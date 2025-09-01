@@ -2,37 +2,37 @@
 #include "common.h"
 
 void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
-	auto src0_ptr = reinterpret_cast<TYPE*>(arg->src0_addr);
-	auto src1_ptr = reinterpret_cast<TYPE*>(arg->src1_addr);
-	auto dst_ptr  = reinterpret_cast<TYPE*>(arg->dst_addr);
-	auto num_points = arg->num_points;
+	auto* __restrict src0 = reinterpret_cast<TYPE*>(arg->src0_addr);
+	auto* __restrict src1 = reinterpret_cast<TYPE*>(arg->src1_addr);
+  auto* __restrict dst  = reinterpret_cast<TYPE*>(arg->dst_addr);
+  uint32_t n = arg->num_points;
 
-	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-	int cacheIndex = threadIdx.x;
+	// Allocate local menory
+	auto tbuf = reinterpret_cast<TYPE*>(__local_mem(blockDim.x * sizeof(TYPE)));
 
-	auto cache = reinterpret_cast<TYPE*>(__local_mem(blockDim.x * sizeof(TYPE)));
+	int tid = threadIdx.x;
+	int gid = blockIdx.x * blockDim.x + tid;
 
-	float temp = 0;
-	while (tid < num_points){
-		temp += src0_ptr[tid] * src1_ptr[tid];
-		tid += blockDim.x * gridDim.x;
-	}
+	// grid-stride per-thread accumulate
+	TYPE acc(0);
+	uint32_t stride = blockDim.x * gridDim.x;
+  for (uint32_t i = gid; i < n; i += stride) {
+    acc += src0[i] * src1[i];
+  }
 
-	// set the cache values
-	cache[cacheIndex] = temp;
+	// initiqalize shared memory
+	tbuf[tid] = acc;
 
+  // Tree reduction in shared memory
+  for (int d = blockDim.x / 2; d > 0; d /= 2) {
     __syncthreads();
-
-	int i = blockDim.x/2;
-	while (i != 0){
-		if (cacheIndex < i)
-			cache[cacheIndex] += cache[cacheIndex + i];
-		__syncthreads();
-		i /= 2;
+    if (tid < d) {
+			tbuf[tid] += tbuf[tid + d];
+		}
+  }
+	if (tid == 0) {
+		dst[blockIdx.x] = tbuf[0];
 	}
-	
-	if (cacheIndex == 0)
-		dst_ptr[blockIdx.x] = cache[0];
 }
 
 int main() {

@@ -157,63 +157,63 @@ inline void vx_barrier(int barried_id, int num_warps) {
 // Return current thread identifier
 inline __attribute__((const)) int vx_thread_id() {
     int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_THREAD_ID));
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_THREAD_ID));
     return ret;
 }
 
 // Return current warp identifier
 inline __attribute__((const)) int vx_warp_id() {
     int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_WARP_ID));
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_WARP_ID));
     return ret;
 }
 
 // Return current core identifier
 inline __attribute__((const)) int vx_core_id() {
     int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_CORE_ID));
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_CORE_ID));
     return ret;
 }
 
 // Return active threads mask
-inline __attribute__((const)) int vx_active_threads() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_ACTIVE_THREADS));
+inline __attribute__((const)) size_t vx_active_threads() {
+    size_t ret;
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_ACTIVE_THREADS));
     return ret;
 }
 
 // Return active warps mask
-inline __attribute__((const)) int vx_active_warps() {
-    int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_ACTIVE_WARPS));
+inline __attribute__((const)) size_t vx_active_warps() {
+    size_t ret;
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_ACTIVE_WARPS));
     return ret;
 }
 
 // Return the number of threads per warp
 inline __attribute__((const)) int vx_num_threads() {
     int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_THREADS));
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_THREADS));
     return ret;
 }
 
 // Return the number of warps per core
 inline __attribute__((const)) int vx_num_warps() {
     int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_WARPS));
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_WARPS));
     return ret;
 }
 
 // Return the number of cores per cluster
 inline __attribute__((const)) int vx_num_cores() {
     int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_CORES));
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_CORES));
     return ret;
 }
 
 // Return the hart identifier (thread id accross the processor)
 inline __attribute__((const)) int vx_hart_id() {
     int ret;
-    __asm__ volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_MHARTID));
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_MHARTID));
     return ret;
 }
 
@@ -222,62 +222,62 @@ inline void vx_fence() {
 }
 
 // Returns 1 if every active lane’s predicate is true, 0 otherwise.
-inline __attribute__((const)) int vx_vote_all(int predicate) {
-    int ret;
-    __asm__ volatile (".insn r %1, 0, 1, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
+inline __attribute__((const)) size_t vx_vote_all(int predicate) {
+    size_t ret;
+    __asm__ (".insn r %1, 0, 1, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
     return ret;
 }
 
 // Returns 1 if any active lane’s predicate is true, 0 if none are true.
-inline __attribute__((const)) int vx_vote_any(int predicate) {
-    int ret;
-    __asm__ volatile (".insn r %1, 1, 1, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
+inline __attribute__((const)) size_t vx_vote_any(int predicate) {
+    size_t ret;
+    __asm__ (".insn r %1, 1, 1, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
     return ret;
 }
 
 //  Returns 1 if the predicate is uniform across all active lanes.
-inline __attribute__((const)) int vx_vote_uni(int predicate) {
-    int ret;
-    __asm__ volatile (".insn r %1, 2, 1, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
+inline __attribute__((const)) size_t vx_vote_uni(int predicate) {
+    size_t ret;
+    __asm__ (".insn r %1, 2, 1, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
     return ret;
 }
 
 // Returns a bitmask of the warp, with bit i set if lane i’s predicate is true.
-inline __attribute__((const)) int vx_vote_ballot(int predicate) {
-    int ret;
-    __asm__ volatile (".insn r %1, 3, 1, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
+inline __attribute__((const)) size_t vx_vote_ballot(int predicate) {
+    size_t ret;
+    __asm__ (".insn r %1, 3, 1, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
     return ret;
 }
 
 // Shift values up by b lanes within each sub-group; out-of-range lanes keep their own value.
-inline __attribute__((const)) int vx_shfl_up(size_t value, int bval, int cval, int mask) {
-    int ret;
+inline __attribute__((const)) size_t vx_shfl_up(size_t value, int bval, int cval, int mask) {
+    size_t ret;
     int bc = (mask << 12) | (cval << 6) | bval;
-    __asm__ volatile (".insn r %1, 4, 1, %0, %2, %3" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(value), "r"(bc));
+    __asm__ (".insn r %1, 4, 1, %0, %2, %3" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(value), "r"(bc));
     return ret;
 }
 
 // Shift values down by b lanes within each sub-group; out-of-range lanes keep their own value.
-inline __attribute__((const)) int vx_shfl_down(size_t value, int bval, int cval, int mask) {
-    int ret;
+inline __attribute__((const)) size_t vx_shfl_down(size_t value, int bval, int cval, int mask) {
+    size_t ret;
     int bc = (mask << 12) | (cval << 6) | bval;
-    __asm__ volatile (".insn r %1, 5, 1, %0, %2, %3" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(value), "r"(bc));
+    __asm__ (".insn r %1, 5, 1, %0, %2, %3" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(value), "r"(bc));
     return ret;
 }
 
 // “Butterfly” exchange using XOR with b as a bit‐mask: each lane swaps with lane ⊕ b.
-inline __attribute__((const)) int vx_shfl_bfly(size_t value, int bval, int cval, int mask) {
-    int ret;
+inline __attribute__((const)) size_t vx_shfl_bfly(size_t value, int bval, int cval, int mask) {
+    size_t ret;
     int bc = (mask << 12) | (cval << 6) | bval;
-    __asm__ volatile (".insn r %1, 6, 1, %0, %2, %3" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(value), "r"(bc));
+    __asm__ (".insn r %1, 6, 1, %0, %2, %3" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(value), "r"(bc));
     return ret;
 }
 
 // Gather from an explicit index: every lane reads the value from base + idx, where idx = b[i].
-inline __attribute__((const)) int vx_shfl_idx(size_t value, int bval, int cval, int mask) {
-    int ret;
+inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cval, int mask) {
+    size_t ret;
     int bc = (mask << 12) | (cval << 6) | bval;
-    __asm__ volatile (".insn r %1, 7, 1, %0, %2, %3" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(value), "r"(bc));
+    __asm__ (".insn r %1, 7, 1, %0, %2, %3" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(value), "r"(bc));
     return ret;
 }
 

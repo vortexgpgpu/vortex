@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-PROJECT := dotproduct
+PROJECT := dotproduct2
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 

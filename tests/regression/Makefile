@@ -7,6 +7,7 @@ all:
 	$(MAKE) -C dogfood
 	$(MAKE) -C dropout
 	$(MAKE) -C dotproduct
+	$(MAKE) -C dotproduct2
 	$(MAKE) -C mstress
 	$(MAKE) -C io_addr
 	$(MAKE) -C printf
@@ -28,6 +29,7 @@ run-simx:
 	$(MAKE) -C dogfood run-simx
 	$(MAKE) -C dropout run-simx
 	$(MAKE) -C dotproduct run-simx
+	$(MAKE) -C dotproduct2 run-simx
 	$(MAKE) -C mstress run-simx
 	$(MAKE) -C io_addr run-simx
 	$(MAKE) -C printf run-simx
@@ -49,6 +51,7 @@ run-rtlsim:
 	$(MAKE) -C dogfood run-rtlsim
 	$(MAKE) -C dropout run-rtlsim
 	$(MAKE) -C dotproduct run-rtlsim
+	$(MAKE) -C dotproduct2 run-rtlsim
 	$(MAKE) -C mstress run-rtlsim
 	$(MAKE) -C io_addr run-rtlsim
 	$(MAKE) -C printf run-rtlsim
@@ -70,6 +73,7 @@ clean:
 	$(MAKE) -C dogfood clean
 	$(MAKE) -C dropout clean
 	$(MAKE) -C dotproduct clean
+	$(MAKE) -C dotproduct2 clean
 	$(MAKE) -C mstress clean
 	$(MAKE) -C io_addr clean
 	$(MAKE) -C printf clean
