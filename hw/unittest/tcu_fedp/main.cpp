@@ -42,6 +42,7 @@
 #include <vector>
 #include <bitmanip.h>
 #include "softfloat_ext.h"
+#include "fedp.h"
 
 bool sim_trace_enabled() {
   return true;
@@ -269,7 +270,7 @@ static void pack_elements(const std::vector<uint32_t> &elements, int element_bit
 }
 
 // Calculate expected fp dot product
-static float calculate_fp_dot_product(const std::vector<float> &a_values,
+/*static float calculate_fp_dot_product(const std::vector<float> &a_values,
                                       const std::vector<float> &b_values,
                                       float c_value) {
   float result(c_value);
@@ -277,7 +278,7 @@ static float calculate_fp_dot_product(const std::vector<float> &a_values,
     result += a_values[i] * b_values[i];
   }
   return result;
-}
+}*/
 
 // Calculate expected int dot product
 static int32_t calculate_int_dot_product(const std::vector<uint32_t> &a_values,
@@ -581,9 +582,9 @@ public:
       std::memcpy(&c_value_bits, &c_value_float, sizeof(float));
 
       // Pack into XLEN words
-      uint32_t a_packed[NUM_REGS], b_packed[NUM_REGS];
-      pack_elements(a_values_format, element_bits, NUM_REGS, a_packed);
-      pack_elements(b_values_format, element_bits, NUM_REGS, b_packed);
+      std::vector<uint32_t> a_packed(NUM_REGS), b_packed(NUM_REGS);
+      pack_elements(a_values_format, element_bits, NUM_REGS, a_packed.data());
+      pack_elements(b_values_format, element_bits, NUM_REGS, b_packed.data());
 
       // Apply to DUT
       for (int i = 0; i < NUM_REGS; i++) {
@@ -605,7 +606,9 @@ public:
       std::memcpy(&dut_result, &dut_result_bits, sizeof(float));
 
       // Calculate expected result
-      float expected = calculate_fp_dot_product(a_values_float, b_values_float, c_value_float);
+      //float expected = calculate_fp_dot_product(a_values_float, b_values_float, c_value_float);
+      FEDP fedp(config_.exp_bits, config_.sig_bits, (int)config_.frm);
+      float expected = fedp(a_packed, b_packed, c_value_float, NUM_REGS);
 
       bool passed = approximately_equal(dut_result, expected, config_.exp_bits, config_.sig_bits);
       if (!passed) {
