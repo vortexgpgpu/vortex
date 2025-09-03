@@ -1,4 +1,4 @@
-# OpenCL Pipeline Setup (Vortex v2, 64-bit)
+# Build Toolchain (Vortex v2, 64-bit)
 
 ## 1. Folder structure
 
@@ -60,7 +60,7 @@ mkdir build && cd build
 source ./ci/toolchain_env.sh
 make -s
 make install
-./ci/blackbox.sh --cores=2 --app=vecadd # test
+./ci/blackbox.sh --cores=2 --app=opencl/vecadd # test
 ```
 
 ---
@@ -144,4 +144,12 @@ CuPBoP Running Test
 ```bash
 cd ./exampless/cfd
 ./kjrun_llvm18.sh
+```
+
+---
+
+## 7. Run Extension 1
+```bash
+cd $PRJ/vortex/tests/cgo_script/extension1
+./run_evaluation.sh
 ```
