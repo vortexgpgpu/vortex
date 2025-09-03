@@ -35,7 +35,7 @@
 //======================================================================================================================================================150
 
 #include "./kernel_gpu_opencl_wrapper_2.h"				// (in directory provided here)
-
+ 
 //========================================================================================================================================================================================================200
 //	FUNCTION
 //========================================================================================================================================================================================================200
@@ -691,7 +691,8 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 	//====================================================================================================100
 	//	Kernel
 	//====================================================================================================100
-printf("global_work_size[0]=%d, local_work_size[0]=%d\n", (int)global_work_size[0], (int)local_work_size[0]);
+
+	printf("global size=%ld, local size=%ld\n", global_work_size[0], local_work_size[0]);
 
 	error = clEnqueueNDRangeKernel(	command_queue, 
 									kernel, 
@@ -746,6 +747,7 @@ printf("global_work_size[0]=%d, local_work_size[0]=%d\n", (int)global_work_size[
 	//==================================================50
 	//	ansDLength
 	//==================================================50
+
 	error = clEnqueueReadBuffer(command_queue,				// The command queue.
 								ansDLength,					// The image on the device.
 								CL_TRUE,					// Blocking? (ie. Wait at this line until read has finished?)

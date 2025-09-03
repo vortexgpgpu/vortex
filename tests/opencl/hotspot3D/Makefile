@@ -13,9 +13,9 @@ hotspotKernel.cl: $(SRC_DIR)/hotspotKernel.cl
 
 KERNEL_SRCS := hotspotKernel.cl
 
-OPTS ?= 512 8 100 $(SRC_DIR)/power_512x8 $(SRC_DIR)/temp_512x8 output.out
+#OPTS ?= 512 8 100 $(SRC_DIR)/power_512x8 $(SRC_DIR)/temp_512x8 output.out
 # OPTS ?= 64 8 100 $(SRC_DIR)/power_64x8 $(SRC_DIR)/temp_64x8 output.out
-#OPTS ?= 64 8 1 $(SRC_DIR)/power_64x8 $(SRC_DIR)/temp_64x8 output.out
+OPTS ?= 64 8 1 $(SRC_DIR)/power_64x8 $(SRC_DIR)/temp_64x8 output.out
 
 # CXXFLAGS += -DRD_WG_SIZE=4
 

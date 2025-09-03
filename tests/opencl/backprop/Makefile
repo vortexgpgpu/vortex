@@ -13,7 +13,7 @@ backprop_kernel.cl: $(SRC_DIR)/backprop_kernel.cl
 KERNEL_SRCS := backprop_kernel.cl
 
 # OPTS ?= -n 4194304
-OPTS ?= -n  65536
+OPTS ?= -n 4096
 
 
 include ../common.mk

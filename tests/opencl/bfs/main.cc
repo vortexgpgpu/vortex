@@ -17,7 +17,7 @@
 
 //#define MAX_THREADS_PER_BLOCK 16
 // update for vortex divergence paper
-#define MAX_THREADS_PER_BLOCK 512
+#define MAX_THREADS_PER_BLOCK 256
 
 
 // Structure to hold a node information

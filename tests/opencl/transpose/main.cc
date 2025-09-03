@@ -119,7 +119,7 @@ static double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ci
         if (i == 0)
             shrDeltaT(0);
         for (unsigned int k=0; k < ciDeviceCount; ++k) {
-            printf("global size=%ld, local size=%ld\n", szGlobalWorkSize[0], szLocalWorkSize[0]);
+            printf("global size=%ld, global size=%ld\n", szGlobalWorkSize[0], szGlobalWorkSize[0]);
             printf("local size=%ld, local size=%ld\n", szLocalWorkSize[0], szLocalWorkSize[1]);
             ciErrNum |= clEnqueueNDRangeKernel(commandQueue[k], ckKernel[k], 2, NULL, szGlobalWorkSize, szLocalWorkSize, 0, NULL, NULL);
         }

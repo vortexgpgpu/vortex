@@ -40,8 +40,8 @@
 #elif defined(RD_WG_SIZE)
         #define  DEFAULT_ORDER RD_WG_SIZE
 #else
-        // #define  DEFAULT_ORDER 256
-        #define  DEFAULT_ORDER 512
+        #define  DEFAULT_ORDER 256
+        //#define  DEFAULT_ORDER 16
 #endif
 
 #ifdef RD_WG_SIZE_1_0
@@ -51,8 +51,8 @@
 #elif defined(RD_WG_SIZE)
         #define  DEFAULT_ORDER_2 RD_WG_SIZE
 #else
-        // #define  DEFAULT_ORDER_2 256
-    	#define  DEFAULT_ORDER_2 512
+        #define  DEFAULT_ORDER_2 256
+        //#define  DEFAULT_ORDER_2 16
 #endif
 
 

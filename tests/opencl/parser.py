@@ -1,6 +1,15 @@
 import os
 import re
-import sys 
+import sys
+from tabulate import tabulate
+
+
+folders = ["hotspot3D", "bfs", "srad"]
+options = [1, 2, 3, 4, 5, 8, 9]
+instrs_table = {}
+cycles_table = {}
+instrs_reduction_table = {}
+speedup_table = {}
 
 def parse_perf_file(filepath):
     instrs_total = 0
@@ -17,25 +26,68 @@ def extract_O_value(filename):
     match = re.search(r'_O(\d+)\.txt', filename)
     return int(match.group(1)) if match else None
 
+def print_table(table):
+    #print("Folder\t" + "\t".join([f"Opt{opt}" for opt in options]))
+    #for folder, row in table.items():
+    #    print(folder + "\t" + "\t".join(str(row[opt]) for opt in options))
+    headers = ["Folder"] + [f"Opt{opt}" for opt in options]
+    rows = []
+    for folder, row in table.items():
+        rows.append([folder] + [row.get(opt, "") for opt in options])
+    print(tabulate(rows, headers=headers, tablefmt="grid", floatfmt=".4f"))
+
 def run_perf_summary_on_folder(folder_path):
     str_option = ""
     str_data = ""
     for filename in sorted(os.listdir(folder_path)):
+        if folder_path not in instrs_table:
+            instrs_table[folder_path] = {}
+            cycles_table[folder_path] = {}
+        
         if filename.endswith('.txt') and '_O' in filename:
             O_value = extract_O_value(filename)
             if O_value is not None:
                 filepath = os.path.join(folder_path, filename)
                 instrs_total, cycles_total = parse_perf_file(filepath)  
-                #print(f"{O_value} {instrs_total} {cycles_total}")  
                 str_option = str_option + str(O_value) + " "
-                str_data = str_data + str(instrs_total) + " " + str(cycles_total) + " " 
+                str_data = str_data + str(instrs_total) + " " + str(cycles_total) + " "
+                instrs_table[folder_path][O_value] = instrs_total
+                cycles_table[folder_path][O_value] = cycles_total
     print(str_option)
     print(str_data)
 
 
+def calculate_reductions_and_speedups():
+    for folder in folders:
+        instrs_reduction_table[folder] = {}
+        speedup_table[folder] = {}
+        base_instrs = instrs_table[folder].get(1, None)
+        base_cycles = cycles_table[folder].get(1, None)
+        for opt in options:
+            if base_instrs and instrs_table[folder][opt]:
+                instrs_reduction = base_instrs / instrs_table[folder][opt]
+                instrs_reduction_table[folder][opt] = round(instrs_reduction, 4)
+            else:
+                instrs_reduction_table[folder][opt] = "N/A"
+            if base_cycles and cycles_table[folder][opt]:
+                speedup = base_cycles / cycles_table[folder][opt]
+                speedup_table[folder][opt] = round(speedup, 4)
+            else:
+                speedup_table[folder][opt] = "N/A"
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python script.py <folder_path>")
-        sys.exit(1)
-    folder_path = sys.argv[1]
-    run_perf_summary_on_folder(folder_path)
+    for folder in folders:
+        run_perf_summary_on_folder(folder)
+    calculate_reductions_and_speedups()
+
+    print("================================\n")
+    print("\nInstructions Table:")
+    print_table(instrs_table)
+    print("\nCycles Table:")
+    print_table(cycles_table)
+
+    print("================================\n")
+    print("\nInstructions Reduction Table:")
+    print_table(instrs_reduction_table)
+    print("\nSpeedup Table:")
+    print_table(speedup_table)

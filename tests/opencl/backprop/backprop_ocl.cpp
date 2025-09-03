@@ -189,8 +189,8 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 
 	// set global and local workitems
 	size_t global_work[3] = { BLOCK_SIZE, BLOCK_SIZE * num_blocks, 1 }; 
-	size_t local_work[3] = { BLOCK_SIZE, BLOCK_SIZE, 1 };
-	//size_t local_work[3] = { 8, 16, 1 }; // vortex: use smaller size
+	// size_t local_work[3] = { BLOCK_SIZE, BLOCK_SIZE, 1 };
+	size_t local_work[3] = { 8, 16, 1 }; // vortex: use smaller size
 
 	// this preprocessing stage is temporarily added to correct the bug of wrong memcopy using two-dimensional net->inputweights
 	// todo: fix mem allocation
@@ -257,12 +257,14 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	clSetKernelArg(kernel1, 6, sizeof(cl_int), (void*) &in);
 	clSetKernelArg(kernel1, 7, sizeof(cl_int), (void*) &hid);
 
-	printf("global_work=(%u, %u)\n", (unsigned int)global_work[0], (unsigned int)global_work[1]);
-	printf("local_work=(%u, %u)\n", (unsigned int)local_work[0], (unsigned int)local_work[1]);
+
 	size_t max_work_group_size;
 	err = clGetKernelWorkGroupInfo(kernel1, device_list[device_id_inuse], CL_KERNEL_WORK_GROUP_SIZE, sizeof(size_t), &max_work_group_size, NULL);
 	if(err != CL_SUCCESS) { printf("ERROR: clGetKernelWorkGroupInfo() failed\n"); return -1; }
 	printf("max_work_group_size = %d\n", (int)max_work_group_size);
+
+	printf("global_work=(%u, %u)\n", (unsigned int)global_work[0], (unsigned int)global_work[1]);
+	printf("local_work=(%u, %u)\n", (unsigned int)local_work[0], (unsigned int)local_work[1]);
 
 	err = clEnqueueNDRangeKernel(cmd_queue, kernel1, 2, NULL, global_work, local_work, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
@@ -316,6 +318,9 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	clSetKernelArg(kernel2, 3, sizeof(cl_int), (void*) &in);
 	clSetKernelArg(kernel2, 4, sizeof(void *), (void*) &input_hidden_ocl);
 	clSetKernelArg(kernel2, 5, sizeof(void *), (void*) &input_prev_weights_ocl );
+
+	printf("global_work=(%u, %u)\n", (unsigned int)global_work[0], (unsigned int)global_work[1]);
+	printf("local_work=(%u, %u)\n", (unsigned int)local_work[0], (unsigned int)local_work[1]);
 
 	err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 2, NULL, global_work, local_work, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }

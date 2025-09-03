@@ -1,0 +1,24 @@
+backprop_ocl.o: \
+ /export/nethomes/sjeong306/vortex_project/vortex/tests/opencl/backprop/backprop_ocl.cpp \
+ /export/nethomes/sjeong306/vortex_project/vortex/tests/opencl/backprop/backprop.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl_version.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl_platform.h
+backprop.o: \
+ /export/nethomes/sjeong306/vortex_project/vortex/tests/opencl/backprop/backprop.cpp \
+ /export/nethomes/sjeong306/vortex_project/vortex/tests/opencl/backprop/backprop.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl_version.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl_platform.h
+facetrain.o: \
+ /export/nethomes/sjeong306/vortex_project/vortex/tests/opencl/backprop/facetrain.cpp \
+ /export/nethomes/sjeong306/vortex_project/vortex/tests/opencl/backprop/backprop.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl_version.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl_platform.h
+imagenet.o: \
+ /export/nethomes/sjeong306/vortex_project/vortex/tests/opencl/backprop/imagenet.cpp \
+ /export/nethomes/sjeong306/vortex_project/vortex/tests/opencl/backprop/backprop.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl_version.h \
+ /export/nethomes/sjeong306/vortex_project/tools/pocl/include/CL/cl_platform.h
