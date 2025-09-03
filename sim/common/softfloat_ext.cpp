@@ -460,8 +460,15 @@ float64_t f64_recip7(float64_t in) {
 // Convert a float to a custom floating-point format
 uint32_t cvt_f32_to_custom(float value, uint32_t exp_bits, uint32_t sig_bits,
                            uint32_t frm, uint32_t *fflags) {
+  // RISC-V rounding modes
   enum { RNE=0, RTZ=1, RDN=2, RUP=3, RMM=4 };
-  const uint32_t FLAG_NX = 1u<<0, FLAG_UF = 1u<<1, FLAG_OF = 1u<<2, FLAG_NV = 1u<<4;
+
+  // RISC-V exception flags
+  const uint32_t FLAG_NX = 1u << 0; // inexact
+  const uint32_t FLAG_UF = 1u << 1; // underflow
+  const uint32_t FLAG_OF = 1u << 2; // overflow
+  //const uint32_t FLAG_DZ = 1u << 3; // div-by-zero
+  const uint32_t FLAG_NV = 1u << 4; // invalid
 
   uint32_t flags = 0;
   if (fflags) {
