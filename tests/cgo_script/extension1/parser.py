@@ -4,7 +4,7 @@ import sys
 from tabulate import tabulate
 
 
-folders = ["hotspot3D", "bfs", "srad"]
+folders = ["backprop", "bfs", "blackscholes", "b+tree", "cfd", "conv3", "dotproduct", "gaussian", "hotspot3D", "kmeans", "lavaMD", "nearn", "lbm", "pathfinder", "psum", "saxpy", "sfilter", "sgemm", "sgemm2", "sgemm3", "spmv", "srad", "transpose", "vecadd", "psort"]
 options = [1, 2, 3, 4, 5, 8, 9]
 instrs_table = {}
 cycles_table = {}
@@ -27,9 +27,6 @@ def extract_O_value(filename):
     return int(match.group(1)) if match else None
 
 def print_table(table):
-    #print("Folder\t" + "\t".join([f"Opt{opt}" for opt in options]))
-    #for folder, row in table.items():
-    #    print(folder + "\t" + "\t".join(str(row[opt]) for opt in options))
     headers = ["Folder"] + [f"Opt{opt}" for opt in options]
     rows = []
     for folder, row in table.items():
@@ -38,12 +35,11 @@ def print_table(table):
 
 def run_perf_summary_on_folder(folder_path):
     str_option = ""
-    str_data = ""
+    str_data = folder_path + " "
     for filename in sorted(os.listdir(folder_path)):
         if folder_path not in instrs_table:
             instrs_table[folder_path] = {}
             cycles_table[folder_path] = {}
-        
         if filename.endswith('.txt') and '_O' in filename:
             O_value = extract_O_value(filename)
             if O_value is not None:
