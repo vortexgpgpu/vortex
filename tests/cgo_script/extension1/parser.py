@@ -1,10 +1,11 @@
 import os
 import re
 import sys
+import csv
 from tabulate import tabulate
 
 
-folders = ["backprop", "bfs", "blackscholes", "b+tree", "cfd", "conv3", "dotproduct", "gaussian", "hotspot3D", "kmeans", "lavaMD", "nearn", "lbm", "pathfinder", "psum", "saxpy", "sfilter", "sgemm", "sgemm2", "sgemm3", "spmv", "srad", "transpose", "vecadd", "psort"]
+folders = ["backprop", "bfs", "blackscholes", "b+tree", "cfd", "conv3", "dotproduct", "hotspot3D", "kmeans", "lavaMD", "nearn", "lbm", "pathfinder", "psum", "saxpy", "sfilter", "sgemm", "sgemm2", "sgemm3", "spmv", "srad", "transpose", "vecadd", "psort", "gaussian"]
 options = [1, 2, 3, 4, 5, 8, 9]
 instrs_table = {}
 cycles_table = {}
@@ -26,12 +27,20 @@ def extract_O_value(filename):
     match = re.search(r'_O(\d+)\.txt', filename)
     return int(match.group(1)) if match else None
 
-def print_table(table):
+def print_table(table, table_name="Table"):
     headers = ["Folder"] + [f"Opt{opt}" for opt in options]
     rows = []
     for folder, row in table.items():
         rows.append([folder] + [row.get(opt, "") for opt in options])
     print(tabulate(rows, headers=headers, tablefmt="grid", floatfmt=".4f"))
+    
+    csv_path = "output.csv"
+    with open(csv_path, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([table_name])
+        writer.writerow(headers)
+        writer.writerows(rows)
+    print(f"Saved table '{table_name}' to {csv_path}")
 
 def run_perf_summary_on_folder(folder_path):
     str_option = ""
@@ -57,15 +66,23 @@ def calculate_reductions_and_speedups():
     for folder in folders:
         instrs_reduction_table[folder] = {}
         speedup_table[folder] = {}
+        if instrs_table[folder].get(1, None) is None:
+            continue
+        if cycles_table[folder].get(1, None) is None:
+            continue
         base_instrs = instrs_table[folder].get(1, None)
         base_cycles = cycles_table[folder].get(1, None)
         for opt in options:
-            if base_instrs and instrs_table[folder][opt]:
+            if instrs_table[folder].get(opt) is None:
+                instrs_reduction_table[folder][opt] = "N/A"
+            elif base_instrs and instrs_table[folder][opt]:
                 instrs_reduction = base_instrs / instrs_table[folder][opt]
                 instrs_reduction_table[folder][opt] = round(instrs_reduction, 4)
             else:
                 instrs_reduction_table[folder][opt] = "N/A"
-            if base_cycles and cycles_table[folder][opt]:
+            if cycles_table[folder].get(opt) is None:
+                speedup_table[folder][opt] = "N/A"
+            elif base_cycles and cycles_table[folder][opt]:
                 speedup = base_cycles / cycles_table[folder][opt]
                 speedup_table[folder][opt] = round(speedup, 4)
             else:
@@ -78,12 +95,12 @@ if __name__ == "__main__":
 
     print("================================\n")
     print("\nInstructions Table:")
-    print_table(instrs_table)
+    print_table(instrs_table, "Instructions Count")
     print("\nCycles Table:")
-    print_table(cycles_table)
+    print_table(cycles_table, "Cycles Count")
 
     print("================================\n")
     print("\nInstructions Reduction Table:")
-    print_table(instrs_reduction_table)
+    print_table(instrs_reduction_table, "Instructions Reduction")
     print("\nSpeedup Table:")
-    print_table(speedup_table)
+    print_table(speedup_table, "Speedup")
