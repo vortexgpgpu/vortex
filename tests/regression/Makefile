@@ -24,6 +24,7 @@ all:
 	$(MAKE) -C sgemm2
 	$(MAKE) -C madmax
 	$(MAKE) -C stencil3d
+	$(MAKE) -C raycast
 
 all-mpi:
 	$(MAKE) -C mpi_dotproduct MPI=1 NP=$(NP)
@@ -56,6 +57,7 @@ run-simx:
 	$(MAKE) -C sgemm2 run-simx
 	$(MAKE) -C madmax run-simx
 	$(MAKE) -C stencil3d run-simx
+	$(MAKE) -C raycast run-simx
 
 run-simx-mpi:
 	$(MAKE) -C mpi_dotproduct run-simx MPI=1 NP=$(NP)
@@ -88,6 +90,7 @@ run-rtlsim:
 	$(MAKE) -C sgemm2 run-rtlsim
 	$(MAKE) -C madmax run-rtlsim
 	$(MAKE) -C stencil3d run-rtlsim
+	$(MAKE) -C raycast run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -116,3 +119,4 @@ clean:
 	$(MAKE) -C sgemm2 clean
 	$(MAKE) -C madmax clean
 	$(MAKE) -C stencil3d clean
+	$(MAKE) -C raycast clean

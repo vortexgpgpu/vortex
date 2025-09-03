@@ -368,6 +368,7 @@ static op_string_t op_string(const Instr &instr) {
       case WctlType::JOIN:   return {"JOIN", ""};
       case WctlType::BAR:    return {"BAR", ""};
       case WctlType::PRED:   return {wctlArgs.is_neg ? "PRED.N":"PRED", ""};
+      case WctlType::WSCHED: return {"WSCHED", "priority=" + std::to_string(wctlArgs.priority) + ", yield=" + std::to_string(wctlArgs.yield)};
       default:
         std::abort();
       }
@@ -1032,16 +1033,22 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         instr->setSrcReg(1, rs2, RegType::Integer);
         wctlArgs.is_neg = (rd != 0);
         break;
+      case 6: // WSCHED
+        instr->setOpType(WctlType::WSCHED);
+        wctlArgs.priority = rs1;
+        wctlArgs.yield = rs2;
+        break;
       default:
         std::abort();
       }
       instr->setArgs(wctlArgs);
       ibuffer.push_back(instr);
     } break;
-    case 1: { // VOTE
+    case 1: { // VOTE & SHUFFLE
       auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
       instr->setDestReg(rd, RegType::Integer);
       instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->setSrcReg(1, rs2, RegType::Integer);
       switch (funct3) {
       case 0:
         instr->setOpType(VoteType::ALL);
@@ -1057,19 +1064,19 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         break;
       case 4:
         instr->setOpType(ShflType::UP);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->setSrcReg(2, rs3, RegType::Integer);
         break;
       case 5:
         instr->setOpType(ShflType::DOWN);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->setSrcReg(2, rs3, RegType::Integer);
         break;
       case 6:
         instr->setOpType(ShflType::BFLY);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->setSrcReg(2, rs3, RegType::Integer);
         break;
       case 7:
         instr->setOpType(ShflType::IDX);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->setSrcReg(2, rs3, RegType::Integer);
         break;
       default:
         std::abort();
