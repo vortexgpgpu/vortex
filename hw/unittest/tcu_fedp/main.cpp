@@ -159,7 +159,7 @@ struct TestConfig {
   int exp_bits = 0; // Exponent bits
   int sig_bits = 0; // Significand bits
   RoundingMode frm = RoundingMode::RNE; // Rounding mode
-  uint32_t num_tests = 100;       // Number of tests per feature
+  uint32_t num_tests = 1000; // Number of tests per feature
 };
 
 // Add ostream overload for TestConfig
@@ -607,8 +607,8 @@ public:
 
       // Calculate expected result
       //float expected = calculate_fp_dot_product(a_values_float, b_values_float, c_value_float);
-      FEDP fedp(config_.exp_bits, config_.sig_bits, (int)config_.frm);
-      float expected = fedp(a_packed, b_packed, c_value_float, NUM_REGS);
+      FEDP fedp(config_.exp_bits, config_.sig_bits, (int)config_.frm, total_elements);
+      float expected = fedp(a_packed, b_packed, c_value_float);
 
       bool passed = approximately_equal(dut_result, expected, config_.exp_bits, config_.sig_bits);
       if (!passed) {
