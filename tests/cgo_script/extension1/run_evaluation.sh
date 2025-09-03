@@ -2,7 +2,7 @@
 
 cd ../../../build 
 pwd
-#./ci/blackbox.sh --cores=4 --warps=16 --threads=32 --l2cache --app=opencl/vecadd
+./ci/blackbox.sh --cores=4 --warps=16 --threads=32 --l2cache --app=opencl/vecadd
 
 cd tests/opencl
 pwd
