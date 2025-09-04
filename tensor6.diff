@@ -1,0 +1,37 @@
+diff --git a/tests/regression/sgemm_tpu/tensor_generic.cpp b/tests/regression/sgemm_tpu/tensor_generic.cpp
+index 6b567d0a..1d43a749 100644
+--- a/tests/regression/sgemm_tpu/tensor_generic.cpp
++++ b/tests/regression/sgemm_tpu/tensor_generic.cpp
+@@ -17,7 +17,7 @@ using float32_t = float;
+ #endif
+ 
+ #ifndef OTYPE
+-#define OTYPE float32_t
++#define OTYPE float16_t
+ #endif
+ 
+ #ifndef ITYPE
+@@ -411,7 +411,7 @@ private:
+     for (uint32_t z = 0; z < tcK * i_ratio; ++z) {
+       auto a_val = static_cast<Ot>(a[z]);
+       auto b_val = static_cast<Ot>(b[z]);
+-      acc += a_val * b_val;
++      acc = a_val * b_val + acc;
+     }
+     Xt ret(0);
+     *reinterpret_cast<Ot*>(&ret) = acc;
+@@ -528,7 +528,7 @@ public:
+         for (uint32_t k = 0; k < tileK; ++k) {
+           auto a = static_cast<Ot>(fragA_(row, k));
+           auto b = static_cast<Ot>(fragB_(k, col));
+-          sum += a * b;
++          sum = a * b + sum;;
+         }
+         fragRef_(row, col) = sum + fragC_(row, col);
+       }
+diff --git a/third_party/ramulator b/third_party/ramulator
+--- a/third_party/ramulator
++++ b/third_party/ramulator
+@@ -1 +1 @@
+-Subproject commit e62c84a6f0e06566ba6e182d308434b4532068a5
++Subproject commit e62c84a6f0e06566ba6e182d308434b4532068a5-dirty

@@ -281,6 +281,10 @@ inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cva
     return ret;
 }
 
+// Warp-level scheduling hint
+#define vx_wsched(__prio__, __yield__) \
+    __asm__ (".insn r %0, 6, 0, x0, x%[p], x%[y]" :: "i"(RISCV_CUSTOM0), [p]"i"(__prio__), [y]"i"(__yield__) : "memory")
+
 #ifdef __cplusplus
 }
 #endif

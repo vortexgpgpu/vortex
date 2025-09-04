@@ -145,8 +145,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
          << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << instr.getUUID() << ")");
 
-  assert(warp.tmask.any());
-
   // fetch register values
   if (rsrc0.type != RegType::None) fetch_registers(rs1_data, wid, 0, rsrc0);
   if (rsrc1.type != RegType::None) fetch_registers(rs2_data, wid, 1, rsrc1);
@@ -315,16 +313,15 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!warp.tmask.test(t))
           continue;
-        bool is_pred = (rs1_data[t].i & 1) != 0;
-        has_vote_true  |= is_pred;
-        has_vote_false |= !is_pred;
+        auto is_pred = rs1_data[t].i & 0x1;
         if (is_pred) {
+          has_vote_true = true;
           ballot |= (Word(1) << t);
+        } else {
+          has_vote_false = true;
         }
       }
       for (uint32_t t = thread_start; t < num_threads; ++t) {
-        if (!warp.tmask.test(t))
-          continue;
         switch (vote_type) {
         case VoteType::ALL:
           rd_data[t].i = !has_vote_false;
@@ -376,9 +373,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         default:
           std::abort();
         }
-        if (!pval) {
+        if (!pval)
           lane = t;
-        }
         if (lane < num_threads) {
           rd_data[t].i = rs1_data[lane].i;
         } else {
@@ -1399,11 +1395,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         } else {
           next_tmask = ThreadMask(num_threads, rs2_data.at(thread_last).u);
         }
-      } break;
-      case WctlType::WSCHED: {
-        trace->fetch_stall = true;
-        warp.priority = wctlArgs.priority;
-        warp.yield = wctlArgs.yield;
       } break;
       default:
         std::abort();

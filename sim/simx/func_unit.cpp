@@ -368,7 +368,6 @@ void SfuUnit::tick() {
 			case WctlType::SPLIT:
 			case WctlType::JOIN:
 			case WctlType::PRED:
-		  case WctlType::WSCHED:
 				output.push(trace, 2+delay);
 				break;
 			case WctlType::BAR: {
