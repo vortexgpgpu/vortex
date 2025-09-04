@@ -359,64 +359,6 @@ void Core::issue() {
     }
 
     if (ready_set.any()) {
-      // apply user-driven scheduling
-      auto count = ready_set.count();
-      if (count > 1) {
-        uint32_t priority_warps = 0;
-        uint32_t yielding_warps = 0;
-        for (uint32_t j = 0; j < PER_ISSUE_WARPS; ++j) {
-          if (ready_set.test(j)) {
-            uint32_t wid = j * ISSUE_WIDTH + iw;
-            auto& warp = emulator_.warps_.at(wid);
-            if (warp.priority > 0) {
-              ++priority_warps;
-            }
-            if (warp.yield > 0) {
-              ++yielding_warps;
-            }
-            if (warp.priority > 0 && warp.yield > 0) {
-              std::cout << "Warp cannot be both priority and yielding! wid=" << wid << std::endl << std::flush;
-              std::abort();
-            }
-          }
-        }
-        if (yielding_warps != 0) {
-          // remove yielding warps from ready set
-          for (uint32_t j = 0; j < PER_ISSUE_WARPS; ++j) {
-            if (ready_set.test(j)) {
-              uint32_t wid = j * ISSUE_WIDTH + iw;
-              auto& warp = emulator_.warps_.at(wid);
-              if (warp.yield > 0) {
-                ready_set.reset(j);
-                --warp.yield; // update yield counter
-                --count;
-                auto& ibuffer = ibuffers_.at(wid);
-                auto trace = ibuffer.top();
-                DT(3, "*** pipeline-counter-yield: " << *trace);
-              }
-            }
-          }
-        }
-        if (priority_warps != 0 && priority_warps < count) {
-          // remove non-priority warps from ready set
-          for (uint32_t j = 0; j < PER_ISSUE_WARPS; ++j) {
-            if (ready_set.test(j)) {
-              uint32_t wid = j * ISSUE_WIDTH + iw;
-              auto& warp = emulator_.warps_.at(wid);
-              if (warp.priority == 0) {
-                ready_set.reset(j);
-                --count;
-                auto& ibuffer = ibuffers_.at(wid);
-                auto trace = ibuffer.top();
-                DT(3, "*** pipeline-priority-yield: " << *trace);
-              }
-            }
-          }
-        }
-      }
-    }
-    
-    if (ready_set.any()) {
       // select one instruction from ready set
       auto w = ibuffer_arbs_.at(iw).grant(ready_set);
       uint32_t wid = w * ISSUE_WIDTH + iw;

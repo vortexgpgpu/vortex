@@ -36,8 +36,6 @@ warp_t::warp_t(uint32_t num_threads)
   , tmask(num_threads)
   , PC(0)
   , uuid(0)
-  , priority(0)
-  , yield(0)
 {}
 
 void warp_t::reset(uint64_t startup_addr) {
@@ -45,8 +43,6 @@ void warp_t::reset(uint64_t startup_addr) {
   this->PC = startup_addr;
   this->uuid = 0;
   this->fcsr = 0;
-  this->priority = 0;
-  this->yield = 0;
 
   for (auto& reg_file : this->ireg_file) {
     for (auto& reg : reg_file) {

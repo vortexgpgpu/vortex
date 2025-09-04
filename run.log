@@ -1,0 +1,4 @@
+make: Entering directory '/home/blaise/dev/vortex/tests/regression/sgemm_tpu'
+Makefile:2: /home/blaise/dev/vortex/config.mk: No such file or directory
+make: *** No rule to make target '/home/blaise/dev/vortex/config.mk'.  Stop.
+make: Leaving directory '/home/blaise/dev/vortex/tests/regression/sgemm_tpu'

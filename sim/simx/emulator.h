@@ -60,8 +60,6 @@ struct warp_t {
   Word                              PC;
   Byte                              fcsr;
   uint32_t                          uuid;
-  uint32_t                          priority;
-  uint32_t                          yield;
 
   warp_t(uint32_t num_threads);
 
@@ -166,8 +164,6 @@ private:
 #endif
 
   PoolAllocator<Instr, 64> instr_pool_;
-
-  friend class Core;
 };
 
 }

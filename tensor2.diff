@@ -1,0 +1,1804 @@
+diff --git a/kernel/include/vx_intrinsics.h b/kernel/include/vx_intrinsics.h
+index b3409b2a..65d5ddc7 100644
+--- a/kernel/include/vx_intrinsics.h
++++ b/kernel/include/vx_intrinsics.h
+@@ -260,22 +260,22 @@ typedef float mf32x8_t __attribute__((vector_size(8*4))); // 8 x f32 registers
+     __asm__ volatile("fmv.w.x %0, %1" : "=f"(fd5): "r"(value)); \
+     __asm__ volatile("fmv.w.x %0, %1" : "=f"(fd6): "r"(value)); \
+     __asm__ volatile("fmv.w.x %0, %1" : "=f"(fd7): "r"(value)); \
+-    ret = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7}; \
++    ret = (mf32x8_t){fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7}; \
+     return ret
+ 
+-__attribute__((always_inline)) mf32x8_t vx_wsetm_a_f32(size_t value) {
++inline __attribute__((always_inline)) mf32x8_t vx_wsetm_a_f32(size_t value) {
+     MAKE_VX_WSETM_F32("f8", "f9", "f10", "f11", "f12", "f13", "f14", "f15");
+ }
+ 
+-__attribute__((always_inline)) mf32x8_t vx_wsetm_b_f32(size_t value) {
++inline __attribute__((always_inline)) mf32x8_t vx_wsetm_b_f32(size_t value) {
+     MAKE_VX_WSETM_F32("f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31");
+ }
+ 
+-__attribute__((always_inline)) mf32x8_t vx_wsetm_c_f32(size_t value) {
++inline __attribute__((always_inline)) mf32x8_t vx_wsetm_c_f32(size_t value) {
+     MAKE_VX_WSETM_F32("f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7");
+ }
+ 
+-__attribute__((always_inline)) mf32x8_t vx_wsetm_d_f32(size_t value) {
++inline __attribute__((always_inline)) mf32x8_t vx_wsetm_d_f32(size_t value) {
+     MAKE_VX_WSETM_F32("f16", "f17", "f18", "f19", "f20", "f21", "f22", "f23");
+ }
+ 
+@@ -312,23 +312,23 @@ __attribute__((always_inline)) mf32x8_t vx_wsetm_d_f32(size_t value) {
+     } \
+     return ret
+ 
+-__attribute__((always_inline)) mf32x8_t vx_wldm_ad_f32(const void* src, size_t ldm) {
++inline __attribute__((always_inline)) mf32x8_t vx_wldm_ad_f32(const void* src, size_t ldm) {
+     MAKE_VX_WLDM_D_F32("f8", "f9", "f10", "f11", "f12", "f13", "f14", "f15");
+ }
+ 
+-__attribute__((always_inline)) mf32x8_t vx_wldm_at_f32(const void* src, size_t ldm) {
++inline __attribute__((always_inline)) mf32x8_t vx_wldm_at_f32(const void* src, size_t ldm) {
+     MAKE_VX_WLDM_T_F32("f8", "f9", "f10", "f11", "f12", "f13", "f14", "f15");
+ }
+ 
+-__attribute__((always_inline)) mf32x8_t vx_wldm_bd_f32(const void* src, size_t ldm) {
++inline __attribute__((always_inline)) mf32x8_t vx_wldm_bd_f32(const void* src, size_t ldm) {
+     MAKE_VX_WLDM_D_F32("f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31");
+ }
+ 
+-__attribute__((always_inline)) mf32x8_t vx_wldm_bt_f32(const void* src, size_t ldm) {
++inline __attribute__((always_inline)) mf32x8_t vx_wldm_bt_f32(const void* src, size_t ldm) {
+     MAKE_VX_WLDM_T_F32("f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31");
+ }
+ 
+-__attribute__((always_inline)) void vx_wstm_f32(void* dst, const mf32x8_t& src, size_t ldm) {
++inline __attribute__((always_inline)) void vx_wstm_f32(void* dst, mf32x8_t src, size_t ldm) {
+     uint32_t tid = vx_thread_id(); \
+     uint32_t i = tid / 4; \
+     uint32_t j = tid % 4; \
+@@ -411,7 +411,7 @@ __attribute__((always_inline)) void vx_wstm_f32(void* dst, const mf32x8_t& src,
+     MAKE_VX_HMMA_844_D_F32_STEP(fmt, 3, 5, fd5, fa7, fb6, fd5); \
+     MAKE_VX_HMMA_844_D_F32_STEP(fmt, 3, 6, fd6, fa7, fb7, fd6); \
+     MAKE_VX_HMMA_844_D_F32_STEP(fmt, 3, 7, fd7, fa7, fb7, fd7); \
+-    ret = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7}; \
++    ret = (mf32x8_t){fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7}; \
+     return ret
+ 
+ #define MAKE_VX_HMMA_844_C_F32_STEP(fmt, set, step, rd, rs1, rs2) \
+@@ -475,14 +475,14 @@ __attribute__((always_inline)) void vx_wstm_f32(void* dst, const mf32x8_t& src,
+     MAKE_VX_HMMA_844_C_F32_STEP(fmt, 3, 5, fc5, fa7, fb6); \
+     MAKE_VX_HMMA_844_C_F32_STEP(fmt, 3, 6, fc6, fa7, fb7); \
+     MAKE_VX_HMMA_844_C_F32_STEP(fmt, 3, 7, fc7, fa7, fb7); \
+-    ret = {fc0, fc1, fc2, fc3, fc4, fc5, fc6, fc7}; \
++    ret = (mf32x8_t){fc0, fc1, fc2, fc3, fc4, fc5, fc6, fc7}; \
+     return ret
+ 
+-__attribute__((always_inline)) mf32x8_t vx_hmma_844_c_f16_f32(const mf32x8_t& a, const mf32x8_t& b, const mf32x8_t& c) {
++inline __attribute__((always_inline)) mf32x8_t vx_hmma_844_c_f16_f32(mf32x8_t a, mf32x8_t b, mf32x8_t c) {
+     MAKE_VX_HMMA_844_C_F32(0);
+ }
+ 
+-__attribute__((always_inline)) mf32x8_t vx_hmma_844_d_f16_f32(const mf32x8_t& a, const mf32x8_t& b, const mf32x8_t& c) {
++inline __attribute__((always_inline)) mf32x8_t vx_hmma_844_d_f16_f32(mf32x8_t a, mf32x8_t b, mf32x8_t c) {
+     MAKE_VX_HMMA_844_D_F32(0);
+ }
+ 
+diff --git a/kernel/include/vx_tensor.h b/kernel/include/vx_tensor.h
+index f6084e1d..f29c45c8 100644
+--- a/kernel/include/vx_tensor.h
++++ b/kernel/include/vx_tensor.h
+@@ -11,20 +11,32 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ 
+-#ifndef __VX_TENSOR_H__
+-#define __VX_TENSOR_H__
++#pragma once
+ 
+ #include <stdint.h>
+ #include <vx_intrinsics.h>
+ #include <type_traits>
+ #include <hfloats.h>
++#include <wmma_cfg.h>
+ 
+-#ifndef NUM_LANES
+-#define NUM_LANES 32
++#ifndef NUM_THREADS
++#define NUM_THREADS 4
+ #endif
+ 
++namespace vortex {
+ namespace tensor {
+ 
++template <typename It, // input type (A,B)
++          typename Ot> // output type (C,D)
++struct config {
++private:
++  using cfg = wmma_config_t<NUM_THREADS, 8, sizeof(void*), It, Ot>;
++public:
++  static constexpr uint32_t tileM = cfg::tileM;
++  static constexpr uint32_t tileN = cfg::tileN;
++  static constexpr uint32_t tileK = cfg::tileK;
++};
++
+ enum frag_use_t { matrix_d, matrix_a, matrix_b, matrix_c };
+ enum layout_t { row_major, col_major };
+ 
+@@ -36,92 +48,6 @@ struct fragment {
+   mf32x8_t data;
+ };
+ 
+-__attribute__((always_inline)) void map_operand_ab_32lanes(int tid, int &row, int &col) {
+-  int tg = tid / 4;
+-
+-  // A (row major)
+-  // Figure 7(a) in paper
+-  // row  0~ 3: threadgroups 0 and 2
+-  // row  4~ 7: threadgroups 4 and 6
+-  // row  8~11: threadgroups 1 and 3
+-  // row 12~15: threadgroups 5 and 7
+-  row = tid % 4;
+-  row += (tg * 8) % 16; // +8 -> (1,3,5,7)
+-  row += (tg / 4) * 4;  // +4 -> (4,5,6,7)
+-
+-  // B (column major)
+-  // NOTE: Matrix B mapping in Figure 7(a) is incorrect; below is the
+-  // corrected mapping:
+-  // col  0~ 3: threadgroups 0 and 1
+-  // col  4~ 7: threadgroups 4 and 5
+-  // col  8~11: threadgroups 2 and 3
+-  // col 12~15: threadgroups 6 and 7
+-  col = tid % 4;
+-  col += ((tg % 4) / 2) * 8;  // +8 -> (2,3,6,7)
+-  col += (tg / 4) * 4;        // +4 -> (4,6,5,7)
+-}
+-
+-__attribute__((always_inline)) void map_operand_ab_8lanes(int tid, int &row, int &col) {
+-  int tg = tid / 4;
+-
+-  // A (row major)
+-  // row  0~ 3: threadgroup 0
+-  // row  4~ 7: threadgroup 1
+-  row = tid % 4;
+-  row += tg * 4;
+-
+-  // B (column major)
+-  // col  0~ 3: threadgroup 0
+-  // col  4~ 7: threadgroup 1
+-  col = tid % 4;
+-  col += tg * 4;
+-}
+-
+-__attribute__((always_inline)) void map_operand_c_32lanes(int tid, int &row, int &col) {
+-  int tg = tid / 4;
+-
+-  // Figure 7(b), left
+-  col = ((tg % 4) / 2) * 8;
+-  row = (tg * 8) % 16;
+-  row += (tg / 4) * 4;
+-
+-  // Figure 7(b), right
+-  row += (tid % 4) % 2;
+-  col += ((tid % 4) / 2) * 2;
+-}
+-
+-__attribute__((always_inline)) void map_operand_c_8lanes(int tid, int &row, int &col) {
+-  int tg = tid / 4;
+-
+-  // Figure 7(b), left
+-  col = 0;
+-  row = tg * 4;
+-
+-  // Figure 7(b), right
+-  row += (tid % 4) % 2;
+-  col += ((tid % 4) / 2) * 2;
+-}
+-
+-__attribute__((always_inline)) void map_operand_ab(int tid, int &row, int &col) {
+-  if constexpr (NUM_LANES == 32) {
+-    map_operand_ab_32lanes(tid, row, col);
+-  } else if constexpr (NUM_LANES == 8) {
+-    map_operand_ab_8lanes(tid, row, col);
+-  } else {
+-    static_assert(NUM_LANES == 32 || NUM_LANES == 8, "NUM_LANES must be 8 or 32");
+-  }
+-}
+-
+-__attribute__((always_inline)) void map_operand_c(int tid, int &row, int &col) {
+-  if constexpr (NUM_LANES == 32) {
+-    map_operand_c_32lanes(tid, row, col);
+-  } else if constexpr (NUM_LANES == 8) {
+-    map_operand_c_8lanes(tid, row, col);
+-  } else {
+-    static_assert(NUM_LANES == 32 || NUM_LANES == 8, "NUM_LANES must be 8 or 32");
+-  }
+-}
+-
+ template <typename Frag>
+ __attribute__((always_inline)) void fill_fragment(Frag &dst, size_t value) {
+   if constexpr (Frag::Use == matrix_d) {
+@@ -135,7 +61,7 @@ __attribute__((always_inline)) void fill_fragment(Frag &dst, size_t value) {
+   }
+ }
+ 
+-template <layout_t mem_layout, typename Frag>
++template <typename Frag, layout_t mem_layout = row_major>
+ __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
+   if constexpr (Frag::Use == matrix_a) {
+     if constexpr (Frag::Layout == mem_layout) {
+@@ -154,7 +80,7 @@ __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src,
+   }
+ }
+ 
+-template <layout_t mem_layout, typename Frag>
++template <typename Frag, layout_t mem_layout = row_major>
+ __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
+   static_assert(Frag::Layout == mem_layout, "fragment layout should match memory!");
+   if constexpr (Frag::Use == matrix_c) {
+@@ -189,4 +115,4 @@ __attribute__((always_inline)) void mma_sync(FragD &D, const FragA &A, const Fra
+ 
+ } // namespace wmma
+ 
+-#endif // __VX_TENSOR_H__
+\ No newline at end of file
++} // namespace vortex
+\ No newline at end of file
+diff --git a/tests/regression/sgemm_tpu/common.h b/tests/regression/sgemm_tpu/common.h
+index 720c0ac3..957b4168 100644
+--- a/tests/regression/sgemm_tpu/common.h
++++ b/tests/regression/sgemm_tpu/common.h
+@@ -4,6 +4,10 @@
+ #include <stdint.h>
+ #include <hfloats.h>
+ 
++#ifndef NUM_THREADS
++#define NUM_THREADS 4
++#endif
++
+ #ifndef I_TYPE
+ #define I_TYPE float
+ #endif
+@@ -15,7 +19,6 @@
+ typedef struct {
+   uint32_t grid_dim[2];
+   uint32_t block_dim[2];
+-  uint32_t tileM, tileN, tileK;
+   uint32_t M, N, K;
+   uint64_t A_addr;
+   uint64_t B_addr;
+diff --git a/tests/regression/sgemm_tpu/kernel.cpp b/tests/regression/sgemm_tpu/kernel.cpp
+index 719943ff..a278e3d3 100644
+--- a/tests/regression/sgemm_tpu/kernel.cpp
++++ b/tests/regression/sgemm_tpu/kernel.cpp
+@@ -2,6 +2,8 @@
+ #include <vx_spawn.h>
+ #include <vx_tensor.h>
+ 
++using cfg = tensor::config<I_TYPE, O_TYPE>;
++
+ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
+   auto A = reinterpret_cast<I_TYPE *>(arg->A_addr);
+   auto B = reinterpret_cast<I_TYPE *>(arg->B_addr);
+@@ -12,24 +14,23 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
+   tensor::fragment<tensor::matrix_c, O_TYPE, tensor::row_major> fragC;
+ 
+   // calculate tile row & column based on block index
+-  uint32_t tile_row = blockIdx.y * arg->tileM;
+-  uint32_t tile_col = blockIdx.x * arg->tileN;
++  uint32_t tile_row = blockIdx.y * cfg::tileM;
++  uint32_t tile_col = blockIdx.x * cfg::tileN;
+ 
+   uint32_t N = arg->N;
+   uint32_t K = arg->K;
+-  uint32_t tileK = arg->tileK;
+ 
+   // Initialize accumulator tile to zero
+   tensor::fill_fragment(fragC, 0);
+ 
+-  for (int i = 0; i < K; i += tileK) {
++  for (int i = 0; i < K; i += cfg::tileK) {
+     // Load A tile
+     auto tileA = A + (tile_row * K + i);
+-    tensor::load_matrix_sync<tensor::row_major>(fragA, tileA, K);
++    tensor::load_matrix_sync(fragA, tileA, K);
+ 
+     // Load B tile
+     auto tileB = B + (i * K + tile_col);
+-    tensor::load_matrix_sync<tensor::row_major>(fragB, tileB, K);
++    tensor::load_matrix_sync(fragB, tileB, K);
+ 
+     // Matrix multiply-accumulate: c += a * b
+     tensor::mma_sync(fragC, fragA, fragB, fragC);
+@@ -37,7 +38,7 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
+ 
+   // Store the computed C tile
+   auto tileC = C + (tile_row * N + tile_col);
+-  tensor::store_matrix_sync<tensor::row_major>(tileC, fragC, N);
++  tensor::store_matrix_sync(tileC, fragC, N);
+ }
+ 
+ int main() {
+diff --git a/tests/regression/sgemm_tpu/main.cpp b/tests/regression/sgemm_tpu/main.cpp
+index 11f594c8..afb49187 100644
+--- a/tests/regression/sgemm_tpu/main.cpp
++++ b/tests/regression/sgemm_tpu/main.cpp
+@@ -7,6 +7,7 @@
+ #include <unistd.h>
+ #include <vector>
+ #include <vortex.h>
++#include <wmma_cfg.h>
+ 
+ #define FLOAT_ULP 6
+ 
+@@ -186,73 +187,6 @@ void cleanup() {
+   }
+ }
+ 
+-void compute_wmma_tile(uint32_t NT,     // number of threads
+-                       uint32_t NR,     // number of registers
+-                       uint32_t XlenB,  // register element size in bytes
+-                       uint32_t SlenB,  // A,B element size in bytes
+-                       uint32_t DlenB,  // C,D element size in bytes
+-                       uint32_t &tileM, // tile M dimension
+-                       uint32_t &tileN, // tile N dimension
+-                       uint32_t &tileK  // tile K dimension
+-) {
+-    // input sanity checks
+-    assert((NT    & (NT    - 1)) == 0 && NT    > 0);
+-    assert((NR    & (NR    - 1)) == 0 && NR    > 0);
+-    assert((XlenB & (XlenB - 1)) == 0 && XlenB > 0);
+-    assert((SlenB & (SlenB - 1)) == 0 && SlenB > 0);
+-    assert((DlenB & (DlenB - 1)) == 0 && DlenB > 0);
+-
+-    // 1) pick M,N to saturate C/D budget
+-    // Split exponent pd into two halves for N and M:
+-    // eN = floor(pd/2), eM = pd - eN, tileN = 2^eN, tileM = 2^eM
+-    uint32_t Pd = NT * NR * (XlenB / DlenB);
+-    uint32_t pd = log2(Pd);
+-    uint32_t eN = pd / 2;
+-    uint32_t eM = pd - eN;
+-    tileM = 1u << eM;
+-    tileN = 1u << eN;
+-
+-    // 2) pick K to saturate A/B budget
+-    // Total number of A (or B) elements per warp = NR * (XlenB / SlenB)
+-    // To fit M×K (or K×N) elements into cap_ab slots: K ≤ cap_ab / max(tileM, tileN)
+-    uint32_t cap_ab = NR * (XlenB / SlenB);
+-    tileK = cap_ab / std::max(tileM, tileN);
+-}
+-
+-//------------------------------------------------------------------------------
+-// Determine the micro-op dimensions (m, n, k) for a single-register-operand
+-// MMA instruction on the tensor core, given:
+-//   NT = number of lanes per vector register (threads per warp, power-of-two)
+-//   K  = maximum inner-product length (macro tile K, power-of-two)
+-// Outputs:
+-//   m, n, k such that:
+-//     - k = K (use full inner-product length)
+-//     - m * n = NT (fills all output lanes)
+-//     - m and n are powers of two for alignment.
+-//------------------------------------------------------------------------------
+-void compute_mma_micro(uint32_t NT,    // lanes per register (power-of-two)
+-                       uint32_t K,     // max inner-product length
+-                       uint32_t &m,    // out: micro tile m-dimension
+-                       uint32_t &n,    // out: micro tile n-dimension
+-                       uint32_t &k     // out: micro tile k-dimension
+-) {
+-    // sanity checks: NT and K must be powers of two
+-    assert((NT & (NT - 1)) == 0 && NT > 0);
+-    assert((K  & (K  - 1)) == 0 && K  > 0);
+-
+-    // logNT = log2(NT)
+-    uint32_t logNT = flr_log2(NT);
+-
+-    // split logNT into two exponents e_m = floor(logNT/2), e_n = logNT - e_m
+-    uint32_t e_m = logNT >> 1;      // floor(logNT/2)
+-    uint32_t e_n = logNT - e_m;     // remainder
+-
+-    // m = 2^e_m, n = 2^e_n, k = K
+-    m = 1u << e_m;
+-    n = 1u << e_n;
+-    k = K;
+-}
+-
+ int main(int argc, char *argv[]) {
+   // parse command arguments
+   parse_args(argc, argv);
+@@ -276,15 +210,25 @@ int main(int argc, char *argv[]) {
+   uint32_t XlenB = VX_ISA_ARCH(isa_flags) / 8;
+   std::cout << "GPU XLEN: " << 8 * XlenB << std::endl;
+ 
+-  // tile format ratio
+-  uint32_t o_ratio = XlenB / sizeof(O_TYPE);
+-  uint32_t i_ratio = XlenB / sizeof(I_TYPE);
+-
+-  // determine tensor tile size
+-  uint32_t logNT = log2(NT);
+-  uint32_t tileM = 4 * (1 << (logNT / 2)) * o_ratio;
+-  uint32_t tileN = (logNT % 2 == 0) ? (tileM / 2) : tileM;
+-  uint32_t tileK = std::min(tileM, tileN) * i_ratio;
++  uint32_t tileM, tileN, tileK;
++
++  vortex::wmma_cfg_t<NUM_THREADS, 8, uint32_t, O_TYPE, I_TYPE> cfg32;
++  vortex::wmma_cfg_t<NUM_THREADS, 8, uint64_t, O_TYPE, I_TYPE> cfg64;
++
++  if (XlenB == 4) {
++    std::cout << "Using 32-bit configuration." << std::endl;
++    tileM = cfg32.tileM;
++    tileN = cfg32.tileN;
++    tileK = cfg32.tileK;
++  } else if (XlenB == 8) {
++    std::cout << "Using 64-bit configuration." << std::endl;
++    tileM = cfg64.tileM;
++    tileN = cfg64.tileN;
++    tileK = cfg64.tileK;
++  } else {
++    std::cout << "Error: unsupported XLEN: " << XlenB << " bytes!" << std::endl;
++    return -1;
++  }
+ 
+   std::cout << "GPU tensor tileM=" << tileM << ", tileN=" << tileM << ", tileK=" << tileK << std::endl;
+ 
+@@ -303,10 +247,6 @@ int main(int argc, char *argv[]) {
+     return -1;
+   }
+ 
+-  kernel_arg.tileM = tileM;
+-  kernel_arg.tileN = tileN;
+-  kernel_arg.tileK = tileK;
+-
+   size_t sizeA = M * K;
+   size_t sizeB = K * N;
+   size_t sizeC = M * N;
+diff --git a/tests/regression/sgemm_tpu/tensor_cfg.py b/tests/regression/sgemm_tpu/tensor_cfg.py
+index c7b70fa9..122c02c0 100644
+--- a/tests/regression/sgemm_tpu/tensor_cfg.py
++++ b/tests/regression/sgemm_tpu/tensor_cfg.py
+@@ -1,11 +1,24 @@
++import subprocess
+ import pandas as pd
+ 
++# Operation   (M×N×K)         PTX Instruction
++# FP16→FP16    8×8×4          mma.sync.aligned.m8n8k4.row.col.f16.f16.f16.f16
++#              16×8×16        mma.sync.aligned.m16n8k16.row.col.f16.f16.f16.f16
++# FP16→FP32	   16×8×8	      mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32
++# FP16→FP32	   16×8×16	      mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32
++# INT4→INT32   8×8×32         mma.sync.aligned.m8n8k32.row.col.satfinite.s32.u4.u4.s32
++#              16×8×32        mma.sync.aligned.m16n8k32.row.col.satfinite.s32.u4.s4.s32
++# INT8→INT32   8×8×16         mma.sync.aligned.m8n8k16.row.col.satfinite.s32.s8.u8.s32
++#              16×8×16        mma.sync.aligned.m16n8k16.row.col.satfinite.s32.s8.u8.s32
++# TF32→FP32    16×16x8        mma.sync.aligned.m16n8k4.row.col.f32.tf32.tf32.f32
++
++
+ def clog2(x: int) -> int:
+     """Compute floor(log2(x))."""
+     return 0 if x < 2 else 1 + clog2(x // 2)
+ 
+ class WMMAConfig:
+-    def __init__(self, NT, NR, Xt_size, It_size, Ot_size, DPLEN):
++    def __init__(self, NT, NR, Xt_size, It_size, Ot_size, DPL):
+         self.NT = NT
+         self.NR = NR
+         self.Xt_size = Xt_size
+@@ -13,8 +26,8 @@ class WMMAConfig:
+         self.Ot_size = Ot_size
+ 
+         # compute tileM/tileN/tileK
+-        tile_cd = NT * NR * (Xt_size // Ot_size)
+-        tile_ab = NT * NR * (Xt_size // It_size)
++        tile_cd = NT * NR
++        tile_ab = NT * NR
+         lg_tile_cd = clog2(tile_cd)
+         tile_eN = lg_tile_cd // 2
+         tile_eM = lg_tile_cd - tile_eN
+@@ -23,20 +36,25 @@ class WMMAConfig:
+         self.tileK = tile_ab // max(self.tileM, self.tileN)
+ 
+         # compute tcM/tcN/tcK
+-        tc_cd = NT * (Xt_size // Ot_size)
+-        tc_ab = NT * (Xt_size // It_size)
++        tc_cd = NT
++        tc_ab = NT
+         lg_tc_cd = clog2(tc_cd)
+         tc_en = lg_tc_cd // 2
+         tc_em = lg_tc_cd - tc_en
+         self.tcM = (1 << tc_em)
+         self.tcN = (1 << tc_en)
+-        if DPLEN == 0:
++        if DPL == 0:
+             self.tcK = tc_ab // max(self.tcM, self.tcN)
+         else:
+-            self.tcK = (DPLEN * It_size) // Xt_size
+-            assert ((self.tcM * Ot_size) * (self.tcK * It_size)) <= (NT * Xt_size) and \
+-                   ((self.tcN * Ot_size) * (self.tcK * It_size)) <= (NT * Xt_size), \
+-                   "tcM*tcK, tcN*tcK <= NT"
++            self.tcK = DPL
++
++        assert (self.tileM * self.tileK <= NR * NT), "tileM*tileK <= NR * NT"
++        assert (self.tileN * self.tileK <= NR * NT), "tileN*tileK <= NR * NT"
++        assert (self.tileM * self.tileN <= NR * NT), "tileM*tileN <= NR * NT"
++
++        assert (self.tcM * self.tcK <= NT), "tcM*tcK <= NT"
++        assert (self.tcK * self.tcN <= NT), "tcK*tcN <= NT"
++        assert (self.tcM * self.tcN <= NT), "tcM*tcN <= NT"
+ 
+         # registers per fragment
+         self.nRA = (self.tileM * self.tileK * It_size) // (NT * Xt_size)
+@@ -55,6 +73,20 @@ class WMMAConfig:
+         print(f"TC: M={self.tcM}, N={self.tcN}, K={self.tcK}")
+         print(f"Registers: nRA={self.nRA}, nRB={self.nRB}, nRC={self.nRC}")
+ 
++def verify(NT, DPLEN):
++    compile_cmd = [
++        "gcc", "-std=c++17", "-O2", "-DNDEBUG", "../tests/regression/sgemm_tpu/tensor_generic2.cpp", "-lstdc++",
++        f"-DNUM_THREADS={NT}", f"-DDPLEN={DPLEN}"
++    ]
++    print("Running:", " ".join(compile_cmd))
++    comp = subprocess.run(compile_cmd, capture_output=True)
++    if comp.returncode != 0:
++        return "Compile Error!"
++    run = subprocess.run(["./a.out"])
++    if run.returncode != 0:
++        return "Failed!"
++    return "Passed!"
++
+ # Parameters
+ NR = 8
+ Xt_size = 4
+@@ -64,19 +96,58 @@ NT_values = [1, 2, 4, 8, 16, 32, 64]
+ 
+ rows = []
+ for NT in NT_values:
+-    cfg = WMMAConfig(NT, NR, Xt_size, It_size, Ot_size, 0)
+-    rows.append({
+-        'NT': NT,
+-        'tileM': cfg.tileM,
+-        'tileN': cfg.tileN,
+-        'tileK': cfg.tileK,
+-        'tcM': cfg.tcM,
+-        'tcN': cfg.tcN,
+-        'tcK': cfg.tcK,
+-        'nRA': cfg.nRA,
+-        'nRB': cfg.nRB,
+-        'nRC': cfg.nRC
+-    })
++    cfg0 = WMMAConfig(NT, NR, Xt_size, It_size, Ot_size, 0)
++    dplen = cfg0.tcK
++    while dplen != 0:
++        print(f"Calculating WMMAConfig for NT={NT}, NR={NR}, Xt_size={Xt_size}. It_size={It_size}, Ot_size={Ot_size}, DPLEN={dplen}")
++        cfg = WMMAConfig(NT, NR, Xt_size, It_size, Ot_size, dplen)
++
++        m_steps = cfg.tileM // cfg.tcM
++        n_steps = cfg.tileN // cfg.tcN
++        k_steps = cfg.tileK // cfg.tcK
++
++        a_block_size = cfg.tcM * cfg.tcK  # size of A micro-tile
++        a_sub_blocks = NT // a_block_size  # number of A micro-tiles per register
++        a_sub_steps  = m_steps // a_sub_blocks  # number of A sub-steps per register
++
++        b_block_size = cfg.tcK * cfg.tcN  # size of B micro-tile
++        b_sub_blocks = NT // b_block_size  # number of B micro-tiles per register
++        b_sub_steps  = n_steps // b_sub_blocks  # number of B sub-steps per register
++
++        if a_sub_steps == 0:
++            print(f"Skipping NT={NT}, DPLEN={dplen} due to a_sub_steps=0")
++            dplen //= 2
++            continue
++
++        if b_sub_steps == 0:
++            print(f"Skipping NT={NT}, DPLEN={dplen} due to b_sub_steps=0")
++            dplen //= 2
++            continue
++
++        status = verify(NT, dplen)
++        rows.append({
++            'NT': NT,
++            'tileM': cfg.tileM,
++            'tileN': cfg.tileN,
++            'tileK': cfg.tileK,
++            'tcM': cfg.tcM,
++            'tcN': cfg.tcN,
++            'tcK': cfg.tcK,
++            'nRA': cfg.nRA,
++            'nRB': cfg.nRB,
++            'nRC': cfg.nRC,
++            'm_steps': m_steps,
++            'n_steps': n_steps,
++            'k_steps': k_steps,
++            'a_block_size': a_block_size,
++            'a_sub_blocks': a_sub_blocks,
++            'a_sub_steps': a_sub_steps,
++            'b_block_size': b_block_size,
++            'b_sub_blocks': b_sub_blocks,
++            'b_sub_steps': b_sub_steps,
++            'status': status
++        })
++        dplen //= 2
+ 
+ df = pd.DataFrame(rows)
+ print(df.to_string(index=False))
+\ No newline at end of file
+diff --git a/tests/regression/sgemm_tpu/tensor_generic.cpp b/tests/regression/sgemm_tpu/tensor_generic.cpp
+index 40d1d017..763fb3b7 100644
+--- a/tests/regression/sgemm_tpu/tensor_generic.cpp
++++ b/tests/regression/sgemm_tpu/tensor_generic.cpp
+@@ -2,90 +2,297 @@
+ #include <cassert>
+ #include <cmath>
+ #include <iostream>
++#include <algorithm>
++
++#ifndef NUM_THREADS
++#define NUM_THREADS 32
++#endif
++
++#ifndef DPLEN
++#define DPLEN 0
++#endif
++
++#ifdef NDEBUG
++#define DBG_PRINT(fmt, ...)
++#else
++#define DBG_PRINT(fmt, ...)            \
++  do {                                 \
++    fprintf(stderr, fmt, __VA_ARGS__); \
++  } while (0)
++#endif
++
++#ifdef NDEBUG
++class NullStream {
++public:
++  template <typename T>
++  NullStream &operator<<(const T &) { return *this; }
++  NullStream &operator<<(std::ostream &(*)(std::ostream &)) { return *this; }
++  static NullStream &instance() {
++    static NullStream null_stream;
++    return null_stream;
++  }
++};
++#define dbg_out NullStream::instance()
++#else
++#define dbg_out std::cout
++#endif
+ 
+ template <uint32_t>
+ struct DebugPrint;
+ 
+-template <uint32_t NT,  // number of threads per warp
+-          uint32_t NR,  // registers per fragment
+-          typename Xt,  // vector element type
+-          typename It,  // input type (A,B)
+-          typename Ot   // output type (C,D)
++template <uint32_t NT,    // number of threads per warp
++          uint32_t NR,    // registers per fragment
++          uint32_t XB,    // vector element type size in bytes
++          typename It,    // input type (A,B)
++          typename Ot,    // output type (C,D)
++          uint32_t DP = 0 // Dot-Product Length (0 for auto)
+           >
+ struct wmma_config_t {
++public:
++  static_assert(XB >= 0 && XB <= 8, "invalid XB value!");
++
++  static constexpr uint32_t i_ratio = XB / sizeof(It);
++  static constexpr uint32_t o_ratio = XB / sizeof(Ot);
++  static_assert(i_ratio * sizeof(It) == XB, "XB must be multiple of sizeof(It)");
++  static_assert(o_ratio * sizeof(Ot) == XB, "XB must be multiple of sizeof(Ot)");
++
+ private:
+   static constexpr uint32_t clog2(uint32_t x) {
+     return (x < 2) ? 0 : (1 + clog2(x / 2));
+   }
+ 
+-  static constexpr uint32_t lg_tile_sz = clog2(NT * NR);
+-  static constexpr uint32_t tile_en = lg_tile_sz / 2;
+-  static constexpr uint32_t tile_em = lg_tile_sz - tile_en;
++  static constexpr uint32_t XlenB = XB;
++  static constexpr uint32_t OlenB = sizeof(Ot);
++  static constexpr uint32_t IlenB = sizeof(It);
+ 
+-  static constexpr uint32_t lg_tc_sz = clog2(NT);
+-  static constexpr uint32_t tc_en = lg_tc_sz / 2;
+-  static constexpr uint32_t tc_em = lg_tc_sz - tc_en;
++  static constexpr uint32_t tile_o_cap = NT * NR * o_ratio;
++  static constexpr uint32_t tile_i_cap = NT * NR * i_ratio;
++  static constexpr uint32_t lg_tile_o_cap = clog2(tile_o_cap);
++  static constexpr uint32_t tile_en = lg_tile_o_cap / 2;
++  static constexpr uint32_t tile_em = lg_tile_o_cap - tile_en;
++
++  static constexpr uint32_t block_o_cap = NT * o_ratio;
++  static constexpr uint32_t block_i_cap = NT * i_ratio;
++  static constexpr uint32_t lg_block_o_cap = clog2(block_o_cap);
++  static constexpr uint32_t block_en = lg_block_o_cap / 2;
++  static constexpr uint32_t block_em = lg_block_o_cap - block_en;
+ 
+ public:
+   static constexpr uint32_t NumThreads = NT;
+-  static constexpr uint32_t NumRegs = NR;
++  static constexpr uint32_t NumRegs    = NR;
+ 
+   static constexpr uint32_t tileM = 1u << tile_em;
+   static constexpr uint32_t tileN = 1u << tile_en;
+-  static constexpr uint32_t tileK = (NT * NR) / ((tileM > tileN) ? tileM : tileN);
++  static constexpr uint32_t tileK = tile_i_cap / ((tileM > tileN) ? tileM : tileN);
++
++  static constexpr uint32_t tcM = 1u << block_em;
++  static constexpr uint32_t tcN = 1u << block_en;
++  static constexpr uint32_t tcK = (DP != 0) ? DP : (block_i_cap / ((tcM > tcN) ? tcM : tcN));
+ 
+-  static constexpr uint32_t tcM = 1u << tc_em;
+-  static constexpr uint32_t tcN = 1u << tc_en;
+-  static constexpr uint32_t tcK = NT / ((tcM > tcN) ? tcM : tcN);
++  static constexpr uint32_t m_steps = tileM / tcM;  // number of M steps per register
++  static constexpr uint32_t n_steps = tileN / tcN;  // number of N steps per register
++  static constexpr uint32_t k_steps = tileK / tcK;  // number of K steps per register
+ 
+-  static_assert((tcM * tcK <= NT), "tcM*tcK <= NT");
+-  static_assert((tcN * tcK <= NT), "tcN*tcK <= NT");
++  static constexpr uint32_t a_block_size = tcM * tcK;                   // size of A micro-tile
++  static constexpr uint32_t a_sub_blocks = block_i_cap / a_block_size;  // number of A micro-tiles per register
++  static constexpr uint32_t a_sub_steps  = m_steps / a_sub_blocks;      // number of A sub-steps per register
++
++  static constexpr uint32_t b_block_size = tcK * tcN;                   // size of B micro-tile
++  static constexpr uint32_t b_sub_blocks = block_i_cap / b_block_size;  // number of B micro-tiles per register
++  static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;      // number of B sub-steps per register
++
++  static_assert(a_sub_steps != 0, "tcK is too small for tile A");
++  static_assert(b_sub_steps != 0, "tcK is too small for tile B");
++
++  static_assert((tileM * tileK <= tile_i_cap), "tileM*tileK <= tile_i_cap");
++  static_assert((tileN * tileK <= tile_i_cap), "tileN*tileK <= tile_i_cap");
++  static_assert((tileM * tileN <= tile_o_cap), "tileM*tileN <= tile_o_cap");
++
++  static_assert((tcM * tcK <= block_i_cap), "tcM*tcK <= block_i_cap");
++  static_assert((tcN * tcK <= block_i_cap), "tcN*tcK <= block_i_cap");
++  static_assert((tcM * tcN <= block_o_cap), "tcM*tcN <= block_o_cap");
+ 
+   static_assert((tileM % tcM) == 0, "M,m divisibility");
+   static_assert((tileN % tcN) == 0, "N,n divisibility");
+   static_assert((tileK % tcK) == 0, "K,k divisibility");
+ 
+-  static_assert(sizeof(Xt) % sizeof(It) == 0, "Xt must be multiple of It");
+-  static_assert(sizeof(Xt) % sizeof(Ot) == 0, "Xt must be multiple of Ot");
+-
+-  using vector_t = Xt;
++  using vector_t = std::conditional_t<(XB == 1), uint8_t,
++                    std::conditional_t<(XB == 2), uint16_t,
++                      std::conditional_t<(XB == 4), uint32_t, uint64_t>>>;
+   using input_t  = It;
+   using output_t = Ot;
+ };
+ 
++template <typename D, typename S>
++D pack_row(const S *base, uint32_t ldm) {
++  D packed = 0;
++  auto src = base;
++  for (uint32_t i = 0; i < sizeof(D) / sizeof(S); ++i) {
++    packed |= static_cast<D>(*src) << (i * 8);
++    src += ldm; // move to the next row
++  }
++  return packed;
++}
++
++template <typename T, uint32_t N>
++struct vector_t {
++private:
++  std::array<T, N> data_;
++
++public:
++  T& operator[](size_t idx) {
++    assert(idx < N);
++    return data_[idx];
++  }
++
++  const T& operator[](size_t idx) const {
++    assert(idx < N);
++    return data_[idx];
++  }
++
++  friend std::ostream &operator<<(std::ostream &os, const vector_t &v) {
++    os << "{";
++    for (size_t i = 0; i < N; ++i) {
++      if (i != 0) {
++        os << ", ";
++      }
++      os << v.data_[i];
++    }
++    os << "}";
++    return os;
++  }
++};
++
+ template <typename T, uint32_t R, uint32_t C>
+-struct Fragment {
+-  std::array<T, R * C> data;
++struct array2d_t {
++private:
++  std::array<T, R * C> data_;
++
++public:
++  T* data() {
++    return data_.data();
++  }
++
++  const T* data() const {
++    return data_.data();
++  }
++
++  T &operator()(int row, int col) {
++    assert(row >= 0 && row < R);
++    assert(col >= 0 && col < C);
++    return data_[row * C + col];
++  }
+ 
+-  T &operator()(int row, int col) { return data[row * C + col]; }
+-  const T &operator()(int row, int col) const { return data[row * C + col]; }
++  const T &operator()(int row, int col) const {
++    assert(row >= 0 && row < R);
++    assert(col >= 0 && col < C);
++    return data_[row * C + col];
++  }
+ 
+-  void init(int seed = 0) {
+-    int v = seed;
+-    for (auto &d : data) {
+-      d = static_cast<T>(v++);
++  friend std::ostream &operator<<(std::ostream &os, const array2d_t &v) {
++    os << "{";
++    for (size_t j = 0; j < R; ++j) {
++      if (j != 0) {
++        os << ", ";
++      }
++      os << "{";
++      for (size_t i = 0; i < C; ++i) {
++        if (i != 0) {
++          os << ", ";
++        }
++        os << v(j,i);
++      }
++      os << "}";
+     }
++    os << "}";
++    return os;
+   }
+ };
+ 
+-template <typename X, typename S>
+-static inline X pack_data(const S *ptr) {
+-  constexpr uint32_t W = sizeof(X) / sizeof(S);
+-  X packed = 0;
+-  for (uint32_t b = 0; b < W; ++b) {
+-    X v = static_cast<X>(ptr[b]) & ((X(1) << (8 * sizeof(S))) - 1);
+-    packed |= (v << (8 * sizeof(S) * b));
++template <typename Xt, // element type of the vector register
++          typename Ot, // element type of the output matrix
++          typename It  // element type of the input matrices
++         >
++struct DotProductUnit {
++private:
++  // result = (∑ a_row[k] * b_col[k]) + c_val
++  Ot FEDP(const It* a_row, const It* b_col, Ot c_val, uint32_t len) {
++    Ot sum(0);
++    for (uint32_t k = 0; k < len; ++k) {
++      sum += static_cast<Ot>(a_row[k]) * static_cast<Ot>(b_col[k]);
++    }
++    return sum + c_val;
+   }
+-  return packed;
+-}
+ 
+-template <typename S, typename X>
+-static inline void unpack_data(S *out, X packed) {
+-  constexpr uint32_t W = sizeof(X) / sizeof(S);
+-  for (uint32_t b = 0; b < W; ++b) {
+-    out[b] = static_cast<S>((packed >> (8 * sizeof(S) * b)) & ((X(1) << (8 * sizeof(S))) - 1));
++public:
++  template <uint32_t tcM, uint32_t tcN, uint32_t tcK>
++  void operator()(      array2d_t<Xt, tcM, tcN> &D,
++                  const array2d_t<Xt, tcM, tcK> &A,
++                  const array2d_t<Xt, tcK, tcN> &B,
++                  const array2d_t<Xt, tcM, tcN> &C) {
++    static constexpr uint32_t i_ratio = sizeof(Xt) / sizeof(It);
++    static constexpr uint32_t o_ratio = sizeof(Xt) / sizeof(Ot);
++    static_assert(i_ratio * sizeof(It) == sizeof(Xt), "Xt must be multiple of It");
++    static_assert(o_ratio * sizeof(Ot) == sizeof(Xt), "Xt must be multiple of Ot");
++    static constexpr uint32_t _tcN = tcN * o_ratio;
++    static constexpr uint32_t _tcK = tcK * i_ratio;
++
++    // Bit‐width in bits of a single It and a single Ot:
++    static constexpr uint32_t bits_in  = 8 * sizeof(It);
++    static constexpr uint32_t bits_out = 8 * sizeof(Ot);
++
++    // Masks to extract one It or one Ot from an Xt register:
++    static constexpr Xt mask_in  = (sizeof(It) == sizeof(Xt)) ? Xt(-1) : ((Xt(1) << bits_in) - Xt(1));
++    static constexpr Xt mask_out = (sizeof(Ot) == sizeof(Xt)) ? Xt(-1) : ((Xt(1) << bits_out) - Xt(1));
++
++    /*It a_unpack[tcM][_tcK];
++    It b_unpack[_tcK][_tcN];
++    Ot c_unpack[tcM][_tcN];
++    Ot d_unpack[tcM][_tcN];
++
++    // Unpack A
++    for (uint32_t i = 0; i < tcM; ++i) {
++      for (uint32_t z = 0; z < _tcK; ++z) {
++        uint32_t k_block = z / i_ratio;
++        uint32_t sub_in  = z % i_ratio;
++        Xt packed = A(i, k_block);
++        a_unpack[i][z] = static_cast<It>((packed >> (sub_in * bits_in)) & mask_in);
++      }
++    }
++
++    // Unpack B
++    for (uint32_t z = 0; z < _tcK; ++z) {
++      for (uint32_t j = 0; j < _tcN; ++j) {
++        uint32_t k_block = z / i_ratio;
++        uint32_t sub_in  = z % i_ratio;
++        uint32_t j_block = j / o_ratio;
++        Xt packed = B[k_block][j_block];
++        b_unpack[z][j] = static_cast<It>((packed >> (sub_in * bits_in)) & mask_in);
++      }
++    }
++
++    // Unpack C
++    for (uint32_t i = 0; i < tcM; ++i) {
++      for (uint32_t j = 0; j < _tcN; ++j) {
++        c_unpack[i][j] = static_cast<Ot>((C(i, j / o_ratio) >> ((j % o_ratio) * bits_out)) & mask_out);
++      }
++    }
++
++    // Compute the dot product and accumulate
++    for (uint32_t i = 0; i < tcM; ++i) {
++      for (uint32_t j = 0; j < _tcN; ++j) {
++        d_unpack[i][j] = FEDP(a_unpack[i], b_unpack[j], c_unpack[i][j], tcK);
++      }
++    }
++
++    // Pack the result into D
++    for (uint32_t i = 0; i < tcM; ++i) {
++      for (uint32_t j = 0; j < _tcN; ++j) {
++        D(i, j / o_ratio) |= (static_cast<Xt>(d_unpack[i][j]) & mask_out) << ((j % o_ratio) * bits_out);
++      }
++    }*/
+   }
+-}
++};
+ 
+ template <typename Config>
+ class WMMA {
+@@ -101,22 +308,29 @@ private:
+   static constexpr uint32_t NT = Config::NumThreads;
+   static constexpr uint32_t NR = Config::NumRegs;
+ 
+-  static constexpr uint32_t m_steps = tileM / tcM;
+-  static constexpr uint32_t n_steps = tileN / tcN;
+-  static constexpr uint32_t k_steps = tileK / tcK;
++  static constexpr uint32_t m_steps = Config::m_steps;
++  static constexpr uint32_t n_steps = Config::n_steps;
++  static constexpr uint32_t k_steps = Config::k_steps;
++
++  static constexpr uint32_t a_block_size = Config::a_block_size;
++  static constexpr uint32_t a_sub_blocks = Config::a_sub_blocks;
++  static constexpr uint32_t a_sub_steps  = Config::a_sub_steps;
++
++  static constexpr uint32_t b_block_size = Config::b_block_size;
++  static constexpr uint32_t b_sub_blocks = Config::b_sub_blocks;
++  static constexpr uint32_t b_sub_steps  = Config::b_sub_steps;
+ 
+-  static constexpr uint32_t blockB_size = tcK * tcN; // size of B micro-tile
+-  static constexpr uint32_t Q = NT / blockB_size; // number of B micro-tiles per register
+-  static constexpr uint32_t n_steps_q = n_steps / Q; //
++  static constexpr uint32_t i_ratio = Config::i_ratio;
++  static constexpr uint32_t o_ratio = Config::o_ratio;
+ 
+   using Xt = typename Config::vector_t;
+   using It = typename Config::input_t;
+   using Ot = typename Config::output_t;
+ 
+-  using FragA = Fragment<It, tileM, tileK>; // A: M rows × K cols
+-  using FragB = Fragment<It, tileK, tileN>; // B: K rows × N cols
+-  using FragC = Fragment<Ot, tileM, tileN>; // C/D: M rows × N cols
+-  using FragD = Fragment<Ot, tileM, tileN>;
++  using FragA = array2d_t<It, tileM, tileK>; // A: M rows × K cols
++  using FragB = array2d_t<It, tileK, tileN>; // B: K rows × N cols
++  using FragC = array2d_t<Ot, tileM, tileN>; // C: M rows × N cols
++  using FragD = array2d_t<Ot, tileM, tileN>; // D: M rows × N cols
+ 
+   FragA fragA_;
+   FragB fragB_;
+@@ -125,83 +339,53 @@ private:
+ 
+   FragD fragRef_;
+ 
+-  struct VReg {
+-    std::array<Xt, NT> data;
+-    friend std::ostream &operator<<(std::ostream &os, const VReg &v) {
+-      os << "{";
+-      for (size_t i = 0; i < NT; ++i) {
+-        if (i != 0) {
+-          os << ", ";
+-        }
+-        os << v.data[i];
+-      }
+-      os << "}";
+-      return os;
+-    }
+-  };
++  using Vreg = vector_t<Xt, NR>; // Vector register type
+ 
+-  void load_A(std::array<VReg, NR> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
+-    constexpr uint32_t W = sizeof(Xt) / sizeof(It);
+-    constexpr bool stride_aligned = ((tileK * sizeof(It)) % sizeof(Xt)) == 0;
+-
+-    uint32_t elem_row = lane / tcK;
+-    uint32_t elem_col = lane % tcK;
+-    printf("[load_A] lane=%2u  elem_row=%u elem_col=%u\n", lane, elem_row, elem_col);
++  void load_A(std::array<Vreg, NR> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
++    uint32_t offset = lane * i_ratio;;
++    uint32_t block_idx = offset / a_block_size;
++    uint32_t elem_in_block = offset % a_block_size;
++    uint32_t elem_row = elem_in_block / tcK;
++    uint32_t elem_col = elem_in_block % tcK;
++    DBG_PRINT("[load_A] offset=%2u block_idx=%u elem_in_block=%u elem=[%u,%u]\n", offset, block_idx, elem_in_block, elem_row, elem_col);
+ 
+     for (uint32_t r = 0; r < NR; ++r) {
+-      uint32_t block_m = r / k_steps;
++      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
+       uint32_t block_k = r % k_steps;
+       uint32_t row = block_m * tcM + elem_row;
+       uint32_t col = block_k * tcK + elem_col;
+       auto base = mdata + row * ldm + col;
+-      printf("  r=%u → block_m=%u block_k=%u → loads A[%u,%u]\n", r, block_m, block_k, row, col);
++      DBG_PRINT("  r=%u → block_m=%u block_k=%u → loads A[%u,%u]\n", r, block_m, block_k, row, col);
+ 
+-      if constexpr (W == 1 || stride_aligned) {
+-        vR[r].data[lane] = *reinterpret_cast<const Xt *>(base);
+-      } else {
+-        vR[r].data[lane] = pack_data<Xt>(base);
+-      }
++      vR[r][lane] = *reinterpret_cast<const Xt *>(base);
+     }
+   }
+ 
+-  void load_B(std::array<VReg, NR> &vR,
+-              uint32_t lane,
+-              uint32_t ldm,
+-              const It *mdata) {
+-    constexpr uint32_t W = sizeof(Xt) / sizeof(It);
+-    constexpr bool stride_aligned = ((tileN * sizeof(It)) % sizeof(Xt)) == 0;
+-
+-    uint32_t q = lane / blockB_size; // sub-block index in register
+-
+-    uint32_t lane_in_block = lane % blockB_size;
+-    uint32_t elem_row = lane_in_block / tcN;
+-    uint32_t elem_col = lane_in_block % tcN;
+-    printf("[load_B] lane=%2u  elem_row=%u elem_col=%u\n", lane, elem_row, elem_col);
++  void load_B(std::array<Vreg, NR> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
++    uint32_t offset = lane * i_ratio;;
++    uint32_t block_idx = offset / b_block_size;
++    uint32_t elem_in_block = offset % b_block_size;
++    uint32_t elem_row = elem_in_block / tcK;
++    uint32_t elem_col = elem_in_block % tcK;
++    DBG_PRINT("[load_B] offset=%2u block_idx=%u elem_in_block=%u elem=[%u,%u]\n", offset, block_idx, elem_in_block, elem_row, elem_col);
+ 
+     for (uint32_t r = 0; r < NR; ++r) {
+-      uint32_t block_k = r / n_steps_q;
+-      uint32_t block_n = (r % n_steps_q) * Q + q;
++      uint32_t block_k = r / b_sub_steps;
++      uint32_t block_n = (r % b_sub_steps) * b_sub_blocks + block_idx;
+       uint32_t row = block_k * tcK + elem_row;
+       uint32_t col = block_n * tcN + elem_col;
+-      uint32_t offset = row * ldm + col;
+-      auto base = mdata + offset;
+-      printf("  r=%u → block_k=%u block_n=%u → loads B[%u,%u]\n", r, block_k, block_n, row, col);
+-
+-      if constexpr (W == 1 || stride_aligned) {
+-        vR[r].data[lane] = *reinterpret_cast<const Xt *>(base);
+-      } else {
+-        vR[r].data[lane] = pack_data<Xt>(base);
+-      }
++      auto base = mdata + row * ldm + col;
++      DBG_PRINT("  r=%u → block_k=%u block_n=%u → loads B[%u,%u]\n", r, block_k, block_n, row, col);
++
++      vR[r][lane] = pack_row<Xt>(base, ldm);
+     }
+   }
+ 
+-  void load_C(std::array<VReg, NR> &vR, uint32_t lane, uint32_t ldm, const Ot *mdata) {
+-    constexpr uint32_t W = sizeof(Xt) / sizeof(Ot);
+-    constexpr bool stride_aligned = ((tileN * sizeof(Ot)) % sizeof(Xt)) == 0;
+-
+-    uint32_t elem_row = lane / tcN;
+-    uint32_t elem_col = lane % tcN;
+-    printf("[load_C] lane=%2u  elem_row=%u elem_col=%u\n", lane, elem_row, elem_col);
++  void load_C(std::array<Vreg, NR> &vR, uint32_t lane, uint32_t ldm, const Ot *mdata) {
++    uint32_t offset = lane * o_ratio;
++    uint32_t elem_row = offset / tcN;
++    uint32_t elem_col = offset % tcN;
++    DBG_PRINT("[load_C] offset=%2u elem=[%u,%u]\n", offset, elem_row, elem_col);
+ 
+     for (uint32_t r = 0; r < NR; ++r) {
+       uint32_t block_m = r / n_steps;
+@@ -209,24 +393,18 @@ private:
+       uint32_t row = block_m * tcM + elem_row;
+       uint32_t col = block_n * tcN + elem_col;
+       auto base = mdata + row * ldm + col;
+-      printf("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
++      DBG_PRINT("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
+ 
+-      if constexpr (W == 1 || stride_aligned) {
+-        vR[r].data[lane] = *reinterpret_cast<const Xt *>(base);
+-      } else {
+-        vR[r].data[lane] = pack_data<Xt>(base);
+-      }
++      vR[r][lane] = *reinterpret_cast<const Xt *>(base);
+     }
+   }
+ 
+-  void store_D(Ot *mdata, uint32_t lane, uint32_t ldm, const std::array<VReg, NR> &vR) {
+-    constexpr uint32_t W = sizeof(Xt) / sizeof(Ot);
+-    constexpr bool stride_aligned = ((tileN * sizeof(Ot)) % sizeof(Xt)) == 0;
++  void store_D(Ot *mdata, uint32_t lane, uint32_t ldm, const std::array<Vreg, NR> &vR) {
++    uint32_t offset = lane * o_ratio;
++    uint32_t elem_row = offset / tcN;
++    uint32_t elem_col = offset % tcN;
+ 
+-    uint32_t elem_row = lane / tcN;
+-    uint32_t elem_col = lane % tcN;
+-
+-    printf("[store_D] lane=%2u  elem_row=%u elem_col=%u\n", lane, elem_row, elem_col);
++    DBG_PRINT("[store_D] offset=%2u elem=[%u,%u]\n", offset, elem_row, elem_col);
+ 
+     for (uint32_t r = 0; r < NR; ++r) {
+       uint32_t block_m = r / n_steps;
+@@ -234,118 +412,95 @@ private:
+       uint32_t row = block_m * tcM + elem_row;
+       uint32_t col = block_n * tcN + elem_col;
+       auto base = mdata + row * ldm + col;
+-      printf("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
++      DBG_PRINT("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
+ 
+-      if constexpr (W == 1 || stride_aligned) {
+-        *base = *reinterpret_cast<const Ot *>(&vR[r].data[lane]);
+-      } else {
+-        unpack_data<Ot>(base, vR[r].data[lane]);
+-      }
++      *reinterpret_cast<Xt *>(base) = vR[r][lane];
+     }
+   }
+ 
+-  VReg HMMA(uint32_t q, const VReg &va, const VReg &vb, const VReg &vc) {
+-    // 1) unpack A’s tcM×tcK block
+-    Xt subA[tcM][tcK];
+-    for (uint32_t i = 0; i < tcM; ++i) {
+-      for (uint32_t z = 0; z < tcK; ++z) {
+-        subA[i][z] = va.data[i * tcK + z];
+-      }
+-    }
+-
+-    // 2) unpack B’s tcK×tcN block
+-    // handle sub-block offset
+-    uint32_t off = q * blockB_size;
+-    Xt subB[tcK][tcN];
+-    for (uint32_t z = 0; z < tcK; ++z) {
+-      for (uint32_t j = 0; j < tcN; ++j) {
+-        subB[z][j] = vb.data[off + z*tcN + j];
+-      }
+-    }
+-
+-    // 3) unpack B’s tcM×tcN block
+-    Xt acc[tcM][tcN];
+-    for (uint32_t i = 0; i < tcM; ++i) {
+-      for (uint32_t j = 0; j < tcN; ++j) {
+-        acc[i][j] = vc.data[i * tcN + j];
+-      }
+-    }
++  Vreg MMA(uint32_t m, uint32_t n, uint32_t k, const Vreg &va, const Vreg &vb, const Vreg &vc) {
++    uint32_t a_off = (m % a_sub_blocks) * a_block_size;
++    uint32_t b_off = (n % b_sub_blocks) * b_block_size;
+ 
+-    // 4) compute outer‑product + acc into vd
+     VReg vd;
+     for (uint32_t i = 0; i < tcM; ++i) {
+       for (uint32_t j = 0; j < tcN; ++j) {
+-        Xt sum = 0;
+-        for (uint32_t z = 0; z < tcK; ++z) {
+-          sum += subA[i][z] * subB[z][j];
+-        }
+-        vd.data[i * tcN + j] = acc[i][j] + sum;
++        const Xt *a_row = &va.data[a_off + i * tcK];
++        const Xt *b_col = &vb.data[b_off + j * tcK];
++        Xt c = vc.data[i * tcN + j];
++        Xt d = FEDP(a_row, b_col, c, i, j);
++        vd.data[i * tcN + j] = d;
+       }
+     }
++
+     return vd;
+   }
+ 
+   FragD mmadd(const FragA &A, const FragB &B, const FragC &C) {
+-    FragD D{};
+-    std::array<VReg, NR> vA, vB, vC, vD;
++    FragD D;
++    std::array<Vreg, NR> vA, vB, vC, vD;
++
++    dbg_out << "A=" << A << "\n";
++    dbg_out << "B=" << B << "\n";
++    dbg_out << "C=" << C << "\n";
+ 
+     // per-lane load
+     for (uint32_t lane = 0; lane < NT; ++lane) {
+-      load_A(vA, lane, tileK, A.data.data());
++      load_A(vA, lane, tileK, A.data());
+     }
+     for (uint32_t lane = 0; lane < NT; ++lane) {
+-      load_B(vB, lane, tileN, B.data.data());
++      load_B(vB, lane, tileN, B.data());
+     }
+     for (uint32_t lane = 0; lane < NT; ++lane) {
+-      load_C(vC, lane, tileN, C.data.data());
++      load_C(vC, lane, tileN, C.data());
+     }
+ 
+     for (uint32_t i = 0; i < NR; ++i) {
+-      std::cout << "vA" << i << "=" << vA[i] << "\n";
++      dbg_out << "vA" << i << "=" << vA[i] << "\n";
+     }
+     for (uint32_t i = 0; i < NR; ++i) {
+-      std::cout << "vB" << i << "=" << vB[i] << "\n";
++      dbg_out << "vB" << i << "=" << vB[i] << "\n";
+     }
+     for (uint32_t i = 0; i < NR; ++i) {
+-      std::cout << "vC" << i << "=" << vC[i] << "\n";
++      dbg_out << "vC" << i << "=" << vC[i] << "\n";
+     }
+ 
+     // micro-ops
+     for (uint32_t k = 0; k < k_steps; ++k) {
+       for (uint32_t m = 0; m < m_steps; ++m) {
+-        for (uint32_t nq = 0; nq < n_steps_q; ++nq) {
+-          for (uint32_t q = 0; q < Q; ++q) {
+-            uint32_t n = nq * Q + q;
+-            uint32_t idxA = m * k_steps + k;
+-            uint32_t idxB = k * n_steps_q + nq;
+-            uint32_t idxC = m * n_steps + n;
+-            const VReg &aFrag = vA[idxA];
+-            const VReg &bFrag = vB[idxB];
+-            const VReg &cFrag = (k != 0) ? vD[idxC] : vC[idxC];
+-
+-            std::cout << "[mmadd] m=" << m << " n=" << n << " k=" << k
+-              << " → idxA=" << idxA << " idxB=" << idxB << " idxC=" << idxC
+-              << " aFrag=" << aFrag << " bFrag=" << bFrag << " cFrag=" << cFrag << "\n";
+-
+-            vD[idxC] = HMMA(q, aFrag, bFrag, cFrag);
+-          }
++        for (uint32_t n = 0; n < n_steps; ++n) {
++          uint32_t idxA = (m / a_sub_blocks) * k_steps + k;
++          uint32_t idxB = (k * n_steps + n) / b_sub_blocks;
++          uint32_t idxC = m * n_steps + n;
++
++          const Vreg &aFrag = vA[idxA];
++          const Vreg &bFrag = vB[idxB];
++          const Vreg &cFrag = (k != 0) ? vD[idxC] : vC[idxC];
++
++          dbg_out << "[mmadd] m=" << m << " n=" << n << " k=" << k
++                  << " → idxA=" << idxA << " idxB=" << idxB << " idxC=" << idxC
++                  << " aFrag=" << aFrag << " bFrag=" << bFrag << " cFrag=" << cFrag << "\n";
++
++          vD[idxC] = MMA(m, n, k, aFrag, bFrag, cFrag);
+         }
+       }
+     }
+ 
+     for (uint32_t i = 0; i < NR; ++i) {
+-      std::cout << "vD" << i << "=" << vD[i] << "\n";
++      dbg_out << "vD" << i << "=" << vD[i] << "\n";
+     }
+ 
+     // per-lane store
+     for (uint32_t lane = 0; lane < NT; ++lane) {
+-      store_D(D.data.data(), lane, tileN, vD);
++      store_D(D.data(), lane, tileN, vD);
+     }
++    dbg_out << "D=" << D << "\n";
+     return D;
+   }
+ 
+ public:
+   void init() {
++
+     //fragA_.init();
+     //fragB_.init();
+     //fragC_.init();
+@@ -378,13 +533,23 @@ public:
+   }
+ 
+   float verify() {
+-    float err = 0;
+-    for (uint32_t row = 0; row < tileM; ++row) {
+-      for (uint32_t col = 0; col < tileN; ++col) {
+-        err = std::max(err, std::fabs(fragD_(row, col) - fragRef_(row, col)));
++    if constexpr (std::is_integral_v<Ot>) {
++      int32_t err(0);
++      for (uint32_t row = 0; row < tileM; ++row) {
++        for (uint32_t col = 0; col < tileN; ++col) {
++          err = std::max<int32_t>(err, std::abs((int32_t)fragD_(row, col) - (int32_t)fragRef_(row, col)));
++        }
++      }
++      return err;
++    } else {
++      float err(0);
++      for (uint32_t row = 0; row < tileM; ++row) {
++        for (uint32_t col = 0; col < tileN; ++col) {
++          err = std::max<float>(err, std::fabs((float)fragD_(row, col) - (float)fragRef_(row, col)));
++        }
+       }
++      return err;
+     }
+-    return err;
+   }
+ 
+   void run() {
+@@ -392,12 +557,7 @@ public:
+   }
+ };
+ 
+-using cfg = wmma_config_t<
+-    4,
+-    8,
+-    float,
+-    float,
+-    float>;
++using cfg = wmma_config_t<NUM_THREADS, 8, 4, int8_t, int32_t, DPLEN>;
+ 
+ int main() {
+ 
+diff --git a/tests/regression/sgemm_tpu/tensor_generic2.cpp b/tests/regression/sgemm_tpu/tensor_generic2.cpp
+index 10812519..dd9708cc 100644
+--- a/tests/regression/sgemm_tpu/tensor_generic2.cpp
++++ b/tests/regression/sgemm_tpu/tensor_generic2.cpp
+@@ -2,16 +2,50 @@
+ #include <cassert>
+ #include <cmath>
+ #include <iostream>
++#include <algorithm>
++
++#ifndef NUM_THREADS
++#define NUM_THREADS 32
++#endif
++
++#ifndef DPLEN
++#define DPLEN 0
++#endif
++
++#ifdef NDEBUG
++#define DBG_PRINT(fmt, ...)
++#else
++#define DBG_PRINT(fmt, ...)            \
++  do {                                 \
++    fprintf(stderr, fmt, __VA_ARGS__); \
++  } while (0)
++#endif
++
++#ifdef NDEBUG
++class NullStream {
++public:
++  template <typename T>
++  NullStream &operator<<(const T &) { return *this; }
++  NullStream &operator<<(std::ostream &(*)(std::ostream &)) { return *this; }
++  static NullStream &instance() {
++    static NullStream null_stream;
++    return null_stream;
++  }
++};
++#define dbg_out NullStream::instance()
++#else
++#define dbg_out std::cout
++#endif
+ 
+ template <uint32_t>
+ struct DebugPrint;
+ 
+-template <uint32_t NT,       // number of threads per warp
+-          uint32_t NR,       // registers per fragment
+-          typename Xt,       // vector element type
+-          typename It,       // input type (A,B)
+-          typename Ot,       // output type (C,D)
+-          uint32_t DPLEN = 0 // optional
++template <uint32_t NT,    // number of threads per warp
++          uint32_t NR,    // registers per fragment
++          typename Xt,    // vector element type
++          typename It,    // input type (A,B)
++          typename Ot,    // output type (C,D)
++          uint32_t DP = 0 // Dot-Product Length (0 for auto)
+           >
+ struct wmma_config_t {
+ private:
+@@ -23,11 +57,13 @@ private:
+   static constexpr uint32_t OlenB = sizeof(Ot);
+   static constexpr uint32_t IlenB = sizeof(It);
+ 
+-  static constexpr uint32_t lg_tile_cap = clog2(NT * NR);
++  static constexpr uint32_t tile_cap = NT * NR;
++  static constexpr uint32_t lg_tile_cap = clog2(tile_cap);
+   static constexpr uint32_t tile_en = lg_tile_cap / 2;
+   static constexpr uint32_t tile_em = lg_tile_cap - tile_en;
+ 
+-  static constexpr uint32_t lg_block_cap = clog2(NT);
++  static constexpr uint32_t block_cap = NT;
++  static constexpr uint32_t lg_block_cap = clog2(block_cap);
+   static constexpr uint32_t block_en = lg_block_cap / 2;
+   static constexpr uint32_t block_em = lg_block_cap - block_en;
+ 
+@@ -37,14 +73,34 @@ public:
+ 
+   static constexpr uint32_t tileM = 1u << tile_em;
+   static constexpr uint32_t tileN = 1u << tile_en;
+-  static constexpr uint32_t tileK = (NT * NR) / ((tileM > tileN) ? tileM : tileN);
++  static constexpr uint32_t tileK = tile_cap / ((tileM > tileN) ? tileM : tileN);
+ 
+   static constexpr uint32_t tcM = 1u << block_em;
+   static constexpr uint32_t tcN = 1u << block_en;
+-  static constexpr uint32_t tcK = (DPLEN != 0) ? DPLEN : (NT / ((tcM > tcN) ? tcM : tcN));
++  static constexpr uint32_t tcK = (DP != 0) ? DP : (block_cap / ((tcM > tcN) ? tcM : tcN));
++
++  static constexpr uint32_t m_steps = tileM / tcM;
++  static constexpr uint32_t n_steps = tileN / tcN;
++  static constexpr uint32_t k_steps = tileK / tcK;
++
++  static constexpr uint32_t a_block_size = tcM * tcK;             // size of A micro-tile
++  static constexpr uint32_t a_sub_blocks = NT / a_block_size;     // number of A micro-tiles per register
++  static constexpr uint32_t a_sub_steps  = m_steps / a_sub_blocks;// number of A sub-steps per register
++
++  static constexpr uint32_t b_block_size = tcK * tcN;             // size of B micro-tile
++  static constexpr uint32_t b_sub_blocks = NT / b_block_size;     // number of B micro-tiles per register
++  static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;// number of B sub-steps per register
++
++  static_assert(a_sub_steps != 0, "tcK is too small for tile A");
++  static_assert(b_sub_steps != 0, "tcK is too small for tile B");
++
++  static_assert((tileM * tileK <= NR * NT), "tileM*tileK <= NR * NT");
++  static_assert((tileN * tileK <= NR * NT), "tileN*tileK <= NR * NT");
++  static_assert((tileM * tileN <= NR * NT), "tileM*tileN <= NR * NT");
+ 
+   static_assert((tcM * tcK <= NT), "tcM*tcK <= NT");
+   static_assert((tcN * tcK <= NT), "tcN*tcK <= NT");
++  static_assert((tcM * tcN <= NT), "tcM*tcN <= NT");
+ 
+   static_assert((tileM % tcM) == 0, "M,m divisibility");
+   static_assert((tileN % tcN) == 0, "N,n divisibility");
+@@ -112,11 +168,14 @@ private:
+ 
+   static constexpr uint32_t a_block_size = tcM * tcK; // size of A micro-tile
+   static constexpr uint32_t a_sub_blocks = NT / a_block_size; // number of A micro-tiles per register
+-  static constexpr uint32_t m_sub_steps  = m_steps / a_sub_blocks; // number of A sub-steps per register
++  static constexpr uint32_t a_sub_steps  = m_steps / a_sub_blocks; // number of A sub-steps per register
+ 
+   static constexpr uint32_t b_block_size = tcK * tcN; // size of B micro-tile
+   static constexpr uint32_t b_sub_blocks = NT / b_block_size; // number of B micro-tiles per register
+-  static constexpr uint32_t n_sub_steps  = n_steps / b_sub_blocks; // number of B sub-steps per register
++  static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks; // number of B sub-steps per register
++
++  static_assert(a_sub_steps != 0, "tcK is too small for tile A");
++  static_assert(b_sub_steps != 0, "tcK is too small for tile B");
+ 
+   using Xt = typename Config::vector_t;
+   using It = typename Config::input_t;
+@@ -134,9 +193,9 @@ private:
+ 
+   FragD fragRef_;
+ 
+-  struct VReg {
++  struct Vreg {
+     std::array<Xt, NT> data;
+-    friend std::ostream &operator<<(std::ostream &os, const VReg &v) {
++    friend std::ostream &operator<<(std::ostream &os, const Vreg &v) {
+       os << "{";
+       for (size_t i = 0; i < NT; ++i) {
+         if (i != 0) {
+@@ -149,23 +208,23 @@ private:
+     }
+   };
+ 
+-  void load_A(std::array<VReg, NR> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
++  void load_A(std::array<Vreg, NR> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
+     constexpr uint32_t W = sizeof(Xt) / sizeof(It);
+     constexpr bool stride_aligned = ((tileK * sizeof(It)) % sizeof(Xt)) == 0;
+ 
+     uint32_t block_idx = lane / a_block_size;
+     uint32_t lane_in_block = lane % a_block_size;
+-    uint32_t elem_row = lane_in_block  / tcK;
+-    uint32_t elem_col = lane_in_block  % tcK;
+-    printf("[load_A] lane=%2u  elem_row=%u elem_col=%u\n", lane, elem_row, elem_col);
++    uint32_t elem_row = lane_in_block / tcK;
++    uint32_t elem_col = lane_in_block % tcK;
++    DBG_PRINT("[load_A] lane=%2u block_idx=%u lane_in_block=%u elem=[%u,%u]\n", lane, block_idx, lane_in_block, elem_row, elem_col);
+ 
+     for (uint32_t r = 0; r < NR; ++r) {
+-      uint32_t block_m = r / k_steps;
++      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
+       uint32_t block_k = r % k_steps;
+       uint32_t row = block_m * tcM + elem_row;
+       uint32_t col = block_k * tcK + elem_col;
+       auto base = mdata + row * ldm + col;
+-      printf("  r=%u → block_m=%u block_k=%u → loads A[%u,%u]\n", r, block_m, block_k, row, col);
++      DBG_PRINT("  r=%u → block_m=%u block_k=%u → loads A[%u,%u]\n", r, block_m, block_k, row, col);
+ 
+       if constexpr (W == 1 || stride_aligned) {
+         vR[r].data[lane] = *reinterpret_cast<const Xt *>(base);
+@@ -175,39 +234,50 @@ private:
+     }
+   }
+ 
+-  void load_B(std::array<VReg, NR> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
+-    constexpr uint32_t W = sizeof(Xt) / sizeof(It);
+-    constexpr bool stride_aligned = ((tileN * sizeof(It)) % sizeof(Xt)) == 0;
++ void load_B(std::array<Vreg, NR> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
++  constexpr uint32_t W = sizeof(Xt) / sizeof(It);
++  constexpr bool stride_aligned = ((tileN * sizeof(It)) % sizeof(Xt)) == 0;
+ 
+-    uint32_t block_idx = lane / b_block_size;
+-    uint32_t lane_in_block = lane % b_block_size;
+-    uint32_t elem_row = lane_in_block / tcN;
+-    uint32_t elem_col = lane_in_block % tcN;
+-    printf("[load_B] lane=%2u  elem_row=%u elem_col=%u\n", lane, elem_row, elem_col);
++  // Compute which micro‑tile and which element within that micro‑tile:
++  uint32_t block_idx     = lane / b_block_size;
++  uint32_t lane_in_block = lane % b_block_size;
+ 
+-    for (uint32_t r = 0; r < NR; ++r) {
+-      uint32_t block_k = r / n_sub_steps;
+-      uint32_t block_n = (r % n_sub_steps) * b_sub_blocks + block_idx;
+-      uint32_t row = block_k * tcK + elem_row;
+-      uint32_t col = block_n * tcN + elem_col;
+-      auto base = mdata + row * ldm + col;
+-      printf("  r=%u → block_k=%u block_n=%u → loads B[%u,%u]\n", r, block_k, block_n, row, col);
++  // Switch to column‑major indexing inside each tcK×tcN micro‑tile:
++  uint32_t elem_col = lane_in_block / tcK;  // which column within the micro‑tile
++  uint32_t elem_row = lane_in_block % tcK;  // which row within the micro‑tile
+ 
+-      if constexpr (W == 1 || stride_aligned) {
+-        vR[r].data[lane] = *reinterpret_cast<const Xt *>(base);
+-      } else {
+-        vR[r].data[lane] = pack_data<Xt>(base);
+-      }
++  DBG_PRINT("[load_B] lane=%2u block_idx=%u lane_in_block=%u elem=[%u,%u]\n",
++            lane, block_idx, lane_in_block, elem_row, elem_col);
++
++  for (uint32_t r = 0; r < NR; ++r) {
++    // Determine which tcK×tcN micro‑tile this register r holds:
++    uint32_t block_k = r / b_sub_steps;
++    uint32_t block_n = (r % b_sub_steps) * b_sub_blocks + block_idx;
++
++    // Compute the actual (row, col) in the original B matrix:
++    uint32_t row = block_k * tcK + elem_row;
++    uint32_t col = block_n * tcN + elem_col;
++    auto base = mdata + row * ldm + col;
++
++    DBG_PRINT("  r=%u → block_k=%u block_n=%u → loads B[%u,%u]\n",
++              r, block_k, block_n, row, col);
++
++    if constexpr (W == 1 || stride_aligned) {
++      vR[r].data[lane] = *reinterpret_cast<const Xt *>(base);
++    } else {
++      vR[r].data[lane] = pack_data<Xt>(base);
+     }
+   }
++}
+ 
+-  void load_C(std::array<VReg, NR> &vR, uint32_t lane, uint32_t ldm, const Ot *mdata) {
++
++  void load_C(std::array<Vreg, NR> &vR, uint32_t lane, uint32_t ldm, const Ot *mdata) {
+     constexpr uint32_t W = sizeof(Xt) / sizeof(Ot);
+     constexpr bool stride_aligned = ((tileN * sizeof(Ot)) % sizeof(Xt)) == 0;
+ 
+     uint32_t elem_row = lane / tcN;
+     uint32_t elem_col = lane % tcN;
+-    printf("[load_C] lane=%2u  elem_row=%u elem_col=%u\n", lane, elem_row, elem_col);
++    DBG_PRINT("[load_C] lane=%2u elem=[%u,%u]\n", lane, elem_row, elem_col);
+ 
+     for (uint32_t r = 0; r < NR; ++r) {
+       uint32_t block_m = r / n_steps;
+@@ -215,7 +285,7 @@ private:
+       uint32_t row = block_m * tcM + elem_row;
+       uint32_t col = block_n * tcN + elem_col;
+       auto base = mdata + row * ldm + col;
+-      printf("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
++      DBG_PRINT("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
+ 
+       if constexpr (W == 1 || stride_aligned) {
+         vR[r].data[lane] = *reinterpret_cast<const Xt *>(base);
+@@ -225,14 +295,14 @@ private:
+     }
+   }
+ 
+-  void store_D(Ot *mdata, uint32_t lane, uint32_t ldm, const std::array<VReg, NR> &vR) {
++  void store_D(Ot *mdata, uint32_t lane, uint32_t ldm, const std::array<Vreg, NR> &vR) {
+     constexpr uint32_t W = sizeof(Xt) / sizeof(Ot);
+     constexpr bool stride_aligned = ((tileN * sizeof(Ot)) % sizeof(Xt)) == 0;
+ 
+     uint32_t elem_row = lane / tcN;
+     uint32_t elem_col = lane % tcN;
+ 
+-    printf("[store_D] lane=%2u  elem_row=%u elem_col=%u\n", lane, elem_row, elem_col);
++    DBG_PRINT("[store_D] lane=%2u elem=[%u,%u]\n", lane, elem_row, elem_col);
+ 
+     for (uint32_t r = 0; r < NR; ++r) {
+       uint32_t block_m = r / n_steps;
+@@ -240,7 +310,7 @@ private:
+       uint32_t row = block_m * tcM + elem_row;
+       uint32_t col = block_n * tcN + elem_col;
+       auto base = mdata + row * ldm + col;
+-      printf("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
++      DBG_PRINT("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
+ 
+       if constexpr (W == 1 || stride_aligned) {
+         *base = *reinterpret_cast<const Ot *>(&vR[r].data[lane]);
+@@ -250,51 +320,35 @@ private:
+     }
+   }
+ 
+-  VReg HMMA(uint32_t m, uint32_t n, uint32_t k, const VReg &va, const VReg &vb, const VReg &vc) {
+-    Xt subA[tcM][tcK];
+-    Xt subB[tcK][tcN];
+-    Xt acc[tcM][tcN];
+-
+-    // 1) unpack A’s tcM×tcK block
+-    uint32_t a_off = (m % a_sub_blocks) * a_block_size;
+-    for (uint32_t i = 0; i < tcM; ++i) {
+-      for (uint32_t z = 0; z < tcK; ++z) {
+-        subA[i][z] = va.data[a_off + i * tcK + z];
+-      }
++  Xt FEDP(const Xt *a_row, const Xt *b_col, Xt c_val, uint32_t i, uint32_t j) {
++    Xt acc(c_val);
++    for (uint32_t z = 0; z < tcK; ++z) {
++      acc += a_row[z] * b_col[z];
+     }
++    return acc;
++  }
+ 
+-    // 2) unpack B’s tcK×tcN block
++  Vreg MMA(uint32_t m, uint32_t n, uint32_t k, const Vreg &va, const Vreg &vb, const Vreg &vc) {
++    uint32_t a_off = (m % a_sub_blocks) * a_block_size;
+     uint32_t b_off = (n % b_sub_blocks) * b_block_size;
+-    for (uint32_t z = 0; z < tcK; ++z) {
+-      for (uint32_t j = 0; j < tcN; ++j) {
+-        subB[z][j] = vb.data[b_off + z * tcN + j];
+-      }
+-    }
+ 
+-    // 3) unpack B’s tcM×tcN block
++    Vreg vd;
+     for (uint32_t i = 0; i < tcM; ++i) {
+       for (uint32_t j = 0; j < tcN; ++j) {
+-        acc[i][j] = vc.data[i * tcN + j];
++        const Xt *a_row = &va.data[a_off + i * tcK];
++        const Xt *b_col = &vb.data[b_off + j * tcK];
++        Xt c = vc.data[i * tcN + j];
++        Xt d = FEDP(a_row, b_col, c, i, j);
++        vd.data[i * tcN + j] = d;
+       }
+     }
+ 
+-    // 4) compute outer‑product + acc into vd
+-    VReg vd;
+-    for (uint32_t i = 0; i < tcM; ++i) {
+-      for (uint32_t j = 0; j < tcN; ++j) {
+-        Xt sum(0);
+-        for (uint32_t z = 0; z < tcK; ++z) {
+-          sum += subA[i][z] * subB[z][j];
+-        }
+-        vd.data[i * tcN + j] = acc[i][j] + sum;
+-      }
+-    }
+     return vd;
+   }
+ 
+   FragD mmadd(const FragA &A, const FragB &B, const FragC &C) {
+-    FragD D{};
+-    std::array<VReg, NR> vA, vB, vC, vD;
++    FragD D;
++    std::array<Vreg, NR> vA, vB, vC, vD;
+ 
+     // per-lane load
+     for (uint32_t lane = 0; lane < NT; ++lane) {
+@@ -308,13 +362,13 @@ private:
+     }
+ 
+     for (uint32_t i = 0; i < NR; ++i) {
+-      std::cout << "vA" << i << "=" << vA[i] << "\n";
++      dbg_out << "vA" << i << "=" << vA[i] << "\n";
+     }
+     for (uint32_t i = 0; i < NR; ++i) {
+-      std::cout << "vB" << i << "=" << vB[i] << "\n";
++      dbg_out << "vB" << i << "=" << vB[i] << "\n";
+     }
+     for (uint32_t i = 0; i < NR; ++i) {
+-      std::cout << "vC" << i << "=" << vC[i] << "\n";
++      dbg_out << "vC" << i << "=" << vC[i] << "\n";
+     }
+ 
+     // micro-ops
+@@ -322,24 +376,24 @@ private:
+       for (uint32_t m = 0; m < m_steps; ++m) {
+         for (uint32_t n = 0; n < n_steps; ++n) {
+           uint32_t idxA = (m / a_sub_blocks) * k_steps + k;
+-          uint32_t idxB = k * n_sub_steps + (n / b_sub_blocks);
++          uint32_t idxB = (k * n_steps + n) / b_sub_blocks;
+           uint32_t idxC = m * n_steps + n;
+ 
+-          const VReg &aFrag = vA[idxA];
+-          const VReg &bFrag = vB[idxB];
+-          const VReg &cFrag = (k != 0) ? vD[idxC] : vC[idxC];
++          const Vreg &aFrag = vA[idxA];
++          const Vreg &bFrag = vB[idxB];
++          const Vreg &cFrag = (k != 0) ? vD[idxC] : vC[idxC];
+ 
+-          std::cout << "[mmadd] m=" << m << " n=" << n << " k=" << k
+-            << " → idxA=" << idxA << " idxB=" << idxB << " idxC=" << idxC
+-            << " aFrag=" << aFrag << " bFrag=" << bFrag << " cFrag=" << cFrag << "\n";
++          dbg_out << "[mmadd] m=" << m << " n=" << n << " k=" << k
++                  << " → idxA=" << idxA << " idxB=" << idxB << " idxC=" << idxC
++                  << " aFrag=" << aFrag << " bFrag=" << bFrag << " cFrag=" << cFrag << "\n";
+ 
+-          vD[idxC] = HMMA(m, n, k, aFrag, bFrag, cFrag);
++          vD[idxC] = MMA(m, n, k, aFrag, bFrag, cFrag);
+         }
+       }
+     }
+ 
+     for (uint32_t i = 0; i < NR; ++i) {
+-      std::cout << "vD" << i << "=" << vD[i] << "\n";
++      dbg_out << "vD" << i << "=" << vD[i] << "\n";
+     }
+ 
+     // per-lane store
+@@ -351,10 +405,12 @@ private:
+ 
+ public:
+   void init() {
+-    //fragA_.init();
+-    //fragB_.init();
+-    //fragC_.init();
+ 
++    fragA_.init();
++    fragB_.init();
++    fragC_.init();
++
++    /*
+     for (uint32_t r = 0; r < tileM; ++r) {
+       for (uint32_t c = 0; c < tileK; ++c) {
+         fragA_(r, c) = r * tileK + c;
+@@ -369,7 +425,7 @@ public:
+       for (uint32_t c = 0; c < tileN; ++c) {
+         fragC_(r, c) = 0;
+       }
+-    }
++    }*/
+ 
+     for (uint32_t row = 0; row < tileM; ++row) {
+       for (uint32_t col = 0; col < tileN; ++col) {
+@@ -398,12 +454,12 @@ public:
+ };
+ 
+ using cfg = wmma_config_t<
+-    4,
++    NUM_THREADS,
+     8,
+     float,
+     float,
+     float,
+-    2>;
++    DPLEN>;
+ 
+ int main() {
+ 
+diff --git a/third_party/ramulator b/third_party/ramulator
+--- a/third_party/ramulator
++++ b/third_party/ramulator
+@@ -1 +1 @@
+-Subproject commit e62c84a6f0e06566ba6e182d308434b4532068a5
++Subproject commit e62c84a6f0e06566ba6e182d308434b4532068a5-dirty
