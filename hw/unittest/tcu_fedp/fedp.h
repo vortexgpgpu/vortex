@@ -43,9 +43,10 @@ public:
     // Superformat is TF32 (e8m10): common product magnitude width
     Wc_ = 24u;       // 24-bit magnitude grid for products (s_prod)
     Win_ = Wc_ + 1u; // signed addend width (for alignment/accumulate)
+    Wacc_ = Win_ + ceil_log2(lanes_ + 1) + 1u; // worst-case accumulator width
 
-    LOG("[ctor] frm=%d, lanes=%u, super=TF32, e8m10, Wc=%u, Win=%u, acc_budget~= %u\n",
-        frm_, lanes_, Wc_, Win_, (unsigned)(Win_ + ceil_log2(lanes_ + 1) + 1));
+    LOG("[ctor] frm=%d, lanes=%u, super=TF32, e8m10, Wc=%u, Win=%u, Wacc=%u\n",
+        frm_, lanes_, Wc_, Win_, Wacc_);
   }
 
   // Top-level: a_words/b_words contain n_words packed values with (exp_bits,sig_bits)
@@ -117,8 +118,7 @@ private:
   };
 
   struct AlignOut {
-    std::vector<int32_t> aligned_prods; // signed addends (Win_)
-    int32_t aligned_c{0};
+    std::vector<int32_t> addends;
     int32_t max_exp{0};
     bool sticky_align{false};
   };
@@ -169,9 +169,10 @@ private:
           bw >>= width;
         }
 
-        LOG("[decode] idx=%u, A(s=%u,e=%u,f=0x%x), B(s=%u,e=%u,f=0x%x)\n",
-            out, terms_[out][0].sign, terms_[out][0].exp_field, terms_[out][0].frac,
-            terms_[out][1].sign, terms_[out][1].exp_field, terms_[out][1].frac);
+        LOG("[decode] idx=%u, A(enc=0x%x, s=%u,e=%u,f=0x%x), B(enc=0x%x, s=%u,e=%u,f=0x%x)\n",
+            out,
+            aenc, terms_[out][0].sign, terms_[out][0].exp_field, terms_[out][0].frac,
+            benc, terms_[out][1].sign, terms_[out][1].exp_field, terms_[out][1].frac);
       }
     }
     LOG("[decodeInputs] decoded=%u\n", out);
@@ -234,12 +235,12 @@ private:
           has_pos_inf_ = true;
         raw.push_back(Raw{0, 0, 0, true, true, false});
         has_any_special_ = true;
-        LOG("[mulA] i=%zu, special=Inf/NaN/0*Inf\n", i);
+        LOG("[mul-prod] i=%zu, special=Inf/NaN/0*Inf\n", i);
         continue;
       }
       if (a.is_zero || b.is_zero) {
         raw.push_back(Raw{0, 0, 0, true, false, false});
-        LOG("[mulA] i=%zu, zero=1\n", i);
+        LOG("[mul-prod] i=%zu, zero=1\n", i);
         continue;
       }
 
@@ -250,7 +251,7 @@ private:
       const uint32_t s = a.sign ^ b.sign;
 
       raw.push_back(Raw{s, P, E, false, false, false});
-      LOG("[mulA] i=%zu, s=%u, E=%d, P=0x%08x, Wraw_in=%u\n", i, s, E, P, Wraw_in);
+      LOG("[mul-prod] i=%zu, s=%u, E=%d, P=0x%x, Wraw_in=%u\n", i, s, E, P, Wraw_in);
     }
 
     // Phase B: shift each product up to the 24-bit common grid (exact, no loss)
@@ -262,7 +263,7 @@ private:
     };
     std::vector<WC> wc;
     wc.reserve(raw.size());
-    LOG("[mulB] L_in=%u, Wc=%u, Wraw_in=%u\n", L_in, Wc_, Wraw_in);
+    LOG("[mul-sup] L_in=%u, Wc=%u, Wraw_in=%u\n", L_in, Wc_, Wraw_in);
 
     for (size_t i = 0; i < raw.size(); ++i) {
       const auto &r = raw[i];
@@ -272,7 +273,7 @@ private:
       }
       uint32_t m = (L_in >= 32) ? 0u : (r.P << L_in); // now exactly Wc_ bits
       wc.push_back(WC{r.sign, m, r.E, false, false, false});
-      LOG("[mulB] i=%zu, m_wc=0x%06x, E=%d\n", i, m, r.E);
+      LOG("[mul-sup] i=%zu, m_wc=0x%x, E=%d\n", i, m, r.E);
     }
 
     // Phase C: group reduce in 24-bit domain (fp8:add2, fp4:add4, else passthrough)
@@ -294,7 +295,7 @@ private:
       }
       if (Egrp == INT32_MIN) {
         prods_.push_back(term24_t{0, 0, 0, true, false, false});
-        LOG("[mulC] base=%zu, size=%zu, zero_group=1\n", base, end - base);
+        LOG("[mul-align] base=%zu, size=%zu, zero_group=1\n", base, end - base);
         continue;
       }
 
@@ -321,8 +322,7 @@ private:
           v = -v;
         S += v;
 
-        LOG("[mulC-align] i=%zu, delta=%u, m_adj=%u, signed=%lld\n",
-            i, (unsigned)delta, m, (long long)v);
+        LOG("[mul-align] i=%zu, delta=%u, m_adj=0x%x, signed=0x%lx\n", i, (unsigned)delta, m, v);
       }
 
       // Normalize S to Wc_ bits (drop LSBs -> sticky), bump Egrp if needed
@@ -338,7 +338,7 @@ private:
       const bool is_zero = (m_out == 0);
 
       prods_.push_back(term24_t{sgn, m_out, Egrp, is_zero, false, false});
-      LOG("[mulC-out] base=%zu, size=%zu, s=%u, E=%d, m=0x%06x, zero=%d\n",
+      LOG("[mul-align] base=%zu, size=%zu, s=%u, E=%d, m=0x%x, zero=%d\n",
           base, end - base, sgn, Egrp, m_out, is_zero ? 1 : 0);
     }
 
@@ -386,7 +386,7 @@ private:
         m_c = M >> r;
       }
     }
-    LOG("[decodeC] s=%u, Ec=%d, m=0x%06x, sticky_c32=%d\n", s, Ec, m_c, sticky_c32_ ? 1 : 0);
+    LOG("[decodeC] s=%u, Ec=%d, m=0x%x, sticky_c32=%d\n", s, Ec, m_c, sticky_c32_ ? 1 : 0);
     return term24_t{s, m_c, Ec, false, false, false};
   }
 
@@ -432,50 +432,30 @@ private:
       int32_t v = int32_t(m);
       if (t.sign)
         v = -v;
-      LOG("[align-%s] idx=%zu, delta=%u, sh8=%u, m_adj=%u, signed=%d\n",
+      LOG("[align-%s] idx=%zu, delta=%u, sh8=%u, m_adj=0x%x, signed=%d\n",
           tag, idx, (unsigned)delta, sh8, m, v);
       return v;
     };
 
-    out.aligned_prods.reserve(ps.size());
+    out.addends.reserve(ps.size()+1);
     for (size_t i = 0; i < ps.size(); ++i)
-      out.aligned_prods.push_back(align_one(ps[i], "p", i));
-    out.aligned_c = align_one(cterm, "c", 0);
+      out.addends.push_back(align_one(ps[i], "p", i));
+    out.addends.push_back(align_one(cterm, "c", 0));
 
-    LOG("[alignment] max_exp=%d, sticky=%d, aligned_prods=%zu\n",
-        out.max_exp, out.sticky_align ? 1 : 0, out.aligned_prods.size());
+    LOG("[alignment] max_exp=%d, sticky=%d, addends=%zu\n",
+        out.max_exp, out.sticky_align ? 1 : 0, out.addends.size());
     return out;
   }
 
   // ---------------------------- accumulate --------------------------
   int64_t accumulate(const AlignOut &aout) {
     int64_t acc = 0;
-    const auto &P = aout.aligned_prods;
-
-    size_t idx = 0;
-    bool c_consumed = false;
-
-    while (idx < P.size()) {
-      int64_t chunk_sum = 0;
-      const size_t end = std::min(P.size(), idx + size_t(lanes_));
-      for (size_t i = idx; i < end; ++i)
-        chunk_sum += int64_t(P[i]);
-
-      if (!c_consumed) {
-        chunk_sum += int64_t(aout.aligned_c);
-        c_consumed = true;
-        LOG("[acc-chunk] start=%zu, end=%zu, with_C=1, sum=%lld\n", idx, end, (long long)chunk_sum);
-      } else {
-        LOG("[acc-chunk] start=%zu, end=%zu, with_C=0, sum=%lld\n", idx, end, (long long)chunk_sum);
-      }
-      acc += chunk_sum;
-      idx = end;
+    for (size_t i = 0; i < aout.addends.size(); ++i) {
+      auto &v = aout.addends[i];
+      acc += int64_t(v);
+      LOG("[acc-chunk] idx=%zu, addend=0x%x, acc=0x%lx\n", i, v, acc);
     }
-    if (!c_consumed) { // no product terms
-      acc += int64_t(aout.aligned_c);
-      LOG("[acc-chunk] only_C=1, sum=%lld\n", (long long)aout.aligned_c);
-    }
-    LOG("[accumulate] acc=%lld, lanes=%u\n", (long long)acc, lanes_);
+    LOG("[accumulate] acc=0x%lx\n", acc);
     return acc;
   }
 
@@ -539,7 +519,7 @@ private:
     n.round_bit = round_bit;
     n.sticky_any = sticky_norm || sticky_align_ || sticky_c32_ || sticky_mul_;
 
-    LOG("[normalize] sign=%u, kept24=0x%06x, e_unb=%d, round_bit=%u, sticky_any=%d\n",
+    LOG("[normalize] sign=%u, kept24=0x%x, e_unb=%d, round_bit=%u, sticky_any=%d\n",
         n.sign, n.kept24, n.e_unb, n.round_bit, n.sticky_any ? 1 : 0);
     return n;
   }
@@ -616,14 +596,14 @@ private:
       if (fflags_ & FLAG_NX)
         fflags_ |= FLAG_UF;
       const uint32_t out_sub = (sign << 31) | frac_keep;
-      LOG("[rounding] subnormal_out=0x%08x, fflags=0x%02x\n", out_sub, fflags_);
+      LOG("[rounding] subnormal_out=0x%x, fflags=0x%02x\n", out_sub, fflags_);
       return out_sub;
     }
 
     const uint32_t exp_out = uint32_t(e_bias);
     const uint32_t frac_out = kept24 & ((1u << 23) - 1u);
     const uint32_t out_norm = (sign << 31) | (exp_out << 23) | frac_out;
-    LOG("[rounding] normal_out=0x%08x, fflags=0x%02x\n", out_norm, fflags_);
+    LOG("[rounding] normal_out=0x%x, fflags=0x%02x\n", out_norm, fflags_);
     return out_norm;
   }
 
@@ -703,7 +683,7 @@ private:
 
   // ------------------------------ Members ------------------------------------
   // Config (TF32 superformat)
-  uint32_t Wc_{24}, Win_{25};
+  uint32_t Wc_{24}, Win_{25}, Wacc_{29};
   int frm_{0};
   uint32_t lanes_{1};
 

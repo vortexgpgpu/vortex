@@ -14,25 +14,32 @@
 `include "VX_define.vh"
 
 module VX_tcu_drl_acc #(
-    parameter N = 5         //include c_val count
+    parameter N = 5,         //include c_val count
+    parameter W = 25+$clog2(N)+1
 ) (
     input  wire [N-1:0][24:0] sigsIn,
-    output logic [25+$clog2(N):0] sigOut,
+    output logic [W-1:0] sigOut,
     output logic [N-2:0] signOuts
 );
+    // Sign-extend addends to W bits
+    wire [N-1:0][W-1:0] sigsIn_ext;
+    for (genvar i = 0; i < N; i++) begin : g_ext_sign
+        assign sigsIn_ext[i] = {{(W-25){sigsIn[i][24]}}, sigsIn[i]};
+    end
 
     //Carry-Save-Adder based significand accumulation
     VX_csa_tree #(
         .N (N),
-        .W (25)
+        .W (W),
+        .S (W-1)
     ) sig_csa (
-        .operands (sigsIn),
-        .sum  (sigOut[25+$clog2(N)-1:0]),
-        .cout (sigOut[25+$clog2(N)])
+        .operands (sigsIn_ext),
+        .sum  (sigOut[W-2:0]),
+        .cout (sigOut[W-1])
     );
 
     for (genvar i = 0; i < N-1; i++) begin : g_signs
         assign signOuts[i] = sigsIn[i][24];
     end
-    
+
 endmodule
