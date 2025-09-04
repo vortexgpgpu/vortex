@@ -18,13 +18,14 @@ module VX_tcu_drl_acc #(
     parameter W = 25+$clog2(N)+1
 ) (
     input  wire [N-1:0][24:0] sigsIn,
+    input  wire fmt_sel,
     output logic [W-1:0] sigOut,
     output logic [N-2:0] signOuts
 );
-    // Sign-extend addends to W bits
+    // Sign-extend fp significands to W bits
     wire [N-1:0][W-1:0] sigsIn_ext;
     for (genvar i = 0; i < N; i++) begin : g_ext_sign
-        assign sigsIn_ext[i] = {{(W-25){sigsIn[i][24]}}, sigsIn[i]};
+        assign sigsIn_ext[i] = fmt_sel ? {{(W-25){1'b0}}, sigsIn[i]} : {{(W-25){sigsIn[i][24]}}, sigsIn[i]};
     end
 
     //Carry-Save-Adder based significand accumulation

@@ -95,6 +95,7 @@ module VX_tcu_fedp_drl #(
         .N(TCK+1)
     ) csa_acc (
         .sigsIn   (pipe_aln_sigs),
+        .fmt_sel  (pipe_fmt_sel),
         .sigOut   (acc_sig),
         .signOuts (sigs_sign)
     );
