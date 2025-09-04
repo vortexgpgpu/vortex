@@ -23,6 +23,10 @@ all:
 	$(MAKE) -C madmax
 	$(MAKE) -C stencil3d
 	$(MAKE) -C raycast
+	$(MAKE) -C bfs
+	$(MAKE) -C jacobi
+	$(MAKE) -C pathfinder
+	$(MAKE) -C softmax
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -46,6 +50,10 @@ run-simx:
 	$(MAKE) -C madmax run-simx
 	$(MAKE) -C stencil3d run-simx
 	$(MAKE) -C raycast run-simx
+	$(MAKE) -C bfs run-simx
+	$(MAKE) -C jacobi run-simx
+	$(MAKE) -C pathfinder run-simx
+	$(MAKE) -C softmax run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -69,6 +77,10 @@ run-rtlsim:
 	$(MAKE) -C madmax run-rtlsim
 	$(MAKE) -C stencil3d run-rtlsim
 	$(MAKE) -C raycast run-rtlsim
+	$(MAKE) -C bfs run-rtlsim
+	$(MAKE) -C jacobi run-rtlsim
+	$(MAKE) -C pathfinder run-rtlsim
+	$(MAKE) -C softmax run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -92,3 +104,7 @@ clean:
 	$(MAKE) -C madmax clean
 	$(MAKE) -C stencil3d clean
 	$(MAKE) -C raycast clean
+	$(MAKE) -C bfs clean
+	$(MAKE) -C jacobi clean
+	$(MAKE) -C pathfinder clean
+	$(MAKE) -C softmax clean
