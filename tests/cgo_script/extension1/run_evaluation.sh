@@ -14,3 +14,4 @@ cp ../../../tests/cgo_script/extension1/parser.py .
 ./test.sh
 
 python parser.py
+mv output.csv ../../../tests/cgo_script/extension1/output.csv

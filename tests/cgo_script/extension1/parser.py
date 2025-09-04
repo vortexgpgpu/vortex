@@ -6,7 +6,7 @@ from tabulate import tabulate
 
 
 folders = ["backprop", "bfs", "blackscholes", "b+tree", "cfd", "conv3", "dotproduct", "hotspot3D", "kmeans", "lavaMD", "nearn", "lbm", "pathfinder", "psum", "saxpy", "sfilter", "sgemm", "sgemm2", "sgemm3", "spmv", "srad", "transpose", "vecadd", "psort", "gaussian"]
-options = [1, 2, 3, 4, 5, 8, 9]
+options = [1, 2, 3, 4, 5, 9]
 instrs_table = {}
 cycles_table = {}
 instrs_reduction_table = {}
