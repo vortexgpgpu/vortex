@@ -1,13 +1,15 @@
-#include <cassert>
+// FEDP.hpp — RTL-faithful dot product (TF32 superformat) with tracing.
+//
+// Build with -DFEDP_TRACE=1 to enable logs.
+
+#include <algorithm>
+#include <array>
+#include <climits>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <limits>
-#include <utility>
 #include <vector>
-
-using namespace vortex;
 
 #ifndef FEDP_TRACE
 #define FEDP_TRACE 0
@@ -24,188 +26,200 @@ public:
     }
   }
 };
-
 #define LOG(...) Logger::log(__VA_ARGS__)
 
 class FEDP {
 public:
-  // exp_bits + sig_bits + 1 ∈ {4,8,16,19}; k = number of elements
-  FEDP(int exp_bits, int sig_bits, int frm, uint32_t k)
-      : ebits_(exp_bits)
-      , sbits_(sig_bits)
-      , frm_(frm)
-      , k_(k) {
-    width_ = 1u + ebits_ + sbits_;
-    assert(width_ <= 19u);
-    assert(width_ == 4u || width_ == 8u || width_ == 16u || width_ == 19u);
-    assert(ebits_ >= 2 && ebits_ <= 8);
-    assert(sbits_ >= 1 && sbits_ <= 10); // FP4..TF32
+  // frm: RNE=0, RTZ=1, RDN=2, RUP=3, RMM=4
+  // lanes: product lanes per accumulation "cycle" (1..8). Fan-in per first chunk is (lanes + 1) due to C.
+  FEDP(int frm, uint32_t lanes) : frm_(frm), lanes_(lanes) {
+    if (frm_ < 0 || frm_ > 4)
+      frm_ = 0; // default RNE
+    if (lanes_ < 1)
+      lanes_ = 1;
+    if (lanes_ > 8)
+      lanes_ = 8;
 
-    bias_         = (1u << (ebits_ - 1)) - 1u;
-    exp_all_ones_ = (1u << ebits_) - 1u;
-    frac_mask_    = (1u << sbits_) - 1u;
-    enc_mask_     = (1u << width_) - 1u;
-    TOP_          = 2u * sbits_;
+    // Superformat is TF32 (e8m10): common product magnitude width
+    Wc_ = 24u;       // 24-bit magnitude grid for products (s_prod)
+    Win_ = Wc_ + 1u; // signed addend width (for alignment/accumulate)
 
-    // Packing configuration
-    packed_ = (width_ <= 16);
-    elems_per_word_ = packed_ ? (32u / width_) : 1u;
-    assert(!packed_ || (32u % width_) == 0u);
-
-    // Guard region for single-rounding dot product (no per-term rounding).
-    const uint32_t Kdesign = elems_per_word_ * 4u; // up to 4 packed words
-    uint32_t gb = sbits_ + log2ceil(std::max(Kdesign, 1u)) + 2u;  // +2 cushion
-    guard_bits_ = std::clamp(gb, 1u, 8u);
-
-    LOG("[cfg] ebits=%u, sbits=%u, frm=%u, k=%u, width=%u, packed=%d, elems/word=%u, bias=%u, G=%u\n",
-        ebits_, sbits_, frm_, k_, width_, packed_, elems_per_word_, bias_, guard_bits_);
+    LOG("[ctor] frm=%d, lanes=%u, super=TF32, e8m10, Wc=%u, Win=%u, acc_budget~= %u\n",
+        frm_, lanes_, Wc_, Win_, (unsigned)(Win_ + ceil_log2(lanes_ + 1) + 1));
   }
 
-  // Computes: sum_{i=0..k_-1} a[i]*b[i] + c
-  float operator()(const std::vector<uint32_t> &a,
-                   const std::vector<uint32_t> &b,
-                   float c) {
-    const uint32_t n_words = k_ / elems_per_word_;
-    assert(n_words <= a.size() && n_words <= b.size());
-
+  // Top-level: a_words/b_words contain n_words packed values with (exp_bits,sig_bits)
+  float operator()(const std::vector<uint32_t> &a_words,
+                   const std::vector<uint32_t> &b_words,
+                   float c,
+                   uint32_t n_words,
+                   int exp_bits,
+                   int sig_bits) {
     resetFlags();
 
-    // decode exactly k_ elements
-    auto [adec, bdec] = decodeInputs(a, b, n_words);
+    const uint32_t width = 1u + uint32_t(exp_bits) + uint32_t(sig_bits);
+    const bool packed = (width <= 16u) && ((32u % width) == 0u);
+    const uint32_t elems_per_word = packed ? (32u / width) : 1u;
+    const uint32_t k = n_words * elems_per_word;
 
-    // multiply → normalized product domain
-    auto prods = multiply(adec, bdec);
+    LOG("[inputs] fmt=e%dm%d, width=%u, packed=%d, elems/word=%u, n_words=%u, k=%u\n",
+        exp_bits, sig_bits, width, packed ? 1 : 0, elems_per_word, n_words, k);
 
-    // decode c to product domain
-    auto cenc = bitsFromF32(c);
-    auto cprod = decodeC(cenc);
+    // decode
+    terms_.assign(k, {});
+    decodeInputs(a_words, b_words, n_words, elems_per_word, width, exp_bits, sig_bits, packed);
 
-    // align to common exponent + guard grid
-    auto plan = alignment(prods, cprod);
+    // multiply (and fp8/fp4 reduction)
+    prods_.clear();
+    multiply_to_common(sig_bits, width);
 
-    // accumulate aligned terms
-    auto acc32 = accumulate(plan.terms);
+    // decode C
+    const term24_t cterm = decodeC_to_common(bitsFromF32(c));
 
-    // rounding and normalization
-    auto out = finalize(acc32, plan.max_exp);
+    // alignment (and max_exp)
+    const AlignOut aout = alignment(prods_, cterm);
 
-    // Cast result to float
+    // accumulate (honor lanes)
+    const int64_t acc = accumulate(aout);
+
+    // fast finalize specials/zero
+    if (has_any_special_ || acc == 0) {
+      if (const uint32_t out_fast = finalize_special_or_zero(acc, (sticky_mul_ || sticky_align_ || sticky_c32_))) {
+        return f32FromBits(out_fast);
+      }
+    }
+
+    // 6) normalize
+    const Norm nrm = normalize(acc, aout.max_exp);
+
+    // 7) rounding + pack
+    const uint32_t out = round_and_pack(nrm);
     return f32FromBits(out);
   }
 
+  // fflags accessor (placed after operator() as requested)
   uint32_t fflags() const { return fflags_; }
 
 private:
-  // ------------------------------- Types -------------------------------------
-  struct fp_dec_t {
+  // -------------------------------- Types ------------------------------------
+  struct dec_t {
     uint32_t sign{}, frac{}, exp_field{};
     int32_t exp_unb{};
     bool is_zero{}, is_sub{}, is_inf{}, is_nan{};
   };
-  struct fp_prod_t {
-    uint32_t sign{};
-    int32_t exp{};    // value = mnorm * 2^(exp - TOP_)
-    uint32_t mnorm{}; // MSB near TOP_
-    bool is_zero{};
-    bool sticky{};        // right-shift inexact
-    uint32_t lost_bits{}; // dropped bits
-    uint32_t sh_norm{};   // right shift amount
-  };
-  struct AlignPlan {
-    std::vector<int32_t> terms; // aligned terms on guard grid
-    int32_t max_exp = 0;        // already (max_exp - guard_bits_)
-    uint32_t K_eff = 0;
-    uint32_t M_max = 0;
-    uint32_t W_sum = 0;
+
+  // Common product term: value = m * 2^(E - (Wc_-1))
+  struct term24_t {
+    uint32_t sign{0};
+    uint32_t m{0}; // Wc_ bits magnitude
+    int32_t E{0};
+    bool is_zero{true}, is_inf{false}, is_nan{false};
   };
 
-  // ------------------------------ Utilities ----------------------------------
-  static inline int clz32(uint32_t x) {
-#if defined(__GNUC__) || defined(__clang__)
-    return x ? __builtin_clz(x) : 32;
-#else
-    if (!x)
-      return 32;
-    int n = 0;
-    while ((x & (1u << 31)) == 0u) {
-      x <<= 1;
-      ++n;
-    }
-    return n;
-#endif
-  }
-  static inline uint32_t bitsFromF32(float f) {
-    uint32_t u;
-    std::memcpy(&u, &f, 4);
-    return u;
-  }
-  static inline float f32FromBits(uint32_t u) {
-    float f;
-    std::memcpy(&f, &u, 4);
-    return f;
-  }
-  static inline uint32_t packZero32(uint32_t s) { return s << 31; }
-  static inline uint32_t packInf32(uint32_t s) { return (s << 31) | (0xFFu << 23); }
-  static inline uint32_t canonicalNaN32() { return (0xFFu << 23) | (1u << 22); }
+  struct AlignOut {
+    std::vector<int32_t> aligned_prods; // signed addends (Win_)
+    int32_t aligned_c{0};
+    int32_t max_exp{0};
+    bool sticky_align{false};
+  };
 
-  std::pair<std::vector<fp_dec_t>, std::vector<fp_dec_t>>
-  decodeInputs(const std::vector<uint32_t> &a,
-               const std::vector<uint32_t> &b,
-               uint32_t n_words) const {
-    LOG("[decode] words=%u, width=%u, packed=%d, elems/word=%u, total=%u\n",
-        n_words, width_, packed_ ? 1 : 0, elems_per_word_, k_);
+  struct Norm {
+    uint32_t sign{0};
+    uint32_t kept24{0}; // 24-bit core (1+23) for FP32
+    int32_t e_unb{0};
+    uint32_t round_bit{0};
+    bool sticky_any{false};
+  };
 
-    std::vector<fp_dec_t> A(k_), B(k_);
+  enum { RNE = 0,
+         RTZ = 1,
+         RDN = 2,
+         RUP = 3,
+         RMM = 4 };
+  static constexpr uint32_t FLAG_NX = 1u << 0;
+  static constexpr uint32_t FLAG_UF = 1u << 1;
+  static constexpr uint32_t FLAG_OF = 1u << 2;
+  static constexpr uint32_t FLAG_NV = 1u << 4;
+
+  // -------------------------- decodeInputs --------------------------
+  void decodeInputs(const std::vector<uint32_t> &a_words,
+                    const std::vector<uint32_t> &b_words,
+                    uint32_t n_words,
+                    uint32_t elems_per_word,
+                    uint32_t width,
+                    int exp_bits, int sig_bits,
+                    bool packed) {
+    const uint32_t enc_mask = (width >= 32) ? 0xFFFFFFFFu : ((1u << width) - 1u);
+    const uint32_t frac_mask = (sig_bits >= 32) ? 0xFFFFFFFFu : ((1u << sig_bits) - 1u);
+    const uint32_t exp_mask = (exp_bits >= 32) ? 0xFFFFFFFFu : ((1u << exp_bits) - 1u);
+    const uint32_t bias = (1u << (exp_bits - 1)) - 1u;
+
     uint32_t out = 0;
+    for (uint32_t i = 0; i < n_words; ++i) {
+      uint32_t aw = a_words[i], bw = b_words[i];
+      for (uint32_t j = 0; j < elems_per_word; ++j, ++out) {
+        const uint32_t aenc = packed ? (aw & enc_mask) : aw;
+        const uint32_t benc = packed ? (bw & enc_mask) : bw;
 
-    for (uint32_t i = 0; i < n_words && out < k_; ++i) {
-      uint32_t aw = a[i], bw = b[i];
-      for (uint32_t j = 0; j < elems_per_word_ && out < k_; ++j) {
-        const uint32_t aenc = packed_ ? (aw & enc_mask_) : (a[i] & enc_mask_);
-        const uint32_t benc = packed_ ? (bw & enc_mask_) : (b[i] & enc_mask_);
-        A[out] = decodeCustom(aenc);
-        B[out] = decodeCustom(benc);
-        LOG("  [%u,%u] a(e=%u f=0x%x s=%u) b(e=%u f=0x%x s=%u)\n",
-            i, j, A[out].exp_field, A[out].frac, A[out].sign,
-            B[out].exp_field, B[out].frac, B[out].sign);
-        if (packed_) {
-          aw >>= width_;
-          bw >>= width_;
+        terms_[out][0] = decode_one(aenc, exp_bits, sig_bits, exp_mask, frac_mask, bias);
+        terms_[out][1] = decode_one(benc, exp_bits, sig_bits, exp_mask, frac_mask, bias);
+
+        if (packed) {
+          aw >>= width;
+          bw >>= width;
         }
-        ++out;
+
+        LOG("[decode] idx=%u, A(s=%u,e=%u,f=0x%x), B(s=%u,e=%u,f=0x%x)\n",
+            out, terms_[out][0].sign, terms_[out][0].exp_field, terms_[out][0].frac,
+            terms_[out][1].sign, terms_[out][1].exp_field, terms_[out][1].frac);
       }
     }
-    return {std::move(A), std::move(B)};
+    LOG("[decodeInputs] decoded=%u\n", out);
   }
 
-  fp_dec_t decodeCustom(uint32_t enc) const {
-    enc &= enc_mask_;
-    const uint32_t sign = (enc >> (ebits_ + sbits_)) & 1u;
-    const uint32_t exp = (enc >> sbits_) & ((1u << ebits_) - 1u);
-    const uint32_t frac = enc & frac_mask_;
-    fp_dec_t d{};
+  static inline dec_t decode_one(uint32_t enc, int exp_bits, int sig_bits,
+                                 uint32_t exp_mask, uint32_t frac_mask, uint32_t bias) {
+    const uint32_t sign = (enc >> (exp_bits + sig_bits)) & 1u;
+    const uint32_t exp = (enc >> sig_bits) & exp_mask;
+    const uint32_t frac = enc & frac_mask;
+
+    dec_t d{};
     d.sign = sign;
     d.frac = frac;
     d.exp_field = exp;
     d.is_zero = (exp == 0 && frac == 0);
     d.is_sub = (exp == 0 && frac != 0);
-    d.is_inf = (exp == exp_all_ones_ && frac == 0);
-    d.is_nan = (exp == exp_all_ones_ && frac != 0);
-    d.exp_unb = (exp == 0) ? (1 - int32_t(bias_))
-                           : (exp == exp_all_ones_ ? 0 : int32_t(exp) - int32_t(bias_));
+    d.is_inf = (exp == exp_mask && frac == 0);
+    d.is_nan = (exp == exp_mask && frac != 0);
+    d.exp_unb = (exp == 0) ? (1 - int32_t(bias))
+                           : (exp == exp_mask ? 0 : int32_t(exp) - int32_t(bias));
     return d;
   }
 
-  std::vector<fp_prod_t>
-  multiply(const std::vector<fp_dec_t> &A, const std::vector<fp_dec_t> &B) {
-    assert(A.size() == B.size());
-    resetSpecialFlags();
+  // ----------------------------- multiply ---------------------------
+  // Three phases: raw multiply -> shift each product to 24-bit common grid -> group reduce in 24b
+  void multiply_to_common(int sig_bits_in, uint32_t width_in) {
+    has_any_special_ = false;
+    sticky_mul_ = false;
 
-    std::vector<fp_prod_t> out;
-    out.reserve(A.size());
+    struct Raw {
+      uint32_t sign;
+      uint32_t P;
+      int32_t E;
+      bool is_zero, is_inf, is_nan;
+    };
 
-    for (size_t i = 0; i < A.size(); ++i) {
-      const auto &a = A[i], &b = B[i];
+    const uint32_t Wm_in = uint32_t(sig_bits_in) + 1u; // input mantissa width
+    const uint32_t Wraw_in = 2u * Wm_in;               // raw product width
+    const uint32_t L_in = Wc_ - Wraw_in;               // shift to 24-bit common grid
+
+    // Phase A: raw multiply (no shift-up)
+    std::vector<Raw> raw;
+    raw.reserve(terms_.size());
+
+    for (size_t i = 0; i < terms_.size(); ++i) {
+      const dec_t &a = terms_[i][0];
+      const dec_t &b = terms_[i][1];
 
       if (a.is_nan || b.is_nan)
         has_nan_ = true;
@@ -214,290 +228,370 @@ private:
 
       if (a.is_inf || b.is_inf) {
         const uint32_t s = a.sign ^ b.sign;
-        (s ? has_neg_inf_ : has_pos_inf_) = true;
-        out.push_back(fp_prod_t{0, 0, 0, true, false, 0, 0});
+        if (s)
+          has_neg_inf_ = true;
+        else
+          has_pos_inf_ = true;
+        raw.push_back(Raw{0, 0, 0, true, true, false});
+        has_any_special_ = true;
+        LOG("[mulA] i=%zu, special=Inf/NaN/0*Inf\n", i);
         continue;
       }
       if (a.is_zero || b.is_zero) {
-        out.push_back(fp_prod_t{0, 0, 0, true, false, 0, 0});
+        raw.push_back(Raw{0, 0, 0, true, false, false});
+        LOG("[mulA] i=%zu, zero=1\n", i);
         continue;
       }
 
-      const uint32_t Ma = a.is_sub ? a.frac : ((1u << sbits_) | a.frac);
-      const uint32_t Mb = b.is_sub ? b.frac : ((1u << sbits_) | b.frac);
-      uint32_t m = Ma * Mb; // ≤ 22 bits (sbits ≤ 10)
-      int32_t E = a.exp_unb + b.exp_unb;
+      const uint32_t Ma = a.is_sub ? a.frac : ((1u << sig_bits_in) | a.frac);
+      const uint32_t Mb = b.is_sub ? b.frac : ((1u << sig_bits_in) | b.frac);
+      const uint32_t P = Ma * Mb; // width Wraw_in
+      const int32_t E = (a.exp_unb + b.exp_unb) + 1;
+      const uint32_t s = a.sign ^ b.sign;
 
-      const int pos = 31 - clz32(m); // nbits-1
-      const int sh = pos - int(TOP_);
+      raw.push_back(Raw{s, P, E, false, false, false});
+      LOG("[mulA] i=%zu, s=%u, E=%d, P=0x%08x, Wraw_in=%u\n", i, s, E, P, Wraw_in);
+    }
 
-      bool sticky1 = false;
-      uint32_t lost = 0, sh_norm = 0;
-      if (sh > 0) {
-        const uint32_t mask = (1u << sh) - 1u;
-        lost = (m & mask);
-        sticky1 = (lost != 0);
-        m >>= sh;
-        E += sh;
-        sh_norm = uint32_t(sh);
-      } else if (sh < 0) {
-        m <<= -sh;
-        E -= -sh;
+    // Phase B: shift each product up to the 24-bit common grid (exact, no loss)
+    struct WC {
+      uint32_t sign;
+      uint32_t m;
+      int32_t E;
+      bool is_zero, is_inf, is_nan;
+    };
+    std::vector<WC> wc;
+    wc.reserve(raw.size());
+    LOG("[mulB] L_in=%u, Wc=%u, Wraw_in=%u\n", L_in, Wc_, Wraw_in);
+
+    for (size_t i = 0; i < raw.size(); ++i) {
+      const auto &r = raw[i];
+      if (r.is_zero || r.is_inf || r.is_nan) {
+        wc.push_back(WC{0, 0, 0, true, r.is_inf, r.is_nan});
+        continue;
+      }
+      uint32_t m = (L_in >= 32) ? 0u : (r.P << L_in); // now exactly Wc_ bits
+      wc.push_back(WC{r.sign, m, r.E, false, false, false});
+      LOG("[mulB] i=%zu, m_wc=0x%06x, E=%d\n", i, m, r.E);
+    }
+
+    // Phase C: group reduce in 24-bit domain (fp8:add2, fp4:add4, else passthrough)
+    prods_.clear();
+    uint32_t group = 1;
+    if (width_in == 8u)
+      group = 2;
+    else if (width_in == 4u)
+      group = 4;
+
+    for (size_t base = 0; base < wc.size(); base += group) {
+      const size_t end = std::min(wc.size(), base + group);
+
+      int32_t Egrp = INT32_MIN;
+      for (size_t i = base; i < end; ++i) {
+        const auto &t = wc[i];
+        if (!t.is_zero && !t.is_inf && !t.is_nan && t.E > Egrp)
+          Egrp = t.E;
+      }
+      if (Egrp == INT32_MIN) {
+        prods_.push_back(term24_t{0, 0, 0, true, false, false});
+        LOG("[mulC] base=%zu, size=%zu, zero_group=1\n", base, end - base);
+        continue;
       }
 
-      out.push_back(fp_prod_t{a.sign ^ b.sign, E, m, false, sticky1, lost, sh_norm});
-      LOG("[multiply] i=%zu s=%u E=%d M=0x%08x sh=%d sticky1=%u\n",
-          i, out.back().sign, out.back().exp, out.back().mnorm, sh, sticky1 ? 1u : 0u);
+      int64_t S = 0;
+      for (size_t i = base; i < end; ++i) {
+        const auto &t = wc[i];
+        if (t.is_zero || t.is_inf || t.is_nan)
+          continue;
+
+        const uint32_t delta = uint32_t(Egrp - t.E);
+        uint32_t m = t.m; // 24-bit
+        if (delta >= Wc_) {
+          if (m)
+            sticky_mul_ = true;
+          m = 0;
+        } else if (delta) {
+          const uint32_t mask = (1u << delta) - 1u;
+          if (m & mask)
+            sticky_mul_ = true;
+          m >>= delta;
+        }
+        int64_t v = int64_t(m);
+        if (t.sign)
+          v = -v;
+        S += v;
+
+        LOG("[mulC-align] i=%zu, delta=%u, m_adj=%u, signed=%lld\n",
+            i, (unsigned)delta, m, (long long)v);
+      }
+
+      // Normalize S to Wc_ bits (drop LSBs -> sticky), bump Egrp if needed
+      uint32_t sgn = (S < 0) ? 1u : 0u;
+      uint64_t mag = (S < 0) ? uint64_t(-S) : uint64_t(S);
+      while (mag >> Wc_) {
+        if (mag & 1ull)
+          sticky_mul_ = true;
+        mag >>= 1;
+        ++Egrp;
+      }
+      const uint32_t m_out = uint32_t(mag & ((1ull << Wc_) - 1ull));
+      const bool is_zero = (m_out == 0);
+
+      prods_.push_back(term24_t{sgn, m_out, Egrp, is_zero, false, false});
+      LOG("[mulC-out] base=%zu, size=%zu, s=%u, E=%d, m=0x%06x, zero=%d\n",
+          base, end - base, sgn, Egrp, m_out, is_zero ? 1 : 0);
     }
+
+    LOG("[multiply] groups=%zu, sticky_mul=%d\n", prods_.size(), sticky_mul_ ? 1 : 0);
+  }
+
+  // ------------------------------ decodeC ---------------------------
+  term24_t decodeC_to_common(uint32_t enc32) {
+    const uint32_t s = (enc32 >> 31) & 1u;
+    const uint32_t e = (enc32 >> 23) & 0xFFu;
+    const uint32_t f = enc32 & 0x7FFFFFu;
+
+    c_sign_ = s;
+    c_is_inf_ = (e == 0xFFu && f == 0);
+    c_is_nan_ = (e == 0xFFu && f != 0);
+
+    if (e == 0 && f == 0) {
+      LOG("[decodeC] zero=1\n");
+      LOG("[decodeC] s=0, E=0, m=0x000000, specials=0\n");
+      return term24_t{0, 0, 0, true, false, false};
+    }
+    if (c_is_inf_ || c_is_nan_) {
+      LOG("[decodeC] special=%s\n", c_is_inf_ ? "Inf" : "NaN");
+      LOG("[decodeC] special=1\n");
+      return term24_t{0, 0, 0, true, c_is_inf_, c_is_nan_};
+    }
+
+    const bool is_sub = (e == 0 && f != 0);
+    const int32_t Ec = is_sub ? (1 - 127) : (int32_t(e) - 127);
+    const uint32_t M = is_sub ? f : ((1u << 23) | f); // 24b
+
+    // Scale FP32 mantissa to Wc_-1 top (23 for TF32)
+    const int dM = int(Wc_ - 1u) - 23;
+    uint32_t m_c = 0;
+    if (dM >= 0) {
+      m_c = (dM >= 32) ? 0u : (M << dM);
+    } else {
+      const int r = -dM;
+      if (r >= 32)
+        m_c = 0u;
+      else {
+        const uint32_t dropped = M & ((1u << r) - 1u);
+        if (dropped)
+          sticky_c32_ = true;
+        m_c = M >> r;
+      }
+    }
+    LOG("[decodeC] s=%u, Ec=%d, m=0x%06x, sticky_c32=%d\n", s, Ec, m_c, sticky_c32_ ? 1 : 0);
+    return term24_t{s, m_c, Ec, false, false, false};
+  }
+
+  // ----------------------------- alignment --------------------------
+  AlignOut alignment(const std::vector<term24_t> &ps, const term24_t &cterm) {
+    AlignOut out{};
+    int32_t max_exp = INT32_MIN;
+
+    auto note = [&](const term24_t &t) {
+      if (!t.is_zero && !t.is_inf && !t.is_nan)
+        if (t.E > max_exp)
+          max_exp = t.E;
+    };
+    for (auto &p : ps)
+      note(p);
+    note(cterm);
+
+    if (max_exp == INT32_MIN) {
+      out.max_exp = 0;
+      LOG("[alignment] all_zero=1\n");
+      return out;
+    }
+    out.max_exp = max_exp;
+
+    auto align_one = [&](const term24_t &t, const char *tag, size_t idx) -> int32_t {
+      if (t.is_zero || t.is_inf || t.is_nan) {
+        LOG("[align-%s] idx=%zu, zero_or_special=1\n", tag, idx);
+        return 0;
+      }
+      uint32_t m = t.m;
+      const uint32_t delta = uint32_t(max_exp - t.E);
+      const uint8_t sh8 = (delta > 255u) ? 255u : uint8_t(delta); // trace
+      if (delta >= Wc_) {
+        if (m)
+          out.sticky_align = true;
+        m = 0;
+      } else if (delta) {
+        const uint32_t mask = (1u << delta) - 1u;
+        if (m & mask)
+          out.sticky_align = true;
+        m >>= delta;
+      }
+      int32_t v = int32_t(m);
+      if (t.sign)
+        v = -v;
+      LOG("[align-%s] idx=%zu, delta=%u, sh8=%u, m_adj=%u, signed=%d\n",
+          tag, idx, (unsigned)delta, sh8, m, v);
+      return v;
+    };
+
+    out.aligned_prods.reserve(ps.size());
+    for (size_t i = 0; i < ps.size(); ++i)
+      out.aligned_prods.push_back(align_one(ps[i], "p", i));
+    out.aligned_c = align_one(cterm, "c", 0);
+
+    LOG("[alignment] max_exp=%d, sticky=%d, aligned_prods=%zu\n",
+        out.max_exp, out.sticky_align ? 1 : 0, out.aligned_prods.size());
     return out;
   }
 
-  // FP32 c → product domain; track c specials; numeric term is zero if non-finite
-  fp_prod_t decodeC(uint32_t enc) {
-    const uint32_t sign = (enc >> 31) & 1u;
-    const uint32_t exp  = (enc >> 23) & 0xFFu;
-    const uint32_t frac = enc & 0x7FFFFFu;
+  // ---------------------------- accumulate --------------------------
+  int64_t accumulate(const AlignOut &aout) {
+    int64_t acc = 0;
+    const auto &P = aout.aligned_prods;
 
-    c_sign_ = sign;
-    c_is_inf_ = (exp == 0xFFu && frac == 0);
-    c_is_nan_ = (exp == 0xFFu && frac != 0);
+    size_t idx = 0;
+    bool c_consumed = false;
 
-    const bool is_zero = (exp == 0 && frac == 0);
-    const bool is_sub = (exp == 0 && frac != 0);
+    while (idx < P.size()) {
+      int64_t chunk_sum = 0;
+      const size_t end = std::min(P.size(), idx + size_t(lanes_));
+      for (size_t i = idx; i < end; ++i)
+        chunk_sum += int64_t(P[i]);
 
-    if (is_zero || c_is_inf_ || c_is_nan_) {
-      LOG("[cprod] non-finite-or-zero c -> numeric 0 (s=%u)\n", sign);
-      return fp_prod_t{0, 0, 0, true, false, 0, 0};
-    }
-
-    const int32_t exp_unb = int32_t(exp) - 127; // exp != 0,0xFF
-    const uint32_t M = is_sub ? frac : ((1u << 23) | frac);
-
-    uint32_t m = M;
-    int32_t E = exp_unb - 23;
-
-    const int pos = 31 - clz32(m);
-    const int sh = pos - int(TOP_);
-
-    bool sticky1 = false;
-    uint32_t lost = 0, sh_norm = 0;
-    if (sh > 0) {
-      const uint32_t mask = (1u << sh) - 1u;
-      lost = (m & mask);
-      sticky1 = (lost != 0);
-      m >>= sh;
-      E += sh;
-      sh_norm = uint32_t(sh);
-    } else if (sh < 0) {
-      m <<= -sh;
-      E -= -sh;
-    }
-
-    E += int(TOP_);
-    LOG("[cprod] s=%u, E=%d, M=0x%08x\n", sign, E, m);
-    return fp_prod_t{sign, E, m, false, sticky1, lost, sh_norm};
-  }
-
-  AlignPlan alignment(const std::vector<fp_prod_t> &ps, const fp_prod_t &cprod) {
-    LOG("[alignment]\n");
-    AlignPlan plan;
-
-    int32_t max_exp = std::numeric_limits<int32_t>::min();
-    auto note = [&](const fp_prod_t &p) {
-      if (!p.is_zero) {
-        max_exp = std::max(max_exp, p.exp);
-      }
-    };
-    for (const auto &p : ps)
-      note(p);
-    note(cprod);
-
-    if (max_exp == std::numeric_limits<int32_t>::min()) {
-      plan.max_exp = 0;
-      plan.K_eff = 0;
-      plan.M_max = 0;
-      plan.W_sum = 0;
-      plan.terms.assign(ps.size() + 1, 0);
-      LOG("  all-zero terms\n");
-      return plan;
-    }
-
-    const uint32_t G = guard_bits_;
-    plan.max_exp = max_exp - int32_t(G);
-    plan.terms.reserve(ps.size() + 1);
-
-    auto align_one = [&](const fp_prod_t &p, const char *tag, int idx) -> int32_t {
-      if (p.is_zero) {
-        LOG("  %s%02d: zero\n", tag, idx);
-        return 0;
-      }
-
-      const int32_t delta = max_exp - p.exp; // ≥ 0 wrt original grid
-      uint32_t m = p.mnorm;
-
-      // Align to guard grid (keep G guards; anything below → sticky)
-      if (delta >= int32_t(G)) {
-        const uint32_t sh = uint32_t(delta - int32_t(G));
-        if (sh >= 32u) {
-          if (m)
-            any_sticky_ = true;
-          m = 0;
-        } else {
-          if (sh > 0) {
-            const uint32_t rem_mask = (1u << sh) - 1u;
-            if (m & rem_mask)
-              any_sticky_ = true;
-          }
-          m >>= sh;
-        }
+      if (!c_consumed) {
+        chunk_sum += int64_t(aout.aligned_c);
+        c_consumed = true;
+        LOG("[acc-chunk] start=%zu, end=%zu, with_C=1, sum=%lld\n", idx, end, (long long)chunk_sum);
       } else {
-        const uint32_t lsh = uint32_t(int32_t(G) - delta);
-        m <<= lsh;
+        LOG("[acc-chunk] start=%zu, end=%zu, with_C=0, sum=%lld\n", idx, end, (long long)chunk_sum);
       }
-
-      // Re-inject lost bits: integer part to grid; fractional → sticky
-      if (p.lost_bits) {
-        const int32_t sd_signed = (max_exp - p.exp) + int32_t(p.sh_norm) - int32_t(G);
-        if (sd_signed <= 0) {
-          const uint32_t lsh = uint32_t(-sd_signed);
-          if (lsh < 32u)
-            m += (p.lost_bits << lsh);
-        } else {
-          const uint32_t sd = uint32_t(sd_signed);
-          const uint32_t extra = (sd < 32u) ? (p.lost_bits >> sd) : 0u;
-          if (extra)
-            m += extra;
-          if (sd < 32u) {
-            const uint32_t rem_mask = (1u << sd) - 1u;
-            if (p.lost_bits & rem_mask)
-              any_sticky_ = true;
-          } else if (p.lost_bits) {
-            any_sticky_ = true;
-          }
-        }
-      }
-
-      if (p.sticky)
-        any_sticky_ = true;
-
-      const uint32_t mbits = m ? uint32_t(32 - clz32(m)) : 0u;
-      plan.M_max = std::max(plan.M_max, mbits);
-      if (m)
-        plan.K_eff++;
-
-      int32_t val = int32_t(m);
-      if (p.sign)
-        val = -val;
-
-      LOG("  %s%02d: δ=%d mbits=%u sign=%u (G=%u)\n", tag, idx, delta, mbits, p.sign, G);
-      return val;
-    };
-
-    for (size_t i = 0; i < ps.size(); ++i)
-      plan.terms.push_back(align_one(ps[i], "p", int(i)));
-    plan.terms.push_back(align_one(cprod, "c", 0));
-
-    // Width proof (no cancellation). Must fit signed 32-bit magnitude.
-    plan.W_sum = (plan.K_eff == 0) ? 0u : (plan.M_max + log2ceil(plan.K_eff));
-    assert(plan.W_sum <= 31u && "Accumulator magnitude would exceed 31 bits");
-
-    LOG("  summary: K=%u, M_max=%u, W_sum=%u (<=31 OK), sticky=%u (G=%u)\n",
-        plan.K_eff, plan.M_max, plan.W_sum, any_sticky_ ? 1u : 0u, G);
-    return plan;
-  }
-
-  int32_t accumulate(const std::vector<int32_t> &terms) const {
-    LOG("[accumulate]\n");
-    int32_t acc = 0;
-    for (size_t i = 0; i < terms.size(); ++i) {
-      int32_t before = acc;
-      acc += terms[i];
-      LOG("  %02zu: %d + %d -> %d\n", i, before, terms[i], acc);
+      acc += chunk_sum;
+      idx = end;
     }
-    LOG("  acc=%d\n", acc);
+    if (!c_consumed) { // no product terms
+      acc += int64_t(aout.aligned_c);
+      LOG("[acc-chunk] only_C=1, sum=%lld\n", (long long)aout.aligned_c);
+    }
+    LOG("[accumulate] acc=%lld, lanes=%u\n", (long long)acc, lanes_);
     return acc;
   }
 
-  uint32_t finalize(int32_t acc32, int32_t max_exp_fine) {
-    // Resolve specials (no early exits elsewhere)
+  // -------------------- Special/zero fast finalize helper --------------------
+  uint32_t finalize_special_or_zero(int64_t acc, bool sticky_pre) {
     if (has_nv_ ||
         (has_pos_inf_ && has_neg_inf_) ||
         (c_is_inf_ && ((has_pos_inf_ && c_sign_ == 1u) || (has_neg_inf_ && c_sign_ == 0u)))) {
       fflags_ |= FLAG_NV;
-      LOG("[finalize] invalid -> qNaN\n");
+      LOG("[final-fast] invalid=1, out=qNaN\n");
       return canonicalNaN32();
     }
     if (has_nan_ || c_is_nan_) {
-      LOG("[finalize] NaN observed -> qNaN\n");
+      LOG("[final-fast] has_NaN=1, out=qNaN\n");
       return canonicalNaN32();
     }
     if (has_pos_inf_ || has_neg_inf_) {
       const uint32_t s = has_neg_inf_ ? 1u : 0u;
-      LOG("[finalize] product Inf -> %sInf\n", s ? "-" : "+");
       return packInf32(s);
     }
     if (c_is_inf_) {
-      LOG("[finalize] c is Inf -> pass through\n");
       return packInf32(c_sign_);
     }
-
-    // Finite numeric path
-    if (acc32 == 0) {
-      if (any_sticky_)
+    if (acc == 0) {
+      if (sticky_pre)
         fflags_ |= (FLAG_NX | FLAG_UF);
-      LOG("[finalize] zero, fflags=0x%02x\n", fflags_);
+      LOG("[final-fast] zero=1, fflags=0x%02x\n", fflags_);
       return packZero32(0);
     }
+    return 0;
+  }
 
-    const uint32_t sign = (acc32 < 0) ? 1u : 0u;
-    uint32_t mag = (acc32 < 0) ? uint32_t(-(int32_t)acc32) : uint32_t(acc32);
+  // ---------------------------- normalize ---------------------------
+  Norm normalize(int64_t acc, int32_t max_exp) {
+    Norm n{};
+    n.sign = (acc < 0) ? 1u : 0u;
+    uint64_t mag = (acc < 0) ? uint64_t(-acc) : uint64_t(acc);
 
-    const int nbits = 32 - clz32(mag); // 1..31 by construction
-    int32_t e_unb32 = (max_exp_fine - int32_t(TOP_)) + (nbits - 1);
+    const uint32_t nbits = 64u - uint32_t(clz64(mag)); // >=1
+    n.e_unb = (max_exp - int32_t(Wc_ - 1u)) + int32_t(nbits - 1u);
 
-    // Normalize to 24b (1.hidden + 23 frac)
+    // Normalize to FP32 24-bit core (1+23)
     const int FP_TOP = 23;
-    const int sh = (nbits - 1) - FP_TOP;
+    const int sh = int(nbits - 1u) - FP_TOP;
+
     uint32_t kept24 = 0, round_bit = 0;
     bool sticky_norm = false;
-
     if (sh > 0) {
-      const uint32_t mask = (sh >= 32) ? 0xFFFFFFFFu : ((1u << sh) - 1u);
-      const uint32_t rem = mag & mask;
-      round_bit = (sh >= 1) ? ((rem >> (sh - 1)) & 1u) : 0u;
-      sticky_norm = (sh >= 2) ? ((rem & ((1u << (sh - 1)) - 1u)) != 0u) : false;
-      kept24 = (sh >= 32) ? 0u : (mag >> sh);
+      const uint64_t mask = (sh >= 64) ? ~0ull : ((1ull << sh) - 1ull);
+      const uint64_t rem = mag & mask;
+      round_bit = (sh >= 1) ? ((rem >> (sh - 1)) & 1ull) : 0u;
+      sticky_norm = (sh >= 2) ? ((rem & ((1ull << (sh - 1)) - 1ull)) != 0ull) : false;
+      kept24 = (sh >= 64) ? 0u : uint32_t(mag >> sh);
     } else {
-      kept24 = (sh < -31) ? 0u : (mag << (-sh));
+      const int lsh = -sh;
+      kept24 = (lsh >= 32) ? 0u : uint32_t(mag << lsh);
     }
     kept24 &= ((1u << 24) - 1u);
 
-    const bool sticky_any = sticky_norm || any_sticky_;
-    if (round_bit || sticky_any)
+    n.kept24 = kept24;
+    n.round_bit = round_bit;
+    n.sticky_any = sticky_norm || sticky_align_ || sticky_c32_ || sticky_mul_;
+
+    LOG("[normalize] sign=%u, kept24=0x%06x, e_unb=%d, round_bit=%u, sticky_any=%d\n",
+        n.sign, n.kept24, n.e_unb, n.round_bit, n.sticky_any ? 1 : 0);
+    return n;
+  }
+
+  // ----------------------------- rounding ---------------------------
+  uint32_t round_and_pack(const Norm &nrm) {
+    // specials again (in case early exit didn't take)
+    if (has_nv_ ||
+        (has_pos_inf_ && has_neg_inf_) ||
+        (c_is_inf_ && ((has_pos_inf_ && c_sign_ == 1u) || (has_neg_inf_ && c_sign_ == 0u)))) {
+      fflags_ |= FLAG_NV;
+      LOG("[rounding] out=qNaN\n");
+      return canonicalNaN32();
+    }
+    if (has_nan_ || c_is_nan_) {
+      LOG("[rounding] has_NaN=1, out=qNaN\n");
+      return canonicalNaN32();
+    }
+    if (has_pos_inf_ || has_neg_inf_) {
+      const uint32_t s = has_neg_inf_ ? 1u : 0u;
+      return packInf32(s);
+    }
+    if (c_is_inf_) {
+      return packInf32(c_sign_);
+    }
+
+    uint32_t kept24 = nrm.kept24;
+    int32_t e_unb = nrm.e_unb;
+    const uint32_t sign = nrm.sign;
+
+    if (nrm.round_bit || nrm.sticky_any)
       fflags_ |= FLAG_NX;
 
     const uint32_t lsb = kept24 & 1u;
-    if (roundInc(sign, lsb, round_bit, sticky_any)) {
+    if (roundInc(sign, lsb, nrm.round_bit, nrm.sticky_any)) {
       kept24 += 1u;
       if (kept24 >= (1u << 24)) {
         kept24 >>= 1;
-        e_unb32 += 1;
+        e_unb += 1;
       }
     }
 
-    const int32_t e_bias32 = e_unb32 + 127;
+    const int32_t e_bias = e_unb + 127;
 
-    // Overflow → Inf
-    if (e_bias32 >= 0xFF) {
+    if (e_bias >= 0xFF) {
       fflags_ |= (FLAG_OF | FLAG_NX);
-      const uint32_t out = packInf32(sign);
-      LOG("[finalize] overflow -> inf 0x%08x, fflags=0x%02x\n", out, fflags_);
-      return out;
+      LOG("[rounding] out=Inf\n");
+      return packInf32(sign);
     }
 
-    // Subnormal / underflow
-    if (e_bias32 <= 0) {
-      const int sh2 = 1 - e_bias32;
+    if (e_bias <= 0) {
+      const int sh2 = 1 - e_bias;
       const uint32_t shifted = (sh2 >= 32) ? 0u : (kept24 >> sh2);
       const uint32_t mask2 = (sh2 >= 32) ? kept24 : ((1u << sh2) - 1u);
       const uint32_t rem2 = kept24 & mask2;
@@ -512,32 +606,27 @@ private:
       if (roundInc(sign, lsb2, rb2, st2)) {
         const uint32_t t = frac_keep + 1u;
         if (t >= (1u << 23)) {
-          const uint32_t out = (sign << 31) | (1u << 23);
           if (fflags_ & FLAG_NX)
             fflags_ |= FLAG_UF;
-          LOG("[finalize] subnormal->min-normal 0x%08x, fflags=0x%02x\n", out, fflags_);
-          return out;
+          LOG("[rounding] subnormal_to_min_normal=1\n");
+          return (sign << 31) | (1u << 23);
         }
         frac_keep = t;
       }
-
       if (fflags_ & FLAG_NX)
         fflags_ |= FLAG_UF;
-      const uint32_t out = (sign << 31) | frac_keep;
-      LOG("[finalize] subnormal 0x%08x, fflags=0x%02x\n", out, fflags_);
-      return out;
+      const uint32_t out_sub = (sign << 31) | frac_keep;
+      LOG("[rounding] subnormal_out=0x%08x, fflags=0x%02x\n", out_sub, fflags_);
+      return out_sub;
     }
 
-    // Normal
-    const uint32_t exp_out = uint32_t(e_bias32);
+    const uint32_t exp_out = uint32_t(e_bias);
     const uint32_t frac_out = kept24 & ((1u << 23) - 1u);
-    const uint32_t out = (sign << 31) | (exp_out << 23) | frac_out;
-    LOG("[finalize] normal 0x%08x, s=%u, e=0x%x, f=0x%x, fflags=0x%02x\n",
-        out, sign, exp_out, frac_out, fflags_);
-    return out;
+    const uint32_t out_norm = (sign << 31) | (exp_out << 23) | frac_out;
+    LOG("[rounding] normal_out=0x%08x, fflags=0x%02x\n", out_norm, fflags_);
+    return out_norm;
   }
 
-  // ------------------------------ Rounding -----------------------------------
   bool roundInc(uint32_t sign, uint32_t lsb, uint32_t round_bit, bool sticky) const {
     switch (frm_) {
     case RNE:
@@ -559,42 +648,74 @@ private:
     }
   }
 
-  // ------------------------------ Flags/state --------------------------------
   void resetFlags() {
     fflags_ = 0;
-    any_sticky_ = false;
     has_nan_ = has_pos_inf_ = has_neg_inf_ = has_nv_ = false;
     c_is_nan_ = c_is_inf_ = false;
     c_sign_ = 0;
+    sticky_c32_ = sticky_align_ = sticky_mul_ = false;
+    has_any_special_ = false;
   }
-  void resetSpecialFlags() {
-    has_nan_ = has_pos_inf_ = has_neg_inf_ = has_nv_ = false;
+
+  // ------------------------------- Utilities ---------------------------------
+  static inline uint32_t bitsFromF32(float f) {
+    uint32_t u;
+    std::memcpy(&u, &f, 4);
+    return u;
+  }
+  static inline float f32FromBits(uint32_t u) {
+    float f;
+    std::memcpy(&f, &u, 4);
+    return f;
   }
 
-  enum { RNE = 0,
-         RTZ = 1,
-         RDN = 2,
-         RUP = 3,
-         RMM = 4 };
-  static constexpr uint32_t FLAG_NX = 1u << 0;
-  static constexpr uint32_t FLAG_UF = 1u << 1;
-  static constexpr uint32_t FLAG_OF = 1u << 2;
-  static constexpr uint32_t FLAG_NV = 1u << 4;
+  static inline int clz64(uint64_t x) {
+#if defined(__GNUC__) || defined(__clang__)
+    return x ? __builtin_clzll(x) : 64;
+#else
+    if (!x)
+      return 64;
+    int n = 0;
+    while (!(x & (1ull << 63))) {
+      x <<= 1;
+      ++n;
+    }
+    return n;
+#endif
+  }
+  static inline uint32_t ceil_log2(uint32_t x) {
+    if (x <= 1)
+      return 0;
+#if defined(__GNUC__) || defined(__clang__)
+    return 32u - uint32_t(__builtin_clz(x - 1u));
+#else
+    uint32_t v = x - 1u, n = 0;
+    while (v) {
+      v >>= 1;
+      ++n;
+    }
+    return n;
+#endif
+  }
+  static inline uint32_t packZero32(uint32_t s) { return s << 31; }
+  static inline uint32_t packInf32(uint32_t s) { return (s << 31) | (0xFFu << 23); }
+  static inline uint32_t canonicalNaN32() { return (0xFFu << 23) | (1u << 22); }
 
-  // Config
-  unsigned ebits_, sbits_, width_;
-  uint32_t bias_, exp_all_ones_, frac_mask_, enc_mask_;
-  int frm_;
-  uint32_t k_;
-  bool packed_ = true;
-  uint32_t elems_per_word_ = 1;
-  uint32_t guard_bits_ = 1;
-  uint32_t TOP_ = 0;
+  // ------------------------------ Members ------------------------------------
+  // Config (TF32 superformat)
+  uint32_t Wc_{24}, Win_{25};
+  int frm_{0};
+  uint32_t lanes_{1};
 
-  // State
-  uint32_t fflags_ = 0;
-  bool any_sticky_ = false;
-  bool has_nan_ = false, has_pos_inf_ = false, has_neg_inf_ = false, has_nv_ = false;
-  bool c_is_nan_ = false, c_is_inf_ = false;
-  uint32_t c_sign_ = 0;
+  // State / flags
+  uint32_t fflags_{0};
+  bool has_nan_{false}, has_pos_inf_{false}, has_neg_inf_{false}, has_nv_{false};
+  bool c_is_nan_{false}, c_is_inf_{false};
+  uint32_t c_sign_{0};
+  bool sticky_c32_{false}, sticky_align_{false}, sticky_mul_{false};
+  bool has_any_special_{false};
+
+  // Decoded inputs and reduced products
+  std::vector<std::array<dec_t, 2>> terms_; // terms_[i][0] = a_i, terms_[i][1] = b_i
+  std::vector<term24_t> prods_;             // reduced product groups in 24-bit common grid
 };
