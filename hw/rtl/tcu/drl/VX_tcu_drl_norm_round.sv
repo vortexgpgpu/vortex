@@ -62,15 +62,15 @@ module VX_tcu_drl_norm_round #(
 
     //Final INT addition
     wire [6:0] ext_acc_int = 7'($signed(acc_sig[25+$clog2(N):25]));
-    wire [N-1:0][6:0] ext_signs;
+    wire [N-2:0][6:0] ext_signs;
     for (genvar i = 0; i < N-1; i++) begin : g_sign_ext
         assign ext_signs[i] = 7'($signed(sigSigns[i]));
     end
-    assign ext_signs[N-1] = 7'd0; //($signed(acc_sig[25+$clog2(N)-1]));
+
     wire [6:0] int_hi;
 
     VX_csa_tree #(
-        .N (N+2),
+        .N (N+1),
         .W (7),
         .S (7)
     ) int_adder (
