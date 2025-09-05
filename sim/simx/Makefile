@@ -27,6 +27,18 @@ SRCS += $(SRC_DIR)/execute.cpp $(SRC_DIR)/func_unit.cpp
 SRCS += $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp $(SRC_DIR)/mem_coalescer.cpp
 SRCS += $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 
+# SST flags
+SST_CFLAGS := $(shell pkg-config --cflags sst-core)
+SST_CFLAGS += -I../../../sst/sst/sst-core/include
+SST_LFLAGS := $(shell pkg-config --libs sst-core)
+
+VORTEX_SST_SRCS := \
+    $(SRC_DIR)/mem_backend.cpp \
+    $(SRC_DIR)/mem_backend_dram.cpp \
+    $(SRC_DIR)/mem_backend_sst.cpp \
+    $(SRC_DIR)/vortex_simulator.cpp \
+    $(SRC_DIR)/VortexGPGPU.cpp
+
 # Add V extension sources
 ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
   	SRCS += $(SRC_DIR)/voperands.cpp
@@ -72,7 +84,14 @@ PROJECT := simx
 
 .PHONY: all force clean clean-lib clean-exe clean-obj
 
-all: $(DESTDIR)/$(PROJECT)
+all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/libvortex.so
+
+$(DESTDIR)/libvortex.so:
+        $(CXX) $(CXXFLAGS) $(SST_CFLAGS) -DUSE_SST_MEM_BACKEND \
+            -I./sim/simx \
+            $(SRCS) $(VORTEX_SST_SRCS) \
+            -shared -o $@ \
+            $(LDFLAGS) $(SST_LFLAGS)
 
 # build common object files
 $(OBJ_DIR)/common/%.o: $(SW_COMMON_DIR)/%.cpp $(CONFIG_FILE)
@@ -113,10 +132,13 @@ $(CONFIG_FILE): force
 clean-lib:
 	rm -f $(DESTDIR)/lib$(PROJECT).so
 
+clean-libvortex:
+	rm -f $(DESTDIR)/libvortex.so
+
 clean-exe:
 	rm -f $(DESTDIR)/$(PROJECT)
 
 clean-obj:
 	rm -rf $(OBJ_DIR)
 
-clean: clean-lib clean-exe clean-obj
+clean: clean-lib clean-exe clean-obj clean-libvortex
