@@ -100,7 +100,7 @@ ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 endif
-endif
+
 
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
