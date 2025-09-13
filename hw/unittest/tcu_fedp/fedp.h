@@ -67,18 +67,16 @@ public:
         exp_bits, sig_bits, width, packed ? 1 : 0, elems_per_word, n_words, k);
 
     // decode
-    terms_.assign(k, {});
-    decodeInputs(a_words, b_words, n_words, elems_per_word, width, exp_bits, sig_bits, packed);
+    const auto terms = decodeInputs(a_words, b_words, n_words, elems_per_word, width, exp_bits, sig_bits, packed);
 
     // multiply (and fp8/fp4 reduction)
-    prods_.clear();
-    multiply_to_common(sig_bits, width);
+    const auto prods = multiply_to_common(terms, sig_bits, width);
 
     // decode C
     const term24_t cterm = decodeC_to_common(bitsFromF32(c));
 
     // alignment (and max_exp)
-    const AlignOut aout = alignment(prods_, cterm);
+    const AlignOut aout = alignment(prods, cterm);
 
     // accumulate (honor lanes)
     const int64_t acc = accumulate(aout);
@@ -90,10 +88,10 @@ public:
       }
     }
 
-    // 6) normalize
+    // normalize
     const Norm nrm = normalize(acc, aout.max_exp);
 
-    // 7) rounding + pack
+    // rounding + pack
     const uint32_t out = round_and_pack(nrm);
     return f32FromBits(out);
   }
@@ -142,17 +140,21 @@ private:
   static constexpr uint32_t FLAG_NV = 1u << 4;
 
   // -------------------------- decodeInputs --------------------------
-  void decodeInputs(const std::vector<uint32_t> &a_words,
-                    const std::vector<uint32_t> &b_words,
-                    uint32_t n_words,
-                    uint32_t elems_per_word,
-                    uint32_t width,
-                    int exp_bits, int sig_bits,
-                    bool packed) {
+  std::vector<std::array<dec_t, 2>>
+  decodeInputs(const std::vector<uint32_t> &a_words,
+               const std::vector<uint32_t> &b_words,
+               uint32_t n_words,
+               uint32_t elems_per_word,
+               uint32_t width,
+               int exp_bits, int sig_bits,
+               bool packed) {
     const uint32_t enc_mask = (width >= 32) ? 0xFFFFFFFFu : ((1u << width) - 1u);
     const uint32_t frac_mask = (sig_bits >= 32) ? 0xFFFFFFFFu : ((1u << sig_bits) - 1u);
     const uint32_t exp_mask = (exp_bits >= 32) ? 0xFFFFFFFFu : ((1u << exp_bits) - 1u);
     const uint32_t bias = (1u << (exp_bits - 1)) - 1u;
+
+    const uint32_t k = n_words * elems_per_word;
+    std::vector<std::array<dec_t, 2>> terms(k);
 
     uint32_t out = 0;
     for (uint32_t i = 0; i < n_words; ++i) {
@@ -161,8 +163,8 @@ private:
         const uint32_t aenc = packed ? (aw & enc_mask) : aw;
         const uint32_t benc = packed ? (bw & enc_mask) : bw;
 
-        terms_[out][0] = decode_one(aenc, exp_bits, sig_bits, exp_mask, frac_mask, bias);
-        terms_[out][1] = decode_one(benc, exp_bits, sig_bits, exp_mask, frac_mask, bias);
+        terms[out][0] = decode_one(aenc, exp_bits, sig_bits, exp_mask, frac_mask, bias);
+        terms[out][1] = decode_one(benc, exp_bits, sig_bits, exp_mask, frac_mask, bias);
 
         if (packed) {
           aw >>= width;
@@ -171,11 +173,12 @@ private:
 
         LOG("[decode] idx=%u, A(enc=0x%x, s=%u,e=%u,f=0x%x), B(enc=0x%x, s=%u,e=%u,f=0x%x)\n",
             out,
-            aenc, terms_[out][0].sign, terms_[out][0].exp_field, terms_[out][0].frac,
-            benc, terms_[out][1].sign, terms_[out][1].exp_field, terms_[out][1].frac);
+            aenc, terms[out][0].sign, terms[out][0].exp_field, terms[out][0].frac,
+            benc, terms[out][1].sign, terms[out][1].exp_field, terms[out][1].frac);
       }
     }
     LOG("[decodeInputs] decoded=%u\n", out);
+    return terms;
   }
 
   static inline dec_t decode_one(uint32_t enc, int exp_bits, int sig_bits,
@@ -199,7 +202,8 @@ private:
 
   // ----------------------------- multiply ---------------------------
   // Three phases: raw multiply -> shift each product to 24-bit common grid -> group reduce in 24b
-  void multiply_to_common(int sig_bits_in, uint32_t width_in) {
+  std::vector<term24_t>
+  multiply_to_common(const std::vector<std::array<dec_t,2>> &terms, int sig_bits_in, uint32_t width_in) {
     has_any_special_ = false;
     sticky_mul_ = false;
 
@@ -215,12 +219,12 @@ private:
     const uint32_t L_in = Wc_ - Wraw_in;               // shift to 24-bit common grid
 
     // Phase A: raw multiply (no shift-up)
-    std::vector<Raw> raw;
-    raw.reserve(terms_.size());
+    const size_t N = terms.size();
+    std::vector<Raw> raw(N);
 
-    for (size_t i = 0; i < terms_.size(); ++i) {
-      const dec_t &a = terms_[i][0];
-      const dec_t &b = terms_[i][1];
+    for (size_t i = 0; i < N; ++i) {
+      const dec_t &a = terms[i][0];
+      const dec_t &b = terms[i][1];
 
       if (a.is_nan || b.is_nan)
         has_nan_ = true;
@@ -233,13 +237,13 @@ private:
           has_neg_inf_ = true;
         else
           has_pos_inf_ = true;
-        raw.push_back(Raw{0, 0, 0, true, true, false});
+        raw[i] = Raw{0, 0, 0, true, true, false};
         has_any_special_ = true;
         LOG("[mul-prod] i=%zu, special=Inf/NaN/0*Inf\n", i);
         continue;
       }
       if (a.is_zero || b.is_zero) {
-        raw.push_back(Raw{0, 0, 0, true, false, false});
+        raw[i] = Raw{0, 0, 0, true, false, false};
         LOG("[mul-prod] i=%zu, zero=1\n", i);
         continue;
       }
@@ -250,7 +254,7 @@ private:
       const int32_t E = (a.exp_unb + b.exp_unb) + 1;
       const uint32_t s = a.sign ^ b.sign;
 
-      raw.push_back(Raw{s, P, E, false, false, false});
+      raw[i] = Raw{s, P, E, false, false, false};
       LOG("[mul-prod] i=%zu, s=%u, E=%d, P=0x%x, Wraw_in=%u\n", i, s, E, P, Wraw_in);
     }
 
@@ -261,31 +265,33 @@ private:
       int32_t E;
       bool is_zero, is_inf, is_nan;
     };
-    std::vector<WC> wc;
-    wc.reserve(raw.size());
+    std::vector<WC> wc(N);
     LOG("[mul-sup] L_in=%u, Wc=%u, Wraw_in=%u\n", L_in, Wc_, Wraw_in);
 
-    for (size_t i = 0; i < raw.size(); ++i) {
+    for (size_t i = 0; i < N; ++i) {
       const auto &r = raw[i];
       if (r.is_zero || r.is_inf || r.is_nan) {
-        wc.push_back(WC{0, 0, 0, true, r.is_inf, r.is_nan});
+        wc[i] = WC{0, 0, 0, true, r.is_inf, r.is_nan};
         continue;
       }
       uint32_t m = (L_in >= 32) ? 0u : (r.P << L_in); // now exactly Wc_ bits
-      wc.push_back(WC{r.sign, m, r.E, false, false, false});
+      wc[i] = WC{r.sign, m, r.E, false, false, false};
       LOG("[mul-sup] i=%zu, m_wc=0x%x, E=%d\n", i, m, r.E);
     }
 
     // Phase C: group reduce in 24-bit domain (fp8:add2, fp4:add4, else passthrough)
-    prods_.clear();
     uint32_t group = 1;
     if (width_in == 8u)
       group = 2;
     else if (width_in == 4u)
       group = 4;
 
-    for (size_t base = 0; base < wc.size(); base += group) {
-      const size_t end = std::min(wc.size(), base + group);
+    const size_t G = (N + group - 1) / group;
+    std::vector<term24_t> prods(G);
+    size_t g = 0;
+
+    for (size_t base = 0; base < N; base += group, ++g) {
+      const size_t end = std::min(N, base + group);
 
       int32_t Egrp = INT32_MIN;
       for (size_t i = base; i < end; ++i) {
@@ -294,7 +300,7 @@ private:
           Egrp = t.E;
       }
       if (Egrp == INT32_MIN) {
-        prods_.push_back(term24_t{0, 0, 0, true, false, false});
+        prods[g] = term24_t{0, 0, 0, true, false, false};
         LOG("[mul-align] base=%zu, size=%zu, zero_group=1\n", base, end - base);
         continue;
       }
@@ -337,12 +343,13 @@ private:
       const uint32_t m_out = uint32_t(mag & ((1ull << Wc_) - 1ull));
       const bool is_zero = (m_out == 0);
 
-      prods_.push_back(term24_t{sgn, m_out, Egrp, is_zero, false, false});
+      prods[g] = term24_t{sgn, m_out, Egrp, is_zero, false, false};
       LOG("[mul-align] base=%zu, size=%zu, s=%u, E=%d, m=0x%x, zero=%d\n",
           base, end - base, sgn, Egrp, m_out, is_zero ? 1 : 0);
     }
 
-    LOG("[multiply] groups=%zu, sticky_mul=%d\n", prods_.size(), sticky_mul_ ? 1 : 0);
+    LOG("[multiply] groups=%zu, sticky_mul=%d\n", prods.size(), sticky_mul_ ? 1 : 0);
+    return prods;
   }
 
   // ------------------------------ decodeC ---------------------------
@@ -694,8 +701,4 @@ private:
   uint32_t c_sign_{0};
   bool sticky_c32_{false}, sticky_align_{false}, sticky_mul_{false};
   bool has_any_special_{false};
-
-  // Decoded inputs and reduced products
-  std::vector<std::array<dec_t, 2>> terms_; // terms_[i][0] = a_i, terms_[i][1] = b_i
-  std::vector<term24_t> prods_;             // reduced product groups in 24-bit common grid
 };
