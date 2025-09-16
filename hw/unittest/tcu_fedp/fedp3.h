@@ -1,6 +1,13 @@
-// FEDP.hpp — RTL-faithful dot product (TF32 superformat) with tracing.
+// FEDP.hpp — CSA-based pipeline (SOTA) for fused dot product (TF32 superformat) with deep tracing.
+// Pipeline:
+//   S1: decode + multiply + group-reduce -> ***two separate CSAs: pos_cs and neg_cs***
+//   S2: CPA(pos/neg) WIDE -> ***renorm each magnitude if it overflows 2^Wc (bump E)***
+//       -> V = pos_mag - neg_mag (signed) -> arith-renorm of V if |V| ≥ 2^(Wc-1)
+//       -> align (arith) to max_exp; emit Wacc-bit two’s-complement (sum=enc, carry=0)
+//   S3: accumulate all aligned terms in Wacc-bit CSA
+//   S4: single CPA (Wacc) -> sign-extend -> normalize -> round -> pack
 //
-// Build with -DFEDP_TRACE=1 to enable logs.
+// Build with: -DFEDP_TRACE=1   (enable verbose logs)
 
 #include <algorithm>
 #include <array>
@@ -9,6 +16,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #ifndef FEDP_TRACE
@@ -31,7 +40,6 @@ public:
 class FEDP {
 public:
   // frm: RNE=0, RTZ=1, RDN=2, RUP=3, RMM=4
-  // lanes: product lanes per accumulation "cycle" (1..8). Fan-in per first chunk is (lanes + 1) due to C.
   FEDP(int frm, uint32_t lanes) : frm_(frm), lanes_(lanes) {
     if (frm_ < 0 || frm_ > 4)
       frm_ = 0; // default RNE
@@ -40,91 +48,95 @@ public:
     if (lanes_ > 8)
       lanes_ = 8;
 
-    // Superformat is TF32 (e8m10): common product magnitude width
-    Wc_ = 24u;       // 24-bit magnitude grid for products (s_prod)
-    Win_ = Wc_ + 1u; // signed addend width (for alignment/accumulate)
-    Wacc_ = Win_ + ceil_log2(lanes_ + 1) + 1u; // worst-case accumulator width
+    // TF32 (e8m10) common product grid
+    Wc_ = 24u;       // CSA mantissa grid (bits)
+    Win_ = Wc_ + 1u; // signed addend width (for +/-)
+    // Headroom: allow up to ~64 inputs; add guard; cap to 63 (we use 64-bit).
+    Wacc_ = Win_ + ceil_log2(64) + 4u; // ~35 in your runs
+    if (Wacc_ > 63u)
+      Wacc_ = 63u;
 
     LOG("[ctor] frm=%d, lanes=%u, super=TF32, e8m10, Wc=%u, Win=%u, Wacc=%u\n",
         frm_, lanes_, Wc_, Win_, Wacc_);
   }
 
-  // Top-level: a_words/b_words contain n_words packed values with (exp_bits,sig_bits)
   float operator()(const std::vector<uint32_t> &a_words,
                    const std::vector<uint32_t> &b_words,
                    float c,
                    uint32_t n_words,
                    int exp_bits,
                    int sig_bits) {
-    // stage1 -----------------------------------------------------------------
-
     resetFlags();
 
     const uint32_t width = 1u + uint32_t(exp_bits) + uint32_t(sig_bits);
     const bool packed = (width <= 16u) && ((32u % width) == 0u);
     const uint32_t elems_per_word = packed ? (32u / width) : 1u;
-    const uint32_t k = n_words * elems_per_word;
 
     LOG("[inputs] fmt=e%dm%d, width=%u, packed=%d, elems/word=%u, n_words=%u, k=%u\n",
-        exp_bits, sig_bits, width, packed ? 1 : 0, elems_per_word, n_words, k);
+        exp_bits, sig_bits, width, packed ? 1 : 0, elems_per_word, n_words, n_words * elems_per_word);
 
-    // decode
-    const auto terms = decodeInputs(a_words, b_words, n_words, elems_per_word, width, exp_bits, sig_bits, packed);
+    // ---------------- S1: decode + multiply + group-reduce (pos/neg CSAs) -------------
+    const auto terms = decodeInputs(a_words, b_words, n_words, elems_per_word, width,
+                                    exp_bits, sig_bits, packed);
+    const auto groups = s1_groups_to_csa_posneg(terms, sig_bits, width);
 
-    // multiply (and fp8/fp4 reduction)
-    const auto prods = multiply_to_common(terms, sig_bits, width);
+    // Scalar C as its own "group": pos/neg CSA selection by sign (still at Wc domain)
+    const auto cgrp = decodeC_to_posneg_csa(bitsFromF32(c));
 
-    // decode C
-    const term24_t cterm = decodeC_to_common(bitsFromF32(c));
+    // --------------------- S2: CPA(pos/neg) -> renorm(mags) -> V -> renorm(V) -> align ----------
+    const auto aout = s2_cpa_posneg_then_align(groups, cgrp);
+    sticky_align_ = aout.sticky_align; // visible to S4's sticky_any
 
-    // stage2 -----------------------------------------------------------------
+    // --------------------- S3: accumulate in CSA (tree, Wacc) -----------------------
+    const CS acc_csa = s3_accumulate_csa(aout); // Wacc-wide in 64-bit
 
-    // alignment (and max_exp)
-    const AlignOut aout = alignment(prods, cterm);
-
-    // stage3 -----------------------------------------------------------------
-
-    // accumulate (honor lanes)
-    const int64_t acc = accumulate(aout);
-
-    // stage4 -----------------------------------------------------------------
-
-    // fast finalize specials/zero
-    if (has_any_special_ || acc == 0) {
-      if (const uint32_t out_fast = finalize_special_or_zero(acc, (sticky_mul_ || sticky_align_ || sticky_c32_))) {
+    // --------------------- S4: finalize (CPA + NRZ + pack) --------------------------
+    if (has_any_special_ || (acc_csa.sum == 0 && acc_csa.carry == 0)) {
+      const bool sticky_pre = (sticky_mul_ || aout.sticky_align || sticky_c32_);
+      if (const uint32_t out_fast = finalize_special_or_zero(0, sticky_pre)) {
         return f32FromBits(out_fast);
       }
     }
 
-    // normalize
-    const Norm nrm = normalize(acc, aout.max_exp);
+    const uint64_t maskWacc = lowbits_mask(Wacc_);
+    const uint64_t cpa_sum = (acc_csa.sum + acc_csa.carry) & maskWacc;
+    const int64_t acc_signed = sign_extend(cpa_sum, Wacc_);
 
-    // rounding + pack
+    LOG("[CPA] Wacc=%u, sum=0x%llx, carry=0x%llx, cpa=0x%llx, signext=%lld\n",
+        Wacc_,
+        (unsigned long long)acc_csa.sum, (unsigned long long)acc_csa.carry,
+        (unsigned long long)cpa_sum, (long long)acc_signed);
+
+    const Norm nrm = normalize(acc_signed, aout.max_exp);
     const uint32_t out = round_and_pack(nrm);
     return f32FromBits(out);
   }
 
-  // fflags accessor (placed after operator() as requested)
-  uint32_t fflags() const { return fflags_; }
+  [[nodiscard]] uint32_t fflags() const { return fflags_; }
 
 private:
-  // -------------------------------- Types ------------------------------------
+  // -------------------------------- Types ---------------------------------
   struct dec_t {
     uint32_t sign{}, frac{}, exp_field{};
     int32_t exp_unb{};
     bool is_zero{}, is_sub{}, is_inf{}, is_nan{};
   };
 
-  // Common product term: value = m * 2^(E - (Wc_-1))
-  struct term24_t {
-    uint32_t sign{0};
-    uint32_t m{0}; // Wc_ bits magnitude
+  struct CS {
+    uint64_t sum{0};
+    uint64_t carry{0};
+  };
+
+  struct GroupPosNeg {
+    CS pos_cs{}; // CSA of positive magnitudes aligned to E
+    CS neg_cs{}; // CSA of negative magnitudes aligned to E
     int32_t E{0};
     bool is_zero{true}, is_inf{false}, is_nan{false};
+    bool sticky_local{false};
   };
 
   struct AlignOut {
-    std::vector<int32_t> addends;
+    std::vector<CS> aligned; // Wacc-bit two’s-complement patterns: sum=enc@Wacc, carry=0
     int32_t max_exp{0};
     bool sticky_align{false};
   };
@@ -208,10 +220,10 @@ private:
     return d;
   }
 
-  // ----------------------------- multiply ---------------------------
-  // Three phases: raw multiply -> shift each product to 24-bit common grid -> group reduce in 24b
-  std::vector<term24_t>
-  multiply_to_common(const std::vector<std::array<dec_t,2>> &terms, int sig_bits_in, uint32_t width_in) {
+  // --------------------- S1: multiply + group reduce (pos/neg CSAs) -------------
+  std::vector<GroupPosNeg>
+  s1_groups_to_csa_posneg(const std::vector<std::array<dec_t, 2>> &terms,
+                          int sig_bits_in, uint32_t width_in) {
     has_any_special_ = false;
     sticky_mul_ = false;
 
@@ -222,14 +234,14 @@ private:
       bool is_zero, is_inf, is_nan;
     };
 
-    const uint32_t Wm_in = uint32_t(sig_bits_in) + 1u; // input mantissa width
+    const uint32_t Wm_in = uint32_t(sig_bits_in) + 1u; // incl hidden 1 for normals
     const uint32_t Wraw_in = 2u * Wm_in;               // raw product width
-    const uint32_t L_in = Wc_ - Wraw_in;               // shift to 24-bit common grid
+    const uint32_t L_in = (Wc_ > Wraw_in) ? (Wc_ - Wraw_in) : 0u;
 
-    // Phase A: raw multiply (no shift-up)
     const size_t N = terms.size();
     std::vector<Raw> raw(N);
 
+    // Phase A: raw multiply (no alignment yet)
     for (size_t i = 0; i < N; ++i) {
       const dec_t &a = terms[i][0];
       const dec_t &b = terms[i][1];
@@ -258,7 +270,7 @@ private:
 
       const uint32_t Ma = a.is_sub ? a.frac : ((1u << sig_bits_in) | a.frac);
       const uint32_t Mb = b.is_sub ? b.frac : ((1u << sig_bits_in) | b.frac);
-      const uint32_t P = Ma * Mb; // width Wraw_in
+      const uint32_t P = Ma * Mb; // ≤ 2*Wm_in (fits 32b here)
       const int32_t E = (a.exp_unb + b.exp_unb) + 1;
       const uint32_t s = a.sign ^ b.sign;
 
@@ -266,10 +278,9 @@ private:
       LOG("[mul-prod] i=%zu, s=%u, E=%d, P=0x%x, Wraw_in=%u\n", i, s, E, P, Wraw_in);
     }
 
-    // Phase B: shift each product up to the 24-bit common grid (exact, no loss)
+    // Phase B: shift product to 24-bit grid (exact left shift; no loss)
     struct WC {
-      uint32_t sign;
-      uint32_t m;
+      uint32_t sign, m;
       int32_t E;
       bool is_zero, is_inf, is_nan;
     };
@@ -282,12 +293,12 @@ private:
         wc[i] = WC{0, 0, 0, true, r.is_inf, r.is_nan};
         continue;
       }
-      uint32_t m = (L_in >= 32) ? 0u : (r.P << L_in); // now exactly Wc_ bits
+      const uint32_t m = (L_in >= 32) ? 0u : (r.P << L_in); // Wc bits
       wc[i] = WC{r.sign, m, r.E, false, false, false};
       LOG("[mul-sup] i=%zu, m_wc=0x%x, E=%d\n", i, m, r.E);
     }
 
-    // Phase C: group reduce in 24-bit domain (fp8:add2, fp4:add4, else passthrough)
+    // Phase C: group reduction by width (8→pairs, 4→quads, else passthrough)
     uint32_t group = 1;
     if (width_in == 8u)
       group = 2;
@@ -295,75 +306,93 @@ private:
       group = 4;
 
     const size_t G = (N + group - 1) / group;
-    std::vector<term24_t> prods(G);
-    size_t g = 0;
+    std::vector<GroupPosNeg> out(G);
 
-    for (size_t base = 0; base < N; base += group, ++g) {
+    for (size_t base = 0, g = 0; base < N; base += group, ++g) {
       const size_t end = std::min(N, base + group);
 
-      int32_t max_exp_grp = INT32_MIN;
+      int32_t Egrp = INT32_MIN;
       for (size_t i = base; i < end; ++i) {
         const auto &t = wc[i];
-        if (!t.is_zero && !t.is_inf && !t.is_nan && t.E > max_exp_grp)
-          max_exp_grp = t.E;
+        if (!t.is_zero && !t.is_inf && !t.is_nan && t.E > Egrp)
+          Egrp = t.E;
       }
-      if (max_exp_grp == INT32_MIN) {
-        prods[g] = term24_t{0, 0, 0, true, false, false};
-        LOG("[mul-align] base=%zu, size=%zu, zero_group=1\n", base, end - base);
+      if (Egrp == INT32_MIN) {
+        out[g] = GroupPosNeg{CS{0, 0}, CS{0, 0}, 0, true, false, false, false};
+        LOG("[mul-group] base=%zu size=%zu zero_group\n", base, end - base);
         continue;
       }
 
-      int64_t S = 0;
+      bool sticky_local = false;
+      std::vector<uint32_t> pos_mags;
+      pos_mags.reserve(end - base);
+      std::vector<uint32_t> neg_mags;
+      neg_mags.reserve(end - base);
+
       for (size_t i = base; i < end; ++i) {
         const auto &t = wc[i];
         if (t.is_zero || t.is_inf || t.is_nan)
           continue;
-
-        const uint32_t delta = uint32_t(max_exp_grp - t.E);
-        uint32_t m = t.m; // 24-bit
+        uint32_t m = t.m;
+        const uint32_t delta = uint32_t(Egrp - t.E);
         if (delta >= Wc_) {
           if (m)
-            sticky_mul_ = true;
+            sticky_local = true;
           m = 0;
         } else if (delta) {
           const uint32_t mask = (1u << delta) - 1u;
           if (m & mask)
-            sticky_mul_ = true;
+            sticky_local = true;
           m >>= delta;
         }
-        int64_t v = int64_t(m);
         if (t.sign)
-          v = -v;
-        S += v;
-
-        LOG("[mul-align] i=%zu, delta=%u, m_adj=0x%x, signed=0x%lx\n", i, (unsigned)delta, m, v);
+          neg_mags.push_back(m);
+        else
+          pos_mags.push_back(m);
       }
 
-      // Normalize S to Wc_ bits (drop LSBs -> sticky), bump max_exp_grp if needed
-      uint32_t sgn = (S < 0) ? 1u : 0u;
-      uint64_t mag = (S < 0) ? uint64_t(-S) : uint64_t(S);
-      while (mag >> Wc_) {
-        if (mag & 1ull)
-          sticky_mul_ = true;
-        mag >>= 1;
-        ++max_exp_grp;
-      }
-      const uint32_t m_out = uint32_t(mag & ((1ull << Wc_) - 1ull));
-      const bool is_zero = (m_out == 0);
+      CS pos{0, 0}, neg{0, 0};
+      const uint64_t Wmask = lowbits_mask(Wc_);
+      auto fold_many = [&](CS acc, const std::vector<uint32_t> &mags) {
+        CS a = acc;
+        size_t i = 0;
+        while (i + 3 < mags.size()) {
+          CS t = csa42(uint64_t(mags[i]) & Wmask,
+                       uint64_t(mags[i + 1]) & Wmask,
+                       uint64_t(mags[i + 2]) & Wmask,
+                       uint64_t(mags[i + 3]) & Wmask);
+          a = csa32_fold(a, t.sum, t.carry);
+          i += 4;
+        }
+        for (; i + 1 < mags.size(); i += 2) {
+          a = csa32_fold(a, uint64_t(mags[i]) & Wmask, uint64_t(mags[i + 1]) & Wmask);
+        }
+        if (i < mags.size())
+          a = csa32_fold(a, uint64_t(mags[i]) & Wmask, 0ull);
+        return a;
+      };
+      pos = fold_many(pos, pos_mags);
+      neg = fold_many(neg, neg_mags);
 
-      prods[g] = term24_t{sgn, m_out, max_exp_grp, is_zero, false, false};
-      LOG("[mul-align] base=%zu, size=%zu, s=%u, E=%d, m=0x%x, zero=%d\n",
-          base, end - base, sgn, max_exp_grp, m_out, is_zero ? 1 : 0);
+      LOG("[s1-group-posneg] g=%zu, E=%d, pos(sum=0x%llx,car=0x%llx) neg(sum=0x%llx,car=0x%llx) sticky=%d\n",
+          g, Egrp,
+          (unsigned long long)pos.sum, (unsigned long long)pos.carry,
+          (unsigned long long)neg.sum, (unsigned long long)neg.carry,
+          sticky_local ? 1 : 0);
+
+      sticky_mul_ |= sticky_local;
+      out[g] = GroupPosNeg{pos, neg, Egrp, false, false, false, sticky_local};
     }
 
-    LOG("[multiply] groups=%zu, sticky_mul=%d\n", prods.size(), sticky_mul_ ? 1 : 0);
-    return prods;
+    LOG("[multiply] groups=%zu\n", out.size());
+    return out;
   }
 
-  // ------------------------------ decodeC ---------------------------
-  term24_t decodeC_to_common(uint32_t enc32) {
+  // ------------------------------ decode C to pos/neg CSA -----------------------
+  GroupPosNeg decodeC_to_posneg_csa(uint32_t enc32) {
     const uint32_t s = (enc32 >> 31) & 1u;
     const uint32_t e = (enc32 >> 23) & 0xFFu;
+    a32_ = enc32; // for debugging if needed
     const uint32_t f = enc32 & 0x7FFFFFu;
 
     c_sign_ = s;
@@ -372,20 +401,18 @@ private:
 
     if (e == 0 && f == 0) {
       LOG("[decodeC] zero=1\n");
-      LOG("[decodeC] s=0, E=0, m=0x000000, specials=0\n");
-      return term24_t{0, 0, 0, true, false, false};
+      return GroupPosNeg{CS{0, 0}, CS{0, 0}, 0, true, false, false, false};
     }
     if (c_is_inf_ || c_is_nan_) {
       LOG("[decodeC] special=%s\n", c_is_inf_ ? "Inf" : "NaN");
-      LOG("[decodeC] special=1\n");
-      return term24_t{0, 0, 0, true, c_is_inf_, c_is_nan_};
+      has_any_special_ = true;
+      return GroupPosNeg{CS{0, 0}, CS{0, 0}, 0, true, c_is_inf_, c_is_nan_, false};
     }
 
     const bool is_sub = (e == 0 && f != 0);
     const int32_t Ec = is_sub ? (1 - 127) : (int32_t(e) - 127);
     const uint32_t M = is_sub ? f : ((1u << 23) | f); // 24b
 
-    // Scale FP32 mantissa to Wc_-1 top (23 for TF32)
     const int dM = int(Wc_ - 1u) - 23;
     uint32_t m_c = 0;
     if (dM >= 0) {
@@ -401,82 +428,179 @@ private:
         m_c = M >> r;
       }
     }
-    LOG("[decodeC] s=%u, Ec=%d, m=0x%x, sticky_c32=%d\n", s, Ec, m_c, sticky_c32_ ? 1 : 0);
-    return term24_t{s, m_c, Ec, false, false, false};
+
+    CS pos{0, 0}, neg{0, 0};
+    const uint64_t Wmask = lowbits_mask(Wc_);
+    if (s == 0) {
+      pos = csa32_fold(pos, uint64_t(m_c) & Wmask, 0ull);
+    } else {
+      neg = csa32_fold(neg, uint64_t(m_c) & Wmask, 0ull);
+    }
+    LOG("[decodeC] s=%u, Ec=%d, m=0x%x, sticky_c32=%d, pos(sum=0x%llx,car=0x%llx) neg(sum=0x%llx,car=0x%llx)\n",
+        s, Ec, m_c, sticky_c32_ ? 1 : 0,
+        (unsigned long long)pos.sum, (unsigned long long)pos.carry,
+        (unsigned long long)neg.sum, (unsigned long long)neg.carry);
+    return GroupPosNeg{pos, neg, Ec, false, false, false, false};
   }
 
-  // ----------------------------- alignment --------------------------
-  AlignOut alignment(const std::vector<term24_t> &ps, const term24_t &cterm) {
-    AlignOut out;
+  // --------------- S2: CPA(pos/neg) WIDE -> renorm(mags) -> V=pos-neg -> renorm(V) -> align ------------
+  AlignOut s2_cpa_posneg_then_align(const std::vector<GroupPosNeg> &groups,
+                                    const GroupPosNeg &cgrp) {
+    struct Tmp {
+      bool special;
+      int32_t E_in;
+      int32_t E_after; // after renorm
+      int64_t V;       // signed value after renorm
+      bool sticky_renorm;
+      char tag;
+      size_t idx;
+    };
+    std::vector<Tmp> tmp;
+    tmp.reserve(groups.size() + 1);
+
+    auto cpa_posneg_renorm = [&](const GroupPosNeg &g, char tag, size_t idx) -> Tmp {
+      if (g.is_zero || g.is_inf || g.is_nan) {
+        LOG("[s2-pre] %c%zu special/zero: skip\n", tag, idx);
+        return Tmp{true, g.E, g.E, 0, false, tag, idx};
+      }
+      const uint64_t twoWc = (Wc_ >= 63 ? ~0ull : (1ull << Wc_));
+      const uint64_t maskWc = lowbits_mask(Wc_);
+
+      // Wide CPA for pos/neg CSAs
+      uint64_t pos_wide = g.pos_cs.sum + g.pos_cs.carry; // may exceed 2^Wc
+      uint64_t neg_wide = g.neg_cs.sum + g.neg_cs.carry; // may exceed 2^Wc
+      int32_t E = g.E;
+      bool sticky_r = false;
+      int ren_pos = 0, ren_neg = 0;
+
+      // *** NEW: renormalize unsigned magnitudes BEFORE subtraction ***
+      while (pos_wide >= twoWc) {
+        sticky_r |= (pos_wide & 1ull) != 0ull;
+        pos_wide >>= 1;
+        ++E;
+        ++ren_pos;
+      }
+      while (neg_wide >= twoWc) {
+        sticky_r |= (neg_wide & 1ull) != 0ull;
+        neg_wide >>= 1;
+        ++E;
+        ++ren_neg;
+      }
+
+      LOG("[s2-renorm-mags] %c%zu: pos_wide_pre=0x%llx neg_wide_pre=0x%llx -> pos_wide=0x%llx neg_wide=0x%llx E_bumps(+pos=%d,+neg=%d) E_now=%d\n",
+          tag, idx,
+          (unsigned long long)(g.pos_cs.sum + g.pos_cs.carry),
+          (unsigned long long)(g.neg_cs.sum + g.neg_cs.carry),
+          (unsigned long long)pos_wide, (unsigned long long)neg_wide,
+          ren_pos, ren_neg, E);
+
+      // Interpret as unsigned magnitudes in [0, 2^Wc-1] (guaranteed after renorm)
+      const uint64_t pos_mag = pos_wide & maskWc;
+      const uint64_t neg_mag = neg_wide & maskWc;
+
+      // Now form signed difference at wide precision
+      int64_t V = (int64_t)pos_mag - (int64_t)neg_mag;
+
+      LOG("[s2-cpa-posneg] %c%zu: pos_mag=0x%llx neg_mag=0x%llx V_in=%lld\n",
+          tag, idx, (unsigned long long)pos_mag, (unsigned long long)neg_mag, (long long)V);
+
+      // Arithmetic renorm of V to keep |V| < 2^(Wc-1)
+      const int64_t LIM = (int64_t(1) << (Wc_ - 1));
+      int shifts = 0;
+      while (V >= LIM || V < -LIM) {
+        sticky_r |= (V & 1ll) != 0;
+        V >>= 1;
+        ++E;
+        ++shifts;
+      }
+      LOG("[s2-renorm] %c%zu: E_in=%d, V_after=%lld, shifts=%d, sticky_r=%d\n",
+          tag, idx, g.E, (long long)V, shifts, sticky_r ? 1 : 0);
+
+      return Tmp{false, g.E, E, V, sticky_r, tag, idx};
+    };
+
+    for (size_t i = 0; i < groups.size(); ++i)
+      tmp.push_back(cpa_posneg_renorm(groups[i], 'p', i));
+    tmp.push_back(cpa_posneg_renorm(cgrp, 'c', 0));
 
     int32_t max_exp = INT32_MIN;
-    auto calc_max_exp = [&](const term24_t &t) {
-      if (!t.is_zero && !t.is_inf && !t.is_nan) {
-        max_exp = std::max(max_exp, t.E);
-      }
-    };
-    for (auto &p : ps) {
-      calc_max_exp(p);
-    }
-    calc_max_exp(cterm);
-
+    for (const auto &t : tmp)
+      if (!t.special && t.E_after > max_exp)
+        max_exp = t.E_after;
     if (max_exp == INT32_MIN) {
-      out.max_exp = 0;
-      LOG("[alignment] all_zero=1\n");
-      return out;
+      LOG("[alignment] all_zero_after_renorm=1\n");
+      return AlignOut{};
     }
+    LOG("[alignment] max_exp(after_renorm)=%d\n", max_exp);
+
+    AlignOut out{};
     out.max_exp = max_exp;
-
-    auto align_one = [&](const term24_t &t, const char *tag, size_t idx) -> int32_t {
-      if (t.is_zero || t.is_inf || t.is_nan) {
-        LOG("[align-%s] idx=%zu, zero_or_special=1\n", tag, idx);
-        return 0;
+    out.aligned.reserve(tmp.size());
+    const uint64_t maskWacc = lowbits_mask(Wacc_);
+    for (size_t i = 0; i < tmp.size(); ++i) {
+      const auto &t = tmp[i];
+      if (t.special) {
+        out.aligned.push_back(CS{0, 0});
+        continue;
       }
-      uint32_t m = t.m;
-      const uint32_t delta = uint32_t(max_exp - t.E);
-      const uint8_t sh8 = (delta > 255u) ? 255u : uint8_t(delta); // trace
-      if (delta >= Wc_) {
-        if (m)
-          out.sticky_align = true;
-        m = 0;
-      } else if (delta) {
-        const uint32_t mask = (1u << delta) - 1u;
-        if (m & mask)
-          out.sticky_align = true;
-        m >>= delta;
+      int64_t V = t.V;
+      const uint32_t delta = uint32_t(max_exp - t.E_after);
+      if (delta > 0) {
+        const uint64_t dropMask = (delta >= 64) ? ~0ull : ((1ull << delta) - 1ull);
+        out.sticky_align |= ((uint64_t)V & dropMask) != 0ull;
+        const int64_t before = V;
+        V >>= std::min<uint32_t>(delta, 63u);
+        LOG("[align-arith] %c%zu delta=%u dropMask=0x%llx dropped=0x%llx before=%lld after=%lld\n",
+            t.tag, t.idx, (unsigned)delta,
+            (unsigned long long)dropMask,
+            (unsigned long long)((uint64_t)before & dropMask),
+            (long long)before, (long long)V);
+      } else {
+        LOG("[align-arith] %c%zu delta=0 V=%lld\n", t.tag, t.idx, (long long)V);
       }
-      int32_t v = int32_t(m);
-      if (t.sign)
-        v = -v;
-      LOG("[align-%s] idx=%zu, delta=%u, sh8=%u, m_adj=0x%x, signed=%d\n",
-          tag, idx, (unsigned)delta, sh8, m, v);
-      return v;
-    };
-
-    out.addends.reserve(ps.size()+1);
-    for (size_t i = 0; i < ps.size(); ++i) {
-      out.addends.push_back(align_one(ps[i], "p", i));
+      const uint64_t enc = (uint64_t)V & maskWacc;
+      out.aligned.push_back(CS{enc, 0});
     }
-    out.addends.push_back(align_one(cterm, "c", 0));
-
-    LOG("[alignment] max_exp=%d, sticky=%d, addends=%zu\n",
-        out.max_exp, out.sticky_align ? 1 : 0, out.addends.size());
     return out;
   }
 
-  // ---------------------------- accumulate --------------------------
-  int64_t accumulate(const AlignOut &aout) {
-    int64_t acc = 0;
-    for (size_t i = 0; i < aout.addends.size(); ++i) {
-      auto &v = aout.addends[i];
-      acc += int64_t(v);
-      LOG("[acc-chunk] idx=%zu, addend=0x%x, acc=0x%lx\n", i, v, acc);
+  // ------------------------------ S3: CSA accumulation (Wacc) -------------------
+  CS s3_accumulate_csa(const AlignOut &aout) {
+    std::vector<uint64_t> ops;
+    ops.reserve(aout.aligned.size() * 2);
+    for (const auto &x : aout.aligned) {
+      ops.push_back(x.sum);
+      ops.push_back(x.carry);
     }
-    LOG("[accumulate] acc=0x%lx\n", acc);
+
+    CS acc{0, 0};
+    size_t i = 0;
+    while (i + 3 < ops.size()) {
+      CS t = csa42(ops[i], ops[i + 1], ops[i + 2], ops[i + 3]);
+      acc = csa32_fold(acc, t.sum, t.carry);
+      LOG("[acc-tree] i=%zu..%zu -> t(sum=0x%llx,car=0x%llx) acc(sum=0x%llx,car=0x%llx)\n",
+          i, i + 3,
+          (unsigned long long)t.sum, (unsigned long long)t.carry,
+          (unsigned long long)acc.sum, (unsigned long long)acc.carry);
+      i += 4;
+    }
+    for (; i + 1 < ops.size(); i += 2) {
+      acc = csa32_fold(acc, ops[i], ops[i + 1]);
+      LOG("[acc-fold2] i=%zu,%zu -> acc(sum=0x%llx,car=0x%llx)\n",
+          i, i + 1, (unsigned long long)acc.sum, (unsigned long long)acc.carry);
+    }
+    if (i < ops.size()) {
+      acc = csa32_fold(acc, ops[i], 0ull);
+      LOG("[acc-fold1] i=%zu -> acc(sum=0x%llx,car=0x%llx)\n",
+          i, (unsigned long long)acc.sum, (unsigned long long)acc.carry);
+    }
+
+    LOG("[accumulate-csa] sum=0x%llx carry=0x%llx (Wacc=%u)\n",
+        (unsigned long long)acc.sum, (unsigned long long)acc.carry, Wacc_);
     return acc;
   }
 
-  // -------------------- Special/zero fast finalize helper --------------------
+  // -------------------- Special/zero fast finalize helper ----------------------
   uint32_t finalize_special_or_zero(int64_t acc, bool sticky_pre) {
     if (has_nv_ ||
         (has_pos_inf_ && has_neg_inf_) ||
@@ -505,16 +629,16 @@ private:
     return 0;
   }
 
-  // ---------------------------- normalize ---------------------------
+  // ---------------------------- S4: normalize ----------------------------
+
   Norm normalize(int64_t acc, int32_t max_exp) {
     Norm n{};
     n.sign = (acc < 0) ? 1u : 0u;
     uint64_t mag = (acc < 0) ? uint64_t(-acc) : uint64_t(acc);
 
-    const uint32_t nbits = 64u - uint32_t(clz64(mag)); // >=1
+    const uint32_t nbits = 64u - uint32_t(clz64(mag)); // >=1 if mag!=0
     n.e_unb = (max_exp - int32_t(Wc_ - 1u)) + int32_t(nbits - 1u);
 
-    // Normalize to FP32 24-bit core (1+23)
     const int FP_TOP = 23;
     const int sh = int(nbits - 1u) - FP_TOP;
 
@@ -524,7 +648,7 @@ private:
       const uint64_t mask = (sh >= 64) ? ~0ull : ((1ull << sh) - 1ull);
       const uint64_t rem = mag & mask;
       round_bit = (sh >= 1) ? ((rem >> (sh - 1)) & 1ull) : 0u;
-      sticky_norm = (sh >= 2) ? ((rem & ((1ull << (sh - 1)) - 1ull)) != 0ull) : false;
+      sticky_norm = (sh >= 2) ? ((rem & ((1ull << (sh - 1)) - 1u)) != 0ull) : false;
       kept24 = (sh >= 64) ? 0u : uint32_t(mag >> sh);
     } else {
       const int lsh = -sh;
@@ -541,9 +665,8 @@ private:
     return n;
   }
 
-  // ----------------------------- rounding ---------------------------
+  // ----------------------------- rounding + pack ------------------------------
   uint32_t round_and_pack(const Norm &nrm) {
-    // specials again (in case early exit didn't take)
     if (has_nv_ ||
         (has_pos_inf_ && has_neg_inf_) ||
         (c_is_inf_ && ((has_pos_inf_ && c_sign_ == 1u) || (has_neg_inf_ && c_sign_ == 0u)))) {
@@ -654,6 +777,38 @@ private:
     has_any_special_ = false;
   }
 
+  // ------------------------------- Primitives ---------------------------------
+
+  static inline uint64_t lowbits_mask(uint32_t W) {
+    return (W >= 64) ? ~0ull : ((1ull << W) - 1ull);
+  }
+
+  // 3:2 compressor on 64-bit lanes.
+  static inline CS csa32(uint64_t a, uint64_t b, uint64_t c) {
+    const uint64_t s = (a ^ b) ^ c;
+    const uint64_t g = (a & b) | (a & c) | (b & c);
+    return CS{s, g << 1};
+  }
+
+  static inline CS csa32_fold(CS acc, uint64_t x, uint64_t y) {
+    CS t1 = csa32(acc.sum, acc.carry, x);
+    return csa32(t1.sum, t1.carry, y);
+  }
+
+  static inline CS csa42(uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+    CS t = csa32(a, b, c);
+    return csa32(t.sum, t.carry, d);
+  }
+
+  static inline int64_t sign_extend(uint64_t v, uint32_t W) {
+    if (W >= 64)
+      return (int64_t)v;
+    const uint64_t mask = (1ull << W) - 1ull;
+    v &= mask;
+    const uint64_t msb = 1ull << (W - 1);
+    return (v & msb) ? (int64_t)(v | ~mask) : (int64_t)v;
+  }
+
   // ------------------------------- Utilities ---------------------------------
   static inline uint32_t bitsFromF32(float f) {
     uint32_t u;
@@ -699,16 +854,17 @@ private:
   static inline uint32_t canonicalNaN32() { return (0xFFu << 23) | (1u << 22); }
 
   // ------------------------------ Members ------------------------------------
-  // Config (TF32 superformat)
-  uint32_t Wc_{24}, Win_{25}, Wacc_{29};
+  uint32_t Wc_{24}, Win_{25}, Wacc_{35};
   int frm_{0};
   uint32_t lanes_{1};
 
-  // State / flags
   uint32_t fflags_{0};
   bool has_nan_{false}, has_pos_inf_{false}, has_neg_inf_{false}, has_nv_{false};
   bool c_is_nan_{false}, c_is_inf_{false};
   uint32_t c_sign_{0};
   bool sticky_c32_{false}, sticky_align_{false}, sticky_mul_{false};
   bool has_any_special_{false};
+
+  // debug scratch
+  uint32_t a32_{0};
 };
