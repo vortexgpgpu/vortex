@@ -42,7 +42,7 @@
 #include <vector>
 #include <bitmanip.h>
 #include "softfloat_ext.h"
-#include "fedp.h"
+#include "fedp4.h"
 
 bool sim_trace_enabled() {
   return true;
