@@ -102,19 +102,19 @@ public:
 private:
   // ------------------------------- Types ------------------------------------
   struct dec_t {
-    uint32_t sign{0}; // sign bit
-    uint32_t frac{0}; // fraction bits
-    uint32_t exp{0}; // exponent bits
-    bool is_zero{false}; // is zero
+    uint32_t sign{0};   // sign bit
+    uint32_t frac{0};   // fraction bits
+    uint32_t exp{0};    // exponent bits
+    bool is_zero{false};// is zero
     bool is_sub{false}; // is subnormal
     bool is_inf{false}; // is infinity
     bool is_nan{false}; // is NaN
   };
 
   struct term24_t {
-    int64_t S{0};
-    uint64_t C{0};
-    int32_t E{0};
+    int32_t  S{0};
+    uint32_t C{0};
+    int32_t  E{0};
     bool is_zero{true};
     bool is_inf{false};
     bool is_nan{false};
@@ -189,8 +189,8 @@ private:
     const int dM = int(Wc_ - 1u) - sig_bits;
     assert(dM < 32);
     uint32_t m_c = M << dM;
-    const int64_t addend = s ? -int64_t(m_c) : int64_t(m_c);
-    LOG("[decodeC] s=%u Ec=%d m=0x%x -> add=0x%llx\n", s, Ec, m_c, (long long)addend);
+    const int32_t addend = s ? -int32_t(m_c) : int32_t(m_c);
+    LOG("[decodeC] s=%u Ec=%d m=0x%x -> add=0x%llx\n", s, Ec, m_c, addend);
 
     term24_t p;
     p.S = addend;
@@ -228,10 +228,6 @@ private:
         LOG("[mul-prod] i=%zu special=Inf/NaN/0*Inf\n", i);
         continue;
       }
-      if (a.is_zero || b.is_zero) {
-        LOG("[mul-prod] i=%zu zero=1\n", i);
-        continue;
-      }
     }
     if (has_nv
      || (has_pos_inf && has_neg_inf)
@@ -258,19 +254,17 @@ private:
   std::tuple<std::vector<term24_t>, bool>
   multiply_to_common(const std::vector<std::array<dec_t, 2>> &terms, int exp_bits, int sig_bits) {
     const uint32_t width = 1u + exp_bits + sig_bits;
-    const uint32_t bias  = (1u << (exp_bits - 1)) - 1u;
-    const uint32_t Wm_in = uint32_t(sig_bits) + 1u;  // input mantissa width
-    const uint32_t Wraw  = 2u * Wm_in;               // raw product width
-    assert(Wraw < Wc_);                              // must fit into Wc grid
-    const uint32_t L_in  = Wc_ - Wraw;               // shift up to Wc grid
+    const int32_t  bias  = (1 << (exp_bits - 1)) - 1;
+    const uint32_t Wm_in = uint32_t(sig_bits) + 1u;   // input mantissa width (incl. hidden 1)
+    const uint32_t Wraw  = 2u * Wm_in;                // raw product width
+    assert(Wraw < Wc_);                               // must fit Wc grid
+    const uint32_t L_in  = Wc_ - Wraw;                // shift up to Wc grid
 
     struct Traw {
       uint32_t sign;
       uint32_t m_wc;
       int32_t  E;
       bool is_zero;
-      bool is_inf;
-      bool is_nan;
     };
 
     const size_t N = terms.size();
@@ -283,24 +277,24 @@ private:
 
       const uint32_t s = a.sign ^ b.sign;
 
-      const uint32_t Ea = a.is_sub ? (1 - bias) : (a.exp - bias);
-      const uint32_t Eb = b.is_sub ? (1 - bias) : (b.exp - bias);
-      const int32_t  E  = Ea + Eb + 1;
+      const int32_t Ea = (a.is_sub ? 1 : a.exp) - bias;
+      const int32_t Eb = (b.is_sub ? 1 : b.exp) - bias;
+      const int32_t E  = Ea + Eb + 1;
 
-      const uint32_t Ma = a.is_sub ? a.frac : ((1u << sig_bits) | a.frac);
-      const uint32_t Mb = b.is_sub ? b.frac : ((1u << sig_bits) | b.frac);
+      const uint32_t Ma = (!(a.is_zero || a.is_sub) << sig_bits) | a.frac;
+      const uint32_t Mb = (!(b.is_zero || b.is_sub) << sig_bits) | b.frac;
       const uint32_t P  = Ma * Mb; // Wraw bits
 
       // Shift up to Wc bits (no loss)
       const uint32_t m_wc = P << L_in;
       assert(L_in < 32);
 
-      v[i] = Traw{s, m_wc, E, false, false, false};
-      LOG("[mul-prod] i=%zu s=%u E=%d P=0x%x Wraw=%u\n", i, s, E, P, Wraw);
+      v[i] = Traw{s, m_wc, E, false};
+      LOG("[mul-prod] i=%zu s=%u E=%d P=0x%x m_wc=0x%x Wraw=%u\n", i, s, E, P, m_wc, Wraw);
     }
 
-    // Phase B: n_groups size (fp16:1, fp8:2, fp4:4)
-    const uint32_t n_groups = 16 / width; // max 16 values per word
+    // Phase B: reduce per group into CSA pair aligned to each group's Eg
+    const uint32_t n_groups = 16 / width; // fp16:1, e5m2:2, e4m3:2, fp4:4
     const size_t G = (N + n_groups - 1) / n_groups;
     std::vector<term24_t> out(G);
     bool sticky = false;
@@ -309,7 +303,7 @@ private:
       const size_t g = base / n_groups;
       const size_t end = std::min(N, base + n_groups);
 
-      // Find per-group max exponent Eg
+      // Per-group max exponent Eg
       int32_t Eg = INT32_MIN;
       for (size_t i = base; i < end; ++i) {
         Eg = std::max(Eg, v[i].E);
@@ -320,22 +314,20 @@ private:
       for (size_t i = base; i < end; ++i) {
         const auto &t = v[i];
 
-        // Align this term to Eg in magnitude domain (no CPA): right shift magnitude
+        // Align t to Eg in magnitude domain: right shift magnitude, gather sticky
         const uint32_t delta = uint32_t(Eg - t.E);
-        bool sticky_local;
-        uint32_t m_shifted;
-        if (delta > Wc_) {
+        uint32_t m_shifted = (t.m_wc >> delta);
+
+        bool sticky_local = false;
+        if (delta >= Wc_) {
           sticky_local = (t.m_wc != 0);
-          m_shifted = 0;
-        } else {
-          const uint32_t mask = (1u << delta) - 1u;
-          sticky_local = (t.m_wc & mask) != 0;
-          m_shifted = (t.m_wc >> delta);
+        } else if (delta > 0) {
+          const uint32_t mask = (delta == 32) ? 0xFFFFFFFFu : ((1u << delta) - 1u);
+          sticky_local = (t.m_wc & mask) != 0u;
         }
 
-        int64_t addend = t.sign ? -int64_t(m_shifted) : int64_t(m_shifted);
-
-        // per-group CSA accumulation (in Wc grid)
+        // Signed addend into CSA rails at Wc weight
+        const int32_t addend = t.sign ? -int32_t(m_shifted) : int32_t(m_shifted);
         auto [s1, c1] = csa32(acc.S, (acc.C << 1u), addend);
         acc.S = s1;
         acc.C = c1;
@@ -343,29 +335,25 @@ private:
         sticky |= sticky_local;
 
         LOG("[s1-csa] g=%zu i=%zu s=%u delta=%u m_adj=0x%x add=0x%llx S=0x%llx C=0x%llx\n",
-            g, i, t.sign, (unsigned)delta, m_shifted,
-            (long long)addend, (long long)acc.S, (long long)acc.C);
+            g, i, t.sign, delta, m_shifted, addend, acc.S, acc.C);
       }
 
-      // Mark zero if both rails are zero
       acc.is_zero = (acc.S == 0 && acc.C == 0);
       out[g] = acc;
       LOG("[s1-csa] g=%zu Eg=%d S=0x%llx C=0x%llx sticky=%d zero=%d\n",
-          g, Eg, (long long)acc.S, (long long)acc.C, (sticky ? 1 : 0), acc.is_zero ? 1 : 0);
+          g, Eg, acc.S, acc.C, (sticky ? 1 : 0), acc.is_zero ? 1 : 0);
     }
 
     LOG("[multiply] groups=%zu\n", out.size());
     return std::tuple{out, sticky};
   }
 
-  // ---------------------------- S2: Align CSA terms -------------------------
+  // ------------------------- S2: Alignment to Emax (CSA-preserving, 32-bit) --
   std::tuple<std::vector<term24_t>, int32_t, bool>
   alignment(const std::vector<term24_t> &groups, const term24_t &cterm) {
-    // Find Emax
+    // Emax over all terms
     int32_t Emax = INT32_MIN;
-    for (auto &g : groups) {
-      Emax = std::max(Emax, g.E);
-    }
+    for (const auto &g : groups) Emax = std::max(Emax, g.E);
     Emax = std::max(Emax, cterm.E);
 
     std::vector<term24_t> out;
@@ -375,100 +363,72 @@ private:
 
     auto align_one = [&](const term24_t &t, const char *tag, size_t idx) {
       const uint32_t delta = uint32_t(Emax - t.E);
-      // align by dividing the full value V = S + (C<<1) by 2^delta
-      // using truncate-toward-zero semantics; sticky comes from dropped bits.
-      uint64_t Su = static_cast<uint64_t>(t.S);
-      uint64_t Bu = (t.C << 1);
-      int64_t V = Su + Bu;
-      bool local_sticky = false;
 
-      if (delta > 0) {
-        if (delta >= 63) {
-          if (V != 0) {
-            local_sticky = true;
-          }
-          V = 0;
-        } else {
-          uint64_t absV = (V < 0) ? uint64_t(-V) : uint64_t(V);
-          uint64_t mask = (uint64_t(1) << delta) - 1ull;
-          if (absV & mask) {
-            local_sticky = true;
-          }
-          // truncate toward zero
-          V = (V >= 0) ? (V >> delta) : -(int64_t(((-V) >> delta)));
-        }
-      }
+      // Shift rails independently
+      const int32_t Sprime = asr32(t.S, delta);
+      const int32_t Cprime = asr32(t.C, delta);
 
+      // Sticky: any dropped bit from either rail counts
+      const bool local_sticky = any_dropped32(t.S, delta) || any_dropped32(t.C, delta);
       sticky |= local_sticky;
 
-      term24_t a;
-      a.S = V;
-      a.C = 0;
+      term24_t a{};
+      a.S = Sprime;
+      a.C = Cprime;
       a.E = Emax;
-      a.is_zero = (V == 0);
+      a.is_zero = (a.S == 0 && a.C == 0);
       a.is_inf = false;
       a.is_nan = false;
 
-      LOG("[align-%s] idx=%zu delta=%u S'=0x%llx C'=0x%llx sticky+=%d\n",
-          tag, idx, (unsigned)delta, (long long)a.S, (long long)a.C, (local_sticky ? 1 : 0));
+      LOG("[align-%s] idx=%zu delta=%u S'=%#x C'=%#x sticky+=%d\n",
+          tag, idx, (unsigned)delta, uint32_t(a.S), uint32_t(a.C), local_sticky ? 1 : 0);
+
       out.push_back(a);
     };
 
-    for (size_t i = 0; i < groups.size(); ++i) {
-      align_one(groups[i], "p", i);
-    }
+    for (size_t i = 0; i < groups.size(); ++i) align_one(groups[i], "p", i);
     align_one(cterm, "c", 0);
 
-    LOG("[alignment] Emax=%d sticky_align=%d terms=%zu\n", Emax, (sticky ? 1 : 0), out.size());
+    LOG("[alignment] Emax=%d sticky_align=%d terms=%zu\n",
+        Emax, sticky ? 1 : 0, out.size());
+
     return std::tuple{out, Emax, sticky};
   }
 
   // ------------------------- S3: CSA Accumulate + CPA -----------------------
-  int64_t accumulate(const std::vector<term24_t> &aligned) {
+  int32_t accumulate(const std::vector<term24_t> &aligned) {
     term24_t acc{0, 0, 0, true, false, false};
     acc.E = aligned[0].E;
     acc.is_zero = false;
 
     auto add_pair_into = [&](term24_t &dst, const term24_t &src) {
       // Fold S component
-      {
-        const uint64_t A = static_cast<uint64_t>(dst.S);
-        const uint64_t B = (dst.C << 1);
-        const uint64_t X = static_cast<uint64_t>(src.S);
-        auto [s1, c1] = csa32(A, B, X);
-        dst.S = static_cast<int64_t>(s1);
-        dst.C = c1;
-      }
+      auto [s1, c1] = csa32(dst.S, (dst.C << 1), src.S);
+      dst.S = s1;
+      dst.C = c1;
       // Fold C component (shifted by 1 in weight)
-      {
-        const uint64_t A = static_cast<uint64_t>(dst.S);
-        const uint64_t B = (dst.C << 1);
-        const uint64_t X = (src.C << 1);
-        auto [s1, c1] = csa32(A, B, X);
-        dst.S = static_cast<int64_t>(s1);
-        dst.C = c1;
-      }
+      auto [s2, c2] = csa32(dst.S, (dst.C << 1),(src.C << 1));
+      dst.S = s2;
+      dst.C = c2;
     };
 
     for (size_t i = 0; i < aligned.size(); ++i) {
       add_pair_into(acc, aligned[i]);
-      LOG("[acc-csa] i=%zu S=0x%llx C=0x%llx\n", i, (long long)acc.S, (long long)acc.C);
+      LOG("[acc-csa] i=%zu S=0x%llx C=0x%llx\n", i, acc.S, acc.C);
     }
 
     // Single CPA here: V = S + (C<<1) with well-defined wrap via unsigned
-    const uint64_t Su = static_cast<uint64_t>(acc.S);
-    const uint64_t B = (acc.C << 1);
-    int64_t V = Su + B;
+    int32_t V = acc.S + (acc.C << 1);
     return V;
   }
 
   // ------------------------------ S4: Normalize -----------------------------
-  norm_t normalize(int64_t acc, int32_t Emax, bool sticky_prev) {
+  norm_t normalize(int32_t acc, int32_t Emax, bool sticky_prev) {
     norm_t n{};
     n.sign = (acc < 0) ? 1u : 0u;
-    uint64_t mag = (acc < 0) ? uint64_t(-acc) : uint64_t(acc);
+    uint32_t mag = (acc < 0) ? uint32_t(-acc) : uint32_t(acc);
 
-    const uint32_t nbits = (mag == 0) ? 1u : (64u - uint32_t(clz64(mag))); // >=1
+    const uint32_t nbits = (mag == 0) ? 1u : (64u - uint32_t(clz32(mag))); // >=1
     // Our fixed-point point was at bit (Wc_-1) relative to exponent; now the leading 1 is at nbits-1
     n.e_unb = (Emax - int32_t(Wc_ - 1u)) + int32_t(nbits - 1u);
 
@@ -479,8 +439,8 @@ private:
     uint32_t kept24 = 0, round_bit = 0;
     bool sticky_norm = false;
     if (sh > 0) {
-      const uint64_t mask = (sh >= 64) ? ~0ull : ((1ull << sh) - 1ull);
-      const uint64_t rem = mag & mask;
+      const uint32_t mask = (sh >= 64) ? ~0ull : ((1ull << sh) - 1ull);
+      const uint32_t rem = mag & mask;
       round_bit = (sh >= 1) ? ((rem >> (sh - 1)) & 1ull) : 0u;
       sticky_norm = (sh >= 2) ? ((rem & ((1ull << (sh - 1)) - 1ull)) != 0ull) : false;
       kept24 = (sh >= 64) ? 0u : uint32_t(mag >> sh);
@@ -606,20 +566,26 @@ private:
   }
 
   // 3:2 compressor on equal-weight bit-vectors
-  static inline std::pair<uint64_t, uint64_t> csa32(uint64_t a, uint64_t b, uint64_t c) {
-    const uint64_t t = (a ^ b);
-    uint64_t sum = t ^ c;
-    uint64_t carry = ((a & b) | (b & c) | (a & c));
+  static inline std::pair<uint32_t, uint32_t> csa32(uint32_t a, uint32_t b, uint32_t c) {
+    const uint32_t t = (a ^ b);
+    uint32_t sum = t ^ c;
+    uint32_t carry = ((a & b) | (b & c) | (a & c));
     return std::pair{sum, carry};
   }
 
-  // Safe arithmetic right shift for signed 64-bit (handles large shifts)
-  static inline int64_t asr64(int64_t v, uint32_t sh) {
-    if (sh == 0)
-      return v;
-    if (sh >= 63)
-      return (v < 0) ? int64_t(-1) : int64_t(0);
-    return v >> sh;
+  // portable arithmetic shift right
+  static inline int32_t asr32(int32_t x, uint32_t k) {
+    if (k == 0) return x;
+    if (k >= 31) return (x < 0) ? -1 : 0; // sign saturation after huge shift
+    return (x >= 0) ? (x >> k) : ~((~x) >> k);
+  }
+
+  // check if any of the lowest k bits are set
+  static inline bool any_dropped32(int32_t x, uint32_t k) {
+    if (k == 0) return false;
+    if (k >= 31) return x != 0;
+    const uint32_t mask = (1u << k) - 1u;
+    return (uint32_t(x) & mask) != 0u;
   }
 
   // ------------------------------- Utilities ----------------------------------
@@ -634,14 +600,14 @@ private:
     return f;
   }
 
-  static inline int clz64(uint64_t x) {
+  static inline int clz32(uint32_t x) {
 #if defined(__GNUC__) || defined(__clang__)
-    return x ? __builtin_clzll(x) : 64;
+    return x ? __builtin_clzl(x) : 32;
 #else
     if (!x)
-      return 64;
+      return 32;
     int n = 0;
-    while (!(x & (1ull << 63))) {
+    while (!(x & (1ull << 31))) {
       x <<= 1;
       ++n;
     }
