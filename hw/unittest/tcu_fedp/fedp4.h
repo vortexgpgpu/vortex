@@ -100,7 +100,7 @@ public:
   uint32_t fflags() const { return fflags_; }
 
 private:
-  // ------------------------------- Types --------------------------------------
+  // ------------------------------- Types ------------------------------------
   struct dec_t {
     uint32_t sign{0}; // sign bit
     uint32_t frac{0}; // fraction bits
@@ -135,7 +135,7 @@ private:
   static constexpr uint32_t FLAG_OF = 1u << 2;
   static constexpr uint32_t FLAG_NV = 1u << 4;
 
-  // ----------------------------- Decode Inputs --------------------------------
+  // ----------------------------- Decode Inputs ------------------------------
   std::vector<std::array<dec_t, 2>>
   decode_inputs(const std::vector<uint32_t> &a_words,
                const std::vector<uint32_t> &b_words,
@@ -152,19 +152,17 @@ private:
 
     uint32_t out = 0;
     for (uint32_t i = 0; i < n_words; ++i) {
-      uint32_t aw = a_words[i], bw = b_words[i];
+      uint32_t aw = a_words[i];
+      uint32_t bw = b_words[i];
       for (uint32_t j = 0; j < elems_per_word; ++j, ++out) {
         const uint32_t aenc = packed ? (aw & enc_mask) : aw;
         const uint32_t benc = packed ? (bw & enc_mask) : bw;
-
         terms[out][0] = decode_input(aenc, exp_bits, sig_bits);
         terms[out][1] = decode_input(benc, exp_bits, sig_bits);
-
         if (packed) {
           aw >>= width;
           bw >>= width;
         }
-
         LOG("[decode] idx=%u, A(enc=0x%x, s=%u,e=%u,f=0x%x), B(enc=0x%x, s=%u,e=%u,f=0x%x)\n",
             out,
             aenc, terms[out][0].sign, terms[out][0].exp, terms[out][0].frac,
@@ -175,7 +173,7 @@ private:
     return terms;
   }
 
-  // ------------------------------ Decode C to CSA ------------------------------
+  // ---------------------------- Decode C to CSA -----------------------------
   term24_t decoded_to_common(dec_t decoded, int exp_bits, int sig_bits) {
     const uint32_t frac_mask = ((1u << sig_bits) - 1u);
     const uint32_t exp_mask  = ((1u << exp_bits) - 1u);
@@ -185,7 +183,7 @@ private:
     const uint32_t e = decoded.exp;
     const uint32_t f = decoded.frac;
 
-    const int32_t Ec = decoded.is_sub ? (1 - bias) : (int32_t(e) - bias);
+    const int32_t Ec = decoded.is_sub ? (1 - bias) : (e - bias);
     const uint32_t M = decoded.is_sub ? f : ((1u << sig_bits) | f); // 24b
 
     // Scale mantissa to Wc_-1
@@ -257,14 +255,14 @@ private:
     return 0;
   }
 
-  // ------------------------------ S1: Multiply & n_groups → CSA ------------------
+  // ------------------------- S1: Multiply & n_groups → CSA ------------------
   std::tuple<std::vector<term24_t>, bool>
   multiply_to_common(const std::vector<std::array<dec_t, 2>> &terms, int exp_bits, int sig_bits) {
     const uint32_t width = 1u + exp_bits + sig_bits;
     const uint32_t Wm_in = uint32_t(sig_bits) + 1u;  // input mantissa width
-    const uint32_t Wraw = 2u * Wm_in;                // raw product width
+    const uint32_t Wraw  = 2u * Wm_in;               // raw product width
     assert(Wraw < Wc_);                              // must fit into Wc grid
-    const uint32_t L_in = Wc_ - Wraw;                // shift up to Wc grid
+    const uint32_t L_in  = Wc_ - Wraw;               // shift up to Wc grid
 
     struct Traw {
       uint32_t sign;
@@ -307,47 +305,30 @@ private:
       const size_t g = base / n_groups;
       const size_t end = std::min(N, base + n_groups);
 
-      // Find n_groups reference exponent Eg
+      // Find per-group max exponent Eg
       int32_t Eg = INT32_MIN;
       for (size_t i = base; i < end; ++i) {
-        if (v[i].is_zero || v[i].is_inf || v[i].is_nan)
-          continue;
         Eg = std::max(Eg, v[i].E);
-      }
-      if (Eg == INT32_MIN) {
-        out[g] = term24_t{0, 0, 0, true, false, false};
-        LOG("[s1-csa] g=%zu all_zero=1\n", g);
-        continue;
       }
 
       term24_t acc{0, 0, Eg, false, false, false};
 
       for (size_t i = base; i < end; ++i) {
         const auto &t = v[i];
-        if (t.is_zero || t.is_inf || t.is_nan)
-          continue;
 
         // Align this term to Eg in magnitude domain (no CPA): right shift magnitude
         const uint32_t delta = uint32_t(Eg - t.E);
-        uint32_t m_shifted = 0;
-        bool sticky_local = false;
-        if (delta == 0) {
-          m_shifted = t.m_wc;
-        } else if (delta >= Wc_) {
-          sticky_local = (t.m_wc != 0);
-          m_shifted = 0;
-        } else {
-          const uint32_t mask = (1u << delta) - 1u;
-          sticky_local = (t.m_wc & mask) != 0;
-          m_shifted = (t.m_wc >> delta);
-        }
-
+        assert(delta <= L_in);
+        uint32_t m_shifted = t.m_wc >> delta;
         int64_t addend = t.sign ? -int64_t(m_shifted) : int64_t(m_shifted);
 
+        // per-group CSA accumulation (in Wc grid)
         auto [s1, c1] = csa32(acc.S, (acc.C << 1u), addend);
         acc.S = s1;
         acc.C = c1;
 
+        const uint32_t mask = (1u << delta) - 1u;
+        bool sticky_local = (t.m_wc & mask) != 0;
         sticky |= sticky_local;
 
         LOG("[s1-csa] g=%zu i=%zu s=%u delta=%u m_adj=0x%x add=0x%llx S=0x%llx C=0x%llx\n",
@@ -382,16 +363,12 @@ private:
     bool sticky = false;
 
     auto align_one = [&](const term24_t &t, const char *tag, size_t idx) {
-      if (t.is_zero || t.is_inf || t.is_nan) {
-        LOG("[align-%s] idx=%zu zero_or_special=1\n", tag, idx);
-        return;
-      }
       const uint32_t delta = uint32_t(Emax - t.E);
       // align by dividing the full value V = S + (C<<1) by 2^delta
       // using truncate-toward-zero semantics; sticky comes from dropped bits.
       uint64_t Su = static_cast<uint64_t>(t.S);
       uint64_t Bu = (t.C << 1);
-      int64_t V = static_cast<int64_t>(Su + Bu);
+      int64_t V = Su + Bu;
       bool local_sticky = false;
 
       if (delta > 0) {
@@ -406,11 +383,12 @@ private:
           if (absV & mask) {
             local_sticky = true;
           }
-
           // truncate toward zero
           V = (V >= 0) ? (V >> delta) : -(int64_t(((-V) >> delta)));
         }
       }
+
+      sticky |= local_sticky;
 
       term24_t a;
       a.S = V;
@@ -423,8 +401,6 @@ private:
       LOG("[align-%s] idx=%zu delta=%u S'=0x%llx C'=0x%llx sticky+=%d\n",
           tag, idx, (unsigned)delta, (long long)a.S, (long long)a.C, (local_sticky ? 1 : 0));
       out.push_back(a);
-
-      sticky |= local_sticky;
     };
 
     for (size_t i = 0; i < groups.size(); ++i) {
@@ -436,7 +412,7 @@ private:
     return std::tuple{out, Emax, sticky};
   }
 
-  // ------------------------------ S3: CSA Accumulate + CPA --------------------
+  // ---------------------------- S3: CSA Accumulate + CPA --------------------
   int64_t accumulate(const std::vector<term24_t> &aligned) {
     term24_t acc{0, 0, 0, true, false, false};
     acc.E = aligned[0].E;
@@ -475,7 +451,7 @@ private:
     return V;
   }
 
-  // ------------------------------ S4: Normalize -------------------------------
+  // ------------------------------ S4: Normalize -----------------------------
   norm_t normalize(int64_t acc, int32_t Emax, bool sticky_prev) {
     norm_t n{};
     n.sign = (acc < 0) ? 1u : 0u;
@@ -512,7 +488,7 @@ private:
     return n;
   }
 
-  // ------------------------------ Rounding/Pack -------------------------------
+  // ----------------------------- Rounding/Pack ------------------------------
   uint32_t round_and_pack(const norm_t &nrm) {
     uint32_t kept24 = nrm.kept24;
     int32_t e_unb = nrm.e_unb;
@@ -670,7 +646,7 @@ private:
     fflags_ = 0;
   }
 
-  // ------------------------------ Members -------------------------------------
+  // ------------------------------ Members -----------------------------------
   // Config Superformat is TF32 (e8m10)
   const uint32_t Wc_{24};  // common product magnitude width
   const uint32_t Win_{25}; // signed addend width
