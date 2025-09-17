@@ -105,7 +105,6 @@ private:
     uint32_t sign{0}; // sign bit
     uint32_t frac{0}; // fraction bits
     uint32_t exp{0}; // exponent bits
-    int32_t exp_unb{0}; // unbiased exponent
     bool is_zero{false}; // is zero
     bool is_sub{false}; // is subnormal
     bool is_inf{false}; // is infinity
@@ -184,11 +183,11 @@ private:
     const uint32_t f = decoded.frac;
 
     const int32_t Ec = decoded.is_sub ? (1 - bias) : (e - bias);
-    const uint32_t M = decoded.is_sub ? f : ((1u << sig_bits) | f); // 24b
+    const uint32_t M = decoded.is_sub ? f : ((1u << sig_bits) | f);
 
     // Scale mantissa to Wc_-1
     const int dM = int(Wc_ - 1u) - sig_bits;
-    assert(dM <= 32);
+    assert(dM < 32);
     uint32_t m_c = M << dM;
     const int64_t addend = s ? -int64_t(m_c) : int64_t(m_c);
     LOG("[decodeC] s=%u Ec=%d m=0x%x -> add=0x%llx\n", s, Ec, m_c, (long long)addend);
@@ -259,6 +258,7 @@ private:
   std::tuple<std::vector<term24_t>, bool>
   multiply_to_common(const std::vector<std::array<dec_t, 2>> &terms, int exp_bits, int sig_bits) {
     const uint32_t width = 1u + exp_bits + sig_bits;
+    const uint32_t bias  = (1u << (exp_bits - 1)) - 1u;
     const uint32_t Wm_in = uint32_t(sig_bits) + 1u;  // input mantissa width
     const uint32_t Wraw  = 2u * Wm_in;               // raw product width
     assert(Wraw < Wc_);                              // must fit into Wc grid
@@ -281,11 +281,15 @@ private:
       const dec_t &a = terms[i][0];
       const dec_t &b = terms[i][1];
 
+      const uint32_t s = a.sign ^ b.sign;
+
+      const uint32_t Ea = a.is_sub ? (1 - bias) : (a.exp - bias);
+      const uint32_t Eb = b.is_sub ? (1 - bias) : (b.exp - bias);
+      const int32_t  E  = Ea + Eb + 1;
+
       const uint32_t Ma = a.is_sub ? a.frac : ((1u << sig_bits) | a.frac);
       const uint32_t Mb = b.is_sub ? b.frac : ((1u << sig_bits) | b.frac);
-      const uint32_t P = Ma * Mb; // Wraw bits
-      const int32_t  E = (a.exp_unb + b.exp_unb) + 1;
-      const uint32_t s = a.sign ^ b.sign;
+      const uint32_t P  = Ma * Mb; // Wraw bits
 
       // Shift up to Wc bits (no loss)
       const uint32_t m_wc = P << L_in;
@@ -318,8 +322,17 @@ private:
 
         // Align this term to Eg in magnitude domain (no CPA): right shift magnitude
         const uint32_t delta = uint32_t(Eg - t.E);
-        assert(delta <= L_in);
-        uint32_t m_shifted = t.m_wc >> delta;
+        bool sticky_local;
+        uint32_t m_shifted;
+        if (delta > Wc_) {
+          sticky_local = (t.m_wc != 0);
+          m_shifted = 0;
+        } else {
+          const uint32_t mask = (1u << delta) - 1u;
+          sticky_local = (t.m_wc & mask) != 0;
+          m_shifted = (t.m_wc >> delta);
+        }
+
         int64_t addend = t.sign ? -int64_t(m_shifted) : int64_t(m_shifted);
 
         // per-group CSA accumulation (in Wc grid)
@@ -327,8 +340,6 @@ private:
         acc.S = s1;
         acc.C = c1;
 
-        const uint32_t mask = (1u << delta) - 1u;
-        bool sticky_local = (t.m_wc & mask) != 0;
         sticky |= sticky_local;
 
         LOG("[s1-csa] g=%zu i=%zu s=%u delta=%u m_adj=0x%x add=0x%llx S=0x%llx C=0x%llx\n",
@@ -412,7 +423,7 @@ private:
     return std::tuple{out, Emax, sticky};
   }
 
-  // ---------------------------- S3: CSA Accumulate + CPA --------------------
+  // ------------------------- S3: CSA Accumulate + CPA -----------------------
   int64_t accumulate(const std::vector<term24_t> &aligned) {
     term24_t acc{0, 0, 0, true, false, false};
     acc.E = aligned[0].E;
@@ -558,7 +569,6 @@ private:
   static inline dec_t decode_input(uint32_t enc, int exp_bits, int sig_bits) {
     const uint32_t frac_mask = ((1u << sig_bits) - 1u);
     const uint32_t exp_mask  = ((1u << exp_bits) - 1u);
-    const uint32_t bias = (1u << (exp_bits - 1)) - 1u;
     const uint32_t sign = (enc >> (exp_bits + sig_bits)) & 1u;
     const uint32_t exp  = (enc >> sig_bits) & exp_mask;
     const uint32_t frac = enc & frac_mask;
@@ -567,7 +577,6 @@ private:
     d.sign    = sign;
     d.frac    = frac;
     d.exp     = exp;
-    d.exp_unb = (exp == 0) ? (1 - int32_t(bias)) : (exp == exp_mask ? 0 : int32_t(exp) - int32_t(bias));
     d.is_zero = (exp == 0 && frac == 0);
     d.is_sub  = (exp == 0 && frac != 0);
     d.is_inf  = (exp == exp_mask && frac == 0);

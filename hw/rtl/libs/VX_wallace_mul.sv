@@ -19,7 +19,7 @@ module VX_wallace_mul #(
 ) (
     input wire [N-1:0]   a,
     input wire [N-1:0]   b,
-    output logic [P-1:0] p
+    output wire [P-1:0] p
 );
     wire [N-1:0][2*N-1:0] pp;    //partial products, double width (shifted)
 

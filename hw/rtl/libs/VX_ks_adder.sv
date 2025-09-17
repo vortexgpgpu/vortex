@@ -20,16 +20,16 @@
 module VX_ks_adder #(
     parameter N = 16
 ) (
-    input  logic [N-1:0] dataa,
-    input  logic [N-1:0] datab,
-    output logic [N-1:0] sum,
-    output logic         cout
+    input  wire [N-1:0] dataa,
+    input  wire [N-1:0] datab,
+    output wire [N-1:0] sum,
+    output wire         cout
 );
     localparam LEVELS = $clog2(N);
 
 `IGNORE_UNOPTFLAT_BEGIN
-    logic [N-1:0] G [LEVELS+1];
-    logic [N-1:0] P [LEVELS+1];
+    wire [N-1:0] G [LEVELS+1];
+    wire [N-1:0] P [LEVELS+1];
 `IGNORE_UNOPTFLAT_END
 
     // level 0: initial generate & propagate
