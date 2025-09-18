@@ -160,6 +160,7 @@ struct TestConfig {
   int sig_bits = 0; // Significand bits
   RoundingMode frm = RoundingMode::RNE; // Rounding mode
   uint32_t num_tests = 100000; // Number of tests per feature
+  int32_t test_id = -1; // Specific test ID to run (for debugging)
 };
 
 // Add ostream overload for TestConfig
@@ -175,6 +176,7 @@ std::ostream &operator<<(std::ostream &os, const TestConfig &config) {
      << ", sig_bits: " << config.sig_bits
      << ", frm: " << frm_to_string(config.frm)
      << ", num_tests: " << config.num_tests
+     << ", test_id: " << config.test_id
      << ", test_features: {";
   int i = 0;
   for (const auto &f : config.test_features) {
@@ -480,21 +482,21 @@ public:
 
     std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
 
-    for (int test_idx = 0; test_idx < config_.num_tests; test_idx++) {
+    for (int test_id = 0; test_id < config_.num_tests; test_id++) {
       // Generate test vectors
       std::vector<uint32_t> a_values(total_elements), b_values(total_elements);
 
-      bool a_enable = (test_idx % 3) == 0;
-      bool b_enable = (test_idx % 3) == 1;
-      bool c_enable = (test_idx % 3) == 2;
+      bool a_enable = (test_id % 3) == 0;
+      bool b_enable = (test_id % 3) == 1;
+      bool c_enable = (test_id % 3) == 2;
 
       for (int i = 0; i < total_elements; i++) {
-        a_values[i] = (a_enable && i == 0) ? generate_int_value(is_signed, element_bits, test_idx) : generate_int_value(is_signed, element_bits, -1);
-        a_values[i] = (b_enable && i == 0) ? generate_int_value(is_signed, element_bits, test_idx) : generate_int_value(is_signed, element_bits, -1);
+        a_values[i] = (a_enable && i == 0) ? generate_int_value(is_signed, element_bits, test_id) : generate_int_value(is_signed, element_bits, -1);
+        a_values[i] = (b_enable && i == 0) ? generate_int_value(is_signed, element_bits, test_id) : generate_int_value(is_signed, element_bits, -1);
       }
 
       // Generate c value
-      int32_t c_value = c_enable ? generate_int_value(true, 32, test_idx) : generate_int_value(true, 32, -1);
+      int32_t c_value = c_enable ? generate_int_value(true, 32, test_id) : generate_int_value(true, 32, -1);
 
       // Pack into XLEN words
       uint32_t a_packed[NUM_REGS], b_packed[NUM_REGS];
@@ -522,7 +524,7 @@ public:
       int32_t expected = calculate_int_dot_product(a_values, b_values, c_value);
 
       if (dut_result != expected) {
-        std::cout << "Test:" << test_idx << " failed:" << std::endl;
+        std::cout << "Test:" << test_id << " failed:" << std::endl;
         print_format("  a_values=", a_values, true);
         print_format("  b_values=", b_values, true);
         print_format("  c_value=", c_value, true);
@@ -536,33 +538,42 @@ public:
       tick();
     }
 
-    std::cout << "  " << config_.num_tests << " tests passed" << std::endl;
     return true;
   }
 
   // Test a specific fp feature
-  bool test_fp_feature(const std::string &feature) {
-    std::cout << "Testing floating-point feature: " << feature << std::endl;
-
+  bool test_fp_feature(const std::vector<std::string>& features_to_test) {
     // Calculate how many elements we can fit in NUM_REGS XLEN words
     int element_bits = float_fmt_width(config_.exp_bits, config_.sig_bits);
     int elements_per_word = 32 / element_bits;
     int total_elements = NUM_REGS * elements_per_word;
 
-    std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
+    //std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
 
-    for (int test_idx = 0; test_idx < config_.num_tests; test_idx++) {
+    const uint32_t NT = config_.num_tests;
+    const uint32_t NF = features_to_test.size();
+    const uint32_t tests_per_feature = (NT + NF- 1) / NF;
+
+    for (int test_id = 0; test_id < NT; test_id++) {
+      // select feature to test
+      int feature_id = test_id / tests_per_feature;
+      std::string feature = features_to_test[feature_id];
+
+      if (config_.test_id >= 0 || (test_id % tests_per_feature) == 0) {
+        std::cout << "Testing floating-point feature: " << feature << std::endl;
+      }
+
       // Generate test vectors
       std::vector<float> a_values_float(total_elements), b_values_float(total_elements);
       std::vector<uint32_t> a_values_format(total_elements), b_values_format(total_elements);
 
-      bool a_enable = (test_idx % 3) == 0;
-      bool b_enable = (test_idx % 3) == 1;
-      bool c_enable = (test_idx % 3) == 2;
+      bool a_enable = (test_id % 3) == 0;
+      bool b_enable = (test_id % 3) == 1;
+      bool c_enable = (test_id % 3) == 2;
 
       for (int i = 0; i < total_elements; i++) {
-        float af = (a_enable && i == 0) ? generate_fp_value(feature) : generate_fp_value("normals");
-        float bf = (b_enable && i == 0) ? generate_fp_value(feature) : generate_fp_value("normals");
+        float af = (a_enable && (i & 0x1) == 0) ? generate_fp_value(feature) : generate_fp_value("normals");
+        float bf = (b_enable && (i & 0x1) == 0) ? generate_fp_value(feature) : generate_fp_value("normals");
 
         a_values_format[i] = cvt_f32_to_custom(af, config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
         b_values_format[i] = cvt_f32_to_custom(bf, config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
@@ -578,6 +589,11 @@ public:
 
       // Generate c value
       float c_value_float = c_enable ? generate_fp_value(feature) : generate_fp_value("normals");
+
+      // skip if not in selected test id
+      if (config_.test_id >= 0 && test_id != config_.test_id)
+        continue;
+      
       uint32_t c_value_bits;
       std::memcpy(&c_value_bits, &c_value_float, sizeof(float));
 
@@ -612,7 +628,7 @@ public:
 
       bool passed = approximately_equal(dut_result, expected, config_.exp_bits, config_.sig_bits);
       if (!passed) {
-        std::cout << "Test " << feature << ":" << test_idx << " failed:" << std::endl;
+        std::cout << "Test #" << test_id << " (" << feature << ") failed:" << std::endl;
         print_float("  af_values=", a_values_float, true);
         print_format("  ax_values=", a_values_format, true);
         print_float("  bf_values=", b_values_float, true);
@@ -627,8 +643,6 @@ public:
       dut_->enable = 0;
       tick();
     }
-
-    std::cout << "  " << config_.num_tests << " tests passed" << std::endl;
     return true;
   }
 
@@ -652,14 +666,17 @@ public:
         }
       }
 
-      for (const auto &feature : features_to_test) {
-        if (!test_fp_feature(feature)) {
-          return false;
-        }
+      if (!test_fp_feature(features_to_test)) {
+        return false;
       }
     }
 
-    std::cout << "All tests PASSED!" << std::endl;
+    if (config_.test_id >= 0) {
+      std::cout << "Test #" << config_.test_id << " PASSED!" << std::endl;
+    } else {
+      std::cout << config_.num_tests << " test(s) PASSED!" << std::endl;
+    }
+
     std::cout << "Simulation completed in " << cycle_count_ << " cycles" << std::endl;
     return true;
   }
@@ -691,11 +708,13 @@ TestConfig parse_args(int argc, char **argv) {
       config_.sig_bits = std::stoi(arg.substr(6));
     } else if (arg.substr(0, 6) == "--rnd=") {
       config_.frm = frm_from_string(arg.substr(6));
-    } else if (arg == "--tests" && i + 1 < argc) {
-      config_.num_tests = std::stoul(argv[++i]);
-    } else if (arg == "--seed" && i + 1 < argc) {
-      config_.random_seed = std::stoul(argv[++i]);
-    } else if (arg == "--help") {
+    } else if (arg.substr(0, 8) == "--tests=") {
+      config_.num_tests = std::stoi(arg.substr(8));
+    } else if (arg.substr(0, 7) == "--test=") {
+      config_.test_id = std::stoi(arg.substr(7));
+    } else if (arg.substr(0, 7) == "--seed=") {
+      config_.random_seed = std::stoi(arg.substr(7));
+    } else {
       std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
       std::cout << "Options:" << std::endl;
       std::cout << "  --no-trace        Disable VCD tracing" << std::endl;
@@ -709,7 +728,8 @@ TestConfig parse_args(int argc, char **argv) {
       std::cout << "  --sig=BITS        Significand bits for custom format" << std::endl;
       std::cout << "  --rnd=MODE        Rounding mode (RNE, RZ, RU, RD, RM)" << std::endl;
       std::cout << "  --seed <value>    Set random seed" << std::endl;
-      std::cout << "  --tests <count>   Number of tests to run (default: 100)" << std::endl;
+      std::cout << "  --tests <count>   Number of tests to run (default: 100000)" << std::endl;
+      std::cout << "  --test <id>       Run the specified test only" << std::endl;
       std::cout << "  --help            Show this help message" << std::endl;
       exit(0);
     }
