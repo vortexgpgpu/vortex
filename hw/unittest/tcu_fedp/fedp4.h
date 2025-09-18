@@ -123,12 +123,14 @@ private:
   };
 
   struct term24_t {
-    int32_t  S{0};
-    uint32_t C{0};
-    int32_t  E{0};
-    bool is_zero{true};
-    bool is_inf{false};
-    bool is_nan{false};
+    int32_t S{0};
+    int32_t C{0};
+    int32_t E{0};
+  };
+
+  struct align_t {
+    int32_t S{0};
+    int32_t C{0};
   };
 
   struct norm_t {
@@ -184,31 +186,21 @@ private:
   }
 
   // ---------------------------- Decode C to CSA -----------------------------
-  term24_t decoded_to_common(dec_t decoded, int exp_bits, int sig_bits) {
+  term24_t decoded_to_common(dec_t dec, int exp_bits, int sig_bits) {
     const uint32_t frac_mask = ((1u << sig_bits) - 1u);
     const uint32_t exp_mask  = ((1u << exp_bits) - 1u);
     const uint32_t bias = (1u << (exp_bits - 1)) - 1u;
-
-    const uint32_t s = decoded.sign;
-    const uint32_t e = decoded.exp;
-    const uint32_t f = decoded.frac;
-
-    const int32_t Ec = e - bias + 127;
-    const uint32_t M = ((e != 0) << sig_bits) | f;
+    const int32_t Ec = dec.exp - bias + 127;
+    const uint32_t M = ((dec.exp != 0) << sig_bits) | dec.frac;
 
     // Scale mantissa to Wc_-1
     const int dM = int(Wc_ - 1u) - sig_bits;
     assert(dM < 32);
     uint32_t m_c = M << dM;
-    const int32_t addend = s ? -int32_t(m_c) : int32_t(m_c);
-    LOG("[decodeC] s=%u, Ec=0x%x, m=0x%x -> add=0x%x\n", s, Ec, m_c, addend);
+    const int32_t addend = dec.sign ? -int32_t(m_c) : int32_t(m_c);
+    LOG("[decodeC] s=%u, Ec=0x%x, m=0x%x -> add=0x%x\n", dec.sign, Ec, m_c, addend);
 
-    term24_t p;
-    p.S = addend;
-    p.C = 0;
-    p.E = Ec;
-    p.is_zero = (m_c == 0);
-    return p;
+    return term24_t{addend, 0, Ec};
   }
 
   // -------------------- Special/zero fast finalize helper -------------------
@@ -319,7 +311,7 @@ private:
         Eg = std::max(Eg, v[i].E);
       }
 
-      term24_t acc{0, 0, Eg, false, false, false};
+      term24_t acc{0, 0, Eg};
 
       for (size_t i = base; i < end; ++i) {
         const auto &t = v[i];
@@ -348,25 +340,26 @@ private:
             g, i, t.sign, delta, m_shifted, addend, acc.S, acc.C);
       }
 
-      acc.is_zero = (acc.S == 0 && acc.C == 0);
       out[g] = acc;
-      LOG("[s1-csa] g=%zu, Eg=0x%x, S=0x%x, C=0x%x, sticky=%d, zero=%d\n",
-          g, Eg, acc.S, acc.C, (sticky ? 1 : 0), (acc.is_zero ? 1 : 0));
+      LOG("[s1-csa] g=%zu, Eg=0x%x, S=0x%x, C=0x%x, sticky=%d\n",
+          g, Eg, acc.S, acc.C, (sticky ? 1 : 0));
     }
 
     LOG("[multiply] groups=%zu\n", out.size());
     return std::tuple{out, sticky};
   }
 
-  // ------------------------- S2: Alignment to Emax (CSA-preserving, 32-bit) --
-  std::tuple<std::vector<term24_t>, int32_t, bool>
+  // ------------------------ S2: Alignment to Emax ---------------------------
+  std::tuple<std::vector<align_t>, int32_t, bool>
   alignment(const std::vector<term24_t> &groups, const term24_t &cterm) {
     // Emax over all terms
     int32_t Emax = INT32_MIN;
-    for (const auto &g : groups) Emax = std::max(Emax, g.E);
+    for (const auto &g : groups) {
+      Emax = std::max(Emax, g.E);
+    }
     Emax = std::max(Emax, cterm.E);
 
-    std::vector<term24_t> out;
+    std::vector<align_t> out;
     out.reserve(groups.size() + 1);
 
     bool sticky = false;
@@ -382,13 +375,9 @@ private:
       const bool local_sticky = any_dropped32(t.S, delta) || any_dropped32(t.C, delta);
       sticky |= local_sticky;
 
-      term24_t a{};
+      align_t a{};
       a.S = Sprime;
       a.C = Cprime;
-      a.E = Emax;
-      a.is_zero = (a.S == 0 && a.C == 0);
-      a.is_inf = false;
-      a.is_nan = false;
 
       LOG("[align-%s] idx=%zu, delta=0x%x, S'=0x%x, C'=0x%x, sticky+=%d\n",
           tag, idx, delta, a.S, a.C, (local_sticky ? 1 : 0));
@@ -408,29 +397,19 @@ private:
   }
 
   // ------------------------- S3: CSA Accumulate + CPA -----------------------
-  int32_t accumulate(const std::vector<term24_t> &aligned) {
-    term24_t acc{0, 0, 0, true, false, false};
-    acc.E = aligned[0].E;
-    acc.is_zero = false;
-
-    auto add_pair_into = [&](term24_t &dst, const term24_t &src) {
-      // Fold S component
-      auto [s1, c1] = csa32(dst.S, (dst.C << 1), src.S);
-      dst.S = s1;
-      dst.C = c1;
-      // Fold C component (shifted by 1 in weight)
-      auto [s2, c2] = csa32(dst.S, (dst.C << 1),(src.C << 1));
-      dst.S = s2;
-      dst.C = c2;
-    };
+  int32_t accumulate(const std::vector<align_t> &aligned) {
+    int32_t sum(0), carry(0);
 
     for (size_t i = 0; i < aligned.size(); ++i) {
-      add_pair_into(acc, aligned[i]);
-      LOG("[acc-csa] i=%zu, S=0x%x, C=0x%x\n", i, acc.S, acc.C);
+      auto& a = aligned[i];
+      auto [s1, c1] = csa32(sum, (carry << 1), a.S);
+      auto [s2, c2] = csa32(s1, (c1 << 1),(a.C << 1));
+      sum = s2;
+      carry = c2;
+      LOG("[acc-csa] i=%zu, S=0x%x, C=0x%x\n", i, sum, carry);
     }
-
     // Single CPA here: V = S + (C<<1) with well-defined wrap via unsigned
-    int32_t V = acc.S + (acc.C << 1);
+    int32_t V = sum + (carry << 1);
     return V;
   }
 
@@ -588,7 +567,7 @@ private:
   // portable arithmetic shift right
   static inline int32_t asr32(int32_t x, uint32_t k) {
     if (k == 0) return x;
-    if (k >= 31) return (x < 0) ? -1 : 0; // sign saturation after huge shift
+    if (k >= 31) return (x < 0) ? -1 : 0;
     return (x >= 0) ? (x >> k) : ~((~x) >> k);
   }
 
@@ -629,14 +608,11 @@ private:
   static inline uint32_t packInf32(uint32_t s) { return (s << 31) | (0xFFu << 23); }
   static inline uint32_t canonicalNaN32() { return (0xFFu << 23) | (1u << 22); }
 
-  void resetFlags() {
-    fflags_ = 0;
-  }
+  void resetFlags() { fflags_ = 0; }
 
   // ------------------------------ Members -----------------------------------
-  // Config Superformat is TF32 (e8m10)
-  const uint32_t Wc_{24};  // common product magnitude width
-  const uint32_t Win_{25}; // signed addend width
+  const uint32_t Wc_{24};  // common TF32 product magnitude width
+  const uint32_t Win_{25}; // signed TF32 addend width
   const int frm_;
   const uint32_t lanes_;
 
