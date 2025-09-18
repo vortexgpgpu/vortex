@@ -272,7 +272,7 @@ static void pack_elements(const std::vector<uint32_t> &elements, int element_bit
 }
 
 // Calculate expected fp dot product
-/*static float calculate_fp_dot_product(const std::vector<float> &a_values,
+static float calculate_fp_dot_product(const std::vector<float> &a_values,
                                       const std::vector<float> &b_values,
                                       float c_value) {
   float result(c_value);
@@ -280,7 +280,7 @@ static void pack_elements(const std::vector<uint32_t> &elements, int element_bit
     result += a_values[i] * b_values[i];
   }
   return result;
-}*/
+}
 
 // Calculate expected int dot product
 static int32_t calculate_int_dot_product(const std::vector<uint32_t> &a_values,
@@ -581,12 +581,12 @@ public:
       bool c_enable = (test_id % 3) == 2;
 
       for (int i = 0; i < total_elements; i++) {
-        a_values[i] = (a_enable && i == 0) ? generate_int_value(is_signed, element_bits, test_id) : generate_int_value(is_signed, element_bits, -1);
-        a_values[i] = (b_enable && i == 0) ? generate_int_value(is_signed, element_bits, test_id) : generate_int_value(is_signed, element_bits, -1);
+        a_values[i] = generate_int_value(is_signed, element_bits, (a_enable && i == 0) ? test_id : -1);
+        a_values[i] = generate_int_value(is_signed, element_bits, (b_enable && i == 0) ? test_id : -1);
       }
 
       // Generate c value
-      int32_t c_value = c_enable ? generate_int_value(true, 32, test_id) : generate_int_value(true, 32, -1);
+      int32_t c_value = generate_int_value(true, 32, c_enable ? test_id : -1);
 
       // Pack into XLEN words
       uint32_t a_packed[NUM_REGS], b_packed[NUM_REGS];
@@ -643,6 +643,8 @@ public:
     const uint32_t NF = features_to_test.size();
     const uint32_t tests_per_feature = (NT + NF- 1) / NF;
 
+    uint32_t skipped = 0;
+
     for (int test_id = 0; test_id < NT; test_id++) {
       // select feature to test
       int feature_id = test_id / tests_per_feature;
@@ -667,6 +669,13 @@ public:
 
       // Generate c value
       float c_value_float = generate_fp_value(c_enable ? feature : "normals", 8, 23, test_id);
+
+      // skip invalid tests that produce NaN or Inf
+      float result = calculate_fp_dot_product(a_values_float, b_values_float, c_value_float);
+      if (std::isnan(result) || std::isinf(result)) {
+        ++skipped;
+        continue;
+      }
 
       // skip if not in selected test id
       if (config_.test_id >= 0 && test_id != config_.test_id)
@@ -704,7 +713,6 @@ public:
       std::memcpy(&dut_result, &dut_result_bits, sizeof(float));
 
       // Calculate expected result
-      //float expected = calculate_fp_dot_product(a_values_float, b_values_float, c_value_float);
       FEDP fedp((int)config_.frm, NUM_REGS * 2);
       float expected = fedp(a_packed, b_packed, c_value_float, NUM_REGS, config_.exp_bits, config_.sig_bits);
 
@@ -725,6 +733,11 @@ public:
       dut_->enable = 0;
       tick();
     }
+
+    if (skipped > 0) {
+      std::cout << "  Skipped " << skipped << " invalid test(s) that produced NaN or Inf" << std::endl;
+    }
+
     return true;
   }
 
