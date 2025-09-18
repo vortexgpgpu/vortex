@@ -329,6 +329,24 @@ static bool approximately_equal(float a, float b, int exp_bits, int sig_bits) {
   return false;
 }
 
+static inline uint32_t pack_fp_bits(uint32_t sign, uint32_t exp, uint32_t frac, uint32_t exp_bits, uint32_t sig_bits) {
+  const uint32_t S = 1u;
+  const uint32_t W = S + exp_bits + sig_bits;
+  assert(W <= 32);
+  const uint32_t sign_mask = 1u;
+  const uint32_t exp_mask  = (exp_bits == 32 ? 0xFFFFFFFFu : ((1u << exp_bits) - 1u));
+  const uint32_t frac_mask = (sig_bits == 32 ? 0xFFFFFFFFu : ((1u << sig_bits) - 1u));
+
+  sign &= sign_mask;
+  exp  &= exp_mask;
+  frac &= frac_mask;
+
+  const uint32_t sign_shift = exp_bits + sig_bits;
+  const uint32_t exp_shift  = sig_bits;
+
+  return (sign << sign_shift) | (exp << exp_shift) | frac;
+}
+
 // Floating-point dot product testbench
 class Testbench {
 private:
@@ -410,32 +428,104 @@ private:
     return value;
   }
 
-  // Generate fp value for a specific feature
-  float generate_fp_value(const std::string &feature) {
-    static std::uniform_real_distribution<float> normal_dist(-1.0f, 1.0f);
-    static std::uniform_int_distribution<uint32_t> bits_dist(0, 0xFFFFFFFF);
+  uint32_t generate_fp_value(const std::string &feature, uint32_t exp_bits, uint32_t sig_bits, uint32_t test_id) {
+    const uint32_t all_exp = (exp_bits == 32 ? 0xFFFFFFFFu : ((1u << exp_bits) - 1u));
+    const uint32_t max_frac = (sig_bits == 32 ? 0xFFFFFFFFu : ((1u << sig_bits) - 1u));
+
+    std::uniform_int_distribution<uint32_t> bit_dist(0, 0xFFFFFFFFu);
+    std::uniform_int_distribution<uint32_t> sign_dist(0, 1);
+    std::uniform_int_distribution<uint32_t> exp_norm_dist(1, (all_exp > 0 ? all_exp - 1 : 0)); // [1, all_ones-1]
+    std::uniform_int_distribution<uint32_t> frac_dist(0, (max_frac > 0 ? max_frac : 0));
+    std::uniform_int_distribution<uint32_t> frac_nz_dist(1, (max_frac > 0 ? max_frac : 1));    // nonzero frac
+
+    auto deterministic_sign = [&](uint32_t salt)->uint32_t {
+      // Mix test_id with salt for reproducible sign selection
+      return ((test_id ^ (salt * 0x9E3779B9u)) >> 31) & 1u;
+    };
+
     if (feature == "zeros") {
-      return 0.0f;
+      // +0 and -0; alternate by test_id for coverage
+      uint32_t s = (test_id & 1u) ? 1u : 0u;
+      return pack_fp_bits(s, 0u, 0u, exp_bits, sig_bits);
+
     } else if (feature == "normals") {
-      return normal_dist(rng_) * 100.0f;
+      if (exp_bits < 2) {
+        // No normal numbers exist; fall back to zero
+        return pack_fp_bits(0u, 0u, 0u, exp_bits, sig_bits);
+      }
+      // Spread some directed cases using test_id to hit edges:
+      const uint32_t which = test_id % 5u;
+      uint32_t s = (which == 0) ? deterministic_sign(1) : sign_dist(rng_);
+      uint32_t e, f;
+      switch (which) {
+        case 0: // random normal
+          e = exp_norm_dist(rng_);
+          f = frac_dist(rng_);
+          break;
+        case 1: // smallest normal: exp=1, frac varies
+          e = 1u;
+          f = frac_dist(rng_);
+          break;
+        case 2: // largest finite: exp=all_ones-1, frac=all_ones
+          e = (all_exp > 0 ? all_exp - 1 : 0);
+          f = max_frac;
+          break;
+        case 3: // near one: exponent=bias, small fraction
+          e = (exp_bits ? ((1u << (exp_bits - 1)) - 1u) : 0u);
+          f = (sig_bits ? (frac_dist(rng_) & ((1u << (sig_bits > 4 ? 4 : sig_bits)) - 1u)) : 0u);
+          break;
+        default: // dense random but still normal
+          e = exp_norm_dist(rng_);
+          f = frac_dist(rng_);
+          break;
+      }
+      return pack_fp_bits(s, e, f, exp_bits, sig_bits);
+
     } else if (feature == "subnormals") {
-      // Generate a subnormal value
-      uint32_t subnormal_bits = bits_dist(rng_) & 0x007FFFFF; // Subnormal bit pattern
-      float result;
-      std::memcpy(&result, &subnormal_bits, sizeof(float));
-      return result;
+      // exp = 0, frac != 0
+      if (sig_bits == 0) {
+        // No fraction field -> subnormals don't exist; return zero
+        return pack_fp_bits(0u, 0u, 0u, exp_bits, sig_bits);
+      }
+      uint32_t s = sign_dist(rng_);
+      // Bias test_id to sometimes hit smallest and largest subnormals
+      const uint32_t which = test_id % 3u;
+      uint32_t f;
+      if (which == 0)      f = 1u;             // smallest subnormal (lsb)
+      else if (which == 1) f = max_frac;       // largest subnormal
+      else                 f = frac_nz_dist(rng_);
+      return pack_fp_bits(s, 0u, f, exp_bits, sig_bits);
+
     } else if (feature == "infinities") {
-      return std::numeric_limits<float>::infinity();
+      // exp = all ones, frac = 0
+      uint32_t s = deterministic_sign(2);
+      uint32_t e = all_exp;
+      uint32_t f = 0u;
+      return pack_fp_bits(s, e, f, exp_bits, sig_bits);
+
     } else if (feature == "nans") {
-      return std::numeric_limits<float>::quiet_NaN();
+      // exp = all ones, frac != 0. Prefer quiet NaNs by setting MSB of fraction.
+      if (sig_bits == 0) {
+        // If there is no fraction field, you can't encode a NaN distinct from Inf; return Inf pattern.
+        uint32_t s = deterministic_sign(3);
+        return pack_fp_bits(s, all_exp, 0u, exp_bits, sig_bits);
+      }
+      uint32_t s = sign_dist(rng_);
+      uint32_t e = all_exp;
+      uint32_t quiet_bit = 1u << (sig_bits - 1);     // top frac bit
+      uint32_t payload = frac_dist(rng_) & (quiet_bit - 1u);
+      if (payload == 0u) payload = 1u;               // ensure nonzero payload
+      uint32_t f = quiet_bit | payload;              // make it a qNaN
+      return pack_fp_bits(s, e, f, exp_bits, sig_bits);
+
     } else {
       std::cout << "Unknown feature: " << feature << std::endl;
       std::abort();
     }
-    return 0.0f;
   }
 
 public:
+
   Testbench(const TestConfig &cfg)
     : config_(cfg)
     , cycle_count_(0)
@@ -541,8 +631,7 @@ public:
     return true;
   }
 
-  // Test a specific fp feature
-  bool test_fp_feature(const std::vector<std::string>& features_to_test) {
+  bool test_floating_points(const std::vector<std::string>& features_to_test) {
     // Calculate how many elements we can fit in NUM_REGS XLEN words
     int element_bits = float_fmt_width(config_.exp_bits, config_.sig_bits);
     int elements_per_word = 32 / element_bits;
@@ -559,10 +648,6 @@ public:
       int feature_id = test_id / tests_per_feature;
       std::string feature = features_to_test[feature_id];
 
-      if (config_.test_id >= 0 || (test_id % tests_per_feature) == 0) {
-        std::cout << "Testing floating-point feature: " << feature << std::endl;
-      }
-
       // Generate test vectors
       std::vector<float> a_values_float(total_elements), b_values_float(total_elements);
       std::vector<uint32_t> a_values_format(total_elements), b_values_format(total_elements);
@@ -572,28 +657,25 @@ public:
       bool c_enable = (test_id % 3) == 2;
 
       for (int i = 0; i < total_elements; i++) {
-        float af = (a_enable && (i & 0x1) == 0) ? generate_fp_value(feature) : generate_fp_value("normals");
-        float bf = (b_enable && (i & 0x1) == 0) ? generate_fp_value(feature) : generate_fp_value("normals");
+        a_values_format[i] = generate_fp_value((a_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
+        b_values_format[i] = generate_fp_value((b_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
 
-        a_values_format[i] = cvt_f32_to_custom(af, config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
-        b_values_format[i] = cvt_f32_to_custom(bf, config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
-
-        // Convert back to float to account for precision loss
+        // Convert to float to account for precision loss
         a_values_float[i] = cvt_custom_to_f32(a_values_format[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
         b_values_float[i] = cvt_custom_to_f32(b_values_format[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
-
-        /*print_float("  af=", af);
-        print_float(", bf=", bf);
-        std::cout << std::endl;*/
       }
 
       // Generate c value
-      float c_value_float = c_enable ? generate_fp_value(feature) : generate_fp_value("normals");
+      float c_value_float = generate_fp_value(c_enable ? feature : "normals", 8, 23, test_id);
 
       // skip if not in selected test id
       if (config_.test_id >= 0 && test_id != config_.test_id)
         continue;
-      
+
+      if (config_.test_id >= 0 || (test_id % tests_per_feature) == 0) {
+        std::cout << "Testing floating-point feature: " << feature << std::endl;
+      }
+
       uint32_t c_value_bits;
       std::memcpy(&c_value_bits, &c_value_float, sizeof(float));
 
@@ -666,7 +748,7 @@ public:
         }
       }
 
-      if (!test_fp_feature(features_to_test)) {
+      if (!test_floating_points(features_to_test)) {
         return false;
       }
     }

@@ -440,7 +440,7 @@ private:
     n.sign = (acc < 0) ? 1u : 0u;
     uint32_t mag = (acc < 0) ? uint32_t(-acc) : uint32_t(acc);
 
-    const uint32_t nbits = (mag == 0) ? 1u : (64u - uint32_t(clz32(mag))); // >=1
+    const uint32_t nbits = (mag == 0) ? 1u : (32u - uint32_t(clz32(mag))); // >=1
     // Our fixed-point point was at bit (Wc_-1) relative to exponent; now the leading 1 is at nbits-1
     n.e_unb = (Emax - int32_t(Wc_ - 1u)) + int32_t(nbits - 1u);
 
@@ -451,11 +451,11 @@ private:
     uint32_t kept24 = 0, round_bit = 0;
     bool sticky_norm = false;
     if (sh > 0) {
-      const uint32_t mask = (sh >= 64) ? ~0ull : ((1ull << sh) - 1ull);
+      const uint32_t mask = (sh >= 32) ? ~0ull : ((1ull << sh) - 1ull);
       const uint32_t rem = mag & mask;
       round_bit = (sh >= 1) ? ((rem >> (sh - 1)) & 1ull) : 0u;
       sticky_norm = (sh >= 2) ? ((rem & ((1ull << (sh - 1)) - 1ull)) != 0ull) : false;
-      kept24 = (sh >= 64) ? 0u : uint32_t(mag >> sh);
+      kept24 = (sh >= 32) ? 0u : uint32_t(mag >> sh);
     } else {
       const int lsh = -sh;
       kept24 = (lsh >= 32) ? 0u : uint32_t(mag << lsh);
