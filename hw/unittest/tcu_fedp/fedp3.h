@@ -1,13 +1,15 @@
-// FEDP.hpp — CSA-based pipeline (SOTA) for fused dot product (TF32 superformat) with deep tracing.
-// Pipeline:
-//   S1: decode + multiply + group-reduce -> ***two separate CSAs: pos_cs and neg_cs***
-//   S2: CPA(pos/neg) WIDE -> ***renorm each magnitude if it overflows 2^Wc (bump E)***
-//       -> V = pos_mag - neg_mag (signed) -> arith-renorm of V if |V| ≥ 2^(Wc-1)
-//       -> align (arith) to max_exp; emit Wacc-bit two’s-complement (sum=enc, carry=0)
-//   S3: accumulate all aligned terms in Wacc-bit CSA
-//   S4: single CPA (Wacc) -> sign-extend -> normalize -> round -> pack
+// Copyright © 2019-2023
 //
-// Build with: -DFEDP_TRACE=1   (enable verbose logs)
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <algorithm>
 #include <array>
