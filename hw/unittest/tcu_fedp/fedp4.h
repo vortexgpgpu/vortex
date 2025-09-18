@@ -1,4 +1,15 @@
-// FEDP.hpp — RTL-faithful dot product (TF32 superformat)
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -86,7 +97,7 @@ public:
       if (mul_sticky || align_sticky) {
         fflags_ |= (FLAG_NX | FLAG_UF);
       }
-      LOG("[final-fast] zero=1 fflags=0x%02x\n", fflags_);
+      LOG("[final-fast] zero=1, fflags=0x%02x\n", fflags_);
       return f32FromBits(0);
     }
 
@@ -162,7 +173,7 @@ private:
           aw >>= width;
           bw >>= width;
         }
-        LOG("[decode] idx=%u, A(enc=0x%x, s=%u,e=%u,f=0x%x), B(enc=0x%x, s=%u,e=%u,f=0x%x)\n",
+        LOG("[decode] idx=%u, A(enc=0x%x, s=%u, e=%u, f=0x%x), B(enc=0x%x, s=%u, e=%u, f=0x%x)\n",
             out,
             aenc, terms[out][0].sign, terms[out][0].exp, terms[out][0].frac,
             benc, terms[out][1].sign, terms[out][1].exp, terms[out][1].frac);
@@ -182,15 +193,15 @@ private:
     const uint32_t e = decoded.exp;
     const uint32_t f = decoded.frac;
 
-    const int32_t Ec = decoded.is_sub ? (1 - bias) : (e - bias);
-    const uint32_t M = decoded.is_sub ? f : ((1u << sig_bits) | f);
+    const int32_t Ec = e - bias + 127;
+    const uint32_t M = ((e != 0) << sig_bits) | f;
 
     // Scale mantissa to Wc_-1
     const int dM = int(Wc_ - 1u) - sig_bits;
     assert(dM < 32);
     uint32_t m_c = M << dM;
     const int32_t addend = s ? -int32_t(m_c) : int32_t(m_c);
-    LOG("[decodeC] s=%u Ec=%d m=0x%x -> add=0x%llx\n", s, Ec, m_c, addend);
+    LOG("[decodeC] s=%u, Ec=0x%x, m=0x%x -> add=0x%x\n", s, Ec, m_c, addend);
 
     term24_t p;
     p.S = addend;
@@ -225,7 +236,7 @@ private:
         else
           has_pos_inf = true;
         has_any_special = true;
-        LOG("[mul-prod] i=%zu special=Inf/NaN/0*Inf\n", i);
+        LOG("[mul-prod] i=%zu, special=Inf/NaN/0*Inf\n", i);
         continue;
       }
     }
@@ -264,7 +275,6 @@ private:
       uint32_t sign;
       uint32_t m_wc;
       int32_t  E;
-      bool is_zero;
     };
 
     const size_t N = terms.size();
@@ -277,20 +287,20 @@ private:
 
       const uint32_t s = a.sign ^ b.sign;
 
-      const int32_t Ea = (a.is_sub ? 1 : a.exp) - bias;
-      const int32_t Eb = (b.is_sub ? 1 : b.exp) - bias;
-      const int32_t E  = Ea + Eb + 1;
+      const int32_t Ea = a.exp - bias;
+      const int32_t Eb = b.exp - bias;
+      const int32_t E  = Ea + Eb + 1 + 127;
 
-      const uint32_t Ma = (!(a.is_zero || a.is_sub) << sig_bits) | a.frac;
-      const uint32_t Mb = (!(b.is_zero || b.is_sub) << sig_bits) | b.frac;
+      const uint32_t Ma = ((a.exp != 0) << sig_bits) | a.frac;
+      const uint32_t Mb = ((b.exp != 0) << sig_bits) | b.frac;
       const uint32_t P  = Ma * Mb; // Wraw bits
 
       // Shift up to Wc bits (no loss)
       const uint32_t m_wc = P << L_in;
       assert(L_in < 32);
 
-      v[i] = Traw{s, m_wc, E, false};
-      LOG("[mul-prod] i=%zu s=%u E=%d P=0x%x m_wc=0x%x Wraw=%u\n", i, s, E, P, m_wc, Wraw);
+      v[i] = Traw{s, m_wc, E};
+      LOG("[mul-prod] i=%zu, s=%u, E=0x%x, P=0x%x, m_wc=0x%x, Wraw=%u\n", i, s, E, P, m_wc, Wraw);
     }
 
     // Phase B: reduce per group into CSA pair aligned to each group's Eg
@@ -334,14 +344,14 @@ private:
 
         sticky |= sticky_local;
 
-        LOG("[s1-csa] g=%zu i=%zu s=%u delta=%u m_adj=0x%x add=0x%llx S=0x%llx C=0x%llx\n",
+        LOG("[s1-csa] g=%zu, i=%zu, s=%u, delta=0x%x, m_adj=0x%x, add=0x%x, S=0x%x, C=0x%x\n",
             g, i, t.sign, delta, m_shifted, addend, acc.S, acc.C);
       }
 
       acc.is_zero = (acc.S == 0 && acc.C == 0);
       out[g] = acc;
-      LOG("[s1-csa] g=%zu Eg=%d S=0x%llx C=0x%llx sticky=%d zero=%d\n",
-          g, Eg, acc.S, acc.C, (sticky ? 1 : 0), acc.is_zero ? 1 : 0);
+      LOG("[s1-csa] g=%zu, Eg=0x%x, S=0x%x, C=0x%x, sticky=%d, zero=%d\n",
+          g, Eg, acc.S, acc.C, (sticky ? 1 : 0), (acc.is_zero ? 1 : 0));
     }
 
     LOG("[multiply] groups=%zu\n", out.size());
@@ -380,17 +390,19 @@ private:
       a.is_inf = false;
       a.is_nan = false;
 
-      LOG("[align-%s] idx=%zu delta=%u S'=%#x C'=%#x sticky+=%d\n",
-          tag, idx, (unsigned)delta, uint32_t(a.S), uint32_t(a.C), local_sticky ? 1 : 0);
+      LOG("[align-%s] idx=%zu, delta=0x%x, S'=0x%x, C'=0x%x, sticky+=%d\n",
+          tag, idx, delta, a.S, a.C, (local_sticky ? 1 : 0));
 
       out.push_back(a);
     };
 
-    for (size_t i = 0; i < groups.size(); ++i) align_one(groups[i], "p", i);
+    for (size_t i = 0; i < groups.size(); ++i) {
+      align_one(groups[i], "p", i);
+    }
     align_one(cterm, "c", 0);
 
-    LOG("[alignment] Emax=%d sticky_align=%d terms=%zu\n",
-        Emax, sticky ? 1 : 0, out.size());
+    LOG("[alignment] Emax=0x%x, sticky_align=%d, terms=%zu\n",
+        Emax, (sticky ? 1 : 0), out.size());
 
     return std::tuple{out, Emax, sticky};
   }
@@ -414,7 +426,7 @@ private:
 
     for (size_t i = 0; i < aligned.size(); ++i) {
       add_pair_into(acc, aligned[i]);
-      LOG("[acc-csa] i=%zu S=0x%llx C=0x%llx\n", i, acc.S, acc.C);
+      LOG("[acc-csa] i=%zu, S=0x%x, C=0x%x\n", i, acc.S, acc.C);
     }
 
     // Single CPA here: V = S + (C<<1) with well-defined wrap via unsigned
@@ -454,7 +466,7 @@ private:
     n.round_bit = round_bit;
     n.sticky = (sticky_norm || sticky_prev);
 
-    LOG("[normalize] sign=%u kept24=0x%x e_unb=%d round=%u stickyAny=%d\n",
+    LOG("[normalize] sign=%u, kept24=0x%x, e_unb=%d, round=%u, stickyAny=%d\n",
         n.sign, n.kept24, n.e_unb, n.round_bit, n.sticky ? 1 : 0);
     return n;
   }
@@ -478,7 +490,7 @@ private:
       }
     }
 
-    const int32_t e_bias = e_unb + 127;
+    const int32_t e_bias = e_unb;
 
     if (e_bias >= 0xFF) {
       fflags_ |= (FLAG_OF | FLAG_NX);
@@ -515,14 +527,14 @@ private:
         fflags_ |= FLAG_UF;
       }
       const uint32_t out_sub = (sign << 31) | frac_keep;
-      LOG("[rounding] subnormal_out=0x%x fflags=0x%02x\n", out_sub, fflags_);
+      LOG("[rounding] subnormal_out=0x%x, fflags=0x%02x\n", out_sub, fflags_);
       return out_sub;
     }
 
     const uint32_t exp_out  = uint32_t(e_bias);
     const uint32_t frac_out = kept24 & ((1u << 23) - 1u);
     const uint32_t out_norm = (sign << 31) | (exp_out << 23) | frac_out;
-    LOG("[rounding] normal_out=0x%x fflags=0x%02x\n", out_norm, fflags_);
+    LOG("[rounding] normal_out=0x%x, fflags=0x%02x\n", out_norm, fflags_);
     return out_norm;
   }
 
@@ -602,12 +614,12 @@ private:
 
   static inline int clz32(uint32_t x) {
 #if defined(__GNUC__) || defined(__clang__)
-    return x ? __builtin_clzl(x) : 32;
+    return x ? __builtin_clz(x) : 32;
 #else
     if (!x)
       return 32;
     int n = 0;
-    while (!(x & (1ull << 31))) {
+    while (!(x & (1u << 31))) {
       x <<= 1;
       ++n;
     }
