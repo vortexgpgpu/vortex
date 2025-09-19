@@ -186,6 +186,7 @@ jobs:
           fi
 
   complete:
+    needs: tests
     strategy:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
