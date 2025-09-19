@@ -32,12 +32,9 @@ public:
     // Called from vx_on_mem_complete
     void complete(uint64_t tag);
 
-    // Set by MemSim to push MemRsp back to crossbar
-    std::function<void(uint32_t bank, const MemRsp& rsp)> mem_xbar_rsp_cb_;
-
 
 private:
-    struct Info { uint32_t cid; uint64_t uuid; bool write; };
+    struct Info { uint32_t cid; uint64_t uuid; bool write; uint32_t bank;};
     std::unordered_map<uint64_t,Info> inflight_;
     static MemBackendSST* inst_;
     static vx_submit_fn submit_fn_;

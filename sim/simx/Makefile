@@ -1,5 +1,5 @@
 include ../common.mk
-
+# now you see me 2
 DESTDIR ?= $(CURDIR)
 
 OBJ_DIR = $(DESTDIR)/obj
@@ -25,17 +25,16 @@ SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(
 SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/opc_unit.cpp $(SRC_DIR)/dispatcher.cpp
 SRCS += $(SRC_DIR)/execute.cpp $(SRC_DIR)/func_unit.cpp
 SRCS += $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp $(SRC_DIR)/mem_coalescer.cpp
+SRCS += $(SRC_DIR)/mem_backend_sst.cpp \
+SRCS += $(SRC_DIR)/mem_backend_dram.cpp \
 SRCS += $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 
 # SST flags
-SST_CFLAGS := $(shell pkg-config --cflags sst-core)
-SST_CFLAGS += -I../../../sst/sst/sst-core/include
-SST_LFLAGS := $(shell pkg-config --libs sst-core)
+SST_CFLAGS := $(shell pkg-config --cflags SST-14.1)
+SST_CFLAGS += -I../../../sst/sst/sst-core/include/
+SST_LFLAGS := $(shell pkg-config --libs SST-14.1)
 
 VORTEX_SST_SRCS := \
-    $(SRC_DIR)/mem_backend.cpp \
-    $(SRC_DIR)/mem_backend_dram.cpp \
-    $(SRC_DIR)/mem_backend_sst.cpp \
     $(SRC_DIR)/vortex_simulator.cpp \
     $(SRC_DIR)/VortexGPGPU.cpp
 
@@ -74,9 +73,6 @@ MAIN_OBJ    := $(OBJ_DIR)/main.o
 
 DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d)
 
-# generate .d files alongside .o files
-CXXFLAGS += -MMD -MP -MF $(@:.o=.d)
-
 # optional: pipe through ccache if you have it
 CXX := $(if $(shell which ccache),ccache $(CXX),$(CXX))
 
@@ -85,13 +81,6 @@ PROJECT := simx
 .PHONY: all force clean clean-lib clean-exe clean-obj
 
 all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/libvortex.so
-
-$(DESTDIR)/libvortex.so:
-        $(CXX) $(CXXFLAGS) $(SST_CFLAGS) -DUSE_SST_MEM_BACKEND \
-            -I./sim/simx \
-            $(SRCS) $(VORTEX_SST_SRCS) \
-            -shared -o $@ \
-            $(LDFLAGS) $(SST_LFLAGS)
 
 # build common object files
 $(OBJ_DIR)/common/%.o: $(SW_COMMON_DIR)/%.cpp $(CONFIG_FILE)
@@ -115,6 +104,13 @@ $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)
 # Shared library
 $(DESTDIR)/lib$(PROJECT).so: $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -o $@
+
+$(DESTDIR)/libvortex.so: $(OBJS) $(SST_OBJS)
+	$(CXX) $(CXXFLAGS) $(SST_CFLAGS) -DUSE_SST_MEM_BACKEND \
+	-I./sim/simx \
+	$(OBJS) $(VORTEX_SST_SRCS) \
+	-shared -o $@ \
+	$(LDFLAGS) $(SST_LFLAGS)
 
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force

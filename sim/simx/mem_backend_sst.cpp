@@ -6,10 +6,10 @@
 // be correlated back to the correct cluster and request.  When a read
 // completion is observed via vx_on_mem_complete(), the backend pushes a
 // MemRsp back into the crossbar using the stored cid/uuid.  Writes
-// complete silently.  Bank routing is currently fixed to bank 0; this
-// preserves correctness but may underutilize bank-level parallelism.
+// complete silently.
 
 #include "mem_backend_sst.h"
+#include <VX_config.h>
 
 extern "C" {
 
@@ -49,10 +49,9 @@ void MemBackendSST::reset() {
 void MemBackendSST::send_request(uint64_t addr, bool write,
                                  uint32_t size, uint32_t tag,
                                  uint32_t cid, uint64_t uuid) {
-    // Save request metadata so we can form a response on completion
-    inflight_.emplace(tag, Info{cid, uuid, write});
-    // Forward the request into SST.  The SST wrapper will create a
-    // StandardMem::Read or ::Write using this address, size and tag.
+    uint32_t lg2_block = log2ceil(size);
+    uint32_t bank = (addr >> lg2_block) & (PLATFORM_MEMORY_NUM_BANKS - 1);
+    inflight_.emplace(tag, Info{cid, uuid, write, bank});
     if (submit_fn_) {
         submit_fn_(addr, write, size, tag);
     }
@@ -66,10 +65,8 @@ void MemBackendSST::complete(uint64_t tag) {
     // Only produce a MemRsp for reads; writes complete silently
     if (!info.write) {
         MemRsp rsp{tag, info.cid, info.uuid};
-        // Always route completions to bank 0; adjust if you need per-bank
-        // completion routing in the future.
         if (mem_xbar_rsp_cb_)
-            mem_xbar_rsp_cb_(0, rsp);
-    }
+        mem_xbar_rsp_cb_(info.bank, rsp);
+        }
     inflight_.erase(it);
 }

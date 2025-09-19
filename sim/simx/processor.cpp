@@ -159,6 +159,19 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   return perf;
 }
 
+bool ProcessorImpl::cycle() {
+  SimPlatform::instance().tick();
+  bool anyRunning = false;
+  for (auto& cluster : clusters_) {
+    if (cluster->running()) {
+      anyRunning = true;
+      break;
+    }
+  }
+  perf_mem_latency_ += perf_mem_pending_reads_;
+  return anyRunning;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 Processor::Processor(const Arch& arch)
@@ -194,6 +207,14 @@ int Processor::run() {
 
 void Processor::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+bool Processor::cycle() {
+  try {
+    return impl_->cycle();
+  } catch (...) {
+    return false;
+  }
 }
 
 #ifdef VM_ENABLE
