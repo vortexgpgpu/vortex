@@ -223,9 +223,9 @@ int main(int argc, char *argv[]) {
 
 
 
-  uint64_t total_cycles_per_core;
+  uint64_t total_cycles_per_core(0);
+  uint64_t total_instrs_per_core(0);
   uint64_t cycles_per_core;
-  uint64_t total_instrs_per_core;
   uint64_t instrs_per_core;
 
   /*uint64_t iteration = 30;*/
@@ -293,7 +293,7 @@ int main(int argc, char *argv[]) {
     }
     printf("%f\n", h_dst[i]);
   }
-  printf("total_cycles=%d total_insn=%d\n", total_cycles_per_core, total_instrs_per_core);
+  printf("total_cycles=%ld total_insn=%ld\n", total_cycles_per_core, total_instrs_per_core);
 
   // cleanup
   std::cout << "cleanup" << std::endl;

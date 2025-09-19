@@ -223,11 +223,9 @@ int main(int argc, char *argv[]) {
   std::cout << "upload kernel argument" << std::endl;
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
-
-
-  uint64_t total_cycles_per_core;
+  uint64_t total_cycles_per_core(0);
+  uint64_t total_instrs_per_core(0);
   uint64_t cycles_per_core;
-  uint64_t total_instrs_per_core;
   uint64_t instrs_per_core;
 
   for(uint32_t k = 0; k < size - 1; k++){
@@ -301,7 +299,7 @@ int main(int argc, char *argv[]) {
       ++errors;
     }
   }
-  printf("total_cycles=%d total_insn=%d\n", total_cycles_per_core, total_instrs_per_core);
+  printf("total_cycles=%ld total_insn=%ld\n", total_cycles_per_core, total_instrs_per_core);
 
   // cleanup
   std::cout << "cleanup" << std::endl;
