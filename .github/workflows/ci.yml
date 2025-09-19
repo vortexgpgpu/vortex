@@ -33,18 +33,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ runner.os }}-toolchain-v0.1
+          key: ${{ matrix.os }}-toolchain-v0.1
           restore-keys: |
-            ${{ runner.os }}-toolchain-
+            ${{ matrix.os }}-toolchain-
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ runner.os }}-thirdparty-v0.1
+          key: ${{ matrix.os }}-thirdparty-v0.1
           restore-keys: |
-            ${{ runner.os }}-thirdparty-
+            ${{ matrix.os }}-thirdparty-
 
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
@@ -85,18 +85,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ runner.os }}-toolchain-v0.1
+          key: ${{ matrix.os }}-toolchain-v0.1
           restore-keys: |
-            ${{ runner.os }}-toolchain-
+            ${{ matrix.os }}-toolchain-
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ runner.os }}-thirdparty-v0.1
+          key: ${{ matrix.os }}-thirdparty-v0.1
           restore-keys: |
-            ${{ runner.os }}-thirdparty-
+            ${{ matrix.os }}-thirdparty-
 
       - name: Run Build
         run: |
@@ -135,18 +135,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ runner.os }}-toolchain-v0.1
+          key: ${{ matrix.os }}-toolchain-v0.1
           restore-keys: |
-            ${{ runner.os }}-toolchain-
+            ${{ matrix.os }}-toolchain-
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ runner.os }}-thirdparty-v0.1
+          key: ${{ matrix.os }}-thirdparty-v0.1
           restore-keys: |
-            ${{ runner.os }}-thirdparty-
+            ${{ matrix.os }}-thirdparty-
 
       - name: Download Build Artifact
         uses: actions/download-artifact@v4
