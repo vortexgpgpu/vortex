@@ -66,6 +66,7 @@ jobs:
           make -C third_party > /dev/null
 
   build:
+    needs: setup
     strategy:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
@@ -115,6 +116,7 @@ jobs:
           path: build${{ matrix.xlen }}
 
   tests:
+    needs: build
     strategy:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
