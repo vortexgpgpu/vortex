@@ -32,8 +32,8 @@ module VX_tcu_bhf_fadd #(
     input  wire [2:0]       frm,
     input  wire [IN_FECW-1:0] a,
     input  wire [IN_FECW-1:0] b,
-    output logic [OUT_FECW-1:0] y,
-    output logic [4:0]      fflags
+    output wire [OUT_FECW-1:0] y,
+    output wire [4:0]      fflags
 );
     localparam IN_RECW  = IN_EXPW + IN_SIGW + 1;
     localparam OUT_RECW = OUT_EXPW + OUT_SIGW + 1;

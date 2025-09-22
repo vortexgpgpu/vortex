@@ -15,6 +15,7 @@
 
 `ifndef SYNTHESIS
 `define DSP_TEST
+`include "dpi_float.vh"
 `endif
 
 // Function to convert IEEE-754 half precision (16-bit) to single precision (32-bit)
@@ -116,11 +117,11 @@ module VX_tcu_fedp_dsp #(
     localparam FCVT_LATENCY = 1;
     localparam FMUL_LATENCY = 8;
     localparam FADD_LATENCY = 11;
-    localparam FRND_LATENCY = 1;
-    localparam RED_LATENCY  = LEVELS * FADD_LATENCY;
-    localparam ACC_LATENCY  = RED_LATENCY + FADD_LATENCY;
-    localparam TOTAL_LATENCY= FCVT_LATENCY + FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
+    localparam FRED_LATENCY = LEVELS * FADD_LATENCY;
+    localparam TOTAL_LATENCY= FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY + FADD_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
+
+    localparam C_DELAY = FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY;
 
     `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
 
@@ -262,7 +263,7 @@ module VX_tcu_fedp_dsp #(
 
     VX_pipe_register #(
         .DATAW (32),
-        .DEPTH (FCVT_LATENCY + FMUL_LATENCY + RED_LATENCY)
+        .DEPTH (C_DELAY)
     ) pipe_c (
         .clk     (clk),
         .reset   (reset),
@@ -271,7 +272,7 @@ module VX_tcu_fedp_dsp #(
         .data_out(delayed_c)
     );
 
-    wire [31:0] acc;
+    wire [31:0] result;
 
     // final accumulation
 `ifdef DSP_TEST
@@ -283,7 +284,7 @@ module VX_tcu_fedp_dsp #(
     always @(*) begin
         dpi_fadd(enable, int'(0), a_h, b_h, 3'b0, c_h, fflags);
     end
-    `BUFFER_EX(acc, c_h[31:0], enable, 0, FADD_LATENCY);
+    `BUFFER_EX(result, c_h[31:0], enable, 0, FADD_LATENCY);
 `else
     xil_fadd fadd_acc (
         .aclk                (clk),
@@ -295,22 +296,9 @@ module VX_tcu_fedp_dsp #(
         .s_axis_operation_tvalid (1'b1),
         .s_axis_operation_tdata (8'b0), // 0=add
         `UNUSED_PIN (m_axis_result_tvalid),
-        .m_axis_result_tdata (acc)
+        .m_axis_result_tdata (result)
     );
 `endif
-     wire [31:0] result;
-    `UNUSED_VAR(result);
-
-    VX_pipe_register #(
-        .DATAW (32),
-        .DEPTH (FRND_LATENCY)
-    ) pipe_out (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .data_in (acc),
-        .data_out(result)
-    );
 
 `ifdef XLEN_64
     // should nan-box when writing to FP registers
