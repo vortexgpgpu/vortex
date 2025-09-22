@@ -15,6 +15,7 @@
 
 `ifndef SYNTHESIS
 `define DSP_TEST
+`include "dpi_float.vh"
 `endif
 
 // Function to convert IEEE-754 half precision (16-bit) to single precision (32-bit)
@@ -116,11 +117,11 @@ module VX_tcu_fedp_dsp #(
     localparam FCVT_LATENCY = 1;
     localparam FMUL_LATENCY = 8;
     localparam FADD_LATENCY = 11;
-    localparam FRND_LATENCY = 1;
-    localparam RED_LATENCY = LEVELS * FADD_LATENCY;
-    localparam ACC_LATENCY = RED_LATENCY + FADD_LATENCY;
-    localparam TOTAL_LATENCY= FCVT_LATENCY + FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
+    localparam FRED_LATENCY = LEVELS * FADD_LATENCY;
+    localparam TOTAL_LATENCY= FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY + FADD_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
+
+    localparam C_DELAY = FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY;
 
     `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
 

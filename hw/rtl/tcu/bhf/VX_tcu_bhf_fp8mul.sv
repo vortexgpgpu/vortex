@@ -34,8 +34,8 @@ module VX_tcu_bhf_fp8mul #(
     input  wire [IN_FECW-1:0] b0,
     input  wire [IN_FECW-1:0] a1,
     input  wire [IN_FECW-1:0] b1,
-    output logic [OUT_FECW-1:0] y,
-    output logic [4:0]      fflags
+    output wire [OUT_FECW-1:0] y,
+    output wire [4:0]      fflags
 );
     localparam MUL_EXPW = IN_EXPW + 1;
     localparam MUL_SIGW = IN_SIGW * 2 + 1;

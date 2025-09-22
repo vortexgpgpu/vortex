@@ -31,9 +31,8 @@ module VX_tcu_fedp_dpi #(
     output wire [`XLEN-1:0] d_val
 );
     localparam FMUL_LATENCY = 2;
-    localparam ACC_LATENCY  = 1;
-    localparam FRND_LATENCY = 1;
-    localparam TOTAL_LATENCY= FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
+    localparam FACC_LATENCY = 2;
+    localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
     `UNUSED_VAR (reset);
@@ -149,23 +148,25 @@ module VX_tcu_fedp_dpi #(
     `UNUSED_VAR(acc_f[63:32]);
 
     always_comb begin
-        acc_f = {32'hffffffff, delayed_c};
+        acc_f = 64'hffffffff00000000;
         for (int i = 0; i < N; ++i) begin
             dpi_fadd(enable, int'(0), {32'hffffffff, nult_result[i]}, acc_f, 3'b0, acc_f, fflags);
         end
+        dpi_fadd(enable, int'(0), {32'hffffffff, delayed_c}, acc_f, 3'b0, acc_f, fflags);
     end
 
     always_comb begin
-        acc_i = delayed_c;
+        acc_i = 0;
         for (int i = 0; i < N; ++i) begin
             acc_i = acc_i + nult_result[i];
         end
+        acc_i += delayed_c;
     end
 
     wire [31:0] result;
     VX_pipe_register #(
         .DATAW (32),
-        .DEPTH (ACC_LATENCY + FRND_LATENCY)
+        .DEPTH (FACC_LATENCY)
     ) pipe_acc (
         .clk     (clk),
         .reset   (reset),
@@ -174,6 +175,11 @@ module VX_tcu_fedp_dpi #(
         .data_out(result)
     );
 
-    assign d_val = `XLEN'(result);
+`ifdef XLEN_64
+    // should nan-box when writing to FP registers
+    assign d_val = {32'hffffffff, result};
+`else
+    assign d_val = result;
+`endif
 
 endmodule

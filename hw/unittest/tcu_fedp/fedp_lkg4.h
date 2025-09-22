@@ -122,8 +122,8 @@ private:
 
   // FP32 common grid sizing
   static constexpr uint32_t Wc_ = 24;                       // hidden+mantissa for FP32
-  static constexpr uint32_t G_BITS_ = 1;                    // G/R/S budget
-  static constexpr uint32_t SCALE_K_ = (Wc_ - 1) + G_BITS_; // 23 + 1 = 24
+  static constexpr uint32_t G_BITS_ = 3;                    // G/R/S budget
+  static constexpr uint32_t SCALE_K_ = (Wc_ - 1) + G_BITS_; // 23 + 3 = 26
   static constexpr uint32_t K_WIN_ = 28;                    // 1+23+3 + 1 headroom
   static constexpr uint32_t C_SHIFT_BASE_ = SCALE_K_ - 23;  // = 3
 
@@ -263,8 +263,8 @@ private:
   //   int_C = m24 * 2^(SCALE_K - 23)  (SCALE_K-23 = 3)
   CT decodeC_to_common_scaled(const dec_t &d) {
     const uint32_t sb = 23, eb = 8, bias = (1u << (eb - 1)) - 1u;
-    const uint32_t M = ((d.exp != 0) ? (1u << sb) : 0u) | d.frac;          // m24
-    const int32_t Ec = int32_t((d.exp ? d.exp : 0) - (int32_t)bias) + 127; // FP32 field scale (Ec==exp field)
+    const uint32_t M = ((d.exp != 0) << sb) | d.frac;
+    const int32_t Ec = d.exp - (int32_t)bias + 127;
     const uint32_t mScaled = (M << C_SHIFT_BASE_);
     const int32_t S = d.sign ? -int32_t(mScaled) : int32_t(mScaled);
     LOG("[decodeC] s=%u Ec=0x%x m24=0x%06x mScaled=0x%06x -> Sc=0x%x\n",
@@ -294,14 +294,14 @@ private:
     for (uint32_t i = 0; i < N; ++i) {
       const auto &a = terms[i][0], &b = terms[i][1];
       const bool a_norm = (a.exp != 0), b_norm = (b.exp != 0);
-      const uint32_t mA = (a_norm ? (1u << sb) : 0u) | a.frac;
-      const uint32_t mB = (b_norm ? (1u << sb) : 0u) | b.frac;
+      const uint32_t mA = (a_norm << sb) | a.frac;
+      const uint32_t mB = (b_norm << sb) | b.frac;
       const uint32_t prod = mA * mB; // unsigned product magnitude
 
-      const int32_t ea_unb = a_norm ? (int32_t)a.exp - bias : (1 - bias);
-      const int32_t eb_unb = b_norm ? (int32_t)b.exp - bias : (1 - bias);
+      const int32_t ea_unb = a.exp - bias;
+      const int32_t eb_unb = b.exp - bias;
       const int32_t ep_unb = ea_unb + eb_unb;
-      const int32_t Ep_field = (prod ? (ep_unb + 127) : INT32_MIN);
+      const int32_t Ep_field = ep_unb + 127;
 
       P[i] = prod;
       Sgn[i] = a.sign ^ b.sign;
@@ -440,8 +440,6 @@ private:
 
       // Val = Vin * 2^(Et - E_anchor)
       Val = sign_mag_shr32(Val, (uint32_t)d, st);
-      // if      (d > 0) Val = sign_mag_shr32(Val, (uint32_t)d, st);           // RIGHT
-      // else if (d < 0) Val = sign_mag_shl32_clipK(Val, (uint32_t)(-d), st);  // LEFT (clip+bucket)
 
       out.sticky_any |= uint32_t(st | term_sticky);
 
