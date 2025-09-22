@@ -132,8 +132,8 @@ sv2v()
 yosys()
 {
     case $OSVERSION in
-    "centos/7") parts=$(eval echo {a..c}) ;;
-    *)          parts=$(eval echo {a..c}) ;;
+    "centos/7") parts=$(eval echo {a..a}) ;;
+    *)          parts=$(eval echo {a..a}) ;;
     esac
     echo $parts
     rm -f yosys.tar.bz2.parta*
