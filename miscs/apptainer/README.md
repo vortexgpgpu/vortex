@@ -1,8 +1,8 @@
 # Apptainer Build Process
 
-Use the Slurm scheduler to request an interactive job on Flubber9
+Use the Slurm scheduler to request an interactive job on Flubber1
 ```
-salloc -p rg-fpga --nodes=1 --ntasks-per-node=64 --mem=16G --nodelist flubber9 --time=01:00:00
+salloc -p rg-fpga --nodes=1 --ntasks-per-node=16 --mem=16G --nodelist flubber1 --time=08:00:00
 ```
 
 Go to `apptainer` directory
@@ -96,7 +96,7 @@ Apptainer> verilator --version
 Verilator 5.026 2024-06-15 rev v5.026-43-g065f36ab5
 
 Apptainer> cd hw/syn/xilinx/xrt
-Apptainer> PREFIX=test1 PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 TARGET=hw NUM_CORES=1 make > build_u50_hw_1c.log 2>&1 &
+Apptainer> PREFIX=test1 PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 TARGET=hw NUM_CORES=1 make JOBS=<number of cores allocated>  > build_u50_hw_1c.log 2>&1 &
 Creates ../test1_xilinx_u50_gen3x16_xdma_5_202210_1_hw/bin/vortex_afu.xclbin
 ```
 
@@ -108,7 +108,7 @@ Apptainer> pwd
 
 Apptainer> make -C runtime/ clean
 
-Apptainer> FPGA_BIN_DIR=hw/syn/xilinx/xrt/test1_xilinx_u50_gen3x16_xdma_5_202210_1_hw/bin  TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1  ./ci/blackbox.sh --driver=xrt --app=demo
+Apptainer> FPGA_BIN_DIR=/home/vortex/build/hw/syn/xilinx/xrt/test1_xilinx_u50_gen3x16_xdma_5_202210_1_hw/bin  TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1  ./ci/blackbox.sh --driver=xrt --app=demo
 
 Verify following line being printed:
 info: device name=xilinx_u50_gen3x16_xdma_base_5, memory_capacity=0x200000000 bytes, memory_banks=32.
