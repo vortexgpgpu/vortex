@@ -42,7 +42,7 @@
 #include <vector>
 #include <bitmanip.h>
 #include "softfloat_ext.h"
-#include "fedp_lkg4.h"
+#include "fedp.h"
 
 bool sim_trace_enabled() {
   return true;
@@ -187,17 +187,18 @@ std::ostream &operator<<(std::ostream &os, const TestConfig &config) {
   return os;
 }
 
-static void print_float(const std::string& prefix, float value, bool newline = false) {
+static void print_float(const std::string &prefix, float value, bool newline = false) {
   std::cout << prefix << value << " (0x" << std::hex << bit_cast<uint32_t>(value) << ")" << std::dec;
   if (newline) {
     std::cout << std::endl;
   }
 }
 
-static void print_float(const std::string& prefix, std::vector<float>& values, bool newline = false) {
+static void print_float(const std::string &prefix, std::vector<float> &values, bool newline = false) {
   std::cout << prefix << "{";
   for (size_t i = 0; i < values.size(); i++) {
-    if (i > 0) std::cout << ", ";
+    if (i > 0)
+      std::cout << ", ";
     print_float("", values[i], false);
   }
   std::cout << "}";
@@ -216,7 +217,8 @@ static void print_format(const std::string& prefix, uint32_t value, bool newline
 static void print_format(const std::string& prefix, std::vector<uint32_t>& values, bool newline = false) {
   std::cout << prefix << "{";
   for (size_t i = 0; i < values.size(); i++) {
-    if (i > 0) std::cout << ", ";
+    if (i > 0)
+      std::cout << ", ";
     print_format("", values[i], false);
   }
   std::cout << "}";
@@ -272,25 +274,23 @@ static void pack_elements(const std::vector<uint32_t> &elements, int element_bit
 }
 
 // Calculate expected fp dot product
-static float calculate_fp_dot_product(const std::vector<float> &a_values,
-                                      const std::vector<float> &b_values,
-                                      float c_value) {
-  float result(c_value);
-  for (size_t i = 0; i < a_values.size(); i++) {
-    result += a_values[i] * b_values[i];
+static float dot_product(const float *a, const float *b, float c, uint32_t n) {
+  float acc(0);
+  for (size_t i = 0; i < n; i++) {
+    acc += a[i] * b[i];
   }
-  return result;
+  acc += c;
+  return acc;
 }
 
 // Calculate expected int dot product
-static int32_t calculate_int_dot_product(const std::vector<uint32_t> &a_values,
-                                         const std::vector<uint32_t> &b_values,
-                                         int32_t c_value) {
-  int32_t result(c_value);
-  for (size_t i = 0; i < a_values.size(); i++) {
-    result += int32_t(a_values[i]) * int32_t(b_values[i]);
+static int32_t dot_product(const int32_t *a, const int32_t *b, int32_t c, uint32_t n) {
+  int32_t acc(0);
+  for (size_t i = 0; i < n; i++) {
+    acc += a[i] * b[i];
   }
-  return result;
+  acc += c;
+  return acc;
 }
 
 // Check if two floats are approximately equal
@@ -389,34 +389,34 @@ private:
     dut_->reset = 0;
   }
 
-  // Generate fp value for a specific feature
-  uint32_t generate_int_value(bool is_signed, int element_bits, int index) {
+  // Generate test int values based on sign, element bits, and test ID
+  int32_t generate_int_value(bool is_signed, int element_bits, int test_id) {
     uint32_t mask = (element_bits < 32) ? ((1u << element_bits) - 1u) : 0xFFFFFFFFu;
     std::uniform_int_distribution<uint32_t> int_dist(0, mask);
 
-    uint32_t value;
-    if (index == -1) {
+    int32_t value;
+    if (test_id == -1) {
       value = int_dist(rng_);
     } else {
-      switch (index) {
+      switch (test_id % 4) {
       case 0: // zero
         value = 0;
         break;
       case 1: // min
         if (is_signed) {
-            value = (element_bits < 32) ? (1u << (element_bits-1)) : 0x80000000u;
+          value = (element_bits < 32) ? (1u << (element_bits - 1)) : 0x80000000u;
         } else {
-            value = 0;
+          value = 0;
         }
         break;
       case 2: // max
         if (is_signed) {
-            value = (element_bits < 32) ? ((1u << (element_bits-1))-1u) : 0x7FFFFFFFu;
+          value = (element_bits < 32) ? ((1u << (element_bits - 1)) - 1u) : 0x7FFFFFFFu;
         } else {
-            value = mask;
+          value = mask;
         }
         break;
-      default:
+      default: // random
         value = int_dist(rng_);
         break;
       }
@@ -428,6 +428,7 @@ private:
     return value;
   }
 
+  // Generate test floating-point values based on feature, format, and test ID
   uint32_t generate_fp_value(const std::string &feature, uint32_t exp_bits, uint32_t sig_bits, uint32_t test_id) {
     const uint32_t all_exp = (exp_bits == 32 ? 0xFFFFFFFFu : ((1u << exp_bits) - 1u));
     const uint32_t max_frac = (sig_bits == 32 ? 0xFFFFFFFFu : ((1u << sig_bits) - 1u));
@@ -436,9 +437,9 @@ private:
     std::uniform_int_distribution<uint32_t> sign_dist(0, 1);
     std::uniform_int_distribution<uint32_t> exp_norm_dist(1, (all_exp > 0 ? all_exp - 1 : 0)); // [1, all_ones-1]
     std::uniform_int_distribution<uint32_t> frac_dist(0, (max_frac > 0 ? max_frac : 0));
-    std::uniform_int_distribution<uint32_t> frac_nz_dist(1, (max_frac > 0 ? max_frac : 1));    // nonzero frac
+    std::uniform_int_distribution<uint32_t> frac_nz_dist(1, (max_frac > 0 ? max_frac : 1)); // nonzero frac
 
-    auto deterministic_sign = [&](uint32_t salt)->uint32_t {
+    auto deterministic_sign = [&](uint32_t salt) -> uint32_t {
       // Mix test_id with salt for reproducible sign selection
       return ((test_id ^ (salt * 0x9E3779B9u)) >> 31) & 1u;
     };
@@ -458,26 +459,26 @@ private:
       uint32_t s = (which == 0) ? deterministic_sign(1) : sign_dist(rng_);
       uint32_t e, f;
       switch (which) {
-        case 0: // random normal
-          e = exp_norm_dist(rng_);
-          f = frac_dist(rng_);
-          break;
-        case 1: // smallest normal: exp=1, frac varies
-          e = 1u;
-          f = frac_dist(rng_);
-          break;
-        case 2: // largest finite: exp=all_ones-1, frac=all_ones
-          e = (all_exp > 0 ? all_exp - 1 : 0);
-          f = max_frac;
-          break;
-        case 3: // near one: exponent=bias, small fraction
-          e = (exp_bits ? ((1u << (exp_bits - 1)) - 1u) : 0u);
-          f = (sig_bits ? (frac_dist(rng_) & ((1u << (sig_bits > 4 ? 4 : sig_bits)) - 1u)) : 0u);
-          break;
-        default: // dense random but still normal
-          e = exp_norm_dist(rng_);
-          f = frac_dist(rng_);
-          break;
+      case 0: // random normal
+        e = exp_norm_dist(rng_);
+        f = frac_dist(rng_);
+        break;
+      case 1: // smallest normal: exp=1, frac varies
+        e = 1u;
+        f = frac_dist(rng_);
+        break;
+      case 2: // largest finite: exp=all_ones-1, frac=all_ones
+        e = (all_exp > 0 ? all_exp - 1 : 0);
+        f = max_frac;
+        break;
+      case 3: // near one: exponent=bias, small fraction
+        e = (exp_bits ? ((1u << (exp_bits - 1)) - 1u) : 0u);
+        f = (sig_bits ? (frac_dist(rng_) & ((1u << (sig_bits > 4 ? 4 : sig_bits)) - 1u)) : 0u);
+        break;
+      default: // dense random but still normal
+        e = exp_norm_dist(rng_);
+        f = frac_dist(rng_);
+        break;
       }
       return pack_fp_bits(s, e, f, exp_bits, sig_bits);
 
@@ -491,9 +492,12 @@ private:
       // Bias test_id to sometimes hit smallest and largest subnormals
       const uint32_t which = test_id % 3u;
       uint32_t f;
-      if (which == 0)      f = 1u;             // smallest subnormal (lsb)
-      else if (which == 1) f = max_frac;       // largest subnormal
-      else                 f = frac_nz_dist(rng_);
+      if (which == 0)
+        f = 1u; // smallest subnormal (lsb)
+      else if (which == 1)
+        f = max_frac; // largest subnormal
+      else
+        f = frac_nz_dist(rng_);
       return pack_fp_bits(s, 0u, f, exp_bits, sig_bits);
 
     } else if (feature == "infinities") {
@@ -512,10 +516,11 @@ private:
       }
       uint32_t s = sign_dist(rng_);
       uint32_t e = all_exp;
-      uint32_t quiet_bit = 1u << (sig_bits - 1);     // top frac bit
+      uint32_t quiet_bit = 1u << (sig_bits - 1); // top frac bit
       uint32_t payload = frac_dist(rng_) & (quiet_bit - 1u);
-      if (payload == 0u) payload = 1u;               // ensure nonzero payload
-      uint32_t f = quiet_bit | payload;              // make it a qNaN
+      if (payload == 0u)
+        payload = 1u;                   // ensure nonzero payload
+      uint32_t f = quiet_bit | payload; // make it a qNaN
       return pack_fp_bits(s, e, f, exp_bits, sig_bits);
 
     } else {
@@ -611,7 +616,7 @@ public:
       int32_t dut_result = dut_->d_val;
 
       // Calculate expected result
-      int32_t expected = calculate_int_dot_product(a_values, b_values, c_value);
+      int32_t expected = dot_product((const int32_t *)a_values.data(), (const int32_t *)b_values.data(), c_value, total_elements);
 
       if (dut_result != expected) {
         std::cout << "Test:" << test_id << " failed:" << std::endl;
@@ -631,17 +636,17 @@ public:
     return true;
   }
 
-  bool test_floating_points(const std::vector<std::string>& features_to_test) {
+  bool test_floating_points(const std::vector<std::string> &features_to_test) {
     // Calculate how many elements we can fit in NUM_REGS XLEN words
     int element_bits = float_fmt_width(config_.exp_bits, config_.sig_bits);
     int elements_per_word = 32 / element_bits;
     int total_elements = NUM_REGS * elements_per_word;
 
-    //std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
+    // std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
 
     const uint32_t NT = config_.num_tests;
     const uint32_t NF = features_to_test.size();
-    const uint32_t tests_per_feature = (NT + NF- 1) / NF;
+    const uint32_t tests_per_feature = (NT + NF - 1) / NF;
 
     uint32_t skipped = 0;
 
@@ -671,7 +676,7 @@ public:
       float c_value_float = generate_fp_value(c_enable ? feature : "normals", 8, 23, test_id);
 
       // skip invalid tests that produce NaN or Inf
-      float result = calculate_fp_dot_product(a_values_float, b_values_float, c_value_float);
+      float result = dot_product(a_values_float.data(), b_values_float.data(), c_value_float, total_elements);
       if (std::isnan(result) || std::isinf(result)) {
         ++skipped;
         continue;
@@ -846,7 +851,7 @@ TestConfig parse_args(int argc, char **argv) {
     int total_bits = 1 + config_.exp_bits + config_.sig_bits;
     if (total_bits > 32) {
       std::cout << "Error: Total bits (1 + exp_bits + sig_bits) cannot exceed 32" << std::endl;
-       exit(1);
+      exit(1);
     }
     if (32 % total_bits != 0) {
       std::cout << "Warning: Element size " << total_bits << " doesn't evenly divide 32 bits" << std::endl;
