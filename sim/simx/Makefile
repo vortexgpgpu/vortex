@@ -27,17 +27,20 @@ SRCS += $(SRC_DIR)/execute.cpp $(SRC_DIR)/func_unit.cpp
 SRCS += $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp $(SRC_DIR)/mem_coalescer.cpp
 SRCS += $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 
+# sparse unit; add -DEXT_SPARSE_ENABLE flag later
+SRCS += $(SRC_DIR)/sparse_unit.cpp
+
 # Add V extension sources
 ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
-  	SRCS += $(SRC_DIR)/voperands.cpp
-  	SRCS += $(SRC_DIR)/vopc_unit.cpp
-  	SRCS += $(SRC_DIR)/vec_unit.cpp
+	SRCS += $(SRC_DIR)/voperands.cpp
+	SRCS += $(SRC_DIR)/vopc_unit.cpp
+	SRCS += $(SRC_DIR)/vec_unit.cpp
 else
 	SRCS += $(SRC_DIR)/operands.cpp
 endif
 # Add TCU extension sources
 ifneq ($(findstring -DEXT_TCU_ENABLE, $(CONFIGS)),)
-  	SRCS += $(SRC_DIR)/tensor_unit.cpp
+	SRCS += $(SRC_DIR)/tensor_unit.cpp
 endif
 
 # Debugging
