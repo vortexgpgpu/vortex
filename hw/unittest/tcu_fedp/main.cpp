@@ -582,7 +582,7 @@ public:
 
       for (int i = 0; i < total_elements; i++) {
         a_values[i] = generate_int_value(is_signed, element_bits, (a_enable && i == 0) ? test_id : -1);
-        a_values[i] = generate_int_value(is_signed, element_bits, (b_enable && i == 0) ? test_id : -1);
+        b_values[i] = generate_int_value(is_signed, element_bits, (b_enable && i == 0) ? test_id : -1);
       }
 
       // Generate c value
