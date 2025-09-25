@@ -88,7 +88,7 @@ module VX_tcu_fedp_dpi #(
             4'b1001: begin // int8
                 prod = 0;
                 for (int j = 0; j < 4; j++) begin
-                    prod += $signed(a_row[i][8 * j +: 8]) * $signed(b_col[i][8 * j +: 8]);
+                    prod += $signed({{24{a_row[i][8 * j + 7]}}, a_row[i][8 * j +: 8]}) * $signed({{24{b_col[i][8 * j + 7]}}, b_col[i][8 * j +: 8]});
                 end
             end
             4'b1010: begin // uint8
@@ -100,7 +100,7 @@ module VX_tcu_fedp_dpi #(
             4'b1011: begin // int4
                 prod = 0;
                 for (int j = 0; j < 8; j++) begin
-                    prod += $signed(a_row[i][4 * j +: 4]) * $signed(b_col[i][4 * j +: 4]);
+                    prod += $signed({{28{a_row[i][4 * j + 3]}}, a_row[i][4 * j +: 4]}) * $signed({{28{b_col[i][4 * j + 3]}}, b_col[i][4 * j +: 4]});
                 end
             end
             4'b1100: begin // uint4
