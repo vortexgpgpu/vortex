@@ -303,30 +303,30 @@ op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SparseUnit::TensorUnit(const SimContext &ctx, const char* name, const Arch& arch, Core* core)
-	: SimObject<TensorUnit>(ctx, name)
+SparseUnit::SparseUnit(const SimContext &ctx, const char* name, const Arch& arch, Core* core)
+	: SimObject<SparseUnit>(ctx, name)
 	, Inputs(ISSUE_WIDTH, this)
 	, Outputs(ISSUE_WIDTH, this)
 	, impl_(new Impl(this, arch, core))
 {}
 
-TensorUnit::~TensorUnit() {
+SparseUnit::~SparseUnit() {
   delete impl_;
 }
 
-void TensorUnit::reset() {
+void SparseUnit::reset() {
   impl_->reset();
 }
 
-void TensorUnit::tick() {
+void SparseUnit::tick() {
   impl_->tick();
 }
 
-const TensorUnit::PerfStats &TensorUnit::perf_stats() const {
+const SparseUnit::PerfStats &SparseUnit::perf_stats() const {
 	return impl_->perf_stats();
 }
 
-void TensorUnit::wmma(uint32_t wid,
+void SparseUnit::wmma(uint32_t wid,
                       uint32_t fmt_s,
                       uint32_t fmt_d,
                       uint32_t step_m,
