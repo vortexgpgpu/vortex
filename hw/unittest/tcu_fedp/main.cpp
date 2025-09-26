@@ -42,7 +42,11 @@
 #include <vector>
 #include <bitmanip.h>
 #include "softfloat_ext.h"
+
+#ifdef FEDP_EMUL
 #include "fedp.h"
+#endif
+
 
 bool sim_trace_enabled() {
   return true;
@@ -294,7 +298,7 @@ static int32_t dot_product(const int32_t *a, const int32_t *b, int32_t c, uint32
 }
 
 // Check if two floats are approximately equal
-static bool approximately_equal(float a, float b, int exp_bits, int sig_bits) {
+static bool approximately_equal(float a, float b, float epsilon) {
   // Handle NaN
   if (std::isnan(a) && std::isnan(b))
     return true;
@@ -302,19 +306,6 @@ static bool approximately_equal(float a, float b, int exp_bits, int sig_bits) {
   // Handle infinity
   if (std::isinf(a) && std::isinf(b))
     return std::signbit(a) == std::signbit(b);
-
-  // Generalize epsilon calculation based on format precision
-  float epsilon;
-  int total_bits = 1 + exp_bits + sig_bits;
-  if (total_bits <= 8) {
-    epsilon = 0.1f; // Very low precision formats
-  } else if (total_bits <= 16) {
-    epsilon = 0.01f; // Low precision formats
-  } else if (total_bits <= 24) {
-    epsilon = 0.001f; // Medium precision formats
-  } else {
-    epsilon = 0.0001f; // High precision formats
-  }
 
   // Check for approximate equality
   if (std::abs(a - b) < epsilon)
@@ -718,10 +709,14 @@ public:
       std::memcpy(&dut_result, &dut_result_bits, sizeof(float));
 
       // Calculate expected result
+    #ifdef FEDP_EMUL
       FEDP fedp((int)config_.frm, NUM_REGS * 2);
       float expected = fedp(a_packed, b_packed, c_value_float, NUM_REGS, config_.exp_bits, config_.sig_bits);
+    #else
+      float expected = result;
+    #endif
 
-      bool passed = approximately_equal(dut_result, expected, config_.exp_bits, config_.sig_bits);
+      bool passed = approximately_equal(dut_result, expected, 0.00001);
       if (!passed) {
         std::cout << "Test #" << test_id << " (" << feature << ") failed:" << std::endl;
         print_float("  af_values=", a_values_float, true);
