@@ -268,20 +268,58 @@ private:
   }
 
   //======================== S1: multiply_to_common() ========================//
+  // Reduction with HI/LO binning using baseline SCALE_K_ placement onto K_WIN_.
   std::vector<grp_term>
-  reduce_terms(const std::vector<uint32_t> &P,
-               const std::vector<uint32_t> &Sgn,
-               const std::vector<int32_t> &Ep,
-               const std::vector<uint32_t> &Q,
-               const std::vector<uint8_t> &Qsticky,
-               uint32_t N,
-               uint32_t G,
-               uint32_t gsize) {
-    constexpr uint32_t DELTA_BITS = 8;
-    constexpr uint32_t K_OVERLAP  = 2;
+  reduce_terms(const std::vector<uint32_t>& P,
+              const std::vector<uint32_t>& Sgn,
+              const std::vector<int32_t>&  Ep,
+              int eb, int sb, uint32_t N)
+  {
+    const uint32_t G = lanes_;
+    const uint32_t gsize = (N + G - 1) / G;
+
+    // Design constraints for this path
+    assert((gsize == 2 || gsize == 4) && "reduce_terms: gsize must be 2 or 4");
+    assert(eb + sb + 1 <= 8 && "reduce_terms: (eb+sb+1) must be <= 8");
 
     std::vector<grp_term> out(G, grp_term{0, 0, INT32_MIN, false});
-    assert(G <= 8);
+    if (!N) return out;
+
+    // Pass 1: place each product onto fixed K grid (K_WIN_)
+    const int PROD_SHIFT_BASE = int(SCALE_K_) - (2 * sb);   // e.g., fp16: 26-20=6; fp8: 26-6/8=20/18
+    std::vector<uint32_t> Q(N, 0);
+    std::vector<uint8_t>  Qsticky(N, 0);
+
+    for (uint32_t i = 0; i < N; ++i) {
+      uint32_t tmp = P[i];
+      bool st = false;
+
+      // Fixed left placement shift
+      if (PROD_SHIFT_BASE < 32) {
+        const uint32_t overflow = (PROD_SHIFT_BASE == 0) ? 0u : (tmp >> (32u - PROD_SHIFT_BASE));
+        st |= (overflow != 0u);
+        tmp <<= PROD_SHIFT_BASE;
+      } else {
+        st |= (tmp != 0u);
+        tmp = 0;
+      }
+
+      // Clip to K_WIN_ and bucket sticky if anything spilled
+      if (tmp >> K_WIN_) {
+        st = true;
+        tmp &= ((1u << K_WIN_) - 1u);
+      }
+      if (st) tmp |= 1u;
+
+      Q[i] = tmp;
+      Qsticky[i] = (uint8_t)st;
+
+      LOG("[S1/place] i=%u base=%d Q=0x%x st=%u\n", i, PROD_SHIFT_BASE, Q[i], (unsigned)st);
+    }
+
+    // Pass 2: your HI/LO binning + CSA + local CPA + LO→HI merge
+    constexpr uint32_t DELTA_BITS = 8;
+    constexpr uint32_t K_OVERLAP  = 2;
 
     for (uint32_t g = 0; g < G; ++g) {
       const uint32_t i0 = g * gsize;
@@ -325,12 +363,12 @@ private:
           if (mag) {
             auto& S_hi = (Sgn[i] == 0) ? S_hi_pos : S_hi_neg;
             auto& C_hi = (Sgn[i] == 0) ? C_hi_pos : C_hi_neg;
-            auto [s1, c1] = csa32(S_hi, (C_hi << 1), mag);
-            S_hi = s1; C_hi = c1;
+            auto sc1 = csa32(S_hi, (C_hi << 1), mag);
+            S_hi = sc1.first; C_hi = sc1.second;
           }
         } else {
           // align to Elo = Eg - DELTA_BITS
-          const uint32_t d_to_Elo = (uint32_t)(Elo - Ep[i]); // >= 0 and smaller than d_to_Eg by ~DELTA
+          const uint32_t d_to_Elo = (uint32_t)(Elo - Ep[i]); // >= 0
           if (d_to_Elo < 32) {
             term_sticky |= ((mag & ((1u << d_to_Elo) - 1u)) != 0u);
             mag >>= d_to_Elo;
@@ -341,12 +379,10 @@ private:
           if (term_sticky) mag |= 1u;
 
           if (mag) {
-            // NOTE: LO path mag is ≈ (K_WIN - DELTA) bits after alignment.
-            // Using the same 32b type here, but in RTL you can narrow this adder.
             auto& S_lo = (Sgn[i] == 0) ? S_lo_pos : S_lo_neg;
             auto& C_lo = (Sgn[i] == 0) ? C_lo_pos : C_lo_neg;
-            auto [s1, c1] = csa32(S_lo, (C_lo << 1), mag);
-            S_lo = s1; C_lo = c1;
+            auto sc2 = csa32(S_lo, (C_lo << 1), mag);
+            S_lo = sc2.first; C_lo = sc2.second;
           }
         }
 
@@ -391,12 +427,10 @@ private:
     return out;
   }
 
+
   std::vector<grp_term>
   multiply_to_common(const std::vector<std::array<dec_t, 2>> &terms, int eb, int sb) {
     const uint32_t N = (uint32_t)terms.size();
-    const uint32_t G = lanes_;
-    const uint32_t gsize = ceil_div_u(N, G);
-    LOG("[S1/group ] N=%u lanes=%u gsize=%u\n", N, G, gsize);
 
     // --- Pass 0: decode products (P, sign, Ep) --------------------------------
     const int32_t bias = (1 << (eb - 1)) - 1;
@@ -425,46 +459,42 @@ private:
           (unsigned)((Ep_field == INT32_MIN) ? 0 : Ep_field), prod);
     }
 
-    // --- Pass 1: place each product onto the fixed K grid (K_WIN) --------------
-    const int PROD_SHIFT_BASE = int(SCALE_K_) - (2 * sb); // fp8:20, bf16:12, fp16:6
-    std::vector<uint32_t> Q(N, 0);
-    std::vector<uint8_t>  Qsticky(N, 0);
-
-    for (uint32_t i = 0; i < N; ++i) {
-      bool st = false;
-      uint32_t tmp = P[i];
-
-      // Fixed placement shift (LEFT) to fill the K window.
-      if (PROD_SHIFT_BASE < 32) {
-        const uint32_t overflow = (tmp >> (32u - PROD_SHIFT_BASE));
-        st |= (overflow != 0u);
-        tmp <<= PROD_SHIFT_BASE;
-      } else {
-        st |= (tmp != 0u);
-        tmp = 0;
-      }
-
-      // Clip to K_WIN and bucket sticky if anything spilled.
-      if (tmp >> K_WIN_) {
-        st = true;
-        tmp &= ((1u << K_WIN_) - 1u);
-      }
-      if (st) tmp |= 1u;
-
-      Q[i] = tmp;
-      Qsticky[i] = (uint8_t)st;
-
-      LOG("[S1/place] i=%u base=%d Q=0x%x st=%u\n",
-          i, PROD_SHIFT_BASE, Q[i], (unsigned)st);
-    }
-
-    // --- Pass 2: per-group reduction with 2 sub-blocks (block-floating + overlap)
-    if (gsize > 1) {
-      return reduce_terms(P, Sgn, Ep, Q, Qsticky, N, G, gsize);
+    if (N > lanes_) {
+      return reduce_terms(P, Sgn, Ep, eb, sb, N);
     } else {
-      // If gsize == 1, each group is one term, no reduction needed
-      std::vector<grp_term> out(G, grp_term{0, 0, INT32_MIN, false});
-      assert(N <= G);
+      const int PROD_SHIFT_BASE = int(SCALE_K_) - (2 * sb); // fp8:20, bf16:12, fp16:6
+      std::vector<uint32_t> Q(N, 0);
+      std::vector<uint8_t>  Qsticky(N, 0);
+
+      for (uint32_t i = 0; i < N; ++i) {
+        bool st = false;
+        uint32_t tmp = P[i];
+
+        // Fixed placement shift (LEFT) to fill the K window.
+        if (PROD_SHIFT_BASE < 32) {
+          const uint32_t overflow = (tmp >> (32u - PROD_SHIFT_BASE));
+          st |= (overflow != 0u);
+          tmp <<= PROD_SHIFT_BASE;
+        } else {
+          st |= (tmp != 0u);
+          tmp = 0;
+        }
+
+        // Clip to K_WIN and bucket sticky if anything spilled.
+        if (tmp >> K_WIN_) {
+          st = true;
+          tmp &= ((1u << K_WIN_) - 1u);
+        }
+        if (st) tmp |= 1u;
+
+        Q[i] = tmp;
+        Qsticky[i] = (uint8_t)st;
+
+        LOG("[S1/place] i=%u base=%d Q=0x%x st=%u\n",
+            i, PROD_SHIFT_BASE, Q[i], (unsigned)st);
+      }
+
+      std::vector<grp_term> out(N);
       for (uint32_t i = 0; i < N; ++i) {
         out[i] = grp_term{Sgn[i], Q[i], Ep[i], Qsticky[i] != 0};
       }

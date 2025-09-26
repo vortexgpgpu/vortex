@@ -83,7 +83,7 @@ module VX_tcu_fedp_bhf #(
 
         VX_tcu_bhf_fp8mul #(
             .IN_EXPW (4),
-            .IN_SIGW (4),
+            .IN_SIGW (3+1),
             .OUT_EXPW(8),
             .OUT_SIGW(24),
             .IN_REC  (0), // input in IEEE format
@@ -105,7 +105,7 @@ module VX_tcu_fedp_bhf #(
 
         VX_tcu_bhf_fp8mul #(
             .IN_EXPW (5),
-            .IN_SIGW (3),
+            .IN_SIGW (2+1),
             .OUT_EXPW(8),
             .OUT_SIGW(24),
             .IN_REC  (0), // input in IEEE format
@@ -127,7 +127,7 @@ module VX_tcu_fedp_bhf #(
 
         VX_tcu_bhf_fmul #(
             .IN_EXPW (5),
-            .IN_SIGW (11),
+            .IN_SIGW (10+1),
             .OUT_EXPW(8),
             .OUT_SIGW(24),
             .IN_REC  (0), // input in IEEE format
@@ -147,7 +147,7 @@ module VX_tcu_fedp_bhf #(
 
         VX_tcu_bhf_fmul #(
             .IN_EXPW (8),
-            .IN_SIGW (8),
+            .IN_SIGW (7+1),
             .OUT_EXPW(8),
             .OUT_SIGW(24),
             .IN_REC  (0), // input in IEEE format
@@ -202,7 +202,7 @@ module VX_tcu_fedp_bhf #(
         for (genvar i = 0; i < OUTSZ; i++) begin : g_add
             VX_tcu_bhf_fadd #(
                 .IN_EXPW (8),
-                .IN_SIGW (24),
+                .IN_SIGW (23+1),
                 .IN_REC  (1), // input in recoded format
                 .OUT_REC (1), // output in recoded format
                 .ADD_LATENCY (FADD_LATENCY),
@@ -246,7 +246,7 @@ module VX_tcu_fedp_bhf #(
 
     VX_tcu_bhf_fadd #(
         .IN_EXPW (8),
-        .IN_SIGW (24),
+        .IN_SIGW (23+1),
         .IN_REC  (1), // input in recoded format
         .OUT_REC (0), // output in IEEE format
         .ADD_LATENCY (FADD_LATENCY),
