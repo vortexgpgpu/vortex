@@ -53,7 +53,7 @@ struct int32 {
 struct int8 {
   using dtype = int8_t;
   static constexpr uint32_t id = 9;
-  static constexpr uint32_t bits = 16;
+  static constexpr uint32_t bits = 8;
   static constexpr const char* name = "i8";
 };
 
