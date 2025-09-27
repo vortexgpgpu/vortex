@@ -383,7 +383,7 @@ module VX_mem_coalescer #(
                 `TRACE(2, (", data="))
                 `TRACE_ARRAY1D(2, "0x%0h", out_req_data, OUT_REQS)
             end else begin
-                `TRACE(2,  ("%d: %s out-req-rd: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask))
+                `TRACE(2,  ("%t: %s out-req-rd: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", out_req_addr, OUT_REQS)
                 `TRACE(2, (", flags="))
                 `TRACE_ARRAY1D(2, "%b", out_req_flags, OUT_REQS)
