@@ -351,18 +351,18 @@ struct SparseMat {
   uint32_t rows, cols;           // original A dims (M × K)
 };
 
-static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
+static void matmul_cpu(otype_t *D, const itype_t *A, const itype_t *B, otype_t *C, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = 8 / vt::ITYPE::bits;
   uint32_t KS = subbytes ? (K * subbytes) : K;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
-      otype_t sum(0);
+      otype_t sum = data_accessor_t<vt::OTYPE>::read(C, m * N + n);
       for (uint32_t k = 0; k < KS; ++k) {
         auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
         auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
         sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
       }
-      data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
+      data_accessor_t<vt::OTYPE>::write(D, m * N + n, sum);
     }
   }
 }
@@ -427,6 +427,7 @@ vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
+vx_buffer_h D_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
@@ -472,6 +473,7 @@ void cleanup() {
     vx_mem_free(A_buffer);
     vx_mem_free(B_buffer);
     vx_mem_free(C_buffer);
+    vx_mem_free(D_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -590,6 +592,7 @@ int main(int argc, char *argv[]) {
   size_t sizeA = M * K;
   size_t sizeB = K * N;
   size_t sizeC = M * N;
+  size_t sizeD = M * N;
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
@@ -616,21 +619,29 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
   RT_CHECK(vx_mem_alloc(device, sizeB * sizeof(itype_t), VX_MEM_READ, &B_buffer));
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
+  RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_READ, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
+  RT_CHECK(vx_mem_alloc(device, sizeD * sizeof(otype_t), VX_MEM_WRITE, &D_buffer));
+  RT_CHECK(vx_mem_address(D_buffer, &kernel_arg.D_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
+  std::cout << "D_addr=0x" << std::hex << kernel_arg.D_addr << std::endl;
 
   // generate source data
   std::vector<itype_t> h_A(sizeA);
   std::vector<itype_t> h_B(sizeB);
+  std::vector<otype_t> h_C(sizeC);
+
   for (uint32_t i = 0; i < sizeA; ++i) {
     h_A[i] = Comparator<vt::ITYPE>::generate();
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
     h_B[i] = Comparator<vt::ITYPE>::generate();
+  }
+  for (uint32_t i = 0; i < sizeC; ++i) {
+    h_C[i] = Comparator<vt::OTYPE>::generate();
   }
 
   // upload matrix A buffer
@@ -651,6 +662,12 @@ int main(int argc, char *argv[]) {
     } else {
       RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
     }
+  }
+
+  // upload matrix C buffer
+  {
+    std::cout << "upload matrix C buffer" << std::endl;
+    RT_CHECK(vx_copy_to_dev(C_buffer, h_C.data(), 0, sizeC * sizeof(otype_t)));
   }
 
   // upload program
@@ -676,19 +693,19 @@ int main(int argc, char *argv[]) {
   printf("Elapsed time: %lg ms\n", elapsed);
 
   // download destination buffer
-  std::vector<otype_t> h_C(sizeC);
+  std::vector<otype_t> h_D(sizeD);
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t)));
+  RT_CHECK(vx_copy_from_dev(h_D.data(), D_buffer, 0, sizeD * sizeof(otype_t)));
 
   // verify result
   std::cout << "verify result" << std::endl;
   int errors = 0;
   {
     std::vector<otype_t> h_ref(sizeC);
-    matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), M, N, K);
+    matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), h_C.data(), M, N, K);
 
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
-      if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, errors)) {
+      if (!Comparator<vt::OTYPE>::compare(h_D[i], h_ref[i], i, errors)) {
         ++errors;
       }
     }
