@@ -220,10 +220,10 @@ def parse_rtlsim(log_lines):
     wb_pattern = r"wb=(\d)"
     used_rs_pattern = r"used_rs=(\d+)"
     sid_pattern = r"sid=(\d+)"
-    rd_pattern = r"rd=(\d+)"
-    rs1_pattern = r"rs1=(\d+)"
-    rs2_pattern = r"rs2=(\d+)"
-    rs3_pattern = r"rs3=(\d+)"
+    rd_pattern = r"rd=([xz\d]+)"
+    rs1_pattern = r"rs1=([xz\d]+)"
+    rs2_pattern = r"rs2=([xz\d]+)"
+    rs3_pattern = r"rs3=([xz\d]+)"
     rs1_data_pattern = r"rs1_data=\{(.+?)\}"
     rs2_data_pattern = r"rs2_data=\{(.+?)\}"
     rs3_data_pattern = r"rs3_data=\{(.+?)\}"
@@ -336,7 +336,7 @@ def parse_rtlsim(log_lines):
                                 del instr_data[uuid]
                                 entries.append(trace)
         except Exception as e:
-            print("Error: {}; {}".format(e, line))
+            print("Error: {0} ({1}); {2}".format(e, lineno, line))
     perf_sched.dump()
     perf_issue.dump()
     perf_exec.dump()
