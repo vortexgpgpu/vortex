@@ -49,12 +49,12 @@ public:
                    int sig_bits) {
     fflags_ = 0;
 
-    const uint32_t width = 1u + (uint32_t)exp_bits + (uint32_t)sig_bits;
+    const uint32_t width = 1u + exp_bits + sig_bits;
     const bool packed = (width <= 16u) && ((32u % width) == 0u);
     const uint32_t epw = packed ? (32u / width) : 1u;
 
     LOG("[inputs] fmt=e%dm%d width=%u packed=%u elems/word=%u words=%u\n",
-        exp_bits, sig_bits, width, (unsigned)packed, epw, n_words);
+        exp_bits, sig_bits, width, packed, epw, n_words);
 
     // ---- S1: decode lanes ---------------------------------------------------
     const auto terms = decode_inputs(a_words, b_words, n_words, epw, exp_bits, sig_bits, packed);
@@ -134,9 +134,8 @@ private:
   // FP32 common grid sizing
   static constexpr uint32_t Wc_ = 24;                       // hidden+mantissa for FP32
   static constexpr uint32_t G_BITS_ = 3;                    // G/R/S budget
-  static constexpr uint32_t SCALE_K_ = (Wc_ - 1) + G_BITS_; // 23 + 3 = 26
-  static constexpr uint32_t K_WIN_ = 28;                    // 1+23+3 + 1 headroom
-  static constexpr uint32_t C_SHIFT_BASE_ = SCALE_K_ - 23;  // = 3
+  static constexpr uint32_t SCALE_K_ = (Wc_ - 1) + G_BITS_;
+  static constexpr uint32_t K_WIN_ = Wc_ + G_BITS_ + 1;     // +1 headroom for accumulation
 
   const int frm_;
   const uint32_t lanes_;
@@ -238,7 +237,7 @@ private:
         auto a = decode_input(aenc, eb, sb);
         auto b = decode_input(benc, eb, sb);
         LOG("[decode] lane=%u A(s=%u e=%u f=0x%x)  B(s=%u e=%u f=0x%x)\n",
-            (w * epw) + i, a.sign, a.exp, a.frac, b.sign, b.exp, b.frac);
+          (w * epw) + i, a.sign, a.exp, a.frac, b.sign, b.exp, b.frac);
         out[w * epw + i] = {a, b};
         if (packed) {
           aw >>= width;
@@ -250,20 +249,19 @@ private:
     return out;
   }
 
-  // Map FP32 C onto the common integer grid when Ec==E_anchor:
-  //   int_C = m24 * 2^(SCALE_K - 23)  (SCALE_K-23 = 3)
+  // Map FP32 C onto the common integer grid
   CT decodeC_to_common(const dec_t &d) {
     const uint32_t sb = 23, eb = 8, bias = (1u << (eb - 1)) - 1u;
     const uint32_t M = ((d.exp != 0) << sb) | d.frac;
-    const int32_t Ec = d.exp - (int32_t)bias + 127;
-    const uint32_t mScaled = (M << C_SHIFT_BASE_);
+    const int32_t Ec = d.exp - bias + 127;
+    const uint32_t C_SHIFT = SCALE_K_ - sb;
+    const uint32_t mScaled = M << C_SHIFT;
     CT ct{};
     ct.sign = d.sign;
     ct.V = mScaled;
     ct.E = Ec;
     ct.zero = (M == 0);
-    LOG("[decodeC] s=%u Ec=0x%x m24=0x%06x mScaled=0x%06x -> Vc=0x%x\n",
-        ct.sign, Ec, M, mScaled, ct.V);
+    LOG("[decodeC] s=%u Ec=0x%x m24=0x%06x mScaled=0x%06x -> Vc=0x%x\n", ct.sign, Ec, M, mScaled, ct.V);
     return ct;
   }
 
@@ -293,7 +291,7 @@ private:
         Eg = std::max(Eg, Ep[i]);
       }
 
-      const int32_t Elo = Eg - (int32_t)DELTA_BITS;
+      const int32_t Elo = Eg - DELTA_BITS;
       const uint32_t HI_THRESH = DELTA_BITS + K_OVERLAP;
 
       // Separate pos/neg for unsigned CSAs (HI and LO)
@@ -303,7 +301,7 @@ private:
 
       for (uint32_t i = i0; i < i1; ++i) {
         const uint32_t Qi = Q[i];
-        const uint32_t d_to_Eg = (uint32_t)(Eg - Ep[i]); // >= 0
+        const uint32_t d_to_Eg = Eg - Ep[i];
         uint32_t mag = Qi;
         bool term_sticky = (Qsticky[i] != 0);
 
@@ -330,7 +328,7 @@ private:
           }
         } else {
           // align to Elo = Eg - DELTA_BITS
-          const uint32_t d_to_Elo = (uint32_t)(Elo - Ep[i]); // >= 0 and smaller than d_to_Eg by ~DELTA
+          const uint32_t d_to_Elo = Elo - Ep[i];
           if (d_to_Elo < 32) {
             term_sticky |= ((mag & ((1u << d_to_Elo) - 1u)) != 0u);
             mag >>= d_to_Elo;
@@ -353,14 +351,14 @@ private:
         gsticky |= term_sticky;
 
         LOG("[S1/align] g=%u i=%u to_%s dEg=%u mag=0x%x Sgn=%u st=%u\n",
-            g, i, to_hi ? "HI":"LO", d_to_Eg, mag, (unsigned)Sgn[i], (unsigned)term_sticky);
+          g, i, to_hi ? "HI":"LO", d_to_Eg, mag, Sgn[i], term_sticky);
       }
 
       // Per-bin FULL ADDERs (unchanged style): local CPAs
-      const uint32_t V_hi_pos = (uint32_t)S_hi_pos + ((uint32_t)C_hi_pos << 1);
-      const uint32_t V_hi_neg = (uint32_t)S_hi_neg + ((uint32_t)C_hi_neg << 1);
-      const uint32_t V_lo_pos = (uint32_t)S_lo_pos + ((uint32_t)C_lo_pos << 1);
-      const uint32_t V_lo_neg = (uint32_t)S_lo_neg + ((uint32_t)C_lo_neg << 1);
+      const uint32_t V_hi_pos = S_hi_pos + (C_hi_pos << 1);
+      const uint32_t V_hi_neg = S_hi_neg + (C_hi_neg << 1);
+      const uint32_t V_lo_pos = S_lo_pos + (C_lo_pos << 1);
+      const uint32_t V_lo_neg = S_lo_neg + (C_lo_neg << 1);
 
       // Merge bins at group end: up-shift LO by DELTA_BITS into HI domain.
       // Any bits dropped by this up-shift feed sticky.
@@ -385,7 +383,7 @@ private:
 
       out[g] = grp_term{Vg_sign, Vg_mag, Eg, gsticky};
       LOG("[S1/out  ] g=%u Eg=0x%x V_hi_pos=0x%x V_hi_neg=0x%x V_lo_pos=0x%x V_lo_neg=0x%x -> Vg_mag=0x%x Vg_sign=%u st=%u\n",
-          g, (unsigned)Eg, V_hi_pos, V_hi_neg, V_lo_pos, V_lo_neg, Vg_mag, Vg_sign, (unsigned)gsticky);
+          g, Eg, V_hi_pos, V_hi_neg, V_lo_pos, V_lo_neg, Vg_mag, Vg_sign, gsticky);
     }
 
     return out;
@@ -393,7 +391,7 @@ private:
 
   std::vector<grp_term>
   multiply_to_common(const std::vector<std::array<dec_t, 2>> &terms, int eb, int sb) {
-    const uint32_t N = (uint32_t)terms.size();
+    const uint32_t N = terms.size();
     const uint32_t G = lanes_;
     const uint32_t gsize = ceil_div_u(N, G);
     LOG("[S1/group ] N=%u lanes=%u gsize=%u\n", N, G, gsize);
@@ -422,11 +420,11 @@ private:
 
       LOG("[S1/mul ] i=%u s=%u ea=%d eb=%d Ep=0x%x P=0x%x\n",
           i, Sgn[i], ea_unb, eb_unb,
-          (unsigned)((Ep_field == INT32_MIN) ? 0 : Ep_field), prod);
+          ((Ep_field == INT32_MIN) ? 0 : Ep_field), prod);
     }
 
     // --- Pass 1: place each product onto the fixed K grid (K_WIN) --------------
-    const int PROD_SHIFT_BASE = int(SCALE_K_) - (2 * sb); // fp8:20, bf16:12, fp16:6
+    const int PROD_SHIFT = int(SCALE_K_) - (2 * sb); // fp8:20, bf16:12, fp16:6
     std::vector<uint32_t> Q(N, 0);
     std::vector<uint8_t>  Qsticky(N, 0);
 
@@ -435,10 +433,10 @@ private:
       uint32_t tmp = P[i];
 
       // Fixed placement shift (LEFT) to fill the K window.
-      if (PROD_SHIFT_BASE < 32) {
-        const uint32_t overflow = (tmp >> (32u - PROD_SHIFT_BASE));
+      if (PROD_SHIFT < 32) {
+        const uint32_t overflow = (tmp >> (32u - PROD_SHIFT));
         st |= (overflow != 0u);
-        tmp <<= PROD_SHIFT_BASE;
+        tmp <<= PROD_SHIFT;
       } else {
         st |= (tmp != 0u);
         tmp = 0;
@@ -449,13 +447,14 @@ private:
         st = true;
         tmp &= ((1u << K_WIN_) - 1u);
       }
-      if (st) tmp |= 1u;
+      if (st) {
+        tmp |= 1u;
+      }
 
       Q[i] = tmp;
       Qsticky[i] = (uint8_t)st;
 
-      LOG("[S1/place] i=%u base=%d Q=0x%x st=%u\n",
-          i, PROD_SHIFT_BASE, Q[i], (unsigned)st);
+      LOG("[S1/place] i=%u base=%d Q=0x%x st=%u\n", i, PROD_SHIFT, Q[i], st);
     }
 
     // --- Pass 2: per-group reduction with 2 sub-blocks (block-floating + overlap)
@@ -479,14 +478,12 @@ private:
   align_out alignment(const std::vector<grp_term> &groups, const CT &c_term) {
     // 1) products' anchor
     int32_t Eprod = INT32_MIN;
-    for (const auto &g : groups)
-      if (g.V != 0 && g.Eg != INT32_MIN)
-        Eprod = std::max(Eprod, g.Eg);
-
+    for (const auto &g : groups) {
+      Eprod = std::max(Eprod, g.Eg);
+    }
     const int32_t Ec = c_term.E;
-    const int32_t E_anchor = (Eprod == INT32_MIN) ? Ec : std::max(Eprod, Ec);
-    LOG("[S2] Eprod=0x%x Ec=0x%x -> E_anchor=0x%x\n",
-        (unsigned)((Eprod == INT32_MIN) ? 0 : Eprod), (unsigned)Ec, (unsigned)E_anchor);
+    const int32_t E_anchor = std::max(Eprod, Ec);
+    LOG("[S2] Eprod=0x%x Ec=0x%x -> E_anchor=0x%x\n", Eprod, Ec, E_anchor);
 
     align_out out;
     out.Vals.assign(lanes_, 0);
@@ -496,17 +493,18 @@ private:
     auto align_one = [&](uint32_t Vin, uint32_t Vin_sign, int32_t Et, bool term_sticky, const char *tag, int idx) -> int32_t {
       int d = int(E_anchor - Et);
       bool st = false;
-      uint32_t Val_mag = mag_shr32(Vin, (uint32_t)d, st);
-      out.sticky_any |= uint32_t(st | term_sticky);
+      uint32_t Val_mag = mag_shr32(Vin, d, st);
+      //out.sticky_any |= uint32_t(st | term_sticky);
       int32_t Val = (Vin_sign ? -int32_t(Val_mag) : int32_t(Val_mag));
       LOG("[S2/align] %s i=%d Et=0x%x d=%d Val_mag=0x%x st=%u\n",
-          tag, idx, (unsigned)Et, d, Val_mag, (unsigned)st);
+          tag, idx, Et, d, Val_mag, st);
       return Val;
     };
 
     // 2) align all groups
-    for (size_t i = 0; i < groups.size(); ++i)
+    for (size_t i = 0; i < groups.size(); ++i) {
       out.Vals[i] = align_one(groups[i].V, groups[i].sign, groups[i].Eg, groups[i].sticky, "G", (int)i);
+    }
 
     // 3) align C at Ec (pre-scaled <<3)
     out.Cal = align_one(c_term.V, c_term.sign, Ec, /*term_sticky=*/false, "C", -1);
@@ -519,18 +517,18 @@ private:
     uint32_t S = 0, C = 0;
     for (size_t i = 0; i < al.Vals.size(); ++i) {
       const int32_t v = al.Vals[i];
-      auto [s1, c1] = csa32(S, (C << 1), (uint32_t)v);
+      auto [s1, c1] = csa32(S, (C << 1), v);
       S = s1;
       C = c1;
-      LOG("[S3/accG] i=%zu v=0x%x -> S=0x%x C=0x%x\n", i, (uint32_t)v, S, C);
+      LOG("[S3/accG] i=%zu v=0x%x -> S=0x%x C=0x%x\n", i, v, S, C);
     }
-    auto [s1, c1] = csa32(S, (C << 1), (uint32_t)al.Cal);
+    auto [s1, c1] = csa32(S, (C << 1), al.Cal);
     S = s1;
     C = c1;
-    LOG("[S3/accC] Cal=0x%x -> S=0x%x C=0x%x\n", (uint32_t)al.Cal, S, C);
-    const int32_t acc = (int32_t)S + ((int32_t)C << 1);
+    LOG("[S3/accC] Cal=0x%x -> S=0x%x C=0x%x\n", al.Cal, S, C);
+    const int32_t acc = S + (C << 1);
     LOG("[S3/out ] (S,C) @ E_anchor=0x%x  S=0x%x C=0x%x acc=0x%x\n",
-        (unsigned)al.E_anchor, S, C, (uint32_t)acc);
+        al.E_anchor, S, C, acc);
     return s3_out{acc, al.E_anchor};
   }
 
@@ -570,7 +568,7 @@ private:
     no.e_biased = s3.E_anchor + (nbits - 1) - int(SCALE_K_);
 
     LOG("[S4/norm ] E_anchor=0x%x sign=%u nbits=%d kept24=0x%x e_biased=%d guard=%u sticky=%u\n",
-        (unsigned)s3.E_anchor, no.sign, nbits, no.kept24, no.e_biased, no.guard, (unsigned)no.sticky);
+        s3.E_anchor, no.sign, nbits, no.kept24, no.e_biased, no.guard, no.sticky);
 
     return no;
   }
