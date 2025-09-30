@@ -31,10 +31,11 @@ module VX_tcu_fedp_drl #(
 );
 
     localparam TCK = 2 * N;
-    localparam FMUL_LATENCY = 2;
+    localparam FMUL_LATENCY = 1;
+    localparam ALN_LATENCY  = 1;
     localparam ACC_LATENCY  = 1;
     localparam FRND_LATENCY = 1;
-    localparam TOTAL_LATENCY= FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
+    localparam TOTAL_LATENCY= FMUL_LATENCY + ALN_LATENCY + ACC_LATENCY + FRND_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
     `UNUSED_VAR ({fmt_d, c_val});
@@ -50,44 +51,78 @@ module VX_tcu_fedp_drl #(
         assign b_col16[2*i+1] = b_col[i][31:16];
     end
 
-    //Transprecision Mul & Max Exp & Align Sigs
-    wire [7:0] raw_max_exp;
-    wire [TCK:0][24:0] aln_sigs;
+    //Transprecision Mul & Max Exp
     wire [6:0] hi_c = c_val[31:25];   //c_val[24:0] acc is taken care of in acc stage
     wire fmt_sel = fmt_s[3];
+    wire [7:0] raw_max_exp;
+    wire [TCK:0][7:0] shift_amounts;
+    wire [TCK:0][24:0] raw_sigs;
 
     VX_tcu_drl_mul_exp #(
         .N(TCK+1)
     ) mul_exp (
-        .enable       (enable),
-        .fmt_s        (fmt_s),
-        .a_rows       (a_row16),
-        .b_cols       (b_col16),
-        .c_val        (c_val[31:0]),
-        .raw_max_exp  (raw_max_exp),
-        .sigs_out     (aln_sigs)
+        .enable        (enable),
+        .fmt_s         (fmt_s),
+        .a_rows        (a_row16),
+        .b_cols        (b_col16),
+        .c_val         (c_val[31:0]),
+        .raw_max_exp   (raw_max_exp),
+        .shift_amounts (shift_amounts),
+        .raw_sigs      (raw_sigs)
     );
 
-    //Stage 1/2 pipeline reg
+    //Stage 1 pipeline reg
     wire [7:0] pipe_raw_max_exp;
-    wire [TCK:0][24:0] pipe_aln_sigs;
+    wire [TCK:0][7:0] pipe_shift_amounts;
+    wire [TCK:0][24:0] pipe_raw_sigs;
     wire [6:0] pipe_hi_c;
     wire pipe_fmt_sel;
     VX_pipe_register #(
-        .DATAW (8+((TCK+1)*25)+7+1),
+        .DATAW (8+((TCK+1)*8)+((TCK+1)*25)+7+1),
         .DEPTH (FMUL_LATENCY)
-    ) pipe_align (
+    ) pipe_fmul (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({raw_max_exp, aln_sigs, hi_c, fmt_sel}),
-        .data_out({pipe_raw_max_exp, pipe_aln_sigs, pipe_hi_c, pipe_fmt_sel})
+        .data_in ({raw_max_exp, shift_amounts, raw_sigs, hi_c, fmt_sel}),
+        .data_out({pipe_raw_max_exp, pipe_shift_amounts, pipe_raw_sigs, pipe_hi_c, pipe_fmt_sel})
+    );
+
+    //Significand Alignment
+    wire [TCK:0][24:0] aln_sigs;
+    wire [7:0] aln_max_exp = pipe_raw_max_exp;
+    wire [6:0] aln_hi_c = pipe_hi_c;
+    wire aln_fmt_sel = pipe_fmt_sel;
+
+    VX_tcu_drl_align #(
+        .N(TCK+1)
+    ) sigs_aln (
+        .shift_amounts (pipe_shift_amounts),
+        .sigs_in       (pipe_raw_sigs),
+        .fmt_sel       (pipe_fmt_sel),
+        .sigs_out      (aln_sigs)
+    );
+
+    //Stage 2 pipeline reg
+    wire [7:0] pipe_aln_max_exp;
+    wire [TCK:0][24:0] pipe_aln_sigs;
+    wire [6:0] pipe_aln_hi_c;
+    wire pipe_aln_fmt_sel;
+    VX_pipe_register #(
+        .DATAW (8+((TCK+1)*25)+7+1),
+        .DEPTH (ALN_LATENCY)
+    ) pipe_aln (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in ({aln_max_exp, aln_sigs, aln_hi_c, aln_fmt_sel}),
+        .data_out({pipe_aln_max_exp, pipe_aln_sigs, pipe_aln_hi_c, pipe_aln_fmt_sel})
     );
 
     //Accumulate CSA reduction tree
-    wire [7:0] acc_max_exp = pipe_raw_max_exp;
-    wire [6:0] acc_hi_c = pipe_hi_c;
-    wire acc_fmt_sel = pipe_fmt_sel;
+    wire [7:0] acc_max_exp = pipe_aln_max_exp;
+    wire [6:0] acc_hi_c = pipe_aln_hi_c;
+    wire acc_fmt_sel = pipe_aln_fmt_sel;
     wire [25+$clog2(TCK+1):0] acc_sig;    //23 mantissa + 1 hidden + 1 sign + log2(N) bits
     wire [TCK-1:0] sigs_sign;    //sign bits of all operands (for int math)
 
@@ -95,7 +130,7 @@ module VX_tcu_fedp_drl #(
         .N(TCK+1)
     ) csa_acc (
         .sigsIn   (pipe_aln_sigs),
-        .fmt_sel  (pipe_fmt_sel),
+        .fmt_sel  (pipe_aln_fmt_sel),
         .sigOut   (acc_sig),
         .signOuts (sigs_sign)
     );
