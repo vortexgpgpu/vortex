@@ -66,7 +66,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [3:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
     wire [3:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
 
-    `UNUSED_VAR ({step_m, step_n, fmt_s, fmt_d});
+    `UNUSED_VAR ({step_m, step_n, fmt_s, fmt_d, execute_if.data});
 
     wire mdata_queue_full;
 
