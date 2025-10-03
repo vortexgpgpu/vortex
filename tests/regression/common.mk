@@ -65,6 +65,12 @@ CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -L$(VORTEX_RT_PATH) -lvortex
 
+ifdef MPI
+	MPIRUN = mpirun  --allow-run-as-root --oversubscribe -np $(NP)
+else
+	MPIRUN =
+endif
+
 # Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
@@ -99,7 +105,7 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 run-simx: $(PROJECT) kernel.vxbin
-	LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx  $(MPIRUN) ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT) kernel.vxbin
 	LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
