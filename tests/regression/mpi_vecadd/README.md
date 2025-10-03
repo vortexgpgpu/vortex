@@ -59,9 +59,11 @@ Total work = size elements.
 Each rank computes its chunk:
 
 ```
-local_size = size / world_size;
-start = rank * local_size;
-end   = start + local_size;
+  // Compute local chunk
+  uint32_t chunk = (size + world_size - 1) / world_size; // ceil div
+  uint32_t start = rank * chunk;
+  uint32_t end   = std::min(start + chunk, size);
+  uint32_t num_points = end - start;
 ```
 
 
