@@ -47,7 +47,6 @@
 #include "fedp.h"
 #endif
 
-
 bool sim_trace_enabled() {
   return true;
 }
@@ -278,14 +277,46 @@ static void pack_elements(const std::vector<uint32_t> &elements, int element_bit
 }
 
 // Calculate expected fp dot product
-static float dot_product(const float *a, const float *b, float c, uint32_t n) {
-  float acc(0);
-  for (size_t i = 0; i < n; i++) {
-    acc += a[i] * b[i];
+static float dot_product(const uint32_t* A, const uint32_t* B, uint32_t Cbits, int n, int eb, int sb) {
+  auto to_longdouble = [&](uint32_t x, int ebits, int sbits) -> long double {
+    uint32_t sign = (x >> (ebits + sbits)) & 1u;
+    uint32_t exp  = (x >> sbits) & ((ebits == 32) ? 0xFFFFFFFFu : ((1u << ebits) - 1u));
+    uint32_t frac = x & ((sbits == 32) ? 0xFFFFFFFFu : ((1u << sbits) - 1u));
+    uint32_t all1 = (ebits == 32) ? 0xFFFFFFFFu : ((1u << ebits) - 1u);
+    uint32_t bias = (1u << (ebits - 1)) - 1u;
+
+    // Zero (preserve sign)
+    if (exp == 0 && frac == 0) {
+      long double z = 0.0L;
+      return sign ? -z : z;
+    }
+    // Inf / NaN
+    if (exp == all1) {
+      if (frac) return std::numeric_limits<long double>::quiet_NaN();
+      return sign ? -std::numeric_limits<long double>::infinity()
+                  :  std::numeric_limits<long double>::infinity();
+    }
+    long double mant;
+    int ex;
+    if (exp == 0) {
+        mant = static_cast<long double>(frac) / static_cast<long double>(1ULL << sbits);
+        ex = 1 - bias;
+    } else {
+        mant = 1.0L + static_cast<long double>(frac) / static_cast<long double>(1ULL << sbits);
+        ex = static_cast<int>(exp) - bias;
+    }
+    long double val = ldexpl(mant, ex);
+    return sign ? -val : val;
+  };
+  long double sum = 0.0L;
+  for (size_t i = 0; i < n; ++i) {
+    sum += to_longdouble(A[i], eb, sb) * to_longdouble(B[i], eb, sb);
   }
-  acc += c;
-  return acc;
+  sum += to_longdouble(Cbits, 8, 23);
+  // cast to float32
+  return static_cast<float>(sum);
 }
+
 
 // Calculate expected int dot product
 static int32_t dot_product(const int32_t *a, const int32_t *b, int32_t c, uint32_t n) {
@@ -298,7 +329,7 @@ static int32_t dot_product(const int32_t *a, const int32_t *b, int32_t c, uint32
 }
 
 // Check if two floats are approximately equal
-static bool approximately_equal(float a, float b, float epsilon) {
+static bool approximately_equal(float a, float b, uint32_t ulp = 0) {
   // Handle NaN
   if (std::isnan(a) && std::isnan(b))
     return true;
@@ -307,17 +338,14 @@ static bool approximately_equal(float a, float b, float epsilon) {
   if (std::isinf(a) && std::isinf(b))
     return std::signbit(a) == std::signbit(b);
 
-  // Check for approximate equality
-  if (std::abs(a - b) < epsilon)
-    return true;
-
-  // Check for relative error for larger numbers
-  if (std::abs(a) > 1.0f || std::abs(b) > 1.0f) {
-    float relative_error = std::abs(a - b) / std::max(std::abs(a), std::abs(b));
-    return relative_error < epsilon;
-  }
-
-  return false;
+  // ULP comparison
+  uint32_t xa, xb;
+  std::memcpy(&xa, &a, sizeof(a));
+  std::memcpy(&xb, &b, sizeof(b));
+  uint32_t oa = xa ^ 0x80000000u;
+  uint32_t ob = xb ^ 0x80000000u;
+  uint32_t delta = (oa > ob) ? (oa - ob) : (ob - oa);
+  return (delta <= ulp);
 }
 
 static inline uint32_t pack_fp_bits(uint32_t sign, uint32_t exp, uint32_t frac, uint32_t exp_bits, uint32_t sig_bits) {
@@ -666,12 +694,11 @@ public:
       // Generate c value
       float c_value_float = generate_fp_value(c_enable ? feature : "normals", 8, 23, test_id);
 
+      uint32_t c_value_bits;
+      std::memcpy(&c_value_bits, &c_value_float, sizeof(float));
+
       // skip invalid tests that produce NaN or Inf
-      float result = dot_product(a_values_float.data(), b_values_float.data(), c_value_float, total_elements);
-      if (std::isnan(result) || std::isinf(result)) {
-        ++skipped;
-        continue;
-      }
+      float expected = dot_product(a_values_format.data(), b_values_format.data(), c_value_bits, total_elements, config_.exp_bits, config_.sig_bits);
 
       // skip if not in selected test id
       if (config_.test_id >= 0 && test_id != config_.test_id)
@@ -680,9 +707,6 @@ public:
       if (config_.test_id >= 0 || (test_id % tests_per_feature) == 0) {
         std::cout << "Testing floating-point feature: " << feature << std::endl;
       }
-
-      uint32_t c_value_bits;
-      std::memcpy(&c_value_bits, &c_value_float, sizeof(float));
 
       // Pack into XLEN words
       std::vector<uint32_t> a_packed(NUM_REGS), b_packed(NUM_REGS);
@@ -711,12 +735,10 @@ public:
       // Calculate expected result
     #ifdef FEDP_EMUL
       FEDP fedp((int)config_.frm, NUM_REGS * 2);
-      float expected = fedp(a_packed, b_packed, c_value_float, NUM_REGS, config_.exp_bits, config_.sig_bits);
-    #else
-      float expected = result;
+      dut_result = fedp(a_packed, b_packed, c_value_float, NUM_REGS, config_.exp_bits, config_.sig_bits);
     #endif
 
-      bool passed = approximately_equal(dut_result, expected, 0.00001);
+      bool passed = approximately_equal(dut_result, expected);
       if (!passed) {
         std::cout << "Test #" << test_id << " (" << feature << ") failed:" << std::endl;
         print_float("  af_values=", a_values_float, true);
