@@ -493,7 +493,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `ifdef EXT_TCU_ENABLE
                     7'h02: begin
                         case (funct3)
-                            3'h0: begin // WMMA
+                            3'h0: begin // WMMA_SYNC
                                 ex_type = EX_TCU;
                                 op_type = INST_OP_BITS'(INST_TCU_WMMA);
                                 op_args.tcu.fmt_s  = rs1[3:0];

@@ -1079,7 +1079,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   #ifdef EXT_TCU_ENABLE
     case 2: {
       switch (funct3) {
-      case 0: { // WMMA
+      case 0: { // WMMA_SYNC
         namespace vt = vortex::tensor;
         using cfg = vt::wmma_config_t<NUM_THREADS>;
         uint32_t ra_base = 0;
