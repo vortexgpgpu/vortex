@@ -531,7 +531,7 @@ public:
     uint32_t rsrc0 = instr.getSrcReg(0).idx;
     uint32_t rsrc1 = instr.getSrcReg(1).idx;
 
-    VpuOpType vpu_op;
+    VpuOpType vpu_op = VpuOpType::ARITH;
 
     auto vop_type = std::get<VopType>(op_type);
     auto vopArgs = std::get<IntrVopArgs>(instrArgs);
