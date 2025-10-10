@@ -15,6 +15,7 @@
 
 #include "cache_sim.h"
 #include "debug.h"
+#include "ptw.h"
 
 namespace vortex {
 
@@ -22,6 +23,13 @@ class TlbSim : public SimObject<TlbSim> {
 public:
 	struct PerfStats {
     	CacheSim::PerfStats tlb;
+		PTW::PerfStats ptw;
+		
+		PerfStats& operator+=(const PerfStats& rhs) {
+			this->tlb += rhs.tlb;
+			this->ptw += rhs.ptw;
+			return *this;
+		}
   	};
 	std::vector<SimPort<MemReq>> CoreReqPorts;
 	std::vector<SimPort<MemRsp>> CoreRspPorts;
@@ -38,7 +46,8 @@ public:
 		, CoreRspPorts(tlb_config.num_inputs, this)
 		, MemReqPorts(tlb_config.mem_ports, this)
 		, MemRspPorts(tlb_config.mem_ports, this)
-		, tlb_(MAX(num_units, 0x1)) {
+		, tlb_(MAX(num_units, 0x1))
+		, ptw_(MAX(num_units, 0x1)) {
 
 		CacheSim::Config tlb_config2(tlb_config);
 		if (0 == num_units) {
@@ -48,24 +57,33 @@ public:
 
 		char sname[100];
 
-		// Page table Walker Implementation
-		// std::vector<MemArbiter::Ptr> ptw();
-
-		// Connect tlb
+		// Create TLB cache
 		snprintf(sname, 100, "%s-cache%d", name, 0);
 		tlb_.at(0) = CacheSim::Create(sname, tlb_config2);
 
-		//Connect input to TLB(Cache)
+		// Create Page Table Walker (simplified - single port)
+		snprintf(sname, 100, "%s-ptw%d", name, 0);
+		PTW::Config ptw_config;
+		ptw_config.pt_levels = PT_LEVEL;
+		ptw_config.pte_size = PTE_SIZE;
+		ptw_.at(0) = PTW::Create(sname, ptw_config);
+
+		// Connect input to TLB(Cache)
 		for (uint32_t j = 0; j < tlb_config.num_inputs; ++j) {			
 			this->CoreReqPorts.at(j).bind(&tlb_.at(0)->CoreReqPorts.at(j));
 			tlb_.at(0)->CoreRspPorts.at(j).bind(&this->CoreRspPorts.at(j));
 		}
 
-		// TLB memory ports for page table walks
-		for (uint32_t i = 0; i < tlb_config.mem_ports; ++i) {
-			tlb_.at(0)->MemReqPorts.at(i).bind(&this->MemReqPorts.at(i));
-			this->MemRspPorts.at(i).bind(&tlb_.at(0)->MemRspPorts.at(i));
-		}
+		// Connect TLB miss port (first MemReqPort) to PTW
+		// PTW handles one walk at a time sequentially
+		tlb_.at(0)->MemReqPorts.at(0).bind(&ptw_.at(0)->CoreReqPort);
+		ptw_.at(0)->CoreRspPort.bind(&tlb_.at(0)->MemRspPorts.at(0));
+
+		// Connect PTW to external memory port for PTE reads
+		ptw_.at(0)->MemReqPort.bind(&this->MemReqPorts.at(0));
+		this->MemRspPorts.at(0).bind(&ptw_.at(0)->MemRspPort);
+		
+		DT(1, "TlbSim created with PTW: " << name);
 	}
 
 	~TlbSim() {}
@@ -81,21 +99,29 @@ public:
 		}
 		tick_count++;
 		
+		// Tick TLB and PTW
 		for (auto tlb : tlb_) {
-			tlb->tick();
+			if (tlb) tlb->tick();
+		}
+		for (auto ptw : ptw_) {
+			if (ptw) ptw->tick();
 		}
 	}
 
 	TlbSim::PerfStats perf_stats() const {
 		TlbSim::PerfStats perf;
 		for (auto tlb : tlb_) {
-			perf.tlb += tlb->perf_stats();
+			if (tlb) perf.tlb += tlb->perf_stats();
+		}
+		for (auto ptw : ptw_) {
+			if (ptw) perf.ptw += ptw->perf_stats();
 		}
 		return perf;
 	}
 
 private:
-  std::vector<CacheSim::Ptr> tlb_;
+	std::vector<CacheSim::Ptr> tlb_;
+	std::vector<PTW::Ptr> ptw_;
 };
 
 }
