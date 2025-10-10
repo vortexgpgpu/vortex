@@ -358,7 +358,27 @@
     `endif
 
     `ifndef TLB_SIZE
-    `define TLB_SIZE (32)
+    `define TLB_SIZE (512)
+    `endif
+
+    `ifndef TLB_LINE_SIZE
+    `define TLB_LINE_SIZE (8)
+    `endif
+
+    `ifndef TLB_WORD_SIZE
+    `define TLB_WORD_SIZE (8)
+    `endif
+
+    `ifndef TLB_NUM_WAYS
+    `define TLB_NUM_WAYS (4)
+    `endif
+
+    `ifndef TLB_NUM_BANKS
+    `define TLB_NUM_BANKS (2)
+    `endif
+
+    `ifndef TLB_MSHR_SIZE
+    `define TLB_MSHR_SIZE (8)
     `endif
 
 `endif
