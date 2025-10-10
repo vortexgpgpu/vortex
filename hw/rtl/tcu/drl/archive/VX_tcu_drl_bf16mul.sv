@@ -36,16 +36,19 @@ module VX_tcu_drl_bf16mul (
     assign sign_y = sign_a ^ sign_b;
 
     //Raw result exponent calculation
-    wire [7:0] neg_bias = -8'd126;    //-127+1
+    wire [9:0] neg_bias = 10'b1110000010; //-127+1
+    wire [9:0] raw_exp_y_signed;
+    `UNUSED_VAR (raw_exp_y_signed);
     VX_csa_tree #(
         .N(3),
-        .W(8),
-        .S(8)
+        .W(10),
+        .S(10)
     ) biasexp_bf16(
-        .operands({exp_a, exp_b, neg_bias}),
-        .sum     (raw_exp_y),
+        .operands({{2'd0, exp_a}, {2'd0, exp_b}, neg_bias}),
+        .sum     (raw_exp_y_signed),
         `UNUSED_PIN (cout)
     );
+    assign raw_exp_y = raw_exp_y_signed[9] ? -raw_exp_y_signed[7:0] : raw_exp_y_signed[7:0];
 
     //Mantissa Calculation
     wire [7:0] full_mant_a = {1'b1, frac_a};
