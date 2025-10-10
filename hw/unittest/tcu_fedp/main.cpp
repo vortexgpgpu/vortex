@@ -697,7 +697,7 @@ public:
       uint32_t c_value_bits;
       std::memcpy(&c_value_bits, &c_value_float, sizeof(float));
 
-      // skip invalid tests that produce NaN or Inf
+      // generate gold result
       float expected = dot_product(a_values_format.data(), b_values_format.data(), c_value_bits, total_elements, config_.exp_bits, config_.sig_bits);
 
       // skip if not in selected test id
@@ -734,13 +734,26 @@ public:
 
       // Calculate expected result
     #ifdef FEDP_EMUL
-      FEDP fedp((int)config_.frm, NUM_REGS * 2);
-      dut_result = fedp(a_packed, b_packed, c_value_float, NUM_REGS, config_.exp_bits, config_.sig_bits);
+      FEDP fedp(config_.exp_bits, config_.sig_bits, (int)config_.frm, NUM_REGS * 2);
+      dut_result = fedp(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS);
     #endif
 
-      bool passed = approximately_equal(dut_result, expected);
+      bool passed = approximately_equal(dut_result, expected, 1);
       if (!passed) {
         std::cout << "Test #" << test_id << " (" << feature << ") failed:" << std::endl;
+
+        std::cout << "  scenario='[";
+          for (uint32_t i = 0; i < total_elements; i++) {
+            if (i > 0) std::cout << ",";
+            print_format("", a_values_format[i], false);
+          }
+        std::cout << "];[";
+          for (uint32_t i = 0; i < total_elements; i++) {
+            if (i > 0) std::cout << ",";
+            print_format("", b_values_format[i], false);
+          }
+        std::cout << "];" << std::hex << "0x" << c_value_bits << std::dec << "';" << std::endl;
+
         print_float("  af_values=", a_values_float, true);
         print_format("  ax_values=", a_values_format, true);
         print_float("  bf_values=", b_values_float, true);
