@@ -62,7 +62,7 @@ module VX_csa_42 #(
     wire [1:0] carry_temp;
 
     assign sum = WIDTH_O'(sum_int);
-    assign carry_temp = carry_int[N-1] + cin[N];
+    assign carry_temp = {carry_int[N-1] & cin[N], carry_int[N-1] ^ cin[N]};
     assign carry = WIDTH_O'({carry_temp, carry_int[N-2:0], 1'b0});
 endmodule
 
