@@ -52,8 +52,7 @@ module VX_tcu_drl_norm_round #(
     wire guard_bit = shifted_acc_sig[ACC_WIDTH-2-23];
     wire round_bit = shifted_acc_sig[ACC_WIDTH-2-24];
     wire sticky_bit = |shifted_acc_sig[ACC_WIDTH-2-25:0];
-    //wire round_up = guard_bit & (round_bit | sticky_bit | lsb);   //TODO: standard RNE should've worked but doesnt?
-    wire round_up = guard_bit | (round_bit | sticky_bit | lsb);    
+    wire round_up = guard_bit & (round_bit | sticky_bit | lsb);    
     //Index [ACC_WIDTH-1] becomes the hidden 1
     wire [22:0] rounded_sig = shifted_acc_sig[ACC_WIDTH-2 : ACC_WIDTH-2-22] + 23'(round_up);
 
