@@ -98,6 +98,9 @@ uint16_t rv_ftoh_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_btof_s(uint16_t a, uint32_t frm, uint32_t* fflags);
 uint16_t rv_ftob_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 
+uint32_t rv_xtof_s(uint32_t a, uint32_t exp, uint32_t sig, uint32_t frm, uint32_t* fflags);
+uint32_t rv_ftox_s(uint32_t a, uint32_t exp, uint32_t sig, uint32_t frm, uint32_t* fflags);
+
 #ifdef __cplusplus
 }
 #endif
