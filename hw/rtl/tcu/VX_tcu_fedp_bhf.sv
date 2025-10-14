@@ -40,7 +40,7 @@ module VX_tcu_fedp_bhf #(
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
     localparam FMT_DELAY = FMUL_LATENCY + FRND_LATENCY;
-    localparam C_DELAY = (FMUL_LATENCY + FRND_LATENCY) + FRED_LATENCY;
+    localparam C_DELAY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FRED_LATENCY;
 
     `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
 
