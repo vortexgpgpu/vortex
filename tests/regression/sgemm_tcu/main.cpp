@@ -279,7 +279,7 @@ public:
   }
   static bool compare(float a, float b, int index, int errors) {
     //fp8/bf8 quantization noise is too high, so we use a different threshold
-    //fp8 machine epsilon = 0.125, bf8 machine epsilon = 0.25 (so 0.025 is within reasonable limits) 
+    //fp8 machine epsilon = 0.125, bf8 machine epsilon = 0.25 (so 0.025 is within reasonable limits)
     if constexpr (std::is_same<vt::ITYPE, vt::fp8>::value || std::is_same<vt::ITYPE, vt::bf8>::value) {
       auto diff = std::abs((a - b)/b);    //relative error tolerance
       if (diff < 0.025f) {
@@ -508,9 +508,9 @@ static void matmul_cpu_sparseA(
 
 const char *kernel_file = "kernel.vxbin";
 
-uint32_t xm = 4;
-uint32_t xn = 8;
-uint32_t xk = 2;
+uint32_t xm = 32;
+uint32_t xn = 32;
+uint32_t xk = 32;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -657,9 +657,9 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  uint32_t M = xm * cfg::tileM;
-  uint32_t N = xn * cfg::tileN;
-  uint32_t K = xk = cfg::tileK;
+  uint32_t M = xm;
+  uint32_t N = xn;
+  uint32_t K = xk;
 
   if ((M % cfg::tileM) != 0) {
     std::cout << "Error: M must be a multiple of tensor tileM!" << std::endl;
