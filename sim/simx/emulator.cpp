@@ -201,9 +201,17 @@ instr_trace_t* Emulator::step() {
   DP(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=" << ThreadMaskOS(warp.tmask, arch_.num_threads())
          << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
 
+  // Create trace
+  auto trace = new instr_trace_t(uuid, arch_);
   // Fetch
   uint32_t instr_code = 0;
+  #ifdef VM_ENABLE
+  uint64_t p_addr = 0;
+  this->icache_read(&instr_code, &p_addr, warp.PC, sizeof(uint32_t));
+  trace->inst_phys_addr = p_addr;
+  #else
   this->icache_read(&instr_code, warp.PC, sizeof(uint32_t));
+  #endif
 
   // Decode
   auto instr = this->decode(instr_code);
@@ -213,9 +221,6 @@ instr_trace_t* Emulator::step() {
   }
 
   DP(1, "Instr 0x" << std::hex << instr_code << ": " << std::dec << *instr);
-
-  // Create trace
-  auto trace = new instr_trace_t(uuid, arch_);
 
   // Execute
   this->execute(*instr, scheduled_warp, trace);
@@ -304,11 +309,11 @@ bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
 }
 
 #ifdef VM_ENABLE
-void Emulator::icache_read(void *data, uint64_t addr, uint32_t size) {
+void Emulator::icache_read(void *data, uint64_t* p_addr, uint64_t addr, uint32_t size) {
   DP(3, "*** icache_read 0x" << std::hex << addr << ", size = 0x "  << size);
   try
   {
-    mmu_.read(data, addr, size, ACCESS_TYPE::FETCH);
+    mmu_.read(data, p_addr, addr, size, ACCESS_TYPE::FETCH);
   }
   catch (Page_Fault_Exception& page_fault)
   {
@@ -331,7 +336,7 @@ void Emulator::set_satp(uint64_t satp) {
 
 
 #ifdef VM_ENABLE
-void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
+void Emulator::dcache_read(void *data, uint64_t* p_addr, uint64_t addr, uint32_t size) {
   DP(1, "*** dcache_read 0x" << std::hex << addr << ", size = 0x "  << size);
   auto type = get_addr_type(addr);
   if (type == AddrType::Shared) {
@@ -339,7 +344,7 @@ void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
   } else {
     try
     {
-      mmu_.read(data, addr, size, ACCESS_TYPE::LOAD);
+      mmu_.read(data, p_addr, addr, size, ACCESS_TYPE::LOAD);
     }
     catch (Page_Fault_Exception& page_fault)
     {
@@ -362,7 +367,7 @@ void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
 #endif
 
 #ifdef VM_ENABLE
-void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
+void Emulator::dcache_write(const void* data, uint64_t* p_addr, uint64_t addr, uint32_t size) {
   DP(1, "*** dcache_write 0x" << std::hex << addr << ", size = 0x "  << size);
   auto type = get_addr_type(addr);
   if (addr >= uint64_t(IO_COUT_ADDR)
@@ -375,7 +380,7 @@ void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
       try
       {
         // mmu_.write(data, addr, size, 0);
-        mmu_.write(data, addr, size, ACCESS_TYPE::STORE);
+        mmu_.write(data, p_addr, addr, size, ACCESS_TYPE::STORE);
       }
       catch (Page_Fault_Exception& page_fault)
       {

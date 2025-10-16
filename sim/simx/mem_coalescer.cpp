@@ -97,6 +97,7 @@ void MemCoalescer::tick() {
 
   BitVector<> out_mask(output_size_);
   std::vector<uint64_t> out_addrs(output_size_);
+  std::vector<uint64_t> out_p_addrs(output_size_);
 
   BitVector<> cur_mask(input_size_);
 
@@ -107,6 +108,7 @@ void MemCoalescer::tick() {
         continue;
 
       uint64_t seed_addr = in_req.addrs.at(i) & addr_mask;
+      uint64_t seed_p_addr = in_req.p_addrs.at(i) & addr_mask;
       cur_mask.set(i);
 
       // coalesce matching requests
@@ -122,6 +124,7 @@ void MemCoalescer::tick() {
 
       out_mask.set(o);
       out_addrs.at(o) = seed_addr;
+      out_p_addrs.at(o) = seed_p_addr;
       break;
     }
   }
@@ -140,6 +143,7 @@ void MemCoalescer::tick() {
   out_req.tag = tag;
   out_req.write = in_req.write;
   out_req.addrs = out_addrs;
+  out_req.p_addrs = out_p_addrs;
   out_req.cid = in_req.cid;
   out_req.uuid = in_req.uuid;
 

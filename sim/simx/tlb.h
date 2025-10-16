@@ -24,7 +24,7 @@ public:
 	struct PerfStats {
     	CacheSim::PerfStats tlb;
 		PTW::PerfStats ptw;
-		
+
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->tlb += rhs.tlb;
 			this->ptw += rhs.ptw;
@@ -38,7 +38,6 @@ public:
 
 	TlbSim(const SimContext& ctx,
 			const char* name,
-			uint32_t /* num_inputs */,
 			uint32_t num_units,
 			const CacheSim::Config& tlb_config)
 		: SimObject(ctx, name)
@@ -66,10 +65,11 @@ public:
 		PTW::Config ptw_config;
 		ptw_config.pt_levels = PT_LEVEL;
 		ptw_config.pte_size = PTE_SIZE;
+		ptw_config.base_ppn = 0x0;  // Default SATP base PPN - can be updated later
 		ptw_.at(0) = PTW::Create(sname, ptw_config);
 
 		// Connect input to TLB(Cache)
-		for (uint32_t j = 0; j < tlb_config.num_inputs; ++j) {			
+		for (uint32_t j = 0; j < tlb_config.num_inputs; ++j) {
 			this->CoreReqPorts.at(j).bind(&tlb_.at(0)->CoreReqPorts.at(j));
 			tlb_.at(0)->CoreRspPorts.at(j).bind(&this->CoreRspPorts.at(j));
 		}
@@ -82,7 +82,7 @@ public:
 		// Connect PTW to external memory port for PTE reads
 		ptw_.at(0)->MemReqPort.bind(&this->MemReqPorts.at(0));
 		this->MemRspPorts.at(0).bind(&ptw_.at(0)->MemRspPort);
-		
+
 		DT(1, "TlbSim created with PTW: " << name);
 	}
 
@@ -93,12 +93,12 @@ public:
 	void tick() {
 		static uint64_t tick_count = 0;
 		if ((tick_count % 1000) == 0) {
-			DT(2, this->name() << "-tick: count=" << tick_count 
+			DT(2, this->name() << "-tick: count=" << tick_count
 				<< " tlb_req_empty=" << (tlb_.at(0) ? tlb_.at(0)->CoreReqPorts.at(0).empty() : 1)
 				<< " tlb_rsp_empty=" << (tlb_.at(0) ? tlb_.at(0)->CoreRspPorts.at(0).empty() : 1));
 		}
 		tick_count++;
-		
+
 		// Tick TLB and PTW
 		for (auto tlb : tlb_) {
 			if (tlb) tlb->tick();
@@ -117,6 +117,28 @@ public:
 			if (ptw) perf.ptw += ptw->perf_stats();
 		}
 		return perf;
+	}
+
+	void set_satp(uint64_t satp) {
+		// Extract base PPN from SATP register
+		uint64_t base_ppn = 0;
+		#ifdef XLEN_32
+		// SV32: PPN is bits [0:21] of SATP
+		base_ppn = satp & 0x3FFFFF;  // 22 bits
+		#else
+		// SV39: PPN is bits [0:43] of SATP
+		base_ppn = satp & 0xFFFFFFFFFFF;  // 44 bits
+		#endif
+
+		DT(1, "TlbSim::set_satp: satp=0x" << std::hex << satp
+		   << " base_ppn=0x" << base_ppn << std::dec);
+
+		// Update PTW with the correct base PPN
+		for (auto ptw : ptw_) {
+			if (ptw) {
+				ptw->set_base_ppn(base_ppn);
+			}
+		}
 	}
 
 private:

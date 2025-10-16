@@ -212,6 +212,7 @@ inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
 
 struct mem_addr_size_t {
   uint64_t addr;
+  uint64_t p_addr;
   uint32_t size;
 };
 
@@ -286,6 +287,7 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
 struct LsuReq {
   BitVector<> mask;
   std::vector<uint64_t> addrs;
+  std::vector<uint64_t> p_addrs;
   bool     write;
   uint32_t tag;
   uint32_t cid;
@@ -294,6 +296,7 @@ struct LsuReq {
   LsuReq(uint32_t size)
     : mask(size)
     , addrs(size, 0)
+    , p_addrs(size, 0)
     , write(false)
     , tag(0)
     , cid(0)
@@ -309,6 +312,7 @@ inline std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
     first_addr = false;
     if (req.mask.test(i)) {
       os << "0x" << std::hex << req.addrs.at(i) << std::dec;
+      os << "0x" << std::hex << req.p_addrs.at(i) << std::dec;
     } else {
       os << "-";
     }
@@ -344,6 +348,7 @@ inline std::ostream &operator<<(std::ostream &os, const LsuRsp& rsp) {
 
 struct MemReq {
   uint64_t addr;
+  uint64_t p_addr;
   bool     write;
   AddrType type;
   uint32_t tag;
@@ -351,12 +356,14 @@ struct MemReq {
   uint64_t uuid;
 
   MemReq(uint64_t _addr = 0,
+          uint64_t _p_addr = 0,
           bool _write = false,
           AddrType _type = AddrType::Global,
           uint64_t _tag = 0,
           uint32_t _cid = 0,
           uint64_t _uuid = 0
   ) : addr(_addr)
+    , p_addr(_p_addr)
     , write(_write)
     , type(_type)
     , tag(_tag)

@@ -60,10 +60,13 @@ public:
   Word get_tiles();
   Word get_tc_size();
   Word get_tc_num();
-
+#ifdef VM_ENABLE
+  void dcache_read(void* data, uint64_t* p_addr, uint64_t addr, uint32_t size);
+  void dcache_write(const void* data, uint64_t* p_addr, uint64_t addr, uint32_t size);
+#else
   void dcache_read(void* data, uint64_t addr, uint32_t size);
-
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
+#endif
 
 private:
 
@@ -135,8 +138,11 @@ private:
   void storeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata);
   void executeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata);
 #endif
-
+#ifdef VM_ENABLE
+  void icache_read(void* data, uint64_t* p_addr, uint64_t addr, uint32_t size);
+#else
   void icache_read(void* data, uint64_t addr, uint32_t size);
+#endif
 
   void dcache_amo_reserve(uint64_t addr);
 

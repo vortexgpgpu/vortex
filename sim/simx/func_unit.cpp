@@ -188,6 +188,7 @@ void LsuUnit::tick() {
 				if (trace->tmask.test(t0 + i)) {
 					lsu_req.mask.set(i);
 					lsu_req.addrs.at(i) = trace_data->mem_addrs.at(t0 + i).addr;
+					lsu_req.p_addrs.at(i) = trace_data->mem_addrs.at(t0 + i).p_addr;
 				}
 			}
 		}

@@ -135,8 +135,17 @@ void Socket::attach_ram(RAM* ram) {
 
 #ifdef VM_ENABLE
 void Socket::set_satp(uint64_t satp) {
+  // Propagate SATP to cores (for data modeling)
   for (auto core : cores_) {
     core->set_satp(satp);
+  }
+
+  // Propagate SATP to cache clusters (for performance modeling)
+  if (icaches_) {
+    icaches_->set_satp(satp);
+  }
+  if (dcaches_) {
+    dcaches_->set_satp(satp);
   }
 }
 #endif
@@ -167,7 +176,7 @@ void Socket::resume(uint32_t core_index) {
 
 Socket::PerfStats Socket::perf_stats() const {
   PerfStats perf_stats;
-  perf_stats.icache = icaches_->perf_stats();
-  perf_stats.dcache = dcaches_->perf_stats();
+  perf_stats.icache = icaches_->perf_stats().caches;
+  perf_stats.dcache = dcaches_->perf_stats().caches;
   return perf_stats;
 }

@@ -231,6 +231,7 @@ void Core::fetch() {
   auto trace = fetch_latch_.front();
   MemReq mem_req;
   mem_req.addr  = trace->PC;
+  mem_req.p_addr = trace->inst_phys_addr;
   mem_req.write = false;
   mem_req.tag   = pending_icache_.allocate(trace);
   mem_req.cid   = trace->cid;

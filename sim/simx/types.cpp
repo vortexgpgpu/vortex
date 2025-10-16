@@ -64,9 +64,11 @@ void LocalMemSwitch::tick() {
         if (type == AddrType::Shared) {
           out_lmem_req.mask.set(i);
           out_lmem_req.addrs.at(i) = in_req.addrs.at(i);
+          out_lmem_req.p_addrs.at(i) = in_req.p_addrs.at(i);
         } else {
           out_dc_req.mask.set(i);
           out_dc_req.addrs.at(i) = in_req.addrs.at(i);
+          out_dc_req.p_addrs.at(i) = in_req.p_addrs.at(i);
         }
       }
     }
@@ -147,6 +149,7 @@ void LsuMemAdapter::tick() {
         MemReq out_req;
         out_req.write = in_req.write;
         out_req.addr  = in_req.addrs.at(i);
+        out_req.p_addr = in_req.p_addrs.at(i);
         out_req.type  = get_addr_type(in_req.addrs.at(i));
         out_req.tag   = in_req.tag;
         out_req.cid   = in_req.cid;
