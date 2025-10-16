@@ -27,11 +27,13 @@ enum mem_layout {
 namespace detail {
 
   template <typename F, std::size_t... Is>
+  __attribute__((always_inline))
   constexpr void unroll_for_impl(std::index_sequence<Is...>, F&& f) {
     (f(std::integral_constant<std::size_t, Is>{}), ...);
   }
 
   template <std::size_t N, typename F>
+  __attribute__((always_inline))
   constexpr void unroll_for(F&& f) {
     unroll_for_impl(std::make_index_sequence<N>{}, std::forward<F>(f));
   }
