@@ -14,6 +14,7 @@ all:
 	$(MAKE) -C sort
 	$(MAKE) -C fence
 	$(MAKE) -C vecadd
+	$(MAKE) -C mpi_vecadd
 	$(MAKE) -C sgemm
 	$(MAKE) -C conv3
 	$(MAKE) -C relu
@@ -35,6 +36,7 @@ run-simx:
 	$(MAKE) -C sort run-simx
 	$(MAKE) -C fence run-simx
 	$(MAKE) -C vecadd run-simx
+	$(MAKE) -C mpi_vecadd run-simx
 	$(MAKE) -C sgemm run-simx
 	$(MAKE) -C conv3 run-simx
 	$(MAKE) -C relu run-simx
@@ -77,6 +79,7 @@ clean:
 	$(MAKE) -C sort clean
 	$(MAKE) -C fence clean
 	$(MAKE) -C vecadd clean
+	$(MAKE) -C mpi_vecadd clean
 	$(MAKE) -C sgemm clean
 	$(MAKE) -C conv3 clean
 	$(MAKE) -C relu clean
