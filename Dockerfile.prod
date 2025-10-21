@@ -36,7 +36,7 @@ RUN apt-get upgrade && apt-get update
 RUN apt-get install -y cmake
 
 # Clone the Vortex repository
-RUN git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git /vortex
+RUN git clone --depth=1 --recursive https://github.com/gupann/vortex.git /vortex
 
 # Set the initial working directory
 WORKDIR /vortex
