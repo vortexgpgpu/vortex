@@ -70,25 +70,10 @@ public:
 };
 
 static void matmul_cpu(int32_t* out, const int8_t* A, const int8_t* B, uint32_t width, uint32_t height) {
-  // for (int i = 0; i < N; ++i) {
-  //   for (int j = 0; j < N; ++j) {
-  //     C[i][j] = 0;
-  //     for (int k = 0; k < N; k += 4) {
-  //       // Pack 4 int8_t elements from A and B into 32-bit integers
-  //       uint32_t packedA = *((int*)(A[i] + k));
-  //       uint32_t packedB = ((uint8_t)B[k+0][j] << 0)
-  //                        | ((uint8_t)B[k+1][j] << 8)
-  //                        | ((uint8_t)B[k+2][j] << 16)
-  //                        | ((uint8_t)B[k+3][j] << 24);
-  //       // Accumulate the dot product result into the C
-  //       C[i][j] += vx_dot8(packedA, packedB);
-  //     }
-  //   }
-  // }
-  for (uint8_t row = 0; row < height; ++row) {
-    for (uint8_t col = 0; col < width; ++col) {
+  for (uint32_t row = 0; row < height; ++row) {
+    for (uint32_t col = 0; col < width; ++col) {
       int32_t sum(0);
-      for (uint8_t e = 0; e < width; ++e) {
+      for (uint32_t e = 0; e < width; ++e) {
           sum += A[row * width + e] * B[e * width + col];
       }
       out[row * width + col] = sum;
