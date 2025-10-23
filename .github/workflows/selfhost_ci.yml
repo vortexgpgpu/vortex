@@ -1,0 +1,16 @@
+name: Build and Test Vortex
+
+on:
+  pull_request:
+    branches: [main, test]
+  schedule:
+    - cron: '00 7 * * *'
+
+jobs:  
+  build-cuda:
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run batch file
+      run: cd miscs/apptainer && chmod +x run_apptainer.sh && sbatch run_apptainer.sh
+      

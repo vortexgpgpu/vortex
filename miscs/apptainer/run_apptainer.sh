@@ -3,9 +3,9 @@
 # Set environment variables with fallback default values.
 # The :- means if the variable CONTAINER_IMAGE is not set or is empty, then use the default value vortex.sif
 export GIT_REPO_PATH=${GIT_REPO_PATH:-~/USERSCRATCH/vortex}
-export CONTAINER_IMAGE=${CONTAINER_IMAGE:-vortex.sif}
+export CONTAINER_IMAGE=${CONTAINER_IMAGE:-/projects/tools/x86_64/containers/vortex_micro25.sif}
 export DEVNULL_BIND=${DEVNULL_BIND:-~/USERSCRATCH/devnull}
-export VORTEX_TOOLCHAIN_PATH=${VORTEX_TOOLCHAIN_PATH:-~/USERSCRATCH/tools}
+export VORTEX_TOOLCHAIN_PATH=${VORTEX_TOOLCHAIN_PATH:-/projects/tools/x86_64/common-tools/vortex-tools}
 
 # Launch the Apptainer container with the bind mount
 apptainer shell --fakeroot --cleanenv --writable-tmpfs \
