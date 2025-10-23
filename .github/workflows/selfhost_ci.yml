@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, test]
   schedule:
-    - cron: '00 7 * * *'
+    - cron: '05 7 * * *'
 
 jobs:  
   build-cuda:
