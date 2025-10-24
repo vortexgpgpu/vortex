@@ -12,6 +12,7 @@
 #include <VX_config.h>
 
 extern "C" {
+#ifdef VORTEX_SST_ENABLE_STDMEM
 
 // Register a submit function provided by the SST component.  The
 // MemBackendSST stores it in a static member so that calls to
@@ -27,6 +28,12 @@ void vx_on_mem_complete(uint64_t tag) {
     if (auto inst = vortex::MemBackendSST::instance())
         inst->complete(tag);
 }
+#else
+
+void vx_register_submit(vx_submit_fn)      {}
+void vx_on_mem_complete(uint64_t)          {}
+
+#endif
 
 } // extern "C"
 

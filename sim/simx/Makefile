@@ -6,6 +6,9 @@ OBJ_DIR = $(DESTDIR)/obj
 CONFIG_FILE = $(DESTDIR)/simx_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/simx
 
+# SST StandardMem bridge (default off)
+SST_USE_STDMEM ?= 0
+
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I$(SRC_DIR) -I$(SW_COMMON_DIR) -I$(ROOT_DIR)/hw
@@ -34,9 +37,19 @@ SST_CFLAGS := $(shell pkg-config --cflags SST-14.1)
 SST_CFLAGS += -I../../../sst/sst/sst-core/include/
 SST_LFLAGS := $(shell pkg-config --libs SST-14.1)
 
-VORTEX_SST_SRCS := \
-    $(SRC_DIR)/vortex_simulator.cpp \
-    $(SRC_DIR)/VortexGPGPU.cpp
+ifeq ($(SST_USE_STDMEM),1)
+  CXXFLAGS += -DUSE_SST_MEM_BACKEND -DVORTEX_SST_ENABLE_STDMEM
+  LIBVORTEX_SST_DEFS = -DUSE_SST_MEM_BACKEND -DVORTEX_SST_ENABLE_STDMEM
+  VORTEX_SST_SRCS := \
+      $(SRC_DIR)/mem_backend_sst.cpp \
+      $(SRC_DIR)/vortex_simulator.cpp \
+      $(SRC_DIR)/VortexGPGPU.cpp
+else
+  LIBVORTEX_SST_DEFS =
+  VORTEX_SST_SRCS := \
+      $(SRC_DIR)/vortex_simulator.cpp \
+      $(SRC_DIR)/VortexGPGPU.cpp
+endif
 
 # Add V extension sources
 ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
@@ -106,7 +119,7 @@ $(DESTDIR)/lib$(PROJECT).so: $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -o $@
 
 $(DESTDIR)/libvortex.so: $(OBJS) $(SST_OBJS)
-	$(CXX) $(CXXFLAGS) $(SST_CFLAGS) -DUSE_SST_MEM_BACKEND \
+	$(CXX) $(CXXFLAGS) $(SST_CFLAGS) $(LIBVORTEX_SST_DEFS) \
 	-I./sim/simx \
 	$(OBJS) $(VORTEX_SST_SRCS) \
 	-shared -o $@ \

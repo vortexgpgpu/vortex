@@ -51,6 +51,7 @@ void MemBackendDram::dram_complete(void* arg) {
             uint32_t bank = info.bank;
             if (backend->mem_xbar_rsp_cb_)
                 backend->mem_xbar_rsp_cb_(bank, rsp);
+                
         }
         backend->inflight_.erase(it);
     }

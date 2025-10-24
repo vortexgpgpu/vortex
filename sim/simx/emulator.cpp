@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <math.h>
 #include <assert.h>
+#include <limits>
 #include <util.h>
 
 #include "emulator.h"
@@ -131,7 +132,7 @@ void Emulator::reset() {
 void Emulator::attach_ram(RAM* ram) {
   // bind RAM to memory unit
 #if (XLEN == 64)
-  mmu_.attach(*ram, 0, 0x7FFFFFFFFF); //39bit SV39
+  mmu_.attach(*ram, 0, std::numeric_limits<uint64_t>::max());
 #else
   mmu_.attach(*ram, 0, 0xFFFFFFFF);
 #endif

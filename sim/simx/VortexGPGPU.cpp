@@ -1,6 +1,9 @@
 #include <sst/core/sst_config.h>
 #include "VortexGPGPU.h"
-#include "mem_backend_sst.h"   // needed for vx_register_submit and vx_on_mem_complete
+#ifdef VORTEX_SST_ENABLE_STDMEM
+#include "mem_backend_sst.h" // needed for vx_register_submit and vx_on_mem_complete
+#endif   
+#include <cstdlib>
 #include <vector>
 #include <utility>
 #include <unordered_map>
@@ -9,7 +12,14 @@ using namespace SST;
 using namespace SST::Vortex;
 using SST::Interfaces::StandardMem;
 
+namespace {
+constexpr const char* kDefaultKernelPath = "/nethome/jsubburayan3/vortex/kernel.vxbin";
+constexpr uint32_t    kDefaultLaunchBytes = 64;
+}
+
+#ifdef VORTEX_SST_ENABLE_STDMEM
 VortexGPGPU *VortexGPGPU::instance_ = nullptr;
+#endif
 
 VortexGPGPU::VortexGPGPU(ComponentId_t id, Params &params)
     : Component(id),
@@ -18,9 +28,19 @@ VortexGPGPU::VortexGPGPU(ComponentId_t id, Params &params)
 
     // Parameter: clock frequency (default 1GHz)
     std::string clockfreq = params.find<std::string>("clock", "1GHz");
+
     // Parameter: program path
     std::string kernel = params.find<std::string>("program", "");
+    if (kernel.empty()) {
+        if (const char* env = std::getenv("VORTEX_DEFAULT_KERNEL"))
+            kernel = env;
+        else
+            kernel = kDefaultKernelPath;
+    }
+    const uint32_t launch_bytes = params.find<uint32_t>("launch_bytes", kDefaultLaunchBytes);
 
+
+#ifdef VORTEX_SST_ENABLE_STDMEM
     // Create StandardMem interface; auto-bind to port name "memIface"
     memIface_ = loadUserSubComponent<StandardMem>(
         "memIface", ComponentInfo::SHARE_NONE,
@@ -32,7 +52,13 @@ VortexGPGPU::VortexGPGPU(ComponentId_t id, Params &params)
         SST::Output out;
         out.fatal(CALL_INFO, -1, "VortexGPGPU: failed to load memIface StandardMem port\n");
     }
+#else
+    // No SST memory: just register our clock handler
+    registerClock(clockfreq,
+                  new SST::Clock::Handler<VortexGPGPU>(this, &VortexGPGPU::clockTick));
+#endif
 
+#ifdef VORTEX_SST_ENABLE_STDMEM
     // Register callback so SimX can submit memory to SST
     instance_ = this;
     // Track app-specific tags by StandardMem request-id
@@ -60,13 +86,24 @@ VortexGPGPU::VortexGPGPU(ComponentId_t id, Params &params)
 
         instance_->memIface_->send(req);
     });
-
+#endif
 
     // Load the kernel or ELF
     if (!sim_->init(kernel)) {
         SST::Output out;
         out.fatal(CALL_INFO, -1, "VortexSimulator init failed\n");
     }
+
+    // Set up a default launch descriptor if the caller did not supply one
+    if (!sim_->allocateMemory(launch_bytes, 64, true, true, &launch_desc_addr_)) {
+        SST::Output out;
+        out.fatal(CALL_INFO, -1,
+                  "VortexGPGPU: unable to allocate launch descriptor (%u bytes)\n",
+                  launch_bytes);
+    }
+    std::vector<uint8_t> launch_payload(launch_bytes, 0);
+    sim_->writeMemory(launch_desc_addr_, launch_payload.data(), launch_payload.size());
+    sim_->setStartupArg(launch_desc_addr_);
 
     registerAsPrimaryComponent();
     primaryComponentDoNotEndSim();
@@ -88,6 +125,7 @@ bool VortexGPGPU::clockTick(SST::Cycle_t) {
 }
 
 void VortexGPGPU::handleMemResp(StandardMem::Request *req) {
+    #ifdef VORTEX_SST_ENABLE_STDMEM
     // Inform SimX that this request has completed
     const auto id = req->getID();
     const auto it = tag_by_id.find(id);
@@ -100,4 +138,7 @@ void VortexGPGPU::handleMemResp(StandardMem::Request *req) {
         tag_by_id.erase(it);
     }
     delete req;
+    #else
+    delete req; // should never be called without StandardMem
+    #endif
 }
