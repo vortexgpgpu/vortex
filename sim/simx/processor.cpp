@@ -160,15 +160,23 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
 }
 
 bool ProcessorImpl::cycle() {
+  if (!is_cycle_initialized_) {
+    std::cout << "ProcessorImpl: Initializing cycle()\n";
+    SimPlatform::instance().reset();
+    this->reset();
+    is_cycle_initialized_ = true;
+  }
+  //std::cout << "ProcessorImpl: cycle()" << std::endl;
   SimPlatform::instance().tick();
   bool anyRunning = false;
-  for (auto& cluster : clusters_) {
+  for (auto cluster : clusters_) {
     if (cluster->running()) {
       anyRunning = true;
       break;
     }
   }
   perf_mem_latency_ += perf_mem_pending_reads_;
+  //std::cout << "ProcessorImpl: cycle() - returns: " << anyRunning << std::endl;
   return anyRunning;
 }
 
@@ -211,6 +219,7 @@ void Processor::dcr_write(uint32_t addr, uint32_t value) {
 
 bool Processor::cycle() {
   try {
+    //std::cout << "Processor: cycle()" << std::endl;
     return impl_->cycle();
   } catch (...) {
     return false;

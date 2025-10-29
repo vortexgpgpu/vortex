@@ -52,6 +52,7 @@ private:
 
   void reset();
 
+  bool is_cycle_initialized_ = false;
   const Arch& arch_;
   std::vector<std::shared_ptr<Cluster>> clusters_;
   DCRS dcrs_;

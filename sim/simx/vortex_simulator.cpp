@@ -10,52 +10,63 @@
 #include "dcrs.h"
 #include <VX_config.h>
 #include <VX_types.h>
+#include "util.h"
 
 namespace vortex {
-
-// Utility to extract file extension
-static std::string getFileExt(const std::string& filename) {
-    auto pos = filename.find_last_of('.');
-    if (pos == std::string::npos) return "";
-    return filename.substr(pos + 1);
-}
 
 VortexSimulator::VortexSimulator()
 : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES)
 , ram_(0, MEM_PAGE_SIZE)
 , proc_(std::make_unique<Processor>(arch_))
-, kernel_image_{}
-, next_alloc_addr_(kAllocBaseAddr)
+// , kernel_image_{}
+// , next_alloc_addr_(kAllocBaseAddr)
 , halted_(true) {}
 
 bool VortexSimulator::init(const std::string& kernelPath) {
     proc_->attach_ram(&ram_);
 
-    kernel_image_ = {};
-    next_alloc_addr_ = kAllocBaseAddr;
-    ram_.clear();
-    ram_.set_acl(0, kGlobalMemSize, 0);
+    // kernel_image_ = {};
+    // next_alloc_addr_ = kAllocBaseAddr;
+    // ram_.clear();
+    // ram_.set_acl(0, kGlobalMemSize, 0);
 
-    bool has_kernel = false;
+    // can be used when launch descriptor is required
+    /* bool has_kernel = false;
     if (!kernelPath.empty()) {
         auto image_info = this->loadKernelImage(kernelPath);
         if (!image_info)
             return false;
         kernel_image_ = *image_info;
         has_kernel = true;
-    }
+    } */
 
     // Program base DCRs - align startup to loaded kernel when provided
-    uint64_t startup = STARTUP_ADDR;
+    /* uint64_t startup = STARTUP_ADDR;
     if (has_kernel)
-        startup = kernel_image_.base_addr;
+        startup = kernel_image_.base_addr; */
 
-    proc_->dcr_write(VX_DCR_BASE_STARTUP_ADDR0, startup & 0xffffffffu);
-
+    // setup base DCRs
+    const uint64_t startup_addr(STARTUP_ADDR);
+    proc_->dcr_write(VX_DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff);
     #if (XLEN == 64)
-    proc_->dcr_write(VX_DCR_BASE_STARTUP_ADDR1, startup >> 32);
+        proc_->dcr_write(VX_DCR_BASE_STARTUP_ADDR1, startup_addr >> 32);
     #endif
     proc_->dcr_write(VX_DCR_BASE_MPM_CLASS, 0);
+
+    // load program/kernel
+    {
+      std::string program_ext(fileExtension(kernelPath.c_str()));
+      if (program_ext == "bin") {
+        std::cout << "vortex_simulator: Loading binary image: " << kernelPath << " with startup address: 0x" << std::hex << startup_addr << std::dec << std::endl;
+        ram_.loadBinImage(kernelPath.c_str(), startup_addr);
+      } else if (program_ext == "hex") {
+        std::cout << "vortex_simulator: Loading hex image: " << kernelPath << std::endl;
+        ram_.loadHexImage(kernelPath.c_str());
+      } else {
+        std::cerr << "Error: only *.bin or *.hex images supported." << std::endl;
+        return -1;
+      }
+    }
 
     halted_ = false;
     return true;
@@ -63,13 +74,20 @@ bool VortexSimulator::init(const std::string& kernelPath) {
 
 bool VortexSimulator::cycle() {
 if (halted_) return false;
+//std::cout << "VortexSimulator: cycle()" << std::endl;
 // Advance one cycle through the processor interface
 bool running = proc_->cycle(); 
 halted_ = !running;
+//std::cout << "VortexSimulator: cycle() returns " << running << std::endl;
 return running;
 }
 
-bool VortexSimulator::allocateMemory(uint64_t size, uint64_t alignment, bool readable, bool writable, uint64_t* addr_out) {
+bool VortexSimulator::isHalted() const {
+    return halted_;
+}
+
+// Required when using launch descriptor and SST memory
+/* bool VortexSimulator::allocateMemory(uint64_t size, uint64_t alignment, bool readable, bool writable, uint64_t* addr_out) {
     if (addr_out == nullptr || size == 0)
         return false;
 
@@ -246,10 +264,6 @@ uint64_t VortexSimulator::normalizeAlignment(uint64_t alignment) {
     alignment |= alignment >> 32;
     alignment++;
     return alignment;
-}
-
-bool VortexSimulator::isHalted() const {
-    return halted_;
-}
+} */
 
 } // namespace vortex

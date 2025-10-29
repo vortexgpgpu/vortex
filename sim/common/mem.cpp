@@ -59,7 +59,7 @@ void RamMemDevice::read(void* data, uint64_t addr, uint64_t size) {
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1))
    || (addr_end > contents_.size())) {
-    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
+    std::cout << "RamMemDevice::read lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
     throw BadAddress();
   }
 
@@ -74,7 +74,7 @@ void RamMemDevice::write(const void* data, uint64_t addr, uint64_t size) {
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1))
    || (addr_end > contents_.size())) {
-    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
+    std::cout << "RamMemDevice::write lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
     throw BadAddress();
   }
 
@@ -108,14 +108,16 @@ bool MemoryUnit::ADecoder::lookup(uint64_t addr, uint32_t wordSize, mem_accessor
 
 void MemoryUnit::ADecoder::map(uint64_t start, uint64_t end, MemDevice &md) {
   assert(end >= start);
+  //std::cout << "ADecoder: map() with start 0x" << std::hex << start << " and end 0x" << end << std::dec << " and md 0x" << &md << std::endl;
   entry_t entry{&md, start, end};
   entries_.emplace_back(entry);
 }
 
 void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
+  //std::cout << "MemoryUnit::ADecoder::read init lookup of 0x" << std::hex << addr << std::dec << ".\n";
   if (!this->lookup(addr, size, &ma)) {
-    std::cout << "lookup of 0x" << std::hex << addr << std::dec << " failed.\n";
+    std::cout << "MemoryUnit::ADecoder::read lookup of 0x" << std::hex << addr << std::dec << " failed.\n";
     throw BadAddress();
   }
   ma.md->read(data, ma.addr, size);
@@ -124,7 +126,7 @@ void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
 void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
-    std::cout << "lookup of 0x" << std::hex << addr << std::dec << " failed.\n";
+    std::cout << "MemoryUnit::ADecoder::write lookup of 0x" << std::hex << addr << std::dec << " failed.\n";
     throw BadAddress();
   }
   ma.md->write(data, ma.addr, size);
@@ -154,6 +156,7 @@ MemoryUnit::MemoryUnit(uint64_t pageSize)
 #endif
 
 void MemoryUnit::attach(MemDevice &m, uint64_t start, uint64_t end) {
+  //std::cout << "MemoryUnit: attach() with start 0x" << std::hex << start << " and end 0x" << end << std::dec << " and m 0x" << &m << std::endl;
   decoder_.map(start, end, m);
 }
 
@@ -510,6 +513,7 @@ void RAM::loadBinImage(const char* filename, uint64_t destination) {
   std::ifstream ifs(filename);
   if (!ifs) {
     std::cerr << "Error: " << filename << " not found" << std::endl;
+    //std::cout << "loadBinImage Error: " << filename << " not found" << std::endl;
     std::abort();
   }
 
@@ -521,6 +525,7 @@ void RAM::loadBinImage(const char* filename, uint64_t destination) {
 
   this->clear();
   this->write(content.data(), destination, size);
+  //std::cout << "Loaded binary image: " << filename << ", size: " << size << " bytes, destination: 0x" << std::hex << destination << std::dec << std::endl;
 }
 
 void RAM::loadHexImage(const char* filename) {
