@@ -29,7 +29,7 @@ module VX_tcu_drl_acc #(
     end
 
     //Carry-Save-Adder based significand accumulation
-    VX_csa_tree #(
+    VX_csa_mod4 #(
         .N (N),
         .W (W),
         .S (W-1)
