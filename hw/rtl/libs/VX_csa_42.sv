@@ -15,15 +15,21 @@
 
 `TRACING_OFF
 
+`IGNORE_UNOPTFLAT_BEGIN
 // 5:3 counter for 4:2 compressor
 module counter_5to3(
     input wire x1, x2, x3, x4, cin,
     output wire sum, carry, cout
 );
-    assign sum = x1 ^ x2 ^ x3 ^ x4 ^ cin;
-    assign cout = (x1 ^ x2) & x3 | ~(x1 ^ x2) & x1;
-    assign carry = (x1 ^ x2 ^ x3 ^ x4) & cin | ~(x1 ^ x2 ^ x3 ^ x4) & x4;
+    // FA1: x1 + x2 + x3
+    wire s1 = x1 ^ x2 ^ x3;
+    assign cout = (x1 & x2) | (x2 & x3) | (x1 & x3);
+    
+    // FA2: s1 + x4 + cin
+    assign sum = s1 ^ x4 ^ cin;
+    assign carry = (s1 & x4) | (x4 & cin) | (s1 & cin);
 endmodule
+`IGNORE_UNOPTFLAT_END
 
 // 4:2 Compressor level
 module VX_csa_42 #(
@@ -67,3 +73,4 @@ module VX_csa_42 #(
 endmodule
 
 `TRACING_ON
+
