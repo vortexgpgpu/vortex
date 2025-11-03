@@ -35,6 +35,7 @@ module VX_tcu_drl_acc #(
         .S (W-1)
     ) sig_csa (
         .operands (sigsIn_ext),
+        .half_en (1'b1),    // TODO: feed sparsity control signal when resolved
         .sum  (sigOut[W-2:0]),
         .cout (sigOut[W-1])
     );
