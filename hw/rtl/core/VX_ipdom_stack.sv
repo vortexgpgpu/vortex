@@ -21,8 +21,7 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
     input  wire             clk,
     input  wire             reset,
     input wire [NW_WIDTH-1:0] wid,
-    input  wire [WIDTH-1:0] d0,
-    input  wire [WIDTH-1:0] d1,
+    input  wire [WIDTH-1:0] d_val,
     input  wire [ADDRW-1:0] rd_ptr,
     input  wire             push,
     input  wire             pop,
@@ -32,7 +31,7 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
     output wire             empty,
     output wire             full
 );
-    localparam BRAM_DATAW = 1 + WIDTH * 2;
+    localparam BRAM_DATAW = 1 + WIDTH;
     localparam BRAM_SIZE  = DEPTH * `NUM_WARPS;
     localparam BRAW_ADDRW = `LOG2UP(BRAM_SIZE);
 
@@ -96,8 +95,6 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
         assign raddr = 0;
     end
 
-    wire [WIDTH-1:0] q0, q1;
-
     VX_dp_ram #(
         .DATAW    (BRAM_DATAW),
         .SIZE     (BRAM_SIZE),
@@ -111,11 +108,10 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
         .wren  (1'b1),
         .waddr (waddr),
         .raddr (raddr),
-        .wdata (push ? {1'b0, d1, d0} : {1'b1, q1, q0}),
-        .rdata ({q_idx, q1, q0})
+        .wdata (push ? {1'b0, d_val} : {1'b1, q_val}),
+        .rdata ({q_idx, q_val})
     );
 
-    assign q_val  = q_idx ? q0 : q1;
     assign wr_ptr = wr_ptr_w;
     assign empty  = empty_w[wid];
     assign full   = full_w[wid];

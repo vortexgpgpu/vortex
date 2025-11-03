@@ -7,19 +7,20 @@
 #include "common.h"
 
 #define RT_CHECK(_expr)                                         \
-   do {                                                         \
-     int _ret = _expr;                                          \
-     if (0 == _ret)                                             \
-       break;                                                   \
-     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
-	 cleanup();			                                              \
-     exit(-1);                                                  \
-   } while (false)
+  do {                                                          \
+    int _ret = _expr;                                           \
+    if (0 == _ret)                                              \
+      break;                                                    \
+    printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);    \
+    cleanup();                                                  \
+    exit(-1);                                                   \
+  } while (false)
 
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.vxbin";
 uint32_t count = 0;
+uint32_t branch_depth = 8; // NEW: default nested depth
 
 vx_device_h device = nullptr;
 vx_buffer_h src_buffer = nullptr;
@@ -29,27 +30,29 @@ vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
-   std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-n words] [-h: help]" << std::endl;
+  std::cout << "Vortex Test.\n";
+  std::cout << "Usage: [-k kernel] [-n words] [-d depth(1..8)] [-h]\n";
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "n:k:d:h")) != -1) {
     switch (c) {
-    case 'n':
-      count = atoi(optarg);
-      break;
-    case 'k':
-      kernel_file = optarg;
-      break;
-    case 'h':
-      show_usage();
-      exit(0);
-      break;
-    default:
-      show_usage();
-      exit(-1);
+      case 'n':
+        count = atoi(optarg);
+        break;
+      case 'k':
+        kernel_file = optarg;
+        break;
+      case 'd':
+        branch_depth = std::max(1, std::min(8, atoi(optarg)));
+        break;
+      case 'h':
+        show_usage();
+        exit(0);
+      default:
+        show_usage();
+        exit(-1);
     }
   }
 }
@@ -69,11 +72,42 @@ void gen_src_data(std::vector<int>& src_data, uint32_t size) {
   for (uint32_t i = 0; i < size; ++i) {
     int value = std::rand();
     src_data[i] = value;
-    //std::cout << std::dec << i << ": value=0x" << std::hex << value << std::endl;
   }
 }
 
-void gen_ref_data(std::vector<int>& ref_data, const std::vector<int>& src_data, uint32_t size) {
+// Host mirror of kernel's nested chain (must be identical to device logic)
+static inline int nested_chain_1to8_host(int v, uint32_t id, uint32_t depth) {
+  if (depth == 0) return v;
+
+  if ((id >> 0) & 1) v += 1; else v -= 1;
+  if (depth <= 1) return v;
+
+  if ((id >> 1) & 1) v += 2; else v -= 2;
+  if (depth <= 2) return v;
+
+  if ((id >> 2) & 1) v += 3; else v -= 3;
+  if (depth <= 3) return v;
+
+  if ((id >> 3) & 1) v += 4; else v -= 4;
+  if (depth <= 4) return v;
+
+  if ((id >> 4) & 1) v += 5; else v -= 5;
+  if (depth <= 5) return v;
+
+  if ((id >> 5) & 1) v += 6; else v -= 6;
+  if (depth <= 6) return v;
+
+  if ((id >> 6) & 1) v += 7; else v -= 7;
+  if (depth <= 7) return v;
+
+  if ((id >> 7) & 1) v += 8; else v -= 8;
+  return v;
+}
+
+void gen_ref_data(std::vector<int>& ref_data,
+                  const std::vector<int>& src_data,
+                  uint32_t size,
+                  uint32_t depth) {
   ref_data.resize(size);
   for (int i = 0; i < (int)size; ++i) {
     int value = src_data.at(i);
@@ -121,46 +155,37 @@ void gen_ref_data(std::vector<int>& ref_data, const std::vector<int>& src_data, 
 
     // switch
     switch (i) {
-    case 0:
-      value += 1;
-      break;
-    case 1:
-      value -= 1;
-      break;
-    case 2:
-      value *= 3;
-      break;
-    case 3:
-      value *= 5;
-      break;
-    default:
-      assert(i < (int)size);
-      break;
+      case 0: value += 1; break;
+      case 1: value -= 1; break;
+      case 2: value *= 3; break;
+      case 3: value *= 5; break;
+      default: break;
     }
 
     // select
-    value += (i >= 0) ? ((i > 5) ? src_data.at(0) : i) : ((i < 5) ? src_data.at(1) : -i);
+    value += (i >= 0) ? ((i > 5) ? src_data.at(0) : i)
+                      : ((i < 5) ? src_data.at(1) : -i);
 
     // min/max
-	  value += std::min(src_data.at(i), value);
-	  value += std::max(src_data.at(i), value);
+    value += std::min(src_data.at(i), value);
+    value += std::max(src_data.at(i), value);
+
+    // NEW: deep nested branch test (mirrors kernel)
+    uint32_t d = (depth > 8) ? 8 : depth;
+    value = nested_chain_1to8_host(value, (uint32_t)i, d);
 
     ref_data[i] = value;
   }
 }
 
 int main(int argc, char *argv[]) {
-  // parse command arguments
   parse_args(argc, argv);
 
-  if (count == 0) {
-    count = 1;
-  }
+  if (count == 0) count = 1;
 
   std::srand(50);
 
-  // open device connection
-  std::cout << "open device connection" << std::endl;
+  std::cout << "open device connection\n";
   RT_CHECK(vx_dev_open(&device));
 
   uint64_t num_cores, num_warps, num_threads;
@@ -172,80 +197,70 @@ int main(int argc, char *argv[]) {
   uint32_t num_points = count * total_threads;
   uint32_t buf_size = num_points * sizeof(int32_t);
 
-  std::cout << "number of points: " << num_points << std::endl;
-  std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
+  std::cout << "number of points: " << num_points << "\n";
+  std::cout << "buffer size: " << buf_size << " bytes\n";
+  std::cout << "nested branch depth: " << branch_depth << "\n";
 
-  kernel_arg.num_points = num_points;
+  kernel_arg.num_points   = num_points;
+  kernel_arg.branch_depth = branch_depth; // NEW
 
-  // allocate device memory
-  std::cout << "allocate device memory" << std::endl;
+  std::cout << "allocate device memory\n";
   RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src_buffer));
   RT_CHECK(vx_mem_address(src_buffer, &kernel_arg.src_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &dst_buffer));
   RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
 
-  std::cout << "dev_src=0x" << std::hex << kernel_arg.src_addr << std::endl;
-  std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::endl;
+  std::cout << "dev_src=0x" << std::hex << kernel_arg.src_addr << "\n";
+  std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << "\n";
 
-  // allocate host buffers
-  std::cout << "allocate host buffers" << std::endl;
+  std::cout << "allocate host buffers\n";
   std::vector<int32_t> h_src;
   std::vector<int32_t> h_dst(num_points);
   gen_src_data(h_src, num_points);
 
-  // upload source buffer
-  std::cout << "upload source buffer" << std::endl;
+  std::cout << "upload source buffer\n";
   RT_CHECK(vx_copy_to_dev(src_buffer, h_src.data(), 0, buf_size));
 
-  // Upload kernel binary
-  std::cout << "Upload kernel binary" << std::endl;
+  std::cout << "Upload kernel binary\n";
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
 
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
+  std::cout << "upload kernel argument\n";
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
-  // start device
-  std::cout << "start device" << std::endl;
+  std::cout << "start device\n";
   RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
 
-  // wait for completion
-  std::cout << "wait for completion" << std::endl;
+  std::cout << "wait for completion\n";
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
-  // download destination buffer
-  std::cout << "download destination buffer" << std::endl;
+  std::cout << "download destination buffer\n";
   RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, buf_size));
 
-  // verify result
-  std::cout << "verify result" << std::endl;
+  std::cout << "verify result\n";
   int errors = 0;
   {
     std::vector<int32_t> h_ref;
-    gen_ref_data(h_ref, h_src, num_points);
+    gen_ref_data(h_ref, h_src, num_points, branch_depth);
 
     for (uint32_t i = 0; i < num_points; ++i) {
       int ref = h_ref[i];
       int cur = h_dst[i];
       if (cur != ref) {
         std::cout << "error at result #" << std::dec << i
-                  << std::hex << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
+                  << std::hex << ": actual 0x" << cur << ", expected 0x" << ref << "\n";
         ++errors;
       }
     }
   }
 
-  // cleanup
-  std::cout << "cleanup" << std::endl;
+  std::cout << "cleanup\n";
   cleanup();
 
   if (errors != 0) {
-    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-    std::cout << "FAILED!" << std::endl;
+    std::cout << "Found " << std::dec << errors << " errors!\nFAILED!\n";
     return errors;
   }
 
-  std::cout << "PASSED!" << std::endl;
-
+  std::cout << "PASSED!\n";
   return 0;
 }

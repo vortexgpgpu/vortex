@@ -1345,14 +1345,13 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             std::abort();
           }
           // set new thread mask to the larger set
-          if (then_tmask.count() >= else_tmask.count()) {
+          if (then_tmask.count() <= else_tmask.count()) {
             next_tmask = then_tmask;
           } else {
             next_tmask = else_tmask;
           }
-          // push reconvergence and not-taken thread mask onto the stack
-          auto ntaken_tmask = ~next_tmask & warp.tmask;
-          warp.ipdom_stack.emplace(warp.tmask, ntaken_tmask, next_pc);
+          // push reconvergence mask and next PC onto the stack
+          warp.ipdom_stack.emplace(warp.tmask, next_pc);
         }
         // return divergent state
         for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -1363,7 +1362,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       case WctlType::JOIN: {
         trace->fetch_stall = true;
         auto stack_ptr = rs1_data.at(thread_last).u;
-        if (stack_ptr != warp.ipdom_stack.size()) {
+        auto stack_size = warp.ipdom_stack.size();
+        if (stack_ptr != stack_size) {
           if (warp.ipdom_stack.empty()) {
             std::cout << "IPDOM stack is empty!\n" << std::flush;
             std::abort();
@@ -1372,8 +1372,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             next_tmask = warp.ipdom_stack.top().orig_tmask;
             warp.ipdom_stack.pop();
           } else {
-            next_tmask = warp.ipdom_stack.top().else_tmask;
-            next_pc = warp.ipdom_stack.top().PC;
+            next_tmask = ~warp.tmask & warp.ipdom_stack.top().orig_tmask;
+            next_pc = warp.ipdom_stack.top().else_PC;
             warp.ipdom_stack.top().fallthrough = true;
           }
         }

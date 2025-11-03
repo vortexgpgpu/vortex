@@ -111,7 +111,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire [`CLOG2(`NUM_THREADS+1)-1:0] then_tmask_cnt, else_tmask_cnt;
     `POP_COUNT(then_tmask_cnt, then_tmask);
     `POP_COUNT(else_tmask_cnt, else_tmask);
-    wire then_first = (then_tmask_cnt >= else_tmask_cnt);
+    wire then_first = (then_tmask_cnt <= else_tmask_cnt);
     wire [`NUM_THREADS-1:0] taken_tmask = then_first ? then_tmask : else_tmask;
     wire [`NUM_THREADS-1:0] ntaken_tmask = then_first ? else_tmask : then_tmask;
 
@@ -124,6 +124,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // join
 
     assign sjoin.valid      = is_join;
+    assign sjoin.tmask      = then_tmask | else_tmask;
     assign sjoin.stack_ptr  = rs1_data[DV_STACK_SIZEW-1:0];
 
     // barrier

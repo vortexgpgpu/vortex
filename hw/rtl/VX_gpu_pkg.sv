@@ -56,7 +56,7 @@ package VX_gpu_pkg;
 	localparam NUM_REGS_BITS = `CLOG2(NUM_REGS);
 
 	localparam DV_STACK_SIZE = `UP(`NUM_THREADS-1);
-	localparam DV_STACK_SIZEW = `UP(`CLOG2(DV_STACK_SIZE));
+	localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
 
 	localparam PERF_CTR_BITS = 44;
 
@@ -474,6 +474,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic                   valid;
+        logic [`NUM_THREADS-1:0] tmask;
         logic [DV_STACK_SIZEW-1:0] stack_ptr;
     } join_t;
 

@@ -39,14 +39,12 @@ class instr_trace_t;
 
 struct ipdom_entry_t {
   ThreadMask  orig_tmask;
-  ThreadMask  else_tmask;
-  Word        PC;
+  Word        else_PC;
   bool        fallthrough;
 
-  ipdom_entry_t(const ThreadMask &orig_tmask, const ThreadMask &else_tmask, Word PC)
-    : orig_tmask (orig_tmask)
-    , else_tmask (else_tmask)
-    , PC         (PC)
+  ipdom_entry_t(const ThreadMask &tmask, Word PC)
+    : orig_tmask (tmask)
+    , else_PC    (PC)
     , fallthrough(false)
   {}
 };
