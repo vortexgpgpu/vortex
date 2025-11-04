@@ -4,12 +4,11 @@
 #include <iostream>
 #include <algorithm>
 #include <cstring>
-//#include "float16.h"
 
-#ifndef USE_SPARSE_A
-/* 0 = dense A
- * 1 = sparse A             */
-#define USE_SPARSE_A 1
+// Include random header only when sparsity is enabled
+#ifdef ENABLE_SPARSITY
+#include <random>
+#endif
 
 struct int4_t {
   uint8_t data;
@@ -17,8 +16,11 @@ struct int4_t {
 
 using float32_t = float;
 
+// ============================================================================
+// Configuration Macros
+// ============================================================================
 #ifndef NUM_THREADS
-#define NUM_THREADS 32
+#define NUM_THREADS 16      // Should be 32 for paper accuracy
 #endif
 
 #ifndef XLENB
@@ -26,7 +28,7 @@ using float32_t = float;
 #endif
 
 #ifndef ITYPE
-#define ITYPE int32_t
+#define ITYPE int8_t
 #endif
 
 #ifndef OTYPE
@@ -37,6 +39,9 @@ using float32_t = float;
 #define DPLEN 0
 #endif
 
+// ============================================================================
+// Debug Output Macros
+// ============================================================================
 #ifdef NDEBUG
 #define DBG_PRINT(fmt, ...)
 #else
@@ -65,6 +70,9 @@ public:
 template <uint32_t>
 struct DebugPrint;
 
+// ============================================================================
+// WMMA Configuration Template
+// ============================================================================
 template <uint32_t NT,    // number of threads per warp
           uint32_t NR,    // registers per fragment
           uint32_t XB,    // vector element type size in bytes
@@ -106,25 +114,34 @@ public:
   static constexpr uint32_t tcN = 1u << block_en;
   static constexpr uint32_t tcK = (DP != 0) ? DP : (block_cap / ((tcM > tcN) ? tcM : tcN));
 
-  static constexpr uint32_t m_steps = xtileM / tcM;  // number of M steps per register
-  static constexpr uint32_t n_steps = xtileN / tcN;  // number of N steps per register
-  static constexpr uint32_t k_steps = xtileK / tcK;  // number of K steps per register
+  static constexpr uint32_t m_steps = xtileM / tcM;
+  static constexpr uint32_t n_steps = xtileN / tcN;
+  static constexpr uint32_t k_steps = xtileK / tcK;
 
-  static constexpr uint32_t a_block_size = tcM * tcK;                 // size of A micro-tile
-  static constexpr uint32_t a_sub_blocks = block_cap / a_block_size;  // number of A micro-tiles per register
-  static constexpr uint32_t a_sub_steps  = m_steps / a_sub_blocks;    // number of A sub-steps per register
+  static constexpr uint32_t a_block_size = tcM * tcK;
+  static constexpr uint32_t a_sub_blocks = block_cap / a_block_size;
+  static constexpr uint32_t a_sub_steps  = m_steps / a_sub_blocks;
 
-  static constexpr uint32_t b_block_size = tcK * tcN;                 // size of B micro-tile
-  static constexpr uint32_t b_sub_blocks = block_cap / b_block_size;  // number of B micro-tiles per register
-  static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;    // number of B sub-steps per register
+#ifdef ENABLE_SPARSITY
+  // For 2:4 sparsity, B needs to provide both potential values
+  static constexpr uint32_t SPARSITY_RATIO = 2;
+  static constexpr uint32_t b_block_size = tcK * tcN * SPARSITY_RATIO;
+  static constexpr uint32_t b_sub_blocks = block_cap / b_block_size;
+  static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;
+#else
+  // Dense mode: standard B block configuration
+  static constexpr uint32_t b_block_size = tcK * tcN;
+  static constexpr uint32_t b_sub_blocks = block_cap / b_block_size;
+  static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;
+#endif
 
-  static constexpr uint32_t NRA = (xtileM * xtileK) / NT; // Number of A registers
-  static constexpr uint32_t NRB = (xtileN * xtileK) / NT; // Number of B registers
-  static constexpr uint32_t NRC = (xtileM * xtileN) / NT; // Number of C registers
+  static constexpr uint32_t NRA = (xtileM * xtileK) / NT;
+  static constexpr uint32_t NRB = (xtileN * xtileK) / NT;
+  static constexpr uint32_t NRC = (xtileM * xtileN) / NT;
 
   static constexpr uint32_t tileM = xtileM;
   static constexpr uint32_t tileN = xtileN;
-  static constexpr uint32_t tileK = xtileK * i_ratio; // Adjusted for input type size
+  static constexpr uint32_t tileK = xtileK * i_ratio;
 
   static_assert(a_sub_steps != 0, "tcK is too small for tile A");
   static_assert(b_sub_steps != 0, "tcK is too small for tile B");
@@ -148,6 +165,9 @@ public:
   using output_t = Ot;
 };
 
+// ============================================================================
+// Utility Types
+// ============================================================================
 template <typename T>
 struct raw_unsigned {
   static_assert(
@@ -162,7 +182,7 @@ struct raw_unsigned {
       sizeof(T) == 2, uint16_t,
       std::conditional_t<
         sizeof(T) == 4, uint32_t,
-        uint64_t  // sizeof(T) == 8
+        uint64_t
       >
     >
   >;
@@ -171,6 +191,9 @@ struct raw_unsigned {
 template <typename T>
 using raw_unsigned_t = typename raw_unsigned<T>::type;
 
+// ============================================================================
+// Pack Row Function
+// ============================================================================
 template <typename D, typename S>
 D pack_row(const S *base, uint32_t ldm) {
   static_assert(sizeof(D) % sizeof(S) == 0, "D must be a multiple of S");
@@ -181,13 +204,16 @@ D pack_row(const S *base, uint32_t ldm) {
   for (uint32_t i = 0; i < count; ++i) {
     US bits;
     bits = *reinterpret_cast<const US *>(src);
-    D elem = static_cast<D>(bits); // zero-extend S to D
+    D elem = static_cast<D>(bits);
     packed |= (elem << (i * (8u * sizeof(S))));
-    src += ldm; // move to the next row
+    src += ldm;
   }
   return packed;
 }
 
+// ============================================================================
+// Vector Register Type
+// ============================================================================
 template <typename T, uint32_t N>
 struct vector_t {
 private:
@@ -231,6 +257,9 @@ public:
   }
 };
 
+// ============================================================================
+// 2D Array Type
+// ============================================================================
 template <typename T, uint32_t R, uint32_t C>
 struct array2d_t {
 private:
@@ -277,23 +306,13 @@ public:
   }
 };
 
-template <typename Itype>
-struct SparseMat {
-  std::vector<Itype> values;   // non-zeros
-  std::vector<uint8_t> meta;     // Array of row-masks: 1 byte marks the columns
-                                  // of the 4 elements in the block that are non-zero.
-                                  // e.g. 0b0101 means 2nd and 4th elements are non-zero.
-
-  uint32_t rows, cols;           // original A dims (M × K)
-};
-
-template <typename Itype>
-SparseMat<Itype>
-dense_to_sparse(const std::vector<Itype>&, uint32_t, uint32_t);
-
+// ============================================================================
+// WMMA Implementation (Dense or Sparse based on ENABLE_SPARSITY)
+// ============================================================================
 template <typename Config>
 class WMMA {
 private:
+  // Configuration constants
   static constexpr uint32_t tileM = Config::tileM;
   static constexpr uint32_t tileN = Config::tileN;
   static constexpr uint32_t tileK = Config::tileK;
@@ -322,30 +341,215 @@ private:
   static constexpr uint32_t i_ratio = Config::i_ratio;
   static constexpr uint32_t o_ratio = Config::o_ratio;
 
+#ifdef ENABLE_SPARSITY
+  // Sparsity-specific constants
+  static constexpr uint32_t SPARSITY_N = 2;  // 2 non-zero elements
+  static constexpr uint32_t SPARSITY_M = 4;  // out of 4 elements (2:4 sparsity)
+  static constexpr uint32_t METADATA_LANES = 2;  // Lanes 0,1 hold metadata
+  static constexpr uint32_t COMPRESSION_RATE = SPARSITY_M / SPARSITY_N; // 2x compression
+#endif
+
   using Xt = typename Config::vector_t;
   using It = typename Config::input_t;
   using Ot = typename Config::output_t;
 
-  using Vreg = vector_t<Xt, NT>; // Vector register type
+  using Vreg = vector_t<Xt, NT>;
 
-  using FragA = array2d_t<It, tileM, tileK>; // A: M rows × K cols
-  using FragB = array2d_t<It, tileK, tileN>; // B: K rows × N cols
-  using FragC = array2d_t<Ot, tileM, tileN>; // C: M rows × N cols
-  using FragD = array2d_t<Ot, tileM, tileN>; // D: M rows × N cols
+  using FragA = array2d_t<It, tileM, tileK>;
+  using FragB = array2d_t<It, tileK, tileN>;
+  using FragC = array2d_t<Ot, tileM, tileN>;
+  using FragD = array2d_t<Ot, tileM, tileN>;
 
+  // Matrix fragments
   FragA fragA_;
   FragB fragB_;
   FragC fragC_;
   FragD fragD_;
 
+#ifdef ENABLE_SPARSITY
+  // Sparsity-specific data structures
+  using FragA_meta = array2d_t<uint8_t, tileM, tileK>;
+
+  FragA fragA_compressed_;   // Compressed matrix A (50% storage)
+  FragA_meta fragA_meta_;    // Metadata: 1 = non-zero, 0 = pruned
+  vector_t<uint32_t, 8> packed_bit_meta_;  // Packed bitmap metadata
+#endif
+
   FragD fragRef_;
 
+  uint32_t loop_iteration_count_;  // Counter for total loop iterations
+
+  // ========================================================================
+  // Sparsity Helper Functions (only compiled when ENABLE_SPARSITY is defined)
+  // ========================================================================
+#ifdef ENABLE_SPARSITY
+  // Apply 2:4 structured pruning pattern
+  void apply_2_4_pruning(std::mt19937 &gen) {
+    std::vector<int> masks = {1, 1, 0, 0};  // 2 ones, 2 zeros
+
+    for (uint32_t r = 0; r < tileM; ++r) {
+      for (uint32_t c = 0; c < tileK / SPARSITY_M; ++c) {
+        // Shuffle the mask for this group of 4 elements
+        std::shuffle(masks.begin(), masks.end(), gen);
+
+        // Apply mask to each element in the group
+        for (uint32_t c_4 = 0; c_4 < SPARSITY_M; ++c_4) {
+          uint32_t col = c * SPARSITY_M + c_4;
+          if (masks[c_4] == 0) {
+            fragA_(r, col) = 0;
+            fragA_meta_(r, col) = 0;
+          } else {
+            fragA_meta_(r, col) = 1;
+          }
+        }
+      }
+    }
+  }
+
+  // Compress matrix A by removing zeros
+  void compress_matrix_A() {
+    // Initialize compressed matrix to zero
+    for (uint32_t r = 0; r < tileM; ++r) {
+      for (uint32_t c = 0; c < tileK; ++c) {
+        fragA_compressed_(r, c) = 0;
+      }
+    }
+
+    // Pack non-zero elements into compressed format
+    uint32_t comp_cnt = 0;
+    for (uint32_t r = 0; r < tileM; ++r) {
+      for (uint32_t c = 0; c < tileK; ++c) {
+        if (fragA_meta_(r, c) == 1) {
+          uint32_t comp_r = comp_cnt / (tileK / COMPRESSION_RATE);
+          uint32_t comp_c = comp_cnt % (tileK / COMPRESSION_RATE);
+          fragA_compressed_(comp_r, comp_c) = fragA_(r, c);
+          comp_cnt++;
+        }
+      }
+    }
+  }
+
+  // Pack metadata into compact bitmap format
+  void pack_metadata_bitmap() {
+    constexpr uint32_t ELEMENTS_PER_ROW = tcK * i_ratio * COMPRESSION_RATE;
+    constexpr uint32_t ROWS_PER_CHUNK = tcM / COMPRESSION_RATE;
+
+    for (uint32_t m = 0; m < m_steps; ++m) {
+      for (uint32_t k = 0; k < k_steps / COMPRESSION_RATE; ++k) {
+        for (uint32_t chunk = 0; chunk < COMPRESSION_RATE; ++chunk) {
+          uint32_t tmp_bit = 0;
+
+          // Pack metadata for this chunk
+          for (uint32_t r_i = 0; r_i < ROWS_PER_CHUNK; ++r_i) {
+            for (uint32_t c_i = 0; c_i < ELEMENTS_PER_ROb_W; ++c_i) {
+              uint32_t row = r_i + chunk * ROWS_PER_CHUNK + m * tcM;
+              uint32_t col = c_i + k * ELEMENTS_PER_ROW;
+
+              if (fragA_meta_(row, col) == 1) {
+                uint32_t bit_pos = 31 - (c_i + r_i * ELEMENTS_PER_ROW);
+                tmp_bit |= (1ULL << bit_pos);
+              }
+            }
+          }
+
+          uint32_t idx = chunk + k * SPARSITY_N + m * (k_steps / SPARSITY_N) * SPARSITY_N;
+          packed_bit_meta_[idx] = tmp_bit;
+        }
+      }
+    }
+  }
+
+  // Extract bitmap for a specific row
+  uint16_t extract_row_metadata(const Vreg &va_meta, uint32_t row_idx) const {
+    uint32_t meta_reg_idx = row_idx / COMPRESSION_RATE;
+    bool is_upper_half = (row_idx % COMPRESSION_RATE) == 0;
+    return is_upper_half ?
+           static_cast<uint16_t>(va_meta[meta_reg_idx] >> 16) :
+           static_cast<uint16_t>(va_meta[meta_reg_idx]);
+  }
+
+  // Gather B column elements based on A's sparsity pattern
+  void gather_sparse_B_column(
+      uint8_t *b_collected,
+      const Xt *b_col_0,
+      const Xt *b_col_1,
+      uint16_t a_row_meta) const {
+
+    constexpr uint32_t TOTAL_ELEMENTS = tcK * i_ratio;
+    uint32_t collect_idx = 0;
+
+    // Gather from first half based on upper bits of metadata
+    for (uint32_t bit_idx = 0; bit_idx < TOTAL_ELEMENTS; ++bit_idx) {
+      uint32_t bit_pos = TOTAL_ELEMENTS * SPARSITY_N - bit_idx - 1;
+      if ((a_row_meta & (1 << bit_pos)) != 0) {
+        uint32_t element_idx = bit_idx / i_ratio;
+        uint32_t byte_pos = (bit_idx % i_ratio) * 8;
+        b_collected[collect_idx++] =
+            static_cast<uint8_t>((b_col_0[element_idx] >> byte_pos) & 0xFF);
+      }
+    }
+
+    // Gather from second half based on lower bits of metadata
+    for (uint32_t bit_idx = 0; bit_idx < TOTAL_ELEMENTS; ++bit_idx) {
+      if (collect_idx >= TOTAL_ELEMENTS) break;
+
+      uint32_t bit_pos = TOTAL_ELEMENTS - bit_idx - 1;
+      if ((a_row_meta & (1 << bit_pos)) != 0) {
+        uint32_t element_idx = bit_idx / i_ratio;
+        uint32_t byte_pos = (bit_idx % i_ratio) * 8;
+        b_collected[collect_idx++] =
+            static_cast<uint8_t>((b_col_1[element_idx] >> byte_pos) & 0xFF);
+      }
+    }
+  }
+#endif  // ENABLE_SPARSITY
+
+  // ========================================================================
+  // Load/Store Operations (different implementations for dense/sparse)
+  // ========================================================================
+
+#ifdef ENABLE_SPARSITY
+  // Sparse version of load_A
+  void load_A(vector_t<Vreg, NRA> &vR, uint32_t lane, uint32_t ldm,
+              const It *mdata, const vector_t<uint32_t, 8> &A_meta) {
+    uint32_t block_idx = lane / a_block_size;
+    uint32_t lane_in_block = lane % a_block_size;
+    uint32_t elem_row = lane_in_block / tcK;
+    uint32_t elem_col = lane_in_block % tcK;
+
+    // Load compressed data into first half of registers
+    for (uint32_t r = 0; r < NRA / COMPRESSION_RATE; ++r) {
+      uint32_t block_m = (r / (k_steps / COMPRESSION_RATE)) * a_sub_blocks + block_idx;
+      uint32_t block_k = r % (k_steps / COMPRESSION_RATE);
+      uint32_t row = block_m * tcM + elem_row;
+      uint32_t col = block_k * tcK + elem_col;
+      auto base = mdata + row * ldm + col * i_ratio;
+
+      assert(reinterpret_cast<uintptr_t>(base) % alignof(Xt) == 0 &&
+             "Base pointer must be aligned");
+      vR[r][lane] = *reinterpret_cast<const Xt *>(base);
+    }
+
+    // Load metadata into second half (only for metadata lanes)
+    if (lane < METADATA_LANES) {
+      for (uint32_t r = NRA / COMPRESSION_RATE; r < NRA; ++r) {
+        vR[r][lane] = A_meta.data()[COMPRESSION_RATE * (r - NRA / COMPRESSION_RATE) + lane];
+      }
+    } else {
+      for (uint32_t r = NRA / COMPRESSION_RATE; r < NRA; ++r) {
+        vR[r][lane] = 0;
+      }
+    }
+  }
+#else
+  // Dense version of load_A
   void load_A(vector_t<Vreg, NRA> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
     uint32_t block_idx = lane / a_block_size;
     uint32_t lane_in_block = lane % a_block_size;
     uint32_t elem_row = lane_in_block / tcK;
     uint32_t elem_col = lane_in_block % tcK;
-    DBG_PRINT("[load_A] lane=%u block_idx=%u lane_in_block=%u elem=[%u,%u], src=%p-%p\n", lane, block_idx, lane_in_block, elem_row, elem_col, mdata, mdata + tileM * tileK);
+    //DBG_PRINT("[load_A] lane=%u block_idx=%u lane_in_block=%u elem=[%u,%u], src=%p-%p\n",
+    //          lane, block_idx, lane_in_block, elem_row, elem_col, mdata, mdata + tileM * tileK);
 
     for (uint32_t r = 0; r < NRA; ++r) {
       uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
@@ -354,72 +558,46 @@ private:
       uint32_t col = block_k * tcK + elem_col;
       auto base = mdata + row * ldm + col * i_ratio;
 
-      assert(reinterpret_cast<uintptr_t>(base) % alignof(Xt) == 0 && "Base pointer must be aligned to sizeof(Xt)");
+      assert(reinterpret_cast<uintptr_t>(base) % alignof(Xt) == 0 &&
+             "Base pointer must be aligned to sizeof(Xt)");
       vR[r][lane] = *reinterpret_cast<const Xt *>(base);
-      DBG_PRINT("  r=%u → block_m=%u block_k=%u → loads A[%u,%u] → %p → %u\n", r, block_m, block_k, row, col, base, vR[r][lane]);
+      //DBG_PRINT("  r=%u → block_m=%u block_k=%u → loads A[%u,%u] → %p → %u\n",
+      //          r, block_m, block_k, row, col, base, vR[r][lane]);
     }
   }
+#endif
 
-  //The function only loads the sparse matrix Data from SparseA.
-  void load_A_sparse_data(vector_t<Vreg, NRA>& vR, uint32_t lane, uint32_t ldm, const It* SA_values){
-    uint32_t block_idx = lane / a_block_size;
-    uint32_t lane_in_block = lane % a_block_size;
-    uint32_t elem_row = lane_in_block / tcK;
-    uint32_t elem_col = lane_in_block % tcK;
-    
-    constexpr uint32_t vals_per_block = 2;        // 2:4 sparsity
-    constexpr uint32_t cols_per_block = 4;        // tcK
-    assert(lane % 4 == 0 || lane % 4 == 1);
-    for (uint32_t r = 0; r < NRA; ++r) {
-      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
-      uint32_t block_k = r % k_steps;
-      uint32_t row = block_m * tcM + elem_row;
-      uint32_t col   = block_k * tcK + elem_col;
+#ifdef ENABLE_SPARSITY
+  // Sparse version of load_B (loads 2x data for sparse B access)
+  void load_B(vector_t<Vreg, NRB> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
+    uint32_t block_idx = lane / b_block_size;
+    uint32_t lane_in_block = lane % b_block_size;
+    uint32_t elem_col = lane_in_block / (tcK * COMPRESSION_RATE);
+    uint32_t elem_row = lane_in_block % (tcK * COMPRESSION_RATE);
 
-      uint32_t blk_id_row = col / cols_per_block;
-      uint32_t base_idx   = row * (ldm / cols_per_block) * vals_per_block + blk_id_row * vals_per_block;
+    for (uint32_t r = 0; r < NRB; ++r) {
+      uint32_t block_k = r / b_sub_steps;
+      uint32_t block_n = (r % b_sub_steps) * b_sub_blocks + block_idx;
+      uint32_t row = block_k * tcK * COMPRESSION_RATE + elem_row;
+      uint32_t col = block_n * tcN + elem_col;
+      auto base = mdata + row * ldm * i_ratio + col;
 
-      Xt packed(0);
-      
-      It v = SA_values[base_idx + elem_col];
-      std::memcpy(&packed, &v, sizeof(packed));
-
-
-      vR[r][lane] = packed;
+      if constexpr (sizeof(Xt) == sizeof(It)) {
+        vR[r][lane] = *reinterpret_cast<const Xt *>(base);
+      } else {
+        vR[r][lane] = pack_row<Xt>(base, ldm);
+      }
     }
   }
-
-  void load_A_sparse_mask(vector_t<Vreg, NRA>& vR, uint32_t lane, uint32_t ldm, const uint8_t* SA_meta){
-    uint32_t block_idx = lane / a_block_size;
-    uint32_t lane_in_block = lane % a_block_size;
-    uint32_t elem_row = lane_in_block / tcK;
-    uint32_t elem_col = lane_in_block % tcK;
-    assert(lane % 4 == 2);
-    for (uint32_t r = 0; r < NRA; ++r) {
-      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
-      uint32_t block_k = r % k_steps;
-      uint32_t row = block_m * tcM + elem_row;
-      uint32_t col = block_k * tcK + elem_col;
-
-      constexpr uint32_t vals_per_block = 2;        // 2:4 sparsity
-      constexpr uint32_t cols_per_block = 4;
-
-      uint32_t meta_idx = row * (ldm / cols_per_block) + col / cols_per_block;
-      vR[r][lane] = Xt(SA_meta[meta_idx]);
-    }
-  }
-
-//a[0],a[1] = data, a[2]=mask; 
-//NRA = 32, #ofrow = 8 #ofcol = 4
-//a[2], mask, a[6] 
-
-
+#else
+  // Dense version of load_B
   void load_B(vector_t<Vreg, NRB> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
     uint32_t block_idx = lane / b_block_size;
     uint32_t lane_in_block = lane % b_block_size;
     uint32_t elem_col = lane_in_block / tcK;
     uint32_t elem_row = lane_in_block % tcK;
-    DBG_PRINT("[load_B] lane=%u block_idx=%u lane_in_block=%u elem=[%u,%u], src=%p-%p\n", lane, block_idx, lane_in_block, elem_row, elem_col, mdata, mdata + tileK * tileN);
+    //DBG_PRINT("[load_B] lane=%u block_idx=%u lane_in_block=%u elem=[%u,%u], src=%p-%p\n",
+    //          lane, block_idx, lane_in_block, elem_row, elem_col, mdata, mdata + tileK * tileN);
 
     for (uint32_t r = 0; r < NRB; ++r) {
       uint32_t block_k = r / b_sub_steps;
@@ -433,14 +611,17 @@ private:
       } else {
         vR[r][lane] = pack_row<Xt>(base, ldm);
       }
-      DBG_PRINT("  r=%u → block_k=%u block_n=%u → loads B[%u,%u] → %p → %u\n", r, block_k, block_n, row, col, base, vR[r][lane]);
+      //DBG_PRINT("  r=%u → block_k=%u block_n=%u → loads B[%u,%u] → %p → %u\n",
+      //          r, block_k, block_n, row, col, base, vR[r][lane]);
     }
   }
+#endif
 
   void load_C(vector_t<Vreg, NRC> &vR, uint32_t lane, uint32_t ldm, const Ot *mdata) {
     uint32_t elem_row = lane / tcN;
     uint32_t elem_col = lane % tcN;
-    DBG_PRINT("[load_C] lane=%u elem=[%u,%u], src=%p-%p\n", lane, elem_row, elem_col, mdata, mdata + tileM * tileN);
+    // DBG_PRINT("[load_C] lane=%u elem=[%u,%u], src=%p-%p\n",
+    //           lane, elem_row, elem_col, mdata, mdata + tileM * tileN);
 
     for (uint32_t r = 0; r < NRC; ++r) {
       uint32_t block_m = r / n_steps;
@@ -456,7 +637,8 @@ private:
         *reinterpret_cast<Ot*>(&tmp) = *base;
         vR[r][lane] = tmp;
       }
-      DBG_PRINT("  r=%u → block_m=%u block_n=%u → loads C[%u,%u] → %p → %u\n", r, block_m, block_n, row, col, base, vR[r][lane]);
+      // DBG_PRINT("  r=%u → block_m=%u block_n=%u → loads C[%u,%u] → %p → %u\n",
+      //           r, block_m, block_n, row, col, base, vR[r][lane]);
     }
   }
 
@@ -464,7 +646,8 @@ private:
     uint32_t elem_row = lane / tcN;
     uint32_t elem_col = lane % tcN;
 
-    DBG_PRINT("[store_D] lane=%u elem=[%u,%u], dst=%p-%p\n", lane, elem_row, elem_col, mdata, mdata + tileM * tileN);
+    // DBG_PRINT("[store_D] lane=%u elem=[%u,%u], dst=%p-%p\n",
+    //           lane, elem_row, elem_col, mdata, mdata + tileM * tileN);
 
     for (uint32_t r = 0; r < NRC; ++r) {
       uint32_t block_m = r / n_steps;
@@ -479,43 +662,63 @@ private:
         Xt tmp(vR[r][lane]);
         *base = *reinterpret_cast<const Ot*>(&tmp);
       }
-      DBG_PRINT("  r=%u → block_m=%u block_n=%u → store C[%u,%u] → %p → %u\n", r, block_m, block_n, row, col, base , vR[r][lane]);
+      // DBG_PRINT("  r=%u → block_m=%u block_n=%u → store C[%u,%u] → %p → %u\n",
+      //           r, block_m, block_n, row, col, base , vR[r][lane]);
     }
   }
 
-  Xt FEDP(const Xt *a_row, const Xt *b_col, Xt c_val) {
-    //  ┌───────────┐   ┌────────────┐
-    //  │ a_row[0]  │   │   b_col[0]  │
-    //  │ a_row[1]  │   │   b_col[1]  │
-    //  │  mask     │   │   b_col[2]  │
-    //  │  wasted   │   │   b_col[3]  │
-    //  └───────────┘   └────────────┘
-    
+  // ========================================================================
+  // Core Computation Operations
+  // ========================================================================
+
+  // Fused Element-wise Dot Product
+  Xt FEDP(const Xt *a_row, const Xt *b_col, Xt c_val) const {
     Ot acc(*reinterpret_cast<const Ot*>(&c_val));
-    const It* a = reinterpret_cast<const It *>(a_row);
-    const It* b = reinterpret_cast<const It *>(b_col);
-
-    assert((tcK * i_ratio) % 4 == 0 && "tcK must be a multiple of 4 for FEDP");
-    uint32_t num_blocks = (tcK * i_ratio) / 4; // Number of 4-element blocks in the K dimension
-    
-    uint32_t a_idx = 0;
-
-    for(uint32_t block = 0; block < num_blocks; ++block) {
-      uint8_t mask = static_cast<uint8_t>(a[2 + block * 4]); //mask at a[2],a[6],a[10],...
-      for (uint32_t z = block * 4; z < (block + 1) * 4; ++z) {
-        Ot b_val = static_cast<Ot>(b[z]);
-        if ((mask >> (z & 3)) & 1u) {
-          Ot a_val = static_cast<Ot>(a[a_idx]);
-          acc += a_val * b_val;
-          ++a_idx;
-        }
-      }
+    auto a = reinterpret_cast<const It *>(a_row);
+    auto b = reinterpret_cast<const It *>(b_col);
+    for (uint32_t z = 0; z < tcK * i_ratio; ++z) {
+      auto a_val = static_cast<Ot>(a[z]);
+      auto b_val = static_cast<Ot>(b[z]);
+      acc = a_val * b_val + acc;
     }
     Xt ret(0);
     *reinterpret_cast<Ot*>(&ret) = acc;
     return ret;
   }
 
+#ifdef ENABLE_SPARSITY
+  // Sparse Matrix Multiply-Accumulate micro-operation
+  Vreg MMA(uint32_t m, uint32_t n, const Vreg &va, const Vreg &va_meta,
+           const Vreg &vb, const Vreg &vc) {
+    uint32_t a_off = (m % a_sub_blocks) * a_block_size;
+    uint32_t b_off = (n % b_sub_blocks) * b_block_size;
+
+    Vreg vd;
+    uint8_t b_col_collected[tcK * i_ratio];
+
+    for (uint32_t i = 0; i < tcM; ++i) {
+      for (uint32_t j = 0; j < tcN; ++j) {
+        auto a_row = &va[a_off + i * tcK];
+        auto b_col_0 = &vb[b_off + j * tcK * COMPRESSION_RATE];
+        auto b_col_1 = &vb[b_off + j * tcK * COMPRESSION_RATE + tcK];
+        auto c = vc[i * tcN + j];
+
+        // Extract metadata for this row
+        uint16_t a_row_meta = extract_row_metadata(va_meta, i);
+
+        // Gather sparse B elements based on A's metadata
+        gather_sparse_B_column(b_col_collected, b_col_0, b_col_1, a_row_meta);
+
+        // Compute dot product
+        auto d = FEDP(a_row, reinterpret_cast<const Xt*>(b_col_collected), c);
+        vd[i * tcN + j] = d;
+      }
+    }
+
+    return vd;
+  }
+#else
+  // Dense Matrix Multiply-Accumulate micro-operation
   Vreg MMA(uint32_t m, uint32_t n, const Vreg &va, const Vreg &vb, const Vreg &vc) {
     uint32_t a_off = (m % a_sub_blocks) * a_block_size;
     uint32_t b_off = (n % b_sub_blocks) * b_block_size;
@@ -533,7 +736,63 @@ private:
 
     return vd;
   }
+#endif
 
+#ifdef ENABLE_SPARSITY
+  // Sparse matrix multiply-add operation
+  FragD mmadd(const FragA &A, const vector_t<uint32_t, 8> &A_meta,
+              const FragB &B, const FragC &C) {
+    FragD D;
+    vector_t<Vreg, NRA> vA;
+    vector_t<Vreg, NRB> vB;
+    vector_t<Vreg, NRC> vC, vD;
+
+    dbg_out << "A=" << A << "\n";
+    dbg_out << "B=" << B << "\n";
+    dbg_out << "C=" << C << "\n";
+
+    // Load fragments into vector registers
+    for (uint32_t lane = 0; lane < NT; ++lane) {
+      load_A(vA, lane, tileK, A.data(), A_meta);
+    }
+    for (uint32_t lane = 0; lane < NT; ++lane) {
+      load_B(vB, lane, tileN, B.data());
+    }
+    for (uint32_t lane = 0; lane < NT; ++lane) {
+      load_C(vC, lane, tileN, C.data());
+    }
+
+    // Execute micro-operations
+    for (uint32_t k = 0; k < k_steps / COMPRESSION_RATE; ++k) {
+      for (uint32_t m = 0; m < m_steps; ++m) {
+        for (uint32_t n = 0; n < n_steps; ++n) {
+          loop_iteration_count_++;  // Count loop iterations
+          uint32_t idxA = (m / a_sub_blocks) * (k_steps / COMPRESSION_RATE) + k;
+          uint32_t idxA_meta = idxA + NRA / COMPRESSION_RATE;
+          uint32_t idxB = (k * n_steps + n) / b_sub_blocks;
+          uint32_t idxC = m * n_steps + n;
+
+          auto &va = vA[idxA];
+          auto &va_meta = vA[idxA_meta];
+          auto &vb = vB[idxB];
+          auto &vc = (k != 0) ? vD[idxC] : vC[idxC];
+
+          auto vd = MMA(m, n, va, va_meta, vb, vc);
+          vD[idxC] = vd;
+        }
+      }
+    }
+
+    // Store results back to fragment
+    for (uint32_t lane = 0; lane < NT; ++lane) {
+      store_D(D.data(), lane, tileN, vD);
+    }
+
+    dbg_out << "D=" << D << "\n";
+    return D;
+  }
+#else
+  // Dense matrix multiply-add operation
   FragD mmadd(const FragA &A, const FragB &B, const FragC &C) {
     FragD D;
     vector_t<Vreg, NRA> vA;
@@ -545,28 +804,9 @@ private:
     dbg_out << "C=" << C << "\n";
 
     // per-lane load
-    #if USE_SPARSE_A == 1
-    /* ---------- ❸ replace on‑the‑fly converter with a tiny helper ---- */
-    auto fragA_to_vec = [&](const FragA& f){
-        std::vector<It> v(tileM*tileK);
-        std::memcpy(v.data(), f.data(), v.size()*sizeof(It));
-        return v;
-    };
-
-    auto Sp = dense_to_sparse(fragA_to_vec(A), tileM, tileK);
-    //TODO: if Lane % 4 = 0 or 1, load Sparse Data; if Lane % 4 = 2, load Mask.if lane % 4 = 3, do nothing. This ensures that the latency for loadASparse is the same as the latency for loadAMask.
-    for (uint32_t lane = 0; lane < NT; ++lane){
-        if (lane % 4 == 0 || lane % 4 == 1) {
-            load_A_sparse_data(vA, lane, tileK, Sp.values.data());
-        } else if (lane % 4 == 2) {
-            load_A_sparse_mask(vA, lane, tileK, Sp.meta.data());
-        }
-    }
-    #else
     for (uint32_t lane = 0; lane < NT; ++lane) {
       load_A(vA, lane, tileK, A.data());
     }
-    #endif
     for (uint32_t lane = 0; lane < NT; ++lane) {
       load_B(vB, lane, tileN, B.data());
     }
@@ -588,6 +828,7 @@ private:
     for (uint32_t k = 0; k < k_steps; ++k) {
       for (uint32_t m = 0; m < m_steps; ++m) {
         for (uint32_t n = 0; n < n_steps; ++n) {
+          loop_iteration_count_++;  // Count loop iterations
           uint32_t idxA = (m / a_sub_blocks) * k_steps + k;
           uint32_t idxB = (k * n_steps + n) / b_sub_blocks;
           uint32_t idxC = m * n_steps + n;
@@ -598,9 +839,9 @@ private:
 
           auto vd = MMA(m, n, va, vb, vc);
 
-          dbg_out << "[mmadd] m=" << m << " n=" << n << " k=" << k
-                  << " → idxA=" << idxA << " idxB=" << idxB << " idxC=" << idxC
-                  << " va=" << va << " vb=" << vb << " vc=" << vc << " vd=" << vd << "\n";
+          // dbg_out << "[mmadd] m=" << m << " n=" << n << " k=" << k
+          //         << " → idxA=" << idxA << " idxB=" << idxB << " idxC=" << idxC
+          //         << " va=" << va << " vb=" << vb << " vc=" << vc << " vd=" << vd << "\n";
 
           vD[idxC] = vd;
         }
@@ -621,71 +862,65 @@ private:
     dbg_out << "D=" << D << "\n";
     return D;
   }
+#endif
 
 public:
+  // ========================================================================
+  // Public Interface
+  // ========================================================================
+
   void init() {
-
-    //fragA_.init();
-    //fragB_.init();
-    //fragC_.init();
-
     int x = 0;
 
+    // Initialize matrix A with sequential values
     for (uint32_t r = 0; r < tileM; ++r) {
       for (uint32_t c = 0; c < tileK; ++c) {
         fragA_(r, c) = x++;
       }
     }
+
+#ifdef ENABLE_SPARSITY
+    // Apply 2:4 structured sparsity
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    apply_2_4_pruning(gen);
+
+    // Compress sparse matrix A
+    compress_matrix_A();
+
+    // Pack metadata into bitmap format
+    pack_metadata_bitmap();
+#endif
+
+    // Initialize matrix B with sequential values
     for (uint32_t r = 0; r < tileK; ++r) {
       for (uint32_t c = 0; c < tileN; ++c) {
         fragB_(r, c) = x++;
       }
     }
+
+    // Initialize matrix C to zero
     for (uint32_t r = 0; r < tileM; ++r) {
       for (uint32_t c = 0; c < tileN; ++c) {
         fragC_(r, c) = 0;
       }
     }
 
+    // Compute reference result
     for (uint32_t row = 0; row < tileM; ++row) {
       for (uint32_t col = 0; col < tileN; ++col) {
         Ot sum(0);
-#if USE_SPARSE_A == 0
         for (uint32_t k = 0; k < tileK; ++k) {
           auto a = static_cast<Ot>(fragA_(row, k));
           auto b = static_cast<Ot>(fragB_(k, col));
           sum = a * b + sum;
         }
-#else
-        for (uint32_t k = 0; k < tileK; k += 4) {
-          Ot a0 = static_cast<Ot>(fragA_(row, k + 0));
-          Ot a1 = static_cast<Ot>(fragA_(row, k + 1));
-          Ot a2 = static_cast<Ot>(fragA_(row, k + 2));
-          Ot a3 = static_cast<Ot>(fragA_(row, k + 3));
-
-          uint32_t idx_big1 = 0, idx_big2 = 1;           // initial guess
-          Ot vals[4] = {a0, a1, a2, a3};
-
-          for (uint32_t i = 0; i < 4; ++i) {
-            if (vals[i] > vals[idx_big1]) {
-              idx_big2 = idx_big1;
-              idx_big1 = i;
-            } else if (vals[i] > vals[idx_big2] && i != idx_big1) {
-              idx_big2 = i;
-            }
-          }
-          auto b_big1 = static_cast<Ot>(fragB_(k + idx_big1, col));
-          auto b_big2 = static_cast<Ot>(fragB_(k + idx_big2, col));
-          sum += vals[idx_big1] * b_big1;
-          sum += vals[idx_big2] * b_big2;
-        }
-#endif
         fragRef_(row, col) = sum + fragC_(row, col);
       }
     }
   }
 
-  float verify() {
+  float verify() const {
     if constexpr (std::is_integral_v<Ot>) {
       int32_t err(0);
       for (uint32_t row = 0; row < tileM; ++row) {
@@ -696,7 +931,7 @@ public:
           err = std::max<int32_t>(err, diff);
         }
       }
-      return err;
+      return static_cast<float>(err);
     } else {
       float err(0);
       for (uint32_t row = 0; row < tileM; ++row) {
@@ -711,11 +946,23 @@ public:
     }
   }
 
+  uint32_t get_loop_count() const {
+    return loop_iteration_count_;
+  }
+
   void run() {
+    loop_iteration_count_ = 0;  // Initialize counter
+#ifdef ENABLE_SPARSITY
+    fragD_ = mmadd(fragA_compressed_, packed_bit_meta_, fragB_, fragC_);
+#else
     fragD_ = mmadd(fragA_, fragB_, fragC_);
+#endif
   }
 };
 
+// ============================================================================
+// Main Test Driver
+// ============================================================================
 using cfg = wmma_config_t<
     NUM_THREADS,
     8,
@@ -724,52 +971,14 @@ using cfg = wmma_config_t<
     ITYPE,
     DPLEN>;
 
-template <typename Itype>
-SparseMat<Itype> dense_to_sparse(const std::vector<Itype>& dense,
-                                 uint32_t rows, uint32_t cols)
-{
-  SparseMat<Itype> S;
-  S.rows = rows;
-  S.cols = cols;
-  S.values.reserve(rows * cols / 2);
-  S.meta   .reserve(rows * cols / 4);
-
-  for (uint32_t r = 0; r < rows; ++r) {
-    for (uint32_t c = 0; c < cols; c += 4) {
-      // build a length‐4 window of (value, index)
-      std::array<std::pair<Itype,uint32_t>,4> tmp;
-      for (uint32_t i = 0; i < 4; ++i)
-        tmp[i] = { dense[r*cols + c + i], i };
-
-      // pick the two largest‐magnitude entries
-      std::sort(tmp.begin(), tmp.end(),
-        [](auto &a, auto &b){
-          return std::abs(int(a.first)) > std::abs(int(b.first));
-        });
-
-      // mask bit = union of their column‐indices
-      uint32_t idx0 = tmp[0].second, idx1 = tmp[1].second;
-      uint8_t m = (1u << idx0) | (1u << idx1);
-      S.meta.push_back(m);
-
-      // **NEW**: push values in ascending‐index order so that
-      // your popcount‐prefix decompressor lines up correctly
-      if (idx0 < idx1) {
-        S.values.push_back(tmp[0].first);
-        S.values.push_back(tmp[1].first);
-      } else {
-        S.values.push_back(tmp[1].first);
-        S.values.push_back(tmp[0].first);
-      }
-    }
-  }
-  return S;
-}
-
-
 int main() {
-
   WMMA<cfg> wmma;
+
+#ifdef ENABLE_SPARSITY
+  std::cout << "=== Sparse Tensor Core Configuration (2:4 Structured Sparsity) ===\n";
+#else
+  std::cout << "=== Dense Tensor Core Configuration ===\n";
+#endif
 
   std::cout
       << "tileM = " << cfg::tileM << "\n"
@@ -790,23 +999,30 @@ int main() {
       << "NRA = " << cfg::NRA << "\n"
       << "NRB = " << cfg::NRB << "\n"
       << "NRC = " << cfg::NRC << "\n"
-      ;
+      << "\n";
 
   wmma.init();
-
   wmma.run();
 
   auto err = wmma.verify();
-
   bool passed = (err < 1e-4f);
 
-  std::cout << "Max abs error: " << err << "\n"
+  std::cout << "Total loop iterations: " << wmma.get_loop_count() << "\n"
+            << "Max abs error: " << err << "\n"
             << (passed ? "PASSED!" : "FAILED!") << '\n';
 
   return passed ? 0 : 1;
-  //return 0;
 }
 
-#endif
-// README
-// gcc -std=c++17 -o tensor_generic -O2 tensor_generic.cpp -lstdc++ 
+// ============================================================================
+// Build Instructions
+// ============================================================================
+// Dense mode (default):
+//   g++ -std=c++17 -O2 tensor_generic.cpp -o a.out
+//
+// Sparse mode (2:4 structured sparsity):
+//   g++ -std=c++17 -O2 -DENABLE_SPARSITY tensor_generic.cpp -o a.out
+//
+// Debug builds:
+//   g++ -std=c++17 -g tensor_generic.cpp -o a.out
+//   g++ -std=c++17 -g -DENABLE_SPARSITY tensor_generic.cpp -o a.out
