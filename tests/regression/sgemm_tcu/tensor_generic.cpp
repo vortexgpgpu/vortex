@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 
+#define ENABLE_SPARSITY true
 // Include random header only when sparsity is enabled
 #ifdef ENABLE_SPARSITY
 #include <random>
@@ -20,7 +21,7 @@ using float32_t = float;
 // Configuration Macros
 // ============================================================================
 #ifndef NUM_THREADS
-#define NUM_THREADS 16      // Should be 32 for paper accuracy
+#define NUM_THREADS 8      // Should be 32 for paper accuracy
 #endif
 
 #ifndef XLENB
@@ -372,7 +373,7 @@ private:
 
   FragA fragA_compressed_;   // Compressed matrix A (50% storage)
   FragA_meta fragA_meta_;    // Metadata: 1 = non-zero, 0 = pruned
-  vector_t<uint32_t, 8> packed_bit_meta_;  // Packed bitmap metadata
+  vector_t<uint32_t, NRA> packed_bit_meta_;  // Packed bitmap metadata, 32 * 32bit Reg in RISC-V
 #endif
 
   FragD fragRef_;
@@ -441,7 +442,7 @@ private:
 
           // Pack metadata for this chunk
           for (uint32_t r_i = 0; r_i < ROWS_PER_CHUNK; ++r_i) {
-            for (uint32_t c_i = 0; c_i < ELEMENTS_PER_ROb_W; ++c_i) {
+            for (uint32_t c_i = 0; c_i < ELEMENTS_PER_ROW; ++c_i) {
               uint32_t row = r_i + chunk * ROWS_PER_CHUNK + m * tcM;
               uint32_t col = c_i + k * ELEMENTS_PER_ROW;
 
@@ -470,7 +471,7 @@ private:
 
   // Gather B column elements based on A's sparsity pattern
   void gather_sparse_B_column(
-      uint8_t *b_collected,
+      It *b_collected,
       const Xt *b_col_0,
       const Xt *b_col_1,
       uint16_t a_row_meta) const {
@@ -485,7 +486,7 @@ private:
         uint32_t element_idx = bit_idx / i_ratio;
         uint32_t byte_pos = (bit_idx % i_ratio) * 8;
         b_collected[collect_idx++] =
-            static_cast<uint8_t>((b_col_0[element_idx] >> byte_pos) & 0xFF);
+            static_cast<It>((b_col_0[element_idx] >> byte_pos) & 0xFF);
       }
     }
 
@@ -694,7 +695,7 @@ private:
     uint32_t b_off = (n % b_sub_blocks) * b_block_size;
 
     Vreg vd;
-    uint8_t b_col_collected[tcK * i_ratio];
+    It b_col_collected[tcK * i_ratio];
 
     for (uint32_t i = 0; i < tcM; ++i) {
       for (uint32_t j = 0; j < tcN; ++j) {
