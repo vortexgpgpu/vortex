@@ -1,0 +1,22 @@
+`verilator_config
+
+// Lint waivers for Vortex RTL
+
+// Allow interface ports on non-top modules
+lint_off -rule UNSUPPORTED -file "*/VX_cache_cluster.sv"
+lint_off -rule UNSUPPORTED -file "*/VX_cache_wrap.sv"
+lint_off -rule UNSUPPORTED -file "*/VX_cache.sv"
+lint_off -rule UNSUPPORTED -file "*/VX_tlb_wrap.sv"
+
+// Suppress other common warnings
+lint_off -rule UNUSED
+lint_off -rule UNDRIVEN
+lint_off -rule UNUSEDPARAM
+lint_off -rule UNUSEDSIGNAL
+lint_off -rule GENUNNAMED
+lint_off -rule VARHIDDEN
+lint_off -rule WIDTHEXPAND
+lint_off -rule WIDTHTRUNC
+lint_off -rule PINCONNECTEMPTY
+lint_off -rule EOFNEWLINE
+
