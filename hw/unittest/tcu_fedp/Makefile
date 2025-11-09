@@ -32,11 +32,14 @@ DBG_TRACE_FLAGS :=
 RTL_INCLUDE := -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
 RTL_INCLUDE += -I$(RTL_DIR)/tcu
 
+ifneq (,$(findstring -DTCU_DPI, $(CONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 TOP := VX_tcu_fedp_dpi
+endif
 
-ifneq (,$(findstring -DTCU_DRL, $(CONFIGS)))
-RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
-TOP := VX_tcu_fedp_drl
+ifneq (,$(findstring -DTCU_DSP, $(CONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
+TOP := VX_tcu_fedp_dsp
 endif
 
 ifneq (,$(findstring -DTCU_BHF, $(CONFIGS)))
@@ -54,8 +57,9 @@ RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 TOP := VX_tcu_fedp_bhf
 endif
 
-ifneq (,$(findstring -DTCU_DSP, $(CONFIGS)))
-TOP := VX_tcu_fedp_dsp
+ifneq (,$(findstring -DTCU_DRL, $(CONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
+TOP := VX_tcu_fedp_drl
 endif
 
 # test fp16
