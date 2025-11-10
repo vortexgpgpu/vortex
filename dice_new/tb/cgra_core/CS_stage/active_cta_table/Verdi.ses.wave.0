@@ -1,0 +1,88 @@
+Magic 271485
+Revision Verdi_X-2025.06
+
+; Window Layout <x> <y> <width> <height> <signalwidth> <valuewidth>
+viewPort 0 11 2560 577 201 65
+
+; File list:
+; openDirFile [-d delimiter] [-s time_offset] [-rf auto_bus_rule_file] path_name file_name
+openDirFile -d / "" "/home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb"
+
+; file time scale:
+; fileTimeScale ### s|ms|us|ns|ps
+
+individualSetFormt -File /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb -UDEC /tb_active_cta_table/dut/add_cta_id_y[15:0]
+individualSetFormt -File /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb -UDEC /tb_active_cta_table/dut/add_cta_size_y[10:0]
+individualSetFormt -File /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb -UDEC /tb_active_cta_table/dut/add_cta_id_x[15:0]
+individualSetFormt -File /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb -UDEC /tb_active_cta_table/dut/add_cta_size_x[10:0]
+individualSetFormt -File /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb -UDEC /tb_active_cta_table/dut/add_cta_size[10:0]
+individualSetFormt -File /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb -UDEC /tb_active_cta_table/dut/add_kernel_id[15:0]
+individualSetFormt -File /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb -UDEC /tb_active_cta_table/dut/add_cta_id_z[15:0]
+individualSetFormt -File /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb -UDEC /tb_active_cta_table/dut/add_cta_size_z[10:0]
+
+; signal spacing:
+signalSpacing 5
+
+; windowTimeUnit is used for zoom, cursor & marker
+; waveform viewport range
+zoom 0.000000 479.304822
+cursor 29.000000
+marker 0.000000
+
+; user define markers
+; userMarker time_pos marker_name color linestyle
+; visible top row signal index
+top 5
+; marker line index
+markerPos 1
+
+; event list
+; addEvent event_name event_expression
+; curEvent event_name
+
+
+
+COMPLEX_EVENT_BEGIN
+
+
+COMPLEX_EVENT_END
+
+
+
+; toolbar current search type
+; curSTATUS search_type
+curSTATUS ByChange
+
+
+addGroup "Pop Interface"
+activeDirFile "" "/home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb"
+addSignal -h 16 /tb_active_cta_table/dut/rst_n
+addSignal -h 16 -UNSIGNED -HEX -holdScope pop_hw_cta_id[1:0]
+addSignal -h 16 -holdScope pop_valid
+addGroup "Add Interface"
+addSignal -h 16 /tb_active_cta_table/dut/add_valid
+addSignal -h 16 -UNSIGNED -UDEC -holdScope add_cta_id_x[15:0]
+addSignal -h 16 -UNSIGNED -UDEC -holdScope add_cta_id_y[15:0]
+addSignal -h 16 -UNSIGNED -UDEC -holdScope add_cta_id_z[15:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope add_grid_size_x[15:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope add_grid_size_y[15:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope add_grid_size_z[15:0]
+addSignal -h 16 -UNSIGNED -UDEC -holdScope add_cta_size_x[10:0]
+addSignal -h 16 -UNSIGNED -UDEC -holdScope add_cta_size_y[10:0]
+addSignal -h 16 -UNSIGNED -UDEC -holdScope add_cta_size_z[10:0]
+addSignal -h 16 -UNSIGNED -UDEC -holdScope add_cta_size[10:0]
+addSignal -h 16 -UNSIGNED -UDEC -holdScope add_kernel_id[15:0]
+addSignal -h 16 -holdScope add_ready
+addGroup "Output Interface"
+addSignal -h 16 /tb_active_cta_table/dut/out_valid
+addSignal -h 16 -UNSIGNED -HEX -holdScope out_cta_id_x[15:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope out_cta_id_y[15:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope out_cta_id_z[15:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope out_cta_size[10:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope out_kernel_id[15:0]
+addSignal -h 16 -holdScope out_ready
+addGroup "G4"
+
+; getSignalForm Scope Hierarchy Status
+; active file of getSignalForm
+

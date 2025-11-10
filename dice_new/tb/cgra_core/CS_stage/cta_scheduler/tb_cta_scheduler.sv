@@ -30,7 +30,14 @@ module tb_cta_scheduler;
     int test_count;
     int pass_count;
     int fail_count;
-    
+
+    // Used for generating waveforms
+    initial begin
+        //dump fsdb
+        $fsdbDumpfile("tb_cta_scheduler.fsdb");
+        $fsdbDumpvars("+all");
+    end
+
     // Test data for CTA states
     logic [PC_WIDTH-1:0] test_pcs[MAX_NUM_CTA] = '{
         64'h1000, 64'h2000, 64'h3000, 64'h4000

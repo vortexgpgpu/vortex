@@ -40,6 +40,12 @@ module tb_simt_stack;
     // Test data array
     stack_entry_t test_entries[STACK_DEPTH + 5]; // Extra entries for overflow testing
     
+    initial begin
+        //dump fsdb
+        $fsdbDumpfile("tb_simt_stack.fsdb");
+        $fsdbDumpvars("+all");
+    end
+
     // DUT instantiation
     simt_stack #(
         .STACK_DEPTH(STACK_DEPTH),

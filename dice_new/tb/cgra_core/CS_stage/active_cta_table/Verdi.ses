@@ -1,0 +1,105 @@
+@verdi rc file Version 1.0
+[General]
+saveDB = TRUE
+relativePath = FALSE
+saveSingleView = FALSE
+saveNWaveWinId = 2
+VerdiVersion = Verdi_X-2025.06
+[KeyNote]
+Line1 = invoke directory: /home/sz330
+Line2 = command line: -elab /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/simv.daidir/kdb.elab++ -ba 
+Line3 = current trace scope: tb_active_cta_table.dut
+Line4 = memo:
+Line5 = Save Open Database Information: Yes
+Line6 = Path Option: Absolute Paths
+Line7 = Windows Option: All Windows
+[OneSearch]
+isExisted = TRUE
+[TestBench]
+ConstrViewShow = 0
+InherViewShow = 0
+FSDBMsgShow = 0
+AnnotationShow = 0
+Console = FALSE
+powerDumped = 0
+[fusa]
+fdb_server = 
+fdb_proj = 
+fdb_campaign = 
+fdb_tool = 
+[hb]
+postSimFile = /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb
+syncTime = 29
+viewport = 0 27 2560 1305 0 0 291 898
+activeNode = "tb_active_cta_table.dut"
+activeScope = "tb_active_cta_table.dut"
+activeFile = "/home/sz330/vortex4dice/dice_new/rtl/cgra_core/cta_schedule/active_cta_table.sv"
+interactiveMode = False
+viewType = Source
+simulatorMode = False
+sourceBeginLine = 25
+baMode = False
+srcLineNum = True
+AutoWrap = True
+IdentifyFalseLogic = False
+syncSignal = False
+traceMode = Hierarchical
+showTraceInSchema = True
+paMode = False
+funcMode = False
+powerAwareAnnot = True
+safetyAwareAnnot = True
+amsAnnot = True
+DnDtraceCrossHierOnly = True
+leadingZero = False
+signalPane = False
+SourceVerticalScrollLines = 5
+Scope1 = "tb_active_cta_table.dut"
+Scope2 = "tb_active_cta_table.scenario_reset_check"
+Scope3 = "tb_active_cta_table.ref_reset"
+Scope4 = "tb_active_cta_table.scenario_backpressure"
+Scope5 = "tb_active_cta_table.check_status_vs_ref"
+Scope6 = "tb_active_cta_table.drive_add"
+Scope7 = "tb_active_cta_table.dut.unnamed$$_0"
+Scope8 = "tb_active_cta_table"
+sdfCheckUndef = FALSE
+simFlow = FALSE
+[hb.design]
+importCmd = "-dbdir" "/home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/simv.daidir" 
+invokeDir = /home/sz330
+[hb.sourceTab.1]
+scope = tb_active_cta_table.dut
+File = /home/sz330/vortex4dice/dice_new/rtl/cgra_core/cta_schedule/active_cta_table.sv
+Line = 26
+[nMemoryManager]
+WaveformFile = /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/tb_active_cta_table.fsdb
+UserActionNum = 0
+nMemWindowNum = 0
+[wave.0]
+viewPort = 0 11 2560 577 201 65
+primaryWindow = TRUE
+SessionFile = /home/sz330/vortex4dice/dice_new/tb/cgra_core/CS_stage/active_cta_table/Verdi.ses.wave.0
+displayGrid = FALSE
+hierarchicalName = FALSE
+waveformToolTip = FALSE
+snap = TRUE
+displayLeadingZeros = FALSE
+displayGridLine = FALSE
+fixDelta = FALSE
+displayCursorMarker = FALSE
+autoUpdate = FALSE
+highlightGlitchs = FALSE
+waveformSyncCursorMarker = FALSE
+waveformSyncHorizontalRange = FALSE
+waveformSyncVerticalscroll = FALSE
+displayErrors = TRUE
+displayMsgSymbols = TRUE
+showMsgDescriptions = TRUE
+autoFit = FALSE
+displayDeltaY = FALSE
+centerCursor = FALSE
+fsaRegMask = TRUE
+fsaCoreMask = TRUE
+fsaSfsmMask = TRUE
+fsaEcrMask = TRUE
+tPropMask = TRUE
