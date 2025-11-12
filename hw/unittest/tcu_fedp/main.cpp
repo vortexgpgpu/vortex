@@ -162,7 +162,11 @@ struct TestConfig {
   int exp_bits = 0; // Exponent bits
   int sig_bits = 0; // Significand bits
   RoundingMode frm = RoundingMode::RNE; // Rounding mode
+  int W = 25; // Accumulator window width
+  int HR = 3; // Accumulator Headroom bits
+  bool renorm = false; // renormalize product
   uint32_t num_tests = 100000; // Number of tests per feature
+  int ulp = 1; // float precision error bits
   int32_t test_id = -1; // Specific test ID to run (for debugging)
 };
 
@@ -329,23 +333,23 @@ static int32_t dot_product(const int32_t *a, const int32_t *b, int32_t c, uint32
 }
 
 // Check if two floats are approximately equal
-static bool approximately_equal(float a, float b, uint32_t ulp = 0) {
+static int approximately_equal(float a, float b) {
   // Handle NaN
   if (std::isnan(a) && std::isnan(b))
-    return true;
+    return 0;
 
   // Handle infinity
   if (std::isinf(a) && std::isinf(b))
-    return std::signbit(a) == std::signbit(b);
+    return (std::signbit(a) == std::signbit(b)) ? 0 : 1;
 
-  // ULP comparison
+  // comparison
   uint32_t xa, xb;
   std::memcpy(&xa, &a, sizeof(a));
   std::memcpy(&xb, &b, sizeof(b));
   uint32_t oa = xa ^ 0x80000000u;
   uint32_t ob = xb ^ 0x80000000u;
-  uint32_t delta = (oa > ob) ? (oa - ob) : (ob - oa);
-  return (delta <= ulp);
+  int delta = oa - ob;
+  return delta;
 }
 
 static inline uint32_t pack_fp_bits(uint32_t sign, uint32_t exp, uint32_t frac, uint32_t exp_bits, uint32_t sig_bits) {
@@ -734,12 +738,12 @@ public:
 
       // Calculate expected result
     #ifdef FEDP_EMUL
-      FEDP fedp(config_.exp_bits, config_.sig_bits, (int)config_.frm, NUM_REGS * 2);
+      FEDP fedp(config_.exp_bits, config_.sig_bits, NUM_REGS * 2, (int)config_.frm, config_.W, config_.HR, config_.renorm);
       dut_result = fedp(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS);
     #endif
 
-      bool passed = approximately_equal(dut_result, expected, 1);
-      if (!passed) {
+      int delta = approximately_equal(dut_result, expected);
+      if (abs(delta) > config_.ulp) {
         std::cout << "Test #" << test_id << " (" << feature << ") failed:" << std::endl;
 
         std::cout << "  scenario='[";
@@ -761,6 +765,7 @@ public:
         print_float("  c_value=", c_value_float, true);
         print_float("  expected=", expected, true);
         print_float("  actual=", dut_result, true);
+        std::cout << "  delta=" << delta << std::endl;
         return false;
       }
 
@@ -836,8 +841,16 @@ TestConfig parse_args(int argc, char **argv) {
       config_.exp_bits = std::stoi(arg.substr(6));
     } else if (arg.substr(0, 6) == "--sig=") {
       config_.sig_bits = std::stoi(arg.substr(6));
-    } else if (arg.substr(0, 6) == "--rnd=") {
+    } else if (arg.substr(0, 6) == "--frm=") {
       config_.frm = frm_from_string(arg.substr(6));
+    } else if (arg.substr(0, 6) == "--W=") {
+      config_.W = std::stoi(arg.substr(4));
+    } else if (arg.substr(0, 6) == "--HR=") {
+      config_.HR = std::stoi(arg.substr(5));
+    } else if (arg == "--renorm") {
+      config_.renorm = true;
+    } else if (arg.substr(0, 6) == "--ulp=") {
+      config_.ulp = std::stoi(arg.substr(6));
     } else if (arg.substr(0, 8) == "--tests=") {
       config_.num_tests = std::stoi(arg.substr(8));
     } else if (arg.substr(0, 7) == "--test=") {
@@ -856,7 +869,11 @@ TestConfig parse_args(int argc, char **argv) {
       std::cout << "  --fmt=N           Set source format code" << std::endl;
       std::cout << "  --ext=BITS        Exponent bits for custom format" << std::endl;
       std::cout << "  --sig=BITS        Significand bits for custom format" << std::endl;
-      std::cout << "  --rnd=MODE        Rounding mode (RNE, RZ, RU, RD, RM)" << std::endl;
+      std::cout << "  --frm=MODE        Rounding mode (RNE, RZ, RU, RD, RM)" << std::endl;
+      std::cout << "  --W <value>       Accumulator window width W" << std::endl;
+      std::cout << "  --HR <value>      Accumulator Headroom bits" << std::endl;
+      std::cout << "  --reborm          Renormalize product" << std::endl;
+      std::cout << "  --ulp <value>     Adjust floats precision error bits" << std::endl;
       std::cout << "  --seed <value>    Set random seed" << std::endl;
       std::cout << "  --tests <count>   Number of tests to run (default: 100000)" << std::endl;
       std::cout << "  --test <id>       Run the specified test only" << std::endl;
