@@ -44,7 +44,8 @@ From: ubuntu:22.04
                        openjdk-11-jre-headless libcairo2 librsvg2-2 librsvg2-common \
                        openjdk-11-jre-zero libtheora0 libavcodec58 libcairo-gobject2 \
                        ca-certificates-java libchromaprint1 software-properties-common perl-modules bzip2 \
-                       unzip zlib1g-dev libtinfo5 g++ usbutils gawk bison gcc make tar python3.9 locales zstd uuid-dev ccache || true
+                       unzip zlib1g-dev libtinfo5 g++ usbutils pciutils gawk bison gcc make tar python3.9 locales zstd uuid-dev ccache \
+                       libboost-filesystem1.74.0 libboost-program-options1.74.0 libboost-system1.74.0 libboost-chrono1.74.0 libboost-thread1.74.0 environment-modules || true
 
     ln -s /usr/bin/python3 /usr/bin/python
 

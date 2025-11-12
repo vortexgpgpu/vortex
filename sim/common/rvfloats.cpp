@@ -13,6 +13,7 @@
 
 #include "rvfloats.h"
 #include <stdio.h>
+#include <cstring>
 
 extern "C" {
 #include <softfloat.h>
@@ -560,6 +561,22 @@ uint16_t rv_ftob_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   auto r = f32_to_bf16(to_float32_t(a));
   if (fflags) { *fflags = softfloat_exceptionFlags; }
   return from_bfloat16_t(r);
+}
+
+uint32_t rv_xtof_s(uint32_t a, uint32_t exp, uint32_t sig, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float out = cvt_custom_to_f32(a, exp, sig, softfloat_roundingMode, fflags);
+  uint32_t xout;
+  memcpy(&xout, &out, sizeof(out));
+  return xout;
+}
+
+uint32_t rv_ftox_s(uint32_t a, uint32_t exp, uint32_t sig, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float af;
+  memcpy(&af, &a, sizeof(af));
+  auto out = cvt_f32_to_custom(af, exp, sig, softfloat_roundingMode, fflags);
+  return out;
 }
 
 #ifdef __cplusplus
