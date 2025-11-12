@@ -140,12 +140,10 @@ void Socket::set_satp(uint64_t satp) {
 #endif
 
 bool Socket::running() const {
-  //std::cout << "Socket: running()" << std::endl;
   for (auto& core : cores_) {
     if (core->running())
       return true;
   }
-  std::cout << "Socket: running() returns false" << std::endl;
   return false;
 }
 

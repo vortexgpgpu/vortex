@@ -103,12 +103,10 @@ void Cluster::set_satp(uint64_t satp) {
 #endif
 
 bool Cluster::running() const {
-  //std::cout << "Cluster: running()" << std::endl;
   for (auto& socket : sockets_) {
     if (socket->running())
       return true;
   }
-  std::cout << "Cluster: running() returns false" << std::endl;
   return false;
 }
 

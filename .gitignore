@@ -2,3 +2,5 @@
 /.vscode
 *.cache
 *.code-workspace
+sim/simx/simx_config.stamp
+sim/simx/obj/common/*.o

@@ -440,7 +440,6 @@ int Core::get_exitcode() const {
 
 bool Core::running() const {
   if (emulator_.running() || !pending_instrs_.empty()) {
-    //std::cout << "Core::running() emulator running: " << emulator_.running() << ", pending_instrs size: " << pending_instrs_.size() << std::endl;
   #ifndef NDEBUG
     for (auto& trace : pending_instrs_) {
       DT(5, "pipeline-pending: " << *trace);
@@ -448,7 +447,6 @@ bool Core::running() const {
   #endif
     return true;
   }
-  std::cout << "Core::running() returns false" << std::endl;
   return false;
 }
 

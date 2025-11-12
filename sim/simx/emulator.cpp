@@ -130,7 +130,6 @@ void Emulator::reset() {
 
 void Emulator::attach_ram(RAM* ram) {
   // bind RAM to memory unit
-  //std::cout << "Emulator: attach_ram()" << std::endl;
 #if (XLEN == 64)
   mmu_.attach(*ram, 0, 0x7FFFFFFFFF); //39bit SV39
 #else
