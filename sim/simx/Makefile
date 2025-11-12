@@ -1,6 +1,8 @@
 include ../common.mk
 
 DESTDIR ?= $(CURDIR)
+USE_SST ?= 0
+SST_PKG ?= SST-14.1 # default SST package name
 
 OBJ_DIR = $(DESTDIR)/obj
 CONFIG_FILE = $(DESTDIR)/simx_config.stamp
@@ -27,13 +29,13 @@ SRCS += $(SRC_DIR)/execute.cpp $(SRC_DIR)/func_unit.cpp
 SRCS += $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp $(SRC_DIR)/mem_coalescer.cpp
 SRCS += $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 
+ifeq ($(USE_SST), 1)
 VORTEX_SST_SRCS := $(SRC_DIR)/vortex_simulator.cpp
 VORTEX_SST_SRCS += $(SRC_DIR)/VortexGPGPU.cpp
-
-# SST flags
-SST_CFLAGS := $(shell pkg-config --cflags SST-14.1)
-SST_CFLAGS += -I../../../sst/sst/sst-core/include/
-SST_LFLAGS := $(shell pkg-config --libs SST-14.1)
+SST_CFLAGS := $(shell pkg-config --cflags $(SST_PKG))
+SST_LFLAGS := $(shell pkg-config --libs $(SST_PKG))
+CXXFLAGS += $(SST_CFLAGS) -DUSE_SST
+endif
 
 # Add V extension sources
 ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
@@ -65,11 +67,16 @@ COMMON_SRCS := $(filter $(SW_COMMON_DIR)/%.cpp,$(SRCS))
 SRC_SRCS    := $(filter $(SRC_DIR)/%.cpp,$(SRCS))
 COMMON_OBJS := $(patsubst $(SW_COMMON_DIR)/%.cpp,$(OBJ_DIR)/common/%.o,$(COMMON_SRCS))
 SRC_OBJS    := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_SRCS))
-VORTEX_SST_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(VORTEX_SST_SRCS))
 OBJS        := $(COMMON_OBJS) $(SRC_OBJS)
 MAIN_OBJ    := $(OBJ_DIR)/main.o
 
-DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d) $(VORTEX_SST_OBJS:.o=.d)
+DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d)
+
+ifeq ($(USE_SST), 1)
+VORTEX_SST_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(VORTEX_SST_SRCS))
+DEPS += $(VORTEX_SST_OBJS:.o=.d)
+endif
+
 
 # optional: pipe through ccache if you have it
 CXX := $(if $(shell which ccache),ccache $(CXX),$(CXX))
@@ -79,11 +86,11 @@ VORTEX_LIB := libvortex.so
 
 .PHONY: all force clean clean-lib clean-exe clean-obj libvortex clean-libvortex
 
-#ifdef USE_SST
+ifeq ($(USE_SST), 1)
 all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_LIB)
-#else
-#all: $(DESTDIR)/$(PROJECT)
-#endif
+else
+all: $(DESTDIR)/$(PROJECT)
+endif
 
 # build common object files
 $(OBJ_DIR)/common/%.o: $(SW_COMMON_DIR)/%.cpp $(CONFIG_FILE)
@@ -96,9 +103,11 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # build SST-specific source object files
+ifeq ($(USE_SST), 1)
 $(VORTEX_SST_OBJS): $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(CONFIG_FILE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(SST_CFLAGS) -c $< -o $@
+endif
 
 # build main object file
 $(MAIN_OBJ): $(SRC_DIR)/main.cpp $(CONFIG_FILE)
@@ -113,6 +122,8 @@ $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)
 $(DESTDIR)/lib$(PROJECT).so: $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -o $@
 
+# Vortex SST simulator component shared library
+ifeq ($(USE_SST), 1)
 libvortex: $(DESTDIR)/$(VORTEX_LIB)
 
 $(DESTDIR)/$(VORTEX_LIB): $(OBJS) $(VORTEX_SST_OBJS)
@@ -121,6 +132,7 @@ $(DESTDIR)/$(VORTEX_LIB): $(OBJS) $(VORTEX_SST_OBJS)
 	$(OBJS) $(VORTEX_SST_SRCS) \
 	-shared -o $@ \
 	$(LDFLAGS) $(SST_LFLAGS)
+endif
 
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force

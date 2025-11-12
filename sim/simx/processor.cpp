@@ -159,6 +159,7 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   return perf;
 }
 
+// Advance the simulation by one cycle for SST - code adapted from run() method
 bool ProcessorImpl::cycle() {
   if (!is_cycle_initialized_) {
     std::cout << "ProcessorImpl: Initializing cycle()\n";
@@ -166,7 +167,7 @@ bool ProcessorImpl::cycle() {
     this->reset();
     is_cycle_initialized_ = true;
   }
-  //std::cout << "ProcessorImpl: cycle()" << std::endl;
+
   SimPlatform::instance().tick();
   bool anyRunning = false;
   for (auto cluster : clusters_) {
@@ -176,7 +177,6 @@ bool ProcessorImpl::cycle() {
     }
   }
   perf_mem_latency_ += perf_mem_pending_reads_;
-  //std::cout << "ProcessorImpl: cycle() - returns: " << anyRunning << std::endl;
   return anyRunning;
 }
 
@@ -217,9 +217,9 @@ void Processor::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
 }
 
+// advance the simulation by one cycle for SST
 bool Processor::cycle() {
   try {
-    //std::cout << "Processor: cycle()" << std::endl;
     return impl_->cycle();
   } catch (...) {
     return false;
