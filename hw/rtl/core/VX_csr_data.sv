@@ -76,6 +76,10 @@ import VX_fpu_pkg::*;
     // CSRs Write /////////////////////////////////////////////////////////////
 
     reg [`XLEN-1:0] mscratch;
+`ifdef VM_ENABLE
+    reg [`XLEN-1:0] satp;
+`endif
+
 
 `ifdef EXT_F_ENABLE
     reg [`NUM_WARPS-1:0][INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
