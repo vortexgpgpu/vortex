@@ -66,7 +66,10 @@ import VX_fpu_pkg::*;
     input wire [UUID_WIDTH-1:0]         write_uuid,
     input wire [NW_WIDTH-1:0]           write_wid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  write_addr,
-    input wire [`XLEN-1:0]              write_data
+    input wire [`XLEN-1:0]              write_data,
+`ifdef VM_ENABLE
+    output wire [`XLEN-1:0]             satp_value
+`endif
 );
 
     `UNUSED_VAR (reset)
@@ -79,7 +82,6 @@ import VX_fpu_pkg::*;
 `ifdef VM_ENABLE
     reg [`XLEN-1:0] satp;
 `endif
-
 
 `ifdef EXT_F_ENABLE
     reg [`NUM_WARPS-1:0][INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
@@ -127,6 +129,9 @@ import VX_fpu_pkg::*;
     always @(posedge clk) begin
         if (reset) begin
             mscratch <= base_dcrs.startup_arg;
+`ifdef VM_ENABLE
+            satp <= '0;  // Initialize to BARE mode (mode=0)
+`endif
         end
         if (write_enable) begin
             case (write_addr)
@@ -135,7 +140,6 @@ import VX_fpu_pkg::*;
                 `VX_CSR_FRM,
                 `VX_CSR_FCSR,
             `endif
-                `VX_CSR_SATP,
                 `VX_CSR_MSTATUS,
                 `VX_CSR_MNSTATUS,
                 `VX_CSR_MEDELEG,
@@ -147,6 +151,11 @@ import VX_fpu_pkg::*;
                 `VX_CSR_PMPADDR0: begin
                     // do nothing!
                 end
+            `ifdef VM_ENABLE
+                `VX_CSR_SATP: begin
+                    satp <= write_data;
+                end
+            `endif
                 `VX_CSR_MSCRATCH: begin
                     mscratch <= write_data;
                 end
@@ -195,7 +204,9 @@ import VX_fpu_pkg::*;
 
             `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_w, commit_csr_if.instret);
 
-            `VX_CSR_SATP,
+        `ifdef VM_ENABLE
+            `VX_CSR_SATP       : read_data_rw_w = satp;
+        `endif
             `VX_CSR_MSTATUS,
             `VX_CSR_MNSTATUS,
             `VX_CSR_MEDELEG,
@@ -291,6 +302,10 @@ import VX_fpu_pkg::*;
 
     assign read_data_ro = read_data_ro_w;
     assign read_data_rw = read_data_rw_w;
+
+`ifdef VM_ENABLE
+      assign satp_value = satp;
+`endif
 
     `UNUSED_VAR (base_dcrs)
 
