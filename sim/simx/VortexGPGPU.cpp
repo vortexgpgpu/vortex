@@ -18,10 +18,7 @@ VortexGPGPU::VortexGPGPU(ComponentId_t id, Params &params)
     std::string clockfreq = params.find<std::string>("clock", "1GHz");
 
     // Parameter: program path
-    std::string kernel = params.find<std::string>("program", "/nethome/jsubburayan3/vortex/build/tests/kernel/hello/hello.bin");
-
-    //const uint32_t launch_bytes = params.find<uint32_t>("launch_bytes", kDefaultLaunchBytes); // required when launch descriptor is used
-
+    std::string kernel = params.find<std::string>("program", "");
 
     // Register our clock handler with SST
     registerClock(clockfreq,

@@ -72,6 +72,9 @@ MAIN_OBJ    := $(OBJ_DIR)/main.o
 
 DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d)
 
+# generate .d files alongside .o files
+CXXFLAGS += -MMD -MP -MF $(@:.o=.d)
+
 ifeq ($(USE_SST), 1)
 VORTEX_SST_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(VORTEX_SST_SRCS))
 DEPS += $(VORTEX_SST_OBJS:.o=.d)
@@ -103,11 +106,9 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # build SST-specific source object files
-ifeq ($(USE_SST), 1)
 $(VORTEX_SST_OBJS): $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(CONFIG_FILE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(SST_CFLAGS) -c $< -o $@
-endif
 
 # build main object file
 $(MAIN_OBJ): $(SRC_DIR)/main.cpp $(CONFIG_FILE)
@@ -123,7 +124,6 @@ $(DESTDIR)/lib$(PROJECT).so: $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -o $@
 
 # Vortex SST simulator component shared library
-ifeq ($(USE_SST), 1)
 libvortex: $(DESTDIR)/$(VORTEX_LIB)
 
 $(DESTDIR)/$(VORTEX_LIB): $(OBJS) $(VORTEX_SST_OBJS)
@@ -132,7 +132,6 @@ $(DESTDIR)/$(VORTEX_LIB): $(OBJS) $(VORTEX_SST_OBJS)
 	$(OBJS) $(VORTEX_SST_SRCS) \
 	-shared -o $@ \
 	$(LDFLAGS) $(SST_LFLAGS)
-endif
 
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force
