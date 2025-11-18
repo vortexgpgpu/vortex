@@ -256,6 +256,9 @@ set _bbmods [split [string map {, " "} [string trim $BB_MODULES]]]
 foreach m $_bbmods {
   if {$m eq ""} continue
   set cells [get_cells -hier -filter "ref_name==$m" -quiet]
+  if {![llength $cells]} {
+    set cells [get_cells -hier -filter "ref_name=~${m}*" -quiet]
+  }
   if {[llength $cells]} {
     puts "INFO: Applying 'dont_touch' to cell $m"
     set_dont_touch $cells
