@@ -29,7 +29,7 @@ using float32_t = float;
 #endif
 
 #ifndef ITYPE
-#define ITYPE int8_t
+#define ITYPE int16_t
 #endif
 
 #ifndef OTYPE
@@ -346,7 +346,7 @@ private:
   // Sparsity-specific constants
   static constexpr uint32_t SPARSITY_N = 2;  // 2 non-zero elements
   static constexpr uint32_t SPARSITY_M = 4;  // out of 4 elements (2:4 sparsity)
-  static constexpr uint32_t METADATA_LANES = 2;  // Lanes 0,1 hold metadata
+  static constexpr uint32_t METADATA_LANES = Config::NumThreads / 4 / sizeof(typename Config::input_t);  // Lanes 0,1 hold metadata for NT8, int8_t, 8Registers; for int16_t, NT=8, 4Registers, only lane 0 holds metadata
   static constexpr uint32_t COMPRESSION_RATE = SPARSITY_M / SPARSITY_N; // 2x compression
 #endif
 
@@ -373,7 +373,7 @@ private:
 
   FragA fragA_compressed_;   // Compressed matrix A (50% storage)
   FragA_meta fragA_meta_;    // Metadata: 1 = non-zero, 0 = pruned
-  vector_t<uint32_t, NRA> packed_bit_meta_;  // Packed bitmap metadata, 32 * 32bit Reg in RISC-V
+  vector_t<uint32_t, NRA/sizeof(It) > packed_bit_meta_;  // Packed bitmap metadata. NT = 8, int8, 8REGS, MetaThreads = 2; int16, 4Regs, MetaThreads = 1
 #endif
 
   FragD fragRef_;
@@ -433,11 +433,14 @@ private:
   // Pack metadata into compact bitmap format
   void pack_metadata_bitmap() {
     constexpr uint32_t ELEMENTS_PER_ROW = tcK * i_ratio * COMPRESSION_RATE;
-    constexpr uint32_t ROWS_PER_CHUNK = tcM / COMPRESSION_RATE;
+    constexpr uint32_t ROWS_PER_CHUNK = tcM / COMPRESSION_RATE * sizeof(It);
+
+    constexpr uint32_t k_steps_compressed = k_steps / COMPRESSION_RATE;
+    constexpr uint32_t num_chunks = COMPRESSION_RATE / sizeof(It);
 
     for (uint32_t m = 0; m < m_steps; ++m) {
       for (uint32_t k = 0; k < k_steps / COMPRESSION_RATE; ++k) {
-        for (uint32_t chunk = 0; chunk < COMPRESSION_RATE; ++chunk) {
+        for (uint32_t chunk = 0; chunk < COMPRESSION_RATE / sizeof(It); ++chunk) {
           uint32_t tmp_bit = 0;
 
           // Pack metadata for this chunk
@@ -452,8 +455,13 @@ private:
               }
             }
           }
-
-          uint32_t idx = chunk + k * SPARSITY_N + m * (k_steps / SPARSITY_N) * SPARSITY_N;
+          uint32_t idx;
+          //
+          if(sizeof(It) == 1 || sizeof(It) == 2){
+            idx = chunk + k * num_chunks + m * k_steps_compressed * num_chunks;
+          }else{
+            static_assert(sizeof(It) == 1 || sizeof(It) == 2, "Only int8_t and int16_t are supported for sparsity");
+          }
           packed_bit_meta_[idx] = tmp_bit;
         }
       }
@@ -461,12 +469,27 @@ private:
   }
 
   // Extract bitmap for a specific row
-  uint16_t extract_row_metadata(const Vreg &va_meta, uint32_t row_idx) const {
+  uint16_t extract_row_metadata_int8_t(const Vreg &va_meta, uint32_t row_idx) const {
+    static_assert(sizeof(It) == 1, "int8_t extractor requires sizeof(It)==1");
     uint32_t meta_reg_idx = row_idx / COMPRESSION_RATE;
     bool is_upper_half = (row_idx % COMPRESSION_RATE) == 0;
     return is_upper_half ?
            static_cast<uint16_t>(va_meta[meta_reg_idx] >> 16) :
            static_cast<uint16_t>(va_meta[meta_reg_idx]);
+  }
+
+  uint8_t extract_row_metadata_int16_t(const Vreg &va_meta, uint32_t row_idx) const {
+    constexpr uint32_t ELEMENTS_PER_ROW = COMPRESSION_RATE * (tcK * i_ratio);   // = 8
+    constexpr uint32_t ROWS_PER_CHUNK  = 32 / ELEMENTS_PER_ROW;     // = 4
+    constexpr uint32_t ROW_MASK = 0xFF; //masks 8bits
+
+    uint32_t meta_reg_idx = row_idx / ROWS_PER_CHUNK; // /4
+    uint32_t which_part = row_idx % ROWS_PER_CHUNK; //%4
+    uint32_t shift = 32 - (which_part + 1) * ELEMENTS_PER_ROW;
+
+    uint32_t word = (va_meta[meta_reg_idx]);
+    return static_cast<uint8_t>((word >> shift) & ROW_MASK);
+
   }
 
   // Gather B column elements based on A's sparsity pattern
@@ -475,18 +498,27 @@ private:
       const Xt *b_col_0,
       const Xt *b_col_1,
       uint16_t a_row_meta) const {
+        //for ITYPE=int16_t, a_row_meta is uint8_t
+    //dbg_out << " [gather_sparse_B_column] a_row_meta=0x"<< std::hex << +a_row_meta << std::dec << "\n";
 
     constexpr uint32_t TOTAL_ELEMENTS = tcK * i_ratio;
     uint32_t collect_idx = 0;
+
+    static_assert(sizeof(It) == 1 || sizeof(It) == 2, "Only int8_t and int16_t are supported for sparsity");
+    uint32_t b_Mask = (uint32_t{1} << (8 * sizeof(It))) - 1; // 0xFF for int8, 0xFFFF for int16
 
     // Gather from first half based on upper bits of metadata
     for (uint32_t bit_idx = 0; bit_idx < TOTAL_ELEMENTS; ++bit_idx) {
       uint32_t bit_pos = TOTAL_ELEMENTS * SPARSITY_N - bit_idx - 1;
       if ((a_row_meta & (1 << bit_pos)) != 0) {
+        //dbg_out << "  bit 1 at"<< " bit_idx=" << bit_idx << " bit_pos=" << bit_pos << "\n";
         uint32_t element_idx = bit_idx / i_ratio;
-        uint32_t byte_pos = (bit_idx % i_ratio) * 8;
+        //dbg_out << "  Gathering element_idx=" << element_idx << "\n";
+        uint32_t byte_pos = (bit_idx % i_ratio) * 8 * sizeof(It);
+        //dbg_out << "  byte_pos=" << byte_pos << "\n";
         b_collected[collect_idx++] =
-            static_cast<It>((b_col_0[element_idx] >> byte_pos) & 0xFF);
+            static_cast<It>((b_col_0[element_idx] >> byte_pos) & b_Mask);
+        //dbg_out << "  " << +b_collected[collect_idx-1];
       }
     }
 
@@ -496,12 +528,17 @@ private:
 
       uint32_t bit_pos = TOTAL_ELEMENTS - bit_idx - 1;
       if ((a_row_meta & (1 << bit_pos)) != 0) {
+        //dbg_out << "  bit 1 at"<< " bit_idx=" << bit_idx << " bit_pos=" << bit_pos << "\n";
         uint32_t element_idx = bit_idx / i_ratio;
-        uint32_t byte_pos = (bit_idx % i_ratio) * 8;
+        //dbg_out << "  Gathering element_idx=" << element_idx << "\n";
+        uint32_t byte_pos = (bit_idx % i_ratio) * 8 * sizeof(It);
+        //dbg_out << "  byte_pos=" << byte_pos << "\n";
         b_collected[collect_idx++] =
-            static_cast<uint8_t>((b_col_1[element_idx] >> byte_pos) & 0xFF);
+            static_cast<It>((b_col_1[element_idx] >> byte_pos) & b_Mask);
+        //dbg_out << "  " << +b_collected[collect_idx-1];
       }
     }
+    //dbg_out << "\n";
   }
 #endif  // ENABLE_SPARSITY
 
@@ -512,7 +549,7 @@ private:
 #ifdef ENABLE_SPARSITY
   // Sparse version of load_A
   void load_A(vector_t<Vreg, NRA> &vR, uint32_t lane, uint32_t ldm,
-              const It *mdata, const vector_t<uint32_t, 8> &A_meta) {
+              const It *mdata, const vector_t<uint32_t, NRA/sizeof(It)> &A_meta) {
     uint32_t block_idx = lane / a_block_size;
     uint32_t lane_in_block = lane % a_block_size;
     uint32_t elem_row = lane_in_block / tcK;
@@ -534,7 +571,12 @@ private:
     // Load metadata into second half (only for metadata lanes)
     if (lane < METADATA_LANES) {
       for (uint32_t r = NRA / COMPRESSION_RATE; r < NRA; ++r) {
-        vR[r][lane] = A_meta.data()[COMPRESSION_RATE * (r - NRA / COMPRESSION_RATE) + lane];
+        uint32_t meta_idx = (COMPRESSION_RATE * (r - NRA / COMPRESSION_RATE) + lane)/sizeof(It);
+        vR[r][lane] = A_meta.data()[meta_idx];
+        /* dbg_out << "[load_A] lane=" << lane << " r=" << r
+                << " loads meta idx=" << meta_idx
+                << " value=0x" << std::hex << +vR[r][lane] << std::dec << "\n"; 
+                */
       }
     } else {
       for (uint32_t r = NRA / COMPRESSION_RATE; r < NRA; ++r) {
@@ -705,8 +747,12 @@ private:
         auto c = vc[i * tcN + j];
 
         // Extract metadata for this row
-        uint16_t a_row_meta = extract_row_metadata(va_meta, i);
-
+        uint32_t a_row_meta;
+        if constexpr (sizeof(It) == 1){
+           a_row_meta = extract_row_metadata_int8_t(va_meta, i);
+        }else if (sizeof(It) == 2){
+           a_row_meta = extract_row_metadata_int16_t(va_meta, i);
+        }
         // Gather sparse B elements based on A's metadata
         gather_sparse_B_column(b_col_collected, b_col_0, b_col_1, a_row_meta);
 
@@ -741,7 +787,7 @@ private:
 
 #ifdef ENABLE_SPARSITY
   // Sparse matrix multiply-add operation
-  FragD mmadd(const FragA &A, const vector_t<uint32_t, 8> &A_meta,
+  FragD mmadd(const FragA &A, const vector_t<uint32_t, NRA/sizeof(It)> &A_meta,
               const FragB &B, const FragC &C) {
     FragD D;
     vector_t<Vreg, NRA> vA;
