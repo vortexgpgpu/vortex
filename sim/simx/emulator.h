@@ -26,6 +26,9 @@
 #ifdef EXT_V_ENABLE
 #include "vec_unit.h"
 #endif
+#ifdef EXT_VEGETA_ENABLE
+#include "sparse_unit.h"
+#endif
 
 namespace vortex {
 
@@ -161,6 +164,10 @@ private:
 
 #ifdef EXT_V_ENABLE
   VecUnit::Ptr vec_unit_;
+#endif
+
+#ifdef EXT_VEGETA_ENABLE
+  SparseUnit::Ptr sparse_unit_;
 #endif
 
   PoolAllocator<Instr, 64> instr_pool_;

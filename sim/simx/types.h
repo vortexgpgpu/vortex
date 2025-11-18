@@ -83,6 +83,9 @@ enum class RegType {
 #ifdef EXT_V_ENABLE
   Vector,
 #endif
+#ifdef EXT_VEGETA_ENABLE
+  Tile,
+#endif
   Count
 };
 
@@ -93,6 +96,9 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   case RegType::Float:   os << "f"; break;
 #ifdef EXT_V_ENABLE
   case RegType::Vector:  os << "v"; break;
+#endif
+#ifdef EXT_VEGETA_ENABLE
+  case RegType::Tile:    os << "t"; break;
 #endif
   default: assert(false);
   }
@@ -133,6 +139,9 @@ enum class FUType {
 #ifdef EXT_TCU_ENABLE
   TCU,
 #endif
+#ifdef EXT_VEGETA_ENABLE
+  VEGETA,
+#endif
   Count
 };
 
@@ -147,6 +156,9 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
 #endif
 #ifdef EXT_TCU_ENABLE
   case FUType::TCU: os << "TCU"; break;
+#endif
+#ifdef EXT_VEGETA_ENABLE
+  case FUType::VEGETA: os << "VEGETA"; break;
 #endif
   default:
     assert(false);
@@ -661,6 +673,52 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+enum class VegetaLsuType {
+  TILE_LOAD_T,
+  TILE_LOAD_U,
+  TILE_LOAD_V,
+  TILE_LOAD_M,
+  TILE_STORE_T
+};
+
+inline std::ostream &operator<<(std::ostream &os, const VegetaLsuType& type) {
+  switch (type) {
+  case VegetaLsuType::TILE_LOAD_T: os << "TILE_LOAD_T"; break;
+  case VegetaLsuType::TILE_LOAD_U: os << "TILE_LOAD_U"; break;
+  case VegetaLsuType::TILE_LOAD_V: os << "TILE_LOAD_V"; break;
+  case VegetaLsuType::TILE_LOAD_M: os << "TILE_LOAD_M"; break;
+  case VegetaLsuType::TILE_STORE_T: os << "TILE_STORE_T"; break;
+  default: assert(false);
+  }
+  return os;
+}
+
+struct IntrVegetaLsuArgs {
+  unsigned int offset;  // Immediate offset for address calculation
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+enum class VegetaTcuType {
+  TILE_GEMM_T,
+  TILE_GEMM_U,
+  TILE_GEMM_V,
+  TILE_GEMM_R
+};
+
+inline std::ostream &operator<<(std::ostream &os, const VegetaTcuType& type) {
+  switch (type) {
+  case VegetaTcuType::TILE_GEMM_T: os << "TILE_GEMM_T"; break;
+  case VegetaTcuType::TILE_GEMM_U: os << "TILE_GEMM_U"; break;
+  case VegetaTcuType::TILE_GEMM_V: os << "TILE_GEMM_V"; break;
+  case VegetaTcuType::TILE_GEMM_R: os << "TILE_GEMM_R"; break;
+  default: assert(false);
+  }
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 using OpType = std::variant<
   AluType
 , BrType
@@ -680,6 +738,9 @@ using OpType = std::variant<
 #ifdef EXT_TCU_ENABLE
 , TcuType
 #endif
+#ifdef EXT_VEGETA_ENABLE
+, VegetaLsuType, VegetaTcuType
+#endif
 >;
 
 using IntrArgs = std::variant<
@@ -698,6 +759,9 @@ using IntrArgs = std::variant<
 #endif
 #ifdef EXT_TCU_ENABLE
 , IntrTcuArgs
+#endif
+#ifdef EXT_VEGETA_ENABLE
+, IntrVegetaLsuArgs
 #endif
 >;
 

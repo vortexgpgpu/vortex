@@ -85,6 +85,9 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
   #ifdef EXT_V_ENABLE
     , vec_unit_(core->vec_unit())
   #endif
+  #ifdef EXT_VEGETA_ENABLE
+    , sparse_unit_(core->sparse_unit())
+  #endif
 {
   std::srand(50);
   this->reset();
@@ -115,6 +118,10 @@ void Emulator::reset() {
 
 #ifdef EXT_V_ENABLE
   vec_unit_->reset();
+#endif
+
+#ifdef EXT_VEGETA_ENABLE
+  sparse_unit_->reset();
 #endif
 
   csr_mscratch_ = startup_arg;

@@ -138,6 +138,8 @@ private:
     static constexpr frag_use_t Use = U;
     static constexpr uint32_t NR = N;
     std::array<vreg_t, N> data;
+    using metadata_array_t = std::conditional_t<U == matrix_a, std::array<uint32_t, N>, std::array<uint32_t, 0>>;
+    metadata_array_t metadata{};
   };
 
 public:
@@ -175,7 +177,7 @@ public:
   }
 
   template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm, const void *meta_src = nullptr) {
     uint32_t lane = vx_thread_id();
     if constexpr (Frag::Use == matrix_a) {
       // Load row-major matrix A
@@ -188,24 +190,46 @@ public:
       if constexpr (src_layout == col_major) {
         std::swap(block_row, block_col);
       }
-      auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
+      // For sparse format: when meta_src is provided, data stride is K/2 (not K)
+      // because each row has K/2 values (2 per block of 4)
+      size_t data_ldm = (meta_src != nullptr) ? (ldm / 2) : ldm;
+      auto base = reinterpret_cast<const input_t*>(src) + block_row * data_ldm + block_col;
+      const uint8_t* meta_base = meta_src ? reinterpret_cast<const uint8_t*>(meta_src) : nullptr;
+      uint32_t meta_ldm = meta_src ? (ldm / 4) : 0; // Number of metadata bytes per row (K/4 blocks)
+      
       detail::unroll_for<Frag::NR>([&](auto r) {
         uint32_t block_m  = r / cfg::k_steps;
         uint32_t block_k  = r % cfg::k_steps;
         uint32_t elem_row = block_m * m_stride;
         uint32_t elem_col = block_k * k_stride;
+        uint32_t meta_value = 0;
+
+        if (meta_base) {
+          uint32_t matrix_row = block_row + elem_row;
+          uint32_t k_elem_idx = elem_col / i_ratio;
+          uint32_t meta_block_k = k_elem_idx / 4;
+          if (meta_block_k < meta_ldm) {
+            uint32_t meta_offset = matrix_row * meta_ldm + meta_block_k;
+            meta_value = static_cast<uint32_t>(meta_base[meta_offset]);
+          }
+        }
+
+        if constexpr (Frag::Use == matrix_a) {
+          dst.metadata[r] = meta_value;
+        }
         if constexpr (src_layout == col_major) {
           static_assert(input_is_subbyte == false, "col_major layout is not supported for sub-byte matrix_a");
           std::swap(elem_row, elem_col);
-          auto ptr = base + elem_row * ldm + elem_col;
+          auto ptr = base + elem_row * data_ldm + elem_col;
           if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
             dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
           } else {
-            dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
+            dst.data[r] = input_acessor_t::pack_row(ptr, data_ldm);
           }
         } else {
-          // raw_major layout
-          auto ptr = base + elem_row * ldm + elem_col;
+          // row_major layout
+          // For sparse format, use data_ldm (K/2) instead of ldm (K)
+          auto ptr = base + elem_row * data_ldm + elem_col;
           assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
           dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
         }
@@ -310,6 +334,24 @@ public:
     static_assert(FragC::Use == accumulator, "C must be accumulator");
     static_assert(FragD::Use == accumulator, "D must be accumulator");
 
+    auto meta_value = [&](uint32_t idx) -> uint32_t {
+      if constexpr (FragA::Use == matrix_a) {
+        if (idx < FragA::NR) {
+          return fragA.metadata[idx];
+        }
+      }
+      return 0u;
+    };
+
+    register uint32_t ma0 __asm__("a0") = meta_value(0);
+    register uint32_t ma1 __asm__("a1") = meta_value(1);
+    register uint32_t ma2 __asm__("a2") = meta_value(2);
+    register uint32_t ma3 __asm__("a3") = meta_value(3);
+    register uint32_t ma4 __asm__("a4") = meta_value(4);
+    register uint32_t ma5 __asm__("a5") = meta_value(5);
+    register uint32_t ma6 __asm__("a6") = meta_value(6);
+    register uint32_t ma7 __asm__("a7") = meta_value(7);
+
     // fragA: caller-saved registers (f0-f7)
     register float fa0 __asm__("f0")  = fragA.data[0];
     register float fa1 __asm__("f1")  = fragA.data[1];
@@ -348,15 +390,16 @@ public:
       register float fd3 __asm__("f27");
       register float fd4 __asm__("f28");
       register float fd5 __asm__("f29");
-      register float fd6 __asm__("f30");
+      register float fd6 __asm__("f30"); 
       register float fd7 __asm__("f31");
 
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x0"
+      __asm__ volatile (".insn r %[insn], 0, 3, x%[fmd], x%[fms], x0"
         : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
           "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7),
-          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
+          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7),
+          "r"(ma0), "r"(ma1), "r"(ma2), "r"(ma3), "r"(ma4), "r"(ma5), "r"(ma6), "r"(ma7)
       );
 
       // Write results to fragD
@@ -389,12 +432,13 @@ public:
       register float fd6 __asm__("f16");
       register float fd7 __asm__("f17");
 
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x0"
+      __asm__ volatile (".insn r %[insn], 0, 3, x%[fmd], x%[fms], x0"
         : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
           "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3),
-          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
+          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7),
+          "r"(ma0), "r"(ma1), "r"(ma2), "r"(ma3), "r"(ma4), "r"(ma5), "r"(ma6), "r"(ma7)
       );
 
       // Write results to fragD

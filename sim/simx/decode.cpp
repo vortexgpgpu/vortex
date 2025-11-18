@@ -473,6 +473,30 @@ static op_string_t op_string(const Instr &instr) {
       return op_string(tcu_type, tpuArgs);
     }
   #endif // EXT_TCU_ENABLE
+  #ifdef EXT_VEGETA_ENABLE
+    ,[&](VegetaLsuType lsu_type)-> op_string_t {
+      auto lsuArgs = std::get<IntrVegetaLsuArgs>(instrArgs);
+      switch (lsu_type) {
+      case VegetaLsuType::TILE_LOAD_T: return {"TILE_LOAD_T", to_hex_str(lsuArgs.offset)};
+      case VegetaLsuType::TILE_LOAD_U: return {"TILE_LOAD_U", to_hex_str(lsuArgs.offset)};
+      case VegetaLsuType::TILE_LOAD_V: return {"TILE_LOAD_V", to_hex_str(lsuArgs.offset)};
+      case VegetaLsuType::TILE_LOAD_M: return {"TILE_LOAD_M", to_hex_str(lsuArgs.offset)};
+      case VegetaLsuType::TILE_STORE_T: return {"TILE_STORE_T", to_hex_str(lsuArgs.offset)};
+      default:
+        std::abort();
+      }
+    },
+    [&](VegetaTcuType tcu_type)-> op_string_t {
+      switch (tcu_type) {
+      case VegetaTcuType::TILE_GEMM_T: return {"TILE_GEMM_T", ""};
+      case VegetaTcuType::TILE_GEMM_U: return {"TILE_GEMM_U", ""};
+      case VegetaTcuType::TILE_GEMM_V: return {"TILE_GEMM_V", ""};
+      case VegetaTcuType::TILE_GEMM_R: return {"TILE_GEMM_R", ""};
+      default:
+        std::abort();
+      }
+    }
+  #endif // EXT_VEGETA_ENABLE
  );
  return {"", ""};
 }
@@ -1118,10 +1142,157 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       }
     } break;
   #endif
+  #ifdef EXT_VEGETA_ENABLE
+  /*
+  case 3: {
+    switch (funct3) {
+    case 0: { // DOT8
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
+      instr->setOpType(AluType::DOT8);
+      instr->setArgs(IntrAluArgs{0, 0, 0});
+      // TODO: set destination register
+      // TODO: set source registers
+      instr->setDestReg(rd, RegType::Integer);
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->setSrcReg(1, rs2, RegType::Integer);
+      ibuffer.push_back(instr);
+    } break;
     default:
       std::abort();
     }
   } break;
+  */
+  #endif
+    default:
+      std::abort();
+    }
+  } break;
+#ifdef EXT_VEGETA_ENABLE
+  case Opcode::EXT2: {
+    switch (funct3) {
+    case 0: { // TILE LOAD T
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VEGETA);
+      uint32_t imm12 = code >> shift_rs2;  // Extract 12-bit immediate from rs2 field
+      auto offset = sext(imm12, width_i_imm);  // Sign-extend to WordI
+      instr->setOpType(VegetaLsuType::TILE_LOAD_T);
+      instr->setDestReg(rd, RegType::Tile);
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->setArgs(IntrVegetaLsuArgs{offset});
+      ibuffer.push_back(instr);
+    } break;
+    case 1: { // TILE LOAD U
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VEGETA);
+      uint32_t imm12 = code >> shift_rs2;  // Extract 12-bit immediate from rs2 field
+      auto offset = sext(imm12, width_i_imm);  // Sign-extend to WordI
+      instr->setOpType(VegetaLsuType::TILE_LOAD_U);
+      instr->setDestReg(rd, RegType::Tile);
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->setArgs(IntrVegetaLsuArgs{offset});
+      ibuffer.push_back(instr);
+    } break;
+    case 2: { // TILE LOAD V
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VEGETA);
+      uint32_t imm12 = code >> shift_rs2;  // Extract 12-bit immediate from rs2 field
+      auto offset = sext(imm12, width_i_imm);  // Sign-extend to WordI
+      instr->setOpType(VegetaLsuType::TILE_LOAD_V);
+      instr->setDestReg(rd, RegType::Tile);
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->setArgs(IntrVegetaLsuArgs{offset});
+      ibuffer.push_back(instr);
+    } break;
+    case 3: { // TILE LOAD M
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VEGETA);
+      uint32_t imm12 = code >> shift_rs2;  // Extract 12-bit immediate from rs2 field
+      auto offset = sext(imm12, width_i_imm);  // Sign-extend to WordI
+      instr->setOpType(VegetaLsuType::TILE_LOAD_M);
+      instr->setDestReg(rd, RegType::Tile);
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->setArgs(IntrVegetaLsuArgs{offset});
+      ibuffer.push_back(instr);
+    } break;
+    default:
+      std::abort();
+    }
+  } break;
+  case Opcode::EXT3: {
+    switch(funct3) {
+      case 0: { // TILE STORE T
+        auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VEGETA);
+        uint32_t imm12 = (funct7 << width_reg) | rd;  // Extract 12-bit immediate from funct7 and rd fields (S-type format)
+        auto offset = sext(imm12, width_i_imm);  // Sign-extend to WordI
+        instr->setOpType(VegetaLsuType::TILE_STORE_T);
+        instr->setSrcReg(0, rs1, RegType::Integer);
+        instr->setSrcReg(1, rs2, RegType::Tile);
+        instr->setArgs(IntrVegetaLsuArgs{offset});
+        ibuffer.push_back(instr);
+      } break;
+      default:
+        std::abort();
+      }
+  } break;
+  case Opcode::EXT4: {
+    switch(funct7) {
+      case 0: {
+        switch(funct3) {
+          case 0: { // TILE GEMM T
+            auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VEGETA);
+            instr->setOpType(VegetaTcuType::TILE_GEMM_T);
+            instr->setDestReg(rd, RegType::Tile);
+            instr->setSrcReg(0, rs1, RegType::Tile);
+            instr->setSrcReg(1, rs2, RegType::Tile);
+            ibuffer.push_back(instr);
+          } break;
+          default:
+            std::abort();
+        }
+      } break;
+      case 1: {
+        switch(funct3) {
+          case 0: { // TILE GEMM U
+            auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VEGETA);
+            instr->setOpType(VegetaTcuType::TILE_GEMM_U);
+            instr->setDestReg(rd, RegType::Tile);
+            instr->setSrcReg(0, rs1, RegType::Tile);
+            instr->setSrcReg(1, rs2, RegType::Tile);
+            ibuffer.push_back(instr);
+          } break;
+          default:
+            std::abort();
+        }
+      } break;
+      case 2: {
+        switch(funct3) {
+          case 0: { // TILE GEMM V
+            auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VEGETA);
+            instr->setOpType(VegetaTcuType::TILE_GEMM_V);
+            instr->setDestReg(rd, RegType::Tile);
+            instr->setSrcReg(0, rs1, RegType::Tile);
+            instr->setSrcReg(1, rs2, RegType::Tile);
+            ibuffer.push_back(instr);
+          } break;
+          default:
+            std::abort();
+        }
+      } break;
+      case 3: {
+        switch(funct3) {
+          case 0: { // TILE GEMM R
+            auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VEGETA);
+            instr->setOpType(VegetaTcuType::TILE_GEMM_R);
+            instr->setDestReg(rd, RegType::Tile);
+            instr->setSrcReg(0, rs1, RegType::Tile);
+            instr->setSrcReg(1, rs2, RegType::Tile);
+            ibuffer.push_back(instr);
+          } break;
+          default:
+            std::abort();
+        }
+      } break;
+      default:
+        std::abort();
+    }
+  } break;
+#endif // EXT_VEGETA_ENABLE
   default:
     std::abort();
   }

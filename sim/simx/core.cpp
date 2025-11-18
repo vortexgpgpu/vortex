@@ -23,6 +23,23 @@
 #include "debug.h"
 #include "constants.h"
 
+#ifdef EXT_VEGETA_ENABLE
+#ifndef NUM_VEGETA_BLOCKS
+#ifdef NUM_TCU_BLOCKS
+#define NUM_VEGETA_BLOCKS NUM_TCU_BLOCKS
+#else
+#define NUM_VEGETA_BLOCKS ISSUE_WIDTH
+#endif
+#endif
+#ifndef NUM_VEGETA_LANES
+#ifdef NUM_TCU_LANES
+#define NUM_VEGETA_LANES NUM_TCU_LANES
+#else
+#define NUM_VEGETA_LANES NUM_THREADS
+#endif
+#endif
+#endif
+
 using namespace vortex;
 
 Core::Core(const SimContext& ctx,
@@ -44,6 +61,9 @@ Core::Core(const SimContext& ctx,
 #endif
 #ifdef EXT_V_ENABLE
   , vec_unit_(VecUnit::Create("vpu", arch, this))
+#endif
+#ifdef EXT_VEGETA_ENABLE
+  , sparse_unit_(SparseUnit::Create("spu", arch, this))
 #endif
   , emulator_(arch, dcrs, this)
   , ibuffers_(arch.num_warps(), IBUF_SIZE)
@@ -133,7 +153,7 @@ Core::Core(const SimContext& ctx,
       dcache_rsp_ports.at(p).bind(&lsu_dcache_adapter.at(b)->RspOut.at(c));
     }
   }
-
+  
   // initialize dispatchers
   dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_ALU_BLOCKS, NUM_ALU_LANES);
   dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_FPU_BLOCKS, NUM_FPU_LANES);
@@ -144,6 +164,9 @@ Core::Core(const SimContext& ctx,
 #endif
 #ifdef EXT_TCU_ENABLE
   dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_TCU_BLOCKS, NUM_TCU_LANES);
+#endif
+#ifdef EXT_VEGETA_ENABLE
+  dispatchers_.at((int)FUType::VEGETA) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_VEGETA_BLOCKS, NUM_VEGETA_LANES);
 #endif
 
   // initialize execute units
@@ -157,7 +180,9 @@ Core::Core(const SimContext& ctx,
 #ifdef EXT_TCU_ENABLE
   func_units_.at((int)FUType::TCU) = SimPlatform::instance().create_object<TcuUnit>(this);
 #endif
-
+#ifdef EXT_VEGETA_ENABLE
+  func_units_.at((int)FUType::VEGETA) = SimPlatform::instance().create_object<VegetaUnit>(this);
+#endif
   // bind commit arbiters
   for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
     snprintf(sname, 100, "%s-commit-arb%d", this->name().c_str(), iw);
@@ -223,7 +248,6 @@ void Core::schedule() {
 
   // suspend warp until decode
   emulator_.suspend(trace->wid);
-
   DT(3, "pipeline-schedule: " << *trace);
 
   // advance to fetch stage

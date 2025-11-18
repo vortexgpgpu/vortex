@@ -29,6 +29,9 @@
 #ifdef EXT_V_ENABLE
 #include "processor_impl.h"
 #endif
+#ifdef EXT_VEGETA_ENABLE
+#include "sparse_unit.h"
+#endif
 #include "VX_types.h"
 
 using namespace vortex;
@@ -146,9 +149,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
          << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << instr.getUUID() << ")");
 
   // fetch register values
-  if (rsrc0.type != RegType::None) fetch_registers(rs1_data, wid, 0, rsrc0);
-  if (rsrc1.type != RegType::None) fetch_registers(rs2_data, wid, 1, rsrc1);
-  if (rsrc2.type != RegType::None) fetch_registers(rs3_data, wid, 2, rsrc2);
+  if (rsrc0.type != RegType::None && rsrc0.type != RegType::Tile) fetch_registers(rs1_data, wid, 0, rsrc0);
+  if (rsrc1.type != RegType::None && rsrc1.type != RegType::Tile) fetch_registers(rs2_data, wid, 1, rsrc1);
+  if (rsrc2.type != RegType::None && rsrc2.type != RegType::Tile) fetch_registers(rs3_data, wid, 2, rsrc2);
 
   uint32_t thread_start = 0;
   for (; thread_start < num_threads; ++thread_start) {
@@ -1466,6 +1469,105 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       }
     }
   #endif // EXT_TCU_ENABLE
+  #ifdef EXT_VEGETA_ENABLE
+  ,[&](VegetaLsuType lsu_type) {
+    switch (lsu_type) {
+    case VegetaLsuType::TILE_LOAD_T: {
+      auto trace_data = std::make_shared<SparseUnit::MemTraceData>(num_threads);
+      trace->data = trace_data;
+      // rs1_data contains the base address
+      // DestReg (rd) contains the tile register index
+      // Immediate offset is extracted in decode and stored in instruction args
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        sparse_unit_->load(instr, wid, t, rs1_data, trace_data.get());
+      }
+      rd_write = true;
+      break;
+    }
+    case VegetaLsuType::TILE_LOAD_U: {
+      auto trace_data = std::make_shared<SparseUnit::MemTraceData>(num_threads);
+      trace->data = trace_data;
+      // rs1_data contains the base address
+      // DestReg (rd) contains the ureg index (mapped to tile regs in load function)
+      // Immediate offset is extracted in decode and stored in instruction args
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        sparse_unit_->load(instr, wid, t, rs1_data, trace_data.get());
+      }
+      rd_write = true;
+      break;
+    }
+    case VegetaLsuType::TILE_LOAD_V: {
+      auto trace_data = std::make_shared<SparseUnit::MemTraceData>(num_threads);
+      trace->data = trace_data;
+      // rs1_data contains the base address
+      // DestReg (rd) contains the vreg index (mapped to tile regs in load function)
+      // Immediate offset is extracted in decode and stored in instruction args
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        sparse_unit_->load(instr, wid, t, rs1_data, trace_data.get());
+      }
+      rd_write = true;
+      break;
+    }
+    case VegetaLsuType::TILE_LOAD_M: {
+      auto trace_data = std::make_shared<SparseUnit::MemTraceData>(num_threads);
+      trace->data = trace_data;
+      // rs1_data contains the base address
+      // DestReg (rd) contains the metadata register index
+      // Immediate offset is extracted in decode and stored in instruction args
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        sparse_unit_->load(instr, wid, t, rs1_data, trace_data.get());
+      }
+      rd_write = true;
+      break;
+    }
+    case VegetaLsuType::TILE_STORE_T: {
+      auto trace_data = std::make_shared<SparseUnit::MemTraceData>(num_threads);
+      trace->data = trace_data;
+      // rs1_data contains the base address
+      // rs2 (SrcReg[1]) contains the source tile register index
+      // Immediate offset is extracted in decode and stored in instruction args
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        sparse_unit_->store(instr, wid, t, rs1_data, trace_data.get());
+      }
+      break;
+    }
+    default:
+      std::abort();
+    }
+  },
+  [&](VegetaTcuType tcu_type) {
+    auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
+    trace->data = trace_data;
+    assert(warp.tmask.count() == num_threads);
+    // For now, use default values for fmt_s, fmt_d, step_m, step_n
+    // These may need to be extracted from the instruction in the future
+    uint32_t fmt_s = 0;
+    uint32_t fmt_d = 0;
+    uint32_t step_m = 0;
+    uint32_t step_n = 0;
+    switch (tcu_type) {
+    case VegetaTcuType::TILE_GEMM_T:
+    case VegetaTcuType::TILE_GEMM_U:
+    case VegetaTcuType::TILE_GEMM_V:
+    case VegetaTcuType::TILE_GEMM_R:
+      sparse_unit_->wmma(wid, fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
+      rd_write = true;
+      break;
+    default:
+      std::abort();
+    }
+  }
+  #endif // EXT_VEGETA_ENABLE
   );
 
   if (rd_write) {
@@ -1520,6 +1622,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         DPN(2, vec_unit_->dumpRegister(wid, t, rdest.idx));
       }
       DPN(2, "}" << std::endl);
+      break;
+  #endif
+  #ifdef EXT_VEGETA_ENABLE
+    case RegType::Tile:
+      DPH(2, "Dest Reg: " << rdest << "= Tile register " << rdest.idx << " (data written to sparse unit register file)");
+      DPN(2, std::endl);
       break;
   #endif
     default:

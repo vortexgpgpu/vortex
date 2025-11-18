@@ -442,3 +442,20 @@ void TcuUnit::tick() {
 	// use tensor_unit
 }
 #endif
+
+#ifdef EXT_VEGETA_ENABLE
+
+VegetaUnit::VegetaUnit(const SimContext& ctx, Core* core)
+	: FuncUnit(ctx, core, "vegeta-unit")
+{
+	// bind sparse unit
+	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		this->Inputs.at(iw).bind(&core_->sparse_unit()->Inputs.at(iw));
+		core_->sparse_unit()->Outputs.at(iw).bind(&this->Outputs.at(iw));
+	}
+}
+
+void VegetaUnit::tick() {
+	// use sparse_unit
+}
+#endif

@@ -281,6 +281,70 @@ inline __attribute__((const)) int vx_shfl_idx(size_t value, int bval, int cval, 
     return ret;
 }
 
+// -----------------------------------------------------------------------------
+// VEGETA tile memory operations (Load/Store)
+// -----------------------------------------------------------------------------
+
+// TILE LOAD T: Load 1KB from ptr[TILE] to tile register index 'dst_treg'
+// Each load uses I-type encoding: rd=dst tile index, rs1=src_gpr, imm=ptr immediate
+inline void vx_lt(int dst_treg, int src_gpr, size_t ptr_imm) {
+    __asm__ volatile (".insn i %0, 0, x%1, %2, %3"
+        :: "i"(RISCV_CUSTOM1), "i"(dst_treg), "r"(src_gpr), "i"(ptr_imm) : "memory");
+}
+
+// TILE LOAD U: Load 1KB from ptr[TILE] to ureg index 'dst_ureg'
+inline void vx_lu(int dst_ureg, int src_gpr, size_t ptr_imm) {
+    __asm__ volatile (".insn i %0, 1, x%1, %2, %3"
+        :: "i"(RISCV_CUSTOM1), "i"(dst_ureg), "r"(src_gpr), "i"(ptr_imm) : "memory");
+}
+
+// TILE LOAD V: Load 1KB from ptr[TILE] to vreg index 'dst_vreg'
+inline void vx_lv(int dst_vreg, int src_gpr, size_t ptr_imm) {
+    __asm__ volatile (".insn i %0, 2, x%1, %2, %3"
+        :: "i"(RISCV_CUSTOM1), "i"(dst_vreg), "r"(src_gpr), "i"(ptr_imm) : "memory");
+}
+
+// TILE LOAD M: Load 1KB from ptr[TILE] to mreg index 'dst_mreg'
+inline void vx_lm(int dst_mreg, int src_gpr, size_t ptr_imm) {
+    __asm__ volatile (".insn i %0, 3, x%1, %2, %3"
+        :: "i"(RISCV_CUSTOM1), "i"(dst_mreg), "r"(src_gpr), "i"(ptr_imm) : "memory");
+}
+
+// TILE STORE T: Store 1KB from treg index 'src_treg' to ptr[TILE]
+// Store uses S-type encoding: rs1=src_gpr, rs2=src_treg index, imm=ptr immediate
+inline void vx_st(int src_gpr, size_t ptr_imm, int src_treg) {
+    __asm__ volatile (".insn s %0, 0, %1, x%2, %3"
+        :: "i"(RISCV_CUSTOM2), "r"(src_gpr), "i"(src_treg), "i"(ptr_imm) : "memory");
+}
+
+// -----------------------------------------------------------------------------
+// VEGETA tile compute (GEMM variants)
+// -----------------------------------------------------------------------------
+
+// TGEMM: Multiply dense tile src1 with dense tile src2, accumulate into dst
+inline void vx_tgemm(int dst_treg, int src1_treg, int src2_treg) {
+    __asm__ volatile (".insn r %0, 0, 0, x%1, x%2, x%3"
+        :: "i"(RISCV_CUSTOM3), "i"(dst_treg), "i"(src1_treg), "i"(src2_treg));
+}
+
+// UGEMM: Multiply sparse (2:4) tile src1 with dense tile src2, accumulate into dst
+inline void vx_ugemm(int dst_treg, int src1_treg, int src2_ureg) {
+    __asm__ volatile (".insn r %0, 0, 1, x%1, x%2, x%3"
+        :: "i"(RISCV_CUSTOM3), "i"(dst_treg), "i"(src1_treg), "i"(src2_ureg));
+}
+
+// VGEMM: Multiply sparse (1:4) tile src1 with dense tile src2, accumulate into dst
+inline void vx_vgemm(int dst_treg, int src1_treg, int src2_vreg) {
+    __asm__ volatile (".insn r %0, 0, 2, x%1, x%2, x%3"
+        :: "i"(RISCV_CUSTOM3), "i"(dst_treg), "i"(src1_treg), "i"(src2_vreg));
+}
+
+// RGEMM: Multiply sparse (row-wise N:4) tile src1 with dense tile src2, accumulate into dst
+inline void vx_rgemm(int dst_ureg, int src1_treg, int src2_ureg) {
+    __asm__ volatile (".insn r %0, 0, 3, x%1, x%2, x%3"
+        :: "i"(RISCV_CUSTOM3), "i"(dst_ureg), "i"(src1_treg), "i"(src2_ureg));
+}
+
 #ifdef __cplusplus
 }
 #endif

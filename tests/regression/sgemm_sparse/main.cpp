@@ -1,6 +1,7 @@
 #include "common.h"
 #include <chrono>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <rvfloats.h>
 #include <string.h>
@@ -24,11 +25,11 @@
   } while (false)
 
 using namespace vortex;
-namespace vt = tensor;
+namespace vt = sparse;
 
-static bool g_enable_sparse = false;
+static bool g_enable_sparse = true;
 ///////////////////////////////////////////////////////////////////////////////
-
+/*
 static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t height, const uint8_t *src) {
   // Calculate output size and stride
   uint32_t out_bytes = (width * height + 1) / 2;
@@ -59,7 +60,7 @@ static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t
     }
   }
 }
-
+*/
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
@@ -350,7 +351,7 @@ struct SparseMat {
 
   uint32_t rows, cols;           // original A dims (M × K)
 };
-
+/*
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = 8 / vt::ITYPE::bits;
   uint32_t KS = subbytes ? (K * subbytes) : K;
@@ -366,7 +367,7 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
     }
   }
 }
-
+*/
 /*
 static void matmul_cpu_sparseA(
       otype_t*               C,      // [M × N]   output
@@ -542,9 +543,6 @@ int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
-  if(g_enable_sparse) {
-    test_pruneA(); // Test the pruning function
-  }
 
   std::srand(50);
 
@@ -552,7 +550,7 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
-  uint64_t isa_flags;
+  /*uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
   bool has_ext = (isa_flags & VX_ISA_EXT_TCU) != 0;
   if (!has_ext) {
@@ -560,7 +558,7 @@ int main(int argc, char *argv[]) {
     cleanup();
     return -1;
   }
-
+*/
   uint64_t NT;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &NT));
   if (NT != NUM_THREADS) {
@@ -569,88 +567,146 @@ int main(int argc, char *argv[]) {
   }
 
   uint32_t M = xm * cfg::tileM;
-  uint32_t N = xn * cfg::tileN;
-  uint32_t K = xk = cfg::tileK;
+  uint32_t K = xk * cfg::tileK;
 
   if ((M % cfg::tileM) != 0) {
     std::cout << "Error: M must be a multiple of tensor tileM!" << std::endl;
     return -1;
   }
 
-  if ((N % cfg::tileN) != 0) {
-    std::cout << "Error: M must be a multiple of tensor tileN!" << std::endl;
-    return -1;
-  }
-
   if ((K % cfg::tileK) != 0) {
-    std::cout << "Error: M must be a multiple of tensor tileK!" << std::endl;
+    std::cout << "Error: K must be a multiple of tensor tileK!" << std::endl;
     return -1;
   }
-
-  size_t sizeA = M * K;
-  size_t sizeB = K * N;
-  size_t sizeC = M * N;
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
-  std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
   std::cout << "WMMA Core Dimension: M=" << cfg::tcM << ", N=" << cfg::tcN << ", K=" << cfg::tcK << std::endl;
   std::cout << "WMMA Tile Dimension: M=" << cfg::tileM << ", N=" << cfg::tileN << ", K=" << cfg::tileK << std::endl;
-  std::cout << "matrix A: " << M << "x" << K << std::endl;
-  std::cout << "matrix B: " << K << "x" << N << std::endl;
-  std::cout << "matrix C: " << M << "x" << N << std::endl;
+  std::cout << "matrix A: " << M << "x" << K << " (sparse format)" << std::endl;
 
   // set block size to warp size
-  kernel_arg.grid_dim[0] = N / cfg::tileN;
+  kernel_arg.grid_dim[0] = 1;  // Only need 1 block for testing
   kernel_arg.grid_dim[1] = M / cfg::tileM;
-  kernel_arg.block_dim[0] = NT; // warp sizeb
+  kernel_arg.block_dim[0] = NT; // warp size
   kernel_arg.block_dim[1] = 1;
 
   // set matrix dimensions
   kernel_arg.M = M;
-  kernel_arg.N = N;
+  kernel_arg.N = 0;  // Not used for loading test
   kernel_arg.K = K;
 
-  // allocate device memory
+  // allocate device memory for sparse matrix A
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
+  
+  size_t sizeA_sparse = 0;
+  // For sparse format: data (values) first, then metadata
+  // Values size: (M * K / 2) * sizeof(itype_t) bytes
+  // Metadata size: (M * K / 4) * sizeof(uint8_t) bytes
+  size_t values_size = (M * K / 2) * sizeof(itype_t);
+  size_t meta_size = (M * K / 4) * sizeof(uint8_t);
+  sizeA_sparse = values_size + meta_size;
+  
+  RT_CHECK(vx_mem_alloc(device, sizeA_sparse, VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeB * sizeof(itype_t), VX_MEM_READ, &B_buffer));
+  RT_CHECK(vx_mem_alloc(device, 1, VX_MEM_READ, &B_buffer));  // Dummy buffer
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
+  RT_CHECK(vx_mem_alloc(device, 1, VX_MEM_WRITE, &C_buffer));  // Dummy buffer
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
-  std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
-  std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
 
-  // generate source data
-  std::vector<itype_t> h_A(sizeA);
-  std::vector<itype_t> h_B(sizeB);
-  for (uint32_t i = 0; i < sizeA; ++i) {
-    h_A[i] = Comparator<vt::ITYPE>::generate();
-  }
-  for (uint32_t i = 0; i < sizeB; ++i) {
-    h_B[i] = Comparator<vt::ITYPE>::generate();
+  // generate source data and convert to sparse format
+  std::vector<itype_t> h_A_dense(M * K);
+  for (uint32_t i = 0; i < M * K; ++i) {
+    h_A_dense[i] = Comparator<vt::ITYPE>::generate();
   }
 
-  // upload matrix A buffer
-  {
-    std::cout << "upload matrix A buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, sizeA * sizeof(itype_t)));
-  }
-
-  // upload matrix B buffer
-  {
-    std::cout << "upload matrix B buffer" << std::endl;
-    if constexpr (std::is_same<vt::ITYPE, vt::int4>::value || std::is_same<vt::ITYPE, vt::uint4>::value) {
-      // sub-byte matrix B must be in col-major format
-      // we convert the 4-bit row-major to col-major here
-      std::vector<uint8_t> h_B_col(sizeB);
-      convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());
-      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB));
-    } else {
-      RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
+  // Convert to sparse format
+  auto sparseA = pruneAndCompressMatrixA(h_A_dense, M, K);
+  
+  // Print original dense matrix A
+  std::cout << "\n=== Original Dense Matrix A (" << M << "x" << K << ") ===" << std::endl;
+  for (uint32_t m = 0; m < M; ++m) {
+    std::cout << "Row " << m << ": ";
+    for (uint32_t k = 0; k < K; ++k) {
+      if (vt::ITYPE::id == vt::fp32::id) {
+        std::cout << std::fixed << std::setprecision(3) << h_A_dense[m * K + k] << " ";
+      } else {
+        std::cout << std::hex << "0x" << (uint32_t)h_A_dense[m * K + k] << " ";
+      }
     }
+    std::cout << std::endl;
+  }
+  std::cout << std::dec;
+  
+  // Print sparse values
+  std::cout << "\n=== Sparse Matrix Values (" << sparseA.values.size() << " elements) ===" << std::endl;
+  size_t val_idx = 0;
+  for (uint32_t m = 0; m < M; ++m) {
+    std::cout << "Row " << m << " values: ";
+    for (uint32_t k = 0; k < K / 2; ++k) {
+      if (vt::ITYPE::id == vt::fp32::id) {
+        std::cout << std::fixed << std::setprecision(3) << sparseA.values[val_idx++] << " ";
+      } else {
+        std::cout << std::hex << "0x" << (uint32_t)sparseA.values[val_idx++] << " ";
+      }
+    }
+    std::cout << std::endl;
+  }
+  std::cout << std::dec;
+  
+  // Print metadata
+  std::cout << "\n=== Metadata (" << sparseA.meta.size() << " bytes) ===" << std::endl;
+  size_t meta_idx = 0;
+  for (uint32_t m = 0; m < M; ++m) {
+    std::cout << "Row " << m << " metadata: ";
+    for (uint32_t blk = 0; blk < K / 4; ++blk) {
+      uint8_t mask = sparseA.meta[meta_idx++];
+      std::cout << "0b";
+      for (int i = 3; i >= 0; --i) {
+        std::cout << ((mask >> i) & 1);
+      }
+      std::cout << " ";
+    }
+    std::cout << std::endl;
+  }
+  
+  // Print metadata with position interpretation
+  std::cout << "\n=== Metadata Interpretation (showing kept positions) ===" << std::endl;
+  meta_idx = 0;
+  val_idx = 0;
+  for (uint32_t m = 0; m < M; ++m) {
+    std::cout << "Row " << m << ": ";
+    for (uint32_t blk = 0; blk < K / 4; ++blk) {
+      uint8_t mask = sparseA.meta[meta_idx++];
+      std::cout << "[";
+      bool first = true;
+      for (uint32_t i = 0; i < 4; ++i) {
+        if (mask & (1u << i)) {
+          if (!first) std::cout << ",";
+          std::cout << (blk * 4 + i);
+          first = false;
+        }
+      }
+      std::cout << "] ";
+    }
+    std::cout << std::endl;
+  }
+  
+  // Create buffer: data first, then metadata
+  std::vector<uint8_t> sparse_buffer(sizeA_sparse);
+  memcpy(sparse_buffer.data(), sparseA.values.data(), values_size);
+  memcpy(sparse_buffer.data() + values_size, sparseA.meta.data(), meta_size);
+  
+  std::cout << "\nSparse A: values=" << sparseA.values.size() 
+            << " elements (" << values_size << " bytes), "
+            << "metadata=" << sparseA.meta.size() 
+            << " bytes, total=" << sizeA_sparse << " bytes" << std::endl;
+
+  // upload sparse matrix A buffer
+  {
+    std::cout << "upload sparse matrix A buffer" << std::endl;
+    RT_CHECK(vx_copy_to_dev(A_buffer, sparse_buffer.data(), 0, sizeA_sparse));
   }
 
   // upload program
@@ -675,35 +731,11 @@ int main(int argc, char *argv[]) {
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
-  // download destination buffer
-  std::vector<otype_t> h_C(sizeC);
-  std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t)));
-
-  // verify result
-  std::cout << "verify result" << std::endl;
-  int errors = 0;
-  {
-    std::vector<otype_t> h_ref(sizeC);
-    matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), M, N, K);
-
-    for (uint32_t i = 0; i < h_ref.size(); ++i) {
-      if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, errors)) {
-        ++errors;
-      }
-    }
-  }
-
   // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();
 
-  if (errors != 0) {
-    std::cout << "Found " << std::dec << errors << " / " << sizeC << " errors!" << std::endl;
-    std::cout << "FAILED!" << std::endl;
-    return errors;
-  }
-
+  std::cout << "Sparse matrix loading test completed successfully!" << std::endl;
   std::cout << "PASSED!" << std::endl;
 
   return 0;

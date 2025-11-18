@@ -29,6 +29,9 @@
 #else
 #include "operands.h"
 #endif
+#ifdef EXT_VEGETA_ENABLE
+#include "sparse_unit.h"
+#endif
 
 #include "dispatcher.h"
 #include "func_unit.h"
@@ -171,6 +174,12 @@ public:
   }
 #endif
 
+#ifdef EXT_VEGETA_ENABLE
+  SparseUnit::Ptr& sparse_unit() {
+    return sparse_unit_;
+  }
+#endif
+
   auto& trace_pool() {
     return trace_pool_;
   }
@@ -198,6 +207,10 @@ private:
 
 #ifdef EXT_V_ENABLE
   VecUnit::Ptr vec_unit_;
+#endif
+
+#ifdef EXT_VEGETA_ENABLE
+  SparseUnit::Ptr sparse_unit_;
 #endif
 
   Emulator emulator_;

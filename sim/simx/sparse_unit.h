@@ -14,16 +14,28 @@
 #pragma once
 
 #include <simobject.h>
+#include "instr.h"
 #include "instr_trace.h"
+#include <vector>
+#include "sparse_cfg.h"
 
 namespace vortex {
 
 class Core;
 
+// Register file type: 8 registers, each with 16 rows x 32 columns of fp32
+using SparseRegFile_t = std::vector<std::vector<std::vector<typename sparse::fp32::dtype>>>;
+
 op_string_t op_string(TcuType tcu_type, IntrTcuArgs args);
 
 class SparseUnit : public SimObject<SparseUnit> {
 public:
+
+  struct MemTraceData : public ITraceData {
+    using Ptr = std::shared_ptr<MemTraceData>;
+    std::vector<std::vector<mem_addr_size_t>> mem_addrs;
+    MemTraceData(uint32_t num_threads = 0) : mem_addrs(num_threads) {}
+  };
 
   struct ExeTraceData : public ITraceData {
     using Ptr = std::shared_ptr<ExeTraceData>;
@@ -51,6 +63,10 @@ public:
   virtual void reset();
 
   virtual void tick();
+
+  void load(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, MemTraceData* trace_data);
+
+  void store(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, MemTraceData* trace_data);
 
 	void wmma(uint32_t wid,
 			 	    uint32_t fmt_s,

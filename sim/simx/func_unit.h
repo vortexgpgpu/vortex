@@ -123,6 +123,17 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef EXT_VEGETA_ENABLE
+
+class VegetaUnit : public FuncUnit {
+public:
+	VegetaUnit(const SimContext& ctx, Core*);
+
+	void tick() override;
+};
+
+#endif
+
 #ifdef EXT_V_ENABLE
 
 class VpuUnit : public FuncUnit {
