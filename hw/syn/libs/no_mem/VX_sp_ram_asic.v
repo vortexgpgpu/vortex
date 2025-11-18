@@ -27,6 +27,29 @@ module VX_sp_ram_asic #(
     input wire [DATAW-1:0]   wdata,
     output wire [DATAW-1:0]  rdata
 );
-    //--
+    localparam WSELW = DATAW / WRENW;
+
+    reg [DATAW-1:0] mem [0:SIZE-1];
+    reg [DATAW-1:0] rdata_reg;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            rdata_reg <= '0;
+        end else if (read) begin
+            rdata_reg <= mem[addr];
+        end
+    end
+
+    always @(posedge clk) begin
+        if (write) begin
+            for (integer i = 0; i < WRENW; ++i) begin
+                if (wren[i]) begin
+                    mem[addr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                end
+            end
+        end
+    end
+
+    assign rdata = rdata_reg;
 
 endmodule

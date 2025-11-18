@@ -18,6 +18,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 defines=()
 includes=()
 externs=()
+source_files=()
 
 output_file=""
 define_header=""
@@ -63,7 +64,7 @@ do
         ;;
     P)  preprocessor=1
         ;;
-    h)  echo "Usage: [-D<macro>] [-G<param>=<value>] [-T<top-module>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-H<define_header>] [-P: macro preprocessing] [-h help]"
+    h)  echo "Usage: [-D<macro>] [-G<param>=<value>] [-T<top-module>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-H<define_header>] [-P: macro preprocessing] [-h help] [files...]"
         exit 0
         ;;
     \?) echo "Invalid option: -$OPTARG" 1>&2
@@ -72,6 +73,13 @@ do
   esac
 done
 
+# Remaining args are explicit source files
+shift $((OPTIND - 1))
+for arg in "$@"; do
+  source_files+=( "$arg" )
+done
+
+# Optional header with `define`s
 if [ "$define_header" != "" ]; then
     directory=$(dirname "$define_header")
     mkdir -p "$directory"
@@ -88,41 +96,63 @@ if [ "$define_header" != "" ]; then
     } > "$define_header"
 fi
 
-if [ "$copy_folder" != "" ]; then
-    # copy source files
-    mkdir -p "$copy_folder"
-    for dir in ${includes[@]}; do
-        find "$dir" -maxdepth 1 -type f | while read -r file; do
-            file_ext="${file##*.}"
-            file_name=$(basename -- "$file")
-            if [ $preprocessor != 0 ] && { [ "$file_ext" == "v" ] || [ "$file_ext" == "sv" ]; }; then
-                if [[ -n "$params_str" && $file_name == "$top_module."* ]]; then
-                    temp_file=$(mktemp)
-                    $script_dir/repl_params.py $params_str -T$top_module "$file" > "$temp_file"
-                    verilator $defines_str $includes_str -E -P "$temp_file" > "$copy_folder/$file_name"
-                else
-                    verilator $defines_str $includes_str -E -P "$file" > "$copy_folder/$file_name"
-                fi
-            else
-                cp "$file" "$copy_folder"
-            fi
-        done
+# Helper to copy/preprocess a single file
+copy_one_file() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+
+  local file_ext="${file##*.}"
+  local file_name
+  file_name=$(basename -- "$file")
+
+  if [ "$preprocessor" != 0 ] && { [ "$file_ext" = "v" ] || [ "$file_ext" = "sv" ]; }; then
+    if [[ -n "$params_str" && "$file_name" == "$top_module."* ]]; then
+      local temp_file
+      temp_file=$(mktemp)
+      "$SCRIPT_DIR"/repl_params.py $params_str -T"$top_module" "$file" > "$temp_file"
+      verilator $defines_str $includes_str -E -P "$temp_file" > "$copy_folder/$file_name"
+      rm -f "$temp_file"
+    else
+      verilator $defines_str $includes_str -E -P "$file" > "$copy_folder/$file_name"
+    fi
+  else
+    cp "$file" "$copy_folder"
+  fi
+}
+
+# Optional copy phase
+if [ -n "$copy_folder" ]; then
+  mkdir -p "$copy_folder"
+
+  # Files from include dirs
+  for dir in "${includes[@]}"; do
+    find "$dir" -maxdepth 1 -type f | while read -r file; do
+      copy_one_file "$file"
     done
+  done
+
+  # Files passed explicitly on the command line
+  for file in "${source_files[@]}"; do
+    copy_one_file "$file"
+  done
 fi
 
+# Optional filelist generation
 if [ "$output_file" != "" ]; then
     {
-        if [ "$define_header" == "" ]; then
-            # dump defines
+        # If we didn't generate a header, push +define+ into the filelist
+        if [ -z "$define_header" ]; then
             for value in ${defines[@]}; do
                 echo "+define+$value"
             done
         fi
 
+        # extern search paths
         for dir in ${externs[@]}; do
             echo "+incdir+$(realpath "$dir")"
         done
 
+        # extern *_pkg.sv and .v/.sv files
         for dir in ${externs[@]}; do
             find "$(realpath $dir)" -maxdepth 1 -type f -name "*_pkg.sv" -print
         done
@@ -131,24 +161,27 @@ if [ "$output_file" != "" ]; then
         done
 
         if [ "$copy_folder" != "" ]; then
-            # dump include directories
+            # All files have been copied; just point to the copy folder
             echo "+incdir+$(realpath "$copy_folder")"
-
-            # dump source files
             find "$(realpath "$copy_folder")" -maxdepth 1 -type f -name "*_pkg.sv" -print
             find "$(realpath "$copy_folder")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" -print
         else
-            # dump include directories
+            # Use original include dirs
             for dir in ${includes[@]}; do
                 echo "+incdir+$(realpath "$dir")"
             done
 
-            # dump source files
+            # *_pkg.sv and .v/.sv from include dirs
             for dir in ${includes[@]}; do
                 find "$(realpath "$dir")" -maxdepth 1 -type f -name "*_pkg.sv" -print
             done
             for dir in ${includes[@]}; do
                 find "$(realpath "$dir")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" -print
+            done
+
+            # add source files
+            for file in "${source_files[@]}"; do
+                echo "$(realpath "$file")"
             done
         fi
     } > "$output_file"

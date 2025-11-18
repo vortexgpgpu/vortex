@@ -257,7 +257,10 @@ foreach m $_bbmods {
   if {$m eq ""} continue
   set cells [get_cells -hier -filter "ref_name==$m" -quiet]
   if {[llength $cells]} {
+    puts "INFO: Applying 'dont_touch' to cell $m"
     set_dont_touch $cells
+  } else {
+    puts "WARNING: Could not find cell '$m' to set 'dont_touch'."
   }
 }
 
@@ -298,12 +301,15 @@ catch { set power_enable_analysis true }
 compile_ultra -retime
 
 # ---------------- reports ----------------
-report_qor                                      > [file join $RPT_DIR "qor.rpt"]
-report_area -hier -nosplit                      > [file join $RPT_DIR "area.rpt"]
-report_timing -delay_type max -path_type full_clock -max_paths 50  > [file join $RPT_DIR "timing_max.rpt"]
-report_timing -delay_type min -path_type full_clock -max_paths 50  > [file join $RPT_DIR "timing_min.rpt"]
-report_power                                    > [file join $RPT_DIR "power_vectorless.rpt"]
-report_constraints -all_violators               > [file join $RPT_DIR "constraints_violators.rpt"]
+report_qor                          > [file join $RPT_DIR "qor.rpt"]
+report_timing_summary               > [file join $RPT_DIR "timing_summary.rpt"]
+report_timing -max_paths 10 -transition_time -capacitance -nets -input_pins > [file join $RPT_DIR "worst_setup.rpt"]
+report_timing -delay_type min -max_paths 10 -nets -input_pins > [file join $RPT_DIR "worst_hold.rpt"]
+check_timing                        > [file join $RPT_DIR "check_timing.rpt"]
+report_area                         > [file join $RPT_DIR "area.rpt"]
+report_area -hierarchy              > [file join $RPT_DIR "area_hier.rpt"]
+report_power                        > [file join $RPT_DIR "power_vectorless.rpt"]
+report_constraints -all_violators   > [file join $RPT_DIR "constraints_violators.rpt"]
 
 # ---------------- outputs ----------------
 write -format ddc     -hierarchy -output [file join $OUT_DIR "${TOP}.mapped.ddc"]

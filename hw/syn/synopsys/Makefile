@@ -90,6 +90,7 @@ $(BUILD_DIR)/sources.txt:
 synthesis: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
+	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
