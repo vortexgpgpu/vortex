@@ -110,6 +110,25 @@
 `define VX_CSR_MPM_IFETCH_LT_H          12'hB91
 `define VX_CSR_MPM_LOAD_LT              12'hB12
 `define VX_CSR_MPM_LOAD_LT_H            12'hB92
+// PERF: TLB (VM enabled only)
+`define VX_CSR_MPM_TLB_MISS_R           12'hB13     // TLB read misses
+`define VX_CSR_MPM_TLB_MISS_R_H         12'hB93
+`define VX_CSR_MPM_TLB_MISS_W           12'hB14     // TLB write misses
+`define VX_CSR_MPM_TLB_MISS_W_H         12'hB94
+`define VX_CSR_MPM_TLB_READS            12'hB15     // TLB reads (total accesses)
+`define VX_CSR_MPM_TLB_READS_H          12'hB95
+`define VX_CSR_MPM_TLB_MSHR_ST          12'hB16     // TLB MSHR stalls (PTW contention)
+`define VX_CSR_MPM_TLB_MSHR_ST_H        12'hB96
+`define VX_CSR_MPM_TLB_EVICTIONS        12'hB17     // TLB evictions
+`define VX_CSR_MPM_TLB_EVICTIONS_H      12'hB97
+
+// PTW Performance counters
+`define VX_CSR_MPM_PTW_WALKS            12'hB18     // PTW total walks
+`define VX_CSR_MPM_PTW_WALKS_H          12'hB98
+`define VX_CSR_MPM_PTW_MEM_ACCESSES     12'hB19     // PTW memory accesses
+`define VX_CSR_MPM_PTW_MEM_ACCESSES_H   12'hB99
+`define VX_CSR_MPM_PTW_MAX_CONCURRENT   12'hB1A     // PTW max concurrent walks
+`define VX_CSR_MPM_PTW_MAX_CONCURRENT_H 12'hB9A
 
 // Machine Performance-monitoring memory counters (class 2) ///////////////////
 

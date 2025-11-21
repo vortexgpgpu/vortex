@@ -15,7 +15,9 @@
 
 #include "cache_sim.h"
 #include "debug.h"
-#include "ptw.h"
+#include <iostream>
+#include <iomanip>
+#include <map>
 
 namespace vortex {
 
@@ -23,18 +25,16 @@ class TlbSim : public SimObject<TlbSim> {
 public:
 	struct PerfStats {
     	CacheSim::PerfStats tlb;
-		PTW::PerfStats ptw;
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->tlb += rhs.tlb;
-			this->ptw += rhs.ptw;
 			return *this;
 		}
   	};
 	std::vector<SimPort<MemReq>> CoreReqPorts;
 	std::vector<SimPort<MemRsp>> CoreRspPorts;
-	std::vector<SimPort<MemReq>> MemReqPorts;
-	std::vector<SimPort<MemRsp>> MemRspPorts;
+	std::vector<SimPort<MemReq>> MemReqPorts;  // TLB miss requests (for shared PTW)
+	std::vector<SimPort<MemRsp>> MemRspPorts;  // PTW responses (from shared PTW)
 
 	TlbSim(const SimContext& ctx,
 			const char* name,
@@ -45,8 +45,7 @@ public:
 		, CoreRspPorts(tlb_config.num_inputs, this)
 		, MemReqPorts(tlb_config.mem_ports, this)
 		, MemRspPorts(tlb_config.mem_ports, this)
-		, tlb_(MAX(num_units, 0x1))
-		, ptw_(MAX(num_units, 0x1)) {
+		, tlb_(MAX(num_units, 0x1)) {
 
 		CacheSim::Config tlb_config2(tlb_config);
 		if (0 == num_units) {
@@ -60,30 +59,25 @@ public:
 		snprintf(sname, 100, "%s-cache%d", name, 0);
 		tlb_.at(0) = CacheSim::Create(sname, tlb_config2);
 
-		// Create Page Table Walker (simplified - single port)
-		snprintf(sname, 100, "%s-ptw%d", name, 0);
-		PTW::Config ptw_config;
-		ptw_config.pt_levels = PT_LEVEL;
-		ptw_config.pte_size = PTE_SIZE;
-		ptw_config.base_ppn = 0x0;  // Default SATP base PPN - can be updated later
-		ptw_.at(0) = PTW::Create(sname, ptw_config);
-
 		// Connect input to TLB(Cache)
 		for (uint32_t j = 0; j < tlb_config.num_inputs; ++j) {
 			this->CoreReqPorts.at(j).bind(&tlb_.at(0)->CoreReqPorts.at(j));
 			tlb_.at(0)->CoreRspPorts.at(j).bind(&this->CoreRspPorts.at(j));
 		}
 
-		// Connect TLB miss port (first MemReqPort) to PTW
-		// PTW handles one walk at a time sequentially
-		tlb_.at(0)->MemReqPorts.at(0).bind(&ptw_.at(0)->CoreReqPort);
-		ptw_.at(0)->CoreRspPort.bind(&tlb_.at(0)->MemRspPorts.at(0));
+		// Connect TLB cache's memory ports to TlbSim's memory ports (for PTW)
+		// TLB cache misses go to TlbSim's MemReqPorts (connected to PTW in CacheCluster)
+		// PTW responses come back through TlbSim's MemRspPorts to TLB cache's MemRspPorts
+		// NOTE: MemReqPorts binding is done here, but MemRspPorts binding is done externally
+		// in CacheCluster to allow PTW -> TlbSim -> Internal Cache chain
+		for (uint32_t j = 0; j < tlb_config.mem_ports; ++j) {
+			tlb_.at(0)->MemReqPorts.at(j).bind(&this->MemReqPorts.at(j));
+			// REMOVED: this->MemRspPorts.at(j).bind(&tlb_.at(0)->MemRspPorts.at(j));
+			// This binding is now done by the external component (PTW -> TlbSim MemRspPorts)
+			// and TlbSim MemRspPorts must forward to internal cache manually in tick()
+		}
 
-		// Connect PTW to external memory port for PTE reads
-		ptw_.at(0)->MemReqPort.bind(&this->MemReqPorts.at(0));
-		this->MemRspPorts.at(0).bind(&ptw_.at(0)->MemRspPort);
-
-		DT(1, "TlbSim created with PTW: " << name);
+		DT(1, "TlbSim created (PTW shared): " << name);
 	}
 
 	~TlbSim() {}
@@ -92,6 +86,22 @@ public:
 
 	void tick() {
 		static uint64_t tick_count = 0;
+		static int tlb_trace_count = 0;
+		
+		// Trace first few TLB requests
+		if (tlb_.at(0) && tlb_trace_count < 5) {
+			for (uint32_t j = 0; j < CoreReqPorts.size(); ++j) {
+				if (!CoreReqPorts.at(j).empty()) {
+					auto& req = CoreReqPorts.at(j).front();
+					std::cout << "\n=== [TLB LOOKUP TRACE #" << tlb_trace_count << "] === " << this->name() 
+					   << " at tick=" << tick_count << std::endl;
+					std::cout << "    Received request: addr=0x" << std::hex << req.addr << std::dec 
+					   << " tag=" << req.tag << " (checking TLB cache...)" << std::endl;
+					tlb_trace_count++;
+				}
+			}
+		}
+		
 		if ((tick_count % 1000) == 0) {
 			DT(2, this->name() << "-tick: count=" << tick_count
 				<< " tlb_req_empty=" << (tlb_.at(0) ? tlb_.at(0)->CoreReqPorts.at(0).empty() : 1)
@@ -99,12 +109,73 @@ public:
 		}
 		tick_count++;
 
-		// Tick TLB and PTW
+			// Forward PTW responses to internal TLB cache
+			// Since we removed the automatic binding, we need to manually forward
+			if (tlb_.at(0)) {
+				static int ptw_rsp_trace_count = 0;
+				static std::map<std::string, int> received_count;
+				// Debug: Always check and log for dcaches
+				if (this->name() == std::string("socket0-dcaches-tlb0")) {
+					for (uint32_t j = 0; j < MemRspPorts.size(); ++j) {
+						if (!MemRspPorts.at(j).empty()) {
+							received_count[this->name()]++;
+							std::cout << "[TLB_DEBUG] " << this->name() << " tick=" << tick_count 
+							   << " MemRspPorts[" << j << "] HAS RESPONSE #" << received_count[this->name()]
+							   << " (before forwarding)" << std::endl;
+						}
+					}
+				}
+				for (uint32_t j = 0; j < MemRspPorts.size(); ++j) {
+					if (!MemRspPorts.at(j).empty()) {
+						auto rsp = MemRspPorts.at(j).front();
+						// Always trace for dcaches to debug missing responses
+						if (this->name() == std::string("socket0-dcaches-tlb0")) {
+							static int dcache_forward_count = 0;
+							dcache_forward_count++;
+							std::cout << "\n=== [DCACHE TLB FORWARD #" << dcache_forward_count << "] === " << this->name() 
+							   << " at tick=" << tick_count << std::endl;
+							std::cout << "    Forwarding PTW response: tag=" << rsp.tag << " cid=" << rsp.cid 
+							   << " uuid=" << rsp.uuid << " to internal cache" << std::endl;
+						}
+						if (ptw_rsp_trace_count < 10) {
+							std::cout << "\n=== [PTW FILL TRACE #" << ptw_rsp_trace_count << "] === " << this->name() 
+							   << " at tick=" << tick_count << std::endl;
+							std::cout << "    Received PTW response: tag=" << rsp.tag << " cid=" << rsp.cid 
+							   << " (filling TLB cache)" << std::endl;
+							ptw_rsp_trace_count++;
+						}
+						// Forward to internal cache's MemRspPorts (delay=1 for proper pipeline timing)
+						// CRITICAL FIX: Use delay=1 instead of delay=0 to allow cache to process in next tick
+						// With delay=0, the response arrives in the same tick as the forward, which may cause
+						// timing issues if the cache has already processed its mem_rsp queue this tick
+						tlb_.at(0)->MemRspPorts.at(j).push(rsp, 1);
+						MemRspPorts.at(j).pop();
+						
+						if (this->name() == std::string("socket0-dcaches-tlb0")) {
+							std::cout << "    >> Using delay=1 to ensure cache processes response in next tick" << std::endl;
+						}
+					}
+				}
+			}
+
+		// Tick TLB only (PTW is now shared in CacheCluster)
 		for (auto tlb : tlb_) {
 			if (tlb) tlb->tick();
 		}
-		for (auto ptw : ptw_) {
-			if (ptw) ptw->tick();
+		
+		// Trace TLB responses (hits or filled from PTW)
+		static int tlb_output_trace_count = 0;
+		if (tlb_.at(0) && tlb_output_trace_count < 5) {
+			for (uint32_t j = 0; j < CoreRspPorts.size(); ++j) {
+				if (!CoreRspPorts.at(j).empty()) {
+					auto& rsp = CoreRspPorts.at(j).front();
+					std::cout << "\n=== [TLB OUTPUT TRACE #" << tlb_output_trace_count << "] === " << this->name() 
+					   << " at tick=" << tick_count << std::endl;
+					std::cout << "    TLB sending response: tag=" << rsp.tag << " cid=" << rsp.cid 
+					   << " (translation available)" << std::endl;
+					tlb_output_trace_count++;
+				}
+			}
 		}
 	}
 
@@ -113,37 +184,11 @@ public:
 		for (auto tlb : tlb_) {
 			if (tlb) perf.tlb += tlb->perf_stats();
 		}
-		for (auto ptw : ptw_) {
-			if (ptw) perf.ptw += ptw->perf_stats();
-		}
 		return perf;
-	}
-
-	void set_satp(uint64_t satp) {
-		// Extract base PPN from SATP register
-		uint64_t base_ppn = 0;
-		#ifdef XLEN_32
-		// SV32: PPN is bits [0:21] of SATP
-		base_ppn = satp & 0x3FFFFF;  // 22 bits
-		#else
-		// SV39: PPN is bits [0:43] of SATP
-		base_ppn = satp & 0xFFFFFFFFFFF;  // 44 bits
-		#endif
-
-		DT(1, "TlbSim::set_satp: satp=0x" << std::hex << satp
-		   << " base_ppn=0x" << base_ppn << std::dec);
-
-		// Update PTW with the correct base PPN
-		for (auto ptw : ptw_) {
-			if (ptw) {
-				ptw->set_base_ppn(base_ppn);
-			}
-		}
 	}
 
 private:
 	std::vector<CacheSim::Ptr> tlb_;
-	std::vector<PTW::Ptr> ptw_;
 };
 
 }

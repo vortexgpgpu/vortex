@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <math.h>
 #include <assert.h>
+#include <map>
 #include <util.h>
 
 #include "emulator.h"
@@ -544,6 +545,11 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
       case VX_DCR_MPM_CLASS_NONE:
         break;
       case VX_DCR_MPM_CLASS_CORE: {
+        #ifdef VM_ENABLE
+        // Get socket perf for TLB stats (similar to how MEM class gets socket_perf)
+        // Declare unconditionally to avoid stack corruption issues
+        auto socket_perf_tlb = core_->socket()->perf_stats();
+        #endif
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_SCHED_ID, core_perf.sched_idle);
         CSR_READ_64(VX_CSR_MPM_SCHED_ST, core_perf.sched_stalls);
@@ -561,6 +567,21 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         CSR_READ_64(VX_CSR_MPM_STORES, core_perf.stores);
         CSR_READ_64(VX_CSR_MPM_IFETCH_LT, core_perf.ifetch_latency);
         CSR_READ_64(VX_CSR_MPM_LOAD_LT, core_perf.load_latency);
+        #ifdef VM_ENABLE
+        // TLB stats - using available addresses in CORE class (B13-B17)
+        // These addresses are free in CORE class but used in MEM class - that's OK, different classes
+        CSR_READ_64(VX_CSR_MPM_TLB_MISS_R, socket_perf_tlb.tlb.read_misses);
+        CSR_READ_64(VX_CSR_MPM_TLB_MISS_W, socket_perf_tlb.tlb.write_misses);
+        CSR_READ_64(VX_CSR_MPM_TLB_READS, socket_perf_tlb.tlb.reads);
+        CSR_READ_64(VX_CSR_MPM_TLB_MSHR_ST, socket_perf_tlb.tlb.mshr_stalls);
+        CSR_READ_64(VX_CSR_MPM_TLB_EVICTIONS, socket_perf_tlb.tlb.evictions);
+        // PTW stats - using available addresses in CORE class (B18-B1A)
+        CSR_READ_64(VX_CSR_MPM_PTW_WALKS, socket_perf_tlb.ptw.walks);
+        CSR_READ_64(VX_CSR_MPM_PTW_MEM_ACCESSES, socket_perf_tlb.ptw.mem_accesses);
+        CSR_READ_64(VX_CSR_MPM_PTW_MAX_CONCURRENT, socket_perf_tlb.ptw.max_concurrent_walks);
+        #endif
+        default:
+          break;
         }
       } break;
       case VX_DCR_MPM_CLASS_MEM: {

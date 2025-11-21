@@ -30,6 +30,10 @@ public:
   struct PerfStats {
     CacheSim::PerfStats icache;
     CacheSim::PerfStats dcache;
+    #ifdef VM_ENABLE
+    CacheSim::PerfStats tlb;  // D-TLB stats (from dcaches CacheCluster)
+    PTW::PerfStats ptw;       // PTW stats (from both I-TLB and D-TLB)
+    #endif
   };
 
   std::vector<SimPort<MemReq>> mem_req_ports;
@@ -70,6 +74,7 @@ public:
   void resume(uint32_t core_id);
 
   PerfStats perf_stats() const;
+  void print_perf_stats() const;
 
 private:
   uint32_t                socket_id_;

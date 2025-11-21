@@ -12,6 +12,8 @@
 // limitations under the License.
 
 #include "socket.h"
+#include <iostream>
+#include <iomanip>
 #include "cluster.h"
 
 using namespace vortex;
@@ -135,6 +137,7 @@ void Socket::attach_ram(RAM* ram) {
 
 #ifdef VM_ENABLE
 void Socket::set_satp(uint64_t satp) {
+  std::cout << "[SOCKET] " << this->name() << " set_satp CALLED: satp=0x" << std::hex << satp << std::dec << std::endl;
   // Propagate SATP to cores (for data modeling)
   for (auto core : cores_) {
     core->set_satp(satp);
@@ -178,5 +181,25 @@ Socket::PerfStats Socket::perf_stats() const {
   PerfStats perf_stats;
   perf_stats.icache = icaches_->perf_stats().caches;
   perf_stats.dcache = dcaches_->perf_stats().caches;
+  #ifdef VM_ENABLE
+  // Aggregate TLB and PTW stats from both I-cache and D-cache clusters
+  auto icache_cluster_perf = icaches_->perf_stats();
+  auto dcache_cluster_perf = dcaches_->perf_stats();
+  perf_stats.tlb = icache_cluster_perf.tlb;  // Start with I-cache TLB stats
+  perf_stats.tlb += dcache_cluster_perf.tlb; // Add D-cache TLB stats
+  perf_stats.ptw = icache_cluster_perf.ptw;  // Start with I-cache PTW stats
+  perf_stats.ptw += dcache_cluster_perf.ptw; // Add D-cache PTW stats
+  #endif
   return perf_stats;
+}
+
+void Socket::print_perf_stats() const {
+  if (icaches_) {
+    std::cout << "\n=== I-Cache Cluster Stats ===" << std::endl;
+    icaches_->print_perf_stats();
+  }
+  if (dcaches_) {
+    std::cout << "\n=== D-Cache Cluster Stats ===" << std::endl;
+    dcaches_->print_perf_stats();
+  }
 }

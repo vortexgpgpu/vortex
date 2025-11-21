@@ -357,13 +357,18 @@
     `define PT_SIZE MEM_PAGE_SIZE
     `endif
 
+    // TLB Configuration (using CacheSim structure)
+    // Total entries = TLB_SIZE / TLB_LINE_SIZE = 65536 / 4096 = 16 entries
+    // Actual hardware storage: 16 entries × ~12 bytes/entry = ~192 bytes (not 64KB!)
+    // The 64KB represents logical coverage (16 pages × 4KB/page)
+
     `ifndef TLB_SIZE
-    `define TLB_SIZE (512)
+    `define TLB_SIZE (65536)  // 64KB logical coverage = 16 entries × 4KB pages
     `endif
 
     `ifndef TLB_LINE_SIZE
-    `define TLB_LINE_SIZE (8)
-    `endif
+    `define TLB_LINE_SIZE (4096)  // CRITICAL: MUST equal PAGE_SIZE for proper VPN granularity!
+    `endif                         // Controls tag granularity - each TLB entry covers one full page
 
     `ifndef TLB_WORD_SIZE
     `define TLB_WORD_SIZE (8)
@@ -380,6 +385,15 @@
     `ifndef TLB_MSHR_SIZE
     `define TLB_MSHR_SIZE (8)
     `endif
+
+    `ifndef NUM_PTWS
+    `define NUM_PTWS (1)  // Number of page table walkers (finalized: 1 for multithreaded implementation)
+    `endif                            // Can be increased to NUM_ICACHES for one PTW per TLB
+
+    `ifndef PTW_BUFFER_SIZE
+    `define PTW_BUFFER_SIZE (4)  // PTW request buffer size - finalized: 4 for multithreaded implementation
+    `endif                         // Controls how many walks can be in progress simultaneously
+                                  // Can be increased for higher concurrency, but 4 is sufficient for current workloads
 
 `endif
 

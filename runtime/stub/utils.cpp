@@ -393,6 +393,69 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         if (num_cores > 1) fprintf(stream, "PERF: core%d: stores=%ld\n", core_id, stores_per_core);
         stores += stores_per_core;
       }
+      
+      // PERF: TLB (VM enabled only) - using CSRs in CORE class (B13-B17)
+      #ifdef VM_ENABLE
+      uint64_t tlb_reads = 0;
+      uint64_t tlb_read_misses = 0;
+      uint64_t tlb_write_misses = 0;
+      uint64_t tlb_mshr_stalls = 0;
+      uint64_t tlb_evictions = 0;
+      
+      int tlb_err_reads = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_READS, core_id, &tlb_reads);
+      int tlb_err_r = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_MISS_R, core_id, &tlb_read_misses);
+      int tlb_err_w = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_MISS_W, core_id, &tlb_write_misses);
+      int tlb_err_mshr = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_MSHR_ST, core_id, &tlb_mshr_stalls);
+      int tlb_err_evict = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_EVICTIONS, core_id, &tlb_evictions);
+      
+      (void)tlb_err_mshr;  // May not be available in all configurations
+      (void)tlb_err_evict; // May not be available in all configurations
+      
+      if (tlb_err_reads == 0 && tlb_err_r == 0 && tlb_err_w == 0) {
+        // TLB stats available (VM enabled)
+        int tlb_read_hit_ratio = (tlb_reads > 0) ? calcRatio(tlb_read_misses, tlb_reads) : 0;
+        int mshr_utilization = calcAvgPercent(tlb_read_misses + tlb_write_misses, tlb_read_misses + tlb_write_misses + tlb_mshr_stalls);
+        
+        if (num_cores > 1) {
+          fprintf(stream, "PERF: core%d: tlb reads=%ld\n", core_id, tlb_reads);
+          fprintf(stream, "PERF: core%d: tlb read misses=%ld (hit ratio=%d%%)\n", core_id, tlb_read_misses, tlb_read_hit_ratio);
+          fprintf(stream, "PERF: core%d: tlb write misses=%ld\n", core_id, tlb_write_misses);
+          if (tlb_mshr_stalls > 0) {
+            fprintf(stream, "PERF: core%d: tlb mshr stalls=%ld (utilization=%d%%)\n", core_id, tlb_mshr_stalls, mshr_utilization);
+          }
+          if (tlb_evictions > 0) {
+            fprintf(stream, "PERF: core%d: tlb evictions=%ld\n", core_id, tlb_evictions);
+          }
+        }
+      }
+      
+      // PERF: PTW (Page Table Walker)
+      uint64_t ptw_walks = 0;
+      uint64_t ptw_mem_accesses = 0;
+      uint64_t ptw_max_concurrent = 0;
+      
+      int ptw_err_walks = vx_mpm_query(hdevice, VX_CSR_MPM_PTW_WALKS, core_id, &ptw_walks);
+      int ptw_err_mem = vx_mpm_query(hdevice, VX_CSR_MPM_PTW_MEM_ACCESSES, core_id, &ptw_mem_accesses);
+      int ptw_err_conc = vx_mpm_query(hdevice, VX_CSR_MPM_PTW_MAX_CONCURRENT, core_id, &ptw_max_concurrent);
+      
+      (void)ptw_err_conc;  // May not be available in all configurations
+      
+      if (ptw_err_walks == 0 && ptw_err_mem == 0) {
+        // PTW stats available (VM enabled)
+        if (num_cores > 1) {
+          fprintf(stream, "PERF: core%d: ptw walks=%ld\n", core_id, ptw_walks);
+          fprintf(stream, "PERF: core%d: ptw mem accesses=%ld", core_id, ptw_mem_accesses);
+          if (ptw_walks > 0) {
+            double avg_mem_per_walk = (double)ptw_mem_accesses / (double)ptw_walks;
+            fprintf(stream, " (avg=%.1f per walk)", avg_mem_per_walk);
+          }
+          fprintf(stream, "\n");
+          if (ptw_max_concurrent > 0) {
+            fprintf(stream, "PERF: core%d: ptw max concurrent=%ld\n", core_id, ptw_max_concurrent);
+          }
+        }
+      }
+      #endif
     } break;
     case VX_DCR_MPM_CLASS_MEM: {
       if (lmem_enable) {
@@ -594,6 +657,102 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     fprintf(stream, "PERF: stores=%ld\n", stores);
     fprintf(stream, "PERF: ifetch latency=%d cycles\n", ifetch_avg_lat);
     fprintf(stream, "PERF: load latency=%d cycles\n", load_avg_lat);
+    
+    // PERF: TLB (VM enabled only) - using CSRs in CORE class (B13-B17)
+    // Note: TLB stats are queried from each core and aggregated
+    // Try to read TLB CSRs - they exist only if VM is enabled
+    uint64_t tlb_reads_total = 0;
+    uint64_t tlb_read_misses_total = 0;
+    uint64_t tlb_write_misses_total = 0;
+    uint64_t tlb_mshr_stalls_total = 0;
+    uint64_t tlb_evictions_total = 0;
+    bool tlb_stats_available = true;
+    
+    // Aggregate TLB stats across all cores
+    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+      uint64_t tlb_reads = 0;
+      uint64_t tlb_read_misses = 0;
+      uint64_t tlb_write_misses = 0;
+      uint64_t tlb_mshr_stalls = 0;
+      uint64_t tlb_evictions = 0;
+      
+      int tlb_err_reads = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_READS, core_id, &tlb_reads);
+      int tlb_err_r = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_MISS_R, core_id, &tlb_read_misses);
+      int tlb_err_w = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_MISS_W, core_id, &tlb_write_misses);
+      int tlb_err_mshr = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_MSHR_ST, core_id, &tlb_mshr_stalls);
+      int tlb_err_evict = vx_mpm_query(hdevice, VX_CSR_MPM_TLB_EVICTIONS, core_id, &tlb_evictions);
+      
+      (void)tlb_err_mshr;  // May not be available in all configurations
+      (void)tlb_err_evict; // May not be available in all configurations
+      
+      if (tlb_err_reads != 0 || tlb_err_r != 0 || tlb_err_w != 0) {
+        tlb_stats_available = false;
+        break;
+      }
+      tlb_reads_total += tlb_reads;
+      tlb_read_misses_total += tlb_read_misses;
+      tlb_write_misses_total += tlb_write_misses;
+      tlb_mshr_stalls_total += tlb_mshr_stalls;
+      tlb_evictions_total += tlb_evictions;
+    }
+    
+    if (tlb_stats_available) {
+      // TLB stats available (VM enabled)
+      int tlb_read_hit_ratio = (tlb_reads_total > 0) ? calcRatio(tlb_read_misses_total, tlb_reads_total) : 0;
+      int mshr_utilization = calcAvgPercent(tlb_read_misses_total + tlb_write_misses_total, tlb_read_misses_total + tlb_write_misses_total + tlb_mshr_stalls_total);
+      
+      fprintf(stream, "PERF: tlb reads=%ld\n", tlb_reads_total);
+      fprintf(stream, "PERF: tlb read misses=%ld (hit ratio=%d%%)\n", tlb_read_misses_total, tlb_read_hit_ratio);
+      fprintf(stream, "PERF: tlb write misses=%ld\n", tlb_write_misses_total);
+      if (tlb_mshr_stalls_total > 0) {
+        fprintf(stream, "PERF: tlb mshr stalls=%ld (utilization=%d%%)\n", tlb_mshr_stalls_total, mshr_utilization);
+      }
+      if (tlb_evictions_total > 0) {
+        fprintf(stream, "PERF: tlb evictions=%ld\n", tlb_evictions_total);
+      }
+    }
+    
+    // PERF: PTW (Page Table Walker) - aggregate across all cores
+    uint64_t ptw_walks_total = 0;
+    uint64_t ptw_mem_accesses_total = 0;
+    uint64_t ptw_max_concurrent_max = 0;
+    bool ptw_stats_available = true;
+    
+    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+      uint64_t ptw_walks = 0;
+      uint64_t ptw_mem_accesses = 0;
+      uint64_t ptw_max_concurrent = 0;
+      
+      int ptw_err_walks = vx_mpm_query(hdevice, VX_CSR_MPM_PTW_WALKS, core_id, &ptw_walks);
+      int ptw_err_mem = vx_mpm_query(hdevice, VX_CSR_MPM_PTW_MEM_ACCESSES, core_id, &ptw_mem_accesses);
+      int ptw_err_conc = vx_mpm_query(hdevice, VX_CSR_MPM_PTW_MAX_CONCURRENT, core_id, &ptw_max_concurrent);
+      
+      (void)ptw_err_conc;  // May not be available in all configurations
+      
+      if (ptw_err_walks != 0 || ptw_err_mem != 0) {
+        ptw_stats_available = false;
+        break;
+      }
+      ptw_walks_total += ptw_walks;
+      ptw_mem_accesses_total += ptw_mem_accesses;
+      if (ptw_max_concurrent > ptw_max_concurrent_max) {
+        ptw_max_concurrent_max = ptw_max_concurrent;
+      }
+    }
+    
+    if (ptw_stats_available && ptw_walks_total > 0) {
+      // PTW stats available (VM enabled)
+      fprintf(stream, "PERF: ptw walks=%ld\n", ptw_walks_total);
+      fprintf(stream, "PERF: ptw mem accesses=%ld", ptw_mem_accesses_total);
+      if (ptw_walks_total > 0) {
+        double avg_mem_per_walk = (double)ptw_mem_accesses_total / (double)ptw_walks_total;
+        fprintf(stream, " (avg=%.1f per walk)", avg_mem_per_walk);
+      }
+      fprintf(stream, "\n");
+      if (ptw_max_concurrent_max > 0) {
+        fprintf(stream, "PERF: ptw max concurrent=%ld\n", ptw_max_concurrent_max);
+      }
+    }
   } break;
   case VX_DCR_MPM_CLASS_MEM: {
     if (l2cache_enable) {
