@@ -100,6 +100,7 @@ synthesis: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
+	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_SYNTH=1 \
@@ -109,6 +110,7 @@ techmap: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
+	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_MAP=1 \
@@ -118,6 +120,7 @@ timing: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
+	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_STA=1 \

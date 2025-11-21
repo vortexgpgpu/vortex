@@ -2,12 +2,21 @@
 # run_synth.sh — minimal Yosys wrapper: generates synth.ys and runs it
 #
 # Usage (env):
-#   TOP=<top> SRC_FILE=<filelist.f> \
-#   [LIB_TGT=<tech.lib>] [LIB_ROOT=<dir_with_libs>] \
-#   [SDC_FILE=<constraints.sdc>] \
-#   [OUT_DIR=out] [RPT_DIR=reports] \
-#   [RUN_SYNTH=1] [RUN_MAP=1] [RUN_STA=0] \
-#   [ABC_PERIOD=<ns>] [BB_MODULES="modA,modB"] \
+#   TOP=<top> SRC_FILE=<filelist.f>
+#   [LIB_TGT=<tech.lib>]
+#   [LIB_ROOT=<dir_with_libs>]
+#   [SDC_FILE=<constraints.sdc>]
+#   [OUT_DIR=out]
+#   [RPT_DIR=reports]
+#   [RUN_SYNTH=1]
+#   [RUN_MAP=1]
+#   [RUN_STA=0]
+#   [ABC_PERIOD=<ns>]
+#   [BB_MODULES="modA,modB"]
+#   [SRAM_BIT_AREA=0.1]
+#   [SRAM_OVERHEAD=100.0]
+#   [SRAM_W_PORTS="wdata,rdata"]
+#   [SRAM_A_PORTS="addr,waddr,raddr"]
 #   ./run_synth.sh
 #
 set -euo pipefail
@@ -35,6 +44,12 @@ RUN_MAP="${RUN_MAP:-1}"
 RUN_STA="${RUN_STA:-0}"
 ABC_PERIOD="${ABC_PERIOD:-}"
 BB_MODULES="${BB_MODULES:-}"
+
+# Area Estimation Defaults
+SRAM_BIT_AREA="${SRAM_BIT_AREA:-0.1}"
+SRAM_OVERHEAD="${SRAM_OVERHEAD:-100.0}"
+SRAM_W_PORTS="wdata,rdata"
+SRAM_A_PORTS="addr,waddr,raddr"
 
 mkdir -p "$OUT_DIR" "$RPT_DIR"
 
@@ -135,6 +150,27 @@ stamp "gen-ys"
 log "yosys -q -s $YS -l $YLOG"
 yosys -q -s "$YS" -l "$YLOG"
 stamp "yosys"
+
+# -------- run sram area estimation --------
+if [[ -n "$BB_MODULES" ]]; then
+  if [[ -f "$JOUT" && -f "$SCRIPT_DIR/sram_cost.py" ]]; then
+      log "Running SRAM Area Estimator..."
+      BB_ARGS=$(echo "$BB_MODULES" | tr ',' ' ')
+
+      python3 "$SCRIPT_DIR/sram_cost.py" "$JOUT" \
+          --top "$TOP" \
+          --modules $BB_ARGS \
+          --width-ports $SRAM_W_PORTS \
+          --addr-ports $SRAM_A_PORTS \
+          --bit-area "$SRAM_BIT_AREA" \
+          --overhead "$SRAM_OVERHEAD" \
+          | tee "$RPT_DIR/sram_area.rpt"
+  else
+      log "Warning: Skipping SRAM estimation. (Missing JSON or script)"
+  fi
+else
+  log "Skipping SRAM Area Estimation (BB_MODULES is empty)"
+fi
 
 # -------- optional OpenSTA (run_sta.tcl colocated) --------
 if [[ "$RUN_STA" == "1" ]]; then
