@@ -4,6 +4,9 @@ include $(ROOT_DIR)/config.mk
 SRC_DIR := $(VORTEX_HOME)/hw/syn/synopsys
 LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 
+SRAM_LIB := /mnt/nas0/eda.libs/saed14/EDK_08_2025/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.lib
+SRAM_DB  := /mnt/nas0/eda.libs/saed14/EDK_08_2025/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.db
+
 DEFAULT_LIB := $(LIB_DIR)/NanGate_15nm_OCL.db
 SYN_LIB_ENV := $(if $(LIB_TGT),LIB_TGT=$(LIB_TGT),$(if $(LIB_ROOT),LIB_ROOT=$(LIB_ROOT),LIB_TGT=$(DEFAULT_LIB)))
 
@@ -56,6 +59,12 @@ RTL_INCLUDE += $(FPU_INCLUDE)
 
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
 
+# Add V extension sources
+ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/vpu
+endif
+
 # Debugging
 ifdef DEBUG
 	CFLAGS += $(DBG_TRACE_FLAGS)
@@ -79,7 +88,7 @@ CFLAGS += -DXLEN_$(XLEN)
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
-.PHONY: clean synthesis gen-sources
+.PHONY: clean gen-sources gen-rams synthesis-nosram synthesis-estsram synthesis
 
 all: synthesis
 
@@ -87,11 +96,36 @@ gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
 	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
 
-synthesis: $(BUILD_DIR)/sources.txt
-	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
+gen-rams: $(BUILD_DIR)/sources.txt
+	@echo "[Make] Generating SRAM Wrappers from $(SRAM_LIB)..."
+	mkdir -p $(BUILD_DIR)/src
+	python3 $(SRC_DIR)/gen_srams.py $(SRAM_LIB) $(BUILD_DIR)/src
+
+synthesis: $(BUILD_DIR)/sources.txt gen-rams
+	cd $(BUILD_DIR); \
+	TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
-	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
+	MEM_LIBS="$(SRAM_DB)" \
+	$(SYN_LIB_ENV) \
+	TOOL_DIR=$(SCRIPT_DIR) \
+	dc_shell -f $(SRC_DIR)/project.tcl
+
+synthesis-nosram: $(BUILD_DIR)/sources.txt
+	cd $(BUILD_DIR); \
+	TOP=$(TOP_LEVEL_ENTITY) \
+	SRC_FILE=sources.txt \
+	SDC_FILE=$(SRC_DIR)/project.sdc \
+	$(SYN_LIB_ENV) \
+	TOOL_DIR=$(SCRIPT_DIR) \
+	dc_shell -f $(SRC_DIR)/project.tcl
+
+synthesis-estsram: $(BUILD_DIR)/sources.txt
+	cd $(BUILD_DIR); \
+	TOP=$(TOP_LEVEL_ENTITY) \
+	SRC_FILE=sources.txt \
+	SDC_FILE=$(SRC_DIR)/project.sdc \
+	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	dc_shell -f $(SRC_DIR)/project.tcl

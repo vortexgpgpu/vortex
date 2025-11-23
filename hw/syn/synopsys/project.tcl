@@ -7,6 +7,8 @@
 #   LIB_TGT        : explicit target .db (optional)
 #   SDC_FILE       : constraints file (optional)
 #   BB_MODULES     : comma-separated list of modules to set as dont_touch (optional)
+#   MEM_LIBS       : path/wildcard to generated memory .db files (optional)
+#                    If set, BB_MODULES logic is skipped for RAMs.
 #   OUT_DIR        : output netlist/sdf folder (default: ./out)
 #   RPT_DIR        : reports folder (default: ./reports)
 #   TOOL_DIR       : folder containing parse_vcs_list.tcl (default: script dir)
@@ -45,8 +47,6 @@ proc sv_file_has_package {path} {
       set ret 1
     }
   }
-
-  # puts "sv_file_has_package: $path -> $ret"
   return $ret
 }
 
@@ -121,18 +121,27 @@ proc basename {p} { return [file tail $p] }
 
 # Setup environment
 set TOP          [getenv TOP          ""]
-set SRC_FILE [getenv SRC_FILE ""]
+set SRC_FILE     [getenv SRC_FILE     ""]
 set SDC_FILE     [getenv SDC_FILE     ""]
 set LIB_ROOT     [getenv LIB_ROOT     ""]
 set LIB_TGT_HINT [getenv LIB_TGT      ""]
 set BB_MODULES   [getenv BB_MODULES   ""]
+set MEM_LIBS     [getenv MEM_LIBS     ""]
 set TOOL_DIR     [getenv TOOL_DIR     ""]
 set OUT_DIR      [file normalize [getenv OUT_DIR "./out"]]
 set RPT_DIR      [file normalize [getenv RPT_DIR "./reports"]]
 
+# Helper lists for port discovery
+set SRAM_W_PORTS {wdata rdata}
+set SRAM_A_PORTS {addr waddr raddr}
+
+# Change these to calibrate SRAM estimation
+set SRAM_BIT_AREA 0.1   ; # um^2 per bit
+set SRAM_OH_AREA  100.0 ; # um^2 overhead (decoders, sense amps)
+
 # Validate environment
 if {$TOP eq ""}          { DIE "TOP not set" }
-if {$SRC_FILE eq ""} { DIE "SRC_FILE not set" }
+if {$SRC_FILE eq ""}     { DIE "SRC_FILE not set" }
 if {![file exists $SRC_FILE]} { DIE "SRC_FILE not found: $SRC_FILE" }
 
 # Create output directories
@@ -183,7 +192,7 @@ puts "SV Files    : [llength $v_files]"
 puts "First file  : [lindex $v_files 0]"
 puts "Last file   : [lindex $v_files end]"
 puts "Incdirs     : [join $incdirs "\n"]"
-puts "Defines     : [join $defines " "]"  ;# Show all defines
+puts "Defines     : [join $defines " "]"
 puts "===================\n"
 
 # ---------------- library setup (.db only) ----------------
@@ -211,6 +220,16 @@ if {$LIB_TGT_HINT ne ""} {
   foreach f $std_dbs { if {$f ne $target_db} { lappend link_dbs $f } }
 }
 
+set use_mem_libs 0
+if {$MEM_LIBS ne ""} {
+  set gen_dbs [glob -nocomplain $MEM_LIBS]
+  if {[llength $gen_dbs] > 0} {
+    puts "INFO: Pre-loading Memory Libraries: $gen_dbs"
+    lappend link_dbs {*}$gen_dbs
+    set use_mem_libs 1
+  }
+}
+
 puts "===== LIBRARIES ====="
 puts "Target DB : $target_db"
 puts "Link DBs  : [join $link_dbs { }]"
@@ -229,9 +248,10 @@ define_design_lib WORK -path WORK
 catch { set hdlin_sv on }
 catch { set hdlin_sv_2009 true }
 catch { set_app_var hdlin_check_no_latch true }
+# Preserve parameters so we can read them for area estimation
+catch { set_app_var hdlin_keep_signal_name user }
 
 # ---------------- analyze ----------------
-# Check file existence first
 foreach f $v_files {
   if {![file exists $f]} { WARN "Source file not found: $f" }
 }
@@ -244,36 +264,130 @@ if {[llength $defines]} {
   analyze -format sverilog -work WORK $v_files
 }
 
-# ---------------- elaborate / link ----------------
+# ---------------- elaborate ----------------
 if {[catch {elaborate $TOP -work WORK} elaberr]} {
   DIE "Elaborate failed for '$TOP': $elaberr"
 }
 current_design $TOP
+
+# Uniquify BEFORE linking or setting blackboxes.
+# This ensures 'VX_sp_ram_asic' becomes 'VX_sp_ram_asic_DATAW32_SIZE1024...'
+# which allows us to set area attributes on specific configurations.
+uniquify
 link
 
-# BB_MODULES: comma/space-separated module names
-set _bbmods [split [string map {, " "} [string trim $BB_MODULES]]]
-foreach m $_bbmods {
-  if {$m eq ""} continue
-  set cells [get_cells -hier -filter "ref_name==$m" -quiet]
-  if {![llength $cells]} {
-    set cells [get_cells -hier -filter "ref_name=~${m}*" -quiet]
-  }
-  if {[llength $cells]} {
-    puts "INFO: Applying 'dont_touch' to cell $m"
-    set_dont_touch $cells
+# ---------------- Memory / Blackbox Logic ----------------
+
+if {$use_mem_libs} {
+  # ---------------------------------------
+  # FLOW A: Real Macro Flow (Generated DBs)
+  # ---------------------------------------
+  puts "\nINFO: MEM_LIBS detected. Real-Macro flow active."
+  # Libraries were pre-loaded in 'link_library' above, so simple 'link' is sufficient.
+
+} else {
+  # ---------------------------------------
+  # FLOW B: Blackbox Flow with Estimation
+  # ---------------------------------------
+  puts "\nINFO: MEM_LIBS not set or empty. Defaulting to Blackbox Flow with Area Estimation."
+
+  set _bbmods [split [string map {, " "} [string trim $BB_MODULES]]]
+
+  # [FIX] Initialize Total Area counter
+  set total_sram_area 0.0
+
+  if {[llength $_bbmods] > 0} {
+    foreach m $_bbmods {
+      if {$m eq ""} continue
+
+      # Find all cells matching this blackbox module
+      set cells [get_cells -hier -filter "ref_name=~${m}*" -quiet]
+
+      if {[llength $cells]} {
+        puts "INFO: Processing blackbox: $m"
+
+        # 1. Set Dont Touch on instances
+        set_dont_touch $cells
+
+        # 2. Estimate Area on the Design References
+        set ref_designs [get_designs -quiet -filter "original_design_name==$m || name=~${m}*"]
+
+        foreach_in_collection des $ref_designs {
+          set d_name [get_object_name $des]
+
+          # Direct Attribute Access
+          set w [get_attribute $des "DATAW" -quiet]
+          set d [get_attribute $des "SIZE" -quiet]
+
+          if {$w eq "" || $d eq ""} {
+            puts "INFO: Calculate Width from Ports."
+            set des_ports [get_ports -quiet -of_objects $des]
+            foreach p $SRAM_W_PORTS {
+                set p_obj [filter_collection $des_ports "name == $p"]
+                if {[sizeof_collection $p_obj] > 0} {
+                    set w [get_attribute $p_obj bit_width -quiet]
+                    if {$w ne ""} { break }
+                }
+            }
+            # Calculate Depth from Address Ports (2 ^ ADDRW)
+            foreach p $SRAM_A_PORTS {
+                set p_obj [filter_collection $des_ports "name == $p"]
+                if {[sizeof_collection $p_obj] > 0} {
+                    set aw [get_attribute $p_obj bit_width -quiet]
+                    if {$aw ne ""} {
+                        set d [expr {1 << $aw}]
+                        break
+                    }
+                }
+            }
+
+            if {$w eq "" || $d eq ""} {
+              puts "INFO: Calculate Width from module name."
+              if {[regexp {DATAW(\d+)} $d_name match val]} { set w $val }
+              if {[regexp {SIZE(\d+)}  $d_name match val]} { set d $val }
+            }
+          }
+
+          # Apply Estimation
+          if {$w ne "" && $d ne ""} {
+             set total_bits [expr $w * $d]
+             set est_area [expr ($total_bits * $SRAM_BIT_AREA) + $SRAM_OH_AREA]
+
+             # [FIX] Accumulate Total Area
+             set total_sram_area [expr $total_sram_area + $est_area]
+
+             # Safely set attribute. If handle causes warning, try via current_design
+             if {[catch { set_attribute $des area $est_area } err]} {
+                 # Fallback: set on current_design temporarily
+                 set saved_design [current_design]
+                 current_design $des
+                 catch { set_attribute [current_design] area $est_area }
+                 current_design $saved_design
+             }
+
+             puts "      > Estimated Area for $d_name ($w x $d): $est_area"
+          } else {
+             puts "      > WARN: Could not derive DATAW/SIZE for $d_name. Area will be 0."
+          }
+        }
+      } else {
+        puts "WARNING: Could not find cell instances for '$m'."
+      }
+    }
   } else {
-    puts "WARNING: Could not find cell '$m' to set 'dont_touch'."
+    puts "INFO: BB_MODULES is empty. No blackbox attributes or estimation will be applied."
+  }
+
+  # [FIX] Print Total Area Summary
+  if {$total_sram_area > 0} {
+    puts "------------------------------------------------"
+    puts "INFO: Total Estimated SRAM Area: $total_sram_area"
+    puts "------------------------------------------------"
   }
 }
 
-# Set operating conditions if available (library-dependent)
-catch { set_operating_conditions TT }
-
-# Pre-compile checks and uniquify
+# ---------------- Pre-Compile Checks ----------------
 check_design > [file join $RPT_DIR "check_design.rpt"]
-uniquify
-link
 
 # Optional: multi-core
 catch { set_host_options -max_cores [getenv DC_CORES 8] }
