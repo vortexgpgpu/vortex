@@ -67,6 +67,9 @@ public:
   #ifdef EXT_TCU_ENABLE
     uint64_t scrb_tcu;
   #endif
+  #ifdef EXT_VEGETA_ENABLE
+    uint64_t scrb_vegeta;
+  #endif
     uint64_t ifetches;
     uint64_t loads;
     uint64_t stores;
@@ -93,6 +96,9 @@ public:
     #endif
     #ifdef EXT_TCU_ENABLE
       , scrb_tcu(0)
+    #endif
+    #ifdef EXT_VEGETA_ENABLE
+      , scrb_vegeta(0)
     #endif
       , ifetches(0)
       , loads(0)

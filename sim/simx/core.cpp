@@ -373,6 +373,9 @@ void Core::issue() {
         #ifdef EXT_TCU_ENABLE
           case FUType::TCU: ++perf_stats_.scrb_tcu; break;
         #endif
+        #ifdef EXT_VEGETA_ENABLE
+          case FUType::VEGETA: ++perf_stats_.scrb_vegeta; break;
+        #endif
           default: assert(false);
           }
         }

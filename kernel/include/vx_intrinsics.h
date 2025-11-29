@@ -287,34 +287,34 @@ inline __attribute__((const)) int vx_shfl_idx(size_t value, int bval, int cval, 
 
 // TILE LOAD T: Load 1KB from ptr[TILE] to tile register index 'dst_treg'
 // Each load uses I-type encoding: rd=dst tile index, rs1=src_gpr, imm=ptr immediate
-inline void vx_lt(int dst_treg, int src_gpr, size_t ptr_imm) {
+inline void vx_lt(int dst_treg, size_t src_gpr, size_t ptr_imm) {
     __asm__ volatile (".insn i %0, 0, x%1, %2, %3"
         :: "i"(RISCV_CUSTOM1), "i"(dst_treg), "r"(src_gpr), "i"(ptr_imm) : "memory");
 }
 
 // TILE LOAD U: Load 1KB from ptr[TILE] to ureg index 'dst_ureg'
-inline void vx_lu(int dst_ureg, int src_gpr, size_t ptr_imm) {
+inline void vx_lu(int dst_ureg, size_t src_gpr, size_t ptr_imm) {
     __asm__ volatile (".insn i %0, 1, x%1, %2, %3"
         :: "i"(RISCV_CUSTOM1), "i"(dst_ureg), "r"(src_gpr), "i"(ptr_imm) : "memory");
 }
 
 // TILE LOAD V: Load 1KB from ptr[TILE] to vreg index 'dst_vreg'
-inline void vx_lv(int dst_vreg, int src_gpr, size_t ptr_imm) {
+inline void vx_lv(int dst_vreg, size_t src_gpr, size_t ptr_imm) {
     __asm__ volatile (".insn i %0, 2, x%1, %2, %3"
         :: "i"(RISCV_CUSTOM1), "i"(dst_vreg), "r"(src_gpr), "i"(ptr_imm) : "memory");
 }
 
 // TILE LOAD M: Load 1KB from ptr[TILE] to mreg index 'dst_mreg'
-inline void vx_lm(int dst_mreg, int src_gpr, size_t ptr_imm) {
+inline void vx_lm(int dst_mreg, size_t src_gpr, size_t ptr_imm) {
     __asm__ volatile (".insn i %0, 3, x%1, %2, %3"
         :: "i"(RISCV_CUSTOM1), "i"(dst_mreg), "r"(src_gpr), "i"(ptr_imm) : "memory");
 }
 
 // TILE STORE T: Store 1KB from treg index 'src_treg' to ptr[TILE]
 // Store uses S-type encoding: rs1=src_gpr, rs2=src_treg index, imm=ptr immediate
-inline void vx_st(int src_gpr, size_t ptr_imm, int src_treg) {
-    __asm__ volatile (".insn s %0, 0, %1, x%2, %3"
-        :: "i"(RISCV_CUSTOM2), "r"(src_gpr), "i"(src_treg), "i"(ptr_imm) : "memory");
+inline void vx_st(size_t src_gpr, size_t ptr_imm, int src_treg) {
+    __asm__ volatile (".insn s %0, 0, x%3, %2(%1)"
+        :: "i"(RISCV_CUSTOM2), "r"(src_gpr), "i"(ptr_imm), "i"(src_treg) : "memory");
 }
 
 // -----------------------------------------------------------------------------

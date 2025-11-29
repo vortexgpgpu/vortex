@@ -238,18 +238,36 @@ public:
       auto trace = input.front();
       int delay = 0;
       #ifdef EXT_VEGETA_ENABLE
-      auto tcu_type = std::get<VegetaTcuType>(trace->op_type);
-      switch (tcu_type) {
-      case VegetaTcuType::TILE_GEMM_T:
-      case VegetaTcuType::TILE_GEMM_U:
-      case VegetaTcuType::TILE_GEMM_V:
-      case VegetaTcuType::TILE_GEMM_R:
-        delay = 4;
-        break;
-      default:
+      if (std::holds_alternative<VegetaTcuType>(trace->op_type)) {
+        auto tcu_type = std::get<VegetaTcuType>(trace->op_type);
+        switch (tcu_type) {
+        case VegetaTcuType::TILE_GEMM_T:
+        case VegetaTcuType::TILE_GEMM_U:
+        case VegetaTcuType::TILE_GEMM_V:
+        case VegetaTcuType::TILE_GEMM_R:
+          delay = 4;
+          break;
+        default:
+          std::abort();
+        }
+        DT(3, simobject_->name() << ": op=" << tcu_type << ", " << *trace);
+      } else if (std::holds_alternative<VegetaLsuType>(trace->op_type)) {
+        auto lsu_type = std::get<VegetaLsuType>(trace->op_type);
+        switch (lsu_type) {
+        case VegetaLsuType::TILE_LOAD_T:
+        case VegetaLsuType::TILE_LOAD_U:
+        case VegetaLsuType::TILE_LOAD_V:
+        case VegetaLsuType::TILE_LOAD_M:
+        case VegetaLsuType::TILE_STORE_T:
+          delay = 2;
+          break;
+        default:
+          std::abort();
+        }
+        DT(3, simobject_->name() << ": op=" << lsu_type << ", " << *trace);
+      } else {
         std::abort();
       }
-      DT(3, simobject_->name() << ": op=" << tcu_type << ", " << *trace);
       #else
       auto tcu_type = std::get<TcuType>(trace->op_type);
       switch (tcu_type) {
@@ -444,19 +462,19 @@ public:
       uint32_t meta_reg_idx = vd;
       assert(meta_reg_idx < metadata_reg_file_.size() && "Metadata register index out of bounds");
       auto &metadata_reg = metadata_reg_file_[meta_reg_idx];
-      constexpr uint32_t ELEMENT_SIZE = sizeof(typename vt::uint4::dtype); // 1 byte for uint8_t (stores one uint4)
 
-      // Load metadata from memory: 16 rows x 32 columns = 512 uint4 elements = 512 bytes
-      // Note: Each uint4 is stored in the lower 4 bits of a byte
+      // Load metadata from memory: 16 rows x 32 columns = 512 uint4 elements = 256 bytes
+      // Each byte stores two uint4 values: upper nibble for col N, lower nibble for col N+1
       for (uint32_t row = 0; row < TILE_ROWS; ++row) {
-        for (uint32_t col = 0; col < TILE_COLS; ++col) {
-          uint64_t mem_addr = base_addr + (row * TILE_COLS + col) * ELEMENT_SIZE;
+        for (uint32_t col = 0; col < TILE_COLS; col += 2) {
+          uint64_t mem_addr = base_addr + (row * (TILE_COLS / 2) + col / 2);
           uint8_t mem_data = 0;
-          core_->dcache_read(&mem_data, mem_addr, ELEMENT_SIZE);
-          trace_data->mem_addrs.at(tid).push_back({mem_addr, ELEMENT_SIZE});
+          core_->dcache_read(&mem_data, mem_addr, 1);
+          trace_data->mem_addrs.at(tid).push_back({mem_addr, 1});
           
-          // Store only lower 4 bits (uint4 value)
-          metadata_reg[row][col] = mem_data & 0x0F;
+          // Upper nibble for col N, lower nibble for col N+1
+          metadata_reg[row][col] = (mem_data >> 4) & 0x0F;
+          metadata_reg[row][col + 1] = mem_data & 0x0F;
         }
       }
 
