@@ -42,10 +42,10 @@ void MemCoalescer::reset() {
 }
 
 void MemCoalescer::tick() {
-  // process incoming responses
+  // process outgoing responses
   if (!RspOut.empty()) {
     auto& out_rsp = RspOut.front();
-    DT(4, this->name() << " mem-rsp: " << out_rsp);
+    DT(4, this->name() << "-mem-rsp: " << out_rsp);
     auto& entry = pending_rd_reqs_.at(out_rsp.tag);
 
     BitVector<> rsp_mask(input_size_);
@@ -89,7 +89,7 @@ void MemCoalescer::tick() {
 
   // ensure we can allocate a response tag
   if (pending_rd_reqs_.full()) {
-    DT(4, "*** " << this->name() << " queue-full: " << in_req);
+    DT(4, "*** " << this->name() << "-queue-full: " << in_req);
     return;
   }
 
@@ -97,6 +97,7 @@ void MemCoalescer::tick() {
 
   BitVector<> out_mask(output_size_);
   std::vector<uint64_t> out_addrs(output_size_);
+  std::vector<uint64_t> out_p_addrs(output_size_);
 
   BitVector<> cur_mask(input_size_);
 
@@ -107,6 +108,7 @@ void MemCoalescer::tick() {
         continue;
 
       uint64_t seed_addr = in_req.addrs.at(i) & addr_mask;
+      uint64_t seed_p_addr = in_req.p_addrs.at(i) & addr_mask;
       cur_mask.set(i);
 
       // coalesce matching requests
@@ -122,6 +124,7 @@ void MemCoalescer::tick() {
 
       out_mask.set(o);
       out_addrs.at(o) = seed_addr;
+      out_p_addrs.at(o) = seed_p_addr;
       break;
     }
   }
@@ -140,12 +143,16 @@ void MemCoalescer::tick() {
   out_req.tag = tag;
   out_req.write = in_req.write;
   out_req.addrs = out_addrs;
+  out_req.p_addrs = out_p_addrs;
   out_req.cid = in_req.cid;
   out_req.uuid = in_req.uuid;
 
   // send memory request
   ReqOut.push(out_req, delay_);
-  DT(4, this->name() << " mem-req: coalesced=" << cur_mask.count() << ", " << out_req);
+  DT(4, this->name() << "-mem-req: coalesced=" << cur_mask.count() << ", " << out_req);
+
+  // track partial responses
+  perf_stats_.misses += (cur_mask.count() != in_req.mask.count());
 
   // update sent mask
   sent_mask_ |= cur_mask;
@@ -153,4 +160,8 @@ void MemCoalescer::tick() {
     ReqIn.pop();
     sent_mask_.reset();
   }
+}
+
+const MemCoalescer::PerfStats& MemCoalescer::perf_stats() const {
+  return perf_stats_;
 }

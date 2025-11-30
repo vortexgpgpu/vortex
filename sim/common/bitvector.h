@@ -21,32 +21,32 @@ template <typename T = uint32_t>
 class BitVector {
 private:
   static constexpr size_t BITS_PER_WORD = sizeof(T) * 8;
-  std::vector<T> bits_;
+  std::vector<T> words_;
   size_t size_;
   bool all_zero_;
 
-  size_t wordIndex(size_t pos) const {
+  constexpr size_t wordIndex(size_t pos) const {
     return pos / BITS_PER_WORD;
   }
 
-  T bitMask(size_t pos) const {
+  constexpr T bitMask(size_t pos) const {
     return T(1) << (pos % BITS_PER_WORD);
   }
 
   void updateAllZero() {
-    all_zero_ = std::all_of(bits_.begin(), bits_.end(), [](T word) { return word == 0; });
+    all_zero_ = std::all_of(words_.begin(), words_.end(), [](T word) { return word == 0; });
   }
 
 public:
   explicit BitVector(size_t size = 0)
-    : bits_((size + (BITS_PER_WORD - 1)) / BITS_PER_WORD)
+    : words_((size + (BITS_PER_WORD - 1)) / BITS_PER_WORD)
     , size_(size)
     , all_zero_(true)
   {}
 
   void set(size_t pos) {
     if (pos >= size_) throw std::out_of_range("Index out of range");
-    bits_[this->wordIndex(pos)] |= this->bitMask(pos);
+    words_[this->wordIndex(pos)] |= this->bitMask(pos);
     all_zero_ = false;
   }
 
@@ -59,19 +59,19 @@ public:
   }
 
   void reset() {
-    std::fill(bits_.begin(), bits_.end(), 0);
+    std::fill(words_.begin(), words_.end(), 0);
     all_zero_ = true;
   }
 
   void reset(size_t pos) {
     if (pos >= size_) throw std::out_of_range("Index out of range");
-    bits_[this->wordIndex(pos)] &= ~this->bitMask(pos);
+    words_[this->wordIndex(pos)] &= ~this->bitMask(pos);
     this->updateAllZero();
   }
 
   bool test(size_t pos) const {
     if (pos >= size_) throw std::out_of_range("Index out of range");
-    return bits_[this->wordIndex(pos)] & this->bitMask(pos);
+    return words_[this->wordIndex(pos)] & this->bitMask(pos);
   }
 
   size_t size() const {
@@ -80,12 +80,12 @@ public:
 
   void resize(size_t new_size) {
     size_ = new_size;
-    bits_.resize((new_size + (BITS_PER_WORD - 1)) / BITS_PER_WORD, 0);
+    words_.resize((new_size + (BITS_PER_WORD - 1)) / BITS_PER_WORD, 0);
     this->updateAllZero();
   }
 
   bool operator==(const BitVector& other) const {
-    return (size_ == other.size_) && (bits_ == other.bits_);
+    return (size_ == other.size_) && (words_ == other.words_);
   }
 
   bool operator!=(const BitVector& other) const {
@@ -98,8 +98,8 @@ public:
 
   BitVector& operator&=(const BitVector& other) {
     if (size_ != other.size_) throw std::invalid_argument("Bit sizes must match");
-    for (size_t i = 0; i < bits_.size(); ++i) {
-      bits_[i] &= other.bits_[i];
+    for (size_t i = 0; i < words_.size(); ++i) {
+      words_[i] &= other.words_[i];
     }
     this->updateAllZero();
     return *this;
@@ -107,8 +107,8 @@ public:
 
   BitVector& operator|=(const BitVector& other) {
     if (size_ != other.size_) throw std::invalid_argument("Bit sizes must match");
-    for (size_t i = 0; i < bits_.size(); ++i) {
-      bits_[i] |= other.bits_[i];
+    for (size_t i = 0; i < words_.size(); ++i) {
+      words_[i] |= other.words_[i];
     }
     this->updateAllZero();
     return *this;
@@ -116,8 +116,8 @@ public:
 
   BitVector& operator^=(const BitVector& other) {
     if (size_ != other.size_) throw std::invalid_argument("Bit sizes must match");
-    for (size_t i = 0; i < bits_.size(); ++i) {
-      bits_[i] ^= other.bits_[i];
+    for (size_t i = 0; i < words_.size(); ++i) {
+      words_[i] ^= other.words_[i];
     }
     this->updateAllZero();
     return *this;
@@ -125,23 +125,48 @@ public:
 
   BitVector operator~() const {
     BitVector result(size_);
-    for (size_t i = 0; i < bits_.size(); ++i) {
-      result.bits_[i] = ~bits_[i];
+    for (size_t i = 0; i < words_.size(); ++i) {
+      result.words_[i] = ~words_[i];
     }
     result.updateAllZero();
     return result;
   }
 
   void flip() {
-    for (auto &word : bits_) {
+    for (auto &word : words_) {
       word = ~word;
     }
     this->updateAllZero();
   }
 
+  void reverse() {
+    if (size_ == 0)
+      return;
+    size_t remaining_bits = size_ % BITS_PER_WORD;
+    if (remaining_bits != 0) {
+      std::vector<T> reversed_words(words_.size(), 0);
+      for (size_t i = 0; i < size_; ++i) {
+        size_t reversed_pos = size_ - 1 - i;
+        size_t src_word = i / BITS_PER_WORD;
+        size_t src_offset = i % BITS_PER_WORD;
+        size_t dst_word = reversed_pos / BITS_PER_WORD;
+        size_t dst_offset = reversed_pos % BITS_PER_WORD;
+        if (words_[src_word] & (T(1) << src_offset)) {
+          reversed_words[dst_word] |= (T(1) << dst_offset);
+        }
+      }
+      words_ = std::move(reversed_words);
+    } else {
+      std::reverse(words_.begin(), words_.end());
+      for (auto &word : words_) {
+        word = static_cast<T>(bit_reverse(static_cast<uint64_t>(word)));
+      }
+    }
+  }
+
   size_t count() const {
     size_t count = 0;
-    for (const auto &word : bits_) {
+    for (const auto &word : words_) {
       count += std::bitset<BITS_PER_WORD>(word).count();
     }
     return count;
@@ -160,12 +185,12 @@ public:
     size_t remaining_bits = size_ % BITS_PER_WORD;
     T full_mask = ~T(0);
     for (size_t i = 0; i < full_bits; ++i) {
-      if (bits_[i] != full_mask)
+      if (words_[i] != full_mask)
         return false;
     }
     if (remaining_bits > 0) {
       T partial_mask = (T(1) << remaining_bits) - 1;
-      if ((bits_[full_bits] & partial_mask) != partial_mask)
+      if ((words_[full_bits] & partial_mask) != partial_mask)
         return false;
     }
     return true;
@@ -181,17 +206,17 @@ public:
     size_t bit_shift = pos % BITS_PER_WORD;
 
     if (word_shift > 0) {
-      for (size_t i = bits_.size() - 1; i >= word_shift; --i) {
-        bits_[i] = bits_[i - word_shift];
+      for (size_t i = words_.size() - 1; i >= word_shift; --i) {
+        words_[i] = words_[i - word_shift];
       }
-      std::fill(bits_.begin(), bits_.begin() + word_shift, 0);
+      std::fill(words_.begin(), words_.begin() + word_shift, 0);
     }
 
     if (bit_shift > 0) {
-      for (size_t i = bits_.size() - 1; i > 0; --i) {
-        bits_[i] = (bits_[i] << bit_shift) | (bits_[i - 1] >> (BITS_PER_WORD - bit_shift));
+      for (size_t i = words_.size() - 1; i > 0; --i) {
+        words_[i] = (words_[i] << bit_shift) | (words_[i - 1] >> (BITS_PER_WORD - bit_shift));
       }
-      bits_[0] <<= bit_shift;
+      words_[0] <<= bit_shift;
     }
 
     this->updateAllZero();
@@ -208,17 +233,17 @@ public:
     size_t bit_shift = pos % BITS_PER_WORD;
 
     if (word_shift > 0) {
-      for (size_t i = 0; i < bits_.size() - word_shift; ++i) {
-        bits_[i] = bits_[i + word_shift];
+      for (size_t i = 0; i < words_.size() - word_shift; ++i) {
+        words_[i] = words_[i + word_shift];
       }
-      std::fill(bits_.end() - word_shift, bits_.end(), 0);
+      std::fill(words_.end() - word_shift, words_.end(), 0);
     }
 
     if (bit_shift > 0) {
-      for (size_t i = 0; i < bits_.size() - 1; ++i) {
-        bits_[i] = (bits_[i] >> bit_shift) | (bits_[i + 1] << (BITS_PER_WORD - bit_shift));
+      for (size_t i = 0; i < words_.size() - 1; ++i) {
+        words_[i] = (words_[i] >> bit_shift) | (words_[i + 1] << (BITS_PER_WORD - bit_shift));
       }
-      bits_.back() >>= bit_shift;
+      words_.back() >>= bit_shift;
     }
 
     this->updateAllZero();

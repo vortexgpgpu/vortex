@@ -1,4 +1,4 @@
-#include <malloc.h>
+#include <mem_alloc.h>
 #include <stdio.h>
 
 #define RT_CHECK(_expr)                                         \
@@ -12,7 +12,7 @@
 
 static uint64_t minAddress = 0;
 static uint64_t maxAddress = 0xffffffff;
-static uint32_t pageAlign  = 4096; 
+static uint32_t pageAlign  = 4096;
 static uint32_t blockAlign = 64;
 
 int main() {

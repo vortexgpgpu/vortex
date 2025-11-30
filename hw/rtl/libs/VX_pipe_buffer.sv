@@ -24,8 +24,9 @@
 
 `TRACING_OFF
 module VX_pipe_buffer #(
-    parameter DATAW = 1,
-    parameter DEPTH = 1
+    parameter DATAW  = 1,
+    parameter RESETW = 0,
+    parameter DEPTH  = 1
 ) (
     input  wire             clk,
     input  wire             reset,
@@ -36,16 +37,16 @@ module VX_pipe_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
-    if (DEPTH == 0) begin
+    if (DEPTH == 0) begin : g_passthru
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
         assign ready_in  = ready_out;
         assign valid_out = valid_in;
         assign data_out  = data_in;
-    end else begin
+    end else begin : g_register
         wire [DEPTH:0] valid;
     `IGNORE_UNOPTFLAT_BEGIN
-        wire [DEPTH:0] ready;
+        wire ready [DEPTH+1];
     `IGNORE_UNOPTFLAT_END
         wire [DEPTH:0][DATAW-1:0] data;
 
@@ -53,11 +54,11 @@ module VX_pipe_buffer #(
         assign data[0]  = data_in;
         assign ready_in = ready[0];
 
-        for (genvar i = 0; i < DEPTH; ++i) begin
+        for (genvar i = 0; i < DEPTH; ++i) begin : g_pipe_regs
             assign ready[i] = (ready[i+1] || ~valid[i+1]);
             VX_pipe_register #(
                 .DATAW  (1 + DATAW),
-                .RESETW (1)
+                .RESETW (1 + RESETW)
             ) pipe_register (
                 .clk      (clk),
                 .reset    (reset),
@@ -70,7 +71,6 @@ module VX_pipe_buffer #(
         assign valid_out = valid[DEPTH];
         assign data_out = data[DEPTH];
         assign ready[DEPTH] = ready_out;
-
     end
 
 endmodule

@@ -27,27 +27,40 @@ class MemSim::Impl {
 private:
 	MemSim*   simobject_;
 	Config    config_;
+	MemCrossBar::Ptr mem_xbar_;
 	DramSim   dram_sim_;
-	PerfStats perf_stats_;
-
+	mutable PerfStats perf_stats_;
 	struct DramCallbackArgs {
-		MemSim* simobject;
-		MemReq  request;
-		uint32_t i;
+		MemSim::Impl* memsim;
+		MemReq request;
+		uint32_t bank_id;
 	};
 
 public:
 	Impl(MemSim* simobject, const Config& config)
 		: simobject_(simobject)
 		, config_(config)
-		, dram_sim_(MEM_CLOCK_RATIO)
-	{}
+		, dram_sim_(config.num_banks, config.block_size, config.clock_ratio)
+	{
+		char sname[100];
+		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_ports, config.num_banks, 1,
+			[lg2_block_size = log2ceil(config.block_size), num_banks = config.num_banks](const MemCrossBar::ReqType& req) {
+    	// Custom logic to calculate the output index using bank interleaving
+			return (uint32_t)((req.addr >> lg2_block_size) & (num_banks-1));
+		});
+		for (uint32_t i = 0; i < config.num_ports; ++i) {
+			simobject->MemReqPorts.at(i).bind(&mem_xbar_->ReqIn.at(i));
+			mem_xbar_->RspIn.at(i).bind(&simobject->MemRspPorts.at(i));
+		}
+	}
 
 	~Impl() {
 		//--
 	}
 
 	const PerfStats& perf_stats() const {
+		perf_stats_.bank_stalls = mem_xbar_->req_collisions();
 		return perf_stats_;
 	}
 
@@ -57,48 +70,33 @@ public:
 
 	void tick() {
 		dram_sim_.tick();
-		uint32_t counter = 0;
 
-		for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
-			if (simobject_->MemReqPorts.at(i).empty())
+		for (uint32_t i = 0; i < config_.num_banks; ++i) {
+			if (mem_xbar_->ReqOut.at(i).empty())
 				continue;
 
-			auto& mem_req = simobject_->MemReqPorts.at(i).front();
+			auto& mem_req = mem_xbar_->ReqOut.at(i).front();
 
-			// try to enqueue the request to the memory system
-			auto req_args = new DramCallbackArgs{simobject_, mem_req, i};
-			auto enqueue_success = dram_sim_.send_request(
-				mem_req.write,
+			// enqueue the request to the memory system
+			auto req_args = new DramCallbackArgs{this, mem_req, i};
+			dram_sim_.send_request(
 				mem_req.addr,
-				0,
+				mem_req.write,
 				[](void* arg) {
 					auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);
-					// only send a response for read requests
 					if (!rsp_args->request.write) {
+						// only send a response for read requests
 						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
-						rsp_args->simobject->MemRspPorts.at(rsp_args->i).push(mem_rsp, 1);
-						DT(3, rsp_args->simobject->name() << " mem-rsp: " << mem_rsp << " bank: " << rsp_args->i);
+						rsp_args->memsim->mem_xbar_->RspOut.at(rsp_args->bank_id).push(mem_rsp, 1);
+						DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp[" << rsp_args->bank_id << "]: " << mem_rsp);
 					}
 					delete rsp_args;
 				},
 				req_args
 			);
 
-			// check if the request was enqueued successfully
-			if (!enqueue_success) {
-				delete req_args;
-				continue;
-			}
-
-			DT(3, simobject_->name() << " mem-req: " << mem_req << " bank: " << i);
-
-			simobject_->MemReqPorts.at(i).pop();
-			counter++;
-		}
-
-		perf_stats_.counter += counter;
-		if (counter > 0) {
-			++perf_stats_.ticks;
+			DT(3, simobject_->name() << "-mem-req[" << i << "]: " << mem_req);
+			mem_xbar_->ReqOut.at(i).pop();
 		}
 	}
 };
@@ -107,8 +105,8 @@ public:
 
 MemSim::MemSim(const SimContext& ctx, const char* name, const Config& config)
 	: SimObject<MemSim>(ctx, name)
-	, MemReqPorts(NUM_MEM_PORTS, this)
-	, MemRspPorts(NUM_MEM_PORTS, this)
+	, MemReqPorts(config.num_ports, this)
+	, MemRspPorts(config.num_ports, this)
 	, impl_(new Impl(this, config))
 {}
 

@@ -104,7 +104,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:l:h?")) != -1) {
+  while ((c = getopt(argc, argv, "n:l:h")) != -1) {
     switch (c) {
     case 'n':
       size = atoi(optarg);
@@ -113,10 +113,9 @@ static void parse_args(int argc, char **argv) {
       local_size = atoi(optarg);
       break;
     case 'h':
-    case '?': {
       show_usage();
       exit(0);
-    } break;
+      break;
     default:
       show_usage();
       exit(-1);

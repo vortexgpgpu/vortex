@@ -23,6 +23,19 @@ public:
   SimPort<LsuReq> ReqOut;
   SimPort<LsuRsp> RspOut;
 
+  struct PerfStats {
+    uint64_t misses;
+
+    PerfStats()
+      : misses(0)
+    {}
+
+    PerfStats& operator+=(const PerfStats& rhs) {
+      this->misses += rhs.misses;
+      return *this;
+    }
+  };
+
   MemCoalescer(
     const SimContext& ctx,
     const char* name,
@@ -36,6 +49,8 @@ public:
   void reset();
 
   void tick();
+
+  const PerfStats& perf_stats() const;
 
 private:
 
@@ -52,6 +67,7 @@ private:
   BitVector<> sent_mask_;
   uint32_t line_size_;
   uint32_t delay_;
+  PerfStats perf_stats_;
 };
 
 }

@@ -13,9 +13,7 @@ regression:
 	$(MAKE) -C regression
 
 opencl:
-ifneq ($(XLEN),64)
 	$(MAKE) -C opencl
-endif
 
 riscv:
 	$(MAKE) -C riscv

@@ -34,7 +34,7 @@ class Socket;
 class Arch;
 class DCRS;
 
-using TraceSwitch = Mux<instr_trace_t*>;
+using TraceArbiter = Arbiter<instr_trace_t*>;
 
 class Core : public SimObject<Core> {
 public:
@@ -127,6 +127,10 @@ public:
     return local_mem_;
   }
 
+  const MemCoalescer::Ptr& mem_coalescer(uint32_t idx) const {
+    return mem_coalescers_.at(idx);
+  }
+
   const PerfStats& perf_stats() const {
     return perf_stats_;
   }
@@ -154,10 +158,8 @@ private:
   std::vector<Dispatcher::Ptr> dispatchers_;
   std::vector<FuncUnit::Ptr> func_units_;
   LocalMem::Ptr local_mem_;
-  std::vector<LocalMemDemux::Ptr> lsu_demux_;
+  std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
-  std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter_;
-  std::vector<LsuMemAdapter::Ptr> lsu_lmem_adapter_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
@@ -169,7 +171,7 @@ private:
 
   PerfStats perf_stats_;
 
-  std::vector<TraceSwitch::Ptr> commit_arbs_;
+  std::vector<TraceArbiter::Ptr> commit_arbs_;
 
   uint32_t commit_exe_;
   uint32_t ibuffer_idx_;
@@ -178,6 +180,7 @@ private:
   friend class AluUnit;
   friend class FpuUnit;
   friend class SfuUnit;
+  friend class TcuUnit;
 };
 
 } // namespace vortex

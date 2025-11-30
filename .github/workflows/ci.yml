@@ -17,7 +17,7 @@ on: [push, pull_request]
 
 jobs:
   setup:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
@@ -46,7 +46,7 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -63,7 +63,7 @@ jobs:
           make -C third_party > /dev/null
 
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: setup
     strategy:
       matrix:
@@ -75,7 +75,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
@@ -111,13 +111,13 @@ jobs:
           name: build-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
 
-  test:
-    runs-on: ubuntu-20.04
+  tests:
+    runs-on: ubuntu-22.04
     needs: build
     strategy:
       fail-fast: false
       matrix:
-        name: [regression, opencl, cache, config1, config2, debug, stress, vm]
+        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector]
         xlen: [32, 64]
 
     steps:
@@ -126,7 +126,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
@@ -151,6 +151,7 @@ jobs:
         with:
           name: build-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
+
       - name: Run tests
         run: |
           cd build${{ matrix.xlen }}
@@ -160,15 +161,14 @@ jobs:
             ./ci/regression.sh --unittest
             ./ci/regression.sh --isa
             ./ci/regression.sh --kernel
-            ./ci/regression.sh --synthesis
             ./ci/regression.sh --regression
           else
             ./ci/regression.sh --${{ matrix.name }}
           fi
 
   complete:
-    runs-on: ubuntu-20.04
-    needs: test
+    runs-on: ubuntu-22.04
+    needs: tests
 
     steps:
       - name: Check Completion

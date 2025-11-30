@@ -13,7 +13,11 @@
 
 #pragma once
 
+#ifdef OPAESIM
 #include <fpga.h>
+#else
+#include <opae/fpga.h>
+#endif
 
 typedef fpga_result (*pfn_fpgaGetProperties)(fpga_token token, fpga_properties *prop);
 typedef fpga_result (*pfn_fpgaPropertiesSetObjectType)(fpga_properties prop, fpga_objtype objtype);

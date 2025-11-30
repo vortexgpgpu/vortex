@@ -64,7 +64,7 @@ class SATP_t
   public:
     SATP_t(uint64_t satp) : satp(satp)
     {
-#ifdef XLEN_32 
+#ifdef XLEN_32
       mode = bit(satp, 31);
       asid = bits(satp, 22, 30);
       ppn  = bits(satp, 0,21);
@@ -72,21 +72,21 @@ class SATP_t
       mode = bits(satp, 60,63);
       asid = bits(satp, 44, 59);
       ppn  = bits(satp, 0,43);
-#endif 
+#endif
       address = ppn << MEM_PAGE_LOG2_SIZE;
     }
 
     SATP_t(uint64_t address, uint16_t asid) : address(address), asid(asid)
-    { 
-#ifdef XLEN_32 
+    {
+#ifdef XLEN_32
       assert((address >> 32) == 0 && "Upper 32 bits are not zero!");
 #endif
       mode= VM_ADDR_MODE;
-      // asid = 0 ; 
+      // asid = 0 ;
       ppn = address >> MEM_PAGE_LOG2_SIZE;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshift-count-overflow"
-#ifdef XLEN_32 
+#ifdef XLEN_32
       satp = (((uint64_t)mode << 31) | ((uint64_t)asid << 22) | ppn);
 #else
       satp = (((uint64_t)mode << 60) | ((uint64_t)asid << 44) | ppn);
@@ -96,19 +96,19 @@ class SATP_t
     uint8_t get_mode()
     {
       return mode;
-    } 
+    }
     uint16_t get_asid()
     {
       return asid;
-    } 
+    }
     uint64_t get_base_ppn()
     {
       return ppn;
-    } 
+    }
     uint64_t get_satp()
     {
       return satp;
-    } 
+    }
 };
 
 
@@ -188,7 +188,7 @@ public:
 #ifdef VM_ENABLE
   MemoryUnit(uint64_t pageSize = MEM_PAGE_SIZE);
   ~MemoryUnit(){
-    if ( this->satp_ != NULL) 
+    if ( this->satp_ != NULL)
       delete this->satp_;
   };
 #else
@@ -199,8 +199,8 @@ public:
 
 
 #ifdef VM_ENABLE
-  void read(void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type = ACCESS_TYPE::LOAD);
-  void write(const void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type = ACCESS_TYPE::STORE);
+  void read(void* data, uint64_t* p_addr, uint64_t addr, uint32_t size, ACCESS_TYPE type = ACCESS_TYPE::LOAD);
+  void write(const void* data, uint64_t* p_addr, uint64_t addr, uint32_t size, ACCESS_TYPE type = ACCESS_TYPE::STORE);
 #else
   void read(void* data, uint64_t addr, uint32_t size, bool sup);
   void write(const void* data, uint64_t addr, uint32_t size, bool sup);
@@ -290,7 +290,7 @@ private:
   #else
     TLBEntry(uint32_t pfn, uint32_t flags)
       : pfn(pfn)
-      , flags(flags) 
+      , flags(flags)
     {}
     uint32_t pfn;
     uint32_t flags;
@@ -305,7 +305,7 @@ private:
 
   uint64_t get_pte_address(uint64_t base_ppn, uint64_t vpn);
   std::pair<uint64_t, uint8_t> page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t* size_bits);
-#else 
+#else
   uint64_t toPhyAddr(uint64_t vAddr, uint32_t flagMask);
   TLBEntry tlbLookup(uint64_t vAddr, uint32_t flagMask);
 #endif
@@ -394,7 +394,7 @@ private:
 };
 
 #ifdef VM_ENABLE
-class PTE_t 
+class PTE_t
 {
 
   private:
@@ -462,13 +462,13 @@ class PTE_t
     }
 
     PTE_t(uint64_t pte_bytes) : pte_bytes(pte_bytes)
-    { 
+    {
 #if VM_ADDR_MODE == SV39
       N = bit(pte_bytes,63);
       PBMT = bits(pte_bytes,61,62);
       level = 3;
       ppn=bits(pte_bytes,10,53);
-      address = ppn << MEM_PAGE_LOG2_SIZE; 
+      address = ppn << MEM_PAGE_LOG2_SIZE;
       // Reserve for Super page support
       // ppn = new uint32_t [level];
       // ppn[2]=bits(pte_bytes,28,53);
@@ -478,7 +478,7 @@ class PTE_t
       assert((pte_bytes >> 32) == 0 && "Upper 32 bits are not zero!");
       level = 2;
       ppn=bits(pte_bytes,10, 31);
-      address = ppn << MEM_PAGE_LOG2_SIZE; 
+      address = ppn << MEM_PAGE_LOG2_SIZE;
       // Reserve for Super page support
       // ppn = new uint32_t[level];
       // ppn[1]=bits(address, 20,31);
@@ -494,7 +494,7 @@ class PTE_t
     }
 };
 
-class vAddr_t 
+class vAddr_t
 {
 
   private:

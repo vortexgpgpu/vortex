@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,13 +14,13 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_shift_register #( 
+module VX_shift_register #(
     parameter DATAW      = 1,
     parameter RESETW     = 0,
     parameter DEPTH      = 1,
-    parameter NUM_TAPS   = 1,    
+    parameter NUM_TAPS   = 1,
     parameter TAP_START  = 0,
-    parameter TAP_STRIDE = 1    
+    parameter TAP_STRIDE = 1
 ) (
     input wire                         clk,
     input wire                         reset,
@@ -28,7 +28,7 @@ module VX_shift_register #(
     input wire [DATAW-1:0]             data_in,
     output wire [NUM_TAPS-1:0][DATAW-1:0] data_out
 );
-    if (DEPTH != 0) begin
+    if (DEPTH != 0) begin : g_shift_register
         reg [DEPTH-1:0][DATAW-1:0] entries;
 
         always @(posedge clk) begin
@@ -36,7 +36,7 @@ module VX_shift_register #(
                 if ((i >= (DATAW-RESETW)) && reset) begin
                     for (integer j = 0; j < DEPTH; ++j)
                         entries[j][i] <= 0;
-                end else if (enable) begin          
+                end else if (enable) begin
                     for (integer j = 1; j < DEPTH; ++j)
                         entries[j-1][i] <= entries[j][i];
                     entries[DEPTH-1][i] <= data_in[i];
@@ -44,10 +44,10 @@ module VX_shift_register #(
             end
         end
 
-        for (genvar i = 0; i < NUM_TAPS; ++i) begin
+        for (genvar i = 0; i < NUM_TAPS; ++i) begin : g_data_out
             assign data_out[i] = entries[i * TAP_STRIDE + TAP_START];
         end
-    end else begin
+    end else begin : g_passthru
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
         `UNUSED_VAR (enable)

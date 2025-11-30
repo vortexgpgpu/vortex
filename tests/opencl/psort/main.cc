@@ -87,7 +87,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "fn:h?")) != -1) {
+  while ((c = getopt(argc, argv, "fn:h")) != -1) {
     switch (c) {
     case 'f':
       float_enable = 1;
@@ -96,10 +96,9 @@ static void parse_args(int argc, char **argv) {
       size = atoi(optarg);
       break;
     case 'h':
-    case '?': {
       show_usage();
       exit(0);
-    } break;
+      break;
     default:
       show_usage();
       exit(-1);

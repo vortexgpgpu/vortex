@@ -15,10 +15,10 @@
 
 `TRACING_OFF
 module VX_index_buffer #(
-    parameter DATAW  = 1,
-    parameter SIZE   = 1,
-    parameter LUTRAM = 1,
-    parameter ADDRW  = `LOG2UP(SIZE)
+    parameter DATAW = 1,
+    parameter SIZE  = 1,
+    parameter LUTRAM = 0,
+    parameter ADDRW = `LOG2UP(SIZE)
 ) (
     input  wire             clk,
     input  wire             reset,
@@ -49,9 +49,10 @@ module VX_index_buffer #(
     );
 
     VX_dp_ram #(
-        .DATAW  (DATAW),
-        .SIZE   (SIZE),
-        .LUTRAM (LUTRAM)
+        .DATAW (DATAW),
+        .SIZE  (SIZE),
+        .LUTRAM (LUTRAM),
+        .RDW_MODE ("W")
     ) data_table (
         .clk   (clk),
         .reset (reset),

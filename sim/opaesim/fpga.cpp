@@ -93,6 +93,8 @@ extern fpga_result fpgaClose(fpga_handle handle) {
     return FPGA_INVALID_PARAM;
 
   auto sim = reinterpret_cast<opae_sim*>(handle);
+  sim->shutdown();
+
   delete sim;
 
   return FPGA_OK;

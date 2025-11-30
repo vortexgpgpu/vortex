@@ -57,15 +57,51 @@ public:
 
   int get_exitcode() const;
 
+  Word get_tiles();
+  Word get_tc_size();
+  Word get_tc_num();
+#ifdef VM_ENABLE
+  void dcache_read(void* data, uint64_t* p_addr, uint64_t addr, uint32_t size);
+  void dcache_write(const void* data, uint64_t* p_addr, uint64_t addr, uint32_t size);
+#else
+  void dcache_read(void* data, uint64_t addr, uint32_t size);
+  void dcache_write(const void* data, uint64_t addr, uint32_t size);
+#endif
+
 private:
 
   struct ipdom_entry_t {
-    ipdom_entry_t(const ThreadMask &tmask, Word PC);
-    ipdom_entry_t(const ThreadMask &tmask);
+    ipdom_entry_t(const ThreadMask &orig_tmask, const ThreadMask &else_tmask, Word PC)
+      : orig_tmask (orig_tmask)
+      , else_tmask (else_tmask)
+      , PC         (PC)
+      , fallthrough(false)
+    {}
 
-    ThreadMask  tmask;
+    ThreadMask  orig_tmask;
+    ThreadMask  else_tmask;
     Word        PC;
     bool        fallthrough;
+  };
+
+  struct vtype_t {
+    uint32_t vill;
+    uint32_t vma;
+    uint32_t vta;
+    uint32_t vsew;
+    uint32_t vlmul;
+  };
+
+  union reg_data_t {
+    Word     u;
+    WordI    i;
+    WordF    f;
+    float    f32;
+    double   f64;
+    uint32_t u32;
+    uint64_t u64;
+    int32_t  i32;
+    int64_t  i64;
   };
 
   struct warp_t {
@@ -78,6 +114,12 @@ private:
     std::vector<std::vector<uint64_t>>freg_file;
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
+#ifdef EXT_V_ENABLE
+    std::vector<std::vector<Byte>>    vreg_file;
+    vtype_t                           vtype;
+    uint32_t                          vl;
+    Word                              vlmax;
+#endif
     uint32_t                          uuid;
   };
 
@@ -91,11 +133,16 @@ private:
 
   void execute(const Instr &instr, uint32_t wid, instr_trace_t *trace);
 
+#ifdef EXT_V_ENABLE
+  void loadVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata);
+  void storeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata);
+  void executeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata);
+#endif
+#ifdef VM_ENABLE
+  void icache_read(void* data, uint64_t* p_addr, uint64_t addr, uint32_t size);
+#else
   void icache_read(void* data, uint64_t addr, uint32_t size);
-
-  void dcache_read(void* data, uint64_t addr, uint32_t size);
-
-  void dcache_write(const void* data, uint64_t addr, uint32_t size);
+#endif
 
   void dcache_amo_reserve(uint64_t addr);
 
@@ -113,6 +160,11 @@ private:
 
   void update_fcrs(uint32_t fflags, uint32_t tid, uint32_t wid);
 
+  // temporarily added for riscv-vector tests
+  // TODO: remove once ecall/ebreak are supported
+  void trigger_ecall();
+  void trigger_ebreak();
+
   const Arch& arch_;
   const DCRS& dcrs_;
   Core*       core_;
@@ -125,6 +177,11 @@ private:
   uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
+  std::vector<Word> scratchpad;
+  uint32_t mat_size;
+  uint32_t tc_size;
+  uint32_t tc_num;
+  std::vector<std::vector<std::unordered_map<uint32_t, uint32_t>>> csrs_;
 };
 
 }

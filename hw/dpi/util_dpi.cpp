@@ -47,8 +47,6 @@ extern "C" {
   void dpi_trace(int level, const char* format, ...);
   void dpi_trace_start();
   void dpi_trace_stop();
-
-  uint64_t dpi_uuid_gen(bool reset, int wid);
 }
 
 bool sim_trace_enabled();
@@ -203,18 +201,4 @@ void dpi_trace_start() {
 
 void dpi_trace_stop() {
   sim_trace_enable(false);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-std::unordered_map<uint32_t, uint32_t> g_uuid_gens;
-
-uint64_t dpi_uuid_gen(bool reset, int wid) {
-  if (reset) {
-    g_uuid_gens.clear();
-    return 0;
-  }
-  uint32_t instr_uuid = g_uuid_gens[wid]++;
-  uint64_t uuid = (uint64_t(wid) << 32) | instr_uuid;
-  return uuid;
 }
