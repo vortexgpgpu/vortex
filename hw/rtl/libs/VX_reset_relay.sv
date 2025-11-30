@@ -22,19 +22,19 @@ module VX_reset_relay #(
     input wire          reset,
     output wire [N-1:0] reset_o
 );
-    if (MAX_FANOUT >= 0 && N > (MAX_FANOUT + MAX_FANOUT/2)) begin
+    if (MAX_FANOUT >= 0 && N > (MAX_FANOUT + MAX_FANOUT/2)) begin : g_relay
         localparam F = `UP(MAX_FANOUT);
         localparam R = N / F;
         `PRESERVE_NET reg [R-1:0] reset_r;
-        for (genvar i = 0; i < R; ++i) begin
+        for (genvar i = 0; i < R; ++i) begin : g_reset_r
             always @(posedge clk) begin
                 reset_r[i] <= reset;
             end
         end
-        for (genvar i = 0; i < N; ++i) begin
+        for (genvar i = 0; i < N; ++i) begin : g_reset_o
             assign reset_o[i] = reset_r[i / F];
         end
-    end else begin
+    end else begin : g_passthru
         `UNUSED_VAR (clk)
         assign reset_o = {N{reset}};
     end

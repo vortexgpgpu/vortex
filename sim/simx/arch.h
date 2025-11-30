@@ -33,7 +33,7 @@ private:
   uint64_t local_mem_base_;
 
 public:
-  Arch(uint16_t num_threads, uint16_t num_warps, uint16_t num_cores)
+  Arch(uint16_t num_threads, uint16_t num_warps, uint16_t num_cores)   
     : num_threads_(num_threads)
     , num_warps_(num_warps)
     , num_cores_(num_cores)
@@ -70,6 +70,7 @@ public:
   uint16_t socket_size() const {
     return socket_size_;
   }
+
 };
 
 }

@@ -110,6 +110,25 @@
 `define VX_CSR_MPM_IFETCH_LT_H          12'hB91
 `define VX_CSR_MPM_LOAD_LT              12'hB12
 `define VX_CSR_MPM_LOAD_LT_H            12'hB92
+// PERF: TLB (VM enabled only)
+`define VX_CSR_MPM_TLB_MISS_R           12'hB13     // TLB read misses
+`define VX_CSR_MPM_TLB_MISS_R_H         12'hB93
+`define VX_CSR_MPM_TLB_MISS_W           12'hB14     // TLB write misses
+`define VX_CSR_MPM_TLB_MISS_W_H         12'hB94
+`define VX_CSR_MPM_TLB_READS            12'hB15     // TLB reads (total accesses)
+`define VX_CSR_MPM_TLB_READS_H          12'hB95
+`define VX_CSR_MPM_TLB_MSHR_ST          12'hB16     // TLB MSHR stalls (PTW contention)
+`define VX_CSR_MPM_TLB_MSHR_ST_H        12'hB96
+`define VX_CSR_MPM_TLB_EVICTIONS        12'hB17     // TLB evictions
+`define VX_CSR_MPM_TLB_EVICTIONS_H      12'hB97
+
+// PTW Performance counters
+`define VX_CSR_MPM_PTW_WALKS            12'hB18     // PTW total walks
+`define VX_CSR_MPM_PTW_WALKS_H          12'hB98
+`define VX_CSR_MPM_PTW_MEM_ACCESSES     12'hB19     // PTW memory accesses
+`define VX_CSR_MPM_PTW_MEM_ACCESSES_H   12'hB99
+`define VX_CSR_MPM_PTW_MAX_CONCURRENT   12'hB1A     // PTW max concurrent walks
+`define VX_CSR_MPM_PTW_MAX_CONCURRENT_H 12'hB9A
 
 // Machine Performance-monitoring memory counters (class 2) ///////////////////
 
@@ -166,10 +185,8 @@
 `define VX_CSR_MPM_MEM_WRITES_H         12'hB99
 `define VX_CSR_MPM_MEM_LT               12'hB1A     // memory latency
 `define VX_CSR_MPM_MEM_LT_H             12'hB9A
-`define VX_CSR_MPM_MEM_BANK_CNTR        12'hB1E     // memory bank requests
-`define VX_CSR_MPM_MEM_BANK_CNTR_H      12'hB9E
-`define VX_CSR_MPM_MEM_BANK_TICK        12'hB1F     // memory ticks
-`define VX_CSR_MPM_MEM_BANK_TICK_H      12'hB9F
+`define VX_CSR_MPM_MEM_BANK_ST          12'hB1E     // bank conflicts
+`define VX_CSR_MPM_MEM_BANK_ST_H        12'hB9E
 // PERF: lmem
 `define VX_CSR_MPM_LMEM_READS           12'hB1B     // memory reads
 `define VX_CSR_MPM_LMEM_READS_H         12'hB9B
@@ -177,6 +194,9 @@
 `define VX_CSR_MPM_LMEM_WRITES_H        12'hB9C
 `define VX_CSR_MPM_LMEM_BANK_ST         12'hB1D     // bank conflicts
 `define VX_CSR_MPM_LMEM_BANK_ST_H       12'hB9D
+// PERF: coalescer
+`define VX_CSR_MPM_COALESCER_MISS       12'hB1F     // coalescer misses
+`define VX_CSR_MPM_COALESCER_MISS_H     12'hB9F
 
 // Machine Performance-monitoring memory counters (class 3) ///////////////////
 // <Add your own counters: use addresses hB03..B1F, hB83..hB9F>
@@ -187,6 +207,19 @@
 `define VX_CSR_MARCHID                  12'hF12
 `define VX_CSR_MIMPID                   12'hF13
 `define VX_CSR_MHARTID                  12'hF14
+
+// Vector CSRs
+
+`define VX_CSR_VSTART                   12'h008
+`define VX_CSR_VXSAT                    12'h009
+`define VX_CSR_VXRM                     12'h00A
+`define VX_CSR_VCSR                     12'h00F
+`define VX_CSR_VL                       12'hC20
+`define VX_CSR_VTYPE                    12'hC21
+`define VX_CSR_VLENB                    12'hC22
+`define VX_CSR_VCYCLE                   12'hC00
+`define VX_CSR_VTIME                    12'hC01
+`define VX_CSR_VINSTRET                 12'hC02
 
 // GPGU CSRs
 
@@ -200,5 +233,11 @@
 `define VX_CSR_NUM_WARPS                12'hFC1
 `define VX_CSR_NUM_CORES                12'hFC2
 `define VX_CSR_LOCAL_MEM_BASE           12'hFC3
+
+`define VX_MAT_MUL_SIZE                 12'hFC4     // VX_MAT_MUL_SIZE = Matrix Size / TC Size
+`define VX_TC_NUM                       12'hFC5
+`define VX_TC_SIZE                      12'hFC6
+
+
 
 `endif // VX_TYPES_VH

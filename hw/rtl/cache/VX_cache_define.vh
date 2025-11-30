@@ -22,6 +22,7 @@
 `define CS_LINE_WIDTH           (8 * LINE_SIZE)
 `define CS_BANK_SIZE            (CACHE_SIZE / NUM_BANKS)
 `define CS_WAY_SEL_BITS         `CLOG2(NUM_WAYS)
+`define CS_WAY_SEL_WIDTH        `UP(`CS_WAY_SEL_BITS)
 
 `define CS_LINES_PER_BANK       (`CS_BANK_SIZE / (LINE_SIZE * NUM_WAYS))
 `define CS_WORDS_PER_LINE       (LINE_SIZE / WORD_SIZE)
@@ -54,12 +55,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CS_LINE_TO_MEM_ADDR(x, i)  {x, `CS_BANK_SEL_BITS'(i)}
-`define CS_MEM_ADDR_TO_BANK_ID(x)  x[0 +: `CS_BANK_SEL_BITS]
-`define CS_MEM_TAG_TO_REQ_ID(x)    x[MSHR_ADDR_WIDTH-1:0]
-`define CS_MEM_TAG_TO_BANK_ID(x)   x[MSHR_ADDR_WIDTH +: `CS_BANK_SEL_BITS]
-
-`define CS_LINE_TO_FULL_ADDR(x, i) {x, (`XLEN-$bits(x))'(i << (`XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
+`define CS_BANK_TO_FULL_ADDR(x, b) {x, (`XLEN-$bits(x))'(b << (`XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
 `define CS_MEM_TO_FULL_ADDR(x)     {x, (`XLEN-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -73,5 +69,11 @@
     `PERF_COUNTER_ADD (dst, src, mshr_stalls, `PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, mem_stalls, `PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, crsp_stalls, `PERF_CTR_BITS, count, (count > 1))
+
+///////////////////////////////////////////////////////////////////////////////
+
+`define CS_REPL_RANDOM  0
+`define CS_REPL_FIFO    1
+`define CS_REPL_PLRU    2
 
 `endif // VX_CACHE_DEFINE_VH

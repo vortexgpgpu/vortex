@@ -23,9 +23,9 @@ OSVERSION=${OSVERSION:=@OSVERSION@}
 riscv32()
 {
     case $OSVERSION in
-    "centos/7") parts=$(eval echo {a..h}) ;;
-    "ubuntu/focal") parts=$(eval echo {a..k}) ;;
-    *)          parts=$(eval echo {a..j}) ;;
+    "centos/7") parts=$(eval echo {a..l}) ;;
+    "ubuntu/bionic") parts=$(eval echo {a..j}) ;;
+    *)          parts=$(eval echo {a..k}) ;;
     esac
     rm -f riscv32-gnu-toolchain.tar.bz2.parta*
     for x in $parts
@@ -41,7 +41,7 @@ riscv32()
 riscv64()
 {
     case $OSVERSION in
-    "centos/7") parts=$(eval echo {a..h}) ;;
+    "centos/7") parts=$(eval echo {a..l}) ;;
     *)          parts=$(eval echo {a..j}) ;;
     esac
     rm -f riscv64-gnu-toolchain.tar.bz2.parta*

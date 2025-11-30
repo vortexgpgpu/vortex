@@ -1,17 +1,17 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Modified port of cast module from fpnew Libray 
+// Modified port of cast module from fpnew Libray
 // reference: https://github.com/pulp-platform/fpnew
 
 `include "VX_fpu_define.vh"
@@ -22,7 +22,8 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     parameter LATENCY   = 1,
     parameter INT_WIDTH = 32,
     parameter MAN_BITS  = 23,
-    parameter EXP_BITS  = 8    
+    parameter EXP_BITS  = 8,
+    parameter OUT_REG   = 0
 ) (
     input wire clk,
     input wire reset,
@@ -35,10 +36,10 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     input wire is_signed,
 
     input wire [31:0]  dataa,
-    output wire [31:0] result, 
+    output wire [31:0] result,
 
     output wire [`FP_FLAGS_BITS-1:0] fflags
-);   
+);
     // Constants
     localparam EXP_BIAS = 2**(EXP_BITS-1)-1;
 
@@ -55,11 +56,11 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     localparam FMT_SHIFT_COMPENSATION = S_MAN_WIDTH - 1 - MAN_BITS;
     localparam NUM_FP_STICKY  = 2 * S_MAN_WIDTH - MAN_BITS - 1;   // removed mantissa, 1. and R
     localparam NUM_INT_STICKY = 2 * S_MAN_WIDTH - INT_WIDTH;  // removed int and R
-    
+
     // Input processing
-    
-    fclass_t fclass;      
-    VX_fp_classifier #( 
+
+    fclass_t fclass;
+    VX_fp_classifier #(
         .EXP_BITS (EXP_BITS),
         .MAN_BITS (MAN_BITS)
     ) fp_classifier (
@@ -69,9 +70,9 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     );
 
     wire [S_MAN_WIDTH-1:0] input_mant;
-    wire [S_EXP_WIDTH-1:0] input_exp;    
+    wire [S_EXP_WIDTH-1:0] input_exp;
     wire                   input_sign;
-    
+
     wire i2f_sign = dataa[INT_WIDTH-1];
     wire f2i_sign = dataa[INT_WIDTH-1] && is_signed;
     wire [S_MAN_WIDTH-1:0] f2i_mantissa = f2i_sign ? (-dataa) : dataa;
@@ -81,7 +82,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     assign input_sign = is_itof ? f2i_sign : i2f_sign;
 
     // Pipeline stage0
-    
+
     wire                   is_itof_s0;
     wire                   is_signed_s0;
     wire [2:0]             rnd_mode_s0;
@@ -92,7 +93,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
 
     VX_pipe_register #(
         .DATAW (1 + `INST_FRM_BITS + 1 + $bits(fclass_t) + 1 + S_EXP_WIDTH + S_MAN_WIDTH),
-        .DEPTH (LATENCY > 2)
+        .DEPTH (LATENCY > 1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
@@ -100,7 +101,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
         .data_in  ({is_itof,    is_signed,    frm,         fclass,    input_sign,    input_exp,       input_mant}),
         .data_out ({is_itof_s0, is_signed_s0, rnd_mode_s0, fclass_s0, input_sign_s0, fmt_exponent_s0, encoded_mant_s0})
     );
-    
+
     // Normalization
 
     wire [LZC_RESULT_WIDTH-1:0] renorm_shamt_s0; // renormalization shift amount
@@ -113,12 +114,12 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
         .data_out  (renorm_shamt_s0),
         .valid_out (mant_is_nonzero_s0)
     );
-    
+
     wire mant_is_zero_s0 = ~mant_is_nonzero_s0;
 
-    wire [S_MAN_WIDTH-1:0] input_mant_n_s0;    // normalized input mantissa    
+    wire [S_MAN_WIDTH-1:0] input_mant_n_s0;    // normalized input mantissa
     wire [S_EXP_WIDTH-1:0] input_exp_n_s0;     // unbiased true exponent
-    
+
     // Realign input mantissa, append zeroes if destination is wider
     assign input_mant_n_s0 = encoded_mant_s0 << renorm_shamt_s0;
 
@@ -140,7 +141,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
 
     VX_pipe_register #(
         .DATAW (1 + `INST_FRM_BITS + 1 + $bits(fclass_t) + 1 + 1 + S_MAN_WIDTH + S_EXP_WIDTH),
-        .DEPTH (LATENCY > 1)
+        .DEPTH (LATENCY > 2)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
@@ -169,30 +170,30 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     wire of_before_round_s1 = overflow;
 
     // Pipeline stage2
-    
+
     wire                   is_itof_s2;
     wire                   is_signed_s2;
     wire [2:0]             rnd_mode_s2;
-    fclass_t               fclass_s2;   
+    fclass_t               fclass_s2;
     wire                   mant_is_zero_s2;
     wire                   input_sign_s2;
     wire [2*S_MAN_WIDTH:0] destination_mant_s2;
     wire [EXP_BITS-1:0]    final_exp_s2;
     wire                   of_before_round_s2;
-    
+
     VX_pipe_register #(
         .DATAW (1 + 1 + `INST_FRM_BITS + $bits(fclass_t) + 1 + 1 + (2*S_MAN_WIDTH+1) + EXP_BITS + 1),
-        .DEPTH (LATENCY > 3)
+        .DEPTH (LATENCY > 0)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
         .data_in  ({is_itof_s1, is_signed_s1, rnd_mode_s1, fclass_s1, mant_is_zero_s1, input_sign_s1, destination_mant_s1, final_exp_s1, of_before_round_s1}),
         .data_out ({is_itof_s2, is_signed_s2, rnd_mode_s2, fclass_s2, mant_is_zero_s2, input_sign_s2, destination_mant_s2, final_exp_s2, of_before_round_s2})
-    );   
-    
+    );
+
     // Rouding and classification
-   
+
     wire [MAN_BITS-1:0]  final_mant_s2;  // mantissa after adjustments
     wire [INT_WIDTH-1:0] final_int_s2;   // integer shifted in position
     wire [1:0]           f2i_round_sticky_bits_s2, i2f_round_sticky_bits_s2;
@@ -237,20 +238,20 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
 
     wire                 is_itof_s3;
     wire                 is_signed_s3;
-    fclass_t             fclass_s3;   
+    fclass_t             fclass_s3;
     wire                 mant_is_zero_s3;
     wire                 input_sign_s3;
     wire                 rounded_sign_s3;
     wire [INT_WIDTH-1:0] rounded_abs_s3;
-    wire                 of_before_round_s3;   
+    wire                 of_before_round_s3;
     wire                 f2i_round_has_sticky_s3;
     wire                 i2f_round_has_sticky_s3;
 
-    `UNUSED_VAR (fclass_s3) 
+    `UNUSED_VAR (fclass_s3)
 
     VX_pipe_register #(
         .DATAW (1 + 1 + $bits(fclass_t) + 1 + 1 + 32 + 1 + 1 + 1 + 1),
-        .DEPTH (LATENCY > 4)
+        .DEPTH (LATENCY > 3)
     ) pipe_reg3 (
         .clk      (clk),
         .reset    (reset),
@@ -258,7 +259,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
         .data_in  ({is_itof_s2, is_signed_s2, fclass_s2, mant_is_zero_s2, input_sign_s2, rounded_abs_s2, rounded_sign_s2, of_before_round_s2, f2i_round_has_sticky_s2, i2f_round_has_sticky_s2}),
         .data_out ({is_itof_s3, is_signed_s3, fclass_s3, mant_is_zero_s3, input_sign_s3, rounded_abs_s3, rounded_sign_s3, of_before_round_s3, f2i_round_has_sticky_s3, i2f_round_has_sticky_s3})
     );
-     
+
     // Assemble regular result, nan box short ones. Int zeroes need to be detected
     wire [INT_WIDTH-1:0] fmt_result_s3 = mant_is_zero_s3 ? 0 : {rounded_sign_s3, rounded_abs_s3[EXP_BITS+MAN_BITS-1:0]};
 
@@ -278,18 +279,18 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
             f2i_special_result_s3[INT_WIDTH-2:0] = 2**(INT_WIDTH-1) - 1;   // alone yields 2**(31)-1
             f2i_special_result_s3[INT_WIDTH-1]   = ~is_signed_s3;   // for unsigned casts yields 2**31
         end
-    end            
+    end
 
     // Detect special case from source format (inf, nan, overflow, nan-boxing or negative unsigned)
-    wire f2i_result_is_special_s3 = fclass_s3.is_nan 
+    wire f2i_result_is_special_s3 = fclass_s3.is_nan
                                   | fclass_s3.is_inf
                                   | of_before_round_s3
                                   | (input_sign_s3 & ~is_signed_s3 & ~rounded_int_res_zero_s3);
-                                    
+
     fflags_t f2i_special_status_s3;
     fflags_t i2f_status_s3, f2i_status_s3;
     fflags_t tmp_fflags_s3;
-    
+
     // All integer special cases are invalid
     assign f2i_special_status_s3 = {1'b1, 4'h0};
 
@@ -306,7 +307,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
 
     VX_pipe_register #(
         .DATAW (32 + `FP_FLAGS_BITS),
-        .DEPTH (LATENCY > 0)
+        .DEPTH (OUT_REG)
     ) pipe_reg4 (
         .clk      (clk),
         .reset    (reset),

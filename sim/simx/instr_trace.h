@@ -59,6 +59,8 @@ public:
   uint32_t    wid;
   ThreadMask  tmask;
   Word        PC;
+  uint64_t    inst_phys_addr;
+  uint64_t    data_phys_addr;
   bool        wb;
 
   //--
@@ -77,6 +79,7 @@ public:
     AluType  alu_type;
     FpuType  fpu_type;
     SfuType  sfu_type;
+    TCUType  tcu_type;
   };
 
   ITraceData::Ptr data;
@@ -94,6 +97,8 @@ public:
     , wid(0)
     , tmask(0)
     , PC(0)
+    , inst_phys_addr(0)
+    , data_phys_addr(0)
     , wb(false)
     , dst_reg({RegType::None, 0})
     , src_regs(NUM_SRC_REGS, {RegType::None, 0})
@@ -114,6 +119,8 @@ public:
     , wid(rhs.wid)
     , tmask(rhs.tmask)
     , PC(rhs.PC)
+    , inst_phys_addr(rhs.inst_phys_addr)
+    , data_phys_addr(rhs.data_phys_addr)
     , wb(rhs.wb)
     , dst_reg(rhs.dst_reg)
     , src_regs(rhs.src_regs)
@@ -147,6 +154,10 @@ inline std::ostream &operator<<(std::ostream &os, const instr_trace_t& trace) {
       os << trace.tmask.test(i);
   }
   os << ", PC=0x" << std::hex << trace.PC << std::dec;
+  os << ", instr_phys=0x" << std::hex << trace.inst_phys_addr;
+  if (trace.data_phys_addr != 0) {
+    os << ", data_phys=0x" << trace.data_phys_addr;
+  }
   os << ", wb=" << trace.wb;
   if (trace.dst_reg.type != RegType::None) {
      os << ", rd=" << trace.dst_reg.type << trace.dst_reg.idx;

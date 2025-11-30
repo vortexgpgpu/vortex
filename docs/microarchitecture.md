@@ -78,3 +78,6 @@ Vortex has a 6-stage pipeline:
   - Grouping multiple cores sharing L1 cache
 - Clusters
   - Grouping of sockets sharing L2 cache
+
+### Vortex Cache Subsystem
+More details about the cache subsystem are provided [here](./cache_subsystem.md).

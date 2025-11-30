@@ -13,11 +13,12 @@
 
 #pragma once
 
+#include <assert.h>
 #include <vortex.h>
 #include <VX_config.h>
 #include <VX_types.h>
 #include <callbacks.h>
-#include <malloc.h>
+#include <mem_alloc.h>
 
 #include <cstdint>
 #include <unordered_map>

@@ -30,7 +30,7 @@ Core::Core(const SimContext& ctx,
            Socket* socket,
            const Arch &arch,
            const DCRS &dcrs)
-  : SimObject(ctx, "core")
+  : SimObject(ctx, StrFormat("core%d", core_id))
   , icache_req_ports(1, this)
   , icache_rsp_ports(1, this)
   , dcache_req_ports(DCACHE_NUM_REQS, this)
@@ -44,10 +44,8 @@ Core::Core(const SimContext& ctx,
   , operands_(ISSUE_WIDTH)
   , dispatchers_((uint32_t)FUType::Count)
   , func_units_((uint32_t)FUType::Count)
-  , lsu_demux_(NUM_LSU_BLOCKS)
+  , lmem_switch_(NUM_LSU_BLOCKS)
   , mem_coalescers_(NUM_LSU_BLOCKS)
-  , lsu_dcache_adapter_(NUM_LSU_BLOCKS)
-  , lsu_lmem_adapter_(NUM_LSU_BLOCKS)
   , pending_icache_(arch_.num_warps())
   , commit_arbs_(ISSUE_WIDTH)
 {
@@ -59,68 +57,72 @@ Core::Core(const SimContext& ctx,
 
   // create the memory coalescer
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "core%d-coalescer%d", core_id, i);
+    snprintf(sname, 100, "%s-coalescer%d", this->name().c_str(), i);
     mem_coalescers_.at(i) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSUQ_OUT_SIZE, 1);
   }
 
   // create local memory
-  snprintf(sname, 100, "core%d-local_mem", core_id);
+  snprintf(sname, 100, "%s-lmem", this->name().c_str());
   local_mem_ = LocalMem::Create(sname, LocalMem::Config{
     (1 << LMEM_LOG_SIZE),
     LSU_WORD_SIZE,
-    LSU_NUM_REQS,
+    LSU_CHANNELS,
     log2ceil(LMEM_NUM_BANKS),
     false
   });
 
-  // create lsu demux
+  // create lmem switch
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "core%d-lsu_demux%d", core_id, i);
-    lsu_demux_.at(i) = LocalMemDemux::Create(sname, 1);
+    snprintf(sname, 100, "%s-lmem_switch%d", this->name().c_str(), i);
+    lmem_switch_.at(i) = LocalMemSwitch::Create(sname, 1);
   }
 
-  // create lsu dcache adapter
+  // create dcache adapter
+  std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(NUM_LSU_BLOCKS);
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "core%d-lsu_dcache_adapter%d", core_id, i);
-    lsu_dcache_adapter_.at(i) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
+    snprintf(sname, 100, "%s-lsu_dcache_adapter%d", this->name().c_str(), i);
+    lsu_dcache_adapter.at(i) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
   }
 
-  // create lsu lmem adapter
-  for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "core%d-lsu_lmem_adapter%d", core_id, i);
-    lsu_lmem_adapter_.at(i) = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
-  }
+  // create lmem arbiter
+  snprintf(sname, 100, "%s-lmem_arb", this->name().c_str());
+  auto lmem_arb = LsuArbiter::Create(sname, ArbiterType::RoundRobin, NUM_LSU_BLOCKS, 1);
 
-  // connect lsu demux
+  // create lmem adapter
+  snprintf(sname, 100, "%s-lsu_lmem_adapter", this->name().c_str());
+  auto lsu_lmem_adapter = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
+
+  // connect lmem switch
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    lsu_demux_.at(b)->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn);
-    mem_coalescers_.at(b)->RspIn.bind(&lsu_demux_.at(b)->RspDC);
+    lmem_switch_.at(b)->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn);
+    lmem_switch_.at(b)->ReqLmem.bind(&lmem_arb->ReqIn.at(b));
 
-    lsu_demux_.at(b)->ReqLmem.bind(&lsu_lmem_adapter_.at(b)->ReqIn);
-    lsu_lmem_adapter_.at(b)->RspIn.bind(&lsu_demux_.at(b)->RspLmem);
+    mem_coalescers_.at(b)->RspIn.bind(&lmem_switch_.at(b)->RspDC);
+    lmem_arb->RspIn.at(b).bind(&lmem_switch_.at(b)->RspLmem);
   }
 
-  // connect coalescer-adapter
+  // connect lmem arbiter
+  lmem_arb->ReqOut.at(0).bind(&lsu_lmem_adapter->ReqIn);
+  lsu_lmem_adapter->RspIn.bind(&lmem_arb->RspOut.at(0));
+
+  // connect lmem adapter
+  for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
+    lsu_lmem_adapter->ReqOut.at(c).bind(&local_mem_->Inputs.at(c));
+    local_mem_->Outputs.at(c).bind(&lsu_lmem_adapter->RspOut.at(c));
+  }
+
+  // connect dcache coalescer
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    mem_coalescers_.at(b)->ReqOut.bind(&lsu_dcache_adapter_.at(b)->ReqIn);
-    lsu_dcache_adapter_.at(b)->RspIn.bind(&mem_coalescers_.at(b)->RspOut);
+    mem_coalescers_.at(b)->ReqOut.bind(&lsu_dcache_adapter.at(b)->ReqIn);
+    lsu_dcache_adapter.at(b)->RspIn.bind(&mem_coalescers_.at(b)->RspOut);
   }
 
-  // connect adapter-dcache
+  // connect dcache adapter
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
     for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
       uint32_t i = b * DCACHE_CHANNELS + c;
-      lsu_dcache_adapter_.at(b)->ReqOut.at(c).bind(&dcache_req_ports.at(i));
-      dcache_rsp_ports.at(i).bind(&lsu_dcache_adapter_.at(b)->RspOut.at(c));
-    }
-  }
-
-  // connect adapter-lmem
-  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
-      uint32_t i = b * LSU_CHANNELS + c;
-      lsu_lmem_adapter_.at(b)->ReqOut.at(c).bind(&local_mem_->Inputs.at(i));
-      local_mem_->Outputs.at(i).bind(&lsu_lmem_adapter_.at(b)->RspOut.at(c));
+      lsu_dcache_adapter.at(b)->ReqOut.at(c).bind(&dcache_req_ports.at(i));
+      dcache_rsp_ports.at(i).bind(&lsu_dcache_adapter.at(b)->RspOut.at(c));
     }
   }
 
@@ -129,17 +131,19 @@ Core::Core(const SimContext& ctx,
   dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_FPU_BLOCKS, NUM_FPU_LANES);
   dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_LSU_BLOCKS, NUM_LSU_LANES);
   dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
+  dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_TCU_BLOCKS, NUM_TCU_LANES);
 
   // initialize execute units
   func_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
   func_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);
   func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(this);
   func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(this);
+  func_units_.at((int)FUType::TCU) = SimPlatform::instance().create_object<TcuUnit>(this);
 
   // bind commit arbiters
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-    snprintf(sname, 100, "core%d-commit-arb%d", core_id, i);
-    auto arbiter = TraceSwitch::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
+    snprintf(sname, 100, "%s-commit-arb%d", this->name().c_str(), i);
+    auto arbiter = TraceArbiter::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
     for (uint32_t j = 0; j < (uint32_t)FUType::Count; ++j) {
       func_units_.at(j)->Outputs.at(i).bind(&arbiter->Inputs.at(j));
     }
@@ -227,6 +231,7 @@ void Core::fetch() {
   auto trace = fetch_latch_.front();
   MemReq mem_req;
   mem_req.addr  = trace->PC;
+  mem_req.p_addr = trace->inst_phys_addr;
   mem_req.write = false;
   mem_req.tag   = pending_icache_.allocate(trace);
   mem_req.cid   = trace->cid;

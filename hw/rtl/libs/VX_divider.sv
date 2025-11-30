@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,7 +24,7 @@ module VX_divider #(
     parameter LATENCY  = 0
 ) (
     input wire                clk,
-    input wire                enable, 
+    input wire                enable,
     input wire [N_WIDTH-1:0]  numer,
     input wire [D_WIDTH-1:0]  denom,
     output wire [Q_WIDTH-1:0] quotient,
@@ -37,7 +37,7 @@ module VX_divider #(
     wire [D_WIDTH-1:0] remainder_unqual;
 
     lpm_divide divide (
-        .clock    (clk),        
+        .clock    (clk),
         .clken    (enable),
         .numer    (numer),
         .denom    (denom),
@@ -47,7 +47,7 @@ module VX_divider #(
 
     defparam
         divide.lpm_type     = "LPM_DIVIDE",
-        divide.lpm_widthn   = N_WIDTH,        
+        divide.lpm_widthn   = N_WIDTH,
         divide.lpm_widthd   = D_WIDTH,
         divide.lpm_nrepresentation = N_SIGNED ? "SIGNED" : "UNSIGNED",
         divide.lpm_drepresentation = D_SIGNED ? "SIGNED" : "UNSIGNED",
@@ -62,36 +62,36 @@ module VX_divider #(
     reg [N_WIDTH-1:0] quotient_unqual;
     reg [D_WIDTH-1:0] remainder_unqual;
 
-    always @(*) begin   
+    always @(*) begin
         begin
             if (N_SIGNED && D_SIGNED) begin
                 quotient_unqual  = $signed(numer) / $signed(denom);
                 remainder_unqual = $signed(numer) % $signed(denom);
-            end 
+            end
             else if (N_SIGNED && !D_SIGNED) begin
                 quotient_unqual  = $signed(numer) / denom;
                 remainder_unqual = $signed(numer) % denom;
-            end 
+            end
             else if (!N_SIGNED && D_SIGNED) begin
                 quotient_unqual  = numer / $signed(denom);
                 remainder_unqual = numer % $signed(denom);
-            end 
+            end
             else begin
                 quotient_unqual  = numer / denom;
-                remainder_unqual = numer % denom;        
+                remainder_unqual = numer % denom;
             end
         end
     end
 
-    if (LATENCY == 0) begin
+    if (LATENCY == 0) begin : g_comb
         assign quotient  = quotient_unqual [Q_WIDTH-1:0];
         assign remainder = remainder_unqual [R_WIDTH-1:0];
-    end else begin
+    end else begin : g_pipe
         reg [N_WIDTH-1:0] quotient_pipe [LATENCY-1:0];
         reg [D_WIDTH-1:0] remainder_pipe [LATENCY-1:0];
 
-        for (genvar i = 0; i < LATENCY; ++i) begin
-            always @(posedge clk) begin                
+        for (genvar i = 0; i < LATENCY; ++i) begin : g_reg
+            always @(posedge clk) begin
                 if (enable) begin
                     quotient_pipe[i]  <= (0 == i) ? quotient_unqual  : quotient_pipe[i-1];
                     remainder_pipe[i] <= (0 == i) ? remainder_unqual : remainder_pipe[i-1];
@@ -101,7 +101,7 @@ module VX_divider #(
 
         assign quotient  = quotient_pipe[LATENCY-1][Q_WIDTH-1:0];
         assign remainder = remainder_pipe[LATENCY-1][R_WIDTH-1:0];
-    end    
+    end
 
 `endif
 

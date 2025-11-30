@@ -12,6 +12,8 @@
 // limitations under the License.
 
 #include "socket.h"
+#include <iostream>
+#include <iomanip>
 #include "cluster.h"
 
 using namespace vortex;
@@ -21,11 +23,9 @@ Socket::Socket(const SimContext& ctx,
                 Cluster* cluster,
                 const Arch &arch,
                 const DCRS &dcrs)
-  : SimObject(ctx, "socket")
-  , icache_mem_req_port(this)
-  , icache_mem_rsp_port(this)
-  , dcache_mem_req_port(this)
-  , dcache_mem_rsp_port(this)
+  : SimObject(ctx, StrFormat("socket%d", socket_id))
+  , mem_req_ports(L1_MEM_PORTS, this)
+  , mem_rsp_ports(L1_MEM_PORTS, this)
   , socket_id_(socket_id)
   , cluster_(cluster)
   , cores_(arch.socket_size())
@@ -33,8 +33,8 @@ Socket::Socket(const SimContext& ctx,
   auto cores_per_socket = cores_.size();
 
   char sname[100];
-  snprintf(sname, 100, "socket%d-icaches", socket_id);
-  icaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_ICACHES, 1, CacheSim::Config{
+  snprintf(sname, 100, "%s-icaches", this->name().c_str());
+  icaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_ICACHES, CacheSim::Config{
     !ICACHE_ENABLED,
     log2ceil(ICACHE_SIZE),  // C
     log2ceil(L1_LINE_SIZE), // L
@@ -44,17 +44,15 @@ Socket::Socket(const SimContext& ctx,
     XLEN,                   // address bits
     1,                      // number of ports
     1,                      // number of inputs
+    ICACHE_MEM_PORTS,       // memory ports
     false,                  // write-back
     false,                  // write response
     (uint8_t)arch.num_warps(), // mshr size
     2,                      // pipeline latency
   });
 
-  icaches_->MemReqPort.bind(&icache_mem_req_port);
-  icache_mem_rsp_port.bind(&icaches_->MemRspPort);
-
-  snprintf(sname, 100, "socket%d-dcaches", socket_id);
-  dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, DCACHE_NUM_REQS, CacheSim::Config{
+  snprintf(sname, 100, "%s-dcaches", this->name().c_str());
+  dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, CacheSim::Config{
     !DCACHE_ENABLED,
     log2ceil(DCACHE_SIZE),  // C
     log2ceil(L1_LINE_SIZE), // L
@@ -64,21 +62,51 @@ Socket::Socket(const SimContext& ctx,
     XLEN,                   // address bits
     1,                      // number of ports
     DCACHE_NUM_REQS,        // number of inputs
+    L1_MEM_PORTS,           // memory ports
     DCACHE_WRITEBACK,       // write-back
     false,                  // write response
     DCACHE_MSHR_SIZE,       // mshr size
     2,                      // pipeline latency
   });
 
-  dcaches_->MemReqPort.bind(&dcache_mem_req_port);
-  dcache_mem_rsp_port.bind(&dcaches_->MemRspPort);
+  // find overlap
+  uint32_t overlap = MIN(ICACHE_MEM_PORTS, L1_MEM_PORTS);
+
+  // connect l1 caches to outgoing memory interfaces
+  for (uint32_t i = 0; i < L1_MEM_PORTS; ++i) {
+    snprintf(sname, 100, "%s-l1_arb%d", this->name().c_str(), i);
+    auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2 * overlap, overlap);
+
+    if (i < overlap) {
+      icaches_->MemReqPorts.at(i).bind(&l1_arb->ReqIn.at(i));
+      l1_arb->RspIn.at(i).bind(&icaches_->MemRspPorts.at(i));
+
+      dcaches_->MemReqPorts.at(i).bind(&l1_arb->ReqIn.at(overlap + i));
+      l1_arb->RspIn.at(overlap + i).bind(&dcaches_->MemRspPorts.at(i));
+
+      l1_arb->ReqOut.at(i).bind(&this->mem_req_ports.at(i));
+      this->mem_rsp_ports.at(i).bind(&l1_arb->RspOut.at(i));
+    } else {
+      if (L1_MEM_PORTS > ICACHE_MEM_PORTS) {
+        // if more dcache ports
+        dcaches_->MemReqPorts.at(i).bind(&this->mem_req_ports.at(i));
+        this->mem_rsp_ports.at(i).bind(&dcaches_->MemRspPorts.at(i));
+      } else {
+        // if more icache ports
+        icaches_->MemReqPorts.at(i).bind(&this->mem_req_ports.at(i));
+        this->mem_rsp_ports.at(i).bind(&icaches_->MemRspPorts.at(i));
+      }
+    }
+  }
 
   // create cores
-
   for (uint32_t i = 0; i < cores_per_socket; ++i) {
     uint32_t core_id = socket_id * cores_per_socket + i;
     cores_.at(i) = Core::Create(core_id, this, arch, dcrs);
+  }
 
+  // connect cores to caches
+  for (uint32_t i = 0; i < cores_per_socket; ++i) {
     cores_.at(i)->icache_req_ports.at(0).bind(&icaches_->CoreReqPorts.at(i).at(0));
     icaches_->CoreRspPorts.at(i).at(0).bind(&cores_.at(i)->icache_rsp_ports.at(0));
 
@@ -109,8 +137,18 @@ void Socket::attach_ram(RAM* ram) {
 
 #ifdef VM_ENABLE
 void Socket::set_satp(uint64_t satp) {
+  std::cout << "[SOCKET] " << this->name() << " set_satp CALLED: satp=0x" << std::hex << satp << std::dec << std::endl;
+  // Propagate SATP to cores (for data modeling)
   for (auto core : cores_) {
     core->set_satp(satp);
+  }
+
+  // Propagate SATP to cache clusters (for performance modeling)
+  if (icaches_) {
+    icaches_->set_satp(satp);
+  }
+  if (dcaches_) {
+    dcaches_->set_satp(satp);
   }
 }
 #endif
@@ -141,7 +179,27 @@ void Socket::resume(uint32_t core_index) {
 
 Socket::PerfStats Socket::perf_stats() const {
   PerfStats perf_stats;
-  perf_stats.icache = icaches_->perf_stats();
-  perf_stats.dcache = dcaches_->perf_stats();
+  perf_stats.icache = icaches_->perf_stats().caches;
+  perf_stats.dcache = dcaches_->perf_stats().caches;
+  #ifdef VM_ENABLE
+  // Aggregate TLB and PTW stats from both I-cache and D-cache clusters
+  auto icache_cluster_perf = icaches_->perf_stats();
+  auto dcache_cluster_perf = dcaches_->perf_stats();
+  perf_stats.tlb = icache_cluster_perf.tlb;  // Start with I-cache TLB stats
+  perf_stats.tlb += dcache_cluster_perf.tlb; // Add D-cache TLB stats
+  perf_stats.ptw = icache_cluster_perf.ptw;  // Start with I-cache PTW stats
+  perf_stats.ptw += dcache_cluster_perf.ptw; // Add D-cache PTW stats
+  #endif
   return perf_stats;
+}
+
+void Socket::print_perf_stats() const {
+  if (icaches_) {
+    std::cout << "\n=== I-Cache Cluster Stats ===" << std::endl;
+    icaches_->print_perf_stats();
+  }
+  if (dcaches_) {
+    std::cout << "\n=== D-Cache Cluster Stats ===" << std::endl;
+    dcaches_->print_perf_stats();
+  }
 }

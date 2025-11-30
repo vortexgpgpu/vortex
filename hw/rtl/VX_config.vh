@@ -14,8 +14,6 @@
 `ifndef VX_CONFIG_VH
 `define VX_CONFIG_VH
 
-
-
 `ifndef MIN
 `define MIN(x, y)   (((x) < (y)) ? (x) : (y))
 `endif
@@ -87,6 +85,10 @@
 `endif
 `endif
 
+`ifndef VLEN
+`define VLEN 256
+`endif
+
 `ifndef NUM_CLUSTERS
 `define NUM_CLUSTERS 1
 `endif
@@ -109,6 +111,24 @@
 
 `ifndef SOCKET_SIZE
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
+`endif
+
+// Size of Tensor Core
+`ifndef TC_SIZE
+`define TC_SIZE 8
+`endif
+
+// Number of TCs per Warp
+`ifndef TC_NUM
+`define TC_NUM 4
+`endif
+
+`ifndef NUM_TCU_LANES
+`define NUM_TCU_LANES   `TC_NUM
+`endif
+
+`ifndef NUM_TCU_BLOCKS
+`define NUM_TCU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 `ifdef L2_ENABLE
@@ -152,6 +172,28 @@
 `define L3_LINE_SIZE `MEM_BLOCK_SIZE
 `endif
 
+// Platform memory parameters
+
+`ifndef PLATFORM_MEMORY_NUM_BANKS
+`define PLATFORM_MEMORY_NUM_BANKS 2
+`endif
+
+`ifndef PLATFORM_MEMORY_ADDR_WIDTH
+`ifdef XLEN_64
+    `define PLATFORM_MEMORY_ADDR_WIDTH 48
+`else
+    `define PLATFORM_MEMORY_ADDR_WIDTH 32
+`endif
+`endif
+
+`ifndef PLATFORM_MEMORY_DATA_SIZE
+`define PLATFORM_MEMORY_DATA_SIZE 64
+`endif
+
+`ifndef PLATFORM_MEMORY_INTERLEAVE
+`define PLATFORM_MEMORY_INTERLEAVE 1
+`endif
+
 `ifdef XLEN_64
 
 `ifndef STACK_BASE_ADDR
@@ -159,7 +201,7 @@
 `endif
 
 `ifndef STARTUP_ADDR
-`define STARTUP_ADDR    64'h180000000
+`define STARTUP_ADDR    64'h080000000
 `endif
 
 `ifndef USER_BASE_ADDR
@@ -171,8 +213,8 @@
 `endif
 
 `ifdef VM_ENABLE
-`ifndef PAGE_TABLE_BASE_ADDR  
-`define PAGE_TABLE_BASE_ADDR 64'h1F0000000
+`ifndef PAGE_TABLE_BASE_ADDR
+`define PAGE_TABLE_BASE_ADDR 64'h0F0000000
 `endif
 
 `endif
@@ -196,7 +238,7 @@
 `endif
 
 `ifdef VM_ENABLE
-`ifndef PAGE_TABLE_BASE_ADDR  
+`ifndef PAGE_TABLE_BASE_ADDR
 `define PAGE_TABLE_BASE_ADDR 32'hF0000000
 `endif
 
@@ -217,7 +259,7 @@
 `ifndef IO_COUT_ADDR
 `define IO_COUT_ADDR    `IO_BASE_ADDR
 `endif
-`define IO_COUT_SIZE    `MEM_BLOCK_SIZE
+`define IO_COUT_SIZE    64
 
 `ifndef IO_MPM_ADDR
 `define IO_MPM_ADDR     (`IO_COUT_ADDR + `IO_COUT_SIZE)
@@ -229,14 +271,16 @@
 `endif
 `define STACK_SIZE      (1 << `STACK_LOG2_SIZE)
 
-`define RESET_DELAY 8
+`define RESET_DELAY     8
 
 `ifndef STALL_TIMEOUT
 `define STALL_TIMEOUT   (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
 `ifndef SV_DPI
+`ifndef DPI_DISABLE
 `define DPI_DISABLE
+`endif
 `endif
 
 `ifndef FPU_FPNEW
@@ -279,13 +323,13 @@
         `ifndef VM_ADDR_MODE
         `define VM_ADDR_MODE SV32  //or BARE
         `endif
-        `ifndef PT_LEVEL 
+        `ifndef PT_LEVEL
         `define PT_LEVEL (2)
         `endif
         `ifndef PTE_SIZE
         `define PTE_SIZE (4)
         `endif
-        `ifndef NUM_PTE_ENTRY 
+        `ifndef NUM_PTE_ENTRY
         `define NUM_PTE_ENTRY (1024)
         `endif
         `ifndef PT_SIZE_LIMIT
@@ -295,13 +339,13 @@
         `ifndef VM_ADDR_MODE
         `define VM_ADDR_MODE SV39 //or BARE
         `endif
-        `ifndef PT_LEVEL 
+        `ifndef PT_LEVEL
         `define PT_LEVEL (3)
         `endif
         `ifndef PTE_SIZE
         `define PTE_SIZE (8)
         `endif
-        `ifndef NUM_PTE_ENTRY 
+        `ifndef NUM_PTE_ENTRY
         `define NUM_PTE_ENTRY (512)
         `endif
         `ifndef PT_SIZE_LIMIT
@@ -313,9 +357,43 @@
     `define PT_SIZE MEM_PAGE_SIZE
     `endif
 
+    // TLB Configuration (using CacheSim structure)
+    // Total entries = TLB_SIZE / TLB_LINE_SIZE = 65536 / 4096 = 16 entries
+    // Actual hardware storage: 16 entries × ~12 bytes/entry = ~192 bytes (not 64KB!)
+    // The 64KB represents logical coverage (16 pages × 4KB/page)
+
     `ifndef TLB_SIZE
-    `define TLB_SIZE (32)
+    `define TLB_SIZE (65536)  // 64KB logical coverage = 16 entries × 4KB pages
     `endif
+
+    `ifndef TLB_LINE_SIZE
+    `define TLB_LINE_SIZE (4096)  // CRITICAL: MUST equal PAGE_SIZE for proper VPN granularity!
+    `endif                         // Controls tag granularity - each TLB entry covers one full page
+
+    `ifndef TLB_WORD_SIZE
+    `define TLB_WORD_SIZE (8)
+    `endif
+
+    `ifndef TLB_NUM_WAYS
+    `define TLB_NUM_WAYS (4)
+    `endif
+
+    `ifndef TLB_NUM_BANKS
+    `define TLB_NUM_BANKS (2)
+    `endif
+
+    `ifndef TLB_MSHR_SIZE
+    `define TLB_MSHR_SIZE (8)
+    `endif
+
+    `ifndef NUM_PTWS
+    `define NUM_PTWS (1)  // Number of page table walkers (finalized: 1 for multithreaded implementation)
+    `endif                            // Can be increased to NUM_ICACHES for one PTW per TLB
+
+    `ifndef PTW_BUFFER_SIZE
+    `define PTW_BUFFER_SIZE (4)  // PTW request buffer size - finalized: 4 for multithreaded implementation
+    `endif                         // Controls how many walks can be in progress simultaneously
+                                  // Can be increased for higher concurrency, but 4 is sufficient for current workloads
 
 `endif
 
@@ -546,7 +624,16 @@
 
 // Number of Associative Ways
 `ifndef ICACHE_NUM_WAYS
-`define ICACHE_NUM_WAYS 1
+`define ICACHE_NUM_WAYS 4
+`endif
+
+// Replacement Policy
+`ifndef ICACHE_REPL_POLICY
+`define ICACHE_REPL_POLICY 1
+`endif
+
+`ifndef ICACHE_MEM_PORTS
+`define ICACHE_MEM_PORTS 1
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -575,7 +662,7 @@
 
 // Number of Banks
 `ifndef DCACHE_NUM_BANKS
-`define DCACHE_NUM_BANKS `MIN(`NUM_LSU_LANES, 4)
+`define DCACHE_NUM_BANKS `MIN(DCACHE_NUM_REQS, 16)
 `endif
 
 // Core Response Queue Size
@@ -595,17 +682,36 @@
 
 // Memory Response Queue Size
 `ifndef DCACHE_MRSQ_SIZE
-`define DCACHE_MRSQ_SIZE 0
+`define DCACHE_MRSQ_SIZE 4
 `endif
 
 // Number of Associative Ways
 `ifndef DCACHE_NUM_WAYS
-`define DCACHE_NUM_WAYS 1
+`define DCACHE_NUM_WAYS 4
 `endif
 
 // Enable Cache Writeback
 `ifndef DCACHE_WRITEBACK
 `define DCACHE_WRITEBACK 0
+`endif
+
+// Enable Cache Dirty bytes
+`ifndef DCACHE_DIRTYBYTES
+`define DCACHE_DIRTYBYTES `DCACHE_WRITEBACK
+`endif
+
+// Replacement Policy
+`ifndef DCACHE_REPL_POLICY
+`define DCACHE_REPL_POLICY 1
+`endif
+
+// Number of Memory Ports
+`ifndef L1_MEM_PORTS
+`ifdef L1_DISABLE
+`define L1_MEM_PORTS `MIN(DCACHE_NUM_REQS, `PLATFORM_MEMORY_NUM_BANKS)
+`else
+`define L1_MEM_PORTS `MIN(`DCACHE_NUM_BANKS, `PLATFORM_MEMORY_NUM_BANKS)
+`endif
 `endif
 
 // LMEM Configurable Knobs ////////////////////////////////////////////////////
@@ -630,16 +736,12 @@
 
 // Cache Size
 `ifndef L2_CACHE_SIZE
-`ifdef ALTERA_S10
-`define L2_CACHE_SIZE 2097152
-`else
 `define L2_CACHE_SIZE 1048576
-`endif
 `endif
 
 // Number of Banks
 `ifndef L2_NUM_BANKS
-`define L2_NUM_BANKS `MIN(4, `NUM_SOCKETS)
+`define L2_NUM_BANKS `MIN(L2_NUM_REQS, 16)
 `endif
 
 // Core Response Queue Size
@@ -659,12 +761,12 @@
 
 // Memory Response Queue Size
 `ifndef L2_MRSQ_SIZE
-`define L2_MRSQ_SIZE 0
+`define L2_MRSQ_SIZE 4
 `endif
 
 // Number of Associative Ways
 `ifndef L2_NUM_WAYS
-`define L2_NUM_WAYS 2
+`define L2_NUM_WAYS 8
 `endif
 
 // Enable Cache Writeback
@@ -672,20 +774,35 @@
 `define L2_WRITEBACK 0
 `endif
 
+// Enable Cache Dirty bytes
+`ifndef L2_DIRTYBYTES
+`define L2_DIRTYBYTES `L2_WRITEBACK
+`endif
+
+// Replacement Policy
+`ifndef L2_REPL_POLICY
+`define L2_REPL_POLICY 1
+`endif
+
+// Number of Memory Ports
+`ifndef L2_MEM_PORTS
+`ifdef L2_ENABLE
+`define L2_MEM_PORTS `MIN(`L2_NUM_BANKS, `PLATFORM_MEMORY_NUM_BANKS)
+`else
+`define L2_MEM_PORTS `MIN(L2_NUM_REQS, `PLATFORM_MEMORY_NUM_BANKS)
+`endif
+`endif
+
 // L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Cache Size
 `ifndef L3_CACHE_SIZE
-`ifdef ALTERA_S10
 `define L3_CACHE_SIZE 2097152
-`else
-`define L3_CACHE_SIZE 1048576
-`endif
 `endif
 
 // Number of Banks
 `ifndef L3_NUM_BANKS
-`define L3_NUM_BANKS `MIN(8, `NUM_CLUSTERS)
+`define L3_NUM_BANKS `MIN(L3_NUM_REQS, 16)
 `endif
 
 // Core Response Queue Size
@@ -705,12 +822,12 @@
 
 // Memory Response Queue Size
 `ifndef L3_MRSQ_SIZE
-`define L3_MRSQ_SIZE 0
+`define L3_MRSQ_SIZE 4
 `endif
 
 // Number of Associative Ways
 `ifndef L3_NUM_WAYS
-`define L3_NUM_WAYS 4
+`define L3_NUM_WAYS 8
 `endif
 
 // Enable Cache Writeback
@@ -718,13 +835,23 @@
 `define L3_WRITEBACK 0
 `endif
 
-`ifndef MEMORY_BANKS
-`define MEMORY_BANKS 8
+// Enable Cache Dirty bytes
+`ifndef L3_DIRTYBYTES
+`define L3_DIRTYBYTES `L3_WRITEBACK
 `endif
 
-// Number of Memory Ports from LLC
-`ifndef NUM_MEM_PORTS
-`define NUM_MEM_PORTS `MIN(`MEMORY_BANKS, `L3_NUM_BANKS)
+// Replacement Policy
+`ifndef L3_REPL_POLICY
+`define L3_REPL_POLICY 1
+`endif
+
+// Number of Memory Ports
+`ifndef L3_MEM_PORTS
+`ifdef L3_ENABLE
+`define L3_MEM_PORTS `MIN(`L3_NUM_BANKS, `PLATFORM_MEMORY_NUM_BANKS)
+`else
+`define L3_MEM_PORTS `MIN(L3_NUM_REQS, `PLATFORM_MEMORY_NUM_BANKS)
+`endif
 `endif
 
 // ISA Extensions /////////////////////////////////////////////////////////////
@@ -759,6 +886,12 @@
     `define EXT_M_ENABLED   0
 `endif
 
+`ifdef EXT_V_ENABLE
+    `define EXT_V_ENABLED   1
+`else
+    `define EXT_V_ENABLED   0
+`endif
+
 `ifdef EXT_ZICOND_ENABLE
     `define EXT_ZICOND_ENABLED 1
 `else
@@ -775,7 +908,7 @@
 `define ISA_STD_N           13
 `define ISA_STD_Q           16
 `define ISA_STD_S           18
-`define ISA_STD_U           20
+`define ISA_STD_V           21
 
 `define ISA_EXT_ICACHE      0
 `define ISA_EXT_DCACHE      1
@@ -812,7 +945,7 @@
                 | (0 << 18) /* S - Supervisor mode implemented */ \
                 | (0 << 19) /* T - Tentatively reserved for Transactional Memory extension */ \
                 | (1 << 20) /* U - User mode implemented */ \
-                | (0 << 21) /* V - Tentatively reserved for Vector extension */ \
+                | (`EXT_V_ENABLED << 21) /* V - Tentatively reserved for Vector extension */ \
                 | (0 << 22) /* W - Reserved */ \
                 | (1 << 23) /* X - Non-standard extensions present */ \
                 | (0 << 24) /* Y - Reserved */ \

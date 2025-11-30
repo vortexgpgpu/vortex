@@ -141,7 +141,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] + b[i];
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -171,7 +171,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] * b[i];
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -201,7 +201,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] / b[i];
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -233,7 +233,7 @@ public:
       auto y = a[i] * b[i];
       auto ref = x + y;
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -263,7 +263,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] + b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -293,7 +293,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] - b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -323,7 +323,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] * b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -353,7 +353,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] * b[i] + b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -383,7 +383,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] * b[i] - b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -413,7 +413,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = -a[i] * b[i] - b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -443,7 +443,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = -a[i] * b[i] + b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -475,7 +475,7 @@ public:
       auto y =  a[i] * b[i] + b[i];
       auto ref = x + y;
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -505,7 +505,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = a[i] / b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -537,7 +537,7 @@ public:
       auto y = b[i] / a[i];
       auto ref = x + y;
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -568,7 +568,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = sqrt(a[i] * b[i]);
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -600,7 +600,7 @@ public:
       auto x = a[i] + b[i];
       auto ref = (int32_t)x;
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -632,7 +632,7 @@ public:
       auto x = a[i] + b[i];
       auto ref = (uint32_t)x;
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -663,7 +663,7 @@ public:
       auto x = a[i] + b[i];
       auto ref = (float)x;
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -694,7 +694,7 @@ public:
       auto x = a[i] + b[i];
       auto ref = (float)x;
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -724,7 +724,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = fmin(fmax(1.0f, a[i]), b[i]);
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -754,7 +754,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = std::min(std::max(1, a[i]), b[i]);
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -787,7 +787,7 @@ public:
         ref = sinf(ref);
       }
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -820,7 +820,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       uint32_t ref = a[i] + 1;
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected=" << std::hex << ref << ", actual=" << c[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << std::hex << ref << ", actual=" << c[i] << std::endl;
         ++errors;
       }
     }
@@ -857,7 +857,7 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       uint32_t ref = a[i] + 1;
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected=" << std::hex << ref << ", actual=" << c[i] << std::endl;
+        std::cout << "error at result #" << std::dec << i << std::hex << ": expected=" << std::hex << ref << ", actual=" << c[i] << std::endl;
         ++errors;
       }
     }

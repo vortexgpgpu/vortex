@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -13,7 +13,7 @@
 
 `include "VX_platform.vh"
 
-// Iterative integer multiplier 
+// Iterative integer multiplier
 // An adaptation of ZipCPU algorithm for a multi-lane elastic architecture.
 // https://zipcpu.com/zipcpu/2021/07/03/slowmpy.html
 
@@ -65,7 +65,7 @@ module VX_serial_mul #(
         end
     end
 
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < LANES; ++i) begin : g_mul
         wire [X_WIDTH-1:0] axb = b[i][0] ? a[i] : '0;
 
         always @(posedge clk) begin
@@ -73,12 +73,12 @@ module VX_serial_mul #(
                 if (SIGNED) begin
                     a[i] <= X_WIDTH'($signed(dataa[i]));
                     b[i] <= Y_WIDTH'($signed(datab[i]));
-                end else begin			
+                end else begin
                     a[i] <= dataa[i];
                     b[i] <= datab[i];
                 end
                 p[i] <= 0;
-            end else if (busy_r) begin			
+            end else if (busy_r) begin
                 b[i] <= (b[i] >> 1);
                 p[i][Y_WIDTH-2:0] <= p[i][Y_WIDTH-1:1];
                 if (SIGNED) begin
@@ -93,9 +93,9 @@ module VX_serial_mul #(
             end
         end
 
-        if (SIGNED) begin
+        if (SIGNED) begin : g_signed
             assign result[i] = R_WIDTH'(p[i][P_WIDTH-1:0] + {1'b1, {(X_WIDTH-2){1'b0}}, 1'b1, {(Y_WIDTH){1'b0}}});
-        end else begin
+        end else begin : g_unsigned
             assign result[i] = R_WIDTH'(p[i]);
         end
     end

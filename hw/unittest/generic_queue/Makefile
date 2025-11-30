@@ -21,4 +21,6 @@ RTL_INCLUDE := -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
 
 TOP := VX_fifo_queue
 
+PARAMS := -GDATAW=32 -GDEPTH=8
+
 include ../common.mk

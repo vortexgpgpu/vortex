@@ -47,37 +47,12 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::FMSUB,   InstType::R4},
   {Opcode::FMNMADD, InstType::R4},
   {Opcode::FMNMSUB, InstType::R4},
+  {Opcode::VSET,    InstType::V},
   {Opcode::EXT1,    InstType::R},
   {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
   {Opcode::I_W,     InstType::I},
-};
-
-enum Constants {
-  width_opcode= 7,
-  width_reg   = 5,
-  width_func2 = 2,
-  width_func3 = 3,
-  width_func7 = 7,
-  width_i_imm = 12,
-  width_j_imm = 20,
-
-  shift_opcode= 0,
-  shift_rd    = width_opcode,
-  shift_func3 = shift_rd + width_reg,
-  shift_rs1   = shift_func3 + width_func3,
-  shift_rs2   = shift_rs1 + width_reg,
-  shift_func2 = shift_rs2 + width_reg,
-  shift_func7 = shift_rs2 + width_reg,
-  shift_rs3   = shift_func7 + width_func2,
-
-  mask_opcode = (1 << width_opcode) - 1,
-  mask_reg    = (1 << width_reg)   - 1,
-  mask_func2  = (1 << width_func2) - 1,
-  mask_func3  = (1 << width_func3) - 1,
-  mask_func7  = (1 << width_func7) - 1,
-  mask_i_imm  = (1 << width_i_imm) - 1,
-  mask_j_imm  = (1 << width_j_imm) - 1,
+  {Opcode::TCU,     InstType::I},
 };
 
 static const char* op_string(const Instr &instr) {
@@ -86,7 +61,7 @@ static const char* op_string(const Instr &instr) {
   auto func3  = instr.getFunc3();
   auto func7  = instr.getFunc7();
   auto rd     = instr.getRDest();
-  auto rs2    = instr.getRSrc(1);
+  auto rs1    = instr.getRSrc(1);
   auto imm    = instr.getImm();
 
   switch (opcode) {
@@ -229,10 +204,14 @@ static const char* op_string(const Instr &instr) {
   case Opcode::FENCE: return "FENCE";
   case Opcode::FL:
     switch (func3) {
-    case 0x1: return "VL";
     case 0x2: return "FLW";
     case 0x3: return "FLD";
+    case 0x0: return "VL8";
+    case 0x5: return "VL16";
+    case 0x6: return "VL32";
+    case 0x7: return "VL64";
     default:
+      std::cout << "Could not decode float/vector load with func3: " << func3 << std::endl;
       std::abort();
     }
   case Opcode::FS:
@@ -240,7 +219,12 @@ static const char* op_string(const Instr &instr) {
     case 0x1: return "VS";
     case 0x2: return "FSW";
     case 0x3: return "FSD";
+    case 0x0: return "VS8";
+    case 0x5: return "VS16";
+    case 0x6: return "VS32";
+    case 0x7: return "VS64";
     default:
+      std::cout << "Could not decode float/vector store with func3: " << func3 << std::endl;
       std::abort();
     }
   case Opcode::AMO: {
@@ -343,7 +327,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x60:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.W.S";
       case 1: return "FCVT.WU.S";
       case 2: return "FCVT.L.S";
@@ -352,7 +336,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x61:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.W.D";
       case 1: return "FCVT.WU.D";
       case 2: return "FCVT.L.D";
@@ -361,7 +345,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x68:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.S.W";
       case 1: return "FCVT.S.WU";
       case 2: return "FCVT.S.L";
@@ -370,7 +354,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x69:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.D.W";
       case 1: return "FCVT.D.WU";
       case 2: return "FCVT.D.L";
@@ -389,13 +373,14 @@ static const char* op_string(const Instr &instr) {
   case Opcode::FMSUB:   return func2 ? "FMSUB.D" : "FMSUB.S";
   case Opcode::FMNMADD: return func2 ? "FNMADD.D" : "FNMADD.S";
   case Opcode::FMNMSUB: return func2 ? "FNMSUB.D" : "FNMSUB.S";
+  case Opcode::VSET:    return "VSET";
   case Opcode::EXT1:
     switch (func7) {
     case 0:
       switch (func3) {
       case 0: return "TMC";
       case 1: return "WSPAWN";
-      case 2: return rs2 ? "SPLIT.N" : "SPLIT";
+      case 2: return rs1 ? "SPLIT.N" : "SPLIT";
       case 3: return "JOIN";
       case 4: return "BAR";
       case 5: return rd ? "PRED.N" : "PRED";
@@ -405,10 +390,50 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
+
+  case Opcode::TCU:
+    switch(func3)
+    {
+      case 0: return "ML";     // Matrix Load
+      case 1: return "MS";     // Matrix Store
+      case 2: return "MATMUL"; // Matrix Multiply
+      default:
+        std::abort();
+    }
   default:
     std::abort();
   }
 }
+
+#ifdef EXT_V_ENABLE
+inline void print_vec_attr(std::ostream &os, const Instr &instr) {
+  uint32_t mask = instr.getVattrMask();
+  if (mask & vattr_vlswidth)
+    os << ", width:" << instr.getVlsWidth();
+  if (mask & vattr_vmop)
+    os << ", mop:" << instr.getVmop();
+  if (mask & vattr_vumop)
+    os << ", umop:" << instr.getVumop();
+  if (mask & vattr_vnf)
+    os << ", nf:" << instr.getVnf();
+  if (mask & vattr_vmask)
+    os << ", vmask:" << instr.getVmask();
+  if (mask & vattr_vs3)
+    os << ", vs3:" << instr.getVs3();
+  if (mask & vattr_zimm)
+    os << ", zimm:" << ((instr.hasZimm()) ? "true" : "false");
+  if (mask & vattr_vlmul)
+    os << ", lmul:" << instr.getVlmul();
+  if (mask & vattr_vsew)
+    os << ", sew:" << instr.getVsew();
+  if (mask & vattr_vta)
+    os << ", ta:" << instr.getVta();
+  if (mask & vattr_vma)
+    os << ", ma:" << instr.getVma();
+  if (mask & vattr_vediv)
+    os << ", ediv:" << instr.getVediv();
+}
+#endif
 
 namespace vortex {
 std::ostream &operator<<(std::ostream &os, const Instr &instr) {
@@ -430,6 +455,17 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getImm() << std::dec;
   }
+#ifdef EXT_V_ENABLE
+  if (instr.getOpcode() == Opcode::SYS && instr.getFunc3() >= 5) {
+    // CSRs with immediate values
+    if (sep++ != 0) { os << ", "; } else { os << " "; }
+    os << "0x" << std::hex << instr.getRSrc(0);
+  }
+  // Log vector-specific attributes
+  if (instr.getVattrMask() != 0) {
+    print_vec_attr(os, instr);
+  }
+#endif
   return os;
 }
 }
@@ -441,7 +477,9 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
 
   auto func2 = (code >> shift_func2) & mask_func2;
   auto func3 = (code >> shift_func3) & mask_func3;
+  auto func6 = (code >> shift_func6) & mask_func6;
   auto func7 = (code >> shift_func7) & mask_func7;
+  __unused(func6);
 
   auto rd  = (code >> shift_rd)  & mask_reg;
   auto rs1 = (code >> shift_rs1) & mask_reg;
@@ -455,11 +493,22 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   }
 
   auto iType = op_it->second;
+  if (op == Opcode::FL || op == Opcode::FS) {
+    if (func3 != 0x2 && func3 != 0x3) {
+      iType = InstType::V;
+    }
+  }
+
   switch (iType) {
   case InstType::R:
     switch (op) {
     case Opcode::FCI:
       switch (func7) {
+      case 0x20: // FCVT.S.D
+      case 0x21: // FCVT.D.S
+        instr->setDestReg(rd, RegType::Float);
+        instr->addSrcReg(rs1, RegType::Float);
+        break;
       case 0x2c: // FSQRT.S
       case 0x2d: // FSQRT.D
         instr->setDestReg(rd, RegType::Float);
@@ -543,6 +592,14 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
 
   case InstType::I: {
     switch (op) {
+    case Opcode::TCU: {
+      instr->setDestReg(rs1, RegType::Integer);
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setFunc3(func3);
+      instr->setFunc7(func7);
+      auto imm = code >> shift_rs2;
+      instr->setImm(sext(imm, width_i_imm));
+    } break;
     case Opcode::I:
     case Opcode::I_W:
     case Opcode::JALR:
@@ -636,14 +693,112 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     instr->setImm(sext(imm, width_j_imm+1));
   } break;
 
-  case InstType::R4:
+  case InstType::R4: {
     instr->setDestReg(rd, RegType::Float);
     instr->addSrcReg(rs1, RegType::Float);
     instr->addSrcReg(rs2, RegType::Float);
     instr->addSrcReg(rs3, RegType::Float);
     instr->setFunc2(func2);
     instr->setFunc3(func3);
+  } break;
+
+#ifdef EXT_V_ENABLE
+  case InstType::V:
+    switch (op) {
+    case Opcode::VSET: {
+      instr->setDestReg(rd, RegType::Integer);
+      instr->setFunc3(func3);
+      switch (func3) {
+        case 7: {
+          if (code >> (shift_vset - 1) == 0b10) { // vsetvl
+            instr->addSrcReg(rs1, RegType::Integer);
+            instr->addSrcReg(rs2, RegType::Integer);
+          } else {
+            auto zimm = (code >> shift_rs2) & mask_v_zimm;
+            instr->setZimm(true);
+            instr->setVlmul(zimm & mask_v_lmul);
+            instr->setVsew((zimm >> shift_v_sew) & mask_v_sew);
+            instr->setVta((zimm >> shift_v_ta) & mask_v_ta);
+            instr->setVma((zimm >> shift_v_ma) & mask_v_ma);
+            if ((code >> shift_vset)) { // vsetivli
+              instr->setImm(rs1);
+            } else { // vsetvli
+              instr->addSrcReg(rs1, RegType::Integer);
+            }
+          }
+        } break;
+        case 3: { // Vector - immediate arithmetic instructions
+          instr->setDestReg(rd, RegType::Vector);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setImm(rs1);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
+        default: { // Vector - vector/scalar arithmetic instructions
+          if (func3 == 1 && func6 == 16) {
+            instr->setDestReg(rd, RegType::Float);
+          } else if (func3 == 2 && func6 == 16) {
+            instr->setDestReg(rd, RegType::Integer);
+          } else {
+            instr->setDestReg(rd, RegType::Vector);
+          }
+          instr->addSrcReg(rs1, RegType::Vector);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        }
+      }
+    } break;
+    case Opcode::FL:
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setVmop((code >> shift_vmop) & 0b11);
+      switch (instr->getVmop()) {
+        case 0b00:
+          instr->setVumop(rs2);
+          break;
+        case 0b10:
+          instr->addSrcReg(rs2, RegType::Integer);
+          break;
+        case 0b01:
+        case 0b11:
+          instr->addSrcReg(rs2, RegType::Vector);
+          break;
+      }
+      instr->setVsew(func3 & 0x3);
+      instr->setDestReg(rd, RegType::Vector);
+      instr->setVlsWidth(func3);
+      instr->setVmask((code >> shift_func7) & 0x1);
+      instr->setVnf((code >> shift_vnf) & mask_func3);
+      break;
+
+    case Opcode::FS:
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setVmop((code >> shift_vmop) & 0b11);
+      switch (instr->getVmop()) {
+        case 0b00:
+          instr->setVumop(rs2);
+          break;
+        case 0b10:
+          instr->addSrcReg(rs2, RegType::Integer);
+          break;
+        case 0b01:
+        case 0b11:
+          instr->addSrcReg(rs2, RegType::Vector);
+          break;
+      }
+      instr->setVsew(func3 & 0x3);
+      instr->addSrcReg(rd, RegType::Vector);
+      instr->setVlsWidth(func3);
+      instr->setVmask((code >> shift_func7) & 0x1);
+      instr->setVmop((code >> shift_vmop) & 0b11);
+      instr->setVnf((code >> shift_vnf) & mask_func3);
+      break;
+
+    default:
+      std::abort();
+    }
     break;
+  #endif
 
   default:
     std::abort();
