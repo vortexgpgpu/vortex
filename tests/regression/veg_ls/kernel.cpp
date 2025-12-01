@@ -81,14 +81,14 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	
 	// ===== Test 4: TILE_LOAD_M - Load all 8 M-regs =====
 	// M-registers store metadata (sparsity patterns/masks)
-// 	vx_lm(0, (size_t)(src_m_ptr + 0 * M_TILE_SIZE), 0);
-// 	vx_lm(1, (size_t)(src_m_ptr + 1 * M_TILE_SIZE), 0);
-// 	vx_lm(2, (size_t)(src_m_ptr + 2 * M_TILE_SIZE), 0);
-// 	vx_lm(3, (size_t)(src_m_ptr + 3 * M_TILE_SIZE), 0);
-// 	vx_lm(4, (size_t)(src_m_ptr + 4 * M_TILE_SIZE), 0);
-// 	vx_lm(5, (size_t)(src_m_ptr + 5 * M_TILE_SIZE), 0);
-// 	vx_lm(6, (size_t)(src_m_ptr + 6 * M_TILE_SIZE), 0);
-// 	vx_lm(7, (size_t)(src_m_ptr + 7 * M_TILE_SIZE), 0);
+	vx_lm(0, (size_t)(src_m_ptr + 0 * M_TILE_SIZE), 0);
+	vx_lm(1, (size_t)(src_m_ptr + 1 * M_TILE_SIZE), 0);
+	vx_lm(2, (size_t)(src_m_ptr + 2 * M_TILE_SIZE), 0);
+	vx_lm(3, (size_t)(src_m_ptr + 3 * M_TILE_SIZE), 0);
+	vx_lm(4, (size_t)(src_m_ptr + 4 * M_TILE_SIZE), 0);
+	vx_lm(5, (size_t)(src_m_ptr + 5 * M_TILE_SIZE), 0);
+	vx_lm(6, (size_t)(src_m_ptr + 6 * M_TILE_SIZE), 0);
+	vx_lm(7, (size_t)(src_m_ptr + 7 * M_TILE_SIZE), 0);
 }
 
 int main() {
