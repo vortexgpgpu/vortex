@@ -87,10 +87,10 @@ sst_tests()
 
     cp sim/simx/libvortex.so $SST_ELEMENTS_HOME/lib/sst-elements-library/   # alternatively - $ sst --add-lib-path `pwd` myConfig.py
 
-    sst test_vortex_hello.py
-    sst test_vortex_fibonacci.py
-    sst test_vortex_vecadd.py
-    sst test_vortex.py
+    sst ci/sst_test_vortex_hello.py
+    sst ci/sst_test_vortex_fibonacci.py
+    sst ci/sst_test_vortex_vecadd.py
+    sst ci/sst_test_vortex_conform.py
 
     echo "sst tests done!"
 }
