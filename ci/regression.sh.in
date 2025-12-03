@@ -522,7 +522,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--sst] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -580,6 +580,9 @@ while [ "$1" != "" ]; do
                 ;;
         --cupbop )
                 tests+=("cupbop")
+                ;;
+        --sst )
+                tests+=("sst")
                 ;;
         --all )
                 tests=()
