@@ -168,7 +168,7 @@ jobs:
             ./ci/regression.sh --isa
             ./ci/regression.sh --kernel
             ./ci/regression.sh --regression
-            ./ci/regression.sh --sst
+            ./ci/regression.sh --sst_tests
           else
             ./ci/regression.sh --${{ matrix.name }}
           fi
