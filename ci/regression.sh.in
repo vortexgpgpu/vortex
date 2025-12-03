@@ -78,6 +78,23 @@ kernel()
     echo "kernel tests done!"
 }
 
+sst()
+{
+    echo "begin sst tests..."
+
+    make -C sim/simx USE_SST=1
+    make -C tests/kernel
+
+    cp sim/simx/libvortex.so $SST_ELEMENTS_HOME/lib/sst-elements-library/   # alternatively - $ sst --add-lib-path `pwd` myConfig.py
+
+    sst test_vortex_hello.py
+    sst test_vortex_fibonacci.py
+    sst test_vortex_vecadd.py
+    sst test_vortex.py
+
+    echo "sst tests done!"
+}
+
 regression()
 {
     echo "begin regression tests..."

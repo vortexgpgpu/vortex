@@ -2,7 +2,7 @@ include ../common.mk
 
 DESTDIR ?= $(CURDIR)
 USE_SST ?= 0
-SST_PKG ?= SST-14.1 # default SST package name
+#SST_PKG ?= SST-14.1 # default SST package name
 
 OBJ_DIR = $(DESTDIR)/obj
 CONFIG_FILE = $(DESTDIR)/simx_config.stamp
@@ -32,8 +32,8 @@ SRCS += $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 ifeq ($(USE_SST), 1)
 VORTEX_SST_SRCS := $(SRC_DIR)/vortex_simulator.cpp
 VORTEX_SST_SRCS += $(SRC_DIR)/VortexGPGPU.cpp
-SST_CFLAGS := $(shell pkg-config --cflags $(SST_PKG))
-SST_LFLAGS := $(shell pkg-config --libs $(SST_PKG))
+SST_CFLAGS := $(shell sst-config --ELEMENT_CXXFLAGS)
+SST_LFLAGS := $(shell sst-config --ELEMENT_LDFLAGS)
 CXXFLAGS += $(SST_CFLAGS) -DUSE_SST
 endif
 

@@ -59,6 +59,7 @@ jobs:
           cd build
           ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --all
+          ci/sst_install.sh
 
       - name: Setup Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
@@ -167,6 +168,7 @@ jobs:
             ./ci/regression.sh --isa
             ./ci/regression.sh --kernel
             ./ci/regression.sh --regression
+            ./ci/regression.sh --sst
           else
             ./ci/regression.sh --${{ matrix.name }}
           fi
