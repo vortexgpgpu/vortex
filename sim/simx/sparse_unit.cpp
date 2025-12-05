@@ -357,23 +357,38 @@ public:
     // Metadata byte indicates which 2 positions are non-zero
     // We process 2 T-registers as one U-register
     
+    // U-register spans 2 T-registers, giving K dimension of 2*TILE_DIM = 32
+    // A is stored in compressed form: 16 values per row representing 32 logical positions
+    // Metadata indicates which 2 out of every 4 logical positions are stored
+    
     for (uint32_t i = 0; i < TILE_DIM; ++i) {
       for (uint32_t j = 0; j < TILE_DIM; ++j) {
         float sum = tile_dst[i][j];  // Accumulate
         
-        // Process sparse A row with dense B column
-        // Every 4 elements in A row, check metadata
-        for (uint32_t k_blk = 0; k_blk < TILE_DIM; k_blk += 4) {
-          uint8_t mask = meta_a[i][k_blk / 4];  // Get metadata for this 4-element block
+        // Iterate through compressed A values and map to logical K positions
+        uint32_t compressed_idx = 0;  // Index into compressed storage (tile_a)
+        
+        // Process 8 groups of 4 logical K positions (covering K=0..31)
+        for (uint32_t k_grp = 0; k_grp < 8; ++k_grp) {
+          uint8_t mask = meta_a[i][k_grp];  // Metadata for this 4-element group
+          uint32_t k_base = k_grp * 4;  // Base logical K position for this group
           
-          // Process only non-zero elements indicated by metadata
+          // Check each of the 4 positions in this group
           for (uint32_t offset = 0; offset < 4; ++offset) {
             if (mask & (1u << offset)) {
-              uint32_t k = k_blk + offset;
-              // Determine which T-register to access for B
-              uint32_t treg_idx = (k < TILE_DIM) ? src2_tregs[0] : src2_tregs[1];
-              uint32_t k_local = k % TILE_DIM;
-              sum += tile_a[i][k] * tile_reg_file_[treg_idx][k_local][j];
+              // This position is non-zero
+              uint32_t k_logical = k_base + offset;  // Logical K position (0-31)
+              
+              // Access compressed value from tile_a
+              float a_val = tile_a[i][compressed_idx];
+              
+              // Determine which T-register of B to access
+              uint32_t treg_idx = (k_logical < TILE_DIM) ? src2_tregs[0] : src2_tregs[1];
+              uint32_t k_local = k_logical % TILE_DIM;
+              
+              sum += a_val * tile_reg_file_[treg_idx][k_local][j];
+              
+              compressed_idx++;  // Move to next compressed value
             }
           }
         }
@@ -400,22 +415,38 @@ public:
     std::vector<uint32_t> src2_tregs = map_vreg_to_treg(src2_vreg);
     
     // For 1:4 sparsity, each 4-element block has 1 non-zero value
+    // V-register spans 4 T-registers, giving K dimension of 4*TILE_DIM = 64
+    // A is stored in compressed form: 16 values per row representing 64 logical positions
+    // Metadata indicates which 1 out of every 4 logical positions is stored
+    
     for (uint32_t i = 0; i < TILE_DIM; ++i) {
       for (uint32_t j = 0; j < TILE_DIM; ++j) {
         float sum = tile_dst[i][j];  // Accumulate
         
-        // Process sparse A row with dense B column
-        for (uint32_t k_blk = 0; k_blk < TILE_DIM; k_blk += 4) {
-          uint8_t mask = meta_a[i][k_blk / 4];  // Get metadata for this 4-element block
+        // Iterate through compressed A values and map to logical K positions
+        uint32_t compressed_idx = 0;  // Index into compressed storage (tile_a)
+        
+        // Process 16 groups of 4 logical K positions (covering K=0..63)
+        for (uint32_t k_grp = 0; k_grp < 16; ++k_grp) {
+          uint8_t mask = meta_a[i][k_grp];  // Metadata for this 4-element group
+          uint32_t k_base = k_grp * 4;  // Base logical K position for this group
           
-          // Process only non-zero elements indicated by metadata
+          // Check each of the 4 positions in this group
           for (uint32_t offset = 0; offset < 4; ++offset) {
             if (mask & (1u << offset)) {
-              uint32_t k = k_blk + offset;
-              // Determine which T-register to access for B
-              uint32_t treg_idx = src2_tregs[k / TILE_DIM];
-              uint32_t k_local = k % TILE_DIM;
-              sum += tile_a[i][k] * tile_reg_file_[treg_idx][k_local][j];
+              // This position is non-zero
+              uint32_t k_logical = k_base + offset;  // Logical K position (0-63)
+              
+              // Access compressed value from tile_a
+              float a_val = tile_a[i][compressed_idx];
+              
+              // Determine which T-register of B to access
+              uint32_t treg_idx = src2_tregs[k_logical / TILE_DIM];
+              uint32_t k_local = k_logical % TILE_DIM;
+              
+              sum += a_val * tile_reg_file_[treg_idx][k_local][j];
+              
+              compressed_idx++;  // Move to next compressed value
             }
           }
         }
