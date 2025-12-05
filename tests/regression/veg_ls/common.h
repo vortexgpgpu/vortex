@@ -5,17 +5,17 @@
 #define TYPE float
 #endif
 
-// T-reg: 2KB (16x32 4-byte elements)
-#define T_TILE_SIZE 2048
+// T-reg: 1KB (16x16 fp32 elements)
+#define T_TILE_SIZE 1024
 
-// U-reg: 4KB (2 x T-reg)
-#define U_TILE_SIZE 4096
+// U-reg: 2KB (2 x T-reg)
+#define U_TILE_SIZE 2048
 
-// V-reg: 8KB (4 x T-reg)
-#define V_TILE_SIZE 8192
+// V-reg: 4KB (4 x T-reg)
+#define V_TILE_SIZE 4096
 
-// M-reg: 256B (16x32 4-bit elements)
-#define M_TILE_SIZE 256
+// M-reg: 128B (16x16 4-bit elements, 2 per byte)
+#define M_TILE_SIZE 128
 
 // Number of tiles to test for each register type
 #define NUM_T_TILES 8  // Test all 8 T-regs

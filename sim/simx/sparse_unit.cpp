@@ -204,10 +204,10 @@ public:
     , core_(core)
     , arch_(arch)
     , perf_stats_()
-    , tile_reg_file_(8, std::vector<std::vector<typename vt::fp32::dtype>>(16, std::vector<typename vt::fp32::dtype>(32, 0.0f)))
-    , metadata_reg_file_(8, std::vector<std::vector<typename vt::uint4::dtype>>(16, std::vector<typename vt::uint4::dtype>(32, 0)))
+    , tile_reg_file_(8, std::vector<std::vector<typename vt::fp32::dtype>>(16, std::vector<typename vt::fp32::dtype>(16, 0.0f)))
+    , metadata_reg_file_(8, std::vector<std::vector<typename vt::uint4::dtype>>(16, std::vector<typename vt::uint4::dtype>(16, 0)))
   {
-    // Register file initialized: 8 registers, each 16x32 fp32 elements
+    // Register file initialized: 8 registers, each 16x16 fp32 elements
   }
 
   ~Impl() {
@@ -296,33 +296,177 @@ public:
             ExeTraceData* trace_data) {
     __unused(wid);
     __unused(trace_data);
+    __unused(fmt_s);
+    __unused(fmt_d);
+    __unused(step_m);
+    __unused(step_n);
+    __unused(rs1_data);
+    __unused(rs2_data);
+    __unused(rs3_data);
+    __unused(rd_data);
 
-    auto fedp = select_FEDP(fmt_s, fmt_d);
+    // This function is now a placeholder for TILE_GEMM operations
+    // The actual implementation is handled via tile registers directly
+    // See tile_gemm_t, tile_gemm_u, tile_gemm_v, tile_gemm_r functions
+  }
 
-    uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
-    uint32_t b_off = (step_n % cfg::b_sub_blocks) * cfg::b_block_size;
+  // TILE_GEMM_T: Dense tile × Dense tile = Tile (T × T → T)
+  // Tiles are 16×16, so this computes: C[16×16] = A[16×16] × B[16×16]
+  void tile_gemm_t(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_treg) {
+    assert(dst_treg < tile_reg_file_.size() && "Destination tile register out of bounds");
+    assert(src1_treg < tile_reg_file_.size() && "Source1 tile register out of bounds");
+    assert(src2_treg < tile_reg_file_.size() && "Source2 tile register out of bounds");
 
-    for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      for (uint32_t j = 0; j < cfg::tcN; ++j) {
-        auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
-        auto b_col = rs2_data.data() + b_off + j * cfg::tcK;
-        auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
-        auto d_val = fedp(a_row, b_col, c_val);
-        rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
+    constexpr uint32_t TILE_DIM = 16;
+    
+    auto& tile_dst = tile_reg_file_[dst_treg];
+    const auto& tile_a = tile_reg_file_[src1_treg];
+    const auto& tile_b = tile_reg_file_[src2_treg];
 
-        DTH(3, "FEDP: wid=" << wid << ", i=" << i << ", j=" << j << ", m=" << step_m << ", n=" << step_n << ", a_row={" << std::hex);
-        for (uint32_t q = 0; q < cfg::tcK; ++q) {
-          if (q) DTN(3, ", ");
-          DTN(3, "0x" << a_row[q].u32);
+    // Matrix multiplication: C[16×16] = A[16×16] × B[16×16]
+    // C += A × B (accumulate to existing value)
+    for (uint32_t i = 0; i < TILE_DIM; ++i) {
+      for (uint32_t j = 0; j < TILE_DIM; ++j) {
+        float sum = tile_dst[i][j];  // Accumulate to existing value
+        for (uint32_t k = 0; k < TILE_DIM; ++k) {
+          sum += tile_a[i][k] * tile_b[k][j];
         }
-        DTN(3, "}, b_col={");
-        for (uint32_t q = 0; q < cfg::tcK; ++q) {
-          if (q) DTN(3, ", ");
-          DTN(3, "0x" << b_col[q].u32);
-        }
-        DTN(3, "}, c_val=0x" << c_val << ", d_val=0x" << d_val << std::dec << std::endl);
+        tile_dst[i][j] = sum;
       }
     }
+
+    DP(2, "TILE_GEMM_T: dst_t" << dst_treg << " = t" << src1_treg << " × t" << src2_treg);
+  }
+
+  // TILE_GEMM_U: Sparse tile (2:4) × Dense tile = Tile (T × U → T)
+  void tile_gemm_u(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_ureg, uint32_t meta_reg) {
+    assert(dst_treg < tile_reg_file_.size() && "Destination tile register out of bounds");
+    assert(src1_treg < tile_reg_file_.size() && "Source1 tile register out of bounds");
+    assert(meta_reg < metadata_reg_file_.size() && "Metadata register out of bounds");
+
+    constexpr uint32_t TILE_DIM = 16;
+    
+    auto& tile_dst = tile_reg_file_[dst_treg];
+    const auto& tile_a = tile_reg_file_[src1_treg];  // Sparse tile
+    const auto& meta_a = metadata_reg_file_[meta_reg];  // Metadata for sparse tile
+    
+    // U-register maps to 2 T-registers
+    std::vector<uint32_t> src2_tregs = map_ureg_to_treg(src2_ureg);
+    
+    // For 2:4 sparsity, each 4-element block has 2 non-zero values
+    // Metadata byte indicates which 2 positions are non-zero
+    // We process 2 T-registers as one U-register
+    
+    for (uint32_t i = 0; i < TILE_DIM; ++i) {
+      for (uint32_t j = 0; j < TILE_DIM; ++j) {
+        float sum = tile_dst[i][j];  // Accumulate
+        
+        // Process sparse A row with dense B column
+        // Every 4 elements in A row, check metadata
+        for (uint32_t k_blk = 0; k_blk < TILE_DIM; k_blk += 4) {
+          uint8_t mask = meta_a[i][k_blk / 4];  // Get metadata for this 4-element block
+          
+          // Process only non-zero elements indicated by metadata
+          for (uint32_t offset = 0; offset < 4; ++offset) {
+            if (mask & (1u << offset)) {
+              uint32_t k = k_blk + offset;
+              // Determine which T-register to access for B
+              uint32_t treg_idx = (k < TILE_DIM) ? src2_tregs[0] : src2_tregs[1];
+              uint32_t k_local = k % TILE_DIM;
+              sum += tile_a[i][k] * tile_reg_file_[treg_idx][k_local][j];
+            }
+          }
+        }
+        tile_dst[i][j] = sum;
+      }
+    }
+
+    DP(2, "TILE_GEMM_U: dst_t" << dst_treg << " = t" << src1_treg << "(sparse via m" << meta_reg << ") × u" << src2_ureg);
+  }
+
+  // TILE_GEMM_V: Sparse tile (1:4) × Dense tile = Tile (T × V → T)
+  void tile_gemm_v(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_vreg, uint32_t meta_reg) {
+    assert(dst_treg < tile_reg_file_.size() && "Destination tile register out of bounds");
+    assert(src1_treg < tile_reg_file_.size() && "Source1 tile register out of bounds");
+    assert(meta_reg < metadata_reg_file_.size() && "Metadata register out of bounds");
+
+    constexpr uint32_t TILE_DIM = 16;
+    
+    auto& tile_dst = tile_reg_file_[dst_treg];
+    const auto& tile_a = tile_reg_file_[src1_treg];  // Sparse tile
+    const auto& meta_a = metadata_reg_file_[meta_reg];  // Metadata for sparse tile
+    
+    // V-register maps to 4 T-registers
+    std::vector<uint32_t> src2_tregs = map_vreg_to_treg(src2_vreg);
+    
+    // For 1:4 sparsity, each 4-element block has 1 non-zero value
+    for (uint32_t i = 0; i < TILE_DIM; ++i) {
+      for (uint32_t j = 0; j < TILE_DIM; ++j) {
+        float sum = tile_dst[i][j];  // Accumulate
+        
+        // Process sparse A row with dense B column
+        for (uint32_t k_blk = 0; k_blk < TILE_DIM; k_blk += 4) {
+          uint8_t mask = meta_a[i][k_blk / 4];  // Get metadata for this 4-element block
+          
+          // Process only non-zero elements indicated by metadata
+          for (uint32_t offset = 0; offset < 4; ++offset) {
+            if (mask & (1u << offset)) {
+              uint32_t k = k_blk + offset;
+              // Determine which T-register to access for B
+              uint32_t treg_idx = src2_tregs[k / TILE_DIM];
+              uint32_t k_local = k % TILE_DIM;
+              sum += tile_a[i][k] * tile_reg_file_[treg_idx][k_local][j];
+            }
+          }
+        }
+        tile_dst[i][j] = sum;
+      }
+    }
+
+    DP(2, "TILE_GEMM_V: dst_t" << dst_treg << " = t" << src1_treg << "(sparse via m" << meta_reg << ") × v" << src2_vreg);
+  }
+
+  // TILE_GEMM_R: Row-wise sparse tile × Dense tile = Tile (T × U → U)
+  void tile_gemm_r(uint32_t dst_ureg, uint32_t src1_treg, uint32_t src2_ureg, uint32_t meta_reg) {
+    assert(src1_treg < tile_reg_file_.size() && "Source1 tile register out of bounds");
+    assert(meta_reg < metadata_reg_file_.size() && "Metadata register out of bounds");
+
+    constexpr uint32_t TILE_DIM = 16;
+    
+    const auto& tile_a = tile_reg_file_[src1_treg];  // Sparse tile
+    const auto& meta_a = metadata_reg_file_[meta_reg];  // Metadata for sparse tile
+    
+    // Both dst and src2 are U-registers (map to 2 T-registers each)
+    std::vector<uint32_t> dst_tregs = map_ureg_to_treg(dst_ureg);
+    std::vector<uint32_t> src2_tregs = map_ureg_to_treg(src2_ureg);
+    
+    // Row-wise sparsity: metadata can vary per row
+    for (uint32_t i = 0; i < TILE_DIM; ++i) {
+      for (uint32_t j = 0; j < TILE_DIM; ++j) {
+        // Determine which destination T-register
+        uint32_t dst_treg_idx = dst_tregs[j / TILE_DIM];
+        uint32_t j_local = j % TILE_DIM;
+        
+        float sum = tile_reg_file_[dst_treg_idx][i][j_local];  // Accumulate
+        
+        // Process sparse A row with dense B column
+        for (uint32_t k_blk = 0; k_blk < TILE_DIM; k_blk += 4) {
+          uint8_t mask = meta_a[i][k_blk / 4];  // Row-wise metadata
+          
+          for (uint32_t offset = 0; offset < 4; ++offset) {
+            if (mask & (1u << offset)) {
+              uint32_t k = k_blk + offset;
+              uint32_t src2_treg_idx = src2_tregs[k / TILE_DIM];
+              uint32_t k_local = k % TILE_DIM;
+              sum += tile_a[i][k] * tile_reg_file_[src2_treg_idx][k_local][j];
+            }
+          }
+        }
+        tile_reg_file_[dst_treg_idx][i][j_local] = sum;
+      }
+    }
+
+    DP(2, "TILE_GEMM_R: dst_u" << dst_ureg << " = t" << src1_treg << "(sparse via m" << meta_reg << ") × u" << src2_ureg);
   }
 
   // Map ureg index to tile register indices
@@ -363,8 +507,7 @@ public:
     // Calculate base address: rs1_data + immediate offset
     uint64_t base_addr = rs1_data.at(tid).i + lsuArgs.offset;
 
-    constexpr uint32_t TILE_ROWS = 16;
-    constexpr uint32_t TILE_COLS = 32;
+    constexpr uint32_t TILE_DIM = 16;
 
     switch (lsu_type) {
     case VegetaLsuType::TILE_LOAD_T: {
@@ -375,10 +518,10 @@ public:
       constexpr uint32_t ELEMENT_SIZE = sizeof(typename vt::fp32::dtype); // 4 bytes for fp32
       base_addr &= 0xFFFFFFFC; // Align to word boundary for fp32 loads
 
-      // Load tile from memory: 16 rows x 32 columns = 512 fp32 elements = 2048 bytes
-      for (uint32_t row = 0; row < TILE_ROWS; ++row) {
-        for (uint32_t col = 0; col < TILE_COLS; ++col) {
-          uint64_t mem_addr = base_addr + (row * TILE_COLS + col) * ELEMENT_SIZE;
+      // Load tile from memory: 16 rows x 16 columns = 256 fp32 elements = 1024 bytes
+      for (uint32_t row = 0; row < TILE_DIM; ++row) {
+        for (uint32_t col = 0; col < TILE_DIM; ++col) {
+          uint64_t mem_addr = base_addr + (row * TILE_DIM + col) * ELEMENT_SIZE;
           uint32_t mem_data = 0;
           core_->dcache_read(&mem_data, mem_addr, ELEMENT_SIZE);
           trace_data->mem_addrs.at(tid).push_back({mem_addr, ELEMENT_SIZE});
@@ -401,14 +544,15 @@ public:
       base_addr &= 0xFFFFFFFC; // Align to word boundary for fp32 loads
       constexpr uint32_t ELEMENT_SIZE = sizeof(typename vt::fp32::dtype);
       
+      uint64_t current_addr = base_addr;
       for (uint32_t treg_idx : target_tregs) {
         assert(treg_idx < tile_reg_file_.size() && "Tile register index out of bounds");
         auto &tile_reg = tile_reg_file_[treg_idx];
         
-        // Load tile from memory: 16 rows x 32 columns = 512 fp32 elements = 2048 bytes
-        for (uint32_t row = 0; row < TILE_ROWS; ++row) {
-          for (uint32_t col = 0; col < TILE_COLS; ++col) {
-            uint64_t mem_addr = base_addr + (row * TILE_COLS + col) * ELEMENT_SIZE;
+        // Load tile from memory: 16 rows x 16 columns = 256 fp32 elements = 1024 bytes
+        for (uint32_t row = 0; row < TILE_DIM; ++row) {
+          for (uint32_t col = 0; col < TILE_DIM; ++col) {
+            uint64_t mem_addr = current_addr + (row * TILE_DIM + col) * ELEMENT_SIZE;
             uint32_t mem_data = 0;
             core_->dcache_read(&mem_data, mem_addr, ELEMENT_SIZE);
             trace_data->mem_addrs.at(tid).push_back({mem_addr, ELEMENT_SIZE});
@@ -418,6 +562,7 @@ public:
             tile_reg[row][col] = value;
           }
         }
+        current_addr += TILE_DIM * TILE_DIM * ELEMENT_SIZE; // Move to next tile (1KB)
       }
       
       DP(2, "TILE_LOAD_U: wid=" << wid << ", tid=" << tid 
@@ -432,14 +577,15 @@ public:
       base_addr &= 0xFFFFFFFC; // Align to word boundary for fp32 loads
       constexpr uint32_t ELEMENT_SIZE = sizeof(typename vt::fp32::dtype);
       
+      uint64_t current_addr = base_addr;
       for (uint32_t treg_idx : target_tregs) {
         assert(treg_idx < tile_reg_file_.size() && "Tile register index out of bounds");
         auto &tile_reg = tile_reg_file_[treg_idx];
         
-        // Load tile from memory: 16 rows x 32 columns = 512 fp32 elements = 2048 bytes
-        for (uint32_t row = 0; row < TILE_ROWS; ++row) {
-          for (uint32_t col = 0; col < TILE_COLS; ++col) {
-            uint64_t mem_addr = base_addr + (row * TILE_COLS + col) * ELEMENT_SIZE;
+        // Load tile from memory: 16 rows x 16 columns = 256 fp32 elements = 1024 bytes
+        for (uint32_t row = 0; row < TILE_DIM; ++row) {
+          for (uint32_t col = 0; col < TILE_DIM; ++col) {
+            uint64_t mem_addr = current_addr + (row * TILE_DIM + col) * ELEMENT_SIZE;
             uint32_t mem_data = 0;
             core_->dcache_read(&mem_data, mem_addr, ELEMENT_SIZE);
             trace_data->mem_addrs.at(tid).push_back({mem_addr, ELEMENT_SIZE});
@@ -449,6 +595,7 @@ public:
             tile_reg[row][col] = value;
           }
         }
+        current_addr += TILE_DIM * TILE_DIM * ELEMENT_SIZE; // Move to next tile (1KB)
       }
       
       DP(2, "TILE_LOAD_V: wid=" << wid << ", tid=" << tid 
@@ -463,11 +610,11 @@ public:
       assert(meta_reg_idx < metadata_reg_file_.size() && "Metadata register index out of bounds");
       auto &metadata_reg = metadata_reg_file_[meta_reg_idx];
 
-      // Load metadata from memory: 16 rows x 32 columns = 512 uint4 elements = 256 bytes
+      // Load metadata from memory: 16 rows x 16 columns = 256 uint4 elements = 128 bytes
       // Each byte stores two uint4 values: upper nibble for col N, lower nibble for col N+1
-      for (uint32_t row = 0; row < TILE_ROWS; ++row) {
-        for (uint32_t col = 0; col < TILE_COLS; col += 2) {
-          uint64_t mem_addr = base_addr + (row * (TILE_COLS / 2) + col / 2);
+      for (uint32_t row = 0; row < TILE_DIM; ++row) {
+        for (uint32_t col = 0; col < TILE_DIM; col += 2) {
+          uint64_t mem_addr = base_addr + (row * (TILE_DIM / 2) + col / 2);
           uint8_t mem_data = 0;
           core_->dcache_read(&mem_data, mem_addr, 1);
           trace_data->mem_addrs.at(tid).push_back({mem_addr, 1});
@@ -503,14 +650,13 @@ public:
 
     assert(vs3 < tile_reg_file_.size() && "Tile register index out of bounds");
     auto &tile_reg = tile_reg_file_[vs3];
-    constexpr uint32_t TILE_ROWS = 16;
-    constexpr uint32_t TILE_COLS = 32;
+    constexpr uint32_t TILE_DIM = 16;
     constexpr uint32_t ELEMENT_SIZE = sizeof(typename vt::fp32::dtype); // 4 bytes for fp32
 
-    // Store tile to memory: 16 rows x 32 columns = 512 fp32 elements = 2048 bytes
-    for (uint32_t row = 0; row < TILE_ROWS; ++row) {
-      for (uint32_t col = 0; col < TILE_COLS; ++col) {
-        uint64_t mem_addr = base_addr + (row * TILE_COLS + col) * ELEMENT_SIZE;
+    // Store tile to memory: 16 rows x 16 columns = 256 fp32 elements = 1024 bytes
+    for (uint32_t row = 0; row < TILE_DIM; ++row) {
+      for (uint32_t col = 0; col < TILE_DIM; ++col) {
+        uint64_t mem_addr = base_addr + (row * TILE_DIM + col) * ELEMENT_SIZE;
         float value = tile_reg[row][col];
         uint32_t mem_data = 0;
         std::memcpy(&mem_data, &value, ELEMENT_SIZE);
@@ -603,8 +749,8 @@ private:
   Core*         core_;
   Arch          arch_;
   PerfStats     perf_stats_;
-  SparseRegFile_t tile_reg_file_;  // 8 registers, each 16x32 fp32 elements
-  std::vector<std::vector<std::vector<typename vt::uint4::dtype>>> metadata_reg_file_;  // 8 registers, each 16x32 uint4 elements
+  SparseRegFile_t tile_reg_file_;  // 8 registers, each 16x16 fp32 elements
+  std::vector<std::vector<std::vector<typename vt::uint4::dtype>>> metadata_reg_file_;  // 8 registers, each 16x16 uint4 elements
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -663,4 +809,20 @@ void SparseUnit::wmma(uint32_t wid,
                       std::vector<reg_data_t>& rd_data,
                       ExeTraceData* trace_data) {
   impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
+}
+
+void SparseUnit::tile_gemm_t(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_treg) {
+  impl_->tile_gemm_t(dst_treg, src1_treg, src2_treg);
+}
+
+void SparseUnit::tile_gemm_u(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_ureg, uint32_t meta_reg) {
+  impl_->tile_gemm_u(dst_treg, src1_treg, src2_ureg, meta_reg);
+}
+
+void SparseUnit::tile_gemm_v(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_vreg, uint32_t meta_reg) {
+  impl_->tile_gemm_v(dst_treg, src1_treg, src2_vreg, meta_reg);
+}
+
+void SparseUnit::tile_gemm_r(uint32_t dst_ureg, uint32_t src1_treg, uint32_t src2_ureg, uint32_t meta_reg) {
+  impl_->tile_gemm_r(dst_ureg, src1_treg, src2_ureg, meta_reg);
 }

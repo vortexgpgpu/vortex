@@ -1549,19 +1549,33 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
     trace->data = trace_data;
     assert(warp.tmask.count() == num_threads);
-    // For now, use default values for fmt_s, fmt_d, step_m, step_n
-    // These may need to be extracted from the instruction in the future
-    uint32_t fmt_s = 0;
-    uint32_t fmt_d = 0;
-    uint32_t step_m = 0;
-    uint32_t step_n = 0;
+    
+    // Extract tile register indices from instruction
+    uint32_t dst_reg = rdest.idx;
+    uint32_t src1_reg = instr.getSrcReg(0).idx;
+    uint32_t src2_reg = instr.getSrcReg(1).idx;
+    
     switch (tcu_type) {
     case VegetaTcuType::TILE_GEMM_T:
+      // Dense tile × Dense tile → Tile (T × T → T)
+      sparse_unit_->tile_gemm_t(dst_reg, src1_reg, src2_reg);
+      rd_write = false;  // Writes to tile registers, not scalar registers
+      break;
     case VegetaTcuType::TILE_GEMM_U:
+      // Sparse tile (2:4) × Dense tile → Tile (T × U → T)
+      // Metadata assumed to be in corresponding m-register (same index as src1)
+      sparse_unit_->tile_gemm_u(dst_reg, src1_reg, src2_reg, src1_reg);
+      rd_write = false;
+      break;
     case VegetaTcuType::TILE_GEMM_V:
+      // Sparse tile (1:4) × Dense tile → Tile (T × V → T)
+      sparse_unit_->tile_gemm_v(dst_reg, src1_reg, src2_reg, src1_reg);
+      rd_write = false;
+      break;
     case VegetaTcuType::TILE_GEMM_R:
-      sparse_unit_->wmma(wid, fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
-      rd_write = true;
+      // Row-wise sparse tile × Dense tile → Tile (T × U → U)
+      sparse_unit_->tile_gemm_r(dst_reg, src1_reg, src2_reg, src1_reg);
+      rd_write = false;
       break;
     default:
       std::abort();

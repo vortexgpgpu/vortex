@@ -79,6 +79,11 @@ public:
 					  std::vector<reg_data_t>& rd_data,
 					  ExeTraceData* trace_data);
 
+  void tile_gemm_t(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_treg);
+  void tile_gemm_u(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_ureg, uint32_t meta_reg);
+  void tile_gemm_v(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_vreg, uint32_t meta_reg);
+  void tile_gemm_r(uint32_t dst_ureg, uint32_t src1_treg, uint32_t src2_ureg, uint32_t meta_reg);
+
 	const PerfStats& perf_stats() const;
 
 private:
