@@ -42,6 +42,8 @@ echo 'export PATH='"$MPIHOME"'/bin:$PATH' >> ~/.bashrc
 echo 'export MPICC=mpicc' >> ~/.bashrc
 echo 'export MPICXX=mpicxx' >> ~/.bashrc
 
+rm -r $TOOLDIR/openmpi-4.1.6
+
 cd $TOOLDIR
 wget $SST_CORE_1510
 tar -xvzf sstcore-15.1.0.tar.gz
@@ -52,12 +54,14 @@ mkdir -p $TOOLDIR/sst-install/sst-core
 export SST_CORE_HOME=$TOOLDIR/sst-install/sst-core
 export SST_CORE_ROOT=$TOOLDIR/sst-core
 echo 'export SST_CORE_HOME='"$SST_CORE_HOME" >> ~/.bashrc
-echo 'export SST_CORE_ROOT='"$SST_CORE_ROOT" >> ~/.bashrc
+#echo 'export SST_CORE_ROOT='"$SST_CORE_ROOT" >> ~/.bashrc
 
 autoreconf -fi
 ./configure --prefix=$SST_CORE_HOME
 make -j$(nproc) all
 make install
+
+rm -r $SST_CORE_ROOT
 
 export PATH=$SST_CORE_HOME/bin:$PATH
 echo 'export PATH='"$SST_CORE_HOME"'/bin:$PATH' >> ~/.bashrc
@@ -72,11 +76,13 @@ mkdir -p $TOOLDIR/sst-install/sst-elements
 export SST_ELEMENTS_HOME=$TOOLDIR/sst-install/sst-elements
 export SST_ELEMENTS_ROOT=$TOOLDIR/sst-elements
 echo 'export SST_ELEMENTS_HOME='"$SST_ELEMENTS_HOME" >> ~/.bashrc
-echo 'export SST_ELEMENTS_ROOT='"$SST_ELEMENTS_ROOT" >> ~/.bashrc
+#echo 'export SST_ELEMENTS_ROOT='"$SST_ELEMENTS_ROOT" >> ~/.bashrc
 
 ./configure --prefix=$SST_ELEMENTS_HOME --with-sst-core=$SST_CORE_HOME
 make -j2 all
 make install
+
+rm -r $SST_ELEMENTS_ROOT
 
 export PATH=$SST_ELEMENTS_HOME/bin:$PATH
 echo 'export PATH='"$SST_ELEMENTS_HOME"'/bin:$PATH' >> ~/.bashrc
