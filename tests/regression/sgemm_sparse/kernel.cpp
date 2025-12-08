@@ -5,6 +5,12 @@
 namespace vt = vortex::sparse;
 using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
+static inline size_t align_up_size(size_t value, size_t alignment) {
+  if (!alignment)
+    return value;
+  return (value + alignment - 1) & ~(alignment - 1);
+}
+
 void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   auto pA_values = reinterpret_cast<ctx::input_t *>(arg->A_addr);
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
@@ -25,42 +31,46 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   if (tile_row >= M || tile_col >= N)
     return;
 
-  // Sparse A layout: values first (M * K / 2 entries), then metadata (M * K / 4 bytes)
+  // Sparse A layout: data (values) first, then metadata (padded to 4-byte alignment)
+  // Values size: (M * K / 2) * sizeof(input_t) bytes
+  // Metadata size: (M * K / 4) * sizeof(uint32_t) bytes
+  constexpr size_t meta_entry_bytes = sizeof(uint32_t);
   size_t values_per_row = K / 2;
-  size_t meta_per_row = K / 4;
-  size_t total_values = static_cast<size_t>(M) * values_per_row;
-  const uint8_t *meta_base = reinterpret_cast<const uint8_t *>(pA_values + total_values);
+  size_t values_size = static_cast<size_t>(M) * values_per_row * sizeof(ctx::input_t);
+  size_t meta_offset = align_up_size(values_size, meta_entry_bytes);
+  const uint8_t *base_ptr = reinterpret_cast<const uint8_t *>(pA_values);
+  const uint32_t *meta_base = reinterpret_cast<const uint32_t *>(base_ptr + meta_offset);
 
   // Initialize accumulator
   ctx::fill_fragment(fragC, 0);
 
   for (uint32_t k_tile = 0; k_tile < K; k_tile += ctx::tileK) {
     // Keep fragB resident while we iterate over sparse A tiles that consume it.
-    /*if constexpr (vt::ITYPE::bits < 8) {
+    if constexpr (vt::ITYPE::bits < 8) {
       auto pTileB = pB + tile_col * K + k_tile;
       ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
     } else {
       auto pTileB = pB + k_tile * N + tile_col;
       ctx::load_matrix_sync(fragB, pTileB, N);
-    }*/
+    }
 
     // Base pointers for sparse A data/metadata corresponding to this tile
     size_t row_offset_vals = static_cast<size_t>(tile_row) * values_per_row;
-    size_t row_offset_meta = static_cast<size_t>(tile_row) * meta_per_row;
-    size_t col_offset_vals = k_tile / 2;
-    size_t col_offset_meta = k_tile / 4;
-
+    size_t col_offset_vals = (k_tile / 4) * 2; // two stored values per 4-column block
     auto pTileA = pA_values + row_offset_vals + col_offset_vals;
-    const uint8_t *pTileMeta = meta_base + row_offset_meta + col_offset_meta;
+    
+    // Pass metadata base pointer (not offset) along with tile position
+    // load_matrix_sync will calculate absolute positions
+    const void *pTileMeta = reinterpret_cast<const void *>(meta_base);
 
-    ctx::load_matrix_sync(fragA, pTileA, K, pTileMeta);
+    ctx::load_matrix_sync(fragA, pTileA, K, pTileMeta, tile_row, k_tile);
 
     // Matrix multiply-accumulate while fragB stays in registers
-   // ctx::mma_sync(fragC, fragA, fragB, fragC);
+    ctx::mma_sync(fragC, fragA, fragB, fragC);
   }
 
-  //auto pTileC = pC + tile_row * N + tile_col;
-  //ctx::store_matrix_sync(pTileC, fragC, N);
+  auto pTileC = pC + tile_row * N + tile_col;
+  ctx::store_matrix_sync(pTileC, fragC, N);
 }
 
 int main() {

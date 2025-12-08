@@ -26,7 +26,7 @@
 #include "arch.h"
 #include "instr.h"
 
-#ifdef EXT_TCU_ENABLE
+#if defined(EXT_TCU_ENABLE) || defined(EXT_VEGETA_ENABLE)
 #include "tensor_cfg.h"
 #endif
 
@@ -492,6 +492,12 @@ static op_string_t op_string(const Instr &instr) {
       case VegetaTcuType::TILE_GEMM_U: return {"TILE_GEMM_U", ""};
       case VegetaTcuType::TILE_GEMM_V: return {"TILE_GEMM_V", ""};
       case VegetaTcuType::TILE_GEMM_R: return {"TILE_GEMM_R", ""};
+      case VegetaTcuType::WMMA: {
+        auto tpuArgs = std::get<IntrVegetaTcuArgs>(instrArgs);
+        namespace vt = vortex::tensor;
+        return {"WMMA." + std::string(vt::fmt_string(tpuArgs.fmt_s)) + "." + std::string(vt::fmt_string(tpuArgs.fmt_d))
+                 + "." + std::to_string(tpuArgs.step_m) + "." + std::to_string(tpuArgs.step_n), ""};
+      }
       default:
         std::abort();
       }
@@ -1143,25 +1149,46 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     } break;
   #endif
   #ifdef EXT_VEGETA_ENABLE
-  /*
   case 3: {
     switch (funct3) {
-    case 0: { // DOT8
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
-      instr->setOpType(AluType::DOT8);
-      instr->setArgs(IntrAluArgs{0, 0, 0});
-      // TODO: set destination register
-      // TODO: set source registers
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::Integer);
-      ibuffer.push_back(instr);
+    case 0: { // WMMA
+      namespace vt = vortex::tensor;
+      using cfg = vt::wmma_config_t<NUM_THREADS>;
+      uint32_t ra_base = 0;
+      uint32_t rb_base = (cfg::NRB == 4) ? 28 : 10;
+      uint32_t rc_base = (cfg::NRB == 4) ? 10 : 24;
+      uint32_t fmt_d = rd;
+      uint32_t fmt_s = rs1;
+      uint32_t steps = 0;
+      uint32_t steps_count = cfg::m_steps * cfg::n_steps * cfg::k_steps;
+      uint32_t steps_shift = 32 - log2ceil(steps_count);
+      uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
+      uint32_t uuid_lo = uuid & 0xffffffff;
+      for (uint32_t k = 0; k < cfg::k_steps; ++k) {
+        for (uint32_t m = 0; m < cfg::m_steps; ++m) {
+          for (uint32_t n = 0; n < cfg::n_steps; ++n) {
+            uint32_t rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
+            uint32_t rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
+            uint32_t rs3 = rc_base + m * cfg::n_steps + n;
+            uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
+            uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
+            ++steps;
+            auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::VEGETA);
+            instr->setOpType(VegetaTcuType::WMMA);
+            instr->setArgs(IntrVegetaTcuArgs{fmt_s, fmt_d, m, n});
+            instr->setDestReg(rs3, RegType::Float);
+            instr->setSrcReg(0, rs1, RegType::Float);
+            instr->setSrcReg(1, rs2, RegType::Float);
+            instr->setSrcReg(2, rs3, RegType::Float);
+            ibuffer.push_back(instr);
+          }
+        }
+      }
     } break;
     default:
       std::abort();
     }
   } break;
-  */
   #endif
     default:
       std::abort();

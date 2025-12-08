@@ -699,11 +699,19 @@ struct IntrVegetaLsuArgs {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+struct IntrVegetaTcuArgs {
+  uint32_t fmt_s  : 4;
+  uint32_t fmt_d  : 4;
+  uint32_t step_m : 4;
+  uint32_t step_n : 4;
+};
+
 enum class VegetaTcuType {
   TILE_GEMM_T,
   TILE_GEMM_U,
   TILE_GEMM_V,
-  TILE_GEMM_R
+  TILE_GEMM_R,
+  WMMA
 };
 
 inline std::ostream &operator<<(std::ostream &os, const VegetaTcuType& type) {
@@ -712,6 +720,7 @@ inline std::ostream &operator<<(std::ostream &os, const VegetaTcuType& type) {
   case VegetaTcuType::TILE_GEMM_U: os << "TILE_GEMM_U"; break;
   case VegetaTcuType::TILE_GEMM_V: os << "TILE_GEMM_V"; break;
   case VegetaTcuType::TILE_GEMM_R: os << "TILE_GEMM_R"; break;
+  case VegetaTcuType::WMMA: os << "WMMA"; break;
   default: assert(false);
   }
   return os;
@@ -762,6 +771,7 @@ using IntrArgs = std::variant<
 #endif
 #ifdef EXT_VEGETA_ENABLE
 , IntrVegetaLsuArgs
+, IntrVegetaTcuArgs
 #endif
 >;
 

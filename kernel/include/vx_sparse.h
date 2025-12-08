@@ -14,7 +14,11 @@
 #pragma once
 
 #include <sparse_cfg.h>
+#include <cstring>
 #include <vx_intrinsics.h>
+#ifdef VX_SPARSE_DEBUG
+#include <cstdio>
+#endif
 
 namespace vortex {
 namespace sparse {
@@ -177,7 +181,12 @@ public:
   }
 
   template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm, const void *meta_src = nullptr) {
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst,
+      const void *src,
+      size_t ldm,
+      const void *meta_src = nullptr,
+      uint32_t meta_row_base = 0,
+      uint32_t meta_col_base = 0) {
     uint32_t lane = vx_thread_id();
     if constexpr (Frag::Use == matrix_a) {
       // Load row-major matrix A
@@ -185,55 +194,108 @@ public:
       uint32_t lane_in_blk = (cfg::a_block_size == NT) ? lane : (lane % cfg::a_block_size);
       uint32_t block_row = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcM);
       uint32_t block_col = (lane_in_blk % cfg::tcK) * i_ratio;
+      uint32_t block_col_offset = block_col; // preserve original column stride for metadata lookup
       uint32_t m_stride  = cfg::a_sub_blocks * cfg::tcM;
       uint32_t k_stride  = cfg::tcK * i_ratio;
       if constexpr (src_layout == col_major) {
         std::swap(block_row, block_col);
       }
-      // For sparse format: when meta_src is provided, data stride is K/2 (not K)
-      // because each row has K/2 values (2 per block of 4)
-      size_t data_ldm = (meta_src != nullptr) ? (ldm / 2) : ldm;
-      auto base = reinterpret_cast<const input_t*>(src) + block_row * data_ldm + block_col;
-      const uint8_t* meta_base = meta_src ? reinterpret_cast<const uint8_t*>(meta_src) : nullptr;
-      uint32_t meta_ldm = meta_src ? (ldm / 4) : 0; // Number of metadata bytes per row (K/4 blocks)
       
-      detail::unroll_for<Frag::NR>([&](auto r) {
-        uint32_t block_m  = r / cfg::k_steps;
-        uint32_t block_k  = r % cfg::k_steps;
-        uint32_t elem_row = block_m * m_stride;
-        uint32_t elem_col = block_k * k_stride;
-        uint32_t meta_value = 0;
-
-        if (meta_base) {
-          uint32_t matrix_row = block_row + elem_row;
-          uint32_t k_elem_idx = elem_col / i_ratio;
-          uint32_t meta_block_k = k_elem_idx / 4;
-          if (meta_block_k < meta_ldm) {
-            uint32_t meta_offset = matrix_row * meta_ldm + meta_block_k;
-            meta_value = static_cast<uint32_t>(meta_base[meta_offset]);
-          }
-        }
-
-        if constexpr (Frag::Use == matrix_a) {
+      // Metadata pointer is pre-offset to tile position (like data pointer)
+      const uint32_t* meta_base = meta_src ? reinterpret_cast<const uint32_t*>(meta_src) : nullptr;
+      uint32_t meta_ldm = meta_src ? (ldm / 4) : 0;
+      
+      if (meta_src != nullptr) {
+        // SPARSE LOADING: Use metadata to place values in correct k_step registers
+        // data_ldm is K/2 for sparse (compressed values)
+        size_t data_ldm = ldm / 2;
+        // For sparse, don't add block_col to base - we compute sparse_idx separately
+        auto data_base = reinterpret_cast<const input_t*>(src) + block_row * data_ldm;
+        
+        // First, load metadata for each M row that this thread handles
+        // and distribute sparse values to the correct k_step registers
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_m  = r / cfg::k_steps;
+          uint32_t block_k  = r % cfg::k_steps;
+          uint32_t elem_row = block_m * m_stride;
+          
+          // Get metadata for this row (absolute position in matrix)
+          uint32_t abs_row = meta_row_base + block_row + elem_row;
+          uint32_t abs_k_block = (meta_col_base / 4);  // K-block index for this tile
+          const uint32_t *meta_ptr = meta_base + static_cast<size_t>(abs_row) * meta_ldm + abs_k_block;
+          uint32_t meta_value = *meta_ptr;
           dst.metadata[r] = meta_value;
-        }
-        if constexpr (src_layout == col_major) {
-          static_assert(input_is_subbyte == false, "col_major layout is not supported for sub-byte matrix_a");
-          std::swap(elem_row, elem_col);
-          auto ptr = base + elem_row * data_ldm + elem_col;
-          if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
-            dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
-          } else {
-            dst.data[r] = input_acessor_t::pack_row(ptr, data_ldm);
+          
+          // meta_value is a bitmask: bits 0-3 indicate which of 4 K positions have values
+          // block_k indicates which pair of K positions this register is for:
+          //   block_k=0 -> K positions 0,1 (bits 0,1)
+          //   block_k=1 -> K positions 2,3 (bits 2,3)
+          uint8_t meta_byte = meta_value & 0xFF;
+          uint32_t k_start = block_k * cfg::tcK;  // Start K position for this register
+          uint32_t k_end = k_start + cfg::tcK;    // End K position
+          
+          // Count how many sparse values come BEFORE this k_step for this row
+          uint32_t sparse_offset = 0;
+          for (uint32_t pos = 0; pos < k_start; ++pos) {
+            if (meta_byte & (1u << pos)) {
+              sparse_offset++;
+            }
           }
-        } else {
-          // row_major layout
-          // For sparse format, use data_ldm (K/2) instead of ldm (K)
-          auto ptr = base + elem_row * data_ldm + elem_col;
-          assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
-          dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
-        }
-      });
+          
+          // For fp32 with tcK=2, each register holds 1 fp32 value
+          // block_col determines which position within the tcK pair: 0 or 1
+          // So the target K position is: k_start + block_col
+          uint32_t target_pos = k_start + block_col;
+          
+          vreg_t loaded_val = 0.0f;
+          
+          if (target_pos < 4) {
+            // Count sparse values before target_pos to get the sparse index
+            uint32_t sparse_idx = sparse_offset;
+            for (uint32_t pos = k_start; pos < target_pos; ++pos) {
+              if (meta_byte & (1u << pos)) {
+                sparse_idx++;
+              }
+            }
+            
+            // Check if target position has a sparse value
+            if (meta_byte & (1u << target_pos)) {
+              auto ptr = data_base + elem_row * data_ldm + sparse_idx;
+              loaded_val = *ptr;
+            }
+            // else: loaded_val stays 0.0f (position was pruned)
+          }
+          
+          dst.data[r] = loaded_val;
+        });
+      } else {
+        // DENSE LOADING: Original non-sparse path
+        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
+        
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_m  = r / cfg::k_steps;
+          uint32_t block_k  = r % cfg::k_steps;
+          uint32_t elem_row = block_m * m_stride;
+          uint32_t elem_col = block_k * k_stride;
+          
+          dst.metadata[r] = 0;
+          
+          if constexpr (src_layout == col_major) {
+            static_assert(input_is_subbyte == false, "col_major layout is not supported for sub-byte matrix_a");
+            std::swap(elem_row, elem_col);
+            auto ptr = base + elem_row * ldm + elem_col;
+            if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
+              dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+            } else {
+              dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
+            }
+          } else {
+            auto ptr = base + elem_row * ldm + elem_col;
+            assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+          }
+        });
+      }
     } else if constexpr (Frag::Use == matrix_b) {
       // Load column-major matrix B
       uint32_t block_idx = (cfg::b_block_size == NT) ? 0 : (lane / cfg::b_block_size);
@@ -334,23 +396,27 @@ public:
     static_assert(FragC::Use == accumulator, "C must be accumulator");
     static_assert(FragD::Use == accumulator, "D must be accumulator");
 
-    auto meta_value = [&](uint32_t idx) -> uint32_t {
-      if constexpr (FragA::Use == matrix_a) {
-        if (idx < FragA::NR) {
-          return fragA.metadata[idx];
-        }
-      }
-      return 0u;
-    };
+    // Load metadata values into local variables first to avoid stack offset issues
+    uint32_t m0 = 0, m1 = 0, m2 = 0, m3 = 0, m4 = 0, m5 = 0, m6 = 0, m7 = 0;
+    if constexpr (FragA::Use == matrix_a) {
+      if constexpr (FragA::NR > 0) m0 = fragA.metadata[0];
+      if constexpr (FragA::NR > 1) m1 = fragA.metadata[1];
+      if constexpr (FragA::NR > 2) m2 = fragA.metadata[2];
+      if constexpr (FragA::NR > 3) m3 = fragA.metadata[3];
+      if constexpr (FragA::NR > 4) m4 = fragA.metadata[4];
+      if constexpr (FragA::NR > 5) m5 = fragA.metadata[5];  
+      if constexpr (FragA::NR > 6) m6 = fragA.metadata[6];
+      if constexpr (FragA::NR > 7) m7 = fragA.metadata[7];
+    }
 
-    register uint32_t ma0 __asm__("a0") = meta_value(0);
-    register uint32_t ma1 __asm__("a1") = meta_value(1);
-    register uint32_t ma2 __asm__("a2") = meta_value(2);
-    register uint32_t ma3 __asm__("a3") = meta_value(3);
-    register uint32_t ma4 __asm__("a4") = meta_value(4);
-    register uint32_t ma5 __asm__("a5") = meta_value(5);
-    register uint32_t ma6 __asm__("a6") = meta_value(6);
-    register uint32_t ma7 __asm__("a7") = meta_value(7);
+    register uint32_t ma0 __asm__("a0") = m0;
+    register uint32_t ma1 __asm__("a1") = m1;
+    register uint32_t ma2 __asm__("a2") = m2;
+    register uint32_t ma3 __asm__("a3") = m3;
+    register uint32_t ma4 __asm__("a4") = m4;
+    register uint32_t ma5 __asm__("a5") = m5;
+    register uint32_t ma6 __asm__("a6") = m6;
+    register uint32_t ma7 __asm__("a7") = m7;
 
     // fragA: caller-saved registers (f0-f7)
     register float fa0 __asm__("f0")  = fragA.data[0];

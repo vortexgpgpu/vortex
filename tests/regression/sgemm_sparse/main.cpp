@@ -1,4 +1,5 @@
 #include "common.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
@@ -6,6 +7,7 @@
 #include <rvfloats.h>
 #include <string.h>
 #include <sparse_cfg.h>
+#include <type_traits>
 #include <unistd.h>
 #include <util.h>
 #include <vector>
@@ -28,8 +30,13 @@ using namespace vortex;
 namespace vt = sparse;
 
 static bool g_enable_sparse = true;
+
+static size_t align_up(size_t value, size_t alignment) {
+  if (alignment == 0)
+    return value;
+  return (value + alignment - 1) & ~(alignment - 1);
+}
 ///////////////////////////////////////////////////////////////////////////////
-/*
 static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t height, const uint8_t *src) {
   // Calculate output size and stride
   uint32_t out_bytes = (width * height + 1) / 2;
@@ -60,7 +67,6 @@ static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t
     }
   }
 }
-*/
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
@@ -351,6 +357,68 @@ struct SparseMat {
 
   uint32_t rows, cols;           // original A dims (M × K)
 };
+
+static void matmul_cpu_sparseA(
+      otype_t*               C,      // [M × N]   output
+      const SparseMat&       A,      // sparse-A
+      const itype_t*         B,      // [K × N]   dense-B (row major)
+      uint32_t               N)      // number of columns of B/C
+{
+  const uint32_t M = A.rows;
+  const uint32_t K = A.cols;
+  const uint32_t values_per_row = K / 2;
+  const uint32_t meta_per_row   = K / 4;
+  const uint32_t subbytes = 8 / vt::ITYPE::bits;
+
+  for (uint32_t m = 0; m < M; ++m) {
+    const itype_t* row_vals = A.values.data() + static_cast<size_t>(m) * values_per_row;
+    const uint8_t* row_meta = A.meta.data()   + static_cast<size_t>(m) * meta_per_row;
+    otype_t* crow = C + static_cast<size_t>(m) * N;
+
+    for (uint32_t n = 0; n < N; ++n) {
+      size_t v_idx = 0;
+      otype_t sum(0);
+
+      for (uint32_t blk = 0; blk < K; blk += 4) {
+        uint8_t mask = row_meta[blk / 4];
+        if (!mask)
+          continue;
+
+        for (uint32_t i = 0; i < 4; ++i) {
+          if (!(mask & (1u << i)))
+            continue;
+
+          itype_t a_val = row_vals[v_idx++];
+          uint32_t k = blk + i;
+          uint32_t kk = subbytes ? k * subbytes : k;
+          itype_t b_val = data_accessor_t<vt::ITYPE>::read(B, static_cast<size_t>(kk) * N + n);
+          sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a_val, b_val, sum);
+        }
+      }
+
+      crow[n] = sum;
+    }
+  }
+}
+
+static int verify_sparse_gemm(const SparseMat& A,
+                              const std::vector<itype_t>& B,
+                              const std::vector<otype_t>& C,
+                              uint32_t N) {
+  std::vector<otype_t> reference(static_cast<size_t>(A.rows) * N);
+  matmul_cpu_sparseA(reference.data(), A, B.data(), N);
+
+  int errors = 0;
+  for (size_t i = 0, e = reference.size(); i < e; ++i) {
+    if (!Comparator<vt::OTYPE>::compare(C[i], reference[i], static_cast<int>(i), errors)) {
+      ++errors;
+      if (errors >= MAX_ERRORS) {
+        break;
+      }
+    }
+  }
+  return errors;
+}
 /*
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = 8 / vt::ITYPE::bits;
@@ -420,9 +488,9 @@ static void matmul_cpu_sparseA(
 
 const char *kernel_file = "kernel.vxbin";
 
-uint32_t xm = 4;
-uint32_t xn = 8;
-uint32_t xk = 2;
+uint32_t xm = 1;
+uint32_t xn = 1;
+uint32_t xk = 1;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -497,17 +565,25 @@ static SparseMat pruneAndCompressMatrixA(const std::vector<itype_t>& denseA,
                         src[r * K + c + 2],
                         src[r * K + c + 3]};
 
+      // Randomly select 2 out of 4 positions to keep
       uint32_t idx[4] = {0, 1, 2, 3};
-      std::sort(idx, idx + 4,
-        [&](uint32_t a, uint32_t b) {
-          return std::abs((int)blk[a]) < std::abs((int)blk[b]);
-        }); //Sort the 4 elements by absolute value, ascending order
+      // Shuffle the indices
+      for (uint32_t i = 3; i > 0; --i) {
+        uint32_t j = rand() % (i + 1);
+        std::swap(idx[i], idx[j]);
+      }
+      // Select first 2 shuffled indices
+      uint8_t keep0 = idx[0];
+      uint8_t keep1 = idx[1];
 
-      uint8_t keep0 = idx[3];
-      uint8_t keep1 = idx[2]; //idx of largest 2 elements
-
-      out.values.push_back(blk[keep0]);
-      out.values.push_back(blk[keep1]);
+      // Store values in original order (smaller index first)
+      if (keep0 < keep1) {
+        out.values.push_back(blk[keep0]);
+        out.values.push_back(blk[keep1]);
+      } else {
+        out.values.push_back(blk[keep1]);
+        out.values.push_back(blk[keep0]);
+      }
 
       uint8_t m = (1u << keep0) | (1u << keep1);  // e.g. 0b0101
       out.meta.push_back(m);
@@ -567,6 +643,7 @@ int main(int argc, char *argv[]) {
   }
 
   uint32_t M = xm * cfg::tileM;
+  uint32_t N = xn * cfg::tileN;
   uint32_t K = xk * cfg::tileK;
 
   if ((M % cfg::tileM) != 0) {
@@ -579,20 +656,27 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  if ((N % cfg::tileN) != 0) {
+    std::cout << "Error: N must be a multiple of tensor tileN!" << std::endl;
+    return -1;
+  }
+
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "WMMA Core Dimension: M=" << cfg::tcM << ", N=" << cfg::tcN << ", K=" << cfg::tcK << std::endl;
   std::cout << "WMMA Tile Dimension: M=" << cfg::tileM << ", N=" << cfg::tileN << ", K=" << cfg::tileK << std::endl;
   std::cout << "matrix A: " << M << "x" << K << " (sparse format)" << std::endl;
+  std::cout << "matrix B: " << K << "x" << N << std::endl;
+  std::cout << "matrix C: " << M << "x" << N << std::endl;
 
   // set block size to warp size
-  kernel_arg.grid_dim[0] = 1;  // Only need 1 block for testing
+  kernel_arg.grid_dim[0] = N / cfg::tileN;
   kernel_arg.grid_dim[1] = M / cfg::tileM;
   kernel_arg.block_dim[0] = NT; // warp size
   kernel_arg.block_dim[1] = 1;
 
   // set matrix dimensions
   kernel_arg.M = M;
-  kernel_arg.N = 0;  // Not used for loading test
+  kernel_arg.N = N;
   kernel_arg.K = K;
 
   // allocate device memory for sparse matrix A
@@ -603,22 +687,39 @@ int main(int argc, char *argv[]) {
   // Values size: (M * K / 2) * sizeof(itype_t) bytes
   // Metadata size: (M * K / 4) * sizeof(uint8_t) bytes
   size_t values_size = (M * K / 2) * sizeof(itype_t);
-  size_t meta_size = (M * K / 4) * sizeof(uint8_t);
-  sizeA_sparse = values_size + meta_size;
+  constexpr size_t meta_entry_bytes = sizeof(uint32_t);
+  size_t meta_entries = (M * K / 4);
+  size_t meta_size = meta_entries * meta_entry_bytes;
+  size_t meta_offset = align_up(values_size, meta_entry_bytes);
+  size_t padding_bytes = meta_offset - values_size;
+  sizeA_sparse = meta_offset + meta_size;
+
+  size_t sizeB_elems = static_cast<size_t>(K) * N;
+  size_t sizeC_elems = static_cast<size_t>(M) * N;
+  size_t sizeB_bytes = sizeB_elems * sizeof(itype_t);
+  size_t sizeC_bytes = sizeC_elems * sizeof(otype_t);
   
   RT_CHECK(vx_mem_alloc(device, sizeA_sparse, VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, 1, VX_MEM_READ, &B_buffer));  // Dummy buffer
+  RT_CHECK(vx_mem_alloc(device, sizeB_bytes, VX_MEM_READ, &B_buffer));
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, 1, VX_MEM_WRITE, &C_buffer));  // Dummy buffer
+  RT_CHECK(vx_mem_alloc(device, sizeC_bytes, VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
+  std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
+  std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
+  std::cout << std::dec;
 
   // generate source data and convert to sparse format
   std::vector<itype_t> h_A_dense(M * K);
   for (uint32_t i = 0; i < M * K; ++i) {
     h_A_dense[i] = Comparator<vt::ITYPE>::generate();
+  }
+
+  std::vector<itype_t> h_B_dense(sizeB_elems);
+  for (size_t i = 0; i < sizeB_elems; ++i) {
+    h_B_dense[i] = Comparator<vt::ITYPE>::generate();
   }
 
   // Convert to sparse format
@@ -633,6 +734,21 @@ int main(int argc, char *argv[]) {
         std::cout << std::fixed << std::setprecision(3) << h_A_dense[m * K + k] << " ";
       } else {
         std::cout << std::hex << "0x" << (uint32_t)h_A_dense[m * K + k] << " ";
+      }
+    }
+    std::cout << std::endl;
+  }
+  std::cout << std::dec;
+  
+  // Print dense matrix B
+  std::cout << "\n=== Dense Matrix B (" << K << "x" << N << ") ===" << std::endl;
+  for (uint32_t k = 0; k < K; ++k) {
+    std::cout << "Row " << k << ": ";
+    for (uint32_t n = 0; n < N; ++n) {
+      if (vt::ITYPE::id == vt::fp32::id) {
+        std::cout << std::fixed << std::setprecision(3) << h_B_dense[k * N + n] << " ";
+      } else {
+        std::cout << std::hex << "0x" << (uint32_t)h_B_dense[k * N + n] << " ";
       }
     }
     std::cout << std::endl;
@@ -656,7 +772,8 @@ int main(int argc, char *argv[]) {
   std::cout << std::dec;
   
   // Print metadata
-  std::cout << "\n=== Metadata (" << sparseA.meta.size() << " bytes) ===" << std::endl;
+  std::cout << "\n=== Metadata (" << sparseA.meta.size() << " entries; padded size "
+            << meta_size << " bytes) ===" << std::endl;
   size_t meta_idx = 0;
   for (uint32_t m = 0; m < M; ++m) {
     std::cout << "Row " << m << " metadata: ";
@@ -694,19 +811,40 @@ int main(int argc, char *argv[]) {
   }
   
   // Create buffer: data first, then metadata
-  std::vector<uint8_t> sparse_buffer(sizeA_sparse);
+  std::vector<uint8_t> sparse_buffer(sizeA_sparse, 0);
   memcpy(sparse_buffer.data(), sparseA.values.data(), values_size);
-  memcpy(sparse_buffer.data() + values_size, sparseA.meta.data(), meta_size);
+  if (padding_bytes)
+    memset(sparse_buffer.data() + values_size, 0, padding_bytes);
+  auto meta_words = reinterpret_cast<uint32_t*>(sparse_buffer.data() + meta_offset);
+  for (size_t i = 0; i < sparseA.meta.size(); ++i) {
+    meta_words[i] = static_cast<uint32_t>(sparseA.meta[i]);
+  }
   
   std::cout << "\nSparse A: values=" << sparseA.values.size() 
             << " elements (" << values_size << " bytes), "
-            << "metadata=" << sparseA.meta.size() 
+            << "metadata=" << sparseA.meta.size()
+            << " entries padded to " << meta_size
             << " bytes, total=" << sizeA_sparse << " bytes" << std::endl;
 
   // upload sparse matrix A buffer
   {
     std::cout << "upload sparse matrix A buffer" << std::endl;
     RT_CHECK(vx_copy_to_dev(A_buffer, sparse_buffer.data(), 0, sizeA_sparse));
+  }
+
+  // upload dense matrix B buffer (convert layout if needed)
+  {
+    std::cout << "upload matrix B buffer" << std::endl;
+    if constexpr (std::is_same_v<vt::ITYPE, vt::int4> || std::is_same_v<vt::ITYPE, vt::uint4>) {
+      std::vector<uint8_t> h_B_col(sizeB_elems);
+      convert_row_to_col_major_4bit(h_B_col.data(),
+                                    N,
+                                    2 * K,
+                                    reinterpret_cast<const uint8_t*>(h_B_dense.data()));
+      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB_elems));
+    } else {
+      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_dense.data(), 0, sizeB_bytes));
+    }
   }
 
   // upload program
@@ -731,11 +869,24 @@ int main(int argc, char *argv[]) {
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
+  std::vector<otype_t> h_C(sizeC_elems);
+  std::cout << "download result buffer" << std::endl;
+  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC_bytes));
+
+  std::cout << "verify sparse GEMM result" << std::endl;
+  int errors = verify_sparse_gemm(sparseA, h_B_dense, h_C, N);
+
   // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();
 
-  std::cout << "Sparse matrix loading test completed successfully!" << std::endl;
+  if (errors != 0) {
+    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return errors;
+  }
+
+  std::cout << "Sparse GEMM completed successfully!" << std::endl;
   std::cout << "PASSED!" << std::endl;
 
   return 0;

@@ -77,7 +77,8 @@ public:
 					  const std::vector<reg_data_t>& rs2_data,
 					  const std::vector<reg_data_t>& rs3_data,
 					  std::vector<reg_data_t>& rd_data,
-					  ExeTraceData* trace_data);
+					  ExeTraceData* trace_data,
+					  const uint32_t* metadata = nullptr);
 
   void tile_gemm_t(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_treg);
   void tile_gemm_u(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_ureg, uint32_t meta_reg);
