@@ -14,7 +14,8 @@
 typedef enum {
   GEMM_MODE_TGEMM = 0,  // T x T -> T (dense x dense)
   GEMM_MODE_UGEMM = 1,  // T x U -> T (sparse 2:4 packed x dense 2x)
-  GEMM_MODE_VGEMM = 2   // T x V -> T (sparse 1:4 packed x dense 4x)
+  GEMM_MODE_VGEMM = 2,  // T x V -> T (sparse 1:4 packed x dense 4x)
+  GEMM_MODE_RGEMM = 3   // T x U -> U (row-wise N:4 sparse x dense 2x)
 } gemm_mode_t;
 
 typedef struct {

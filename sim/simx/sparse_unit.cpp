@@ -601,42 +601,60 @@ public:
   }
 
   // TILE_GEMM_R: Row-wise sparse tile × Dense tile = Tile (T × U → U)
+  // ISA: A is 16×32 logical (compressed to 16×16 padded T-tile)
+  //      B is 32×16 dense (stored in U-reg = 2 T-regs)
+  //      Output is 16×16 (first T-reg of destination U-reg)
+  // Metadata: 8 blocks per row × 4 bits/block = 32 bits = 4 bytes per row
+  //           Total: 64 bytes mask data + 64 bytes reserved = 128 bytes
   void tile_gemm_r(uint32_t dst_ureg, uint32_t src1_treg, uint32_t src2_ureg, uint32_t meta_reg) {
     assert(src1_treg < tile_reg_file_.size() && "Source1 tile register out of bounds");
     assert(meta_reg < metadata_reg_file_.size() && "Metadata register out of bounds");
 
     constexpr uint32_t TILE_DIM = 16;
+    constexpr uint32_t LOGICAL_K = 32;  // A is 16×32 logical
     
-    const auto& tile_a = tile_reg_file_[src1_treg];  // Sparse tile
+    const auto& tile_a = tile_reg_file_[src1_treg];  // Compressed 16×16 tile
     const auto& meta_a = metadata_reg_file_[meta_reg];  // Metadata for sparse tile
     
     // Both dst and src2 are U-registers (map to 2 T-registers each)
     std::vector<uint32_t> dst_tregs = map_ureg_to_treg(dst_ureg);
     std::vector<uint32_t> src2_tregs = map_ureg_to_treg(src2_ureg);
     
-    // Row-wise sparsity: metadata can vary per row
+    // Row-wise sparsity: each row of A has 8 blocks of 4 elements (32 total)
+    // compressed to 16 values using 2-of-4 sparsity
     for (uint32_t i = 0; i < TILE_DIM; ++i) {
       for (uint32_t j = 0; j < TILE_DIM; ++j) {
-        // Determine which destination T-register
-        uint32_t dst_treg_idx = dst_tregs[j / TILE_DIM];
-        uint32_t j_local = j % TILE_DIM;
+        // Destination is first T-reg of U-reg (16×16 output)
+        uint32_t dst_treg_idx = dst_tregs[0];
         
-        float sum = tile_reg_file_[dst_treg_idx][i][j_local];  // Accumulate
+        float sum = tile_reg_file_[dst_treg_idx][i][j];  // Accumulate
         
-        // Process sparse A row with dense B column
-        for (uint32_t k_blk = 0; k_blk < TILE_DIM; k_blk += 4) {
-          uint8_t mask = meta_a[i][k_blk / 4];  // Row-wise metadata
+        // Track position in compressed A tile for this row
+        uint32_t a_col = 0;
+        
+        // Process 8 blocks of 4 elements each (K=32 logical)
+        for (uint32_t k_blk = 0; k_blk < LOGICAL_K; k_blk += 4) {
+          // Metadata layout: meta_a[row][col] stores individual nibbles (uint4)
+          // nibble_idx = k_blk / 4 (0..7) directly indexes the metadata column
+          uint32_t nibble_idx = k_blk / 4;
+          uint8_t mask = meta_a[i][nibble_idx];  // Direct nibble access
           
           for (uint32_t offset = 0; offset < 4; ++offset) {
             if (mask & (1u << offset)) {
-              uint32_t k = k_blk + offset;
+              // This position is non-zero in the logical A
+              uint32_t k = k_blk + offset;  // Logical K index (0..31)
+              
+              // B is stored in U-reg (32×16), split into 2 T-regs (rows 0-15 and 16-31)
               uint32_t src2_treg_idx = src2_tregs[k / TILE_DIM];
               uint32_t k_local = k % TILE_DIM;
-              sum += tile_a[i][k] * tile_reg_file_[src2_treg_idx][k_local][j];
+              
+              // Get value from compressed A tile
+              sum += tile_a[i][a_col] * tile_reg_file_[src2_treg_idx][k_local][j];
+              a_col++;  // Move to next compressed value
             }
           }
         }
-        tile_reg_file_[dst_treg_idx][i][j_local] = sum;
+        tile_reg_file_[dst_treg_idx][i][j] = sum;
       }
     }
 

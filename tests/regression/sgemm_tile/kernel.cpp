@@ -27,7 +27,7 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	}
 	else if (mode == GEMM_MODE_UGEMM) {
 		// UGEMM: T × U -> T (2:4 sparse)
-		// Load metadata into M-reg 1 (1KB metadata)
+		// Load metadata into M-reg 1 (128 bytes)
 		vx_lm(1, (size_t)M_ptr, 0);
 		
 		// Load B tile into U-reg 2 (2KB sparse 2:4)
@@ -38,7 +38,7 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	}
 	else if (mode == GEMM_MODE_VGEMM) {
 		// VGEMM: T × V -> T (1:4 sparse)
-		// Load metadata into M-reg 1 (1KB metadata)
+		// Load metadata into M-reg 1 (128 bytes)
 		vx_lm(1, (size_t)M_ptr, 0);
 		
 		// Load B tile into V-reg 1 (4KB sparse 1:4)
@@ -48,8 +48,22 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 		// VGEMM: T0 = T1 (sparse with M1 metadata) × V1 (dense)
 		vx_vgemm(0, 1, 1);
 	}
+	else if (mode == GEMM_MODE_RGEMM) {
+		// RGEMM: T × U -> U (row-wise N:4 sparse)
+		// Load metadata into M-reg 1 (128 bytes)
+		vx_lm(1, (size_t)M_ptr, 0);
+		
+		// Load B tile into U-reg 2 (2KB dense)
+		vx_lu(2, (size_t)B_ptr, 0);
+		
+		// RGEMM: U0 = T1 (row-wise sparse with M1 metadata) × U2 (dense)
+		// Output is stored in U-reg 0 = T-reg 0 + T-reg 1 (2KB total)
+		// ISA: vx_rgemm computes full U-reg result
+		vx_rgemm(0, 1, 2);
+	}
 
 	// Store result from T-reg 0 to C (always 1KB)
+	// For RGEMM: we only validate first T-reg of U0 (top 16 rows)
 	vx_st((size_t)C_ptr, 0, 0);
 }
 

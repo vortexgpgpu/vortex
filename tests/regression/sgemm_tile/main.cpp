@@ -37,10 +37,11 @@ static gemm_mode_t gemm_mode = GEMM_MODE_TGEMM;
 static void show_usage() {
    std::cout << "Vortex SGEMM TILE Test (16x16 matrix operations)." << std::endl;
    std::cout << "Usage: [-m mode] [-h: help]" << std::endl;
-   std::cout << "  -m mode: GEMM mode (0=TGEMM, 1=UGEMM, 2=VGEMM) [default: 0]" << std::endl;
+   std::cout << "  -m mode: GEMM mode (0=TGEMM, 1=UGEMM, 2=VGEMM, 3=RGEMM) [default: 0]" << std::endl;
    std::cout << "    TGEMM (0): T × T -> T (dense × dense)" << std::endl;
    std::cout << "    UGEMM (1): T × U -> T (dense × 2:4 sparse)" << std::endl;
    std::cout << "    VGEMM (2): T × V -> T (dense × 1:4 sparse)" << std::endl;
+   std::cout << "    RGEMM (3): T × U -> U (row-wise N:4 sparse × dense)" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
@@ -49,7 +50,7 @@ static void parse_args(int argc, char **argv) {
     switch (c) {
     case 'm':
       gemm_mode = static_cast<gemm_mode_t>(atoi(optarg));
-      if (gemm_mode < GEMM_MODE_TGEMM || gemm_mode > GEMM_MODE_VGEMM) {
+      if (gemm_mode < GEMM_MODE_TGEMM || gemm_mode > GEMM_MODE_RGEMM) {
         std::cerr << "Error: Invalid mode " << gemm_mode << std::endl;
         show_usage();
         exit(-1);
@@ -177,6 +178,75 @@ static void compress_1_4_sparse(const std::vector<float>& logical_tile, int M, i
   }
 }
 
+// Generate compressed row-wise N:4 sparse tile and metadata from full logical matrix
+// Input: logical_tile is M×K (16×32)
+// Output: padded_tile is M×(K/2) (16×16), metadata is exactly 128 bytes
+// Compression: For each 4-element block, keep top-2 values by magnitude (deterministic)
+// Metadata layout: Must match TILE_LOAD_M format (8 bytes per row)
+//   - 16 rows × 8 bytes/row = 128 bytes total
+//   - Each byte stores 2 nibbles: upper nibble for col N, lower for col N+1
+//   - For RGEMM: only first 8 nibbles (cols 0-7) are used, rest are zero
+static void compress_rowwise_n4_sparse(const std::vector<float>& logical_tile, int M, int K,
+                                        std::vector<float>& padded_tile, std::vector<uint8_t>& metadata) {
+  // Output sizes: padded tile is M×(K/2), metadata is exactly 128 bytes
+  padded_tile.resize(M * (K / 2));
+  metadata.resize(128);  // 8 bytes per row × 16 rows = 128 bytes
+  std::fill(metadata.begin(), metadata.end(), 0);
+  
+  for (int row = 0; row < M; ++row) {
+    int padded_col = 0;
+    
+    // Process K/4 groups of 4 elements (8 groups for K=32)
+    for (int k_grp = 0; k_grp < K / 4; ++k_grp) {
+      int k_base = k_grp * 4;
+      
+      // Find the 2 largest magnitude values in this group of 4
+      // Use index-value pairs for deterministic selection
+      std::pair<int, float> vals[4];
+      for (int offset = 0; offset < 4; ++offset) {
+        vals[offset] = {offset, logical_tile[row * K + k_base + offset]};
+      }
+      
+      // Sort by magnitude (descending) to find top 2
+      // For equal magnitudes, lower index wins (stable, deterministic)
+      std::sort(vals, vals + 4, [](const auto& a, const auto& b) {
+        float abs_a = std::abs(a.second);
+        float abs_b = std::abs(b.second);
+        if (abs_a != abs_b) return abs_a > abs_b;
+        return a.first < b.first;  // Tie-breaker: lower index first
+      });
+      
+      // Create 4-bit bitmask for top 2 values
+      uint8_t mask = 0;
+      for (int i = 0; i < 2; ++i) {
+        int offset = vals[i].first;
+        mask |= (1u << offset);
+      }
+      
+      // Store values in POSITION ORDER (not magnitude order)
+      // Hardware iterates through bit positions 0-3 sequentially
+      for (int offset = 0; offset < 4; ++offset) {
+        if (mask & (1u << offset)) {
+          padded_tile[row * (K / 2) + padded_col++] = logical_tile[row * K + k_base + offset];
+        }
+      }
+      
+      // Store metadata: 4 bits per block
+      // Layout: 8 bytes per row (matching TILE_LOAD_M format)
+      // Each byte stores 2 nibbles: upper for even col, lower for odd col
+      // k_grp 0,1 -> byte 0 (cols 0,1), k_grp 2,3 -> byte 1 (cols 2,3), etc.
+      int byte_idx = row * 8 + k_grp / 2;  // 8 bytes per row
+      if (k_grp % 2 == 0) {
+        metadata[byte_idx] = (mask << 4);  // Upper nibble (col N)
+      } else {
+        metadata[byte_idx] |= mask;  // Lower nibble (col N+1)
+      }
+    }
+  }
+  
+  // Remaining bytes in each row (cols 8-15) are zero, already initialized
+}
+
 // CPU reference: C = A × B 
 // A is MxK, B is KxN, C is MxN
 // For TGEMM: A is 16x16, B is 16x16
@@ -219,9 +289,9 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
-  uint32_t num_elements = TILE_SIZE * TILE_SIZE;  // 256 elements
+  uint32_t num_elements = TILE_SIZE * TILE_SIZE;  // 256 elements for T-reg
   uint32_t A_buf_size = T_TILE_BYTES;             // Always 1KB for A
-  uint32_t C_buf_size = T_TILE_BYTES;             // Always 1KB for C
+  uint32_t C_buf_size = T_TILE_BYTES;             // Always 1KB for C (first T-reg of result)
   uint32_t B_buf_size, M_buf_size = 0;
   
   const char* mode_name;
@@ -238,7 +308,12 @@ int main(int argc, char *argv[]) {
     case GEMM_MODE_VGEMM:
       mode_name = "VGEMM (T × V, 1:4 sparse)";
       B_buf_size = V_TILE_BYTES;  // 4KB
-      M_buf_size = M_TILE_BYTES;  // 1KB metadata
+      M_buf_size = M_TILE_BYTES;  // 128 bytes metadata
+      break;
+    case GEMM_MODE_RGEMM:
+      mode_name = "RGEMM (T × U -> U, row-wise N:4 sparse)";
+      B_buf_size = U_TILE_BYTES;  // 2KB (B is dense U-reg)
+      M_buf_size = M_TILE_BYTES;  // 128 bytes metadata
       break;
     default:
       std::cerr << "Invalid GEMM mode!" << std::endl;
@@ -282,9 +357,12 @@ int main(int argc, char *argv[]) {
   // allocate host buffers
   std::cout << "allocate host buffers" << std::endl;
   
-  // A's logical size depends on mode: 16x16 for TGEMM, 16x32 for UGEMM, 16x64 for VGEMM
+  // A's logical size depends on mode:
+  // - TGEMM: 16x16 (dense)
+  // - UGEMM/RGEMM: 16x32 (sparse compressed to 16x16)
+  // - VGEMM: 16x64 (sparse 1:4 compressed to 16x16)
   uint32_t A_cols_logical = TILE_SIZE;
-  if (gemm_mode == GEMM_MODE_UGEMM) A_cols_logical = 2 * TILE_SIZE;  // 32 logical cols
+  if (gemm_mode == GEMM_MODE_UGEMM || gemm_mode == GEMM_MODE_RGEMM) A_cols_logical = 2 * TILE_SIZE;  // 32 logical cols
   else if (gemm_mode == GEMM_MODE_VGEMM) A_cols_logical = 4 * TILE_SIZE;  // 64 logical cols
   
   // B size matches A's logical K dimension
@@ -293,7 +371,7 @@ int main(int argc, char *argv[]) {
   std::vector<float> h_A_logical(TILE_SIZE * A_cols_logical);  // Logical A before compression
   std::vector<float> h_A(num_elements);  // Compressed A (always 16x16 = 1KB for storage)
   std::vector<float> h_B(A_cols_logical * B_cols);  // B is K×N where K matches A's logical K
-  std::vector<float> h_C(num_elements);
+  std::vector<float> h_C(num_elements);  // Output is always 16×16 for tested modes
   std::vector<float> h_ref(num_elements);
 
   // Initialize logical matrix A
@@ -348,6 +426,21 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(M_buffer, h_M.data(), 0, M_buf_size));
     RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, B_buf_size));
   }
+  else if (gemm_mode == GEMM_MODE_RGEMM) {
+    // RGEMM: A (16x32 logical, compressed to 16x16 via row-wise N:4) × B (32x16) = C (16x16)
+    // A: logical 16x32 -> padded 16x16 (1KB T-tile) with metadata (128 bytes)
+    // B: full 32x16 stored in U-register (2KB = 2 T-regs)
+    
+    // Compress A from 16x32 logical to 16x16 padded using row-wise N:4 compression
+    compress_rowwise_n4_sparse(h_A_logical, TILE_SIZE, 2 * TILE_SIZE, h_A, h_M);
+    
+    std::cout << "Row-wise N:4 sparse A: logical 16x32 -> padded 16x16, metadata " << h_M.size() << " bytes" << std::endl;
+    
+    // Upload padded A (1KB), metadata (128B), and full B (2KB for U-reg)
+    RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, A_buf_size));
+    RT_CHECK(vx_copy_to_dev(M_buffer, h_M.data(), 0, M_buf_size));
+    RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, B_buf_size));
+  }
 
   // upload kernel binary
   std::cout << "upload kernel binary" << std::endl;
@@ -371,12 +464,40 @@ int main(int argc, char *argv[]) {
 
   // Zero out pruned values in h_A_logical based on metadata for CPU reference
   // This ensures CPU computes the same result as GPU (which only uses non-zero values)
+  //
+  // METADATA LAYOUT DIFFERENCES:
+  // - UGEMM/VGEMM metadata: 8 bytes per row (16 nibbles = 16 4-element blocks)
+  //   Total: 128 bytes (16 rows × 8 bytes/row)
+  // - RGEMM metadata: 4 bytes per row (8 nibbles = 8 4-element blocks)
+  //   Total: 64 bytes mask data + 64 bytes reserved = 128 bytes
+  //
   if (gemm_mode == GEMM_MODE_UGEMM || gemm_mode == GEMM_MODE_VGEMM) {
+    // UGEMM/VGEMM: 8 bytes per row (16 blocks of 4 elements for K=32/64)
     for (uint32_t row = 0; row < TILE_SIZE; ++row) {
       uint32_t k_groups = A_cols_logical / 4;
       for (uint32_t k_grp = 0; k_grp < k_groups; ++k_grp) {
         int k_base = k_grp * 4;
-        // Get metadata nibble for this group
+        // Get metadata nibble for this group (8 bytes per row layout)
+        int byte_idx = row * 8 + k_grp / 2;
+        uint8_t nibble = (k_grp % 2 == 0) ? (h_M[byte_idx] >> 4) : (h_M[byte_idx] & 0x0F);
+        
+        // Zero out positions not in metadata mask
+        for (int offset = 0; offset < 4; ++offset) {
+          if (!(nibble & (1u << offset))) {
+            h_A_logical[row * A_cols_logical + k_base + offset] = 0.0f;
+          }
+        }
+      }
+    }
+  }
+  else if (gemm_mode == GEMM_MODE_RGEMM) {
+    // RGEMM: 8 bytes per row (matching TILE_LOAD_M format)
+    // Only first 8 nibbles (cols 0-7) are used for 8 blocks of 4 elements (K=32)
+    for (uint32_t row = 0; row < TILE_SIZE; ++row) {
+      uint32_t k_groups = A_cols_logical / 4;  // 8 groups for K=32
+      for (uint32_t k_grp = 0; k_grp < k_groups; ++k_grp) {
+        int k_base = k_grp * 4;
+        // Get metadata nibble for this group (8 bytes per row layout)
         int byte_idx = row * 8 + k_grp / 2;
         uint8_t nibble = (k_grp % 2 == 0) ? (h_M[byte_idx] >> 4) : (h_M[byte_idx] & 0x0F);
         
@@ -390,13 +511,15 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  // compute CPU reference using logical A matrix (now with zeros in pruned positions)
+  // compute CPU reference
   std::cout << "verify result" << std::endl;
-  // C = A × B where A is MxK, B is KxN, C is MxN
+  
+  // For all modes: C = A_logical (with zeros in pruned positions) × B
+  // For RGEMM: A_logical is 16×32 with zeros, B is 32×16, result is 16×16
   // M = TILE_SIZE (16), K = A_cols_logical, N = B_cols (16)
   matmul_cpu(h_ref.data(), h_A_logical.data(), h_B.data(), TILE_SIZE, A_cols_logical, B_cols);
 
-  // verify result
+  // verify result (always 256 elements = 16×16)
   int errors = 0;
   for (uint32_t i = 0; i < num_elements; ++i) {
     compare_float(h_C[i], h_ref[i], i, errors);
@@ -408,13 +531,48 @@ int main(int argc, char *argv[]) {
   if (output_file.is_open()) {
     output_file << "GEMM Mode: " << mode_name << "\n\n";
     
+    // 1. Print compressed/padded A matrix (what's actually sent to hardware)
+    if (gemm_mode != GEMM_MODE_TGEMM) {
+      output_file << "Matrix A Padded (Compressed " << TILE_SIZE << "x" << TILE_SIZE << "):\n";
+      for (uint32_t i = 0; i < TILE_SIZE; ++i) {
+        for (uint32_t j = 0; j < TILE_SIZE; ++j) {
+          output_file << h_A[i * TILE_SIZE + j];
+          if (j < TILE_SIZE - 1) output_file << " ";
+        }
+        output_file << "\n";
+      }
+      output_file << "\n";
+      
+      // 2. Print metadata as 0/1 pattern
+      output_file << "Metadata (" << TILE_SIZE << "x" << A_cols_logical << " sparsity pattern, 1=kept, 0=pruned):\n";
+      for (uint32_t row = 0; row < TILE_SIZE; ++row) {
+        uint32_t k_groups = A_cols_logical / 4;
+        for (uint32_t k_grp = 0; k_grp < k_groups; ++k_grp) {
+          // Get metadata nibble for this group (8 bytes per row layout)
+          int byte_idx = row * 8 + k_grp / 2;
+          uint8_t nibble = (k_grp % 2 == 0) ? (h_M[byte_idx] >> 4) : (h_M[byte_idx] & 0x0F);
+          
+          // Print 4 bits as 0/1
+          for (int offset = 0; offset < 4; ++offset) {
+            output_file << ((nibble & (1u << offset)) ? "1" : "0");
+            if (k_grp < k_groups - 1 || offset < 3) output_file << " ";
+          }
+        }
+        output_file << "\n";
+      }
+      output_file << "\n";
+    }
+
+    // 3. Print logical A matrix
     output_file << "Matrix A Logical (";
     if (gemm_mode == GEMM_MODE_TGEMM) {
       output_file << "Dense";
     } else if (gemm_mode == GEMM_MODE_UGEMM) {
       output_file << "2:4 Sparse";
-    } else {
+    } else if (gemm_mode == GEMM_MODE_VGEMM) {
       output_file << "1:4 Sparse";
+    } else if (gemm_mode == GEMM_MODE_RGEMM) {
+      output_file << "Row-wise N:4 Sparse";
     }
     output_file << ", " << TILE_SIZE << "x" << A_cols_logical << "):\n";
     for (uint32_t i = 0; i < TILE_SIZE; ++i) {
@@ -426,6 +584,7 @@ int main(int argc, char *argv[]) {
     }
     output_file << "\n";
 
+    // 4. Print B matrix
     output_file << "Matrix B (Dense, " << A_cols_logical << "x" << B_cols << "):\n";
     for (uint32_t i = 0; i < A_cols_logical; ++i) {
       for (uint32_t j = 0; j < B_cols; ++j) {
@@ -436,9 +595,10 @@ int main(int argc, char *argv[]) {
     }
     output_file << "\n";
 
+    // 5. Print C matrices (GPU and CPU reference)
     output_file << "Matrix C (GPU Result, " << TILE_SIZE << "x" << TILE_SIZE << "):\n";
-    for (int i = 0; i < TILE_SIZE; ++i) {
-      for (int j = 0; j < TILE_SIZE; ++j) {
+    for (uint32_t i = 0; i < TILE_SIZE; ++i) {
+      for (uint32_t j = 0; j < TILE_SIZE; ++j) {
         output_file << h_C[i * TILE_SIZE + j];
         if (j < TILE_SIZE - 1) output_file << " ";
       }
@@ -447,8 +607,8 @@ int main(int argc, char *argv[]) {
     output_file << "\n";
 
     output_file << "Matrix C (CPU Reference, " << TILE_SIZE << "x" << TILE_SIZE << "):\n";
-    for (int i = 0; i < TILE_SIZE; ++i) {
-      for (int j = 0; j < TILE_SIZE; ++j) {
+    for (uint32_t i = 0; i < TILE_SIZE; ++i) {
+      for (uint32_t j = 0; j < TILE_SIZE; ++j) {
         output_file << h_ref[i * TILE_SIZE + j];
         if (j < TILE_SIZE - 1) output_file << " ";
       }
