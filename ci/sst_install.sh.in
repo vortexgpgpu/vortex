@@ -87,5 +87,11 @@ rm -r $SST_ELEMENTS_ROOT
 export PATH=$SST_ELEMENTS_HOME/bin:$PATH
 echo 'export PATH='"$SST_ELEMENTS_HOME"'/bin:$PATH' >> ~/.bashrc
 
+if [ -n "$GITHUB_PATH" ]; then
+  echo "$SST_CORE_HOME/bin" >> "$GITHUB_PATH"
+  echo "$SST_ELEMENTS_HOME/bin" >> "$GITHUB_PATH"
+fi
+
+
 
 
