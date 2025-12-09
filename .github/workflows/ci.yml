@@ -66,6 +66,13 @@ jobs:
         run: |
           make -C third_party > /dev/null
 
+      - name: Export SST paths
+        run: |
+          echo "$PWD/tools/sst-install/sst-core/bin" >> $GITHUB_PATH
+          echo "$PWD/tools/sst-install/sst-elements/bin" >> $GITHUB_PATH
+          echo "SST_CORE_HOME=$PWD/tools/sst-install/sst-core" >> $GITHUB_ENV
+          echo "SST_ELEMENTS_HOME=$PWD/tools/sst-install/sst-elements" >> $GITHUB_ENV
+
   build:
     needs: setup
     strategy:
@@ -99,6 +106,13 @@ jobs:
           key: ${{ matrix.os }}-thirdparty-v0.1
           restore-keys: |
             ${{ matrix.os }}-thirdparty-
+
+      - name: Export SST paths
+        run: |
+          echo "$PWD/tools/sst-install/sst-core/bin" >> $GITHUB_PATH
+          echo "$PWD/tools/sst-install/sst-elements/bin" >> $GITHUB_PATH
+          echo "SST_CORE_HOME=$PWD/tools/sst-install/sst-core" >> $GITHUB_ENV
+          echo "SST_ELEMENTS_HOME=$PWD/tools/sst-install/sst-elements" >> $GITHUB_ENV
 
       - name: Run Build
         run: |
@@ -157,6 +171,13 @@ jobs:
         with:
           name: build-${{ matrix.os }}-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
+
+      - name: Export SST paths
+        run: |
+          echo "$PWD/tools/sst-install/sst-core/bin" >> $GITHUB_PATH
+          echo "$PWD/tools/sst-install/sst-elements/bin" >> $GITHUB_PATH
+          echo "SST_CORE_HOME=$PWD/tools/sst-install/sst-core" >> $GITHUB_ENV
+          echo "SST_ELEMENTS_HOME=$PWD/tools/sst-install/sst-elements" >> $GITHUB_ENV
 
       - name: Run tests
         run: |
