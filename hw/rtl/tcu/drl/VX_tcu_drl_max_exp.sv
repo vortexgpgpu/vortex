@@ -40,11 +40,29 @@ module VX_tcu_drl_max_exp #(
     //Finding max exp one-hot encoded index
     wire [N-1:0] sel_exp;
     for (genvar i = 0; i < N; i++) begin : g_index
-        wire [N-1:0] col_i;
-        for (genvar j = 0; j < N; j++) begin : g_col_extract
-            assign col_i[j] = sign_mat[j][i];
+        wire and_left, or_right;
+
+        if (i == 0) begin : g_first
+            assign and_left = 1'b1;
+        end else begin : g_and_left
+            wire [i-1:0] left_signals;
+            for (genvar jl = 0; jl < i; jl++) begin : g_left
+               assign left_signals[jl] = sign_mat[jl][i];
+            end
+            assign and_left = &left_signals;
         end
-        assign sel_exp[i] = ~(|col_i);    //Column with all zeros is max
+
+        if (i == N-1) begin : g_last
+            assign or_right = 1'b0;
+        end else begin : g_or_right
+            wire [N-2-i:0] right_signals;
+            for (genvar jr = i+1; jr < N; jr++) begin : g_right
+                assign right_signals[jr-i-1] = sign_mat[i][jr];
+            end
+            assign or_right = |right_signals;
+        end
+
+        assign sel_exp[i] = and_left & (~or_right);
     end
 
     //Reduction OR (Explicit MUX)

@@ -50,6 +50,8 @@ ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v

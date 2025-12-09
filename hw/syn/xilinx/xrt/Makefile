@@ -97,6 +97,9 @@ ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 endif
