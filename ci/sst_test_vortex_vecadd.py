@@ -3,5 +3,5 @@ import sst
 gpu = sst.Component("gpu0", "vortex.VortexGPGPU")
 gpu.addParams({
     "clock": "1GHz",
-    "program": "../build/tests/kernel/vecadd/vecadd.bin"
+    "program": "tests/kernel/vecadd/vecadd.bin"
 })
