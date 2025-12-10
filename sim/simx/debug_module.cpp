@@ -73,6 +73,11 @@ void DebugModule::reset()
     dmstatus.authenticated = true;
     dmstatus.authbusy = false;
     dmstatus.version = 2;
+    // Set XLEN support bits: sr32, sr64, sr128 (bits 20, 21, 22)
+    // OpenOCD checks these FIRST to determine XLEN
+    dmstatus.sr32 = (XLEN == 32);
+    dmstatus.sr64 = (XLEN == 64);
+    dmstatus.sr128 = false; // No 128-bit support
 
     dmstatus.allnonexistent = false;
     dmstatus.anynonexistent = false;
@@ -523,25 +528,40 @@ void DebugModule::execute_command(uint32_t value)
 
         if (transfer) {
             if (write) {
-                write_register(regaddr, data0());
+                // For 64-bit systems, combine data0 (low) and data1 (high) if available
+                vortex::Word val;
+                if (XLEN == 64 && abstractcs.datacount >= 2) {
+                    val = static_cast<vortex::Word>(data0()) | (static_cast<vortex::Word>(data1) << 32);
+                } else {
+                    val = static_cast<vortex::Word>(data0());
+                }
+                write_register(regaddr, val);
             } else {
-                data0() = read_register(regaddr);
+                vortex::Word val = read_register(regaddr);
+                // For 64-bit systems, split into data0 (low) and data1 (high) if available
+                if (XLEN == 64 && abstractcs.datacount >= 2) {
+                    data0() = static_cast<uint32_t>(val);
+                    data1 = static_cast<uint32_t>(val >> 32);
+                } else {
+                    data0() = static_cast<uint32_t>(val);
+                }
             }
         }
 
         if (postexec) {
             // Get PC from emulator
-            uint32_t pc = 0;
+            vortex::Word pc = 0;
             if (emulator_ != nullptr) {
                 auto& warp0 = emulator_->get_warp(0);
-                pc = static_cast<uint32_t>(warp0.PC);
+                pc = warp0.PC;
             }
             
             // Check for software breakpoint: if instruction at PC is EBREAK, halt
-            uint32_t instruction = read_mem(pc);
-            if (instruction == 0x00100073) {
+            vortex::Word instruction = read_mem(pc);
+            if ((instruction & 0xFFFFFFFF) == 0x00100073) {
                 // EBREAK instruction - software breakpoint
-                dm_log("[DM] Software breakpoint hit at 0x%08x (EBREAK), halting hart\n", pc);
+                dm_log("[DM] Software breakpoint hit at 0x%0*llx (EBREAK), halting hart\n", 
+                       (XLEN == 64) ? 16 : 8, (unsigned long long)pc);
                 halt_hart(1);  // Cause 1 = ebreak instruction
                 return;  // Don't execute the instruction
             }
@@ -580,7 +600,7 @@ void DebugModule::execute_command(uint32_t value)
             ADDR_PREV
         } addr_src = ADDR_NONE;
 
-        uint32_t mem_addr = 0;
+        vortex::Word mem_addr = 0;
 
         // If this looks like a continuation of a postincrement sequence (no explicit address
         // in DATA[0-2]), reuse the last address.
@@ -590,13 +610,13 @@ void DebugModule::execute_command(uint32_t value)
             mem_addr = access_mem_addr;
             addr_src = ADDR_PREV;
         } else if (data2 != 0) {
-            mem_addr = data2;
+            mem_addr = static_cast<vortex::Word>(data2);
             addr_src = ADDR_DATA2;
         } else if (data1 != 0) {
-            mem_addr = data1;
+            mem_addr = static_cast<vortex::Word>(data1);
             addr_src = ADDR_DATA1;
         } else if (data0() != 0) {
-            mem_addr = data0();
+            mem_addr = static_cast<vortex::Word>(data0());
             addr_src = ADDR_DATA0;
         } else if (access_mem_addr_valid) {
             // Fallback to previous address if we have one.
@@ -607,26 +627,33 @@ void DebugModule::execute_command(uint32_t value)
             addr_src = ADDR_NONE;
         }
         
-        dm_log("[DM] EXECUTE COMMAND: Access Memory, addr=0x%08x, write=%d, aamsize=%u, postinc=%d\n",
-               mem_addr, write ? 1 : 0, aamsize, aampostincrement ? 1 : 0);
+        dm_log("[DM] EXECUTE COMMAND: Access Memory, addr=0x%0*llx, write=%d, aamsize=%u, postinc=%d\n",
+               (XLEN == 64) ? 16 : 8, (unsigned long long)mem_addr, 
+               write ? 1 : 0, aamsize, aampostincrement ? 1 : 0);
 
         // Always perform one memory access per command.
             if (write) {
-                // Write memory: DATA0 contains the data to write
-                uint32_t write_data = data0();
+                // Write memory: For 64-bit, combine data0 (low) and data1 (high) if available
+                vortex::Word write_data;
+                if (access_size == 8 && XLEN == 64 && abstractcs.datacount >= 2) {
+                    write_data = static_cast<vortex::Word>(data0()) | (static_cast<vortex::Word>(data1) << 32);
+                } else {
+                    write_data = static_cast<vortex::Word>(data0());
+                }
                 
-            dm_log("[DM] Access Memory WRITE: addr=0x%08x, data=0x%08x, size=%zu\n",
-                   mem_addr, write_data, access_size);
+            dm_log("[DM] Access Memory WRITE: addr=0x%llx, data=0x%0*llx, size=%zu\n",
+                   (unsigned long long)mem_addr, (access_size == 8) ? 16 : 8, 
+                   (unsigned long long)write_data, access_size);
                 
                 if (access_size == 1) {
-                    uint32_t old_val = read_mem(mem_addr);
+                    vortex::Word old_val = read_mem(mem_addr);
                     write_mem(mem_addr, (old_val & ~0xFF) | (write_data & 0xFF));
                 } else if (access_size == 2) {
                 // Detect compressed EBREAK (0x9002) being written - save original instruction
                 if ((write_data & 0xFFFF) == 0x9002 && !has_breakpoint(mem_addr)) {
                     add_breakpoint(mem_addr);
                 }
-                    uint32_t old_val = read_mem(mem_addr);
+                    vortex::Word old_val = read_mem(mem_addr);
                     write_mem(mem_addr, (old_val & ~0xFFFF) | (write_data & 0xFFFF));
                 } else if (access_size == 4) {
                 // Detect EBREAK instruction (32-bit: 0x00100073 or compressed: 0x00009002) being written
@@ -635,19 +662,31 @@ void DebugModule::execute_command(uint32_t value)
                     add_breakpoint(mem_addr);
                 }
                     write_mem(mem_addr, write_data);
+                } else if (access_size == 8) {
+                    // 64-bit write
+                    write_mem(mem_addr, write_data);
                 } else {
                     dm_log("[DM] Access Memory: unsupported write size %zu\n", access_size);
                 }
         } else {
-                // Read memory: result goes into DATA0
-                uint32_t read_val = read_mem(mem_addr);
+                // Read memory: result goes into DATA0 (and DATA1 for 64-bit if available)
+                vortex::Word read_val = read_mem(mem_addr);
                 
                 if (access_size == 1) {
-                    data0() = read_val & 0xFF;
+                    data0() = static_cast<uint32_t>(read_val & 0xFF);
                 } else if (access_size == 2) {
-                    data0() = read_val & 0xFFFF;
+                    data0() = static_cast<uint32_t>(read_val & 0xFFFF);
                 } else if (access_size == 4) {
-                    data0() = read_val;
+                    data0() = static_cast<uint32_t>(read_val);
+                } else if (access_size == 8) {
+                    // 64-bit read: split into data0 (low) and data1 (high) if available
+                    if (XLEN == 64 && abstractcs.datacount >= 2) {
+                        data0() = static_cast<uint32_t>(read_val);
+                        data1 = static_cast<uint32_t>(read_val >> 32);
+                    } else {
+                        // Fallback: only return low 32 bits
+                        data0() = static_cast<uint32_t>(read_val);
+                    }
                 } else {
                     dm_log("[DM] Access Memory: unsupported read size %zu\n", access_size);
                     data0() = 0;
@@ -655,25 +694,25 @@ void DebugModule::execute_command(uint32_t value)
             }
             
         // Implement aampostincrement: advance the address and write it back to the same source.
-        uint32_t new_addr = mem_addr;
+        vortex::Word new_addr = mem_addr;
             if (aampostincrement) {
             new_addr = mem_addr + access_size;
             switch (addr_src) {
                 case ADDR_DATA2:
-                    data2 = new_addr;
+                    data2 = static_cast<uint32_t>(new_addr);
                     break;
                 case ADDR_DATA1:
-                    data1 = new_addr;
+                    data1 = static_cast<uint32_t>(new_addr);
                     break;
                 case ADDR_DATA0:
-                    data0() = new_addr;
+                    data0() = static_cast<uint32_t>(new_addr);
                     break;
                 case ADDR_NONE:
                 case ADDR_PREV:
                 default:
                     // When address came from a previous implicit address sequence,
                     // follow the spec and leave the updated address in DATA0.
-                    data0() = new_addr;
+                    data0() = static_cast<uint32_t>(new_addr);
                     break;
             }
             access_mem_addr = new_addr;
@@ -691,186 +730,176 @@ void DebugModule::execute_command(uint32_t value)
 // Reads a hart register by abstract register address (used by access register commands).
 // Use case: Called during abstract command execution to read GPRs, PC, DCSR, DPC, or CSRs.
 // Register address mapping: 0x1000-0x101F (GPRs), 0x1020 (PC), 0x7B0 (DCSR), 0x7B1 (DPC), 0x0000-0x0FFF/0xC000-0xFFFF (CSRs).
-uint32_t DebugModule::read_register(uint16_t regaddr)
+vortex::Word DebugModule::read_register(uint16_t regaddr)
 {
     // General purpose registers (x0–x31) at addresses 0x1000–0x101F
     if (regaddr >= 0x1000 && regaddr <= 0x101F) {
         int gpr_index = regaddr - 0x1000;
-        uint32_t value;
+        vortex::Word value;
         if (emulator_ != nullptr) {
             // Use emulator's warp 0, thread 0 register
             auto& warp0 = emulator_->get_warp(0);
-            value = static_cast<uint32_t>(warp0.ireg_file.at(gpr_index).at(0));
+            value = warp0.ireg_file.at(gpr_index).at(0);  // Direct assignment, no cast needed
         } else {
             // No emulator available
             value = 0;
         }
-        dm_log("[DM] READ REG  x%d (0x%04x) -> 0x%08x\n", gpr_index, regaddr, value);
+        dm_log("[DM] READ REG  x%d (0x%04x) -> 0x%0*llx\n", gpr_index, regaddr, 
+               (XLEN == 64) ? 16 : 8, (unsigned long long)value);
         return value;
     }
 
     if (regaddr == 0x1020) {
-        uint32_t value;
+        vortex::Word value;
         if (emulator_ != nullptr) {
             // Use emulator's warp 0 PC
             auto& warp0 = emulator_->get_warp(0);
-            value = static_cast<uint32_t>(warp0.PC);
+            value = warp0.PC;  // PC is already Word type
         } else {
             // No emulator available
             value = 0;
         }
-        dm_log("[DM] READ REG  pc (0x1020) -> 0x%08x\n", value);
+        dm_log("[DM] READ REG  pc (0x1020) -> 0x%0*llx\n", (XLEN == 64) ? 16 : 8, (unsigned long long)value);
         return value;
     }
 
     if (regaddr == 0x07b0 || regaddr == 0x7B0) {
-        uint32_t value = dcsr_.to_u32();
-        dm_log("[DM] READ REG  dcsr (0x7B0) -> 0x%08x\n", value);
+        vortex::Word value = dcsr_.to_u32();  // DCSR is always 32-bit
+        dm_log("[DM] READ REG  dcsr (0x7B0) -> 0x%08x\n", (uint32_t)value);
         return value;
     }
 
     if (regaddr == 0x07b1 || regaddr == 0x7B1) {
-        uint32_t value = dpc_;
-        dm_log("[DM] READ REG  dpc (0x7B1) -> 0x%08x\n", value);
+        vortex::Word value = dpc_;
+        dm_log("[DM] READ REG  dpc (0x7B1) -> 0x%0*llx\n", (XLEN == 64) ? 16 : 8, (unsigned long long)value);
         return value;
     }
 
+    // Helper function to read CSR by number
+    // Note: CSRs are always 32-bit per RISC-V spec, but we return Word for consistency
+    auto read_csr = [this](uint16_t csr_num, uint16_t regaddr) -> vortex::Word {
+        if (csr_num == 0x0301) {
+            // Calculate MISA based on configured extensions
+            // MXL field (bits 31:30): 1=RV32, 2=RV64, 3=RV128
+            uint32_t mxl = (vortex::log2floor(XLEN) - 4);
+            uint32_t value = (mxl << 30) | MISA_STD;
+            dm_log("[DM] READ REG  misa (0x%03x via 0x%04x) -> 0x%08x (RV%d, MXL=%d, MISA_STD=0x%08x)\n", 
+                   csr_num, regaddr, value, XLEN, mxl, MISA_STD);
+            return value;
+        }
+
+        if (csr_num == 0x0c22) {
+            uint32_t value = 0;
+            dm_log("[DM] READ REG  vlenb (0x%03x via 0x%04x) -> 0x%08x (no vector support)\n", 
+                   csr_num, regaddr, value);
+            return value;
+        }
+
+        dm_log("[DM] READ REG  csr[0x%03x] (0x%04x) -> 0x00000000\n", csr_num, regaddr);
+        return 0;
+    };
+
+    // Direct CSR access: 0x0000-0x0FFF (CSR number = regaddr)
     if (regaddr >= 0x0000 && regaddr <= 0x0FFF) {
-        uint16_t csr_num = regaddr;
-
-        if (csr_num == 0x0301) {
-            // Calculate MISA based on configured extensions
-            uint32_t value = ((vortex::log2floor(XLEN) - 4) << 30) | MISA_STD;
-            dm_log("[DM] READ REG  misa (0x0301) -> 0x%08x (RV%dIMAFD%s)\n", 
-                   value, XLEN, (EXT_A_ENABLED ? "A" : ""));
-            return value;
-        }
-
-        if (csr_num == 0x0c22) {
-            uint32_t value = 0;
-            dm_log("[DM] READ REG  vlenb (0x0c22) -> 0x%08x (no vector support)\n", value);
-            return value;
-        }
-        dm_log("[DM] READ REG  csr[0x%03x] (0x%04x) -> 0x00000000\n", csr_num, regaddr);
-        return 0;
-    }
-
-    if (regaddr >= 0xC000 && regaddr <= 0xFFFF) {
-        uint16_t csr_num = regaddr - 0xC000;
-
-        if (csr_num == 0x0301) {
-            // Calculate MISA based on configured extensions
-            uint32_t value = ((vortex::log2floor(XLEN) - 4) << 30) | MISA_STD;
-            dm_log("[DM] READ REG  misa (0x%04x) -> 0x%08x (RV%dIMAFD%s)\n", 
-                   regaddr, value, XLEN, (EXT_A_ENABLED ? "A" : ""));
-            return value;
-        }
-
-        if (csr_num == 0x0c22) {
-            uint32_t value = 0;
-            dm_log("[DM] READ REG  vlenb (0x%04x) -> 0x%08x (no vector support)\n", regaddr, value);
-            return value;
-        }
-
-        dm_log("[DM] READ REG  csr[0x%03x] (0x%04x) -> 0x00000000\n", csr_num, regaddr);
-        return 0;
+        return read_csr(static_cast<uint16_t>(regaddr), regaddr);
     }
 
     dm_log("[DM] READ REG unknown regaddr=0x%04x -> 0x00000000\n", regaddr);
-    return 0;
+    return vortex::Word(0);
 }
 
-void DebugModule::write_register(uint16_t regaddr, uint32_t val)
+void DebugModule::write_register(uint16_t regaddr, vortex::Word val)
 {
     if (regaddr >= 0x1000 && regaddr <= 0x101F) {
         int gpr_index = regaddr - 0x1000;
         if (gpr_index == 0) {
-            dm_log("[DM] WRITE REG x0 (0x%04x) <- 0x%08x (ignored, x0 is read-only)\n", regaddr, val);
+            dm_log("[DM] WRITE REG x0 (0x%04x) <- 0x%0*llx (ignored, x0 is read-only)\n", 
+                   regaddr, (XLEN == 64) ? 16 : 8, (unsigned long long)val);
             return;
         }
         if (emulator_ != nullptr) {
             auto& warp0 = emulator_->get_warp(0);
-            warp0.ireg_file.at(gpr_index).at(0) = val;
+            warp0.ireg_file.at(gpr_index).at(0) = val;  // Direct assignment
         }
-        dm_log("[DM] WRITE REG x%d (0x%04x) <- 0x%08x\n", gpr_index, regaddr, val);
+        dm_log("[DM] WRITE REG x%d (0x%04x) <- 0x%0*llx\n", 
+               gpr_index, regaddr, (XLEN == 64) ? 16 : 8, (unsigned long long)val);
         return;
     }
-
 
     if (regaddr == 0x1020) {
         if (emulator_ != nullptr) {
             auto& warp0 = emulator_->get_warp(0);
-            warp0.PC = val;
+            warp0.PC = val;  // Direct assignment, PC is Word type
         }
-        dm_log("[DM] WRITE REG pc (0x1020) <- 0x%08x\n", val);
+        dm_log("[DM] WRITE REG pc (0x1020) <- 0x%0*llx\n", 
+               (XLEN == 64) ? 16 : 8, (unsigned long long)val);
         return;
     }
 
     if (regaddr == 0x07b0 || regaddr == 0x7B0) {
-        dcsr_.from_u32(val);
-        dm_log("[DM] WRITE REG dcsr (0x7B0) <- 0x%08x\n", val);
+        dcsr_.from_u32(static_cast<uint32_t>(val));  // DCSR is always 32-bit
+        dm_log("[DM] WRITE REG dcsr (0x7B0) <- 0x%08x\n", (uint32_t)val);
         return;
     }
 
     if (regaddr == 0x07b1 || regaddr == 0x7B1) {
         dpc_ = val;
-        dm_log("[DM] WRITE REG dpc (0x7B1) <- 0x%08x\n", val);
+        dm_log("[DM] WRITE REG dpc (0x7B1) <- 0x%0*llx\n", 
+               (XLEN == 64) ? 16 : 8, (unsigned long long)val);
         return;
     }
 
     if (regaddr >= 0xC000 && regaddr <= 0xFFFF) {
-        dm_log("[DM] WRITE REG csr[0x%04x] (0x%04x) <- 0x%08x (ignored)\n", regaddr - 0xC000, regaddr, val);
+        dm_log("[DM] WRITE REG csr[0x%04x] (0x%04x) <- 0x%0*llx (ignored)\n", 
+               regaddr - 0xC000, regaddr, (XLEN == 64) ? 16 : 8, (unsigned long long)val);
         return;
     }
 
-    dm_log("[DM] WRITE REG unknown regaddr=0x%04x <- 0x%08x (ignored)\n", regaddr, val);
+    dm_log("[DM] WRITE REG unknown regaddr=0x%04x <- 0x%0*llx (ignored)\n", 
+           regaddr, (XLEN == 64) ? 16 : 8, (unsigned long long)val);
 }
 
-uint32_t DebugModule::read_mem(uint64_t addr)
+vortex::Word DebugModule::read_mem(vortex::Word addr)
 {
-    if (addr > UINT32_MAX) {
-        dm_log("[DM] READ MEM  addr=0x%llx -> ADDRESS TOO LARGE\n", (unsigned long long)addr);
-        return 0;
-    }
-    uint32_t val = read_program_memory(static_cast<uint32_t>(addr));
-    dm_log("[DM] READ MEM  addr=0x%llx -> 0x%x\n", (unsigned long long)addr, val);
+    vortex::Word val = read_program_memory(addr);
+    dm_log("[DM] READ MEM  addr=0x%0*llx -> 0x%0*llx\n", 
+           (XLEN == 64) ? 16 : 8, (unsigned long long)addr,
+           (XLEN == 64) ? 16 : 8, (unsigned long long)val);
     return val;
 }
 
-void DebugModule::write_mem(uint64_t addr, uint32_t val)
+void DebugModule::write_mem(vortex::Word addr, vortex::Word val)
 {
-    if (addr > UINT32_MAX) {
-        dm_log("[DM] WRITE MEM addr=0x%llx <- 0x%x ADDRESS TOO LARGE\n", (unsigned long long)addr, val);
-        return;
-    }
-    write_program_memory(static_cast<uint32_t>(addr), val);
-    dm_log("[DM] WRITE MEM addr=0x%llx <- 0x%x\n", (unsigned long long)addr, val);
+    write_program_memory(addr, val);
+    dm_log("[DM] WRITE MEM addr=0x%0*llx <- 0x%0*llx\n", 
+           (XLEN == 64) ? 16 : 8, (unsigned long long)addr,
+           (XLEN == 64) ? 16 : 8, (unsigned long long)val);
 }
 
-uint32_t DebugModule::read_program_memory(uint32_t addr) const
+vortex::Word DebugModule::read_program_memory(vortex::Word addr) const
 {
     if (!emulator_) {
         return 0;
     }
-    uint32_t value = 0;
-    emulator_->dcache_read(&value, addr, sizeof(uint32_t));
+    vortex::Word value = 0;
+    emulator_->dcache_read(&value, static_cast<uint64_t>(addr), sizeof(vortex::Word));
     return value;
 }
 
-void DebugModule::write_program_memory(uint32_t addr, uint32_t value)
+void DebugModule::write_program_memory(vortex::Word addr, vortex::Word value)
 {
     if (!emulator_) {
         return;
     }
-    emulator_->dcache_write(&value, addr, sizeof(uint32_t));
+    emulator_->dcache_write(&value, static_cast<uint64_t>(addr), sizeof(vortex::Word));
 }
 
-uint32_t DebugModule::direct_read_register(uint16_t regaddr)
+vortex::Word DebugModule::direct_read_register(uint16_t regaddr)
 {
     return read_register(regaddr);
 }
 
-void DebugModule::direct_write_register(uint16_t regaddr, uint32_t value)
+void DebugModule::direct_write_register(uint16_t regaddr, vortex::Word value)
 {
     write_register(regaddr, value);
 }
@@ -923,10 +952,12 @@ void DebugModule::resume_hart(bool single_step)
     // Log current program state before resuming
     if (emulator_ != nullptr) {
         auto& warp0 = emulator_->get_warp(0);
-        uint32_t current_pc = static_cast<uint32_t>(warp0.PC);
-        uint32_t dpc = dpc_;
-        dm_log("[DM] Resume state: PC=0x%08x, DPC=0x%08x, halt_requested=%d\n", 
-               current_pc, dpc, halt_requested_ ? 1 : 0);
+        vortex::Word current_pc = warp0.PC;
+        vortex::Word dpc = dpc_;
+        dm_log("[DM] Resume state: PC=0x%0*llx, DPC=0x%0*llx, halt_requested=%d\n", 
+               (XLEN == 64) ? 16 : 8, (unsigned long long)current_pc,
+               (XLEN == 64) ? 16 : 8, (unsigned long long)dpc,
+               halt_requested_ ? 1 : 0);
     }
 
     bool do_step = single_step || dcsr_.step;
@@ -1011,11 +1042,12 @@ void DebugModule::remove_breakpoint(uint32_t addr)
 }
 
 // Notification from emulator when program completes naturally
-void DebugModule::notify_program_completed(uint32_t final_pc)
+void DebugModule::notify_program_completed(vortex::Word final_pc)
 {
     // Only process if we weren't already explicitly halted
     if (!is_halted_ && !halt_requested_) {
-        dm_log("[DM] Program completed naturally at PC=0x%08x, halting hart\n", final_pc);
+        dm_log("[DM] Program completed naturally at PC=0x%0*llx, halting hart\n", 
+               (XLEN == 64) ? 16 : 8, (unsigned long long)final_pc);
         
         // Update DPC to final PC
         direct_write_register(0x7B1, final_pc);
@@ -1027,24 +1059,16 @@ void DebugModule::notify_program_completed(uint32_t final_pc)
     }
 }
 
-// Called periodically when JTAG is in Run-Test-Idle state.
-// Use case: Allows the debug module to process state updates during idle periods.
-// When the hart is running continuously, this simulates instruction execution by advancing PC
-// and checking for breakpoints.
+
 void DebugModule::run_test_idle()
 {
-    // run_test_idle is called periodically during JTAG Run-Test-Idle state
-    // The emulator handles actual instruction execution via step()
-    // We just need to check if we're halted or running
-    // Note: We don't execute instructions here - that's handled by the emulator
-    
-    // Only log occasionally to avoid spam (every 1000 calls)
     static uint64_t log_counter = 0;
     if (!is_halted_ && !halt_requested_) {
         if ((log_counter++ % 1000) == 0 && emulator_ != nullptr) {
             auto& warp0 = emulator_->get_warp(0);
-            uint32_t pc = static_cast<uint32_t>(warp0.PC);
-            dm_log("[DM] run_test_idle: hart running, PC=0x%08x\n", pc);
+            vortex::Word pc = warp0.PC;
+            dm_log("[DM] run_test_idle: hart running, PC=0x%0*llx\n", 
+                   (XLEN == 64) ? 16 : 8, (unsigned long long)pc);
         }
     } else {
         // Only log occasionally when halted too

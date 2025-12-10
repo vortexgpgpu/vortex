@@ -5,6 +5,8 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <VX_config.h>
+#include "types.h"
 
 namespace vortex {
     class Emulator;
@@ -84,6 +86,9 @@ struct dmstatus_t {
     bool allhavereset;
 
     bool impebreak;
+    bool sr32;  // hart supports 32-bit abstract register access
+    bool sr64;  // hart supports 64-bit abstract register access
+    bool sr128; // hart supports 128-bit abstract register access
 
 
     dmstatus_t() : version(2), confstrptrvalid(false), hasresethaltreq(false),
@@ -94,7 +99,8 @@ struct dmstatus_t {
                    anynonexistent(false), allnonexistent(false),
                    anyresumeack(false), allresumeack(true),
                    anyhavereset(false), allhavereset(false),
-                   impebreak(false) {}
+                   impebreak(false),
+                   sr32(false), sr64(false), sr128(false) {}
 };
 
 
@@ -104,7 +110,9 @@ struct abstractcs_t {
     bool busy;
     unsigned cmderr;
 
-    abstractcs_t() : datacount(1), progbufsize(0), busy(false), cmderr(0) {}
+    // datacount: number of data registers (1 for RV32, 2 for RV64)
+    // OpenOCD uses this to determine XLEN
+    abstractcs_t() : datacount((XLEN == 64) ? 2 : 1), progbufsize(0), busy(false), cmderr(0) {}
 };
 
 class DebugModule {
@@ -126,8 +134,8 @@ public:
     static bool verbose_logging();
 
 
-    uint32_t direct_read_register(uint16_t regaddr);
-    void direct_write_register(uint16_t regaddr, uint32_t value);
+    vortex::Word direct_read_register(uint16_t regaddr);
+    void direct_write_register(uint16_t regaddr, vortex::Word value);
     bool read_memory_block(uint64_t addr, uint8_t* dest, size_t len) const;
     bool write_memory_block(uint64_t addr, const uint8_t* src, size_t len);
     // Halts the warp (SIMD thread group) and enters debug mode with the specified cause.
@@ -162,7 +170,7 @@ public:
     void remove_breakpoint(uint32_t addr);
     
     // Notification from emulator when program completes
-    void notify_program_completed(uint32_t final_pc);
+    void notify_program_completed(vortex::Word final_pc);
 
 private:
 
@@ -229,7 +237,7 @@ private:
     } dcsr_;
     
     // Debug Program Counter (DPC) - PC value when entering debug mode
-    uint32_t dpc_;
+    vortex::Word dpc_;
     
     // Debug state tracking
     bool resumeack_;
@@ -239,7 +247,9 @@ private:
     // Software breakpoint storage: address -> original instruction
     std::map<uint32_t, uint32_t> software_breakpoints_;
 
-    static constexpr unsigned datacount = 1;
+    // datacount: number of data registers (1 for RV32, 2 for RV64)
+    // OpenOCD uses this to determine XLEN
+    static constexpr unsigned datacount = (XLEN == 64) ? 2 : 1;
     uint32_t dmdata[datacount];
     uint32_t data1;  // DATA1 register (address 0x5)
     uint32_t data2;  // DATA2 register (address 0x6)
@@ -261,7 +271,7 @@ private:
     
     // Temporary storage for Access Memory command address
     // OpenOCD sets address in DATA0, then data, then executes command
-    uint32_t access_mem_addr;
+    vortex::Word access_mem_addr;
     bool access_mem_addr_valid;
 
 
@@ -273,16 +283,16 @@ private:
     void execute_command(uint32_t cmd);
 
 
-    uint32_t read_register(uint16_t regaddr);
-    void write_register(uint16_t regaddr, uint32_t val);
+    vortex::Word read_register(uint16_t regaddr);
+    void write_register(uint16_t regaddr, vortex::Word val);
 
 
-    uint32_t read_mem(uint64_t addr);
-    void write_mem(uint64_t addr, uint32_t val);
+    vortex::Word read_mem(vortex::Word addr);
+    void write_mem(vortex::Word addr, vortex::Word val);
     
     // Program memory access (via emulator)
-    uint32_t read_program_memory(uint32_t addr) const;
-    void write_program_memory(uint32_t addr, uint32_t value);
+    vortex::Word read_program_memory(vortex::Word addr) const;
+    void write_program_memory(vortex::Word addr, vortex::Word value);
 
 
     uint32_t read_dmcontrol();

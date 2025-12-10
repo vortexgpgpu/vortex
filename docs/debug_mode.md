@@ -4,9 +4,27 @@ This guide explains how to debug Vortex programs using GDB and OpenOCD with the 
 
 ## Prerequisites
 
-- Built simulator: `make -C build/sim/simx`
-- OpenOCD installed
-- RISC-V GDB (part of RISC-V toolchain)
+Before running the debugger, ensure you have the following dependencies installed:
+
+- **OpenOCD**: Open On-Chip Debugger for JTAG communication
+- **RISC-V GDB**: RISC-V cross-debugger (part of RISC-V toolchain, e.g., `riscv64-unknown-elf-gdb`)
+- **Build tools**: Make and C++ compiler (g++)
+
+## Building the Simulator
+
+The simulator must be built with `XLEN=64` to support 64-bit RISC-V binaries (including double-precision floating point):
+
+```bash
+cd /vortex
+cd build/sim/simx
+make clean
+make XLEN=64
+```
+
+This builds the simulator with:
+- **XLEN=64**: 64-bit integer registers
+- **EXT_D enabled**: Double-precision floating point support (FLEN=64)
+- **RISC-V Debug Module**: Full debug interface support
 
 ## Quick Start: Debugging Fibonacci
 
@@ -15,6 +33,11 @@ This guide explains how to debug Vortex programs using GDB and OpenOCD with the 
 ```bash
 cd /vortex
 ./build/sim/simx/simx -d -p 9824 build/tests/kernel/fibonacci/fibonacci.bin
+```
+
+For verbose debug logging (optional, shows detailed debug module operations):
+```bash
+./build/sim/simx/simx -d -V -p 9824 build/tests/kernel/fibonacci/fibonacci.bin
 ```
 
 The simulator starts halted, waiting for a debugger connection.
@@ -74,10 +97,13 @@ In GDB:
 Options:
   -d              Enable debug mode
   -p <port>       Remote bitbang port (default: 9823)
+  -V              Enable verbose debug module logging (shows detailed debug operations)
   -c <cores>      Number of cores
   -w <warps>      Number of warps per core
   -t <threads>    Number of threads per warp
 ```
+
+**Note:** The `-V` flag enables verbose logging from the debug module, which shows detailed information about register accesses, memory operations, and debug commands. This is useful for debugging the debugger itself, but can produce a lot of output. Use it when you need to see what the debug module is doing internally.
 
 ## Key Addresses (Fibonacci Binary)
 
@@ -98,10 +124,6 @@ Options:
 - Check port numbers match (default 9823, config uses 9824)
 - Check simulator output for "Remote bitbang server ready"
 
-**GDB shows PC at 0x800001ac:**
-- Program already completed
-- Use `monitor reset halt` and `set $pc = 0x80000000` to restart
-
 **Breakpoints not working:**
 - Ensure address is in executable memory (0x80000000+)
 - Verify program hasn't already passed that address
@@ -109,7 +131,7 @@ Options:
 ## Example Session
 
 ```bash
-# Terminal 1
+# Terminal 1 (add -V for verbose debug logging)
 ./build/sim/simx/simx -d -p 9824 build/tests/kernel/fibonacci/fibonacci.bin
 
 # Terminal 2

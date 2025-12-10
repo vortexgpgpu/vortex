@@ -189,7 +189,7 @@ instr_trace_t* Emulator::step() {
   if (scheduled_warp == -1) {
     // No warp is ready to execute - check if program has completed
     if (debug_module_ != nullptr && !active_warps_.any()) {
-      uint32_t final_pc = (last_inactive_warp_pc_ != 0) ? last_inactive_warp_pc_ : static_cast<uint32_t>(warps_.at(0).PC);
+      vortex::Word final_pc = (last_inactive_warp_pc_ != 0) ? static_cast<vortex::Word>(last_inactive_warp_pc_) : warps_.at(0).PC;
       debug_module_->notify_program_completed(final_pc);
     }
     return nullptr;
@@ -220,7 +220,7 @@ instr_trace_t* Emulator::step() {
       if (is_ebreak && debug_module_->has_breakpoint(warp.PC)) {
         // Software breakpoint hit - update DPC with emulator's PC and halt
         std::cout << "[EMU] Breakpoint hit at PC=0x" << std::hex << warp.PC << std::dec << std::endl;
-        uint32_t emulator_pc = static_cast<uint32_t>(warp.PC);
+        vortex::Word emulator_pc = warp.PC;  // PC is already Word type
         debug_module_->direct_write_register(0x7B1, emulator_pc);  // Update DPC register
         debug_module_->halt_hart(1);  // Cause 1 = ebreak instruction
         debug_module_->set_halt_requested(true);
@@ -247,7 +247,7 @@ instr_trace_t* Emulator::step() {
   // Check for single-step mode - halt after executing one instruction
   if (debug_module_ != nullptr && debug_module_->is_single_step_active()) {
     // Update DPC with current PC (which points to next instruction after execution)
-    uint32_t emulator_pc = static_cast<uint32_t>(warp.PC);
+    vortex::Word emulator_pc = warp.PC;  // PC is already Word type
     debug_module_->direct_write_register(0x7B1, emulator_pc);  // Update DPC register
     debug_module_->set_halt_requested(true);
     debug_module_->set_single_step_active(false);

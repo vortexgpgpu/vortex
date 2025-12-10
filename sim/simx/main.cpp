@@ -33,7 +33,7 @@
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-v: vector-test] [-s: stats] [-d: debug-mode] [-p <port>: RBB port] [-h: help] <program>" << std::endl;
+   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-v: vector-test] [-s: stats] [-d: debug-mode] [-p <port>: RBB port] [-V: verbose debug logging] [-h: help] <program>" << std::endl;
 }
 
 uint32_t num_threads = NUM_THREADS;
@@ -42,12 +42,13 @@ uint32_t num_cores = NUM_CORES;
 bool showStats = false;
 bool vector_test = false;
 bool debug_mode = false;
+bool debug_verbose = false;  // Verbose debug module logging
 uint16_t rbb_port = 9823;  // Default OpenOCD remote bitbang port
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
-  	while ((c = getopt(argc, argv, "t:w:c:vshdp:")) != -1) {
+  	while ((c = getopt(argc, argv, "t:w:c:vshdp:V")) != -1) {
     	switch (c) {
       case 't':
         num_threads = atoi(optarg);
@@ -69,6 +70,9 @@ static void parse_args(int argc, char **argv) {
         break;
       case 'p':
         rbb_port = static_cast<uint16_t>(atoi(optarg));
+        break;
+      case 'V':
+        debug_verbose = true;
         break;
     	case 'h':
       	show_usage();
@@ -137,8 +141,8 @@ int main(int argc, char **argv) {
       // Debug mode: run RBB server in infinite loop
       std::cout << "[DEBUG] Starting debug mode on port " << rbb_port << std::endl;
       
-      // Disable verbose logging for debug module (set to false to reduce noise)
-      DebugModule::set_verbose_logging(false);
+      // Set verbose logging for debug module based on command-line flag
+      DebugModule::set_verbose_logging(debug_verbose);
       
       // Get emulator from processor
       Emulator* emulator = processor.get_first_emulator();
@@ -165,7 +169,7 @@ int main(int argc, char **argv) {
       if (emulator != nullptr) {
         // Update DPC with initial PC value before halting
         auto& warp0 = emulator->get_warp(0);
-        uint32_t initial_pc = static_cast<uint32_t>(warp0.PC);
+        vortex::Word initial_pc = warp0.PC;  // PC is already Word type
         dm.direct_write_register(0x7B1, initial_pc);  // Set DPC to initial PC
         // Note: We don't need to suspend the warp here because halt_requested_
         // check at the start of step() will prevent execution
