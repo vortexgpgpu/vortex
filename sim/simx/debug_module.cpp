@@ -603,21 +603,37 @@ void DebugModule::execute_command(uint32_t value)
         vortex::Word mem_addr = 0;
 
         // If this looks like a continuation of a postincrement sequence (no explicit address
-        // in DATA[0-2]), reuse the last address.
+        // in DATA[0-3]), reuse the last address.
         if (aampostincrement &&
             access_mem_addr_valid &&
-            data2 == 0 && data1 == 0 && data0() == 0) {
+            data3 == 0 && data2 == 0 && data1 == 0 && data0() == 0) {
             mem_addr = access_mem_addr;
             addr_src = ADDR_PREV;
-        } else if (data2 != 0) {
-            mem_addr = static_cast<vortex::Word>(data2);
-            addr_src = ADDR_DATA2;
-        } else if (data1 != 0) {
-            mem_addr = static_cast<vortex::Word>(data1);
-            addr_src = ADDR_DATA1;
-        } else if (data0() != 0) {
-            mem_addr = static_cast<vortex::Word>(data0());
-            addr_src = ADDR_DATA0;
+        } else if (data3 != 0 || data2 != 0) {
+            // For 64-bit addresses, combine DATA3 (high) and DATA2 (low)
+            if (XLEN == 64 && data3 != 0) {
+                mem_addr = (static_cast<vortex::Word>(data3) << 32) | static_cast<vortex::Word>(data2);
+                addr_src = ADDR_DATA2;
+                dm_log("[DM] Access Memory: Combining DATA3 (0x%08x) and DATA2 (0x%08x) -> addr=0x%016llx\n",
+                       data3, data2, (unsigned long long)mem_addr);
+            } else {
+                mem_addr = static_cast<vortex::Word>(data2);
+                addr_src = ADDR_DATA2;
+            }
+        } else if (data1 != 0 || data0() != 0) {
+            // For 64-bit addresses, combine DATA1 (high) and DATA0 (low)
+            if (XLEN == 64 && data1 != 0) {
+                mem_addr = (static_cast<vortex::Word>(data1) << 32) | static_cast<vortex::Word>(data0());
+                addr_src = ADDR_DATA0;
+                dm_log("[DM] Access Memory: Combining DATA1 (0x%08x) and DATA0 (0x%08x) -> addr=0x%016llx\n",
+                       data1, data0(), (unsigned long long)mem_addr);
+            } else if (data1 != 0) {
+                mem_addr = static_cast<vortex::Word>(data1);
+                addr_src = ADDR_DATA1;
+            } else {
+                mem_addr = static_cast<vortex::Word>(data0());
+                addr_src = ADDR_DATA0;
+            }
         } else if (access_mem_addr_valid) {
             // Fallback to previous address if we have one.
             mem_addr = access_mem_addr;
@@ -699,13 +715,25 @@ void DebugModule::execute_command(uint32_t value)
             new_addr = mem_addr + access_size;
             switch (addr_src) {
                 case ADDR_DATA2:
-                    data2 = static_cast<uint32_t>(new_addr);
+                    // If address came from DATA3+DATA2 (64-bit), write back both parts
+                    if (XLEN == 64 && data3 != 0) {
+                        data3 = static_cast<uint32_t>(new_addr >> 32);
+                        data2 = static_cast<uint32_t>(new_addr);
+                    } else {
+                        data2 = static_cast<uint32_t>(new_addr);
+                    }
                     break;
                 case ADDR_DATA1:
                     data1 = static_cast<uint32_t>(new_addr);
                     break;
                 case ADDR_DATA0:
-                    data0() = static_cast<uint32_t>(new_addr);
+                    // If address came from DATA1+DATA0 (64-bit), write back both parts
+                    if (XLEN == 64 && data1 != 0) {
+                        data1 = static_cast<uint32_t>(new_addr >> 32);
+                        data0() = static_cast<uint32_t>(new_addr);
+                    } else {
+                        data0() = static_cast<uint32_t>(new_addr);
+                    }
                     break;
                 case ADDR_NONE:
                 case ADDR_PREV:
