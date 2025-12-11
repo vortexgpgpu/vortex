@@ -10,7 +10,9 @@ Before running the debugger, ensure you have the following dependencies installe
 - **RISC-V GDB**: RISC-V cross-debugger (part of RISC-V toolchain, e.g., `riscv64-unknown-elf-gdb`)
 - **Build tools**: Make and C++ compiler (g++)
 
-## Building the Simulator
+## Building the Simulator and Kernel Files
+
+### Building the Simulator
 
 The simulator must be built with `XLEN=64` to support 64-bit RISC-V binaries (including double-precision floating point):
 
@@ -26,18 +28,57 @@ This builds the simulator with:
 - **EXT_D enabled**: Double-precision floating point support (FLEN=64)
 - **RISC-V Debug Module**: Full debug interface support
 
+### Building the Kernel Library
+
+The kernel library (`libvortex.a`) must be built with the same `XLEN` value as the simulator. For 64-bit support:
+
+```bash
+cd /vortex/build/kernel
+make clean
+make XLEN=64
+```
+
+This builds the kernel library that provides system calls, startup code, and runtime support for Vortex programs.
+
+### Building Test Binaries
+
+All test binaries must also be built with `XLEN=64` to match the simulator and kernel library:
+
+```bash
+# Build a specific test (e.g., fibonacci)
+cd /vortex/build/tests/kernel/fibonacci
+make clean
+make XLEN=64
+
+# Or build all kernel tests
+cd /vortex/build/tests/kernel
+for dir in */; do
+    cd "$dir"
+    make clean
+    make XLEN=64
+    cd ..
+done
+```
+
+**Important:** The `XLEN` value must be consistent across:
+- Simulator (`build/sim/simx`)
+- Kernel library (`build/kernel`)
+- All test binaries (`build/tests/kernel/*`)
+
+Mismatched `XLEN` values will cause linker errors or runtime failures.
+
 ## Quick Start: Debugging Fibonacci
 
 ### Step 1: Start Simulator in Debug Mode
 
 ```bash
 cd /vortex
-./build/sim/simx/simx -d -p 9824 build/tests/kernel/fibonacci/fibonacci.bin
+./build/sim/simx/simx -d build/tests/kernel/fibonacci/fibonacci.bin
 ```
 
 For verbose debug logging (optional, shows detailed debug module operations):
 ```bash
-./build/sim/simx/simx -d -V -p 9824 build/tests/kernel/fibonacci/fibonacci.bin
+./build/sim/simx/simx -d -V 9824 build/tests/kernel/fibonacci/fibonacci.bin
 ```
 
 The simulator starts halted, waiting for a debugger connection.
@@ -124,10 +165,6 @@ Options:
 - Check port numbers match (default 9823, config uses 9824)
 - Check simulator output for "Remote bitbang server ready"
 
-**Breakpoints not working:**
-- Ensure address is in executable memory (0x80000000+)
-- Verify program hasn't already passed that address
-
 ## Example Session
 
 ```bash
@@ -148,13 +185,6 @@ riscv64-unknown-elf-gdb
 Continuing.
 Program Stopped
 ```
-
-## Features
-
-- **Software breakpoints:** Implemented using `EBREAK` instructions
-- **Single-step:** Full instruction-level stepping support
-- **Program completion:** Automatically detected and reported to GDB
-- **RISC-V Debug Spec 0.13:** Full compliance with standard debug interface
 
 ## Additional Resources
 
