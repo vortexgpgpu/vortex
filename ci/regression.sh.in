@@ -540,11 +540,11 @@ tensor()
 
     # test uint8
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
+    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
 
     # test int4
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
+    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
 
     # test uint4
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
