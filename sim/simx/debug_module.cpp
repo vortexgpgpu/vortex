@@ -557,7 +557,7 @@ void DebugModule::execute_command(uint32_t value)
             }
             
             // Check for software breakpoint: if instruction at PC is EBREAK, halt
-            vortex::Word instruction = read_mem(pc);
+            vortex::Word instruction = read_mem(pc, sizeof(uint32_t));  // Read 4-byte instruction
             if ((instruction & 0xFFFFFFFF) == 0x00100073) {
                 // EBREAK instruction - software breakpoint
                 dm_log("[DM] Software breakpoint hit at 0x%0*llx (EBREAK), halting hart\n", 
@@ -662,31 +662,31 @@ void DebugModule::execute_command(uint32_t value)
                    (unsigned long long)write_data, access_size);
                 
                 if (access_size == 1) {
-                    vortex::Word old_val = read_mem(mem_addr);
-                    write_mem(mem_addr, (old_val & ~0xFF) | (write_data & 0xFF));
+                    vortex::Word old_val = read_mem(mem_addr, access_size);
+                    write_mem(mem_addr, (old_val & ~0xFF) | (write_data & 0xFF), access_size);
                 } else if (access_size == 2) {
                 // Detect compressed EBREAK (0x9002) being written - save original instruction
                 if ((write_data & 0xFFFF) == 0x9002 && !has_breakpoint(mem_addr)) {
                     add_breakpoint(mem_addr);
                 }
-                    vortex::Word old_val = read_mem(mem_addr);
-                    write_mem(mem_addr, (old_val & ~0xFFFF) | (write_data & 0xFFFF));
+                    vortex::Word old_val = read_mem(mem_addr, access_size);
+                    write_mem(mem_addr, (old_val & ~0xFFFF) | (write_data & 0xFFFF), access_size);
                 } else if (access_size == 4) {
                 // Detect EBREAK instruction (32-bit: 0x00100073 or compressed: 0x00009002) being written
                 bool is_ebreak = (write_data == 0x00100073) || ((write_data & 0xFFFF) == 0x9002);
                 if (is_ebreak && !has_breakpoint(mem_addr)) {
                     add_breakpoint(mem_addr);
                 }
-                    write_mem(mem_addr, write_data);
+                    write_mem(mem_addr, write_data, access_size);
                 } else if (access_size == 8) {
                     // 64-bit write
-                    write_mem(mem_addr, write_data);
+                    write_mem(mem_addr, write_data, access_size);
                 } else {
                     dm_log("[DM] Access Memory: unsupported write size %zu\n", access_size);
                 }
         } else {
                 // Read memory: result goes into DATA0 (and DATA1 for 64-bit if available)
-                vortex::Word read_val = read_mem(mem_addr);
+                vortex::Word read_val = read_mem(mem_addr, access_size);
                 
                 if (access_size == 1) {
                     data0() = static_cast<uint32_t>(read_val & 0xFF);
@@ -735,12 +735,17 @@ void DebugModule::execute_command(uint32_t value)
                         data0() = static_cast<uint32_t>(new_addr);
                     }
                     break;
-                case ADDR_NONE:
                 case ADDR_PREV:
+                    // When address came from a previous implicit address sequence (access_mem_addr),
+                    // DO NOT write back to data registers - only update internal state.
+                    // This prevents overwriting data registers that OpenOCD might use for other purposes.
+                    // The incremented address is stored in access_mem_addr for the next postincrement operation.
+                    dm_log("[DM] Access Memory postincrement: address from access_mem_addr, NOT writing back to data registers (prev=0x%0*llx, new=0x%0*llx)\n",
+                           (XLEN == 64) ? 16 : 8, (unsigned long long)mem_addr,
+                           (XLEN == 64) ? 16 : 8, (unsigned long long)new_addr);
+                    break;
+                case ADDR_NONE:
                 default:
-                    // When address came from a previous implicit address sequence,
-                    // follow the spec and leave the updated address in DATA0.
-                    data0() = static_cast<uint32_t>(new_addr);
                     break;
             }
             access_mem_addr = new_addr;
@@ -887,39 +892,52 @@ void DebugModule::write_register(uint16_t regaddr, vortex::Word val)
            regaddr, (XLEN == 64) ? 16 : 8, (unsigned long long)val);
 }
 
-vortex::Word DebugModule::read_mem(vortex::Word addr)
+vortex::Word DebugModule::read_mem(vortex::Word addr, size_t size)
 {
-    vortex::Word val = read_program_memory(addr);
-    dm_log("[DM] READ MEM  addr=0x%0*llx -> 0x%0*llx\n", 
+    vortex::Word val = read_program_memory(addr, size);
+    dm_log("[DM] READ MEM  addr=0x%0*llx -> 0x%0*llx (size=%zu)\n", 
            (XLEN == 64) ? 16 : 8, (unsigned long long)addr,
-           (XLEN == 64) ? 16 : 8, (unsigned long long)val);
+           (XLEN == 64) ? 16 : 8, (unsigned long long)val, size);
     return val;
 }
 
-void DebugModule::write_mem(vortex::Word addr, vortex::Word val)
+void DebugModule::write_mem(vortex::Word addr, vortex::Word val, size_t size)
 {
-    write_program_memory(addr, val);
-    dm_log("[DM] WRITE MEM addr=0x%0*llx <- 0x%0*llx\n", 
+    write_program_memory(addr, val, size);
+    dm_log("[DM] WRITE MEM addr=0x%0*llx <- 0x%0*llx (size=%zu)\n", 
            (XLEN == 64) ? 16 : 8, (unsigned long long)addr,
-           (XLEN == 64) ? 16 : 8, (unsigned long long)val);
+           (XLEN == 64) ? 16 : 8, (unsigned long long)val, size);
 }
 
-vortex::Word DebugModule::read_program_memory(vortex::Word addr) const
+vortex::Word DebugModule::read_program_memory(vortex::Word addr, size_t size) const
 {
     if (!emulator_) {
         return 0;
     }
+    // Read the specified number of bytes
+    uint8_t buffer[8] = {0};  // Max 8 bytes for 64-bit access
+    emulator_->dcache_read(buffer, static_cast<uint64_t>(addr), size);
+    
+    // Convert to Word based on size
     vortex::Word value = 0;
-    emulator_->dcache_read(&value, static_cast<uint64_t>(addr), sizeof(vortex::Word));
+    for (size_t i = 0; i < size && i < sizeof(vortex::Word); ++i) {
+        value |= static_cast<vortex::Word>(buffer[i]) << (i * 8);
+    }
     return value;
 }
 
-void DebugModule::write_program_memory(vortex::Word addr, vortex::Word value)
+void DebugModule::write_program_memory(vortex::Word addr, vortex::Word value, size_t size)
 {
     if (!emulator_) {
         return;
     }
-    emulator_->dcache_write(&value, static_cast<uint64_t>(addr), sizeof(vortex::Word));
+    
+    // Write the specified number of bytes
+    uint8_t buffer[8];  // Max 8 bytes for 64-bit access
+    for (size_t i = 0; i < size && i < sizeof(vortex::Word); ++i) {
+        buffer[i] = static_cast<uint8_t>((value >> (i * 8)) & 0xFF);
+    }
+    emulator_->dcache_write(buffer, static_cast<uint64_t>(addr), size);
 }
 
 vortex::Word DebugModule::direct_read_register(uint16_t regaddr)
@@ -1054,7 +1072,7 @@ void DebugModule::add_breakpoint(uint32_t addr)
         return; // Already has breakpoint
     }
     // Read and store the original instruction (should be called before EBREAK is written)
-    uint32_t original = read_program_memory(addr);
+    uint32_t original = static_cast<uint32_t>(read_program_memory(addr, sizeof(uint32_t)));  // Read 4-byte instruction
     software_breakpoints_[addr] = original;
 }
 
@@ -1065,7 +1083,7 @@ void DebugModule::remove_breakpoint(uint32_t addr)
         return; // No breakpoint at this address
     }
     // Restore the original instruction
-    write_program_memory(addr, it->second);
+    write_program_memory(addr, it->second, sizeof(uint32_t));  // Write 4-byte instruction
     software_breakpoints_.erase(it);
 }
 

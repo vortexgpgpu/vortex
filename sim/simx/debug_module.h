@@ -287,12 +287,12 @@ private:
     void write_register(uint16_t regaddr, vortex::Word val);
 
 
-    vortex::Word read_mem(vortex::Word addr);
-    void write_mem(vortex::Word addr, vortex::Word val);
+    vortex::Word read_mem(vortex::Word addr, size_t size = sizeof(vortex::Word));
+    void write_mem(vortex::Word addr, vortex::Word val, size_t size = sizeof(vortex::Word));
     
     // Program memory access (via emulator)
-    vortex::Word read_program_memory(vortex::Word addr) const;
-    void write_program_memory(vortex::Word addr, vortex::Word value);
+    vortex::Word read_program_memory(vortex::Word addr, size_t size = sizeof(uint32_t)) const;
+    void write_program_memory(vortex::Word addr, vortex::Word value, size_t size = sizeof(uint32_t));
 
 
     uint32_t read_dmcontrol();
