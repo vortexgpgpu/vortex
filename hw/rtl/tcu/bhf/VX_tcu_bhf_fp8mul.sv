@@ -38,7 +38,7 @@ module VX_tcu_bhf_fp8mul #(
     output wire [4:0]      fflags
 );
     localparam MUL_EXPW = IN_EXPW + 1;
-    localparam MUL_SIGW = `MAX(2 * (IN_EXPW + IN_SIGW) + 1, 24);
+    localparam MUL_SIGW = 2 * (IN_EXPW + IN_SIGW) + 7;
     localparam MUL_RECW = MUL_EXPW + MUL_SIGW + 1;
 
     wire [MUL_RECW-1:0] y0, y1;

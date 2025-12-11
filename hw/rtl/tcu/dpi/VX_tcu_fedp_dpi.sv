@@ -45,7 +45,7 @@ module VX_tcu_fedp_dpi #(
     // multiplication stage
     for (genvar i = 0; i < N; i++) begin : g_prod
         reg [63:0] a_f, b_f;
-        reg [63:0] prod;
+        reg [63:0] temp, prod;
         reg [4:0] fflags;
 
         `UNUSED_VAR({fflags, prod[63:32]});
@@ -57,7 +57,8 @@ module VX_tcu_fedp_dpi #(
                 for (int j = 0; j < 2; j++) begin
                     dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, a_row[i][j * 16 +: 16]}, 3'b0, a_f, fflags);
                     dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, b_col[i][j * 16 +: 16]}, 3'b0, b_f, fflags);
-                    dpi_fmadd(enable, int'(0), a_f, b_f, prod, 3'b0, prod, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                    dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
             4'b0010: begin // bf16
@@ -65,7 +66,8 @@ module VX_tcu_fedp_dpi #(
                 for (int j = 0; j < 2; j++) begin
                     dpi_f2f(enable, int'(0), int'(3), {48'hffffffffffff, a_row[i][j * 16 +: 16]}, 3'b0, a_f, fflags);
                     dpi_f2f(enable, int'(0), int'(3), {48'hffffffffffff, b_col[i][j * 16 +: 16]}, 3'b0, b_f, fflags);
-                    dpi_fmadd(enable, int'(0), a_f, b_f, prod, 3'b0, prod, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                    dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
             4'b0011: begin // fp8
@@ -73,7 +75,8 @@ module VX_tcu_fedp_dpi #(
                 for (int j = 0; j < 4; j++) begin
                     dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
                     dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, b_col[i][j * 8 +: 8]}, 3'b0, b_f, fflags);
-                    dpi_fmadd(enable, int'(0), a_f, b_f, prod, 3'b0, prod, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                    dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
             4'b0100: begin // bf8
@@ -81,7 +84,8 @@ module VX_tcu_fedp_dpi #(
                 for (int j = 0; j < 4; j++) begin
                     dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
                     dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffffff, b_col[i][j * 8 +: 8]}, 3'b0, b_f, fflags);
-                    dpi_fmadd(enable, int'(0), a_f, b_f, prod, 3'b0, prod, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                    dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
             4'b1001: begin // int8

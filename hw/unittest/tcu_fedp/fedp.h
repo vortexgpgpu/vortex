@@ -22,29 +22,26 @@
 #include <unordered_map>
 #include <vector>
 
-#ifndef FEDP_TRACE
-#define FEDP_TRACE 0
+#if FEDP_TRACE
+#include <cstdio>
+#define LOG(...) std::fprintf(stderr, __VA_ARGS__);
+#else
+#define LOG(...)
 #endif
-
-struct FEDP_Log {
-  static inline void p(const char *fmt, ...) {
-    if constexpr (FEDP_TRACE) {
-      va_list a; va_start(a, fmt); std::vprintf(fmt, a); va_end(a);
-    }
-  }
-};
-#define LOG(...) FEDP_Log::p(__VA_ARGS__)
 
 class FEDP {
 public:
   // ====== DO NOT CHANGE (external interface) ======
-  explicit FEDP(int exp_bits = 5, int sig_bits = 10, int lanes = 4, int frm = 0, int W = 25, int HR = 3, bool renorm = false) :
-    exp_bits_(exp_bits), sig_bits_(sig_bits), frm_(frm), lanes_(lanes), W_(W), HR_(HR), renorm_(renorm) {
+  explicit FEDP(int exp_bits = 5, int sig_bits = 10, int lanes = 4, int frm = 0, int W = 25, bool renorm = false) :
+    exp_bits_(exp_bits), sig_bits_(sig_bits), frm_(frm), lanes_(lanes), W_(W), renorm_(renorm) {
+    HR_ = 32 - lzcN(lanes_, 32); // ceil(log2(lanes + 1))
     assert(exp_bits_ > 0 && exp_bits_ <= 8);
     assert(sig_bits_ > 0 && sig_bits_ <= 10);
     assert(frm_ >= 0 && frm_ <= 4); // 0=RNE, 1=RTZ, 2=RDN, 3=RUP, 4=RMM
     assert(lanes_ >= 1 && lanes_ <= 8);
-    LOG("[ctor] fmt=e%dm%d frm=%d lanes=%u  W=%d HR=%d renorm_=%s\n",
+    int total_inputs = lanes_ + 1;
+    HR_ = (total_inputs <= 1) ? 0 : (32 - __builtin_clz(total_inputs - 1));
+    LOG("[ctor] fmt=e%dm%d frm=%d lanes=%u W=%d HR=%d renorm_=%s\n",
         exp_bits_, sig_bits_, frm_, lanes_, W_, HR_, (renorm_ ? "true": "false"));
   }
 
@@ -208,7 +205,7 @@ private:
       bool s = ((a.sign ^ b.sign) != 0);
 
       out.push_back({(int)s, Mp, Ep, lzc_prod, 0});
-      LOG("[multiply_to_common] s=%d Ea=%d Eb=%d P=0x%llx\n", (int)s, Ea, Eb, Mp);
+      LOG("[multiply_to_common] s=%d Ea=%d Eb=%d P=0x%lx\n", (int)s, Ea, Eb, Mp);
     }
     return out;
   }
@@ -292,11 +289,11 @@ private:
     for (uint64_t T : a.T) {
       auto sc = csa(s_acc, c_acc, T, mask);
       s_acc = sc.first; c_acc = sc.second;
-      LOG("[accumulate] i=%zu T=0x%llx s=0x%llx c=0x%llx\n", i++, T, s_acc, c_acc);
+      LOG("[accumulate] i=%zu T=0x%lx s=0x%lx c=0x%lx\n", i++, T, s_acc, c_acc);
     }
     uint64_t Vw = cpa(s_acc, c_acc, mask);
     int64_t V = twos_to_int(Vw,Ww);
-    LOG("[accumulate] Vw=0x%llx V=%lld sticky=%d L=%d cc=%d\n", Vw, V, a.sticky, a.L, a.cc);
+    LOG("[accumulate] Vw=0x%lx V=%ld sticky=%d L=%d cc=%d\n", Vw, V, a.sticky, a.L, a.cc);
     return { V, a.sticky, a.L, a.cc, a.sp };
   }
 
@@ -423,8 +420,12 @@ private:
     return u;
   }
 
-  // -------- members --------
-  int exp_bits_, sig_bits_, frm_, lanes_;
-  int W_, HR_;
-  bool renorm_;
+  // members --------
+  int exp_bits_;  // input format exponent
+  int sig_bits_;  // input format significant
+  int frm_;       // rounding mode
+  int lanes_;     // number of elements
+  int W_;         // accumulator width
+  int HR_;        // accumulator head room
+  bool renorm_;   // renormalize products
 };

@@ -148,6 +148,7 @@ void init_default_fp_format(uint32_t fmt, int *exp_bits, int *sig_bits) {
 struct TestConfig {
   uint64_t max_cycles = 1000;
   bool enable_tracing = true;
+  bool fused = true;
   uint64_t trace_start = 0;
   uint64_t trace_end = 100;
   unsigned int random_seed = 12345;
@@ -162,8 +163,7 @@ struct TestConfig {
   int exp_bits = 0; // Exponent bits
   int sig_bits = 0; // Significand bits
   RoundingMode frm = RoundingMode::RNE; // Rounding mode
-  int W = 25; // Accumulator window width
-  int HR = 3; // Accumulator Headroom bits
+  int W = 53; // Accumulator window width
   bool renorm = false; // renormalize product
   uint32_t num_tests = 100000; // Number of tests per feature
   int ulp = 1; // float precision error bits
@@ -280,9 +280,10 @@ static void pack_elements(const std::vector<uint32_t> &elements, int element_bit
   }
 }
 
+#ifndef FEDP_EMUL
 // Calculate expected fp dot product
-static float dot_product(const uint32_t* A, const uint32_t* B, uint32_t Cbits, int n, int eb, int sb) {
-  auto to_longdouble = [&](uint32_t x, int ebits, int sbits) -> long double {
+static float dot_product(const uint32_t* A, const uint32_t* B, uint32_t C, int n, int eb, int sb, bool fused) {
+  auto to_float = [&](uint32_t x, int ebits, int sbits) -> long double {
     uint32_t sign = (x >> (ebits + sbits)) & 1u;
     uint32_t exp  = (x >> sbits) & ((ebits == 32) ? 0xFFFFFFFFu : ((1u << ebits) - 1u));
     uint32_t frac = x & ((sbits == 32) ? 0xFFFFFFFFu : ((1u << sbits) - 1u));
@@ -312,15 +313,22 @@ static float dot_product(const uint32_t* A, const uint32_t* B, uint32_t Cbits, i
     long double val = ldexpl(mant, ex);
     return sign ? -val : val;
   };
+  auto fadd = [&](long double a, long double b) -> long double {
+    return fused ? (a + b) : float(a) + float(b);
+  };
   long double sum = 0.0L;
+  auto dc = to_float(C, 8, 23);
   for (size_t i = 0; i < n; ++i) {
-    sum += to_longdouble(A[i], eb, sb) * to_longdouble(B[i], eb, sb);
+    auto da = to_float(A[i], eb, sb);
+    auto db = to_float(B[i], eb, sb);
+    auto prod = da * db;
+    sum = fadd(sum, prod);
+
   }
-  sum += to_longdouble(Cbits, 8, 23);
-  // cast to float32
+  sum = fadd(sum, dc);
   return static_cast<float>(sum);
 }
-
+#endif
 
 // Calculate expected int dot product
 static int32_t dot_product(const int32_t *a, const int32_t *b, int32_t c, uint32_t n) {
@@ -671,6 +679,10 @@ public:
     const uint32_t NF = features_to_test.size();
     const uint32_t tests_per_feature = (NT + NF - 1) / NF;
 
+  #ifdef FEDP_EMUL
+    FEDP fedp(config_.exp_bits, config_.sig_bits, NUM_REGS * 2, (int)config_.frm, config_.W, config_.renorm);
+  #endif
+
     uint32_t skipped = 0;
 
     for (int test_id = 0; test_id < NT; test_id++) {
@@ -680,29 +692,26 @@ public:
 
       // Generate test vectors
       std::vector<float> a_values_float(total_elements), b_values_float(total_elements);
-      std::vector<uint32_t> a_values_format(total_elements), b_values_format(total_elements);
+      std::vector<uint32_t> a_value_hex(total_elements), b_value_hex(total_elements);
 
       bool a_enable = (test_id % 3) == 0;
       bool b_enable = (test_id % 3) == 1;
       bool c_enable = (test_id % 3) == 2;
 
       for (int i = 0; i < total_elements; i++) {
-        a_values_format[i] = generate_fp_value((a_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
-        b_values_format[i] = generate_fp_value((b_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
+        a_value_hex[i] = generate_fp_value((a_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
+        b_value_hex[i] = generate_fp_value((b_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
 
         // Convert to float to account for precision loss
-        a_values_float[i] = cvt_custom_to_f32(a_values_format[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
-        b_values_float[i] = cvt_custom_to_f32(b_values_format[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
+        a_values_float[i] = cvt_custom_to_f32(a_value_hex[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
+        b_values_float[i] = cvt_custom_to_f32(b_value_hex[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
       }
 
       // Generate c value
       float c_value_float = generate_fp_value(c_enable ? feature : "normals", 8, 23, test_id);
 
-      uint32_t c_value_bits;
-      std::memcpy(&c_value_bits, &c_value_float, sizeof(float));
-
-      // generate gold result
-      float expected = dot_product(a_values_format.data(), b_values_format.data(), c_value_bits, total_elements, config_.exp_bits, config_.sig_bits);
+      uint32_t c_value_hex;
+      std::memcpy(&c_value_hex, &c_value_float, sizeof(float));
 
       // skip if not in selected test id
       if (config_.test_id >= 0 && test_id != config_.test_id)
@@ -714,15 +723,15 @@ public:
 
       // Pack into XLEN words
       std::vector<uint32_t> a_packed(NUM_REGS), b_packed(NUM_REGS);
-      pack_elements(a_values_format, element_bits, NUM_REGS, a_packed.data());
-      pack_elements(b_values_format, element_bits, NUM_REGS, b_packed.data());
+      pack_elements(a_value_hex, element_bits, NUM_REGS, a_packed.data());
+      pack_elements(b_value_hex, element_bits, NUM_REGS, b_packed.data());
 
       // Apply to DUT
       for (int i = 0; i < NUM_REGS; i++) {
         WRITE_WDATA(dut_->a_row, i, a_packed[i]);
         WRITE_WDATA(dut_->b_col, i, b_packed[i]);
       }
-      dut_->c_val = c_value_bits;
+      dut_->c_val = c_value_hex;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
 
@@ -738,8 +747,10 @@ public:
 
       // Calculate expected result
     #ifdef FEDP_EMUL
-      FEDP fedp(config_.exp_bits, config_.sig_bits, NUM_REGS * 2, (int)config_.frm, config_.W, config_.HR, config_.renorm);
-      dut_result = fedp(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS);
+      float expected = fedp(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS);
+    #else
+      float expected = dot_product(a_value_hex.data(), b_value_hex.data(),
+        c_value_hex, total_elements, config_.exp_bits, config_.sig_bits, config_.fused);
     #endif
 
       int delta = approximately_equal(dut_result, expected);
@@ -749,19 +760,19 @@ public:
         std::cout << "  scenario='[";
           for (uint32_t i = 0; i < total_elements; i++) {
             if (i > 0) std::cout << ",";
-            print_format("", a_values_format[i], false);
+            print_format("", a_value_hex[i], false);
           }
         std::cout << "];[";
           for (uint32_t i = 0; i < total_elements; i++) {
             if (i > 0) std::cout << ",";
-            print_format("", b_values_format[i], false);
+            print_format("", b_value_hex[i], false);
           }
-        std::cout << "];" << std::hex << "0x" << c_value_bits << std::dec << "';" << std::endl;
+        std::cout << "];" << std::hex << "0x" << c_value_hex << std::dec << "';" << std::endl;
 
         print_float("  af_values=", a_values_float, true);
-        print_format("  ax_values=", a_values_format, true);
+        print_format("  ax_values=", a_value_hex, true);
         print_float("  bf_values=", b_values_float, true);
-        print_format("  bx_values=", b_values_format, true);
+        print_format("  bx_values=", b_value_hex, true);
         print_float("  c_value=", c_value_float, true);
         print_float("  expected=", expected, true);
         print_float("  actual=", dut_result, true);
@@ -825,6 +836,8 @@ TestConfig parse_args(int argc, char **argv) {
     std::string arg = argv[i];
     if (arg == "--no-trace") {
       config_.enable_tracing = false;
+    } else if (arg == "--no-fused") {
+      config_.fused = false;
     } else if (arg == "--no-normals") {
       config_.test_features["normals"] = false;
     } else if (arg == "--no-zeros") {
@@ -843,10 +856,8 @@ TestConfig parse_args(int argc, char **argv) {
       config_.sig_bits = std::stoi(arg.substr(6));
     } else if (arg.substr(0, 6) == "--frm=") {
       config_.frm = frm_from_string(arg.substr(6));
-    } else if (arg.substr(0, 6) == "--W=") {
+    } else if (arg.substr(0, 4) == "--W=") {
       config_.W = std::stoi(arg.substr(4));
-    } else if (arg.substr(0, 6) == "--HR=") {
-      config_.HR = std::stoi(arg.substr(5));
     } else if (arg == "--renorm") {
       config_.renorm = true;
     } else if (arg.substr(0, 6) == "--ulp=") {
@@ -860,6 +871,7 @@ TestConfig parse_args(int argc, char **argv) {
     } else {
       std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
       std::cout << "Options:" << std::endl;
+      std::cout << "  --no-fused       Enable discrete Mul and Add pipeline" << std::endl;
       std::cout << "  --no-trace       Disable VCD tracing" << std::endl;
       std::cout << "  --no-normals     Skip normal number tests" << std::endl;
       std::cout << "  --no-zeros       Skip zero tests" << std::endl;
@@ -871,7 +883,6 @@ TestConfig parse_args(int argc, char **argv) {
       std::cout << "  --sig=BITS       Significand bits for custom format" << std::endl;
       std::cout << "  --frm=MODE       Rounding mode (RNE, RZ, RU, RD, RM)" << std::endl;
       std::cout << "  --W <value>      Accumulator window width W" << std::endl;
-      std::cout << "  --HR <value>     Accumulator Headroom bits" << std::endl;
       std::cout << "  --reborm         Renormalize product" << std::endl;
       std::cout << "  --ulp <value>    Adjust floats precision error bits" << std::endl;
       std::cout << "  --seed <value>   Set random seed" << std::endl;
