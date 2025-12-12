@@ -139,6 +139,10 @@ extern int vx_copy_from_dev(void* host_ptr, vx_buffer_h hbuffer, uint64_t src_of
   return (g_callbacks.copy_from_dev)(host_ptr, hbuffer, src_offset, size);
 }
 
+extern int vx_copy_dev_to_dev(vx_buffer_h hdest_buffer, uint64_t dest_offset, vx_buffer_h hsrc_buffer, uint64_t src_offset, uint64_t size) {
+  return (g_callbacks.copy_dev_to_dev)(hdest_buffer, dest_offset, hsrc_buffer, src_offset, size);
+}
+
 extern int vx_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments) {
   int profiling_mode = get_profiling_mode();
   if (profiling_mode != 0) {

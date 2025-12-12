@@ -152,6 +152,16 @@ extern fpga_result fpgaReadMMIO64(fpga_handle handle, uint32_t mmio_num, uint64_
   return FPGA_OK;
 }
 
+extern fpga_result fpgaCopyBuffer(fpga_handle handle, uint64_t dest, uint64_t src, uint64_t size) {
+  if (NULL == handle)
+    return FPGA_INVALID_PARAM;
+
+  auto sim = reinterpret_cast<opae_sim*>(handle);
+  sim->copy(dest, src, size);
+
+  return FPGA_OK;
+}
+
 extern const char *fpgaErrStr(fpga_result e) {
   return "";
 }
