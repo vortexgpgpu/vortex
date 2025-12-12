@@ -1,6 +1,6 @@
 module cta_status_table #(
     // Number of CTAs per core; should match your core/BRT parameter
-    parameter int MAX_CTA_SIZE = `DICE_NUM_MAX_CTA_PER_CORE
+    parameter int MAX_CTA_SIZE = 4
 ) (
     input  logic clk,
     input  logic rst_n,

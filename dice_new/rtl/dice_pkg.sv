@@ -63,6 +63,24 @@ package dice_pkg;
     dice_cta_id_t                cta_id;
   } dice_cta_desc_t; // CTA descriptor passed to CGRA core front end
 
+  typedef struct packed {
+    logic unresolved_control_divergence;
+    logic [DICE_ADDR_WIDTH-1:0] predict_pc;
+    logic still_pending_in_BRT;
+    logic return_pending;
+  } dice_cta_status_t; // CTA status descriptor
+
+  typedef struct packed {
+    logic [DICE_HW_CTA_ID_WIDTH-1:0] hw_cta_id;
+    logic unresolved_control_divergence;
+    logic [DICE_ADDR_WIDTH-1:0] predict_pc;
+    logic is_return;
+  } branch_predict_interface_t; // Branch prediction interface descriptor
+
+  typedef struct packed {
+    logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] hw_cta_pending;
+  } block_retire_status_t; // Block retire status descriptor
+
 endpackage
 
 `endif // DICE_PKG_VH
