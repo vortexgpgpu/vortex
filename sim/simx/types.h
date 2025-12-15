@@ -697,6 +697,13 @@ struct IntrVegetaLsuArgs {
   unsigned int offset;  // Immediate offset for address calculation
 };
 
+struct IntrVegetaTcuArgs {
+  uint32_t fmt_s  : 4;
+  uint32_t fmt_d  : 4;
+  uint32_t step_m : 4;
+  uint32_t step_n : 4;
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 
 struct IntrVegetaTcuArgs {
