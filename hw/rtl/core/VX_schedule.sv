@@ -32,6 +32,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_decode_sched_if.slave decode_sched_if,
     VX_issue_sched_if.slave issue_sched_if[`ISSUE_WIDTH],
+    VX_lsu_rsp_if.slave     lsu_rsp_if,
     VX_commit_sched_if.slave commit_sched_if,
 
     // outputs
@@ -53,11 +54,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
     reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks, thread_masks_n;
     reg [`NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
 
-    wire [NW_WIDTH-1:0]     schedule_wid;
+    logic [NW_WIDTH-1:0]     schedule_wid;
     wire [`NUM_THREADS-1:0] schedule_tmask;
     wire [PC_BITS-1:0]      schedule_pc;
-    wire                    schedule_valid;
-    wire                    schedule_ready;
+    logic                    schedule_valid;
+    logic                    schedule_ready;
 
     // split/join
     wire                    join_valid;
@@ -71,6 +72,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     wire schedule_fire = schedule_valid && schedule_ready;
     wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
+
 
     // branch
     wire [`NUM_ALU_BLOCKS-1:0]               branch_valid;
@@ -102,7 +104,154 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     wire [`CLOG2(`NUM_WARPS+1)-1:0] active_warps_cnt;
     `POP_COUNT(active_warps_cnt, active_warps);
+    
+    // CURRENT WARP (GTO state)
+    reg [NW_WIDTH-1:0] curr_wid, curr_wid_n; // the greedy warp to prefer until it stalls
 
+    reg [`NUM_WARPS-1:0] mem_blocked_warps, mem_blocked_warps_n;
+
+
+//////////////////////////////////
+// RL-based warp scheduler core //
+//////////////////////////////////
+
+    // RL state attributes 
+    logic attr_JSLMI;
+    assign attr_JSLMI = |mem_blocked_warps;
+
+    logic [1:0] attr_NWS;
+    assign attr_NWS = (active_warps == 'd0) ? 2'b00 : 
+			((active_warps == 'd1) ? 2'b01 : 
+			((active_warps <= 'd4) ? 2'b10 : 
+						2'b11));
+    logic attr_NSW;
+    assign attr_NSW = (|thread_masks) && (~&thread_masks);
+
+    // RL state
+    logic [3:0] RL_state;
+    assign RL_state = {attr_JSLMI, attr_NWS, attr_NSW};
+
+
+    // Action Space
+    typedef enum logic [1:0] {
+	NO_INSTR = 2'd0, // Schedule no warp
+	NMB_INSTR = 2'd1, // Schedule a warp that is not memory blocked
+	RR_INSTR = 2'd2 // Schedule a warp using Round-Robin	
+    } RL_action_t;
+
+    RL_action_t RL_action;
+
+    // Q-table
+localparam int NUM_STATES  = 16;
+localparam int NUM_ACTIONS = 3;
+localparam int QW = 16; // Q-value width (fixed point)
+
+logic signed [QW-1:0] Q_table [NUM_STATES-1:0][NUM_ACTIONS-1:0];
+    
+
+// Fixed-point parameters
+localparam signed [QW-1:0] ALPHA = 16'sd32;   // 0.125
+localparam signed [QW-1:0] GAMMA = 16'sd128;  // 0.5
+
+
+// Reward: 1 if schedule succeeds, else 0
+logic signed [QW-1:0] reward;
+
+always @(*) begin
+    if (schedule_fire)
+        reward = 16'sd256;   // +1.0 in Q8.8
+    else
+        reward = 16'sd0;     // 0
+end
+
+// Action Selection
+RL_action_t rl_action_greedy;
+logic signed [QW-1:0] q0, q1, q2;
+
+always @(*) begin
+    q0 = Q_table[RL_state][NO_INSTR];
+    q1 = Q_table[RL_state][NMB_INSTR];
+    q2 = Q_table[RL_state][RR_INSTR];
+
+    rl_action_greedy = NO_INSTR;
+    if (q1 > q0) rl_action_greedy = NMB_INSTR;
+    if ((q2 > q1) && (q2 > q0)) rl_action_greedy = RR_INSTR;
+end
+
+//assign RL_action = rl_action_greedy;
+
+assign RL_action = RR_INSTR;
+`UNUSED_VAR (rl_action_greedy)
+
+// Previous states
+logic [3:0]       prev_state;
+RL_action_t       prev_action;
+logic             prev_valid;
+
+// Max Q of next state
+logic signed [QW-1:0] maxQ_next;
+
+always @(*) begin
+    maxQ_next = Q_table[RL_state][0];
+    if (Q_table[RL_state][1] > maxQ_next)
+        maxQ_next = Q_table[RL_state][1];
+    if (Q_table[RL_state][2] > maxQ_next)
+        maxQ_next = Q_table[RL_state][2];
+end
+
+// Clipping to avoid exceed min/max
+localparam signed [QW-1:0] Q_MAX = 16'sd32767; // ~+127.996
+localparam signed [QW-1:0] Q_MIN = -16'sd32768; // -128.0
+
+function automatic signed [QW-1:0] sat_q;
+    input signed [QW:0] val; // one extra bit for overflow
+    begin
+        if (val > {Q_MAX[QW-1], Q_MAX})      sat_q = Q_MAX;
+        else if (val < {Q_MIN[QW-1], Q_MIN}) sat_q = Q_MIN;
+        else                  sat_q = val[QW-1:0];
+    end
+endfunction
+
+// Sequential update
+logic signed [QW:0] q_next_ext;
+assign q_next_ext =
+	        Q_table[prev_state][prev_action] +
+	        ((ALPHA * (
+	            reward +
+	            ((GAMMA * maxQ_next) >>> 8) -
+	            Q_table[prev_state][prev_action]
+	        )) >>> 8);
+
+always @(posedge clk) begin
+    if (reset) begin
+        prev_valid <= 1'b0;
+
+        // initialize Q-table to zero
+        for (int s = 0; s < NUM_STATES; s++) begin
+            Q_table[s][NO_INSTR]  <= 16'sd0;     // 0.0
+            Q_table[s][NMB_INSTR] <= 16'sd128;   // 0.5
+            Q_table[s][RR_INSTR]  <= 16'sd256;   // 1.0
+        end
+    end else begin
+        // Bellman update
+        if (prev_valid) begin
+	    Q_table[prev_state][prev_action] <= sat_q(q_next_ext);
+        end
+
+        // Latch current transition
+        if (schedule_fire) begin
+            prev_state  <= RL_state;
+            prev_action <= RL_action;
+            prev_valid  <= 1'b1;
+        end
+    end
+end
+
+
+
+
+
+///////////////////////////////////////////////
     always @(*) begin
         active_warps_n  = active_warps;
         stalled_warps_n = stalled_warps;
@@ -115,7 +264,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
         // decode unlock
         if (decode_sched_if.valid && decode_sched_if.unlock) begin
             stalled_warps_n[decode_sched_if.wid] = 0;
-        end
+        end// else if (decode_sched_if.valid) begin
+	//    stalled_warps_n[decode_sched_if.wid] = 1;
+	//end
 
         // CSR unlock
         if (sched_csr_if.unlock_warp) begin
@@ -198,6 +349,26 @@ module VX_schedule import VX_gpu_pkg::*; #(
             end
         end
 
+
+
+    // long latency mem inst (GTO/RL)
+    
+        mem_blocked_warps_n = mem_blocked_warps;
+    
+        // When decode discovers a long-latency memory instruction
+        if (decode_sched_if.valid && decode_sched_if.is_long_mem) begin
+            mem_blocked_warps_n[decode_sched_if.wid] = 1;
+    	//stalled_warps_n[decode_sched_if.wid] = 1;
+        end
+    
+        // When memory response arrives, unblock
+        if (lsu_rsp_if.valid) begin
+            mem_blocked_warps_n[lsu_rsp_if.wid] = 0;
+    	//stalled_warps_n[lsu_rsp_if.wid] = 0;
+        end
+
+    // long latency mem inst ends
+
         // stall the warp until decode stage
         if (schedule_fire) begin
             stalled_warps_n[schedule_wid] = 1;
@@ -207,9 +378,10 @@ module VX_schedule import VX_gpu_pkg::*; #(
         if (schedule_if_fire) begin
             warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`XLEN'(4));
         end
-    end
 
+end
     `UNUSED_VAR (base_dcrs)
+    //`UNUSED_VAR (schedule_fire) 
 
     always @(posedge clk) begin
         if (reset) begin
@@ -231,6 +403,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
             active_warps[0] <= 1;
             thread_masks[0][0] <= 1;
             is_single_warp  <= 1;
+	    // GTO init
+            curr_wid        <= '0;
+	    mem_blocked_warps <= '0;
         end else begin
             active_warps   <= active_warps_n;
             stalled_warps  <= stalled_warps_n;
@@ -240,6 +415,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
             barrier_ctrs   <= barrier_ctrs_n;
             barrier_stalls <= barrier_stalls_n;
             is_single_warp <= (active_warps_cnt == $bits(active_warps_cnt)'(1));
+	    curr_wid       <= curr_wid_n;
+	    mem_blocked_warps <= mem_blocked_warps_n;
 
             // wspawn handling
             if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
@@ -306,16 +483,50 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     // schedule the next ready warp
 
-    wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~stalled_warps;
+    wire [`NUM_WARPS-1:0] rr_ready_warps = active_warps & ~stalled_warps;
+    wire [`NUM_WARPS-1:0] nmb_ready_warps = rr_ready_warps & ~mem_blocked_warps;
+    wire [`NUM_WARPS-1:0] ready_warps = (RL_action == NMB_INSTR) ? nmb_ready_warps : rr_ready_warps;
+
+    // Priority encoder now produces candidate (oldest) warp when we need to switch.
+    wire [NW_WIDTH-1:0] cand_wid;
+    wire                cand_valid;
 
     VX_priority_encoder #(
         .N (`NUM_WARPS)
     ) wid_select (
         .data_in   (ready_warps),
-        .index_out (schedule_wid),
-        .valid_out (schedule_valid),
+        .index_out (cand_wid),
+        .valid_out (cand_valid),
         `UNUSED_PIN (onehot_out)
     );
+
+    always @(*) begin
+        // default
+        schedule_valid = 1'b0;
+        schedule_wid = '0;
+        curr_wid_n = curr_wid;
+	
+	if (RL_action != NO_INSTR) begin
+            // if current warp is in the set of ready warps, prefer it (greedy) -- currently unsupported
+            if (ready_warps[curr_wid]) begin
+                // continue issuing curr_wid
+                schedule_wid = curr_wid;
+                schedule_valid = 1'b1;
+            end else begin
+                // current warp not ready (or stalled) -> switch to the oldest ready candidate if any
+                if (cand_valid) begin
+                    schedule_wid = cand_wid;
+                    schedule_valid = 1'b1;
+                end else begin
+                    schedule_valid = 1'b0;
+                end
+            end
+	end
+
+	if (schedule_fire) begin
+            curr_wid_n = schedule_wid; // move greedy pointer to actually-scheduled warp
+        end
+    end
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + PC_BITS)-1:0] schedule_data;
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_schedule_data
