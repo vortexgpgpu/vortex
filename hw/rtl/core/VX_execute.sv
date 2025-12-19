@@ -44,7 +44,10 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_warp_ctl_if.master   warp_ctl_if,
 
     // commit interface
-    VX_commit_csr_if.slave  commit_csr_if
+    VX_commit_csr_if.slave  commit_csr_if,
+
+    // lsu response interface to scheduler -- added by liub92
+    VX_lsu_rsp_if.master    lsu_rsp_if
 );
 
 `ifdef EXT_F_ENABLE
@@ -71,7 +74,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .reset          (reset),
         .dispatch_if    (dispatch_if[EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .lsu_mem_if     (lsu_mem_if)
+        .lsu_mem_if     (lsu_mem_if),
+	.lsu_rsp_if	(lsu_rsp_if)
     );
 
 `ifdef EXT_F_ENABLE

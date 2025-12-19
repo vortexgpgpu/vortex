@@ -18,17 +18,20 @@ interface VX_decode_sched_if import VX_gpu_pkg::*; ();
     wire                valid;
     wire                unlock;
     wire [NW_WIDTH-1:0] wid;
+    wire		is_long_mem;
 
     modport master (
         output valid,
         output unlock,
-        output wid
+        output wid,
+	output is_long_mem
     );
 
     modport slave (
         input valid,
         input unlock,
-        input wid
+        input wid,
+	input is_long_mem
     );
 
 endinterface

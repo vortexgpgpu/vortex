@@ -65,6 +65,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_mem_if[`NUM_LSU_BLOCKS]();
 
+    VX_lsu_rsp_if	lsu_rsp_if();
+
 `ifdef PERF_ENABLE
     lmem_perf_t lmem_perf;
     coalescer_perf_t coalescer_perf;
@@ -106,6 +108,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .decode_sched_if(decode_sched_if),
         .issue_sched_if (issue_sched_if),
+	.lsu_rsp_if	(lsu_rsp_if),
         .commit_sched_if(commit_sched_if),
 
         .schedule_if    (schedule_if),
@@ -181,7 +184,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .sched_csr_if   (sched_csr_if),
 
         .warp_ctl_if    (warp_ctl_if),
-        .branch_ctl_if  (branch_ctl_if)
+        .branch_ctl_if  (branch_ctl_if),
+
+	.lsu_rsp_if	(lsu_rsp_if)
     );
 
     VX_commit #(

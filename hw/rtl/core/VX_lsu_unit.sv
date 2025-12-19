@@ -26,7 +26,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
-    VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS]
+    VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS],
+    VX_lsu_rsp_if.master    lsu_rsp_if
 );
     localparam BLOCK_SIZE = `NUM_LSU_BLOCKS;
     localparam NUM_LANES  = `NUM_LSU_LANES;
@@ -75,5 +76,21 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .result_if (per_block_result_if),
         .commit_if (commit_if)
     );
+
+    // liub92
+    logic lsu_rsp_fire;
+    logic [NW_WIDTH-1:0] lsu_rsp_warp;
+
+    always_comb begin
+        lsu_rsp_fire = 0;
+        lsu_rsp_warp = '0;
+        if (per_block_execute_if[0].valid && per_block_execute_if[0].ready) begin
+            lsu_rsp_fire = 1;
+            lsu_rsp_warp = per_block_execute_if[0].data.wid; // warp_id
+        end
+    end
+    assign lsu_rsp_if.valid   = lsu_rsp_fire;
+    assign lsu_rsp_if.wid = lsu_rsp_warp;
+
 
 endmodule
