@@ -15,7 +15,8 @@
 
 module VX_tcu_fedp_drl #(
     parameter LATENCY = 0,
-    parameter N = 2
+    parameter N = 2,
+    parameter W = 53
 ) (
     input  wire clk,
     input  wire reset,
@@ -53,7 +54,7 @@ module VX_tcu_fedp_drl #(
 
     //Transprecision Mul & Max Exp
     wire [6:0] hi_c = c_val[31:25];   //c_val[24:0] acc is taken care of in acc stage
-    wire fmt_sel = fmt_s[3];
+    wire fmt_sel = fmt_s[3];          //high-->int, low-->fp 
     wire [7:0] raw_max_exp;
     wire [TCK:0][7:0] shift_amounts;
     wire [TCK:0][24:0] raw_sigs;
@@ -89,13 +90,14 @@ module VX_tcu_fedp_drl #(
     );
 
     //Significand Alignment
-    wire [TCK:0][24:0] aln_sigs;
+    wire [TCK:0][W-1:0] aln_sigs;
     wire [7:0] aln_max_exp = pipe_raw_max_exp;
     wire [6:0] aln_hi_c = pipe_hi_c;
     wire aln_fmt_sel = pipe_fmt_sel;
 
     VX_tcu_drl_align #(
-        .N(TCK+1)
+        .N (TCK+1),
+        .W (W)
     ) sigs_aln (
         .shift_amounts (pipe_shift_amounts),
         .sigs_in       (pipe_raw_sigs),
@@ -105,11 +107,11 @@ module VX_tcu_fedp_drl #(
 
     //Stage 2 pipeline reg
     wire [7:0] pipe_aln_max_exp;
-    wire [TCK:0][24:0] pipe_aln_sigs;
+    wire [TCK:0][W-1:0] pipe_aln_sigs;
     wire [6:0] pipe_aln_hi_c;
     wire pipe_aln_fmt_sel;
     VX_pipe_register #(
-        .DATAW (8+((TCK+1)*25)+7+1),
+        .DATAW (8+((TCK+1)*W)+7+1),
         .DEPTH (ALN_LATENCY)
     ) pipe_aln (
         .clk     (clk),
@@ -123,11 +125,12 @@ module VX_tcu_fedp_drl #(
     wire [7:0] acc_max_exp = pipe_aln_max_exp;
     wire [6:0] acc_hi_c = pipe_aln_hi_c;
     wire acc_fmt_sel = pipe_aln_fmt_sel;
-    wire [25+$clog2(TCK+1):0] acc_sig;    //23 mantissa + 1 hidden + 1 sign + log2(N) bits
+    wire [W+$clog2(TCK+1):0] acc_sig;    //23 mantissa + 1 hidden + 1 sign + log2(N) bits
     wire [TCK-1:0] sigs_sign;    //sign bits of all operands (for int math)
 
     VX_tcu_drl_acc #(
-        .N(TCK+1)
+        .N (TCK+1),
+        .W (W)
     ) csa_acc (
         .sigsIn   (pipe_aln_sigs),
         .fmt_sel  (pipe_aln_fmt_sel),
@@ -139,10 +142,10 @@ module VX_tcu_fedp_drl #(
     wire [7:0] pipe_acc_max_exp;
     wire [6:0] pipe_acc_hi_c;
     wire pipe_acc_fmt_sel;
-    wire [25+$clog2(TCK+1):0] pipe_acc_sig;
+    wire [W+$clog2(TCK+1):0] pipe_acc_sig;
     wire [TCK-1:0] pipe_sigs_sign;
     VX_pipe_register #(
-        .DATAW (8+25+$clog2(TCK+1)+1+7+1+TCK),
+        .DATAW (8+W+$clog2(TCK+1)+1+7+1+TCK),
         .DEPTH (ACC_LATENCY)
     ) pipe_acc (
         .clk     (clk),
@@ -157,7 +160,8 @@ module VX_tcu_fedp_drl #(
     wire [31:0] final_result;
 
     VX_tcu_drl_norm_round #(
-        .N(TCK+1)
+        .N (TCK+1),
+        .W (W)
     ) norm_round (
         .max_exp     (pipe_acc_max_exp),
         .acc_sig     (pipe_acc_sig),

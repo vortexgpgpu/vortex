@@ -73,12 +73,12 @@ module VX_tcu_drl_shared_mul (
     wire [23:0] y_f8_add = sign_f8_add ? -signed_sig_res[23:0] : signed_sig_res[23:0];
 
     //int8 pack 4 ops/reg --> need two instantiations per multiplier slice
-    wire [1:0][15:0] y_i8;
+    wire [1:0][16:0] y_i8;
     for (genvar i = 0; i < 2; i++) begin : g_i8_mul
         wire [7:0] a_i8 = a[8*i+7 -: 8];
         wire [7:0] b_i8 = b[8*i+7 -: 8];
-        wire [7:0] abs_a_i8 = a_i8[7] ? -a_i8 : a_i8;
-        wire [7:0] abs_b_i8 = b_i8[7] ? -b_i8 : b_i8;
+        wire [7:0] abs_a_i8 = fmt_s[0] ? (a_i8[7] ? -a_i8 : a_i8) : a_i8;
+        wire [7:0] abs_b_i8 = fmt_s[0] ? (b_i8[7] ? -b_i8 : b_i8) : b_i8;
         wire ab_sign_i8 = a_i8[7] ^ b_i8[7];
         wire [15:0] abs_y_i8;
         VX_wallace_mul #(
@@ -88,49 +88,61 @@ module VX_tcu_drl_shared_mul (
             .b (abs_b_i8),
             .p (abs_y_i8)
         );
-        assign y_i8[i] = ab_sign_i8 ? -abs_y_i8 : abs_y_i8;
+        wire [15:0] signed_y_i8 = ab_sign_i8 ? -abs_y_i8 : abs_y_i8;
+        assign y_i8[i] = fmt_s[0] ? 17'($signed(signed_y_i8)) : {1'b0, abs_y_i8};
     end
     wire [16:0] y_i8_add;
+    //KSA needs to be 17-bit for carry overflow handling 
     VX_ks_adder #(
         .N(17)
     ) i8_adder (
-        .dataa (17'($signed(y_i8[0]))),
-        .datab (17'($signed(y_i8[1]))),
+        .dataa (y_i8[0]),
+        .datab (y_i8[1]),
         .sum   (y_i8_add),
-        `UNUSED_PIN (cout)
+        `UNUSED_PIN(cout)
     );
 
-    //uint4 pack 8 ops/reg --> need four instantiations per multiplier slice
-    wire [3:0][7:0] y_u4;
-    for (genvar i = 0; i < 4; i++) begin : g_u4_mul
+    //int4 pack 8 ops/reg --> need four instantiations per multiplier slice
+    wire [3:0][9:0] y_i4;
+    for (genvar i = 0; i < 4; i++) begin : g_i4_mul
+        wire [3:0] a_i4 = a[4*i+3 -: 4];
+        wire [3:0] b_i4 = b[4*i+3 -: 4];
+        wire [3:0] abs_a_i4 = fmt_s[0] ? (a_i4[3] ? -a_i4 : a_i4) : a_i4;
+        wire [3:0] abs_b_i4 = fmt_s[0] ? (b_i4[3] ? -b_i4 : b_i4) : b_i4;
+        wire ab_sign_i4 = a_i4[3] ^ b_i4[3];
+        wire [7:0] abs_y_i4;
         VX_wallace_mul #(
             .N (4)
-        ) wtmul_u4 (
-            .a (a[4*i+3 -: 4]),
-            .b (b[4*i+3 -: 4]),
-            .p (y_u4[i])
+        ) wtmul_i4 (
+            .a (abs_a_i4),
+            .b (abs_b_i4),
+            .p (abs_y_i4)
         );
+        wire [7:0] signed_y_i4 = ab_sign_i4 ? -abs_y_i4 : abs_y_i4;
+        assign y_i4[i] = fmt_s[0] ? 10'($signed(signed_y_i4)) : {2'd0, abs_y_i4};
     end
-    wire [9:0] y_u4_add;
+    wire [9:0] y_i4_add;
     VX_csa_tree #(
         .N (4),
-        .W (8),
+        .W (10),    //8+log2(4)
         .S (10)
-    ) u4_adder (
-        .operands (y_u4),
-        .sum      (y_u4_add),
+    ) i4_adder (
+        .operands (y_i4),
+        .sum      (y_i4_add),
         `UNUSED_PIN (cout)
     );
 
-    //Select sig out based on datatype
+    //Select sign+sig out based on datatype
     always_comb begin
         case (fmt_s)
-            4'd1: y = {sign_f16, y_f16, 2'd0};          //fp16
-            4'd2: y = {sign_f16, y_f16[15:0], 8'd0};    //bf16
-            4'd3: y = {sign_f8_add, y_f8_add};          //fp8
-            4'd4: y = {sign_f8_add, y_f8_add};          //bf8
-            4'd9: y = 25'($signed(y_i8_add));           //int8
-            4'd12: y = {15'd0, y_u4_add};               //uint4
+            4'd1:  y = {sign_f16, y_f16, 2'd0};          //fp16
+            4'd2:  y = {sign_f16, y_f16[15:0], 8'd0};    //bf16
+            4'd3:  y = {sign_f8_add, y_f8_add};          //fp8
+            4'd4:  y = {sign_f8_add, y_f8_add};          //bf8
+            4'd9:  y = 25'($signed(y_i8_add));           //int8
+            4'd10: y = {8'd0, y_i8_add};                 //uint8
+            4'd11: y = 25'($signed(y_i4_add));           //int4
+            4'd12: y = {15'd0, y_i4_add};                //uint4
             default: y = 25'hxxxxxxx;
         endcase
     end

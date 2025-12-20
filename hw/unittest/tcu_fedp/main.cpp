@@ -883,8 +883,8 @@ TestConfig parse_args(int argc, char **argv) {
       std::cout << "  --sig=BITS       Significand bits for custom format" << std::endl;
       std::cout << "  --frm=MODE       Rounding mode (RNE, RZ, RU, RD, RM)" << std::endl;
       std::cout << "  --W <value>      Accumulator window width W" << std::endl;
-      std::cout << "  --reborm         Renormalize product" << std::endl;
-      std::cout << "  --ulp <value>    Adjust floats precision error bits" << std::endl;
+      std::cout << "  --renorm         Renormalize product" << std::endl;
+      std::cout << "  --ulp=<value>    Adjust floats precision error bits" << std::endl;
       std::cout << "  --seed <value>   Set random seed" << std::endl;
       std::cout << "  --tests <count>  Number of tests to run (default: 100000)" << std::endl;
       std::cout << "  --test <id>      Run the specified test only" << std::endl;
