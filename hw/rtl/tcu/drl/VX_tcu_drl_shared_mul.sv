@@ -22,7 +22,6 @@ module VX_tcu_drl_shared_mul (
     input wire [6:0] raw_exp_diff,
     output logic [24:0] y
 );
-    //NOTE: exception handling neglected for now
     `UNUSED_VAR(enable);
 
     //fp16/bf16 pack 2 ops/reg --> need one instantiation per multiplier slice

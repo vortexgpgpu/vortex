@@ -22,6 +22,7 @@ module VX_tcu_drl_norm_round #(
     input wire [6:0] hi_c,
     input wire [N-2:0] sigSigns,
     input wire fmt_sel,
+    input wire [2:0] exceptions,
     output wire [31:0] result
 );
 
@@ -31,6 +32,9 @@ module VX_tcu_drl_norm_round #(
     wire sum_sign = acc_sig[W+$clog2(N)-1];
     wire [ACC_WIDTH-1:0] abs_sum;
     assign abs_sum = sum_sign ? -acc_sig[ACC_WIDTH-1:0] : acc_sig[ACC_WIDTH-1:0];
+    
+    //Exception handling
+    wire zero_sum = ~|abs_sum;
 
     //Leading zero counter
     wire [$clog2(ACC_WIDTH)-1:0] lz_count;
@@ -43,9 +47,9 @@ module VX_tcu_drl_norm_round #(
     );
 
     //Exponent normalization
-    wire [7:0] shift_amount = 8'(lz_count) - 8'($clog2(N));
-    wire [7:0] norm_exp = max_exp - shift_amount;
-    
+    wire [7:0] shift_amount = 8'($clog2(N)) - 8'(lz_count);
+    wire [7:0] norm_exp = max_exp + shift_amount;
+
     //Move leading 1 to MSB (mantissa norm)
     wire [ACC_WIDTH-1:0] shifted_acc_sig = abs_sum << lz_count;
     //RNE rounding
@@ -55,10 +59,21 @@ module VX_tcu_drl_norm_round #(
     wire sticky_bit = |shifted_acc_sig[ACC_WIDTH-27:0];
     wire round_up = guard_bit & (round_bit | sticky_bit | lsb);    
     //Index [ACC_WIDTH-1] becomes the hidden 1
-    wire [22:0] rounded_sig = shifted_acc_sig[ACC_WIDTH-2 : ACC_WIDTH-24] + 23'(round_up);
+    wire [23:0] rounded_sig_temp = {1'b0, shifted_acc_sig[ACC_WIDTH-2 : ACC_WIDTH-24]} + 24'(round_up);
+    wire carry_out = rounded_sig_temp[23];
 
-    //Final FP concat
-    wire [31:0] fp_result = {sum_sign, norm_exp, rounded_sig};
+    wire [22:0] rounded_sig = rounded_sig_temp[22:0];
+    wire [7:0] adjusted_exp = zero_sum ? 8'd0 : (norm_exp + 8'(carry_out));
+
+    logic [31:0] fp_result;
+    always_comb begin
+        case (exceptions[1:0])
+            2'b00: fp_result = {sum_sign, adjusted_exp, rounded_sig};
+            2'b01: fp_result = {exceptions[2], 8'hFF, 23'h000000};
+            2'b10: fp_result = {exceptions[2], 8'hFF, 23'h400000};
+            default: fp_result = 32'hxxxxxxxx;
+        endcase            
+    end
 
     //Final INT addition
     wire [6:0] ext_acc_int = 7'($signed(acc_sig[W+$clog2(N):W]));
@@ -83,4 +98,4 @@ module VX_tcu_drl_norm_round #(
 
     assign result = fmt_sel ? int_result : fp_result;
 
-endmodule 
+endmodule

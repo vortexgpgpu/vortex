@@ -22,7 +22,6 @@ module VX_tcu_drl_exp_bias (
     output logic exp_low_larger,
     output logic [6:0] raw_exp_diff
 );
-    //NOTE: exception handling neglected for now
     `UNUSED_VAR({a, b, enable});
 
     //FP16 exponent addition and bias
@@ -45,7 +44,7 @@ module VX_tcu_drl_exp_bias (
     `UNUSED_VAR(raw_exp_bf16_signed);
     VX_csa_tree #(
         .N(3),
-        .W(10),
+        .W(10),    //8 + log2(3) extend for sign handling
         .S(10)
     ) biasexp_bf16(
         .operands({{2'd0, a[14:7]}, {2'd0, b[14:7]}, neg_bias}),

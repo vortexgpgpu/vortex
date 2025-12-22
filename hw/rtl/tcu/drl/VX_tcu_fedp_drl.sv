@@ -58,6 +58,7 @@ module VX_tcu_fedp_drl #(
     wire [7:0] raw_max_exp;
     wire [TCK:0][7:0] shift_amounts;
     wire [TCK:0][24:0] raw_sigs;
+    wire [2:0] exceptions;
 
     VX_tcu_drl_mul_exp #(
         .N(TCK+1)
@@ -69,7 +70,8 @@ module VX_tcu_fedp_drl #(
         .c_val         (c_val[31:0]),
         .raw_max_exp   (raw_max_exp),
         .shift_amounts (shift_amounts),
-        .raw_sigs      (raw_sigs)
+        .raw_sigs      (raw_sigs),
+        .exceptions    (exceptions)
     );
 
     //Stage 1 pipeline reg
@@ -78,15 +80,16 @@ module VX_tcu_fedp_drl #(
     wire [TCK:0][24:0] pipe_raw_sigs;
     wire [6:0] pipe_hi_c;
     wire pipe_fmt_sel;
+    wire [2:0] pipe_exceptions;
     VX_pipe_register #(
-        .DATAW (8+((TCK+1)*8)+((TCK+1)*25)+7+1),
+        .DATAW (8+((TCK+1)*8)+((TCK+1)*25)+7+1+3),
         .DEPTH (FMUL_LATENCY)
     ) pipe_fmul (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({raw_max_exp, shift_amounts, raw_sigs, hi_c, fmt_sel}),
-        .data_out({pipe_raw_max_exp, pipe_shift_amounts, pipe_raw_sigs, pipe_hi_c, pipe_fmt_sel})
+        .data_in ({raw_max_exp, shift_amounts, raw_sigs, hi_c, fmt_sel, exceptions}),
+        .data_out({pipe_raw_max_exp, pipe_shift_amounts, pipe_raw_sigs, pipe_hi_c, pipe_fmt_sel, pipe_exceptions})
     );
 
     //Significand Alignment
@@ -94,6 +97,7 @@ module VX_tcu_fedp_drl #(
     wire [7:0] aln_max_exp = pipe_raw_max_exp;
     wire [6:0] aln_hi_c = pipe_hi_c;
     wire aln_fmt_sel = pipe_fmt_sel;
+    wire [2:0] aln_exceptions = pipe_exceptions;
 
     VX_tcu_drl_align #(
         .N (TCK+1),
@@ -110,21 +114,23 @@ module VX_tcu_fedp_drl #(
     wire [TCK:0][W-1:0] pipe_aln_sigs;
     wire [6:0] pipe_aln_hi_c;
     wire pipe_aln_fmt_sel;
+    wire [2:0] pipe_aln_exceptions;
     VX_pipe_register #(
-        .DATAW (8+((TCK+1)*W)+7+1),
+        .DATAW (8+((TCK+1)*W)+7+1+3),
         .DEPTH (ALN_LATENCY)
     ) pipe_aln (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({aln_max_exp, aln_sigs, aln_hi_c, aln_fmt_sel}),
-        .data_out({pipe_aln_max_exp, pipe_aln_sigs, pipe_aln_hi_c, pipe_aln_fmt_sel})
+        .data_in ({aln_max_exp, aln_sigs, aln_hi_c, aln_fmt_sel, aln_exceptions}),
+        .data_out({pipe_aln_max_exp, pipe_aln_sigs, pipe_aln_hi_c, pipe_aln_fmt_sel, pipe_aln_exceptions})
     );
 
     //Accumulate CSA reduction tree
     wire [7:0] acc_max_exp = pipe_aln_max_exp;
     wire [6:0] acc_hi_c = pipe_aln_hi_c;
     wire acc_fmt_sel = pipe_aln_fmt_sel;
+    wire [2:0] acc_exceptions = pipe_aln_exceptions;
     wire [W+$clog2(TCK+1):0] acc_sig;    //23 mantissa + 1 hidden + 1 sign + log2(N) bits
     wire [TCK-1:0] sigs_sign;    //sign bits of all operands (for int math)
 
@@ -144,15 +150,16 @@ module VX_tcu_fedp_drl #(
     wire pipe_acc_fmt_sel;
     wire [W+$clog2(TCK+1):0] pipe_acc_sig;
     wire [TCK-1:0] pipe_sigs_sign;
+    wire [2:0] pipe_acc_exceptions;
     VX_pipe_register #(
-        .DATAW (8+W+$clog2(TCK+1)+1+7+1+TCK),
+        .DATAW (8+W+$clog2(TCK+1)+1+7+1+TCK+3),
         .DEPTH (ACC_LATENCY)
     ) pipe_acc (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({acc_max_exp, acc_sig, acc_hi_c, acc_fmt_sel, sigs_sign}),
-        .data_out({pipe_acc_max_exp, pipe_acc_sig, pipe_acc_hi_c, pipe_acc_fmt_sel, pipe_sigs_sign})
+        .data_in ({acc_max_exp, acc_sig, acc_hi_c, acc_fmt_sel, sigs_sign, acc_exceptions}),
+        .data_out({pipe_acc_max_exp, pipe_acc_sig, pipe_acc_hi_c, pipe_acc_fmt_sel, pipe_sigs_sign, pipe_acc_exceptions})
     );
 
     //Normalization and RNE of accumulated significand for FP
@@ -168,6 +175,7 @@ module VX_tcu_fedp_drl #(
         .hi_c        (pipe_acc_hi_c),
         .sigSigns    (pipe_sigs_sign),
         .fmt_sel     (pipe_acc_fmt_sel),
+        .exceptions  (pipe_acc_exceptions),
         .result      (final_result)
     );
 

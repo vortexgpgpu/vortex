@@ -23,7 +23,8 @@ module VX_tcu_drl_mul_exp #(
     input wire [31:0] c_val,
     output logic [7:0] raw_max_exp,
     output logic [N-1:0][7:0] shift_amounts,
-    output logic [N-1:0][24:0] raw_sigs
+    output logic [N-1:0][24:0] raw_sigs,
+    output logic [2:0] exceptions
 );
 
     //muxed signals
@@ -67,6 +68,18 @@ module VX_tcu_drl_mul_exp #(
         .exponents     (raw_exps),
         .max_exp       (raw_max_exp),
         .shift_amounts (shift_amounts)
+    );
+
+    //NaN/Inf exception flag generation
+    VX_tcu_drl_nan_inf #(
+        .N(N)
+    ) nan_inf_exc (
+        .enable     (enable),
+        .fmt_s      (fmt_s[2:0]),
+        .a_rows     (a_rows),
+        .b_cols     (b_cols),
+        .c_val      (c_val),
+        .exceptions (exceptions)
     );
     
 endmodule
