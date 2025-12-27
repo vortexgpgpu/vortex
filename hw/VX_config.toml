@@ -9,6 +9,8 @@ SOCKET_SIZE = "expr: min(4, $NUM_CORES)"
 
 RESET_DELAY = 8
 
+DPI_ENABLE = "expr: $SV_DPI"
+
 ICACHE_ENABLE = true
 DCACHE_ENABLE = true
 LMEM_ENABLE = true
@@ -104,8 +106,8 @@ IO_END_ADDR = "expr: $USER_BASE_ADDR"
 NUM_ALU_LANES = "expr: $SIMD_WIDTH"
 NUM_ALU_BLOCKS = "expr: $ISSUE_WIDTH"
 
-IMUL_DPI = "expr: (not $SYNTHESIS) and $DPI_ENAALE"
-IDIV_DPI = "expr: (not $SYNTHESIS) and $DPI_ENAALE"
+IMUL_DPI = "expr: (not $SYNTHESIS) and $DPI_ENABLE"
+IDIV_DPI = "expr: (not $SYNTHESIS) and $DPI_ENABLE"
 
 [sfu]
 NUM_SFU_LANES = "expr: $SIMD_WIDTH"
@@ -254,11 +256,10 @@ MISA_EXT = "expr: ($ICACHE_ENABLED << $ISA_EXT_ICACHE) | ($DCACHE_ENABLED << $IS
 ASIC = false
 SYNTHESIS = false
 VIVADO = false
-ALTERA = false
+QUARTUS = false
 YOSYS = false
 SYNOPSIS = false
 SV_DPI = false
-DPI_ENAALE = "expr: $SV_DPI"
 
 [debug]
 STALL_TIMEOUT = 100000

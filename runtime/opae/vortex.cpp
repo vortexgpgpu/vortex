@@ -74,20 +74,6 @@ using namespace vortex;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static inline void afu_uuid_to_guid(uint8_t fpga_guid[16]) {
-#if defined(__SIZEOF_INT128__)
-  __uint128_t v = (__uint128_t)AFU_ACCEL_UUID;  // macro unchanged
-
-  // Write bytes in the same order as the hex literal (big-endian)
-  for (int i = 15; i >= 0; --i) {
-    fpga_guid[i] = (uint8_t)(v & 0xff);
-    v >>= 8;
-  }
-#else
-# error "No __int128 support on this compiler; use the string-parse fallback below."
-#endif
-}
-
 class vx_device {
 public:
   vx_device()

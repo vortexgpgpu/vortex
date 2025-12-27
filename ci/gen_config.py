@@ -19,31 +19,6 @@ Key features:
     definitions that can be overridden from -D flags.
   - Resolved mode (-r/--resolved): fully evaluates expressions and emits
     resolved constants (always enabled for cflags).
-
-Boolean emission rule:
-  - True  => emit macro flag (e.g. `define FOO)
-  - False => do NOT emit anything (macro remains undefined)
-
-Hex formatting:
-  - If a TOML integer was written as a 0x... literal, cpp/verilog/cflags preserve hex.
-  - Verilog hex values use exact nibble width derived from literal digit count:
-      0x0   -> 4'h0
-      0x00  -> 8'h00
-      0x000 -> 12'h000
-  - Hex digits are emitted in CAPITAL letters.
-
-Param rule:
-  - When emitting Verilog *expressions* (unresolved mode), identifiers declared in [[param]]
-    must NOT be prefixed with ` (backtick). E.g. $DODO -> DODO, not `DODO.
-  - In resolved mode, builtin/param values are forced to their type defaults (0 / "" / false),
-    regardless of -D overrides.
-
-*_DISABLE guard rule (bug fix):
-  - In unresolved headers, any auto-definition of X_ENABLE must be wrapped in
-      `ifndef X_DISABLE
-        ...
-      `endif
-    so that -DX_DISABLE prevents the header from enabling X_ENABLE by default.
 """
 
 from __future__ import annotations
@@ -1227,6 +1202,23 @@ def main(argv: List[str]) -> int:
   defs += _parse_defines_from_cflags(args.cflags)
   defs += _parse_defines(unknown)
   overrides, _explicit = _apply_overrides(defs, enums)
+  # - A name declared under [[param]] / [[builtin]] is a read-only symbol used only for expression evaluation.
+  ro = params_set | set(builtins.keys())
+  assigned = set(toml_defs.keys()) & ro
+  if assigned:
+    names = ", ".join(sorted(assigned))
+    raise ValueError(
+      f"Read-only symbol(s) assigned in config tables: {names}. "
+      "Names declared in [[param]]/[[builtin]] must not appear as regular config keys."
+    )
+
+  illegal = set(overrides.keys()) & ro
+  if illegal:
+    names = ", ".join(sorted(illegal))
+    raise ValueError(
+      f"Illegal -D override(s) for read-only symbol(s): {names}. "
+      "Remove these -D flags; [[param]]/[[builtin]] values are read-only."
+    )
 
   resolved = True if args.format == "cflags" else args.resolved
 
