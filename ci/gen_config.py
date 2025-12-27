@@ -513,11 +513,42 @@ class ClampHelper(HelperSpec):
     return f"{d.ref(self.macro)}({args[0]}, {args[1]}, {args[2]})"
 
 
+class PowHelper(HelperSpec):
+  fn = "pow"
+  macro = "__POW"
+
+  def emit(self, d: Dialect) -> List[str]:
+    if d.kind == "sv":
+      return _guarded_macro(d, self.macro, "(x,y) ((x) ** (y))")
+    return _guarded_macro(d, self.macro, "(x,y) ((int)std::pow((x), (y)))")
+
+  def translate_call(self, d: Dialect, args: List[str]) -> str:
+    if len(args) != 2:
+      return "0"
+    return f"{d.ref(self.macro)}({args[0]}, {args[1]})"
+
+
+class Clog2Helper(HelperSpec):
+  fn = "clog2"
+  macro = "__CLOG2"
+
+  def emit(self, d: Dialect) -> List[str]:
+    if d.kind == "sv":
+      return _guarded_macro(d, self.macro, "(x) ($clog2(x))")
+    return _guarded_macro(d, self.macro, "(x) ((int)std::ceil(std::log2((double)(x))))")
+
+  def translate_call(self, d: Dialect, args: List[str]) -> str:
+    if len(args) != 1:
+      return "0"
+    return f"{d.ref(self.macro)}({args[0]})"
+
 HELPERS: Dict[str, HelperSpec] = {
   "min": MinHelper(),
   "max": MaxHelper(),
   "up": UpHelper(),
   "clamp": ClampHelper(),
+  "pow": PowHelper(),
+  "clog2": Clog2Helper(),
 }
 
 
@@ -990,6 +1021,21 @@ def _py_clamp(x: Any, lo: Any, hi: Any) -> Any:
   return hi if x > hi else (lo if x < lo else x)
 
 
+def _py_pow(x: Any, y: Any) -> Any:
+  xi = int(x)
+  yi = int(y)
+  if yi < 0:
+    raise ValueError("pow(x, y) with negative y is not supported for config evaluation")
+  return xi ** yi
+
+
+def _py_clog2(x: Any) -> Any:
+  xi = int(x)
+  if xi <= 1:
+    return 0
+  return (xi - 1).bit_length()
+
+
 class Resolver:
   def __init__(self, base: Dict[str, Any], overrides: Dict[str, Any],
                enums: Dict[str, EnumSpec], builtins: Dict[str, VarSpec], params: Dict[str, VarSpec]) -> None:
@@ -1079,6 +1125,10 @@ class EvalScope(dict):
       return _py_up
     if k == "clamp":
       return _py_clamp
+    if k == "pow":
+      return _py_pow
+    if k == "clog2":
+      return _py_clog2
     if k == "int":
       return int
     if k == "bool":

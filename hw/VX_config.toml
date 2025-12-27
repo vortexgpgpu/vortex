@@ -144,7 +144,7 @@ FNCP_PE_RATIO = 1
 
 [vpu]
 NUM_VPU_LANES = "expr: $SIMD_WIDTH"
-NUM_VPU_BLOCKS = 1
+NUM_VPU_BLOCKS = "expr: $ISSUE_WIDTH"
 
 [vm]
 VM_ADDR_MODE = "expr: 'SV39' if $XLEN_64 else 'SV32'"
@@ -176,8 +176,8 @@ DCACHE_MREQ_SIZE = 4
 DCACHE_MRSQ_SIZE = 4
 DCACHE_CRSQ_SIZE = 2
 
-NUM_ICACHES = "expr: up($SOCKET_SIZE / 4)"
-NUM_DCACHES = "expr: up($SOCKET_SIZE / 4)"
+NUM_ICACHES = "expr: up($SOCKET_SIZE / 4) if $ICACHE_ENABLE else 0"
+NUM_DCACHES = "expr: up($SOCKET_SIZE / 4) if $DCACHE_ENABLE else 0"
 
 DCACHE_NUM_BANKS = "expr: min($DCACHE_NUM_REQS, 16)"
 
@@ -262,7 +262,7 @@ SYNOPSIS = false
 SV_DPI = false
 
 [debug]
-STALL_TIMEOUT = 100000
+STALL_TIMEOUT = "expr: (100000 * (1 << ($L2_ENABLED + $L3_ENABLED)))"
 DEBUG_LEVEL = 3
 
 [[enum]]
