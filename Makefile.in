@@ -25,14 +25,14 @@ software:
 tests:
 	$(MAKE) -C tests
 
-clean-build:
+clean:
 	$(MAKE) -C hw clean
 	$(MAKE) -C sim clean
 	$(MAKE) -C kernel clean
 	$(MAKE) -C runtime clean
 	$(MAKE) -C tests clean
 
-clean: clean-build
+clean-all: clean
 	$(MAKE) -C $(VORTEX_HOME)/third_party clean
 
 # Install setup

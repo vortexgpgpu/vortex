@@ -15,7 +15,7 @@
 
 #include "driver.h"
 
-#include <vortex_afu.h>
+#include <vortex_opae.h>
 
 #ifdef SCOPE
 #include "scope.h"
@@ -74,6 +74,20 @@ using namespace vortex;
 
 ///////////////////////////////////////////////////////////////////////////////
 
+static inline void afu_uuid_to_guid(uint8_t fpga_guid[16]) {
+#if defined(__SIZEOF_INT128__)
+  __uint128_t v = (__uint128_t)AFU_ACCEL_UUID;  // macro unchanged
+
+  // Write bytes in the same order as the hex literal (big-endian)
+  for (int i = 15; i >= 0; --i) {
+    fpga_guid[i] = (uint8_t)(v & 0xff);
+    v >>= 8;
+  }
+#else
+# error "No __int128 support on this compiler; use the string-parse fallback below."
+#endif
+}
+
 class vx_device {
 public:
   vx_device()
@@ -124,9 +138,7 @@ public:
     });
 
     // Add the desired UUID to the filter
-    std::string s_uuid(AFU_ACCEL_UUID);
-    std::replace(s_uuid.begin(), s_uuid.end(), '_', '-');
-    uuid_parse(s_uuid.c_str(), guid);
+    uuid_parse(AFU_ACCEL_UUID_S, guid);
     CHECK_FPGA_ERR(api_.fpgaPropertiesSetGUID(filter, guid), {
       api_.fpgaDestroyProperties(&filter);
       return -1;
@@ -145,7 +157,7 @@ public:
     });
 
     if (num_matches < 1) {
-      fprintf(stderr, "[VXDRV] Error: accelerator %s not found!\n", AFU_ACCEL_UUID);
+      fprintf(stderr, "[VXDRV] Error: accelerator %s not found!\n", AFU_ACCEL_UUID_S);
       api_.fpgaDestroyToken(&accel_token);
       return -1;
     }

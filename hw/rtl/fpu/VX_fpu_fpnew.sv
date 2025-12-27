@@ -13,7 +13,7 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_FPNEW
+`ifdef FPU_TYPE_FPNEW
 
 module VX_fpu_fpnew
     import VX_gpu_pkg::*;

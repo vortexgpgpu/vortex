@@ -8,6 +8,8 @@ OBJ_DIR = $(DESTDIR)/obj
 CONFIG_FILE = $(DESTDIR)/simx_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/simx
 
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I$(SRC_DIR) -I$(SW_COMMON_DIR) -I$(ROOT_DIR)/hw
@@ -39,16 +41,16 @@ CXXFLAGS += $(SST_CFLAGS) -DUSE_SST
 endif
 
 # Add V extension sources
-ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
-  	SRCS += $(SRC_DIR)/vpu/voperands.cpp
-  	SRCS += $(SRC_DIR)/vpu/vopc_unit.cpp
-  	SRCS += $(SRC_DIR)/vpu/vec_unit.cpp
+ifneq ($(filter -DEXT_V_ENABLE, $(XCONFIGS)),)
+  	SRCS += $(SRC_DIR)/voperands.cpp
+  	SRCS += $(SRC_DIR)/vopc_unit.cpp
+  	SRCS += $(SRC_DIR)/vec_unit.cpp
 else
 	SRCS += $(SRC_DIR)/operands.cpp
 endif
 # Add TCU extension sources
-ifneq ($(findstring -DEXT_TCU_ENABLE, $(CONFIGS)),)
-  	SRCS += $(SRC_DIR)/tcu/tensor_unit.cpp
+ifneq ($(filter -DEXT_TCU_ENABLE, $(XCONFIGS)),)
+  	SRCS += $(SRC_DIR)/tensor_unit.cpp
 endif
 
 # Debugging

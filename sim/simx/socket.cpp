@@ -66,7 +66,7 @@ Socket::Socket(const SimContext& ctx,
   });
 
   // find overlap
-  uint32_t overlap = MIN(ICACHE_MEM_PORTS, L1_MEM_PORTS);
+  uint32_t overlap = __MIN(ICACHE_MEM_PORTS, L1_MEM_PORTS);
 
   // connect l1 caches to outgoing memory interfaces
   for (uint32_t i = 0; i < L1_MEM_PORTS; ++i) {

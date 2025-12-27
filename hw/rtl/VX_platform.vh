@@ -203,7 +203,7 @@
 `define PRESERVE_NET
 `define BLACKBOX_CELL
 `define STRING
-`define FPU_FPNEW
+`define FPU_TYPE_FPNEW
 `else
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3

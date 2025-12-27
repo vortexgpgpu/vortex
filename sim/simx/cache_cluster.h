@@ -34,7 +34,7 @@ public:
 		, CoreRspPorts(num_inputs, std::vector<SimPort<MemRsp>>(cache_config.num_inputs, this))
 		, MemReqPorts(cache_config.mem_ports, this)
 		, MemRspPorts(cache_config.mem_ports, this)
-		, caches_(MAX(num_units, 0x1)) {
+		, caches_(__MAX(num_units, 0x1)) {
 
 		CacheSim::Config cache_config2(cache_config);
 		if (0 == num_units) {

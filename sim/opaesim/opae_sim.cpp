@@ -27,7 +27,7 @@
 #include <dram_sim.h>
 
 #include <VX_config.h>
-#include <vortex_afu.h>
+#include <vortex_opae.h>
 
 #include <future>
 #include <list>

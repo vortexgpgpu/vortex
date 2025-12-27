@@ -4,4 +4,4 @@ SRC_FILE = $(PROJECT).sv
 
 include ../../common.mk
 
-RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs
+RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs

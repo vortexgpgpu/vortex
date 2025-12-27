@@ -1,0 +1,280 @@
+[platform]
+VENDOR_ID = 0
+ARCHITECTURE_ID = 0
+IMPLEMENTATION_ID = 0
+
+NUM_CLUSTERS = 1
+NUM_CORES = 1
+SOCKET_SIZE = "expr: min(4, $NUM_CORES)"
+
+RESET_DELAY = 8
+
+ICACHE_ENABLE = true
+DCACHE_ENABLE = true
+LMEM_ENABLE = true
+L2_ENABLE = false
+L3_ENABLE = false
+
+ICACHE_ENABLED = "expr: 1 if $ICACHE_ENABLE else 0"
+DCACHE_ENABLED = "expr: 1 if $DCACHE_ENABLE else 0"
+LMEM_ENABLED = "expr: 1 if $LMEM_ENABLE else 0"
+L2_ENABLED = "expr: 1 if $L2_ENABLE else 0"
+L3_ENABLED = "expr: 1 if $L3_ENABLE else 0"
+
+[isa]
+XLEN = 32
+
+GBAR_ENABLE = false
+GBAR_ENABLED = "expr: 1 if $GBAR_ENABLE else 0"
+
+VM_ENABLE = false
+VM_ENABLED = "expr: 1 if $VM_ENABLE else 0"
+
+EXT_D_ENABLE = "expr: $XLEN_64"
+FLEN = "expr: 64 if $EXT_D_ENABLE else 32"
+
+# extensions
+EXT_M_ENABLE = true
+EXT_F_ENABLE = true
+EXT_C_ENABLE = false
+EXT_A_ENABLE = false
+EXT_V_ENABLE = false
+
+EXT_ZICOND_ENABLE = true
+EXT_TCU_ENABLE = false
+
+EXT_M_ENABLED = "expr: 1 if $EXT_M_ENABLE else 0"
+EXT_F_ENABLED = "expr: 1 if $EXT_F_ENABLE else 0"
+EXT_C_ENABLED = "expr: 1 if $EXT_C_ENABLE else 0"
+EXT_A_ENABLED = "expr: 1 if $EXT_A_ENABLE else 0"
+EXT_D_ENABLED = "expr: 1 if $EXT_D_ENABLE else 0"
+EXT_V_ENABLED = "expr: 1 if $EXT_V_ENABLE else 0"
+EXT_ZICOND_ENABLED = "expr: 1 if $EXT_ZICOND_ENABLE else 0"
+EXT_TCU_ENABLED = "expr: 1 if $EXT_TCU_ENABLE else 0"
+
+VLEN = "expr: $XLEN * 4"
+
+[pipeline]
+NUM_WARPS = 4
+NUM_THREADS = 4
+NUM_BARRIERS = "expr: up($NUM_WARPS / 2)"
+
+IBUF_SIZE = 4
+ISSUE_WIDTH = "expr: up($NUM_WARPS / 16)"
+SIMD_WIDTH = "expr: $NUM_THREADS"
+NUM_OPCS = "expr: up($NUM_WARPS / (4 * $ISSUE_WIDTH))"
+
+NUM_GPR_BANKS = 4
+NUM_VGPR_BANKS = 2
+
+[memory]
+MEM_BLOCK_SIZE = 64
+MEM_ADDR_WIDTH = "expr: 48 if $XLEN_64 else 32"
+
+L1_LINE_SIZE = "expr: $MEM_BLOCK_SIZE"
+L2_LINE_SIZE = "expr: $MEM_BLOCK_SIZE"
+L3_LINE_SIZE = "expr: $MEM_BLOCK_SIZE"
+
+PLATFORM_MEMORY_NUM_BANKS = 2
+PLATFORM_MEMORY_ADDR_WIDTH = "expr: 48 if $XLEN_64 else 32"
+PLATFORM_MEMORY_DATA_SIZE = 64
+PLATFORM_MEMORY_INTERLEAVE = 1
+
+# VM page size (used only when VM_ENABLE=true)
+MEM_PAGE_LOG2_SIZE = 12
+MEM_PAGE_SIZE = "expr: 1 << $MEM_PAGE_LOG2_SIZE"
+
+[address_space]
+STARTUP_ADDR = "expr: 0x0000000800000000 if $XLEN_64 else 0x80000000"
+USER_BASE_ADDR = "expr: 0x0000000000010000 if $XLEN_64 else 0x00010000"
+
+STACK_LOG2_SIZE = 13
+STACK_BASE_ADDR = "expr: 0x00000001FFFF0000 if $XLEN_64 else 0xFFFF0000"
+
+IO_BASE_ADDR = "expr: 0x0000000000000040 if $XLEN_64 else 0x00000040"
+PAGE_TABLE_BASE_ADDR = "expr: 0x00000000F0000000 if $XLEN_64 else 0xF0000000"
+
+IO_COUT_ADDR = "expr: $IO_BASE_ADDR"
+IO_COUT_SIZE = 64
+
+IO_MPM_ADDR = "expr: ($IO_COUT_ADDR + $IO_COUT_SIZE)"
+IO_END_ADDR = "expr: $USER_BASE_ADDR"
+
+[alu]
+NUM_ALU_LANES = "expr: $SIMD_WIDTH"
+NUM_ALU_BLOCKS = "expr: $ISSUE_WIDTH"
+
+IMUL_DPI = "expr: (not $SYNTHESIS) and $DPI_ENAALE"
+IDIV_DPI = "expr: (not $SYNTHESIS) and $DPI_ENAALE"
+
+[sfu]
+NUM_SFU_LANES = "expr: $SIMD_WIDTH"
+NUM_SFU_BLOCKS = 1
+
+[lsu]
+NUM_LSU_LANES = "expr: $SIMD_WIDTH"
+NUM_LSU_BLOCKS = 1
+
+LSU_LINE_SIZE = "expr: min($NUM_LSU_LANES * ($XLEN / 8), $L1_LINE_SIZE)"
+LSUQ_IN_SIZE = "expr: (2 * ($SIMD_WIDTH / $NUM_LSU_LANES))"
+LSUQ_OUT_SIZE = "expr: max($LSUQ_IN_SIZE, $LSU_LINE_SIZE / ($XLEN / 8))"
+
+[fpu]
+# FPU_TYPE is a string enum: 'DPI'|'DSP'|'FPNEW'
+FPU_TYPE = "expr: 'DSP' if $SYNTHESIS else ('DPI' if $DPI_ENABLE else 'FPNEW')"
+FPU_RV64F = "expr: $XLEN_64 and $FLEN_32"
+
+NUM_FPU_LANES = "expr: $SIMD_WIDTH"
+NUM_FPU_BLOCKS = "expr: $ISSUE_WIDTH"
+FPUQ_SIZE = "expr: 2 * ($SIMD_WIDTH // $NUM_FPU_LANES)"
+
+LATENCY_FMA  = "expr: 4 if ($FPU_TYPE_DPI or $FPU_TYPE_FPNEW or ($FPU_TYPE_DSP and $QUARTUS)) else (16 if ($FPU_TYPE_DSP and $VIVADO) else 4)"
+LATENCY_FDIV = "expr: 15 if $FPU_TYPE_DPI else (16 if $FPU_TYPE_FPNEW else (15 if ($FPU_TYPE_DSP and $QUARTUS) else (28 if ($FPU_TYPE_DSP and $VIVADO) else 16)))"
+LATENCY_FSQRT= "expr: 10 if $FPU_TYPE_DPI else (16 if $FPU_TYPE_FPNEW else (10 if ($FPU_TYPE_DSP and $QUARTUS) else (28 if ($FPU_TYPE_DSP and $VIVADO) else 16)))"
+LATENCY_FNCP = 2
+LATENCY_FCVT = 5
+
+FMA_PE_RATIO  = 1
+FDIV_PE_RATIO = 1
+FSQRT_PE_RATIO= 1
+FCVT_PE_RATIO = 1
+FNCP_PE_RATIO = 1
+
+[vpu]
+NUM_VPU_LANES = "expr: $SIMD_WIDTH"
+NUM_VPU_BLOCKS = 1
+
+[vm]
+VM_ADDR_MODE = "expr: 'SV39' if $XLEN_64 else 'SV32'"
+TLB_SIZE = 32
+
+PT_LEVEL = "expr: 3 if $XLEN_64 else 2"
+PTE_SIZE = "expr: 8 if $XLEN_64 else 4"
+NUM_PTE_ENTRY = "expr: 512 if $XLEN_64 else 1024"
+PT_SIZE = "expr: $MEM_PAGE_SIZE"
+PT_SIZE_LIMIT = "expr: (1 << 25) if $XLEN_64 else (1 << 23)"
+
+[l1cache]
+ICACHE_SIZE = 16384
+ICACHE_NUM_WAYS = 4
+ICACHE_REPL_POLICY = 1
+ICACHE_MSHR_SIZE = 16
+ICACHE_MREQ_SIZE = 4
+ICACHE_MRSQ_SIZE = 0
+ICACHE_CRSQ_SIZE = 2
+ICACHE_MEM_PORTS = 1
+
+DCACHE_SIZE = 16384
+DCACHE_NUM_WAYS = 4
+DCACHE_WRITEBACK = 0
+DCACHE_DIRTYBYTES = "expr: $DCACHE_WRITEBACK"
+DCACHE_REPL_POLICY = 1
+DCACHE_MSHR_SIZE = 16
+DCACHE_MREQ_SIZE = 4
+DCACHE_MRSQ_SIZE = 4
+DCACHE_CRSQ_SIZE = 2
+
+NUM_ICACHES = "expr: up($SOCKET_SIZE / 4)"
+NUM_DCACHES = "expr: up($SOCKET_SIZE / 4)"
+
+DCACHE_NUM_BANKS = "expr: min($DCACHE_NUM_REQS, 16)"
+
+L1_MEM_PORTS = "expr: min($DCACHE_NUM_BANKS, $PLATFORM_MEMORY_NUM_BANKS) if ($ICACHE_ENABLE or $DCACHE_ENABLE) else min($DCACHE_NUM_REQS, $PLATFORM_MEMORY_NUM_BANKS)"
+
+[l2cache]
+L2_CACHE_SIZE = 1048576
+L2_NUM_WAYS = 8
+L2_WRITEBACK = 0
+L2_DIRTYBYTES = "expr: $L2_WRITEBACK"
+L2_REPL_POLICY = 1
+L2_MSHR_SIZE = 16
+L2_MREQ_SIZE = 4
+L2_MRSQ_SIZE = 4
+L2_CRSQ_SIZE = 2
+
+L2_NUM_BANKS = "expr: min($L2_NUM_REQS, 16)"
+L2_MEM_PORTS = "expr: min($L2_NUM_BANKS, $PLATFORM_MEMORY_NUM_BANKS) if $L2_ENABLE else min($L2_NUM_REQS, $PLATFORM_MEMORY_NUM_BANKS)"
+
+[l3cache]
+L3_CACHE_SIZE = 2097152
+L3_NUM_WAYS = 8
+L3_WRITEBACK = 0
+L3_DIRTYBYTES = "expr: $L3_WRITEBACK"
+L3_REPL_POLICY = 1
+L3_MSHR_SIZE = 16
+L3_MREQ_SIZE = 4
+L3_MRSQ_SIZE = 4
+L3_CRSQ_SIZE = 2
+
+L3_NUM_BANKS = "expr: min($L3_NUM_REQS, 16)"
+L3_MEM_PORTS = "expr: min($L3_NUM_BANKS, $PLATFORM_MEMORY_NUM_BANKS) if $L3_ENABLE else min($L3_NUM_REQS, $PLATFORM_MEMORY_NUM_BANKS)"
+
+[lmem]
+LMEM_LOG_SIZE = 14
+LMEM_BASE_ADDR = "expr: $STACK_BASE_ADDR"
+LMEM_NUM_BANKS = "expr: $NUM_LSU_LANES"
+
+[tcu]
+# TCU_TYPE is a string enum: 'DPI'|'DSP'|'BHF'|'DRL'
+TCU_TYPE = "expr: 'DSP' if $SYNTHESIS else ('DPI' if $DPI_ENABLE else 'DRL')"
+NUM_TCU_LANES = "expr: $NUM_THREADS"
+NUM_TCU_BLOCKS = "expr: $ISSUE_WIDTH"
+
+[isa_signatures]
+
+# Standard extension signature
+
+ISA_STD_A = 0
+ISA_STD_C = 2
+ISA_STD_D = 3
+ISA_STD_E = 4
+ISA_STD_F = 5
+ISA_STD_H = 7
+ISA_STD_I = 8
+ISA_STD_N = 13
+ISA_STD_Q = 16
+ISA_STD_S = 18
+ISA_STD_V = 21
+
+MISA_STD = "expr: ($EXT_A_ENABLED << $ISA_STD_A) | (0 << 1) | ($EXT_C_ENABLED << $ISA_STD_C) | ($EXT_D_ENABLED << $ISA_STD_D) | (0 << $ISA_STD_E) | ($EXT_F_ENABLED << $ISA_STD_F) | (0 << 6) | (0 << $ISA_STD_H) | (1 << $ISA_STD_I) | (0 << 9) | (0 << 10) | (0 << 11) | ($EXT_M_ENABLED << 12) | (0 << $ISA_STD_N) | (0 << 14) | (0 << 15) | (0 << $ISA_STD_Q) | (0 << 17) | (0 << $ISA_STD_S) | (0 << 19) | (1 << 20) | ($EXT_V_ENABLED << $ISA_STD_V) | (0 << 22) | (1 << 23) | (0 << 24) | (0 << 25)"
+
+# Custom extensions signature
+
+ISA_EXT_ICACHE  = 0
+ISA_EXT_DCACHE  = 1
+ISA_EXT_L2CACHE = 2
+ISA_EXT_L3CACHE = 3
+ISA_EXT_LMEM    = 4
+ISA_EXT_ZICOND  = 5
+ISA_EXT_TCU     = 6
+
+MISA_EXT = "expr: ($ICACHE_ENABLED << $ISA_EXT_ICACHE) | ($DCACHE_ENABLED << $ISA_EXT_DCACHE) | ($L2_ENABLED << $ISA_EXT_L2CACHE) | ($L3_ENABLED << $ISA_EXT_L3CACHE) | ($LMEM_ENABLED << $ISA_EXT_LMEM) | ($EXT_ZICOND_ENABLED << $ISA_EXT_ZICOND) | ($EXT_TCU_ENABLED << $ISA_EXT_TCU)"
+
+[toolchain]
+ASIC = false
+SYNTHESIS = false
+VIVADO = false
+ALTERA = false
+YOSYS = false
+SYNOPSIS = false
+SV_DPI = false
+DPI_ENAALE = "expr: $SV_DPI"
+
+[debug]
+STALL_TIMEOUT = 100000
+DEBUG_LEVEL = 3
+
+[[enum]]
+XLEN = [32, 64]
+FLEN = [32, 64]
+FPU_TYPE = ["DPI", "DSP", "FPNEW"]
+TCU_TYPE = ["DPI", "DSP", "BHF", "DRL"]
+
+[[param]]
+DCACHE_NUM_REQS = "int"
+L2_NUM_REQS = "int"
+L3_NUM_REQS = "int"
+
+[[builtin]]
+__FILE__ = "string"
+__LINE__ = "int"

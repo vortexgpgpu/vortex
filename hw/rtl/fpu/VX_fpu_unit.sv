@@ -98,7 +98,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign fpu_req_valid = per_block_execute_if[block_idx].valid && ~mdata_full;
         assign per_block_execute_if[block_idx].ready = fpu_req_ready && ~mdata_full;
 
-    `ifdef FPU_DPI
+    `ifdef FPU_TYPE_DPI
 
         VX_fpu_dpi #(
             .NUM_LANES  (NUM_LANES),
@@ -127,7 +127,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .ready_out  (fpu_rsp_ready)
         );
 
-    `elsif FPU_FPNEW
+    `elsif FPU_TYPE_FPNEW
 
         VX_fpu_fpnew #(
             .NUM_LANES  (NUM_LANES),
@@ -156,7 +156,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .ready_out  (fpu_rsp_ready)
         );
 
-    `elsif FPU_DSP
+    `elsif FPU_TYPE_DSP
 
         VX_fpu_dsp #(
             .NUM_LANES  (NUM_LANES),

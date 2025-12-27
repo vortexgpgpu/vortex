@@ -11,6 +11,8 @@ DPI_DIR := $(VORTEX_HOME)/hw/dpi
 
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
 CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
@@ -29,20 +31,20 @@ SRCS += $(SRC_DIR)/main.cpp
 
 DBG_TRACE_FLAGS :=
 
-RTL_INCLUDE := -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
+RTL_INCLUDE := -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
 RTL_INCLUDE += -I$(RTL_DIR)/tcu
 
-ifneq (,$(findstring -DTCU_DPI, $(CONFIGS)))
+ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 TOP := VX_tcu_fedp_dpi
 endif
 
-ifneq (,$(findstring -DTCU_DSP, $(CONFIGS)))
+ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 TOP := VX_tcu_fedp_dsp
 endif
 
-ifneq (,$(findstring -DTCU_BHF, $(CONFIGS)))
+ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
@@ -57,7 +59,7 @@ RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 TOP := VX_tcu_fedp_bhf
 endif
 
-ifneq (,$(findstring -DTCU_DRL, $(CONFIGS)))
+ifneq (,$(filter -DTCU_TYPE_DRL, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
 TOP := VX_tcu_fedp_drl
 endif

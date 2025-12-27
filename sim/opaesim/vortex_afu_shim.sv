@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 `IGNORE_WARNINGS_BEGIN
-`include "vortex_afu.vh"
+`include "vortex_opae.vh"
 `IGNORE_WARNINGS_END
 
 module vortex_afu_shim import local_mem_cfg_pkg::*; import ccip_if_pkg::*; (

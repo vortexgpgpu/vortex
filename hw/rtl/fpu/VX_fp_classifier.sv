@@ -13,7 +13,7 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_DSP
+`ifdef FPU_TYPE_DSP
 
 module VX_fp_classifier import VX_fpu_pkg::*; #(
     parameter MAN_BITS = 23,

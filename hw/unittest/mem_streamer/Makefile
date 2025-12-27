@@ -16,7 +16,7 @@ DBG_TRACE_FLAGS :=
 
 RTL_PKGS :=
 
-RTL_INCLUDE := -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
+RTL_INCLUDE := -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
 
 TOP := VX_mem_scheduler
 

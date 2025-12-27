@@ -16,7 +16,7 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_DSP
+`ifdef FPU_TYPE_DSP
 
 module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY   = 1,

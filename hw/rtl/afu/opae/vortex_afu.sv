@@ -16,7 +16,7 @@
 `ifndef NOPAE
 `include "afu_json_info.vh"
 `else
-`include "vortex_afu.vh"
+`include "vortex_opae.vh"
 `endif
 
 module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_gpu_pkg::*; #(

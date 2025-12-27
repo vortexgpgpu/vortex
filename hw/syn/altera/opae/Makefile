@@ -60,21 +60,21 @@ endif
 RTL_PKGS = $(AFU_DIR)/local_mem_cfg_pkg.sv $(AFU_DIR)/ccip/ccip_if_pkg.sv
 RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(findstring -DFPU_FPNEW, $(CONFIGS)))
+ifneq (,$(filter -DFPU_TYPE_FPNEW, $(CONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
+RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE)
 
 # Add V extension sources
-ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
+ifneq (,$(filter -DEXT_V_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
 
 # Add TCU extension sources
-ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
+ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
@@ -123,8 +123,8 @@ ip-gen: $(IP_CACHE_DIR)/ip-gen.log
 $(IP_CACHE_DIR)/ip-gen.log:
 	$(SCRIPT_DIR)/altera_ip_gen.sh $(IP_CACHE_DIR)
 
-swconfig: vortex_afu.h
-vortex_afu.h: $(SRC_DIR)/vortex_afu.json
+swconfig: vortex_opae.h
+vortex_opae.h: $(SRC_DIR)/vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
 $(BUILD_DIR)/setup.cfg:
@@ -164,4 +164,4 @@ $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	$(SCRIPT_DIR)/scope.py $(BUILD_DIR)/vortex.xml -o $(BUILD_DIR)/scope.json
 
 clean:
-	rm -rf vortex_afu.h $(BUILD_DIR)
+	rm -rf vortex_opae.h $(BUILD_DIR)

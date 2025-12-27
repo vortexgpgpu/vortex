@@ -6,6 +6,8 @@ CONFIG_FILE := $(DESTDIR)/xrtsim_config.stamp
 SRC_DIR := $(VORTEX_HOME)/sim/xrtsim
 AFU_DIR := $(RTL_DIR)/afu/xrt
 
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I$(SRC_DIR) -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(DESTDIR)
@@ -43,30 +45,30 @@ SRCS += $(SRC_DIR)/xrt_c.cpp $(SRC_DIR)/xrt_sim.cpp
 RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(findstring -DFPU_FPNEW, $(CONFIGS)))
+ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
+RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR)
 
 # Add V extension sources
-ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
+ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
 
 # Add TCU extension sources
-ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
+ifneq (,$(filter -DEXT_TCU_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	ifneq (,$(findstring -DTCU_DPI, $(CONFIGS)))
+	ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 	endif
-	ifneq (,$(findstring -DTCU_DSP, $(CONFIGS)))
+	ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 	endif
-	ifneq (,$(findstring -DTCU_BHF, $(CONFIGS)))
+	ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
@@ -80,7 +82,7 @@ ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
 	endif
-	ifneq (,$(findstring -DTCU_DRL, $(CONFIGS)))
+	ifneq (,$(filter -DTCU_TYPE_DRL, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
 	endif
 endif

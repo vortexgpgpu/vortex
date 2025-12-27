@@ -28,7 +28,7 @@ ifeq ($(TARGET), opaesim)
 	BUILD_DEPS = $(DESTDIR)/libopae-c-sim.so
 	CXXFLAGS += -DOPAESIM -I$(SIM_DIR)/opaesim
 else
-	BUILD_DEPS = $(ROOT_DIR)/hw/syn/altera/opae/vortex_afu.h
+	BUILD_DEPS = $(ROOT_DIR)/hw/syn/altera/opae/vortex_opae.h
 	CXXFLAGS += -I$(SYN_DIR) -I$(ROOT_DIR)/hw/syn/altera/opae
 endif
 
@@ -51,7 +51,7 @@ PROJECT := libvortex-opae.so
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(ROOT_DIR)/hw/syn/altera/opae/vortex_afu.h:
+$(ROOT_DIR)/hw/syn/altera/opae/vortex_opae.h:
 	$(MAKE) -C $(ROOT_DIR)/hw/syn/altera/opae swconfig
 
 driver: $(DESTDIR)/libopae-c-sim.so

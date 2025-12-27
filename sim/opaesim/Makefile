@@ -6,6 +6,8 @@ CONFIG_FILE := $(DESTDIR)/opaesim_config.stamp
 SRC_DIR := $(VORTEX_HOME)/sim/opaesim
 AFU_DIR := $(RTL_DIR)/afu/opae
 
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I$(SRC_DIR) -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(DESTDIR)
@@ -44,30 +46,30 @@ RTL_PKGS = $(AFU_DIR)/local_mem_cfg_pkg.sv $(AFU_DIR)/ccip/ccip_if_pkg.sv
 RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(findstring -DFPU_FPNEW, $(CONFIGS)))
+ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
+RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip
 
 # Add V extension sources
-ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
+ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
 
 # Add TCU extension sources
-ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
+ifneq (,$(filter -DEXT_TCU_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	ifneq (,$(findstring -DTCU_DPI, $(CONFIGS)))
+	ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 	endif
-	ifneq (,$(findstring -DTCU_DSP, $(CONFIGS)))
+	ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 	endif
-	ifneq (,$(findstring -DTCU_BHF, $(CONFIGS)))
+	ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
@@ -81,7 +83,7 @@ ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
 	endif
-	ifneq (,$(findstring -DTCU_DRL, $(CONFIGS)))
+	ifneq (,$(filter -DTCU_TYPE_DRL, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
 	endif
 endif
@@ -149,10 +151,7 @@ $(DESTDIR)/vortex.xml: $(CONFIG_FILE)
 $(DESTDIR)/scope.json: $(DESTDIR)/vortex.xml
 	$(SCRIPT_DIR)/scope.py $^ -o $@
 
-$(DESTDIR)/vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
-	$(SCRIPT_DIR)/gen_config.py -i $^ -o $@
-
-$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON) $(CONFIG_FILE) $(RTL_SRCS)
+$(DESTDIR)/$(PROJECT): $(SRCS) $(SCOPE_JSON) $(CONFIG_FILE) $(RTL_SRCS)
 	verilator --build --exe $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 # updates the timestamp when flags changed.
@@ -167,4 +166,4 @@ $(CONFIG_FILE): force
 
 clean:
 	rm -rf $(DESTDIR)/$(PROJECT).obj_dir
-	rm -f $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/vortex_afu.h $(DESTDIR)/$(PROJECT)
+	rm -f $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/$(PROJECT)

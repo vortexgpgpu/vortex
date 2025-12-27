@@ -11,13 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#if defined(TCU_DRL)
+#if defined(TCU_TYPE_DRL)
 #include "VVX_tcu_fedp_drl.h"
 #define MODULE VVX_tcu_fedp_drl
-#elif defined(TCU_BHF)
+#elif defined(TCU_TYPE_BHF)
 #include "VVX_tcu_fedp_bhf.h"
 #define MODULE VVX_tcu_fedp_bhf
-#elif defined(TCU_DSP)
+#elif defined(TCU_TYPE_DSP)
 #include "VVX_tcu_fedp_dsp.h"
 #define MODULE VVX_tcu_fedp_dsp
 #else

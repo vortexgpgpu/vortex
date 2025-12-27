@@ -43,23 +43,23 @@ isa()
     make -C tests/riscv/isa run-simx
     make -C tests/riscv/isa run-rtlsim
 
-    CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
+    CONFIGS="-DFPU_TYPE_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
-    CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
+    CONFIGS="-DFPU_TYPE_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
-    CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
+    CONFIGS="-DFPU_TYPE_DSP" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
     if [ "$XLEN" == "64" ]
     then
-        CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
+        CONFIGS="-DFPU_TYPE_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
 
-        CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
+        CONFIGS="-DFPU_TYPE_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
 
-        CONFIGS="-DFPU_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
+        CONFIGS="-DFPU_TYPE_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
 
-        CONFIGS="-DFPU_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
+        CONFIGS="-DFPU_TYPE_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
 
-        CONFIGS="-DFPU_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64fx
+        CONFIGS="-DFPU_TYPE_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64fx
     fi
 
     echo "isa tests done!"
@@ -188,14 +188,14 @@ cache()
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=demo --perf=1
 
     # disable L1 cache
-    CONFIGS="-DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
+    CONFIGS="-DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
+    CONFIGS="-DICACHE_DISABLE -DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
     CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
     CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
 
     # reduce l1 line size
     CONFIGS="-DL1_LINE_SIZE=$XSIZE" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
-    CONFIGS="-DL1_LINE_SIZE=$XSIZE -DDISABLE_L1" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
+    CONFIGS="-DL1_LINE_SIZE=$XSIZE -DICACHE_DISABLE -DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
     CONFIGS="-DL1_LINE_SIZE=$XSIZE" ./ci/blackbox.sh --driver=simx --app=io_addr
     CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
     CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemm
@@ -313,13 +313,13 @@ config2()
     # disable DPI
     if [ "$XLEN" == "64" ]; then
         # need to disable trig on 64-bit due to a bug inside fpnew's sqrt core.
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-xtrig -xbar -xgbar"
+        CONFIGS="-DDPI_DISABLE -DFPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
+        CONFIGS="-DDPI_DISABLE -DFPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
+        CONFIGS="-DDPI_DISABLE -DFPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-xtrig -xbar -xgbar"
     else
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood
+        CONFIGS="-DDPI_DISABLE -DFPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
+        CONFIGS="-DDPI_DISABLE -DFPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
+        CONFIGS="-DDPI_DISABLE -DFPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood
     fi
 
     # custom program startup address
@@ -489,66 +489,66 @@ tensor()
 
     # rtlsim tests
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=fp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=bf8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_DPI -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DPI -DISSUE_WIDTH=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     # test fp16
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1  --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DSP" NUM_REGS=1 LATENCY=31 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused --ulp=3
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-zeros --no-subnormals --no-infinities --no-nans
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1  --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DSP" NUM_REGS=1 LATENCY=31 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused --ulp=3
+    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-zeros --no-subnormals --no-infinities --no-nans
 
     # test bf16
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" NUM_REGS=1 LATENCY=4  make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DSP" NUM_REGS=1 LATENCY=31 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL -DUSE_FEDP" NUM_REGS=2 LATENCY=4  make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-zeros --no-subnormals --no-infinities --no-nans
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4  make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DSP" NUM_REGS=1 LATENCY=31 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused
+    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL -DUSE_FEDP" NUM_REGS=2 LATENCY=4  make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-zeros --no-subnormals --no-infinities --no-nans
 
     # test fp8_e4m3
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-zeros --no-subnormals --no-infinities --no-nans
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
+    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-zeros --no-subnormals --no-infinities --no-nans
 
     # test fp8_e5m2
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-fused --ulp=4
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-zeros --no-subnormals --no-infinities --no-nans
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-fused
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-fused --ulp=4
+    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-zeros --no-subnormals --no-infinities --no-nans
 
     # test int8
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
 
     # test uint8
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
+    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
 
     # test int4
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
+    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
 
     # test uint4
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
 
     echo "tensor tests done!"
 }

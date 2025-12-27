@@ -29,23 +29,23 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID);
 
-`ifdef TCU_DSP
+`ifdef TCU_TYPE_DSP
     localparam FCVT_LATENCY = 1;
     localparam FMUL_LATENCY = 8;
     localparam FADD_LATENCY = 11;
     localparam FACC_LATENCY = $clog2(2 * TCU_TC_K + 1) * FADD_LATENCY;
     localparam FEDP_LATENCY = FCVT_LATENCY + FMUL_LATENCY + FACC_LATENCY;
-`elsif TCU_BHF
+`elsif TCU_TYPE_BHF
     localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 2;
     localparam FRND_LATENCY = 1;
     localparam FACC_LATENCY  = $clog2(2 * TCU_TC_K + 1) * (FADD_LATENCY + FRND_LATENCY);
     localparam FEDP_LATENCY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FACC_LATENCY;
-`elsif TCU_DPI
+`elsif TCU_TYPE_DPI
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam FEDP_LATENCY = FMUL_LATENCY + FACC_LATENCY;
-`else // TCU_DRL
+`else // TCU_TYPE_DRL
     localparam FMUL_LATENCY = 1;
     localparam FALN_LATENCY = 1;
     localparam FACC_LATENCY = 1;
@@ -136,7 +136,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 1  // depth
             );
 
-        `ifdef TCU_DPI
+        `ifdef TCU_TYPE_DPI
             VX_tcu_fedp_dpi #(
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K)
@@ -151,7 +151,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
-        `elsif TCU_BHF
+        `elsif TCU_TYPE_BHF
             VX_tcu_fedp_bhf #(
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K)
@@ -166,7 +166,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
-        `elsif TCU_DRL
+        `elsif TCU_TYPE_DRL
             VX_tcu_fedp_drl #(
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K)
@@ -181,7 +181,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
-        `elsif TCU_DSP
+        `elsif TCU_TYPE_DSP
             VX_tcu_fedp_dsp #(
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K)

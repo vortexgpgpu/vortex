@@ -13,7 +13,7 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_DPI
+`ifdef FPU_TYPE_DPI
 
 `include "dpi_float.vh"
 
