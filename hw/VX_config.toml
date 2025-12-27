@@ -270,6 +270,7 @@ XLEN = [32, 64]
 FLEN = [32, 64]
 FPU_TYPE = ["DPI", "DSP", "FPNEW"]
 TCU_TYPE = ["DPI", "DSP", "BHF", "DRL"]
+VM_ADDR_MODE = ["BARE", "SV32", "SV39", "SV48", "SV57"]
 
 [[param]]
 DCACHE_NUM_REQS = "int"
