@@ -8,7 +8,7 @@ OBJ_DIR = $(DESTDIR)/obj
 CONFIG_FILE = $(DESTDIR)/simx_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/simx
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '-DSV_DPI $(CONFIGS)')
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized

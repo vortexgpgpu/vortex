@@ -6,7 +6,7 @@ CONFIG_FILE := $(DESTDIR)/xrtsim_config.stamp
 SRC_DIR := $(VORTEX_HOME)/sim/xrtsim
 AFU_DIR := $(RTL_DIR)/afu/xrt
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '-DSV_DPI $(CONFIGS)')
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized

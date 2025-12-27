@@ -11,7 +11,7 @@ DPI_DIR := $(VORTEX_HOME)/hw/dpi
 
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '-DSV_DPI $(CONFIGS)')
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 

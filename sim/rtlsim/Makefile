@@ -5,7 +5,7 @@ DESTDIR ?= $(CURDIR)
 CONFIG_FILE = $(DESTDIR)/rtlsim_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/rtlsim
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '-DSV_DPI $(CONFIGS)')
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
