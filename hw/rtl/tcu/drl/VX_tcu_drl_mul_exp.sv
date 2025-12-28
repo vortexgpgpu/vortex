@@ -16,11 +16,11 @@
 module VX_tcu_drl_mul_exp #(
     parameter N = 5  //includes c_val count
 ) (
-    input wire enable,
     input wire [3:0] fmt_s,
     input wire [N-2:0][15:0] a_rows,
     input wire [N-2:0][15:0] b_cols,
     input wire [31:0] c_val,
+    input wire [N-2:0] sparse_mask,
     output logic [7:0] raw_max_exp,
     output logic [N-1:0][7:0] shift_amounts,
     output logic [N-1:0][24:0] raw_sigs,
@@ -36,7 +36,7 @@ module VX_tcu_drl_mul_exp #(
         
         //shared significand multiplier
         VX_tcu_drl_shared_mul shared_mul_inst (
-            .enable         (enable),
+            .enable         (sparse_mask[i]),
             .fmt_s          (fmt_s),
             .a              (a_rows[i]),
             .b              (b_cols[i]),
@@ -47,7 +47,7 @@ module VX_tcu_drl_mul_exp #(
 
         //exponent add and bias
         VX_tcu_drl_exp_bias exp_bias_inst (
-            .enable         (enable),
+            .enable         (sparse_mask[i]),
             .fmt_s          (fmt_s[2:0]),
             .a              (a_rows[i]),
             .b              (b_cols[i]),
@@ -70,11 +70,10 @@ module VX_tcu_drl_mul_exp #(
         .shift_amounts (shift_amounts)
     );
 
-    //NaN/Inf exception flag generation
+    //NaN/Inf exception flag generation (dont en gate for clean 0 handling)
     VX_tcu_drl_nan_inf #(
         .N(N)
     ) nan_inf_exc (
-        .enable     (enable),
         .fmt_s      (fmt_s[2:0]),
         .a_rows     (a_rows),
         .b_cols     (b_cols),

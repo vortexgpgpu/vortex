@@ -20,22 +20,28 @@ module VX_tcu_drl_align #(
     input wire [N-1:0][7:0] shift_amounts,
     input wire [N-1:0][24:0] sigs_in,
     input wire fmt_sel,
+    input wire [N-2:0] sparse_mask,
     output logic [N-1:0][W-1:0] sigs_out
 );
 
+    //input power gating
+    wire [N-1:0][7:0] gated_shift_amounts;
+    wire [N-1:0][24:0] gated_sigs_in;
+    for (genvar i = 0; i < N-1; i++) begin : g_power_gating
+        assign gated_sigs_in[i] = ({25{sparse_mask[i]}} & sigs_in[i]);
+        assign gated_shift_amounts[i] = ({8{sparse_mask[i]}} & shift_amounts[i]);
+    end
+    assign gated_sigs_in[N-1] = sigs_in[N-1];               //c_val
+    assign gated_shift_amounts[N-1] = shift_amounts[N-1];
+
     //extend + align + sign significands
     for (genvar i = 0; i < N; i++) begin : g_align
-        wire [W-1:0] ext_sigs_in = {sigs_in[i], {W-25{1'b0}}};
+        wire [W-1:0] ext_sigs_in = {gated_sigs_in[i], {W-25{1'b0}}};
         wire fp_sign = ext_sigs_in[W-1];
         wire [W-2:0] fp_sig = ext_sigs_in[W-2:0];
-        wire [W-2:0] adj_sig = fp_sig >> shift_amounts[i];
+        wire [W-2:0] adj_sig = fp_sig >> gated_shift_amounts[i];
         wire [W-1:0] fp_val = fp_sign ? -adj_sig : {1'b0, adj_sig};
         assign sigs_out[i] = fmt_sel ? ext_sigs_in : fp_val;
     end
 
 endmodule
-
-/*
-        wire [23:0] adj_sig = shift_amount[3] ? 24'd0 : full_sig[i] >> shift_amount;      //reducing switching activity (power) by clamping to 0 if
-                                                                                        //input won't make a significant impact on accumulated value
-*/

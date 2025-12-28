@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_tcu_drl_shared_mul (
-    input wire enable,
+    input wire enable,            //active high
     input wire [3:0] fmt_s,
     input wire [15:0] a,
     input wire [15:0] b,
@@ -22,12 +22,18 @@ module VX_tcu_drl_shared_mul (
     input wire [6:0] raw_exp_diff,
     output logic [24:0] y
 );
-    `UNUSED_VAR(enable);
+
+    //power gating inputs to prevent switching activity if not enabled
+    wire [15:0] gated_a = {16{enable}} & a;
+    wire [15:0] gated_b = {16{enable}} & b;
+    wire [3:0] gated_fmt_s = {4{enable}} & fmt_s;
+    wire gated_exp_low_larger = enable & exp_low_larger;
+    wire [6:0] gated_raw_exp_diff = {7{enable}} & raw_exp_diff;
 
     //fp16/bf16 pack 2 ops/reg --> need one instantiation per multiplier slice
-    wire sign_f16 = a[15] ^ b[15];
-    wire [10:0] a_f16 = fmt_s[0] ? {1'b1, a[9:0]} : {3'd0, 1'b1, a[6:0]};
-    wire [10:0] b_f16 = fmt_s[0] ? {1'b1, b[9:0]} : {3'd0, 1'b1, b[6:0]};
+    wire sign_f16 = gated_a[15] ^ gated_b[15];
+    wire [10:0] a_f16 = gated_fmt_s[0] ? {1'b1, gated_a[9:0]} : {3'd0, 1'b1, gated_a[6:0]};
+    wire [10:0] b_f16 = gated_fmt_s[0] ? {1'b1, gated_b[9:0]} : {3'd0, 1'b1, gated_b[6:0]};
     wire [21:0] y_f16;
     VX_wallace_mul #(
         .N (11)
@@ -41,9 +47,9 @@ module VX_tcu_drl_shared_mul (
     wire [1:0] sign_f8;
     wire [1:0][7:0] y_f8;
     for (genvar i = 0; i < 2; i++) begin  :  g_f8_mul
-        assign sign_f8[i] = a[(i*8)+7] ^ b[(i*8)+7];
-        wire [3:0] a_f8 = fmt_s[0] ? {1'b1, a[(i*8)+2 -: 3]} : {1'd0, 1'b1, a[(i*8)+1 -: 2]};
-        wire [3:0] b_f8 = fmt_s[0] ? {1'b1, b[(i*8)+2 -: 3]} : {1'd0, 1'b1, b[(i*8)+1 -: 2]};
+        assign sign_f8[i] = gated_a[(i*8)+7] ^ gated_b[(i*8)+7];
+        wire [3:0] a_f8 = gated_fmt_s[0] ? {1'b1, gated_a[(i*8)+2 -: 3]} : {1'd0, 1'b1, gated_a[(i*8)+1 -: 2]};
+        wire [3:0] b_f8 = gated_fmt_s[0] ? {1'b1, gated_b[(i*8)+2 -: 3]} : {1'd0, 1'b1, gated_b[(i*8)+1 -: 2]};
         VX_wallace_mul #(
             .N (4)
         ) wtmul_f8 (
@@ -52,11 +58,11 @@ module VX_tcu_drl_shared_mul (
             .p (y_f8[i])
         );
     end
-    wire [6:0] shift_amount = exp_low_larger ?  -raw_exp_diff : raw_exp_diff;
-    wire [7:0] y_f8_low  = fmt_s[0] ? y_f8[0] : {y_f8[0][5:0], 2'd0};
-    wire [7:0] y_f8_high = fmt_s[0] ? y_f8[1] : {y_f8[1][5:0], 2'd0};
-    wire [22:0] aligned_sig_low  = exp_low_larger ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> shift_amount;
-    wire [22:0] aligned_sig_high = exp_low_larger ? {y_f8_high, 15'd0} >> shift_amount : {y_f8_high, 15'd0};
+    wire [6:0] shift_amount = gated_exp_low_larger ?  -gated_raw_exp_diff : gated_raw_exp_diff;
+    wire [7:0] y_f8_low  = gated_fmt_s[0] ? y_f8[0] : {y_f8[0][5:0], 2'd0};
+    wire [7:0] y_f8_high = gated_fmt_s[0] ? y_f8[1] : {y_f8[1][5:0], 2'd0};
+    wire [22:0] aligned_sig_low  = gated_exp_low_larger ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> shift_amount;
+    wire [22:0] aligned_sig_high = gated_exp_low_larger ? {y_f8_high, 15'd0} >> shift_amount : {y_f8_high, 15'd0};
     wire [23:0] signed_sig_low  = sign_f8[0] ? -aligned_sig_low  : {1'b0, aligned_sig_low};
     wire [23:0] signed_sig_high = sign_f8[1] ? -aligned_sig_high : {1'b0, aligned_sig_high};
     wire [24:0] signed_sig_res;
@@ -74,10 +80,10 @@ module VX_tcu_drl_shared_mul (
     //int8 pack 4 ops/reg --> need two instantiations per multiplier slice
     wire [1:0][16:0] y_i8;
     for (genvar i = 0; i < 2; i++) begin : g_i8_mul
-        wire [7:0] a_i8 = a[8*i+7 -: 8];
-        wire [7:0] b_i8 = b[8*i+7 -: 8];
-        wire [7:0] abs_a_i8 = fmt_s[0] ? (a_i8[7] ? -a_i8 : a_i8) : a_i8;
-        wire [7:0] abs_b_i8 = fmt_s[0] ? (b_i8[7] ? -b_i8 : b_i8) : b_i8;
+        wire [7:0] a_i8 = gated_a[8*i+7 -: 8];
+        wire [7:0] b_i8 = gated_b[8*i+7 -: 8];
+        wire [7:0] abs_a_i8 = gated_fmt_s[0] ? (a_i8[7] ? -a_i8 : a_i8) : a_i8;
+        wire [7:0] abs_b_i8 = gated_fmt_s[0] ? (b_i8[7] ? -b_i8 : b_i8) : b_i8;
         wire ab_sign_i8 = a_i8[7] ^ b_i8[7];
         wire [15:0] abs_y_i8;
         VX_wallace_mul #(
@@ -88,7 +94,7 @@ module VX_tcu_drl_shared_mul (
             .p (abs_y_i8)
         );
         wire [15:0] signed_y_i8 = ab_sign_i8 ? -abs_y_i8 : abs_y_i8;
-        assign y_i8[i] = fmt_s[0] ? 17'($signed(signed_y_i8)) : {1'b0, abs_y_i8};
+        assign y_i8[i] = gated_fmt_s[0] ? 17'($signed(signed_y_i8)) : {1'b0, abs_y_i8};
     end
     wire [16:0] y_i8_add;
     //KSA needs to be 17-bit for carry overflow handling 
@@ -104,10 +110,10 @@ module VX_tcu_drl_shared_mul (
     //int4 pack 8 ops/reg --> need four instantiations per multiplier slice
     wire [3:0][9:0] y_i4;
     for (genvar i = 0; i < 4; i++) begin : g_i4_mul
-        wire [3:0] a_i4 = a[4*i+3 -: 4];
-        wire [3:0] b_i4 = b[4*i+3 -: 4];
-        wire [3:0] abs_a_i4 = fmt_s[0] ? (a_i4[3] ? -a_i4 : a_i4) : a_i4;
-        wire [3:0] abs_b_i4 = fmt_s[0] ? (b_i4[3] ? -b_i4 : b_i4) : b_i4;
+        wire [3:0] a_i4 = gated_a[4*i+3 -: 4];
+        wire [3:0] b_i4 = gated_b[4*i+3 -: 4];
+        wire [3:0] abs_a_i4 = gated_fmt_s[0] ? (a_i4[3] ? -a_i4 : a_i4) : a_i4;
+        wire [3:0] abs_b_i4 = gated_fmt_s[0] ? (b_i4[3] ? -b_i4 : b_i4) : b_i4;
         wire ab_sign_i4 = a_i4[3] ^ b_i4[3];
         wire [7:0] abs_y_i4;
         VX_wallace_mul #(
@@ -118,7 +124,7 @@ module VX_tcu_drl_shared_mul (
             .p (abs_y_i4)
         );
         wire [7:0] signed_y_i4 = ab_sign_i4 ? -abs_y_i4 : abs_y_i4;
-        assign y_i4[i] = fmt_s[0] ? 10'($signed(signed_y_i4)) : {2'd0, abs_y_i4};
+        assign y_i4[i] = gated_fmt_s[0] ? 10'($signed(signed_y_i4)) : {2'd0, abs_y_i4};
     end
     wire [9:0] y_i4_add;
     VX_csa_tree #(
@@ -133,7 +139,7 @@ module VX_tcu_drl_shared_mul (
 
     //Select sign+sig out based on datatype
     always_comb begin
-        case (fmt_s)
+        case (gated_fmt_s)
             4'd1:  y = {sign_f16, y_f16, 2'd0};          //fp16
             4'd2:  y = {sign_f16, y_f16[15:0], 8'd0};    //bf16
             4'd3:  y = {sign_f8_add, y_f8_add};          //fp8

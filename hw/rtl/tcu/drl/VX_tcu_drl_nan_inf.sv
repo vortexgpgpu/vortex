@@ -16,14 +16,12 @@
 module VX_tcu_drl_nan_inf #(
     parameter N = 5  //includes c_val count
 ) (
-    input wire enable,
     input wire [2:0] fmt_s,
     input wire [N-2:0][15:0] a_rows,
     input wire [N-2:0][15:0] b_cols,
     input wire [31:0] c_val,
     output logic [2:0] exceptions    //{sign, nan, inf}
 );
-    `UNUSED_VAR({enable});
 
     wire [N-2:0] sign_a_fp16, sign_b_fp16, nan_a_fp16, nan_b_fp16, inf_a_fp16, inf_b_fp16, zero_a_fp16, zero_b_fp16;
     wire [N-2:0] sign_a_bf16, sign_b_bf16, nan_a_bf16, nan_b_bf16, inf_a_bf16, inf_b_bf16, zero_a_bf16, zero_b_bf16;
@@ -61,34 +59,34 @@ module VX_tcu_drl_nan_inf #(
     always_comb begin
         case (fmt_s)
             3'b001: begin
-                assign sign_a = sign_a_fp16;
-                assign sign_b = sign_b_fp16;
-                assign nan_a  = nan_a_fp16;
-                assign nan_b  = nan_b_fp16;
-                assign inf_a  = inf_a_fp16;
-                assign inf_b  = inf_b_fp16;
-                assign zero_a = zero_a_fp16;
-                assign zero_b = zero_b_fp16;
+                sign_a = sign_a_fp16;
+                sign_b = sign_b_fp16;
+                nan_a  = nan_a_fp16;
+                nan_b  = nan_b_fp16;
+                inf_a  = inf_a_fp16;
+                inf_b  = inf_b_fp16;
+                zero_a = zero_a_fp16;
+                zero_b = zero_b_fp16;
             end
             3'b010: begin
-                assign sign_a = sign_a_bf16;
-                assign sign_b = sign_b_bf16;
-                assign nan_a  = nan_a_bf16;
-                assign nan_b  = nan_b_bf16;
-                assign inf_a  = inf_a_bf16;
-                assign inf_b  = inf_b_bf16;
-                assign zero_a = zero_a_bf16;
-                assign zero_b = zero_b_bf16;
+                sign_a = sign_a_bf16;
+                sign_b = sign_b_bf16;
+                nan_a  = nan_a_bf16;
+                nan_b  = nan_b_bf16;
+                inf_a  = inf_a_bf16;
+                inf_b  = inf_b_bf16;
+                zero_a = zero_a_bf16;
+                zero_b = zero_b_bf16;
             end
             default: begin
-                assign sign_a = 'x;
-                assign sign_b = 'x;
-                assign nan_a  = 'x;
-                assign nan_b  = 'x;
-                assign inf_a  = 'x;
-                assign inf_b  = 'x;
-                assign zero_a = 'x;
-                assign zero_b = 'x;
+                sign_a = {(N-1){1'b0}};
+                sign_b = {(N-1){1'b0}};
+                nan_a  = {(N-1){1'b0}};
+                nan_b  = {(N-1){1'b0}};
+                inf_a  = {(N-1){1'b0}};
+                inf_b  = {(N-1){1'b0}};
+                zero_a = {(N-1){1'b0}};
+                zero_b = {(N-1){1'b0}};
             end
         endcase
     end

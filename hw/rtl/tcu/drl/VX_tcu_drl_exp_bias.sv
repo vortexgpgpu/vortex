@@ -22,7 +22,12 @@ module VX_tcu_drl_exp_bias (
     output logic exp_low_larger,
     output logic [6:0] raw_exp_diff
 );
-    `UNUSED_VAR({a, b, enable});
+
+    //Power gating inputs to prevent switching activity if not enabled
+    wire [15:0] gated_a = {16{enable}} & a;
+    wire [15:0] gated_b = {16{enable}} & b;
+    wire [2:0] gated_fmt_s = {3{enable}} & fmt_s;
+    `UNUSED_VAR({gated_a, gated_b});
 
     //FP16 exponent addition and bias
     wire [7:0] raw_exp_fp16;
@@ -32,7 +37,7 @@ module VX_tcu_drl_exp_bias (
         .W(8),
         .S(8)
     ) biasexp_fp16(
-        .operands({{3'd0, a[14:10]}, {3'd0, b[14:10]}, fp16_32_conv_bias}),
+        .operands({{3'd0, gated_a[14:10]}, {3'd0, gated_b[14:10]}, fp16_32_conv_bias}),
         .sum     (raw_exp_fp16),
         `UNUSED_PIN (cout)
     );
@@ -44,10 +49,10 @@ module VX_tcu_drl_exp_bias (
     `UNUSED_VAR(raw_exp_bf16_signed);
     VX_csa_tree #(
         .N(3),
-        .W(10),    //8 + log2(3) extend for sign handling
+        .W(10),    //8 + log2(3)-extend for sign handling
         .S(10)
     ) biasexp_bf16(
-        .operands({{2'd0, a[14:7]}, {2'd0, b[14:7]}, neg_bias}),
+        .operands({{2'd0, gated_a[14:7]}, {2'd0, gated_b[14:7]}, neg_bias}),
         .sum     (raw_exp_bf16_signed),
         `UNUSED_PIN (cout)
     );
@@ -60,8 +65,8 @@ module VX_tcu_drl_exp_bias (
         VX_ks_adder #(
             .N(4)
         ) raw_exp_fp8_sub_add (
-            .dataa (a[(i*8)+6 -: 4]),
-            .datab (b[(i*8)+6 -: 4]),
+            .dataa (gated_a[(i*8)+6 -: 4]),
+            .datab (gated_b[(i*8)+6 -: 4]),
             .sum   (raw_exp_fp8_sub[i][3:0]),
             .cout  (raw_exp_fp8_sub[i][4])
         );
@@ -86,8 +91,8 @@ module VX_tcu_drl_exp_bias (
         VX_ks_adder #(
             .N(5)
         ) raw_exp_bf8_sub_add (
-            .dataa (a[(j*8)+6 -: 5]),
-            .datab (b[(j*8)+6 -: 5]),
+            .dataa (gated_a[(j*8)+6 -: 5]),
+            .datab (gated_b[(j*8)+6 -: 5]),
             .sum   (raw_exp_bf8_sub[j][4:0]),
             .cout  (raw_exp_bf8_sub[j][5])
         );
@@ -107,7 +112,7 @@ module VX_tcu_drl_exp_bias (
 
     //Select exp out based on datatype
     always_comb begin
-        case(fmt_s[2:0])
+        case(gated_fmt_s[2:0])
             3'd1: begin
                 raw_exp_y      = raw_exp_fp16;
                 exp_low_larger = 1'bx;

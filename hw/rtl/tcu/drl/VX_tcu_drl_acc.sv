@@ -7,7 +7,7 @@
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
-// WAITHOUT WAARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// WITHOUT WAARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
@@ -20,27 +20,48 @@ module VX_tcu_drl_acc #(
 ) (
     input  wire [N-1:0][W-1:0] sigsIn,
     input  wire fmt_sel,
+    input  wire [N-2:0] sparse_mask,
     output logic [WA-1:0] sigOut,
     output logic [N-2:0] signOuts
 );
-    // Sign-extend fp significands to WA bits (header)
+
+    //input power gating
+    wire [N-1:0][W-1:0] gated_sigsIn;
+    for (genvar i = 0; i < N-1; i++) begin : g_power_gating
+        assign gated_sigsIn[i] = ({W{sparse_mask[i]}} & sigsIn[i]);
+    end
+    assign gated_sigsIn[N-1] = sigsIn[N-1];  //c_val
+
+    //Sign-extend fp significands to WA bits (header)
     wire [N-1:0][WA-1:0] sigsIn_ext;
     for (genvar i = 0; i < N; i++) begin : g_ext_sign
-        assign sigsIn_ext[i] = fmt_sel ? {{(WA-W){1'b0}}, sigsIn[i]} : {{(WA-W){sigsIn[i][W-1]}}, sigsIn[i]};
+        assign sigsIn_ext[i] = fmt_sel ? {{(WA-W){1'b0}}, gated_sigsIn[i]} : {{(WA-W){gated_sigsIn[i][W-1]}}, gated_sigsIn[i]};
     end
 
     //Carry-Save-Adder based significand accumulation
-    VX_csa_half_en #(
-        .N (N),
-        .W (WA),
-        .S (WA-1)
-    ) sig_csa (
-        .operands (sigsIn_ext),
-        .half_en (1'b1),    // TODO: feed sparsity control signal when resolved
-        .sum  (sigOut[WA-2:0]),
-        .cout (sigOut[WA-1])
-    );
+    if (N >= 7) begin : g_large_acc
+        VX_csa_mod4 #(
+            .N (N),
+            .W (WA),
+            .S (WA-1)
+        ) sig_csa (
+            .operands (sigsIn_ext),
+            .sum      (sigOut[WA-2:0]),
+            .cout     (sigOut[WA-1])
+        );
+    end else begin : g_small_acc
+        VX_csa_tree #(
+            .N (N),
+            .W (WA),
+            .S (WA-1)
+        ) sig_csa (
+            .operands (sigsIn_ext),
+            .sum      (sigOut[WA-2:0]),
+            .cout     (sigOut[WA-1])
+        );
+    end
 
+    //Extract prod sigs signs for INT
     for (genvar i = 0; i < N-1; i++) begin : g_signs
         assign signOuts[i] = sigsIn[i][W-1];
     end

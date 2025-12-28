@@ -59,10 +59,17 @@ module VX_tcu_drl_norm_round #(
     wire sticky_bit = |shifted_acc_sig[ACC_WIDTH-27:0];
     wire round_up = guard_bit & (round_bit | sticky_bit | lsb);    
     //Index [ACC_WIDTH-1] becomes the hidden 1
-    wire [23:0] rounded_sig_temp = {1'b0, shifted_acc_sig[ACC_WIDTH-2 : ACC_WIDTH-24]} + 24'(round_up);
-    wire carry_out = rounded_sig_temp[23];
+    wire [22:0] rounded_sig;
+    wire carry_out;
+    VX_ks_adder #(
+        .N (23)
+    ) round_up_adder (
+        .dataa ({shifted_acc_sig[ACC_WIDTH-2 : ACC_WIDTH-24]}),
+        .datab (23'(round_up)),
+        .sum   (rounded_sig),
+        .cout  (carry_out)
+    );
 
-    wire [22:0] rounded_sig = rounded_sig_temp[22:0];
     wire [7:0] adjusted_exp = zero_sum ? 8'd0 : (norm_exp + 8'(carry_out));
 
     logic [31:0] fp_result;

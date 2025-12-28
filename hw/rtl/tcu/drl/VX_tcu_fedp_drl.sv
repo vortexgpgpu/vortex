@@ -52,6 +52,9 @@ module VX_tcu_fedp_drl #(
         assign b_col16[2*i+1] = b_col[i][31:16];
     end
 
+    //TODO: temp structured sparsity mask (input from module)
+    wire [TCK-1:0] sparse_mask = {(TCK){1'b1}};    //active high
+
     //Transprecision Mul & Max Exp
     wire [6:0] hi_c = c_val[31:25];   //c_val[24:0] acc is taken care of in acc stage
     wire fmt_sel = fmt_s[3];          //high-->int, low-->fp 
@@ -63,11 +66,11 @@ module VX_tcu_fedp_drl #(
     VX_tcu_drl_mul_exp #(
         .N(TCK+1)
     ) mul_exp (
-        .enable        (enable),
         .fmt_s         (fmt_s),
         .a_rows        (a_row16),
         .b_cols        (b_col16),
         .c_val         (c_val[31:0]),
+        .sparse_mask   (sparse_mask),
         .raw_max_exp   (raw_max_exp),
         .shift_amounts (shift_amounts),
         .raw_sigs      (raw_sigs),
@@ -81,16 +84,31 @@ module VX_tcu_fedp_drl #(
     wire [6:0] pipe_hi_c;
     wire pipe_fmt_sel;
     wire [2:0] pipe_exceptions;
+    wire [TCK-1:0] pipe_sparse_mask;
+    //Always enabled
     VX_pipe_register #(
-        .DATAW (8+((TCK+1)*8)+((TCK+1)*25)+7+1+3),
+        .DATAW (8+8+25+7+1+3+TCK),
         .DEPTH (FMUL_LATENCY)
     ) pipe_fmul (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({raw_max_exp, shift_amounts, raw_sigs, hi_c, fmt_sel, exceptions}),
-        .data_out({pipe_raw_max_exp, pipe_shift_amounts, pipe_raw_sigs, pipe_hi_c, pipe_fmt_sel, pipe_exceptions})
+        .data_in ({raw_max_exp, shift_amounts[TCK], raw_sigs[TCK], hi_c, fmt_sel, exceptions, sparse_mask}),
+        .data_out({pipe_raw_max_exp, pipe_shift_amounts[TCK], pipe_raw_sigs[TCK], pipe_hi_c, pipe_fmt_sel, pipe_exceptions, pipe_sparse_mask})
     );
+    //Sparse gated
+    for (genvar i = 0; i < TCK; i++) begin : g_fmul_gated
+        VX_pipe_register #(
+            .DATAW (8+25),
+            .DEPTH (FMUL_LATENCY)
+        ) pipe_fmul_gated (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable & sparse_mask[i]),
+            .data_in ({shift_amounts[i], raw_sigs[i]}),
+            .data_out({pipe_shift_amounts[i], pipe_raw_sigs[i]})
+        );
+    end
 
     //Significand Alignment
     wire [TCK:0][W-1:0] aln_sigs;
@@ -98,6 +116,7 @@ module VX_tcu_fedp_drl #(
     wire [6:0] aln_hi_c = pipe_hi_c;
     wire aln_fmt_sel = pipe_fmt_sel;
     wire [2:0] aln_exceptions = pipe_exceptions;
+    wire [TCK-1:0] aln_sparse_mask = pipe_sparse_mask;
 
     VX_tcu_drl_align #(
         .N (TCK+1),
@@ -106,6 +125,7 @@ module VX_tcu_fedp_drl #(
         .shift_amounts (pipe_shift_amounts),
         .sigs_in       (pipe_raw_sigs),
         .fmt_sel       (pipe_fmt_sel),
+        .sparse_mask   (pipe_sparse_mask),
         .sigs_out      (aln_sigs)
     );
 
@@ -115,16 +135,31 @@ module VX_tcu_fedp_drl #(
     wire [6:0] pipe_aln_hi_c;
     wire pipe_aln_fmt_sel;
     wire [2:0] pipe_aln_exceptions;
+    wire [TCK-1:0] pipe_aln_sparse_mask;
+    //Always enabled
     VX_pipe_register #(
-        .DATAW (8+((TCK+1)*W)+7+1+3),
+        .DATAW (8+W+7+1+3+TCK),
         .DEPTH (ALN_LATENCY)
     ) pipe_aln (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({aln_max_exp, aln_sigs, aln_hi_c, aln_fmt_sel, aln_exceptions}),
-        .data_out({pipe_aln_max_exp, pipe_aln_sigs, pipe_aln_hi_c, pipe_aln_fmt_sel, pipe_aln_exceptions})
+        .data_in ({aln_max_exp, aln_sigs[TCK], aln_hi_c, aln_fmt_sel, aln_exceptions, aln_sparse_mask}),
+        .data_out({pipe_aln_max_exp, pipe_aln_sigs[TCK], pipe_aln_hi_c, pipe_aln_fmt_sel, pipe_aln_exceptions, pipe_aln_sparse_mask})
     );
+    //Sparse gated
+    for (genvar i = 0; i < TCK; i++) begin : g_aln_gated
+        VX_pipe_register #(
+            .DATAW (W),
+            .DEPTH (ALN_LATENCY)
+        ) pipe_aln_gated (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable & pipe_aln_sparse_mask[i]),
+            .data_in (aln_sigs[i]),
+            .data_out (pipe_aln_sigs[i])
+        );
+    end
 
     //Accumulate CSA reduction tree
     wire [7:0] acc_max_exp = pipe_aln_max_exp;
@@ -138,10 +173,11 @@ module VX_tcu_fedp_drl #(
         .N (TCK+1),
         .W (W)
     ) csa_acc (
-        .sigsIn   (pipe_aln_sigs),
-        .fmt_sel  (pipe_aln_fmt_sel),
-        .sigOut   (acc_sig),
-        .signOuts (sigs_sign)
+        .sigsIn      (pipe_aln_sigs),
+        .fmt_sel     (pipe_aln_fmt_sel),
+        .sparse_mask (pipe_aln_sparse_mask),
+        .sigOut      (acc_sig),
+        .signOuts    (sigs_sign)
     );
 
     //Stage 3 pipeline reg
