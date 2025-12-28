@@ -32,13 +32,66 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-try:
-  import tomllib  # Python 3.11+
-except ModuleNotFoundError:
-  try:
-    import tomli as tomllib  # type: ignore
-  except ModuleNotFoundError as e:
-    raise SystemExit("Missing TOML parser: use Python>=3.11 (tomllib) or install tomli") from e
+# -----------------------------
+# Tiny TOML Parser
+# -----------------------------
+
+class TinyTOML:
+  def parse(self, content: str) -> Dict[str, Any]:
+    root: Dict[str, Any] = {}
+    cursor: Dict[str, Any] = root
+
+    for raw in content.splitlines():
+      # Strip comments (works for your configs; none have '#' inside strings)
+      line = raw.split("#", 1)[0].strip()
+      if not line:
+        continue
+
+      if line.startswith("[[") and line.endswith("]]"):
+        key = line[2:-2].strip()
+        arr = root.get(key)
+        if arr is None:
+          arr = []
+          root[key] = arr
+        if not isinstance(arr, list):
+          raise ValueError(f"TOML key {key!r} used as both table and array-of-tables")
+        tbl: Dict[str, Any] = {}
+        arr.append(tbl)
+        cursor = tbl
+        continue
+
+      if line.startswith("[") and line.endswith("]"):
+        key = line[1:-1].strip()
+        tbl = root.get(key)
+        if tbl is None:
+          tbl = {}
+          root[key] = tbl
+        if not isinstance(tbl, dict):
+          raise ValueError(f"TOML key {key!r} used as both scalar and table")
+        cursor = tbl
+        continue
+
+      if "=" in line:
+        k, v = line.split("=", 1)
+        key = k.strip()
+        val = v.strip()
+        cursor[key] = self._parse_value(val)
+        continue
+
+      raise ValueError(f"Unrecognized TOML line: {raw!r}")
+    return root
+
+  def _parse_value(self, val: str) -> Any:
+    if val == "true": return True
+    if val == "false": return False
+    try:
+      return ast.literal_eval(val)
+    except (ValueError, SyntaxError):
+      return val
+
+def _load_toml(path: str) -> Dict[str, Any]:
+  with open(path, "r", encoding="utf-8") as f:
+    return TinyTOML().parse(f.read())
 
 # -----------------------------
 # Basics
@@ -188,15 +241,6 @@ class Layout:
   sections: List[Tuple[Optional[str], List[str]]]
   ordered_keys: List[str]
   key_to_section: Dict[str, Optional[str]]
-
-
-def _load_toml(path: str) -> Dict[str, Any]:
-  with open(path, "rb") as f:
-    data = tomllib.load(f)
-  if not isinstance(data, dict):
-    raise ValueError("TOML root must be a table")
-  return data
-
 
 def _flatten_with_layout(toml_data: Dict[str, Any]) -> Tuple[Dict[str, Any], Layout]:
   flat: Dict[str, Any] = {}
