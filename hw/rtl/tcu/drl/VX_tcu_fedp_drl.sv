@@ -155,7 +155,7 @@ module VX_tcu_fedp_drl #(
         ) pipe_aln_gated (
             .clk     (clk),
             .reset   (reset),
-            .enable  (enable & pipe_aln_sparse_mask[i]),
+            .enable  (enable & aln_sparse_mask[i]),
             .data_in (aln_sigs[i]),
             .data_out (pipe_aln_sigs[i])
         );

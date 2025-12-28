@@ -895,6 +895,7 @@ TestConfig parse_args(int argc, char **argv) {
 
   if (config_.fmt_s >= 8) {
     // Integer formats
+    config_.fmt_d = 8;
     if (config_.exp_bits != 0 || config_.sig_bits != 0) {
       std::cerr << "Error: Exponent and significand bits should not be set for integer formats" << std::endl;
       exit(1);
