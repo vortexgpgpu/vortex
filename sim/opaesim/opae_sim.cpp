@@ -36,7 +36,7 @@
 #include <util.h>
 
 #ifndef MEM_CLOCK_RATIO
-#define MEM_CLOCK_RATIO 1
+#define MEM_CLOCK_RATIO 1.5
 #endif
 
 #define CACHE_BLOCK_SIZE  64
