@@ -37,11 +37,11 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .data_t (fpu_execute_t)
     ) per_block_execute_if[BLOCK_SIZE]();
 
-    VX_dispatch_unit #(
+    VX_lane_dispatch #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
         .OUT_BUF    (PARTIAL_BW ? 3 : 0)
-    ) dispatch_unit (
+    ) lane_dispatch (
         .clk        (clk),
         .reset      (reset),
         .dispatch_if(dispatch_if),
@@ -238,11 +238,11 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_block_result_if[block_idx].data.header.wb = 1'b1;
     end
 
-    VX_gather_unit #(
+    VX_lane_gather #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
         .OUT_BUF    (PARTIAL_BW ? 3 : 0)
-    ) gather_unit (
+    ) lane_gather (
         .clk       (clk),
         .reset     (reset),
         .result_if (per_block_result_if),

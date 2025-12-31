@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_gather_unit import VX_gpu_pkg::*; #(
+module VX_lane_gather import VX_gpu_pkg::*; #(
     parameter BLOCK_SIZE = 1,
     parameter NUM_LANES  = 1,
     parameter OUT_BUF    = 0

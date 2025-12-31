@@ -38,11 +38,11 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .data_t (tcu_execute_t)
     ) per_block_execute_if[BLOCK_SIZE]();
 
-    VX_dispatch_unit #(
+    VX_lane_dispatch #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
         .OUT_BUF    (3)
-    ) dispatch_unit (
+    ) lane_dispatch (
         .clk        (clk),
         .reset      (reset),
         .dispatch_if(dispatch_if),
@@ -65,11 +65,11 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         );
     end
 
-    VX_gather_unit #(
+    VX_lane_gather #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
         .OUT_BUF    (3)
-    ) gather_unit (
+    ) lane_gather (
         .clk       (clk),
         .reset     (reset),
         .result_if (per_block_result_if),

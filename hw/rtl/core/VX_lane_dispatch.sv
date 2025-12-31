@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_dispatch_unit import VX_gpu_pkg::*; #(
+module VX_lane_dispatch import VX_gpu_pkg::*; #(
     parameter BLOCK_SIZE = 1,
     parameter NUM_LANES  = 1,
     parameter OUT_BUF    = 0,
