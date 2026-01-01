@@ -905,6 +905,64 @@ bfloat8_t f32_to_f8e5m2(float32_t a) {
   return res;
 }
 
+float32_t mxfp8_to_f32(mxfloat8_t a) {
+  //convert e4m3 value to f32
+  uint32_t fflags = 0;
+  auto base_value = cvt_custom_to_f32(a.v, 4, 3, softfloat_roundingMode, &fflags);
+  //convert e8m0 scale factor to f32 (bias = 127)
+  int32_t scale_exp = (int32_t)a.sf - 127;
+  float scale_factor = std::ldexp(1.0f, scale_exp);
+  float out = base_value * scale_factor;
+  softfloat_exceptionFlags |= fflags;
+  float32_t res;
+  res.v = vortex::bit_cast<uint32_t>(out);
+  return res;
+}
+
+mxfloat8_t f32_to_mxfp8(float32_t a, sfexp8_t scale_factor) {
+  //extract e8m0 scale factor
+  int32_t scale_exp = (int32_t)scale_factor.sf - 127;
+  float scale = std::ldexp(1.0f, scale_exp);
+  //divide input by scale factor
+  float scaled_value = vortex::bit_cast<float>(a.v) / scale;
+  //convert scaled value to e4m3
+  uint32_t fflags = 0;
+  auto out = cvt_f32_to_custom(scaled_value, 4, 3, softfloat_roundingMode, &fflags);
+  softfloat_exceptionFlags |= fflags;
+  mxfloat8_t res;
+  res.v = out & 0xff;
+  res.sf = scale_factor.sf;
+  return res;
+}
+
+float32_t nvfp4_to_f32(nvfloat4_t a) {
+  //convert e2m1 value to f32
+  uint32_t fflags = 0;
+  auto base_value = cvt_custom_to_f32(a.v, 2, 1, softfloat_roundingMode, &fflags);
+  //convert e4m3 scale factor to f32
+  auto scale_factor = cvt_custom_to_f32(a.sf, 4, 3, softfloat_roundingMode, &fflags);
+  float out = base_value * scale_factor;
+  softfloat_exceptionFlags |= fflags;
+  float32_t res;
+  res.v = vortex::bit_cast<uint32_t>(out);
+  return res;
+}
+
+nvfloat4_t f32_to_nvfp4(float32_t a, sffloat8_t scale_factor) {
+  //extract e4m3 scale factor
+  uint32_t fflags = 0;
+  float scale = cvt_custom_to_f32(scale_factor.sf, 4, 3, softfloat_roundingMode, &fflags);
+  //divide input by scale factor
+  float scaled_value = vortex::bit_cast<float>(a.v) / scale;
+  //conver scaled value to e2m1
+  auto out = cvt_f32_to_custom(scaled_value, 2, 1, softfloat_roundingMode, &fflags);
+  softfloat_exceptionFlags |= fflags;
+  nvfloat4_t res;
+  res.v = out & 0x0f;
+  res.sf = scale_factor.sf;
+  return res;
+}
+
 #ifdef __cplusplus
 }
 #endif

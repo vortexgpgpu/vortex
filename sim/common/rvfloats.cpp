@@ -598,6 +598,48 @@ uint8_t rv_ftoe5m2_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return bf8.v;
 }
 
+uint32_t rv_mxfp8tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  mxfloat8_t mxfp8;
+  mxfp8.v = a;
+  mxfp8.sf = sf;
+  float32_t f32 = mxfp8_to_f32(mxfp8);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftomxfp8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  sfexp8_t scale_factor;
+  scale_factor.sf = sf;
+  mxfloat8_t mxfp8 = f32_to_mxfp8(f32, scale_factor);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return mxfp8.v;
+}
+
+uint32_t rv_nvfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  nvfloat4_t nvfp4;
+  nvfp4.v = a;
+  nvfp4.sf = sf;
+  float32_t f32 = nvfp4_to_f32(nvfp4);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftonvfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  sffloat8_t scale_factor;
+  scale_factor.sf = sf;
+  nvfloat4_t nvfp4 = f32_to_nvfp4(f32, scale_factor);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return nvfp4.v;
+}
+
 #ifdef __cplusplus
 }
 #endif

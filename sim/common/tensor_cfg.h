@@ -43,7 +43,6 @@ struct bf16 {
   static constexpr const char* name = "bf16";
 };
 
-// e4m3 (use for forward pass)
 struct fp8 {
   using dtype = uint8_t;
   static constexpr uint32_t id = 3;
@@ -51,12 +50,29 @@ struct fp8 {
   static constexpr const char* name = "fp8";
 };
 
-// e5m2 (use for backprop)
 struct bf8 {
   using dtype = uint8_t;
   static constexpr uint32_t id = 4;
   static constexpr uint32_t bits = 8;
   static constexpr const char* name = "bf8";
+};
+
+struct mxfp8 {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 5;
+  static constexpr uint32_t bits = 8;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_block = 32;    //elements per block
+  static constexpr const char* name = "mxfp8";
+};
+
+struct nvfp4 {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 7;
+  static constexpr uint32_t bits = 4;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_block = 16;
+  static constexpr const char* name = "nvfp4";
 };
 
 struct int32 {
@@ -94,19 +110,31 @@ struct uint4 {
   static constexpr const char* name = "u4";
 };
 
+struct mxint8 {
+  using dtype = int8_t;
+  static constexpr uint32_t id = 13;
+  static constexpr uint32_t bits = 8;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_blcok = 32;
+  static constexpr const char* name = "mxi8";
+};
+
 inline const char* fmt_string(uint32_t fmt) {
   switch (fmt) {
-  case fp32::id:  return fp32::name;
-  case fp16::id:  return fp16::name;
-  case bf16::id:  return bf16::name;
-  case fp8::id:   return fp8::name;
-  case bf8::id:   return bf8::name;
-  case int32::id: return int32::name;
-  case int8::id:  return int8::name;
-  case uint8::id: return uint8::name;
-  case int4::id:  return int4::name;
-  case uint4::id: return uint4::name;
-  default:        return "";
+  case fp32::id:   return fp32::name;
+  case fp16::id:   return fp16::name;
+  case bf16::id:   return bf16::name;
+  case fp8::id:    return fp8::name;
+  case bf8::id:    return bf8::name;
+  case mxfp8::id:  return mxfp8::name;
+  case nvfp4::id:  return nvfp4::name;
+  case int32::id:  return int32::name;
+  case int8::id:   return int8::name;
+  case uint8::id:  return uint8::name;
+  case int4::id:   return int4::name;
+  case uint4::id:  return uint4::name;
+  case mxint8::id: return mxint8::name;
+  default:         return "";
   }
 }
 
