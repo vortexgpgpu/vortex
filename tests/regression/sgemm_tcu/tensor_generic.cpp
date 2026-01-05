@@ -373,7 +373,8 @@ private:
 
   FragA fragA_compressed_;   // Compressed matrix A (50% storage)
   FragA_meta fragA_meta_;    // Metadata: 1 = non-zero, 0 = pruned
-  vector_t<uint32_t, NRA/sizeof(It) > packed_bit_meta_;  // Packed bitmap metadata. NT = 8, int8, 8REGS, MetaThreads = 2; int16, 4Regs, MetaThreads = 1
+  static constexpr uint32_t META_ARRAY_SIZE = (tileM * tileK) / 32;  //Total meta: tileM*tileK, each RISC-V register holds 32 bits
+  vector_t<uint32_t, META_ARRAY_SIZE > packed_bit_meta_;  // Packed bitmap metadata. NT = 8, int8, 8REGS, MetaThreads = 2; int16, 4Regs, MetaThreads = 1
 #endif
 
   FragD fragRef_;
@@ -549,7 +550,7 @@ private:
 #ifdef ENABLE_SPARSITY
   // Sparse version of load_A
   void load_A(vector_t<Vreg, NRA> &vR, uint32_t lane, uint32_t ldm,
-              const It *mdata, const vector_t<uint32_t, NRA/sizeof(It)> &A_meta) {
+              const It *mdata, const vector_t<uint32_t, META_ARRAY_SIZE> &A_meta) {
     uint32_t block_idx = lane / a_block_size;
     uint32_t lane_in_block = lane % a_block_size;
     uint32_t elem_row = lane_in_block / tcK;
@@ -787,7 +788,7 @@ private:
 
 #ifdef ENABLE_SPARSITY
   // Sparse matrix multiply-add operation
-  FragD mmadd(const FragA &A, const vector_t<uint32_t, NRA/sizeof(It)> &A_meta,
+  FragD mmadd(const FragA &A, const vector_t<uint32_t, META_ARRAY_SIZE> &A_meta,
               const FragB &B, const FragC &C) {
     FragD D;
     vector_t<Vreg, NRA> vA;
