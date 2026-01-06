@@ -1,10 +1,7 @@
 module active_cta_table
   import dice_pkg::*;
   import dice_frontend_pkg::*;
-#(
-    parameter int THREAD_WIDTH = DICE_NUM_MAX_THREADS_PER_CORE /
-                                 DICE_NUM_MAX_CTA_PER_CORE  // Base thread width
-) (
+(
     input logic clk_i,
     input logic rst_i,
 
@@ -35,17 +32,23 @@ module active_cta_table
     output logic [DICE_HW_CTA_ID_WIDTH-1:0]        next_empty_cta_index_o
 );
 
+  // -------------------------------------------------------------------------
+  // Local Parameters (derived from packages)
+  // -------------------------------------------------------------------------
+  localparam int ThreadWidth = DICE_NUM_MAX_THREADS_PER_CORE / DICE_NUM_MAX_CTA_PER_CORE;
+
   // Calculate number of entries needed for a CTA
-  // Optimized for power-of-2 THREAD_WIDTH using bit shifts
+  // Optimized for power-of-2 ThreadWidth using bit shifts
   function automatic logic [DICE_HW_CTA_ID_WIDTH:0] calc_entries_needed(
       input logic [DICE_TID_WIDTH-1:0] cta_size);
-    // For power-of-2 THREAD_WIDTH, we can use bit shifts
-    // entries_needed = ceil(cta_size / THREAD_WIDTH) = (cta_size + THREAD_WIDTH - 1) >> log2(THREAD_WIDTH)
+    // For power-of-2 ThreadWidth, we can use bit shifts
+    // entries_needed = ceil(cta_size / ThreadWidth) = (cta_size + ThreadWidth - 1) >> log2(ThreadWidth)
     logic [DICE_TID_WIDTH:0] adjusted_size;
-    adjusted_size = (DICE_TID_WIDTH + 1)'(cta_size) + THREAD_WIDTH - 1;
+    adjusted_size = (DICE_TID_WIDTH + 1)'(cta_size) + ThreadWidth - 1;
     return (DICE_HW_CTA_ID_WIDTH + 1)'(adjusted_size >>
-        (DICE_TID_WIDTH'($clog2(THREAD_WIDTH))));
+        (DICE_TID_WIDTH'($clog2(ThreadWidth))));
   endfunction
+
 
 
   // CTA table entry structure

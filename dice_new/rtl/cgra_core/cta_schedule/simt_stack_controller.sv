@@ -2,10 +2,7 @@ module simt_stack_controller
   import dice_pkg::*;
   import dice_frontend_pkg::*;
 #(
-    parameter int STACK_DEPTH = 32,
-    parameter int THREAD_WIDTH = DICE_NUM_MAX_THREADS_PER_CORE /
-                                 DICE_NUM_MAX_CTA_PER_CORE,
-    parameter int METADATA_LENGTH_WIDTH = 8
+    parameter int STACK_DEPTH = 32
 ) (
     input logic clk_i,
     input logic rst_i,
@@ -38,12 +35,18 @@ module simt_stack_controller
     output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_top_valid_o,
     output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_ADDR_WIDTH-1:0] stack_top_next_pc_o,
     output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_ADDR_WIDTH-1:0] stack_top_reconvergence_pc_o,
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][THREAD_WIDTH-1:0] stack_top_active_mask_o,
+    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_NUM_MAX_THREADS_PER_CORE/DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_top_active_mask_o,
 
     // Stack status - individual stack status
     output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_empty_o,
     output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_full_o
 );
+
+  // -------------------------------------------------------------------------
+  // Local Parameters (derived from packages)
+  // -------------------------------------------------------------------------
+  localparam int ThreadWidth = DICE_NUM_MAX_THREADS_PER_CORE / DICE_NUM_MAX_CTA_PER_CORE;
+  localparam int MetadataLengthWidth = BITSTREAM_LENGTH_WIDTH;  // From dice_frontend_pkg
 
   logic [$clog2(DICE_NUM_MAX_CTA_PER_CORE)-1:0] hw_cta_id_q;
   logic [1:0] hw_cta_size_q;
@@ -61,13 +64,13 @@ module simt_stack_controller
   end
 
   // Calculate effective thread width based on CTA size
-  logic [$clog2(DICE_NUM_MAX_CTA_PER_CORE*THREAD_WIDTH+1)-1:0] effective_thread_width;
+  logic [$clog2(DICE_NUM_MAX_CTA_PER_CORE*ThreadWidth+1)-1:0] effective_thread_width;
   always_comb begin
     case (hw_cta_size_q)
-      2'b00:   effective_thread_width = THREAD_WIDTH;  // 256 threads
-      2'b01:   effective_thread_width = 2 * THREAD_WIDTH;  // 512 threads
-      2'b11:   effective_thread_width = 4 * THREAD_WIDTH;  // 1024 threads
-      default: effective_thread_width = THREAD_WIDTH;
+      2'b00:   effective_thread_width = ThreadWidth;  // 256 threads
+      2'b01:   effective_thread_width = 2 * ThreadWidth;  // 512 threads
+      2'b11:   effective_thread_width = 4 * ThreadWidth;  // 1024 threads
+      default: effective_thread_width = ThreadWidth;
     endcase
   end
 
@@ -107,10 +110,10 @@ module simt_stack_controller
 
   logic [DICE_ADDR_WIDTH-1:0] stack_push_next_pc[DICE_NUM_MAX_CTA_PER_CORE];
   logic [DICE_ADDR_WIDTH-1:0] stack_push_reconvergence_pc[DICE_NUM_MAX_CTA_PER_CORE];
-  logic [THREAD_WIDTH-1:0] stack_push_active_mask[DICE_NUM_MAX_CTA_PER_CORE];
+  logic [ThreadWidth-1:0] stack_push_active_mask[DICE_NUM_MAX_CTA_PER_CORE];
   logic [DICE_ADDR_WIDTH-1:0] stack_top_next_pc_int[DICE_NUM_MAX_CTA_PER_CORE];
   logic [DICE_ADDR_WIDTH-1:0] stack_top_reconvergence_pc_int[DICE_NUM_MAX_CTA_PER_CORE];
-  logic [THREAD_WIDTH-1:0] stack_top_active_mask_int[DICE_NUM_MAX_CTA_PER_CORE];
+  logic [ThreadWidth-1:0] stack_top_active_mask_int[DICE_NUM_MAX_CTA_PER_CORE];
 
   // Combined stack signals
   logic combined_stack_out_valid;
@@ -141,8 +144,7 @@ module simt_stack_controller
   generate
     for (i = 0; i < DICE_NUM_MAX_CTA_PER_CORE; i++) begin : gen_stacks
       simt_stack #(
-          .STACK_DEPTH (STACK_DEPTH),
-          .THREAD_WIDTH(THREAD_WIDTH)
+          .STACK_DEPTH (STACK_DEPTH)
       ) stack_inst (
           .clk_i                  (clk_i),
           .rst_i                  (rst_i),
@@ -190,11 +192,11 @@ module simt_stack_controller
       // Combine active masks from all active stacks
       for (int j = 0; j < DICE_NUM_MAX_CTA_PER_CORE; j++) begin
         if (j >= hw_cta_id_q && j < (hw_cta_id_q + num_active_stacks)) begin
-          mask_offset = (j - hw_cta_id_q) * THREAD_WIDTH;
-          combined_stack_top_active_mask[mask_offset+:THREAD_WIDTH] = stack_top_active_mask_int[j];
+          mask_offset = (j - hw_cta_id_q) * ThreadWidth;
+          combined_stack_top_active_mask[mask_offset+:ThreadWidth] = stack_top_active_mask_int[j];
         end else begin
-          mask_offset = j * THREAD_WIDTH;
-          combined_stack_top_active_mask[mask_offset+:THREAD_WIDTH] = '0;
+          mask_offset = j * ThreadWidth;
+          combined_stack_top_active_mask[mask_offset+:ThreadWidth] = '0;
         end
       end
     end
@@ -206,10 +208,10 @@ module simt_stack_controller
   // Extract effective active mask based on CTA size
   always_comb begin
     case (hw_cta_size_q)
-      2'b00:   effective_active_mask = combined_stack_top_active_mask[THREAD_WIDTH-1:0];
-      2'b01:   effective_active_mask = combined_stack_top_active_mask[2*THREAD_WIDTH-1:0];
+      2'b00:   effective_active_mask = combined_stack_top_active_mask[ThreadWidth-1:0];
+      2'b01:   effective_active_mask = combined_stack_top_active_mask[2*ThreadWidth-1:0];
       2'b11:   effective_active_mask = combined_stack_top_active_mask;
-      default: effective_active_mask = combined_stack_top_active_mask[THREAD_WIDTH-1:0];
+      default: effective_active_mask = combined_stack_top_active_mask[ThreadWidth-1:0];
     endcase
   end
 
@@ -288,19 +290,19 @@ module simt_stack_controller
     case (hw_cta_size_q)
       2'b00:
       effective_predicate = {
-        {(DICE_NUM_MAX_CTA_PER_CORE - 1) * THREAD_WIDTH{1'b0}},
-        predicate_regs_value_q[THREAD_WIDTH-1:0]
+        {(DICE_NUM_MAX_CTA_PER_CORE - 1) * ThreadWidth{1'b0}},
+        predicate_regs_value_q[ThreadWidth-1:0]
       };
       2'b01:
       effective_predicate = {
-        {(DICE_NUM_MAX_CTA_PER_CORE - 2) * THREAD_WIDTH{1'b0}},
-        predicate_regs_value_q[2*THREAD_WIDTH-1:0]
+        {(DICE_NUM_MAX_CTA_PER_CORE - 2) * ThreadWidth{1'b0}},
+        predicate_regs_value_q[2*ThreadWidth-1:0]
       };
       2'b11: effective_predicate = predicate_regs_value_q;
       default:
       effective_predicate = {
-        {(DICE_NUM_MAX_CTA_PER_CORE - 1) * THREAD_WIDTH{1'b0}},
-        predicate_regs_value_q[THREAD_WIDTH-1:0]
+        {(DICE_NUM_MAX_CTA_PER_CORE - 1) * ThreadWidth{1'b0}},
+        predicate_regs_value_q[ThreadWidth-1:0]
       };
     endcase
 
@@ -409,8 +411,8 @@ module simt_stack_controller
             stack_push_next_pc[j] = new_top_pc_q;
             stack_push_reconvergence_pc[j] = new_top_reconvergence_pc_q;
             // Distribute active mask across stacks
-            mask_offset = (j - hw_cta_id_q) * THREAD_WIDTH;
-            stack_push_active_mask[j] = new_top_active_mask_q[mask_offset+:THREAD_WIDTH];
+            mask_offset = (j - hw_cta_id_q) * ThreadWidth;
+            stack_push_active_mask[j] = new_top_active_mask_q[mask_offset+:ThreadWidth];
           end
 
           StatePushFirst: begin
@@ -418,8 +420,8 @@ module simt_stack_controller
             stack_push_next_pc[j] = push_pc_1_q;
             stack_push_reconvergence_pc[j] = push_reconvergence_pc_1_q;
             // Distribute active mask across stacks
-            mask_offset = (j - hw_cta_id_q) * THREAD_WIDTH;
-            stack_push_active_mask[j] = push_active_mask_1_q[mask_offset+:THREAD_WIDTH];
+            mask_offset = (j - hw_cta_id_q) * ThreadWidth;
+            stack_push_active_mask[j] = push_active_mask_1_q[mask_offset+:ThreadWidth];
           end
 
           StatePushSecond: begin
@@ -427,8 +429,8 @@ module simt_stack_controller
             stack_push_next_pc[j] = push_pc_2_q;
             stack_push_reconvergence_pc[j] = push_reconvergence_pc_2_q;
             // Distribute active mask across stacks
-            mask_offset = (j - hw_cta_id_q) * THREAD_WIDTH;
-            stack_push_active_mask[j] = push_active_mask_2_q[mask_offset+:THREAD_WIDTH];
+            mask_offset = (j - hw_cta_id_q) * ThreadWidth;
+            stack_push_active_mask[j] = push_active_mask_2_q[mask_offset+:ThreadWidth];
           end
 
           StatePopStack: begin

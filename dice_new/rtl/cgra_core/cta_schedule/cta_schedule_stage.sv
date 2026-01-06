@@ -4,14 +4,9 @@ module cta_schedule_stage
   import dice_pkg::*;
   import dice_frontend_pkg::*;
 #(
-    parameter int MAX_NUM_CTA = 4,
-    parameter int PC_WIDTH = 32,
-    localparam int ThreadWidth = DICE_NUM_MAX_THREADS_PER_CORE /
-                                 DICE_NUM_MAX_CTA_PER_CORE,
-    parameter int STACK_DEPTH = 32,
-    localparam int CtaIdWidth = $clog2(MAX_NUM_CTA),
-    localparam int EblockIdWidth = $clog2(MAX_NUM_CTA + 4)
+    parameter int STACK_DEPTH = 32
 ) (
+
     input logic clk_i,
     input logic rst_i,
 
@@ -30,7 +25,7 @@ module cta_schedule_stage
 
     // E-block commit interface (from execution/retire)
     input logic                     eblock_commit_valid_i,
-    input logic [EblockIdWidth-1:0] eblock_commit_id_i,
+    input logic [EBLOCK_ID_WIDTH-1:0] eblock_commit_id_i,
 
     // Branch handler / predictor interface (from FDR/execution)
     branch_handler_if.slave status_table_bh_if,
@@ -41,16 +36,16 @@ module cta_schedule_stage
 
 
     // UPDATE INTERFACE (SIMT STACK CONTROLLER AND BRANCH HANDLER)
-          dice_bh_simt_if.slave                  simt_stack_update,
-    input logic                 [CtaIdWidth-1:0] simt_update_hw_cta_id_i,
+    dice_bh_simt_if.slave                  simt_stack_update,
+    input logic [$clog2(DICE_NUM_MAX_CTA_PER_CORE)-1:0] simt_update_hw_cta_id_i,
     input logic                 [           1:0] simt_update_hw_cta_size_i,
 
 
     // SIMT STACK STATUS - MAY CHANGE TO BE INCLUDED IN BH AND VC IFs
     output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_top_valid_o,
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][PC_WIDTH-1:0] stack_top_next_pc_o,
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][PC_WIDTH-1:0] stack_top_reconvergence_pc_o,
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][ThreadWidth-1:0] stack_top_active_mask_o,
+    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_ADDR_WIDTH-1:0] stack_top_next_pc_o,
+    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_ADDR_WIDTH-1:0] stack_top_reconvergence_pc_o,
+    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_NUM_MAX_THREADS_PER_CORE/DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_top_active_mask_o,
     // Stack status - individual stack status
     output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_empty_o,
     output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_full_o
@@ -58,6 +53,11 @@ module cta_schedule_stage
     //cta status table stuff
 
 );
+
+  // -------------------------------------------------------------------------
+  // Local Parameters (derived from packages)
+  // -------------------------------------------------------------------------
+  localparam int ThreadWidth = DICE_NUM_MAX_THREADS_PER_CORE / DICE_NUM_MAX_CTA_PER_CORE;
 
   // -------------------------------------------------------------------------
   // Local wires
@@ -152,9 +152,7 @@ module cta_schedule_stage
   // -------------------------------------------------------------------------
   // Active CTA Table
   // -------------------------------------------------------------------------
-  active_cta_table #(
-      .THREAD_WIDTH(ThreadWidth)
-  ) active_cta_table_inst (
+  active_cta_table active_cta_table_inst (
       .clk_i                 (clk_i),
       .rst_i                 (rst_i),
       .add_ready_o           (active_table_add_ready),
@@ -178,10 +176,7 @@ module cta_schedule_stage
   // -------------------------------------------------------------------------
   // CTA Scheduler
   // -------------------------------------------------------------------------
-  cta_scheduler #(
-      .MAX_EBLOCK  (DICE_NUM_MAX_CTA_PER_CORE + 4),
-      .THREAD_WIDTH(ThreadWidth)
-  ) cta_scheduler_inst (
+  cta_scheduler cta_scheduler_inst (
       .clk_i                  (clk_i),
       .rst_i                  (rst_i),
       .enable_i               (1'b1),
@@ -216,8 +211,7 @@ module cta_schedule_stage
   // SIMT Stack Controller
   // -------------------------------------------------------------------------
   simt_stack_controller #(
-      .STACK_DEPTH (STACK_DEPTH),
-      .THREAD_WIDTH(ThreadWidth)
+      .STACK_DEPTH (STACK_DEPTH)
   ) simt_stack_controller_inst (
       .clk_i(clk_i),
       .rst_i(rst_i),

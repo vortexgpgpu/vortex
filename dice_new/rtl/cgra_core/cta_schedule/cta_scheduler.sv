@@ -8,11 +8,7 @@
 module cta_scheduler
   import dice_pkg::*;
   import dice_frontend_pkg::*;
-#(
-    parameter int MAX_EBLOCK = DICE_NUM_MAX_CTA_PER_CORE + 4,
-    parameter int THREAD_WIDTH = DICE_NUM_MAX_THREADS_PER_CORE /
-                                 DICE_NUM_MAX_CTA_PER_CORE
-) (
+(
     input logic clk_i,
     input logic rst_i,
     input logic enable_i, // Enable signal for scheduler operation
@@ -29,7 +25,7 @@ module cta_scheduler
     //do i need this: stack_top_valid
     input logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_ADDR_WIDTH-1:0]
         cta_next_pc_i,
-    input logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][THREAD_WIDTH-1:0] stack_top_active_mask_i,
+    input logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_NUM_MAX_THREADS_PER_CORE/DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_top_active_mask_i,
 
 
     // External interface to invalidate committed e-blocks
@@ -40,8 +36,14 @@ module cta_scheduler
     cta_sched_if.master scheduled_eblock
 );
 
+  // -------------------------------------------------------------------------
+  // Local Parameters (derived from packages)
+  // -------------------------------------------------------------------------
+  localparam int MaxEblock = MAX_EBLOCK;  // From dice_frontend_pkg
+  localparam int ThreadWidth = DICE_NUM_MAX_THREADS_PER_CORE / DICE_NUM_MAX_CTA_PER_CORE;
+
   // E-block tracking table
-  logic [MAX_EBLOCK-1:0] eblock_live_q;
+  logic [MaxEblock-1:0] eblock_live_q;
   logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_ptr_q;  // Circular pointer for e-block alloc
 
   // PC history for locality scheduling
@@ -199,7 +201,7 @@ module cta_scheduler
           (scheduled_eblock.ready == 1'b1)) begin
         // Allocate current e-block and advance pointer
         eblock_live_q[eblock_ptr_q] <= 1'b1;
-        if (eblock_ptr_q == MAX_EBLOCK - 1) begin
+        if (eblock_ptr_q == MaxEblock - 1) begin
           eblock_ptr_q <= '0;
         end else begin
           eblock_ptr_q <= eblock_ptr_q + 1;
