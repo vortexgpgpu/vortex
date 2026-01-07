@@ -58,7 +58,7 @@ module dice_core
       .metacache_mem_if         (metacache_mem_if),
       .bitstream_cache_mem_if   (bitstream_cache_mem_if),
       .schedule_if              (schedule_if),
-      .fdr_if                   (fdr_out_if),
+      .fdr_if                   (fdr_out_if), //modify to include hw size 0-3 rather than cta x*y*z
       .simt_status_if           (simt_status_if),
       .simt_stack_update_if     (simt_stack_update_if),
       .prf_if                   (prf_if),
