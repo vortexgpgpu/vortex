@@ -22,15 +22,15 @@ module dice_core
 );
 
   // Internal Interfaces
-  cta_sched_if          schedule_if ();
-  branch_handler_if     bh_if ();
-  fdr_if                fdr_out_if ();
-  dice_bh_simt_if       simt_stack_update_if ();
-  simt_stack_status_if  simt_status_if ();
-  prf_if                prf_if ();
-  cgra_cm_if            cm0_if ();
-  cgra_cm_if            cm1_if ();
-  branch_control_if     branch_ctrl_if ();
+  cta_sched_if          schedule_if (); //between cta scheduler and fdr stages
+  branch_handler_if     bh_if (); //between fdr and cta scheduler stages (branch handler, simt stack update, simt status)
+  fdr_if                fdr_out_if (); //between fdr and backend stages
+  dice_bh_simt_if       simt_stack_update_if (); //between branch handler and simt stack controller stages
+  simt_stack_status_if  simt_status_if (); //exposes simt stack entries to modules that need it
+  prf_if                prf_if (); //between branch handler and predicated register files
+  cgra_cm_if            cm0_if (); //between bitstream fetch and cgra buffer #0
+  cgra_cm_if            cm1_if (); //between bitstream fetch and cgra buffer #1
+  branch_control_if     branch_ctrl_if ();//branch handler and status table -> may be redundant and internal cta schedule logic could be changed
 
   cta_schedule_stage u_cta_schedule_stage (
       .clk_i                   (clk),

@@ -2,7 +2,7 @@
 interface fdr_if import dice_frontend_pkg::*; ();
 
     logic valid;
-    dice_frontend_pkg::fdr_t data;
+    fdr_t data;
     logic ready;
 
     modport master (
