@@ -1,9 +1,7 @@
 module simt_stack
   import dice_pkg::*;
   import dice_frontend_pkg::*;
-#(
-    parameter int STACK_DEPTH = 32
-)(
+(
     input logic clk_i,
     input logic rst_i,
 
@@ -35,14 +33,14 @@ module simt_stack
     // Local Parameters (derived from packages)
     // -------------------------------------------------------------------------
     localparam int ThreadWidth = DICE_NUM_MAX_THREADS_PER_CORE / DICE_NUM_MAX_CTA_PER_CORE;
-    localparam int StackIndexWidth = $clog2(STACK_DEPTH);
+    localparam int StackIndexWidth = $clog2(SIMT_STACK_DEPTH);
 
     // Constants
     localparam int EntryWidth = DICE_ADDR_WIDTH + DICE_ADDR_WIDTH +
                                 ThreadWidth;
 
     // Stack pointer (0 = empty, points to top of stack + 1)
-    logic [StackIndexWidth:0] stack_ptr_q;  // Extra bit to represent STACK_DEPTH
+    logic [StackIndexWidth:0] stack_ptr_q;  // Extra bit to represent SIMT_STACK_DEPTH
 
     // Output valid register
     logic out_valid_q;
@@ -92,7 +90,7 @@ module simt_stack
 `else
     dice_ram_1w1r #(
         .DATA_WIDTH(EntryWidth),
-        .DEPTH(STACK_DEPTH)
+        .DEPTH(SIMT_STACK_DEPTH)
     ) stack_ram (
         .clk(clk_i),
         .wr_en(ram_wr_en),
@@ -105,7 +103,7 @@ module simt_stack
 `endif
     // Stack status
     assign stack_empty_o = (stack_ptr_q == '0);
-    assign stack_full_o = (stack_ptr_q == STACK_DEPTH);
+    assign stack_full_o = (stack_ptr_q == SIMT_STACK_DEPTH);
 
     // Top of stack outputs - directly from RAM (registered)
     assign top_next_pc_o = unpack_next_pc(ram_rd_data);

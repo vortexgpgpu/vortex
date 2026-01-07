@@ -21,6 +21,7 @@ package dice_pkg;
   parameter int DICE_CLUSTER_ID_WIDTH = $clog2(`DICE_NUM_CGRA_CLUSTERS);
   parameter int DICE_CORE_ID_WIDTH = $clog2(`DICE_NUM_CGRA_CORES);
   parameter int DICE_SMEM_SIZE_WIDTH = $clog2(`DICE_SMEM_SIZE_PER_CORE);
+  parameter int DICE_BITSTREAM_SIZE = 2048;  // 256 bytes max bitstream size
 
   // =========================================================
   // Type definitions

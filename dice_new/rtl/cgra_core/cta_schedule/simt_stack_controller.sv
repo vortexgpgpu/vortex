@@ -1,9 +1,7 @@
 module simt_stack_controller
   import dice_pkg::*;
   import dice_frontend_pkg::*;
-#(
-    parameter int STACK_DEPTH = 32
-) (
+(
     input logic clk_i,
     input logic rst_i,
 
@@ -143,9 +141,7 @@ module simt_stack_controller
   genvar i;
   generate
     for (i = 0; i < DICE_NUM_MAX_CTA_PER_CORE; i++) begin : gen_stacks
-      simt_stack #(
-          .STACK_DEPTH (STACK_DEPTH)
-      ) stack_inst (
+      simt_stack stack_inst (
           .clk_i                  (clk_i),
           .rst_i                  (rst_i),
           .push_i                 (stack_push[i]),

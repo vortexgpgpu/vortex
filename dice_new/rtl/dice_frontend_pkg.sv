@@ -10,6 +10,7 @@ package dice_frontend_pkg;
   localparam int EBLOCK_ID_WIDTH = $clog2(MAX_EBLOCK);
   localparam int SIMT_STACK_COUNT = `DICE_NUM_MAX_CTA_PER_CORE;
   localparam int SIMT_STACK_THREAD_WIDTH = `DICE_NUM_MAX_THREADS_PER_CORE;
+  localparam int SIMT_STACK_DEPTH = 32;
 
   // Predicate register configuration (moved from defines for module use)
   localparam int DICE_PR_NUM = `DICE_PR_NUM;
@@ -155,6 +156,36 @@ package dice_frontend_pkg;
     logic [DICE_ADDR_WIDTH-1:0]     not_taken_pc;  // Fall-through PC
     logic [DICE_ADDR_WIDTH-1:0]     reconv_pc;     // Reconvergence point PC
   } pending_branch_info_t;
+
+
+  // =========================================================
+  // Interface Support Structures
+  // =========================================================
+
+  /**
+   * SIMT Stack Status Entry
+   * Per-CTA status from the SIMT stack controller.
+   */
+  typedef struct packed {
+    logic                              valid;
+    logic [DICE_ADDR_WIDTH-1:0]        next_pc;
+    logic [DICE_ADDR_WIDTH-1:0]        reconvergence_pc;
+    logic [SIMT_STACK_THREAD_WIDTH-1:0] active_mask;
+    logic                              empty;
+    logic                              full;
+  } simt_stack_status_entry_t;
+
+  /**
+   * Branch Control Structure
+   * Aggregates divergence and prefetch clearing signals from FDR.
+   */
+  typedef struct packed {
+    logic                            clear_divergence_valid;
+    logic [DICE_HW_CTA_ID_WIDTH-1:0] clear_divergence_cta_id;
+    logic                            clear_prefetch_valid;
+    logic [DICE_HW_CTA_ID_WIDTH-1:0] clear_prefetch_hw_cta_id;
+    logic                            predict_miss_flush;
+  } branch_control_t;
 
 
 endpackage
