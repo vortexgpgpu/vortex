@@ -22,7 +22,7 @@
 #include <unordered_map>
 #include <vector>
 
-#if FEDP_TRACE
+#ifdef FEDP_TRACE
 #include <cstdio>
 #define LOG(...) std::fprintf(stderr, __VA_ARGS__);
 #else

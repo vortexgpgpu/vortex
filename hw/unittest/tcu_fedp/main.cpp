@@ -43,7 +43,7 @@
 #include <bitmanip.h>
 #include "softfloat_ext.h"
 
-#ifdef FEDP_EMUL
+#ifdef USE_FEDP
 #include "fedp.h"
 #endif
 
@@ -280,7 +280,7 @@ static void pack_elements(const std::vector<uint32_t> &elements, int element_bit
   }
 }
 
-#ifndef FEDP_EMUL
+#ifndef USE_FEDP
 // Calculate expected fp dot product
 static float dot_product(const uint32_t* A, const uint32_t* B, uint32_t C, int n, int eb, int sb, bool fused) {
   auto to_float = [&](uint32_t x, int ebits, int sbits) -> long double {
@@ -679,7 +679,7 @@ public:
     const uint32_t NF = features_to_test.size();
     const uint32_t tests_per_feature = (NT + NF - 1) / NF;
 
-  #ifdef FEDP_EMUL
+  #ifdef USE_FEDP
     FEDP fedp(config_.exp_bits, config_.sig_bits, NUM_REGS * 2, (int)config_.frm, config_.W, config_.renorm);
   #endif
 
@@ -746,7 +746,7 @@ public:
       std::memcpy(&dut_result, &dut_result_bits, sizeof(float));
 
       // Calculate expected result
-    #ifdef FEDP_EMUL
+    #ifdef USE_FEDP
       float expected = fedp(a_packed.data(), b_packed.data(), c_value_float, NUM_REGS);
     #else
       float expected = dot_product(a_value_hex.data(), b_value_hex.data(),

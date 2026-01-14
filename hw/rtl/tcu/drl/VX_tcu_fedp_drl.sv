@@ -16,7 +16,7 @@
 module VX_tcu_fedp_drl #(
     parameter LATENCY = 0,
     parameter N = 2,
-    parameter W = 53
+    parameter W = 25
 ) (
     input  wire clk,
     input  wire reset,
