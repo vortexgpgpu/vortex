@@ -270,7 +270,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_IFETCH_LT, core_id, &c.ifetch_lt), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_LOADS, core_id, &c.loads), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_LOAD_LT, core_id, &c.load_lt), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STORE, core_id, &c.stores), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STORES, core_id, &c.stores), { return err; });
 
       // Per-Core report
       const uint64_t cycles = c.cycles;
