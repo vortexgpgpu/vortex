@@ -64,8 +64,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     output wire                             dispatch_eop[NUM_EX_UNITS * `ISSUE_WIDTH],
     input wire                              dispatch_ready[NUM_EX_UNITS * `ISSUE_WIDTH],
 
-    output wire [ISSUE_WIS_W-1:0]           issue_sched_wis[`ISSUE_WIDTH],
-    output wire                             issue_sched_valid[`ISSUE_WIDTH]
+    output wire [ISSUE_ISW_SIZEW-1:0]       issued_warps_cnt
 );
     VX_decode_if    decode_if();
     VX_dispatch_if  dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
@@ -120,10 +119,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
         assign dispatch_if[i].ready = dispatch_ready[i];
     end
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_issue_sched_if
-        assign issue_sched_wis[i] = issue_sched_if[i].wis;
-        assign issue_sched_valid[i] = issue_sched_if[i].valid;
-    end
+    assign issued_warps_cnt = issue_sched_if.issued_warps_cnt;
 
 `ifdef PERF_ENABLE
     issue_perf_t issue_perf = '0;

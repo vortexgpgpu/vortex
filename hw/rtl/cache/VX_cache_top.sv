@@ -52,7 +52,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     parameter DIRTY_BYTES           = 1,
 
     // core request tag size
-    parameter TAG_WIDTH             = 32,
+    parameter TAG_WIDTH             = 16 + UUID_WIDTH,
 
     // Core response output buffer
     parameter CORE_OUT_BUF          = 3,

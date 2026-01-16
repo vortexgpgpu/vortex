@@ -48,8 +48,8 @@ MemSim::MemSim() {
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
   tfp_ = new VerilatedVcdC;
-  cache_->trace(tfp_, 99);
-  race_->open("trace.vcd");
+  msu_->trace(tfp_, 99);
+  tfp_->open("trace.vcd");
 #endif
 }
 
