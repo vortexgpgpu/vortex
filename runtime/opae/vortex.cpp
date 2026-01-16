@@ -209,25 +209,25 @@ public:
       _value = (dev_caps_ >> 0) & 0xff;
       break;
     case VX_CAPS_NUM_THREADS:
-      _value = ((dev_caps_ >> 8) & 0x3f) + 1;
+      _value = 1 << ((dev_caps_ >> 8) & 0x7);
       break;
     case VX_CAPS_NUM_WARPS:
-      _value = ((dev_caps_ >> 14) & 0x3f) + 1;
+      _value = 1 << ((dev_caps_ >> 11) & 0x7);
       break;
     case VX_CAPS_NUM_CORES: {
-      uint32_t sockets_per_cluster = ((dev_caps_ >> 20) & 0xf) + 1;
-      uint32_t num_clusters = ((dev_caps_ >> 24) & 0xf) + 1;
-      uint32_t socket_size  = ((dev_caps_ >> 28) & 0xf) + 1;
-      _value = num_clusters * sockets_per_cluster * socket_size;
+      uint32_t socket_size  = 1 << ((dev_caps_ >> 14) & 0x7);
+      uint32_t cluster_size = 1 << ((dev_caps_ >> 17) & 0x7);
+      uint32_t num_clusters = 1 << ((dev_caps_ >> 20) & 0x7);
+      _value = num_clusters * cluster_size * socket_size;
     } break;
-    case VX_CAPS_NUM_CLUSTERS:
-      _value = ((dev_caps_ >> 24) & 0xf) + 1;
-      break;
     case VX_CAPS_SOCKET_SIZE:
-      _value = ((dev_caps_ >> 28) & 0xf) + 1;
+      _value = 1 << ((dev_caps_ >> 14) & 0x7);
+      break;
+    case VX_CAPS_NUM_CLUSTERS:
+      _value = 1 << ((dev_caps_ >> 20) & 0x7);
       break;
     case VX_CAPS_ISSUE_WIDTH:
-      _value = ((dev_caps_ >> 32) & 0xf) + 1;
+      _value = 1 << ((dev_caps_ >> 23) & 0x7);
       break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
@@ -236,16 +236,16 @@ public:
       _value = global_mem_size_;
       break;
     case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = 1ull << ((dev_caps_ >> 36) & 0xff);
+      _value = 1ull << ((dev_caps_ >> 26) & 0xff);
       break;
     case VX_CAPS_ISA_FLAGS:
       _value = isa_caps_;
       break;
     case VX_CAPS_NUM_MEM_BANKS:
-      _value = 1 << ((dev_caps_ >> 44) & 0x7);
+      _value = 1 << ((dev_caps_ >> 34) & 0x7);
       break;
     case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (20 + ((dev_caps_ >> 47) & 0x1f));
+      _value = 1ull << (20 + ((dev_caps_ >> 37) & 0x1f));
       break;
     case VX_CAPS_CLOCK_RATE:
       _value = PLATFORM_CLOCK_RATE;
@@ -561,7 +561,7 @@ private:
   uint64_t global_mem_size_;
   uint64_t staging_wsid_;
   uint64_t staging_ioaddr_;
-  uint8_t *staging_ptr_;
+  uint8_t* staging_ptr_;
   uint64_t staging_size_;
   std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
 };

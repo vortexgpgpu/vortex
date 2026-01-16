@@ -291,25 +291,25 @@ public:
       _value = (dev_caps_ >> 0) & 0xff;
       break;
     case VX_CAPS_NUM_THREADS:
-      _value = ((dev_caps_ >> 8) & 0x3f) + 1;
+      _value = 1 << ((dev_caps_ >> 8) & 0x7);
       break;
     case VX_CAPS_NUM_WARPS:
-      _value = ((dev_caps_ >> 14) & 0x3f) + 1;
+      _value = 1 << ((dev_caps_ >> 11) & 0x7);
       break;
     case VX_CAPS_NUM_CORES: {
-      uint32_t sockets_per_cluster = ((dev_caps_ >> 20) & 0xf) + 1;
-      uint32_t num_clusters = ((dev_caps_ >> 24) & 0xf) + 1;
-      uint32_t socket_size  = ((dev_caps_ >> 28) & 0xf) + 1;
-      _value = num_clusters * sockets_per_cluster * socket_size;
+      uint32_t socket_size  = 1 << ((dev_caps_ >> 14) & 0x7);
+      uint32_t cluster_size = 1 << ((dev_caps_ >> 17) & 0x7);
+      uint32_t num_clusters = 1 << ((dev_caps_ >> 20) & 0x7);
+      _value = num_clusters * cluster_size * socket_size;
     } break;
-    case VX_CAPS_NUM_CLUSTERS:
-      _value = ((dev_caps_ >> 24) & 0xf) + 1;
-      break;
     case VX_CAPS_SOCKET_SIZE:
-      _value = ((dev_caps_ >> 28) & 0xf) + 1;
+      _value = 1 << ((dev_caps_ >> 14) & 0x7);
+      break;
+    case VX_CAPS_NUM_CLUSTERS:
+      _value = 1 << ((dev_caps_ >> 20) & 0x7);
       break;
     case VX_CAPS_ISSUE_WIDTH:
-      _value = ((dev_caps_ >> 32) & 0xf) + 1;
+      _value = 1 << ((dev_caps_ >> 23) & 0x7);
       break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
@@ -318,16 +318,16 @@ public:
       _value = global_mem_size_;
       break;
     case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = 1ull << ((dev_caps_ >> 36) & 0xff);
+      _value = 1ull << ((dev_caps_ >> 26) & 0xff);
       break;
     case VX_CAPS_ISA_FLAGS:
       _value = isa_caps_;
       break;
     case VX_CAPS_NUM_MEM_BANKS:
-      _value = 1 << ((dev_caps_ >> 44) & 0x7);
+      _value = 1 << ((dev_caps_ >> 34) & 0x7);
       break;
     case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (20 + ((dev_caps_ >> 47) & 0x1f));
+      _value = 1ull << (20 + ((dev_caps_ >> 37) & 0x1f));
       break;
     case VX_CAPS_CLOCK_RATE:
       _value = clock_freqs_;
@@ -722,8 +722,8 @@ private:
   uint32_t lg2_bank_size_;
 
   uint64_t get_memory_bandwidth(const std::string &device_name) {
-    std::string s_name;
-    std::transform(device_name.begin(), device_name.end(), s_name.begin(), ::tolower);
+    std::string s_name(device_name);
+    std::transform(s_name.begin(), s_name.end(), s_name.begin(), ::tolower);
     if (s_name.find("u55c") != std::string::npos) {
       // Alveo U55C: 16GB HBM2
       // Single stack HBM2 often cited around 460 GB/s aggregate
@@ -750,9 +750,11 @@ private:
       // VCK5000 (Versal AI Core): LPDDR4/DDR4 High Speed
       // Specs list "Off-chip Total Bandwidth" = 102.4 GB/s
       return 102400;
+    } else if (s_name.find("vortex_xrtsim") != std::string::npos) {
+      return PLATFORM_MEMORY_PEAK_BW;
     }
     std::cerr << "Warning: Unknown device type (" << s_name << "). Returning 0." << std::endl;
-    return 0.0;
+    return 0;
   }
 
 #ifdef BANK_INTERLEAVE

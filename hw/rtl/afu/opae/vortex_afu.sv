@@ -106,16 +106,20 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
+    localparam CLUSTER_SIZE = `NUM_CORES / `SOCKET_SIZE;
+    `STATIC_ASSERT((CLUSTER_SIZE * `SOCKET_SIZE) == `NUM_CORES, ("NUM_CORES must be a multiple of SOCKET_SIZE"));
+
     wire [63:0] dev_caps = {
-        16'b0,
+        22'b0,
         5'(LMEM_BYTE_ADDR_WIDTH-20),
-        3'(`CLOG2(NUM_LOCAL_MEM_BANKS)),
+        3'($clog2(NUM_LOCAL_MEM_BANKS)),
         8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
-        4'((`NUM_CORES/`SOCKET_SIZE)-1), // sockets per cluster
-        4'(`NUM_CLUSTERS-1),
-        4'(`SOCKET_SIZE-1),
-        6'(`NUM_WARPS-1),
-        6'(`NUM_THREADS-1),
+        3'($clog2(`ISSUE_WIDTH)),
+        3'($clog2(`NUM_CLUSTERS)),
+        3'($clog2(CLUSTER_SIZE)),
+        3'($clog2(`SOCKET_SIZE)),
+        3'($clog2(`NUM_WARPS)),
+        3'($clog2(`NUM_THREADS)),
         8'(`IMPLEMENTATION_ID)
     };
 

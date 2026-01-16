@@ -156,7 +156,7 @@ int Socket::get_exitcode() const {
 }
 
 void Socket::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
-  cluster_->barrier(bar_id, count, socket_id_ * cores_.size() + core_id);
+  cluster_->barrier(bar_id, count, core_id);
 }
 
 void Socket::resume(uint32_t core_index) {

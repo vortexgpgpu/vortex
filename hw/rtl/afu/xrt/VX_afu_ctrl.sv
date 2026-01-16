@@ -136,21 +136,28 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
 
     localparam MEMORY_BANK_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH - `CLOG2(`PLATFORM_MEMORY_NUM_BANKS);
 
-    // device caps
-    wire [63:0] dev_caps = {16'b0,
-                            5'(MEMORY_BANK_ADDR_WIDTH-20),
-                            3'(`CLOG2(`PLATFORM_MEMORY_NUM_BANKS)),
-                            8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
-                            4'((`NUM_CORES/`SOCKET_SIZE)-1), // sockets per cluster
-                            4'(`NUM_CLUSTERS-1),
-                            4'(`SOCKET_SIZE-1),
-                            6'(`NUM_WARPS-1),
-                            6'(`NUM_THREADS-1),
-                            8'(`IMPLEMENTATION_ID)};
+    localparam CLUSTER_SIZE = `NUM_CORES / `SOCKET_SIZE;
+    `STATIC_ASSERT((CLUSTER_SIZE * `SOCKET_SIZE) == `NUM_CORES, ("NUM_CORES must be a multiple of SOCKET_SIZE"));
 
-    wire [63:0] isa_caps = {32'(`MISA_EXT),
-                            2'(`CLOG2(`XLEN)-4),
-                            30'(`MISA_STD)};
+    wire [63:0] dev_caps = {
+        22'b0,
+        5'(MEMORY_BANK_ADDR_WIDTH-20),
+        3'($clog2(`PLATFORM_MEMORY_NUM_BANKS)),
+        8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
+        3'($clog2(`ISSUE_WIDTH)),
+        3'($clog2(`NUM_CLUSTERS)),
+        3'($clog2(CLUSTER_SIZE)),
+        3'($clog2(`SOCKET_SIZE)),
+        3'($clog2(`NUM_WARPS)),
+        3'($clog2(`NUM_THREADS)),
+        8'(`IMPLEMENTATION_ID)
+    };
+
+    wire [63:0] isa_caps = {
+        32'(`MISA_EXT),
+        2'(`CLOG2(`XLEN)-4),
+        30'(`MISA_STD)
+    };
 
     reg [WSTATE_WIDTH-1:0] wstate;
     reg [ADDR_BITS-1:0] waddr;

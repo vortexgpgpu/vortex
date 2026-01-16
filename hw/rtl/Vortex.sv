@@ -43,6 +43,10 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     // Status
     output wire                             busy
 );
+    // Check clustering configuration
+    `STATIC_ASSERT(`IS_POW2(`NUM_CLUSTERS), ("NUM_CLUSTERS must be a power of 2"));
+    `STATIC_ASSERT(`IS_POW2(`NUM_CORES), ("NUM_CORES must be a power of 2"));
+    `STATIC_ASSERT(`IS_POW2(`SOCKET_SIZE), ("SOCKET_SIZE must be a power of 2"));
 
 `ifdef SCOPE
     localparam scope_cluster = 0;
