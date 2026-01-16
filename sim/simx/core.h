@@ -114,6 +114,12 @@ public:
 
   bool barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
 
+  // Async barrier arrive: returns token (current generation)
+  uint32_t barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid);
+
+  // Async barrier wait: uses token to determine which phase to wait for
+  bool barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid);
+
   bool wspawn(uint32_t num_warps, Word nextPC);
 
   uint32_t id() const {

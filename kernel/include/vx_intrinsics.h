@@ -285,6 +285,32 @@ inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cva
 #define vx_wsched(__prio__, __yield__) \
     __asm__ (".insn r %0, 6, 0, x0, x%[p], x%[y]" :: "i"(RISCV_CUSTOM0), [p]"i"(__prio__), [y]"i"(__yield__) : "memory")
 
+
+inline uint32_t vx_barrier_arrive(int barrier_id, int num_warps) {
+    uint32_t token;
+    __asm__ volatile (
+        ".insn r %1, 6, 0, %0, %2, %3"
+        : "=r"(token)
+        : "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(num_warps)
+        : "memory"
+    );
+    return token;
+}
+
+// Async Barrier Wait: blocks until the barrier phase associated with the token is complete
+// barrier_id: barrier ID (0-7)
+// token: the token returned by vx_barrier_arrive
+inline void vx_barrier_wait(int barrier_id, uint32_t token) {
+    __asm__ volatile (
+        ".insn r %0, 7, 0, x0, %1, %2"
+        :: "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(token)
+        : "memory"
+    );
+}
+
+
+
+
 #ifdef __cplusplus
 }
 #endif

@@ -32,6 +32,36 @@ public:
     CacheSim::PerfStats l2cache;
   };
 
+  struct AsyncClusterBarrier {
+  static constexpr uint32_t MAX_CORES = 32;
+
+  CoreMask   arrived_cores; 
+  CoreMask   waiting_cores;
+  uint32_t   arrived_count;
+  uint32_t   expect_cores;
+  uint32_t   generation;
+  std::array<uint32_t, MAX_CORES> wait_phase;
+
+  AsyncClusterBarrier()
+    : arrived_count(0)
+    , expect_cores(0)
+    , generation(0)
+  {
+    arrived_cores.reset();
+    waiting_cores.reset();
+    wait_phase.fill(0);
+  }
+
+  void reset_all() {
+    arrived_cores.reset();
+    waiting_cores.reset();
+    arrived_count = 0;
+    expect_cores  = 0;
+    generation    = 0;
+    wait_phase.fill(0);
+  }
+};
+
   std::vector<SimChannel<MemReq>> mem_req_out;
   std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
@@ -67,6 +97,9 @@ public:
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
+  void async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
+  bool async_barrier_wait(uint32_t bar_id, uint32_t count, uint32_t core_id);
+
   PerfStats perf_stats() const;
 
   const std::vector<Socket::Ptr>& sockets() const {
@@ -80,6 +113,7 @@ private:
   std::vector<CoreMask>       barriers_;
   CacheSim::Ptr               l2cache_;
   uint32_t                    cores_per_socket_;
+  std::vector<AsyncClusterBarrier>  async_barriers_;
 };
 
 } // namespace vortex

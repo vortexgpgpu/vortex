@@ -519,6 +519,20 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
+                            3'h6: begin // ARRIVE
+                                op_type = INST_OP_BITS'(INST_SFU_ARRIVE);
+                                // use_rd = 1;
+                                `USED_IREG (rd);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h7: begin // WAIT
+                                op_type = INST_OP_BITS'(INST_SFU_WAIT);
+                                // use_rd = 1;
+                                // `USED_IREG (rd);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
                             default:;
                         endcase
                     end

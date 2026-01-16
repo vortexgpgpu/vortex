@@ -32,6 +32,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t);
 
+    // localparam DATAW = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NUM_REGS_BITS + 1 + PID_WIDTH + 1 + 1 + DV_STACK_SIZEW + `XLEN + 1;
+
     `UNUSED_VAR (execute_if.data.rs3_data)
 
     tmc_t       tmc;
@@ -46,6 +48,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_split  = (execute_if.data.op_type == INST_SFU_SPLIT);
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
     wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
+    // async 
+    wire is_bar_arrive = (execute_if.data.op_type == INST_SFU_ARRIVE);
+    wire is_bar_wait   = (execute_if.data.op_type == INST_SFU_WAIT);
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
     if (LANE_BITS != 0) begin : g_last_tid
@@ -129,15 +134,21 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // barrier
 
-    assign barrier.valid    = is_bar;
+    assign barrier.valid    = is_bar || is_bar_arrive || is_bar_wait;
+    // async barrier op
+    assign barrier.op       = is_bar ? BARRIER_OP_SYNC : 
+                              (is_bar_arrive ? BARRIER_OP_ARRIVE : BARRIER_OP_WAIT);
+
     assign barrier.id       = rs1_data[NB_WIDTH-1:0];
 `ifdef GBAR_ENABLE
-    assign barrier.is_global= rs1_data[31];
+    assign barrier.is_global= is_bar ? rs1_data[31] : 1'b0;
 `else
     assign barrier.is_global= 1'b0;
 `endif
-    assign barrier.size_m1  = rs2_data[$bits(barrier.size_m1)-1:0] - $bits(barrier.size_m1)'(1);
-    assign barrier.is_noop  = (rs2_data[$bits(barrier.size_m1)-1:0] == $bits(barrier.size_m1)'(1));
+    assign barrier.size_m1  = is_bar ? (rs2_data[$bits(barrier.size_m1)-1:0] - $bits(barrier.size_m1)'(1)) : '0;
+    assign barrier.is_noop  = is_bar && (rs2_data[$bits(barrier.size_m1)-1:0] == $bits(barrier.size_m1)'(1));
+    assign barrier.count    = rs2_data[NW_WIDTH-1:0]; // For ARRIVE: expected warp count
+    assign barrier.token    = rs2_data[`XLEN-1:0];  // For WAIT: token to wait for
 
     // wspawn
 
@@ -152,18 +163,22 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // response
 
     assign warp_ctl_if.dvstack_wid = execute_if.data.header.wid;
+    assign warp_ctl_if.barrier_id_rd = rs1_data[NB_WIDTH-1:0]; // barrier ID for token lookup
+
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
+    wire [`XLEN-1:0] arrive_token_out;
+    wire is_bar_arrive_out;
 
     VX_elastic_buffer #(
-        .DATAW ($bits(sfu_header_t) + DV_STACK_SIZEW),
+        .DATAW ($bits(sfu_header_t) + DV_STACK_SIZEW + `XLEN + 1),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (execute_if.valid),
         .ready_in  (execute_if.ready),
-        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr}),
-        .data_out  ({result_if.data.header, dvstack_ptr}),
+        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr, warp_ctl_if.arrive_token, is_bar_arrive}),
+        .data_out  ({result_if.data.header, dvstack_ptr, arrive_token_out, is_bar_arrive_out}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
@@ -182,8 +197,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .data_out ({warp_ctl_if.valid, warp_ctl_if.wid,            warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.sjoin, warp_ctl_if.barrier})
     );
 
+    // Result data: for BAR_ARRIVE return token, otherwise return dvstack_ptr
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result_if
-        assign result_if.data.data[i] = `XLEN'(dvstack_ptr);
+        assign result_if.data.data[i] = is_bar_arrive_out ? `XLEN'(arrive_token_out) : `XLEN'(dvstack_ptr);
     end
 
 endmodule

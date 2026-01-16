@@ -87,8 +87,14 @@ module VX_schedule import VX_gpu_pkg::*; #(
     // barriers
     reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] barrier_masks, barrier_masks_n;
     reg [`NUM_BARRIERS-1:0][NW_WIDTH-1:0] barrier_ctrs, barrier_ctrs_n;
-    reg [`NUM_WARPS-1:0] barrier_stalls, barrier_stalls_n;
+    // reg [`NUM_WARPS-1:0] barrier_stalls, barrier_stalls_n;
     reg [`NUM_WARPS-1:0] curr_barrier_mask_p1;
+
+    // async barriers (things I think should be kept separate state from sync barrier)
+    reg [`NUM_BARRIERS-1:0][`XLEN-1:0] async_bar_generation, async_bar_generation_n;
+    reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] async_bar_waiting, async_bar_waiting_n;
+    reg [`NUM_BARRIERS-1:0][NW_WIDTH-1:0] async_bar_arrived_cnt, async_bar_arrived_cnt_n;
+
 `ifdef GBAR_ENABLE
     reg gbar_req_valid;
     reg [NB_WIDTH-1:0] gbar_req_id;
@@ -109,8 +115,13 @@ module VX_schedule import VX_gpu_pkg::*; #(
         thread_masks_n  = thread_masks;
         barrier_masks_n = barrier_masks;
         barrier_ctrs_n  = barrier_ctrs;
-        barrier_stalls_n= barrier_stalls;
+        // barrier_stalls_n= barrier_stalls;
         warp_pcs_n      = warp_pcs;
+
+        // async barrier next state
+        async_bar_generation_n = async_bar_generation;
+        async_bar_waiting_n = async_bar_waiting;
+        async_bar_arrived_cnt_n = async_bar_arrived_cnt;
 
         // decode unlock
         if (decode_sched_if.valid && decode_sched_if.unlock) begin
@@ -156,23 +167,80 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
 
         // barrier handling
-        curr_barrier_mask_p1 = barrier_masks[warp_ctl_if.barrier.id];
-        curr_barrier_mask_p1[warp_ctl_if.wid] = 1;
+        curr_barrier_mask_p1 = '0;
+        // curr_barrier_mask_p1 = barrier_masks[warp_ctl_if.barrier.id];
+        // curr_barrier_mask_p1[warp_ctl_if.wid] = 1;
         if (warp_ctl_if.valid && warp_ctl_if.barrier.valid) begin
-            if (~warp_ctl_if.barrier.is_noop) begin
-                if (~warp_ctl_if.barrier.is_global
-                 && (barrier_ctrs[warp_ctl_if.barrier.id] == NW_WIDTH'(warp_ctl_if.barrier.size_m1))) begin
-                    barrier_ctrs_n[warp_ctl_if.barrier.id] = '0; // reset barrier counter
-                    barrier_masks_n[warp_ctl_if.barrier.id] = '0; // reset barrier mask
-                    stalled_warps_n &= ~barrier_masks[warp_ctl_if.barrier.id]; // unlock warps
-                    stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
-                end else begin
-                    barrier_ctrs_n[warp_ctl_if.barrier.id] = barrier_ctrs[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
-                    barrier_masks_n[warp_ctl_if.barrier.id] = curr_barrier_mask_p1;
+            curr_barrier_mask_p1 = barrier_masks[warp_ctl_if.barrier.id];
+            curr_barrier_mask_p1[warp_ctl_if.wid] = 1;
+
+            // if (~warp_ctl_if.barrier.is_noop) begin
+            //     if (~warp_ctl_if.barrier.is_global
+            //      && (barrier_ctrs[warp_ctl_if.barrier.id] == NW_WIDTH'(warp_ctl_if.barrier.size_m1))) begin
+            //         barrier_ctrs_n[warp_ctl_if.barrier.id] = '0; // reset barrier counter
+            //         barrier_masks_n[warp_ctl_if.barrier.id] = '0; // reset barrier mask
+            //         stalled_warps_n &= ~barrier_masks[warp_ctl_if.barrier.id]; // unlock warps
+            //         stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+            //     end else begin
+            //         barrier_ctrs_n[warp_ctl_if.barrier.id] = barrier_ctrs[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
+            //         barrier_masks_n[warp_ctl_if.barrier.id] = curr_barrier_mask_p1;
+            //     end
+            // end else begin
+            //     stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+            // end
+
+            case (warp_ctl_if.barrier.op)
+                BARRIER_OP_SYNC: begin
+                    if (~warp_ctl_if.barrier.is_noop) begin
+                        if (~warp_ctl_if.barrier.is_global && (barrier_ctrs[warp_ctl_if.barrier.id] == NW_WIDTH'(warp_ctl_if.barrier.size_m1)) ) begin
+                            barrier_ctrs_n[warp_ctl_if.barrier.id] = '0; // reset barrier counter
+                            barrier_masks_n[warp_ctl_if.barrier.id] = '0; // reset barrier mask
+                            stalled_warps_n &= ~barrier_masks[warp_ctl_if.barrier.id]; // unlock warps
+                            stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+                        end else begin
+                            barrier_ctrs_n[warp_ctl_if.barrier.id] = barrier_ctrs[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
+                            barrier_masks_n[warp_ctl_if.barrier.id] = curr_barrier_mask_p1;
+                        end
+                    end
+                    else begin
+                        stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+                    end
                 end
-            end else begin
-                stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
-            end
+
+                BARRIER_OP_ARRIVE: begin
+                    // ARRIVE: non-blocking, update state.
+                    // Assumes each warp arrives at most once per generation.
+                    if (warp_ctl_if.barrier.count <= NW_WIDTH'(1)
+                     || async_bar_arrived_cnt[warp_ctl_if.barrier.id] == (warp_ctl_if.barrier.count - NW_WIDTH'(1))) begin
+                        // Last arrival: advance generation and reset counter
+                        async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = '0;
+                        async_bar_generation_n[warp_ctl_if.barrier.id] = async_bar_generation[warp_ctl_if.barrier.id] + `XLEN'(1);
+                        // Wake all waiting warps
+                        stalled_warps_n &= ~async_bar_waiting[warp_ctl_if.barrier.id];
+                        async_bar_waiting_n[warp_ctl_if.barrier.id] = '0;
+                    end else begin
+                        // Not last arrival: increment arrival counter
+                        async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = async_bar_arrived_cnt[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
+                    end
+
+                    // ARRIVE is non-blocking, unlock warp immediately
+                    stalled_warps_n[warp_ctl_if.wid] = 0;
+                end
+
+                BARRIER_OP_WAIT: begin
+                    // WAIT: check if generation advanced past token (wrap-safe)
+                    if ($signed(async_bar_generation[warp_ctl_if.barrier.id] - warp_ctl_if.barrier.token) > 0) begin
+                        stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+                    end else begin
+                        async_bar_waiting_n[warp_ctl_if.barrier.id][warp_ctl_if.wid] = 1'b1;
+                    end
+                end
+
+                default: begin
+                end
+
+            endcase
+
         end
 
     `ifdef GBAR_ENABLE
@@ -217,9 +285,14 @@ module VX_schedule import VX_gpu_pkg::*; #(
             warp_pcs        <= '0;
             active_warps    <= '0;
             thread_masks    <= '0;
-            barrier_stalls  <= '0;
+            // barrier_stalls  <= '0;
             cycles          <= '0;
             wspawn.valid    <=  0;
+
+            // async barrier reset
+            async_bar_generation  <= '0;
+            async_bar_waiting     <= '0;
+            async_bar_arrived_cnt <= '0;
 
             // activate first warp
             warp_pcs[0]     <= from_fullPC(base_dcrs.startup_addr);
@@ -233,8 +306,13 @@ module VX_schedule import VX_gpu_pkg::*; #(
             warp_pcs       <= warp_pcs_n;
             barrier_masks  <= barrier_masks_n;
             barrier_ctrs   <= barrier_ctrs_n;
-            barrier_stalls <= barrier_stalls_n;
+            // barrier_stalls <= barrier_stalls_n;
             is_single_warp <= (active_warps_cnt == $bits(active_warps_cnt)'(1));
+
+            // async barrier state updates
+            async_bar_generation <= async_bar_generation_n;
+            async_bar_waiting    <= async_bar_waiting_n;
+            async_bar_arrived_cnt <= async_bar_arrived_cnt_n;
 
             // wspawn handling
             if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
@@ -250,6 +328,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             // global barrier scheduling
         `ifdef GBAR_ENABLE
             if (warp_ctl_if.valid && warp_ctl_if.barrier.valid
+             && warp_ctl_if.barrier.op == BARRIER_OP_SYNC
              && warp_ctl_if.barrier.is_global
              && !warp_ctl_if.barrier.is_noop
              && (curr_barrier_mask_p1 == active_warps)) begin
@@ -276,6 +355,10 @@ module VX_schedule import VX_gpu_pkg::*; #(
     assign gbar_bus_if.req_data.size_m1 = gbar_req_size_m1;
     assign gbar_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID % `NUM_CORES);
 `endif
+
+    // async barrier token output for ARRIVE instruction
+    // Returns the current generation at time of arrive
+    assign warp_ctl_if.arrive_token = `XLEN'(async_bar_generation[warp_ctl_if.barrier_id_rd]);
 
     // split/join handling
 

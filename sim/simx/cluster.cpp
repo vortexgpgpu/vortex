@@ -28,6 +28,7 @@ Cluster::Cluster(const SimContext& ctx,
   , sockets_(NUM_SOCKETS)
   , barriers_(arch.num_barriers(), 0)
   , cores_per_socket_(arch.socket_size())
+  , async_barriers_(arch.socket_size())
 {
   char sname[100];
 
@@ -81,6 +82,10 @@ Cluster::~Cluster() {
 void Cluster::reset() {
   for (auto& barrier : barriers_) {
     barrier.reset();
+  }
+
+  for (auto& b : async_barriers_) {
+    b.reset_all();
   }
 }
 
@@ -143,6 +148,118 @@ void Cluster::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
       }
       barrier.reset();
     }
+}
+
+void Cluster::async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
+  auto& b = async_barriers_.at(bar_id);
+
+  uint32_t sockets_per_cluster = sockets_.size();
+  uint32_t cores_per_socket    = cores_per_socket_;
+  uint32_t cores_per_cluster   = sockets_per_cluster * cores_per_socket;
+
+  uint32_t local_core_id = core_id % cores_per_cluster;
+
+  if (b.expect_cores == 0) {
+    b.expect_cores = count;
+  }
+
+  std::cout << "[ACB_ARRIVE] core=" << local_core_id
+            << " gen=" << b.generation
+            << " expect=" << b.expect_cores
+            << " arrived_count=" << b.arrived_count
+            << " arrived_cores=" << b.arrived_cores
+            << std::endl;
+
+  if (b.arrived_cores.test(local_core_id)) {
+    std::cout << "  >> ARRIVE_DUP core=" << local_core_id
+              << " (already arrived this gen)\n";
+    return;
+  }
+
+  b.arrived_cores.set(local_core_id);
+  ++b.arrived_count;
+
+  std::cout << "  >> ARRIVE_UPDATE core=" << local_core_id
+            << " arrived_count=" << b.arrived_count
+            << " arrived_cores=" << b.arrived_cores
+            << std::endl;
+
+  if (b.arrived_count == b.expect_cores) {
+    uint32_t new_gen = b.generation + 1;
+
+    std::cout << "  >> CLUSTER GENERATION COMPLETE: gen="
+              << b.generation << " -> " << new_gen << std::endl;
+
+    // increase generation
+    b.generation    = new_gen;
+    b.arrived_count = 0;
+    b.arrived_cores.reset();
+
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      for (uint32_t c = 0; c < cores_per_socket; ++c) {
+        uint32_t idx = s * cores_per_socket + c;
+        if (b.waiting_cores.test(idx)) {
+          if (b.wait_phase[idx] < b.generation) {
+            std::cout << "  >> WAKE (GEN DONE) core_idx=" << idx
+                      << " now_gen=" << b.generation
+                      << " last_done=" << b.wait_phase[idx]
+                      << std::endl;
+
+            b.wait_phase[idx] = b.generation;
+            b.waiting_cores.reset(idx);
+            sockets_.at(s)->resume(c);
+          }
+        }
+      }
+    }
+  }
+}
+
+bool Cluster::async_barrier_wait(uint32_t bar_id, uint32_t count, uint32_t core_id) {
+  auto& b = async_barriers_.at(bar_id);
+
+  uint32_t sockets_per_cluster = sockets_.size();
+  uint32_t cores_per_socket    = cores_per_socket_;
+  uint32_t cores_per_cluster   = sockets_per_cluster * cores_per_socket;
+
+  uint32_t local_core_id = core_id % cores_per_cluster;
+
+  if (b.expect_cores == 0) {
+    b.expect_cores = count;
+  }
+
+  std::cout << "[ACB_WAIT] core=" << local_core_id
+            << " gen=" << b.generation
+            << " expect=" << b.expect_cores
+            << " arrived_count=" << b.arrived_count
+            << " arrived_cores=" << b.arrived_cores
+            << " waiting_cores=" << b.waiting_cores
+            << std::endl;
+
+  uint32_t desired_gen = b.wait_phase[local_core_id] + 1;
+
+  std::cout << "  >> WAIT TARGET core=" << local_core_id
+            << " wants gen=" << desired_gen
+            << " (last_done=" << b.wait_phase[local_core_id] << ")\n";
+
+
+  if (b.generation >= desired_gen) {
+    std::cout << "[ACB_WAIT_DONE] core=" << local_core_id
+              << " reaches gen=" << b.generation
+              << " (desired=" << desired_gen << ")\n";
+
+    b.wait_phase[local_core_id] = b.generation;
+    b.waiting_cores.reset(local_core_id);
+
+    return true;
+  }
+
+  std::cout << "     -- core " << local_core_id
+            << " waiting for gen " << desired_gen
+            << " (current gen=" << b.generation << ")\n";
+
+  b.waiting_cores.set(local_core_id);
+  return false;
 }
 
 Cluster::PerfStats Cluster::perf_stats() const {

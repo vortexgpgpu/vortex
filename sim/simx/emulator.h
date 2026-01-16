@@ -100,6 +100,12 @@ public:
 
   bool barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
 
+  // Async barrier arrive: returns token (current generation)
+  uint32_t barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid);
+
+  // Async barrier wait: uses token to determine which phase to wait for
+  bool barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid);
+
   bool wspawn(uint32_t num_warps, Word nextPC);
 
   int get_exitcode() const;
@@ -164,10 +170,40 @@ private:
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
 
-  // PC of the last warp to become inactive, used by the debug module to
-  // report the final PC when the program completes.
-  Word        last_inactive_warp_pc_ = 0;
-  bool        last_inactive_warp_pc_valid_ = false;
+  struct AsyncBarrier {
+    #define MAX_WARPS 32
+
+    WarpMask arrived_mask;
+    WarpMask waiting_mask;
+    uint32_t arrived_count;
+    uint32_t expect_count;
+    uint32_t generation;
+    
+    std::array<uint32_t, MAX_WARPS> wait_phase;
+
+    AsyncBarrier()
+        : arrived_count(0)
+        , expect_count(0)
+        , generation(0)
+    {
+        arrived_mask.reset();
+        waiting_mask.reset();
+        wait_phase.fill(0);
+    }
+
+    void reset_for_next_gen() {
+        arrived_mask.reset();
+        waiting_mask.reset();
+        arrived_count = 0;
+        generation = 0;
+        expect_count = 0;
+        wait_phase.fill(0);
+    }
+};
+
+
+std::vector<AsyncBarrier> async_barriers_;  
+
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;
