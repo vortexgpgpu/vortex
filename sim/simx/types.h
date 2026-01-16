@@ -19,6 +19,7 @@
 #include <vector>
 #include <unordered_map>
 #include <variant>
+#include <functional>
 #include <util.h>
 #include <stringutil.h>
 #include <VX_config.h>

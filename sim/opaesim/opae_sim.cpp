@@ -273,13 +273,14 @@ private:
 
     if (!dram_queue_.empty()) {
       auto mem_req = dram_queue_.front();
-      dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg) {
+      dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg)->bool {
         auto orig_req = reinterpret_cast<mem_req_t*>(arg);
         if (orig_req->ready) {
           delete orig_req;
         } else {
           orig_req->ready = true;
         }
+        return true;
       }, mem_req);
       dram_queue_.pop();
     }
