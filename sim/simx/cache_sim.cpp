@@ -128,29 +128,78 @@ struct set_t {
 		}
 	}
 
+	// Tag lookup for a core/replay access. Updates LRU counters.
+	// - Returns hit line id or -1.
+	// - free_line_id: first invalid way (if any), else -1.
+	// - repl_line_id: LRU victim candidate (always a valid index when lines is non-empty).
 	int tag_lookup(uint64_t tag, int* free_line_id, int* repl_line_id) {
-		uint32_t max_cnt = 0;
 		int hit_line_id = -1;
 		*free_line_id = -1;
-		*repl_line_id = -1;
+
+		// Select replacement among valid lines using max LRU counter.
+		uint32_t max_cnt = 0;
+		bool repl_valid = false;
+		*repl_line_id = 0;
+
 		for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
 			auto& line = lines.at(i);
-			if (max_cnt < line.lru_ctr) {
+
+			if (!line.valid) {
+				if (*free_line_id == -1)
+					*free_line_id = i;
+				continue;
+			}
+
+			if (!repl_valid || line.lru_ctr >= max_cnt) {
 				max_cnt = line.lru_ctr;
 				*repl_line_id = i;
+				repl_valid = true;
 			}
-			if (line.valid) {
-				if (line.tag == tag) {
-					hit_line_id = i;
-					line.lru_ctr = 0;
-				} else {
-					++line.lru_ctr;
-				}
+
+			if (line.tag == tag) {
+				hit_line_id = i;
+				line.lru_ctr = 0;
 			} else {
-				*free_line_id = i;
+				++line.lru_ctr;
 			}
 		}
+
+		// If no valid lines exist, pick way 0 (or the free way if present).
+		if (!repl_valid) {
+			*repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
+		}
+
 		return hit_line_id;
+	}
+
+	// Choose a victim line for installing a fill. Does NOT mutate LRU.
+	// Returns the selected line id.
+	int select_victim(int* free_line_id, int* repl_line_id) const {
+		*free_line_id = -1;
+		*repl_line_id = 0;
+
+		uint32_t max_cnt = 0;
+		bool repl_valid = false;
+
+		for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
+			const auto& line = lines.at(i);
+			if (!line.valid) {
+				if (*free_line_id == -1)
+					*free_line_id = i;
+				continue;
+			}
+			if (!repl_valid || line.lru_ctr >= max_cnt) {
+				max_cnt = line.lru_ctr;
+				*repl_line_id = i;
+				repl_valid = true;
+			}
+		}
+
+		if (!repl_valid) {
+			*repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
+		}
+
+		return (*free_line_id != -1) ? *free_line_id : *repl_line_id;
 	}
 };
 
@@ -202,6 +251,7 @@ struct mshr_entry_t {
 	bank_req_t bank_req;
 	uint32_t set_id;
 	uint64_t addr_tag;
+	uint32_t line_id;
 
 	mshr_entry_t() {
 		this->reset();
@@ -211,6 +261,7 @@ struct mshr_entry_t {
 		bank_req.reset();
 		set_id = 0;
 		addr_tag = 0;
+		line_id = 0;
 	}
 };
 
@@ -270,6 +321,7 @@ public:
 				entry.bank_req = bank_req;
 				entry.set_id = set_id;
 				entry.addr_tag = addr_tag;
+				entry.line_id = 0; // victim is selected at Fill time
 				++size_;
 				return i;
 			}
@@ -357,6 +409,7 @@ public:
     pending_read_reqs_ = 0;
 		pending_write_reqs_ = 0;
 		pending_fill_reqs_ = 0;
+			inflight_fills_ = 0;
   }
 
   void tick() {
@@ -390,14 +443,19 @@ private:
 			return;
 		}
 
-		// second: schedule memory fill
-		if (!this->mem_rsp_in.empty()) {
+			// second: schedule memory fill
+			// IMPORTANT: When the bank has latency > 1, we must not enqueue multiple Fill ops
+			// into the pipeline before the first Fill reaches the head and schedules replays.
+			// Otherwise, later Fill ops would sit ahead of Replay ops in the FIFO, breaking the
+			// required ordering (Fill -> Replay) and causing replay misses / MSHR assertions.
+			if (!this->mem_rsp_in.empty() && inflight_fills_ == 0) {
 			auto& mem_rsp = this->mem_rsp_in.peek();
 			bank_req_t bank_req;
 			bank_req.reset();
 			bank_req.type = bank_req_t::Fill;
 			bank_req.mshr_id = mem_rsp.tag;
 			pipe_req_->push(bank_req);
+				++inflight_fills_;
 			this->mem_rsp_in.pop();
 			--pending_fill_reqs_;
 			DT(3, this->name() << "-fill-rsp: " << mem_rsp);
@@ -448,27 +506,17 @@ private:
 			break;
 
 		case bank_req_t::Fill: {
+			// Victim selection is deferred until Fill, so the cache remains fully hit-under-miss.
 			// Peek root entry first so we can do backpressure checks *before* mutating the MSHR.
 			const auto& root_peek = mshr_.peek(bank_req.mshr_id);
 			auto& set  = sets_.at(root_peek.set_id);
 
-			// Select victim logic moved here
 			int32_t free_line_id = -1;
 			int32_t repl_line_id = 0;
-			int hit_line_id = set.tag_lookup(root_peek.addr_tag, &free_line_id, &repl_line_id);
+			int32_t victim_line_id = set.select_victim(&free_line_id, &repl_line_id);
+			auto& victim_line = set.lines.at(victim_line_id);
 
-			uint32_t victim_line_id;
-			if (hit_line_id != -1) {
-				// We found the line!
-				victim_line_id = hit_line_id;
-			} else {
-				// Select a victim: Prioritize free lines, then LRU
-				victim_line_id = (free_line_id != -1) ? free_line_id : repl_line_id;
-			}
-
-			auto& line = set.lines.at(victim_line_id);
-
-			bool need_wb = config_.write_back && line.valid && line.dirty;
+			bool need_wb = config_.write_back && victim_line.valid && victim_line.dirty;
 			if (need_wb && this->mem_req_out.full())
 				return; // stall
 
@@ -478,7 +526,7 @@ private:
 			// Writeback victim if needed (writeback happens in the fill pipeline stage, RTL-style).
 			if (need_wb) {
 				MemReq mem_req;
-				mem_req.addr  = params_.mem_addr(bank_id_, root_entry.set_id, line.tag);
+				mem_req.addr  = params_.mem_addr(bank_id_, root_entry.set_id, victim_line.tag);
 				mem_req.write = true;
 				mem_req.cid   = root_entry.bank_req.cid;
 				mem_req.uuid  = root_entry.bank_req.uuid;
@@ -488,10 +536,10 @@ private:
 			}
 
 			// Install the filled line (Replay will apply request semantics such as dirtying for write-miss).
-			line.valid   = true;
-			line.tag     = root_entry.addr_tag;
-			line.lru_ctr = 0;
-			line.dirty   = false;
+			victim_line.valid   = true;
+			victim_line.tag     = root_entry.addr_tag;
+			victim_line.lru_ctr = 0;
+			victim_line.dirty   = false;
 		} break;
 
 		case bank_req_t::Replay: {
@@ -507,8 +555,6 @@ private:
 			int32_t free_line_id = -1;
 			int32_t repl_line_id = 0;
 			int hit_line_id = set.tag_lookup(addr_tag, &free_line_id, &repl_line_id);
-
-			// The line must be there because Fill just installed it
 			assert(hit_line_id != -1);
 
 			if (bank_req.write && config_.write_back) {
@@ -605,17 +651,14 @@ private:
 
 			// MSHR-backed miss (read miss, or write-back write miss).
 			uint32_t root_id = 0;
-			// [UPDATED] No need for root_line_id anymore
 			bool mshr_pending = mshr_.lookup(set_id, addr_tag, &root_id);
 
-			// [UPDATED] LATE BINDING: We do NOT select the victim here.
-			// We only check if we can send a Fill request if needed.
+			// If we are the first miss for this block, we must be able to send the fill request this cycle.
 			if (!mshr_pending && this->mem_req_out.full())
 				return; // stall
 
 			// Allocate an MSHR entry for this request.
 			assert(!mshr_.full());
-			// [UPDATED] Enqueue without alloc_line_id
 			int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag);
 			DT(3, this->name() << "-mshr-enqueue: " << bank_req);
 
@@ -636,7 +679,15 @@ private:
 			std::abort();
 		}
 
-		pipe_req_->pop();
+			// Pop the request that we just processed.
+			// Keep track of in-flight Fill ops so we never enqueue multiple fills ahead of replays
+			// when bank latency > 1.
+			const bool popped_fill = (bank_req.type == bank_req_t::Fill);
+			pipe_req_->pop();
+			if (popped_fill) {
+				assert(inflight_fills_ > 0);
+				--inflight_fills_;
+			}
 	}
 
 	CacheSim::Config config_;
@@ -653,6 +704,7 @@ private:
 	uint64_t pending_read_reqs_;
 	uint64_t pending_write_reqs_;
 	uint64_t pending_fill_reqs_;
+		uint32_t inflight_fills_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
