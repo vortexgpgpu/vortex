@@ -370,8 +370,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     VX_pending_size #(
         .SIZE      (2048),
-        .INCRW     (`ISSUE_WIDTH),
-        .DECRW     (`ISSUE_WIDTH)
+        .INCRW     (ISSUE_ISW_SIZEW),
+        .DECRW     (ISSUE_ISW_SIZEW)
     ) counter (
         .clk       (clk),
         .reset     (reset),
