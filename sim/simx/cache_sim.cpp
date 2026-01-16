@@ -202,7 +202,6 @@ struct mshr_entry_t {
 	bank_req_t bank_req;
 	uint32_t set_id;
 	uint64_t addr_tag;
-	uint32_t line_id;
 
 	mshr_entry_t() {
 		this->reset();
@@ -212,7 +211,6 @@ struct mshr_entry_t {
 		bank_req.reset();
 		set_id = 0;
 		addr_tag = 0;
-		line_id = 0;
 	}
 };
 
@@ -250,22 +248,21 @@ public:
 	}
 
 	// Returns true if there is an active miss for (set_id, addr_tag).
-	// If true, optionally returns the root entry id and its allocated line_id.
-	bool lookup(uint32_t set_id, uint64_t addr_tag, uint32_t* root_id = nullptr, uint32_t* line_id = nullptr) const {
+	// If true, optionally returns the root entry id.
+	bool lookup(uint32_t set_id, uint64_t addr_tag, uint32_t* root_id = nullptr) const {
 		for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
 			const auto& entry = entries_.at(i);
 			if (entry.bank_req.type != bank_req_t::None
 			 && entry.set_id == set_id
 			 && entry.addr_tag == addr_tag) {
 				if (root_id) *root_id = i;
-				if (line_id) *line_id = entry.line_id;
 				return true;
 			}
 		}
 		return false;
 	}
 
-	int enqueue(const bank_req_t& bank_req, uint32_t set_id, uint64_t addr_tag, uint32_t line_id) {
+	int enqueue(const bank_req_t& bank_req, uint32_t set_id, uint64_t addr_tag) {
 		assert(bank_req.type == bank_req_t::Core);
 		for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
 			auto& entry = entries_.at(i);
@@ -273,7 +270,6 @@ public:
 				entry.bank_req = bank_req;
 				entry.set_id = set_id;
 				entry.addr_tag = addr_tag;
-				entry.line_id = line_id;
 				++size_;
 				return i;
 			}
@@ -455,7 +451,22 @@ private:
 			// Peek root entry first so we can do backpressure checks *before* mutating the MSHR.
 			const auto& root_peek = mshr_.peek(bank_req.mshr_id);
 			auto& set  = sets_.at(root_peek.set_id);
-			auto& line = set.lines.at(root_peek.line_id);
+
+			// Select victim logic moved here
+			int32_t free_line_id = -1;
+			int32_t repl_line_id = 0;
+			int hit_line_id = set.tag_lookup(root_peek.addr_tag, &free_line_id, &repl_line_id);
+
+			uint32_t victim_line_id;
+			if (hit_line_id != -1) {
+				// We found the line!
+				victim_line_id = hit_line_id;
+			} else {
+				// Select a victim: Prioritize free lines, then LRU
+				victim_line_id = (free_line_id != -1) ? free_line_id : repl_line_id;
+			}
+
+			auto& line = set.lines.at(victim_line_id);
 
 			bool need_wb = config_.write_back && line.valid && line.dirty;
 			if (need_wb && this->mem_req_out.full())
@@ -496,6 +507,8 @@ private:
 			int32_t free_line_id = -1;
 			int32_t repl_line_id = 0;
 			int hit_line_id = set.tag_lookup(addr_tag, &free_line_id, &repl_line_id);
+
+			// The line must be there because Fill just installed it
 			assert(hit_line_id != -1);
 
 			if (bank_req.write && config_.write_back) {
@@ -592,19 +605,18 @@ private:
 
 			// MSHR-backed miss (read miss, or write-back write miss).
 			uint32_t root_id = 0;
-			uint32_t root_line_id = 0;
-			bool mshr_pending = mshr_.lookup(set_id, addr_tag, &root_id, &root_line_id);
+			// [UPDATED] No need for root_line_id anymore
+			bool mshr_pending = mshr_.lookup(set_id, addr_tag, &root_id);
 
-			uint32_t alloc_line_id = mshr_pending ? root_line_id
-																						: ((free_line_id != -1) ? free_line_id : repl_line_id);
-
-			// If we are the first miss for this block, we must be able to send the fill request this cycle.
+			// [UPDATED] LATE BINDING: We do NOT select the victim here.
+			// We only check if we can send a Fill request if needed.
 			if (!mshr_pending && this->mem_req_out.full())
 				return; // stall
 
 			// Allocate an MSHR entry for this request.
 			assert(!mshr_.full());
-			int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag, alloc_line_id);
+			// [UPDATED] Enqueue without alloc_line_id
+			int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag);
 			DT(3, this->name() << "-mshr-enqueue: " << bank_req);
 
 			if (!mshr_pending) {

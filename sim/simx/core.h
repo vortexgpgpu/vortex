@@ -74,6 +74,9 @@ public:
     #ifdef EXT_TCU_ENABLE
     uint64_t tcu_instrs = 0;
     #endif
+  #ifdef EXT_V_ENABLE
+    uint64_t vpu_instrs = 0;
+  #endif
     uint64_t ifetches = 0;
     uint64_t loads = 0;
     uint64_t stores = 0;
