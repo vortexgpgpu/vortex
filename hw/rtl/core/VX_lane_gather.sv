@@ -132,6 +132,7 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
             commit_tmask_w,
             result_tmp_if.data.header.PC,
             result_tmp_if.data.header.wb,
+            result_tmp_if.data.header.wr_xregs,
             result_tmp_if.data.header.rd,
             commit_data_w,
             result_tmp_if.data.header.sop,

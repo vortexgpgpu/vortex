@@ -24,22 +24,15 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     // outputs
     VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
-    VX_commit_csr_if.master commit_csr_if,
     VX_commit_sched_if.master commit_sched_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam OUT_DATAW = $bits(commit_t);
-    localparam COMMIT_SIZEW = `CLOG2(`SIMD_WIDTH + 1);
-    localparam COMMIT_ALL_SIZEW = COMMIT_SIZEW + `ISSUE_WIDTH - 1;
 
     // commit arbitration
 
     VX_commit_if commit_arb_if[`ISSUE_WIDTH]();
-
-    wire [`ISSUE_WIDTH-1:0] per_issue_commit_fire;
-    wire [`ISSUE_WIDTH-1:0][NW_WIDTH-1:0] per_issue_commit_wid;
-    wire [`ISSUE_WIDTH-1:0][`SIMD_WIDTH-1:0] per_issue_commit_tmask;
-    wire [`ISSUE_WIDTH-1:0] per_issue_commit_eop;
+    wire [`ISSUE_WIDTH-1:0] committed_warps;
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_commit_arbs
 
@@ -70,103 +63,27 @@ module VX_commit import VX_gpu_pkg::*; #(
             `UNUSED_PIN (sel_out)
         );
 
-        assign per_issue_commit_fire[i] = commit_arb_if[i].valid && commit_arb_if[i].ready;
-        assign per_issue_commit_tmask[i]= {`SIMD_WIDTH{per_issue_commit_fire[i]}} & commit_arb_if[i].data.tmask;
-        assign per_issue_commit_wid[i]  = commit_arb_if[i].data.wid;
-        assign per_issue_commit_eop[i]  = commit_arb_if[i].data.eop;
+        wire commit_arb_fire = commit_arb_if[i].valid && commit_arb_if[i].ready;
+        assign committed_warps[i] = commit_arb_fire && commit_arb_if[i].data.eop;
     end
 
-    // CSRs update
-
-    wire [`ISSUE_WIDTH-1:0][COMMIT_SIZEW-1:0] commit_size, commit_size_r;
-    wire [COMMIT_ALL_SIZEW-1:0] commit_size_all_r, commit_size_all_rr;
-    wire commit_fire_any, commit_fire_any_r, commit_fire_any_rr;
-
-    assign commit_fire_any = (| per_issue_commit_fire);
-
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_commit_size
-        wire [COMMIT_SIZEW-1:0] count;
-        `POP_COUNT(count, per_issue_commit_tmask[i]);
-        assign commit_size[i] = count;
-    end
-
-    VX_pipe_register #(
-        .DATAW  (1 + `ISSUE_WIDTH * COMMIT_SIZEW),
-        .RESETW (1)
-    ) commit_size_reg1 (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (1'b1),
-        .data_in  ({commit_fire_any, commit_size}),
-        .data_out ({commit_fire_any_r, commit_size_r})
-    );
-
-    VX_reduce_tree #(
-        .IN_W  (COMMIT_SIZEW),
-        .OUT_W (COMMIT_ALL_SIZEW),
-        .N     (`ISSUE_WIDTH),
-        .OP    ("+")
-    ) commit_size_reduce (
-        .data_in  (commit_size_r),
-        .data_out (commit_size_all_r)
-    );
-
-    VX_pipe_register #(
-        .DATAW  (1 + COMMIT_ALL_SIZEW),
-        .RESETW (1)
-    ) commit_size_reg2 (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (1'b1),
-        .data_in  ({commit_fire_any_r, commit_size_all_r}),
-        .data_out ({commit_fire_any_rr, commit_size_all_rr})
-    );
-
-    reg [PERF_CTR_BITS-1:0] instret;
-    always @(posedge clk) begin
-       if (reset) begin
-            instret <= '0;
-        end else begin
-            if (commit_fire_any_rr) begin
-                instret <= instret + PERF_CTR_BITS'(commit_size_all_rr);
-            end
-        end
-    end
-    assign commit_csr_if.instret = instret;
-
-    // Track committed instructions
-
-    reg [`NUM_WARPS-1:0] committed_warps;
-
-    always @(*) begin
-        committed_warps = 0;
-        for (integer i = 0; i < `ISSUE_WIDTH; ++i) begin
-            if (per_issue_commit_fire[i] && per_issue_commit_eop[i]) begin
-                committed_warps[per_issue_commit_wid[i]] = 1;
-            end
-        end
-    end
-
-    VX_pipe_register #(
-        .DATAW  (`NUM_WARPS),
-        .RESETW (`NUM_WARPS)
-    ) committed_pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (1'b1),
-        .data_in  (committed_warps),
-        .data_out ({commit_sched_if.committed_warps})
-    );
+    // notify scheduler
+    wire [ISSUE_ISW_SIZEW-1:0] committed_warps_cnt, committed_warps_cnt_r;
+    `POP_COUNT(committed_warps_cnt, committed_warps);
+    `BUFFER(committed_warps_cnt_r, committed_warps_cnt);
+    assign commit_sched_if.committed_warps_cnt = committed_warps_cnt_r;
 
     // Writeback
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_writeback
-        assign writeback_if[i].valid     = commit_arb_if[i].valid && commit_arb_if[i].data.wb;
+        assign writeback_if[i].valid     = commit_arb_if[i].valid;
         assign writeback_if[i].data.uuid = commit_arb_if[i].data.uuid;
         assign writeback_if[i].data.wis  = wid_to_wis(commit_arb_if[i].data.wid);
         assign writeback_if[i].data.sid  = commit_arb_if[i].data.sid;
         assign writeback_if[i].data.PC   = commit_arb_if[i].data.PC;
         assign writeback_if[i].data.tmask= commit_arb_if[i].data.tmask;
+        assign writeback_if[i].data.wb   = commit_arb_if[i].data.wb;
+        assign writeback_if[i].data.wr_xregs = commit_arb_if[i].data.wr_xregs;
         assign writeback_if[i].data.rd   = commit_arb_if[i].data.rd;
         assign writeback_if[i].data.data = commit_arb_if[i].data.data;
         assign writeback_if[i].data.sop  = commit_arb_if[i].data.sop;
@@ -181,7 +98,7 @@ module VX_commit import VX_gpu_pkg::*; #(
                 if (commit_if[j * `ISSUE_WIDTH + i].valid && commit_if[j * `ISSUE_WIDTH + i].ready) begin
                     `TRACE(1, ("%t: %s: wid=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, commit_if[j * `ISSUE_WIDTH + i].data.sid, to_fullPC(commit_if[j * `ISSUE_WIDTH + i].data.PC)))
                     VX_trace_pkg::trace_ex_type(1, j);
-                    `TRACE(1, (", tmask=%b, wb=%0d, rd=%0d, sop=%b, eop=%b, data=", commit_if[j * `ISSUE_WIDTH + i].data.tmask, commit_if[j * `ISSUE_WIDTH + i].data.wb, commit_if[j * `ISSUE_WIDTH + i].data.rd, commit_if[j * `ISSUE_WIDTH + i].data.sop, commit_if[j * `ISSUE_WIDTH + i].data.eop))
+                    `TRACE(1, (", tmask=%b, wb=%b, wr_xregs=%b, rd=%0d, sop=%b, eop=%b, data=", commit_if[j * `ISSUE_WIDTH + i].data.tmask, commit_if[j * `ISSUE_WIDTH + i].data.wb, commit_if[j * `ISSUE_WIDTH + i].data.wr_xregs, commit_if[j * `ISSUE_WIDTH + i].data.rd, commit_if[j * `ISSUE_WIDTH + i].data.sop, commit_if[j * `ISSUE_WIDTH + i].data.eop))
                     `TRACE_ARRAY1D(1, "0x%0h", commit_if[j * `ISSUE_WIDTH + i].data.data, `SIMD_WIDTH)
                     `TRACE(1, (" (#%0d)\n", commit_if[j * `ISSUE_WIDTH + i].data.uuid))
                 end

@@ -32,7 +32,7 @@ void OpcUnit::reset() {
 void OpcUnit::tick() {
   if (Input.empty())
     return;
-  auto trace = Input.front();
+  auto trace = Input.peek();
 
   uint32_t stalls = 0;
 
@@ -55,11 +55,10 @@ void OpcUnit::tick() {
 
   total_stalls_ += stalls;
 
-  Output.push(trace, 2 + stalls);
-
-  DT(3, "pipeline-operands: " << *trace);
-
-  Input.pop();
+  if (Output.try_send(trace, 2 + stalls)) {
+    DT(3, "pipeline-operands: " << *trace);
+    Input.pop();
+  }
 }
 
 void OpcUnit::writeback(instr_trace_t* trace) {

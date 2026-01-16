@@ -209,13 +209,25 @@ public:
       _value = (dev_caps_ >> 0) & 0xff;
       break;
     case VX_CAPS_NUM_THREADS:
-      _value = (dev_caps_ >> 8) & 0xff;
+      _value = ((dev_caps_ >> 8) & 0x3f) + 1;
       break;
     case VX_CAPS_NUM_WARPS:
-      _value = (dev_caps_ >> 16) & 0xff;
+      _value = ((dev_caps_ >> 14) & 0x3f) + 1;
       break;
-    case VX_CAPS_NUM_CORES:
-      _value = (dev_caps_ >> 24) & 0xffff;
+    case VX_CAPS_NUM_CORES: {
+      uint32_t sockets_per_cluster = ((dev_caps_ >> 20) & 0xf) + 1;
+      uint32_t num_clusters = ((dev_caps_ >> 24) & 0xf) + 1;
+      uint32_t socket_size  = ((dev_caps_ >> 28) & 0xf) + 1;
+      _value = num_clusters * sockets_per_cluster * socket_size;
+    } break;
+    case VX_CAPS_NUM_CLUSTERS:
+      _value = ((dev_caps_ >> 24) & 0xf) + 1;
+      break;
+    case VX_CAPS_SOCKET_SIZE:
+      _value = ((dev_caps_ >> 28) & 0xf) + 1;
+      break;
+    case VX_CAPS_ISSUE_WIDTH:
+      _value = ((dev_caps_ >> 32) & 0xf) + 1;
       break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
@@ -224,16 +236,22 @@ public:
       _value = global_mem_size_;
       break;
     case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = 1ull << ((dev_caps_ >> 40) & 0xff);
+      _value = 1ull << ((dev_caps_ >> 36) & 0xff);
       break;
     case VX_CAPS_ISA_FLAGS:
       _value = isa_caps_;
       break;
     case VX_CAPS_NUM_MEM_BANKS:
-      _value = 1 << ((dev_caps_ >> 48) & 0x7);
+      _value = 1 << ((dev_caps_ >> 44) & 0x7);
       break;
     case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (20 + ((dev_caps_ >> 51) & 0x1f));
+      _value = 1ull << (20 + ((dev_caps_ >> 47) & 0x1f));
+      break;
+    case VX_CAPS_CLOCK_RATE:
+      _value = PLATFORM_CLOCK_RATE;
+      break;
+    case VX_CAPS_PEAK_MEM_BW:
+      _value = PLATFORM_MEMORY_PEAK_BW;
       break;
     default:
       fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);

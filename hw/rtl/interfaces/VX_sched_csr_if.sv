@@ -16,31 +16,22 @@
 interface VX_sched_csr_if import VX_gpu_pkg::*; ();
 
     wire [PERF_CTR_BITS-1:0]        cycles;
+    wire [PERF_CTR_BITS-1:0]        instret;
     wire [`NUM_WARPS-1:0]           active_warps;
     wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
-    wire                            alm_empty;
-    wire [NW_WIDTH-1:0]             alm_empty_wid;
-    wire                            unlock_warp;
-    wire [NW_WIDTH-1:0]             unlock_wid;
 
     modport master (
         output cycles,
+        output instret,
         output active_warps,
-        output thread_masks,
-        input  alm_empty_wid,
-        output alm_empty,
-        input  unlock_wid,
-        input  unlock_warp
+        output thread_masks
     );
 
     modport slave (
         input  cycles,
+        input  instret,
         input  active_warps,
-        input  thread_masks,
-        output alm_empty_wid,
-        input  alm_empty,
-        output unlock_wid,
-        output unlock_warp
+        input  thread_masks
     );
 
 endinterface

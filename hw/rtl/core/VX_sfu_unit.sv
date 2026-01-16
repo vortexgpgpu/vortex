@@ -34,7 +34,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_fpu_csr_if.slave     fpu_csr_if [`NUM_FPU_BLOCKS],
 `endif
 
-    VX_commit_csr_if.slave  commit_csr_if,
     VX_sched_csr_if.slave   sched_csr_if,
 
     // Outputs
@@ -132,7 +131,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     `endif
 
         .sched_csr_if   (sched_csr_if),
-        .commit_csr_if  (commit_csr_if),
         .result_if      (pe_result_if[PE_IDX_CSRS])
     );
 

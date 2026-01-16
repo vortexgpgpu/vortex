@@ -51,7 +51,7 @@ public:
 		});
 		for (uint32_t i = 0; i < config.num_reqs; ++i) {
 			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
-			mem_xbar_->RspIn.at(i).bind(&simobject->Outputs.at(i));
+			mem_xbar_->RspOut.at(i).bind(&simobject->Outputs.at(i));
 		}
 	}
 
@@ -81,14 +81,15 @@ public:
 			if (xbar_req_out.empty())
 				continue;
 
-			auto& bank_req = xbar_req_out.front();
-			DT(4, simobject_->name() << "-bank" << i << "-req : " << bank_req);
-
+			auto& bank_req = xbar_req_out.peek();
 			if (!bank_req.write || config_.write_reponse) {
 				// send xbar response
 				MemRsp bank_rsp{bank_req.tag, bank_req.cid, bank_req.uuid};
-				mem_xbar_->RspOut.at(i).push(bank_rsp);
+				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))
+					continue; // stall
 			}
+
+			DT(4, simobject_->name() << "-bank" << i << "-req : " << bank_req);
 
 			// update perf counters
 			perf_stats_.reads += !bank_req.write;

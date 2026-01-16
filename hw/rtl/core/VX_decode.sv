@@ -38,6 +38,8 @@ module VX_decode import VX_gpu_pkg::*; #(
     op_args_t op_args;
     reg [NUM_SRC_OPDS:0][NUM_REGS_BITS-1:0] reg_ids;
     reg [NUM_SRC_OPDS:0] use_regs;
+    reg [NUM_XREGS-1:0] rd_xregs;
+    reg [NUM_XREGS-1:0] wr_xregs;
     reg is_wstall;
 
     wire [31:0] instr = fetch_if.data.instr;
@@ -56,8 +58,28 @@ module VX_decode import VX_gpu_pkg::*; #(
     `UNUSED_VAR (funct2)
     `UNUSED_VAR (funct5)
 
-    wire is_itype_sh = funct3[0] && ~funct3[1];
-    wire is_fpu_csr = (u_12 <= `VX_CSR_FCSR);
+    wire is_itype_sh   = funct3[0] && ~funct3[1];
+    wire is_csr_fflags = (u_12 == `VX_CSR_FFLAGS);
+    wire is_csr_frm    = (u_12 == `VX_CSR_FRM);
+    wire is_csr_fcsr   = (u_12 == `VX_CSR_FCSR);
+    wire frm_is_dyn    = (funct3 == 3'b111);
+
+    reg csr_write;
+    always @(*) begin
+        csr_write = 1'b0;
+        unique case (funct3)
+            3'b001, // CSRRW
+            3'b101: // CSRRWI
+                csr_write = 1'b1;
+            3'b010, // CSRRS
+            3'b011: // CSRRC
+                csr_write = (rs1 != 0);
+            3'b110, // CSRRSI
+            3'b111: // CSRRCI
+                csr_write = (rs1 != 0);
+            default: csr_write = 1'b0;
+        endcase
+    end
 
     wire [19:0] ui_imm  = instr[31:12];
 `ifdef XLEN_64
@@ -132,6 +154,8 @@ module VX_decode import VX_gpu_pkg::*; #(
         op_args   = 'x;
         reg_ids   = 'x;
         use_regs  = '0;
+        rd_xregs  = '0;
+        wr_xregs  = '0;
         is_wstall = 0;
 
         case (opcode)
@@ -281,7 +305,10 @@ module VX_decode import VX_gpu_pkg::*; #(
                     op_args.csr.addr = u_12;
                     op_args.csr.use_imm = funct3[2];
                     op_args.csr.imm5 = rs1;
-                    is_wstall = is_fpu_csr; // only stall for FPU CSRs
+                    rd_xregs[XREG_FFLAGS] = is_csr_fcsr || is_csr_fflags;
+                    rd_xregs[XREG_FRM]    = is_csr_fcsr || is_csr_frm;
+                    wr_xregs[XREG_FFLAGS] = csr_write && (is_csr_fcsr || is_csr_fflags);
+                    wr_xregs[XREG_FRM]    = csr_write && (is_csr_fcsr || is_csr_frm);
                     `USED_IREG (rd);
                     `USED_REG (REG_TYPE_I, rs1, ~funct3[2]);
                 end else begin
@@ -339,6 +366,11 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.fpu.frm = funct3;
                 op_args.fpu.fmt[0] = funct2[0]; // float/double
                 op_args.fpu.fmt[1] = opcode[3] ^ opcode[2]; // SUB
+
+                // track FCSR dependencies
+                rd_xregs[XREG_FRM] = frm_is_dyn;
+                wr_xregs[XREG_FFLAGS] = 1'b1;
+
                 `USED_FREG (rd);
                 `USED_FREG (rs1);
                 `USED_FREG (rs2);
@@ -349,7 +381,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.fpu.frm = funct3;
                 op_args.fpu.fmt[0] = funct2[0]; // float/double
                 op_args.fpu.fmt[1] = rs2[1]; // CVT W/L
-
+                // Most FP operations may set exception flags
+                wr_xregs[XREG_FFLAGS] = 1'b1;
                 case (funct5)
                     5'b00000, // FADD
                     5'b00001, // FSUB
@@ -357,6 +390,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     begin
                         op_type = INST_OP_BITS'({2'b00, 1'b0, funct5[1]});
                         op_args.fpu.fmt[1] = funct5[0]; // SUB
+                        rd_xregs[XREG_FRM] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -365,6 +399,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         // NCP: FSGNJ=0, FSGNJN=1, FSGNJX=2
                         op_type = INST_OP_BITS'(INST_FPU_MISC);
                         op_args.fpu.frm = INST_FRM_BITS'(funct3[1:0]);
+                        wr_xregs[XREG_FFLAGS] = 1'b0;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -381,6 +416,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b01000: begin
                         // FCVT.S.D, FCVT.D.S
                         op_type = INST_OP_BITS'(INST_FPU_F2F);
+                        rd_xregs[XREG_FRM] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                     end
@@ -388,6 +424,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b00011: begin
                         // FDIV
                         op_type = INST_OP_BITS'(INST_FPU_DIV);
+                        rd_xregs[XREG_FRM] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -395,6 +432,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b01011: begin
                         // FSQRT
                         op_type = INST_OP_BITS'(INST_FPU_SQRT);
+                        rd_xregs[XREG_FRM] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                     end
@@ -408,12 +446,14 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b11000: begin
                         // FCVT.W.X, FCVT.WU.X
                         op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_F2U) : INST_OP_BITS'(INST_FPU_F2I);
+                        rd_xregs[XREG_FRM] = frm_is_dyn;
                         `USED_IREG (rd);
                         `USED_FREG (rs1);
                     end
                     5'b11010: begin
                         // FCVT.X.W, FCVT.X.WU
                         op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_U2F) : INST_OP_BITS'(INST_FPU_I2F);
+                        rd_xregs[XREG_FRM] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_IREG (rs1);
                     end
@@ -427,6 +467,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                             op_type = INST_OP_BITS'(INST_FPU_MISC);
                             op_args.fpu.frm = INST_FRM_BITS'(4);
                         end
+                        wr_xregs[XREG_FFLAGS] = 1'b0;
                         `USED_IREG (rd);
                         `USED_FREG (rs1);
                     end
@@ -434,6 +475,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         // NCP: FMV.W.X=5
                         op_type = INST_OP_BITS'(INST_FPU_MISC);
                         op_args.fpu.frm = INST_FRM_BITS'(5);
+                        wr_xregs[XREG_FFLAGS] = 1'b0;
                         `USED_FREG (rd);
                         `USED_IREG (rs1);
                     end
@@ -516,7 +558,7 @@ module VX_decode import VX_gpu_pkg::*; #(
         endcase
     end
 
-    // disable write to integer register r0
+    // disable writes to x0
     wire wb = use_regs[RV_RD] && (reg_ids[RV_RD] != 0);
 
     VX_elastic_buffer #(
@@ -527,8 +569,8 @@ module VX_decode import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                use_regs[3:1],          reg_ids[RV_RD],    reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
-        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
+        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
+        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
     );
@@ -543,6 +585,27 @@ module VX_decode import VX_gpu_pkg::*; #(
 
 `ifndef L1_ENABLE
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
+`endif
+
+`ifdef DBG_TRACE_PIPELINE
+    always @(posedge clk) begin
+        if (decode_if.valid && decode_if.ready) begin
+            `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, to_fullPC(decode_if.data.PC)))
+            VX_trace_pkg::trace_ex_type(1, decode_if.data.ex_type);
+            `TRACE(1, (", op="))
+            VX_trace_pkg::trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
+            `TRACE(1, (", tmask=%b, wb=%b, rd_xregs=%b, wr_xregs=%b, used_rs=%b, rd=", decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs))
+            VX_trace_pkg::trace_reg_idx(1, decode_if.data.rd);
+            `TRACE(1, (", rs1="))
+            VX_trace_pkg::trace_reg_idx(1, decode_if.data.rs1);
+            `TRACE(1, (", rs2="))
+            VX_trace_pkg::trace_reg_idx(1, decode_if.data.rs2);
+            `TRACE(1, (", rs3="))
+            VX_trace_pkg::trace_reg_idx(1, decode_if.data.rs3);
+            VX_trace_pkg::trace_op_args(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
+            `TRACE(1, (" (#%0d)\n", decode_if.data.uuid))
+        end
+    end
 `endif
 
 endmodule

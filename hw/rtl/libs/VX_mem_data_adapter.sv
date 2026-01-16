@@ -172,7 +172,7 @@ module VX_mem_data_adapter #(
         end
         assign mem_rsp_tag_in_x = (rsp_ctr != 0) ? mem_rsp_tag_in_r : mem_rsp_tag_out;
         `RUNTIME_ASSERT(!mem_rsp_in_fire || (mem_rsp_tag_in_x == mem_rsp_tag_out),
-            ("%t: *** out-of-order memory reponse! cur=0x%0h, expected=0x%0h", $time, mem_rsp_tag_in_x, mem_rsp_tag_out))
+            ("out-of-order memory reponse! cur=0x%0h, expected=0x%0h", mem_rsp_tag_in_x, mem_rsp_tag_out))
 
         wire [SRC_ADDR_WIDTH+D-1:0] mem_req_addr_in_qual = {mem_req_addr_in, req_ctr};
 

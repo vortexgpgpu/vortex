@@ -21,11 +21,11 @@ LocalMemSwitch::LocalMemSwitch(
   uint32_t delay
 ) : SimObject<LocalMemSwitch>(ctx, name)
   , ReqIn(this)
-  , RspIn(this)
-  , ReqLmem(this)
-  , RspLmem(this)
-  , ReqDC(this)
-  , RspDC(this)
+  , RspOut(this)
+  , ReqOutLmem(this)
+  , RspInLmem(this)
+  , ReqOutDC(this)
+  , RspInDC(this)
   , delay_(delay)
 {}
 
@@ -33,22 +33,24 @@ void LocalMemSwitch::reset() {}
 
 void LocalMemSwitch::tick() {
   // process outgoing responses
-  if (!RspLmem.empty()) {
-    auto& out_rsp = RspLmem.front();
-    DT(4, this->name() << "-lmem-rsp: " << out_rsp);
-    RspIn.push(out_rsp, 1);
-    RspLmem.pop();
+  if (!RspInLmem.empty()) {
+    auto& out_rsp = RspInLmem.peek();
+    if (RspOut.try_send(out_rsp, 1)) {
+      DT(4, this->name() << "-lmem-rsp: " << out_rsp);
+      RspInLmem.pop();
+    }
   }
-  if (!RspDC.empty()) {
-    auto& out_rsp = RspDC.front();
-    DT(4, this->name() << "-dc-rsp: " << out_rsp);
-    RspIn.push(out_rsp, 1);
-    RspDC.pop();
+  if (!RspInDC.empty()) {
+    auto& out_rsp = RspInDC.peek();
+    if (RspOut.try_send(out_rsp, 1)) {
+      DT(4, this->name() << "-dc-rsp: " << out_rsp);
+      RspInDC.pop();
+    }
   }
 
   // process incoming requests
   if (!ReqIn.empty()) {
-    auto& in_req = ReqIn.front();
+    auto& in_req = ReqIn.peek();
 
     LsuReq out_dc_req(in_req.mask.size());
     out_dc_req.write = in_req.write;
@@ -71,13 +73,24 @@ void LocalMemSwitch::tick() {
       }
     }
 
-    if (!out_dc_req.mask.none()) {
-      ReqDC.push(out_dc_req, delay_);
+    bool send_to_dc = !out_dc_req.mask.none();
+    bool send_to_lmem = !out_lmem_req.mask.none();
+
+    // check DC backpressure
+    if (send_to_dc && ReqOutDC.full())
+      return; // stall
+
+    // check LMem backpressure
+    if (send_to_lmem && ReqOutLmem.full())
+      return; // stall
+
+    if (send_to_dc) {
+      ReqOutDC.send(out_dc_req, delay_);
       DT(4, this->name() << "-dc-req: " << out_dc_req);
     }
 
-    if (!out_lmem_req.mask.none()) {
-      ReqLmem.push(out_lmem_req, delay_);
+    if (send_to_lmem) {
+      ReqOutLmem.send(out_lmem_req, delay_);
       DT(4, this->name() << "-lmem-req: " << out_lmem_req);
     }
     ReqIn.pop();
@@ -93,69 +106,102 @@ LsuMemAdapter::LsuMemAdapter(
   uint32_t delay
 ) : SimObject<LsuMemAdapter>(ctx, name)
   , ReqIn(this)
-  , RspIn(this)
+  , RspOut(this)
   , ReqOut(num_inputs, this)
-  , RspOut(num_inputs, this)
+  , RspIn(num_inputs, this)
   , delay_(delay)
-{}
+  , pending_mask_(num_inputs)
+{
+  assert(num_inputs > 0);
+  if (num_inputs == 1) {
+    // bypass mode
+    ReqIn.bind(&ReqOut.at(0), [](const LsuReq& req) {
+      return MemReq{ req.addrs.at(0), req.write, AddrType::Global, req.tag, req.cid, req.uuid };
+    });
+    RspIn.at(0).bind(&RspOut, [](const MemRsp& rsp) {
+      LsuRsp lsuRsp(1);
+      lsuRsp.mask.set(0);
+      lsuRsp.tag = rsp.tag;
+      lsuRsp.cid = rsp.cid;
+      lsuRsp.uuid = rsp.uuid;
+      return lsuRsp;
+    });
+  }
+}
 
 void LsuMemAdapter::reset() {}
 
 void LsuMemAdapter::tick() {
   uint32_t input_size = ReqOut.size();
+  if (input_size == 1)
+    return;
 
   // process outgoing responses
   for (uint32_t i = 0; i < input_size; ++i) {
-    if (RspOut.at(i).empty())
+    if (RspIn.at(i).empty())
       continue;
-    auto& out_rsp = RspOut.at(i).front();
-    DT(4, this->name() << "-rsp" << i << ": " << out_rsp);
+    auto& rsp_in = RspIn.at(i).peek();
 
     // build memory response
-    LsuRsp in_rsp(input_size);
-    in_rsp.mask.set(i);
-    in_rsp.tag = out_rsp.tag;
-    in_rsp.cid = out_rsp.cid;
-    in_rsp.uuid = out_rsp.uuid;
+    LsuRsp out_rsp(input_size);
+    out_rsp.mask.set(i);
+    out_rsp.tag = rsp_in.tag;
+    out_rsp.cid = rsp_in.cid;
+    out_rsp.uuid = rsp_in.uuid;
 
-    // include other responses with the same tag
+    // merge other responses with the same tag
     for (uint32_t j = i + 1; j < input_size; ++j) {
-      if (RspOut.at(j).empty())
+      if (RspIn.at(j).empty())
         continue;
-      auto& other_rsp = RspOut.at(j).front();
-      if (out_rsp.tag == other_rsp.tag) {
-        in_rsp.mask.set(j);
-        RspOut.at(j).pop();
+      auto& other_rsp = RspIn.at(j).peek();
+      if (rsp_in.tag == other_rsp.tag) {
+        out_rsp.mask.set(j);
+        DT(4, this->name() << "-rsp" << j << ": " << other_rsp);
+        RspIn.at(j).pop();
       }
     }
 
     // send memory response
-    RspIn.push(in_rsp, 1);
+    if (RspOut.try_send(out_rsp, 1)) {
+      DT(4, this->name() << "-rsp" << i << ": " << rsp_in);
+      // remove input
+      RspIn.at(i).pop();
+    }
 
-    // remove input
-    RspOut.at(i).pop();
     break;
   }
 
   // process incoming requests
   if (!ReqIn.empty()) {
-    auto& in_req = ReqIn.front();
+    auto& in_req = ReqIn.peek();
     assert(in_req.mask.size() == input_size);
+
+    if (pending_mask_.none()) {
+      pending_mask_ = in_req.mask;
+      assert(!pending_mask_.none()); // should not be empty
+    }
+
     for (uint32_t i = 0; i < input_size; ++i) {
-      if (in_req.mask.test(i)) {
-        // build memory request
-        MemReq out_req;
-        out_req.write = in_req.write;
-        out_req.addr  = in_req.addrs.at(i);
-        out_req.type  = get_addr_type(in_req.addrs.at(i));
-        out_req.tag   = in_req.tag;
-        out_req.cid   = in_req.cid;
-        out_req.uuid  = in_req.uuid;
-        // send memory request
-        ReqOut.at(i).push(out_req, delay_);
+      if (!pending_mask_.test(i))
+        continue;
+
+      MemReq out_req;
+      out_req.write = in_req.write;
+      out_req.addr  = in_req.addrs.at(i);
+      out_req.type  = get_addr_type(in_req.addrs.at(i));
+      out_req.tag   = in_req.tag;
+      out_req.cid   = in_req.cid;
+      out_req.uuid  = in_req.uuid;
+
+      if (ReqOut.at(i).try_send(out_req, delay_)) {
         DT(4, this->name() << "-req" << i << ": " << out_req);
+        pending_mask_.reset(i); // mark lane done
       }
     }
-    ReqIn.pop();
+
+    // Pop only when all required lanes have been sent
+    if (pending_mask_.none()) {
+      ReqIn.pop();
+    }
   }
 }

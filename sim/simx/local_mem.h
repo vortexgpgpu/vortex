@@ -29,15 +29,9 @@ public:
   };
 
   struct PerfStats {
-    uint64_t reads;
-    uint64_t writes;
-    uint64_t bank_stalls;
-
-    PerfStats()
-      : reads(0)
-      , writes(0)
-      , bank_stalls(0)
-    {}
+    uint64_t reads = 0;
+    uint64_t writes = 0;
+    uint64_t bank_stalls = 0;
 
     PerfStats& operator+=(const PerfStats& rhs) {
       this->reads += rhs.reads;
@@ -47,8 +41,8 @@ public:
     }
   };
 
-  std::vector<SimPort<MemReq>> Inputs;
-  std::vector<SimPort<MemRsp>> Outputs;
+  std::vector<SimChannel<MemReq>> Inputs;
+  std::vector<SimChannel<MemRsp>> Outputs;
 
   LocalMem(const SimContext& ctx, const char* name, const Config& config);
   virtual ~LocalMem();

@@ -28,9 +28,9 @@ public:
   struct PerfStats {
     CacheSim::PerfStats l3cache;
     MemSim::PerfStats memsim;
-    uint64_t mem_reads;
-    uint64_t mem_writes;
-    uint64_t mem_latency;
+    uint64_t mem_reads = 0;
+    uint64_t mem_writes = 0;
+    uint64_t mem_latency = 0;
   };
 
   ProcessorImpl(const Arch& arch);

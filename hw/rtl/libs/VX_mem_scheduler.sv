@@ -99,7 +99,7 @@ module VX_mem_scheduler #(
     `STATIC_ASSERT ((MEM_CHANNELS <= CORE_REQS), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(CORE_REQS * WORD_SIZE, LINE_SIZE), ("invalid parameter"))
     `STATIC_ASSERT ((TAG_WIDTH >= UUID_WIDTH), ("invalid parameter"))
-    `RUNTIME_ASSERT((~core_req_valid || core_req_mask != 0), ("%t: invalid request mask", $time))
+    `RUNTIME_ASSERT((~core_req_valid || core_req_mask != 0), ("invalid request mask"))
 
     wire                            ibuf_push;
     wire                            ibuf_pop;
@@ -578,8 +578,7 @@ module VX_mem_scheduler #(
         for (integer i = 0; i < CORE_QUEUE_SIZE; ++i) begin
             if (pending_reqs_valid[i]) begin
                 `ASSERT(($time - pending_reqs_time[i][63:0]) < STALL_TIMEOUT,
-                    ("%t: *** %s response timeout: tag=0x%0h (#%0d)",
-                        $time, INSTANCE_ID, pending_reqs_time[i][64 +: TAG_ID_WIDTH], pending_reqs_time[i][64+TAG_ID_WIDTH +: `UP(UUID_WIDTH)]));
+                    ("response timeout: tag=0x%0h (#%0d)", pending_reqs_time[i][64 +: TAG_ID_WIDTH], pending_reqs_time[i][64+TAG_ID_WIDTH +: `UP(UUID_WIDTH)]));
             end
         end
     end
@@ -589,7 +588,7 @@ module VX_mem_scheduler #(
 
 `ifdef DBG_TRACE_MEM
     import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
-    
+
     wire [`UP(UUID_WIDTH)-1:0] mem_req_dbg_uuid;
     wire [`UP(UUID_WIDTH)-1:0] mem_rsp_dbg_uuid;
     wire [`UP(UUID_WIDTH)-1:0] rsp_dbg_uuid;

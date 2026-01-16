@@ -28,17 +28,10 @@ public:
   };
 
   struct PerfStats {
-    uint64_t reads;
-    uint64_t writes;
-    uint64_t latency;
-    uint64_t stalls;
-
-    PerfStats()
-      : reads(0)
-      , writes(0)
-      , latency(0)
-      , stalls(0)
-    {}
+    uint64_t reads = 0;
+    uint64_t writes = 0;
+    uint64_t latency = 0;
+    uint64_t stalls = 0;
 
     PerfStats& operator+=(const PerfStats& rhs) {
       this->reads   += rhs.reads;
@@ -49,8 +42,8 @@ public:
     }
   };
 
-  std::vector<SimPort<instr_trace_t*>> Inputs;
-  std::vector<SimPort<instr_trace_t*>> Outputs;
+  std::vector<SimChannel<instr_trace_t*>> Inputs;
+  std::vector<SimChannel<instr_trace_t*>> Outputs;
 
   VecUnit(const SimContext& ctx, const char* name, const Arch& arch, Core* core);
   ~VecUnit();

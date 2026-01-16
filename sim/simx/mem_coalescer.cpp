@@ -25,9 +25,9 @@ MemCoalescer::MemCoalescer(
   uint32_t delay
 ) : SimObject<MemCoalescer>(ctx, name)
   , ReqIn(this)
-  , RspIn(this)
-  , ReqOut(this)
   , RspOut(this)
+  , ReqOut(this)
+  , RspIn(this)
   , input_size_(input_size)
   , output_size_(output_size)
   , output_ratio_(input_size / output_size)
@@ -43,14 +43,13 @@ void MemCoalescer::reset() {
 
 void MemCoalescer::tick() {
   // process outgoing responses
-  if (!RspOut.empty()) {
-    auto& out_rsp = RspOut.front();
-    DT(4, this->name() << "-mem-rsp: " << out_rsp);
-    auto& entry = pending_rd_reqs_.at(out_rsp.tag);
+  if (!RspIn.empty()) {
+    auto& rsp_in = RspIn.peek();
+    auto& entry = pending_rd_reqs_.at(rsp_in.tag);
 
     BitVector<> rsp_mask(input_size_);
     for (uint32_t o = 0; o < output_size_; ++o) {
-      if (!out_rsp.mask.test(o))
+      if (!rsp_in.mask.test(o))
         continue;
       for (uint32_t r = 0; r < output_ratio_; ++r) {
         uint32_t i = o * output_ratio_ + r;
@@ -60,30 +59,36 @@ void MemCoalescer::tick() {
     }
 
     // build memory response
-    LsuRsp in_rsp(input_size_);
-    in_rsp.mask = rsp_mask;
-    in_rsp.tag = entry.tag;
-    in_rsp.cid = out_rsp.cid;
-    in_rsp.uuid = out_rsp.uuid;
+    LsuRsp out_rsp(input_size_);
+    out_rsp.mask = rsp_mask;
+    out_rsp.tag = entry.tag;
+    out_rsp.cid = rsp_in.cid;
+    out_rsp.uuid = rsp_in.uuid;
 
     // send memory response
-    RspIn.push(in_rsp, 1);
+    if (RspOut.try_send(out_rsp, 1)) {
+      DT(4, this->name() << "-mem-rsp: " << rsp_in);
 
-    // track remaining responses
-    assert(!entry.mask.none());
-		entry.mask &= ~rsp_mask;
-		if (entry.mask.none()) {
-      // whole response received, release tag
-			pending_rd_reqs_.release(out_rsp.tag);
-		}
-    RspOut.pop();
+      // track remaining responses
+      assert(!entry.mask.none());
+      entry.mask &= ~rsp_mask;
+      if (entry.mask.none()) {
+        // whole response received, release tag
+        pending_rd_reqs_.release(rsp_in.tag);
+      }
+      RspIn.pop();
+    }
   }
 
   // process incoming requests
   if (ReqIn.empty())
     return;
 
-  auto& in_req = ReqIn.front();
+  // check request output backpressure
+  if (ReqOut.full())
+    return;
+
+  auto& in_req = ReqIn.peek();
   assert(in_req.mask.size() == input_size_);
   assert(!in_req.mask.none());
 
@@ -144,7 +149,7 @@ void MemCoalescer::tick() {
   out_req.uuid = in_req.uuid;
 
   // send memory request
-  ReqOut.push(out_req, delay_);
+  ReqOut.send(out_req, delay_);
   DT(4, this->name() << "-mem-req: coalesced=" << cur_mask.count() << ", " << out_req);
 
   // track partial responses

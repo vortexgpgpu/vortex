@@ -32,7 +32,6 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_fpu_csr_if.slave         fpu_csr_if [`NUM_FPU_BLOCKS],
 `endif
 
-    VX_commit_csr_if.slave      commit_csr_if,
     VX_sched_csr_if.slave       sched_csr_if,
     VX_execute_if.slave         execute_if,
     VX_result_if.master         result_if
@@ -53,14 +52,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
     wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm5;
 
-    wire is_fpu_csr = (csr_addr <= `VX_CSR_FCSR);
-
-    // wait for all pending instructions for current warp to complete
-    assign sched_csr_if.alm_empty_wid = execute_if.data.header.wid;
-    wire no_pending_instr = sched_csr_if.alm_empty || ~is_fpu_csr;
-
-    wire csr_req_valid = execute_if.valid && no_pending_instr;
-    assign execute_if.ready = csr_req_ready && no_pending_instr;
+    wire csr_req_valid = execute_if.valid;
+    assign execute_if.ready = csr_req_ready;
 
     wire [NUM_LANES-1:0][`XLEN-1:0] rs1_data;
     `UNUSED_VAR (rs1_data)
@@ -84,8 +77,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .pipeline_perf  (pipeline_perf),
     `endif
 
-        .commit_csr_if  (commit_csr_if),
         .cycles         (sched_csr_if.cycles),
+        .instret        (sched_csr_if.instret),
         .active_warps   (sched_csr_if.active_warps),
         .thread_masks   (sched_csr_if.thread_masks),
 
@@ -154,10 +147,6 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
             end
         endcase
     end
-
-    // unlock the warp
-    assign sched_csr_if.unlock_warp = csr_req_valid && csr_req_ready && execute_if.data.header.eop && is_fpu_csr;
-    assign sched_csr_if.unlock_wid = execute_if.data.header.wid;
 
     VX_elastic_buffer #(
         .DATAW ($bits(sfu_result_t)),

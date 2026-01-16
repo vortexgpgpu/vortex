@@ -27,16 +27,21 @@ typedef void* vx_device_h;
 typedef void* vx_buffer_h;
 
 // device caps ids
-#define VX_CAPS_VERSION             0x0
-#define VX_CAPS_NUM_THREADS         0x1
-#define VX_CAPS_NUM_WARPS           0x2
-#define VX_CAPS_NUM_CORES           0x3
-#define VX_CAPS_CACHE_LINE_SIZE     0x4
-#define VX_CAPS_GLOBAL_MEM_SIZE     0x5
-#define VX_CAPS_LOCAL_MEM_SIZE      0x6
-#define VX_CAPS_ISA_FLAGS           0x7
-#define VX_CAPS_NUM_MEM_BANKS       0x8
-#define VX_CAPS_MEM_BANK_SIZE       0x9
+#define VX_CAPS_VERSION             0x0   // implementation version
+#define VX_CAPS_NUM_THREADS         0x1   // number of threads per warp
+#define VX_CAPS_NUM_WARPS           0x2   // number of warps per core
+#define VX_CAPS_NUM_CORES           0x3   // number of total cores
+#define VX_CAPS_NUM_CLUSTERS        0x4   // number of clusters
+#define VX_CAPS_SOCKET_SIZE         0x5   // number of cores per socket
+#define VX_CAPS_ISSUE_WIDTH         0x6   // issue width per core
+#define VX_CAPS_CACHE_LINE_SIZE     0x7   // cache line size in bytes
+#define VX_CAPS_GLOBAL_MEM_SIZE     0x8   // global memory size in bytes
+#define VX_CAPS_LOCAL_MEM_SIZE      0x9   // local memory size per core in bytes
+#define VX_CAPS_ISA_FLAGS           0x10   // device ISA flags
+#define VX_CAPS_NUM_MEM_BANKS       0x11  // number of memory banks
+#define VX_CAPS_MEM_BANK_SIZE       0x12  // memory bank size in bytes
+#define VX_CAPS_CLOCK_RATE          0x13  // pipeline clock rate in Hz
+#define VX_CAPS_PEAK_MEM_BW         0x14  // peak memory bandwidth in megabytes per second
 
 // device isa flags
 #define VX_ISA_STD_A                (1ull << ISA_STD_A)

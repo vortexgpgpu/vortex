@@ -55,6 +55,10 @@ package VX_gpu_pkg;
 
 	localparam NUM_REGS_BITS = `CLOG2(NUM_REGS);
 
+    localparam XREG_FFLAGS = 0;
+    localparam XREG_FRM    = 1;
+    localparam NUM_XREGS   = 2;
+
 	localparam DV_STACK_SIZE = `UP(`NUM_THREADS-1);
 	localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
 
@@ -400,6 +404,7 @@ package VX_gpu_pkg;
     /////////////////////////////// Issue parameters //////////////////////////
 
     localparam ISSUE_ISW_BITS = `CLOG2(`ISSUE_WIDTH);
+    localparam ISSUE_ISW_SIZEW = `CLOG2(`ISSUE_WIDTH + 1);
     localparam ISSUE_ISW_W = `UP(ISSUE_ISW_BITS);
     localparam PER_ISSUE_WARPS = `NUM_WARPS / `ISSUE_WIDTH;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
@@ -580,6 +585,8 @@ package VX_gpu_pkg;
         logic [INST_OP_BITS-1:0]    op_type;
         op_args_t                   op_args;
         logic                       wb;
+        logic [NUM_XREGS-1:0]       rd_xregs;
+        logic [NUM_XREGS-1:0]       wr_xregs;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
         logic [NUM_REGS_BITS-1:0]   rd;
         logic [NUM_REGS_BITS-1:0]   rs1;
@@ -595,6 +602,8 @@ package VX_gpu_pkg;
         logic [INST_OP_BITS-1:0]    op_type;
         op_args_t                   op_args;
         logic                       wb;
+        logic [NUM_XREGS-1:0]       rd_xregs;
+        logic [NUM_XREGS-1:0]       wr_xregs;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
         logic [NUM_REGS_BITS-1:0]   rd;
         logic [NUM_REGS_BITS-1:0]   rs1;
@@ -611,6 +620,7 @@ package VX_gpu_pkg;
         logic [INST_OP_BITS-1:0]    op_type;
         op_args_t                   op_args;
         logic                       wb;
+        logic [NUM_XREGS-1:0]       wr_xregs;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
         logic [NUM_REGS_BITS-1:0]   rd;
         logic [NUM_REGS_BITS-1:0]   rs1;
@@ -628,6 +638,7 @@ package VX_gpu_pkg;
         logic [INST_OP_BITS-1:0]            op_type;
         op_args_t                           op_args;
         logic                               wb;
+        logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
@@ -646,6 +657,7 @@ package VX_gpu_pkg;
         logic [INST_ALU_BITS-1:0]           op_type;
         op_args_t                           op_args;
         logic                               wb;
+        logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
@@ -661,6 +673,7 @@ package VX_gpu_pkg;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
         logic                               wb;
+        logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  data;
         logic                               sop;
@@ -673,6 +686,8 @@ package VX_gpu_pkg;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
+        logic                               wb;
+        logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  data;
         logic                               sop;
@@ -722,15 +737,24 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] idles;
-        logic [PERF_CTR_BITS-1:0] stalls;
+        logic [PERF_CTR_BITS-1:0] active_warps;
+        logic [PERF_CTR_BITS-1:0] stalled_warps;
+        logic [PERF_CTR_BITS-1:0] issued_warps;
+        logic [PERF_CTR_BITS-1:0] issued_threads;
+        logic [PERF_CTR_BITS-1:0] branches;
+        logic [PERF_CTR_BITS-1:0] divergence;
     } sched_perf_t;
+
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] stalls;
+    } fetch_perf_t;
 
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] ibf_stalls;
         logic [PERF_CTR_BITS-1:0] scb_stalls;
         logic [PERF_CTR_BITS-1:0] opd_stalls;
-        logic [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] units_uses;
-        logic [NUM_SFU_UNITS-1:0][PERF_CTR_BITS-1:0] sfu_uses;
+        logic [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] dispatch_stalls;
+        logic [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] dispatch_instrs;
     } issue_perf_t;
 
     typedef struct packed {
@@ -745,6 +769,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         sched_perf_t              sched;
+        fetch_perf_t              fetch;
         issue_perf_t              issue;
         logic [PERF_CTR_BITS-1:0] ifetches;
         logic [PERF_CTR_BITS-1:0] loads;

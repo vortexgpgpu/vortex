@@ -37,25 +37,14 @@ public:
 	};
 
 	struct PerfStats {
-		uint64_t reads;
-		uint64_t writes;
-		uint64_t read_misses;
-		uint64_t write_misses;
-		uint64_t evictions;
-		uint64_t bank_stalls;
-		uint64_t mshr_stalls;
-		uint64_t mem_latency;
-
-		PerfStats()
-			: reads(0)
-			, writes(0)
-			, read_misses(0)
-			, write_misses(0)
-			, evictions(0)
-			, bank_stalls(0)
-			, mshr_stalls(0)
-			, mem_latency(0)
-		{}
+		uint64_t reads = 0;
+		uint64_t writes = 0;
+		uint64_t read_misses = 0;
+		uint64_t write_misses = 0;
+		uint64_t evictions = 0;
+		uint64_t bank_stalls = 0;
+		uint64_t mshr_stalls = 0;
+		uint64_t mem_latency = 0;
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->reads += rhs.reads;
@@ -70,10 +59,10 @@ public:
 		}
 	};
 
-	std::vector<SimPort<MemReq>> CoreReqPorts;
-	std::vector<SimPort<MemRsp>> CoreRspPorts;
-	std::vector<SimPort<MemReq>> MemReqPorts;
-	std::vector<SimPort<MemRsp>> MemRspPorts;
+	std::vector<SimChannel<MemReq>> core_req_in;
+	std::vector<SimChannel<MemRsp>> core_rsp_out;
+	std::vector<SimChannel<MemReq>> mem_req_out;
+	std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
 	CacheSim(const SimContext& ctx, const char* name, const Config& config);
 	~CacheSim();

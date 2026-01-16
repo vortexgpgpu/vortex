@@ -45,13 +45,12 @@ import VX_fpu_pkg::*;
     input pipeline_perf_t               pipeline_perf,
 `endif
 
-    VX_commit_csr_if.slave              commit_csr_if,
-
 `ifdef EXT_F_ENABLE
     VX_fpu_csr_if.slave                 fpu_csr_if [`NUM_FPU_BLOCKS],
 `endif
 
     input wire [PERF_CTR_BITS-1:0]      cycles,
+    input wire [PERF_CTR_BITS-1:0]      instret,
     input wire [`NUM_WARPS-1:0]         active_warps,
     input wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks,
 
@@ -69,6 +68,7 @@ import VX_fpu_pkg::*;
     input wire [`XLEN-1:0]              write_data
 );
 
+    `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (write_wid)
     `UNUSED_VAR (write_data)
@@ -147,7 +147,7 @@ import VX_fpu_pkg::*;
                     mscratch <= write_data;
                 end
                 default: begin
-                    `ASSERT(0, ("%t: *** %s invalid CSR write address: %0h (#%0d)", $time, INSTANCE_ID, write_addr, write_uuid));
+                    `ASSERT(0, ("invalid CSR write address: %0h (#%0d)", write_addr, write_uuid));
                 end
             endcase
         end
@@ -185,11 +185,9 @@ import VX_fpu_pkg::*;
             `VX_CSR_LOCAL_MEM_BASE: read_data_ro_w = `XLEN'(`LMEM_BASE_ADDR);
 
             `CSR_READ_64(`VX_CSR_MCYCLE, read_data_ro_w, cycles);
-
+            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_w, instret);
             `VX_CSR_MPM_RESERVED : read_data_ro_w = 'x;
             `VX_CSR_MPM_RESERVED_H : read_data_ro_w = 'x;
-
-            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_w, commit_csr_if.instret);
 
             `VX_CSR_SATP,
             `VX_CSR_MSTATUS,
@@ -212,23 +210,35 @@ import VX_fpu_pkg::*;
                     `VX_DCR_MPM_CLASS_CORE: begin
                         case (read_addr)
                         // PERF: pipeline
-                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ID, read_data_ro_w, pipeline_perf.sched.idles);
-                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ST, read_data_ro_w, pipeline_perf.sched.stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_IBUF_ST, read_data_ro_w, pipeline_perf.issue.ibf_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ST, read_data_ro_w, pipeline_perf.issue.scb_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_OPDS_ST, read_data_ro_w, pipeline_perf.issue.opd_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ALU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_ALU]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_LSU]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_SFU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCHED_IDLE, read_data_ro_w, pipeline_perf.sched.idles);
+                        `CSR_READ_64(`VX_CSR_MPM_ACTIVE_WARPS, read_data_ro_w, pipeline_perf.sched.active_warps);
+                        `CSR_READ_64(`VX_CSR_MPM_STALLED_WARPS, read_data_ro_w, pipeline_perf.sched.stalled_warps);
+                        `CSR_READ_64(`VX_CSR_MPM_ISSUED_WARPS, read_data_ro_w, pipeline_perf.sched.issued_warps);
+                        `CSR_READ_64(`VX_CSR_MPM_ISSUED_THREADS, read_data_ro_w, pipeline_perf.sched.issued_threads);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_FETCH, read_data_ro_w, pipeline_perf.fetch.stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_IBUF, read_data_ro_w, pipeline_perf.issue.ibf_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_SCRB, read_data_ro_w, pipeline_perf.issue.scb_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_OPDS, read_data_ro_w, pipeline_perf.issue.opd_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_ALU, read_data_ro_w, pipeline_perf.issue.dispatch_stalls[EX_ALU]);
+                        `CSR_READ_64(`VX_CSR_MPM_INSTR_ALU, read_data_ro_w, pipeline_perf.issue.dispatch_instrs[EX_ALU]);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_LSU, read_data_ro_w, pipeline_perf.issue.dispatch_stalls[EX_LSU]);
+                        `CSR_READ_64(`VX_CSR_MPM_INSTR_LSU, read_data_ro_w, pipeline_perf.issue.dispatch_instrs[EX_LSU]);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_SFU, read_data_ro_w, pipeline_perf.issue.dispatch_stalls[EX_SFU]);
+                        `CSR_READ_64(`VX_CSR_MPM_INSTR_SFU, read_data_ro_w, pipeline_perf.issue.dispatch_instrs[EX_SFU]);
                     `ifdef EXT_F_ENABLE
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_FPU]);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_FPU, read_data_ro_w, pipeline_perf.issue.dispatch_stalls[EX_FPU]);
+                        `CSR_READ_64(`VX_CSR_MPM_INSTR_FPU, read_data_ro_w, pipeline_perf.issue.dispatch_instrs[EX_FPU]);
                     `endif
                     `ifdef EXT_TCU_ENABLE
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_TCU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_TCU]);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_TCU, read_data_ro_w, pipeline_perf.issue.dispatch_stalls[EX_TCU]);
+                        `CSR_READ_64(`VX_CSR_MPM_INSTR_TCU, read_data_ro_w, pipeline_perf.issue.dispatch_instrs[EX_TCU]);
                     `endif
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_CSRS, read_data_ro_w, pipeline_perf.issue.sfu_uses[SFU_CSRS]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_WCTL, read_data_ro_w, pipeline_perf.issue.sfu_uses[SFU_WCTL]);
+                        // PERF: branches
+                        `CSR_READ_64(`VX_CSR_MPM_BRANCHES, read_data_ro_w, pipeline_perf.sched.branches);
+                        `CSR_READ_64(`VX_CSR_MPM_DIVERGENCE, read_data_ro_w, pipeline_perf.sched.divergence);
                         // PERF: memory
+                        `CSR_READ_64(`VX_CSR_MPM_MEM_READS, read_data_ro_w, sysmem_perf.mem.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_MEM_WRITES, read_data_ro_w, sysmem_perf.mem.writes);
                         `CSR_READ_64(`VX_CSR_MPM_IFETCHES, read_data_ro_w, pipeline_perf.ifetches);
                         `CSR_READ_64(`VX_CSR_MPM_LOADS, read_data_ro_w, pipeline_perf.loads);
                         `CSR_READ_64(`VX_CSR_MPM_STORES, read_data_ro_w, pipeline_perf.stores);
@@ -290,7 +300,7 @@ import VX_fpu_pkg::*;
 
     `UNUSED_VAR (base_dcrs)
 
-    `RUNTIME_ASSERT(~read_enable || read_addr_valid_w, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))
+    `RUNTIME_ASSERT(~read_enable || read_addr_valid_w, ("*** invalid CSR read address: 0x%0h (#%0d)", read_addr, read_uuid))
 
 `ifdef PERF_ENABLE
     `UNUSED_VAR (sysmem_perf.icache);

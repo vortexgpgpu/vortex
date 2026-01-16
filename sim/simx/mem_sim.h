@@ -28,11 +28,7 @@ public:
 	};
 
 	struct PerfStats {
-		uint64_t bank_stalls;
-
-		PerfStats()
-			: bank_stalls(0)
-		{}
+		uint64_t bank_stalls = 0;
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->bank_stalls += rhs.bank_stalls;
@@ -40,8 +36,8 @@ public:
 		}
 	};
 
-	std::vector<SimPort<MemReq>> MemReqPorts;
-	std::vector<SimPort<MemRsp>> MemRspPorts;
+	std::vector<SimChannel<MemReq>> mem_req_in;
+	std::vector<SimChannel<MemRsp>> mem_rsp_out;
 
 	MemSim(const SimContext& ctx, const char* name, const Config& config);
 	~MemSim();

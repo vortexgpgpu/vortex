@@ -22,8 +22,8 @@ class Core;
 
 class Operands : public SimObject<Operands> {
 public:
-  SimPort<instr_trace_t*> Input;
-  SimPort<instr_trace_t*> Output;
+  SimChannel<instr_trace_t*> Input;
+  SimChannel<instr_trace_t*> Output;
 
   Operands(const SimContext &ctx, Core* core);
 

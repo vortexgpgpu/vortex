@@ -58,6 +58,8 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.op_type,
                 decode_if.data.op_args,
                 decode_if.data.wb,
+                decode_if.data.rd_xregs,
+                decode_if.data.wr_xregs,
                 decode_if.data.used_rs,
                 decode_if.data.rd,
                 decode_if.data.rs1,

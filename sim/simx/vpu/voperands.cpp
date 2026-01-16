@@ -57,12 +57,13 @@ void Operands::tick() {
   // process requests
   if (Input.empty())
     return;
-  auto trace = this->Input.front();
+  auto trace = this->Input.peek();
   for (uint32_t i = 0; i < NUM_OPCS; i++) {
     uint32_t wis = trace->wid / ISSUE_WIDTH;
     uint32_t index = wis % NUM_OPCS;
-    opc_units_.at(index)->Input.push(trace);
-    Input.pop();
+    if (opc_units_.at(index)->Input.try_send(trace)) {
+      Input.pop();
+    }
     break;
   }
 }

@@ -30,11 +30,7 @@ public:
   };
 
 	struct PerfStats {
-		uint64_t latency;
-
-		PerfStats()
-			: latency(0)
-		{}
+		uint64_t latency = 0;
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->latency += rhs.latency;
@@ -42,8 +38,8 @@ public:
 		}
 	};
 
-  std::vector<SimPort<instr_trace_t*>> Inputs;
-	std::vector<SimPort<instr_trace_t*>> Outputs;
+  std::vector<SimChannel<instr_trace_t*>> Inputs;
+	std::vector<SimChannel<instr_trace_t*>> Outputs;
 
   TensorUnit(const SimContext &ctx, const char* name, const Arch& arch, Core* core);
   virtual ~TensorUnit();

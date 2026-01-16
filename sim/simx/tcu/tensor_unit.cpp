@@ -290,7 +290,7 @@ public:
       auto& input = simobject_->Inputs.at(iw);
       if (input.empty())
         continue;
-      auto trace = input.front();
+      auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       int delay = 0;
       switch (tcu_type) {
@@ -300,9 +300,10 @@ public:
       default:
         std::abort();
       }
-      simobject_->Outputs.at(iw).push(trace, 2 + delay);
-      DT(3, simobject_->name() << ": op=" << tcu_type << ", " << *trace);
-      input.pop();
+      if (simobject_->Outputs.at(iw).try_send(trace, 2 + delay)) {
+        DT(3, simobject_->name() << ": op=" << tcu_type << ", " << *trace);
+        input.pop();
+      }
     }
   }
 

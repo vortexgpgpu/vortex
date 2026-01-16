@@ -22,8 +22,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output reg [PERF_CTR_BITS-1:0] perf_stalls,
-    output reg [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] perf_units_uses,
-    output reg [NUM_SFU_UNITS-1:0][PERF_CTR_BITS-1:0] perf_sfu_uses,
 `endif
 
     VX_writeback_if.slave   writeback_if,
@@ -34,72 +32,26 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (ISSUE_ID)
     `UNUSED_VAR (writeback_if.data.sop)
 
-    localparam NUM_OPDS = NUM_SRC_OPDS + 1;
-    localparam IN_DATAW = $bits(ibuffer_t);
+    localparam NUM_OPDS  = NUM_SRC_OPDS + 1;
+    localparam IN_DATAW  = $bits(ibuffer_t);
+    localparam OUT_DATAW = $bits(scoreboard_t) - ISSUE_WIS_W;
 
     VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
     wire [PER_ISSUE_WARPS-1:0] operands_ready;
 
 `ifdef PERF_ENABLE
-    reg [PER_ISSUE_WARPS-1:0][NUM_EX_UNITS-1:0] perf_inuse_units_per_cycle;
-    wire [NUM_EX_UNITS-1:0] perf_units_per_cycle, perf_units_per_cycle_r;
-
-    reg [PER_ISSUE_WARPS-1:0][NUM_SFU_UNITS-1:0] perf_inuse_sfu_per_cycle;
-    wire [NUM_SFU_UNITS-1:0] perf_sfu_per_cycle, perf_sfu_per_cycle_r;
-
-    VX_reduce_tree #(
-        .IN_W (NUM_EX_UNITS),
-        .N    (PER_ISSUE_WARPS),
-        .OP   ("|")
-    ) perf_units_reduce (
-        .data_in  (perf_inuse_units_per_cycle),
-        .data_out (perf_units_per_cycle)
-    );
-
-    VX_reduce_tree #(
-        .IN_W (NUM_SFU_UNITS),
-        .N    (PER_ISSUE_WARPS),
-        .OP   ("|")
-    ) perf_sfu_reduce (
-        .data_in  (perf_inuse_sfu_per_cycle),
-        .data_out (perf_sfu_per_cycle)
-    );
-
-    `BUFFER_EX(perf_units_per_cycle_r, perf_units_per_cycle, 1'b1, 0, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
-    `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, 0, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
-
     wire [PER_ISSUE_WARPS-1:0] stg_valid_in;
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stg_valid_in
         assign stg_valid_in[w] = staging_if[w].valid;
     end
 
-    wire perf_stall_per_cycle = (|stg_valid_in) && ~(|(stg_valid_in & operands_ready));
+    wire perf_stall_per_cycle = |(stg_valid_in & ~operands_ready);
 
     always @(posedge clk) begin : g_perf_stalls
         if (reset) begin
             perf_stalls <= '0;
         end else begin
             perf_stalls <= perf_stalls + PERF_CTR_BITS'(perf_stall_per_cycle);
-        end
-    end
-
-    for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_perf_units_uses
-        always @(posedge clk) begin
-            if (reset) begin
-                perf_units_uses[i] <= '0;
-            end else begin
-                perf_units_uses[i] <= perf_units_uses[i] + PERF_CTR_BITS'(perf_units_per_cycle_r[i]);
-            end
-        end
-    end
-
-    for (genvar i = 0; i < NUM_SFU_UNITS; ++i) begin : g_perf_sfu_uses
-        always @(posedge clk) begin
-            if (reset) begin
-                perf_sfu_uses[i] <= '0;
-            end else begin
-                perf_sfu_uses[i] <= perf_sfu_uses[i] + PERF_CTR_BITS'(perf_sfu_per_cycle_r[i]);
-            end
         end
     end
 `endif
@@ -121,6 +73,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_scoreboard
         reg [NUM_REGS-1:0] inuse_regs, inuse_regs_n;
+        reg [NUM_XREGS-1:0] inuse_xregs, inuse_xregs_n;
         wire [NUM_OPDS-1:0] operands_busy;
 
         wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
@@ -137,6 +90,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire [NUM_OPDS-1:0] ibf_used_rs = {ibuffer_if[w].data.used_rs, ibuffer_if[w].data.wb};
         wire [NUM_OPDS-1:0] stg_used_rs = {staging_if[w].data.used_rs, staging_if[w].data.wb};
 
+        // Special-register dependency masks
+        wire [NUM_XREGS-1:0] ibf_xregs_mask = ibuffer_if[w].data.rd_xregs | ibuffer_if[w].data.wr_xregs;
+        wire [NUM_XREGS-1:0] stg_xregs_mask = staging_if[w].data.rd_xregs | staging_if[w].data.wr_xregs;
+
         wire [NUM_OPDS-1:0][REG_TYPES-1:0][RV_REGS-1:0] ibf_opd_mask, stg_opd_mask;
 
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_masks
@@ -147,12 +104,19 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
 
         always @(*) begin
-            inuse_regs_n = inuse_regs;
+            inuse_regs_n  = inuse_regs;
+            inuse_xregs_n = inuse_xregs;
             if (writeback_fire) begin
-                inuse_regs_n[writeback_if.data.rd] = 0; // release rd
+                if (writeback_if.data.wb) begin
+                    inuse_regs_n[writeback_if.data.rd] = 0; // release rd
+                end
+                inuse_xregs_n &= ~writeback_if.data.wr_xregs; // release special regs
             end
-            if (staging_fire && staging_if[w].data.wb) begin
-                inuse_regs_n |= stg_opd_mask[0]; // reserve rd
+            if (staging_fire) begin
+                if (staging_if[w].data.wb) begin
+                    inuse_regs_n |= stg_opd_mask[0]; // reserve rd
+                end
+                inuse_xregs_n |= staging_if[w].data.wr_xregs; // reserve special regs
             end
         end
 
@@ -174,44 +138,24 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             assign operands_busy[i] = (in_use_mask[rtype] & stg_opd_mask[i][rtype]) != 0;
         end
 
+
+        wire [NUM_XREGS-1:0] xregs_mask = ibuffer_fire ? ibf_xregs_mask : stg_xregs_mask;
+        wire [NUM_XREGS-1:0] xregs_busy = inuse_xregs_n & xregs_mask;
+
         reg operands_ready_r;
 
         always @(posedge clk) begin
             if (reset) begin
-                inuse_regs <= '0;
+                inuse_regs  <= '0;
+                inuse_xregs <= '0;
             end else begin
                 inuse_regs <= inuse_regs_n;
+                inuse_xregs <= inuse_xregs_n;
             end
-            operands_ready_r <= ~(| regs_busy);
+            operands_ready_r <= (regs_busy == 0) && (xregs_busy == 0);
         end
 
         assign operands_ready[w] = operands_ready_r;
-
-    `ifdef PERF_ENABLE
-        reg [NUM_REGS-1:0][EX_WIDTH-1:0] inuse_units;
-        reg [NUM_REGS-1:0][SFU_WIDTH-1:0] inuse_sfu;
-
-        always @(*) begin
-            perf_inuse_units_per_cycle[w] = '0;
-            perf_inuse_sfu_per_cycle[w] = '0;
-            for (integer i = 0; i < NUM_OPDS; ++i) begin
-                if (staging_if[w].valid && operands_busy[i]) begin
-                    perf_inuse_units_per_cycle[w][inuse_units[stg_opds[i]]] = 1;
-                    if (inuse_units[stg_opds[i]] == EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[w][inuse_sfu[stg_opds[i]]] = 1;
-                    end
-                end
-            end
-        end
-        always @(posedge clk) begin
-            if (staging_fire && staging_if[w].data.wb) begin
-                inuse_units[staging_if[w].data.rd] <= staging_if[w].data.ex_type;
-                if (staging_if[w].data.ex_type == EX_SFU) begin
-                    inuse_sfu[staging_if[w].data.rd] <= op_to_sfu_type(staging_if[w].data.op_type);
-                end
-            end
-        end
-    `endif
 
     `ifdef SIMULATION
         reg [31:0] timeout_ctr;
@@ -222,9 +166,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end else begin
                 if (staging_if[w].valid && ~staging_if[w].ready) begin
                 `ifdef DBG_TRACE_PIPELINE
-                    `TRACE(4, ("%t: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
+                    `TRACE(4, ("%t: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, opds_busy=%b, xregs_busy=%b (#%0d)\n",
                         $time, INSTANCE_ID, w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
-                        operands_busy, staging_if[w].data.uuid))
+                        operands_busy, xregs_busy, staging_if[w].data.uuid))
                 `endif
                     timeout_ctr <= timeout_ctr + 1;
                 end else if (ibuffer_fire) begin
@@ -234,30 +178,48 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
 
         `RUNTIME_ASSERT((timeout_ctr < STALL_TIMEOUT),
-            ("%t: *** %s timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
-                $time, INSTANCE_ID, w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
+            ("timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
+                w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
                 operands_busy, staging_if[w].data.uuid))
 
-        `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if.data.rd] != 0,
-            ("%t: *** %s invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
-                $time, INSTANCE_ID, w, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, writeback_if.data.rd, writeback_if.data.uuid))
+        `RUNTIME_ASSERT(~(writeback_fire && writeback_if.data.wb) || inuse_regs[writeback_if.data.rd] != 0,
+            ("invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
+                w, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, writeback_if.data.rd, writeback_if.data.uuid))
+
+        `RUNTIME_ASSERT(~writeback_fire || ((writeback_if.data.wr_xregs & ~inuse_xregs) == '0),
+            ("invalid writeback special register: wid=%0d, PC=0x%0h, tmask=%b, xregs=%b (#%0d)",
+                w, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, writeback_if.data.wr_xregs, writeback_if.data.uuid))
     `endif
 
     end
 
     wire [PER_ISSUE_WARPS-1:0] arb_valid_in;
-    wire [PER_ISSUE_WARPS-1:0][IN_DATAW-1:0] arb_data_in;
+    wire [PER_ISSUE_WARPS-1:0][OUT_DATAW-1:0] arb_data_in;
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
         assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
-        assign arb_data_in[w] = staging_if[w].data;
+        assign arb_data_in[w] = {
+            staging_if[w].data.uuid,
+            staging_if[w].data.tmask,
+            staging_if[w].data.PC,
+            staging_if[w].data.ex_type,
+            staging_if[w].data.op_type,
+            staging_if[w].data.op_args,
+            staging_if[w].data.wb,
+            staging_if[w].data.wr_xregs,
+            staging_if[w].data.used_rs,
+            staging_if[w].data.rd,
+            staging_if[w].data.rs1,
+            staging_if[w].data.rs2,
+            staging_if[w].data.rs3
+        };
         assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];
     end
 
     VX_stream_arb #(
         .NUM_INPUTS (PER_ISSUE_WARPS),
-        .DATAW      (IN_DATAW),
+        .DATAW      (OUT_DATAW),
         .ARBITER    ("C"),
         .OUT_BUF    (3)
     ) out_arb (
@@ -274,6 +236,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             scoreboard_if.data.op_type,
             scoreboard_if.data.op_args,
             scoreboard_if.data.wb,
+            scoreboard_if.data.wr_xregs,
             scoreboard_if.data.used_rs,
             scoreboard_if.data.rd,
             scoreboard_if.data.rs1,

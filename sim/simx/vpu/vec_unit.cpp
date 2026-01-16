@@ -50,7 +50,7 @@ public:
       if (input.empty())
         continue;
 
-      auto trace = input.front();
+      auto trace = input.peek();
       auto trace_data = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
       auto vpu_op = trace_data->vpu_op;
 
@@ -89,11 +89,10 @@ public:
         std::abort();
       }
 
-      simobject_->Outputs.at(iw).push(trace, 2 + delay);
-
-      DT(3, simobject_->name() << ": op=" << vpu_op << ", " << *trace);
-
-      input.pop();
+      if (simobject_->Outputs.at(iw).try_send(trace, 2 + delay)) {
+        DT(3, simobject_->name() << ": op=" << vpu_op << ", " << *trace);
+        input.pop();
+      }
     }
   }
 

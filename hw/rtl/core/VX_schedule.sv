@@ -31,7 +31,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     VX_warp_ctl_if.slave    warp_ctl_if,
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_decode_sched_if.slave decode_sched_if,
-    VX_issue_sched_if.slave issue_sched_if[`ISSUE_WIDTH],
+    VX_issue_sched_if.slave issue_sched_if,
     VX_commit_sched_if.slave commit_sched_if,
 
     // outputs
@@ -115,11 +115,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
         // decode unlock
         if (decode_sched_if.valid && decode_sched_if.unlock) begin
             stalled_warps_n[decode_sched_if.wid] = 0;
-        end
-
-        // CSR unlock
-        if (sched_csr_if.unlock_warp) begin
-            stalled_warps_n[sched_csr_if.unlock_wid] = 0;
         end
 
         // wspawn handling
@@ -357,40 +352,42 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .ready_out (schedule_if.ready)
     );
 
-    // Track pending instructions per warp
+    // Track committed instructions
 
-    wire [`NUM_WARPS-1:0] pending_warp_empty;
-    wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
+    reg [PERF_CTR_BITS-1:0] instret;
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_sizes
+    always @(posedge clk) begin
+        if (reset) begin
+            instret <= '0;
+        end else begin
+            instret <= instret + PERF_CTR_BITS'(commit_sched_if.committed_warps_cnt);
+        end
+    end
 
-        localparam isw = wid_to_isw(i);
-        localparam wis = wid_to_wis(i);
+    // Track pending instructions
 
-        VX_pending_size #(
-            .SIZE      (4096),
-            .ALM_EMPTY (1)
-        ) counter (
-            .clk       (clk),
-            .reset     (reset),
-            .incr      (issue_sched_if[isw].valid && (issue_sched_if[isw].wis == wis)),
-            .decr      (commit_sched_if.committed_warps[i]),
-            .empty     (pending_warp_empty[i]),
-            .alm_empty (pending_warp_alm_empty[i]),
-            `UNUSED_PIN (full),
-            `UNUSED_PIN (alm_full),
-            `UNUSED_PIN (size)
-        );
-	end
+    wire pending_warp_empty;
 
-    assign sched_csr_if.alm_empty = pending_warp_alm_empty[sched_csr_if.alm_empty_wid];
+    VX_pending_size #(
+        .SIZE      (2048),
+        .ALM_EMPTY (1)
+    ) counter (
+        .clk       (clk),
+        .reset     (reset),
+        .incr      (issue_sched_if.issued_warps_cnt),
+        .decr      (commit_sched_if.committed_warps_cnt),
+        .empty     (pending_warp_empty),
+        `UNUSED_PIN (alm_empty),
+        `UNUSED_PIN (full),
+        `UNUSED_PIN (alm_full),
+        `UNUSED_PIN (size)
+    );
 
-    wire no_pending_instr = (& pending_warp_empty);
-
-    `BUFFER_EX(busy, (active_warps != 0 || ~no_pending_instr), 1'b1, 1, 1);
+    `BUFFER_EX(busy, (active_warps != 0 || ~pending_warp_empty), 1'b1, 1, 1);
 
     // export CSRs
     assign sched_csr_if.cycles = cycles;
+    assign sched_csr_if.instret = instret;
     assign sched_csr_if.active_warps = active_warps;
     assign sched_csr_if.thread_masks = thread_masks;
 
@@ -412,27 +409,56 @@ module VX_schedule import VX_gpu_pkg::*; #(
             end
         end
     end
-    `RUNTIME_ASSERT(timeout_ctr < STALL_TIMEOUT, ("%t: *** %s timeout: stalled_warps=%b", $time, INSTANCE_ID, stalled_warps))
+    `RUNTIME_ASSERT(timeout_ctr < STALL_TIMEOUT, ("*** %s timeout: stalled_warps=%b", INSTANCE_ID, stalled_warps))
 
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] perf_sched_idles;
-    reg [PERF_CTR_BITS-1:0] perf_sched_stalls;
+    reg [PERF_CTR_BITS-1:0] perf_active_warps;
+    reg [PERF_CTR_BITS-1:0] perf_stalled_warps;
+    reg [PERF_CTR_BITS-1:0] perf_issued_warps;
+    reg [PERF_CTR_BITS-1:0] perf_issued_threads;
+    reg [PERF_CTR_BITS-1:0] perf_branches;
+    reg [PERF_CTR_BITS-1:0] perf_divergence;
+
+    wire [`CLOG2(`NUM_WARPS+1)-1:0] stalled_warps_cnt;
+    wire [`CLOG2(`NUM_ALU_BLOCKS+1)-1:0] branches_cnt;
+    wire [`CLOG2(`NUM_THREADS+1)-1:0] issued_threads_cnt;
 
     wire schedule_idle = ~schedule_valid;
-    wire schedule_stall = schedule_if.valid && ~schedule_if.ready;
+    wire has_divergence = warp_ctl_if.valid && warp_ctl_if.split.valid && warp_ctl_if.split.is_dvg;
+    wire [`NUM_THREADS-1:0] issued_threads = {`NUM_THREADS{schedule_if_fire}} & schedule_if.data.tmask;
+
+    `POP_COUNT(stalled_warps_cnt, stalled_warps);
+    `POP_COUNT(issued_threads_cnt, issued_threads);
+    `POP_COUNT(branches_cnt, branch_valid);
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_sched_idles  <= '0;
-            perf_sched_stalls <= '0;
+            perf_sched_idles   <= '0;
+            perf_active_warps  <= '0;
+            perf_stalled_warps <= '0;
+            perf_issued_warps  <= '0;
+            perf_issued_threads<= '0;
+            perf_branches      <= '0;
+            perf_divergence    <= '0;
         end else begin
-            perf_sched_idles  <= perf_sched_idles + PERF_CTR_BITS'(schedule_idle);
-            perf_sched_stalls <= perf_sched_stalls + PERF_CTR_BITS'(schedule_stall);
+            perf_sched_idles   <= perf_sched_idles + PERF_CTR_BITS'(schedule_idle);
+            perf_active_warps  <= perf_active_warps + PERF_CTR_BITS'(active_warps_cnt);
+            perf_stalled_warps <= perf_stalled_warps + PERF_CTR_BITS'(stalled_warps_cnt);
+            perf_issued_warps  <= perf_issued_warps + PERF_CTR_BITS'(schedule_if_fire);
+            perf_issued_threads<= perf_issued_threads + PERF_CTR_BITS'(issued_threads_cnt);
+            perf_branches      <= perf_branches + PERF_CTR_BITS'(branches_cnt);
+            perf_divergence    <= perf_divergence + PERF_CTR_BITS'(has_divergence);
         end
     end
 
-    assign sched_perf.idles = perf_sched_idles;
-    assign sched_perf.stalls = perf_sched_stalls;
+    assign sched_perf.idles         = perf_sched_idles;
+    assign sched_perf.active_warps  = perf_active_warps;
+    assign sched_perf.stalled_warps = perf_stalled_warps;
+    assign sched_perf.issued_warps  = perf_issued_warps;
+    assign sched_perf.issued_threads= perf_issued_threads;
+    assign sched_perf.branches      = perf_branches;
+    assign sched_perf.divergence    = perf_divergence;
 `endif
 
 `ifdef DBG_TRACE_PIPELINE

@@ -185,12 +185,8 @@ instr_trace_t* Emulator::step() {
     }
   }
 
-  if (scheduled_warp == -1) {
-    // No warp is ready to execute - check if program has completed
-    if (debug_module_ != nullptr && !active_warps_.any()) {
-      Word final_pc = last_inactive_warp_pc_valid_ ? last_inactive_warp_pc_ : warps_.at(0).PC;
-      debug_module_->notify_program_completed(final_pc);
-    }
+  // Any active warp to schedule ?
+  if (scheduled_warp == -1)
     return nullptr;
   }
 
@@ -523,38 +519,48 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
     if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
      || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
+      auto proc_perf = core_->socket()->cluster()->processor()->perf_stats();
       auto perf_class = dcrs_.base_dcrs.read(VX_DCR_BASE_MPM_CLASS);
       switch (perf_class) {
-      case VX_DCR_MPM_CLASS_NONE:
+      case VX_DCR_MPM_CLASS_BASE:
         break;
       case VX_DCR_MPM_CLASS_CORE: {
         switch (addr) {
-        CSR_READ_64(VX_CSR_MPM_SCHED_ID, core_perf.sched_idle);
-        CSR_READ_64(VX_CSR_MPM_SCHED_ST, core_perf.sched_stalls);
-        CSR_READ_64(VX_CSR_MPM_IBUF_ST, core_perf.ibuf_stalls);
-        CSR_READ_64(VX_CSR_MPM_SCRB_ST, core_perf.scrb_stalls);
-        CSR_READ_64(VX_CSR_MPM_OPDS_ST, core_perf.opds_stalls);
-        CSR_READ_64(VX_CSR_MPM_SCRB_ALU, core_perf.scrb_alu);
-        CSR_READ_64(VX_CSR_MPM_SCRB_FPU, core_perf.scrb_fpu);
-        CSR_READ_64(VX_CSR_MPM_SCRB_LSU, core_perf.scrb_lsu);
-        CSR_READ_64(VX_CSR_MPM_SCRB_SFU, core_perf.scrb_sfu);
+        CSR_READ_64(VX_CSR_MPM_SCHED_IDLE, core_perf.sched_idle);
+        CSR_READ_64(VX_CSR_MPM_ACTIVE_WARPS, core_perf.active_warps);
+        CSR_READ_64(VX_CSR_MPM_STALLED_WARPS, core_perf.stalled_warps);
+        CSR_READ_64(VX_CSR_MPM_ISSUED_WARPS, core_perf.issued_warps);
+        CSR_READ_64(VX_CSR_MPM_ISSUED_THREADS, core_perf.issued_threads);
+        CSR_READ_64(VX_CSR_MPM_STALL_FETCH, core_perf.fetch_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_IBUF, core_perf.ibuf_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_SCRB, core_perf.scrb_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_OPDS, core_perf.opds_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_ALU, core_perf.alu_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_FPU, core_perf.fpu_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_LSU, core_perf.lsu_stalls);
+        CSR_READ_64(VX_CSR_MPM_STALL_SFU, core_perf.sfu_stalls);
       #ifdef EXT_TCU_ENABLE
-        CSR_READ_64(VX_CSR_MPM_SCRB_TCU, core_perf.scrb_tcu);
+        CSR_READ_64(VX_CSR_MPM_STALL_TCU, core_perf.tcu_stalls);
       #endif
-      #ifdef EXT_VPU_ENABLE
-        CSR_READ_64(VX_CSR_MPM_SCRB_VPU, core_perf.scrb_vpu);
+        CSR_READ_64(VX_CSR_MPM_BRANCHES, core_perf.branches);
+        CSR_READ_64(VX_CSR_MPM_DIVERGENCE, core_perf.divergence);
+        CSR_READ_64(VX_CSR_MPM_INSTR_ALU, core_perf.alu_instrs);
+        CSR_READ_64(VX_CSR_MPM_INSTR_FPU, core_perf.fpu_instrs);
+        CSR_READ_64(VX_CSR_MPM_INSTR_LSU, core_perf.lsu_instrs);
+        CSR_READ_64(VX_CSR_MPM_INSTR_SFU, core_perf.sfu_instrs);
+      #ifdef EXT_TCU_ENABLE
+        CSR_READ_64(VX_CSR_MPM_INSTR_TCU, core_perf.tcu_instrs);
       #endif
-        CSR_READ_64(VX_CSR_MPM_SCRB_CSRS, core_perf.scrb_csrs);
-        CSR_READ_64(VX_CSR_MPM_SCRB_WCTL, core_perf.scrb_wctl);
+        CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_MEM_WRITES, proc_perf.mem_writes);
         CSR_READ_64(VX_CSR_MPM_IFETCHES, core_perf.ifetches);
+        CSR_READ_64(VX_CSR_MPM_IFETCH_LT, core_perf.ifetch_latency);
         CSR_READ_64(VX_CSR_MPM_LOADS, core_perf.loads);
         CSR_READ_64(VX_CSR_MPM_STORES, core_perf.stores);
-        CSR_READ_64(VX_CSR_MPM_IFETCH_LT, core_perf.ifetch_latency);
         CSR_READ_64(VX_CSR_MPM_LOAD_LT, core_perf.load_latency);
         }
       } break;
       case VX_DCR_MPM_CLASS_MEM: {
-        auto proc_perf = core_->socket()->cluster()->processor()->perf_stats();
         auto cluster_perf = core_->socket()->cluster()->perf_stats();
         auto socket_perf = core_->socket()->perf_stats();
         auto lmem_perf = core_->local_mem()->perf_stats();

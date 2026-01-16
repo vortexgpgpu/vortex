@@ -46,9 +46,9 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
         wire push_s = push && (wid == i);
         wire pop_s = pop && (wid == i);
 
-        `RUNTIME_ASSERT(~(push_s && full_r), ("%t: runtime error: writing to a full stack!", $time));
-        `RUNTIME_ASSERT(~(pop_s && empty_r), ("%t: runtime error: reading an empty stack!", $time));
-        `RUNTIME_ASSERT(~(push_s && pop_s),  ("%t: runtime error: push and pop in same cycle not supported!", $time));
+        `RUNTIME_ASSERT(~(push_s && full_r), ("runtime error: writing to a full stack!"));
+        `RUNTIME_ASSERT(~(pop_s && empty_r), ("runtime error: reading an empty stack!"));
+        `RUNTIME_ASSERT(~(push_s && pop_s),  ("runtime error: push and pop in same cycle not supported!"));
 
         always @(posedge clk) begin
             if (reset) begin

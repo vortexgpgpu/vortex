@@ -49,9 +49,8 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_decode_if        decode_if();
     VX_sched_csr_if     sched_csr_if();
     VX_decode_sched_if  decode_sched_if();
-    VX_issue_sched_if   issue_sched_if[`ISSUE_WIDTH]();
+    VX_issue_sched_if   issue_sched_if();
     VX_commit_sched_if  commit_sched_if();
-    VX_commit_csr_if    commit_csr_if();
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
 
@@ -123,6 +122,9 @@ module VX_core import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
         .reset          (reset),
+    `ifdef PERF_ENABLE
+        .fetch_perf     (pipeline_perf.fetch),
+    `endif
         .icache_bus_if  (icache_bus_if),
         .schedule_if    (schedule_if),
         .fetch_if       (fetch_if)
@@ -177,7 +179,6 @@ module VX_core import VX_gpu_pkg::*; #(
         .dispatch_if    (dispatch_if),
         .commit_if      (commit_if),
 
-        .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
 
         .warp_ctl_if    (warp_ctl_if),
@@ -194,7 +195,6 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .writeback_if   (writeback_if),
 
-        .commit_csr_if  (commit_csr_if),
         .commit_sched_if(commit_sched_if)
     );
 

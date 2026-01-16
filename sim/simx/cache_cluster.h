@@ -19,10 +19,10 @@ namespace vortex {
 
 class CacheCluster : public SimObject<CacheCluster> {
 public:
-	std::vector<std::vector<SimPort<MemReq>>> CoreReqPorts;
-	std::vector<std::vector<SimPort<MemRsp>>> CoreRspPorts;
-	std::vector<SimPort<MemReq>> MemReqPorts;
-	std::vector<SimPort<MemRsp>> MemRspPorts;
+	std::vector<std::vector<SimChannel<MemReq>>> core_req_in;
+	std::vector<std::vector<SimChannel<MemRsp>>> core_rsp_out;
+	std::vector<SimChannel<MemReq>> mem_req_out;
+	std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
 	CacheCluster(const SimContext& ctx,
 							const char* name,
@@ -30,10 +30,10 @@ public:
 							uint32_t num_units,
 							const CacheSim::Config& cache_config)
 		: SimObject(ctx, name)
-		, CoreReqPorts(num_inputs, std::vector<SimPort<MemReq>>(cache_config.num_inputs, this))
-		, CoreRspPorts(num_inputs, std::vector<SimPort<MemRsp>>(cache_config.num_inputs, this))
-		, MemReqPorts(cache_config.mem_ports, this)
-		, MemRspPorts(cache_config.mem_ports, this)
+		, core_req_in(num_inputs, std::vector<SimChannel<MemReq>>(cache_config.num_inputs, this))
+		, core_rsp_out(num_inputs, std::vector<SimChannel<MemRsp>>(cache_config.num_inputs, this))
+		, mem_req_out(cache_config.mem_ports, this)
+		, mem_rsp_in(cache_config.mem_ports, this)
 		, caches_(__MAX(num_units, 0x1)) {
 
 		CacheSim::Config cache_config2(cache_config);
@@ -50,8 +50,8 @@ public:
 			snprintf(sname, 100, "%s-input-arb%d", name, i);
 			input_arbs.at(i) = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_inputs, num_units);
 			for (uint32_t j = 0; j < num_inputs; ++j) {
-				this->CoreReqPorts.at(j).at(i).bind(&input_arbs.at(i)->ReqIn.at(j));
-				input_arbs.at(i)->RspIn.at(j).bind(&this->CoreRspPorts.at(j).at(i));
+				this->core_req_in.at(j).at(i).bind(&input_arbs.at(i)->ReqIn.at(j));
+				input_arbs.at(i)->RspOut.at(j).bind(&this->core_rsp_out.at(j).at(i));
 			}
 		}
 
@@ -60,8 +60,8 @@ public:
 		for (uint32_t i = 0; i < cache_config.mem_ports; ++i) {
 			snprintf(sname, 100, "%s-mem-arb%d", name, i);
 			mem_arbs.at(i) = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_units, 1);
-			mem_arbs.at(i)->ReqOut.at(0).bind(&this->MemReqPorts.at(i));
-			this->MemRspPorts.at(i).bind(&mem_arbs.at(i)->RspOut.at(0));
+			mem_arbs.at(i)->ReqOut.at(0).bind(&this->mem_req_out.at(i));
+			this->mem_rsp_in.at(i).bind(&mem_arbs.at(i)->RspIn.at(0));
 		}
 
 		// Connect caches
@@ -70,13 +70,13 @@ public:
 			caches_.at(i) = CacheSim::Create(sname, cache_config2);
 
 			for (uint32_t j = 0; j < cache_config.num_inputs; ++j) {
-				input_arbs.at(j)->ReqOut.at(i).bind(&caches_.at(i)->CoreReqPorts.at(j));
-				caches_.at(i)->CoreRspPorts.at(j).bind(&input_arbs.at(j)->RspOut.at(i));
+				input_arbs.at(j)->ReqOut.at(i).bind(&caches_.at(i)->core_req_in.at(j));
+				caches_.at(i)->core_rsp_out.at(j).bind(&input_arbs.at(j)->RspIn.at(i));
 			}
 
 			for (uint32_t j = 0; j < cache_config.mem_ports; ++j) {
-				caches_.at(i)->MemReqPorts.at(j).bind(&mem_arbs.at(j)->ReqIn.at(i));
-				mem_arbs.at(j)->RspIn.at(i).bind(&caches_.at(i)->MemRspPorts.at(j));
+				caches_.at(i)->mem_req_out.at(j).bind(&mem_arbs.at(j)->ReqIn.at(i));
+				mem_arbs.at(j)->RspOut.at(i).bind(&caches_.at(i)->mem_rsp_in.at(j));
 			}
 		}
 	}

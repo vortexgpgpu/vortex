@@ -13,16 +13,16 @@
 
 `include "VX_define.vh"
 
-interface VX_commit_sched_if ();
+interface VX_commit_sched_if import VX_gpu_pkg::*; ();
 
-    wire [`NUM_WARPS-1:0] committed_warps;
+    wire [ISSUE_ISW_SIZEW-1:0] committed_warps_cnt;
 
     modport master (
-        output committed_warps
+        output committed_warps_cnt
     );
 
     modport slave (
-        input committed_warps
+        input committed_warps_cnt
     );
 
 endinterface

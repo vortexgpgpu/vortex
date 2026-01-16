@@ -222,10 +222,11 @@ private:
     for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
       if (!dram_queue_[b].empty()) {
         auto mem_req = dram_queue_[b].front();
-        dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg) {
+        dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg)->bool {
           // mark completed request as ready
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
           orig_req->ready = true;
+          return true;
         }, mem_req);
         dram_queue_[b].pop();
       }

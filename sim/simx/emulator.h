@@ -108,14 +108,13 @@ public:
 
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
 
-  // Get warp by index (for debug module access)
-  warp_t& get_warp(uint32_t wid) {
-    return warps_.at(wid);
+  const auto& active_warps() const {
+    return active_warps_;
   }
 
-  // Debug module interface
-  void set_debug_module(::DebugModule* dm);
-  ::DebugModule* get_debug_module() const;
+  const auto& stalled_warps() const {
+    return stalled_warps_;
+  }
 
 private:
 

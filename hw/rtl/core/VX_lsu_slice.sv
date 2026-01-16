@@ -265,8 +265,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
         assign mem_rsp_sop_pkt = pkt_sop[pkt_raddr];
         assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
-        `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("%t: allocator full!", $time))
-        `RUNTIME_ASSERT(~(mem_req_rd_sop_fire && pkt_ctr[pkt_waddr] != 0), ("%t: oops! broken sop request!", $time))
+        `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("allocator full!"))
+        `RUNTIME_ASSERT(~(mem_req_rd_sop_fire && pkt_ctr[pkt_waddr] != 0), ("oops! broken sop request!"))
         `UNUSED_VAR (mem_rsp_sop)
     end else begin : g_no_pid
         assign pkt_waddr = 0;

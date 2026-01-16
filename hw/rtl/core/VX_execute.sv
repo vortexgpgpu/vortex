@@ -41,10 +41,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if,
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
-    VX_warp_ctl_if.master   warp_ctl_if,
-
-    // commit interface
-    VX_commit_csr_if.slave  commit_csr_if
+    VX_warp_ctl_if.master   warp_ctl_if
 );
 
 `ifdef EXT_F_ENABLE
@@ -113,7 +110,6 @@ module VX_execute import VX_gpu_pkg::*; #(
     `ifdef EXT_F_ENABLE
         .fpu_csr_if     (fpu_csr_if),
     `endif
-        .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if)
     );

@@ -23,8 +23,8 @@ class Core;
 
 class FuncUnit : public SimObject<FuncUnit> {
 public:
-	std::vector<SimPort<instr_trace_t*>> Inputs;
-	std::vector<SimPort<instr_trace_t*>> Outputs;
+	std::vector<SimChannel<instr_trace_t*>> Inputs;
+	std::vector<SimChannel<instr_trace_t*>> Outputs;
 
 	FuncUnit(const SimContext& ctx, Core* core, const char* name)
 		: SimObject<FuncUnit>(ctx, name)
@@ -95,7 +95,7 @@ private:
 
 	std::array<lsu_state_t, NUM_LSU_BLOCKS> states_;
 	uint64_t pending_loads_;
-	std::vector<mem_addr_size_t> pending_addrs_;
+	std::vector<mem_addr_size_t> addr_list_;
 	uint32_t remain_addrs_;
 };
 

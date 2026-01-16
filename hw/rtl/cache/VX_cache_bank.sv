@@ -422,7 +422,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign addr_st1 = {line_tag_st1, line_idx_st1};
 
     // ensure mshr replay always get a hit
-    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1 && ~is_hit_st1), ("%t: missed mshr replay", $time))
+    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1 && ~is_hit_st1), ("missed mshr replay"))
 
     assign write_word_st1 = data_st1[`CS_WORD_WIDTH-1:0];
     `UNUSED_VAR (data_st1)
@@ -592,7 +592,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             if (DIRTY_BYTES) begin : g_dirty_bytes
                 // ensure dirty bytes match the tag info
                 wire has_dirty_bytes = (| evict_byteen_st1);
-                `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (is_dirty_st1 == has_dirty_bytes), ("%t: missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", $time, is_dirty_st1, has_dirty_bytes, `CS_BANK_TO_FULL_ADDR(addr_st1, BANK_ID)))
+                `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (is_dirty_st1 == has_dirty_bytes), ("missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", is_dirty_st1, has_dirty_bytes, `CS_BANK_TO_FULL_ADDR(addr_st1, BANK_ID)))
             end
             // issue a fill request on a read/write miss
             // issue a writeback on a dirty line eviction

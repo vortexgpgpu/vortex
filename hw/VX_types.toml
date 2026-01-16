@@ -59,8 +59,8 @@ VX_CSR_NUM_WARPS = 0xFC1
 VX_CSR_NUM_CORES = 0xFC2
 VX_CSR_LOCAL_MEM_BASE = 0xFC3
 
-[dcr_mpm]
-VX_DCR_MPM_CLASS_NONE = 0
+[dcr_mpm_class]
+VX_DCR_MPM_CLASS_BASE = 0
 VX_DCR_MPM_CLASS_CORE = 1
 VX_DCR_MPM_CLASS_MEM = 2
 
@@ -73,44 +73,72 @@ VX_CSR_MINSTRET = 0xB02
 VX_CSR_MINSTRET_H = 0xB82
 
 [csr_mpm_core]
-# PERF: pipeline
-VX_CSR_MPM_SCHED_ID = 0xB03
-VX_CSR_MPM_SCHED_ID_H = 0xB83
-VX_CSR_MPM_SCHED_ST = 0xB04
-VX_CSR_MPM_SCHED_ST_H = 0xB84
-VX_CSR_MPM_IBUF_ST = 0xB05
-VX_CSR_MPM_IBUF_ST_H = 0xB85
-VX_CSR_MPM_SCRB_ST = 0xB06
-VX_CSR_MPM_SCRB_ST_H = 0xB86
-VX_CSR_MPM_OPDS_ST = 0xB07
-VX_CSR_MPM_OPDS_ST_H = 0xB87
-VX_CSR_MPM_SCRB_ALU = 0xB08
-VX_CSR_MPM_SCRB_ALU_H = 0xB88
-VX_CSR_MPM_SCRB_FPU = 0xB09
-VX_CSR_MPM_SCRB_FPU_H = 0xB89
-VX_CSR_MPM_SCRB_LSU = 0xB0A
-VX_CSR_MPM_SCRB_LSU_H = 0xB8A
-VX_CSR_MPM_SCRB_SFU = 0xB0B
-VX_CSR_MPM_SCRB_SFU_H = 0xB8B
-VX_CSR_MPM_SCRB_CSRS = 0xB0C
-VX_CSR_MPM_SCRB_CSRS_H = 0xB8C
-VX_CSR_MPM_SCRB_WCTL = 0xB0D
-VX_CSR_MPM_SCRB_WCTL_H = 0xB8D
-VX_CSR_MPM_SCRB_VPU = 0xB13
-VX_CSR_MPM_SCRB_VPU_H = 0xB93
-VX_CSR_MPM_SCRB_TCU = 0xB14
-VX_CSR_MPM_SCRB_TCU_H = 0xB94
+
+# PERF: scheduler
+VX_CSR_MPM_SCHED_IDLE = 0xB03 # cycles where scheduler is idle
+VX_CSR_MPM_SCHED_IDLE_H = 0xB83
+VX_CSR_MPM_ACTIVE_WARPS = 0xB04 # active warps per cycle sum
+VX_CSR_MPM_ACTIVE_WARPS_H = 0xB84
+VX_CSR_MPM_STALLED_WARPS = 0xB05  # total warps stalled at barrier
+VX_CSR_MPM_STALLED_WARPS_H = 0xB85
+VX_CSR_MPM_ISSUED_WARPS = 0xB06 # issued warps per cycle sum
+VX_CSR_MPM_ISSUED_WARPS_H = 0xB86
+VX_CSR_MPM_ISSUED_THREADS = 0xB07 # issued threads per cyclce sum
+VX_CSR_MPM_ISSUED_THREADS_H = 0xB87
+
+# PERF: pipeline stalls
+VX_CSR_MPM_STALL_FETCH = 0xB08
+VX_CSR_MPM_STALL_FETCH_H = 0xB88
+VX_CSR_MPM_STALL_IBUF = 0xB09 # instruction buffer stalled because full
+VX_CSR_MPM_STALL_IBUF_H = 0xB89
+VX_CSR_MPM_STALL_SCRB = 0xB0A # scoreboard stalled due to data dependency
+VX_CSR_MPM_STALL_SCRB_H = 0xB8A
+VX_CSR_MPM_STALL_OPDS = 0xB0B # operands fetch stage stalled due to bank conflict in
+VX_CSR_MPM_STALL_OPDS_H = 0xB8B
+VX_CSR_MPM_STALL_ALU = 0xB0C  # dispatch stage stalled due to ALU pipeline full
+VX_CSR_MPM_STALL_ALU_H = 0xB8C
+VX_CSR_MPM_STALL_FPU = 0xB0D  # dispatch stage stalled due to FPU pipeline full
+VX_CSR_MPM_STALL_FPU_H = 0xB8D
+VX_CSR_MPM_STALL_LSU = 0xB0E  # dispatch stage stalled due to LSU pipeline full
+VX_CSR_MPM_STALL_LSU_H = 0xB8E
+VX_CSR_MPM_STALL_SFU = 0xB0F  # dispatch stage stalled due to SFU pipeline full
+VX_CSR_MPM_STALL_SFU_H = 0xB8F
+VX_CSR_MPM_STALL_TCU = 0xB10  # dispatch stage stalled due to TCU pipeline full
+VX_CSR_MPM_STALL_TCU_H = 0xB90
+
+# PERF: branches
+VX_CSR_MPM_BRANCHES     = 0xB11  # total conditional branches
+VX_CSR_MPM_BRANCHES_H   = 0xB91
+VX_CSR_MPM_DIVERGENCE   = 0xB12  # total divergent branches
+VX_CSR_MPM_DIVERGENCE_H = 0xB92
+
+# PERF: workload mix
+VX_CSR_MPM_INSTR_ALU = 0xB13  # total ALU instructions
+VX_CSR_MPM_INSTR_ALU_H = 0xB93
+VX_CSR_MPM_INSTR_FPU = 0xB14  # total FPU instructions
+VX_CSR_MPM_INSTR_FPU_H = 0xB94
+VX_CSR_MPM_INSTR_LSU = 0xB15  # total LSU instructions
+VX_CSR_MPM_INSTR_LSU_H = 0xB95
+VX_CSR_MPM_INSTR_SFU = 0xB16  # total SFU instructions
+VX_CSR_MPM_INSTR_SFU_H = 0xB96
+VX_CSR_MPM_INSTR_TCU = 0xB17  # total TCU instructions
+VX_CSR_MPM_INSTR_TCU_H = 0xB97
+
 # PERF: memory
-VX_CSR_MPM_IFETCHES = 0xB0E
-VX_CSR_MPM_IFETCHES_H = 0xB8E
-VX_CSR_MPM_LOADS = 0xB0F
-VX_CSR_MPM_LOADS_H = 0xB8F
-VX_CSR_MPM_STORES = 0xB10
-VX_CSR_MPM_STORES_H = 0xB90
-VX_CSR_MPM_IFETCH_LT = 0xB11
-VX_CSR_MPM_IFETCH_LT_H = 0xB91
-VX_CSR_MPM_LOAD_LT = 0xB12
-VX_CSR_MPM_LOAD_LT_H = 0xB92
+# reserved: VX_CSR_MPM_MEM_READS = 0xB18  # total reads
+# reserved: VX_CSR_MPM_MEM_READS_H = 0xB98
+# reserved: VX_CSR_MPM_MEM_WRITES = 0xB19  # total writes
+# reserved: VX_CSR_MPM_MEM_WRITES_H = 0xB99
+VX_CSR_MPM_IFETCHES     = 0xB1A # total instruction fetch requests
+VX_CSR_MPM_IFETCHES_H   = 0xB9A
+VX_CSR_MPM_IFETCH_LT    = 0xB1B # total instruction fetch latency
+VX_CSR_MPM_IFETCH_LT_H  = 0xB9B
+VX_CSR_MPM_LOADS        = 0xB1C # total LSU load requests
+VX_CSR_MPM_LOADS_H      = 0xB9C
+VX_CSR_MPM_LOAD_LT      = 0xB1D # total LSU load latency
+VX_CSR_MPM_LOAD_LT_H    = 0xB9D
+VX_CSR_MPM_STORES       = 0xB1E # total LSU store requests
+VX_CSR_MPM_STORES_H     = 0xB9E
 
 [csr_mpm_mem]
 # PERF: icache

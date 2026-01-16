@@ -50,8 +50,8 @@ public:
 			return (uint32_t)((req.addr >> lg2_block_size) & (num_banks-1));
 		});
 		for (uint32_t i = 0; i < config.num_ports; ++i) {
-			simobject->MemReqPorts.at(i).bind(&mem_xbar_->ReqIn.at(i));
-			mem_xbar_->RspIn.at(i).bind(&simobject->MemRspPorts.at(i));
+			simobject->mem_req_in.at(i).bind(&mem_xbar_->ReqIn.at(i));
+			mem_xbar_->RspOut.at(i).bind(&simobject->mem_rsp_out.at(i));
 		}
 	}
 
@@ -75,22 +75,28 @@ public:
 			if (mem_xbar_->ReqOut.at(i).empty())
 				continue;
 
-			auto& mem_req = mem_xbar_->ReqOut.at(i).front();
+			auto& mem_req = mem_xbar_->ReqOut.at(i).peek();
 
 			// enqueue the request to the memory system
 			auto req_args = new DramCallbackArgs{this, mem_req, i};
 			dram_sim_.send_request(
 				mem_req.addr,
 				mem_req.write,
-				[](void* arg) {
+				[](void* arg)->bool {
 					auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);
-					if (!rsp_args->request.write) {
+					if (rsp_args->request.write) {
+						delete rsp_args;
+						return true;
+					} else {
 						// only send a response for read requests
 						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
-						rsp_args->memsim->mem_xbar_->RspOut.at(rsp_args->bank_id).push(mem_rsp, 1);
-						DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);
+						if (rsp_args->memsim->mem_xbar_->RspIn.at(rsp_args->bank_id).try_send(mem_rsp)) {
+							DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);
+							delete rsp_args;
+							return true;
+						}
 					}
-					delete rsp_args;
+					return false; // stall
 				},
 				req_args
 			);
@@ -105,8 +111,8 @@ public:
 
 MemSim::MemSim(const SimContext& ctx, const char* name, const Config& config)
 	: SimObject<MemSim>(ctx, name)
-	, MemReqPorts(config.num_ports, this)
-	, MemRspPorts(config.num_ports, this)
+	, mem_req_in(config.num_ports, this)
+	, mem_rsp_out(config.num_ports, this)
 	, impl_(new Impl(this, config))
 {}
 

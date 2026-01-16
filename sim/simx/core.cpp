@@ -32,10 +32,10 @@ Core::Core(const SimContext& ctx,
            const DCRS &dcrs
            )
   : SimObject(ctx, StrFormat("core%d", core_id))
-  , icache_req_ports(1, this)
-  , icache_rsp_ports(1, this)
-  , dcache_req_ports(DCACHE_NUM_REQS, this)
-  , dcache_rsp_ports(DCACHE_NUM_REQS, this)
+  , icache_req_out(1, this)
+  , icache_rsp_in(1, this)
+  , dcache_req_out(DCACHE_NUM_REQS, this)
+  , dcache_rsp_in(DCACHE_NUM_REQS, this)
   , core_id_(core_id)
   , socket_(socket)
   , arch_(arch)
@@ -46,21 +46,30 @@ Core::Core(const SimContext& ctx,
   , vec_unit_(VecUnit::Create("vpu", arch, this))
 #endif
   , emulator_(arch, dcrs, this)
-  , ibuffers_(arch.num_warps(), IBUF_SIZE)
+  , ibuffers_(arch.num_warps())
   , scoreboard_(arch_)
   , operands_(ISSUE_WIDTH)
   , dispatchers_((uint32_t)FUType::Count)
   , func_units_((uint32_t)FUType::Count)
   , lmem_switch_(NUM_LSU_BLOCKS)
   , mem_coalescers_(NUM_LSU_BLOCKS)
+  , fetch_latch_(ctx, "fetch_latch", 1, 2)
+  , decode_latch_(ctx, "decode_latch", 1, 2)
   , pending_icache_(arch_.num_warps())
   , commit_arbs_(ISSUE_WIDTH)
   , ibuffer_arbs_(ISSUE_WIDTH, {ArbiterType::RoundRobin, PER_ISSUE_WARPS})
 {
   char sname[100];
 
+  // create operands
   for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
     operands_.at(iw) = Operands::Create(this);
+  }
+
+  // create ibuffers
+  for (uint32_t i = 0; i < ibuffers_.size(); ++i) {
+    snprintf(sname, 100, "%s-ibuffer%d", this->name().c_str(), i);
+    ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, IBUF_SIZE);
   }
 
   // create the memory coalescer
@@ -102,35 +111,43 @@ Core::Core(const SimContext& ctx,
 
   // connect lmem switch
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    lmem_switch_.at(b)->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn);
-    lmem_switch_.at(b)->ReqLmem.bind(&lmem_arb->ReqIn.at(b));
-
-    mem_coalescers_.at(b)->RspIn.bind(&lmem_switch_.at(b)->RspDC);
-    lmem_arb->RspIn.at(b).bind(&lmem_switch_.at(b)->RspLmem);
+    lmem_switch_.at(b)->ReqOutLmem.bind(&lmem_arb->ReqIn.at(b));
+    lmem_arb->RspOut.at(b).bind(&lmem_switch_.at(b)->RspInLmem);
   }
 
   // connect lmem arbiter
   lmem_arb->ReqOut.at(0).bind(&lsu_lmem_adapter->ReqIn);
-  lsu_lmem_adapter->RspIn.bind(&lmem_arb->RspOut.at(0));
+  lsu_lmem_adapter->RspOut.bind(&lmem_arb->RspIn.at(0));
 
   // connect lmem adapter
   for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
     lsu_lmem_adapter->ReqOut.at(c).bind(&local_mem_->Inputs.at(c));
-    local_mem_->Outputs.at(c).bind(&lsu_lmem_adapter->RspOut.at(c));
+    local_mem_->Outputs.at(c).bind(&lsu_lmem_adapter->RspIn.at(c));
   }
 
-  // connect dcache coalescer
-  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    mem_coalescers_.at(b)->ReqOut.bind(&lsu_dcache_adapter.at(b)->ReqIn);
-    lsu_dcache_adapter.at(b)->RspIn.bind(&mem_coalescers_.at(b)->RspOut);
+  if ((NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) {
+    // connect memory coalescer
+    for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+      lmem_switch_.at(b)->ReqOutDC.bind(&mem_coalescers_.at(b)->ReqIn);
+      mem_coalescers_.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
+
+      mem_coalescers_.at(b)->ReqOut.bind(&lsu_dcache_adapter.at(b)->ReqIn);
+      lsu_dcache_adapter.at(b)->RspOut.bind(&mem_coalescers_.at(b)->RspIn);
+    }
+  } else {
+    // bypass memory coalescer
+    for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+      lmem_switch_.at(b)->ReqOutDC.bind(&lsu_dcache_adapter.at(b)->ReqIn);
+      lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
+    }
   }
 
   // connect dcache adapter
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
     for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
       uint32_t p = b * DCACHE_CHANNELS + c;
-      lsu_dcache_adapter.at(b)->ReqOut.at(c).bind(&dcache_req_ports.at(p));
-      dcache_rsp_ports.at(p).bind(&lsu_dcache_adapter.at(b)->RspOut.at(c));
+      lsu_dcache_adapter.at(b)->ReqOut.at(c).bind(&this->dcache_req_out.at(p));
+      this->dcache_rsp_in.at(p).bind(&lsu_dcache_adapter.at(b)->RspIn.at(c));
     }
   }
 
@@ -179,12 +196,14 @@ void Core::reset() {
 
   emulator_.reset();
 
+  trace_to_schedule_ = nullptr;
+
   for (auto& commit_arb : commit_arbs_) {
     commit_arb->reset();
   }
 
-  for (auto& ibuf : ibuffers_) {
-    ibuf.reset();
+  for (auto& ibuffer : ibuffers_) {
+    ibuffer->reset();
   }
 
   scoreboard_.reset();
@@ -215,63 +234,81 @@ void Core::tick() {
 }
 
 void Core::schedule() {
-  auto trace = emulator_.step();
+  // profiling
+  perf_stats_.active_warps += emulator_.active_warps().count();
+  perf_stats_.stalled_warps += emulator_.stalled_warps().count();
+
+  // get next instruction to schedule
+  auto trace = trace_to_schedule_;
   if (trace == nullptr) {
-    ++perf_stats_.sched_idle;
-    return;
+    trace = emulator_.step();
+    if (trace == nullptr) {
+      ++perf_stats_.sched_idle;
+      return;
+    }
+    trace_to_schedule_ = trace;
   }
 
-  // suspend warp until decode
-  emulator_.suspend(trace->wid);
-
-  DT(3, "pipeline-schedule: " << *trace);
-
   // advance to fetch stage
-  fetch_latch_.push(trace);
-  pending_instrs_.push_back(trace);
+  if (fetch_latch_.try_push(trace)) {
+    DT(3, "pipeline-schedule: " << *trace);
+    // suspend warp until decode
+    emulator_.suspend(trace->wid);
+    // clear schedule trace
+    trace_to_schedule_ = nullptr;
+    // track pending instructions
+    pending_instrs_.push_back(trace);
+    // profiling
+    perf_stats_.issued_warps += 1;
+    perf_stats_.issued_threads += trace->tmask.count();
+  }
 }
 
 void Core::fetch() {
   perf_stats_.ifetch_latency += pending_ifetches_;
 
   // handle icache response
-  auto& icache_rsp_port = icache_rsp_ports.at(0);
-  if (!icache_rsp_port.empty()){
-    auto& mem_rsp = icache_rsp_port.front();
+  auto& icache_rsp = icache_rsp_in.at(0);
+  if (!icache_rsp.empty()){
+    auto& mem_rsp = icache_rsp.peek();
     auto trace = pending_icache_.at(mem_rsp.tag);
-    decode_latch_.push(trace);
-    DT(3, "icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
-    pending_icache_.release(mem_rsp.tag);
-    icache_rsp_port.pop();
-    --pending_ifetches_;
+    if (decode_latch_.try_push(trace)) {
+      DT(3, "icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
+      pending_icache_.release(mem_rsp.tag);
+      icache_rsp.pop();
+      --pending_ifetches_;
+    }
   }
 
   // send icache request
   if (fetch_latch_.empty())
     return;
-  auto trace = fetch_latch_.front();
+  auto trace = fetch_latch_.peek();
   MemReq mem_req;
   mem_req.addr  = trace->PC;
   mem_req.write = false;
   mem_req.tag   = pending_icache_.allocate(trace);
   mem_req.cid   = trace->cid;
   mem_req.uuid  = trace->uuid;
-  icache_req_ports.at(0).push(mem_req, 2);
-  DT(3, "icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
-  fetch_latch_.pop();
-  ++perf_stats_.ifetches;
-  ++pending_ifetches_;
+  if (this->icache_req_out.at(0).try_send(mem_req)) {
+    DT(3, "icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
+    fetch_latch_.pop();
+    ++perf_stats_.ifetches;
+    ++pending_ifetches_;
+  } else {
+    ++perf_stats_.fetch_stalls;
+  }
 }
 
 void Core::decode() {
   if (decode_latch_.empty())
     return;
 
-  auto trace = decode_latch_.front();
+  auto trace = decode_latch_.peek();
 
   // check ibuffer capacity
   auto& ibuffer = ibuffers_.at(trace->wid);
-  if (ibuffer.full()) {
+  if (ibuffer->full()) {
     if (!trace->log_once(true)) {
       DT(4, "*** ibuffer-stall: " << *trace);
     }
@@ -289,7 +326,7 @@ void Core::decode() {
   DT(3, "pipeline-decode: " << *trace);
 
   // insert to ibuffer
-  ibuffer.push(trace);
+  ibuffer->push(trace);
 
   decode_latch_.pop();
 }
@@ -300,9 +337,10 @@ void Core::issue() {
     auto& operand = operands_.at(iw);
     if (operand->Output.empty())
       continue;
-    auto trace = operand->Output.front();
-    dispatchers_.at((int)trace->fu_type)->Inputs.at(iw).push(trace);
-    operand->Output.pop();
+    auto trace = operand->Output.peek();
+    if (dispatchers_.at((int)trace->fu_type)->Inputs.at(iw).try_send(trace)) {
+      operand->Output.pop();
+    }
   }
 
   // issue ibuffer instructions
@@ -312,11 +350,11 @@ void Core::issue() {
     for (uint32_t w = 0; w < PER_ISSUE_WARPS; ++w) {
       uint32_t wid = w * ISSUE_WIDTH + iw;
       auto& ibuffer = ibuffers_.at(wid);
-      if (ibuffer.empty())
+      if (ibuffer->empty())
         continue;
       // check scoreboard
       has_instrs = true;
-      auto trace = ibuffer.top();
+      auto trace = ibuffer->peek();
       if (scoreboard_.in_use(trace)) {
         auto uses = scoreboard_.get_uses(trace);
         if (!trace->log_once(true)) {
@@ -329,29 +367,7 @@ void Core::issue() {
           }
           DTN(4, "}, " << *trace << std::endl);
         }
-        for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
-          auto& use = uses.at(j);
-          switch (use.fu_type) {
-          case FUType::ALU: ++perf_stats_.scrb_alu; break;
-          case FUType::FPU: ++perf_stats_.scrb_fpu; break;
-          case FUType::LSU: ++perf_stats_.scrb_lsu; break;
-          case FUType::SFU: {
-            ++perf_stats_.scrb_sfu;
-            if (std::get_if<WctlType>(&use.op_type)) {
-              ++perf_stats_.scrb_wctl;
-            } else if (std::get_if<CsrType>(&use.op_type)) {
-              ++perf_stats_.scrb_csrs;
-            }
-          } break;
-        #ifdef EXT_V_ENABLE
-          case FUType::VPU: ++perf_stats_.scrb_vpu; break;
-        #endif
-        #ifdef EXT_TCU_ENABLE
-          case FUType::TCU: ++perf_stats_.scrb_tcu; break;
-        #endif
-          default: assert(false);
-          }
-        }
+        ++perf_stats_.scrb_stalls;
       } else {
         trace->log_once(false);
         ready_set.set(w); // mark instruction as ready
@@ -363,15 +379,16 @@ void Core::issue() {
       auto w = ibuffer_arbs_.at(iw).grant(ready_set);
       uint32_t wid = w * ISSUE_WIDTH + iw;
       auto& ibuffer = ibuffers_.at(wid);
-      auto trace = ibuffer.top();
-      // update scoreboard
-      DT(3, "pipeline-ibuffer: " << *trace);
-      if (trace->wb) {
-        scoreboard_.reserve(trace);
-      }
+      auto trace = ibuffer->peek();
       // to operand stage
-      operands_.at(iw)->Input.push(trace, 1);
-      ibuffer.pop();
+      if (operands_.at(iw)->Input.try_send(trace)) {
+        DT(3, "pipeline-ibuffer: " << *trace);
+        if (trace->wb) {
+          // update scoreboard
+          scoreboard_.reserve(trace);
+        }
+        ibuffer->pop();
+      }
     }
 
     // track scoreboard stalls
@@ -388,9 +405,25 @@ void Core::execute() {
     for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
       if (dispatch->Outputs.at(iw).empty())
         continue;
-      auto trace = dispatch->Outputs.at(iw).front();
-      func_unit->Inputs.at(iw).push(trace, 2);
-      dispatch->Outputs.at(iw).pop();
+      auto trace = dispatch->Outputs.at(iw).peek();
+      if (func_unit->Inputs.at(iw).try_send(trace)) {
+        dispatch->Outputs.at(iw).pop();
+      } else {
+        // track functional unit stalls
+        switch ((FUType)fu) {
+        case FUType::ALU: ++perf_stats_.alu_stalls; break;
+        case FUType::FPU: ++perf_stats_.fpu_stalls; break;
+        case FUType::LSU: ++perf_stats_.lsu_stalls; break;
+        case FUType::SFU: ++perf_stats_.sfu_stalls; break;
+      #ifdef EXT_TCU_ENABLE
+        case FUType::TCU: ++perf_stats_.tcu_stalls; break;
+      #endif
+      #ifdef EXT_V_ENABLE
+        case FUType::VPU: ++perf_stats_.vpu_stalls; break;
+      #endif
+        default: assert(false);
+        }
+      }
     }
   }
 }
@@ -401,7 +434,7 @@ void Core::commit() {
     auto& commit_arb = commit_arbs_.at(iw);
     if (commit_arb->Outputs.at(0).empty())
       continue;
-    auto trace = commit_arb->Outputs.at(0).front().data;
+    auto trace = commit_arb->Outputs.at(0).peek().data;
 
     // advance to commit stage
     DT(3, "pipeline-commit: " << *trace);
@@ -413,18 +446,32 @@ void Core::commit() {
         operands_.at(iw)->writeback(trace);
         scoreboard_.release(trace);
       }
-      auto orig_size = pending_instrs_.size();
-      pending_instrs_.remove(trace);
-      if (pending_instrs_.size() != orig_size) {
-        perf_stats_.instrs += trace->tmask.count();
-      #ifdef EXT_V_ENABLE
-        if (std::get_if<VsetType>(&trace->op_type)
-         || std::get_if<VlsType>(&trace->op_type)
-         || std::get_if<VopType>(&trace->op_type)) {
-          perf_stats_.vinstrs += trace->tmask.count();
-        }
-      #endif
+
+      // instruction mix profiling
+      switch (trace->fu_type) {
+      case FUType::ALU: ++perf_stats_.alu_instrs; break;
+      case FUType::FPU: ++perf_stats_.fpu_instrs; break;
+      case FUType::LSU: ++perf_stats_.lsu_instrs; break;
+      case FUType::SFU: ++perf_stats_.sfu_instrs; break;
+    #ifdef EXT_TCU_ENABLE
+      case FUType::TCU: ++perf_stats_.tcu_instrs; break;
+    #endif
+    #ifdef EXT_V_ENABLE
+      case FUType::VPU: ++perf_stats_.vpu_instrs; break;
+    #endif
+      default: assert(false);
       }
+      // track committed instructions
+      perf_stats_.instrs += 1;
+    #ifdef EXT_V_ENABLE
+      if (std::get_if<VsetType>(&trace->op_type)
+        || std::get_if<VlsType>(&trace->op_type)
+        || std::get_if<VopType>(&trace->op_type)) {
+        perf_stats_.vinstrs += 1;
+      }
+    #endif
+    // instruction completed
+    pending_instrs_.remove(trace);
     }
 
     // delete the trace
@@ -440,11 +487,6 @@ int Core::get_exitcode() const {
 
 bool Core::running() const {
   if (emulator_.running() || !pending_instrs_.empty()) {
-  #ifndef NDEBUG
-    for (auto& trace : pending_instrs_) {
-      DT(5, "pipeline-pending: " << *trace);
-    }
-  #endif
     return true;
   }
   return false;
@@ -464,6 +506,14 @@ bool Core::wspawn(uint32_t num_warps, Word nextPC) {
 
 void Core::attach_ram(RAM* ram) {
   emulator_.attach_ram(ram);
+}
+
+Core::PerfStats& Core::perf_stats() {
+  perf_stats_.opds_stalls = 0;
+  for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+    perf_stats_.opds_stalls += operands_.at(iw)->total_stalls();
+  }
+  return perf_stats_;
 }
 
 const Core::PerfStats& Core::perf_stats() const {

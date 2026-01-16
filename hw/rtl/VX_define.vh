@@ -469,6 +469,7 @@
         logic                            eop; \
         logic [PC_BITS-1:0]              PC; \
         logic                            wb; \
+        logic [NUM_XREGS-1:0]            wr_xregs; \
         logic [NUM_REGS_BITS-1:0]        rd; \
     } __name__``_header_t; \
     typedef struct packed { \

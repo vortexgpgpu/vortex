@@ -34,7 +34,12 @@ void VOpcUnit::tick() {
   // process incoming instructions
   if (Input.empty())
     return;
-  auto trace = Input.front();
+
+  // check output backpressure
+  if (this->Output.full())
+    return; // stall
+
+  auto trace = Input.peek();
 
   uint32_t scalar_stalls = 0;
   uint32_t vector_stalls = 0;
@@ -73,7 +78,7 @@ void VOpcUnit::tick() {
     this->translate(trace);
   }
 
-  this->Output.push(trace, 2 + stalls);
+  this->Output.send(trace, 2 + stalls);
 
   DT(3, "pipeline-operands: " << *trace);
 

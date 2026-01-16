@@ -17,7 +17,7 @@ namespace vortex {
 
 class DramSim {
 public:
-  typedef void (*ResponseCallback)(void *arg);
+  typedef bool (*ResponseCallback)(void *arg);
 
   DramSim(uint32_t num_channels, uint32_t channel_size, float clock_ratio);
   ~DramSim();

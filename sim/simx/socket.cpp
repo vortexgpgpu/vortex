@@ -22,8 +22,8 @@ Socket::Socket(const SimContext& ctx,
                 const Arch &arch,
                 const DCRS &dcrs)
   : SimObject(ctx, StrFormat("socket%d", socket_id))
-  , mem_req_ports(L1_MEM_PORTS, this)
-  , mem_rsp_ports(L1_MEM_PORTS, this)
+  , mem_req_out(L1_MEM_PORTS, this)
+  , mem_rsp_in(L1_MEM_PORTS, this)
   , socket_id_(socket_id)
   , cluster_(cluster)
   , cores_(arch.socket_size())
@@ -45,7 +45,7 @@ Socket::Socket(const SimContext& ctx,
     false,                  // write-back
     false,                  // write response
     ICACHE_MSHR_SIZE,       // mshr size
-    2,                      // pipeline latency
+    1,                      // pipeline latency
   });
 
   snprintf(sname, 100, "%s-dcaches", this->name().c_str());
@@ -62,7 +62,7 @@ Socket::Socket(const SimContext& ctx,
     DCACHE_WRITEBACK,       // write-back
     false,                  // write response
     DCACHE_MSHR_SIZE,       // mshr size
-    2,                      // pipeline latency
+    1,                      // pipeline latency
   });
 
   // find overlap
@@ -74,23 +74,23 @@ Socket::Socket(const SimContext& ctx,
     auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2 * overlap, overlap);
 
     if (i < overlap) {
-      icaches_->MemReqPorts.at(i).bind(&l1_arb->ReqIn.at(i));
-      l1_arb->RspIn.at(i).bind(&icaches_->MemRspPorts.at(i));
+      icaches_->mem_req_out.at(i).bind(&l1_arb->ReqIn.at(i));
+      l1_arb->RspOut.at(i).bind(&icaches_->mem_rsp_in.at(i));
 
-      dcaches_->MemReqPorts.at(i).bind(&l1_arb->ReqIn.at(overlap + i));
-      l1_arb->RspIn.at(overlap + i).bind(&dcaches_->MemRspPorts.at(i));
+      dcaches_->mem_req_out.at(i).bind(&l1_arb->ReqIn.at(overlap + i));
+      l1_arb->RspOut.at(overlap + i).bind(&dcaches_->mem_rsp_in.at(i));
 
-      l1_arb->ReqOut.at(i).bind(&this->mem_req_ports.at(i));
-      this->mem_rsp_ports.at(i).bind(&l1_arb->RspOut.at(i));
+      l1_arb->ReqOut.at(i).bind(&this->mem_req_out.at(i));
+      this->mem_rsp_in.at(i).bind(&l1_arb->RspIn.at(i));
     } else {
       if (L1_MEM_PORTS > ICACHE_MEM_PORTS) {
         // if more dcache ports
-        dcaches_->MemReqPorts.at(i).bind(&this->mem_req_ports.at(i));
-        this->mem_rsp_ports.at(i).bind(&dcaches_->MemRspPorts.at(i));
+        dcaches_->mem_req_out.at(i).bind(&this->mem_req_out.at(i));
+        this->mem_rsp_in.at(i).bind(&dcaches_->mem_rsp_in.at(i));
       } else {
         // if more icache ports
-        icaches_->MemReqPorts.at(i).bind(&this->mem_req_ports.at(i));
-        this->mem_rsp_ports.at(i).bind(&icaches_->MemRspPorts.at(i));
+        icaches_->mem_req_out.at(i).bind(&this->mem_req_out.at(i));
+        this->mem_rsp_in.at(i).bind(&icaches_->mem_rsp_in.at(i));
       }
     }
   }
@@ -103,12 +103,12 @@ Socket::Socket(const SimContext& ctx,
 
   // connect cores to caches
   for (uint32_t i = 0; i < cores_per_socket; ++i) {
-    cores_.at(i)->icache_req_ports.at(0).bind(&icaches_->CoreReqPorts.at(i).at(0));
-    icaches_->CoreRspPorts.at(i).at(0).bind(&cores_.at(i)->icache_rsp_ports.at(0));
+    cores_.at(i)->icache_req_out.at(0).bind(&icaches_->core_req_in.at(i).at(0));
+    icaches_->core_rsp_out.at(i).at(0).bind(&cores_.at(i)->icache_rsp_in.at(0));
 
     for (uint32_t j = 0; j < DCACHE_NUM_REQS; ++j) {
-      cores_.at(i)->dcache_req_ports.at(j).bind(&dcaches_->CoreReqPorts.at(i).at(j));
-      dcaches_->CoreRspPorts.at(i).at(j).bind(&cores_.at(i)->dcache_rsp_ports.at(j));
+      cores_.at(i)->dcache_req_out.at(j).bind(&dcaches_->core_req_in.at(i).at(j));
+      dcaches_->core_rsp_out.at(i).at(j).bind(&cores_.at(i)->dcache_rsp_in.at(j));
     }
   }
 }

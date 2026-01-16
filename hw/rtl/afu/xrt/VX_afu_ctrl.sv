@@ -137,13 +137,15 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
     localparam MEMORY_BANK_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH - `CLOG2(`PLATFORM_MEMORY_NUM_BANKS);
 
     // device caps
-    wire [63:0] dev_caps = {8'b0,
+    wire [63:0] dev_caps = {16'b0,
                             5'(MEMORY_BANK_ADDR_WIDTH-20),
                             3'(`CLOG2(`PLATFORM_MEMORY_NUM_BANKS)),
                             8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
-                            16'(`NUM_CORES * `NUM_CLUSTERS),
-                            8'(`NUM_WARPS),
-                            8'(`NUM_THREADS),
+                            4'((`NUM_CORES/`SOCKET_SIZE)-1), // sockets per cluster
+                            4'(`NUM_CLUSTERS-1),
+                            4'(`SOCKET_SIZE-1),
+                            6'(`NUM_WARPS-1),
+                            6'(`NUM_THREADS-1),
                             8'(`IMPLEMENTATION_ID)};
 
     wire [63:0] isa_caps = {32'(`MISA_EXT),

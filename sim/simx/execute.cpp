@@ -449,6 +449,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           }
         }
         trace->fetch_stall = true;
+        // stats
+        core_->perf_stats().branches += 1;
       } break;
       case BrType::JAL: { // RV32I: JAL
         for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -468,6 +470,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
         next_pc = rs1_data[thread_last].i + offset;
         trace->fetch_stall = true;
+        // stats
+        core_->perf_stats().branches += 1;
         rd_write = true;
       } break;
       case BrType::SYS:
@@ -485,6 +489,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         default:
           std::abort();
         }
+        // stats
+        core_->perf_stats().branches += 1;
         break;
       default:
         std::abort();
@@ -1352,6 +1358,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           }
           // push reconvergence mask and next PC onto the stack
           warp.ipdom_stack.emplace(warp.tmask, next_pc);
+          // stats
+          core_->perf_stats().divergence += 1;
         }
         // return divergent state
         for (uint32_t t = thread_start; t < num_threads; ++t) {

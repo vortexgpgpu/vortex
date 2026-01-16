@@ -60,26 +60,26 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   // connect L3 core interfaces
   for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
     for (uint32_t j = 0; j < L2_MEM_PORTS; ++j) {
-      clusters_.at(i)->mem_req_ports.at(j).bind(&l3cache_->CoreReqPorts.at(i * L2_MEM_PORTS + j));
-      l3cache_->CoreRspPorts.at(i * L2_MEM_PORTS + j).bind(&clusters_.at(i)->mem_rsp_ports.at(j));
+      clusters_.at(i)->mem_req_out.at(j).bind(&l3cache_->core_req_in.at(i * L2_MEM_PORTS + j));
+      l3cache_->core_rsp_out.at(i * L2_MEM_PORTS + j).bind(&clusters_.at(i)->mem_rsp_in.at(j));
     }
   }
 
   // connect L3 memory interfaces
   for (uint32_t i = 0; i < L3_MEM_PORTS; ++i) {
-    l3cache_->MemReqPorts.at(i).bind(&memsim_->MemReqPorts.at(i));
-    memsim_->MemRspPorts.at(i).bind(&l3cache_->MemRspPorts.at(i));
+    l3cache_->mem_req_out.at(i).bind(&memsim_->mem_req_in.at(i));
+    memsim_->mem_rsp_out.at(i).bind(&l3cache_->mem_rsp_in.at(i));
   }
 
   // set up memory profiling
   for (uint32_t i = 0; i < L3_MEM_PORTS; ++i) {
-    memsim_->MemReqPorts.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
+    memsim_->mem_req_in.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
       __unused (cycle);
       perf_mem_reads_  += !req.write;
       perf_mem_writes_ += req.write;
       perf_mem_pending_reads_ += !req.write;
     });
-    memsim_->MemRspPorts.at(i).tx_callback([&](const MemRsp&, uint64_t cycle){
+    memsim_->mem_rsp_out.at(i).tx_callback([&](const MemRsp&, uint64_t cycle){
       __unused (cycle);
       --perf_mem_pending_reads_;
     });

@@ -23,8 +23,8 @@ class Core;
 
 class Dispatcher : public SimObject<Dispatcher> {
 public:
-	std::vector<SimPort<instr_trace_t*>> Outputs;
-	std::vector<SimPort<instr_trace_t*>> Inputs;
+	std::vector<SimChannel<instr_trace_t*>> Inputs;
+	std::vector<SimChannel<instr_trace_t*>> Outputs;
 
 	Dispatcher(const SimContext& ctx, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes);
 

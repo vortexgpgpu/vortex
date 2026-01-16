@@ -38,10 +38,6 @@
 
 using namespace vortex;
 
-#ifndef XRTSIM
-#define CPP_API
-#endif
-
 // #define BANK_INTERLEAVE
 
 #define MMIO_CTL_ADDR 0x00
@@ -58,19 +54,9 @@ using namespace vortex;
 #define CTL_AP_RESET (1 << 4)
 #define CTL_AP_RESTART (1 << 7)
 
-#ifdef CPP_API
-
 typedef xrt::device xrt_device_t;
 typedef xrt::ip xrt_kernel_t;
 typedef xrt::bo xrt_buffer_t;
-
-#else
-
-typedef xrtDeviceHandle xrt_device_t;
-typedef xrtKernelHandle xrt_kernel_t;
-typedef xrtBufferHandle xrt_buffer_t;
-
-#endif
 
 #define DEFAULT_DEVICE_INDEX 0
 
@@ -85,16 +71,6 @@ typedef xrtBufferHandle xrt_buffer_t;
     _cleanup                                                                   \
   }
 
-#ifndef CPP_API
-static void dump_xrt_error(xrtDeviceHandle xrtDevice, xrtErrorCode err) {
-  size_t len = 0;
-  xrtErrorGetString(xrtDevice, err, nullptr, 0, &len);
-  std::vector<char> buf(len);
-  xrtErrorGetString(xrtDevice, err, buf.data(), buf.size(), nullptr);
-  printf("[VXDRV] detail: %s!\n", buf.data());
-}
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////
 
 class vx_device {
@@ -104,30 +80,13 @@ public:
                   GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
                   RAM_PAGE_SIZE,
                   CACHE_BLOCK_SIZE)
-  #ifndef CPP_API
     , xrtDevice_(nullptr)
     , xrtKernel_(nullptr)
-  #endif
   {}
 
   ~vx_device() {
   #ifdef SCOPE
     vx_scope_stop(this);
-  #endif
-  #ifndef CPP_API
-    for (auto &entry : xrtBuffers_) {
-    #ifdef BANK_INTERLEAVE
-      xrtBOFree(entry);
-    #else
-      xrtBOFree(entry.second.xrtBuffer);
-    #endif
-    }
-    if (xrtKernel_) {
-      xrtKernelClose(xrtKernel_);
-    }
-    if (xrtDevice_) {
-      xrtDeviceClose(xrtDevice_);
-    }
   #endif
   }
 
@@ -143,50 +102,13 @@ public:
       xlbin_path_s = DEFAULT_XCLBIN_PATH;
     }
 
-  #ifdef CPP_API
-
     auto xrtDevice = xrt::device(device_index);
     auto uuid = xrtDevice.load_xclbin(xlbin_path_s);
     auto xrtKernel = xrt::ip(xrtDevice, uuid, KERNEL_NAME);
     auto xclbin = xrt::xclbin(xlbin_path_s);
     auto device_name = xrtDevice.get_info<xrt::info::device::name>();
-
-  #else
-
-    CHECK_HANDLE(xrtDevice, xrtDeviceOpen(device_index), {
-      return -1;
-    });
-
-  #ifndef XRTSIM
-    CHECK_ERR(xrtDeviceLoadXclbinFile(xrtDevice, xlbin_path_s), {
-      dump_xrt_error(xrtDevice, err);
-      xrtDeviceClose(xrtDevice);
-      return err;
-    });
-
-    xuid_t uuid;
-    CHECK_ERR(xrtDeviceGetXclbinUUID(xrtDevice, uuid), {
-      dump_xrt_error(xrtDevice, err);
-      xrtDeviceClose(xrtDevice);
-      return err;
-    });
-
-    CHECK_HANDLE(xrtKernel, xrtPLKernelOpenExclusive(xrtDevice, uuid, KERNEL_NAME), {
-      xrtDeviceClose(xrtDevice);
-      return -1;
-    });
-  #else
-    xrtKernelHandle xrtKernel = xrtDevice;
-  #endif
-
-    // get device name
-    int device_name_size;
-    xrtXclbinGetXSAName(xrtDevice, nullptr, 0, &device_name_size);
-    std::vector<char> sz_device_name(device_name_size);
-    xrtXclbinGetXSAName(xrtDevice, sz_device_name.data(), device_name_size, nullptr);
-    std::string device_name(sz_device_name.data(), device_name_size);
-
-  #endif
+    clock_freqs_ = xrtDevice.get_info<xrt::info::device::max_clock_frequency_mhz>();
+    memory_bw_ = get_mempry_bandwidth();
 
     xrtDevice_ = xrtDevice;
     xrtKernel_ = xrtKernel;
@@ -226,14 +148,7 @@ public:
   #ifdef BANK_INTERLEAVE
     xrtBuffers_.reserve(num_banks);
     for (uint32_t i = 0; i < num_banks; ++i) {
-    #ifdef CPP_API
       xrtBuffers_.emplace_back(xrtDevice_, bank_size, xrt::bo::flags::normal, i);
-    #else
-      CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice_, bank_size, XRT_BO_FLAGS_NONE, i), {
-         return -1;
-      });
-      xrtBuffers_.push_back(xrtBuffer);
-    #endif
       printf("*** allocated bank%u/%u, size=%lu\n", i, num_banks, bank_size);
     }
   #endif
@@ -281,19 +196,30 @@ public:
 
   int get_caps(uint32_t caps_id, uint64_t *value) {
     uint64_t _value;
-
     switch (caps_id) {
     case VX_CAPS_VERSION:
       _value = (dev_caps_ >> 0) & 0xff;
       break;
     case VX_CAPS_NUM_THREADS:
-      _value = (dev_caps_ >> 8) & 0xff;
+      _value = ((dev_caps_ >> 8) & 0x3f) + 1;
       break;
     case VX_CAPS_NUM_WARPS:
-      _value = (dev_caps_ >> 16) & 0xff;
+      _value = ((dev_caps_ >> 14) & 0x3f) + 1;
       break;
-    case VX_CAPS_NUM_CORES:
-      _value = (dev_caps_ >> 24) & 0xffff;
+    case VX_CAPS_NUM_CORES: {
+      uint32_t sockets_per_cluster = ((dev_caps_ >> 20) & 0xf) + 1;
+      uint32_t num_clusters = ((dev_caps_ >> 24) & 0xf) + 1;
+      uint32_t socket_size  = ((dev_caps_ >> 28) & 0xf) + 1;
+      _value = num_clusters * sockets_per_cluster * socket_size;
+    } break;
+    case VX_CAPS_NUM_CLUSTERS:
+      _value = ((dev_caps_ >> 24) & 0xf) + 1;
+      break;
+    case VX_CAPS_SOCKET_SIZE:
+      _value = ((dev_caps_ >> 28) & 0xf) + 1;
+      break;
+    case VX_CAPS_ISSUE_WIDTH:
+      _value = ((dev_caps_ >> 32) & 0xf) + 1;
       break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
@@ -302,16 +228,22 @@ public:
       _value = global_mem_size_;
       break;
     case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = 1ull << ((dev_caps_ >> 40) & 0xff);
+      _value = 1ull << ((dev_caps_ >> 36) & 0xff);
       break;
     case VX_CAPS_ISA_FLAGS:
       _value = isa_caps_;
       break;
     case VX_CAPS_NUM_MEM_BANKS:
-      _value = 1 << ((dev_caps_ >> 48) & 0x7);
+      _value = 1 << ((dev_caps_ >> 44) & 0x7);
       break;
     case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (20 + ((dev_caps_ >> 51) & 0x1f));
+      _value = 1ull << (20 + ((dev_caps_ >> 47) & 0x1f));
+      break;
+    case VX_CAPS_CLOCK_RATE:
+      _value = clock_freqs_;
+      break;
+    case VX_CAPS_PEAK_MEM_BW:
+      _value = memory_bw_;
       break;
     default:
       fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);
@@ -377,11 +309,6 @@ public:
     });
   #ifdef BANK_INTERLEAVE
     if (0 == global_mem_.allocated()) {
-    #ifndef CPP_API
-      for (auto &entry : xrtBuffers_) {
-        xrtBOFree(entry);
-      }
-    #endif
       xrtBuffers_.clear();
     }
   #else
@@ -394,9 +321,6 @@ public:
       auto count = --it->second.count;
       if (0 == count) {
         printf("freeing bank%d...\n", bank_id);
-      #ifndef CPP_API
-        xrtBOFree(it->second.xrtBuffer);
-      #endif
         xrtBuffers_.erase(it);
       }
     } else {
@@ -421,26 +345,12 @@ public:
   }
 
   int write_register(uint32_t addr, uint32_t value) {
-  #ifdef CPP_API
     xrtKernel_.write_register(addr, value);
-  #else
-    CHECK_ERR(xrtKernelWriteRegister(xrtKernel_, addr, value), {
-      dump_xrt_error(xrtDevice_, err);
-      return err;
-    });
-  #endif
     return 0;
   }
 
   int read_register(uint32_t addr, uint32_t *value) {
-  #ifdef CPP_API
     *value = xrtKernel_.read_register(addr);
-  #else
-    CHECK_ERR(xrtKernelReadRegister(xrtKernel_, addr, value), {
-      dump_xrt_error(xrtDevice_, err);
-      return err;
-    });
-  #endif
     return 0;
   }
 
@@ -537,19 +447,8 @@ public:
       CHECK_ERR(this->get_buffer(bo_index, &xrtBuffer), {
         return err;
       });
-    #ifdef CPP_API
       xrtBuffer.write(host_ptr, size, bo_offset);
       xrtBuffer.sync(XCL_BO_SYNC_BO_TO_DEVICE, size, bo_offset);
-    #else
-      CHECK_ERR(xrtBOWrite(xrtBuffer, host_ptr, size, bo_offset), {
-        dump_xrt_error(xrtDevice_, err);
-        return err;
-      });
-      CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_TO_DEVICE, size, bo_offset), {
-        dump_xrt_error(xrtDevice_, err);
-        return err;
-      });
-#endif
     }
     return 0;
   }
@@ -583,19 +482,8 @@ public:
       CHECK_ERR(this->get_buffer(bo_index, &xrtBuffer), {
         return err;
       });
-    #ifdef CPP_API
       xrtBuffer.sync(XCL_BO_SYNC_BO_FROM_DEVICE, size, bo_offset);
       xrtBuffer.read(host_ptr, size, bo_offset);
-    #else
-      CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_FROM_DEVICE, size, bo_offset), {
-        dump_xrt_error(xrtDevice_, err);
-        return err;
-      });
-      CHECK_ERR(xrtBORead(xrtBuffer, host_ptr, size, bo_offset), {
-        dump_xrt_error(xrtDevice_, err);
-        return err;
-      });
-    #endif
     }
     return 0;
   }
@@ -694,10 +582,46 @@ private:
   uint64_t dev_caps_;
   uint64_t isa_caps_;
   uint64_t global_mem_size_;
+  uint64_t clock_freqs_;
+  uint64_t memory_bw_;
   DeviceConfig dcrs_;
   std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
   uint32_t lg2_num_banks_;
   uint32_t lg2_bank_size_;
+
+  uint64_t get_memory_bandwidth() {
+    std::string device_name = xrtDevice_.get_info<xrt::info::device::name>();
+    std::transform(device_name.begin(), device_name.end(), device_name.begin(), ::tolower);
+    if (device_name.find("u55c") != std::string::npos) {
+      // Alveo U55C: 16GB HBM2
+      // Single stack HBM2 often cited around 460 GB/s aggregate
+      return 460000;
+    } else if (device_name.find("u280") != std::string::npos) {
+      // Alveo U280: 16GB HBM2 (2 Stacks) + DDR4
+      // HBM2 Peak: ~460 GB/s
+      // (Ignoring the 2x DDR4 channels which add ~38 GB/s, as HBM is the primary high-BW target)
+      return 460000;
+    } else if (device_name.find("u50") != std::string::npos) {
+      // Alveo U50: 8GB HBM2 (1 Stack)
+      // 1 Stack HBM2 = 460 / 2 = 230 GB/s theoretical
+      // Note: Often power limited to ~201 GB/s in practice, but theoretical peak is higher.
+      return 316000; // Peak limit often cited for U50 silicon before thermal throttling
+    } else if (device_name.find("u250") != std::string::npos) {
+      // Alveo U250: 4x DDR4-2400 DIMMs
+      // 4 channels * 19.2 GB/s per channel
+      return 76800;
+    } else if (device_name.find("u200") != std::string::npos) {
+      // Alveo U200: 4x DDR4-2400 DIMMs
+      // 4 channels * 19.2 GB/s per channel
+      return 76800;
+    } else if (device_name.find("vck5000") != std::string::npos) {
+      // VCK5000 (Versal AI Core): LPDDR4/DDR4 High Speed
+      // Specs list "Off-chip Total Bandwidth" = 102.4 GB/s
+      return 102400;
+    }
+    std::cerr << "Warning: Unknown device type (" << device_name << "). Returning 0." << std::endl;
+    return 0.0;
+  }
 
 #ifdef BANK_INTERLEAVE
 
@@ -765,13 +689,7 @@ private:
     } else {
       printf("allocating bank%d...\n", bank_id);
       uint64_t bank_size = 1ull << lg2_bank_size_;
-    #ifdef CPP_API
       xrt::bo xrtBuffer(xrtDevice_, bank_size, xrt::bo::flags::normal, bank_id);
-    #else
-      CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice_, bank_size, XRT_BO_FLAGS_NONE, bank_id), {
-        return -1;
-      });
-    #endif
       xrtBuffers_.insert({bank_id, {xrtBuffer, 1}});
       if (pBuf) {
         *pBuf = xrtBuffer;

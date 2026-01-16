@@ -63,7 +63,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
         // select writeback interface
         VX_writeback_if opc_writeback_if();
-        assign opc_writeback_if.valid = writeback_if.valid && (wb_opc == i);
+        assign opc_writeback_if.valid = writeback_if.valid && writeback_if.data.wb && (wb_opc == i);
         assign opc_writeback_if.data  = writeback_if.data;
 
         VX_opc_unit #(

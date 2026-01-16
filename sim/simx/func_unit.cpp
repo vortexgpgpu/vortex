@@ -33,7 +33,9 @@ void AluUnit::tick() {
 		if (input.empty())
 			continue;
 		auto& output = Outputs.at(iw);
-		auto trace = input.front();
+		if (output.full())
+			continue; // stall
+		auto trace = input.peek();
 		int delay = 0;
 		if (std::get_if<AluType>(&trace->op_type)) {
 			auto alu_type = std::get<AluType>(trace->op_type);
@@ -96,7 +98,7 @@ void AluUnit::tick() {
 		} else {
 			std::abort();
 		}
-		output.push(trace, delay);
+		output.send(trace, delay);
 		if (trace->eop && trace->fetch_stall) {
 			core_->resume(trace->wid);
 		}
@@ -114,7 +116,9 @@ void FpuUnit::tick() {
 		if (input.empty())
 			continue;
 		auto& output = Outputs.at(iw);
-		auto trace = input.front();
+		if (output.full())
+			continue; // stall
+		auto trace = input.peek();
 		auto fpu_type = std::get<FpuType>(trace->op_type);
 		int delay = 2;
 		switch (fpu_type) {
@@ -124,7 +128,7 @@ void FpuUnit::tick() {
 		case FpuType::FMVXW:
 		case FpuType::FMVWX:
 		case FpuType::FMINMAX:
-			output.push(trace, 2+delay);
+			output.send(trace, 2+delay);
 			break;
 		case FpuType::FADD:
 		case FpuType::FSUB:
@@ -133,18 +137,18 @@ void FpuUnit::tick() {
 		case FpuType::FMSUB:
 		case FpuType::FNMADD:
 		case FpuType::FNMSUB:
-			output.push(trace, LATENCY_FMA+delay);
+			output.send(trace, LATENCY_FMA+delay);
 			break;
 		case FpuType::FDIV:
-			output.push(trace, LATENCY_FDIV+delay);
+			output.send(trace, LATENCY_FDIV+delay);
 			break;
 		case FpuType::FSQRT:
-			output.push(trace, LATENCY_FSQRT+delay);
+			output.send(trace, LATENCY_FSQRT+delay);
 			break;
 		case FpuType::F2I:
 		case FpuType::I2F:
 		case FpuType::F2F:
-			output.push(trace, LATENCY_FCVT+delay);
+			output.send(trace, LATENCY_FCVT+delay);
 			break;
 		default:
 			std::abort();
@@ -177,14 +181,18 @@ void LsuUnit::tick() {
 
 	// handle memory responses
 	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-		auto& lsu_rsp_port = core_->lmem_switch_.at(b)->RspIn;
-		if (lsu_rsp_port.empty())
+		auto& lsu_rsp_in = core_->lmem_switch_.at(b)->RspOut;
+		if (lsu_rsp_in.empty())
 			continue;
 		auto& state = states_.at(b);
-		auto& lsu_rsp = lsu_rsp_port.front();
-		DT(3, this->name() << "-mem-rsp: " << lsu_rsp);
+		auto& lsu_rsp = lsu_rsp_in.peek();
 		auto& entry = state.pending_rd_reqs.at(lsu_rsp.tag);
 		auto trace = entry.trace;
+		int iw = trace->wid % ISSUE_WIDTH;
+		auto& output = Outputs.at(iw);
+		if (output.full())
+			continue; // stall
+		DT(3, this->name() << "-mem-rsp: " << lsu_rsp);
 		assert(entry.count != 0);
 		entry.count -= lsu_rsp.mask.count(); // track remaining
 		if (entry.count == 0) {
@@ -192,12 +200,11 @@ void LsuUnit::tick() {
 			state.pending_rd_reqs.release(lsu_rsp.tag);
 			// is last batch?
 			if (entry.eop) {
-				int iw = trace->wid % ISSUE_WIDTH;
-				Outputs.at(iw).push(trace, 1);
+				output.send(trace, 1);
 			}
 		}
 		pending_loads_ -= lsu_rsp.mask.count();
-		lsu_rsp_port.pop();
+		lsu_rsp_in.pop();
 	}
 
 	// handle LSU requests
@@ -208,7 +215,8 @@ void LsuUnit::tick() {
 			// wait for all pending memory operations to complete
 			if (!state.pending_rd_reqs.empty())
 				continue;
-			Outputs.at(iw).push(state.fence_trace, 1);
+			if (!Outputs.at(iw).try_send(state.fence_trace))
+				continue;
 			state.fence_lock = false;
 			DT(3, this->name() << "-fence-unlock: " << state.fence_trace);
 		}
@@ -221,7 +229,7 @@ void LsuUnit::tick() {
 		bool is_fence = false;
 		bool is_write = false;
 
-		auto trace = input.front();
+		auto trace = input.peek();
 		if (std::get_if<LsuType>(&trace->op_type)) {
 			auto lsu_type = std::get<LsuType>(trace->op_type);
 			is_fence = (lsu_type == LsuType::FENCE);
@@ -263,7 +271,7 @@ void LsuUnit::tick() {
 		}
 
 		if (remain_addrs_ == 0) {
-			pending_addrs_.clear();
+			addr_list_.clear();
 			if (trace->data) {
 			#ifdef EXT_V_ENABLE
 				if (std::get_if<VlsType>(&trace->op_type)) {
@@ -272,7 +280,7 @@ void LsuUnit::tick() {
 						if (!trace->tmask.test(t))
 							continue;
 						for (auto addr : trace_data->mem_addrs.at(t)) {
-							pending_addrs_.push_back(addr);
+							addr_list_.push_back(addr);
 						}
 					}
 				} else
@@ -282,21 +290,32 @@ void LsuUnit::tick() {
 					for (uint32_t t = 0; t < trace_data->mem_addrs.size(); ++t) {
 						if (!trace->tmask.test(t))
 							continue;
-						pending_addrs_.push_back(trace_data->mem_addrs.at(t));
+						addr_list_.push_back(trace_data->mem_addrs.at(t));
 					}
 				}
-				remain_addrs_ = pending_addrs_.size();
+				remain_addrs_ = addr_list_.size();
 			}
 		}
 
+		// check output backpressure
+		bool direct_commit = (is_write || 0 == addr_list_.size());
+		if (direct_commit && remain_addrs_ <= NUM_LSU_LANES) {
+			if (Outputs.at(iw).full())
+				continue; // stall
+		}
+
 		if (remain_addrs_ != 0) {
+			// check lmem switch backpressure
+			if (core_->lmem_switch_.at(block_idx)->ReqIn.full())
+				continue; // stall
+
 			// setup memory request
 			LsuReq lsu_req(NUM_LSU_LANES);
 			lsu_req.write = is_write;
-			uint32_t t0 = pending_addrs_.size() - remain_addrs_;
+			uint32_t t0 = addr_list_.size() - remain_addrs_;
 			for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
 				lsu_req.mask.set(i);
-				lsu_req.addrs.at(i) = pending_addrs_.at(t0 + i).addr;
+				lsu_req.addrs.at(i) = addr_list_.at(t0 + i).addr;
 				--remain_addrs_;
 				if (remain_addrs_ == 0)
 					break;
@@ -314,7 +333,7 @@ void LsuUnit::tick() {
 			lsu_req.uuid = trace->uuid;
 
 			// send memory request
-			core_->lmem_switch_.at(block_idx)->ReqIn.push(lsu_req);
+			core_->lmem_switch_.at(block_idx)->ReqIn.send(lsu_req);
 			DT(3, this->name() << "-mem-req: " << lsu_req);
 
 			// update stats
@@ -327,9 +346,8 @@ void LsuUnit::tick() {
 		}
 
 		if (remain_addrs_ == 0) {
-			// do not wait on writes
-			if (is_write || 0 == pending_addrs_.size()) {
-				Outputs.at(iw).push(trace, 1);
+			if (direct_commit) {
+				Outputs.at(iw).send(trace);
 			}
 			// remove input
 			input.pop();
@@ -350,7 +368,9 @@ void SfuUnit::tick() {
 		if (input.empty())
 			continue;
 		auto& output = Outputs.at(iw);
-		auto trace = input.front();
+		if (output.full())
+			continue; // stall
+		auto trace = input.peek();
 		bool release_warp = trace->fetch_stall;
 		int delay = 2;
 
@@ -358,7 +378,7 @@ void SfuUnit::tick() {
 			auto wctl_type = std::get<WctlType>(trace->op_type);
 			switch (wctl_type) {
 			case WctlType::WSPAWN:
-				output.push(trace, 2+delay);
+				output.send(trace, 2+delay);
 				if (trace->eop) {
 					auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
 					release_warp = core_->wspawn(trace_data->arg1, trace_data->arg2);
@@ -368,10 +388,10 @@ void SfuUnit::tick() {
 			case WctlType::SPLIT:
 			case WctlType::JOIN:
 			case WctlType::PRED:
-				output.push(trace, 2+delay);
+				output.send(trace, 2+delay);
 				break;
 			case WctlType::BAR: {
-				output.push(trace, 2+delay);
+				output.send(trace, 2+delay);
 				if (trace->eop) {
 					auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
 					release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
@@ -387,7 +407,7 @@ void SfuUnit::tick() {
 			case CsrType::CSRRW:
 			case CsrType::CSRRS:
 			case CsrType::CSRRC:
-				output.push(trace, 2+delay);
+				output.send(trace, 2+delay);
 				break;
 			default:
 				std::abort();

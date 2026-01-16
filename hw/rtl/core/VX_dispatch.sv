@@ -21,7 +21,8 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    output wire [PERF_CTR_BITS-1:0] perf_stalls [NUM_EX_UNITS],
+    output wire [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] perf_stalls,
+    output wire [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] perf_instrs,
 `endif
     // inputs
     VX_operands_if.slave    operands_if,
@@ -54,6 +55,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
                 operands_if.data.tmask,
                 operands_if.data.PC,
                 operands_if.data.wb,
+                operands_if.data.wr_xregs,
                 operands_if.data.rd,
                 operands_if.data.op_type,
                 operands_if.data.op_args,
@@ -71,18 +73,23 @@ module VX_dispatch import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     reg [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] perf_stalls_r;
+    reg [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] perf_instrs_r;
 
+    wire operands_if_fire  = operands_if.valid && operands_if.ready;
     wire operands_if_stall = operands_if.valid && ~operands_if.ready;
 
     for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_perf_stalls
         always @(posedge clk) begin
             if (reset) begin
                 perf_stalls_r[i] <= '0;
+                perf_instrs_r[i] <= '0;
             end else begin
                 perf_stalls_r[i] <= perf_stalls_r[i] + PERF_CTR_BITS'(operands_if_stall && operands_if.data.ex_type == EX_BITS'(i));
+                perf_instrs_r[i] <= perf_instrs_r[i] + PERF_CTR_BITS'(operands_if_fire && operands_if.data.ex_type == EX_BITS'(i) && operands_if.data.eop);
             end
         end
         assign perf_stalls[i] = perf_stalls_r[i];
+        assign perf_instrs[i] = perf_instrs_r[i];
     end
 `endif
 

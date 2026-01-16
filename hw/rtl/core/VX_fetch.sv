@@ -21,6 +21,10 @@ module VX_fetch import VX_gpu_pkg::*; #(
     input  wire             clk,
     input  wire             reset,
 
+`ifdef PERF_ENABLE
+    output fetch_perf_t     fetch_perf,
+`endif
+
     // Icache interface
     VX_mem_bus_if.master    icache_bus_if,
 
@@ -93,7 +97,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `endif
 
     `RUNTIME_ASSERT((!schedule_if.valid || schedule_if.data.PC != 0),
-        ("%t: *** %s invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, INSTANCE_ID, to_fullPC(schedule_if.data.PC), schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.uuid))
+        ("invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", to_fullPC(schedule_if.data.PC), schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.uuid))
 
     // Icache Request
 
@@ -131,6 +135,22 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign fetch_if.data.instr = icache_bus_if.rsp_data.data;
     assign fetch_if.data.uuid  = rsp_uuid;
     assign icache_bus_if.rsp_ready = fetch_if.ready;
+
+`ifdef PERF_ENABLE
+    reg [PERF_CTR_BITS-1:0] perf_fetch_stalls;
+
+    wire icache_req_stall = icache_req_valid && ~icache_req_ready;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_fetch_stalls <= '0;
+        end else begin
+            perf_fetch_stalls <= perf_fetch_stalls + PERF_CTR_BITS'(icache_req_stall);
+        end
+    end
+
+    assign fetch_perf.stalls = perf_fetch_stalls;
+`endif
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_FETCH

@@ -14,13 +14,12 @@
 #pragma once
 
 #include <vector>
+#include <list>
 #include <simobject.h>
 #include "types.h"
 #include "emulator.h"
-#include "pipeline.h"
 #include "cache_sim.h"
 #include "local_mem.h"
-#include "ibuffer.h"
 #include "scoreboard.h"
 
 #ifdef EXT_V_ENABLE
@@ -44,66 +43,49 @@ class DCRS;
 class Core : public SimObject<Core> {
 public:
   struct PerfStats {
-    uint64_t cycles;
-    uint64_t instrs;
-    uint64_t sched_idle;
-    uint64_t sched_stalls;
-    uint64_t ibuf_stalls;
-    uint64_t scrb_stalls;
-    uint64_t opds_stalls;
-    uint64_t scrb_alu;
-    uint64_t scrb_fpu;
-    uint64_t scrb_lsu;
-    uint64_t scrb_sfu;
-    uint64_t scrb_csrs;
-    uint64_t scrb_wctl;
+    uint64_t cycles = 0;
+    uint64_t instrs = 0;
+    uint64_t sched_idle = 0;
+    uint64_t active_warps = 0;
+    uint64_t stalled_warps = 0;
+    uint64_t issued_warps = 0;
+    uint64_t issued_threads = 0;
+    uint64_t fetch_stalls = 0;
+    uint64_t ibuf_stalls = 0;
+    uint64_t scrb_stalls = 0;
+    uint64_t opds_stalls = 0;
+    uint64_t alu_stalls = 0;
+    uint64_t fpu_stalls = 0;
+    uint64_t lsu_stalls = 0;
+    uint64_t sfu_stalls = 0;
   #ifdef EXT_V_ENABLE
-    uint64_t vinstrs;
-    uint64_t scrb_vpu;
+    uint64_t vinstrs = 0;
+    uint64_t vpu_stalls = 0;
   #endif
   #ifdef EXT_TCU_ENABLE
-    uint64_t scrb_tcu;
-  #endif
-    uint64_t ifetches;
-    uint64_t loads;
-    uint64_t stores;
-    uint64_t ifetch_latency;
-    uint64_t load_latency;
-
-    PerfStats()
-      : cycles(0)
-      , instrs(0)
-      , sched_idle(0)
-      , sched_stalls(0)
-      , ibuf_stalls(0)
-      , scrb_stalls(0)
-      , opds_stalls(0)
-      , scrb_alu(0)
-      , scrb_fpu(0)
-      , scrb_lsu(0)
-      , scrb_sfu(0)
-      , scrb_csrs(0)
-      , scrb_wctl(0)
-    #ifdef EXT_V_ENABLE
-      , vinstrs(0)
-      , scrb_vpu(0)
+    uint64_t tcu_stalls = 0;
     #endif
+    uint64_t branches   = 0;
+    uint64_t divergence = 0;
+    uint64_t alu_instrs = 0;
+    uint64_t fpu_instrs = 0;
+    uint64_t lsu_instrs = 0;
+    uint64_t sfu_instrs = 0;
     #ifdef EXT_TCU_ENABLE
-      , scrb_tcu(0)
+    uint64_t tcu_instrs = 0;
     #endif
-      , ifetches(0)
-      , loads(0)
-      , stores(0)
-      , ifetch_latency(0)
-      , load_latency(0)
-    {}
+    uint64_t ifetches = 0;
+    uint64_t loads = 0;
+    uint64_t stores = 0;
+    uint64_t ifetch_latency = 0;
+    uint64_t load_latency = 0;
   };
 
-  std::vector<SimPort<MemReq>> icache_req_ports;
-  std::vector<SimPort<MemRsp>> icache_rsp_ports;
+  std::vector<SimChannel<MemReq>> icache_req_out;
+  std::vector<SimChannel<MemRsp>> icache_rsp_in;
 
-  std::vector<SimPort<MemReq>> dcache_req_ports;
-  std::vector<SimPort<MemRsp>> dcache_rsp_ports;
+  std::vector<SimChannel<MemReq>> dcache_req_out;
+  std::vector<SimChannel<MemRsp>> dcache_rsp_in;
 
   Core(const SimContext& ctx,
        uint32_t core_id,
@@ -180,6 +162,7 @@ public:
   }
 
   const PerfStats& perf_stats() const;
+  PerfStats& perf_stats();
 
   int get_exitcode() const;
 
@@ -206,7 +189,7 @@ private:
 
   Emulator emulator_;
 
-  std::vector<IBuffer> ibuffers_;
+  std::vector<TFifo<instr_trace_t*>::Ptr> ibuffers_;
   Scoreboard scoreboard_;
   std::vector<Operands::Ptr> operands_;
   std::vector<Dispatcher::Ptr> dispatchers_;
@@ -215,8 +198,9 @@ private:
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
 
-  PipelineLatch fetch_latch_;
-  PipelineLatch decode_latch_;
+  TFifo<instr_trace_t*> fetch_latch_;
+  TFifo<instr_trace_t*> decode_latch_;
+  instr_trace_t* trace_to_schedule_;
 
   HashTable<instr_trace_t*> pending_icache_;
   std::list<instr_trace_t*, PoolAllocator<instr_trace_t*, 64>> pending_instrs_;

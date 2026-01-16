@@ -21,8 +21,8 @@ class Core;
 
 class OpcUnit : public SimObject<OpcUnit> {
 public:
-  SimPort<instr_trace_t *> Input;
-  SimPort<instr_trace_t *> Output;
+  SimChannel<instr_trace_t *> Input;
+  SimChannel<instr_trace_t *> Output;
 
   OpcUnit(const SimContext &ctx);
   virtual ~OpcUnit();

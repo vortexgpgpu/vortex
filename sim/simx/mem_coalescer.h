@@ -17,18 +17,14 @@ namespace vortex {
 
 class MemCoalescer : public SimObject<MemCoalescer> {
 public:
-  SimPort<LsuReq> ReqIn;
-  SimPort<LsuRsp> RspIn;
+  SimChannel<LsuReq> ReqIn;
+  SimChannel<LsuRsp> RspOut;
 
-  SimPort<LsuReq> ReqOut;
-  SimPort<LsuRsp> RspOut;
+  SimChannel<LsuReq> ReqOut;
+  SimChannel<LsuRsp> RspIn;
 
   struct PerfStats {
-    uint64_t misses;
-
-    PerfStats()
-      : misses(0)
-    {}
+    uint64_t misses = 0;
 
     PerfStats& operator+=(const PerfStats& rhs) {
       this->misses += rhs.misses;

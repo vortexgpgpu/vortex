@@ -452,7 +452,7 @@ module VX_sp_ram #(
             end
             assign rdata = (prev_write && (prev_waddr == addr)) ? prev_data : ram[addr];
             if (RDW_ASSERT) begin : g_rw_asert
-                `RUNTIME_ASSERT(~read || (rdata == ram[addr]), ("%t: read after write hazard", $time))
+                `RUNTIME_ASSERT(~read || (rdata == ram[addr]), ("read after write hazard"))
             end
         end
     end

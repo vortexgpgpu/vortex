@@ -29,7 +29,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if,
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS],
-    VX_issue_sched_if.master issue_sched_if
+    output wire             warp_issued
 );
     `UNUSED_PARAM (ISSUE_ID)
 
@@ -58,8 +58,6 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .reset          (reset),
     `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.scb_stalls),
-        .perf_units_uses(issue_perf.units_uses),
-        .perf_sfu_uses  (issue_perf.sfu_uses),
     `endif
         .writeback_if   (writeback_if),
         .ibuffer_if     (ibuffer_if),
@@ -87,15 +85,16 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
-        `UNUSED_PIN     (perf_stalls),
+        .perf_stalls    (issue_perf.dispatch_stalls),
+        .perf_instrs    (issue_perf.dispatch_instrs),
     `endif
         .operands_if    (operands_if),
         .dispatch_if    (dispatch_if)
     );
 
     // notify scheduler
-    assign issue_sched_if.valid = operands_if.valid && operands_if.ready && operands_if.data.sop;
-    assign issue_sched_if.wis = operands_if.data.wis;
+    wire scoreboard_fire = scoreboard_if.valid && scoreboard_if.ready;
+    assign warp_issued = scoreboard_fire;
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_ISSUE
@@ -175,7 +174,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
                 VX_trace_pkg::trace_ex_type(1, ibuffer_if[i].data.ex_type);
                 `TRACE(1, (", op="))
                 VX_trace_pkg::trace_ex_op(1, ibuffer_if[i].data.ex_type, ibuffer_if[i].data.op_type, ibuffer_if[i].data.op_args);
-                `TRACE(1, (", tmask=%b, wb=%b, used_rs=%b, rd=", ibuffer_if[i].data.tmask, ibuffer_if[i].data.wb, ibuffer_if[i].data.used_rs))
+                `TRACE(1, (", tmask=%b, wb=%b, rd_xregs=%b, wr_xregs=%b, used_rs=%b, rd=", ibuffer_if[i].data.tmask, ibuffer_if[i].data.wb, ibuffer_if[i].data.rd_xregs, ibuffer_if[i].data.wr_xregs, ibuffer_if[i].data.used_rs))
                 VX_trace_pkg::trace_reg_idx(1, ibuffer_if[i].data.rd);
                 `TRACE(1, (", rs1="))
                 VX_trace_pkg::trace_reg_idx(1, ibuffer_if[i].data.rs1);
@@ -195,7 +194,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
             VX_trace_pkg::trace_ex_type(1, operands_if.data.ex_type);
             `TRACE(1, (", op="))
             VX_trace_pkg::trace_ex_op(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
-            `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if.data.tmask, operands_if.data.wb, operands_if.data.rd))
+            `TRACE(1, (", tmask=%b, wb=%b, wr_xregs=%b, rd=%0d, rs1_data=", operands_if.data.tmask, operands_if.data.wb, operands_if.data.wr_xregs, operands_if.data.rd))
             `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs1_data, `SIMD_WIDTH)
             `TRACE(1, (", rs2_data="))
             `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `SIMD_WIDTH)

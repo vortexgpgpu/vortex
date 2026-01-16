@@ -311,7 +311,7 @@ module VX_axi_adapter #(
         `UNUSED_VAR (m_axi_bid[i])
         `UNUSED_VAR (m_axi_bresp[i])
         assign m_axi_bready[i] = 1'b1;
-        `RUNTIME_ASSERT(~m_axi_bvalid[i] || m_axi_bresp[i] == 0, ("%t: *** AXI response error", $time))
+        `RUNTIME_ASSERT(~m_axi_bvalid[i] || m_axi_bresp[i] == 0, ("*** AXI response error"))
     end
 
     // AXI read response channel
@@ -330,8 +330,8 @@ module VX_axi_adapter #(
             assign rsp_xbar_sel_in[i] = 0;
         end
         assign m_axi_rready[i] = rsp_xbar_ready_in[i];
-        `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rlast[i] == 0), ("%t: *** AXI response error", $time))
-        `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rresp[i] != 0), ("%t: *** AXI response error", $time))
+        `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rlast[i] == 0), ("*** AXI response error"))
+        `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rresp[i] != 0), ("*** AXI response error"))
     end
 
     wire [NUM_PORTS_IN-1:0] rsp_xbar_valid_out;

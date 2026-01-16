@@ -70,7 +70,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     VX_decode_if    decode_if();
     VX_dispatch_if  dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_writeback_if writeback_if[`ISSUE_WIDTH]();
-    VX_issue_sched_if issue_sched_if[`ISSUE_WIDTH]();
+    VX_issue_sched_if issue_sched_if();
 
     assign decode_if.valid = decode_valid;
     assign decode_if.data.uuid = decode_uuid;
