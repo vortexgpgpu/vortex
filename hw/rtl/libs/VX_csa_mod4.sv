@@ -121,6 +121,7 @@ module VX_csa_mod4 #(
         localparam W_F1_IN  = W + DEPTH * 2 + 2;
         localparam W_F1_OUT = W_F1_IN + 2;
         wire [W_F1_OUT-1:0] f1_s, f1_c;
+        `UNUSED_VAR({f1_s, f1_c});
         
         VX_csa_32 #(
             .N(W_F1_IN),
@@ -140,6 +141,7 @@ module VX_csa_mod4 #(
         localparam W_F2_IN  = W + DEPTH * 2 + 2;
         localparam W_F2_OUT = W_F2_IN + 2;
         wire [W_F2_OUT-1:0] f2_s, f2_c;
+        `UNUSED_VAR({f2_s, f2_c});
         
         VX_csa_42 #(
             .N(W_F2_IN),

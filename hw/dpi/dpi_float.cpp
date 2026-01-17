@@ -75,6 +75,14 @@ inline uint64_t nan_box8(uint32_t value) {
 #endif
 }
 
+inline uint64_t nan_box4(uint32_t value) {
+#ifdef XLEN_64
+  return value | 0xfffffffffffffff0;
+#else
+  return value;
+#endif
+}
+
 inline bool is_nan_boxed(uint64_t value) {
 #ifdef XLEN_64
   return (uint32_t(value >> 32) == 0xffffffff);
@@ -99,6 +107,14 @@ inline bool is_nan_boxed8(uint64_t value) {
 #endif
 }
 
+inline bool is_nan_boxed4(uint64_t value) {
+#ifdef XLEN_64
+  return (uint64_t(value >> 4) == 0xfffffffffffffff);
+#else
+  return true;
+#endif
+}
+
 inline int64_t check_boxing(int64_t a) {
   if (is_nan_boxed(a))
     return a;
@@ -116,6 +132,13 @@ inline int64_t check_boxing8(int64_t a, uint8_t nan_value) {
     return a;
   return nan_box8(nan_value); // NaN
 }
+
+inline int64_t check_boxing4(int64_t a, uint8_t nan_value) {
+  if (is_nan_boxed4(a))
+    return a;
+  return nan_box4(nan_value); // NaN
+}
+
 
 void dpi_fadd(bool enable, int dst_fmt, int64_t a, int64_t b, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags) {
   if (!enable)
@@ -299,6 +322,9 @@ void dpi_f2f(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVal
       break;
     case 5: // bf8
       *result = nan_box(rv_e5m2tof_s(check_boxing8(a, 0x7C), *frm, fflags));
+      break;
+    case 6: // nvfp4
+      *result = nan_box(rv_e2m1tof_s(check_boxing4(a, 0xFF), *frm, fflags));
       break;
     default:
       std::abort();

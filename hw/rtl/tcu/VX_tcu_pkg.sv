@@ -26,17 +26,20 @@ package VX_tcu_pkg;
     localparam TCU_DP = 0;
 
     // Supported floating-point types
-    localparam TCU_FP32_ID = 0;
-    localparam TCU_FP16_ID = 1;
-    localparam TCU_BF16_ID = 2;
-    localparam TCU_FP8_ID  = 3;
-    localparam TCU_BF8_ID  = 4;
+    localparam TCU_FP32_ID  = 0;
+    localparam TCU_FP16_ID  = 1;
+    localparam TCU_BF16_ID  = 2;
+    localparam TCU_FP8_ID   = 3;
+    localparam TCU_BF8_ID   = 4;
+    localparam TCU_MXFP8_ID = 5;
+    localparam TCU_NVFP4_ID = 7;
     // Supported integer-point types
     localparam TCU_I32_ID  = 8;
     localparam TCU_I8_ID   = 9;
     localparam TCU_U8_ID   = 10;
     localparam TCU_I4_ID   = 11;
     localparam TCU_U4_ID   = 12;
+    localparam TCU_MXI8_ID = 13;
 
     // Tile dimensions
     localparam TCU_TILE_CAP = TCU_NT * TCU_NR;
@@ -87,17 +90,20 @@ package VX_tcu_pkg;
 `ifdef SIMULATION
     task trace_fmt(input int level, input [3:0] fmt);
         case (fmt)
-            TCU_FP32_ID: `TRACE(level, ("fp32"))
-            TCU_FP16_ID: `TRACE(level, ("fp16"))
-            TCU_BF16_ID: `TRACE(level, ("bf16"))
-            TCU_FP8_ID:  `TRACE(level, ("fp8"))
-            TCU_BF8_ID:  `TRACE(level, ("bf8"))
-            TCU_I32_ID:  `TRACE(level, ("i32"))
-            TCU_I8_ID:   `TRACE(level, ("i8"))
-            TCU_U8_ID:   `TRACE(level, ("u8"))
-            TCU_I4_ID:   `TRACE(level, ("i4"))
-            TCU_U4_ID:   `TRACE(level, ("u4"))
-            default:     `TRACE(level, ("?"))
+            TCU_FP32_ID:  `TRACE(level, ("fp32"))
+            TCU_FP16_ID:  `TRACE(level, ("fp16"))
+            TCU_BF16_ID:  `TRACE(level, ("bf16"))
+            TCU_FP8_ID:   `TRACE(level, ("fp8"))
+            TCU_BF8_ID:   `TRACE(level, ("bf8"))
+            TCU_MXFP8_ID: `TRACE(level, ("mxfp8"))
+            TCU_NVFP4_ID: `TRACE(level, ("nvfp4"))
+            TCU_I32_ID:   `TRACE(level, ("i32"))
+            TCU_I8_ID:    `TRACE(level, ("i8"))
+            TCU_U8_ID:    `TRACE(level, ("u8"))
+            TCU_I4_ID:    `TRACE(level, ("i4"))
+            TCU_U4_ID:    `TRACE(level, ("u4"))
+            TCU_MXI8_ID:  `TRACE(level, ("mxi8"))
+            default:      `TRACE(level, ("?"))
         endcase
     endtask
 

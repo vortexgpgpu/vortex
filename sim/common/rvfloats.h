@@ -115,6 +115,10 @@ uint8_t rv_ftomxfp8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 uint32_t rv_nvfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 uint8_t rv_ftonvfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 
+// e2m1 <--> fp32 conversions
+uint32_t rv_e2m1tof_s(uint8_t a, uint32_t frm, uint32_t* fflags);
+uint8_t rv_ftoe2m1_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+
 #ifdef __cplusplus
 }
 #endif

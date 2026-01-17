@@ -963,6 +963,26 @@ nvfloat4_t f32_to_nvfp4(float32_t a, sffloat8_t scale_factor) {
   return res;
 }
 
+float32_t f4e2m1_to_f32(float4_t a) {
+  uint32_t fflags = 0;
+  auto out = cvt_custom_to_f32(a.v, 2, 1, softfloat_roundingMode, &fflags);
+  //printf("f4e2m1_to_f32: 0x%x -> %f\n", a.v, out);
+  softfloat_exceptionFlags |= fflags;
+  float32_t res;
+  res.v = vortex::bit_cast<uint32_t>(out);
+  return res;
+}
+
+float4_t f32_to_f4e2m1(float32_t a) {
+  uint32_t fflags = 0;
+  auto out = cvt_f32_to_custom(vortex::bit_cast<float>(a.v), 2, 1, softfloat_roundingMode, &fflags);
+  //printf("f32_to_f4e2m1: %f -> 0x%x\n", *(float*)&a.v, out);
+  softfloat_exceptionFlags |= fflags;
+  float4_t res;
+  res.v = out & 0x0f;
+  return res;
+}
+
 #ifdef __cplusplus
 }
 #endif
