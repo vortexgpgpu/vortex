@@ -14,889 +14,855 @@
 #include "cache_sim.h"
 #include "debug.h"
 #include "types.h"
-#include <util.h>
-#include <unordered_map>
-#include <vector>
 #include <list>
 #include <queue>
+#include <unordered_map>
+#include <util.h>
+#include <vector>
 
 using namespace vortex;
 
 struct params_t {
-	uint32_t sets_per_bank;
-	uint32_t lines_per_set;
-	uint32_t words_per_line;
-	uint32_t log2_num_inputs;
+  uint32_t sets_per_bank;
+  uint32_t lines_per_set;
+  uint32_t words_per_line;
+  uint32_t log2_num_inputs;
 
-	int32_t word_select_addr_start;
-	int32_t word_select_addr_end;
+  int32_t word_select_addr_start;
+  int32_t word_select_addr_end;
 
-	int32_t bank_select_addr_start;
-	int32_t bank_select_addr_end;
+  int32_t bank_select_addr_start;
+  int32_t bank_select_addr_end;
 
-	int32_t set_select_addr_start;
-	int32_t set_select_addr_end;
+  int32_t set_select_addr_start;
+  int32_t set_select_addr_end;
 
-	int32_t tag_select_addr_start;
-	int32_t tag_select_addr_end;
+  int32_t tag_select_addr_start;
+  int32_t tag_select_addr_end;
 
-	params_t(const CacheSim::Config& config) {
-		int32_t offset_bits = config.L - config.W;
-		int32_t index_bits = config.C - (config.L + config.A + config.B);
-		assert(offset_bits >= 0);
-		assert(index_bits >= 0);
+  params_t(const CacheSim::Config &config) {
+    int32_t offset_bits = config.L - config.W;
+    int32_t index_bits = config.C - (config.L + config.A + config.B);
+    assert(offset_bits >= 0);
+    assert(index_bits >= 0);
 
-		this->log2_num_inputs = log2ceil(config.num_inputs);
+    this->log2_num_inputs = log2ceil(config.num_inputs);
 
-		this->sets_per_bank  = 1 << index_bits;
-		this->lines_per_set  = 1 << config.A;
-		this->words_per_line = 1 << offset_bits;
+    this->sets_per_bank = 1 << index_bits;
+    this->lines_per_set = 1 << config.A;
+    this->words_per_line = 1 << offset_bits;
 
-		// Word select
-		this->word_select_addr_start = config.W;
-		this->word_select_addr_end = (this->word_select_addr_start+offset_bits-1);
+    // Word select
+    this->word_select_addr_start = config.W;
+    this->word_select_addr_end = (this->word_select_addr_start + offset_bits - 1);
 
-		// Bank select
-		this->bank_select_addr_start = (1+this->word_select_addr_end);
-		this->bank_select_addr_end = (this->bank_select_addr_start+config.B-1);
+    // Bank select
+    this->bank_select_addr_start = (1 + this->word_select_addr_end);
+    this->bank_select_addr_end = (this->bank_select_addr_start + config.B - 1);
 
-		// Set select
-		this->set_select_addr_start = (1+this->bank_select_addr_end);
-		this->set_select_addr_end = (this->set_select_addr_start+index_bits-1);
+    // Set select
+    this->set_select_addr_start = (1 + this->bank_select_addr_end);
+    this->set_select_addr_end = (this->set_select_addr_start + index_bits - 1);
 
-		// Tag select
-		this->tag_select_addr_start = (1+this->set_select_addr_end);
-		this->tag_select_addr_end = (config.addr_width-1);
-	}
+    // Tag select
+    this->tag_select_addr_start = (1 + this->set_select_addr_end);
+    this->tag_select_addr_end = (config.addr_width - 1);
+  }
 
-	uint32_t addr_bank_id(uint64_t addr) const {
-		if (bank_select_addr_end >= bank_select_addr_start)
-			return (uint32_t)bit_getw(addr, bank_select_addr_start, bank_select_addr_end);
-		else
-			return 0;
-	}
+  uint32_t addr_bank_id(uint64_t addr) const {
+    if (bank_select_addr_end >= bank_select_addr_start)
+      return (uint32_t)bit_getw(addr, bank_select_addr_start, bank_select_addr_end);
+    else
+      return 0;
+  }
 
-	uint32_t addr_set_id(uint64_t addr) const {
-		if (set_select_addr_end >= set_select_addr_start)
-			return (uint32_t)bit_getw(addr, set_select_addr_start, set_select_addr_end);
-		else
-			return 0;
-	}
+  uint32_t addr_set_id(uint64_t addr) const {
+    if (set_select_addr_end >= set_select_addr_start)
+      return (uint32_t)bit_getw(addr, set_select_addr_start, set_select_addr_end);
+    else
+      return 0;
+  }
 
-	uint64_t addr_tag(uint64_t addr) const {
-		if (tag_select_addr_end >= tag_select_addr_start)
-			return bit_getw(addr, tag_select_addr_start, tag_select_addr_end);
-		else
-			return 0;
-	}
+  uint64_t addr_tag(uint64_t addr) const {
+    if (tag_select_addr_end >= tag_select_addr_start)
+      return bit_getw(addr, tag_select_addr_start, tag_select_addr_end);
+    else
+      return 0;
+  }
 
-	uint64_t mem_addr(uint32_t bank_id, uint32_t set_id, uint64_t tag) const {
-		uint64_t addr(0);
-		if (bank_select_addr_end >= bank_select_addr_start)
-			addr = bit_setw(addr, bank_select_addr_start, bank_select_addr_end, bank_id);
-		if (set_select_addr_end >= set_select_addr_start)
-			addr = bit_setw(addr, set_select_addr_start, set_select_addr_end, set_id);
-		if (tag_select_addr_end >= tag_select_addr_start)
-			addr = bit_setw(addr, tag_select_addr_start, tag_select_addr_end, tag);
-		return addr;
-	}
+  uint64_t mem_addr(uint32_t bank_id, uint32_t set_id, uint64_t tag) const {
+    uint64_t addr(0);
+    if (bank_select_addr_end >= bank_select_addr_start)
+      addr = bit_setw(addr, bank_select_addr_start, bank_select_addr_end, bank_id);
+    if (set_select_addr_end >= set_select_addr_start)
+      addr = bit_setw(addr, set_select_addr_start, set_select_addr_end, set_id);
+    if (tag_select_addr_end >= tag_select_addr_start)
+      addr = bit_setw(addr, tag_select_addr_start, tag_select_addr_end, tag);
+    return addr;
+  }
 };
 
 struct line_t {
-	uint64_t tag;
-	uint32_t lru_ctr;
-	bool     valid;
-	bool     dirty;
+  uint64_t tag;
+  uint32_t lru_ctr;
+  bool valid;
+  bool dirty;
 
-	void reset() {
-		valid = false;
-		dirty = false;
-		lru_ctr = 0;
-	}
+  void reset() {
+    valid = false;
+    dirty = false;
+    lru_ctr = 0;
+  }
 };
 
 struct set_t {
-	std::vector<line_t> lines;
+  std::vector<line_t> lines;
 
-	set_t(uint32_t num_ways)
-		: lines(num_ways)
-	{}
+  set_t(uint32_t num_ways)
+      : lines(num_ways) {}
 
-	void reset() {
-		for (auto& line : lines) {
-			line.reset();
-		}
-	}
+  void reset() {
+    for (auto &line : lines) {
+      line.reset();
+    }
+  }
 
-	// Tag lookup for a core/replay access. Updates LRU counters.
-	// - Returns hit line id or -1.
-	// - free_line_id: first invalid way (if any), else -1.
-	// - repl_line_id: LRU victim candidate (always a valid index when lines is non-empty).
-	int tag_lookup(uint64_t tag, int* free_line_id, int* repl_line_id) {
-		int hit_line_id = -1;
-		*free_line_id = -1;
+  // Tag lookup for a core/replay access. Updates LRU counters.
+  // - Returns hit line id or -1.
+  // - free_line_id: first unused way (if any), else -1.
+  // - repl_line_id: LRU victim candidate (always a valid index when lines is non-empty).
+  int tag_lookup(uint64_t tag, int *free_line_id, int *repl_line_id) {
+    int hit_line_id = -1;
+    *free_line_id = -1;
 
-		// Select replacement among valid lines using max LRU counter.
-		uint32_t max_cnt = 0;
-		bool repl_valid = false;
-		*repl_line_id = 0;
+    // Select replacement among valid lines using max LRU counter.
+    uint32_t max_cnt = 0;
+    bool repl_valid = false;
+    *repl_line_id = 0;
 
-		for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
-			auto& line = lines.at(i);
+    for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
+      auto &line = lines.at(i);
 
-			if (!line.valid) {
-				if (*free_line_id == -1)
-					*free_line_id = i;
-				continue;
-			}
+      // Track first free line.
+      if (!line.valid) {
+        if (*free_line_id == -1)
+          *free_line_id = i;
+        continue;
+      }
 
-			if (!repl_valid || line.lru_ctr >= max_cnt) {
-				max_cnt = line.lru_ctr;
-				*repl_line_id = i;
-				repl_valid = true;
-			}
+      // Track LRU line for replacement.
+      if (!repl_valid || line.lru_ctr >= max_cnt) {
+        max_cnt = line.lru_ctr;
+        *repl_line_id = i;
+        repl_valid = true;
+      }
 
-			if (line.tag == tag) {
-				hit_line_id = i;
-				line.lru_ctr = 0;
-			} else {
-				++line.lru_ctr;
-			}
-		}
+      // Check for tag match.
+      if (line.tag == tag) {
+        hit_line_id = i;
+        line.lru_ctr = 0;
+      } else {
+        ++line.lru_ctr;
+      }
+    }
 
-		// If no valid lines exist, pick way 0 (or the free way if present).
-		if (!repl_valid) {
-			*repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
-		}
+    // If no valid lines exist, pick way 0 (or the free way if present).
+    if (!repl_valid) {
+      *repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
+    }
 
-		return hit_line_id;
-	}
+    return hit_line_id;
+  }
 
-	// Choose a victim line for installing a fill. Does NOT mutate LRU.
-	// Returns the selected line id.
-	int select_victim(int* free_line_id, int* repl_line_id) const {
-		*free_line_id = -1;
-		*repl_line_id = 0;
+  // Choose a victim line for installing a fill. Does NOT mutate LRU.
+  // Returns the selected line id.
+  int select_victim(int *free_line_id, int *repl_line_id) const {
+    *free_line_id = -1;
+    *repl_line_id = 0;
 
-		uint32_t max_cnt = 0;
-		bool repl_valid = false;
+    uint32_t max_cnt = 0;
+    bool repl_valid = false;
 
-		for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
-			const auto& line = lines.at(i);
-			if (!line.valid) {
-				if (*free_line_id == -1)
-					*free_line_id = i;
-				continue;
-			}
-			if (!repl_valid || line.lru_ctr >= max_cnt) {
-				max_cnt = line.lru_ctr;
-				*repl_line_id = i;
-				repl_valid = true;
-			}
-		}
+    for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
+      const auto &line = lines.at(i);
+      if (!line.valid) {
+        if (*free_line_id == -1)
+          *free_line_id = i;
+        continue;
+      }
+      if (!repl_valid || line.lru_ctr >= max_cnt) {
+        max_cnt = line.lru_ctr;
+        *repl_line_id = i;
+        repl_valid = true;
+      }
+    }
 
-		if (!repl_valid) {
-			*repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
-		}
+    if (!repl_valid) {
+      *repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
+    }
 
-		return (*free_line_id != -1) ? *free_line_id : *repl_line_id;
-	}
+    return (*free_line_id != -1) ? *free_line_id : *repl_line_id;
+  }
 };
 
 struct bank_req_t {
 
   using Ptr = std::shared_ptr<bank_req_t>;
 
-	enum ReqType {
-		None   = 0,
-		Fill   = 1,
-		Replay = 2,
-		Core   = 3
-	};
+  enum ReqType {
+    None = 0,
+    Fill = 1,
+    Replay = 2,
+    Core = 3
+  };
 
-	uint64_t addr;
-	uint32_t cid;
-	uint64_t req_tag;
-	uint64_t uuid;
-	uint32_t mshr_id;
-	ReqType  type;
-	bool     write;
+  uint64_t addr;
+  uint32_t cid;
+  uint64_t req_tag;
+  uint64_t uuid;
+  uint32_t mshr_id;
+  ReqType type;
+  bool write;
 
-	bank_req_t() {
-		this->reset();
-	}
+  bank_req_t() {
+    this->reset();
+  }
 
-	void reset() {
-		addr   = 0;
-		cid    = 0;
-		req_tag= 0;
-		uuid   = 0;
-		mshr_id= 0;
-		type   = ReqType::None;
-		write  = false;
-	}
+  void reset() {
+    addr = 0;
+    cid = 0;
+    req_tag = 0;
+    uuid = 0;
+    mshr_id = 0;
+    type = ReqType::None;
+    write = false;
+  }
 
-	friend std::ostream &operator<<(std::ostream &os, const bank_req_t& req) {
-		os << "addr=0x" << std::hex << req.addr;
-		os << ", rw=" << std::dec << req.write;
-		os << ", type=" << req.type;
-		os << ", req_tag=" << req.req_tag;
-		os << ", cid=" << req.cid;
-		os << " (#" << req.uuid << ")";
-		return os;
-	}
+  friend std::ostream &operator<<(std::ostream &os, const bank_req_t &req) {
+    os << "addr=0x" << std::hex << req.addr;
+    os << ", rw=" << std::dec << req.write;
+    os << ", type=" << req.type;
+    os << ", req_tag=" << req.req_tag;
+    os << ", cid=" << req.cid;
+    os << " (#" << req.uuid << ")";
+    return os;
+  }
 };
 
 struct mshr_entry_t {
-	bank_req_t bank_req;
-	uint32_t set_id;
-	uint64_t addr_tag;
-	uint32_t line_id;
+  bank_req_t bank_req;
+  uint32_t set_id;
+  uint64_t addr_tag;
+  uint32_t line_id;
 
-	mshr_entry_t() {
-		this->reset();
-	}
+  mshr_entry_t() {
+    this->reset();
+  }
 
-	void reset() {
-		bank_req.reset();
-		set_id = 0;
-		addr_tag = 0;
-		line_id = 0;
-	}
+  void reset() {
+    bank_req.reset();
+    set_id = 0;
+    addr_tag = 0;
+    line_id = 0;
+  }
 };
 
 class MSHR {
 public:
-	MSHR(uint32_t size)
-		: entries_(size)
-		, ready_reqs_(0)
-		, size_(0)
-	{}
+  MSHR(uint32_t size)
+      : entries_(size), ready_reqs_(0), size_(0) {}
 
-	uint32_t capacity() const {
-		return entries_.size();
-	}
+  uint32_t capacity() const {
+    return entries_.size();
+  }
 
-	uint32_t size() const {
-		return size_;
-	}
+  uint32_t size() const {
+    return size_;
+  }
 
-	bool empty() const {
-		return (0 == size_);
-	}
+  bool empty() const {
+    return (0 == size_);
+  }
 
-	bool full() const {
-		assert(size_ <= entries_.size());
-		return (size_ == entries_.size());
-	}
+  bool full() const {
+    assert(size_ <= entries_.size());
+    return (size_ == entries_.size());
+  }
 
-	bool has_ready_reqs() const {
-		return (ready_reqs_ != 0);
-	}
+  bool has_ready_reqs() const {
+    return (ready_reqs_ != 0);
+  }
 
-	const mshr_entry_t& peek(uint32_t id) const {
-		return entries_.at(id);
-	}
+  const mshr_entry_t &peek(uint32_t id) const {
+    return entries_.at(id);
+  }
 
-	// Returns true if there is an active miss for (set_id, addr_tag).
-	// If true, optionally returns the root entry id.
-	bool lookup(uint32_t set_id, uint64_t addr_tag, uint32_t* root_id = nullptr) const {
-		for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
-			const auto& entry = entries_.at(i);
-			if (entry.bank_req.type != bank_req_t::None
-			 && entry.set_id == set_id
-			 && entry.addr_tag == addr_tag) {
-				if (root_id) *root_id = i;
-				return true;
-			}
-		}
-		return false;
-	}
+  // Returns true if there is an active pending request for the given set/tag.
+  // If true, optionally returns the root entry id.
+  bool lookup(uint32_t set_id, uint64_t addr_tag, uint32_t *root_id = nullptr) const {
+    for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
+      const auto &entry = entries_.at(i);
+      if (entry.bank_req.type != bank_req_t::None && entry.set_id == set_id && entry.addr_tag == addr_tag) {
+        if (root_id)
+          *root_id = i;
+        return true;
+      }
+    }
+    return false;
+  }
 
-	int enqueue(const bank_req_t& bank_req, uint32_t set_id, uint64_t addr_tag) {
-		assert(bank_req.type == bank_req_t::Core);
-		for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
-			auto& entry = entries_.at(i);
-			if (entry.bank_req.type == bank_req_t::None) {
-				entry.bank_req = bank_req;
-				entry.set_id = set_id;
-				entry.addr_tag = addr_tag;
-				entry.line_id = 0; // victim is selected at Fill time
-				++size_;
-				return i;
-			}
-		}
-		std::abort();
-		return -1;
-	}
+  // Enqueue a new core request and return the allocated entry id.
+  int enqueue(const bank_req_t &bank_req, uint32_t set_id, uint64_t addr_tag) {
+    assert(bank_req.type == bank_req_t::Core);
+    for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
+      auto &entry = entries_.at(i);
+      if (entry.bank_req.type == bank_req_t::None) {
+        entry.bank_req = bank_req;
+        entry.set_id = set_id;
+        entry.addr_tag = addr_tag;
+        entry.line_id = 0; // victim is selected at Fill time
+        ++size_;
+        return i;
+      }
+    }
+    std::abort(); // no free slot found!
+    return -1;
+  }
 
-	// Convert all outstanding requests for the filled block into Replay requests.
-	// Returns the root entry (indexed by id).
-	mshr_entry_t& replay(uint32_t id) {
-		auto& root_entry = entries_.at(id);
-		assert(root_entry.bank_req.type == bank_req_t::Core);
-		assert(ready_reqs_ == 0);
-		// mark all related mshr entries for replay
-		for (auto& entry : entries_) {
-			if (entry.bank_req.type == bank_req_t::Core
-			 && entry.set_id == root_entry.set_id
-			 && entry.addr_tag == root_entry.addr_tag) {
-				entry.bank_req.type = bank_req_t::Replay;
-				++ready_reqs_;
-			}
-		}
-		return root_entry;
-	}
+  // Mark all pending requests matching the entry's tag for replay
+  mshr_entry_t &replay(uint32_t id) {
+    auto &root_entry = entries_.at(id);
+    assert(root_entry.bank_req.type == bank_req_t::Core);
+    assert(ready_reqs_ == 0);
+    for (auto &entry : entries_) {
+      if (entry.bank_req.type == bank_req_t::Core && entry.set_id == root_entry.set_id && entry.addr_tag == root_entry.addr_tag) {
+        entry.bank_req.type = bank_req_t::Replay;
+        ++ready_reqs_;
+      }
+    }
+    return root_entry;
+  }
 
-	void dequeue(bank_req_t* out) {
-		assert(ready_reqs_ > 0);
-		for (auto& entry : entries_) {
-			if (entry.bank_req.type == bank_req_t::Replay) {
-				*out = entry.bank_req;
-				entry.bank_req.type = bank_req_t::None;
-				--ready_reqs_;
-				--size_;
-				break;
-			}
-		}
-	}
+  // Dequeue the next ready replay request
+  void dequeue(bank_req_t *out) {
+    assert(ready_reqs_ > 0);
+    for (auto &entry : entries_) {
+      if (entry.bank_req.type == bank_req_t::Replay) {
+        *out = entry.bank_req;
+        entry.bank_req.type = bank_req_t::None;
+        --ready_reqs_;
+        --size_;
+        break;
+      }
+    }
+  }
 
-	void reset() {
-		for (auto& entry : entries_) {
-			entry.reset();
-		}
-		ready_reqs_ = 0;
-		size_ = 0;
-	}
+  void reset() {
+    for (auto &entry : entries_) {
+      entry.reset();
+    }
+    ready_reqs_ = 0;
+    size_ = 0;
+  }
 
 private:
-	std::vector<mshr_entry_t> entries_;
-	uint32_t ready_reqs_;
-	uint32_t size_;
+  std::vector<mshr_entry_t> entries_;
+  uint32_t ready_reqs_;
+  uint32_t size_;
 };
 
 class CacheBank : public SimObject<CacheBank> {
 public:
-	SimChannel<MemReq> core_req_in;
+  SimChannel<MemReq> core_req_in;
   SimChannel<MemRsp> core_rsp_out;
 
   SimChannel<MemReq> mem_req_out;
   SimChannel<MemRsp> mem_rsp_in;
 
-  CacheBank(const SimContext& ctx,
-	          const char* name,
-	          const CacheSim::Config& config,
-				    const params_t& params,
-						uint32_t bank_id)
-    : SimObject<CacheBank>(ctx, name)
-		, core_req_in(this)
-		, core_rsp_out(this)
-		, mem_req_out(this)
-		, mem_rsp_in(this)
-		, config_(config)
-	  , params_(params)
-		, bank_id_(bank_id)
-		, sets_(params.sets_per_bank, params.lines_per_set)
-		, mshr_(config.mshr_size)
-		, pipe_req_(TFifo<bank_req_t>::Create("", config.latency))
-	{
-		this->reset();
-	}
+  CacheBank(const SimContext &ctx,
+            const char *name,
+            const CacheSim::Config &config,
+            const params_t &params,
+            uint32_t bank_id)
+      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, params.lines_per_set), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)) {
+    this->reset();
+  }
 
   void reset() {
-		perf_stats_ = CacheSim::PerfStats();
-		pending_mshr_size_ = 0;
+    perf_stats_ = CacheSim::PerfStats();
+    pending_mshr_size_ = 0;
     pending_read_reqs_ = 0;
-		pending_write_reqs_ = 0;
-		pending_fill_reqs_ = 0;
-			inflight_fills_ = 0;
+    pending_write_reqs_ = 0;
+    pending_fill_reqs_ = 0;
+    inflight_fills_ = 0;
+    for (auto &set : sets_) {
+      set.reset();
+    }
+    mshr_.reset();
+    pipe_req_->reset();
   }
 
   void tick() {
-		// process input requests
-		this->processInputs();
+    // process input requests
+    if (!pipe_req_->full()) {
+      this->processInputs();
+    }
 
-		// process pipeline requests
-		this->processRequests();
+    // process pipeline requests
+    if (!pipe_req_->empty()) {
+      this->processRequests();
+    }
 
-		// calculate memory latency
-		perf_stats_.mem_latency += pending_fill_reqs_;
-	}
+    // calculate memory latency
+    perf_stats_.mem_latency += pending_fill_reqs_;
+  }
 
-	const CacheSim::PerfStats& perf_stats() const {
-		return perf_stats_;
-	}
+  const CacheSim::PerfStats &perf_stats() const {
+    return perf_stats_;
+  }
 
 private:
+  void processInputs() {
+    // first: schedule MSHR replay
+    if (mshr_.has_ready_reqs()) {
+      bank_req_t bank_req;
+      mshr_.dequeue(&bank_req);
+      pipe_req_->push(bank_req);
+      return;
+    }
 
-	void processInputs() {
-		// check pipeline backpressure
-		if (pipe_req_->full())
-			return; // stall
+    // second: schedule memory fill
+    if (!this->mem_rsp_in.empty() && inflight_fills_ == 0) {
+      auto &mem_rsp = this->mem_rsp_in.peek();
+      bank_req_t bank_req;
+      bank_req.reset();
+      bank_req.type = bank_req_t::Fill;
+      bank_req.mshr_id = mem_rsp.tag;
+      pipe_req_->push(bank_req);
+      ++inflight_fills_;
+      this->mem_rsp_in.pop();
+      --pending_fill_reqs_;
+      DT(3, this->name() << "-fill-rsp: " << mem_rsp);
+      return;
+    }
 
-		// first: schedule MSHR replay
-		if (mshr_.has_ready_reqs()) {
-			bank_req_t bank_req;
-			mshr_.dequeue(&bank_req);
-			pipe_req_->push(bank_req);
-			--pending_mshr_size_;
-			return;
-		}
+    // third: schedule core request
+    if (!this->core_req_in.empty()) {
+      auto &core_req = this->core_req_in.peek();
+      // check MSHR occupancy (conservative: any request that may miss and use MSHR)
+      bool use_mshr = !core_req.write || config_.write_back;
+      if (use_mshr && ((mshr_.size() + pending_mshr_size_) >= mshr_.capacity())) {
+        ++perf_stats_.mshr_stalls;
+        return; // stall
+      }
+      bank_req_t bank_req;
+      bank_req.reset();
+      bank_req.type = bank_req_t::Core;
+      bank_req.addr = core_req.addr;
+      bank_req.cid = core_req.cid;
+      bank_req.uuid = core_req.uuid;
+      bank_req.req_tag = core_req.tag;
+      bank_req.write = core_req.write;
+      pipe_req_->push(bank_req);
+      DT(3, this->name() << "-core-req: " << core_req);
+      ++pending_mshr_size_;
+      if (core_req.write)
+        ++perf_stats_.writes;
+      else
+        ++perf_stats_.reads;
+      this->core_req_in.pop();
+      return;
+    }
+  }
 
-			// second: schedule memory fill
-			// IMPORTANT: When the bank has latency > 1, we must not enqueue multiple Fill ops
-			// into the pipeline before the first Fill reaches the head and schedules replays.
-			// Otherwise, later Fill ops would sit ahead of Replay ops in the FIFO, breaking the
-			// required ordering (Fill -> Replay) and causing replay misses / MSHR assertions.
-			if (!this->mem_rsp_in.empty() && inflight_fills_ == 0) {
-			auto& mem_rsp = this->mem_rsp_in.peek();
-			bank_req_t bank_req;
-			bank_req.reset();
-			bank_req.type = bank_req_t::Fill;
-			bank_req.mshr_id = mem_rsp.tag;
-			pipe_req_->push(bank_req);
-				++inflight_fills_;
-			this->mem_rsp_in.pop();
-			--pending_fill_reqs_;
-			DT(3, this->name() << "-fill-rsp: " << mem_rsp);
-			return;
-		}
+  void processRequests() {
+    const bank_req_t &bank_req = pipe_req_->peek();
 
-		// third: schedule core request
-		if (!this->core_req_in.empty()) {
-			auto& core_req = this->core_req_in.peek();
-			// check MSHR capacity (conservative: any request that may miss and use MSHR)
-			if ((!core_req.write || config_.write_back)
-				&& (pending_mshr_size_ >= mshr_.capacity())) {
-				++perf_stats_.mshr_stalls;
-				return;
-			}
-			bank_req_t bank_req;
-			bank_req.reset();
-			bank_req.type = bank_req_t::Core;
-			bank_req.addr = core_req.addr;
-			bank_req.cid = core_req.cid;
-			bank_req.uuid = core_req.uuid;
-			bank_req.req_tag = core_req.tag;
-			bank_req.write = core_req.write;
-			pipe_req_->push(bank_req);
-			DT(3, this->name() << "-core-req: " << core_req);
-			++pending_mshr_size_;
-			if (core_req.write)
-				++perf_stats_.writes;
-			else
-				++perf_stats_.reads;
-			this->core_req_in.pop();
-			return;
-		}
-	}
+    auto need_core_rsp = [&](const bank_req_t &req) {
+      return (!req.write || config_.write_reponse);
+    };
 
-	void processRequests() {
-		if (pipe_req_->empty())
-			return;
+    switch (bank_req.type) {
+    case bank_req_t::None:
+      break;
 
-		const bank_req_t& bank_req = pipe_req_->peek();
+    case bank_req_t::Fill: {
+      // Check memory output backpressure (conservative: Fill may need to writeback).
+      if (config_.write_back && this->mem_req_out.full())
+        return; // stall
 
-		auto need_core_rsp = [&](const bank_req_t& req) {
-			return (!req.write || config_.write_reponse);
-		};
+      // Select MSHR pending request for replay
+      auto &root_entry = mshr_.replay(bank_req.mshr_id);
 
-		switch (bank_req.type) {
-		case bank_req_t::None:
-			break;
+      // Writeback victim if needed
+      const auto &root_peek = mshr_.peek(bank_req.mshr_id);
+      auto &set = sets_.at(root_peek.set_id);
+      int32_t free_line_id = -1;
+      int32_t repl_line_id = 0;
+      int32_t victim_line_id = set.select_victim(&free_line_id, &repl_line_id);
+      auto &victim_line = set.lines.at(victim_line_id);
+      if (config_.write_back && victim_line.valid && victim_line.dirty) {
+        MemReq mem_req;
+        mem_req.addr = params_.mem_addr(bank_id_, root_entry.set_id, victim_line.tag);
+        mem_req.write = true;
+        mem_req.cid = root_entry.bank_req.cid;
+        mem_req.uuid = root_entry.bank_req.uuid;
+        this->mem_req_out.send(mem_req);
+        DT(3, this->name() << "-writeback: " << mem_req);
+        ++perf_stats_.evictions;
+      }
 
-		case bank_req_t::Fill: {
-			// Victim selection is deferred until Fill, so the cache remains fully hit-under-miss.
-			// Peek root entry first so we can do backpressure checks *before* mutating the MSHR.
-			const auto& root_peek = mshr_.peek(bank_req.mshr_id);
-			auto& set  = sets_.at(root_peek.set_id);
+      // Install the filled line
+      victim_line.valid = true;
+      victim_line.tag = root_entry.addr_tag;
+      victim_line.lru_ctr = 0;
+      victim_line.dirty = false;
+    } break;
 
-			int32_t free_line_id = -1;
-			int32_t repl_line_id = 0;
-			int32_t victim_line_id = set.select_victim(&free_line_id, &repl_line_id);
-			auto& victim_line = set.lines.at(victim_line_id);
+    case bank_req_t::Replay: {
+      // Check core output backpressure
+      if (need_core_rsp(bank_req) && this->core_rsp_out.full())
+        return; // stall
 
-			bool need_wb = config_.write_back && victim_line.valid && victim_line.dirty;
-			if (need_wb && this->mem_req_out.full())
-				return; // stall
+      // Replay must re-access tags to update LRU and apply the original request
+      uint32_t set_id = params_.addr_set_id(bank_req.addr);
+      uint64_t addr_tag = params_.addr_tag(bank_req.addr);
 
-			// Convert all pending requests for this block to Replay.
-			auto& root_entry = mshr_.replay(bank_req.mshr_id);
+      auto &set = sets_.at(set_id);
+      int32_t free_line_id = -1;
+      int32_t repl_line_id = 0;
+      int hit_line_id = set.tag_lookup(addr_tag, &free_line_id, &repl_line_id);
+      assert(hit_line_id != -1);
 
-			// Writeback victim if needed (writeback happens in the fill pipeline stage, RTL-style).
-			if (need_wb) {
-				MemReq mem_req;
-				mem_req.addr  = params_.mem_addr(bank_id_, root_entry.set_id, victim_line.tag);
-				mem_req.write = true;
-				mem_req.cid   = root_entry.bank_req.cid;
-				mem_req.uuid  = root_entry.bank_req.uuid;
-				this->mem_req_out.send(mem_req);
-				DT(3, this->name() << "-writeback: " << mem_req);
-				++perf_stats_.evictions;
-			}
+      if (bank_req.write && config_.write_back) {
+        // Write-miss completed by Fill; Replay completes the store by marking dirty.
+        set.lines.at(hit_line_id).dirty = true;
+      }
 
-			// Install the filled line (Replay will apply request semantics such as dirtying for write-miss).
-			victim_line.valid   = true;
-			victim_line.tag     = root_entry.addr_tag;
-			victim_line.lru_ctr = 0;
-			victim_line.dirty   = false;
-		} break;
+      if (need_core_rsp(bank_req)) {
+        MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+        this->core_rsp_out.send(core_rsp);
+        DT(3, this->name() << "-replay: " << core_rsp);
+      }
+    } break;
 
-		case bank_req_t::Replay: {
-			// Replay must re-access tags to update LRU and apply the original request's side-effects
-			// (e.g. dirtying on a write-back write-miss).
-			if (need_core_rsp(bank_req) && this->core_rsp_out.full())
-				return; // stall
+    case bank_req_t::Core: {
+      uint32_t set_id = params_.addr_set_id(bank_req.addr);
+      uint64_t addr_tag = params_.addr_tag(bank_req.addr);
 
-			uint32_t set_id = params_.addr_set_id(bank_req.addr);
-			uint64_t addr_tag = params_.addr_tag(bank_req.addr);
+      auto &set = sets_.at(set_id);
 
-			auto& set = sets_.at(set_id);
-			int32_t free_line_id = -1;
-			int32_t repl_line_id = 0;
-			int hit_line_id = set.tag_lookup(addr_tag, &free_line_id, &repl_line_id);
-			assert(hit_line_id != -1);
+      int32_t free_line_id = -1;
+      int32_t repl_line_id = 0;
+      int hit_line_id = set.tag_lookup(addr_tag, &free_line_id, &repl_line_id);
 
-			if (bank_req.write && config_.write_back) {
-				// Write-miss completed by Fill; Replay completes the store by marking dirty.
-				set.lines.at(hit_line_id).dirty = true;
-			}
+      if (hit_line_id != -1) {
+        //
+        // Hit handling
+        //
+        // Write-through: forward store to memory
+        if (bank_req.write) {
+          auto &hit_line = set.lines.at(hit_line_id);
+          if (!config_.write_back) {
+            if (this->mem_req_out.full())
+              return; // stall
+            MemReq mem_req;
+            mem_req.addr = params_.mem_addr(bank_id_, set_id, addr_tag);
+            mem_req.write = true;
+            mem_req.cid = bank_req.cid;
+            mem_req.uuid = bank_req.uuid;
+            this->mem_req_out.send(mem_req);
+            DT(3, this->name() << "-writethrough: " << mem_req);
+          } else {
+            // Write-back: mark dirty.
+            hit_line.dirty = true;
+          }
+        }
 
-			if (need_core_rsp(bank_req)) {
-				MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
-				this->core_rsp_out.send(core_rsp);
-				DT(3, this->name() << "-replay: " << core_rsp);
-			}
-		} break;
+        // Send response to core
+        if (need_core_rsp(bank_req)) {
+          if (this->core_rsp_out.full())
+            return; // stall
+          MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+          this->core_rsp_out.send(core_rsp);
+          DT(3, this->name() << "-core-rsp: " << core_rsp);
+        }
+      } else {
+        //
+        // Miss handling
+        //
+        // Write-through miss: forward store to memory and respond immediately (no fill/MSHR).
+        if (bank_req.write && !config_.write_back) {
+          // Check output backpressure
+          if (this->mem_req_out.full())
+            return; // stall
+          if (need_core_rsp(bank_req) && this->core_rsp_out.full())
+            return; // stall
 
-		case bank_req_t::Core: {
-			uint32_t set_id = params_.addr_set_id(bank_req.addr);
-			uint64_t addr_tag = params_.addr_tag(bank_req.addr);
+          {
+            MemReq mem_req;
+            mem_req.addr = params_.mem_addr(bank_id_, set_id, addr_tag);
+            mem_req.write = true;
+            mem_req.cid = bank_req.cid;
+            mem_req.uuid = bank_req.uuid;
+            this->mem_req_out.send(mem_req);
+            DT(3, this->name() << "-writethrough: " << mem_req);
+          }
 
-			auto& set = sets_.at(set_id);
+          if (need_core_rsp(bank_req)) {
+            MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+            this->core_rsp_out.send(core_rsp);
+            DT(3, this->name() << "-core-rsp: " << core_rsp);
+          }
+        } else {
+          // MSHR-backed miss (read miss, or write-back write miss).
+          uint32_t root_id = 0;
+          bool mshr_pending = mshr_.lookup(set_id, addr_tag, &root_id);
 
-			int32_t free_line_id = -1;
-			int32_t repl_line_id = 0;
-			int hit_line_id = set.tag_lookup(addr_tag, &free_line_id, &repl_line_id);
+          // If we are the first miss for this block, we should send the fill request this cycle.
+          if (!mshr_pending && this->mem_req_out.full())
+            return; // stall
 
-			if (hit_line_id != -1) {
-				//
-				// Hit handling
-				//
-				if (bank_req.write) {
-					auto& hit_line = set.lines.at(hit_line_id);
-					if (!config_.write_back) {
-						// Write-through: forward store to memory.
-						if (this->mem_req_out.full())
-							return; // stall
-						MemReq mem_req;
-						mem_req.addr  = params_.mem_addr(bank_id_, set_id, addr_tag);
-						mem_req.write = true;
-						mem_req.cid   = bank_req.cid;
-						mem_req.uuid  = bank_req.uuid;
-						this->mem_req_out.send(mem_req);
-						DT(3, this->name() << "-writethrough: " << mem_req);
-					} else {
-						// Write-back: mark dirty.
-						hit_line.dirty = true;
-					}
-				}
+          // Allocate an MSHR entry for this request.
+          assert(!mshr_.full());
+          int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag);
+          DT(3, this->name() << "-mshr-enqueue: " << bank_req);
 
-				if (need_core_rsp(bank_req)) {
-					if (this->core_rsp_out.full())
-						return; // stall
-					MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
-					this->core_rsp_out.send(core_rsp);
-					DT(3, this->name() << "-core-rsp: " << core_rsp);
-				}
+          if (!mshr_pending) {
+            MemReq mem_req;
+            mem_req.addr = params_.mem_addr(bank_id_, set_id, addr_tag);
+            mem_req.write = false;
+            mem_req.tag = mshr_id; // root id used to route the fill response
+            mem_req.cid = bank_req.cid;
+            mem_req.uuid = bank_req.uuid;
+            this->mem_req_out.send(mem_req);
+            DT(3, this->name() << "-fill-req: " << mem_req);
+            ++pending_fill_reqs_;
+          }
+        }
 
-				--pending_mshr_size_;
-				break;
-			}
+        // Update performance stats
+        if (bank_req.write)
+          ++perf_stats_.write_misses;
+        else
+          ++perf_stats_.read_misses;
+      }
 
-			//
-			// Miss handling
-			//
-			if (bank_req.write)
-				++perf_stats_.write_misses;
-			else
-				++perf_stats_.read_misses;
+      // Update pending MSHR size
+      --pending_mshr_size_;
+    } break;
 
-			if (bank_req.write && !config_.write_back) {
-				// Write-through miss: forward store to memory and respond immediately (no fill/MSHR).
-				if (this->mem_req_out.full())
-					return; // stall
-				if (need_core_rsp(bank_req) && this->core_rsp_out.full())
-					return; // stall
+    default:
+      std::abort();
+    }
 
-				{
-					MemReq mem_req;
-					mem_req.addr  = params_.mem_addr(bank_id_, set_id, addr_tag);
-					mem_req.write = true;
-					mem_req.cid   = bank_req.cid;
-					mem_req.uuid  = bank_req.uuid;
-					this->mem_req_out.send(mem_req);
-					DT(3, this->name() << "-writethrough: " << mem_req);
-				}
+    // Pop the request that we just processed.
+    // Keep track of in-flight Fill ops so we never enqueue multiple fills ahead of replays
+    // when bank latency > 1.
+    const bool popped_fill = (bank_req.type == bank_req_t::Fill);
+    pipe_req_->pop();
+    if (popped_fill) {
+      assert(inflight_fills_ > 0);
+      --inflight_fills_;
+    }
+  }
 
-				if (need_core_rsp(bank_req)) {
-					MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
-					this->core_rsp_out.send(core_rsp);
-					DT(3, this->name() << "-core-rsp: " << core_rsp);
-				}
-
-				--pending_mshr_size_;
-				break;
-			}
-
-			// MSHR-backed miss (read miss, or write-back write miss).
-			uint32_t root_id = 0;
-			bool mshr_pending = mshr_.lookup(set_id, addr_tag, &root_id);
-
-			// If we are the first miss for this block, we must be able to send the fill request this cycle.
-			if (!mshr_pending && this->mem_req_out.full())
-				return; // stall
-
-			// Allocate an MSHR entry for this request.
-			assert(!mshr_.full());
-			int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag);
-			DT(3, this->name() << "-mshr-enqueue: " << bank_req);
-
-			if (!mshr_pending) {
-				MemReq mem_req;
-				mem_req.addr  = params_.mem_addr(bank_id_, set_id, addr_tag);
-				mem_req.write = false;
-				mem_req.tag   = mshr_id; // root id used to route the fill response
-				mem_req.cid   = bank_req.cid;
-				mem_req.uuid  = bank_req.uuid;
-				this->mem_req_out.send(mem_req);
-				DT(3, this->name() << "-fill-req: " << mem_req);
-				++pending_fill_reqs_;
-			}
-		} break;
-
-		default:
-			std::abort();
-		}
-
-			// Pop the request that we just processed.
-			// Keep track of in-flight Fill ops so we never enqueue multiple fills ahead of replays
-			// when bank latency > 1.
-			const bool popped_fill = (bank_req.type == bank_req_t::Fill);
-			pipe_req_->pop();
-			if (popped_fill) {
-				assert(inflight_fills_ > 0);
-				--inflight_fills_;
-			}
-	}
-
-	CacheSim::Config config_;
-	params_t params_;
-	uint32_t bank_id_;
+  CacheSim::Config config_;
+  params_t params_;
+  uint32_t bank_id_;
 
   std::vector<set_t> sets_;
-	MSHR mshr_;
-	uint32_t pending_mshr_size_;
-	TFifo<bank_req_t>::Ptr pipe_req_;
+  MSHR mshr_;
+  uint32_t pending_mshr_size_;
+  TFifo<bank_req_t>::Ptr pipe_req_;
 
-	CacheSim::PerfStats perf_stats_;
+  CacheSim::PerfStats perf_stats_;
 
-	uint64_t pending_read_reqs_;
-	uint64_t pending_write_reqs_;
-	uint64_t pending_fill_reqs_;
-		uint32_t inflight_fills_;
+  uint64_t pending_read_reqs_;
+  uint64_t pending_write_reqs_;
+  uint64_t pending_fill_reqs_;
+  uint32_t inflight_fills_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class CacheSim::Impl {
 public:
-	Impl(CacheSim* simobject, const Config& config)
-		: simobject_(simobject)
-		, config_(config)
-		, params_(config)
-		, banks_(1 << config.B)
-		, nc_mem_arbs_(config.mem_ports)
-	{
-		char sname[100];
+  Impl(CacheSim *simobject, const Config &config)
+      : simobject_(simobject), config_(config), params_(config), banks_(1 << config.B), nc_mem_arbs_(config.mem_ports) {
+    char sname[100];
 
-		uint32_t num_banks = (1 << config.B);
+    uint32_t num_banks = (1 << config.B);
 
-		if (config_.bypass) {
-			snprintf(sname, 100, "%s-bypass_arb", simobject->name().c_str());
-			auto bypass_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, config_.mem_ports);
-			for (uint32_t i = 0; i < config_.num_inputs; ++i) {
-				simobject->core_req_in.at(i).bind(&bypass_arb->ReqIn.at(i));
-				bypass_arb->RspOut.at(i).bind(&simobject->core_rsp_out.at(i));
-			}
-			for (uint32_t i = 0; i < config_.mem_ports; ++i) {
-				bypass_arb->ReqOut.at(i).bind(&simobject->mem_req_out.at(i));
-				simobject->mem_rsp_in.at(i).bind(&bypass_arb->RspIn.at(i));
-			}
-			return;
-		}
+    if (config_.bypass) {
+      snprintf(sname, 100, "%s-bypass_arb", simobject->name().c_str());
+      auto bypass_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, config_.mem_ports);
+      for (uint32_t i = 0; i < config_.num_inputs; ++i) {
+        simobject->core_req_in.at(i).bind(&bypass_arb->ReqIn.at(i));
+        bypass_arb->RspOut.at(i).bind(&simobject->core_rsp_out.at(i));
+      }
+      for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+        bypass_arb->ReqOut.at(i).bind(&simobject->mem_req_out.at(i));
+        simobject->mem_rsp_in.at(i).bind(&bypass_arb->RspIn.at(i));
+      }
+      return;
+    }
 
-		// create non-cacheable arbiter
-		for (uint32_t i = 0; i < config_.mem_ports; ++i) {
-			snprintf(sname, 100, "%s-nc_arb%d", simobject->name().c_str(), i);
-			nc_mem_arbs_.at(i) = MemArbiter::Create(sname, ArbiterType::Priority, 2, 1);
-		}
+    // create non-cacheable arbiter
+    for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+      snprintf(sname, 100, "%s-nc_arb%d", simobject->name().c_str(), i);
+      nc_mem_arbs_.at(i) = MemArbiter::Create(sname, ArbiterType::Priority, 2, 1);
+    }
 
-		// Connect non-cacheable arbiter output port 0 to outgoing memory ports
-		for (uint32_t i = 0; i < config_.mem_ports; ++i) {
-			nc_mem_arbs_.at(i)->ReqOut.at(0).bind(&simobject->mem_req_out.at(i));
-			simobject->mem_rsp_in.at(i).bind(&nc_mem_arbs_.at(i)->RspIn.at(0));
-		}
+    // Connect non-cacheable arbiter output port 0 to outgoing memory ports
+    for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+      nc_mem_arbs_.at(i)->ReqOut.at(0).bind(&simobject->mem_req_out.at(i));
+      simobject->mem_rsp_in.at(i).bind(&nc_mem_arbs_.at(i)->RspIn.at(0));
+    }
 
-		// Create bank's memory arbiter
-		snprintf(sname, 100, "%s-mem_arb", simobject->name().c_str());
-		auto bank_mem_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_banks, config_.mem_ports);
+    // Create bank's memory arbiter
+    snprintf(sname, 100, "%s-mem_arb", simobject->name().c_str());
+    auto bank_mem_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_banks, config_.mem_ports);
 
-		// Connect bank's memory arbiter to non-cacheable arbiter's input port 0
-		for (uint32_t i = 0; i < config_.mem_ports; ++i) {
-			bank_mem_arb->ReqOut.at(i).bind(&nc_mem_arbs_.at(i)->ReqIn.at(0));
-			nc_mem_arbs_.at(i)->RspOut.at(0).bind(&bank_mem_arb->RspIn.at(i));
-		}
+    // Connect bank's memory arbiter to non-cacheable arbiter's input port 0
+    for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+      bank_mem_arb->ReqOut.at(i).bind(&nc_mem_arbs_.at(i)->ReqIn.at(0));
+      nc_mem_arbs_.at(i)->RspOut.at(0).bind(&bank_mem_arb->RspIn.at(i));
+    }
 
-		// Create bank's core crossbar
-		snprintf(sname, 100, "%s-core_xbar", simobject->name().c_str());
-		bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks,
-			[&](const MemCrossBar::ReqType& req) {
-				return params_.addr_bank_id(req.addr);
-			});
+    // Create bank's core crossbar
+    snprintf(sname, 100, "%s-core_xbar", simobject->name().c_str());
+    bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks,
+                                          [&](const MemCrossBar::ReqType &req) {
+                                            return params_.addr_bank_id(req.addr);
+                                          });
 
-		// Create cache banks
-		for (uint32_t i = 0, n = num_banks; i < n; ++i) {
-			snprintf(sname, 100, "%s-bank%d", simobject->name().c_str(), i);
-			banks_.at(i) = CacheBank::Create(sname, config, params_, i);
+    // Create cache banks
+    for (uint32_t i = 0, n = num_banks; i < n; ++i) {
+      snprintf(sname, 100, "%s-bank%d", simobject->name().c_str(), i);
+      banks_.at(i) = CacheBank::Create(sname, config, params_, i);
 
-			// bind core ports
-			bank_core_xbar_->ReqOut.at(i).bind(&banks_.at(i)->core_req_in);
-			banks_.at(i)->core_rsp_out.bind(&bank_core_xbar_->RspIn.at(i));
+      // bind core ports
+      bank_core_xbar_->ReqOut.at(i).bind(&banks_.at(i)->core_req_in);
+      banks_.at(i)->core_rsp_out.bind(&bank_core_xbar_->RspIn.at(i));
 
-			// bind memory ports
-			banks_.at(i)->mem_req_out.bind(&bank_mem_arb->ReqIn.at(i));
-			bank_mem_arb->RspOut.at(i).bind(&banks_.at(i)->mem_rsp_in);
-		}
-	}
+      // bind memory ports
+      banks_.at(i)->mem_req_out.bind(&bank_mem_arb->ReqIn.at(i));
+      bank_mem_arb->RspOut.at(i).bind(&banks_.at(i)->mem_rsp_in);
+    }
+  }
 
   void reset() {
-		if (config_.bypass)
-			return;
-		// calculate cache initialization cycles
-		init_cycles_ = params_.sets_per_bank;
-	}
+    if (config_.bypass)
+      return;
+    // calculate cache initialization cycles
+    init_cycles_ = params_.sets_per_bank;
+  }
 
   void tick() {
-		if (config_.bypass)
-			return;
+    if (config_.bypass)
+      return;
 
-		// wait on cache initialization cycles
-		if (init_cycles_ != 0) {
-			--init_cycles_;
-			DT(3, simobject_->name() << "-init: line=" << init_cycles_);
-			return;
-		}
+    // wait on cache initialization cycles
+    if (init_cycles_ != 0) {
+      --init_cycles_;
+      DT(3, simobject_->name() << "-init: line=" << init_cycles_);
+      return;
+    }
 
-		// handle cache bypasss responses
-		for (uint32_t i = 0, n = config_.mem_ports; i < n; ++i) {
-			// Forward non-cacheable arbiter's output (1) to core response ports
-			auto& bypass = nc_mem_arbs_.at(i)->RspOut.at(1);
-			if (!bypass.empty()) {
-				auto& mem_rsp = bypass.peek();
-				if (this->processBypassResponse(mem_rsp)) {
-					bypass.pop();
-				}
-			}
-		}
+    // handle cache bypasss responses
+    for (uint32_t i = 0, n = config_.mem_ports; i < n; ++i) {
+      // Forward non-cacheable arbiter's output (1) to core response ports
+      auto &bypass = nc_mem_arbs_.at(i)->RspOut.at(1);
+      if (!bypass.empty()) {
+        auto &mem_rsp = bypass.peek();
+        if (this->processBypassResponse(mem_rsp)) {
+          bypass.pop();
+        }
+      }
+    }
 
-		// schedule core responses
-		for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
-			auto& bank_rsp = bank_core_xbar_->RspOut.at(req_id);
-			if (bank_rsp.empty())
-				continue;
-			auto& core_rsp = bank_rsp.peek();
-			if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, 0)) {
-				DT(3, simobject_->name() << "-core-rsp: " << core_rsp);
-				bank_rsp.pop();
-			}
-		}
+    // schedule core responses
+    for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
+      auto &bank_rsp = bank_core_xbar_->RspOut.at(req_id);
+      if (bank_rsp.empty())
+        continue;
+      auto &core_rsp = bank_rsp.peek();
+      if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, 0)) {
+        DT(3, simobject_->name() << "-core-rsp: " << core_rsp);
+        bank_rsp.pop();
+      }
+    }
 
-		// schedule core requests
-		for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
-			auto& core_req_in = simobject_->core_req_in.at(req_id);
-			if (core_req_in.empty())
-				continue;
-			auto& core_req = core_req_in.peek();
-			if (core_req.type == AddrType::IO) {
-				if (this->processBypassRequest(core_req, req_id)) {
-					core_req_in.pop();
-				}
-			} else {
-				if (bank_core_xbar_->ReqIn.at(req_id).try_send(core_req, 0)) {
-					core_req_in.pop();
-				}
-			}
-		}
-	}
+    // schedule core requests
+    for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
+      auto &core_req_in = simobject_->core_req_in.at(req_id);
+      if (core_req_in.empty())
+        continue;
+      auto &core_req = core_req_in.peek();
+      if (core_req.type == AddrType::IO) {
+        if (this->processBypassRequest(core_req, req_id)) {
+          core_req_in.pop();
+        }
+      } else {
+        if (bank_core_xbar_->ReqIn.at(req_id).try_send(core_req, 0)) {
+          core_req_in.pop();
+        }
+      }
+    }
+  }
 
-	PerfStats perf_stats() const {
-		PerfStats perf_stats;
-		if (!config_.bypass) {
-			for (const auto& bank : banks_) {
-				perf_stats += bank->perf_stats();
-			}
-			perf_stats.bank_stalls = bank_core_xbar_->collisions();
-		}
-		return perf_stats;
-	}
+  PerfStats perf_stats() const {
+    PerfStats perf_stats;
+    if (!config_.bypass) {
+      for (const auto &bank : banks_) {
+        perf_stats += bank->perf_stats();
+      }
+      perf_stats.bank_stalls = bank_core_xbar_->collisions();
+    }
+    return perf_stats;
+  }
 
 private:
 
-	bool processBypassResponse(const MemRsp& mem_rsp) {
-		// core response backpressure check
-		uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs)-1);
-		if (simobject_->core_rsp_out.at(req_id).full())
-			return false; // stall
-		uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
-		MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
-		simobject_->core_rsp_out.at(req_id).send(core_rsp, 0);
-		DT(3, simobject_->name() << "-bypass-core-rsp: " << core_rsp);
-		return true;
-	}
+  bool processBypassResponse(const MemRsp &mem_rsp) {
+    // core response backpressure check
+    uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs) - 1);
+    if (simobject_->core_rsp_out.at(req_id).full())
+      return false; // stall
+    uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
+    MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
+    simobject_->core_rsp_out.at(req_id).send(core_rsp, 0);
+    DT(3, simobject_->name() << "-bypass-core-rsp: " << core_rsp);
+    return true;
+  }
 
-	bool processBypassRequest(const MemReq& core_req, uint32_t req_id) {
-		// Push core request to non-cacheable arbiter's input (1)
+  bool processBypassRequest(const MemReq &core_req, uint32_t req_id) {
+    // Push core request to non-cacheable arbiter's input (1)
     uint32_t mem = req_id % config_.mem_ports;
     if (nc_mem_arbs_.at(mem)->ReqIn.at(1).full())
-        return false; // stall
+      return false; // stall
     MemReq mem_req(core_req);
     mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
     nc_mem_arbs_.at(mem)->ReqIn.at(1).send(mem_req, 0);
     DT(3, simobject_->name() << "-bypass-dram-req: " << mem_req);
     return true;
-	}
+  }
 
-	CacheSim* const simobject_;
-	Config config_;
-	params_t params_;
-	std::vector<CacheBank::Ptr> banks_;
-	MemArbiter::Ptr bank_arb_;
-	std::vector<MemArbiter::Ptr> nc_mem_arbs_;
-	MemCrossBar::Ptr bank_core_xbar_;
-	uint32_t init_cycles_;
+  CacheSim *const simobject_;
+  Config config_;
+  params_t params_;
+  std::vector<CacheBank::Ptr> banks_;
+  MemArbiter::Ptr bank_arb_;
+  std::vector<MemArbiter::Ptr> nc_mem_arbs_;
+  MemCrossBar::Ptr bank_core_xbar_;
+  uint32_t init_cycles_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-CacheSim::CacheSim(const SimContext& ctx, const char* name, const Config& config)
-	: SimObject<CacheSim>(ctx, name)
-	, core_req_in(config.num_inputs, this)
-	, core_rsp_out(config.num_inputs, this)
-	, mem_req_out(config.mem_ports, this)
-	, mem_rsp_in(config.mem_ports, this)
-	, impl_(new Impl(this, config))
-{}
+CacheSim::CacheSim(const SimContext &ctx, const char *name, const Config &config)
+    : SimObject<CacheSim>(ctx, name), core_req_in(config.num_inputs, this), core_rsp_out(config.num_inputs, this), mem_req_out(config.mem_ports, this), mem_rsp_in(config.mem_ports, this), impl_(new Impl(this, config)) {}
 
 CacheSim::~CacheSim() {
   delete impl_;
