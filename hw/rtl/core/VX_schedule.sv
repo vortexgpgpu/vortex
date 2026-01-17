@@ -87,7 +87,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
     // barriers
     reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] barrier_masks, barrier_masks_n;
     reg [`NUM_BARRIERS-1:0][NW_WIDTH-1:0] barrier_ctrs, barrier_ctrs_n;
-    // reg [`NUM_WARPS-1:0] barrier_stalls, barrier_stalls_n;
     reg [`NUM_WARPS-1:0] curr_barrier_mask_p1;
 
     // async barriers (things I think should be kept separate state from sync barrier)
@@ -115,7 +114,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
         thread_masks_n  = thread_masks;
         barrier_masks_n = barrier_masks;
         barrier_ctrs_n  = barrier_ctrs;
-        // barrier_stalls_n= barrier_stalls;
         warp_pcs_n      = warp_pcs;
 
         // async barrier next state
@@ -168,26 +166,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
         // barrier handling
         curr_barrier_mask_p1 = '0;
-        // curr_barrier_mask_p1 = barrier_masks[warp_ctl_if.barrier.id];
-        // curr_barrier_mask_p1[warp_ctl_if.wid] = 1;
         if (warp_ctl_if.valid && warp_ctl_if.barrier.valid) begin
             curr_barrier_mask_p1 = barrier_masks[warp_ctl_if.barrier.id];
             curr_barrier_mask_p1[warp_ctl_if.wid] = 1;
-
-            // if (~warp_ctl_if.barrier.is_noop) begin
-            //     if (~warp_ctl_if.barrier.is_global
-            //      && (barrier_ctrs[warp_ctl_if.barrier.id] == NW_WIDTH'(warp_ctl_if.barrier.size_m1))) begin
-            //         barrier_ctrs_n[warp_ctl_if.barrier.id] = '0; // reset barrier counter
-            //         barrier_masks_n[warp_ctl_if.barrier.id] = '0; // reset barrier mask
-            //         stalled_warps_n &= ~barrier_masks[warp_ctl_if.barrier.id]; // unlock warps
-            //         stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
-            //     end else begin
-            //         barrier_ctrs_n[warp_ctl_if.barrier.id] = barrier_ctrs[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
-            //         barrier_masks_n[warp_ctl_if.barrier.id] = curr_barrier_mask_p1;
-            //     end
-            // end else begin
-            //     stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
-            // end
 
             case (warp_ctl_if.barrier.op)
                 BARRIER_OP_SYNC: begin

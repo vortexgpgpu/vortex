@@ -1391,9 +1391,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         trace->data = std::make_shared<SfuTraceData>(rs1_data[thread_last].i, rs2_data[thread_last].i);
       } break;
       case WctlType::BAR_ARRIVE: {
-        // Asynchronous arrive - non-blocking
-        // rs1 = barrier_id, rs2 = num_warps
-        // Returns token (current generation) in rd
         uint32_t bar_id = rs1_data[thread_last].u;
         uint32_t count = rs2_data[thread_last].u;
         uint32_t token = this->barrier_arrive(bar_id, count, wid);
@@ -1405,14 +1402,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         rd_write = true;
       } break;
       case WctlType::BAR_WAIT: {
-        // Asynchronous wait - blocking if barrier generation <= token
-        // rs1 = barrier_id, rs2 = token (from previous arrive)
         uint32_t bar_id = rs1_data[thread_last].u;
         uint32_t token = rs2_data[thread_last].u;
-        // bool ready = this->barrier_wait(bar_id, token, wid);
-        // if (!ready) {
         trace->fetch_stall = true;  // Stall until barrier reaches next generation
-        // }
         trace->data = std::make_shared<SfuTraceData>(bar_id, token);
       } break;
       case WctlType::PRED: {

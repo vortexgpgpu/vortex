@@ -75,11 +75,6 @@ void vx_serial(vx_serial_cb callback, const void * arg);
 //////////////////////////////////////////////////////////////////////////////
 
 // CTA-level async barrier
-// Usage:
-//   barrier bar;
-//   bar.init(num_warps);
-//   uint32_t token = bar.arrive();  // returns token (generation number)
-//   bar.wait(token);                // wait until generation > token
 class barrier {
 public:
   // Constructor

@@ -32,8 +32,6 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t);
 
-    // localparam DATAW = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NUM_REGS_BITS + 1 + PID_WIDTH + 1 + 1 + DV_STACK_SIZEW + `XLEN + 1;
-
     `UNUSED_VAR (execute_if.data.rs3_data)
 
     tmc_t       tmc;

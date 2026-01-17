@@ -350,14 +350,6 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid)
     // Capture current generation as token BEFORE any updates
     uint32_t token = b.generation;
 
-    std::cout << "[ARRIVE] warp=" << wid
-              << " gen =" << b.generation
-              << " token=" << token
-              << " expect =" << b.expect_count
-              << " arrived_count =" << b.arrived_count
-              << " arrived_mask =" << b.arrived_mask
-              << std::endl;
-
     // If arrived in the same generation before, skip but still return token
     if (b.arrived_mask.test(wid)) {
         std::cout << "  >> ARRIVE_DUP warp=" << wid << " (already arrived this gen)\n";
@@ -368,17 +360,10 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid)
     b.arrived_mask.set(wid);
     ++b.arrived_count;
 
-    std::cout << " [ARRIVE_UPDATE] warp=" << wid
-              << " arrived_count=" << b.arrived_count
-              << " arrived_mask=" << b.arrived_mask
-              << std::endl;
 
     // If all warps arrived, update the generation
     if (b.arrived_count == b.expect_count) {
         uint32_t new_gen = b.generation + 1;
-
-        std::cout << " [GENERATION COMPLETE]: gen="
-                  << b.generation << " -> " << new_gen << std::endl;
 
         b.generation = new_gen;
         b.arrived_count = 0;
@@ -389,9 +374,6 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid)
             if (b.waiting_mask.test(w)) {
                 // Check if this warp's token indicates it should wake up
                 // A warp waiting with token T should wake when generation > T
-                std::cout << "  [CHECK WAKE warp] =" << w
-                          << " now_gen =" << b.generation
-                          << std::endl;
                 b.waiting_mask.reset(w);
                 stalled_warps_.reset(w);
             }
@@ -425,42 +407,20 @@ bool Emulator::barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid) {
     // We need to wait until generation > token (i.e., that phase completed)
     uint32_t desired_gen = token + 1;
 
-    std::cout << "[WAIT] warp=" << wid
-              << " token=" << token
-              << " desired_gen=" << desired_gen
-              << " current_gen=" << b.generation
-              << " arrived_mask=" << b.arrived_mask
-              << " waiting_mask=" << b.waiting_mask
-              << std::endl;
-
     if (b.generation >= desired_gen) {
-        std::cout << "[WAIT_DONE] warp=" << wid
-                  << " reaches gen=" << b.generation
-                  << " (desired=" << desired_gen << ", token=" << token << ")"
-                  << std::endl;
+ 
 
         b.waiting_mask.reset(wid);
         stalled_warps_.reset(wid);
 
-        std::cout << "waiting_mask(after pass)="
-                  << b.waiting_mask
-                  << std::endl;
 
         return true;
     }
 
     // Not reached, wait
-    std::cout << "  warp " << wid
-              << " waiting for gen " << desired_gen
-              << " (current gen=" << b.generation << ", token=" << token << ")"
-              << std::endl;
 
     b.waiting_mask.set(wid);
     stalled_warps_.set(wid);
-
-    std::cout << "waiting_mask(after stall)="
-              << b.waiting_mask
-              << std::endl;
 
     return false;
 }
