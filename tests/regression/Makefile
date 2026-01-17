@@ -29,6 +29,7 @@ all:
 	$(MAKE) -C jacobi
 	$(MAKE) -C pathfinder
 	$(MAKE) -C softmax
+	$(MAKE) -C async_barrier
 
 all-mpi:
 	$(MAKE) -C mpi_dotproduct MPI=1 NP=$(NP)
@@ -66,6 +67,7 @@ run-simx:
 	$(MAKE) -C jacobi run-simx
 	$(MAKE) -C pathfinder run-simx
 	$(MAKE) -C softmax run-simx
+	$(MAKE) -C async_barrier run-simx
 
 run-simx-mpi:
 	$(MAKE) -C mpi_dotproduct run-simx MPI=1 NP=$(NP)
@@ -103,6 +105,7 @@ run-rtlsim:
 	$(MAKE) -C jacobi run-rtlsim
 	$(MAKE) -C pathfinder run-rtlsim
 	$(MAKE) -C softmax run-rtlsim
+	$(MAKE) -C async_barrier run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -136,3 +139,4 @@ clean:
 	$(MAKE) -C jacobi clean
 	$(MAKE) -C pathfinder clean
 	$(MAKE) -C softmax clean
+	$(MAKE) -C async_barrier clean

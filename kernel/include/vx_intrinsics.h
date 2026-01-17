@@ -217,9 +217,15 @@ inline __attribute__((const)) int vx_hart_id() {
     return ret;
 }
 
+// Memory fence
 inline void vx_fence() {
     __asm__ volatile ("fence iorw, iorw");
 }
+
+
+//
+// cooperative threads extensions
+//
 
 // Returns 1 if every active lane’s predicate is true, 0 otherwise.
 inline __attribute__((const)) size_t vx_vote_all(int predicate) {
@@ -281,11 +287,14 @@ inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cva
     return ret;
 }
 
-// Warp-level scheduling hint
-#define vx_wsched(__prio__, __yield__) \
-    __asm__ (".insn r %0, 6, 0, x0, x%[p], x%[y]" :: "i"(RISCV_CUSTOM0), [p]"i"(__prio__), [y]"i"(__yield__) : "memory")
+//
+// Asynchronous Barrier extensions
+//
 
-
+// Async Barrier Arrive: non-blocking, returns a token (generation number)
+// barrier_id: identifier of the barrier
+// num_warps: number of warps participating in the barrier
+// returns: token representing the barrier phase for this arrive
 inline uint32_t vx_barrier_arrive(int barrier_id, int num_warps) {
     uint32_t token;
     __asm__ volatile (
@@ -298,7 +307,7 @@ inline uint32_t vx_barrier_arrive(int barrier_id, int num_warps) {
 }
 
 // Async Barrier Wait: blocks until the barrier phase associated with the token is complete
-// barrier_id: barrier ID (0-7)
+// barrier_id: identifier of the barrier
 // token: the token returned by vx_barrier_arrive
 inline void vx_barrier_wait(int barrier_id, uint32_t token) {
     __asm__ volatile (
@@ -307,9 +316,6 @@ inline void vx_barrier_wait(int barrier_id, uint32_t token) {
         : "memory"
     );
 }
-
-
-
 
 #ifdef __cplusplus
 }

@@ -48,10 +48,10 @@ typedef void (*vx_serial_cb)(void *arg);
 #define __syncthreads() \
   vx_barrier(__local_group_id, __warps_per_group)
 
-#define __syncthreads_arrive() \
+#define __asyncthreads_arrive() \
   vx_barrier_arrive(__local_group_id, __warps_per_group)
 
-#define __syncthreads_wait(token) \
+#define __asyncthreads_wait(token) \
   vx_barrier_wait(__local_group_id, token)
 
 // launch a kernel function with a grid of blocks and block of threads
