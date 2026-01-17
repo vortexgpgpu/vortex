@@ -191,8 +191,13 @@ module VX_schedule import VX_gpu_pkg::*; #(
                 BARRIER_OP_ARRIVE: begin
                     // ARRIVE: non-blocking, update state.
                     // Assumes each warp arrives at most once per generation.
-                    if (warp_ctl_if.barrier.count <= NW_WIDTH'(1)
-                     || async_bar_arrived_cnt[warp_ctl_if.barrier.id] == (warp_ctl_if.barrier.count - NW_WIDTH'(1))) begin
+                    if (warp_ctl_if.barrier.count == '0) begin
+                        // Treat count=0 as a completed barrier to avoid deadlock.
+                        async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = '0;
+                        async_bar_generation_n[warp_ctl_if.barrier.id] = async_bar_generation[warp_ctl_if.barrier.id] + `XLEN'(1);
+                        stalled_warps_n &= ~async_bar_waiting[warp_ctl_if.barrier.id];
+                        async_bar_waiting_n[warp_ctl_if.barrier.id] = '0;
+                    end else if (async_bar_arrived_cnt[warp_ctl_if.barrier.id] == (warp_ctl_if.barrier.count - NW_WIDTH'(1))) begin
                         // Last arrival: advance generation and reset counter
                         async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = '0;
                         async_bar_generation_n[warp_ctl_if.barrier.id] = async_bar_generation[warp_ctl_if.barrier.id] + `XLEN'(1);
