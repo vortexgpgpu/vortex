@@ -150,6 +150,9 @@ void LsuMemAdapter::tick() {
     out_rsp.uuid = rsp_in.uuid;
 
     // merge other responses with the same tag
+    std::vector<uint32_t> pop_list;
+    pop_list.reserve(input_size);
+    pop_list.push_back(i);
     for (uint32_t j = i + 1; j < input_size; ++j) {
       if (RspIn.at(j).empty())
         continue;
@@ -157,15 +160,17 @@ void LsuMemAdapter::tick() {
       if (rsp_in.tag == other_rsp.tag) {
         out_rsp.mask.set(j);
         DT(4, this->name() << "-rsp" << j << ": " << other_rsp);
-        RspIn.at(j).pop();
+        pop_list.push_back(j);
       }
     }
 
     // send memory response
     if (RspOut.try_send(out_rsp, 1)) {
       DT(4, this->name() << "-rsp" << i << ": " << rsp_in);
-      // remove input
-      RspIn.at(i).pop();
+      // Pop all merged inputs only after successful send.
+      for (auto idx : pop_list) {
+        RspIn.at(idx).pop();
+      }
     }
 
     break;

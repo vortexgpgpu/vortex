@@ -396,7 +396,7 @@ bool Emulator::barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid) {
             stalled_warps_.set(wid);
             return false;
         }
-        stalled_warps_.reset(wid);
+        // stalled_warps_.reset(wid);
         return true;
     }
 
@@ -411,7 +411,7 @@ bool Emulator::barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid) {
  
 
         b.waiting_mask.reset(wid);
-        stalled_warps_.reset(wid);
+        // stalled_warps_.reset(wid);
 
 
         return true;
