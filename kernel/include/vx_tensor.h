@@ -486,16 +486,34 @@ inline bool compress_2to4_matrix(const T* dense, uint32_t rows, uint32_t cols, u
   if (ld_compressed < out_cols || ld_metadata < meta_cols)
     return false;
 
+  // Assumes input is already 2:4 compliant (at most two non-zeros per 4-wide block).
   for (uint32_t r = 0; r < rows; ++r) {
     const T* row_in = dense + r * ld;
     T* row_out = compressed + r * ld_compressed;
     uint8_t* row_meta = metadata + r * ld_metadata;
     for (uint32_t c = 0; c < cols; c += kBlock) {
       T vals[kBlock] = {row_in[c + 0], row_in[c + 1], row_in[c + 2], row_in[c + 3]};
-      uint32_t keep0, keep1;
-      detail::select_top2(vals, keep0, keep1);
-      uint32_t idx0 = (keep0 < keep1) ? keep0 : keep1;
-      uint32_t idx1 = (keep0 < keep1) ? keep1 : keep0;
+      uint32_t idx0 = kBlock;
+      uint32_t idx1 = kBlock;
+      for (uint32_t i = 0; i < kBlock; ++i) {
+        if (vals[i] != static_cast<T>(0)) {
+          if (idx0 == kBlock) {
+            idx0 = i;
+          } else if (idx1 == kBlock) {
+            idx1 = i;
+          } else {
+            return false;
+          }
+        }
+      }
+      if (idx0 == kBlock) {
+        idx0 = 0;
+        idx1 = 1;
+      } else if (idx1 == kBlock) {
+        idx1 = (idx0 == 0) ? 1 : 0;
+      }
+      if (idx0 > idx1)
+        std::swap(idx0, idx1);
       uint32_t out_base = (c / kBlock) * kKeep;
       row_out[out_base + 0] = vals[idx0];
       row_out[out_base + 1] = vals[idx1];
