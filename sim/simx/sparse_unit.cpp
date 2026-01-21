@@ -323,6 +323,8 @@ public:
   }
 
   void tick() {
+    using ecfg = vortex::vegeta_engine_config_t;
+    
     for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
       auto& input = simobject_->Inputs.at(iw);
       if (input.empty())
@@ -337,27 +339,45 @@ public:
         case VegetaTcuType::TILE_GEMM_U:
         case VegetaTcuType::TILE_GEMM_V:
         case VegetaTcuType::TILE_GEMM_R:
+          // Cycle-accurate pipelined latency:
+          // WL (Weight Load) + FF (Feed First) + FS (Feed Second) + DR (Drain) + REDUCE
+          delay = ecfg::SINGLE_INSTR_LATENCY;
+          break;
         case VegetaTcuType::WMMA:
+          // Keep existing WMMA timing for backward compatibility
           delay = 4;
           break;
         default:
           std::abort();
         }
-        DT(3, simobject_->name() << ": op=" << tcu_type << ", " << *trace);
+        DT(3, simobject_->name() << ": op=" << tcu_type << ", delay=" << delay << ", " << *trace);
       } else if (std::holds_alternative<VegetaLsuType>(trace->op_type)) {
         auto lsu_type = std::get<VegetaLsuType>(trace->op_type);
         switch (lsu_type) {
         case VegetaLsuType::TILE_LOAD_T:
+          // 1KB tile load = TILE_SIZE / MEM_BW cycles
+          delay = ecfg::TILE_LOAD_LATENCY;
+          break;
         case VegetaLsuType::TILE_LOAD_U:
+          // 2KB U-register load = 2 tiles
+          delay = 2 * ecfg::TILE_LOAD_LATENCY;
+          break;
         case VegetaLsuType::TILE_LOAD_V:
+          // 4KB V-register load = 4 tiles  
+          delay = 4 * ecfg::TILE_LOAD_LATENCY;
+          break;
         case VegetaLsuType::TILE_LOAD_M:
-        case VegetaLsuType::TILE_STORE_T:
+          // 128B metadata load
           delay = 2;
+          break;
+        case VegetaLsuType::TILE_STORE_T:
+          // 1KB tile store
+          delay = ecfg::TILE_LOAD_LATENCY;
           break;
         default:
           std::abort();
         }
-        DT(3, simobject_->name() << ": op=" << lsu_type << ", " << *trace);
+        DT(3, simobject_->name() << ": op=" << lsu_type << ", delay=" << delay << ", " << *trace);
       } else {
         std::abort();
       }

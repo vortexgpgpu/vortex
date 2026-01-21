@@ -166,4 +166,62 @@ public:
 };
 
 } // namespace sparse
+
+// Helper function for clog2 calculation
+namespace detail {
+  constexpr uint32_t clog2_helper(uint32_t x) {
+    return (x < 2) ? 0 : (1 + clog2_helper(x / 2));
+  }
+}
+
+// VEGETA Engine Configuration for cycle-accurate pipelined simulation
+// Based on VEGETA paper Section V: Engine Architecture
+struct vegeta_engine_config_t {
+  // Tile dimensions (matching existing TILE_DIM = 16)
+  static constexpr uint32_t TILE_DIM = 16;        // Tile dimension (16×16)
+  static constexpr uint32_t TILE_K = 32;          // Effectual computations per output element
+  static constexpr uint32_t TOTAL_MACS = 512;     // Total MACs in engine
+  
+  // Configurable PE parameters (PE-α-β naming from paper)
+  // α (ALPHA): Broadcast factor - number of PUs per PE
+  // β (BETA): Reduction factor - number of MACs per PU
+  static constexpr uint32_t ALPHA = 4;    // Broadcast factor (PUs per PE)
+  static constexpr uint32_t BETA = 2;     // Reduction factor (MACs per PU)
+  
+  // Derived array dimensions (Section V-A formulas)
+  // Nrows = (# effectual computations per output) / β
+  // Ncols = total_macs / (Nrows × α × β)
+  static constexpr uint32_t NROWS = TILE_K / BETA;                          // = 32/2 = 16
+  static constexpr uint32_t NCOLS = TOTAL_MACS / (NROWS * ALPHA * BETA);    // = 512/(16*4*2) = 4
+  
+  // Pipeline stage latencies (Section V pipelining)
+  // TN: number of columns in input tile
+  static constexpr uint32_t TN = TILE_DIM;
+  
+  // Stage latencies:
+  // WL (Weight Load): Load weight elements to PEs - Nrows cycles
+  // FF (Feed First): Feed inputs/outputs from west/north - TN cycles
+  // FS (Feed Second): Continue skewed input feed - Nrows-1 cycles  
+  // DR (Drain): Drain remaining calculations - Ncols cycles
+  // REDUCE: Reduce partial sums for β > 1
+  static constexpr uint32_t WL_LATENCY = NROWS;
+  static constexpr uint32_t FF_LATENCY = TN;
+  static constexpr uint32_t FS_LATENCY = (NROWS > 1) ? (NROWS - 1) : 0;
+  static constexpr uint32_t DR_LATENCY = NCOLS;
+  static constexpr uint32_t REDUCE_LATENCY = (BETA > 1) ? (detail::clog2_helper(BETA) + 1) : 0;
+  
+  // Total single instruction latency
+  static constexpr uint32_t SINGLE_INSTR_LATENCY = 
+    WL_LATENCY + FF_LATENCY + FS_LATENCY + DR_LATENCY + REDUCE_LATENCY;
+  
+  // Pipelined throughput: cycles between consecutive instruction starts
+  static constexpr uint32_t PIPELINE_II = TN;  // Initiation Interval
+  
+  // Memory bandwidth parameters
+  static constexpr uint32_t TILE_SIZE_BYTES = TILE_DIM * TILE_DIM * 4;  // 1KB for fp32
+  static constexpr uint32_t MEM_BW_BYTES_PER_CYCLE = 64;  // Memory bandwidth
+  static constexpr uint32_t TILE_LOAD_LATENCY = TILE_SIZE_BYTES / MEM_BW_BYTES_PER_CYCLE;
+};
+
 } // namespace vortex
+
