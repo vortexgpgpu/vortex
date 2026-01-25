@@ -382,7 +382,6 @@ package VX_gpu_pkg;
     localparam INST_SFU_WSPAWN = 4'h1;
     localparam INST_SFU_SPLIT =  4'h2;
     localparam INST_SFU_JOIN =   4'h3;
-    localparam INST_SFU_BAR =    4'h4;
     localparam INST_SFU_PRED =   4'h5;
     localparam INST_SFU_CSRRW =  4'h6;
     localparam INST_SFU_CSRRS =  4'h7;
@@ -396,7 +395,13 @@ package VX_gpu_pkg;
     endfunction
 
     function automatic logic inst_sfu_is_wctl(input logic [INST_SFU_BITS-1:0] op);
-        return (op <= 5) || (op == 9) || (op == 10);
+        return (op == INST_SFU_TMC)
+            || (op == INST_SFU_WSPAWN)
+            || (op == INST_SFU_SPLIT)
+            || (op == INST_SFU_JOIN)
+            || (op == INST_SFU_PRED)
+            || (op == INST_SFU_ARRIVE)
+            || (op == INST_SFU_WAIT);
     endfunction
 
     function automatic logic inst_sfu_is_csr(input logic [INST_SFU_BITS-1:0] op);
@@ -485,10 +490,9 @@ package VX_gpu_pkg;
         logic [DV_STACK_SIZEW-1:0] stack_ptr;
     } join_t;
 
-    typedef enum logic [1:0] {
-        BARRIER_OP_SYNC  = 2'b0,
-        BARRIER_OP_ARRIVE = 2'd1,
-        BARRIER_OP_WAIT  = 2'd2
+    typedef enum logic {
+        BARRIER_OP_ARRIVE = 1'b0,
+        BARRIER_OP_WAIT   = 1'b1
     } barrier_op_e;
 
     typedef struct packed {
@@ -497,12 +501,10 @@ package VX_gpu_pkg;
         logic [NB_WIDTH-1:0]    id;
         logic                   is_global;
     `ifdef GBAR_ENABLE
-        logic [`MAX(NW_WIDTH, NC_WIDTH)-1:0] size_m1;
+        logic [`MAX(NW_WIDTH, NC_WIDTH)-1:0] count;
     `else
-        logic [NW_WIDTH-1:0]    size_m1;
-    `endif
-        logic                   is_noop;
         logic [NW_WIDTH-1:0]    count;
+    `endif
         logic [`XLEN-1:0]       token;
     } barrier_t;
 

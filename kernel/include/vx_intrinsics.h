@@ -149,9 +149,14 @@ inline void vx_join(int stack_ptr) {
     __asm__ volatile (".insn r %0, 3, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(stack_ptr) : "memory");
 }
 
+// Forward declarations (implemented below)
+inline uint32_t vx_barrier_arrive(int barrier_id, int num_warps);
+inline void vx_barrier_wait(int barrier_id, uint32_t token);
+
 // Warp Barrier
 inline void vx_barrier(int barried_id, int num_warps) {
-    __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps) : "memory");
+    uint32_t token = vx_barrier_arrive(barried_id, num_warps);
+    vx_barrier_wait(barried_id, token);
 }
 
 // Return current thread identifier

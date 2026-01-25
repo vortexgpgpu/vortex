@@ -672,12 +672,65 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         uint32_t data_bytes = 1 << (lsuArgs.width & 0x3);
         uint32_t data_width = 8 * data_bytes;
         Word offset = sext<Word>(lsuArgs.offset, 32);
+        const bool debug_mem_exc = (std::getenv("SIMX_MEMEXC_DEBUG") != nullptr);
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;
           uint64_t mem_addr = rs1_data[t].i + offset;
           uint64_t read_data = 0;
+          try {
           this->dcache_read(&read_data, mem_addr, data_bytes);
+          } catch (const std::exception& e) {
+            if (debug_mem_exc) {
+              auto ireg = [&](uint32_t reg_idx) -> Word {
+                return warp.ireg_file.at(reg_idx).at(t);
+              };
+              uint32_t blockDim_x = 0;
+              uint32_t blockDim_y = 0;
+              uint32_t gridDim_x = 0;
+              uint32_t gridDim_y = 0;
+              uint32_t tls_local_group_id = 0;
+              uint32_t tls_threadIdx_x = 0;
+              uint32_t tls_threadIdx_y = 0;
+              uint32_t tls_blockIdx_x = 0;
+              uint32_t tls_blockIdx_y = 0;
+              try {
+                mmu_.read(&blockDim_x, 0x800074d0, sizeof(blockDim_x), false);
+                mmu_.read(&blockDim_y, 0x800074d4, sizeof(blockDim_y), false);
+                mmu_.read(&gridDim_x, 0x800074dc, sizeof(gridDim_x), false);
+                mmu_.read(&gridDim_y, 0x800074e0, sizeof(gridDim_y), false);
+                uint64_t tp_base = uint32_t(ireg(4));
+                mmu_.read(&tls_local_group_id, tp_base + 0, sizeof(tls_local_group_id), false);
+                mmu_.read(&tls_threadIdx_x, tp_base + 4, sizeof(tls_threadIdx_x), false);
+                mmu_.read(&tls_threadIdx_y, tp_base + 8, sizeof(tls_threadIdx_y), false);
+                mmu_.read(&tls_blockIdx_x, tp_base + 16, sizeof(tls_blockIdx_x), false);
+                mmu_.read(&tls_blockIdx_y, tp_base + 20, sizeof(tls_blockIdx_y), false);
+              } catch (...) {
+                // best-effort debug read
+              }
+              std::cerr << "SIMX_MEMEXC_DEBUG: LOAD exception"
+                        << " cid=" << core_->id()
+                        << " wid=" << wid
+                        << " tid=" << t
+                        << " PC=0x" << std::hex << warp.PC << std::dec
+                        << " addr=0x" << std::hex << mem_addr << std::dec
+                        << " size=" << data_bytes
+                        << " x5(t0)=0x" << std::hex << ireg(5) << std::dec
+                        << " x7(t2)=0x" << std::hex << ireg(7) << std::dec
+                        << " x4(tp)=0x" << std::hex << ireg(4) << std::dec
+                        << " tls={lgid=" << tls_local_group_id
+                        << ",tidx=(" << tls_threadIdx_x << "," << tls_threadIdx_y << ")"
+                        << ",bidx=(" << tls_blockIdx_x << "," << tls_blockIdx_y << ")}"
+                        << " gridDim={x=" << gridDim_x << ",y=" << gridDim_y << "}"
+                        << " blockDim={x=" << blockDim_x << ",y=" << blockDim_y << "}"
+                        << " x14(a4)=0x" << std::hex << ireg(14) << std::dec
+                        << " x17(a7)=0x" << std::hex << ireg(17) << std::dec
+                        << " x21(s5)=0x" << std::hex << ireg(21) << std::dec
+                        << " what=\"" << e.what() << "\""
+                        << std::endl;
+            }
+            throw;
+          }
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           switch (lsuArgs.width) {
           case 0: // RV32I: LB
@@ -711,12 +764,42 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         trace->data = trace_data;
         uint32_t data_bytes = 1 << (lsuArgs.width & 0x3);
         Word offset = sext<Word>(lsuArgs.offset, 32);
+        const bool debug_tidx_store = (std::getenv("SIMX_TIDX_STORE_DEBUG") != nullptr);
+        const bool debug_blockdim_store = (std::getenv("SIMX_BLOCKDIM_STORE_DEBUG") != nullptr);
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;
           uint64_t mem_addr = rs1_data[t].i + offset;
           uint64_t write_data = rs2_data[t].u64;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
+          if (debug_tidx_store) {
+            uint64_t tp_base = uint32_t(warp.ireg_file.at(4).at(t));
+            if (mem_addr == (tp_base + 4) || mem_addr == (tp_base + 8)) {
+              std::cerr << "SIMX_TIDX_STORE_DEBUG: STORE"
+                        << " cid=" << core_->id()
+                        << " wid=" << wid
+                        << " tid=" << t
+                        << " PC=0x" << std::hex << warp.PC << std::dec
+                        << " addr=0x" << std::hex << mem_addr << std::dec
+                        << " data=0x" << std::hex << write_data << std::dec
+                        << " bytes=" << data_bytes
+                        << " (tp=0x" << std::hex << tp_base << std::dec << ")"
+                        << std::endl;
+            }
+          }
+          if (debug_blockdim_store) {
+            if (mem_addr == 0x800074d0 || mem_addr == 0x800074d4) {
+              std::cerr << "SIMX_BLOCKDIM_STORE_DEBUG: STORE"
+                        << " cid=" << core_->id()
+                        << " wid=" << wid
+                        << " tid=" << t
+                        << " PC=0x" << std::hex << warp.PC << std::dec
+                        << " addr=0x" << std::hex << mem_addr << std::dec
+                        << " data=0x" << std::hex << write_data << std::dec
+                        << " bytes=" << data_bytes
+                        << std::endl;
+            }
+          }
           switch (lsuArgs.width) {
           case 0:
           case 1:

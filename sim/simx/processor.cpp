@@ -16,7 +16,23 @@
 #include "emulator.h"
 #include "core.h"
 
+#include <cstdlib>
+#include <execinfo.h>
+
 using namespace vortex;
+
+static void simx_print_backtrace() {
+  void* addrs[64];
+  int count = ::backtrace(addrs, int(std::size(addrs)));
+  char** symbols = ::backtrace_symbols(addrs, count);
+  if (symbols == nullptr)
+    return;
+  std::cerr << "Backtrace (" << count << " frames):" << std::endl;
+  for (int i = 0; i < count; ++i) {
+    std::cerr << "  " << symbols[i] << std::endl;
+  }
+  std::free(symbols);
+}
 
 ProcessorImpl::ProcessorImpl(const Arch& arch)
   : arch_(arch)
@@ -228,8 +244,14 @@ int Processor::run() {
     return impl_->run();
   } catch (const std::exception& e) {
     std::cerr << "Error: exception: " << e.what() << std::endl;
+    if (std::getenv("SIMX_BACKTRACE") != nullptr) {
+      simx_print_backtrace();
+    }
   } catch (...) {
     std::cerr << "Error: unknown exception." << std::endl;
+    if (std::getenv("SIMX_BACKTRACE") != nullptr) {
+      simx_print_backtrace();
+    }
   }
   return -1;
 }

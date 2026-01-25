@@ -159,12 +159,12 @@ void Socket::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
   cluster_->barrier(bar_id, count, core_id);
 }
 
-void Socket::async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
-    cluster_->async_barrier_arrive(bar_id, count, core_id);
+uint32_t Socket::async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
+    return cluster_->async_barrier_arrive(bar_id, count, core_id);
 }
 
-bool Socket::async_barrier_wait(uint32_t bar_id, uint32_t count, uint32_t core_id) {
-    return cluster_->async_barrier_wait(bar_id, count, core_id);
+bool Socket::async_barrier_wait(uint32_t bar_id, uint32_t token, uint32_t core_id) {
+    return cluster_->async_barrier_wait(bar_id, token, core_id);
 }
 
 void Socket::resume(uint32_t core_index) {

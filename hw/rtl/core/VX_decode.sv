@@ -508,11 +508,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_type = INST_OP_BITS'(INST_SFU_JOIN);
                                 `USED_IREG (rs1);
                             end
-                            3'h4: begin // BAR
-                                op_type = INST_OP_BITS'(INST_SFU_BAR);
-                                `USED_IREG (rs1);
-                                `USED_IREG (rs2);
-                            end
                             3'h5: begin // PRED
                                 op_type = INST_OP_BITS'(INST_SFU_PRED);
                                 op_args.wctl.is_neg = rd[0];

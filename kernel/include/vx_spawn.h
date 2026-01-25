@@ -38,21 +38,49 @@ extern dim3_t blockDim;
 extern __thread uint32_t __local_group_id;
 extern uint32_t __warps_per_group;
 
+static inline uint32_t __vx_local_group_id() {
+  if (__warps_per_group != 0) {
+    return (uint32_t)(vx_warp_id() / (int)__warps_per_group);
+  }
+  return 0;
+}
+
 typedef void (*vx_kernel_func_cb)(void *arg);
 
 typedef void (*vx_serial_cb)(void *arg);
 
 #define __local_mem(size) \
-  (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + __local_group_id * size)
+  (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + __vx_local_group_id() * size)
 
-#define __syncthreads() \
-  vx_barrier(__local_group_id, __warps_per_group)
+// Barrier ID mapping:
+// - Use an even barrier ID for CTA-wide sync barriers (__syncthreads / __sync_threads)
+// - Use an odd  barrier ID for user async barriers (barrier class, __asyncthreads_*)
+//
+// This avoids interference between sync and async barrier phases when a CTA slot
+// (i.e., __local_group_id) is reused across multiple logical CTAs.
+#define __sync_barrier_id() \
+  ((__warps_per_group > 1) ? (uint32_t)(__vx_local_group_id() << 1) : (uint32_t)__vx_local_group_id())
+
+#define __async_barrier_id() \
+  ((__warps_per_group > 1) ? (uint32_t)((__vx_local_group_id() << 1) | 1u) : (uint32_t)__vx_local_group_id())
+
+// CTA-level sync barrier (__syncthreads) implemented using async barrier arrive+wait.
+// This keeps the ISA surface minimal (ARRIVE+WAIT) while hiding the token at the API level.
+#define __sync_threads() do { \
+  if (__warps_per_group > 1) { \
+    uint32_t __bar_id = __sync_barrier_id(); \
+    uint32_t __token = vx_barrier_arrive(__bar_id, __warps_per_group); \
+    vx_barrier_wait(__bar_id, __token); \
+  } \
+} while (0)
+
+#define __syncthreads() __sync_threads()
 
 #define __asyncthreads_arrive() \
-  vx_barrier_arrive(__local_group_id, __warps_per_group)
+  vx_barrier_arrive(__async_barrier_id(), __warps_per_group)
 
 #define __asyncthreads_wait(token) \
-  vx_barrier_wait(__local_group_id, token)
+  vx_barrier_wait(__async_barrier_id(), token)
 
 // launch a kernel function with a grid of blocks and block of threads
 int vx_spawn_threads(uint32_t dimension,
@@ -85,7 +113,7 @@ public:
 
   // Initialize barrier with expected warp count
   void init(uint32_t num_warps) {
-    bar_id_ = __local_group_id;
+    bar_id_ = (num_warps > 1) ? (uint32_t)((__vx_local_group_id() << 1) | 1u) : (uint32_t)__vx_local_group_id();
     num_warps_ = num_warps;
   }
 

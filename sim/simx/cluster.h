@@ -97,8 +97,8 @@ public:
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
-  void async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
-  bool async_barrier_wait(uint32_t bar_id, uint32_t count, uint32_t core_id);
+  uint32_t async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
+  bool async_barrier_wait(uint32_t bar_id, uint32_t token, uint32_t core_id);
 
   PerfStats perf_stats() const;
 

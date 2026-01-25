@@ -45,20 +45,20 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_pred   = (execute_if.data.op_type == INST_SFU_PRED);
     wire is_split  = (execute_if.data.op_type == INST_SFU_SPLIT);
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
-    wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
     // async 
     wire is_bar_arrive = (execute_if.data.op_type == INST_SFU_ARRIVE);
     wire is_bar_wait   = (execute_if.data.op_type == INST_SFU_WAIT);
+    wire is_bar        = is_bar_arrive || is_bar_wait;
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
-    if (LANE_BITS != 0) begin : g_last_tid
-        VX_priority_encoder #(
-            .N (NUM_LANES),
-            .REVERSE (1)
-        ) last_tid_select (
-            .data_in (execute_if.data.header.tmask),
-            .index_out (last_tid),
-            `UNUSED_PIN (onehot_out),
+	    if (LANE_BITS != 0) begin : g_last_tid
+	        VX_priority_encoder #(
+	            .N (NUM_LANES),
+	            .REVERSE (1)
+	        ) last_tid_select (
+	            .data_in (execute_if.data.header.tmask),
+	            .index_out (last_tid),
+	            `UNUSED_PIN (onehot_out),
             `UNUSED_PIN (valid_out)
         );
     end else begin : g_no_tid
@@ -132,10 +132,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // barrier
 
-    assign barrier.valid    = is_bar || is_bar_arrive || is_bar_wait;
+    assign barrier.valid    = is_bar;
     // async barrier op
-    assign barrier.op       = is_bar ? BARRIER_OP_SYNC : 
-                              (is_bar_arrive ? BARRIER_OP_ARRIVE : BARRIER_OP_WAIT);
+    assign barrier.op       = is_bar_wait ? BARRIER_OP_WAIT : BARRIER_OP_ARRIVE;
 
     assign barrier.id       = rs1_data[NB_WIDTH-1:0];
 `ifdef GBAR_ENABLE
@@ -143,9 +142,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 `else
     assign barrier.is_global= 1'b0;
 `endif
-    assign barrier.size_m1  = is_bar ? (rs2_data[$bits(barrier.size_m1)-1:0] - $bits(barrier.size_m1)'(1)) : '0;
-    assign barrier.is_noop  = is_bar && (rs2_data[$bits(barrier.size_m1)-1:0] == $bits(barrier.size_m1)'(1));
-    assign barrier.count    = rs2_data[NW_WIDTH-1:0]; // For ARRIVE: expected warp count
+    // For SYNC/ARRIVE: expected warp count minus 1 (wrap-safe for num_warps == `NUM_WARPS)
+    assign barrier.count    = is_bar_arrive ? (rs2_data[$bits(barrier.count)-1:0] - $bits(barrier.count)'(1)) : '0;
     assign barrier.token    = rs2_data[`XLEN-1:0];  // For WAIT: token to wait for
 
     // wspawn
