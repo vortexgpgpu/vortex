@@ -378,11 +378,12 @@ package VX_gpu_pkg;
 
     ///////////////////////////////////////////////////////////////////////////
 
-    localparam INST_SFU_TMC =    4'h0;
-    localparam INST_SFU_WSPAWN = 4'h1;
-    localparam INST_SFU_SPLIT =  4'h2;
-    localparam INST_SFU_JOIN =   4'h3;
-    localparam INST_SFU_PRED =   4'h5;
+    localparam INST_SFU_TMC =     4'h0;
+    localparam INST_SFU_WSPAWN =  4'h1;
+    localparam INST_SFU_SPLIT =   4'h2;
+    localparam INST_SFU_JOIN =    4'h3;
+    localparam INST_SFU_BARRIER = 4'h4;
+    localparam INST_SFU_PRED =    4'h5;
     localparam INST_SFU_CSRRW =  4'h6;
     localparam INST_SFU_CSRRS =  4'h7;
     localparam INST_SFU_CSRRC =  4'h8;
@@ -399,6 +400,7 @@ package VX_gpu_pkg;
             || (op == INST_SFU_WSPAWN)
             || (op == INST_SFU_SPLIT)
             || (op == INST_SFU_JOIN)
+            || (op == INST_SFU_BARRIER)
             || (op == INST_SFU_PRED)
             || (op == INST_SFU_ARRIVE)
             || (op == INST_SFU_WAIT);
@@ -500,6 +502,7 @@ package VX_gpu_pkg;
         barrier_op_e            op;
         logic [NB_WIDTH-1:0]    id;
         logic                   is_global;
+        logic                   is_sync;
     `ifdef GBAR_ENABLE
         logic [`MAX(NW_WIDTH, NC_WIDTH)-1:0] count;
     `else

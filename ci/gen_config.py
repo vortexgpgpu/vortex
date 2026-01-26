@@ -902,7 +902,10 @@ def _emit_unresolved_key(lines: List[str], d: Dialect, key: str, raw: Any,
     if _truthy(v):
       # keep existing behavior: default true => guarded by DISABLE
       lines.append(f"{d.ifndef()} {disable_guard}")
+      # avoid macro redefinition warnings when KEY is also provided via -DKEY
+      lines.append(f"{d.ifndef()} {key}")
       lines.append(f"{d.define()} {key}")
+      lines.append(d.endif())
       lines.append(d.endif())
       lines.append("")
     return

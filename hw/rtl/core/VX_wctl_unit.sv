@@ -48,7 +48,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // async 
     wire is_bar_arrive = (execute_if.data.op_type == INST_SFU_ARRIVE);
     wire is_bar_wait   = (execute_if.data.op_type == INST_SFU_WAIT);
-    wire is_bar        = is_bar_arrive || is_bar_wait;
+    wire is_bar_sync   = (execute_if.data.op_type == INST_SFU_BARRIER);
+    wire is_bar        = is_bar_arrive || is_bar_wait || is_bar_sync;
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
 	    if (LANE_BITS != 0) begin : g_last_tid
@@ -142,8 +143,10 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 `else
     assign barrier.is_global= 1'b0;
 `endif
+    // legacy sync barrier (funct3=4) blocks like arrive+wait, without exposing the token
+    assign barrier.is_sync  = is_bar_sync;
     // For SYNC/ARRIVE: expected warp count minus 1 (wrap-safe for num_warps == `NUM_WARPS)
-    assign barrier.count    = is_bar_arrive ? (rs2_data[$bits(barrier.count)-1:0] - $bits(barrier.count)'(1)) : '0;
+    assign barrier.count    = (is_bar_arrive || is_bar_sync) ? (rs2_data[$bits(barrier.count)-1:0] - $bits(barrier.count)'(1)) : '0;
     assign barrier.token    = rs2_data[`XLEN-1:0];  // For WAIT: token to wait for
 
     // wspawn

@@ -389,65 +389,36 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       Word offset = sext<Word>(brArgs.offset, 32);
       switch (br_type) {
       case BrType::BR: {
-        bool all_taken = false;
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if (!warp.tmask.test(t))
-            continue;
+        // Vortex assumes warp-uniform branch decisions at the ISA level.
+        // When control-flow divergence is not lowered into explicit split/join,
+        // fall back to the hardware behavior: use the last active lane as the
+        // branch decision source.
           bool curr_taken = false;
+        uint32_t t = static_cast<uint32_t>(thread_last);
           switch (brArgs.cmp) {
-          case 0: { // RV32I: BEQ
-            if (rs1_data[t].i == rs2_data[t].i) {
-              next_pc = warp.PC + offset;
-              curr_taken = true;
-            }
+        case 0: // RV32I: BEQ
+          curr_taken = (rs1_data[t].i == rs2_data[t].i);
             break;
-          }
-          case 1: { // RV32I: BNE
-            if (rs1_data[t].i != rs2_data[t].i) {
-              next_pc = warp.PC + offset;
-              curr_taken = true;
-            }
+        case 1: // RV32I: BNE
+          curr_taken = (rs1_data[t].i != rs2_data[t].i);
             break;
-          }
-          case 4: { // RV32I: BLT
-            if (rs1_data[t].i < rs2_data[t].i) {
-              next_pc = warp.PC + offset;
-              curr_taken = true;
-            }
+        case 4: // RV32I: BLT
+          curr_taken = (rs1_data[t].i < rs2_data[t].i);
             break;
-          }
-          case 5: { // RV32I: BGE
-            if (rs1_data[t].i >= rs2_data[t].i) {
-              next_pc = warp.PC + offset;
-              curr_taken = true;
-            }
+        case 5: // RV32I: BGE
+          curr_taken = (rs1_data[t].i >= rs2_data[t].i);
             break;
-          }
-          case 6: { // RV32I: BLTU
-            if (rs1_data[t].u < rs2_data[t].u) {
-              next_pc = warp.PC + offset;
-              curr_taken = true;
-            }
+        case 6: // RV32I: BLTU
+          curr_taken = (rs1_data[t].u < rs2_data[t].u);
             break;
-          }
-          case 7: { // RV32I: BGEU
-            if (rs1_data[t].u >= rs2_data[t].u) {
-              next_pc = warp.PC + offset;
-              curr_taken = true;
-            }
+        case 7: // RV32I: BGEU
+          curr_taken = (rs1_data[t].u >= rs2_data[t].u);
             break;
-          }
           default:
             std::abort();
           }
-          if (t == thread_start) {
-            all_taken = curr_taken;
-          } else {
-            if (all_taken != curr_taken) {
-              std::cout << "divergent branch! PC=0x" << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n" << std::flush;
-              std::abort();
-            }
-          }
+        if (curr_taken) {
+          next_pc = warp.PC + offset;
         }
         trace->fetch_stall = true;
         // stats

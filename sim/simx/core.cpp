@@ -284,10 +284,18 @@ void Core::fetch() {
   if (fetch_latch_.empty())
     return;
   auto trace = fetch_latch_.peek();
+
+  // Avoid leaking icache tags when the request port back-pressures.
+  if (pending_icache_.full()) {
+    ++perf_stats_.fetch_stalls;
+    return;
+  }
+
   MemReq mem_req;
   mem_req.addr  = trace->PC;
   mem_req.write = false;
-  mem_req.tag   = pending_icache_.allocate(trace);
+  uint32_t tag = pending_icache_.allocate(trace);
+  mem_req.tag   = tag;
   mem_req.cid   = trace->cid;
   mem_req.uuid  = trace->uuid;
   if (this->icache_req_out.at(0).try_send(mem_req)) {
@@ -296,6 +304,7 @@ void Core::fetch() {
     ++perf_stats_.ifetches;
     ++pending_ifetches_;
   } else {
+    pending_icache_.release(tag);
     ++perf_stats_.fetch_stalls;
   }
 }
