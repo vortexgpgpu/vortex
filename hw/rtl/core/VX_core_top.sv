@@ -72,12 +72,12 @@ module VX_core_top import VX_gpu_pkg::*; #(
     VX_gbar_bus_if gbar_bus_if();
 
     assign gbar_req_valid = gbar_bus_if.req_valid;
-    assign gbar_req_id = gbar_bus_if.req_id;
-    assign gbar_req_size_m1 = gbar_bus_if.req_size_m1;
-    assign gbar_req_core_id =  gbar_bus_if.req_core_id;
+    assign gbar_req_id      = gbar_bus_if.req_data.id;
+    assign gbar_req_size_m1 = gbar_bus_if.req_data.size_m1;
+    assign gbar_req_core_id = gbar_bus_if.req_data.core_id;
     assign gbar_bus_if.req_ready = gbar_req_ready;
     assign gbar_bus_if.rsp_valid = gbar_rsp_valid;
-    assign gbar_bus_if.rsp_id = gbar_rsp_id;
+    assign gbar_bus_if.rsp_data.id = gbar_rsp_id;
 `endif
 
     VX_dcr_bus_if dcr_bus_if();

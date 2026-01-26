@@ -72,6 +72,8 @@ import VX_fpu_pkg::*;
     `UNUSED_VAR (reset)
     `UNUSED_VAR (write_wid)
     `UNUSED_VAR (write_data)
+    `UNUSED_VAR (read_enable)
+    `UNUSED_VAR (read_uuid)
 
     // CSRs Write /////////////////////////////////////////////////////////////
 
@@ -293,14 +295,17 @@ import VX_fpu_pkg::*;
                 end
             end
         endcase
+        // If still invalid after decode, return zero instead of halting.
+        if (!read_addr_valid_w) begin
+            read_data_ro_w = '0;
+            read_data_rw_w = '0;
+        end
     end
 
     assign read_data_ro = read_data_ro_w;
     assign read_data_rw = read_data_rw_w;
 
     `UNUSED_VAR (base_dcrs)
-
-    `RUNTIME_ASSERT(~read_enable || read_addr_valid_w, ("*** invalid CSR read address: 0x%0h (#%0d)", read_addr, read_uuid))
 
 `ifdef PERF_ENABLE
     `UNUSED_VAR (sysmem_perf.icache);

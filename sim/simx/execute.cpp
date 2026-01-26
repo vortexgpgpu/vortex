@@ -22,6 +22,7 @@
 #include <assert.h>
 #include <util.h>
 #include <rvfloats.h>
+#include "mem.h"
 #include "emulator.h"
 #include "instr.h"
 #include "core.h"
@@ -695,16 +696,31 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
               uint32_t tls_blockIdx_x = 0;
               uint32_t tls_blockIdx_y = 0;
               try {
+#ifdef VM_ENABLE
+                mmu_.read(&blockDim_x, 0x800074d0, sizeof(blockDim_x), ACCESS_TYPE::LOAD);
+                mmu_.read(&blockDim_y, 0x800074d4, sizeof(blockDim_y), ACCESS_TYPE::LOAD);
+                mmu_.read(&gridDim_x, 0x800074dc, sizeof(gridDim_x), ACCESS_TYPE::LOAD);
+                mmu_.read(&gridDim_y, 0x800074e0, sizeof(gridDim_y), ACCESS_TYPE::LOAD);
+#else
                 mmu_.read(&blockDim_x, 0x800074d0, sizeof(blockDim_x), false);
                 mmu_.read(&blockDim_y, 0x800074d4, sizeof(blockDim_y), false);
                 mmu_.read(&gridDim_x, 0x800074dc, sizeof(gridDim_x), false);
                 mmu_.read(&gridDim_y, 0x800074e0, sizeof(gridDim_y), false);
+#endif
                 uint64_t tp_base = uint32_t(ireg(4));
+#ifdef VM_ENABLE
+                mmu_.read(&tls_local_group_id, tp_base + 0, sizeof(tls_local_group_id), ACCESS_TYPE::LOAD);
+                mmu_.read(&tls_threadIdx_x, tp_base + 4, sizeof(tls_threadIdx_x), ACCESS_TYPE::LOAD);
+                mmu_.read(&tls_threadIdx_y, tp_base + 8, sizeof(tls_threadIdx_y), ACCESS_TYPE::LOAD);
+                mmu_.read(&tls_blockIdx_x, tp_base + 16, sizeof(tls_blockIdx_x), ACCESS_TYPE::LOAD);
+                mmu_.read(&tls_blockIdx_y, tp_base + 20, sizeof(tls_blockIdx_y), ACCESS_TYPE::LOAD);
+#else
                 mmu_.read(&tls_local_group_id, tp_base + 0, sizeof(tls_local_group_id), false);
                 mmu_.read(&tls_threadIdx_x, tp_base + 4, sizeof(tls_threadIdx_x), false);
                 mmu_.read(&tls_threadIdx_y, tp_base + 8, sizeof(tls_threadIdx_y), false);
                 mmu_.read(&tls_blockIdx_x, tp_base + 16, sizeof(tls_blockIdx_x), false);
                 mmu_.read(&tls_blockIdx_y, tp_base + 20, sizeof(tls_blockIdx_y), false);
+#endif
               } catch (...) {
                 // best-effort debug read
               }
