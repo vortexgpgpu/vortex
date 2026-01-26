@@ -400,7 +400,29 @@ public:
       fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
     }
   }
-  // add a wmma_sparse_sync function here?
+
+    template <typename FragD, typename FragA, typename FragB, typename FragC, typename FragMeta>
+    static __attribute__((always_inline)) void mma_sp_sync(
+      FragD &fragD,
+      const FragA &fragA,
+      const FragB &fragB,
+      const FragC &fragC,
+      const FragMeta &fragMeta) {
+
+      static_assert(FragA::Use == matrix_a, "A must be matrix_a");
+      static_assert(FragB::Use == matrix_b, "B must be matrix_b");
+      static_assert(FragC::Use == accumulator, "C must be accumulator");
+      static_assert(FragD::Use == accumulator, "D must be accumulator");
+
+      // placeholder: sparsity path not implemented yet
+      (void)fragA;
+      (void)fragB;
+      (void)fragMeta;
+
+      // NO-OP: keep accumulator unchanged so test will fail (mismatch) but completes cleanly
+      fragD.data = fragC.data;
+}
+
 };
 
 } // namespace tensor

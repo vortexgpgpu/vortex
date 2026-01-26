@@ -67,7 +67,7 @@ namespace detail {
 }
 
 template <typename T>
-inline bool enforce_2to4_sparsity(const T* dense, uint32_t rows, uint32_t cols, uint32_t ld,
+inline bool prune_2to4_matrix(const T* dense, uint32_t rows, uint32_t cols, uint32_t ld,
                                   T* pruned, uint32_t ld_pruned, mem_layout layout = row_major) {
   constexpr uint32_t kBlock = 4;
   if (layout != row_major)
