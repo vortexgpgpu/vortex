@@ -170,10 +170,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
                             async_bar_generation_n[warp_ctl_if.barrier.id] = async_bar_generation[warp_ctl_if.barrier.id] + `XLEN'(1);
                             stalled_warps_n &= ~async_bar_waiting[warp_ctl_if.barrier.id];
                             async_bar_waiting_n[warp_ctl_if.barrier.id] = '0;
-                        end else if (async_bar_arrived_cnt[warp_ctl_if.barrier.id] == (NW_WIDTH'(active_warps_cnt) - NW_WIDTH'(1))) begin
-                            async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = '0;
                         end else begin
-                            async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = async_bar_arrived_cnt[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
+                            // count encodes expected arrivals minus 1 (size_m1)
+                            if (async_bar_arrived_cnt[warp_ctl_if.barrier.id] < NW_WIDTH'(warp_ctl_if.barrier.count)) begin
+                                async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = async_bar_arrived_cnt[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
+                            end
                         end
                     end else begin
                         // local barrier completion (count is encoded as (expected_warps - 1))
@@ -290,16 +291,17 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
             // global barrier scheduling
 	        `ifdef GBAR_ENABLE
-	            if (warp_ctl_if.valid && warp_ctl_if.barrier.valid
-	             && warp_ctl_if.barrier.op == BARRIER_OP_ARRIVE
-	             && warp_ctl_if.barrier.is_global
-	             && (warp_ctl_if.barrier.count != '0)
-	             && !gbar_req_valid
-	             && (async_bar_arrived_cnt[warp_ctl_if.barrier.id] == (NW_WIDTH'(active_warps_cnt) - NW_WIDTH'(1)))) begin
-	                gbar_req_valid <= 1;
-	                gbar_req_id <= warp_ctl_if.barrier.id;
-	                gbar_req_size_m1 <= NC_WIDTH'(warp_ctl_if.barrier.count);
-	            end
+            if (warp_ctl_if.valid && warp_ctl_if.barrier.valid
+             && warp_ctl_if.barrier.op == BARRIER_OP_ARRIVE
+             && warp_ctl_if.barrier.is_global
+             && (warp_ctl_if.barrier.count != '0)
+             && !gbar_req_valid
+             && (async_bar_arrived_cnt[warp_ctl_if.barrier.id] == NW_WIDTH'(warp_ctl_if.barrier.count))) begin
+                // Local arrivals reached expected count: send global barrier request.
+                gbar_req_valid <= 1;
+                gbar_req_id <= warp_ctl_if.barrier.id;
+                gbar_req_size_m1 <= NC_WIDTH'(warp_ctl_if.barrier.count);
+            end
             if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
                 gbar_req_valid <= 0;
             end
