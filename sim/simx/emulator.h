@@ -204,6 +204,32 @@ private:
 
 std::vector<AsyncBarrier> async_barriers_;  
 
+  struct ClusterAsyncBarrier {
+    WarpMask arrived_warps;
+    uint32_t expect_cores;
+    uint32_t token;
+    bool token_valid;
+    bool core_arrived;
+
+    ClusterAsyncBarrier()
+        : expect_cores(0)
+        , token(0)
+        , token_valid(false)
+        , core_arrived(false) {
+      arrived_warps.reset();
+    }
+
+    void reset() {
+      arrived_warps.reset();
+      expect_cores = 0;
+      token = 0;
+      token_valid = false;
+      core_arrived = false;
+    }
+  };
+
+  std::vector<ClusterAsyncBarrier> cluster_async_barriers_;
+
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;

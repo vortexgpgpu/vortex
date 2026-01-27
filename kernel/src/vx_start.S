@@ -51,6 +51,15 @@ _start:
   .insn r RISCV_CUSTOM0, 6, 0, t2, t1, t0  # arrive -> token
   .insn r RISCV_CUSTOM0, 7, 0, x0, t1, t2  # wait(token)
 
+  # synchronize all cores after clearing BSS to avoid one core entering `main`
+  # while another core is still zeroing shared program state.
+  #
+  # Use a global async barrier (id=0 with MSB=1) with count=num_cores.
+  csrr  t0, VX_CSR_NUM_CORES
+  li    t1, 0x80000000
+  .insn r RISCV_CUSTOM0, 6, 0, t2, t1, t0  # arrive -> token
+  .insn r RISCV_CUSTOM0, 7, 0, x0, t1, t2  # wait(token)
+
   # initialize trap vector
   # la t0, trap_entry
   # csrw mtvec, t0

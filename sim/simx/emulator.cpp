@@ -82,6 +82,7 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , barriers_(arch.num_barriers(), 0)
     , ipdom_size_(arch.num_threads()-1)
     , async_barriers_(arch.num_barriers())
+    , cluster_async_barriers_(arch.num_barriers())
   #ifdef EXT_TCU_ENABLE
     , tensor_unit_(core->tensor_unit())
   #endif
@@ -118,6 +119,10 @@ void Emulator::reset() {
 
   for (auto& async_bar : async_barriers_) {
     async_bar.reset_for_next_gen();
+  }
+
+  for (auto& async_bar : cluster_async_barriers_) {
+    async_bar.reset();
   }
 
 #ifdef EXT_V_ENABLE
@@ -335,7 +340,43 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid)
     uint32_t bar_idx = bar_id & 0x7fffffff;
 
     if (is_cluster) {
-        return core_->socket()->async_barrier_arrive(bar_idx, count, core_->id());
+        auto& b = cluster_async_barriers_.at(bar_idx);
+
+        if (b.expect_cores == 0) {
+            b.expect_cores = count;
+        } else {
+            assert(b.expect_cores == count);
+        }
+
+        uint32_t gen = core_->socket()->cluster()->async_barrier_token(bar_idx);
+        if (b.token_valid && gen > b.token) {
+            b.arrived_warps.reset();
+            b.core_arrived = false;
+            b.token_valid = false;
+            b.token = 0;
+        }
+
+        if (!b.token_valid) {
+            b.token = gen;
+            b.token_valid = true;
+        } else {
+            assert(gen == b.token);
+        }
+
+        uint32_t token = b.token;
+
+        // Record warp arrival for this core.
+        b.arrived_warps.set(wid);
+
+        // Count a core's arrival only once all its currently-active warps have arrived.
+        if (!b.core_arrived && ((b.arrived_warps & active_warps_) == active_warps_)) {
+            uint32_t token2 = core_->socket()->async_barrier_arrive(bar_idx, count, core_->id());
+            assert(token2 == token);
+            (void)token2;
+            b.core_arrived = true;
+        }
+
+        return token;
     }
 
     auto& b = async_barriers_.at(bar_idx);
@@ -350,7 +391,6 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid)
 
     // If arrived in the same generation before, skip but still return token
     if (b.arrived_mask.test(wid)) {
-        std::cout << "  >> ARRIVE_DUP warp=" << wid << " (already arrived this gen)\n";
         return token;
     }
 
@@ -394,7 +434,6 @@ bool Emulator::barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid) {
             stalled_warps_.set(wid);
             return false;
         }
-        // stalled_warps_.reset(wid);
         return true;
     }
 

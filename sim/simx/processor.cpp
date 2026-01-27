@@ -19,6 +19,9 @@
 #include <cstdlib>
 #include <execinfo.h>
 
+#include <cstdlib>
+#include <execinfo.h>
+
 using namespace vortex;
 
 static void simx_print_backtrace() {

@@ -487,7 +487,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
     end
 
-    `RUNTIME_ASSERT(timeout_ctr < STALL_TIMEOUT, ("*** %s timeout: stalled_warps=%b", INSTANCE_ID, stalled_warps))
+    `RUNTIME_ASSERT(timeout_ctr < STALL_TIMEOUT, ("*** %s timeout: active_warps=%b stalled_warps=%b pc0=0x%0h", INSTANCE_ID, active_warps, stalled_warps, to_fullPC(warp_pcs[0])))
 
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] perf_sched_idles;
