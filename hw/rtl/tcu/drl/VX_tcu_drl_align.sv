@@ -1,47 +1,73 @@
-// Copyright © 2019-2023
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 `include "VX_define.vh"
 
-module VX_tcu_drl_align #(
-    parameter N = 5,    //includes c_val
-    parameter W = 53    //prod align bitwidth (use 25 for approx)
+module VX_tcu_drl_align import VX_tcu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter N  = 5,
+    parameter W  = 25,
+    parameter WA = W + 2
 ) (
-    input wire [N-1:0][7:0] shift_amounts,
-    input wire [N-1:0][24:0] sigs_in,
-    input wire fmt_sel,
-    input wire [N-2:0] sparse_mask,
-    output logic [N-1:0][W-1:0] sigs_out
+    input  wire                 clk,
+    input  wire                 valid_in,
+    input  wire [31:0]          req_id,
+    input  wire [N-1:0][7:0]    shift_amt,
+    input  wire [N-1:0][W-1:0]  sigs_in,
+    input  wire                 is_int,
+    output wire [N-1:0][WA-1:0] sigs_out,
+    output wire [N-1:0]         sticky_bits
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR ({clk, valid_in, req_id, is_int})
 
-    //input power gating
-    wire [N-1:0][7:0] gated_shift_amounts;
-    wire [N-1:0][24:0] gated_sigs_in;
-    for (genvar i = 0; i < N-1; i++) begin : g_power_gating
-        assign gated_sigs_in[i] = ({25{sparse_mask[i]}} & sigs_in[i]);
-        assign gated_shift_amounts[i] = ({8{sparse_mask[i]}} & shift_amounts[i]);
-    end
-    assign gated_sigs_in[N-1] = sigs_in[N-1];               //c_val
-    assign gated_shift_amounts[N-1] = shift_amounts[N-1];
+    localparam MAX_PRE_SHIFT = W - 23;
+    localparam SHIFT_MAG_W   = (W - 1) + MAX_PRE_SHIFT;
 
-    //extend + align + sign significands
-    for (genvar i = 0; i < N; i++) begin : g_align
-        wire [W-1:0] ext_sigs_in = {gated_sigs_in[i], {W-25{1'b0}}};
-        wire fp_sign = ext_sigs_in[W-1];
-        wire [W-2:0] fp_sig = ext_sigs_in[W-2:0];
-        wire [W-2:0] adj_sig = fp_sig >> gated_shift_amounts[i];
-        wire [W-1:0] fp_val = fp_sign ? -adj_sig : {1'b0, adj_sig};
-        assign sigs_out[i] = fmt_sel ? ext_sigs_in : fp_val;
+    for (genvar i = 0; i < N; ++i) begin : g_align_lanes
+        // 1. Unpack Sign and Magnitude
+        wire in_sign    = sigs_in[i][W-1];
+        wire [W-2:0] in_mag = sigs_in[i][W-2:0];
+
+        // 2. Pre-Shift Magnitude
+        // Inlined padding logic: C-term vs Product terms
+        wire [SHIFT_MAG_W-1:0] mag_shifted;
+
+        if (i == N-1) begin : g_c_term
+            // C-Term: Shift by W-24 (Pad MSB with difference, LSB with W-24)
+            assign mag_shifted = { {(MAX_PRE_SHIFT - (W - 24)){1'b0}}, in_mag, {(W - 24){1'b0}} };
+        end else begin : g_prod_term
+            // Products: Shift by W-23 (Pad LSB only)
+            assign mag_shifted = { in_mag, {(W - 23){1'b0}} };
+        end
+
+        // 3. Shift and Sticky Calculation
+        wire is_overshift = (shift_amt[i] >= 8'(SHIFT_MAG_W));
+
+        // Mask shift result to 0 if overshifted, otherwise take MSBs fitting in WA-1
+        wire [SHIFT_MAG_W-1:0] shift_res_full = mag_shifted >> shift_amt[i];
+        wire [WA-2:0] adj_mag = is_overshift ? '0 : shift_res_full[WA-2:0];
+
+        // Sticky: check lost bits by shifting left
+        wire [SHIFT_MAG_W-1:0] sticky_check_shift = mag_shifted << (8'(SHIFT_MAG_W) - shift_amt[i]);
+        assign sticky_bits[i] = is_overshift ? (|mag_shifted) : (|sticky_check_shift);
+
+        // 4. Convert to 2's Complement
+        wire [WA-1:0] mag_pack = {1'b0, adj_mag};
+        assign sigs_out[i] = in_sign ? (~mag_pack + 1'b1) : mag_pack;
     end
+
+`ifdef DBG_TRACE_TCU
+    always_ff @(posedge clk) begin
+        if (valid_in) begin
+            `TRACE(4, ("%t: %s FEDP-ALIGN(%0d): is_int=%0d, shift_amt=", $time, INSTANCE_ID, req_id, is_int));
+            `TRACE_ARRAY1D(4, "0x%0h", shift_amt, N)
+            `TRACE(4, (", sigs_in="));
+            `TRACE_ARRAY1D(4, "0x%0h", sigs_in, N)
+            `TRACE(4, (", sigs_out="));
+            `TRACE_ARRAY1D(4, "0x%0h", sigs_out, N)
+            `TRACE(4, (", sticky="));
+            `TRACE_ARRAY1D(4, "%0d", sticky_bits, N)
+            `TRACE(4, ("\n"));
+        end
+    end
+`endif
 
 endmodule

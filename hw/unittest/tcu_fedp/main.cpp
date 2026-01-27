@@ -51,6 +51,12 @@ bool sim_trace_enabled() {
   return true;
 }
 
+static uint64_t timestamp = 0;
+
+double sc_time_stamp() {
+  return timestamp;
+}
+
 #ifndef NUM_REGS
 #define NUM_REGS 2
 #endif
@@ -150,7 +156,7 @@ struct TestConfig {
   bool enable_tracing = true;
   bool fused = true;
   uint64_t trace_start = 0;
-  uint64_t trace_end = 100;
+  uint64_t trace_end = -1ull;
   unsigned int random_seed = 12345;
   uint32_t fmt_s = 0; // Source format
   uint32_t fmt_d = 0; // Destination format (always 0 for float32)
@@ -387,7 +393,6 @@ private:
 #endif
   TestConfig config_;
   uint64_t cycle_count_;
-  uint64_t timestamp_;
   std::mt19937 rng_;
 
   // Clock generation
@@ -395,21 +400,22 @@ private:
     dut_->clk = 0;
     dut_->eval();
   #ifdef VCD_OUTPUT
-    if (config_.enable_tracing && (timestamp_ >= config_.trace_start) && (timestamp_ < config_.trace_end)) {
-      trace_->dump(timestamp_);
+    if (config_.enable_tracing && (timestamp >= config_.trace_start) && (timestamp < config_.trace_end)) {
+      trace_->dump(timestamp);
     }
   #endif
-    ++timestamp_;
+    ++timestamp;
 
     dut_->clk = 1;
     dut_->eval();
   #ifdef VCD_OUTPUT
-    if (config_.enable_tracing && (timestamp_ >= config_.trace_start) && (timestamp_ < config_.trace_end)) {
-      trace_->dump(timestamp_);
+    if (config_.enable_tracing && (timestamp >= config_.trace_start) && (timestamp < config_.trace_end)) {
+      trace_->dump(timestamp);
     }
   #endif
-    ++timestamp_;
+    ++timestamp;
     ++cycle_count_;
+    fflush(stdout);
   }
 
   // Reset the DUT
@@ -565,7 +571,6 @@ public:
   Testbench(const TestConfig &cfg)
     : config_(cfg)
     , cycle_count_(0)
-    , timestamp_(0)
     , rng_(config_.random_seed) {
     Verilated::traceEverOn(config_.enable_tracing);
     dut_ = std::make_unique<MODULE>();
@@ -580,6 +585,7 @@ public:
     dut_->clk = 0;
     dut_->reset = 0;
     dut_->enable = 0;
+    dut_->vld_mask = -1;
     dut_->fmt_s = config_.fmt_s;
     dut_->fmt_d = config_.fmt_d;
     for (int i = 0; i < NUM_REGS; i++) {
@@ -637,11 +643,16 @@ public:
       dut_->c_val = c_value;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
+      dut_->vld_mask = -1;
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
+        dut_->vld_mask = 0;
       }
+      // Add one idle cycles between tests
+      dut_->enable = 0;
+      tick();
 
       // Check result
       int32_t dut_result = dut_->d_val;
@@ -658,10 +669,6 @@ public:
         print_format("  actual=", dut_result, true);
         return false;
       }
-
-      // Add one idle cycles between tests
-      dut_->enable = 0;
-      tick();
     }
 
     return true;
@@ -734,11 +741,16 @@ public:
       dut_->c_val = c_value_hex;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
+      dut_->vld_mask = -1;
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
+        dut_->vld_mask = 0;
       }
+      // Add one idle cycles between tests
+      dut_->enable = 0;
+      tick();
 
       // Check result
       uint32_t dut_result_bits = dut_->d_val;
@@ -779,10 +791,6 @@ public:
         std::cout << "  delta=" << delta << std::endl;
         return false;
       }
-
-      // Add one idle cycles between tests
-      dut_->enable = 0;
-      tick();
     }
 
     if (skipped > 0) {

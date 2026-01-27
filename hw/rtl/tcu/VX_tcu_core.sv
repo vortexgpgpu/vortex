@@ -115,96 +115,121 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [OFF_W-1:0] a_off = (OFF_W'(step_m) & OFF_W'(TCU_A_SUB_BLOCKS-1)) << LG_A_BS;
     wire [OFF_W-1:0] b_off = (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
 
-    wire [TCU_TC_M-1:0][TCU_TC_N-1:0][`XLEN-1:0] d_val;
+    wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_i
         for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_j
 
-            wire [TCU_TC_K-1:0][`XLEN-1:0] a_row = execute_if.data.rs1_data[a_off + i * TCU_TC_K +: TCU_TC_K];
-            wire [TCU_TC_K-1:0][`XLEN-1:0] b_col = execute_if.data.rs2_data[b_off + j * TCU_TC_K +: TCU_TC_K];
-            wire [`XLEN-1:0] c_val = execute_if.data.rs3_data[i * TCU_TC_N + j];
+            wire [TCU_TC_K-1:0][31:0] a_row = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K +: TCU_TC_K][31:0]);
+            wire [TCU_TC_K-1:0][31:0] b_cols = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K +: TCU_TC_K][31:0]);
+            wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
+            wire [TCU_MAX_INPUTS-1:0] vld_mask = '1; // TODO: should connect to input source
 
             wire [3:0] fmt_s_r, fmt_d_r;
-            wire [TCU_TC_K-1:0][`XLEN-1:0] a_row_r, b_col_r;
-            wire [`XLEN-1:0] c_val_r;
+            wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
+            wire [31:0] c_val_r;
+            wire [TCU_MAX_INPUTS-1:0] vld_mask_r;
 
             `BUFFER_EX (
-                {a_row_r, b_col_r, c_val_r, fmt_s_r, fmt_d_r},
-                {a_row,   b_col,   c_val,   fmt_s,   fmt_d},
+                {c_val_r, fmt_s_r, fmt_d_r, vld_mask_r},
+                {c_val,   fmt_s,   fmt_d,   vld_mask},
                 fedp_enable,
                 0, // resetw
                 1  // depth
             );
 
+            // latch operands using per-element valid mask
+            for (genvar k = 0; k < TCU_TC_K; ++k) begin : g_operands_latch
+                for (genvar r = 0; r < TCU_MAX_ELT_RATIO; ++r) begin : g_elt
+                    `BUFFER_EX (
+                        {a_row_r[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH], b_col_r[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
+                        {a_row[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH],  b_cols[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
+                        fedp_enable && vld_mask[k * TCU_MAX_ELT_RATIO + r],
+                        0, // resetw
+                        1  // depth
+                    );
+                end
+            end
+
         `ifdef TCU_TYPE_DPI
             VX_tcu_fedp_dpi #(
+                .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
+                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row (a_row_r),
-                .b_col (b_col_r),
+                .a_row(a_row_r),
+                .b_cols(b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
         `elsif TCU_TYPE_BHF
             VX_tcu_fedp_bhf #(
+                .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
+                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row (a_row_r),
-                .b_col (b_col_r),
+                .a_row(a_row_r),
+                .b_cols(b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
         `elsif TCU_TYPE_DRL
             VX_tcu_fedp_drl #(
+                .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
+                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row (a_row_r),
-                .b_col (b_col_r),
+                .a_row(a_row_r),
+                .b_cols(b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
         `elsif TCU_TYPE_DSP
             VX_tcu_fedp_dsp #(
+                .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
                 .N (TCU_TC_K)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
+                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row (a_row_r),
-                .b_col (b_col_r),
+                .a_row(a_row_r),
+                .b_cols(b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
         `endif
+
+        assign result_if.data.data[i * TCU_TC_N + j] = d_val[i][j];
 
         `ifdef DBG_TRACE_TCU
             always @(posedge clk) begin
                 if (execute_if.valid && execute_if.ready) begin
                     `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, execute_if.data.header.wid, i, j, step_m, step_n))
                     `TRACE_ARRAY1D(2, "0x%0h", a_row, TCU_TC_K)
-                    `TRACE(3, (", b_col="));
-                    `TRACE_ARRAY1D(2, "0x%0h", b_col, TCU_TC_K)
+                    `TRACE(3, (", b_cols="));
+                    `TRACE_ARRAY1D(2, "0x%0h", b_cols, TCU_TC_K)
                     `TRACE(3, (", c_val=0x%0h (#%0d)\n", c_val, execute_if.data.header.uuid));
                 end
                 if (result_if.valid && result_if.ready) begin
@@ -214,7 +239,5 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif // DBG_TRACE_TCU
         end
     end
-
-    assign result_if.data.data = d_val;
 
 endmodule

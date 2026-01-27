@@ -21,411 +21,481 @@
 #include <cstring>
 #include <unordered_map>
 #include <vector>
+#include <limits>
 
 #ifdef FEDP_TRACE
-#include <cstdio>
 #define LOG(...) std::fprintf(stderr, __VA_ARGS__);
 #else
 #define LOG(...)
 #endif
 
+#ifdef FEDP_RTL_WATCH
+#define RTL_WATCH(...) std::fprintf(stderr, __VA_ARGS__)
+#else
+#define RTL_WATCH(...)
+#endif
+
 class FEDP {
 public:
-  // ====== DO NOT CHANGE (external interface) ======
-  explicit FEDP(int exp_bits = 5, int sig_bits = 10, int lanes = 4, int frm = 0, int W = 25, bool renorm = false) :
-    exp_bits_(exp_bits), sig_bits_(sig_bits), frm_(frm), lanes_(lanes), W_(W), renorm_(renorm) {
-    HR_ = 32 - lzcN(lanes_, 32); // ceil(log2(lanes + 1))
+  explicit FEDP(int exp_bits = 5, int sig_bits = 10, int lanes = 4, int frm = 0, int W = 25, bool renorm = false, bool no_window = false)
+      : exp_bits_(exp_bits), sig_bits_(sig_bits), frm_(frm), lanes_(lanes), W_(W), renorm_(renorm), no_window_(no_window) {
+    HR_ = 32 - lzcN(lanes_, 32);
     assert(exp_bits_ > 0 && exp_bits_ <= 8);
     assert(sig_bits_ > 0 && sig_bits_ <= 10);
-    assert(frm_ >= 0 && frm_ <= 4); // 0=RNE, 1=RTZ, 2=RDN, 3=RUP, 4=RMM
-    assert(lanes_ >= 1 && lanes_ <= 8);
-    int total_inputs = lanes_ + 1;
-    HR_ = (total_inputs <= 1) ? 0 : (32 - __builtin_clz(total_inputs - 1));
-    LOG("[ctor] fmt=e%dm%d frm=%d lanes=%u W=%d HR=%d renorm_=%s\n",
-        exp_bits_, sig_bits_, frm_, lanes_, W_, HR_, (renorm_ ? "true": "false"));
+    assert(frm_ >= 0 && frm_ <= 4);
+    assert(lanes_ >= 1 && lanes_ <= 16);
+    LOG("[ctor] fmt=e%dm%d frm=%d lanes=%u W=%d HR=%d renorm_=%s no_window_=%s\n",
+        exp_bits_, sig_bits_, frm_, lanes_, W_, HR_, (renorm_ ? "true" : "false"), (no_window_ ? "true" : "false"));
   }
 
-  float operator()(const uint32_t* a, const uint32_t* b, float c, uint32_t n) {
-    const auto terms = decode_inputs(a, b, n);
+  float operator()(const uint32_t *a, const uint32_t *b, float c, uint32_t n) {
+    const uint64_t req_id = req_id_++;
+
     const auto c_enc = bitsFromF32(c);
+    rtl_watch_s0(req_id, a, b, c_enc, n);
+
+    const auto terms = decode_inputs(a, b, n);
     const auto c_dec = decode_input(c_enc, 8, 23);
     const auto c_term = decodeC_to_common(c_dec);
-    const auto prods = multiply_to_common(terms);
-    const auto aln = alignment(prods, c_term);
+
+    const auto mul_res = multiply_to_common(terms, c_term);
+
+    rtl_watch_s1(req_id, mul_res, c_term, c_enc);
+
+    const auto aln = alignment(mul_res);
+
+    rtl_watch_s2(req_id, aln, mul_res, c_term, c_enc);
+
     const auto acc = accumulate(aln);
+
+    rtl_watch_s3(req_id, acc, mul_res, c_term, c_enc);
+
     const auto nrm = normalize(acc);
+
+    rtl_watch_norm(req_id, nrm, acc.flags, mul_res.L);
+
     const auto out = rounding(nrm);
+    rtl_watch_s4(req_id, out);
+
     return f32FromBits(out);
   }
 
 private:
-  // -------- types --------
-  // sp codes: 0=Norm, 1=+Inf, 2=-Inf, 3=NaN
-  enum FRM_TYPE { FRM_RNE=0, FRM_RTZ=1, FRM_RDN=2, FRM_RUP=3, FRM_RMM=4};
-  struct dec_t { uint32_t sign{0}, frac{0}, exp{0}; bool is_zero{false}, is_sub{false}; };
-  struct term_t { int sign; uint64_t Mp; int Ep; int lzcP; int sp; };
-  struct cterm_t { int sign, Mc, Ec, cls; int sp; };
-  struct align_t { std::vector<uint64_t> T; int sticky, L, cc; int sp; };
-  struct acc_t { int64_t V; int sticky, L, cc; int sp; };
-  struct nrm_t { int sign; uint32_t kept; int g; int st; int e; int sp; };
+  enum FRM_TYPE { FRM_RNE = 0, FRM_RTZ = 1, FRM_RDN = 2, FRM_RUP = 3, FRM_RMM = 4 };
+
+  static const uint8_t FL_NAN  = 1;
+  static const uint8_t FL_PINF = 2;
+  static const uint8_t FL_NINF = 4;
+
+  struct dec_t {
+    int  sign;
+    int  frac;
+    int  exp;
+    bool is_zero;
+    bool is_sub;
+  };
+  struct cterm_t {
+    int sign;
+    int Mc;
+    int Ec;
+    int cls;
+    int sp;
+  };
+
+  struct pterm_t {
+    int sign;
+    int Mp;
+  };
+
+  struct mul_res_t {
+    std::vector<pterm_t> terms;
+    int L;
+    std::vector<int> shifts;
+    uint8_t flags;
+  };
+
+  struct align_t {
+    std::vector<uint32_t> terms;
+    int sticky;
+    int L;
+    uint8_t flags;
+    std::vector<uint32_t> dbg_aln_sigs;
+    std::vector<int> dbg_sticky_bits;
+  };
+  struct acc_t {
+    uint32_t V;
+    int sticky;
+    int L;
+    uint8_t flags;
+  };
+  struct nrm_t {
+    int sign;
+    uint32_t kept;
+    int g;
+    int st;
+    int e;
+    uint8_t flags;
+    // Debug info
+    uint32_t abs_sum;
+    int shift_amt;
+    bool round_up;
+  };
 
   // -------- utils --------
-  static inline uint32_t bitsFromF32(float f) {
-    uint32_t u; std::memcpy(&u,&f,4);
-    return u;
-  }
-  static inline float f32FromBits(uint32_t u) {
-    float f;
-    std::memcpy(&f,&u,4);
-    return f;
-  }
-  static inline int bias(int eb) {
-    return (1<<(eb-1))-1;
-  }
-  static inline int lzcN(uint32_t x,int w) {
-    if (!x) {
-      return w;
-    }
-    return __builtin_clz(x) - (32 - w);
-  }
-  static inline int clz64_u(uint64_t x) {
-    return x ? __builtin_clzll(x) : 64;
-  }
-  static inline std::pair<uint64_t,uint64_t> csa(uint64_t a, uint64_t b, uint64_t c, uint64_t mask) {
-    uint64_t s=(a^b^c)&mask, k=((a&b)|(a&c)|(b&c))<<1;
-    return {s, k&mask};
-  }
-  static inline uint64_t cpa(uint64_t s,uint64_t c,uint64_t mask) {
-    return (s+c)&mask;
-  }
-  static inline int64_t twos_to_int(uint64_t x,int w){
-    return ((x>>(w-1))&1)? (int64_t)(x - (uint64_t(1)<<w)) : (int64_t)x;
+  static inline uint32_t bitsFromF32(float f) { uint32_t u; std::memcpy(&u, &f, 4); return u; }
+  static inline float f32FromBits(uint32_t u) { float f; std::memcpy(&f, &u, 4); return f; }
+  static inline int bias(int eb) { return (1 << (eb - 1)) - 1; }
+  static inline int lzcN(uint32_t x, int w) { if (!x) return w; return __builtin_clz(x) - (32 - w); }
+  static inline uint32_t sign_ext(uint32_t x, uint32_t width) {
+    uint32_t mask = 1u << (width - 1);
+    x = x & ((1u << width) - 1);
+    return (x ^ mask) - mask;
   }
 
-  // -------- decode --------
+  // -------- [RTL-WATCH] helpers --------
+  inline void rtl_watch_s0(uint64_t req_id, const uint32_t* a, const uint32_t* b, uint32_t c_enc, uint32_t n) {
+#ifdef FEDP_RTL_WATCH
+    RTL_WATCH("[RTL_WATCH] FEDP-S0(%lu): a_row=", req_id);
+    RTL_WATCH("{");
+    for (int i = (int)n - 1; i >= 0; --i) {
+      RTL_WATCH("0x%x", a[i]);
+      if (i > 0) RTL_WATCH(", ");
+    }
+    RTL_WATCH("}, b_col={");
+    for (int i = (int)n - 1; i >= 0; --i) {
+      RTL_WATCH("0x%x", b[i]);
+      if (i > 0) RTL_WATCH(", ");
+    }
+    RTL_WATCH("}, c_val=0x%x\n", c_enc);
+#endif
+  }
+
+  inline void rtl_watch_s1(uint64_t req_id, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
+#ifdef FEDP_RTL_WATCH
+    RTL_WATCH("[RTL_WATCH] FEDP-S1(%lu): max_exp=0x%x, shift_amt=", req_id, res.L);
+    RTL_WATCH("{");
+    if (!res.shifts.empty()) {
+      RTL_WATCH("0x%x", res.shifts.back());
+      if (res.shifts.size() > 1) RTL_WATCH(", ");
+      for (int i = (int)res.shifts.size() - 2; i >= 0; --i) {
+        RTL_WATCH("0x%x", res.shifts[i]);
+        if (i > 0) RTL_WATCH(", ");
+      }
+    }
+    RTL_WATCH("}, raw_sig={");
+    uint32_t c_raw = c_term.Mc;
+    if (c_term.sign) c_raw |= (1u << 24);
+    if (c_term.cls == 2 || c_term.cls == 1) c_raw |= (1u << 23);
+    RTL_WATCH("0x%x", c_raw);
+    if (res.terms.size() > 1) RTL_WATCH(", ");
+    for (int i = (int)res.terms.size() - 2; i >= 0; --i) {
+      uint32_t raw_val = res.terms[i].Mp;
+      if (res.terms[i].sign) raw_val |= (1u << 24);
+      RTL_WATCH("0x%x", raw_val);
+      if (i > 0) RTL_WATCH(", ");
+    }
+    RTL_WATCH("\n");
+#endif
+  }
+
+  inline void rtl_watch_s2(uint64_t req_id, const align_t& aln, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
+#ifdef FEDP_RTL_WATCH
+    RTL_WATCH("[RTL_WATCH] FEDP-S2(%lu): max_exp=0x%x, aln_sig=", req_id, res.L);
+    RTL_WATCH("{");
+    if (!aln.dbg_aln_sigs.empty()) {
+      uint32_t c_sig = aln.dbg_aln_sigs.back();
+      RTL_WATCH("0x%x", c_sig);
+      if (aln.dbg_aln_sigs.size() > 1) RTL_WATCH(", ");
+      for (int i = (int)aln.dbg_aln_sigs.size() - 2; i >= 0; --i) {
+        RTL_WATCH("0x%x", aln.dbg_aln_sigs[i]);
+        if (i > 0) RTL_WATCH(", ");
+      }
+    }
+    RTL_WATCH("}, sticky_bits={");
+    if (!aln.dbg_sticky_bits.empty()) {
+      RTL_WATCH("0x%x", aln.dbg_sticky_bits.back());
+      if (aln.dbg_sticky_bits.size() > 1) RTL_WATCH(", ");
+      for (int i = (int)aln.dbg_sticky_bits.size() - 2; i >= 0; --i) {
+        RTL_WATCH("0x%x", aln.dbg_sticky_bits[i]);
+        if (i > 0) RTL_WATCH(", ");
+      }
+    }
+    RTL_WATCH("\n");
+#endif
+  }
+
+  inline void rtl_watch_s3(uint64_t req_id, const acc_t& acc, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
+#ifdef FEDP_RTL_WATCH
+    uint32_t sigs_sign = 0;
+    for (size_t i = 0; i < res.terms.size() - 1; ++i) {
+      if (res.terms[i].sign) sigs_sign |= (1 << i);
+    }
+    RTL_WATCH("[RTL_WATCH] FEDP-S3(%lu): acc_sig=0x%x, max_exp=0x%x, sigs_sign=0x%x, sticky=%d, exceptions=",
+        req_id, acc.V, res.L, sigs_sign, acc.sticky ? 1 : 0);
+    RTL_WATCH("\n");
+#endif
+  }
+
+  inline void rtl_watch_norm(uint64_t req_id, const nrm_t& nrm, int flags, int max_exp) {
+#ifdef FEDP_RTL_WATCH
+    int lsb = nrm.kept & 1;
+    RTL_WATCH("[RTL_WATCH] FEDP-NORM(%lu): abs_sum=0x%x, L=%d, G=%d, R=%d, S=%d, Rup=%d\n",
+        req_id,
+        nrm.abs_sum,
+        lsb,
+        nrm.g,
+        0,
+        nrm.st,
+        nrm.round_up
+    );
+#endif
+  }
+
+  inline void rtl_watch_s4(uint64_t req_id, uint32_t result) {
+#ifdef FEDP_RTL_WATCH
+    RTL_WATCH("[RTL_WATCH] FEDP-S4(%lu): result=0x%08x\n", req_id, result);
+#endif
+  }
+
+  // -------- logic --------
+  static inline std::pair<uint32_t, uint32_t> csa(uint32_t a, uint32_t b, uint32_t c) {
+    uint32_t s = a ^ b ^ c;
+    uint32_t k = ((a & b) | (a & c) | (b & c)) << 1;
+    return {s, k};
+  }
+  static inline uint32_t cpa(uint32_t s, uint32_t c) { return s + c; }
+
   static dec_t decode_input(uint32_t enc, int eb, int sb) {
     dec_t d{};
-    d.sign = (enc>>(eb+sb)) & 1u;
-    d.exp  = (enc>>sb) & ((1u<<eb)-1u);
-    d.frac = enc & ((1u<<sb)-1u);
-    d.is_zero = (d.exp==0 && d.frac==0);
-    d.is_sub  = (d.exp==0 && d.frac!=0);
+    d.sign = (enc >> (eb + sb)) & 1u;
+    d.exp = (enc >> sb) & ((1u << eb) - 1u);
+    d.frac = enc & ((1u << sb) - 1u);
+    d.is_zero = (d.exp == 0 && d.frac == 0);
+    d.is_sub = (d.exp == 0 && d.frac != 0);
     return d;
   }
 
-  std::vector<std::array<dec_t,2>>
-  decode_inputs(const uint32_t* a, const uint32_t* b, uint32_t n) {
+  std::vector<std::array<dec_t, 2>> decode_inputs(const uint32_t *a, const uint32_t *b, uint32_t n) {
     const uint32_t width = 1u + exp_bits_ + sig_bits_;
     const bool packed = (width <= 16u) && ((32u % width) == 0u);
-    const uint32_t epw = packed ? (32u/width) : 1u;
-    std::vector<std::array<dec_t,2>> out(n*epw);
-    for (uint32_t w=0; w<n; ++w) {
-      uint32_t aw=a[w], bw=b[w];
-      for (uint32_t i=0;i<epw;++i) {
-        uint32_t aenc = packed ? (aw & ((1u<<width)-1u)) : aw;
-        uint32_t benc = packed ? (bw & ((1u<<width)-1u)) : bw;
-        auto da = decode_input(aenc, exp_bits_, sig_bits_);
-        auto db = decode_input(benc, exp_bits_, sig_bits_);
-        LOG("[decode] lane=%u  A(s=%u e=%u f=0x%x)  B(s=%u e=%u f=0x%x)\n",
-            (w*epw)+i, da.sign, da.exp, da.frac, db.sign, db.exp, db.frac);
-        out[w*epw+i] = {da,db};
-        if (packed) {
-          aw >>= width; bw >>= width;
+    const uint32_t epw = packed ? (32u / width) : 1u;
+    std::vector<std::array<dec_t, 2>> out(n * epw);
+    for (uint32_t w = 0; w < n; ++w) {
+      uint32_t aw = a[w], bw = b[w];
+      for (uint32_t i = 0; i < epw; ++i) {
+        uint32_t aenc = packed ? (aw & ((1u << width) - 1u)) : aw;
+        uint32_t benc = packed ? (bw & ((1u << width) - 1u)) : bw;
+        out[w * epw + i] = {decode_input(aenc, exp_bits_, sig_bits_), decode_input(benc, exp_bits_, sig_bits_)};
+        if (packed) { aw >>= width; bw >>= width; }
+      }
+    }
+    return out;
+  }
+
+  static cterm_t decodeC_to_common(const dec_t &c) {
+    const int ebC = 8, sbC = 23;
+    int cls = 0, Mc = 0, eC = 0, sp = 0;
+    if (c.exp == 255) { sp = c.frac ? 3 : (c.sign ? 2 : 1); }
+    else if (c.is_zero) { cls = 0; Mc = 0; eC = 0; }
+    else if (c.is_sub) { cls = 1; Mc = c.frac; eC = (1 - bias(ebC)) - sbC; }
+    else { cls = 2; Mc = ((1u << sbC) | c.frac); eC = (c.exp - bias(ebC)) - sbC; }
+    return {c.sign, Mc, eC, cls, sp};
+  }
+
+  mul_res_t multiply_to_common(const std::vector<std::array<dec_t, 2>> &v, const cterm_t &c_term) {
+    const int sb = sig_bits_, eb = exp_bits_;
+    std::vector<pterm_t> out;
+    std::vector<int> eps; // per-term *window LSB exponent* (not raw Ep/Ec)
+    out.reserve(v.size() + 1);
+    eps.reserve(v.size() + 1);
+
+    const int F32_BIAS = 127;
+
+    int c_zero_mask = (c_term.cls == 0 && c_term.sp == 0) ? -1 : 0;
+
+    uint8_t c_nan  = (c_term.sp == 3) ? FL_NAN  : 0;
+    uint8_t c_pinf = (c_term.sp == 1) ? FL_PINF : 0;
+    uint8_t c_ninf = (c_term.sp == 2) ? FL_NINF : 0;
+    uint8_t flags  = (c_nan | c_pinf | c_ninf);
+
+    for (const auto &ab : v) {
+      auto a = ab[0], b = ab[1];
+      int all1 = (1 << eb) - 1;
+
+      bool zA = a.is_zero;
+      bool zB = b.is_zero;
+      int zero_mask = (zA || zB) ? -1 : 0;
+
+      bool infA = (a.exp == all1 && !a.frac), infB = (b.exp == all1 && !b.frac);
+      bool nanA = (a.exp == all1 && a.frac), nanB = (b.exp == all1 && b.frac);
+      bool is_nan = nanA || nanB || (infA && zB) || (infB && zA);
+      bool is_inf = (infA || infB) && !is_nan;
+      bool sign_xor = ((a.sign ^ b.sign) != 0);
+
+      flags |= is_nan ? FL_NAN : 0;
+      flags |= is_inf ? (sign_xor ? FL_NINF : FL_PINF) : 0;
+
+      int Ea = a.is_sub ? (1 - bias(eb)) : (a.exp - bias(eb));
+      int Eb = b.is_sub ? (1 - bias(eb)) : (b.exp - bias(eb));
+      int Ma = zA ? 0 : (a.is_sub ? a.frac : ((1 << sb) | a.frac));
+      int Mb = zB ? 0 : (b.is_sub ? b.frac : ((1 << sb) | b.frac));
+
+      int shift_sf = 22 - (2 * sb);
+      int Mp = (Ma * Mb) << shift_sf;
+      int Ep = (Ea + Eb) + F32_BIAS - 22;
+
+      if (renorm_) {
+        int lzc_prod = (a.is_sub ? lzcN(Ma, sb) : 0) + (b.is_sub ? lzcN(Mb, sb) : 0);
+        Mp <<= lzc_prod;
+        Ep -= lzc_prod;
+      }
+
+      int Ep_w = (Ep + 23 - W_) | zero_mask;
+
+      out.push_back({sign_xor, Mp});
+      eps.push_back(Ep_w);
+    }
+
+    int Ec = c_term.Ec + F32_BIAS;
+    int Ec_w = (Ec + 24 - W_) | c_zero_mask;
+
+    out.push_back({c_term.sign, c_term.Mc});
+    eps.push_back(Ec_w);
+
+    int L = *std::max_element(eps.begin(), eps.end());
+
+    std::vector<int> shifts;
+    shifts.reserve(out.size());
+    for (size_t i = 0; i < out.size(); ++i) {
+      shifts.push_back(L - eps[i]);
+    }
+
+    return {out, L , shifts, flags};
+  }
+
+  align_t alignment(const mul_res_t &res) {
+    const auto& t = res.terms;
+    int L = res.L;
+    const auto& shifts = res.shifts;
+
+    const int WA = W_ + 2;
+    const uint32_t mask = (1ULL << WA) - 1;
+    std::vector<uint32_t> dbg_aln_sigs;
+    std::vector<int> dbg_sticky_bits;
+    std::vector<uint32_t> Ts;
+    int global_sticky = 0;
+
+    for (size_t i = 0; i < t.size(); ++i) {
+      const int MANT = (i + 1 == t.size()) ? (W_ - 24) : (W_ - 23);
+
+      uint32_t mag = t[i].Mp;
+      int k = shifts[i];
+
+      uint32_t shifted_mag = 0;
+      bool sticky_bit = false;
+
+      if (mag != 0) {
+        if (k <= MANT) {
+          if (k > (MANT - WA)) {
+            shifted_mag = mag << (MANT - k);
+          }
+        } else {
+          if (k < (WA + MANT)) {
+            int sh = k - MANT;
+            shifted_mag = mag >> sh;
+            sticky_bit = (mag & ((1ULL << sh) - 1)) != 0;
+          } else {
+            sticky_bit = true;
+          }
         }
       }
+
+      uint32_t final_val = shifted_mag & mask;
+      if (t[i].sign) final_val = (~final_val + 1) & mask;
+
+      int s_bit = sticky_bit ? 1 : 0;
+      dbg_aln_sigs.push_back(final_val);
+      dbg_sticky_bits.push_back(s_bit);
+
+      Ts.push_back(final_val);
+      global_sticky |= s_bit;
     }
-    return out;
+
+    return {Ts, global_sticky, L, res.flags, dbg_aln_sigs, dbg_sticky_bits};
   }
 
-  // -------- S1: C → common --------
-  static cterm_t decodeC_to_common(const dec_t& c){
-    const int ebC=8,sbC=23; int cls=0,Mc=0,eC=0, sp=0;
-    LOG("[decodeC_to_common] in: s=%d zero=%d sub=%d exp=%u frac=0x%x\n",
-        (int)c.sign, (int)c.is_zero, (int)c.is_sub, c.exp, c.frac);
-    if (c.exp == 255) {
-      sp = c.frac ? 3 : (c.sign ? 2 : 1);
-    } else if (c.is_zero) {
-      cls=0;
-      Mc=0;
-      eC=0;
-    } else if (c.is_sub) {
-      cls=1;
-      Mc=(int)c.frac;
-      eC=(1-bias(ebC))-sbC;
-    } else {
-      cls=2;
-      Mc=(int)((1u<<sbC)|c.frac);
-      eC=((int)c.exp - bias(ebC)) - sbC;
+  acc_t accumulate(const align_t &a) {
+    const int Wa = W_ + 2;
+    const int Ww = W_ + 1 + HR_;
+    const uint32_t mask = (1ULL << Ww) - 1;
+    uint32_t s_acc = 0, c_acc = 0;
+    for (const auto &val : a.terms) {
+      uint32_t v = sign_ext(val, Wa) & mask;
+      auto sc = csa(s_acc, c_acc, v);
+      s_acc = sc.first & mask; c_acc = sc.second & mask;
     }
-    LOG("[decodeC_to_common] out: cls=%d Mc=0x%x eC=%d sc=%d\n", cls, Mc, eC, (int)c.sign);
-    return { (int)c.sign, Mc, eC, cls, sp };
+    return {cpa(s_acc, c_acc) & mask, a.sticky, a.L, a.flags};
   }
 
-  // -------- S1: products to common --------
-  std::vector<term_t> multiply_to_common(const std::vector<std::array<dec_t,2>>& v){
-    const int sb=sig_bits_, eb=exp_bits_;
-    std::vector<term_t> out; out.reserve(v.size());
-    for(const auto &ab : v){
-      auto a=ab[0], b=ab[1];
-      int all1 = (1<<eb)-1;
-      bool zA=a.is_zero, zB=b.is_zero;
-      bool infA=(a.exp==all1 && !a.frac), infB=(b.exp==all1 && !b.frac);
-      bool nanA=(a.exp==all1 && a.frac), nanB=(b.exp==all1 && b.frac);
+  nrm_t normalize(const acc_t &x) {
+    const int Ww = W_ + 1 + HR_;
+    const uint32_t mask = (1ULL << Ww) - 1;
+    if (x.V == 0) return {0, 0, 0, x.sticky, -1000000000, x.flags, 0, 0, 0};
 
-      // Handle special cases: sp=3(NaN), 2(-Inf), 1(+Inf)
-      if (nanA || nanB || (infA && zB) || (infB && zA)) {
-         out.push_back({0,0,0,0, 3});
-         LOG("[multiply_to_common] skip special cases\n");
-         continue;
-      }
-      if (infA || infB) {
-         out.push_back({0,0,0,0, (a.sign^b.sign) ? 2 : 1});
-         LOG("[multiply_to_common] skip infiniy\n");
-         continue;
-      }
-      if (zA || zB) {
-        LOG("[multiply_to_common] skip zero\n");
-        continue;
-      }
-
-      int Ea = a.is_sub ? (1 - bias(eb)) : ((int)a.exp - bias(eb));
-      int Eb = b.is_sub ? (1 - bias(eb)) : ((int)b.exp - bias(eb));
-      int Ma = a.is_sub? (int)a.frac : ((1<<sb)| (int)a.frac);
-      int Mb = b.is_sub? (int)b.frac : ((1<<sb)| (int)b.frac);
-
-      int lzc_prod = 0;
-      if (renorm_) {
-        int lz_a = a.is_sub ? lzcN((uint32_t)Ma, sb) : 0;
-        int lz_b = b.is_sub ? lzcN((uint32_t)Mb, sb) : 0;
-        lzc_prod = lz_a + lz_b;
-        LOG("[multiply_to_common] lz_a=%d lz_b=%d -> lzc_p=%d\n", lz_a, lz_b, lzc_prod);
-      }
-      uint64_t Mp = (uint64_t)Ma * (uint64_t)Mb;
-      int Ep = Ea + Eb - 2*sb;
-      bool s = ((a.sign ^ b.sign) != 0);
-
-      out.push_back({(int)s, Mp, Ep, lzc_prod, 0});
-      LOG("[multiply_to_common] s=%d Ea=%d Eb=%d P=0x%lx\n", (int)s, Ea, Eb, Mp);
-    }
-    return out;
-  }
-
-  // -------- S2: align window --------
-  align_t alignment(const std::vector<term_t>& t, const cterm_t& C){
-    std::vector<term_t> normalized_terms;
-    bool has_nan = (C.sp == 3);
-    bool has_pos = (C.sp == 1);
-    bool has_neg = (C.sp == 2);
-
-    for (auto& term : t) {
-      if (term.sp == 3) has_nan = true;
-      if (term.sp == 1) has_pos = true;
-      if (term.sp == 2) has_neg = true;
-      if (term.Mp) {
-        uint64_t m_norm = term.Mp << term.lzcP;
-        int e_norm = term.Ep - term.lzcP;
-        normalized_terms.push_back({term.sign, m_norm, e_norm, 0, 0});
-      }
-    }
-
-    // Resolve special state: NaN takes precedence, then Inf-Inf collision
-    int final_sp = 0;
-    if (has_nan || (has_pos && has_neg)) {
-      final_sp = 3;
-    } else if (has_pos) {
-      final_sp = 1;
-    } else if (has_neg) {
-      final_sp = 2;
-    }
-
-    const int Ww=W_+HR_; const uint64_t mask = ((uint64_t)1<<Ww)-1;
-    std::vector<int> tops;
-    for (auto &x : normalized_terms) {
-      if (x.Mp) {
-        int hi2 = (int)((x.Mp>>(2*sig_bits_+1)) & 1ULL);
-        tops.push_back(x.Ep + 2*sig_bits_ + hi2);
-      }
-    }
-    if (C.Mc && C.sp == 0) {
-      tops.push_back(C.Ec + 23);
-    }
-    if (tops.empty()) {
-      LOG("[alignment] empty tops\n");
-      return {std::vector<uint64_t>{},0,0,C.cls, final_sp};
-    }
-    int L = *std::max_element(tops.begin(),tops.end()) - (W_-1);
-    LOG("[alignment] L=%d W=%d HR=%d tops=%zu\n", L, W_, HR_, tops.size());
-
-    std::vector<uint64_t> Ts; int sticky=0;
-    auto emit = [&](long long val,int e){
-      int k=e-L;
-      if (k>=0) {
-        uint64_t mag = (val<0)? -val:val;
-        uint64_t sh = (mag<<k);
-        Ts.push_back((val<0)? ((~sh + 1ULL)&mask) : (sh&mask));
-      } else {
-        int sh=-k; uint64_t mag=(val<0)? -val:val;
-        uint64_t part = (sh>=64)? 0ULL : (mag>>sh);
-        Ts.push_back((val<0)? ((~part + 1ULL)&mask) : (part&mask));
-        sticky |= (sh>=64)? (mag!=0) : ((mag & ((1ULL<<sh)-1))!=0);
-      }
-    };
-    for (auto &x : normalized_terms) {
-      emit( x.sign? -x.Mp : x.Mp, x.Ep );
-    }
-    if (C.Mc && C.sp == 0) {
-      emit( C.sign? -C.Mc : C.Mc, C.Ec );
-    }
-    LOG("[alignment] Ts=%zu sticky=%d L=%d cc=%d sp=%d\n", Ts.size(), sticky, L, C.cls, final_sp);
-    return {Ts, sticky, L, C.cls, final_sp};
-  }
-
-  // -------- S3: accumulate --------
-  acc_t accumulate(const align_t& a){
-    const int Ww=W_+HR_; const uint64_t mask=((uint64_t)1<<Ww)-1;
-    LOG("[accumulate] count=%zu Ww=%d\n", a.T.size(), Ww);
-    uint64_t s_acc=0, c_acc=0;
-    size_t i=0;
-    for (uint64_t T : a.T) {
-      auto sc = csa(s_acc, c_acc, T, mask);
-      s_acc = sc.first; c_acc = sc.second;
-      LOG("[accumulate] i=%zu T=0x%lx s=0x%lx c=0x%lx\n", i++, T, s_acc, c_acc);
-    }
-    uint64_t Vw = cpa(s_acc, c_acc, mask);
-    int64_t V = twos_to_int(Vw,Ww);
-    LOG("[accumulate] Vw=0x%lx V=%ld sticky=%d L=%d cc=%d\n", Vw, V, a.sticky, a.L, a.cc);
-    return { V, a.sticky, a.L, a.cc, a.sp };
-  }
-
-  // -------- S4: normalize --------
-  nrm_t normalize(const acc_t& x){
-    const int Ww=W_+HR_;
-    if (x.V==0) {
-      return {0,0,0,x.sticky, -1000000000, x.sp};
-    }
-    int s = x.V<0; uint64_t X = (uint64_t)( s? -(x.V) : x.V ) & ((((uint64_t)1)<<Ww)-1);
-    int msb = 63 - clz64_u(X);
+    int s = ((x.V >> (Ww - 1)) & 1);
+    uint32_t Q = -x.V & mask;
+    uint32_t X = s ? Q : x.V;
+    int msb = 31 - __builtin_clz(X);
     int e = x.L + msb;
-    int sh = (msb+1) - 24;
-    uint32_t kept; int g=0, st=x.sticky;
-    if (sh>=0) {
-      kept = (uint32_t)((X>>sh) & ((1u<<24)-1));
-      uint64_t rem = X & ((((uint64_t)1)<<sh)-1);
-      g = (sh>0)? (int)((rem>>(sh-1))&1ULL) : 0;
-      st = ((rem & ((1ULL<<(sh>1?sh-1:0))-1))!=0 || st)? 1:0;
+    int sh = (msb + 1) - 24;
+
+    uint32_t kept;
+    int g = 0, st = x.sticky;
+    if (sh >= 0) {
+      kept = (X >> sh) & ((1u << 24) - 1);
+      uint32_t rem = X & ((1 << sh) - 1);
+      g = (sh > 0) ? ((rem >> (sh - 1)) & 1ULL) : 0;
+      st = ((rem & ((1ULL << (sh > 1 ? sh - 1 : 0)) - 1)) != 0 || st) ? 1 : 0;
     } else {
-      kept = (uint32_t)((X<<(-sh)) & ((1u<<24)-1));
+      kept = (X << (-sh)) & ((1u << 24) - 1);
     }
-    LOG("[normalize] e_unb=%d sign=%d kept=0x%06x g=%d st=%d sp=%d\n", e, s, kept, g, st, x.sp);
-    return {s,kept,g,st,e, x.sp};
+
+    bool lsb_bit = (kept & 1);
+    bool round_up = false;
+    if (frm_ == FRM_RNE) round_up = (g && (st || lsb_bit));
+
+    return {s, kept, g, st, e, x.flags, X, sh, round_up};
   }
 
-  // -------- S5: rounding --------
-  inline uint32_t rounding(const nrm_t& r) {
-    if (r.sp == 3) {
-      LOG("[rounding] NAN\n");
-      return 0x7fc00000; // NaN
-    }
-    if (r.sp == 1) {
-      LOG("[rounding] +Infinity\n");
-      return 0x7f800000; // +Inf
-    }
-    if (r.sp == 2) {
-      LOG("[rounding] -Infinity\n");
-      return 0xff800000; // -Inf
-    }
+  uint32_t rounding(const nrm_t &r) {
+    if (r.flags & FL_NAN) return 0x7fc00000;
+    if ((r.flags & FL_PINF) && (r.flags & FL_NINF)) return 0x7fc00000;
+    if (r.flags & FL_PINF) return 0x7f800000;
+    if (r.flags & FL_NINF) return 0xff800000;
 
-    const uint32_t s_bit = (uint32_t)r.sign << 31;
-    LOG("[rounding] in s=%d kept=0x%06x g=%d st=%d e_unb=%d\n", r.sign, r.kept, r.g, r.st, r.e);
+    if (r.kept == 0 && r.st == 0) return 0u;
 
-    if (r.kept == 0 && r.st == 0) {
-      LOG("[rounding] canonical +0\n");
-      return 0u;
-    }
-
+    const uint32_t s_bit = r.sign << 31;
     bool discarded = (r.g == 1 || r.st == 1);
     bool round_up = false;
-    // Determine round_up condition for normal path
     switch (frm_) {
-      case FRM_RNE: round_up = (r.g == 1 && (r.st == 1 || (r.kept & 1) == 1)); break;
-      case FRM_RTZ: round_up = false; break;
-      case FRM_RDN: round_up = (r.sign == 1 && discarded); break;
-      case FRM_RUP: round_up = (r.sign == 0 && discarded); break;
-      case FRM_RMM: round_up = (r.g == 1); break;
+    case FRM_RNE: round_up = (r.g == 1 && (r.st == 1 || (r.kept & 1) == 1)); break;
+    case FRM_RTZ: round_up = false; break;
+    case FRM_RDN: round_up = (r.sign == 1 && discarded); break;
+    case FRM_RUP: round_up = (r.sign == 0 && discarded); break;
+    case FRM_RMM: round_up = (r.g == 1); break;
     }
 
     uint32_t kept_rounded = r.kept + (round_up ? 1 : 0);
-    int e_unb = r.e;
-    // Check for mantissa overflow from rounding
-    if (kept_rounded & (1u << 24)) {
-      kept_rounded >>= 1;
-      e_unb += 1;
-    }
-    int be = e_unb + 127; // Biased exponent
-
-    // Handle Overflow
-    if (be >= 255) {
-      LOG("[rounding] overflow path\n");
-      switch (frm_) {
-        case FRM_RTZ: return s_bit | 0x7f7fffffu;
-        case FRM_RDN: return (r.sign == 0) ? (s_bit | 0x7f7fffffu) : 0xff800000u;
-        case FRM_RUP: return (r.sign == 0) ? 0x7f800000u : (s_bit | 0xff7fffffu);
-        default:      return s_bit | 0x7f800000u;
-      }
-    }
-
-    // Handle Subnormal / Underflow
-    if (be <= 0) {
-      LOG("[rounding] subnormal path\n");
-      int k = 1 - be; // shift amount
-      if (frm_ == FRM_RTZ) {
-        uint32_t m = (k < 25) ? (kept_rounded >> k) : 0;
-        return s_bit | (m & 0x7FFFFFu);
-      }
-      // Handle complete underflow for other modes
-      if (k >= 25) {
-        if (frm_ == FRM_RUP && r.sign == 0 && discarded)
-          return s_bit | 1u;
-        if (frm_ == FRM_RDN && r.sign == 1 && discarded)
-          return s_bit | 0x80000001u;
-        return s_bit;
-      }
-      // Re-apply rounding at the new subnormal boundary
-      uint32_t lsb = (kept_rounded >> k) & 1;
-      uint32_t new_g = (kept_rounded >> (k - 1)) & 1;
-      uint64_t st_mask = (1ull << (k - 1)) - 1;
-      bool new_st = ((kept_rounded & st_mask) != 0 || r.g || r.st);
-      bool new_disc = (new_g || new_st);
-      uint32_t m_sub = kept_rounded >> k;
-      bool ru_sub = false;
-      switch(frm_) {
-        case FRM_RNE: ru_sub = (new_g && (new_st || lsb)); break;
-        case FRM_RDN: ru_sub = (r.sign && new_disc); break;
-        case FRM_RUP: ru_sub = (!r.sign && new_disc); break;
-        case FRM_RMM: ru_sub = (new_g); break;
-        default: break;
-      }
-      uint32_t m_final = m_sub + (ru_sub ? 1 : 0);
-      if (m_final == (1u << 23)) {
-        LOG("[rounding] rounded up to normal\n");
-        return s_bit | (1u << 23);
-      }
-      LOG("[rounding] subnormal k=%d m_sub=0x%x m_final=0x%x\n", k, m_sub, m_final);
-      return s_bit | (m_final & 0x7FFFFFu);
-    }
-
-    uint32_t m = kept_rounded & 0x7FFFFFu;
-    uint32_t u = s_bit | ((uint32_t)(be & 0xff) << 23) | m;
-    LOG("[rounding] normal m=0x%06x -> out=0x%08x\n", m, u);
-    return u;
+    int be = r.e;
+    if (kept_rounded & (1u << 24)) { kept_rounded >>= 1; be += 1; }
+    if (be >= 255) return s_bit | 0x7f800000u;
+    if (be <= 0) return s_bit;
+    return s_bit | ((be & 0xff) << 23) | (kept_rounded & 0x7FFFFFu);
   }
 
   // members --------
-  int exp_bits_;  // input format exponent
-  int sig_bits_;  // input format significant
-  int frm_;       // rounding mode
-  int lanes_;     // number of elements
-  int W_;         // accumulator width
-  int HR_;        // accumulator head room
-  bool renorm_;   // renormalize products
+  int exp_bits_, sig_bits_, frm_, lanes_, W_, HR_;
+  bool renorm_, no_window_;
+  uint64_t req_id_ = 0;
 };

@@ -16,6 +16,8 @@
 
 `include "VX_define.vh"
 
+`IGNORE_UNUSED_BEGIN
+
 package VX_tcu_pkg;
 
     import VX_gpu_pkg::*;
@@ -31,7 +33,8 @@ package VX_tcu_pkg;
     localparam TCU_BF16_ID  = 2;
     localparam TCU_FP8_ID   = 3;
     localparam TCU_BF8_ID   = 4;
-    localparam TCU_MXFP8_ID = 5;
+    localparam TCU_TF32_ID  = 5;
+    localparam TCU_MXFP8_ID = 6;
     localparam TCU_NVFP4_ID = 7;
     // Supported integer-point types
     localparam TCU_I32_ID  = 8;
@@ -86,6 +89,60 @@ package VX_tcu_pkg;
 
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
+    localparam TCU_MIN_FMT_WIDTH = 4; //int4
+    localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
+    localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
+
+    typedef struct packed {
+        logic is_zero;
+        logic is_sub;
+        logic is_inf;
+        logic is_nan;
+        logic sign;
+    } fedp_class_t;
+
+    typedef struct packed {
+        logic is_inf;
+        logic is_nan;
+        logic sign;
+    } fedp_excep_t;
+
+    function automatic int exp_bits(input int fmt);
+        case (fmt)
+            TCU_FP32_ID: return 8;
+            TCU_TF32_ID: return 8;
+            TCU_FP16_ID: return 5;
+            TCU_BF16_ID: return 8;
+            TCU_FP8_ID:  return 5;
+            TCU_BF8_ID:  return 4;
+            default:     return 0;
+        endcase
+    endfunction
+
+    function automatic int sig_bits(input int fmt);
+        case (fmt)
+            TCU_FP32_ID: return 23;
+            TCU_TF32_ID: return 10;
+            TCU_FP16_ID: return 10;
+            TCU_BF16_ID: return 7;
+            TCU_FP8_ID:  return 2;
+            TCU_BF8_ID:  return 3;
+            default:     return 0;
+        endcase
+    endfunction
+
+    function automatic int sign_pos(input int fmt);
+        case (fmt)
+            TCU_FP32_ID: return 31;
+            TCU_TF32_ID: return 31;
+            TCU_FP16_ID: return 15;
+            TCU_BF16_ID: return 15;
+            TCU_FP8_ID:  return 7;
+            TCU_BF8_ID:  return 7;
+            default:     return 0;
+        endcase
+    endfunction
+
     // Tracing info
 `ifdef SIMULATION
     task trace_fmt(input int level, input [3:0] fmt);
@@ -127,5 +184,7 @@ package VX_tcu_pkg;
     `DECL_EXECUTE_T (tcu, `NUM_TCU_LANES);
 
 endpackage
+
+`IGNORE_UNUSED_END
 
 `endif // VX_TCU_PKG_VH

@@ -1,155 +1,286 @@
-// Copyright © 2019-2023
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 `include "VX_define.vh"
 
-module VX_tcu_drl_shared_mul (
-    input wire enable,            //active high
-    input wire [3:0] fmt_s,
-    input wire [15:0] a,
-    input wire [15:0] b,
-    input wire exp_low_larger,    //from exp_bias module
-    input wire [6:0] raw_exp_diff,
-    output logic [24:0] y
+module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
+    parameter N   = 2,
+    parameter TCK = 2 * N,
+    parameter W   = 25
+) (
+    input wire [TCU_MAX_INPUTS-1:0] vld_mask,
+    input wire [3:0]           fmt_s,
+
+    input wire [N-1:0][31:0]   a_row,
+    input wire [N-1:0][31:0]   b_col,
+    input wire [31:0]          c_val,
+
+    input fedp_class_t [N-1:0]     cls_tf32 [2],
+    input fedp_class_t [TCK-1:0]   cls_fp16 [2],
+    input fedp_class_t [TCK-1:0]   cls_bf16 [2],
+    input fedp_class_t [2*TCK-1:0] cls_fp8 [2],
+    input fedp_class_t [2*TCK-1:0] cls_bf8 [2],
+    input fedp_class_t             cls_c,
+
+    input wire [TCK-1:0]       exp_low_larger,
+    input wire [TCK-1:0][6:0]  raw_exp_diff,
+
+    output wire [TCK:0][W-1:0] y
 );
+    `UNUSED_VAR ({vld_mask, exp_low_larger, raw_exp_diff})
 
-    //power gating inputs to prevent switching activity if not enabled
-    wire [15:0] gated_a = {16{enable}} & a;
-    wire [15:0] gated_b = {16{enable}} & b;
-    wire [3:0] gated_fmt_s = {4{enable}} & fmt_s;
-    wire gated_exp_low_larger = enable & exp_low_larger;
-    wire [6:0] gated_raw_exp_diff = {7{enable}} & raw_exp_diff;
+    wire [TCK-1:0][10:0] man_a_tf32, man_b_tf32, man_a_fp16, man_b_fp16, man_a_bf16, man_b_bf16;
+    wire [TCK-1:0]       sign_tf32, sign_fp16, sign_bf16;
 
-    //fp16/bf16 pack 2 ops/reg --> need one instantiation per multiplier slice
-    wire sign_f16 = gated_a[15] ^ gated_b[15];
-    wire [10:0] a_f16 = gated_fmt_s[0] ? {1'b1, gated_a[9:0]} : {3'd0, 1'b1, gated_a[6:0]};
-    wire [10:0] b_f16 = gated_fmt_s[0] ? {1'b1, gated_b[9:0]} : {3'd0, 1'b1, gated_b[6:0]};
-    wire [21:0] y_f16;
-    VX_wallace_mul #(
-        .N (11)
-    ) wtmul_f16 (
-        .a (a_f16),
-        .b (b_f16),
-        .p (y_f16)
-    );
-
-    //fp8/bf8 pack 4 ops/ref --> need two instantiations per multiplier slice
-    wire [1:0] sign_f8;
-    wire [1:0][7:0] y_f8;
-    for (genvar i = 0; i < 2; i++) begin  :  g_f8_mul
-        assign sign_f8[i] = gated_a[(i*8)+7] ^ gated_b[(i*8)+7];
-        wire [3:0] a_f8 = gated_fmt_s[0] ? {1'b1, gated_a[(i*8)+2 -: 3]} : {1'd0, 1'b1, gated_a[(i*8)+1 -: 2]};
-        wire [3:0] b_f8 = gated_fmt_s[0] ? {1'b1, gated_b[(i*8)+2 -: 3]} : {1'd0, 1'b1, gated_b[(i*8)+1 -: 2]};
-        VX_wallace_mul #(
-            .N (4)
-        ) wtmul_f8 (
-            .a (a_f8),
-            .b (b_f8),
-            .p (y_f8[i])
-        );
+    // 1. TF32 Preparation
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_tf32
+        if ((i % 2) == 0) begin
+            fedp_class_t ca = cls_tf32[0][i/2];
+            fedp_class_t cb = cls_tf32[1][i/2];
+            `UNUSED_VAR ({ca, cb})
+            assign sign_tf32[i]  = a_row[i/2][31] ^ b_col[i/2][31];
+            assign man_a_tf32[i] = ca.is_zero ? 11'd0 : { !ca.is_sub, a_row[i/2][22:13] };
+            assign man_b_tf32[i] = cb.is_zero ? 11'd0 : { !cb.is_sub, b_col[i/2][22:13] };
+        end else begin
+            assign sign_tf32[i] = 1'b0;
+            assign man_a_tf32[i] = 11'd0;
+            assign man_b_tf32[i] = 11'd0;
+        end
     end
-    wire [6:0] shift_amount = gated_exp_low_larger ?  -gated_raw_exp_diff : gated_raw_exp_diff;
-    wire [7:0] y_f8_low  = gated_fmt_s[0] ? y_f8[0] : {y_f8[0][5:0], 2'd0};
-    wire [7:0] y_f8_high = gated_fmt_s[0] ? y_f8[1] : {y_f8[1][5:0], 2'd0};
-    wire [22:0] aligned_sig_low  = gated_exp_low_larger ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> shift_amount;
-    wire [22:0] aligned_sig_high = gated_exp_low_larger ? {y_f8_high, 15'd0} >> shift_amount : {y_f8_high, 15'd0};
-    wire [23:0] signed_sig_low  = sign_f8[0] ? -aligned_sig_low  : {1'b0, aligned_sig_low};
-    wire [23:0] signed_sig_high = sign_f8[1] ? -aligned_sig_high : {1'b0, aligned_sig_high};
-    wire [24:0] signed_sig_res;
-    VX_ks_adder #(
-        .N(24)
-    ) sig_adder_f8 (
-        .dataa (signed_sig_low),
-        .datab (signed_sig_high),
-        .sum   (signed_sig_res[23:0]),
-        .cout  (signed_sig_res[24])
-    );
-    wire sign_f8_add = signed_sig_res[24];
-    wire [23:0] y_f8_add = sign_f8_add ? -signed_sig_res[23:0] : signed_sig_res[23:0];
 
-    //int8 pack 4 ops/reg --> need two instantiations per multiplier slice
-    wire [1:0][16:0] y_i8;
-    for (genvar i = 0; i < 2; i++) begin : g_i8_mul
-        wire [7:0] a_i8 = gated_a[8*i+7 -: 8];
-        wire [7:0] b_i8 = gated_b[8*i+7 -: 8];
-        wire [7:0] abs_a_i8 = gated_fmt_s[0] ? (a_i8[7] ? -a_i8 : a_i8) : a_i8;
-        wire [7:0] abs_b_i8 = gated_fmt_s[0] ? (b_i8[7] ? -b_i8 : b_i8) : b_i8;
-        wire ab_sign_i8 = a_i8[7] ^ b_i8[7];
-        wire [15:0] abs_y_i8;
-        VX_wallace_mul #(
-            .N (8)
-        ) wtmul_i8 (
-            .a (abs_a_i8),
-            .b (abs_b_i8),
-            .p (abs_y_i8)
-        );
-        wire [15:0] signed_y_i8 = ab_sign_i8 ? -abs_y_i8 : abs_y_i8;
-        assign y_i8[i] = gated_fmt_s[0] ? 17'($signed(signed_y_i8)) : {1'b0, abs_y_i8};
+    // 2. FP16 Preparation
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_fp16
+        fedp_class_t ca = cls_fp16[0][i];
+        fedp_class_t cb = cls_fp16[1][i];
+        wire [15:0] va = i[0] ? a_row[i/2][31:16] : a_row[i/2][15:0];
+        wire [15:0] vb = i[0] ? b_col[i/2][31:16] : b_col[i/2][15:0];
+        `UNUSED_VAR ({ca, cb, va, vb})
+        assign sign_fp16[i]  = va[15] ^ vb[15];
+        assign man_a_fp16[i] = ca.is_zero ? 11'd0 : { !ca.is_sub, va[9:0] };
+        assign man_b_fp16[i] = cb.is_zero ? 11'd0 : { !cb.is_sub, vb[9:0] };
     end
-    wire [16:0] y_i8_add;
-    //KSA needs to be 17-bit for carry overflow handling 
-    VX_ks_adder #(
-        .N(17)
-    ) i8_adder (
-        .dataa (y_i8[0]),
-        .datab (y_i8[1]),
-        .sum   (y_i8_add),
-        `UNUSED_PIN(cout)
-    );
 
-    //int4 pack 8 ops/reg --> need four instantiations per multiplier slice
-    wire [3:0][9:0] y_i4;
-    for (genvar i = 0; i < 4; i++) begin : g_i4_mul
-        wire [3:0] a_i4 = gated_a[4*i+3 -: 4];
-        wire [3:0] b_i4 = gated_b[4*i+3 -: 4];
-        wire [3:0] abs_a_i4 = gated_fmt_s[0] ? (a_i4[3] ? -a_i4 : a_i4) : a_i4;
-        wire [3:0] abs_b_i4 = gated_fmt_s[0] ? (b_i4[3] ? -b_i4 : b_i4) : b_i4;
-        wire ab_sign_i4 = a_i4[3] ^ b_i4[3];
-        wire [7:0] abs_y_i4;
-        VX_wallace_mul #(
-            .N (4)
-        ) wtmul_i4 (
-            .a (abs_a_i4),
-            .b (abs_b_i4),
-            .p (abs_y_i4)
-        );
-        wire [7:0] signed_y_i4 = ab_sign_i4 ? -abs_y_i4 : abs_y_i4;
-        assign y_i4[i] = gated_fmt_s[0] ? 10'($signed(signed_y_i4)) : {2'd0, abs_y_i4};
+    // 3. BF16 Preparation
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_bf16
+        fedp_class_t ca = cls_bf16[0][i];
+        fedp_class_t cb = cls_bf16[1][i];
+        wire [15:0] va = i[0] ? a_row[i/2][31:16] : a_row[i/2][15:0];
+        wire [15:0] vb = i[0] ? b_col[i/2][31:16] : b_col[i/2][15:0];
+        `UNUSED_VAR ({ca, cb, va, vb})
+        assign sign_bf16[i]  = va[15] ^ vb[15];
+        assign man_a_bf16[i] = ca.is_zero ? 11'd0 : { 3'd0, !ca.is_sub, va[6:0] };
+        assign man_b_bf16[i] = cb.is_zero ? 11'd0 : { 3'd0, !cb.is_sub, vb[6:0] };
     end
-    wire [9:0] y_i4_add;
-    VX_csa_tree #(
-        .N (4),
-        .W (10),    //8+log2(4)
-        .S (10)
-    ) i4_adder (
-        .operands (y_i4),
-        .sum      (y_i4_add),
-        `UNUSED_PIN (cout)
-    );
 
-    //Select sign+sig out based on datatype
-    always_comb begin
-        case (gated_fmt_s)
-            4'd1:  y = {sign_f16, y_f16, 2'd0};          //fp16
-            4'd2:  y = {sign_f16, y_f16[15:0], 8'd0};    //bf16
-            4'd3:  y = {sign_f8_add, y_f8_add};          //fp8
-            4'd4:  y = {sign_f8_add, y_f8_add};          //bf8
-            4'd9:  y = 25'($signed(y_i8_add));           //int8
-            4'd10: y = {8'd0, y_i8_add};                 //uint8
-            4'd11: y = 25'($signed(y_i4_add));           //int4
-            4'd12: y = {15'd0, y_i4_add};                //uint4
-            default: y = 25'hxxxxxxx;
-        endcase
+    // 4. FP8 / BF8 Preparation (2 ops per TCK slice)
+    wire [TCK-1:0][1:0][3:0] man_a_fp8, man_b_fp8, man_a_bf8, man_b_bf8;
+    wire [TCK-1:0][1:0]      sign_fp8, sign_bf8;
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_f8
+        for (genvar j = 0; j < 2; ++j) begin : g_sub
+            // Global index for class array
+            localparam idx = i * 2 + j;
+            // Byte access within 32-bit words
+            wire [7:0] va = a_row[i/2][(i%2)*16 + j*8 +: 8];
+            wire [7:0] vb = b_col[i/2][(i%2)*16 + j*8 +: 8];
+
+            // FP8 (E5M2): 1S, 5E, 2M. Extracted mantissa {1.mm} -> 3 bits. Padded to 4.
+            fedp_class_t ca_fp8 = cls_fp8[0][idx];
+            fedp_class_t cb_fp8 = cls_fp8[1][idx];
+            assign sign_fp8[i][j]  = va[7] ^ vb[7];
+            assign man_a_fp8[i][j] = ca_fp8.is_zero ? 4'd0 : {1'b0, !ca_fp8.is_sub, va[1:0]};
+            assign man_b_fp8[i][j] = cb_fp8.is_zero ? 4'd0 : {1'b0, !cb_fp8.is_sub, vb[1:0]};
+
+            // BF8 (E4M3): 1S, 4E, 3M. Extracted mantissa {1.mmm} -> 4 bits.
+            fedp_class_t ca_bf8 = cls_bf8[0][idx];
+            fedp_class_t cb_bf8 = cls_bf8[1][idx];
+            assign sign_bf8[i][j]  = va[7] ^ vb[7];
+            assign man_a_bf8[i][j] = ca_bf8.is_zero ? 4'd0 : {!ca_bf8.is_sub, va[2:0]};
+            assign man_b_bf8[i][j] = cb_bf8.is_zero ? 4'd0 : {!cb_bf8.is_sub, vb[2:0]};
+
+            `UNUSED_VAR({ca_fp8, cb_fp8, ca_bf8, cb_bf8, va, vb})
+        end
+    end
+
+    // 5. Int8 Preparation (2 ops per TCK slice)
+    wire [TCK-1:0][1:0][7:0] man_a_i8, man_b_i8;
+    wire [TCK-1:0][1:0]      sign_i8;
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_i8
+        for (genvar j = 0; j < 2; ++j) begin : g_sub
+            wire [7:0] va = a_row[i/2][(i%2)*16 + j*8 +: 8];
+            wire [7:0] vb = b_col[i/2][(i%2)*16 + j*8 +: 8];
+            wire signed_op = (fmt_s == 4'(TCU_I8_ID));
+            // If signed, extract abs. If unsigned, value is abs.
+            wire [7:0] abs_a = signed_op ? (va[7] ? -va : va) : va;
+            wire [7:0] abs_b = signed_op ? (vb[7] ? -vb : vb) : vb;
+            assign man_a_i8[i][j] = abs_a;
+            assign man_b_i8[i][j] = abs_b;
+            assign sign_i8[i][j]  = signed_op ? (va[7] ^ vb[7]) : 1'b0;
+        end
+    end
+
+    // 6. Int4 Preparation (4 ops per TCK slice)
+    wire [TCK-1:0][3:0][3:0] man_a_i4, man_b_i4;
+    wire [TCK-1:0][3:0]      sign_i4;
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_i4
+        for (genvar j = 0; j < 4; ++j) begin : g_sub
+            wire [3:0] va = a_row[i/2][(i%2)*16 + j*4 +: 4];
+            wire [3:0] vb = b_col[i/2][(i%2)*16 + j*4 +: 4];
+            wire signed_op = (fmt_s == 4'(TCU_I4_ID));
+            wire [3:0] abs_a = signed_op ? (va[3] ? -va : va) : va;
+            wire [3:0] abs_b = signed_op ? (vb[3] ? -vb : vb) : vb;
+            assign man_a_i4[i][j] = abs_a;
+            assign man_b_i4[i][j] = abs_b;
+            assign sign_i4[i][j]  = signed_op ? (va[3] ^ vb[3]) : 1'b0;
+        end
+    end
+
+    // 7. Multiply, Align & Merge
+    for (genvar i = 0; i < TCK; ++i) begin : g_mul
+        logic [24:0] y_aligned;
+
+        // Shared TF32/FP16/BF16 Multiplier
+        logic [10:0] man_a_sh, man_b_sh;
+        logic        sign_sh;
+        wire [21:0]  y_raw_sh;
+
+        always_comb begin
+            case(fmt_s[3:0])
+                TCU_TF32_ID: begin man_a_sh = man_a_tf32[i]; man_b_sh = man_b_tf32[i]; sign_sh = sign_tf32[i]; end
+                TCU_FP16_ID: begin man_a_sh = man_a_fp16[i]; man_b_sh = man_b_fp16[i]; sign_sh = sign_fp16[i]; end
+                TCU_BF16_ID: begin man_a_sh = man_a_bf16[i]; man_b_sh = man_b_bf16[i]; sign_sh = sign_bf16[i]; end
+                default:     begin man_a_sh = '0;            man_b_sh = '0;            sign_sh = 0;            end
+            endcase
+        end
+
+        VX_wallace_mul #(
+            .N(11)
+        ) wtmul_tf32_f16_vf16 (
+            .a(man_a_sh),
+            .b(man_b_sh),
+            .p(y_raw_sh)
+        );
+
+        // Shared FP8/BF8 Multiplier
+        wire [1:0][7:0] y_raw_f8;
+        wire [1:0]      sign_f8_curr;
+
+        for (genvar j = 0; j < 2; ++j) begin : g_f8
+            wire [3:0] ma_f8 = (fmt_s == 4'(TCU_FP8_ID)) ? man_a_fp8[i][j] : man_a_bf8[i][j];
+            wire [3:0] mb_f8 = (fmt_s == 4'(TCU_FP8_ID)) ? man_b_fp8[i][j] : man_b_bf8[i][j];
+            assign sign_f8_curr[j] = (fmt_s == 4'(TCU_FP8_ID)) ? sign_fp8[i][j] : sign_bf8[i][j];
+
+            VX_wallace_mul #(
+                .N(4)
+            ) wtmul_f8_bf8 (
+                .a(ma_f8),
+                .b(mb_f8),
+                .p(y_raw_f8[j])
+            );
+        end
+
+        // Alignment & Adder for FP8/BF8
+        wire [6:0]  shift_amt_f8 = exp_low_larger[i] ? -raw_exp_diff[i] : raw_exp_diff[i];
+        wire [7:0] y_f8_low  = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[0] : {y_raw_f8[0][5:0], 2'd0};
+        wire [7:0] y_f8_high = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[1] : {y_raw_f8[1][5:0], 2'd0};
+
+        wire [22:0] aligned_sig_low  = exp_low_larger[i] ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> shift_amt_f8;
+        wire [22:0] aligned_sig_high = exp_low_larger[i] ? {y_f8_high, 15'd0} >> shift_amt_f8 : {y_f8_high, 15'd0};
+
+        wire [23:0] signed_sig_low  = sign_f8_curr[0] ? -aligned_sig_low  : {1'b0, aligned_sig_low};
+        wire [23:0] signed_sig_high = sign_f8_curr[1] ? -aligned_sig_high : {1'b0, aligned_sig_high};
+
+        wire [24:0] signed_sig_res;
+        VX_ks_adder #(
+            .N(24)
+        ) sig_adder_f8 (
+            .dataa (signed_sig_low),
+            .datab (signed_sig_high),
+            .sum   (signed_sig_res[23:0]),
+            .cout  (signed_sig_res[24])
+        );
+
+        wire sign_f8_add = signed_sig_res[24];
+        wire [23:0] y_f8_add = sign_f8_add ? -signed_sig_res[23:0] : signed_sig_res[23:0];
+
+        // Shared I8/U8 Multiplier
+        wire [1:0][15:0] y_abs_i8;
+        wire [1:0][16:0] y_signed_i8;
+
+        for (genvar j = 0; j < 2; ++j) begin : g_i8
+            VX_wallace_mul #(
+                .N(8)
+            ) wtmul_i8 (
+                .a(man_a_i8[i][j]),
+                .b(man_b_i8[i][j]),
+                .p(y_abs_i8[j])
+            );
+            wire [15:0] s_prod = sign_i8[i][j] ? -y_abs_i8[j] : y_abs_i8[j];
+            assign y_signed_i8[j] = (fmt_s == 4'(TCU_I8_ID)) ? {s_prod[15], s_prod} : {1'b0, y_abs_i8[j]};
+        end
+
+        wire [16:0] y_i8_add_res;
+        VX_ks_adder #(
+            .N(17)
+        ) i8_adder (
+            .dataa (y_signed_i8[0]),
+            .datab (y_signed_i8[1]),
+            .sum   (y_i8_add_res),
+            `UNUSED_PIN(cout)
+        );
+
+        // Shared I4/U4 Multiplier
+        wire [3:0][7:0] y_abs_i4;
+        wire [3:0][9:0] y_signed_i4;
+        wire [9:0]      y_i4_add_res;
+
+        for (genvar j = 0; j < 4; ++j) begin : g_i4
+            VX_wallace_mul #(
+                .N(4)
+            ) wtmul_i4 (
+                .a(man_a_i4[i][j]),
+                .b(man_b_i4[i][j]),
+                .p(y_abs_i4[j])
+            );
+            wire [7:0] s_prod = sign_i4[i][j] ? -y_abs_i4[j] : y_abs_i4[j];
+            assign y_signed_i4[j] = (fmt_s == 4'(TCU_I4_ID)) ? {{2{s_prod[7]}}, s_prod} : {2'd0, y_abs_i4[j]};
+        end
+
+        VX_csa_tree #(
+            .N (4),
+            .W (10),
+            .S (10)
+        ) i4_adder (
+            .operands (y_signed_i4),
+            .sum      (y_i4_add_res),
+            `UNUSED_PIN (cout)
+        );
+
+        // Mux Output
+        always_comb begin
+            case (fmt_s[3:0])
+                TCU_TF32_ID, TCU_FP16_ID: y_aligned = {sign_sh, y_raw_sh, 2'd0};
+                TCU_BF16_ID:              y_aligned = {sign_sh, y_raw_sh[15:0], 8'd0};
+                TCU_FP8_ID, TCU_BF8_ID:   y_aligned = {sign_f8_add, y_f8_add};
+                TCU_I8_ID:                y_aligned = 25'($signed(y_i8_add_res));
+                TCU_U8_ID:                y_aligned = {8'd0, y_i8_add_res};
+                TCU_I4_ID:                y_aligned = 25'($signed(y_i4_add_res));
+                TCU_U4_ID:                y_aligned = {15'd0, y_i4_add_res};
+                default:                  y_aligned = 25'd0;
+            endcase
+        end
+
+        if (W > 25) begin
+            assign y[i] = {y_aligned, {(W-25){1'b0}}};
+        end else begin
+            assign y[i] = y_aligned[24 -: W];
+        end
+    end
+
+    // 8. C-Term Processing
+    `UNUSED_VAR ({c_val[30:25], cls_c})
+    wire [24:0] c_base = fmt_s[3] ? c_val[24:0] : {c_val[31], 1'b1, c_val[22:0]};
+    if (W > 25) begin
+        assign y[TCK] = {c_base, {(W-25){1'b0}}};
+    end else begin
+        assign y[TCK] = c_base[24 -: W];
     end
 
 endmodule

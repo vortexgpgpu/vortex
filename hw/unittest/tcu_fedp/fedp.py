@@ -12,15 +12,59 @@
 # limitations under the License.
 
 #!/usr/bin/env python3
-import argparse, random, struct, sys, ast, os
+import argparse, random, struct, sys, ast, os, math
 import numpy as np
 
-# Imported if --ref=cuda
+# Imported if --ref=cuda or --ref=cpp
 _torch = None
 _ext = None
+_cpp_ext = None
 
 ULP = 1  # acceptance threshold in ULPs
 MAX_PRINTED_ERRORS_PER_FEATURE = 100 # Max errors to print per feature
+
+# ----------------- format specs -----------------
+# "fmt" matches common tensor-core input formats.
+# All formats here are encoded as custom sign/exponent/fraction bitfields:
+#   total bits = 1 (sign) + eb (exponent) + sb (fraction)
+# and are *not* stored as IEEE-754 except where they coincide (fp16/bf16/fp8/bf8 are IEEE-like;
+# tf32 is the NVIDIA 19-bit "TF32" format: fp32 exponent with 10 fraction bits).
+FORMAT_SPECS = {
+  "tf32": {"eb": 8, "sb": 10, "desc": "TF32 (e8m10)"},
+  "fp16": {"eb": 5, "sb": 10, "desc": "FP16 (e5m10)"},
+  "bf16": {"eb": 8, "sb": 7,  "desc": "BF16 (e8m7)"},
+  "bf8":  {"eb": 5, "sb": 2,  "desc": "BF8 (e5m2)"},
+  "fp8":  {"eb": 4, "sb": 3,  "desc": "FP8 (e4m3)"},
+}
+
+_FMT_ALIASES = {
+  "bf8(e5m2)": "bf8",
+  "fp8(e4m3)": "fp8",
+}
+
+def normalize_fmt(fmt: str):
+  if fmt is None:
+    return None
+  f = fmt.strip().lower()
+  f = _FMT_ALIASES.get(f, f)
+  if f not in FORMAT_SPECS:
+    raise ValueError(f"Unknown --fmt '{fmt}'. Supported: {', '.join(FORMAT_SPECS.keys())}")
+  return f
+
+def fmt_to_eb_sb(fmt: str):
+  f = normalize_fmt(fmt)
+  spec = FORMAT_SPECS[f]
+  return spec["eb"], spec["sb"]
+
+def fmt_from_eb_sb(eb: int, sb: int):
+  for k, v in FORMAT_SPECS.items():
+    if v["eb"] == eb and v["sb"] == sb:
+      return k
+  return None
+
+def fmt_hex_digits(eb: int, sb: int) -> int:
+  total_bits = 1 + int(eb) + int(sb)
+  return (total_bits + 3) // 4
 
 # ----------------- tiny helpers -----------------
 def be32_from_float(x: float) -> int:
@@ -163,12 +207,11 @@ class FEDP:
 
     for s, P, e in normalized_terms:
       if P:
-        # Check the single "overflow" bit (e.g., at bit 21)
-        hi2 = (P >> (base_msb_offset + 1)) & 1
-        # Add fixed offset + overflow
-        tops.append(e + base_msb_offset + hi2)
+        top_val = e + base_msb_offset
+        tops.append(top_val)
+
         if self.trace:
-            print(f"  [S2/tops P] e={e} P=0x{P:x} base_off={base_msb_offset} hi2={hi2} -> top={e + base_msb_offset + hi2}")
+            print(f"  [S2/tops P] e={e} P=0x{P:x} base_off={base_msb_offset} -> top={top_val}")
 
     # candidate from C if it's a finite value
     if cc in (0, 1, 2):
@@ -184,8 +227,6 @@ class FEDP:
       return [], 0, 0, cc
 
     # Choose window base so that the max top fits in [L, L+W-1]
-    # This aligns the MSB of the largest term to the top of the
-    # fractional part of the accumulator.
     L = max(tops) - (W-1)
 
     aligned_terms = []
@@ -662,58 +703,206 @@ def _u16_to_f16(vals_u16):
 def _u32_to_f32(val_u32: int) -> np.float32:
   return np.array([val_u32], dtype=np.uint32).view(np.float32)[0]
 
+
+def _packed_to_f32(vals, eb, sb):
+  # Decode our packed (sign,exp,frac) bitfields into float32 values.
+  # Note: This preserves NaN/Inf/zero semantics; payloads are not preserved.
+  return np.array([np.float32(_to_float_np(int(v), eb, sb)) for v in vals], dtype=np.float32)
+
 def ref_cuda(A, B, Cbits, eb, sb, arch_flag="sm_89") -> int:
   """
-  Tensor-core reference using a single 16x16x16 WMMA tile (half*half->float).
-  - Only supports eb=5,sb=10 (FP16-like) inputs.
-  - Embeds the n-lane dot product into (0,:K)·(:K,0) of the tile.
-  - Uses our custom WMMA kernel so it cannot fall back to plain FMAs.
+  CUDA reference.
+
+  - fp16: uses a custom WMMA (half*half->float) kernel to force Tensor Core MMA.
+  - tf32/bf16/bf8/fp8: decodes inputs to float32 values and performs the dot-product
+    on the GPU in float32 (values are already quantized by the packed format).
+
+  This is intended as a *CUDA-side* reference; for an exact reference use --ref=numpy.
   """
-  if not (eb == 5 and sb == 10):
-    raise NotImplementedError("--ref=cuda supports eb=5,sb=10 (fp16) only")
+  fmt = fmt_from_eb_sb(eb, sb)
 
-  K = len(A)
-  if K > 16:
-    raise ValueError(f"--ref=cuda expects n <= 16, got {K}")
+  # Fast path: true tensor-core WMMA for fp16
+  if fmt == "fp16":
+    K = len(A)
+    if K > 16:
+      raise ValueError(f"--ref=cuda(fp16) expects n <= 16, got {K}")
 
-  torch, ext = _ensure_cuda_ext(arch_flag=arch_flag)
-  device = torch.device("cuda")
+    torch, ext = _ensure_cuda_ext(arch_flag=arch_flag)
+    device = torch.device("cuda")
 
-  # Convert packed 16-bit inputs -> float16
-  a_vals = _u16_to_f16(A)
-  b_vals = _u16_to_f16(B)
-  c_val = _u32_to_f32(Cbits)
+    # Convert packed 16-bit inputs -> float16
+    a_vals = _u16_to_f16(A)
+    b_vals = _u16_to_f16(B)
+    c_val = _u32_to_f32(Cbits)
 
-  # A: 1 x 16 x 16 row-major; only row 0 is used
-  A_h = np.zeros((1, 16, 16), dtype=np.float16)
-  A_h[0, 0, :K] = a_vals
+    # A: 1 x 16 x 16 row-major; only row 0 is used
+    A_h = np.zeros((1, 16, 16), dtype=np.float16)
+    A_h[0, 0, :K] = a_vals
 
-  # B: 1 x 16 x 16 buffer, must be in COL-MAJOR layout
-  # We create a (K, 16) row-major array in numpy...
-  B_row_major_temp = np.zeros((16, 16), dtype=np.float16)
-  B_row_major_temp[:K, 0] = b_vals
-  # ...then transpose it. The .copy() creates a contiguous col-major array.
-  B_col = np.transpose(B_row_major_temp, (1, 0)).copy()
-  # Add a batch dimension
-  B_h = np.expand_dims(B_col, axis=0)
+    # B: 1 x 16 x 16 buffer, must be in COL-MAJOR layout
+    B_row_major_temp = np.zeros((16, 16), dtype=np.float16)
+    B_row_major_temp[:K, 0] = b_vals
+    B_col = np.transpose(B_row_major_temp, (1, 0)).copy()
+    B_h = np.expand_dims(B_col, axis=0)
 
-  # C: 1 x 16 x 16 row-major; only (0,0) = C is non-zero
-  C_h = np.zeros((1, 16, 16), dtype=np.float32)
-  C_h[0, 0, 0] = c_val
+    # C: 1 x 16 x 16 row-major; only (0,0) = C is non-zero
+    C_h = np.zeros((1, 16, 16), dtype=np.float32)
+    C_h[0, 0, 0] = c_val
 
-  # Device tensors
-  A_d = torch.from_numpy(A_h).to(device=device, dtype=torch.float16).contiguous()
-  B_d = torch.from_numpy(B_h).to(device=device, dtype=torch.float16).contiguous()
-  C_d = torch.from_numpy(C_h).to(device=device, dtype=torch.float32).contiguous()
-  D_d = torch.empty_like(C_d)
+    # Device tensors
+    A_d = torch.from_numpy(A_h).to(device=device, dtype=torch.float16).contiguous()
+    B_d = torch.from_numpy(B_h).to(device=device, dtype=torch.float16).contiguous()
+    C_d = torch.from_numpy(C_h).to(device=device, dtype=torch.float32).contiguous()
+    D_d = torch.empty_like(C_d)
 
-  # One WMMA tile on tensor cores
-  ext.wmma_tile_gemm_batched_launcher(A_d, B_d, C_d, D_d, 1)
-  torch.cuda.synchronize()
+    ext.wmma_tile_gemm_batched_launcher(A_d, B_d, C_d, D_d, 1)
+    torch.cuda.synchronize()
 
-  # Extract D[0,0,0]
-  D00 = float(D_d[0, 0, 0].item())
-  return be32_from_float(D00)
+    D00 = float(D_d[0, 0, 0].item())
+    return be32_from_float(D00)
+
+  # Generic CUDA path for the other supported formats
+  try:
+    import torch as _t
+  except Exception as e:
+    raise RuntimeError(f"--ref=cuda requires PyTorch: {e}")
+
+  if not _t.cuda.is_available():
+    raise RuntimeError("--ref=cuda requires a CUDA-capable PyTorch")
+
+  # Decode inputs (already quantized by the packed format)
+  a_f32 = _packed_to_f32(A, eb, sb)
+  b_f32 = _packed_to_f32(B, eb, sb)
+  c_f32 = np.float32(_u32_to_f32(Cbits))
+
+  dev = _t.device("cuda")
+  ta = _t.from_numpy(a_f32).to(device=dev, dtype=_t.float32)
+  tb = _t.from_numpy(b_f32).to(device=dev, dtype=_t.float32)
+  tc = _t.tensor(float(c_f32), device=dev, dtype=_t.float32)
+
+  # Optionally encourage TF32 on eligible GPUs when fmt==tf32
+  if fmt == "tf32":
+    try:
+      _t.backends.cuda.matmul.allow_tf32 = True
+      _t.backends.cudnn.allow_tf32 = True
+      if hasattr(_t, "set_float32_matmul_precision"):
+        _t.set_float32_matmul_precision("high")
+    except Exception:
+      pass
+
+  # Deterministic small reduction (n is typically <= 16 here)
+  out = (ta * tb).sum(dtype=_t.float32) + tc
+  _t.cuda.synchronize()
+  return be32_from_float(float(out.item()))
+
+
+# ----------------- C++ reference -----------------
+def _ensure_cpp_ext(source_path):
+  """
+  Compiles a PyBind wrapper that instantiates the 'FEDP' class
+  defined in the user source.
+  """
+  global _torch, _cpp_ext
+  if _cpp_ext is not None:
+    return _torch, _cpp_ext
+
+  try:
+    import torch as _t
+    from torch.utils.cpp_extension import load_inline
+  except Exception as e:
+    raise RuntimeError(f"--ref=cpp requires PyTorch: {e}")
+
+  abs_path = os.path.abspath(source_path)
+  if not os.path.exists(abs_path):
+    raise FileNotFoundError(f"C++ source not found at: {abs_path}")
+
+  # Helper string for includes
+  cpp_includes = f'#include "{abs_path}"'
+
+  # C++ wrapper implementation.
+  # We DO NOT use an f-string for the main code block to avoid
+  # syntax errors with braces {} in C++.
+  #
+  # UPDATED: Cbits argument type changed from 'int' to 'uint32_t'
+  # to handle 32-bit bit patterns that exceed signed int max (e.g. 0xFF7FFFFF).
+  cpp_src = """
+  #include <torch/extension.h>
+  #include <iostream>
+  #include <cstring>
+
+  #undef LOG
+  // HEADER_PATH_PLACEHOLDER
+
+  uint32_t fedp_run_wrapper(
+      torch::Tensor A, torch::Tensor B, uint32_t Cbits,
+      int n, int eb, int sb, int lanes, std::string frm_str,
+      int W, bool renorm, bool no_window) {
+
+      // Map string FRM to FEDP int constants
+      int frm = 0;
+      if (frm_str == "RNE") frm = 0;
+      else if (frm_str == "RTZ") frm = 1;
+      else if (frm_str == "RDN") frm = 2;
+      else if (frm_str == "RUP") frm = 3;
+      else if (frm_str == "RMM") frm = 4;
+      else {
+        // Fallback or error
+        frm = 0;
+      }
+
+      // Instantiate the class
+      FEDP fedp(eb, sb, lanes, frm, W, renorm, no_window);
+
+      // Prepare C float from bits
+      float c_float;
+      uint32_t c_u32 = Cbits;
+      std::memcpy(&c_float, &c_u32, sizeof(c_float));
+
+      // Get pointers (assuming int32 inputs from python -> torch.int32)
+      auto a_ptr = A.data_ptr<int32_t>();
+      auto b_ptr = B.data_ptr<int32_t>();
+
+      // Run operator()
+      // Note: The source expects 'const uint32_t*', so we cast
+      float res_float = fedp(
+        reinterpret_cast<const uint32_t*>(a_ptr),
+        reinterpret_cast<const uint32_t*>(b_ptr),
+        c_float,
+        (uint32_t)n
+      );
+
+      // Bitcast result back to uint32
+      uint32_t res_u32;
+      std::memcpy(&res_u32, &res_float, sizeof(res_u32));
+      return res_u32;
+  }
+
+  PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("fedp_run", &fedp_run_wrapper, "FEDP Runner Wrapper");
+  }
+  """
+
+  # Inject the include path safely
+  cpp_wrapper_src = cpp_src.replace("// HEADER_PATH_PLACEHOLDER", cpp_includes)
+
+  _cpp_ext = load_inline(
+    name="fedp_cpp_class_wrapper",
+    cpp_sources=cpp_wrapper_src,
+    extra_cflags=["-O3", "-std=c++17"],
+    verbose=False,
+  )
+  _torch = _t
+  return _torch, _cpp_ext
+
+def ref_cpp(A, B, Cbits, eb, sb, W, HR, renorm, frm, no_window, source_path):
+  torch, ext = _ensure_cpp_ext(source_path)
+
+  # Convert inputs to torch tensors (int32) to match C++ uint32 signature
+  tA = torch.tensor(A, dtype=torch.int32)
+  tB = torch.tensor(B, dtype=torch.int32)
+
+  return ext.fedp_run(tA, tB, Cbits, len(A), eb, sb, len(A), frm, W, renorm, no_window)
+
 
 # ----------------- test-case generators -----------------
 def _pack_fp(s, e, f, eb, sb):
@@ -813,7 +1002,10 @@ CUSTOM_CASES = [
   [["0xe150","0xf4d7","0x4bcc","0xf3c1"],["0x83ff","0xda97","0x83ff","0x7ac6"],"0x4e51ad09"],
 ]
 
-def _mk_custom(n):
+def _mk_custom(n, eb, sb):
+  # Custom cases are only defined for fp16 bit-patterns.
+  if not (eb == 5 and sb == 10):
+    return []
   def _pi(x):
     return int(x, 16) if isinstance(x, str) else int(x)
   out = []
@@ -824,26 +1016,28 @@ def _mk_custom(n):
                   _pi(C)))
   return out
 
-def _print_case(tag, idx, A, B, C):
-  a_str = ",".join(f"0x{x:04x}" for x in A)
-  b_str = ",".join(f"0x{x:04x}" for x in B)
+def _print_case(tag, idx, A, B, C, hex_digits=4):
+  a_str = ",".join(f"0x{x:0{hex_digits}x}" for x in A)
+  b_str = ",".join(f"0x{x:0{hex_digits}x}" for x in B)
   c_str = f"0x{C:08x}"
   print(f'[{tag} #{idx}] inputs="[{a_str}];[{b_str}];{c_str}"')
 
 # ----------------- harness -----------------
 def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
          test_id_filter, ref_mode, arch_flag, max_errors,
-         W, HR, no_window):
-
-  random.seed(seed)
-  np.random.seed(seed)
+         W, HR, no_window, cpp_source):
 
   fedp = FEDP(eb=eb, sb=sb, frm=frm, renorm=renorm, lanes=n, trace=trace, W=W, HR=HR, no_window=no_window)
+
+  hex_digits = fmt_hex_digits(eb, sb)
 
   # choose reference
   if ref_mode == "cuda":
     _ensure_cuda_ext(arch_flag=arch_flag)
     ref_fn = lambda A, B, C, EB, SB: ref_cuda(A, B, C, EB, SB, arch_flag=arch_flag)
+  elif ref_mode == "cpp":
+    _ensure_cpp_ext(cpp_source)
+    ref_fn = lambda A, B, C, EB, SB: ref_cpp(A, B, C, EB, SB, W, HR, renorm, frm, no_window, cpp_source)
   else:
     ref_fn = lambda A, B, C, EB, SB: ref_numpy(A, B, C, EB, SB, frm=frm)
 
@@ -851,7 +1045,7 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
   tests_per_feature = max(1, (iters + len(features) - 1) // len(features))
 
   cancel_cases = _mk_cancel_cases(n, eb, sb, tests_per_feature)
-  custom_cases = _mk_custom(n)
+  custom_cases = _mk_custom(n, eb, sb)
 
   ok_by_feature = {f: [0, 0] for f in features}
   errors_by_feature = {f: 0 for f in features}
@@ -859,6 +1053,10 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
   errors = 0
 
   for test_id in range(iters):
+    current_seed = seed + test_id
+    random.seed(current_seed)
+    np.random.seed(current_seed)
+
     if test_id_filter is not None and test_id != test_id_filter:
       continue
 
@@ -890,14 +1088,14 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
       C = generate_fp_value(c_feat, 8, 23, sub_id)
 
     if debug or trace:
-      _print_case(f"{feature} TID {test_id}", sub_id, A, B, C)
+      _print_case(f"{feature} TID {test_id}", sub_id, A, B, C, hex_digits=hex_digits)
 
     got = fedp.dotp(A, B, C)
 
     try:
       ref = ref_fn(A, B, C, eb, sb)
     except (RuntimeError, ValueError) as e:
-      print(f"SKIPPING {feature} TID {test_id}/{sub_id}: ref_fn failed: {e}")
+      print(f"SKIPPING {feature} TID {test_id}: ref_fn failed: {e}")
       continue # Skip this test case
 
     # Track ULP and per-feature max
@@ -924,8 +1122,8 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
       )
 
       if print_this_error:
-        print(f"✘ FAIL {feature} TID {test_id}/{sub_id}: got=0x{got:08x} ref=0x{ref:08x} ulp={current_ulp}")
-        _print_case(feature, sub_id, A, B, C)
+        print(f"✘ FAIL {feature} TID {test_id}: got=0x{got:08x} ref=0x{ref:08x} ulp={current_ulp}")
+        _print_case(feature, sub_id, A, B, C, hex_digits=hex_digits)
       elif errors_by_feature[feature] == MAX_PRINTED_ERRORS_PER_FEATURE + 1:
         # Only emit the "stopping" note if we actually stopped printing.
         print(f"ℹ Stopping error print for {feature} (limit={MAX_PRINTED_ERRORS_PER_FEATURE} reached).")
@@ -946,7 +1144,8 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
       continue
     mark = "✔" if ok == tot else "✘"
 
-    summary_str = f"{mark} {f}: {ok}/{tot} ({100.0 * ok / tot:.1f}%)"
+    pc = math.floor(1000.0 * ok / tot) / 10
+    summary_str = f"{mark} {f}: {ok}/{tot} ({pc:.1f}%)"
     if ok < tot: # Only show MAX_ULP if there were errors
       summary_str += f" MAX_ULP={max_ulp_by_feature[f]}"
     print(summary_str)
@@ -956,7 +1155,8 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
 
   print("-" * 40)
   if total_tot > 0:
-    print(f"OVERALL: {total_ok}/{total_tot} ({100.0 * total_ok / total_tot:.1f}%)")
+    pc = math.floor(1000.0 * total_ok / total_tot) / 10
+    print(f"OVERALL: {total_ok}/{total_tot} ({pc:.1f}%)")
 
   if errors > 0:
     sys.exit(1)
@@ -967,29 +1167,39 @@ if __name__ == "__main__":
                   help="Number of dot-product lanes (max 16 for --ref=cuda)")
   ap.add_argument("--eb", type=int, default=5)
   ap.add_argument("--sb", type=int, default=10)
+  ap.add_argument("--fmt", type=str, default=None,
+                  choices=["tf32","fp16","bf16","bf8","fp8","bf8(e5m2)","fp8(e4m3)"],
+                  help="Select a native input format (overrides --eb/--sb). Supported: tf32, fp16, bf16, bf8(e5m2), fp8(e4m3)")
   ap.add_argument("--frm", type=str, choices=["RNE", "RTZ", "RDN", "RUP", "RMM"], default="RNE",
                   help="Floating-point rounding mode")
   ap.add_argument("--renorm", action="store_true", help="renormalize product")
-  ap.add_argument("--iters", type=int, default=10000)
+  ap.add_argument("--iters", type=int, default=100000)
   ap.add_argument("--seed", type=int, default=1)
   ap.add_argument("--debug", action="store_true", help="print every test scenario")
   ap.add_argument("--trace", action="store_true", help="print per-stage outputs")
   ap.add_argument("--test", type=int, default=None, help="Run a single test by its global TID")
   ap.add_argument("--run", type=str, default=None,
                   help="Directly run a single case. Format: '[A];[B];C'")
-  ap.add_argument("--ref", type=str, choices=["numpy", "cuda"], default="numpy",
-                  help="Reference: 'numpy' (longdouble), 'cuda' (WMMA)")
+  ap.add_argument("--ref", type=str, choices=["numpy", "cuda", "cpp"], default="numpy",
+                  help="Reference: 'numpy' (longdouble), 'cuda' (WMMA), 'cpp' (external C++ source)")
   ap.add_argument("--arch", type=str, default="sm_89",
                   help="CUDA arch for --ref=cuda (e.g., sm_80, sm_89, sm_90)")
+  ap.add_argument("--cpp-source", type=str, default="fedp.h",
+                  help="Path to external C++ source containing FEDP class")
   ap.add_argument("--max-errors", type=int, default=0,
                   help="Stop after N errors (0 = do not stop)")
   ap.add_argument("--W", type=int, default=25,
                   help="Accumulator window width (fractional part) for FEDP model")
-  ap.add_argument("--HR", type=int, default=3,
+  ap.add_argument("--HR", type=int, default=4,
                   help="Accumulator Headroom bits for FEDP model")
   ap.add_argument("--no-window", action="store_true",
                   help="Disable window clipping in FEDP accumulator")
   args = ap.parse_args()
+
+  # --fmt overrides eb/sb
+  if args.fmt is not None:
+    args.fmt = normalize_fmt(args.fmt)
+    args.eb, args.sb = fmt_to_eb_sb(args.fmt)
 
   # Direct single-case mode
   if args.run:
@@ -1008,8 +1218,10 @@ if __name__ == "__main__":
       fedp = FEDP(lanes=args.n, eb=args.eb, sb=args.sb, frm=args.frm, renorm=args.renorm,
                   trace=args.trace, W=args.W, HR=args.HR, no_window=args.no_window)
 
+      hex_digits = fmt_hex_digits(args.eb, args.sb)
+
       if not args.trace:
-        _print_case("direct", 0, A, B, C)
+        _print_case("direct", 0, A, B, C, hex_digits=hex_digits)
 
       # pick reference
       if args.ref == "cuda":
@@ -1018,6 +1230,9 @@ if __name__ == "__main__":
           sys.exit(1)
         _ensure_cuda_ext(arch_flag=args.arch)
         ref_fn = lambda A_, B_, C_, EB, SB: ref_cuda(A_, B_, C_, EB, SB, arch_flag=args.arch)
+      elif args.ref == "cpp":
+        _ensure_cpp_ext(args.cpp_source)
+        ref_fn = lambda A_, B_, C_, EB, SB: ref_cpp(A_, B_, C_, EB, SB, args.W, args.HR, args.renorm, args.frm, args.no_window, args.cpp_source)
       else:
         ref_fn = lambda A_, B_, C_, EB, SB: ref_numpy(A_, B_, C_, EB, SB, frm=args.frm)
 
@@ -1036,4 +1251,5 @@ if __name__ == "__main__":
        args.debug, args.trace, args.test,
        args.ref, args.arch,
        args.max_errors,
-       args.W, args.HR, args.no_window)
+       args.W, args.HR, args.no_window,
+       args.cpp_source)

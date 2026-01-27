@@ -1,69 +1,113 @@
-// Copyright © 2019-2023
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WAARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 `include "VX_define.vh"
 
-module VX_tcu_drl_acc #(
-    parameter N = 5,                //include c_val count
-    parameter W = 53,               //acc width
-    parameter WA = W+$clog2(N)+1    //acc out width
+module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter N  = 5,
+    parameter W  = 26,
+    parameter WA = 30
 ) (
-    input  wire [N-1:0][W-1:0] sigsIn,
-    input  wire fmt_sel,
-    input  wire [N-2:0] sparse_mask,
-    output logic [WA-1:0] sigOut,
-    output logic [N-2:0] signOuts
+    input  wire                 clk,
+    input  wire                 valid_in,
+    input  wire [31:0]          req_id,
+    input  wire [N-2:0]         lane_mask,
+    input  wire [N-1:0][W-1:0]  sigs_in,
+    input  wire [N-1:0]         sticky_in,
+    input  wire                 is_int,
+    output wire [WA-1:0]        sig_out,
+    output wire [N-2:0]         sigs_out,
+    output wire                 sticky_out
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR ({clk, valid_in, req_id, is_int})
 
-    //input power gating
-    wire [N-1:0][W-1:0] gated_sigsIn;
-    for (genvar i = 0; i < N-1; i++) begin : g_power_gating
-        assign gated_sigsIn[i] = ({W{sparse_mask[i]}} & sigsIn[i]);
+    // ----------------------------------------------------------------------
+    // Input Masking
+    // ----------------------------------------------------------------------
+    wire [N-1:0][W-1:0] masked_sigs;
+    wire [N-1:0]        masked_sticky;
+
+    // Mask vector lanes (0 to N-2)
+    for (genvar i = 0; i < N-1; ++i) begin : g_mask
+        assign masked_sigs[i]   = sigs_in[i] & {W{lane_mask[i]}};
+        assign masked_sticky[i] = sticky_in[i] & lane_mask[i];
     end
-    assign gated_sigsIn[N-1] = sigsIn[N-1];  //c_val
 
-    //Sign-extend fp significands to WA bits (header)
-    wire [N-1:0][WA-1:0] sigsIn_ext;
-    for (genvar i = 0; i < N; i++) begin : g_ext_sign
-        assign sigsIn_ext[i] = fmt_sel ? {{(WA-W){1'b0}}, gated_sigsIn[i]} : {{(WA-W){gated_sigsIn[i][W-1]}}, gated_sigsIn[i]};
+    // Pass C-term (N-1) unmasked
+    assign masked_sigs[N-1]   = sigs_in[N-1];
+    assign masked_sticky[N-1] = sticky_in[N-1];
+
+    // ----------------------------------------------------------------------
+    // Sign Extension
+    // ----------------------------------------------------------------------
+
+    wire [N-1:0][WA-1:0] sigs_in_packed;
+    for (genvar i = 0; i < N; ++i) begin : g_ext
+        assign sigs_in_packed[i] = $signed({{(WA-W){masked_sigs[i][W-1]}}, masked_sigs[i]});
     end
 
-    //Carry-Save-Adder based significand accumulation
+    // ----------------------------------------------------------------------
+    // Fast Accumulation (CSA Tree)
+    // ----------------------------------------------------------------------
+
     if (N >= 7) begin : g_large_acc
         VX_csa_mod4 #(
             .N (N),
             .W (WA),
-            .S (WA-1)
+            .S (WA)
         ) sig_csa (
-            .operands (sigsIn_ext),
-            .sum      (sigOut[WA-2:0]),
-            .cout     (sigOut[WA-1])
+            .operands (sigs_in_packed),
+            .sum      (sig_out),
+            `UNUSED_PIN(cout)
         );
-    end else begin : g_small_acc
+    end else if (N >= 3) begin : g_medium_acc
         VX_csa_tree #(
             .N (N),
             .W (WA),
-            .S (WA-1)
+            .S (WA)
         ) sig_csa (
-            .operands (sigsIn_ext),
-            .sum      (sigOut[WA-2:0]),
-            .cout     (sigOut[WA-1])
+            .operands (sigs_in_packed),
+            .sum      (sig_out),
+            `UNUSED_PIN(cout)
         );
+    end else begin : g_small_acc
+        // Fallback for N < 3 where CSA is not applicable
+        logic signed [WA-1:0] sum_serial;
+        always_comb begin
+            sum_serial = '0;
+            for (int i = 0; i < N; ++i) begin
+                sum_serial += $signed(sigs_in_packed[i]);
+            end
+        end
+        assign sig_out = sum_serial;
     end
 
-    //Extract prod sigs signs for INT
-    for (genvar i = 0; i < N-1; i++) begin : g_signs
-        assign signOuts[i] = sigsIn[i][W-1];
+    // ----------------------------------------------------------------------
+    // Outputs
+    // ----------------------------------------------------------------------
+
+    // Product sign bits (exclude C term) for normalization checks
+    for (genvar i = 0; i < N-1; ++i) begin : g_signs
+        assign sigs_out[i] = masked_sigs[i][W-1];
     end
+
+    assign sticky_out = |masked_sticky;
+
+    // ----------------------------------------------------------------------
+    // Debug
+    // ----------------------------------------------------------------------
+
+`ifdef DBG_TRACE_TCU
+    always_ff @(posedge clk) begin
+        if (valid_in) begin
+            `TRACE(4, ("%t: %s FEDP-ACC(%0d): lane_mask=%b, sigs_in=", $time, INSTANCE_ID, req_id, lane_mask));
+            `TRACE_ARRAY1D(4, "0x%0h", sigs_in, N)
+            `TRACE(4, (", masked_sigs="));
+            `TRACE_ARRAY1D(4, "0x%0h", masked_sigs, N)
+            `TRACE(4, (", sticky_in="));
+            `TRACE_ARRAY1D(4, "%0d", sticky_in, N)
+            `TRACE(4, (", sig_out=0x%0h, sticky_out=%0d\n", sig_out, sticky_out));
+        end
+    end
+`endif
 
 endmodule

@@ -1,108 +1,145 @@
-// Copyright © 2019-2023
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+`include "VX_define.vh"
 
-`include "VX_define.vh"    
-    
-module VX_tcu_drl_norm_round #(
-    parameter N = 5,     //includes c_val
-    parameter W = 53    //acc out width    
+module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter N = 5,
+    parameter W = 25,
+    parameter WA = 30,
+    parameter EXP_W = 10
 ) (
-    input wire [7:0] max_exp,
-    input wire [W+$clog2(N):0] acc_sig,
-    input wire [6:0] hi_c,
-    input wire [N-2:0] sigSigns,
-    input wire fmt_sel,
-    input wire [2:0] exceptions,
-    output wire [31:0] result
+    input wire          clk,
+    input wire          valid_in,
+    input wire [31:0]   req_id,
+    input wire [EXP_W-1:0] max_exp,
+    input wire [WA-1:0] acc_sig,
+    input wire [6:0]    cval_hi,    // Unused in FP mode
+    input wire [N-2:0]  sig_signs,  // Unused in FP mode
+    input wire          is_int,     // Unused in FP mode
+    input wire          sticky_in,
+    input fedp_excep_t  exceptions,
+    output wire [31:0]  result
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi, sig_signs})
 
-    localparam ACC_WIDTH = W+$clog2(N)-1;
+    // ----------------------------------------------------------------------
+    // 1. Signed Magnitude Extraction
+    // ----------------------------------------------------------------------
+    // The accumulator is in 2's complement. Convert to Sign-Magnitude.
+    wire             sum_sign = acc_sig[WA-1];
+    wire [WA-1:0]    abs_sum  = sum_sign ? -acc_sig : acc_sig;
+    wire             zero_sum = ~|abs_sum;
 
-    //Extracting magnitude from signed acc sig
-    wire sum_sign = acc_sig[W+$clog2(N)-1];
-    wire [ACC_WIDTH-1:0] abs_sum;
-    assign abs_sum = sum_sign ? -acc_sig[ACC_WIDTH-1:0] : acc_sig[ACC_WIDTH-1:0];
-    
-    //Exception handling
-    wire zero_sum = ~|abs_sum;
-
-    //Leading zero counter
-    wire [$clog2(ACC_WIDTH)-1:0] lz_count;
+    // ----------------------------------------------------------------------
+    // 2. Leading Zero Count (LZC)
+    // ----------------------------------------------------------------------
+    wire [$clog2(WA)-1:0] lz_count;
     VX_lzc #(
-        .N (ACC_WIDTH)
-    ) lzc (
+        .N (WA)
+    ) lzc_inst (
         .data_in   (abs_sum),
         .data_out  (lz_count),
-        `UNUSED_PIN(valid_out)
+        `UNUSED_PIN (valid_out)
     );
 
-    //Exponent normalization
-    wire [7:0] shift_amount = 8'($clog2(N)) - 8'(lz_count);
-    wire [7:0] norm_exp = max_exp + shift_amount;
+    // ----------------------------------------------------------------------
+    // 3. Normalization Shifter
+    // ----------------------------------------------------------------------
+    localparam HR = WA - W;
 
-    //Move leading 1 to MSB (mantissa norm)
-    wire [ACC_WIDTH-1:0] shifted_acc_sig = abs_sum << lz_count;
-    //RNE rounding
-    wire lsb = shifted_acc_sig[ACC_WIDTH-24];
-    wire guard_bit = shifted_acc_sig[ACC_WIDTH-25];
-    wire round_bit = shifted_acc_sig[ACC_WIDTH-26];
-    wire sticky_bit = |shifted_acc_sig[ACC_WIDTH-27:0];
-    wire round_up = guard_bit & (round_bit | sticky_bit | lsb);    
-    //Index [ACC_WIDTH-1] becomes the hidden 1
-    wire [22:0] rounded_sig;
-    wire carry_out;
-    VX_ks_adder #(
-        .N (23)
-    ) round_up_adder (
-        .dataa ({shifted_acc_sig[ACC_WIDTH-2 : ACC_WIDTH-24]}),
-        .datab (23'(round_up)),
-        .sum   (rounded_sig),
-        .cout  (carry_out)
-    );
+    // We want to shift left by lz_count to normalize
+    wire [WA-1:0] shifted_sum;
+    assign shifted_sum = abs_sum << lz_count;
 
-    wire [7:0] adjusted_exp = zero_sum ? 8'd0 : (norm_exp + 8'(carry_out));
+    // ----------------------------------------------------------------------
+    // 4. Exponent Adjustment & Rounding Bits
+    // ----------------------------------------------------------------------
+    // Extract Normalized Mantissa (1 hidden + 23 fraction)
+    // Top bit of shifted_sum is at [WA-1]
+    wire [23:0] norm_man = shifted_sum[WA-1 -: 24];
+
+    // Bits below the mantissa
+    wire        guard_bit = shifted_sum[WA-25];
+    wire        round_bit = shifted_sum[WA-26];
+    wire        sticky_rem = |shifted_sum[WA-27 : 0];
+    wire        sticky_bit = sticky_rem | sticky_in;
+
+    // Calculate Exponent
+    // shift_adj = HR - lzc.
+    wire signed [9:0] shift_adj = 10'(HR) - 10'(lz_count);
+    wire signed [9:0] norm_exp_s = $signed(max_exp) + shift_adj + 10'(W - 1);
+
+    // ----------------------------------------------------------------------
+    // 5. Rounding (RNE - Round to Nearest Even)
+    // ----------------------------------------------------------------------
+    wire lsb_bit  = norm_man[0];
+    wire round_up = guard_bit && (round_bit || sticky_bit || lsb_bit);
+
+    // Add round bit to mantissa
+    wire [24:0] rounded_sig_full = {1'b0, norm_man} + 25'(round_up);
+
+    // Check for carry out after rounding (e.g. 1.11...1 + 1 = 10.00...0)
+    wire carry_out = rounded_sig_full[24];
+
+    // Final Mantissa (23 bits)
+    // If carry_out, we shift right by 1 (exp increments).
+    wire [22:0] final_man = carry_out ? rounded_sig_full[23:1] : rounded_sig_full[22:0];
+
+    // Final Exponent
+    wire signed [9:0] final_exp_s = norm_exp_s + 10'(carry_out);
+
+    // ----------------------------------------------------------------------
+    // 6. Exception & Result Packing
+    // ----------------------------------------------------------------------
+    logic [7:0] packed_exp;
+    logic       exp_overflow, exp_underflow;
+
+    always_comb begin
+        if (final_exp_s >= 255) begin
+            packed_exp = 8'hFF;
+            exp_overflow = 1'b1;
+            exp_underflow = 1'b0;
+        end else if (final_exp_s <= 0) begin
+            packed_exp = 8'h00;
+            exp_overflow = 1'b0;
+            exp_underflow = 1'b1;
+        end else begin
+            packed_exp = final_exp_s[7:0];
+            exp_overflow = 1'b0;
+            exp_underflow = 1'b0;
+        end
+    end
 
     logic [31:0] fp_result;
+
     always_comb begin
-        case (exceptions[1:0])
-            2'b00: fp_result = {sum_sign, adjusted_exp, rounded_sig};
-            2'b01: fp_result = {exceptions[2], 8'hFF, 23'h000000};
-            2'b10: fp_result = {exceptions[2], 8'hFF, 23'h400000};
-            default: fp_result = 32'hxxxxxxxx;
-        endcase            
+        if (exceptions.is_nan) begin
+            // qNaN
+            fp_result = {1'b0, 8'hFF, 1'b1, 22'd0};
+        end else if (exceptions.is_inf) begin
+            // Inf
+            fp_result = {exceptions.sign, 8'hFF, 23'd0};
+        end else begin
+            // Normal / Zero / Overflow / Underflow
+            if (zero_sum || exp_underflow) begin
+                 fp_result = {sum_sign, 8'd0, 23'd0};
+            end else if (exp_overflow) begin
+                 fp_result = {sum_sign, 8'hFF, 23'd0};
+            end else begin
+                 fp_result = {sum_sign, packed_exp, final_man};
+            end
+        end
     end
 
-    //Final INT addition
-    wire [6:0] ext_acc_int = 7'($signed(acc_sig[W+$clog2(N):W]));
-    wire [N-2:0][6:0] ext_signs;
-    for (genvar i = 0; i < N-1; i++) begin : g_sign_ext
-        assign ext_signs[i] = 7'($signed(sigSigns[i]));
+    assign result = fp_result;
+
+`ifdef DBG_TRACE_TCU
+    always_ff @(posedge clk) begin
+        if (valid_in) begin
+            `TRACE(4, ("%t: %s FEDP-NORM(%0d): acc_sig=0x%0h, sign=%b, lzc=%0d, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
+                $time, INSTANCE_ID, req_id, acc_sig, sum_sign, lz_count, norm_exp_s, shifted_sum, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
+        end
     end
-
-    wire [6:0] int_hi;
-
-    VX_csa_tree #(
-        .N (N+1),
-        .W (7),
-        .S (7)
-    ) int_adder (
-        .operands ({ext_acc_int, hi_c, ext_signs}),
-        .sum (int_hi),
-        `UNUSED_PIN (cout)
-    );
-
-    wire [31:0] int_result = {int_hi, acc_sig[(W-25)+:25]};
-
-    assign result = fmt_sel ? int_result : fp_result;
+`endif
 
 endmodule

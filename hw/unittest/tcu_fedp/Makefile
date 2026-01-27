@@ -21,7 +21,7 @@ CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -DNUM_REGS=$(NUM_REGS) -DLATENCY=$(LATENCY)
 PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY)
 
-VL_FLAGS += -DSV_DPI
+VL_FLAGS += -DSV_DPI -DEXT_TCU_ENABLE
 
 SRCS += $(DPI_DIR)/dpi_util.cpp
 SRCS += $(DPI_DIR)/dpi_float.cpp
@@ -29,8 +29,9 @@ SRCS += $(SW_COMMON_DIR)/softfloat_ext.cpp
 SRCS += $(SW_COMMON_DIR)/rvfloats.cpp
 SRCS += $(SRC_DIR)/main.cpp
 
-DBG_TRACE_FLAGS :=
+DBG_TRACE_FLAGS := -DDBG_TRACE_TCU -DFEDP_RTL_WATCH
 
+RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 RTL_INCLUDE := -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
 RTL_INCLUDE += -I$(RTL_DIR)/tcu
 

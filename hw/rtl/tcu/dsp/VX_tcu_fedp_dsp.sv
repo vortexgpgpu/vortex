@@ -95,22 +95,25 @@ module bf16_to_fp32 (
 
 endmodule
 
-module VX_tcu_fedp_dsp #(
+module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter LATENCY = 0,
     parameter N = 1
 ) (
     input  wire clk,
     input  wire reset,
     input  wire enable,
+    input  wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
     input  wire[3:0] fmt_s,
     input  wire[3:0] fmt_d,
 
-    input  wire [N-1:0][`XLEN-1:0] a_row,
-    input  wire [N-1:0][`XLEN-1:0] b_col,
-    input  wire [`XLEN-1:0] c_val,
-    output wire [`XLEN-1:0] d_val
+    input  wire [N-1:0][31:0] a_row,
+    input  wire [N-1:0][31:0] b_col,
+    input  wire [31:0] c_val,
+    output wire [31:0] d_val
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam TCK = 2 * N;
     localparam LEVELS = $clog2(TCK);
 
@@ -123,7 +126,7 @@ module VX_tcu_fedp_dsp #(
 
     localparam C_DELAY = FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY;
 
-    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
+    `UNUSED_VAR ({vld_mask, fmt_s[3], fmt_d, c_val});
 
     wire [TCK-1:0][15:0] a_row16, b_col16;
 
@@ -272,8 +275,6 @@ module VX_tcu_fedp_dsp #(
         .data_out(delayed_c)
     );
 
-    wire [31:0] result;
-
     // final accumulation
 `ifdef DSP_TEST
     wire [63:0] a_h = {32'hffffffff, red_in[LEVELS][0]};
@@ -284,7 +285,7 @@ module VX_tcu_fedp_dsp #(
     always @(*) begin
         dpi_fadd(enable, int'(0), a_h, b_h, 3'b0, c_h, fflags);
     end
-    `BUFFER_EX(result, c_h[31:0], enable, 0, FADD_LATENCY);
+    `BUFFER_EX(d_val, c_h[31:0], enable, 0, FADD_LATENCY);
 `else
     xil_fadd fadd_acc (
         .aclk                (clk),
@@ -296,15 +297,8 @@ module VX_tcu_fedp_dsp #(
         .s_axis_operation_tvalid (1'b1),
         .s_axis_operation_tdata (8'b0), // 0=add
         `UNUSED_PIN (m_axis_result_tvalid),
-        .m_axis_result_tdata (result)
+        .m_axis_result_tdata (d_val)
     );
-`endif
-
-`ifdef XLEN_64
-    // should nan-box when writing to FP registers
-    assign d_val = {32'hffffffff, result};
-`else
-    assign d_val = result;
 `endif
 
 endmodule

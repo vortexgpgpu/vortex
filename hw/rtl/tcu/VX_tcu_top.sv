@@ -13,9 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_top import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
-) (
+module VX_tcu_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     `SCOPE_IO_DECL
 
     input wire clk,
@@ -44,7 +42,7 @@ module VX_tcu_top import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign execute_ready = execute_if.ready;
 
     VX_tcu_core #(
-        .INSTANCE_ID (INSTANCE_ID)
+        .INSTANCE_ID ("tcu")
     ) tcu_core (
         `SCOPE_IO_BIND (0)
         .clk        (clk),

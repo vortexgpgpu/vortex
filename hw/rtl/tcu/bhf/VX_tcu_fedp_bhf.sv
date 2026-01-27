@@ -14,22 +14,25 @@
 `include "VX_define.vh"
 `include "HardFloat_consts.vi"
 
-module VX_tcu_fedp_bhf #(
+module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter LATENCY = 0,
     parameter N = 1
 ) (
     input  wire clk,
     input  wire reset,
     input  wire enable,
+    input  wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
     input  wire[3:0] fmt_s,
     input  wire[3:0] fmt_d,
 
-    input  wire [N-1:0][`XLEN-1:0] a_row,
-    input  wire [N-1:0][`XLEN-1:0] b_col,
-    input  wire [`XLEN-1:0] c_val,
-    output wire [`XLEN-1:0] d_val
+    input  wire [N-1:0][31:0] a_row,
+    input  wire [N-1:0][31:0] b_col,
+    input  wire [31:0] c_val,
+    output wire [31:0] d_val
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam TCK = 2 * N;
     localparam LEVELS = $clog2(TCK);
     localparam FMUL_LATENCY = 2;
@@ -42,7 +45,7 @@ module VX_tcu_fedp_bhf #(
     localparam FMT_DELAY = FMUL_LATENCY + FRND_LATENCY;
     localparam C_DELAY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FRED_LATENCY;
 
-    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
+    `UNUSED_VAR ({vld_mask, fmt_s[3], fmt_d, c_val});
 
     wire [2:0] frm = `round_near_even;
 
@@ -223,7 +226,6 @@ module VX_tcu_fedp_bhf #(
     // Final accumulation with C
 
     wire [32:0] c_rec, c_delayed;
-    wire [31:0] result;
 
     fNToRecFN #(
         .expWidth (8),
@@ -258,10 +260,8 @@ module VX_tcu_fedp_bhf #(
         .frm    (frm),
         .a      (red_in[LEVELS][0]),
         .b      (c_delayed),
-        .y      (result),
+        .y      (d_val),
         `UNUSED_PIN(fflags)
     );
-
-    assign d_val = `XLEN'(result);
 
 endmodule

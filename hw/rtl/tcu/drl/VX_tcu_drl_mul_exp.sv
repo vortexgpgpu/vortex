@@ -1,84 +1,145 @@
-// Copyright © 2019-2023
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 `include "VX_define.vh"
 
-module VX_tcu_drl_mul_exp #(
-    parameter N = 5  //includes c_val count
+module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter N = 2,            // Number of 32-bit input registers
+    parameter W = 25,           // Accumulator/Mantissa Width
+    parameter EXP_W = 10,
+    parameter TCK = 2 * N       // Max physical lanes
 ) (
-    input wire [3:0] fmt_s,
-    input wire [N-2:0][15:0] a_rows,
-    input wire [N-2:0][15:0] b_cols,
-    input wire [31:0] c_val,
-    input wire [N-2:0] sparse_mask,
-    output logic [7:0] raw_max_exp,
-    output logic [N-1:0][7:0] shift_amounts,
-    output logic [N-1:0][24:0] raw_sigs,
-    output logic [2:0] exceptions
+    input wire              clk,
+    input wire              valid_in,
+    input wire [31:0]       req_id,
+    input wire [3:0]        fmt_s,
+
+    input wire [N-1:0][31:0] a_row,
+    input wire [N-1:0][31:0] b_col,
+    input wire [31:0]       c_val,
+    input wire [TCU_MAX_INPUTS-1:0] vld_mask,
+
+    output wire [9:0]         max_exp,
+    output wire [TCK:0][7:0]  shift_amt,
+    output wire [TCK:0][W-1:0] raw_sigs,
+    output wire fedp_excep_t  exceptions,
+    output wire [TCK-1:0]     lane_mask
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR ({clk, req_id, valid_in})
 
-    //muxed signals
-    logic [N-1:0][7:0] raw_exps;
+    // ----------------------------------------------------------------------
+    // 1. Classification
+    // ----------------------------------------------------------------------
+    fedp_class_t [N-1:0] cls_tf32 [2];
+    VX_tcu_drl_classifier #(.N(N), .WIDTH(32), .FMT(TCU_FP32_ID)) c_a_tf32 (.val(a_row), .cls(cls_tf32[0]));
+    VX_tcu_drl_classifier #(.N(N), .WIDTH(32), .FMT(TCU_FP32_ID)) c_b_tf32 (.val(b_col), .cls(cls_tf32[1]));
 
-    for (genvar i = 0; i < N-1; i++) begin : g_prod
-        wire exp_low_larger;
-        wire [6:0] raw_exp_diff;
-        
-        //shared significand multiplier
-        VX_tcu_drl_shared_mul shared_mul_inst (
-            .enable         (sparse_mask[i]),
-            .fmt_s          (fmt_s),
-            .a              (a_rows[i]),
-            .b              (b_cols[i]),
-            .exp_low_larger (exp_low_larger),
-            .raw_exp_diff   (raw_exp_diff),
-            .y              (raw_sigs[i])
-        );
+    fedp_class_t [TCK-1:0] cls_fp16 [2];
+    VX_tcu_drl_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_FP16_ID)) c_a_fp16 (.val(a_row), .cls(cls_fp16[0]));
+    VX_tcu_drl_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_FP16_ID)) c_b_fp16 (.val(b_col), .cls(cls_fp16[1]));
 
-        //exponent add and bias
-        VX_tcu_drl_exp_bias exp_bias_inst (
-            .enable         (sparse_mask[i]),
-            .fmt_s          (fmt_s[2:0]),
-            .a              (a_rows[i]),
-            .b              (b_cols[i]),
-            .raw_exp_y      (raw_exps[i]),
-            .exp_low_larger (exp_low_larger),
-            .raw_exp_diff   (raw_exp_diff)
-        );
-    end
-    
-    //c_val integration
-    assign raw_exps[N-1] = c_val[30:23];
-    assign raw_sigs[N-1] = fmt_s[3] ? c_val[24:0] : {c_val[31], 1'b1, c_val[22:0]};
+    fedp_class_t [TCK-1:0] cls_bf16 [2];
+    VX_tcu_drl_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_BF16_ID)) c_a_bf16 (.val(a_row), .cls(cls_bf16[0]));
+    VX_tcu_drl_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_BF16_ID)) c_b_bf16 (.val(b_col), .cls(cls_bf16[1]));
 
-    //Raw maximum exponent finder (in parallel to mul) and shift amounts
-    VX_tcu_drl_max_exp #(
-        .N(N)
-    ) find_max_exp (
-        .exponents     (raw_exps),
-        .max_exp       (raw_max_exp),
-        .shift_amounts (shift_amounts)
+    fedp_class_t [2*TCK-1:0] cls_fp8 [2];
+    VX_tcu_drl_classifier #(.N(4 * N), .WIDTH(8), .FMT(TCU_FP8_ID)) c_a_fp8 (.val(a_row), .cls(cls_fp8[0]));
+    VX_tcu_drl_classifier #(.N(4 * N), .WIDTH(8), .FMT(TCU_FP8_ID)) c_b_fp8 (.val(b_col), .cls(cls_fp8[1]));
+
+    fedp_class_t [2*TCK-1:0] cls_bf8 [2];
+    VX_tcu_drl_classifier #(.N(4 * N), .WIDTH(8), .FMT(TCU_BF8_ID)) c_a_bf8 (.val(a_row), .cls(cls_bf8[0]));
+    VX_tcu_drl_classifier #(.N(4 * N), .WIDTH(8), .FMT(TCU_BF8_ID)) c_b_bf8 (.val(b_col), .cls(cls_bf8[1]));
+
+    fedp_class_t [0:0] cls_c_arr;
+    VX_tcu_drl_classifier #(.N(1), .WIDTH(32), .FMT(TCU_FP32_ID)) c_c (.val(c_val), .cls(cls_c_arr));
+
+    // ----------------------------------------------------------------------
+    // 2. Mantissa Product
+    // ----------------------------------------------------------------------
+
+    wire [TCK-1:0]      exp_low_larger;
+    wire [TCK-1:0][6:0] raw_exp_diff;
+    wire [TCK:0][9:0]   raw_exps;
+
+    VX_tcu_drl_shared_mul #(
+        .N(N), .TCK(TCK), .W(W)
+    ) shared_mul_inst (
+        .vld_mask       (vld_mask),
+        .fmt_s          (fmt_s),
+        .a_row          (a_row),
+        .b_col          (b_col),
+        .c_val          (c_val),
+        .cls_tf32       (cls_tf32),
+        .cls_fp16       (cls_fp16),
+        .cls_bf16       (cls_bf16),
+        .cls_fp8        (cls_fp8),
+        .cls_bf8        (cls_bf8),
+        .cls_c          (cls_c_arr[0]),
+        .exp_low_larger (exp_low_larger),
+        .raw_exp_diff   (raw_exp_diff),
+        .y              (raw_sigs)
     );
 
-    //NaN/Inf exception flag generation (dont en gate for clean 0 handling)
-    VX_tcu_drl_nan_inf #(
-        .N(N)
-    ) nan_inf_exc (
-        .fmt_s      (fmt_s[2:0]),
-        .a_rows     (a_rows),
-        .b_cols     (b_cols),
-        .c_val      (c_val),
+    // ----------------------------------------------------------------------
+    // 3. Exponent Product
+    // ----------------------------------------------------------------------
+
+    VX_tcu_drl_exp_bias #(
+        .N(N), .TCK(TCK), .W(W), .EXP_W(EXP_W)
+    ) exp_bias_inst (
+        .vld_mask       (vld_mask),
+        .fmt_s          (fmt_s[2:0]),
+        .a_row          (a_row),
+        .b_col          (b_col),
+        .c_val          (c_val),
+        .cls_tf32       (cls_tf32),
+        .cls_fp16       (cls_fp16),
+        .cls_bf16       (cls_bf16),
+        .cls_fp8        (cls_fp8),
+        .cls_bf8        (cls_bf8),
+        .cls_c          (cls_c_arr[0]),
+        .raw_exp_y      (raw_exps),
+        .exp_low_larger (exp_low_larger),
+        .raw_exp_diff   (raw_exp_diff)
+    );
+
+    // ----------------------------------------------------------------------
+    // 4. Max Exponent
+    // ----------------------------------------------------------------------
+
+    VX_tcu_drl_max_exp #(
+        .N     (TCK+1),
+        .WIDTH (EXP_W)
+    ) find_max_exp (
+        .exponents (raw_exps),
+        .max_exp   (max_exp),
+        .shift_amt (shift_amt)
+    );
+
+    // ----------------------------------------------------------------------
+    // 5. Exception Flags
+    // ----------------------------------------------------------------------
+
+    VX_tcu_drl_exceptions #(
+        .N(N), .TCK(TCK)
+    ) exceptions_inst (
+        .vld_mask   (vld_mask),
+        .fmtf       (fmt_s[2:0]),
+        .cls_tf32   (cls_tf32),
+        .cls_fp16   (cls_fp16),
+        .cls_bf16   (cls_bf16),
+        .cls_c      (cls_c_arr[0]),
         .exceptions (exceptions)
     );
-    
+
+    // ----------------------------------------------------------------------
+    // 6. Lane Mask
+    // ----------------------------------------------------------------------
+    VX_tcu_drl_lane_mask #(
+        .N(N), .TCK(TCK)
+    ) lane_mask_inst (
+        .vld_mask (vld_mask),
+        .fmt      (fmt_s[2:0]),
+        .lane_mask(lane_mask)
+    );
+
 endmodule

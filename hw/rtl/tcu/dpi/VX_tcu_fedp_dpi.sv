@@ -14,28 +14,31 @@
 `include "VX_define.vh"
 `include "dpi_float.vh"
 
-module VX_tcu_fedp_dpi #(
+module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter LATENCY = 0,
     parameter N = 1
 ) (
     input  wire clk,
     input  wire reset,
     input  wire enable,
+    input  wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
     input  wire[3:0] fmt_s,
     input  wire[3:0] fmt_d,
 
-    input  wire [N-1:0][`XLEN-1:0] a_row,
-    input  wire [N-1:0][`XLEN-1:0] b_col,
-    input  wire [`XLEN-1:0] c_val,
-    output wire [`XLEN-1:0] d_val
+    input  wire [N-1:0][31:0] a_row,
+    input  wire [N-1:0][31:0] b_col,
+    input  wire [31:0] c_val,
+    output wire [31:0] d_val
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
-    `UNUSED_VAR ({fmt_d, c_val});
+    `UNUSED_VAR ({vld_mask, fmt_d, c_val});
 
     wire [31:0] mult_result [N];
 
@@ -207,7 +210,7 @@ module VX_tcu_fedp_dpi #(
     `UNUSED_VAR(acc_f[63:32]);
     always_comb begin
         acc_f = 64'hffffffff00000000;
-        
+
         //adder chain
         for (int i = 0; i < N; ++i) begin
             dpi_fadd(enable, int'(0), {32'hffffffff, mult_result[i]}, acc_f, 3'b0, acc_f, fflags);
@@ -234,7 +237,6 @@ module VX_tcu_fedp_dpi #(
         acc_i += delayed_c;
     end
 
-    wire [31:0] result;
     VX_pipe_register #(
         .DATAW (32),
         .DEPTH (FACC_LATENCY)
@@ -243,14 +245,7 @@ module VX_tcu_fedp_dpi #(
         .reset   (reset),
         .enable  (enable),
         .data_in (delayed_fmt_s[3] ? acc_i : acc_f[31:0]),
-        .data_out(result)
+        .data_out(d_val)
     );
-
-`ifdef XLEN_64
-    // should nan-box when writing to FP registers
-    assign d_val = {32'hffffffff, result};
-`else
-    assign d_val = result;
-`endif
 
 endmodule
