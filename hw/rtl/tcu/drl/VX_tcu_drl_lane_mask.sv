@@ -18,9 +18,9 @@ module VX_tcu_drl_lane_mask import VX_tcu_pkg::*; #(
     // 1. 32-bit Mask Generation
     // ----------------------------------------------------------------------
     for (genvar i = 0; i < TCK; ++i) begin : g_mask_32
-        if ((i % 2) == 0) begin
+        if ((i % 2) == 0) begin : g_even_lane
             assign mask_32[i] = vld_mask[i * 4];
-        end else begin
+        end else begin : g_odd_lane
             assign mask_32[i] = 1'b0;
         end
     end
@@ -51,7 +51,7 @@ module VX_tcu_drl_lane_mask import VX_tcu_pkg::*; #(
     // ----------------------------------------------------------------------
     always_comb begin
         case (fmt_s)
-            TCU_FP32_ID: lane_mask = mask_32;
+            TCU_TF32_ID: lane_mask = mask_32;
             TCU_FP16_ID: lane_mask = mask_16;
             TCU_BF16_ID: lane_mask = mask_16;
             TCU_FP8_ID:  lane_mask = mask_8;

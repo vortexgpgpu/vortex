@@ -14,19 +14,22 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
     // ----------------------------------------------------------------------
 
     // Generate exponent subtract sign matrix and store differences.
-    // diff_mat stores (exp[i] - exp[j]). Needs 1 extra sign bit.
-    wire [N-1:0] sign_mat[N-1:0];
-    wire signed [WIDTH:0] diff_mat[N-1:0][N-1:0];
+    // Uses (N-1)x(N-1) matrix with diff_mat[i][j] = exp[i] - exp[j+1].
+    // Lower triangle reuses sign bits from upper triangle (~sign_mat[j][i]).
+    `IGNORE_UNOPTFLAT_BEGIN
+    wire [N-2:0] sign_mat[N-2:0];
+    `IGNORE_UNOPTFLAT_END
+    wire signed [WIDTH:0] diff_mat[N-2:0][N-2:0];
 
-    for (genvar i = 0; i < N; i++) begin : g_row
-        for (genvar j = 0; j < N; j++) begin : g_col
-            if (i == j) begin : g_diag
-                assign sign_mat[i][j] = 1'b0;
-                assign diff_mat[i][j] = '0;
-            end else begin : g_comp
-                // Calculate difference: exp[i] - exp[j]
-                assign diff_mat[i][j] = {1'b0, exponents[i]} - {1'b0, exponents[j]};
-                // Sign bit (MSB) determines if exp[i] < exp[j]
+    for (genvar i = 0; i < N-1; i++) begin : g_row
+        for (genvar j = 0; j < N-1; j++) begin : g_col
+            if (j < i) begin : g_lower
+                // Reuse sign from symmetric position (no subtractor needed)
+                assign sign_mat[i][j] = ~sign_mat[j][i];
+            end else begin : g_upper
+                // Calculate difference: exp[i] - exp[j+1]
+                assign diff_mat[i][j] = {1'b0, exponents[i]} - {1'b0, exponents[j+1]};
+                // Sign bit (MSB) determines if exp[i] < exp[j+1]
                 assign sign_mat[i][j] = diff_mat[i][j][WIDTH];
             end
         end
@@ -48,7 +51,7 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
         end else begin : g_and_left
             wire [i-1:0] left_signals;
             for (genvar jl = 0; jl < i; jl++) begin : g_left
-                assign left_signals[jl] = sign_mat[jl][i];
+                assign left_signals[jl] = sign_mat[jl][i-1];
             end
             assign and_left = &left_signals;
         end
@@ -59,7 +62,7 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
         end else begin : g_or_right
             wire [N-2-i:0] right_signals;
             for (genvar jr = i+1; jr < N; jr++) begin : g_right
-                assign right_signals[jr-i-1] = sign_mat[i][jr];
+                assign right_signals[jr-i-1] = sign_mat[i][jr-1];
             end
             assign or_right = |right_signals;
         end
@@ -95,18 +98,32 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
         assign shift_op[0] = 8'd0;
 
         for (genvar j = 0; j < N; j++) begin : g_shift_mux
-            // Negate difference to get positive shift amount
-            wire [WIDTH:0] diff_val = -diff_mat[i][j];
-
-            // Saturation Logic: If diff > 255, clamp to 0xFF
-            wire [7:0] clamped_val;
-            if (WIDTH > 8) begin
-                assign clamped_val = (|diff_val[WIDTH:8]) ? 8'hFF : diff_val[7:0];
-            end else begin
-                assign clamped_val = diff_val[7:0];
+            // For case operand j is max, compute shift = max_exp - exp[i]
+            wire [7:0] shift_sel;
+            if (i < j) begin : g_upper_shift
+                // diff_mat[i][j-1] = exp[i] - exp[j], negate to get exp[j] - exp[i]
+                wire [WIDTH:0] diff_val = -diff_mat[i][j-1];
+                wire [7:0] clamped_val;
+                if (WIDTH > 8) begin : g_clamp
+                    assign clamped_val = (|diff_val[WIDTH:8]) ? 8'hFF : diff_val[7:0];
+                end else begin : g_true_val
+                    assign clamped_val = diff_val[7:0];
+                end
+                assign shift_sel = sel_exp[j] ? clamped_val : 8'd0;
+            end else if (i > j) begin : g_lower_shift
+                // diff_mat[j][i-1] = exp[j] - exp[i], already positive
+                wire [WIDTH:0] diff_val = diff_mat[j][i-1];
+                wire [7:0] clamped_val;
+                if (WIDTH > 8) begin : g_clamp
+                    assign clamped_val = (|diff_val[WIDTH:8]) ? 8'hFF : diff_val[7:0];
+                end else begin : g_true_val
+                    assign clamped_val = diff_val[7:0];
+                end
+                assign shift_sel = sel_exp[j] ? clamped_val : 8'd0;
+            end else begin : g_diag_shift
+                // i == j: shift amount is 0
+                assign shift_sel = 8'd0;
             end
-
-            wire [7:0] shift_sel = sel_exp[j] ? clamped_val : 8'd0;
             assign shift_op[j+1] = shift_op[j] | shift_sel;
         end
 

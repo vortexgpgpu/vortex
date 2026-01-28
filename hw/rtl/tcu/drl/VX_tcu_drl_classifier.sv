@@ -18,20 +18,22 @@ module VX_tcu_drl_classifier import VX_tcu_pkg::*; #(
     localparam MAN_START = EXP_END - 1;
     localparam MAN_END   = MAN_START - MAN_BITS + 1;
 
-    localparam logic [EXP_BITS-1:0] EXP_ZERO = '0;
-    localparam logic [EXP_BITS-1:0] EXP_ONES = '1;
-    localparam logic [MAN_BITS-1:0] MAN_ZERO = '0;
-
     for (genvar i = 0; i < N; ++i) begin : g_cls
         wire sign = val[i][SIGN_POS];
         wire [EXP_BITS-1:0] exp  = val[i][EXP_START : EXP_END];
         wire [MAN_BITS-1:0] man  = val[i][MAN_START : MAN_END];
 
+        wire exp_zero = ~|exp;
+        wire exp_ones = &exp;
+        
+        wire man_non_zero = |man;
+        wire man_zero     = ~man_non_zero;
+
         assign cls[i].sign    = sign;
-        assign cls[i].is_zero = (exp == EXP_ZERO) && (man == MAN_ZERO);
-        assign cls[i].is_sub  = (exp == EXP_ZERO) && (man != MAN_ZERO);
-        assign cls[i].is_inf  = (exp == EXP_ONES) && (man == MAN_ZERO);
-        assign cls[i].is_nan  = (exp == EXP_ONES) && (man != MAN_ZERO);
+        assign cls[i].is_zero = exp_zero & man_zero;
+        assign cls[i].is_sub  = exp_zero & man_non_zero;
+        assign cls[i].is_inf  = exp_ones & man_zero;
+        assign cls[i].is_nan  = exp_ones & man_non_zero;
     end
 
 endmodule

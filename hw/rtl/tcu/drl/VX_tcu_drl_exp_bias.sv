@@ -45,18 +45,17 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     localparam B_BF16 = (1 << (E_BF16 - 1)) - 1;
 
     localparam E_FP8 = VX_tcu_pkg::exp_bits(TCU_FP8_ID);
-    localparam S_FP8 = VX_tcu_pkg::sign_pos(TCU_FP8_ID);
-    localparam B_FP8 = (1 << (E_FP8 - 1)) - 1;
+    localparam B_FP8 = (1 << (E_FP8 - 1)) - 1 ;
 
     localparam E_BF8 = VX_tcu_pkg::exp_bits(TCU_BF8_ID);
-    localparam S_BF8 = VX_tcu_pkg::sign_pos(TCU_BF8_ID);
-    localparam B_BF8 = (1 << (E_BF8 - 1)) - 1;
+    localparam B_BF8 = (1 << (E_BF8 - 1)) - 1 ;
 
     localparam [EXP_W-1:0] BIAS_CONST_TF32 = EXP_W'(F32_BIAS + ALIGN_SHIFT - W);
-    localparam [EXP_W-1:0] BIAS_CONST_FP16 = EXP_W'(F32_BIAS - 2*B_FP16 + ALIGN_SHIFT - W);
     localparam [EXP_W-1:0] BIAS_CONST_BF16 = EXP_W'(F32_BIAS - 2*B_BF16 + ALIGN_SHIFT - W);
-    localparam [EXP_W-1:0] BIAS_CONST_FP8  = EXP_W'(F32_BIAS - 2*B_FP8 + ALIGN_SHIFT - W);
-    localparam [EXP_W-1:0] BIAS_CONST_BF8  = EXP_W'(F32_BIAS - 2*B_BF8 + ALIGN_SHIFT - W);
+    localparam [EXP_W-1:0] BIAS_CONST_FP16 = EXP_W'(F32_BIAS - 2*B_FP16 + ALIGN_SHIFT - W);
+
+    localparam [EXP_W-1:0] BIAS_CONST_FP8  = EXP_W'(F32_BIAS - 2*B_FP8 + 2*ALIGN_SHIFT - W);
+    localparam [EXP_W-1:0] BIAS_CONST_BF8  = EXP_W'(F32_BIAS - 2*B_BF8 + 2*ALIGN_SHIFT - W);
 
     // ----------------------------------------------------------------------
     // 1. Inputs Setup
@@ -70,14 +69,14 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
 
     // --- TF32 Preparation ---
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_tf32
-        if ((i % 2) == 0) begin
+        if ((i % 2) == 0) begin : g_even_lane
             wire [31:0] ra = a_row[i/2];
             wire [31:0] rb = b_col[i/2];
             `UNUSED_VAR({ra, rb})
             assign ea_tf32[i] = cls_tf32[0][i/2].is_sub ? 8'd1 : ra[S_TF32-1 -: E_TF32];
             assign eb_tf32[i] = cls_tf32[1][i/2].is_sub ? 8'd1 : rb[S_TF32-1 -: E_TF32];
             assign z_tf32[i]  = cls_tf32[0][i/2].is_zero | cls_tf32[1][i/2].is_zero | ~vld_mask[i*4];
-        end else begin
+        end else begin : g_odd_lane
             assign ea_tf32[i] = 8'd0;
             assign eb_tf32[i] = 8'd0;
             assign z_tf32[i]  = 1'b1;
@@ -106,29 +105,31 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         assign z_bf16[i]  = cls_bf16[0][i].is_zero | cls_bf16[1][i].is_zero | ~vld_mask[i*4];
     end
 
-    // --- FP8 Preparation ---
+    // --- FP8 (E4M3) Preparation ---
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_fp8
         for (genvar j = 0; j < 2; ++j) begin : g_sub
             localparam idx = i * 2 + j;
             localparam OFF = (i % 2) * 16 + j * 8;
             wire [31:0] ra = a_row[i/2];
             wire [31:0] rb = b_col[i/2];
-            assign ea_fp8[i][j] = cls_fp8[0][idx].is_sub ? 8'd1 : {4'd0, ra[S_FP8-1+OFF -: E_FP8]};
-            assign eb_fp8[i][j] = cls_fp8[1][idx].is_sub ? 8'd1 : {4'd0, rb[S_FP8-1+OFF -: E_FP8]};
+            // E4M3: Sign[7], Exp[6:3], Man[2:0]
+            assign ea_fp8[i][j] = cls_fp8[0][idx].is_sub ? 8'd1 : {4'd0, ra[OFF+6 -: 4]};
+            assign eb_fp8[i][j] = cls_fp8[1][idx].is_sub ? 8'd1 : {4'd0, rb[OFF+6 -: 4]};
             assign z_fp8[i][j]  = cls_fp8[0][idx].is_zero | cls_fp8[1][idx].is_zero | ~vld_mask[idx*2];
             `UNUSED_VAR({ra, rb})
         end
     end
 
-    // --- BF8 Preparation ---
+    // --- BF8 (E5M2) Preparation ---
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_bf8
         for (genvar j = 0; j < 2; ++j) begin : g_sub
             localparam idx = i * 2 + j;
             localparam OFF = (i % 2) * 16 + j * 8;
             wire [31:0] ra = a_row[i/2];
             wire [31:0] rb = b_col[i/2];
-            assign ea_bf8[i][j] = cls_bf8[0][idx].is_sub ? 8'd1 : {3'd0, ra[S_BF8-1+OFF -: E_BF8]};
-            assign eb_bf8[i][j] = cls_bf8[1][idx].is_sub ? 8'd1 : {3'd0, ra[S_BF8-1+OFF -: E_BF8]};
+            // E5M2: Sign[7], Exp[6:2], Man[1:0]
+            assign ea_bf8[i][j] = cls_bf8[0][idx].is_sub ? 8'd1 : {3'd0, ra[OFF+6 -: 5]};
+            assign eb_bf8[i][j] = cls_bf8[1][idx].is_sub ? 8'd1 : {3'd0, rb[OFF+6 -: 5]};
             assign z_bf8[i][j]  = cls_bf8[0][idx].is_zero | cls_bf8[1][idx].is_zero | ~vld_mask[idx*2];
             `UNUSED_VAR({ra, rb})
         end

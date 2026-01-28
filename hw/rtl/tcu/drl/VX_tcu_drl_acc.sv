@@ -69,15 +69,14 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
             `UNUSED_PIN(cout)
         );
     end else begin : g_small_acc
-        // Fallback for N < 3 where CSA is not applicable
-        logic signed [WA-1:0] sum_serial;
-        always_comb begin
-            sum_serial = '0;
-            for (int i = 0; i < N; ++i) begin
-                sum_serial += $signed(sigs_in_packed[i]);
-            end
-        end
-        assign sig_out = sum_serial;
+        VX_ks_adder #(
+            .N (WA)
+        ) sig_ksa (
+            .dataa (sigs_in_packed[0]),
+            .datab (sigs_in_packed[1]),
+            .sum   (sig_out),
+            `UNUSED_PIN (cout)
+        );
     end
 
     // ----------------------------------------------------------------------

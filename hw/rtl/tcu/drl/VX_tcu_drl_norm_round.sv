@@ -46,7 +46,6 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // ----------------------------------------------------------------------
     // 3. Normalization Shifter
     // ----------------------------------------------------------------------
-    localparam HR = WA - W;
 
     // We want to shift left by lz_count to normalize
     wire [WA-1:0] shifted_sum;
@@ -65,10 +64,9 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     wire        sticky_rem = |shifted_sum[WA-27 : 0];
     wire        sticky_bit = sticky_rem | sticky_in;
 
-    // Calculate Exponent
-    // shift_adj = HR - lzc.
-    wire signed [9:0] shift_adj = 10'(HR) - 10'(lz_count);
-    wire signed [9:0] norm_exp_s = $signed(max_exp) + shift_adj + 10'(W - 1);
+    // Calculate Exponent: norm_exp = max_exp + (HR - lz_count)+ (W - 1)
+    // HR + W - 1 = (WA - W) + W - 1 = WA - 1
+    wire signed [9:0] norm_exp_s = $signed(max_exp) - 10'(lz_count) + 10'(WA -1);
 
     // ----------------------------------------------------------------------
     // 5. Rounding (RNE - Round to Nearest Even)
@@ -137,7 +135,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
 
     `UNUSED_VAR (sig_signs)
 
-    // Extract high part of accumulator
+    // Extract sign-extension overflow from accumulator
     wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:W]));
     
     wire [6:0] int_hi;
@@ -150,7 +148,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
         `UNUSED_PIN (cout)
     );
 
-    // Concatenate high integer part with lower accumulator bits
+    // Concatenate upper 7 bits integer & lower shared 25 accumulator bits result
     wire [31:0] int_result = {int_hi, acc_sig[24:0]};
 
     assign result = is_int ? int_result : fp_result;

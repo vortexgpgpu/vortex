@@ -28,23 +28,23 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
     wire [TCK-1:0][10:0] man_a_tf32, man_b_tf32, man_a_fp16, man_b_fp16, man_a_bf16, man_b_bf16;
     wire [TCK-1:0]       sign_tf32, sign_fp16, sign_bf16;
 
-    // 1. TF32 Preparation
+    // 1. TF32 Preparation (1 op every even TCK slice)
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_tf32
-        if ((i % 2) == 0) begin
+        if ((i % 2) == 0) begin : g_even_lane
             fedp_class_t ca = cls_tf32[0][i/2];
             fedp_class_t cb = cls_tf32[1][i/2];
             `UNUSED_VAR ({ca, cb})
             assign sign_tf32[i]  = a_row[i/2][31] ^ b_col[i/2][31];
             assign man_a_tf32[i] = ca.is_zero ? 11'd0 : { !ca.is_sub, a_row[i/2][22:13] };
             assign man_b_tf32[i] = cb.is_zero ? 11'd0 : { !cb.is_sub, b_col[i/2][22:13] };
-        end else begin
+        end else begin : g_odd_lane
             assign sign_tf32[i] = 1'b0;
             assign man_a_tf32[i] = 11'd0;
             assign man_b_tf32[i] = 11'd0;
         end
     end
 
-    // 2. FP16 Preparation
+    // 2. FP16 Preparation (1 op per TCK slice)
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_fp16
         fedp_class_t ca = cls_fp16[0][i];
         fedp_class_t cb = cls_fp16[1][i];
@@ -56,7 +56,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         assign man_b_fp16[i] = cb.is_zero ? 11'd0 : { !cb.is_sub, vb[9:0] };
     end
 
-    // 3. BF16 Preparation
+    // 3. BF16 Preparation (1 op per TCK slice)
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_bf16
         fedp_class_t ca = cls_bf16[0][i];
         fedp_class_t cb = cls_bf16[1][i];
@@ -79,19 +79,21 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             wire [7:0] va = a_row[i/2][(i%2)*16 + j*8 +: 8];
             wire [7:0] vb = b_col[i/2][(i%2)*16 + j*8 +: 8];
 
-            // FP8 (E5M2): 1S, 5E, 2M. Extracted mantissa {1.mm} -> 3 bits. Padded to 4.
+            // FP8 (E4M3): Sign[7], Exp[6:3] (4 bits), Man[2:0] (3 bits)
+            // Extracted mantissa {1.mmm} -> 4 bits
             fedp_class_t ca_fp8 = cls_fp8[0][idx];
             fedp_class_t cb_fp8 = cls_fp8[1][idx];
             assign sign_fp8[i][j]  = va[7] ^ vb[7];
-            assign man_a_fp8[i][j] = ca_fp8.is_zero ? 4'd0 : {1'b0, !ca_fp8.is_sub, va[1:0]};
-            assign man_b_fp8[i][j] = cb_fp8.is_zero ? 4'd0 : {1'b0, !cb_fp8.is_sub, vb[1:0]};
+            assign man_a_fp8[i][j] = ca_fp8.is_zero ? 4'd0 : {!ca_fp8.is_sub, va[2:0]};
+            assign man_b_fp8[i][j] = cb_fp8.is_zero ? 4'd0 : {!cb_fp8.is_sub, vb[2:0]};
 
-            // BF8 (E4M3): 1S, 4E, 3M. Extracted mantissa {1.mmm} -> 4 bits.
+            // BF8 (E5M2): Sign[7], Exp[6:2] (5 bits), Man[1:0] (2 bits)
+            // Extracted mantissa {1.mm} -> 3 bits, padded to 4
             fedp_class_t ca_bf8 = cls_bf8[0][idx];
             fedp_class_t cb_bf8 = cls_bf8[1][idx];
             assign sign_bf8[i][j]  = va[7] ^ vb[7];
-            assign man_a_bf8[i][j] = ca_bf8.is_zero ? 4'd0 : {!ca_bf8.is_sub, va[2:0]};
-            assign man_b_bf8[i][j] = cb_bf8.is_zero ? 4'd0 : {!cb_bf8.is_sub, vb[2:0]};
+            assign man_a_bf8[i][j] = ca_bf8.is_zero ? 4'd0 : {1'b0, !ca_bf8.is_sub, va[1:0]};
+            assign man_b_bf8[i][j] = cb_bf8.is_zero ? 4'd0 : {1'b0, !cb_bf8.is_sub, vb[1:0]};
 
             `UNUSED_VAR({ca_fp8, cb_fp8, ca_bf8, cb_bf8, va, vb})
         end

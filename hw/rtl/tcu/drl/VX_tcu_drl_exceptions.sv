@@ -7,10 +7,12 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
     input wire [2:0]            fmtf,
 
-    input fedp_class_t [N-1:0]   cls_tf32 [2],
-    input fedp_class_t [TCK-1:0] cls_fp16 [2],
-    input fedp_class_t [TCK-1:0] cls_bf16 [2],
-    input fedp_class_t           cls_c,
+    input fedp_class_t [N-1:0]     cls_tf32 [2],
+    input fedp_class_t [TCK-1:0]   cls_fp16 [2],
+    input fedp_class_t [TCK-1:0]   cls_bf16 [2],
+    input fedp_class_t [2*TCK-1:0] cls_fp8 [2],
+    input fedp_class_t [2*TCK-1:0] cls_bf8 [2],
+    input fedp_class_t             cls_c,
 
     output fedp_excep_t          exceptions
 );
@@ -20,12 +22,14 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
     wire [TCK-1:0] nan_in_tf32, inf_z_tf32, inf_op_tf32, sign_tf32;
     wire [TCK-1:0] nan_in_fp16, inf_z_fp16, inf_op_fp16, sign_fp16;
     wire [TCK-1:0] nan_in_bf16, inf_z_bf16, inf_op_bf16, sign_bf16;
+    wire [TCK-1:0][1:0] nan_in_fp8, inf_z_fp8, inf_op_fp8, sign_fp8;
+    wire [TCK-1:0][1:0] nan_in_bf8, inf_z_bf8, inf_op_bf8, sign_bf8;
 
     // ----------------------------------------------------------------------
-    // 1. TF32 Preparation (Even lanes only)
+    // 1a. TF32 Preparation (Even lanes only)
     // ----------------------------------------------------------------------
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_tf32
-        if ((i % 2) == 0) begin
+        if ((i % 2) == 0) begin : g_even_lane
             fedp_class_t ca = cls_tf32[0][i/2];
             fedp_class_t cb = cls_tf32[1][i/2];
             `UNUSED_VAR ({ca, cb})
@@ -33,7 +37,7 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
             assign inf_z_tf32[i]  = (ca.is_inf & cb.is_zero) | (ca.is_zero & cb.is_inf);
             assign inf_op_tf32[i] = ca.is_inf | cb.is_inf;
             assign sign_tf32[i]   = ca.sign ^ cb.sign;
-        end else begin
+        end else begin : g_odd_lane
             assign nan_in_tf32[i] = 1'b0;
             assign inf_z_tf32[i]  = 1'b0;
             assign inf_op_tf32[i] = 1'b0;
@@ -42,7 +46,7 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
     end
 
     // ----------------------------------------------------------------------
-    // 2. FP16 Preparation
+    // 1b. FP16 Preparation
     // ----------------------------------------------------------------------
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_fp16
         fedp_class_t ca = cls_fp16[0][i];
@@ -55,7 +59,7 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
     end
 
     // ----------------------------------------------------------------------
-    // 3. BF16 Preparation
+    // 1c. BF16 Preparation
     // ----------------------------------------------------------------------
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_bf16
         fedp_class_t ca = cls_bf16[0][i];
@@ -68,12 +72,74 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
     end
 
     // ----------------------------------------------------------------------
-    // 4. Merge & Mask
+    // 1d. FP8 (E4M3) Preparation
+    // ----------------------------------------------------------------------
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_fp8
+        for (genvar j = 0; j < 2; ++j) begin : g_sub
+            localparam idx = i * 2 + j;
+            fedp_class_t ca = cls_fp8[0][idx];
+            fedp_class_t cb = cls_fp8[1][idx];
+            `UNUSED_VAR ({ca, cb})
+            assign nan_in_fp8[i][j] = ca.is_nan | cb.is_nan;
+            assign inf_z_fp8[i][j]  = (ca.is_inf & cb.is_zero) | (ca.is_zero & cb.is_inf);
+            assign inf_op_fp8[i][j] = ca.is_inf | cb.is_inf;
+            assign sign_fp8[i][j]   = ca.sign ^ cb.sign;
+        end
+    end
+
+    // ----------------------------------------------------------------------
+    // 1e. BF8 (E5M2) Preparation
+    // ----------------------------------------------------------------------
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_bf8
+        for (genvar j = 0; j < 2; ++j) begin : g_sub
+            localparam idx = i * 2 + j;
+            fedp_class_t ca = cls_bf8[0][idx];
+            fedp_class_t cb = cls_bf8[1][idx];
+            `UNUSED_VAR ({ca, cb})
+            assign nan_in_bf8[i][j] = ca.is_nan | cb.is_nan;
+            assign inf_z_bf8[i][j]  = (ca.is_inf & cb.is_zero) | (ca.is_zero & cb.is_inf);
+            assign inf_op_bf8[i][j] = ca.is_inf | cb.is_inf;
+            assign sign_bf8[i][j]   = ca.sign ^ cb.sign;
+        end
+    end
+
+    // ----------------------------------------------------------------------
+    // 2. Merge & Mask
     // ----------------------------------------------------------------------
     wire [TCK-1:0] prod_nan, prod_inf, prod_sign;
 
     for (genvar i = 0; i < TCK; ++i) begin : g_merge
         logic n_in, i_z, i_op, sgn, valid_lane;
+
+        // FP8/BF8 sub-product addition inf flags
+        wire [1:0] fp8_pos_inf, fp8_neg_inf, fp8_valid_inf;
+        wire [1:0] bf8_pos_inf, bf8_neg_inf, bf8_valid_inf;
+
+        for (genvar j = 0; j < 2; ++j) begin : g_inf_flags
+            assign fp8_valid_inf[j] = inf_op_fp8[i][j] & ~inf_z_fp8[i][j];
+            assign fp8_pos_inf[j]   = fp8_valid_inf[j] & ~sign_fp8[i][j];
+            assign fp8_neg_inf[j]   = fp8_valid_inf[j] & sign_fp8[i][j];
+
+            assign bf8_valid_inf[j] = inf_op_bf8[i][j] & ~inf_z_bf8[i][j];
+            assign bf8_pos_inf[j]   = bf8_valid_inf[j] & ~sign_bf8[i][j];
+            assign bf8_neg_inf[j]   = bf8_valid_inf[j] & sign_bf8[i][j];
+        end
+
+        // NaN if either product has NaN input or inf*0
+        wire n_in_fp8_comb = |nan_in_fp8[i] | |inf_z_fp8[i];
+        wire n_in_bf8_comb = |nan_in_bf8[i] | |inf_z_bf8[i];
+
+        // Check for +inf + -inf in the addition (generates NaN)
+        wire fp8_add_nan = (fp8_pos_inf[0] & fp8_neg_inf[1]) | (fp8_neg_inf[0] & fp8_pos_inf[1]);
+        wire bf8_add_nan = (bf8_pos_inf[0] & bf8_neg_inf[1]) | (bf8_neg_inf[0] & bf8_pos_inf[1]);
+
+        // Combined infinity check (either product is inf and no add-nan)
+        wire i_op_fp8_comb = |fp8_valid_inf;
+        wire i_op_bf8_comb = |bf8_valid_inf;
+
+        // Sign of combined result (dominant inf sign, prefer positive if same magnitude)
+        wire sgn_fp8_comb = (|fp8_neg_inf) & ~(|fp8_pos_inf);
+        wire sgn_bf8_comb = (|bf8_neg_inf) & ~(|bf8_pos_inf);
 
         always_comb begin
             case (fmtf)
@@ -89,6 +155,14 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
                     n_in = nan_in_bf16[i]; i_z = inf_z_bf16[i]; i_op = inf_op_bf16[i]; sgn = sign_bf16[i];
                     valid_lane = vld_mask[i * 4];
                 end
+                TCU_FP8_ID: begin
+                    n_in = n_in_fp8_comb | fp8_add_nan; i_z = 1'b0; i_op = i_op_fp8_comb; sgn = sgn_fp8_comb;
+                    valid_lane = vld_mask[i * 2];
+                end
+                TCU_BF8_ID: begin
+                    n_in = n_in_bf8_comb | bf8_add_nan; i_z = 1'b0; i_op = i_op_bf8_comb; sgn = sgn_bf8_comb;
+                    valid_lane = vld_mask[i * 2];
+                end
                 default: begin
                     n_in=0; i_z=0; i_op=0; sgn=0; valid_lane=0;
                 end
@@ -101,7 +175,7 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
     end
 
     // ----------------------------------------------------------------------
-    // 5. Global Aggregation
+    // 3. Global Aggregation
     // ----------------------------------------------------------------------
 
     wire any_input_nan = (|prod_nan) | cls_c.is_nan;

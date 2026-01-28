@@ -73,8 +73,9 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .cls_bf16       (cls_bf16),
         .cls_fp8        (cls_fp8),
         .cls_bf8        (cls_bf8),
-        .cls_c          (cls_c[0]),
-        .exp_diff_f8   (exp_diff_f8),
+        .cls_c          (cls_c),
+        .exp_low_larger (exp_low_larger),
+        .raw_exp_diff   (raw_exp_diff),
         .y              (raw_sigs)
     );
 
@@ -98,7 +99,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .cls_bf16       (cls_bf16),
         .cls_fp8        (cls_fp8),
         .cls_bf8        (cls_bf8),
-        .cls_c          (cls_c[0]),
+        .cls_c          (cls_c),
         .raw_exp_y      (raw_exps),
         .exp_diff_f8    (exp_diff_f8)
     );
@@ -129,7 +130,9 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .cls_tf32   (cls_tf32),
         .cls_fp16   (cls_fp16),
         .cls_bf16   (cls_bf16),
-        .cls_c      (cls_c[0]),
+        .cls_fp8    (cls_fp8),
+        .cls_bf8    (cls_bf8),
+        .cls_c      (cls_c),
         .exceptions (exceptions)
     );
 
