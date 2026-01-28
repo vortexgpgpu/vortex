@@ -19,7 +19,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
 
     output wire [9:0]         max_exp,
     output wire [TCK:0][7:0]  shift_amt,
-    output wire [TCK:0][W-1:0] raw_sigs,
+    output wire [TCK:0][24:0] raw_sigs,
     output wire fedp_excep_t  exceptions,
     output wire [TCK-1:0]     lane_mask
 );
@@ -49,8 +49,8 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     VX_tcu_drl_classifier #(.N(4 * N), .WIDTH(8), .FMT(TCU_BF8_ID)) c_a_bf8 (.val(a_row), .cls(cls_bf8[0]));
     VX_tcu_drl_classifier #(.N(4 * N), .WIDTH(8), .FMT(TCU_BF8_ID)) c_b_bf8 (.val(b_col), .cls(cls_bf8[1]));
 
-    fedp_class_t [0:0] cls_c_arr;
-    VX_tcu_drl_classifier #(.N(1), .WIDTH(32), .FMT(TCU_FP32_ID)) c_c (.val(c_val), .cls(cls_c_arr));
+    fedp_class_t [0:0] cls_c;
+    VX_tcu_drl_classifier #(.N(1), .WIDTH(32), .FMT(TCU_FP32_ID)) c_c (.val(c_val), .cls(cls_c));
 
     // ----------------------------------------------------------------------
     // 2. Mantissa Product
@@ -62,8 +62,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
 
     VX_tcu_drl_shared_mul #(
         .N   (N),
-        .TCK (TCK),
-        .W   (W)
+        .TCK (TCK)
     ) shared_mul_inst (
         .vld_mask       (vld_mask),
         .fmt_s          (fmt_s),
@@ -75,7 +74,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .cls_bf16       (cls_bf16),
         .cls_fp8        (cls_fp8),
         .cls_bf8        (cls_bf8),
-        .cls_c          (cls_c_arr[0]),
+        .cls_c          (cls_c[0]),
         .exp_low_larger (exp_low_larger),
         .raw_exp_diff   (raw_exp_diff),
         .y              (raw_sigs)
@@ -92,7 +91,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .EXP_W(EXP_W)
     ) exp_bias_inst (
         .vld_mask       (vld_mask),
-        .fmt_s          (fmt_s[2:0]),
+        .fmtf           (fmt_s[2:0]),
         .a_row          (a_row),
         .b_col          (b_col),
         .c_val          (c_val),
@@ -101,7 +100,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .cls_bf16       (cls_bf16),
         .cls_fp8        (cls_fp8),
         .cls_bf8        (cls_bf8),
-        .cls_c          (cls_c_arr[0]),
+        .cls_c          (cls_c[0]),
         .raw_exp_y      (raw_exps),
         .exp_low_larger (exp_low_larger),
         .raw_exp_diff   (raw_exp_diff)
@@ -133,7 +132,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .cls_tf32   (cls_tf32),
         .cls_fp16   (cls_fp16),
         .cls_bf16   (cls_bf16),
-        .cls_c      (cls_c_arr[0]),
+        .cls_c      (cls_c[0]),
         .exceptions (exceptions)
     );
 

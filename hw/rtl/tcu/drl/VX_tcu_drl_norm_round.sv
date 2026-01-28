@@ -5,27 +5,28 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     parameter N = 5,
     parameter W = 25,
     parameter WA = 30,
-    parameter EXP_W = 10
+    parameter EXP_W = 10,
+    parameter C_HI_W = 8
 ) (
     input wire          clk,
     input wire          valid_in,
     input wire [31:0]   req_id,
     input wire [EXP_W-1:0] max_exp,
     input wire [WA-1:0] acc_sig,
-    input wire [6:0]    cval_hi,    // Unused in FP mode
-    input wire [N-2:0]  sig_signs,  // Unused in FP mode
-    input wire          is_int,     // Unused in FP mode
+    input wire [C_HI_W-1:0] cval_hi,
+    input wire [N-2:0]  sig_signs,
+    input wire          is_int,
     input wire          sticky_in,
     input fedp_excep_t  exceptions,
     output wire [31:0]  result
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi, sig_signs})
+    `UNUSED_VAR ({clk, req_id, valid_in})
 
     // ----------------------------------------------------------------------
     // 1. Signed Magnitude Extraction
     // ----------------------------------------------------------------------
-    // The accumulator is in 2's complement. Convert to Sign-Magnitude.
+    // The accumulator is in 2's complement.
     wire             sum_sign = acc_sig[WA-1];
     wire [WA-1:0]    abs_sum  = sum_sign ? -acc_sig : acc_sig;
     wire             zero_sum = ~|abs_sum;
@@ -111,7 +112,6 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     end
 
     logic [31:0] fp_result;
-
     always_comb begin
         if (exceptions.is_nan) begin
             // qNaN
@@ -131,13 +131,35 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
         end
     end
 
-    assign result = fp_result;
+    // ----------------------------------------------------------------------
+    // 7. Integer Handling
+    // ----------------------------------------------------------------------
+
+    `UNUSED_VAR (sig_signs)
+
+    // Extract high part of accumulator
+    wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:W]));
+    
+    wire [6:0] int_hi;
+    VX_ks_adder #(
+        .N (7)
+    ) int_adder (
+        .dataa (ext_acc_int),
+        .datab (cval_hi),
+        .sum   (int_hi),
+        `UNUSED_PIN (cout)
+    );
+
+    // Concatenate high integer part with lower accumulator bits
+    wire [31:0] int_result = {int_hi, acc_sig[24:0]};
+
+    assign result = is_int ? int_result : fp_result;
 
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin
         if (valid_in) begin
-            `TRACE(4, ("%t: %s FEDP-NORM(%0d): acc_sig=0x%0h, sign=%b, lzc=%0d, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
-                $time, INSTANCE_ID, req_id, acc_sig, sum_sign, lz_count, norm_exp_s, shifted_sum, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
+            `TRACE(4, ("%t: %s FEDP-NORM(%0d): is_int=%b, acc_sig=0x%0h, sign=%b, lzc=%0d, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
+                $time, INSTANCE_ID, req_id, is_int, acc_sig, sum_sign, lz_count, norm_exp_s, shifted_sum, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
         end
     end
 `endif

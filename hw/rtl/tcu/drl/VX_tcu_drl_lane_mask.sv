@@ -60,7 +60,7 @@ module VX_tcu_drl_lane_mask import VX_tcu_pkg::*; #(
             TCU_U8_ID:   lane_mask = mask_8;
             TCU_I4_ID:   lane_mask = mask_4;
             TCU_U4_ID:   lane_mask = mask_4;
-            default:     lane_mask = '0;
+            default:     lane_mask = 'x;
         endcase
     end
 

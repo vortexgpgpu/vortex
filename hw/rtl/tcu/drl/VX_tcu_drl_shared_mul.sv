@@ -3,8 +3,7 @@
 
 module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
     parameter N   = 2,
-    parameter TCK = 2 * N,
-    parameter W   = 25
+    parameter TCK = 2 * N
 ) (
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
     input wire [3:0]           fmt_s,
@@ -23,7 +22,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
     input wire [TCK-1:0]       exp_low_larger,
     input wire [TCK-1:0][6:0]  raw_exp_diff,
 
-    output wire [TCK:0][W-1:0] y
+    output logic [TCK:0][24:0] y
 );
     `UNUSED_VAR ({vld_mask, exp_low_larger, raw_exp_diff})
 
@@ -134,8 +133,6 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
 
     // 7. Multiply, Align & Merge
     for (genvar i = 0; i < TCK; ++i) begin : g_mul
-        logic [24:0] y_aligned;
-
         // Shared TF32/FP16/BF16 Multiplier
         logic [10:0] man_a_sh, man_b_sh;
         logic        sign_sh;
@@ -177,7 +174,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         end
 
         // Alignment & Adder for FP8/BF8
-        wire [6:0]  shift_amt_f8 = exp_low_larger[i] ? -raw_exp_diff[i] : raw_exp_diff[i];
+        wire [6:0] shift_amt_f8 = exp_low_larger[i] ? -raw_exp_diff[i] : raw_exp_diff[i];
         wire [7:0] y_f8_low  = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[0] : {y_raw_f8[0][5:0], 2'd0};
         wire [7:0] y_f8_high = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[1] : {y_raw_f8[1][5:0], 2'd0};
 
@@ -256,31 +253,20 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         // Mux Output
         always_comb begin
             case (fmt_s[3:0])
-                TCU_TF32_ID, TCU_FP16_ID: y_aligned = {sign_sh, y_raw_sh, 2'd0};
-                TCU_BF16_ID:              y_aligned = {sign_sh, y_raw_sh[15:0], 8'd0};
-                TCU_FP8_ID, TCU_BF8_ID:   y_aligned = {sign_f8_add, y_f8_add};
-                TCU_I8_ID:                y_aligned = 25'($signed(y_i8_add_res));
-                TCU_U8_ID:                y_aligned = {8'd0, y_i8_add_res};
-                TCU_I4_ID:                y_aligned = 25'($signed(y_i4_add_res));
-                TCU_U4_ID:                y_aligned = {15'd0, y_i4_add_res};
-                default:                  y_aligned = 25'd0;
+                TCU_TF32_ID, TCU_FP16_ID: y[i] = {sign_sh, y_raw_sh, 2'd0};
+                TCU_BF16_ID:              y[i] = {sign_sh, y_raw_sh[15:0], 8'd0};
+                TCU_FP8_ID, TCU_BF8_ID:   y[i] = {sign_f8_add, y_f8_add};
+                TCU_I8_ID:                y[i] = 25'($signed(y_i8_add_res));
+                TCU_U8_ID:                y[i] = {8'd0, y_i8_add_res};
+                TCU_I4_ID:                y[i] = 25'($signed(y_i4_add_res));
+                TCU_U4_ID:                y[i] = {15'd0, y_i4_add_res};
+                default:                  y[i] = 'x;
             endcase
-        end
-
-        if (W > 25) begin
-            assign y[i] = {y_aligned, {(W-25){1'b0}}};
-        end else begin
-            assign y[i] = y_aligned[24 -: W];
         end
     end
 
     // 8. C-Term Processing
     `UNUSED_VAR ({c_val[30:25], cls_c})
-    wire [24:0] c_base = fmt_s[3] ? c_val[24:0] : {c_val[31], 1'b1, c_val[22:0]};
-    if (W > 25) begin
-        assign y[TCK] = {c_base, {(W-25){1'b0}}};
-    end else begin
-        assign y[TCK] = c_base[24 -: W];
-    end
+    assign y[TCK] = fmt_s[3] ? c_val[24:0] : {c_val[31], 1'b1, c_val[22:0]};
 
 endmodule

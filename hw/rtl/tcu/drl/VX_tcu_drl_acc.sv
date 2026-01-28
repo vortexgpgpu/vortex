@@ -12,13 +12,12 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     input  wire [N-2:0]         lane_mask,
     input  wire [N-1:0][W-1:0]  sigs_in,
     input  wire [N-1:0]         sticky_in,
-    input  wire                 is_int,
     output wire [WA-1:0]        sig_out,
     output wire [N-2:0]         sigs_out,
     output wire                 sticky_out
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR ({clk, valid_in, req_id, is_int})
+    `UNUSED_VAR ({clk, valid_in, req_id})
 
     // ----------------------------------------------------------------------
     // Input Masking

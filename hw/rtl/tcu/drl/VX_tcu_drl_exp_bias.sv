@@ -7,7 +7,7 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     parameter EXP_W = 10
 ) (
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
-    input wire [2:0]                fmt_s,
+    input wire [2:0]                fmtf,
 
     // Raw Inputs
     input wire [N-1:0][31:0]        a_row,
@@ -149,11 +149,10 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
 
         // Mux Selection
         always_comb begin
-            // Defaults
             ea_sel = 8'd0; eb_sel = 8'd0; bias_sel = '0; is_zero = 1'b1;
             ea_f8_sel = '0; eb_f8_sel = '0; bias_f8_sel = '0; is_zero_f8 = 2'b11;
 
-            case(fmt_s)
+            case(fmtf)
                 TCU_TF32_ID: begin
                     ea_sel = ea_tf32[i]; eb_sel = eb_tf32[i];
                     is_zero = z_tf32[i]; bias_sel = BIAS_CONST_TF32;
@@ -215,27 +214,22 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         // 2c. Difference calculation for alignment
         wire [EXP_W-1:0] diff_f8 = sum_f8_1 - sum_f8_0;
         wire f8_low_larger = diff_f8[EXP_W-1];
+        assign exp_low_larger[i] = f8_low_larger;
+        assign raw_exp_diff[i] = diff_f8[6:0];
 
         // Final Output Mux
         always_comb begin
-            case(fmt_s)
+            case(fmtf)
                 TCU_TF32_ID, TCU_FP16_ID, TCU_BF16_ID: begin
                     raw_exp_y[i]      = is_zero ? EXP_W'(0) : sum_shared;
-                    exp_low_larger[i] = 1'b0;
-                    raw_exp_diff[i]   = 7'd0;
                 end
                 TCU_FP8_ID, TCU_BF8_ID: begin
                     raw_exp_y[i] = f8_low_larger ?
                         (is_zero_f8[0] ? EXP_W'(0) : sum_f8_0) :
                         (is_zero_f8[1] ? EXP_W'(0) : sum_f8_1);
-
-                    exp_low_larger[i] = f8_low_larger;
-                    raw_exp_diff[i]   = diff_f8[6:0];
                 end
                 default: begin
-                    raw_exp_y[i]      = EXP_W'(0);
-                    exp_low_larger[i] = 1'b0;
-                    raw_exp_diff[i]   = 7'd0;
+                    raw_exp_y[i] = 'x;
                 end
             endcase
         end

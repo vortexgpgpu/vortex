@@ -25,6 +25,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     localparam SHIFT_W = 8;
     localparam RAW_W   = W;
     localparam EXC_W   = $bits(fedp_excep_t);
+    localparam C_HI_W  = 7;
     localparam HR = $clog2(TCK+1);
 
     localparam ALN_SIG_W = W + 2;
@@ -74,6 +75,12 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     fedp_excep_t              exceptions;
     wire [TCK-1:0]            lane_mask;
 
+    wire is_int = fmt_s[3];
+
+    // Integer C-term extraction + correction
+    wire [7:0] cval_top = c_val[31:24];
+    wire [6:0] cval_hi = cval_top[7:1] + 7'(cval_top[0]);
+
     VX_tcu_drl_mul_exp #(
         .N (N),
         .W (W)
@@ -98,31 +105,35 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     wire [TCK-1:0]            s1_lane_mask;
     wire [TCK:0][SHIFT_W-1:0] s1_shift_amt;
     wire [TCK:0][RAW_W-1:0]   s1_raw_sig;
+    wire                      s1_is_int;
+    wire [C_HI_W-1:0]         s1_cval_hi;
 
     VX_pipe_register #(
-        .DATAW (EXP_W + EXC_W + TCK + SHIFT_W + RAW_W), .DEPTH (MUL_LATENCY)
+        .DATAW (EXP_W + EXC_W + TCK + SHIFT_W + RAW_W + C_HI_W + 1),
+        .DEPTH (MUL_LATENCY)
     ) pipe_fmul_ctrl (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .data_in ({max_exp,    exceptions,    lane_mask,    shift_amt[TCK],    raw_sigs[TCK]}),
-        .data_out({s1_max_exp, s1_exceptions, s1_lane_mask, s1_shift_amt[TCK], s1_raw_sig[TCK]})
+        .data_in ({max_exp,    exceptions,    lane_mask,    shift_amt[TCK],    raw_sigs[TCK],   cval_hi,    is_int}),
+        .data_out({s1_max_exp, s1_exceptions, s1_lane_mask, s1_shift_amt[TCK], s1_raw_sig[TCK], s1_cval_hi, s1_is_int})
     );
     for (genvar i = 0; i < TCK; i++) begin : g_fmul_lane
         VX_pipe_register #(
             .DATAW (SHIFT_W + RAW_W),
-            .DEPTH (MUL_LATENCY)) pipe_fmul_lane (
+            .DEPTH (MUL_LATENCY))
+        pipe_fmul_lane (
             .clk(clk),
             .reset(reset),
             .enable(enable & lane_mask[i]),
-            .data_in ({shift_amt[i], raw_sigs[i]}),
+            .data_in ({shift_amt[i],    raw_sigs[i]}),
             .data_out({s1_shift_amt[i], s1_raw_sig[i]})
         );
     end
 
     // Stage 2: Alignment
-    wire [TCK:0][ALN_SIG_W-1:0] aln_sigs;
-    wire [TCK:0]                sticky_bits;
+    wire [TCK:0][ALN_SIG_W-1:0] s1_aln_sigs;
+    wire [TCK:0]                s1_aln_sticky;
 
     VX_tcu_drl_align #(
         .N (TCK+1),
@@ -134,42 +145,46 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .req_id(req_pipe[S1_IDX]),
         .shift_amt(s1_shift_amt),
         .sigs_in(s1_raw_sig),
-        .is_int(1'b0),
-        .sigs_out(aln_sigs),
-        .sticky_bits(sticky_bits)
+        .is_int(s1_is_int),
+        .sigs_out(s1_aln_sigs),
+        .sticky_bits(s1_aln_sticky)
     );
 
     wire [EXP_W-1:0]            s2_max_exp;
     fedp_excep_t                s2_exceptions;
     wire [TCK-1:0]              s2_lane_mask;
-    wire [TCK:0][ALN_SIG_W-1:0] s2_aln_sig;
-    wire [TCK:0]                s2_sticky_bits;
+    wire [TCK:0][ALN_SIG_W-1:0] s2_aln_sigs;
+    wire [TCK:0]                s2_aln_sticky;
+    wire                        s2_is_int;
+    wire [C_HI_W-1:0]           s2_cval_hi;
 
     VX_pipe_register #(
-        .DATAW (EXP_W + EXC_W + TCK + ALN_SIG_W + 1), .DEPTH (ALN_LATENCY)
+        .DATAW (EXP_W + EXC_W + TCK + ALN_SIG_W + 1 + C_HI_W + 1),
+        .DEPTH (ALN_LATENCY)
     ) pipe_aln_ctrl (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .data_in ({s1_max_exp, s1_exceptions, s1_lane_mask, aln_sigs[TCK], sticky_bits[TCK]}),
-        .data_out({s2_max_exp, s2_exceptions, s2_lane_mask, s2_aln_sig[TCK], s2_sticky_bits[TCK]})
+        .data_in ({s1_max_exp, s1_exceptions, s1_lane_mask, s1_aln_sigs[TCK], s1_aln_sticky[TCK], s1_cval_hi, s1_is_int}),
+        .data_out({s2_max_exp, s2_exceptions, s2_lane_mask, s2_aln_sigs[TCK], s2_aln_sticky[TCK], s2_cval_hi, s2_is_int})
     );
     for (genvar i = 0; i < TCK; i++) begin : g_aln_lane
         VX_pipe_register #(
             .DATAW (ALN_SIG_W + 1),
-            .DEPTH (ALN_LATENCY)) pipe_aln_lane (
+            .DEPTH (ALN_LATENCY))
+        pipe_aln_lane (
             .clk(clk),
             .reset(reset),
             .enable(enable & s1_lane_mask[i]),
-            .data_in ({aln_sigs[i],   sticky_bits[i]}),
-            .data_out({s2_aln_sig[i], s2_sticky_bits[i]})
+            .data_in ({s1_aln_sigs[i], s1_aln_sticky[i]}),
+            .data_out({s2_aln_sigs[i], s2_aln_sticky[i]})
         );
     end
 
     // Stage 3: Accumulation
     wire [ACC_SIG_W-1:0] s2_acc_sum;
-    wire [TCK-1:0]       s2_sigs_sign_out;
-    wire                 s2_acc_sticky_out;
+    wire [TCK-1:0]       s2_acc_sigs;
+    wire                 s2_acc_sticky;
 
     VX_tcu_drl_acc #(
         .N (TCK+1),
@@ -180,29 +195,30 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .valid_in(vld_pipe[S2_IDX]),
         .req_id(req_pipe[S2_IDX]),
         .lane_mask(s2_lane_mask),
-        .sigs_in(s2_aln_sig),
-        .sticky_in(s2_sticky_bits),
-        .is_int(1'b0),
+        .sigs_in(s2_aln_sigs),
+        .sticky_in(s2_aln_sticky),
         .sig_out(s2_acc_sum),
-        .sigs_out(s2_sigs_sign_out),
-        .sticky_out(s2_acc_sticky_out)
+        .sigs_out(s2_acc_sigs),
+        .sticky_out(s2_acc_sticky)
     );
 
     wire [EXP_W-1:0]      s3_max_exp;
     wire [ACC_SIG_W-1:0]  s3_acc_sum;
     fedp_excep_t          s3_exceptions;
-    wire                  s3_sticky;
-    wire [TCK-1:0]        s3_sigs_sign_out;
+    wire                  s3_acc_sticky;
+    wire [TCK-1:0]        s3_acc_sigs;
+    wire                  s3_is_int;
+    wire [C_HI_W-1:0]     s3_cval_hi;
 
     VX_pipe_register #(
-        .DATAW (EXP_W + ACC_SIG_W + EXC_W + 1 + TCK),
+        .DATAW (EXP_W + ACC_SIG_W + EXC_W + 1 + TCK + C_HI_W + 1),
         .DEPTH (ACC_LATENCY)
     ) pipe_acc (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .data_in ({s2_max_exp, s2_acc_sum, s2_exceptions, s2_acc_sticky_out, s2_sigs_sign_out}),
-        .data_out({s3_max_exp, s3_acc_sum, s3_exceptions, s3_sticky,         s3_sigs_sign_out})
+        .data_in ({s2_max_exp, s2_acc_sum, s2_exceptions, s2_acc_sticky, s2_acc_sigs, s2_cval_hi, s2_is_int}),
+        .data_out({s3_max_exp, s3_acc_sum, s3_exceptions, s3_acc_sticky, s3_acc_sigs, s3_cval_hi, s3_is_int})
     );
 
     // Stage 4: Normalization and rounding
@@ -212,6 +228,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .N (TCK+1),
         .W (W),
         .EXP_W (EXP_W),
+        .C_HI_W(C_HI_W),
         .WA(ACC_SIG_W)
     ) norm_round (
         .clk(clk),
@@ -219,18 +236,23 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .req_id(req_pipe[S3_IDX]),
         .max_exp(s3_max_exp),
         .acc_sig(s3_acc_sum),
-        .sticky_in(s3_sticky),
+        .sticky_in(s3_acc_sticky),
         .exceptions(s3_exceptions),
-        .cval_hi(7'd0),
-        .sig_signs(s3_sigs_sign_out),
-        .is_int(1'b0),
+        .cval_hi(s3_cval_hi),
+        .sig_signs(s3_acc_sigs),
+        .is_int(s3_is_int),
         .result(final_result)
     );
 
     VX_pipe_register #(
-        .DATAW (32), .DEPTH (NRM_LATENCY)
+        .DATAW (32),
+        .DEPTH (NRM_LATENCY)
     ) pipe_norm_round (
-        .clk(clk), .reset(reset), .enable(enable), .data_in (final_result), .data_out(d_val)
+        .clk(clk),
+        .reset(reset),
+        .enable(enable),
+        .data_in (final_result),
+        .data_out(d_val)
     );
 
 `ifdef DBG_TRACE_TCU
@@ -249,8 +271,8 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     // Stage 1: Mul/Exp
     always_ff @(posedge clk) begin
         if (vld_pipe[S1_IDX]) begin
-            `TRACE(4, ("%t: %s FEDP-S1(%0d): max_exp=0x%0h, shift_amt=",
-                $time, INSTANCE_ID, req_pipe[S1_IDX], s1_max_exp));
+            `TRACE(4, ("%t: %s FEDP-S1(%0d): is_int=%b, cval_hi=0x%0h, max_exp=0x%0h, shift_amt=",
+                $time, INSTANCE_ID, s1_is_int, s1_cval_hi, req_pipe[S1_IDX], s1_max_exp));
             `TRACE_ARRAY1D(4, "0x%0h", s1_shift_amt, (TCK+1))
             `TRACE(4, (", raw_sig="))
             `TRACE_ARRAY1D(4, "0x%0h", s1_raw_sig, (TCK+1))
@@ -261,11 +283,11 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     // Stage 2: Alignment
     always_ff @(posedge clk) begin
         if (vld_pipe[S2_IDX]) begin
-            `TRACE(4, ("%t: %s FEDP-S2(%0d): max_exp=0x%0h, aln_sig=",
-                $time, INSTANCE_ID, req_pipe[S2_IDX], s2_max_exp));
-            `TRACE_ARRAY1D(4, "0x%0h", s2_aln_sig, (TCK+1))
+            `TRACE(4, ("%t: %s FEDP-S2(%0d): is_int=%b, cval_hi=0x%0h, max_exp=0x%0h, aln_sig=",
+                $time, INSTANCE_ID, req_pipe[S2_IDX], s2_is_int, s2_cval_hi, s2_max_exp));
+            `TRACE_ARRAY1D(4, "0x%0h", s2_aln_sigs, (TCK+1))
             `TRACE(4, (", sticky_bits="))
-            `TRACE_ARRAY1D(4, "0b%b", s2_sticky_bits, (TCK+1))
+            `TRACE_ARRAY1D(4, "0b%b", s2_aln_sticky, (TCK+1))
             `TRACE(4, (", exceptions=%0b\n", s2_exceptions))
         end
     end
@@ -273,8 +295,8 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     // Stage 3: Accumulation
     always_ff @(posedge clk) begin
         if (vld_pipe[S3_IDX]) begin
-            `TRACE(4, ("%t: %s FEDP-S3(%0d): acc_sig=0x%0h, max_exp=0x%0h, sticky=%b, exceptions=%0b\n",
-                $time, INSTANCE_ID, req_pipe[S3_IDX], s3_acc_sum, s3_max_exp, s3_sticky, s3_exceptions));
+            `TRACE(4, ("%t: %s FEDP-S3(%0d): is_int=%b, cval_hi=0x%0h, acc_sig=0x%0h, max_exp=0x%0h, sticky=%b, exceptions=%0b\n",
+                $time, INSTANCE_ID, req_pipe[S3_IDX], s3_is_int, s3_cval_hi, s3_acc_sum, s3_max_exp, s3_acc_sticky, s3_exceptions));
         end
     end
 

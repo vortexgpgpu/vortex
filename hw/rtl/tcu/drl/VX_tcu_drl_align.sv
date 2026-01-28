@@ -16,7 +16,7 @@ module VX_tcu_drl_align import VX_tcu_pkg::*; #(
     output wire [N-1:0]         sticky_bits
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR ({clk, valid_in, req_id, is_int})
+    `UNUSED_VAR ({clk, valid_in, req_id})
 
     localparam MAX_PRE_SHIFT = W - 23;
     localparam SHIFT_MAG_W   = (W - 1) + MAX_PRE_SHIFT;
@@ -27,31 +27,28 @@ module VX_tcu_drl_align import VX_tcu_pkg::*; #(
         wire [W-2:0] in_mag = sigs_in[i][W-2:0];
 
         // 2. Pre-Shift Magnitude
-        // Inlined padding logic: C-term vs Product terms
         wire [SHIFT_MAG_W-1:0] mag_shifted;
-
         if (i == N-1) begin : g_c_term
-            // C-Term: Shift by W-24 (Pad MSB with difference, LSB with W-24)
             assign mag_shifted = { {(MAX_PRE_SHIFT - (W - 24)){1'b0}}, in_mag, {(W - 24){1'b0}} };
         end else begin : g_prod_term
-            // Products: Shift by W-23 (Pad LSB only)
             assign mag_shifted = { in_mag, {(W - 23){1'b0}} };
         end
 
-        // 3. Shift and Sticky Calculation
+        // 3. Shift adjustment
         wire is_overshift = (shift_amt[i] >= 8'(SHIFT_MAG_W));
-
-        // Mask shift result to 0 if overshifted, otherwise take MSBs fitting in WA-1
         wire [SHIFT_MAG_W-1:0] shift_res_full = mag_shifted >> shift_amt[i];
         wire [WA-2:0] adj_mag = is_overshift ? '0 : shift_res_full[WA-2:0];
 
-        // Sticky: check lost bits by shifting left
+        // 4. Convert to 2's Complement
+        wire [WA-1:0] mag_pack = {1'b0, adj_mag};
+        wire [WA-1:0] fp_sig_out = in_sign ? (~mag_pack + 1'b1) : mag_pack;
+
+        // 5. Sticky Calculation
         wire [SHIFT_MAG_W-1:0] sticky_check_shift = mag_shifted << (8'(SHIFT_MAG_W) - shift_amt[i]);
         assign sticky_bits[i] = is_overshift ? (|mag_shifted) : (|sticky_check_shift);
 
-        // 4. Convert to 2's Complement
-        wire [WA-1:0] mag_pack = {1'b0, adj_mag};
-        assign sigs_out[i] = in_sign ? (~mag_pack + 1'b1) : mag_pack;
+        // 6. Output select
+        assign sigs_out[i] = is_int ? WA'($signed(sigs_in[i])) : fp_sig_out;
     end
 
 `ifdef DBG_TRACE_TCU
