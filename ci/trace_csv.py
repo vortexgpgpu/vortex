@@ -78,7 +78,9 @@ def parse_simx(log_lines):
     line_pattern = r"^TRACE\s+(\d+):\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_-]+):\s+(.*)$"
 
     # Regex for DEBUG lines (contain the data values)
-    debug_instr_pattern = r"DEBUG Instr:\s+([a-zA-Z0-9_\.]+)\s+.*#(\d+)"
+    # Some instructions have no operands and are logged as "DEBUG Instr: FENCE, ...",
+    # so allow an optional trailing comma after the opcode.
+    debug_instr_pattern = r"DEBUG Instr:\s+([a-zA-Z0-9_\.]+),?\s+.*#(\d+)"
     debug_src_pattern = r"DEBUG Src\d+ Reg:\s+(.+)"
     debug_dest_pattern = r"DEBUG Dest Reg:\s+(.+)"
 
