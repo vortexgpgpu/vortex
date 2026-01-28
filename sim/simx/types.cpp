@@ -140,6 +140,11 @@ void LsuMemAdapter::tick() {
   for (uint32_t i = 0; i < input_size; ++i) {
     if (RspIn.at(i).empty())
       continue;
+
+    // check output backpressure
+    if (RspOut.full())
+      continue;
+
     auto& rsp_in = RspIn.at(i).peek();
 
     // build memory response
@@ -150,9 +155,6 @@ void LsuMemAdapter::tick() {
     out_rsp.uuid = rsp_in.uuid;
 
     // merge other responses with the same tag
-    std::vector<uint32_t> pop_list;
-    pop_list.reserve(input_size);
-    pop_list.push_back(i);
     for (uint32_t j = i + 1; j < input_size; ++j) {
       if (RspIn.at(j).empty())
         continue;
@@ -160,19 +162,16 @@ void LsuMemAdapter::tick() {
       if (rsp_in.tag == other_rsp.tag) {
         out_rsp.mask.set(j);
         DT(4, this->name() << "-rsp" << j << ": " << other_rsp);
-        pop_list.push_back(j);
+        RspIn.at(j).pop();
       }
     }
 
     // send memory response
-    if (RspOut.try_send(out_rsp, 1)) {
-      DT(4, this->name() << "-rsp" << i << ": " << rsp_in);
-      // Pop all merged inputs only after successful send.
-      for (auto idx : pop_list) {
-        RspIn.at(idx).pop();
-      }
-    }
-
+    RspOut.send(out_rsp, 1);
+    
+    // remove input
+    DT(4, this->name() << "-rsp" << i << ": " << rsp_in);
+    RspIn.at(i).pop();
     break;
   }
 

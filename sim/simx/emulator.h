@@ -203,9 +203,6 @@ private:
     }
 };
 
-
-std::vector<AsyncBarrier> async_barriers_;  
-
   struct ClusterAsyncBarrier {
     WarpMask arrived_warps;
     uint32_t expect_cores;
