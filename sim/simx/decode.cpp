@@ -1105,7 +1105,6 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         uint32_t steps_shift = 32 - log2ceil(steps_count);
         uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
         uint32_t uuid_lo = uuid & 0xffffffff;
-        std::cout << "*** parentUUID=" << uuid << "\n";
         for (uint32_t k = 0; k < cfg::k_steps; ++k) {
           for (uint32_t m = 0; m < cfg::m_steps; ++m) {
             for (uint32_t n = 0; n < cfg::n_steps; ++n) {
