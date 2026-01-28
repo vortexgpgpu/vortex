@@ -5,49 +5,61 @@ module VX_tcu_drl_lane_mask import VX_tcu_pkg::*; #(
     parameter TCK = 2 * N
 ) (
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
-    input wire [2:0]                fmt,
+    input wire [3:0]                fmt_s,
     output logic [TCK-1:0]          lane_mask
 );
     `UNUSED_VAR (vld_mask)
-    wire [TCK-1:0] mask_tf32;
-    wire [TCK-1:0] mask_fp16;
-    wire [TCK-1:0] mask_bf16;
+    wire [TCK-1:0] mask_32;
+    wire [TCK-1:0] mask_16;
+    wire [TCK-1:0] mask_8;
+    wire [TCK-1:0] mask_4;
 
     // ----------------------------------------------------------------------
-    // 1. TF32 Mask Generation
+    // 1. 32-bit Mask Generation
     // ----------------------------------------------------------------------
-    // TF32 consumes a full 32-bit register (2 physical lanes).
-    // We map it to even physical lanes (0, 2..). Odd lanes are forced to 0.
-    for (genvar i = 0; i < TCK; ++i) begin : g_mask_tf32
+    for (genvar i = 0; i < TCK; ++i) begin : g_mask_32
         if ((i % 2) == 0) begin
-            assign mask_tf32[i] = vld_mask[i * 4];
+            assign mask_32[i] = vld_mask[i * 4];
         end else begin
-            assign mask_tf32[i] = 1'b0;
+            assign mask_32[i] = 1'b0;
         end
     end
 
     // ----------------------------------------------------------------------
-    // 2. FP16 Mask Generation
+    // 2. 16-bit Mask Generation
     // ----------------------------------------------------------------------
-    for (genvar i = 0; i < TCK; ++i) begin : g_mask_fp16
-        assign mask_fp16[i] = vld_mask[i * 4];
+    for (genvar i = 0; i < TCK; ++i) begin : g_mask_16
+        assign mask_16[i] = vld_mask[i * 4];
     end
 
     // ----------------------------------------------------------------------
-    // 3. BF16 Mask Generation
+    // 3. 8-bit Mask Generation
     // ----------------------------------------------------------------------
-    for (genvar i = 0; i < TCK; ++i) begin : g_mask_bf16
-        assign mask_bf16[i] = vld_mask[i * 4];
+    for (genvar i = 0; i < TCK; ++i) begin : g_mask_8
+        assign mask_8[i] = vld_mask[i * 2];
+    end
+
+    // ----------------------------------------------------------------------
+    // 3. 4-bit Mask Generation
+    // ----------------------------------------------------------------------
+    for (genvar i = 0; i < TCK; ++i) begin : g_mask_4
+        assign mask_4[i] = vld_mask[i];
     end
 
     // ----------------------------------------------------------------------
     // 4. Final Format Selection
     // ----------------------------------------------------------------------
     always_comb begin
-        case (fmt)
-            TCU_FP32_ID: lane_mask = mask_tf32;
-            TCU_FP16_ID: lane_mask = mask_fp16;
-            TCU_BF16_ID: lane_mask = mask_bf16;
+        case (fmt_s)
+            TCU_FP32_ID: lane_mask = mask_32;
+            TCU_FP16_ID: lane_mask = mask_16;
+            TCU_BF16_ID: lane_mask = mask_16;
+            TCU_FP8_ID:  lane_mask = mask_8;
+            TCU_BF8_ID:  lane_mask = mask_8;
+            TCU_I8_ID:   lane_mask = mask_8;
+            TCU_U8_ID:   lane_mask = mask_8;
+            TCU_I4_ID:   lane_mask = mask_4;
+            TCU_U4_ID:   lane_mask = mask_4;
             default:     lane_mask = '0;
         endcase
     end

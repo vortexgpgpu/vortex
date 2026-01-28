@@ -61,7 +61,9 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     wire [TCK:0][9:0]   raw_exps;
 
     VX_tcu_drl_shared_mul #(
-        .N(N), .TCK(TCK), .W(W)
+        .N   (N),
+        .TCK (TCK),
+        .W   (W)
     ) shared_mul_inst (
         .vld_mask       (vld_mask),
         .fmt_s          (fmt_s),
@@ -84,7 +86,10 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     // ----------------------------------------------------------------------
 
     VX_tcu_drl_exp_bias #(
-        .N(N), .TCK(TCK), .W(W), .EXP_W(EXP_W)
+        .N   (N),
+        .TCK (TCK),
+        .W   (W),
+        .EXP_W(EXP_W)
     ) exp_bias_inst (
         .vld_mask       (vld_mask),
         .fmt_s          (fmt_s[2:0]),
@@ -120,7 +125,8 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     // ----------------------------------------------------------------------
 
     VX_tcu_drl_exceptions #(
-        .N(N), .TCK(TCK)
+        .N   (N),
+        .TCK (TCK)
     ) exceptions_inst (
         .vld_mask   (vld_mask),
         .fmtf       (fmt_s[2:0]),
@@ -135,10 +141,11 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     // 6. Lane Mask
     // ----------------------------------------------------------------------
     VX_tcu_drl_lane_mask #(
-        .N(N), .TCK(TCK)
+        .N   (N),
+        .TCK (TCK)
     ) lane_mask_inst (
         .vld_mask (vld_mask),
-        .fmt      (fmt_s[2:0]),
+        .fmt_s    (fmt_s),
         .lane_mask(lane_mask)
     );
 
