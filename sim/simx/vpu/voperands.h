@@ -25,7 +25,7 @@ public:
   SimChannel<instr_trace_t*> Input;
   SimChannel<instr_trace_t*> Output;
 
-  Operands(const SimContext &ctx, Core* core);
+  Operands(const SimContext &ctx, const char* name, Core* core);
 
   virtual ~Operands();
 

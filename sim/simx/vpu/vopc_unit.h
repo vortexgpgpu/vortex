@@ -24,7 +24,7 @@ public:
   SimChannel<instr_trace_t*> Input;
   SimChannel<instr_trace_t*> Output;
 
-  VOpcUnit(const SimContext &ctx, Core* core);
+  VOpcUnit(const SimContext &ctx, const char* name, Core* core);
 
   virtual ~VOpcUnit();
 

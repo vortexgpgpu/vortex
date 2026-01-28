@@ -278,7 +278,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
                 `CS_BANK_TO_FULL_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid))
         end
         if (show_table) begin
-            `TRACE(3, ("%t: %s table", $time, INSTANCE_ID))
+            `TRACE(3, ("%t: %s table: ", $time, INSTANCE_ID))
             for (integer i = 0; i < MSHR_SIZE; ++i) begin
                 if (valid_table[i]) begin
                     `TRACE(3, (" %0d=0x%0h", i, `CS_BANK_TO_FULL_ADDR(addr_table[i], BANK_ID)))

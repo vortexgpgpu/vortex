@@ -26,7 +26,7 @@ public:
 	std::vector<SimChannel<instr_trace_t*>> Inputs;
 	std::vector<SimChannel<instr_trace_t*>> Outputs;
 
-	Dispatcher(const SimContext& ctx, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes);
+	Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes);
 
 	virtual ~Dispatcher();
 

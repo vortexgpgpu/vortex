@@ -1243,7 +1243,7 @@ public:
         auto& req_in = Inputs.at(i);
         auto& req = req_in.peek();
         if (Outputs.at(o).try_send(RspType(req, i), delay_)) {
-          DT(4, this->name() << "-req" << i << "_" << o << ": " << req);
+          DT(4, this->name() << " req" << i << "_" << o << ": " << req);
           req_in.pop();
         }
       }
@@ -1356,7 +1356,7 @@ public:
         auto& req_in = Inputs.at(input_idx);
         auto& req = req_in.peek();
         if (Outputs.at(o).try_send(RspType(req, input_idx), delay_)) {
-          DT(4, this->name() << "-req" << input_idx << "_" << o << ": " << req);
+          DT(4, this->name() << " req" << input_idx << "_" << o << ": " << req);
           req_in.pop();
         }
         collisions_ += has_collision;
@@ -1472,7 +1472,7 @@ public:
         }
         uint32_t i = o * R + r;
         if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
-          DT(4, this->name() << "-rsp" << o << "_" << i << ": " << out_rsp);
+          DT(4, this->name() << " rsp" << o << "_" << i << ": " << out_rsp);
           rsp_in.pop();
         }
       }
@@ -1595,7 +1595,7 @@ public:
           out_rsp.tag = rsp.tag >> lg2_inputs_;
         }
         if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
-          DT(4, this->name() << "-rsp" << g << "_" << i << ": " << out_rsp);
+          DT(4, this->name() << " rsp" << g << "_" << i << ": " << out_rsp);
           rsp_in.pop();
         }
       }

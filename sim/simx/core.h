@@ -91,6 +91,7 @@ public:
   std::vector<SimChannel<MemRsp>> dcache_rsp_in;
 
   Core(const SimContext& ctx,
+       const char* name,
        uint32_t core_id,
        Socket* socket,
        const Arch &arch,
@@ -121,6 +122,8 @@ public:
   bool barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid);
 
   bool wspawn(uint32_t num_warps, Word nextPC);
+
+  bool setTmask(uint32_t wid, const ThreadMask& tmask);
 
   uint32_t id() const {
     return core_id_;

@@ -16,20 +16,22 @@
 
 using namespace vortex;
 
-Operands::Operands(const SimContext &ctx, Core* core)
-    : SimObject<Operands>(ctx, "operands")
+Operands::Operands(const SimContext &ctx, const char* name, Core* core)
+    : SimObject<Operands>(ctx, name)
     , Input(this)
     , Output(this)
     , opc_units_(NUM_OPCS) {
   static_assert(NUM_OPCS <= PER_ISSUE_WARPS, "invalid NUM_OPCS value");
+  char sname[100];
   // create OPC units
   for (uint32_t i = 0; i < NUM_OPCS; i++) {
-    opc_units_.at(i) = VOpcUnit::Create(core);
+    snprintf(sname, 100, "%s-opc%d", name, i);
+    opc_units_.at(i) = VOpcUnit::Create(sname, core);
   }
 
   if (NUM_OPCS >= 2) {
     char sname[100];
-    snprintf(sname, 100, "%s-rsp_arb", this->name().c_str());
+    snprintf(sname, 100, "%s-rsp_arb", name);
     rsp_arb_ = TraceArbiter::Create(sname, ArbiterType::RoundRobin, NUM_OPCS, 1);
     for (uint32_t i = 0; i < NUM_OPCS; ++i) {
       opc_units_.at(i)->Output.bind(&rsp_arb_->Inputs.at(i));

@@ -172,7 +172,7 @@ instr_trace_t* Emulator::step() {
 
   int scheduled_warp = -1;
 
-  // process pending wspawn
+  // process pending wspawn when we are down to a single active warp
   if (wspawn_.valid && active_warps_.count() == 1) {
     DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC << std::dec);
     for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
@@ -180,9 +180,11 @@ instr_trace_t* Emulator::step() {
       warp.PC = wspawn_.nextPC;
       warp.tmask.set(0);
       active_warps_.set(i);
+      stalled_warps_.reset(i);
+      DT(3, core_->name() << " warp-state: wid=" << i << ", active=true, stalled=false, tmask=" << warp.tmask);
     }
     wspawn_.valid = false;
-    stalled_warps_.reset(0);
+    this->resume(0);
   }
 
   // find next ready warp
@@ -210,9 +212,9 @@ instr_trace_t* Emulator::step() {
   #ifndef NDEBUG
     {
       // generate unique universal instruction ID
-      uint32_t instr_uuid = warp.uuid++;
+      uint32_t instr_id = warp.uuid++;
       uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
-      uuid = (uint64_t(g_wid) << 32) | instr_uuid;
+      uuid = (uint64_t(g_wid) << 32) | instr_id;
     }
   #endif
 
@@ -285,17 +287,41 @@ void Emulator::suspend(uint32_t wid) {
 
 void Emulator::resume(uint32_t wid) {
   if (wid != 0xffffffff) {
+    assert(active_warps_.test(wid));
     assert(stalled_warps_.test(wid));
     stalled_warps_.reset(wid);
+    DT(3, core_->name() << " warp-state: wid=" << wid << ", stalled=false");
   } else {
-    stalled_warps_.reset();
+    // resume all active warps
+    for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
+      if (active_warps_.test(i)) {
+        assert(stalled_warps_.test(i));
+        stalled_warps_.reset(i);
+        DT(3, core_->name() << " warp-state: wid=" << i << ", stalled=false");
   }
+    }
+  }
+}
+
+bool Emulator::setTmask(uint32_t wid, const ThreadMask& tmask) {
+  auto& warp = warps_.at(wid);
+  if (warp.tmask != tmask) {
+    DT(3, core_->name() << " warp-state: wid=" << wid << ", tmask=" << tmask);
+  }
+  warp.tmask = tmask;
+  // deactivate warp if no active threads
+  if (!tmask.any()) {
+    active_warps_.reset(wid);
+    return false;
+  }
+  return true;
 }
 
 bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
   num_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
   if (num_warps < 2 && active_warps_.count() == 1)
-    return true;
+    return true; // nothing to do
+  // schedule wspawn
   wspawn_.valid = true;
   wspawn_.num_warps = num_warps;
   wspawn_.nextPC = nextPC;
@@ -311,7 +337,6 @@ bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
 
   auto& barrier = barriers_.at(bar_idx);
   barrier.set(wid);
-  DP(3, "*** Suspend core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_idx);
 
   if (is_global) {
     // global barrier handling
@@ -326,10 +351,12 @@ bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
       for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
         if (barrier.test(i)) {
           DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_idx);
-          stalled_warps_.reset(i);
+          this->resume(i);
         }
       }
       barrier.reset();
+    } else {
+      DP(3, "*** Suspend core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_idx);
     }
   }
   return false;
@@ -413,7 +440,7 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid)
                 // Check if this warp's token indicates it should wake up
                 // A warp waiting with token T should wake when generation > T
                 b.waiting_mask.reset(w);
-                stalled_warps_.reset(w);
+                this->resume(w);
             }
         }
     }
@@ -455,22 +482,15 @@ bool Emulator::barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid) {
     }
 
     // Not reached, wait
-
     b.waiting_mask.set(wid);
-    stalled_warps_.set(wid);
-
     return false;
 }
 
 #ifdef VM_ENABLE
 void Emulator::icache_read(void *data, uint64_t addr, uint32_t size) {
-  DP(3, "*** icache_read 0x" << std::hex << addr << ", size = 0x "  << size);
-  try
-  {
+  try {
     mmu_.read(data, addr, size, ACCESS_TYPE::FETCH);
-  }
-  catch (Page_Fault_Exception& page_fault)
-  {
+  } catch (Page_Fault_Exception& page_fault) {
     std::cout<<page_fault.what()<<std::endl;
     throw;
   }
@@ -491,17 +511,13 @@ void Emulator::set_satp(uint64_t satp) {
 
 #ifdef VM_ENABLE
 void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
-  DP(1, "*** dcache_read 0x" << std::hex << addr << ", size = 0x "  << size);
   auto type = get_addr_type(addr);
   if (type == AddrType::Shared) {
     core_->local_mem()->read(data, addr, size);
   } else {
-    try
-    {
+    try {
       mmu_.read(data, addr, size, ACCESS_TYPE::LOAD);
-    }
-    catch (Page_Fault_Exception& page_fault)
-    {
+    } catch (Page_Fault_Exception& page_fault) {
       std::cout<<page_fault.what()<<std::endl;
       throw;
     }
@@ -522,7 +538,6 @@ void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
 
 #ifdef VM_ENABLE
 void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
-  DP(1, "*** dcache_write 0x" << std::hex << addr << ", size = 0x "  << size);
   auto type = get_addr_type(addr);
   if (addr >= uint64_t(IO_COUT_ADDR)
    && addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
@@ -531,13 +546,10 @@ void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
     if (type == AddrType::Shared) {
       core_->local_mem()->write(data, addr, size);
     } else {
-      try
-      {
+      try {
         // mmu_.write(data, addr, size, 0);
         mmu_.write(data, addr, size, ACCESS_TYPE::STORE);
-      }
-      catch (Page_Fault_Exception& page_fault)
-      {
+      } catch (Page_Fault_Exception& page_fault) {
         std::cout<<page_fault.what()<<std::endl;
         throw;
       }
@@ -650,7 +662,7 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   default:
   #ifdef EXT_V_ENABLE
     Word value = 0;
-    if (vec_unit_->get_csr(addr, wid, tid, &value))
+    if (core_->vec_unit()->get_csr(addr, wid, tid, &value))
       return value;
   #endif
     if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
@@ -791,7 +803,7 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
     break;
   default: {
     #ifdef EXT_V_ENABLE
-      if (vec_unit_->set_csr(addr, wid, tid, value))
+      if (core_->vec_unit()->set_csr(addr, wid, tid, value))
         return;
     #endif
       std::cerr << "Error: invalid CSR write addr=0x" << std::hex << addr << ", value=0x" << value << std::dec << std::endl;

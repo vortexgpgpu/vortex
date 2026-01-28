@@ -17,11 +17,12 @@
 using namespace vortex;
 
 Socket::Socket(const SimContext& ctx,
+                const char* name,
                 uint32_t socket_id,
                 Cluster* cluster,
                 const Arch &arch,
                 const DCRS &dcrs)
-  : SimObject(ctx, StrFormat("socket%d", socket_id))
+  : SimObject(ctx, name)
   , mem_req_out(L1_MEM_PORTS, this)
   , mem_rsp_in(L1_MEM_PORTS, this)
   , socket_id_(socket_id)
@@ -31,7 +32,7 @@ Socket::Socket(const SimContext& ctx,
   auto cores_per_socket = cores_.size();
 
   char sname[100];
-  snprintf(sname, 100, "%s-icaches", this->name().c_str());
+  snprintf(sname, 100, "%s-icache", name);
   icaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_ICACHES, CacheSim::Config{
     !ICACHE_ENABLED,
     log2ceil(ICACHE_SIZE),  // C
@@ -48,7 +49,7 @@ Socket::Socket(const SimContext& ctx,
     1,                      // pipeline latency
   });
 
-  snprintf(sname, 100, "%s-dcaches", this->name().c_str());
+  snprintf(sname, 100, "%s-dcache", name);
   dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, CacheSim::Config{
     !DCACHE_ENABLED,
     log2ceil(DCACHE_SIZE),  // C
@@ -70,7 +71,7 @@ Socket::Socket(const SimContext& ctx,
 
   // connect l1 caches to outgoing memory interfaces
   for (uint32_t i = 0; i < L1_MEM_PORTS; ++i) {
-    snprintf(sname, 100, "%s-l1_arb%d", this->name().c_str(), i);
+    snprintf(sname, 100, "%s-l1_arb%d", name, i);
     auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2 * overlap, overlap);
 
     if (i < overlap) {
@@ -98,13 +99,14 @@ Socket::Socket(const SimContext& ctx,
   // create cores
   for (uint32_t i = 0; i < cores_per_socket; ++i) {
     uint32_t core_id = socket_id * cores_per_socket + i;
-    cores_.at(i) = Core::Create(core_id, this, arch, dcrs);
+    snprintf(sname, 100, "%s-core%d", name, i);
+    cores_.at(i) = Core::Create(sname, core_id, this, arch, dcrs);
   }
 
   // connect cores to caches
   for (uint32_t i = 0; i < cores_per_socket; ++i) {
-    cores_.at(i)->icache_req_out.at(0).bind(&icaches_->core_req_in.at(i).at(0));
-    icaches_->core_rsp_out.at(i).at(0).bind(&cores_.at(i)->icache_rsp_in.at(0));
+      cores_.at(i)->icache_req_out.at(0).bind(&icaches_->core_req_in.at(i).at(0));
+      icaches_->core_rsp_out.at(i).at(0).bind(&cores_.at(i)->icache_rsp_in.at(0));
 
     for (uint32_t j = 0; j < DCACHE_NUM_REQS; ++j) {
       cores_.at(i)->dcache_req_out.at(j).bind(&dcaches_->core_req_in.at(i).at(j));

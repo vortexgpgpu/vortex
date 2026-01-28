@@ -87,10 +87,10 @@ module VX_core import VX_gpu_pkg::*; #(
 
     `SCOPE_IO_SWITCH (3);
 
-    VX_schedule #(
-        .INSTANCE_ID (`SFORMATF(("%s-schedule", INSTANCE_ID))),
+    VX_scheduler #(
+        .INSTANCE_ID (`SFORMATF(("%s-scheduler", INSTANCE_ID))),
         .CORE_ID (CORE_ID)
-    ) schedule (
+    ) scheduler (
         .clk            (clk),
         .reset          (reset),
 

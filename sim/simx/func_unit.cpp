@@ -25,7 +25,9 @@
 
 using namespace vortex;
 
-AluUnit::AluUnit(const SimContext& ctx, Core* core) : FuncUnit(ctx, core, "alu-unit") {}
+AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
+	: FuncUnit(ctx, name, core)
+{}
 
 void AluUnit::tick() {
   for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
@@ -58,7 +60,7 @@ void AluUnit::tick() {
 			default:
 				std::abort();
 			}
-			DT(3, this->name() << ": op=" << alu_type << ", " << *trace);
+			DT(3, this->name() << " execute: op=" << alu_type << ", " << *trace);
 		} else if (std::get_if<VoteType>(&trace->op_type)) {
 				delay = 2;
 		} else if (std::get_if<ShflType>(&trace->op_type)) {
@@ -75,7 +77,7 @@ void AluUnit::tick() {
 			default:
 				std::abort();
 			}
-			DT(3, this->name() << ": op=" << br_type << ", " << *trace);
+			DT(3, this->name() << " execute: op=" << br_type << ", " << *trace);
 		} else if (std::get_if<MdvType>(&trace->op_type)) {
 			auto mdv_type = std::get<MdvType>(trace->op_type);
 			switch (mdv_type) {
@@ -94,7 +96,7 @@ void AluUnit::tick() {
 			default:
 				std::abort();
 			}
-			DT(3, this->name() << ": op=" << mdv_type << ", " << *trace);
+			DT(3, this->name() << " execute: op=" << mdv_type << ", " << *trace);
 		} else {
 			std::abort();
 		}
@@ -108,7 +110,9 @@ void AluUnit::tick() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-FpuUnit::FpuUnit(const SimContext& ctx, Core* core) : FuncUnit(ctx, core, "fpu-unit") {}
+FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)
+	: FuncUnit(ctx, name, core)
+{}
 
 void FpuUnit::tick() {
 	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
@@ -153,15 +157,15 @@ void FpuUnit::tick() {
 		default:
 			std::abort();
 		}
-		DT(3,this->name() << ": op=" << fpu_type << ", " << *trace);
+		DT(3,this->name() << " execute: op=" << fpu_type << ", " << *trace);
 		input.pop();
 	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-LsuUnit::LsuUnit(const SimContext& ctx, Core* core)
-	: FuncUnit(ctx, core, "lsu-unit")
+LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
+	: FuncUnit(ctx, name, core)
 	, pending_loads_(0)
 {}
 
@@ -192,7 +196,7 @@ void LsuUnit::tick() {
 		auto& output = Outputs.at(iw);
 		if (output.full())
 			continue; // stall
-		DT(3, this->name() << "-mem-rsp: " << lsu_rsp);
+		DT(3, this->name() << " mem-rsp: " << lsu_rsp);
 		assert(entry.count != 0);
 		entry.count -= lsu_rsp.mask.count(); // track remaining
 		if (entry.count == 0) {
@@ -218,7 +222,7 @@ void LsuUnit::tick() {
 			if (!Outputs.at(iw).try_send(state.fence_trace))
 				continue;
 			state.fence_lock = false;
-			DT(3, this->name() << "-fence-unlock: " << state.fence_trace);
+			DT(3, this->name() << " fence-unlock: " << state.fence_trace);
 		}
 
 		// check input queue
@@ -254,7 +258,7 @@ void LsuUnit::tick() {
 			// schedule fence lock
 			state.fence_trace = trace;
 			state.fence_lock = true;
-			DT(3, this->name() << "-fence-lock: " << *trace);
+			DT(3, this->name() << " fence-lock: " << *trace);
 			// remove input
 			input.pop();
 			continue;
@@ -263,7 +267,7 @@ void LsuUnit::tick() {
 		// check pending queue capacity
 		if (!is_write && state.pending_rd_reqs.full()) {
 			if (!trace->log_once(true)) {
-				DT(4, "*** " << this->name() << "-queue-full: " << *trace);
+				DT(4, this->name() << " queue-full: " << *trace);
 			}
 			continue;
 		} else {
@@ -334,7 +338,7 @@ void LsuUnit::tick() {
 
 			// send memory request
 			core_->lmem_switch_.at(block_idx)->ReqIn.send(lsu_req);
-			DT(3, this->name() << "-mem-req: " << lsu_req);
+			DT(3, this->name() << " mem-req: " << lsu_req);
 
 			// update stats
 			if (is_write) {
@@ -357,8 +361,8 @@ void LsuUnit::tick() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SfuUnit::SfuUnit(const SimContext& ctx, Core* core)
-	: FuncUnit(ctx, core, "sfu-unit")
+SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
+	: FuncUnit(ctx, name, core)
 {}
 
 void SfuUnit::tick() {
@@ -389,6 +393,11 @@ void SfuUnit::tick() {
 			case WctlType::JOIN:
 			case WctlType::PRED:
 				output.send(trace, 2+delay);
+				if (trace->eop) {
+					auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
+					ThreadMask tmask(core_->arch().num_threads(), trace_data->arg1);
+					release_warp = core_->setTmask(trace->wid, tmask);
+				}
 				break;
 			case WctlType::BAR: {
 				output.send(trace, 2+delay);
@@ -410,7 +419,7 @@ void SfuUnit::tick() {
 			default:
 				std::abort();
 			}
-			DT(3, this->name() << ": op=" << wctl_type << ", " << *trace);
+			DT(3, this->name() << " execute: op=" << wctl_type << ", " << *trace);
 		} else if (std::get_if<CsrType>(&trace->op_type)) {
 			auto csr_type = std::get<CsrType>(trace->op_type);
 			switch  (csr_type) {
@@ -422,7 +431,7 @@ void SfuUnit::tick() {
 			default:
 				std::abort();
 			}
-			DT(3, this->name() << ": op=" << csr_type << ", " << *trace);
+			DT(3, this->name() << " execute: op=" << csr_type << ", " << *trace);
 		} else {
 			std::abort();
 		}
@@ -439,8 +448,8 @@ void SfuUnit::tick() {
 
 #ifdef EXT_V_ENABLE
 
-VpuUnit::VpuUnit(const SimContext& ctx, Core* core)
-	: FuncUnit(ctx, core, "vpu-unit")
+VpuUnit::VpuUnit(const SimContext& ctx, const char* name, Core* core)
+	: FuncUnit(ctx, name, core)
 {
 	// bind vector unit
 	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
@@ -458,8 +467,8 @@ void VpuUnit::tick() {
 
 #ifdef EXT_TCU_ENABLE
 
-TcuUnit::TcuUnit(const SimContext& ctx, Core* core)
-	: FuncUnit(ctx, core, "tcu-unit")
+TcuUnit::TcuUnit(const SimContext& ctx, const char* name, Core* core)
+	: FuncUnit(ctx, name, core)
 {
 	// bind tensor unit
 	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {

@@ -920,7 +920,6 @@ def _emit_unresolved_key(lines: List[str], d: Dialect, key: str, raw: Any,
     # SPECIAL CASE: X_ENABLE = "expr: $FLAG"
     if key.endswith("_ENABLE") and isinstance(tree.body, ast.Name):
       flag = tree.body.id
-      # BUG FIX: wrap auto-enable with `ifndef X_DISABLE
       lines.append(f"{d.ifndef()} {disable_guard}")
       lines.append(f"{d.ifndef()} {key}")
       lines.append(f"{d.ifdef()} {flag}")
@@ -943,7 +942,6 @@ def _emit_unresolved_key(lines: List[str], d: Dialect, key: str, raw: Any,
 
     # PURE FLAG BOOLEAN EXPR => emit nested ifdefs
     if _is_pure_flag_test(tree.body):
-      # BUG FIX: if this is X_ENABLE, guard auto-define under X_DISABLE
       if key.endswith("_ENABLE"):
         lines.append(f"{d.ifndef()} {disable_guard}")
         _emit_unresolved_boolean_define(lines, d, key, tree.body, add_blank=False)

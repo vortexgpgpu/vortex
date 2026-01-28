@@ -96,7 +96,7 @@ module VX_commit import VX_gpu_pkg::*; #(
         for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_j
             always @(posedge clk) begin
                 if (commit_if[j * `ISSUE_WIDTH + i].valid && commit_if[j * `ISSUE_WIDTH + i].ready) begin
-                    `TRACE(1, ("%t: %s: wid=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, commit_if[j * `ISSUE_WIDTH + i].data.sid, to_fullPC(commit_if[j * `ISSUE_WIDTH + i].data.PC)))
+                    `TRACE(1, ("%t: %s commit: wid=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, commit_if[j * `ISSUE_WIDTH + i].data.sid, to_fullPC(commit_if[j * `ISSUE_WIDTH + i].data.PC)))
                     VX_trace_pkg::trace_ex_type(1, j);
                     `TRACE(1, (", tmask=%b, wb=%b, wr_xregs=%b, rd=%0d, sop=%b, eop=%b, data=", commit_if[j * `ISSUE_WIDTH + i].data.tmask, commit_if[j * `ISSUE_WIDTH + i].data.wb, commit_if[j * `ISSUE_WIDTH + i].data.wr_xregs, commit_if[j * `ISSUE_WIDTH + i].data.rd, commit_if[j * `ISSUE_WIDTH + i].data.sop, commit_if[j * `ISSUE_WIDTH + i].data.eop))
                     `TRACE_ARRAY1D(1, "0x%0h", commit_if[j * `ISSUE_WIDTH + i].data.data, `SIMD_WIDTH)

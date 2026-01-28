@@ -26,7 +26,7 @@ public:
 	std::vector<SimChannel<instr_trace_t*>> Inputs;
 	std::vector<SimChannel<instr_trace_t*>> Outputs;
 
-	FuncUnit(const SimContext& ctx, Core* core, const char* name)
+	FuncUnit(const SimContext& ctx, const char* name, Core* core)
 		: SimObject<FuncUnit>(ctx, name)
 		, Inputs(ISSUE_WIDTH, this)
 		, Outputs(ISSUE_WIDTH, this)
@@ -47,7 +47,7 @@ protected:
 
 class AluUnit : public FuncUnit {
 public:
-  AluUnit(const SimContext& ctx, Core*);
+  AluUnit(const SimContext& ctx, const char* name, Core*);
 
   void tick() override;
 };
@@ -56,7 +56,7 @@ public:
 
 class FpuUnit : public FuncUnit {
 public:
-  FpuUnit(const SimContext& ctx, Core*);
+  FpuUnit(const SimContext& ctx, const char* name, Core*);
 
   void tick() override;
 };
@@ -65,7 +65,7 @@ public:
 
 class LsuUnit : public FuncUnit {
 public:
-	LsuUnit(const SimContext& ctx, Core*);
+	LsuUnit(const SimContext& ctx, const char* name, Core*);
 	~LsuUnit();
 
 	void reset() override;
@@ -103,7 +103,7 @@ private:
 
 class SfuUnit : public FuncUnit {
 public:
-	SfuUnit(const SimContext& ctx, Core*);
+	SfuUnit(const SimContext& ctx, const char* name, Core*);
 
 	void tick() override;
 };
@@ -114,7 +114,7 @@ public:
 
 class TcuUnit : public FuncUnit {
 public:
-	TcuUnit(const SimContext& ctx, Core*);
+	TcuUnit(const SimContext& ctx, const char* name, Core*);
 
 	void tick() override;
 };
@@ -127,7 +127,7 @@ public:
 
 class VpuUnit : public FuncUnit {
 public:
-	VpuUnit(const SimContext& ctx, Core*);
+	VpuUnit(const SimContext& ctx, const char* name, Core*);
 
 	void tick() override;
 };

@@ -138,7 +138,9 @@ public:
 
   Instr(uint64_t uuid, FUType fu_type = FUType::ALU)
     : uuid_(uuid)
+    , parent_uuid_(uuid)
     , fu_type_(fu_type)
+    , is_uop_(false)
   {}
 
   void setFUType(FUType fu_type) {
@@ -161,6 +163,11 @@ public:
     rsrc_[index] = { type, srcReg};
   }
 
+  void setParentUUID(uint64_t parent_uuid) {
+    parent_uuid_ = parent_uuid;
+    is_uop_ = true;
+  }
+
   FUType getFUType() const { return fu_type_; }
 
   OpType getOpType() const { return op_type_; }
@@ -173,14 +180,22 @@ public:
 
   uint64_t getUUID() const { return uuid_; }
 
+  uint64_t getParentUUID() const { return parent_uuid_; }
+
+  bool is_uop() const {
+    return is_uop_;
+  }
+
 private:
 
   uint64_t uuid_;
+  uint64_t parent_uuid_;
   FUType   fu_type_;
   OpType   op_type_;
   IntrArgs args_;
   RegOpd   rsrc_[MAX_REG_SOURCES];
   RegOpd   rdest_;
+  bool     is_uop_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };

@@ -66,6 +66,7 @@ public:
   std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
   Cluster(const SimContext& ctx,
+          const char* name, 
           uint32_t cluster_id,
           ProcessorImpl* processor,
           const Arch &arch,

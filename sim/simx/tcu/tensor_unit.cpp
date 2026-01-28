@@ -142,7 +142,7 @@ template <>
 struct FMA<vt::mxfp8, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
     constexpr uint8_t sf_a = SCALE_FACTOR_E8M0_A; //TODO: input as parameter
-    constexpr uint8_t sf_b = SCALE_FACTOR_E8M0_B; 
+    constexpr uint8_t sf_b = SCALE_FACTOR_E8M0_B;
     auto xa = rv_mxfp8tof_s(a, sf_a, 0, nullptr);
     auto xb = rv_mxfp8tof_s(b, sf_b, 0, nullptr);
     auto xab= rv_fmul_s(xa, xb, 0, nullptr);
@@ -463,7 +463,7 @@ public:
         std::abort();
       }
       if (simobject_->Outputs.at(iw).try_send(trace, 2 + delay)) {
-        DT(3, simobject_->name() << ": op=" << tcu_type << ", " << *trace);
+        DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
     }
@@ -495,7 +495,7 @@ public:
         auto d_val = fedp(a_row, b_col, c_val);
         rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
 
-        DTH(3, "FEDP: wid=" << wid << ", i=" << i << ", j=" << j << ", m=" << step_m << ", n=" << step_n << ", a_row={" << std::hex);
+        DTH(3, simobject_->name() << " FEDP: wid=" << wid << ", i=" << i << ", j=" << j << ", m=" << step_m << ", n=" << step_n << ", a_row={" << std::hex);
         for (uint32_t q = 0; q < cfg::tcK; ++q) {
           if (q) DTN(3, ", ");
           DTN(3, "0x" << a_row[q].u32);

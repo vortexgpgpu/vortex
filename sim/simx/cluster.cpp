@@ -16,11 +16,12 @@
 using namespace vortex;
 
 Cluster::Cluster(const SimContext& ctx,
+                 const char* name,
                  uint32_t cluster_id,
                  ProcessorImpl* processor,
                  const Arch &arch,
                  const DCRS &dcrs)
-  : SimObject(ctx, StrFormat("cluster%d", cluster_id))
+  : SimObject(ctx, name)
   , mem_req_out(L2_MEM_PORTS, this)
   , mem_rsp_in(L2_MEM_PORTS, this)
   , cluster_id_(cluster_id)
@@ -38,12 +39,13 @@ Cluster::Cluster(const SimContext& ctx,
 
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
     uint32_t socket_id = cluster_id * sockets_per_cluster + i;
-    sockets_.at(i) = Socket::Create(socket_id, this, arch, dcrs);
+    snprintf(sname, 100, "%s-socket%d", name, i);
+    sockets_.at(i) = Socket::Create(sname, socket_id, this, arch, dcrs);
   }
 
   // Create l2cache
 
-  snprintf(sname, 100, "%s-l2cache", this->name().c_str());
+  snprintf(sname, 100, "%s-l2cache", name);
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
     !L2_ENABLED,
     log2ceil(L2_CACHE_SIZE),// C
@@ -133,21 +135,21 @@ void Cluster::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
   uint32_t local_core_id = core_id % cores_per_cluster;
   barrier.set(local_core_id);
 
-  DP(3, "*** Suspend core #" << core_id << " at barrier #" << bar_id);
-
   if (barrier.count() == (size_t)count) {
-      // resume all suspended cores
-      for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
-        for (uint32_t c = 0; c < cores_per_socket; ++c) {
-          uint32_t i = s * cores_per_socket + c;
-          if (barrier.test(i)) {
-            DP(3, "*** Resume core #" << i << " at barrier #" << bar_id);
-            sockets_.at(s)->resume(c);
-          }
+    // resume all suspended cores
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      for (uint32_t c = 0; c < cores_per_socket; ++c) {
+        uint32_t i = s * cores_per_socket + c;
+        if (barrier.test(i)) {
+          DP(3, "*** Resume core #" << i << " at barrier #" << bar_id);
+          sockets_.at(s)->resume(c);
         }
       }
-      barrier.reset();
     }
+    barrier.reset();
+  } else {
+    DP(3, "*** Suspend core #" << core_id << " at barrier #" << bar_id);
+  }
 }
 
 uint32_t Cluster::async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {

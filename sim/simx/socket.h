@@ -36,6 +36,7 @@ public:
   std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
   Socket(const SimContext& ctx,
+         const char* name,
          uint32_t socket_id,
          Cluster* cluster,
          const Arch &arch,

@@ -663,18 +663,18 @@ package VX_gpu_pkg;
         logic                               eop;
     } operands_t;
 
-    // warning: this layout should not be modified without updating VX_lane_dispatch!!!
+    // warning: this layout should not be modified without updating VX_dispatch and VX_lane_dispatch!!!
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
-        logic [INST_ALU_BITS-1:0]           op_type;
-        op_args_t                           op_args;
         logic                               wb;
         logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
+        logic [INST_OP_BITS-1:0]            op_type;
+        op_args_t                           op_args;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs3_data;

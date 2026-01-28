@@ -67,7 +67,7 @@ void MemCoalescer::tick() {
 
     // send memory response
     if (RspOut.try_send(out_rsp, 1)) {
-      DT(4, this->name() << "-mem-rsp: " << rsp_in);
+      DT(4, this->name() << " mem-rsp: " << rsp_in);
 
       // track remaining responses
       assert(!entry.mask.none());
@@ -94,7 +94,7 @@ void MemCoalescer::tick() {
 
   // ensure we can allocate a response tag
   if (pending_rd_reqs_.full()) {
-    DT(4, "*** " << this->name() << "-queue-full: " << in_req);
+    DT(4, this->name() << " queue-full: " << in_req);
     return;
   }
 
@@ -150,7 +150,7 @@ void MemCoalescer::tick() {
 
   // send memory request
   ReqOut.send(out_req, delay_);
-  DT(4, this->name() << "-mem-req: coalesced=" << cur_mask.count() << ", " << out_req);
+  DT(4, this->name() << " mem-req: coalesced=" << cur_mask.count() << ", " << out_req);
 
   // track partial responses
   perf_stats_.misses += (cur_mask.count() != in_req.mask.count());

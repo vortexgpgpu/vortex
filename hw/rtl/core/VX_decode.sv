@@ -604,7 +604,7 @@ module VX_decode import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
-            `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, to_fullPC(decode_if.data.PC)))
+            `TRACE(1, ("%t: %s decode: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, to_fullPC(decode_if.data.PC)))
             VX_trace_pkg::trace_ex_type(1, decode_if.data.ex_type);
             `TRACE(1, (", op="))
             VX_trace_pkg::trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);

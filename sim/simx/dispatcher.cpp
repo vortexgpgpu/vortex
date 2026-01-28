@@ -16,8 +16,8 @@
 
 using namespace vortex;
 
-Dispatcher::Dispatcher(const SimContext& ctx, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes)
-  : SimObject<Dispatcher>(ctx, "dispatcher")
+Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes)
+  : SimObject<Dispatcher>(ctx, name)
   , Inputs(ISSUE_WIDTH, this)
   , Outputs(ISSUE_WIDTH, this)
   , arch_(core->arch())
@@ -102,7 +102,7 @@ void Dispatcher::tick() {
       input.pop();
       ++block_sent;
     }
-    DT(3, "pipeline-dispatch: " << *new_trace);
+    DT(3, this->name() << "-pipeline dispatch: " << *new_trace);
     output.send(new_trace, 1);
   }
 

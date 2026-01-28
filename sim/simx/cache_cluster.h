@@ -66,7 +66,7 @@ public:
 
 		// Connect caches
 		for (uint32_t i = 0; i < num_units; ++i) {
-			snprintf(sname, 100, "%s-cache%d", name, i);
+			snprintf(sname, 100, "%s%d", name, i);
 			caches_.at(i) = CacheSim::Create(sname, cache_config2);
 
 			for (uint32_t j = 0; j < cache_config.num_inputs; ++j) {

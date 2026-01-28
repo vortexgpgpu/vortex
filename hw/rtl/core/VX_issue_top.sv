@@ -53,7 +53,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     output wire [SIMD_IDX_W-1:0]            dispatch_sid[NUM_EX_UNITS * `ISSUE_WIDTH],
     output wire [`SIMD_WIDTH-1:0]           dispatch_tmask[NUM_EX_UNITS * `ISSUE_WIDTH],
     output wire [PC_BITS-1:0]               dispatch_PC[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [INST_ALU_BITS-1:0]         dispatch_op_type[NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [INST_OP_BITS-1:0]          dispatch_op_type[NUM_EX_UNITS * `ISSUE_WIDTH],
     output op_args_t                        dispatch_op_args[NUM_EX_UNITS * `ISSUE_WIDTH],
     output wire                             dispatch_wb[NUM_EX_UNITS * `ISSUE_WIDTH],
     output wire [NUM_REGS_BITS-1:0]         dispatch_rd[NUM_EX_UNITS * `ISSUE_WIDTH],

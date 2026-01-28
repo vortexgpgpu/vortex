@@ -30,7 +30,6 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     // outputs
     VX_ibuffer_if.master ibuffer_if [PER_ISSUE_WARPS]
 );
-    `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (ISSUE_ID)
 
     localparam OUT_DATAW = $bits(ibuffer_t);
@@ -75,7 +74,10 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
         assign decode_if.ibuf_pop[w] = uop_sequencer_if.valid && uop_sequencer_if.ready;
     `endif
 
-        VX_uop_sequencer uop_sequencer (
+        VX_uop_sequencer #(
+            .INSTANCE_ID (`SFORMATF(("%s-uop", INSTANCE_ID))),
+            .WARP_ID  (w)
+        ) uop_sequencer (
             .clk       (clk),
             .reset     (reset),
             .input_if  (uop_sequencer_if),

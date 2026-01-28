@@ -36,14 +36,14 @@ void LocalMemSwitch::tick() {
   if (!RspInLmem.empty()) {
     auto& out_rsp = RspInLmem.peek();
     if (RspOut.try_send(out_rsp, 1)) {
-      DT(4, this->name() << "-lmem-rsp: " << out_rsp);
+      DT(4, this->name() << " lmem-rsp: " << out_rsp);
       RspInLmem.pop();
     }
   }
   if (!RspInDC.empty()) {
     auto& out_rsp = RspInDC.peek();
     if (RspOut.try_send(out_rsp, 1)) {
-      DT(4, this->name() << "-dc-rsp: " << out_rsp);
+      DT(4, this->name() << " dc-rsp: " << out_rsp);
       RspInDC.pop();
     }
   }
@@ -86,12 +86,12 @@ void LocalMemSwitch::tick() {
 
     if (send_to_dc) {
       ReqOutDC.send(out_dc_req, delay_);
-      DT(4, this->name() << "-dc-req: " << out_dc_req);
+      DT(4, this->name() << " dc-req: " << out_dc_req);
     }
 
     if (send_to_lmem) {
       ReqOutLmem.send(out_lmem_req, delay_);
-      DT(4, this->name() << "-lmem-req: " << out_lmem_req);
+      DT(4, this->name() << " lmem-req: " << out_lmem_req);
     }
     ReqIn.pop();
   }
@@ -199,7 +199,7 @@ void LsuMemAdapter::tick() {
       out_req.uuid  = in_req.uuid;
 
       if (ReqOut.at(i).try_send(out_req, delay_)) {
-        DT(4, this->name() << "-req" << i << ": " << out_req);
+        DT(4, this->name() << " req" << i << ": " << out_req);
         pending_mask_.reset(i); // mark lane done
       }
     }

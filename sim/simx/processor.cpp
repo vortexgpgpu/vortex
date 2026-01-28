@@ -53,9 +53,12 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     MEM_CLOCK_RATIO
   });
 
+  char sname[100];
+
   // create clusters
   for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
-    clusters_.at(i) = Cluster::Create(i, this, arch, dcrs_);
+    snprintf(sname, 100, "cluster%d", i);
+    clusters_.at(i) = Cluster::Create(sname, i, this, arch, dcrs_);
   }
 
   // create L3 cache

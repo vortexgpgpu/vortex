@@ -26,12 +26,13 @@
 using namespace vortex;
 
 Core::Core(const SimContext& ctx,
+           const char* name,
            uint32_t core_id,
            Socket* socket,
            const Arch &arch,
            const DCRS &dcrs
            )
-  : SimObject(ctx, StrFormat("core%d", core_id))
+  : SimObject(ctx, name)
   , icache_req_out(1, this)
   , icache_rsp_in(1, this)
   , dcache_req_out(DCACHE_NUM_REQS, this)
@@ -39,12 +40,6 @@ Core::Core(const SimContext& ctx,
   , core_id_(core_id)
   , socket_(socket)
   , arch_(arch)
-#ifdef EXT_TCU_ENABLE
-  , tensor_unit_(TensorUnit::Create("tcu", arch, this))
-#endif
-#ifdef EXT_V_ENABLE
-  , vec_unit_(VecUnit::Create("vpu", arch, this))
-#endif
   , emulator_(arch, dcrs, this)
   , ibuffers_(arch.num_warps())
   , scoreboard_(arch_)
@@ -61,25 +56,35 @@ Core::Core(const SimContext& ctx,
 {
   char sname[100];
 
+#ifdef EXT_TCU_ENABLE
+  snprintf(sname, 100, "%s-tcu", name);
+  tensor_unit_ = TensorUnit::Create(sname, arch, this);
+#endif
+#ifdef EXT_V_ENABLE
+  snprintf(sname, 100, "%s-vpu", name);
+  vec_unit_ = VecUnit::Create(sname, arch, this);
+#endif
+
   // create operands
   for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-    operands_.at(iw) = Operands::Create(this);
+    snprintf(sname, 100, "%s-operand%d", name, iw);
+    operands_.at(iw) = Operands::Create(sname, this);
   }
 
   // create ibuffers
   for (uint32_t i = 0; i < ibuffers_.size(); ++i) {
-    snprintf(sname, 100, "%s-ibuffer%d", this->name().c_str(), i);
+    snprintf(sname, 100, "%s-ibuffer%d", name, i);
     ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, IBUF_SIZE);
   }
 
   // create the memory coalescer
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    snprintf(sname, 100, "%s-coalescer%d", this->name().c_str(), b);
+    snprintf(sname, 100, "%s-coalescer%d", name, b);
     mem_coalescers_.at(b) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSUQ_OUT_SIZE, 1);
   }
 
   // create local memory
-  snprintf(sname, 100, "%s-lmem", this->name().c_str());
+  snprintf(sname, 100, "%s-lmem", name);
   local_mem_ = LocalMem::Create(sname, LocalMem::Config{
     (1 << LMEM_LOG_SIZE),
     LSU_WORD_SIZE,
@@ -90,23 +95,23 @@ Core::Core(const SimContext& ctx,
 
   // create lmem switch
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    snprintf(sname, 100, "%s-lmem_switch%d", this->name().c_str(), b);
+    snprintf(sname, 100, "%s-lmem_switch%d", name, b);
     lmem_switch_.at(b) = LocalMemSwitch::Create(sname, 1);
   }
 
   // create dcache adapter
   std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(NUM_LSU_BLOCKS);
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    snprintf(sname, 100, "%s-lsu_dcache_adapter%d", this->name().c_str(), b);
+    snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name, b);
     lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
   }
 
   // create lmem arbiter
-  snprintf(sname, 100, "%s-lmem_arb", this->name().c_str());
+  snprintf(sname, 100, "%s-lmem_arb", name);
   auto lmem_arb = LsuArbiter::Create(sname, ArbiterType::RoundRobin, NUM_LSU_BLOCKS, 1);
 
   // create lmem adapter
-  snprintf(sname, 100, "%s-lsu_lmem_adapter", this->name().c_str());
+  snprintf(sname, 100, "%s-lsu_lmem_adapter", name);
   auto lsu_lmem_adapter = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
 
   // connect lmem switch
@@ -152,32 +157,38 @@ Core::Core(const SimContext& ctx,
   }
 
   // initialize dispatchers
-  dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_ALU_BLOCKS, NUM_ALU_LANES);
-  dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_FPU_BLOCKS, NUM_FPU_LANES);
-  dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_LSU_BLOCKS, NUM_LSU_LANES);
-  dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
+  dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_ALU_BLOCKS, NUM_ALU_LANES);
+  dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_FPU_BLOCKS, NUM_FPU_LANES);
+  dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_LSU_BLOCKS, NUM_LSU_LANES);
+  dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
 #ifdef EXT_V_ENABLE
-  dispatchers_.at((int)FUType::VPU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_VPU_BLOCKS, NUM_VPU_LANES);
+  dispatchers_.at((int)FUType::VPU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_VPU_BLOCKS, NUM_VPU_LANES);
 #endif
 #ifdef EXT_TCU_ENABLE
-  dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_TCU_BLOCKS, NUM_TCU_LANES);
+  dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_TCU_BLOCKS, NUM_TCU_LANES);
 #endif
 
   // initialize execute units
-  func_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
-  func_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);
-  func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(this);
-  func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(this);
+  snprintf(sname, 100, "%s-alu", name);
+  func_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(sname, this);
+  snprintf(sname, 100, "%s-fpu", name);
+  func_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(sname, this);
+  snprintf(sname, 100, "%s-lsu", name);
+  func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(sname, this);
+  snprintf(sname, 100, "%s-sfu", name);
+  func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(sname, this);
 #ifdef EXT_V_ENABLE
-  func_units_.at((int)FUType::VPU) = SimPlatform::instance().create_object<VpuUnit>(this);
+  snprintf(sname, 100, "%s-vpu", name);
+  func_units_.at((int)FUType::VPU) = SimPlatform::instance().create_object<VpuUnit>(sname, this);
 #endif
 #ifdef EXT_TCU_ENABLE
-  func_units_.at((int)FUType::TCU) = SimPlatform::instance().create_object<TcuUnit>(this);
+  snprintf(sname, 100, "%s-tcu", name);
+  func_units_.at((int)FUType::TCU) = SimPlatform::instance().create_object<TcuUnit>(sname, this);
 #endif
 
   // bind commit arbiters
   for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-    snprintf(sname, 100, "%s-commit-arb%d", this->name().c_str(), iw);
+    snprintf(sname, 100, "%s-commit-arb%d", name, iw);
     auto arbiter = TraceArbiter::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
     for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
       func_units_.at(fu)->Outputs.at(iw).bind(&arbiter->Inputs.at(fu));
@@ -198,18 +209,7 @@ void Core::reset() {
 
   trace_to_schedule_ = nullptr;
 
-  for (auto& commit_arb : commit_arbs_) {
-    commit_arb->reset();
-  }
-
-  for (auto& ibuffer : ibuffers_) {
-    ibuffer->reset();
-  }
-
   scoreboard_.reset();
-  fetch_latch_.reset();
-  decode_latch_.reset();
-  pending_icache_.clear();
 
   for (auto& arb : ibuffer_arbs_) {
     arb.reset();
@@ -251,7 +251,7 @@ void Core::schedule() {
 
   // advance to fetch stage
   if (fetch_latch_.try_push(trace)) {
-    DT(3, "pipeline-schedule: " << *trace);
+    DT(3, this->name() << "-pipeline schedule: " << *trace);
     // suspend warp until decode
     emulator_.suspend(trace->wid);
     // clear schedule trace
@@ -273,7 +273,7 @@ void Core::fetch() {
     auto& mem_rsp = icache_rsp.peek();
     auto trace = pending_icache_.at(mem_rsp.tag);
     if (decode_latch_.try_push(trace)) {
-      DT(3, "icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
+      DT(3, this->name() << " icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
       pending_icache_.release(mem_rsp.tag);
       icache_rsp.pop();
       --pending_ifetches_;
@@ -299,7 +299,7 @@ void Core::fetch() {
   mem_req.cid   = trace->cid;
   mem_req.uuid  = trace->uuid;
   if (this->icache_req_out.at(0).try_send(mem_req)) {
-    DT(3, "icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
+    DT(3, this->name() << " icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
     fetch_latch_.pop();
     ++perf_stats_.ifetches;
     ++pending_ifetches_;
@@ -319,7 +319,7 @@ void Core::decode() {
   auto& ibuffer = ibuffers_.at(trace->wid);
   if (ibuffer->full()) {
     if (!trace->log_once(true)) {
-      DT(4, "*** ibuffer-stall: " << *trace);
+      DT(4, this->name() << " ibuffer-stall: " << *trace);
     }
     ++perf_stats_.ibuf_stalls;
     return;
@@ -332,7 +332,7 @@ void Core::decode() {
     emulator_.resume(trace->wid);
   }
 
-  DT(3, "pipeline-decode: " << *trace);
+  DT(3, this->name() << "-pipeline decode: " << *trace);
 
   // insert to ibuffer
   ibuffer->push(trace);
@@ -391,7 +391,7 @@ void Core::issue() {
       auto trace = ibuffer->peek();
       // to operand stage
       if (operands_.at(iw)->Input.try_send(trace)) {
-        DT(3, "pipeline-ibuffer: " << *trace);
+        DT(3, this->name() << "-pipeline ibuffer: " << *trace);
         if (trace->wb) {
           // update scoreboard
           scoreboard_.reserve(trace);
@@ -446,7 +446,7 @@ void Core::commit() {
     auto trace = commit_arb->Outputs.at(0).peek().data;
 
     // advance to commit stage
-    DT(3, "pipeline-commit: " << *trace);
+    DT(3, this->name() << "-pipeline commit: " << *trace);
     assert(trace->cid == core_id_);
 
     // update scoreboard
@@ -519,6 +519,10 @@ bool Core::barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid) {
 
 bool Core::wspawn(uint32_t num_warps, Word nextPC) {
   return emulator_.wspawn(num_warps, nextPC);
+}
+
+bool Core::setTmask(uint32_t wid, const ThreadMask& tmask) {
+  return emulator_.setTmask(wid, tmask);
 }
 
 void Core::attach_ram(RAM* ram) {

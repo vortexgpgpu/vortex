@@ -64,7 +64,7 @@ void Emulator::fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint3
         DPN(2, "-");
         continue;
       }
-      DPN(2, vec_unit_->dumpRegister(wid, t, reg.idx));
+      DPN(2, core_->vec_unit()->dumpRegister(wid, t, reg.idx));
     }
     DPN(2, "}" << std::endl);
 #endif
@@ -114,7 +114,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   assert(warp.tmask.any());
 
   auto next_pc = warp.PC + 4;
-  auto next_tmask = warp.tmask;
 
   auto fu_type = instr.getFUType();
   auto op_type = instr.getOpType();
@@ -143,8 +142,13 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   std::vector<reg_data_t> rs2_data;
   std::vector<reg_data_t> rs3_data;
 
+  if (instr.is_uop()) {
+    DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
+          << ", PC=0x" << std::hex << warp.PC << std::dec << ", parent=#" << instr.getParentUUID() << " (#" << instr.getUUID() << ")");
+  } else {
   DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
          << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << instr.getUUID() << ")");
+  }
 
   // fetch register values
   if (rsrc0.type != RegType::None) fetch_registers(rs1_data, wid, 0, rsrc0);
@@ -1392,10 +1396,11 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       switch (wctl_type) {
       case WctlType::TMC: {
         trace->fetch_stall = true;
-        next_tmask.reset();
+        ThreadMask next_tmask(num_threads);
         for (uint32_t t = 0; t < num_threads; ++t) {
           next_tmask.set(t, rs1_data.at(thread_last).u & (1 << t));
         }
+        trace->data = std::make_shared<SfuTraceData>(next_tmask.to_ulong(), 0);
       } break;
       case WctlType::WSPAWN: {
         trace->fetch_stall = true;
@@ -1414,6 +1419,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           else_tmask[t] = warp.tmask.test(t) && !cond;
         }
 
+        ThreadMask next_tmask = warp.tmask;
         bool is_divergent = then_tmask.any() && else_tmask.any();
         if (is_divergent) {
           if (stack_size == ipdom_size_) {
@@ -1435,12 +1441,14 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           rd_data[t].i = stack_size;
         }
+        trace->data = std::make_shared<SfuTraceData>(next_tmask.to_ulong(), 0);
         rd_write = true;
       } break;
       case WctlType::JOIN: {
         trace->fetch_stall = true;
         auto stack_ptr = rs1_data.at(thread_last).u;
         auto stack_size = warp.ipdom_stack.size();
+        ThreadMask next_tmask = warp.tmask;
         if (stack_ptr != stack_size) {
           if (warp.ipdom_stack.empty()) {
             std::cout << "IPDOM stack is empty!\n" << std::flush;
@@ -1455,6 +1463,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             warp.ipdom_stack.top().fallthrough = true;
           }
         }
+        trace->data = std::make_shared<SfuTraceData>(next_tmask.to_ulong(), 0);
       } break;
       case WctlType::BAR: {
         trace->fetch_stall = true;
@@ -1485,11 +1494,13 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           auto cond = (rs1_data.at(t).i & 0x1) ^ not_pred;
           pred[t] = warp.tmask.test(t) && cond;
         }
+        ThreadMask next_tmask = warp.tmask;
         if (pred.any()) {
           next_tmask &= pred;
         } else {
           next_tmask = ThreadMask(num_threads, rs2_data.at(thread_last).u);
         }
+        trace->data = std::make_shared<SfuTraceData>(next_tmask.to_ulong(), 0);
       } break;
       default:
         std::abort();
@@ -1502,7 +1513,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!warp.tmask.test(t))
           continue;
-        vec_unit_->configure(instr, wid, t, rs1_data, rs2_data, rd_data, trace_data.get());
+        core_->vec_unit()->configure(instr, wid, t, rs1_data, rs2_data, rd_data, trace_data.get());
       }
       rd_write = true;
     },
@@ -1516,7 +1527,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;
-          vec_unit_->load(instr, wid, t, rs1_data, rs2_data, trace_data.get());
+          core_->vec_unit()->load(instr, wid, t, rs1_data, rs2_data, trace_data.get());
         }
         rd_write = true;
       } break;
@@ -1528,7 +1539,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;
-          vec_unit_->store(instr, wid, t, rs1_data, rs2_data, trace_data.get());
+          core_->vec_unit()->store(instr, wid, t, rs1_data, rs2_data, trace_data.get());
         }
       } break;
       default:
@@ -1541,7 +1552,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!warp.tmask.test(t))
           continue;
-        vec_unit_->execute(instr, wid, t, rs1_data, rd_data, trace_data.get());
+        core_->vec_unit()->execute(instr, wid, t, rs1_data, rd_data, trace_data.get());
       }
       rd_write = true;
     }
@@ -1554,7 +1565,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
         assert(warp.tmask.count() == num_threads);
-        tensor_unit_->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
+        core_->tensor_unit()->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
         rd_write = true;
       } break;
       default:
@@ -1613,7 +1624,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           DPN(2, "-");
           continue;
         }
-        DPN(2, vec_unit_->dumpRegister(wid, t, rdest.idx));
+        DPN(2, core_->vec_unit()->dumpRegister(wid, t, rdest.idx));
       }
       DPN(2, "}" << std::endl);
       break;
@@ -1630,16 +1641,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   if (warp.PC != next_pc) {
     DP(3, "*** Next PC=0x" << std::hex << next_pc << std::dec);
     warp.PC = next_pc;
-  }
-
-  if (warp.tmask != next_tmask) {
-    DP(3, "*** New Tmask=" << next_tmask);
-    warp.tmask = next_tmask;
-    if (!next_tmask.any()) {
-      last_inactive_warp_pc_ = warp.PC;
-      last_inactive_warp_pc_valid_ = true;
-      active_warps_.reset(wid);
-    }
   }
 
   DP(5, "Register state:");

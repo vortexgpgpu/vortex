@@ -45,7 +45,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_pred   = (execute_if.data.op_type == INST_SFU_PRED);
     wire is_split  = (execute_if.data.op_type == INST_SFU_SPLIT);
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
-    // async 
+    // async
     wire is_bar_arrive = (execute_if.data.op_type == INST_SFU_ARRIVE);
     wire is_bar_wait   = (execute_if.data.op_type == INST_SFU_WAIT);
     wire is_bar_sync   = (execute_if.data.op_type == INST_SFU_BARRIER);
@@ -164,6 +164,24 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign warp_ctl_if.dvstack_wid = execute_if.data.header.wid;
     assign warp_ctl_if.barrier_id_rd = rs1_data[NB_WIDTH-1:0]; // barrier ID for token lookup
 
+    // Send WCTL request
+
+    wire execute_fire = execute_if.valid && execute_if.ready;
+    wire wctl_valid = execute_fire && execute_if.data.header.eop;
+
+    VX_pipe_register #(
+        .DATAW (1 + NW_WIDTH + WCTL_WIDTH),
+        .RESETW (1)
+    ) wctl_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({wctl_valid,        execute_if.data.header.wid, tmc,             wspawn,             split,             sjoin,             barrier}),
+        .data_out ({warp_ctl_if.valid, warp_ctl_if.wid,            warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.sjoin, warp_ctl_if.barrier})
+    );
+
+    // Send result
+
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
     wire [`XLEN-1:0] arrive_token_out;
     wire is_bar_arrive_out;
@@ -182,21 +200,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .ready_out (result_if.ready)
     );
 
-    wire execute_fire = execute_if.valid && execute_if.ready;
-    wire wctl_valid = execute_fire && execute_if.data.header.eop;
-
-    VX_pipe_register #(
-        .DATAW (1 + NW_WIDTH + WCTL_WIDTH),
-        .RESETW (1)
-    ) wctl_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (1'b1),
-        .data_in  ({wctl_valid,        execute_if.data.header.wid, tmc,             wspawn,             split,             sjoin,             barrier}),
-        .data_out ({warp_ctl_if.valid, warp_ctl_if.wid,            warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.sjoin, warp_ctl_if.barrier})
-    );
-
-    // Result data: for BAR_ARRIVE return token, otherwise return dvstack_ptr
+    // Result data
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result_if
         assign result_if.data.data[i] = is_bar_arrive_out ? `XLEN'(arrive_token_out) : `XLEN'(dvstack_ptr);
     end

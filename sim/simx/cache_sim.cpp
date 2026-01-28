@@ -399,7 +399,6 @@ public:
       set.reset();
     }
     mshr_.reset();
-    pipe_req_->reset();
   }
 
   void tick() {
@@ -442,7 +441,7 @@ private:
       ++inflight_fills_;
       this->mem_rsp_in.pop();
       --pending_fill_reqs_;
-      DT(3, this->name() << "-fill-rsp: " << mem_rsp);
+      DT(3, this->name() << " fill-rsp: " << mem_rsp);
       return;
     }
 
@@ -464,7 +463,7 @@ private:
       bank_req.req_tag = core_req.tag;
       bank_req.write = core_req.write;
       pipe_req_->push(bank_req);
-      DT(3, this->name() << "-core-req: " << core_req);
+      DT(3, this->name() << " core-req: " << core_req);
       ++pending_mshr_size_;
       if (core_req.write)
         ++perf_stats_.writes;
@@ -508,7 +507,7 @@ private:
         mem_req.cid = root_entry.bank_req.cid;
         mem_req.uuid = root_entry.bank_req.uuid;
         this->mem_req_out.send(mem_req);
-        DT(3, this->name() << "-writeback: " << mem_req);
+        DT(3, this->name() << " writeback: " << mem_req);
         ++perf_stats_.evictions;
       }
 
@@ -542,7 +541,7 @@ private:
       if (need_core_rsp(bank_req)) {
         MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
         this->core_rsp_out.send(core_rsp);
-        DT(3, this->name() << "-replay: " << core_rsp);
+        DT(3, this->name() << " replay: " << core_rsp);
       }
     } break;
 
@@ -572,7 +571,7 @@ private:
             mem_req.cid = bank_req.cid;
             mem_req.uuid = bank_req.uuid;
             this->mem_req_out.send(mem_req);
-            DT(3, this->name() << "-writethrough: " << mem_req);
+            DT(3, this->name() << " writethrough: " << mem_req);
           } else {
             // Write-back: mark dirty.
             hit_line.dirty = true;
@@ -585,7 +584,7 @@ private:
             return; // stall
           MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
           this->core_rsp_out.send(core_rsp);
-          DT(3, this->name() << "-core-rsp: " << core_rsp);
+          DT(3, this->name() << " core-rsp: " << core_rsp);
         }
       } else {
         //
@@ -606,13 +605,13 @@ private:
             mem_req.cid = bank_req.cid;
             mem_req.uuid = bank_req.uuid;
             this->mem_req_out.send(mem_req);
-            DT(3, this->name() << "-writethrough: " << mem_req);
+            DT(3, this->name() << " writethrough: " << mem_req);
           }
 
           if (need_core_rsp(bank_req)) {
             MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
             this->core_rsp_out.send(core_rsp);
-            DT(3, this->name() << "-core-rsp: " << core_rsp);
+            DT(3, this->name() << " core-rsp: " << core_rsp);
           }
         } else {
           // MSHR-backed miss (read miss, or write-back write miss).
@@ -626,7 +625,7 @@ private:
           // Allocate an MSHR entry for this request.
           assert(!mshr_.full());
           int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag);
-          DT(3, this->name() << "-mshr-enqueue: " << bank_req);
+          DT(3, this->name() << " mshr-enqueue: " << bank_req);
 
           if (!mshr_pending) {
             MemReq mem_req;
@@ -636,7 +635,7 @@ private:
             mem_req.cid = bank_req.cid;
             mem_req.uuid = bank_req.uuid;
             this->mem_req_out.send(mem_req);
-            DT(3, this->name() << "-fill-req: " << mem_req);
+            DT(3, this->name() << " fill-req: " << mem_req);
             ++pending_fill_reqs_;
           }
         }
@@ -766,7 +765,7 @@ public:
     // wait on cache initialization cycles
     if (init_cycles_ != 0) {
       --init_cycles_;
-      DT(3, simobject_->name() << "-init: line=" << init_cycles_);
+      DT(3, simobject_->name() << " init: line=" << init_cycles_);
       return;
     }
 
@@ -789,7 +788,7 @@ public:
         continue;
       auto &core_rsp = bank_rsp.peek();
       if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, 0)) {
-        DT(3, simobject_->name() << "-core-rsp: " << core_rsp);
+        DT(3, simobject_->name() << " core-rsp: " << core_rsp);
         bank_rsp.pop();
       }
     }
@@ -833,7 +832,7 @@ private:
     uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
     MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
     simobject_->core_rsp_out.at(req_id).send(core_rsp, 0);
-    DT(3, simobject_->name() << "-bypass-core-rsp: " << core_rsp);
+    DT(3, simobject_->name() << " bypass-core-rsp: " << core_rsp);
     return true;
   }
 
@@ -845,7 +844,7 @@ private:
     MemReq mem_req(core_req);
     mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
     nc_mem_arbs_.at(mem)->ReqIn.at(1).send(mem_req, 0);
-    DT(3, simobject_->name() << "-bypass-dram-req: " << mem_req);
+    DT(3, simobject_->name() << " bypass-dram-req: " << mem_req);
     return true;
   }
 

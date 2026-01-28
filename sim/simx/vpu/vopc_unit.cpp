@@ -16,8 +16,8 @@
 
 using namespace vortex;
 
-VOpcUnit::VOpcUnit(const SimContext &ctx, Core* core)
-  : SimObject<VOpcUnit>(ctx, "vopc-unit")
+VOpcUnit::VOpcUnit(const SimContext &ctx, const char* name, Core* core)
+  : SimObject<VOpcUnit>(ctx, name)
   , Input(this)
   , Output(this)
   , core_(core) {
@@ -80,7 +80,7 @@ void VOpcUnit::tick() {
 
   this->Output.send(trace, 2 + stalls);
 
-  DT(3, "pipeline-operands: " << *trace);
+  DT(3, this->name() << "-pipeline operands: " << *trace);
 
   Input.pop();
 }

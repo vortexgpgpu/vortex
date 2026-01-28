@@ -108,6 +108,8 @@ public:
 
   bool wspawn(uint32_t num_warps, Word nextPC);
 
+  bool setTmask(uint32_t wid, const ThreadMask& tmask);
+
   int get_exitcode() const;
 
   void dcache_read(void* data, uint64_t addr, uint32_t size);
@@ -239,6 +241,7 @@ std::vector<AsyncBarrier> async_barriers_;
   VecUnit::Ptr vec_unit_;
 #endif
 
+  std::vector<AsyncBarrier> async_barriers_;
   PoolAllocator<Instr, 64> instr_pool_;
 };
 

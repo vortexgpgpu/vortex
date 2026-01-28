@@ -16,8 +16,8 @@
 
 using namespace vortex;
 
-OpcUnit::OpcUnit(const SimContext &ctx)
-  : SimObject<OpcUnit>(ctx, "opc-unit")
+OpcUnit::OpcUnit(const SimContext &ctx, const char* name)
+  : SimObject<OpcUnit>(ctx, name)
   , Input(this)
   , Output(this) {
   this->reset();
@@ -56,7 +56,7 @@ void OpcUnit::tick() {
   total_stalls_ += stalls;
 
   if (Output.try_send(trace, 2 + stalls)) {
-    DT(3, "pipeline-operands: " << *trace);
+    DT(3, this->name() << "-pipeline operands: " << *trace);
     Input.pop();
   }
 }

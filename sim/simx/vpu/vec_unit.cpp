@@ -90,7 +90,7 @@ public:
       }
 
       if (simobject_->Outputs.at(iw).try_send(trace, 2 + delay)) {
-        DT(3, simobject_->name() << ": op=" << vpu_op << ", " << *trace);
+        DT(3, simobject_->name() << " execute: op=" << vpu_op << ", " << *trace);
         input.pop();
       }
     }
@@ -1802,7 +1802,11 @@ VecUnit::VecUnit(const SimContext &ctx,
                  const char *name,
                  const Arch &arch,
                  Core *core)
-    : SimObject<VecUnit>(ctx, name), Inputs(ISSUE_WIDTH, this), Outputs(ISSUE_WIDTH, this), impl_(new Impl(this, arch, core)) {}
+  : SimObject<VecUnit>(ctx, name)
+  , Inputs(ISSUE_WIDTH, this)
+  , Outputs(ISSUE_WIDTH, this)
+  , impl_(new Impl(this, arch, core))
+{}
 
 VecUnit::~VecUnit() {
   delete impl_;

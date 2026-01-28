@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_schedule import VX_gpu_pkg::*; #(
+module VX_scheduler import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0
 ) (
@@ -120,7 +120,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         : '0;
 `endif
 
-    always @(*) begin
+     always @(*) begin
         active_warps_n  = active_warps;
         stalled_warps_n = stalled_warps;
         thread_masks_n  = thread_masks;
@@ -487,7 +487,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
     end
 
-    `RUNTIME_ASSERT(timeout_ctr < STALL_TIMEOUT, ("*** %s timeout: active_warps=%b stalled_warps=%b pc0=0x%0h", INSTANCE_ID, active_warps, stalled_warps, to_fullPC(warp_pcs[0])))
+    `RUNTIME_ASSERT(timeout_ctr < STALL_TIMEOUT, ("*** %s timeout: active_warps=%b, stalled_warps=%b", INSTANCE_ID, active_warps, stalled_warps))
 
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] perf_sched_idles;
@@ -540,9 +540,21 @@ module VX_schedule import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef DBG_TRACE_PIPELINE
+    for (genvar w = 0; w < `NUM_WARPS; ++w) begin : g_trace_warp_status
+        always @(posedge clk) begin
+            if (active_warps_n[w] != active_warps[w]
+             || (active_warps[w] && (stalled_warps_n[w] != stalled_warps[w]
+                                  || thread_masks_n[w] != thread_masks[w]))) begin
+                `TRACE(1, ("%t: %s warp-state: wid=%0d, active=%b, stalled=%b, tmask=%b\n",
+                    $time, INSTANCE_ID, w, active_warps_n[w], stalled_warps_n[w], thread_masks_n[w]
+                ))
+            end
+        end
+    end
+
     always @(posedge clk) begin
         if (schedule_fire) begin
-            `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_wid, to_fullPC(schedule_pc), schedule_tmask, instr_uuid))
+            `TRACE(1, ("%t: %s dispatch: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_wid, to_fullPC(schedule_pc), schedule_tmask, instr_uuid))
         end
     end
 `endif

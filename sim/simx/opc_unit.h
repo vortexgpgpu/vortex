@@ -24,7 +24,7 @@ public:
   SimChannel<instr_trace_t *> Input;
   SimChannel<instr_trace_t *> Output;
 
-  OpcUnit(const SimContext &ctx);
+  OpcUnit(const SimContext &ctx, const char* name);
   virtual ~OpcUnit();
 
   virtual void reset();

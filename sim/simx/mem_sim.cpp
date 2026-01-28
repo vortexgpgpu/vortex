@@ -91,7 +91,7 @@ public:
 						// only send a response for read requests
 						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
 						if (rsp_args->memsim->mem_xbar_->RspIn.at(rsp_args->bank_id).try_send(mem_rsp)) {
-							DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);
+							DT(3, rsp_args->memsim->simobject_->name() << " mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);
 							delete rsp_args;
 							return true;
 						}
@@ -101,7 +101,7 @@ public:
 				req_args
 			);
 
-			DT(3, simobject_->name() << "-mem-req" << i << ": " << mem_req);
+			DT(3, simobject_->name() << " mem-req" << i << ": " << mem_req);
 			mem_xbar_->ReqOut.at(i).pop();
 		}
 	}
