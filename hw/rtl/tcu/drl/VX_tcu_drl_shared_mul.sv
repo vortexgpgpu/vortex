@@ -34,9 +34,9 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             fedp_class_t ca = cls_tf32[0][i/2];
             fedp_class_t cb = cls_tf32[1][i/2];
             `UNUSED_VAR ({ca, cb})
-            assign sign_tf32[i]  = a_row[i/2][31] ^ b_col[i/2][31];
-            assign man_a_tf32[i] = ca.is_zero ? 11'd0 : { !ca.is_sub, a_row[i/2][22:13] };
-            assign man_b_tf32[i] = cb.is_zero ? 11'd0 : { !cb.is_sub, b_col[i/2][22:13] };
+            assign sign_tf32[i]  = a_row[i/2][18] ^ b_col[i/2][18];
+            assign man_a_tf32[i] = ca.is_zero ? 11'd0 : { !ca.is_sub, a_row[i/2][9:0] };
+            assign man_b_tf32[i] = cb.is_zero ? 11'd0 : { !cb.is_sub, b_col[i/2][9:0] };
         end else begin : g_odd_lane
             assign sign_tf32[i] = 1'b0;
             assign man_a_tf32[i] = 11'd0;

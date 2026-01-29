@@ -110,11 +110,11 @@ package VX_tcu_pkg;
     function automatic int exp_bits(input int fmt);
         case (fmt)
             TCU_FP32_ID: return 8;
-            TCU_TF32_ID: return 8;
             TCU_FP16_ID: return 5;
             TCU_BF16_ID: return 8;
             TCU_FP8_ID:  return 4;
             TCU_BF8_ID:  return 5;
+            TCU_TF32_ID: return 8;
             default:     return 0;
         endcase
     endfunction
@@ -122,11 +122,11 @@ package VX_tcu_pkg;
     function automatic int sig_bits(input int fmt);
         case (fmt)
             TCU_FP32_ID: return 23;
-            TCU_TF32_ID: return 10;
             TCU_FP16_ID: return 10;
             TCU_BF16_ID: return 7;
             TCU_FP8_ID:  return 3;
             TCU_BF8_ID:  return 2;
+            TCU_TF32_ID: return 10;
             default:     return 0;
         endcase
     endfunction
@@ -134,11 +134,11 @@ package VX_tcu_pkg;
     function automatic int sign_pos(input int fmt);
         case (fmt)
             TCU_FP32_ID: return 31;
-            TCU_TF32_ID: return 31;
             TCU_FP16_ID: return 15;
             TCU_BF16_ID: return 15;
             TCU_FP8_ID:  return 7;
             TCU_BF8_ID:  return 7;
+            TCU_TF32_ID: return 18;
             default:     return 0;
         endcase
     endfunction

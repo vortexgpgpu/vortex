@@ -168,6 +168,33 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
             `UNUSED_PIN(fflags)
         );
 
+        wire [32:0] mult_result_tf32;
+        // Only even TCK lanes are valid for TF32
+        if ((i % 2) == 0) begin : g_tf32_mul
+            VX_tcu_bhf_fmul #(
+                .IN_EXPW (8),
+                .IN_SIGW (10+1),
+                .OUT_EXPW(8),
+                .OUT_SIGW(24),
+                .IN_REC  (0), // input in IEEE format
+                .OUT_REC (1), // output in recoded format
+                .MUL_LATENCY (FMUL_LATENCY),
+                .RND_LATENCY (FRND_LATENCY)
+            ) tf32_mul (
+                .clk    (clk),
+                .reset  (reset),
+                .enable (enable),
+                .frm    (frm),
+                .a      (a_row[i/2][18:0]),
+                .b      (b_col[i/2][18:0]),
+                .y      (mult_result_tf32),
+                `UNUSED_PIN(fflags)
+            );
+        end else begin : g_tf32_zero
+            // Zero out odd lanes
+            assign mult_result_tf32 = 33'h0;
+        end
+
         logic [32:0] mult_result_mux;
         always_comb begin
             case(fmt_s_delayed)
@@ -175,6 +202,7 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
                 3'd2: mult_result_mux = mult_result_bf16;
                 3'd3: mult_result_mux = mult_result_fp8;
                 3'd4: mult_result_mux = mult_result_bf8;
+                3'd5: mult_result_mux = mult_result_tf32;  // TF32
                 default: mult_result_mux = 'x;
             endcase
         end

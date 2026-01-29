@@ -30,8 +30,8 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     // 1. Classification
     // ----------------------------------------------------------------------
     fedp_class_t [N-1:0] cls_tf32 [2];
-    VX_tcu_drl_classifier #(.N(N), .WIDTH(32), .FMT(TCU_FP32_ID)) c_a_tf32 (.val(a_row), .cls(cls_tf32[0]));
-    VX_tcu_drl_classifier #(.N(N), .WIDTH(32), .FMT(TCU_FP32_ID)) c_b_tf32 (.val(b_col), .cls(cls_tf32[1]));
+    VX_tcu_drl_classifier #(.N(N), .WIDTH(32), .FMT(TCU_TF32_ID)) c_a_tf32 (.val(a_row), .cls(cls_tf32[0]));
+    VX_tcu_drl_classifier #(.N(N), .WIDTH(32), .FMT(TCU_TF32_ID)) c_b_tf32 (.val(b_col), .cls(cls_tf32[1]));
 
     fedp_class_t [TCK-1:0] cls_fp16 [2];
     VX_tcu_drl_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_FP16_ID)) c_a_fp16 (.val(a_row), .cls(cls_fp16[0]));

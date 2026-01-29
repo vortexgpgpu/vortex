@@ -88,7 +88,13 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
-            4'b0101: begin // mxfp8 (basically the exact same as fp8 for fmul)
+            4'b0101: begin // tf32 (one 19-bit op in 32-bit reg)
+                prod = 64'hffffffff00000000;
+                dpi_f2f(enable, int'(0), int'(6), {32'hffffffff, a_row[i]}, 3'b0, a_f, fflags);
+                dpi_f2f(enable, int'(0), int'(6), {32'hffffffff, b_col[i]}, 3'b0, b_f, fflags);
+                dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, prod, fflags);
+            end
+            4'b0110: begin // mxfp8 (basically the exact same as fp8 for fmul)
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 4; j++) begin
                     dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
@@ -100,8 +106,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
             4'b0111: begin // nvfp4
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 8; j++) begin
-                    dpi_f2f(enable, int'(0), int'(6), {60'hfffffffffffffff, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
-                    dpi_f2f(enable, int'(0), int'(6), {60'hfffffffffffffff, b_col[i][j * 4 +: 4]}, 3'b0, b_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, b_col[i][j * 4 +: 4]}, 3'b0, b_f, fflags);
                     dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
@@ -166,7 +172,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     `UNUSED_VAR(sfflags);
     always_comb begin
         case (fmt_s)
-            4'b0101: begin // mxfp8
+            4'b0110: begin // mxfp8
                 raw_sf_a = SCALE_FACTOR_E8M0_A - 8'd127;
                 raw_sf_b = SCALE_FACTOR_E8M0_B - 8'd127;
                 raw_sf   = raw_sf_a + raw_sf_b;

@@ -143,10 +143,6 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
 
         always_comb begin
             case (fmtf)
-                TCU_FP32_ID: begin
-                    n_in = nan_in_tf32[i]; i_z = inf_z_tf32[i]; i_op = inf_op_tf32[i]; sgn = sign_tf32[i];
-                    valid_lane = ((i % 2) == 0) ? vld_mask[i * 4] : 1'b0;
-                end
                 TCU_FP16_ID: begin
                     n_in = nan_in_fp16[i]; i_z = inf_z_fp16[i]; i_op = inf_op_fp16[i]; sgn = sign_fp16[i];
                     valid_lane = vld_mask[i * 4];
@@ -162,6 +158,10 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
                 TCU_BF8_ID: begin
                     n_in = n_in_bf8_comb | bf8_add_nan; i_z = 1'b0; i_op = i_op_bf8_comb; sgn = sgn_bf8_comb;
                     valid_lane = vld_mask[i * 2];
+                end
+                TCU_TF32_ID: begin
+                    n_in = nan_in_tf32[i]; i_z = inf_z_tf32[i]; i_op = inf_op_tf32[i]; sgn = sign_tf32[i];
+                    valid_lane = ((i % 2) == 0) ? vld_mask[i * 4] : 1'b0;
                 end
                 default: begin
                     n_in=0; i_z=0; i_op=0; sgn=0; valid_lane=0;
