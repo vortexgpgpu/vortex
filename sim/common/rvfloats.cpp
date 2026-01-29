@@ -598,6 +598,24 @@ uint8_t rv_ftoe5m2_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return bf8.v;
 }
 
+uint32_t rv_tf32tof_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  tfloat32_t tf32;
+  tf32.v = a;
+  float32_t f32 = tf32_to_f32(tf32);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint32_t rv_ftotf32_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  tfloat32_t tf32 = f32_to_tf32(f32);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return tf32.v;
+}
+
 uint32_t rv_mxfp8tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   rv_init(frm);
   mxfloat8_t mxfp8;

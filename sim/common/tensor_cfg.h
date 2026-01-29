@@ -57,9 +57,16 @@ struct bf8 {
   static constexpr const char* name = "bf8";
 };
 
+struct tf32 {
+  using dtype = uint32_t;
+  static constexpr uint32_t id = 5;
+  static constexpr uint32_t bits = 32;
+  static constexpr const char* name = "tf32";
+};
+
 struct mxfp8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 5;
+  static constexpr uint32_t id = 6;
   static constexpr uint32_t bits = 8;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 32;    //elements per block
@@ -126,6 +133,7 @@ inline const char* fmt_string(uint32_t fmt) {
   case bf16::id:   return bf16::name;
   case fp8::id:    return fp8::name;
   case bf8::id:    return bf8::name;
+  case tf32::id:   return tf32::name;
   case mxfp8::id:  return mxfp8::name;
   case nvfp4::id:  return nvfp4::name;
   case int32::id:  return int32::name;

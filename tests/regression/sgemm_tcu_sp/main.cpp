@@ -305,6 +305,24 @@ public:
   }
 };
 
+template <>
+class Comparator<vt::tf32> {
+public:
+  static uint32_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftotf32_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
+  }
+  static bool compare(uint32_t a, uint32_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
 // TODO: temp arbitrarily hardcoded scale factors
 constexpr uint8_t SCALE_FACTOR_E8M0_A = 129;  // val = 4, bias = 127
 constexpr uint8_t SCALE_FACTOR_E8M0_B = 131;  // val = 16
@@ -486,6 +504,26 @@ struct muladd_t<vt::bf8, vt::bf8> {
     auto fc = bit_cast<float>(rv_e5m2tof_s(c, 0, nullptr));
     auto fd = fa * fb + fc;
     return rv_ftoe5m2_s(bit_cast<uint32_t>(fd), 0, nullptr);
+  }
+};
+
+template <>
+struct muladd_t<vt::tf32, vt::fp32> {
+  static float eval(uint32_t a, uint32_t b, float c) {
+    auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::tf32, vt::tf32> {
+  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
+    auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_tf32tof_s(c, 0, nullptr));
+    auto fd = fa * fb + fc;
+    return rv_ftotf32_s(bit_cast<uint32_t>(fd), 0, nullptr);
   }
 };
 

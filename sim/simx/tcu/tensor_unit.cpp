@@ -132,6 +132,30 @@ struct FMA<vt::bf8, vt::bf8> {
   }
 };
 
+template <>
+struct FMA<vt::tf32, vt::fp32> {
+  static float eval(uint32_t a, uint32_t b, float c) {
+    auto xa = rv_tf32tof_s(a, 0, nullptr);
+    auto xb = rv_tf32tof_s(b, 0, nullptr);
+    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
+    auto xc = bit_cast<uint32_t>(c);
+    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
+    return bit_cast<float>(xd);
+  }
+};
+
+template <>
+struct FMA<vt::tf32, vt::tf32> {
+  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
+    auto xa = rv_tf32tof_s(a, 0, nullptr);
+    auto xb = rv_tf32tof_s(b, 0, nullptr);
+    auto xc = rv_tf32tof_s(c, 0, nullptr);
+    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
+    auto xh = rv_ftotf32_s(xd, 0, nullptr);
+    return xh;
+  }
+};
+
 // TODO: temp arbitrarily hardcoded scale factors
 constexpr uint8_t SCALE_FACTOR_E8M0_A = 129;  // val = 4, bias = 127
 constexpr uint8_t SCALE_FACTOR_E8M0_B = 131;  // val = 16
@@ -342,6 +366,8 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
       return FEDP<vt::fp8, vt::fp32>::eval;
     case vt::bf8::id:
       return FEDP<vt::bf8, vt::fp32>::eval;
+    case vt::tf32::id:
+      return FEDP<vt::tf32, vt::fp32>::eval;
     case vt::mxfp8::id:
       return FEDP<vt::mxfp8, vt::fp32>::eval;
     case vt::nvfp4::id:
@@ -382,6 +408,15 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
     switch (IT) {
     case vt::bf8::id:
       return FEDP<vt::bf8, vt::bf8>::eval;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
+    break;
+  case vt::tf32::id:
+    switch (IT) {
+    case vt::tf32::id:
+      return FEDP<vt::tf32, vt::tf32>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();

@@ -305,6 +305,24 @@ public:
   }
 };
 
+template <>
+class Comparator<vt::tf32> {
+public:
+  static uint32_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftotf32_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
+  }
+  static bool compare(uint32_t a, uint32_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
 // TODO: temp arbitrarily hardcoded scale factors
 constexpr uint8_t SCALE_FACTOR_E8M0_A = 129;  // val = 4, bias = 127
 constexpr uint8_t SCALE_FACTOR_E8M0_B = 131;  // val = 16
@@ -379,22 +397,22 @@ public:
       }
       return false;
     } else {
-    union fi_t {
-      float f;
-      int32_t i;
-    };
-    fi_t fa, fb;
-    fa.f = a;
-    fb.f = b;
-    auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
-      if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
+      union fi_t {
+        float f;
+        int32_t i;
+      };
+      fi_t fa, fb;
+      fa.f = a;
+      fb.f = b;
+      auto d = std::abs(fa.i - fb.i);
+      if (d > FLOAT_ULP) {
+        if (errors < MAX_ERRORS) {
+          printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
+        }
+        return false;
       }
-      return false;
+      return true;
     }
-    return true;
-  }
   }
 };
 
@@ -486,6 +504,26 @@ struct muladd_t<vt::bf8, vt::bf8> {
     auto fc = bit_cast<float>(rv_e5m2tof_s(c, 0, nullptr));
     auto fd = fa * fb + fc;
     return rv_ftoe5m2_s(bit_cast<uint32_t>(fd), 0, nullptr);
+  }
+};
+
+template <>
+struct muladd_t<vt::tf32, vt::fp32> {
+  static float eval(uint32_t a, uint32_t b, float c) {
+    auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::tf32, vt::tf32> {
+  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
+    auto fa = bit_cast<float>(rv_tf32tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_tf32tof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_tf32tof_s(c, 0, nullptr));
+    auto fd = fa * fb + fc;
+    return rv_ftotf32_s(bit_cast<uint32_t>(fd), 0, nullptr);
   }
 };
 
@@ -763,14 +801,14 @@ int main(int argc, char *argv[]) {
 
   // generate source data
   std::vector<itype_t> h_A(sizeA);
-  std::vector<itype_t> h_B(sizeB);
+  std::vector<itype_t> h_B(sizeB);  
   for (uint32_t i = 0; i < sizeA; ++i) {
     h_A[i] = generate_A_value<vt::ITYPE>();
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
     h_B[i] = generate_B_value<vt::ITYPE>();
   }
-
+  
   // upload matrix A buffer
   {
     std::cout << "upload matrix A buffer" << std::endl;

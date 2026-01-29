@@ -905,6 +905,26 @@ bfloat8_t f32_to_f8e5m2(float32_t a) {
   return res;
 }
 
+float32_t tf32_to_f32(tfloat32_t a) {
+  uint32_t fflags = 0;
+  auto out = cvt_custom_to_f32(a.v, 8, 10, softfloat_roundingMode, &fflags);
+  //printf("tf32_to_f32: 0x%x -> %f\n", a.v, out);
+  softfloat_exceptionFlags |= fflags;
+  float32_t res;
+  res.v = vortex::bit_cast<uint32_t>(out);
+  return res;
+}
+
+tfloat32_t f32_to_tf32(float32_t a) {
+  uint32_t fflags = 0;
+  auto out = cvt_f32_to_custom(vortex::bit_cast<float>(a.v), 8, 10, softfloat_roundingMode, &fflags);
+  //printf("f32_to_tf32: %f -> 0x%x\n", *(float*)&a.v, out);
+  softfloat_exceptionFlags |= fflags;
+  tfloat32_t res;
+  res.v = out & 0xffffffff;
+  return res;
+}
+
 float32_t mxfp8_to_f32(mxfloat8_t a) {
   //convert e4m3 value to f32
   uint32_t fflags = 0;
