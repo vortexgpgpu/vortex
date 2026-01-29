@@ -126,7 +126,9 @@ void Emulator::reset() {
   }
 
 #ifdef EXT_V_ENABLE
+  if (vec_unit_) {
   vec_unit_->reset();
+  }
 #endif
 
   csr_mscratch_ = startup_arg;
