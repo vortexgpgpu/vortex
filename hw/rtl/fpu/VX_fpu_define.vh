@@ -15,6 +15,7 @@
 `define VX_FPU_DEFINE_VH
 
 `include "VX_define.vh"
+`include "dpi_float.vh"
 
 `define FPU_MERGE_FFLAGS(out, in, mask, lanes) \
     fflags_t __``out; \

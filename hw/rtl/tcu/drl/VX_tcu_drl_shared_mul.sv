@@ -175,7 +175,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         end
 
         // Alignment & Adder for FP8/BF8
-        wire [5:0] shift_amt_f8 = exp_diff_f8[i][5] ? -{1'b0, exp_diff_f8[i][4:0]} : {1'b0, exp_diff_f8[i][4:0]};
+        wire [5:0] shift_amt_f8 = {1'b0, exp_diff_f8[i][4:0]};
         wire [7:0] y_f8_low  = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[0] : {y_raw_f8[0][5:0], 2'd0};
         wire [7:0] y_f8_high = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[1] : {y_raw_f8[1][5:0], 2'd0};
 
