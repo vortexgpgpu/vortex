@@ -135,39 +135,39 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
     // 7. Multiply, Align & Merge
     for (genvar i = 0; i < TCK; ++i) begin : g_mul
         // Shared TF32/FP16/BF16 Multiplier
-        logic [10:0] man_a_sh, man_b_sh;
-        logic        sign_sh;
-        wire [21:0]  y_raw_sh;
+        logic [10:0] man_a_f16, man_b_f16;
+        logic        sign_f16;
+        wire [21:0]  y_raw_f16;
 
         always_comb begin
             case(fmt_s[3:0])
-                TCU_TF32_ID: begin man_a_sh = man_a_tf32[i]; man_b_sh = man_b_tf32[i]; sign_sh = sign_tf32[i]; end
-                TCU_FP16_ID: begin man_a_sh = man_a_fp16[i]; man_b_sh = man_b_fp16[i]; sign_sh = sign_fp16[i]; end
-                TCU_BF16_ID: begin man_a_sh = man_a_bf16[i]; man_b_sh = man_b_bf16[i]; sign_sh = sign_bf16[i]; end
-                default:     begin man_a_sh = '0;            man_b_sh = '0;            sign_sh = 0;            end
+                TCU_TF32_ID: begin man_a_f16 = man_a_tf32[i]; man_b_f16 = man_b_tf32[i]; sign_f16 = sign_tf32[i]; end
+                TCU_FP16_ID: begin man_a_f16 = man_a_fp16[i]; man_b_f16 = man_b_fp16[i]; sign_f16 = sign_fp16[i]; end
+                TCU_BF16_ID: begin man_a_f16 = man_a_bf16[i]; man_b_f16 = man_b_bf16[i]; sign_f16 = sign_bf16[i]; end
+                default:     begin man_a_f16 = '0;            man_b_f16 = '0;            sign_f16 = 0;            end
             endcase
         end
 
         VX_wallace_mul #(
             .N(11)
-        ) wtmul_tf32_f16_vf16 (
-            .a(man_a_sh),
-            .b(man_b_sh),
-            .p(y_raw_sh)
+        ) wtmul_f16 (
+            .a(man_a_f16),
+            .b(man_b_f16),
+            .p(y_raw_f16)
         );
 
         // Shared FP8/BF8 Multiplier
         wire [1:0][7:0] y_raw_f8;
-        wire [1:0]      sign_f8_curr;
+        wire [1:0]      sign_f8;
 
         for (genvar j = 0; j < 2; ++j) begin : g_f8
             wire [3:0] ma_f8 = (fmt_s == 4'(TCU_FP8_ID)) ? man_a_fp8[i][j] : man_a_bf8[i][j];
             wire [3:0] mb_f8 = (fmt_s == 4'(TCU_FP8_ID)) ? man_b_fp8[i][j] : man_b_bf8[i][j];
-            assign sign_f8_curr[j] = (fmt_s == 4'(TCU_FP8_ID)) ? sign_fp8[i][j] : sign_bf8[i][j];
+            assign sign_f8[j] = (fmt_s == 4'(TCU_FP8_ID)) ? sign_fp8[i][j] : sign_bf8[i][j];
 
             VX_wallace_mul #(
                 .N(4)
-            ) wtmul_f8_bf8 (
+            ) wtmul_f8 (
                 .a(ma_f8),
                 .b(mb_f8),
                 .p(y_raw_f8[j])
@@ -182,8 +182,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         wire [22:0] aligned_sig_low  = exp_diff_f8[i][5] ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> shift_amt_f8;
         wire [22:0] aligned_sig_high = exp_diff_f8[i][5] ? {y_f8_high, 15'd0} >> shift_amt_f8 : {y_f8_high, 15'd0};
 
-        wire [23:0] signed_sig_low  = sign_f8_curr[0] ? -aligned_sig_low  : {1'b0, aligned_sig_low};
-        wire [23:0] signed_sig_high = sign_f8_curr[1] ? -aligned_sig_high : {1'b0, aligned_sig_high};
+        wire [23:0] signed_sig_low  = sign_f8[0] ? -aligned_sig_low  : {1'b0, aligned_sig_low};
+        wire [23:0] signed_sig_high = sign_f8[1] ? -aligned_sig_high : {1'b0, aligned_sig_high};
 
         wire [24:0] signed_sig_res;
         VX_ks_adder #(
@@ -254,8 +254,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         // Mux Output
         always_comb begin
             case (fmt_s[3:0])
-                TCU_TF32_ID, TCU_FP16_ID: y[i] = {sign_sh, y_raw_sh, 2'd0};
-                TCU_BF16_ID:              y[i] = {sign_sh, y_raw_sh[15:0], 8'd0};
+                TCU_TF32_ID, TCU_FP16_ID: y[i] = {sign_f16, y_raw_f16, 2'd0};
+                TCU_BF16_ID:              y[i] = {sign_f16, y_raw_f16[15:0], 8'd0};
                 TCU_FP8_ID, TCU_BF8_ID:   y[i] = {sign_f8_add, y_f8_add};
                 TCU_I8_ID:                y[i] = 25'($signed(y_i8_add_res));
                 TCU_U8_ID:                y[i] = {8'd0, y_i8_add_res};
