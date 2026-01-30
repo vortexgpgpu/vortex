@@ -817,8 +817,8 @@ def ref_cuda(A, B, Cbits, eb, sb, arch_flag="sm_89") -> int:
     b_np = np.array(B, dtype=np.uint16).view(np.float16)
     torch_dtype = torch.float16
   elif fmt == "bf16":
-    a_np = np.array(A, dtype=np.int16)
-    b_np = np.array(B, dtype=np.int16)
+    a_np = np.array(A, dtype=np.uint16).view(np.int16)
+    b_np = np.array(B, dtype=np.uint16).view(np.int16)
     torch_dtype = torch.bfloat16
   elif fmt == "tf32":
     a_np = np.array([_to_float_np(x, 8, 10) for x in A], dtype=np.float32)
@@ -1053,6 +1053,9 @@ def _print_case(tag, idx, A, B, C, hex_digits=4):
 def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
          test_id_filter, ref_mode, arch_flag, max_errors,
          W, no_window, cpp_source):
+  
+  random.seed(seed)
+  np.random.seed(seed)
 
   fedp = FEDP(eb=eb, sb=sb, frm=frm, renorm=renorm, lanes=n, trace=trace, W=W, no_window=no_window)
   hex_digits = fmt_hex_digits(eb, sb)
@@ -1082,10 +1085,6 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
   errors = 0
 
   for test_id in range(iters):
-    current_seed = seed + test_id
-    random.seed(current_seed)
-    np.random.seed(current_seed)
-
     if test_id_filter is not None and test_id != test_id_filter:
       continue
 
