@@ -4,6 +4,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     parameter `STRING INSTANCE_ID = "",
     parameter N = 2,            // Number of 32-bit input registers
     parameter W = 25,           // Product width
+    parameter WA = 28,          // Accumulator width
     parameter EXP_W = 10,       // Nax pxponent width
     parameter TCK = 2 * N       // Max physical lanes
 ) (
@@ -86,6 +87,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .N   (N),
         .TCK (TCK),
         .W   (W),
+        .WA  (WA),
         .EXP_W(EXP_W)
     ) exp_bias_inst (
         .vld_mask       (vld_mask),

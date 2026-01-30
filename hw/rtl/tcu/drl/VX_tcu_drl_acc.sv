@@ -3,17 +3,16 @@
 module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter N  = 5,
-    parameter W  = 26,
-    parameter WA = 30
+    parameter WI = 26,
+    parameter WO = 30
 ) (
     input  wire                 clk,
     input  wire                 valid_in,
     input  wire [31:0]          req_id,
     input  wire [N-2:0]         lane_mask,
-    input  wire [N-1:0][W-1:0]  sigs_in,
+    input  wire [N-1:0][WI-1:0]  sigs_in,
     input  wire [N-1:0]         sticky_in,
-    output wire [WA-1:0]        sig_out,
-    output wire [N-2:0]         sigs_out,
+    output wire [WO-1:0]        sig_out,
     output wire                 sticky_out
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -22,12 +21,12 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     // ----------------------------------------------------------------------
     // Input Masking
     // ----------------------------------------------------------------------
-    wire [N-1:0][W-1:0] masked_sigs;
+    wire [N-1:0][WI-1:0] masked_sigs;
     wire [N-1:0]        masked_sticky;
 
     // Mask vector lanes (0 to N-2)
     for (genvar i = 0; i < N-1; ++i) begin : g_mask
-        assign masked_sigs[i]   = sigs_in[i] & {W{lane_mask[i]}};
+        assign masked_sigs[i]   = sigs_in[i] & {WI{lane_mask[i]}};
         assign masked_sticky[i] = sticky_in[i] & lane_mask[i];
     end
 
@@ -39,9 +38,9 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     // Sign Extension
     // ----------------------------------------------------------------------
 
-    wire [N-1:0][WA-1:0] sigs_in_packed;
+    wire [N-1:0][WO-1:0] sigs_in_packed;
     for (genvar i = 0; i < N; ++i) begin : g_ext
-        assign sigs_in_packed[i] = $signed({{(WA-W){masked_sigs[i][W-1]}}, masked_sigs[i]});
+        assign sigs_in_packed[i] = $signed({{(WO-WI){masked_sigs[i][WI-1]}}, masked_sigs[i]});
     end
 
     // ----------------------------------------------------------------------
@@ -51,8 +50,8 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     if (N >= 7) begin : g_large_acc
         VX_csa_mod4 #(
             .N (N),
-            .W (WA),
-            .S (WA)
+            .W (WO),
+            .S (WO)
         ) sig_csa (
             .operands (sigs_in_packed),
             .sum      (sig_out),
@@ -61,8 +60,8 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     end else if (N >= 3) begin : g_medium_acc
         VX_csa_tree #(
             .N (N),
-            .W (WA),
-            .S (WA)
+            .W (WO),
+            .S (WO)
         ) sig_csa (
             .operands (sigs_in_packed),
             .sum      (sig_out),
@@ -70,7 +69,7 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
         );
     end else begin : g_small_acc
         VX_ks_adder #(
-            .N (WA)
+            .N (WO)
         ) sig_ksa (
             .dataa (sigs_in_packed[0]),
             .datab (sigs_in_packed[1]),
@@ -80,13 +79,8 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     end
 
     // ----------------------------------------------------------------------
-    // Outputs
+    // Sticky aggregation
     // ----------------------------------------------------------------------
-
-    // Product sign bits (exclude C term) for normalization checks
-    for (genvar i = 0; i < N-1; ++i) begin : g_signs
-        assign sigs_out[i] = masked_sigs[i][W-1];
-    end
 
     assign sticky_out = |masked_sticky;
 

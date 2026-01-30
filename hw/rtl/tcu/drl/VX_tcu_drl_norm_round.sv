@@ -2,8 +2,6 @@
 
 module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter N = 5,
-    parameter W = 25,
     parameter WA = 30,
     parameter EXP_W = 10,
     parameter C_HI_W = 8
@@ -14,7 +12,6 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     input wire [EXP_W-1:0] max_exp,
     input wire [WA-1:0] acc_sig,
     input wire [C_HI_W-1:0] cval_hi,
-    input wire [N-2:0]  sig_signs,
     input wire          is_int,
     input wire          sticky_in,
     input fedp_excep_t  exceptions,
@@ -27,9 +24,9 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // 1. Signed Magnitude Extraction
     // ----------------------------------------------------------------------
     // The accumulator is in 2's complement.
-    wire             sum_sign = acc_sig[WA-1];
-    wire [WA-1:0]    abs_sum  = sum_sign ? -acc_sig : acc_sig;
-    wire             zero_sum = ~|abs_sum;
+    wire          sum_sign = acc_sig[WA-1];
+    wire [WA-1:0] abs_sum  = sum_sign ? -acc_sig : acc_sig;
+    wire          zero_sum = ~|abs_sum;
 
     // ----------------------------------------------------------------------
     // 2. Leading Zero Count (LZC)
@@ -48,8 +45,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // ----------------------------------------------------------------------
 
     // We want to shift left by lz_count to normalize
-    wire [WA-1:0] shifted_sum;
-    assign shifted_sum = abs_sum << lz_count;
+    wire [WA-1:0] shifted_sum = abs_sum << lz_count;
 
     // ----------------------------------------------------------------------
     // 4. Exponent Adjustment & Rounding Bits
@@ -59,14 +55,14 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     wire [23:0] norm_man = shifted_sum[WA-1 -: 24];
 
     // Bits below the mantissa
-    wire        guard_bit = shifted_sum[WA-25];
-    wire        round_bit = shifted_sum[WA-26];
-    wire        sticky_rem = |shifted_sum[WA-27 : 0];
-    wire        sticky_bit = sticky_rem | sticky_in;
+    wire guard_bit = shifted_sum[WA-25];
+    wire round_bit = shifted_sum[WA-26];
+    wire sticky_rem = |shifted_sum[WA-27 : 0];
+    wire sticky_bit = sticky_rem | sticky_in;
 
     // Calculate Exponent: norm_exp = max_exp + (HR - lz_count) + (W - 1)
     // HR + W - 1 = (WA - W) + W - 1 = WA - 1
-    wire signed [EXP_W-1:0] norm_exp_s = $signed(max_exp) - EXP_W'(lz_count) + EXP_W'(WA - 1);
+    wire signed [EXP_W-1:0] norm_exp_s = $signed(max_exp) - EXP_W'(lz_count);
 
     // ----------------------------------------------------------------------
     // 5. Rounding (RNE - Round to Nearest Even)
@@ -80,8 +76,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // Check for carry out after rounding (e.g. 1.11...1 + 1 = 10.00...0)
     wire carry_out = rounded_sig_full[24];
 
-    // Final Mantissa (23 bits)
-    // If carry_out, we shift right by 1 (exp increments).
+    // Final Mantissa (23 bits), we shift right by 1 if carry_out.
     wire [22:0] final_man = carry_out ? rounded_sig_full[23:1] : rounded_sig_full[22:0];
 
     // Final Exponent
@@ -91,7 +86,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // 6. Exception & Result Packing
     // ----------------------------------------------------------------------
     logic [7:0] packed_exp;
-    logic       exp_overflow, exp_underflow;
+    logic exp_overflow, exp_underflow;
 
     always_comb begin
         if (final_exp_s >= 255) begin
@@ -133,10 +128,8 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // 7. Integer Handling
     // ----------------------------------------------------------------------
 
-    `UNUSED_VAR (sig_signs)
-
     // Extract sign-extension overflow from accumulator
-    wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:W]));
+    wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:25]));
 
     wire [6:0] int_hi;
     VX_ks_adder #(

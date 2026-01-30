@@ -23,7 +23,6 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     localparam TCK     = 2 * N;
     localparam EXP_W   = 9;
     localparam SHIFT_W = 8;
-    localparam RAW_W   = W;
     localparam EXC_W   = $bits(fedp_excep_t);
     localparam C_HI_W  = 7;
     localparam HR = $clog2(TCK+1);
@@ -71,7 +70,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     // Stage 1: Multiply & Max Exponent
     wire [EXP_W-1:0]          max_exp;
     wire [TCK:0][SHIFT_W-1:0] shift_amt;
-    wire [TCK:0][RAW_W-1:0]   raw_sigs;
+    wire [TCK:0][W-1:0]   raw_sigs;
     fedp_excep_t              exceptions;
     wire [TCK-1:0]            lane_mask;
 
@@ -84,6 +83,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     VX_tcu_drl_mul_exp #(
         .N (N),
         .W (W),
+        .WA(ACC_SIG_W),
         .EXP_W (EXP_W)
     ) mul_exp (
         .clk(clk),
@@ -105,12 +105,12 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     fedp_excep_t              s1_exceptions;
     wire [TCK-1:0]            s1_lane_mask;
     wire [TCK:0][SHIFT_W-1:0] s1_shift_amt;
-    wire [TCK:0][RAW_W-1:0]   s1_raw_sig;
+    wire [TCK:0][W-1:0]   s1_raw_sig;
     wire                      s1_is_int;
     wire [C_HI_W-1:0]         s1_cval_hi;
 
     VX_pipe_register #(
-        .DATAW (EXP_W + EXC_W + TCK + SHIFT_W + RAW_W + C_HI_W + 1),
+        .DATAW (EXP_W + EXC_W + TCK + SHIFT_W + W + C_HI_W + 1),
         .DEPTH (MUL_LATENCY)
     ) pipe_fmul_ctrl (
         .clk(clk),
@@ -121,7 +121,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     );
     for (genvar i = 0; i < TCK; i++) begin : g_fmul_lane
         VX_pipe_register #(
-            .DATAW (SHIFT_W + RAW_W),
+            .DATAW (SHIFT_W + W),
             .DEPTH (MUL_LATENCY))
         pipe_fmul_lane (
             .clk(clk),
@@ -138,8 +138,8 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
 
     VX_tcu_drl_align #(
         .N (TCK+1),
-        .W (RAW_W),
-        .WA(ALN_SIG_W)
+        .WI(W),
+        .WO(ALN_SIG_W)
     ) sigs_aln (
         .clk(clk),
         .valid_in(vld_pipe[S1_IDX]),
@@ -184,13 +184,12 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
 
     // Stage 3: Accumulation
     wire [ACC_SIG_W-1:0] s2_acc_sum;
-    wire [TCK-1:0]       s2_acc_sigs;
     wire                 s2_acc_sticky;
 
     VX_tcu_drl_acc #(
         .N (TCK+1),
-        .W (ALN_SIG_W),
-        .WA(ACC_SIG_W)
+        .WI(ALN_SIG_W),
+        .WO(ACC_SIG_W)
     ) csa_acc (
         .clk(clk),
         .valid_in(vld_pipe[S2_IDX]),
@@ -199,7 +198,6 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .sigs_in(s2_aln_sigs),
         .sticky_in(s2_aln_sticky),
         .sig_out(s2_acc_sum),
-        .sigs_out(s2_acc_sigs),
         .sticky_out(s2_acc_sticky)
     );
 
@@ -207,30 +205,27 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     wire [ACC_SIG_W-1:0]  s3_acc_sum;
     fedp_excep_t          s3_exceptions;
     wire                  s3_acc_sticky;
-    wire [TCK-1:0]        s3_acc_sigs;
     wire                  s3_is_int;
     wire [C_HI_W-1:0]     s3_cval_hi;
 
     VX_pipe_register #(
-        .DATAW (EXP_W + ACC_SIG_W + EXC_W + 1 + TCK + C_HI_W + 1),
+        .DATAW (EXP_W + ACC_SIG_W + EXC_W + 1 + C_HI_W + 1),
         .DEPTH (ACC_LATENCY)
     ) pipe_acc (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .data_in ({s2_max_exp, s2_acc_sum, s2_exceptions, s2_acc_sticky, s2_acc_sigs, s2_cval_hi, s2_is_int}),
-        .data_out({s3_max_exp, s3_acc_sum, s3_exceptions, s3_acc_sticky, s3_acc_sigs, s3_cval_hi, s3_is_int})
+        .data_in ({s2_max_exp, s2_acc_sum, s2_exceptions, s2_acc_sticky, s2_cval_hi, s2_is_int}),
+        .data_out({s3_max_exp, s3_acc_sum, s3_exceptions, s3_acc_sticky, s3_cval_hi, s3_is_int})
     );
 
     // Stage 4: Normalization and rounding
     wire [31:0] final_result;
 
     VX_tcu_drl_norm_round #(
-        .N (TCK+1),
-        .W (W),
         .EXP_W (EXP_W),
         .C_HI_W(C_HI_W),
-        .WA(ACC_SIG_W)
+        .WA (ACC_SIG_W)
     ) norm_round (
         .clk(clk),
         .valid_in(vld_pipe[S3_IDX]),
@@ -240,7 +235,6 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .sticky_in(s3_acc_sticky),
         .exceptions(s3_exceptions),
         .cval_hi(s3_cval_hi),
-        .sig_signs(s3_acc_sigs),
         .is_int(s3_is_int),
         .result(final_result)
     );

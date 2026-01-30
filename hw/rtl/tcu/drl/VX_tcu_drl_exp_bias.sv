@@ -4,6 +4,7 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     parameter N     = 2,
     parameter TCK   = 2 * N,
     parameter W     = 25,
+    parameter WA    = 28,
     parameter EXP_W = 10
 ) (
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
@@ -51,11 +52,11 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     localparam E_BF8 = VX_tcu_pkg::exp_bits(TCU_BF8_ID);
     localparam B_BF8 = (1 << (E_BF8 - 1)) - 1 ;
 
-    localparam [EXP_W-1:0] BIAS_CONST_TF32 = EXP_W'(F32_BIAS - 2*B_TF32 + ALIGN_SHIFT - W);
-    localparam [EXP_W-1:0] BIAS_CONST_FP16 = EXP_W'(F32_BIAS - 2*B_FP16 + ALIGN_SHIFT   - W);
-    localparam [EXP_W-1:0] BIAS_CONST_BF16 = EXP_W'(F32_BIAS - 2*B_BF16 + ALIGN_SHIFT   - W);
-    localparam [EXP_W-1:0] BIAS_CONST_FP8  = EXP_W'(F32_BIAS - 2*B_FP8 + 2*ALIGN_SHIFT - W);
-    localparam [EXP_W-1:0] BIAS_CONST_BF8  = EXP_W'(F32_BIAS - 2*B_BF8 + 2*ALIGN_SHIFT - W);
+    localparam [EXP_W-1:0] BIAS_CONST_TF32 = EXP_W'(F32_BIAS - 2*B_TF32 + ALIGN_SHIFT   - W + WA - 1);
+    localparam [EXP_W-1:0] BIAS_CONST_FP16 = EXP_W'(F32_BIAS - 2*B_FP16 + ALIGN_SHIFT   - W + WA - 1);
+    localparam [EXP_W-1:0] BIAS_CONST_BF16 = EXP_W'(F32_BIAS - 2*B_BF16 + ALIGN_SHIFT   - W + WA - 1);
+    localparam [EXP_W-1:0] BIAS_CONST_FP8  = EXP_W'(F32_BIAS - 2*B_FP8  + 2*ALIGN_SHIFT - W + WA - 1);
+    localparam [EXP_W-1:0] BIAS_CONST_BF8  = EXP_W'(F32_BIAS - 2*B_BF8  + 2*ALIGN_SHIFT - W + WA - 1);
 
     // ----------------------------------------------------------------------
     // 1. Inputs Setup
@@ -259,10 +260,10 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     // 3. C-Term Exponent
     // ----------------------------------------------------------------------
 
-    // Corrected to include Window Adjustment: c_exp - (W - 1)
+    // Corrected to include Window Adjustment: c_exp - (W - 1) + WA - 1
     `UNUSED_VAR ({c_val[31], c_val[23:0], cls_c})
     wire [7:0] c_exp_raw = c_val[30:23];
-    wire [EXP_W-1:0] c_exp_adj = EXP_W'(c_exp_raw) - EXP_W'(W-1);
+    wire [EXP_W-1:0] c_exp_adj = EXP_W'(c_exp_raw) - EXP_W'(W-1) + EXP_W'(WA-1);
     assign raw_exp_y[TCK] = cls_c.is_zero ? EXP_W'(0) : c_exp_adj;
 
 endmodule
