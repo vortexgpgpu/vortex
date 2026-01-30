@@ -3,8 +3,8 @@
 module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     parameter `STRING INSTANCE_ID = "",
     parameter N = 2,            // Number of 32-bit input registers
-    parameter W = 25,           // Accumulator/Mantissa Width
-    parameter EXP_W = 10,
+    parameter W = 25,           // Product width
+    parameter EXP_W = 10,       // Nax pxponent width
     parameter TCK = 2 * N       // Max physical lanes
 ) (
     input wire              clk,
@@ -74,8 +74,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .cls_fp8        (cls_fp8),
         .cls_bf8        (cls_bf8),
         .cls_c          (cls_c),
-        .exp_low_larger (exp_low_larger),
-        .raw_exp_diff   (raw_exp_diff),
+        .exp_diff_f8(exp_diff_f8),
         .y              (raw_sigs)
     );
 

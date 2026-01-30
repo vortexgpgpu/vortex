@@ -64,9 +64,9 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     wire        sticky_rem = |shifted_sum[WA-27 : 0];
     wire        sticky_bit = sticky_rem | sticky_in;
 
-    // Calculate Exponent: norm_exp = max_exp + (HR - lz_count)+ (W - 1)
+    // Calculate Exponent: norm_exp = max_exp + (HR - lz_count) + (W - 1)
     // HR + W - 1 = (WA - W) + W - 1 = WA - 1
-    wire signed [9:0] norm_exp_s = $signed(max_exp) - 10'(lz_count) + 10'(WA -1);
+    wire signed [EXP_W-1:0] norm_exp_s = $signed(max_exp) - EXP_W'(lz_count) + EXP_W'(WA - 1);
 
     // ----------------------------------------------------------------------
     // 5. Rounding (RNE - Round to Nearest Even)
@@ -85,7 +85,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     wire [22:0] final_man = carry_out ? rounded_sig_full[23:1] : rounded_sig_full[22:0];
 
     // Final Exponent
-    wire signed [9:0] final_exp_s = norm_exp_s + 10'(carry_out);
+    wire signed [EXP_W-1:0] final_exp_s = norm_exp_s + EXP_W'(carry_out);
 
     // ----------------------------------------------------------------------
     // 6. Exception & Result Packing
@@ -137,7 +137,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
 
     // Extract sign-extension overflow from accumulator
     wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:W]));
-    
+
     wire [6:0] int_hi;
     VX_ks_adder #(
         .N (7)
