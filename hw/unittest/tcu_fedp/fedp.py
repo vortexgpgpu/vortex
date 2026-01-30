@@ -119,7 +119,19 @@ def split(x: int, eb: int, sb: int):
   F = x & ((1 << sb) - 1)
   ALL1 = (1 << eb) - 1
   b = bias(eb)
-
+  # FP8 (E4M3) Special Handling
+  if eb == 4 and sb == 3:
+      # NaN is strictly E=15, F=7 (0x7f or 0xff)
+      if E == ALL1 and F == ((1 << sb) - 1):
+          return s, 4, 0, 0  # qNaN
+      # E4M3 has NO Infinity. E=15 are just normal numbers (extending the range).
+      if E == 0 and F == 0:
+          return s, 0, 0, 0  # Zero
+      if E == 0:
+          return s, 1, 1 - b - sb, F  # subnormals
+      # All other cases (including E=15) are Normals
+      return s, 2, E - b - sb, (1 << sb) | F
+  # Generic IEEE Logic
   if E == ALL1 and F != 0:
     return s, 4, 0, 0  # qNaN
   if E == ALL1 and F == 0:
@@ -155,7 +167,7 @@ def ulp_diff(a: int, b: int) -> int:
 
 # ----------------- FEDP core -----------------
 class FEDP:
-  def __init__(self, lanes=4, eb=5, sb=10, frm="RNE", renorm=False, trace=False, W=25, HR=3, no_window=False):
+  def __init__(self, lanes=4, eb=5, sb=10, frm="RNE", renorm=False, trace=False, W=25, no_window=False):
     self.eb = eb
     self.sb = sb
     self.renorm = renorm
@@ -163,262 +175,330 @@ class FEDP:
     self.lanes = lanes
     self.ebC, self.sbC = 8, 23
     self.W = W
-    self.HR = HR
+    self.HR = lanes.bit_length()
     self.no_window = bool(no_window)
     self.trace = bool(trace)
+    self.bias = (1 << (eb - 1)) - 1
+    self.F32_BIAS = 127
+    self.is_low_prec = (1 + eb + sb <= 8)
+
+  def _split(self, x):
+    s = (x >> (self.eb + self.sb)) & 1
+    e = (x >> self.sb) & ((1 << self.eb) - 1)
+    m = x & ((1 << self.sb) - 1)
+
+    if self.eb == 4 and self.sb == 3:
+      if e == 15 and m != 7:
+        val_m = (1 << self.sb) | m
+        val_e = e - self.bias
+        return s, val_m, val_e
+
+    if e == 0:
+      return s, m, 1 - self.bias
+
+    if e == ((1 << self.eb) - 1):
+      return s, m, 999
+
+    val_m = (1 << self.sb) | m
+    val_e = e - self.bias
+    return s, val_m, val_e
+
+  def _split_c(self, Cbits):
+    s = (Cbits >> 31) & 1
+    e = (Cbits >> 23) & 0xFF
+    m = Cbits & 0x7FFFFF
+
+    if e == 255:
+      if m != 0: return s, m, 999, 1 # NaN
+      return s, m, 999, 4 # Inf
+
+    if e == 0 and m == 0:
+      return s, 0, 0, 0
+
+    if e == 0:
+      val_m = m
+      val_e = -126 - 23
+    else:
+      val_m = (1 << 23) | m
+      val_e = e - 127 - 23
+
+    return s, val_m, val_e, 2
 
   def s1_decode_mul(self, A, B):
-    sb = self.sb
+    terms = []
     inv = False
     nan = False
     pos = False
     neg = False
-    terms = []
 
-    for a, b in zip(A, B):
-      sa, ca, ea, Ma = split(a, self.eb, sb)
-      sb_, cb, eb, Mb = split(b, self.eb, sb)
+    # Calculate shift to align product to MSB of Stage 2 window
+    shift_sf = 22 - (2 * self.sb)
 
-      if ca == 4 or cb == 4:
-        nan = True
-        continue
-      if (ca == 3 and cb == 0) or (cb == 3 and ca == 0):
-        inv = True
-        continue
-      if ca == 3 or cb == 3:
-        sgn = sa ^ sb_
-        pos |= (sgn == 0)
-        neg |= (sgn == 1)
-        continue
+    if self.trace:
+      print(f"  [S1:Input] shift_sf={shift_sf}")
 
-      lzc_prod = 0
-      if self.renorm:
-        lz_a = lzc(Ma, sb) if ca == 1 else 0
-        lz_b = lzc(Mb, sb) if cb == 1 else 0
-        lzc_prod = lz_a + lz_b
+    # --- 1. Decode & Multiply (N Terms) ---
+    for i, (a_bits, b_bits) in enumerate(zip(A, B)):
+      sA, mA, eA = self._split(a_bits)
+      sB, mB, eB = self._split(b_bits)
 
-      P = Ma * Mb
-      e = ea + eb
-      sgn = sa ^ sb_
-      terms.append((sgn, P, e, lzc_prod))
+      # Global exception flags update...
+      zA = (mA == 0 and eA != 999)
+      zB = (mB == 0 and eB != 999)
+      infA = (eA == 999 and mA == 0)
+      infB = (eB == 999 and mB == 0)
+      nanA = (eA == 999 and mA != 0)
+      nanB = (eB == 999 and mB != 0)
+      is_nan = nanA or nanB or (infA and zB) or (infB and zA)
+      is_inf = (infA or infB) and not is_nan
+      sign_xor = (sA ^ sB)
+
+      if is_nan: nan = True
+      if is_inf:
+        if sign_xor: neg = True
+        else: pos = True
+      if nanA or nanB: continue
+
+      # Compute Term (Standard P-Term Generation)
+      P = (mA * mB) << shift_sf
+      E = eA + eB + self.F32_BIAS - 22
+
+      if self.renorm and P > 0:
+        lz = P.bit_length()
+        P = P << lz
+        E = E - lz
+
+      terms.append((sign_xor, P, E))
+
+    # Stage 1.5: Pairwise Reduction (N -> N/2)
+    if self.is_low_prec and len(terms) > 1:
+      if self.trace:
+        print(f"  [PartialReduce] Single Pass (N->N/2): reducing {len(terms)} terms...")
+
+      next_terms = []
+
+      # Iterate pairwise (0,1), (2,3), etc.
+      for i in range(0, len(terms), 2):
+        if i + 1 >= len(terms):
+          # Pass through odd term (unpaired)
+          next_terms.append(terms[i])
+          continue
+
+        s1, m1, e1 = terms[i]
+        s2, m2, e2 = terms[i+1]
+        e_max = max(e1, e2)
+        shift1 = e_max - e1
+        m1_aligned = m1 >> shift1
+        if s1: m1_aligned = -m1_aligned
+
+        if self.trace and shift1 > 0:
+          print(f"    Grp {i//2} T1: Shift {shift1} (0x{m1:x} -> 0x{abs(m1_aligned):x})")
+
+        shift2 = e_max - e2
+        m2_aligned = m2 >> shift2
+        if s2: m2_aligned = -m2_aligned
+
+        if self.trace and shift2 > 0:
+          print(f"    Grp {i//2} T2: Shift {shift2} (0x{m2:x} -> 0x{abs(m2_aligned):x})")
+        v_sum = m1_aligned + m2_aligned
+        if v_sum == 0:
+          next_terms.append((0, 0, 0))
+        else:
+          new_s = 1 if v_sum < 0 else 0
+          new_m = abs(v_sum)
+          new_e = e_max
+          if self.trace:
+            print(f"    Grp {i//2}: Sum=0x{new_m:x} E={new_e}")
+
+        next_terms.append((new_s, new_m, new_e))
+
+      terms = next_terms
 
     if self.trace:
       print(f"  [S1:decode_mul] terms={len(terms)} inv={inv} nan={nan} pos={pos} neg={neg}")
+
     return terms, inv, nan, pos, neg
 
-  def s1_mapC(self, Cbits: int):
-    sc, cc, eC, Mc = split(Cbits, self.ebC, self.sbC)
+  def s1_mapC(self, Cbits):
+    sc, Mc, eC, cc = self._split_c(Cbits)
+
+    # Bias the C-term exponent to match P-term pipeline
+    if cc != 4 and Mc != 0:
+      eC = eC + self.F32_BIAS
+
     if self.trace:
       print(f"  [S1:mapC] sc={sc} Mc=0x{Mc:x} eC={eC} cc={cc}")
-    if cc == 3:
-      cc = -3 if sc else 3
+
     return sc, Mc, eC, cc
 
   def s2_align(self, terms, Cp):
-    normalized_terms = []
-    for s, P_raw, e_raw, lead_prod in terms:
-        if P_raw:
-            P_norm = P_raw << lead_prod
-            e_norm = e_raw - lead_prod
-            normalized_terms.append((s, P_norm, e_norm))
-
     sc, Mc, eC, cc = Cp
-    W = self.W
-    sb = self.sb
-    tops = []
-    base_msb_offset = 2 * sb
+    pipe_terms = []
 
-    for s, P, e in normalized_terms:
-      if P:
-        top_val = e + base_msb_offset
-        tops.append(top_val)
+    # Tag terms to identify P vs C for alignment offsets
+    for s, m, e in terms:
+      if m != 0:
+        eff_e = e + 23 - self.W
+        pipe_terms.append((s, m, eff_e, False))
 
-    if cc in (0, 1, 2):
-      if Mc:
-        tops.append(eC + self.sbC)
+    if Mc != 0 and cc != 4:
+      eff_e_c = eC + 24 - self.W
+      pipe_terms.append((sc, Mc, eff_e_c, True))
 
-    if not tops:
-      if self.trace:
-        print("  [S2:align] no terms; nothing to align")
+    if not pipe_terms:
+      if self.trace: print("  [S2:align] no terms")
       return [], 0, 0, cc
 
-    L = max(tops) - (W-1)
+    L = -9999
+    for t in pipe_terms:
+      if t[2] > L: L = t[2]
+
     aligned_terms = []
     sticky = 0
+    WA = self.W + 2
+    mask_WA = (1 << WA) - 1
 
-    def align_and_add(val: int, e: int):
-      nonlocal sticky
-      k = e - L
-      if k >= 0:
-        aligned_terms.append(val << k)
+    for s, m, eff_e, is_c in pipe_terms:
+      shift = L - eff_e
+
+      # Distinct Alignment Anchors
+      # P-terms match C++ 'MANT = W-23' -> Offset WA-25
+      # C-terms match C++ 'MANT = W-24' -> Offset WA-26
+      if is_c:
+        offset = WA - 26
       else:
-        sh = -k
-        mag = -val if val < 0 else val
-        part = mag >> sh
-        T = -part if val < 0 else part
-        aligned_terms.append(T)
-        if (mag & ((1 << sh) - 1)) != 0:
-          sticky |= 1
+        offset = WA - 25
 
-    for s, P, e in normalized_terms:
-      if P:
-        align_and_add(-P if s else P, e)
+      sh = offset - shift
 
-    if Mc and cc in (0, 1, 2):
-      align_and_add(-Mc if sc else Mc, eC)
+      val = 0
+      st_local = 0
+
+      if sh >= 0:
+        val = m << sh
+      else:
+        r_sh = -sh
+        val = m >> r_sh
+        mask_st = (1 << r_sh) - 1
+        if (m & mask_st) != 0:
+          st_local = 1
+
+      val = val & mask_WA
+      if s: val = (~val + 1) & mask_WA
+      aligned_terms.append(val)
+      sticky = sticky | st_local
 
     if self.trace:
       print(f"  [S2:align] aligned_terms={len(aligned_terms)} sticky={sticky} L={L}")
+
     return aligned_terms, sticky, L, cc
 
   def s3_accumulate(self, aligned_terms):
-    if not aligned_terms:
-      if self.trace:
-        print("  [S3:accumulate] Vw=0 (no terms)")
-      return 0
+    if not aligned_terms: return 0
+    Ww = self.W + 1 + self.HR
+    mask_Ww = (1 << Ww) - 1
+
+    WA = self.W + 2
+
     if self.no_window:
-      V = 0
-      for T in aligned_terms:
-        V += T
-      return V
+      val_sum = 0
+      for v in aligned_terms:
+        if v & (1 << (WA - 1)):
+          val_sum += (v - (1 << WA))
+        else:
+          val_sum += v
+      if self.trace: print(f"  [S3:accumulate] Vw={val_sum} (no_window)")
+      return val_sum
 
-    WW = self.W + self.HR
-    mask = (1 << WW) - 1
-    s_acc = 0
-    c_acc = 0
-    for T in aligned_terms:
-      s_acc, c_acc = csa(s_acc, c_acc, T & mask, mask)
-    Vw_unsigned = cpa(s_acc, c_acc, mask)
-    Vw = twos_to_int(Vw_unsigned, WW)
+    # Explicit Sign Extension before Summing
+    current_sum = 0
+    msb_WA = 1 << (WA - 1)
+
+    for val in aligned_terms:
+      if val & msb_WA:
+        signed_val = val - (1 << WA)
+      else:
+        signed_val = val
+      current_sum += signed_val
+
+    # Mask result to Ww bits
+    V_unsigned = current_sum & mask_Ww
+
+    # Convert Ww-bit result back to Python signed integer
+    msb_Ww = 1 << (Ww - 1)
+    V = V_unsigned
+    if V_unsigned & msb_Ww:
+      V = V_unsigned - (1 << Ww)
+
     if self.trace:
-      print(f"  [S3:accumulate] Vw={Vw} (0x{Vw_unsigned:x})")
-    return Vw
+      print(f"  [S3:accumulate] Vw={V} (0x{V_unsigned:x})")
+    return V
 
-  def s4_normalize(self, V: int, st: int, L: int):
-    WW = self.W + self.HR
+  def s4_normalize(self, V, sticky, L):
+    Ww = self.W + 1 + self.HR
     if V == 0:
-      return 0, 0, 0, st, -10**9
+      if self.trace: print("  [S4:normalize] V=0")
+      return 0, 0, 0, sticky, -999
 
     s = 1 if V < 0 else 0
-    X = (-V if V < 0 else V)
+    X = abs(V)
+
     if not self.no_window:
-      X &= (1 << WW) - 1
+      mask_Ww = (1 << Ww) - 1
+      pass
 
     i = X.bit_length() - 1
     e = L + i
     sh = (i + 1) - 24
 
+    kept = 0; g = 0; st_out = 0
     if sh >= 0:
-      kept = (X >> sh) & ((1 << 24) - 1)
+      kept = (X >> sh) & 0xFFFFFF
       rem = X & ((1 << sh) - 1)
-      g = (rem >> (sh - 1)) & 1 if sh > 0 else 0
-      low = rem & ((1 << (sh - 1)) - 1) if sh > 1 else 0
-      st_out = 1 if (low != 0 or st) else 0
+      if sh > 0: g = (rem >> (sh - 1)) & 1
+      if (rem & ((1 << (sh - 1 if sh > 1 else 0)) - 1)) != 0 or sticky: st_out = 1
     else:
-      kept = (X << (-sh)) & ((1 << 24) - 1)
-      g = 0
-      st_out = st
+      kept = (X << -sh) & 0xFFFFFF
+      g = 0; st_out = sticky
 
     if self.trace:
       print(f"  [S4:normalize] s={s} kept=0x{kept:06x} g={g} st={st_out} e={e}")
     return s, kept, g, st_out, e
 
   def s5_rounding(self, s, kept, g, st, e, cc, inv, nan, pos, neg):
-    if nan or inv or (pos and neg):
-      result = 0x7fc00000
-    elif cc == 4:
-      result = 0x7fc00000
-    elif cc in (3, -3):
-      cneg = 1 if cc < 0 else 0
-      if pos or neg:
-        if (pos and neg) or (pos and cneg) or (neg and not cneg):
-          result = 0x7fc00000
-        else:
-          result = 0xff800000 if cneg else 0x7f800000
-      else:
-        result = 0xff800000 if cneg else 0x7f800000
-    elif pos and not neg:
-      result = 0x7f800000
-    elif neg and not pos:
-      result = 0xff800000
-    elif kept == 0 and st == 0:
-      result = 0x00000000
-    else:
-      result = self._f32_round_pack(s, kept, g, st, e, self.frm)
-    if self.trace:
-      print(f"  [S5:rounding] final=0x{result:08x}")
-    return result
+    # Priority: NaN > Inf > Normal
+    if nan or inv or (pos and neg): return 0x7fc00000 # NaN
+    if cc == 4: return 0x7fc00000 # C was NaN
 
-  @staticmethod
-  def _f32_round_pack(s, kept, g, st, e_unb, frm):
+    if pos: return 0x7f800000 # +Inf
+    if neg: return 0xff800000 # -Inf
+
+    if kept == 0 and st == 0: return 0x00000000
+
+    round_up = False
     discarded = (g == 1 or st == 1)
-    if frm == "RNE":
-      round_up = (g == 1 and (st == 1 or (kept & 1) == 1))
-    elif frm == "RTZ":
-      round_up = False
-    elif frm == "RDN":
-      round_up = (s == 1 and discarded)
-    elif frm == "RUP":
-      round_up = (s == 0 and discarded)
-    elif frm == "RMM":
-      round_up = (g == 1)
-    else:
-      raise ValueError(f"Unknown rounding mode: {frm}")
+    if self.frm == "RNE":
+      round_up = (g == 1 and (st == 1 or (kept & 1)))
+    elif self.frm == "RTZ": round_up = False
+    elif self.frm == "RDN": round_up = (s == 1 and discarded)
+    elif self.frm == "RUP": round_up = (s == 0 and discarded)
+    elif self.frm == "RMM": round_up = (g == 1)
 
-    if round_up:
-      kept_rounded = kept + 1
-    else:
-      kept_rounded = kept
-
+    kept_rounded = kept + (1 if round_up else 0)
     if kept_rounded & (1 << 24):
       kept_rounded >>= 1
-      e_unb += 1
+      e += 1
 
-    be = e_unb + 127
+    be = e
+
     if be >= 255:
-      if frm == "RTZ":
+      if self.frm == "RTZ":
         return (s << 31) | 0x7f7fffff
-      if frm == "RDN":
-        return (s << 31) | 0x7f7fffff if s == 0 else 0xff800000
-      if frm == "RUP":
-        return (s << 31) | 0x7f800000 if s == 0 else 0xff7fffff
       return (s << 31) | 0x7f800000
-
-    if be <= 0:
-      k = 1 - be
-      if frm == "RTZ":
-        m = (kept_rounded >> k) if k < 25 else 0
-        return (s << 31) | (m & 0x7FFFFF)
-      if k >= 25:
-        if (frm == "RUP" and s == 0 and discarded):
-            return (s << 31) | 1
-        if (frm == "RDN" and s == 1 and discarded):
-            return (s << 31) | 0x80000001
-        return (s << 31)
-
-      lsb = (kept_rounded >> k) & 1
-      new_g = (kept_rounded >> (k - 1)) & 1
-      st_mask = (1 << (k - 1)) - 1
-      new_st = 1 if ((kept_rounded & st_mask) != 0 or g != 0 or st != 0) else 0
-      m_sub = kept_rounded >> k
-
-      if frm == "RNE":
-          round_up_sub = (new_g == 1 and (new_st == 1 or lsb == 1))
-      elif frm == "RDN":
-          round_up_sub = (s == 1 and (new_g == 1 or new_st == 1))
-      elif frm == "RUP":
-          round_up_sub = (s == 0 and (new_g == 1 or new_st == 1))
-      elif frm == "RMM":
-          round_up_sub = (new_g == 1)
-      else: round_up_sub = False
-
-      m_final = m_sub + 1 if round_up_sub else m_sub
-      if m_final == (1 << 23):
-          return (s << 31) | (1 << 23)
-      return (s << 31) | (m_final & 0x7FFFFF)
-
-    m = kept_rounded & 0x7FFFFF
-    return (s << 31) | ((be & 0xff) << 23) | m
+    elif be <= 0:
+      return (s << 31) # Flush to zero
+    else:
+      return (s << 31) | ((be & 0xFF) << 23) | (kept_rounded & 0x7FFFFF)
 
   def dotp(self, A, B, Cbits):
     terms, inv, nan, pos, neg = self.s1_decode_mul(A, B)
@@ -426,7 +506,8 @@ class FEDP:
     aligned, sticky1, L, cc = self.s2_align(terms, Cp)
     V = self.s3_accumulate(aligned)
     s, kept, g, sticky2, e = self.s4_normalize(V, sticky1, L)
-    return self.s5_rounding(s, kept, g, sticky2, e, cc, inv, nan, pos, neg)
+    res = self.s5_rounding(s, kept, g, sticky2, e, cc, inv, nan, pos, neg)
+    return res
 
 # ----------------- references -----------------
 def _to_float_np(x: int, eb: int, sb: int) -> np.longdouble:
@@ -434,6 +515,21 @@ def _to_float_np(x: int, eb: int, sb: int) -> np.longdouble:
   E = (x >> sb) & ((1 << eb) - 1)
   F = x & ((1 << sb) - 1)
   b = bias(eb)
+
+  # FP8 Support in Numpy ref (Just approximate range)
+  if eb == 4 and sb == 3:
+      # NaNs
+      if E == 15 and F == 7: return np.longdouble(np.nan)
+      # No Inf
+      if E == 0 and F == 0: return np.longdouble(-0.0) if s else np.longdouble(0.0)
+      if E == 0: # Subnormal
+          m = np.longdouble(F) / np.longdouble(1 << sb)
+          e = 1 - b
+      else: # Normal (incl E=15)
+          m = np.longdouble(1.0) + np.longdouble(F) / np.longdouble(1 << sb)
+          e = E - b
+      v = np.ldexp(m, int(e))
+      return -v if s else v
 
   if E == 0 and F == 0:
     return np.longdouble(-0.0) if s else np.longdouble(0.0)
@@ -487,13 +583,7 @@ def ref_numpy(A, B, Cbits, eb, sb, frm) -> int:
   return round_longdouble_to_f32_bits(s_ld, frm)
 
 def _ensure_cuda_ext(fmt: str, arch_flag: str):
-  """
-  Build/load a CUDA extension dynamically based on the requested format.
-  Uses the robust template logic from tcu_eval.py.
-  """
   global _torch, _ext
-
-  # Create a unique key for the extension
   ext_key = f"{fmt}_{arch_flag}"
   if ext_key in _ext:
     return _torch, _ext[ext_key]
@@ -512,7 +602,6 @@ def _ensure_cuda_ext(fmt: str, arch_flag: str):
 
   cfg = FMT_CONFIG[fmt]
 
-  # C++ Source (Binding)
   cpp_src = r"""
     #include <torch/extension.h>
     void wmma_tile_gemm_batched_launcher(torch::Tensor A,
@@ -527,9 +616,7 @@ def _ensure_cuda_ext(fmt: str, arch_flag: str):
     }
     """
 
-  # CUDA Source
   if not cfg["use_ptx"]:
-    # Standard WMMA C++ Path
     cuda_src_template = r"""
     #include <torch/extension.h>
     #include <ATen/cuda/CUDAContext.h>
@@ -550,9 +637,6 @@ def _ensure_cuda_ext(fmt: str, arch_flag: str):
       const int K_BACKING = {backing_k};
       const int N_TILE    = {n_tile};
 
-      // Stride setup matching tcu_eval logic:
-      // A: row-major 16 x K_BACKING
-      // B: col-major K_BACKING x 16 (but we pass pre-transposed memory with stride K)
       const int STRIDE_AB = 16 * K_BACKING;
       const int LD_AB     = K_BACKING;
       const int STRIDE_CD = 16 * 16;
@@ -602,7 +686,6 @@ def _ensure_cuda_ext(fmt: str, arch_flag: str):
     )
 
   else:
-    # Manual PTX FP8 Path
     cuda_src_template = r"""
     #include <torch/extension.h>
     #include <cuda_fp8.h>
@@ -701,7 +784,6 @@ def _ensure_cuda_ext(fmt: str, arch_flag: str):
     """
     cuda_src = cuda_src_template.format(ptx_type=cfg["ptx_type"])
 
-  # Ensure compilation for correct arch
   os.environ.setdefault("TORCH_CUDA_ARCH_LIST", arch_flag.replace("sm_", "").replace(".", ""))
 
   ext = load_inline(
@@ -721,10 +803,6 @@ def _u32_to_f32(val_u32: int) -> np.float32:
   return np.array([val_u32], dtype=np.uint32).view(np.float32)[0]
 
 def ref_cuda(A, B, Cbits, eb, sb, arch_flag="sm_89") -> int:
-  """
-  Unified CUDA reference using tcu_eval backend logic.
-  Map dot-product A*B+C to GEMM row 0, col 0.
-  """
   fmt = fmt_from_eb_sb(eb, sb)
   torch, ext = _ensure_cuda_ext(fmt, arch_flag)
   device = torch.device("cuda")
@@ -734,77 +812,38 @@ def ref_cuda(A, B, Cbits, eb, sb, arch_flag="sm_89") -> int:
   if K > cfg["k_tile"]:
     raise ValueError(f"--ref=cuda({fmt}) expects n <= {cfg['k_tile']}, got {K}")
 
-  # 1. Prepare Data
-  # A and B inputs are Python integers (raw bits). We must pack them into the
-  # correct numpy types expected by the tensor core backend.
-
   if fmt == "fp16":
     a_np = np.array(A, dtype=np.uint16).view(np.float16)
     b_np = np.array(B, dtype=np.uint16).view(np.float16)
     torch_dtype = torch.float16
   elif fmt == "bf16":
-    # No native np.bfloat16. Pass as int16, view as bfloat16 in Torch
     a_np = np.array(A, dtype=np.int16)
     b_np = np.array(B, dtype=np.int16)
     torch_dtype = torch.bfloat16
   elif fmt == "tf32":
-    # TF32 in memory is float32. We expand the packed bits to float32.
     a_np = np.array([_to_float_np(x, 8, 10) for x in A], dtype=np.float32)
     b_np = np.array([_to_float_np(x, 8, 10) for x in B], dtype=np.float32)
     torch_dtype = torch.float32
   elif fmt in ["fp8", "bf8"]:
-    # Pass as raw bytes (uint8)
     a_np = np.array(A, dtype=np.uint8)
     b_np = np.array(B, dtype=np.uint8)
-    # torch.float8 types exist in newer torch, but our backend casts void* -> int4/int2
-    # so we just pass uint8 tensors and let the kernel re-interpret.
     torch_dtype = torch.uint8
   else:
     raise ValueError(f"Unknown format for ref_cuda: {fmt}")
 
-  # 2. Layout for GEMM
-  # GEMM: C_mxn = A_mxk * B_kxn + C_mxn
-  # We want a simple dot product. We use 1xK * Kx1 = 1x1.
-  # However, the kernels operate on tiles (16x16, etc).
-  # We place Vector A into Row 0 of Matrix A Tile.
-  # We place Vector B into Column 0 of Matrix B Tile.
-  # Result is at (0,0).
-
   backing_k = cfg["backing_k"]
-  n_tile = cfg["n_tile"] # typically 16 or 8
-
-  # A_h: 1 (batch) x 16 (rows) x backing_k (cols)
-  # Row-major.
   A_h = np.zeros((1, 16, backing_k), dtype=a_np.dtype)
   A_h[0, 0, :K] = a_np
 
-  # B_h: 1 (batch) x 16 (rows) x backing_k (cols)
-  # We need to construct B such that when treated as COL-MAJOR by the kernel,
-  # the first column (which is contiguous in row-major memory?)
-  # Wait, tcu_eval logic:
-  #   B_row[:, :K, 0] = b_terms  (B_row is 16xK, b_terms is Kx1)
-  #   B_h = transpose(B_row) -> 1 x K x 16
-  #   The kernel receives B_colmajor pointer.
-  #   wmma::load_matrix_sync(..., layout=col_major) expects stride to be leading dimension (rows).
-  #
-  # Let's stick to the tcu_eval construction exactly:
-  # B input to launcher is "B_colmajor".
-  # In tcu_eval: B_row = zeros(16, backing_k); B_row[:K, 0] = b_vec
-  #              B_h   = transpose(B_row) -> (backing_k, 16)
-
   B_row = np.zeros((1, 16, backing_k), dtype=b_np.dtype)
   B_row[0, :K, 0] = b_np
-  # Transpose last two dims: (1, 16, K) -> (1, K, 16)
   B_h = np.transpose(B_row, (0, 2, 1)).copy()
 
-  # C: 1 x 16 x 16 (float32)
   c_val = _u32_to_f32(Cbits)
   C_h = np.zeros((1, 16, 16), dtype=np.float32)
   C_h[0, 0, 0] = c_val
 
-  # 3. Transfer to GPU
   if fmt == "bf16":
-    # Special view handling for BF16 since numpy lacks it
     A_d = torch.from_numpy(A_h).to(device=device).view(torch.bfloat16)
     B_d = torch.from_numpy(B_h).to(device=device).view(torch.bfloat16)
   else:
@@ -814,16 +853,13 @@ def ref_cuda(A, B, Cbits, eb, sb, arch_flag="sm_89") -> int:
   C_d = torch.from_numpy(C_h).to(device=device, dtype=torch.float32)
   D_d = torch.empty_like(C_d)
 
-  # 4. Launch
   ext.wmma_tile_gemm_batched_launcher(A_d, B_d, C_d, D_d, 1)
   torch.cuda.synchronize()
 
-  # 5. Readback
   D00 = float(D_d[0, 0, 0].item())
   return be32_from_float(D00)
 
 
-# ----------------- C++ reference -----------------
 def _ensure_cpp_ext(source_path):
   global _torch, _cpp_ext
   if _cpp_ext is not None:
@@ -898,7 +934,7 @@ def _ensure_cpp_ext(source_path):
   _torch = _t
   return _torch, _cpp_ext
 
-def ref_cpp(A, B, Cbits, eb, sb, W, HR, renorm, frm, no_window, source_path):
+def ref_cpp(A, B, Cbits, eb, sb, W, renorm, frm, no_window, source_path):
   torch, ext = _ensure_cpp_ext(source_path)
   tA = torch.tensor(A, dtype=torch.int32)
   tB = torch.tensor(B, dtype=torch.int32)
@@ -921,11 +957,21 @@ def generate_fp_value(feature, eb, sb, test_id):
   tag = _stable_feature_tag(feature)
   s = (test_id ^ tag) & 1
 
+  # [FIX 2] Update Generator to respect FP8 E4M3 Rules
+  is_e4m3 = (eb == 4 and sb == 3)
+
   if feature == "zeros":
     return _pack_fp(test_id & 1, 0, 0, eb, sb)
   elif feature == "infinities":
+    if is_e4m3:
+        # E4M3 has no Infinity. Return Max Normal.
+        return _pack_fp(s, all_exp, max_frac - 1, eb, sb)
     return _pack_fp(test_id & 1, all_exp, 0, eb, sb)
   elif feature == "nans":
+    if is_e4m3:
+        # E4M3 NaN is strictly E=15, F=7
+        return _pack_fp(s, all_exp, max_frac, eb, sb)
+
     if sb == 0:
       return _pack_fp(s, all_exp, 0, eb, sb)
     qbit = 1 << (sb - 1)
@@ -1001,18 +1047,17 @@ def _print_case(tag, idx, A, B, C, hex_digits=4):
   a_str = ",".join(f"0x{x:0{hex_digits}x}" for x in A)
   b_str = ",".join(f"0x{x:0{hex_digits}x}" for x in B)
   c_str = f"0x{C:08x}"
-  print(f'[{tag} #{idx}] inputs="[{a_str}];[{b_str}];{c_str}"')
+  print(f'[{tag} Case {idx}] inputs="[{a_str}];[{b_str}];{c_str}"')
 
 # ----------------- harness -----------------
 def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
          test_id_filter, ref_mode, arch_flag, max_errors,
-         W, HR, no_window, cpp_source):
+         W, no_window, cpp_source):
 
-  fedp = FEDP(eb=eb, sb=sb, frm=frm, renorm=renorm, lanes=n, trace=trace, W=W, HR=HR, no_window=no_window)
+  fedp = FEDP(eb=eb, sb=sb, frm=frm, renorm=renorm, lanes=n, trace=trace, W=W, no_window=no_window)
   hex_digits = fmt_hex_digits(eb, sb)
 
   if ref_mode == "cuda":
-    # Ensure ext is loaded early to fail fast
     fmt = fmt_from_eb_sb(eb, sb)
     if fmt is None:
          print(f"Error: CUDA ref does not support custom eb={eb}/sb={sb}. Use --fmt.", file=sys.stderr)
@@ -1021,7 +1066,7 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
     ref_fn = lambda A, B, C, EB, SB: ref_cuda(A, B, C, EB, SB, arch_flag=arch_flag)
   elif ref_mode == "cpp":
     _ensure_cpp_ext(cpp_source)
-    ref_fn = lambda A, B, C, EB, SB: ref_cpp(A, B, C, EB, SB, W, HR, renorm, frm, no_window, cpp_source)
+    ref_fn = lambda A, B, C, EB, SB: ref_cpp(A, B, C, EB, SB, W, renorm, frm, no_window, cpp_source)
   else:
     ref_fn = lambda A, B, C, EB, SB: ref_numpy(A, B, C, EB, SB, frm=frm)
 
@@ -1157,8 +1202,6 @@ if __name__ == "__main__":
                   help="Stop after N errors (0 = do not stop)")
   ap.add_argument("--W", type=int, default=25,
                   help="Accumulator window width")
-  ap.add_argument("--HR", type=int, default=4,
-                  help="Accumulator Headroom bits")
   ap.add_argument("--no-window", action="store_true",
                   help="Disable window clipping in FEDP accumulator")
   args = ap.parse_args()
@@ -1178,7 +1221,7 @@ if __name__ == "__main__":
         sys.exit(1)
       args.n = len(A)
       fedp = FEDP(lanes=args.n, eb=args.eb, sb=args.sb, frm=args.frm, renorm=args.renorm,
-                  trace=args.trace, W=args.W, HR=args.HR, no_window=args.no_window)
+                  trace=args.trace, W=args.W, no_window=args.no_window)
       hex_digits = fmt_hex_digits(args.eb, args.sb)
       if not args.trace:
         _print_case("direct", 0, A, B, C, hex_digits=hex_digits)
@@ -1195,7 +1238,7 @@ if __name__ == "__main__":
         ref_fn = lambda A_, B_, C_, EB, SB: ref_cuda(A_, B_, C_, EB, SB, arch_flag=args.arch)
       elif args.ref == "cpp":
         _ensure_cpp_ext(args.cpp_source)
-        ref_fn = lambda A_, B_, C_, EB, SB: ref_cpp(A_, B_, C_, EB, SB, args.W, args.HR, args.renorm, args.frm, args.no_window, args.cpp_source)
+        ref_fn = lambda A_, B_, C_, EB, SB: ref_cpp(A_, B_, C_, EB, SB, args.W, args.renorm, args.frm, args.no_window, args.cpp_source)
       else:
         ref_fn = lambda A_, B_, C_, EB, SB: ref_numpy(A_, B_, C_, EB, SB, frm=args.frm)
 
@@ -1210,4 +1253,4 @@ if __name__ == "__main__":
 
   test(args.n, args.eb, args.sb, args.frm, args.renorm,
        args.iters, args.seed, args.debug, args.trace, args.test,
-       args.ref, args.arch, args.max_errors, args.W, args.HR, args.no_window, args.cpp_source)
+       args.ref, args.arch, args.max_errors, args.W, args.no_window, args.cpp_source)
