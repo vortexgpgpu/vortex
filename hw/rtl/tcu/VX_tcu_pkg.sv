@@ -113,8 +113,8 @@ package VX_tcu_pkg;
             TCU_TF32_ID: return 8;
             TCU_FP16_ID: return 5;
             TCU_BF16_ID: return 8;
-            TCU_FP8_ID:  return 5;
-            TCU_BF8_ID:  return 4;
+            TCU_FP8_ID:  return 4;
+            TCU_BF8_ID:  return 5;
             default:     return 0;
         endcase
     endfunction
@@ -125,8 +125,8 @@ package VX_tcu_pkg;
             TCU_TF32_ID: return 10;
             TCU_FP16_ID: return 10;
             TCU_BF16_ID: return 7;
-            TCU_FP8_ID:  return 2;
-            TCU_BF8_ID:  return 3;
+            TCU_FP8_ID:  return 3;
+            TCU_BF8_ID:  return 2;
             default:     return 0;
         endcase
     endfunction
@@ -152,6 +152,7 @@ package VX_tcu_pkg;
             TCU_BF16_ID:  `TRACE(level, ("bf16"))
             TCU_FP8_ID:   `TRACE(level, ("fp8"))
             TCU_BF8_ID:   `TRACE(level, ("bf8"))
+            TCU_TF32_ID:  `TRACE(level, ("tf32"))
             TCU_MXFP8_ID: `TRACE(level, ("mxfp8"))
             TCU_NVFP4_ID: `TRACE(level, ("nvfp4"))
             TCU_I32_ID:   `TRACE(level, ("i32"))

@@ -40,8 +40,7 @@ module VX_tcu_drl_align import VX_tcu_pkg::*; #(
         wire [WA-2:0] adj_mag = is_overshift ? '0 : shift_res_full[WA-2:0];
 
         // 4. Convert to 2's Complement
-        wire [WA-1:0] mag_pack = {1'b0, adj_mag};
-        wire [WA-1:0] fp_sig_out = in_sign ? (~mag_pack + 1'b1) : mag_pack;
+        wire [WA-1:0] fp_sig_out = in_sign ? -{1'b0, adj_mag} : {1'b0, adj_mag};
 
         // 5. Sticky Calculation
         wire [SHIFT_MAG_W-1:0] sticky_check_shift = mag_shifted << (8'(SHIFT_MAG_W) - shift_amt[i]);

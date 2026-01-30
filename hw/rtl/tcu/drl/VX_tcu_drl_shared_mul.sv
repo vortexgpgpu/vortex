@@ -19,12 +19,11 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
     input fedp_class_t [2*TCK-1:0] cls_bf8 [2],
     input fedp_class_t             cls_c,
 
-    input wire [TCK-1:0]       exp_low_larger,
-    input wire [TCK-1:0][6:0]  raw_exp_diff,
+    input wire [TCK-1:0][5:0]  exp_diff_f8,
 
     output logic [TCK:0][24:0] y
 );
-    `UNUSED_VAR ({vld_mask, exp_low_larger, raw_exp_diff})
+    `UNUSED_VAR (vld_mask)
 
     wire [TCK-1:0][10:0] man_a_tf32, man_b_tf32, man_a_fp16, man_b_fp16, man_a_bf16, man_b_bf16;
     wire [TCK-1:0]       sign_tf32, sign_fp16, sign_bf16;
@@ -174,12 +173,12 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         end
 
         // Alignment & Adder for FP8/BF8
-        wire [6:0] shift_amt_f8 = exp_low_larger[i] ? -raw_exp_diff[i] : raw_exp_diff[i];
+        wire [5:0] shift_amt_f8 = exp_diff_f8[i][5] ? -{1'b0, exp_diff_f8[i][4:0]} : {1'b0, exp_diff_f8[i][4:0]};
         wire [7:0] y_f8_low  = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[0] : {y_raw_f8[0][5:0], 2'd0};
         wire [7:0] y_f8_high = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[1] : {y_raw_f8[1][5:0], 2'd0};
 
-        wire [22:0] aligned_sig_low  = exp_low_larger[i] ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> shift_amt_f8;
-        wire [22:0] aligned_sig_high = exp_low_larger[i] ? {y_f8_high, 15'd0} >> shift_amt_f8 : {y_f8_high, 15'd0};
+        wire [22:0] aligned_sig_low  = exp_diff_f8[i][5] ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> shift_amt_f8;
+        wire [22:0] aligned_sig_high = exp_diff_f8[i][5] ? {y_f8_high, 15'd0} >> shift_amt_f8 : {y_f8_high, 15'd0};
 
         wire [23:0] signed_sig_low  = sign_f8_curr[0] ? -aligned_sig_low  : {1'b0, aligned_sig_low};
         wire [23:0] signed_sig_high = sign_f8_curr[1] ? -aligned_sig_high : {1'b0, aligned_sig_high};

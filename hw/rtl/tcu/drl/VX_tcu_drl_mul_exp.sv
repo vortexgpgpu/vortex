@@ -17,7 +17,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     input wire [31:0]       c_val,
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
-    output wire [9:0]         max_exp,
+    output wire [EXP_W-1:0]   max_exp,
     output wire [TCK:0][7:0]  shift_amt,
     output wire [TCK:0][24:0] raw_sigs,
     output wire fedp_excep_t  exceptions,
@@ -56,9 +56,8 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
     // 2. Mantissa Product
     // ----------------------------------------------------------------------
 
-    wire [TCK-1:0]      exp_low_larger;
-    wire [TCK-1:0][6:0] raw_exp_diff;
-    wire [TCK:0][9:0]   raw_exps;
+    wire [TCK-1:0][5:0] exp_diff_f8;
+    wire [TCK:0][EXP_W-1:0] raw_exps;
 
     VX_tcu_drl_shared_mul #(
         .N   (N),
@@ -75,8 +74,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .cls_fp8        (cls_fp8),
         .cls_bf8        (cls_bf8),
         .cls_c          (cls_c[0]),
-        .exp_low_larger (exp_low_larger),
-        .raw_exp_diff   (raw_exp_diff),
+        .exp_diff_f8   (exp_diff_f8),
         .y              (raw_sigs)
     );
 
@@ -102,8 +100,7 @@ module VX_tcu_drl_mul_exp import VX_tcu_pkg::*;  #(
         .cls_bf8        (cls_bf8),
         .cls_c          (cls_c[0]),
         .raw_exp_y      (raw_exps),
-        .exp_low_larger (exp_low_larger),
-        .raw_exp_diff   (raw_exp_diff)
+        .exp_diff_f8    (exp_diff_f8)
     );
 
     // ----------------------------------------------------------------------

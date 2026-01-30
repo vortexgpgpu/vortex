@@ -21,7 +21,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     `UNUSED_VAR (fmt_d)
 
     localparam TCK     = 2 * N;
-    localparam EXP_W   = 10;
+    localparam EXP_W   = 9;
     localparam SHIFT_W = 8;
     localparam RAW_W   = W;
     localparam EXC_W   = $bits(fedp_excep_t);
@@ -83,7 +83,8 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
 
     VX_tcu_drl_mul_exp #(
         .N (N),
-        .W (W)
+        .W (W),
+        .EXP_W (EXP_W)
     ) mul_exp (
         .clk(clk),
         .valid_in(vld_pipe[S0_IDX]),
