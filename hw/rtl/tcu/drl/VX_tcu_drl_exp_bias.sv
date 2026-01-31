@@ -58,6 +58,8 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     localparam [EXP_W-1:0] BIAS_CONST_FP8  = EXP_W'(F32_BIAS - 2*B_FP8  + 2*ALIGN_SHIFT - W + WA - 1);
     localparam [EXP_W-1:0] BIAS_CONST_BF8  = EXP_W'(F32_BIAS - 2*B_BF8  + 2*ALIGN_SHIFT - W + WA - 1);
 
+    localparam [EXP_W-1:0] EXP_NEG_INF = {1'b1, {(EXP_W-1){1'b0}}};
+
     // ----------------------------------------------------------------------
     // 1. Inputs Setup
     // ----------------------------------------------------------------------
@@ -242,12 +244,12 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         always_comb begin
             case(fmtf)
                 TCU_TF32_ID, TCU_FP16_ID, TCU_BF16_ID: begin
-                    raw_exp_y[i] = is_zero_f16 ? EXP_W'(0) : sum_f16;
+                    raw_exp_y[i] = is_zero_f16 ? EXP_NEG_INF : sum_f16;
                 end
                 TCU_FP8_ID, TCU_BF8_ID: begin
                     raw_exp_y[i] = diff_f8_sign ?
-                        (is_zero_f8[0] ? EXP_W'(0) : sum_f8_0) :
-                        (is_zero_f8[1] ? EXP_W'(0) : sum_f8_1);
+                        (is_zero_f8[0] ? EXP_NEG_INF : sum_f8_0) :
+                        (is_zero_f8[1] ? EXP_NEG_INF : sum_f8_1);
                 end
                 default: begin
                     raw_exp_y[i] = 'x;
@@ -264,6 +266,6 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     `UNUSED_VAR ({c_val[31], c_val[23:0], cls_c})
     wire [7:0] c_exp_raw = c_val[30:23];
     wire [EXP_W-1:0] c_exp_adj = EXP_W'(c_exp_raw) - EXP_W'(W-1) + EXP_W'(WA-1);
-    assign raw_exp_y[TCK] = cls_c.is_zero ? EXP_W'(0) : c_exp_adj;
+    assign raw_exp_y[TCK] = cls_c.is_zero ? EXP_NEG_INF : c_exp_adj;
 
 endmodule

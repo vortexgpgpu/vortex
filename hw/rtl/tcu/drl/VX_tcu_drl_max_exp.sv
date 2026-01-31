@@ -27,8 +27,8 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
                 // Reuse sign from symmetric position (no subtractor needed)
                 assign sign_mat[i][j] = ~sign_mat[j][i];
             end else begin : g_upper
-                // Calculate difference: exp[i] - exp[j+1]
-                assign diff_mat[i][j] = {1'b0, exponents[i]} - {1'b0, exponents[j+1]};
+                // Calculate signed difference: exp[i] - exp[j+1]
+                assign diff_mat[i][j] = {exponents[i][WIDTH-1], exponents[i]} - {exponents[j+1][WIDTH-1], exponents[j+1]};
                 // Sign bit (MSB) determines if exp[i] < exp[j+1]
                 assign sign_mat[i][j] = diff_mat[i][j][WIDTH];
             end

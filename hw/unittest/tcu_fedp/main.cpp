@@ -145,6 +145,10 @@ void init_default_fp_format(uint32_t fmt, int *exp_bits, int *sig_bits) {
       *exp_bits = 5;
       *sig_bits = 2;
       break;
+    case 5: // tf32
+      *exp_bits = 8;
+      *sig_bits = 10;
+      break;
     default:
       break;
   }
@@ -886,7 +890,7 @@ TestConfig parse_args(int argc, char **argv) {
       std::cout << "  --no-infinities  Skip infinity tests" << std::endl;
       std::cout << "  --no-nans        Skip NaN tests" << std::endl;
       std::cout << "  --no-subnormals  Skip subnormal tests" << std::endl;
-      std::cout << "  --fmt=N          Set source format code" << std::endl;
+      std::cout << "  --fmt=<id>       Set source format code" << std::endl;
       std::cout << "  --ext=BITS       Exponent bits for custom format" << std::endl;
       std::cout << "  --sig=BITS       Significand bits for custom format" << std::endl;
       std::cout << "  --frm=MODE       Rounding mode (RNE, RZ, RU, RD, RM)" << std::endl;
@@ -918,11 +922,6 @@ TestConfig parse_args(int argc, char **argv) {
     int total_bits = 1 + config_.exp_bits + config_.sig_bits;
     if (total_bits > 32) {
       std::cout << "Error: Total bits (1 + exp_bits + sig_bits) cannot exceed 32" << std::endl;
-      exit(1);
-    }
-    if (32 % total_bits != 0) {
-      std::cout << "Warning: Element size " << total_bits << " doesn't evenly divide 32 bits" << std::endl;
-      std::cout << "This may result in unused bits in the packed words" << std::endl;
       exit(1);
     }
   }

@@ -40,12 +40,12 @@ public:
   explicit FEDP(int exp_bits = 5, int sig_bits = 10, int lanes = 4, int frm = 0, int W = 25, bool renorm = false, bool no_window = false)
       : exp_bits_(exp_bits), sig_bits_(sig_bits), frm_(frm), lanes_(lanes), W_(W), renorm_(renorm), no_window_(no_window) {
     HR_ = 32 - lzcN(lanes_, 32);
+    LOG("[ctor] fmt=e%dm%d frm=%d lanes=%u W=%d HR=%d renorm_=%s no_window_=%s\n",
+        exp_bits_, sig_bits_, frm_, lanes_, W_, HR_, (renorm_ ? "true" : "false"), (no_window_ ? "true" : "false"));
     assert(exp_bits_ > 0 && exp_bits_ <= 8);
     assert(sig_bits_ > 0 && sig_bits_ <= 10);
     assert(frm_ >= 0 && frm_ <= 4);
     assert(lanes_ >= 1 && lanes_ <= 16);
-    LOG("[ctor] fmt=e%dm%d frm=%d lanes=%u W=%d HR=%d renorm_=%s no_window_=%s\n",
-        exp_bits_, sig_bits_, frm_, lanes_, W_, HR_, (renorm_ ? "true" : "false"), (no_window_ ? "true" : "false"));
   }
 
   float operator()(const uint32_t *a, const uint32_t *b, float c, uint32_t n) {
