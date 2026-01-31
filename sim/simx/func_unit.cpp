@@ -399,13 +399,6 @@ void SfuUnit::tick() {
 					release_warp = core_->setTmask(trace->wid, tmask);
 				}
 				break;
-			case WctlType::BAR: {
-				output.send(trace, 2+delay);
-				if (trace->eop) {
-					auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
-					release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
-				}
-			} break;
 			case WctlType::BAR_ARRIVE: {
 				output.send(trace, 2+delay);
 			} break;

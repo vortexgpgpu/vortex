@@ -59,7 +59,7 @@ VLEN = "expr: $XLEN * 4"
 [pipeline]
 NUM_WARPS = 4
 NUM_THREADS = 4
-NUM_BARRIERS = "expr: up($NUM_WARPS)"
+NUM_BARRIERS = "expr: up($NUM_WARPS / 2)"
 
 IBUF_SIZE = 4
 ISSUE_WIDTH = "expr: up($NUM_WARPS / 16)"

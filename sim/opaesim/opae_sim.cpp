@@ -327,6 +327,17 @@ private:
     // check mmio request
     bool mmio_req_enabled = device_->vcp2af_sRxPort_c0_mmioRdValid
                          || device_->vcp2af_sRxPort_c0_mmioWrValid;
+#ifndef NDEBUG
+    if (mmio_req_enabled && sim_trace_enabled()) {
+      uint64_t mmio_data = 0;
+      memcpy(&mmio_data, device_->vcp2af_sRxPort_c0_data, sizeof(mmio_data));
+      printf("%0lu: [sim] MMIO %s: addr=0x%x, data=0x%lx\n",
+             timestamp,
+             device_->vcp2af_sRxPort_c0_mmioWrValid ? "WR" : "RD",
+             device_->vcp2af_sRxPort_c0_ReqMmioHdr_address,
+             mmio_data);
+    }
+#endif
 
     // schedule CCI read responses
     std::list<cci_rd_req_t>::iterator cci_rd_it(cci_reads_.end());
@@ -356,6 +367,12 @@ private:
       device_->vcp2af_sRxPort_c1_rspValid = 1;
       device_->vcp2af_sRxPort_c1_hdr_resp_type = 0;
       device_->vcp2af_sRxPort_c1_hdr_mdata = cci_wr_it->mdata;
+    #ifndef NDEBUG
+      if (sim_trace_enabled()) {
+        printf("%0lu: [sim] CCI Wr Rsp: mdata=0x%x\n",
+               timestamp, cci_wr_it->mdata);
+      }
+    #endif
       cci_writes_.erase(cci_wr_it);
     }
 
@@ -367,6 +384,12 @@ private:
       device_->vcp2af_sRxPort_c0_hdr_resp_type = 0;
       memcpy(device_->vcp2af_sRxPort_c0_data, cci_rd_it->data.data(), CACHE_BLOCK_SIZE);
       device_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;
+    #ifndef NDEBUG
+      if (sim_trace_enabled()) {
+        printf("%0lu: [sim] CCI Rd Rsp: addr=0x%lx, mdata=0x%x\n",
+               timestamp, cci_rd_it->addr, cci_rd_it->mdata);
+      }
+    #endif
       /*printf("%0ld: [sim] CCI Rd Rsp: addr=0x%lx, mdata=0x%x, data=0x", timestamp, cci_rd_it->addr, cci_rd_it->mdata);
       for (int i = 0; i < CACHE_BLOCK_SIZE; ++i)
         printf("%02x", cci_rd_it->data[CACHE_BLOCK_SIZE-1-i]);
@@ -383,6 +406,12 @@ private:
       cci_req.cycles_left = CCI_LATENCY + (timestamp % CCI_RAND_MOD);
       cci_req.addr = device_->af2cp_sTxPort_c0_hdr_address;
       cci_req.mdata = device_->af2cp_sTxPort_c0_hdr_mdata;
+    #ifndef NDEBUG
+      if (sim_trace_enabled()) {
+        printf("%0lu: [sim] CCI Rd Req: addr=0x%lx, mdata=0x%x\n",
+               timestamp, (uint64_t)cci_req.addr, cci_req.mdata);
+      }
+    #endif
       auto host_ptr = (uint64_t*)(device_->af2cp_sTxPort_c0_hdr_address * CACHE_BLOCK_SIZE);
       memcpy(cci_req.data.data(), host_ptr, CACHE_BLOCK_SIZE);
       //printf("%0ld: [sim] CCI Rd Req: addr=0x%lx, mdata=0x%x\n", timestamp, device_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
@@ -395,6 +424,12 @@ private:
       cci_wr_req_t cci_req;
       cci_req.cycles_left = CCI_LATENCY + (timestamp % CCI_RAND_MOD);
       cci_req.mdata = device_->af2cp_sTxPort_c1_hdr_mdata;
+    #ifndef NDEBUG
+      if (sim_trace_enabled()) {
+        printf("%0lu: [sim] CCI Wr Req: addr=0x%lx, mdata=0x%x\n",
+               timestamp, (uint64_t)device_->af2cp_sTxPort_c1_hdr_address, cci_req.mdata);
+      }
+    #endif
       auto host_ptr = (uint64_t*)(device_->af2cp_sTxPort_c1_hdr_address * CACHE_BLOCK_SIZE);
       memcpy(host_ptr, device_->af2cp_sTxPort_c1_data, CACHE_BLOCK_SIZE);
       cci_writes_.emplace_back(cci_req);
@@ -423,6 +458,11 @@ private:
         device_->avs_readdatavalid[b] = 1;
         memcpy(device_->avs_readdata[b], mem_req->data.data(), PLATFORM_MEMORY_DATA_SIZE);
         uint32_t addr = mem_req->addr;
+#ifndef NDEBUG
+        if (sim_trace_enabled()) {
+          printf("%0lu: [sim] AVS Rd Rsp[%d]: addr=0x%x\n", timestamp, b, addr);
+        }
+#endif
         pending_mem_reqs_[b].erase(mem_rd_it);
         delete mem_req;
       }
@@ -436,6 +476,12 @@ private:
     #endif
 
       if (device_->avs_write[b]) {
+#ifndef NDEBUG
+        if (sim_trace_enabled()) {
+          printf("%0lu: [sim] AVS Wr Req[%d]: addr=0x%lx, byteen=0x%lx\n",
+                 timestamp, b, (unsigned long)byte_addr, (unsigned long)device_->avs_byteenable[b]);
+        }
+#endif
         // process write request
         uint64_t byteen = device_->avs_byteenable[b];
         uint8_t* data = (uint8_t*)(device_->avs_writedata[b].data());
@@ -461,6 +507,12 @@ private:
         dram_queue_.push(mem_req);
       } else
       if (device_->avs_read[b]) {
+#ifndef NDEBUG
+        if (sim_trace_enabled()) {
+          printf("%0lu: [sim] AVS Rd Req[%d]: addr=0x%lx, byteen=0x%lx\n",
+                 timestamp, b, (unsigned long)byte_addr, (unsigned long)device_->avs_byteenable[b]);
+        }
+#endif
         // process read request
         auto mem_req = new mem_req_t();
         mem_req->addr = device_->avs_address[b];

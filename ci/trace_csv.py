@@ -292,8 +292,8 @@ def merge_data(trace, key, new_data, mask):
 
 def parse_rtlsim(log_lines):
     global configs
-    # Regex to capture timestamp, topology, module, and action
-    line_pattern = r"(\d+):\s+cluster(\d+)-socket(\d+)-core(\d+)-([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_-]+):"
+    # Regex to capture timestamp, topology, module, and optional action
+    line_pattern = r"(\d+):\s+cluster(\d+)-socket(\d+)-core(\d+)-([a-zA-Z0-9_-]+)(?:\s+([a-zA-Z0-9_-]+))?:"
 
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
     op_pattern = r"op=([\?0-9a-zA-Z_\.]+)"
@@ -335,18 +335,29 @@ def parse_rtlsim(log_lines):
                 socket_id = int(line_match.group(3))
                 core_id = int(line_match.group(4))
                 module = line_match.group(5)
-                action = line_match.group(6)
+                action = line_match.group(6) or ""
 
                 uuid_match = re.search(uuid_pattern, line)
                 if not uuid_match:
                     continue
                 uuid = int(uuid_match.group(1))
 
+                stage = module
+                if action:
+                    if action == "dispatch" and "scheduler" in module:
+                        stage = "schedule"
+                    elif action in {"decode", "dispatch"}:
+                        stage = module
+                    elif action == "commit":
+                        stage = "commit"
+                    else:
+                        continue
+
                 # Pipeline Stage Identification
-                is_schedule = "scheduler" in module and action == "dispatch"
-                is_decode   = ("decode" in module or "ibuffer-uop" in module) and action == "decode"
-                is_dispatch = "dispatcher" in module and action == "dispatch"
-                is_commit   = "commit" in module and action == "commit"
+                is_schedule = re.match(r"schedule", stage)
+                is_decode   = re.match(r"issue\d+-ibuffer", stage) or stage == "decode"
+                is_dispatch = re.match(r"issue\d+-dispatch", stage) or stage == "dispatch"
+                is_commit   = re.match(r"commit", stage)
 
                 if is_schedule:
                     schd_ticks[uuid] = timestamp

@@ -146,8 +146,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
           << ", PC=0x" << std::hex << warp.PC << std::dec << ", parent=#" << instr.getParentUUID() << " (#" << instr.getUUID() << ")");
   } else {
-  DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
-         << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << instr.getUUID() << ")");
+    DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
+          << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << instr.getUUID() << ")");
   }
 
   // fetch register values
@@ -397,30 +397,30 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         // When control-flow divergence is not lowered into explicit split/join,
         // fall back to the hardware behavior: use the last active lane as the
         // branch decision source.
-          bool curr_taken = false;
+        bool curr_taken = false;
         uint32_t t = static_cast<uint32_t>(thread_last);
-          switch (brArgs.cmp) {
+        switch (brArgs.cmp) {
         case 0: // RV32I: BEQ
           curr_taken = (rs1_data[t].i == rs2_data[t].i);
-            break;
+          break;
         case 1: // RV32I: BNE
           curr_taken = (rs1_data[t].i != rs2_data[t].i);
-            break;
+          break;
         case 4: // RV32I: BLT
           curr_taken = (rs1_data[t].i < rs2_data[t].i);
-            break;
+          break;
         case 5: // RV32I: BGE
           curr_taken = (rs1_data[t].i >= rs2_data[t].i);
-            break;
+          break;
         case 6: // RV32I: BLTU
           curr_taken = (rs1_data[t].u < rs2_data[t].u);
-            break;
+          break;
         case 7: // RV32I: BGEU
           curr_taken = (rs1_data[t].u >= rs2_data[t].u);
-            break;
-          default:
-            std::abort();
-          }
+          break;
+        default:
+          std::abort();
+        }
         if (curr_taken) {
           next_pc = warp.PC + offset;
         }
@@ -655,7 +655,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].i + offset;
           uint64_t read_data = 0;
           try {
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+            this->dcache_read(&read_data, mem_addr, data_bytes);
           } catch (const std::exception& e) {
             if (debug_mem_exc) {
               auto ireg = [&](uint32_t reg_idx) -> Word {
@@ -1465,10 +1465,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
         trace->data = std::make_shared<SfuTraceData>(next_tmask.to_ulong(), 0);
       } break;
-      case WctlType::BAR: {
-        trace->fetch_stall = true;
-        trace->data = std::make_shared<SfuTraceData>(rs1_data[thread_last].i, rs2_data[thread_last].i);
-      } break;
       case WctlType::BAR_ARRIVE: {
         uint32_t bar_id = rs1_data[thread_last].u;
         uint32_t count = rs2_data[thread_last].u;
@@ -1482,7 +1478,13 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       } break;
       case WctlType::BAR_WAIT: {
         uint32_t bar_id = rs1_data[thread_last].u;
-        uint32_t token = rs2_data[thread_last].u;
+        uint32_t token = 0;
+        if (wctlArgs.is_wait) {
+          uint32_t count = rs2_data[thread_last].u;
+          token = this->barrier_arrive(bar_id, count, wid);
+        } else {
+          token = rs2_data[thread_last].u;
+        }
         trace->fetch_stall = true;  // Stall until barrier reaches next generation
         trace->data = std::make_shared<SfuTraceData>(bar_id, token);
       } break;

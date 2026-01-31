@@ -157,10 +157,6 @@ int Socket::get_exitcode() const {
   return exitcode;
 }
 
-void Socket::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
-  cluster_->barrier(bar_id, count, core_id);
-}
-
 uint32_t Socket::async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
     return cluster_->async_barrier_arrive(bar_id, count, core_id);
 }
@@ -171,6 +167,10 @@ bool Socket::async_barrier_wait(uint32_t bar_id, uint32_t token, uint32_t core_i
 
 void Socket::resume(uint32_t core_index) {
   cores_.at(core_index)->resume(-1);
+}
+
+void Socket::resume_barrier(uint32_t core_index, uint32_t bar_id) {
+  cores_.at(core_index)->resume_barrier(bar_id);
 }
 
 Socket::PerfStats Socket::perf_stats() const {

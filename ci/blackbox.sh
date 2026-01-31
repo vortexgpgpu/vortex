@@ -125,7 +125,7 @@ run_app() {
     [ $DEBUG -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "DEBUG=1")
     [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VORTEX_RT_PATH=\"$TEMPDIR\"")
     [ $HAS_ARGS -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "OPTS=\"$ARGS\"")
-    [ $HAS_NP -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "NP=$NP")
+    [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")
     cmd_opts=$(add_option "$cmd_opts" "make -C \"$APP_PATH\" run-$DRIVER")
     [ $DEBUG -ne 0 ] && cmd_opts=$(add_option "$cmd_opts" "> $LOGFILE 2>&1")
     echo "Running: $cmd_opts"

@@ -45,11 +45,11 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_pred   = (execute_if.data.op_type == INST_SFU_PRED);
     wire is_split  = (execute_if.data.op_type == INST_SFU_SPLIT);
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
-    // async
-    wire is_bar_arrive = (execute_if.data.op_type == INST_SFU_ARRIVE);
-    wire is_bar_wait   = (execute_if.data.op_type == INST_SFU_WAIT);
-    wire is_bar_sync   = (execute_if.data.op_type == INST_SFU_BARRIER);
-    wire is_bar        = is_bar_arrive || is_bar_wait || is_bar_sync;
+    // barrier
+    wire is_bar = (execute_if.data.op_type == INST_SFU_BARRIER);
+    wire bar_wait_only = execute_if.data.op_args.wctl.is_wait_only;
+    wire bar_wait = is_bar && execute_if.data.op_args.wctl.is_wait;
+    wire bar_arrive = is_bar && !bar_wait_only;
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
 	    if (LANE_BITS != 0) begin : g_last_tid
@@ -134,8 +134,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // barrier
 
     assign barrier.valid    = is_bar;
-    // async barrier op
-    assign barrier.op       = is_bar_wait ? BARRIER_OP_WAIT : BARRIER_OP_ARRIVE;
+    assign barrier.wait_    = bar_wait;
+    assign barrier.wait_only= bar_wait_only;
 
     assign barrier.id       = rs1_data[NB_WIDTH-1:0];
 `ifdef GBAR_ENABLE
@@ -143,10 +143,10 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 `else
     assign barrier.is_global= 1'b0;
 `endif
-    // legacy sync barrier (funct3=4) blocks like arrive+wait, without exposing the token
-    assign barrier.is_sync  = is_bar_sync;
-    // For SYNC/ARRIVE: expected warp count minus 1 (wrap-safe for num_warps == `NUM_WARPS)
-    assign barrier.count    = (is_bar_arrive || is_bar_sync) ? (rs2_data[$bits(barrier.count)-1:0] - $bits(barrier.count)'(1)) : '0;
+    // For ARRIVE: expected warp count minus 1 (wrap-safe for num_warps == `NUM_WARPS)
+    assign barrier.count    = bar_arrive
+                           ? (rs2_data[$bits(barrier.count)-1:0] - $bits(barrier.count)'(1))
+                           : '0;
     assign barrier.token    = rs2_data[`XLEN-1:0];  // For WAIT: token to wait for
 
     // wspawn
@@ -194,7 +194,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (execute_if.valid),
         .ready_in  (execute_if.ready),
-        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr, warp_ctl_if.arrive_token, is_bar_arrive}),
+        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr, warp_ctl_if.arrive_token, bar_arrive}),
         .data_out  ({result_if.data.header, dvstack_ptr, arrive_token_out, is_bar_arrive_out}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)

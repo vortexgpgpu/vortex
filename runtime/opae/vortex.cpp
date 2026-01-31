@@ -439,7 +439,12 @@ public:
 
     struct timespec sleep_time;
     sleep_time.tv_sec = 0;
+#if defined(OPAESIM) && !defined(NDEBUG)
+    // Slow down MMIO polling in debug simulation to avoid starving CCI responses.
+    sleep_time.tv_nsec = 10000000;
+#else
     sleep_time.tv_nsec = 1000000;
+#endif
 
     // to milliseconds
     uint64_t sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
