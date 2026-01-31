@@ -311,7 +311,7 @@ private:
 
     const int F32_BIAS = 127;
 
-    int c_zero_mask = (c_term.cls == 0 && c_term.sp == 0) ? -1 : 0;
+    bool c_is_zero = (c_term.cls == 0 && c_term.sp == 0);
 
     uint8_t c_nan  = (c_term.sp == 3) ? FL_NAN  : 0;
     uint8_t c_pinf = (c_term.sp == 1) ? FL_PINF : 0;
@@ -324,7 +324,7 @@ private:
 
       bool zA = a.is_zero;
       bool zB = b.is_zero;
-      int zero_mask = (zA || zB) ? -1 : 0;
+      bool p_is_zero = zA || zB;
 
       bool infA = (a.exp == all1 && !a.frac), infB = (b.exp == all1 && !b.frac);
       bool nanA = (a.exp == all1 && a.frac), nanB = (b.exp == all1 && b.frac);
@@ -350,14 +350,20 @@ private:
         Ep -= lzc_prod;
       }
 
-      int Ep_w = (Ep + 23 - W_) | zero_mask;
+      int Ep_w = (Ep + 23 - W_);
+      if (p_is_zero) {
+        Ep_w = std::numeric_limits<int>::min();
+      }
 
       out.push_back({sign_xor, Mp});
       eps.push_back(Ep_w);
     }
 
     int Ec = c_term.Ec + F32_BIAS;
-    int Ec_w = (Ec + 24 - W_) | c_zero_mask;
+    int Ec_w = Ec + 24 - W_;
+    if (c_is_zero) {
+      Ec_w = std::numeric_limits<int>::min();
+    }
 
     out.push_back({c_term.sign, c_term.Mc});
     eps.push_back(Ec_w);
@@ -462,8 +468,9 @@ private:
 
     bool lsb_bit = (kept & 1);
     bool round_up = false;
-    if (frm_ == FRM_RNE) round_up = (g && (st || lsb_bit));
-
+    if (frm_ == FRM_RNE) {
+      round_up = (g && (st || lsb_bit));
+    }
     return {s, kept, g, st, e, x.flags, X, sh, round_up};
   }
 
