@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <util.h>
 #include <vector>
+#include <vx_sparsity.h>
 #include <vortex.h>
 
 #define FLOAT_ULP 6
@@ -666,7 +667,8 @@ uint32_t xn = 32;
 uint32_t xk = 32;
 
 vx_device_h device = nullptr;
-vx_buffer_h A_buffer = nullptr;
+vx_buffer_h A_comp_buffer = nullptr;
+vx_buffer_h A_meta_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
@@ -706,7 +708,8 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(A_buffer);
+    vx_mem_free(A_comp_buffer);
+    vx_mem_free(A_meta_buffer);
     vx_mem_free(B_buffer);
     vx_mem_free(C_buffer);
     vx_mem_free(krnl_buffer);
@@ -764,6 +767,8 @@ int main(int argc, char *argv[]) {
   }
 
   size_t sizeA = M * K;
+  size_t sizeA_comp = M * (K / 2);
+  size_t sizeA_meta = M * (K / 4); // TODO: I think this is INCORRECT. Metasize depends on ITYPE
   size_t sizeB = K * N;
   size_t sizeC = M * N;
 
@@ -788,31 +793,63 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
-  RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
+  RT_CHECK(vx_mem_alloc(device, sizeA_comp * sizeof(itype_t), VX_MEM_READ, &A_comp_buffer));
+  RT_CHECK(vx_mem_address(A_comp_buffer, &kernel_arg.A_comp_addr));
+  RT_CHECK(vx_mem_alloc(device, sizeA_meta * sizeof(uint8_t), VX_MEM_READ, &A_meta_buffer));
+  RT_CHECK(vx_mem_address(A_meta_buffer, &kernel_arg.A_meta_addr));
   RT_CHECK(vx_mem_alloc(device, sizeB * sizeof(itype_t), VX_MEM_READ, &B_buffer));
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
   RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
-  std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
+  std::cout << "A_comp_addr=0x" << std::hex << kernel_arg.A_comp_addr << std::endl;
+  std::cout << "A_meta_addr=0x" << std::hex << kernel_arg.A_meta_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
 
   // generate source data
   std::vector<itype_t> h_A(sizeA);
-  std::vector<itype_t> h_B(sizeB);  
+  std::vector<itype_t> h_A_pruned(sizeA);
+  std::vector<itype_t> h_A_comp(sizeA_comp);
+  std::vector<uint8_t> h_A_meta(sizeA_meta);
+  std::vector<itype_t> h_B(sizeB);
+
   for (uint32_t i = 0; i < sizeA; ++i) {
     h_A[i] = generate_A_value<vt::ITYPE>();
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
     h_B[i] = generate_B_value<vt::ITYPE>();
   }
+  // prune and compress matrix A to sparse format
+  {
+    const uint32_t ldA = K;
+    const uint32_t ldA_pruned = K;
+    const uint32_t ldA_comp = K / 2;
+    const uint32_t ldA_meta = K / 4;
+
+    bool ok = vortex::tensor::prune_2to4_matrix(h_A.data(), M, K, ldA,
+                                               h_A_pruned.data(), ldA_pruned,
+                                               vortex::tensor::row_major);
+    if (!ok) {
+      std::cerr << "prune_2to4_matrix failed (K must be multiple of 4, row_major)" << std::endl;
+      return -1;
+    }
+
+    ok = vortex::tensor::compress_2to4_matrix(h_A_pruned.data(), M, K, ldA_pruned,
+                                              h_A_comp.data(), ldA_comp,
+                                              h_A_meta.data(), ldA_meta,
+                                              vortex::tensor::row_major);
+    if (!ok) {
+      std::cerr << "compress_2to4_matrix failed (expects 2:4 pruned input)" << std::endl;
+      return -1;
+    }
+  }
   
   // upload matrix A buffer
   {
-    std::cout << "upload matrix A buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, sizeA * sizeof(itype_t)));
+// upload matrix A compressed buffers
+  RT_CHECK(vx_copy_to_dev(A_comp_buffer, h_A_comp.data(), 0, sizeA_comp * sizeof(itype_t)));
+  RT_CHECK(vx_copy_to_dev(A_meta_buffer, h_A_meta.data(), 0, sizeA_meta * sizeof(uint8_t)));
   }
 
   // upload matrix B buffer
@@ -863,7 +900,7 @@ int main(int argc, char *argv[]) {
   int errors = 0;
   {
     std::vector<otype_t> h_ref(sizeC);
-    matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), M, N, K);
+    matmul_cpu(h_ref.data(), h_A_pruned.data(), h_B.data(), M, N, K);
 
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
       if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, errors)) {

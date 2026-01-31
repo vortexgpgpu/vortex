@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-PROJECT := sgemm_tcu
+PROJECT := sgemm_tcu_sp
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 
@@ -10,6 +10,8 @@ SRCS := $(SRC_DIR)/main.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/softf
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
+
+CXXFLAGS += -I$(VORTEX_HOME)/kernel/include
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
