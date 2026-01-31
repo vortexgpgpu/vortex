@@ -12,9 +12,6 @@
 // limitations under the License.
 
 `include "VX_fpu_define.vh"
-`ifdef SV_DPI
-`include "dpi_float.vh"
-`endif
 
 `ifdef FPU_TYPE_DSP
 

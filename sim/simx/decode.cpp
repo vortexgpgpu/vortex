@@ -366,6 +366,7 @@ static op_string_t op_string(const Instr &instr) {
       case WctlType::WSPAWN: return {"WSPAWN", ""};
       case WctlType::SPLIT:  return {wctlArgs.is_neg ? "SPLIT.N":"SPLIT", ""};
       case WctlType::JOIN:   return {"JOIN", ""};
+      case WctlType::BAR:    return {"BAR", ""};
       case WctlType::PRED:   return {wctlArgs.is_neg ? "PRED.N":"PRED", ""};
       case WctlType::BAR_ARRIVE: return {"BAR.ARRIVE", ""};
       case WctlType::BAR_WAIT:   return {"BAR.WAIT", ""};
@@ -1022,26 +1023,27 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         instr->setOpType(WctlType::JOIN);
         instr->setSrcReg(0, rs1, RegType::Integer);
         break;
-      case 4: // BAR (legacy sync barrier)
-      case 6: // BAR (arrive / wait via rd=x0)
-      case 7: { // BAR (legacy wait-only)
-        bool is_wait = (funct3 == 4) || ((funct3 == 6) && (rd == 0));
-        bool is_wait_only = (funct3 == 7);
-        bool do_wait = is_wait || is_wait_only;
-        instr->setOpType(do_wait ? WctlType::BAR_WAIT : WctlType::BAR_ARRIVE);
-        if (!do_wait) {
-          instr->setDestReg(rd, RegType::Integer);   // token returned in rd
-        }
-        instr->setSrcReg(0, rs1, RegType::Integer); // barrier_id
-        instr->setSrcReg(1, rs2, RegType::Integer); // num_warps or token
-        wctlArgs.is_wait = is_wait;
+      case 4: // BAR
+        instr->setOpType(WctlType::BAR);
+        instr->setSrcReg(0, rs1, RegType::Integer);
+        instr->setSrcReg(1, rs2, RegType::Integer);
         break;
-      }
       case 5: // PRED
         instr->setOpType(WctlType::PRED);
         instr->setSrcReg(0, rs1, RegType::Integer);
         instr->setSrcReg(1, rs2, RegType::Integer);
         wctlArgs.is_neg = (rd != 0);
+        break;
+      case 6: // BAR_ARRIVE
+        instr->setOpType(WctlType::BAR_ARRIVE);
+        instr->setDestReg(rd, RegType::Integer);   // token returned in rd
+        instr->setSrcReg(0, rs1, RegType::Integer); // barrier_id
+        instr->setSrcReg(1, rs2, RegType::Integer); // num_warps
+        break;
+      case 7: // BAR_WAIT
+        instr->setOpType(WctlType::BAR_WAIT);
+        instr->setSrcReg(0, rs1, RegType::Integer); // barrier_id
+        instr->setSrcReg(1, rs2, RegType::Integer); // token (was num_warps)
         break;
       default:
         std::abort();

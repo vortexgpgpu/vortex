@@ -429,6 +429,7 @@ enum class WctlType {
   WSPAWN,
   SPLIT,
   JOIN,
+  BAR,
   PRED,
   BAR_ARRIVE,
   BAR_WAIT
@@ -436,7 +437,6 @@ enum class WctlType {
 
 struct IntrWctlArgs {
   uint32_t is_neg : 1;
-  uint32_t is_wait : 1;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
@@ -445,6 +445,7 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
   case WctlType::WSPAWN: os << "WSPAWN"; break;
   case WctlType::SPLIT:  os << "SPLIT"; break;
   case WctlType::JOIN:   os << "JOIN"; break;
+  case WctlType::BAR:    os << "BAR"; break;
   case WctlType::PRED:   os << "PRED"; break;
   case WctlType::BAR_ARRIVE: os << "BAR_ARRIVE"; break;
   case WctlType::BAR_WAIT:   os << "BAR_WAIT"; break;

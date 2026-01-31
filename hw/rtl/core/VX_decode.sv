@@ -508,24 +508,28 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_type = INST_OP_BITS'(INST_SFU_JOIN);
                                 `USED_IREG (rs1);
                             end
-                            3'h4,
-                            3'h6,
-                            3'h7: begin // BARRIER (legacy sync/arrive/wait)
+                            3'h4: begin // BARRIER (legacy sync barrier)
                                 op_type = INST_OP_BITS'(INST_SFU_BARRIER);
-                                op_args.wctl = '0;
-                                op_args.wctl.is_wait = (funct3 == 3'h4)
-                                                    || (funct3 == 3'h7)
-                                                    || ((funct3 == 3'h6) && (rd == 0));
-                                op_args.wctl.is_wait_only = (funct3 == 3'h7);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
-                                if ((funct3 == 3'h6) && (rd != 0)) begin
-                                    `USED_IREG (rd);
-                                end
                             end
                             3'h5: begin // PRED
                                 op_type = INST_OP_BITS'(INST_SFU_PRED);
                                 op_args.wctl.is_neg = rd[0];
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h6: begin // ARRIVE
+                                op_type = INST_OP_BITS'(INST_SFU_ARRIVE);
+                                // use_rd = 1;
+                                `USED_IREG (rd);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h7: begin // WAIT
+                                op_type = INST_OP_BITS'(INST_SFU_WAIT);
+                                // use_rd = 1;
+                                // `USED_IREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end

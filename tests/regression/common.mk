@@ -98,7 +98,7 @@ kernel.dump: kernel.elf
 kernel.vxbin: kernel.elf
 	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
 
-kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/libvortex.a
+kernel.elf: $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o kernel.elf
 
 $(PROJECT): $(SRCS)

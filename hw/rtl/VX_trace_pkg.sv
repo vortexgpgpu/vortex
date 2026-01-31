@@ -207,7 +207,6 @@ package VX_trace_pkg;
                     end
                 end
                 INST_SFU_JOIN:  `TRACE(level, ("JOIN"))
-                INST_SFU_BARRIER: `TRACE(level, ("BARRIER"))
                 INST_SFU_PRED:  begin
                     if (op_args.wctl.is_neg) begin
                         `TRACE(level, ("PRED.N"))
@@ -215,6 +214,8 @@ package VX_trace_pkg;
                         `TRACE(level, ("PRED"))
                     end
                 end
+                INST_SFU_ARRIVE:`TRACE(level, ("ARRIVE"))
+                INST_SFU_WAIT:  `TRACE(level, ("WAIT"))
                 INST_SFU_CSRRW: begin
                     if (op_args.csr.use_imm) begin
                         `TRACE(level, ("CSRRWI"))

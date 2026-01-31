@@ -1465,6 +1465,10 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
         trace->data = std::make_shared<SfuTraceData>(next_tmask.to_ulong(), 0);
       } break;
+      case WctlType::BAR: {
+        trace->fetch_stall = true;
+        trace->data = std::make_shared<SfuTraceData>(rs1_data[thread_last].i, rs2_data[thread_last].i);
+      } break;
       case WctlType::BAR_ARRIVE: {
         uint32_t bar_id = rs1_data[thread_last].u;
         uint32_t count = rs2_data[thread_last].u;
@@ -1478,13 +1482,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       } break;
       case WctlType::BAR_WAIT: {
         uint32_t bar_id = rs1_data[thread_last].u;
-        uint32_t token = 0;
-        if (wctlArgs.is_wait) {
-          uint32_t count = rs2_data[thread_last].u;
-          token = this->barrier_arrive(bar_id, count, wid);
-        } else {
-          token = rs2_data[thread_last].u;
-        }
+        uint32_t token = rs2_data[thread_last].u;
         trace->fetch_stall = true;  // Stall until barrier reaches next generation
         trace->data = std::make_shared<SfuTraceData>(bar_id, token);
       } break;

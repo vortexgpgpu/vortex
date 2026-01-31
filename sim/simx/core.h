@@ -112,7 +112,8 @@ public:
   bool running() const;
 
   void resume(uint32_t wid);
-  void resume_barrier(uint32_t bar_id);
+
+  bool barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
 
   // Async barrier arrive: returns token (current generation)
   uint32_t barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid);

@@ -387,6 +387,8 @@ package VX_gpu_pkg;
     localparam INST_SFU_CSRRW =  4'h6;
     localparam INST_SFU_CSRRS =  4'h7;
     localparam INST_SFU_CSRRC =  4'h8;
+    localparam INST_SFU_ARRIVE = 4'h9;
+    localparam INST_SFU_WAIT =   4'ha;
     localparam INST_SFU_BITS =   4;
 
     function automatic logic [3:0] inst_sfu_csr(input logic [2:0] funct3);
@@ -399,7 +401,9 @@ package VX_gpu_pkg;
             || (op == INST_SFU_SPLIT)
             || (op == INST_SFU_JOIN)
             || (op == INST_SFU_BARRIER)
-            || (op == INST_SFU_PRED);
+            || (op == INST_SFU_PRED)
+            || (op == INST_SFU_ARRIVE)
+            || (op == INST_SFU_WAIT);
     endfunction
 
     function automatic logic inst_sfu_is_csr(input logic [INST_SFU_BITS-1:0] op);
@@ -488,12 +492,17 @@ package VX_gpu_pkg;
         logic [DV_STACK_SIZEW-1:0] stack_ptr;
     } join_t;
 
+    typedef enum logic {
+        BARRIER_OP_ARRIVE = 1'b0,
+        BARRIER_OP_WAIT   = 1'b1
+    } barrier_op_e;
+
     typedef struct packed {
         logic                   valid;
-        logic                   wait_;
-        logic                   wait_only;
+        barrier_op_e            op;
         logic [NB_WIDTH-1:0]    id;
         logic                   is_global;
+        logic                   is_sync;
     `ifdef GBAR_ENABLE
         logic [`MAX(NW_WIDTH, NC_WIDTH)-1:0] count;
     `else
@@ -545,10 +554,8 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(csr_args_t) == INST_ARGS_BITS)
 
     typedef struct packed {
-        logic [(INST_ARGS_BITS-1-1-1)-1:0] __padding;
+        logic [(INST_ARGS_BITS-1)-1:0] __padding;
         logic is_neg;
-        logic is_wait;
-        logic is_wait_only;
     } wctl_args_t;
     `PACKAGE_ASSERT($bits(wctl_args_t) == INST_ARGS_BITS)
 

@@ -27,6 +27,7 @@ Cluster::Cluster(const SimContext& ctx,
   , cluster_id_(cluster_id)
   , processor_(processor)
   , sockets_(NUM_SOCKETS)
+  , barriers_(arch.num_barriers(), 0)
   , cores_per_socket_(arch.socket_size())
   , async_barriers_(arch.socket_size())
 {
@@ -81,6 +82,10 @@ Cluster::~Cluster() {
 }
 
 void Cluster::reset() {
+  for (auto& barrier : barriers_) {
+    barrier.reset();
+  }
+
   for (auto& b : async_barriers_) {
     b.reset_all();
   }
@@ -120,6 +125,33 @@ int Cluster::get_exitcode() const {
   return exitcode;
 }
 
+void Cluster::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
+  auto& barrier = barriers_.at(bar_id);
+
+  auto sockets_per_cluster = sockets_.size();
+  auto cores_per_socket = cores_per_socket_;
+
+  uint32_t cores_per_cluster = sockets_per_cluster * cores_per_socket;
+  uint32_t local_core_id = core_id % cores_per_cluster;
+  barrier.set(local_core_id);
+
+  if (barrier.count() == (size_t)count) {
+    // resume all suspended cores
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      for (uint32_t c = 0; c < cores_per_socket; ++c) {
+        uint32_t i = s * cores_per_socket + c;
+        if (barrier.test(i)) {
+          DP(3, "*** Resume core #" << i << " at barrier #" << bar_id);
+          sockets_.at(s)->resume(c);
+        }
+      }
+    }
+    barrier.reset();
+  } else {
+    DP(3, "*** Suspend core #" << core_id << " at barrier #" << bar_id);
+  }
+}
+
 uint32_t Cluster::async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
   auto& b = async_barriers_.at(bar_id);
 
@@ -144,7 +176,6 @@ uint32_t Cluster::async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t
 
   if (b.arrived_count == b.expect_cores) {
     b.generation += 1;
-    b.expect_cores = 0;
     b.arrived_count = 0;
     b.arrived_cores.reset();
 
@@ -153,7 +184,7 @@ uint32_t Cluster::async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t
         uint32_t idx = s * cores_per_socket + c;
         if (b.waiting_cores.test(idx)) {
           b.waiting_cores.reset(idx);
-          sockets_.at(s)->resume_barrier(c, bar_id);
+          sockets_.at(s)->resume(c);
         }
       }
     }

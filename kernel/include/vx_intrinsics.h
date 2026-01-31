@@ -311,13 +311,12 @@ inline uint32_t vx_barrier_arrive(int barrier_id, int num_warps) {
     return token;
 }
 
-// Async Barrier Wait: rd=x0 indicates wait (no return value)
-// blocks until the barrier phase associated with the token is complete
+// Async Barrier Wait: blocks until the barrier phase associated with the token is complete
 // barrier_id: identifier of the barrier
 // token: the token returned by vx_barrier_arrive
 inline void vx_barrier_wait(int barrier_id, uint32_t token) {
     __asm__ volatile (
-        ".insn r %0, 6, 0, x0, %1, %2"
+        ".insn r %0, 7, 0, x0, %1, %2"
         :: "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(token)
         : "memory"
     );
