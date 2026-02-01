@@ -119,8 +119,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_i
         for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_j
-            wire [TCU_TC_K-1:0][`XLEN-1:0] a_row = execute_if.data.rs1_data[a_off + i * TCU_TC_K +: TCU_TC_K];
-            wire [TCU_TC_K-1:0][`XLEN-1:0] b_col = execute_if.data.rs2_data[b_off + j * TCU_TC_K +: TCU_TC_K];
+            wire [TCU_TC_K-1:0][31:0] a_row, b_col;
+            for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
+                assign a_row[k_idx] = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
+                assign b_col[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
+            end
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
 
             wire [TCU_MAX_INPUTS-1:0] vld_mask = '1; // TODO: should connect to input source
@@ -143,7 +146,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 for (genvar r = 0; r < TCU_MAX_ELT_RATIO; ++r) begin : g_elt
                     `BUFFER_EX (
                         {a_row_r[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH], b_col_r[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
-                        {a_row[k][31:0][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH],  b_col[k][31:0][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
+                        {a_row[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH],  b_col[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
                         fedp_enable && vld_mask[k * TCU_MAX_ELT_RATIO + r],
                         0, // resetw
                         1  // depth
