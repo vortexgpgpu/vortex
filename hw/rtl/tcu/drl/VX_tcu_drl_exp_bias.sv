@@ -24,8 +24,8 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     input fedp_class_t              cls_c,
 
     // Output increased to [TCK:0] to include C-term
-    output wire [TCK:0][EXP_W-1:0] raw_exp_y,
-    output logic [TCK-1:0][5:0]     exp_diff_f8
+    output logic [TCK:0][EXP_W-1:0] raw_exp_y,
+    output wire [TCK-1:0][5:0]      exp_diff_f8
 );
     `UNUSED_VAR({vld_mask})
 
