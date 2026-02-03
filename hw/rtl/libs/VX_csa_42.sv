@@ -24,7 +24,7 @@ module counter_5to3(
     // FA1: x1 + x2 + x3
     wire s1 = x1 ^ x2 ^ x3;
     assign cout = (x1 & x2) | (x2 & x3) | (x1 & x3);
-    
+
     // FA2: s1 + x4 + cin
     assign sum = s1 ^ x4 ^ cin;
     assign carry = (s1 & x4) | (x4 & cin) | (s1 & cin);
@@ -44,7 +44,7 @@ module VX_csa_42 #(
     output wire [WIDTH_O-1:0] carry
 );
     wire [N-1:0] sum_int;
-    wire [N:0] cin;
+    wire [N:0]   cin;
     wire [N-1:0] cout;
     wire [N-1:0] carry_int;
 

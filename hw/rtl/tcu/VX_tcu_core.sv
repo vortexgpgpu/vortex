@@ -146,7 +146,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 for (genvar r = 0; r < TCU_MAX_ELT_RATIO; ++r) begin : g_elt
                     `BUFFER_EX (
                         {a_row_r[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH], b_col_r[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
-                        {a_row[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH],  b_col[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
+                        {a_row[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH], b_col[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
                         fedp_enable && vld_mask[k * TCU_MAX_ELT_RATIO + r],
                         0, // resetw
                         1  // depth

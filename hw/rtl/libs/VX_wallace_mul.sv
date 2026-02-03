@@ -17,8 +17,8 @@ module VX_wallace_mul #(
     parameter N = 8,
     parameter P = 2 * N
 ) (
-    input wire [N-1:0]   a,
-    input wire [N-1:0]   b,
+    input wire [N-1:0]  a,
+    input wire [N-1:0]  b,
     output wire [P-1:0] p
 );
     wire [N-1:0][2*N-1:0] pp;    //partial products, double width (shifted)

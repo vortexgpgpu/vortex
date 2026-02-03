@@ -18,12 +18,13 @@
 // Fast Kogge-Stone adder
 
 module VX_ks_adder #(
-    parameter N = 16
+    parameter N = 16,    // inputs width
+    parameter SIGNED = 0 // 0 = Unsigned, 1 = Signed
 ) (
     input  wire [N-1:0] dataa,
     input  wire [N-1:0] datab,
     output wire [N-1:0] sum,
-    output wire         cout
+    output wire         cout // Overflow flag (if SIGNED=1) or Carry out
 );
     localparam LEVELS = $clog2(N);
 
@@ -58,8 +59,18 @@ module VX_ks_adder #(
         assign sum[i] = P[0][i] ^ G[LEVELS][i-1];
     end
 
-    // final carry‑out
-    assign cout = G[LEVELS][N-1];
+    if (SIGNED) begin : g_signed_logic
+        if (N > 1) begin : g_ovf
+            // Signed Overflow = Carry_Out_MSB XOR Carry_In_MSB
+            assign cout = G[LEVELS][N-1] ^ G[LEVELS][N-2];
+        end else begin : g_ovf_1bit
+            // For 1-bit signed, Overflow = Carry_Out ^ 0
+            assign cout = G[LEVELS][0];
+        end
+    end else begin : g_unsigned_logic
+        // Unsigned Carry Out
+        assign cout = G[LEVELS][N-1];
+    end
 
 endmodule
 

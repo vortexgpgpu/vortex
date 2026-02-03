@@ -17,9 +17,10 @@
 
 // Carry-Save Adder Tree (4:2 based, falls back to 3:2 if needed)
 module VX_csa_tree #(
-    parameter N = 4,  // Number of operands
-    parameter W = 8,  // Bit-width of each operand
-    parameter S = W + $clog2(N)  // Output width
+    parameter N = 4,              // Number of operands
+    parameter W = 8,              // Bit-width of each operand
+    parameter S = W + $clog2(N),  // Output width
+    parameter bit SIGNED = 0      // 0 = Unsigned, 1 = Signed
 ) (
     input  wire [N-1:0][W-1:0] operands,  // Input operands
     output wire [S-1:0] sum,  // Final sum output
@@ -39,77 +40,132 @@ module VX_csa_tree #(
 
     localparam LEVELS_4TO2 = calc_4to2_levels(N);
     localparam TOTAL_LEVELS = LEVELS_4TO2 + ((N - LEVELS_4TO2 * 2) == 3 ? 1 : 0);
-    localparam WN = W + TOTAL_LEVELS + 2;
 
-    // Intermediate signals
+    // Signed: Must grow by 2 bits/stage to preserve Sign Bit (MSB).
+    // Unsigned: Can grow by 1 bit/stage.
+    localparam GROWTH = SIGNED ? 2 : 1;
+
+    // Clamp internal width to S.
+    localparam MAX_WN = W + TOTAL_LEVELS + 2;
+    localparam WN = (S < MAX_WN) ? S : MAX_WN;
+
     wire [WN-1:0] St [0:TOTAL_LEVELS];
     wire [WN-1:0] Ct [0:TOTAL_LEVELS];
 
-    // Initialize first two operands
-    assign St[0] = WN'(operands[0]);
-    assign Ct[0] = WN'(operands[1]);
+    // Initialize inputs (Extend to WN)
+    assign St[0] = SIGNED ? WN'($signed(operands[0])) : WN'(operands[0]);
+    assign Ct[0] = SIGNED ? WN'($signed(operands[1])) : WN'(operands[1]);
 
-    // Generate 4:2 compressor levels first
+    // --------------------------------------------------------------
+    // 4:2 COMPRESSOR LEVELS
+    // --------------------------------------------------------------
+    
     for (genvar i = 0; i < LEVELS_4TO2; i++) begin : g_4to2_levels
-        localparam WI = W + i;
-        localparam WO = WI + 2;
+        // We set the input width (WI) to match the accumulation of 2 bits/stage.
+        localparam _WI = W + (i * GROWTH);
+        localparam _WO = _WI + 2;
+        localparam WI = (_WI > WN) ? WN : _WI;
+        localparam WO = (_WO > WN) ? WN : _WO;
+
+        localparam CSA_N = SIGNED ? WO : WI;
+
         localparam OP_A_IDX = 2 + (i * 2);
         localparam OP_B_IDX = 3 + (i * 2);
 
         wire [WO-1:0] st, ct;
+
+        // Cast inputs to CSA_N (Sign-Extend if Signed)
+        wire [CSA_N-1:0] op_a = SIGNED ? CSA_N'($signed(WI'(St[i]))) : CSA_N'(WI'(St[i]));
+        wire [CSA_N-1:0] op_b = SIGNED ? CSA_N'($signed(WI'(Ct[i]))) : CSA_N'(WI'(Ct[i]));
+        wire [CSA_N-1:0] op_c = SIGNED ? CSA_N'($signed(operands[OP_A_IDX])) : CSA_N'(operands[OP_A_IDX]);
+        wire [CSA_N-1:0] op_d = SIGNED ? CSA_N'($signed(operands[OP_B_IDX])) : CSA_N'(operands[OP_B_IDX]);
+
         VX_csa_42 #(
-            .N       (WI),
+            .N       (CSA_N),
             .WIDTH_O (WO)
         ) csa_42 (
-            .a     (WI'(St[i])),
-            .b     (WI'(Ct[i])),
-            .c     (WI'(operands[OP_A_IDX])),
-            .d     (WI'(operands[OP_B_IDX])),
+            .a     (op_a),
+            .b     (op_b),
+            .c     (op_c),
+            .d     (op_d),
             .sum   (st),
             .carry (ct)
         );
-        assign St[i+1] = WN'(st);
-        assign Ct[i+1] = WN'(ct);
+
+        // Store back in WN-wide container
+        assign St[i+1] = SIGNED ? WN'($signed(st)) : WN'(st);
+        assign Ct[i+1] = SIGNED ? WN'($signed(ct)) : WN'(ct);
     end
 
-    // If final 3:2 compressor level is needed
+    // --------------------------------------------------------------
+    // FINAL 3:2 LEVEL
+    // --------------------------------------------------------------
+
     if ((N - LEVELS_4TO2 * 2) == 3) begin : g_final_3to2
-        // exactly 3 operands left
         localparam FINAL_OP_IDX = 2 + (LEVELS_4TO2 * 2);
-        localparam WI = W + LEVELS_4TO2;
-        localparam WO = WI + 2;
+
+        // Input width must match the accumulated growth (W + Levels*2)
+        localparam _WI = W + (LEVELS_4TO2 * GROWTH);
+        localparam _WO = _WI + 2;
+        localparam WI = (_WI > WN) ? WN : _WI;
+        localparam WO = (_WO > WN) ? WN : _WO;
+
+        localparam CSA_N = SIGNED ? WO : WI;
 
         wire [WO-1:0] st, ct;
+
+        // Cast inputs to CSA_N (Sign-Extend if Signed)
+        wire [CSA_N-1:0] op_a = SIGNED ? CSA_N'($signed(WI'(St[LEVELS_4TO2]))) : CSA_N'(WI'(St[LEVELS_4TO2]));
+        wire [CSA_N-1:0] op_b = SIGNED ? CSA_N'($signed(WI'(Ct[LEVELS_4TO2]))) : CSA_N'(WI'(Ct[LEVELS_4TO2]));
+        wire [CSA_N-1:0] op_c = SIGNED ? CSA_N'($signed(operands[FINAL_OP_IDX])) : CSA_N'(operands[FINAL_OP_IDX]);
+
         VX_csa_32 #(
-            .N       (WI),
+            .N       (CSA_N),
             .WIDTH_O (WO)
         ) csa_32 (
-            .a     (WI'(St[LEVELS_4TO2])),
-            .b     (WI'(Ct[LEVELS_4TO2])),
-            .c     (WI'(operands[FINAL_OP_IDX])),
+            .a     (op_a),
+            .b     (op_b),
+            .c     (op_c),
             .sum   (st),
             .carry (ct)
         );
-        assign St[LEVELS_4TO2+1] = WN'(st);
-        assign Ct[LEVELS_4TO2+1] = WN'(ct);
+
+        assign St[LEVELS_4TO2+1] = SIGNED ? WN'($signed(st)) : WN'(st);
+        assign Ct[LEVELS_4TO2+1] = SIGNED ? WN'($signed(ct)) : WN'(ct);
     end
     else begin : g_no_final_3to2
-        // exactly 2 operands left
         if (LEVELS_4TO2 < TOTAL_LEVELS) begin : g_pass_through
             assign St[LEVELS_4TO2+1] = St[LEVELS_4TO2];
             assign Ct[LEVELS_4TO2+1] = Ct[LEVELS_4TO2];
         end
     end
 
-    // Final Kogge-Stone addition
+    // --------------------------------------------------------------
+    // FINAL ADDER
+    // --------------------------------------------------------------
+
+    wire [WN-1:0] raw_sum;
+    wire          raw_cout;
+
     VX_ks_adder #(
-        .N (S)
+        .N      (WN),
+        .SIGNED (SIGNED)
     ) KSA (
-        .dataa(St[TOTAL_LEVELS][S-1:0]),
-        .datab(Ct[TOTAL_LEVELS][S-1:0]),
-        .sum(sum),
-        .cout(cout)
+        .dataa (St[TOTAL_LEVELS]),
+        .datab (Ct[TOTAL_LEVELS]),
+        .sum   (raw_sum),
+        .cout  (raw_cout)
     );
+
+    // Final Output Expansion
+    if (SIGNED) begin : g_sign_extend
+        assign sum = S'($signed(raw_sum));
+    end else begin : g_zero_pad
+        assign sum = S'(raw_sum);
+    end
+
+    assign cout = raw_cout;
+
 endmodule
 
 `TRACING_ON

@@ -66,6 +66,6 @@ TOP := VX_tcu_fedp_drl
 endif
 
 # test fp16
-OPTS ?= --fmt=1 --ext=5 --sig=10 --no-infinities  --no-nans
+OPTS ?= --fmt=1
 
 include ../common.mk
