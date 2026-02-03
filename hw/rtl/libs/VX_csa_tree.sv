@@ -59,7 +59,7 @@ module VX_csa_tree #(
     // --------------------------------------------------------------
     // 4:2 COMPRESSOR LEVELS
     // --------------------------------------------------------------
-    
+
     for (genvar i = 0; i < LEVELS_4TO2; i++) begin : g_4to2_levels
         // We set the input width (WI) to match the accumulation of 2 bits/stage.
         localparam _WI = W + (i * GROWTH);
@@ -151,6 +151,7 @@ module VX_csa_tree #(
         .N      (WN),
         .SIGNED (SIGNED)
     ) KSA (
+        .cin   (0),
         .dataa (St[TOTAL_LEVELS]),
         .datab (Ct[TOTAL_LEVELS]),
         .sum   (raw_sum),

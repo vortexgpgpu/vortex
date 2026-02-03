@@ -234,9 +234,20 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         );
 
         // 2c. Difference calculation for alignment
-        wire [EXP_W-1:0] diff_f8 = sum_f8_1 - sum_f8_0;
-        wire diff_f8_sign = diff_f8[EXP_W-1];
-        wire [EXP_W-1:0] diff_f8_abs = diff_f8_sign ? -diff_f8 : diff_f8;
+        wire diff_f8_sign = (sum_f8_1 < sum_f8_0);
+        wire [EXP_W-1:0] max_sum_f8 = diff_f8_sign ? sum_f8_0 : sum_f8_1;
+        wire [EXP_W-1:0] min_sum_f8 = diff_f8_sign ? sum_f8_1 : sum_f8_0;
+        wire [EXP_W-1:0] diff_f8_abs;
+        VX_ks_adder #(
+            .N(EXP_W),
+            .SIGNED(0)
+        ) ks_diff_f8 (
+            .dataa (max_sum_f8),
+            .datab (~min_sum_f8),
+            .cin   (1'b1),
+            .sum   (diff_f8_abs),
+            `UNUSED_PIN (cout)
+        );
         `UNUSED_VAR (diff_f8_abs[EXP_W-1:5])
         assign exp_diff_f8[i] = {diff_f8_sign, diff_f8_abs[4:0]};
 

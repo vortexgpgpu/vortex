@@ -283,6 +283,7 @@ module VX_csa_mod4 #(
         .N(WN),
         .SIGNED(SIGNED)
     ) ksa (
+        .cin(0),
         .dataa(final_sum),
         .datab(final_carry),
         .sum(raw_sum),

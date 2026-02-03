@@ -135,6 +135,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     VX_ks_adder #(
         .N (7)
     ) int_adder (
+        .cin   (0),
         .dataa (ext_acc_int),
         .datab (cval_hi),
         .sum   (int_hi),

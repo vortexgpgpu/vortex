@@ -23,6 +23,7 @@ module VX_ks_adder #(
 ) (
     input  wire [N-1:0] dataa,
     input  wire [N-1:0] datab,
+    input  wire         cin, // Carry-in
     output wire [N-1:0] sum,
     output wire         cout // Overflow flag (if SIGNED=1) or Carry out
 );
@@ -54,22 +55,26 @@ module VX_ks_adder #(
     end
 
     // final sum bits
-    assign sum[0] = P[0][0];
+    assign sum[0] = P[0][0] ^ cin;
     for (genvar i = 1; i < N; i++) begin : g_sum
-        assign sum[i] = P[0][i] ^ G[LEVELS][i-1];
+        wire carry_in_i = G[LEVELS][i-1] | (P[LEVELS][i-1] & cin);
+        assign sum[i] = P[0][i] ^ carry_in_i;
     end
 
+    // Carry Out / Overflow Logic
     if (SIGNED) begin : g_signed_logic
         if (N > 1) begin : g_ovf
-            // Signed Overflow = Carry_Out_MSB XOR Carry_In_MSB
-            assign cout = G[LEVELS][N-1] ^ G[LEVELS][N-2];
+            // Signed Overflow = Carry_In_MSB XOR Carry_Out_MSB
+            wire carry_in_msb  = G[LEVELS][N-2] | (P[LEVELS][N-2] & cin);
+            wire carry_out_msb = G[LEVELS][N-1] | (P[LEVELS][N-1] & cin);
+            assign cout = carry_out_msb ^ carry_in_msb;
         end else begin : g_ovf_1bit
-            // For 1-bit signed, Overflow = Carry_Out ^ 0
-            assign cout = G[LEVELS][0];
+            // For 1-bit signed, Overflow = Carry_Out ^ Cin
+            assign cout = (G[LEVELS][0] | (P[LEVELS][0] & cin)) ^ cin;
         end
     end else begin : g_unsigned_logic
-        // Unsigned Carry Out
-        assign cout = G[LEVELS][N-1];
+        // Unsigned Carry Out = G_total | (P_total & cin)
+        assign cout = G[LEVELS][N-1] | (P[LEVELS][N-1] & cin);
     end
 
 endmodule

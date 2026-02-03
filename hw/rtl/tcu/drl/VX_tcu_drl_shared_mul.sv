@@ -175,28 +175,30 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         end
 
         // Alignment & Adder for FP8/BF8
-        wire [5:0] shift_amt_f8 = {1'b0, exp_diff_f8[i][4:0]};
         wire [7:0] y_f8_low  = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[0] : {y_raw_f8[0][5:0], 2'd0};
         wire [7:0] y_f8_high = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[1] : {y_raw_f8[1][5:0], 2'd0};
-
-        wire [22:0] aligned_sig_low  = exp_diff_f8[i][5] ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> shift_amt_f8;
-        wire [22:0] aligned_sig_high = exp_diff_f8[i][5] ? {y_f8_high, 15'd0} >> shift_amt_f8 : {y_f8_high, 15'd0};
-
-        wire [23:0] signed_sig_low  = sign_f8[0] ? -aligned_sig_low  : {1'b0, aligned_sig_low};
-        wire [23:0] signed_sig_high = sign_f8[1] ? -aligned_sig_high : {1'b0, aligned_sig_high};
-
-        wire [24:0] signed_sig_res;
+        wire [22:0] aligned_sig_low  = exp_diff_f8[i][5] ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> exp_diff_f8[i][4:0];
+        wire [22:0] aligned_sig_high = exp_diff_f8[i][5] ? {y_f8_high, 15'd0} >> exp_diff_f8[i][4:0] : {y_f8_high, 15'd0};
+        // -- Determine which operand is larger
+        wire mag_0_is_larger = (mag_0 > mag_1);
+        wire [23:0] mag_0 = {1'b0, aligned_sig_low};
+        wire [23:0] mag_1 = {1'b0, aligned_sig_high};
+        wire [23:0] op_a = mag_0_is_larger ? mag_0 : mag_1;
+        wire [23:0] op_b = mag_0_is_larger ? mag_1 : mag_0;
+        // -- Absolute value adder
+        wire do_sub = sign_f8[0] ^ sign_f8[1];
+        wire [23:0] adder_result;
         VX_ks_adder #(
             .N(24)
         ) sig_adder_f8 (
-            .dataa (signed_sig_low),
-            .datab (signed_sig_high),
-            .sum   (signed_sig_res[23:0]),
-            .cout  (signed_sig_res[24])
+            .cin   (do_sub),
+            .dataa (op_a),
+            .datab (do_sub ? ~op_b : op_b),
+            .sum   (adder_result),
+            `UNUSED_PIN (cout)
         );
-
-        wire sign_f8_add = signed_sig_res[24];
-        wire [23:0] y_f8_add = sign_f8_add ? -signed_sig_res[23:0] : signed_sig_res[23:0];
+        wire [23:0] y_f8_add = adder_result[23:0];
+        wire sign_f8_add = mag_0_is_larger ? sign_f8[0] : sign_f8[1];
 
         // Shared I8/U8 Multiplier
         wire [1:0][15:0] y_abs_i8;
@@ -218,6 +220,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         VX_ks_adder #(
             .N(17)
         ) i8_adder (
+            .cin   (0),
             .dataa (y_signed_i8[0]),
             .datab (y_signed_i8[1]),
             .sum   (y_i8_add_res),
