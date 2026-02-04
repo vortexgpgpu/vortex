@@ -151,6 +151,7 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
                     n_in = nan_in_bf16[i]; i_z = inf_z_bf16[i]; i_op = inf_op_bf16[i]; sgn = sign_bf16[i];
                     valid_lane = vld_mask[i * 4];
                 end
+            `ifdef TCU_FP8_ENABLE
                 TCU_FP8_ID: begin
                     n_in = n_in_fp8_comb | fp8_add_nan; i_z = 1'b0; i_op = i_op_fp8_comb; sgn = sgn_fp8_comb;
                     valid_lane = vld_mask[i * 2];
@@ -159,6 +160,7 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
                     n_in = n_in_bf8_comb | bf8_add_nan; i_z = 1'b0; i_op = i_op_bf8_comb; sgn = sgn_bf8_comb;
                     valid_lane = vld_mask[i * 2];
                 end
+            `endif
                 TCU_TF32_ID: begin
                     n_in = nan_in_tf32[i]; i_z = inf_z_tf32[i]; i_op = inf_op_tf32[i]; sgn = sign_tf32[i];
                     valid_lane = ((i % 2) == 0) ? vld_mask[i * 4] : 1'b0;
@@ -168,7 +170,7 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
                 end
             endcase
         end
-
+        `UNUSED_VAR ({n_in_fp8_comb, n_in_bf8_comb, fp8_add_nan, bf8_add_nan, i_op_fp8_comb, i_op_bf8_comb, sgn_fp8_comb, sgn_bf8_comb})
         assign prod_nan[i]  = (n_in | i_z) & valid_lane;
         assign prod_inf[i]  = (i_op & ~i_z) & valid_lane;
         assign prod_sign[i] = sgn;

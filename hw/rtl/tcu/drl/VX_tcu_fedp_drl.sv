@@ -2,6 +2,7 @@
 
 module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
+    parameter USE_VALID = 0,
     parameter LATENCY = 0,
     parameter N = 2,
     parameter W = 25
@@ -50,7 +51,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     reg [TOTAL_LATENCY-1:0] vld_pipe_r;
     reg [TOTAL_LATENCY-1:0][31:0] req_pipe_r;
     reg [31:0] req_id;
-    wire vld_any = |vld_mask;
+    wire vld_any = (|vld_mask) && USE_VALID;
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -93,7 +94,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .a_row(a_row),
         .b_col(b_col),
         .c_val(c_val),
-        .vld_mask(vld_mask),
+        .vld_mask(vld_mask | TCU_MAX_INPUTS'(!USE_VALID)),
         .max_exp(max_exp),
         .shift_amt(shift_amt),
         .raw_sigs(raw_sigs),
@@ -126,7 +127,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         pipe_fmul_lane (
             .clk(clk),
             .reset(reset),
-            .enable(enable & lane_mask[i]),
+            .enable(enable & (lane_mask[i] || !USE_VALID)),
             .data_in ({shift_amt[i],    raw_sigs[i]}),
             .data_out({s1_shift_amt[i], s1_raw_sig[i]})
         );
@@ -176,7 +177,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         pipe_aln_lane (
             .clk(clk),
             .reset(reset),
-            .enable(enable & s1_lane_mask[i]),
+            .enable(enable & (s1_lane_mask[i] || !USE_VALID)),
             .data_in ({s1_aln_sigs[i], s1_aln_sticky[i]}),
             .data_out({s2_aln_sigs[i], s2_aln_sticky[i]})
         );

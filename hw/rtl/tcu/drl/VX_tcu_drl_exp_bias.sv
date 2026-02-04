@@ -64,7 +64,7 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     // 1. Inputs Setup
     // ----------------------------------------------------------------------
 
-    wire [TCK-1:0][7:0] ea_tf32, eb_tf32, ea_fp16, eb_fp16, ea_bf16, eb_bf16;
+    wire [TCK-1:0][7:0] ea_fp16, eb_fp16, ea_bf16, eb_bf16, ea_tf32, eb_tf32;
     wire [TCK-1:0]      z_tf32,  z_fp16,  z_bf16;
 
     wire [TCK-1:0][1:0][7:0] ea_fp8, eb_fp8, ea_bf8, eb_bf8;
@@ -149,12 +149,12 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         wire [EXP_W-1:0]  sum_f16;
 
         // Packed signals (FP8/BF8)
-        logic [1:0][7:0]  ea_f8_sel, eb_f8_sel;
-        logic [EXP_W-1:0] bias_f8_sel;
+        logic [1:0][7:0]  ea_sel_f8, eb_sel_f8;
+        logic [EXP_W-1:0] bias_sel_f8;
         logic [1:0]       is_zero_f8;
         wire [EXP_W-1:0]  sum_f8_0, sum_f8_1;
 
-        // Mux Selection
+        // f16 Mux Selection
         always_comb begin
             case (fmtf)
                 TCU_TF32_ID: begin
@@ -175,33 +175,41 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
                     is_zero_f16  = z_bf16[i];
                     bias_sel_f16 = BIAS_CONST_BF16;
                 end
-                TCU_FP8_ID: begin
-                    ea_f8_sel   = ea_fp8[i];
-                    eb_f8_sel   = eb_fp8[i];
-                    is_zero_f8  = z_fp8[i];
-                    bias_f8_sel = BIAS_CONST_FP8;
-                end
-                TCU_BF8_ID: begin
-                    ea_f8_sel   = ea_bf8[i];
-                    eb_f8_sel   = eb_bf8[i];
-                    is_zero_f8  = z_bf8[i];
-                    bias_f8_sel = BIAS_CONST_BF8;
-                end
                 default: begin
                     ea_sel_f16  = 'x;
                     eb_sel_f16  = 'x;
                     bias_sel_f16= 'x;
                     is_zero_f16 = 'x;
-                    ea_f8_sel   = 'x;
-                    eb_f8_sel   = 'x;
-                    bias_f8_sel = 'x;
+                end
+            endcase
+        end
+
+        // f8 Mux Selection
+        always_comb begin
+            case (fmtf)
+                TCU_FP8_ID: begin
+                    ea_sel_f8   = ea_fp8[i];
+                    eb_sel_f8   = eb_fp8[i];
+                    is_zero_f8  = z_fp8[i];
+                    bias_sel_f8 = BIAS_CONST_FP8;
+                end
+                TCU_BF8_ID: begin
+                    ea_sel_f8   = ea_bf8[i];
+                    eb_sel_f8   = eb_bf8[i];
+                    is_zero_f8  = z_bf8[i];
+                    bias_sel_f8 = BIAS_CONST_BF8;
+                end
+                default: begin
+                    ea_sel_f8   = 'x;
+                    eb_sel_f8   = 'x;
+                    bias_sel_f8 = 'x;
                     is_zero_f8  = 'x;
                 end
                 default: ;
             endcase
         end
 
-        // 2a. Shared CSA Tree
+        // Shared f16/bf16/tf32 adder
         VX_csa_tree #(
             .N (3),
             .W (EXP_W),
@@ -212,13 +220,13 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
             `UNUSED_PIN (cout)
         );
 
-        // 2b. Packed CSA Trees for 8-bit formats
+        // Shared fp8/bf8 adders
         VX_csa_tree #(
             .N (3),
             .W (EXP_W),
             .S (EXP_W)
         ) exp_adder_f8_0 (
-            .operands ({EXP_W'(ea_f8_sel[0]), EXP_W'(eb_f8_sel[0]), bias_f8_sel}),
+            .operands ({EXP_W'(ea_sel_f8[0]), EXP_W'(eb_sel_f8[0]), bias_sel_f8}),
             .sum      (sum_f8_0),
             `UNUSED_PIN (cout)
         );
@@ -228,27 +236,27 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
             .W (EXP_W),
             .S (EXP_W)
         ) exp_adder_f8_1 (
-            .operands ({EXP_W'(ea_f8_sel[1]), EXP_W'(eb_f8_sel[1]), bias_f8_sel}),
+            .operands ({EXP_W'(ea_sel_f8[1]), EXP_W'(eb_sel_f8[1]), bias_sel_f8}),
             .sum      (sum_f8_1),
             `UNUSED_PIN (cout)
         );
 
-        // 2c. Difference calculation for alignment
-        wire diff_f8_sign = (sum_f8_1 < sum_f8_0);
-        wire [EXP_W-1:0] max_sum_f8 = diff_f8_sign ? sum_f8_0 : sum_f8_1;
-        wire [EXP_W-1:0] min_sum_f8 = diff_f8_sign ? sum_f8_1 : sum_f8_0;
-        wire [EXP_W-1:0] diff_f8_abs;
+        // Difference calculation for alignment
+        wire diff_sign_f8 = (sum_f8_1 < sum_f8_0);
+        wire [EXP_W-1:0] max_sum_f8 = diff_sign_f8 ? sum_f8_0 : sum_f8_1;
+        wire [EXP_W-1:0] min_sum_f8 = diff_sign_f8 ? sum_f8_1 : sum_f8_0;
+        wire [EXP_W-1:0] diff_abs_f8;
         VX_ks_adder #(
             .N(EXP_W)
         ) ks_diff_f8 (
             .dataa (max_sum_f8),
             .datab (~min_sum_f8),
             .cin   (1'b1),
-            .sum   (diff_f8_abs),
+            .sum   (diff_abs_f8),
             `UNUSED_PIN (cout)
         );
-        `UNUSED_VAR (diff_f8_abs[EXP_W-1:5])
-        assign exp_diff_f8[i] = {diff_f8_sign, diff_f8_abs[4:0]};
+        `UNUSED_VAR (diff_abs_f8[EXP_W-1:5])
+        assign exp_diff_f8[i] = {diff_sign_f8, diff_abs_f8[4:0]};
 
         // Final Output Mux
         always_comb begin
@@ -256,16 +264,19 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
                 TCU_TF32_ID, TCU_FP16_ID, TCU_BF16_ID: begin
                     raw_exp_y[i] = is_zero_f16 ? EXP_NEG_INF : sum_f16;
                 end
+            `ifdef TCU_FP8_ENABLE
                 TCU_FP8_ID, TCU_BF8_ID: begin
-                    raw_exp_y[i] = diff_f8_sign ?
+                    raw_exp_y[i] = diff_sign_f8 ?
                         (is_zero_f8[0] ? EXP_NEG_INF : sum_f8_0) :
                         (is_zero_f8[1] ? EXP_NEG_INF : sum_f8_1);
                 end
+            `endif
                 default: begin
                     raw_exp_y[i] = 'x;
                 end
             endcase
         end
+        `UNUSED_VAR ({diff_sign_f8, is_zero_f8, sum_f8_0, sum_f8_1})
     end
 
     // ----------------------------------------------------------------------

@@ -259,7 +259,9 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             case (fmt_s[3:0])
                 TCU_TF32_ID, TCU_FP16_ID: y[i] = {sign_f16, y_raw_f16, 2'd0};
                 TCU_BF16_ID:              y[i] = {sign_f16, y_raw_f16[15:0], 8'd0};
+            `ifdef TCU_FP8_ENABLE
                 TCU_FP8_ID, TCU_BF8_ID:   y[i] = {sign_f8_add, y_f8_add};
+            `endif
                 TCU_I8_ID:                y[i] = 25'($signed(y_i8_add_res));
                 TCU_U8_ID:                y[i] = {8'd0, y_i8_add_res};
                 TCU_I4_ID:                y[i] = 25'($signed(y_i4_add_res));
@@ -267,6 +269,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
                 default:                  y[i] = 'x;
             endcase
         end
+        `UNUSED_VAR ({sign_f8_add, y_f8_add})
     end
 
     // 8. C-Term Processing

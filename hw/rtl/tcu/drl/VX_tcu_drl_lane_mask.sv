@@ -54,8 +54,10 @@ module VX_tcu_drl_lane_mask import VX_tcu_pkg::*; #(
             TCU_TF32_ID: lane_mask = mask_32;
             TCU_FP16_ID: lane_mask = mask_16;
             TCU_BF16_ID: lane_mask = mask_16;
+        `ifdef TCU_FP8_ENABLE
             TCU_FP8_ID:  lane_mask = mask_8;
             TCU_BF8_ID:  lane_mask = mask_8;
+        `endif
             TCU_I8_ID:   lane_mask = mask_8;
             TCU_U8_ID:   lane_mask = mask_8;
             TCU_I4_ID:   lane_mask = mask_4;
