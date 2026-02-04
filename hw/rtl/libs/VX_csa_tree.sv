@@ -15,140 +15,147 @@
 
 `TRACING_OFF
 
-// Carry-Save Adder Tree (4:2 based, falls back to 3:2 if needed)
+// -------------------------------------------------------------------------
+// Recursive Reduction Module
+// -------------------------------------------------------------------------
+
+module VX_csa_reducer #(
+    parameter N = 1,
+    parameter W = 1
+) (
+    input  wire [N-1:0][W-1:0] operands,
+    output wire [W-1:0]        sum_out,
+    output wire [W-1:0]        carry_out
+);
+
+    // -----------------------------------------------------------------
+    // STRATEGY:
+    // - Use as many 4:2 compressors as possible (Groups of 4).
+    // - If 3 remain, use a 3:2 compressor.
+    // - Pass any remaining inputs (1 or 2) directly to the next level.
+    // -----------------------------------------------------------------
+
+    localparam NUM_42 = N / 4;
+    localparam REM_AFTER_42 = N % 4;
+
+    // We only use a 3:2 if exactly 3 are left. If 1 or 2 left, we pass them.
+    localparam USE_32 = (REM_AFTER_42 == 3);
+
+    // Pass-through count
+    localparam NUM_PASS = USE_32 ? 0 : REM_AFTER_42;
+
+    // Calculate the number of signals going to the NEXT level
+    localparam N_NEXT = (NUM_42 * 2) + (USE_32 * 2) + NUM_PASS;
+
+    // Intermediate wires for the output of this layer
+    wire [N_NEXT-1:0][W-1:0] next_operands;
+
+    // 1. Instantiate 4:2 Compressors
+    for (genvar i = 0; i < NUM_42; i++) begin : g_csa42
+        wire [W-1:0] s, c;
+        VX_csa_42 #(
+            .N      (W),
+            .WIDTH_O(W)
+        ) csa42_inst (
+            .a      (operands[4*i + 0]),
+            .b      (operands[4*i + 1]),
+            .c      (operands[4*i + 2]),
+            .d      (operands[4*i + 3]),
+            .sum    (s),
+            .carry  (c)
+        );
+        assign next_operands[2*i + 0] = s;
+        assign next_operands[2*i + 1] = c;
+    end
+
+    // 2. Instantiate 3:2 Compressor (if needed)
+    if (USE_32) begin : g_csa32
+        wire [W-1:0] s, c;
+        VX_csa_32 #(
+            .N      (W),
+            .WIDTH_O(W)
+        ) csa32_inst (
+            .a      (operands[4*NUM_42 + 0]),
+            .b      (operands[4*NUM_42 + 1]),
+            .c      (operands[4*NUM_42 + 2]),
+            .sum    (s),
+            .carry  (c)
+        );
+        // Map to the next available slots after the 4:2 outputs
+        assign next_operands[(2*NUM_42) + 0] = s;
+        assign next_operands[(2*NUM_42) + 1] = c;
+    end
+
+    // 3. Pass-through remaining signals
+    if (NUM_PASS > 0) begin : g_pass
+        for (genvar i = 0; i < NUM_PASS; i++) begin : g_loop
+            assign next_operands[(2*NUM_42) + (USE_32 ? 2 : 0) + i] = operands[(4*NUM_42) + i];
+        end
+    end
+
+    // 4. Recursive Step
+    if (N_NEXT > 2) begin : g_recurse
+        VX_csa_reducer #(
+            .N (N_NEXT),
+            .W (W)
+        ) next_step (
+            .operands  (next_operands),
+            .sum_out   (sum_out),
+            .carry_out (carry_out)
+        );
+    end else begin : g_done
+        assign sum_out   = next_operands[0];
+        assign carry_out = next_operands[1];
+    end
+
+endmodule
+
+// -------------------------------------------------------------------------
+// Top Level Tree
+// -------------------------------------------------------------------------
+
 module VX_csa_tree #(
     parameter N = 4,              // Number of operands
     parameter W = 8,              // Bit-width of each operand
     parameter S = W + $clog2(N)   // Output width
 ) (
-    input  wire [N-1:0][W-1:0] operands,  // Input operands
-    output wire [S-1:0] sum,  // Final sum output
-    output wire cout
+    input  wire [N-1:0][W-1:0] operands,
+    output wire [S-1:0]        sum,
+    output wire                cout
 );
-    `STATIC_ASSERT (N >= 3, ("N must be at least 3"));
+    `STATIC_ASSERT(N >= 2, ("N must be at least 2"));
 
-    function automatic integer calc_4to2_levels(integer n);
-        integer remaining = n;
-        integer levels_4to2 = 0;
-        while (remaining >= 4) begin
-            levels_4to2 = levels_4to2 + 1;
-            remaining = remaining - 2;    // 4->2 reduction
-        end
-        return levels_4to2;
-    endfunction
+    // 1. Determine Internal Operands Width
+    localparam WN = S;
 
-    localparam LEVELS_4TO2 = calc_4to2_levels(N);
-    localparam TOTAL_LEVELS = LEVELS_4TO2 + ((N - LEVELS_4TO2 * 2) == 3 ? 1 : 0);
-
-    // Clamp internal width to S.
-    localparam MAX_WN = W + TOTAL_LEVELS + 2;
-    localparam WN = (S < MAX_WN) ? S : MAX_WN;
-
-    wire [WN-1:0] St [0:TOTAL_LEVELS];
-    wire [WN-1:0] Ct [0:TOTAL_LEVELS];
-
-    // Initialize inputs (Extend to WN)
-    assign St[0] = WN'(operands[0]);
-    assign Ct[0] = WN'(operands[1]);
-
-    // --------------------------------------------------------------
-    // 4:2 COMPRESSOR LEVELS
-    // --------------------------------------------------------------
-
-    for (genvar i = 0; i < LEVELS_4TO2; i++) begin : g_4to2_levels
-        // We set the input width (WI) to match the accumulation of 2 bits/stage.
-        localparam _WI = W + i;
-        localparam _WO = _WI + 2;
-        localparam WI = (_WI > WN) ? WN : _WI;
-        localparam WO = (_WO > WN) ? WN : _WO;
-
-        localparam OP_A_IDX = 2 + (i * 2);
-        localparam OP_B_IDX = 3 + (i * 2);
-
-        // Cast inputs to WI
-        wire [WI-1:0] op_a = WI'(St[i]);
-        wire [WI-1:0] op_b = WI'(Ct[i]);
-        wire [WI-1:0] op_c = WI'(operands[OP_A_IDX]);
-        wire [WI-1:0] op_d = WI'(operands[OP_B_IDX]);
-
-        wire [WO-1:0] st, ct;
-
-        VX_csa_42 #(
-            .N       (WI),
-            .WIDTH_O (WO)
-        ) csa_42 (
-            .a     (op_a),
-            .b     (op_b),
-            .c     (op_c),
-            .d     (op_d),
-            .sum   (st),
-            .carry (ct)
-        );
-
-        // Store back in WN-wide container
-        assign St[i+1] = WN'(st);
-        assign Ct[i+1] = WN'(ct);
+    // 2. Extend Inputs to Internal Width
+    wire [N-1:0][WN-1:0] operands_extended;
+    for (genvar i = 0; i < N; i++) begin : g_extend
+        assign operands_extended[i] = WN'(operands[i]);
     end
 
-    // --------------------------------------------------------------
-    // FINAL 3:2 LEVEL
-    // --------------------------------------------------------------
+    // 3. Instantiate Recursive Reduction Tree
+    wire [WN-1:0] final_sum_vec;
+    wire [WN-1:0] final_carry_vec;
+    VX_csa_reducer #(
+        .N (N),
+        .W (WN)
+    ) tree_core (
+        .operands  (operands_extended),
+        .sum_out   (final_sum_vec),
+        .carry_out (final_carry_vec)
+    );
 
-    if ((N - LEVELS_4TO2 * 2) == 3) begin : g_final_3to2
-        localparam FINAL_OP_IDX = 2 + (LEVELS_4TO2 * 2);
-
-        // Input width must match the accumulated growth (W + Levels*2)
-        localparam _WI = W + LEVELS_4TO2;
-        localparam _WO = _WI + 2;
-        localparam WI = (_WI > WN) ? WN : _WI;
-        localparam WO = (_WO > WN) ? WN : _WO;
-
-        // Cast inputs to WI
-        wire [WI-1:0] op_a = WI'(St[LEVELS_4TO2]);
-        wire [WI-1:0] op_b = WI'(Ct[LEVELS_4TO2]);
-        wire [WI-1:0] op_c = operands[FINAL_OP_IDX];
-
-        wire [WO-1:0] st, ct;
-
-        VX_csa_32 #(
-            .N       (WI),
-            .WIDTH_O (WO)
-        ) csa_32 (
-            .a     (op_a),
-            .b     (op_b),
-            .c     (op_c),
-            .sum   (st),
-            .carry (ct)
-        );
-
-        assign St[LEVELS_4TO2+1] = WN'(st);
-        assign Ct[LEVELS_4TO2+1] = WN'(ct);
-    end
-    else begin : g_no_final_3to2
-        if (LEVELS_4TO2 < TOTAL_LEVELS) begin : g_pass_through
-            assign St[LEVELS_4TO2+1] = St[LEVELS_4TO2];
-            assign Ct[LEVELS_4TO2+1] = Ct[LEVELS_4TO2];
-        end
-    end
-
-    // --------------------------------------------------------------
-    // FINAL ADDER
-    // --------------------------------------------------------------
-
-    wire [WN-1:0] raw_sum;
-
+    // 4. Final Carry Propagate Adder
     VX_ks_adder #(
         .N (WN)
     ) KSA (
-        .cin   (0),
-        .dataa (St[TOTAL_LEVELS]),
-        .datab (Ct[TOTAL_LEVELS]),
-        .sum   (raw_sum),
+        .cin   (1'b0),
+        .dataa (final_sum_vec),
+        .datab (final_carry_vec),
+        .sum   (sum),
         .cout  (cout)
     );
-
-    // Final Output Expansion
-    assign sum = S'(raw_sum);
 
 endmodule
 

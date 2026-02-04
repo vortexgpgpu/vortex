@@ -47,37 +47,15 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     // Fast Accumulation (CSA Tree)
     // ----------------------------------------------------------------------
 
-    if (N >= 7) begin : g_large_acc
-        VX_csa_mod4 #(
-            .N (N),
-            .W (WO),
-            .S (WO)
-        ) sig_csa (
-            .operands (sigs_in_packed),
-            .sum      (sig_out),
-            `UNUSED_PIN(cout)
-        );
-    end else if (N >= 3) begin : g_medium_acc
-        VX_csa_tree #(
-            .N (N),
-            .W (WO),
-            .S (WO)
-        ) sig_csa (
-            .operands (sigs_in_packed),
-            .sum      (sig_out),
-            `UNUSED_PIN(cout)
-        );
-    end else begin : g_small_acc
-        VX_ks_adder #(
-            .N (WO)
-        ) sig_ksa (
-            .cin   (0),
-            .dataa (sigs_in_packed[0]),
-            .datab (sigs_in_packed[1]),
-            .sum   (sig_out),
-            `UNUSED_PIN (cout)
-        );
-    end
+    VX_csa_tree #(
+        .N (N),
+        .W (WO),
+        .S (WO)
+    ) sig_csa (
+        .operands (sigs_in_packed),
+        .sum      (sig_out),
+        `UNUSED_PIN(cout)
+    );
 
     // ----------------------------------------------------------------------
     // Sticky aggregation
