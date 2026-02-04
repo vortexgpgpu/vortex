@@ -239,8 +239,7 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         wire [EXP_W-1:0] min_sum_f8 = diff_f8_sign ? sum_f8_1 : sum_f8_0;
         wire [EXP_W-1:0] diff_f8_abs;
         VX_ks_adder #(
-            .N(EXP_W),
-            .SIGNED(0)
+            .N(EXP_W)
         ) ks_diff_f8 (
             .dataa (max_sum_f8),
             .datab (~min_sum_f8),

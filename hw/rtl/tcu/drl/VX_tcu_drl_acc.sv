@@ -35,30 +35,47 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     assign masked_sticky[N-1] = sticky_in[N-1];
 
     // ----------------------------------------------------------------------
-    // Fast Accumulation with signed CSA Tree
+    // Sign Extension
+    // ----------------------------------------------------------------------
+
+    wire [N-1:0][WO-1:0] sigs_in_packed;
+    for (genvar i = 0; i < N; ++i) begin : g_ext
+        assign sigs_in_packed[i] = $signed({{(WO-WI){masked_sigs[i][WI-1]}}, masked_sigs[i]});
+    end
+
+    // ----------------------------------------------------------------------
+    // Fast Accumulation (CSA Tree)
     // ----------------------------------------------------------------------
 
     if (N >= 7) begin : g_large_acc
         VX_csa_mod4 #(
             .N (N),
-            .W (WI),
-            .S (WO),
-            .SIGNED(1)
+            .W (WO),
+            .S (WO)
         ) sig_csa (
-            .operands (masked_sigs),
+            .operands (sigs_in_packed),
             .sum      (sig_out),
             `UNUSED_PIN(cout)
         );
-    end else begin : g_acc
+    end else if (N >= 3) begin : g_medium_acc
         VX_csa_tree #(
             .N (N),
-            .W (WI),
-            .S (WO),
-            .SIGNED(1)
+            .W (WO),
+            .S (WO)
         ) sig_csa (
-            .operands (masked_sigs),
-            .sum (sig_out),
+            .operands (sigs_in_packed),
+            .sum      (sig_out),
             `UNUSED_PIN(cout)
+        );
+    end else begin : g_small_acc
+        VX_ks_adder #(
+            .N (WO)
+        ) sig_ksa (
+            .cin   (0),
+            .dataa (sigs_in_packed[0]),
+            .datab (sigs_in_packed[1]),
+            .sum   (sig_out),
+            `UNUSED_PIN (cout)
         );
     end
 
