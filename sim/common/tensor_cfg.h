@@ -191,7 +191,7 @@ public:
   static constexpr uint32_t a_sub_blocks = block_cap / a_block_size;  // number of A micro-tiles per register
   static constexpr uint32_t a_sub_steps  = m_steps / a_sub_blocks;    // number of A sub-steps per register
 
-  static constexpr uint32_t b_block_size = tcK * tcN;                 // size of B micro-tile
+  static constexpr uint32_t b_block_size = (tcK * tcN)*2;               // size of B micro-tile
   static constexpr uint32_t b_sub_blocks = block_cap / b_block_size;  // number of B micro-tiles per register
   static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;    // number of B sub-steps per register
 

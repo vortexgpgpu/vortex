@@ -62,10 +62,14 @@ module VX_tcu_uops import
     end
 
     // Register offsets
-    wire [CTR_W-1:0] rs1_offset = ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
+    // wire [CTR_W-1:0] rs1_offset = ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
+    // wire [CTR_W-1:0] rs2_offset = ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
+    // wire [CTR_W-1:0] rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
+
+    wire [CTR_W-1:0] rs1_offset = ((CTR_W'(m_index) >> LG_A_SB) << (LG_K/2)) | CTR_W'(k_index);
     wire [CTR_W-1:0] rs2_offset = ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
     wire [CTR_W-1:0] rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
-
+    
     // Register calculations
     wire [4:0] rs1 = TCU_RA + 5'(rs1_offset);
     wire [4:0] rs2 = TCU_RB + 5'(rs2_offset);
@@ -115,7 +119,7 @@ module VX_tcu_uops import
                 done <= (TCU_UOPS == 1);
             end else if (busy && next) begin
                 counter <= counter + ((TCU_UOPS > 1) ? 1 : 0);
-                done <= (counter == CTR_W'(TCU_UOPS-2));
+                done <= (counter == CTR_W'((TCU_UOPS/2)-2));  // sparsity 2601223
                 busy <= ~done;
             end
         end

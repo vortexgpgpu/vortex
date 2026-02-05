@@ -117,7 +117,6 @@ namespace detail {
       return *reinterpret_cast<const D*>(&result_u);
     }
   };
-
 }
 
 template <uint32_t NT, // number of threads per warp
@@ -206,17 +205,24 @@ public:
           // raw_major layout
           auto ptr = base + elem_row * ldm + elem_col;
           assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
-          dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+          //dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+          if (r < 4) {
+            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+          } else {
+            // Zero for r=4,5,6,7
+            uint32_t zero = 0;
+            dst.data[r] = *reinterpret_cast<const vreg_t*>(&zero);
+          }
         }
       });
     } else if constexpr (Frag::Use == matrix_b) {
       // Load column-major matrix B
       uint32_t block_idx = (cfg::b_block_size == NT) ? 0 : (lane / cfg::b_block_size);
       uint32_t lane_in_blk = (cfg::b_block_size == NT) ? lane : (lane % cfg::b_block_size);
-      uint32_t block_col = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcN);
-      uint32_t block_row = (lane_in_blk % cfg::tcK) * i_ratio;
+      uint32_t block_col = (lane_in_blk / ((cfg::tcK)*2)) + (block_idx * cfg::tcN);
+      uint32_t block_row = (lane_in_blk % ((cfg::tcK)*2)) * i_ratio;
       uint32_t n_stride  = cfg::b_sub_blocks * cfg::tcN;
-      uint32_t k_stride  = cfg::tcK * i_ratio;
+      uint32_t k_stride  = ((cfg::tcK)*2) * i_ratio;
       if constexpr (src_layout == col_major) {
         std::swap(block_row, block_col);
       }
