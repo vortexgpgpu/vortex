@@ -168,12 +168,12 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
         reg [31:0] a_row_sel, a_col_sel;
 
         always @(*) begin
-            case (fmt_s[2:0])
-            3'b001: begin // fp16
+            case (fmt_s)
+            TCU_FP16_ID: begin
                 a_row_sel = a_row_fp16;
                 a_col_sel = b_col_fp16;
             end
-            3'b010: begin // bf16
+            TCU_BF16_ID: begin
                 a_row_sel = a_row_bf16;
                 a_col_sel = b_col_bf16;
             end

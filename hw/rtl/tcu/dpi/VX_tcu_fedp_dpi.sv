@@ -52,7 +52,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
 
         always_latch begin
             case (fmt_s)
-            4'b0001: begin // fp16
+            TCU_FP16_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 2; j++) begin
                     dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, a_row[i][j * 16 +: 16]}, 3'b0, a_f, fflags);
@@ -61,7 +61,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
-            4'b0010: begin // bf16
+            TCU_BF16_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 2; j++) begin
                     dpi_f2f(enable, int'(0), int'(3), {48'hffffffffffff, a_row[i][j * 16 +: 16]}, 3'b0, a_f, fflags);
@@ -70,7 +70,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
-            4'b0011: begin // fp8
+            TCU_FP8_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 4; j++) begin
                     dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
@@ -79,7 +79,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
-            4'b0100: begin // bf8
+            TCU_BF8_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 4; j++) begin
                     dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
@@ -88,13 +88,13 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
-            4'b0101: begin // tf32 (one 19-bit op in 32-bit reg)
+            TCU_TF32_ID: begin
                 prod = 64'hffffffff00000000;
                 dpi_f2f(enable, int'(0), int'(6), {32'hffffffff, a_row[i]}, 3'b0, a_f, fflags);
                 dpi_f2f(enable, int'(0), int'(6), {32'hffffffff, b_col[i]}, 3'b0, b_f, fflags);
                 dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, prod, fflags);
             end
-            4'b0110: begin // mxfp8 (basically the exact same as fp8 for fmul)
+            TCU_MXFP8_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 4; j++) begin
                     dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
@@ -103,7 +103,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
-            4'b0111: begin // nvfp4
+            TCU_NVFP4_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 8; j++) begin
                     dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
@@ -112,31 +112,31 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
-            4'b1001: begin // int8
+            TCU_I8_ID: begin
                 prod = 0;
                 for (int j = 0; j < 4; j++) begin
                     prod += $signed({{24{a_row[i][8 * j + 7]}}, a_row[i][8 * j +: 8]}) * $signed({{24{b_col[i][8 * j + 7]}}, b_col[i][8 * j +: 8]});
                 end
             end
-            4'b1010: begin // uint8
+            TCU_U8_ID: begin
                 prod = 0;
                 for (int j = 0; j < 4; j++) begin
                     prod += a_row[i][8 * j +: 8] * b_col[i][8 * j +: 8];
                 end
             end
-            4'b1011: begin // int4
+            TCU_I4_ID: begin
                 prod = 0;
                 for (int j = 0; j < 8; j++) begin
                     prod += $signed({{28{a_row[i][4 * j + 3]}}, a_row[i][4 * j +: 4]}) * $signed({{28{b_col[i][4 * j + 3]}}, b_col[i][4 * j +: 4]});
                 end
             end
-            4'b1100: begin // uint4
+            TCU_U4_ID: begin
                 prod = 0;
                 for (int j = 0; j < 8; j++) begin
                     prod += a_row[i][4 * j +: 4] * b_col[i][4 * j +: 4];
                 end
             end
-            4'b1101: begin // mxint8
+            TCU_MXFP8_ID: begin
                 prod = 0;
                 for (int j = 0; j < 4; j++) begin
                     prod += $signed({{24{a_row[i][8 * j + 7]}}, a_row[i][8 * j +: 8]}) * $signed({{24{b_col[i][8 * j + 7]}}, b_col[i][8 * j +: 8]});
@@ -172,17 +172,17 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     `UNUSED_VAR(sfflags);
     always_comb begin
         case (fmt_s)
-            4'b0110: begin // mxfp8
+            TCU_MXFP8_ID: begin
                 raw_sf_a = SCALE_FACTOR_E8M0_A - 8'd127;
                 raw_sf_b = SCALE_FACTOR_E8M0_B - 8'd127;
                 raw_sf   = raw_sf_a + raw_sf_b;
             end
-            4'b0111: begin // nvfp4
+            TCU_NVFP4_ID: begin
                 dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, SCALE_FACTOR_E4M3_A}, 3'b0, a_sf, sfflags);
                 dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, SCALE_FACTOR_E4M3_B}, 3'b0, b_sf, sfflags);
                 dpi_fmul(enable, int'(0), a_sf, b_sf, 3'b0, temp_sf, sfflags);
             end
-            4'b1101: begin // mxint8
+            TCU_MXI8_ID: begin
                 raw_sf_a = SCALE_FACTOR_E8M0_A - 8'd133;
                 raw_sf_b = SCALE_FACTOR_E8M0_B - 8'd133;
                 raw_sf   = raw_sf_a + raw_sf_b;
@@ -223,7 +223,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
         end
 
         //multiply with scaling factor
-        if (delayed_fmt_s == 4'b0111) begin // nvfp4
+        if (delayed_fmt_s == TCU_NVFP4_ID) begin // nvfp4
             dpi_fmul(enable, int'(0), acc_f, delayed_temp_sf, 3'b0, acc_f, fflags);
         end else begin
             acc_f[30:23] += delayed_raw_sf; // mxfp8

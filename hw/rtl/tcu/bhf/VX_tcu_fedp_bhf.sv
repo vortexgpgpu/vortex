@@ -197,12 +197,12 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
 
         logic [32:0] mult_result_mux;
         always_comb begin
-            case(fmt_s_delayed)
-                3'd1: mult_result_mux = mult_result_fp16;
-                3'd2: mult_result_mux = mult_result_bf16;
-                3'd3: mult_result_mux = mult_result_fp8;
-                3'd4: mult_result_mux = mult_result_bf8;
-                3'd5: mult_result_mux = mult_result_tf32;  // TF32
+            case({1'b0, fmt_s_delayed})
+                TCU_FP16_ID: mult_result_mux = mult_result_fp16;
+                TCU_FB16_ID: mult_result_mux = mult_result_bf16;
+                TCU_FP8_ID:  mult_result_mux = mult_result_fp8;
+                TCU_BF8_ID:  mult_result_mux = mult_result_bf8;
+                TCU_TF32_ID: mult_result_mux = mult_result_tf32;
                 default: mult_result_mux = 'x;
             endcase
         end

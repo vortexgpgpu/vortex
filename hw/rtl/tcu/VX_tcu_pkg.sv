@@ -154,7 +154,7 @@ package VX_tcu_pkg;
     endfunction
 
     function automatic logic tcu_fmt_is_bfloat(input logic [TCU_FMT_WIDTH-2:0] float_fmt);
-        return float_fmt[0];
+        return ~float_fmt[0];
     endfunction
 
     // Tracing info
