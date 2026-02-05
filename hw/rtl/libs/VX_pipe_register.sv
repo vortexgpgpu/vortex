@@ -80,7 +80,7 @@ module VX_pipe_register #(
             end
         end
 
-        assign data_out = pipe;
+        assign data_out = pipe[DEPTH-1];
     end
 
 endmodule
