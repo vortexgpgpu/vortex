@@ -48,23 +48,23 @@ void softmax_find_max_thread(softmax_args_t* __UNIFORM__ args) {
     }
 }
 
-// Thread function: compute exp in parallel, thread 0 sums
-void softmax_exp_sum_thread(softmax_args_t* __UNIFORM__ args) {
+// Thread function: compute exp in parallel
+void softmax_exp_thread(softmax_args_t* __UNIFORM__ args) {
     uint32_t i = blockIdx.x;
     
     // All threads compute their exp value
     if (i < args->size) {
         args->data[i] = expf(args->data[i] - *(args->max_val));
     }
-    
-    // Thread 0 does the sum reduction serially
-    if (i == 0) {
-        TYPE sum_exp = 0.0f;
-        for (uint32_t j = 0; j < args->size; ++j) {
-            sum_exp += args->data[j];
-        }
-        *(args->sum_exp) = sum_exp;
+}
+
+// Thread function: single thread sums all exp values
+void softmax_sum_thread(softmax_args_t* __UNIFORM__ args) {
+    TYPE sum_exp = 0.0f;
+    for (uint32_t j = 0; j < args->size; ++j) {
+        sum_exp += args->data[j];
     }
+    *(args->sum_exp) = sum_exp;
 }
 
 // Thread function: normalize in parallel
@@ -86,7 +86,9 @@ void apply_softmax(TYPE* data, uint32_t size) {
     uint32_t single_thread = 1;
     vx_spawn_threads(1, &single_thread, nullptr, (vx_kernel_func_cb)softmax_find_max_thread, &args);
 
-    vx_spawn_threads(1, &size, nullptr, (vx_kernel_func_cb)softmax_exp_sum_thread, &args);
+    vx_spawn_threads(1, &size, nullptr, (vx_kernel_func_cb)softmax_exp_thread, &args);
+    
+    vx_spawn_threads(1, &single_thread, nullptr, (vx_kernel_func_cb)softmax_sum_thread, &args);
     
     vx_spawn_threads(1, &size, nullptr, (vx_kernel_func_cb)softmax_normalize_thread, &args);
 }

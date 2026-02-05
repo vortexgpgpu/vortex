@@ -85,6 +85,47 @@ void cleanup() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Tile-Major Layout Conversion
+///////////////////////////////////////////////////////////////////////////////
+
+// Convert row-major [batch × dim] to tile-major layout for VEGETA loads
+// Input: row_major[batch × dim] where batch=16, dim is multiple of 16
+// Output: tile_major stores data as contiguous 16×16 tiles
+// Memory layout: For each tile column, store all 16 rows contiguously
+void convert_to_tile_major(const std::vector<TYPE>& row_major, int batch, int dim,
+                           std::vector<TYPE>& tile_major) {
+    int num_tile_cols = dim / TILE_SIZE;
+    tile_major.resize(batch * dim);
+    
+    for (int tile_col = 0; tile_col < num_tile_cols; ++tile_col) {
+        for (int row = 0; row < batch; ++row) {
+            for (int col = 0; col < TILE_SIZE; ++col) {
+                int src_idx = row * dim + tile_col * TILE_SIZE + col;
+                int dst_idx = tile_col * (batch * TILE_SIZE) + row * TILE_SIZE + col;
+                tile_major[dst_idx] = row_major[src_idx];
+            }
+        }
+    }
+}
+
+// Convert tile-major back to row-major [batch × dim]
+void convert_from_tile_major(const std::vector<TYPE>& tile_major, int batch, int dim,
+                             std::vector<TYPE>& row_major) {
+    int num_tile_cols = dim / TILE_SIZE;
+    row_major.resize(batch * dim);
+    
+    for (int tile_col = 0; tile_col < num_tile_cols; ++tile_col) {
+        for (int row = 0; row < batch; ++row) {
+            for (int col = 0; col < TILE_SIZE; ++col) {
+                int src_idx = tile_col * (batch * TILE_SIZE) + row * TILE_SIZE + col;
+                int dst_idx = row * dim + tile_col * TILE_SIZE + col;
+                row_major[dst_idx] = tile_major[src_idx];
+            }
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Sparse Weight Compression
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -115,25 +156,38 @@ void compress_2_4_sparse(const std::vector<TYPE>& dense, int in_dim, int out_dim
             // Sort by magnitude (descending)
             std::sort(vals, vals + 4, [](auto& a, auto& b) { return a.first > b.first; });
             
-            // Keep top 2, generate mask
+            // Create bitmask for top 2 values
             uint8_t mask = 0;
             for (int k = 0; k < 2; ++k) {
                 int pos = vals[k].second;
                 mask |= (1 << pos);
-                compressed[(comp_idx / 2) * out_dim + j] = dense[(i + pos) * out_dim + j];
-                logical[(i + pos) * out_dim + j] = dense[(i + pos) * out_dim + j];
-                comp_idx++;
             }
             
-            // Store metadata (simplified - in real impl would be tile-based)
+            // Store compressed values in POSITION ORDER (not magnitude order)
+            // Hardware iterates through bit positions 0-3 and expects values in that order
+            for (int pos = 0; pos < 4; ++pos) {
+                if (mask & (1 << pos)) {
+                    compressed[comp_idx * out_dim + j] = dense[(i + pos) * out_dim + j];
+                    logical[(i + pos) * out_dim + j] = dense[(i + pos) * out_dim + j];
+                    comp_idx++;
+                }
+            }
+            
+            // Store metadata in 16×16 nibble format (128 bytes per tile)
+            // Each row has 8 bytes, each byte has 2 nibbles
+            // Byte layout per row: byte 0 = cols 0,1; byte 1 = cols 2,3; ...; byte 7 = cols 14,15
             int tile_in = i / TILE_SIZE;
             int tile_out = j / TILE_SIZE;
             int meta_offset = (tile_in * out_tiles + tile_out) * M_TILE_BYTES;
-            int row_in_tile = (i % TILE_SIZE) / 4;
-            int col_in_tile = j % TILE_SIZE;
-            int byte_offset = meta_offset + row_in_tile * TILE_SIZE + col_in_tile;
-            if (byte_offset < (int)metadata.size()) {
-                metadata[byte_offset] = mask;
+            int row_in_tile = i % TILE_SIZE;
+            int k_grp = (i % TILE_SIZE) / 4;  // Which group of 4 in this row
+            int byte_idx = meta_offset + row_in_tile * 8 + k_grp / 2;
+            if (byte_idx < (int)metadata.size()) {
+                if (k_grp % 2 == 0) {
+                    metadata[byte_idx] = (mask << 4);  // Upper nibble
+                } else {
+                    metadata[byte_idx] |= mask;  // Lower nibble
+                }
             }
         }
     }
@@ -168,16 +222,21 @@ void compress_1_4_sparse(const std::vector<TYPE>& dense, int in_dim, int out_dim
             logical[(i + max_pos) * out_dim + j] = dense[(i + max_pos) * out_dim + j];
             comp_idx++;
             
-            // Store metadata
+            // Store metadata in 16×16 nibble format (128 bytes per tile)
+            // Each row has 8 bytes, each byte has 2 nibbles
             uint8_t mask = (1 << max_pos);
             int tile_in = i / TILE_SIZE;
             int tile_out = j / TILE_SIZE;
             int meta_offset = (tile_in * out_tiles + tile_out) * M_TILE_BYTES;
-            int row_in_tile = (i % TILE_SIZE) / 4;
-            int col_in_tile = j % TILE_SIZE;
-            int byte_offset = meta_offset + row_in_tile * TILE_SIZE + col_in_tile;
-            if (byte_offset < (int)metadata.size()) {
-                metadata[byte_offset] = mask;
+            int row_in_tile = i % TILE_SIZE;
+            int k_grp = (i % TILE_SIZE) / 4;  // Which group of 4 in this row
+            int byte_idx = meta_offset + row_in_tile * 8 + k_grp / 2;
+            if (byte_idx < (int)metadata.size()) {
+                if (k_grp % 2 == 0) {
+                    metadata[byte_idx] = (mask << 4);  // Upper nibble
+                } else {
+                    metadata[byte_idx] |= mask;  // Lower nibble
+                }
             }
         }
     }
@@ -301,11 +360,15 @@ int main(int argc, char *argv[]) {
     std::cout << "Opening device connection..." << std::endl;
     RT_CHECK(vx_dev_open(&device));
     
-    // Generate batched input
-    std::vector<TYPE> h_input(BATCH_SIZE * INPUT_DIM);
-    for (auto& v : h_input) {
+    // Generate batched input (row-major)
+    std::vector<TYPE> h_input_row_major(BATCH_SIZE * INPUT_DIM);
+    for (auto& v : h_input_row_major) {
         v = static_cast<TYPE>(rand()) / RAND_MAX;
     }
+    
+    // Convert to tile-major for device
+    std::vector<TYPE> h_input_tile_major;
+    convert_to_tile_major(h_input_row_major, BATCH_SIZE, INPUT_DIM, h_input_tile_major);
     
     // Generate weights, biases, and optional sparse compression
     std::vector<std::vector<TYPE>> h_weights_dense(NUM_LAYERS);
@@ -394,8 +457,8 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_mem_alloc(device, layer_configs.size() * sizeof(layer_config_t), VX_MEM_READ, &layer_configs_buffer));
     RT_CHECK(vx_copy_to_dev(layer_configs_buffer, layer_configs.data(), 0, layer_configs.size() * sizeof(layer_config_t)));
     
-    std::cout << "Uploading input data (" << BATCH_SIZE << " samples)..." << std::endl;
-    RT_CHECK(vx_copy_to_dev(input_buffer, h_input.data(), 0, BATCH_SIZE * INPUT_DIM * sizeof(TYPE)));
+    std::cout << "Uploading input data (" << BATCH_SIZE << " samples, tile-major)..." << std::endl;
+    RT_CHECK(vx_copy_to_dev(input_buffer, h_input_tile_major.data(), 0, BATCH_SIZE * INPUT_DIM * sizeof(TYPE)));
     
     std::cout << "Uploading kernel binary..." << std::endl;
     RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
@@ -420,14 +483,18 @@ int main(int argc, char *argv[]) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     std::cout << "Elapsed time: " << duration.count() << " ms" << std::endl;
     
-    std::cout << "Downloading output (" << BATCH_SIZE << " samples)..." << std::endl;
-    std::vector<TYPE> h_output(BATCH_SIZE * OUTPUT_DIM);
-    RT_CHECK(vx_copy_from_dev(h_output.data(), output_buffer, 0, BATCH_SIZE * OUTPUT_DIM * sizeof(TYPE)));
+    std::cout << "Downloading output (" << BATCH_SIZE << " samples, tile-major)..." << std::endl;
+    std::vector<TYPE> h_output_tile_major(BATCH_SIZE * OUTPUT_DIM);
+    RT_CHECK(vx_copy_from_dev(h_output_tile_major.data(), output_buffer, 0, BATCH_SIZE * OUTPUT_DIM * sizeof(TYPE)));
+    
+    // Convert output back to row-major for comparison
+    std::vector<TYPE> h_output;
+    convert_from_tile_major(h_output_tile_major, BATCH_SIZE, OUTPUT_DIM, h_output);
     
     // CPU reference uses logical weights (with zeros for pruned elements)
     std::cout << "Computing CPU reference..." << std::endl;
     std::vector<TYPE> h_ref;
-    mlp_cpu_batch(h_input, h_weights_logical, h_biases, layer_dims, h_ref);
+    mlp_cpu_batch(h_input_row_major, h_weights_logical, h_biases, layer_dims, h_ref);
     
     std::cout << "Verifying results..." << std::endl;
     int errors = 0;

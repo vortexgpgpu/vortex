@@ -6,21 +6,32 @@
 // Aligned tile buffer for intermediate results 
 static TYPE g_C_tile[TILE_SIZE * TILE_SIZE] __attribute__((aligned(64)));
 
-// ReLU activation (in-place) for batched data
+// ReLU activation (in-place) for tile-major batched data
 inline void apply_relu_batch(TYPE* data, uint32_t batch_size, uint32_t dim) {
-    for (uint32_t b = 0; b < batch_size; ++b) {
-        for (uint32_t i = 0; i < dim; ++i) {
-            TYPE& v = data[b * dim + i];
-            if (v < 0) v = 0;
-        }
+    // Data is in tile-major format: process all elements
+    uint32_t total_elements = batch_size * dim;
+    for (uint32_t i = 0; i < total_elements; ++i) {
+        if (data[i] < 0) data[i] = 0;
     }
 }
 
-// Softmax for each sample in batch
+// Softmax for each sample in batch (tile-major layout)
 void apply_softmax_batch(TYPE* data, uint32_t batch_size, uint32_t dim) {
+    // Convert tile-major to row-major for softmax processing
+    // Since dim is OUTPUT_DIM=16 which is one tile, data layout is simple
+    int num_tile_cols = dim / TILE_SIZE;
+    
     for (uint32_t b = 0; b < batch_size; ++b) {
-        TYPE* sample = data + b * dim;
+        // Extract this sample's values across tiles
+        TYPE sample[OUTPUT_DIM];
+        for (int tile_col = 0; tile_col < num_tile_cols; ++tile_col) {
+            for (int col = 0; col < TILE_SIZE; ++col) {
+                int tile_idx = tile_col * (batch_size * TILE_SIZE) + b * TILE_SIZE + col;
+                sample[tile_col * TILE_SIZE + col] = data[tile_idx];
+            }
+        }
         
+        // Compute softmax
         TYPE max_val = sample[0];
         for (uint32_t i = 1; i < dim; ++i) {
             if (sample[i] > max_val) max_val = sample[i];
@@ -34,6 +45,14 @@ void apply_softmax_batch(TYPE* data, uint32_t batch_size, uint32_t dim) {
         
         for (uint32_t i = 0; i < dim; ++i) {
             sample[i] /= sum_exp;
+        }
+        
+        // Write back to tile-major
+        for (int tile_col = 0; tile_col < num_tile_cols; ++tile_col) {
+            for (int col = 0; col < TILE_SIZE; ++col) {
+                int tile_idx = tile_col * (batch_size * TILE_SIZE) + b * TILE_SIZE + col;
+                data[tile_idx] = sample[tile_col * TILE_SIZE + col];
+            }
         }
     }
 }
@@ -67,30 +86,31 @@ void vegeta_layer_tgemm_batch(
         clear_C_tile();
         
         for (uint32_t in_t = 0; in_t < in_tiles; ++in_t) {
-            TYPE* A_tile = input + in_t * TILE_SIZE;
+            // Tile-major layout: each tile column stores BATCH_SIZE×TILE_SIZE contiguously
+            TYPE* A_tile = input + in_t * (BATCH_SIZE * TILE_SIZE);
             TYPE* B_tile = weights + in_t * TILE_SIZE * out_dim + out_t * TILE_SIZE;
             vegeta_tgemm_tile_accumulate(A_tile, B_tile, g_C_tile);
         }
         
-        for (uint32_t row = 0; row < BATCH_SIZE; ++row) {
-            for (uint32_t col = 0; col < TILE_SIZE; ++col) {
-                output[row * out_dim + out_t * TILE_SIZE + col] = 
-                    g_C_tile[row * TILE_SIZE + col] + bias[out_t * TILE_SIZE + col];
-            }
+        // Store result in tile-major format
+        for (uint32_t i = 0; i < BATCH_SIZE * TILE_SIZE; ++i) {
+            output[out_t * (BATCH_SIZE * TILE_SIZE) + i] = 
+                g_C_tile[i] + bias[out_t * TILE_SIZE + (i % TILE_SIZE)];
         }
     }
 }
 
 // =============================================================================
-// UGEMM: Dense × 2:4 Sparse (T × U → T)
+// UGEMM: Dense × 2:4 Sparse Weights (T × U → T)
 // For 2:4 sparsity: weights are compressed to half size, metadata indicates positions
+// T-reg contains sparse weights (with metadata), U-reg contains dense activations
 // =============================================================================
 void vegeta_ugemm_tile_accumulate(TYPE* A_tile, TYPE* B_tile, uint8_t* M_tile, TYPE* C_tile) {
     vx_lt(0, (size_t)C_tile, 0);  // Load C to T0 (accumulator)
-    vx_lt(1, (size_t)A_tile, 0);  // Load A to T1
-    vx_lm(1, (size_t)M_tile, 0);  // Load metadata to M1
-    vx_lu(2, (size_t)B_tile, 0);  // Load B (2KB) to U2
-    vx_ugemm(0, 1, 2);             // T0 += T1 × U2 (with M1 metadata)
+    vx_lt(1, (size_t)B_tile, 0);  // Load sparse weights B to T1
+    vx_lm(1, (size_t)M_tile, 0);  // Load metadata for weights into M1
+    vx_lu(2, (size_t)A_tile, 0);  // Load dense activations A to U2
+    vx_ugemm(0, 1, 2);             // T0 += T1(sparse weights) × U2(dense activations) with M1 metadata
     vx_st((size_t)C_tile, 0, 0);  // Store result
 }
 
@@ -105,7 +125,8 @@ void vegeta_layer_ugemm_batch(
         clear_C_tile();
         
         for (uint32_t in_t = 0; in_t < in_tiles; ++in_t) {
-            TYPE* A_tile = input + in_t * TILE_SIZE;
+            // Tile-major input: U-reg loads 2×TILE_SIZE worth of activation data
+            TYPE* A_tile = input + in_t * (BATCH_SIZE * TILE_SIZE);
             // Compressed weights: half the K dimension
             TYPE* B_tile = weights + (in_t * TILE_SIZE / 2) * out_dim + out_t * TILE_SIZE;
             // Metadata: 128 bytes per tile
@@ -113,25 +134,25 @@ void vegeta_layer_ugemm_batch(
             vegeta_ugemm_tile_accumulate(A_tile, B_tile, M_tile, g_C_tile);
         }
         
-        for (uint32_t row = 0; row < BATCH_SIZE; ++row) {
-            for (uint32_t col = 0; col < TILE_SIZE; ++col) {
-                output[row * out_dim + out_t * TILE_SIZE + col] = 
-                    g_C_tile[row * TILE_SIZE + col] + bias[out_t * TILE_SIZE + col];
-            }
+        // Store result in tile-major format
+        for (uint32_t i = 0; i < BATCH_SIZE * TILE_SIZE; ++i) {
+            output[out_t * (BATCH_SIZE * TILE_SIZE) + i] = 
+                g_C_tile[i] + bias[out_t * TILE_SIZE + (i % TILE_SIZE)];
         }
     }
 }
 
 // =============================================================================
-// VGEMM: Dense × 1:4 Sparse (T × V → T)
+// VGEMM: Dense × 1:4 Sparse Weights (T × V → T)
 // For 1:4 sparsity: weights are compressed to quarter size, metadata indicates positions
+// T-reg contains sparse weights (with metadata), V-reg contains dense activations
 // =============================================================================
 void vegeta_vgemm_tile_accumulate(TYPE* A_tile, TYPE* B_tile, uint8_t* M_tile, TYPE* C_tile) {
     vx_lt(0, (size_t)C_tile, 0);  // Load C to T0 (accumulator)
-    vx_lt(1, (size_t)A_tile, 0);  // Load A to T1
-    vx_lm(1, (size_t)M_tile, 0);  // Load metadata to M1
-    vx_lv(1, (size_t)B_tile, 0);  // Load B (4KB) to V1
-    vx_vgemm(0, 1, 1);             // T0 += T1 × V1 (with M1 metadata)
+    vx_lt(1, (size_t)B_tile, 0);  // Load compressed sparse weights B to T1
+    vx_lm(1, (size_t)M_tile, 0);  // Load metadata for sparse weights to M1
+    vx_lv(1, (size_t)A_tile, 0);  // Load dense activations A to V1
+    vx_vgemm(0, 1, 1);             // T0 += T1(sparse weights) × V1(dense activations) with M1 metadata
     vx_st((size_t)C_tile, 0, 0);  // Store result
 }
 
@@ -146,7 +167,8 @@ void vegeta_layer_vgemm_batch(
         clear_C_tile();
         
         for (uint32_t in_t = 0; in_t < in_tiles; ++in_t) {
-            TYPE* A_tile = input + in_t * TILE_SIZE;
+            // Tile-major input: V-reg loads 4×TILE_SIZE worth of activation data
+            TYPE* A_tile = input + in_t * (BATCH_SIZE * TILE_SIZE);
             // Compressed weights: quarter the K dimension
             TYPE* B_tile = weights + (in_t * TILE_SIZE / 4) * out_dim + out_t * TILE_SIZE;
             // Metadata: 128 bytes per tile
@@ -154,11 +176,10 @@ void vegeta_layer_vgemm_batch(
             vegeta_vgemm_tile_accumulate(A_tile, B_tile, M_tile, g_C_tile);
         }
         
-        for (uint32_t row = 0; row < BATCH_SIZE; ++row) {
-            for (uint32_t col = 0; col < TILE_SIZE; ++col) {
-                output[row * out_dim + out_t * TILE_SIZE + col] = 
-                    g_C_tile[row * TILE_SIZE + col] + bias[out_t * TILE_SIZE + col];
-            }
+        // Store result in tile-major format
+        for (uint32_t i = 0; i < BATCH_SIZE * TILE_SIZE; ++i) {
+            output[out_t * (BATCH_SIZE * TILE_SIZE) + i] = 
+                g_C_tile[i] + bias[out_t * TILE_SIZE + (i % TILE_SIZE)];
         }
     }
 }
