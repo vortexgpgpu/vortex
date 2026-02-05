@@ -77,6 +77,9 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // HR + W - 1 = (WA - W) + W - 1 = WA - 1
     wire signed [EXP_W-1:0] norm_exp_s = $signed(max_exp) - EXP_W'(lz_count);
 
+    // Pre-calculate the "overflow" exponent (if rounding causes a carry)
+    wire signed [EXP_W-1:0] norm_exp_inc = norm_exp_s + 1'b1;
+
     // ----------------------------------------------------------------------
     // 5. Rounding (RNE - Round to Nearest Even)
     // ----------------------------------------------------------------------
@@ -93,7 +96,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     wire [22:0] final_man = carry_out ? rounded_sig_full[23:1] : rounded_sig_full[22:0];
 
     // Final Exponent
-    wire signed [EXP_W-1:0] final_exp_s = norm_exp_s + EXP_W'(carry_out);
+    wire signed [EXP_W-1:0] final_exp_s = carry_out ? norm_exp_inc : norm_exp_s;
 
     // ----------------------------------------------------------------------
     // 6. Exception & Result Packing

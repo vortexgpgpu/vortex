@@ -37,6 +37,9 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
 );
     `UNUSED_VAR (vld_mask)
 
+    logic fmt_is_signed_int = tcu_fmt_is_signed_int(fmt_s[2:0]);
+    logic tmt_is_bfloat = tcu_fmt_is_bfloat(fmt_s[2:0]);
+
     wire [TCK-1:0][10:0] man_a_tf32, man_b_tf32, man_a_fp16, man_b_fp16, man_a_bf16, man_b_bf16;
     wire [TCK-1:0]       sign_tf32, sign_fp16, sign_bf16;
 
@@ -118,13 +121,11 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         for (genvar j = 0; j < 2; ++j) begin : g_sub
             wire [7:0] va = a_row[i/2][(i%2)*16 + j*8 +: 8];
             wire [7:0] vb = b_col[i/2][(i%2)*16 + j*8 +: 8];
-            wire signed_op = (fmt_s == 4'(TCU_I8_ID));
-            // If signed, extract abs. If unsigned, value is abs.
-            wire [7:0] abs_a = signed_op ? (va[7] ? -va : va) : va;
-            wire [7:0] abs_b = signed_op ? (vb[7] ? -vb : vb) : vb;
+            wire [7:0] abs_a = fmt_is_signed_int ? (va[7] ? -va : va) : va;
+            wire [7:0] abs_b = fmt_is_signed_int ? (vb[7] ? -vb : vb) : vb;
             assign man_a_i8[i][j] = abs_a;
             assign man_b_i8[i][j] = abs_b;
-            assign sign_i8[i][j]  = signed_op ? (va[7] ^ vb[7]) : 1'b0;
+            assign sign_i8[i][j]  = fmt_is_signed_int && (va[7] ^ vb[7]);
         end
     end
 
@@ -135,12 +136,11 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         for (genvar j = 0; j < 4; ++j) begin : g_sub
             wire [3:0] va = a_row[i/2][(i%2)*16 + j*4 +: 4];
             wire [3:0] vb = b_col[i/2][(i%2)*16 + j*4 +: 4];
-            wire signed_op = (fmt_s == 4'(TCU_I4_ID));
-            wire [3:0] abs_a = signed_op ? (va[3] ? -va : va) : va;
-            wire [3:0] abs_b = signed_op ? (vb[3] ? -vb : vb) : vb;
+            wire [3:0] abs_a = fmt_is_signed_int ? (va[3] ? -va : va) : va;
+            wire [3:0] abs_b = fmt_is_signed_int ? (vb[3] ? -vb : vb) : vb;
             assign man_a_i4[i][j] = abs_a;
             assign man_b_i4[i][j] = abs_b;
-            assign sign_i4[i][j]  = signed_op ? (va[3] ^ vb[3]) : 1'b0;
+            assign sign_i4[i][j]  = fmt_is_signed_int && (va[3] ^ vb[3]);
         end
     end
 
@@ -173,9 +173,9 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         wire [1:0]      sign_f8;
 
         for (genvar j = 0; j < 2; ++j) begin : g_f8
-            wire [3:0] ma_f8 = (fmt_s == 4'(TCU_FP8_ID)) ? man_a_fp8[i][j] : man_a_bf8[i][j];
-            wire [3:0] mb_f8 = (fmt_s == 4'(TCU_FP8_ID)) ? man_b_fp8[i][j] : man_b_bf8[i][j];
-            assign sign_f8[j] = (fmt_s == 4'(TCU_FP8_ID)) ? sign_fp8[i][j] : sign_bf8[i][j];
+            wire [3:0] ma_f8 = tmt_is_bfloat ? man_a_bf8[i][j] : man_a_fp8[i][j];
+            wire [3:0] mb_f8 = tmt_is_bfloat? man_b_bf8[i][j] : man_b_fp8[i][j];
+            assign sign_f8[j] = tmt_is_bfloat ? sign_bf8[i][j] : sign_fp8[i][j];
 
             VX_wallace_mul #(
                 .N(4)
@@ -187,8 +187,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         end
 
         // Alignment & Adder for FP8/BF8
-        wire [7:0] y_f8_low  = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[0] : {y_raw_f8[0][5:0], 2'd0};
-        wire [7:0] y_f8_high = (fmt_s == 4'(TCU_FP8_ID)) ? y_raw_f8[1] : {y_raw_f8[1][5:0], 2'd0};
+        wire [7:0] y_f8_low  = tmt_is_bfloat ? {y_raw_f8[0][5:0], 2'd0} : y_raw_f8[0];
+        wire [7:0] y_f8_high = tmt_is_bfloat ? {y_raw_f8[1][5:0], 2'd0} : y_raw_f8[1];
         wire [22:0] aligned_sig_low  = exp_diff_f8[i][5] ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> exp_diff_f8[i][4:0];
         wire [22:0] aligned_sig_high = exp_diff_f8[i][5] ? {y_f8_high, 15'd0} >> exp_diff_f8[i][4:0] : {y_f8_high, 15'd0};
         // -- Determine which operand is larger
@@ -225,7 +225,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
                 .p(y_abs_i8[j])
             );
             wire [15:0] s_prod = sign_i8[i][j] ? -y_abs_i8[j] : y_abs_i8[j];
-            assign y_signed_i8[j] = (fmt_s == 4'(TCU_I8_ID)) ? {s_prod[15], s_prod} : {1'b0, y_abs_i8[j]};
+            assign y_signed_i8[j] = fmt_is_signed_int ? {s_prod[15], s_prod} : {1'b0, y_abs_i8[j]};
         end
 
         wire [16:0] y_i8_add_res;
@@ -253,7 +253,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
                 .p(y_abs_i4[j])
             );
             wire [7:0] s_prod = sign_i4[i][j] ? -y_abs_i4[j] : y_abs_i4[j];
-            assign y_signed_i4[j] = (fmt_s == 4'(TCU_I4_ID)) ? {{2{s_prod[7]}}, s_prod} : {2'd0, y_abs_i4[j]};
+            assign y_signed_i4[j] = fmt_is_signed_int ? {{2{s_prod[7]}}, s_prod} : {2'd0, y_abs_i4[j]};
         end
 
         VX_csa_tree #(

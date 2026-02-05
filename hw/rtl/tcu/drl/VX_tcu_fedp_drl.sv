@@ -84,11 +84,11 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     // Stage 1: Multiply & Max Exponent
     wire [EXP_W-1:0]          max_exp;
     wire [TCK:0][SHIFT_W-1:0] shift_amt;
-    wire [TCK:0][W-1:0]   raw_sigs;
+    wire [TCK:0][W-1:0]       raw_sigs;
     fedp_excep_t              exceptions;
     wire [TCK-1:0]            lane_mask;
 
-    wire is_int = fmt_s[3];
+    wire is_int = tcu_fmt_is_int(fmt_s);
 
     // Integer C-term extraction + correction
     wire [7:0] cval_top = c_val[31:24];
@@ -119,7 +119,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     fedp_excep_t              s1_exceptions;
     wire [TCK-1:0]            s1_lane_mask;
     wire [TCK:0][SHIFT_W-1:0] s1_shift_amt;
-    wire [TCK:0][W-1:0]   s1_raw_sig;
+    wire [TCK:0][W-1:0]       s1_raw_sig;
     wire                      s1_is_int;
     wire [C_HI_W-1:0]         s1_cval_hi;
 
