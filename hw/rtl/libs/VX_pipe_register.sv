@@ -15,9 +15,9 @@
 
 `TRACING_OFF
 module VX_pipe_register #(
-    parameter DATAW   = 1,
-    parameter RESETW  = 0,
-    parameter DEPTH   = 1,
+    parameter DATAW  = 1,
+    parameter RESETW = 0,
+    parameter DEPTH  = 1,
     parameter [`UP(RESETW)-1:0] INIT_VALUE = {`UP(RESETW){1'b0}}
 ) (
     input wire              clk,
@@ -26,90 +26,61 @@ module VX_pipe_register #(
     input wire [DATAW-1:0]  data_in,
     output wire [DATAW-1:0] data_out
 );
-    `STATIC_ASSERT(RESETW <= DATAW, ("invalid parameter"))
-
+    `STATIC_ASSERT (RESETW <= DATAW, ("invalid parameter"))
     if (DEPTH == 0) begin : g_passthru
-
         `UNUSED_VAR ({clk, reset, enable})
+        `UNUSED_PARAM (RESETW)
+        `UNUSED_PARAM (INIT_VALUE)
         assign data_out = data_in;
-
-    end else if (DEPTH == 1) begin : g_depth1
-
-        reg [DATAW-1:0] store;
-
-        if (RESETW == DATAW) begin : g_full_reset
-            always_ff @(posedge clk) begin
-                if (reset) begin
-                    store <= INIT_VALUE;
-                end else if (enable) begin
-                    store <= data_in;
-                end
-            end
-        end else if (RESETW != 0) begin : g_partial_reset
-            always_ff @(posedge clk) begin
-                if (reset) begin
-                    store[RESETW-1:0] <= INIT_VALUE;
-                end else if (enable) begin
-                    store[RESETW-1:0] <= data_in[RESETW-1:0];
-                end
-            end
-            always_ff @(posedge clk) begin
-                if (enable) begin
-                    store[DATAW-1:RESETW] <= data_in[DATAW-1:RESETW];
-                end
-            end
-        end else begin : g_no_reset
-            `UNUSED_VAR (reset)
-            always_ff @(posedge clk) begin
-                if (enable) begin
-                    store <= data_in;
-                end
-            end
-        end
-
-        assign data_out = store;
-
     end else begin : g_pipe
-
-        reg [DEPTH-1:0][DATAW-1:0] pipe;
+        logic [DEPTH-1:0][DATAW-1:0] pipe;
 
         if (RESETW == DATAW) begin : g_full_reset
             always_ff @(posedge clk) begin
                 if (reset) begin
                     pipe <= {DEPTH{INIT_VALUE}};
                 end else if (enable) begin
-                    pipe <= {pipe[DEPTH-2:0], data_in};
+                    pipe[0] <= data_in;
+                    for (int i = 1; i < DEPTH; ++i) begin
+                        pipe[i] <= pipe[i-1];
+                    end
                 end
             end
         end else if (RESETW != 0) begin : g_partial_reset
             always_ff @(posedge clk) begin
                 if (reset) begin
                     for (int i = 0; i < DEPTH; ++i) begin
-                        pipe[i][RESETW-1:0] <= INIT_VALUE;
+                        pipe[i][DATAW-1 : DATAW-RESETW] <= INIT_VALUE;
                     end
                 end else if (enable) begin
-                    for (int i = 0; i < DEPTH; ++i) begin
-                        pipe[i][RESETW-1:0] <= (i==0) ? data_in[RESETW-1:0] : pipe[i-1][RESETW-1:0];
+                    pipe[0][DATAW-1 : DATAW-RESETW] <= data_in[DATAW-1 : DATAW-RESETW];
+                    for (int i = 1; i < DEPTH; ++i) begin
+                        pipe[i][DATAW-1 : DATAW-RESETW] <= pipe[i-1][DATAW-1 : DATAW-RESETW];
                     end
                 end
             end
             always_ff @(posedge clk) begin
                 if (enable) begin
-                    for (int i = 0; i < DEPTH; ++i) begin
-                        pipe[i][DATAW-1:RESETW] <= (i==0) ? data_in[DATAW-1:RESETW] : pipe[i-1][DATAW-1:RESETW];
+                    pipe[0][DATAW-RESETW-1 : 0] <= data_in[DATAW-RESETW-1 : 0];
+                    for (int i = 1; i < DEPTH; ++i) begin
+                        pipe[i][DATAW-RESETW-1 : 0] <= pipe[i-1][DATAW-RESETW-1 : 0];
                     end
                 end
             end
         end else begin : g_no_reset
             `UNUSED_VAR (reset)
+            `UNUSED_PARAM (INIT_VALUE)
             always_ff @(posedge clk) begin
                 if (enable) begin
-                    pipe <= {pipe[DEPTH-2:0], data_in};
+                    pipe[0] <= data_in;
+                    for (int i = 1; i < DEPTH; ++i) begin
+                        pipe[i] <= pipe[i-1];
+                    end
                 end
             end
         end
 
-        assign data_out = pipe[DEPTH-1];
+        assign data_out = pipe;
     end
 
 endmodule
