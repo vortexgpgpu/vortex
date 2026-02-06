@@ -556,6 +556,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_args.tcu.fmt_d  = rd[3:0];
                                 op_args.tcu.step_m = '0;
                                 op_args.tcu.step_n = '0;
+                                op_args.tcu.step_k = '0;
                                 `USED_FREG (rd);
                                 `USED_FREG (rs1);
                                 `USED_FREG (rs2);

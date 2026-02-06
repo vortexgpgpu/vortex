@@ -92,6 +92,7 @@ module VX_tcu_uops import
     assign ibuf_out.op_args.tcu.fmt_d = ibuf_in.op_args.tcu.fmt_d;
     assign ibuf_out.op_args.tcu.step_m = 4'(m_index);
     assign ibuf_out.op_args.tcu.step_n = 4'(n_index);
+    assign ibuf_out.op_args.tcu.step_k = 4'(k_index);
     assign ibuf_out.wb        = 1;
     assign ibuf_out.rd_xregs  = ibuf_in.rd_xregs;
     assign ibuf_out.wr_xregs  = ibuf_in.wr_xregs;

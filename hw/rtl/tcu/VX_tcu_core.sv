@@ -62,11 +62,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire [3:0] step_m = execute_if.data.op_args.tcu.step_m;
     wire [3:0] step_n = execute_if.data.op_args.tcu.step_n;
+    wire [3:0] step_k = execute_if.data.op_args.tcu.step_k;
 
     wire [3:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
     wire [3:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
 
-    `UNUSED_VAR ({step_m, step_n, fmt_s, fmt_d, execute_if.data});
+    `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
 
     wire mdata_queue_full;
 
@@ -117,16 +118,62 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
 
+    // Metadata block from VX_tcu_meta (for 2:4 sparsity)
+    localparam I_RATIO = 4;  // Elements per 32-bit word
+    localparam META_BLOCK_WIDTH = TCU_NT * 2 * I_RATIO;
+    localparam META_ROW_WIDTH   = TCU_TC_K * 2 * I_RATIO;
+    localparam ELT_W            = 32 / I_RATIO;            // bits per element (8 for int8)
+    wire [META_BLOCK_WIDTH-1:0] vld_meta_block;
+
+    VX_tcu_meta #(
+        .INSTANCE_ID     (INSTANCE_ID),
+        .META_BLOCK_WIDTH(META_BLOCK_WIDTH)
+    ) tcu_meta (
+        .clk           (clk),
+        .reset         (reset),
+        .step_m        (step_m),
+        .step_k        (step_k),
+        .vld_meta_block(vld_meta_block)
+    );
+
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_i
         for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_j
-            wire [TCU_TC_K-1:0][31:0] a_row, b_col;
+            wire [TCU_TC_K-1:0][31:0] a_row, b_col, b_col_1, b_col_2;
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
-                assign a_row[k_idx] = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
-                assign b_col[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
+                assign a_row[k_idx]   = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
+                assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
+                assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx]);
             end
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
 
             wire [TCU_MAX_INPUTS-1:0] vld_mask = '1; // TODO: should connect to input source
+            wire [META_ROW_WIDTH-1:0] vld_meta_row = vld_meta_block[META_ROW_WIDTH*i +: META_ROW_WIDTH];
+
+            // Sparse B-column mux: compress valid elements using 2:4 metadata
+            // Per K position: 2 groups of I_RATIO elements → I_RATIO valid elements
+            for (genvar k = 0; k < TCU_TC_K; ++k) begin : g_bmux
+                wire [I_RATIO-1:0] grp_mask_lo = vld_meta_row[I_RATIO * k              +: I_RATIO];
+                wire [I_RATIO-1:0] grp_mask_hi = vld_meta_row[I_RATIO * (TCU_TC_K + k) +: I_RATIO];
+
+                // Group lo: first 2 valid elements from b_col_1[k]
+                wire [ELT_W-1:0] lo_0 = grp_mask_lo[0] ? b_col_1[k][0*ELT_W +: ELT_W] :
+                                         grp_mask_lo[1] ? b_col_1[k][1*ELT_W +: ELT_W] :
+                                                          b_col_1[k][2*ELT_W +: ELT_W];
+                wire [ELT_W-1:0] lo_1 = grp_mask_lo[3] ? b_col_1[k][3*ELT_W +: ELT_W] :
+                                         grp_mask_lo[2] ? b_col_1[k][2*ELT_W +: ELT_W] :
+                                                          b_col_1[k][1*ELT_W +: ELT_W];
+
+                // Group hi: first 2 valid elements from b_col_2[k]
+                wire [ELT_W-1:0] hi_0 = grp_mask_hi[0] ? b_col_2[k][0*ELT_W +: ELT_W] :
+                                         grp_mask_hi[1] ? b_col_2[k][1*ELT_W +: ELT_W] :
+                                                          b_col_2[k][2*ELT_W +: ELT_W];
+                wire [ELT_W-1:0] hi_1 = grp_mask_hi[3] ? b_col_2[k][3*ELT_W +: ELT_W] :
+                                         grp_mask_hi[2] ? b_col_2[k][2*ELT_W +: ELT_W] :
+                                                          b_col_2[k][1*ELT_W +: ELT_W];
+
+                // Pack 4 valid elements into b_col[k]
+                assign b_col[k] = {hi_1, hi_0, lo_1, lo_0};
+            end
 
             wire [3:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
