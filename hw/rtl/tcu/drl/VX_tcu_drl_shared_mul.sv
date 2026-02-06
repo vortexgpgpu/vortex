@@ -37,8 +37,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
 );
     `UNUSED_VAR (vld_mask)
 
-    logic fmt_is_signed_int = tcu_fmt_is_signed_int(fmt_s[2:0]);
-    logic tmt_is_bfloat = tcu_fmt_is_bfloat(fmt_s[2:0]);
+    wire fmt_is_signed_int = tcu_fmt_is_signed_int(fmt_s[2:0]);
+    wire tmt_is_bfloat = tcu_fmt_is_bfloat(fmt_s[2:0]);
 
     wire [TCK-1:0][10:0] man_a_tf32, man_b_tf32, man_a_fp16, man_b_fp16, man_a_bf16, man_b_bf16;
     wire [TCK-1:0]       sign_tf32, sign_fp16, sign_bf16;
