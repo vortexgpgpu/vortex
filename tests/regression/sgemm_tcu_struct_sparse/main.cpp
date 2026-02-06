@@ -831,12 +831,12 @@ int main(int argc, char *argv[]) {
   std::vector<itype_t> h_A(sizeA);
   std::vector<itype_t> h_B(sizeB);
   for (uint32_t i = 0; i < sizeA; ++i) { // assume it is pruned and compressed already
-    //h_A[i] = Comparator<vt::ITYPE>::generate();    
-    h_A[i] = static_cast<itype_t>(i);
+    h_A[i] = Comparator<vt::ITYPE>::generate();    
+    //h_A[i] = static_cast<itype_t>(i);
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
-    //h_B[i] = Comparator<vt::ITYPE>::generate();
-    h_B[i] = static_cast<itype_t>(1);
+    h_B[i] = Comparator<vt::ITYPE>::generate();
+    //h_B[i] = static_cast<itype_t>(1);
   }
   
   // upload matrix A buffer
