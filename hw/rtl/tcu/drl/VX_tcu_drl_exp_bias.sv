@@ -73,6 +73,8 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
 
     localparam [EXP_W-1:0] EXP_NEG_INF = {1'b1, {(EXP_W-1){1'b0}}};
 
+    `UNUSED_PARAM (BIAS_CONST_TF32)
+
     // ----------------------------------------------------------------------
     // 1. Inputs Setup
     // ----------------------------------------------------------------------
@@ -98,6 +100,7 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
             assign z_tf32[i]  = 1'b1;
         end
     end
+    `UNUSED_VAR ({ea_tf32, eb_tf32, z_tf32})
 
     // --- FP16 Preparation ---
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_fp16
@@ -170,12 +173,14 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         // f16 Mux Selection
         always_comb begin
             case (fmtf)
+            `ifdef TCU_TF32_ENABLE
                 TCU_TF32_ID: begin
                     ea_sel_f16   = ea_tf32[i];
                     eb_sel_f16   = eb_tf32[i];
                     is_zero_f16  = z_tf32[i];
                     bias_sel_f16 = BIAS_CONST_TF32;
                 end
+            `endif
                 TCU_FP16_ID: begin
                     ea_sel_f16   = ea_fp16[i];
                     eb_sel_f16   = eb_fp16[i];
@@ -274,9 +279,13 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         // Final Output Mux
         always_comb begin
             case(fmtf)
-                TCU_TF32_ID, TCU_FP16_ID, TCU_BF16_ID: begin
+            `ifdef TCU_TF32_ENABLE
+                TCU_TF32_ID,
+            `endif
+                TCU_FP16_ID, TCU_BF16_ID: begin
                     raw_exp_y[i] = is_zero_f16 ? EXP_NEG_INF : sum_f16;
                 end
+
             `ifdef TCU_FP8_ENABLE
                 TCU_FP8_ID, TCU_BF8_ID: begin
                     raw_exp_y[i] = diff_sign_f8 ?

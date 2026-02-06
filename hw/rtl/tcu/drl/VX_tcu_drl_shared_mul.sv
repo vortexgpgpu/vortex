@@ -58,6 +58,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             assign man_b_tf32[i] = 11'd0;
         end
     end
+    `UNUSED_VAR ({sign_tf32, man_a_tf32, man_b_tf32})
 
     // 2. FP16 Preparation (1 op per TCK slice)
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_fp16
@@ -153,7 +154,9 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
 
         always_comb begin
             case(fmt_s[3:0])
+            `ifdef TCU_TF32_ENABLE
                 TCU_TF32_ID: begin man_a_f16 = man_a_tf32[i]; man_b_f16 = man_b_tf32[i]; sign_f16 = sign_tf32[i]; end
+            `endif
                 TCU_FP16_ID: begin man_a_f16 = man_a_fp16[i]; man_b_f16 = man_b_fp16[i]; sign_f16 = sign_fp16[i]; end
                 TCU_BF16_ID: begin man_a_f16 = man_a_bf16[i]; man_b_f16 = man_b_bf16[i]; sign_f16 = sign_bf16[i]; end
                 default:     begin man_a_f16 = '0;            man_b_f16 = '0;            sign_f16 = 0;            end
@@ -174,7 +177,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
 
         for (genvar j = 0; j < 2; ++j) begin : g_f8
             wire [3:0] ma_f8 = tmt_is_bfloat ? man_a_bf8[i][j] : man_a_fp8[i][j];
-            wire [3:0] mb_f8 = tmt_is_bfloat? man_b_bf8[i][j] : man_b_fp8[i][j];
+            wire [3:0] mb_f8 = tmt_is_bfloat ? man_b_bf8[i][j] : man_b_fp8[i][j];
             assign sign_f8[j] = tmt_is_bfloat ? sign_bf8[i][j] : sign_fp8[i][j];
 
             VX_wallace_mul #(
@@ -223,8 +226,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
                 .b(man_b_i8[i][j]),
                 .p(prod)
             );
-            wire [15:0] abs_prod = sign_i8[i][j] ? -prod : prod;
-            assign y_prod_i8[j] = fmt_is_signed_int ? {abs_prod[15], abs_prod} : {1'b0, prod};
+            wire [15:0] prod_abs = sign_i8[i][j] ? -prod : prod;
+            assign y_prod_i8[j] = fmt_is_signed_int ? {prod_abs[15], prod_abs} : {1'b0, prod};
         end
 
         wire [16:0] y_i8_add_res;
@@ -249,8 +252,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
                 .b(man_b_i4[i][j]),
                 .p(prod)
             );
-            wire [7:0] abs_prod = sign_i4[i][j] ? -prod : prod;
-            assign y_prod_i4[j] = fmt_is_signed_int ? {{2{abs_prod[7]}}, abs_prod} : {2'd0, prod};
+            wire [7:0] prod_abs = sign_i4[i][j] ? -prod : prod;
+            assign y_prod_i4[j] = fmt_is_signed_int ? {{2{prod_abs[7]}}, prod_abs} : {2'd0, prod};
         end
 
         wire [9:0] y_i4_add_res;
@@ -267,19 +270,24 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         // Mux Output
         always_comb begin
             case (fmt_s[3:0])
-                TCU_TF32_ID, TCU_FP16_ID: y[i] = {sign_f16, y_raw_f16, 2'd0};
+            `ifdef TCU_TF32_ENABLE
+                TCU_TF32_ID,
+            `endif
+                TCU_FP16_ID:              y[i] = {sign_f16, y_raw_f16, 2'd0};
                 TCU_BF16_ID:              y[i] = {sign_f16, y_raw_f16[15:0], 8'd0};
             `ifdef TCU_FP8_ENABLE
                 TCU_FP8_ID, TCU_BF8_ID:   y[i] = {sign_f8_add, y_f8_add};
             `endif
+            `ifdef TCU_INT_ENABLE
                 TCU_I8_ID:                y[i] = 25'($signed(y_i8_add_res));
                 TCU_U8_ID:                y[i] = {8'd0, y_i8_add_res};
                 TCU_I4_ID:                y[i] = 25'($signed(y_i4_add_res));
                 TCU_U4_ID:                y[i] = {15'd0, y_i4_add_res};
+            `endif
                 default:                  y[i] = 'x;
             endcase
         end
-        `UNUSED_VAR ({sign_f8_add, y_f8_add})
+        `UNUSED_VAR ({sign_f8_add, y_f8_add, y_i8_add_res, y_i4_add_res})
     end
 
     // 8. C-Term Processing

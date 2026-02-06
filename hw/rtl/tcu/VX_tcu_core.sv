@@ -126,33 +126,17 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
 
-            wire [TCU_MAX_INPUTS-1:0] vld_mask = '1; // TODO: should connect to input source
-
             wire [3:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
             wire [31:0] c_val_r;
-            wire [TCU_MAX_INPUTS-1:0] vld_mask_r;
 
             `BUFFER_EX (
-                {c_val_r, fmt_s_r, fmt_d_r, vld_mask_r},
-                {c_val,   fmt_s,   fmt_d,   vld_mask},
+                {c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r},
+                {c_val,   fmt_s,   fmt_d,   b_col,   a_row},
                 fedp_enable,
                 0, // resetw
                 1  // depth
             );
-
-            // latch operands using per-element valid mask
-            for (genvar k = 0; k < TCU_TC_K; ++k) begin : g_operands_latch
-                for (genvar r = 0; r < TCU_MAX_ELT_RATIO; ++r) begin : g_elt
-                    `BUFFER_EX (
-                        {a_row_r[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH], b_col_r[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
-                        {a_row[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH], b_col[k][r * TCU_MIN_FMT_WIDTH +: TCU_MIN_FMT_WIDTH]},
-                        fedp_enable && vld_mask[k * TCU_MAX_ELT_RATIO + r],
-                        0, // resetw
-                        1  // depth
-                    );
-                end
-            end
 
         `ifdef TCU_TYPE_DPI
             VX_tcu_fedp_dpi #(
@@ -163,7 +147,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
-                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row(a_row_r),
@@ -180,7 +163,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
-                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row(a_row_r),
@@ -196,12 +178,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
+                .vld_mask('1),
                 .enable(fedp_enable),
-                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row(a_row_r),
-                .b_col(b_col_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
@@ -214,7 +196,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
-                .vld_mask(vld_mask_r),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
                 .a_row(a_row_r),

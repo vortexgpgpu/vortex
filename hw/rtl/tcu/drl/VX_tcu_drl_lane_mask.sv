@@ -37,6 +37,7 @@ module VX_tcu_drl_lane_mask import VX_tcu_pkg::*; #(
             assign mask_32[i] = 1'b0;
         end
     end
+    `UNUSED_VAR (mask_32)
 
     // ----------------------------------------------------------------------
     // 2. 16-bit Mask Generation
@@ -64,7 +65,9 @@ module VX_tcu_drl_lane_mask import VX_tcu_pkg::*; #(
     // ----------------------------------------------------------------------
     always_comb begin
         case (fmt_s)
+        `ifdef TCU_TF32_ENABLE
             TCU_TF32_ID: lane_mask = mask_32;
+        `endif
             TCU_FP16_ID: lane_mask = mask_16;
             TCU_BF16_ID: lane_mask = mask_16;
         `ifdef TCU_FP8_ENABLE

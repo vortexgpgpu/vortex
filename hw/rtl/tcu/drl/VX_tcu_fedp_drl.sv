@@ -15,7 +15,7 @@
 
 module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter USE_VALID = 0,
+    parameter PER_LANE_VALID = 0,
     parameter LATENCY = 0,
     parameter N = 2,
     parameter W = 25
@@ -64,7 +64,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     reg [TOTAL_LATENCY-1:0] vld_pipe_r;
     reg [TOTAL_LATENCY-1:0][31:0] req_pipe_r;
     reg [31:0] req_id;
-    wire vld_any = (|vld_mask) && USE_VALID;
+    wire vld_any = (|vld_mask) && PER_LANE_VALID;
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -107,7 +107,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .a_row(a_row),
         .b_col(b_col),
         .c_val(c_val),
-        .vld_mask(vld_mask | TCU_MAX_INPUTS'(!USE_VALID)),
+        .vld_mask(vld_mask | TCU_MAX_INPUTS'(!PER_LANE_VALID)),
         .max_exp(max_exp),
         .shift_amt(shift_amt),
         .raw_sigs(raw_sigs),
@@ -123,28 +123,26 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     wire                      s1_is_int;
     wire [C_HI_W-1:0]         s1_cval_hi;
 
-    VX_pipe_register #(
-        .DATAW (EXP_W + EXC_W + TCK + SHIFT_W + W + C_HI_W + 1),
-        .DEPTH (MUL_LATENCY)
-    ) pipe_fmul_ctrl (
+    wire [TCK-1:0][SHIFT_W + W-1:0] pipe_mul_lane_din, pipe_mul_lane_dout;
+    `MAP_AOS_SOA(i, TCK, pipe_mul_lane_din[i], {shift_amt[i], raw_sigs[i]})
+    `MAP_AOS_SOA(i, TCK, {s1_shift_amt[i], s1_raw_sig[i]}, pipe_mul_lane_dout[i])
+
+    VX_tcu_drl_pipe_register #(
+        .NUM_LANES      (TCK),
+        .SHARED_DATAW   (EXP_W + EXC_W + TCK + SHIFT_W + W + C_HI_W + 1),
+        .LANE_DATAW     (SHIFT_W + W),
+        .DEPTH          (MUL_LATENCY),
+        .PER_LANE_VALID (PER_LANE_VALID)
+    ) pipe_mul (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .data_in ({max_exp,    exceptions,    lane_mask,    shift_amt[TCK],    raw_sigs[TCK],   cval_hi,    is_int}),
-        .data_out({s1_max_exp, s1_exceptions, s1_lane_mask, s1_shift_amt[TCK], s1_raw_sig[TCK], s1_cval_hi, s1_is_int})
+        .lane_mask (lane_mask),
+        .shared_data_in ({max_exp,    exceptions,    lane_mask,    shift_amt[TCK],    raw_sigs[TCK],   cval_hi,    is_int}),
+        .shared_data_out({s1_max_exp, s1_exceptions, s1_lane_mask, s1_shift_amt[TCK], s1_raw_sig[TCK], s1_cval_hi, s1_is_int}),
+        .lane_data_in (pipe_mul_lane_din),
+        .lane_data_out(pipe_mul_lane_dout)
     );
-    for (genvar i = 0; i < TCK; i++) begin : g_fmul_lane
-        VX_pipe_register #(
-            .DATAW (SHIFT_W + W),
-            .DEPTH (MUL_LATENCY))
-        pipe_fmul_lane (
-            .clk(clk),
-            .reset(reset),
-            .enable(enable & (lane_mask[i] || !USE_VALID)),
-            .data_in ({shift_amt[i],    raw_sigs[i]}),
-            .data_out({s1_shift_amt[i], s1_raw_sig[i]})
-        );
-    end
 
     // Stage 2: Alignment
     wire [TCK:0][ALN_SIG_W-1:0] s1_aln_sigs;
@@ -173,28 +171,26 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     wire                        s2_is_int;
     wire [C_HI_W-1:0]           s2_cval_hi;
 
-    VX_pipe_register #(
-        .DATAW (EXP_W + EXC_W + TCK + ALN_SIG_W + 1 + C_HI_W + 1),
-        .DEPTH (ALN_LATENCY)
-    ) pipe_aln_ctrl (
+    wire [TCK-1:0][ALN_SIG_W + 1-1:0] pipe_aln_lane_din, pipe_aln_lane_dout;
+    `MAP_AOS_SOA(i, TCK, pipe_aln_lane_din[i], {s1_aln_sigs[i], s1_aln_sticky[i]})
+    `MAP_AOS_SOA(i, TCK, {s2_aln_sigs[i], s2_aln_sticky[i]}, pipe_aln_lane_dout[i])
+
+    VX_tcu_drl_pipe_register #(
+        .NUM_LANES      (TCK),
+        .SHARED_DATAW   (EXP_W + EXC_W + TCK + ALN_SIG_W + 1 + C_HI_W + 1),
+        .LANE_DATAW     (ALN_SIG_W + 1),
+        .DEPTH          (ALN_LATENCY),
+        .PER_LANE_VALID (PER_LANE_VALID)
+    ) pipe_aln (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .data_in ({s1_max_exp, s1_exceptions, s1_lane_mask, s1_aln_sigs[TCK], s1_aln_sticky[TCK], s1_cval_hi, s1_is_int}),
-        .data_out({s2_max_exp, s2_exceptions, s2_lane_mask, s2_aln_sigs[TCK], s2_aln_sticky[TCK], s2_cval_hi, s2_is_int})
+        .lane_mask (lane_mask),
+        .shared_data_in ({s1_max_exp, s1_exceptions, s1_lane_mask, s1_aln_sigs[TCK], s1_aln_sticky[TCK], s1_cval_hi, s1_is_int}),
+        .shared_data_out({s2_max_exp, s2_exceptions, s2_lane_mask, s2_aln_sigs[TCK], s2_aln_sticky[TCK], s2_cval_hi, s2_is_int}),
+        .lane_data_in (pipe_aln_lane_din),
+        .lane_data_out(pipe_aln_lane_dout)
     );
-    for (genvar i = 0; i < TCK; i++) begin : g_aln_lane
-        VX_pipe_register #(
-            .DATAW (ALN_SIG_W + 1),
-            .DEPTH (ALN_LATENCY))
-        pipe_aln_lane (
-            .clk(clk),
-            .reset(reset),
-            .enable(enable & (s1_lane_mask[i] || !USE_VALID)),
-            .data_in ({s1_aln_sigs[i], s1_aln_sticky[i]}),
-            .data_out({s2_aln_sigs[i], s2_aln_sticky[i]})
-        );
-    end
 
     // Stage 3: Accumulation
     wire [ACC_SIG_W-1:0] s2_acc_sum;

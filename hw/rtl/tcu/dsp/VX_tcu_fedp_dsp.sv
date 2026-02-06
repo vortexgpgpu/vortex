@@ -103,7 +103,6 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
     input  wire clk,
     input  wire reset,
     input  wire enable,
-    input  wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
     input  wire[3:0] fmt_s,
     input  wire[3:0] fmt_d,
@@ -126,7 +125,7 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
 
     localparam C_DELAY = FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY;
 
-    `UNUSED_VAR ({vld_mask, fmt_s[3], fmt_d, c_val});
+    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
 
     wire [TCK-1:0][15:0] a_row16, b_col16;
 

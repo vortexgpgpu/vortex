@@ -222,6 +222,11 @@
 
 `define STRINGIFY(x) `"x`"
 
+`define MAP_AOS_SOA(__i, __size, __lhs, __rhs) \
+    for (genvar __i = 0; __i < (__size); __i++) begin : g_map_aoa_soa_`__LINE__ \
+        assign __lhs = __rhs; \
+    end
+
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
 `define LOG2UP(x)   (((x) > 1) ? $clog2(x) : 1)

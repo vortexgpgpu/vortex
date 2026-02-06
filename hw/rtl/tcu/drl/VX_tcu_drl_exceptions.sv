@@ -57,6 +57,7 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
             assign sign_tf32[i]   = 1'b0;
         end
     end
+    `UNUSED_VAR ({nan_in_tf32, inf_z_tf32, inf_op_tf32, sign_tf32})
 
     // ----------------------------------------------------------------------
     // 1b. FP16 Preparation
@@ -174,10 +175,12 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
                     valid_lane = vld_mask[i * 2];
                 end
             `endif
+            `ifdef TCU_TF32_ENABLE
                 TCU_TF32_ID: begin
                     n_in = nan_in_tf32[i]; i_z = inf_z_tf32[i]; i_op = inf_op_tf32[i]; sgn = sign_tf32[i];
                     valid_lane = ((i % 2) == 0) ? vld_mask[i * 4] : 1'b0;
                 end
+            `endif
                 default: begin
                     n_in=0; i_z=0; i_op=0; sgn=0; valid_lane=0;
                 end

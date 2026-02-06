@@ -31,7 +31,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     output wire [31:0]  result
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR ({clk, req_id, valid_in})
+    `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi})
 
     // ----------------------------------------------------------------------
     // 1. Signed Magnitude Extraction
@@ -140,6 +140,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
         end
     end
 
+`ifdef TCU_INT_ENABLE
     // ----------------------------------------------------------------------
     // 7. Integer Handling
     // ----------------------------------------------------------------------
@@ -161,7 +162,11 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // Concatenate upper 7 bits integer & lower shared 25 accumulator bits result
     wire [31:0] int_result = {int_hi, acc_sig[24:0]};
 
+    // Result muxing
     assign result = is_int ? int_result : fp_result;
+`else
+    assign result = fp_result;
+`endif
 
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin

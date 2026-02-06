@@ -22,7 +22,6 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
     input  wire clk,
     input  wire reset,
     input  wire enable,
-    input  wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
     input  wire[3:0] fmt_s,
     input  wire[3:0] fmt_d,
@@ -45,7 +44,7 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
     localparam FMT_DELAY = FMUL_LATENCY + FRND_LATENCY;
     localparam C_DELAY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FRED_LATENCY;
 
-    `UNUSED_VAR ({vld_mask, fmt_s[3], fmt_d, c_val});
+    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
 
     wire [2:0] frm = `round_near_even;
 
