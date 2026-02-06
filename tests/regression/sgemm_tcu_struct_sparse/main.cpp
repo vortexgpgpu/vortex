@@ -661,15 +661,23 @@ using otype_t = typename vt::OTYPE::dtype;
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = 8 / vt::ITYPE::bits;
   uint32_t KS = subbytes ? (K * subbytes) : K;
+  constexpr uint8_t META_MASK = 0b1100;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       otype_t sum(0);
-      for (uint32_t k = 0; k < (KS/2); ++k) {
-        uint32_t m_module = m % 4;
-        uint32_t m_block = m / 4;
-        auto a = data_accessor_t<vt::ITYPE>::read(A, m_module * KS + k + m_block * (KS/2));
-        auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
-        sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
+      uint32_t m_module = m % 4;
+      uint32_t m_block = m / 4;      
+      uint32_t m_count = 0;         
+      for (uint32_t k1 = 0; k1 < (KS/4); ++k1) {
+        for (uint32_t k2 = 0; k2 < 4; ++k2) {
+          uint32_t k = k1 * 4 + k2;
+          if (META_MASK & (1 << k2)) {
+            auto a = data_accessor_t<vt::ITYPE>::read(A, m_module * KS + m_block * (KS/2) + m_count );
+            auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
+            sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
+            m_count++;
+          }
+        }
       }
       data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
     }
