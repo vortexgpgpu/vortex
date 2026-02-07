@@ -16,6 +16,7 @@
 #include <tensor_cfg.h>
 #include <vx_intrinsics.h>
 #include <vx_sparsity.h>
+#include <vx_print.h>      // for vx_printf
 
 namespace vortex {
 namespace tensor {

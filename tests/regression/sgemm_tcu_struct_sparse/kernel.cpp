@@ -5,6 +5,19 @@
 namespace vt = vortex::tensor;
 using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
+// Decode fp16 bit pattern to value*100 (2 decimal places) using integer math
+static inline int32_t fp16_to_x100(uint16_t h) {
+  uint32_t e = (h >> 10) & 0x1F;
+  uint32_t m = h & 0x3FF;
+  if (e == 0) return 0;                // zero / subnormal → 0
+  // val = 2^(e-15) * (1024+m) / 1024
+  // val*100 = (1024+m)*100 * 2^(e-25)
+  int32_t v = (int32_t)(1024 + m) * 100;
+  int s = (int)e - 25;
+  v = (s >= 0) ? (v << s) : (v >> (-s));
+  return (h & 0x8000) ? -v : v;
+}
+
 void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
@@ -40,6 +53,25 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
       auto pTileB = pB + i * N + tile_col;
       ctx::load_matrix_sync(fragB, pTileB, N);
     }
+
+    // if (vx_thread_id() == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
+    //   for (uint32_t r = 0; r < 8; ++r) {
+    //     uint32_t packed;
+    //     asm volatile("fmv.x.w %0, %1" : "=r"(packed) : "f"(fragA.data[r]));
+    //     int32_t lo = fp16_to_x100(packed & 0xFFFF);
+    //     int32_t hi = fp16_to_x100((packed >> 16) & 0xFFFF);
+    //     vx_printf("fragA[%d] | %d.%02d, %d.%02d\n", r,
+    //               lo / 100, lo % 100, hi / 100, hi % 100);
+    //   }
+    //   for (uint32_t r = 0; r < 8; ++r) {
+    //     uint32_t packed;
+    //     asm volatile("fmv.x.w %0, %1" : "=r"(packed) : "f"(fragB.data[r]));
+    //     int32_t lo = fp16_to_x100(packed & 0xFFFF);
+    //     int32_t hi = fp16_to_x100((packed >> 16) & 0xFFFF);
+    //     vx_printf("fragB[%d] | %d.%02d, %d.%02d\n", r,
+    //               lo / 100, lo % 100, hi / 100, hi % 100);
+    //   }
+    // }
 
     // Matrix multiply-accumulate: c += a * b
     ctx::mma_sync(fragC, fragA, fragB, fragC);

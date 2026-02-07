@@ -661,7 +661,7 @@ using otype_t = typename vt::OTYPE::dtype;
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = 8 / vt::ITYPE::bits;
   uint32_t KS = subbytes ? (K * subbytes) : K;
-  constexpr uint8_t META_MASK = 0b1100;
+  constexpr uint8_t META_MASK = 0b1010;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       otype_t sum(0);
@@ -831,12 +831,14 @@ int main(int argc, char *argv[]) {
   std::vector<itype_t> h_A(sizeA);
   std::vector<itype_t> h_B(sizeB);
   for (uint32_t i = 0; i < sizeA; ++i) { // assume it is pruned and compressed already
-    h_A[i] = Comparator<vt::ITYPE>::generate();    
+    //h_A[i] = Comparator<vt::ITYPE>::generate();    
     //h_A[i] = static_cast<itype_t>(i);
+    h_A[i] = rv_ftoh_s(bit_cast<uint32_t>((float)i), 0, nullptr);
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
-    h_B[i] = Comparator<vt::ITYPE>::generate();
-    //h_B[i] = static_cast<itype_t>(1);
+    //h_B[i] = Comparator<vt::ITYPE>::generate();
+    //h_B[i] = static_cast<itype_t>(i);
+    h_B[i] = rv_ftoh_s(bit_cast<uint32_t>((float)i), 0, nullptr);
   }
   
   // upload matrix A buffer

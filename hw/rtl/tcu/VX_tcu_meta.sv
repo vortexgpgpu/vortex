@@ -50,7 +50,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .OUT_REG     (0),   // Combinational read: output same cycle as address
         .RDW_MODE    ("R"),
         .INIT_ENABLE (1),
-        .INIT_VALUE  ({(META_BLOCK_WIDTH/4){4'b1100}})  // 2:4 pattern: positions 2,3 valid in each group of 4
+        .INIT_VALUE  ({(META_BLOCK_WIDTH/4){4'b1010}})  // 2:4 pattern: positions 2,3 valid in each group of 4
     ) meta_store (
         .clk   (clk),
         .reset (1'b0),      // No reset needed for read-only
