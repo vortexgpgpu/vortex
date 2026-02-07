@@ -33,77 +33,134 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi})
 
-    // ----------------------------------------------------------------------
-    // 1. Signed Magnitude Extraction
-    // ----------------------------------------------------------------------
-    // The accumulator is in 2's complement.
-    wire          sum_sign = acc_sig[WA-1];
-    wire [WA-1:0] abs_sum  = sum_sign ? -acc_sig : acc_sig;
-    wire          zero_sum = ~|abs_sum;
+    // ======================================================================
+    // PHASE 1: PARALLEL COMPUTATION (Adder || LZC || Exp)
+    // ======================================================================
 
-    // ----------------------------------------------------------------------
-    // 2. Leading Zero Count (LZC)
-    // ----------------------------------------------------------------------
-    wire [$clog2(WA)-1:0] lz_count;
+    // Input Prep
+    wire sum_sign = acc_sig[WA-1];
+    wire [WA-1:0] acc_inv = acc_sig ^ {WA{sum_sign}}; // 1's complement
+
+    // Exact Magnitude
+    // abs_sum = acc_inv + sum_sign (2's complement conversion)
+    wire [WA-1:0] abs_sum;
+
+    VX_ks_adder #(
+        .N(WA),
+        .BYPASS (`FORCE_BUILTIN_ADDER(WA))
+    ) abs_adder (
+        .cin   (sum_sign),
+        .dataa (acc_inv),
+        .datab ({WA{1'b0}}),
+        .sum   (abs_sum),
+        `UNUSED_PIN (cout)
+    );
+    wire zero_sum = ~|abs_sum;
+
+    // Predictive Leading Zero Count (LZA)
+    wire [$clog2(WA)-1:0] lz_count_pred;
+
     VX_lzc #(
-        .N (WA)
+        .N(WA)
     ) lzc_inst (
-        .data_in   (abs_sum),
-        .data_out  (lz_count),
+        .data_in   (acc_inv),
+        .data_out  (lz_count_pred),
         `UNUSED_PIN (valid_out)
     );
 
-    // ----------------------------------------------------------------------
-    // 3. Normalization Shifter
-    // ----------------------------------------------------------------------
+    // Parallel Exponent Calculation
+    wire signed [EXP_W-1:0] norm_exp_base;
+    wire signed [EXP_W-1:0] norm_exp_plus1;
+    wire signed [EXP_W-1:0] norm_exp_plus2; // Overshift + Rounding
 
-    // We want to shift left by lz_count to normalize
-    wire [WA-1:0] shifted_sum = abs_sum << lz_count;
+    // norm_exp_base = max_exp - lz_count_pred
+    VX_ks_adder #(
+        .N(EXP_W),
+        .BYPASS (`FORCE_BUILTIN_ADDER(EXP_W))
+    ) exp_sub (
+        .cin   (1'b1),
+        .dataa (max_exp),
+        .datab (~EXP_W'(lz_count_pred)),
+        .sum   (norm_exp_base),
+        `UNUSED_PIN (cout)
+    );
 
-    // ----------------------------------------------------------------------
-    // 4. Exponent Adjustment & Rounding Bits
-    // ----------------------------------------------------------------------
-    // Extract Normalized Mantissa (1 hidden + 23 fraction)
-    // Top bit of shifted_sum is at [WA-1]
-    wire [23:0] norm_man = shifted_sum[WA-1 -: 24];
+    // Generate +1 and +2 variants relative to base
+    assign norm_exp_plus1 = norm_exp_base + EXP_W'(1'b1);
+    assign norm_exp_plus2 = norm_exp_base + EXP_W'(2'd2);
 
-    // Bits below the mantissa
-    wire guard_bit = shifted_sum[WA-25];
-    wire round_bit = shifted_sum[WA-26];
-    wire sticky_rem = |shifted_sum[WA-27 : 0];
-    wire sticky_bit = sticky_rem | sticky_in;
+    // ======================================================================
+    // PHASE 2: SHIFT & OVERSHIFT CORRECTION
+    // ======================================================================
 
-    // Calculate Exponent: norm_exp = max_exp + (HR - lz_count) + (W - 1)
-    // HR + W - 1 = (WA - W) + W - 1 = WA - 1
-    wire signed [EXP_W-1:0] norm_exp_s = $signed(max_exp) - EXP_W'(lz_count);
+    // Predictive Shifting
+    // Expand to WA+1 to catch the LZC error bit
+    wire [WA:0] abs_sum_ext = {1'b0, abs_sum};
+    wire [WA:0] shifted_sum_raw = abs_sum_ext << lz_count_pred;
 
-    // Pre-calculate the "overflow" exponent (if rounding causes a carry)
-    wire signed [EXP_W-1:0] norm_exp_inc = norm_exp_s + 1'b1;
+    // Correction Logic
+    // If bit [WA] is set, the LZC prediction was too high by 1 (Overshift).
+    wire overshift = shifted_sum_raw[WA];
 
-    // ----------------------------------------------------------------------
-    // 5. Rounding (RNE - Round to Nearest Even)
-    // ----------------------------------------------------------------------
-    wire lsb_bit  = norm_man[0];
+    // Select the correct 27-bit window (Mantissa + G + R + S)
+    // Normal:    [WA-1 : WA-27]
+    // Overshift: [WA   : WA-26] (One bit higher)
+    wire [26:0] aligned_bits = overshift ? shifted_sum_raw[WA   -: 27]
+                                         : shifted_sum_raw[WA-1 -: 27];
+
+    // ======================================================================
+    // PHASE 3: PARALLEL ROUNDING (Select-Add)
+    // ======================================================================
+
+    wire [23:0] norm_man   = aligned_bits[26:3];
+    wire        guard_bit  = aligned_bits[2];
+    wire        round_bit  = aligned_bits[1];
+    wire        sticky_bit = aligned_bits[0] | (|shifted_sum_raw[WA-27:0]) | sticky_in;
+    wire        lsb_bit    = norm_man[0];
+
     wire round_up = guard_bit && (round_bit || sticky_bit || lsb_bit);
 
-    // Add round bit to mantissa
-    wire [24:0] rounded_sig_full = {1'b0, norm_man} + 25'(round_up);
+    // Parallel Increment
+    wire [24:0] man_plus_zero = {1'b0, norm_man};
+    wire [24:0] man_plus_one;
 
-    // Check for carry out after rounding (e.g. 1.11...1 + 1 = 10.00...0)
+    VX_ks_adder #(
+        .N(25),
+        .BYPASS (`FORCE_BUILTIN_ADDER(25))
+    ) round_adder (
+        .cin   (1'b1),
+        .dataa (man_plus_zero),
+        .datab (25'd0),
+        .sum   (man_plus_one),
+        `UNUSED_PIN (cout)
+    );
+
+    // Final Selection
+    wire [24:0] rounded_sig_full = round_up ? man_plus_one : man_plus_zero;
     wire carry_out = rounded_sig_full[24];
-
-    // Final Mantissa (23 bits), we shift right by 1 if carry_out.
     wire [22:0] final_man = carry_out ? rounded_sig_full[23:1] : rounded_sig_full[22:0];
 
-    // Final Exponent
-    wire signed [EXP_W-1:0] final_exp_s = carry_out ? norm_exp_inc : norm_exp_s;
+    // ======================================================================
+    // PHASE 4: FINAL EXPONENT & EXCEPTION
+    // ======================================================================
 
-    // ----------------------------------------------------------------------
-    // 6. Exception & Result Packing
-    // ----------------------------------------------------------------------
+    // Determine which exponent to use:
+    // 1. Normal:              norm_exp_base
+    // 2. Overshift OR Carry:  norm_exp_plus1
+    // 3. Overshift AND Carry: norm_exp_plus2
+    logic signed [EXP_W-1:0] final_exp_s;
+    always_comb begin
+        case ({overshift, carry_out})
+            2'b00: final_exp_s = norm_exp_base;
+            2'b01: final_exp_s = norm_exp_plus1; // Rounding carry
+            2'b10: final_exp_s = norm_exp_plus1; // LZA correction
+            2'b11: final_exp_s = norm_exp_plus2; // Both
+        endcase
+    end
+
+    // Check exception flags
     logic [7:0] packed_exp;
     logic exp_overflow, exp_underflow;
-
     always_comb begin
         if (final_exp_s >= 255) begin
             packed_exp = 8'hFF;
@@ -120,16 +177,14 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
         end
     end
 
+    // Select floating point result
     logic [31:0] fp_result;
     always_comb begin
         if (exceptions.is_nan) begin
-            // qNaN
             fp_result = {1'b0, 8'hFF, 1'b1, 22'd0};
         end else if (exceptions.is_inf) begin
-            // Inf
             fp_result = {exceptions.sign, 8'hFF, 23'd0};
         end else begin
-            // Normal / Zero / Overflow / Underflow
             if (zero_sum || exp_underflow) begin
                  fp_result = {sum_sign, 8'd0, 23'd0};
             end else if (exp_overflow) begin
@@ -141,16 +196,18 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     end
 
 `ifdef TCU_INT_ENABLE
-    // ----------------------------------------------------------------------
-    // 7. Integer Handling
-    // ----------------------------------------------------------------------
+
+    // ======================================================================
+    // PHASE 5: INTEGER HANDLING
+    // ======================================================================
 
     // Extract sign-extension overflow from accumulator
     wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:25]));
 
     wire [6:0] int_hi;
     VX_ks_adder #(
-        .N (7)
+        .N (7),
+        .BYPASS (`FORCE_BUILTIN_ADDER(7))
     ) int_adder (
         .cin   (0),
         .dataa (ext_acc_int),
@@ -172,7 +229,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     always_ff @(posedge clk) begin
         if (valid_in) begin
             `TRACE(4, ("%t: %s FEDP-NORM(%0d): is_int=%b, acc_sig=0x%0h, sign=%b, lzc=%0d, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
-                $time, INSTANCE_ID, req_id, is_int, acc_sig, sum_sign, lz_count, norm_exp_s, shifted_sum, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
+                $time, INSTANCE_ID, req_id, is_int, acc_sig, sum_sign, lz_count_pred, norm_exp_base, shifted_sum_raw, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
         end
     end
 `endif

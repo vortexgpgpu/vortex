@@ -117,7 +117,8 @@ endmodule
 module VX_csa_tree #(
     parameter N = 4,              // Number of operands
     parameter W = 8,              // Bit-width of each operand
-    parameter S = W + $clog2(N)   // Output width
+    parameter S = W + $clog2(N),  // Output width
+    parameter CPA_KS = 1          // Use Kogge-Stone CPA
 ) (
     input  wire [N-1:0][W-1:0] operands,
     output wire [S-1:0]        sum,
@@ -148,7 +149,8 @@ module VX_csa_tree #(
 
     // 4. Final Carry Propagate Adder
     VX_ks_adder #(
-        .N (WN)
+        .N (WN),
+        .BYPASS (!CPA_KS)
     ) KSA (
         .cin   (1'b0),
         .dataa (final_sum_vec),

@@ -164,7 +164,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         end
 
         VX_wallace_mul #(
-            .N(11)
+            .N (11),
+            .CPA_KS (!`FORCE_BUILTIN_ADDER(11))
         ) wtmul_f16 (
             .a(man_a_f16),
             .b(man_b_f16),
@@ -181,7 +182,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             assign sign_f8[j] = tmt_is_bfloat ? sign_bf8[i][j] : sign_fp8[i][j];
 
             VX_wallace_mul #(
-                .N(4)
+                .N (4),
+                .CPA_KS (!`FORCE_BUILTIN_ADDER(4))
             ) wtmul_f8 (
                 .a(ma_f8),
                 .b(mb_f8),
@@ -204,7 +206,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         wire do_sub = sign_f8[0] ^ sign_f8[1];
         wire [23:0] adder_result;
         VX_ks_adder #(
-            .N(24)
+            .N(24),
+            .BYPASS (`FORCE_BUILTIN_ADDER(24))
         ) sig_adder_f8 (
             .cin   (do_sub),
             .dataa (op_a),
@@ -220,7 +223,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         for (genvar j = 0; j < 2; ++j) begin : g_i8
             wire [15:0] prod;
             VX_wallace_mul #(
-                .N(8)
+                .N (8),
+                .CPA_KS (!`FORCE_BUILTIN_ADDER(8))
             ) wtmul_i8 (
                 .a(man_a_i8[i][j]),
                 .b(man_b_i8[i][j]),
@@ -232,7 +236,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
 
         wire [16:0] y_i8_add_res;
         VX_ks_adder #(
-            .N(17)
+            .N(17),
+            .BYPASS (`FORCE_BUILTIN_ADDER(17))
         ) i8_adder (
             .cin   (0),
             .dataa (y_prod_i8[0]),
@@ -246,7 +251,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         for (genvar j = 0; j < 4; ++j) begin : g_i4
             wire [7:0] prod;
             VX_wallace_mul #(
-                .N(4)
+                .N (4),
+                .CPA_KS (!`FORCE_BUILTIN_ADDER(4))
             ) wtmul_i4 (
                 .a(man_a_i4[i][j]),
                 .b(man_b_i4[i][j]),
@@ -260,7 +266,8 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         VX_csa_tree #(
             .N (4),
             .W (10),
-            .S (10)
+            .S (10),
+            .CPA_KS (!`FORCE_BUILTIN_ADDER(10))
         ) i4_adder (
             .operands (y_prod_i4),
             .sum      (y_i4_add_res),

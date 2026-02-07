@@ -63,7 +63,8 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     VX_csa_tree #(
         .N (N),
         .W (WO),
-        .S (WO)
+        .S (WO),
+        .CPA_KS (!`FORCE_BUILTIN_ADDER(WO))
     ) sig_csa (
         .operands (sigs_in_packed),
         .sum      (sig_out),

@@ -231,7 +231,8 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         VX_csa_tree #(
             .N (3),
             .W (EXP_W),
-            .S (EXP_W)
+            .S (EXP_W),
+            .CPA_KS (!`FORCE_BUILTIN_ADDER(EXP_W))
         ) exp_adder_f16 (
             .operands ({EXP_W'(ea_sel_f16), EXP_W'(eb_sel_f16), bias_sel_f16}),
             .sum      (sum_f16),
@@ -242,7 +243,8 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         VX_csa_tree #(
             .N (3),
             .W (EXP_W),
-            .S (EXP_W)
+            .S (EXP_W),
+            .CPA_KS (!`FORCE_BUILTIN_ADDER(EXP_W))
         ) exp_adder_f8_0 (
             .operands ({EXP_W'(ea_sel_f8[0]), EXP_W'(eb_sel_f8[0]), bias_sel_f8}),
             .sum      (sum_f8_0),
@@ -252,7 +254,8 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         VX_csa_tree #(
             .N (3),
             .W (EXP_W),
-            .S (EXP_W)
+            .S (EXP_W),
+            .CPA_KS (!`FORCE_BUILTIN_ADDER(EXP_W))
         ) exp_adder_f8_1 (
             .operands ({EXP_W'(ea_sel_f8[1]), EXP_W'(eb_sel_f8[1]), bias_sel_f8}),
             .sum      (sum_f8_1),
@@ -265,7 +268,8 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         wire [EXP_W-1:0] min_sum_f8 = diff_sign_f8 ? sum_f8_1 : sum_f8_0;
         wire [EXP_W-1:0] diff_abs_f8;
         VX_ks_adder #(
-            .N(EXP_W)
+            .N (EXP_W),
+            .BYPASS (`FORCE_BUILTIN_ADDER(EXP_W))
         ) ks_diff_f8 (
             .dataa (max_sum_f8),
             .datab (~min_sum_f8),

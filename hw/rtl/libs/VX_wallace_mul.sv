@@ -15,7 +15,8 @@
 
 module VX_wallace_mul #(
     parameter N = 8,
-    parameter P = 2 * N
+    parameter P = 2 * N,
+    parameter CPA_KS = 1 // Use Kogge-Stone CPA
 ) (
     input wire [N-1:0]  a,
     input wire [N-1:0]  b,
@@ -36,7 +37,8 @@ module VX_wallace_mul #(
     VX_csa_tree #(
         .N (N),
         .W (2*N),
-        .S (P)
+        .S (P),
+        .CPA_KS(CPA_KS)
     ) pp_acc (
         .operands (pp),
         .sum (p),
