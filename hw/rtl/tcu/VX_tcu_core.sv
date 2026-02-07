@@ -119,7 +119,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
 
     // Metadata block from VX_tcu_meta (for 2:4 sparsity)
-    localparam I_RATIO = 4;  // Elements per 32-bit word
+`ifndef TCU_ITYPE_BITS
+`define TCU_ITYPE_BITS 8
+`endif
+    localparam I_RATIO = 32 / `TCU_ITYPE_BITS;  // Elements per 32-bit word
     localparam META_BLOCK_WIDTH = TCU_NT * 2 * I_RATIO;
     localparam META_ROW_WIDTH   = TCU_TC_K * 2 * I_RATIO;
     localparam ELT_W            = 32 / I_RATIO;            // bits per element (8 for int8)
