@@ -64,7 +64,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     reg [TOTAL_LATENCY-1:0] vld_pipe_r;
     reg [TOTAL_LATENCY-1:0][31:0] req_pipe_r;
     reg [31:0] req_id;
-    wire vld_any = (|vld_mask) && PER_LANE_VALID;
+    wire vld_any = (|vld_mask) && (PER_LANE_VALID != 0);
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -107,7 +107,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .a_row(a_row),
         .b_col(b_col),
         .c_val(c_val),
-        .vld_mask(vld_mask | TCU_MAX_INPUTS'(!PER_LANE_VALID)),
+        .vld_mask(vld_mask | TCU_MAX_INPUTS'(PER_LANE_VALID == 0)),
         .max_exp(max_exp),
         .shift_amt(shift_amt),
         .raw_sigs(raw_sigs),
@@ -277,7 +277,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     always_ff @(posedge clk) begin
         if (vld_pipe[S1_IDX]) begin
             `TRACE(4, ("%t: %s FEDP-S1(%0d): is_int=%b, cval_hi=0x%0h, max_exp=0x%0h, shift_amt=",
-                $time, INSTANCE_ID, s1_is_int, s1_cval_hi, req_pipe[S1_IDX], s1_max_exp));
+                $time, INSTANCE_ID, req_pipe[S1_IDX], s1_is_int, s1_cval_hi, s1_max_exp));
             `TRACE_ARRAY1D(4, "0x%0h", s1_shift_amt, (TCK+1))
             `TRACE(4, (", raw_sig="))
             `TRACE_ARRAY1D(4, "0x%0h", s1_raw_sig, (TCK+1))

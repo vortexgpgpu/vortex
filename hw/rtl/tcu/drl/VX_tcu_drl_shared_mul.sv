@@ -165,7 +165,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
 
         VX_wallace_mul #(
             .N (11),
-            .CPA_KS (!`FORCE_BUILTIN_ADDER(11))
+            .CPA_KS (!`FORCE_BUILTIN_ADDER(11*2))
         ) wtmul_f16 (
             .a(man_a_f16),
             .b(man_b_f16),
@@ -183,7 +183,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
 
             VX_wallace_mul #(
                 .N (4),
-                .CPA_KS (!`FORCE_BUILTIN_ADDER(4))
+                .CPA_KS (!`FORCE_BUILTIN_ADDER(4*2))
             ) wtmul_f8 (
                 .a(ma_f8),
                 .b(mb_f8),
@@ -224,7 +224,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             wire [15:0] prod;
             VX_wallace_mul #(
                 .N (8),
-                .CPA_KS (!`FORCE_BUILTIN_ADDER(8))
+                .CPA_KS (!`FORCE_BUILTIN_ADDER(8*2))
             ) wtmul_i8 (
                 .a(man_a_i8[i][j]),
                 .b(man_b_i8[i][j]),
@@ -252,7 +252,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             wire [7:0] prod;
             VX_wallace_mul #(
                 .N (4),
-                .CPA_KS (!`FORCE_BUILTIN_ADDER(4))
+                .CPA_KS (!`FORCE_BUILTIN_ADDER(4*2))
             ) wtmul_i4 (
                 .a(man_a_i4[i][j]),
                 .b(man_b_i4[i][j]),

@@ -194,7 +194,7 @@ private:
       RTL_WATCH("0x%x", raw_val);
       if (i > 0) RTL_WATCH(", ");
     }
-    RTL_WATCH("\n");
+    RTL_WATCH("}\n");
 #endif
   }
 
@@ -220,7 +220,7 @@ private:
         if (i > 0) RTL_WATCH(", ");
       }
     }
-    RTL_WATCH("\n");
+    RTL_WATCH("}\n");
 #endif
   }
 
@@ -230,9 +230,8 @@ private:
     for (size_t i = 0; i < res.terms.size() - 1; ++i) {
       if (res.terms[i].sign) sigs_sign |= (1 << i);
     }
-    RTL_WATCH("[RTL_WATCH] FEDP-S3(%lu): acc_sig=0x%x, max_exp=0x%x, sigs_sign=0x%x, sticky=%d, exceptions=",
+    RTL_WATCH("[RTL_WATCH] FEDP-S3(%lu): acc_sig=0x%x, max_exp=0x%x, sigs_sign=0x%x, sticky=%d\n",
         req_id, acc.V, res.L, sigs_sign, acc.sticky ? 1 : 0);
-    RTL_WATCH("\n");
 #endif
   }
 
@@ -240,13 +239,7 @@ private:
 #ifdef FEDP_RTL_WATCH
     int lsb = nrm.kept & 1;
     RTL_WATCH("[RTL_WATCH] FEDP-NORM(%lu): abs_sum=0x%x, L=%d, G=%d, R=%d, S=%d, Rup=%d\n",
-        req_id,
-        nrm.abs_sum,
-        lsb,
-        nrm.g,
-        0,
-        nrm.st,
-        nrm.round_up
+        req_id, nrm.abs_sum, lsb, nrm.g, 0, nrm.st, nrm.round_up
     );
 #endif
   }
