@@ -116,6 +116,7 @@ module VX_tcu_uops import
             done    <= 0;
         end else begin
             if (~busy && start) begin
+                counter <= 0;
                 busy <= 1;
                 done <= (TCU_UOPS == 1);
             end else if (busy && next) begin

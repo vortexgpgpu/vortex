@@ -76,6 +76,46 @@ module VX_tcu_sel import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                       grp_mask[1] ? elem1 : elem0;
 
             assign b_col[k] = {sel_1, sel_0};
+
+        end else if (I_RATIO == 8) begin : g_ratio8
+            // int4: each 32-bit register has 8 elements in 2 sub-groups of 4
+            wire [I_RATIO-1:0] grp_mask_lo = vld_meta_row[I_RATIO * k              +: I_RATIO];
+            wire [I_RATIO-1:0] grp_mask_hi = vld_meta_row[I_RATIO * (TCU_TC_K + k) +: I_RATIO];
+            wire [3:0] sg0_mask = grp_mask_lo[3:0];
+            wire [3:0] sg1_mask = grp_mask_lo[7:4];
+            wire [3:0] sg2_mask = grp_mask_hi[3:0];
+            wire [3:0] sg3_mask = grp_mask_hi[7:4];
+
+            // Sub-group 0: b_col_1 low half [elements 0-3]
+            wire [ELT_W-1:0] sg0_0 = sg0_mask[0] ? b_col_1[k][0*ELT_W +: ELT_W] :
+                                       sg0_mask[1] ? b_col_1[k][1*ELT_W +: ELT_W] :
+                                                     b_col_1[k][2*ELT_W +: ELT_W];
+            wire [ELT_W-1:0] sg0_1 = sg0_mask[3] ? b_col_1[k][3*ELT_W +: ELT_W] :
+                                       sg0_mask[2] ? b_col_1[k][2*ELT_W +: ELT_W] :
+                                                     b_col_1[k][1*ELT_W +: ELT_W];
+            // Sub-group 1: b_col_1 high half [elements 4-7]
+            wire [ELT_W-1:0] sg1_0 = sg1_mask[0] ? b_col_1[k][4*ELT_W +: ELT_W] :
+                                       sg1_mask[1] ? b_col_1[k][5*ELT_W +: ELT_W] :
+                                                     b_col_1[k][6*ELT_W +: ELT_W];
+            wire [ELT_W-1:0] sg1_1 = sg1_mask[3] ? b_col_1[k][7*ELT_W +: ELT_W] :
+                                       sg1_mask[2] ? b_col_1[k][6*ELT_W +: ELT_W] :
+                                                     b_col_1[k][5*ELT_W +: ELT_W];
+            // Sub-group 2: b_col_2 low half [elements 0-3]
+            wire [ELT_W-1:0] sg2_0 = sg2_mask[0] ? b_col_2[k][0*ELT_W +: ELT_W] :
+                                       sg2_mask[1] ? b_col_2[k][1*ELT_W +: ELT_W] :
+                                                     b_col_2[k][2*ELT_W +: ELT_W];
+            wire [ELT_W-1:0] sg2_1 = sg2_mask[3] ? b_col_2[k][3*ELT_W +: ELT_W] :
+                                       sg2_mask[2] ? b_col_2[k][2*ELT_W +: ELT_W] :
+                                                     b_col_2[k][1*ELT_W +: ELT_W];
+            // Sub-group 3: b_col_2 high half [elements 4-7]
+            wire [ELT_W-1:0] sg3_0 = sg3_mask[0] ? b_col_2[k][4*ELT_W +: ELT_W] :
+                                       sg3_mask[1] ? b_col_2[k][5*ELT_W +: ELT_W] :
+                                                     b_col_2[k][6*ELT_W +: ELT_W];
+            wire [ELT_W-1:0] sg3_1 = sg3_mask[3] ? b_col_2[k][7*ELT_W +: ELT_W] :
+                                       sg3_mask[2] ? b_col_2[k][6*ELT_W +: ELT_W] :
+                                                     b_col_2[k][5*ELT_W +: ELT_W];
+
+            assign b_col[k] = {sg3_1, sg3_0, sg2_1, sg2_0, sg1_1, sg1_0, sg0_1, sg0_0};
         end
 
     end

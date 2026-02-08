@@ -658,24 +658,25 @@ using otype_t = typename vt::OTYPE::dtype;
 // }
 
 // CPU reference matrix multiplication for sparse A case
+// A is stored row-major compressed: M rows, each with K/2 non-zero elements
+// Metadata is hardcoded 0b1010: positions 1,3 are kept in each group of 4
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
-  uint32_t subbytes = 8 / vt::ITYPE::bits;
+  uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
   uint32_t KS = subbytes ? (K * subbytes) : K;
+  uint32_t stride_A = KS / 2;
   constexpr uint8_t META_MASK = 0b1010;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       otype_t sum(0);
-      uint32_t m_module = m % 4;
-      uint32_t m_block = m / 4;      
-      uint32_t m_count = 0;         
-      for (uint32_t k1 = 0; k1 < (KS/4); ++k1) {
+      uint32_t a_count = 0;
+      for (uint32_t k1 = 0; k1 < (KS / 4); ++k1) {
         for (uint32_t k2 = 0; k2 < 4; ++k2) {
           uint32_t k = k1 * 4 + k2;
           if (META_MASK & (1 << k2)) {
-            auto a = data_accessor_t<vt::ITYPE>::read(A, m_module * KS + m_block * (KS/2) + m_count );
+            auto a = data_accessor_t<vt::ITYPE>::read(A, m * stride_A + a_count);
             auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
             sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
-            m_count++;
+            a_count++;
           }
         }
       }
@@ -831,14 +832,10 @@ int main(int argc, char *argv[]) {
   std::vector<itype_t> h_A(sizeA);
   std::vector<itype_t> h_B(sizeB);
   for (uint32_t i = 0; i < sizeA; ++i) { // assume it is pruned and compressed already
-    //h_A[i] = Comparator<vt::ITYPE>::generate();    
-    //h_A[i] = static_cast<itype_t>(i);
-    h_A[i] = rv_ftoh_s(bit_cast<uint32_t>((float)i), 0, nullptr);
+    h_A[i] = generate_A_value<vt::ITYPE>();
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
-    //h_B[i] = Comparator<vt::ITYPE>::generate();
-    //h_B[i] = static_cast<itype_t>(i);
-    h_B[i] = rv_ftoh_s(bit_cast<uint32_t>((float)i), 0, nullptr);
+    h_B[i] = generate_B_value<vt::ITYPE>();
   }
   
   // upload matrix A buffer

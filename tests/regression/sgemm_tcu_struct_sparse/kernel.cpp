@@ -38,19 +38,20 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   // Initialize accumulator tile to zero
   ctx::fill_fragment(fragC, 0);
 
-  for (int i = 0; i < (K)/2; i += (ctx::tileK)/2) {  
-    auto pTileA = pA + tile_row * K + i;
+  uint32_t stride_A = K / 2;
+  for (int i = 0; i < (int)(K / 2); i += (int)(ctx::tileK / 2)) {
+    auto pTileA = pA + tile_row * stride_A + i;
 
-    // Load A tile
-    ctx::load_matrix_sync(fragA, pTileA, K);
+    // Load A tile (compressed: stride = K/2)
+    ctx::load_matrix_sync(fragA, pTileA, stride_A);
 
-    // Load B tile
+    // Load B tile (full: uses 2*i to index into original K dimension)
     if constexpr (vt::ITYPE::bits < 8) {
       // For sub-byte matrix B must be in col-major format
-      auto pTileB = pB + tile_col * K + i;
+      auto pTileB = pB + tile_col * K + (2 * i);
       ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
     } else {
-      auto pTileB = pB + i * N + tile_col;
+      auto pTileB = pB + (2 * i) * N + tile_col;
       ctx::load_matrix_sync(fragB, pTileB, N);
     }
 
