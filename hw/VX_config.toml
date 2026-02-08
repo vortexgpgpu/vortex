@@ -224,7 +224,7 @@ NUM_TCU_LANES = "expr: $NUM_THREADS"
 NUM_TCU_BLOCKS = "expr: $ISSUE_WIDTH"
 TCU_INT_ENABLE = true
 TCU_FP8_ENABLE = true
-TCU_FT32_ENABLE = true
+TCU_TF32_ENABLE = true
 
 [isa_signatures]
 
