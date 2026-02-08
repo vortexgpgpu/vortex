@@ -42,17 +42,17 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   for (int i = 0; i < (int)(K / 2); i += (int)(ctx::tileK / 2)) {
     auto pTileA = pA + tile_row * stride_A + i;
 
-    // Load A tile (compressed: stride = K/2)
-    ctx::load_matrix_sync(fragA, pTileA, stride_A);
+    // Load A tile (compressed: stride = K/2, sparse=true)
+    ctx::load_matrix_sync<vt::row_major, true>(fragA, pTileA, stride_A);
 
-    // Load B tile (full: uses 2*i to index into original K dimension)
+    // Load B tile (full: uses 2*i to index into original K dimension, sparse=true)
     if constexpr (vt::ITYPE::bits < 8) {
       // For sub-byte matrix B must be in col-major format
       auto pTileB = pB + tile_col * K + (2 * i);
-      ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
+      ctx::load_matrix_sync<vt::col_major, true>(fragB, pTileB, K);
     } else {
       auto pTileB = pB + (2 * i) * N + tile_col;
-      ctx::load_matrix_sync(fragB, pTileB, N);
+      ctx::load_matrix_sync<vt::row_major, true>(fragB, pTileB, N);
     }
 
     // if (vx_thread_id() == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
@@ -74,8 +74,8 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     //   }
     // }
 
-    // Matrix multiply-accumulate: c += a * b
-    ctx::mma_sync(fragC, fragA, fragB, fragC);
+    // Matrix multiply-accumulate: c += a * b (sparse instruction, funct3=1)
+    ctx::mma_struct_sparse_sync(fragC, fragA, fragB, fragC);
   }
 
   // Store the computed C tile

@@ -562,6 +562,19 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 `USED_FREG (rs2);
                                 `USED_FREG (rs3);
                             end
+                            3'h1: begin // WMMA_STRUCT_SPARSE_SYNC
+                                ex_type = EX_TCU;
+                                op_type = INST_OP_BITS'(INST_TCU_WMMA_SP);
+                                op_args.tcu.fmt_s  = rs1[3:0];
+                                op_args.tcu.fmt_d  = rd[3:0];
+                                op_args.tcu.step_m = '0;
+                                op_args.tcu.step_n = '0;
+                                op_args.tcu.step_k = '0;
+                                `USED_FREG (rd);
+                                `USED_FREG (rs1);
+                                `USED_FREG (rs2);
+                                `USED_FREG (rs3);
+                            end
                             default:;
                         endcase
                     end

@@ -460,7 +460,8 @@ package VX_gpu_pkg;
 
 `ifdef EXT_TCU_ENABLE
 
-    localparam INST_TCU_WMMA = 4'h0;
+    localparam INST_TCU_WMMA    = 4'h0;
+    localparam INST_TCU_WMMA_SP = 4'h1;
     localparam INST_TCU_BITS = 4;
 
 `endif

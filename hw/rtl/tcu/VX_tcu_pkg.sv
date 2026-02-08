@@ -73,9 +73,13 @@ package VX_tcu_pkg;
     localparam TCU_A_BLOCK_SIZE = TCU_TC_M * TCU_TC_K;
     localparam TCU_A_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_A_BLOCK_SIZE;
 
-    // B micro-tiling
-    localparam TCU_B_BLOCK_SIZE = (TCU_TC_K * TCU_TC_N)*2;               // sparsity 2601223
+    // B micro-tiling (dense)
+    localparam TCU_B_BLOCK_SIZE = TCU_TC_K * TCU_TC_N;
     localparam TCU_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE;
+
+    // B micro-tiling (sparse 2:4)
+    localparam TCU_B_BLOCK_SIZE_SP = (TCU_TC_K * TCU_TC_N) * 2;
+    localparam TCU_B_SUB_BLOCKS_SP = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
 
     // Register counts
     //localparam TCU_NRA = (TCU_TILE_M * TCU_TILE_K) / TCU_NT;
@@ -172,6 +176,13 @@ package VX_tcu_pkg;
         case (INST_TCU_BITS'(op_type))
             INST_TCU_WMMA: begin
                 `TRACE(level, ("WMMA."));
+                trace_fmt(level, op_args.tcu.fmt_s);
+                `TRACE(level, ("."));
+                trace_fmt(level, op_args.tcu.fmt_d);
+                `TRACE(level, (".%0d.%0d", op_args.tcu.step_m, op_args.tcu.step_n));
+            end
+            INST_TCU_WMMA_SP: begin
+                `TRACE(level, ("WMMA_SP."));
                 trace_fmt(level, op_args.tcu.fmt_s);
                 `TRACE(level, ("."));
                 trace_fmt(level, op_args.tcu.fmt_d);

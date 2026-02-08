@@ -56,9 +56,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam PIPE_LATENCY = FEDP_LATENCY + 1;
     localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);
 
-    localparam LG_A_BS = $clog2(TCU_A_BLOCK_SIZE);
-    localparam LG_B_BS = $clog2(TCU_B_BLOCK_SIZE);
-    localparam OFF_W   = $clog2(TCU_BLOCK_CAP);
+    localparam LG_A_BS    = $clog2(TCU_A_BLOCK_SIZE);
+    localparam LG_B_BS    = $clog2(TCU_B_BLOCK_SIZE);
+    localparam LG_B_BS_SP = $clog2(TCU_B_BLOCK_SIZE_SP);
+    localparam OFF_W      = $clog2(TCU_BLOCK_CAP);
+
+    wire is_sparse = (execute_if.data.op_type == INST_TCU_WMMA_SP);
 
     wire [3:0] step_m = execute_if.data.op_args.tcu.step_m;
     wire [3:0] step_n = execute_if.data.op_args.tcu.step_n;
@@ -114,7 +117,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     wire [OFF_W-1:0] a_off = (OFF_W'(step_m) & OFF_W'(TCU_A_SUB_BLOCKS-1)) << LG_A_BS;
-    wire [OFF_W-1:0] b_off = (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
+    wire [OFF_W-1:0] b_off = is_sparse
+        ? (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS_SP-1)) << LG_B_BS_SP
+        : (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1))    << LG_B_BS;
 
     wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
 
@@ -141,11 +146,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_i
         for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_j
-            wire [TCU_TC_K-1:0][31:0] a_row, b_col, b_col_1, b_col_2;
+            wire [TCU_TC_K-1:0][31:0] a_row, b_col, b_col_dense, b_col_sparse, b_col_1, b_col_2;
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
-                assign a_row[k_idx]   = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
-                assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2]);
-                assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2 + 1]);
+                assign a_row[k_idx]      = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
+                // Dense: B registers packed with TCU_TC_K per column
+                assign b_col_dense[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
+                // Sparse: B registers packed with TCU_TC_K*2 per column (2x for sparsity)
+                assign b_col_1[k_idx]    = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2]);
+                assign b_col_2[k_idx]    = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2 + 1]);
             end
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
 
@@ -161,8 +169,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .b_col_1      (b_col_1),
                 .b_col_2      (b_col_2),
                 .vld_meta_row (vld_meta_row),
-                .b_col        (b_col)
+                .b_col        (b_col_sparse)
             );
+
+            // Select dense or sparse B column
+            assign b_col = is_sparse ? b_col_sparse : b_col_dense;
 
             wire [3:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;

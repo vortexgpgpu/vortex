@@ -33,8 +33,12 @@ module VX_tcu_uops import
     localparam LG_M = $clog2(TCU_M_STEPS);
     localparam LG_K = $clog2(TCU_K_STEPS);
 
-    localparam LG_A_SB = $clog2(TCU_A_SUB_BLOCKS);
-    localparam LG_B_SB = $clog2(TCU_B_SUB_BLOCKS);
+    localparam LG_A_SB    = $clog2(TCU_A_SUB_BLOCKS);
+    localparam LG_B_SB    = $clog2(TCU_B_SUB_BLOCKS);
+    localparam LG_B_SB_SP = $clog2(TCU_B_SUB_BLOCKS_SP);
+
+    wire is_sparse_in = (ibuf_in.op_type == INST_TCU_WMMA_SP);
+    reg  is_sparse;
 
     // uop counter
     reg [CTR_W-1:0] counter;
@@ -61,13 +65,15 @@ module VX_tcu_uops import
         assign k_index = 0;
     end
 
-    // Register offsets
-    // wire [CTR_W-1:0] rs1_offset = ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
-    // wire [CTR_W-1:0] rs2_offset = ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
-    // wire [CTR_W-1:0] rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
+    // Register offsets — dense vs sparse formulas
+    wire [CTR_W-1:0] rs1_offset = is_sparse
+        ? ((CTR_W'(m_index) >> LG_A_SB) << (LG_K/2)) | CTR_W'(k_index)
+        : ((CTR_W'(m_index) >> LG_A_SB) << LG_K)     | CTR_W'(k_index);
 
-    wire [CTR_W-1:0] rs1_offset = ((CTR_W'(m_index) >> LG_A_SB) << (LG_K/2)) | CTR_W'(k_index);
-    wire [CTR_W-1:0] rs2_offset = ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
+    wire [CTR_W-1:0] rs2_offset = is_sparse
+        ? ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB_SP
+        : ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
+
     wire [CTR_W-1:0] rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
     
     // Register calculations
@@ -111,17 +117,21 @@ module VX_tcu_uops import
 
     always_ff @(posedge clk) begin
         if (reset) begin
-            counter <= 0;
-            busy    <= 0;
-            done    <= 0;
+            counter   <= 0;
+            busy      <= 0;
+            done      <= 0;
+            is_sparse <= 0;
         end else begin
             if (~busy && start) begin
-                counter <= 0;
-                busy <= 1;
-                done <= (TCU_UOPS == 1);
+                counter   <= 0;
+                busy      <= 1;
+                is_sparse <= is_sparse_in;
+                done <= is_sparse_in ? (TCU_UOPS/2 == 1) : (TCU_UOPS == 1);
             end else if (busy && next) begin
                 counter <= counter + ((TCU_UOPS > 1) ? 1 : 0);
-                done <= (counter == CTR_W'((TCU_UOPS/2)-2));  // sparsity 2601223
+                done <= is_sparse
+                    ? (counter == CTR_W'((TCU_UOPS/2)-2))
+                    : (counter == CTR_W'(TCU_UOPS-2));
                 busy <= ~done;
             end
         end
