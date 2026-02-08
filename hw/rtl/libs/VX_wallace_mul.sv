@@ -34,15 +34,28 @@ module VX_wallace_mul #(
         assign pp[g][2*N-1:N+g] = {(N-g){1'b0}};    //fill upper bits with zeros
     end
 
-    VX_csa_tree #(
-        .N (N),
-        .W (2*N),
-        .S (P),
-        .CPA_KS(CPA_KS)
-    ) pp_acc (
-        .operands (pp),
-        .sum (p),
-        `UNUSED_PIN (cout)
-    );
+    if (N >= 7) begin : g_large_csa
+        VX_csa_mod4 #(
+            .N (N),
+            .W (2*N),
+            .S (P),
+            .CPA_KS(CPA_KS)
+        ) pp_acc (
+            .operands (pp),
+            .sum (p),
+            `UNUSED_PIN (cout)
+        );
+    end else begin : g_small_csa
+        VX_csa_tree #(
+            .N (N),
+            .W (2*N),
+            .S (P),
+            .CPA_KS(CPA_KS)
+        ) pp_acc (
+            .operands (pp),
+            .sum (p),
+            `UNUSED_PIN (cout)
+        );
+    end
 
 endmodule

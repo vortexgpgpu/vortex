@@ -19,7 +19,8 @@
 module VX_csa_mod4 #(
     parameter N = 11,             // Number of operands (N >= 3)
     parameter W = 8,              // Bit-width of each operand
-    parameter S = W + $clog2(N)   // Output width
+    parameter S = W + $clog2(N),  // Output width
+    parameter CPA_KS = 1          // Use Kogge-Stone CPA
 ) (
     input  wire [N-1:0][W-1:0] operands,
     output wire [S-1:0] sum,
@@ -266,7 +267,8 @@ module VX_csa_mod4 #(
     wire [WN-1:0] raw_sum;
 
     VX_ks_adder #(
-        .N(WN)
+        .N (WN),
+        .BYPASS (!CPA_KS)
     ) ksa (
         .cin(0),
         .dataa(final_sum),

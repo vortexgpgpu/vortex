@@ -15,150 +15,104 @@
 
 `TRACING_OFF
 
-// -------------------------------------------------------------------------
-// Recursive Reduction Module
-// -------------------------------------------------------------------------
-
-module VX_csa_reducer #(
-    parameter N = 1,
-    parameter W = 1
-) (
-    input  wire [N-1:0][W-1:0] operands,
-    output wire [W-1:0]        sum_out,
-    output wire [W-1:0]        carry_out
-);
-
-    // -----------------------------------------------------------------
-    // STRATEGY:
-    // - Use as many 4:2 compressors as possible (Groups of 4).
-    // - If 3 remain, use a 3:2 compressor.
-    // - Pass any remaining inputs (1 or 2) directly to the next level.
-    // -----------------------------------------------------------------
-
-    localparam NUM_42 = N / 4;
-    localparam REM_AFTER_42 = N % 4;
-
-    // We only use a 3:2 if exactly 3 are left. If 1 or 2 left, we pass them.
-    localparam USE_32 = (REM_AFTER_42 == 3);
-
-    // Pass-through count
-    localparam NUM_PASS = USE_32 ? 0 : REM_AFTER_42;
-
-    // Calculate the number of signals going to the NEXT level
-    localparam N_NEXT = (NUM_42 * 2) + (USE_32 * 2) + NUM_PASS;
-
-    // Intermediate wires for the output of this layer
-    wire [N_NEXT-1:0][W-1:0] next_operands;
-
-    // 1. Instantiate 4:2 Compressors
-    for (genvar i = 0; i < NUM_42; i++) begin : g_csa42
-        wire [W-1:0] s, c;
-        VX_csa_42 #(
-            .N      (W),
-            .WIDTH_O(W)
-        ) csa42_inst (
-            .a      (operands[4*i + 0]),
-            .b      (operands[4*i + 1]),
-            .c      (operands[4*i + 2]),
-            .d      (operands[4*i + 3]),
-            .sum    (s),
-            .carry  (c)
-        );
-        assign next_operands[2*i + 0] = s;
-        assign next_operands[2*i + 1] = c;
-    end
-
-    // 2. Instantiate 3:2 Compressor (if needed)
-    if (USE_32) begin : g_csa32
-        wire [W-1:0] s, c;
-        VX_csa_32 #(
-            .N      (W),
-            .WIDTH_O(W)
-        ) csa32_inst (
-            .a      (operands[4*NUM_42 + 0]),
-            .b      (operands[4*NUM_42 + 1]),
-            .c      (operands[4*NUM_42 + 2]),
-            .sum    (s),
-            .carry  (c)
-        );
-        // Map to the next available slots after the 4:2 outputs
-        assign next_operands[(2*NUM_42) + 0] = s;
-        assign next_operands[(2*NUM_42) + 1] = c;
-    end
-
-    // 3. Pass-through remaining signals
-    if (NUM_PASS > 0) begin : g_pass
-        for (genvar i = 0; i < NUM_PASS; i++) begin : g_loop
-            assign next_operands[(2*NUM_42) + (USE_32 ? 2 : 0) + i] = operands[(4*NUM_42) + i];
-        end
-    end
-
-    // 4. Recursive Step
-    if (N_NEXT > 2) begin : g_recurse
-        VX_csa_reducer #(
-            .N (N_NEXT),
-            .W (W)
-        ) next_step (
-            .operands  (next_operands),
-            .sum_out   (sum_out),
-            .carry_out (carry_out)
-        );
-    end else begin : g_done
-        assign sum_out   = next_operands[0];
-        assign carry_out = next_operands[1];
-    end
-
-endmodule
-
-// -------------------------------------------------------------------------
-// Top Level Tree
-// -------------------------------------------------------------------------
-
+// Carry-Save Adder Tree (4:2 based, falls back to 3:2 if needed)
 module VX_csa_tree #(
-    parameter N = 4,              // Number of operands
-    parameter W = 8,              // Bit-width of each operand
+    parameter N = 4,  // Number of operands
+    parameter W = 8,  // Bit-width of each operand
     parameter S = W + $clog2(N),  // Output width
     parameter CPA_KS = 1          // Use Kogge-Stone CPA
 ) (
-    input  wire [N-1:0][W-1:0] operands,
-    output wire [S-1:0]        sum,
-    output wire                cout
+    input  wire [N-1:0][W-1:0] operands,  // Input operands
+    output wire [S-1:0] sum,  // Final sum output
+    output wire cout
 );
-    `STATIC_ASSERT(N >= 2, ("N must be at least 2"));
+    `STATIC_ASSERT (N >= 3, ("N must be at least 3"));
 
-    // 1. Determine Internal Operands Width
-    localparam WN = S;
+    function automatic integer calc_4to2_levels(integer n);
+        integer remaining = n;
+        integer levels_4to2 = 0;
+        while (remaining >= 4) begin
+            levels_4to2 = levels_4to2 + 1;
+            remaining = remaining - 2;    // 4->2 reduction
+        end
+        return levels_4to2;
+    endfunction
 
-    // 2. Extend Inputs to Internal Width
-    wire [N-1:0][WN-1:0] operands_extended;
-    for (genvar i = 0; i < N; i++) begin : g_extend
-        assign operands_extended[i] = WN'(operands[i]);
+    localparam LEVELS_4TO2 = calc_4to2_levels(N);
+    localparam TOTAL_LEVELS = LEVELS_4TO2 + ((N - LEVELS_4TO2 * 2) == 3 ? 1 : 0);
+    localparam WN = W + TOTAL_LEVELS + 2;
+
+    // Intermediate signals
+    wire [WN-1:0] St [0:TOTAL_LEVELS];
+    wire [WN-1:0] Ct [0:TOTAL_LEVELS];
+
+    // Initialize first two operands
+    assign St[0] = WN'(operands[0]);
+    assign Ct[0] = WN'(operands[1]);
+
+    // Generate 4:2 compressor levels first
+    for (genvar i = 0; i < LEVELS_4TO2; i++) begin : g_4to2_levels
+        localparam WI = W + i;
+        localparam WO = WI + 2;
+        localparam OP_A_IDX = 2 + (i * 2);
+        localparam OP_B_IDX = 3 + (i * 2);
+
+        wire [WO-1:0] st, ct;
+        VX_csa_42 #(
+            .N       (WI),
+            .WIDTH_O (WO)
+        ) csa_42 (
+            .a     (WI'(St[i])),
+            .b     (WI'(Ct[i])),
+            .c     (WI'(operands[OP_A_IDX])),
+            .d     (WI'(operands[OP_B_IDX])),
+            .sum   (st),
+            .carry (ct)
+        );
+        assign St[i+1] = WN'(st);
+        assign Ct[i+1] = WN'(ct);
     end
 
-    // 3. Instantiate Recursive Reduction Tree
-    wire [WN-1:0] final_sum_vec;
-    wire [WN-1:0] final_carry_vec;
-    VX_csa_reducer #(
-        .N (N),
-        .W (WN)
-    ) tree_core (
-        .operands  (operands_extended),
-        .sum_out   (final_sum_vec),
-        .carry_out (final_carry_vec)
-    );
+    // If final 3:2 compressor level is needed
+    if ((N - LEVELS_4TO2 * 2) == 3) begin : g_final_3to2
+        // exactly 3 operands left
+        localparam FINAL_OP_IDX = 2 + (LEVELS_4TO2 * 2);
+        localparam WI = W + LEVELS_4TO2;
+        localparam WO = WI + 2;
 
-    // 4. Final Carry Propagate Adder
+        wire [WO-1:0] st, ct;
+        VX_csa_32 #(
+            .N       (WI),
+            .WIDTH_O (WO)
+        ) csa_32 (
+            .a     (WI'(St[LEVELS_4TO2])),
+            .b     (WI'(Ct[LEVELS_4TO2])),
+            .c     (WI'(operands[FINAL_OP_IDX])),
+            .sum   (st),
+            .carry (ct)
+        );
+        assign St[LEVELS_4TO2+1] = WN'(st);
+        assign Ct[LEVELS_4TO2+1] = WN'(ct);
+    end
+    else begin : g_no_final_3to2
+        // exactly 2 operands left
+        if (LEVELS_4TO2 < TOTAL_LEVELS) begin : g_pass_through
+            assign St[LEVELS_4TO2+1] = St[LEVELS_4TO2];
+            assign Ct[LEVELS_4TO2+1] = Ct[LEVELS_4TO2];
+        end
+    end
+
+    // Final Kogge-Stone addition
     VX_ks_adder #(
-        .N (WN),
+        .N (S),
         .BYPASS (!CPA_KS)
     ) KSA (
-        .cin   (1'b0),
-        .dataa (final_sum_vec),
-        .datab (final_carry_vec),
-        .sum   (sum),
-        .cout  (cout)
+        .cin(0),
+        .dataa(St[TOTAL_LEVELS][S-1:0]),
+        .datab(Ct[TOTAL_LEVELS][S-1:0]),
+        .sum(sum),
+        .cout(cout)
     );
-
 endmodule
 
 `TRACING_ON
