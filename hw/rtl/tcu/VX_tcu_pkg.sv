@@ -174,15 +174,9 @@ package VX_tcu_pkg;
                      input op_args_t op_args
     );
         case (INST_TCU_BITS'(op_type))
-            INST_TCU_WMMA: begin
-                `TRACE(level, ("WMMA."));
-                trace_fmt(level, op_args.tcu.fmt_s);
-                `TRACE(level, ("."));
-                trace_fmt(level, op_args.tcu.fmt_d);
-                `TRACE(level, (".%0d.%0d", op_args.tcu.step_m, op_args.tcu.step_n));
-            end
+            INST_TCU_WMMA,
             INST_TCU_WMMA_SP: begin
-                `TRACE(level, ("WMMA_SP."));
+                `TRACE(level, (INST_TCU_BITS'(op_type) == INST_TCU_WMMA_SP ? "WMMA_SP." : "WMMA."));
                 trace_fmt(level, op_args.tcu.fmt_s);
                 `TRACE(level, ("."));
                 trace_fmt(level, op_args.tcu.fmt_d);

@@ -641,8 +641,7 @@ using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 
 
-// Dense CPU reference matmul. Works for sparse case too because pruned A
-// has zeros at masked positions, so A[m][k]*B[k][n] = 0 naturally.
+// Dense CPU reference matmul (pruned A has zeros at masked positions)
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
   uint32_t KS = subbytes ? (K * subbytes) : K;
@@ -659,8 +658,7 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
   }
 }
 
-// In-place: zero out elements in full A (M × K) that are NOT selected by
-// the fixed 0101/1010 alternating metadata mask.
+// Zero out elements in full A not selected by alternating 0101/1010 mask
 static void prune_fixed_mask(itype_t *A, uint32_t M, uint32_t K) {
   uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
   uint32_t KS = subbytes ? (K * subbytes) : K;
@@ -681,8 +679,7 @@ static void prune_fixed_mask(itype_t *A, uint32_t M, uint32_t K) {
   }
 }
 
-// Extract mask-selected (non-zero) positions from pruned A (M × K) into
-// compressed output (M × K/2).
+// Compress pruned A (M x K) to M x K/2 by extracting mask-selected positions
 static void compress_fixed_mask(itype_t *compressed, const itype_t *pruned_A,
                                 uint32_t M, uint32_t K) {
   uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
@@ -765,7 +762,6 @@ void cleanup() {
     vx_dev_close(device);
   }
 }
-
 
 
 

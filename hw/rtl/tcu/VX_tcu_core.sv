@@ -123,7 +123,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
 
-    // Metadata block from VX_tcu_meta (for 2:4 sparsity)
+    // 2:4 sparsity metadata
 `ifndef TCU_ITYPE_BITS
 `define TCU_ITYPE_BITS 8
 `endif
@@ -149,9 +149,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [TCU_TC_K-1:0][31:0] a_row, b_col, b_col_dense, b_col_sparse, b_col_1, b_col_2;
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
                 assign a_row[k_idx]      = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
-                // Dense: B registers packed with TCU_TC_K per column
                 assign b_col_dense[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
-                // Sparse: B registers packed with TCU_TC_K*2 per column (2x for sparsity)
                 assign b_col_1[k_idx]    = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2]);
                 assign b_col_2[k_idx]    = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2 + 1]);
             end

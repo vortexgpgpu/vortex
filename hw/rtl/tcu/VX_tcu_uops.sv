@@ -75,7 +75,7 @@ module VX_tcu_uops import
         : ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
 
     wire [CTR_W-1:0] rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
-    
+
     // Register calculations
     wire [4:0] rs1 = TCU_RA + 5'(rs1_offset);
     wire [4:0] rs2 = TCU_RB + 5'(rs2_offset);

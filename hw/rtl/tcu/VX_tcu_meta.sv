@@ -38,11 +38,10 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam M_STEP_BITS = `CLOG2(TCU_M_STEPS);   // Bits needed for step_m index
     localparam K_STEP_BITS = `CLOG2(HALF_K_STEPS);  // Bits needed for step_k index (sparse)
 
-    // Read address calculation using bit concatenation (no multiplication)
+    // Read address: {step_m, step_k}
     wire [ADDRW-1:0] read_addr = {step_m[M_STEP_BITS-1:0], step_k[K_STEP_BITS-1:0]};
 
-    // Post-reset initialization: write alternating patterns into SRAM
-    // addr LSB = step_k[0]: even → 0101 (positions 0,2), odd → 1010 (positions 1,3)
+    // Post-reset init: even addr → 0101, odd addr → 1010
     reg [ADDRW:0] init_counter;
     wire init_active = ~init_counter[ADDRW];
     wire [ADDRW-1:0] init_addr = init_counter[ADDRW-1:0];
@@ -58,7 +57,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
-    // Metadata SRAM with combinational read
+    // Metadata SRAM (combinational read)
     VX_dp_ram #(
         .DATAW       (META_BLOCK_WIDTH),
         .SIZE        (DEPTH),

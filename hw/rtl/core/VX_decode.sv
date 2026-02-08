@@ -548,35 +548,20 @@ module VX_decode import VX_gpu_pkg::*; #(
                     end
                 `ifdef EXT_TCU_ENABLE
                     7'h02: begin
-                        case (funct3)
-                            3'h0: begin // WMMA_SYNC
-                                ex_type = EX_TCU;
-                                op_type = INST_OP_BITS'(INST_TCU_WMMA);
-                                op_args.tcu.fmt_s  = rs1[3:0];
-                                op_args.tcu.fmt_d  = rd[3:0];
-                                op_args.tcu.step_m = '0;
-                                op_args.tcu.step_n = '0;
-                                op_args.tcu.step_k = '0;
-                                `USED_FREG (rd);
-                                `USED_FREG (rs1);
-                                `USED_FREG (rs2);
-                                `USED_FREG (rs3);
-                            end
-                            3'h1: begin // WMMA_STRUCT_SPARSE_SYNC
-                                ex_type = EX_TCU;
-                                op_type = INST_OP_BITS'(INST_TCU_WMMA_SP);
-                                op_args.tcu.fmt_s  = rs1[3:0];
-                                op_args.tcu.fmt_d  = rd[3:0];
-                                op_args.tcu.step_m = '0;
-                                op_args.tcu.step_n = '0;
-                                op_args.tcu.step_k = '0;
-                                `USED_FREG (rd);
-                                `USED_FREG (rs1);
-                                `USED_FREG (rs2);
-                                `USED_FREG (rs3);
-                            end
-                            default:;
-                        endcase
+                        if (funct3 == 3'h0 || funct3 == 3'h1) begin
+                            ex_type = EX_TCU;
+                            op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WMMA_SP)
+                                                : INST_OP_BITS'(INST_TCU_WMMA);
+                            op_args.tcu.fmt_s  = rs1[3:0];
+                            op_args.tcu.fmt_d  = rd[3:0];
+                            op_args.tcu.step_m = '0;
+                            op_args.tcu.step_n = '0;
+                            op_args.tcu.step_k = '0;
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                            `USED_FREG (rs2);
+                            `USED_FREG (rs3);
+                        end
                     end
                 `endif
                     default:;

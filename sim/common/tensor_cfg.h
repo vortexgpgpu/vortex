@@ -195,9 +195,9 @@ public:
   static constexpr uint32_t b_sub_blocks = block_cap / b_block_size;  // number of B micro-tiles per register
   static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;    // number of B sub-steps per register
 
-  static constexpr uint32_t b_block_size_sp = (tcK * tcN) * 2;                  // size of B micro-tile (sparse 2:4)
-  static constexpr uint32_t b_sub_blocks_sp = block_cap / b_block_size_sp;      // number of B micro-tiles per register (sparse)
-  static constexpr uint32_t b_sub_steps_sp  = n_steps / b_sub_blocks_sp;        // number of B sub-steps per register (sparse)
+  static constexpr uint32_t b_block_size_sp = (tcK * tcN) * 2;             // sparse 2:4
+  static constexpr uint32_t b_sub_blocks_sp = block_cap / b_block_size_sp;
+  static constexpr uint32_t b_sub_steps_sp  = n_steps / b_sub_blocks_sp;
 
   static constexpr uint32_t NRA = (xtileM * xtileK) / NT; // Number of A registers
   static constexpr uint32_t NRB = (xtileN * xtileK) / NT; // Number of B registers
