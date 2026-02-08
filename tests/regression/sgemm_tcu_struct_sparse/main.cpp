@@ -641,53 +641,69 @@ using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 
 
-// static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
-//   uint32_t subbytes = 8 / vt::ITYPE::bits;
-//   uint32_t KS = subbytes ? (K * subbytes) : K;
-//   for (uint32_t m = 0; m < M; ++m) {
-//     for (uint32_t n = 0; n < N; ++n) {
-//       otype_t sum(0);
-//       for (uint32_t k = 0; k < KS; ++k) {
-//         auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
-//         auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
-//         sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
-//       }
-//       data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
-//     }
-//   }
-// }
-
-// CPU reference matrix multiplication for sparse A case
-// A is stored row-major compressed: M rows, each with K/2 non-zero elements
-// Metadata alternates per step_k within each tile:
-//   step_k=0 (first half of tileK): 0101 — positions 0,2 kept
-//   step_k=1 (second half of tileK): 1010 — positions 1,3 kept
+// Dense CPU reference matmul. Works for sparse case too because pruned A
+// has zeros at masked positions, so A[m][k]*B[k][n] = 0 naturally.
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
   uint32_t KS = subbytes ? (K * subbytes) : K;
-  uint32_t stride_A = KS / 2;
-  // Scale tileK to element units (for sub-byte types, cfg::tileK is in register-element units)
-  uint32_t tile_k_elem = subbytes ? (cfg::tileK * subbytes) : cfg::tileK;
-  uint32_t half_tile = tile_k_elem / 2;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       otype_t sum(0);
-      uint32_t a_count = 0;
-      for (uint32_t k1 = 0; k1 < (KS / 4); ++k1) {
-        uint32_t k_start = k1 * 4;
-        uint32_t pos_in_tile = k_start % tile_k_elem;
-        uint8_t meta_mask = (pos_in_tile < half_tile) ? 0b0101 : 0b1010;
-        for (uint32_t k2 = 0; k2 < 4; ++k2) {
-          uint32_t k = k_start + k2;
-          if (meta_mask & (1 << k2)) {
-            auto a = data_accessor_t<vt::ITYPE>::read(A, m * stride_A + a_count);
-            auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
-            sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
-            a_count++;
-          }
-        }
+      for (uint32_t k = 0; k < KS; ++k) {
+        auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
+        auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
+        sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
       }
       data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
+    }
+  }
+}
+
+// In-place: zero out elements in full A (M × K) that are NOT selected by
+// the fixed 0101/1010 alternating metadata mask.
+static void prune_fixed_mask(itype_t *A, uint32_t M, uint32_t K) {
+  uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
+  uint32_t KS = subbytes ? (K * subbytes) : K;
+  uint32_t tile_k_elem = subbytes ? (cfg::tileK * subbytes) : cfg::tileK;
+  uint32_t half_tile = tile_k_elem / 2;
+
+  for (uint32_t m = 0; m < M; ++m) {
+    for (uint32_t k1 = 0; k1 < (KS / 4); ++k1) {
+      uint32_t k_start = k1 * 4;
+      uint32_t pos_in_tile = k_start % tile_k_elem;
+      uint8_t meta_mask = (pos_in_tile < half_tile) ? 0b0101 : 0b1010;
+      for (uint32_t k2 = 0; k2 < 4; ++k2) {
+        if (!(meta_mask & (1 << k2))) {
+          data_accessor_t<vt::ITYPE>::write(A, m * KS + k_start + k2, 0);
+        }
+      }
+    }
+  }
+}
+
+// Extract mask-selected (non-zero) positions from pruned A (M × K) into
+// compressed output (M × K/2).
+static void compress_fixed_mask(itype_t *compressed, const itype_t *pruned_A,
+                                uint32_t M, uint32_t K) {
+  uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
+  uint32_t KS = subbytes ? (K * subbytes) : K;
+  uint32_t stride_comp = KS / 2;
+  uint32_t tile_k_elem = subbytes ? (cfg::tileK * subbytes) : cfg::tileK;
+  uint32_t half_tile = tile_k_elem / 2;
+
+  for (uint32_t m = 0; m < M; ++m) {
+    uint32_t a_out = 0;
+    for (uint32_t k1 = 0; k1 < (KS / 4); ++k1) {
+      uint32_t k_start = k1 * 4;
+      uint32_t pos_in_tile = k_start % tile_k_elem;
+      uint8_t meta_mask = (pos_in_tile < half_tile) ? 0b0101 : 0b1010;
+      for (uint32_t k2 = 0; k2 < 4; ++k2) {
+        if (meta_mask & (1 << k2)) {
+          auto val = data_accessor_t<vt::ITYPE>::read(pruned_A, m * KS + k_start + k2);
+          data_accessor_t<vt::ITYPE>::write(compressed, m * stride_comp + a_out, val);
+          a_out++;
+        }
+      }
     }
   }
 }
@@ -798,8 +814,8 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  size_t sizeA_full = M * K;
   size_t sizeA = (M * K) / 2;
-  //size_t sizeA = M * K;
   size_t sizeB = K * N;
   size_t sizeC = M * N;
 
@@ -836,11 +852,16 @@ int main(int argc, char *argv[]) {
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
 
   // generate source data
-  std::vector<itype_t> h_A(sizeA);
-  std::vector<itype_t> h_B(sizeB);
-  for (uint32_t i = 0; i < sizeA; ++i) { // assume it is pruned and compressed already
-    h_A[i] = generate_A_value<vt::ITYPE>();
+  // Generate full matrix A (M × K), prune in-place, then compress to M × K/2
+  std::vector<itype_t> h_A_full(sizeA_full);
+  for (uint32_t i = 0; i < sizeA_full; ++i) {
+    h_A_full[i] = generate_A_value<vt::ITYPE>();
   }
+  prune_fixed_mask(h_A_full.data(), M, K);
+  std::vector<itype_t> h_A(sizeA);
+  compress_fixed_mask(h_A.data(), h_A_full.data(), M, K);
+
+  std::vector<itype_t> h_B(sizeB);
   for (uint32_t i = 0; i < sizeB; ++i) {
     h_B[i] = generate_B_value<vt::ITYPE>();
   }
@@ -899,7 +920,7 @@ int main(int argc, char *argv[]) {
   int errors = 0;
   {
     std::vector<otype_t> h_ref(sizeC);
-    matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), M, N, K);
+    matmul_cpu(h_ref.data(), h_A_full.data(), h_B.data(), M, N, K);
 
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
       if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, errors)) {
