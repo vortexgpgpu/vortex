@@ -659,20 +659,27 @@ using otype_t = typename vt::OTYPE::dtype;
 
 // CPU reference matrix multiplication for sparse A case
 // A is stored row-major compressed: M rows, each with K/2 non-zero elements
-// Metadata is hardcoded 0b1010: positions 1,3 are kept in each group of 4
+// Metadata alternates per step_k within each tile:
+//   step_k=0 (first half of tileK): 0101 — positions 0,2 kept
+//   step_k=1 (second half of tileK): 1010 — positions 1,3 kept
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
   uint32_t KS = subbytes ? (K * subbytes) : K;
   uint32_t stride_A = KS / 2;
-  constexpr uint8_t META_MASK = 0b1010;
+  // Scale tileK to element units (for sub-byte types, cfg::tileK is in register-element units)
+  uint32_t tile_k_elem = subbytes ? (cfg::tileK * subbytes) : cfg::tileK;
+  uint32_t half_tile = tile_k_elem / 2;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       otype_t sum(0);
       uint32_t a_count = 0;
       for (uint32_t k1 = 0; k1 < (KS / 4); ++k1) {
+        uint32_t k_start = k1 * 4;
+        uint32_t pos_in_tile = k_start % tile_k_elem;
+        uint8_t meta_mask = (pos_in_tile < half_tile) ? 0b0101 : 0b1010;
         for (uint32_t k2 = 0; k2 < 4; ++k2) {
-          uint32_t k = k1 * 4 + k2;
-          if (META_MASK & (1 << k2)) {
+          uint32_t k = k_start + k2;
+          if (meta_mask & (1 << k2)) {
             auto a = data_accessor_t<vt::ITYPE>::read(A, m * stride_A + a_count);
             auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
             sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
