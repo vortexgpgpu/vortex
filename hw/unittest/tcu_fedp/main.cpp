@@ -589,7 +589,9 @@ public:
     dut_->clk = 0;
     dut_->reset = 0;
     dut_->enable = 0;
-    dut_->vld_mask = -1;
+  #ifdef TCU_TYPE_DRL
+    dut_->vld_mask = 0;
+  #endif
     dut_->fmt_s = config_.fmt_s;
     dut_->fmt_d = config_.fmt_d;
     for (int i = 0; i < NUM_REGS; i++) {
@@ -647,12 +649,16 @@ public:
       dut_->c_val = c_value;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
+    #ifdef TCU_TYPE_DRL
       dut_->vld_mask = -1;
+    #endif
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
+      #ifdef TCU_TYPE_DRL
         dut_->vld_mask = 0;
+      #endif
       }
       // Add one idle cycles between tests
       dut_->enable = 0;
@@ -745,12 +751,16 @@ public:
       dut_->c_val = c_value_hex;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
+    #ifdef TCU_TYPE_DRL
       dut_->vld_mask = -1;
+    #endif
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
+      #ifdef TCU_TYPE_DRL
         dut_->vld_mask = 0;
+      #endif
       }
       // Add one idle cycles between tests
       dut_->enable = 0;

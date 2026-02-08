@@ -19,7 +19,7 @@ CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
 CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 
 CXXFLAGS += -DNUM_REGS=$(NUM_REGS) -DLATENCY=$(LATENCY)
-PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY) -GPER_LANE_VALID=1
+PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY)
 
 VL_FLAGS += -DSV_DPI -DEXT_TCU_ENABLE
 
@@ -63,6 +63,7 @@ endif
 ifneq (,$(filter -DTCU_TYPE_DRL, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
 TOP := VX_tcu_fedp_drl
+PARAMS += -GPER_LANE_VALID=1
 endif
 
 # test fp16
