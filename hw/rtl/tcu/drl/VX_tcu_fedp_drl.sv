@@ -123,7 +123,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     wire                      s1_is_int;
     wire [C_HI_W-1:0]         s1_cval_hi;
 
-    wire [TCK-1:0][SHIFT_W + W-1:0] pipe_mul_lane_din, pipe_mul_lane_dout;
+    wire [TCK-1:0][(SHIFT_W + W)-1:0] pipe_mul_lane_din, pipe_mul_lane_dout;
     `MAP_AOS_SOA(i, TCK, pipe_mul_lane_din[i], {shift_amt[i], raw_sigs[i]})
     `MAP_AOS_SOA(i, TCK, {s1_shift_amt[i], s1_raw_sig[i]}, pipe_mul_lane_dout[i])
 
@@ -171,7 +171,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     wire                        s2_is_int;
     wire [C_HI_W-1:0]           s2_cval_hi;
 
-    wire [TCK-1:0][ALN_SIG_W + 1-1:0] pipe_aln_lane_din, pipe_aln_lane_dout;
+    wire [TCK-1:0][(ALN_SIG_W + 1)-1:0] pipe_aln_lane_din, pipe_aln_lane_dout;
     `MAP_AOS_SOA(i, TCK, pipe_aln_lane_din[i], {s1_aln_sigs[i], s1_aln_sticky[i]})
     `MAP_AOS_SOA(i, TCK, {s2_aln_sigs[i], s2_aln_sticky[i]}, pipe_aln_lane_dout[i])
 
@@ -185,7 +185,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .lane_mask (lane_mask),
+        .lane_mask (s1_lane_mask),
         .shared_data_in ({s1_max_exp, s1_exceptions, s1_lane_mask, s1_aln_sigs[TCK], s1_aln_sticky[TCK], s1_cval_hi, s1_is_int}),
         .shared_data_out({s2_max_exp, s2_exceptions, s2_lane_mask, s2_aln_sigs[TCK], s2_aln_sticky[TCK], s2_cval_hi, s2_is_int}),
         .lane_data_in (pipe_aln_lane_din),
