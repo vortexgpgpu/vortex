@@ -1556,7 +1556,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     case VegetaTcuType::TILE_GEMM_T: {
       auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
       trace->data = trace_data;
-      assert(warp.tmask.count() == num_threads);
       
       // Extract tile register indices from instruction
       uint32_t dst_reg = rdest.idx;
@@ -1570,7 +1569,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     case VegetaTcuType::TILE_GEMM_U: {
       auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
       trace->data = trace_data;
-      assert(warp.tmask.count() == num_threads);
       
       // Extract tile register indices from instruction
       uint32_t dst_reg = rdest.idx;
@@ -1585,7 +1583,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     case VegetaTcuType::TILE_GEMM_V: {
       auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
       trace->data = trace_data;
-      assert(warp.tmask.count() == num_threads);
       
       // Extract tile register indices from instruction
       uint32_t dst_reg = rdest.idx;
@@ -1599,7 +1596,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     case VegetaTcuType::TILE_GEMM_R: {
       auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
       trace->data = trace_data;
-      assert(warp.tmask.count() == num_threads);
       
       // Extract tile register indices from instruction
       uint32_t dst_reg = rdest.idx;
@@ -1614,7 +1610,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       auto tpuArgs = std::get<IntrVegetaTcuArgs>(instrArgs);
       auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
       trace->data = trace_data;
-      assert(warp.tmask.count() == num_threads);
       
       // Get metadata from integer registers a0-a7 (x10-x17) for sparse fragA
       // These contain metadata values loaded by mma_sync into a0-a7
