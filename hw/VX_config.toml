@@ -44,6 +44,7 @@ EXT_V_ENABLE = false
 
 EXT_ZICOND_ENABLE = true
 EXT_TCU_ENABLE = false
+EXT_DMA_ENABLE = false
 
 EXT_M_ENABLED = "expr: 1 if $EXT_M_ENABLE else 0"
 EXT_F_ENABLED = "expr: 1 if $EXT_F_ENABLE else 0"

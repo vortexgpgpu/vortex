@@ -78,7 +78,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         if (req_data_valid && ~req_data.is_global) begin
             if (req_data.is_arrive) begin
                 // barrier arrival
-                if (count_r == req_data.size_m1) begin
+                if (count_r == NW_WIDTH'(req_data.size_m1)) begin
                     count_n = '0;
                     mask_n  = '0;
                     unlock_valid_n = 1; // release waiting warps

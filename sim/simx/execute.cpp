@@ -1466,7 +1466,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         trace->data = std::make_shared<SfuTraceData>(next_tmask.to_ulong(), 0);
       } break;
       case WctlType::BAR: {
-        trace->fetch_stall = true;
         uint32_t arg1 = rs1_data[thread_last].u;
         uint32_t arg2 = rs2_data[thread_last].u;
         uint32_t cta_no = arg1 & 0xffff;
