@@ -200,7 +200,7 @@ package VX_trace_pkg;
                 INST_SFU_TMC:   `TRACE(level, ("TMC"))
                 INST_SFU_WSPAWN:`TRACE(level, ("WSPAWN"))
                 INST_SFU_SPLIT: begin
-                    if (op_args.wctl.is_neg) begin
+                    if (op_args.wctl.is_cond_neg) begin
                         `TRACE(level, ("SPLIT.N"))
                     end else begin
                         `TRACE(level, ("SPLIT"))
@@ -208,14 +208,23 @@ package VX_trace_pkg;
                 end
                 INST_SFU_JOIN:  `TRACE(level, ("JOIN"))
                 INST_SFU_PRED:  begin
-                    if (op_args.wctl.is_neg) begin
+                    if (op_args.wctl.is_cond_neg) begin
                         `TRACE(level, ("PRED.N"))
                     end else begin
                         `TRACE(level, ("PRED"))
                     end
                 end
-                INST_SFU_ARRIVE:`TRACE(level, ("ARRIVE"))
-                INST_SFU_WAIT:  `TRACE(level, ("WAIT"))
+                INST_SFU_BAR: begin
+                    if (op_args.wctl.is_async_bar) begin
+                        if (op_args.wctl.is_bar_arrive) begin
+                            `TRACE(level, ("BAR.ARRIVE"))
+                        end else begin
+                            `TRACE(level, ("BAR.WAIT"))
+                        end
+                    end else begin
+                        `TRACE(level, ("BAR"))
+                    end
+                end
                 INST_SFU_CSRRW: begin
                     if (op_args.csr.use_imm) begin
                         `TRACE(level, ("CSRRWI"))

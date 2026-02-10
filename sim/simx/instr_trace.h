@@ -43,6 +43,15 @@ struct SfuTraceData : public ITraceData {
   SfuTraceData(Word arg1, Word arg2) : arg1(arg1), arg2(arg2) {}
 };
 
+struct BarTraceData : public ITraceData {
+  using Ptr = std::shared_ptr<BarTraceData>;
+  Word bar_id;
+  Word count;
+  int is_async_bar;
+  BarTraceData(Word bar_id, Word count, bool is_async_bar)
+    : bar_id(bar_id), count(count), is_async_bar(is_async_bar) {}
+};
+
 struct instr_trace_t {
 public:
   //--

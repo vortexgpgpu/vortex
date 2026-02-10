@@ -402,18 +402,16 @@ void SfuUnit::tick() {
 			case WctlType::BAR: {
 				output.send(trace, 2+delay);
 				if (trace->eop) {
-					auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
-					release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
-				}
-			} break;
-			case WctlType::BAR_ARRIVE: {
-				output.send(trace, 2+delay);
-			} break;
-			case WctlType::BAR_WAIT: {
-				output.send(trace, 2+delay);
-				if (trace->eop) {
-					auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
-					release_warp = core_->barrier_wait(trace_data->arg1, trace_data->arg2, trace->wid);
+					auto trace_data = std::dynamic_pointer_cast<BarTraceData>(trace->data);
+					uint32_t phase = trace_data->count;
+					bool is_bar_arrive = trace->wb || !trace_data->is_async_bar;
+					bool is_bar_wait = !trace->wb;
+					if (is_bar_arrive) {
+						phase = core_->barrier_arrive(trace_data->bar_id, trace_data->count, trace->wid, trace_data->is_async_bar);
+					}
+					if (is_bar_wait) {
+						release_warp = !core_->barrier_wait(trace_data->bar_id,	phase, trace->wid);
+					}
 				}
 			} break;
 			default:

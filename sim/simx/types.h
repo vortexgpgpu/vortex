@@ -70,6 +70,30 @@ union reg_data_t {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+struct warp_barrier_t {
+  WarpMask wait_mask  = 0;
+  uint32_t arrival_count = 0;
+  uint32_t phase = 0;
+
+  void reset() {
+    wait_mask.reset();
+    arrival_count = 0;
+    phase = 0;
+  }
+};
+
+struct core_barrier_t {
+  CoreMask mask = 0;
+  uint32_t phase = 0;
+
+  void reset() {
+    mask = 0;
+    phase = 0;
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 struct op_string_t {
   std::string op;
   std::string arg;
@@ -430,13 +454,13 @@ enum class WctlType {
   SPLIT,
   JOIN,
   BAR,
-  PRED,
-  BAR_ARRIVE,
-  BAR_WAIT
+  PRED
 };
 
 struct IntrWctlArgs {
-  uint32_t is_neg : 1;
+  uint32_t is_cond_neg : 1;
+  uint32_t is_async_bar : 1;
+  uint32_t is_bar_arrive : 1;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
@@ -447,8 +471,6 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
   case WctlType::JOIN:   os << "JOIN"; break;
   case WctlType::BAR:    os << "BAR"; break;
   case WctlType::PRED:   os << "PRED"; break;
-  case WctlType::BAR_ARRIVE: os << "BAR_ARRIVE"; break;
-  case WctlType::BAR_WAIT:   os << "BAR_WAIT"; break;
   default:
     assert(false);
   }

@@ -500,7 +500,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                             end
                             3'h2: begin // SPLIT
                                 op_type = INST_OP_BITS'(INST_SFU_SPLIT);
-                                op_args.wctl.is_neg = rs2[0];
+                                op_args.wctl.is_cond_neg = rs2[0];
                                 `USED_IREG (rs1);
                                 `USED_IREG (rd);
                             end
@@ -508,28 +508,26 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_type = INST_OP_BITS'(INST_SFU_JOIN);
                                 `USED_IREG (rs1);
                             end
-                            3'h4: begin // BARRIER (legacy sync barrier)
-                                op_type = INST_OP_BITS'(INST_SFU_BARRIER);
+                            3'h4: begin // BAR
+                                op_type = INST_OP_BITS'(INST_SFU_BAR);
+                                op_args.wctl.is_async_bar = 0;
+                                op_args.wctl.is_bar_arrive = 0;
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
                             3'h5: begin // PRED
                                 op_type = INST_OP_BITS'(INST_SFU_PRED);
-                                op_args.wctl.is_neg = rd[0];
+                                op_args.wctl.is_cond_neg = rd[0];
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
-                            3'h6: begin // ARRIVE
-                                op_type = INST_OP_BITS'(INST_SFU_ARRIVE);
-                                // use_rd = 1;
+                            3'h6: begin // Asynchronous arrive/wait barrier
+                                logic is_wait = (rd == 0);
+                                op_type = INST_OP_BITS'(INST_SFU_BAR);
+                                op_args.wctl.is_async_bar = 1;
+                                op_args.wctl.is_bar_arrive = ~is_wait;
+                                is_wstall = is_wait;
                                 `USED_IREG (rd);
-                                `USED_IREG (rs1);
-                                `USED_IREG (rs2);
-                            end
-                            3'h7: begin // WAIT
-                                op_type = INST_OP_BITS'(INST_SFU_WAIT);
-                                // use_rd = 1;
-                                // `USED_IREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end

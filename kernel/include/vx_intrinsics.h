@@ -149,16 +149,10 @@ inline void vx_join(int stack_ptr) {
     __asm__ volatile (".insn r %0, 3, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(stack_ptr) : "memory");
 }
 
-// Forward declarations (implemented below)
-inline uint32_t vx_barrier_arrive(int barrier_id, int num_warps);
-inline void vx_barrier_wait(int barrier_id, uint32_t token);
-
 // Warp Barrier
 inline void vx_barrier(int barried_id, int num_warps) {
-    uint32_t token = vx_barrier_arrive(barried_id, num_warps);
-    vx_barrier_wait(barried_id, token);
+    __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps) : "memory");
 }
-
 // Return current thread identifier
 inline __attribute__((const)) int vx_thread_id() {
     int ret;
@@ -212,6 +206,13 @@ inline __attribute__((const)) int vx_num_warps() {
 inline __attribute__((const)) int vx_num_cores() {
     int ret;
     __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_CORES));
+    return ret;
+}
+
+// Return the number of barriers
+inline __attribute__((const)) int vx_num_barriers() {
+    int ret;
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_BARRIERS));
     return ret;
 }
 
@@ -296,29 +297,24 @@ inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cva
 // Asynchronous Barrier extensions
 //
 
-// Async Barrier Arrive: non-blocking, returns a token (generation number)
+// Async Barrier Arrive: non-blocking, returns a phase (generation number)
 // barrier_id: identifier of the barrier
 // num_warps: number of warps participating in the barrier
-// returns: token representing the barrier phase for this arrive
-inline uint32_t vx_barrier_arrive(int barrier_id, int num_warps) {
-    uint32_t token;
+// returns: number representing the barrier phase for this arrive
+inline int vx_barrier_arrive(int barrier_id, int num_warps) {
+    int phase;
     __asm__ volatile (
-        ".insn r %1, 6, 0, %0, %2, %3"
-        : "=r"(token)
-        : "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(num_warps)
-        : "memory"
+        ".insn r %1, 6, 0, %0, %2, %3" : "=r"(phase) : "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(num_warps) : "memory"
     );
-    return token;
+    return phase;
 }
 
-// Async Barrier Wait: blocks until the barrier phase associated with the token is complete
+// Async Barrier Wait: blocks until a barrier phase is complete
 // barrier_id: identifier of the barrier
-// token: the token returned by vx_barrier_arrive
-inline void vx_barrier_wait(int barrier_id, uint32_t token) {
+// phase: the phase returned by vx_barrier_arrive
+inline void vx_barrier_wait(int barrier_id, int phase) {
     __asm__ volatile (
-        ".insn r %0, 7, 0, x0, %1, %2"
-        :: "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(token)
-        : "memory"
+        ".insn r %0, 6, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(phase) : "memory"
     );
 }
 

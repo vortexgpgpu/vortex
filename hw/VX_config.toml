@@ -59,7 +59,7 @@ VLEN = "expr: $XLEN * 4"
 [pipeline]
 NUM_WARPS = 4
 NUM_THREADS = 4
-NUM_BARRIERS = "expr: up($NUM_WARPS)"
+NUM_BARRIERS = 8
 
 IBUF_SIZE = 4
 ISSUE_WIDTH = "expr: up($NUM_WARPS / 16)"
@@ -264,6 +264,9 @@ QUARTUS = false
 YOSYS = false
 SYNOPSIS = false
 SV_DPI = false
+
+[testing]
+RVTEST_MT = false
 
 [debug]
 STALL_TIMEOUT = "expr: (100000 * (1 << ($L2_ENABLED + $L3_ENABLED)))"

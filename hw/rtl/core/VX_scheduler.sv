@@ -84,16 +84,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         assign branch_dest[i]  = branch_ctl_if[i].dest;
     end
 
-    // barriers (async-style state; used by both SYNC and async ARRIVE/WAIT)
-    reg [`NUM_BARRIERS-1:0][`XLEN-1:0] async_bar_generation, async_bar_generation_n;
-    reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] async_bar_waiting, async_bar_waiting_n;
-    reg [`NUM_BARRIERS-1:0][NW_WIDTH-1:0] async_bar_arrived_cnt, async_bar_arrived_cnt_n;
-
-`ifdef GBAR_ENABLE
-    reg gbar_req_valid;
-    reg [NB_WIDTH-1:0] gbar_req_id;
-    reg [NC_WIDTH-1:0] gbar_req_size_m1;
-`endif
+    // barriers
+    wire [`NUM_WARPS-1:0] barrier_unlock_mask;
+    wire barrier_unlock_valid;
 
     // wspawn
     wspawn_t wspawn;
@@ -103,33 +96,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [`CLOG2(`NUM_WARPS+1)-1:0] active_warps_cnt;
     `POP_COUNT(active_warps_cnt, active_warps);
 
-    // Global barrier local arrival target = min(requested_count, active_warps_cnt-1)
-    // Keep widths consistent across GBAR/non-GBAR builds (Verilator treats warnings as errors).
-`ifdef GBAR_ENABLE
-    localparam integer BAR_COUNT_W = `MAX(NW_WIDTH, NC_WIDTH);
-    wire [NW_WIDTH-1:0] local_target_m1 = (active_warps_cnt != 0)
-        ? ((warp_ctl_if.barrier.count < BAR_COUNT_W'(active_warps_cnt))
-            ? warp_ctl_if.barrier.count[NW_WIDTH-1:0]
-            : (NW_WIDTH'(active_warps_cnt) - NW_WIDTH'(1)))
-        : '0;
-`else
-    wire [NW_WIDTH-1:0] local_target_m1 = (active_warps_cnt != 0)
-        ? ((warp_ctl_if.barrier.count < NW_WIDTH'(active_warps_cnt))
-            ? warp_ctl_if.barrier.count
-            : (NW_WIDTH'(active_warps_cnt) - NW_WIDTH'(1)))
-        : '0;
-`endif
-
      always @(*) begin
         active_warps_n  = active_warps;
         stalled_warps_n = stalled_warps;
         thread_masks_n  = thread_masks;
         warp_pcs_n      = warp_pcs;
-
-        // async barrier next state
-        async_bar_generation_n = async_bar_generation;
-        async_bar_waiting_n = async_bar_waiting;
-        async_bar_arrived_cnt_n = async_bar_arrived_cnt;
 
         // decode unlock
         if (decode_sched_if.valid && decode_sched_if.unlock) begin
@@ -174,77 +145,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n[join_wid] = 0; // unlock warp
         end
 
-        // barrier handling (ARRIVE/WAIT)
-        if (warp_ctl_if.valid && warp_ctl_if.barrier.valid) begin
-            unique case (warp_ctl_if.barrier.op)
-
-                // ARRIVE: non-blocking, update state.
-                BARRIER_OP_ARRIVE: begin
-                    logic barrier_done;
-                    barrier_done = 1'b0;
-                    if (warp_ctl_if.barrier.is_global) begin
-                        // global barrier: local arrive tracking (completion on gbar response)
-                        if (warp_ctl_if.barrier.count == '0) begin
-                            // noop (size=1): advance generation so WAIT passes
-                            async_bar_generation_n[warp_ctl_if.barrier.id] = async_bar_generation[warp_ctl_if.barrier.id] + `XLEN'(1);
-                            stalled_warps_n &= ~async_bar_waiting[warp_ctl_if.barrier.id];
-                            async_bar_waiting_n[warp_ctl_if.barrier.id] = '0;
-                            barrier_done = 1'b1;
-                        end else if (async_bar_arrived_cnt[warp_ctl_if.barrier.id] < local_target_m1) begin
-                            async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = async_bar_arrived_cnt[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
-                        end
-                    end else begin
-                        // local barrier completion (count is encoded as (expected_warps - 1))
-                        if (async_bar_arrived_cnt[warp_ctl_if.barrier.id] == NW_WIDTH'(warp_ctl_if.barrier.count)) begin
-                            // last arrival: advance generation and reset counter
-                            async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = '0;
-                            async_bar_generation_n[warp_ctl_if.barrier.id] = async_bar_generation[warp_ctl_if.barrier.id] + `XLEN'(1);
-                            // wake all waiting warps
-                            stalled_warps_n &= ~async_bar_waiting[warp_ctl_if.barrier.id];
-                            async_bar_waiting_n[warp_ctl_if.barrier.id] = '0;
-                            barrier_done = 1'b1;
-                        end else begin
-                            // not last: increment arrival counter
-                            async_bar_arrived_cnt_n[warp_ctl_if.barrier.id] = async_bar_arrived_cnt[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
-                        end
-                    end
-
-                    if (warp_ctl_if.barrier.is_sync) begin
-                        if (barrier_done) begin
-                            stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
-                        end else begin
-                            // SYNC barrier blocks until the next generation is reached
-                            async_bar_waiting_n[warp_ctl_if.barrier.id][warp_ctl_if.wid] = 1'b1;
-                        end
-                    end else begin
-                        // ARRIVE is non-blocking, unlock warp immediately
-                        stalled_warps_n[warp_ctl_if.wid] = 0;
-                    end
-                end
-
-                // WAIT: check if generation advanced past token (wrap-safe)
-                BARRIER_OP_WAIT: begin
-                    if ($signed(async_bar_generation[warp_ctl_if.barrier.id] - warp_ctl_if.barrier.token) > 0) begin
-                        stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
-                    end else begin
-                        async_bar_waiting_n[warp_ctl_if.barrier.id][warp_ctl_if.wid] = 1'b1;
-                    end
-                end
-
-                default: begin
-                end
-            endcase
+        // barrier unlock handling
+        if (barrier_unlock_valid) begin
+            stalled_warps_n &= ~barrier_unlock_mask;
         end
-
-    `ifdef GBAR_ENABLE
-        if (gbar_bus_if.rsp_valid && (gbar_req_id == gbar_bus_if.rsp_data.id)) begin
-            // Global barrier completion releases local waiters for this barrier ID.
-            async_bar_arrived_cnt_n[gbar_bus_if.rsp_data.id] = '0;
-            async_bar_generation_n[gbar_bus_if.rsp_data.id] = async_bar_generation[gbar_bus_if.rsp_data.id] + `XLEN'(1);
-            stalled_warps_n &= ~async_bar_waiting[gbar_bus_if.rsp_data.id];
-            async_bar_waiting_n[gbar_bus_if.rsp_data.id] = '0;
-        end
-    `endif
 
         // Branch handling
         for (integer i = 0; i < `NUM_ALU_BLOCKS; ++i) begin
@@ -271,39 +175,32 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     always @(posedge clk) begin
         if (reset) begin
-        `ifdef GBAR_ENABLE
-            gbar_req_valid  <= 0;
-        `endif
             stalled_warps   <= '0;
             warp_pcs        <= '0;
             active_warps    <= '0;
             thread_masks    <= '0;
-            // barrier_stalls  <= '0;
             cycles          <= '0;
             wspawn.valid    <=  0;
-
-            // async barrier reset
-            async_bar_generation  <= '0;
-            async_bar_waiting     <= '0;
-            async_bar_arrived_cnt <= '0;
-
-            // activate first warp
+        `ifdef RVTEST_MT
+            // activate all warps as single-thread
+            for (integer i = 0; i < `NUM_WARPS; ++i) begin
+                warp_pcs[i]     <= from_fullPC(base_dcrs.startup_addr);
+                active_warps[i] <= 1;
+                thread_masks[i][0] <= 1;
+            end
+        `else
+            // activate first warp as single-thread
             warp_pcs[0]     <= from_fullPC(base_dcrs.startup_addr);
             active_warps[0] <= 1;
             thread_masks[0][0] <= 1;
+        `endif
             is_single_warp  <= 1;
         end else begin
             active_warps   <= active_warps_n;
             stalled_warps  <= stalled_warps_n;
             thread_masks   <= thread_masks_n;
             warp_pcs       <= warp_pcs_n;
-            // barrier_stalls <= barrier_stalls_n;
             is_single_warp <= (active_warps_cnt == $bits(active_warps_cnt)'(1));
-
-            // async barrier state updates
-            async_bar_generation <= async_bar_generation_n;
-            async_bar_waiting    <= async_bar_waiting_n;
-            async_bar_arrived_cnt <= async_bar_arrived_cnt_n;
 
             // wspawn handling
             if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
@@ -316,24 +213,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 wspawn.valid <= 0;
             end
 
-            // global barrier scheduling
-	        `ifdef GBAR_ENABLE
-            if (warp_ctl_if.valid && warp_ctl_if.barrier.valid
-             && warp_ctl_if.barrier.op == BARRIER_OP_ARRIVE
-             && warp_ctl_if.barrier.is_global
-             && (warp_ctl_if.barrier.count != '0)
-             && !gbar_req_valid
-             && (async_bar_arrived_cnt[warp_ctl_if.barrier.id] == local_target_m1)) begin
-                // Local arrivals reached expected count: send global barrier request.
-                gbar_req_valid <= 1;
-                gbar_req_id <= warp_ctl_if.barrier.id;
-                gbar_req_size_m1 <= NC_WIDTH'(warp_ctl_if.barrier.count);
-            end
-            if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
-                gbar_req_valid <= 0;
-            end
-        `endif
-
             if (busy) begin
                 cycles <= cycles + 1;
             end
@@ -342,16 +221,24 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // barrier handling
 
-`ifdef GBAR_ENABLE
-    assign gbar_bus_if.req_valid        = gbar_req_valid;
-    assign gbar_bus_if.req_data.id      = gbar_req_id;
-    assign gbar_bus_if.req_data.size_m1 = gbar_req_size_m1;
-    assign gbar_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID % `NUM_CORES);
-`endif
-
-    // async barrier token output for ARRIVE instruction
-    // Returns the current generation at time of arrive
-    assign warp_ctl_if.arrive_token = `XLEN'(async_bar_generation[warp_ctl_if.barrier_id_rd]);
+    VX_bar_unit #(
+        .INSTANCE_ID (`SFORMATF(("%s-barrier", INSTANCE_ID))),
+        .CORE_ID     (CORE_ID)
+    ) bar_unit (
+        .clk        (clk),
+        .reset      (reset),
+        .req_valid  (warp_ctl_if.valid),
+        .req_wid    (warp_ctl_if.wid),
+        .req_data   (warp_ctl_if.barrier),
+        .read_addr  (warp_ctl_if.barrier_addr),
+        .read_phase (warp_ctl_if.barrier_phase),
+        .active_warps(active_warps),
+    `ifdef GBAR_ENABLE
+        .gbar_bus_if(gbar_bus_if),
+    `endif
+        .unlock_valid(barrier_unlock_valid),
+        .unlock_mask(barrier_unlock_mask)
+    );
 
     // split/join handling
 

@@ -45,11 +45,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_pred   = (execute_if.data.op_type == INST_SFU_PRED);
     wire is_split  = (execute_if.data.op_type == INST_SFU_SPLIT);
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
-    // async
-    wire is_bar_arrive = (execute_if.data.op_type == INST_SFU_ARRIVE);
-    wire is_bar_wait   = (execute_if.data.op_type == INST_SFU_WAIT);
-    wire is_bar_sync   = (execute_if.data.op_type == INST_SFU_BARRIER);
-    wire is_bar        = is_bar_arrive || is_bar_wait || is_bar_sync;
+    wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
 	    if (LANE_BITS != 0) begin : g_last_tid
@@ -70,7 +66,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire [`XLEN-1:0] rs2_data = execute_if.data.rs2_data[last_tid];
     `UNUSED_VAR (rs1_data)
 
-    wire not_pred = execute_if.data.op_args.wctl.is_neg;
+    wire not_pred = execute_if.data.op_args.wctl.is_cond_neg;
 
     wire [NUM_LANES-1:0] taken;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_taken
@@ -134,20 +130,16 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // barrier
 
     assign barrier.valid    = is_bar;
-    // async barrier op
-    assign barrier.op       = is_bar_wait ? BARRIER_OP_WAIT : BARRIER_OP_ARRIVE;
-
-    assign barrier.id       = rs1_data[NB_WIDTH-1:0];
+    assign barrier.id       = rs1_data[16 +: NB_BITS];
+    assign barrier.is_async = execute_if.data.op_args.wctl.is_async_bar;
 `ifdef GBAR_ENABLE
-    assign barrier.is_global= is_bar ? rs1_data[31] : 1'b0;
+    assign barrier.is_global= rs1_data[31];
 `else
     assign barrier.is_global= 1'b0;
 `endif
-    // legacy sync barrier (funct3=4) blocks like arrive+wait, without exposing the token
-    assign barrier.is_sync  = is_bar_sync;
-    // For SYNC/ARRIVE: expected warp count minus 1 (wrap-safe for num_warps == `NUM_WARPS)
-    assign barrier.count    = (is_bar_arrive || is_bar_sync) ? (rs2_data[$bits(barrier.count)-1:0] - $bits(barrier.count)'(1)) : '0;
-    assign barrier.token    = rs2_data[`XLEN-1:0];  // For WAIT: token to wait for
+    assign barrier.is_arrive= execute_if.data.op_args.wctl.is_bar_arrive || ~execute_if.data.op_args.wctl.is_async_bar;
+    assign barrier.phase    = rs2_data[0];
+    assign barrier.size_m1  = rs2_data[BAR_SIZE_W-1:0] - BAR_SIZE_W'(1);
 
     // wspawn
 
@@ -162,7 +154,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // response
 
     assign warp_ctl_if.dvstack_wid = execute_if.data.header.wid;
-    assign warp_ctl_if.barrier_id_rd = rs1_data[NB_WIDTH-1:0]; // barrier ID for token lookup
+    assign warp_ctl_if.barrier_addr = {rs1_data[NW_BITS-1:0], rs1_data[16 +: NB_BITS]};
 
     // Send WCTL request
 
@@ -182,27 +174,28 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // Send result
 
-    wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
-    wire [`XLEN-1:0] arrive_token_out;
-    wire is_bar_arrive_out;
+    wire [DV_STACK_SIZEW-1:0] dvstack_ptr_r;
+    wire bar_rsp_valid = is_bar && execute_if.data.op_args.wctl.is_bar_arrive;
+    wire bar_rsp_valid_r;
+    wire bar_phase_r;
 
     VX_elastic_buffer #(
-        .DATAW ($bits(sfu_header_t) + DV_STACK_SIZEW + `XLEN + 1),
+        .DATAW ($bits(sfu_header_t) + DV_STACK_SIZEW + 1 + 1),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (execute_if.valid),
         .ready_in  (execute_if.ready),
-        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr, warp_ctl_if.arrive_token, is_bar_arrive}),
-        .data_out  ({result_if.data.header, dvstack_ptr, arrive_token_out, is_bar_arrive_out}),
+        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr, warp_ctl_if.barrier_phase, bar_rsp_valid}),
+        .data_out  ({result_if.data.header,  dvstack_ptr_r,           bar_phase_r,               bar_rsp_valid_r}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
 
     // Result data
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result_if
-        assign result_if.data.data[i] = is_bar_arrive_out ? `XLEN'(arrive_token_out) : `XLEN'(dvstack_ptr);
+        assign result_if.data.data[i] = bar_rsp_valid_r ? `XLEN'(bar_phase_r) : `XLEN'(dvstack_ptr_r);
     end
 
 endmodule

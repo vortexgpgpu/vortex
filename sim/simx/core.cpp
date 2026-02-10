@@ -505,12 +505,8 @@ void Core::resume(uint32_t wid) {
   emulator_.resume(wid);
 }
 
-bool Core::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
-  return emulator_.barrier(bar_id, count, wid);
-}
-
-uint32_t Core::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid) {
-  return emulator_.barrier_arrive(bar_id, count, wid);
+uint32_t Core::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_async_bar) {
+  return emulator_.barrier_arrive(bar_id, count, wid, is_async_bar);
 }
 
 bool Core::barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid) {

@@ -1412,7 +1412,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
 
         ThreadMask then_tmask(num_threads);
         ThreadMask else_tmask(num_threads);
-        auto not_pred = wctlArgs.is_neg;
+        auto not_pred = wctlArgs.is_cond_neg;
         for (uint32_t t = 0; t < num_threads; ++t) {
           auto cond = (rs1_data.at(t).i & 0x1) ^ not_pred;
           then_tmask[t] = warp.tmask.test(t) && cond;
@@ -1467,29 +1467,27 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       } break;
       case WctlType::BAR: {
         trace->fetch_stall = true;
-        trace->data = std::make_shared<SfuTraceData>(rs1_data[thread_last].i, rs2_data[thread_last].i);
-      } break;
-      case WctlType::BAR_ARRIVE: {
-        uint32_t bar_id = rs1_data[thread_last].u;
-        uint32_t count = rs2_data[thread_last].u;
-        uint32_t token = this->barrier_arrive(bar_id, count, wid);
-        // Write token to all active threads' destination register
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          rd_data[t].u = token;
+        uint32_t arg1 = rs1_data[thread_last].u;
+        uint32_t arg2 = rs2_data[thread_last].u;
+        uint32_t cta_no = arg1 & 0xffff;
+        uint32_t bar_no = (arg1 >> 16) & 0x7fff;
+        uint32_t bar_id = (cta_no * arch_.num_barriers() + bar_no) | (arg1 & 0x80000000);
+        trace->data = std::make_shared<BarTraceData>(bar_id, arg2, (bool)wctlArgs.is_async_bar);
+        if (wctlArgs.is_bar_arrive) {
+          uint32_t phase = this->get_barrier_phase(bar_id);
+          for (uint32_t t = thread_start; t < num_threads; ++t) {
+            if (!warp.tmask.test(t))
+              continue;
+            rd_data[t].i = phase;
+          }
+          rd_write = true;
         }
-        trace->data = std::make_shared<SfuTraceData>(bar_id, count);
-        rd_write = true;
-      } break;
-      case WctlType::BAR_WAIT: {
-        uint32_t bar_id = rs1_data[thread_last].u;
-        uint32_t token = rs2_data[thread_last].u;
-        trace->fetch_stall = true;  // Stall until barrier reaches next generation
-        trace->data = std::make_shared<SfuTraceData>(bar_id, token);
+        trace->fetch_stall = !wctlArgs.is_bar_arrive;
       } break;
       case WctlType::PRED: {
         trace->fetch_stall = true;
         ThreadMask pred(num_threads);
-        auto not_pred = wctlArgs.is_neg;
+        auto not_pred = wctlArgs.is_cond_neg;
         for (uint32_t t = 0; t < num_threads; ++t) {
           auto cond = (rs1_data.at(t).i & 0x1) ^ not_pred;
           pred[t] = warp.tmask.test(t) && cond;

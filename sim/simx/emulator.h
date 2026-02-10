@@ -98,13 +98,9 @@ public:
 
   void resume(uint32_t wid);
 
-  bool barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
+  uint32_t barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_async_bar);
 
-  // Async barrier arrive: returns token (current generation)
-  uint32_t barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid);
-
-  // Async barrier wait: uses token to determine which phase to wait for
-  bool barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid);
+  bool barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid);
 
   bool wspawn(uint32_t num_warps, Word nextPC);
 
@@ -152,6 +148,8 @@ private:
 
   void update_fcrs(uint32_t fflags, uint32_t wid, uint32_t tid);
 
+  uint32_t get_barrier_phase(uint32_t bar_id) const;
+
   // temporarily added for riscv-vector tests
   // TODO: remove once ecall/ebreak are supported
   void trigger_ecall();
@@ -165,80 +163,13 @@ private:
   std::vector<warp_t> warps_;
   WarpMask    active_warps_;
   WarpMask    stalled_warps_;
-  std::vector<WarpMask> barriers_;
+  std::vector<warp_barrier_t> barriers_;
   std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;
   uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
 
-  struct AsyncBarrier {
-    #define MAX_WARPS 32
-
-    WarpMask arrived_mask;
-    WarpMask waiting_mask;
-    uint32_t arrived_count;
-    uint32_t expect_count;
-    uint32_t generation;
-    
-    std::array<uint32_t, MAX_WARPS> wait_phase;
-
-    AsyncBarrier()
-        : arrived_count(0)
-        , expect_count(0)
-        , generation(0)
-    {
-        arrived_mask.reset();
-        waiting_mask.reset();
-        wait_phase.fill(0);
-    }
-
-    void reset_for_next_gen() {
-        arrived_mask.reset();
-        waiting_mask.reset();
-        arrived_count = 0;
-        generation = 0;
-        expect_count = 0;
-        wait_phase.fill(0);
-    }
-};
-
-  struct ClusterAsyncBarrier {
-    WarpMask arrived_warps;
-    uint32_t expect_cores;
-    uint32_t token;
-    bool token_valid;
-    bool core_arrived;
-
-    ClusterAsyncBarrier()
-        : expect_cores(0)
-        , token(0)
-        , token_valid(false)
-        , core_arrived(false) {
-      arrived_warps.reset();
-    }
-
-    void reset() {
-      arrived_warps.reset();
-      expect_cores = 0;
-      token = 0;
-      token_valid = false;
-      core_arrived = false;
-    }
-  };
-
-  std::vector<ClusterAsyncBarrier> cluster_async_barriers_;
-
-
-#ifdef EXT_TCU_ENABLE
-  TensorUnit::Ptr tensor_unit_;
-#endif
-
-#ifdef EXT_V_ENABLE
-  VecUnit::Ptr vec_unit_;
-#endif
-
-  std::vector<AsyncBarrier> async_barriers_;
   PoolAllocator<Instr, 64> instr_pool_;
 };
 
