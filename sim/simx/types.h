@@ -709,6 +709,7 @@ inline std::ostream &operator<<(std::ostream &os, const VpuOpType& type) {
 
 enum class TcuType {
   WMMA,
+  WMMA_SP,
 };
 
 struct IntrTcuArgs {
@@ -716,11 +717,13 @@ struct IntrTcuArgs {
   uint32_t fmt_d  : 4;
   uint32_t step_m : 4;
   uint32_t step_n : 4;
+  //uint32_t sparse_flag : 1;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   switch (type) {
   case TcuType::WMMA: os << "WMMA"; break;
+  case TcuType::WMMA_SP: os << "WMMA_SP"; break;
   default:
     assert(false);
   }

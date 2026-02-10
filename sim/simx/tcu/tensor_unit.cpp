@@ -463,6 +463,59 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
   }
 }
 
+static inline void gather_B8(uint8_t mask0,
+                             uint8_t mask1,
+                             uint32_t bword0,
+                             uint32_t bword1,
+                             uint32_t& b_gathered) {
+  assert(__builtin_popcount(mask0 & 0x0f) == 2 && "mask0 must select exactly 2 of 4");
+  assert(__builtin_popcount(mask1 & 0x0f) == 2 && "mask1 must select exactly 2 of 4");
+
+  uint8_t out[4];
+  uint32_t out_idx = 0;
+
+  for (uint32_t i = 0; i < 4; ++i) {
+    if (mask0 & (1u << i)) {
+      out[out_idx++] = (bword0 >> (i * 8)) & 0xff;
+    }
+  }
+  for (uint32_t i = 0; i < 4; ++i) {
+    if (mask1 & (1u << i)) {
+      out[out_idx++] = (bword1 >> (i * 8)) & 0xff;
+    }
+  }
+
+  assert(out_idx == 4 && "gather_B8 must output exactly 4 elements");
+  b_gathered = (uint32_t(out[0]) << 0)
+             | (uint32_t(out[1]) << 8)
+             | (uint32_t(out[2]) << 16)
+             | (uint32_t(out[3]) << 24);
+}
+
+static inline void gather_B16(uint8_t mask,
+                              uint32_t bword0,
+                              uint32_t bword1,
+                              uint32_t& b_gathered) {
+  assert(__builtin_popcount(mask & 0x0f) == 2 && "mask must select exactly 2 of 4");
+
+  uint16_t in[4] = {
+      static_cast<uint16_t>((bword0 >> 0) & 0xffff),
+      static_cast<uint16_t>((bword0 >> 16) & 0xffff),
+      static_cast<uint16_t>((bword1 >> 0) & 0xffff),
+      static_cast<uint16_t>((bword1 >> 16) & 0xffff),
+  };
+
+  uint16_t out[2];
+  uint32_t out_idx = 0;
+  for (uint32_t i = 0; i < 4; ++i) {
+    if (mask & (1u << i)) {
+      out[out_idx++] = in[i];
+    }
+  }
+  assert(out_idx == 2 && "gather_B16 must output exactly 2 elements");
+  b_gathered = (uint32_t(out[0]) << 0) | (uint32_t(out[1]) << 16);
+}
+
 class TensorUnit::Impl {
 public:
   Impl(TensorUnit* simobject, const Arch& arch, Core* core)
@@ -492,6 +545,7 @@ public:
       int delay = 0;
       switch (tcu_type) {
       case TcuType::WMMA:
+      case TcuType::WMMA_SP:
         delay = 4;
         break;
       default:
@@ -545,6 +599,95 @@ public:
     }
   }
 
+  void wmma_sp(uint32_t wid,
+               uint32_t fmt_s,
+               uint32_t fmt_d,
+               uint32_t step_m,
+               uint32_t step_n,
+               const std::vector<reg_data_t>& rs1_data,
+               const std::vector<reg_data_t>& rs2_data,
+               const std::vector<reg_data_t>& rs3_data,
+               std::vector<reg_data_t>& rd_data,
+               ExeTraceData* trace_data) {
+    __unused(wid);
+    __unused(trace_data);
+
+    auto fedp = select_FEDP(fmt_s, fmt_d);
+
+    // Bring-up target: sparse path currently supports NT=8 and 8/16-bit input formats.
+    // Do not silently fall back to dense WMMA, because sparse-packed A would
+    // produce incorrect results under dense semantics.
+    if (NUM_THREADS != 8) {
+      std::cout << "Error: WMMA_SP unsupported for NUM_THREADS=" << NUM_THREADS
+                << " (expected 8)." << std::endl;
+      std::abort();
+    }
+    const bool is_8bit_sparse_fmt =
+        (fmt_s == vt::int8::id)  ||
+        (fmt_s == vt::uint8::id) ||
+        (fmt_s == vt::fp8::id)   ||
+        (fmt_s == vt::bf8::id)   ||
+        (fmt_s == vt::mxfp8::id) ||
+        (fmt_s == vt::mxint8::id);
+    const bool is_16bit_sparse_fmt =
+        (fmt_s == vt::fp16::id) ||
+        (fmt_s == vt::bf16::id);
+    if (!is_8bit_sparse_fmt && !is_16bit_sparse_fmt) {
+      std::cout << "Error: WMMA_SP unsupported input format: "
+                << vt::fmt_string(fmt_s) << " (id=" << fmt_s
+                << "). Supported formats: i8, u8, fp8, bf8, mxfp8, mxi8, fp16, bf16." << std::endl;
+      std::abort();
+    }
+
+    // Fixed masks for bring-up (2:4): keep lanes [0,3] from each 4-element B chunk.
+    constexpr uint8_t kMask0 = 0x9;
+    constexpr uint8_t kMask1 = 0x9;
+    constexpr uint32_t kCompression = 2;
+    constexpr uint32_t b_block_size_sp = cfg::b_block_size * kCompression;
+    static_assert((NUM_THREADS % b_block_size_sp) == 0, "NUM_THREADS must be divisible by sparse B block size");
+    constexpr uint32_t b_sub_blocks_sp = NUM_THREADS / b_block_size_sp;
+
+    uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
+    uint32_t b_off = (step_n % b_sub_blocks_sp) * b_block_size_sp;
+
+    for (uint32_t i = 0; i < cfg::tcM; ++i) {
+      for (uint32_t j = 0; j < cfg::tcN; ++j) {
+        auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
+        auto b_col = rs2_data.data() + b_off + j * (cfg::tcK * kCompression);
+        auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
+
+        reg_data_t a_row_sparse[cfg::tcK];
+        reg_data_t b_col_sparse[cfg::tcK];
+        for (uint32_t z = 0; z < cfg::tcK; ++z) {
+          a_row_sparse[z].u32 = a_row[z].u32;
+          uint32_t b_gathered = 0;
+          if (is_8bit_sparse_fmt) {
+            gather_B8(kMask0, kMask1,
+                      b_col[z * kCompression + 0].u32,
+                      b_col[z * kCompression + 1].u32,
+                      b_gathered);
+          } else {
+            gather_B16(kMask0,
+                       b_col[z * kCompression + 0].u32,
+                       b_col[z * kCompression + 1].u32,
+                       b_gathered);
+          }
+          b_col_sparse[z].u32 = b_gathered;
+        }
+
+        auto d_val = fedp(a_row_sparse, b_col_sparse, c_val);
+        rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
+
+        DTH(3, simobject_->name() << " SP_FEDP: wid=" << wid << ", i=" << i << ", j=" << j
+            << ", m=" << step_m << ", n=" << step_n << ", a0=0x" << std::hex << a_row_sparse[0].u32
+            << ", a1=0x" << a_row_sparse[1].u32
+            << ", bg0=0x" << b_col_sparse[0].u32
+            << ", bg1=0x" << b_col_sparse[1].u32
+            << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
+      }
+    }
+  }
+
   const PerfStats& perf_stats() const {
     return perf_stats_;
   }
@@ -563,6 +706,9 @@ op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
   switch (tcu_type) {
   case TcuType::WMMA:
     return {"WMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
+             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
+  case TcuType::WMMA_SP:
+    return {"WMMA_SP." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
   default:
     std::abort();
@@ -605,4 +751,17 @@ void TensorUnit::wmma(uint32_t wid,
                       std::vector<reg_data_t>& rd_data,
                       ExeTraceData* trace_data) {
   impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
+}
+
+void TensorUnit::wmma_sp(uint32_t wid,
+                         uint32_t fmt_s,
+                         uint32_t fmt_d,
+                         uint32_t step_m,
+                         uint32_t step_n,
+                         const std::vector<reg_data_t>& rs1_data,
+                         const std::vector<reg_data_t>& rs2_data,
+                         const std::vector<reg_data_t>& rs3_data,
+                         std::vector<reg_data_t>& rd_data,
+                         ExeTraceData* trace_data) {
+  impl_->wmma_sp(wid, fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
 }
