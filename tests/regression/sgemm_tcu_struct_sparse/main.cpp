@@ -871,7 +871,7 @@ int main(int argc, char *argv[]) {
   // upload matrix B buffer
   {
     std::cout << "upload matrix B buffer" << std::endl;
-    if constexpr (std::is_same<vt::ITYPE, vt::int4>::value || 
+    if constexpr (std::is_same<vt::ITYPE, vt::int4>::value ||
                   std::is_same<vt::ITYPE, vt::uint4>::value ||
                   std::is_same<vt::ITYPE, vt::nvfp4>::value) {
       // sub-byte matrix B must be in col-major format

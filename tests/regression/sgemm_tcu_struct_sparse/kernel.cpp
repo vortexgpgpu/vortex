@@ -24,15 +24,15 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   ctx::fill_fragment(fragC, 0);
 
   uint32_t stride_A = K / 2;
-  for (int i = 0; i < (int)(K / 2); i += (int)(ctx::tileK / 2)) {
-    auto pTileA = pA + tile_row * stride_A + i;
+  for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
+    auto pTileA = pA + tile_row * stride_A + (i / 2);
     ctx::load_matrix_sync<vt::row_major, true>(fragA, pTileA, stride_A);
 
     if constexpr (vt::ITYPE::bits < 8) {
-      auto pTileB = pB + tile_col * K + (2 * i);
+      auto pTileB = pB + tile_col * K + i;
       ctx::load_matrix_sync<vt::col_major, true>(fragB, pTileB, K);
     } else {
-      auto pTileB = pB + (2 * i) * N + tile_col;
+      auto pTileB = pB + i * N + tile_col;
       ctx::load_matrix_sync<vt::row_major, true>(fragB, pTileB, N);
     }
 
