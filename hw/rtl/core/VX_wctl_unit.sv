@@ -154,7 +154,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // response
 
     assign warp_ctl_if.dvstack_wid = execute_if.data.header.wid;
-    assign warp_ctl_if.barrier_addr = {rs1_data[NW_BITS-1:0], rs1_data[16 +: NB_BITS]};
+    assign warp_ctl_if.barrier_addr = {rs1_data[NW_WIDTH-1:0], rs1_data[16 +: NB_BITS]};
 
     // Send WCTL request
 

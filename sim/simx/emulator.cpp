@@ -347,7 +347,7 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid,
     // local barrier handling
     phase = barrier.phase;
     if (barrier.arrival_count == count) {
-      // resume suspended warps
+      // resume waiting warps
       for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
         if (barrier.wait_mask.test(i)) {
           DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);

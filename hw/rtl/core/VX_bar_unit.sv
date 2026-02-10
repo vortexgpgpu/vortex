@@ -134,7 +134,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     VX_dp_ram #(
         .DATAW    (BAR_DATAW),
         .SIZE     (1 << BAR_ADDR_BITS),
-        .RDW_MODE ("R"),
+        .RDW_MODE ("W"),
         .RADDR_REG(1)
     ) barrier_store (
         .clk   (clk),
