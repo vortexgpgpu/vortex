@@ -39,8 +39,10 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     wire is_addr_global = | (lsu_in_if.req_data.mask & ~is_addr_local_mask);
     wire is_addr_local  = | (lsu_in_if.req_data.mask & is_addr_local_mask);
 
-    assign lsu_in_if.req_ready = (req_global_ready && is_addr_global)
-                              || (req_local_ready && is_addr_local);
+    // Require all active destinations to be ready when a request spans both
+    // global and local memory lanes.
+    assign lsu_in_if.req_ready = (!is_addr_global || req_global_ready)
+                              && (!is_addr_local  || req_local_ready);
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),

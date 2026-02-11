@@ -26,7 +26,7 @@ L3_ENABLED = "expr: 1 if $L3_ENABLE else 0"
 [isa]
 XLEN = 32
 
-GBAR_ENABLE = true
+GBAR_ENABLE = false
 GBAR_ENABLED = "expr: 1 if $GBAR_ENABLE else 0"
 
 VM_ENABLE = false
@@ -226,6 +226,7 @@ NUM_TCU_BLOCKS = "expr: $ISSUE_WIDTH"
 TCU_INT_ENABLE = true
 TCU_FP8_ENABLE = true
 TCU_TF32_ENABLE = true
+TCU_SPARSE_ENABLE = true
 
 [isa_signatures]
 

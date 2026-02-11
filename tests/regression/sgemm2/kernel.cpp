@@ -1,5 +1,4 @@
 #include <vx_spawn.h>
-#include <math.h>
 #include "common.h"
 
 void kernel_body(kernel_arg_t *arg) {
@@ -25,7 +24,6 @@ void kernel_body(kernel_arg_t *arg) {
   auto l_col = threadIdx.y;
 
   TYPE sum(0);
-  TYPE local_acc(0);
 
   // Loop over tiles
   for (uint32_t k = 0; k < size; k += tile_size) {
@@ -36,16 +34,6 @@ void kernel_body(kernel_arg_t *arg) {
     // Synchronize all warps in current group
     __syncthreads();
 
-    TYPE my_val = local_A[l_row * tile_size + l_col];
-    TYPE my_val_b = local_B[l_row * tile_size + l_col];
-
-    for (int iter = 0; iter < tile_size; ++iter) {
-      my_val = (sqrt(my_val * my_val + 0.01f));
-      my_val_b = (sqrt(my_val_b * my_val_b + 0.01f));
-    }
-    local_acc += my_val + my_val_b;
-
-    // __syncthreads();
     // Compute partial sum for the local tile
     for (uint32_t j = 0; j < tile_size; ++j) {
       sum += local_A[l_row * tile_size + j] * local_B[j * tile_size + l_col];
@@ -56,7 +44,7 @@ void kernel_body(kernel_arg_t *arg) {
   }
 
   // Store the computed sum into the result matrix C
-  C_ptr[g_row * size + g_col] = sum + local_acc - local_acc;
+  C_ptr[g_row * size + g_col] = sum;
 }
 
 int main() {
