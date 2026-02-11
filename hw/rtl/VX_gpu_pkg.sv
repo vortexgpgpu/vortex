@@ -73,7 +73,12 @@ package VX_gpu_pkg;
 
     localparam BAR_ADDR_BITS = NW_BITS + NB_BITS;
     localparam BAR_ADDR_W = `UP(BAR_ADDR_BITS);
+
+`ifdef GBAR_ENABLE
     localparam BAR_SIZE_W = `MAX(NW_WIDTH, NC_WIDTH);
+`else
+    localparam BAR_SIZE_W = NW_WIDTH;
+`endif
 
 `ifndef NDEBUG
 	localparam UUID_WIDTH = 44;
@@ -499,11 +504,7 @@ package VX_gpu_pkg;
         logic                   is_arrive;
         logic                   is_async;
         logic                   phase;
-    `ifdef GBAR_ENABLE
         logic [BAR_SIZE_W-1:0]  size_m1;
-    `else
-        logic [NW_WIDTH-1:0]    size_m1;
-    `endif
     } barrier_t;
 
     typedef struct packed {
