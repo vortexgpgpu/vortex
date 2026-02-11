@@ -40,6 +40,8 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     output wire [`NUM_WARPS-1:0] unlock_mask // warps to unlock
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_VAR ({req_data.id, active_warps})
 
     //                     warp mask + warp count_r + phase_r
     localparam BAR_DATAW = `NUM_WARPS + NW_WIDTH + 1;
