@@ -438,26 +438,56 @@ check_design > [file join $RPT_DIR "check_design.rpt"]
 # Optional: multi-core
 catch { set_host_options -max_cores [getenv DC_CORES 8] }
 
-# ------------------- Clock Setup --------------------
+# ------------------- Clock Setup (Auto-scale from lib units) --------------------
 
-set NS 1.0
-if {[catch {set_units -time ns -resistance kOhm -capacitance pF -voltage V -current mA}]} {
-  WARN "Library locked to Picoseconds. Scaling constraints by 1000."
-  set NS 1000.0
+# Capture report_units output into a Tcl variable
+set _ru ""
+catch { redirect -variable _ru { report_units } }
+
+# Parse ONLY the Time_unit line, extract token in parentheses at end of that line.
+# Example line: "Time_unit            : 1.0e-09 Second(ns)"
+set LIB_TIME_UNIT "ns"
+if {[regexp -line {^Time_unit\s*:\s*.*\(([^)]+)\)\s*$} $_ru -> LIB_TIME_UNIT]} {
+  set LIB_TIME_UNIT [string trim $LIB_TIME_UNIT]
+} else {
+  puts "WARN: Failed to parse Time_unit from report_units; assuming ns"
+  set LIB_TIME_UNIT "ns"
 }
 
-set CLOCK_FREQ [getenv CLOCK 800]
-set period_ns [expr 1000.0 / $CLOCK_FREQ]
-set target_period [expr $period_ns * $NS]
-set target_uncertainty [expr $target_period * 0.10] ;# 10% Jitter/Skew margin
-set target_io_delay    [expr $target_period * 0.15] ;# 15% External I/O Delay
+# Compute scale: how many <LIB_TIME_UNIT> per 1 ns
+#   ns -> 1
+#   ps -> 1000
+#   fs -> 1000000
+set NS_TO_LIB 1.0
+switch -exact -- $LIB_TIME_UNIT {
+  ns { set NS_TO_LIB 1.0 }
+  ps { set NS_TO_LIB 1000.0 }
+  fs { set NS_TO_LIB 1000000.0 }
+  default {
+    # Unknown unit: be safe and assume ns, but warn loudly
+    set NS_TO_LIB 1.0
+    puts "WARN: Unknown library time unit '$LIB_TIME_UNIT' from report_units; assuming ns"
+  }
+}
+
+# Read CLOCK in MHz (env var CLOCK overrides default 800)
+set CLOCK_FREQ [getenv CLOCK 800]               ;# MHz
+
+# Period in ns (always correct, independent of library units)
+set period_ns [expr 1000.0 / double($CLOCK_FREQ)]  ;# ns
+
+# Convert ns to library time units for all time-based constraints
+set target_period      [expr $period_ns * $NS_TO_LIB]
+set target_uncertainty [expr $target_period * 0.10]  ;# 10%
+set target_io_delay    [expr $target_period * 0.15]  ;# 15%
 
 puts "----------------------------------------------------------------"
-puts "INFO: Target Frequency : $CLOCK_FREQ MHz"
-puts "INFO: Library Scaling  : x$NS"
-puts "INFO: Clock Period     : $target_period"
-puts "INFO: Clock Uncertainty: $target_uncertainty"
-puts "INFO: I/O Delay        : $target_io_delay"
+puts "INFO: Target Frequency     : $CLOCK_FREQ MHz"
+puts "INFO: Period (ns)          : $period_ns ns"
+puts "INFO: Library time unit    : $LIB_TIME_UNIT"
+puts "INFO: Period (lib units)   : $target_period $LIB_TIME_UNIT"
+puts "INFO: Uncertainty (lib)    : $target_uncertainty $LIB_TIME_UNIT"
+puts "INFO: I/O Delay (lib)      : $target_io_delay $LIB_TIME_UNIT"
 puts "----------------------------------------------------------------"
 
 # ---------------- constraints ----------------

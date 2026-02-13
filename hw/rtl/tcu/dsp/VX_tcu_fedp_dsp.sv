@@ -172,10 +172,12 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
                 a_row_sel = a_row_fp16;
                 a_col_sel = b_col_fp16;
             end
+        `ifdef TCU_BF16_ENABLE
             TCU_BF16_ID: begin
                 a_row_sel = a_row_bf16;
                 a_col_sel = b_col_bf16;
             end
+        `endif
             default: begin
                 a_row_sel = 'x;
                 a_col_sel = 'x;
