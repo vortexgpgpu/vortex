@@ -17,14 +17,16 @@
 
 // Mod-4 Carry-Save Adder Reduction Tree Structure for large operand counts
 module VX_csa_mod4 #(
-    parameter N = 11,             // Number of operands (N >= 3)
-    parameter W = 8,              // Bit-width of each operand
-    parameter S = W + $clog2(N),  // Output width
-    parameter CPA_KS = 1          // Use Kogge-Stone CPA
+    parameter N = 4,             // Number of operands
+    parameter W = 8,             // Bit-width of each operand
+    parameter S = W + $clog2(N), // Output width
+    parameter CPA_KS = 1,        // Use Kogge-Stone CPA
+    parameter NO_CPA = 0,        // 0: Final Sum, 1: Sum/Carry Vectors
+    parameter CW = (NO_CPA ? S : 1)
 ) (
     input  wire [N-1:0][W-1:0] operands,
-    output wire [S-1:0] sum,
-    output wire cout
+    output wire [S-1:0]        sum,
+    output wire [CW-1:0]       cout
 );
     `STATIC_ASSERT (N >= 7, ("N must at least be 7"));
 
@@ -260,25 +262,24 @@ module VX_csa_mod4 #(
         assign final_carry = WN'(f3b_c);
     end
 
-    // -------------------------------------------------------------------------
-    // Final KS Adder
-    // -------------------------------------------------------------------------
-
-    wire [WN-1:0] raw_sum;
-
-    VX_ks_adder #(
-        .N (WN),
-        .BYPASS (!CPA_KS)
-    ) ksa (
-        .cin(0),
-        .dataa(final_sum),
-        .datab(final_carry),
-        .sum(raw_sum),
-        .cout(cout)
-    );
-
-    // Final Output Expansion
-    assign sum = S'(raw_sum);
+    // Final Output Generation
+    if (NO_CPA) begin : g_no_cpa
+        assign sum  = S'(final_sum);
+        assign cout = S'(final_carry);
+    end else begin : g_cpa
+        wire [WN-1:0] raw_sum;
+        VX_ks_adder #(
+            .N (WN),
+            .BYPASS (!CPA_KS)
+        ) ksa (
+            .cin(0),
+            .dataa(final_sum),
+            .datab(final_carry),
+            .sum(raw_sum),
+            .cout(cout)
+        );
+        assign sum = S'(raw_sum);
+    end
 
 endmodule
 

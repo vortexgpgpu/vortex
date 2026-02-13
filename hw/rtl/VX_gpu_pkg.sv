@@ -82,12 +82,10 @@ package VX_gpu_pkg;
 
 `ifndef NDEBUG
 	localparam UUID_WIDTH = 44;
-`else
-`ifdef SCOPE
+`elsif SCOPE
 	localparam UUID_WIDTH = 44;
 `else
 	localparam UUID_WIDTH = 1;
-`endif
 `endif
 
 `ifndef NDEBUG

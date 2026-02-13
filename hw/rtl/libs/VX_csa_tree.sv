@@ -17,14 +17,16 @@
 
 // Carry-Save Adder Tree (4:2 based, falls back to 3:2 if needed)
 module VX_csa_tree #(
-    parameter N = 4,  // Number of operands
-    parameter W = 8,  // Bit-width of each operand
-    parameter S = W + $clog2(N),  // Output width
-    parameter CPA_KS = 1          // Use Kogge-Stone CPA
+    parameter N = 4,             // Number of operands
+    parameter W = 8,             // Bit-width of each operand
+    parameter S = W + $clog2(N), // Output width
+    parameter CPA_KS = 1,        // Use Kogge-Stone CPA
+    parameter NO_CPA = 0,        // 0: Final Sum, 1: Sum/Carry Vectors
+    parameter CW = (NO_CPA ? S : 1)
 ) (
-    input  wire [N-1:0][W-1:0] operands,  // Input operands
-    output wire [S-1:0] sum,  // Final sum output
-    output wire cout
+    input  wire [N-1:0][W-1:0] operands,
+    output wire [S-1:0]        sum,
+    output wire [CW-1:0]       cout
 );
     `STATIC_ASSERT (N >= 3, ("N must be at least 3"));
 
@@ -102,17 +104,23 @@ module VX_csa_tree #(
         end
     end
 
-    // Final Kogge-Stone addition
-    VX_ks_adder #(
-        .N (S),
-        .BYPASS (!CPA_KS)
-    ) KSA (
-        .cin(0),
-        .dataa(St[TOTAL_LEVELS][S-1:0]),
-        .datab(Ct[TOTAL_LEVELS][S-1:0]),
-        .sum(sum),
-        .cout(cout)
-    );
+    // Final Output Generation
+    if (NO_CPA) begin : g_no_cpa
+        assign sum  = St[TOTAL_LEVELS][S-1:0];
+        assign cout = Ct[TOTAL_LEVELS][S-1:0];
+    end else begin : g_cpa
+        VX_ks_adder #(
+            .N (S),
+            .BYPASS (!CPA_KS)
+        ) KSA (
+            .cin(0),
+            .dataa(St[TOTAL_LEVELS][S-1:0]),
+            .datab(Ct[TOTAL_LEVELS][S-1:0]),
+            .sum(sum),
+            .cout(cout)
+        );
+    end
+
 endmodule
 
 `TRACING_ON
