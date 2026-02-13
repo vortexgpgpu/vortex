@@ -36,11 +36,12 @@ module VX_csa_mod4 #(
     localparam NUM_L0 = N_MOD4 >> 2;   // Number of initial 4:2 compressors
 
     function automatic integer calc_depth(integer n);
-        integer d;
+        integer d, t;
         d = 0;
-        while (n > 1) begin
+        t = n;
+        while (t > 1) begin
             d = d + 1;
-            n = (n + 1) >> 1;
+            t = (t + 1) >> 1;
         end
         return d;
     endfunction

@@ -63,6 +63,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire is_csr_frm    = (u_12 == `VX_CSR_FRM);
     wire is_csr_fcsr   = (u_12 == `VX_CSR_FCSR);
     wire frm_is_dyn    = (funct3 == 3'b111);
+    wire is_rd_zero    = (rd == 0);
 
     reg csr_write;
     always @(*) begin
@@ -522,11 +523,10 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 `USED_IREG (rs2);
                             end
                             3'h6: begin // Asynchronous arrive/wait barrier
-                                logic is_wait = (rd == 0);
                                 op_type = INST_OP_BITS'(INST_SFU_BAR);
                                 op_args.wctl.is_async_bar = 1;
-                                op_args.wctl.is_bar_arrive = ~is_wait;
-                                is_wstall = is_wait;
+                                op_args.wctl.is_bar_arrive = ~is_rd_zero;
+                                is_wstall = is_rd_zero;
                                 `USED_IREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);

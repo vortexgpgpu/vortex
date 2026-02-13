@@ -130,16 +130,16 @@ module VX_tcu_drl_exceptions import VX_tcu_pkg::*; #(
         end
 
         // NaN if either product has NaN input or inf*0
-        wire n_in_fp8_comb = |nan_in_fp8[i] | |inf_z_fp8[i];
-        wire n_in_bf8_comb = |nan_in_bf8[i] | |inf_z_bf8[i];
+        wire n_in_fp8_comb = (|nan_in_fp8[i]) | (|inf_z_fp8[i]);
+        wire n_in_bf8_comb = (|nan_in_bf8[i]) | (|inf_z_bf8[i]);
 
         // Check for +inf + -inf in the addition (generates NaN)
         wire fp8_add_nan = (fp8_pos_inf[0] & fp8_neg_inf[1]) | (fp8_neg_inf[0] & fp8_pos_inf[1]);
         wire bf8_add_nan = (bf8_pos_inf[0] & bf8_neg_inf[1]) | (bf8_neg_inf[0] & bf8_pos_inf[1]);
 
         // Combined infinity check (either product is inf and no add-nan)
-        wire i_op_fp8_comb = |fp8_valid_inf;
-        wire i_op_bf8_comb = |bf8_valid_inf;
+        wire i_op_fp8_comb = (|fp8_valid_inf);
+        wire i_op_bf8_comb = (|bf8_valid_inf);
 
         // Sign of combined result (dominant inf sign, prefer positive if same magnitude)
         wire sgn_fp8_comb = (|fp8_neg_inf) & ~(|fp8_pos_inf);

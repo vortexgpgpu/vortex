@@ -16,6 +16,9 @@ PREFIX ?= build
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 
+SDC_FILE := $(SRC_DIR)/project_400.sdc
+WALL_IGNORE := "$(THIRD_PARTY_DIR)/cvfpu/src/*"
+
 CP = cp -rf
 RMDIR = rm -rf
 ECHO = @echo
@@ -52,7 +55,7 @@ endif
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifeq (,$(filter -DEXT_F_DISABLE, $(CONFIGS)))
-	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
+	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE)
@@ -125,29 +128,32 @@ synthesis: $(BUILD_DIR)/sources.txt gen-rams
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
-	SDC_FILE=$(SRC_DIR)/project.sdc \
+	SDC_FILE=$(SDC_FILE) \
 	MEM_LIBS="$(SRAM_DB)" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
+	WALL_IGNORE=$(WALL_IGNORE) \
 	dc_shell -f $(SRC_DIR)/project.tcl
 
 synthesis-nosram: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
-	SDC_FILE=$(SRC_DIR)/project.sdc \
+	SDC_FILE=$(SDC_FILE) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
+	WALL_IGNORE=$(WALL_IGNORE) \
 	dc_shell -f $(SRC_DIR)/project.tcl
 
 synthesis-estsram: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
-	SDC_FILE=$(SRC_DIR)/project.sdc \
+	SDC_FILE=$(SDC_FILE) \
 	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
+	WALL_IGNORE=$(WALL_IGNORE) \
 	dc_shell -f $(SRC_DIR)/project.tcl
 
 clean:
