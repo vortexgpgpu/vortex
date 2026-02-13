@@ -203,8 +203,8 @@
 `define NO_RW_RAM_CHECK
 `define RW_RAM_CHECK
 `define DISABLE_BRAM
-`define PRESERVE_NET
-`define BLACKBOX_CELL
+`define PRESERVE_NET    (* syn_keep = "true" *)
+`define BLACKBOX_CELL   (* syn_black_box *)
 `define STRING
 `define FPU_TYPE_FPNEW
 `else

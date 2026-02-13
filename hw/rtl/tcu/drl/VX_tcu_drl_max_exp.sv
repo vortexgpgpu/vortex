@@ -121,6 +121,7 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
                     assign clamped_val = (|diff_val[WIDTH:8]) ? 8'hFF : diff_val[7:0];
                 end else begin : g_true_val
                     assign clamped_val = diff_val[7:0];
+                    `UNUSED_VAR (diff_val[WIDTH:8])
                 end
                 assign shift_sel = sel_exp[j] ? clamped_val : 8'd0;
             end else if (i > j) begin : g_lower_shift
@@ -131,6 +132,7 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
                     assign clamped_val = (|diff_val[WIDTH:8]) ? 8'hFF : diff_val[7:0];
                 end else begin : g_true_val
                     assign clamped_val = diff_val[7:0];
+                    `UNUSED_VAR (diff_val[WIDTH:8])
                 end
                 assign shift_sel = sel_exp[j] ? clamped_val : 8'd0;
             end else begin : g_diag_shift

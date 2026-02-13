@@ -95,6 +95,14 @@ package VX_tcu_pkg;
     localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
 
+    `ifdef TCU_TF32_ENABLE
+        localparam TCU_EXP_BITS = 10;
+    `elsif TCU_BF16_ENABLE
+        localparam TCU_EXP_BITS = 10;
+    `else
+        localparam TCU_EXP_BITS = 9;
+    `endif
+
     typedef struct packed {
         logic is_zero;
         logic is_sub;

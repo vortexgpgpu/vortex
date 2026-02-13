@@ -4,8 +4,9 @@ include $(ROOT_DIR)/config.mk
 SRC_DIR := $(VORTEX_HOME)/hw/syn/synopsys
 LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 
-SRAM_LIB := /mnt/nas0/eda.libs/saed14/EDK_08_2025/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.lib
-SRAM_DB  := /mnt/nas0/eda.libs/saed14/EDK_08_2025/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.db
+LIB_ROOT := /mnt/nas0/eda.libs/saed14/EDK_03_2025
+SRAM_LIB := $(LIB_ROOT)/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.lib
+SRAM_DB  := $(LIB_ROOT)/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.db
 
 DEFAULT_LIB := $(LIB_DIR)/NanGate_15nm_OCL.db
 SYN_LIB_ENV := $(if $(LIB_TGT),LIB_TGT=$(LIB_TGT),$(if $(LIB_ROOT),LIB_ROOT=$(LIB_ROOT),LIB_TGT=$(DEFAULT_LIB)))
@@ -17,7 +18,7 @@ SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 
 SDC_FILE := $(SRC_DIR)/project_400.sdc
-WALL_IGNORE := "$(THIRD_PARTY_DIR)/cvfpu/src/*"
+WALL_IGNORE := "*/stream_omega_net.sv,*/fpnew_pkg.sv"
 
 CP = cp -rf
 RMDIR = rm -rf
@@ -55,7 +56,7 @@ endif
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifeq (,$(filter -DEXT_F_DISABLE, $(CONFIGS)))
-	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
+	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE)

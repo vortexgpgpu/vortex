@@ -77,6 +77,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         assign man_a_bf16[i] = cls_bf16[0][i].is_zero ? 11'd0 : { 3'd0, !cls_bf16[0][i].is_sub, va[6:0] };
         assign man_b_bf16[i] = cls_bf16[1][i].is_zero ? 11'd0 : { 3'd0, !cls_bf16[1][i].is_sub, vb[6:0] };
     end
+    `UNUSED_VAR ({sign_bf16, man_a_bf16, man_b_bf16})
 
     // 3. FP8 / BF8 Preparation (2 ops per TCK slice)
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_f8
@@ -117,12 +118,14 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
 
         always_comb begin
             case(fmt_s[3:0])
+                TCU_FP16_ID: begin man_a_f16 = man_a_fp16[i]; man_b_f16 = man_b_fp16[i]; sign_f16 = sign_fp16[i]; end
+            `ifdef TCU_BF16_ENABLE
+                TCU_BF16_ID: begin man_a_f16 = man_a_bf16[i]; man_b_f16 = man_b_bf16[i]; sign_f16 = sign_bf16[i]; end
+            `endif
             `ifdef TCU_TF32_ENABLE
                 TCU_TF32_ID: begin man_a_f16 = man_a_tf32[i]; man_b_f16 = man_b_tf32[i]; sign_f16 = sign_tf32[i]; end
             `endif
-                TCU_FP16_ID: begin man_a_f16 = man_a_fp16[i]; man_b_f16 = man_b_fp16[i]; sign_f16 = sign_fp16[i]; end
-                TCU_BF16_ID: begin man_a_f16 = man_a_bf16[i]; man_b_f16 = man_b_bf16[i]; sign_f16 = sign_bf16[i]; end
-                default:     begin man_a_f16 = '0;            man_b_f16 = '0;            sign_f16 = 0;            end
+                default: begin man_a_f16 = 'x; man_b_f16 = 'x; sign_f16 = 'x; end
             endcase
         end
 
@@ -232,7 +235,9 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
                 TCU_TF32_ID,
             `endif
                 TCU_FP16_ID:              y[i] = {sign_f16, y_raw_f16, 2'd0};
+            `ifdef TCU_BF16_ENABLE
                 TCU_BF16_ID:              y[i] = {sign_f16, y_raw_f16[15:0], 8'd0};
+            `endif
             `ifdef TCU_FP8_ENABLE
                 TCU_FP8_ID, TCU_BF8_ID:   y[i] = {sign_f8_add, y_f8_add};
             `endif

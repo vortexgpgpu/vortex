@@ -35,7 +35,7 @@ module VX_tcu_fedp_drl import VX_tcu_pkg::*; #(
     `UNUSED_VAR (fmt_d)
 
     localparam TCK     = 2 * N;
-    localparam EXP_W   = 10;
+    localparam EXP_W   = TCU_EXP_BITS;
     localparam SHIFT_W = 8;
     localparam EXC_W   = $bits(fedp_excep_t);
     localparam C_HI_W  = 7;

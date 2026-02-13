@@ -553,6 +553,7 @@ tensor()
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DSP" NUM_REGS=1 LATENCY=31 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused --ulp=3
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --W=25
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DRL -DUSE_FEDP -DTCU_BF16_DISABLE -DTCU_TF32_DISABLE -DTCU_FP8_DISABLE -DTCU_INT_DISABLE" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --W=25
 
     # test bf16
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4  make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --no-fused

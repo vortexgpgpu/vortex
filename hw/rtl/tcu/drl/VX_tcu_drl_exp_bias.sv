@@ -74,6 +74,9 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
     localparam [EXP_W-1:0] EXP_NEG_INF = {1'b1, {(EXP_W-1){1'b0}}};
 
     `UNUSED_PARAM (BIAS_CONST_TF32)
+    `UNUSED_PARAM (BIAS_CONST_BF16)
+    `UNUSED_PARAM (BIAS_CONST_FP8)
+    `UNUSED_PARAM (BIAS_CONST_BF8)
 
     // ----------------------------------------------------------------------
     // 1. Inputs Setup
@@ -123,6 +126,7 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         assign eb_bf16[i] = cls_bf16[1][i].is_sub ? 8'd1 : rb[S_BF16-1+OFF -: E_BF16];
         assign z_bf16[i]  = cls_bf16[0][i].is_zero | cls_bf16[1][i].is_zero | ~vld_mask[i*4];
     end
+    `UNUSED_VAR ({ea_bf16, eb_bf16, z_bf16})
 
     // --- FP8 (E4M3) Preparation ---
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_fp8
@@ -173,6 +177,20 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         // f16 Mux Selection
         always_comb begin
             case (fmtf)
+                TCU_FP16_ID: begin
+                    ea_sel_f16   = ea_fp16[i];
+                    eb_sel_f16   = eb_fp16[i];
+                    is_zero_f16  = z_fp16[i];
+                    bias_sel_f16 = BIAS_CONST_FP16;
+                end
+            `ifdef TCU_BF16_ENABLE
+                TCU_BF16_ID: begin
+                    ea_sel_f16   = ea_bf16[i];
+                    eb_sel_f16   = eb_bf16[i];
+                    is_zero_f16  = z_bf16[i];
+                    bias_sel_f16 = BIAS_CONST_BF16;
+                end
+            `endif
             `ifdef TCU_TF32_ENABLE
                 TCU_TF32_ID: begin
                     ea_sel_f16   = ea_tf32[i];
@@ -181,18 +199,6 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
                     bias_sel_f16 = BIAS_CONST_TF32;
                 end
             `endif
-                TCU_FP16_ID: begin
-                    ea_sel_f16   = ea_fp16[i];
-                    eb_sel_f16   = eb_fp16[i];
-                    is_zero_f16  = z_fp16[i];
-                    bias_sel_f16 = BIAS_CONST_FP16;
-                end
-                TCU_BF16_ID: begin
-                    ea_sel_f16   = ea_bf16[i];
-                    eb_sel_f16   = eb_bf16[i];
-                    is_zero_f16  = z_bf16[i];
-                    bias_sel_f16 = BIAS_CONST_BF16;
-                end
                 default: begin
                     ea_sel_f16  = 'x;
                     eb_sel_f16  = 'x;
@@ -240,32 +246,56 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
         );
 
         // Shared fp8/bf8 adders
-        VX_csa_tree #(
-            .N (3),
-            .W (EXP_W),
-            .S (EXP_W),
-            .CPA_KS (!`FORCE_BUILTIN_ADDER(EXP_W))
-        ) exp_adder_f8_0 (
-            .operands ({EXP_W'(ea_sel_f8[0]), EXP_W'(eb_sel_f8[0]), bias_sel_f8}),
+        wire [EXP_W-1:0] pre_sum_f8_0, pre_sum_f8_1;
+        VX_ks_adder #(
+            .N (EXP_W),
+            .BYPASS (`FORCE_BUILTIN_ADDER(EXP_W))
+        ) exp_adder1_f8_0 (
+            .dataa (EXP_W'(ea_sel_f8[0])),
+            .datab (EXP_W'(eb_sel_f8[0])),
+            .cin   (1'b0),
+            .sum   (pre_sum_f8_0),
+            `UNUSED_PIN (cout)
+        );
+
+        VX_ks_adder #(
+            .N (EXP_W),
+            .BYPASS (`FORCE_BUILTIN_ADDER(EXP_W))
+        ) exp_adder2_f8_0 (
+            .dataa (pre_sum_f8_0),
+            .datab (bias_sel_f8),
+            .cin   (1'b0),
             .sum      (sum_f8_0),
             `UNUSED_PIN (cout)
         );
 
-        VX_csa_tree #(
-            .N (3),
-            .W (EXP_W),
-            .S (EXP_W),
-            .CPA_KS (!`FORCE_BUILTIN_ADDER(EXP_W))
-        ) exp_adder_f8_1 (
-            .operands ({EXP_W'(ea_sel_f8[1]), EXP_W'(eb_sel_f8[1]), bias_sel_f8}),
+        VX_ks_adder #(
+            .N (EXP_W),
+            .BYPASS (`FORCE_BUILTIN_ADDER(EXP_W))
+        ) exp_adder1_f8_1 (
+            .dataa (EXP_W'(ea_sel_f8[1])),
+            .datab (EXP_W'(eb_sel_f8[1])),
+            .cin   (1'b0),
+            .sum   (pre_sum_f8_1),
+            `UNUSED_PIN (cout)
+        );
+
+        VX_ks_adder #(
+            .N (EXP_W),
+            .BYPASS (`FORCE_BUILTIN_ADDER(EXP_W))
+        ) exp_adder2_f8_1 (
+            .dataa (pre_sum_f8_1),
+            .datab (bias_sel_f8),
+            .cin   (1'b0),
             .sum      (sum_f8_1),
             `UNUSED_PIN (cout)
         );
 
         // Difference calculation for alignment
-        wire diff_sign_f8 = (sum_f8_1 < sum_f8_0);
-        wire [EXP_W-1:0] max_sum_f8 = diff_sign_f8 ? sum_f8_0 : sum_f8_1;
-        wire [EXP_W-1:0] min_sum_f8 = diff_sign_f8 ? sum_f8_1 : sum_f8_0;
+
+        wire diff_sign_f8 = (pre_sum_f8_1 < pre_sum_f8_0);
+        wire [EXP_W-1:0] max_sum_f8 = diff_sign_f8 ? pre_sum_f8_0 : pre_sum_f8_1;
+        wire [EXP_W-1:0] min_sum_f8 = diff_sign_f8 ? pre_sum_f8_1 : pre_sum_f8_0;
         wire [EXP_W-1:0] diff_abs_f8;
         VX_ks_adder #(
             .N (EXP_W),
@@ -286,10 +316,12 @@ module VX_tcu_drl_exp_bias import VX_tcu_pkg::*;  #(
             `ifdef TCU_TF32_ENABLE
                 TCU_TF32_ID,
             `endif
-                TCU_FP16_ID, TCU_BF16_ID: begin
+            `ifdef TCU_BF16_ENABLE
+                TCU_BF16_ID,
+            `endif
+                TCU_FP16_ID: begin
                     raw_exp_y[i] = is_zero_f16 ? EXP_NEG_INF : sum_f16;
                 end
-
             `ifdef TCU_FP8_ENABLE
                 TCU_FP8_ID, TCU_BF8_ID: begin
                     raw_exp_y[i] = diff_sign_f8 ?

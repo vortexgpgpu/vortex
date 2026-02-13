@@ -256,7 +256,10 @@ set_app_var sh_continue_on_error false
 
 # 2. Promote CRITICAL warnings to errors
 set strict_warning_ids {
+  ELAB-311 ELAB-307 ELAB-909
   VER-104 VER-130 VER-129 VER-225 VER-708 VER-936 VER-941 VER-1005
+  LINK-5 LINK-19
+  UID-401 UID-101
 }
 foreach msg_id $strict_warning_ids {
   set_message_info -id $msg_id -stop_on
@@ -424,6 +427,7 @@ check_design > [file join $RPT_DIR "check_design.rpt"]
 catch { set_host_options -max_cores [getenv DC_CORES 8] }
 
 # ---------------- constraints ----------------
+set_units -time ns -resistance kOhm -capacitance pF -voltage V -current mA
 if {$SDC_FILE ne "" && [file exists $SDC_FILE]} {
   puts "INFO: Loading SDC: $SDC_FILE"
   source $SDC_FILE
