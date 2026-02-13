@@ -438,7 +438,7 @@ check_design > [file join $RPT_DIR "check_design.rpt"]
 # Optional: multi-core
 catch { set_host_options -max_cores [getenv DC_CORES 8] }
 
-# ------------------- Clock Setup (Auto-scale from lib units) --------------------
+# ------------------- Clock Setup --------------------
 
 # Capture report_units output into a Tcl variable
 set _ru ""
@@ -478,8 +478,8 @@ set period_ns [expr 1000.0 / double($CLOCK_FREQ)]  ;# ns
 
 # Convert ns to library time units for all time-based constraints
 set target_period      [expr $period_ns * $NS_TO_LIB]
-set target_uncertainty [expr $target_period * 0.10]  ;# 10%
-set target_io_delay    [expr $target_period * 0.15]  ;# 15%
+set target_uncertainty [expr $target_period * 0.01]  ;# 1%
+set target_io_delay    [expr $target_period * 0.001]  ;# 0.1%
 
 puts "----------------------------------------------------------------"
 puts "INFO: Target Frequency     : $CLOCK_FREQ MHz"
@@ -526,8 +526,9 @@ if {[sizeof_collection $unmapped_cells] > 0} {
 # ---------------- reports ----------------
 report_qor                                      > [file join $RPT_DIR "qor.rpt"]
 report_area -hier -nosplit                      > [file join $RPT_DIR "area.rpt"]
-report_timing -delay_type max -path_type full_clock -max_paths 50  > [file join $RPT_DIR "timing_max.rpt"]
-report_timing -delay_type min -path_type full_clock -max_paths 50  > [file join $RPT_DIR "timing_min.rpt"]
+report_timing -delay_type max -path_type full_clock -max_paths 50 -nets -transition_time -capacitance > [file join $RPT_DIR "timing_max.rpt"]
+report_timing -delay_type min -path_type full_clock -max_paths 50 -nets -transition_time -capacitance > [file join $RPT_DIR "timing_min.rpt"]
+report_clock -skew
 report_power                                    > [file join $RPT_DIR "power_vectorless.rpt"]
 report_constraints -all_violators               > [file join $RPT_DIR "constraints_violators.rpt"]
 
