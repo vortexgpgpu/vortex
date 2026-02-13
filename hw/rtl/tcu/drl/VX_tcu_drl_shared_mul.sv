@@ -52,12 +52,9 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
     // 1. TF32 Preparation (1 op every even TCK slice)
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_tf32
         if ((i % 2) == 0) begin : g_even_lane
-            fedp_class_t ca = cls_tf32[0][i/2];
-            fedp_class_t cb = cls_tf32[1][i/2];
-            `UNUSED_VAR ({ca, cb})
             assign sign_tf32[i]  = a_row[i/2][18] ^ b_col[i/2][18];
-            assign man_a_tf32[i] = ca.is_zero ? 11'd0 : { !ca.is_sub, a_row[i/2][9:0] };
-            assign man_b_tf32[i] = cb.is_zero ? 11'd0 : { !cb.is_sub, b_col[i/2][9:0] };
+            assign man_a_tf32[i] = cls_tf32[0][i/2].is_zero ? 11'd0 : { !cls_tf32[0][i/2].is_sub, a_row[i/2][9:0] };
+            assign man_b_tf32[i] = cls_tf32[1][i/2].is_zero ? 11'd0 : { !cls_tf32[1][i/2].is_sub, b_col[i/2][9:0] };
         end else begin : g_odd_lane
             assign sign_tf32[i] = 1'b0;
             assign man_a_tf32[i] = 11'd0;
@@ -66,73 +63,54 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
     end
     `UNUSED_VAR ({sign_tf32, man_a_tf32, man_b_tf32})
 
-    // 2. FP16 Preparation (1 op per TCK slice)
-    for (genvar i = 0; i < TCK; ++i) begin : g_prep_fp16
-        fedp_class_t ca = cls_fp16[0][i];
-        fedp_class_t cb = cls_fp16[1][i];
+    // 2. FP16/BF16 Preparation (1 op per TCK slice)
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_f16
         wire [15:0] va = i[0] ? a_row[i/2][31:16] : a_row[i/2][15:0];
         wire [15:0] vb = i[0] ? b_col[i/2][31:16] : b_col[i/2][15:0];
-        `UNUSED_VAR ({ca, cb, va, vb})
+        `UNUSED_VAR ({va, vb})
+        // FP16
         assign sign_fp16[i]  = va[15] ^ vb[15];
-        assign man_a_fp16[i] = ca.is_zero ? 11'd0 : { !ca.is_sub, va[9:0] };
-        assign man_b_fp16[i] = cb.is_zero ? 11'd0 : { !cb.is_sub, vb[9:0] };
-    end
-
-    // 3. BF16 Preparation (1 op per TCK slice)
-    for (genvar i = 0; i < TCK; ++i) begin : g_prep_bf16
-        fedp_class_t ca = cls_bf16[0][i];
-        fedp_class_t cb = cls_bf16[1][i];
-        wire [15:0] va = i[0] ? a_row[i/2][31:16] : a_row[i/2][15:0];
-        wire [15:0] vb = i[0] ? b_col[i/2][31:16] : b_col[i/2][15:0];
-        `UNUSED_VAR ({ca, cb, va, vb})
+        assign man_a_fp16[i] = cls_fp16[0][i].is_zero ? 11'd0 : { !cls_fp16[0][i].is_sub, va[9:0] };
+        assign man_b_fp16[i] = cls_fp16[1][i].is_zero ? 11'd0 : { !cls_fp16[1][i].is_sub, vb[9:0] };
+        // BF16
         assign sign_bf16[i]  = va[15] ^ vb[15];
-        assign man_a_bf16[i] = ca.is_zero ? 11'd0 : { 3'd0, !ca.is_sub, va[6:0] };
-        assign man_b_bf16[i] = cb.is_zero ? 11'd0 : { 3'd0, !cb.is_sub, vb[6:0] };
+        assign man_a_bf16[i] = cls_bf16[0][i].is_zero ? 11'd0 : { 3'd0, !cls_bf16[0][i].is_sub, va[6:0] };
+        assign man_b_bf16[i] = cls_bf16[1][i].is_zero ? 11'd0 : { 3'd0, !cls_bf16[1][i].is_sub, vb[6:0] };
     end
 
-    // 4. FP8 / BF8 Preparation (2 ops per TCK slice)
+    // 3. FP8 / BF8 Preparation (2 ops per TCK slice)
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_f8
         for (genvar j = 0; j < 2; ++j) begin : g_sub
             localparam idx = i * 2 + j;
             wire [7:0] va = a_row[i/2][(i%2)*16 + j*8 +: 8];
             wire [7:0] vb = b_col[i/2][(i%2)*16 + j*8 +: 8];
-
+            `UNUSED_VAR({va, vb})
             // FP8 (E4M3)
-            fedp_class_t ca_fp8 = cls_fp8[0][idx];
-            fedp_class_t cb_fp8 = cls_fp8[1][idx];
             assign sign_fp8[i][j]  = va[7] ^ vb[7];
-            assign man_a_fp8[i][j] = ca_fp8.is_zero ? 4'd0 : {!ca_fp8.is_sub, va[2:0]};
-            assign man_b_fp8[i][j] = cb_fp8.is_zero ? 4'd0 : {!cb_fp8.is_sub, vb[2:0]};
-
+            assign man_a_fp8[i][j] = cls_fp8[0][idx].is_zero ? 4'd0 : {!cls_fp8[0][idx].is_sub, va[2:0]};
+            assign man_b_fp8[i][j] = cls_fp8[1][idx].is_zero ? 4'd0 : {!cls_fp8[1][idx].is_sub, vb[2:0]};
             // BF8 (E5M2)
-            fedp_class_t ca_bf8 = cls_bf8[0][idx];
-            fedp_class_t cb_bf8 = cls_bf8[1][idx];
             assign sign_bf8[i][j]  = va[7] ^ vb[7];
-            assign man_a_bf8[i][j] = ca_bf8.is_zero ? 4'd0 : {1'b0, !ca_bf8.is_sub, va[1:0]};
-            assign man_b_bf8[i][j] = cb_bf8.is_zero ? 4'd0 : {1'b0, !cb_bf8.is_sub, vb[1:0]};
-            `UNUSED_VAR({ca_fp8, cb_fp8, ca_bf8, cb_bf8, va, vb})
+            assign man_a_bf8[i][j] = cls_bf8[0][idx].is_zero ? 4'd0 : {1'b0, !cls_bf8[0][idx].is_sub, va[1:0]};
+            assign man_b_bf8[i][j] = cls_bf8[1][idx].is_zero ? 4'd0 : {1'b0, !cls_bf8[1][idx].is_sub, vb[1:0]};
         end
     end
 
-    // 5. Int8 Preparation (2 ops per TCK slice)
-    for (genvar i = 0; i < TCK; ++i) begin : g_prep_i8
-        for (genvar j = 0; j < 2; ++j) begin : g_sub
+    // 4. Integer Preparation (2 ops per TCK slice)
+    for (genvar i = 0; i < TCK; ++i) begin : g_prep_int
+        for (genvar j = 0; j < 2; ++j) begin : g_i8
             assign raw_a_i8[i][j] = a_row[i/2][(i%2)*16 + j*8 +: 8];
             assign raw_b_i8[i][j] = b_col[i/2][(i%2)*16 + j*8 +: 8];
         end
-    end
-
-    // 6. Int4 Preparation (4 ops per TCK slice)
-    for (genvar i = 0; i < TCK; ++i) begin : g_prep_i4
-        for (genvar j = 0; j < 4; ++j) begin : g_sub
+        for (genvar j = 0; j < 4; ++j) begin : g_i4
             assign raw_a_i4[i][j] = a_row[i/2][(i%2)*16 + j*4 +: 4];
             assign raw_b_i4[i][j] = b_col[i/2][(i%2)*16 + j*4 +: 4];
         end
     end
 
-    // 7. Multiply, Align & Merge
+    // 5. Multiply, Align & Merge
     for (genvar i = 0; i < TCK; ++i) begin : g_mul
-        // 7.1 Shared TF32/FP16/BF16 Multiplier
+        // 5.1 Shared TF32/FP16/BF16 Multiplier
         logic [10:0] man_a_f16, man_b_f16;
         logic        sign_f16;
         wire [21:0]  y_raw_f16;
@@ -157,7 +135,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             .p(y_raw_f16)
         );
 
-        // 7.2 Shared FP8/BF8 Multiplier
+        // 5.2 Shared FP8/BF8 Multiplier
         wire [1:0][7:0] y_raw_f8;
         wire [1:0]      sign_f8;
 
@@ -203,7 +181,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         wire [23:0] y_f8_add = adder_result[23:0];
         wire sign_f8_add = mag_0_is_larger ? sign_f8[0] : sign_f8[1];
 
-        // 7.3 Shared I8/U8 Multiplier
+        // 5.3 Shared I8/U8 Multiplier
         wire signed [16:0] y_prod_i8 [2];
         for (genvar j = 0; j < 2; ++j) begin : g_i8
             wire signed [8:0] s_a = fmt_is_signed_int ? $signed({raw_a_i8[i][j][7], raw_a_i8[i][j]}) : $signed({1'b0, raw_a_i8[i][j]});
@@ -225,7 +203,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             `UNUSED_PIN(cout)
         );
 
-        // 7.4 Shared I4/U4 Multiplier
+        // 5.4 Shared I4/U4 Multiplier
         wire signed [3:0][9:0] y_prod_i4;
         for (genvar j = 0; j < 4; ++j) begin : g_i4
             wire signed [4:0] s_a = fmt_is_signed_int ? $signed({raw_a_i4[i][j][3], raw_a_i4[i][j]}) : $signed({1'b0, raw_a_i4[i][j]});
@@ -270,7 +248,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         `UNUSED_VAR ({sign_f8_add, y_f8_add, y_i8_add_res, y_i4_add_res})
     end
 
-    // 8. C-Term Processing
+    // 6. C-Term Processing
     `UNUSED_VAR ({c_val[30:25], cls_c})
     assign y[TCK] = fmt_s[3] ? c_val[24:0] : {c_val[31], 1'b1, c_val[22:0]};
 

@@ -26,7 +26,7 @@ module VX_wallace_mul #(
 
     for (genvar g = 0; g < N; g++) begin: g_pp_loop
         for (genvar h = 0; h < N; h++) begin: g_and_loop
-            and a(pp[g][h+g], a[h], b[g]);
+            assign pp[g][h+g] = a[h] & b[g];
         end
         if (g != 0) begin : g_bit_fill
             assign pp[g][g-1:0] = {g{1'b0}};    //fill lower bits with zeros

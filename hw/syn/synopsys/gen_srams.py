@@ -212,11 +212,6 @@ module VX_dp_ram_asic #(
         end""")
 
         f.write("""
-        else begin
-            initial begin
-                $error("No suitable Dual Port SRAM found for W=%d D=%d", DATAW, SIZE);
-            end
-        end
     endgenerate
 endmodule
 """)
