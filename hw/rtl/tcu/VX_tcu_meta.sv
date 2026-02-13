@@ -36,10 +36,15 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam DEPTH = TCU_M_STEPS * HALF_K_STEPS;
     localparam ADDRW = `CLOG2(DEPTH);
     localparam M_STEP_BITS = `CLOG2(TCU_M_STEPS);   // Bits needed for step_m index
-    localparam K_STEP_BITS = `CLOG2(HALF_K_STEPS);  // Bits needed for step_k index (sparse)
+    localparam K_STEP_BITS = (HALF_K_STEPS > 1) ? `CLOG2(HALF_K_STEPS) : 0;
 
-    // Read address: {step_m, step_k}
-    wire [ADDRW-1:0] read_addr = {step_m[M_STEP_BITS-1:0], step_k[K_STEP_BITS-1:0]};
+    // Read address: {step_m, step_k} — step_k omitted when K_STEP_BITS=0 (B_SPLIT)
+    wire [ADDRW-1:0] read_addr;
+    if (K_STEP_BITS > 0) begin : g_addr_mk
+        assign read_addr = {step_m[M_STEP_BITS-1:0], step_k[K_STEP_BITS-1:0]};
+    end else begin : g_addr_m
+        assign read_addr = step_m[M_STEP_BITS-1:0];
+    end
 
     // Post-reset init: even addr → 0101, odd addr → 1010
     reg [ADDRW:0] init_counter;

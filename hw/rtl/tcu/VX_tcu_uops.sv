@@ -35,7 +35,7 @@ module VX_tcu_uops import
 
     localparam LG_A_SB    = $clog2(TCU_A_SUB_BLOCKS);
     localparam LG_B_SB    = $clog2(TCU_B_SUB_BLOCKS);
-    localparam LG_B_SB_SP = $clog2(TCU_B_SUB_BLOCKS_SP);
+    localparam LG_B_SB_SP = TCU_B_SPLIT ? 0 : $clog2(TCU_B_SUB_BLOCKS_SP);
 
     wire is_sparse_in = (ibuf_in.op_type == INST_TCU_WMMA_SP);
     reg  is_sparse;
@@ -47,31 +47,43 @@ module VX_tcu_uops import
     logic [`UP(LG_M)-1:0] m_index;
     logic [`UP(LG_K)-1:0] k_index;
 
-    if (LG_N != 0) begin : g_n_idx
-        assign n_index = counter[0 +: LG_N];
-    end else begin : g_n_idx0
-        assign n_index = 0;
-    end
+    if (TCU_B_SPLIT) begin : g_idx_bsplit
+        // B_SPLIT: when sparse, k iterates fastest so Phase1/Phase2 are consecutive
+        // when dense, use original order (n fastest)
+        assign k_index = is_sparse ? counter[0 +: LG_K] : counter[LG_N + LG_M +: LG_K];
+        assign n_index = is_sparse ? counter[LG_K +: LG_N] : counter[0 +: LG_N];
+        assign m_index = is_sparse ? counter[LG_K + LG_N +: LG_M] : counter[LG_N +: LG_M];
+    end else begin : g_idx_normal
+        if (LG_N != 0) begin : g_n_idx
+            assign n_index = counter[0 +: LG_N];
+        end else begin : g_n_idx0
+            assign n_index = 0;
+        end
 
-    if (LG_M != 0) begin : g_m_idx
-        assign m_index = counter[LG_N +: LG_M];
-    end else begin : g_m_idx0
-        assign m_index = 0;
-    end
+        if (LG_M != 0) begin : g_m_idx
+            assign m_index = counter[LG_N +: LG_M];
+        end else begin : g_m_idx0
+            assign m_index = 0;
+        end
 
-    if (LG_K != 0) begin : g_k_idx
-        assign k_index = counter[LG_N + LG_M +: LG_K];
-    end else begin : g_k_idx0
-        assign k_index = 0;
+        if (LG_K != 0) begin : g_k_idx
+            assign k_index = counter[LG_N + LG_M +: LG_K];
+        end else begin : g_k_idx0
+            assign k_index = 0;
+        end
     end
 
     // Register offsets — dense vs sparse formulas
     wire [CTR_W-1:0] rs1_offset = is_sparse
-        ? ((CTR_W'(m_index) >> LG_A_SB) << (LG_K/2)) | CTR_W'(k_index)
-        : ((CTR_W'(m_index) >> LG_A_SB) << LG_K)     | CTR_W'(k_index);
+        ? (TCU_B_SPLIT
+            ? (CTR_W'(m_index) >> LG_A_SB)
+            : ((CTR_W'(m_index) >> LG_A_SB) << (LG_K/2)) | CTR_W'(k_index))
+        : ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
 
     wire [CTR_W-1:0] rs2_offset = is_sparse
-        ? ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB_SP
+        ? (TCU_B_SPLIT
+            ? ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB
+            : ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB_SP)
         : ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
 
     wire [CTR_W-1:0] rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
@@ -126,10 +138,12 @@ module VX_tcu_uops import
                 counter   <= 0;
                 busy      <= 1;
                 is_sparse <= is_sparse_in;
-                done <= is_sparse_in ? (TCU_UOPS/2 == 1) : (TCU_UOPS == 1);
+                done <= (is_sparse_in && !TCU_B_SPLIT)
+                    ? (TCU_UOPS/2 == 1)
+                    : (TCU_UOPS == 1);
             end else if (busy && next) begin
                 counter <= counter + ((TCU_UOPS > 1) ? 1 : 0);
-                done <= is_sparse
+                done <= (is_sparse && !TCU_B_SPLIT)
                     ? (counter == CTR_W'((TCU_UOPS/2)-2))
                     : (counter == CTR_W'(TCU_UOPS-2));
                 busy <= ~done;

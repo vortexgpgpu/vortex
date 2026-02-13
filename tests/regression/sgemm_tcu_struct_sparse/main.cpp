@@ -668,8 +668,15 @@ static void prune_fixed_mask(itype_t *A, uint32_t M, uint32_t K) {
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t k1 = 0; k1 < (KS / 4); ++k1) {
       uint32_t k_start = k1 * 4;
-      uint32_t pos_in_tile = k_start % tile_k_elem;
-      uint8_t meta_mask = (pos_in_tile < half_tile) ? 0b0101 : 0b1010;
+      uint8_t meta_mask;
+      if constexpr (cfg::b_split) {
+        // B_SPLIT: metadata addresses by step_m (alternating by row group)
+        uint32_t step_m = (m % cfg::tileM) / cfg::tcM;
+        meta_mask = (step_m & 1) ? 0b1010 : 0b0101;
+      } else {
+        uint32_t pos_in_tile = k_start % tile_k_elem;
+        meta_mask = (pos_in_tile < half_tile) ? 0b0101 : 0b1010;
+      }
       for (uint32_t k2 = 0; k2 < 4; ++k2) {
         if (!(meta_mask & (1 << k2))) {
           data_accessor_t<vt::ITYPE>::write(A, m * KS + k_start + k2, 0);
@@ -692,8 +699,14 @@ static void compress_fixed_mask(itype_t *compressed, const itype_t *pruned_A,
     uint32_t a_out = 0;
     for (uint32_t k1 = 0; k1 < (KS / 4); ++k1) {
       uint32_t k_start = k1 * 4;
-      uint32_t pos_in_tile = k_start % tile_k_elem;
-      uint8_t meta_mask = (pos_in_tile < half_tile) ? 0b0101 : 0b1010;
+      uint8_t meta_mask;
+      if constexpr (cfg::b_split) {
+        uint32_t step_m = (m % cfg::tileM) / cfg::tcM;
+        meta_mask = (step_m & 1) ? 0b1010 : 0b0101;
+      } else {
+        uint32_t pos_in_tile = k_start % tile_k_elem;
+        meta_mask = (pos_in_tile < half_tile) ? 0b0101 : 0b1010;
+      }
       for (uint32_t k2 = 0; k2 < 4; ++k2) {
         if (meta_mask & (1 << k2)) {
           auto val = data_accessor_t<vt::ITYPE>::read(pruned_A, m * KS + k_start + k2);
