@@ -204,20 +204,31 @@ if {$LIB_TGT_HINT ne ""} {
 } else {
   if {$LIB_ROOT eq ""} { DIE "Set LIB_ROOT or LIB_TGT in environment" }
   if {![file exists $LIB_ROOT]} { DIE "LIB_ROOT does not exist: $LIB_ROOT" }
+
   set dbs [find_files $LIB_ROOT {*.db *.DB}]
-  if {[llength $dbs]==0} { DIE "No .db files found under $LIB_ROOT" }
+  if {[llength $dbs] == 0} { DIE "No .db files found under $LIB_ROOT" }
+
   set std_dbs [filter_stdcell $dbs]
-  if {[llength $std_dbs]==0} {
-    WARN "No std-cell-looking .db found; using all .db"
-    set std_dbs $dbs
+  if {[llength $std_dbs] == 0} { set std_dbs $dbs }
+
+  # We must use ALL files that match the target corner (TT)
+  # instead of picking just one.
+  set target_db [list]
+  foreach f $std_dbs {
+    # Check if file is typical corner (TT)
+    if {[classify_corner $f] eq "TT"} {
+       lappend target_db $f
+    }
   }
-  set target_db [pick_tt_target $std_dbs]
-  if {$target_db eq ""} {
-    WARN "No TT .db detected; falling back to first .db"
-    set target_db [lindex $std_dbs 0]
+
+  # Failsafe: if no TT found, grab everything standard cell related
+  if {[llength $target_db] == 0} {
+     puts "WARN: No TT corner files found. Using all detected DBs as target."
+     set target_db $std_dbs
   }
-  set link_dbs [list $target_db]
-  foreach f $std_dbs { if {$f ne $target_db} { lappend link_dbs $f } }
+
+  # Link DBs matches Target DBs for std cells
+  set link_dbs $target_db
 }
 
 set use_mem_libs 0
@@ -421,13 +432,36 @@ if {$use_mem_libs} {
 }
 
 # ---------------- Pre-Compile Checks ----------------
+
 check_design > [file join $RPT_DIR "check_design.rpt"]
 
 # Optional: multi-core
 catch { set_host_options -max_cores [getenv DC_CORES 8] }
 
+# ------------------- Clock Setup --------------------
+
+set NS 1.0
+if {[catch {set_units -time ns -resistance kOhm -capacitance pF -voltage V -current mA}]} {
+  WARN "Library locked to Picoseconds. Scaling constraints by 1000."
+  set NS 1000.0
+}
+
+set CLOCK_FREQ [getenv CLOCK 800]
+set period_ns [expr 1000.0 / $CLOCK_FREQ]
+set target_period [expr $period_ns * $NS]
+set target_uncertainty [expr $target_period * 0.10] ;# 10% Jitter/Skew margin
+set target_io_delay    [expr $target_period * 0.15] ;# 15% External I/O Delay
+
+puts "----------------------------------------------------------------"
+puts "INFO: Target Frequency : $CLOCK_FREQ MHz"
+puts "INFO: Library Scaling  : x$NS"
+puts "INFO: Clock Period     : $target_period"
+puts "INFO: Clock Uncertainty: $target_uncertainty"
+puts "INFO: I/O Delay        : $target_io_delay"
+puts "----------------------------------------------------------------"
+
 # ---------------- constraints ----------------
-set_units -time ns -resistance kOhm -capacitance pF -voltage V -current mA
+
 if {$SDC_FILE ne "" && [file exists $SDC_FILE]} {
   puts "INFO: Loading SDC: $SDC_FILE"
   source $SDC_FILE
@@ -452,6 +486,11 @@ catch { set power_enable_analysis true }
 # ---------------- compile ----------------
 if {[catch {compile_ultra -retime} compile_err]} {
   DIE "Synthesis (compile_ultra) Failed: $compile_err"
+}
+# If OPT-101 occurs, DC leaves generic "GTECH" cells. We must catch this.
+set unmapped_cells [get_cells -hierarchical -filter "ref_name =~ *GTECH*"]
+if {[sizeof_collection $unmapped_cells] > 0} {
+  DIE "FATAL: Synthesis incomplete. Found [sizeof_collection $unmapped_cells] unmapped GTECH cells."
 }
 
 # ---------------- reports ----------------
