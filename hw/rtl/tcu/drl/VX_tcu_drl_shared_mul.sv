@@ -182,9 +182,9 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         wire [22:0] aligned_sig_low  = exp_diff_f8[i][5] ? {y_f8_low, 15'd0} : {y_f8_low, 15'd0} >> exp_diff_f8[i][4:0];
         wire [22:0] aligned_sig_high = exp_diff_f8[i][5] ? {y_f8_high, 15'd0} >> exp_diff_f8[i][4:0] : {y_f8_high, 15'd0};
         // -- Determine which operand is larger
-        wire mag_0_is_larger = (mag_0 > mag_1);
         wire [23:0] mag_0 = {1'b0, aligned_sig_low};
         wire [23:0] mag_1 = {1'b0, aligned_sig_high};
+        wire mag_0_is_larger = (mag_0 > mag_1);
         wire [23:0] op_a = mag_0_is_larger ? mag_0 : mag_1;
         wire [23:0] op_b = mag_0_is_larger ? mag_1 : mag_0;
         // -- Absolute value adder
