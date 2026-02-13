@@ -43,6 +43,12 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
     wire [TCK-1:0][10:0] man_a_tf32, man_b_tf32, man_a_fp16, man_b_fp16, man_a_bf16, man_b_bf16;
     wire [TCK-1:0]       sign_tf32, sign_fp16, sign_bf16;
 
+    wire [TCK-1:0][1:0][3:0] man_a_fp8, man_b_fp8, man_a_bf8, man_b_bf8;
+    wire [TCK-1:0][1:0]      sign_fp8, sign_bf8;
+
+    wire [TCK-1:0][1:0][7:0] raw_a_i8, raw_b_i8;
+    wire [TCK-1:0][3:0][3:0] raw_a_i4, raw_b_i4;
+
     // 1. TF32 Preparation (1 op every even TCK slice)
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_tf32
         if ((i % 2) == 0) begin : g_even_lane
@@ -85,69 +91,48 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
     end
 
     // 4. FP8 / BF8 Preparation (2 ops per TCK slice)
-    wire [TCK-1:0][1:0][3:0] man_a_fp8, man_b_fp8, man_a_bf8, man_b_bf8;
-    wire [TCK-1:0][1:0]      sign_fp8, sign_bf8;
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_f8
         for (genvar j = 0; j < 2; ++j) begin : g_sub
-            // Global index for class array
             localparam idx = i * 2 + j;
-            // Byte access within 32-bit words
             wire [7:0] va = a_row[i/2][(i%2)*16 + j*8 +: 8];
             wire [7:0] vb = b_col[i/2][(i%2)*16 + j*8 +: 8];
 
-            // FP8 (E4M3): Sign[7], Exp[6:3] (4 bits), Man[2:0] (3 bits)
-            // Extracted mantissa {1.mmm} -> 4 bits
+            // FP8 (E4M3)
             fedp_class_t ca_fp8 = cls_fp8[0][idx];
             fedp_class_t cb_fp8 = cls_fp8[1][idx];
             assign sign_fp8[i][j]  = va[7] ^ vb[7];
             assign man_a_fp8[i][j] = ca_fp8.is_zero ? 4'd0 : {!ca_fp8.is_sub, va[2:0]};
             assign man_b_fp8[i][j] = cb_fp8.is_zero ? 4'd0 : {!cb_fp8.is_sub, vb[2:0]};
 
-            // BF8 (E5M2): Sign[7], Exp[6:2] (5 bits), Man[1:0] (2 bits)
-            // Extracted mantissa {1.mm} -> 3 bits, padded to 4
+            // BF8 (E5M2)
             fedp_class_t ca_bf8 = cls_bf8[0][idx];
             fedp_class_t cb_bf8 = cls_bf8[1][idx];
             assign sign_bf8[i][j]  = va[7] ^ vb[7];
             assign man_a_bf8[i][j] = ca_bf8.is_zero ? 4'd0 : {1'b0, !ca_bf8.is_sub, va[1:0]};
             assign man_b_bf8[i][j] = cb_bf8.is_zero ? 4'd0 : {1'b0, !cb_bf8.is_sub, vb[1:0]};
-
             `UNUSED_VAR({ca_fp8, cb_fp8, ca_bf8, cb_bf8, va, vb})
         end
     end
 
     // 5. Int8 Preparation (2 ops per TCK slice)
-    wire [TCK-1:0][1:0][7:0] man_a_i8, man_b_i8;
-    wire [TCK-1:0][1:0]      sign_i8;
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_i8
         for (genvar j = 0; j < 2; ++j) begin : g_sub
-            wire [7:0] va = a_row[i/2][(i%2)*16 + j*8 +: 8];
-            wire [7:0] vb = b_col[i/2][(i%2)*16 + j*8 +: 8];
-            wire [7:0] abs_a = fmt_is_signed_int ? (va[7] ? -va : va) : va;
-            wire [7:0] abs_b = fmt_is_signed_int ? (vb[7] ? -vb : vb) : vb;
-            assign man_a_i8[i][j] = abs_a;
-            assign man_b_i8[i][j] = abs_b;
-            assign sign_i8[i][j]  = fmt_is_signed_int && (va[7] ^ vb[7]);
+            assign raw_a_i8[i][j] = a_row[i/2][(i%2)*16 + j*8 +: 8];
+            assign raw_b_i8[i][j] = b_col[i/2][(i%2)*16 + j*8 +: 8];
         end
     end
 
     // 6. Int4 Preparation (4 ops per TCK slice)
-    wire [TCK-1:0][3:0][3:0] man_a_i4, man_b_i4;
-    wire [TCK-1:0][3:0]      sign_i4;
     for (genvar i = 0; i < TCK; ++i) begin : g_prep_i4
         for (genvar j = 0; j < 4; ++j) begin : g_sub
-            wire [3:0] va = a_row[i/2][(i%2)*16 + j*4 +: 4];
-            wire [3:0] vb = b_col[i/2][(i%2)*16 + j*4 +: 4];
-            wire [3:0] abs_a = fmt_is_signed_int ? (va[3] ? -va : va) : va;
-            wire [3:0] abs_b = fmt_is_signed_int ? (vb[3] ? -vb : vb) : vb;
-            assign man_a_i4[i][j] = abs_a;
-            assign man_b_i4[i][j] = abs_b;
-            assign sign_i4[i][j]  = fmt_is_signed_int && (va[3] ^ vb[3]);
+            assign raw_a_i4[i][j] = a_row[i/2][(i%2)*16 + j*4 +: 4];
+            assign raw_b_i4[i][j] = b_col[i/2][(i%2)*16 + j*4 +: 4];
         end
     end
 
     // 7. Multiply, Align & Merge
     for (genvar i = 0; i < TCK; ++i) begin : g_mul
-        // Shared TF32/FP16/BF16 Multiplier
+        // 7.1 Shared TF32/FP16/BF16 Multiplier
         logic [10:0] man_a_f16, man_b_f16;
         logic        sign_f16;
         wire [21:0]  y_raw_f16;
@@ -172,7 +157,7 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             .p(y_raw_f16)
         );
 
-        // Shared FP8/BF8 Multiplier
+        // 7.2 Shared FP8/BF8 Multiplier
         wire [1:0][7:0] y_raw_f8;
         wire [1:0]      sign_f8;
 
@@ -218,20 +203,14 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
         wire [23:0] y_f8_add = adder_result[23:0];
         wire sign_f8_add = mag_0_is_larger ? sign_f8[0] : sign_f8[1];
 
-        // Shared I8/U8 Multiplier
-        wire [1:0][16:0] y_prod_i8;
+        // 7.3 Shared I8/U8 Multiplier
+        wire signed [16:0] y_prod_i8 [2];
         for (genvar j = 0; j < 2; ++j) begin : g_i8
-            wire [15:0] prod;
-            VX_wallace_mul #(
-                .N (8),
-                .CPA_KS (!`FORCE_BUILTIN_ADDER(8*2))
-            ) wtmul_i8 (
-                .a(man_a_i8[i][j]),
-                .b(man_b_i8[i][j]),
-                .p(prod)
-            );
-            wire [15:0] prod_abs = sign_i8[i][j] ? -prod : prod;
-            assign y_prod_i8[j] = fmt_is_signed_int ? {prod_abs[15], prod_abs} : {1'b0, prod};
+            wire signed [8:0] s_a = fmt_is_signed_int ? $signed({raw_a_i8[i][j][7], raw_a_i8[i][j]}) : $signed({1'b0, raw_a_i8[i][j]});
+            wire signed [8:0] s_b = fmt_is_signed_int ? $signed({raw_b_i8[i][j][7], raw_b_i8[i][j]}) : $signed({1'b0, raw_b_i8[i][j]});
+            wire signed [17:0] prod_full = s_a * s_b;
+            `UNUSED_VAR (prod_full)
+            assign y_prod_i8[j] = prod_full[16:0];
         end
 
         wire [16:0] y_i8_add_res;
@@ -246,20 +225,14 @@ module VX_tcu_drl_shared_mul import VX_tcu_pkg::*; #(
             `UNUSED_PIN(cout)
         );
 
-        // Shared I4/U4 Multiplier
-        wire [3:0][9:0] y_prod_i4;
+        // 7.4 Shared I4/U4 Multiplier
+        wire signed [3:0][9:0] y_prod_i4;
         for (genvar j = 0; j < 4; ++j) begin : g_i4
-            wire [7:0] prod;
-            VX_wallace_mul #(
-                .N (4),
-                .CPA_KS (!`FORCE_BUILTIN_ADDER(4*2))
-            ) wtmul_i4 (
-                .a(man_a_i4[i][j]),
-                .b(man_b_i4[i][j]),
-                .p(prod)
-            );
-            wire [7:0] prod_abs = sign_i4[i][j] ? -prod : prod;
-            assign y_prod_i4[j] = fmt_is_signed_int ? {{2{prod_abs[7]}}, prod_abs} : {2'd0, prod};
+            wire signed [4:0] s_a = fmt_is_signed_int ? $signed({raw_a_i4[i][j][3], raw_a_i4[i][j]}) : $signed({1'b0, raw_a_i4[i][j]});
+            wire signed [4:0] s_b = fmt_is_signed_int ? $signed({raw_b_i4[i][j][3], raw_b_i4[i][j]}) : $signed({1'b0, raw_b_i4[i][j]});
+            wire signed [9:0] prod_full = s_a * s_b;
+            `UNUSED_VAR (prod_full)
+            assign y_prod_i4[j] = prod_full;
         end
 
         wire [9:0] y_i4_add_res;
