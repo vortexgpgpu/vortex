@@ -56,6 +56,32 @@ RTL_INCLUDE += $(FPU_INCLUDE)
 
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
 
+# Add TCU extension sources
+ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+	ifneq (,$(filter -DTCU_TYPE_DPI, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
+	endif
+	ifneq (,$(filter -DTCU_TYPE_DSP, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
+	endif
+	ifneq (,$(filter -DTCU_TYPE_BHF, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
+	endif
+	ifneq (,$(filter -DTCU_TYPE_DRL, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
+	endif
+endif
+
+# Add V extension sources
+ifneq (,$(filter -DEXT_V_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/vpu
+endif
+
 # Debugging
 ifdef DEBUG
 	CFLAGS += $(DBG_TRACE_FLAGS)

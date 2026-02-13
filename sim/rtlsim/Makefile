@@ -40,39 +40,30 @@ ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 
-# Add V extension sources
-ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/vpu
-endif
-
 # Add TCU extension sources
-ifneq (,$(filter -DEXT_TCU_ENABLE,$(XCONFIGS)))
+ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
+	ifneq (,$(filter -DTCU_TYPE_DPI, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 	endif
-	ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
+	ifneq (,$(filter -DTCU_TYPE_DSP, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 	endif
-	ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
-	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
-	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
-	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
-	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
-	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
-	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_primitives.v
-	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_rawFN.v
-	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/isSigNaNRecFN.v
-	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/mulRecFN.v
-	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
-	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
+	ifneq (,$(filter -DTCU_TYPE_BHF, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 	endif
-	ifneq (,$(filter -DTCU_TYPE_DRL, $(XCONFIGS)))
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
+	ifneq (,$(filter -DTCU_TYPE_DRL, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
 	endif
+endif
+
+# Add V extension sources
+ifneq (,$(filter -DEXT_V_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
 
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
