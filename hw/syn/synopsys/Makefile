@@ -17,7 +17,7 @@ PREFIX ?= build
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 
-SDC_FILE := $(SRC_DIR)/project_400.sdc
+SDC_FILE := $(SRC_DIR)/project_800.sdc
 WALL_IGNORE := "*/stream_omega_net.sv,*/fpnew_pkg.sv"
 
 CP = cp -rf
