@@ -9,6 +9,7 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
+  auto pCycles = reinterpret_cast<uint64_t *>(arg->cycles_addr);
 
   uint32_t M = arg->M;
   uint32_t N = arg->N;
@@ -24,6 +25,8 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
 
   // Initialize accumulator tile to zero
   ctx::fill_fragment(fragC, 0);
+
+  uint64_t mma_cycles = 0;
 
   for (int i = 0; i < K; i += ctx::tileK) {
     auto pTileA = pA + tile_row * K + i;
@@ -42,7 +45,16 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     }
 
     // Matrix multiply-accumulate: c += a * b
+    uint64_t mma_start = vx_cycle_count();
     ctx::mma_sync(fragC, fragA, fragB, fragC);
+    // Serialize end timestamp against MMA result availability via an FPR dependency.
+    uint64_t mma_end = vx_cycle_count_fdep(fragC.data[0]);
+    mma_cycles += (mma_end - mma_start);
+  }
+
+  if (threadIdx.x == 0) {
+    uint32_t tile_id = blockIdx.y * arg->grid_dim[0] + blockIdx.x;
+    pCycles[tile_id] = mma_cycles;
   }
 
   // Store the computed C tile

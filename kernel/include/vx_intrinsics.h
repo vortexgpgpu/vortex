@@ -223,6 +223,29 @@ inline __attribute__((const)) int vx_hart_id() {
     return ret;
 }
 
+// Return current cycle counter
+inline uint64_t vx_cycle_count() {
+#ifdef XLEN_64
+    return csr_read(VX_CSR_MCYCLE);
+#else
+    uint32_t hi0, lo, hi1;
+    do {
+        hi0 = csr_read(VX_CSR_MCYCLE_H);
+        lo  = csr_read(VX_CSR_MCYCLE);
+        hi1 = csr_read(VX_CSR_MCYCLE_H);
+    } while (hi0 != hi1);
+    return (((uint64_t)hi0) << 32) | lo;
+#endif
+}
+
+// Return current cycle counter with a dependency on a floating-point source value.
+inline uint64_t vx_cycle_count_fdep(float dep_src) {
+    size_t dep_gpr;
+    __asm__ __volatile__ ("fmv.x.w %0, %1" : "=r" (dep_gpr) : "f" (dep_src) : "memory");
+    __asm__ __volatile__ ("" : "+r" (dep_gpr) :: "memory");
+    return vx_cycle_count();
+}
+
 // Memory fence
 inline void vx_fence() {
     __asm__ volatile ("fence iorw, iorw");
