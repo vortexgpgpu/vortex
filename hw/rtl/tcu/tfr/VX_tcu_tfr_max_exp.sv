@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
+module VX_tcu_tfr_max_exp import VX_tcu_pkg::*; #(
     parameter N     = 5,
     parameter WIDTH = 8
 ) (

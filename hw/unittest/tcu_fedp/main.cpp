@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#if defined(TCU_TYPE_DRL)
-#include "VVX_tcu_fedp_drl.h"
-#define MODULE VVX_tcu_fedp_drl
+#if defined(TCU_TYPE_TFR)
+#include "VVX_tcu_fedp_tfr.h"
+#define MODULE VVX_tcu_fedp_tfr
 #elif defined(TCU_TYPE_BHF)
 #include "VVX_tcu_fedp_bhf.h"
 #define MODULE VVX_tcu_fedp_bhf
@@ -589,7 +589,7 @@ public:
     dut_->clk = 0;
     dut_->reset = 0;
     dut_->enable = 0;
-  #ifdef TCU_TYPE_DRL
+  #ifdef TCU_TYPE_TFR
     dut_->vld_mask = 0;
   #endif
     dut_->fmt_s = config_.fmt_s;
@@ -649,14 +649,14 @@ public:
       dut_->c_val = c_value;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
-    #ifdef TCU_TYPE_DRL
+    #ifdef TCU_TYPE_TFR
       dut_->vld_mask = -1;
     #endif
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
-      #ifdef TCU_TYPE_DRL
+      #ifdef TCU_TYPE_TFR
         dut_->vld_mask = 0;
       #endif
       }
@@ -751,14 +751,14 @@ public:
       dut_->c_val = c_value_hex;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
-    #ifdef TCU_TYPE_DRL
+    #ifdef TCU_TYPE_TFR
       dut_->vld_mask = -1;
     #endif
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
-      #ifdef TCU_TYPE_DRL
+      #ifdef TCU_TYPE_TFR
         dut_->vld_mask = 0;
       #endif
       }

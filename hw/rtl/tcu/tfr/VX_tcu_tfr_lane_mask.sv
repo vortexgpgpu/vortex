@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_drl_lane_mask import VX_tcu_pkg::*; #(
+module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
     parameter N   = 2,
     parameter TCK = 2 * N
 ) (
@@ -80,6 +80,7 @@ module VX_tcu_drl_lane_mask import VX_tcu_pkg::*; #(
         `ifdef TCU_FP8_ENABLE
             TCU_FP8_ID,
             TCU_BF8_ID:  lane_mask = mask_8;
+            TCU_MXFP8_ID:lane_mask = mask_8;
         `endif
         `ifdef TCU_INT_ENABLE
             TCU_I8_ID,

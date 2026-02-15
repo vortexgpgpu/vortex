@@ -60,9 +60,9 @@ RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 TOP := VX_tcu_fedp_bhf
 endif
 
-ifneq (,$(filter -DTCU_TYPE_DRL, $(XCONFIGS)))
-RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
-TOP := VX_tcu_fedp_drl
+ifneq (,$(filter -DTCU_TYPE_TFR, $(XCONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
+TOP := VX_tcu_fedp_tfr
 PARAMS += -GPER_LANE_VALID=1
 endif
 

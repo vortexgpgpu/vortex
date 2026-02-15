@@ -219,8 +219,8 @@ LMEM_BASE_ADDR = "expr: $STACK_BASE_ADDR"
 LMEM_NUM_BANKS = "expr: $NUM_LSU_LANES"
 
 [tcu]
-# TCU_TYPE is a string enum: 'DPI'|'DSP'|'BHF'|'DRL'
-TCU_TYPE = "expr: 'DSP' if $SYNTHESIS else ('DPI' if $DPI_ENABLE else 'DRL')"
+# TCU_TYPE is a string enum: 'DPI'|'DSP'|'BHF'|'TFR'
+TCU_TYPE = "expr: 'DSP' if $SYNTHESIS else ('DPI' if $DPI_ENABLE else 'TFR')"
 NUM_TCU_LANES = "expr: $NUM_THREADS"
 NUM_TCU_BLOCKS = "expr: $ISSUE_WIDTH"
 TCU_BF16_ENABLE = true
@@ -279,7 +279,7 @@ DEBUG_LEVEL = 3
 XLEN = [32, 64]
 FLEN = [32, 64]
 FPU_TYPE = ["DPI", "DSP", "FPNEW"]
-TCU_TYPE = ["DPI", "DSP", "BHF", "DRL"]
+TCU_TYPE = ["DPI", "DSP", "BHF", "TFR"]
 VM_ADDR_MODE = ["BARE", "SV32", "SV39", "SV48", "SV57"]
 
 [[param]]

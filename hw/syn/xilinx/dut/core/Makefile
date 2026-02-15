@@ -29,8 +29,8 @@ ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS)))
 		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 	endif
-	ifneq (,$(filter -DTCU_TYPE_DRL, $(CONFIGS)))
-		RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
+	ifneq (,$(filter -DTCU_TYPE_TFR, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 	endif
 endif
 

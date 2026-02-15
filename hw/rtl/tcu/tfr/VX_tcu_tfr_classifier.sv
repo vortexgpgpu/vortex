@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_drl_classifier import VX_tcu_pkg::*; #(
+module VX_tcu_tfr_classifier import VX_tcu_pkg::*; #(
     parameter N     = 1,
     parameter WIDTH = 32,
     parameter FMT   = 0

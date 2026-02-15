@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
+module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter N  = 5,
     parameter WI = 26,

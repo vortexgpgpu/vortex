@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_drl_pipe_register #(
+module VX_tcu_tfr_pipe_register #(
     parameter SHARED_DATAW = 1,
     parameter LANE_DATAW   = 1,
     parameter NUM_LANES    = 1,
