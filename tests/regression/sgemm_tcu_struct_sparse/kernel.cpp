@@ -9,16 +9,12 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
-  auto pMeta = reinterpret_cast<const void *>(arg->meta_addr);
+  auto pMetaBase = reinterpret_cast<const float *>(arg->meta_addr);
 
   uint32_t M = arg->M;
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 
-  // Phase 1: Load metadata into SRAM (once per tile)
-  ctx::load_metadata_sync(pMeta);
-
-  // Phase 2: Compute
   ctx::fragment_a   fragA;
   ctx::fragment_b   fragB;
   ctx::fragment_acc fragC;
@@ -28,8 +24,20 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
 
   ctx::fill_fragment(fragC, 0);
 
+  // Per-K-tile metadata reload
+  constexpr uint32_t rtl_i_ratio = 32 / vt::ITYPE::bits;
+  constexpr uint32_t meta_cols = (NUM_THREADS * 2 * rtl_i_ratio) / 32;
+  constexpr uint32_t per_k_tile_words = NUM_THREADS * meta_cols;
+  uint32_t num_k_tiles = K / ctx::tileK;
+  uint32_t tile_row_idx = blockIdx.y;
+
   uint32_t stride_A = K / 2;
   for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
+    // Load metadata for this K-tile
+    uint32_t k_tile = i / ctx::tileK;
+    auto pMeta = pMetaBase + (tile_row_idx * num_k_tiles + k_tile) * per_k_tile_words;
+    ctx::load_metadata_sync(pMeta);
+
     auto pTileA = pA + tile_row * stride_A + (i / 2);
     ctx::load_matrix_sync<vt::row_major, true>(fragA, pTileA, stride_A);
 
