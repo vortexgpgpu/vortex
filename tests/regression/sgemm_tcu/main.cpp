@@ -669,6 +669,7 @@ vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
+vx_buffer_h cycles_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
@@ -709,6 +710,7 @@ void cleanup() {
     vx_mem_free(A_buffer);
     vx_mem_free(B_buffer);
     vx_mem_free(C_buffer);
+    vx_mem_free(cycles_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -795,6 +797,10 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
+  uint32_t num_blocks = kernel_arg.grid_dim[0] * kernel_arg.grid_dim[1];
+  RT_CHECK(vx_mem_alloc(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
+  RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.tcu_cycles_addr));
+
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
@@ -857,6 +863,17 @@ int main(int argc, char *argv[]) {
   std::vector<otype_t> h_C(sizeC);
   std::cout << "download destination buffer" << std::endl;
   RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t)));
+
+  // download TCU K-loop cycle counts
+  {
+    std::vector<uint32_t> h_cycles(num_blocks);
+    RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_blocks * sizeof(uint32_t)));
+    uint32_t max_cyc = 0;
+    for (uint32_t i = 0; i < num_blocks; ++i) {
+      if (h_cycles[i] > max_cyc) max_cyc = h_cycles[i];
+    }
+    printf("TCU_CYCLES: max=%u (across %u blocks)\n", max_cyc, num_blocks);
+  }
 
   // verify result
   std::cout << "verify result" << std::endl;

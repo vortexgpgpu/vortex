@@ -1,6 +1,7 @@
 #include "common.h"
 #include <vx_spawn.h>
 #include <vx_tensor.h>
+#include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
 using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
@@ -25,6 +26,7 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   // Initialize accumulator tile to zero
   ctx::fill_fragment(fragC, 0);
 
+  uint32_t cyc_start = csr_read(0xB00);
   for (int i = 0; i < K; i += ctx::tileK) {
     auto pTileA = pA + tile_row * K + i;
 
@@ -44,6 +46,10 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     // Matrix multiply-accumulate: c += a * b
     ctx::mma_sync(fragC, fragA, fragB, fragC);
   }
+  uint32_t cyc_end = csr_read(0xB00);
+  auto pCycles = reinterpret_cast<uint32_t*>(arg->tcu_cycles_addr);
+  uint32_t block_id = blockIdx.y * arg->grid_dim[0] + blockIdx.x;
+  pCycles[block_id] = cyc_end - cyc_start;
 
   // Store the computed C tile
   auto pTileC = pC + tile_row * N + tile_col;
