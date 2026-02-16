@@ -561,6 +561,15 @@ module VX_decode import VX_gpu_pkg::*; #(
                             `USED_FREG (rs1);
                             `USED_FREG (rs2);
                             `USED_FREG (rs3);
+                        end else if (funct3 == 3'h2) begin
+                            ex_type = EX_TCU;
+                            op_type = INST_OP_BITS'(INST_TCU_META_STORE);
+                            op_args.tcu.fmt_d  = rd[3:0]; // col_idx
+                            op_args.tcu.fmt_s  = '0;
+                            op_args.tcu.step_m = '0;
+                            op_args.tcu.step_n = '0;
+                            op_args.tcu.step_k = '0;
+                            `USED_FREG (rs1); // source float register
                         end
                     end
                 `endif

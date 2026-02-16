@@ -375,6 +375,23 @@ public:
     });
   }
 
+  template <int COL>
+  static __attribute__((always_inline)) void meta_store(float data) {
+    __asm__ volatile(".insn r 0x0b, 2, 2, x%[col], %[data], x0"
+      :: [col]"i"(COL), [data]"f"(data));
+  }
+
+  static __attribute__((always_inline)) void load_metadata_sync(const void* meta_ptr) {
+    constexpr uint32_t rtl_i_ratio = 32 / It::bits;
+    constexpr uint32_t num_cols = (NT * 2 * rtl_i_ratio) / 32;
+    uint32_t lane_id = vx_thread_id();
+    auto base = reinterpret_cast<const float*>(meta_ptr);
+    detail::unroll_for<num_cols>([&](auto col) {
+      float data = base[lane_id * num_cols + col];
+      meta_store<col>(data);
+    });
+  }
+
   template <bool sparse = false, typename FragD, typename FragA, typename FragB, typename FragC>
   static __attribute__((always_inline)) void mma_sync(FragD &fragD, const FragA &fragA, const FragB &fragB, const FragC &fragC) {
     static_assert(FragA::Use == matrix_a, "A must be matrix_a");

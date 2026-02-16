@@ -730,6 +730,7 @@ vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
+vx_buffer_h meta_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
@@ -770,6 +771,7 @@ void cleanup() {
     vx_mem_free(A_buffer);
     vx_mem_free(B_buffer);
     vx_mem_free(C_buffer);
+    vx_mem_free(meta_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -856,9 +858,17 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
+  // allocate metadata buffer (padded to NT rows for all lanes)
+  constexpr uint32_t meta_cols = cfg::meta_cols;
+  constexpr uint32_t per_warp_depth = cfg::per_warp_depth;
+  constexpr uint32_t meta_buf_entries = NUM_THREADS * meta_cols;
+  RT_CHECK(vx_mem_alloc(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
+  RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_addr));
+
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
+  std::cout << "meta_addr=0x" << std::hex << kernel_arg.meta_addr << std::endl;
 
   // generate source data
   // Generate full matrix A (M × K), prune in-place, then compress to M × K/2
@@ -895,6 +905,19 @@ int main(int argc, char *argv[]) {
     } else {
       RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
     }
+  }
+
+  // upload metadata buffer
+  {
+    std::cout << "upload metadata buffer" << std::endl;
+    std::vector<uint32_t> h_meta(meta_buf_entries, 0);
+    for (uint32_t row = 0; row < per_warp_depth; ++row) {
+      uint32_t pattern = (row & 1) ? 0xAAAAAAAA : 0x55555555;
+      for (uint32_t col = 0; col < meta_cols; ++col) {
+        h_meta[row * meta_cols + col] = pattern;
+      }
+    }
+    RT_CHECK(vx_copy_to_dev(meta_buffer, h_meta.data(), 0, meta_buf_entries * sizeof(uint32_t)));
   }
 
   // upload program

@@ -222,6 +222,13 @@ public:
   static constexpr uint32_t tileM = xtileM;
   static constexpr uint32_t tileN = xtileN;
   static constexpr uint32_t tileK = xtileK * i_ratio; // Adjusted for input type size
+
+  // Metadata constants for 2:4 structured sparsity
+  static constexpr uint32_t itype_bits = It::bits;
+  static constexpr uint32_t rtl_i_ratio = 32 / itype_bits;
+  static constexpr uint32_t meta_block_width = NT * 2 * rtl_i_ratio; // bits
+  static constexpr uint32_t meta_cols = meta_block_width / 32;
+  static constexpr uint32_t per_warp_depth = m_steps * (k_steps / 2);
 };
 
 } // namespace tensor

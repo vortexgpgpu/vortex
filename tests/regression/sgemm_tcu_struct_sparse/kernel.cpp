@@ -9,11 +9,16 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
+  auto pMeta = reinterpret_cast<const void *>(arg->meta_addr);
 
   uint32_t M = arg->M;
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 
+  // Phase 1: Load metadata into SRAM (once per tile)
+  ctx::load_metadata_sync(pMeta);
+
+  // Phase 2: Compute
   ctx::fragment_a   fragA;
   ctx::fragment_b   fragB;
   ctx::fragment_acc fragC;
