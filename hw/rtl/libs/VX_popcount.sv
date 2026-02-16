@@ -176,9 +176,7 @@ module VX_popcount #(
         localparam PN = 1 << `CLOG2(N);
         localparam LOGPN = `CLOG2(PN);
 
-    `IGNORE_UNOPTFLAT_BEGIN
-        wire [M-1:0] tmp [LOGPN-1:0][PN-1:0];
-    `IGNORE_UNOPTFLAT_END
+        wire [M-1:0] tmp [LOGPN-1:0][PN-1:0] /* verilator split_var*/;
 
         for (genvar j = 0; j < LOGPN; ++j) begin
             localparam D = j + 1;

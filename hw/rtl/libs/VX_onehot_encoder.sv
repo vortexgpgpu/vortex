@@ -39,10 +39,8 @@ module VX_onehot_encoder #(
 
     end else if (MODEL == 1) begin : g_model1
         localparam M = 1 << LN;
-    `IGNORE_UNOPTFLAT_BEGIN
-        wire [M-1:0] addr [LN];
-        wire [M-1:0] v [LN+1];
-    `IGNORE_UNOPTFLAT_END
+        wire [M-1:0] addr [LN] /* verilator split_var*/;
+        wire [M-1:0] v [LN+1] /* verilator split_var*/;
 
         // base case, also handle padding for non-power of two inputs
         assign v[0] = REVERSE ? (M'(data_in) << (M - N)) : M'(data_in);
@@ -51,9 +49,7 @@ module VX_onehot_encoder #(
             localparam SN = 1 << (LN - lvl);
             localparam SI = M / SN;
             for (genvar s = 0; s < SN; ++s) begin : g_scan_s
-            `IGNORE_UNOPTFLAT_BEGIN
                 wire [1:0] vs = {v[lvl-1][s*SI+(SI>>1)], v[lvl-1][s*SI]};
-            `IGNORE_UNOPTFLAT_END
                 assign v[lvl][s*SI] = (| vs);
                 if (lvl == 1) begin : g_lvl_1
                     assign addr[lvl-1][s*SI +: lvl] = vs[!REVERSE];

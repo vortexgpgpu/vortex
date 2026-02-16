@@ -112,11 +112,8 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
   ```
 - **Other warnings**
   ```verilog
-  // Silencing Circular Combinational Logic warning.
-  `IGNORE_UNOPTFLAT_BEGIN
-  logic [N-1:0] G [LEVELS+1];
-  logic [N-1:0] P [LEVELS+1];
-  `IGNORE_UNOPTFLAT_END
+  // Silencing Circular Combinational Logic warnings in Verilator..
+  logic [N-1:0] G [LEVELS+1] /* verilator split_var*/;
   ```
 
 ## 6. Assertions

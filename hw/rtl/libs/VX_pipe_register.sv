@@ -33,7 +33,8 @@ module VX_pipe_register #(
         `UNUSED_PARAM (INIT_VALUE)
         assign data_out = data_in;
     end else begin : g_pipe
-        logic [DEPTH-1:0][DATAW-1:0] pipe;
+    
+        reg [DEPTH-1:0][DATAW-1:0] pipe;
 
         if (RESETW == DATAW) begin : g_full_reset
             always_ff @(posedge clk) begin

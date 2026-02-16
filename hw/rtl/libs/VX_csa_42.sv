@@ -15,7 +15,6 @@
 
 `TRACING_OFF
 
-`IGNORE_UNOPTFLAT_BEGIN
 // 5:3 counter for 4:2 compressor
 module counter_5to3(
     input wire x1, x2, x3, x4, cin,
@@ -29,7 +28,6 @@ module counter_5to3(
     assign sum = s1 ^ x4 ^ cin;
     assign carry = (s1 & x4) | (x4 & cin) | (s1 & cin);
 endmodule
-`IGNORE_UNOPTFLAT_END
 
 // 4:2 Compressor level
 module VX_csa_42 #(
@@ -70,6 +68,7 @@ module VX_csa_42 #(
     assign sum = WIDTH_O'(sum_int);
     assign carry_temp = {carry_int[N-1] & cin[N], carry_int[N-1] ^ cin[N]};
     assign carry = WIDTH_O'({carry_temp, carry_int[N-2:0], 1'b0});
+
 endmodule
 
 `TRACING_ON

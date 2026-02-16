@@ -41,9 +41,7 @@ module VX_priority_encoder #(
 
         end else if (MODEL != 0) begin : g_model1
 
-        `IGNORE_UNOPTFLAT_BEGIN
-            wire [N-1:0] higher_pri_regs;
-        `IGNORE_UNOPTFLAT_END
+            wire [N-1:0] higher_pri_regs /* verilator split_var*/;
 
             assign higher_pri_regs[N-1] = 1'b0;
             for (genvar i = N-2; i >= 0; --i) begin : g_higher_pri_regs
@@ -105,9 +103,7 @@ module VX_priority_encoder #(
 
         end else if (MODEL == 1) begin : g_model1
 
-        `IGNORE_UNOPTFLAT_BEGIN
-            wire [N-1:0] higher_pri_regs;
-        `IGNORE_UNOPTFLAT_END
+            wire [N-1:0] higher_pri_regs /* verilator split_var*/;
 
             assign higher_pri_regs[0] = 1'b0;
             for (genvar i = 1; i < N; ++i) begin : g_higher_pri_regs
