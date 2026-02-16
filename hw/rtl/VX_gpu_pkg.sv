@@ -91,7 +91,7 @@ package VX_gpu_pkg;
 `ifndef NDEBUG
 	localparam PC_BITS = `XLEN;
     function automatic logic [`XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
-        to_fullPC = pc;
+        to_fullPC = `XLEN'(pc);
     endfunction
     function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`XLEN-1:0] pc);
         from_fullPC = pc;
@@ -99,7 +99,7 @@ package VX_gpu_pkg;
 `else
     localparam PC_BITS = (`XLEN-2);
     function automatic logic [`XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
-        to_fullPC = {pc, 2'b0};
+        to_fullPC = `XLEN'({pc, 2'b0});
     endfunction
     function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`XLEN-1:0] pc);
         from_fullPC = PC_BITS'(pc >> 2);
