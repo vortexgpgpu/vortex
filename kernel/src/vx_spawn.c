@@ -237,7 +237,13 @@ int vx_spawn_threads(uint32_t dimension,
     }
 
     // calculate offsets for group distribution
-    uint32_t group_offset = core_id * total_groups_per_core + MIN(core_id, remaining_groups_per_core);
+    uint32_t group_offset;
+    uint32_t base_groups = num_groups / active_cores;
+    if (core_id < remaining_groups_per_core) {
+      group_offset = core_id * (base_groups + 1);
+    } else {
+      group_offset = remaining_groups_per_core * (base_groups + 1) + (core_id - remaining_groups_per_core) * base_groups;
+    }
 
     // set scheduler arguments
     wspawn_groups_args_t wspawn_args = {
@@ -296,7 +302,12 @@ int vx_spawn_threads(uint32_t dimension,
     }
 
     // calculate offsets for task distribution
-    uint32_t all_tasks_offset = core_id * tasks_per_core + MIN(core_id, remaining_tasks_per_core);
+    uint32_t all_tasks_offset;
+    if (core_id < remaining_tasks_per_core) {
+      all_tasks_offset = core_id * tasks_per_core;
+    } else {
+      all_tasks_offset = remaining_tasks_per_core * (tasks_per_core + 1) + (core_id - remaining_tasks_per_core) * tasks_per_core;
+    }
     uint32_t remain_tasks_offset = all_tasks_offset + (tasks_per_core - remaining_tasks);
 
     // prepare scheduler arguments
