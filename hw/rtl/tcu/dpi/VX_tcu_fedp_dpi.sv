@@ -135,10 +135,26 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     prod += a_row[i][4 * j +: 4] * b_col[i][4 * j +: 4];
                 end
             end
-            TCU_MXFP8_ID: begin
+            TCU_MXI8_ID: begin
                 prod = 0;
                 for (int j = 0; j < 4; j++) begin
-                    prod += $signed({{24{a_row[i][8 * j + 7]}}, a_row[i][8 * j +: 8]}) * $signed({{24{b_col[i][8 * j + 7]}}, b_col[i][8 * j +: 8]});
+                    reg signed [31:0] raw_prod;
+                    reg        [31:0] abs_prod;
+                    reg signed [31:0] scaled_prod;
+                    reg signed [7:0]  combined_sf;
+                    reg        [7:0]  shift_amt;
+                    raw_prod = $signed({{24{a_row[i][8 * j + 7]}}, a_row[i][8 * j +: 8]}) * $signed({{24{b_col[i][8 * j + 7]}}, b_col[i][8 * j +: 8]});
+                    combined_sf = $signed(SCALE_FACTOR_E8M0_A - 8'd133) + $signed(SCALE_FACTOR_E8M0_B - 8'd133);
+                    if (combined_sf[7]) begin
+                        // Negative: right shift with truncation toward zero
+                        shift_amt = -combined_sf;
+                        abs_prod = raw_prod[31] ? (-raw_prod) : raw_prod;
+                        scaled_prod = abs_prod >> shift_amt;
+                        if (raw_prod[31]) scaled_prod = -scaled_prod;
+                    end else begin
+                        scaled_prod = raw_prod <<< combined_sf;
+                    end
+                    prod += 64'($signed(scaled_prod));
                 end
             end
             default: begin

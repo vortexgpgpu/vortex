@@ -76,6 +76,8 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .a_row      (a_row),
         .b_col      (b_col),
         .c_val      (c_val),
+        .sf_a       (sf_a),
+        .sf_b       (sf_b),
         .cls_tf32   (cls_tf32),
         .cls_fp16   (cls_fp16),
         .cls_bf16   (cls_bf16),
