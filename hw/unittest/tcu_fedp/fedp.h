@@ -303,7 +303,7 @@ private:
     out.reserve(v.size() + 1);
     eps.reserve(v.size() + 1);
 
-    const int F32_BIAS = 127;
+    const int F32_BIAS = 127 + 128;
 
     bool c_is_zero = (c_term.cls == 0 && c_term.sp == 0);
 
@@ -346,7 +346,7 @@ private:
 
       int Ep_w = (Ep + 23 - W_);
       if (p_is_zero) {
-        Ep_w = std::numeric_limits<int>::min();
+        Ep_w = 0;
       }
 
       out.push_back({sign_xor, Mp});
@@ -356,7 +356,7 @@ private:
     int Ec = c_term.Ec + F32_BIAS;
     int Ec_w = Ec + 24 - W_;
     if (c_is_zero) {
-      Ec_w = std::numeric_limits<int>::min();
+      Ec_w = 0;
     }
 
     out.push_back({c_term.sign, c_term.Mc});
@@ -446,7 +446,7 @@ private:
     uint32_t Q = -x.V & mask;
     uint32_t X = s ? Q : x.V;
     int msb = 31 - __builtin_clz(X);
-    int e = x.L + msb;
+    int e = x.L + msb - 128;
     int sh = (msb + 1) - 24;
 
     uint32_t kept;

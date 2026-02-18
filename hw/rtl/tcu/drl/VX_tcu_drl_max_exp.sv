@@ -1,16 +1,3 @@
-// Copyright © 2019-2023
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 `include "VX_define.vh"
 
 module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
@@ -18,47 +5,35 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
     parameter WIDTH = 8
 ) (
     input  wire [N-1:0][WIDTH-1:0] exponents,
-    output wire [WIDTH-1:0]        max_exp,
-    output wire [N-1:0][7:0]       shift_amt
+    output logic [WIDTH-1:0]       max_exp
 );
 
     // ----------------------------------------------------------------------
-    // 1. Subtractor-based Compare Matrix
+    // 1. Signed Subtractor Matrix
     // ----------------------------------------------------------------------
 
-    // Generate exponent subtract sign matrix and store differences.
-    // Uses (N-1)x(N-1) matrix with diff_mat[i][j] = exp[i] - exp[j+1].
-    // Lower triangle reuses sign bits from upper triangle (~sign_mat[j][i]).
-    `IGNORE_UNOPTFLAT_BEGIN
-    wire [N-2:0] sign_mat[N-2:0];
-    `IGNORE_UNOPTFLAT_END
+    wire [N-2:0] sign_mat[N-2:0] /* verilator split_var */;
     wire signed [WIDTH:0] diff_mat[N-2:0][N-2:0];
 
     for (genvar i = 0; i < N-1; i++) begin : g_row
         for (genvar j = 0; j < N-1; j++) begin : g_col
             if (j < i) begin : g_lower
-                // Reuse sign from symmetric position (no subtractor needed)
                 assign sign_mat[i][j] = ~sign_mat[j][i];
             end else begin : g_upper
-                // Calculate signed difference: exp[i] - exp[j+1]
-                assign diff_mat[i][j] = {exponents[i][WIDTH-1], exponents[i]} - {exponents[j+1][WIDTH-1], exponents[j+1]};
-                // Sign bit (MSB) determines if exp[i] < exp[j+1]
+                assign diff_mat[i][j] = {1'b0, exponents[i]} - {1'b0, exponents[j+1]};
                 assign sign_mat[i][j] = diff_mat[i][j][WIDTH];
             end
         end
     end
 
     // ----------------------------------------------------------------------
-    // 2. Find One-Hot Encoded Max Index
+    // 2. One-Hot Select Logic (Kept exactly as you requested)
     // ----------------------------------------------------------------------
 
-    // Index i is max if it is >= all left neighbors AND > all right neighbors.
     wire [N-1:0] sel_exp;
 
     for (genvar i = 0; i < N; i++) begin : g_index
         wire and_left, or_right;
-
-        // Check Left (0 to i-1)
         if (i == 0) begin : g_first
             assign and_left = 1'b1;
         end else begin : g_and_left
@@ -69,7 +44,6 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
             assign and_left = &left_signals;
         end
 
-        // Check Right (i+1 to N-1)
         if (i == N-1) begin : g_last
             assign or_right = 1'b0;
         end else begin : g_or_right
@@ -84,65 +58,15 @@ module VX_tcu_drl_max_exp import VX_tcu_pkg::*; #(
     end
 
     // ----------------------------------------------------------------------
-    // 3. Mux Maximum Exponent (Reduction OR)
+    // 3. Parallel Output Mux
     // ----------------------------------------------------------------------
 
-    `IGNORE_UNOPTFLAT_BEGIN
-    wire [WIDTH-1:0] or_red[N:0];
-    `IGNORE_UNOPTFLAT_END
+    wire [WIDTH-1:0] or_red[N:0] /* verilator split_var */;
 
     assign or_red[0] = {WIDTH{1'b0}};
-
     for (genvar i = 0; i < N; i++) begin : g_or_red
         assign or_red[i+1] = or_red[i] | (sel_exp[i] ? exponents[i] : {WIDTH{1'b0}});
     end
-
     assign max_exp = or_red[N];
-
-    // ----------------------------------------------------------------------
-    // 4. Calculate Shift Amounts (Reuse Difference Matrix)
-    // ----------------------------------------------------------------------
-
-    for (genvar i = 0; i < N; i++) begin : g_shift_extract
-        `IGNORE_UNOPTFLAT_BEGIN
-        wire [7:0] shift_op[N:0];
-        `IGNORE_UNOPTFLAT_END
-
-        assign shift_op[0] = 8'd0;
-
-        for (genvar j = 0; j < N; j++) begin : g_shift_mux
-            // For case operand j is max, compute shift = max_exp - exp[i]
-            wire [7:0] shift_sel;
-            if (i < j) begin : g_upper_shift
-                // diff_mat[i][j-1] = exp[i] - exp[j], negate to get exp[j] - exp[i]
-                wire [WIDTH:0] diff_val = -diff_mat[i][j-1];
-                wire [7:0] clamped_val;
-                if (WIDTH > 8) begin : g_clamp
-                    assign clamped_val = (|diff_val[WIDTH:8]) ? 8'hFF : diff_val[7:0];
-                end else begin : g_true_val
-                    assign clamped_val = diff_val[7:0];
-                    `UNUSED_VAR (diff_val[WIDTH:8])
-                end
-                assign shift_sel = sel_exp[j] ? clamped_val : 8'd0;
-            end else if (i > j) begin : g_lower_shift
-                // diff_mat[j][i-1] = exp[j] - exp[i], already positive
-                wire [WIDTH:0] diff_val = diff_mat[j][i-1];
-                wire [7:0] clamped_val;
-                if (WIDTH > 8) begin : g_clamp
-                    assign clamped_val = (|diff_val[WIDTH:8]) ? 8'hFF : diff_val[7:0];
-                end else begin : g_true_val
-                    assign clamped_val = diff_val[7:0];
-                    `UNUSED_VAR (diff_val[WIDTH:8])
-                end
-                assign shift_sel = sel_exp[j] ? clamped_val : 8'd0;
-            end else begin : g_diag_shift
-                // i == j: shift amount is 0
-                assign shift_sel = 8'd0;
-            end
-            assign shift_op[j+1] = shift_op[j] | shift_sel;
-        end
-
-        assign shift_amt[i] = shift_op[N];
-    end
 
 endmodule

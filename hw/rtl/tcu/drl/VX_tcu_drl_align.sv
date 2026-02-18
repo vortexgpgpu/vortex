@@ -15,14 +15,18 @@
 
 module VX_tcu_drl_align import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter N  = 5,
-    parameter WI = 25,
-    parameter WO = WI + 2
+    parameter N     = 5,
+    parameter WI    = 25,
+    parameter WO    = WI + 2,
+    parameter EXP_W = 10
 ) (
     input  wire                 clk,
     input  wire                 valid_in,
     input  wire [31:0]          req_id,
-    input  wire [N-1:0][7:0]    shift_amt,
+
+    input  wire [N-1:0][EXP_W-1:0] exponents,
+    input  wire [EXP_W-1:0]     max_exp,
+
     input  wire [N-1:0][WI-1:0] sigs_in,
     input  wire                 is_int,
     output wire [N-1:0][WO-1:0] sigs_out,
@@ -34,7 +38,13 @@ module VX_tcu_drl_align import VX_tcu_pkg::*; #(
     localparam MAX_PRE_SHIFT = WI - 23;
     localparam SHIFT_MAG_W   = (WI - 1) + MAX_PRE_SHIFT;
 
+    wire [N-1:0][7:0] shift_amt;
+
     for (genvar i = 0; i < N; ++i) begin : g_align_lanes
+        // 0. Calculate Shift Amount
+        wire [EXP_W-1:0] exp_diff = max_exp - exponents[i];
+        assign shift_amt[i] = (|exp_diff[EXP_W-1:8]) ? 8'hFF : exp_diff[7:0];
+
         // 1. Unpack Sign and Magnitude
         wire in_sign = sigs_in[i][WI-1];
         wire [WI-2:0] in_mag = sigs_in[i][WI-2:0];
@@ -66,7 +76,10 @@ module VX_tcu_drl_align import VX_tcu_pkg::*; #(
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin
         if (valid_in) begin
-            `TRACE(4, ("%t: %s FEDP-ALIGN(%0d): is_int=%0d, shift_amt=", $time, INSTANCE_ID, req_id, is_int));
+            `TRACE(4, ("%t: %s FEDP-ALIGN(%0d): is_int=%0d, max_exp=0x%0h", $time, INSTANCE_ID, req_id, is_int, max_exp));
+            `TRACE(4, (", exponents="));
+            `TRACE_ARRAY1D(4, "0x%0h", exponents, N)
+            `TRACE(4, (", shift_amt="));
             `TRACE_ARRAY1D(4, "0x%0h", shift_amt, N)
             `TRACE(4, (", sigs_in="));
             `TRACE_ARRAY1D(4, "0x%0h", sigs_in, N)

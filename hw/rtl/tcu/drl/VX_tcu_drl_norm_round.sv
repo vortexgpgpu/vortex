@@ -23,7 +23,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     input wire          valid_in,
     input wire [31:0]   req_id,
     input wire [EXP_W-1:0] max_exp,
-    input wire [WA-1:0] acc_sig,
+    input wire [WA-1:0] acc_sig,   // Packed Sign-Magnitude
     input wire [C_HI_W-1:0] cval_hi,
     input wire          is_int,
     input wire          sticky_in,
@@ -34,36 +34,21 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi})
 
     // ======================================================================
-    // PHASE 1: PARALLEL COMPUTATION (Adder || LZC || Exp)
+    // PHASE 1: UNPACK & PARALLEL COMPUTATION
     // ======================================================================
 
-    // Input Prep
+    // Unpack Sign-Magnitude
     wire sum_sign = acc_sig[WA-1];
-    wire [WA-1:0] acc_inv = acc_sig ^ {WA{sum_sign}}; // 1's complement
-
-    // Exact Magnitude
-    // abs_sum = acc_inv + sum_sign (2's complement conversion)
-    wire [WA-1:0] abs_sum;
-
-    VX_ks_adder #(
-        .N(WA),
-        .BYPASS (`FORCE_BUILTIN_ADDER(WA))
-    ) abs_adder (
-        .cin   (sum_sign),
-        .dataa (acc_inv),
-        .datab ({WA{1'b0}}),
-        .sum   (abs_sum),
-        `UNUSED_PIN (cout)
-    );
+    wire [WA-1:0] abs_sum = {1'b0, acc_sig[WA-2:0]};
     wire zero_sum = ~|abs_sum;
 
     // Predictive Leading Zero Count (LZA)
+    // Works directly on the unpacked Magnitude
     wire [$clog2(WA)-1:0] lz_count_pred;
-
     VX_lzc #(
         .N(WA)
     ) lzc_inst (
-        .data_in   (acc_inv),
+        .data_in   (abs_sum),
         .data_out  (lz_count_pred),
         `UNUSED_PIN (valid_out)
     );
@@ -71,16 +56,18 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // Parallel Exponent Calculation
     wire signed [EXP_W-1:0] norm_exp_base;
     wire signed [EXP_W-1:0] norm_exp_plus1;
-    wire signed [EXP_W-1:0] norm_exp_plus2; // Overshift + Rounding
+    wire signed [EXP_W-1:0] norm_exp_plus2;
 
-    // norm_exp_base = max_exp - lz_count_pred
+    // Overshift + Rounding
+    // norm_exp_base = max_exp - (lz_count_pred + 128)
+    wire [EXP_W-1:0] sub_term = EXP_W'({1'b1, 2'b00, lz_count_pred});
     VX_ks_adder #(
         .N(EXP_W),
         .BYPASS (`FORCE_BUILTIN_ADDER(EXP_W))
     ) exp_sub (
         .cin   (1'b1),
         .dataa (max_exp),
-        .datab (~EXP_W'(lz_count_pred)),
+        .datab (~sub_term),
         .sum   (norm_exp_base),
         `UNUSED_PIN (cout)
     );
@@ -117,13 +104,11 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     wire        round_bit  = aligned_bits[1];
     wire        sticky_bit = aligned_bits[0] | (|shifted_sum_raw[WA-27:0]) | sticky_in;
     wire        lsb_bit    = norm_man[0];
-
     wire round_up = guard_bit && (round_bit || sticky_bit || lsb_bit);
 
     // Parallel Increment
     wire [24:0] man_plus_zero = {1'b0, norm_man};
     wire [24:0] man_plus_one;
-
     VX_ks_adder #(
         .N(25),
         .BYPASS (`FORCE_BUILTIN_ADDER(25))
@@ -201,9 +186,12 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     // PHASE 5: INTEGER HANDLING
     // ======================================================================
 
-    // Extract sign-extension overflow from accumulator
-    wire [6:0] ext_acc_int = 7'($signed(acc_sig[WA-1:25]));
+    // Reconstruct original 2's complement from Sign-Mag
+    // acc_val = sign ? -abs : abs
+    wire [WA-1:0] acc_sig_reconstructed = sum_sign ? (-abs_sum) : abs_sum;
 
+    // Extract sign-extension overflow from accumulator
+    wire [6:0] ext_acc_int = 7'($signed(acc_sig_reconstructed[WA-1:25]));
     wire [6:0] int_hi;
     VX_ks_adder #(
         .N (7),
@@ -217,7 +205,7 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
     );
 
     // Concatenate upper 7 bits integer & lower shared 25 accumulator bits result
-    wire [31:0] int_result = {int_hi, acc_sig[24:0]};
+    wire [31:0] int_result = {int_hi, acc_sig_reconstructed[24:0]};
 
     // Result muxing
     assign result = is_int ? int_result : fp_result;
@@ -228,8 +216,8 @@ module VX_tcu_drl_norm_round import VX_tcu_pkg::*; #(
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin
         if (valid_in) begin
-            `TRACE(4, ("%t: %s FEDP-NORM(%0d): is_int=%b, acc_sig=0x%0h, sign=%b, lzc=%0d, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
-                $time, INSTANCE_ID, req_id, is_int, acc_sig, sum_sign, lz_count_pred, norm_exp_base, shifted_sum_raw, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
+            `TRACE(4, ("%t: %s FEDP-NORM(%0d): is_int=%b, abs_sum=0x%0h, sign=%b, lzc=%0d, norm_exp=%0d, shifted=0x%0h, R=%b, S=%b, Rup=%b, carry=%b, final_exp=%0d, result=0x%0h\n",
+                $time, INSTANCE_ID, req_id, is_int, abs_sum, sum_sign, lz_count_pred, norm_exp_base, shifted_sum_raw, round_bit, sticky_bit, round_up, carry_out, final_exp_s, result));
         end
     end
 `endif

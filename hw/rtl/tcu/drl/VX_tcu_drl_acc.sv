@@ -25,7 +25,7 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     input  wire [N-2:0]         lane_mask,
     input  wire [N-1:0][WI-1:0] sigs_in,
     input  wire [N-1:0]         sticky_in,
-    output wire [WO-1:0]        sig_out,
+    output wire [WO-1:0]        sig_out,   // Packed Sign-Magnitude
     output wire                 sticky_out
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -36,7 +36,6 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     // ----------------------------------------------------------------------
     wire [N-1:0][WI-1:0] masked_sigs;
     wire [N-1:0]        masked_sticky;
-
     // Mask vector lanes (0 to N-2)
     for (genvar i = 0; i < N-1; ++i) begin : g_mask
         assign masked_sigs[i]   = sigs_in[i] & {WI{lane_mask[i]}};
@@ -60,29 +59,66 @@ module VX_tcu_drl_acc import VX_tcu_pkg::*; #(
     // Fast Accumulation (CSA Tree)
     // ----------------------------------------------------------------------
 
-    if (N >= 7) begin : g_large_acc
-        VX_csa_mod4 #(
-            .N (N),
-            .W (WI),
-            .S (WO),
-            .CPA_KS (!`FORCE_BUILTIN_ADDER(WO))
-        ) sig_csa (
-            .operands (masked_sigs),
-            .sum      (sig_out),
-            `UNUSED_PIN(cout)
-        );
-    end else begin : g_acc
-        VX_csa_tree #(
-            .N (N),
-            .W (WO),
-            .S (WO),
-            .CPA_KS (!`FORCE_BUILTIN_ADDER(WO))
-        ) sig_csa (
-            .operands (sigs_in_packed),
-            .sum      (sig_out),
-            `UNUSED_PIN(cout)
-        );
-    end
+    wire [WO-1:0] sum_vec;
+    wire [WO-1:0] carry_vec;
+
+    VX_csa_tree #(
+        .N (N),
+        .W (WO),
+        .S (WO)
+    ) sig_csa (
+        .operands (sigs_in_packed),
+        .sum      (sum_vec),
+        .carry    (carry_vec)
+    );
+
+    // ----------------------------------------------------------------------
+    // Final Adders & Optimization
+    // ----------------------------------------------------------------------
+
+    // Path A: Compute Positive Result (Standard)
+    wire [WO-1:0] sig_pos;
+    VX_ks_adder #(
+        .N (WO),
+        .BYPASS (`FORCE_BUILTIN_ADDER(WO))
+    ) final_adder (
+        .cin   (1'b0),
+        .dataa (sum_vec),
+        .datab (carry_vec),
+        .sum   (sig_pos),
+        `UNUSED_PIN (cout)
+    );
+
+    // Path B: Compute Negative Result (Parallel)
+    // We utilize a ks_adder to perform the heavy lifting of negation.
+    // Logic: -(A+B) = ~A + ~B + 2.
+    // The adder with cin=1 calculates (~A + ~B + 1), which is ~(A+B).
+    wire [WO-2:0] sig_neg_raw;
+    VX_ks_adder #(
+        .N (WO-1),
+        .BYPASS (`FORCE_BUILTIN_ADDER(WO))
+    ) neg_adder (
+        .cin   (1'b1),
+        .dataa (~sum_vec[WO-2:0]),
+        .datab (~carry_vec[WO-2:0]),
+        .sum   (sig_neg_raw),
+        `UNUSED_PIN (cout)
+    );
+
+    // Final correction: Convert 1's complement (~Sum) to 2's complement (-Sum)
+    wire [WO-2:0] sig_neg = sig_neg_raw + (WO-1)'(1);
+
+    // ----------------------------------------------------------------------
+    // Packing Logic (Mux)
+    // ----------------------------------------------------------------------
+
+    wire sign_bit = sig_pos[WO-1];
+
+    // Select the positive magnitude
+    wire [WO-2:0] abs_full = sign_bit ? sig_neg : sig_pos[WO-2:0];
+
+    // Pack {sign, magnitude}
+    assign sig_out = {sign_bit, abs_full};
 
     // ----------------------------------------------------------------------
     // Sticky aggregation
