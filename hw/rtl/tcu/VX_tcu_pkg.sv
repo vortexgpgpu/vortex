@@ -79,8 +79,7 @@ package VX_tcu_pkg;
 
     // B micro-tiling (sparse 2:4)
     localparam TCU_B_BLOCK_SIZE_SP = (TCU_TC_K * TCU_TC_N) * 2;
-    localparam TCU_B_SPLIT = (TCU_B_BLOCK_SIZE_SP > TCU_BLOCK_CAP);
-    localparam TCU_B_SUB_BLOCKS_SP = TCU_B_SPLIT ? 1 : (TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP);
+    localparam TCU_B_SUB_BLOCKS_SP = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
 
     // Register counts
     //localparam TCU_NRA = (TCU_TILE_M * TCU_TILE_K) / TCU_NT;

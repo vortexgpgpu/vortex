@@ -247,8 +247,8 @@ public:
         });
       }
     } else if constexpr (Frag::Use == matrix_b) {
-      if constexpr (sparse && !cfg::b_split) {
-        // Sparse B load (non-B_SPLIT): uses 2x tcK for B block
+      if constexpr (sparse) {
+        // Sparse B load: uses 2x tcK for B block
         constexpr uint32_t b_tcK = cfg::tcK * 2;
         uint32_t block_idx = (cfg::b_block_size_sp == NT) ? 0 : (lane / cfg::b_block_size_sp);
         uint32_t lane_in_blk = (cfg::b_block_size_sp == NT) ? lane : (lane % cfg::b_block_size_sp);

@@ -196,9 +196,8 @@ public:
   static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;    // number of B sub-steps per register
 
   static constexpr uint32_t b_block_size_sp = (tcK * tcN) * 2;             // sparse 2:4
-  static constexpr bool     b_split         = (b_block_size_sp > NT);
-  static constexpr uint32_t b_sub_blocks_sp = b_split ? 1 : (block_cap / b_block_size_sp);
-  static constexpr uint32_t b_sub_steps_sp  = b_split ? 0 : (n_steps / b_sub_blocks_sp);
+  static constexpr uint32_t b_sub_blocks_sp = block_cap / b_block_size_sp;
+  static constexpr uint32_t b_sub_steps_sp  = n_steps / b_sub_blocks_sp;
 
   static constexpr uint32_t NRA = (xtileM * xtileK) / NT; // Number of A registers
   static constexpr uint32_t NRB = (xtileN * xtileK) / NT; // Number of B registers

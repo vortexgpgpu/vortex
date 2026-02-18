@@ -98,21 +98,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire result_fire = result_if.valid && result_if.ready;
     wire fedp_enable, fedp_done;
 
-    // B_SPLIT: Phase 1 (step_k[0]=0) latches rs2, Phase 2 (step_k[0]=1) computes
-    wire b_split_phase1 = (TCU_B_SPLIT != 0) & is_sparse & ~step_k[0];
-
-    // B_SPLIT: per-warp latch for rs2_data (prevents cross-warp corruption)
-    if (TCU_B_SPLIT) begin : g_bsplit
-        reg [`NUM_WARPS-1:0][`NUM_TCU_LANES-1:0][`XLEN-1:0] rs2_data_latch;
-        wire [`LOG2UP(`NUM_WARPS)-1:0] bsplit_wid = execute_if.data.header.wid;
-        always @(posedge clk) begin
-            if (reset)
-                rs2_data_latch <= '0;
-            else if (execute_fire & b_split_phase1)
-                rs2_data_latch[bsplit_wid] <= execute_if.data.rs2_data;
-        end
-    end
-
     // FEDP delay handling
     reg [PIPE_LATENCY-1:0] fedp_delay_pipe;
     always @(posedge clk) begin
@@ -153,9 +138,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire [OFF_W-1:0] a_off = (OFF_W'(step_m) & OFF_W'(TCU_A_SUB_BLOCKS-1)) << LG_A_BS;
     wire [OFF_W-1:0] b_off = is_sparse
-        ? (TCU_B_SPLIT
-            ? (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS
-            : (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS_SP-1)) << LG_B_BS_SP)
+        ? (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS_SP-1)) << LG_B_BS_SP
         : (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1))    << LG_B_BS;
 
     wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
@@ -193,20 +176,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
                 assign a_row[k_idx]      = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
                 assign b_col_dense[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
-                if (TCU_B_SPLIT) begin : g_bsplit_col
-                    // B_SPLIT: pair adjacent lanes within same source (interleaved)
-                    // First half of k uses Phase 1 latch, second half uses Phase 2 rs2
-                    if (k_idx < (TCU_TC_K / 2)) begin : g_phase1_lane
-                        assign b_col_1[k_idx] = 32'(g_bsplit.rs2_data_latch[g_bsplit.bsplit_wid][b_off + j * TCU_TC_K + k_idx * 2]);
-                        assign b_col_2[k_idx] = 32'(g_bsplit.rs2_data_latch[g_bsplit.bsplit_wid][b_off + j * TCU_TC_K + k_idx * 2 + 1]);
-                    end else begin : g_phase2_lane
-                        assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + (k_idx - TCU_TC_K/2) * 2]);
-                        assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + (k_idx - TCU_TC_K/2) * 2 + 1]);
-                    end
-                end else begin : g_std_col
-                    assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2]);
-                    assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2 + 1]);
-                end
+                assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2]);
+                assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2 + 1]);
             end
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
 
@@ -226,8 +197,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             );
 
             // Select dense or sparse B column
-            // B_SPLIT Phase 1: zero b_col so FEDP computes 0+c=c (passthrough)
-            assign b_col = b_split_phase1 ? '0 : (is_sparse ? b_col_sparse : b_col_dense);
+            assign b_col = is_sparse ? b_col_sparse : b_col_dense;
 
             wire [3:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
