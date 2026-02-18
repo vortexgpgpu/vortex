@@ -34,16 +34,9 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
 
-    // ----------------------------------------------------------------------
-    // 1. Classification
-    // ----------------------------------------------------------------------
-    fedp_class_t [N-1:0] cls_tf32 [2];
-    VX_tcu_tfr_classifier #(.N(N), .WIDTH(32), .FMT(TCU_TF32_ID)) c_a_tf32 (.val(a_row), .cls(cls_tf32[0]));
-    VX_tcu_tfr_classifier #(.N(N), .WIDTH(32), .FMT(TCU_TF32_ID)) c_b_tf32 (.val(b_col), .cls(cls_tf32[1]));
-
-    fedp_class_t [TCK-1:0] cls_fp16 [2];
-    VX_tcu_tfr_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_FP16_ID)) c_a_fp16 (.val(a_row), .cls(cls_fp16[0]));
-    VX_tcu_tfr_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_FP16_ID)) c_b_fp16 (.val(b_col), .cls(cls_fp16[1]));
+    // ======================================================================
+    // 1. Independent Compute Paths
+    // ======================================================================
 
     fedp_class_t [TCK-1:0] cls_bf16 [2];
     VX_tcu_tfr_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_BF16_ID)) c_a_bf16 (.val(a_row), .cls(cls_bf16[0]));
@@ -156,6 +149,8 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .fmt_i      (fmt_s[2:0]),
         .a_row      (a_row),
         .b_col      (b_col),
+        .sf_a       (sf_a),
+        .sf_b       (sf_b),
         .result     (mul_int_sig)
     );
 

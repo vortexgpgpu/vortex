@@ -63,7 +63,8 @@ module VX_tcu_drl_mul_f8 import VX_tcu_pkg::*; #(
     localparam S_SUPER   = 22;
 
     // adding +128 to bias base to ensure BIAS in [0..255] range
-    localparam BIAS_BASE = F32_BIAS + S_FP32 - S_SUPER - W + WA - 1 + 128;
+    // f8 lanes need 2*ALIGN_SHIFT (one per sub-product) unlike f16 which needs 1x
+    localparam BIAS_BASE = F32_BIAS + 2*(S_FP32 - S_SUPER) - W + WA - 1 + 128;
 
     localparam E_FP8 = VX_tcu_pkg::exp_bits(TCU_FP8_ID);
     localparam S_FP8 = VX_tcu_pkg::sign_pos(TCU_FP8_ID);
@@ -240,8 +241,13 @@ module VX_tcu_drl_mul_f8 import VX_tcu_pkg::*; #(
         wire [7:0] man_prod0_v = man_prod[0] & {8{lane_valid[0]}};
         wire [7:0] man_prod1_v = man_prod[1] & {8{lane_valid[1]}};
 
-        wire [22:0] sig_low  = {man_prod0_v, 15'b0};
-        wire [22:0] sig_high = {man_prod1_v, 15'b0};
+        // BF8 (E5M2) products use only 6 significant bits [5:0];
+        // pad left by 2 to align MSB with FP8 (E4M3) products.
+        wire [7:0] padded_prod0 = is_bfloat ? {man_prod0_v[5:0], 2'b0} : man_prod0_v;
+        wire [7:0] padded_prod1 = is_bfloat ? {man_prod1_v[5:0], 2'b0} : man_prod1_v;
+
+        wire [22:0] sig_low  = {padded_prod0, 15'b0};
+        wire [22:0] sig_high = {padded_prod1, 15'b0};
 
         // Prevent shift wrap when exponent diff >= 32:
         // diff_abs[5] indicates diff >= 32 (since diff_abs is 6-bit).
