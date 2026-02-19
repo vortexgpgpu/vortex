@@ -132,6 +132,7 @@ jobs:
         name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
         xlen: [32, 64]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
