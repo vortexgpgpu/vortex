@@ -48,7 +48,8 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     uint64_t mma_start = vx_cycle_count();
     ctx::mma_sync(fragC, fragA, fragB, fragC);
     // Serialize end timestamp against MMA result availability via an FPR dependency.
-    uint64_t mma_end = vx_cycle_count_fdep(fragC.data[0]);
+    vx_create_freg_dep(fragC.data[0]);
+    uint64_t mma_end = vx_cycle_count();
     mma_cycles += (mma_end - mma_start);
   }
 
