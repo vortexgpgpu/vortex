@@ -377,9 +377,15 @@ public:
 
   template <int COL>
   static __attribute__((always_inline)) void meta_store(float data) {
-    __asm__ volatile(".insn r 0x0b, 2, 2, x%[col], %[data], x0"
+    __asm__ volatile(".insn r 0x0b, 2, 2, x%[col], %[data], x0"           // RISCV_CUSTOM0 instead of 0b
       :: [col]"i"(COL), [data]"f"(data));
   }
+
+// // Set thread mask  // "memory" comment stop compiler reordering. 
+// inline void vx_tmc(int thread_mask) {
+//     __asm__ volatile (".insn r %0, 0, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(thread_mask) : "memory");
+// }
+
 
   static __attribute__((always_inline)) void load_metadata_sync(const void* meta_ptr) {
     constexpr uint32_t rtl_i_ratio = 32 / It::bits;
