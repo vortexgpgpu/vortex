@@ -87,7 +87,9 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
             TCU_U8_ID:   lane_mask = mask_8;
             TCU_I4_ID,
             TCU_U4_ID:   lane_mask = mask_4;
+        `ifdef TCU_MXI8_ENABLE
             TCU_MXI8_ID: lane_mask = mask_8;
+        `endif
         `endif
             default:     lane_mask = 'x;
         endcase

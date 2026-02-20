@@ -231,10 +231,11 @@ LMEM_NUM_BANKS = "expr: $NUM_LSU_LANES"
 TCU_TYPE = "expr: 'DSP' if $SYNTHESIS else ('DPI' if $DPI_ENABLE else 'TFR')"
 NUM_TCU_LANES = "expr: $NUM_THREADS"
 NUM_TCU_BLOCKS = "expr: $ISSUE_WIDTH"
-TCU_BF16_ENABLE = true
-TCU_INT_ENABLE = true
-TCU_FP8_ENABLE = true
 TCU_TF32_ENABLE = true
+TCU_BF16_ENABLE = true
+TCU_FP8_ENABLE = true
+TCU_INT_ENABLE = true
+TCU_MXI8_ENABLE = false
 TCU_SPARSE_ENABLE = true
 
 [isa_signatures]
