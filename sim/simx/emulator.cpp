@@ -276,6 +276,11 @@ bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
 }
 
 uint32_t Emulator::get_barrier_phase(uint32_t bar_id) const {
+  bool is_global = (bar_id >> 31);
+  bar_id &= 0x7fffffff;
+  if (is_global) {
+    return core_->socket()->get_barrier_phase(bar_id);
+  }
   return barriers_.at(bar_id).phase;
 }
 
