@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 
+`TRACING_OFF
 module VX_wallace_mul #(
     parameter N = 8,
     parameter P = 2 * N,
@@ -58,3 +59,4 @@ module VX_wallace_mul #(
     );
 
 endmodule
+`TRACING_ON
