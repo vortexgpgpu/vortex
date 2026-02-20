@@ -14,39 +14,23 @@
 `include "VX_define.vh"
 
 module VX_tcu_tfr_classifier import VX_tcu_pkg::*; #(
-    parameter N     = 1,
-    parameter WIDTH = 32,
-    parameter FMT   = 0
+    parameter EXP_W = 8,
+    parameter MAN_W = 23
 ) (
-    input wire [N-1:0][WIDTH-1:0] val,
-    output fedp_class_t [N-1:0]   cls
+    input wire [EXP_W-1:0] exp,
+    input wire [MAN_W-1:0] man,
+    input wire [EXP_W-1:0] max_exp,
+    output fedp_class_t    cls
 );
-    localparam EXP_BITS = VX_tcu_pkg::exp_bits(FMT);
-    localparam MAN_BITS = VX_tcu_pkg::sig_bits(FMT);
-    localparam SIGN_POS = VX_tcu_pkg::sign_pos(FMT);
+    wire exp_zero = ~|exp;
+    wire exp_ones = (exp == max_exp);
 
-    localparam EXP_START = SIGN_POS - 1;
-    localparam EXP_END   = EXP_START - EXP_BITS + 1;
+    wire man_non_zero = |man;
+    wire man_zero     = ~man_non_zero;
 
-    localparam MAN_START = EXP_END - 1;
-    localparam MAN_END   = MAN_START - MAN_BITS + 1;
-
-    for (genvar i = 0; i < N; ++i) begin : g_cls
-        wire sign = val[i][SIGN_POS];
-        wire [EXP_BITS-1:0] exp  = val[i][EXP_START : EXP_END];
-        wire [MAN_BITS-1:0] man  = val[i][MAN_START : MAN_END];
-
-        wire exp_zero = ~|exp;
-        wire exp_ones = &exp;
-
-        wire man_non_zero = |man;
-        wire man_zero     = ~man_non_zero;
-
-        assign cls[i].sign    = sign;
-        assign cls[i].is_zero = exp_zero & man_zero;
-        assign cls[i].is_sub  = exp_zero & man_non_zero;
-        assign cls[i].is_inf  = exp_ones & man_zero;
-        assign cls[i].is_nan  = exp_ones & man_non_zero;
-    end
+    assign cls.is_zero = exp_zero & man_zero;
+    assign cls.is_sub  = exp_zero & man_non_zero;
+    assign cls.is_inf  = exp_ones & man_zero;
+    assign cls.is_nan  = exp_ones & man_non_zero;
 
 endmodule

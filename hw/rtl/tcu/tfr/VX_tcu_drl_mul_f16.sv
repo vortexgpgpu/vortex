@@ -13,7 +13,8 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_drl_mul_f16 import VX_tcu_pkg::*; #(
+module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
+#(
     parameter `STRING INSTANCE_ID = "",
     parameter N     = 2,
     parameter TCK   = 2 * N,
@@ -42,30 +43,12 @@ module VX_tcu_drl_mul_f16 import VX_tcu_pkg::*; #(
     `UNUSED_VAR (vld_mask)
 
     // ======================================================================
-    // 1. Internal Classification (Replicated Logic)
-    // ======================================================================
-
-    fedp_class_t [N-1:0]   cls_tf32 [2];
-    fedp_class_t [TCK-1:0] cls_fp16 [2];
-    fedp_class_t [TCK-1:0] cls_bf16 [2];
-
-    VX_tcu_drl_classifier #(.N(N), .WIDTH(32), .FMT(TCU_TF32_ID)) c_a_tf32 (.val(a_row), .cls(cls_tf32[0]));
-    VX_tcu_drl_classifier #(.N(N), .WIDTH(32), .FMT(TCU_TF32_ID)) c_b_tf32 (.val(b_col), .cls(cls_tf32[1]));
-
-    VX_tcu_drl_classifier #(.N(TCK), .WIDTH(16), .FMT(TCU_FP16_ID)) c_a_fp16 (.val(a_row), .cls(cls_fp16[0]));
-    VX_tcu_drl_classifier #(.N(TCK), .WIDTH(16), .FMT(TCU_FP16_ID)) c_b_fp16 (.val(b_col), .cls(cls_fp16[1]));
-
-    VX_tcu_drl_classifier #(.N(TCK), .WIDTH(16), .FMT(TCU_BF16_ID)) c_a_bf16 (.val(a_row), .cls(cls_bf16[0]));
-    VX_tcu_drl_classifier #(.N(TCK), .WIDTH(16), .FMT(TCU_BF16_ID)) c_b_bf16 (.val(b_col), .cls(cls_bf16[1]));
-
-    // ======================================================================
-    // 2. Constants & Parameters
+    // 1. Constants & Parameters
     // ======================================================================
 
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
     localparam S_SUPER   = 22;
-
     // adding +128 to bias base to ensure BIAS in [0..255] range
     localparam BIAS_BASE = F32_BIAS + S_FP32 - S_SUPER - W + WA - 1 + 128;
 
@@ -88,155 +71,133 @@ module VX_tcu_drl_mul_f16 import VX_tcu_pkg::*; #(
     `UNUSED_PARAM (BIAS_CONST_BF16)
 
     // ======================================================================
-    // 3. Main Loop (Per TCK Lane)
+    // 2. Main Loop (Per TCK Lane)
     // ======================================================================
 
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
 
-        // Selected Signals (Mux Output)
-        logic [7:0]  ea_sel, eb_sel;
-        logic [7:0]  bias_sel;
-        logic [10:0] ma_sel, mb_sel;
-        logic        zero_sel, sign_sel, nan_sel, inf_sel;
-
-        // ------------------------------------------------------------------
-        // 3a. Pre-Calculation (Independent Paths)
-        // ------------------------------------------------------------------
-
-        // Lane Masking
         wire lane_valid = vld_mask[i*4];
         localparam OFF_16 = (i % 2) * 16;
 
-        // --- FP16 Signals -------------------------------------------------
-        wire [7:0]  ea_fp16 = cls_fp16[0][i].is_sub ? 8'b1 : 8'(a_row[i/2][S_FP16-1+OFF_16 -: E_FP16]);
-        wire [7:0]  eb_fp16 = cls_fp16[1][i].is_sub ? 8'b1 : 8'(b_col[i/2][S_FP16-1+OFF_16 -: E_FP16]);
-        wire        z_fp16  = cls_fp16[0][i].is_zero | cls_fp16[1][i].is_zero;
-
-        wire [10:0] ma_fp16 = {!cls_fp16[0][i].is_sub, a_row[i/2][9+OFF_16 -: 10]};
-        wire [10:0] mb_fp16 = {!cls_fp16[1][i].is_sub, b_col[i/2][9+OFF_16 -: 10]};
-        wire        s_fp16  = cls_fp16[0][i].sign ^ cls_fp16[1][i].sign;
-
-        wire nan_in_fp16 = cls_fp16[0][i].is_nan | cls_fp16[1][i].is_nan;
-        wire inf_z_fp16  = (cls_fp16[0][i].is_inf & cls_fp16[1][i].is_zero) |
-                           (cls_fp16[0][i].is_zero & cls_fp16[1][i].is_inf);
-        wire inf_op_fp16 = cls_fp16[0][i].is_inf | cls_fp16[1][i].is_inf;
-
-        wire nan_fp16 = nan_in_fp16 | inf_z_fp16;
-        wire inf_fp16 = inf_op_fp16 & ~inf_z_fp16;
-
-        // --- BF16 Signals -------------------------------------------------
-        wire [7:0]  ea_bf16 = cls_bf16[0][i].is_sub ? 8'b1 : a_row[i/2][S_BF16-1+OFF_16 -: E_BF16];
-        wire [7:0]  eb_bf16 = cls_bf16[1][i].is_sub ? 8'b1 : b_col[i/2][S_BF16-1+OFF_16 -: E_BF16];
-        wire        z_bf16  = cls_bf16[0][i].is_zero | cls_bf16[1][i].is_zero;
-
-        wire [10:0] ma_bf16 = {3'b0, !cls_bf16[0][i].is_sub, a_row[i/2][6+OFF_16 -: 7]};
-        wire [10:0] mb_bf16 = {3'b0, !cls_bf16[1][i].is_sub, b_col[i/2][6+OFF_16 -: 7]};
-        wire        s_bf16  = cls_bf16[0][i].sign ^ cls_bf16[1][i].sign;
-
-        wire nan_in_bf16 = cls_bf16[0][i].is_nan | cls_bf16[1][i].is_nan;
-        wire inf_z_bf16  = (cls_bf16[0][i].is_inf & cls_bf16[1][i].is_zero) |
-                           (cls_bf16[0][i].is_zero & cls_bf16[1][i].is_inf);
-        wire inf_op_bf16 = cls_bf16[0][i].is_inf | cls_bf16[1][i].is_inf;
-
-        wire nan_bf16 = nan_in_bf16 | inf_z_bf16;
-        wire inf_bf16 = inf_op_bf16 & ~inf_z_bf16;
-        `UNUSED_VAR ({ea_bf16, eb_bf16, ma_bf16, mb_bf16, s_bf16, z_bf16, nan_bf16, inf_bf16})
-
-        // --- TF32 Signals -------------------------------------------------
-        wire [7:0]  ea_tf32, eb_tf32;
-        wire [10:0] ma_tf32, mb_tf32;
-        wire        z_tf32, s_tf32, nan_tf32, inf_tf32;
-
-        if ((i % 2) == 0) begin : g_tf32_even
-            assign ea_tf32 = cls_tf32[0][i/2].is_sub ? 8'b1 : a_row[i/2][S_TF32-1 -: E_TF32];
-            assign eb_tf32 = cls_tf32[1][i/2].is_sub ? 8'b1 : b_col[i/2][S_TF32-1 -: E_TF32];
-            assign z_tf32  = cls_tf32[0][i/2].is_zero | cls_tf32[1][i/2].is_zero;
-
-            assign ma_tf32 = {!cls_tf32[0][i/2].is_sub, a_row[i/2][9:0]};
-            assign mb_tf32 = {!cls_tf32[1][i/2].is_sub, b_col[i/2][9:0]};
-            assign s_tf32  = cls_tf32[0][i/2].sign ^ cls_tf32[1][i/2].sign;
-
-            wire nan_in_tf32 = cls_tf32[0][i/2].is_nan | cls_tf32[1][i/2].is_nan;
-            wire inf_z_tf32  = (cls_tf32[0][i/2].is_inf & cls_tf32[1][i/2].is_zero) |
-                               (cls_tf32[0][i/2].is_zero & cls_tf32[1][i/2].is_inf);
-            wire inf_op_tf32 = cls_tf32[0][i/2].is_inf | cls_tf32[1][i/2].is_inf;
-
-            assign nan_tf32 = nan_in_tf32 | inf_z_tf32;
-            assign inf_tf32 = inf_op_tf32 & ~inf_z_tf32;
-        end else begin : g_tf32_odd
-            assign ea_tf32  = '0;
-            assign eb_tf32  = '0;
-            assign ma_tf32  = '0;
-            assign mb_tf32  = '0;
-            assign z_tf32   = 1'b1;
-            assign s_tf32   = 1'b0;
-            assign nan_tf32 = 1'b0;
-            assign inf_tf32 = 1'b0;
-        end
-        `UNUSED_VAR ({ea_tf32, eb_tf32, ma_tf32, mb_tf32, s_tf32, z_tf32, nan_tf32, inf_tf32})
-
         // ------------------------------------------------------------------
-        // 3b. Muxing (Selection Only)
+        // 2a. Input Muxing & Field Extraction
         // ------------------------------------------------------------------
+        logic [7:0] raw_ea, raw_eb;
+        logic [9:0] raw_ma, raw_mb;
+        logic       raw_sa, raw_sb;
+        logic [7:0] exp_max;
+        logic [7:0] bias_sel;
+
         always_comb begin
-            case(fmt_f)
+            case (fmt_f)
                 TCU_FP16_ID: begin
-                    ea_sel      = ea_fp16;
-                    eb_sel      = eb_fp16;
-                    ma_sel      = ma_fp16;
-                    mb_sel      = mb_fp16;
+                    raw_ea    = 8'(a_row[i/2][S_FP16-1+OFF_16 -: E_FP16]);
+                    raw_eb    = 8'(b_col[i/2][S_FP16-1+OFF_16 -: E_FP16]);
+                    raw_ma    = a_row[i/2][9+OFF_16 -: 10];
+                    raw_mb    = b_col[i/2][9+OFF_16 -: 10];
+                    raw_sa    = a_row[i/2][15+OFF_16];
+                    raw_sb    = b_col[i/2][15+OFF_16];
+                    exp_max   = 8'h1F;
                     bias_sel    = BIAS_CONST_FP16;
-                    sign_sel    = s_fp16;
-                    zero_sel    = z_fp16;
-                    nan_sel     = nan_fp16;
-                    inf_sel     = inf_fp16;
                 end
             `ifdef TCU_BF16_ENABLE
                 TCU_BF16_ID: begin
-                    ea_sel      = ea_bf16;
-                    eb_sel      = eb_bf16;
-                    ma_sel      = ma_bf16;
-                    mb_sel      = mb_bf16;
+                    raw_ea    = a_row[i/2][S_BF16-1+OFF_16 -: E_BF16];
+                    raw_eb    = b_col[i/2][S_BF16-1+OFF_16 -: E_BF16];
+                    raw_ma    = {a_row[i/2][6+OFF_16 -: 7], 3'b0};
+                    raw_mb    = {b_col[i/2][6+OFF_16 -: 7], 3'b0};
+                    raw_sa    = a_row[i/2][15+OFF_16];
+                    raw_sb    = b_col[i/2][15+OFF_16];
+                    exp_max   = 8'hFF;
                     bias_sel    = BIAS_CONST_BF16;
-                    sign_sel    = s_bf16;
-                    zero_sel    = z_bf16;
-                    nan_sel     = nan_bf16;
-                    inf_sel     = inf_bf16;
                 end
             `endif
             `ifdef TCU_TF32_ENABLE
                 TCU_TF32_ID: begin
-                    ea_sel      = ea_tf32;
-                    eb_sel      = eb_tf32;
-                    ma_sel      = ma_tf32;
-                    mb_sel      = mb_tf32;
+                    if ((i % 2) == 0) begin
+                        raw_ea    = a_row[i/2][S_TF32-1 -: E_TF32];
+                        raw_eb    = b_col[i/2][S_TF32-1 -: E_TF32];
+                        raw_ma    = a_row[i/2][9:0];
+                        raw_mb    = b_col[i/2][9:0];
+                        raw_sa    = a_row[i/2][18];
+                        raw_sb    = b_col[i/2][18];
+                        exp_max   = 8'hFF;
                     bias_sel    = BIAS_CONST_TF32;
-                    sign_sel    = s_tf32;
-                    zero_sel    = z_tf32;
-                    nan_sel     = nan_tf32;
-                    inf_sel     = inf_tf32;
+                    end else begin
+                        raw_ea    = '0;
+                        raw_eb    = '0;
+                        raw_ma    = '0;
+                        raw_mb    = '0;
+                        raw_sa    = '0;
+                        raw_sb    = '0;
+                        exp_max   = 8'hFF;
+                        bias_sel  = '0;
+                    end
                 end
             `endif
                 default: begin
-                    ea_sel      = 'x;
-                    eb_sel      = 'x;
-                    ma_sel      = 'x;
-                    mb_sel      = 'x;
+                    raw_ea    = 'x;
+                    raw_eb    = 'x;
+                    raw_ma    = 'x;
+                    raw_mb    = 'x;
+                    raw_sa    = 'x;
+                    raw_sb    = 'x;
+                    exp_max   = 'x;
                     bias_sel    = 'x;
-                    sign_sel    = 'x;
-                    zero_sel    = 'x;
-                    nan_sel     = 'x;
-                    inf_sel     = 'x;
                 end
             endcase
         end
 
         // ------------------------------------------------------------------
-        // 3c. Arithmetic Path
+        // 2b. Inline Generic Classification
+        // ------------------------------------------------------------------
+
+        fedp_class_t cls_a;
+        VX_tcu_tfr_classifier #(
+            .EXP_W (8),
+            .MAN_W (10)
+        ) class_a (
+            .exp (raw_ea),
+            .man (raw_ma),
+            .max_exp (exp_max),
+            .cls (cls_a)
+        );
+
+        fedp_class_t cls_b;
+        VX_tcu_tfr_classifier #(
+            .EXP_W (8),
+            .MAN_W (10)
+        ) class_b (
+            .exp (raw_eb),
+            .man (raw_mb),
+            .max_exp (exp_max),
+            .cls (cls_b)
+        );
+
+        // ------------------------------------------------------------------
+        // 2c. Operand Preparation
+        // ------------------------------------------------------------------
+        wire [7:0] ea_sel = cls_a.is_sub ? 8'b1 : raw_ea;
+        wire [7:0] eb_sel = cls_b.is_sub ? 8'b1 : raw_eb;
+
+        wire [10:0] ma_sel = {!cls_a.is_sub, raw_ma};
+        wire [10:0] mb_sel = {!cls_b.is_sub, raw_mb};
+
+        wire sign_sel = raw_sa ^ raw_sb;
+        wire zero_sel = cls_a.is_zero | cls_b.is_zero;
+
+        wire nan_in = cls_a.is_nan | cls_b.is_nan;
+        wire inf_z  = (cls_a.is_inf & cls_b.is_zero) | (cls_a.is_zero & cls_b.is_inf);
+        wire inf_op = cls_a.is_inf | cls_b.is_inf;
+
+        wire nan_sel = nan_in | inf_z;
+        wire inf_sel = inf_op & ~inf_z;
+
+        // ------------------------------------------------------------------
+        // 2d. Arithmetic Path
         // ------------------------------------------------------------------
 
         // Exponent Addition
-
         wire [EXP_W-1:0] exp_sum, exp_carry;
         VX_csa_tree #(
             .N (3),
@@ -278,7 +239,7 @@ module VX_tcu_drl_mul_f16 import VX_tcu_pkg::*; #(
             case (fmt_f)
                 TCU_FP16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
             `ifdef TCU_BF16_ENABLE
-                TCU_BF16_ID: result_sig[i] = {sign_sel, man_prod[15:0], 8'b0};
+                TCU_BF16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
             `endif
             `ifdef TCU_TF32_ENABLE
                 TCU_TF32_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};

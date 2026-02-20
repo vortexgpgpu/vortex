@@ -104,11 +104,20 @@ module VX_tcu_drl_mul_join import VX_tcu_pkg::*; #(
 
     // 2a. Local Classifier for C (Check for Zero/Nan/Inf)
     fedp_class_t cls_c;
-    VX_tcu_drl_classifier #(.N(1), .WIDTH(32), .FMT(TCU_FP32_ID)) c_c (.val(c_val), .cls(cls_c));
-    `UNUSED_VAR (cls_c)
+    VX_tcu_tfr_classifier #(
+        .EXP_W (8),
+        .MAN_W (23)
+    ) class_c (
+        .exp (c_val[30:23]),
+        .man (c_val[22:0]),
+        .max_exp (8'hFF),
+        .cls (cls_c)
+    );
+    `UNUSED_VAR (cls_c.is_sub)
 
     // 2b. C-Term Signal Extraction
     // If format is INT, we just take the bits. If float, we add hidden bit.
+    wire c_sign = c_val[31];
     wire [24:0] c_sig_final = c_is_int ? c_val[24:0] : {c_val[31], 1'b1, c_val[22:0]};
 
     // 2c. C-Term Exponent Calculation
@@ -139,21 +148,15 @@ module VX_tcu_drl_mul_join import VX_tcu_pkg::*; #(
         assign lane_sign[i] = exc_sel[i].sign;
     end
 
-    // 4a. C-Term flags
-    // If Integer mode, C-term exceptions are suppressed (always valid)
-    wire c_is_nan = cls_c.is_nan;
-    wire c_is_inf = cls_c.is_inf;
-    wire c_sign   = cls_c.sign; // Relevant only if Inf
-
-    // 4b. Global Infinity Analysis
+    // 4a. Global Infinity Analysis
     // We must detect if we are adding +Inf and -Inf anywhere in the dot product.
     // This includes (Lane vs Lane) AND (Lanes vs C-term).
 
     wire [TCK-1:0] p_pos_inf = lane_inf & ~lane_sign;
     wire [TCK-1:0] p_neg_inf = lane_inf &  lane_sign;
 
-    wire c_pos_inf = c_is_inf & ~c_sign;
-    wire c_neg_inf = c_is_inf &  c_sign;
+    wire c_pos_inf = cls_c.is_inf & ~c_sign;
+    wire c_neg_inf = cls_c.is_inf &  c_sign;
 
     // Check if we have ANY positive infinity (Lanes or C)
     wire has_pos = (|p_pos_inf) | c_pos_inf;
@@ -161,11 +164,11 @@ module VX_tcu_drl_mul_join import VX_tcu_pkg::*; #(
     // Check if we have ANY negative infinity (Lanes or C)
     wire has_neg = (|p_neg_inf) | c_neg_inf;
 
-    // 4c. Final Logic
+    // 4b. Final Logic
     // NaN if:
     // 1. Any input (Lane product or C-term) is NaN
     // 2. We have both +Inf and -Inf in the sum (Invalid Operation)
-    wire any_input_nan = (|lane_nan) | c_is_nan;
+    wire any_input_nan = (|lane_nan) | cls_c.is_nan;
     wire add_gen_nan   = has_pos & has_neg;
     wire res_nan       = any_input_nan | add_gen_nan;
 

@@ -108,7 +108,6 @@ package VX_tcu_pkg;
         logic is_sub;
         logic is_inf;
         logic is_nan;
-        logic sign;
     } fedp_class_t;
 
     typedef struct packed {
