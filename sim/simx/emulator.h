@@ -102,6 +102,10 @@ public:
 
   bool barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid);
 
+  void barrier_tx_start(uint32_t bar_id);
+
+  void barrier_tx_done(uint32_t bar_id);
+
   bool wspawn(uint32_t num_warps, Word nextPC);
 
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
@@ -149,6 +153,8 @@ private:
   void update_fcrs(uint32_t fflags, uint32_t wid, uint32_t tid);
 
   uint32_t get_barrier_phase(uint32_t bar_id) const;
+
+  void release_local_barrier(uint32_t bar_id);
 
   // temporarily added for riscv-vector tests
   // TODO: remove once ecall/ebreak are supported

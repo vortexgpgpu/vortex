@@ -323,6 +323,24 @@ uint32_t Emulator::get_barrier_phase(uint32_t bar_id) const {
   return barriers_.at(bar_id).phase;
 }
 
+void Emulator::release_local_barrier(uint32_t bar_id) {
+  auto& barrier = barriers_.at(bar_id);
+  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
+    if (barrier.wait_mask.test(i)) {
+      DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
+      this->resume(i);
+    }
+  }
+  barrier.wait_mask.reset();
+  barrier.arrival_count = 0;
+#ifdef EXT_TXBAR_ENABLE
+  barrier.expected_count = 0;
+  barrier.tx_pending = false;
+  barrier.arrivals_done = false;
+#endif
+  ++barrier.phase;
+}
+
 // Mark warp arrival at a barrier and return the phase generation number
 uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_async_bar) {
   bool is_global = (bar_id >> 31);
@@ -330,6 +348,10 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid,
 
   auto& barrier = barriers_.at(bar_id);
 
+#ifdef EXT_TXBAR_ENABLE
+  // Save expected local participant count for delayed transactional completion.
+  barrier.expected_count = count;
+#endif
   // update arrival count
   barrier.arrival_count++;
 
@@ -347,6 +369,22 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid,
     // local barrier handling
     phase = barrier.phase;
     if (barrier.arrival_count == count) {
+#ifdef EXT_TXBAR_ENABLE
+      if (barrier.tx_pending) {
+        barrier.arrivals_done = true;
+        // Legacy blocking barrier arrives must remain blocked until tx completion.
+        if (!is_async_bar) {
+          barrier.wait_mask.set(wid);
+        }
+      } else {
+        // also resume current warp if stalled (legacy barrier)
+        if (!is_async_bar) {
+          DP(3, "*** Resume core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id);
+          this->resume(wid);
+        }
+        release_local_barrier(bar_id);
+      }
+#else
       // resume waiting warps
       for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
         if (barrier.wait_mask.test(i)) {
@@ -363,6 +401,7 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid,
       barrier.arrival_count = 0;
       barrier.wait_mask.reset();
       ++barrier.phase;
+#endif
     }
   }
 
@@ -393,6 +432,35 @@ bool Emulator::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
     }
 
   return wait;
+}
+
+void Emulator::barrier_tx_start(uint32_t bar_id) {
+#ifdef EXT_TXBAR_ENABLE
+  bool is_global = (bar_id >> 31);
+  bar_id &= 0x7fffffff;
+  if (is_global)
+    return;
+  auto& barrier = barriers_.at(bar_id);
+  barrier.tx_pending = true;
+#else
+  __unused(bar_id);
+#endif
+}
+
+void Emulator::barrier_tx_done(uint32_t bar_id) {
+#ifdef EXT_TXBAR_ENABLE
+  bool is_global = (bar_id >> 31);
+  bar_id &= 0x7fffffff;
+  if (is_global)
+    return;
+  auto& barrier = barriers_.at(bar_id);
+  barrier.tx_pending = false;
+  if (barrier.arrivals_done && (barrier.arrival_count == barrier.expected_count)) {
+    release_local_barrier(bar_id);
+  }
+#else
+  __unused(bar_id);
+#endif
 }
 
 #ifdef VM_ENABLE

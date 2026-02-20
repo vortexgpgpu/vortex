@@ -25,6 +25,14 @@
 
 using namespace vortex;
 
+#ifdef EXT_TMA_ENABLE
+static inline uint32_t decode_barrier_addr(uint32_t bar_addr_raw, const Arch& arch) {
+  uint32_t cta_no = bar_addr_raw & 0xffffu;
+  uint32_t bar_no = (bar_addr_raw >> 16) & 0x7fffu;
+  return (cta_no * arch.num_barriers() + bar_no) | (bar_addr_raw & 0x80000000u);
+}
+#endif
+
 AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit(ctx, name, core)
 {}
@@ -363,7 +371,44 @@ void LsuUnit::tick() {
 
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit(ctx, name, core)
-{}
+{
+#ifdef EXT_TMA_ENABLE
+	tma_runtime_.resize(core->arch().num_warps());
+#endif
+}
+
+#ifdef EXT_TMA_ENABLE
+bool SfuUnit::execute_tma_op(instr_trace_t* trace, TmaType tma_type, const TmaTraceData& tma_data) {
+	auto& runtime = tma_runtime_.at(trace->wid);
+	switch (tma_type) {
+	case TmaType::SETUP0:
+		runtime.desc_slot = tma_data.rs1;
+		runtime.bar_id = decode_barrier_addr(tma_data.rs2, core_->arch());
+		core_->barrier_tx_start(runtime.bar_id);
+		return true;
+	case TmaType::SETUP1:
+		runtime.smem_addr = tma_data.rs1;
+		runtime.flags = tma_data.rs2;
+		return true;
+	case TmaType::COORD01:
+		runtime.coords[0] = tma_data.rs1;
+		runtime.coords[1] = tma_data.rs2;
+		return true;
+	case TmaType::COORD23:
+		runtime.coords[2] = tma_data.rs1;
+		runtime.coords[3] = tma_data.rs2;
+		return true;
+	case TmaType::ISSUE: {
+		runtime.coords[4] = tma_data.rs1;
+		bool accepted = core_->tma_issue(runtime.desc_slot, runtime.smem_addr, runtime.coords.data(), runtime.flags, runtime.bar_id);
+		return accepted;
+	}
+	default:
+		std::abort();
+	}
+	return false;
+}
+#endif
 
 void SfuUnit::tick() {
 	// check input queue
@@ -418,6 +463,17 @@ void SfuUnit::tick() {
 				std::abort();
 			}
 			DT(3, this->name() << " execute: op=" << wctl_type << ", " << *trace);
+#ifdef EXT_TMA_ENABLE
+		} else if (std::get_if<TmaType>(&trace->op_type)) {
+			auto tma_type = std::get<TmaType>(trace->op_type);
+			auto tma_data = std::dynamic_pointer_cast<TmaTraceData>(trace->data);
+			assert(tma_data);
+			if (!this->execute_tma_op(trace, tma_type, *tma_data)) {
+				continue; // TMA request queue backpressure
+			}
+			output.send(trace, 2+delay);
+			DT(3, this->name() << " execute: op=" << tma_type << ", " << *trace);
+#endif
 		} else if (std::get_if<CsrType>(&trace->op_type)) {
 			auto csr_type = std::get<CsrType>(trace->op_type);
 			switch  (csr_type) {

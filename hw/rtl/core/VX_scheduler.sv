@@ -29,6 +29,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // inputsdecode_if
     VX_warp_ctl_if.slave    warp_ctl_if,
+`ifdef EXT_TMA_ENABLE
+    VX_txbar_bus_if.slave   txbar_if,
+`endif
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_decode_sched_if.slave decode_sched_if,
     VX_issue_sched_if.slave issue_sched_if,
@@ -220,6 +223,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 
     // barrier handling
+`ifdef EXT_TMA_ENABLE
+    wire bar_req_data_valid = warp_ctl_if.valid && warp_ctl_if.barrier.valid;
+    wire txbar_fire = txbar_if.valid && txbar_if.ready;
+`endif
 
     VX_bar_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-barrier", INSTANCE_ID))),
@@ -230,6 +237,15 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .req_valid  (warp_ctl_if.valid),
         .req_wid    (warp_ctl_if.wid),
         .req_data   (warp_ctl_if.barrier),
+    `ifdef EXT_TMA_ENABLE
+        .tx_valid   (txbar_fire),
+        .tx_bar_addr(txbar_if.data.addr),
+        .tx_is_done (txbar_if.data.is_done),
+    `else
+        .tx_valid   (1'b0),
+        .tx_bar_addr('0),
+        .tx_is_done (1'b0),
+    `endif
         .read_addr  (warp_ctl_if.barrier_addr),
         .read_phase (warp_ctl_if.barrier_phase),
         .active_warps(active_warps),
@@ -239,6 +255,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .unlock_valid(barrier_unlock_valid),
         .unlock_mask(barrier_unlock_mask)
     );
+
+`ifdef EXT_TMA_ENABLE
+    assign txbar_if.ready = ~bar_req_data_valid;
+`endif
 
     // split/join handling
 

@@ -246,6 +246,19 @@ package VX_trace_pkg;
                         `TRACE(level, ("CSRRC"))
                     end
                 end
+            `ifdef EXT_TMA_ENABLE
+                INST_SFU_TMA: begin
+                    case (op_args.tma.op)
+                        3'd0: `TRACE(level, ("TMA.SETUP0"))
+                        3'd1: `TRACE(level, ("TMA.SETUP1"))
+                        3'd2: `TRACE(level, ("TMA.COORD01"))
+                        3'd3: `TRACE(level, ("TMA.COORD23"))
+                        3'd4: `TRACE(level, ("TMA.ISSUE"))
+                        3'd5: `TRACE(level, ("TMA.LAUNCH"))
+                        default: `TRACE(level, ("TMA.?"))
+                    endcase
+                end
+            `endif
                 default: `TRACE(level, ("?"))
             endcase
         end

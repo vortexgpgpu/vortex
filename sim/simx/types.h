@@ -73,11 +73,21 @@ union reg_data_t {
 struct warp_barrier_t {
   WarpMask wait_mask  = 0;
   uint32_t arrival_count = 0;
+#ifdef EXT_TXBAR_ENABLE
+  uint32_t expected_count = 0;
+  bool tx_pending = false;
+  bool arrivals_done = false;
+#endif
   uint32_t phase = 0;
 
   void reset() {
     wait_mask.reset();
     arrival_count = 0;
+#ifdef EXT_TXBAR_ENABLE
+    expected_count = 0;
+    tx_pending = false;
+    arrivals_done = false;
+#endif
     phase = 0;
   }
 };
@@ -479,6 +489,37 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef EXT_TMA_ENABLE
+
+enum class TmaType {
+  SETUP0,
+  SETUP1,
+  COORD01,
+  COORD23,
+  ISSUE
+};
+
+struct IntrTmaArgs {
+  uint32_t op : 3;
+};
+
+inline std::ostream &operator<<(std::ostream &os, const TmaType& type) {
+  switch (type) {
+  case TmaType::SETUP0:  os << "TMA.SETUP0"; break;
+  case TmaType::SETUP1:  os << "TMA.SETUP1"; break;
+  case TmaType::COORD01: os << "TMA.COORD01"; break;
+  case TmaType::COORD23: os << "TMA.COORD23"; break;
+  case TmaType::ISSUE:   os << "TMA.ISSUE"; break;
+  default:
+    assert(false);
+  }
+  return os;
+}
+
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class CsrType {
   CSRRW,
   CSRRS,
@@ -699,6 +740,9 @@ using OpType = std::variant<
 , VoteType
 , ShflType
 , WctlType
+#ifdef EXT_TMA_ENABLE
+, TmaType
+#endif
 #ifdef EXT_V_ENABLE
 , VsetType
 , VlsType
@@ -718,6 +762,9 @@ using IntrArgs = std::variant<
 , IntrFpuArgs
 , IntrCsrArgs
 , IntrWctlArgs
+#ifdef EXT_TMA_ENABLE
+, IntrTmaArgs
+#endif
 #ifdef EXT_V_ENABLE
 , IntrVsetArgs
 , IntrVlsArgs

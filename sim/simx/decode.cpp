@@ -379,6 +379,19 @@ static op_string_t op_string(const Instr &instr) {
         std::abort();
       }
     }
+#ifdef EXT_TMA_ENABLE
+    ,[&](TmaType tma_type)-> op_string_t {
+      switch (tma_type) {
+      case TmaType::SETUP0:  return {"TMA.SETUP0", ""};
+      case TmaType::SETUP1:  return {"TMA.SETUP1", ""};
+      case TmaType::COORD01: return {"TMA.COORD01", ""};
+      case TmaType::COORD23: return {"TMA.COORD23", ""};
+      case TmaType::ISSUE:   return {"TMA.ISSUE", ""};
+      default:
+        std::abort();
+      }
+    }
+#endif
   #ifdef EXT_V_ENABLE
     ,[&](VsetType vset_type)-> op_string_t {
       auto vsetArgs = std::get<IntrVsetArgs>(instrArgs);
@@ -1093,6 +1106,36 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       }
       ibuffer.push_back(instr);
     } break;
+#ifdef EXT_TMA_ENABLE
+    case 3: { // TMA runtime issue (leader-thread serialized payload)
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
+      IntrTmaArgs tmaArgs{};
+      tmaArgs.op = funct3;
+      instr->setArgs(tmaArgs);
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->setSrcReg(1, rs2, RegType::Integer);
+      switch (funct3) {
+      case 0:
+        instr->setOpType(TmaType::SETUP0);
+        break;
+      case 1:
+        instr->setOpType(TmaType::SETUP1);
+        break;
+      case 2:
+        instr->setOpType(TmaType::COORD01);
+        break;
+      case 3:
+        instr->setOpType(TmaType::COORD23);
+        break;
+      case 4:
+        instr->setOpType(TmaType::ISSUE);
+        break;
+      default:
+        std::abort();
+      }
+      ibuffer.push_back(instr);
+    } break;
+#endif
   #ifdef EXT_TCU_ENABLE
     case 2: {
       switch (funct3) {

@@ -26,6 +26,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
+`ifdef EXT_TMA_ENABLE
+    ,
+    VX_mem_bus_if.slave     tma_smem_bus_if
+`endif
 );
     VX_lsu_mem_if #(
         .NUM_LANES (`NUM_LSU_LANES),
@@ -104,6 +108,83 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .mem_bus_if (lmem_adapt_if)
     );
 
+`ifdef EXT_TMA_ENABLE
+    if (`EXT_TMA_CLUSTER_LEVEL_ENABLED) begin : g_lmem_ext_tma
+        VX_mem_bus_if #(
+            .DATA_SIZE (LSU_WORD_SIZE),
+            .TAG_WIDTH (LMEM_TAG_WIDTH)
+        ) lmem_ext_tma_if();
+
+        if (TMA_SMEM_WORD_SIZE != LSU_WORD_SIZE) begin : g_lmem_ext_tma_downsize
+            VX_tma_smem_downsize #(
+                .SRC_DATA_SIZE (TMA_SMEM_WORD_SIZE),
+                .DST_DATA_SIZE (LSU_WORD_SIZE),
+                .TAG_WIDTH     (LMEM_TAG_WIDTH),
+                .SRC_ADDR_WIDTH(TMA_SMEM_ADDR_WIDTH),
+                .DST_ADDR_WIDTH(LSU_ADDR_WIDTH)
+            ) lmem_ext_tma_downsize (
+                .clk       (clk),
+                .reset     (reset),
+                .src_bus_if(tma_smem_bus_if),
+                .dst_bus_if(lmem_ext_tma_if)
+            );
+        end else begin : g_lmem_ext_tma_passthru
+            `ASSIGN_VX_MEM_BUS_IF (lmem_ext_tma_if, tma_smem_bus_if);
+        end
+
+        VX_mem_bus_if #(
+            .DATA_SIZE (LSU_WORD_SIZE),
+            .TAG_WIDTH (LMEM_TAG_WIDTH)
+        ) lmem_mux_if[`NUM_LSU_LANES + 1]();
+
+        // Keep TMA at input index 0 so VX_local_mem's priority arbiter
+        // grants TMA ahead of LSU lanes at the bank-facing request xbar.
+        `ASSIGN_VX_MEM_BUS_IF (lmem_mux_if[0], lmem_ext_tma_if);
+        for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin : g_lmem_mux_lsu
+            `ASSIGN_VX_MEM_BUS_IF (lmem_mux_if[i + 1], lmem_adapt_if[i]);
+        end
+
+        VX_local_mem #(
+            .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
+            .SIZE       (1 << `LMEM_LOG_SIZE),
+            .NUM_REQS   (`NUM_LSU_LANES + 1),
+            .NUM_BANKS  (`LMEM_NUM_BANKS),
+            .WORD_SIZE  (LSU_WORD_SIZE),
+            .ADDR_WIDTH (LMEM_ADDR_WIDTH),
+            .TAG_WIDTH  (LMEM_TAG_WIDTH),
+            .OUT_BUF    (3)
+        ) local_mem (
+            .clk        (clk),
+            .reset      (reset),
+        `ifdef PERF_ENABLE
+            .lmem_perf  (lmem_perf),
+        `endif
+            .mem_bus_if (lmem_mux_if)
+        );
+    end else begin : g_lmem_no_ext_tma
+        VX_local_mem #(
+            .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
+            .SIZE       (1 << `LMEM_LOG_SIZE),
+            .NUM_REQS   (`NUM_LSU_LANES),
+            .NUM_BANKS  (`LMEM_NUM_BANKS),
+            .WORD_SIZE  (LSU_WORD_SIZE),
+            .ADDR_WIDTH (LMEM_ADDR_WIDTH),
+            .TAG_WIDTH  (LMEM_TAG_WIDTH),
+            .OUT_BUF    (3)
+        ) local_mem (
+            .clk        (clk),
+            .reset      (reset),
+        `ifdef PERF_ENABLE
+            .lmem_perf  (lmem_perf),
+        `endif
+            .mem_bus_if (lmem_adapt_if)
+        );
+
+        assign tma_smem_bus_if.req_ready = 1'b1;
+        assign tma_smem_bus_if.rsp_valid = 1'b0;
+        assign tma_smem_bus_if.rsp_data  = '0;
+    end
+`else
     VX_local_mem #(
         .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
         .SIZE       (1 << `LMEM_LOG_SIZE),
@@ -121,6 +202,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `endif
         .mem_bus_if (lmem_adapt_if)
     );
+`endif
 
 `else
 
@@ -131,6 +213,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lsu_dcache_if
         `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if[i], lsu_mem_if[i]);
     end
+
+`ifdef EXT_TMA_ENABLE
+    assign tma_smem_bus_if.req_ready = 1'b1;
+    assign tma_smem_bus_if.rsp_valid = 1'b0;
+    assign tma_smem_bus_if.rsp_data  = '0;
+`endif
 
 `endif
 

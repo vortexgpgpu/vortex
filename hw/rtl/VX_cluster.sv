@@ -81,7 +81,21 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
     ) per_socket_mem_bus_if[NUM_SOCKETS * `L1_MEM_PORTS]();
 
+`ifdef EXT_TMA_ENABLE
+    VX_tma_bus_if per_socket_tma_bus_if[NUM_SOCKETS]();
+    VX_mem_bus_if #(
+        .DATA_SIZE (TMA_SMEM_WORD_SIZE),
+        .TAG_WIDTH (LMEM_TAG_WIDTH)
+    ) per_socket_tma_smem_bus_if[NUM_SOCKETS]();
+    localparam TMA_CORE_LOCAL_BITS = `CLOG2(`SOCKET_SIZE);
+`endif
+
     `RESET_RELAY (l2_reset, reset);
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (`L2_LINE_SIZE),
+        .TAG_WIDTH (L2_MEM_TAG_WIDTH)
+    ) l2_mem_bus_if[`L2_MEM_PORTS]();
 
     VX_cache_wrap #(
         .INSTANCE_ID    (`SFORMATF(("%s-l2cache", INSTANCE_ID))),
@@ -112,8 +126,31 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .cache_perf     (l2_perf),
     `endif
         .core_bus_if    (per_socket_mem_bus_if),
-        .mem_bus_if     (mem_bus_if)
+        .mem_bus_if     (l2_mem_bus_if)
     );
+
+`ifdef EXT_TMA_ENABLE
+    VX_tma_cluster #(
+        .INSTANCE_ID     (`SFORMATF(("%s-tma-cluster", INSTANCE_ID))),
+        .TMA_NUM_SOCKETS (NUM_SOCKETS),
+        .NUM_TMA_UNITS   (`NUM_TMA_UNITS),
+        .L2_MEM_PORTS    (`L2_MEM_PORTS),
+        .CORE_LOCAL_BITS (TMA_CORE_LOCAL_BITS),
+        .ENABLE          (`EXT_TMA_CLUSTER_LEVEL_ENABLED)
+    ) tma_cluster (
+        .clk                    (clk),
+        .reset                  (reset),
+        .dcr_bus_if             (dcr_bus_if),
+        .per_socket_tma_bus_if  (per_socket_tma_bus_if),
+        .per_socket_tma_smem_bus_if(per_socket_tma_smem_bus_if),
+        .l2_mem_bus_if          (l2_mem_bus_if),
+        .mem_bus_if             (mem_bus_if)
+    );
+`else
+    for (genvar i = 0; i < `L2_MEM_PORTS; ++i) begin : g_l2_mem_out
+        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l2_mem_bus_if[i]);
+    end
+`endif
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -144,6 +181,11 @@ module VX_cluster import VX_gpu_pkg::*; #(
             .dcr_bus_if     (socket_dcr_bus_if),
 
             .mem_bus_if     (per_socket_mem_bus_if[socket_id * `L1_MEM_PORTS +: `L1_MEM_PORTS]),
+
+        `ifdef EXT_TMA_ENABLE
+            .tma_bus_if     (per_socket_tma_bus_if[socket_id]),
+            .tma_smem_bus_if(per_socket_tma_smem_bus_if[socket_id]),
+        `endif
 
         `ifdef GBAR_ENABLE
             .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),

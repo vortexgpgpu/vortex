@@ -15,6 +15,9 @@
 
 #include <vector>
 #include <list>
+#ifdef EXT_TMA_ENABLE
+#include <memory>
+#endif
 #include <simobject.h>
 #include "types.h"
 #include "emulator.h"
@@ -33,6 +36,9 @@
 #include "func_unit.h"
 #include "mem_coalescer.h"
 #include "VX_config.h"
+#ifdef EXT_TMA_ENABLE
+#include "tma_engine.h"
+#endif
 
 namespace vortex {
 
@@ -117,6 +123,10 @@ public:
 
   bool barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid);
 
+  void barrier_tx_start(uint32_t bar_id);
+
+  void barrier_tx_done(uint32_t bar_id);
+
   bool wspawn(uint32_t num_warps, Word nextPC);
 
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
@@ -149,9 +159,17 @@ public:
     return emulator_.dcache_write(data, addr, size);
   }
 
-  Emulator& emulator() {
-    return emulator_;
-  }
+#ifdef EXT_TMA_ENABLE
+  bool tma_issue(uint32_t desc_slot,
+                 uint32_t smem_addr,
+                 const uint32_t coords[5],
+                 uint32_t flags,
+                 uint32_t bar_id);
+
+  bool tma_estimate(uint32_t desc_slot, uint32_t flags, uint32_t* total_elems, uint32_t* elem_bytes);
+
+  bool tma_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t flags, uint32_t* bytes_copied);
+#endif
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr& tensor_unit() {
@@ -186,6 +204,9 @@ private:
   uint32_t core_id_;
   Socket* socket_;
   const Arch& arch_;
+#ifdef EXT_TMA_ENABLE
+  const DCRS& dcrs_;
+#endif
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;
@@ -221,6 +242,10 @@ private:
 
   uint32_t commit_exe_;
   std::vector<Arbiter> ibuffer_arbs_;
+
+#ifdef EXT_TMA_ENABLE
+  std::unique_ptr<TmaEngine> tma_engine_;
+#endif
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 

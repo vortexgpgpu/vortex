@@ -30,34 +30,69 @@ module VX_uop_sequencer import
     `UNUSED_PARAM (WARP_ID)
     `UNUSED_SPARAM (INSTANCE_ID)
 
+    ibuffer_t base_uop_data;
+    ibuffer_t tma_uop_data;
     ibuffer_t uop_data;
 
+    wire is_base_uop_input;
+    wire is_tma_uop_input;
     wire is_uop_input;
     wire uop_start = input_if.valid && is_uop_input;
     wire uop_next = output_if.ready;
     wire uop_done;
+    wire base_uop_done;
+    wire tma_uop_done;
 
 `ifdef EXT_TCU_ENABLE
 
-    assign is_uop_input = (input_if.data.ex_type == EX_TCU && input_if.data.op_type == INST_TCU_WMMA);
+    assign is_base_uop_input = (input_if.data.ex_type == EX_TCU && input_if.data.op_type == INST_TCU_WMMA);
 
     VX_tcu_uops tcu_uops (
         .clk     (clk),
         .reset   (reset),
         .ibuf_in (input_if.data),
-        .ibuf_out(uop_data),
-        .start   (uop_start),
+        .ibuf_out(base_uop_data),
+        .start   (uop_start && is_base_uop_input),
         .next    (uop_next),
-        .done    (uop_done)
+        .done    (base_uop_done)
     );
 
 `else
 
-    assign is_uop_input = 0;
-    assign uop_done = 0;
-    assign uop_data = '0;
+    assign is_base_uop_input = 0;
+    assign base_uop_done = 0;
+    assign base_uop_data = '0;
 
 `endif
+
+`ifdef EXT_TMA_ENABLE
+
+    localparam TMA_OP_LAUNCH = 3'd5;
+    assign is_tma_uop_input = (input_if.data.ex_type == EX_SFU)
+                            && (input_if.data.op_type == INST_SFU_TMA)
+                            && (input_if.data.op_args.tma.op == TMA_OP_LAUNCH);
+
+    VX_tma_uops tma_uops (
+        .clk     (clk),
+        .reset   (reset),
+        .ibuf_in (input_if.data),
+        .ibuf_out(tma_uop_data),
+        .start   (uop_start && is_tma_uop_input),
+        .next    (uop_next),
+        .done    (tma_uop_done)
+    );
+
+`else
+
+    assign is_tma_uop_input = 0;
+    assign tma_uop_done = 0;
+    assign tma_uop_data = '0;
+
+`endif
+
+    assign is_uop_input = is_base_uop_input || is_tma_uop_input;
+    assign uop_data = is_tma_uop_input ? tma_uop_data : base_uop_data;
+    assign uop_done = is_tma_uop_input ? tma_uop_done : base_uop_done;
 
     reg uop_active;
 
