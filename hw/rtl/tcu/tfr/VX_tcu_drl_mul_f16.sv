@@ -112,8 +112,8 @@ module VX_tcu_drl_mul_f16 import VX_tcu_pkg::*; #(
         wire [7:0]  eb_fp16 = cls_fp16[1][i].is_sub ? 8'b1 : 8'(b_col[i/2][S_FP16-1+OFF_16 -: E_FP16]);
         wire        z_fp16  = cls_fp16[0][i].is_zero | cls_fp16[1][i].is_zero;
 
-        wire [10:0] ma_fp16 = cls_fp16[0][i].is_zero ? 11'b0 : {!cls_fp16[0][i].is_sub, a_row[i/2][9+OFF_16 -: 10]};
-        wire [10:0] mb_fp16 = cls_fp16[1][i].is_zero ? 11'b0 : {!cls_fp16[1][i].is_sub, b_col[i/2][9+OFF_16 -: 10]};
+        wire [10:0] ma_fp16 = {!cls_fp16[0][i].is_sub, a_row[i/2][9+OFF_16 -: 10]};
+        wire [10:0] mb_fp16 = {!cls_fp16[1][i].is_sub, b_col[i/2][9+OFF_16 -: 10]};
         wire        s_fp16  = cls_fp16[0][i].sign ^ cls_fp16[1][i].sign;
 
         wire nan_in_fp16 = cls_fp16[0][i].is_nan | cls_fp16[1][i].is_nan;
@@ -129,8 +129,8 @@ module VX_tcu_drl_mul_f16 import VX_tcu_pkg::*; #(
         wire [7:0]  eb_bf16 = cls_bf16[1][i].is_sub ? 8'b1 : b_col[i/2][S_BF16-1+OFF_16 -: E_BF16];
         wire        z_bf16  = cls_bf16[0][i].is_zero | cls_bf16[1][i].is_zero;
 
-        wire [10:0] ma_bf16 = cls_bf16[0][i].is_zero ? 11'b0 : {3'b0, !cls_bf16[0][i].is_sub, a_row[i/2][6+OFF_16 -: 7]};
-        wire [10:0] mb_bf16 = cls_bf16[1][i].is_zero ? 11'b0 : {3'b0, !cls_bf16[1][i].is_sub, b_col[i/2][6+OFF_16 -: 7]};
+        wire [10:0] ma_bf16 = {3'b0, !cls_bf16[0][i].is_sub, a_row[i/2][6+OFF_16 -: 7]};
+        wire [10:0] mb_bf16 = {3'b0, !cls_bf16[1][i].is_sub, b_col[i/2][6+OFF_16 -: 7]};
         wire        s_bf16  = cls_bf16[0][i].sign ^ cls_bf16[1][i].sign;
 
         wire nan_in_bf16 = cls_bf16[0][i].is_nan | cls_bf16[1][i].is_nan;
@@ -152,8 +152,8 @@ module VX_tcu_drl_mul_f16 import VX_tcu_pkg::*; #(
             assign eb_tf32 = cls_tf32[1][i/2].is_sub ? 8'b1 : b_col[i/2][S_TF32-1 -: E_TF32];
             assign z_tf32  = cls_tf32[0][i/2].is_zero | cls_tf32[1][i/2].is_zero;
 
-            assign ma_tf32 = cls_tf32[0][i/2].is_zero ? 11'b0 : {!cls_tf32[0][i/2].is_sub, a_row[i/2][9:0]};
-            assign mb_tf32 = cls_tf32[1][i/2].is_zero ? 11'b0 : {!cls_tf32[1][i/2].is_sub, b_col[i/2][9:0]};
+            assign ma_tf32 = {!cls_tf32[0][i/2].is_sub, a_row[i/2][9:0]};
+            assign mb_tf32 = {!cls_tf32[1][i/2].is_sub, b_col[i/2][9:0]};
             assign s_tf32  = cls_tf32[0][i/2].sign ^ cls_tf32[1][i/2].sign;
 
             wire nan_in_tf32 = cls_tf32[0][i/2].is_nan | cls_tf32[1][i/2].is_nan;

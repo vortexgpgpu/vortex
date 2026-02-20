@@ -114,8 +114,8 @@ module VX_tcu_drl_mul_f8 import VX_tcu_pkg::*; #(
             assign eb_fp8[j] = cls_fp8[1][idx].is_sub ? 5'b1 : 5'(b_col[i/2][S_FP8-1+OFF -: E_FP8]);
             assign zero_fp8[j] = cls_fp8[0][idx].is_zero | cls_fp8[1][idx].is_zero;
 
-            assign ma_fp8[j] = cls_fp8[0][idx].is_zero ? 4'b0 : {!cls_fp8[0][idx].is_sub, raw_a[2:0]};
-            assign mb_fp8[j] = cls_fp8[1][idx].is_zero ? 4'b0 : {!cls_fp8[1][idx].is_sub, raw_b[2:0]};
+            assign ma_fp8[j] = {!cls_fp8[0][idx].is_sub, raw_a[2:0]};
+            assign mb_fp8[j] = {!cls_fp8[1][idx].is_sub, raw_b[2:0]};
             assign sign_fp8[j] = cls_fp8[0][idx].sign ^ cls_fp8[1][idx].sign;
 
             wire nan_in_fp8 = cls_fp8[0][idx].is_nan | cls_fp8[1][idx].is_nan;
@@ -131,8 +131,8 @@ module VX_tcu_drl_mul_f8 import VX_tcu_pkg::*; #(
             assign eb_bf8[j] = cls_bf8[1][idx].is_sub ? 5'b1 : 5'(b_col[i/2][S_BF8-1+OFF -: E_BF8]);
             assign zero_bf8[j] = cls_bf8[0][idx].is_zero | cls_bf8[1][idx].is_zero;
 
-            assign ma_bf8[j] = cls_bf8[0][idx].is_zero ? 4'b0 : {1'b0, !cls_bf8[0][idx].is_sub, raw_a[1:0]};
-            assign mb_bf8[j] = cls_bf8[1][idx].is_zero ? 4'b0 : {1'b0, !cls_bf8[1][idx].is_sub, raw_b[1:0]};
+            assign ma_bf8[j] = {1'b0, !cls_bf8[0][idx].is_sub, raw_a[1:0]};
+            assign mb_bf8[j] = {1'b0, !cls_bf8[1][idx].is_sub, raw_b[1:0]};
             assign sign_bf8[j] = cls_bf8[0][idx].sign ^ cls_bf8[1][idx].sign;
 
             wire nan_in_bf8 = cls_bf8[0][idx].is_nan | cls_bf8[1][idx].is_nan;
