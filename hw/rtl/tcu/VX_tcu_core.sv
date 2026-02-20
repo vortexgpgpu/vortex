@@ -180,8 +180,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2 + 1]);
             end
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
-
+            /* verilator lint_off UNUSEDSIGNAL */
             wire [TCU_MAX_INPUTS-1:0] vld_mask = '1; // TODO: should connect to input source
+            /* verilator lint_on UNUSEDSIGNAL */
             wire [META_ROW_WIDTH-1:0] vld_meta_row = vld_meta_block[META_ROW_WIDTH*i +: META_ROW_WIDTH];
 
             VX_tcu_sel #(
