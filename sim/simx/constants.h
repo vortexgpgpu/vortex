@@ -35,6 +35,10 @@
 #define VX_DCR_BASE_STATE(addr)   ((addr) - VX_DCR_BASE_STATE_BEGIN)
 #define VX_DCR_BASE_STATE_COUNT   (VX_DCR_BASE_STATE_END-VX_DCR_BASE_STATE_BEGIN)
 
+#define VX_DCR_TMA_DESC_SLOT(addr) (((addr) - VX_DCR_TMA_DESC_BASE) / VX_DCR_TMA_DESC_STRIDE)
+#define VX_DCR_TMA_DESC_WORD(addr) (((addr) - VX_DCR_TMA_DESC_BASE) % VX_DCR_TMA_DESC_STRIDE)
+#define VX_DCR_TMA_STATE_COUNT     (VX_DCR_TMA_STATE_END - VX_DCR_TMA_STATE_BEGIN)
+
 namespace vortex {
 
 inline constexpr uint32_t XLENB           = (XLEN / 8);

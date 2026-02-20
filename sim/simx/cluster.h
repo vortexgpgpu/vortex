@@ -66,7 +66,7 @@ public:
   std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
   Cluster(const SimContext& ctx,
-          const char* name, 
+          const char* name,
           uint32_t cluster_id,
           ProcessorImpl* processor,
           const Arch &arch,
@@ -96,13 +96,9 @@ public:
 
   int get_exitcode() const;
 
-  void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
+  uint32_t get_barrier_phase(uint32_t bar_id) const;
 
-  uint32_t async_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
-  bool async_barrier_wait(uint32_t bar_id, uint32_t token, uint32_t core_id);
-  uint32_t async_barrier_token(uint32_t bar_id) const {
-    return async_barriers_.at(bar_id).generation;
-  }
+  void barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
   PerfStats perf_stats() const;
 
@@ -110,10 +106,9 @@ private:
   uint32_t                    cluster_id_;
   ProcessorImpl*              processor_;
   std::vector<Socket::Ptr>    sockets_;
-  std::vector<CoreMask>       barriers_;
+  std::vector<core_barrier_t> barriers_;
   CacheSim::Ptr               l2cache_;
   uint32_t                    cores_per_socket_;
-  std::vector<AsyncClusterBarrier>  async_barriers_;
 };
 
 } // namespace vortex

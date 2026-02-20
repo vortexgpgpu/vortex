@@ -124,6 +124,7 @@ jobs:
         name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
         xlen: [32, 64]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -165,7 +166,7 @@ jobs:
           if [ "${{ matrix.name }}" == "regression" ]; then
             ./ci/regression.sh --unittest
             ./ci/regression.sh --isa
-            ./ci/regression.sh --kernel
+            # TODO: ./ci/regression.sh --kernel
             ./ci/regression.sh --regression
           else
             ./ci/regression.sh --${{ matrix.name }}

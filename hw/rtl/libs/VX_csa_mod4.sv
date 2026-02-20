@@ -17,14 +17,16 @@
 
 // Mod-4 Carry-Save Adder Reduction Tree Structure for large operand counts
 module VX_csa_mod4 #(
-    parameter N = 11,             // Number of operands (N >= 3)
-    parameter W = 8,              // Bit-width of each operand
-    parameter S = W + $clog2(N),  // Output width
-    parameter SIGNED = 0          // 0 = Unsigned, 1 = Signed
+    parameter N = 4,             // Number of operands
+    parameter W = 8,             // Bit-width of each operand
+    parameter S = W + $clog2(N), // Output width
+    parameter CPA_KS = 1,        // Use Kogge-Stone CPA
+    parameter NO_CPA = 0,        // 0: Final Sum, 1: Sum/Carry Vectors
+    parameter CW = (NO_CPA ? S : 1)
 ) (
     input  wire [N-1:0][W-1:0] operands,
-    output wire [S-1:0] sum,
-    output wire cout
+    output wire [S-1:0]        sum,
+    output wire [CW-1:0]       cout
 );
     `STATIC_ASSERT (N >= 7, ("N must at least be 7"));
 
@@ -34,11 +36,12 @@ module VX_csa_mod4 #(
     localparam NUM_L0 = N_MOD4 >> 2;   // Number of initial 4:2 compressors
 
     function automatic integer calc_depth(integer n);
-        integer d;
+        integer d, t;
         d = 0;
-        while (n > 1) begin
+        t = n;
+        while (t > 1) begin
             d = d + 1;
-            n = (n + 1) >> 1;
+            t = (t + 1) >> 1;
         end
         return d;
     endfunction
@@ -66,18 +69,16 @@ module VX_csa_mod4 #(
         localparam WI = (_WI > WN) ? WN : _WI;
         localparam WO = (_WO > WN) ? WN : _WO;
 
-        localparam CSA_N = SIGNED ? WO : WI;
-
         wire [WO-1:0] s_temp, c_temp;
 
-        // Cast inputs to CSA_N (Sign-Extend if Signed)
-        wire [CSA_N-1:0] op_a = SIGNED ? CSA_N'($signed(operands[i*4 + 0])) : CSA_N'(operands[i*4 + 0]);
-        wire [CSA_N-1:0] op_b = SIGNED ? CSA_N'($signed(operands[i*4 + 1])) : CSA_N'(operands[i*4 + 1]);
-        wire [CSA_N-1:0] op_c = SIGNED ? CSA_N'($signed(operands[i*4 + 2])) : CSA_N'(operands[i*4 + 2]);
-        wire [CSA_N-1:0] op_d = SIGNED ? CSA_N'($signed(operands[i*4 + 3])) : CSA_N'(operands[i*4 + 3]);
+        // Cast inputs to WI (Sign-Extend if Signed)
+        wire [WI-1:0] op_a = WI'(operands[i*4 + 0]);
+        wire [WI-1:0] op_b = WI'(operands[i*4 + 1]);
+        wire [WI-1:0] op_c = WI'(operands[i*4 + 2]);
+        wire [WI-1:0] op_d = WI'(operands[i*4 + 3]);
 
         VX_csa_42 #(
-            .N(CSA_N),
+            .N(WI),
             .WIDTH_O(WO)
         ) csa_0 (
             .a(op_a),
@@ -88,8 +89,8 @@ module VX_csa_mod4 #(
             .carry(c_temp)
         );
 
-        assign level_s[0][i] = SIGNED ? WN'($signed(s_temp)) : WN'(s_temp);
-        assign level_c[0][i] = SIGNED ? WN'($signed(c_temp)) : WN'(c_temp);
+        assign level_s[0][i] = WN'(s_temp);
+        assign level_c[0][i] = WN'(c_temp);
     end
 
     // -------------------------------------------------------------------------
@@ -105,22 +106,19 @@ module VX_csa_mod4 #(
         localparam WI = (_WI > WN) ? WN : _WI;
         localparam WO = (_WO > WN) ? WN : _WO;
 
-        // Optimization
-        localparam CSA_N = SIGNED ? WO : WI;
-
         for (genvar i = 0; i < NUM_CURR; i = i + 1) begin : g_comps
             localparam HAS_PAIR = (i * 2 + 1) < NUM_PREV;
             if (HAS_PAIR) begin : g_has_pair
                 wire [WO-1:0] s_temp, c_temp;
 
-                // Cast inputs to CSA_N (Sign-Extend if Signed)
-                wire [CSA_N-1:0] op_a = SIGNED ? CSA_N'($signed(WI'(level_s[lev-1][i*2])))   : CSA_N'(WI'(level_s[lev-1][i*2]));
-                wire [CSA_N-1:0] op_b = SIGNED ? CSA_N'($signed(WI'(level_c[lev-1][i*2])))   : CSA_N'(WI'(level_c[lev-1][i*2]));
-                wire [CSA_N-1:0] op_c = SIGNED ? CSA_N'($signed(WI'(level_s[lev-1][i*2+1]))) : CSA_N'(WI'(level_s[lev-1][i*2+1]));
-                wire [CSA_N-1:0] op_d = SIGNED ? CSA_N'($signed(WI'(level_c[lev-1][i*2+1]))) : CSA_N'(WI'(level_c[lev-1][i*2+1]));
+                // Cast inputs to WI (Sign-Extend if Signed)
+                wire [WI-1:0] op_a = WI'(level_s[lev-1][i*2]);
+                wire [WI-1:0] op_b = WI'(level_c[lev-1][i*2]);
+                wire [WI-1:0] op_c = WI'(level_s[lev-1][i*2+1]);
+                wire [WI-1:0] op_d = WI'(level_c[lev-1][i*2+1]);
 
                 VX_csa_42 #(
-                    .N(CSA_N),
+                    .N(WI),
                     .WIDTH_O(WO)
                 ) csa_n (
                     .a(op_a),
@@ -131,8 +129,8 @@ module VX_csa_mod4 #(
                     .carry(c_temp)
                 );
 
-                assign level_s[lev][i] = SIGNED ? WN'($signed(s_temp)) : WN'(s_temp);
-                assign level_c[lev][i] = SIGNED ? WN'($signed(c_temp)) : WN'(c_temp);
+                assign level_s[lev][i] = WN'(s_temp);
+                assign level_c[lev][i] = WN'(c_temp);
             end
             else begin : g_passthrough
                 assign level_s[lev][i] = level_s[lev-1][i*2];
@@ -160,16 +158,15 @@ module VX_csa_mod4 #(
 
         localparam WI = (_WI > WN) ? WN : _WI;
         localparam WO = (_WO > WN) ? WN : _WO;
-        localparam CSA_N = SIGNED ? WO : WI;
 
         wire [WO-1:0] f1_s, f1_c;
 
-        wire [CSA_N-1:0] op_a = SIGNED ? CSA_N'($signed(WI'(tree_sum_w)))   : CSA_N'(WI'(tree_sum_w));
-        wire [CSA_N-1:0] op_b = SIGNED ? CSA_N'($signed(WI'(tree_carry_w))) : CSA_N'(WI'(tree_carry_w));
-        wire [CSA_N-1:0] op_c = SIGNED ? CSA_N'($signed(operands[N-1]))     : CSA_N'(operands[N-1]);
+        wire [WI-1:0] op_a = WI'(tree_sum_w);
+        wire [WI-1:0] op_b = WI'(tree_carry_w);
+        wire [WI-1:0] op_c = WI'(operands[N-1]);
 
         VX_csa_32 #(
-            .N(CSA_N),
+            .N(WI),
             .WIDTH_O(WO)
         ) csa_rem1 (
             .a(op_a),
@@ -179,8 +176,8 @@ module VX_csa_mod4 #(
             .carry(f1_c)
         );
 
-        assign final_sum   = SIGNED ? WN'($signed(f1_s)) : WN'(f1_s);
-        assign final_carry = SIGNED ? WN'($signed(f1_c)) : WN'(f1_c);
+        assign final_sum   = WN'(f1_s);
+        assign final_carry = WN'(f1_c);
     end
     else if (N_REM == 2) begin : g_rem_2
         localparam _WI = W + (DEPTH * 2) + 2;
@@ -188,18 +185,16 @@ module VX_csa_mod4 #(
         localparam WI = (_WI > WN) ? WN : _WI;
         localparam WO = (_WO > WN) ? WN : _WO;
 
-        localparam CSA_N = SIGNED ? WO : WI;
-
         wire [WO-1:0] f2_s, f2_c;
 
-        // Cast inputs to CSA_N (Sign-Extend if Signed)
-        wire [CSA_N-1:0] op_a = SIGNED ? CSA_N'($signed(WI'(tree_sum_w)))   : CSA_N'(WI'(tree_sum_w));
-        wire [CSA_N-1:0] op_b = SIGNED ? CSA_N'($signed(WI'(tree_carry_w))) : CSA_N'(WI'(tree_carry_w));
-        wire [CSA_N-1:0] op_c = SIGNED ? CSA_N'($signed(operands[N-2]))     : CSA_N'(operands[N-2]);
-        wire [CSA_N-1:0] op_d = SIGNED ? CSA_N'($signed(operands[N-1]))     : CSA_N'(operands[N-1]);
+        // Cast inputs to WI (Sign-Extend if Signed)
+        wire [WI-1:0] op_a = WI'(tree_sum_w);
+        wire [WI-1:0] op_b = WI'(tree_carry_w);
+        wire [WI-1:0] op_c = WI'(operands[N-2]);
+        wire [WI-1:0] op_d = WI'(operands[N-1]);
 
         VX_csa_42 #(
-            .N(CSA_N),
+            .N(WI),
             .WIDTH_O(WO)
         ) csa_rem2 (
             .a(op_a),
@@ -210,8 +205,8 @@ module VX_csa_mod4 #(
             .carry(f2_c)
         );
 
-        assign final_sum   = SIGNED ? WN'($signed(f2_s)) : WN'(f2_s);
-        assign final_carry = SIGNED ? WN'($signed(f2_c)) : WN'(f2_c);
+        assign final_sum   = WN'(f2_s);
+        assign final_carry = WN'(f2_c);
     end
     else begin : g_rem_3
         // STEP 1: 3:2 CSA
@@ -220,17 +215,15 @@ module VX_csa_mod4 #(
         localparam WI_A = (_WI_A > WN) ? WN : _WI_A;
         localparam WO_A = (_WO_A > WN) ? WN : _WO_A;
 
-        localparam CSA_N_A = SIGNED ? WO_A : WI_A;
+        // Cast inputs to WI (Sign-Extend if Signed)
+        wire [WI_A-1:0] op_a1 = WI_A'(tree_sum_w);
+        wire [WI_A-1:0] op_b1 = WI_A'(tree_carry_w);
+        wire [WI_A-1:0] op_c1 = WI_A'(operands[N-3]);
 
         wire [WO_A-1:0] f3a_s, f3a_c;
 
-        // Cast inputs to CSA_N (Sign-Extend if Signed)
-        wire [CSA_N_A-1:0] op_a1 = SIGNED ? CSA_N_A'($signed(WI_A'(tree_sum_w)))   : CSA_N_A'(WI_A'(tree_sum_w));
-        wire [CSA_N_A-1:0] op_b1 = SIGNED ? CSA_N_A'($signed(WI_A'(tree_carry_w))) : CSA_N_A'(WI_A'(tree_carry_w));
-        wire [CSA_N_A-1:0] op_c1 = SIGNED ? CSA_N_A'($signed(operands[N-3]))       : CSA_N_A'(operands[N-3]);
-
         VX_csa_32 #(
-            .N(CSA_N_A),
+            .N(WI_A),
             .WIDTH_O(WO_A)
         ) csa_rem3a (
             .a(op_a1),
@@ -246,18 +239,16 @@ module VX_csa_mod4 #(
         localparam WI_B = (_WI_B > WN) ? WN : _WI_B;
         localparam WO_B = (_WO_B > WN) ? WN : _WO_B;
 
-        localparam CSA_N_B = SIGNED ? WO_B : WI_B;
+        // Cast inputs to WI (Sign-Extend if Signed)
+        wire [WI_B-1:0] op_a2 = WI_B'(f3a_s);
+        wire [WI_B-1:0] op_b2 = WI_B'(f3a_c);
+        wire [WI_B-1:0] op_c2 = WI_B'(operands[N-2]);
+        wire [WI_B-1:0] op_d2 = WI_B'(operands[N-1]);
 
         wire [WO_B-1:0] f3b_s, f3b_c;
 
-        // Cast inputs to CSA_N (Sign-Extend if Signed)
-        wire [CSA_N_B-1:0] op_a2 = SIGNED ? CSA_N_B'($signed(WI_B'(f3a_s))) : CSA_N_B'(WI_B'(f3a_s));
-        wire [CSA_N_B-1:0] op_b2 = SIGNED ? CSA_N_B'($signed(WI_B'(f3a_c))) : CSA_N_B'(WI_B'(f3a_c));
-        wire [CSA_N_B-1:0] op_c2 = SIGNED ? CSA_N_B'($signed(operands[N-2])) : CSA_N_B'(operands[N-2]);
-        wire [CSA_N_B-1:0] op_d2 = SIGNED ? CSA_N_B'($signed(operands[N-1])) : CSA_N_B'(operands[N-1]);
-
         VX_csa_42 #(
-            .N(CSA_N_B),
+            .N(WI_B),
             .WIDTH_O(WO_B)
         ) csa_rem3b (
             .a(op_a2),
@@ -268,36 +259,28 @@ module VX_csa_mod4 #(
             .carry(f3b_c)
         );
 
-        assign final_sum   = SIGNED ? WN'($signed(f3b_s)) : WN'(f3b_s);
-        assign final_carry = SIGNED ? WN'($signed(f3b_c)) : WN'(f3b_c);
+        assign final_sum   = WN'(f3b_s);
+        assign final_carry = WN'(f3b_c);
     end
 
-    // -------------------------------------------------------------------------
-    // Final KS Adder
-    // -------------------------------------------------------------------------
-
-    wire [WN-1:0] raw_sum;
-    wire          raw_cout;
-
-    VX_ks_adder #(
-        .N(WN),
-        .SIGNED(SIGNED)
-    ) ksa (
-        .cin(0),
-        .dataa(final_sum),
-        .datab(final_carry),
-        .sum(raw_sum),
-        .cout(raw_cout)
-    );
-
-    // Final Output Expansion
-    if (SIGNED) begin : g_sign_extend
-        assign sum = S'($signed(raw_sum));
-    end else begin : g_zero_pad
+    // Final Output Generation
+    if (NO_CPA) begin : g_no_cpa
+        assign sum  = S'(final_sum);
+        assign cout = S'(final_carry);
+    end else begin : g_cpa
+        wire [WN-1:0] raw_sum;
+        VX_ks_adder #(
+            .N (WN),
+            .BYPASS (!CPA_KS)
+        ) ksa (
+            .cin(0),
+            .dataa(final_sum),
+            .datab(final_carry),
+            .sum(raw_sum),
+            .cout(cout)
+        );
         assign sum = S'(raw_sum);
     end
-
-    assign cout = raw_cout;
 
 endmodule
 

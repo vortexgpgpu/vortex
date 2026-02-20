@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
+module VX_tcu_core_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     `SCOPE_IO_DECL
 
     input wire clk,

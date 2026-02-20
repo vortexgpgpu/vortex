@@ -77,16 +77,8 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , dcrs_(dcrs)
     , core_(core)
     , warps_(arch.num_warps(), arch.num_threads())
-    , barriers_(arch.num_barriers(), 0)
+    , barriers_(arch.num_warps() * arch.num_barriers())
     , ipdom_size_(arch.num_threads()-1)
-    , async_barriers_(arch.num_barriers())
-    , cluster_async_barriers_(arch.num_barriers())
-  #ifdef EXT_TCU_ENABLE
-    , tensor_unit_(core->tensor_unit())
-  #endif
-  #ifdef EXT_V_ENABLE
-    , vec_unit_(core->vec_unit())
-  #endif
 {
   std::srand(50);
   this->reset();
@@ -115,28 +107,23 @@ void Emulator::reset() {
     barrier.reset();
   }
 
-  for (auto& async_bar : async_barriers_) {
-    async_bar.reset_for_next_gen();
-  }
-
-  for (auto& async_bar : cluster_async_barriers_) {
-    async_bar.reset();
-  }
-
-#ifdef EXT_V_ENABLE
-  if (vec_unit_) {
-    vec_unit_->reset();
-  }
-#endif
-
   csr_mscratch_ = startup_arg;
 
   stalled_warps_.reset();
   active_warps_.reset();
 
-  // activate first warp and thread
-  active_warps_.set(0);
-  warps_[0].tmask.set(0);
+  #ifdef RVTEST_MT
+    // activate all warps with a single thread
+    for (int i = 0; i < arch_.num_warps(); ++i) {
+      active_warps_.set(i); // activate warp (i)
+      warps_[i].tmask.set(0); // activate thread (0) or warp (i)
+    }
+  #else
+    // activate first warp as single-thread
+    active_warps_.set(0);
+    warps_[0].tmask.set(0);
+  #endif
+
   wspawn_.valid = false;
 }
 
@@ -239,8 +226,10 @@ int Emulator::get_exitcode() const {
 }
 
 void Emulator::suspend(uint32_t wid) {
+  assert(active_warps_.test(wid));
   assert(!stalled_warps_.test(wid));
   stalled_warps_.set(wid);
+  DT(3, core_->name() << " warp-state: wid=" << wid << ", stalled=true");
 }
 
 void Emulator::resume(uint32_t wid) {
@@ -286,162 +275,148 @@ bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
   return false;
 }
 
-bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
-  if (count < 2)
-    return true;
+uint32_t Emulator::get_barrier_phase(uint32_t bar_id) const {
+  return barriers_.at(bar_id).phase;
+}
 
-  uint32_t bar_idx = bar_id & 0x7fffffff;
+void Emulator::release_local_barrier(uint32_t bar_id) {
+  auto& barrier = barriers_.at(bar_id);
+  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
+    if (barrier.wait_mask.test(i)) {
+      DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
+      this->resume(i);
+    }
+  }
+  barrier.wait_mask.reset();
+  barrier.arrival_count = 0;
+#ifdef EXT_TXBAR_ENABLE
+  barrier.expected_count = 0;
+  barrier.tx_pending = false;
+  barrier.arrivals_done = false;
+#endif
+  ++barrier.phase;
+}
+
+// Mark warp arrival at a barrier and return the phase generation number
+uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_async_bar) {
   bool is_global = (bar_id >> 31);
+  bar_id &= 0x7fffffff;
 
-  auto& barrier = barriers_.at(bar_idx);
-  barrier.set(wid);
+  auto& barrier = barriers_.at(bar_id);
+
+#ifdef EXT_TXBAR_ENABLE
+  // Save expected local participant count for delayed transactional completion.
+  barrier.expected_count = count;
+#endif
+  // update arrival count
+  barrier.arrival_count++;
+
+  uint32_t phase;
 
   if (is_global) {
-    // global barrier handling
-    if (barrier.count() == active_warps_.count()) {
-      core_->socket()->barrier(bar_idx, count, core_->id());
+    // query global barrier phase
+    phase = core_->socket()->get_barrier_phase(bar_id);
+    // notify global barrier
+    if (barrier.arrival_count == active_warps_.count()) {
+      core_->socket()->barrier_arrive(bar_id, count, core_->id());
       barrier.reset();
     }
   } else {
     // local barrier handling
-    if (barrier.count() == (size_t)count) {
-      // resume suspended warps
+    phase = barrier.phase;
+    if (barrier.arrival_count == count) {
+#ifdef EXT_TXBAR_ENABLE
+      if (barrier.tx_pending) {
+        barrier.arrivals_done = true;
+        // Legacy blocking barrier arrives must remain blocked until tx completion.
+        if (!is_async_bar) {
+          barrier.wait_mask.set(wid);
+        }
+      } else {
+        // also resume current warp if stalled (legacy barrier)
+        if (!is_async_bar) {
+          DP(3, "*** Resume core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id);
+          this->resume(wid);
+        }
+        release_local_barrier(bar_id);
+      }
+#else
+      // resume waiting warps
       for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
-        if (barrier.test(i)) {
-          DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_idx);
+        if (barrier.wait_mask.test(i)) {
+          DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
           this->resume(i);
         }
       }
-      barrier.reset();
-    } else {
-      DP(3, "*** Suspend core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_idx);
+      // also resume current warp if stalled (legacy barrier)
+      if (!is_async_bar) {
+        DP(3, "*** Resume core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id);
+        this->resume(wid);
+      }
+      // reset barrier and advance phase
+      barrier.arrival_count = 0;
+      barrier.wait_mask.reset();
+      ++barrier.phase;
+#endif
     }
   }
-  return false;
+
+  return phase;
 }
 
-uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid) {
-    bool is_cluster = (bar_id >> 31);
-    uint32_t bar_idx = bar_id & 0x7fffffff;
+// Async barrier wait: suspend warp until arrival phase is complete
+// phase: the value returned by barrier_arrive
+bool Emulator::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
+  __unused(wid);
+  bool is_global = (bar_id >> 31);
+  bar_id &= 0x7fffffff;
 
-    if (is_cluster) {
-        auto& b = cluster_async_barriers_.at(bar_idx);
-
-        if (b.expect_cores == 0) {
-            b.expect_cores = count;
-        } else {
-            assert(b.expect_cores == count);
-        }
-
-        uint32_t gen = core_->socket()->cluster()->async_barrier_token(bar_idx);
-        if (b.token_valid && gen > b.token) {
-            b.arrived_warps.reset();
-            b.core_arrived = false;
-            b.token_valid = false;
-            b.token = 0;
-        }
-
-        if (!b.token_valid) {
-            b.token = gen;
-            b.token_valid = true;
-        } else {
-            assert(gen == b.token);
-        }
-
-        uint32_t token = b.token;
-
-        // Record warp arrival for this core.
-        b.arrived_warps.set(wid);
-
-        // Count a core's arrival only once all its currently-active warps have arrived.
-        if (!b.core_arrived && ((b.arrived_warps & active_warps_) == active_warps_)) {
-            uint32_t token2 = core_->socket()->async_barrier_arrive(bar_idx, count, core_->id());
-            assert(token2 == token);
-            (void)token2;
-            b.core_arrived = true;
-        }
-
-        return token;
+  bool wait;
+  if (is_global) {
+    // global barrier handling
+    uint32_t bar_phase = core_->socket()->get_barrier_phase(bar_id);
+    wait = (bar_phase == phase);
+  } else {
+    // local barrier handling
+    auto& barrier = barriers_.at(bar_id);
+    wait = (barrier.phase == phase);
+    if (wait) {
+      // add warp to wait list
+      barrier.wait_mask.set(wid);
+      DP(3, "*** Suspend core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id);
     }
+  }
 
-    auto& b = async_barriers_.at(bar_idx);
-
-    // record expect_count to prevent different carrying different count (should be redundant)
-    if (b.expect_count == 0) {
-        b.expect_count = count;
-    }
-
-    // Capture current generation as token BEFORE any updates
-    uint32_t token = b.generation;
-
-    // If arrived in the same generation before, skip but still return token
-    if (b.arrived_mask.test(wid)) {
-        return token;
-    }
-
-    // record the arrival
-    b.arrived_mask.set(wid);
-    ++b.arrived_count;
-
-
-    // If all warps arrived, update the generation
-    if (b.arrived_count == b.expect_count) {
-        uint32_t new_gen = b.generation + 1;
-
-        b.generation = new_gen;
-        b.arrived_count = 0;
-        b.arrived_mask.reset();
-
-        // wake all warps waiting for this generation
-        for (uint32_t w = 0; w < arch_.num_warps(); ++w) {
-            if (b.waiting_mask.test(w)) {
-                // Check if this warp's token indicates it should wake up
-                // A warp waiting with token T should wake when generation > T
-                b.waiting_mask.reset(w);
-                this->resume(w);
-            }
-        }
-    }
-
-    return token;
+  return wait;
 }
 
+void Emulator::barrier_tx_start(uint32_t bar_id) {
+#ifdef EXT_TXBAR_ENABLE
+  bool is_global = (bar_id >> 31);
+  bar_id &= 0x7fffffff;
+  if (is_global)
+    return;
+  auto& barrier = barriers_.at(bar_id);
+  barrier.tx_pending = true;
+#else
+  __unused(bar_id);
+#endif
+}
 
-// Async barrier wait: uses token to determine which generation to wait for
-// token: the value returned by barrier_arrive
-bool Emulator::barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid) {
-    bool is_cluster = (bar_id >> 31);
-    uint32_t bar_idx = bar_id & 0x7fffffff;
-
-    if (is_cluster) {
-        bool ok = core_->socket()->async_barrier_wait(bar_idx, token, core_->id());
-        if (!ok) {
-            stalled_warps_.set(wid);
-            return false;
-        }
-        return true;
-    }
-
-    auto& b = async_barriers_.at(bar_idx);
-
-    // Calculate desired generation from token
-    // Token represents the generation when arrive() was called
-    // We need to wait until generation > token (i.e., that phase completed)
-    uint32_t desired_gen = token + 1;
-
-    if (b.generation >= desired_gen) {
-
-
-        b.waiting_mask.reset(wid);
-        // stalled_warps_.reset(wid);
-
-
-        return true;
-    }
-
-    // Not reached, wait
-    b.waiting_mask.set(wid);
-    return false;
+void Emulator::barrier_tx_done(uint32_t bar_id) {
+#ifdef EXT_TXBAR_ENABLE
+  bool is_global = (bar_id >> 31);
+  bar_id &= 0x7fffffff;
+  if (is_global)
+    return;
+  auto& barrier = barriers_.at(bar_id);
+  barrier.tx_pending = false;
+  if (barrier.arrivals_done && (barrier.arrival_count == barrier.expected_count)) {
+    release_local_barrier(bar_id);
+  }
+#else
+  __unused(bar_id);
+#endif
 }
 
 #ifdef VM_ENABLE
@@ -465,7 +440,6 @@ void Emulator::set_satp(uint64_t satp) {
   set_csr(VX_CSR_SATP,satp,0,0);
 }
 #endif
-
 
 #ifdef VM_ENABLE
 void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
@@ -613,6 +587,7 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_NUM_WARPS:  return arch_.num_warps();
   case VX_CSR_NUM_CORES:  return uint32_t(arch_.num_cores()) * arch_.num_clusters();
   case VX_CSR_LOCAL_MEM_BASE: return arch_.local_mem_base();
+  case VX_CSR_NUM_BARRIERS: return arch_.num_barriers();
   case VX_CSR_MSCRATCH:   return csr_mscratch_;
 
   CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);

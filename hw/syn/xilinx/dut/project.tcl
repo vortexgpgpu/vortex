@@ -71,9 +71,19 @@ proc run_setup {} {
   # Create project
   create_project $project_name $project_name -force -part $device_part
 
-  # Set high-performance strategies to enable retiming
+  # 1. Synthesis: Enable Retiming
   set_property strategy "Flow_PerfOptimized_High" [get_runs synth_1]
-  set_property strategy "Performance_Explore" [get_runs impl_1]
+  set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]
+
+  # 2. Implementation: Use ExtraTimingOpt
+  set_property strategy "Performance_ExtraTimingOpt" [get_runs impl_1]
+
+  # 3. Implementation: Force Physical Optimization steps
+  set_property STEPS.PHYS_OPT_DESIGN.IS_ENABLED true [get_runs impl_1]
+  set_property STEPS.PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]
+
+  set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.IS_ENABLED true [get_runs impl_1]
+  set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]
 
   # Add constrains file
   read_xdc $xdc_file

@@ -1,4 +1,5 @@
 #include <vx_spawn.h>
+#include <vx_barrier.h>
 #include <math.h>
 #include "common.h"
 
@@ -28,11 +29,7 @@ void kernel_body(kernel_arg_t *arg) {
   TYPE local_acc(0);
 
   // Initialize CTA-level async barrier
-  barrier bar;
-  bar.init(__warps_per_group);
-  __syncthreads();
-
-  uint32_t token_load;
+  vortex::barrier bar(1);
   uint32_t token_compute;
 
   // Main loop
@@ -45,8 +42,8 @@ void kernel_body(kernel_arg_t *arg) {
     local_B0[l_row * tile_size + l_col] = B_ptr[(k + l_row) * size + g_col];
 
     // Async arrive: non-blocking, returns token (generation number)
-    token_load = bar.arrive();
-    
+    uint32_t token_load = bar.arrive();
+
     // Do independent work while waiting for other warps
     TYPE my_val = local_A0[l_row * tile_size + l_col];
     TYPE my_val_b = local_B0[l_row * tile_size + l_col];

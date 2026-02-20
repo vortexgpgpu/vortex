@@ -103,7 +103,6 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
     input  wire clk,
     input  wire reset,
     input  wire enable,
-    input  wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
     input  wire[3:0] fmt_s,
     input  wire[3:0] fmt_d,
@@ -126,7 +125,7 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
 
     localparam C_DELAY = FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY;
 
-    `UNUSED_VAR ({vld_mask, fmt_s[3], fmt_d, c_val});
+    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
 
     wire [TCK-1:0][15:0] a_row16, b_col16;
 
@@ -168,15 +167,17 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
         reg [31:0] a_row_sel, a_col_sel;
 
         always @(*) begin
-            case (fmt_s[2:0])
-            3'b001: begin // fp16
+            case (fmt_s)
+            TCU_FP16_ID: begin
                 a_row_sel = a_row_fp16;
                 a_col_sel = b_col_fp16;
             end
-            3'b010: begin // bf16
+        `ifdef TCU_BF16_ENABLE
+            TCU_BF16_ID: begin
                 a_row_sel = a_row_bf16;
                 a_col_sel = b_col_bf16;
             end
+        `endif
             default: begin
                 a_row_sel = 'x;
                 a_col_sel = 'x;

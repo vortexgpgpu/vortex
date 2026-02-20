@@ -168,6 +168,7 @@
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
+`define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
@@ -180,6 +181,7 @@
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
+`define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
@@ -195,19 +197,21 @@
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
+`define FORCE_BUILTIN_ADDER(w)  0
 `define USE_BLOCK_BRAM
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
 `define RW_RAM_CHECK
 `define DISABLE_BRAM
-`define PRESERVE_NET
-`define BLACKBOX_CELL
+`define PRESERVE_NET    (* syn_keep = "true" *)
+`define BLACKBOX_CELL   (* syn_black_box *)
 `define STRING
 `define FPU_TYPE_FPNEW
 `else
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
+`define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
@@ -221,6 +225,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define STRINGIFY(x) `"x`"
+
+`define MAP_AOS_SOA(__i, __size, __lhs, __rhs) \
+    for (genvar __i = 0; __i < (__size); __i++) begin : g_map_aos_soa_`__LINE__ \
+        assign __lhs = __rhs; \
+    end
 
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))

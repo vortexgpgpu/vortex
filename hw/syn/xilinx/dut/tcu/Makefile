@@ -1,4 +1,4 @@
-PROJECT = VX_tcu_top
+PROJECT = VX_tcu_core_top
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
 FPU_IP = 1
@@ -22,6 +22,6 @@ RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 endif
-ifneq (,$(filter -DTCU_TYPE_DRL, $(CONFIGS)))
-RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
+ifneq (,$(filter -DTCU_TYPE_TFR, $(CONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 endif

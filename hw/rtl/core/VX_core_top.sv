@@ -80,6 +80,22 @@ module VX_core_top import VX_gpu_pkg::*; #(
     assign gbar_bus_if.rsp_data.id = gbar_rsp_id;
 `endif
 
+`ifdef EXT_TMA_ENABLE
+    VX_tma_bus_if tma_bus_if();
+    VX_mem_bus_if #(
+        .DATA_SIZE (TMA_SMEM_WORD_SIZE),
+        .TAG_WIDTH (LMEM_TAG_WIDTH)
+    ) tma_smem_bus_if();
+
+    assign tma_bus_if.req_valid = 1'b0;
+    assign tma_bus_if.req_data  = '0;
+    assign tma_bus_if.rsp_ready = 1'b1;
+
+    assign tma_smem_bus_if.req_valid = 1'b0;
+    assign tma_smem_bus_if.req_data  = '0;
+    assign tma_smem_bus_if.rsp_ready = 1'b1;
+`endif
+
     VX_dcr_bus_if dcr_bus_if();
 
     assign dcr_bus_if.write_valid = dcr_write_valid;
@@ -163,6 +179,11 @@ module VX_core_top import VX_gpu_pkg::*; #(
 
     `ifdef GBAR_ENABLE
         .gbar_bus_if    (gbar_bus_if),
+    `endif
+
+    `ifdef EXT_TMA_ENABLE
+        .tma_bus_if     (tma_bus_if),
+        .tma_smem_bus_if(tma_smem_bus_if),
     `endif
 
         .busy           (busy)

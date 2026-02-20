@@ -83,13 +83,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
 
     end else begin : g_disable
 
-        `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
-        `UNUSED_VAR (split)
-        `UNUSED_VAR (sjoin)
-        `UNUSED_VAR (wid)
-        `UNUSED_VAR (stack_wid)
-        `UNUSED_VAR (split_valid)
+        `UNUSED_VAR ({clk, reset, split, sjoin, stack_wid, split_valid})
         assign join_valid = sjoin_valid;
         assign join_wid = wid;
         assign join_is_dvg = 0;

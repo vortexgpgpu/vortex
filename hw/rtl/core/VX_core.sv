@@ -37,6 +37,11 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_mem_bus_if.master    icache_bus_if,
 
+`ifdef EXT_TMA_ENABLE
+    VX_tma_bus_if.master    tma_bus_if,
+    VX_mem_bus_if.slave     tma_smem_bus_if,
+`endif
+
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if.master   gbar_bus_if,
 `endif
@@ -53,6 +58,9 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_commit_sched_if  commit_sched_if();
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
+`ifdef EXT_TMA_ENABLE
+    VX_txbar_bus_if     txbar_if();
+`endif
 
     VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_commit_if        commit_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
@@ -101,6 +109,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .base_dcrs      (base_dcrs),
 
         .warp_ctl_if    (warp_ctl_if),
+    `ifdef EXT_TMA_ENABLE
+        .txbar_if       (txbar_if),
+    `endif
         .branch_ctl_if  (branch_ctl_if),
 
         .decode_sched_if(decode_sched_if),
@@ -183,6 +194,11 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if)
+    `ifdef EXT_TMA_ENABLE
+        ,
+        .tma_bus_if     (tma_bus_if),
+        .txbar_if       (txbar_if)
+    `endif
     );
 
     VX_commit #(
@@ -209,6 +225,10 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
         .lsu_mem_if    (lsu_mem_if),
         .dcache_bus_if (dcache_bus_if)
+    `ifdef EXT_TMA_ENABLE
+        ,
+        .tma_smem_bus_if(tma_smem_bus_if)
+    `endif
     );
 
 `ifdef PERF_ENABLE

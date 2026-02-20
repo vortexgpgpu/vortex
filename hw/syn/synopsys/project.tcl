@@ -9,6 +9,7 @@
 #   BB_MODULES     : comma-separated list of modules to set as dont_touch (optional)
 #   MEM_LIBS       : path/wildcard to generated memory .db files (optional)
 #                    If set, BB_MODULES logic is skipped for RAMs.
+#   WALL_IGNORE    : comma-separated list of wildcard paths to exempt from strict checks
 #   OUT_DIR        : output netlist/sdf folder (default: ./out)
 #   RPT_DIR        : reports folder (default: ./reports)
 #   TOOL_DIR       : folder containing parse_vcs_list.tcl (default: script dir)
@@ -105,15 +106,15 @@ proc pick_tt_target {files} {
 
 # Small utilities
 proc uniq {lst} {
-    array set seen {}
-    set out {}
-    foreach x $lst {
-        if {![info exists seen($x)]} {
-            set seen($x) 1
-            lappend out $x
-        }
+  array set seen {}
+  set out {}
+  foreach x $lst {
+    if {![info exists seen($x)]} {
+      set seen($x) 1
+      lappend out $x
     }
-    return $out
+  }
+  return $out
 }
 proc basename {p} { return [file tail $p] }
 
@@ -127,6 +128,7 @@ set LIB_ROOT     [getenv LIB_ROOT     ""]
 set LIB_TGT_HINT [getenv LIB_TGT      ""]
 set BB_MODULES   [getenv BB_MODULES   ""]
 set MEM_LIBS     [getenv MEM_LIBS     ""]
+set WALL_IGNORE  [getenv WALL_IGNORE  ""]
 set TOOL_DIR     [getenv TOOL_DIR     ""]
 set OUT_DIR      [file normalize [getenv OUT_DIR "./out"]]
 set RPT_DIR      [file normalize [getenv RPT_DIR "./reports"]]
@@ -189,8 +191,6 @@ lappend defines "FPGA_TARGET_SAED"
 puts "\n===== SOURCES ====="
 puts "Top         : $TOP"
 puts "SV Files    : [llength $v_files]"
-puts "First file  : [lindex $v_files 0]"
-puts "Last file   : [lindex $v_files end]"
 puts "Incdirs     : [join $incdirs "\n"]"
 puts "Defines     : [join $defines " "]"
 puts "===================\n"
@@ -204,20 +204,31 @@ if {$LIB_TGT_HINT ne ""} {
 } else {
   if {$LIB_ROOT eq ""} { DIE "Set LIB_ROOT or LIB_TGT in environment" }
   if {![file exists $LIB_ROOT]} { DIE "LIB_ROOT does not exist: $LIB_ROOT" }
+
   set dbs [find_files $LIB_ROOT {*.db *.DB}]
-  if {[llength $dbs]==0} { DIE "No .db files found under $LIB_ROOT" }
+  if {[llength $dbs] == 0} { DIE "No .db files found under $LIB_ROOT" }
+
   set std_dbs [filter_stdcell $dbs]
-  if {[llength $std_dbs]==0} {
-    WARN "No std-cell-looking .db found; using all .db"
-    set std_dbs $dbs
+  if {[llength $std_dbs] == 0} { set std_dbs $dbs }
+
+  # We must use ALL files that match the target corner (TT)
+  # instead of picking just one.
+  set target_db [list]
+  foreach f $std_dbs {
+    # Check if file is typical corner (TT)
+    if {[classify_corner $f] eq "TT"} {
+       lappend target_db $f
+    }
   }
-  set target_db [pick_tt_target $std_dbs]
-  if {$target_db eq ""} {
-    WARN "No TT .db detected; falling back to first .db"
-    set target_db [lindex $std_dbs 0]
+
+  # Failsafe: if no TT found, grab everything standard cell related
+  if {[llength $target_db] == 0} {
+     puts "WARN: No TT corner files found. Using all detected DBs as target."
+     set target_db $std_dbs
   }
-  set link_dbs [list $target_db]
-  foreach f $std_dbs { if {$f ne $target_db} { lappend link_dbs $f } }
+
+  # Link DBs matches Target DBs for std cells
+  set link_dbs $target_db
 }
 
 set use_mem_libs 0
@@ -248,31 +259,87 @@ define_design_lib WORK -path WORK
 catch { set hdlin_sv on }
 catch { set hdlin_sv_2009 true }
 catch { set_app_var hdlin_check_no_latch true }
-# Preserve parameters so we can read them for area estimation
 catch { set_app_var hdlin_keep_signal_name user }
 
-# ---------------- analyze ----------------
-foreach f $v_files {
-  if {![file exists $f]} { WARN "Source file not found: $f" }
+# ---------------- STRICT MODE & WALL_IGNORE ----------------
+# 1. Force stop on error
+set_app_var sh_continue_on_error false
+
+# 2. Promote CRITICAL warnings to errors
+set strict_warning_ids {
+  ELAB-311 ELAB-307 ELAB-909
+  VER-104 VER-130 VER-129 VER-225 VER-708 VER-936 VER-941 VER-1005
+  LINK-5 LINK-19
+  UID-401 UID-101
+}
+foreach msg_id $strict_warning_ids {
+  set_message_info -id $msg_id -stop_on
 }
 
-if {[llength $defines]} {
-  puts "Analyzing (SV) with defines: $defines"
-  analyze -format sverilog -work WORK -define $defines $v_files
-} else {
-  puts "Analyzing (SV)..."
-  analyze -format sverilog -work WORK $v_files
+# 3. Parse ignore list (comma separated wildcards)
+set wall_ignore_patterns [list]
+if {$WALL_IGNORE ne ""} {
+  foreach p [split $WALL_IGNORE ","] {
+    lappend wall_ignore_patterns [string trim $p]
+  }
+}
+
+# ---------------- analyze (File-by-File) ----------------
+puts "Starting Analysis (Strict Mode Enabled)..."
+
+foreach f $v_files {
+  if {![file exists $f]} { DIE "Source file not found: $f" }
+
+  # Check if this file matches WALL_IGNORE
+  set is_exempt 0
+  foreach pattern $wall_ignore_patterns {
+    if {[string match $pattern $f] || [string match $pattern [file tail $f]]} {
+      set is_exempt 1
+      break
+    }
+  }
+
+  if {$is_exempt} {
+    puts "INFO: Exempting file from strict checks: $f"
+    set_app_var sh_continue_on_error true
+    foreach msg_id $strict_warning_ids {
+      set_message_info -id $msg_id -stop_off
+    }
+  }
+
+  # Analyze single file
+  if {[catch {
+    if {[llength $defines]} {
+      analyze -format sverilog -work WORK -define $defines $f
+    } else {
+      analyze -format sverilog -work WORK $f
+    }
+  } err_msg]} {
+    if {!$is_exempt} {
+      DIE "STRICT ANALYSIS FAILED on $f:\n$err_msg"
+    } else {
+      puts "WARN: Error in exempt file $f (Ignored due to WALL_IGNORE): $err_msg"
+    }
+  }
+
+  # Immediately restore Strict Mode
+  if {$is_exempt} {
+    set_app_var sh_continue_on_error false
+    foreach msg_id $strict_warning_ids {
+      set_message_info -id $msg_id -stop_on
+    }
+  }
 }
 
 # ---------------- elaborate ----------------
+# Elaborate is critical; typically we want this to strict fail,
+# but if previous analysis passed with exemptions, this might trigger link errors.
 if {[catch {elaborate $TOP -work WORK} elaberr]} {
   DIE "Elaborate failed for '$TOP': $elaberr"
 }
 current_design $TOP
 
 # Uniquify BEFORE linking or setting blackboxes.
-# This ensures 'VX_sp_ram_asic' becomes 'VX_sp_ram_asic_DATAW32_SIZE1024...'
-# which allows us to set area attributes on specific configurations.
 uniquify
 link
 
@@ -283,7 +350,6 @@ if {$use_mem_libs} {
   # FLOW A: Real Macro Flow (Generated DBs)
   # ---------------------------------------
   puts "\nINFO: MEM_LIBS detected. Real-Macro flow active."
-  # Libraries were pre-loaded in 'link_library' above, so simple 'link' is sufficient.
 
 } else {
   # ---------------------------------------
@@ -292,82 +358,62 @@ if {$use_mem_libs} {
   puts "\nINFO: MEM_LIBS not set or empty. Defaulting to Blackbox Flow with Area Estimation."
 
   set _bbmods [split [string map {, " "} [string trim $BB_MODULES]]]
-
-  # [FIX] Initialize Total Area counter
   set total_sram_area 0.0
 
   if {[llength $_bbmods] > 0} {
     foreach m $_bbmods {
       if {$m eq ""} continue
 
-      # Find all cells matching this blackbox module
       set cells [get_cells -hier -filter "ref_name=~${m}*" -quiet]
 
       if {[llength $cells]} {
         puts "INFO: Processing blackbox: $m"
-
-        # 1. Set Dont Touch on instances
         set_dont_touch $cells
 
-        # 2. Estimate Area on the Design References
         set ref_designs [get_designs -quiet -filter "original_design_name==$m || name=~${m}*"]
 
         foreach_in_collection des $ref_designs {
           set d_name [get_object_name $des]
 
-          # Direct Attribute Access
           set w [get_attribute $des "DATAW" -quiet]
           set d [get_attribute $des "SIZE" -quiet]
 
           if {$w eq "" || $d eq ""} {
-            puts "INFO: Calculate Width from Ports."
             set des_ports [get_ports -quiet -of_objects $des]
             foreach p $SRAM_W_PORTS {
-                set p_obj [filter_collection $des_ports "name == $p"]
-                if {[sizeof_collection $p_obj] > 0} {
-                    set w [get_attribute $p_obj bit_width -quiet]
-                    if {$w ne ""} { break }
-                }
+              set p_obj [filter_collection $des_ports "name == $p"]
+              if {[sizeof_collection $p_obj] > 0} {
+                set w [get_attribute $p_obj bit_width -quiet]
+                if {$w ne ""} { break }
+              }
             }
-            # Calculate Depth from Address Ports (2 ^ ADDRW)
             foreach p $SRAM_A_PORTS {
-                set p_obj [filter_collection $des_ports "name == $p"]
-                if {[sizeof_collection $p_obj] > 0} {
-                    set aw [get_attribute $p_obj bit_width -quiet]
-                    if {$aw ne ""} {
-                        set d [expr {1 << $aw}]
-                        break
-                    }
-                }
+              set p_obj [filter_collection $des_ports "name == $p"]
+              if {[sizeof_collection $p_obj] > 0} {
+                set aw [get_attribute $p_obj bit_width -quiet]
+                if {$aw ne ""} { set d [expr {1 << $aw}]; break }
+              }
             }
-
             if {$w eq "" || $d eq ""} {
-              puts "INFO: Calculate Width from module name."
               if {[regexp {DATAW(\d+)} $d_name match val]} { set w $val }
               if {[regexp {SIZE(\d+)}  $d_name match val]} { set d $val }
             }
           }
 
-          # Apply Estimation
           if {$w ne "" && $d ne ""} {
-             set total_bits [expr $w * $d]
-             set est_area [expr ($total_bits * $SRAM_BIT_AREA) + $SRAM_OH_AREA]
+            set total_bits [expr $w * $d]
+            set est_area [expr ($total_bits * $SRAM_BIT_AREA) + $SRAM_OH_AREA]
+            set total_sram_area [expr $total_sram_area + $est_area]
 
-             # [FIX] Accumulate Total Area
-             set total_sram_area [expr $total_sram_area + $est_area]
-
-             # Safely set attribute. If handle causes warning, try via current_design
-             if {[catch { set_attribute $des area $est_area } err]} {
-                 # Fallback: set on current_design temporarily
-                 set saved_design [current_design]
-                 current_design $des
-                 catch { set_attribute [current_design] area $est_area }
-                 current_design $saved_design
-             }
-
-             puts "      > Estimated Area for $d_name ($w x $d): $est_area"
+            if {[catch { set_attribute $des area $est_area } err]} {
+              set saved_design [current_design]
+              current_design $des
+              catch { set_attribute [current_design] area $est_area }
+              current_design $saved_design
+            }
+            puts "      > Estimated Area for $d_name ($w x $d): $est_area"
           } else {
-             puts "      > WARN: Could not derive DATAW/SIZE for $d_name. Area will be 0."
+            puts "      > WARN: Could not derive DATAW/SIZE for $d_name. Area will be 0."
           }
         }
       } else {
@@ -378,7 +424,6 @@ if {$use_mem_libs} {
     puts "INFO: BB_MODULES is empty. No blackbox attributes or estimation will be applied."
   }
 
-  # [FIX] Print Total Area Summary
   if {$total_sram_area > 0} {
     puts "------------------------------------------------"
     puts "INFO: Total Estimated SRAM Area: $total_sram_area"
@@ -387,12 +432,66 @@ if {$use_mem_libs} {
 }
 
 # ---------------- Pre-Compile Checks ----------------
+
 check_design > [file join $RPT_DIR "check_design.rpt"]
 
 # Optional: multi-core
 catch { set_host_options -max_cores [getenv DC_CORES 8] }
 
+# ------------------- Clock Setup --------------------
+
+# Capture report_units output into a Tcl variable
+set _ru ""
+catch { redirect -variable _ru { report_units } }
+
+# Parse ONLY the Time_unit line, extract token in parentheses at end of that line.
+# Example line: "Time_unit            : 1.0e-09 Second(ns)"
+set LIB_TIME_UNIT "ns"
+if {[regexp -line {^Time_unit\s*:\s*.*\(([^)]+)\)\s*$} $_ru -> LIB_TIME_UNIT]} {
+  set LIB_TIME_UNIT [string trim $LIB_TIME_UNIT]
+} else {
+  puts "WARN: Failed to parse Time_unit from report_units; assuming ns"
+  set LIB_TIME_UNIT "ns"
+}
+
+# Compute scale: how many <LIB_TIME_UNIT> per 1 ns
+#   ns -> 1
+#   ps -> 1000
+#   fs -> 1000000
+set NS_TO_LIB 1.0
+switch -exact -- $LIB_TIME_UNIT {
+  ns { set NS_TO_LIB 1.0 }
+  ps { set NS_TO_LIB 1000.0 }
+  fs { set NS_TO_LIB 1000000.0 }
+  default {
+    # Unknown unit: be safe and assume ns, but warn loudly
+    set NS_TO_LIB 1.0
+    puts "WARN: Unknown library time unit '$LIB_TIME_UNIT' from report_units; assuming ns"
+  }
+}
+
+# Read CLOCK in MHz (env var CLOCK overrides default 800)
+set CLOCK_FREQ [getenv CLOCK 800]               ;# MHz
+
+# Period in ns (always correct, independent of library units)
+set period_ns [expr 1000.0 / double($CLOCK_FREQ)]  ;# ns
+
+# Convert ns to library time units for all time-based constraints
+set target_period      [expr $period_ns * $NS_TO_LIB]
+set target_uncertainty [expr $target_period * 0.01]  ;# 1%
+set target_io_delay    [expr $target_period * 0.001]  ;# 0.1%
+
+puts "----------------------------------------------------------------"
+puts "INFO: Target Frequency     : $CLOCK_FREQ MHz"
+puts "INFO: Period (ns)          : $period_ns ns"
+puts "INFO: Library time unit    : $LIB_TIME_UNIT"
+puts "INFO: Period (lib units)   : $target_period $LIB_TIME_UNIT"
+puts "INFO: Uncertainty (lib)    : $target_uncertainty $LIB_TIME_UNIT"
+puts "INFO: I/O Delay (lib)      : $target_io_delay $LIB_TIME_UNIT"
+puts "----------------------------------------------------------------"
+
 # ---------------- constraints ----------------
+
 if {$SDC_FILE ne "" && [file exists $SDC_FILE]} {
   puts "INFO: Loading SDC: $SDC_FILE"
   source $SDC_FILE
@@ -415,13 +514,21 @@ catch { set compile_seqmap_propagate_constants true }
 catch { set power_enable_analysis true }
 
 # ---------------- compile ----------------
-compile_ultra -retime
+if {[catch {compile_ultra -retime} compile_err]} {
+  DIE "Synthesis (compile_ultra) Failed: $compile_err"
+}
+# If OPT-101 occurs, DC leaves generic "GTECH" cells. We must catch this.
+set unmapped_cells [get_cells -hierarchical -filter "ref_name =~ *GTECH*"]
+if {[sizeof_collection $unmapped_cells] > 0} {
+  DIE "FATAL: Synthesis incomplete. Found [sizeof_collection $unmapped_cells] unmapped GTECH cells."
+}
 
 # ---------------- reports ----------------
 report_qor                                      > [file join $RPT_DIR "qor.rpt"]
 report_area -hier -nosplit                      > [file join $RPT_DIR "area.rpt"]
-report_timing -delay_type max -path_type full_clock -max_paths 50  > [file join $RPT_DIR "timing_max.rpt"]
-report_timing -delay_type min -path_type full_clock -max_paths 50  > [file join $RPT_DIR "timing_min.rpt"]
+report_timing -delay_type max -path_type full_clock -max_paths 50 -nets -transition_time -capacitance > [file join $RPT_DIR "timing_max.rpt"]
+report_timing -delay_type min -path_type full_clock -max_paths 50 -nets -transition_time -capacitance > [file join $RPT_DIR "timing_min.rpt"]
+report_clock -skew
 report_power                                    > [file join $RPT_DIR "power_vectorless.rpt"]
 report_constraints -all_violators               > [file join $RPT_DIR "constraints_violators.rpt"]
 
@@ -432,4 +539,4 @@ write_sdf                           [file join $OUT_DIR "${TOP}.mapped.sdf"]
 catch { write_sdc                   [file join $OUT_DIR "${TOP}.post_compile.sdc"] }
 
 puts "\nDONE. Top: $TOP"
-exit
+exit 0

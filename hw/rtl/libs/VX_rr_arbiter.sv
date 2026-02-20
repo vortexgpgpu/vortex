@@ -429,9 +429,8 @@ module VX_rr_arbiter #(
 
     end else if (MODEL == 1) begin : g_model1
 
-    `IGNORE_UNOPTFLAT_BEGIN
-        wire [NUM_REQS-1:0] masked_pri_reqs, unmasked_pri_reqs;
-    `IGNORE_UNOPTFLAT_END
+        wire [NUM_REQS-1:0] masked_pri_reqs /* verilator split_var*/;
+        wire [NUM_REQS-1:0] unmasked_pri_reqs /* verilator split_var*/;
         reg [NUM_REQS-1:0] reqs_mask;
 
         wire [NUM_REQS-1:0] masked_reqs = requests & reqs_mask;

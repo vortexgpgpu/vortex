@@ -149,16 +149,10 @@ inline void vx_join(int stack_ptr) {
     __asm__ volatile (".insn r %0, 3, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(stack_ptr) : "memory");
 }
 
-// Forward declarations (implemented below)
-inline uint32_t vx_barrier_arrive(int barrier_id, int num_warps);
-inline void vx_barrier_wait(int barrier_id, uint32_t token);
-
 // Warp Barrier
 inline void vx_barrier(int barried_id, int num_warps) {
-    uint32_t token = vx_barrier_arrive(barried_id, num_warps);
-    vx_barrier_wait(barried_id, token);
+    __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps) : "memory");
 }
-
 // Return current thread identifier
 inline __attribute__((const)) int vx_thread_id() {
     int ret;
@@ -215,11 +209,41 @@ inline __attribute__((const)) int vx_num_cores() {
     return ret;
 }
 
+// Return the number of barriers
+inline __attribute__((const)) int vx_num_barriers() {
+    int ret;
+    __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_BARRIERS));
+    return ret;
+}
+
 // Return the hart identifier (thread id accross the processor)
 inline __attribute__((const)) int vx_hart_id() {
     int ret;
     __asm__ ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_MHARTID));
     return ret;
+}
+
+// Return current cycle counter
+inline uint64_t vx_cycle_count() {
+#ifdef XLEN_64
+    return csr_read(VX_CSR_MCYCLE);
+#else
+    uint32_t hi0, lo, hi1;
+    do {
+        hi0 = csr_read(VX_CSR_MCYCLE_H);
+        lo  = csr_read(VX_CSR_MCYCLE);
+        hi1 = csr_read(VX_CSR_MCYCLE_H);
+    } while (hi0 != hi1);
+    return (((uint64_t)hi0) << 32) | lo;
+#endif
+}
+
+// Return current cycle counter with a dependency on a floating-point source value.
+inline uint64_t vx_cycle_count_fdep(float dep_src) {
+    size_t dep_gpr;
+    __asm__ __volatile__ ("fmv.x.w %0, %1" : "=r" (dep_gpr) : "f" (dep_src) : "memory");
+    __asm__ __volatile__ ("" : "+r" (dep_gpr) :: "memory");
+    return vx_cycle_count();
 }
 
 // Memory fence
@@ -296,29 +320,24 @@ inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cva
 // Asynchronous Barrier extensions
 //
 
-// Async Barrier Arrive: non-blocking, returns a token (generation number)
+// Async Barrier Arrive: non-blocking, returns a phase (generation number)
 // barrier_id: identifier of the barrier
 // num_warps: number of warps participating in the barrier
-// returns: token representing the barrier phase for this arrive
-inline uint32_t vx_barrier_arrive(int barrier_id, int num_warps) {
-    uint32_t token;
+// returns: number representing the barrier phase for this arrive
+inline int vx_barrier_arrive(int barrier_id, int num_warps) {
+    int phase;
     __asm__ volatile (
-        ".insn r %1, 6, 0, %0, %2, %3"
-        : "=r"(token)
-        : "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(num_warps)
-        : "memory"
+        ".insn r %1, 6, 0, %0, %2, %3" : "=r"(phase) : "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(num_warps) : "memory"
     );
-    return token;
+    return phase;
 }
 
-// Async Barrier Wait: blocks until the barrier phase associated with the token is complete
+// Async Barrier Wait: blocks until a barrier phase is complete
 // barrier_id: identifier of the barrier
-// token: the token returned by vx_barrier_arrive
-inline void vx_barrier_wait(int barrier_id, uint32_t token) {
+// phase: the phase returned by vx_barrier_arrive
+inline void vx_barrier_wait(int barrier_id, int phase) {
     __asm__ volatile (
-        ".insn r %0, 7, 0, x0, %1, %2"
-        :: "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(token)
-        : "memory"
+        ".insn r %0, 6, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barrier_id), "r"(phase) : "memory"
     );
 }
 

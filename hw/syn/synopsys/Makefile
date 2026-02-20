@@ -1,11 +1,40 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
+CLOCK ?= 800
+LIB_TYPE ?= DEFAULT
+
 SRC_DIR := $(VORTEX_HOME)/hw/syn/synopsys
 LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 
-SRAM_LIB := /mnt/nas0/eda.libs/saed14/EDK_08_2025/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.lib
-SRAM_DB  := /mnt/nas0/eda.libs/saed14/EDK_08_2025/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.db
+ASAP7_ROOT      := /mnt/nas0/eda.libs/asap7
+ASAP7_LIB_ROOT  := $(ASAP7_ROOT)/asap7sc7p5t_28/LIB/NLDM
+ASAP7_SRAM_LIB  := $(ASAP7_ROOT)/ASAP7_SRAM_0p0/generated/LIB/srambank_128x4x32_6t122.lib
+ASAP7_SRAM_DB   := $(ASAP7_ROOT)/ASAP7_SRAM_0p0/generated/LIB/srambank_128x4x32_6t122.db
+ASAP7_NAME      := "ASAP7 (7nm)"
+
+SAED14_ROOT     := /mnt/nas0/eda.libs/saed14/EDK_03_2025
+SAED14_LIB_ROOT := $(SAED14_ROOT)/SAED14nm_EDK_STD_SLVT/liberty/nldm
+SAED14_SRAM_LIB := $(SAED14_ROOT)/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.lib
+SAED14_SRAM_DB  := $(SAED14_ROOT)/SAED14nm_EDK_SRAM/liberty/nldm/saed14sram_tt0p8v25c.db
+SAED14_NAME     := "SAED14 (14nm SLVT)"
+
+DEFAULT_ROOT     :=
+DEFAULT_LIB_ROOT :=
+DEFAULT_SRAM_LIB :=
+DEFAULT_SRAM_DB  :=
+DEFAULT_NAME     := "NanGate 15nm OCL"
+
+LIB_ROOT := $($(LIB_TYPE)_LIB_ROOT)
+SRAM_LIB := $($(LIB_TYPE)_SRAM_LIB)
+SRAM_DB  := $($(LIB_TYPE)_SRAM_DB)
+LIB_NAME := $($(LIB_TYPE)_NAME)
+
+ifeq ($(LIB_NAME),)
+    $(error Invalid LIB_TYPE=$(LIB_TYPE).)
+endif
+
+$(info [Make] Using library $(LIB_NAME))
 
 DEFAULT_LIB := $(LIB_DIR)/NanGate_15nm_OCL.db
 SYN_LIB_ENV := $(if $(LIB_TGT),LIB_TGT=$(LIB_TGT),$(if $(LIB_ROOT),LIB_ROOT=$(LIB_ROOT),LIB_TGT=$(DEFAULT_LIB)))
@@ -15,6 +44,8 @@ PREFIX ?= build
 
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
+
+WALL_IGNORE := "*/stream_omega_net.sv,*/fpnew_pkg.sv"
 
 CP = cp -rf
 RMDIR = rm -rf
@@ -58,6 +89,26 @@ RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/inter
 RTL_INCLUDE += $(FPU_INCLUDE)
 
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
+
+# Add TCU extension sources
+ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+	ifneq (,$(filter -DTCU_TYPE_DPI, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
+	endif
+	ifneq (,$(filter -DTCU_TYPE_DSP, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
+	endif
+	ifneq (,$(filter -DTCU_TYPE_BHF, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
+	endif
+	ifneq (,$(filter -DTCU_TYPE_TFR, $(CONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
+	endif
+endif
 
 # Add V extension sources
 ifneq (,$(filter -DEXT_V_ENABLE, $(CONFIGS)))
@@ -104,30 +155,36 @@ gen-rams: $(BUILD_DIR)/sources.txt
 synthesis: $(BUILD_DIR)/sources.txt gen-rams
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
+	CLOCK=$(CLOCK) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
 	MEM_LIBS="$(SRAM_DB)" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
+	WALL_IGNORE=$(WALL_IGNORE) \
 	dc_shell -f $(SRC_DIR)/project.tcl
 
 synthesis-nosram: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
+	CLOCK=$(CLOCK) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
+	WALL_IGNORE=$(WALL_IGNORE) \
 	dc_shell -f $(SRC_DIR)/project.tcl
 
 synthesis-estsram: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
+	CLOCK=$(CLOCK) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
 	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
+	WALL_IGNORE=$(WALL_IGNORE) \
 	dc_shell -f $(SRC_DIR)/project.tcl
 
 clean:

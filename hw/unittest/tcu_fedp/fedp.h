@@ -39,9 +39,8 @@ class FEDP {
 public:
   explicit FEDP(int exp_bits = 5, int sig_bits = 10, int lanes = 4, int frm = 0, int W = 25, bool renorm = false, bool no_window = false)
       : exp_bits_(exp_bits), sig_bits_(sig_bits), frm_(frm), lanes_(lanes), W_(W), renorm_(renorm), no_window_(no_window) {
-    HR_ = 32 - lzcN(lanes_, 32);
-    LOG("[ctor] fmt=e%dm%d frm=%d lanes=%u W=%d HR=%d renorm_=%s no_window_=%s\n",
-        exp_bits_, sig_bits_, frm_, lanes_, W_, HR_, (renorm_ ? "true" : "false"), (no_window_ ? "true" : "false"));
+    LOG("[ctor] fmt=e%dm%d frm=%d lanes=%u W=%d renorm_=%s no_window_=%s\n",
+        exp_bits_, sig_bits_, frm_, lanes_, W_, (renorm_ ? "true" : "false"), (no_window_ ? "true" : "false"));
     assert(exp_bits_ > 0 && exp_bits_ <= 8);
     assert(sig_bits_ > 0 && sig_bits_ <= 10);
     assert(frm_ >= 0 && frm_ <= 4);
@@ -61,6 +60,8 @@ public:
     const auto mul_res = multiply_to_common(terms, c_term);
 
     rtl_watch_s1(req_id, mul_res, c_term, c_enc);
+
+    HR_ = 32 - lzcN(terms.size() + 1, 32);
 
     const auto aln = alignment(mul_res);
 
@@ -194,7 +195,7 @@ private:
       RTL_WATCH("0x%x", raw_val);
       if (i > 0) RTL_WATCH(", ");
     }
-    RTL_WATCH("\n");
+    RTL_WATCH("}\n");
 #endif
   }
 
@@ -220,7 +221,7 @@ private:
         if (i > 0) RTL_WATCH(", ");
       }
     }
-    RTL_WATCH("\n");
+    RTL_WATCH("}\n");
 #endif
   }
 
@@ -230,9 +231,8 @@ private:
     for (size_t i = 0; i < res.terms.size() - 1; ++i) {
       if (res.terms[i].sign) sigs_sign |= (1 << i);
     }
-    RTL_WATCH("[RTL_WATCH] FEDP-S3(%lu): acc_sig=0x%x, max_exp=0x%x, sigs_sign=0x%x, sticky=%d, exceptions=",
+    RTL_WATCH("[RTL_WATCH] FEDP-S3(%lu): acc_sig=0x%x, max_exp=0x%x, sigs_sign=0x%x, sticky=%d\n",
         req_id, acc.V, res.L, sigs_sign, acc.sticky ? 1 : 0);
-    RTL_WATCH("\n");
 #endif
   }
 
@@ -240,13 +240,7 @@ private:
 #ifdef FEDP_RTL_WATCH
     int lsb = nrm.kept & 1;
     RTL_WATCH("[RTL_WATCH] FEDP-NORM(%lu): abs_sum=0x%x, L=%d, G=%d, R=%d, S=%d, Rup=%d\n",
-        req_id,
-        nrm.abs_sum,
-        lsb,
-        nrm.g,
-        0,
-        nrm.st,
-        nrm.round_up
+        req_id, nrm.abs_sum, lsb, nrm.g, 0, nrm.st, nrm.round_up
     );
 #endif
   }
@@ -309,7 +303,7 @@ private:
     out.reserve(v.size() + 1);
     eps.reserve(v.size() + 1);
 
-    const int F32_BIAS = 127;
+    const int F32_BIAS = 127 + 128;
 
     bool c_is_zero = (c_term.cls == 0 && c_term.sp == 0);
 
@@ -352,7 +346,7 @@ private:
 
       int Ep_w = (Ep + 23 - W_);
       if (p_is_zero) {
-        Ep_w = std::numeric_limits<int>::min();
+        Ep_w = 0;
       }
 
       out.push_back({sign_xor, Mp});
@@ -362,7 +356,7 @@ private:
     int Ec = c_term.Ec + F32_BIAS;
     int Ec_w = Ec + 24 - W_;
     if (c_is_zero) {
-      Ec_w = std::numeric_limits<int>::min();
+      Ec_w = 0;
     }
 
     out.push_back({c_term.sign, c_term.Mc});
@@ -452,7 +446,7 @@ private:
     uint32_t Q = -x.V & mask;
     uint32_t X = s ? Q : x.V;
     int msb = 31 - __builtin_clz(X);
-    int e = x.L + msb;
+    int e = x.L + msb - 128;
     int sh = (msb + 1) - 24;
 
     uint32_t kept;

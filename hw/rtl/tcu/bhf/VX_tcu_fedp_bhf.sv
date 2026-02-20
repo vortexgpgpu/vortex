@@ -22,7 +22,6 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
     input  wire clk,
     input  wire reset,
     input  wire enable,
-    input  wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
     input  wire[3:0] fmt_s,
     input  wire[3:0] fmt_d,
@@ -45,7 +44,7 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
     localparam FMT_DELAY = FMUL_LATENCY + FRND_LATENCY;
     localparam C_DELAY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FRED_LATENCY;
 
-    `UNUSED_VAR ({vld_mask, fmt_s[3], fmt_d, c_val});
+    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
 
     wire [2:0] frm = `round_near_even;
 
@@ -197,12 +196,18 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
 
         logic [32:0] mult_result_mux;
         always_comb begin
-            case(fmt_s_delayed)
-                3'd1: mult_result_mux = mult_result_fp16;
-                3'd2: mult_result_mux = mult_result_bf16;
-                3'd3: mult_result_mux = mult_result_fp8;
-                3'd4: mult_result_mux = mult_result_bf8;
-                3'd5: mult_result_mux = mult_result_tf32;  // TF32
+            case({1'b0, fmt_s_delayed})
+                TCU_FP16_ID: mult_result_mux = mult_result_fp16;
+            `ifdef TCU_BF16_ENABLE
+                TCU_BF16_ID: mult_result_mux = mult_result_bf16;
+            `endif
+            `ifdef TCU_FP8_ENABLE
+                TCU_FP8_ID:  mult_result_mux = mult_result_fp8;
+                TCU_BF8_ID:  mult_result_mux = mult_result_bf8;
+            `endif
+            `ifdef TCU_TF32_ENABLE
+                TCU_TF32_ID: mult_result_mux = mult_result_tf32;
+            `endif
                 default: mult_result_mux = 'x;
             endcase
         end

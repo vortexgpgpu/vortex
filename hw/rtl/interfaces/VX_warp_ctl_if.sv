@@ -23,12 +23,13 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     join_t      sjoin;
     barrier_t   barrier;
 
+    // Return IPDOM stack address
     wire [NW_WIDTH-1:0] dvstack_wid;
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
 
-    // Async barrier token loopup
-    wire [NB_WIDTH-1:0] barrier_id_rd; // barrier ID to read token from
-    wire [`XLEN-1:0] arrive_token; // current generation (token) returned
+    // Return barrier phase
+    wire [BAR_ADDR_W-1:0] barrier_addr;
+    wire barrier_phase;
 
     modport master (
         output valid,
@@ -39,8 +40,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output sjoin,
         output barrier,
 
-        output barrier_id_rd,
-        input  arrive_token,
+        output barrier_addr,
+        input  barrier_phase,
 
         output dvstack_wid,
         input  dvstack_ptr
@@ -55,8 +56,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input sjoin,
         input barrier,
 
-        input barrier_id_rd,
-        output arrive_token,
+        input  barrier_addr,
+        output barrier_phase,
 
         input dvstack_wid,
         output dvstack_ptr

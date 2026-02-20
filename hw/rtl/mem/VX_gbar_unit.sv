@@ -23,9 +23,10 @@ module VX_gbar_unit import VX_gpu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    reg [NB_WIDTH-1:0][`NUM_CORES-1:0] barrier_masks;
+    reg [`NUM_BARRIERS-1:0][`NUM_CORES-1:0] barrier_masks;
     wire [`CLOG2(`NUM_CORES+1)-1:0] active_barrier_count;
-    wire [`NUM_CORES-1:0] curr_barrier_mask = barrier_masks[gbar_bus_if.req_data.id];
+    wire [NB_WIDTH-1:0] req_id = gbar_bus_if.req_data.id;
+    wire [`NUM_CORES-1:0] curr_barrier_mask = barrier_masks[req_id];
 
     `POP_COUNT(active_barrier_count, curr_barrier_mask);
     `UNUSED_VAR (active_barrier_count)
@@ -39,23 +40,23 @@ module VX_gbar_unit import VX_gpu_pkg::*; #(
             rsp_valid <= 0;
         end else begin
             if (rsp_valid) begin
-                rsp_valid <= 0;
+                rsp_valid <= 0; // response pulse clear
             end
             if (gbar_bus_if.req_valid) begin
                 if (active_barrier_count[NC_WIDTH-1:0] == gbar_bus_if.req_data.size_m1) begin
-                    barrier_masks[gbar_bus_if.req_data.id] <= '0;
-                    rsp_bar_id <= gbar_bus_if.req_data.id;
-                    rsp_valid  <= 1;
+                    barrier_masks[req_id] <= '0; // clear mask
+                    rsp_valid  <= 1; // send response
+                    rsp_bar_id <= req_id;
                 end else begin
-                    barrier_masks[gbar_bus_if.req_data.id][gbar_bus_if.req_data.core_id] <= 1;
+                    barrier_masks[req_id][gbar_bus_if.req_data.core_id] <= 1;
                 end
             end
         end
     end
 
+    assign gbar_bus_if.req_ready = 1; // always ready for requests
     assign gbar_bus_if.rsp_valid = rsp_valid;
     assign gbar_bus_if.rsp_data.id = rsp_bar_id;
-    assign gbar_bus_if.req_ready = 1; // global barrier unit is always ready (no dependencies)
 
 `ifdef DBG_TRACE_GBAR
     always @(posedge clk) begin

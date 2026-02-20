@@ -106,6 +106,21 @@ public:
 	SfuUnit(const SimContext& ctx, const char* name, Core*);
 
 	void tick() override;
+
+#ifdef EXT_TMA_ENABLE
+private:
+  struct tma_runtime_t {
+    uint32_t desc_slot = 0;
+    uint32_t bar_id = 0;
+    uint32_t smem_addr = 0;
+    uint32_t flags = 0;
+    std::array<uint32_t, 5> coords = {0, 0, 0, 0, 0};
+  };
+
+  bool execute_tma_op(instr_trace_t* trace, TmaType tma_type, const TmaTraceData& tma_data);
+
+  std::vector<tma_runtime_t> tma_runtime_;
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////

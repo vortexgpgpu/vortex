@@ -63,6 +63,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire is_csr_frm    = (u_12 == `VX_CSR_FRM);
     wire is_csr_fcsr   = (u_12 == `VX_CSR_FCSR);
     wire frm_is_dyn    = (funct3 == 3'b111);
+    wire is_rd_zero    = (rd == 0);
 
     reg csr_write;
     always @(*) begin
@@ -500,7 +501,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                             end
                             3'h2: begin // SPLIT
                                 op_type = INST_OP_BITS'(INST_SFU_SPLIT);
-                                op_args.wctl.is_neg = rs2[0];
+                                op_args.wctl.is_cond_neg = rs2[0];
                                 `USED_IREG (rs1);
                                 `USED_IREG (rd);
                             end
@@ -508,28 +509,25 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_type = INST_OP_BITS'(INST_SFU_JOIN);
                                 `USED_IREG (rs1);
                             end
-                            3'h4: begin // BARRIER (legacy sync barrier)
-                                op_type = INST_OP_BITS'(INST_SFU_BARRIER);
+                            3'h4: begin // BAR
+                                op_type = INST_OP_BITS'(INST_SFU_BAR);
+                                op_args.wctl.is_async_bar = 0;
+                                op_args.wctl.is_bar_arrive = 0;
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
                             3'h5: begin // PRED
                                 op_type = INST_OP_BITS'(INST_SFU_PRED);
-                                op_args.wctl.is_neg = rd[0];
+                                op_args.wctl.is_cond_neg = rd[0];
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
-                            3'h6: begin // ARRIVE
-                                op_type = INST_OP_BITS'(INST_SFU_ARRIVE);
-                                // use_rd = 1;
+                            3'h6: begin // Asynchronous arrive/wait barrier
+                                op_type = INST_OP_BITS'(INST_SFU_BAR);
+                                op_args.wctl.is_async_bar = 1;
+                                op_args.wctl.is_bar_arrive = ~is_rd_zero;
+                                is_wstall = is_rd_zero;
                                 `USED_IREG (rd);
-                                `USED_IREG (rs1);
-                                `USED_IREG (rs2);
-                            end
-                            3'h7: begin // WAIT
-                                op_type = INST_OP_BITS'(INST_SFU_WAIT);
-                                // use_rd = 1;
-                                // `USED_IREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
@@ -546,6 +544,15 @@ module VX_decode import VX_gpu_pkg::*; #(
                         end
                         op_type = INST_OP_BITS'(funct3);
                     end
+                `ifdef EXT_TMA_ENABLE
+                    7'h03: begin // TMA runtime issue packet
+                        ex_type = EX_SFU;
+                        op_type = INST_OP_BITS'(INST_SFU_TMA);
+                        op_args.tma.op = funct3;
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                    end
+                `endif
                 `ifdef EXT_TCU_ENABLE
                     7'h02: begin
                         if (funct3 == 3'h0 || funct3 == 3'h1) begin

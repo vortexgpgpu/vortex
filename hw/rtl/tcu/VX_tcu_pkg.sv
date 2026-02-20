@@ -28,6 +28,7 @@ package VX_tcu_pkg;
     localparam TCU_DP = 0;
 
     // Supported floating-point types
+    // WARNING: Changing this list requires updating format utility functions below
     localparam TCU_FP32_ID  = 0;
     localparam TCU_FP16_ID  = 1;
     localparam TCU_BF16_ID  = 2;
@@ -37,12 +38,13 @@ package VX_tcu_pkg;
     localparam TCU_MXFP8_ID = 6;
     localparam TCU_NVFP4_ID = 7;
     // Supported integer-point types
-    localparam TCU_I32_ID  = 8;
-    localparam TCU_I8_ID   = 9;
-    localparam TCU_U8_ID   = 10;
-    localparam TCU_I4_ID   = 11;
-    localparam TCU_U4_ID   = 12;
-    localparam TCU_MXI8_ID = 13;
+    localparam TCU_I32_ID   = 8;
+    localparam TCU_I8_ID    = 9;
+    localparam TCU_U8_ID    = 10;
+    localparam TCU_I4_ID    = 11;
+    localparam TCU_U4_ID    = 12;
+    localparam TCU_MXI8_ID  = 13;
+    localparam TCU_FMT_WIDTH= 4;
 
     // Tile dimensions
     localparam TCU_TILE_CAP = TCU_NT * TCU_NR;
@@ -97,6 +99,14 @@ package VX_tcu_pkg;
     localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
 
+    `ifdef TCU_TF32_ENABLE
+        localparam TCU_EXP_BITS = 10;
+    `elsif TCU_BF16_ENABLE
+        localparam TCU_EXP_BITS = 10;
+    `else
+        localparam TCU_EXP_BITS = 9;
+    `endif
+
     typedef struct packed {
         logic is_zero;
         logic is_sub;
@@ -145,6 +155,18 @@ package VX_tcu_pkg;
             TCU_TF32_ID: return 18;
             default:     return 0;
         endcase
+    endfunction
+
+    function automatic logic tcu_fmt_is_int(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        return fmt[TCU_FMT_WIDTH-1];
+    endfunction
+
+    function automatic logic tcu_fmt_is_signed_int(input logic [TCU_FMT_WIDTH-2:0] int_fmt);
+        return int_fmt[0];
+    endfunction
+
+    function automatic logic tcu_fmt_is_bfloat(input logic [TCU_FMT_WIDTH-2:0] float_fmt);
+        return !float_fmt[0];
     endfunction
 
     // Tracing info

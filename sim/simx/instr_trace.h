@@ -43,6 +43,28 @@ struct SfuTraceData : public ITraceData {
   SfuTraceData(Word arg1, Word arg2) : arg1(arg1), arg2(arg2) {}
 };
 
+#ifdef EXT_TMA_ENABLE
+struct TmaTraceData : public ITraceData {
+  using Ptr = std::shared_ptr<TmaTraceData>;
+  Word rs1;
+  Word rs2;
+  uint32_t op;
+  TmaTraceData(Word rs1, Word rs2, uint32_t op)
+    : rs1(rs1)
+    , rs2(rs2)
+    , op(op) {}
+};
+#endif
+
+struct BarTraceData : public ITraceData {
+  using Ptr = std::shared_ptr<BarTraceData>;
+  Word bar_id;
+  Word count;
+  int is_async_bar;
+  BarTraceData(Word bar_id, Word count, bool is_async_bar)
+    : bar_id(bar_id), count(count), is_async_bar(is_async_bar) {}
+};
+
 struct instr_trace_t {
 public:
   //--
