@@ -13,8 +13,8 @@
 
 `include "VX_define.vh"
 
-module VX_tma_smem_downsize import VX_gpu_pkg::*; #(
-    parameter SRC_DATA_SIZE = TMA_SMEM_WORD_SIZE,
+module VX_dxa_smem_downsize import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
+    parameter SRC_DATA_SIZE = DXA_SMEM_WORD_SIZE,
     parameter DST_DATA_SIZE = LSU_WORD_SIZE,
     parameter TAG_WIDTH = LMEM_TAG_WIDTH,
     parameter SRC_ADDR_WIDTH = (`MEM_ADDR_WIDTH - `CLOG2(SRC_DATA_SIZE)),

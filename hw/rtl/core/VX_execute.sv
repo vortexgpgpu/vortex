@@ -42,9 +42,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_sched_csr_if.slave   sched_csr_if,
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_warp_ctl_if.master   warp_ctl_if
-`ifdef EXT_TMA_ENABLE
+`ifdef EXT_DXA_ENABLE
     ,
-    VX_tma_bus_if.master    tma_bus_if,
+    VX_dxa_req_bus_if.master    dxa_req_bus_if,
     VX_txbar_bus_if.master  txbar_if
 `endif
 );
@@ -117,9 +117,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if)
-    `ifdef EXT_TMA_ENABLE
+    `ifdef EXT_DXA_ENABLE
         ,
-        .tma_bus_if     (tma_bus_if),
+        .dxa_req_bus_if     (dxa_req_bus_if),
         .txbar_if       (txbar_if)
     `endif
     );

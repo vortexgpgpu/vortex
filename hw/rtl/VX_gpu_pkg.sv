@@ -394,8 +394,9 @@ package VX_gpu_pkg;
     localparam INST_SFU_CSRRW =  4'h6;
     localparam INST_SFU_CSRRS =  4'h7;
     localparam INST_SFU_CSRRC =  4'h8;
-`ifdef EXT_TMA_ENABLE
-    localparam INST_SFU_TMA =    4'h9;
+`ifdef EXT_DXA_ENABLE
+    localparam INST_SFU_DXA =    4'h9;
+    localparam INST_SFU_DXA =    INST_SFU_DXA; // compatibility alias
 `endif
     localparam INST_SFU_BITS =   4;
 
@@ -558,84 +559,12 @@ package VX_gpu_pkg;
     } wctl_args_t;
     `PACKAGE_ASSERT($bits(wctl_args_t) == INST_ARGS_BITS)
 
-`ifdef EXT_TMA_ENABLE
+`ifdef EXT_DXA_ENABLE
     typedef struct packed {
         logic [(INST_ARGS_BITS-3)-1:0] __padding;
         logic [2:0] op;
-    } tma_args_t;
-    `PACKAGE_ASSERT($bits(tma_args_t) == INST_ARGS_BITS)
-
-    // Internal TMA engine bundles: keep submodule wiring compact and readable.
-    typedef struct packed {
-        logic [31:0] rank;
-        logic [31:0] elem_bytes;
-        logic [31:0] tile0;
-        logic [31:0] tile1;
-        logic [31:0] size0;
-        logic [31:0] size1;
-        logic [31:0] stride0;
-        logic [31:0] total;
-        logic is_s2g;
-        logic supported;
-    } tma_issue_dec_t;
-
-    typedef struct packed {
-        logic active;
-        logic [NC_WIDTH-1:0] core_id;
-        logic [UUID_WIDTH-1:0] uuid;
-        logic [NW_WIDTH-1:0] wid;
-        logic [BAR_ADDR_W-1:0] bar_addr;
-        logic is_s2g;
-        logic [`MEM_ADDR_WIDTH-1:0] gbase;
-        logic [`XLEN-1:0] smem_base;
-        logic [31:0] coord0;
-        logic [31:0] coord1;
-        logic [31:0] size0;
-        logic [31:0] size1;
-        logic [31:0] stride0;
-        logic [31:0] tile0;
-        logic [31:0] tile1;
-        logic [31:0] elem_bytes;
-        logic [31:0] cfill;
-        logic [31:0] idx;
-        logic [31:0] total;
-        logic [1:0] elem_state;
-        logic wait_rsp_from_gmem;
-        logic write_to_gmem;
-        logic [`MEM_ADDR_WIDTH-1:0] pending_rd_byte_addr;
-        logic [`MEM_ADDR_WIDTH-1:0] pending_wr_byte_addr;
-        logic [63:0] pending_elem_data;
-    } tma_xfer_state_t;
-
-    typedef struct packed {
-        logic state_idle;
-        logic state_wait_rd;
-        logic state_wait_wr;
-        logic [`MEM_ADDR_WIDTH-1:0] cur_gmem_byte_addr;
-        logic [`MEM_ADDR_WIDTH-1:0] cur_smem_byte_addr;
-        logic cur_need_skip;
-        logic cur_need_fill;
-        logic cur_need_read;
-        logic cur_read_from_gmem;
-        logic cur_read_from_smem;
-        logic [`L2_LINE_SIZE * 8-1:0] pending_gmem_wr_data_shifted;
-        logic [XLENB * 8-1:0] pending_smem_wr_data_shifted;
-        logic [`L2_LINE_SIZE-1:0] pending_gmem_byteen;
-        logic [XLENB-1:0] pending_smem_byteen;
-        logic [63:0] gmem_rsp_data_shifted;
-        logic [63:0] smem_rsp_data_shifted;
-        logic [`L2_LINE_SIZE-1:0] cur_gmem_byteen;
-        logic [XLENB-1:0] cur_smem_byteen;
-    } tma_xfer_math_t;
-
-    typedef struct packed {
-        logic gmem_rd_req_fire;
-        logic smem_rd_req_fire;
-        logic gmem_wr_req_fire;
-        logic smem_wr_req_fire;
-        logic gmem_rsp_fire;
-        logic smem_rsp_fire;
-    } tma_xfer_evt_t;
+    } dxa_args_t;
+    `PACKAGE_ASSERT($bits(dxa_args_t) == INST_ARGS_BITS)
 `endif
 
 `ifdef EXT_TCU_ENABLE
@@ -655,8 +584,9 @@ package VX_gpu_pkg;
         lsu_args_t  lsu;
         csr_args_t  csr;
         wctl_args_t wctl;
-    `ifdef EXT_TMA_ENABLE
-        tma_args_t  tma;
+    `ifdef EXT_DXA_ENABLE
+        dxa_args_t  dxa;
+        dxa_args_t  dxa;
     `endif
     `ifdef EXT_TCU_ENABLE
         tcu_args_t  tcu;
@@ -885,10 +815,10 @@ package VX_gpu_pkg;
     localparam LSU_TAG_WIDTH        = (UUID_WIDTH + LSU_TAG_ID_BITS);
     localparam LSU_NUM_REQS	        = `NUM_LSU_BLOCKS * `NUM_LSU_LANES;
     localparam LMEM_TAG_WIDTH       = LSU_TAG_WIDTH + `CLOG2(`NUM_LSU_BLOCKS);
-    // TMA shared-memory path is dimensioned independently from LSU scalar word size
+    // DXA shared-memory path is dimensioned independently from LSU scalar word size
     // to match the shared-memory service width per request path.
-    localparam TMA_SMEM_WORD_SIZE   = `LSU_LINE_SIZE;
-    localparam TMA_SMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(TMA_SMEM_WORD_SIZE));
+    localparam DXA_SMEM_WORD_SIZE   = `LSU_LINE_SIZE;
+    localparam DXA_SMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_SMEM_WORD_SIZE));
 
     ////////////////////////// Icache Parameters //////////////////////////////
 
@@ -977,17 +907,17 @@ package VX_gpu_pkg;
 `endif
 
     // Extra tag bits needed on cluster external memory port when cluster-level
-    // TMA gmem arbitration is enabled:
-    //   1) TMA-engine merge: NUM_TMA_UNITS -> 1
-    //   2) L2/TMA port-0 merge: 2 -> 1
-`ifdef NUM_TMA_UNITS
-    localparam NUM_TMA_UNITS_P = `NUM_TMA_UNITS;
+    // DXA gmem arbitration is enabled:
+    //   1) DXA-engine merge: NUM_DXA_UNITS -> 1
+    //   2) L2/DXA port-0 merge: 2 -> 1
+`ifdef NUM_DXA_UNITS
+    localparam NUM_DXA_UNITS_P = `NUM_DXA_UNITS;
 `else
-    localparam NUM_TMA_UNITS_P = 1;
+    localparam NUM_DXA_UNITS_P = 1;
 `endif
-    localparam L2_TMA_ARB_TAG_WIDTH = L2_MEM_TAG_WIDTH
-                                    + (`EXT_TMA_CLUSTER_LEVEL_ENABLED
-                                        ? (`ARB_SEL_BITS(NUM_TMA_UNITS_P, 1)
+    localparam L2_DXA_ARB_TAG_WIDTH = L2_MEM_TAG_WIDTH
+                                    + (`EXT_DXA_CLUSTER_LEVEL_ENABLED
+                                        ? (`ARB_SEL_BITS(NUM_DXA_UNITS_P, 1)
                                          + `ARB_SEL_BITS(2, 1))
                                         : 0);
 
@@ -1001,8 +931,8 @@ package VX_gpu_pkg;
 
     // Core request tag bits:
     // - default: preserve original L2_MEM_TAG_WIDTH contract
-    // - cluster-level TMA on: widen for additional arb-routing tag bits
-    localparam L3_TAG_WIDTH	        = (`EXT_TMA_CLUSTER_LEVEL_ENABLED ? L2_TMA_ARB_TAG_WIDTH : L2_MEM_TAG_WIDTH);
+    // - cluster-level DXA on: widen for additional arb-routing tag bits
+    localparam L3_TAG_WIDTH	        = (`EXT_DXA_CLUSTER_LEVEL_ENABLED ? L2_DXA_ARB_TAG_WIDTH : L2_MEM_TAG_WIDTH);
 
     // Memory request data bits
     localparam L3_MEM_DATA_WIDTH	= (`L3_LINE_SIZE * 8);

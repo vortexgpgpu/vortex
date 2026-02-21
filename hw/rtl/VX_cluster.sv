@@ -81,13 +81,13 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
     ) per_socket_mem_bus_if[NUM_SOCKETS * `L1_MEM_PORTS]();
 
-`ifdef EXT_TMA_ENABLE
-    VX_tma_bus_if per_socket_tma_bus_if[NUM_SOCKETS]();
+`ifdef EXT_DXA_ENABLE
+    VX_dxa_req_bus_if per_socket_dxa_req_bus_if[NUM_SOCKETS]();
     VX_mem_bus_if #(
-        .DATA_SIZE (TMA_SMEM_WORD_SIZE),
+        .DATA_SIZE (DXA_SMEM_WORD_SIZE),
         .TAG_WIDTH (LMEM_TAG_WIDTH)
-    ) per_socket_tma_smem_bus_if[NUM_SOCKETS]();
-    localparam TMA_CORE_LOCAL_BITS = `CLOG2(`SOCKET_SIZE);
+    ) per_socket_dxa_smem_bus_if[NUM_SOCKETS]();
+    localparam DXA_CORE_LOCAL_BITS = `CLOG2(`SOCKET_SIZE);
 `endif
 
     `RESET_RELAY (l2_reset, reset);
@@ -129,20 +129,20 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .mem_bus_if     (l2_mem_bus_if)
     );
 
-`ifdef EXT_TMA_ENABLE
-    VX_tma_cluster #(
-        .INSTANCE_ID     (`SFORMATF(("%s-tma-cluster", INSTANCE_ID))),
-        .TMA_NUM_SOCKETS (NUM_SOCKETS),
-        .NUM_TMA_UNITS   (`NUM_TMA_UNITS),
+`ifdef EXT_DXA_ENABLE
+    VX_dxa_cluster #(
+        .INSTANCE_ID     (`SFORMATF(("%s-dxa-cluster", INSTANCE_ID))),
+        .DXA_NUM_SOCKETS (NUM_SOCKETS),
+        .NUM_DXA_UNITS   (`NUM_DXA_UNITS),
         .L2_MEM_PORTS    (`L2_MEM_PORTS),
-        .CORE_LOCAL_BITS (TMA_CORE_LOCAL_BITS),
-        .ENABLE          (`EXT_TMA_CLUSTER_LEVEL_ENABLED)
-    ) tma_cluster (
+        .CORE_LOCAL_BITS (DXA_CORE_LOCAL_BITS),
+        .ENABLE          (`EXT_DXA_CLUSTER_LEVEL_ENABLED)
+    ) dxa_cluster (
         .clk                    (clk),
         .reset                  (reset),
         .dcr_bus_if             (dcr_bus_if),
-        .per_socket_tma_bus_if  (per_socket_tma_bus_if),
-        .per_socket_tma_smem_bus_if(per_socket_tma_smem_bus_if),
+        .per_socket_dxa_bus_if  (per_socket_dxa_req_bus_if),
+        .per_socket_dxa_smem_bus_if(per_socket_dxa_smem_bus_if),
         .l2_mem_bus_if          (l2_mem_bus_if),
         .mem_bus_if             (mem_bus_if)
     );
@@ -182,9 +182,9 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
             .mem_bus_if     (per_socket_mem_bus_if[socket_id * `L1_MEM_PORTS +: `L1_MEM_PORTS]),
 
-        `ifdef EXT_TMA_ENABLE
-            .tma_bus_if     (per_socket_tma_bus_if[socket_id]),
-            .tma_smem_bus_if(per_socket_tma_smem_bus_if[socket_id]),
+        `ifdef EXT_DXA_ENABLE
+            .dxa_req_bus_if     (per_socket_dxa_req_bus_if[socket_id]),
+            .dxa_smem_bus_if    (per_socket_dxa_smem_bus_if[socket_id]),
         `endif
 
         `ifdef GBAR_ENABLE

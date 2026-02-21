@@ -53,6 +53,12 @@ endif
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip
 
+# Add DXA extension sources
+ifneq (,$(filter -DEXT_DXA_ENABLE -DEXT_DXA_ENABLE=%,$(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/dxa/VX_dxa_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/dxa
+endif
+
 # Add TCU extension sources
 ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv

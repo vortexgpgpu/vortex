@@ -43,7 +43,7 @@ struct SfuTraceData : public ITraceData {
   SfuTraceData(Word arg1, Word arg2) : arg1(arg1), arg2(arg2) {}
 };
 
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 struct TmaTraceData : public ITraceData {
   using Ptr = std::shared_ptr<TmaTraceData>;
   Word rs1;

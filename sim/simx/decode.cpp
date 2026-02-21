@@ -379,14 +379,14 @@ static op_string_t op_string(const Instr &instr) {
         std::abort();
       }
     }
-#ifdef EXT_TMA_ENABLE
-    ,[&](TmaType tma_type)-> op_string_t {
-      switch (tma_type) {
-      case TmaType::SETUP0:  return {"TMA.SETUP0", ""};
-      case TmaType::SETUP1:  return {"TMA.SETUP1", ""};
-      case TmaType::COORD01: return {"TMA.COORD01", ""};
-      case TmaType::COORD23: return {"TMA.COORD23", ""};
-      case TmaType::ISSUE:   return {"TMA.ISSUE", ""};
+#ifdef EXT_DXA_ENABLE
+    ,[&](TmaType dxa_type)-> op_string_t {
+      switch (dxa_type) {
+      case TmaType::SETUP0:  return {"DXA.SETUP0", ""};
+      case TmaType::SETUP1:  return {"DXA.SETUP1", ""};
+      case TmaType::COORD01: return {"DXA.COORD01", ""};
+      case TmaType::COORD23: return {"DXA.COORD23", ""};
+      case TmaType::ISSUE:   return {"DXA.ISSUE", ""};
       default:
         std::abort();
       }
@@ -1106,8 +1106,8 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       }
       ibuffer.push_back(instr);
     } break;
-#ifdef EXT_TMA_ENABLE
-    case 3: { // TMA runtime issue (leader-thread serialized payload)
+#ifdef EXT_DXA_ENABLE
+    case 3: { // DXA runtime issue (leader-thread serialized payload)
       auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
       IntrTmaArgs tmaArgs{};
       tmaArgs.op = funct3;

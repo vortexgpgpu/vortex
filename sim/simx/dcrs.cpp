@@ -16,40 +16,40 @@
 
 using namespace vortex;
 
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 TmaDCRS::Descriptor TmaDCRS::read_descriptor(uint32_t slot) const {
   Descriptor desc{};
-  desc.base_addr = (uint64_t(read_word(slot, VX_DCR_TMA_DESC_BASE_HI_OFF)) << 32)
-                 | uint64_t(read_word(slot, VX_DCR_TMA_DESC_BASE_LO_OFF));
+  desc.base_addr = (uint64_t(read_word(slot, VX_DCR_DXA_DESC_BASE_HI_OFF)) << 32)
+                 | uint64_t(read_word(slot, VX_DCR_DXA_DESC_BASE_LO_OFF));
 
   desc.sizes = {
-    read_word(slot, VX_DCR_TMA_DESC_SIZE0_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_SIZE1_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_SIZE2_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_SIZE3_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_SIZE4_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_SIZE0_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_SIZE1_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_SIZE2_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_SIZE3_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_SIZE4_OFF),
   };
 
   desc.strides = {
-    read_word(slot, VX_DCR_TMA_DESC_STRIDE0_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_STRIDE1_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_STRIDE2_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_STRIDE3_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_STRIDE0_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_STRIDE1_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_STRIDE2_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_STRIDE3_OFF),
   };
 
-  desc.meta = read_word(slot, VX_DCR_TMA_DESC_META_OFF);
+  desc.meta = read_word(slot, VX_DCR_DXA_DESC_META_OFF);
 
   desc.element_strides = {
-    read_word(slot, VX_DCR_TMA_DESC_ESTRIDE0_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_ESTRIDE1_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_ESTRIDE2_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_ESTRIDE3_OFF),
-    read_word(slot, VX_DCR_TMA_DESC_ESTRIDE4_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_ESTRIDE0_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_ESTRIDE1_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_ESTRIDE2_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_ESTRIDE3_OFF),
+    read_word(slot, VX_DCR_DXA_DESC_ESTRIDE4_OFF),
   };
 
-  uint32_t ts01 = read_word(slot, VX_DCR_TMA_DESC_TILESIZE01_OFF);
-  uint32_t ts23 = read_word(slot, VX_DCR_TMA_DESC_TILESIZE23_OFF);
-  uint32_t ts4 = read_word(slot, VX_DCR_TMA_DESC_TILESIZE4_OFF);
+  uint32_t ts01 = read_word(slot, VX_DCR_DXA_DESC_TILESIZE01_OFF);
+  uint32_t ts23 = read_word(slot, VX_DCR_DXA_DESC_TILESIZE23_OFF);
+  uint32_t ts4 = read_word(slot, VX_DCR_DXA_DESC_TILESIZE4_OFF);
   desc.tile_sizes = {
     uint16_t(ts01 & 0xffff),
     uint16_t((ts01 >> 16) & 0xffff),
@@ -58,7 +58,7 @@ TmaDCRS::Descriptor TmaDCRS::read_descriptor(uint32_t slot) const {
     uint16_t(ts4 & 0xffff),
   };
 
-  desc.cfill = read_word(slot, VX_DCR_TMA_DESC_CFILL_OFF);
+  desc.cfill = read_word(slot, VX_DCR_DXA_DESC_CFILL_OFF);
   return desc;
 }
 #endif
@@ -70,10 +70,10 @@ void DCRS::write(uint32_t addr, uint32_t value) {
       return;
   }
 
-#ifdef EXT_TMA_ENABLE
-  if (addr >= VX_DCR_TMA_STATE_BEGIN
-   && addr < VX_DCR_TMA_STATE_END) {
-      tma_dcrs.write(addr, value);
+#ifdef EXT_DXA_ENABLE
+  if (addr >= VX_DCR_DXA_STATE_BEGIN
+   && addr < VX_DCR_DXA_STATE_END) {
+      dxa_dcrs.write(addr, value);
       return;
   }
 #endif

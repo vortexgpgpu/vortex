@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tma_engine import VX_gpu_pkg::*; #(
+module VX_dxa_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter ENGINE_ID = 0
 ) (
@@ -21,23 +21,15 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
     input wire              reset,
 
     VX_dcr_bus_if.slave     dcr_bus_if,
-    VX_tma_bus_if.slave     tma_bus_if,
+    VX_dxa_req_bus_if.slave     dxa_req_bus_if,
 
     VX_mem_bus_if.master    gmem_bus_if,
     VX_mem_bus_if.master    smem_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    localparam TMA_OP_ISSUE   = 3'd4;
-
-    localparam TMA_REQ_DATAW      = NC_WIDTH + UUID_WIDTH + NW_WIDTH + 3 + (2 * `XLEN);
-    localparam TMA_RSP_DATAW      = NC_WIDTH + UUID_WIDTH + NW_WIDTH + BAR_ADDR_W + 2;
-    localparam TMA_CTX_COUNT      = `NUM_CORES * `NUM_WARPS;
-    localparam TMA_CTX_BITS       = `UP(`CLOG2(TMA_CTX_COUNT));
-    localparam TMA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_TMA_DESC_COUNT);
-    localparam TMA_DESC_SLOT_W    = `UP(TMA_DESC_SLOT_BITS);
-    localparam TMA_DESC_WORD_BITS = `CLOG2(`VX_DCR_TMA_DESC_STRIDE);
-    localparam TMA_DESC_WORD_W    = `UP(TMA_DESC_WORD_BITS);
+    localparam DXA_CTX_COUNT      = `NUM_CORES * `NUM_WARPS;
+    localparam DXA_CTX_BITS       = `UP(`CLOG2(DXA_CTX_COUNT));
 
     localparam GMEM_BYTES      = `L2_LINE_SIZE;
     localparam GMEM_DATAW      = GMEM_BYTES * 8;
@@ -49,16 +41,16 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
     localparam SMEM_ADDR_WIDTH = `MEM_ADDR_WIDTH - `CLOG2(SMEM_BYTES);
     localparam SMEM_OFF_BITS   = `CLOG2(SMEM_BYTES);
 
-    localparam TMA_SMEM_ENGINE_BITS = `CLOG2(`NUM_TMA_UNITS);
-    localparam TMA_SMEM_ENGINE_W    = `UP(TMA_SMEM_ENGINE_BITS);
+    localparam DXA_SMEM_ENGINE_BITS = `CLOG2(`NUM_DXA_UNITS);
+    localparam DXA_SMEM_ENGINE_W    = `UP(DXA_SMEM_ENGINE_BITS);
     localparam UUID_W               = `UP(UUID_WIDTH);
     localparam SMEM_TAG_TOTALW      = LMEM_TAG_WIDTH;
     localparam SMEM_TAG_VALUEW      = SMEM_TAG_TOTALW - UUID_W;
-    localparam SMEM_TAG_ROUTEW      = TMA_SMEM_ENGINE_W + NC_WIDTH;
+    localparam SMEM_TAG_ROUTEW      = DXA_SMEM_ENGINE_W + NC_WIDTH;
 
     `STATIC_ASSERT(SMEM_TAG_TOTALW >= SMEM_TAG_ROUTEW, ("invalid parameter"))
     wire req_valid;
-    wire [TMA_REQ_DATAW-1:0] req_data_raw;
+    wire [DXA_REQ_DATAW-1:0] req_data_raw;
     wire req_accept;
     wire req_fire;
     wire [NC_WIDTH-1:0] req_core_id;
@@ -68,12 +60,12 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
     wire [`XLEN-1:0] req_rs1;
     wire [`XLEN-1:0] req_rs2;
 
-    wire [TMA_CTX_BITS-1:0] req_ctx_idx;
-    wire [TMA_CTX_BITS-1:0] req_core_ofs;
+    wire [DXA_CTX_BITS-1:0] req_ctx_idx;
+    wire [DXA_CTX_BITS-1:0] req_core_ofs;
     wire [BAR_ADDR_W-1:0] req_bar_addr;
 
     wire [BAR_ADDR_W-1:0] issue_bar_addr;
-    wire [TMA_DESC_SLOT_W-1:0] issue_desc_slot;
+    wire [DXA_DESC_SLOT_W-1:0] issue_desc_slot;
     wire [`XLEN-1:0] issue_smem_addr;
     wire [`XLEN-1:0] issue_flags;
     wire [4:0][`XLEN-1:0] issue_coords;
@@ -88,23 +80,23 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
     wire [31:0] issue_size1_raw;
     wire [31:0] issue_stride0_raw;
 
-    tma_issue_dec_t issue_dec;
-    tma_xfer_state_t xfer_state_r;
-    tma_xfer_math_t xfer_math_w;
-    tma_xfer_evt_t xfer_evt;
+    dxa_issue_dec_t issue_dec;
+    dxa_xfer_state_t xfer_state_r;
+    dxa_xfer_math_t xfer_math_w;
+    dxa_xfer_evt_t xfer_evt;
 
     wire                       done_rsp_valid_r;
-    wire [TMA_RSP_DATAW-1:0]   done_rsp_data_r;
+    wire [DXA_RSP_DATAW-1:0]   done_rsp_data_r;
 
     VX_elastic_buffer #(
-        .DATAW (TMA_REQ_DATAW),
+        .DATAW (DXA_REQ_DATAW),
         .SIZE  (8)
     ) req_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (tma_bus_if.req_valid),
-        .ready_in  (tma_bus_if.req_ready),
-        .data_in   (tma_bus_if.req_data),
+        .valid_in  (dxa_req_bus_if.req_valid),
+        .ready_in  (dxa_req_bus_if.req_ready),
+        .data_in   (dxa_req_bus_if.req_data),
         .valid_out (req_valid),
         .ready_out (req_accept),
         .data_out  (req_data_raw)
@@ -112,12 +104,12 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
 
     assign {req_core_id, req_uuid, req_wid, req_op, req_rs1, req_rs2} = req_data_raw;
     assign req_accept = ~req_valid
-                     || (req_op != TMA_OP_ISSUE)
+                     || (req_op != DXA_OP_ISSUE)
                      || (~xfer_state_r.active && ~done_rsp_valid_r);
     assign req_fire = req_valid && req_accept;
 
-    assign req_core_ofs = TMA_CTX_BITS'(req_core_id) * TMA_CTX_BITS'(`NUM_WARPS);
-    assign req_ctx_idx = req_core_ofs + TMA_CTX_BITS'(req_wid);
+    assign req_core_ofs = DXA_CTX_BITS'(req_core_id) * DXA_CTX_BITS'(`NUM_WARPS);
+    assign req_ctx_idx = req_core_ofs + DXA_CTX_BITS'(req_wid);
 
     if (`NUM_WARPS > 1) begin : g_req_bar_addr_w
         assign req_bar_addr = {req_rs2[NW_BITS-1:0], req_rs2[16 +: NB_BITS]};
@@ -125,13 +117,13 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
         assign req_bar_addr = req_rs2[16 +: NB_BITS];
     end
 
-    VX_tma_issue_state #(
-        .TMA_CTX_COUNT     (TMA_CTX_COUNT),
-        .TMA_CTX_BITS      (TMA_CTX_BITS),
-        .TMA_DESC_SLOT_BITS(TMA_DESC_SLOT_BITS),
-        .TMA_DESC_SLOT_W   (TMA_DESC_SLOT_W),
-        .TMA_DESC_WORD_BITS(TMA_DESC_WORD_BITS),
-        .TMA_DESC_WORD_W   (TMA_DESC_WORD_W)
+    VX_dxa_issue_state #(
+        .DXA_CTX_COUNT     (DXA_CTX_COUNT),
+        .DXA_CTX_BITS      (DXA_CTX_BITS),
+        .DXA_DESC_SLOT_BITS(DXA_DESC_SLOT_BITS),
+        .DXA_DESC_SLOT_W   (DXA_DESC_SLOT_W),
+        .DXA_DESC_WORD_BITS(DXA_DESC_WORD_BITS),
+        .DXA_DESC_WORD_W   (DXA_DESC_WORD_W)
     ) issue_state (
         .clk            (clk),
         .reset          (reset),
@@ -158,7 +150,7 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
         .issue_stride0  (issue_stride0_raw)
     );
 
-    VX_tma_issue_decode #(
+    VX_dxa_issue_decode #(
         .GMEM_BYTES(GMEM_BYTES),
         .SMEM_BYTES(SMEM_BYTES)
     ) issue_decode (
@@ -171,7 +163,7 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
         .issue_dec        (issue_dec)
     );
 
-    VX_tma_xfer_math xfer_math_i (
+    VX_dxa_xfer_math xfer_math_i (
         .xfer_state  (xfer_state_r),
         .gmem_rsp_data(gmem_bus_if.rsp_data.data),
         .smem_rsp_data(smem_bus_if.rsp_data.data),
@@ -190,8 +182,8 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
     assign xfer_evt.gmem_rsp_fire = rd_wait_gmem && gmem_bus_if.rsp_valid;
     assign xfer_evt.smem_rsp_fire = rd_wait_smem && smem_bus_if.rsp_valid;
 
-    VX_tma_xfer_ctrl #(
-        .TMA_RSP_DATAW(TMA_RSP_DATAW)
+    VX_dxa_xfer_ctrl #(
+        .RSP_DATAW   (DXA_RSP_DATAW)
     ) xfer_ctrl (
         .clk                   (clk),
         .reset                 (reset),
@@ -208,7 +200,7 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
         .issue_desc_cfill      (issue_desc_cfill),
         .xfer_math             (xfer_math_w),
         .xfer_evt              (xfer_evt),
-        .tma_rsp_ready         (tma_bus_if.rsp_ready),
+        .dxa_rsp_ready         (dxa_req_bus_if.rsp_ready),
         .xfer_state_r          (xfer_state_r),
         .done_rsp_valid_r      (done_rsp_valid_r),
         .done_rsp_data_r       (done_rsp_data_r)
@@ -220,13 +212,13 @@ module VX_tma_engine import VX_gpu_pkg::*; #(
     assign smem_tag_route = {
         {(SMEM_TAG_TOTALW - SMEM_TAG_ROUTEW){1'b0}},
         NC_WIDTH'(xfer_state_r.core_id),
-        TMA_SMEM_ENGINE_W'(ENGINE_ID)
+        DXA_SMEM_ENGINE_W'(ENGINE_ID)
     };
     assign smem_tag_uuid  = UUID_W'(smem_tag_route[SMEM_TAG_TOTALW-1 -: UUID_W]);
     assign smem_tag_value = SMEM_TAG_VALUEW'(smem_tag_route[SMEM_TAG_VALUEW-1:0]);
 
-    assign tma_bus_if.rsp_valid = done_rsp_valid_r;
-    assign tma_bus_if.rsp_data  = done_rsp_data_r;
+    assign dxa_req_bus_if.rsp_valid = done_rsp_valid_r;
+    assign dxa_req_bus_if.rsp_data  = done_rsp_data_r;
 
     assign gmem_bus_if.req_valid = xfer_math_w.cur_read_from_gmem || wr_issue_gmem;
     assign gmem_bus_if.req_data.rw = wr_issue_gmem;

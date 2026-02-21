@@ -15,7 +15,7 @@
 #include <iomanip>
 #include <string.h>
 #include <assert.h>
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 #include <algorithm>
 #endif
 #include <util.h>
@@ -23,7 +23,7 @@
 #include "arch.h"
 #include "mem.h"
 #include "core.h"
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 #include "dcrs.h"
 #endif
 #include "debug.h"
@@ -46,7 +46,7 @@ Core::Core(const SimContext& ctx,
   , core_id_(core_id)
   , socket_(socket)
   , arch_(arch)
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
   , dcrs_(dcrs)
 #endif
   , emulator_(arch, dcrs, this)
@@ -205,8 +205,8 @@ Core::Core(const SimContext& ctx,
     commit_arbs_.at(iw) = arbiter;
   }
 
-#ifdef EXT_TMA_ENABLE
-  tma_engine_ = std::make_unique<TmaEngine>(this);
+#ifdef EXT_DXA_ENABLE
+  dxa_engine_ = std::make_unique<TmaEngine>(this);
 #endif
 
   this->reset();
@@ -231,9 +231,9 @@ void Core::reset() {
   pending_instrs_.clear();
   pending_ifetches_ = 0;
 
-#ifdef EXT_TMA_ENABLE
-  if (tma_engine_) {
-    tma_engine_->reset();
+#ifdef EXT_DXA_ENABLE
+  if (dxa_engine_) {
+    dxa_engine_->reset();
   }
 #endif
 
@@ -241,9 +241,9 @@ void Core::reset() {
 }
 
 void Core::tick() {
-#ifdef EXT_TMA_ENABLE
-  if (tma_engine_) {
-    tma_engine_->tick();
+#ifdef EXT_DXA_ENABLE
+  if (dxa_engine_) {
+    dxa_engine_->tick();
   }
 #endif
 
@@ -546,25 +546,25 @@ void Core::barrier_tx_done(uint32_t bar_id) {
   emulator_.barrier_tx_done(bar_id);
 }
 
-#ifdef EXT_TMA_ENABLE
-bool Core::tma_issue(uint32_t desc_slot,
+#ifdef EXT_DXA_ENABLE
+bool Core::dxa_issue(uint32_t desc_slot,
                      uint32_t smem_addr,
                      const uint32_t coords[5],
                      uint32_t flags,
                      uint32_t bar_id) {
-  if (!tma_engine_) {
+  if (!dxa_engine_) {
     return false;
   }
-  return tma_engine_->issue(desc_slot, smem_addr, coords, flags, bar_id);
+  return dxa_engine_->issue(desc_slot, smem_addr, coords, flags, bar_id);
 }
 
-static inline uint32_t tma_elem_bytes(uint32_t meta) {
-  uint32_t enc = (meta >> VX_TMA_DESC_META_ELEMSZ_LSB) & ((1u << VX_TMA_DESC_META_ELEMSZ_BITS) - 1u);
+static inline uint32_t dxa_elem_bytes(uint32_t meta) {
+  uint32_t enc = (meta >> VX_DXA_DESC_META_ELEMSZ_LSB) & ((1u << VX_DXA_DESC_META_ELEMSZ_BITS) - 1u);
   return 1u << enc;
 }
 
-static inline uint32_t tma_rank(uint32_t meta) {
-  uint32_t rank = (meta >> VX_TMA_DESC_META_DIM_LSB) & ((1u << VX_TMA_DESC_META_DIM_BITS) - 1u);
+static inline uint32_t dxa_rank(uint32_t meta) {
+  uint32_t rank = (meta >> VX_DXA_DESC_META_DIM_LSB) & ((1u << VX_DXA_DESC_META_DIM_BITS) - 1u);
   if (rank == 0)
     return 1;
   if (rank > 5)
@@ -572,7 +572,7 @@ static inline uint32_t tma_rank(uint32_t meta) {
   return rank;
 }
 
-struct tma_copy_cfg_t {
+struct dxa_copy_cfg_t {
   bool is_s2g;
   uint32_t rank;
   uint32_t elem_bytes;
@@ -580,8 +580,8 @@ struct tma_copy_cfg_t {
   uint32_t tile1;
 };
 
-static inline bool tma_build_copy_cfg(const TmaDCRS::Descriptor& desc, uint32_t flags, tma_copy_cfg_t* cfg) {
-  uint32_t rank = tma_rank(desc.meta);
+static inline bool dxa_build_copy_cfg(const TmaDCRS::Descriptor& desc, uint32_t flags, dxa_copy_cfg_t* cfg) {
+  uint32_t rank = dxa_rank(desc.meta);
   if (rank > 2) {
     // Current reboot phase supports rank-1 and rank-2 copy path only.
     return false;
@@ -589,19 +589,19 @@ static inline bool tma_build_copy_cfg(const TmaDCRS::Descriptor& desc, uint32_t 
 
   cfg->is_s2g = ((flags & 0x1) != 0);
   cfg->rank = rank;
-  cfg->elem_bytes = tma_elem_bytes(desc.meta);
+  cfg->elem_bytes = dxa_elem_bytes(desc.meta);
   cfg->tile0 = std::max<uint32_t>(1, desc.tile_sizes[0]);
   cfg->tile1 = (rank >= 2) ? std::max<uint32_t>(1, desc.tile_sizes[1]) : 1u;
   return true;
 }
 
-static inline bool tma_in_bounds(const TmaDCRS::Descriptor& desc, const tma_copy_cfg_t& cfg, uint32_t i0, uint32_t i1) {
+static inline bool dxa_in_bounds(const TmaDCRS::Descriptor& desc, const dxa_copy_cfg_t& cfg, uint32_t i0, uint32_t i1) {
   bool ok0 = (i0 < desc.sizes[0]);
   bool ok1 = (cfg.rank < 2) || (i1 < desc.sizes[1]);
   return ok0 && ok1;
 }
 
-static inline uint64_t tma_global_addr(const TmaDCRS::Descriptor& desc, const tma_copy_cfg_t& cfg, uint32_t i0, uint32_t i1) {
+static inline uint64_t dxa_global_addr(const TmaDCRS::Descriptor& desc, const dxa_copy_cfg_t& cfg, uint32_t i0, uint32_t i1) {
   uint64_t addr = desc.base_addr + uint64_t(i0) * cfg.elem_bytes;
   if (cfg.rank >= 2) {
     addr += uint64_t(i1) * uint64_t(desc.strides[0]);
@@ -609,17 +609,17 @@ static inline uint64_t tma_global_addr(const TmaDCRS::Descriptor& desc, const tm
   return addr;
 }
 
-static inline uint64_t tma_shared_addr(const tma_copy_cfg_t& cfg, uint32_t smem_addr, uint32_t x, uint32_t y) {
+static inline uint64_t dxa_shared_addr(const dxa_copy_cfg_t& cfg, uint32_t smem_addr, uint32_t x, uint32_t y) {
   return uint64_t(smem_addr) + (uint64_t(y) * cfg.tile0 + x) * cfg.elem_bytes;
 }
 
-bool Core::tma_estimate(uint32_t desc_slot, uint32_t flags, uint32_t* total_elems, uint32_t* elem_bytes) {
-  if (desc_slot >= VX_DCR_TMA_DESC_COUNT)
+bool Core::dxa_estimate(uint32_t desc_slot, uint32_t flags, uint32_t* total_elems, uint32_t* elem_bytes) {
+  if (desc_slot >= VX_DCR_DXA_DESC_COUNT)
     return false;
 
-  auto desc = dcrs_.tma_dcrs.read_descriptor(desc_slot);
-  tma_copy_cfg_t cfg;
-  if (!tma_build_copy_cfg(desc, flags, &cfg)) {
+  auto desc = dcrs_.dxa_dcrs.read_descriptor(desc_slot);
+  dxa_copy_cfg_t cfg;
+  if (!dxa_build_copy_cfg(desc, flags, &cfg)) {
     return false;
   }
 
@@ -632,13 +632,13 @@ bool Core::tma_estimate(uint32_t desc_slot, uint32_t flags, uint32_t* total_elem
   return true;
 }
 
-bool Core::tma_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t flags, uint32_t* bytes_copied) {
-  if (desc_slot >= VX_DCR_TMA_DESC_COUNT)
+bool Core::dxa_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t flags, uint32_t* bytes_copied) {
+  if (desc_slot >= VX_DCR_DXA_DESC_COUNT)
     return false;
 
-  auto desc = dcrs_.tma_dcrs.read_descriptor(desc_slot);
-  tma_copy_cfg_t cfg;
-  if (!tma_build_copy_cfg(desc, flags, &cfg)) {
+  auto desc = dcrs_.dxa_dcrs.read_descriptor(desc_slot);
+  dxa_copy_cfg_t cfg;
+  if (!dxa_build_copy_cfg(desc, flags, &cfg)) {
     return false;
   }
 
@@ -647,9 +647,9 @@ bool Core::tma_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coord
     for (uint32_t x = 0; x < cfg.tile0; ++x) {
       uint32_t i0 = coords[0] + x;
       uint32_t i1 = coords[1] + y;
-      uint64_t saddr = tma_shared_addr(cfg, smem_addr, x, y);
-      if (tma_in_bounds(desc, cfg, i0, i1)) {
-        uint64_t gaddr = tma_global_addr(desc, cfg, i0, i1);
+      uint64_t saddr = dxa_shared_addr(cfg, smem_addr, x, y);
+      if (dxa_in_bounds(desc, cfg, i0, i1)) {
+        uint64_t gaddr = dxa_global_addr(desc, cfg, i0, i1);
         uint64_t value = 0;
         if (cfg.is_s2g) {
           this->dcache_read(&value, saddr, cfg.elem_bytes);

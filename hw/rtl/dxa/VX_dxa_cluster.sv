@@ -13,10 +13,10 @@
 
 `include "VX_define.vh"
 
-module VX_tma_cluster import VX_gpu_pkg::*; #(
+module VX_dxa_cluster import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter TMA_NUM_SOCKETS = 1,
-    parameter NUM_TMA_UNITS = 1,
+    parameter DXA_NUM_SOCKETS = 1,
+    parameter NUM_DXA_UNITS = 1,
     parameter L2_MEM_PORTS = 1,
     parameter CORE_LOCAL_BITS = 0,
     parameter ENABLE = 0
@@ -26,70 +26,70 @@ module VX_tma_cluster import VX_gpu_pkg::*; #(
 
     VX_dcr_bus_if.slave dcr_bus_if,
 
-    VX_tma_bus_if.slave per_socket_tma_bus_if[TMA_NUM_SOCKETS],
-    VX_mem_bus_if.master per_socket_tma_smem_bus_if[TMA_NUM_SOCKETS],
+    VX_dxa_req_bus_if.slave per_socket_dxa_bus_if[DXA_NUM_SOCKETS],
+    VX_mem_bus_if.master per_socket_dxa_smem_bus_if[DXA_NUM_SOCKETS],
 
     VX_mem_bus_if.slave l2_mem_bus_if[L2_MEM_PORTS],
     VX_mem_bus_if.master mem_bus_if[L2_MEM_PORTS]
 );
-    VX_tma_bus_if cluster_tma_bus_if[NUM_TMA_UNITS]();
+    VX_dxa_req_bus_if cluster_dxa_bus_if[NUM_DXA_UNITS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (`L2_LINE_SIZE),
         .TAG_WIDTH (L2_MEM_TAG_WIDTH)
-    ) tma_gmem_bus_if[NUM_TMA_UNITS]();
+    ) dxa_gmem_bus_if[NUM_DXA_UNITS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (TMA_SMEM_WORD_SIZE),
+        .DATA_SIZE (DXA_SMEM_WORD_SIZE),
         .TAG_WIDTH (LMEM_TAG_WIDTH)
-    ) tma_smem_bus_if[NUM_TMA_UNITS]();
+    ) dxa_smem_bus_if[NUM_DXA_UNITS]();
 
-    VX_tma_cluster_ctrl #(
-        .TMA_NUM_SOCKETS(TMA_NUM_SOCKETS),
-        .NUM_TMA_UNITS  (NUM_TMA_UNITS),
+    VX_dxa_cluster_ctrl #(
+        .DXA_NUM_SOCKETS(DXA_NUM_SOCKETS),
+        .NUM_DXA_UNITS  (NUM_DXA_UNITS),
         .CORE_LOCAL_BITS(CORE_LOCAL_BITS),
         .ENABLE         (ENABLE)
-    ) tma_ctrl (
+    ) dxa_ctrl (
         .clk                  (clk),
         .reset                (reset),
-        .per_socket_tma_bus_if(per_socket_tma_bus_if),
-        .cluster_tma_bus_if   (cluster_tma_bus_if)
+        .per_socket_dxa_bus_if(per_socket_dxa_bus_if),
+        .cluster_dxa_bus_if   (cluster_dxa_bus_if)
     );
 
-    VX_tma_cluster_engine_array #(
+    VX_dxa_cluster_engine_array #(
         .INSTANCE_ID  (`SFORMATF(("%s-engines", INSTANCE_ID))),
-        .NUM_TMA_UNITS(NUM_TMA_UNITS),
+        .NUM_DXA_UNITS(NUM_DXA_UNITS),
         .ENABLE       (ENABLE)
-    ) tma_engine_array (
+    ) dxa_engine_array (
         .clk               (clk),
         .reset             (reset),
         .dcr_bus_if        (dcr_bus_if),
-        .cluster_tma_bus_if(cluster_tma_bus_if),
-        .tma_gmem_bus_if   (tma_gmem_bus_if),
-        .tma_smem_bus_if   (tma_smem_bus_if)
+        .cluster_dxa_bus_if(cluster_dxa_bus_if),
+        .dxa_gmem_bus_if   (dxa_gmem_bus_if),
+        .dxa_smem_bus_if   (dxa_smem_bus_if)
     );
 
-    VX_tma_cluster_smem_xbar #(
-        .TMA_NUM_SOCKETS(TMA_NUM_SOCKETS),
-        .NUM_TMA_UNITS  (NUM_TMA_UNITS),
+    VX_dxa_cluster_smem_xbar #(
+        .DXA_NUM_SOCKETS(DXA_NUM_SOCKETS),
+        .NUM_DXA_UNITS  (NUM_DXA_UNITS),
         .CORE_LOCAL_BITS(CORE_LOCAL_BITS),
         .ENABLE         (ENABLE)
-    ) tma_smem_xbar (
+    ) dxa_smem_xbar (
         .clk                    (clk),
         .reset                  (reset),
-        .tma_smem_bus_if        (tma_smem_bus_if),
-        .per_socket_tma_smem_bus_if(per_socket_tma_smem_bus_if)
+        .dxa_smem_bus_if        (dxa_smem_bus_if),
+        .per_socket_dxa_smem_bus_if(per_socket_dxa_smem_bus_if)
     );
 
-    VX_tma_cluster_gmem_path #(
-        .NUM_TMA_UNITS(NUM_TMA_UNITS),
+    VX_dxa_cluster_gmem_path #(
+        .NUM_DXA_UNITS(NUM_DXA_UNITS),
         .L2_MEM_PORTS (L2_MEM_PORTS),
         .OUT_TAG_WIDTH(L3_TAG_WIDTH),
         .ENABLE       (ENABLE)
-    ) tma_gmem_path (
+    ) dxa_gmem_path (
         .clk          (clk),
         .reset        (reset),
-        .tma_gmem_bus_if(tma_gmem_bus_if),
+        .dxa_gmem_bus_if(dxa_gmem_bus_if),
         .l2_mem_bus_if(l2_mem_bus_if),
         .mem_bus_if   (mem_bus_if)
     );

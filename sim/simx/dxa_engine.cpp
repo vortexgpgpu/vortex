@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "tma_engine.h"
+#include "dxa_engine.h"
 
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 
 #include <algorithm>
 #include <limits>
@@ -107,7 +107,7 @@ bool TmaEngine::decode_request(const Request& req,
                                uint32_t* total_cycles) const {
   uint32_t desc_elems = 0;
   uint32_t desc_elem_bytes = 0;
-  if (!core_->tma_estimate(req.desc_slot, req.flags, &desc_elems, &desc_elem_bytes)) {
+  if (!core_->dxa_estimate(req.desc_slot, req.flags, &desc_elems, &desc_elem_bytes)) {
     return false;
   }
 
@@ -151,7 +151,7 @@ void TmaEngine::progress_active_request() {
 
 void TmaEngine::complete_active_request() {
   uint32_t bytes_copied = 0;
-  (void)core_->tma_copy(active_xfer_.req.desc_slot,
+  (void)core_->dxa_copy(active_xfer_.req.desc_slot,
                         active_xfer_.req.smem_addr,
                         active_xfer_.req.coords.data(),
                         active_xfer_.req.flags,
@@ -165,5 +165,5 @@ void TmaEngine::complete_active_request() {
 
 } // namespace vortex
 
-#endif // EXT_TMA_ENABLE
+#endif // EXT_DXA_ENABLE
 

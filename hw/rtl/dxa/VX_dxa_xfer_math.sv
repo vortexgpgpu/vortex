@@ -14,11 +14,11 @@
 `include "VX_define.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
-module VX_tma_xfer_math import VX_gpu_pkg::*; (
-    input tma_xfer_state_t xfer_state,
+module VX_dxa_xfer_math import VX_gpu_pkg::*, VX_dxa_pkg::*; (
+    input dxa_xfer_state_t xfer_state,
     input wire [`L2_LINE_SIZE * 8-1:0] gmem_rsp_data,
     input wire [LSU_WORD_SIZE * 8-1:0] smem_rsp_data,
-    output wire tma_xfer_math_t xfer_math
+    output wire dxa_xfer_math_t xfer_math
 );
     localparam XFER_ELEM_IDLE    = 2'd0;
     localparam XFER_ELEM_WAIT_RD = 2'd1;
@@ -35,12 +35,12 @@ module VX_tma_xfer_math import VX_gpu_pkg::*; (
     localparam MAX_BYTES = (GMEM_BYTES > SMEM_BYTES) ? GMEM_BYTES : SMEM_BYTES;
     localparam MAX_DATAW = MAX_BYTES * 8;
 
-    function automatic [MAX_BYTES-1:0] tma_byte_mask(input [31:0] nbytes);
+    function automatic [MAX_BYTES-1:0] dxa_byte_mask(input [31:0] nbytes);
     begin
         if (nbytes >= MAX_BYTES) begin
-            tma_byte_mask = {MAX_BYTES{1'b1}};
+            dxa_byte_mask = {MAX_BYTES{1'b1}};
         end else begin
-            tma_byte_mask = (MAX_BYTES'(1) << nbytes) - 1;
+            dxa_byte_mask = (MAX_BYTES'(1) << nbytes) - 1;
         end
     end
     endfunction
@@ -63,7 +63,7 @@ module VX_tma_xfer_math import VX_gpu_pkg::*; (
 
     wire [GMEM_OFF_BITS-1:0] cur_gmem_off = GMEM_OFF_BITS'(cur_gmem_byte_addr_w);
     wire [SMEM_OFF_BITS-1:0] cur_smem_off = SMEM_OFF_BITS'(cur_smem_byte_addr_w);
-    wire [MAX_BYTES-1:0] cur_elem_mask = tma_byte_mask(xfer_state.elem_bytes);
+    wire [MAX_BYTES-1:0] cur_elem_mask = dxa_byte_mask(xfer_state.elem_bytes);
     wire [GMEM_BYTES-1:0] cur_gmem_byteen_w = GMEM_BYTES'(cur_elem_mask << cur_gmem_off);
     wire [SMEM_BYTES-1:0] cur_smem_byteen_w = SMEM_BYTES'(cur_elem_mask << cur_smem_off);
 

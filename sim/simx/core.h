@@ -15,7 +15,7 @@
 
 #include <vector>
 #include <list>
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 #include <memory>
 #endif
 #include <simobject.h>
@@ -36,8 +36,8 @@
 #include "func_unit.h"
 #include "mem_coalescer.h"
 #include "VX_config.h"
-#ifdef EXT_TMA_ENABLE
-#include "tma_engine.h"
+#ifdef EXT_DXA_ENABLE
+#include "dxa_engine.h"
 #endif
 
 namespace vortex {
@@ -159,16 +159,16 @@ public:
     return emulator_.dcache_write(data, addr, size);
   }
 
-#ifdef EXT_TMA_ENABLE
-  bool tma_issue(uint32_t desc_slot,
+#ifdef EXT_DXA_ENABLE
+  bool dxa_issue(uint32_t desc_slot,
                  uint32_t smem_addr,
                  const uint32_t coords[5],
                  uint32_t flags,
                  uint32_t bar_id);
 
-  bool tma_estimate(uint32_t desc_slot, uint32_t flags, uint32_t* total_elems, uint32_t* elem_bytes);
+  bool dxa_estimate(uint32_t desc_slot, uint32_t flags, uint32_t* total_elems, uint32_t* elem_bytes);
 
-  bool tma_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t flags, uint32_t* bytes_copied);
+  bool dxa_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t flags, uint32_t* bytes_copied);
 #endif
 
 #ifdef EXT_TCU_ENABLE
@@ -204,7 +204,7 @@ private:
   uint32_t core_id_;
   Socket* socket_;
   const Arch& arch_;
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
   const DCRS& dcrs_;
 #endif
 
@@ -243,8 +243,8 @@ private:
   uint32_t commit_exe_;
   std::vector<Arbiter> ibuffer_arbs_;
 
-#ifdef EXT_TMA_ENABLE
-  std::unique_ptr<TmaEngine> tma_engine_;
+#ifdef EXT_DXA_ENABLE
+  std::unique_ptr<TmaEngine> dxa_engine_;
 #endif
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;

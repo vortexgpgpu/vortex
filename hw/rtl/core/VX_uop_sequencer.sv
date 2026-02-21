@@ -31,17 +31,17 @@ module VX_uop_sequencer import
     `UNUSED_SPARAM (INSTANCE_ID)
 
     ibuffer_t base_uop_data;
-    ibuffer_t tma_uop_data;
+    ibuffer_t dxa_uop_data;
     ibuffer_t uop_data;
 
     wire is_base_uop_input;
-    wire is_tma_uop_input;
+    wire is_dxa_uop_input;
     wire is_uop_input;
     wire uop_start = input_if.valid && is_uop_input;
     wire uop_next = output_if.ready;
     wire uop_done;
     wire base_uop_done;
-    wire tma_uop_done;
+    wire dxa_uop_done;
 
 `ifdef EXT_TCU_ENABLE
 
@@ -65,34 +65,34 @@ module VX_uop_sequencer import
 
 `endif
 
-`ifdef EXT_TMA_ENABLE
+`ifdef EXT_DXA_ENABLE
 
-    localparam TMA_OP_LAUNCH = 3'd5;
-    assign is_tma_uop_input = (input_if.data.ex_type == EX_SFU)
-                            && (input_if.data.op_type == INST_SFU_TMA)
-                            && (input_if.data.op_args.tma.op == TMA_OP_LAUNCH);
+    localparam DXA_OP_LAUNCH = 3'd5;
+    assign is_dxa_uop_input = (input_if.data.ex_type == EX_SFU)
+                            && (input_if.data.op_type == INST_SFU_DXA)
+                            && (input_if.data.op_args.dxa.op == DXA_OP_LAUNCH);
 
-    VX_tma_uops tma_uops (
+    VX_dxa_uops dxa_uops (
         .clk     (clk),
         .reset   (reset),
         .ibuf_in (input_if.data),
-        .ibuf_out(tma_uop_data),
-        .start   (uop_start && is_tma_uop_input),
+        .ibuf_out(dxa_uop_data),
+        .start   (uop_start && is_dxa_uop_input),
         .next    (uop_next),
-        .done    (tma_uop_done)
+        .done    (dxa_uop_done)
     );
 
 `else
 
-    assign is_tma_uop_input = 0;
-    assign tma_uop_done = 0;
-    assign tma_uop_data = '0;
+    assign is_dxa_uop_input = 0;
+    assign dxa_uop_done = 0;
+    assign dxa_uop_data = '0;
 
 `endif
 
-    assign is_uop_input = is_base_uop_input || is_tma_uop_input;
-    assign uop_data = is_tma_uop_input ? tma_uop_data : base_uop_data;
-    assign uop_done = is_tma_uop_input ? tma_uop_done : base_uop_done;
+    assign is_uop_input = is_base_uop_input || is_dxa_uop_input;
+    assign uop_data = is_dxa_uop_input ? dxa_uop_data : base_uop_data;
+    assign uop_done = is_dxa_uop_input ? dxa_uop_done : base_uop_done;
 
     reg uop_active;
 
