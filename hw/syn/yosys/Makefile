@@ -1,6 +1,12 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
+CLOCK_FREQ	?= 800
+DELAY_UNC 	?= 0.02
+DELAY_IO  	?= 0.05
+SAIF_FILE 	?=
+SAIF_INST 	?=
+
 SRC_DIR := $(VORTEX_HOME)/hw/syn/yosys
 LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 
@@ -137,6 +143,7 @@ techmap: $(BUILD_DIR)/sources.txt
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
 	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
+	CLOCK_FREQ=$(CLOCK_FREQ) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_MAP=1 \
@@ -147,6 +154,11 @@ timing: $(BUILD_DIR)/sources.txt
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
 	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
+	CLOCK_FREQ=$(CLOCK_FREQ) \
+	DELAY_UNC=$(DELAY_UNC) \
+	DELAY_IO=$(DELAY_IO) \
+	SAIF_FILE="$(SAIF_FILE)" \
+	SAIF_INST="$(SAIF_INST)" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_STA=1 \

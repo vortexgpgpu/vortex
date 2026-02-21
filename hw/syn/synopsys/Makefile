@@ -1,8 +1,12 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-CLOCK ?= 800
-LIB_TYPE ?= DEFAULT
+CLOCK_FREQ	?= 800
+DELAY_UNC 	?= 0.02
+DELAY_IO  	?= 0.05
+SAIF_FILE 	?=
+SAIF_INST 	?=
+LIB_TYPE 	?= DEFAULT
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/synopsys
 LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
@@ -155,10 +159,14 @@ gen-rams: $(BUILD_DIR)/sources.txt
 synthesis: $(BUILD_DIR)/sources.txt gen-rams
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
-	CLOCK=$(CLOCK) \
+	CLOCK_FREQ=$(CLOCK_FREQ) \
+	DELAY_UNC=$(DELAY_UNC) \
+	DELAY_IO=$(DELAY_IO) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
 	MEM_LIBS="$(SRAM_DB)" \
+	SAIF_FILE="$(SAIF_FILE)" \
+	SAIF_INST="$(SAIF_INST)" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	WALL_IGNORE=$(WALL_IGNORE) \
@@ -167,9 +175,13 @@ synthesis: $(BUILD_DIR)/sources.txt gen-rams
 synthesis-nosram: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
-	CLOCK=$(CLOCK) \
+	CLOCK_FREQ=$(CLOCK_FREQ) \
+	DELAY_UNC=$(DELAY_UNC) \
+	DELAY_IO=$(DELAY_IO) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
+	SAIF_FILE="$(SAIF_FILE)" \
+	SAIF_INST="$(SAIF_INST)" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	WALL_IGNORE=$(WALL_IGNORE) \
@@ -178,10 +190,14 @@ synthesis-nosram: $(BUILD_DIR)/sources.txt
 synthesis-estsram: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
-	CLOCK=$(CLOCK) \
+	CLOCK_FREQ=$(CLOCK_FREQ) \
+	DELAY_UNC=$(DELAY_UNC) \
+	DELAY_IO=$(DELAY_IO) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
 	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
+	SAIF_FILE="$(SAIF_FILE)" \
+	SAIF_INST="$(SAIF_INST)" \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	WALL_IGNORE=$(WALL_IGNORE) \

@@ -1,3 +1,4 @@
+
 set clk_names [list \
   clk clock clk_i clock_i clk_in clock_in \
 ]
@@ -31,7 +32,7 @@ set_clock_uncertainty $target_uncertainty [get_clocks clk]
 create_clock -name ext_clk -period $target_period
 
 # I/O Delays
-set in_ports [remove_from_collection [all_inputs] [get_ports clk_port]]
+set in_ports [remove_from_collection [all_inputs] [get_ports $clk_port]]
 set_input_delay  $target_io_delay -clock ext_clk $in_ports
 set_output_delay $target_io_delay -clock ext_clk [all_outputs]
 

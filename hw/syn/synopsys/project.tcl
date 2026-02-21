@@ -1,3 +1,16 @@
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 ###############################################################################
 # Synopsys DC — Generic Synthesis (SystemVerilog) using .db libraries
 # Inputs via environment variables:
@@ -13,6 +26,11 @@
 #   OUT_DIR        : output netlist/sdf folder (default: ./out)
 #   RPT_DIR        : reports folder (default: ./reports)
 #   TOOL_DIR       : folder containing parse_vcs_list.tcl (default: script dir)
+#   CLOCK_FREQ     : clock frequency in MHz (default: 800)
+#   DELAY_UNC      : clock uncertainty in % (default: 2)
+#   DELAY_IO       : clock I/O delay in % (default: 5)
+#   SAIF_FILE      : path to SAIF file (optional)
+#   SAIF_INST      : path to top module instance in SAIF file (optional)
 ###############################################################################
 
 # ---------------- helpers ----------------
@@ -132,6 +150,11 @@ set WALL_IGNORE  [getenv WALL_IGNORE  ""]
 set TOOL_DIR     [getenv TOOL_DIR     ""]
 set OUT_DIR      [file normalize [getenv OUT_DIR "./out"]]
 set RPT_DIR      [file normalize [getenv RPT_DIR "./reports"]]
+set CLOCK_FREQ   [getenv CLOCK_FREQ  800]
+set DELAY_UNC    [getenv DELAY_UNC  0.02]
+set DELAY_IO     [getenv DELAY_IO   0.05]
+set SAIF_FILE    [getenv SAIF_FILE    ""]
+set SAIF_INST    [getenv SAIF_INST    ""]
 
 # Helper lists for port discovery
 set SRAM_W_PORTS {wdata rdata}
@@ -470,16 +493,13 @@ switch -exact -- $LIB_TIME_UNIT {
   }
 }
 
-# Read CLOCK in MHz (env var CLOCK overrides default 800)
-set CLOCK_FREQ [getenv CLOCK 800]               ;# MHz
-
 # Period in ns (always correct, independent of library units)
 set period_ns [expr 1000.0 / double($CLOCK_FREQ)]  ;# ns
 
 # Convert ns to library time units for all time-based constraints
 set target_period      [expr $period_ns * $NS_TO_LIB]
-set target_uncertainty [expr $target_period * 0.01]  ;# 1%
-set target_io_delay    [expr $target_period * 0.001]  ;# 0.1%
+set target_uncertainty [expr $target_period * $DELAY_UNC]
+set target_io_delay    [expr $target_period * $DELAY_IO]
 
 puts "----------------------------------------------------------------"
 puts "INFO: Target Frequency     : $CLOCK_FREQ MHz"
@@ -496,16 +516,7 @@ if {$SDC_FILE ne "" && [file exists $SDC_FILE]} {
   puts "INFO: Loading SDC: $SDC_FILE"
   source $SDC_FILE
 } else {
-  WARN "No SDC provided/found; creating default 10ns clock if 'clk' exists"
-  set clk_ports [get_ports clk -quiet]
-  if {[sizeof_collection $clk_ports]} {
-    create_clock -name clk -period 10.0 $clk_ports
-    set_clock_uncertainty 0.05 [get_clocks clk]
-    set_input_delay  0.2 -clock clk [remove_from_collection [all_inputs] $clk_ports]
-    set_output_delay 0.2 -clock clk [all_outputs]
-  } else {
-    WARN "No 'clk' port to constrain; consider providing an SDC."
-  }
+  DIE "No SDC file provided"
 }
 
 # ---------------- pre-compile hygiene ----------------
@@ -528,15 +539,38 @@ report_qor                                      > [file join $RPT_DIR "qor.rpt"]
 report_area -hier -nosplit                      > [file join $RPT_DIR "area.rpt"]
 report_timing -delay_type max -path_type full_clock -max_paths 50 -nets -transition_time -capacitance > [file join $RPT_DIR "timing_max.rpt"]
 report_timing -delay_type min -path_type full_clock -max_paths 50 -nets -transition_time -capacitance > [file join $RPT_DIR "timing_min.rpt"]
-report_clock -skew
-report_power                                    > [file join $RPT_DIR "power_vectorless.rpt"]
+report_clock -skew                              > [file join $RPT_DIR "clock_skew.rpt"]
 report_constraints -all_violators               > [file join $RPT_DIR "constraints_violators.rpt"]
+
+# ------------ power evaluation -----------
+if {$SAIF_FILE ne "" && [file exists $SAIF_FILE]} {
+  if {$SAIF_INST eq ""} {
+    puts "INFO: Loading SAIF activity: $SAIF_FILE"
+    WARN "SAIF_INST not set. Using current_design scope (may mis-map if SAIF has tb hierarchy)."
+    read_saif -input $SAIF_FILE -auto_map_names -verbose
+  } else {
+    puts "INFO: Loading SAIF activity: $SAIF_FILE for instance: $SAIF_INST"
+    read_saif -input $SAIF_FILE -instance_name $SAIF_INST -auto_map_names -verbose
+  }
+
+  # Update the power model with the new toggle rates
+  update_power
+
+  # Generate a hierarchical power report based on the vector data
+  report_power -hierarchy > [file join $RPT_DIR "power_active.rpt"]
+
+  # Report how much of the design was successfully annotated by the SAIF file
+  report_saif > [file join $RPT_DIR "saif_annotation_coverage.rpt"]
+} else {
+  puts "WARN: SAIF_FILE not set or not found. Falling back to vectorless power estimation."
+  report_power > [file join $RPT_DIR "power_vectorless.rpt"]
+}
 
 # ---------------- outputs ----------------
 write -format ddc     -hierarchy -output [file join $OUT_DIR "${TOP}.mapped.ddc"]
 write -format verilog -hierarchy -output [file join $OUT_DIR "${TOP}.mapped.v"]
-write_sdf                           [file join $OUT_DIR "${TOP}.mapped.sdf"]
-catch { write_sdc                   [file join $OUT_DIR "${TOP}.post_compile.sdc"] }
+write_sdf [file join $OUT_DIR "${TOP}.mapped.sdf"]
+catch { write_sdc [file join $OUT_DIR "${TOP}.post_compile.sdc"] }
 
 puts "\nDONE. Top: $TOP"
 exit 0
