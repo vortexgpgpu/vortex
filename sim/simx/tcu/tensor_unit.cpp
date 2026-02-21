@@ -614,14 +614,14 @@ public:
 
     auto fedp = select_FEDP(fmt_s, fmt_d);
 
-    // Bring-up target: sparse path currently supports NT=8 and 8/16-bit input formats.
+    // Bring-up target: sparse path currently supports NT=8/32 and 8/16-bit input formats.
     // Do not silently fall back to dense WMMA, because sparse-packed A would
     // produce incorrect results under dense semantics.
-    if (NUM_THREADS != 8) {
-      std::cout << "Error: WMMA_SP unsupported for NUM_THREADS=" << NUM_THREADS
-                << " (expected 8)." << std::endl;
-      std::abort();
-    }
+#if (NUM_THREADS != 8) && (NUM_THREADS != 32)
+    std::cout << "Error: WMMA_SP unsupported for NUM_THREADS=" << NUM_THREADS
+              << " (expected 8 or 32)." << std::endl;
+    std::abort();
+#else
     const bool is_8bit_sparse_fmt =
         (fmt_s == vt::int8::id)  ||
         (fmt_s == vt::uint8::id) ||
@@ -686,6 +686,7 @@ public:
             << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
       }
     }
+#endif
   }
 
   const PerfStats& perf_stats() const {

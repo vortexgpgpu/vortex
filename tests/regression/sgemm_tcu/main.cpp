@@ -771,6 +771,7 @@ int main(int argc, char *argv[]) {
   uint32_t grid_x = N / cfg::tileN;
   uint32_t grid_y = M / cfg::tileM;
   size_t num_thread_blocks = grid_x * grid_y;
+  size_t num_mma_sync_instrs = num_thread_blocks * cfg::tileK; // each thread block has tileK iterations of mma.sync
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
@@ -875,7 +876,7 @@ int main(int argc, char *argv[]) {
   }
   std::cout << std::dec;
   std::cout << "mma_sync cycles total: " << cycles_sum << std::endl;
-  std::cout << "mma_sync cycles average per mma_sync instr: " << (cycles_sum / num_thread_blocks / cfg::tileK) << std::endl;
+  std::cout << "mma_sync cycles average per mma_sync instr: " << (cycles_sum / num_mma_sync_instrs) << std::endl;
 
   // verify result
   std::cout << "verify result" << std::endl;

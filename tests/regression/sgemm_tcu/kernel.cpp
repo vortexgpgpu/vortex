@@ -45,6 +45,7 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     }
 
     // Matrix multiply-accumulate: c += a * b
+    vx_create_freg_dep(fragB.data[0]);
     uint64_t mma_start = vx_cycle_count();
     ctx::mma_sync(fragC, fragA, fragB, fragC);
     // Serialize end timestamp against MMA result availability via an FPR dependency.

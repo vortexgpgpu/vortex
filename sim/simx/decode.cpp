@@ -1176,6 +1176,9 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         }
       } break;
       case 1: { // WMMA_SP_SYNC
+#if (NUM_THREADS != 8) && (NUM_THREADS != 32)
+        std::abort();
+#else
         namespace vt = vortex::tensor;
         using cfg = vt::wmma_config_t<NUM_THREADS>;
         constexpr uint32_t kCompression = 2;
@@ -1222,6 +1225,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
             }
           }
         }
+#endif
       } break;
       default:
         std::abort();
