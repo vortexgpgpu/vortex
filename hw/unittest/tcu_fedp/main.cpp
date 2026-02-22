@@ -40,6 +40,7 @@
 #include <random>
 #include <sstream>
 #include <vector>
+#include <string>
 #include <bitmanip.h>
 #include "softfloat_ext.h"
 
@@ -164,12 +165,12 @@ struct TestConfig {
   unsigned int random_seed = 12345;
   uint32_t fmt_s = 0; // Source format
   uint32_t fmt_d = 0; // Destination format (always 0 for float32)
-  std::map<std::string, bool> test_features = {
-      {"normals", true},
-      {"zeros", true},
-      {"infinities", true},
-      {"nans", true},
-      {"subnormals", true}};
+  std::vector<std::string> test_features = {
+      "infinities",
+      "nans",
+      "subnormals",
+      "normals",
+      "zero"};
   int exp_bits = 0; // Exponent bits
   int sig_bits = 0; // Significand bits
   RoundingMode frm = RoundingMode::RNE; // Rounding mode
@@ -177,6 +178,7 @@ struct TestConfig {
   bool renorm = false; // renormalize product
   uint32_t num_tests = 100000; // Number of tests per feature
   int ulp = 1; // float precision error bits
+  int sparsity = 0; // % of zero inputs
   int32_t test_id = -1; // Specific test ID to run (for debugging)
 };
 
@@ -192,13 +194,14 @@ std::ostream &operator<<(std::ostream &os, const TestConfig &config) {
      << ", exp_bits: " << config.exp_bits
      << ", sig_bits: " << config.sig_bits
      << ", frm: " << frm_to_string(config.frm)
+     << ", sparsity: " << config.sparsity
      << ", num_tests: " << config.num_tests
      << ", test_id: " << config.test_id
      << ", test_features: {";
   int i = 0;
   for (const auto &f : config.test_features) {
     if (i++ > 0) os << ", ";
-    os << f.first << ": " << (f.second ? "true" : "false");
+    os << f;
   }
   os << "}}";
   return os;
@@ -618,7 +621,13 @@ public:
     int elements_per_word = 32 / element_bits;
     int total_elements = NUM_REGS * elements_per_word;
 
+    // Determine bits per element in vld_mask depending on element packing size
+    int vld_bits_per_elem = 32 / elements_per_word / 4;
+    uint32_t elem_vld_mask = (1 << vld_bits_per_elem) - 1;
+
     std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
+
+    std::uniform_int_distribution<int> sparsity_dist(0, 99);
 
     for (int test_id = 0; test_id < config_.num_tests; test_id++) {
       // Generate test vectors
@@ -627,9 +636,17 @@ public:
       bool a_enable = (test_id % 3) == 0;
       bool b_enable = (test_id % 3) == 1;
       bool c_enable = (test_id % 3) == 2;
+      uint32_t current_vld_mask = 0;
 
       for (int i = 0; i < total_elements; i++) {
-        a_values[i] = generate_int_value(is_signed, element_bits, (a_enable && i == 0) ? test_id : -1);
+        bool is_sparse = (config_.sparsity > 0) && (sparsity_dist(rng_) < config_.sparsity);
+
+        if (is_sparse) {
+          a_values[i] = 0;
+        } else {
+          a_values[i] = generate_int_value(is_signed, element_bits, (a_enable && i == 0) ? test_id : -1);
+          current_vld_mask |= (elem_vld_mask << (i * vld_bits_per_elem));
+        }
         b_values[i] = generate_int_value(is_signed, element_bits, (b_enable && i == 0) ? test_id : -1);
       }
 
@@ -650,7 +667,7 @@ public:
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
     #ifdef TCU_TYPE_TFR
-      dut_->vld_mask = -1;
+      dut_->vld_mask = current_vld_mask;
     #endif
 
       // Run for latency cycles
@@ -685,10 +702,16 @@ public:
   }
 
   bool test_floating_points(const std::vector<std::string> &features_to_test) {
+    if (features_to_test.empty()) return true;
+
     // Calculate how many elements we can fit in NUM_REGS XLEN words
     int element_bits = float_fmt_width(config_.exp_bits, config_.sig_bits);
     int elements_per_word = 32 / element_bits;
     int total_elements = NUM_REGS * elements_per_word;
+
+    // Determine bits per element in vld_mask depending on element packing size
+    int vld_bits_per_elem = 32 / elements_per_word / 4;
+    uint32_t elem_vld_mask = (1 << vld_bits_per_elem) - 1;
 
     // std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
 
@@ -697,14 +720,16 @@ public:
     const uint32_t tests_per_feature = (NT + NF - 1) / NF;
 
   #ifdef USE_FEDP
-    FEDP fedp(config_.exp_bits, config_.sig_bits, NUM_REGS * 2, (int)config_.frm, config_.W, config_.renorm);
+    FEDP fedp(config_.exp_bits, config_.sig_bits, (int)config_.frm, config_.W, config_.renorm);
   #endif
 
     uint32_t skipped = 0;
+    std::uniform_int_distribution<int> sparsity_dist(0, 99);
 
     for (int test_id = 0; test_id < NT; test_id++) {
       // select feature to test
       int feature_id = test_id / tests_per_feature;
+      if (feature_id >= NF) break; // prevent overflow if division rounding goes out of bounds
       std::string feature = features_to_test[feature_id];
 
       // Generate test vectors
@@ -714,13 +739,21 @@ public:
       bool a_enable = (test_id % 3) == 0;
       bool b_enable = (test_id % 3) == 1;
       bool c_enable = (test_id % 3) == 2;
+      uint32_t current_vld_mask = 0;
 
       for (int i = 0; i < total_elements; i++) {
-        a_value_hex[i] = generate_fp_value((a_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
-        b_value_hex[i] = generate_fp_value((b_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
+        bool is_sparse = (config_.sparsity > 0) && (sparsity_dist(rng_) < config_.sparsity);
 
-        // Convert to float to account for precision loss
-        a_values_float[i] = cvt_custom_to_f32(a_value_hex[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
+        if (is_sparse) {
+          a_value_hex[i] = pack_fp_bits(0u, 0u, 0u, config_.exp_bits, config_.sig_bits);
+          a_values_float[i] = 0.0f;
+        } else {
+          a_value_hex[i] = generate_fp_value((a_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
+          a_values_float[i] = cvt_custom_to_f32(a_value_hex[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
+          current_vld_mask |= (elem_vld_mask << (i * vld_bits_per_elem));
+        }
+
+        b_value_hex[i] = generate_fp_value((b_enable && (i & 0x1) == 0) ? feature : "normals", config_.exp_bits, config_.sig_bits, test_id);
         b_values_float[i] = cvt_custom_to_f32(b_value_hex[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
       }
 
@@ -752,7 +785,7 @@ public:
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
     #ifdef TCU_TYPE_TFR
-      dut_->vld_mask = -1;
+      dut_->vld_mask = current_vld_mask;
     #endif
 
       // Run for latency cycles
@@ -827,14 +860,7 @@ public:
       }
     } else {
       // test floating-point formats
-      std::vector<std::string> features_to_test;
-      for (const auto &feature : config_.test_features) {
-        if (feature.second) {
-          features_to_test.push_back(feature.first);
-        }
-      }
-
-      if (!test_floating_points(features_to_test)) {
+      if (!test_floating_points(config_.test_features)) {
         return false;
       }
     }
@@ -860,16 +886,14 @@ TestConfig parse_args(int argc, char **argv) {
       config_.enable_tracing = false;
     } else if (arg == "--no-fused") {
       config_.fused = false;
-    } else if (arg == "--no-normals") {
-      config_.test_features["normals"] = false;
-    } else if (arg == "--no-zeros") {
-      config_.test_features["zeros"] = false;
-    } else if (arg == "--no-infinities") {
-      config_.test_features["infinities"] = false;
-    } else if (arg == "--no-nans") {
-      config_.test_features["nans"] = false;
-    } else if (arg == "--no-subnormals") {
-      config_.test_features["subnormals"] = false;
+    } else if (arg.substr(0, 11) == "--features=") {
+      config_.test_features.clear();
+      std::string features_str = arg.substr(11);
+      std::stringstream ss(features_str);
+      std::string item;
+      while (std::getline(ss, item, ';')) {
+        config_.test_features.push_back(item);
+      }
     } else if (arg.substr(0, 6) == "--fmt=") {
       config_.fmt_s = std::stoi(arg.substr(6));
     } else if (arg.substr(0, 6) == "--ext=") {
@@ -884,6 +908,8 @@ TestConfig parse_args(int argc, char **argv) {
       config_.renorm = true;
     } else if (arg.substr(0, 6) == "--ulp=") {
       config_.ulp = std::stoi(arg.substr(6));
+    } else if (arg.substr(0, 11) == "--sparsity=") {
+      config_.sparsity = std::stoi(arg.substr(11));
     } else if (arg.substr(0, 8) == "--tests=") {
       config_.num_tests = std::stoi(arg.substr(8));
     } else if (arg.substr(0, 7) == "--test=") {
@@ -895,11 +921,7 @@ TestConfig parse_args(int argc, char **argv) {
       std::cout << "Options:" << std::endl;
       std::cout << "  --no-fused       Enable discrete Mul and Add pipeline" << std::endl;
       std::cout << "  --no-trace       Disable VCD tracing" << std::endl;
-      std::cout << "  --no-normals     Skip normal number tests" << std::endl;
-      std::cout << "  --no-zeros       Skip zero tests" << std::endl;
-      std::cout << "  --no-infinities  Skip infinity tests" << std::endl;
-      std::cout << "  --no-nans        Skip NaN tests" << std::endl;
-      std::cout << "  --no-subnormals  Skip subnormal tests" << std::endl;
+      std::cout << "  --features=LIST  Semicolon-separated list of features to test (default: infinities;nans;subnormals;normals;zeros)" << std::endl;
       std::cout << "  --fmt=<id>       Set source format code" << std::endl;
       std::cout << "  --ext=BITS       Exponent bits for custom format" << std::endl;
       std::cout << "  --sig=BITS       Significand bits for custom format" << std::endl;
@@ -907,6 +929,7 @@ TestConfig parse_args(int argc, char **argv) {
       std::cout << "  --W <value>      Accumulator window width W" << std::endl;
       std::cout << "  --renorm         Renormalize product" << std::endl;
       std::cout << "  --ulp=<value>    Adjust floats precision error bits" << std::endl;
+      std::cout << "  --sparsity=<%>   Percentage of zero inputs (0-100)" << std::endl;
       std::cout << "  --seed <value>   Set random seed" << std::endl;
       std::cout << "  --tests <count>  Number of tests to run (default: 100000)" << std::endl;
       std::cout << "  --test <id>      Run the specified test only" << std::endl;

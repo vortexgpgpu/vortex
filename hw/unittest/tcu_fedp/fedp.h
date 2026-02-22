@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <vector>
 #include <limits>
+#include <utility>
 
 #ifdef FEDP_TRACE
 #define LOG(...) std::fprintf(stderr, __VA_ARGS__);
@@ -37,14 +38,13 @@
 
 class FEDP {
 public:
-  explicit FEDP(int exp_bits = 5, int sig_bits = 10, int lanes = 4, int frm = 0, int W = 25, bool renorm = false, bool no_window = false)
-      : exp_bits_(exp_bits), sig_bits_(sig_bits), frm_(frm), lanes_(lanes), W_(W), renorm_(renorm), no_window_(no_window) {
-    LOG("[ctor] fmt=e%dm%d frm=%d lanes=%u W=%d renorm_=%s no_window_=%s\n",
-        exp_bits_, sig_bits_, frm_, lanes_, W_, (renorm_ ? "true" : "false"), (no_window_ ? "true" : "false"));
+  explicit FEDP(int exp_bits = 5, int sig_bits = 10, int frm = 0, int W = 25, bool renorm = false, bool no_window = false)
+      : exp_bits_(exp_bits), sig_bits_(sig_bits), frm_(frm), W_(W), renorm_(renorm), no_window_(no_window) {
+    LOG("[ctor] fmt=e%dm%d, frm=%d, W=%d, renorm_=%s, no_window_=%s\n",
+        exp_bits_, sig_bits_, frm_, W_, (renorm_ ? "true" : "false"), (no_window_ ? "true" : "false"));
     assert(exp_bits_ > 0 && exp_bits_ <= 8);
     assert(sig_bits_ > 0 && sig_bits_ <= 10);
     assert(frm_ >= 0 && frm_ <= 4);
-    assert(lanes_ >= 1 && lanes_ <= 16);
   }
 
   float operator()(const uint32_t *a, const uint32_t *b, float c, uint32_t n) {
@@ -61,7 +61,7 @@ public:
 
     rtl_watch_s1(req_id, mul_res, c_term, c_enc);
 
-    HR_ = 32 - lzcN(terms.size() + 1, 32);
+    HR_ = 32 - lzcN(mul_res.terms.size() - 1, 32);
 
     const auto aln = alignment(mul_res);
 
@@ -87,6 +87,9 @@ private:
   static const uint8_t FL_NAN  = 1;
   static const uint8_t FL_PINF = 2;
   static const uint8_t FL_NINF = 4;
+
+  static const int F32_BIAS = 127;
+  static const int EXP_POS_BIAS = 128;
 
   struct dec_t {
     int  sign;
@@ -303,8 +306,6 @@ private:
     out.reserve(v.size() + 1);
     eps.reserve(v.size() + 1);
 
-    const int F32_BIAS = 127 + 128;
-
     bool c_is_zero = (c_term.cls == 0 && c_term.sp == 0);
 
     uint8_t c_nan  = (c_term.sp == 3) ? FL_NAN  : 0;
@@ -320,8 +321,17 @@ private:
       bool zB = b.is_zero;
       bool p_is_zero = zA || zB;
 
-      bool infA = (a.exp == all1 && !a.frac), infB = (b.exp == all1 && !b.frac);
-      bool nanA = (a.exp == all1 && a.frac), nanB = (b.exp == all1 && b.frac);
+      bool is_e4m3 = (eb == 4 && sb == 3);
+      bool infA, infB, nanA, nanB;
+      if (is_e4m3) {
+        infA = false; infB = false;
+        nanA = (a.exp == 15 && a.frac == 7);
+        nanB = (b.exp == 15 && b.frac == 7);
+      } else {
+        infA = (a.exp == all1 && !a.frac); infB = (b.exp == all1 && !b.frac);
+        nanA = (a.exp == all1 && a.frac); nanB = (b.exp == all1 && b.frac);
+      }
+
       bool is_nan = nanA || nanB || (infA && zB) || (infB && zA);
       bool is_inf = (infA || infB) && !is_nan;
       bool sign_xor = ((a.sign ^ b.sign) != 0);
@@ -336,7 +346,7 @@ private:
 
       int shift_sf = 22 - (2 * sb);
       int Mp = (Ma * Mb) << shift_sf;
-      int Ep = (Ea + Eb) + F32_BIAS - 22;
+      int Ep = (Ea + Eb) + F32_BIAS + EXP_POS_BIAS + 1 - W_;
 
       if (renorm_) {
         int lzc_prod = (a.is_sub ? lzcN(Ma, sb) : 0) + (b.is_sub ? lzcN(Mb, sb) : 0);
@@ -344,23 +354,44 @@ private:
         Ep -= lzc_prod;
       }
 
-      int Ep_w = (Ep + 23 - W_);
       if (p_is_zero) {
-        Ep_w = 0;
+        Ep = 0;
+        Mp = 0;
       }
 
       out.push_back({sign_xor, Mp});
-      eps.push_back(Ep_w);
+      eps.push_back(Ep);
     }
 
-    int Ec = c_term.Ec + F32_BIAS;
-    int Ec_w = Ec + 24 - W_;
+    // FP8/BF8: reduce product terms pairwise
+    if ((1 + eb + sb) <= 8) {
+      std::vector<pterm_t> red_out;
+      std::vector<int> red_eps;
+      red_out.reserve((out.size() + 1) / 2);
+      red_eps.reserve((eps.size() + 1) / 2);
+
+      for (size_t j = 0; j < out.size(); j += 2) {
+        if (j + 1 < out.size()) {
+          auto r = reduce_f8(out[j], eps[j], out[j + 1], eps[j + 1]);
+          red_out.push_back(r.first);
+          red_eps.push_back(r.second);
+        } else {
+          red_out.push_back(out[j]);
+          red_eps.push_back(eps[j]);
+        }
+      }
+
+      out.swap(red_out);
+      eps.swap(red_eps);
+    }
+
+    int Ec = c_term.Ec + F32_BIAS + EXP_POS_BIAS + 24 - W_;
     if (c_is_zero) {
-      Ec_w = 0;
+      Ec = 0;
     }
 
     out.push_back({c_term.sign, c_term.Mc});
-    eps.push_back(Ec_w);
+    eps.push_back(Ec);
 
     int L = *std::max_element(eps.begin(), eps.end());
 
@@ -371,6 +402,58 @@ private:
     }
 
     return {out, L , shifts, flags};
+  }
+
+  std::pair<pterm_t, int> reduce_f8(const pterm_t& t1, int e1, const pterm_t& t2, int e2) {
+    if (t1.Mp == 0) return {t2, e2};
+    if (t2.Mp == 0) return {t1, e1};
+
+    // Pick max exponent term
+    int max_E, max_s, min_E, min_s;
+    int64_t max_P, min_P;
+
+    if (e1 >= e2) {
+      max_E = e1; max_P = t1.Mp; max_s = t1.sign;
+      min_E = e2; min_P = t2.Mp; min_s = t2.sign;
+    } else {
+      max_E = e2; max_P = t2.Mp; max_s = t2.sign;
+      min_E = e1; min_P = t1.Mp; min_s = t1.sign;
+    }
+
+    int diff = max_E - min_E;
+
+    // Align smaller term
+    int64_t aligned = 0;
+    if (diff >= 32) {
+      aligned = 0;
+    } else if (diff == 0) {
+      aligned = min_P;
+    } else {
+      aligned = (min_P >> diff);
+    }
+
+    // Signed add
+    int64_t val1 = max_s ? -max_P : max_P;
+    int64_t val2 = min_s ? -aligned : aligned;
+    int64_t val  = val1 + val2;
+
+    if (val == 0) {
+      return {{0, 0}, 0};
+    }
+
+    int s = (val < 0) ? 1 : 0;
+    int64_t P = (val < 0) ? -val : val;
+    int E = max_E;
+
+    // Renormalize if mantissa overflowed beyond 24 bits
+    if (P >= (1LL << 24)) {
+      P >>= 1;
+      E += 1;
+    }
+
+    LOG("[reduce_f8] t1=(%d, %d, %d), t2=(%d, %d, %d) -> s=%d P=0x%llx E=%d\n", t1.sign, t1.Mp, e1, t2.sign, t2.Mp, e2, s, P, E);
+
+    return {{s, (int)P}, E};
   }
 
   align_t alignment(const mul_res_t &res) {
@@ -446,7 +529,7 @@ private:
     uint32_t Q = -x.V & mask;
     uint32_t X = s ? Q : x.V;
     int msb = 31 - __builtin_clz(X);
-    int e = x.L + msb - 128;
+    int e = x.L + msb - EXP_POS_BIAS;
     int sh = (msb + 1) - 24;
 
     uint32_t kept;
@@ -496,7 +579,7 @@ private:
   }
 
   // members --------
-  int exp_bits_, sig_bits_, frm_, lanes_, W_, HR_;
+  int exp_bits_, sig_bits_, frm_, W_, HR_;
   bool renorm_, no_window_;
   uint64_t req_id_ = 0;
 };

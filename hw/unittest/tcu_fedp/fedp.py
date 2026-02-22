@@ -14,13 +14,17 @@
 #!/usr/bin/env python3
 import argparse, random, struct, sys, ast, os, math
 import numpy as np
+import ctypes
+import subprocess
+import tempfile
+import hashlib
 
 # Imported if --ref=cuda or --ref=cpp
 _torch = None
 _ext = {} # Changed to dict to cache extensions by format
 _cpp_ext = None
 
-ULP = 1  # acceptance threshold in ULPs
+ULP = 0  # acceptance threshold in ULPs
 MAX_PRINTED_ERRORS_PER_FEATURE = 100 # Max errors to print per feature
 
 # ----------------- format specs -----------------
@@ -81,6 +85,21 @@ FMT_CONFIG = {
         "ptx_type": "e5m2",
     }
 }
+
+FRM_RNE = 0
+FRM_RTZ = 1
+FRM_RDN = 2
+FRM_RUP = 3
+FRM_RMM = 4
+
+def frm_to_int(frm_str: str) -> int:
+  s = (frm_str or "").strip().upper()
+  if s == "RNE": return FRM_RNE
+  if s == "RTZ": return FRM_RTZ
+  if s == "RDN": return FRM_RDN
+  if s == "RUP": return FRM_RUP
+  if s == "RMM": return FRM_RMM
+  return FRM_RNE
 
 def normalize_fmt(fmt: str):
   if fmt is None:
@@ -172,14 +191,13 @@ class FEDP:
     self.sb = sb
     self.renorm = renorm
     self.frm = frm
-    self.lanes = lanes
     self.ebC, self.sbC = 8, 23
     self.W = W
-    self.HR = lanes.bit_length()
     self.no_window = bool(no_window)
     self.trace = bool(trace)
     self.bias = (1 << (eb - 1)) - 1
     self.F32_BIAS = 127
+    self.EXP_POS_BIAS = 128
     self.is_low_prec = (1 + eb + sb <= 8)
 
   def _split(self, x):
@@ -234,9 +252,6 @@ class FEDP:
     # Calculate shift to align product to MSB of Stage 2 window
     shift_sf = 22 - (2 * self.sb)
 
-    if self.trace:
-      print(f"  [S1:Input] shift_sf={shift_sf}")
-
     # --- 1. Decode & Multiply (N Terms) ---
     for i, (a_bits, b_bits) in enumerate(zip(A, B)):
       sA, mA, eA = self._split(a_bits)
@@ -257,11 +272,14 @@ class FEDP:
       if is_inf:
         if sign_xor: neg = True
         else: pos = True
-      if nanA or nanB: continue
+      if nanA or nanB:
+        if self.trace:
+          print(f"  [S1 decode_mul loop] i={i} a=0x{a_bits:x} b=0x{b_bits:x} -> NaN/Inf skip")
+        continue
 
       # Compute Term (Standard P-Term Generation)
       P = (mA * mB) << shift_sf
-      E = eA + eB + self.F32_BIAS - 22
+      E = eA + eB + self.F32_BIAS + self.EXP_POS_BIAS - 22
 
       if self.renorm and P > 0:
         lz = P.bit_length()
@@ -269,53 +287,25 @@ class FEDP:
         E = E - lz
 
       terms.append((sign_xor, P, E))
-
-    # Stage 1.5: Pairwise Reduction (N -> N/2)
-    if self.is_low_prec and len(terms) > 1:
       if self.trace:
-        print(f"  [PartialReduce] Single Pass (N->N/2): reducing {len(terms)} terms...")
+        print(f"  [S1 decode_mul loop] i={i} a=0x{a_bits:x} b=0x{b_bits:x} -> P=0x{P:x} E={E} s={sign_xor}")
 
-      next_terms = []
+    if self.is_low_prec:
+        reduced_terms = []
+        for j in range(0, len(terms), 2):
+            if j + 1 < len(terms):
+                reduced_terms.append(self.s1_reduce_f8(terms[j], terms[j+1]))
+            else:
+                reduced_terms.append(terms[j])
+            if self.trace:
+                print(f"  [S1 reduce loop] j={j} terms -> {reduced_terms[-1]}")
+        terms = reduced_terms
 
-      # Iterate pairwise (0,1), (2,3), etc.
-      for i in range(0, len(terms), 2):
-        if i + 1 >= len(terms):
-          # Pass through odd term (unpaired)
-          next_terms.append(terms[i])
-          continue
-
-        s1, m1, e1 = terms[i]
-        s2, m2, e2 = terms[i+1]
-        e_max = max(e1, e2)
-        shift1 = e_max - e1
-        m1_aligned = m1 >> shift1
-        if s1: m1_aligned = -m1_aligned
-
-        if self.trace and shift1 > 0:
-          print(f"    Grp {i//2} T1: Shift {shift1} (0x{m1:x} -> 0x{abs(m1_aligned):x})")
-
-        shift2 = e_max - e2
-        m2_aligned = m2 >> shift2
-        if s2: m2_aligned = -m2_aligned
-
-        if self.trace and shift2 > 0:
-          print(f"    Grp {i//2} T2: Shift {shift2} (0x{m2:x} -> 0x{abs(m2_aligned):x})")
-        v_sum = m1_aligned + m2_aligned
-        if v_sum == 0:
-          next_terms.append((0, 0, 0))
-        else:
-          new_s = 1 if v_sum < 0 else 0
-          new_m = abs(v_sum)
-          new_e = e_max
-          if self.trace:
-            print(f"    Grp {i//2}: Sum=0x{new_m:x} E={new_e}")
-
-        next_terms.append((new_s, new_m, new_e))
-
-      terms = next_terms
+    lanes = len(terms)
+    self.HR = lanes.bit_length()
 
     if self.trace:
-      print(f"  [S1:decode_mul] terms={len(terms)} inv={inv} nan={nan} pos={pos} neg={neg}")
+      print(f"  [S1 end] lanes={lanes} terms={[(t[0], hex(t[1]), t[2]) for t in terms]} inv={inv} nan={nan} pos={pos} neg={neg}")
 
     return terms, inv, nan, pos, neg
 
@@ -324,12 +314,56 @@ class FEDP:
 
     # Bias the C-term exponent to match P-term pipeline
     if cc != 4 and Mc != 0:
-      eC = eC + self.F32_BIAS
+      eC = eC + self.F32_BIAS + self.EXP_POS_BIAS
 
     if self.trace:
       print(f"  [S1:mapC] sc={sc} Mc=0x{Mc:x} eC={eC} cc={cc}")
 
     return sc, Mc, eC, cc
+
+  def s1_reduce_f8(self, t1, t2):
+    s1, P1, E1 = t1
+    s2, P2, E2 = t2
+
+    if P1 == 0: return t2
+    if P2 == 0: return t1
+
+    # Pick max exponent term
+    if E1 >= E2:
+      max_E, max_P, max_s = E1, P1, s1
+      min_E, min_P, min_s = E2, P2, s2
+    else:
+      max_E, max_P, max_s = E2, P2, s2
+      min_E, min_P, min_s = E1, P1, s1
+
+    diff = max_E - min_E
+
+    # Align smaller term with 1-bit sticky (cheap)
+    if diff >= 32:
+      aligned = 0
+    elif diff == 0:
+      aligned = min_P
+    else:
+      aligned = min_P >> diff
+
+    # Signed add
+    val = (-max_P if max_s else max_P) + (-aligned if min_s else aligned)
+    if val == 0:
+      return (0, 0, 0)
+
+    s = 1 if val < 0 else 0
+    P = -val if val < 0 else val
+    E = max_E
+
+    # renormalize if mantissa overflowed beyond 24 bits
+    if P >= (1 << 24):
+      P >>= 1
+      E += 1
+
+    if self.trace:
+      print(f"  [_fp8_reduce end] t1={t1} t2={t2} -> s={s} P=0x{P:x} E={E}")
+
+    return (s, P, E)
 
   def s2_align(self, terms, Cp):
     sc, Mc, eC, cc = Cp
@@ -346,7 +380,7 @@ class FEDP:
       pipe_terms.append((sc, Mc, eff_e_c, True))
 
     if not pipe_terms:
-      if self.trace: print("  [S2:align] no terms")
+      if self.trace: print("  [S2 end] no terms")
       return [], 0, 0, cc
 
     L = -9999
@@ -361,9 +395,6 @@ class FEDP:
     for s, m, eff_e, is_c in pipe_terms:
       shift = L - eff_e
 
-      # Distinct Alignment Anchors
-      # P-terms match C++ 'MANT = W-23' -> Offset WA-25
-      # C-terms match C++ 'MANT = W-24' -> Offset WA-26
       if is_c:
         offset = WA - 26
       else:
@@ -388,8 +419,11 @@ class FEDP:
       aligned_terms.append(val)
       sticky = sticky | st_local
 
+      if self.trace:
+        print(f"  [S2 loop] m=0x{m:x} eff_e={eff_e} is_c={is_c} -> shift={shift} val=0x{val:x} st={st_local}")
+
     if self.trace:
-      print(f"  [S2:align] aligned_terms={len(aligned_terms)} sticky={sticky} L={L}")
+      print(f"  [S2 end] aligned_terms={len(aligned_terms)} sticky={sticky} L={L} cc={cc}")
 
     return aligned_terms, sticky, L, cc
 
@@ -407,7 +441,10 @@ class FEDP:
           val_sum += (v - (1 << WA))
         else:
           val_sum += v
-      if self.trace: print(f"  [S3:accumulate] Vw={val_sum} (no_window)")
+        if self.trace:
+          print(f"  [S3 loop no_window] v=0x{v:x} -> val_sum={val_sum}")
+      if self.trace:
+        print(f"  [S3 end] Vw={val_sum} (no_window)")
       return val_sum
 
     # Explicit Sign Extension before Summing
@@ -420,6 +457,8 @@ class FEDP:
       else:
         signed_val = val
       current_sum += signed_val
+      if self.trace:
+        print(f"  [S3 loop] val=0x{val:x} signed={signed_val} -> current_sum={current_sum}")
 
     # Mask result to Ww bits
     V_unsigned = current_sum & mask_Ww
@@ -431,24 +470,19 @@ class FEDP:
       V = V_unsigned - (1 << Ww)
 
     if self.trace:
-      print(f"  [S3:accumulate] Vw={V} (0x{V_unsigned:x})")
+      print(f"  [S3 end] V={V} (0x{V_unsigned:x}) WA={WA} Ww={Ww}")
     return V
 
   def s4_normalize(self, V, sticky, L):
-    Ww = self.W + 1 + self.HR
     if V == 0:
-      if self.trace: print("  [S4:normalize] V=0")
+      if self.trace: print("  [S4 end] V=0")
       return 0, 0, 0, sticky, -999
 
     s = 1 if V < 0 else 0
     X = abs(V)
 
-    if not self.no_window:
-      mask_Ww = (1 << Ww) - 1
-      pass
-
     i = X.bit_length() - 1
-    e = L + i
+    e = L + i - self.EXP_POS_BIAS
     sh = (i + 1) - 24
 
     kept = 0; g = 0; st_out = 0
@@ -462,43 +496,53 @@ class FEDP:
       g = 0; st_out = sticky
 
     if self.trace:
-      print(f"  [S4:normalize] s={s} kept=0x{kept:06x} g={g} st={st_out} e={e}")
+      print(f"  [S4 end] s={s} kept=0x{kept:06x} g={g} st={st_out} e={e} (X=0x{X:x} L={L} i={i} sh={sh})")
     return s, kept, g, st_out, e
 
   def s5_rounding(self, s, kept, g, st, e, cc, inv, nan, pos, neg):
+    res = 0
     # Priority: NaN > Inf > Normal
-    if nan or inv or (pos and neg): return 0x7fc00000 # NaN
-    if cc == 4: return 0x7fc00000 # C was NaN
-
-    if pos: return 0x7f800000 # +Inf
-    if neg: return 0xff800000 # -Inf
-
-    if kept == 0 and st == 0: return 0x00000000
-
-    round_up = False
-    discarded = (g == 1 or st == 1)
-    if self.frm == "RNE":
-      round_up = (g == 1 and (st == 1 or (kept & 1)))
-    elif self.frm == "RTZ": round_up = False
-    elif self.frm == "RDN": round_up = (s == 1 and discarded)
-    elif self.frm == "RUP": round_up = (s == 0 and discarded)
-    elif self.frm == "RMM": round_up = (g == 1)
-
-    kept_rounded = kept + (1 if round_up else 0)
-    if kept_rounded & (1 << 24):
-      kept_rounded >>= 1
-      e += 1
-
-    be = e
-
-    if be >= 255:
-      if self.frm == "RTZ":
-        return (s << 31) | 0x7f7fffff
-      return (s << 31) | 0x7f800000
-    elif be <= 0:
-      return (s << 31) # Flush to zero
+    if nan or inv or (pos and neg):
+      res = 0x7fc00000 # NaN
+    elif cc == 4:
+      res = 0x7fc00000 # C was NaN
+    elif pos:
+      res = 0x7f800000 # +Inf
+    elif neg:
+      res = 0xff800000 # -Inf
+    elif kept == 0 and st == 0:
+      res = 0x00000000
     else:
-      return (s << 31) | ((be & 0xFF) << 23) | (kept_rounded & 0x7FFFFF)
+      round_up = False
+      discarded = (g == 1 or st == 1)
+      if self.frm == "RNE":
+        round_up = (g == 1 and (st == 1 or (kept & 1)))
+      elif self.frm == "RTZ": round_up = False
+      elif self.frm == "RDN": round_up = (s == 1 and discarded)
+      elif self.frm == "RUP": round_up = (s == 0 and discarded)
+      elif self.frm == "RMM": round_up = (g == 1)
+
+      kept_rounded = kept + (1 if round_up else 0)
+      if kept_rounded & (1 << 24):
+        kept_rounded >>= 1
+        e += 1
+
+      be = e
+
+      if be >= 255:
+        if self.frm == "RTZ":
+          res = (s << 31) | 0x7f7fffff
+        else:
+          res = (s << 31) | 0x7f800000
+      elif be <= 0:
+        res = (s << 31) # Flush to zero
+      else:
+        res = (s << 31) | ((be & 0xFF) << 23) | (kept_rounded & 0x7FFFFF)
+
+    if self.trace:
+      print(f"  [S5 end] res=0x{res:08x} (s={s} kept=0x{kept:x} g={g} st={st} e={e} cc={cc} frm={self.frm})")
+
+    return res
 
   def dotp(self, A, B, Cbits):
     terms, inv, nan, pos, neg = self.s1_decode_mul(A, B)
@@ -546,6 +590,32 @@ def _to_float_np(x: int, eb: int, sb: int) -> np.longdouble:
   v = np.ldexp(m, int(e))
   return -v if s else v
 
+def _f32_round_pack(s, m, g, st, e_unb, frm):
+  round_up = False
+  discarded = (g == 1 or st == 1)
+  if frm == "RNE":
+    round_up = (g == 1 and (st == 1 or (m & 1)))
+  elif frm == "RTZ": round_up = False
+  elif frm == "RDN": round_up = (s == 1 and discarded)
+  elif frm == "RUP": round_up = (s == 0 and discarded)
+  elif frm == "RMM": round_up = (g == 1)
+
+  m_rounded = m + (1 if round_up else 0)
+  e_biased = e_unb + 127
+
+  if m_rounded & (1 << 24):
+    m_rounded >>= 1
+    e_biased += 1
+
+  if e_biased >= 255:
+    if frm == "RTZ":
+      return (s << 31) | 0x7f7fffff
+    return (s << 31) | 0x7f800000
+  elif e_biased <= 0:
+    return (s << 31) # Flush to zero
+  else:
+    return (s << 31) | (e_biased << 23) | (m_rounded & 0x7FFFFF)
+
 def round_longdouble_to_f32_bits(x: np.longdouble, frm: str) -> int:
   if np.isnan(x):
     return 0x7fc00000
@@ -572,7 +642,7 @@ def round_longdouble_to_f32_bits(x: np.longdouble, frm: str) -> int:
     g, st = 1, 0
   else:
     g, st = 1, 1
-  return FEDP._f32_round_pack(s, mant_floor, g, st, e_unb, frm)
+  return _f32_round_pack(s, mant_floor, g, st, e_unb, frm)
 
 def ref_numpy(A, B, Cbits, eb, sb, frm) -> int:
   a_ld = np.array([_to_float_np(x, eb, sb) for x in A], dtype=np.longdouble)
@@ -791,7 +861,7 @@ def _ensure_cuda_ext(fmt: str, arch_flag: str):
     cpp_sources=cpp_src,
     cuda_sources=cuda_src,
     extra_cflags=["-O3", "-std=c++17"],
-    extra_cuda_cflags=["-O3", "-std=c++17", f"-arch={arch_flag}", "-U__CUDA_NO_HALF_OPERATORS__", "-U__CUDA_NO_HALF_CONVERSIONS__"],
+    extra_cuda_cflags=["-O3", "-std=c++17", f"-arch={arch_flag}", "-U__CUDA_NO_HALF_OPERATORS__", "-U__CUDA_NO_HALF_CONVERSIONS__", "--keep"],
     verbose=False,
   )
 
@@ -859,87 +929,114 @@ def ref_cuda(A, B, Cbits, eb, sb, arch_flag="sm_89") -> int:
   D00 = float(D_d[0, 0, 0].item())
   return be32_from_float(D00)
 
-
 def _ensure_cpp_ext(source_path):
-  global _torch, _cpp_ext
+  global _cpp_ext
   if _cpp_ext is not None:
-    return _torch, _cpp_ext
-
-  try:
-    import torch as _t
-    from torch.utils.cpp_extension import load_inline
-  except Exception as e:
-    raise RuntimeError(f"--ref=cpp requires PyTorch: {e}")
+    return _cpp_ext
 
   abs_path = os.path.abspath(source_path)
   if not os.path.exists(abs_path):
     raise FileNotFoundError(f"C++ source not found at: {abs_path}")
 
-  cpp_includes = f'#include "{abs_path}"'
-  cpp_src = """
-  #include <torch/extension.h>
-  #include <iostream>
+  cpp_src = f"""
+  #include "{abs_path}"
+  #include <cstdint>
   #include <cstring>
+  #include <string>
 
-  #undef LOG
-  // HEADER_PATH_PLACEHOLDER
+  extern "C" {{
+    uint32_t fedp_run_wrapper(
+        const uint32_t* a_ptr, const uint32_t* b_ptr, uint32_t Cbits,
+        int n, int eb, int sb, int frm,
+        int W, bool renorm, bool no_window) {{
 
-  uint32_t fedp_run_wrapper(
-      torch::Tensor A, torch::Tensor B, uint32_t Cbits,
-      int n, int eb, int sb, int lanes, std::string frm_str,
-      int W, bool renorm, bool no_window) {
+        FEDP fedp(eb, sb,frm, W, renorm, no_window);
 
-      int frm = 0;
-      if (frm_str == "RNE") frm = 0;
-      else if (frm_str == "RTZ") frm = 1;
-      else if (frm_str == "RDN") frm = 2;
-      else if (frm_str == "RUP") frm = 3;
-      else if (frm_str == "RMM") frm = 4;
-      else frm = 0;
+        float c_float;
+        uint32_t c_u32 = Cbits;
+        std::memcpy(&c_float, &c_u32, sizeof(c_float));
 
-      FEDP fedp(eb, sb, lanes, frm, W, renorm, no_window);
+        float res_float = fedp(
+          a_ptr,
+          b_ptr,
+          c_float,
+          n
+        );
 
-      float c_float;
-      uint32_t c_u32 = Cbits;
-      std::memcpy(&c_float, &c_u32, sizeof(c_float));
-
-      auto a_ptr = A.data_ptr<int32_t>();
-      auto b_ptr = B.data_ptr<int32_t>();
-
-      float res_float = fedp(
-        reinterpret_cast<const uint32_t*>(a_ptr),
-        reinterpret_cast<const uint32_t*>(b_ptr),
-        c_float,
-        (uint32_t)n
-      );
-
-      uint32_t res_u32;
-      std::memcpy(&res_u32, &res_float, sizeof(res_u32));
-      return res_u32;
-  }
-
-  PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("fedp_run", &fedp_run_wrapper, "FEDP Runner Wrapper");
-  }
+        uint32_t res_u32;
+        std::memcpy(&res_u32, &res_float, sizeof(res_u32));
+        return res_u32;
+    }}
+  }}
   """
 
-  cpp_wrapper_src = cpp_src.replace("// HEADER_PATH_PLACEHOLDER", cpp_includes)
+  with open(abs_path, 'r') as f:
+    header_content = f.read()
 
-  _cpp_ext = load_inline(
-    name="fedp_cpp_class_wrapper",
-    cpp_sources=cpp_wrapper_src,
-    extra_cflags=["-O3", "-std=c++17"],
-    verbose=False,
-  )
-  _torch = _t
-  return _torch, _cpp_ext
+  code_hash = hashlib.md5((cpp_src + header_content).encode('utf-8')).hexdigest()
+  tmp_dir = tempfile.gettempdir()
+  lib_path = os.path.join(tmp_dir, f"fedp_ext_{code_hash}.so")
+
+  if not os.path.exists(lib_path):
+    src_path = os.path.join(tmp_dir, f"fedp_ext_{code_hash}.cpp")
+    with open(src_path, 'w') as f:
+      f.write(cpp_src)
+
+    cmd = ["g++", "-O3", "-std=c++17", "-shared", "-fPIC", src_path, "-o", lib_path]
+    try:
+      subprocess.check_call(cmd)
+    except subprocess.CalledProcessError as e:
+      raise RuntimeError(f"Failed to compile C++ extension: {e}")
+
+  lib = ctypes.CDLL(lib_path)
+  lib.fedp_run_wrapper.argtypes = [
+      ctypes.POINTER(ctypes.c_uint32),  # a_ptr
+      ctypes.POINTER(ctypes.c_uint32),  # b_ptr
+      ctypes.c_uint32,                  # Cbits
+      ctypes.c_int,                     # n
+      ctypes.c_int,                     # eb
+      ctypes.c_int,                     # sb
+      ctypes.c_int,                     # frm
+      ctypes.c_int,                     # W
+      ctypes.c_bool,                    # renorm
+      ctypes.c_bool                     # no_window
+  ]
+  lib.fedp_run_wrapper.restype = ctypes.c_uint32
+
+  _cpp_ext = lib
+  return _cpp_ext
+
+def _pack_lanes_u32(lanes_u32, elt_bits: int):
+  if not (elt_bits <= 16) and (32 % elt_bits == 0):
+    return list(lanes_u32)
+  epw = 32 // elt_bits
+  mask = (1 << elt_bits) - 1
+  packed_u32 = []
+  for i in range(0, len(lanes_u32), epw):
+    w = 0
+    for j in range(epw):
+      idx = i + j
+      lane = lanes_u32[idx] if idx < len(lanes_u32) else 0
+      w |= (lane & mask) << (j * elt_bits)
+    packed_u32.append(w & 0xFFFFFFFF)
+  return packed_u32
 
 def ref_cpp(A, B, Cbits, eb, sb, W, renorm, frm, no_window, source_path):
-  torch, ext = _ensure_cpp_ext(source_path)
-  tA = torch.tensor(A, dtype=torch.int32)
-  tB = torch.tensor(B, dtype=torch.int32)
-  return ext.fedp_run(tA, tB, Cbits, len(A), eb, sb, len(A), frm, W, renorm, no_window)
+  ext = _ensure_cpp_ext(source_path)
 
+  ifrm = frm_to_int(frm)
+
+  # pack elements in array
+  elt_bits = 1 + eb + sb
+  pA = _pack_lanes_u32(A, elt_bits)
+  pB = _pack_lanes_u32(B, elt_bits)
+
+  # cast to C++ int32_t pointer
+  ArrType = ctypes.c_uint32 * len(pA)
+  tA = ArrType(*pA)
+  tB = ArrType(*pB)
+
+  return ext.fedp_run_wrapper(tA, tB, Cbits, len(tA), eb, sb, ifrm, W, renorm, no_window)
 
 # ----------------- test-case generators -----------------
 def _pack_fp(s, e, f, eb, sb):
@@ -1053,7 +1150,7 @@ def _print_case(tag, idx, A, B, C, hex_digits=4):
 def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
          test_id_filter, ref_mode, arch_flag, max_errors,
          W, no_window, cpp_source):
-  
+
   random.seed(seed)
   np.random.seed(seed)
 
@@ -1141,8 +1238,8 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
         or is_new_max
       )
       if print_this_error:
-        print(f"✘ FAIL {feature} TID {test_id}: got=0x{got:08x} ref=0x{ref:08x} ulp={current_ulp}")
         _print_case(feature, sub_id, A, B, C, hex_digits=hex_digits)
+        print(f"✘ FAIL {feature} TID {test_id}: got=0x{got:08x} ref=0x{ref:08x} ulp={current_ulp}")
       elif errors_by_feature[feature] == MAX_PRINTED_ERRORS_PER_FEATURE + 1:
         print(f"ℹ Stopping error print for {feature} (limit={MAX_PRINTED_ERRORS_PER_FEATURE} reached).")
 
@@ -1174,7 +1271,7 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
 
 if __name__ == "__main__":
   ap = argparse.ArgumentParser()
-  ap.add_argument("--n", type=int, default=4,
+  ap.add_argument("--n", type=int, default=8,
                   help="Number of dot-product lanes")
   ap.add_argument("--eb", type=int, default=5)
   ap.add_argument("--sb", type=int, default=10)
@@ -1199,11 +1296,15 @@ if __name__ == "__main__":
                   help="Path to external C++ source containing FEDP class")
   ap.add_argument("--max-errors", type=int, default=0,
                   help="Stop after N errors (0 = do not stop)")
+  ap.add_argument("--ulp", type=int, default=1,
+                  help="Acceptance threshold in ULPs")
   ap.add_argument("--W", type=int, default=25,
                   help="Accumulator window width")
   ap.add_argument("--no-window", action="store_true",
                   help="Disable window clipping in FEDP accumulator")
   args = ap.parse_args()
+
+  ULP = args.ulp
 
   if args.fmt is not None:
     args.fmt = normalize_fmt(args.fmt)
