@@ -48,10 +48,8 @@ public:
   }
 
   float operator()(const uint32_t *a, const uint32_t *b, float c, uint32_t n) {
-    const uint64_t req_id = req_id_++;
-
     const auto c_enc = bitsFromF32(c);
-    rtl_watch_s0(req_id, a, b, c_enc, n);
+    rtl_watch_s0(a, b, c_enc, n);
 
     const auto terms = decode_inputs(a, b, n);
     const auto c_dec = decode_input(c_enc, 8, 23);
@@ -59,24 +57,26 @@ public:
 
     const auto mul_res = multiply_to_common(terms, c_term);
 
-    rtl_watch_s1(req_id, mul_res, c_term, c_enc);
+    rtl_watch_s1(mul_res, c_term, c_enc);
 
     HR_ = 32 - lzcN(mul_res.terms.size() - 1, 32);
 
     const auto aln = alignment(mul_res);
 
-    rtl_watch_s2(req_id, aln, mul_res, c_term, c_enc);
+    rtl_watch_s2(aln, mul_res, c_term, c_enc);
 
     const auto acc = accumulate(aln);
 
-    rtl_watch_s3(req_id, acc, mul_res, c_term, c_enc);
+    rtl_watch_s3(acc, mul_res, c_term, c_enc);
 
     const auto nrm = normalize(acc);
 
-    rtl_watch_norm(req_id, nrm, acc.flags, mul_res.L);
+    rtl_watch_norm(nrm, acc.flags, mul_res.L);
 
     const auto out = rounding(nrm);
-    rtl_watch_s4(req_id, out);
+    rtl_watch_s4(out);
+
+    ++req_id_;
 
     return f32FromBits(out);
   }
@@ -157,9 +157,9 @@ private:
   }
 
   // -------- [RTL-WATCH] helpers --------
-  inline void rtl_watch_s0(uint64_t req_id, const uint32_t* a, const uint32_t* b, uint32_t c_enc, uint32_t n) {
+  inline void rtl_watch_s0(const uint32_t* a, const uint32_t* b, uint32_t c_enc, uint32_t n) {
 #ifdef FEDP_RTL_WATCH
-    RTL_WATCH("[RTL_WATCH] FEDP-S0(%lu): a_row=", req_id);
+    RTL_WATCH("[RTL_WATCH] FEDP-S0(%lu): a_row=", req_id_);
     RTL_WATCH("{");
     for (int i = (int)n - 1; i >= 0; --i) {
       RTL_WATCH("0x%x", a[i]);
@@ -174,9 +174,9 @@ private:
 #endif
   }
 
-  inline void rtl_watch_s1(uint64_t req_id, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
+  inline void rtl_watch_s1(const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
 #ifdef FEDP_RTL_WATCH
-    RTL_WATCH("[RTL_WATCH] FEDP-S1(%lu): max_exp=0x%x, shift_amt=", req_id, res.L);
+    RTL_WATCH("[RTL_WATCH] FEDP-S1(%lu): max_exp=0x%x, shift_amt=", req_id_, res.L);
     RTL_WATCH("{");
     if (!res.shifts.empty()) {
       RTL_WATCH("0x%x", res.shifts.back());
@@ -202,9 +202,9 @@ private:
 #endif
   }
 
-  inline void rtl_watch_s2(uint64_t req_id, const align_t& aln, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
+  inline void rtl_watch_s2(const align_t& aln, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
 #ifdef FEDP_RTL_WATCH
-    RTL_WATCH("[RTL_WATCH] FEDP-S2(%lu): max_exp=0x%x, aln_sig=", req_id, res.L);
+    RTL_WATCH("[RTL_WATCH] FEDP-S2(%lu): max_exp=0x%x, aln_sig=", req_id_, res.L);
     RTL_WATCH("{");
     if (!aln.dbg_aln_sigs.empty()) {
       uint32_t c_sig = aln.dbg_aln_sigs.back();
@@ -228,29 +228,29 @@ private:
 #endif
   }
 
-  inline void rtl_watch_s3(uint64_t req_id, const acc_t& acc, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
+  inline void rtl_watch_s3(const acc_t& acc, const mul_res_t& res, const cterm_t& c_term, uint32_t c_enc) {
 #ifdef FEDP_RTL_WATCH
     uint32_t sigs_sign = 0;
     for (size_t i = 0; i < res.terms.size() - 1; ++i) {
       if (res.terms[i].sign) sigs_sign |= (1 << i);
     }
     RTL_WATCH("[RTL_WATCH] FEDP-S3(%lu): acc_sig=0x%x, max_exp=0x%x, sigs_sign=0x%x, sticky=%d\n",
-        req_id, acc.V, res.L, sigs_sign, acc.sticky ? 1 : 0);
+        req_id_, acc.V, res.L, sigs_sign, acc.sticky ? 1 : 0);
 #endif
   }
 
-  inline void rtl_watch_norm(uint64_t req_id, const nrm_t& nrm, int flags, int max_exp) {
+  inline void rtl_watch_norm(const nrm_t& nrm, int flags, int max_exp) {
 #ifdef FEDP_RTL_WATCH
     int lsb = nrm.kept & 1;
     RTL_WATCH("[RTL_WATCH] FEDP-NORM(%lu): abs_sum=0x%x, L=%d, G=%d, R=%d, S=%d, Rup=%d\n",
-        req_id, nrm.abs_sum, lsb, nrm.g, 0, nrm.st, nrm.round_up
+        req_id_, nrm.abs_sum, lsb, nrm.g, 0, nrm.st, nrm.round_up
     );
 #endif
   }
 
-  inline void rtl_watch_s4(uint64_t req_id, uint32_t result) {
+  inline void rtl_watch_s4(uint32_t result) {
 #ifdef FEDP_RTL_WATCH
-    RTL_WATCH("[RTL_WATCH] FEDP-S4(%lu): result=0x%08x\n", req_id, result);
+    RTL_WATCH("[RTL_WATCH] FEDP-S4(%lu): result=0x%08x\n", req_id_, result);
 #endif
   }
 
@@ -445,13 +445,12 @@ private:
     int64_t P = (val < 0) ? -val : val;
     int E = max_E;
 
-    // Renormalize if mantissa overflowed beyond 24 bits
-    if (P >= (1LL << 24)) {
-      P >>= 1;
-      E += 1;
-    }
+    // scaling by 1 to avoid renormalization
+    P >>= 1;
+    E += 1;
 
-    LOG("[reduce_f8] t1=(%d, %d, %d), t2=(%d, %d, %d) -> s=%d P=0x%lx E=%d\n", t1.sign, t1.Mp, e1, t2.sign, t2.Mp, e2, s, P, E);
+    LOG("[reduce_f8 (%ld)] t1=(%d, %d, %d), t2=(%d, %d, %d) | diff=%d max_P=0x%lx min_P=0x%lx aligned=0x%lx val=0x%lx -> s=%d P=0x%lx E=%d\n",
+        req_id_, t1.sign, t1.Mp, e1, t2.sign, t2.Mp, e2, diff, max_P, min_P, aligned, val, s, P, E);
 
     return {{s, (int)P}, E};
   }

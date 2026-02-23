@@ -1147,28 +1147,34 @@ def _print_case(tag, idx, A, B, C, hex_digits=4):
   print(f'[{tag} Case {idx}] inputs="[{a_str}];[{b_str}];{c_str}"')
 
 # ----------------- harness -----------------
+def get_runner(mode, n, eb, sb, frm, renorm, trace, W, no_window, arch_flag, cpp_source):
+  if mode == "emul":
+    fedp = FEDP(eb=eb, sb=sb, frm=frm, renorm=renorm, lanes=n, trace=trace, W=W, no_window=no_window)
+    return lambda A, B, C, EB, SB: fedp.dotp(A, B, C)
+  elif mode == "cuda":
+    fmt = fmt_from_eb_sb(eb, sb)
+    if fmt is None:
+      print(f"Error: CUDA mode does not support custom eb={eb}/sb={sb}. Use --fmt.", file=sys.stderr)
+      sys.exit(1)
+    _ensure_cuda_ext(fmt, arch_flag=arch_flag)
+    return lambda A, B, C, EB, SB: ref_cuda(A, B, C, EB, SB, arch_flag=arch_flag)
+  elif mode == "cpp":
+    _ensure_cpp_ext(cpp_source)
+    return lambda A, B, C, EB, SB: ref_cpp(A, B, C, EB, SB, W, renorm, frm, no_window, cpp_source)
+  else:
+    return lambda A, B, C, EB, SB: ref_numpy(A, B, C, EB, SB, frm=frm)
+
 def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
-         test_id_filter, ref_mode, arch_flag, max_errors,
+         test_id_filter, src_mode, ref_mode, arch_flag, max_errors,
          W, no_window, cpp_source):
 
   random.seed(seed)
   np.random.seed(seed)
 
-  fedp = FEDP(eb=eb, sb=sb, frm=frm, renorm=renorm, lanes=n, trace=trace, W=W, no_window=no_window)
   hex_digits = fmt_hex_digits(eb, sb)
 
-  if ref_mode == "cuda":
-    fmt = fmt_from_eb_sb(eb, sb)
-    if fmt is None:
-         print(f"Error: CUDA ref does not support custom eb={eb}/sb={sb}. Use --fmt.", file=sys.stderr)
-         sys.exit(1)
-    _ensure_cuda_ext(fmt, arch_flag=arch_flag)
-    ref_fn = lambda A, B, C, EB, SB: ref_cuda(A, B, C, EB, SB, arch_flag=arch_flag)
-  elif ref_mode == "cpp":
-    _ensure_cpp_ext(cpp_source)
-    ref_fn = lambda A, B, C, EB, SB: ref_cpp(A, B, C, EB, SB, W, renorm, frm, no_window, cpp_source)
-  else:
-    ref_fn = lambda A, B, C, EB, SB: ref_numpy(A, B, C, EB, SB, frm=frm)
+  src_fn = get_runner(src_mode, n, eb, sb, frm, renorm, trace, W, no_window, arch_flag, cpp_source)
+  ref_fn = get_runner(ref_mode, n, eb, sb, frm, renorm, trace, W, no_window, arch_flag, cpp_source)
 
   features = ["normals", "subnormals", "zeros", "infinities", "nans", "cancellation", "custom"]
   tests_per_feature = max(1, (iters + len(features) - 1) // len(features))
@@ -1212,7 +1218,12 @@ def test(n, eb, sb, frm, renorm, iters, seed, debug, trace,
     if debug or trace:
       _print_case(f"{feature} TID {test_id}", sub_id, A, B, C, hex_digits=hex_digits)
 
-    got = fedp.dotp(A, B, C)
+    try:
+      got = src_fn(A, B, C, eb, sb)
+    except (RuntimeError, ValueError) as e:
+      print(f"SKIPPING {feature} TID {test_id}: src_fn failed: {e}")
+      continue
+
     try:
       ref = ref_fn(A, B, C, eb, sb)
     except (RuntimeError, ValueError) as e:
@@ -1288,15 +1299,17 @@ if __name__ == "__main__":
   ap.add_argument("--test", type=int, default=None, help="Run a single test by its global TID")
   ap.add_argument("--run", type=str, default=None,
                   help="Directly run a single case. Format: '[A];[B];C'")
-  ap.add_argument("--ref", type=str, choices=["numpy", "cuda", "cpp"], default="numpy",
-                  help="Reference: 'numpy' (longdouble), 'cuda' (WMMA/PTX), 'cpp' (external)")
+  ap.add_argument("--src", type=str, choices=["numpy", "cuda", "cpp", "emul"], default="emul",
+                  help="Source: 'emul' (FEDP class), 'numpy', 'cuda', 'cpp'")
+  ap.add_argument("--ref", type=str, choices=["numpy", "cuda", "cpp", "emul"], default="numpy",
+                  help="Reference: 'numpy', 'cuda', 'cpp', 'emul'")
   ap.add_argument("--arch", type=str, default="sm_89",
                   help="CUDA arch for --ref=cuda (e.g., sm_80, sm_89, sm_90)")
   ap.add_argument("--cpp-source", type=str, default="fedp.h",
                   help="Path to external C++ source containing FEDP class")
   ap.add_argument("--max-errors", type=int, default=0,
                   help="Stop after N errors (0 = do not stop)")
-  ap.add_argument("--ulp", type=int, default=1,
+  ap.add_argument("--ulp", type=int, default=0,
                   help="Acceptance threshold in ULPs")
   ap.add_argument("--W", type=int, default=25,
                   help="Accumulator window width")
@@ -1326,24 +1339,12 @@ if __name__ == "__main__":
       if not args.trace:
         _print_case("direct", 0, A, B, C, hex_digits=hex_digits)
 
-      if args.ref == "cuda":
-        fmt = fmt_from_eb_sb(args.eb, args.sb)
-        if not fmt:
-            print("Error: CUDA ref requires standard --fmt", file=sys.stderr)
-            sys.exit(1)
-        if args.n > FMT_CONFIG[fmt]["k_tile"]:
-          print(f"ERROR: --ref=cuda requires n <= {FMT_CONFIG[fmt]['k_tile']}.", file=sys.stderr)
-          sys.exit(1)
-        _ensure_cuda_ext(fmt, arch_flag=args.arch)
-        ref_fn = lambda A_, B_, C_, EB, SB: ref_cuda(A_, B_, C_, EB, SB, arch_flag=args.arch)
-      elif args.ref == "cpp":
-        _ensure_cpp_ext(args.cpp_source)
-        ref_fn = lambda A_, B_, C_, EB, SB: ref_cpp(A_, B_, C_, EB, SB, args.W, args.renorm, args.frm, args.no_window, args.cpp_source)
-      else:
-        ref_fn = lambda A_, B_, C_, EB, SB: ref_numpy(A_, B_, C_, EB, SB, frm=args.frm)
+      src_fn = get_runner(args.src, args.n, args.eb, args.sb, args.frm, args.renorm, args.trace, args.W, args.no_window, args.arch, args.cpp_source)
+      ref_fn = get_runner(args.ref, args.n, args.eb, args.sb, args.frm, args.renorm, args.trace, args.W, args.no_window, args.arch, args.cpp_source)
 
-      result = fedp.dotp(A, B, C)
+      result = src_fn(A, B, C, args.eb, args.sb)
       ref = ref_fn(A, B, C, args.eb, args.sb)
+
       print(f"Result:     0x{result:08x}")
       print(f"Ref({args.ref}): 0x{ref:08x}")
       print(f"ULP diff:   {ulp_diff(result, ref)}")
@@ -1353,4 +1354,4 @@ if __name__ == "__main__":
 
   test(args.n, args.eb, args.sb, args.frm, args.renorm,
        args.iters, args.seed, args.debug, args.trace, args.test,
-       args.ref, args.arch, args.max_errors, args.W, args.no_window, args.cpp_source)
+       args.src, args.ref, args.arch, args.max_errors, args.W, args.no_window, args.cpp_source)

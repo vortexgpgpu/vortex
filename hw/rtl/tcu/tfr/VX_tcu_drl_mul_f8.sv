@@ -150,19 +150,22 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             assign zero_sel[j] = cls_a.is_zero | cls_b.is_zero;
 
             // Exception resolution
-            wire nan_in = cls_a.is_nan | cls_b.is_nan;
-            wire inf_z  = (cls_a.is_inf & cls_b.is_zero) | (cls_a.is_zero & cls_b.is_inf);
-            wire inf_op = cls_a.is_inf | cls_b.is_inf;
+            wire a_is_inf = is_bfloat ? cls_a.is_inf : 1'b0;
+            wire b_is_inf = is_bfloat ? cls_b.is_inf : 1'b0;
+            wire a_is_nan = is_bfloat ? cls_a.is_nan : (raw_ea == 5'h0F) && (raw_ma == 3'b111);
+            wire b_is_nan = is_bfloat ? cls_b.is_nan : (raw_eb == 5'h0F) && (raw_mb == 3'b111);
+
+            wire nan_in = a_is_nan | b_is_nan;
+            wire inf_z  = (a_is_inf & cls_b.is_zero) | (cls_a.is_zero & b_is_inf);
+            wire inf_op = a_is_inf | b_is_inf;
 
             assign nan_sel[j] = nan_in | inf_z;
             assign inf_sel[j] = inf_op & ~inf_z;
         end
 
         // ------------------------------------------------------------------
-        // 2b. Muxing (Bias only, rest is handled inline)
+        // 2b. Exponents Addition
         // ------------------------------------------------------------------
-
-        // Calculate Pre-Sums (Exponent A + Exponent B)
 
         wire [5:0] pre_sum_0, pre_sum_1;
 
@@ -188,7 +191,7 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             `UNUSED_PIN(cout)
         );
 
-        // Select max/min term using per-element validity.
+        // Select max/min term
 
         wire v0 = ~zero_sel[0] && lane_valid[0];
         wire v1 = ~zero_sel[1] && lane_valid[1];
@@ -212,9 +215,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             .sum(final_exp),
             `UNUSED_PIN(cout)
         );
-
-        // Exponent is meaningful only if lane has at least one valid contributing element.
-        assign result_exp[i] = (v0 || v1) ? final_exp : '0;
 
         // ------------------------------------------------------------------
         // 2c. Mantissa Multiplication
@@ -252,48 +252,56 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire [7:0] man_prod0_v = man_prod[0] & {8{lane_valid[0]}};
         wire [7:0] man_prod1_v = man_prod[1] & {8{lane_valid[1]}};
 
-        // Magnitude Sorting
-        wire exp_eq = (diff_abs == 6'b0);
-        wire man_0_ge_1 = (man_prod0_v >= man_prod1_v);
-
-        // If exponents are equal, tie-break with 8-bit mantissas
-        wire mag_0_is_larger = diff_sign ? (~exp_eq | man_0_ge_1) : 1'b0;
-
-        // Route to Large (L) and Small (S)
-        wire [7:0] prod_L = mag_0_is_larger ? man_prod0_v : man_prod1_v;
-        wire [7:0] prod_S = mag_0_is_larger ? man_prod1_v : man_prod0_v;
-        wire       sign_L = mag_0_is_larger ? sign_sel[0] : sign_sel[1];
-
-        // Pad to 24-bit adder width
-        wire [23:0] op_L = {1'b0, prod_L, 15'b0};
-        wire [23:0] op_S_raw = {1'b0, prod_S, 15'b0};
+        // Pad to 24 bits (8-bit product + 16-bit static padding)
+        wire [23:0] sig_low  = {man_prod0_v, 16'b0};
+        wire [23:0] sig_high = {man_prod1_v, 16'b0};
 
         // Single Barrel Shifter
         wire diff_ge_32 = diff_abs[5];
         wire [4:0] shamt = diff_abs[4:0];
-        wire [23:0] op_S = diff_ge_32 ? 24'b0 : (op_S_raw >> shamt);
+        wire [23:0] aligned_sig_low  = diff_sign ? sig_low : (diff_ge_32 ? 24'b0 : (sig_low >> shamt));
+        wire [23:0] aligned_sig_high = diff_sign ? (diff_ge_32 ? 24'b0 : (sig_high >> shamt)) : sig_high;
 
         // ------------------------------------------------------------------
         // 2e. Absolute Difference / Addition
         // ------------------------------------------------------------------
 
-        wire do_sub = sign_sel[0] ^ sign_sel[1];
+        // Fast magnitude sorting after alignment prevents underflow
+        wire [24:0] mag_0 = {1'b0, aligned_sig_low};
+        wire [24:0] mag_1 = {1'b0, aligned_sig_high};
+        wire mag_0_is_larger = (mag_0 > mag_1);
 
-        wire [23:0] sig_add;
+        wire [24:0] op_a = mag_0_is_larger ? mag_0 : mag_1;
+        wire [24:0] op_b = mag_0_is_larger ? mag_1 : mag_0;
+
+        wire do_sub = sign_sel[0] ^ sign_sel[1];
+        wire [24:0] sig_add_raw;
+
         VX_ks_adder #(
-            .N(24),
-            .BYPASS(`FORCE_BUILTIN_ADDER(24))
+            .N(25),
+            .BYPASS(`FORCE_BUILTIN_ADDER(25))
         ) sig_adder_f8 (
             .cin(do_sub),
-            .dataa(op_L),
-            .datab(do_sub ? ~op_S : op_S),
-            .sum(sig_add),
+            .dataa(op_a),
+            .datab(do_sub ? ~op_b : op_b),
+            .sum(sig_add_raw),
             `UNUSED_PIN(cout)
         );
 
+        // scaling by 1 to avoid renormalization
+        wire [23:0] sig_add = sig_add_raw[24:1];
+        `UNUSED_VAR (sig_add_raw[0])
+
+        // Identify exact cancellation
+        wire mag_is_equal = (aligned_sig_low == aligned_sig_high);
+        wire is_zero_out = do_sub && mag_is_equal;
+
         // Force +0 on exact cancellation
-        wire sig_sign = (sig_add == 24'b0) ? 1'b0 : sign_L;
+        wire sig_sign_raw = mag_0_is_larger ? sign_sel[0] : sign_sel[1];
+        wire sig_sign = is_zero_out ? 1'b0 : sig_sign_raw;
+
         assign result_sig[i] = {sig_sign, sig_add};
+        assign result_exp[i] = ((v0 || v1) && !is_zero_out) ? final_exp : '0;
 
         // ------------------------------------------------------------------
         // 2f. Exception Merging (Merge 2 sub-products per lane)
@@ -319,6 +327,18 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         assign exceptions[i].is_nan = any_nan;
         assign exceptions[i].is_inf = any_inf;
         assign exceptions[i].sign   = any_inf ? final_sign_inf : sig_sign;
+
+    `ifdef DBG_TRACE_TCU
+        always_ff @(posedge clk) begin
+            if (valid_in && g_lane[i].lane_valid != 0) begin
+                `TRACE(4, ("%t: %s FEDP-REDUCE(%0d) lane=%0d: ", $time, INSTANCE_ID, req_id, i));
+                `TRACE(4, ("t1=(%0d, 0x%0h, %0d), ", sign_sel[0], sig_low, pre_sum_0));
+                `TRACE(4, ("t2=(%0d, 0x%0h, %0d) ", sign_sel[1], sig_high, pre_sum_1));
+                `TRACE(4, ("| aln_t1=0x%0h, aln_t2=0x%0h ", aligned_sig_low, aligned_sig_high));
+                `TRACE(4, ("-> s=%0d P=0x%0h E=%0d\n", sig_sign, sig_add, final_exp));
+            end
+        end
+    `endif
 
     end
 

@@ -170,7 +170,7 @@ struct TestConfig {
       "nans",
       "subnormals",
       "normals",
-      "zero"};
+      "zeros"};
   int exp_bits = 0; // Exponent bits
   int sig_bits = 0; // Significand bits
   RoundingMode frm = RoundingMode::RNE; // Rounding mode
@@ -309,6 +309,10 @@ static float dot_product(const uint32_t* A, const uint32_t* B, uint32_t C, int n
       return sign ? -z : z;
     }
     // Inf / NaN
+    if (ebits == 4 && sbits == 3) {
+      // FP8 E4M3 exception
+      if (exp == 15 && frac == 7) return std::numeric_limits<long double>::quiet_NaN();
+    } else
     if (exp == all1) {
       if (frac) return std::numeric_limits<long double>::quiet_NaN();
       return sign ? -std::numeric_limits<long double>::infinity()
