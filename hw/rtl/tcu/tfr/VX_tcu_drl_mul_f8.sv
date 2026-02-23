@@ -143,8 +143,8 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             assign eb_sel[j] = cls_b.is_sub ? 5'b1 : raw_eb;
 
             // Select normalized mantissas (append implicit bit, force 0 if zero/subnormal)
-            assign ma_sel[j] = {!cls_a.is_sub && !cls_a.is_zero, raw_a[2:0]};
-            assign mb_sel[j] = {!cls_b.is_sub && !cls_b.is_zero, raw_b[2:0]};
+            assign ma_sel[j] = {!cls_a.is_sub && !cls_a.is_zero, raw_ma};
+            assign mb_sel[j] = {!cls_b.is_sub && !cls_b.is_zero, raw_mb};
 
             assign sign_sel[j] = raw_sa ^ raw_sb;
             assign zero_sel[j] = cls_a.is_zero | cls_b.is_zero;
@@ -252,27 +252,30 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire [7:0] man_prod0_v = man_prod[0] & {8{lane_valid[0]}};
         wire [7:0] man_prod1_v = man_prod[1] & {8{lane_valid[1]}};
 
-        wire [22:0] sig_low  = {man_prod0_v, 15'b0};
-        wire [22:0] sig_high = {man_prod1_v, 15'b0};
+        // Magnitude Sorting
+        wire exp_eq = (diff_abs == 6'b0);
+        wire man_0_ge_1 = (man_prod0_v >= man_prod1_v);
 
-        // Prevent shift wrap when exponent diff >= 32:
-        // diff_abs[5] indicates diff >= 32 (since diff_abs is 6-bit).
-        // For such large diffs the smaller term is effectively zero.
+        // If exponents are equal, tie-break with 8-bit mantissas
+        wire mag_0_is_larger = diff_sign ? (~exp_eq | man_0_ge_1) : 1'b0;
+
+        // Route to Large (L) and Small (S)
+        wire [7:0] prod_L = mag_0_is_larger ? man_prod0_v : man_prod1_v;
+        wire [7:0] prod_S = mag_0_is_larger ? man_prod1_v : man_prod0_v;
+        wire       sign_L = mag_0_is_larger ? sign_sel[0] : sign_sel[1];
+
+        // Pad to 24-bit adder width
+        wire [23:0] op_L = {1'b0, prod_L, 15'b0};
+        wire [23:0] op_S_raw = {1'b0, prod_S, 15'b0};
+
+        // Single Barrel Shifter
         wire diff_ge_32 = diff_abs[5];
         wire [4:0] shamt = diff_abs[4:0];
-
-        wire [22:0] aligned_sig_low  = diff_sign ? sig_low : (diff_ge_32 ? 23'b0 : (sig_low >> shamt));
-        wire [22:0] aligned_sig_high = diff_sign ? (diff_ge_32 ? 23'b0 : (sig_high >> shamt)) : sig_high;
+        wire [23:0] op_S = diff_ge_32 ? 24'b0 : (op_S_raw >> shamt);
 
         // ------------------------------------------------------------------
         // 2e. Absolute Difference / Addition
         // ------------------------------------------------------------------
-        wire [23:0] mag_0 = {1'b0, aligned_sig_low};
-        wire [23:0] mag_1 = {1'b0, aligned_sig_high};
-        wire mag_0_is_larger = (mag_0 > mag_1);
-
-        wire [23:0] op_a = mag_0_is_larger ? mag_0 : mag_1;
-        wire [23:0] op_b = mag_0_is_larger ? mag_1 : mag_0;
 
         wire do_sub = sign_sel[0] ^ sign_sel[1];
 
@@ -282,15 +285,14 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             .BYPASS(`FORCE_BUILTIN_ADDER(24))
         ) sig_adder_f8 (
             .cin(do_sub),
-            .dataa(op_a),
-            .datab(do_sub ? ~op_b : op_b),
+            .dataa(op_L),
+            .datab(do_sub ? ~op_S : op_S),
             .sum(sig_add),
             `UNUSED_PIN(cout)
         );
 
         // Force +0 on exact cancellation
-        wire sig_sign_raw = mag_0_is_larger ? sign_sel[0] : sign_sel[1];
-        wire sig_sign = (sig_add == 24'b0) ? 1'b0 : sig_sign_raw;
+        wire sig_sign = (sig_add == 24'b0) ? 1'b0 : sign_L;
         assign result_sig[i] = {sig_sign, sig_add};
 
         // ------------------------------------------------------------------

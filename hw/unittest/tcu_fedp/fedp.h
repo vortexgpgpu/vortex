@@ -451,7 +451,7 @@ private:
       E += 1;
     }
 
-    LOG("[reduce_f8] t1=(%d, %d, %d), t2=(%d, %d, %d) -> s=%d P=0x%llx E=%d\n", t1.sign, t1.Mp, e1, t2.sign, t2.Mp, e2, s, P, E);
+    LOG("[reduce_f8] t1=(%d, %d, %d), t2=(%d, %d, %d) -> s=%d P=0x%lx E=%d\n", t1.sign, t1.Mp, e1, t2.sign, t2.Mp, e2, s, P, E);
 
     return {{s, (int)P}, E};
   }
