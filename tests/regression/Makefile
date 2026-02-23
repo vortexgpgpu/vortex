@@ -7,16 +7,23 @@ all:
 	$(MAKE) -C dogfood
 	$(MAKE) -C dropout
 	$(MAKE) -C dotproduct
+	$(MAKE) -C mpi_dotproduct
+	$(MAKE) -C mpi_put_dotproduct
 	$(MAKE) -C mstress
 	$(MAKE) -C io_addr
 	$(MAKE) -C printf
 	$(MAKE) -C diverge
+	$(MAKE) -C mpi_diverge
 	$(MAKE) -C sort
 	$(MAKE) -C fence
 	$(MAKE) -C vecadd
 	$(MAKE) -C mpi_vecadd
 	$(MAKE) -C sgemm
+	$(MAKE) -C mpi_sgemm
+	$(MAKE) -C mpi_blocked_sgemm
 	$(MAKE) -C conv3
+	$(MAKE) -C mpi_conv3
+	$(MAKE) -C mpi_neighbor_a2a_conv3
 	$(MAKE) -C relu
 	$(MAKE) -C sgemv
 	$(MAKE) -C sgemm2
@@ -29,16 +36,23 @@ run-simx:
 	$(MAKE) -C dogfood run-simx
 	$(MAKE) -C dropout run-simx
 	$(MAKE) -C dotproduct run-simx
+	$(MAKE) -C mpi_dotproduct run-simx
+	$(MAKE) -C mpi_put_dotproduct run-simx
 	$(MAKE) -C mstress run-simx
 	$(MAKE) -C io_addr run-simx
 	$(MAKE) -C printf run-simx
 	$(MAKE) -C diverge run-simx
+	$(MAKE) -C mpi_diverge run-simx
 	$(MAKE) -C sort run-simx
 	$(MAKE) -C fence run-simx
 	$(MAKE) -C vecadd run-simx
 	$(MAKE) -C mpi_vecadd run-simx
 	$(MAKE) -C sgemm run-simx
+	$(MAKE) -C mpi_sgemm run-simx
+	$(MAKE) -C mpi_blocked_sgemm run-simx
 	$(MAKE) -C conv3 run-simx
+	$(MAKE) -C mpi_conv3 run-simx
+	$(MAKE) -C mpi_neighbor_a2a_conv3 run-simx
 	$(MAKE) -C relu run-simx
 	$(MAKE) -C sgemv run-simx
 	$(MAKE) -C sgemm2 run-simx
@@ -72,16 +86,23 @@ clean:
 	$(MAKE) -C dogfood clean
 	$(MAKE) -C dropout clean
 	$(MAKE) -C dotproduct clean
+	$(MAKE) -C mpi_dotproduct clean
+	$(MAKE) -C mpi_put_dotproduct clean
 	$(MAKE) -C mstress clean
 	$(MAKE) -C io_addr clean
 	$(MAKE) -C printf clean
 	$(MAKE) -C diverge clean
+	$(MAKE) -C mpi_diverge clean
 	$(MAKE) -C sort clean
 	$(MAKE) -C fence clean
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C mpi_vecadd clean
 	$(MAKE) -C sgemm clean
+	$(MAKE) -C mpi_sgemm clean
+	$(MAKE) -C mpi_blocked_sgemm clean
 	$(MAKE) -C conv3 clean
+	$(MAKE) -C mpi_neighbor_a2a_conv3 clean
+	$(MAKE) -C mpi_conv3 clean
 	$(MAKE) -C relu clean
 	$(MAKE) -C sgemv clean
 	$(MAKE) -C sgemm2 clean
