@@ -396,7 +396,6 @@ package VX_gpu_pkg;
     localparam INST_SFU_CSRRC =  4'h8;
 `ifdef EXT_DXA_ENABLE
     localparam INST_SFU_DXA =    4'h9;
-    localparam INST_SFU_DXA =    INST_SFU_DXA; // compatibility alias
 `endif
     localparam INST_SFU_BITS =   4;
 
@@ -585,7 +584,6 @@ package VX_gpu_pkg;
         csr_args_t  csr;
         wctl_args_t wctl;
     `ifdef EXT_DXA_ENABLE
-        dxa_args_t  dxa;
         dxa_args_t  dxa;
     `endif
     `ifdef EXT_TCU_ENABLE

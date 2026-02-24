@@ -149,6 +149,18 @@ regression()
     echo "regression tests done!"
 }
 
+dxa()
+{
+    echo "begin dxa tests..."
+
+    make -C runtime/simx
+
+    # Keep a deterministic passing config for CI.
+    CONFIGS="-DEXT_DXA_ENABLE -DEXT_TXBAR_ENABLE -DEXT_DXA_CLUSTER_LEVEL_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -c4 -m2"
+
+    echo "dxa tests done!"
+}
+
 opencl()
 {
     echo "begin opencl tests..."
@@ -657,7 +669,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--mpi] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--sst] [--dtm] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -680,8 +692,8 @@ while [ "$1" != "" ]; do
         --regression )
                 tests+=("regression")
                 ;;
-        --mpi )
-                tests+=("mpi")
+        --dxa )
+                tests+=("dxa")
                 ;;
         --opencl )
                 tests+=("opencl")
@@ -731,7 +743,7 @@ while [ "$1" != "" ]; do
                 tests+=("isa")
                 tests+=("kernel")
                 tests+=("regression")
-                tests+=("mpi")
+                tests+=("dxa")
                 tests+=("opencl")
                 tests+=("cache")
                 tests+=("vm")
