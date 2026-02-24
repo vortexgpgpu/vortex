@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 
+`TRACING_OFF
 // Linear reduction module
 module VX_csa_block #(
     parameter N = 4,
@@ -335,3 +336,4 @@ module VX_csa_tree #(
     assign carry = (get_cnt_at_lev(DEPTH, TOP_N) > 1) ? S'(tree_sig[DEPTH][1]) : '0;
 
 endmodule
+`TRACING_ON

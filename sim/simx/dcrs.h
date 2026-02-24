@@ -36,7 +36,7 @@ private:
   std::array<uint32_t, VX_DCR_BASE_STATE_COUNT> states_;
 };
 
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 class TmaDCRS {
 public:
   struct Descriptor {
@@ -50,8 +50,8 @@ public:
   };
 
   void write(uint32_t addr, uint32_t value) {
-    uint32_t slot = VX_DCR_TMA_DESC_SLOT(addr);
-    uint32_t word = VX_DCR_TMA_DESC_WORD(addr);
+    uint32_t slot = VX_DCR_DXA_DESC_SLOT(addr);
+    uint32_t word = VX_DCR_DXA_DESC_WORD(addr);
     states_.at(slot).at(word) = value;
   }
 
@@ -62,7 +62,7 @@ public:
   Descriptor read_descriptor(uint32_t slot) const;
 
 private:
-  std::array<std::array<uint32_t, VX_DCR_TMA_DESC_STRIDE>, VX_DCR_TMA_DESC_COUNT> states_;
+  std::array<std::array<uint32_t, VX_DCR_DXA_DESC_STRIDE>, VX_DCR_DXA_DESC_COUNT> states_;
 };
 #endif
 
@@ -71,8 +71,8 @@ public:
   void write(uint32_t addr, uint32_t value);
 
   BaseDCRS base_dcrs;
-#ifdef EXT_TMA_ENABLE
-  TmaDCRS tma_dcrs;
+#ifdef EXT_DXA_ENABLE
+  TmaDCRS dxa_dcrs;
 #endif
 };
 

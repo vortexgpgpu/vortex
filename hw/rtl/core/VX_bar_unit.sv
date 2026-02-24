@@ -198,7 +198,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
             end
 `endif
         end else if (tx_valid) begin
-            // transaction marker path from TMA
+            // transaction marker path from DXA
             bar_we_n = 1'b1;
             bar_waddr_n = tx_bar_addr;
             bar_mask_n = tx_mask_cur;

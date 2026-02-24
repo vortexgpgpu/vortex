@@ -29,7 +29,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // inputsdecode_if
     VX_warp_ctl_if.slave    warp_ctl_if,
-`ifdef EXT_TMA_ENABLE
+`ifdef EXT_DXA_ENABLE
     VX_txbar_bus_if.slave   txbar_if,
 `endif
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
@@ -223,7 +223,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 
     // barrier handling
-`ifdef EXT_TMA_ENABLE
+`ifdef EXT_DXA_ENABLE
     wire bar_req_data_valid = warp_ctl_if.valid && warp_ctl_if.barrier.valid;
     wire txbar_fire = txbar_if.valid && txbar_if.ready;
 `endif
@@ -237,7 +237,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .req_valid  (warp_ctl_if.valid),
         .req_wid    (warp_ctl_if.wid),
         .req_data   (warp_ctl_if.barrier),
-    `ifdef EXT_TMA_ENABLE
+    `ifdef EXT_DXA_ENABLE
         .tx_valid   (txbar_fire),
         .tx_bar_addr(txbar_if.data.addr),
         .tx_is_done (txbar_if.data.is_done),
@@ -256,7 +256,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .unlock_mask(barrier_unlock_mask)
     );
 
-`ifdef EXT_TMA_ENABLE
+`ifdef EXT_DXA_ENABLE
     assign txbar_if.ready = ~bar_req_data_valid;
 `endif
 

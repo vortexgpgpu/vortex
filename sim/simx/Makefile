@@ -42,9 +42,9 @@ ifneq ($(filter -DEXT_TCU_ENABLE, $(XCONFIGS)),)
   	SRCS += $(SRC_DIR)/tensor_unit.cpp
 endif
 
-# Add TMA extension sources
-ifneq ($(filter -DEXT_TMA_ENABLE, $(XCONFIGS)),)
-	SRCS += $(SRC_DIR)/tma_engine.cpp
+# Add DXA extension sources
+ifneq ($(filter -DEXT_DXA_ENABLE -DEXT_DXA_ENABLE=%, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/dxa_engine.cpp
 endif
 
 # Debugging

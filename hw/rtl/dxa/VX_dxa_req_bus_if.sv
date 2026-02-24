@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-interface VX_tma_bus_if import VX_gpu_pkg::*; ();
+interface VX_dxa_req_bus_if import VX_gpu_pkg::*, VX_dxa_pkg::*; ();
 
     typedef struct packed {
         logic [NC_WIDTH-1:0]      core_id;

@@ -39,21 +39,21 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_warp_ctl_if.master   warp_ctl_if
-`ifdef EXT_TMA_ENABLE
+`ifdef EXT_DXA_ENABLE
     ,
-    VX_tma_bus_if.master    tma_bus_if,
+    VX_dxa_req_bus_if.master    dxa_req_bus_if,
     VX_txbar_bus_if.master  txbar_if
 `endif
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
     localparam NUM_LANES    = `NUM_SFU_LANES;
-    localparam PE_COUNT     = 2 + `EXT_TMA_ENABLED;
+    localparam PE_COUNT     = 2 + `EXT_DXA_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
-`ifdef EXT_TMA_ENABLE
-    localparam PE_IDX_TMA   = 2;
+`ifdef EXT_DXA_ENABLE
+    localparam PE_IDX_DXA   = 2;
 `endif
 
     VX_execute_if #(
@@ -89,9 +89,9 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         if (inst_sfu_is_csr(per_block_execute_if[0].data.op_type)) begin
             pe_select = PE_IDX_CSRS;
         end
-    `ifdef EXT_TMA_ENABLE
-        if (per_block_execute_if[0].data.op_type == INST_SFU_TMA) begin
-            pe_select = PE_IDX_TMA;
+    `ifdef EXT_DXA_ENABLE
+        if (per_block_execute_if[0].data.op_type == INST_SFU_DXA) begin
+            pe_select = PE_IDX_DXA;
         end
     `endif
     end
@@ -147,17 +147,17 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .result_if      (pe_result_if[PE_IDX_CSRS])
     );
 
-`ifdef EXT_TMA_ENABLE
-    VX_tma_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-tma", INSTANCE_ID))),
+`ifdef EXT_DXA_ENABLE
+    VX_dxa_unit #(
+        .INSTANCE_ID (`SFORMATF(("%s-dxa", INSTANCE_ID))),
         .CORE_ID (CORE_ID),
         .NUM_LANES (NUM_LANES)
-    ) tma_unit (
+    ) dxa_unit (
         .clk        (clk),
         .reset      (reset),
-        .execute_if (pe_execute_if[PE_IDX_TMA]),
-        .result_if  (pe_result_if[PE_IDX_TMA]),
-        .tma_bus_if (tma_bus_if),
+        .execute_if (pe_execute_if[PE_IDX_DXA]),
+        .result_if  (pe_result_if[PE_IDX_DXA]),
+        .dxa_req_bus_if (dxa_req_bus_if),
         .txbar_if   (txbar_if)
     );
 `endif

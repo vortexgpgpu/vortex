@@ -25,7 +25,7 @@
 
 using namespace vortex;
 
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 static inline uint32_t decode_barrier_addr(uint32_t bar_addr_raw, const Arch& arch) {
   uint32_t cta_no = bar_addr_raw & 0xffffu;
   uint32_t bar_no = (bar_addr_raw >> 16) & 0x7fffu;
@@ -372,35 +372,35 @@ void LsuUnit::tick() {
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit(ctx, name, core)
 {
-#ifdef EXT_TMA_ENABLE
-	tma_runtime_.resize(core->arch().num_warps());
+#ifdef EXT_DXA_ENABLE
+	dxa_runtime_.resize(core->arch().num_warps());
 #endif
 }
 
-#ifdef EXT_TMA_ENABLE
-bool SfuUnit::execute_tma_op(instr_trace_t* trace, TmaType tma_type, const TmaTraceData& tma_data) {
-	auto& runtime = tma_runtime_.at(trace->wid);
-	switch (tma_type) {
+#ifdef EXT_DXA_ENABLE
+bool SfuUnit::execute_dxa_op(instr_trace_t* trace, TmaType dxa_type, const TmaTraceData& dxa_data) {
+	auto& runtime = dxa_runtime_.at(trace->wid);
+	switch (dxa_type) {
 	case TmaType::SETUP0:
-		runtime.desc_slot = tma_data.rs1;
-		runtime.bar_id = decode_barrier_addr(tma_data.rs2, core_->arch());
+		runtime.desc_slot = dxa_data.rs1;
+		runtime.bar_id = decode_barrier_addr(dxa_data.rs2, core_->arch());
 		core_->barrier_tx_start(runtime.bar_id);
 		return true;
 	case TmaType::SETUP1:
-		runtime.smem_addr = tma_data.rs1;
-		runtime.flags = tma_data.rs2;
+		runtime.smem_addr = dxa_data.rs1;
+		runtime.flags = dxa_data.rs2;
 		return true;
 	case TmaType::COORD01:
-		runtime.coords[0] = tma_data.rs1;
-		runtime.coords[1] = tma_data.rs2;
+		runtime.coords[0] = dxa_data.rs1;
+		runtime.coords[1] = dxa_data.rs2;
 		return true;
 	case TmaType::COORD23:
-		runtime.coords[2] = tma_data.rs1;
-		runtime.coords[3] = tma_data.rs2;
+		runtime.coords[2] = dxa_data.rs1;
+		runtime.coords[3] = dxa_data.rs2;
 		return true;
 	case TmaType::ISSUE: {
-		runtime.coords[4] = tma_data.rs1;
-		bool accepted = core_->tma_issue(runtime.desc_slot, runtime.smem_addr, runtime.coords.data(), runtime.flags, runtime.bar_id);
+		runtime.coords[4] = dxa_data.rs1;
+		bool accepted = core_->dxa_issue(runtime.desc_slot, runtime.smem_addr, runtime.coords.data(), runtime.flags, runtime.bar_id);
 		return accepted;
 	}
 	default:
@@ -463,16 +463,16 @@ void SfuUnit::tick() {
 				std::abort();
 			}
 			DT(3, this->name() << " execute: op=" << wctl_type << ", " << *trace);
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 		} else if (std::get_if<TmaType>(&trace->op_type)) {
-			auto tma_type = std::get<TmaType>(trace->op_type);
-			auto tma_data = std::dynamic_pointer_cast<TmaTraceData>(trace->data);
-			assert(tma_data);
-			if (!this->execute_tma_op(trace, tma_type, *tma_data)) {
-				continue; // TMA request queue backpressure
+			auto dxa_type = std::get<TmaType>(trace->op_type);
+			auto dxa_data = std::dynamic_pointer_cast<TmaTraceData>(trace->data);
+			assert(dxa_data);
+			if (!this->execute_dxa_op(trace, dxa_type, *dxa_data)) {
+				continue; // DXA request queue backpressure
 			}
 			output.send(trace, 2+delay);
-			DT(3, this->name() << " execute: op=" << tma_type << ", " << *trace);
+			DT(3, this->name() << " execute: op=" << dxa_type << ", " << *trace);
 #endif
 		} else if (std::get_if<CsrType>(&trace->op_type)) {
 			auto csr_type = std::get<CsrType>(trace->op_type);

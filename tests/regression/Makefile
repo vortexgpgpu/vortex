@@ -100,6 +100,8 @@ clean:
 	$(MAKE) -C fence clean
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C sgemm clean
+	$(MAKE) -C sgemm_tcu clean
+	$(MAKE) -C sgemm_tcu_sp clean
 	$(MAKE) -C conv3 clean
 	$(MAKE) -C relu clean
 	$(MAKE) -C sgemv clean

@@ -63,7 +63,7 @@ endif
 ifneq (,$(filter -DTCU_TYPE_TFR, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 TOP := VX_tcu_fedp_tfr
-PARAMS += -GPER_LANE_VALID=1
+PARAMS += -GLANE_MASK=1
 endif
 
 # test fp16

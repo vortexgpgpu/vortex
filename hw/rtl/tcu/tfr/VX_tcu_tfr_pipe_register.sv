@@ -18,7 +18,7 @@ module VX_tcu_tfr_pipe_register #(
     parameter LANE_DATAW   = 1,
     parameter NUM_LANES    = 1,
     parameter DEPTH        = 1,
-    parameter PER_LANE_VALID = 0
+    parameter LANE_MASK    = 0
 ) (
     input wire clk,
     input wire reset,
@@ -34,7 +34,7 @@ module VX_tcu_tfr_pipe_register #(
     output wire [NUM_LANES*LANE_DATAW-1:0] lane_data_out
 );
 
-    if (PER_LANE_VALID == 0) begin : g_merged
+    if (LANE_MASK == 0) begin : g_merged
         VX_pipe_register #(
             .DATAW (SHARED_DATAW + (NUM_LANES * LANE_DATAW)),
             .DEPTH (DEPTH)

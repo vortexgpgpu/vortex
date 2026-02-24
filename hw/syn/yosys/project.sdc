@@ -1,18 +1,45 @@
-# On-chip clock
-create_clock -name clk -period 6.0 [get_ports clk]
-set_clock_uncertainty 0.05 [get_clocks clk]
+set clk_names [list \
+  clk clock clk_i clock_i clk_in clock_in \
+]
 
-# Virtual external clock for I/O timing
-create_clock -name ext_clk -period 6.0
+set reset_names [list \
+  rst rst_i rst_in rst_n_i rst_ni rst_n_in \
+  reset reset_i reset_in reset_n_i reset_ni reset_n_in \
+]
 
-# I/O delays: exclude the clock port from input delays
-set _all_in  [all_inputs]
-set _in_wo_clk {}
-foreach p $_all_in {
-  if {$p ne "clk"} { lappend _in_wo_clk $p }
+set clk_port ""
+foreach n $clk_names {
+  set p [get_ports -quiet $n]
+  if {[sizeof_collection $p] > 0} {
+    set clk_port $p
+    set clk_port_name $n
+    break
+  }
 }
-set_input_delay  0.40 -clock ext_clk $_in_wo_clk
-set_output_delay 0.40 -clock ext_clk [all_outputs]
 
-# Optional: treat async reset as false path (uncomment if desired)
-# set_false_path -from [get_ports reset_n]
+if {$clk_port eq ""} {
+  puts "ERROR: No clock port found. Tried: $clk_names"
+  exit 1
+}
+
+puts "INFO: Using clock port: $clk_port_name"
+
+create_clock -name clk -period $target_period $clk_port
+set_clock_uncertainty $target_uncertainty [get_clocks clk]
+
+# Virtual Clock (for I/O)
+create_clock -name ext_clk -period $target_period
+
+# I/O Delays
+set in_ports [remove_from_collection [all_inputs] [get_ports $clk_port]]
+set_input_delay  $target_io_delay -clock ext_clk $in_ports
+set_output_delay $target_io_delay -clock ext_clk [all_outputs]
+
+# Prevent synthesis from trying to buffer the global reset tree
+set rst_ports [get_ports -quiet $reset_names]
+if {[sizeof_collection $rst_ports] > 0} {
+  puts "INFO: Found reset ports: [get_object_name $rst_ports]"
+  set_ideal_network $rst_ports
+} else {
+  puts "WARNING: No reset ports found matching your list."
+}

@@ -15,7 +15,7 @@
 
 module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter PER_LANE_VALID = 0,
+    parameter LANE_MASK = 0,
     parameter LATENCY = 0,
     parameter N = 2,
     parameter W = 25
@@ -64,7 +64,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     reg [TOTAL_LATENCY-1:0][31:0] req_pipe_r;
     reg [31:0] req_id;
 
-    wire vld_any = (|vld_mask) && (PER_LANE_VALID != 0);
+    wire vld_any = (|vld_mask) && (LANE_MASK != 0);
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -112,7 +112,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .clk(clk),
         .valid_in(vld_pipe[S0_IDX]),
         .req_id(req_pipe[S0_IDX]),
-        .vld_mask(vld_mask | TCU_MAX_INPUTS'(PER_LANE_VALID == 0)),
+        .vld_mask(vld_mask | TCU_MAX_INPUTS'(LANE_MASK == 0)),
         .fmt_s(fmt_s),
         .a_row(a_row),
         .b_col(b_col),
@@ -139,18 +139,18 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     `MAP_AOS_SOA(i, TCK, s1_raw_sig[i], pipe_mul_lane_dout[i])
 
     VX_tcu_tfr_pipe_register #(
-        .NUM_LANES      (TCK),
-        .SHARED_DATAW   (EXP_W + ((TCK+1)*EXP_W) + EXC_W + TCK + W + C_HI_W + 1),
-        .LANE_DATAW     (W),
-        .DEPTH          (MUL_LATENCY),
-        .PER_LANE_VALID (PER_LANE_VALID)
+        .NUM_LANES  (TCK),
+        .SHARED_DATAW(EXP_W + ((TCK+1)*EXP_W) + EXC_W + TCK + W + C_HI_W + 1),
+        .LANE_DATAW (W),
+        .DEPTH      (MUL_LATENCY),
+        .LANE_MASK  (LANE_MASK)
     ) pipe_mul (
         .clk(clk),
         .reset(reset),
         .enable(enable),
         .lane_mask (lane_mask),
-        .shared_data_in ({max_exp,    exponents,    exceptions,    lane_mask,    raw_sigs[TCK],    cval_hi,    is_int}),
-        .shared_data_out({s1_max_exp, s1_exponents, s1_exceptions, s1_lane_mask, s1_raw_sig[TCK],  s1_cval_hi, s1_is_int}),
+        .shared_data_in ({max_exp,    exponents,    exceptions,    lane_mask,    raw_sigs[TCK],   cval_hi,    is_int}),
+        .shared_data_out({s1_max_exp, s1_exponents, s1_exceptions, s1_lane_mask, s1_raw_sig[TCK], s1_cval_hi, s1_is_int}),
         .lane_data_in (pipe_mul_lane_din),
         .lane_data_out(pipe_mul_lane_dout)
     );
@@ -192,11 +192,11 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     `MAP_AOS_SOA(i, TCK, {s2_aln_sigs[i], s2_aln_sticky[i]}, pipe_aln_lane_dout[i])
 
     VX_tcu_tfr_pipe_register #(
-        .NUM_LANES      (TCK),
-        .SHARED_DATAW   (EXP_W + EXC_W + TCK + ALN_SIG_W + 1 + C_HI_W + 1),
-        .LANE_DATAW     (ALN_SIG_W + 1),
-        .DEPTH          (ALN_LATENCY),
-        .PER_LANE_VALID (PER_LANE_VALID)
+        .NUM_LANES  (TCK),
+        .SHARED_DATAW(EXP_W + EXC_W + TCK + ALN_SIG_W + 1 + C_HI_W + 1),
+        .LANE_DATAW (ALN_SIG_W + 1),
+        .DEPTH      (ALN_LATENCY),
+        .LANE_MASK  (LANE_MASK)
     ) pipe_aln (
         .clk(clk),
         .reset(reset),

@@ -6,7 +6,8 @@ namespace vt = vortex::tensor;
 using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
-  auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
+  auto pA_comp = reinterpret_cast<ctx::input_t *>(arg->A_comp_addr);
+  auto pA_meta = reinterpret_cast<const uint8_t *>(arg->A_meta_addr);
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
 
@@ -14,7 +15,7 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 
-  ctx::fragment_a   fragA;
+  ctx::fragment_a_sp fragA_comp;
   ctx::fragment_b   fragB;
   ctx::fragment_acc fragC;
 
@@ -26,10 +27,11 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   ctx::fill_fragment(fragC, 0);
 
   for (int i = 0; i < K; i += ctx::tileK) {
-    auto pTileA = pA + tile_row * K + i;
+    auto pTileA_comp = pA_comp + tile_row * (K / 2) + (i / 2);
+    auto pTileA_meta = pA_meta + tile_row * (K / 4) + (i / 4);
 
-    // Load A tile
-    ctx::load_matrix_sync(fragA, pTileA, K);
+    // Load A tile (2:4 compressed, row-major)
+    ctx::load_matrix_sync_sparse_a(fragA_comp, pTileA_comp, K / 2);
 
     // Load B tile
     if constexpr (vt::ITYPE::bits < 8) {
@@ -38,11 +40,11 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
       ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
     } else {
       auto pTileB = pB + i * N + tile_col;
-      ctx::load_matrix_sync(fragB, pTileB, N);
+      ctx::load_matrix_sync_sparse_b(fragB, pTileB, N);
     }
 
     // Matrix multiply-accumulate: c += a * b
-    ctx::mma_sync(fragC, fragA, fragB, fragC);
+    ctx::mma_sp_sync(fragC, fragA_comp, fragB, fragC, pTileA_meta);
   }
 
   // Store the computed C tile

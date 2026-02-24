@@ -64,7 +64,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     end
 `endif
 
-    localparam CLUSTER_MEM_TAG_WIDTH = (`EXT_TMA_CLUSTER_LEVEL_ENABLED ? L3_TAG_WIDTH : L2_MEM_TAG_WIDTH);
+    localparam CLUSTER_MEM_TAG_WIDTH = (`EXT_DXA_CLUSTER_LEVEL_ENABLED ? L3_TAG_WIDTH : L2_MEM_TAG_WIDTH);
 
     VX_mem_bus_if #(
         .DATA_SIZE (`L2_LINE_SIZE),

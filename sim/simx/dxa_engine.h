@@ -13,7 +13,7 @@
 
 #pragma once
 
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 
 #include <array>
 #include <deque>
@@ -23,7 +23,7 @@ namespace vortex {
 
 class Core;
 
-// Cycle-model TMA engine for simx.
+// Cycle-model DXA engine for simx.
 // Issue path enqueues requests and completion notifies barrier only when
 // modeled transfer latency elapses.
 class TmaEngine {
@@ -71,4 +71,4 @@ private:
 
 } // namespace vortex
 
-#endif // EXT_TMA_ENABLE
+#endif // EXT_DXA_ENABLE

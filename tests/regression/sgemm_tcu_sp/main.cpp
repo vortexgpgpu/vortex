@@ -14,6 +14,10 @@
 #define FLOAT_ULP 6
 #define MAX_ERRORS 100
 
+#ifndef SGEMM_TCU_SP_FIXED_MASK_MODE
+#define SGEMM_TCU_SP_FIXED_MASK_MODE 1
+#endif
+
 #define RT_CHECK(_expr)                                      \
   do {                                                       \
     int _ret = _expr;                                        \
@@ -809,7 +813,10 @@ int main(int argc, char *argv[]) {
 
   // generate source data
   std::vector<itype_t> h_A(sizeA);
+#if !SGEMM_TCU_SP_FIXED_MASK_MODE
   std::vector<itype_t> h_A_pruned(sizeA);
+#endif
+  std::vector<itype_t> h_A_sparse_ref(sizeA, itype_t(0));
   std::vector<itype_t> h_A_comp(sizeA_comp);
   std::vector<uint8_t> h_A_meta(sizeA_meta);
   std::vector<itype_t> h_B(sizeB);
@@ -820,6 +827,26 @@ int main(int argc, char *argv[]) {
   for (uint32_t i = 0; i < sizeB; ++i) {
     h_B[i] = generate_B_value<vt::ITYPE>();
   }
+
+#if SGEMM_TCU_SP_FIXED_MASK_MODE
+  // Fixed-mask sparse path: metadata is always 0b1001 for each 4-element K group.
+  // Keep A[k+0] and A[k+3] in compressed storage and zero-out the dropped lanes
+  // in the CPU reference matrix used for validation.
+  for (uint32_t row = 0; row < M; ++row) {
+    for (uint32_t k = 0; k < K; k += 4) {
+      const uint32_t a_base = row * K + k;
+      const uint32_t c_base = row * (K / 2) + (k / 2);
+      const uint32_t m_idx = row * (K / 4) + (k / 4);
+
+      h_A_comp[c_base + 0] = h_A[a_base + 0];
+      h_A_comp[c_base + 1] = h_A[a_base + 3];
+      h_A_meta[m_idx] = 0x9;
+
+      h_A_sparse_ref[a_base + 0] = h_A[a_base + 0];
+      h_A_sparse_ref[a_base + 3] = h_A[a_base + 3];
+    }
+  }
+#else
   // prune and compress matrix A to sparse format
   {
     const uint32_t ldA = K;
@@ -843,8 +870,10 @@ int main(int argc, char *argv[]) {
       std::cerr << "compress_2to4_matrix failed (expects 2:4 pruned input)" << std::endl;
       return -1;
     }
+    h_A_sparse_ref = h_A_pruned;
   }
-  
+#endif
+
   // upload matrix A buffer
   {
 // upload matrix A compressed buffers
@@ -900,7 +929,7 @@ int main(int argc, char *argv[]) {
   int errors = 0;
   {
     std::vector<otype_t> h_ref(sizeC);
-    matmul_cpu(h_ref.data(), h_A_pruned.data(), h_B.data(), M, N, K);
+    matmul_cpu(h_ref.data(), h_A_sparse_ref.data(), h_B.data(), M, N, K);
 
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
       if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, errors)) {

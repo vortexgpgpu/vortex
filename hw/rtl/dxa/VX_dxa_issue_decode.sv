@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 /* verilator lint_off UNUSEDSIGNAL */
-module VX_tma_issue_decode import VX_gpu_pkg::*; #(
+module VX_dxa_issue_decode import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter GMEM_BYTES = `L2_LINE_SIZE,
     parameter SMEM_BYTES = LSU_WORD_SIZE
 ) (
@@ -25,12 +25,12 @@ module VX_tma_issue_decode import VX_gpu_pkg::*; #(
     input wire [31:0] issue_size1_raw,
     input wire [31:0] issue_stride0_raw,
 
-    output wire tma_issue_dec_t issue_dec
+    output wire dxa_issue_dec_t issue_dec
 );
-    wire [`VX_TMA_DESC_META_ELEMSZ_BITS-1:0] issue_desc_esize_enc =
-        issue_desc_meta[`VX_TMA_DESC_META_ELEMSZ_LSB +: `VX_TMA_DESC_META_ELEMSZ_BITS];
-    wire [`VX_TMA_DESC_META_DIM_BITS-1:0] issue_rank_raw =
-        issue_desc_meta[`VX_TMA_DESC_META_DIM_LSB +: `VX_TMA_DESC_META_DIM_BITS];
+    wire [`VX_DXA_DESC_META_ELEMSZ_BITS-1:0] issue_desc_esize_enc =
+        issue_desc_meta[`VX_DXA_DESC_META_ELEMSZ_LSB +: `VX_DXA_DESC_META_ELEMSZ_BITS];
+    wire [`VX_DXA_DESC_META_DIM_BITS-1:0] issue_rank_raw =
+        issue_desc_meta[`VX_DXA_DESC_META_DIM_LSB +: `VX_DXA_DESC_META_DIM_BITS];
 
     wire [31:0] issue_rank_w = (issue_rank_raw == 0) ? 32'd1
                              : (issue_rank_raw > 5) ? 32'd5

@@ -154,6 +154,7 @@ public:
   static constexpr uint32_t tileK = cfg::tileK * i_ratio;
 
   using fragment_a   = fragment_t<matrix_a, input_t, cfg::NRA>;
+  using fragment_a_sp = fragment_t<matrix_a, input_t, cfg::NRA>;
   using fragment_b   = fragment_t<matrix_b, input_t, cfg::NRB>;
   using fragment_acc = fragment_t<accumulator, output_t, cfg::NRC>;
 
@@ -343,6 +344,78 @@ public:
         }
       });
     }
+  }
+
+  template <typename Frag>
+  static __attribute__((always_inline)) void load_matrix_sync_sparse_a(Frag &dst, const void *src, size_t ldm_compressed) {
+    static_assert(Frag::Use == matrix_a, "sparse A loader expects matrix_a");
+    static_assert(cfg::tcK % 2 == 0, "tcK must be even for 2:4");
+    static_assert(Frag::NR == cfg::NRA, "sparse A fragment must match dense NRA register schedule");
+
+    constexpr uint32_t tcK_sp = cfg::tcK / 2;
+    constexpr uint32_t m_stride = cfg::a_sub_blocks * cfg::tcM;
+    constexpr uint32_t k_stride = tcK_sp * i_ratio;
+
+    uint32_t lane = vx_thread_id();
+    uint32_t block_idx = (cfg::a_block_size == NT) ? 0 : (lane / cfg::a_block_size);
+    uint32_t lane_in_blk = (cfg::a_block_size == NT) ? lane : (lane % cfg::a_block_size);
+    uint32_t block_row = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcM);
+    uint32_t block_col = (lane_in_blk % cfg::tcK) * i_ratio;
+    auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm_compressed + block_col;
+    detail::unroll_for<Frag::NR>([&](auto r) {
+      uint32_t block_m  = r / cfg::k_steps;
+      uint32_t block_k  = r % cfg::k_steps;
+      uint32_t elem_row = block_m * m_stride;
+      uint32_t elem_col = block_k * k_stride;
+      auto ptr = base + elem_row * ldm_compressed + elem_col;
+      assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+      dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+    });
+  }
+
+  template <mem_layout src_layout = row_major, typename Frag>
+  static __attribute__((always_inline)) void load_matrix_sync_sparse_b(Frag &dst, const void *src, size_t ldm) {
+    static_assert(Frag::Use == matrix_b, "sparse B loader expects matrix_b");
+    static_assert(cfg::tcK % 2 == 0, "tcK must be even for 2:4");
+    constexpr uint32_t kCompression = 2;
+    constexpr uint32_t tcK_dense = cfg::tcK * kCompression;
+    constexpr uint32_t b_block_size_sp = tcK_dense * cfg::tcN;
+    static_assert((NT % b_block_size_sp) == 0, "NT must be divisible by sparse B block size");
+    constexpr uint32_t b_sub_blocks_sp = NT / b_block_size_sp;
+    static_assert((cfg::n_steps % b_sub_blocks_sp) == 0, "n_steps must be divisible by sparse b_sub_blocks");
+    constexpr uint32_t b_sub_steps_sp = cfg::n_steps / b_sub_blocks_sp;
+    constexpr uint32_t n_stride = b_sub_blocks_sp * cfg::tcN;
+    constexpr uint32_t k_stride = tcK_dense * i_ratio;
+
+    uint32_t lane = vx_thread_id();
+    uint32_t block_idx = (b_block_size_sp == NT) ? 0 : (lane / b_block_size_sp);
+    uint32_t lane_in_blk = (b_block_size_sp == NT) ? lane : (lane % b_block_size_sp);
+    uint32_t block_col = (lane_in_blk / tcK_dense) + (block_idx * cfg::tcN);
+    uint32_t block_row = (lane_in_blk % tcK_dense) * i_ratio;
+    if constexpr (src_layout == col_major) {
+      std::swap(block_row, block_col);
+    }
+    auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
+    detail::unroll_for<Frag::NR>([&](auto r) {
+      uint32_t block_k = r / b_sub_steps_sp;
+      uint32_t block_n = r % b_sub_steps_sp;
+      uint32_t elem_row = block_k * k_stride;
+      uint32_t elem_col = block_n * n_stride;
+      if constexpr (src_layout == row_major) {
+        static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte sparse matrix_b");
+        auto ptr = base + elem_row * ldm + elem_col;
+        if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
+          dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+        } else {
+          dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
+        }
+      } else {
+        std::swap(elem_row, elem_col);
+        auto ptr = base + elem_row * ldm + elem_col;
+        assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+        dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+      }
+    });
   }
 
   template <mem_layout dst_layout = row_major, typename Frag>

@@ -107,9 +107,9 @@ public:
 
 	void tick() override;
 
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 private:
-  struct tma_runtime_t {
+  struct dxa_runtime_t {
     uint32_t desc_slot = 0;
     uint32_t bar_id = 0;
     uint32_t smem_addr = 0;
@@ -117,9 +117,9 @@ private:
     std::array<uint32_t, 5> coords = {0, 0, 0, 0, 0};
   };
 
-  bool execute_tma_op(instr_trace_t* trace, TmaType tma_type, const TmaTraceData& tma_data);
+  bool execute_dxa_op(instr_trace_t* trace, TmaType dxa_type, const TmaTraceData& dxa_data);
 
-  std::vector<tma_runtime_t> tma_runtime_;
+  std::vector<dxa_runtime_t> dxa_runtime_;
 #endif
 };
 

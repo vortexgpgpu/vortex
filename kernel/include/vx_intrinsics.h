@@ -238,12 +238,11 @@ inline uint64_t vx_cycle_count() {
 #endif
 }
 
-// Return current cycle counter with a dependency on a floating-point source value.
-inline uint64_t vx_cycle_count_fdep(float dep_src) {
+// Fake a dependency on a floating-point register, to prevent cycle counter read before instruction commit.
+inline void vx_create_freg_dep(float dep_src) {
     size_t dep_gpr;
     __asm__ __volatile__ ("fmv.x.w %0, %1" : "=r" (dep_gpr) : "f" (dep_src) : "memory");
     __asm__ __volatile__ ("" : "+r" (dep_gpr) :: "memory");
-    return vx_cycle_count();
 }
 
 // Memory fence

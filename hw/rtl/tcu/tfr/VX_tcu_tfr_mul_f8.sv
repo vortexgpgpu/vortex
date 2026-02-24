@@ -13,7 +13,8 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*; #(
+module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
+#(
     parameter `STRING INSTANCE_ID = "",
     parameter N     = 2,
     parameter TCK   = 2 * N,
@@ -42,26 +43,12 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*; #(
     `UNUSED_VAR (vld_mask)
 
     // ======================================================================
-    // 1. Internal Classification (Replicated Logic)
-    // ======================================================================
-
-    fedp_class_t [2*TCK-1:0] cls_fp8 [2];
-    fedp_class_t [2*TCK-1:0] cls_bf8 [2];
-
-    VX_tcu_tfr_classifier #(.N(4*N), .WIDTH(8), .FMT(TCU_FP8_ID)) c_a_fp8 (.val(a_row), .cls(cls_fp8[0]));
-    VX_tcu_tfr_classifier #(.N(4*N), .WIDTH(8), .FMT(TCU_FP8_ID)) c_b_fp8 (.val(b_col), .cls(cls_fp8[1]));
-
-    VX_tcu_tfr_classifier #(.N(4*N), .WIDTH(8), .FMT(TCU_BF8_ID)) c_a_bf8 (.val(a_row), .cls(cls_bf8[0]));
-    VX_tcu_tfr_classifier #(.N(4*N), .WIDTH(8), .FMT(TCU_BF8_ID)) c_b_bf8 (.val(b_col), .cls(cls_bf8[1]));
-
-    // ======================================================================
-    // 2. Constants & Parameters
+    // 1. Constants & Parameters
     // ======================================================================
 
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
     localparam S_SUPER   = 22;
-
     // adding +128 to bias base to ensure BIAS in [0..255] range
     // f8 lanes need 2*ALIGN_SHIFT (one per sub-product) unlike f16 which needs 1x
     localparam BIAS_BASE = F32_BIAS + 2*(S_FP32 - S_SUPER) - W + WA - 1 + 128;
@@ -79,7 +66,7 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*; #(
     wire is_bfloat = tcu_fmt_is_bfloat(fmt_f);
 
     // ======================================================================
-    // 3. Main Loop (Per TCK Lane)
+    // 2. Main Loop (Per TCK Lane)
     // ======================================================================
 
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
@@ -89,81 +76,103 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*; #(
         wire [1:0] lane_valid = {vld_mask[i * 4 + 2], vld_mask[i * 4 + 0]};
 
         // ------------------------------------------------------------------
-        // 3a. Pre-Calculation (Extraction outside always_comb)
+        // 2a. Pre-Calculation & Inline Classification
         // ------------------------------------------------------------------
 
-        wire [1:0][4:0] ea_fp8, eb_fp8;
-        wire [1:0][4:0] ea_bf8, eb_bf8;
-
-        wire [1:0][3:0] ma_fp8, mb_fp8;
-        wire [1:0][3:0] ma_bf8, mb_bf8;
-
-        wire [1:0]      zero_fp8, sign_fp8, nan_fp8, inf_fp8;
-        wire [1:0]      zero_bf8, sign_bf8, nan_bf8, inf_bf8;
+        wire [1:0][4:0] ea_sel, eb_sel;
+        wire [1:0][3:0] ma_sel, mb_sel;
+        wire [1:0]      zero_sel, sign_sel, nan_sel, inf_sel;
 
         for (genvar j = 0; j < 2; ++j) begin : g_extract
-            localparam idx = 2 * i + j;
             localparam OFF = (i % 2) * 16 + j * 8;
 
             wire [7:0] raw_a = a_row[i/2][OFF +: 8];
             wire [7:0] raw_b = b_col[i/2][OFF +: 8];
-            `UNUSED_VAR ({raw_a, raw_b})
 
-            // --- FP8 Logic ---
-            assign ea_fp8[j] = cls_fp8[0][idx].is_sub ? 5'b1 : 5'(a_row[i/2][S_FP8-1+OFF -: E_FP8]);
-            assign eb_fp8[j] = cls_fp8[1][idx].is_sub ? 5'b1 : 5'(b_col[i/2][S_FP8-1+OFF -: E_FP8]);
-            assign zero_fp8[j] = cls_fp8[0][idx].is_zero | cls_fp8[1][idx].is_zero;
+            logic [4:0] raw_ea, raw_eb;
+            logic [2:0] raw_ma, raw_mb;
+            logic       raw_sa, raw_sb;
+            logic [4:0] exp_max;
 
-            assign ma_fp8[j] = cls_fp8[0][idx].is_zero ? 4'b0 : {!cls_fp8[0][idx].is_sub, raw_a[2:0]};
-            assign mb_fp8[j] = cls_fp8[1][idx].is_zero ? 4'b0 : {!cls_fp8[1][idx].is_sub, raw_b[2:0]};
-            assign sign_fp8[j] = cls_fp8[0][idx].sign ^ cls_fp8[1][idx].sign;
+            always_comb begin
+                if (is_bfloat) begin // TCU_BF8_ID (E5M2)
+                    raw_ea  = 5'(raw_a[S_BF8-1 -: E_BF8]);
+                    raw_eb  = 5'(raw_b[S_BF8-1 -: E_BF8]);
+                    raw_ma  = {raw_a[1:0], 1'b0};
+                    raw_mb  = {raw_b[1:0], 1'b0};
+                    raw_sa  = raw_a[7];
+                    raw_sb  = raw_b[7];
+                    exp_max = 5'h1F;
+                end else begin       // TCU_FP8_ID (E4M3)
+                    raw_ea  = 5'(raw_a[S_FP8-1 -: E_FP8]);
+                    raw_eb  = 5'(raw_b[S_FP8-1 -: E_FP8]);
+                    raw_ma  = raw_a[2:0];
+                    raw_mb  = raw_b[2:0];
+                    raw_sa  = raw_a[7];
+                    raw_sb  = raw_b[7];
+                    exp_max = 5'h0F;
+                end
+            end
 
-            wire nan_in_fp8 = cls_fp8[0][idx].is_nan | cls_fp8[1][idx].is_nan;
-            wire inf_z_fp8  = (cls_fp8[0][idx].is_inf & cls_fp8[1][idx].is_zero) |
-                              (cls_fp8[0][idx].is_zero & cls_fp8[1][idx].is_inf);
-            wire inf_op_fp8 = cls_fp8[0][idx].is_inf | cls_fp8[1][idx].is_inf;
+            // Generic Classifier Logic
 
-            assign nan_fp8[j]  = nan_in_fp8 | inf_z_fp8;
-            assign inf_fp8[j]  = inf_op_fp8 & ~inf_z_fp8;
+            fedp_class_t cls_a;
+            VX_tcu_tfr_classifier #(
+                .EXP_W (5),
+                .MAN_W (3)
+            ) class_a (
+                .exp (raw_ea),
+                .man (raw_ma),
+                .max_exp (exp_max),
+                .cls (cls_a)
+            );
 
-            // --- BF8 Logic ---
-            assign ea_bf8[j] = cls_bf8[0][idx].is_sub ? 5'b1 : 5'(a_row[i/2][S_BF8-1+OFF -: E_BF8]);
-            assign eb_bf8[j] = cls_bf8[1][idx].is_sub ? 5'b1 : 5'(b_col[i/2][S_BF8-1+OFF -: E_BF8]);
-            assign zero_bf8[j] = cls_bf8[0][idx].is_zero | cls_bf8[1][idx].is_zero;
+            fedp_class_t cls_b;
+            VX_tcu_tfr_classifier #(
+                .EXP_W (5),
+                .MAN_W (3)
+            ) class_b (
+                .exp (raw_eb),
+                .man (raw_mb),
+                .max_exp (exp_max),
+                .cls (cls_b)
+            );
 
-            assign ma_bf8[j] = cls_bf8[0][idx].is_zero ? 4'b0 : {1'b0, !cls_bf8[0][idx].is_sub, raw_a[1:0]};
-            assign mb_bf8[j] = cls_bf8[1][idx].is_zero ? 4'b0 : {1'b0, !cls_bf8[1][idx].is_sub, raw_b[1:0]};
-            assign sign_bf8[j] = cls_bf8[0][idx].sign ^ cls_bf8[1][idx].sign;
+            // Select normalized exponents (force subnormals to 1)
+            assign ea_sel[j] = cls_a.is_sub ? 5'b1 : raw_ea;
+            assign eb_sel[j] = cls_b.is_sub ? 5'b1 : raw_eb;
 
-            wire nan_in_bf8 = cls_bf8[0][idx].is_nan | cls_bf8[1][idx].is_nan;
-            wire inf_z_bf8  = (cls_bf8[0][idx].is_inf & cls_bf8[1][idx].is_zero) |
-                              (cls_bf8[0][idx].is_zero & cls_bf8[1][idx].is_inf);
-            wire inf_op_bf8 = cls_bf8[0][idx].is_inf | cls_bf8[1][idx].is_inf;
+            // Select normalized mantissas (append implicit bit, force 0 if zero/subnormal)
+            assign ma_sel[j] = {!cls_a.is_sub && !cls_a.is_zero, raw_ma};
+            assign mb_sel[j] = {!cls_b.is_sub && !cls_b.is_zero, raw_mb};
 
-            assign nan_bf8[j]  = nan_in_bf8 | inf_z_bf8;
-            assign inf_bf8[j]  = inf_op_bf8 & ~inf_z_bf8;
+            assign sign_sel[j] = raw_sa ^ raw_sb;
+            assign zero_sel[j] = cls_a.is_zero | cls_b.is_zero;
+
+            // Exception resolution
+            wire a_is_inf = is_bfloat ? cls_a.is_inf : 1'b0;
+            wire b_is_inf = is_bfloat ? cls_b.is_inf : 1'b0;
+            wire a_is_nan = is_bfloat ? cls_a.is_nan : (raw_ea == 5'h0F) && (raw_ma == 3'b111);
+            wire b_is_nan = is_bfloat ? cls_b.is_nan : (raw_eb == 5'h0F) && (raw_mb == 3'b111);
+
+            wire nan_in = a_is_nan | b_is_nan;
+            wire inf_z  = (a_is_inf & cls_b.is_zero) | (cls_a.is_zero & b_is_inf);
+            wire inf_op = a_is_inf | b_is_inf;
+
+            assign nan_sel[j] = nan_in | inf_z;
+            assign inf_sel[j] = inf_op & ~inf_z;
         end
 
         // ------------------------------------------------------------------
-        // 3b. Muxing
+        // 2b. Exponents Addition
         // ------------------------------------------------------------------
 
-        wire [1:0][4:0] ea_sel = is_bfloat ? ea_bf8 : ea_fp8;
-        wire [1:0][4:0] eb_sel = is_bfloat ? eb_bf8 : eb_fp8;
-        wire [1:0][3:0] ma_sel = is_bfloat ? ma_bf8 : ma_fp8;
-        wire [1:0][3:0] mb_sel = is_bfloat ? mb_bf8 : mb_fp8;
-        wire [7:0]    bias_sel = is_bfloat ? BIAS_CONST_BF8 : BIAS_CONST_FP8;
-        wire [1:0]    zero_sel = is_bfloat ? zero_bf8 : zero_fp8;
-        wire [1:0]    sign_sel = is_bfloat ? sign_bf8 : sign_fp8;
-        wire [1:0]     nan_sel = is_bfloat ? nan_bf8 : nan_fp8;
-        wire [1:0]     inf_sel = is_bfloat ? inf_bf8 : inf_fp8;
-
-        // Calculate Pre-Sums (Exponent A + Exponent B)
         wire [5:0] pre_sum_0, pre_sum_1;
+
         VX_ks_adder #(
             .N(6),
-            .BYPASS(`FORCE_BUILTIN_ADDER(6)))
-        exp_add1_0 (
+            .BYPASS(`FORCE_BUILTIN_ADDER(6))
+        ) exp_add1_0 (
             .dataa(6'(ea_sel[0])),
             .datab(6'(eb_sel[0])),
             .cin(1'b0),
@@ -182,14 +191,18 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*; #(
             `UNUSED_PIN(cout)
         );
 
-        // Select max/min term using per-element validity.
+        // Select max/min term
+
         wire v0 = ~zero_sel[0] && lane_valid[0];
         wire v1 = ~zero_sel[1] && lane_valid[1];
+
         wire term0_is_max = (v0 & ~v1) || (pre_sum_0 >= pre_sum_1);
         wire diff_sign = term0_is_max;
 
         wire [5:0] max_pre_sum = term0_is_max ? pre_sum_0 : pre_sum_1;
         wire [5:0] min_pre_sum = term0_is_max ? pre_sum_1 : pre_sum_0;
+
+        wire [7:0] bias_sel = is_bfloat ? BIAS_CONST_BF8 : BIAS_CONST_FP8;
 
         wire [EXP_W-1:0] final_exp;
         VX_ks_adder #(
@@ -203,14 +216,12 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*; #(
             `UNUSED_PIN(cout)
         );
 
-        // Exponent is meaningful only if lane has at least one valid contributing element.
-        assign result_exp[i] = (v0 || v1) ? final_exp : '0;
-
         // ------------------------------------------------------------------
-        // 3c. Mantissa Multiplication
+        // 2c. Mantissa Multiplication
         // ------------------------------------------------------------------
 
         wire [1:0][7:0] man_prod;
+
         for (genvar j = 0; j < 2; ++j) begin : g_mul
             VX_wallace_mul #(
                 .N(4),
@@ -223,7 +234,7 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*; #(
         end
 
         // ------------------------------------------------------------------
-        // 3d. Alignment & Reduction
+        // 2d. Alignment & Reduction
         // ------------------------------------------------------------------
 
         wire [5:0] diff_abs;
@@ -241,53 +252,59 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*; #(
         wire [7:0] man_prod0_v = man_prod[0] & {8{lane_valid[0]}};
         wire [7:0] man_prod1_v = man_prod[1] & {8{lane_valid[1]}};
 
-        // BF8 (E5M2) products use only 6 significant bits [5:0];
-        // pad left by 2 to align MSB with FP8 (E4M3) products.
-        wire [7:0] padded_prod0 = is_bfloat ? {man_prod0_v[5:0], 2'b0} : man_prod0_v;
-        wire [7:0] padded_prod1 = is_bfloat ? {man_prod1_v[5:0], 2'b0} : man_prod1_v;
+        // Pad to 24 bits (8-bit product + 16-bit static padding)
+        wire [23:0] sig_low  = {man_prod0_v, 16'b0};
+        wire [23:0] sig_high = {man_prod1_v, 16'b0};
 
-        wire [22:0] sig_low  = {padded_prod0, 15'b0};
-        wire [22:0] sig_high = {padded_prod1, 15'b0};
-
-        // Prevent shift wrap when exponent diff >= 32:
-        // diff_abs[5] indicates diff >= 32 (since diff_abs is 6-bit).
-        // For such large diffs the smaller term is effectively zero.
+        // Single Barrel Shifter
         wire diff_ge_32 = diff_abs[5];
         wire [4:0] shamt = diff_abs[4:0];
-        wire [22:0] aligned_sig_low  = diff_sign ? sig_low : (diff_ge_32 ? 23'b0 : (sig_low >> shamt));
-        wire [22:0] aligned_sig_high = diff_sign ? (diff_ge_32 ? 23'b0 : (sig_high >> shamt)) : sig_high;
+        wire [23:0] aligned_sig_low  = diff_sign ? sig_low : (diff_ge_32 ? 24'b0 : (sig_low >> shamt));
+        wire [23:0] aligned_sig_high = diff_sign ? (diff_ge_32 ? 24'b0 : (sig_high >> shamt)) : sig_high;
 
         // ------------------------------------------------------------------
-        // 3e. Absolute Difference / Addition
+        // 2e. Absolute Difference / Addition
         // ------------------------------------------------------------------
-        wire [23:0] mag_0 = {1'b0, aligned_sig_low};
-        wire [23:0] mag_1 = {1'b0, aligned_sig_high};
+
+        // Fast magnitude sorting after alignment prevents underflow
+        wire [24:0] mag_0 = {1'b0, aligned_sig_low};
+        wire [24:0] mag_1 = {1'b0, aligned_sig_high};
         wire mag_0_is_larger = (mag_0 > mag_1);
 
-        wire [23:0] op_a = mag_0_is_larger ? mag_0 : mag_1;
-        wire [23:0] op_b = mag_0_is_larger ? mag_1 : mag_0;
+        wire [24:0] op_a = mag_0_is_larger ? mag_0 : mag_1;
+        wire [24:0] op_b = mag_0_is_larger ? mag_1 : mag_0;
 
         wire do_sub = sign_sel[0] ^ sign_sel[1];
+        wire [24:0] sig_add_raw;
 
-        wire [23:0] sig_add;
         VX_ks_adder #(
-            .N(24),
-            .BYPASS(`FORCE_BUILTIN_ADDER(24))
+            .N(25),
+            .BYPASS(`FORCE_BUILTIN_ADDER(25))
         ) sig_adder_f8 (
             .cin(do_sub),
             .dataa(op_a),
             .datab(do_sub ? ~op_b : op_b),
-            .sum(sig_add),
+            .sum(sig_add_raw),
             `UNUSED_PIN(cout)
         );
 
+        // scaling by 1 to avoid renormalization
+        wire [23:0] sig_add = sig_add_raw[24:1];
+        `UNUSED_VAR (sig_add_raw[0])
+
+        // Identify exact cancellation
+        wire mag_is_equal = (aligned_sig_low == aligned_sig_high);
+        wire is_zero_out = do_sub && mag_is_equal;
+
         // Force +0 on exact cancellation
         wire sig_sign_raw = mag_0_is_larger ? sign_sel[0] : sign_sel[1];
-        wire sig_sign = (sig_add == 24'b0) ? 1'b0 : sig_sign_raw;
+        wire sig_sign = is_zero_out ? 1'b0 : sig_sign_raw;
+
         assign result_sig[i] = {sig_sign, sig_add};
+        assign result_exp[i] = ((v0 || v1) && !is_zero_out) ? final_exp : '0;
 
         // ------------------------------------------------------------------
-        // 3f. Exception Merging (Merge 2 sub-products per lane)
+        // 2f. Exception Merging (Merge 2 sub-products per lane)
         // ------------------------------------------------------------------
 
         // Check for +Inf + -Inf (Generates NaN)
@@ -310,6 +327,18 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*; #(
         assign exceptions[i].is_nan = any_nan;
         assign exceptions[i].is_inf = any_inf;
         assign exceptions[i].sign   = any_inf ? final_sign_inf : sig_sign;
+
+    `ifdef DBG_TRACE_TCU
+        always_ff @(posedge clk) begin
+            if (valid_in && g_lane[i].lane_valid != 0) begin
+                `TRACE(4, ("%t: %s FEDP-REDUCE(%0d) lane=%0d: ", $time, INSTANCE_ID, req_id, i));
+                `TRACE(4, ("t1=(%0d, 0x%0h, %0d), ", sign_sel[0], sig_low, pre_sum_0));
+                `TRACE(4, ("t2=(%0d, 0x%0h, %0d) ", sign_sel[1], sig_high, pre_sum_1));
+                `TRACE(4, ("| aln_t1=0x%0h, aln_t2=0x%0h ", aligned_sig_low, aligned_sig_high));
+                `TRACE(4, ("-> s=%0d P=0x%0h E=%0d\n", sig_sign, sig_add, final_exp));
+            end
+        end
+    `endif
 
     end
 

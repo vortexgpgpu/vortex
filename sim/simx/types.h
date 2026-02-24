@@ -489,7 +489,7 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 
 enum class TmaType {
   SETUP0,
@@ -505,11 +505,11 @@ struct IntrTmaArgs {
 
 inline std::ostream &operator<<(std::ostream &os, const TmaType& type) {
   switch (type) {
-  case TmaType::SETUP0:  os << "TMA.SETUP0"; break;
-  case TmaType::SETUP1:  os << "TMA.SETUP1"; break;
-  case TmaType::COORD01: os << "TMA.COORD01"; break;
-  case TmaType::COORD23: os << "TMA.COORD23"; break;
-  case TmaType::ISSUE:   os << "TMA.ISSUE"; break;
+  case TmaType::SETUP0:  os << "DXA.SETUP0"; break;
+  case TmaType::SETUP1:  os << "DXA.SETUP1"; break;
+  case TmaType::COORD01: os << "DXA.COORD01"; break;
+  case TmaType::COORD23: os << "DXA.COORD23"; break;
+  case TmaType::ISSUE:   os << "DXA.ISSUE"; break;
   default:
     assert(false);
   }
@@ -709,6 +709,7 @@ inline std::ostream &operator<<(std::ostream &os, const VpuOpType& type) {
 
 enum class TcuType {
   WMMA,
+  WMMA_SP,
 };
 
 struct IntrTcuArgs {
@@ -716,11 +717,13 @@ struct IntrTcuArgs {
   uint32_t fmt_d  : 4;
   uint32_t step_m : 4;
   uint32_t step_n : 4;
+  //uint32_t sparse_flag : 1;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   switch (type) {
   case TcuType::WMMA: os << "WMMA"; break;
+  case TcuType::WMMA_SP: os << "WMMA_SP"; break;
   default:
     assert(false);
   }
@@ -740,7 +743,7 @@ using OpType = std::variant<
 , VoteType
 , ShflType
 , WctlType
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 , TmaType
 #endif
 #ifdef EXT_V_ENABLE
@@ -762,7 +765,7 @@ using IntrArgs = std::variant<
 , IntrFpuArgs
 , IntrCsrArgs
 , IntrWctlArgs
-#ifdef EXT_TMA_ENABLE
+#ifdef EXT_DXA_ENABLE
 , IntrTmaArgs
 #endif
 #ifdef EXT_V_ENABLE

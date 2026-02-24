@@ -544,11 +544,11 @@ module VX_decode import VX_gpu_pkg::*; #(
                         end
                         op_type = INST_OP_BITS'(funct3);
                     end
-                `ifdef EXT_TMA_ENABLE
-                    7'h03: begin // TMA runtime issue packet
+                `ifdef EXT_DXA_ENABLE
+                    7'h03: begin // DXA runtime issue packet
                         ex_type = EX_SFU;
-                        op_type = INST_OP_BITS'(INST_SFU_TMA);
-                        op_args.tma.op = funct3;
+                        op_type = INST_OP_BITS'(INST_SFU_DXA);
+                        op_args.dxa.op = funct3;
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
                     end

@@ -508,6 +508,9 @@ tensor()
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=bf8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=mxint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DTCU_MXI8_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+
     # test fp16
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1  --no-fused
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --no-fused
@@ -523,13 +526,13 @@ tensor()
 
     # test fp8
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --W=25
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --no-fused --features="normals;subnormals;zeros" --ulp=2
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=4 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --W=25
 
     # test bf8
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-fused
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --no-fused --ulp=4
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --W=25
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=4 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --W=25
 
     # test tf32
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5  --no-fused
