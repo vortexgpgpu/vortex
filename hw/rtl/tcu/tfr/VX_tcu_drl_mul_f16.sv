@@ -69,6 +69,9 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
 
     `UNUSED_PARAM (BIAS_CONST_TF32)
     `UNUSED_PARAM (BIAS_CONST_BF16)
+    `UNUSED_PARAM (S_TF32)
+    `UNUSED_PARAM (S_BF16)
+
 
     // ======================================================================
     // 2. Main Loop (Per TCK Lane)
@@ -98,7 +101,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_sa    = a_row[i/2][15+OFF_16];
                     raw_sb    = b_col[i/2][15+OFF_16];
                     exp_max   = 8'h1F;
-                    bias_sel    = BIAS_CONST_FP16;
+                    bias_sel  = BIAS_CONST_FP16;
                 end
             `ifdef TCU_BF16_ENABLE
                 TCU_BF16_ID: begin
@@ -109,7 +112,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_sa    = a_row[i/2][15+OFF_16];
                     raw_sb    = b_col[i/2][15+OFF_16];
                     exp_max   = 8'hFF;
-                    bias_sel    = BIAS_CONST_BF16;
+                    bias_sel  = BIAS_CONST_BF16;
                 end
             `endif
             `ifdef TCU_TF32_ENABLE
@@ -122,7 +125,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                         raw_sa    = a_row[i/2][18];
                         raw_sb    = b_col[i/2][18];
                         exp_max   = 8'hFF;
-                    bias_sel    = BIAS_CONST_TF32;
+                        bias_sel  = BIAS_CONST_TF32;
                     end else begin
                         raw_ea    = '0;
                         raw_eb    = '0;
@@ -143,7 +146,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_sa    = 'x;
                     raw_sb    = 'x;
                     exp_max   = 'x;
-                    bias_sel    = 'x;
+                    bias_sel  = 'x;
                 end
             endcase
         end

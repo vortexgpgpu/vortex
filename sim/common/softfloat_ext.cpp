@@ -691,7 +691,18 @@ float cvt_custom_to_f32(uint32_t value, uint32_t exp_bits, uint32_t sig_bits,
   };
 
   // Handle special cases (NaN, Infinity, Zero)
-  if (exp_field == exp_max) {
+  bool is_e4m3 = (exp_bits == 4 && sig_bits == 3);
+  bool is_e4m3_nan = is_e4m3 && (exp_field == 0xf) && (sig_field == 0x7);
+  bool is_standard_special = !is_e4m3 && (exp_field == exp_max);
+
+  if (is_e4m3_nan) {
+    if (fflags) {
+      *fflags |= flags;
+    }
+    return pack_float((sign << 31) | 0x7FC00000u); // quiet NaN
+  }
+
+  if (is_standard_special) {
     if (sig_field != 0) {
       // sNaN if top mantissa bit is 0 (when present)
       if (sig_bits > 0 && ((sig_field >> (sig_bits - 1)) & 1u) == 0) {
@@ -726,7 +737,7 @@ float cvt_custom_to_f32(uint32_t value, uint32_t exp_bits, uint32_t sig_bits,
     exponent = 1 - bias_custom;
     significand = sig_field;
     if (sig_field != 0) {
-      int shift = __builtin_clz(sig_field) - (32 - sig_bits);
+      int shift = __builtin_clz(sig_field) - (31 - sig_bits);
       significand <<= shift;
       exponent -= shift;
     }

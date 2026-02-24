@@ -894,9 +894,13 @@ TestConfig parse_args(int argc, char **argv) {
       config_.test_features.clear();
       std::string features_str = arg.substr(11);
       std::stringstream ss(features_str);
-      std::string item;
-      while (std::getline(ss, item, ';')) {
+      std::string str = ss.str();
+      size_t pos = 0;
+      while ((pos = str.find_first_not_of(" ,;", pos)) != std::string::npos) {
+        auto end = str.find_first_of(" ,;", pos);
+        auto item = str.substr(pos, end - pos);
         config_.test_features.push_back(item);
+        pos = end;
       }
     } else if (arg.substr(0, 6) == "--fmt=") {
       config_.fmt_s = std::stoi(arg.substr(6));

@@ -405,9 +405,6 @@ private:
   }
 
   std::pair<pterm_t, int> reduce_f8(const pterm_t& t1, int e1, const pterm_t& t2, int e2) {
-    if (t1.Mp == 0) return {t2, e2};
-    if (t2.Mp == 0) return {t1, e1};
-
     // Pick max exponent term
     int max_E, max_s, min_E, min_s;
     int64_t max_P, min_P;
