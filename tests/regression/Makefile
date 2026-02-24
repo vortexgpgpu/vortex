@@ -124,8 +124,8 @@ clean:
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C mpi_vecadd clean
 	$(MAKE) -C sgemm clean
-	$(MAKE) -C mpi_sgemm clean
-	$(MAKE) -C mpi_blocked_sgemm clean
+	$(MAKE) -C sgemm_tcu clean
+	$(MAKE) -C sgemm_tcu_sp clean
 	$(MAKE) -C conv3 clean
 	$(MAKE) -C mpi_neighbor_a2a_conv3 clean
 	$(MAKE) -C mpi_conv3 clean
