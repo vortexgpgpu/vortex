@@ -42,15 +42,28 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam TOTAL_DEPTH  = `NUM_WARPS * PER_WARP_DEPTH;
     localparam ADDRW        = `CLOG2(TOTAL_DEPTH);
     localparam ADDRW_PW     = `CLOG2(PER_WARP_DEPTH);
-    localparam M_STEP_BITS  = `CLOG2(TCU_M_STEPS);
-    localparam K_STEP_BITS  = `CLOG2(HALF_K_STEPS);
     localparam NUM_COLS     = META_BLOCK_WIDTH / 32;
 
     // Metadata register array (per-warp partitioned)
     reg [META_BLOCK_WIDTH-1:0] meta_mem [0:TOTAL_DEPTH-1];
 
-    // Read address: {wid, step_m, step_k}
-    wire [ADDRW_PW-1:0] per_warp_raddr = {step_m[M_STEP_BITS-1:0], step_k[K_STEP_BITS-1:0]};
+    // Read address: bit-concatenation of step_m and step_k (pure wire routing, zero delay)
+    // Use generate-if to avoid zero-width bit-selects when a dimension has only 1 step
+    localparam M_STEP_BITS = `CLOG2(TCU_M_STEPS);
+    localparam K_STEP_BITS = `CLOG2(HALF_K_STEPS);
+
+    wire [ADDRW_PW-1:0] per_warp_raddr;
+    generate
+        if (K_STEP_BITS > 0 && M_STEP_BITS > 0) begin : g_addr_mk
+            assign per_warp_raddr = {step_m[M_STEP_BITS-1:0], step_k[K_STEP_BITS-1:0]};
+        end else if (K_STEP_BITS > 0) begin : g_addr_k
+            assign per_warp_raddr = step_k[K_STEP_BITS-1:0];
+        end else if (M_STEP_BITS > 0) begin : g_addr_m
+            assign per_warp_raddr = step_m[M_STEP_BITS-1:0];
+        end else begin : g_addr_zero
+            assign per_warp_raddr = '0;
+        end
+    endgenerate
     wire [ADDRW-1:0] read_addr = {raddr_wid, per_warp_raddr};
 
     // Combinational read
