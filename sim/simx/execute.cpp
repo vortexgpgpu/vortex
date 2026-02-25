@@ -1499,6 +1499,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
         trace->data = std::make_shared<SfuTraceData>(next_tmask.to_ulong(), 0);
       } break;
+      case WctlType::WSYNC: {
+        trace->fetch_stall = true;
+      } break;
       default:
         std::abort();
       }

@@ -476,6 +476,11 @@ void Core::commit() {
 
     // update scoreboard
     if (trace->eop) {
+      bool release_wsync = false;
+      if (auto wctl_type = std::get_if<WctlType>(&trace->op_type)) {
+        release_wsync = (*wctl_type == WctlType::WSYNC);
+      } //if the instruction is a wsync, set release_wsync to true.  warp will continue to run after commits
+
       if (trace->wb) {
         operands_.at(iw)->writeback(trace);
         scoreboard_.release(trace);
@@ -504,8 +509,12 @@ void Core::commit() {
         perf_stats_.vinstrs += 1;
       }
     #endif
-    // instruction completed
-    pending_instrs_.remove(trace);
+      // instruction completed
+      pending_instrs_.remove(trace);
+
+      if (release_wsync) {
+        this->resume(trace->wid); //allows the scheduler to select this warp to fetch new instructions
+      }
     }
 
     // delete the trace
@@ -524,6 +533,16 @@ bool Core::running() const {
     return true;
   }
   return false;
+}
+
+bool Core::warp_sync_ready(uint32_t wid, uint64_t uuid) const {
+  for (auto trace : pending_instrs_) {
+    if (trace->wid != wid)
+      continue;
+    if (trace->uuid < uuid)
+      return false;
+  }
+  return true;
 }
 
 void Core::resume(uint32_t wid) {

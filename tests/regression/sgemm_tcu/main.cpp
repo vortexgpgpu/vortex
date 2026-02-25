@@ -756,12 +756,12 @@ int main(int argc, char *argv[]) {
   }
 
   if ((N % cfg::tileN) != 0) {
-    std::cout << "Error: M must be a multiple of tensor tileN!" << std::endl;
+    std::cout << "Error: N must be a multiple of tensor tileN!" << std::endl;
     return -1;
   }
 
   if ((K % cfg::tileK) != 0) {
-    std::cout << "Error: M must be a multiple of tensor tileK!" << std::endl;
+    std::cout << "Error: K must be a multiple of tensor tileK!" << std::endl;
     return -1;
   }
 
@@ -771,7 +771,7 @@ int main(int argc, char *argv[]) {
   uint32_t grid_x = N / cfg::tileN;
   uint32_t grid_y = M / cfg::tileM;
   size_t num_thread_blocks = grid_x * grid_y;
-  size_t num_mma_sync_instrs = num_thread_blocks * cfg::tileK; // each thread block has tileK iterations of mma.sync
+  size_t num_mma_sync_instrs = num_thread_blocks * (K / cfg::tileK); // each thread block has K / tileK iterations of mma.sync
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;

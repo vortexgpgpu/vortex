@@ -153,6 +153,12 @@ inline void vx_join(int stack_ptr) {
 inline void vx_barrier(int barried_id, int num_warps) {
     __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps) : "memory");
 }
+
+// Warp Sync
+inline void vx_wsync() {
+    __asm__ __volatile__ (".insn r %0, 7, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
+}
+
 // Return current thread identifier
 inline __attribute__((const)) int vx_thread_id() {
     int ret;
@@ -223,11 +229,11 @@ inline __attribute__((const)) int vx_hart_id() {
     return ret;
 }
 
-// Return current cycle counter
+// Return current cycle counter (deprecated, use vx_rdcycle_sync instead for accurate timing)
 inline uint64_t vx_cycle_count() {
-#ifdef XLEN_64
+#if __riscv_xlen == 64
     return csr_read(VX_CSR_MCYCLE);
-#else
+#elif __riscv_xlen == 32
     uint32_t hi0, lo, hi1;
     do {
         hi0 = csr_read(VX_CSR_MCYCLE_H);
@@ -235,7 +241,43 @@ inline uint64_t vx_cycle_count() {
         hi1 = csr_read(VX_CSR_MCYCLE_H);
     } while (hi0 != hi1);
     return (((uint64_t)hi0) << 32) | lo;
+#else
+#error "Unsupported RISC-V XLEN"
 #endif
+}
+
+/* Safely flushes the warp pipeline and reads the 64-bit cycle counter.
+ * Automatically handles 32-bit overflow mitigation or native 64-bit reads.
+ */
+static inline uint64_t vx_rdcycle_sync() {
+    uint64_t cycles;
+#if __riscv_xlen == 32
+    uint32_t cycle_lo, cycle_hi, cycle_hi_check;
+    __asm__ __volatile__ (
+        ".insn r %3, 7, 0, x0, x0, x0\n\t"
+        "1:\n\t"
+        "csrr %0, %4\n\t"
+        "csrr %1, %5\n\t"
+        "csrr %2, %4\n\t"
+        "bne %0, %2, 1b\n\t"
+        : "=&r" (cycle_hi), "=&r" (cycle_lo), "=&r" (cycle_hi_check)
+        : "i" (RISCV_CUSTOM0), "i" (VX_CSR_MCYCLE_H), "i" (VX_CSR_MCYCLE)
+        : "memory"
+    );
+    cycles = ((uint64_t)cycle_hi << 32) | cycle_lo;
+#elif __riscv_xlen == 64
+    __asm__ __volatile__ (
+        ".insn r %1, 7, 0, x0, x0, x0\n\t"
+        "csrr %0, %2\n\t"
+        : "=r" (cycles)
+        : "i" (RISCV_CUSTOM0), "i" (VX_CSR_MCYCLE)
+        : "memory"
+    );
+#else
+#error "Unsupported RISC-V XLEN"
+#endif
+
+    return cycles;
 }
 
 // Fake a dependency on a floating-point register, to prevent cycle counter read before instruction commit.

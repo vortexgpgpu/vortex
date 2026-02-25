@@ -119,6 +119,8 @@ public:
 
   void resume(uint32_t wid);
 
+  bool warp_sync_ready(uint32_t wid, uint64_t uuid) const;
+
   uint32_t barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_async_bar);
 
   bool barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid);
