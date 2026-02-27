@@ -56,17 +56,56 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam PIPE_LATENCY = FEDP_LATENCY + 1;
     localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);
 
-    localparam LG_A_BS = $clog2(TCU_A_BLOCK_SIZE);
-    localparam LG_B_BS = $clog2(TCU_B_BLOCK_SIZE);
-    localparam OFF_W   = $clog2(TCU_BLOCK_CAP);
+    localparam LG_A_BS    = $clog2(TCU_A_BLOCK_SIZE);
+    localparam LG_B_BS    = $clog2(TCU_B_BLOCK_SIZE);
+    localparam OFF_W      = $clog2(TCU_BLOCK_CAP);
+
+`ifdef TCU_SPARSE_ENABLE
+    localparam LG_B_BS_SP = $clog2(TCU_B_BLOCK_SIZE_SP);
+
+    wire is_sparse = (execute_if.data.op_type == INST_TCU_WMMA_SP);
+    wire is_meta_store = (execute_if.data.op_type == INST_TCU_META_STORE);
+`endif
 
     wire [3:0] step_m = execute_if.data.op_args.tcu.step_m;
     wire [3:0] step_n = execute_if.data.op_args.tcu.step_n;
+    wire [3:0] step_k = execute_if.data.op_args.tcu.step_k;
 
     wire [3:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
     wire [3:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
 
-    `UNUSED_VAR ({step_m, step_n, fmt_s, fmt_d, execute_if.data});
+`ifdef TCU_SPARSE_ENABLE
+    wire [`LOG2UP(`NUM_WARPS)-1:0] wid = execute_if.data.header.wid;
+
+    // meta_store: extract per-row write data from rs1_data lanes
+    localparam PER_WARP_DEPTH = TCU_M_STEPS * (TCU_K_STEPS / 2);
+    localparam COLS_PER_LOAD = TCU_BLOCK_CAP / PER_WARP_DEPTH;
+    localparam LG_CPL = $clog2(COLS_PER_LOAD);
+    localparam LG_PD  = $clog2(PER_WARP_DEPTH);
+    wire meta_wr_en = execute_fire && is_meta_store;
+    wire [PER_WARP_DEPTH-1:0][31:0] meta_wr_data;
+    wire [$clog2(TCU_BLOCK_CAP)-1:0] meta_thread_offset;
+    assign meta_thread_offset = {fmt_d[LG_CPL-1:0], {LG_PD{1'b0}}};
+    for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
+        assign meta_wr_data[r] = 32'(execute_if.data.rs1_data[meta_thread_offset + r]);
+    end
+
+    // meta_store: force rd=0 in mdata_queue header (x0 write is harmless)
+    tcu_header_t mdata_queue_in;
+    always_comb begin
+        mdata_queue_in = execute_if.data.header;
+        if (is_meta_store) begin
+            mdata_queue_in.rd = '0;
+        end
+    end
+`else
+    tcu_header_t mdata_queue_in;
+    always_comb begin
+        mdata_queue_in = execute_if.data.header;
+    end
+`endif
+
+    `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
 
     wire mdata_queue_full;
 
@@ -103,7 +142,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .reset  (reset),
         .push   (execute_fire),
         .pop    (result_fire),
-        .data_in(execute_if.data.header),
+        .data_in(mdata_queue_in),
         .data_out(result_if.data.header),
         `UNUSED_PIN(empty),
         `UNUSED_PIN(alm_empty),
@@ -113,18 +152,75 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     wire [OFF_W-1:0] a_off = (OFF_W'(step_m) & OFF_W'(TCU_A_SUB_BLOCKS-1)) << LG_A_BS;
+`ifdef TCU_SPARSE_ENABLE
+    wire [OFF_W-1:0] b_off = is_sparse
+        ? (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS_SP-1)) << LG_B_BS_SP
+        : (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1))    << LG_B_BS;
+`else
     wire [OFF_W-1:0] b_off = (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
+`endif
 
     wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
 
+`ifdef TCU_SPARSE_ENABLE
+    // 2:4 sparsity metadata (sized for worst-case: int4, I_RATIO=8)
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block;
+
+    VX_tcu_meta #(
+        .INSTANCE_ID     (INSTANCE_ID),
+        .META_BLOCK_WIDTH(TCU_MAX_META_BLOCK_WIDTH),
+        .PER_WARP_DEPTH  (PER_WARP_DEPTH)
+    ) tcu_meta (
+        .clk           (clk),
+        .reset         (reset),
+        .raddr_wid     (wid),
+        .step_m        (step_m),
+        .step_k        (step_k),
+        .vld_meta_block(vld_meta_block),
+        .wr_en         (meta_wr_en),
+        .wr_wid        (wid),
+        .wr_col_idx    (fmt_d),
+        .wr_data       (meta_wr_data)
+    );
+`endif
+
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_i
         for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_j
+`ifdef TCU_SPARSE_ENABLE
+            wire [TCU_TC_K-1:0][31:0] a_row, b_col, b_col_dense, b_col_sparse, b_col_1, b_col_2;
+`else
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
+`endif
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
-                assign a_row[k_idx] = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
+                assign a_row[k_idx]      = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
+`ifdef TCU_SPARSE_ENABLE
+                assign b_col_dense[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
+                assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2]);
+                assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2 + 1]);
+`else
                 assign b_col[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
+`endif
             end
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
+`ifdef TCU_SPARSE_ENABLE
+            /* verilator lint_off UNUSEDSIGNAL */
+            wire [TCU_MAX_INPUTS-1:0] vld_mask = '1; // TODO: should connect to input source
+            /* verilator lint_on UNUSEDSIGNAL */
+
+            VX_tcu_sel #(
+                .INSTANCE_ID (INSTANCE_ID),
+                .ROW_IDX     (i)
+            ) tcu_sel (
+                .fmt_s          (fmt_s),
+                .b_col_1        (b_col_1),
+                .b_col_2        (b_col_2),
+                .vld_meta_block (vld_meta_block),
+                .b_col          (b_col_sparse)
+            );
+
+            // Select dense or sparse B column
+            assign b_col = is_sparse ? b_col_sparse : b_col_dense;
+`endif
 
             wire [3:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;

@@ -15,7 +15,13 @@
 
 #include <tensor_cfg.h>
 #include <vx_intrinsics.h>
+#ifdef TCU_SPARSE_ENABLE
 #include <vx_sparsity.h>
+#else
+namespace vortex { namespace tensor {
+enum mem_layout { row_major, col_major };
+} }
+#endif
 
 namespace vortex {
 namespace tensor {
@@ -117,7 +123,6 @@ namespace detail {
       return *reinterpret_cast<const D*>(&result_u);
     }
   };
-
 }
 
 template <uint32_t NT, // number of threads per warp
@@ -155,7 +160,9 @@ public:
   static constexpr uint32_t tileK = cfg::tileK * i_ratio;
 
   using fragment_a   = fragment_t<matrix_a, input_t, cfg::NRA>;
+#ifdef TCU_SPARSE_ENABLE
   using fragment_a_sp = fragment_t<matrix_a, input_t, cfg::NRA>;
+#endif
   using fragment_b   = fragment_t<matrix_b, input_t, cfg::NRB>;
   using fragment_acc = fragment_t<accumulator, output_t, cfg::NRC>;
 
@@ -174,7 +181,7 @@ public:
     });
   }
 
-  template <mem_layout src_layout = row_major, typename Frag>
+  template <mem_layout src_layout = row_major, bool sparse = false, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
     uint32_t lane = vx_thread_id();
     if constexpr (Frag::Use == matrix_a) {
@@ -188,61 +195,132 @@ public:
       if constexpr (src_layout == col_major) {
         std::swap(block_row, block_col);
       }
-      auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
-      detail::unroll_for<Frag::NR>([&](auto r) {
-        uint32_t block_m  = r / cfg::k_steps;
-        uint32_t block_k  = r % cfg::k_steps;
-        uint32_t elem_row = block_m * m_stride;
-        uint32_t elem_col = block_k * k_stride;
-        if constexpr (src_layout == col_major) {
-          static_assert(input_is_subbyte == false, "col_major layout is not supported for sub-byte matrix_a");
-          std::swap(elem_row, elem_col);
-          auto ptr = base + elem_row * ldm + elem_col;
-          if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
-            dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+#ifdef TCU_SPARSE_ENABLE
+      if constexpr (sparse) {
+        // Sparse A load: only load half the K-steps (compressed A)
+        // HW only reads registers 0..sparse_regs-1, no need to zero-fill the rest
+        constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
+        constexpr uint32_t sparse_regs = cfg::m_steps * sparse_k_steps;
+        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
+        detail::unroll_for<sparse_regs>([&](auto r) {
+          uint32_t block_m  = r / sparse_k_steps;
+          uint32_t block_k  = r % sparse_k_steps;
+          uint32_t elem_row = block_m * m_stride;
+          uint32_t elem_col = block_k * k_stride;
+          if constexpr (src_layout == col_major) {
+            static_assert(input_is_subbyte == false, "col_major layout is not supported for sub-byte matrix_a");
+            std::swap(elem_row, elem_col);
+            auto ptr = base + elem_row * ldm + elem_col;
+            if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
+              dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+            } else {
+              dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
+            }
           } else {
-            dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
+            // row_major layout
+            auto ptr = base + elem_row * ldm + elem_col;
+            assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
           }
-        } else {
-          // raw_major layout
-          auto ptr = base + elem_row * ldm + elem_col;
-          assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
-          dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
-        }
-      });
-    } else if constexpr (Frag::Use == matrix_b) {
-      // Load column-major matrix B
-      uint32_t block_idx = (cfg::b_block_size == NT) ? 0 : (lane / cfg::b_block_size);
-      uint32_t lane_in_blk = (cfg::b_block_size == NT) ? lane : (lane % cfg::b_block_size);
-      uint32_t block_col = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcN);
-      uint32_t block_row = (lane_in_blk % cfg::tcK) * i_ratio;
-      uint32_t n_stride  = cfg::b_sub_blocks * cfg::tcN;
-      uint32_t k_stride  = cfg::tcK * i_ratio;
-      if constexpr (src_layout == col_major) {
-        std::swap(block_row, block_col);
+        });
+      } else
+#endif
+      {
+        // Dense A load: load all K-steps
+        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_m  = r / cfg::k_steps;
+          uint32_t block_k  = r % cfg::k_steps;
+          uint32_t elem_row = block_m * m_stride;
+          uint32_t elem_col = block_k * k_stride;
+          if constexpr (src_layout == col_major) {
+            static_assert(input_is_subbyte == false, "col_major layout is not supported for sub-byte matrix_a");
+            std::swap(elem_row, elem_col);
+            auto ptr = base + elem_row * ldm + elem_col;
+            if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
+              dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+            } else {
+              dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
+            }
+          } else {
+            auto ptr = base + elem_row * ldm + elem_col;
+            assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+          }
+        });
       }
-      auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
-      detail::unroll_for<Frag::NR>([&](auto r) {
-        uint32_t block_k = r / cfg::b_sub_steps;
-        uint32_t block_n = r % cfg::b_sub_steps;
-        uint32_t elem_row = block_k * k_stride;
-        uint32_t elem_col = block_n * n_stride;
-        if constexpr (src_layout == row_major) {
-          static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
-          auto ptr = base + elem_row * ldm + elem_col;
-          if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
-            dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
-          } else {
-            dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
-          }
-        } else {
-          // col_major layout
-          std::swap(elem_row, elem_col);
-          auto ptr = base + elem_row * ldm + elem_col;
-          assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
-          dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+    } else if constexpr (Frag::Use == matrix_b) {
+#ifdef TCU_SPARSE_ENABLE
+      if constexpr (sparse) {
+        // Sparse B load: uses 2x tcK for B block
+        constexpr uint32_t b_tcK = cfg::tcK * 2;
+        uint32_t block_idx = (cfg::b_block_size_sp == NT) ? 0 : (lane / cfg::b_block_size_sp);
+        uint32_t lane_in_blk = (cfg::b_block_size_sp == NT) ? lane : (lane % cfg::b_block_size_sp);
+        uint32_t block_col = (lane_in_blk / b_tcK) + (block_idx * cfg::tcN);
+        uint32_t block_row = (lane_in_blk % b_tcK) * i_ratio;
+        uint32_t n_stride  = cfg::b_sub_blocks_sp * cfg::tcN;
+        uint32_t k_stride  = b_tcK * i_ratio;
+        if constexpr (src_layout == col_major) {
+          std::swap(block_row, block_col);
         }
-      });
+        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_k = r / cfg::b_sub_steps_sp;
+          uint32_t block_n = r % cfg::b_sub_steps_sp;
+          uint32_t elem_row = block_k * k_stride;
+          uint32_t elem_col = block_n * n_stride;
+          if constexpr (src_layout == row_major) {
+            static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
+            auto ptr = base + elem_row * ldm + elem_col;
+            if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
+              dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+            } else {
+              dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
+            }
+          } else {
+            // col_major layout
+            std::swap(elem_row, elem_col);
+            auto ptr = base + elem_row * ldm + elem_col;
+            assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+          }
+        });
+      } else
+#endif
+      {
+        // Dense B load
+        uint32_t block_idx = (cfg::b_block_size == NT) ? 0 : (lane / cfg::b_block_size);
+        uint32_t lane_in_blk = (cfg::b_block_size == NT) ? lane : (lane % cfg::b_block_size);
+        uint32_t block_col = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcN);
+        uint32_t block_row = (lane_in_blk % cfg::tcK) * i_ratio;
+        uint32_t n_stride  = cfg::b_sub_blocks * cfg::tcN;
+        uint32_t k_stride  = cfg::tcK * i_ratio;
+        if constexpr (src_layout == col_major) {
+          std::swap(block_row, block_col);
+        }
+        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_k = r / cfg::b_sub_steps;
+          uint32_t block_n = r % cfg::b_sub_steps;
+          uint32_t elem_row = block_k * k_stride;
+          uint32_t elem_col = block_n * n_stride;
+          if constexpr (src_layout == row_major) {
+            static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
+            auto ptr = base + elem_row * ldm + elem_col;
+            if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
+              dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+            } else {
+              dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
+            }
+          } else {
+            // col_major layout
+            std::swap(elem_row, elem_col);
+            auto ptr = base + elem_row * ldm + elem_col;
+            assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+          }
+        });
+      }
     } else {
       // Load accumulator matrix C
       uint32_t block_row = lane / cfg::tcN;
@@ -273,6 +351,7 @@ public:
     }
   }
 
+#ifdef TCU_SPARSE_ENABLE
   template <typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync_sparse_a(Frag &dst, const void *src, size_t ldm_compressed) {
     static_assert(Frag::Use == matrix_a, "sparse A loader expects matrix_a");
@@ -344,6 +423,7 @@ public:
       }
     });
   }
+#endif // TCU_SPARSE_ENABLE
 
   template <mem_layout dst_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
@@ -375,8 +455,140 @@ public:
     });
   }
 
-  template <typename FragD, typename FragA, typename FragB, typename FragC>
+#ifdef TCU_SPARSE_ENABLE
+  template <int COL>
+  static __attribute__((always_inline)) void meta_store(float data) {
+    __asm__ volatile(".insn r 0x0b, 2, 2, x%[col], %[data], x0"           // RISCV_CUSTOM0 instead of 0b
+      :: [col]"i"(COL), [data]"f"(data));
+  }
+
+// // Set thread mask  // "memory" comment stop compiler reordering. 
+// inline void vx_tmc(int thread_mask) {
+//     __asm__ volatile (".insn r %0, 0, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(thread_mask) : "memory");
+// }
+
+
+  static __attribute__((always_inline)) void load_metadata_sync(const void* meta_ptr) {
+    constexpr uint32_t rtl_i_ratio = 32 / It::bits;
+    constexpr uint32_t num_cols = (NT * 2 * rtl_i_ratio) / 32;
+    constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
+    constexpr uint32_t cols_per_load = NT / PD;
+    constexpr uint32_t num_loads = (num_cols + cols_per_load - 1) / cols_per_load;
+    uint32_t lane_id = vx_thread_id();
+    auto base = reinterpret_cast<const float*>(meta_ptr);
+    detail::unroll_for<num_loads>([&](auto l) {
+      float data = base[l * NT + lane_id];
+      detail::unroll_for<cols_per_load>([&](auto c) {
+        constexpr uint32_t col = l * cols_per_load + c;
+        if constexpr (col < num_cols) {
+          meta_store<col>(data);
+        }
+      });
+    });
+  }
+#endif // TCU_SPARSE_ENABLE
+
+  template <bool sparse = false, typename FragD, typename FragA, typename FragB, typename FragC>
   static __attribute__((always_inline)) void mma_sync(FragD &fragD, const FragA &fragA, const FragB &fragB, const FragC &fragC) {
+    static_assert(FragA::Use == matrix_a, "A must be matrix_a");
+    static_assert(FragB::Use == matrix_b, "B must be matrix_b");
+    static_assert(FragC::Use == accumulator, "C must be accumulator");
+    static_assert(FragD::Use == accumulator, "D must be accumulator");
+#ifndef TCU_SPARSE_ENABLE
+    static_assert(!sparse, "sparse=true requires TCU_SPARSE_ENABLE");
+#endif
+
+    // fragA: caller-saved registers (f0-f7)
+    register float fa0 __asm__("f0")  = fragA.data[0];
+    register float fa1 __asm__("f1")  = fragA.data[1];
+    register float fa2 __asm__("f2")  = fragA.data[2];
+    register float fa3 __asm__("f3")  = fragA.data[3];
+    register float fa4 __asm__("f4")  = fragA.data[4];
+    register float fa5 __asm__("f5")  = fragA.data[5];
+    register float fa6 __asm__("f6")  = fragA.data[6];
+    register float fa7 __asm__("f7")  = fragA.data[7];
+
+    if constexpr (FragB::NR == 8) {
+      // fragB: caller-saved registers (f10-f17)
+      register float fb0 __asm__("f10") = fragB.data[0];
+      register float fb1 __asm__("f11") = fragB.data[1];
+      register float fb2 __asm__("f12") = fragB.data[2];
+      register float fb3 __asm__("f13") = fragB.data[3];
+      register float fb4 __asm__("f14") = fragB.data[4];
+      register float fb5 __asm__("f15") = fragB.data[5];
+      register float fb6 __asm__("f16") = fragB.data[6];
+      register float fb7 __asm__("f17") = fragB.data[7];
+
+      // fragC: mix of caller-saved (f28-f31) and callee-saved (f18-f21)
+      register float fc0 __asm__("f24") = fragC.data[0];
+      register float fc1 __asm__("f25") = fragC.data[1];
+      register float fc2 __asm__("f26") = fragC.data[2];
+      register float fc3 __asm__("f27") = fragC.data[3];
+      register float fc4 __asm__("f28") = fragC.data[4];
+      register float fc5 __asm__("f29") = fragC.data[5];
+      register float fc6 __asm__("f30") = fragC.data[6];
+      register float fc7 __asm__("f31") = fragC.data[7];
+
+      // Force outputs into accumulator registers
+      register float fd0 __asm__("f24");
+      register float fd1 __asm__("f25");
+      register float fd2 __asm__("f26");
+      register float fd3 __asm__("f27");
+      register float fd4 __asm__("f28");
+      register float fd5 __asm__("f29");
+      register float fd6 __asm__("f30");
+      register float fd7 __asm__("f31");
+
+      constexpr int funct3 = sparse ? 1 : 0;
+      __asm__ volatile (".insn r %[insn], %[f3], 2, x%[fmd], x%[fms], x0"
+        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+        : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(funct3), [fmd]"i"(Ot::id), [fms]"i"(It::id),
+          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7),
+          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
+      );
+
+      fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
+    } else {
+      static_assert(FragB::NR == 4, "Unsupported number of registers for FragB");
+      register float fb0 __asm__("f28") = fragB.data[0];
+      register float fb1 __asm__("f29") = fragB.data[1];
+      register float fb2 __asm__("f30") = fragB.data[2];
+      register float fb3 __asm__("f31") = fragB.data[3];
+
+      register float fc0 __asm__("f10") = fragC.data[0];
+      register float fc1 __asm__("f11") = fragC.data[1];
+      register float fc2 __asm__("f12") = fragC.data[2];
+      register float fc3 __asm__("f13") = fragC.data[3];
+      register float fc4 __asm__("f14") = fragC.data[4];
+      register float fc5 __asm__("f15") = fragC.data[5];
+      register float fc6 __asm__("f16") = fragC.data[6];
+      register float fc7 __asm__("f17") = fragC.data[7];
+
+      register float fd0 __asm__("f10");
+      register float fd1 __asm__("f11");
+      register float fd2 __asm__("f12");
+      register float fd3 __asm__("f13");
+      register float fd4 __asm__("f14");
+      register float fd5 __asm__("f15");
+      register float fd6 __asm__("f16");
+      register float fd7 __asm__("f17");
+
+      constexpr int funct3 = sparse ? 1 : 0;
+      __asm__ volatile (".insn r %[insn], %[f3], 2, x%[fmd], x%[fms], x0"
+        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+        : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(funct3), [fmd]"i"(Ot::id), [fms]"i"(It::id),
+          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3),
+          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
+      );
+
+      fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
+    }
+  }
+
+  template <typename FragD, typename FragA, typename FragB, typename FragC>
+  static __attribute__((always_inline)) void mma_struct_sparse_sync(FragD &fragD, const FragA &fragA, const FragB &fragB, const FragC &fragC) {
     static_assert(FragA::Use == matrix_a, "A must be matrix_a");
     static_assert(FragB::Use == matrix_b, "B must be matrix_b");
     static_assert(FragC::Use == accumulator, "C must be accumulator");
@@ -423,7 +635,7 @@ public:
       register float fd6 __asm__("f30");
       register float fd7 __asm__("f31");
 
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x0"
+      __asm__ volatile (".insn r %[insn], 1, 2, x%[fmd], x%[fms], x0"
         : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
@@ -461,7 +673,7 @@ public:
       register float fd6 __asm__("f16");
       register float fd7 __asm__("f17");
 
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x0"
+      __asm__ volatile (".insn r %[insn], 1, 2, x%[fmd], x%[fms], x0"
         : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),

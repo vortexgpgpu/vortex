@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <VX_config.h>
 #include <stdint.h>
 #include <type_traits>
 #include <algorithm>
@@ -191,9 +192,15 @@ public:
   static constexpr uint32_t a_sub_blocks = block_cap / a_block_size;  // number of A micro-tiles per register
   static constexpr uint32_t a_sub_steps  = m_steps / a_sub_blocks;    // number of A sub-steps per register
 
-  static constexpr uint32_t b_block_size = tcK * tcN;                 // size of B micro-tile
+  static constexpr uint32_t b_block_size = tcK * tcN;                   // size of B micro-tile (dense)
   static constexpr uint32_t b_sub_blocks = block_cap / b_block_size;  // number of B micro-tiles per register
   static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;    // number of B sub-steps per register
+
+#ifdef TCU_SPARSE_ENABLE
+  static constexpr uint32_t b_block_size_sp = (tcK * tcN) * 2;             // sparse 2:4
+  static constexpr uint32_t b_sub_blocks_sp = block_cap / b_block_size_sp;
+  static constexpr uint32_t b_sub_steps_sp  = n_steps / b_sub_blocks_sp;
+#endif
 
   static constexpr uint32_t NRA = (xtileM * xtileK) / NT; // Number of A registers
   static constexpr uint32_t NRB = (xtileN * xtileK) / NT; // Number of B registers
@@ -217,6 +224,15 @@ public:
   static constexpr uint32_t tileM = xtileM;
   static constexpr uint32_t tileN = xtileN;
   static constexpr uint32_t tileK = xtileK * i_ratio; // Adjusted for input type size
+
+#ifdef TCU_SPARSE_ENABLE
+  // Metadata constants for 2:4 structured sparsity
+  static constexpr uint32_t itype_bits = It::bits;
+  static constexpr uint32_t rtl_i_ratio = 32 / itype_bits;
+  static constexpr uint32_t meta_block_width = NT * 2 * rtl_i_ratio; // bits
+  static constexpr uint32_t meta_cols = meta_block_width / 32;
+  static constexpr uint32_t per_warp_depth = m_steps * (k_steps / 2);
+#endif
 };
 
 } // namespace tensor

@@ -45,7 +45,12 @@ module VX_uop_sequencer import
 
 `ifdef EXT_TCU_ENABLE
 
-    assign is_base_uop_input = (input_if.data.ex_type == EX_TCU && input_if.data.op_type == INST_TCU_WMMA);
+    assign is_base_uop_input = (input_if.data.ex_type == EX_TCU
+        && (input_if.data.op_type == INST_TCU_WMMA
+`ifdef TCU_SPARSE_ENABLE
+         || input_if.data.op_type == INST_TCU_WMMA_SP
+`endif
+        ));
 
     VX_tcu_uops tcu_uops (
         .clk     (clk),

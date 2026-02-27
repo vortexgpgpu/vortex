@@ -25,6 +25,8 @@ enum mem_layout {
   col_major
 };
 
+#ifdef TCU_SPARSE_ENABLE
+
 namespace detail {
 
   template <typename T>
@@ -145,6 +147,8 @@ inline bool compress_2to4_matrix(const T* dense, uint32_t rows, uint32_t cols, u
   }
   return true;
 }
+
+#endif // TCU_SPARSE_ENABLE
 
 } // namespace tensor
 } // namespace vortex
