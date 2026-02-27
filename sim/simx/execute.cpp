@@ -1507,14 +1507,14 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       }
     }
 #ifdef EXT_DXA_ENABLE
-    ,[&](TmaType dxa_type) {
-      auto tmaArgs = std::get<IntrTmaArgs>(instrArgs);
-      uint32_t dxa_op = tmaArgs.op;
+    ,[&](DxaType dxa_type) {
+      auto dxaArgs = std::get<IntrDxaArgs>(instrArgs);
+      uint32_t dxa_op = dxaArgs.op;
       (void)dxa_type;
       // DXA runtime packetization is asynchronous and side-effected in SFU.
       // This stage forwards raw operands.
       trace->fetch_stall = false;
-      trace->data = std::make_shared<TmaTraceData>(
+      trace->data = std::make_shared<DxaTraceData>(
           rs1_data.at(thread_last).u,
           rs2_data.at(thread_last).u,
           dxa_op);

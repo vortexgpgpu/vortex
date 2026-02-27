@@ -381,13 +381,12 @@ static op_string_t op_string(const Instr &instr) {
       }
     }
 #ifdef EXT_DXA_ENABLE
-    ,[&](TmaType dxa_type)-> op_string_t {
+    ,[&](DxaType dxa_type)-> op_string_t {
       switch (dxa_type) {
-      case TmaType::SETUP0:  return {"DXA.SETUP0", ""};
-      case TmaType::SETUP1:  return {"DXA.SETUP1", ""};
-      case TmaType::COORD01: return {"DXA.COORD01", ""};
-      case TmaType::COORD23: return {"DXA.COORD23", ""};
-      case TmaType::ISSUE:   return {"DXA.ISSUE", ""};
+      case DxaType::SETUP:   return {"DXA.SETUP", ""};
+      case DxaType::COORD01: return {"DXA.COORD01", ""};
+      case DxaType::COORD23: return {"DXA.COORD23", ""};
+      case DxaType::ISSUE:   return {"DXA.ISSUE", ""};
       default:
         std::abort();
       }
@@ -1111,33 +1110,46 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       ibuffer.push_back(instr);
     } break;
 #ifdef EXT_DXA_ENABLE
-    case 3: { // DXA runtime issue (leader-thread serialized payload)
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
-      IntrTmaArgs tmaArgs{};
-      tmaArgs.op = funct3;
-      instr->setArgs(tmaArgs);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::Integer);
-      switch (funct3) {
-      case 0:
-        instr->setOpType(TmaType::SETUP0);
-        break;
-      case 1:
-        instr->setOpType(TmaType::SETUP1);
-        break;
-      case 2:
-        instr->setOpType(TmaType::COORD01);
-        break;
-      case 3:
-        instr->setOpType(TmaType::COORD23);
-        break;
-      case 4:
-        instr->setOpType(TmaType::ISSUE);
-        break;
-      default:
+    case 3: { // DXA issue (dimension-specific, funct3 = 0..4 for 1D..5D)
+      uint32_t dim = funct3; // 0=1D, 1=2D, 2=3D, 3=4D, 4=5D
+      if (dim > 4) {
         std::abort();
       }
+
+      uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
+      uint32_t uuid_lo = uuid & 0xffffffff;
+      uint32_t step = 0;
+      auto make_uop_uuid = [&](uint32_t s) {
+        uint32_t uuid_lo_x = (uuid_lo & ~0x7u) | (s & 0x7u);
+        return (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
+      };
+
+      auto make_dxa_uop = [&](DxaType type, uint32_t op, uint32_t src0, uint32_t src1) {
+        auto instr = std::allocate_shared<Instr>(instr_pool_, make_uop_uuid(step), FUType::SFU);
+        instr->setParentUUID(uuid);
+        IntrDxaArgs dxaArgs{};
+        dxaArgs.op = op;
+        instr->setArgs(dxaArgs);
+        instr->setOpType(type);
+        instr->setSrcReg(0, src0, RegType::Integer);
+        instr->setSrcReg(1, src1, RegType::Integer);
       ibuffer.push_back(instr);
+        ++step;
+      };
+
+      // SETUP: rs1=smem_addr (architected rs1), rs2=meta (architected rs2).
+      make_dxa_uop(DxaType::SETUP, 0, rs1, rs2);
+
+      // COORD01: always present. coord1 (t4) only if dim >= 2D.
+      make_dxa_uop(DxaType::COORD01, 1, 28, (dim >= 1) ? 29 : 0);
+
+      // COORD23: present only if dim >= 3D. coord3 (t6) only if dim >= 4D.
+      if (dim >= 2) {
+        make_dxa_uop(DxaType::COORD23, 2, 30, (dim >= 3) ? 31 : 0);
+      }
+
+      // ISSUE: coord4 (t0) only for 5D.
+      make_dxa_uop(DxaType::ISSUE, 3, (dim >= 4) ? 5 : 0, 0);
     } break;
 #endif
   #ifdef EXT_TCU_ENABLE

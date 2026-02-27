@@ -30,7 +30,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // inputsdecode_if
     VX_warp_ctl_if.slave    warp_ctl_if,
 `ifdef EXT_DXA_ENABLE
-    VX_txbar_bus_if.slave   txbar_if,
+    VX_tx_bar_bus_if.slave  tx_bar_if,
+`ifdef EXT_DXA_ENABLE
+    input wire              dxa_done_valid,
+    input wire [BAR_ADDR_W-1:0] dxa_done_bar_addr,
+`endif
 `endif
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_decode_sched_if.slave decode_sched_if,
@@ -224,8 +228,78 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // barrier handling
 `ifdef EXT_DXA_ENABLE
-    wire bar_req_data_valid = warp_ctl_if.valid && warp_ctl_if.barrier.valid;
-    wire txbar_fire = txbar_if.valid && txbar_if.ready;
+    wire tx_bar_fire = tx_bar_if.valid && tx_bar_if.ready;
+    wire tx_evt_fire;
+    wire tx_evt_ready;
+    wire [BAR_ADDR_W-1:0] tx_evt_bar_addr;
+    wire tx_evt_is_done;
+`ifdef EXT_DXA_ENABLE
+    localparam DXA_DONE_ENGINE_BITS = `CLOG2(`NUM_DXA_UNITS);
+    // Keep route width consistent with DXA tag producer side (VX_dxa_pkg / worker).
+    localparam DXA_DONE_ROUTE_W     = DXA_DONE_ENGINE_BITS + NC_WIDTH;
+    localparam DXA_DONE_META_W      = BAR_ADDR_W + 1;
+    localparam DXA_DONE_META_ENABLE = (LMEM_TAG_WIDTH >= (DXA_DONE_ROUTE_W + DXA_DONE_META_W));
+
+    if (DXA_DONE_META_ENABLE) begin : g_dxa_done_banksync
+`ifdef DXA_DONE_FIFO_DEPTH
+        localparam DXA_DONE_FIFO_DEPTH_P = `DXA_DONE_FIFO_DEPTH;
+`else
+        localparam DXA_DONE_FIFO_DEPTH_P = 8;
+`endif
+        `STATIC_ASSERT(`IS_POW2(DXA_DONE_FIFO_DEPTH_P), ("DXA_DONE_FIFO_DEPTH must be a power of 2"))
+
+        wire [BAR_ADDR_W-1:0] dxa_done_q_data;
+        wire dxa_done_q_empty;
+        wire dxa_done_q_full;
+        wire dxa_done_q_pop;
+        wire [BAR_ADDR_W-1:0] dxa_done_addr = dxa_done_q_data;
+        wire dxa_done_avail = ~dxa_done_q_empty;
+
+        VX_fifo_queue #(
+            .DATAW  (BAR_ADDR_W),
+            .DEPTH  (DXA_DONE_FIFO_DEPTH_P),
+            .OUT_REG(1),
+            .LUTRAM (1)
+        ) dxa_done_q (
+            .clk      (clk),
+            .reset    (reset),
+            .push     (dxa_done_valid),
+            .pop      (dxa_done_q_pop),
+            .data_in  (dxa_done_bar_addr),
+            .data_out (dxa_done_q_data),
+            .empty    (dxa_done_q_empty),
+            `UNUSED_PIN (alm_empty),
+            .full     (dxa_done_q_full),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
+
+        wire tx_setup_fire = tx_bar_fire && ~tx_bar_if.data.is_done;
+        wire tx_done_tx_bar_fire = tx_bar_fire && tx_bar_if.data.is_done;
+        wire tx_done_smem_fire = ~tx_bar_fire && dxa_done_avail && tx_evt_ready;
+        wire tx_done_fire = tx_done_tx_bar_fire || tx_done_smem_fire;
+        assign dxa_done_q_pop = tx_done_smem_fire;
+        assign tx_evt_fire = tx_setup_fire || tx_done_fire;
+        assign tx_evt_bar_addr = tx_setup_fire ? tx_bar_if.data.addr
+                              : (tx_done_tx_bar_fire ? tx_bar_if.data.addr : dxa_done_addr);
+        assign tx_evt_is_done = ~tx_setup_fire;
+        `RUNTIME_ASSERT(~(dxa_done_valid && dxa_done_q_full && ~dxa_done_q_pop), (
+            "*** %s dxa_done queue overflow: bar=%0d", INSTANCE_ID, dxa_done_bar_addr))
+    end else begin : g_dxa_done_legacy
+        assign tx_evt_fire = tx_bar_fire;
+        assign tx_evt_bar_addr = tx_bar_if.data.addr;
+        assign tx_evt_is_done = tx_bar_if.data.is_done;
+        `UNUSED_VAR ({dxa_done_valid, dxa_done_bar_addr})
+    end
+`else
+    assign tx_evt_fire = tx_bar_fire;
+    assign tx_evt_bar_addr = tx_bar_if.data.addr;
+    assign tx_evt_is_done = tx_bar_if.data.is_done;
+`endif
+`endif
+`ifndef EXT_DXA_ENABLE
+    wire tx_ready_unused;
+    `UNUSED_VAR(tx_ready_unused)
 `endif
 
     VX_bar_unit #(
@@ -238,13 +312,15 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .req_wid    (warp_ctl_if.wid),
         .req_data   (warp_ctl_if.barrier),
     `ifdef EXT_DXA_ENABLE
-        .tx_valid   (txbar_fire),
-        .tx_bar_addr(txbar_if.data.addr),
-        .tx_is_done (txbar_if.data.is_done),
+        .tx_valid   (tx_evt_fire),
+        .tx_bar_addr(tx_evt_bar_addr),
+        .tx_is_done (tx_evt_is_done),
+        .tx_ready   (tx_evt_ready),
     `else
         .tx_valid   (1'b0),
         .tx_bar_addr('0),
         .tx_is_done (1'b0),
+        .tx_ready   (tx_ready_unused),
     `endif
         .read_addr  (warp_ctl_if.barrier_addr),
         .read_phase (warp_ctl_if.barrier_phase),
@@ -257,7 +333,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     );
 
 `ifdef EXT_DXA_ENABLE
-    assign txbar_if.ready = ~bar_req_data_valid;
+    assign tx_bar_if.ready = tx_evt_ready;
 `endif
 
     // split/join handling
@@ -394,7 +470,23 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
     end
 
-    `RUNTIME_ASSERT(timeout_ctr < STALL_TIMEOUT, ("*** %s timeout: active_warps=%b, stalled_warps=%b", INSTANCE_ID, active_warps, stalled_warps))
+`ifdef EXT_SCHED_STALL_TIMEOUT
+    localparam SCHED_STALL_TIMEOUT = `EXT_SCHED_STALL_TIMEOUT;
+`else
+    localparam SCHED_STALL_TIMEOUT = STALL_TIMEOUT;
+`endif
+`ifdef EXT_SCHED_TIMEOUT_DUMP
+    always @(posedge clk) begin
+        if (!reset && (timeout_ctr == (SCHED_STALL_TIMEOUT - 1))) begin
+            $display("*** %s scheduler-timeout dump: active=%b stalled=%b", INSTANCE_ID, active_warps, stalled_warps);
+            for (integer wi = 0; wi < `NUM_WARPS; ++wi) begin
+                $display("    wid=%0d stalled=%0d pc=0x%0h tmask=%b",
+                         wi, stalled_warps[wi], to_fullPC(warp_pcs[wi]), thread_masks[wi]);
+            end
+        end
+    end
+`endif
+    `RUNTIME_ASSERT(timeout_ctr < SCHED_STALL_TIMEOUT, ("*** %s timeout: active_warps=%b, stalled_warps=%b", INSTANCE_ID, active_warps, stalled_warps))
 
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] perf_sched_idles;
@@ -463,6 +555,25 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         if (schedule_fire) begin
             `TRACE(1, ("%t: %s dispatch: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_wid, to_fullPC(schedule_pc), schedule_tmask, instr_uuid))
         end
+    end
+`endif
+
+`ifdef DBG_TRACE_DXA_TX_BAR
+    always @(posedge clk) begin
+        if (warp_ctl_if.valid && warp_ctl_if.barrier.valid && ~warp_ctl_if.barrier.is_global) begin
+            `TRACE(1, ("%t: %s bar-req: wid=%0d arrive=%b async=%b phase=%b addr=%0d size_m1=%0d\n",
+                $time, INSTANCE_ID, warp_ctl_if.wid, warp_ctl_if.barrier.is_arrive, warp_ctl_if.barrier.is_async,
+                warp_ctl_if.barrier.phase, warp_ctl_if.barrier_addr, warp_ctl_if.barrier.size_m1))
+        end
+        if (barrier_unlock_valid) begin
+            `TRACE(1, ("%t: %s bar-unlock: mask=%b\n", $time, INSTANCE_ID, barrier_unlock_mask))
+        end
+    `ifdef EXT_DXA_ENABLE
+        if (tx_evt_fire) begin
+            `TRACE(1, ("%t: %s tx-evt: fire=%b ready=%b setup_fire=%b addr=%0d done=%b\n",
+                $time, INSTANCE_ID, tx_evt_fire, tx_evt_ready, tx_bar_fire && ~tx_bar_if.data.is_done, tx_evt_bar_addr, tx_evt_is_done))
+        end
+    `endif
     end
 `endif
 

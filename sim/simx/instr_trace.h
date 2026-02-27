@@ -44,12 +44,12 @@ struct SfuTraceData : public ITraceData {
 };
 
 #ifdef EXT_DXA_ENABLE
-struct TmaTraceData : public ITraceData {
-  using Ptr = std::shared_ptr<TmaTraceData>;
+struct DxaTraceData : public ITraceData {
+  using Ptr = std::shared_ptr<DxaTraceData>;
   Word rs1;
   Word rs2;
   uint32_t op;
-  TmaTraceData(Word rs1, Word rs2, uint32_t op)
+  DxaTraceData(Word rs1, Word rs2, uint32_t op)
     : rs1(rs1)
     , rs2(rs2)
     , op(op) {}

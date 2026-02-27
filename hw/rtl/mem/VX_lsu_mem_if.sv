@@ -48,7 +48,13 @@ interface VX_lsu_mem_if import VX_gpu_pkg::*; #(
     logic  req_ready;
 
     logic  rsp_valid;
+`ifdef EXT_DXA_ENABLE
+    /* verilator lint_off UNUSEDSIGNAL */
+`endif
     rsp_data_t rsp_data;
+`ifdef EXT_DXA_ENABLE
+    /* verilator lint_on UNUSEDSIGNAL */
+`endif
     logic  rsp_ready;
 
     modport master (

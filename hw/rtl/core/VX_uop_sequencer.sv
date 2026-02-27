@@ -67,10 +67,9 @@ module VX_uop_sequencer import
 
 `ifdef EXT_DXA_ENABLE
 
-    localparam DXA_OP_LAUNCH = 3'd5;
+    // All DXA dimension variants (funct3 0-4) require uop expansion.
     assign is_dxa_uop_input = (input_if.data.ex_type == EX_SFU)
-                            && (input_if.data.op_type == INST_SFU_DXA)
-                            && (input_if.data.op_args.dxa.op == DXA_OP_LAUNCH);
+                            && (input_if.data.op_type == INST_SFU_DXA);
 
     VX_dxa_uops dxa_uops (
         .clk     (clk),

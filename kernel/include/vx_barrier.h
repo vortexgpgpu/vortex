@@ -43,6 +43,9 @@ public:
     wait(phase);
   }
 
+  // Packed barrier id (for passing to DXA issue instructions)
+  uint32_t id() const { return bar_id_; }
+
 private:
   uint32_t bar_id_;
   uint32_t num_warps_;

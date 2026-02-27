@@ -113,11 +113,10 @@ private:
     uint32_t desc_slot = 0;
     uint32_t bar_id = 0;
     uint32_t smem_addr = 0;
-    uint32_t flags = 0;
     std::array<uint32_t, 5> coords = {0, 0, 0, 0, 0};
   };
 
-  bool execute_dxa_op(instr_trace_t* trace, TmaType dxa_type, const TmaTraceData& dxa_data);
+  bool execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaTraceData& dxa_data);
 
   std::vector<dxa_runtime_t> dxa_runtime_;
 #endif

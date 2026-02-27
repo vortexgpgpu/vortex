@@ -165,12 +165,11 @@ public:
   bool dxa_issue(uint32_t desc_slot,
                  uint32_t smem_addr,
                  const uint32_t coords[5],
-                 uint32_t flags,
                  uint32_t bar_id);
 
-  bool dxa_estimate(uint32_t desc_slot, uint32_t flags, uint32_t* total_elems, uint32_t* elem_bytes);
+  bool dxa_estimate(uint32_t desc_slot, uint32_t* total_elems, uint32_t* elem_bytes);
 
-  bool dxa_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t flags, uint32_t* bytes_copied);
+  bool dxa_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t* bytes_copied);
 #endif
 
 #ifdef EXT_TCU_ENABLE
@@ -246,7 +245,7 @@ private:
   std::vector<Arbiter> ibuffer_arbs_;
 
 #ifdef EXT_DXA_ENABLE
-  std::unique_ptr<TmaEngine> dxa_engine_;
+  std::unique_ptr<DxaEngine> dxa_engine_;
 #endif
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;

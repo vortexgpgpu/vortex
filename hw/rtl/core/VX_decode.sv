@@ -545,12 +545,16 @@ module VX_decode import VX_gpu_pkg::*; #(
                         op_type = INST_OP_BITS'(funct3);
                     end
                 `ifdef EXT_DXA_ENABLE
-                    7'h03: begin // DXA runtime issue packet
-                        ex_type = EX_SFU;
-                        op_type = INST_OP_BITS'(INST_SFU_DXA);
-                        op_args.dxa.op = funct3;
-                        `USED_IREG (rs1);
-                        `USED_IREG (rs2);
+                    7'h03: begin // DXA issue (dimension-specific)
+                        // funct3 encodes dimensionality: 0=1D .. 4=5D.
+                        // Expanded into micro-ops by VX_dxa_uops.
+                        if (funct3 <= 3'd4) begin
+                            ex_type = EX_SFU;
+                            op_type = INST_OP_BITS'(INST_SFU_DXA);
+                            op_args.dxa.op = funct3;
+                            `USED_IREG (rs1);
+                            `USED_IREG (rs2);
+                        end
                     end
                 `endif
                 `ifdef EXT_TCU_ENABLE

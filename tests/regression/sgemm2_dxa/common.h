@@ -11,7 +11,7 @@ typedef struct {
   uint32_t size;
   uint32_t tile_size;
   uint32_t chunk_k;
-  // 1: single-buffered DXA, 2: double-buffered DXA
+  // 1: single-buffered (full-K), 2: double-buffered (chunked-K)
   uint32_t mode;
   uint64_t A_addr;
   uint64_t B_addr;

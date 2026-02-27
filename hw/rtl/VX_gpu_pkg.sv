@@ -120,7 +120,11 @@ package VX_gpu_pkg;
     localparam VX_DCR_ADDR_WIDTH = `VX_DCR_ADDR_BITS;
     localparam VX_DCR_DATA_WIDTH = 32;
 
+`ifdef EXT_STALL_TIMEOUT
+    localparam STALL_TIMEOUT = `EXT_STALL_TIMEOUT;
+`else
     localparam STALL_TIMEOUT = (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)));
+`endif
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -812,11 +816,28 @@ package VX_gpu_pkg;
     localparam LSU_TAG_ID_BITS      = (`CLOG2(`LSUQ_IN_SIZE) + `CLOG2(LSU_MEM_BATCHES));
     localparam LSU_TAG_WIDTH        = (UUID_WIDTH + LSU_TAG_ID_BITS);
     localparam LSU_NUM_REQS	        = `NUM_LSU_BLOCKS * `NUM_LSU_LANES;
-    localparam LMEM_TAG_WIDTH       = LSU_TAG_WIDTH + `CLOG2(`NUM_LSU_BLOCKS);
+    localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(`NUM_LSU_BLOCKS);
+`ifdef EXT_DXA_ENABLE
+    // DXA completion signaling via SMEM write tags requires route bits
+    // (engine/core) plus metadata bits (barrier address + last-packet bit).
+    localparam DXA_DONE_ROUTE_REQ_W = (`CLOG2(`NUM_DXA_UNITS) + NC_WIDTH);
+    localparam DXA_DONE_META_REQ_W  = (BAR_ADDR_W + 1);
+    localparam DXA_DONE_TAG_REQ_W   = (DXA_DONE_ROUTE_REQ_W + DXA_DONE_META_REQ_W);
+    // Keep inflated until all consumers are converted to bank-native interface.
+    localparam LMEM_TAG_WIDTH       = `MAX(LMEM_TAG_WIDTH_BASE, DXA_DONE_TAG_REQ_W);
     // DXA shared-memory path is dimensioned independently from LSU scalar word size
     // to match the shared-memory service width per request path.
     localparam DXA_SMEM_WORD_SIZE   = `LSU_LINE_SIZE;
     localparam DXA_SMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_SMEM_WORD_SIZE));
+
+    // New bank-native DXA SMEM interface params.
+    // DXA bank-write tag: {last_pkt, bar_addr} — carried on VX_dxa_bank_wr_if.
+    localparam DXA_BANK_WR_TAG_WIDTH = (BAR_ADDR_W + 1);
+    // Bank-level address width for DXA SMEM writes (word-addressed within one bank).
+    localparam DXA_SMEM_BANK_ADDR_WIDTH = (`LMEM_LOG_SIZE - `CLOG2(`XLEN / 8) - `CLOG2(`LMEM_NUM_BANKS));
+`else
+    localparam LMEM_TAG_WIDTH       = LMEM_TAG_WIDTH_BASE;
+`endif
 
     ////////////////////////// Icache Parameters //////////////////////////////
 
@@ -888,11 +909,29 @@ package VX_gpu_pkg;
     // Word size in bytes
     localparam L2_WORD_SIZE	        = `L1_LINE_SIZE;
 
-    // Input request size
-    localparam L2_NUM_REQS	        = NUM_SOCKETS * `L1_MEM_PORTS;
+    // Input request size — socket-only (DXA merges via per-port priority arb)
+    localparam L2_SOCKET_REQS       = NUM_SOCKETS * `L1_MEM_PORTS;
+    localparam L2_NUM_REQS          = L2_SOCKET_REQS;
 
-    // Core request tag bits
-    localparam L2_TAG_WIDTH	        = L1_MEM_ARB_TAG_WIDTH;
+`ifdef EXT_DXA_ENABLE
+`ifdef NUM_DXA_UNITS
+    localparam L2_DXA_NUM_REQS      = `NUM_DXA_UNITS;
+`else
+    localparam L2_DXA_NUM_REQS      = 1;
+`endif
+    // DXA uses a fixed small number of L2 ports (= NUM_DXA_UNITS) to avoid
+    // a combinational ready-valid loop when output-select distribution fans
+    // out 1 worker across many L2 ports in multi-core configs.
+    localparam DXA_L2_GMEM_PORTS    = `MIN(L2_DXA_NUM_REQS, L2_SOCKET_REQS);
+    localparam DXA_L2_ARB_TAG_BITS  = `CLOG2(2);
+`else
+    localparam L2_DXA_NUM_REQS      = 0;
+    localparam DXA_L2_GMEM_PORTS    = 0;
+    localparam DXA_L2_ARB_TAG_BITS  = 0;
+`endif
+
+    // Core request tag bits (includes DXA arb overhead when enabled)
+    localparam L2_TAG_WIDTH         = L1_MEM_ARB_TAG_WIDTH + DXA_L2_ARB_TAG_BITS;
 
     // Memory request data bits
     localparam L2_MEM_DATA_WIDTH	= (`L2_LINE_SIZE * 8);
@@ -904,21 +943,6 @@ package VX_gpu_pkg;
     localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, `L2_MEM_PORTS, `L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
 `endif
 
-    // Extra tag bits needed on cluster external memory port when cluster-level
-    // DXA gmem arbitration is enabled:
-    //   1) DXA-engine merge: NUM_DXA_UNITS -> 1
-    //   2) L2/DXA port-0 merge: 2 -> 1
-`ifdef NUM_DXA_UNITS
-    localparam NUM_DXA_UNITS_P = `NUM_DXA_UNITS;
-`else
-    localparam NUM_DXA_UNITS_P = 1;
-`endif
-    localparam L2_DXA_ARB_TAG_WIDTH = L2_MEM_TAG_WIDTH
-                                    + (`EXT_DXA_CLUSTER_LEVEL_ENABLED
-                                        ? (`ARB_SEL_BITS(NUM_DXA_UNITS_P, 1)
-                                         + `ARB_SEL_BITS(2, 1))
-                                        : 0);
-
     /////////////////////////////// L3 Parameters /////////////////////////////
 
     // Word size in bytes
@@ -927,10 +951,8 @@ package VX_gpu_pkg;
     // Input request size
     localparam L3_NUM_REQS	        = `NUM_CLUSTERS * `L2_MEM_PORTS;
 
-    // Core request tag bits:
-    // - default: preserve original L2_MEM_TAG_WIDTH contract
-    // - cluster-level DXA on: widen for additional arb-routing tag bits
-    localparam L3_TAG_WIDTH	        = (`EXT_DXA_CLUSTER_LEVEL_ENABLED ? L2_DXA_ARB_TAG_WIDTH : L2_MEM_TAG_WIDTH);
+    // Core request tag bits
+    localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;
 
     // Memory request data bits
     localparam L3_MEM_DATA_WIDTH	= (`L3_LINE_SIZE * 8);

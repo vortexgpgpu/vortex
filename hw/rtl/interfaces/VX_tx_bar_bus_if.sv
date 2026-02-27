@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-interface VX_txbar_bus_if import VX_gpu_pkg::*; ();
+interface VX_tx_bar_bus_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
         logic [BAR_ADDR_W-1:0] addr;

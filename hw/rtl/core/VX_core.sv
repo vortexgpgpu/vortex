@@ -39,7 +39,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
 `ifdef EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master    dxa_req_bus_if,
-    VX_mem_bus_if.slave     dxa_smem_bus_if,
+    VX_dxa_bank_wr_if.slave     dxa_bank_wr_if,
 `endif
 
 `ifdef GBAR_ENABLE
@@ -59,7 +59,13 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
 `ifdef EXT_DXA_ENABLE
-    VX_txbar_bus_if     txbar_if();
+    VX_tx_bar_bus_if    tx_bar_if();
+    wire                dxa_done_valid;
+    wire [BAR_ADDR_W-1:0] dxa_done_bar_addr;
+`ifndef EXT_DXA_ENABLE
+    `UNUSED_VAR (dxa_done_valid)
+    `UNUSED_VAR (dxa_done_bar_addr)
+`endif
 `endif
 
     VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
@@ -110,7 +116,11 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .warp_ctl_if    (warp_ctl_if),
     `ifdef EXT_DXA_ENABLE
-        .txbar_if       (txbar_if),
+        .tx_bar_if      (tx_bar_if),
+    `ifdef EXT_DXA_ENABLE
+        .dxa_done_valid (dxa_done_valid),
+        .dxa_done_bar_addr(dxa_done_bar_addr),
+    `endif
     `endif
         .branch_ctl_if  (branch_ctl_if),
 
@@ -197,7 +207,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef EXT_DXA_ENABLE
         ,
         .dxa_req_bus_if     (dxa_req_bus_if),
-        .txbar_if       (txbar_if)
+        .tx_bar_if      (tx_bar_if)
     `endif
     );
 
@@ -227,7 +237,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .dcache_bus_if (dcache_bus_if)
     `ifdef EXT_DXA_ENABLE
         ,
-        .dxa_smem_bus_if(dxa_smem_bus_if)
+        .dxa_bank_wr_if (dxa_bank_wr_if),
+        .dxa_done_valid (dxa_done_valid),
+        .dxa_done_bar_addr(dxa_done_bar_addr)
     `endif
     );
 

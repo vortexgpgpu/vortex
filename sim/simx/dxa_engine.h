@@ -23,19 +23,26 @@ namespace vortex {
 
 class Core;
 
-// Cycle-model DXA engine for simx.
-// Issue path enqueues requests and completion notifies barrier only when
-// modeled transfer latency elapses.
-class TmaEngine {
+// Cycle-approximate DXA engine for simx.
+//
+// Models the next-gen AG→RRS→WBC pipeline timing:
+//   - g2s: pipelined gmem reads with MAX_OUTSTANDING concurrent slots,
+//     so the dominant cost is cache-line fill latency amortized across
+//     the pipeline depth, plus per-element write-back.
+//   - s2g: serial per-element (read smem, write gmem).
+//
+// The model counts down modeled cycles.  When the countdown expires it
+// performs the actual data copy via core_->dxa_copy() and releases the
+// barrier via core_->barrier_tx_done().
+class DxaEngine {
 public:
-  explicit TmaEngine(Core* core);
+  explicit DxaEngine(Core* core);
 
   void reset();
 
   bool issue(uint32_t desc_slot,
              uint32_t smem_addr,
              const uint32_t coords[5],
-             uint32_t flags,
              uint32_t bar_id);
 
   void tick();
@@ -44,7 +51,6 @@ private:
   struct Request {
     uint32_t desc_slot = 0;
     uint32_t smem_addr = 0;
-    uint32_t flags = 0;
     uint32_t bar_id = 0;
     std::array<uint32_t, 5> coords = {0, 0, 0, 0, 0};
   };

@@ -44,6 +44,12 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 `endif
 
     VX_mem_bus_if.slave mem_bus_if [NUM_REQS]
+`ifdef EXT_DXA_ENABLE
+    ,
+    VX_dxa_bank_wr_if.slave   dxa_bank_wr_if,
+    output wire               dxa_done_valid,
+    output wire [BAR_ADDR_W-1:0] dxa_done_bar_addr
+`endif
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -147,6 +153,26 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         } = per_bank_req_data_aos[i];
     end
 
+`ifdef EXT_DXA_ENABLE
+    // DXA bank writes: always accepted (priority over LSU at each bank SRAM)
+    assign dxa_bank_wr_if.wr_ready = 1'b1;
+
+    // DXA completion detection from dedicated bank write port
+    wire [NUM_BANKS-1:0] dxa_bank_wr_fire = dxa_bank_wr_if.wr_valid;
+
+    VX_dxa_completion_detect #(
+        .NUM_BANKS(NUM_BANKS),
+        .TAG_WIDTH(DXA_BANK_WR_TAG_WIDTH)
+    ) dxa_completion_detect (
+        .clk            (clk),
+        .reset          (reset),
+        .bank_wr_fire   (dxa_bank_wr_fire),
+        .bank_wr_tag    (dxa_bank_wr_if.wr_tag),
+        .done_valid     (dxa_done_valid),
+        .done_bar_addr  (dxa_done_bar_addr)
+    );
+`endif
+
     // banks access
 
     wire [NUM_BANKS-1:0]                per_bank_rsp_valid;
@@ -158,6 +184,21 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_data_store
         wire bank_rsp_valid, bank_rsp_ready;
 
+        // DXA bank writes: priority over LSU at each bank SRAM
+    `ifdef EXT_DXA_ENABLE
+        wire dxa_wr_b = dxa_bank_wr_if.wr_valid[i];
+        wire [BANK_ADDR_WIDTH-1:0] bank_sram_addr  = dxa_wr_b ? dxa_bank_wr_if.wr_addr[i]   : per_bank_req_addr[i];
+        wire [WORD_WIDTH-1:0]      bank_sram_wdata = dxa_wr_b ? dxa_bank_wr_if.wr_data[i]   : per_bank_req_data[i];
+        wire [WORD_SIZE-1:0]       bank_sram_wren  = dxa_wr_b ? dxa_bank_wr_if.wr_byteen[i] : per_bank_req_byteen[i];
+    `else
+        wire dxa_wr_b = 1'b0;
+        wire [BANK_ADDR_WIDTH-1:0] bank_sram_addr  = per_bank_req_addr[i];
+        wire [WORD_WIDTH-1:0]      bank_sram_wdata = per_bank_req_data[i];
+        wire [WORD_SIZE-1:0]       bank_sram_wren  = per_bank_req_byteen[i];
+    `endif
+
+        wire lsu_active = per_bank_req_valid[i] && per_bank_req_ready[i];
+
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
@@ -167,30 +208,30 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         ) lmem_store (
             .clk   (clk),
             .reset (reset),
-            .read  (per_bank_req_valid[i] && per_bank_req_ready[i] && ~per_bank_req_rw[i]),
-            .write (per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i]),
-            .wren  (per_bank_req_byteen[i]),
-            .addr  (per_bank_req_addr[i]),
-            .wdata (per_bank_req_data[i]),
+            .read  (lsu_active && ~per_bank_req_rw[i]),
+            .write (dxa_wr_b || (lsu_active && per_bank_req_rw[i])),
+            .wren  (bank_sram_wren),
+            .addr  (bank_sram_addr),
+            .wdata (bank_sram_wdata),
             .rdata (per_bank_rsp_data[i])
         );
 
-        // read-during-write hazard detection
+        // read-during-write hazard detection (includes DXA writes)
         reg [BANK_ADDR_WIDTH-1:0] last_wr_addr;
         reg last_wr_valid;
         always @(posedge clk) begin
             if (reset) begin
                 last_wr_valid <= 0;
             end else begin
-                last_wr_valid <= per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i];
+                last_wr_valid <= dxa_wr_b || (lsu_active && per_bank_req_rw[i]);
             end
-            last_wr_addr <= per_bank_req_addr[i];
+            last_wr_addr <= bank_sram_addr;
         end
         wire is_rdw_hazard = last_wr_valid && ~per_bank_req_rw[i] && (per_bank_req_addr[i] == last_wr_addr);
 
-        // drop write response
-        assign bank_rsp_valid = per_bank_req_valid[i] && ~per_bank_req_rw[i] && ~is_rdw_hazard;
-        assign per_bank_req_ready[i] = (bank_rsp_ready || per_bank_req_rw[i]) && ~is_rdw_hazard;
+        // drop write response; block LSU when DXA writes to this bank
+        assign bank_rsp_valid = per_bank_req_valid[i] && ~dxa_wr_b && ~per_bank_req_rw[i] && ~is_rdw_hazard;
+        assign per_bank_req_ready[i] = ~dxa_wr_b && (bank_rsp_ready || per_bank_req_rw[i]) && ~is_rdw_hazard;
 
         // register BRAM output
         VX_pipe_buffer #(

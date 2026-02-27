@@ -28,7 +28,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 `ifdef EXT_DXA_ENABLE
     ,
-    VX_mem_bus_if.slave     dxa_smem_bus_if
+    VX_dxa_bank_wr_if.slave dxa_bank_wr_if,
+    output wire             dxa_done_valid,
+    output wire [BAR_ADDR_W-1:0] dxa_done_bar_addr
 `endif
 );
     VX_lsu_mem_if #(
@@ -77,6 +79,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .NUM_LANES  (`NUM_LSU_LANES),
         .DATA_SIZE  (LSU_WORD_SIZE),
         .TAG_WIDTH  (LSU_TAG_WIDTH),
+    `ifdef EXT_DXA_ENABLE
+        .OUT_TAG_WIDTH(LMEM_TAG_WIDTH),
+    `endif
         .TAG_SEL_IDX(0),
         .ARBITER    ("R"),
         .REQ_OUT_BUF(0),
@@ -109,81 +114,27 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     );
 
 `ifdef EXT_DXA_ENABLE
-    if (`EXT_DXA_CLUSTER_LEVEL_ENABLED) begin : g_lmem_ext_dxa
-        VX_mem_bus_if #(
-            .DATA_SIZE (LSU_WORD_SIZE),
-            .TAG_WIDTH (LMEM_TAG_WIDTH)
-        ) lmem_ext_dxa_if();
-
-        if (DXA_SMEM_WORD_SIZE != LSU_WORD_SIZE) begin : g_lmem_ext_dxa_downsize
-            VX_dxa_smem_downsize #(
-                .SRC_DATA_SIZE (DXA_SMEM_WORD_SIZE),
-                .DST_DATA_SIZE (LSU_WORD_SIZE),
-                .TAG_WIDTH     (LMEM_TAG_WIDTH),
-                .SRC_ADDR_WIDTH(DXA_SMEM_ADDR_WIDTH),
-                .DST_ADDR_WIDTH(LSU_ADDR_WIDTH)
-            ) lmem_ext_dxa_downsize (
-                .clk       (clk),
-                .reset     (reset),
-                .src_bus_if(dxa_smem_bus_if),
-                .dst_bus_if(lmem_ext_dxa_if)
-            );
-        end else begin : g_lmem_ext_dxa_passthru
-            `ASSIGN_VX_MEM_BUS_IF (lmem_ext_dxa_if, dxa_smem_bus_if);
-        end
-
-        VX_mem_bus_if #(
-            .DATA_SIZE (LSU_WORD_SIZE),
-            .TAG_WIDTH (LMEM_TAG_WIDTH)
-        ) lmem_mux_if[`NUM_LSU_LANES + 1]();
-
-        // Keep DXA at input index 0 so VX_local_mem's priority arbiter
-        // grants DXA ahead of LSU lanes at the bank-facing request xbar.
-        `ASSIGN_VX_MEM_BUS_IF (lmem_mux_if[0], lmem_ext_dxa_if);
-        for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin : g_lmem_mux_lsu
-            `ASSIGN_VX_MEM_BUS_IF (lmem_mux_if[i + 1], lmem_adapt_if[i]);
-        end
-
-        VX_local_mem #(
-            .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
-            .SIZE       (1 << `LMEM_LOG_SIZE),
-            .NUM_REQS   (`NUM_LSU_LANES + 1),
-            .NUM_BANKS  (`LMEM_NUM_BANKS),
-            .WORD_SIZE  (LSU_WORD_SIZE),
-            .ADDR_WIDTH (LMEM_ADDR_WIDTH),
-            .TAG_WIDTH  (LMEM_TAG_WIDTH),
-            .OUT_BUF    (3)
-        ) local_mem (
-            .clk        (clk),
-            .reset      (reset),
-        `ifdef PERF_ENABLE
-            .lmem_perf  (lmem_perf),
-        `endif
-            .mem_bus_if (lmem_mux_if)
-        );
-    end else begin : g_lmem_no_ext_dxa
-        VX_local_mem #(
-            .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
-            .SIZE       (1 << `LMEM_LOG_SIZE),
-            .NUM_REQS   (`NUM_LSU_LANES),
-            .NUM_BANKS  (`LMEM_NUM_BANKS),
-            .WORD_SIZE  (LSU_WORD_SIZE),
-            .ADDR_WIDTH (LMEM_ADDR_WIDTH),
-            .TAG_WIDTH  (LMEM_TAG_WIDTH),
-            .OUT_BUF    (3)
-        ) local_mem (
-            .clk        (clk),
-            .reset      (reset),
-        `ifdef PERF_ENABLE
-            .lmem_perf  (lmem_perf),
-        `endif
-            .mem_bus_if (lmem_adapt_if)
-        );
-
-        assign dxa_smem_bus_if.req_ready = 1'b1;
-        assign dxa_smem_bus_if.rsp_valid = 1'b0;
-        assign dxa_smem_bus_if.rsp_data  = '0;
-    end
+    // DXA bank-native writes bypass LSU crossbar — dedicated port to VX_local_mem
+    VX_local_mem #(
+        .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
+        .SIZE       (1 << `LMEM_LOG_SIZE),
+        .NUM_REQS   (`NUM_LSU_LANES),
+        .NUM_BANKS  (`LMEM_NUM_BANKS),
+        .WORD_SIZE  (LSU_WORD_SIZE),
+        .ADDR_WIDTH (LMEM_ADDR_WIDTH),
+        .TAG_WIDTH  (LMEM_TAG_WIDTH),
+        .OUT_BUF    (3)
+    ) local_mem (
+        .clk        (clk),
+        .reset      (reset),
+    `ifdef PERF_ENABLE
+        .lmem_perf  (lmem_perf),
+    `endif
+        .mem_bus_if (lmem_adapt_if),
+        .dxa_bank_wr_if(dxa_bank_wr_if),
+        .dxa_done_valid(dxa_done_valid),
+        .dxa_done_bar_addr(dxa_done_bar_addr)
+    );
 `else
     VX_local_mem #(
         .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
@@ -215,9 +166,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     end
 
 `ifdef EXT_DXA_ENABLE
-    assign dxa_smem_bus_if.req_ready = 1'b1;
-    assign dxa_smem_bus_if.rsp_valid = 1'b0;
-    assign dxa_smem_bus_if.rsp_data  = '0;
+    assign dxa_bank_wr_if.wr_ready = 1'b1;
+    `UNUSED_VAR (dxa_bank_wr_if.wr_valid)
+    `UNUSED_VAR (dxa_bank_wr_if.wr_addr)
+    `UNUSED_VAR (dxa_bank_wr_if.wr_data)
+    `UNUSED_VAR (dxa_bank_wr_if.wr_byteen)
+    `UNUSED_VAR (dxa_bank_wr_if.wr_tag)
+    assign dxa_done_valid = 1'b0;
+    assign dxa_done_bar_addr = '0;
 `endif
 
 `endif

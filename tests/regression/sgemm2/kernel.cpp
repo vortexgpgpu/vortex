@@ -2,48 +2,50 @@
 #include "common.h"
 
 void kernel_body(kernel_arg_t *arg) {
-	// Setup buffer arguments
   auto A_ptr = reinterpret_cast<TYPE*>(arg->A_addr);
   auto B_ptr = reinterpret_cast<TYPE*>(arg->B_addr);
   auto C_ptr = reinterpret_cast<TYPE*>(arg->C_addr);
 
-  // Allocate local memory for the tile of matrix A & B
-	auto local_ptr = __local_mem(2 * blockDim.x * blockDim.y * sizeof(TYPE));
-  auto local_A = (TYPE*)local_ptr;
-  auto local_B = (TYPE*)local_ptr + blockDim.x * blockDim.y;
-
-  auto size = arg->size;
+  auto size      = arg->size;
   auto tile_size = arg->tile_size;
+  auto chunk_k   = arg->chunk_k;
 
-  // Determine global row and column indices
+  // Global and local thread coordinates.
   auto g_row = blockIdx.x * blockDim.x + threadIdx.x;
   auto g_col = blockIdx.y * blockDim.y + threadIdx.y;
-
-  // Determine local row and column indices
   auto l_row = threadIdx.x;
   auto l_col = threadIdx.y;
 
+  // Shared memory layout:
+  //   local_A: [tile_size × chunk_k], row-major (row = l_row, col = k_local)
+  //   local_B: [chunk_k × tile_size], row-major (row = k_local, col = l_col)
+  auto tile_elems_a = tile_size * chunk_k;
+  auto tile_elems_b = chunk_k * tile_size;
+  auto local_ptr = __local_mem((tile_elems_a + tile_elems_b) * sizeof(TYPE));
+  auto local_A = reinterpret_cast<TYPE*>(local_ptr);
+  auto local_B = local_A + tile_elems_a;
+
   TYPE sum(0);
 
-  // Loop over tiles
-  for (uint32_t k = 0; k < size; k += tile_size) {
-    // Load tile of matrix A & B to local memory
-    local_A[l_row * tile_size + l_col] = A_ptr[g_row * size + (k + l_col)];
-    local_B[l_row * tile_size + l_col] = B_ptr[(k + l_row) * size + g_col];
-
-    // Synchronize all warps in current group
-    __syncthreads();
-
-    // Compute partial sum for the local tile
-    for (uint32_t j = 0; j < tile_size; ++j) {
-      sum += local_A[l_row * tile_size + j] * local_B[j * tile_size + l_col];
+  for (uint32_t k = 0; k < size; k += chunk_k) {
+    // Cooperative load: each thread loads chunk_k/tile_size elements per tile.
+    // Thread (l_row, l_col) loads columns l_col, l_col+tile_size, ... of its row.
+    for (uint32_t kk = l_col; kk < chunk_k; kk += tile_size) {
+      local_A[l_row * chunk_k + kk] = A_ptr[g_row * size + (k + kk)];
+    }
+    for (uint32_t kk = l_row; kk < chunk_k; kk += tile_size) {
+      local_B[kk * tile_size + l_col] = B_ptr[(k + kk) * size + g_col];
     }
 
-    // Synchronize all warps in current group
+    __syncthreads();
+
+    for (uint32_t j = 0; j < chunk_k; ++j) {
+      sum += local_A[l_row * chunk_k + j] * local_B[j * tile_size + l_col];
+    }
+
     __syncthreads();
   }
 
-  // Store the computed sum into the result matrix C
   C_ptr[g_row * size + g_col] = sum;
 }
 

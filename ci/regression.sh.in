@@ -155,8 +155,13 @@ dxa()
 
     make -C runtime/simx
 
-    # Keep a deterministic passing config for CI.
-    CONFIGS="-DEXT_DXA_ENABLE -DEXT_TXBAR_ENABLE -DEXT_DXA_CLUSTER_LEVEL_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -c4 -m2"
+    # single-core with L2 cache
+    CONFIGS="-DEXT_DXA_ENABLE -DBAR_TX_ENABLE" \
+    ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m2" --l2cache
+
+    # multi-core with L2 cache
+    CONFIGS="-DEXT_DXA_ENABLE -DBAR_TX_ENABLE" \
+    ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m2" --cores=4 --l2cache
 
     echo "dxa tests done!"
 }

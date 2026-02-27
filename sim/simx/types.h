@@ -73,9 +73,9 @@ union reg_data_t {
 struct warp_barrier_t {
   WarpMask wait_mask  = 0;
   uint32_t arrival_count = 0;
-#ifdef EXT_TXBAR_ENABLE
+#ifdef BAR_TX_ENABLE
   uint32_t expected_count = 0;
-  bool tx_pending = false;
+  uint32_t tx_count = 0;
   bool arrivals_done = false;
 #endif
   uint32_t phase = 0;
@@ -83,9 +83,9 @@ struct warp_barrier_t {
   void reset() {
     wait_mask.reset();
     arrival_count = 0;
-#ifdef EXT_TXBAR_ENABLE
+#ifdef BAR_TX_ENABLE
     expected_count = 0;
-    tx_pending = false;
+    tx_count = 0;
     arrivals_done = false;
 #endif
     phase = 0;
@@ -493,25 +493,23 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
 
 #ifdef EXT_DXA_ENABLE
 
-enum class TmaType {
-  SETUP0,
-  SETUP1,
+enum class DxaType {
+  SETUP,
   COORD01,
   COORD23,
   ISSUE
 };
 
-struct IntrTmaArgs {
+struct IntrDxaArgs {
   uint32_t op : 3;
 };
 
-inline std::ostream &operator<<(std::ostream &os, const TmaType& type) {
+inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
   switch (type) {
-  case TmaType::SETUP0:  os << "DXA.SETUP0"; break;
-  case TmaType::SETUP1:  os << "DXA.SETUP1"; break;
-  case TmaType::COORD01: os << "DXA.COORD01"; break;
-  case TmaType::COORD23: os << "DXA.COORD23"; break;
-  case TmaType::ISSUE:   os << "DXA.ISSUE"; break;
+  case DxaType::SETUP:   os << "DXA.SETUP"; break;
+  case DxaType::COORD01: os << "DXA.COORD01"; break;
+  case DxaType::COORD23: os << "DXA.COORD23"; break;
+  case DxaType::ISSUE:   os << "DXA.ISSUE"; break;
   default:
     assert(false);
   }
@@ -746,7 +744,7 @@ using OpType = std::variant<
 , ShflType
 , WctlType
 #ifdef EXT_DXA_ENABLE
-, TmaType
+, DxaType
 #endif
 #ifdef EXT_V_ENABLE
 , VsetType
@@ -768,7 +766,7 @@ using IntrArgs = std::variant<
 , IntrCsrArgs
 , IntrWctlArgs
 #ifdef EXT_DXA_ENABLE
-, IntrTmaArgs
+, IntrDxaArgs
 #endif
 #ifdef EXT_V_ENABLE
 , IntrVsetArgs

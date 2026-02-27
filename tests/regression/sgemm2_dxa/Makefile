@@ -9,8 +9,8 @@ SRCS := $(SRC_DIR)/main.cpp
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
-OPTS ?= -n16 -t4 -c4 -m2
+OPTS ?= -n16 -t4 -m2
 
-CONFIGS += -DEXT_DXA_ENABLE -DEXT_TXBAR_ENABLE -DEXT_DXA_CLUSTER_LEVEL_ENABLE
+CONFIGS += -DEXT_DXA_ENABLE -DBAR_TX_ENABLE
 
 include ../common.mk

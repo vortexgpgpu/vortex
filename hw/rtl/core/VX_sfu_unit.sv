@@ -42,7 +42,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 `ifdef EXT_DXA_ENABLE
     ,
     VX_dxa_req_bus_if.master    dxa_req_bus_if,
-    VX_txbar_bus_if.master  txbar_if
+    VX_tx_bar_bus_if.master tx_bar_if
 `endif
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -158,7 +158,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .execute_if (pe_execute_if[PE_IDX_DXA]),
         .result_if  (pe_result_if[PE_IDX_DXA]),
         .dxa_req_bus_if (dxa_req_bus_if),
-        .txbar_if   (txbar_if)
+        .tx_bar_if  (tx_bar_if)
     );
 `endif
 

@@ -24,7 +24,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_execute_if.slave     execute_if,
     VX_result_if.master     result_if,
     VX_dxa_req_bus_if.master    dxa_req_bus_if,
-    VX_txbar_bus_if.master  txbar_if
+    VX_tx_bar_bus_if.master tx_bar_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (execute_if.data.rs3_data)
@@ -68,22 +68,28 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .ready_out (result_if.ready)
     );
 
-    if (`EXT_DXA_CLUSTER_LEVEL_ENABLED) begin : g_cluster_level
+    if (1) begin : g_cluster_level
+        reg [1:0] boot_guard_r;
+        wire boot_ready = boot_guard_r[1];
+        wire issue_valid_safe;
         wire is_setup0_req;
         wire req_tx_ready;
         wire req_fire;
         wire [BAR_ADDR_W-1:0] setup0_bar_addr;
         wire tx_setup_valid;
-        wire tx_rsp_valid;
-        wire tx_emit_setup;
-        wire tx_emit_rsp;
+        wire setup0_is_packed;
+        wire [NB_BITS-1:0] setup0_bar_slot;
+        wire [NW_BITS-1:0] setup0_bar_owner;
 
-        assign is_setup0_req = (execute_if.data.op_args.dxa.op == DXA_OP_SETUP0);
-        assign req_tx_ready = ~is_setup0_req || txbar_if.ready;
-        assign issue_valid_in = execute_if.valid;
-        assign execute_if.ready = issue_ready_in && dxa_req_bus_if.req_ready && req_tx_ready;
+        // Treat X/unknown valid as 0 and add a short boot guard to avoid
+        // reset-exit ghost traffic on DXA request/response channels.
+        assign issue_valid_safe = boot_ready && (execute_if.valid === 1'b1);
+        assign is_setup0_req = (execute_if.data.op_args.dxa.op == DXA_OP_SETUP);
+        assign req_tx_ready = ~is_setup0_req || tx_bar_if.ready;
+        assign issue_valid_in = issue_valid_safe;
+        assign execute_if.ready = issue_ready_in && dxa_req_bus_if.req_ready && req_tx_ready && ~reset;
 
-        assign dxa_req_bus_if.req_valid = issue_valid_in && issue_ready_in && req_tx_ready;
+        assign dxa_req_bus_if.req_valid = issue_valid_safe && issue_ready_in && req_tx_ready;
         assign dxa_req_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID);
         assign dxa_req_bus_if.req_data.uuid    = execute_if.data.header.uuid;
         assign dxa_req_bus_if.req_data.wid     = execute_if.data.header.wid;
@@ -91,44 +97,63 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign dxa_req_bus_if.req_data.rs1     = issue_rs1_data;
         assign dxa_req_bus_if.req_data.rs2     = issue_rs2_data;
 
-        if (`NUM_WARPS > 1) begin : g_setup_bar_addr_w
-            assign setup0_bar_addr = {issue_rs2_data[NW_BITS-1:0], issue_rs2_data[16 +: NB_BITS]};
-        end else begin : g_setup_bar_addr_wo
-            assign setup0_bar_addr = issue_rs2_data[16 +: NB_BITS];
+        // Packed launch metadata: [3:0]=desc, [30:4]=barrier payload, [31]=marker.
+        assign setup0_is_packed = issue_rs2_data[31];
+        assign setup0_bar_slot = setup0_is_packed ? issue_rs2_data[20 +: NB_BITS]
+                                                  : issue_rs2_data[16 +: NB_BITS];
+        if (`NUM_WARPS > 1) begin : g_setup_bar_owner
+            assign setup0_bar_owner = setup0_is_packed ? issue_rs2_data[4 +: NW_BITS]
+                                                       : issue_rs2_data[NW_BITS-1:0];
+        end else begin : g_setup_bar_owner_wo
+            assign setup0_bar_owner = '0;
         end
 
-        assign req_fire = dxa_req_bus_if.req_valid && dxa_req_bus_if.req_ready;
+        if (`NUM_WARPS > 1) begin : g_setup_bar_addr_w
+            assign setup0_bar_addr = {setup0_bar_owner, setup0_bar_slot};
+        end else begin : g_setup_bar_addr_wo
+            assign setup0_bar_addr = setup0_bar_slot;
+        end
+
+        assign req_fire = boot_ready && dxa_req_bus_if.req_valid && dxa_req_bus_if.req_ready;
         assign tx_setup_valid = req_fire && is_setup0_req;
-        assign tx_rsp_valid = dxa_req_bus_if.rsp_valid && dxa_req_bus_if.rsp_data.notify_barrier;
+        assign tx_bar_if.valid        = tx_setup_valid;
+        assign tx_bar_if.data.addr    = setup0_bar_addr;
+        assign tx_bar_if.data.is_done = 1'b0;
 
-        assign tx_emit_setup = tx_setup_valid;
-        assign tx_emit_rsp = tx_rsp_valid && ~tx_emit_setup;
-
-        assign txbar_if.valid        = tx_emit_setup || tx_emit_rsp;
-        assign txbar_if.data.addr    = tx_emit_setup ? setup0_bar_addr : dxa_req_bus_if.rsp_data.bar_addr;
-        assign txbar_if.data.is_done = tx_emit_setup ? 1'b0 : dxa_req_bus_if.rsp_data.done;
-
-        assign dxa_req_bus_if.rsp_ready = ~tx_rsp_valid || (txbar_if.ready && ~tx_emit_setup);
-
-        `UNUSED_VAR (dxa_req_bus_if.rsp_data.core_id)
-        `UNUSED_VAR (dxa_req_bus_if.rsp_data.uuid)
-        `UNUSED_VAR (dxa_req_bus_if.rsp_data.wid)
-    end else begin : g_cluster_level_off
-        assign issue_valid_in = execute_if.valid;
-        assign execute_if.ready = issue_ready_in;
-
-        assign dxa_req_bus_if.req_valid = 1'b0;
-        assign dxa_req_bus_if.req_data  = '0;
+        // Completion path is no longer carried over dxa_req_bus_if.rsp.
         assign dxa_req_bus_if.rsp_ready = 1'b1;
-        assign txbar_if.valid       = 1'b0;
-        assign txbar_if.data        = '0;
 
-        `UNUSED_VAR (execute_if.data.op_type)
-        `UNUSED_VAR (execute_if.data.op_args)
-        `UNUSED_VAR (dxa_req_bus_if.req_ready)
+        always @(posedge clk) begin
+            if (reset) begin
+                boot_guard_r <= 2'b00;
+            end else begin
+                if (~boot_guard_r[1]) begin
+                    boot_guard_r <= boot_guard_r + 2'b01;
+                end
+            end
+        end
+
         `UNUSED_VAR (dxa_req_bus_if.rsp_valid)
         `UNUSED_VAR (dxa_req_bus_if.rsp_data)
-        `UNUSED_VAR (txbar_if.ready)
+
+    `ifdef DBG_TRACE_DXA_TX_BAR
+        always @(posedge clk) begin
+            if (~reset) begin
+                if (req_fire) begin
+                    `TRACE(1, ("%t: %s dxa-req: op=%0d wid=%0d rs1=0x%0h rs2=0x%0h setup0=%b\n",
+                        $time, INSTANCE_ID, dxa_req_bus_if.req_data.op, execute_if.data.header.wid, issue_rs1_data, issue_rs2_data, is_setup0_req))
+                end
+                if (tx_setup_valid) begin
+                    `TRACE(1, ("%t: %s tx-setup: addr=%0d packed=%b slot=%0d owner=%0d\n",
+                        $time, INSTANCE_ID, setup0_bar_addr, setup0_is_packed, setup0_bar_slot, setup0_bar_owner))
+                end
+                if (tx_bar_if.valid && tx_bar_if.ready) begin
+                    `TRACE(1, ("%t: %s tx-bar-fire: addr=%0d done=%b\n",
+                        $time, INSTANCE_ID, tx_bar_if.data.addr, tx_bar_if.data.is_done))
+                end
+            end
+        end
+    `endif
     end
 
     assign result_if.data.header = header_out;

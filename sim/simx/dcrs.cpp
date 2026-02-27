@@ -17,7 +17,7 @@
 using namespace vortex;
 
 #ifdef EXT_DXA_ENABLE
-TmaDCRS::Descriptor TmaDCRS::read_descriptor(uint32_t slot) const {
+DxaDCRS::Descriptor DxaDCRS::read_descriptor(uint32_t slot) const {
   Descriptor desc{};
   desc.base_addr = (uint64_t(read_word(slot, VX_DCR_DXA_DESC_BASE_HI_OFF)) << 32)
                  | uint64_t(read_word(slot, VX_DCR_DXA_DESC_BASE_LO_OFF));

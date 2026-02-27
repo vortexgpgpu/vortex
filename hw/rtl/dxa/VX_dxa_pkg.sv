@@ -22,21 +22,41 @@ package VX_dxa_pkg;
 
     import VX_gpu_pkg::*;
 
-    localparam DXA_OP_SETUP0  = 3'd0;
-    localparam DXA_OP_SETUP1  = 3'd1;
-    localparam DXA_OP_COORD01 = 3'd2;
-    localparam DXA_OP_COORD23 = 3'd3;
-    localparam DXA_OP_ISSUE   = 3'd4;
-    localparam DXA_OP_LAUNCH  = 3'd5;
+    localparam DXA_OP_SETUP   = 3'd0;
+    localparam DXA_OP_COORD01 = 3'd1;
+    localparam DXA_OP_COORD23 = 3'd2;
+    localparam DXA_OP_ISSUE   = 3'd3;
+    // Architected funct3 encoding: 0=1D, 1=2D, 2=3D, 3=4D, 4=5D.
+    // All variants are expanded into micro-ops by VX_dxa_uops.
 
     localparam DXA_REQ_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + 3 + (2 * `XLEN);
-    localparam DXA_RSP_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + BAR_ADDR_W + 2;
 
     // Keep compatibility with existing global DXA descriptor macros.
     localparam DXA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_DXA_DESC_COUNT);
     localparam DXA_DESC_SLOT_W    = `UP(DXA_DESC_SLOT_BITS);
     localparam DXA_DESC_WORD_BITS = `CLOG2(`VX_DCR_DXA_DESC_STRIDE);
     localparam DXA_DESC_WORD_W    = `UP(DXA_DESC_WORD_BITS);
+    localparam DXA_DONE_ENGINE_BITS = `CLOG2(`NUM_DXA_UNITS);
+    localparam DXA_DONE_ENGINE_W    = `UP(DXA_DONE_ENGINE_BITS);
+    // Legacy tag-route params (still used by old code paths, will be removed in cleanup).
+    localparam DXA_DONE_ROUTE_W     = DXA_DONE_ENGINE_BITS + NC_WIDTH;
+    localparam DXA_DONE_META_W      = BAR_ADDR_W + 1;
+    localparam DXA_DONE_META_ENABLE = (LMEM_TAG_WIDTH >= (DXA_DONE_ROUTE_W + DXA_DONE_META_W));
+
+    // Configurable per-socket DXA bank_wr port count.
+    // Default: SOCKET_SIZE (1:1 passthrough, no socket-level arb).
+    // When < SOCKET_SIZE: socket_arb routes M inputs to N=SOCKET_SIZE cores.
+    localparam DXA_SMEM_PORTS_PER_SOCKET = `SOCKET_SIZE;
+    localparam DXA_SMEM_LOCAL_CORE_BITS  = `CLOG2(`SOCKET_SIZE);
+    localparam DXA_SMEM_LOCAL_CORE_W     = `UP(DXA_SMEM_LOCAL_CORE_BITS);
+
+    // Bank-write interface payload width (for flatten/unflatten in routing).
+    // Per-bank: BANK_ADDR_WIDTH + WORD_WIDTH + WORD_SIZE (addr + data + byteen).
+    // Full payload: NUM_BANKS * per_bank + NUM_BANKS valid bits + TAG_WIDTH.
+    localparam DXA_BANK_WR_WORD_SIZE  = `XLEN / 8;
+    localparam DXA_BANK_WR_WORD_WIDTH = DXA_BANK_WR_WORD_SIZE * 8;
+    localparam DXA_BANK_WR_PER_BANK_W = DXA_SMEM_BANK_ADDR_WIDTH + DXA_BANK_WR_WORD_WIDTH + DXA_BANK_WR_WORD_SIZE;
+    localparam DXA_BANK_WR_DATAW      = `LMEM_NUM_BANKS * (1 + DXA_BANK_WR_PER_BANK_W) + DXA_BANK_WR_TAG_WIDTH;
 
     typedef struct packed {
         logic [31:0] rank;
@@ -57,6 +77,7 @@ package VX_dxa_pkg;
         logic [UUID_WIDTH-1:0] uuid;
         logic [NW_WIDTH-1:0] wid;
         logic [BAR_ADDR_W-1:0] bar_addr;
+        logic notify_via_smem_done;
         logic is_s2g;
         logic [`MEM_ADDR_WIDTH-1:0] gbase;
         logic [`XLEN-1:0] smem_base;
@@ -70,6 +91,8 @@ package VX_dxa_pkg;
         logic [31:0] elem_bytes;
         logic [31:0] cfill;
         logic [31:0] idx;
+        logic [31:0] elem_x;
+        logic [31:0] elem_y;
         logic [31:0] total;
         logic [1:0] elem_state;
         logic wait_rsp_from_gmem;
@@ -91,13 +114,13 @@ package VX_dxa_pkg;
         logic cur_read_from_gmem;
         logic cur_read_from_smem;
         logic [`L2_LINE_SIZE * 8-1:0] pending_gmem_wr_data_shifted;
-        logic [XLENB * 8-1:0] pending_smem_wr_data_shifted;
+        logic [DXA_SMEM_WORD_SIZE * 8-1:0] pending_smem_wr_data_shifted;
         logic [`L2_LINE_SIZE-1:0] pending_gmem_byteen;
-        logic [XLENB-1:0] pending_smem_byteen;
+        logic [DXA_SMEM_WORD_SIZE-1:0] pending_smem_byteen;
         logic [63:0] gmem_rsp_data_shifted;
         logic [63:0] smem_rsp_data_shifted;
         logic [`L2_LINE_SIZE-1:0] cur_gmem_byteen;
-        logic [XLENB-1:0] cur_smem_byteen;
+        logic [DXA_SMEM_WORD_SIZE-1:0] cur_smem_byteen;
     } dxa_xfer_math_t;
 
     typedef struct packed {
@@ -108,6 +131,28 @@ package VX_dxa_pkg;
         logic gmem_rsp_fire;
         logic smem_rsp_fire;
     } dxa_xfer_evt_t;
+
+    // Next-gen unified-engine skeleton types.
+    typedef struct packed {
+        logic [NC_WIDTH-1:0]      core_id;
+        logic [NW_WIDTH-1:0]      wid;
+        logic [BAR_ADDR_W-1:0]    bar_addr;
+        logic [`MEM_ADDR_WIDTH-1:0] gmem_base;
+        logic [`XLEN-1:0]         smem_base;
+        logic [4:0][`XLEN-1:0]    coords;
+        dxa_issue_dec_t           dec;
+    } dxa_worker_cmd_t;
+
+    typedef struct packed {
+        logic [NC_WIDTH-1:0]      core_id;
+        logic [NW_WIDTH-1:0]      wid;
+        logic [BAR_ADDR_W-1:0]    bar_addr;
+        logic                     done;
+    } dxa_completion_info_t;
+
+    typedef struct packed {
+        logic [BAR_ADDR_W-1:0]    bar_addr;
+    } dxa_smem_done_t;
 
 endpackage
 

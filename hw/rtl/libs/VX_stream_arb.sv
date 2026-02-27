@@ -130,7 +130,11 @@ module VX_stream_arb #(
                 wire [NUM_OUTPUTS-1:0] requests;
                 for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_o
                     localparam i = r * NUM_OUTPUTS + o;
-                    assign requests[o] = valid_in[i];
+                    if (i < NUM_INPUTS) begin : g_req_valid
+                        assign requests[o] = valid_in[i];
+                    end else begin : g_req_pad
+                        assign requests[o] = 1'b0;
+                    end
                 end
                 assign arb_requests[r] = (| requests);
             end
@@ -158,7 +162,7 @@ module VX_stream_arb #(
                 wire [NUM_REQS-1:0][DATAW-1:0] data_in_w;
                 for (genvar r = 0; r < NUM_REQS; ++r) begin : g_r
                     localparam i = r * NUM_OUTPUTS + o;
-                    if (r < NUM_INPUTS) begin : g_valid
+                    if (i < NUM_INPUTS) begin : g_valid
                         assign valid_in_w[r] = valid_in[i];
                         assign data_in_w[r]  = data_in[i];
                     end else begin : g_padding

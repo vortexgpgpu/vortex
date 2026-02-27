@@ -60,6 +60,10 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
         .TAG_WIDTH (TAG_WIDTH),
         .ADDR_WIDTH(ADDR_WIDTH)
     ) mem_bus_if[NUM_REQS]();
+`ifdef EXT_DXA_ENABLE
+    wire dxa_done_valid;
+    wire [BAR_ADDR_W-1:0] dxa_done_bar_addr;
+`endif
 
      // memory request
     for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -94,6 +98,15 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
         .clk        (clk),
         .reset      (reset),
         .mem_bus_if (mem_bus_if)
+    `ifdef EXT_DXA_ENABLE
+        ,
+        .dxa_done_valid(dxa_done_valid),
+        .dxa_done_bar_addr(dxa_done_bar_addr)
+    `endif
     );
+
+`ifdef EXT_DXA_ENABLE
+    `UNUSED_VAR ({dxa_done_valid, dxa_done_bar_addr})
+`endif
 
 endmodule

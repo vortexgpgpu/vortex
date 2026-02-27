@@ -25,12 +25,8 @@ interface VX_dxa_req_bus_if import VX_gpu_pkg::*, VX_dxa_pkg::*; ();
     } req_data_t;
 
     typedef struct packed {
-        logic [NC_WIDTH-1:0]      core_id;
-        logic [UUID_WIDTH-1:0]    uuid;
-        logic [NW_WIDTH-1:0]      wid;
-        logic [BAR_ADDR_W-1:0]    bar_addr;
-        logic                     notify_barrier;
-        logic                     done;
+        // Reserved: response payload is no longer architecturally used.
+        logic                     unused;
     } rsp_data_t;
 
     logic      req_valid;

@@ -7,6 +7,7 @@
 
 #include <VX_types.h>
 #include <vortex.h>
+#include <dxa.h>
 
 #include "common.h"
 
@@ -82,78 +83,6 @@ kernel_arg_t kernel_arg = {};
 constexpr uint32_t kDescA = 0;
 constexpr uint32_t kDescB = 1;
 
-static uint32_t pack_meta(uint32_t rank, uint32_t elem_size_enc) {
-  return ((rank & ((1u << VX_DXA_DESC_META_DIM_BITS) - 1u)) << VX_DXA_DESC_META_DIM_LSB)
-       | ((elem_size_enc & ((1u << VX_DXA_DESC_META_ELEMSZ_BITS) - 1u)) << VX_DXA_DESC_META_ELEMSZ_LSB);
-}
-
-static uint32_t pack_2x16(uint32_t lo, uint32_t hi) {
-  return ((hi & 0xffffu) << 16) | (lo & 0xffffu);
-}
-
-static int dxa_program_desc_2d(vx_device_h dev,
-                               uint32_t slot,
-                               uint64_t base_addr,
-                               uint32_t size0,
-                               uint32_t size1,
-                               uint32_t stride0_bytes,
-                               uint32_t tile0,
-                               uint32_t tile1) {
-  uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
-  uint32_t meta = pack_meta(/*rank=*/2, /*elem_size_enc=*/2);
-  int ret = 0;
-
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_BASE_LO_OFF, (uint32_t)(base_addr & 0xffffffffu));
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_BASE_HI_OFF, (uint32_t)(base_addr >> 32));
-  if (ret) return ret;
-
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_SIZE0_OFF, size0);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_SIZE1_OFF, size1);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_SIZE2_OFF, 1);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_SIZE3_OFF, 1);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_SIZE4_OFF, 1);
-  if (ret) return ret;
-
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_STRIDE0_OFF, stride0_bytes);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_STRIDE1_OFF, 0);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_STRIDE2_OFF, 0);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_STRIDE3_OFF, 0);
-  if (ret) return ret;
-
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_META_OFF, meta);
-  if (ret) return ret;
-
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_ESTRIDE0_OFF, 1);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_ESTRIDE1_OFF, 1);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_ESTRIDE2_OFF, 1);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_ESTRIDE3_OFF, 1);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_ESTRIDE4_OFF, 1);
-  if (ret) return ret;
-
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_TILESIZE01_OFF, pack_2x16(tile0, tile1));
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_TILESIZE23_OFF, 0);
-  if (ret) return ret;
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_TILESIZE4_OFF, 0);
-  if (ret) return ret;
-
-  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_CFILL_OFF, 0);
-  if (ret) return ret;
-  return 0;
-}
-
 static void show_usage() {
   std::cout << "Usage: [-k kernel] [-n matrix_size] [-t tile_size] [-c chunk_k] "
                "[-m mode(1=single,2=double)] [-q skip_verify] [-h]\n"
@@ -225,7 +154,7 @@ int main(int argc, char* argv[]) {
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << "\n";
   std::cout << "matrix size: " << size << "x" << size << "\n";
-  std::cout << "mode: " << mode << " (1=single, 2=double)\n";
+  std::cout << "mode: " << mode << " (1=single/full-K, 2=double/chunked-K)\n";
 
   uint32_t max_localmem = 0;
   RT_CHECK(vx_check_occupancy(device, group_size, &max_localmem));
@@ -237,11 +166,14 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  // Full-K by default, bounded by SMEM capacity and optional user cap.
-  uint32_t chunk_k_target = size;
-  if (chunk_k != 0) {
-    chunk_k_target = std::min(chunk_k_target, chunk_k);
+  // Single-buffer mode always uses full-K (one shot, no K-loop).
+  // Double-buffer mode uses chunk_k (user-specified or auto-bounded by SMEM).
+  if (mode == 1) {
+    chunk_k = size;
   }
+
+  // Determine chunk_k bounded by SMEM capacity and divisibility.
+  uint32_t chunk_k_target = (chunk_k != 0) ? std::min(chunk_k, size) : size;
   uint32_t chunk_k_cap = max_localmem / bytes_per_k;
   chunk_k_cap = std::max(1u, std::min(chunk_k_cap, size));
   uint32_t chosen_chunk_k = std::min(chunk_k_target, chunk_k_cap);
@@ -295,24 +227,18 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, buf_size));
 
   // Descriptor A: dim0=k, dim1=row => A[row, k]
-  RT_CHECK(dxa_program_desc_2d(device,
-                               kDescA,
-                               kernel_arg.A_addr,
-                               /*size0=*/size,
-                               /*size1=*/size,
-                               /*stride0=*/size * sizeof(TYPE),
-                               /*tile0=*/chunk_k,
-                               /*tile1=*/tile_size));
+  RT_CHECK(vx_dxa_program_desc_2d(device, kDescA, kernel_arg.A_addr,
+    /*size0=*/size, /*size1=*/size,
+    /*stride0_bytes=*/size * sizeof(TYPE),
+    /*tile0=*/chunk_k, /*tile1=*/tile_size,
+    /*elem_bytes=*/sizeof(TYPE)));
 
   // Descriptor B: dim0=col, dim1=k => B[k, col]
-  RT_CHECK(dxa_program_desc_2d(device,
-                               kDescB,
-                               kernel_arg.B_addr,
-                               /*size0=*/size,
-                               /*size1=*/size,
-                               /*stride0=*/size * sizeof(TYPE),
-                               /*tile0=*/tile_size,
-                               /*tile1=*/chunk_k));
+  RT_CHECK(vx_dxa_program_desc_2d(device, kDescB, kernel_arg.B_addr,
+    /*size0=*/size, /*size1=*/size,
+    /*stride0_bytes=*/size * sizeof(TYPE),
+    /*tile0=*/tile_size, /*tile1=*/chunk_k,
+    /*elem_bytes=*/sizeof(TYPE)));
 
   std::cout << "upload kernel\n";
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));

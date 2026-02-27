@@ -378,29 +378,40 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 }
 
 #ifdef EXT_DXA_ENABLE
-bool SfuUnit::execute_dxa_op(instr_trace_t* trace, TmaType dxa_type, const TmaTraceData& dxa_data) {
+bool SfuUnit::execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaTraceData& dxa_data) {
 	auto& runtime = dxa_runtime_.at(trace->wid);
 	switch (dxa_type) {
-	case TmaType::SETUP0:
-		runtime.desc_slot = dxa_data.rs1;
-		runtime.bar_id = decode_barrier_addr(dxa_data.rs2, core_->arch());
+	case DxaType::SETUP:
+		// Clear all coords to prevent stale leakage from previous
+		// higher-dimension instructions on this warp.
+		runtime.coords = {0, 0, 0, 0, 0};
+		// rs1 = smem_addr, rs2 = packed meta
+		runtime.smem_addr = dxa_data.rs1;
+		if (dxa_data.rs2 & 0x80000000u) {
+			// Packed launch metadata:
+			//   rs2[3:0]   = desc_slot
+			//   rs2[30:4]  = raw barrier payload
+			//   rs2[31]    = packed marker
+			uint32_t raw_bar = (dxa_data.rs2 >> 4) & 0x07ffffffu;
+			runtime.desc_slot = dxa_data.rs2 & 0x0fu;
+			runtime.bar_id = decode_barrier_addr(raw_bar, core_->arch());
+		} else {
+			runtime.desc_slot = dxa_data.rs1;
+			runtime.bar_id = decode_barrier_addr(dxa_data.rs2, core_->arch());
+		}
 		core_->barrier_tx_start(runtime.bar_id);
 		return true;
-	case TmaType::SETUP1:
-		runtime.smem_addr = dxa_data.rs1;
-		runtime.flags = dxa_data.rs2;
-		return true;
-	case TmaType::COORD01:
+	case DxaType::COORD01:
 		runtime.coords[0] = dxa_data.rs1;
 		runtime.coords[1] = dxa_data.rs2;
 		return true;
-	case TmaType::COORD23:
+	case DxaType::COORD23:
 		runtime.coords[2] = dxa_data.rs1;
 		runtime.coords[3] = dxa_data.rs2;
 		return true;
-	case TmaType::ISSUE: {
+	case DxaType::ISSUE: {
 		runtime.coords[4] = dxa_data.rs1;
-		bool accepted = core_->dxa_issue(runtime.desc_slot, runtime.smem_addr, runtime.coords.data(), runtime.flags, runtime.bar_id);
+		bool accepted = core_->dxa_issue(runtime.desc_slot, runtime.smem_addr, runtime.coords.data(), runtime.bar_id);
 		return accepted;
 	}
 	default:
@@ -470,9 +481,9 @@ void SfuUnit::tick() {
 			}
 			DT(3, this->name() << " execute: op=" << wctl_type << ", " << *trace);
 #ifdef EXT_DXA_ENABLE
-		} else if (std::get_if<TmaType>(&trace->op_type)) {
-			auto dxa_type = std::get<TmaType>(trace->op_type);
-			auto dxa_data = std::dynamic_pointer_cast<TmaTraceData>(trace->data);
+		} else if (std::get_if<DxaType>(&trace->op_type)) {
+			auto dxa_type = std::get<DxaType>(trace->op_type);
+			auto dxa_data = std::dynamic_pointer_cast<DxaTraceData>(trace->data);
 			assert(dxa_data);
 			if (!this->execute_dxa_op(trace, dxa_type, *dxa_data)) {
 				continue; // DXA request queue backpressure

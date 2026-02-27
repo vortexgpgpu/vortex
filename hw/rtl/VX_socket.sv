@@ -36,8 +36,8 @@ module VX_socket import VX_gpu_pkg::*; #(
 `ifdef EXT_DXA_ENABLE
     // DXA control path
     VX_dxa_req_bus_if.master    dxa_req_bus_if,
-    // DXA shared-memory data path
-    VX_mem_bus_if.slave         dxa_smem_bus_if,
+    // DXA bank-native SMEM write path (one per core)
+    VX_dxa_bank_wr_if.slave     per_core_bank_wr_if [`SOCKET_SIZE],
 `endif
 
 `ifdef GBAR_ENABLE
@@ -222,39 +222,31 @@ module VX_socket import VX_gpu_pkg::*; #(
 
 `ifdef EXT_DXA_ENABLE
 
+    // DXA control request: N:1 arbitration from per-core to cluster
     VX_dxa_req_bus_if per_core_dxa_req_bus_if[`SOCKET_SIZE]();
-    VX_mem_bus_if #(
-        .DATA_SIZE (DXA_SMEM_WORD_SIZE),
-        .TAG_WIDTH (LMEM_TAG_WIDTH)
-    ) per_core_dxa_smem_bus_if[`SOCKET_SIZE]();
 
-    localparam DXA_REQ_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + 3 + (2 * `XLEN);
-    localparam DXA_RSP_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + BAR_ADDR_W + 2;
-    localparam DXA_CORE_SEL_BITS = `CLOG2(`SOCKET_SIZE);
-    localparam DXA_CORE_SEL_W = `UP(DXA_CORE_SEL_BITS);
-
+    localparam DXA_REQ_DATAW_LOCAL = NC_WIDTH + UUID_WIDTH + NW_WIDTH + 3 + (2 * `XLEN);
     wire [`SOCKET_SIZE-1:0] dxa_req_valid_in;
-    wire [`SOCKET_SIZE-1:0][DXA_REQ_DATAW-1:0] dxa_req_data_in;
+    wire [`SOCKET_SIZE-1:0][DXA_REQ_DATAW_LOCAL-1:0] dxa_req_data_in;
     wire [`SOCKET_SIZE-1:0] dxa_req_ready_in;
 
-    wire [`SOCKET_SIZE-1:0] dxa_rsp_ready_out;
-
     for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin : g_dxa_req_in
-        assign dxa_req_valid_in[i] = per_core_dxa_req_bus_if[i].req_valid;
+        assign dxa_req_valid_in[i] = ~reset && per_core_dxa_req_bus_if[i].req_valid;
         assign dxa_req_data_in[i] = per_core_dxa_req_bus_if[i].req_data;
         assign per_core_dxa_req_bus_if[i].req_ready = dxa_req_ready_in[i];
-        assign dxa_rsp_ready_out[i] = per_core_dxa_req_bus_if[i].rsp_ready;
+        assign per_core_dxa_req_bus_if[i].rsp_valid = 1'b0;
+        assign per_core_dxa_req_bus_if[i].rsp_data  = '0;
+        `UNUSED_VAR (per_core_dxa_req_bus_if[i].rsp_ready)
     end
 
     wire [0:0] dxa_req_valid_out;
-    wire [0:0][DXA_REQ_DATAW-1:0] dxa_req_data_out;
+    wire [0:0][DXA_REQ_DATAW_LOCAL-1:0] dxa_req_data_out;
     wire [0:0] dxa_req_ready_out;
-    wire [0:0][`UP(`CLOG2(`SOCKET_SIZE))-1:0] dxa_req_sel_out;
 
     VX_stream_arb #(
         .NUM_INPUTS  (`SOCKET_SIZE),
         .NUM_OUTPUTS (1),
-        .DATAW       (DXA_REQ_DATAW),
+        .DATAW       (DXA_REQ_DATAW_LOCAL),
         .ARBITER     ("R"),
         .OUT_BUF     (2)
     ) dxa_req_arb (
@@ -266,150 +258,20 @@ module VX_socket import VX_gpu_pkg::*; #(
         .valid_out  (dxa_req_valid_out),
         .data_out   (dxa_req_data_out),
         .ready_out  (dxa_req_ready_out),
-        .sel_out    (dxa_req_sel_out)
+        `UNUSED_PIN (sel_out)
     );
 
     assign dxa_req_bus_if.req_valid = dxa_req_valid_out[0];
     assign dxa_req_bus_if.req_data  = dxa_req_data_out[0];
     assign dxa_req_ready_out[0] = dxa_req_bus_if.req_ready;
-    `UNUSED_VAR (dxa_req_sel_out)
 
-    wire [DXA_CORE_SEL_W-1:0] dxa_rsp_core_sel = DXA_CORE_SEL_W'(dxa_req_bus_if.rsp_data.core_id);
-    wire [0:0] dxa_rsp_valid_in;
-    wire [0:0][DXA_RSP_DATAW-1:0] dxa_rsp_data_in;
-    wire [0:0][DXA_CORE_SEL_W-1:0] dxa_rsp_sel_in;
-    wire [0:0] dxa_rsp_ready_in;
+    assign dxa_req_bus_if.rsp_ready = 1'b1;
+    `UNUSED_VAR (dxa_req_bus_if.rsp_valid)
+    `UNUSED_VAR (dxa_req_bus_if.rsp_data)
 
-    wire [`SOCKET_SIZE-1:0] dxa_rsp_valid_out;
-    wire [`SOCKET_SIZE-1:0][DXA_RSP_DATAW-1:0] dxa_rsp_data_out;
-
-    assign dxa_rsp_valid_in[0] = dxa_req_bus_if.rsp_valid;
-    assign dxa_rsp_data_in[0] = dxa_req_bus_if.rsp_data;
-    assign dxa_rsp_sel_in[0] = dxa_rsp_core_sel;
-
-    VX_stream_switch #(
-        .NUM_INPUTS  (1),
-        .NUM_OUTPUTS (`SOCKET_SIZE),
-        .DATAW       (DXA_RSP_DATAW),
-        .OUT_BUF     (2)
-    ) dxa_rsp_switch (
-        .clk       (clk),
-        .reset     (reset),
-        .sel_in    (dxa_rsp_sel_in),
-        .valid_in  (dxa_rsp_valid_in),
-        .data_in   (dxa_rsp_data_in),
-        .ready_in  (dxa_rsp_ready_in),
-        .valid_out (dxa_rsp_valid_out),
-        .data_out  (dxa_rsp_data_out),
-        .ready_out (dxa_rsp_ready_out)
-    );
-
-    assign dxa_req_bus_if.rsp_ready = dxa_rsp_ready_in[0];
-
-    for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin : g_dxa_rsp_out
-        assign per_core_dxa_req_bus_if[i].rsp_valid = dxa_rsp_valid_out[i];
-        assign per_core_dxa_req_bus_if[i].rsp_data  = dxa_rsp_data_out[i];
-    end
-
-    localparam DXA_SMEM_REQ_DATAW = 1
-                                  + DXA_SMEM_ADDR_WIDTH
-                                  + (DXA_SMEM_WORD_SIZE * 8)
-                                  + DXA_SMEM_WORD_SIZE
-                                  + MEM_FLAGS_WIDTH
-                                  + LMEM_TAG_WIDTH;
-    localparam DXA_SMEM_RSP_DATAW = (DXA_SMEM_WORD_SIZE * 8) + LMEM_TAG_WIDTH;
-    localparam DXA_SMEM_TAG_WIDTH = LMEM_TAG_WIDTH;
-    localparam DXA_SMEM_ENGINE_BITS = `CLOG2(`NUM_DXA_UNITS);
-    localparam DXA_SMEM_ENGINE_W = `UP(DXA_SMEM_ENGINE_BITS);
-    localparam DXA_CORE_LOCAL_BITS = `CLOG2(`SOCKET_SIZE);
-    localparam DXA_CORE_LOCAL_W = `UP(DXA_CORE_LOCAL_BITS);
-
-    wire [DXA_SMEM_TAG_WIDTH-1:0] dxa_smem_req_tag_route = {
-        dxa_smem_bus_if.req_data.tag.uuid,
-        dxa_smem_bus_if.req_data.tag.value
-    };
-    wire [DXA_SMEM_ENGINE_W-1:0] dxa_smem_req_engine_id =
-        dxa_smem_req_tag_route[DXA_SMEM_ENGINE_W-1:0];
-    wire [NC_WIDTH-1:0] dxa_smem_req_core_id =
-        NC_WIDTH'(dxa_smem_req_tag_route[DXA_SMEM_ENGINE_W +: NC_WIDTH]);
-
-    wire [DXA_CORE_LOCAL_W-1:0] dxa_smem_req_core_sel =
-        DXA_CORE_LOCAL_W'(dxa_smem_req_core_id);
-
-    wire [0:0] dxa_smem_req_valid_in;
-    wire [0:0][DXA_SMEM_REQ_DATAW-1:0] dxa_smem_req_data_in;
-    wire [0:0][DXA_CORE_LOCAL_W-1:0] dxa_smem_req_sel_in;
-    wire [0:0] dxa_smem_req_ready_in;
-    wire [`SOCKET_SIZE-1:0] dxa_smem_req_valid_out;
-    wire [`SOCKET_SIZE-1:0][DXA_SMEM_REQ_DATAW-1:0] dxa_smem_req_data_out;
-    wire [`SOCKET_SIZE-1:0] dxa_smem_req_ready_out;
-
-    assign dxa_smem_req_valid_in[0] = dxa_smem_bus_if.req_valid;
-    assign dxa_smem_req_data_in[0] = dxa_smem_bus_if.req_data;
-    assign dxa_smem_req_sel_in[0] = dxa_smem_req_core_sel;
-
-    VX_stream_switch #(
-        .NUM_INPUTS  (1),
-        .NUM_OUTPUTS (`SOCKET_SIZE),
-        .DATAW       (DXA_SMEM_REQ_DATAW),
-        .OUT_BUF     (2)
-    ) dxa_smem_req_switch (
-        .clk       (clk),
-        .reset     (reset),
-        .sel_in    (dxa_smem_req_sel_in),
-        .valid_in  (dxa_smem_req_valid_in),
-        .data_in   (dxa_smem_req_data_in),
-        .ready_in  (dxa_smem_req_ready_in),
-        .valid_out (dxa_smem_req_valid_out),
-        .data_out  (dxa_smem_req_data_out),
-        .ready_out (dxa_smem_req_ready_out)
-    );
-
-    assign dxa_smem_bus_if.req_ready = dxa_smem_req_ready_in[0];
-
-    for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin : g_dxa_smem_req_out
-        assign per_core_dxa_smem_bus_if[i].req_valid = dxa_smem_req_valid_out[i];
-        assign per_core_dxa_smem_bus_if[i].req_data = dxa_smem_req_data_out[i];
-        assign dxa_smem_req_ready_out[i] = per_core_dxa_smem_bus_if[i].req_ready;
-    end
-
-    wire [`SOCKET_SIZE-1:0] dxa_smem_rsp_valid_in;
-    wire [`SOCKET_SIZE-1:0][DXA_SMEM_RSP_DATAW-1:0] dxa_smem_rsp_data_in;
-    wire [`SOCKET_SIZE-1:0] dxa_smem_rsp_ready_in;
-
-    for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin : g_dxa_smem_rsp_in
-        assign dxa_smem_rsp_valid_in[i] = per_core_dxa_smem_bus_if[i].rsp_valid;
-        assign dxa_smem_rsp_data_in[i] = per_core_dxa_smem_bus_if[i].rsp_data;
-        assign per_core_dxa_smem_bus_if[i].rsp_ready = dxa_smem_rsp_ready_in[i];
-    end
-
-    wire [0:0] dxa_smem_rsp_valid_out;
-    wire [0:0][DXA_SMEM_RSP_DATAW-1:0] dxa_smem_rsp_data_out;
-    wire [0:0] dxa_smem_rsp_ready_out;
-
-    VX_stream_arb #(
-        .NUM_INPUTS  (`SOCKET_SIZE),
-        .NUM_OUTPUTS (1),
-        .DATAW       (DXA_SMEM_RSP_DATAW),
-        .ARBITER     ("R"),
-        .OUT_BUF     (2)
-    ) dxa_smem_rsp_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .valid_in   (dxa_smem_rsp_valid_in),
-        .data_in    (dxa_smem_rsp_data_in),
-        .ready_in   (dxa_smem_rsp_ready_in),
-        .valid_out  (dxa_smem_rsp_valid_out),
-        .data_out   (dxa_smem_rsp_data_out),
-        .ready_out  (dxa_smem_rsp_ready_out),
-        `UNUSED_PIN (sel_out)
-    );
-
-    assign dxa_smem_bus_if.rsp_valid = dxa_smem_rsp_valid_out[0];
-    assign dxa_smem_bus_if.rsp_data  = dxa_smem_rsp_data_out[0];
-    assign dxa_smem_rsp_ready_out[0] = dxa_smem_bus_if.rsp_ready;
-
-    `UNUSED_VAR (dxa_smem_req_engine_id)
+    // DXA SMEM bank writes: direct passthrough from cluster to per-core.
+    // Each core gets its own VX_dxa_bank_wr_if from the DXA core router.
+    // No socket-level arb needed (1:1 mapping).
 
 `endif
 
@@ -446,7 +308,7 @@ module VX_socket import VX_gpu_pkg::*; #(
 
         `ifdef EXT_DXA_ENABLE
             .dxa_req_bus_if     (per_core_dxa_req_bus_if[core_id]),
-            .dxa_smem_bus_if    (per_core_dxa_smem_bus_if[core_id]),
+            .dxa_bank_wr_if     (per_core_bank_wr_if[core_id]),
         `endif
 
         `ifdef GBAR_ENABLE

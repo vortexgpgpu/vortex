@@ -18,7 +18,6 @@ module VX_dxa_issue_decode import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter GMEM_BYTES = `L2_LINE_SIZE,
     parameter SMEM_BYTES = LSU_WORD_SIZE
 ) (
-    input wire [`XLEN-1:0] issue_flags,
     input wire [31:0] issue_desc_meta,
     input wire [31:0] issue_desc_tile01,
     input wire [31:0] issue_size0_raw,
@@ -48,7 +47,7 @@ module VX_dxa_issue_decode import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                            : 32'd1;
     wire [31:0] issue_stride0_w = (issue_rank_w >= 2) ? issue_stride0_raw : 32'd0;
     wire [31:0] issue_total_w = issue_tile0_w * issue_tile1_w;
-    wire issue_is_s2g_w = issue_flags[0];
+    wire issue_is_s2g_w = 1'b0;  // Always g2s; s2g support removed with flags
     wire issue_supported_w = (issue_rank_w <= 2)
                           && (issue_elem_bytes_w != 0)
                           && (issue_elem_bytes_w <= GMEM_BYTES)

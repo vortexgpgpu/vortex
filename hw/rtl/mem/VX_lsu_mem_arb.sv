@@ -19,6 +19,9 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     parameter NUM_LANES      = 1,
     parameter DATA_SIZE      = 1,
     parameter TAG_WIDTH      = 1,
+`ifdef EXT_DXA_ENABLE
+    parameter OUT_TAG_WIDTH  = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS),
+`endif
     parameter TAG_SEL_IDX    = 0,
     parameter REQ_OUT_BUF    = 0,
     parameter RSP_OUT_BUF    = 0,
@@ -87,6 +90,24 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
         } = req_data_out[i];
         assign req_ready_out[i] = bus_out_if[i].req_ready;
 
+    `ifdef EXT_DXA_ENABLE
+        if (NUM_INPUTS > NUM_OUTPUTS) begin : g_req_tag_sel_out
+            wire [TAG_WIDTH + LOG_NUM_REQS - 1:0] req_tag_sel_out;
+            VX_bits_insert #(
+                .N   (TAG_WIDTH),
+                .S   (LOG_NUM_REQS),
+                .POS (TAG_SEL_IDX)
+            ) bits_insert (
+                .data_in  (req_tag_out),
+                .ins_in   (req_sel_out[i]),
+                .data_out (req_tag_sel_out)
+            );
+            assign bus_out_if[i].req_data.tag = OUT_TAG_WIDTH'(req_tag_sel_out);
+        end else begin : g_req_tag_out
+            `UNUSED_VAR (req_sel_out)
+            assign bus_out_if[i].req_data.tag = OUT_TAG_WIDTH'(req_tag_out);
+        end
+    `else
         if (NUM_INPUTS > NUM_OUTPUTS) begin : g_req_tag_sel_out
             VX_bits_insert #(
                 .N   (TAG_WIDTH),
@@ -101,6 +122,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
             `UNUSED_VAR (req_sel_out)
             assign bus_out_if[i].req_data.tag = req_tag_out;
         end
+    `endif
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -118,13 +140,20 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
         wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS-1:0] rsp_sel_in;
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
+        `ifdef EXT_DXA_ENABLE
+            wire [TAG_WIDTH + LOG_NUM_REQS - 1:0] rsp_tag_in = (TAG_WIDTH + LOG_NUM_REQS)'(bus_out_if[i].rsp_data.tag);
+        `endif
             wire [TAG_WIDTH-1:0] rsp_tag_out;
             VX_bits_remove #(
                 .N   (TAG_WIDTH + LOG_NUM_REQS),
                 .S   (LOG_NUM_REQS),
                 .POS (TAG_SEL_IDX)
             ) bits_remove (
+        `ifdef EXT_DXA_ENABLE
+                .data_in  (rsp_tag_in),
+        `else
                 .data_in  (bus_out_if[i].rsp_data.tag),
+        `endif
                 .sel_out  (rsp_sel_in[i]),
                 .data_out (rsp_tag_out)
             );
@@ -158,7 +187,15 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
             assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
+        `ifdef EXT_DXA_ENABLE
+            assign rsp_data_in[i]  = {
+                bus_out_if[i].rsp_data.mask,
+                bus_out_if[i].rsp_data.data,
+                TAG_WIDTH'(bus_out_if[i].rsp_data.tag)
+            };
+        `else
             assign rsp_data_in[i]  = bus_out_if[i].rsp_data;
+        `endif
             assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
         end
 

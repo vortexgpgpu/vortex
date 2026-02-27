@@ -37,7 +37,7 @@ private:
 };
 
 #ifdef EXT_DXA_ENABLE
-class TmaDCRS {
+class DxaDCRS {
 public:
   struct Descriptor {
     uint64_t base_addr;
@@ -72,7 +72,7 @@ public:
 
   BaseDCRS base_dcrs;
 #ifdef EXT_DXA_ENABLE
-  TmaDCRS dxa_dcrs;
+  DxaDCRS dxa_dcrs;
 #endif
 };
 
