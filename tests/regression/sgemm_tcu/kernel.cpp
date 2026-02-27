@@ -45,10 +45,10 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     }
 
     // Matrix multiply-accumulate: c += a * b
-    uint64_t mma_start = vx_rdcycle_sync();
+    //uint64_t mma_start = vx_rdcycle_sync();
     ctx::mma_sync(fragC, fragA, fragB, fragC);
-    uint64_t mma_end = vx_rdcycle_sync();
-    mma_cycles += (mma_end - mma_start);
+    //uint64_t mma_end = vx_rdcycle_sync();
+    //mma_cycles += (mma_end - mma_start);
   }
 
   if (threadIdx.x == 0) {
