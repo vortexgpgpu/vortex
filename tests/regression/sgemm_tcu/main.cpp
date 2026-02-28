@@ -669,7 +669,7 @@ vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
-vx_buffer_h cycles_buffer = nullptr;
+// vx_buffer_h cycles_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
@@ -710,7 +710,7 @@ void cleanup() {
     vx_mem_free(A_buffer);
     vx_mem_free(B_buffer);
     vx_mem_free(C_buffer);
-    vx_mem_free(cycles_buffer);
+    // vx_mem_free(cycles_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -770,8 +770,8 @@ int main(int argc, char *argv[]) {
   size_t sizeC = M * N;
   uint32_t grid_x = N / cfg::tileN;
   uint32_t grid_y = M / cfg::tileM;
-  size_t num_thread_blocks = grid_x * grid_y;
-  size_t num_mma_sync_instrs = num_thread_blocks * (K / cfg::tileK); // each thread block has K / tileK iterations of mma.sync
+  // size_t num_thread_blocks = grid_x * grid_y;
+  // size_t num_mma_sync_instrs = num_thread_blocks * (K / cfg::tileK); // each thread block has K / tileK iterations of mma.sync
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
@@ -800,13 +800,13 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
   RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
-  RT_CHECK(vx_mem_alloc(device, num_thread_blocks * sizeof(uint64_t), VX_MEM_WRITE, &cycles_buffer));
-  RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
+  // RT_CHECK(vx_mem_alloc(device, num_thread_blocks * sizeof(uint64_t), VX_MEM_WRITE, &cycles_buffer));
+  // RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
-  std::cout << "cycles_addr=0x" << std::hex << kernel_arg.cycles_addr << std::endl;
+  // std::cout << "cycles_addr=0x" << std::hex << kernel_arg.cycles_addr << std::endl;
 
   // generate source data
   std::vector<itype_t> h_A(sizeA);
@@ -867,16 +867,16 @@ int main(int argc, char *argv[]) {
   std::cout << "download destination buffer" << std::endl;
   RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t)));
 
-  std::vector<uint64_t> h_cycles(num_thread_blocks);
-  std::cout << "download mma cycle counts" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_thread_blocks * sizeof(uint64_t)));
-  uint64_t cycles_sum = 0;
-  for (auto cycles : h_cycles) {
-    cycles_sum += cycles;
-  }
-  std::cout << std::dec;
-  std::cout << "mma_sync cycles total: " << cycles_sum << std::endl;
-  std::cout << "mma_sync cycles average per mma_sync instr: " << (cycles_sum / num_mma_sync_instrs) << std::endl;
+  // std::vector<uint64_t> h_cycles(num_thread_blocks);
+  // std::cout << "download mma cycle counts" << std::endl;
+  // RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_thread_blocks * sizeof(uint64_t)));
+  // uint64_t cycles_sum = 0;
+  // for (auto cycles : h_cycles) {
+  //   cycles_sum += cycles;
+  // }
+  // std::cout << std::dec;
+  // std::cout << "mma_sync cycles total: " << cycles_sum << std::endl;
+  // std::cout << "mma_sync cycles average per mma_sync instr: " << (cycles_sum / num_mma_sync_instrs) << std::endl;
 
   // verify result
   std::cout << "verify result" << std::endl;
