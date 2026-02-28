@@ -61,6 +61,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam OFF_W      = $clog2(TCU_BLOCK_CAP);
 
 `ifdef TCU_SPARSE_ENABLE
+    `STATIC_ASSERT((`NUM_THREADS == 8) || (`NUM_THREADS == 32), ("Sparse TCU supports NUM_THREADS=8 or 32 only"));
     localparam LG_B_BS_SP = $clog2(TCU_B_BLOCK_SIZE_SP);
 
     wire is_sparse = (execute_if.data.op_type == INST_TCU_WMMA_SP);
