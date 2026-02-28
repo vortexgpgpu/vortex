@@ -233,7 +233,7 @@ TCU_BF16_ENABLE = true
 TCU_FP8_ENABLE = true
 TCU_INT_ENABLE = true
 TCU_MXI8_ENABLE = false
-TCU_SPARSE_ENABLE = "expr: (($NUM_THREADS == 8) or ($NUM_THREADS == 32))"
+TCU_SPARSE_ENABLE = true
 
 [isa_signatures]
 
