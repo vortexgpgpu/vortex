@@ -71,11 +71,9 @@ int foo(int x);
 ```
 
 ## 7. Using #ifdef
-- Write the base function first (no preprocessor).
-- Keep normal nested control flow readable before adding feature guards.
-- Then add `#if/#elif/#else/#endif` around feature-specific parts.
+- Preserve indent of nested code and shift pre-processor left by one level
 
-Base function (no `#ifdef`):
+Base function (before):
 ```cpp
 regno_t to_regno_base(const reg_t& reg, bool has_type, bool is_dp) {
   if (has_type) {
@@ -88,7 +86,7 @@ regno_t to_regno_base(const reg_t& reg, bool has_type, bool is_dp) {
 }
 ```
 
-Then add feature guards:
+Adding ifdef (after):
 ```cpp
 regno_t to_regno_base(const reg_t& reg, bool has_type, bool is_dp) {
   if (has_type) {

@@ -127,9 +127,7 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
   ```
 
 ## 7. Using `ifdef
-- Write the base logic first (no preprocessor).
-- Keep nested control flow readable before adding feature guards.
-- Then add one `ifdef/`else/`endif around the feature-specific block.
+-Preserve indent of nested code and shift pre-processor left by one level
 
 Base version (before):
   ```verilog
@@ -149,7 +147,7 @@ Base version (before):
   end
   ```
 
-With feature guards (after):
+Adding ifdef (after):
   ```verilog
   always_comb begin
       decode_valid = issue_valid;
