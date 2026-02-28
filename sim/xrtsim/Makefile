@@ -53,7 +53,7 @@ RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DI
 RTL_INCLUDE += -I$(AFU_DIR)
 
 # Add DXA extension sources
-ifneq (,$(filter -DEXT_DXA_ENABLE -DEXT_DXA_ENABLE=%,$(CONFIGS)))
+ifneq (,$(filter -DEXT_DXA_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/dxa/VX_dxa_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/dxa
 endif
