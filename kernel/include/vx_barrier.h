@@ -39,8 +39,7 @@ public:
 
   // Convenience: arrive and wait in one call
   void arrive_and_wait() {
-    uint32_t phase = arrive();
-    wait(phase);
+    vx_barrier(bar_id_, num_warps_);
   }
 
   // Packed barrier id (for passing to DXA issue instructions)
