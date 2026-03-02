@@ -91,7 +91,10 @@ void kernel_body(kernel_arg_t* arg) {
       // (3) Compute on current tiles.
       gemm_accumulate(sum, shA[cur], shB[cur], tile_size, chunk_k, l_row, l_col);
 
+      bar[cur].arrive_and_wait();
+      
       cur = nxt;
+      
     }
   } else {
     // ── Single-buffered: full-K in one shot ───────────────────────────
@@ -104,6 +107,8 @@ void kernel_body(kernel_arg_t* arg) {
 
     // Accumulate over the full K dimension.
     gemm_accumulate(sum, shA[0], shB[0], tile_size, chunk_k, l_row, l_col);
+
+    bar[0].arrive_and_wait();
   }
 
   // Store result to global memory.
