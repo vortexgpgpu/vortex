@@ -386,7 +386,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [`CLOG2(`NUM_THREADS+1)-1:0] issued_threads_cnt;
 
     wire schedule_idle = ~schedule_valid;
-    wire has_divergence = warp_ctl_if.valid && warp_ctl_if.split.valid && warp_ctl_if.split.is_dvg;
+    wire has_divergence = warp_ctl_if.split_valid && warp_ctl_if.split.is_dvg;
     wire [`NUM_THREADS-1:0] issued_threads = {`NUM_THREADS{schedule_if_fire}} & schedule_if.data.tmask;
 
     `POP_COUNT(stalled_warps_cnt, stalled_warps);
