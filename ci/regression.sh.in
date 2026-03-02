@@ -165,6 +165,7 @@ dxa()
     # single-core with L2 cache
     CONFIGS="-DEXT_DXA_ENABLE -DBAR_TX_ENABLE -DL2_ENABLE" \
     ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1"
+    CONFIGS="-DEXT_DXA_ENABLE -DBAR_TX_ENABLE -DL2_ENABLE" \
     ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1"
 
     # multi-core with L2 cache
