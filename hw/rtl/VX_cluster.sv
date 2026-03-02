@@ -51,14 +51,13 @@ module VX_cluster import VX_gpu_pkg::*; #(
     end
 `endif
 
-`ifdef GBAR_ENABLE
-
     VX_gbar_bus_if per_socket_gbar_bus_if[NUM_SOCKETS]();
     VX_gbar_bus_if gbar_bus_if();
 
     VX_gbar_arb #(
         .NUM_REQS (NUM_SOCKETS),
-        .OUT_BUF  ((NUM_SOCKETS > 2) ? 1 : 0) // bgar_unit has no backpressure
+        .REQ_OUT_BUF ((NUM_SOCKETS > 2) ? 2 : 0),
+        .RSP_OUT_BUF ((NUM_SOCKETS > 2) ? 2 : 0)
     ) gbar_arb (
         .clk        (clk),
         .reset      (reset),
@@ -73,8 +72,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .reset       (reset),
         .gbar_bus_if (gbar_bus_if)
     );
-
-`endif
 
     // L2 input buses (post-arb tag width when DXA enabled)
     VX_mem_bus_if #(
@@ -242,13 +239,11 @@ module VX_cluster import VX_gpu_pkg::*; #(
             .mem_bus_if     (socket_mem_bus_if[socket_id * `L1_MEM_PORTS +: `L1_MEM_PORTS]),
 
         `ifdef EXT_DXA_ENABLE
-            .dxa_req_bus_if     (per_socket_dxa_req_bus_if[socket_id]),
+            .dxa_req_bus_if (per_socket_dxa_req_bus_if[socket_id]),
             .per_core_bank_wr_if(per_core_bank_wr_if[socket_id * `SOCKET_SIZE +: `SOCKET_SIZE]),
         `endif
 
-        `ifdef GBAR_ENABLE
             .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),
-        `endif
 
             .busy           (per_socket_busy[socket_id])
         );

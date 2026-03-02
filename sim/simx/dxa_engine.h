@@ -33,7 +33,7 @@ class Core;
 //
 // The model counts down modeled cycles.  When the countdown expires it
 // performs the actual data copy via core_->dxa_copy() and releases the
-// barrier via core_->barrier_tx_done().
+// barrier via core_->barrier_event_release().
 class DxaEngine {
 public:
   explicit DxaEngine(Core* core);

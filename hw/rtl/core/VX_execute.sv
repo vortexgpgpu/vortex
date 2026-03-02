@@ -38,15 +38,15 @@ module VX_execute import VX_gpu_pkg::*; #(
     // commit interface
     VX_commit_if.master     commit_if [NUM_EX_UNITS * `ISSUE_WIDTH],
 
+`ifdef EXT_DXA_ENABLE
+    VX_dxa_req_bus_if.master dxa_req_bus_if,
+    VX_txbar_bus_if.slave  dxa_txbar_bus_if,
+`endif
+
     // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if,
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_warp_ctl_if.master   warp_ctl_if
-`ifdef EXT_DXA_ENABLE
-    ,
-    VX_dxa_req_bus_if.master    dxa_req_bus_if,
-    VX_tx_bar_bus_if.master tx_bar_if
-`endif
 );
 
 `ifdef EXT_F_ENABLE
@@ -115,13 +115,12 @@ module VX_execute import VX_gpu_pkg::*; #(
     `ifdef EXT_F_ENABLE
         .fpu_csr_if     (fpu_csr_if),
     `endif
+    `ifdef EXT_DXA_ENABLE
+        .dxa_req_bus_if (dxa_req_bus_if),
+        .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `endif
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if)
-    `ifdef EXT_DXA_ENABLE
-        ,
-        .dxa_req_bus_if     (dxa_req_bus_if),
-        .tx_bar_if      (tx_bar_if)
-    `endif
     );
 
 endmodule

@@ -215,14 +215,14 @@ package VX_trace_pkg;
                     end
                 end
                 INST_SFU_BAR: begin
-                    if (op_args.wctl.is_async_bar) begin
+                    if (op_args.wctl.is_sync_bar) begin
+                        `TRACE(level, ("BAR"))
+                    end else begin
                         if (op_args.wctl.is_bar_arrive) begin
                             `TRACE(level, ("BAR.ARRIVE"))
                         end else begin
                             `TRACE(level, ("BAR.WAIT"))
                         end
-                    end else begin
-                        `TRACE(level, ("BAR"))
                     end
                 end
                 INST_SFU_CSRRW: begin

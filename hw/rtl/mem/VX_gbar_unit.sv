@@ -34,15 +34,19 @@ module VX_gbar_unit import VX_gpu_pkg::*; #(
     reg rsp_valid;
     reg [NB_WIDTH-1:0] rsp_bar_id;
 
+    wire req_file  = gbar_bus_if.req_valid && gbar_bus_if.req_ready;
+    wire rsp_fire  = gbar_bus_if.rsp_valid && gbar_bus_if.rsp_ready;
+    wire rsp_stall = gbar_bus_if.rsp_valid && ~gbar_bus_if.rsp_ready;
+
     always @(posedge clk) begin
         if (reset) begin
             barrier_masks <= '0;
             rsp_valid <= 0;
         end else begin
-            if (rsp_valid) begin
-                rsp_valid <= 0; // response pulse clear
+            if (rsp_fire) begin
+                rsp_valid <= 0; // response accepted
             end
-            if (gbar_bus_if.req_valid) begin
+            if (req_file) begin
                 if (active_barrier_count[NC_WIDTH-1:0] == gbar_bus_if.req_data.size_m1) begin
                     barrier_masks[req_id] <= '0; // clear mask
                     rsp_valid  <= 1; // send response
@@ -54,18 +58,21 @@ module VX_gbar_unit import VX_gpu_pkg::*; #(
         end
     end
 
-    assign gbar_bus_if.req_ready = 1; // always ready for requests
+    // request ack
+    assign gbar_bus_if.req_ready = ~rsp_stall;
+
+    // response broadcast
     assign gbar_bus_if.rsp_valid = rsp_valid;
     assign gbar_bus_if.rsp_data.id = rsp_bar_id;
 
 `ifdef DBG_TRACE_GBAR
     always @(posedge clk) begin
-        if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
-            `TRACE(2, ("%t: %s acquire: bar_id=%0d, size=%0d, core_id=%0d\n",
+        if (req_file) begin
+            `TRACE(2, ("%t: %s arrive: bar_id=%0d, size=%0d, core_id=%0d\n",
                 $time, INSTANCE_ID, gbar_bus_if.req_data.id, gbar_bus_if.req_data.size_m1, gbar_bus_if.req_data.core_id))
         end
-        if (gbar_bus_if.rsp_valid) begin
-            `TRACE(2, ("%t: %s release: bar_id=%0d\n", $time, INSTANCE_ID, gbar_bus_if.rsp_data.id))
+        if (rsp_fire) begin
+            `TRACE(2, ("%t: %s resume: bar_id=%0d\n", $time, INSTANCE_ID, gbar_bus_if.rsp_data.id))
         end
     end
 `endif

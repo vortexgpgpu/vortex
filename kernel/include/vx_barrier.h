@@ -32,7 +32,7 @@ public:
   }
 
   // Wait for barrier phase to complete
-  // Blocks until generation > token
+  // Blocks until generation > phase
   void wait(uint32_t phase) {
     vx_barrier_wait(bar_id_, phase);
   }
@@ -48,6 +48,38 @@ public:
 private:
   uint32_t bar_id_;
   uint32_t num_warps_;
+};
+
+class gbarrier {
+public:
+  gbarrier(uint32_t id, uint32_t num_cores = vx_num_cores()) {
+    bar_id_ = (id << 16) | 0x80000000;
+    num_cores_ = num_cores;
+  }
+
+  // Notify arrival at barrier (non-blocking)
+  // Returns: phase (current generation number)
+  uint32_t arrive() {
+    return vx_barrier_arrive(bar_id_, num_cores_);
+  }
+
+  // Wait for barrier phase to complete
+  // Blocks until generation > phase
+  void wait(uint32_t phase) {
+    vx_barrier_wait(bar_id_, phase);
+  }
+
+  // Convenience: arrive and wait in one call
+  void arrive_and_wait() {
+    vx_barrier(bar_id_, num_cores_);
+  }
+
+  // Barrier identifier
+  uint32_t id() const { return bar_id_; }
+
+private:
+  uint32_t bar_id_;
+  uint32_t num_cores_;
 };
 
 }

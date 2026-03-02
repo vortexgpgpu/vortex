@@ -24,14 +24,13 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     output coalescer_perf_t coalescer_perf,
 `endif
 
+`ifdef EXT_DXA_ENABLE
+    VX_dxa_bank_wr_if.slave dxa_bank_wr_if,
+    VX_txbar_bus_if.master  dxa_txbar_bus_if,
+`endif
+
     VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
-`ifdef EXT_DXA_ENABLE
-    ,
-    VX_dxa_bank_wr_if.slave dxa_bank_wr_if,
-    output wire             dxa_done_valid,
-    output wire [BAR_ADDR_W-1:0] dxa_done_bar_addr
-`endif
 );
     VX_lsu_mem_if #(
         .NUM_LANES (`NUM_LSU_LANES),
@@ -114,6 +113,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     );
 
 `ifdef EXT_DXA_ENABLE
+    wire dxa_done_valid;
+    wire [BAR_ADDR_W-1:0] dxa_done_bar_addr;
+
     // DXA bank-native writes bypass LSU crossbar — dedicated port to VX_local_mem
     VX_local_mem #(
         .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
@@ -135,6 +137,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .dxa_done_valid(dxa_done_valid),
         .dxa_done_bar_addr(dxa_done_bar_addr)
     );
+
+    // Connect DXA completion to txbar interface
+    assign dxa_txbar_bus_if.valid = dxa_done_valid;
+    assign dxa_txbar_bus_if.data.addr = dxa_done_bar_addr;
+    assign dxa_txbar_bus_if.data.is_done = 1'b1;
+    `UNUSED_VAR (dxa_txbar_bus_if.ready) // TODO: BUG!!!!!!
 `else
     VX_local_mem #(
         .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
@@ -166,14 +174,15 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     end
 
 `ifdef EXT_DXA_ENABLE
+    assign dxa_txbar_bus_if.valid = 1'b0;
+    assign dxa_txbar_bus_if.data.addr = '0;
+    assign dxa_txbar_bus_if.data.is_done = 1'b0;
     assign dxa_bank_wr_if.wr_ready = 1'b1;
     `UNUSED_VAR (dxa_bank_wr_if.wr_valid)
     `UNUSED_VAR (dxa_bank_wr_if.wr_addr)
     `UNUSED_VAR (dxa_bank_wr_if.wr_data)
     `UNUSED_VAR (dxa_bank_wr_if.wr_byteen)
     `UNUSED_VAR (dxa_bank_wr_if.wr_tag)
-    assign dxa_done_valid = 1'b0;
-    assign dxa_done_bar_addr = '0;
 `endif
 
 `endif

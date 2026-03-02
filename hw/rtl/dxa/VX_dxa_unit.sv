@@ -23,8 +23,8 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     VX_execute_if.slave     execute_if,
     VX_result_if.master     result_if,
-    VX_dxa_req_bus_if.master    dxa_req_bus_if,
-    VX_tx_bar_bus_if.master tx_bar_if
+    VX_dxa_req_bus_if.master dxa_req_bus_if,
+    VX_txbar_bus_if.master txbar_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (execute_if.data.rs3_data)
@@ -73,7 +73,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire boot_ready = boot_guard_r[1];
         wire issue_valid_safe;
         wire is_setup0_req;
-        wire req_tx_ready;
+        wire req_txbar_ready;
         wire req_fire;
         wire [BAR_ADDR_W-1:0] setup0_bar_addr;
         wire tx_setup_valid;
@@ -85,11 +85,11 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         // reset-exit ghost traffic on DXA request/response channels.
         assign issue_valid_safe = boot_ready && (execute_if.valid === 1'b1);
         assign is_setup0_req = (execute_if.data.op_args.dxa.op == DXA_OP_SETUP);
-        assign req_tx_ready = ~is_setup0_req || tx_bar_if.ready;
+        assign req_txbar_ready = ~is_setup0_req || txbar_bus_if.ready;
         assign issue_valid_in = issue_valid_safe;
-        assign execute_if.ready = issue_ready_in && dxa_req_bus_if.req_ready && req_tx_ready && ~reset;
+        assign execute_if.ready = issue_ready_in && dxa_req_bus_if.req_ready && req_txbar_ready && ~reset;
 
-        assign dxa_req_bus_if.req_valid = issue_valid_safe && issue_ready_in && req_tx_ready;
+        assign dxa_req_bus_if.req_valid = issue_valid_safe && issue_ready_in && req_txbar_ready;
         assign dxa_req_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID);
         assign dxa_req_bus_if.req_data.uuid    = execute_if.data.header.uuid;
         assign dxa_req_bus_if.req_data.wid     = execute_if.data.header.wid;
@@ -116,9 +116,9 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
         assign req_fire = boot_ready && dxa_req_bus_if.req_valid && dxa_req_bus_if.req_ready;
         assign tx_setup_valid = req_fire && is_setup0_req;
-        assign tx_bar_if.valid        = tx_setup_valid;
-        assign tx_bar_if.data.addr    = setup0_bar_addr;
-        assign tx_bar_if.data.is_done = 1'b0;
+        assign txbar_bus_if.valid        = tx_setup_valid;
+        assign txbar_bus_if.data.addr    = setup0_bar_addr;
+        assign txbar_bus_if.data.is_done = 1'b0;
 
         // Completion path is no longer carried over dxa_req_bus_if.rsp.
         assign dxa_req_bus_if.rsp_ready = 1'b1;
@@ -136,7 +136,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         `UNUSED_VAR (dxa_req_bus_if.rsp_valid)
         `UNUSED_VAR (dxa_req_bus_if.rsp_data)
 
-    `ifdef DBG_TRACE_DXA_TX_BAR
+    `ifdef DBG_TRACE_DXA_TXBAR
         always @(posedge clk) begin
             if (~reset) begin
                 if (req_fire) begin
@@ -147,9 +147,9 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     `TRACE(1, ("%t: %s tx-setup: addr=%0d packed=%b slot=%0d owner=%0d\n",
                         $time, INSTANCE_ID, setup0_bar_addr, setup0_is_packed, setup0_bar_slot, setup0_bar_owner))
                 end
-                if (tx_bar_if.valid && tx_bar_if.ready) begin
+                if (txbar_bus_if.valid && txbar_bus_if.ready) begin
                     `TRACE(1, ("%t: %s tx-bar-fire: addr=%0d done=%b\n",
-                        $time, INSTANCE_ID, tx_bar_if.data.addr, tx_bar_if.data.is_done))
+                        $time, INSTANCE_ID, txbar_bus_if.data.addr, txbar_bus_if.data.is_done))
                 end
             end
         end

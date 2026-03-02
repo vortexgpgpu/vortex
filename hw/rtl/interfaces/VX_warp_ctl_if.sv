@@ -15,49 +15,67 @@
 
 interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
-    wire        valid;
+    wire wspawn_valid;
+    wire tmc_valid;
+    wire split_valid;
+    wire sjoin_valid;
+    wire bar_valid;
+
     wire [NW_WIDTH-1:0] wid;
-    tmc_t       tmc;
-    wspawn_t    wspawn;
-    split_t     split;
-    join_t      sjoin;
-    barrier_t   barrier;
+
+    tmc_t     tmc;
+    wspawn_t  wspawn;
+    split_t   split;
+    join_t    sjoin;
+    barrier_t bar;
 
     // Return IPDOM stack address
     wire [NW_WIDTH-1:0] dvstack_wid;
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
 
     // Return barrier phase
-    wire [BAR_ADDR_W-1:0] barrier_addr;
-    wire barrier_phase;
+    wire [BAR_ADDR_W-1:0] bar_addr;
+    wire bar_phase;
 
     modport master (
-        output valid,
+        output wspawn_valid,
+        output tmc_valid,
+        output split_valid,
+        output sjoin_valid,
+        output bar_valid,
+
         output wid,
+
         output wspawn,
         output tmc,
         output split,
         output sjoin,
-        output barrier,
+        output bar,
 
-        output barrier_addr,
-        input  barrier_phase,
+        output bar_addr,
+        input  bar_phase,
 
         output dvstack_wid,
         input  dvstack_ptr
     );
 
     modport slave (
-        input valid,
+        input wspawn_valid,
+        input tmc_valid,
+        input split_valid,
+        input sjoin_valid,
+        input bar_valid,
+
         input wid,
+
         input wspawn,
         input tmc,
         input split,
         input sjoin,
-        input barrier,
+        input bar,
 
-        input  barrier_addr,
-        output barrier_phase,
+        input  bar_addr,
+        output bar_phase,
 
         input dvstack_wid,
         output dvstack_ptr

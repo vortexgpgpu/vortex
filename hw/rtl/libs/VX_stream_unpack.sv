@@ -38,23 +38,26 @@ module VX_stream_unpack #(
 );
     if (NUM_REQS > 1) begin : g_unpack
 
-        reg [NUM_REQS-1:0] rem_mask_r;
-        wire [NUM_REQS-1:0] ready_out_w;
+        reg [NUM_REQS-1:0] delivered_r;
+        wire [NUM_REQS-1:0] valid_in_w, ready_in_w;
 
-        wire [NUM_REQS-1:0] rem_mask_n = rem_mask_r & ~ready_out_w;
-        wire sent_all = ~(| (mask_in & rem_mask_n));
+        assign valid_in_w = {NUM_REQS{valid_in}} & mask_in & ~delivered_r;
+
+        wire all_ready = & (~mask_in | delivered_r | ready_in_w);
 
         always @(posedge clk) begin
             if (reset) begin
-                rem_mask_r <= '1;
-            end else begin
-                if (valid_in) begin
-                    rem_mask_r <= sent_all ? '1 : rem_mask_n;
+                delivered_r <= '0;
+            end else if (valid_in) begin
+                if (all_ready) begin
+                    delivered_r <= '0;
+                end else begin
+                    delivered_r <= delivered_r | ready_in_w;
                 end
             end
         end
 
-        assign ready_in = sent_all;
+        assign ready_in = all_ready;
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_outbuf
             VX_elastic_buffer #(
@@ -64,8 +67,8 @@ module VX_stream_unpack #(
             ) out_buf (
                 .clk       (clk),
                 .reset     (reset),
-                .valid_in  (valid_in && mask_in[i] && rem_mask_r[i]),
-                .ready_in  (ready_out_w[i]),
+                .valid_in  (valid_in_w[i]),
+                .ready_in  (ready_in_w[i]),
                 .data_in   ({data_in[i],  tag_in}),
                 .data_out  ({data_out[i], tag_out[i]}),
                 .valid_out (valid_out[i]),

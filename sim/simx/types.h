@@ -71,34 +71,24 @@ union reg_data_t {
 ///////////////////////////////////////////////////////////////////////////////
 
 struct warp_barrier_t {
-  WarpMask wait_mask  = 0;
-  uint32_t arrival_count = 0;
-#ifdef BAR_TX_ENABLE
-  uint32_t expected_count = 0;
-  uint32_t tx_count = 0;
-  bool arrivals_done = false;
-#endif
+  WarpMask wait_mask = 0;
+  uint32_t count = 0;
+  uint32_t events = 0;
   uint32_t phase = 0;
 
   void reset() {
     wait_mask.reset();
-    arrival_count = 0;
-#ifdef BAR_TX_ENABLE
-    expected_count = 0;
-    tx_count = 0;
-    arrivals_done = false;
-#endif
-    phase = 0;
+    count  = 0;
+    events = 0;
+    phase  = 0;
   }
 };
 
 struct core_barrier_t {
   CoreMask mask = 0;
-  uint32_t phase = 0;
 
   void reset() {
     mask = 0;
-    phase = 0;
   }
 };
 
@@ -470,7 +460,7 @@ enum class WctlType {
 
 struct IntrWctlArgs {
   uint32_t is_cond_neg : 1;
-  uint32_t is_async_bar : 1;
+  uint32_t is_sync_bar : 1;
   uint32_t is_bar_arrive : 1;
 };
 

@@ -40,10 +40,9 @@ module VX_socket import VX_gpu_pkg::*; #(
     VX_dxa_bank_wr_if.slave     per_core_bank_wr_if [`SOCKET_SIZE],
 `endif
 
-`ifdef GBAR_ENABLE
     // Barrier
     VX_gbar_bus_if.master   gbar_bus_if,
-`endif
+
     // Status
     output wire             busy
 );
@@ -53,19 +52,18 @@ module VX_socket import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (`SOCKET_SIZE);
 `endif
 
-`ifdef GBAR_ENABLE
     VX_gbar_bus_if per_core_gbar_bus_if[`SOCKET_SIZE]();
 
     VX_gbar_arb #(
         .NUM_REQS (`SOCKET_SIZE),
-        .OUT_BUF  ((`SOCKET_SIZE > 1) ? 2 : 0)
+        .REQ_OUT_BUF ((`SOCKET_SIZE > 1) ? 2 : 0),
+        .RSP_OUT_BUF ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) gbar_arb (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (per_core_gbar_bus_if),
         .bus_out_if (gbar_bus_if)
     );
-`endif
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -307,13 +305,11 @@ module VX_socket import VX_gpu_pkg::*; #(
             .icache_bus_if  (per_core_icache_bus_if[core_id]),
 
         `ifdef EXT_DXA_ENABLE
-            .dxa_req_bus_if     (per_core_dxa_req_bus_if[core_id]),
-            .dxa_bank_wr_if     (per_core_bank_wr_if[core_id]),
+            .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),
+            .dxa_bank_wr_if (per_core_bank_wr_if[core_id]),
         `endif
 
-        `ifdef GBAR_ENABLE
             .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
-        `endif
 
             .busy           (per_core_busy[core_id])
         );

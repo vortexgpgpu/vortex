@@ -19,7 +19,8 @@ module VX_split_join import VX_gpu_pkg::*; #(
 ) (
     input  wire                     clk,
     input  wire                     reset,
-    input  wire                     valid,
+    input  wire                     split_valid,
+    input  wire                     sjoin_valid,
     input  wire [NW_WIDTH-1:0]      wid,
     input  split_t                  split,
     input  join_t                   sjoin,
@@ -33,9 +34,6 @@ module VX_split_join import VX_gpu_pkg::*; #(
     output wire [DV_STACK_SIZEW-1:0] stack_ptr
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-
-    wire split_valid = valid && split.valid;
-    wire sjoin_valid = valid && sjoin.valid;
 
     if (NT_BITS != 0) begin : g_enable
         wire [`NUM_WARPS-1:0][DV_STACK_SIZEW-1:0] ipdom_wr_ptr;

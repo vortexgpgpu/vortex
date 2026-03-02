@@ -277,21 +277,10 @@ void Emulator::suspend(uint32_t wid) {
 }
 
 void Emulator::resume(uint32_t wid) {
-  if (wid != 0xffffffff) {
     assert(active_warps_.test(wid));
     assert(stalled_warps_.test(wid));
     stalled_warps_.reset(wid);
     DT(3, core_->name() << " warp-state: wid=" << wid << ", stalled=false");
-  } else {
-    // resume all active warps
-    for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
-      if (active_warps_.test(i)) {
-        assert(stalled_warps_.test(i));
-        stalled_warps_.reset(i);
-        DT(3, core_->name() << " warp-state: wid=" << i << ", stalled=false");
-  }
-    }
-  }
 }
 
 bool Emulator::setTmask(uint32_t wid, const ThreadMask& tmask) {
@@ -320,76 +309,34 @@ bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
 }
 
 uint32_t Emulator::get_barrier_phase(uint32_t bar_id) const {
-  bool is_global = (bar_id >> 31);
-  bar_id &= 0x7fffffff;
-  if (is_global) {
-    return core_->socket()->get_barrier_phase(bar_id);
-  }
-  return barriers_.at(bar_id).phase;
-}
-
-void Emulator::release_local_barrier(uint32_t bar_id) {
-  auto& barrier = barriers_.at(bar_id);
-  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
-    if (barrier.wait_mask.test(i)) {
-      DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
-      this->resume(i);
-    }
-  }
-  barrier.wait_mask.reset();
-  barrier.arrival_count = 0;
-#ifdef BAR_TX_ENABLE
-  barrier.expected_count = 0;
-  barrier.tx_count = 0;
-  barrier.arrivals_done = false;
-#endif
-  ++barrier.phase;
+  auto bar_index = bar_id & 0x7fffffff;
+  return barriers_.at(bar_index).phase;
 }
 
 // Mark warp arrival at a barrier and return the phase generation number
-uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_async_bar) {
+void Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar) {
   bool is_global = (bar_id >> 31);
-  bar_id &= 0x7fffffff;
+  auto bar_index = bar_id & 0x7fffffff;
 
-  auto& barrier = barriers_.at(bar_id);
+  auto& barrier = barriers_.at(bar_index);
 
-#ifdef BAR_TX_ENABLE
-  // Save expected local participant count for delayed transactional completion.
-  barrier.expected_count = count;
-#endif
-  // update arrival count
-  barrier.arrival_count++;
-
-  uint32_t phase;
+  DP(4, "*** Barrier arrive: core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id << ", phase=" << barrier.phase << ", wait_mask=" << barrier.wait_mask << ", count=" << barrier.count << ", events=" << barrier.events);
 
   if (is_global) {
-    // query global barrier phase
-    phase = core_->socket()->get_barrier_phase(bar_id);
+    barrier.count = count; // save core count
+    barrier.wait_mask.set(wid); // mark warp arrival
+    if (barrier.wait_mask.count() == active_warps_.count() && barrier.events == 0) {
     // notify global barrier
-    if (barrier.arrival_count == active_warps_.count()) {
-      core_->socket()->barrier_arrive(bar_id, count, core_->id());
+      core_->socket()->global_barrier_arrive(bar_id, count, core_->id());
       barrier.reset();
     }
   } else {
-    // local barrier handling
-    phase = barrier.phase;
-    if (barrier.arrival_count == count) {
-#ifdef BAR_TX_ENABLE
-      if (barrier.tx_count > 0) {
-        barrier.arrivals_done = true;
-        // Legacy blocking barrier arrives must remain blocked until tx completion.
-        if (!is_async_bar) {
+    if (is_sync_bar) {
           barrier.wait_mask.set(wid);
         }
-      } else {
-        // also resume current warp if stalled (legacy barrier)
-        if (!is_async_bar) {
-          DP(3, "*** Resume core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id);
-          this->resume(wid);
-        }
-        release_local_barrier(bar_id);
-      }
-#else
+    // local barrier handling
+    auto barrier_count_p1 = barrier.count + 1;
+    if (barrier_count_p1 == count && barrier.events == 0) {
       // resume waiting warps
       for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
         if (barrier.wait_mask.test(i)) {
@@ -397,76 +344,82 @@ uint32_t Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid,
           this->resume(i);
         }
       }
-      // also resume current warp if stalled (legacy barrier)
-      if (!is_async_bar) {
-        DP(3, "*** Resume core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id);
-        this->resume(wid);
-      }
       // reset barrier and advance phase
-      barrier.arrival_count = 0;
       barrier.wait_mask.reset();
       ++barrier.phase;
-#endif
     }
+    // update count and wrap around
+    barrier.count = barrier_count_p1 % count;
   }
-
-  return phase;
 }
 
 // Async barrier wait: suspend warp until arrival phase is complete
 // phase: the value returned by barrier_arrive
 bool Emulator::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
-  __unused(wid);
-  bool is_global = (bar_id >> 31);
-  bar_id &= 0x7fffffff;
+  auto bar_index = bar_id & 0x7fffffff;
 
-  bool wait;
-  if (is_global) {
-    // global barrier handling
-    uint32_t bar_phase = core_->socket()->get_barrier_phase(bar_id);
-    wait = (bar_phase == phase);
-        } else {
-    // local barrier handling
-    auto& barrier = barriers_.at(bar_id);
-    wait = (barrier.phase == phase);
+  auto& barrier = barriers_.at(bar_index);
+  bool wait = (barrier.phase == phase);
+
+  DP(4, "*** Barrier wait: core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id << ", wait=" << wait);
+
     if (wait) {
       // add warp to wait list
       barrier.wait_mask.set(wid);
       DP(3, "*** Suspend core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_id);
         }
-    }
 
   return wait;
 }
 
-void Emulator::barrier_tx_start(uint32_t bar_id) {
-#ifdef BAR_TX_ENABLE
-  bool is_global = (bar_id >> 31);
-  bar_id &= 0x7fffffff;
-  if (is_global)
-    return;
-  auto& barrier = barriers_.at(bar_id);
-  barrier.tx_count++;
-#else
-  __unused(bar_id);
-#endif
+void Emulator::global_barrier_resume(uint32_t bar_id) {
+  auto bar_index = bar_id & 0x7fffffff;
+  auto& barrier = barriers_.at(bar_index);
+  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
+    if (active_warps_.test(i)) {
+      DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
+      this->resume(i);
+    }
+  }
+  barrier.wait_mask.reset();
+  ++barrier.phase;
 }
 
-void Emulator::barrier_tx_done(uint32_t bar_id) {
-#ifdef BAR_TX_ENABLE
+void Emulator::barrier_event_attach(uint32_t bar_id) {
+  auto bar_index = bar_id & 0x7fffffff;
+  auto& barrier = barriers_.at(bar_index);
+  ++barrier.events;
+}
+
+void Emulator::barrier_event_release(uint32_t bar_id) {
   bool is_global = (bar_id >> 31);
-  bar_id &= 0x7fffffff;
-  if (is_global)
-    return;
-  auto& barrier = barriers_.at(bar_id);
-  assert(barrier.tx_count > 0);
-  barrier.tx_count--;
-  if (barrier.tx_count == 0 && barrier.arrivals_done && (barrier.arrival_count == barrier.expected_count)) {
-    release_local_barrier(bar_id);
+  auto bar_index = bar_id & 0x7fffffff;
+  auto& barrier = barriers_.at(bar_index);
+  assert(barrier.events > 0);
+  --barrier.events;
+  if (barrier.events == 0) {
+    if (is_global) {
+      if (barrier.wait_mask.count() == active_warps_.count()) {
+        uint32_t num_cores = barrier.count; // was saved in barrier_arrive
+        // notify global barrier
+        core_->socket()->global_barrier_arrive(bar_id, num_cores, core_->id());
+        barrier.reset();
+      }
+    } else {
+      if (barrier.count == 0) {
+        // resume waiting warps
+        for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
+          if (barrier.wait_mask.test(i)) {
+            DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
+            this->resume(i);
+          }
+        }
+        // reset barrier and advance phase
+        barrier.wait_mask.reset();
+        ++barrier.phase;
+      }
+    }
   }
-#else
-  __unused(bar_id);
-#endif
 }
 
 #ifdef VM_ENABLE

@@ -26,9 +26,6 @@ L3_ENABLED = "expr: 1 if $L3_ENABLE else 0"
 [isa]
 XLEN = 32
 
-GBAR_ENABLE = false
-GBAR_ENABLED = "expr: 1 if $GBAR_ENABLE else 0"
-
 VM_ENABLE = false
 VM_ENABLED = "expr: 1 if $VM_ENABLE else 0"
 
@@ -46,7 +43,6 @@ EXT_ZICOND_ENABLE = true
 EXT_TCU_ENABLE = false
 EXT_DMA_ENABLE = false
 EXT_DXA_ENABLE = false
-BAR_TX_ENABLE = false
 # Cluster-level DXA engine count (decoupled from NUM_CORES/SOCKET_SIZE).
 NUM_DXA_UNITS = "expr: max(1, up($NUM_CORES / 8))"
 
@@ -59,7 +55,6 @@ EXT_V_ENABLED = "expr: 1 if $EXT_V_ENABLE else 0"
 EXT_ZICOND_ENABLED = "expr: 1 if $EXT_ZICOND_ENABLE else 0"
 EXT_TCU_ENABLED = "expr: 1 if $EXT_TCU_ENABLE else 0"
 EXT_DXA_ENABLED = "expr: 1 if $EXT_DXA_ENABLE else 0"
-BAR_TX_ENABLED = "expr: 1 if $BAR_TX_ENABLE else 0"
 VLEN = "expr: $XLEN * 4"
 
 [pipeline]

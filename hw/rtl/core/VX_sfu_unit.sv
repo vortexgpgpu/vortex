@@ -34,16 +34,16 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_fpu_csr_if.slave     fpu_csr_if [`NUM_FPU_BLOCKS],
 `endif
 
+`ifdef EXT_DXA_ENABLE
+    VX_dxa_req_bus_if.master dxa_req_bus_if,
+    VX_txbar_bus_if.slave   dxa_txbar_bus_if,
+`endif
+
     VX_sched_csr_if.slave   sched_csr_if,
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_warp_ctl_if.master   warp_ctl_if
-`ifdef EXT_DXA_ENABLE
-    ,
-    VX_dxa_req_bus_if.master    dxa_req_bus_if,
-    VX_tx_bar_bus_if.master tx_bar_if
-`endif
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
@@ -112,6 +112,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .result_in_if (pe_result_if)
     );
 
+    VX_txbar_bus_if txbar_bus_if();
+
     VX_wctl_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-wctl", INSTANCE_ID))),
         .NUM_LANES (NUM_LANES)
@@ -120,6 +122,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .reset      (reset),
         .execute_if (pe_execute_if[PE_IDX_WCTL]),
         .warp_ctl_if(warp_ctl_if),
+        .txbar_bus_if(txbar_bus_if),
         .result_if  (pe_result_if[PE_IDX_WCTL])
     );
 
@@ -148,6 +151,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     );
 
 `ifdef EXT_DXA_ENABLE
+    VX_txbar_bus_if dxa_txbar_attach_if();
+
     VX_dxa_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-dxa", INSTANCE_ID))),
         .CORE_ID (CORE_ID),
@@ -158,8 +163,19 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .execute_if (pe_execute_if[PE_IDX_DXA]),
         .result_if  (pe_result_if[PE_IDX_DXA]),
         .dxa_req_bus_if (dxa_req_bus_if),
-        .tx_bar_if  (tx_bar_if)
+        .txbar_bus_if(dxa_txbar_attach_if)
     );
+
+    // arbitrate between DXA agent and DXA core (prioritizing the DXA core)
+    assign txbar_bus_if.valid = dxa_txbar_bus_if.valid || dxa_txbar_attach_if.valid;
+    assign txbar_bus_if.data.is_done = dxa_txbar_bus_if.valid;
+    assign txbar_bus_if.data.addr = dxa_txbar_bus_if.valid ? dxa_txbar_bus_if.data.addr : dxa_txbar_attach_if.data.addr;
+    assign dxa_txbar_bus_if.ready = txbar_bus_if.ready;
+    assign dxa_txbar_attach_if.ready = txbar_bus_if.ready && ~dxa_txbar_bus_if.valid;
+`else
+    assign txbar_bus_if.valid = 1'b0;
+    assign txbar_bus_if.data = 'x;
+    `UNUSED_VAR (txbar_bus_if.ready)
 `endif
 
     VX_lane_gather #(

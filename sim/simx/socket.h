@@ -66,11 +66,9 @@ public:
 
   int get_exitcode() const;
 
-  uint32_t get_barrier_phase(uint32_t bar_id) const;
+  void global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
-  void barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
-
-  void resume(uint32_t core_id);
+  void global_barrier_resume(uint32_t bar_id, uint32_t core_id);
 
   PerfStats perf_stats() const;
 

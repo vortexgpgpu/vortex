@@ -38,13 +38,11 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    icache_bus_if,
 
 `ifdef EXT_DXA_ENABLE
-    VX_dxa_req_bus_if.master    dxa_req_bus_if,
-    VX_dxa_bank_wr_if.slave     dxa_bank_wr_if,
+    VX_dxa_req_bus_if.master dxa_req_bus_if,
+    VX_dxa_bank_wr_if.slave  dxa_bank_wr_if,
 `endif
 
-`ifdef GBAR_ENABLE
     VX_gbar_bus_if.master   gbar_bus_if,
-`endif
 
     // Status
     output wire             busy
@@ -58,19 +56,14 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_commit_sched_if  commit_sched_if();
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
-`ifdef EXT_DXA_ENABLE
-    VX_tx_bar_bus_if    tx_bar_if();
-    wire                dxa_done_valid;
-    wire [BAR_ADDR_W-1:0] dxa_done_bar_addr;
-`ifndef EXT_DXA_ENABLE
-    `UNUSED_VAR (dxa_done_valid)
-    `UNUSED_VAR (dxa_done_bar_addr)
-`endif
-`endif
 
     VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_commit_if        commit_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_writeback_if     writeback_if[`ISSUE_WIDTH]();
+
+`ifdef EXT_DXA_ENABLE
+    VX_txbar_bus_if     dxa_txbar_bus_if();
+`endif
 
     VX_lsu_mem_if #(
         .NUM_LANES (`NUM_LSU_LANES),
@@ -115,13 +108,6 @@ module VX_core import VX_gpu_pkg::*; #(
         .base_dcrs      (base_dcrs),
 
         .warp_ctl_if    (warp_ctl_if),
-    `ifdef EXT_DXA_ENABLE
-        .tx_bar_if      (tx_bar_if),
-    `ifdef EXT_DXA_ENABLE
-        .dxa_done_valid (dxa_done_valid),
-        .dxa_done_bar_addr(dxa_done_bar_addr),
-    `endif
-    `endif
         .branch_ctl_if  (branch_ctl_if),
 
         .decode_sched_if(decode_sched_if),
@@ -129,10 +115,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .commit_sched_if(commit_sched_if),
 
         .schedule_if    (schedule_if),
-    `ifdef GBAR_ENABLE
-        .gbar_bus_if    (gbar_bus_if),
-    `endif
         .sched_csr_if   (sched_csr_if),
+        .gbar_bus_if    (gbar_bus_if),
 
         .busy           (busy)
     );
@@ -202,13 +186,13 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .sched_csr_if   (sched_csr_if),
 
+    `ifdef EXT_DXA_ENABLE
+        .dxa_req_bus_if (dxa_req_bus_if),
+        .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `endif
+
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if)
-    `ifdef EXT_DXA_ENABLE
-        ,
-        .dxa_req_bus_if     (dxa_req_bus_if),
-        .tx_bar_if      (tx_bar_if)
-    `endif
     );
 
     VX_commit #(
@@ -233,14 +217,12 @@ module VX_core import VX_gpu_pkg::*; #(
         .lmem_perf     (lmem_perf),
         .coalescer_perf(coalescer_perf),
     `endif
+    `ifdef EXT_DXA_ENABLE
+        .dxa_bank_wr_if (dxa_bank_wr_if),
+        .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `endif
         .lsu_mem_if    (lsu_mem_if),
         .dcache_bus_if (dcache_bus_if)
-    `ifdef EXT_DXA_ENABLE
-        ,
-        .dxa_bank_wr_if (dxa_bank_wr_if),
-        .dxa_done_valid (dxa_done_valid),
-        .dxa_done_bar_addr(dxa_done_bar_addr)
-    `endif
     );
 
 `ifdef PERF_ENABLE

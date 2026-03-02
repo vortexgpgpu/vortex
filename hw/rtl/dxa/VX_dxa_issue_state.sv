@@ -40,13 +40,13 @@ module VX_dxa_issue_state import VX_gpu_pkg::*; #(
     localparam DXA_OP_COORD23 = 3'd2;
     localparam DXA_OP_ISSUE   = 3'd3;
 
-    reg [DXA_CTX_COUNT-1:0][BAR_ADDR_W-1:0] ctx_bar_addr_r;
+    reg [DXA_CTX_COUNT-1:0][BAR_ADDR_W-1:0] ctxbar_addr_r;
     reg [DXA_CTX_COUNT-1:0][DXA_DESC_SLOT_W-1:0] ctx_desc_slot_r;
     reg [DXA_CTX_COUNT-1:0][`XLEN-1:0] ctx_smem_addr_r;
     reg [DXA_CTX_COUNT-1:0][4:0][`XLEN-1:0] ctx_coords_r;
     reg [DXA_CTX_COUNT-1:0] ctx_valid_r;
 
-    assign issue_bar_addr = ctx_bar_addr_r[req_ctx_idx];
+    assign issue_bar_addr = ctxbar_addr_r[req_ctx_idx];
     assign issue_desc_slot = ctx_desc_slot_r[req_ctx_idx];
     assign issue_smem_addr = ctx_smem_addr_r[req_ctx_idx];
     assign issue_coords = ctx_coords_r[req_ctx_idx];
@@ -55,7 +55,7 @@ module VX_dxa_issue_state import VX_gpu_pkg::*; #(
     always @(posedge clk) begin
         if (reset) begin
             for (integer i = 0; i < DXA_CTX_COUNT; ++i) begin
-                ctx_bar_addr_r[i] <= '0;
+                ctxbar_addr_r[i] <= '0;
                 ctx_desc_slot_r[i] <= '0;
                 ctx_smem_addr_r[i] <= '0;
                 ctx_valid_r[i] <= 1'b0;
@@ -69,7 +69,7 @@ module VX_dxa_issue_state import VX_gpu_pkg::*; #(
                     // rs1 = smem_addr, rs2 = packed meta
                     ctx_smem_addr_r[req_ctx_idx] <= req_rs1;
                     ctx_desc_slot_r[req_ctx_idx] <= DXA_DESC_SLOT_W'(req_rs2[DXA_DESC_SLOT_W-1:0]);
-                    ctx_bar_addr_r[req_ctx_idx] <= req_bar_addr;
+                    ctxbar_addr_r[req_ctx_idx] <= req_bar_addr;
                     ctx_valid_r[req_ctx_idx] <= 1'b1;
                     // Clear all coords to prevent stale leakage from
                     // previous higher-dimension instructions on this context.

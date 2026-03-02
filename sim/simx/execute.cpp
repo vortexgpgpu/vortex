@@ -1471,7 +1471,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         uint32_t cta_no = arg1 & 0xffff;
         uint32_t bar_no = (arg1 >> 16) & 0x7fff;
         uint32_t bar_id = (cta_no * arch_.num_barriers() + bar_no) | (arg1 & 0x80000000);
-        trace->data = std::make_shared<BarTraceData>(bar_id, arg2, (bool)wctlArgs.is_async_bar);
+        trace->data = std::make_shared<BarTraceData>(bar_id, arg2, (bool)wctlArgs.is_sync_bar);
         if (wctlArgs.is_bar_arrive) {
           uint32_t phase = this->get_barrier_phase(bar_id);
           for (uint32_t t = thread_start; t < num_threads; ++t) {

@@ -367,11 +367,11 @@ static op_string_t op_string(const Instr &instr) {
       case WctlType::SPLIT:  return {wctlArgs.is_cond_neg ? "SPLIT.N":"SPLIT", ""};
       case WctlType::JOIN:   return {"JOIN", ""};
       case WctlType::BAR: {
-        if (wctlArgs.is_async_bar) {
+        if (wctlArgs.is_sync_bar) {
+          return {"BAR", ""};
+        } else {
           if (wctlArgs.is_bar_arrive) return {"BAR.ARRIVE", ""};
           else return {"BAR.WAIT", ""};
-        } else {
-          return {"BAR", ""};
         }
       }
       case WctlType::PRED:   return {wctlArgs.is_cond_neg ? "PRED.N":"PRED", ""};
@@ -1045,7 +1045,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         instr->setOpType(WctlType::BAR);
         instr->setSrcReg(0, rs1, RegType::Integer);
         instr->setSrcReg(1, rs2, RegType::Integer);
-        wctlArgs.is_async_bar = 0;
+        wctlArgs.is_sync_bar = 1;
         wctlArgs.is_bar_arrive = 0;
         break;
       case 5: // PRED
@@ -1059,7 +1059,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         instr->setDestReg(rd, RegType::Integer);
         instr->setSrcReg(0, rs1, RegType::Integer);
         instr->setSrcReg(1, rs2, RegType::Integer);
-        wctlArgs.is_async_bar = 1;
+        wctlArgs.is_sync_bar = 0;
         wctlArgs.is_bar_arrive = (rd != 0);
         break;
       case 7: // WSYNC

@@ -29,7 +29,11 @@ all:
 	$(MAKE) -C jacobi
 	$(MAKE) -C pathfinder
 	$(MAKE) -C softmax
+	$(MAKE) -C sgemm_tcu
+	$(MAKE) -C sgemm_tcu_sp
+	$(MAKE) -C sgemm_dxa
 	$(MAKE) -C async_barrier
+	$(MAKE) -C async_gbarrier
 
 all-mpi:
 	$(MAKE) -C mpi_dotproduct MPI=1 NP=$(NP)
@@ -139,4 +143,8 @@ clean:
 	$(MAKE) -C jacobi clean
 	$(MAKE) -C pathfinder clean
 	$(MAKE) -C softmax clean
+	$(MAKE) -C sgemm_tcu clean
+	$(MAKE) -C sgemm_tcu_sp clean
+	$(MAKE) -C sgemm_dxa clean
 	$(MAKE) -C async_barrier clean
+	$(MAKE) -C async_gbarrier clean

@@ -399,7 +399,7 @@ bool SfuUnit::execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaTr
 			runtime.desc_slot = dxa_data.rs1;
 			runtime.bar_id = decode_barrier_addr(dxa_data.rs2, core_->arch());
 		}
-		core_->barrier_tx_start(runtime.bar_id);
+		core_->barrier_event_attach(runtime.bar_id);
 		return true;
 	case DxaType::COORD01:
 		runtime.coords[0] = dxa_data.rs1;
@@ -465,14 +465,13 @@ void SfuUnit::tick() {
 				output.send(trace, 2+delay);
 				if (trace->eop) {
 					auto trace_data = std::dynamic_pointer_cast<BarTraceData>(trace->data);
-					uint32_t phase = trace_data->count;
-					bool is_bar_arrive = trace->wb || !trace_data->is_async_bar;
-					bool is_bar_wait = !trace->wb;
-					if (is_bar_arrive) {
-						phase = core_->barrier_arrive(trace_data->bar_id, trace_data->count, trace->wid, trace_data->is_async_bar);
-					}
-					if (is_bar_wait) {
-						release_warp = !core_->barrier_wait(trace_data->bar_id,	phase, trace->wid);
+					if (trace->wb || trace_data->is_sync_bar) {
+						core_->barrier_arrive(trace_data->bar_id, trace_data->count, trace->wid, trace_data->is_sync_bar);
+						if (trace_data->is_sync_bar){
+							release_warp = false;
+						}
+					} else {
+						release_warp = !core_->barrier_wait(trace_data->bar_id,	trace_data->count, trace->wid);
 					}
 				}
 			} break;

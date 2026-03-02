@@ -511,7 +511,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                             end
                             3'h4: begin // BAR
                                 op_type = INST_OP_BITS'(INST_SFU_BAR);
-                                op_args.wctl.is_async_bar = 0;
+                                op_args.wctl.is_sync_bar = 1;
                                 op_args.wctl.is_bar_arrive = 0;
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
@@ -524,7 +524,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                             end
                             3'h6: begin // Asynchronous arrive/wait barrier
                                 op_type = INST_OP_BITS'(INST_SFU_BAR);
-                                op_args.wctl.is_async_bar = 1;
+                                op_args.wctl.is_sync_bar = 0;
                                 op_args.wctl.is_bar_arrive = ~is_rd_zero;
                                 is_wstall = is_rd_zero;
                                 `USED_IREG (rd);

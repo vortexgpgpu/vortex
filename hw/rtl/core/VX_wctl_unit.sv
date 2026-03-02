@@ -22,6 +22,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // Inputs
     VX_execute_if.slave     execute_if,
+    VX_txbar_bus_if.slave   txbar_bus_if,
 
     // Outputs
     VX_warp_ctl_if.master   warp_ctl_if,
@@ -38,7 +39,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wspawn_t    wspawn;
     split_t     split;
     join_t      sjoin;
-    barrier_t   barrier;
+    barrier_t   bar;
 
     wire is_wspawn = (execute_if.data.op_type == INST_SFU_WSPAWN);
     wire is_tmc    = (execute_if.data.op_type == INST_SFU_TMC);
@@ -46,6 +47,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_split  = (execute_if.data.op_type == INST_SFU_SPLIT);
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
     wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
+
+    wire wctl_valid;
+    wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid;
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
 	    if (LANE_BITS != 0) begin : g_last_tid
@@ -103,7 +107,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // tmc / pred
 
     wire [`NUM_THREADS-1:0] pred_mask = has_then ? then_tmask : rs2_data[`NUM_THREADS-1:0];
-    assign tmc.valid = (is_tmc || is_pred);
+    assign tmc_valid = wctl_valid && (is_tmc || is_pred);
     assign tmc.tmask = is_pred ? pred_mask : rs1_data[`NUM_THREADS-1:0];
 
     // split
@@ -115,7 +119,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire [`NUM_THREADS-1:0] taken_tmask = then_first ? then_tmask : else_tmask;
     wire [`NUM_THREADS-1:0] ntaken_tmask = then_first ? else_tmask : then_tmask;
 
-    assign split.valid      = is_split;
+    assign split_valid      = wctl_valid && is_split;
     assign split.is_dvg     = has_then && has_else;
     assign split.then_tmask = taken_tmask;
     assign split.else_tmask = ntaken_tmask;
@@ -123,23 +127,24 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // join
 
-    assign sjoin.valid      = is_join;
+    assign sjoin_valid      = wctl_valid && is_join;
     assign sjoin.tmask      = then_tmask | else_tmask;
     assign sjoin.stack_ptr  = rs1_data[DV_STACK_SIZEW-1:0];
 
     // barrier
 
-    assign barrier.valid    = is_bar;
-    assign barrier.id       = rs1_data[16 +: NB_BITS];
-    assign barrier.is_async = execute_if.data.op_args.wctl.is_async_bar;
-`ifdef GBAR_ENABLE
-    assign barrier.is_global= rs1_data[31];
-`else
-    assign barrier.is_global= 1'b0;
-`endif
-    assign barrier.is_arrive= execute_if.data.op_args.wctl.is_bar_arrive || ~execute_if.data.op_args.wctl.is_async_bar;
-    assign barrier.phase    = rs2_data[0];
-    assign barrier.size_m1  = rs2_data[BAR_SIZE_W-1:0] - BAR_SIZE_W'(1);
+    wire wctl_bar_enable = wctl_valid && is_bar;
+
+    assign bar_valid    = wctl_bar_enable || txbar_bus_if.valid;
+    assign bar.id       = rs1_data[16 +: NB_BITS];
+    assign bar.is_event = txbar_bus_if.valid && ~wctl_bar_enable;
+    assign bar.is_sync  = execute_if.data.op_args.wctl.is_sync_bar;
+    assign bar.is_global= rs1_data[31];
+    assign bar.is_arrive= execute_if.data.op_args.wctl.is_bar_arrive || execute_if.data.op_args.wctl.is_sync_bar;
+    assign bar.phase    = wctl_bar_enable ? rs2_data[0] : txbar_bus_if.data.is_done;
+    assign bar.size_m1  = rs2_data[BAR_SIZE_W-1:0] - BAR_SIZE_W'(1);
+
+    assign txbar_bus_if.ready = ~wctl_bar_enable;
 
     // wspawn
 
@@ -147,33 +152,55 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_wspawn_wmask
         assign wspawn_wmask[i] = (i < rs1_data[NW_BITS:0]) && (i != execute_if.data.header.wid);
     end
-    assign wspawn.valid = is_wspawn;
+    assign wspawn_valid = wctl_valid && is_wspawn;
     assign wspawn.wmask = wspawn_wmask;
     assign wspawn.pc    = from_fullPC(rs2_data);
 
-    // response
+    // Scheduler response setup
 
     assign warp_ctl_if.dvstack_wid = execute_if.data.header.wid;
-    if (`NUM_WARPS > 1) begin : g_barrier_addr
-        assign warp_ctl_if.barrier_addr = {rs1_data[NW_BITS-1:0], rs1_data[16 +: NB_BITS]};
-    end else begin : g_barrier_addr_w1
-        assign warp_ctl_if.barrier_addr = rs1_data[16 +: NB_BITS];
-    end
+    wire [BAR_ADDR_W-1:0] wctl_bar_addr;
+    `CONCAT(wctl_bar_addr, rs1_data[NW_BITS-1:0], rs1_data[16 +: NB_BITS], NW_BITS, NB_BITS)
+    assign warp_ctl_if.bar_addr = wctl_bar_enable ? wctl_bar_addr : txbar_bus_if.data.addr;
 
-    // Send WCTL request
+    // Send scheduler request
 
     wire execute_fire = execute_if.valid && execute_if.ready;
-    wire wctl_valid = execute_fire && execute_if.data.header.eop;
+    assign wctl_valid = execute_fire && execute_if.data.header.eop;
 
     VX_pipe_register #(
-        .DATAW (1 + NW_WIDTH + WCTL_WIDTH),
+        .DATAW (5 + NW_WIDTH + WCTL_WIDTH),
         .RESETW (1)
     ) wctl_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({wctl_valid,        execute_if.data.header.wid, tmc,             wspawn,             split,             sjoin,             barrier}),
-        .data_out ({warp_ctl_if.valid, warp_ctl_if.wid,            warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.sjoin, warp_ctl_if.barrier})
+        .data_in  ({
+            tmc_valid,
+            wspawn_valid,
+            split_valid,
+            sjoin_valid,
+            bar_valid,
+            execute_if.data.header.wid,
+            tmc,
+            wspawn,
+            split,
+            sjoin,
+            bar
+        }),
+        .data_out ({
+            warp_ctl_if.tmc_valid,
+            warp_ctl_if.wspawn_valid,
+            warp_ctl_if.split_valid,
+            warp_ctl_if.sjoin_valid,
+            warp_ctl_if.bar_valid,
+            warp_ctl_if.wid,
+            warp_ctl_if.tmc,
+            warp_ctl_if.wspawn,
+            warp_ctl_if.split,
+            warp_ctl_if.sjoin,
+            warp_ctl_if.bar
+        })
     );
 
     // Send result
@@ -191,8 +218,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (execute_if.valid),
         .ready_in  (execute_if.ready),
-        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr, warp_ctl_if.barrier_phase, bar_rsp_valid}),
-        .data_out  ({result_if.data.header,  dvstack_ptr_r,           bar_phase_r,               bar_rsp_valid_r}),
+        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr, warp_ctl_if.bar_phase, bar_rsp_valid}),
+        .data_out  ({result_if.data.header,  dvstack_ptr_r,           bar_phase_r,           bar_rsp_valid_r}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );

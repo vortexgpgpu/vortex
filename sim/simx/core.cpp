@@ -549,20 +549,24 @@ void Core::resume(uint32_t wid) {
   emulator_.resume(wid);
 }
 
-uint32_t Core::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_async_bar) {
-  return emulator_.barrier_arrive(bar_id, count, wid, is_async_bar);
+void Core::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar) {
+  emulator_.barrier_arrive(bar_id, count, wid, is_sync_bar);
 }
 
-bool Core::barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid) {
-  return emulator_.barrier_wait(bar_id, token, wid);
+bool Core::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
+  return emulator_.barrier_wait(bar_id, phase, wid);
 }
 
-void Core::barrier_tx_start(uint32_t bar_id) {
-  emulator_.barrier_tx_start(bar_id);
+void Core::global_barrier_resume(uint32_t bar_id) {
+  emulator_.global_barrier_resume(bar_id);
 }
 
-void Core::barrier_tx_done(uint32_t bar_id) {
-  emulator_.barrier_tx_done(bar_id);
+void Core::barrier_event_attach(uint32_t bar_id) {
+  emulator_.barrier_event_attach(bar_id);
+}
+
+void Core::barrier_event_release(uint32_t bar_id) {
+  emulator_.barrier_event_release(bar_id);
 }
 
 #ifdef EXT_DXA_ENABLE

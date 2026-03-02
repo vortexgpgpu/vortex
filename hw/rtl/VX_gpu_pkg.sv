@@ -74,11 +74,7 @@ package VX_gpu_pkg;
     localparam BAR_ADDR_BITS = NW_BITS + NB_BITS;
     localparam BAR_ADDR_W = `UP(BAR_ADDR_BITS);
 
-`ifdef GBAR_ENABLE
     localparam BAR_SIZE_W = `MAX(NW_WIDTH, NC_WIDTH);
-`else
-    localparam BAR_SIZE_W = NW_WIDTH;
-`endif
 
 `ifndef NDEBUG
 	localparam UUID_WIDTH = 44;
@@ -110,7 +106,8 @@ package VX_gpu_pkg;
     localparam SRC_OPD_BITS = `CLOG2(NUM_SRC_OPDS);
     localparam SRC_OPD_WIDTH = `UP(SRC_OPD_BITS);
 
-	localparam NUM_SOCKETS = `UP(`NUM_CORES / `SOCKET_SIZE);
+	localparam NUM_CORES   = `NUM_CORES;
+    localparam NUM_SOCKETS = `UP(NUM_CORES / `SOCKET_SIZE);
 
     localparam MEM_REQ_FLAG_FLUSH =  0;
     localparam MEM_REQ_FLAG_IO =     1;
@@ -469,31 +466,26 @@ package VX_gpu_pkg;
     /////////////////////////////// TENSOR UNIT ///////////////////////////////
 
 `ifdef EXT_TCU_ENABLE
-
     localparam INST_TCU_WMMA       = 4'h0;
 `ifdef TCU_SPARSE_ENABLE
     localparam INST_TCU_WMMA_SP    = 4'h1;
     localparam INST_TCU_META_STORE = 4'h2;
 `endif
     localparam INST_TCU_BITS = 4;
-
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
 
     typedef struct packed {
-        logic                    valid;
         logic [`NUM_THREADS-1:0] tmask;
     } tmc_t;
 
     typedef struct packed {
-        logic                   valid;
         logic [`NUM_WARPS-1:0]  wmask;
         logic [PC_BITS-1:0]     pc;
     } wspawn_t;
 
     typedef struct packed {
-        logic                   valid;
         logic                   is_dvg;
         logic [`NUM_THREADS-1:0] then_tmask;
         logic [`NUM_THREADS-1:0] else_tmask;
@@ -501,20 +493,34 @@ package VX_gpu_pkg;
     } split_t;
 
     typedef struct packed {
-        logic                   valid;
         logic [`NUM_THREADS-1:0] tmask;
         logic [DV_STACK_SIZEW-1:0] stack_ptr;
     } join_t;
 
     typedef struct packed {
-        logic                   valid;
         logic [NB_WIDTH-1:0]    id;
+        logic                   is_event;
         logic                   is_global;
         logic                   is_arrive;
-        logic                   is_async;
+        logic                   is_sync;
         logic                   phase;
         logic [BAR_SIZE_W-1:0]  size_m1;
     } barrier_t;
+
+    typedef struct packed {
+        logic [NB_WIDTH-1:0] id;
+        logic [NC_WIDTH-1:0] size_m1;
+        logic [NC_WIDTH-1:0] core_id;
+    } gbar_req_t;
+
+    typedef struct packed {
+        logic [NB_WIDTH-1:0] id;
+    } gbar_rsp_t;
+
+    typedef struct packed {
+        logic [BAR_ADDR_W-1:0] addr;
+        logic                  is_done;
+    } txbar_t;
 
     typedef struct packed {
         logic [`XLEN-1:0]   startup_addr;
@@ -561,7 +567,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [(INST_ARGS_BITS-3)-1:0] __padding;
         logic is_cond_neg;
-        logic is_async_bar;
+        logic is_sync_bar;
         logic is_bar_arrive;
     } wctl_args_t;
     `PACKAGE_ASSERT($bits(wctl_args_t) == INST_ARGS_BITS)

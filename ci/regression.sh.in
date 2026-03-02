@@ -134,9 +134,9 @@ regression()
     ./ci/blackbox.sh --driver=simx --threads=32 --app=cta --args="-x1 -y5 -z3 -a3 -b5 -c7"
 
     # test global barrier
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tgbar" --cores=2
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tgbar" --cores=2
+    ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
+    ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tgbar" --cores=2
+    ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tgbar" --cores=2
 
     # test local barrier
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
@@ -156,12 +156,10 @@ dxa()
     make -C runtime/simx
 
     # single-core with L2 cache
-    CONFIGS="-DEXT_DXA_ENABLE -DBAR_TX_ENABLE" \
-    ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m2" --l2cache
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m2" --l2cache
 
     # multi-core with L2 cache
-    CONFIGS="-DEXT_DXA_ENABLE -DBAR_TX_ENABLE" \
-    ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m2" --cores=4 --l2cache
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m2" --cores=4 --l2cache
 
     echo "dxa tests done!"
 }

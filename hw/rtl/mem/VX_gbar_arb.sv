@@ -14,8 +14,9 @@
 `include "VX_define.vh"
 
 module VX_gbar_arb import VX_gpu_pkg::*; #(
-    parameter NUM_REQS = 1,
-    parameter OUT_BUF  = 0,
+    parameter NUM_REQS    = 1,
+    parameter REQ_OUT_BUF = 0,
+    parameter RSP_OUT_BUF = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
@@ -25,7 +26,8 @@ module VX_gbar_arb import VX_gpu_pkg::*; #(
     VX_gbar_bus_if.master   bus_out_if
 );
 
-    localparam REQ_DATAW = NB_WIDTH + NC_WIDTH + NC_WIDTH;
+    localparam REQ_DATAW = $bits(gbar_req_t);
+    localparam RSP_DATAW = $bits(gbar_rsp_t);
 
     // arbitrate request
 
@@ -44,7 +46,7 @@ module VX_gbar_arb import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (1),
         .DATAW       (REQ_DATAW),
         .ARBITER     (ARBITER),
-        .OUT_BUF     (OUT_BUF)
+        .OUT_BUF     (REQ_OUT_BUF)
     ) req_arb (
         .clk        (clk),
         .reset      (reset),
@@ -59,21 +61,33 @@ module VX_gbar_arb import VX_gpu_pkg::*; #(
 
     // broadcast response
 
-    reg rsp_valid;
-    reg [NB_WIDTH-1:0] rsp_data;
+    wire [NUM_REQS-1:0] rsp_valid_out;
+    wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_out;
+    wire [NUM_REQS-1:0] rsp_ready_out;
 
-    always @(posedge clk) begin
-        if (reset) begin
-            rsp_valid <= 0;
-        end else begin
-            rsp_valid <= bus_out_if.rsp_valid;
-        end
-        rsp_data <= bus_out_if.rsp_data;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_rsp_ready
+        assign rsp_ready_out[i] = bus_in_if[i].rsp_ready;
     end
 
+    VX_stream_fork #(
+        .NUM_OUTPUTS (NUM_REQS),
+        .DATAW       (RSP_DATAW),
+        .EAGER       (1),
+        .OUT_BUF     (RSP_OUT_BUF)
+    ) rsp_fork (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (bus_out_if.rsp_valid),
+        .data_in   (bus_out_if.rsp_data),
+        .ready_in  (bus_out_if.rsp_ready),
+        .valid_out (rsp_valid_out),
+        .data_out  (rsp_data_out),
+        .ready_out (rsp_ready_out)
+    );
+
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_bus_in_if
-        assign bus_in_if[i].rsp_valid = rsp_valid;
-        assign bus_in_if[i].rsp_data  = rsp_data;
+        assign bus_in_if[i].rsp_valid = rsp_valid_out[i];
+        assign bus_in_if[i].rsp_data  = rsp_data_out[i];
     end
 
 endmodule

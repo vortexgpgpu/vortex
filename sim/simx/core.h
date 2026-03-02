@@ -121,13 +121,15 @@ public:
 
   bool warp_sync_ready(uint32_t wid, uint64_t uuid) const;
 
-  uint32_t barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_async_bar);
+  void barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar);
 
-  bool barrier_wait(uint32_t bar_id, uint32_t token, uint32_t wid);
+  bool barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid);
 
-  void barrier_tx_start(uint32_t bar_id);
+  void global_barrier_resume(uint32_t bar_id);
 
-  void barrier_tx_done(uint32_t bar_id);
+  void barrier_event_attach(uint32_t bar_id);
+
+  void barrier_event_release(uint32_t bar_id);
 
   bool wspawn(uint32_t num_warps, Word nextPC);
 

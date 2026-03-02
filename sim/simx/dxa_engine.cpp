@@ -104,7 +104,7 @@ bool DxaEngine::start_next_request() {
   uint32_t elem_bytes = 0;
   uint32_t total_cycles = 0;
   if (!this->decode_request(req, &total_elems, &elem_bytes, &total_cycles)) {
-    core_->barrier_tx_done(req.bar_id);
+    core_->barrier_event_release(req.bar_id);
     return false;
   }
 
@@ -203,7 +203,7 @@ void DxaEngine::complete_active_request() {
                         active_xfer_.req.coords.data(),
                         &bytes_copied);
   (void)bytes_copied;
-  core_->barrier_tx_done(active_xfer_.req.bar_id);
+  core_->barrier_event_release(active_xfer_.req.bar_id);
 
   has_active_ = false;
   active_xfer_ = ActiveTransfer();

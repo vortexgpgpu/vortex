@@ -157,16 +157,12 @@ int Socket::get_exitcode() const {
   return exitcode;
 }
 
-uint32_t Socket::get_barrier_phase(uint32_t bar_id) const {
-  return cluster_->get_barrier_phase(bar_id);
+void Socket::global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
+  cluster_->global_barrier_arrive(bar_id, count, core_id);
 }
 
-void Socket::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id) {
-  cluster_->barrier_arrive(bar_id, count, core_id);
-}
-
-void Socket::resume(uint32_t core_index) {
-  cores_.at(core_index)->resume(-1);
+void Socket::global_barrier_resume(uint32_t bar_id, uint32_t core_index) {
+  cores_.at(core_index)->global_barrier_resume(bar_id);
 }
 
 Socket::PerfStats Socket::perf_stats() const {
