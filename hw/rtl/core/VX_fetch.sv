@@ -198,6 +198,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `endif
 `endif
 
+
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (schedule_if.valid && schedule_if.ready) begin

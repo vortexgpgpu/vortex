@@ -24,37 +24,20 @@ interface VX_dxa_req_bus_if import VX_gpu_pkg::*, VX_dxa_pkg::*; ();
         logic [`XLEN-1:0]         rs2;
     } req_data_t;
 
-    typedef struct packed {
-        // Reserved: response payload is no longer architecturally used.
-        logic                     unused;
-    } rsp_data_t;
-
     logic      req_valid;
     req_data_t req_data;
     logic      req_ready;
 
-    logic      rsp_valid;
-    rsp_data_t rsp_data;
-    logic      rsp_ready;
-
     modport master (
         output req_valid,
         output req_data,
-        input  req_ready,
-
-        input  rsp_valid,
-        input  rsp_data,
-        output rsp_ready
+        input  req_ready
     );
 
     modport slave (
         input  req_valid,
         input  req_data,
-        output req_ready,
-
-        output rsp_valid,
-        output rsp_data,
-        input  rsp_ready
+        output req_ready
     );
 
 endinterface

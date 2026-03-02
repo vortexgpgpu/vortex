@@ -245,6 +245,7 @@ module VX_dxa_rrs import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `UNUSED_VAR (ag_gmem_byte_addr)
     `UNUSED_VAR (gmem_rd_rsp_tag[GMEM_TAG_VALUEW-1:RD_SLOT_W])
 
+
     `RUNTIME_ASSERT(~(gmem_rd_rsp_valid && gmem_rd_rsp_ready) || rsp_slot_busy,
         ("invalid dxa rrs gmem rsp slot"))
 endmodule

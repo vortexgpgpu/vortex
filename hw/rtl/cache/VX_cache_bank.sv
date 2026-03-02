@@ -684,6 +684,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign perf_mshr_stall = mshr_alm_full;
 `endif
 
+
 `ifdef DBG_TRACE_CACHE
     wire crsp_queue_fire = crsp_queue_valid && crsp_queue_ready;
     wire input_stall = (replay_valid || mem_rsp_valid || core_req_valid || flush_valid)

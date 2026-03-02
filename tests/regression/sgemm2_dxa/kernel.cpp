@@ -55,11 +55,11 @@ void kernel_body(kernel_arg_t* arg) {
   // barriers (one per stage); single-buffer uses only bar[0].
   vortex::barrier bar[2] = { vortex::barrier(0), vortex::barrier(1) };
 
-  // Only the first hardware warp issues DXA commands. This is a warp-uniform
-  // condition — no divergence overhead within any warp.
-  const uint32_t hw_threads = static_cast<uint32_t>(vx_num_threads());
-  const uint32_t local_tid  = threadIdx.x + threadIdx.y * blockDim.x;
-  const bool is_dxa_warp    = (local_tid < hw_threads);
+  // Only the first hardware warp (warp 0 within the CTA) issues DXA commands.
+  // group_warp_id = vx_warp_id() % __warps_per_group identifies the warp's
+  // position within its CTA (0 = first warp).  __local_group_id is the CTA
+  // group index within the core, NOT the warp-within-CTA index.
+  const bool is_dxa_warp    = (__warps_per_group == 0) ? false : (vx_warp_id() % __warps_per_group == 0);
 
   if (mode == 2) {
     // ── Double-buffered pipeline ──────────────────────────────────────

@@ -85,9 +85,16 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         // reset-exit ghost traffic on DXA request/response channels.
         assign issue_valid_safe = boot_ready && (execute_if.valid === 1'b1);
         assign is_setup0_req = (execute_if.data.op_args.dxa.op == DXA_OP_SETUP);
-        assign req_txbar_ready = ~is_setup0_req || txbar_bus_if.ready;
-        assign issue_valid_in = issue_valid_safe;
-        assign execute_if.ready = issue_ready_in && dxa_req_bus_if.req_ready && req_txbar_ready && ~reset;
+        assign req_tx_ready = ~is_setup0_req || tx_bar_if.ready;
+    // `ifdef DXA_FIX_RSP_DUP
+        // Fix: gate response buffer accept on ALL downstream ready signals.
+        // Without this, the buffer can accept duplicate entries when the DXA
+        // request bus is not ready, causing pending-counter underflow on commit.
+        assign issue_valid_in = issue_valid_safe && dxa_req_bus_if.req_ready && req_tx_ready;
+    // `else
+        // assign issue_valid_in = issue_valid_safe;
+    // `endif
+        assign execute_if.ready = issue_ready_in && dxa_req_bus_if.req_ready && req_tx_ready && ~reset;
 
         assign dxa_req_bus_if.req_valid = issue_valid_safe && issue_ready_in && req_txbar_ready;
         assign dxa_req_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID);
@@ -120,9 +127,6 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign txbar_bus_if.data.addr    = setup0_bar_addr;
         assign txbar_bus_if.data.is_done = 1'b0;
 
-        // Completion path is no longer carried over dxa_req_bus_if.rsp.
-        assign dxa_req_bus_if.rsp_ready = 1'b1;
-
         always @(posedge clk) begin
             if (reset) begin
                 boot_guard_r <= 2'b00;
@@ -133,10 +137,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             end
         end
 
-        `UNUSED_VAR (dxa_req_bus_if.rsp_valid)
-        `UNUSED_VAR (dxa_req_bus_if.rsp_data)
-
-    `ifdef DBG_TRACE_DXA_TXBAR
+    `ifdef DBG_TRACE_DXA_TX_BAR
         always @(posedge clk) begin
             if (~reset) begin
                 if (req_fire) begin

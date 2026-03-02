@@ -232,6 +232,32 @@ private:
       }
     }
 
+    // Diagnostic: periodic dump of memory queue state
+    if ((timestamp % 2000000) == 0 && timestamp > 0) {
+      for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+        size_t pending_total = pending_mem_reqs_[b].size();
+        size_t pending_reads = 0, pending_writes = 0;
+        size_t reads_ready = 0, writes_ready = 0;
+        for (auto& req : pending_mem_reqs_[b]) {
+          if (req->write) { pending_writes++; if (req->ready) writes_ready++; }
+          else { pending_reads++; if (req->ready) reads_ready++; }
+        }
+        const char* head_type = "empty";
+        bool head_ready = false;
+        if (!pending_mem_reqs_[b].empty()) {
+          auto head = pending_mem_reqs_[b].front();
+          head_type = head->write ? "write" : "read";
+          head_ready = head->ready;
+        }
+        printf("[%lu] SIM-DIAG bank[%d]: pending=%zu (rd=%zu[rdy=%zu] wr=%zu[rdy=%zu]) "
+               "dram_q=%zu head=%s(ready=%d) rsp_valid=%d\n",
+               (unsigned long)timestamp, b,
+               pending_total, pending_reads, reads_ready, pending_writes, writes_ready,
+               dram_queue_[b].size(), head_type, (int)head_ready,
+               (int)device_->mem_rsp_valid[b]);
+      }
+    }
+
   #ifndef NDEBUG
     fflush(stdout);
   #endif

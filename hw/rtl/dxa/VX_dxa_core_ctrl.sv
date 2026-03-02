@@ -73,34 +73,20 @@ module VX_dxa_core_ctrl import VX_gpu_pkg::*; #(
             assign cluster_dxa_bus_if[i].req_valid = dxa_req_valid_out[i];
             assign cluster_dxa_bus_if[i].req_data  = dxa_req_data_out[i];
             assign dxa_req_ready_out[i] = cluster_dxa_bus_if[i].req_ready;
-            assign cluster_dxa_bus_if[i].rsp_ready = 1'b1;
-            `UNUSED_VAR (cluster_dxa_bus_if[i].rsp_valid)
-            `UNUSED_VAR (cluster_dxa_bus_if[i].rsp_data)
         end
         `UNUSED_VAR (dxa_req_sel_out)
 
-        for (genvar i = 0; i < DXA_NUM_SOCKETS; ++i) begin : g_dxa_rsp_out
-            assign per_socket_dxa_bus_if[i].rsp_valid = 1'b0;
-            assign per_socket_dxa_bus_if[i].rsp_data  = '0;
-            `UNUSED_VAR (per_socket_dxa_bus_if[i].rsp_ready)
-        end
     end else begin : g_ctrl_off
         for (genvar i = 0; i < DXA_NUM_SOCKETS; ++i) begin : g_socket_off
             assign per_socket_dxa_bus_if[i].req_ready = 1'b1;
-            assign per_socket_dxa_bus_if[i].rsp_valid = 1'b0;
-            assign per_socket_dxa_bus_if[i].rsp_data  = '0;
             `UNUSED_VAR (per_socket_dxa_bus_if[i].req_valid)
             `UNUSED_VAR (per_socket_dxa_bus_if[i].req_data)
-            `UNUSED_VAR (per_socket_dxa_bus_if[i].rsp_ready)
         end
 
         for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_unit_off
             assign cluster_dxa_bus_if[i].req_valid = 1'b0;
             assign cluster_dxa_bus_if[i].req_data  = '0;
-            assign cluster_dxa_bus_if[i].rsp_ready = 1'b1;
             `UNUSED_VAR (cluster_dxa_bus_if[i].req_ready)
-            `UNUSED_VAR (cluster_dxa_bus_if[i].rsp_valid)
-            `UNUSED_VAR (cluster_dxa_bus_if[i].rsp_data)
         end
     end
 

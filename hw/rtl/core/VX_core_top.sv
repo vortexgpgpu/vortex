@@ -87,7 +87,6 @@ module VX_core_top import VX_gpu_pkg::*; #(
 
     assign dxa_req_bus_if.req_valid = 1'b0;
     assign dxa_req_bus_if.req_data  = '0;
-    assign dxa_req_bus_if.rsp_ready = 1'b1;
 
     assign dxa_smem_bus_if.req_valid = 1'b0;
     assign dxa_smem_bus_if.req_data  = '0;

@@ -165,35 +165,18 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 assign req_ready_out[i] = worker_dxa_bus_if[i].req_ready;
             end
 
-            for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_rsp_stub_cluster
-                assign worker_dxa_bus_if[i].rsp_ready = 1'b1;
-                assign cluster_dxa_bus_if[i].rsp_valid = 1'b0;
-                assign cluster_dxa_bus_if[i].rsp_data  = '0;
-                `UNUSED_VAR (cluster_dxa_bus_if[i].rsp_ready)
-                `UNUSED_VAR (worker_dxa_bus_if[i].rsp_valid)
-                `UNUSED_VAR (worker_dxa_bus_if[i].rsp_data)
-            end
             `UNUSED_VAR (worker_idle)
         end else begin : g_unified_direct
             for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_direct
                 assign worker_dxa_bus_if[i].req_valid = cluster_dxa_bus_if[i].req_valid;
                 assign worker_dxa_bus_if[i].req_data  = cluster_dxa_bus_if[i].req_data;
                 assign cluster_dxa_bus_if[i].req_ready = worker_dxa_bus_if[i].req_ready;
-
-                assign worker_dxa_bus_if[i].rsp_ready = 1'b1;
-                assign cluster_dxa_bus_if[i].rsp_valid = 1'b0;
-                assign cluster_dxa_bus_if[i].rsp_data  = '0;
-                `UNUSED_VAR (cluster_dxa_bus_if[i].rsp_ready)
-                `UNUSED_VAR (worker_dxa_bus_if[i].rsp_valid)
-                `UNUSED_VAR (worker_dxa_bus_if[i].rsp_data)
             end
             `UNUSED_VAR (worker_idle)
         end
     end else begin : g_dxa_unified_off
         for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_dxa_off
             assign cluster_dxa_bus_if[i].req_ready = 1'b1;
-            assign cluster_dxa_bus_if[i].rsp_valid = 1'b0;
-            assign cluster_dxa_bus_if[i].rsp_data  = '0;
             `UNUSED_VAR (cluster_dxa_bus_if[i].req_valid)
             `UNUSED_VAR (cluster_dxa_bus_if[i].req_data)
 

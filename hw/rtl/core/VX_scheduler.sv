@@ -370,23 +370,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
     end
 
-`ifdef EXT_SCHED_STALL_TIMEOUT
-    localparam SCHED_STALL_TIMEOUT = `EXT_SCHED_STALL_TIMEOUT;
-`else
-    localparam SCHED_STALL_TIMEOUT = STALL_TIMEOUT;
-`endif
-`ifdef EXT_SCHED_TIMEOUT_DUMP
-    always @(posedge clk) begin
-        if (!reset && (timeout_ctr == (SCHED_STALL_TIMEOUT - 1))) begin
-            $display("*** %s scheduler-timeout dump: active=%b stalled=%b", INSTANCE_ID, active_warps, stalled_warps);
-            for (integer wi = 0; wi < `NUM_WARPS; ++wi) begin
-                $display("    wid=%0d stalled=%0d pc=0x%0h tmask=%b",
-                         wi, stalled_warps[wi], to_fullPC(warp_pcs[wi]), thread_masks[wi]);
-            end
-        end
-    end
-`endif
-    `RUNTIME_ASSERT(timeout_ctr < SCHED_STALL_TIMEOUT, ("*** %s timeout: active_warps=%b, stalled_warps=%b", INSTANCE_ID, active_warps, stalled_warps))
+    `RUNTIME_ASSERT(timeout_ctr < STALL_TIMEOUT, ("*** %s timeout: active_warps=%b, stalled_warps=%b", INSTANCE_ID, active_warps, stalled_warps))
 
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] perf_sched_idles;

@@ -520,6 +520,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     end
 `endif
 
+
 `ifdef SCOPE
 `ifdef DBG_SCOPE_LSU
     `SCOPE_IO_SWITCH (1);

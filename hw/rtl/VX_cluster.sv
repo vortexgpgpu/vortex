@@ -158,30 +158,29 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .dxa_gmem_bus_if       (dxa_gmem_bus_if)
     );
 
-    // DXA+LSU arb: all L2_SOCKET_REQS ports go through the 2:1 priority arb
-    // to maintain correct tag width (arb adds DXA_L2_ARB_TAG_BITS).
-    // DXA only connects to the first DXA_L2_GMEM_PORTS slots;
-    // remaining DXA slots are tied off (valid=0) so they never contend.
+    // LSU+DXA arb: LSU gets priority ("P") to prevent DXA bulk traffic from
+    // starving core icache/dcache at L2 and the shared memory bus.
+    // Lower index = higher priority, so LSU is bound first.
     VX_mem_bus_if #(
         .DATA_SIZE (`L1_LINE_SIZE),
         .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
     ) l2_arb_in_if[2 * L2_SOCKET_REQS]();
 
-    // Bind DXA gmem ports (first DXA_L2_GMEM_PORTS slots)
+    // Bind LSU ports first (high priority, indices 0..L2_SOCKET_REQS-1)
+    for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_lsu_l2_bind
+        `ASSIGN_VX_MEM_BUS_IF (l2_arb_in_if[i], socket_mem_bus_if[i]);
+    end
+
+    // Bind DXA gmem ports second (low priority, indices L2_SOCKET_REQS+..)
     for (genvar i = 0; i < DXA_L2_GMEM_PORTS; ++i) begin : g_dxa_l2_bind
-        `ASSIGN_VX_MEM_BUS_IF (l2_arb_in_if[i], dxa_gmem_bus_if[i]);
+        `ASSIGN_VX_MEM_BUS_IF (l2_arb_in_if[L2_SOCKET_REQS + i], dxa_gmem_bus_if[i]);
     end
 
     // Tie off unused DXA slots
     for (genvar i = DXA_L2_GMEM_PORTS; i < L2_SOCKET_REQS; ++i) begin : g_dxa_l2_tieoff
-        assign l2_arb_in_if[i].req_valid = 1'b0;
-        assign l2_arb_in_if[i].req_data  = '0;
-        assign l2_arb_in_if[i].rsp_ready = 1'b1;
-    end
-
-    // Bind all LSU ports
-    for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_lsu_l2_bind
-        `ASSIGN_VX_MEM_BUS_IF (l2_arb_in_if[L2_SOCKET_REQS + i], socket_mem_bus_if[i]);
+        assign l2_arb_in_if[L2_SOCKET_REQS + i].req_valid = 1'b0;
+        assign l2_arb_in_if[L2_SOCKET_REQS + i].req_data  = '0;
+        assign l2_arb_in_if[L2_SOCKET_REQS + i].rsp_ready = 1'b1;
     end
 
     VX_mem_arb #(
@@ -190,13 +189,22 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .DATA_SIZE   (`L1_LINE_SIZE),
         .TAG_WIDTH   (L1_MEM_ARB_TAG_WIDTH),
         .TAG_SEL_IDX (0),
-        .ARBITER     ("R")
+        .ARBITER     ("P"),
+        // DXA fix: add 1-entry elastic buffer per response output.
+        // After DXA transfers complete, the last DXA-tagged response leaves a
+        // stale routing bit in the L2 bank's tag register. VX_stream_switch
+        // propagates this stale sel_in to ready_in, permanently backpressuring
+        // the L2 bank even when no response is pending. Adding RSP_OUT_BUF=1
+        // ensures the DXA port's buffer is always empty (and ready=1) after DXA
+        // completes, breaking the spurious backpressure chain.
+        .RSP_OUT_BUF (1)
     ) dxa_l2_priority_arb (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (l2_arb_in_if),
         .bus_out_if (per_socket_mem_bus_if)
     );
+
 `else
     // No DXA: direct socket → L2
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_no_dxa_l2

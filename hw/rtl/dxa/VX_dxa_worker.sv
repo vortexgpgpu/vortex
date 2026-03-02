@@ -368,11 +368,6 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Core-id sideband for routing in DXA core router.
     assign smem_core_id = active_core_id_r;
 
-    // Completion is signaled through SMEM-tag-based detection path.
-    // Worker response channel is kept idle.
-    assign dxa_req_bus_if.rsp_valid = 1'b0;
-    assign dxa_req_bus_if.rsp_data  = '0;
-
     // ---- Transfer FSM (IDLE → ACTIVE → IDLE) ----
     assign ag_start = req_valid_cmd && ~active_r;
     assign xfer_done_fire = active_r && wbc_transfer_done;
