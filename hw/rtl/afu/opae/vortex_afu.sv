@@ -376,9 +376,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             end
             `endif
             default: begin
-                `ifdef DBG_TRACE_AFU
+            `ifdef DBG_TRACE_AFU
                 `TRACE(2, ("%t: Unknown MMIO Wr: addr=0x%0h, data=0x%h\n", $time, mmio_req_hdr.address, 64'(cp2af_sRxPort.c0.data)))
-                `endif
+            `endif
             end
             endcase
         end

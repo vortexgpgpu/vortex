@@ -158,15 +158,15 @@ module VX_tcu_uops import
             counter   <= 0;
             busy      <= 0;
             done      <= 0;
-`ifdef TCU_SPARSE_ENABLE
+        `ifdef TCU_SPARSE_ENABLE
             is_sparse     <= 0;
             is_meta_store <= 0;
-`endif
+        `endif
         end else begin
             if (~busy && start) begin
                 counter   <= 0;
                 busy      <= 1;
-`ifdef TCU_SPARSE_ENABLE
+            `ifdef TCU_SPARSE_ENABLE
                 if (is_meta_store_in) begin
                     is_meta_store      <= 1;
                     is_sparse          <= 0;
@@ -178,12 +178,12 @@ module VX_tcu_uops import
                     done <= (is_sparse_in && !SPARSE_SAME_CYCLES)
                         ? (TCU_UOPS/2 == 1) : (TCU_UOPS == 1);
                 end
-`else
+            `else
                 done <= (TCU_UOPS == 1);
-`endif
+            `endif
             end else if (busy && next) begin
                 counter <= counter + ((TCU_UOPS > 1) ? 1 : 0);
-`ifdef TCU_SPARSE_ENABLE
+            `ifdef TCU_SPARSE_ENABLE
                 if (is_meta_store) begin
                     done <= (counter == CTR_W'(meta_uop_count_reg - CTR_W'(2)));
                 end else begin
@@ -191,9 +191,9 @@ module VX_tcu_uops import
                         ? (counter == CTR_W'((TCU_UOPS/2)-2))
                         : (counter == CTR_W'(TCU_UOPS-2));
                 end
-`else
+            `else
                 done <= (counter == CTR_W'(TCU_UOPS-2));
-`endif
+            `endif
                 busy <= ~done;
             end
         end

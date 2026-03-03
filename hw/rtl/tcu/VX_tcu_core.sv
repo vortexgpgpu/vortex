@@ -190,23 +190,23 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_i
         for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_j
-`ifdef TCU_SPARSE_ENABLE
+        `ifdef TCU_SPARSE_ENABLE
             wire [TCU_TC_K-1:0][31:0] a_row, b_col, b_col_dense, b_col_sparse, b_col_1, b_col_2;
-`else
+        `else
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
-`endif
+        `endif
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
-                assign a_row[k_idx]      = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
-`ifdef TCU_SPARSE_ENABLE
+                assign a_row[k_idx]   = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
+            `ifdef TCU_SPARSE_ENABLE
                 assign b_col_dense[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
                 assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2]);
                 assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2 + 1]);
-`else
+            `else
                 assign b_col[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
-`endif
+            `endif
             end
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
-`ifdef TCU_SPARSE_ENABLE
+        `ifdef TCU_SPARSE_ENABLE
             /* verilator lint_off UNUSEDSIGNAL */
             wire [TCU_MAX_INPUTS-1:0] vld_mask = '1; // TODO: should connect to input source
             /* verilator lint_on UNUSEDSIGNAL */
@@ -224,7 +224,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
             // Select dense or sparse B column
             assign b_col = is_sparse ? b_col_sparse : b_col_dense;
-`endif
+        `endif
 
             wire [3:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
