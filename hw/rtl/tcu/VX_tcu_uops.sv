@@ -37,9 +37,14 @@ module VX_tcu_uops import
     localparam LG_B_SB    = $clog2(TCU_B_SUB_BLOCKS);
 `ifdef TCU_SPARSE_ENABLE
     localparam LG_B_SB_SP = $clog2(TCU_B_SUB_BLOCKS_SP);
+    localparam SPARSE_SAME_CYCLES = (TCU_BLOCK_CAP == 16);
+    localparam HALF_K = TCU_K_STEPS / 2;
 
     wire is_sparse_in = (ibuf_in.op_type == INST_TCU_WMMA_SP);
     reg  is_sparse;
+    wire is_meta_store_in = (ibuf_in.op_type == INST_TCU_META_STORE);
+    reg  is_meta_store;
+    reg  [CTR_W-1:0] meta_uop_count_reg;
 `endif
 
     // uop counter
@@ -98,27 +103,52 @@ module VX_tcu_uops import
 
     // Output uop generation
     assign ibuf_out.uuid      = uuid;
-    assign ibuf_out.tmask     = ibuf_in.tmask;
+`ifdef TCU_SPARSE_ENABLE
+    wire sparse_k_masked = SPARSE_SAME_CYCLES && is_sparse
+                        && (k_index >= `UP(LG_K)'(HALF_K));
+    assign ibuf_out.tmask = sparse_k_masked ? '0 : ibuf_in.tmask;
+`else
+    assign ibuf_out.tmask = ibuf_in.tmask;
+`endif
     assign ibuf_out.PC        = ibuf_in.PC;
     assign ibuf_out.ex_type   = ibuf_in.ex_type;
     assign ibuf_out.op_type   = ibuf_in.op_type;
     assign ibuf_out.op_args.tcu.fmt_s = ibuf_in.op_args.tcu.fmt_s;
+`ifdef TCU_SPARSE_ENABLE
+    /* verilator lint_off UNSIGNED */
+    wire meta_use_rs2 = (counter >= CTR_W'(TCU_META_COLS_PER_LOAD));
+    /* verilator lint_on UNSIGNED */
+    assign ibuf_out.op_args.tcu.fmt_d  = is_meta_store ? 4'(counter) : ibuf_in.op_args.tcu.fmt_d;
+    assign ibuf_out.op_args.tcu.step_m = is_meta_store ? '0 : 4'(m_index);
+    assign ibuf_out.op_args.tcu.step_n = is_meta_store ? '0 : 4'(n_index);
+    assign ibuf_out.op_args.tcu.step_k = is_meta_store ? '0 : 4'(k_index);
+    assign ibuf_out.wb  = is_meta_store ? 1'b0 : 1'b1;
+    assign ibuf_out.rd  = is_meta_store ? '0 : make_reg_num(REG_TYPE_F, rs3);
+    assign ibuf_out.rs1 = is_meta_store
+        ? (meta_use_rs2 ? ibuf_in.rs2 : ibuf_in.rs1)
+        : make_reg_num(REG_TYPE_F, rs1);
+    assign ibuf_out.rs2 = is_meta_store ? ibuf_in.rs2 : make_reg_num(REG_TYPE_F, rs2);
+    assign ibuf_out.rs3 = is_meta_store ? '0 : make_reg_num(REG_TYPE_F, rs3);
+`else
     assign ibuf_out.op_args.tcu.fmt_d = ibuf_in.op_args.tcu.fmt_d;
     assign ibuf_out.op_args.tcu.step_m = 4'(m_index);
     assign ibuf_out.op_args.tcu.step_n = 4'(n_index);
     assign ibuf_out.op_args.tcu.step_k = 4'(k_index);
     assign ibuf_out.wb        = 1;
-    assign ibuf_out.rd_xregs  = ibuf_in.rd_xregs;
-    assign ibuf_out.wr_xregs  = ibuf_in.wr_xregs;
-    assign ibuf_out.used_rs   = ibuf_in.used_rs;
+    assign ibuf_out.rd        = make_reg_num(REG_TYPE_F, rs3);
     assign ibuf_out.rs1       = make_reg_num(REG_TYPE_F, rs1);
     assign ibuf_out.rs2       = make_reg_num(REG_TYPE_F, rs2);
     assign ibuf_out.rs3       = make_reg_num(REG_TYPE_F, rs3);
-    assign ibuf_out.rd        = make_reg_num(REG_TYPE_F, rs3);
+`endif
+    assign ibuf_out.rd_xregs  = ibuf_in.rd_xregs;
+    assign ibuf_out.wr_xregs  = ibuf_in.wr_xregs;
+    assign ibuf_out.used_rs   = ibuf_in.used_rs;
     `UNUSED_VAR (ibuf_in.wb)
     `UNUSED_VAR (ibuf_in.rd)
+`ifndef TCU_SPARSE_ENABLE
     `UNUSED_VAR (ibuf_in.rs1)
     `UNUSED_VAR (ibuf_in.rs2)
+`endif
     `UNUSED_VAR (ibuf_in.rs3)
 
     reg busy;
@@ -129,24 +159,38 @@ module VX_tcu_uops import
             busy      <= 0;
             done      <= 0;
 `ifdef TCU_SPARSE_ENABLE
-            is_sparse <= 0;
+            is_sparse     <= 0;
+            is_meta_store <= 0;
 `endif
         end else begin
             if (~busy && start) begin
                 counter   <= 0;
                 busy      <= 1;
 `ifdef TCU_SPARSE_ENABLE
-                is_sparse <= is_sparse_in;
-                done <= is_sparse_in ? (TCU_UOPS/2 == 1) : (TCU_UOPS == 1);
+                if (is_meta_store_in) begin
+                    is_meta_store      <= 1;
+                    is_sparse          <= 0;
+                    meta_uop_count_reg <= CTR_W'(meta_num_cols(ibuf_in.op_args.tcu.fmt_s));
+                    done <= (meta_num_cols(ibuf_in.op_args.tcu.fmt_s) == 5'd1);
+                end else begin
+                    is_meta_store <= 0;
+                    is_sparse     <= is_sparse_in;
+                    done <= (is_sparse_in && !SPARSE_SAME_CYCLES)
+                        ? (TCU_UOPS/2 == 1) : (TCU_UOPS == 1);
+                end
 `else
                 done <= (TCU_UOPS == 1);
 `endif
             end else if (busy && next) begin
                 counter <= counter + ((TCU_UOPS > 1) ? 1 : 0);
 `ifdef TCU_SPARSE_ENABLE
-                done <= is_sparse
-                    ? (counter == CTR_W'((TCU_UOPS/2)-2))
-                    : (counter == CTR_W'(TCU_UOPS-2));
+                if (is_meta_store) begin
+                    done <= (counter == CTR_W'(meta_uop_count_reg - CTR_W'(2)));
+                end else begin
+                    done <= (is_sparse && !SPARSE_SAME_CYCLES)
+                        ? (counter == CTR_W'((TCU_UOPS/2)-2))
+                        : (counter == CTR_W'(TCU_UOPS-2));
+                end
 `else
                 done <= (counter == CTR_W'(TCU_UOPS-2));
 `endif

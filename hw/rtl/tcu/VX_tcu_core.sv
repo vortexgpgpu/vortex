@@ -78,14 +78,18 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [`LOG2UP(`NUM_WARPS)-1:0] wid = execute_if.data.header.wid;
 
     // meta_store: extract per-row write data from rs1_data lanes
-    localparam PER_WARP_DEPTH = TCU_M_STEPS * (TCU_K_STEPS / 2);
-    localparam COLS_PER_LOAD = TCU_BLOCK_CAP / PER_WARP_DEPTH;
-    localparam LG_CPL = $clog2(COLS_PER_LOAD);
+    localparam PER_WARP_DEPTH = TCU_META_PER_WARP_DEPTH;
+    localparam COLS_PER_LOAD  = TCU_META_COLS_PER_LOAD;
+    localparam LG_CPL = $clog2((COLS_PER_LOAD > 1) ? COLS_PER_LOAD : 2);
     localparam LG_PD  = $clog2(PER_WARP_DEPTH);
     wire meta_wr_en = execute_fire && is_meta_store;
     wire [PER_WARP_DEPTH-1:0][31:0] meta_wr_data;
     wire [$clog2(TCU_BLOCK_CAP)-1:0] meta_thread_offset;
-    assign meta_thread_offset = {fmt_d[LG_CPL-1:0], {LG_PD{1'b0}}};
+    if (COLS_PER_LOAD > 1) begin : g_meta_off
+        assign meta_thread_offset = {fmt_d[LG_CPL-1:0], {LG_PD{1'b0}}};
+    end else begin : g_meta_off
+        assign meta_thread_offset = '0;
+    end
     for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
         assign meta_wr_data[r] = 32'(execute_if.data.rs1_data[meta_thread_offset + r]);
     end

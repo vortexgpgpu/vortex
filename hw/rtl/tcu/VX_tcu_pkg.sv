@@ -59,7 +59,7 @@ package VX_tcu_pkg;
     // Block dimensions
     localparam TCU_BLOCK_CAP = TCU_NT;
     localparam TCU_LG_BLOCK_CAP = $clog2(TCU_BLOCK_CAP);
-    localparam TCU_BLOCK_EN = TCU_LG_BLOCK_CAP / 2;
+    localparam TCU_BLOCK_EN = (TCU_LG_BLOCK_CAP == 4) ? 1 : (TCU_LG_BLOCK_CAP / 2);
     localparam TCU_BLOCK_EM = TCU_LG_BLOCK_CAP - TCU_BLOCK_EN;
 
     localparam TCU_TC_M = 1 << TCU_BLOCK_EM;
@@ -87,6 +87,23 @@ package VX_tcu_pkg;
     // Max metadata widths (sized for widest type: 4-bit elements, I_RATIO=8)
     localparam TCU_MAX_META_ROW_WIDTH   = TCU_TC_K * 2 * TCU_MAX_ELT_RATIO;
     localparam TCU_MAX_META_BLOCK_WIDTH = TCU_NT   * 2 * TCU_MAX_ELT_RATIO;
+
+    // Meta-store micro-op expansion parameters
+    localparam TCU_META_PER_WARP_DEPTH = TCU_M_STEPS * (TCU_K_STEPS / 2);
+    localparam TCU_META_COLS_PER_LOAD  = TCU_BLOCK_CAP / TCU_META_PER_WARP_DEPTH;
+
+    function automatic logic [4:0] meta_num_cols(input logic [3:0] fmt);
+        case (fmt)
+            TCU_FP16_ID, TCU_BF16_ID:
+                return 5'(TCU_BLOCK_CAP / 8);   // 16-bit: NT/8
+            TCU_FP8_ID, TCU_BF8_ID, TCU_I8_ID, TCU_U8_ID:
+                return 5'(TCU_BLOCK_CAP / 4);   // 8-bit: NT/4
+            TCU_I4_ID, TCU_U4_ID, TCU_NVFP4_ID:
+                return 5'(TCU_BLOCK_CAP / 2);   // 4-bit: NT/2
+            default:
+                return 5'd1;
+        endcase
+    endfunction
 `endif
 
     // Register counts
@@ -218,7 +235,8 @@ package VX_tcu_pkg;
             end
 `ifdef TCU_SPARSE_ENABLE
             INST_TCU_META_STORE: begin
-                `TRACE(level, ("META_STORE.col%0d", op_args.tcu.fmt_d));
+                `TRACE(level, ("META_STORE."));
+                trace_fmt(level, op_args.tcu.fmt_s);
             end
 `endif
             default: `TRACE(level, ("?"))

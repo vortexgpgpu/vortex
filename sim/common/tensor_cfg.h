@@ -166,7 +166,7 @@ private:
 
   static constexpr uint32_t block_cap = NT;
   static constexpr uint32_t lg_block_cap = clog2(block_cap);
-  static constexpr uint32_t block_en = lg_block_cap / 2;
+  static constexpr uint32_t block_en = (lg_block_cap == 4) ? 1 : (lg_block_cap / 2);
   static constexpr uint32_t block_em = lg_block_cap - block_en;
 
 public:
