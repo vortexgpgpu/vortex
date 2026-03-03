@@ -1,6 +1,6 @@
 #include "common.h"
 #include <vx_spawn.h>
-#include <vx_tensor.h>
+#include <vx_sparsity.h>
 
 namespace vt = vortex::tensor;
 using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
@@ -15,7 +15,7 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 
-  ctx::fragment_a_sp fragA_comp;
+  ctx::fragment_a   fragA_comp;
   ctx::fragment_b   fragB;
   ctx::fragment_acc fragC;
 

@@ -21,7 +21,7 @@ CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_HOME)/kernel/include -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
-CFLAGS += -DXLEN_$(XLEN) -DNDEBUG $(CONFIGS)
+CFLAGS += -DXLEN_$(XLEN) -DNDEBUG $(CONFIGS) -D__VORTEX__
 
 LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc
 LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
