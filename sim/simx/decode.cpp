@@ -1155,7 +1155,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   #ifdef EXT_TCU_ENABLE
     case 2: {
       switch (funct3) {
-      case 0: { // WMMA_SYNC
+      case 0: { // WMMA_SYNC or WMMA_SP_SYNC based on rs2
         namespace vt = vortex::tensor;
         using cfg = vt::wmma_config_t<NUM_THREADS>;
         uint32_t ra_base = 0;
@@ -1163,48 +1163,15 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         uint32_t rc_base = (cfg::NRB == 4) ? 10 : 24;
         uint32_t fmt_d = rd;
         uint32_t fmt_s = rs1;
-        auto tcu_type = TcuType::WMMA;
-        uint32_t steps = 0;
-        uint32_t steps_count = cfg::m_steps * cfg::n_steps * cfg::k_steps;
-        uint32_t steps_shift = 32 - log2ceil(steps_count);
-        uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
-        uint32_t uuid_lo = uuid & 0xffffffff;
-        for (uint32_t k = 0; k < cfg::k_steps; ++k) {
-          for (uint32_t m = 0; m < cfg::m_steps; ++m) {
-            for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-              uint32_t rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
-              uint32_t rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
-              uint32_t rs3 = rc_base + m * cfg::n_steps + n;
-              uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
-              uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
-              ++steps;
-              auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-              instr->setOpType(tcu_type);
-              instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n});
-              instr->setDestReg(rs3, RegType::Float);
-              instr->setSrcReg(0, rs1, RegType::Float);
-              instr->setSrcReg(1, rs2, RegType::Float);
-              instr->setSrcReg(2, rs3, RegType::Float);
-              instr->setParentUUID(uuid);
-              ibuffer.push_back(instr);
-            }
-          }
-        }
-      } break;
-      case 1: { // WMMA_SP_SYNC
+        bool is_sparse = (rs2 & 1) != 0;
+        auto tcu_type = is_sparse ? TcuType::WMMA_SP : TcuType::WMMA;
+
+        if (is_sparse) {
+          // Sparse mode - different step calculations
 #if (NUM_THREADS != 8) && (NUM_THREADS != 32)
         std::abort();
 #else
-        namespace vt = vortex::tensor;
-        using cfg = vt::wmma_config_t<NUM_THREADS>;
         constexpr uint32_t kCompression = 2;
-        uint32_t ra_base = 0;
-        uint32_t rb_base = (cfg::NRB == 4) ? 28 : 10;
-        uint32_t rc_base = (cfg::NRB == 4) ? 10 : 24;
-        uint32_t fmt_d = rd;
-        uint32_t fmt_s = rs1;
-        auto tcu_type = TcuType::WMMA_SP;
-
         if ((cfg::k_steps % kCompression) != 0) {
           std::abort();
         }
@@ -1223,25 +1190,64 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         for (uint32_t k = 0; k < k_steps_sp; ++k) {
           for (uint32_t m = 0; m < cfg::m_steps; ++m) {
             for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-              uint32_t rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + (k * kCompression);
-              uint32_t rs2 = rb_base + (k * cfg::n_steps + n) / b_sub_blocks_sp;
-              uint32_t rs3 = rc_base + m * cfg::n_steps + n;
+                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + (k * kCompression);
+                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / b_sub_blocks_sp;
+                uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
               uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
               uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
               ++steps;
               auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
               instr->setOpType(tcu_type);
               instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n});
-              instr->setDestReg(rs3, RegType::Float);
-              instr->setSrcReg(0, rs1, RegType::Float);
-              instr->setSrcReg(1, rs2, RegType::Float);
-              instr->setSrcReg(2, rs3, RegType::Float);
+                instr->setDestReg(reg_rs3, RegType::Float);
+                instr->setSrcReg(0, reg_rs1, RegType::Float);
+                instr->setSrcReg(1, reg_rs2, RegType::Float);
+                instr->setSrcReg(2, reg_rs3, RegType::Float);
               instr->setParentUUID(uuid);
               ibuffer.push_back(instr);
             }
           }
         }
 #endif
+        } else {
+          // Dense mode
+          uint32_t steps = 0;
+          uint32_t steps_count = cfg::m_steps * cfg::n_steps * cfg::k_steps;
+          uint32_t steps_shift = 32 - log2ceil(steps_count);
+          uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
+          uint32_t uuid_lo = uuid & 0xffffffff;
+          for (uint32_t k = 0; k < cfg::k_steps; ++k) {
+            for (uint32_t m = 0; m < cfg::m_steps; ++m) {
+              for (uint32_t n = 0; n < cfg::n_steps; ++n) {
+                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
+                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
+                uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
+                uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
+                uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
+                ++steps;
+                auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
+                instr->setOpType(tcu_type);
+                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n});
+                instr->setDestReg(reg_rs3, RegType::Float);
+                instr->setSrcReg(0, reg_rs1, RegType::Float);
+                instr->setSrcReg(1, reg_rs2, RegType::Float);
+                instr->setSrcReg(2, reg_rs3, RegType::Float);
+                instr->setParentUUID(uuid);
+                ibuffer.push_back(instr);
+              }
+            }
+          }
+        }
+              instr->setParentUUID(uuid);
+              ibuffer.push_back(instr);
+            }
+          }
+        }
+      } break;
+      case 1: { // META_STORE
+        // META_STORE instruction - stores metadata for sparse operations
+        // This is a passthrough as metadata loading is handled separately
+        // No micro-ops needed here
       } break;
       default:
         std::abort();

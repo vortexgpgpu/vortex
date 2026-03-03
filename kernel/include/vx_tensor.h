@@ -446,7 +446,7 @@ public:
 
   template <int COL>
   static __attribute__((always_inline)) void meta_store(float data) {
-    __asm__ volatile(".insn r 0x0b, 2, 2, x%[col], %[data], x0"           // RISCV_CUSTOM0 instead of 0b
+    __asm__ volatile(".insn r 0x0b, 1, 2, x%[col], %[data], x0"           // RISCV_CUSTOM0 instead of 0b
       :: [col]"i"(COL), [data]"f"(data));
   }
 
@@ -523,10 +523,10 @@ public:
       register float fd6 __asm__("f30");
       register float fd7 __asm__("f31");
 
-      constexpr int funct3 = is_sparse ? 1 : 0;
-      __asm__ volatile (".insn r %[insn], %[f3], 2, x%[fmd], x%[fms], x0"
+      constexpr int flags = is_sparse ? 1 : 0;
+      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], %[flags]"
         : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(funct3), [fmd]"i"(Ot::id), [fms]"i"(It::id),
+        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
           "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7),
           "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
@@ -558,10 +558,10 @@ public:
       register float fd6 __asm__("f16");
       register float fd7 __asm__("f17");
 
-      constexpr int funct3 = is_sparse ? 1 : 0;
-      __asm__ volatile (".insn r %[insn], %[f3], 2, x%[fmd], x%[fms], x0"
+      constexpr int flags = is_sparse ? 1 : 0;
+      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], %[flags]"
         : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(funct3), [fmd]"i"(Ot::id), [fms]"i"(It::id),
+        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
           "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3),
           "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
