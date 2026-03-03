@@ -617,11 +617,12 @@ public:
     // Bring-up target: sparse path currently supports NT=8/32 and 8/16-bit input formats.
     // Do not silently fall back to dense WMMA, because sparse-packed A would
     // produce incorrect results under dense semantics.
-#if (NUM_THREADS != 8) && (NUM_THREADS != 32)
-    std::cout << "Error: WMMA_SP unsupported for NUM_THREADS=" << NUM_THREADS
-              << " (expected 8 or 32)." << std::endl;
-    std::abort();
-#else
+    if (this->arch_.num_threads() != 8 && this->arch_.num_threads() != 32) {
+      std::cout << "Error: WMMA_SP unsupported for NUM_THREADS=" << this->arch_.num_threads()
+                << " (expected 8 or 32)." << std::endl;
+      std::abort();
+    }
+
     const bool is_8bit_sparse_fmt =
         (fmt_s == vt::int8::id)  ||
         (fmt_s == vt::uint8::id) ||
@@ -644,8 +645,12 @@ public:
     constexpr uint8_t kMask1 = 0x9;
     constexpr uint32_t kCompression = 2;
     constexpr uint32_t b_block_size_sp = cfg::b_block_size * kCompression;
-    static_assert((NUM_THREADS % b_block_size_sp) == 0, "NUM_THREADS must be divisible by sparse B block size");
-    constexpr uint32_t b_sub_blocks_sp = NUM_THREADS / b_block_size_sp;
+    uint32_t num_threads = this->arch_.num_threads();
+    if ((num_threads % b_block_size_sp) != 0) {
+      std::cout << "Error: NUM_THREADS must be divisible by sparse B block size" << std::endl;
+      std::abort();
+    }
+    uint32_t b_sub_blocks_sp = num_threads / b_block_size_sp;
 
     uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
     uint32_t b_off = (step_n % b_sub_blocks_sp) * b_block_size_sp;
@@ -686,7 +691,6 @@ public:
             << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
       }
     }
-#endif
   }
 
   const PerfStats& perf_stats() const {
