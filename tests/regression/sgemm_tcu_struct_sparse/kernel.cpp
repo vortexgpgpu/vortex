@@ -4,7 +4,7 @@
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, true>; // is_sparse=true
 
 void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -45,9 +45,9 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     auto pTileB = pB + tile_col * K;
     for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
       ctx::load_metadata_sync(pMeta);
-      ctx::load_matrix_sync<vt::row_major, true>(fragA, pTileA, stride_A);
-      ctx::load_matrix_sync<vt::col_major, true>(fragB, pTileB, K);
-      ctx::mma_sync<true>(fragC, fragA, fragB, fragC);
+      ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A);
+      ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
+      ctx::mma_sync(fragC, fragA, fragB, fragC);
       pMeta += per_k_tile_words;
       pTileA += a_k_stride;
       pTileB += ctx::tileK;
@@ -57,9 +57,9 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     uint32_t b_k_stride = ctx::tileK * N;
     for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
       ctx::load_metadata_sync(pMeta);
-      ctx::load_matrix_sync<vt::row_major, true>(fragA, pTileA, stride_A);
-      ctx::load_matrix_sync<vt::row_major, true>(fragB, pTileB, N);
-      ctx::mma_sync<true>(fragC, fragA, fragB, fragC);
+      ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A);
+      ctx::load_matrix_sync<vt::row_major>(fragB, pTileB, N);
+      ctx::mma_sync(fragC, fragA, fragB, fragC);
       pMeta += per_k_tile_words;
       pTileA += a_k_stride;
       pTileB += b_k_stride;

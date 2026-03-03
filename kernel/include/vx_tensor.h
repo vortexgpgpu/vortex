@@ -15,13 +15,10 @@
 
 #include <tensor_cfg.h>
 #include <vx_intrinsics.h>
-#ifdef TCU_SPARSE_ENABLE
 #include <vx_sparsity.h>
-#else
 namespace vortex { namespace tensor {
 enum mem_layout { row_major, col_major };
 } }
-#endif
 
 namespace vortex {
 namespace tensor {
@@ -127,7 +124,8 @@ namespace detail {
 
 template <uint32_t NT, // number of threads per warp
           typename It, // input type (A,B)
-          typename Ot> // output type (C,D)
+          typename Ot, // output type (C,D)
+          bool is_sparse = false> // sparse mode flag
 struct wmma_context {
 private:
   using cfg = wmma_config_t<NT>;
@@ -160,9 +158,7 @@ public:
   static constexpr uint32_t tileK = cfg::tileK * i_ratio;
 
   using fragment_a   = fragment_t<matrix_a, input_t, cfg::NRA>;
-#ifdef TCU_SPARSE_ENABLE
   using fragment_a_sp = fragment_t<matrix_a, input_t, cfg::NRA>;
-#endif
   using fragment_b   = fragment_t<matrix_b, input_t, cfg::NRB>;
   using fragment_acc = fragment_t<accumulator, output_t, cfg::NRC>;
 
@@ -181,7 +177,7 @@ public:
     });
   }
 
-  template <mem_layout src_layout = row_major, bool sparse = false, typename Frag>
+  template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
     uint32_t lane = vx_thread_id();
     if constexpr (Frag::Use == matrix_a) {
@@ -195,8 +191,7 @@ public:
       if constexpr (src_layout == col_major) {
         std::swap(block_row, block_col);
       }
-#ifdef TCU_SPARSE_ENABLE
-      if constexpr (sparse) {
+      if constexpr (is_sparse) {
         // Sparse A load: only load half the K-steps (compressed A)
         // HW only reads registers 0..sparse_regs-1, no need to zero-fill the rest
         constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
@@ -223,9 +218,7 @@ public:
             dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
           }
         });
-      } else
-#endif
-      {
+      } else {
         // Dense A load: load all K-steps
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
         detail::unroll_for<Frag::NR>([&](auto r) {
@@ -250,8 +243,7 @@ public:
         });
       }
     } else if constexpr (Frag::Use == matrix_b) {
-#ifdef TCU_SPARSE_ENABLE
-      if constexpr (sparse) {
+      if constexpr (is_sparse) {
         // Sparse B load: uses 2x tcK for B block
         constexpr uint32_t b_tcK = cfg::tcK * 2;
         uint32_t block_idx = (cfg::b_block_size_sp == NT) ? 0 : (lane / cfg::b_block_size_sp);
@@ -285,9 +277,7 @@ public:
             dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
           }
         });
-      } else
-#endif
-      {
+      } else {
         // Dense B load
         uint32_t block_idx = (cfg::b_block_size == NT) ? 0 : (lane / cfg::b_block_size);
         uint32_t lane_in_blk = (cfg::b_block_size == NT) ? lane : (lane % cfg::b_block_size);
@@ -351,7 +341,6 @@ public:
     }
   }
 
-#ifdef TCU_SPARSE_ENABLE
   template <typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync_sparse_a(Frag &dst, const void *src, size_t ldm_compressed) {
     static_assert(Frag::Use == matrix_a, "sparse A loader expects matrix_a");
@@ -423,7 +412,7 @@ public:
       }
     });
   }
-#endif // TCU_SPARSE_ENABLE
+
 
   template <mem_layout dst_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
@@ -455,14 +444,13 @@ public:
     });
   }
 
-#ifdef TCU_SPARSE_ENABLE
   template <int COL>
   static __attribute__((always_inline)) void meta_store(float data) {
     __asm__ volatile(".insn r 0x0b, 2, 2, x%[col], %[data], x0"           // RISCV_CUSTOM0 instead of 0b
       :: [col]"i"(COL), [data]"f"(data));
   }
 
-// // Set thread mask  // "memory" comment stop compiler reordering. 
+// // Set thread mask  // "memory" comment stop compiler reordering.
 // inline void vx_tmc(int thread_mask) {
 //     __asm__ volatile (".insn r %0, 0, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(thread_mask) : "memory");
 // }
@@ -486,17 +474,13 @@ public:
       });
     });
   }
-#endif // TCU_SPARSE_ENABLE
 
-  template <bool sparse = false, typename FragD, typename FragA, typename FragB, typename FragC>
+  template <typename FragD, typename FragA, typename FragB, typename FragC>
   static __attribute__((always_inline)) void mma_sync(FragD &fragD, const FragA &fragA, const FragB &fragB, const FragC &fragC) {
     static_assert(FragA::Use == matrix_a, "A must be matrix_a");
     static_assert(FragB::Use == matrix_b, "B must be matrix_b");
     static_assert(FragC::Use == accumulator, "C must be accumulator");
     static_assert(FragD::Use == accumulator, "D must be accumulator");
-#ifndef TCU_SPARSE_ENABLE
-    static_assert(!sparse, "sparse=true requires TCU_SPARSE_ENABLE");
-#endif
 
     // fragA: caller-saved registers (f0-f7)
     register float fa0 __asm__("f0")  = fragA.data[0];
@@ -539,7 +523,7 @@ public:
       register float fd6 __asm__("f30");
       register float fd7 __asm__("f31");
 
-      constexpr int funct3 = sparse ? 1 : 0;
+      constexpr int funct3 = is_sparse ? 1 : 0;
       __asm__ volatile (".insn r %[insn], %[f3], 2, x%[fmd], x%[fms], x0"
         : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(funct3), [fmd]"i"(Ot::id), [fms]"i"(It::id),
@@ -574,7 +558,7 @@ public:
       register float fd6 __asm__("f16");
       register float fd7 __asm__("f17");
 
-      constexpr int funct3 = sparse ? 1 : 0;
+      constexpr int funct3 = is_sparse ? 1 : 0;
       __asm__ volatile (".insn r %[insn], %[f3], 2, x%[fmd], x%[fms], x0"
         : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [f3]"i"(funct3), [fmd]"i"(Ot::id), [fms]"i"(It::id),
