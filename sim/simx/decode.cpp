@@ -1158,9 +1158,9 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       case 0: { // WMMA_SYNC or WMMA_SP_SYNC based on rs2
         namespace vt = vortex::tensor;
         using cfg = vt::wmma_config_t<NUM_THREADS>;
-        uint32_t ra_base = 0;
-        uint32_t rb_base = (cfg::NRB == 4) ? 28 : 10;
-        uint32_t rc_base = (cfg::NRB == 4) ? 10 : 24;
+        uint32_t rc_base = 0;
+        uint32_t ra_base = 10;
+        uint32_t rb_base = (cfg::NRB == 4) ? 28 : 24;
         uint32_t fmt_d = rd;
         uint32_t fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;

@@ -358,96 +358,63 @@ public:
     static_assert(FragC::Use == accumulator, "C must be accumulator");
     static_assert(FragD::Use == accumulator, "D must be accumulator");
 
-    // fragA: caller-saved registers (f0-f7)
-    register float fa0 __asm__("f0")  = fragA.data[0];
-    register float fa1 __asm__("f1")  = fragA.data[1];
-    register float fa2 __asm__("f2")  = fragA.data[2];
-    register float fa3 __asm__("f3")  = fragA.data[3];
-    register float fa4 __asm__("f4")  = fragA.data[4];
-    register float fa5 __asm__("f5")  = fragA.data[5];
-    register float fa6 __asm__("f6")  = fragA.data[6];
-    register float fa7 __asm__("f7")  = fragA.data[7];
+    // fragC initialized into accumulator registers (f0-f7)
+    register float fd0 __asm__("f0") = fragC.data[0];
+    register float fd1 __asm__("f1") = fragC.data[1];
+    register float fd2 __asm__("f2") = fragC.data[2];
+    register float fd3 __asm__("f3") = fragC.data[3];
+    register float fd4 __asm__("f4") = fragC.data[4];
+    register float fd5 __asm__("f5") = fragC.data[5];
+    register float fd6 __asm__("f6") = fragC.data[6];
+    register float fd7 __asm__("f7") = fragC.data[7];
+
+    // fragA: caller-saved registers (f10-f17)
+    register float fa0 __asm__("f10") = fragA.data[0];
+    register float fa1 __asm__("f11") = fragA.data[1];
+    register float fa2 __asm__("f12") = fragA.data[2];
+    register float fa3 __asm__("f13") = fragA.data[3];
+    register float fa4 __asm__("f14") = fragA.data[4];
+    register float fa5 __asm__("f15") = fragA.data[5];
+    register float fa6 __asm__("f16") = fragA.data[6];
+    register float fa7 __asm__("f17") = fragA.data[7];
 
     if constexpr (FragB::NR == 8) {
-      // fragB: caller-saved registers (f10-f17)
-      register float fb0 __asm__("f10") = fragB.data[0];
-      register float fb1 __asm__("f11") = fragB.data[1];
-      register float fb2 __asm__("f12") = fragB.data[2];
-      register float fb3 __asm__("f13") = fragB.data[3];
-      register float fb4 __asm__("f14") = fragB.data[4];
-      register float fb5 __asm__("f15") = fragB.data[5];
-      register float fb6 __asm__("f16") = fragB.data[6];
-      register float fb7 __asm__("f17") = fragB.data[7];
 
-      // fragC: mix of caller-saved (f28-f31) and callee-saved (f18-f21)
-      register float fc0 __asm__("f24") = fragC.data[0];
-      register float fc1 __asm__("f25") = fragC.data[1];
-      register float fc2 __asm__("f26") = fragC.data[2];
-      register float fc3 __asm__("f27") = fragC.data[3];
-      register float fc4 __asm__("f28") = fragC.data[4];
-      register float fc5 __asm__("f29") = fragC.data[5];
-      register float fc6 __asm__("f30") = fragC.data[6];
-      register float fc7 __asm__("f31") = fragC.data[7];
-
-      // Force outputs into accumulator registers
-      register float fd0 __asm__("f24");
-      register float fd1 __asm__("f25");
-      register float fd2 __asm__("f26");
-      register float fd3 __asm__("f27");
-      register float fd4 __asm__("f28");
-      register float fd5 __asm__("f29");
-      register float fd6 __asm__("f30");
-      register float fd7 __asm__("f31");
+      // fragB: caller-saved registers (f24-f31)
+      register float fb0 __asm__("f24")  = fragB.data[0];
+      register float fb1 __asm__("f25")  = fragB.data[1];
+      register float fb2 __asm__("f26")  = fragB.data[2];
+      register float fb3 __asm__("f27")  = fragB.data[3];
+      register float fb4 __asm__("f28")  = fragB.data[4];
+      register float fb5 __asm__("f29")  = fragB.data[5];
+      register float fb6 __asm__("f30")  = fragB.data[6];
+      register float fb7 __asm__("f31")  = fragB.data[7];
 
       __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x0"
-        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+        : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7),
-          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
+          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
       );
-
-      // Write results to fragD
-      fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
     } else {
       static_assert(FragB::NR == 4, "Unsupported number of registers for FragB");
+
       // fragB: caller-saved registers (f28-f31)
       register float fb0 __asm__("f28") = fragB.data[0];
       register float fb1 __asm__("f29") = fragB.data[1];
       register float fb2 __asm__("f30") = fragB.data[2];
       register float fb3 __asm__("f31") = fragB.data[3];
 
-      // fragC: mix of caller-saved (f10-f17)
-      register float fc0 __asm__("f10") = fragC.data[0];
-      register float fc1 __asm__("f11") = fragC.data[1];
-      register float fc2 __asm__("f12") = fragC.data[2];
-      register float fc3 __asm__("f13") = fragC.data[3];
-      register float fc4 __asm__("f14") = fragC.data[4];
-      register float fc5 __asm__("f15") = fragC.data[5];
-      register float fc6 __asm__("f16") = fragC.data[6];
-      register float fc7 __asm__("f17") = fragC.data[7];
-
-      // Force outputs into accumulator registers
-      register float fd0 __asm__("f10");
-      register float fd1 __asm__("f11");
-      register float fd2 __asm__("f12");
-      register float fd3 __asm__("f13");
-      register float fd4 __asm__("f14");
-      register float fd5 __asm__("f15");
-      register float fd6 __asm__("f16");
-      register float fd7 __asm__("f17");
-
       __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x0"
-        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+        : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3),
-          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
+          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
       );
-
-      // Write results to fragD
-      fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
     }
+
+    // Write results to fragD
+    fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
   }
 
   template <typename Frag>
@@ -520,105 +487,6 @@ public:
         dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
       }
     });
-  }
-
-  template <typename FragD, typename FragA, typename FragB, typename FragC>
-  static __attribute__((always_inline)) void mma_struct_sparse_sync(FragD &fragD, const FragA &fragA, const FragB &fragB, const FragC &fragC) {
-    static_assert(FragA::Use == matrix_a, "A must be matrix_a");
-    static_assert(FragB::Use == matrix_b, "B must be matrix_b");
-    static_assert(FragC::Use == accumulator, "C must be accumulator");
-    static_assert(FragD::Use == accumulator, "D must be accumulator");
-
-    // fragA: caller-saved registers (f0-f7)
-    register float fa0 __asm__("f0")  = fragA.data[0];
-    register float fa1 __asm__("f1")  = fragA.data[1];
-    register float fa2 __asm__("f2")  = fragA.data[2];
-    register float fa3 __asm__("f3")  = fragA.data[3];
-    register float fa4 __asm__("f4")  = fragA.data[4];
-    register float fa5 __asm__("f5")  = fragA.data[5];
-    register float fa6 __asm__("f6")  = fragA.data[6];
-    register float fa7 __asm__("f7")  = fragA.data[7];
-
-    if constexpr (FragB::NR == 8) {
-      // fragB: caller-saved registers (f10-f17)
-      register float fb0 __asm__("f10") = fragB.data[0];
-      register float fb1 __asm__("f11") = fragB.data[1];
-      register float fb2 __asm__("f12") = fragB.data[2];
-      register float fb3 __asm__("f13") = fragB.data[3];
-      register float fb4 __asm__("f14") = fragB.data[4];
-      register float fb5 __asm__("f15") = fragB.data[5];
-      register float fb6 __asm__("f16") = fragB.data[6];
-      register float fb7 __asm__("f17") = fragB.data[7];
-
-      // fragC: mix of caller-saved (f28-f31) and callee-saved (f18-f21)
-      register float fc0 __asm__("f24") = fragC.data[0];
-      register float fc1 __asm__("f25") = fragC.data[1];
-      register float fc2 __asm__("f26") = fragC.data[2];
-      register float fc3 __asm__("f27") = fragC.data[3];
-      register float fc4 __asm__("f28") = fragC.data[4];
-      register float fc5 __asm__("f29") = fragC.data[5];
-      register float fc6 __asm__("f30") = fragC.data[6];
-      register float fc7 __asm__("f31") = fragC.data[7];
-
-      // Force outputs into accumulator registers
-      register float fd0 __asm__("f24");
-      register float fd1 __asm__("f25");
-      register float fd2 __asm__("f26");
-      register float fd3 __asm__("f27");
-      register float fd4 __asm__("f28");
-      register float fd5 __asm__("f29");
-      register float fd6 __asm__("f30");
-      register float fd7 __asm__("f31");
-
-      __asm__ volatile (".insn r %[insn], 1, 2, x%[fmd], x%[fms], x0"
-        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7),
-          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
-      );
-
-      // Write results to fragD
-      fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
-    } else {
-      static_assert(FragB::NR == 4, "Unsupported number of registers for FragB");
-      // fragB: caller-saved registers (f28-f31)
-      register float fb0 __asm__("f28") = fragB.data[0];
-      register float fb1 __asm__("f29") = fragB.data[1];
-      register float fb2 __asm__("f30") = fragB.data[2];
-      register float fb3 __asm__("f31") = fragB.data[3];
-
-      // fragC: mix of caller-saved (f10-f17)
-      register float fc0 __asm__("f10") = fragC.data[0];
-      register float fc1 __asm__("f11") = fragC.data[1];
-      register float fc2 __asm__("f12") = fragC.data[2];
-      register float fc3 __asm__("f13") = fragC.data[3];
-      register float fc4 __asm__("f14") = fragC.data[4];
-      register float fc5 __asm__("f15") = fragC.data[5];
-      register float fc6 __asm__("f16") = fragC.data[6];
-      register float fc7 __asm__("f17") = fragC.data[7];
-
-      // Force outputs into accumulator registers
-      register float fd0 __asm__("f10");
-      register float fd1 __asm__("f11");
-      register float fd2 __asm__("f12");
-      register float fd3 __asm__("f13");
-      register float fd4 __asm__("f14");
-      register float fd5 __asm__("f15");
-      register float fd6 __asm__("f16");
-      register float fd7 __asm__("f17");
-
-      __asm__ volatile (".insn r %[insn], 1, 2, x%[fmd], x%[fms], x0"
-        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3),
-          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
-      );
-
-      // Write results to fragD
-      fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
-    }
   }
 
   template <typename FragD, typename FragA, typename FragB, typename FragC, typename FragMeta>
