@@ -459,7 +459,7 @@ void SfuUnit::tick() {
 				if (trace->eop && !core_->warp_sync_ready(trace->wid, trace->uuid))
 					continue; //skips the rest of the loop. Does not pop the input.
 				output.send(trace, 2+delay);
-				release_warp = false;
+				release_warp = true;
 				break;
 			case WctlType::BAR: {
 				output.send(trace, 2+delay);
