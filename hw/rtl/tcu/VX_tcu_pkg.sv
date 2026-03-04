@@ -59,7 +59,7 @@ package VX_tcu_pkg;
     // Block dimensions
     localparam TCU_BLOCK_CAP = TCU_NT;
     localparam TCU_LG_BLOCK_CAP = $clog2(TCU_BLOCK_CAP);
-    localparam TCU_BLOCK_EN = (TCU_LG_BLOCK_CAP == 4) ? 1 : (TCU_LG_BLOCK_CAP / 2);
+    localparam TCU_BLOCK_EN = TCU_LG_BLOCK_CAP / 2;
     localparam TCU_BLOCK_EM = TCU_LG_BLOCK_CAP - TCU_BLOCK_EN;
 
     localparam TCU_TC_M = 1 << TCU_BLOCK_EM;
@@ -80,8 +80,13 @@ package VX_tcu_pkg;
     localparam TCU_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE;
 
 `ifdef TCU_SPARSE_ENABLE
+    // NT=16 symmetric sparse flag
+    localparam NT16_SPARSE = (TCU_LG_BLOCK_CAP == 4);
+
     // B micro-tiling (sparse 2:4)
-    localparam TCU_B_BLOCK_SIZE_SP = (TCU_TC_K * TCU_TC_N) * 2;
+    // NT=16: column-pair layout (2 cols × tcK × 2 candidates = NT lanes per block)
+    // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)
+    localparam TCU_B_BLOCK_SIZE_SP = NT16_SPARSE ? TCU_BLOCK_CAP : (TCU_TC_K * TCU_TC_N) * 2;
     localparam TCU_B_SUB_BLOCKS_SP = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
 
     // Max metadata widths (sized for widest type: 4-bit elements, I_RATIO=8)

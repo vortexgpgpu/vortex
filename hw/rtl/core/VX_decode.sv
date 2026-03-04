@@ -561,8 +561,12 @@ module VX_decode import VX_gpu_pkg::*; #(
                     7'h02: begin
                         if (funct3 == 3'h0) begin
                             ex_type = EX_TCU;
+                        `ifdef TCU_SPARSE_ENABLE
                             op_type = rs2[0] ? INST_OP_BITS'(INST_TCU_WMMA_SP)
                                              : INST_OP_BITS'(INST_TCU_WMMA);
+                        `else
+                            op_type = INST_OP_BITS'(INST_TCU_WMMA);
+                        `endif
                             op_args.tcu.fmt_s  = rs1[3:0];
                             op_args.tcu.fmt_d  = rd[3:0];
                             op_args.tcu.step_m = '0;
@@ -572,7 +576,9 @@ module VX_decode import VX_gpu_pkg::*; #(
                             `USED_FREG (rs1);
                             `USED_FREG (rs2);
                             `USED_FREG (rs3);
-                        end else if (funct3 == 3'h1) begin
+                        end
+                    `ifdef TCU_SPARSE_ENABLE
+                        else if (funct3 == 3'h1) begin
                             ex_type = EX_TCU;
                             op_type = INST_OP_BITS'(INST_TCU_META_STORE);
                             op_args.tcu.fmt_s  = rd[3:0]; // input type ID (uop seq generates col_idx)
@@ -583,6 +589,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                             `USED_FREG (rs1); // float register with load 0 data
                             `USED_FREG (rs2); // float register with load 1 data (int4) or same as rs1
                         end
+                    `endif
                     end
                 `endif
                     default:;

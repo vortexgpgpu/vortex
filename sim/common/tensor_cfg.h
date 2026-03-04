@@ -166,7 +166,7 @@ private:
 
   static constexpr uint32_t block_cap = NT;
   static constexpr uint32_t lg_block_cap = clog2(block_cap);
-  static constexpr uint32_t block_en = (lg_block_cap == 4) ? 1 : (lg_block_cap / 2);
+  static constexpr uint32_t block_en = lg_block_cap / 2;
   static constexpr uint32_t block_em = lg_block_cap - block_en;
 
 public:
@@ -197,7 +197,12 @@ public:
   static constexpr uint32_t b_sub_steps  = n_steps / b_sub_blocks;    // number of B sub-steps per register
 
 #ifdef TCU_SPARSE_ENABLE
-  static constexpr uint32_t b_block_size_sp = (tcK * tcN) * 2;             // sparse 2:4
+  // NT=16 symmetric sparse flag
+  static constexpr bool nt16_sparse = (lg_block_cap == 4);
+
+  // NT=16: column-pair layout (2 cols × tcK × 2 candidates = block_cap lanes per block)
+  // NT=8/32: standard interleaved layout (tcK × tcN × 2 = block_cap lanes per block)
+  static constexpr uint32_t b_block_size_sp = nt16_sparse ? block_cap : (tcK * tcN) * 2;
   static constexpr uint32_t b_sub_blocks_sp = block_cap / b_block_size_sp;
   static constexpr uint32_t b_sub_steps_sp  = n_steps / b_sub_blocks_sp;
 #endif

@@ -37,8 +37,6 @@ module VX_tcu_uops import
     localparam LG_B_SB    = $clog2(TCU_B_SUB_BLOCKS);
 `ifdef TCU_SPARSE_ENABLE
     localparam LG_B_SB_SP = $clog2(TCU_B_SUB_BLOCKS_SP);
-    localparam SPARSE_SAME_CYCLES = (TCU_BLOCK_CAP == 16);
-    localparam HALF_K = TCU_K_STEPS / 2;
 
     wire is_sparse_in = (ibuf_in.op_type == INST_TCU_WMMA_SP);
     reg  is_sparse;
@@ -74,20 +72,37 @@ module VX_tcu_uops import
 
     // Register offsets — dense vs sparse formulas
 `ifdef TCU_SPARSE_ENABLE
-    wire [CTR_W-1:0] rs1_offset = is_sparse
-        ? ((CTR_W'(m_index) >> LG_A_SB) << (LG_K/2)) | CTR_W'(k_index)
-        : ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
+    wire [CTR_W-1:0] rs1_offset, rs2_offset, rs3_offset;
 
-    wire [CTR_W-1:0] rs2_offset = is_sparse
-        ? ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB_SP
-        : ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
+    if (NT16_SPARSE) begin : g_nt16_off
+        // NT=16 sparse: reinterpret counter bits
+        // n_sp = counter[1:0] (absorbs k bit), m_sp = counter[3:2]
+        wire [`UP(LG_N+LG_K)-1:0] n_sp = counter[0 +: (LG_N + LG_K)];
+        wire [`UP(LG_M)-1:0] m_sp = counter[(LG_N + LG_K) +: LG_M];
+
+        assign rs1_offset = is_sparse
+            ? CTR_W'(m_sp)
+            : ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
+        assign rs2_offset = is_sparse
+            ? CTR_W'(n_sp)
+            : ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
+        assign rs3_offset = is_sparse
+            ? CTR_W'(counter >> 1)
+            : (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
+    end else begin : g_def_off
+        assign rs1_offset = is_sparse
+            ? ((CTR_W'(m_index) >> LG_A_SB) << (LG_K/2)) | CTR_W'(k_index)
+            : ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
+        assign rs2_offset = is_sparse
+            ? ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB_SP
+            : ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
+        assign rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
+    end
 `else
     wire [CTR_W-1:0] rs1_offset = ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
-
     wire [CTR_W-1:0] rs2_offset = ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
-`endif
-
     wire [CTR_W-1:0] rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
+`endif
 
     // Register calculations
     wire [4:0] rs1 = TCU_RA + 5'(rs1_offset);
@@ -104,9 +119,17 @@ module VX_tcu_uops import
     // Output uop generation
     assign ibuf_out.uuid      = uuid;
 `ifdef TCU_SPARSE_ENABLE
-    wire sparse_k_masked = SPARSE_SAME_CYCLES && is_sparse
-                        && (k_index >= `UP(LG_K)'(HALF_K));
-    assign ibuf_out.tmask = sparse_k_masked ? '0 : ibuf_in.tmask;
+    if (NT16_SPARSE) begin : g_nt16_tmask
+        // NT=16 sparse: alternate j=0,1 (0x3333) and j=2,3 (0xCCCC)
+        wire sparse_active = is_sparse && !is_meta_store;
+        wire col_half = counter[0]; // n_sp[0]: even → lower cols, odd → upper cols
+        assign ibuf_out.tmask = sparse_active
+            ? (col_half ? (ibuf_in.tmask & 16'hCCCC) : (ibuf_in.tmask & 16'h3333))
+            : ibuf_in.tmask;
+    end else begin : g_def_tmask
+        // NT=8/32: no tmask changes for sparse
+        assign ibuf_out.tmask = ibuf_in.tmask;
+    end
 `else
     assign ibuf_out.tmask = ibuf_in.tmask;
 `endif
@@ -119,9 +142,19 @@ module VX_tcu_uops import
     wire meta_use_rs2 = (counter >= CTR_W'(TCU_META_COLS_PER_LOAD));
     /* verilator lint_on UNSIGNED */
     assign ibuf_out.op_args.tcu.fmt_d  = is_meta_store ? 4'(counter) : ibuf_in.op_args.tcu.fmt_d;
-    assign ibuf_out.op_args.tcu.step_m = is_meta_store ? '0 : 4'(m_index);
-    assign ibuf_out.op_args.tcu.step_n = is_meta_store ? '0 : 4'(n_index);
-    assign ibuf_out.op_args.tcu.step_k = is_meta_store ? '0 : 4'(k_index);
+
+    if (NT16_SPARSE) begin : g_nt16_steps
+        wire [`UP(LG_M)-1:0] m_sp_st = counter[(LG_N + LG_K) +: LG_M];
+        wire [`UP(LG_N+LG_K)-1:0] n_sp_st = counter[0 +: (LG_N + LG_K)];
+        assign ibuf_out.op_args.tcu.step_m = is_meta_store ? '0 : (is_sparse ? 4'(m_sp_st) : 4'(m_index));
+        assign ibuf_out.op_args.tcu.step_n = is_meta_store ? '0 : (is_sparse ? 4'(n_sp_st) : 4'(n_index));
+        assign ibuf_out.op_args.tcu.step_k = is_meta_store ? '0 : (is_sparse ? 4'(0) : 4'(k_index));
+    end else begin : g_def_steps
+        assign ibuf_out.op_args.tcu.step_m = is_meta_store ? '0 : 4'(m_index);
+        assign ibuf_out.op_args.tcu.step_n = is_meta_store ? '0 : 4'(n_index);
+        assign ibuf_out.op_args.tcu.step_k = is_meta_store ? '0 : 4'(k_index);
+    end
+
     assign ibuf_out.wb  = is_meta_store ? 1'b0 : 1'b1;
     assign ibuf_out.rd  = is_meta_store ? '0 : make_reg_num(REG_TYPE_F, rs3);
     assign ibuf_out.rs1 = is_meta_store
@@ -175,7 +208,9 @@ module VX_tcu_uops import
                 end else begin
                     is_meta_store <= 0;
                     is_sparse     <= is_sparse_in;
-                    done <= (is_sparse_in && !SPARSE_SAME_CYCLES)
+                    // NT=16 sparse: full uop count (same as dense)
+                    // NT=8/32 sparse: halved uop count
+                    done <= (is_sparse_in && !NT16_SPARSE)
                         ? (TCU_UOPS/2 == 1) : (TCU_UOPS == 1);
                 end
             `else
@@ -187,7 +222,8 @@ module VX_tcu_uops import
                 if (is_meta_store) begin
                     done <= (counter == CTR_W'(meta_uop_count_reg - CTR_W'(2)));
                 end else begin
-                    done <= (is_sparse && !SPARSE_SAME_CYCLES)
+                    // NT=16 sparse: full uop count; NT=8/32 sparse: halved
+                    done <= (is_sparse && !NT16_SPARSE)
                         ? (counter == CTR_W'((TCU_UOPS/2)-2))
                         : (counter == CTR_W'(TCU_UOPS-2));
                 end

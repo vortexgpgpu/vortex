@@ -251,15 +251,23 @@ public:
         uint32_t lane_in_blk = (cfg::b_block_size_sp == NT) ? lane : (lane % cfg::b_block_size_sp);
         uint32_t block_col = (lane_in_blk / b_tcK) + (block_idx * cfg::tcN);
         uint32_t block_row = (lane_in_blk % b_tcK) * i_ratio;
-        uint32_t n_stride  = cfg::b_sub_blocks_sp * cfg::tcN;
+        // NT=16 sparse: each register = 2 columns × full K (n_stride=2, no K iteration)
+        // NT=8/32 sparse: standard interleaved layout
+        uint32_t n_stride  = cfg::nt16_sparse ? 2 : (cfg::b_sub_blocks_sp * cfg::tcN);
         uint32_t k_stride  = b_tcK * i_ratio;
         if constexpr (src_layout == col_major) {
           std::swap(block_row, block_col);
         }
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
         detail::unroll_for<Frag::NR>([&](auto r) {
-          uint32_t block_k = r / cfg::b_sub_steps_sp;
-          uint32_t block_n = r % cfg::b_sub_steps_sp;
+          uint32_t block_k, block_n;
+          if constexpr (cfg::nt16_sparse) {
+            block_k = 0;
+            block_n = r;
+          } else {
+            block_k = r / cfg::b_sub_steps_sp;
+            block_n = r % cfg::b_sub_steps_sp;
+          }
           uint32_t elem_row = block_k * k_stride;
           uint32_t elem_col = block_n * n_stride;
           if constexpr (src_layout == row_major) {

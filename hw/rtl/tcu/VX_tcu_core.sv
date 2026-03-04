@@ -199,8 +199,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 assign a_row[k_idx]   = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
             `ifdef TCU_SPARSE_ENABLE
                 assign b_col_dense[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
-                assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2]);
-                assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K * 2 + k_idx * 2 + 1]);
+                // NT=16 sparse: j_sp = j % 2 (wraps j=2,3 back to lanes 0..15)
+                // NT=8/32: j_sp = j (no wrapping needed)
+                localparam J_SP = NT16_SPARSE ? (j % (TCU_TC_N / 2)) : j;
+                assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
+                assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
             `else
                 assign b_col[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
             `endif
