@@ -154,11 +154,6 @@ inline void vx_barrier(int barried_id, int num_warps) {
     __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps) : "memory");
 }
 
-// Warp Sync
-inline void vx_wsync() {
-    __asm__ volatile (".insn r %0, 7, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
-}
-
 // Return current thread identifier
 inline __attribute__((const)) int vx_thread_id() {
     int ret;
@@ -229,8 +224,12 @@ inline __attribute__((const)) int vx_hart_id() {
     return ret;
 }
 
-// Return current cycle counter (deprecated, use vx_rdcycle_sync instead for accurate timing)
-inline uint64_t vx_cycle_count() {
+//
+// profiling
+//
+
+// Return current cycle counter
+inline uint64_t vx_rdcycle() {
 #if __riscv_xlen == 64
     return csr_read(VX_CSR_MCYCLE);
 #elif __riscv_xlen == 32
@@ -244,6 +243,11 @@ inline uint64_t vx_cycle_count() {
 #else
 #error "Unsupported RISC-V XLEN"
 #endif
+}
+
+// Warp Sync
+inline void vx_wsync() {
+    __asm__ volatile (".insn r %0, 7, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
 }
 
 /* Safely flushes the warp pipeline and reads the 64-bit cycle counter.
@@ -278,13 +282,6 @@ static inline uint64_t vx_rdcycle_sync() {
 #endif
 
     return cycles;
-}
-
-// Fake a dependency on a floating-point register, to prevent cycle counter read before instruction commit.
-inline void vx_create_freg_dep(float dep_src) {
-    size_t dep_gpr;
-    __asm__ volatile ("fmv.x.w %0, %1" : "=r" (dep_gpr) : "f" (dep_src) : "memory");
-    __asm__ volatile ("" : "+r" (dep_gpr) :: "memory");
 }
 
 // Memory fence
