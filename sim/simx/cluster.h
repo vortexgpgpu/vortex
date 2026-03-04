@@ -22,6 +22,10 @@
 #include "socket.h"
 #include "constants.h"
 
+#ifdef EXT_TCU_ENABLE
+#include "d_tensor_core.h"
+#endif
+
 namespace vortex {
 
 class ProcessorImpl;
@@ -82,6 +86,12 @@ public:
     return processor_;
   }
 
+  #ifdef EXT_TCU_ENABLE
+    DTensorCore* dtensor() const {
+      return dtensor_.get();
+    }
+  #endif
+
   void reset();
 
   void tick();
@@ -108,6 +118,9 @@ private:
   std::vector<Socket::Ptr>    sockets_;
   std::vector<core_barrier_t> barriers_;
   CacheSim::Ptr               l2cache_;
+  #ifdef EXT_TCU_ENABLE
+    DTensorCore::Ptr          dtensor_;
+  #endif
   uint32_t                    cores_per_socket_;
 };
 

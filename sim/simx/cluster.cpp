@@ -35,7 +35,6 @@ Cluster::Cluster(const SimContext& ctx,
   uint32_t sockets_per_cluster = sockets_.size();
 
   // create sockets
-
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
     uint32_t socket_id = cluster_id * sockets_per_cluster + i;
     snprintf(sname, 100, "%s-socket%d", name, i);
@@ -43,7 +42,6 @@ Cluster::Cluster(const SimContext& ctx,
   }
 
   // Create l2cache
-
   snprintf(sname, 100, "%s-l2cache", name);
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
     !L2_ENABLED,
@@ -61,6 +59,12 @@ Cluster::Cluster(const SimContext& ctx,
     2,                      // pipeline latency
   });
 
+  //Create Disaggregated Tensor Core
+  #ifdef EXT_TCU_ENABLE
+    snprintf(sname, 100, "%s-dtensor", this->name().c_str());
+    dtensor_ = DTensorCore::Create(sname, this, arch, dcrs);
+  #endif
+
   // connect l2cache core interface
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
     for (uint32_t j = 0; j < L1_MEM_PORTS; ++j) {
@@ -68,6 +72,14 @@ Cluster::Cluster(const SimContext& ctx,
       l2cache_->core_rsp_out.at(i * L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
     }
   }
+
+  //Connect Disaggregated Tensor Core to L2 cache
+    #ifdef EXT_TCU_ENABLE
+    const uint32_t dtensor_port = sockets_per_cluster * L1_MEM_PORTS; // last index in CoreReq/Rsp ports
+    dtensor_->mem_req_out.bind(&l2cache_->core_req_in.at(dtensor_port));
+    l2cache_->core_rsp_out.at(dtensor_port).bind(&dtensor_->mem_rsp_in);
+  #endif
+
 
   // connect l2cache memory interface
   for (uint32_t i = 0; i < L2_MEM_PORTS; ++i) {
@@ -84,6 +96,10 @@ void Cluster::reset() {
   for (auto& barrier : barriers_) {
     barrier.reset();
   }
+
+  #ifdef EXT_TCU_ENABLE
+    if (dtensor_) dtensor_->reset();
+  #endif
 }
 
 void Cluster::tick() {
@@ -94,6 +110,10 @@ void Cluster::attach_ram(RAM* ram) {
   for (auto& socket : sockets_) {
     socket->attach_ram(ram);
   }
+
+  #ifdef EXT_TCU_ENABLE
+    if (dtensor_) dtensor_->attach_ram(ram);
+  #endif
 }
 
 #ifdef VM_ENABLE

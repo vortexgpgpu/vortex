@@ -1,4 +1,3 @@
-
 // Copyright © 2019-2023
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,17 +11,231 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "tensor_unit.h"
+#include "d_tensor_core.h"
+#include "cluster.h"
+#include "types.h"
 #include "tensor_cfg.h"
 #include <rvfloats.h>
-#include "core.h"
 #include <cmath>
+#include <iostream>
+#include <cstring>
+#include <cassert>
 
 using namespace vortex;
 
 namespace vt = vortex::tensor;
 using cfg = vt::wmma_config_t<NUM_THREADS>;
 
+DTensorCore::DTensorCore(const SimContext& ctx,
+                                   const char* name,
+                                   Cluster* cluster,
+                                   const Arch& arch,
+                                   const DCRS& dcrs)
+  : SimObject<DTensorCore>(ctx, name)
+  , mem_req_out(this)
+  , mem_rsp_in(this)
+  , cluster_(cluster)
+  , arch_(arch)
+  , dcrs_(dcrs)
+  , ram_(nullptr)
+  , state_(State::IDLE)
+  , busy_(false)
+  , done_(false)
+  , desc_addr_(0)
+  , desc_{}
+  , tag_alloc_(1)
+  , pending_tag_(0)
+  , fragA_(NUM_THREADS * cfg::NRA, 0.0f)
+  , fragB_(NUM_THREADS * cfg::NRB, 0.0f)
+  , fragC_(NUM_THREADS * cfg::NRC, 0.0f)
+{
+  //--
+}
+
+DTensorCore::~DTensorCore() {
+  //--
+}
+
+void DTensorCore::attach_ram(RAM* ram) {
+  ram_ = ram;
+}
+
+void DTensorCore::reset() {
+  state_ = State::IDLE;
+  busy_  = false;
+  done_  = false;
+  pending_tag_ = 0;
+  desc_addr_ = 0;
+  std::memset(&desc_, 0, sizeof(desc_));
+}
+
+void DTensorCore::start(uint64_t desc_addr) {
+  if (busy_) {
+    DP(2, this->name() << ": START ignored (busy)");
+    return;
+  }
+  done_ = false;
+  busy_ = true;
+  desc_addr_ = desc_addr;
+  state_ = State::DESC_REQ;
+}
+
+uint32_t DTensorCore::poll() const {
+  return done_ ? 1u : 0u;
+}
+
+void DTensorCore::issue_mem_req(uint64_t addr, bool write) {
+  MemReq req;
+  req.addr  = addr;
+  req.write = write;
+  req.tag   = tag_alloc_++;
+  req.cid   = 0;
+  req.uuid  = 0;
+
+  if (!write) {
+    pending_tag_ = req.tag;
+  } else {
+    pending_tag_ = 0;
+  }
+  // 1-cycle latency for memory access
+  // For same-level interconnect, other files (cache_sim) use a 1-cycle latency for the entire request-response round trip too.
+  mem_req_out.send(req);
+}
+
+void DTensorCore::load_desc() {
+  assert(ram_ && "RAM must be attached before DTensor use");
+  ram_->read(&desc_, desc_addr_, sizeof(Desc));
+}
+
+static inline uint32_t elem_size_bytes(uint32_t fmt_id) {
+  switch (fmt_id) {
+  case vt::fp32::id:  return 4;
+  case vt::fp16::id:  return 2;
+  case vt::bf16::id:  return 2;
+  case vt::int32::id: return 4;
+  case vt::int8::id:  return 1;
+  case vt::uint8::id: return 1;
+  case vt::int4::id:  return 1;
+  case vt::uint4::id: return 1;
+  default:            return 4;
+  }
+}
+
+void DTensorCore::load_operands() {
+  uint32_t fmt_s = desc_.fmt_s;
+  uint32_t fmt_d = desc_.fmt_d;
+
+  if (desc_.flags & 0x1) {
+    std::fill(fragC_.begin(), fragC_.end(), 0.0f);
+  }
+
+  // Load A (row_major), same mapping as kernel/include/vx_tensor.h
+  for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+    uint32_t block_idx   = (cfg::a_block_size == NUM_THREADS) ? 0 : (lane / cfg::a_block_size);
+    uint32_t lane_in_blk = (cfg::a_block_size == NUM_THREADS) ? lane : (lane % cfg::a_block_size);
+    uint32_t block_row   = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcM);
+    uint32_t block_col   = (lane_in_blk % cfg::tcK);
+
+    uint32_t i_ratio = 4 / elem_size_bytes(fmt_s);
+    uint32_t m_stride  = cfg::a_sub_blocks * cfg::tcM;
+    uint32_t k_stride  = cfg::tcK * i_ratio;
+
+    uint64_t base_addr = desc_.ptrA + (uint64_t)block_row * desc_.ldmA * elem_size_bytes(fmt_s)
+                                   + (uint64_t)block_col * i_ratio * elem_size_bytes(fmt_s);
+
+    for (uint32_t r = 0; r < cfg::NRA; ++r) {
+      uint32_t block_m  = r / cfg::k_steps;
+      uint32_t block_k  = r % cfg::k_steps;
+      uint32_t elem_row = block_m * m_stride;
+      uint32_t elem_col = block_k * k_stride;
+
+      uint64_t addr = base_addr + (uint64_t)elem_row * desc_.ldmA * elem_size_bytes(fmt_s)
+                                + (uint64_t)elem_col * elem_size_bytes(fmt_s);
+
+      float word = 0.0f;
+      if (fmt_s == vt::fp32::id) {
+        ram_->read(&word, addr, 4);
+      } else if (fmt_s == vt::fp16::id || fmt_s == vt::bf16::id) {
+        uint16_t v0, v1;
+        ram_->read(&v0, addr, 2);
+        ram_->read(&v1, addr + 2, 2);
+        uint32_t u32 = (uint32_t(v1) << 16) | uint32_t(v0);
+        std::memcpy(&word, &u32, 4);
+      } else {
+        ram_->read(&word, addr, 4);
+      }
+
+      fragA_[lane * cfg::NRA + r] = word;
+    }
+  }
+
+  // Load B (col_major)
+  for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+    uint32_t block_idx   = (cfg::b_block_size == NUM_THREADS) ? 0 : (lane / cfg::b_block_size);
+    uint32_t lane_in_blk = (cfg::b_block_size == NUM_THREADS) ? lane : (lane % cfg::b_block_size);
+    uint32_t block_col   = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcN);
+    uint32_t block_row   = (lane_in_blk % cfg::tcK);
+
+    uint32_t i_ratio = 4 / elem_size_bytes(fmt_s);
+    uint32_t n_stride  = cfg::b_sub_blocks * cfg::tcN;
+    uint32_t k_stride  = cfg::tcK * i_ratio;
+
+    uint64_t base_addr = desc_.ptrB + (uint64_t)block_row * i_ratio * elem_size_bytes(fmt_s)
+                                   + (uint64_t)block_col * desc_.ldmB * elem_size_bytes(fmt_s);
+
+    for (uint32_t r = 0; r < cfg::NRB; ++r) {
+      uint32_t block_k  = r / cfg::n_steps;
+      uint32_t block_n  = r % cfg::n_steps;
+      uint32_t elem_row = block_k * k_stride;
+      uint32_t elem_col = block_n * n_stride;
+
+      uint64_t addr = base_addr + (uint64_t)elem_row * elem_size_bytes(fmt_s)
+                                + (uint64_t)elem_col * desc_.ldmB * elem_size_bytes(fmt_s);
+
+      float word = 0.0f;
+      if (fmt_s == vt::fp32::id) {
+        ram_->read(&word, addr, 4);
+      } else if (fmt_s == vt::fp16::id || fmt_s == vt::bf16::id) {
+        uint16_t v0, v1;
+        ram_->read(&v0, addr, 2);
+        ram_->read(&v1, addr + 2, 2);
+        uint32_t u32 = (uint32_t(v1) << 16) | uint32_t(v0);
+        std::memcpy(&word, &u32, 4);
+      } else {
+        ram_->read(&word, addr, 4);
+      }
+
+      fragB_[lane * cfg::NRB + r] = word;
+    }
+  }
+
+  // Load C accumulator (row_major) unless C_is_zero
+  if ((desc_.flags & 0x1) == 0) {
+    for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+      uint32_t block_row = lane / cfg::tcN;
+      uint32_t block_col = lane % cfg::tcN;
+
+      uint64_t base_addr = desc_.ptrC + (uint64_t)block_row * desc_.ldmC * elem_size_bytes(fmt_d)
+                                     + (uint64_t)block_col * elem_size_bytes(fmt_d);
+
+      for (uint32_t r = 0; r < cfg::NRC; ++r) {
+        uint32_t block_m  = r / cfg::n_steps;
+        uint32_t block_n  = r % cfg::n_steps;
+        uint32_t elem_row = block_m * cfg::tcM;
+        uint32_t elem_col = block_n * cfg::tcN;
+
+        uint64_t addr = base_addr + (uint64_t)elem_row * desc_.ldmC * elem_size_bytes(fmt_d)
+                                  + (uint64_t)elem_col * elem_size_bytes(fmt_d);
+
+        float word = 0.0f;
+        ram_->read(&word, addr, 4);
+        fragC_[lane * cfg::NRC + r] = word;
+      }
+    }
+  }
+}
+
+// Start of FMA and FEDP definitions (copied from tensor_unit.cpp)
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
 }
@@ -462,151 +675,159 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
     std::abort();
   }
 }
+// End of FMA and FEDP definitions
 
-class TensorUnit::Impl {
-public:
-  Impl(TensorUnit* simobject, const Arch& arch, Core* core)
-    : simobject_(simobject)
-    , core_(core)
-    , arch_(arch)
-    , perf_stats_()
-  {
-    //--
-  }
+void DTensorCore::execute_wmma() {
+  // m, n, k calculation from decode.cpp
+  uint32_t fmt_s = desc_.fmt_s;
+  uint32_t fmt_d = desc_.fmt_d;
 
-  ~Impl() {
-    // Destructor logic if needed
-  }
+  std::vector<reg_data_t> rs1_data(NUM_THREADS);
+  std::vector<reg_data_t> rs2_data(NUM_THREADS);
+  std::vector<reg_data_t> rs3_data(NUM_THREADS);
+  std::vector<reg_data_t> rd_data(NUM_THREADS);
 
-  void reset() {
-    perf_stats_ = PerfStats();
-  }
+  for (uint32_t k = 0; k < cfg::k_steps; ++k) {
+    for (uint32_t m = 0; m < cfg::m_steps; ++m) {
+      for (uint32_t n = 0; n < cfg::n_steps; ++n) {
+        uint32_t rs1 = (m / cfg::a_sub_blocks) * cfg::k_steps + k;
+        uint32_t rs2 = (k * cfg::n_steps + n) / cfg::b_sub_blocks;
+        uint32_t rs3 = m * cfg::n_steps + n;
 
-  void tick() {
-    for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-      auto& input = simobject_->Inputs.at(iw);
-      if (input.empty())
-        continue;
-      auto trace = input.peek();
-      auto tcu_type = std::get<TcuType>(trace->op_type);
-      int delay = 0;
-      switch (tcu_type) {
-      case TcuType::WMMA:
-        delay = 4;
-        break;
-      default:
-        std::abort();
-      }
-      if (simobject_->Outputs.at(iw).try_send(trace, 2 + delay)) {
-        DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
-        input.pop();
+        for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+          float fa = fragA_[lane * cfg::NRA + rs1];
+          float fb = fragB_[lane * cfg::NRB + rs2];
+          float fc = fragC_[lane * cfg::NRC + rs3];
+          uint32_t a_u32, b_u32, c_u32;
+          std::memcpy(&a_u32, &fa, 4);
+          std::memcpy(&b_u32, &fb, 4);
+          std::memcpy(&c_u32, &fc, 4);
+          rs1_data[lane].u32 = a_u32;
+          rs2_data[lane].u32 = b_u32;
+          rs3_data[lane].u32 = c_u32;
+        }
+
+        // Calls wmma function in TensorUnit with per-lane fragment data
+
+        //tensor_unit() is getter from core.h which returns TensorUnit instance (TensorUnit::Create)
+        //  ->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
+        //tcu_->wmma(0, fmt_s, fmt_d, m, n, rs1_data, rs2_data, rs3_data, rd_data, nullptr);
+
+        // Execute WMMA (copied from tensor_unit.cpp)
+        auto fedp = select_FEDP(fmt_s, fmt_d);
+
+        uint32_t a_off = (m % cfg::a_sub_blocks) * cfg::a_block_size;
+        uint32_t b_off = (n % cfg::b_sub_blocks) * cfg::b_block_size;
+
+        for (uint32_t i = 0; i < cfg::tcM; ++i) {
+          for (uint32_t j = 0; j < cfg::tcN; ++j) {
+            auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
+            auto b_col = rs2_data.data() + b_off + j * cfg::tcK;
+            auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
+            auto d_val = fedp(a_row, b_col, c_val);
+            rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
+          }
+        }
+        
+        for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+          uint32_t d_u32 = rd_data[lane].u32;
+          float fd;
+          std::memcpy(&fd, &d_u32, 4);
+          fragC_[lane * cfg::NRC + rs3] = fd;
+        }
       }
     }
   }
+}
 
-  void wmma(uint32_t wid,
-            uint32_t fmt_s,
-            uint32_t fmt_d,
-            uint32_t step_m,
-            uint32_t step_n,
-            const std::vector<reg_data_t>& rs1_data,
-            const std::vector<reg_data_t>& rs2_data,
-            const std::vector<reg_data_t>& rs3_data,
-            std::vector<reg_data_t>& rd_data,
-            ExeTraceData* trace_data) {
-    __unused(wid);
-    __unused(trace_data);
+void DTensorCore::store_output() {
+  uint32_t fmt_d = desc_.fmt_d;
+  uint32_t out_sz = elem_size_bytes(fmt_d);
 
-    auto fedp = select_FEDP(fmt_s, fmt_d);
+  for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+    uint32_t block_row = lane / cfg::tcN;
+    uint32_t block_col = lane % cfg::tcN;
 
-    uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
-    uint32_t b_off = (step_n % cfg::b_sub_blocks) * cfg::b_block_size;
+    uint64_t base_addr = desc_.ptrD + (uint64_t)block_row * desc_.ldmD * out_sz + (uint64_t)block_col * out_sz;
 
-    for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      for (uint32_t j = 0; j < cfg::tcN; ++j) {
-        auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
-        auto b_col = rs2_data.data() + b_off + j * cfg::tcK;
-        auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
-        auto d_val = fedp(a_row, b_col, c_val);
-        rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
+    for (uint32_t r = 0; r < cfg::NRC; ++r) {
+      uint32_t block_m  = r / cfg::n_steps;
+      uint32_t block_n  = r % cfg::n_steps;
+      uint32_t elem_row = block_m * cfg::tcM;
+      uint32_t elem_col = block_n * cfg::tcN;
 
-        DTH(3, simobject_->name() << " FEDP: wid=" << wid << ", i=" << i << ", j=" << j << ", m=" << step_m << ", n=" << step_n << ", a_row={" << std::hex);
-        for (uint32_t q = 0; q < cfg::tcK; ++q) {
-          if (q) DTN(3, ", ");
-          DTN(3, "0x" << a_row[q].u32);
-        }
-        DTN(3, "}, b_col={");
-        for (uint32_t q = 0; q < cfg::tcK; ++q) {
-          if (q) DTN(3, ", ");
-          DTN(3, "0x" << b_col[q].u32);
-        }
-        DTN(3, "}, c_val=0x" << c_val << ", d_val=0x" << d_val << std::dec << std::endl);
-      }
+      uint64_t addr = base_addr + (uint64_t)elem_row * desc_.ldmD * out_sz
+                                + (uint64_t)elem_col * out_sz;
+
+      float fd = fragC_[lane * cfg::NRC + r];
+      ram_->write(&fd, addr, 4);
+    }
+  }
+}
+
+//Adapted from cache_sim.cpp for mem response handling
+void DTensorCore::tick() {
+  if (!mem_rsp_in.empty()) {
+    auto rsp = mem_rsp_in.peek();
+    if (rsp.tag == pending_tag_) {
+      mem_rsp_in.pop();
+      pending_tag_ = 0;
     }
   }
 
-  const PerfStats& perf_stats() const {
-    return perf_stats_;
-  }
+  switch (state_) {
+  case State::IDLE:
+    break;
 
-private:
+  case State::DESC_REQ:
+    issue_mem_req(desc_addr_, false); // Read descriptor
+    state_ = State::DESC_WAIT;
+    break;
 
-  TensorUnit*   simobject_;
-  Core*         core_;
-  Arch          arch_;
-  PerfStats     perf_stats_;
-};
+  case State::DESC_WAIT:
+    if (pending_tag_ == 0) {
+      load_desc();
+      state_ = State::OP_REQ;
+    }
+    break;
 
-///////////////////////////////////////////////////////////////////////////////
+  case State::OP_REQ:
+    // timing model: one L2 read to represent operand fetch
+    // L2를 몇번 엑세스할지 = 총 딜레이 -> 이거 바꿔야될 수도!
+    issue_mem_req(desc_.ptrA, false); // Read operand
+    state_ = State::OP_WAIT;
+    break;
 
-op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
-  switch (tcu_type) {
-  case TcuType::WMMA:
-    return {"WMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
-             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
-  case TcuType::DTENSOR_START:
-    return {"DTENSOR.START", ""};
-  case TcuType::DTENSOR_POLL:
-    return {"DTENSOR.POLL", ""};
+  case State::OP_WAIT:
+    if (pending_tag_ == 0) {
+      load_operands();
+      state_ = State::EXECUTE;
+    }
+    break;
+
+  case State::EXECUTE:
+    execute_wmma();
+    state_ = State::OUT_REQ;
+    break;
+
+  case State::OUT_REQ:
+    issue_mem_req(desc_.ptrD, true); // Write matrix output
+    state_ = State::OUT_WAIT;
+    break;
+
+  case State::OUT_WAIT:
+    if (pending_tag_ == 0) {
+      store_output();
+      done_ = true;
+      busy_ = false;
+      state_ = State::DONE;
+    }
+    break;
+
+  case State::DONE:
+    break;
+
   default:
-    std::abort();
+    break;
   }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-TensorUnit::TensorUnit(const SimContext &ctx, const char* name, const Arch& arch, Core* core)
-	: SimObject<TensorUnit>(ctx, name)
-	, Inputs(ISSUE_WIDTH, this)
-	, Outputs(ISSUE_WIDTH, this)
-	, impl_(new Impl(this, arch, core))
-{}
-
-TensorUnit::~TensorUnit() {
-  delete impl_;
-}
-
-void TensorUnit::reset() {
-  impl_->reset();
-}
-
-void TensorUnit::tick() {
-  impl_->tick();
-}
-
-const TensorUnit::PerfStats &TensorUnit::perf_stats() const {
-	return impl_->perf_stats();
-}
-
-void TensorUnit::wmma(uint32_t wid,
-                      uint32_t fmt_s,
-                      uint32_t fmt_d,
-                      uint32_t step_m,
-                      uint32_t step_n,
-                      const std::vector<reg_data_t>& rs1_data,
-                      const std::vector<reg_data_t>& rs2_data,
-                      const std::vector<reg_data_t>& rs3_data,
-                      std::vector<reg_data_t>& rd_data,
-                      ExeTraceData* trace_data) {
-  impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
 }

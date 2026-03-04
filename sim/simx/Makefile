@@ -40,6 +40,7 @@ endif
 # Add TCU extension sources
 ifneq ($(filter -DEXT_TCU_ENABLE, $(XCONFIGS)),)
   	SRCS += $(SRC_DIR)/tensor_unit.cpp
+	SRCS += $(SRC_DIR)/d_tensor_core.cpp
 endif
 
 # Debugging

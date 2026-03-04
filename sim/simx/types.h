@@ -156,6 +156,7 @@ enum class FUType {
   VPU,
 #endif
 #ifdef EXT_TCU_ENABLE
+  DTCU_Control,
   TCU,
 #endif
   Count
@@ -171,6 +172,7 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::VPU: os << "VPU"; break;
 #endif
 #ifdef EXT_TCU_ENABLE
+  case FUType::DTCU_Control: os << "DTCU_Control"; break;
   case FUType::TCU: os << "TCU"; break;
 #endif
   default:
@@ -668,6 +670,8 @@ inline std::ostream &operator<<(std::ostream &os, const VpuOpType& type) {
 
 enum class TcuType {
   WMMA,
+  DTENSOR_START,
+  DTENSOR_POLL,
 };
 
 struct IntrTcuArgs {
@@ -680,6 +684,8 @@ struct IntrTcuArgs {
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   switch (type) {
   case TcuType::WMMA: os << "WMMA"; break;
+  case TcuType::DTENSOR_START: os << "DTENSOR.START"; break;
+  case TcuType::DTENSOR_POLL:  os << "DTENSOR.POLL"; break;
   default:
     assert(false);
   }

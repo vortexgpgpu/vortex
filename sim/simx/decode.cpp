@@ -1131,6 +1131,20 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
           }
         }
       } break;
+      case 1: { // DTENSOR_START (Disaggregated Tensor Core)
+        auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::DTCU_Control);
+        instr->setOpType(TcuType::DTENSOR_START);
+        instr->setArgs(IntrTcuArgs{0, 0, 0, 0});
+        instr->setSrcReg(0, rs1, RegType::Integer); // rs1 holds descriptor address
+        ibuffer.push_back(instr);
+      } break;
+      case 2: { // DTENSOR_POLL
+        auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::DTCU_Control);
+        instr->setOpType(TcuType::DTENSOR_POLL);
+        instr->setArgs(IntrTcuArgs{0, 0, 0, 0});
+        instr->setDestReg(rd, RegType::Integer); // rd gets done flag
+        ibuffer.push_back(instr);
+      } break;
       default:
         std::abort();
       }
