@@ -421,9 +421,45 @@ public:
 
       // NO-OP: keep accumulator unchanged so test will fail (mismatch) but completes cleanly
       fragD.data = fragC.data;
+      }
+};
+
+// -----------------------------------------------------------------------------
+// Disaggregated Tensor Core control intrinsics
+// Encoding: opcode=RISCV_CUSTOM0, funct7=2 (same as WMMA), funct3=1/2
+
+struct dtensor_desc_t {
+  uint64_t ptrA;
+  uint64_t ptrB;
+  uint64_t ptrC;
+  uint64_t ptrD;
+  uint32_t ldmA;
+  uint32_t ldmB;
+  uint32_t ldmC;
+  uint32_t ldmD;
+  uint32_t fmt_s;
+  uint32_t fmt_d;
+  uint32_t flags;
+};
+
+static __attribute__((always_inline)) void dtensor_start(uint64_t desc_addr) {
+  __asm__ volatile (".insn r %[insn], 1, 2, x0, %[addr], x0"
+    :
+    : [insn] "i"(RISCV_CUSTOM0),
+      [addr] "r"(desc_addr)
+  );
 }
 
-};
+static __attribute__((always_inline)) uint32_t dtensor_poll() {
+  uint32_t done;
+  __asm__ volatile (".insn r %[insn], 2, 2, %0, x0, x0"
+    : "=r"(done)
+    : [insn]"i"(RISCV_CUSTOM0)
+  );
+  return done;
+}
+
+
 
 } // namespace tensor
 } // namespace vortex

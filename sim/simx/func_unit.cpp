@@ -478,4 +478,45 @@ TcuUnit::TcuUnit(const SimContext& ctx, const char* name, Core* core)
 void TcuUnit::tick() {
 	// use tensor_unit
 }
+
+DtcuControlUnit::DtcuControlUnit(const SimContext& ctx, const char* name, Core* core)
+  : FuncUnit(ctx, name, core)
+{}
+
+void DtcuControlUnit::tick() {
+	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		auto& input = Inputs.at(iw);
+
+		if (input.empty()) continue;
+
+		auto& output = Outputs.at(iw);
+		if (output.full()) continue; // stall
+
+		auto trace = input.peek();
+
+		int delay = 0;
+		
+		if (std::get_if<TcuType>(&trace->op_type)) {
+			auto tcu_type = std::get<TcuType>(trace->op_type);
+			switch (tcu_type) {
+				case TcuType::DTENSOR_START:
+				case TcuType::DTENSOR_POLL:
+					delay = 2;
+					break;
+				default:
+					std::abort();
+			}
+			DT(3, this->name() << " execute: op=" << tcu_type << ", " << *trace);
+		} else {
+			std::abort();
+		}
+
+		output.send(trace, delay);
+
+		if (trace->eop && trace->fetch_stall) {
+			core_->resume(trace->wid);
+		}
+		input.pop();
+	}
+}
 #endif

@@ -119,6 +119,13 @@ public:
 	void tick() override;
 };
 
+class DtcuControlUnit : public FuncUnit {
+public:
+	DtcuControlUnit(const SimContext& ctx, const char* name, Core*);
+	
+	void tick() override;
+};
+
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
