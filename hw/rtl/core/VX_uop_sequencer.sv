@@ -19,7 +19,7 @@ module VX_uop_sequencer import
 `endif
     VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter WARP_ID  = 0
+    parameter WARP_ID = 0
 ) (
     input clk,
     input reset,
@@ -30,93 +30,115 @@ module VX_uop_sequencer import
     `UNUSED_PARAM (WARP_ID)
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    localparam UOP_TCU   = 0;
-    localparam UOP_DXA   = UOP_TCU + `EXT_TCU_ENABLED;
-    localparam UOP_MAX   = UOP_DXA + `EXT_DXA_ENABLED;
+    localparam UOP_TCU = 0;
+    localparam UOP_DXA = UOP_TCU + `EXT_TCU_ENABLED;
+    localparam UOP_MAX = UOP_DXA + `EXT_DXA_ENABLED;
 
-    ibuffer_t uop_data;
+    localparam UOP_SEL_W = `LOG2UP(UOP_MAX);
+
+    // UOP-expanders signals.
+    wire [UOP_MAX-1:0]     uop_valid_in;
+    ibuffer_t              uop_data_in [UOP_MAX];
+    wire [UOP_CTR_W-1:0]   uop_count_out [UOP_MAX];
+
+    reg [UOP_CTR_W-1:0] uop_ctr;    // current uop index within active burst
+    reg [UOP_SEL_W-1:0] sel_idx;    // registered active expander index
+    reg [UOP_CTR_W-1:0] last_ctr;   // count[active] - 1, latched at start
+    reg                 uop_active; // high while emitting a uop burst
+
+    logic [UOP_SEL_W-1:0] sel_idx_n;
     wire is_uop_input;
-    wire uop_start = input_if.valid && is_uop_input;
-    wire uop_next = output_if.ready;
-    wire uop_done;
+    VX_priority_encoder #(
+        .N       (UOP_MAX),
+        .REVERSE (1)
+    ) priority_enc (
+        .data_in    (uop_valid_in),
+        `UNUSED_PIN (onehot_out),
+        .index_out  (sel_idx_n),
+        .valid_out  (is_uop_input)
+    );
 
-    ibuffer_t uop_data_in [UOP_MAX];
-    wire [UOP_MAX-1:0] uop_valid_in;
-    wire [UOP_MAX-1:0] uop_done_in;
+    // uop_start fires for exactly one cycle at the beginning of a new burst.
+    // The ~uop_active guard prevents re-triggering while a burst is in flight.
+    wire uop_start = input_if.valid && is_uop_input && ~uop_active;
+
+    // uop_next: downstream accepted a uop this cycle.
+    wire uop_next = output_if.ready;
+
+    // uop_done: last uop of the burst is being presented this cycle.
+    wire uop_done = (uop_ctr == last_ctr);
+
+    // Sequential state machine: track the active burst and uop index.
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            uop_ctr    <= '0;
+            sel_idx    <= '0;
+            last_ctr   <= '0;
+            uop_active <= 1'b0;
+        end else begin
+            if (uop_start) begin
+                uop_ctr    <= '0;
+                sel_idx    <= sel_idx_n;
+                last_ctr   <= uop_count_out[sel_idx_n] - UOP_CTR_W'(1);
+                uop_active <= 1'b1;
+            end else if (uop_active && uop_next) begin
+                // Advance or retire the burst.
+                uop_ctr    <= uop_done ? '0 : (uop_ctr + UOP_CTR_W'(1));
+                uop_active <= ~uop_done;
+            end
+        end
+    end
+
+    wire [UOP_MAX-1:0] uop_start_in;
+    for (genvar i = 0; i < UOP_MAX; ++i) begin : g_start
+        assign uop_start_in[i] = uop_start && uop_valid_in[i];
+    end
 
 `ifdef EXT_TCU_ENABLE
-
-    // TCU uop expansion
-    assign uop_valid_in[UOP_TCU] = (input_if.data.ex_type == EX_TCU
+    // ------------------------------------------------------------------
+    // TCU uop expander
+    // ------------------------------------------------------------------
+    assign uop_valid_in[UOP_TCU] = (input_if.data.ex_type == EX_TCU)
         && (input_if.data.op_type == INST_TCU_WMMA
     `ifdef TCU_SPARSE_ENABLE
          || input_if.data.op_type == INST_TCU_WMMA_SP
          || input_if.data.op_type == INST_TCU_META_STORE
     `endif
-        ));
+        );
 
     VX_tcu_uops tcu_uops (
-        .clk     (clk),
-        .reset   (reset),
-        .ibuf_in (input_if.data),
-        .ibuf_out(uop_data_in[UOP_TCU]),
-        .start   (uop_start && uop_valid_in[UOP_TCU]),
-        .next    (uop_next),
-        .done    (uop_done_in[UOP_TCU])
+        .clk       (clk),
+        .reset     (reset),
+        .ibuf_in   (input_if.data),
+        .ibuf_out  (uop_data_in[UOP_TCU]),
+        .start     (uop_start_in[UOP_TCU]),
+        .uop_idx   (uop_ctr),
+        .uop_count (uop_count_out[UOP_TCU])
     );
-
 `endif
 
 `ifdef EXT_DXA_ENABLE
-
-    // All DXA dimension variants (funct3 0-4) require uop expansion.
+    // ------------------------------------------------------------------
+    // DXA uop expander
+    // ------------------------------------------------------------------
     assign uop_valid_in[UOP_DXA] = (input_if.data.ex_type == EX_SFU)
                                  && (input_if.data.op_type == INST_SFU_DXA);
     VX_dxa_uops dxa_uops (
-        .clk     (clk),
-        .reset   (reset),
-        .ibuf_in (input_if.data),
-        .ibuf_out(uop_data_in[UOP_DXA]),
-        .start   (uop_start && uop_valid_in[UOP_DXA]),
-        .next    (uop_next),
-        .done    (uop_done_in[UOP_DXA])
+        .clk       (clk),
+        .reset     (reset),
+        .ibuf_in   (input_if.data),
+        .ibuf_out  (uop_data_in[UOP_DXA]),
+        .start     (uop_start_in[UOP_DXA]),
+        .uop_idx   (uop_ctr),
+        .uop_count (uop_count_out[UOP_DXA])
     );
-
 `endif
 
-    VX_uop_mux #(
-        .NUM_REQS (UOP_MAX)
-    ) uop_mux (
-        .valid_in  (uop_valid_in),
-        .data_in   (uop_data_in),
-        .done_in   (uop_done_in),
-        .valid_out (is_uop_input),
-        .data_out  (uop_data),
-        .done_out  (uop_done)
-    );
+    wire uop_hold = is_uop_input && ~uop_active;
 
-    reg uop_active;
-
-    always_ff @(posedge clk) begin
-        if (reset) begin
-            uop_active <= 0;
-        end else begin
-            if (uop_active) begin
-                if (uop_next && uop_done) begin
-                    uop_active <= 0;
-                end
-            end
-            else if (uop_start) begin
-                uop_active <= 1;
-            end
-        end
-    end
-
-    // output assignments
-    wire uop_hold = ~uop_active && is_uop_input; // hold transition cycles to uop_active
     assign output_if.valid = uop_active ? 1'b1 : (input_if.valid && ~uop_hold);
-    assign output_if.data  = uop_active ? uop_data : input_if.data;
-    assign input_if.ready  = uop_active ? (output_if.ready && uop_done) : (output_if.ready && ~uop_hold);
+    assign output_if.data  = uop_active ? uop_data_in[sel_idx] : input_if.data;
+    assign input_if.ready  = uop_active ? (uop_next && uop_done) : (uop_next && ~uop_hold);
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin

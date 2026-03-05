@@ -76,6 +76,8 @@ package VX_gpu_pkg;
 
     localparam BAR_SIZE_W = `MAX(NW_WIDTH, NC_WIDTH);
 
+    localparam UOP_CTR_W = 8;
+
 `ifndef NDEBUG
 	localparam UUID_WIDTH = 44;
 `elsif SCOPE
@@ -1006,6 +1008,15 @@ package VX_gpu_pkg;
 
     function automatic logic [RV_REGS_BITS-1:0] get_reg_idx(input logic [NUM_REGS_BITS-1:0] reg_num);
         return reg_num[RV_REGS_BITS-1:0];
+    endfunction
+
+    function automatic logic [UUID_WIDTH-1:0] get_uop_uuid(input logic [UUID_WIDTH-1:0] uuid, input logic [UOP_CTR_W-1:0] uop_idx);
+    `ifdef UUID_ENABLE
+        logic [31:0] uuid_lo = {uop_idx[0 +: UOP_CTR_W], uuid[0 +: (32 - UOP_CTR_W)]};
+        return {uuid[UUID_WIDTH-1:32], uuid_lo};
+    `else
+        return uuid;
+    `endif
     endfunction
 
 endpackage

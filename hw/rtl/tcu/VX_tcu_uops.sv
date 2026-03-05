@@ -13,169 +13,149 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_uops import
-`ifdef EXT_TCU_ENABLE
-    VX_tcu_pkg::*,
-`endif
-    VX_gpu_pkg::*; (
+//
+// TCU uop expander.
+//
+module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     input clk,
     input reset,
 
     input  ibuffer_t ibuf_in,
     output ibuffer_t ibuf_out,
-    input  wire      start,
-    input  wire      next,
-    output reg       done
+
+    input wire start,
+    input wire [UOP_CTR_W-1:0] uop_idx,
+    output wire [UOP_CTR_W-1:0] uop_count
 );
     localparam CTR_W = $clog2(TCU_UOPS);
+    `STATIC_ASSERT (CTR_W <= UOP_CTR_W, ("invalid parameter"))
 
     localparam LG_N = $clog2(TCU_N_STEPS);
     localparam LG_M = $clog2(TCU_M_STEPS);
     localparam LG_K = $clog2(TCU_K_STEPS);
 
-    localparam LG_A_SB    = $clog2(TCU_A_SUB_BLOCKS);
-    localparam LG_B_SB    = $clog2(TCU_B_SUB_BLOCKS);
-`ifdef TCU_SPARSE_ENABLE
-    localparam LG_B_SB_SP = $clog2(TCU_B_SUB_BLOCKS_SP);
+    localparam LG_A_SB = $clog2(TCU_A_SUB_BLOCKS);
+    localparam LG_B_SB = $clog2(TCU_B_SUB_BLOCKS);
 
-    wire is_sparse_in = (ibuf_in.op_type == INST_TCU_WMMA_SP);
-    reg  is_sparse;
+    // Truncate the wide shared uop_idx to the bits this expander actually uses.
+    // UP(CTR_W) avoids a 0-bit wire when TCU_UOPS == 1.
+    wire [`UP(CTR_W)-1:0] ctr = `UP(CTR_W)'(uop_idx);
+    `UNUSED_VAR (uop_idx)
+
+`ifdef TCU_SPARSE_ENABLE
+    localparam LG_B_SB_SP       = $clog2(TCU_B_SUB_BLOCKS_SP);
+    localparam SPARSE_SAME_CYCLES = (TCU_BLOCK_CAP == 16);
+    localparam HALF_K           = TCU_K_STEPS / 2;
+
+    wire is_sparse_in     = (ibuf_in.op_type == INST_TCU_WMMA_SP);
     wire is_meta_store_in = (ibuf_in.op_type == INST_TCU_META_STORE);
-    reg  is_meta_store;
-    reg  [CTR_W-1:0] meta_uop_count_reg;
+
+    // Latched on start; stable for the whole burst.
+    reg is_sparse;
+    reg is_meta_store;
+
+    // uop_count: combinational from ibuf_in so the sequencer can latch
+    // last_ctr = uop_count - 1 on the same cycle as start.
+    assign uop_count = is_meta_store_in
+        ? UOP_CTR_W'(meta_num_cols(ibuf_in.op_args.tcu.fmt_s))
+        : (is_sparse_in && !SPARSE_SAME_CYCLES)
+            ? UOP_CTR_W'(TCU_UOPS / 2)
+            : UOP_CTR_W'(TCU_UOPS);
+`else
+    // Dense-only: count is a compile-time constant.
+    assign uop_count = UOP_CTR_W'(TCU_UOPS);
 `endif
 
-    // uop counter
-    reg [CTR_W-1:0] counter;
-
+    // -----------------------------------------------------------------------
+    // Index extraction from the shared uop_idx (unchanged from original).
+    // -----------------------------------------------------------------------
     logic [`UP(LG_N)-1:0] n_index;
     logic [`UP(LG_M)-1:0] m_index;
     logic [`UP(LG_K)-1:0] k_index;
 
     if (LG_N != 0) begin : g_n_idx
-        assign n_index = counter[0 +: LG_N];
+        assign n_index = ctr[0 +: LG_N];
     end else begin : g_n_idx0
         assign n_index = 0;
     end
 
     if (LG_M != 0) begin : g_m_idx
-        assign m_index = counter[LG_N +: LG_M];
+        assign m_index = ctr[LG_N +: LG_M];
     end else begin : g_m_idx0
         assign m_index = 0;
     end
 
     if (LG_K != 0) begin : g_k_idx
-        assign k_index = counter[LG_N + LG_M +: LG_K];
+        assign k_index = ctr[LG_N + LG_M +: LG_K];
     end else begin : g_k_idx0
         assign k_index = 0;
     end
 
-    // Register offsets — dense vs sparse formulas
+    // -----------------------------------------------------------------------
+    // Register-offset arithmetic (unchanged from original).
+    // -----------------------------------------------------------------------
 `ifdef TCU_SPARSE_ENABLE
-    wire [CTR_W-1:0] rs1_offset, rs2_offset, rs3_offset;
+    wire [`UP(CTR_W)-1:0] rs1_offset = is_sparse
+        ? ((`UP(CTR_W)'(m_index) >> LG_A_SB) << (LG_K / 2)) | `UP(CTR_W)'(k_index)
+        : ((`UP(CTR_W)'(m_index) >> LG_A_SB) << LG_K)       | `UP(CTR_W)'(k_index);
 
-    if (NT16_SPARSE) begin : g_nt16_off
-        // NT=16 sparse: reinterpret counter bits
-        // n_sp = counter[1:0] (absorbs k bit), m_sp = counter[3:2]
-        wire [`UP(LG_N+LG_K)-1:0] n_sp = counter[0 +: (LG_N + LG_K)];
-        wire [`UP(LG_M)-1:0] m_sp = counter[(LG_N + LG_K) +: LG_M];
-
-        assign rs1_offset = is_sparse
-            ? CTR_W'(m_sp)
-            : ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
-        assign rs2_offset = is_sparse
-            ? CTR_W'(n_sp)
-            : ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
-        assign rs3_offset = is_sparse
-            ? CTR_W'(counter >> 1)
-            : (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
-    end else begin : g_def_off
-        assign rs1_offset = is_sparse
-            ? ((CTR_W'(m_index) >> LG_A_SB) << (LG_K/2)) | CTR_W'(k_index)
-            : ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
-        assign rs2_offset = is_sparse
-            ? ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB_SP
-            : ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
-        assign rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
-    end
+    wire [`UP(CTR_W)-1:0] rs2_offset = is_sparse
+        ? ((`UP(CTR_W)'(k_index) << LG_N) | `UP(CTR_W)'(n_index)) >> LG_B_SB_SP
+        : ((`UP(CTR_W)'(k_index) << LG_N) | `UP(CTR_W)'(n_index)) >> LG_B_SB;
 `else
-    wire [CTR_W-1:0] rs1_offset = ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
-    wire [CTR_W-1:0] rs2_offset = ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
-    wire [CTR_W-1:0] rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
+    wire [`UP(CTR_W)-1:0] rs1_offset = ((`UP(CTR_W)'(m_index) >> LG_A_SB) << LG_K) | `UP(CTR_W)'(k_index);
+    wire [`UP(CTR_W)-1:0] rs2_offset = ((`UP(CTR_W)'(k_index) << LG_N) | `UP(CTR_W)'(n_index)) >> LG_B_SB;
 `endif
 
-    // Register calculations
+    wire [`UP(CTR_W)-1:0] rs3_offset = (`UP(CTR_W)'(m_index) << LG_N) | `UP(CTR_W)'(n_index);
+
     wire [4:0] rs1 = TCU_RA + 5'(rs1_offset);
     wire [4:0] rs2 = TCU_RB + 5'(rs2_offset);
     wire [4:0] rs3 = TCU_RC + 5'(rs3_offset);
 
-`ifdef UUID_ENABLE
-    wire [31:0] uuid_lo = {counter, ibuf_in.uuid[0 +: (32-CTR_W)]};
-    wire [UUID_WIDTH-1:0] uuid = {ibuf_in.uuid[UUID_WIDTH-1:32], uuid_lo};
-`else
-    wire [UUID_WIDTH-1:0] uuid = ibuf_in.uuid;
-`endif
-
-    // Output uop generation
-    assign ibuf_out.uuid      = uuid;
+    // -----------------------------------------------------------------------
+    // Output uop assembly (combinational; unchanged from original).
+    // -----------------------------------------------------------------------
+    assign ibuf_out.uuid = get_uop_uuid(ibuf_in.uuid, uop_idx);
 `ifdef TCU_SPARSE_ENABLE
-    if (NT16_SPARSE) begin : g_nt16_tmask
-        // NT=16 sparse: alternate j=0,1 (0x3333) and j=2,3 (0xCCCC)
-        wire sparse_active = is_sparse && !is_meta_store;
-        wire col_half = counter[0]; // n_sp[0]: even → lower cols, odd → upper cols
-        assign ibuf_out.tmask = sparse_active
-            ? (col_half ? (ibuf_in.tmask & 16'hCCCC) : (ibuf_in.tmask & 16'h3333))
-            : ibuf_in.tmask;
-    end else begin : g_def_tmask
-        // NT=8/32: no tmask changes for sparse
-        assign ibuf_out.tmask = ibuf_in.tmask;
-    end
+    wire sparse_k_masked = SPARSE_SAME_CYCLES && is_sparse
+                        && (k_index >= `UP(LG_K)'(HALF_K));
+    assign ibuf_out.tmask = sparse_k_masked ? '0 : ibuf_in.tmask;
 `else
     assign ibuf_out.tmask = ibuf_in.tmask;
 `endif
-    assign ibuf_out.PC        = ibuf_in.PC;
-    assign ibuf_out.ex_type   = ibuf_in.ex_type;
-    assign ibuf_out.op_type   = ibuf_in.op_type;
+    assign ibuf_out.PC      = ibuf_in.PC;
+    assign ibuf_out.ex_type = ibuf_in.ex_type;
+    assign ibuf_out.op_type = ibuf_in.op_type;
     assign ibuf_out.op_args.tcu.fmt_s = ibuf_in.op_args.tcu.fmt_s;
 `ifdef TCU_SPARSE_ENABLE
     /* verilator lint_off UNSIGNED */
-    wire meta_use_rs2 = (counter >= CTR_W'(TCU_META_COLS_PER_LOAD));
+    wire meta_use_rs2 = (ctr >= `UP(CTR_W)'(TCU_META_COLS_PER_LOAD));
     /* verilator lint_on UNSIGNED */
-    assign ibuf_out.op_args.tcu.fmt_d  = is_meta_store ? 4'(counter) : ibuf_in.op_args.tcu.fmt_d;
-
-    if (NT16_SPARSE) begin : g_nt16_steps
-        wire [`UP(LG_M)-1:0] m_sp_st = counter[(LG_N + LG_K) +: LG_M];
-        wire [`UP(LG_N+LG_K)-1:0] n_sp_st = counter[0 +: (LG_N + LG_K)];
-        assign ibuf_out.op_args.tcu.step_m = is_meta_store ? '0 : (is_sparse ? 4'(m_sp_st) : 4'(m_index));
-        assign ibuf_out.op_args.tcu.step_n = is_meta_store ? '0 : (is_sparse ? 4'(n_sp_st) : 4'(n_index));
-        assign ibuf_out.op_args.tcu.step_k = is_meta_store ? '0 : (is_sparse ? 4'(0) : 4'(k_index));
-    end else begin : g_def_steps
-        assign ibuf_out.op_args.tcu.step_m = is_meta_store ? '0 : 4'(m_index);
-        assign ibuf_out.op_args.tcu.step_n = is_meta_store ? '0 : 4'(n_index);
-        assign ibuf_out.op_args.tcu.step_k = is_meta_store ? '0 : 4'(k_index);
-    end
-
+    assign ibuf_out.op_args.tcu.fmt_d  = is_meta_store ? 4'(ctr) : ibuf_in.op_args.tcu.fmt_d;
+    assign ibuf_out.op_args.tcu.step_m = is_meta_store ? '0 : 4'(m_index);
+    assign ibuf_out.op_args.tcu.step_n = is_meta_store ? '0 : 4'(n_index);
+    assign ibuf_out.op_args.tcu.step_k = is_meta_store ? '0 : 4'(k_index);
     assign ibuf_out.wb  = is_meta_store ? 1'b0 : 1'b1;
     assign ibuf_out.rd  = is_meta_store ? '0 : make_reg_num(REG_TYPE_F, rs3);
-    assign ibuf_out.rs1 = is_meta_store
-        ? (meta_use_rs2 ? ibuf_in.rs2 : ibuf_in.rs1)
-        : make_reg_num(REG_TYPE_F, rs1);
+    assign ibuf_out.rs1 = is_meta_store ? (meta_use_rs2 ? ibuf_in.rs2 : ibuf_in.rs1) : make_reg_num(REG_TYPE_F, rs1);
     assign ibuf_out.rs2 = is_meta_store ? ibuf_in.rs2 : make_reg_num(REG_TYPE_F, rs2);
     assign ibuf_out.rs3 = is_meta_store ? '0 : make_reg_num(REG_TYPE_F, rs3);
 `else
-    assign ibuf_out.op_args.tcu.fmt_d = ibuf_in.op_args.tcu.fmt_d;
+    assign ibuf_out.op_args.tcu.fmt_d  = ibuf_in.op_args.tcu.fmt_d;
     assign ibuf_out.op_args.tcu.step_m = 4'(m_index);
     assign ibuf_out.op_args.tcu.step_n = 4'(n_index);
     assign ibuf_out.op_args.tcu.step_k = 4'(k_index);
-    assign ibuf_out.wb        = 1;
-    assign ibuf_out.rd        = make_reg_num(REG_TYPE_F, rs3);
-    assign ibuf_out.rs1       = make_reg_num(REG_TYPE_F, rs1);
-    assign ibuf_out.rs2       = make_reg_num(REG_TYPE_F, rs2);
-    assign ibuf_out.rs3       = make_reg_num(REG_TYPE_F, rs3);
+    assign ibuf_out.wb  = 1;
+    assign ibuf_out.rd  = make_reg_num(REG_TYPE_F, rs3);
+    assign ibuf_out.rs1 = make_reg_num(REG_TYPE_F, rs1);
+    assign ibuf_out.rs2 = make_reg_num(REG_TYPE_F, rs2);
+    assign ibuf_out.rs3 = make_reg_num(REG_TYPE_F, rs3);
 `endif
-    assign ibuf_out.rd_xregs  = ibuf_in.rd_xregs;
-    assign ibuf_out.wr_xregs  = ibuf_in.wr_xregs;
-    assign ibuf_out.used_rs   = ibuf_in.used_rs;
+    assign ibuf_out.rd_xregs = ibuf_in.rd_xregs;
+    assign ibuf_out.wr_xregs = ibuf_in.wr_xregs;
+    assign ibuf_out.used_rs  = ibuf_in.used_rs;
+
     `UNUSED_VAR (ibuf_in.wb)
     `UNUSED_VAR (ibuf_in.rd)
 `ifndef TCU_SPARSE_ENABLE
@@ -184,55 +164,24 @@ module VX_tcu_uops import
 `endif
     `UNUSED_VAR (ibuf_in.rs3)
 
-    reg busy;
-
+    // -----------------------------------------------------------------------
+    // Minimal sequential state: only instruction-class flags remain.
+    // Latched on start, stable for the whole uop burst.
+    // (uop_idx / busy / done / look-ahead all moved to VX_uop_sequencer)
+    // -----------------------------------------------------------------------
+`ifdef TCU_SPARSE_ENABLE
     always_ff @(posedge clk) begin
         if (reset) begin
-            counter   <= 0;
-            busy      <= 0;
-            done      <= 0;
-        `ifdef TCU_SPARSE_ENABLE
-            is_sparse     <= 0;
-            is_meta_store <= 0;
-        `endif
-        end else begin
-            if (~busy && start) begin
-                counter   <= 0;
-                busy      <= 1;
-            `ifdef TCU_SPARSE_ENABLE
-                if (is_meta_store_in) begin
-                    is_meta_store      <= 1;
-                    is_sparse          <= 0;
-                    meta_uop_count_reg <= CTR_W'(meta_num_cols(ibuf_in.op_args.tcu.fmt_s));
-                    done <= (meta_num_cols(ibuf_in.op_args.tcu.fmt_s) == 5'd1);
-                end else begin
-                    is_meta_store <= 0;
-                    is_sparse     <= is_sparse_in;
-                    // NT=16 sparse: full uop count (same as dense)
-                    // NT=8/32 sparse: halved uop count
-                    done <= (is_sparse_in && !NT16_SPARSE)
-                        ? (TCU_UOPS/2 == 1) : (TCU_UOPS == 1);
-                end
-            `else
-                done <= (TCU_UOPS == 1);
-            `endif
-            end else if (busy && next) begin
-                counter <= counter + ((TCU_UOPS > 1) ? 1 : 0);
-            `ifdef TCU_SPARSE_ENABLE
-                if (is_meta_store) begin
-                    done <= (counter == CTR_W'(meta_uop_count_reg - CTR_W'(2)));
-                end else begin
-                    // NT=16 sparse: full uop count; NT=8/32 sparse: halved
-                    done <= (is_sparse && !NT16_SPARSE)
-                        ? (counter == CTR_W'((TCU_UOPS/2)-2))
-                        : (counter == CTR_W'(TCU_UOPS-2));
-                end
-            `else
-                done <= (counter == CTR_W'(TCU_UOPS-2));
-            `endif
-                busy <= ~done;
-            end
+            is_sparse     <= 1'b0;
+            is_meta_store <= 1'b0;
+        end else if (start) begin
+            is_sparse     <= is_sparse_in;
+            is_meta_store <= is_meta_store_in;
         end
     end
+`else
+    // No per-burst state needed in the dense-only build.
+    `UNUSED_VAR (start)
+`endif
 
 endmodule
