@@ -37,10 +37,13 @@ module VX_uop_sequencer import
     ibuffer_t            uop_data_out [UOP_MAX];
     wire [UOP_CTR_W-1:0] uop_count_out [UOP_MAX];
 
+    ibuffer_t           uop_data;   // selected uop data
     reg [UOP_CTR_W-1:0] uop_ctr;    // current uop index within active burst
-    reg [UOP_SEL_W-1:0] sel_idx;    // registered active expander index
-    reg [UOP_CTR_W-1:0] last_ctr;   // count[active] - 1, latched at start
     reg                 uop_active; // high while emitting a uop burst
+    reg                 uop_done;   // pulse when the last uop of the burst is presented
+
+    reg [UOP_SEL_W-1:0] sel_idx_r;
+    reg [UOP_CTR_W-1:0] last_ctr_r;
 
     logic [UOP_SEL_W-1:0] sel_idx_n;
     wire is_uop_input;
@@ -61,26 +64,28 @@ module VX_uop_sequencer import
     // uop_next: downstream accepted a uop this cycle.
     wire uop_next = output_if.ready;
 
-    // uop_done: last uop of the burst is being presented this cycle.
-    wire uop_done = (uop_ctr == last_ctr);
-
     // Sequential state machine: track the active burst and uop index.
     always_ff @(posedge clk) begin
         if (reset) begin
             uop_ctr    <= '0;
-            sel_idx    <= '0;
-            last_ctr   <= '0;
+            sel_idx_r  <= '0;
+            last_ctr_r <= '0;
             uop_active <= 1'b0;
+            uop_data   <= '0;
+            uop_done   <= 1'b0;
         end else begin
             if (uop_start) begin
-                uop_ctr    <= '0;
-                sel_idx    <= sel_idx_n;
-                last_ctr   <= uop_count_out[sel_idx_n] - UOP_CTR_W'(1);
                 uop_active <= 1'b1;
+                uop_ctr    <= UOP_CTR_W'(1);
+                sel_idx_r  <= sel_idx_n;
+                last_ctr_r <= uop_count_out[sel_idx_n] - UOP_CTR_W'(1);
+                uop_data   <= uop_data_out[sel_idx_n];
+                uop_done   <= (uop_count_out[sel_idx_n] == UOP_CTR_W'(1));
             end else if (uop_active && uop_next) begin
-                // Advance or retire the burst.
-                uop_ctr    <= uop_done ? '0 : (uop_ctr + UOP_CTR_W'(1));
                 uop_active <= ~uop_done;
+                uop_ctr    <= uop_done ? '0 : uop_ctr + UOP_CTR_W'(1);
+                uop_data   <= uop_data_out[sel_idx_r];
+                uop_done   <= (uop_ctr == last_ctr_r);
             end
         end
     end
@@ -101,7 +106,6 @@ module VX_uop_sequencer import
         || input_if.data.op_type == INST_TCU_META_STORE
     `endif
         );
-
     VX_tcu_uops tcu_uops (
         .clk       (clk),
         .reset     (reset),
@@ -132,9 +136,9 @@ module VX_uop_sequencer import
 
     wire uop_hold = is_uop_input && ~uop_active;
 
-    assign output_if.valid = uop_active ? 1'b1 : (input_if.valid && ~uop_hold);
-    assign output_if.data  = uop_active ? uop_data_out[sel_idx] : input_if.data;
-    assign input_if.ready  = uop_active ? (uop_next && uop_done) : (uop_next && ~uop_hold);
+    assign output_if.valid = uop_active || (input_if.valid && ~uop_hold);
+    assign output_if.data  = uop_active ? uop_data : input_if.data;
+    assign input_if.ready  = output_if.ready && (uop_active ? uop_done : ~uop_hold);
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin

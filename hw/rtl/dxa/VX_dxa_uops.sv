@@ -38,7 +38,7 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
 
     // Truncate the shared uop_idx to the bits DXA actually needs.
     wire [CTR_W-1:0] ctr = CTR_W'(uop_idx);
-    `UNUSED_VAR (uop_idx)
+    `UNUSED_VAR ({clk, reset, start, uop_idx})
 
     // Fixed coordinate register bank in the integer register file:
     // x28/x29/x30/x31/x5 = t3/t4/t5/t6/t0.
@@ -64,12 +64,12 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
 
     // -----------------------------------------------------------------------
     // Latched dimensionality — stable for the whole uop burst.
-    // (The combinational operand decode below uses dim_r, not ibuf_in.op_args,
+    // (The combinational operand decode below uses dim_w, not ibuf_in.op_args,
     //  so it is correct even if ibuf_in changes after the start cycle.)
     // -----------------------------------------------------------------------
-    reg [2:0] dim_r;
+    reg [2:0] dim_w = ibuf_in.op_args[2:0];
 
-    wire has_coord23 = (dim_r >= 3'd2);
+    wire has_coord23 = (dim_w >= 3'd2);
 
     // -----------------------------------------------------------------------
     // Combinational operand decode (uop_idx-index -> register operands).
@@ -101,7 +101,7 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
                 // coord0 = t3; coord1 = t4 when dim >= 2D, else x0.
                 uop_op  = DXA_OP_COORD01;
                 uop_rs1 = dxa_coord_reg(COORD0_REG);
-                if (dim_r >= 3'd1) begin
+                if (dim_w >= 3'd1) begin
                     uop_used_rs = NUM_SRC_OPDS'(3'b011);
                     uop_rs2     = dxa_coord_reg(COORD1_REG);
                 end else begin
@@ -115,7 +115,7 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
                     // coord2 = t5; coord3 = t6 when dim >= 4D, else x0.
                     uop_op  = DXA_OP_COORD23;
                     uop_rs1 = dxa_coord_reg(COORD2_REG);
-                    if (dim_r >= 3'd3) begin
+                    if (dim_w >= 3'd3) begin
                         uop_used_rs = NUM_SRC_OPDS'(3'b011);
                         uop_rs2     = dxa_coord_reg(COORD3_REG);
                     end else begin
@@ -133,7 +133,7 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
             default: begin
                 // ISSUE for 3D/4D/5D.
                 uop_op = DXA_OP_ISSUE;
-                if (dim_r == 3'd4) begin
+                if (dim_w == 3'd4) begin
                     // 5D: coord4 = t0.
                     uop_used_rs = NUM_SRC_OPDS'(3'b001);
                     uop_rs1     = dxa_coord_reg(COORD4_REG);
@@ -147,7 +147,7 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
     end
 
     // -----------------------------------------------------------------------
-    // Output assembly (combinational; unchanged from original).
+    // Output assembly.
     // -----------------------------------------------------------------------
     assign ibuf_out.uuid     = get_uop_uuid(ibuf_in.uuid, uop_idx);
     assign ibuf_out.tmask    = ibuf_in.tmask;
@@ -164,19 +164,6 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
     assign ibuf_out.rs2      = uop_rs2;
     assign ibuf_out.rs3      = uop_rs3;
     `UNUSED_VAR (ibuf_in)
-
-    // -----------------------------------------------------------------------
-    // Minimal sequential state: only dim_r remains.
-    // Latched on start, stable for the whole uop burst.
-    // (uop_idx / busy / done / last_counter all moved to VX_uop_sequencer)
-    // -----------------------------------------------------------------------
-    always_ff @(posedge clk) begin
-        if (reset) begin
-            dim_r <= '0;
-        end else if (start) begin
-            dim_r <= ibuf_in.op_args[2:0];   // latch funct3 as dimensionality
-        end
-    end
 
 endmodule
 /* verilator lint_on UNUSEDSIGNAL */

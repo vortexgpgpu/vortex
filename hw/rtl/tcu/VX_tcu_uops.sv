@@ -37,28 +37,21 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     localparam LG_A_SB = $clog2(TCU_A_SUB_BLOCKS);
     localparam LG_B_SB = $clog2(TCU_B_SUB_BLOCKS);
 
-    // Truncate the wide shared uop_idx to the bits this expander actually uses.
-    // UP(CTR_W) avoids a 0-bit wire when TCU_UOPS == 1.
+    // Truncate the wide uop_idx to the bits this expander actually uses.
     wire [`UP(CTR_W)-1:0] ctr = `UP(CTR_W)'(uop_idx);
-    `UNUSED_VAR (uop_idx)
+    `UNUSED_VAR ({clk, reset, start, uop_idx})
 
 `ifdef TCU_SPARSE_ENABLE
     localparam LG_B_SB_SP       = $clog2(TCU_B_SUB_BLOCKS_SP);
     localparam SPARSE_SAME_CYCLES = (TCU_BLOCK_CAP == 16);
     localparam HALF_K           = TCU_K_STEPS / 2;
 
-    wire is_sparse_in     = (ibuf_in.op_type == INST_TCU_WMMA_SP);
-    wire is_meta_store_in = (ibuf_in.op_type == INST_TCU_META_STORE);
+    wire is_sparse = (ibuf_in.op_type == INST_TCU_WMMA_SP);
+    wire is_meta_store = (ibuf_in.op_type == INST_TCU_META_STORE);
 
-    // Latched on start; stable for the whole burst.
-    reg is_sparse;
-    reg is_meta_store;
-
-    // uop_count: combinational from ibuf_in so the sequencer can latch
-    // last_ctr = uop_count - 1 on the same cycle as start.
-    assign uop_count = is_meta_store_in
+    assign uop_count = is_meta_store
         ? UOP_CTR_W'(meta_num_cols(ibuf_in.op_args.tcu.fmt_s))
-        : (is_sparse_in && !SPARSE_SAME_CYCLES)
+        : (is_sparse && !SPARSE_SAME_CYCLES)
             ? UOP_CTR_W'(TCU_UOPS / 2)
             : UOP_CTR_W'(TCU_UOPS);
 `else
@@ -67,7 +60,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `endif
 
     // -----------------------------------------------------------------------
-    // Index extraction from the shared uop_idx (unchanged from original).
+    // Index extraction from uop_idx
     // -----------------------------------------------------------------------
     logic [`UP(LG_N)-1:0] n_index;
     logic [`UP(LG_M)-1:0] m_index;
@@ -92,7 +85,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     end
 
     // -----------------------------------------------------------------------
-    // Register-offset arithmetic (unchanged from original).
+    // Register-offset arithmetic.
     // -----------------------------------------------------------------------
 `ifdef TCU_SPARSE_ENABLE
     wire [`UP(CTR_W)-1:0] rs1_offset = is_sparse
@@ -114,7 +107,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire [4:0] rs3 = TCU_RC + 5'(rs3_offset);
 
     // -----------------------------------------------------------------------
-    // Output uop assembly (combinational; unchanged from original).
+    // Output uop assembly.
     // -----------------------------------------------------------------------
     assign ibuf_out.uuid = get_uop_uuid(ibuf_in.uuid, uop_idx);
 `ifdef TCU_SPARSE_ENABLE
@@ -163,25 +156,5 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     `UNUSED_VAR (ibuf_in.rs2)
 `endif
     `UNUSED_VAR (ibuf_in.rs3)
-
-    // -----------------------------------------------------------------------
-    // Minimal sequential state: only instruction-class flags remain.
-    // Latched on start, stable for the whole uop burst.
-    // (uop_idx / busy / done / look-ahead all moved to VX_uop_sequencer)
-    // -----------------------------------------------------------------------
-`ifdef TCU_SPARSE_ENABLE
-    always_ff @(posedge clk) begin
-        if (reset) begin
-            is_sparse     <= 1'b0;
-            is_meta_store <= 1'b0;
-        end else if (start) begin
-            is_sparse     <= is_sparse_in;
-            is_meta_store <= is_meta_store_in;
-        end
-    end
-`else
-    // No per-burst state needed in the dense-only build.
-    `UNUSED_VAR (start)
-`endif
 
 endmodule
