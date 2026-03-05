@@ -30,22 +30,24 @@ module VX_uop_sequencer import
     `UNUSED_PARAM (WARP_ID)
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    ibuffer_t base_uop_data;
-    ibuffer_t dxa_uop_data;
-    ibuffer_t uop_data;
+    localparam UOP_TCU   = 0;
+    localparam UOP_DXA   = UOP_TCU + `EXT_TCU_ENABLED;
+    localparam UOP_MAX   = UOP_DXA + `EXT_DXA_ENABLED;
 
-    wire is_base_uop_input;
-    wire is_dxa_uop_input;
+    ibuffer_t uop_data;
     wire is_uop_input;
     wire uop_start = input_if.valid && is_uop_input;
     wire uop_next = output_if.ready;
     wire uop_done;
-    wire base_uop_done;
-    wire dxa_uop_done;
+
+    ibuffer_t uop_data_in [UOP_MAX];
+    wire [UOP_MAX-1:0] uop_valid_in;
+    wire [UOP_MAX-1:0] uop_done_in;
 
 `ifdef EXT_TCU_ENABLE
 
-    assign is_base_uop_input = (input_if.data.ex_type == EX_TCU
+    // TCU uop expansion
+    assign uop_valid_in[UOP_TCU] = (input_if.data.ex_type == EX_TCU
         && (input_if.data.op_type == INST_TCU_WMMA
     `ifdef TCU_SPARSE_ENABLE
          || input_if.data.op_type == INST_TCU_WMMA_SP
@@ -57,47 +59,41 @@ module VX_uop_sequencer import
         .clk     (clk),
         .reset   (reset),
         .ibuf_in (input_if.data),
-        .ibuf_out(base_uop_data),
-        .start   (uop_start && is_base_uop_input),
+        .ibuf_out(uop_data_in[UOP_TCU]),
+        .start   (uop_start && uop_valid_in[UOP_TCU]),
         .next    (uop_next),
-        .done    (base_uop_done)
+        .done    (uop_done_in[UOP_TCU])
     );
-
-`else
-
-    assign is_base_uop_input = 0;
-    assign base_uop_done = 0;
-    assign base_uop_data = '0;
 
 `endif
 
 `ifdef EXT_DXA_ENABLE
 
     // All DXA dimension variants (funct3 0-4) require uop expansion.
-    assign is_dxa_uop_input = (input_if.data.ex_type == EX_SFU)
-                            && (input_if.data.op_type == INST_SFU_DXA);
-
+    assign uop_valid_in[UOP_DXA] = (input_if.data.ex_type == EX_SFU)
+                                 && (input_if.data.op_type == INST_SFU_DXA);
     VX_dxa_uops dxa_uops (
         .clk     (clk),
         .reset   (reset),
         .ibuf_in (input_if.data),
-        .ibuf_out(dxa_uop_data),
-        .start   (uop_start && is_dxa_uop_input),
+        .ibuf_out(uop_data_in[UOP_DXA]),
+        .start   (uop_start && uop_valid_in[UOP_DXA]),
         .next    (uop_next),
-        .done    (dxa_uop_done)
+        .done    (uop_done_in[UOP_DXA])
     );
-
-`else
-
-    assign is_dxa_uop_input = 0;
-    assign dxa_uop_done = 0;
-    assign dxa_uop_data = '0;
 
 `endif
 
-    assign is_uop_input = is_base_uop_input || is_dxa_uop_input;
-    assign uop_data = is_dxa_uop_input ? dxa_uop_data : base_uop_data;
-    assign uop_done = is_dxa_uop_input ? dxa_uop_done : base_uop_done;
+    VX_uop_mux #(
+        .NUM_REQS (UOP_MAX)
+    ) uop_mux (
+        .valid_in  (uop_valid_in),
+        .data_in   (uop_data_in),
+        .done_in   (uop_done_in),
+        .valid_out (is_uop_input),
+        .data_out  (uop_data),
+        .done_out  (uop_done)
+    );
 
     reg uop_active;
 

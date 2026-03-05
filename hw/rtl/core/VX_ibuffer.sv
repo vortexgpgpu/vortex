@@ -39,7 +39,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0] ibuf_ready_in;
     assign decode_if.ready = ibuf_ready_in[decode_wis];
 
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_instr_bufs
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_bufs
         VX_ibuffer_if uop_sequencer_if();
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
