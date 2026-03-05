@@ -2,5 +2,4 @@
 /.vscode
 *.cache
 *.code-workspace
-miscs/apptainer/vortex.def
 miscs/apptainer/vortex.sif
