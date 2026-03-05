@@ -1,3 +1,7 @@
+// Simple test to validate DTCU functionality
+// Compares DTCU result with CPU reference
+// The test covers basic data movement and computation of DTCU over 1 tile (M=8, N=4, K=8) with fp16/bf16 input and fp32 output
+
 #include "common.h"
 
 #include <cmath>
