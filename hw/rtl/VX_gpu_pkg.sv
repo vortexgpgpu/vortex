@@ -76,6 +76,9 @@ package VX_gpu_pkg;
 
     localparam BAR_SIZE_W = `MAX(NW_WIDTH, NC_WIDTH);
 
+    localparam UOP_TCU = 0;
+    localparam UOP_DXA = UOP_TCU + `EXT_TCU_ENABLED;
+    localparam UOP_MAX = UOP_DXA + `EXT_DXA_ENABLED;
     localparam UOP_CTR_W = 8;
 
 `ifndef NDEBUG

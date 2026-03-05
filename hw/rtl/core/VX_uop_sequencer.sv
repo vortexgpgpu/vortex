@@ -30,16 +30,12 @@ module VX_uop_sequencer import
     `UNUSED_PARAM (WARP_ID)
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    localparam UOP_TCU = 0;
-    localparam UOP_DXA = UOP_TCU + `EXT_TCU_ENABLED;
-    localparam UOP_MAX = UOP_DXA + `EXT_DXA_ENABLED;
-
     localparam UOP_SEL_W = `LOG2UP(UOP_MAX);
 
     // UOP-expanders signals.
-    wire [UOP_MAX-1:0]     uop_valid_in;
-    ibuffer_t              uop_data_in [UOP_MAX];
-    wire [UOP_CTR_W-1:0]   uop_count_out [UOP_MAX];
+    wire [UOP_MAX-1:0]   uop_valid_in;
+    ibuffer_t            uop_data_out [UOP_MAX];
+    wire [UOP_CTR_W-1:0] uop_count_out [UOP_MAX];
 
     reg [UOP_CTR_W-1:0] uop_ctr;    // current uop index within active burst
     reg [UOP_SEL_W-1:0] sel_idx;    // registered active expander index
@@ -49,7 +45,7 @@ module VX_uop_sequencer import
     logic [UOP_SEL_W-1:0] sel_idx_n;
     wire is_uop_input;
     VX_priority_encoder #(
-        .N       (UOP_MAX),
+        .N (UOP_MAX),
         .REVERSE (1)
     ) priority_enc (
         .data_in    (uop_valid_in),
@@ -101,8 +97,8 @@ module VX_uop_sequencer import
     assign uop_valid_in[UOP_TCU] = (input_if.data.ex_type == EX_TCU)
         && (input_if.data.op_type == INST_TCU_WMMA
     `ifdef TCU_SPARSE_ENABLE
-         || input_if.data.op_type == INST_TCU_WMMA_SP
-         || input_if.data.op_type == INST_TCU_META_STORE
+        || input_if.data.op_type == INST_TCU_WMMA_SP
+        || input_if.data.op_type == INST_TCU_META_STORE
     `endif
         );
 
@@ -110,7 +106,7 @@ module VX_uop_sequencer import
         .clk       (clk),
         .reset     (reset),
         .ibuf_in   (input_if.data),
-        .ibuf_out  (uop_data_in[UOP_TCU]),
+        .ibuf_out  (uop_data_out[UOP_TCU]),
         .start     (uop_start_in[UOP_TCU]),
         .uop_idx   (uop_ctr),
         .uop_count (uop_count_out[UOP_TCU])
@@ -122,12 +118,12 @@ module VX_uop_sequencer import
     // DXA uop expander
     // ------------------------------------------------------------------
     assign uop_valid_in[UOP_DXA] = (input_if.data.ex_type == EX_SFU)
-                                 && (input_if.data.op_type == INST_SFU_DXA);
+                                && (input_if.data.op_type == INST_SFU_DXA);
     VX_dxa_uops dxa_uops (
         .clk       (clk),
         .reset     (reset),
         .ibuf_in   (input_if.data),
-        .ibuf_out  (uop_data_in[UOP_DXA]),
+        .ibuf_out  (uop_data_out[UOP_DXA]),
         .start     (uop_start_in[UOP_DXA]),
         .uop_idx   (uop_ctr),
         .uop_count (uop_count_out[UOP_DXA])
@@ -137,7 +133,7 @@ module VX_uop_sequencer import
     wire uop_hold = is_uop_input && ~uop_active;
 
     assign output_if.valid = uop_active ? 1'b1 : (input_if.valid && ~uop_hold);
-    assign output_if.data  = uop_active ? uop_data_in[sel_idx] : input_if.data;
+    assign output_if.data  = uop_active ? uop_data_out[sel_idx] : input_if.data;
     assign input_if.ready  = uop_active ? (uop_next && uop_done) : (uop_next && ~uop_hold);
 
 `ifdef DBG_TRACE_PIPELINE
