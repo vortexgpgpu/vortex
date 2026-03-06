@@ -20,6 +20,8 @@
 #include <iostream>
 #include <cstring>
 #include <cassert>
+#include <unordered_set>
+#include <algorithm>
 
 using namespace vortex;
 
@@ -67,6 +69,10 @@ void DTensorCore::reset() {
   pending_tag_ = 0;
   desc_addr_ = 0;
   std::memset(&desc_, 0, sizeof(desc_));
+  op_req_lines_.clear();
+  out_req_lines_.clear();
+  op_req_idx_ = 0;
+  out_req_idx_ = 0;
 }
 
 void DTensorCore::start(uint64_t desc_addr) {
@@ -78,6 +84,10 @@ void DTensorCore::start(uint64_t desc_addr) {
   busy_ = true;
   desc_addr_ = desc_addr;
   state_ = State::DESC_REQ;
+  op_req_lines_.clear();
+  out_req_lines_.clear();
+  op_req_idx_ = 0;
+  out_req_idx_ = 0;
 }
 
 uint32_t DTensorCore::poll() const {
@@ -765,7 +775,169 @@ void DTensorCore::store_output() {
   }
 }
 
-//Adapted from cache_sim.cpp for mem response handling
+// --------------------- L2 timing model for memory traffic -------------------
+// Compute which cache lines are touched by A/B/C/D 
+// then issue MemReq as per # of unique cache line
+
+static inline uint64_t line_base(uint64_t addr) {
+  return addr & ~uint64_t(L2_LINE_SIZE - 1);
+}
+
+// Similar to mem_coalescer
+static inline void coalesce_to_lines(const std::vector<uint64_t>& addrs, uint32_t bytes, std::unordered_set<uint64_t>& out_lines) {
+  for (auto addr : addrs) {
+    uint64_t l0 = line_base(addr);
+    uint64_t l1 = line_base(addr + bytes - 1);
+    out_lines.insert(l0);
+    out_lines.insert(l1);
+  }
+}
+
+void DTensorCore::build_req_lists_() {
+  op_req_lines_.clear();
+  out_req_lines_.clear();
+  op_req_idx_ = 0;
+  out_req_idx_ = 0;
+
+  std::unordered_set<uint64_t> op_lines;
+  std::unordered_set<uint64_t> out_lines;
+
+  const uint32_t fmt_s  = desc_.fmt_s;
+  const uint32_t fmt_d  = desc_.fmt_d;
+  const uint32_t in_sz  = elem_size_bytes(fmt_s);
+  const uint32_t out_sz = elem_size_bytes(fmt_d);
+
+  // Match current RAM access granularity
+  constexpr uint32_t WORD_BYTES = 4;
+
+  std::vector<uint64_t> op_addrs;
+  std::vector<uint64_t> out_addrs;
+
+  // A - row_major
+  for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+    uint32_t block_idx   = (cfg::a_block_size == NUM_THREADS) ? 0 : (lane / cfg::a_block_size);
+    uint32_t lane_in_blk = (cfg::a_block_size == NUM_THREADS) ? lane : (lane % cfg::a_block_size);
+    uint32_t block_row   = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcM);
+    uint32_t block_col   = (lane_in_blk % cfg::tcK);
+
+    uint32_t i_ratio  = 4 / in_sz;
+    uint32_t m_stride = cfg::a_sub_blocks * cfg::tcM;
+    uint32_t k_stride = cfg::tcK * i_ratio;
+
+    uint64_t base_addr = desc_.ptrA + (uint64_t)block_row * desc_.ldmA * in_sz
+                                   + (uint64_t)block_col * i_ratio * in_sz;
+
+    for (uint32_t r = 0; r < cfg::NRA; ++r) {
+      uint32_t block_m  = r / cfg::k_steps;
+      uint32_t block_k  = r % cfg::k_steps;
+      uint32_t elem_row = block_m * m_stride;
+      uint32_t elem_col = block_k * k_stride;
+
+      uint64_t addr = base_addr + (uint64_t)elem_row * desc_.ldmA * in_sz
+                                + (uint64_t)elem_col * in_sz;
+      op_addrs.push_back(addr);
+    }
+  }
+
+  // B - col_major
+  for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+    uint32_t block_idx   = (cfg::b_block_size == NUM_THREADS) ? 0 : (lane / cfg::b_block_size);
+    uint32_t lane_in_blk = (cfg::b_block_size == NUM_THREADS) ? lane : (lane % cfg::b_block_size);
+    uint32_t block_col   = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcN);
+    uint32_t block_row   = (lane_in_blk % cfg::tcK);
+
+    uint32_t i_ratio  = 4 / in_sz;
+    uint32_t n_stride = cfg::b_sub_blocks * cfg::tcN;
+    uint32_t k_stride = cfg::tcK * i_ratio;
+
+    uint64_t base_addr = desc_.ptrB + (uint64_t)block_row * i_ratio * in_sz
+                                   + (uint64_t)block_col * desc_.ldmB * in_sz;
+
+    for (uint32_t r = 0; r < cfg::NRB; ++r) {
+      uint32_t block_k  = r / cfg::n_steps;
+      uint32_t block_n  = r % cfg::n_steps;
+      uint32_t elem_row = block_k * k_stride;
+      uint32_t elem_col = block_n * n_stride;
+
+      uint64_t addr = base_addr + (uint64_t)elem_row * in_sz
+                                + (uint64_t)elem_col * desc_.ldmB * in_sz;
+      op_addrs.push_back(addr);
+    }
+  }
+
+  // C - row_major
+  if ((desc_.flags & 0x1) == 0) {
+    for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+      uint32_t block_row = lane / cfg::tcN;
+      uint32_t block_col = lane % cfg::tcN;
+
+      uint64_t base_addr = desc_.ptrC + (uint64_t)block_row * desc_.ldmC * out_sz
+                                     + (uint64_t)block_col * out_sz;
+
+      for (uint32_t r = 0; r < cfg::NRC; ++r) {
+        uint32_t block_m  = r / cfg::n_steps;
+        uint32_t block_n  = r % cfg::n_steps;
+        uint32_t elem_row = block_m * cfg::tcM;
+        uint32_t elem_col = block_n * cfg::tcN;
+
+        uint64_t addr = base_addr + (uint64_t)elem_row * desc_.ldmC * out_sz
+                                  + (uint64_t)elem_col * out_sz;
+        op_addrs.push_back(addr);
+      }
+    }
+  }
+
+  // D output (row_major)
+  for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+    uint32_t block_row = lane / cfg::tcN;
+    uint32_t block_col = lane % cfg::tcN;
+
+    uint64_t base_addr = desc_.ptrD + (uint64_t)block_row * desc_.ldmD * out_sz
+                                   + (uint64_t)block_col * out_sz;
+
+    for (uint32_t r = 0; r < cfg::NRC; ++r) {
+      uint32_t block_m  = r / cfg::n_steps;
+      uint32_t block_n  = r % cfg::n_steps;
+      uint32_t elem_row = block_m * cfg::tcM;
+      uint32_t elem_col = block_n * cfg::tcN;
+
+      uint64_t addr = base_addr + (uint64_t)elem_row * desc_.ldmD * out_sz
+                                + (uint64_t)elem_col * out_sz;
+      out_addrs.push_back(addr);
+    }
+  }
+
+  // Coalesce in order to only calculate unique cache lines touched
+  coalesce_to_lines(op_addrs,  WORD_BYTES, op_lines);
+  coalesce_to_lines(out_addrs, WORD_BYTES, out_lines);
+
+  op_req_lines_.assign(op_lines.begin(), op_lines.end());
+  out_req_lines_.assign(out_lines.begin(), out_lines.end());
+
+  std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << op_req_lines_.size() << ", output=" << out_req_lines_.size()
+        << ", total=" << (1 + op_req_lines_.size() + out_req_lines_.size()) << std::endl;
+}
+
+
+// Sequentially issues operand MemReq (one per cache line)
+// Returns false when all operand read requests issued
+bool DTensorCore::issue_next_op_req_() {
+  if (op_req_idx_ >= op_req_lines_.size())
+    return false;
+  issue_mem_req(op_req_lines_[op_req_idx_++], false);
+  return true;
+}
+
+// Sequentially issues output MemReq (one per cache line)
+// Returns false when all output write requests issued
+bool DTensorCore::issue_next_out_req_() {
+  if (out_req_idx_ >= out_req_lines_.size())
+    return false;
+  issue_mem_req(out_req_lines_[out_req_idx_++], true);
+  return true;
+}
+
+// Adapted from cache_sim.cpp for mem response handling
 void DTensorCore::tick() {
   if (!mem_rsp_in.empty()) {
     auto rsp = mem_rsp_in.peek();
@@ -787,21 +959,27 @@ void DTensorCore::tick() {
   case State::DESC_WAIT:
     if (pending_tag_ == 0) {
       load_desc();
+      build_req_lists_();
       state_ = State::OP_REQ;
     }
     break;
 
   case State::OP_REQ:
-    // timing model: one L2 read to represent operand fetch
-    // L2를 몇번 엑세스할지 = 총 딜레이 -> 이거 바꿔야될 수도!
-    issue_mem_req(desc_.ptrA, false); // Read operand
+    // Issue variable number of MemReq
+    if (!issue_next_op_req_()) {
+      pending_tag_ = 0;
+    }
     state_ = State::OP_WAIT;
     break;
 
   case State::OP_WAIT:
     if (pending_tag_ == 0) {
-      load_operands();
-      state_ = State::EXECUTE;
+      if (op_req_idx_ < op_req_lines_.size()) {
+        state_ = State::OP_REQ;
+      } else {
+        load_operands();
+        state_ = State::EXECUTE;
+      }
     }
     break;
 
@@ -811,8 +989,10 @@ void DTensorCore::tick() {
     break;
 
   case State::OUT_REQ:
-    issue_mem_req(desc_.ptrD, true); // Write matrix output
-    state_ = State::OUT_WAIT;
+    // Issue variable number of MemReq
+    if (!issue_next_out_req_()) {
+      state_ = State::OUT_WAIT;
+    }
     break;
 
   case State::OUT_WAIT:

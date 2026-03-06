@@ -18,6 +18,7 @@
 #include "arch.h"
 #include "dcrs.h"
 #include "mem.h"
+#include <vector>
 
 namespace vortex {
 
@@ -92,6 +93,17 @@ private:
   std::vector<float> fragA_; // NUM_THREADS * cfg::NRA
   std::vector<float> fragB_; // NUM_THREADS * cfg::NRB
   std::vector<float> fragC_; // NUM_THREADS * cfg::NRC
+
+  // Cacheline request lists 
+  // For calculating # of cache line accesses during operand load and output store
+  std::vector<uint64_t> op_req_lines_;
+  uint32_t op_req_idx_ = 0;
+  std::vector<uint64_t> out_req_lines_;
+  uint32_t out_req_idx_ = 0;
+
+  void build_req_lists_();
+  bool issue_next_op_req_();
+  bool issue_next_out_req_();
 
   void issue_mem_req(uint64_t addr, bool write);
 
