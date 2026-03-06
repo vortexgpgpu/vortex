@@ -135,6 +135,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .mem_bus_if (lmem_adapt_if),
         .dxa_bank_wr_if(dxa_bank_wr_if),
         .dxa_done_valid(dxa_done_valid),
+        .dxa_done_ready(dxa_txbar_bus_if.ready),
         .dxa_done_bar_addr(dxa_done_bar_addr)
     );
 
@@ -142,7 +143,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     assign dxa_txbar_bus_if.valid = dxa_done_valid;
     assign dxa_txbar_bus_if.data.addr = dxa_done_bar_addr;
     assign dxa_txbar_bus_if.data.is_done = 1'b1;
-    `UNUSED_VAR (dxa_txbar_bus_if.ready) // TODO: BUG!!!!!!
+`ifdef DBG_TRACE_DXA
+    always @(posedge clk) begin
+        if (dxa_done_valid && !reset) begin
+            `TRACE(2, ("%t: %s-mem_unit: dxa_done_valid=1 bar_addr=0x%0h ready=%b\n",
+                $time, INSTANCE_ID, dxa_done_bar_addr, dxa_txbar_bus_if.ready))
+        end
+    end
+`endif
 `else
     VX_local_mem #(
         .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),

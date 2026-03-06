@@ -48,6 +48,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     ,
     VX_dxa_bank_wr_if.slave   dxa_bank_wr_if,
     output wire               dxa_done_valid,
+    input  wire               dxa_done_ready,
     output wire [BAR_ADDR_W-1:0] dxa_done_bar_addr
 `endif
 );
@@ -157,8 +158,11 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // DXA bank writes: always accepted (priority over LSU at each bank SRAM)
     assign dxa_bank_wr_if.wr_ready = 1'b1;
 
-    // DXA completion detection from dedicated bank write port
-    wire [NUM_BANKS-1:0] dxa_bank_wr_fire = dxa_bank_wr_if.wr_valid;
+    // DXA completion detection: derive per-bank fire from shared valid + byteen
+    wire [NUM_BANKS-1:0] dxa_bank_wr_fire;
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_dxa_fire
+        assign dxa_bank_wr_fire[i] = dxa_bank_wr_if.wr_valid && (|dxa_bank_wr_if.wr_byteen[i]);
+    end
 
     VX_dxa_completion_detect #(
         .NUM_BANKS(NUM_BANKS),
@@ -169,6 +173,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .bank_wr_fire   (dxa_bank_wr_fire),
         .bank_wr_tag    (dxa_bank_wr_if.wr_tag),
         .done_valid     (dxa_done_valid),
+        .done_ready     (dxa_done_ready),
         .done_bar_addr  (dxa_done_bar_addr)
     );
 `endif
@@ -186,8 +191,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
         // DXA bank writes: priority over LSU at each bank SRAM
     `ifdef EXT_DXA_ENABLE
-        wire dxa_wr_b = dxa_bank_wr_if.wr_valid[i];
-        wire [BANK_ADDR_WIDTH-1:0] bank_sram_addr  = dxa_wr_b ? dxa_bank_wr_if.wr_addr[i]   : per_bank_req_addr[i];
+        wire dxa_wr_b = dxa_bank_wr_if.wr_valid && (|dxa_bank_wr_if.wr_byteen[i]);
+        wire [BANK_ADDR_WIDTH-1:0] bank_sram_addr  = dxa_wr_b ? dxa_bank_wr_if.wr_addr : per_bank_req_addr[i];
         wire [WORD_WIDTH-1:0]      bank_sram_wdata = dxa_wr_b ? dxa_bank_wr_if.wr_data[i]   : per_bank_req_data[i];
         wire [WORD_SIZE-1:0]       bank_sram_wren  = dxa_wr_b ? dxa_bank_wr_if.wr_byteen[i] : per_bank_req_byteen[i];
     `else

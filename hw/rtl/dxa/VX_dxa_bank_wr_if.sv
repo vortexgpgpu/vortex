@@ -13,9 +13,9 @@
 
 `include "VX_define.vh"
 
-// Write-only, NUM_BANKS parallel bank write ports for DXA shared-memory path.
-// Phase 1: 1 bank write/cycle (single wr_valid bit set).
-// Phase 2: up to NUM_BANKS writes/cycle (multiple wr_valid bits set).
+// Write-only DXA shared-memory bank write interface.
+// Shared valid/addr across all banks; per-bank data and byte-enables
+// control which banks actually receive a write.
 
 interface VX_dxa_bank_wr_if #(
     parameter NUM_BANKS       = 4,
@@ -26,9 +26,9 @@ interface VX_dxa_bank_wr_if #(
 
     localparam WORD_WIDTH = WORD_SIZE * 8;
 
-    // Per-bank write signals
-    logic [NUM_BANKS-1:0]                       wr_valid;   // per-bank write enable
-    logic [NUM_BANKS-1:0][BANK_ADDR_WIDTH-1:0]  wr_addr;    // per-bank word address (within bank)
+    // Shared write control (same valid/addr for all banks)
+    logic                                       wr_valid;   // write enable (shared)
+    logic [BANK_ADDR_WIDTH-1:0]                 wr_addr;    // word address within bank (shared)
     logic [NUM_BANKS-1:0][WORD_WIDTH-1:0]       wr_data;    // per-bank write data
     logic [NUM_BANKS-1:0][WORD_SIZE-1:0]        wr_byteen;  // per-bank byte enables
     logic [TAG_WIDTH-1:0]                       wr_tag;     // completion metadata (shared)

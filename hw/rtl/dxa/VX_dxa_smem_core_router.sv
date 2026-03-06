@@ -45,10 +45,11 @@ module VX_dxa_smem_core_router import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam SEL_WIDTH       = `UP(`CLOG2(NUM_OUTPUTS));
     localparam CORE_ID_W       = `UP(CORE_ID_WIDTH);
 
-    // Flatten payload: {[core_id], tag, per_bank(byteen, data, addr), per_bank(valid)}
+    // Flatten payload: {[core_id], tag, per_bank(byteen, data), addr, valid}
     localparam BASE_PAYLOAD_W = TAG_WIDTH
-                              + NUM_BANKS * (WORD_SIZE + WORD_WIDTH + BANK_ADDR_WIDTH)
-                              + NUM_BANKS;
+                              + NUM_BANKS * (WORD_SIZE + WORD_WIDTH)
+                              + BANK_ADDR_WIDTH
+                              + 1;
     localparam PAYLOAD_W = BASE_PAYLOAD_W + ((CORE_ID_WIDTH > 0) ? CORE_ID_WIDTH : 0);
 
     if (ENABLE) begin : g_route
@@ -64,7 +65,7 @@ module VX_dxa_smem_core_router import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
         // Flatten worker bank_wr into payload vectors
         for (genvar w = 0; w < NUM_INPUTS; ++w) begin : g_flatten_in
-            assign req_valid_in[w] = |worker_bank_wr_if[w].wr_valid;
+            assign req_valid_in[w] = worker_bank_wr_if[w].wr_valid;
             if (CORE_ID_WIDTH > 0) begin : g_with_sideband
                 assign req_data_in[w] = {
                     worker_local_core_id[w][CORE_ID_WIDTH-1:0],
@@ -115,8 +116,8 @@ module VX_dxa_smem_core_router import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
         // Unflatten output back to VX_dxa_bank_wr_if + optional sideband
         for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_unflatten_out
-            wire [NUM_BANKS-1:0]                       out_wr_valid;
-            wire [NUM_BANKS-1:0][BANK_ADDR_WIDTH-1:0]  out_wr_addr;
+            wire                                       out_wr_valid;
+            wire [BANK_ADDR_WIDTH-1:0]                 out_wr_addr;
             wire [NUM_BANKS-1:0][WORD_WIDTH-1:0]       out_wr_data;
             wire [NUM_BANKS-1:0][WORD_SIZE-1:0]        out_wr_byteen;
             wire [TAG_WIDTH-1:0]                       out_wr_tag;
@@ -132,10 +133,10 @@ module VX_dxa_smem_core_router import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 assign out_local_core_id[o] = '0;
             end
 
-            // Gate per-bank valid with the xbar output valid
+            // Gate valid with xbar output valid; shared addr
+            assign out_bank_wr_if[o].wr_valid = req_valid_out[o] && out_wr_valid;
+            assign out_bank_wr_if[o].wr_addr  = out_wr_addr;
             for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_bank_gate
-                assign out_bank_wr_if[o].wr_valid[b]  = req_valid_out[o] && out_wr_valid[b];
-                assign out_bank_wr_if[o].wr_addr[b]   = out_wr_addr[b];
                 assign out_bank_wr_if[o].wr_data[b]   = out_wr_data[b];
                 assign out_bank_wr_if[o].wr_byteen[b] = out_wr_byteen[b];
             end

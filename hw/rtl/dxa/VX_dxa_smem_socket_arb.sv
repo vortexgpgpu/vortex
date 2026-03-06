@@ -38,10 +38,11 @@ module VX_dxa_smem_socket_arb import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam TAG_WIDTH       = DXA_BANK_WR_TAG_WIDTH;
     localparam SEL_WIDTH       = `UP(`CLOG2(NUM_OUTPUTS));
 
-    // Flatten payload: {tag, per_bank(byteen, data, addr), per_bank(valid)}
+    // Flatten payload: {tag, per_bank(byteen, data), addr, valid}
     localparam PAYLOAD_W = TAG_WIDTH
-                         + NUM_BANKS * (WORD_SIZE + WORD_WIDTH + BANK_ADDR_WIDTH)
-                         + NUM_BANKS;
+                         + NUM_BANKS * (WORD_SIZE + WORD_WIDTH)
+                         + BANK_ADDR_WIDTH
+                         + 1;
 
     wire [NUM_INPUTS-1:0]                 req_valid_in;
     wire [NUM_INPUTS-1:0][PAYLOAD_W-1:0]  req_data_in;
@@ -54,7 +55,7 @@ module VX_dxa_smem_socket_arb import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Flatten inputs
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_flatten
-        assign req_valid_in[i] = |bank_wr_in[i].wr_valid;
+        assign req_valid_in[i] = bank_wr_in[i].wr_valid;
         assign req_data_in[i] = {
             bank_wr_in[i].wr_tag,
             bank_wr_in[i].wr_byteen,
@@ -93,8 +94,8 @@ module VX_dxa_smem_socket_arb import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Unflatten outputs
     for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_unflatten
-        wire [NUM_BANKS-1:0]                       out_wr_valid;
-        wire [NUM_BANKS-1:0][BANK_ADDR_WIDTH-1:0]  out_wr_addr;
+        wire                                       out_wr_valid;
+        wire [BANK_ADDR_WIDTH-1:0]                 out_wr_addr;
         wire [NUM_BANKS-1:0][WORD_WIDTH-1:0]       out_wr_data;
         wire [NUM_BANKS-1:0][WORD_SIZE-1:0]        out_wr_byteen;
         wire [TAG_WIDTH-1:0]                       out_wr_tag;
@@ -102,9 +103,9 @@ module VX_dxa_smem_socket_arb import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign {out_wr_tag, out_wr_byteen, out_wr_data, out_wr_addr, out_wr_valid}
             = req_data_out[o];
 
+        assign bank_wr_out[o].wr_valid = req_valid_out[o] && out_wr_valid;
+        assign bank_wr_out[o].wr_addr  = out_wr_addr;
         for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_bank
-            assign bank_wr_out[o].wr_valid[b]  = req_valid_out[o] && out_wr_valid[b];
-            assign bank_wr_out[o].wr_addr[b]   = out_wr_addr[b];
             assign bank_wr_out[o].wr_data[b]   = out_wr_data[b];
             assign bank_wr_out[o].wr_byteen[b] = out_wr_byteen[b];
         end

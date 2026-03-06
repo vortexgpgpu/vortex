@@ -86,19 +86,21 @@ module VX_cluster import VX_gpu_pkg::*; #(
     ) socket_mem_bus_if[L2_SOCKET_REQS]();
 
 `ifdef EXT_DXA_ENABLE
+    import VX_dxa_pkg::*;
     VX_dxa_req_bus_if per_socket_dxa_req_bus_if[NUM_SOCKETS]();
     VX_mem_bus_if #(
         .DATA_SIZE (`L1_LINE_SIZE),
         .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
     ) dxa_gmem_bus_if[DXA_L2_GMEM_PORTS]();
     localparam DXA_CORE_LOCAL_BITS = `CLOG2(`SOCKET_SIZE);
-    localparam DXA_NUM_CORE_OUTPUTS = NUM_SOCKETS * `SOCKET_SIZE;
+    localparam DXA_NUM_SMEM_OUTPUTS = NUM_SOCKETS * DXA_SMEM_PORTS_PER_SOCKET;
     VX_dxa_bank_wr_if #(
         .NUM_BANKS       (`LMEM_NUM_BANKS),
         .BANK_ADDR_WIDTH (DXA_SMEM_BANK_ADDR_WIDTH),
         .WORD_SIZE       (`XLEN / 8),
         .TAG_WIDTH       (DXA_BANK_WR_TAG_WIDTH)
-    ) per_core_bank_wr_if[DXA_NUM_CORE_OUTPUTS]();
+    ) dxa_smem_bus_if[DXA_NUM_SMEM_OUTPUTS]();
+    wire [DXA_NUM_SMEM_OUTPUTS-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] dxa_smem_local_core_id;
 `endif
 
     `RESET_RELAY (l2_reset, reset);
@@ -147,15 +149,15 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .NUM_DXA_UNITS    (`NUM_DXA_UNITS),
         .GMEM_OUT_PORTS   (DXA_L2_GMEM_PORTS),
         .CORE_LOCAL_BITS  (DXA_CORE_LOCAL_BITS),
-        .NUM_CORE_OUTPUTS (DXA_NUM_CORE_OUTPUTS),
         .ENABLE           (1)
     ) dxa_core (
         .clk                   (clk),
         .reset                 (reset),
         .dcr_bus_if            (dcr_bus_if),
-        .per_socket_dxa_bus_if (per_socket_dxa_req_bus_if),
-        .per_core_bank_wr_if   (per_core_bank_wr_if),
-        .dxa_gmem_bus_if       (dxa_gmem_bus_if)
+        .req_bus_if            (per_socket_dxa_req_bus_if),
+        .smem_bus_if           (dxa_smem_bus_if),
+        .smem_local_core_id    (dxa_smem_local_core_id),
+        .gmem_bus_if           (dxa_gmem_bus_if)
     );
 
     // LSU+DXA arb: LSU gets priority ("P") to prevent DXA bulk traffic from
@@ -247,8 +249,9 @@ module VX_cluster import VX_gpu_pkg::*; #(
             .mem_bus_if     (socket_mem_bus_if[socket_id * `L1_MEM_PORTS +: `L1_MEM_PORTS]),
 
         `ifdef EXT_DXA_ENABLE
-            .dxa_req_bus_if (per_socket_dxa_req_bus_if[socket_id]),
-            .per_core_bank_wr_if(per_core_bank_wr_if[socket_id * `SOCKET_SIZE +: `SOCKET_SIZE]),
+            .dxa_req_bus_if         (per_socket_dxa_req_bus_if[socket_id]),
+            .dxa_smem_bus_if        (dxa_smem_bus_if[socket_id * DXA_SMEM_PORTS_PER_SOCKET +: DXA_SMEM_PORTS_PER_SOCKET]),
+            .dxa_smem_local_core_id (dxa_smem_local_core_id[socket_id * DXA_SMEM_PORTS_PER_SOCKET +: DXA_SMEM_PORTS_PER_SOCKET]),
         `endif
 
             .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),
