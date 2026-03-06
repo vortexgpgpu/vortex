@@ -135,6 +135,15 @@ if [ -n "$copy_folder" ]; then
   for file in "${source_files[@]}"; do
     copy_one_file "$file"
   done
+
+  # Strip .master/.slave modport qualifiers from preprocessed copies
+  # (Vivado doesn't support modport qualifiers in interface port declarations)
+  if [ "$preprocessor" != 0 ]; then
+    for f in "$copy_folder"/*.sv; do
+      [ -f "$f" ] || continue
+      sed -i 's/\.\(master\|slave\)\b//g' "$f"
+    done
+  fi
 fi
 
 # Optional filelist generation
@@ -164,19 +173,23 @@ if [ "$output_file" != "" ]; then
             # All files have been copied; just point to the copy folder
             echo "+incdir+$(realpath "$copy_folder")"
             find "$(realpath "$copy_folder")" -maxdepth 1 -type f -name "*_pkg.sv" -print
-            find "$(realpath "$copy_folder")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" -print
+            find "$(realpath "$copy_folder")" -maxdepth 1 -type f -name "*_if.sv" -print
+            find "$(realpath "$copy_folder")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" ! -name "*_if.sv" -print
         else
             # Use original include dirs
             for dir in ${includes[@]}; do
                 echo "+incdir+$(realpath "$dir")"
             done
 
-            # *_pkg.sv and .v/.sv from include dirs
+            # *_pkg.sv, then *_if.sv (interfaces), then remaining .v/.sv from include dirs
             for dir in ${includes[@]}; do
                 find "$(realpath "$dir")" -maxdepth 1 -type f -name "*_pkg.sv" -print
             done
             for dir in ${includes[@]}; do
-                find "$(realpath "$dir")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" -print
+                find "$(realpath "$dir")" -maxdepth 1 -type f -name "*_if.sv" -print
+            done
+            for dir in ${includes[@]}; do
+                find "$(realpath "$dir")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" ! -name "*_if.sv" -print
             done
 
             # add source files
