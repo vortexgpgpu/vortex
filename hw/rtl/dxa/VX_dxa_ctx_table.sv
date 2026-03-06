@@ -30,11 +30,18 @@ module VX_dxa_ctx_table import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input wire [`XLEN-1:0] req_rs2,
     input wire [BAR_ADDR_W-1:0] req_bar_addr,
 
+    input wire [DXA_CTX_BITS-1:0] read_ctx_idx,
     output wire [BAR_ADDR_W-1:0] issue_bar_addr,
     output wire [DXA_DESC_SLOT_W-1:0] issue_desc_slot,
     output wire [`XLEN-1:0] issue_smem_addr,
     output wire [4:0][`XLEN-1:0] issue_coords,
-    output wire issue_ctx_valid
+    output wire issue_ctx_valid,
+
+    input wire set_pending_fire,
+    input wire [DXA_CTX_BITS-1:0] set_pending_idx,
+    input wire clear_pending_fire,
+    input wire [DXA_CTX_BITS-1:0] clear_pending_idx,
+    output wire [DXA_CTX_COUNT-1:0] ctx_pending
 );
     // Next-gen skeleton: keep context-table as an explicit module.
     // Functional behavior is currently equivalent to the legacy issue_state.
@@ -52,11 +59,17 @@ module VX_dxa_ctx_table import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .req_rs1        (req_rs1),
         .req_rs2        (req_rs2),
         .req_bar_addr   (req_bar_addr),
+        .read_ctx_idx   (read_ctx_idx),
         .issue_bar_addr (issue_bar_addr),
         .issue_desc_slot(issue_desc_slot),
         .issue_smem_addr(issue_smem_addr),
         .issue_coords   (issue_coords),
-        .issue_ctx_valid(issue_ctx_valid)
+        .issue_ctx_valid(issue_ctx_valid),
+        .set_pending_fire  (set_pending_fire),
+        .set_pending_idx   (set_pending_idx),
+        .clear_pending_fire(clear_pending_fire),
+        .clear_pending_idx (clear_pending_idx),
+        .ctx_pending       (ctx_pending)
     );
 
 endmodule

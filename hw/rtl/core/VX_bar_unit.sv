@@ -73,15 +73,24 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 
         // local barrier scheduling
         if (req_valid && ~req_data.is_global) begin
+            // Apply any folded txbar event that arrived concurrently with a BAR instruction.
+            // This ensures the event is reflected in events_r before checking unlock.
+            if (req_data.pending_event) begin
+                if (req_data.pending_event_phase) begin
+                    events_n = events_n + EVENT_WIDTH'(1);
+                end else begin
+                    events_n = events_n - EVENT_WIDTH'(1);
+                end
+            end
             if (req_data.is_event) begin
                 // event tracking
                 if (req_data.phase) begin
-                    events_n = events_r + EVENT_WIDTH'(1);
+                    events_n = events_n + EVENT_WIDTH'(1);
                 end else begin
-                    events_n = events_r - EVENT_WIDTH'(1);
+                    events_n = events_n - EVENT_WIDTH'(1);
                 end
-                // unlock warps if decrementing event to 0 and all all warps have arrived
-                if ((req_data.phase == 0) && (events_r == EVENT_WIDTH'(1)) && (count_r == 0)) begin
+                // unlock warps if decrementing event to 0 and all warps have arrived
+                if ((req_data.phase == 0) && (events_n == EVENT_WIDTH'(0)) && (count_r == 0)) begin
                     mask_n = '0;
                     unlock_valid_n = 1; // release waiting warps
                     unlock_mask_n = mask_r;
@@ -91,11 +100,16 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                 // barrier arrival
                 if (count_r == NW_WIDTH'(req_data.size_m1)) begin
                     count_n = '0;
-                    if (events_r == 0) begin
+                    if (events_n == 0) begin
                         mask_n = '0;
                         unlock_valid_n = 1; // release waiting warps
                         unlock_mask_n = req_data.is_sync ? wait_mask : mask_r;
                         phase_n = next_phase; // advance phase
+                    end else if (req_data.is_sync) begin
+                        // All warps arrived but events still outstanding.
+                        // Add arriving warp to wait mask so it gets released
+                        // when events eventually reach 0.
+                        mask_n = wait_mask;
                     end
                 end else begin
                     count_n = next_count;
@@ -250,6 +264,36 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     assign read_phase   = phase_async;
     assign unlock_valid = unlock_valid_r;
     assign unlock_mask  = unlock_mask_r;
+
+`ifdef DBG_TRACE_DXA
+    always @(posedge clk) begin
+        if (req_valid && ~req_data.is_global && !reset) begin
+            `TRACE(2, ("%t: %s-bar_unit: addr=0x%0h is_event=%b is_arrive=%b phase=%b pending_event=%b pending_phase=%b count_r=%0d events_r=%0d events_n=%0d mask_r=%b unlock=%b wid=%0d size_m1=%0d\n",
+                $time, INSTANCE_ID, store_waddr, req_data.is_event, req_data.is_arrive, req_data.phase,
+                req_data.pending_event, req_data.pending_event_phase,
+                count_r, events_r, events_n, mask_r, unlock_valid_n, req_wid, req_data.size_m1))
+        end
+    end
+`endif
+
+`ifdef DBG_TRACE_DXA_TIMELINE
+    reg [BAR_ADDR_W-1:0] tl_unlock_bar_r;
+    always @(posedge clk) begin
+        tl_unlock_bar_r <= store_waddr;
+    end
+    always @(posedge clk) begin
+        if (!reset) begin
+            if (req_valid && ~req_data.is_global && req_data.is_arrive) begin
+                $write("DXA_TL,%0d,BAR_ARRIVE,%0d,%0d,%0d,count=%0d size_m1=%0d\n",
+                    $time, CORE_ID, req_wid, store_waddr, count_r, req_data.size_m1);
+            end
+            if (unlock_valid_r) begin
+                $write("DXA_TL,%0d,BAR_UNLOCK,%0d,0,%0d,mask=%b\n",
+                    $time, CORE_ID, tl_unlock_bar_r, unlock_mask_r);
+            end
+        end
+    end
+`endif
 
     if (USE_GBAR) begin : g_gbar
 
