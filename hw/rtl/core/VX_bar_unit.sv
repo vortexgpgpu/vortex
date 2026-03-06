@@ -28,7 +28,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     output wire               read_phase,  // asynchronous phase bit return at read_addr
 
     // global barrier interface
-    output VX_gbar_bus_if.master gbar_bus_if,
+    VX_gbar_bus_if.master gbar_bus_if,
 
     // scheduler interface
     input wire [`NUM_WARPS-1:0] active_warps,

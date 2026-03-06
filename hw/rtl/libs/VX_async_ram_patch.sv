@@ -13,44 +13,36 @@
 
 `include "VX_platform.vh"
 
-`ifndef ASIC
-    `define RAM_INITIALIZATION \
-        if (INIT_ENABLE != 0) begin : g_init \
-            if (INIT_FILE != "") begin : g_file \
-                initial $readmemh(INIT_FILE, ram); \
-            end else begin : g_value \
-                initial begin \
-                    for (integer i = 0; i < SIZE; ++i) begin : g_i \
-                        ram[i] = INIT_VALUE; \
-                    end \
+`define RAM_INITIALIZATION \
+    if (INIT_ENABLE != 0) begin : g_init \
+        if (INIT_FILE != "") begin : g_file \
+            initial $readmemh(INIT_FILE, ram); \
+        end else begin : g_value \
+            initial begin \
+                for (integer i = 0; i < SIZE; ++i) begin : g_i \
+                    ram[i] = INIT_VALUE; \
                 end \
             end \
-        end
-`else
-    `define RAM_INITIALIZATION
-`endif
+        end \
+    end
 
-`define SYNC_RAM_WF_BLOCK(__d, __re_n, __we, __ra_n, __wa) \
-    `RAM_ATTRIBUTES reg [DATAW-1:0] ram [0:SIZE-1]; \
+`define SYNC_RAM_WF_BLOCK(__d, __re, __we, __ra, __wa) \
+    `RAM_ATTRIBUTES `RW_RAM_CHECK reg [DATAW-1:0] ram [0:SIZE-1]; \
     `RAM_INITIALIZATION \
-    reg [DATAW-1:0] rdata_r; \
     reg [ADDRW-1:0] raddr_r; \
     always @(posedge clk) begin \
         if (__we) begin \
             ram[__wa] <= wdata; \
         end \
-        if (__re_n) begin \
-            rdata_r <= ram[__ra_n]; \
-            raddr_r <= __ra_n; \
+        if (__re) begin \
+            raddr_r <= __ra; \
         end \
     end \
-    wire is_rdw_hazard = __we && (__wa == raddr_r); \
-    assign __d = is_rdw_hazard ? wdata : rdata_r
+    assign __d = ram[raddr_r]
 
-`define SYNC_RAM_WF_WREN_BLOCK(__d, __re_n, __we, __ra_n, __wa) \
-    `RAM_ATTRIBUTES reg [DATAW-1:0] ram [0:SIZE-1]; \
+`define SYNC_RAM_WF_WREN_BLOCK(__d, __re, __we, __ra, __wa) \
+    `RAM_ATTRIBUTES `RW_RAM_CHECK reg [DATAW-1:0] ram [0:SIZE-1]; \
     `RAM_INITIALIZATION \
-    reg [DATAW-1:0] rdata_r; \
     reg [ADDRW-1:0] raddr_r; \
     always @(posedge clk) begin \
         if (__we) begin \
@@ -60,17 +52,13 @@
                 end \
             end \
         end \
-        if (__re_n) begin \
-            rdata_r <= ram[__ra_n]; \
-            raddr_r <= __ra_n; \
+        if (__re) begin \
+            raddr_r <= __ra; \
         end \
     end \
-    wire is_rdw_hazard = __we && (__wa == raddr_r); \
-    for (genvar i = 0; i < WRENW; ++i) begin : g_i \
-        assign __d[i * WSELW +: WSELW] = (is_rdw_hazard && wren[i]) ? wdata[i * WSELW +: WSELW] : rdata_r[i * WSELW +: WSELW]; \
-    end
+    assign __d = ram[raddr_r]
 
-`define SYNC_RAM_RF_BLOCK(__d, __re_n, __we, __ra_n, __wa) \
+`define SYNC_RAM_RF_BLOCK(__d, __re, __we, __ra, __wa) \
     `RAM_ATTRIBUTES reg [DATAW-1:0] ram [0:SIZE-1]; \
     `RAM_INITIALIZATION \
     reg [DATAW-1:0] rdata_r; \
@@ -78,13 +66,13 @@
         if (__we) begin \
             ram[__wa] <= wdata; \
         end \
-        if (__re_n) begin \
-            rdata_r <= ram[__ra_n]; \
+        if (__re) begin \
+            rdata_r <= ram[__ra]; \
         end \
     end \
     assign __d = rdata_r
 
-`define SYNC_RAM_RF_WREN_BLOCK(__d, __re_n, __we, __ra_n, __wa) \
+`define SYNC_RAM_RF_WREN_BLOCK(__d, __re, __we, __ra, __wa) \
     `RAM_ATTRIBUTES reg [DATAW-1:0] ram [0:SIZE-1]; \
     `RAM_INITIALIZATION \
     reg [DATAW-1:0] rdata_r; \
@@ -96,8 +84,8 @@
                 end \
             end \
         end \
-        if (__re_n) begin \
-            rdata_r <= ram[__ra_n]; \
+        if (__re) begin \
+            rdata_r <= ram[__ra]; \
         end \
     end \
     assign __d = rdata_r
