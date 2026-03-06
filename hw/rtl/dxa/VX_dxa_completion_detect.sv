@@ -25,6 +25,7 @@ module VX_dxa_completion_detect import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [TAG_WIDTH-1:0]                bank_wr_tag,    // shared tag: {last_pkt, bar_addr}
 
     output wire                                done_valid,
+    input  wire                                done_ready,
     output wire [BAR_ADDR_W-1:0]               done_bar_addr
 );
 `ifdef EXT_DXA_ENABLE
@@ -33,22 +34,32 @@ module VX_dxa_completion_detect import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire is_last = bank_wr_tag[TAG_WIDTH-1];
     wire any_dxa_wr = |bank_wr_fire;
 
-    // Simple combinational output — at most 1 done event per cycle
-    // (each worker issues 1 DXA write/cycle, shared tag across all banks).
-    // Use a single pending slot to handle back-to-back done events.
+    // Valid/ready handshake: hold done_valid high until downstream accepts.
+    // Use a single pending slot to handle backpressure and back-to-back events.
 
     reg pending_valid_r;
     reg [BAR_ADDR_W-1:0] pending_bar_r;
 
     wire done_fire = any_dxa_wr && is_last;
     wire [BAR_ADDR_W-1:0] done_fire_bar = bank_wr_tag[BAR_ADDR_W-1:0];
+    wire done_accepted = done_valid && done_ready;
+
+`ifdef DBG_TRACE_DXA
+    always @(posedge clk) begin
+        if (any_dxa_wr && !reset) begin
+            `TRACE(2, ("%t: dxa-completion-detect: bank_wr_fire=%b tag=0x%0h is_last=%b done_fire=%b pending=%b done_valid=%b done_ready=%b\n",
+                $time, bank_wr_fire, bank_wr_tag, is_last, done_fire, pending_valid_r, done_valid, done_ready))
+        end
+        if (done_accepted && !reset) begin
+            `TRACE(2, ("%t: dxa-completion-detect: ACCEPTED bar_addr=0x%0h\n",
+                $time, done_bar_addr))
+        end
+    end
+`endif
 
     // Priority: emit pending first, then same-cycle fire
-    wire emit_pending = pending_valid_r;
-    wire emit_new = done_fire && ~pending_valid_r;
-
-    assign done_valid = emit_pending || emit_new;
-    assign done_bar_addr = emit_pending ? pending_bar_r : done_fire_bar;
+    assign done_valid = pending_valid_r || (done_fire && ~pending_valid_r);
+    assign done_bar_addr = pending_valid_r ? pending_bar_r : done_fire_bar;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -56,18 +67,25 @@ module VX_dxa_completion_detect import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             pending_bar_r <= '0;
         end else begin
             if (pending_valid_r) begin
-                // Pending was emitted this cycle
-                if (done_fire) begin
-                    // New event arrived while emitting pending — queue it
+                if (done_accepted) begin
+                    // Pending was accepted by downstream
+                    if (done_fire) begin
+                        // New event same cycle — refill pending
+                        pending_valid_r <= 1'b1;
+                        pending_bar_r <= done_fire_bar;
+                    end else begin
+                        pending_valid_r <= 1'b0;
+                        pending_bar_r <= '0;
+                    end
+                end
+                // If !done_accepted: keep pending as-is (hold valid high)
+            end else if (done_fire) begin
+                if (!done_ready) begin
+                    // Not accepted — queue it in pending
                     pending_valid_r <= 1'b1;
                     pending_bar_r <= done_fire_bar;
-                end else begin
-                    pending_valid_r <= 1'b0;
-                    pending_bar_r <= '0;
                 end
-            end else if (done_fire) begin
-                // No pending, new event emitted directly — no queue needed
-                pending_valid_r <= 1'b0;
+                // If done_ready=1: accepted immediately, no pending needed
             end
         end
     end

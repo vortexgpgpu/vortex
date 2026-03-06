@@ -19,7 +19,6 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter NUM_DXA_UNITS = 1,
     parameter GMEM_OUT_PORTS = 1,
     parameter CORE_LOCAL_BITS = 0,
-    parameter NUM_CORE_OUTPUTS = DXA_NUM_SOCKETS * (1 << CORE_LOCAL_BITS),
     parameter ENABLE = 0
 ) (
     input wire clk,
@@ -27,16 +26,16 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     VX_dcr_bus_if.slave dcr_bus_if,
 
-    VX_dxa_req_bus_if.slave per_socket_dxa_bus_if[DXA_NUM_SOCKETS],
-    VX_dxa_bank_wr_if.master per_core_bank_wr_if[NUM_CORE_OUTPUTS],
-    VX_mem_bus_if.master dxa_gmem_bus_if[GMEM_OUT_PORTS]
+    VX_dxa_req_bus_if.slave req_bus_if[DXA_NUM_SOCKETS],
+    VX_dxa_bank_wr_if.master smem_bus_if[DXA_NUM_SOCKETS * DXA_SMEM_PORTS_PER_SOCKET],
+    output wire [DXA_NUM_SOCKETS * DXA_SMEM_PORTS_PER_SOCKET-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] smem_local_core_id,
+    VX_mem_bus_if.master gmem_bus_if[GMEM_OUT_PORTS]
 );
 
-    // Whether we need a socket-level arb (fewer router outputs than total cores).
-    localparam NEED_SOCKET_ARB  = (DXA_SMEM_PORTS_PER_SOCKET < `SOCKET_SIZE);
-    localparam ROUTER_OUTPUTS   = NEED_SOCKET_ARB ? (DXA_NUM_SOCKETS * DXA_SMEM_PORTS_PER_SOCKET) : NUM_CORE_OUTPUTS;
-    localparam ROUTER_SEL_W     = `UP(`CLOG2(ROUTER_OUTPUTS));
-    localparam ROUTER_CORE_ID_W = NEED_SOCKET_ARB ? DXA_SMEM_LOCAL_CORE_BITS : 0;
+    localparam NUM_SMEM_OUTPUTS  = DXA_NUM_SOCKETS * DXA_SMEM_PORTS_PER_SOCKET;
+    localparam NEED_SOCKET_ARB   = (DXA_SMEM_PORTS_PER_SOCKET < `SOCKET_SIZE);
+    localparam ROUTER_SEL_W      = `UP(`CLOG2(NUM_SMEM_OUTPUTS));
+    localparam ROUTER_CORE_ID_W  = NEED_SOCKET_ARB ? DXA_SMEM_LOCAL_CORE_BITS : 0;
 
     VX_dxa_req_bus_if cluster_dxa_bus_if[NUM_DXA_UNITS]();
 
@@ -57,7 +56,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     ) dxa_ctrl (
         .clk                  (clk),
         .reset                (reset),
-        .per_socket_dxa_bus_if(per_socket_dxa_bus_if),
+        .per_socket_dxa_bus_if(req_bus_if),
         .cluster_dxa_bus_if   (cluster_dxa_bus_if)
     );
 
@@ -92,7 +91,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (worker_gmem_bus_if),
-        .bus_out_if (dxa_gmem_bus_if)
+        .bus_out_if (gmem_bus_if)
     );
 
     // Compute routing sel and local_core_id sideband for each worker.
@@ -101,85 +100,32 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     for (genvar w = 0; w < NUM_DXA_UNITS; ++w) begin : g_worker_sel
         if (NEED_SOCKET_ARB) begin : g_reduced
-            // socket_id = core_id >> CORE_LOCAL_BITS
-            // local_core_id = core_id[CORE_LOCAL_BITS-1:0]
-            // port_within_socket = local_core_id % PORTS_PER_SOCKET
             localparam PORTS_BITS = `CLOG2(DXA_SMEM_PORTS_PER_SOCKET);
             wire [`UP(CORE_LOCAL_BITS)-1:0] local_cid = worker_smem_core_id[w][`UP(CORE_LOCAL_BITS)-1:0];
             wire [NC_WIDTH-1:0] socket_id = worker_smem_core_id[w] >> CORE_LOCAL_BITS;
-            assign worker_output_sel[w] = ROUTER_SEL_W'(socket_id * DXA_SMEM_PORTS_PER_SOCKET + local_cid[`UP(PORTS_BITS)-1:0]);
+            assign worker_output_sel[w] = ROUTER_SEL_W'(32'(socket_id) * DXA_SMEM_PORTS_PER_SOCKET + 32'(local_cid[`UP(PORTS_BITS)-1:0]));
             assign worker_local_core_id[w] = `UP(ROUTER_CORE_ID_W)'(local_cid);
-        end else begin : g_passthrough
+        end else begin : g_direct
             assign worker_output_sel[w] = ROUTER_SEL_W'(worker_smem_core_id[w]);
             assign worker_local_core_id[w] = '0;
         end
     end
 
-    if (NEED_SOCKET_ARB) begin : g_socket_arb
-        // Router outputs fewer ports; socket_arb expands to per-core.
-        VX_dxa_bank_wr_if #(
-            .NUM_BANKS       (`LMEM_NUM_BANKS),
-            .BANK_ADDR_WIDTH (DXA_SMEM_BANK_ADDR_WIDTH),
-            .WORD_SIZE       (`XLEN / 8),
-            .TAG_WIDTH       (DXA_BANK_WR_TAG_WIDTH)
-        ) router_out_bank_wr_if[ROUTER_OUTPUTS]();
-
-        wire [ROUTER_OUTPUTS-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] router_out_local_core_id;
-
-        VX_dxa_smem_core_router #(
-            .NUM_INPUTS    (NUM_DXA_UNITS),
-            .NUM_OUTPUTS   (ROUTER_OUTPUTS),
-            .CORE_ID_WIDTH (ROUTER_CORE_ID_W),
-            .ENABLE        (ENABLE)
-        ) dxa_smem_router (
-            .clk                  (clk),
-            .reset                (reset),
-            .worker_bank_wr_if    (worker_bank_wr_if),
-            .worker_output_sel    (worker_output_sel),
-            .worker_local_core_id (worker_local_core_id),
-            .out_bank_wr_if       (router_out_bank_wr_if),
-            .out_local_core_id    (router_out_local_core_id)
-        );
-
-        // Per-socket arb: PORTS_PER_SOCKET → SOCKET_SIZE
-        for (genvar s = 0; s < DXA_NUM_SOCKETS; ++s) begin : g_per_socket_arb
-            /* verilator lint_off UNUSEDSIGNAL */
-            wire [`SOCKET_SIZE-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] socket_arb_lcid_out;
-            /* verilator lint_on UNUSEDSIGNAL */
-
-            VX_dxa_smem_socket_arb #(
-                .NUM_INPUTS  (DXA_SMEM_PORTS_PER_SOCKET),
-                .NUM_OUTPUTS (`SOCKET_SIZE)
-            ) socket_arb (
-                .clk              (clk),
-                .reset            (reset),
-                .bank_wr_in       (router_out_bank_wr_if[s * DXA_SMEM_PORTS_PER_SOCKET +: DXA_SMEM_PORTS_PER_SOCKET]),
-                .local_core_id_in (router_out_local_core_id[s * DXA_SMEM_PORTS_PER_SOCKET +: DXA_SMEM_PORTS_PER_SOCKET]),
-                .bank_wr_out      (per_core_bank_wr_if[s * `SOCKET_SIZE +: `SOCKET_SIZE]),
-                .local_core_id_out(socket_arb_lcid_out)
-            );
-        end
-
-    end else begin : g_direct
-        // Direct 1:1 routing (PORTS_PER_SOCKET == SOCKET_SIZE).
-        /* verilator lint_off UNUSEDSIGNAL */
-        wire [NUM_CORE_OUTPUTS-1:0][`UP(ROUTER_CORE_ID_W)-1:0] unused_router_local_core_id;
-        /* verilator lint_on UNUSEDSIGNAL */
-
-        VX_dxa_smem_core_router #(
-            .NUM_INPUTS    (NUM_DXA_UNITS),
-            .NUM_OUTPUTS   (NUM_CORE_OUTPUTS),
-            .CORE_ID_WIDTH (0),
-            .ENABLE        (ENABLE)
-        ) dxa_smem_router (
-            .clk                  (clk),
-            .reset                (reset),
-            .worker_bank_wr_if    (worker_bank_wr_if),
-            .worker_output_sel    (worker_output_sel),
-            .worker_local_core_id (worker_local_core_id),
-            .out_bank_wr_if       (per_core_bank_wr_if),
-            .out_local_core_id    (unused_router_local_core_id)
-        );
-    end
+    // Single router with local_core_id sideband.
+    // Socket-level fan-out (if needed) is handled downstream in VX_socket.
+    VX_dxa_smem_core_router #(
+        .NUM_INPUTS    (NUM_DXA_UNITS),
+        .NUM_OUTPUTS   (NUM_SMEM_OUTPUTS),
+        .CORE_ID_WIDTH (ROUTER_CORE_ID_W),
+        .ENABLE        (ENABLE)
+    ) dxa_smem_router (
+        .clk                  (clk),
+        .reset                (reset),
+        .worker_bank_wr_if    (worker_bank_wr_if),
+        .worker_output_sel    (worker_output_sel),
+        .worker_local_core_id (worker_local_core_id),
+        .out_bank_wr_if       (smem_bus_if),
+        .out_local_core_id    (smem_local_core_id)
+    );
 
 endmodule

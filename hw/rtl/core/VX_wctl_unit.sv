@@ -138,13 +138,40 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign bar_valid    = wctl_bar_enable || txbar_bus_if.valid;
     assign bar.id       = rs1_data[16 +: NB_BITS];
     assign bar.is_event = txbar_bus_if.valid && ~wctl_bar_enable;
-    assign bar.is_sync  = execute_if.data.op_args.wctl.is_sync_bar;
-    assign bar.is_global= rs1_data[31];
-    assign bar.is_arrive= execute_if.data.op_args.wctl.is_bar_arrive || execute_if.data.op_args.wctl.is_sync_bar;
-    assign bar.phase    = wctl_bar_enable ? rs2_data[0] : txbar_bus_if.data.is_done;
+    assign bar.is_sync  = wctl_bar_enable ? execute_if.data.op_args.wctl.is_sync_bar : 1'b0;
+    assign bar.is_global= wctl_bar_enable ? rs1_data[31] : 1'b0;
+    assign bar.is_arrive= wctl_bar_enable ? (execute_if.data.op_args.wctl.is_bar_arrive || execute_if.data.op_args.wctl.is_sync_bar) : 1'b0;
+    assign bar.phase    = wctl_bar_enable ? rs2_data[0] : ~txbar_bus_if.data.is_done;
     assign bar.size_m1  = rs2_data[BAR_SIZE_W-1:0] - BAR_SIZE_W'(1);
 
-    assign txbar_bus_if.ready = ~wctl_bar_enable;
+    // When a BAR instruction and a txbar event arrive simultaneously
+    // AND target the same barrier address, fold the txbar event into
+    // the BAR request so the bar_unit can apply the event atomically
+    // before checking the unlock condition. If they target different
+    // addresses, block the txbar (it will be processed next free cycle).
+    wire same_bar_addr = (txbar_bus_if.data.addr == wctl_bar_addr);
+    assign bar.pending_event       = wctl_bar_enable && txbar_bus_if.valid && same_bar_addr;
+    assign bar.pending_event_phase = ~txbar_bus_if.data.is_done;
+
+    // Accept txbar event: either when no BAR is executing (normal path),
+    // or when a BAR IS executing AND targets the same barrier (folded).
+    // Block txbar when BAR targets a different barrier to avoid losing the event.
+    assign txbar_bus_if.ready = ~wctl_bar_enable || same_bar_addr;
+
+`ifdef DBG_TRACE_DXA
+    always @(posedge clk) begin
+        if (txbar_bus_if.valid && !reset) begin
+            `TRACE(2, ("%t: %s-wctl: txbar valid=%b ready=%b is_done=%b addr=0x%0h wctl_bar_enable=%b same_addr=%b pending=%b\n",
+                $time, INSTANCE_ID, txbar_bus_if.valid, txbar_bus_if.ready, txbar_bus_if.data.is_done,
+                txbar_bus_if.data.addr, wctl_bar_enable, same_bar_addr, bar.pending_event))
+        end
+        if (wctl_bar_enable && !reset) begin
+            `TRACE(2, ("%t: %s-wctl: BAR wid=%0d bar_addr=0x%0h is_arrive=%b is_sync=%b phase=%b\n",
+                $time, INSTANCE_ID, execute_if.data.header.wid, wctl_bar_addr,
+                bar.is_arrive, bar.is_sync, bar.phase))
+        end
+    end
+`endif
 
     // wspawn
 

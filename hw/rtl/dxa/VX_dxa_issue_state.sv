@@ -22,6 +22,7 @@ module VX_dxa_issue_state import VX_gpu_pkg::*; #(
     input wire clk,
     input wire reset,
 
+    // Write port (SETUP/COORD ops)
     input wire req_fire,
     input wire [2:0] req_op,
     input wire [DXA_CTX_BITS-1:0] req_ctx_idx,
@@ -29,11 +30,21 @@ module VX_dxa_issue_state import VX_gpu_pkg::*; #(
     input wire [`XLEN-1:0] req_rs2,
     input wire [BAR_ADDR_W-1:0] req_bar_addr,
 
+    // Independent read port (for ISSUE dispatch)
+    input wire [DXA_CTX_BITS-1:0] read_ctx_idx,
     output wire [BAR_ADDR_W-1:0] issue_bar_addr,
     output wire [DXA_DESC_SLOT_W-1:0] issue_desc_slot,
     output wire [`XLEN-1:0] issue_smem_addr,
     output wire [4:0][`XLEN-1:0] issue_coords,
-    output wire issue_ctx_valid
+    output wire issue_ctx_valid,
+
+    // Pending lock: prevents SETUP from overwriting a context that
+    // has been pushed to the ISSUE FIFO but not yet dispatched to a worker.
+    input wire set_pending_fire,
+    input wire [DXA_CTX_BITS-1:0] set_pending_idx,
+    input wire clear_pending_fire,
+    input wire [DXA_CTX_BITS-1:0] clear_pending_idx,
+    output wire [DXA_CTX_COUNT-1:0] ctx_pending
 );
     localparam DXA_OP_SETUP   = 3'd0;
     localparam DXA_OP_COORD01 = 3'd1;
@@ -45,12 +56,14 @@ module VX_dxa_issue_state import VX_gpu_pkg::*; #(
     reg [DXA_CTX_COUNT-1:0][`XLEN-1:0] ctx_smem_addr_r;
     reg [DXA_CTX_COUNT-1:0][4:0][`XLEN-1:0] ctx_coords_r;
     reg [DXA_CTX_COUNT-1:0] ctx_valid_r;
+    reg [DXA_CTX_COUNT-1:0] ctx_pending_r;
 
-    assign issue_bar_addr = ctxbar_addr_r[req_ctx_idx];
-    assign issue_desc_slot = ctx_desc_slot_r[req_ctx_idx];
-    assign issue_smem_addr = ctx_smem_addr_r[req_ctx_idx];
-    assign issue_coords = ctx_coords_r[req_ctx_idx];
-    assign issue_ctx_valid = ctx_valid_r[req_ctx_idx];
+    assign ctx_pending = ctx_pending_r;
+    assign issue_bar_addr = ctxbar_addr_r[read_ctx_idx];
+    assign issue_desc_slot = ctx_desc_slot_r[read_ctx_idx];
+    assign issue_smem_addr = ctx_smem_addr_r[read_ctx_idx];
+    assign issue_coords = ctx_coords_r[read_ctx_idx];
+    assign issue_ctx_valid = ctx_valid_r[read_ctx_idx];
 
     always @(posedge clk) begin
         if (reset) begin
@@ -93,6 +106,23 @@ module VX_dxa_issue_state import VX_gpu_pkg::*; #(
                 default: begin
                 end
             endcase
+        end
+    end
+
+    // Pending flag: set when ISSUE enqueues to FIFO, cleared on worker dispatch.
+    // Set takes priority over clear for same idx (new command queued same cycle).
+    always @(posedge clk) begin
+        if (reset) begin
+            ctx_pending_r <= '0;
+        end else begin
+            // Clear on dispatch
+            if (clear_pending_fire) begin
+                ctx_pending_r[clear_pending_idx] <= 1'b0;
+            end
+            // Set on ISSUE enqueue (higher priority than clear for same idx)
+            if (set_pending_fire) begin
+                ctx_pending_r[set_pending_idx] <= 1'b1;
+            end
         end
     end
 

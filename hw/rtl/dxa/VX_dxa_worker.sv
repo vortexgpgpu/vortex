@@ -12,8 +12,9 @@
 // limitations under the License.
 
 // DXA worker: orchestrates AG→RRS→WBC pipeline for non-blocking transfers.
-// Single-transaction service: accept ISSUE when idle, run to completion,
-// signal done through SMEM-tag completion path, return to idle.
+// Stateless single-transaction executor: accept launch when idle, run to
+// completion, signal done, return to idle. Context table and dispatch queue
+// are managed at the unified_engine level.
 
 `include "VX_define.vh"
 
@@ -24,8 +25,18 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    VX_dxa_req_bus_if.slave dxa_req_bus_if,
+    // Launch interface (from unified_engine dispatch)
+    input wire                          launch_valid,
+    output wire                         launch_ready,
+    input wire [NC_WIDTH-1:0]           launch_core_id,
+    input wire [UUID_WIDTH-1:0]         launch_uuid,
+    input wire [NW_WIDTH-1:0]           launch_wid,
+    input wire [BAR_ADDR_W-1:0]         launch_bar_addr,
+    input wire [DXA_DESC_SLOT_W-1:0]    launch_desc_slot,
+    input wire [`XLEN-1:0]              launch_smem_addr,
+    input wire [4:0][`XLEN-1:0]         launch_coords,
 
+    // Descriptor table read port (shared desc_table in unified_engine)
     output wire [DXA_DESC_SLOT_W-1:0] issue_desc_slot_out,
     input wire [`MEM_ADDR_WIDTH-1:0] issue_base_addr,
     input wire [31:0] issue_desc_meta,
@@ -62,9 +73,6 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam BANK_WORD_WIDTH = BANK_WORD_SIZE * 8;
     localparam BANK_ADDR_WIDTH = DXA_SMEM_BANK_ADDR_WIDTH;
 
-    localparam DXA_CTX_COUNT   = `NUM_CORES * `NUM_WARPS;
-    localparam DXA_CTX_BITS    = `UP(`CLOG2(DXA_CTX_COUNT));
-
 `ifdef DXA_NB_MAX_OUTSTANDING
     localparam MAX_OUTSTANDING = `DXA_NB_MAX_OUTSTANDING;
 `else
@@ -78,78 +86,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    // ---- Request buffering and decode ----
-    wire req_valid;
-    wire [DXA_REQ_DATAW-1:0] req_data_raw;
-    wire req_accept;
-    wire req_fire;
-    wire [NC_WIDTH-1:0] req_core_id;
-    wire [UUID_WIDTH-1:0] req_uuid;
-    wire [NW_WIDTH-1:0] req_wid;
-    wire [2:0] req_op;
-    wire [`XLEN-1:0] req_rs1;
-    wire [`XLEN-1:0] req_rs2;
+    // ---- Desc slot drives desc_table read port ----
+    assign issue_desc_slot_out = launch_desc_slot;
 
-    VX_elastic_buffer #(
-        .DATAW (DXA_REQ_DATAW),
-        .SIZE  (32)
-    ) req_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (dxa_req_bus_if.req_valid),
-        .ready_in  (dxa_req_bus_if.req_ready),
-        .data_in   (dxa_req_bus_if.req_data),
-        .valid_out (req_valid),
-        .ready_out (req_accept),
-        .data_out  (req_data_raw)
-    );
-
-    assign {req_core_id, req_uuid, req_wid, req_op, req_rs1, req_rs2} = req_data_raw;
-
-    // ---- Context table (issue state) ----
-    wire [DXA_CTX_BITS-1:0] req_core_ofs = DXA_CTX_BITS'(req_core_id) * DXA_CTX_BITS'(`NUM_WARPS);
-    wire [DXA_CTX_BITS-1:0] req_ctx_idx = req_core_ofs + DXA_CTX_BITS'(req_wid);
-
-    wire setup0_is_packed = req_rs2[31];
-    wire [BAR_ADDR_W-1:0] req_bar_addr;
-    if (`NUM_WARPS > 1) begin : g_bar_addr_w
-        assign req_bar_addr = setup0_is_packed
-                            ? {req_rs2[4 +: NW_BITS], req_rs2[20 +: NB_BITS]}
-                            : {req_rs2[NW_BITS-1:0], req_rs2[16 +: NB_BITS]};
-    end else begin : g_bar_addr_wo
-        assign req_bar_addr = setup0_is_packed
-                            ? req_rs2[20 +: NB_BITS]
-                            : req_rs2[16 +: NB_BITS];
-    end
-
-    wire [BAR_ADDR_W-1:0] issue_bar_addr;
-    wire [DXA_DESC_SLOT_W-1:0] issue_desc_slot;
-    wire [`XLEN-1:0] issue_smem_addr;
-    wire [4:0][`XLEN-1:0] issue_coords;
-    wire issue_ctx_valid;
-
-    VX_dxa_ctx_table #(
-        .DXA_CTX_COUNT     (DXA_CTX_COUNT),
-        .DXA_CTX_BITS      (DXA_CTX_BITS)
-    ) ctx_table (
-        .clk            (clk),
-        .reset          (reset),
-        .req_fire       (req_fire),
-        .req_op         (req_op),
-        .req_ctx_idx    (req_ctx_idx),
-        .req_rs1        (req_rs1),
-        .req_rs2        (req_rs2),
-        .req_bar_addr   (req_bar_addr),
-        .issue_bar_addr (issue_bar_addr),
-        .issue_desc_slot(issue_desc_slot),
-        .issue_smem_addr(issue_smem_addr),
-        .issue_coords   (issue_coords),
-        .issue_ctx_valid(issue_ctx_valid)
-    );
-
-    assign issue_desc_slot_out = issue_desc_slot;
-
-    // ---- Issue decode ----
+    // ---- Issue decode (combinatorial from desc_table outputs) ----
     dxa_issue_dec_t issue_dec;
 
     VX_dxa_issue_decode #(
@@ -175,20 +115,15 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg  [31:0]            active_cfill_r;
     reg  [31:0]            active_elem_bytes_r;
 
-    // ---- Request acceptance ----
-    wire req_is_issue = (req_op == DXA_OP_ISSUE);
-    wire req_use_nb = ~issue_dec.is_s2g;  // NB pipeline handles g2s only (for now)
-    wire req_issue_ctx_valid = req_is_issue && issue_ctx_valid;
-    wire req_issue_supported = req_use_nb && issue_dec.supported && (issue_dec.total != 0);
-    wire req_valid_cmd = req_valid && req_issue_ctx_valid && req_issue_supported;
-    wire req_invalid_cmd = req_valid && req_issue_ctx_valid && ~req_issue_supported;
+    // ---- Launch acceptance ----
+    wire launch_use_nb = ~issue_dec.is_s2g;  // NB pipeline handles g2s only (for now)
+    wire launch_supported = launch_use_nb && issue_dec.supported && (issue_dec.total != 0);
+    wire launch_valid_cmd = launch_valid && launch_supported;
+    wire launch_invalid_cmd = launch_valid && ~launch_supported;
     wire xfer_done_fire;
 
-    // Accept when: not an issue, or issue context is valid and worker is idle.
-    assign req_accept = ~req_valid
-                     || ~req_is_issue
-                     || (issue_ctx_valid && ~active_r);
-    assign req_fire = req_valid && req_accept;
+    // Accept launch only when idle
+    assign launch_ready = ~active_r;
 
     // ---- AG instance ----
     wire ag_start;
@@ -201,7 +136,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [31:0] ag_elem_idx_w;
     wire ag_busy_w, ag_done_w;
 
-    // AG latches inputs on ag_start; issue_* signals are valid at that time.
+    // AG latches inputs on ag_start; launch_* and desc signals are valid at that time.
     VX_dxa_ag #(
         .GMEM_BYTES     (GMEM_BYTES),
         .GMEM_OFF_BITS  (GMEM_OFF_BITS),
@@ -212,8 +147,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .start           (ag_start),
         .issue_dec       (issue_dec),
         .gmem_base       (issue_base_addr),
-        .smem_base       (issue_smem_addr),
-        .coords          (issue_coords),
+        .smem_base       (launch_smem_addr),
+        .coords          (launch_coords),
         .cfill           (issue_desc_cfill),
         .ag_valid        (ag_valid_w),
         .ag_ready        (ag_ready_w),
@@ -343,21 +278,16 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign gmem_bus_if.req_data.tag.value = rrs_gmem_rd_req_tag;
 
     // ---- smem bank-native write (write-only for g2s) ----
-    // DXA_SMEM_WORD_SIZE == NUM_BANKS * BANK_WORD_SIZE by construction.
-    // Each DXA word spans exactly one row across all banks: sub-word b → bank b.
-    // Bank address is the same for all banks (the DXA word address low bits).
     wire [BANK_ADDR_WIDTH-1:0] smem_bank_addr = BANK_ADDR_WIDTH'(wbc_smem_wr_addr);
 
+    assign smem_bank_wr_if.wr_valid = wbc_smem_wr_valid;
+    assign smem_bank_wr_if.wr_addr  = smem_bank_addr;
     for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_bank_wr
-        assign smem_bank_wr_if.wr_valid[b]  = wbc_smem_wr_valid
-            && (|wbc_smem_wr_byteen[b * BANK_WORD_SIZE +: BANK_WORD_SIZE]);
-        assign smem_bank_wr_if.wr_addr[b]   = smem_bank_addr;
         assign smem_bank_wr_if.wr_data[b]   = wbc_smem_wr_data[b * BANK_WORD_WIDTH +: BANK_WORD_WIDTH];
         assign smem_bank_wr_if.wr_byteen[b] = wbc_smem_wr_byteen[b * BANK_WORD_SIZE +: BANK_WORD_SIZE];
     end
 
-    // Completion tag: {last_pkt, bar_addr}. Suppress last_pkt when completion
-    // notification is not requested (e.g. gmem completion path instead).
+    // Completion tag: {last_pkt, bar_addr}.
 `ifdef EXT_DXA_ENABLE
     wire smem_wr_tag_last = wbc_smem_wr_last_pkt && active_notify_smem_done_r;
     assign smem_bank_wr_if.wr_tag = {smem_wr_tag_last, active_bar_addr_r};
@@ -369,7 +299,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign smem_core_id = active_core_id_r;
 
     // ---- Transfer FSM (IDLE → ACTIVE → IDLE) ----
-    assign ag_start = req_valid_cmd && ~active_r;
+    assign ag_start = launch_valid_cmd && ~active_r;
     assign xfer_done_fire = active_r && wbc_transfer_done;
 
     always @(posedge clk) begin
@@ -384,13 +314,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             active_cfill_r      <= '0;
             active_elem_bytes_r <= '0;
         end else begin
-            // Start new transfer when idle and valid command arrives.
             if (ag_start) begin
                 active_r            <= 1'b1;
-                active_core_id_r    <= req_core_id;
-                active_uuid_r       <= req_uuid;
-                active_wid_r        <= req_wid;
-                active_bar_addr_r   <= issue_bar_addr;
+                active_core_id_r    <= launch_core_id;
+                active_uuid_r       <= launch_uuid;
+                active_wid_r        <= launch_wid;
+                active_bar_addr_r   <= launch_bar_addr;
             `ifdef EXT_DXA_ENABLE
                 active_notify_smem_done_r <= DXA_DONE_META_ENABLE;
             `else
@@ -400,7 +329,6 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 active_cfill_r      <= issue_desc_cfill;
                 active_elem_bytes_r <= issue_dec.elem_bytes;
             end
-            // Transfer completion.
             if (xfer_done_fire) begin
                 active_r <= 1'b0;
             end
@@ -441,7 +369,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             if (active_r) begin
                 prof_active_cycles_r <= prof_active_cycles_r + 32'd1;
             end
-            if (req_valid && req_is_issue && ~req_accept) begin
+            if (launch_valid && ~launch_ready) begin
                 prof_issue_block_cycles_r <= prof_issue_block_cycles_r + 32'd1;
             end
             if (ag_valid_w && ~ag_ready_w) begin
@@ -502,9 +430,9 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `UNUSED_VAR (wbc_smem_wr_addr[SMEM_ADDR_WIDTH-1:BANK_ADDR_WIDTH])
     `UNUSED_VAR (issue_desc_tile23)
     `UNUSED_VAR (issue_desc_tile4)
-    `UNUSED_VAR (issue_desc_slot)
+    `UNUSED_VAR (launch_desc_slot)
 `ifndef DBG_TRACE_DXA
-    `UNUSED_VAR (req_invalid_cmd)
+    `UNUSED_VAR (launch_invalid_cmd)
 `endif
 `ifndef EXT_DXA_ENABLE
     `UNUSED_VAR (active_bar_addr_r)
@@ -514,20 +442,38 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
         if (~reset) begin
-            if (req_fire && req_is_issue) begin
-                `TRACE(1, ("%t: %s issue-fire: core=%0d wid=%0d bar=%0d ctx_ok=%0d supported=%0d valid_cmd=%0d invalid_cmd=%0d active=%0d total=%0d is_s2g=%0d\n",
-                    $time, INSTANCE_ID, req_core_id, req_wid, issue_bar_addr, issue_ctx_valid, req_issue_supported,
-                    req_valid_cmd, req_invalid_cmd, active_r, issue_dec.total, issue_dec.is_s2g))
-            end
-            if (req_valid && req_is_issue && ~req_accept) begin
-                `TRACE(1, ("%t: %s issue-stall: core=%0d wid=%0d bar=%0d ctx_ok=%0d supported=%0d active=%0d\n",
-                    $time, INSTANCE_ID, req_core_id, req_wid, issue_bar_addr, issue_ctx_valid, req_issue_supported,
-                    active_r))
-            end
             if (ag_start) begin
-                `TRACE(1, ("%t: %s start: core=%0d wid=%0d bar=%0d total=%0d elem=%0d\n",
-                    $time, INSTANCE_ID, req_core_id, req_wid, issue_bar_addr,
-                    issue_dec.total, issue_dec.elem_bytes))
+                `TRACE(1, ("%t: %s start: core=%0d wid=%0d bar=%0d total=%0d elem=%0d gbase=0x%0h smem=0x%0h desc=%0d\n",
+                    $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
+                    issue_dec.total, issue_dec.elem_bytes, issue_base_addr, launch_smem_addr, launch_desc_slot))
+            end
+            if (launch_invalid_cmd) begin
+                `TRACE(1, ("%t: %s launch-unsupported: core=%0d wid=%0d bar=%0d supported=%0d is_s2g=%0d total=%0d\n",
+                    $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
+                    issue_dec.supported, issue_dec.is_s2g, issue_dec.total))
+            end
+            if (active_r) begin
+                if (ag_valid_w && ag_ready_w) begin
+                    `TRACE(2, ("%t: %s ag-advance: idx=%0d gmem=0x%0h smem=0x%0h inb=%0b last=%0b\n",
+                        $time, INSTANCE_ID, ag_elem_idx_w, ag_gmem_byte_addr_w, ag_smem_byte_addr_w, ag_in_bounds_w, ag_is_last_w))
+                end
+                if (ag_valid_w && ~ag_ready_w) begin
+                    `TRACE(2, ("%t: %s ag-stall: idx=%0d gmem_req_v=%0b gmem_req_r=%0b inflight=%0b noslot=%0b rsp_bp=%0b\n",
+                        $time, INSTANCE_ID, ag_elem_idx_w, rrs_gmem_rd_req_valid, gmem_bus_if.req_ready,
+                        rrs_stall_inflight, rrs_stall_no_slot, rrs_stall_rsp_backpressure))
+                end
+                if (rrs_gmem_req_fire) begin
+                    `TRACE(2, ("%t: %s gmem-req: addr=0x%0h\n",
+                        $time, INSTANCE_ID, rrs_gmem_rd_req_addr))
+                end
+                if (rrs_rsp_fire) begin
+                    `TRACE(2, ("%t: %s gmem-rsp: tag=%0d\n",
+                        $time, INSTANCE_ID, gmem_bus_if.rsp_data.tag.value))
+                end
+                if (wbc_smem_req_fire) begin
+                    `TRACE(2, ("%t: %s smem-wr: addr=0x%0h count=%0d\n",
+                        $time, INSTANCE_ID, wbc_smem_wr_addr, wbc_wr_done_count))
+                end
             end
             if (active_r && wbc_transfer_done) begin
                 `TRACE(1, ("%t: %s done: core=%0d wid=%0d bar=%0d wr_count=%0d\n",
@@ -547,6 +493,23 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 prof_gmem_req_block_cycles_r, prof_gmem_rsp_block_cycles_r, prof_smem_req_block_cycles_r,
                 prof_inflight_block_cycles_r, prof_no_slot_block_cycles_r, prof_rsp_backpressure_cycles_r,
                 prof_gmem_req_fire_r, prof_gmem_rsp_fire_r, prof_smem_req_fire_r);
+        end
+    end
+`endif
+
+`ifdef DBG_TRACE_DXA_TIMELINE
+    always @(posedge clk) begin
+        if (~reset) begin
+            if (ag_start) begin
+                $write("DXA_TL,%0d,XFER_START,%0d,%0d,%0d,total=%0d elem=%0d\n",
+                    $time, launch_core_id, launch_wid, launch_bar_addr,
+                    issue_dec.total, issue_dec.elem_bytes);
+            end
+            if (active_r && wbc_transfer_done) begin
+                $write("DXA_TL,%0d,XFER_DONE,%0d,%0d,%0d,wr_count=%0d\n",
+                    $time, active_core_id_r, active_wid_r, active_bar_addr_r,
+                    wbc_wr_done_count);
+            end
         end
     end
 `endif

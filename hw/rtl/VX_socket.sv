@@ -13,7 +13,11 @@
 
 `include "VX_define.vh"
 
-module VX_socket import VX_gpu_pkg::*; #(
+module VX_socket import VX_gpu_pkg::*;
+`ifdef EXT_DXA_ENABLE
+    import VX_dxa_pkg::*;
+`endif
+#(
     parameter SOCKET_ID = 0,
     parameter `STRING INSTANCE_ID = ""
 ) (
@@ -36,8 +40,9 @@ module VX_socket import VX_gpu_pkg::*; #(
 `ifdef EXT_DXA_ENABLE
     // DXA control path
     VX_dxa_req_bus_if.master    dxa_req_bus_if,
-    // DXA bank-native SMEM write path (one per core)
-    VX_dxa_bank_wr_if.slave     per_core_bank_wr_if [`SOCKET_SIZE],
+    // DXA SMEM write path (per-socket-port, fan-out to cores handled here)
+    VX_dxa_bank_wr_if.slave     dxa_smem_bus_if [DXA_SMEM_PORTS_PER_SOCKET],
+    input wire [DXA_SMEM_PORTS_PER_SOCKET-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] dxa_smem_local_core_id,
 `endif
 
     // Barrier
@@ -261,9 +266,44 @@ module VX_socket import VX_gpu_pkg::*; #(
     assign dxa_req_bus_if.req_data  = dxa_req_data_out[0];
     assign dxa_req_ready_out[0] = dxa_req_bus_if.req_ready;
 
-    // DXA SMEM bank writes: direct passthrough from cluster to per-core.
-    // Each core gets its own VX_dxa_bank_wr_if from the DXA core router.
-    // No socket-level arb needed (1:1 mapping).
+    // DXA SMEM bank writes: distribute per-socket-port to per-core
+    VX_dxa_bank_wr_if #(
+        .NUM_BANKS       (`LMEM_NUM_BANKS),
+        .BANK_ADDR_WIDTH (DXA_SMEM_BANK_ADDR_WIDTH),
+        .WORD_SIZE       (`XLEN / 8),
+        .TAG_WIDTH       (DXA_BANK_WR_TAG_WIDTH)
+    ) per_core_dxa_bank_wr_if [`SOCKET_SIZE]();
+
+    localparam DXA_SMEM_NEED_ARB = (DXA_SMEM_PORTS_PER_SOCKET < `SOCKET_SIZE);
+
+    if (DXA_SMEM_NEED_ARB) begin : g_dxa_socket_arb
+        /* verilator lint_off UNUSEDSIGNAL */
+        wire [`SOCKET_SIZE-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] socket_arb_lcid_out;
+        /* verilator lint_on UNUSEDSIGNAL */
+
+        VX_dxa_smem_socket_arb #(
+            .NUM_INPUTS  (DXA_SMEM_PORTS_PER_SOCKET),
+            .NUM_OUTPUTS (`SOCKET_SIZE)
+        ) dxa_socket_arb (
+            .clk              (clk),
+            .reset            (reset),
+            .bank_wr_in       (dxa_smem_bus_if),
+            .local_core_id_in (dxa_smem_local_core_id),
+            .bank_wr_out      (per_core_dxa_bank_wr_if),
+            .local_core_id_out(socket_arb_lcid_out)
+        );
+    end else begin : g_dxa_direct
+        // 1:1 mapping: PORTS_PER_SOCKET == SOCKET_SIZE
+        for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin : g_passthru
+            assign per_core_dxa_bank_wr_if[i].wr_valid  = dxa_smem_bus_if[i].wr_valid;
+            assign per_core_dxa_bank_wr_if[i].wr_addr   = dxa_smem_bus_if[i].wr_addr;
+            assign per_core_dxa_bank_wr_if[i].wr_data   = dxa_smem_bus_if[i].wr_data;
+            assign per_core_dxa_bank_wr_if[i].wr_byteen = dxa_smem_bus_if[i].wr_byteen;
+            assign per_core_dxa_bank_wr_if[i].wr_tag    = dxa_smem_bus_if[i].wr_tag;
+            assign dxa_smem_bus_if[i].wr_ready = per_core_dxa_bank_wr_if[i].wr_ready;
+        end
+        `UNUSED_VAR (dxa_smem_local_core_id)
+    end
 
 `endif
 
@@ -300,7 +340,7 @@ module VX_socket import VX_gpu_pkg::*; #(
 
         `ifdef EXT_DXA_ENABLE
             .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),
-            .dxa_bank_wr_if (per_core_bank_wr_if[core_id]),
+            .dxa_bank_wr_if (per_core_dxa_bank_wr_if[core_id]),
         `endif
 
             .gbar_bus_if    (per_core_gbar_bus_if[core_id]),

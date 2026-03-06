@@ -101,6 +101,7 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
     `ifdef EXT_DXA_ENABLE
         ,
         .dxa_done_valid(dxa_done_valid),
+        .dxa_done_ready(1'b1),
         .dxa_done_bar_addr(dxa_done_bar_addr)
     `endif
     );
