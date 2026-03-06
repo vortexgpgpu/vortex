@@ -125,7 +125,7 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
 
     localparam C_DELAY = FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY;
 
-    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
+    `UNUSED_VAR ({fmt_d});
 
     wire [TCK-1:0][15:0] a_row16, b_col16;
 
@@ -276,7 +276,136 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
         .data_out(delayed_c)
     );
 
-    // final accumulation
+    // Integer dot product - 3-stage pipeline:
+    //   Stage 1a: individual element products in native width (registered)
+    //   Stage 1b: per-word sum of products (registered)
+    //   Stage 2:  cross-word sum + C (piped to match FP latency)
+    // Total: 1 + 1 + (TOTAL_LATENCY-2) = TOTAL_LATENCY cycles
+    wire is_int = tcu_fmt_is_int(fmt_s);
+
+    wire [N-1:0][31:0] int_word_prod;
+
+    for (genvar i = 0; i < N; i++) begin : g_int_mul
+        localparam MAX_PRODS = 8; // max elements per 32-bit word (INT4 has 8)
+        wire [MAX_PRODS-1:0][31:0] elem_prods;
+
+        // Stage 1a: elements 0..3 (valid for INT8/UINT8/INT4/UINT4)
+        for (genvar j = 0; j < 4; j++) begin : g_elem_lo
+            wire signed [15:0] i8_prod = $signed(a_row[i][8*j +: 8]) * $signed(b_col[i][8*j +: 8]);
+            wire        [15:0] u8_prod = a_row[i][8*j +: 8] * b_col[i][8*j +: 8];
+            wire signed  [7:0] i4_prod = $signed(a_row[i][4*j +: 4]) * $signed(b_col[i][4*j +: 4]);
+            wire         [7:0] u4_prod = a_row[i][4*j +: 4] * b_col[i][4*j +: 4];
+
+            reg [31:0] prod_sel;
+            always @(*) begin
+                case (fmt_s)
+                    TCU_I8_ID: prod_sel = {{16{i8_prod[15]}}, i8_prod};
+                    TCU_U8_ID: prod_sel = {16'b0, u8_prod};
+                    TCU_I4_ID: prod_sel = {{24{i4_prod[7]}}, i4_prod};
+                    TCU_U4_ID: prod_sel = {24'b0, u4_prod};
+                    default:   prod_sel = '0;
+                endcase
+            end
+
+            VX_pipe_register #(
+                .DATAW (32),
+                .DEPTH (1)
+            ) pipe_elem (
+                .clk     (clk),
+                .reset   (reset),
+                .enable  (enable),
+                .data_in (prod_sel),
+                .data_out(elem_prods[j])
+            );
+        end
+
+        // Stage 1a: elements 4..7 (only valid for INT4/UINT4)
+        for (genvar j = 4; j < MAX_PRODS; j++) begin : g_elem_hi
+            wire signed [7:0] i4_prod = $signed(a_row[i][4*j +: 4]) * $signed(b_col[i][4*j +: 4]);
+            wire        [7:0] u4_prod = a_row[i][4*j +: 4] * b_col[i][4*j +: 4];
+
+            reg [31:0] prod_sel;
+            always @(*) begin
+                case (fmt_s)
+                    TCU_I4_ID: prod_sel = {{24{i4_prod[7]}}, i4_prod};
+                    TCU_U4_ID: prod_sel = {24'b0, u4_prod};
+                    default:   prod_sel = '0;
+                endcase
+            end
+
+            VX_pipe_register #(
+                .DATAW (32),
+                .DEPTH (1)
+            ) pipe_elem (
+                .clk     (clk),
+                .reset   (reset),
+                .enable  (enable),
+                .data_in (prod_sel),
+                .data_out(elem_prods[j])
+            );
+        end
+
+        // Stage 1b: sum all element products per word (registered)
+        reg [31:0] word_sum;
+        always @(*) begin
+            word_sum = 0;
+            for (int j = 0; j < MAX_PRODS; j++) begin
+                word_sum = word_sum + elem_prods[j];
+            end
+        end
+
+        VX_pipe_register #(
+            .DATAW (32),
+            .DEPTH (1)
+        ) pipe_word_sum (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable),
+            .data_in (word_sum),
+            .data_out(int_word_prod[i])
+        );
+    end
+
+    // Delay c_val and is_int by 2 cycles to align with Stage 1b output
+    wire [31:0] int_c_s2;
+    wire is_int_s2;
+
+    VX_pipe_register #(
+        .DATAW (32 + 1),
+        .DEPTH (2)
+    ) pipe_int_ctrl (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in ({c_val, is_int}),
+        .data_out({int_c_s2, is_int_s2})
+    );
+
+    // Stage 2: cross-word accumulate + C (combinational, then piped to match FP latency)
+    reg [31:0] int_acc;
+    always @(*) begin
+        int_acc = int_c_s2;
+        for (int i = 0; i < N; i++) begin
+            int_acc = int_acc + int_word_prod[i];
+        end
+    end
+
+    wire [31:0] int_result;
+    wire is_int_out;
+
+    VX_pipe_register #(
+        .DATAW (32 + 1),
+        .DEPTH (TOTAL_LATENCY - 2)
+    ) pipe_int (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in ({int_acc, is_int_s2}),
+        .data_out({int_result, is_int_out})
+    );
+
+    // final FP accumulation
+    wire [31:0] fp_result;
 `ifdef DSP_TEST
     wire [63:0] a_h = {32'hffffffff, red_in[LEVELS][0]};
     wire [63:0] b_h = {32'hffffffff, delayed_c};
@@ -286,7 +415,7 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
     always @(*) begin
         dpi_fadd(enable, int'(0), a_h, b_h, 3'b0, c_h, fflags);
     end
-    `BUFFER_EX(d_val, c_h[31:0], enable, 0, FADD_LATENCY);
+    `BUFFER_EX(fp_result, c_h[31:0], enable, 0, FADD_LATENCY);
 `else
     xil_fadd fadd_acc (
         .aclk                (clk),
@@ -298,8 +427,11 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
         .s_axis_operation_tvalid (1'b1),
         .s_axis_operation_tdata (8'b0), // 0=add
         `UNUSED_PIN (m_axis_result_tvalid),
-        .m_axis_result_tdata (d_val)
+        .m_axis_result_tdata (fp_result)
     );
 `endif
+
+    // Output mux: integer or floating-point result
+    assign d_val = is_int_out ? int_result : fp_result;
 
 endmodule
