@@ -178,7 +178,8 @@ public:
   }
 
   template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
+                                                               const void *meta_ptr = nullptr) {
     uint32_t lane = vx_thread_id();
     if constexpr (Frag::Use == matrix_a) {
       // Load row-major matrix A
@@ -193,7 +194,6 @@ public:
       }
       if constexpr (is_sparse) {
         // Sparse A load: only load half the K-steps (compressed A)
-        // HW only reads registers 0..sparse_regs-1, no need to zero-fill the rest
         constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
         constexpr uint32_t sparse_regs = cfg::m_steps * sparse_k_steps;
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
@@ -218,6 +218,20 @@ public:
             dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
           }
         });
+        // Load metadata into tail registers (fragA.data[sparse_regs..sparse_regs+num_loads-1])
+        if (meta_ptr != nullptr) {
+          constexpr uint32_t rtl_i_ratio = 32 / It::bits;
+          constexpr uint32_t num_cols = (NT * 2 * rtl_i_ratio) / 32;
+          constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
+          constexpr uint32_t cols_per_load = NT / PD;
+          constexpr uint32_t num_loads = (num_cols + cols_per_load - 1) / cols_per_load;
+          auto meta_base = reinterpret_cast<const float*>(meta_ptr);
+          uint32_t lane_id = vx_thread_id();
+          dst.data[sparse_regs] = meta_base[lane_id];
+          if constexpr (num_loads == 2) {
+            dst.data[sparse_regs + 1] = meta_base[NT + lane_id];
+          }
+        }
       } else {
         // Dense A load: load all K-steps
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
@@ -384,25 +398,6 @@ public:
   static __attribute__((always_inline)) void meta_store_expand(float d0, float d1) {
     __asm__ volatile(".insn r 0x0b, 1, 2, x%[fmt], %[d0], %[d1]"
       :: [fmt]"i"(FMT_S), [d0]"f"(d0), [d1]"f"(d1));
-  }
-
-  static __attribute__((always_inline)) void load_metadata_sync(const void* meta_ptr) {
-    constexpr uint32_t rtl_i_ratio = 32 / It::bits;
-    constexpr uint32_t num_cols = (NT * 2 * rtl_i_ratio) / 32;
-    constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-    constexpr uint32_t cols_per_load = NT / PD;
-    constexpr uint32_t num_loads = (num_cols + cols_per_load - 1) / cols_per_load;
-    uint32_t lane_id = vx_thread_id();
-    auto base = reinterpret_cast<const float*>(meta_ptr);
-    if constexpr (num_loads == 1) {
-      float d0 = base[lane_id];
-      meta_store_expand<It::id>(d0, d0);
-    } else {
-      static_assert(num_loads == 2, "num_loads must be 1 or 2");
-      float d0 = base[lane_id];
-      float d1 = base[NT + lane_id];
-      meta_store_expand<It::id>(d0, d1);
-    }
   }
 
   template <typename FragD, typename FragA, typename FragB, typename FragC>
