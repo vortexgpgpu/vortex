@@ -45,7 +45,6 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     auto pTileB = pB + tile_col * K;
     for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
       ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, pMeta);
-      ctx::meta_store_expand<vt::ITYPE::id>(fragA.data[4], fragA.data[5]);
       ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
       ctx::mma_sync(fragC, fragA, fragB, fragC);
       pMeta += per_k_tile_words;
@@ -57,7 +56,6 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     uint32_t b_k_stride = ctx::tileK * N;
     for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
       ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, pMeta);
-      ctx::meta_store_expand<vt::ITYPE::id>(fragA.data[4], fragA.data[5]);
       ctx::load_matrix_sync<vt::row_major>(fragB, pTileB, N);
       ctx::mma_sync(fragC, fragA, fragB, fragC);
       pMeta += per_k_tile_words;
