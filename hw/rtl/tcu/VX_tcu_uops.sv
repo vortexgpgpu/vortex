@@ -56,7 +56,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire is_meta_store = (ibuf_in.op_type == INST_TCU_META_STORE);
 
     // Phase detection for fused meta+MMA sequence
+    /* verilator lint_off UNUSEDSIGNAL */
     wire [4:0] sparse_meta_cols = meta_num_cols(ibuf_in.op_args.tcu.fmt_s);
+    /* verilator lint_on UNUSEDSIGNAL */
     wire is_meta_phase = is_sparse && (ctr < `UP(CTR_W)'(sparse_meta_cols));
     wire [`UP(CTR_W)-1:0] mma_ctr = ctr - `UP(CTR_W)'(sparse_meta_cols);
     wire meta_uop = is_meta_store || is_meta_phase;
