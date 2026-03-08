@@ -82,36 +82,43 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign col_wren[c] = (c[3:0] == wr_col_idx);
     end
 
-    // Banked VX_dp_ram instances — one bank per PER_WARP_DEPTH row
+    // Per-column RAMs avoid WRENW partial writes (FPGA LUTRAM byte-enable bug).
+    // Each column gets its own WRENW=1 RAM — no partial writes needed.
     wire [META_BLOCK_WIDTH-1:0] bank_rdata [PER_WARP_DEPTH];
 
     for (genvar b = 0; b < PER_WARP_DEPTH; ++b) begin : g_meta_banks
-        localparam [META_BLOCK_WIDTH-1:0] BANK_INIT =
-            (b % 2 == 0) ? {(META_BLOCK_WIDTH/4){4'b0101}}
-                         : {(META_BLOCK_WIDTH/4){4'b1010}};
+        localparam [31:0] COL_INIT_EVEN = {8{4'b0101}};
+        localparam [31:0] COL_INIT_ODD  = {8{4'b1010}};
+        localparam [31:0] COL_INIT = (b % 2 == 0) ? COL_INIT_EVEN : COL_INIT_ODD;
 
-        wire                        bank_wr   = init_active || wr_en;
-        wire [BANK_ADDRW-1:0]      bank_wa   = init_active ? init_addr : wr_wid;
-        wire [META_BLOCK_WIDTH-1:0] bank_wd   = init_active ? BANK_INIT : {NUM_COLS{wr_data[b]}};
-        wire [NUM_COLS-1:0]         bank_wren = init_active ? {NUM_COLS{1'b1}} : col_wren;
+        wire                   bank_wr = init_active || wr_en;
+        wire [BANK_ADDRW-1:0] bank_wa = init_active ? init_addr : wr_wid;
 
-        VX_dp_ram #(
-            .DATAW    (META_BLOCK_WIDTH),
-            .SIZE     (BANK_DEPTH),
-            .WRENW    (NUM_COLS),
-            .OUT_REG  (0),
-            .RDW_MODE ("W")
-        ) meta_ram (
-            .clk   (clk),
-            .reset (reset),
-            .read  (1'b1),
-            .write (bank_wr),
-            .wren  (bank_wren),
-            .waddr (bank_wa),
-            .wdata (bank_wd),
-            .raddr (raddr_wid),
-            .rdata (bank_rdata[b])
-        );
+        for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col
+            wire col_wr = init_active ? bank_wr : (bank_wr && col_wren[c]);
+            wire [31:0] col_wd = init_active ? COL_INIT : wr_data[b];
+            wire [31:0] col_rd;
+
+            VX_dp_ram #(
+                .DATAW    (32),
+                .SIZE     (BANK_DEPTH),
+                .WRENW    (1),
+                .OUT_REG  (0),
+                .RDW_MODE ("W")
+            ) meta_col_ram (
+                .clk   (clk),
+                .reset (reset),
+                .read  (1'b1),
+                .write (col_wr),
+                .wren  (1'b1),
+                .waddr (bank_wa),
+                .wdata (col_wd),
+                .raddr (raddr_wid),
+                .rdata (col_rd)
+            );
+
+            assign bank_rdata[b][c*32 +: 32] = col_rd;
+        end
     end
 
     // Read output MUX: select bank based on {step_m, step_k}
