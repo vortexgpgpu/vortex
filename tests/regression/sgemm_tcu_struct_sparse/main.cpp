@@ -1,5 +1,6 @@
 #include "common.h"
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <iostream>
 #include <rvfloats.h>
@@ -11,7 +12,9 @@
 #include <vector>
 #include <vortex.h>
 
+#ifndef FLOAT_ULP
 #define FLOAT_ULP 6
+#endif
 #define MAX_ERRORS 100
 
 #define RT_CHECK(_expr)                                      \
@@ -833,6 +836,8 @@ vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
 
+bool zero_a_test = false; // T5: zero out A matrix for FEDP/metadata diagnostic
+
 std::string last_build_options;
 
 static void show_usage() {
@@ -842,7 +847,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:i:o:hs")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:i:o:hsZ")) != -1) {
     switch (c) {
     case 'm':
       xm = atoi(optarg);
@@ -852,6 +857,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'k':
       xk = atoi(optarg);
+      break;
+    case 'Z':
+      zero_a_test = true;
       break;
     case 'h':
       show_usage();
@@ -985,6 +993,13 @@ int main(int argc, char *argv[]) {
   prune_2to4(h_A_full.data(), masks, M, K);
   std::vector<itype_t> h_A(sizeA);
   compress_2to4(h_A.data(), h_A_full.data(), masks, M, K);
+
+  // T5: Zero-A test — zero out compressed A to test FEDP/metadata isolation
+  if (zero_a_test) {
+    printf("*** ZERO-A TEST MODE: zeroing compressed A matrix ***\n");
+    memset(h_A.data(), 0, sizeA * sizeof(itype_t));
+    memset(h_A_full.data(), 0, sizeA_full * sizeof(itype_t));
+  }
 
   std::vector<itype_t> h_B(sizeB);
   for (uint32_t i = 0; i < sizeB; ++i) {
@@ -1214,6 +1229,162 @@ int main(int argc, char *argv[]) {
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
       if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, errors)) {
         ++errors;
+      }
+    }
+
+    // === DETAILED ERROR ANALYSIS (FPGA root-cause investigation) ===
+    {
+      printf("\n=== DETAILED ERROR ANALYSIS ===\n");
+      printf("Config: tileM=%u tileN=%u tileK=%u tcM=%u tcN=%u tcK=%u\n",
+          cfg::tileM, cfg::tileN, cfg::tileK, cfg::tcM, cfg::tcN, cfg::tcK);
+      printf("Steps: m_steps=%u n_steps=%u k_steps=%u\n",
+          cfg::m_steps, cfg::n_steps, cfg::k_steps);
+      printf("Matrix: M=%u N=%u K=%u, Grid=%ux%u\n",
+          M, N, K, M/cfg::tileM, N/cfg::tileN);
+#ifdef TCU_SPARSE_ENABLE
+      printf("Sparse: meta_cols=%u per_warp_depth=%u\n",
+          cfg::meta_cols, cfg::per_warp_depth);
+#endif
+
+      struct ErrInfo {
+        uint32_t idx, m, n;
+        uint32_t block_row, block_col;
+        uint32_t in_block_m, in_block_n;
+        uint32_t step_m, step_n;
+        uint32_t sub_m, sub_n;
+        otype_t expected, actual;
+      };
+      std::vector<ErrInfo> errs;
+
+      for (uint32_t i = 0; i < sizeC; ++i) {
+        // Use Comparator for type-appropriate comparison but suppress printing
+        bool match = Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, INT_MAX);
+        if (!match) {
+          ErrInfo e;
+          e.idx = i;
+          e.m = i / N;
+          e.n = i % N;
+          e.block_row = e.m / cfg::tileM;
+          e.block_col = e.n / cfg::tileN;
+          e.in_block_m = e.m % cfg::tileM;
+          e.in_block_n = e.n % cfg::tileN;
+          e.step_m = e.in_block_m / cfg::tcM;
+          e.step_n = e.in_block_n / cfg::tcN;
+          e.sub_m = e.in_block_m % cfg::tcM;
+          e.sub_n = e.in_block_n % cfg::tcN;
+          e.expected = h_ref[i];
+          e.actual = h_C[i];
+          errs.push_back(e);
+        }
+      }
+
+      printf("\nTotal errors: %zu / %u\n\n", errs.size(), (unsigned)sizeC);
+
+      // Print all errors with position mapping (up to 200)
+      for (size_t i = 0; i < errs.size() && i < 200; ++i) {
+        auto &e = errs[i];
+        double diff = static_cast<double>(e.actual) - static_cast<double>(e.expected);
+        printf("ERR[%zu]: pos=(%u,%u) blk=(%u,%u) step=(%u,%u) sub=(%u,%u) exp=%g act=%g diff=%+g\n",
+            i, e.m, e.n, e.block_row, e.block_col,
+            e.step_m, e.step_n, e.sub_m, e.sub_n,
+            static_cast<double>(e.expected), static_cast<double>(e.actual), diff);
+      }
+
+      if (!errs.empty()) {
+        // Block distribution
+        uint32_t grid_y = M / cfg::tileM;
+        uint32_t grid_x = N / cfg::tileN;
+        printf("\nBlock distribution (grid %ux%u):\n", grid_y, grid_x);
+        for (uint32_t br = 0; br < grid_y; ++br) {
+          for (uint32_t bc = 0; bc < grid_x; ++bc) {
+            int cnt = 0;
+            for (auto &e : errs) {
+              if (e.block_row == br && e.block_col == bc) cnt++;
+            }
+            if (cnt > 0) printf("  blk(%u,%u): %d errors\n", br, bc, cnt);
+          }
+        }
+
+        // Sub-tile position distribution
+        printf("\nSub-tile position (tcM=%u x tcN=%u):\n", cfg::tcM, cfg::tcN);
+        for (uint32_t sm = 0; sm < cfg::tcM; ++sm) {
+          for (uint32_t sn = 0; sn < cfg::tcN; ++sn) {
+            int cnt = 0;
+            for (auto &e : errs) {
+              if (e.sub_m == sm && e.sub_n == sn) cnt++;
+            }
+            if (cnt > 0) printf("  sub(%u,%u): %d errors\n", sm, sn, cnt);
+          }
+        }
+
+        // Step distribution
+        printf("\nStep distribution (m_steps=%u x n_steps=%u):\n",
+            cfg::m_steps, cfg::n_steps);
+        for (uint32_t sm = 0; sm < cfg::m_steps; ++sm) {
+          for (uint32_t sn = 0; sn < cfg::n_steps; ++sn) {
+            int cnt = 0;
+            for (auto &e : errs) {
+              if (e.step_m == sm && e.step_n == sn) cnt++;
+            }
+            if (cnt > 0) printf("  step(%u,%u): %d errors\n", sm, sn, cnt);
+          }
+        }
+
+        // Error magnitude analysis (integer types)
+        if constexpr (std::is_integral_v<otype_t>) {
+          int64_t min_diff = INT64_MAX, max_diff = INT64_MIN;
+          int64_t sum_abs = 0;
+          bool all_positive = true, all_negative = true;
+          for (auto &e : errs) {
+            int64_t d = static_cast<int64_t>(e.actual) - static_cast<int64_t>(e.expected);
+            if (d < min_diff) min_diff = d;
+            if (d > max_diff) max_diff = d;
+            sum_abs += std::abs(d);
+            if (d > 0) all_negative = false;
+            if (d < 0) all_positive = false;
+          }
+          printf("\nError magnitude: min=%+ld max=%+ld mean_abs=%ld\n",
+              (long)min_diff, (long)max_diff,
+              (long)(sum_abs / (int64_t)errs.size()));
+          printf("Direction: %s\n",
+              all_positive ? "ALL POSITIVE" :
+              all_negative ? "ALL NEGATIVE" : "MIXED");
+        }
+
+        // Per-block error detail: for each block with errors, show which K-tiles contribute
+        printf("\nPer-block detail:\n");
+        for (uint32_t br = 0; br < grid_y; ++br) {
+          for (uint32_t bc = 0; bc < grid_x; ++bc) {
+            std::vector<ErrInfo*> blk_errs;
+            for (auto &e : errs) {
+              if (e.block_row == br && e.block_col == bc) blk_errs.push_back(&e);
+            }
+            if (blk_errs.empty()) continue;
+            uint32_t block_id = br * grid_x + bc;
+            printf("  blk(%u,%u) id=%u: %zu errors\n", br, bc, block_id, blk_errs.size());
+            for (auto *ep : blk_errs) {
+              double diff = static_cast<double>(ep->actual) - static_cast<double>(ep->expected);
+              printf("    pos=(%u,%u) step=(%u,%u) sub=(%u,%u) diff=%+g\n",
+                  ep->m, ep->n, ep->step_m, ep->step_n, ep->sub_m, ep->sub_n, diff);
+            }
+          }
+        }
+      }
+
+      // Raw hex dump of first 16 entries for manual inspection
+      printf("\nFirst 16 entries (raw values):\n");
+      for (uint32_t i = 0; i < 16 && i < sizeC; ++i) {
+        if constexpr (std::is_integral_v<otype_t>) {
+          printf("  [%u] ref=0x%08x gpu=0x%08x %s\n",
+              i, static_cast<unsigned>(h_ref[i]), static_cast<unsigned>(h_C[i]),
+              (h_ref[i] == h_C[i]) ? "OK" : "MISMATCH");
+        } else {
+          union { float f; uint32_t u; } ref_u, gpu_u;
+          ref_u.f = h_ref[i]; gpu_u.f = h_C[i];
+          printf("  [%u] ref=0x%08x (%f) gpu=0x%08x (%f) %s\n",
+              i, ref_u.u, ref_u.f, gpu_u.u, gpu_u.f,
+              (ref_u.u == gpu_u.u) ? "EXACT" : "DIFF");
+        }
       }
     }
   }
