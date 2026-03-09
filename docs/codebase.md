@@ -1,7 +1,9 @@
 # Vortex Codebase
 
-The directory/file layout of the Vortex codebase is as followed:
+The directory/file layout of the Vortex codebase is as follows:
 
+- `ci`: continuous integration scripts
+- `docs`: documentation
 - `hw`:     
   - `rtl`: hardware rtl sources    
     - `core`: core pipeline
@@ -9,7 +11,8 @@ The directory/file layout of the Vortex codebase is as followed:
     - `mem`: memory subsystem
     - `fpu`: floating point unit
     - `interfaces`: interfaces for inter-module communication
-    - `libs`: general-purpose RTL modules    
+    - `libs`: general-purpose RTL modules 
+    - `tcu`: tensor core unit   
   - `syn`: synthesis directory
     - `altera`: Altera synthesis scripts
     - `xilinx`: Xilinx synthesis scripts    
@@ -17,6 +20,11 @@ The directory/file layout of the Vortex codebase is as followed:
     - `modelsim`: Modelsim synthesis scripts
     - `yosys`: Yosys synthesis scripts
   - `unit_tests`: unit tests for some hardware components
+- `kernel`: GPU kernel software APIs
+  - `include`: Vortex runtime public headers
+  - `linker`: linker file for compiling kernels
+  - `src`: runtime implementation
+- `miscs`: miscellaneous resources.
 - `runtime`: host runtime software APIs
   - `include`: Vortex driver public headers
   - `stub`: Vortex stub driver library
@@ -24,10 +32,6 @@ The directory/file layout of the Vortex codebase is as followed:
   - `xrt`: software driver that uses Xilinx XRT API with device targets=hw|hw_emu|sw_emu
   - `rtlsim`: software driver that uses rtlsim simulator
   - `simx`: software driver that uses simX simulator
-- `kernel`: GPU kernel software APIs
-  - `include`: Vortex runtime public headers
-  - `linker`: linker file for compiling kernels
-  - `src`: runtime implementation
 - `sim`: 
   - `opaesim`: Intel OPAE AFU RTL simulator
   - `rtlsim`: processor RTL simulator
@@ -37,5 +41,4 @@ The directory/file layout of the Vortex codebase is as followed:
   - `kernel`: kernel tests
   - `regression`: regression tests  
   - `opencl`: opencl benchmarks and tests
-- `ci`: continuous integration scripts
-- `miscs`: miscellaneous resources.
+- `third_party`: external library submodules

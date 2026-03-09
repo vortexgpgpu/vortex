@@ -1,34 +1,21 @@
 # Installing and Setting Up the Vortex Environment
 
-## Ubuntu 18.04, 20.04
+## Ubuntu 24.04
 
 1. Install the following dependencies:
 
    ```
-   sudo apt-get install build-essential zlib1g-dev libtinfo-dev libncurses5 uuid-dev libboost-serialization-dev libpng-dev libhwloc-dev
+   sudo apt-get update
+   sudo apt-get install build-essential cmake ccache zlib1g-dev libtinfo-dev libncurses-dev uuid-dev libboost-serialization-dev libpng-dev libhwloc-dev
    ```
 
-2. Upgrade GCC to 11:
-
-   ```
-   sudo apt-get install gcc-11 g++-11
-   ```
-
-   Multiple gcc versions on Ubuntu can be managed with update-alternatives, e.g.:
-
-   ```
-   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 9
-   sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 9
-   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 11
-   sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 11
-   ```
-
-3. Download the Vortex codebase:
+2. Download the Vortex codebase:
 
    ```
    git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
    ```
-4. Build Vortex
+
+3. Build Vortex:
 
    ```
    $ cd vortex
@@ -40,6 +27,11 @@
    $ make -s
    ```
 
+4. (Optional) Add toolchain environment variables to bashrc for future sessions:
+
+   ```
+   echo 'source <build-path>/ci/toolchain_env.sh' >> ~/.bashrc
+   ```
 
 ## RHEL 8
 Note: depending on the system, some of the toolchain may need to be recompiled for non-Ubuntu Linux. The source for the tools can be found [here](https://github.com/vortexgpgpu/).
