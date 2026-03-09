@@ -16,6 +16,7 @@
 #include "tensor_cfg.h"
 #include <rvfloats.h>
 #include "core.h"
+#include <array>
 #include <cmath>
 
 using namespace vortex;
@@ -516,6 +517,59 @@ static inline void gather_B16(uint8_t mask,
   b_gathered = (uint32_t(out[0]) << 0) | (uint32_t(out[1]) << 16);
 }
 
+static inline uint32_t meta_num_cols(uint32_t fmt_s) {
+  switch (fmt_s) {
+  case vt::fp16::id:
+  case vt::bf16::id:
+    return NUM_THREADS / 8;
+  case vt::fp8::id:
+  case vt::bf8::id:
+  case vt::int8::id:
+  case vt::uint8::id:
+  case vt::mxfp8::id:
+  case vt::mxint8::id:
+    return NUM_THREADS / 4;
+  case vt::int4::id:
+  case vt::uint4::id:
+  case vt::nvfp4::id:
+    return NUM_THREADS / 2;
+  default:
+    return 1;
+  }
+}
+
+static inline uint32_t meta_row_width(uint32_t fmt_s) {
+  switch (fmt_s) {
+  case vt::fp16::id:
+  case vt::bf16::id:
+    return cfg::tcK * 2 * 2;
+  case vt::int4::id:
+  case vt::uint4::id:
+  case vt::nvfp4::id:
+    return cfg::tcK * 2 * 8;
+  default:
+    return cfg::tcK * 2 * 4;
+  }
+}
+
+static inline uint8_t first_selected_4(uint8_t mask) {
+  for (uint32_t i = 0; i < 4; ++i) {
+    if (mask & (1u << i)) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+static inline uint8_t last_selected_4(uint8_t mask) {
+  for (int i = 3; i >= 0; --i) {
+    if (mask & (1u << i)) {
+      return i;
+    }
+  }
+  return 3;
+}
+
 class TensorUnit::Impl {
 public:
   Impl(TensorUnit* simobject, const Arch& arch, Core* core)
@@ -523,6 +577,7 @@ public:
     , core_(core)
     , arch_(arch)
     , perf_stats_()
+    , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
   {
     //--
   }
@@ -533,6 +588,13 @@ public:
 
   void reset() {
     perf_stats_ = PerfStats();
+    for (auto& meta : sparse_meta_) {
+      for (uint32_t bank = 0; bank < kMetaBanks; ++bank) {
+        for (uint32_t col = 0; col < kMaxMetaCols; ++col) {
+          meta[bank * kMaxMetaCols + col] = (bank & 1) ? 0xaaaaaaaau : 0x55555555u;
+        }
+      }
+    }
   }
 
   void tick() {
@@ -547,6 +609,9 @@ public:
       case TcuType::WMMA:
       case TcuType::WMMA_SP:
         delay = 4;
+        break;
+      case TcuType::META_STORE:
+        delay = 1;
         break;
       default:
         std::abort();
@@ -563,6 +628,7 @@ public:
             uint32_t fmt_d,
             uint32_t step_m,
             uint32_t step_n,
+            uint32_t step_k,
             const std::vector<reg_data_t>& rs1_data,
             const std::vector<reg_data_t>& rs2_data,
             const std::vector<reg_data_t>& rs3_data,
@@ -570,6 +636,7 @@ public:
             ExeTraceData* trace_data) {
     __unused(wid);
     __unused(trace_data);
+    __unused(step_k);
 
     auto fedp = select_FEDP(fmt_s, fmt_d);
 
@@ -604,22 +671,18 @@ public:
                uint32_t fmt_d,
                uint32_t step_m,
                uint32_t step_n,
+               uint32_t step_k,
                const std::vector<reg_data_t>& rs1_data,
                const std::vector<reg_data_t>& rs2_data,
                const std::vector<reg_data_t>& rs3_data,
                std::vector<reg_data_t>& rd_data,
                ExeTraceData* trace_data) {
-    __unused(wid);
     __unused(trace_data);
 
     auto fedp = select_FEDP(fmt_s, fmt_d);
 
-    // Bring-up target: sparse path currently supports NT=8/32 and 8/16-bit input formats.
-    // Do not silently fall back to dense WMMA, because sparse-packed A would
-    // produce incorrect results under dense semantics.
-    if (this->arch_.num_threads() != 8 && this->arch_.num_threads() != 32) {
-      std::cout << "Error: WMMA_SP unsupported for NUM_THREADS=" << this->arch_.num_threads()
-                << " (expected 8 or 32)." << std::endl;
+    if (cfg::nt16_sparse || (this->arch_.num_threads() != 8 && this->arch_.num_threads() != 32)) {
+      std::cout << "Error: WMMA_SP unsupported for NUM_THREADS=" << this->arch_.num_threads() << std::endl;
       std::abort();
     }
 
@@ -633,49 +696,92 @@ public:
     const bool is_16bit_sparse_fmt =
         (fmt_s == vt::fp16::id) ||
         (fmt_s == vt::bf16::id);
-    if (!is_8bit_sparse_fmt && !is_16bit_sparse_fmt) {
+    const bool is_4bit_sparse_fmt =
+        (fmt_s == vt::int4::id) ||
+        (fmt_s == vt::uint4::id) ||
+        (fmt_s == vt::nvfp4::id);
+    if (!is_8bit_sparse_fmt && !is_16bit_sparse_fmt && !is_4bit_sparse_fmt) {
       std::cout << "Error: WMMA_SP unsupported input format: "
                 << vt::fmt_string(fmt_s) << " (id=" << fmt_s
-                << "). Supported formats: i8, u8, fp8, bf8, mxfp8, mxi8, fp16, bf16." << std::endl;
+                << "). Supported formats: i8, u8, fp8, bf8, mxfp8, mxi8, fp16, bf16, i4, u4, nvfp4." << std::endl;
       std::abort();
     }
 
-    // Fixed masks for bring-up (2:4): keep lanes [0,3] from each 4-element B chunk.
-    constexpr uint8_t kMask0 = 0x9;
-    constexpr uint8_t kMask1 = 0x9;
     constexpr uint32_t kCompression = 2;
-    constexpr uint32_t b_block_size_sp = cfg::b_block_size * kCompression;
-    uint32_t num_threads = this->arch_.num_threads();
-    if ((num_threads % b_block_size_sp) != 0) {
+    if ((this->arch_.num_threads() % cfg::b_block_size_sp) != 0) {
       std::cout << "Error: NUM_THREADS must be divisible by sparse B block size" << std::endl;
       std::abort();
     }
-    uint32_t b_sub_blocks_sp = num_threads / b_block_size_sp;
 
     uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
-    uint32_t b_off = (step_n % b_sub_blocks_sp) * b_block_size_sp;
+    uint32_t b_off = (step_n % cfg::b_sub_blocks_sp) * cfg::b_block_size_sp;
+    uint32_t bank = step_m * (cfg::k_steps / 2) + step_k;
 
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
       for (uint32_t j = 0; j < cfg::tcN; ++j) {
         auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
-        auto b_col = rs2_data.data() + b_off + j * (cfg::tcK * kCompression);
         auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
 
         reg_data_t a_row_sparse[cfg::tcK];
         reg_data_t b_col_sparse[cfg::tcK];
+        uint32_t row_base = i * meta_row_width(fmt_s);
         for (uint32_t z = 0; z < cfg::tcK; ++z) {
           a_row_sparse[z].u32 = a_row[z].u32;
+          auto meta_bit = [&](uint32_t bit_idx) {
+            uint32_t col = bit_idx / 32;
+            uint32_t off = bit_idx % 32;
+            return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) >> off) & 1u;
+          };
+          auto bword1 = rs2_data.at(b_off + j * cfg::tcK * kCompression + z * kCompression + 0).u32;
+          auto bword2 = rs2_data.at(b_off + j * cfg::tcK * kCompression + z * kCompression + 1).u32;
           uint32_t b_gathered = 0;
-          if (is_8bit_sparse_fmt) {
-            gather_B8(kMask0, kMask1,
-                      b_col[z * kCompression + 0].u32,
-                      b_col[z * kCompression + 1].u32,
-                      b_gathered);
-          } else {
-            gather_B16(kMask0,
-                       b_col[z * kCompression + 0].u32,
-                       b_col[z * kCompression + 1].u32,
-                       b_gathered);
+          if (is_16bit_sparse_fmt) {
+            uint8_t mask_lo = 0;
+            uint8_t mask_hi = 0;
+            for (uint32_t bit = 0; bit < 2; ++bit) {
+              mask_lo |= meta_bit(row_base + 2 * z + bit) << bit;
+              mask_hi |= meta_bit(row_base + 2 * (cfg::tcK + z) + bit) << bit;
+            }
+            uint8_t grp_mask = uint8_t((mask_hi << 2) | mask_lo);
+            gather_B16(grp_mask, bword1, bword2, b_gathered);
+          } else if (is_8bit_sparse_fmt) {
+            uint8_t mask_lo = 0;
+            uint8_t mask_hi = 0;
+            for (uint32_t bit = 0; bit < 4; ++bit) {
+              mask_lo |= meta_bit(row_base + 4 * z + bit) << bit;
+              mask_hi |= meta_bit(row_base + 4 * (cfg::tcK + z) + bit) << bit;
+            }
+            gather_B8(mask_lo, mask_hi, bword1, bword2, b_gathered);
+          } else { // 4-bit sparse format
+            uint8_t grp_mask_lo = 0;
+            uint8_t grp_mask_hi = 0;
+            for (uint32_t bit = 0; bit < 8; ++bit) {
+              grp_mask_lo |= meta_bit(row_base + 8 * z + bit) << bit;
+              grp_mask_hi |= meta_bit(row_base + 8 * (cfg::tcK + z) + bit) << bit;
+            }
+
+            uint32_t packed = 0;
+            for (uint32_t sg = 0; sg < 2; ++sg) {
+              uint8_t mask = (grp_mask_lo >> (sg * 4)) & 0xf;
+              uint8_t idx0 = first_selected_4(mask);
+              uint8_t idx1 = last_selected_4(mask);
+              uint32_t base = sg * 4;
+              uint32_t nib0 = (bword1 >> ((base + idx0) * 4)) & 0xf;
+              uint32_t nib1 = (bword1 >> ((base + idx1) * 4)) & 0xf;
+              packed |= nib0 << ((sg * 2 + 0) * 4);
+              packed |= nib1 << ((sg * 2 + 1) * 4);
+            }
+            for (uint32_t sg = 0; sg < 2; ++sg) {
+              uint8_t mask = (grp_mask_hi >> (sg * 4)) & 0xf;
+              uint8_t idx0 = first_selected_4(mask);
+              uint8_t idx1 = last_selected_4(mask);
+              uint32_t base = sg * 4;
+              uint32_t nib0 = (bword2 >> ((base + idx0) * 4)) & 0xf;
+              uint32_t nib1 = (bword2 >> ((base + idx1) * 4)) & 0xf;
+              packed |= nib0 << (((sg + 2) * 2 + 0) * 4);
+              packed |= nib1 << (((sg + 2) * 2 + 1) * 4);
+            }
+            b_gathered = packed;
           }
           b_col_sparse[z].u32 = b_gathered;
         }
@@ -693,16 +799,41 @@ public:
     }
   }
 
+  void meta_store(uint32_t wid,
+                  uint32_t fmt_s,
+                  uint32_t col_idx,
+                  const std::vector<reg_data_t>& rs1_data,
+                  ExeTraceData* trace_data) {
+    __unused(trace_data);
+
+    constexpr uint32_t meta_per_warp_depth = cfg::m_steps * (cfg::k_steps / 2);
+    constexpr uint32_t meta_cols_per_load = NUM_THREADS / meta_per_warp_depth;
+    uint32_t num_cols = meta_num_cols(fmt_s);
+    if (col_idx >= num_cols) {
+      std::cout << "Error: META_STORE column out of range: " << col_idx << std::endl;
+      std::abort();
+    }
+
+    uint32_t thread_offset = (meta_cols_per_load > 1) ? ((col_idx % meta_cols_per_load) * meta_per_warp_depth) : 0;
+    for (uint32_t bank = 0; bank < meta_per_warp_depth; ++bank) {
+      sparse_meta_.at(wid).at(bank * kMaxMetaCols + col_idx) = rs1_data.at(thread_offset + bank).u32;
+    }
+  }
+
   const PerfStats& perf_stats() const {
     return perf_stats_;
   }
 
 private:
+  static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
+  static constexpr uint32_t kMetaBanks = cfg::m_steps * kSparseKSteps;
+  static constexpr uint32_t kMaxMetaCols = NUM_THREADS / 2;
 
   TensorUnit*   simobject_;
   Core*         core_;
   Arch          arch_;
   PerfStats     perf_stats_;
+  std::vector<std::vector<uint32_t>> sparse_meta_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -711,10 +842,14 @@ op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
   switch (tcu_type) {
   case TcuType::WMMA:
     return {"WMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
-             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
+             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
+             + "." + std::to_string(args.step_k), ""};
   case TcuType::WMMA_SP:
     return {"WMMA_SP." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
-             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
+             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
+             + "." + std::to_string(args.step_k), ""};
+  case TcuType::META_STORE:
+    return {"META_STORE." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::to_string(args.fmt_d), ""};
   default:
     std::abort();
   }
@@ -750,12 +885,13 @@ void TensorUnit::wmma(uint32_t wid,
                       uint32_t fmt_d,
                       uint32_t step_m,
                       uint32_t step_n,
+                      uint32_t step_k,
                       const std::vector<reg_data_t>& rs1_data,
                       const std::vector<reg_data_t>& rs2_data,
                       const std::vector<reg_data_t>& rs3_data,
                       std::vector<reg_data_t>& rd_data,
                       ExeTraceData* trace_data) {
-  impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
+  impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
 }
 
 void TensorUnit::wmma_sp(uint32_t wid,
@@ -763,10 +899,19 @@ void TensorUnit::wmma_sp(uint32_t wid,
                          uint32_t fmt_d,
                          uint32_t step_m,
                          uint32_t step_n,
+                         uint32_t step_k,
                          const std::vector<reg_data_t>& rs1_data,
                          const std::vector<reg_data_t>& rs2_data,
                          const std::vector<reg_data_t>& rs3_data,
                          std::vector<reg_data_t>& rd_data,
                          ExeTraceData* trace_data) {
-  impl_->wmma_sp(wid, fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
+  impl_->wmma_sp(wid, fmt_s, fmt_d, step_m, step_n, step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
+}
+
+void TensorUnit::meta_store(uint32_t wid,
+                            uint32_t fmt_s,
+                            uint32_t col_idx,
+                            const std::vector<reg_data_t>& rs1_data,
+                            ExeTraceData* trace_data) {
+  impl_->meta_store(wid, fmt_s, col_idx, rs1_data, trace_data);
 }

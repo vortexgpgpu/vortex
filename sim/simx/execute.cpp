@@ -1579,15 +1579,21 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
         assert(warp.tmask.count() == num_threads);
-        core_->tensor_unit()->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
+        core_->tensor_unit()->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
         rd_write = true;
       } break;
       case TcuType::WMMA_SP: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
         assert(warp.tmask.count() == num_threads);
-        core_->tensor_unit()->wmma_sp(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
+        core_->tensor_unit()->wmma_sp(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
         rd_write = true;
+      } break;
+      case TcuType::META_STORE: {
+        auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
+        trace->data = trace_data;
+        assert(warp.tmask.count() == num_threads);
+        core_->tensor_unit()->meta_store(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, rs1_data, trace_data.get());
       } break;
       default:
         std::abort();
