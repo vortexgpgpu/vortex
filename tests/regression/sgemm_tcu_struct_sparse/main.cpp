@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iostream>
 #include <rvfloats.h>
+#include <sparsity.h>
 #include <string.h>
 #include <VX_config.h>
 #include <tensor_cfg.h>
@@ -662,94 +663,6 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
   }
 }
 
-// Get magnitude of element at given offset in A matrix (for pruning comparison)
-static float get_element_magnitude(const itype_t *A, uint32_t offset) {
-  auto val = data_accessor_t<vt::ITYPE>::read(A, offset);
-  if constexpr (std::is_same_v<vt::ITYPE, vt::int8> || std::is_same_v<vt::ITYPE, vt::mxint8>) {
-    return std::abs(static_cast<float>(static_cast<int8_t>(val)));
-  } else if constexpr (std::is_same_v<vt::ITYPE, vt::uint8>) {
-    return static_cast<float>(val);
-  } else if constexpr (std::is_same_v<vt::ITYPE, vt::int4>) {
-    int32_t sval = val & 0xF;
-    if (sval & 0x8) sval |= ~0xF;
-    return std::abs(static_cast<float>(sval));
-  } else if constexpr (std::is_same_v<vt::ITYPE, vt::uint4>) {
-    return static_cast<float>(val & 0xF);
-  } else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) {
-    return std::abs(bit_cast<float>(rv_htof_s(val, 0, nullptr)));
-  } else if constexpr (std::is_same_v<vt::ITYPE, vt::bf16>) {
-    return std::abs(bit_cast<float>(rv_btof_s(val, 0, nullptr)));
-  } else {
-    return std::abs(static_cast<float>(val));
-  }
-}
-
-// Prune matrix A with real 2:4 structured sparsity (top-2 by magnitude per group of 4)
-// Zeros pruned elements in-place and stores per-group 4-bit masks
-static void prune_2to4(itype_t *A, std::vector<uint8_t> &masks, uint32_t M, uint32_t K) {
-  uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
-  uint32_t KS = subbytes ? (K * subbytes) : K;
-  uint32_t num_groups = KS / 4;
-  masks.resize(M * num_groups);
-
-  for (uint32_t m = 0; m < M; ++m) {
-    for (uint32_t g = 0; g < num_groups; ++g) {
-      uint32_t k_start = g * 4;
-
-      // Get magnitudes
-      float mags[4];
-      for (int p = 0; p < 4; ++p) {
-        mags[p] = get_element_magnitude(A, m * KS + k_start + p);
-      }
-
-      // Find indices of top-2 by magnitude (ties broken by lower index)
-      int top[2] = {0, 1};
-      if (mags[1] > mags[0]) { top[0] = 1; top[1] = 0; }
-      for (int p = 2; p < 4; ++p) {
-        if (mags[p] > mags[top[0]]) {
-          top[1] = top[0];
-          top[0] = p;
-        } else if (mags[p] > mags[top[1]]) {
-          top[1] = p;
-        }
-      }
-
-      // Build mask and zero pruned elements
-      uint8_t mask = (1 << top[0]) | (1 << top[1]);
-      masks[m * num_groups + g] = mask;
-      for (int p = 0; p < 4; ++p) {
-        if (!(mask & (1 << p))) {
-          data_accessor_t<vt::ITYPE>::write(A, m * KS + k_start + p, 0);
-        }
-      }
-    }
-  }
-}
-
-// Compress pruned A (M x K) to M x K/2 using per-group masks
-static void compress_2to4(itype_t *compressed, const itype_t *pruned_A,
-                           const std::vector<uint8_t> &masks, uint32_t M, uint32_t K) {
-  uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
-  uint32_t KS = subbytes ? (K * subbytes) : K;
-  uint32_t stride_comp = KS / 2;
-  uint32_t num_groups = KS / 4;
-
-  for (uint32_t m = 0; m < M; ++m) {
-    uint32_t a_out = 0;
-    for (uint32_t g = 0; g < num_groups; ++g) {
-      uint32_t k_start = g * 4;
-      uint8_t mask = masks[m * num_groups + g];
-      for (uint32_t k2 = 0; k2 < 4; ++k2) {
-        if (mask & (1 << k2)) {
-          auto val = data_accessor_t<vt::ITYPE>::read(pruned_A, m * KS + k_start + k2);
-          data_accessor_t<vt::ITYPE>::write(compressed, m * stride_comp + a_out, val);
-          a_out++;
-        }
-      }
-    }
-  }
-}
-
 // Pack per-group masks into VX_tcu_meta SRAM layout
 // Output: h_meta vector indexed as [tile_row][k_tile][NT * meta_cols words]
 static void pack_metadata(std::vector<uint32_t> &h_meta,
@@ -989,10 +902,16 @@ int main(int argc, char *argv[]) {
   for (uint32_t i = 0; i < sizeA_full; ++i) {
     h_A_full[i] = generate_A_value<vt::ITYPE>();
   }
-  std::vector<uint8_t> masks;
-  prune_2to4(h_A_full.data(), masks, M, K);
+  if (!vortex::sparsity::prune_2to4_matrix<vt::ITYPE>(h_A_full.data(), M, K)) {
+    std::cerr << "prune_2to4_matrix failed" << std::endl;
+    return -1;
+  }
   std::vector<itype_t> h_A(sizeA);
-  compress_2to4(h_A.data(), h_A_full.data(), masks, M, K);
+  std::vector<uint8_t> masks;
+  if (!vortex::sparsity::compress_2to4_matrix<vt::ITYPE>(h_A.data(), h_A_full.data(), masks, M, K)) {
+    std::cerr << "compress_2to4_matrix failed" << std::endl;
+    return -1;
+  }
 
   // T5: Zero-A test — zero out compressed A to test FEDP/metadata isolation
   if (zero_a_test) {
@@ -1028,7 +947,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // upload metadata buffer (real masks from pruning)
+  // upload metadata buffer (per-group metadata bytes from compression)
   {
     std::cout << "upload metadata buffer" << std::endl;
     std::vector<uint32_t> h_meta;
