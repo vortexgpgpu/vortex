@@ -1165,40 +1165,84 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         uint32_t fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
         auto tcu_type = is_sparse ? TcuType::WMMA_SP : TcuType::WMMA;
+        auto meta_num_cols = [](uint32_t fmt) -> uint32_t {
+          switch (fmt) {
+          case vt::fp16::id:
+          case vt::bf16::id:
+            return NUM_THREADS / 8;
+          case vt::fp8::id:
+          case vt::bf8::id:
+          case vt::int8::id:
+          case vt::uint8::id:
+          case vt::mxfp8::id:
+          case vt::mxint8::id:
+            return NUM_THREADS / 4;
+          case vt::int4::id:
+          case vt::uint4::id:
+          case vt::nvfp4::id:
+            return NUM_THREADS / 2;
+          default:
+            return 1u;
+          }
+        };
 
         if (is_sparse) {
-          // Sparse mode - different step calculations
+          // Sparse mode uses the packed sparse-A register layout from vx_tensor.h
+          // and a synthesized metadata phase, matching the RTL uop expansion.
 #if (NUM_THREADS != 8) && (NUM_THREADS != 32)
           std::abort();
 #else
-          constexpr uint32_t kCompression = 2;
-          if ((cfg::k_steps % kCompression) != 0) {
+          constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
+          constexpr uint32_t meta_reg0 = 14; // f14
+          constexpr uint32_t meta_reg1 = 15; // f15
+          constexpr uint32_t meta_per_warp_depth = cfg::m_steps * sparse_k_steps;
+          constexpr uint32_t meta_cols_per_load = NUM_THREADS / meta_per_warp_depth;
+
+          if ((cfg::k_steps % 2) != 0) {
             std::abort();
           }
-          uint32_t k_steps_sp = cfg::k_steps / kCompression;
-          uint32_t b_block_size_sp = cfg::b_block_size * kCompression;
-          if ((b_block_size_sp == 0) || (NUM_THREADS % b_block_size_sp) != 0) {
+          if (cfg::nt16_sparse) {
             std::abort();
           }
-          uint32_t b_sub_blocks_sp = NUM_THREADS / b_block_size_sp;
+          if ((cfg::b_block_size_sp == 0) || (NUM_THREADS % cfg::b_block_size_sp) != 0) {
+            std::abort();
+          }
+          uint32_t num_meta_cols = meta_num_cols(fmt_s);
+          if (num_meta_cols > (2 * meta_cols_per_load)) {
+            std::abort();
+          }
 
           uint32_t steps = 0;
-          uint32_t steps_count = cfg::m_steps * cfg::n_steps * k_steps_sp;
-          uint32_t steps_shift = 32 - log2ceil(steps_count);
+          uint32_t steps_count = num_meta_cols + (cfg::m_steps * cfg::n_steps * sparse_k_steps);
+          uint32_t steps_shift = (steps_count > 1) ? (32 - log2ceil(steps_count)) : 0;
           uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
           uint32_t uuid_lo = uuid & 0xffffffff;
-          for (uint32_t k = 0; k < k_steps_sp; ++k) {
+
+          for (uint32_t col = 0; col < num_meta_cols; ++col) {
+            uint32_t reg_rs1 = (col >= meta_cols_per_load) ? meta_reg1 : meta_reg0;
+            uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
+            uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
+            ++steps;
+            auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
+            instr->setOpType(TcuType::META_STORE);
+            instr->setArgs(IntrTcuArgs{fmt_s, col, 0, 0, 0});
+            instr->setSrcReg(0, reg_rs1, RegType::Float);
+            instr->setParentUUID(uuid);
+            ibuffer.push_back(instr);
+          }
+
+          for (uint32_t k = 0; k < sparse_k_steps; ++k) {
             for (uint32_t m = 0; m < cfg::m_steps; ++m) {
               for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + (k * kCompression);
-                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / b_sub_blocks_sp;
+                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * sparse_k_steps + k;
+                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks_sp;
                 uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
                 uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
                 uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
                 ++steps;
                 auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
                 instr->setOpType(tcu_type);
-                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n});
+                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k});
                 instr->setDestReg(reg_rs3, RegType::Float);
                 instr->setSrcReg(0, reg_rs1, RegType::Float);
                 instr->setSrcReg(1, reg_rs2, RegType::Float);
@@ -1227,7 +1271,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
                 ++steps;
                 auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
                 instr->setOpType(tcu_type);
-                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n});
+                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k});
                 instr->setDestReg(reg_rs3, RegType::Float);
                 instr->setSrcReg(0, reg_rs1, RegType::Float);
                 instr->setSrcReg(1, reg_rs2, RegType::Float);
@@ -1240,9 +1284,52 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         }
       } break;
       case 1: { // META_STORE
-        // META_STORE instruction - stores metadata for sparse operations
-        // This is a passthrough as metadata loading is handled separately
-        // No micro-ops needed here
+        namespace vt = vortex::tensor;
+        using cfg = vt::wmma_config_t<NUM_THREADS>;
+        auto meta_num_cols = [](uint32_t fmt) -> uint32_t {
+          switch (fmt) {
+          case vt::fp16::id:
+          case vt::bf16::id:
+            return NUM_THREADS / 8;
+          case vt::fp8::id:
+          case vt::bf8::id:
+          case vt::int8::id:
+          case vt::uint8::id:
+          case vt::mxfp8::id:
+          case vt::mxint8::id:
+            return NUM_THREADS / 4;
+          case vt::int4::id:
+          case vt::uint4::id:
+          case vt::nvfp4::id:
+            return NUM_THREADS / 2;
+          default:
+            return 1u;
+          }
+        };
+
+        constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
+        constexpr uint32_t meta_per_warp_depth = cfg::m_steps * sparse_k_steps;
+        constexpr uint32_t meta_cols_per_load = NUM_THREADS / meta_per_warp_depth;
+        uint32_t fmt_meta = rd;
+        uint32_t num_meta_cols = meta_num_cols(fmt_meta);
+        if (num_meta_cols > (2 * meta_cols_per_load)) {
+          std::abort();
+        }
+
+        uint32_t steps_shift = (num_meta_cols > 1) ? (32 - log2ceil(num_meta_cols)) : 0;
+        uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
+        uint32_t uuid_lo = uuid & 0xffffffff;
+        for (uint32_t col = 0; col < num_meta_cols; ++col) {
+          uint32_t reg_rs1 = (col >= meta_cols_per_load) ? rs2 : rs1;
+          uint32_t uuid_lo_x = (col << steps_shift) | uuid_lo;
+          uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
+          auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
+          instr->setOpType(TcuType::META_STORE);
+          instr->setArgs(IntrTcuArgs{fmt_meta, col, 0, 0, 0});
+          instr->setSrcReg(0, reg_rs1, RegType::Float);
+          instr->setParentUUID(uuid);
+          ibuffer.push_back(instr);
+        }
       } break;
       default:
         std::abort();

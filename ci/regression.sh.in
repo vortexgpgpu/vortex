@@ -591,17 +591,139 @@ tensor()
     #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=13
     #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=13
 
-    # sparsity tests
+    echo "tensor tests done!"
+}
+
+tensor_sparse()
+{
+    echo "begin tensor sparse tests..."
+
+    # simx tests (NT=8)
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=uint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k16"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k16"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=bf8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k32"
+
+    # simx tests (NT=32)
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=uint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=int4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k128"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k128"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=fp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=bf8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k64"
+
+    # rtlsim tests (NT=8)
     make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k32"
 
-    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=uint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k32"
 
     make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k16"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k16"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k32"
 
-    echo "tensor tests done!"
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=bf8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m8 -n8 -k32"
+
+    # rtlsim tests (NT=16)
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n8 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=uint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n8 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=int4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n8 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n8 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n8 -k16"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n8 -k16"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n8 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=bf8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n8 -k32"
+
+    # rtlsim tests (NT=32)
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=uint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=int4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k128"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k128"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k32"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=fp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k64"
+
+    make -C tests/regression/sgemm_tcu_struct_sparse clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=bf8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_struct_sparse
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_struct_sparse --args="-m16 -n16 -k64"
+
+    echo "tensor sparse tests done!"
 }
 
 cupbop() {
@@ -649,7 +771,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sparse] [--cupbop] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -708,6 +830,9 @@ while [ "$1" != "" ]; do
         --tensor )
                 tests+=("tensor")
                 ;;
+        --tensor_sparse )
+                tests+=("tensor_sparse")
+                ;;
         --cupbop )
                 tests+=("cupbop")
                 ;;
@@ -729,6 +854,7 @@ while [ "$1" != "" ]; do
                 tests+=("synthesis")
                 tests+=("vector")
                 tests+=("tensor")
+                tests+=("tensor_sparse")
                 tests+=("cupbop")
                 ;;
         -h | --help )
