@@ -129,8 +129,6 @@ inline float element_magnitude(const typename TensorT::dtype* data, uint32_t off
   if constexpr (std::is_same_v<TensorT, tensor::int8> || std::is_same_v<TensorT, tensor::mxint8>) {
     return std::abs(static_cast<float>(static_cast<int8_t>(val)));
   } else if constexpr (std::is_same_v<TensorT, tensor::uint8>
-                    || std::is_same_v<TensorT, tensor::fp16>
-                    || std::is_same_v<TensorT, tensor::bf16>
                     || std::is_same_v<TensorT, tensor::fp8>
                     || std::is_same_v<TensorT, tensor::bf8>
                     || std::is_same_v<TensorT, tensor::mxfp8>) {
@@ -143,6 +141,10 @@ inline float element_magnitude(const typename TensorT::dtype* data, uint32_t off
     return std::abs(static_cast<float>(sval));
   } else if constexpr (std::is_same_v<TensorT, tensor::uint4>) {
     return static_cast<float>(val & 0xF);
+  } else if constexpr (std::is_same_v<TensorT, tensor::fp16>) {
+    return std::abs(bit_cast<float>(rv_htof_s(val, 0, nullptr)));
+  } else if constexpr (std::is_same_v<TensorT, tensor::bf16>) {
+    return std::abs(bit_cast<float>(rv_btof_s(val, 0, nullptr)));
   } else {
     return std::abs(static_cast<float>(val));
   }
