@@ -70,6 +70,8 @@ Vortex has a 6-stage pipeline:
   - SFU Unit
     - Handle warp control operations
     - Handle Control Status Registers (CSRs) operations
+  - TCU Unit
+    - Handle warp matrix multiply accumulate operations
 - **Commit**
   - Write result back to the register file and update the Scoreboard.
 
