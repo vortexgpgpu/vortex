@@ -24,7 +24,6 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     output ibuffer_t ibuf_out,
 
     input wire start,
-    input wire advance,
     input wire [UOP_CTR_W-1:0] uop_idx,
     output wire [UOP_CTR_W-1:0] uop_count
 );
@@ -48,11 +47,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 
     // Truncate the wide uop_idx to the bits this expander actually uses.
     wire [`UP(CTR_W)-1:0] ctr = `UP(CTR_W)'(uop_idx);
-`ifdef TCU_SPARSE_ENABLE
-    `UNUSED_VAR ({uop_idx})
-`else
-    `UNUSED_VAR ({clk, reset, start, advance, uop_idx})
-`endif
+    `UNUSED_VAR ({clk, reset, start, uop_idx})
 
 `ifdef TCU_SPARSE_ENABLE
     localparam LG_B_SB_SP = $clog2(TCU_B_SUB_BLOCKS_SP);
@@ -64,36 +59,10 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire [4:0] sparse_meta_cols = meta_num_cols(ibuf_in.op_args.tcu.fmt_s);
     /* verilator lint_on UNUSEDSIGNAL */
 
-    // Registered phase tracking — eliminates combinational subtractor/comparator
-    reg meta_done_r;
-    reg [`UP(CTR_W)-1:0] mma_ctr_r;
-    reg [`UP(CTR_W)-1:0] meta_last_r;
-
-    always_ff @(posedge clk) begin
-        if (reset) begin
-            meta_done_r <= 1'b1;
-            mma_ctr_r   <= '0;
-            meta_last_r <= '0;
-        end else if (start) begin
-            if (is_sparse) begin
-                meta_done_r <= 1'b0;
-                mma_ctr_r   <= '0;
-                meta_last_r <= `UP(CTR_W)'(sparse_meta_cols) - `UP(CTR_W)'(1);
-            end else begin
-                meta_done_r <= 1'b1;
-                mma_ctr_r   <= '0;
-            end
-        end else if (advance) begin
-            if (is_sparse && !meta_done_r) begin
-                if (ctr == meta_last_r)
-                    meta_done_r <= 1'b1;
-            end else if (meta_done_r && !is_meta_store) begin
-                mma_ctr_r <= mma_ctr_r + `UP(CTR_W)'(1);
-            end
-        end
-    end
-
-    wire is_meta_phase = is_sparse && !meta_done_r;
+    // Combinational meta-phase detection — comparator/subtractor absorbed
+    // by the registered uop_data stage in VX_uop_sequencer.
+    wire is_meta_phase = is_sparse && (ctr < `UP(CTR_W)'(sparse_meta_cols));
+    wire [`UP(CTR_W)-1:0] mma_ctr = ctr - `UP(CTR_W)'(sparse_meta_cols);
     wire meta_uop = is_meta_store || is_meta_phase;
     localparam META_REG0 = TCU_RA + 4;  // f14 — fragA.data[4]
     localparam META_REG1 = TCU_RA + 5;  // f15 — fragA.data[5]
@@ -112,7 +81,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `endif
 
 `ifdef TCU_SPARSE_ENABLE
-    wire [`UP(CTR_W)-1:0] eff_ctr = (is_sparse && meta_done_r) ? mma_ctr_r : ctr;
+    wire [`UP(CTR_W)-1:0] eff_ctr = (is_sparse && !is_meta_phase) ? mma_ctr : ctr;
 `else
     wire [`UP(CTR_W)-1:0] eff_ctr = ctr;
 `endif
