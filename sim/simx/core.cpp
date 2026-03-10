@@ -526,13 +526,12 @@ bool Core::running() const {
   return false;
 }
 
-bool Core::warp_sync_ready(uint32_t wid, uint64_t uuid) const {
-  (void)uuid;
+bool Core::has_pending_instrs(uint32_t wid) const {
   for (auto trace : pending_instrs_) {
-    if (trace->wid != wid)
-      continue;
+    if (trace->wid == wid)
+      return true;
   }
-  return true;
+  return false;
 }
 
 void Core::resume(uint32_t wid) {
