@@ -526,12 +526,13 @@ bool Core::running() const {
   return false;
 }
 
-bool Core::has_pending_instrs(uint32_t wid, uint64_t exclude_uuid) const {
+bool Core::has_pending_instrs(uint32_t wid) const {
+  uint32_t count = 0;
   for (auto trace : pending_instrs_) {
-    if (trace->wid == wid && trace->uuid != exclude_uuid)
-      return true;
+    if (trace->wid == wid)
+      ++count;
   }
-  return false;
+  return count > 1; // more than 1 because the current instruction is also counted
 }
 
 void Core::resume(uint32_t wid) {
