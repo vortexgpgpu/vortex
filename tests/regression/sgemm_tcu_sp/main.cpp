@@ -1131,7 +1131,7 @@ int main(int argc, char *argv[]) {
       }
     }
     if (sparse_ref_errors > 0) {
-      printf("WARNING: sparse_ref vs cpu_ref: %d / %u mismatches!\n", sparse_ref_errors, sizeC);
+      printf("WARNING: sparse_ref vs cpu_ref: %d / %zu mismatches!\n", sparse_ref_errors, sizeC);
     } else {
       printf("sparse_ref vs cpu_ref: ALL MATCH\n");
     }
@@ -1149,7 +1149,7 @@ int main(int argc, char *argv[]) {
       }
     }
     if (gpu_vs_sparse > 0) {
-      printf("GPU vs sparse_ref: %d / %u mismatches\n", gpu_vs_sparse, sizeC);
+      printf("GPU vs sparse_ref: %d / %zu mismatches\n", gpu_vs_sparse, sizeC);
     } else {
       printf("GPU vs sparse_ref: ALL MATCH\n");
     }
