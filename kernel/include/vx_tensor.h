@@ -64,9 +64,9 @@ namespace detail {
         auto src_u = *reinterpret_cast<const US*>(&src); // unsigned cast
         auto src_d = static_cast<UD>(src_u); // zero-extend
         UD result_u(0);
-        for (uint32_t i = 0; i < count; i++) {
+        detail::unroll_for<count>([&](auto i) {
           result_u |= (src_d << (i * bits));
-        }
+        });
         return *reinterpret_cast<const D*>(&result_u);
       }
     }
@@ -78,12 +78,12 @@ namespace detail {
       using US = raw_unsigned_t<Type>;
       using UD = raw_unsigned_t<D>;
       UD result_u(0);
-      for (uint32_t i = 0; i < count; ++i) {
+      detail::unroll_for<count>([&](auto i) {
         auto src_u = *reinterpret_cast<const US*>(base); // unsigned cast
         auto src_d = static_cast<UD>(src_u); // zero-extend
         result_u |= (src_d << (i * bits));
         base += ldm; // next row
-      }
+      });
       return *reinterpret_cast<const D*>(&result_u);
     }
   };
@@ -98,9 +98,9 @@ namespace detail {
       uint8_t src_u8 = (src << 4) | src; // pack 2 nibbles
       auto src_d = static_cast<UD>(src_u8); // zero-extend
       UD result_u(0);
-      for (uint32_t i = 0; i < count; i++) {
+      detail::unroll_for<count>([&](auto i) {
         result_u |= (src_d << (i * 8));
-      }
+      });
       return *reinterpret_cast<const D*>(&result_u);
     }
   };
@@ -115,9 +115,9 @@ namespace detail {
       uint8_t src_u8 = (src << 4) | src; // pack 2 nibbles
       auto src_d = static_cast<UD>(src_u8); // zero-extend
       UD result_u(0);
-      for (uint32_t i = 0; i < count; i++) {
+      detail::unroll_for<count>([&](auto i) {
         result_u |= (src_d << (i * 8));
-      }
+      });
       return *reinterpret_cast<const D*>(&result_u);
     }
   };
