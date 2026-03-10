@@ -340,12 +340,12 @@ public:
   static uint8_t generate() {
     return generate_with_scale(SCALE_FACTOR_E8M0_A);
   }
-  
+
   static uint8_t generate_with_scale(uint8_t scale_factor) {
     auto fvalue = float(rand()) / RAND_MAX;
     return rv_ftomxfp8_s(bit_cast<uint32_t>(fvalue), scale_factor, 0, nullptr);
   }
-  
+
   static bool compare(uint8_t a, uint8_t b, int index, int errors) {
     if (a != b) {
       if (errors < MAX_ERRORS) {
@@ -363,12 +363,12 @@ public:
   static uint8_t generate() {
     return generate_with_scale(SCALE_FACTOR_E4M3_A);
   }
-  
+
   static uint8_t generate_with_scale(uint8_t scale_factor) {
     auto fvalue = float(rand()) / RAND_MAX;
     return rv_ftonvfp4_s(bit_cast<uint32_t>(fvalue), scale_factor, 0, nullptr);
   }
-  
+
   static bool compare(uint8_t a, uint8_t b, int index, int errors) {
     if (a != b) {
       if (errors < MAX_ERRORS) {
@@ -834,17 +834,17 @@ int main(int argc, char *argv[]) {
   uint32_t K = xk;
 
   if ((M % cfg::tileM) != 0) {
-    std::cout << "Error: M must be a multiple of tensor tileM!" << std::endl;
+    std::cout << "Error: M must be a multiple of tensor tileM=" << cfg::tileM << "!" << std::endl;
     return -1;
   }
 
   if ((N % cfg::tileN) != 0) {
-    std::cout << "Error: M must be a multiple of tensor tileN!" << std::endl;
+    std::cout << "Error: N must be a multiple of tensor tileN=" << cfg::tileN << "!" << std::endl;
     return -1;
   }
 
   if ((K % cfg::tileK) != 0) {
-    std::cout << "Error: M must be a multiple of tensor tileK!" << std::endl;
+    std::cout << "Error: K must be a multiple of tensor tileK=" << cfg::tileK << "!" << std::endl;
     return -1;
   }
 
@@ -925,7 +925,7 @@ int main(int argc, char *argv[]) {
   for (uint32_t i = 0; i < sizeB; ++i) {
     h_B[i] = generate_B_value<vt::ITYPE>();
   }
-  
+
   // upload matrix A buffer
   {
     std::cout << "upload matrix A buffer" << std::endl;

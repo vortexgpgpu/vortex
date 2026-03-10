@@ -178,8 +178,7 @@ public:
   }
 
   template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
-                                                               const void *meta_ptr = nullptr) {
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
     uint32_t lane = vx_thread_id();
     if constexpr (Frag::Use == matrix_a) {
       // Load row-major matrix A
@@ -218,20 +217,6 @@ public:
             dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
           }
         });
-        // Load metadata into tail registers (fragA.data[sparse_regs..sparse_regs+num_loads-1])
-        if (meta_ptr != nullptr) {
-          constexpr uint32_t rtl_i_ratio = 32 / It::bits;
-          constexpr uint32_t num_cols = (NT * 2 * rtl_i_ratio) / 32;
-          constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-          constexpr uint32_t cols_per_load = NT / PD;
-          constexpr uint32_t num_loads = (num_cols + cols_per_load - 1) / cols_per_load;
-          auto meta_base = reinterpret_cast<const float*>(meta_ptr);
-          uint32_t lane_id = vx_thread_id();
-          dst.data[sparse_regs] = meta_base[lane_id];
-          if constexpr (num_loads == 2) {
-            dst.data[sparse_regs + 1] = meta_base[NT + lane_id];
-          }
-        }
       } else {
         // Dense A load: load all K-steps
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
@@ -361,6 +346,31 @@ public:
           dst.data[r] = tmp;
         }
       });
+    }
+  }
+
+  template <mem_layout src_layout = row_major, typename Frag>
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
+                                                               const void *meta_ptr) {
+    static_assert(is_sparse, "meta_ptr is only supported in sparse mode");
+    static_assert(Frag::Use == matrix_a, "meta_ptr is only supported for matrix_a");
+
+    // Reuse the base function for the standard data load
+    load_matrix_sync<src_layout, Frag>(dst, src, ldm);
+
+    // Load metadata into tail registers (fragA.data[sparse_regs..sparse_regs+num_loads-1])
+    constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
+    constexpr uint32_t sparse_regs = cfg::m_steps * sparse_k_steps;
+    constexpr uint32_t rtl_i_ratio = 32 / It::bits;
+    constexpr uint32_t num_cols = (NT * 2 * rtl_i_ratio) / 32;
+    constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
+    constexpr uint32_t cols_per_load = NT / PD;
+    constexpr uint32_t num_loads = (num_cols + cols_per_load - 1) / cols_per_load;
+    auto meta_base = reinterpret_cast<const float*>(meta_ptr);
+    uint32_t lane_id = vx_thread_id();
+    dst.data[sparse_regs] = meta_base[lane_id];
+    if constexpr (num_loads == 2) {
+      dst.data[sparse_regs + 1] = meta_base[NT + lane_id];
     }
   }
 
