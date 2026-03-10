@@ -1,5 +1,5 @@
-#ifndef __VX_SPARSITY_HOST_H__
-#define __VX_SPARSITY_HOST_H__
+#ifndef __VX_TENSOR_HOST_H__
+#define __VX_TENSOR_HOST_H__
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,7 @@
 #include <util.h>
 
 namespace vortex {
-namespace sparsity {
+namespace tensor {
 
 namespace detail {
 
@@ -30,7 +30,7 @@ struct data_accessor_t {
 };
 
 template <>
-struct data_accessor_t<tensor::int4> {
+struct data_accessor_t<int4> {
   static uint8_t read(const uint8_t* ptr, uint32_t offset) {
     uint32_t row_off = offset / 2;
     bool odd = offset & 0x1;
@@ -49,7 +49,7 @@ struct data_accessor_t<tensor::int4> {
 };
 
 template <>
-struct data_accessor_t<tensor::uint4> {
+struct data_accessor_t<uint4> {
   static uint8_t read(const uint8_t* ptr, uint32_t offset) {
     uint32_t row_off = offset / 2;
     bool odd = offset & 0x1;
@@ -68,7 +68,7 @@ struct data_accessor_t<tensor::uint4> {
 };
 
 template <>
-struct data_accessor_t<tensor::nvfp4> {
+struct data_accessor_t<nvfp4> {
   static uint8_t read(const uint8_t* ptr, uint32_t offset) {
     uint32_t row_off = offset / 2;
     bool odd = offset & 0x1;
@@ -126,24 +126,24 @@ inline void select_top2(const typename TensorT::dtype* data,
 template <typename TensorT>
 inline float element_magnitude(const typename TensorT::dtype* data, uint32_t offset) {
   auto val = data_accessor_t<TensorT>::read(data, offset);
-  if constexpr (std::is_same_v<TensorT, tensor::int8> || std::is_same_v<TensorT, tensor::mxint8>) {
+  if constexpr (std::is_same_v<TensorT, int8> || std::is_same_v<TensorT, mxint8>) {
     return std::abs(static_cast<float>(static_cast<int8_t>(val)));
-  } else if constexpr (std::is_same_v<TensorT, tensor::uint8>
-                    || std::is_same_v<TensorT, tensor::fp8>
-                    || std::is_same_v<TensorT, tensor::bf8>
-                    || std::is_same_v<TensorT, tensor::mxfp8>) {
+  } else if constexpr (std::is_same_v<TensorT, uint8>
+                    || std::is_same_v<TensorT, fp8>
+                    || std::is_same_v<TensorT, bf8>
+                    || std::is_same_v<TensorT, mxfp8>) {
     return static_cast<float>(val);
-  } else if constexpr (std::is_same_v<TensorT, tensor::int4>) {
+  } else if constexpr (std::is_same_v<TensorT, int4>) {
     int32_t sval = val & 0xF;
     if (sval & 0x8) {
       sval |= ~0xF;
     }
     return std::abs(static_cast<float>(sval));
-  } else if constexpr (std::is_same_v<TensorT, tensor::uint4>) {
+  } else if constexpr (std::is_same_v<TensorT, uint4>) {
     return static_cast<float>(val & 0xF);
-  } else if constexpr (std::is_same_v<TensorT, tensor::fp16>) {
+  } else if constexpr (std::is_same_v<TensorT, fp16>) {
     return std::abs(bit_cast<float>(rv_htof_s(val, 0, nullptr)));
-  } else if constexpr (std::is_same_v<TensorT, tensor::bf16>) {
+  } else if constexpr (std::is_same_v<TensorT, bf16>) {
     return std::abs(bit_cast<float>(rv_btof_s(val, 0, nullptr)));
   } else {
     return std::abs(static_cast<float>(val));
@@ -234,7 +234,7 @@ inline bool compress_2to4_matrix(typename TensorT::dtype* compressed,
   return true;
 }
 
-} // namespace sparsity
+} // namespace tensor
 } // namespace vortex
 
-#endif // __VX_SPARSITY_HOST_H__
+#endif // __VX_TENSOR_HOST_H__

@@ -11,8 +11,6 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 
-CXXFLAGS += -I$(VORTEX_HOME)/kernel/include
-
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
 include ../common.mk
