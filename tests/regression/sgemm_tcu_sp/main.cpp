@@ -749,7 +749,6 @@ vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
 vx_buffer_h meta_buffer = nullptr;
-vx_buffer_h cycles_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
@@ -796,7 +795,6 @@ void cleanup() {
     vx_mem_free(B_buffer);
     vx_mem_free(C_buffer);
     vx_mem_free(meta_buffer);
-    vx_mem_free(cycles_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -894,10 +892,6 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
   RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_addr));
 
-  uint32_t num_blocks = kernel_arg.grid_dim[0] * kernel_arg.grid_dim[1];
-  RT_CHECK(vx_mem_alloc(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
-  RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.tcu_cycles_addr));
-
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
@@ -988,26 +982,6 @@ int main(int argc, char *argv[]) {
   std::vector<otype_t> h_C(sizeC);
   std::cout << "download destination buffer" << std::endl;
   RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t)));
-
-  // download TCU K-loop cycle counts
-  {
-    std::vector<uint32_t> h_cycles(num_blocks);
-    RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_blocks * sizeof(uint32_t)));
-    uint64_t cycles_sum = 0;
-    uint32_t max_cyc = 0;
-    for (uint32_t i = 0; i < num_blocks; ++i) {
-      cycles_sum += h_cycles[i];
-      if (h_cycles[i] > max_cyc) max_cyc = h_cycles[i];
-    }
-    uint32_t mma_syncs_per_block = K / cfg::tileK;
-    uint64_t num_mma_sync_instrs = uint64_t(num_blocks) * mma_syncs_per_block;
-    printf("TCU_CYCLES: max=%u total=%lu avg_per_mma_sync=%.2f (across %u blocks, %lu mma_sync)\n",
-      max_cyc,
-      cycles_sum,
-      (num_mma_sync_instrs != 0) ? (double(cycles_sum) / num_mma_sync_instrs) : 0.0,
-      num_blocks,
-      num_mma_sync_instrs);
-  }
 
   // === DEBUG: dump masks, metadata, compressed A for row 0 ===
   {
