@@ -52,7 +52,7 @@ namespace detail {
   struct data_accessor_t {
     using Type = typename T::dtype;
 
-    static inline D bit_fill(Type src) {
+    static __attribute__((always_inline)) D bit_fill(Type src) {
       static_assert(sizeof(D) % sizeof(Type) == 0, "D must be a multiple of Type in size");
       if constexpr (std::is_same_v<Type, D>) {
         return src; // passthrough
@@ -71,7 +71,7 @@ namespace detail {
       }
     }
 
-    static inline D pack_row(const Type *base, uint32_t ldm) {
+    static __attribute__((always_inline)) D pack_row(const Type *base, uint32_t ldm) {
       static_assert(sizeof(D) % sizeof(Type) == 0, "D must be a multiple of Type in size");
       constexpr uint32_t count = sizeof(D) / sizeof(Type);
       constexpr uint32_t bits = 8 * sizeof(Type);
@@ -91,7 +91,7 @@ namespace detail {
   template <typename D>
   struct data_accessor_t<int4, D> {
 
-    static inline D bit_fill(uint8_t src) {
+    static __attribute__((always_inline)) D bit_fill(uint8_t src) {
       constexpr uint32_t count = sizeof(D);
       assert((src & 0xf0) == 0 && "src must be a 4-bit value");
       using UD = raw_unsigned_t<D>;
@@ -108,7 +108,7 @@ namespace detail {
   template <typename D>
   struct data_accessor_t<uint4, D> {
 
-    static inline D bit_fill(uint8_t src) {
+    static __attribute__((always_inline)) D bit_fill(uint8_t src) {
       constexpr uint32_t count = sizeof(D);
       assert((src & 0xf0) == 0 && "src must be a 4-bit value");
       using UD = raw_unsigned_t<D>;
