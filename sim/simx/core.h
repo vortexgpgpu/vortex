@@ -119,7 +119,7 @@ public:
 
   void resume(uint32_t wid);
 
-  bool has_pending_instrs(uint32_t wid) const;
+  bool has_pending_instrs(uint32_t wid, uint64_t exclude_uuid) const;
 
   void barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar);
 

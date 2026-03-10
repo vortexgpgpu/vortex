@@ -456,7 +456,7 @@ void SfuUnit::tick() {
 				}
 				break;
 			case WctlType::WSYNC:
-				if (!trace->eop || core_->has_pending_instrs(trace->wid))
+				if (!trace->eop || core_->has_pending_instrs(trace->wid, trace->uuid))
 					continue; //skips the rest of the loop. Does not pop the input.
 				output.send(trace, 2+delay);
 				release_warp = true;

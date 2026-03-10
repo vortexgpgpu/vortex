@@ -526,9 +526,9 @@ bool Core::running() const {
   return false;
 }
 
-bool Core::has_pending_instrs(uint32_t wid) const {
+bool Core::has_pending_instrs(uint32_t wid, uint64_t exclude_uuid) const {
   for (auto trace : pending_instrs_) {
-    if (trace->wid == wid)
+    if (trace->wid == wid && trace->uuid != exclude_uuid)
       return true;
   }
   return false;
