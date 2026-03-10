@@ -217,6 +217,20 @@ public:
             dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
           }
         });
+        // Load metadata into tail registers (fragA.data[sparse_regs..sparse_regs+num_loads-1])
+        // meta_ptr is always non-null in sparse path — no runtime check needed
+        {
+          constexpr uint32_t rtl_i_ratio = 32 / It::bits;
+          constexpr uint32_t num_cols = (NT * 2 * rtl_i_ratio) / 32;
+          constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
+          constexpr uint32_t cols_per_load = NT / PD;
+          constexpr uint32_t num_loads = (num_cols + cols_per_load - 1) / cols_per_load;
+          auto meta_base = reinterpret_cast<const float*>(meta_ptr);
+          dst.data[sparse_regs] = meta_base[lane];
+          if constexpr (num_loads == 2) {
+            dst.data[sparse_regs + 1] = meta_base[NT + lane];
+          }
+        }
       } else {
         // Dense A load: load all K-steps
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
