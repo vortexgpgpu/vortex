@@ -1,0 +1,633 @@
+diff --git a/kernel/include/vx_intrinsics.h b/kernel/include/vx_intrinsics.h
+index a3e39f91..1de560c9 100644
+--- a/kernel/include/vx_intrinsics.h
++++ b/kernel/include/vx_intrinsics.h
+@@ -281,6 +281,10 @@ inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cva
+     return ret;
+ }
+ 
++// Warp-level scheduling hint
++#define vx_wsched(__prio__, __yield__) \
++    __asm__ (".insn r %0, 6, 0, x0, x%[p], x%[y]" :: "i"(RISCV_CUSTOM0), [p]"i"(__prio__), [y]"i"(__yield__) : "memory")
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/sim/simx/core.cpp b/sim/simx/core.cpp
+index 55791907..c3254163 100644
+--- a/sim/simx/core.cpp
++++ b/sim/simx/core.cpp
+@@ -358,6 +358,64 @@ void Core::issue() {
+       }
+     }
+ 
++    if (ready_set.any()) {
++      // apply user-driven scheduling
++      auto count = ready_set.count();
++      if (count > 1) {
++        uint32_t priority_warps = 0;
++        uint32_t yielding_warps = 0;
++        for (uint32_t j = 0; j < PER_ISSUE_WARPS; ++j) {
++          if (ready_set.test(j)) {
++            uint32_t wid = j * ISSUE_WIDTH + iw;
++            auto& warp = emulator_.warps_.at(wid);
++            if (warp.priority > 0) {
++              ++priority_warps;
++            }
++            if (warp.yield > 0) {
++              ++yielding_warps;
++            }
++            if (warp.priority > 0 && warp.yield > 0) {
++              std::cout << "Warp cannot be both priority and yielding! wid=" << wid << std::endl << std::flush;
++              std::abort();
++            }
++          }
++        }
++        if (yielding_warps != 0) {
++          // remove yielding warps from ready set
++          for (uint32_t j = 0; j < PER_ISSUE_WARPS; ++j) {
++            if (ready_set.test(j)) {
++              uint32_t wid = j * ISSUE_WIDTH + iw;
++              auto& warp = emulator_.warps_.at(wid);
++              if (warp.yield > 0) {
++                ready_set.reset(j);
++                --warp.yield; // update yield counter
++                --count;
++                auto& ibuffer = ibuffers_.at(wid);
++                auto trace = ibuffer.top();
++                DT(3, "*** pipeline-counter-yield: " << *trace);
++              }
++            }
++          }
++        }
++        if (priority_warps != 0 && priority_warps < count) {
++          // remove non-priority warps from ready set
++          for (uint32_t j = 0; j < PER_ISSUE_WARPS; ++j) {
++            if (ready_set.test(j)) {
++              uint32_t wid = j * ISSUE_WIDTH + iw;
++              auto& warp = emulator_.warps_.at(wid);
++              if (warp.priority == 0) {
++                ready_set.reset(j);
++                --count;
++                auto& ibuffer = ibuffers_.at(wid);
++                auto trace = ibuffer.top();
++                DT(3, "*** pipeline-priority-yield: " << *trace);
++              }
++            }
++          }
++        }
++      }
++    }
++    
+     if (ready_set.any()) {
+       // select one instruction from ready set
+       auto w = ibuffer_arbs_.at(iw).grant(ready_set);
+diff --git a/sim/simx/decode.cpp b/sim/simx/decode.cpp
+index f2d6cc35..fdef5a31 100644
+--- a/sim/simx/decode.cpp
++++ b/sim/simx/decode.cpp
+@@ -368,6 +368,7 @@ static op_string_t op_string(const Instr &instr) {
+       case WctlType::JOIN:   return {"JOIN", ""};
+       case WctlType::BAR:    return {"BAR", ""};
+       case WctlType::PRED:   return {wctlArgs.is_neg ? "PRED.N":"PRED", ""};
++      case WctlType::WSCHED: return {"WSCHED", "priority=" + std::to_string(wctlArgs.priority) + ", yield=" + std::to_string(wctlArgs.yield)};
+       default:
+         std::abort();
+       }
+@@ -1032,16 +1033,22 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
+         instr->setSrcReg(1, rs2, RegType::Integer);
+         wctlArgs.is_neg = (rd != 0);
+         break;
++      case 6: // WSCHED
++        instr->setOpType(WctlType::WSCHED);
++        wctlArgs.priority = rs1;
++        wctlArgs.yield = rs2;
++        break;
+       default:
+         std::abort();
+       }
+       instr->setArgs(wctlArgs);
+       ibuffer.push_back(instr);
+     } break;
+-    case 1: { // VOTE
++    case 1: { // VOTE & SHUFFLE
+       auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
+       instr->setDestReg(rd, RegType::Integer);
+       instr->setSrcReg(0, rs1, RegType::Integer);
++      instr->setSrcReg(1, rs2, RegType::Integer);
+       switch (funct3) {
+       case 0:
+         instr->setOpType(VoteType::ALL);
+@@ -1057,19 +1064,19 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
+         break;
+       case 4:
+         instr->setOpType(ShflType::UP);
+-        instr->setSrcReg(1, rs2, RegType::Integer);
++        instr->setSrcReg(2, rs3, RegType::Integer);
+         break;
+       case 5:
+         instr->setOpType(ShflType::DOWN);
+-        instr->setSrcReg(1, rs2, RegType::Integer);
++        instr->setSrcReg(2, rs3, RegType::Integer);
+         break;
+       case 6:
+         instr->setOpType(ShflType::BFLY);
+-        instr->setSrcReg(1, rs2, RegType::Integer);
++        instr->setSrcReg(2, rs3, RegType::Integer);
+         break;
+       case 7:
+         instr->setOpType(ShflType::IDX);
+-        instr->setSrcReg(1, rs2, RegType::Integer);
++        instr->setSrcReg(2, rs3, RegType::Integer);
+         break;
+       default:
+         std::abort();
+diff --git a/sim/simx/emulator.cpp b/sim/simx/emulator.cpp
+index 92030807..7a6170b5 100644
+--- a/sim/simx/emulator.cpp
++++ b/sim/simx/emulator.cpp
+@@ -36,6 +36,8 @@ warp_t::warp_t(uint32_t num_threads)
+   , tmask(num_threads)
+   , PC(0)
+   , uuid(0)
++  , priority(0)
++  , yield(0)
+ {}
+ 
+ void warp_t::reset(uint64_t startup_addr) {
+@@ -43,6 +45,8 @@ void warp_t::reset(uint64_t startup_addr) {
+   this->PC = startup_addr;
+   this->uuid = 0;
+   this->fcsr = 0;
++  this->priority = 0;
++  this->yield = 0;
+ 
+   for (auto& reg_file : this->ireg_file) {
+     for (auto& reg : reg_file) {
+diff --git a/sim/simx/emulator.h b/sim/simx/emulator.h
+index 0fb1e0b7..b278416f 100644
+--- a/sim/simx/emulator.h
++++ b/sim/simx/emulator.h
+@@ -60,6 +60,8 @@ struct warp_t {
+   Word                              PC;
+   Byte                              fcsr;
+   uint32_t                          uuid;
++  uint32_t                          priority;
++  uint32_t                          yield;
+ 
+   warp_t(uint32_t num_threads);
+ 
+@@ -164,6 +166,8 @@ private:
+ #endif
+ 
+   PoolAllocator<Instr, 64> instr_pool_;
++
++  friend class Core;
+ };
+ 
+ }
+diff --git a/sim/simx/execute.cpp b/sim/simx/execute.cpp
+index 4556efa8..08161035 100644
+--- a/sim/simx/execute.cpp
++++ b/sim/simx/execute.cpp
+@@ -145,6 +145,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
+   DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
+          << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << instr.getUUID() << ")");
+ 
++  assert(warp.tmask.any());
++
+   // fetch register values
+   if (rsrc0.type != RegType::None) fetch_registers(rs1_data, wid, 0, rsrc0);
+   if (rsrc1.type != RegType::None) fetch_registers(rs2_data, wid, 1, rsrc1);
+@@ -313,15 +315,16 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
+       for (uint32_t t = thread_start; t < num_threads; ++t) {
+         if (!warp.tmask.test(t))
+           continue;
+-        auto is_pred = rs1_data[t].i & 0x1;
++        bool is_pred = (rs1_data[t].i & 1) != 0;
++        has_vote_true  |= is_pred;
++        has_vote_false |= !is_pred;
+         if (is_pred) {
+-          has_vote_true = true;
+           ballot |= (Word(1) << t);
+-        } else {
+-          has_vote_false = true;
+         }
+       }
+       for (uint32_t t = thread_start; t < num_threads; ++t) {
++        if (!warp.tmask.test(t))
++          continue;
+         switch (vote_type) {
+         case VoteType::ALL:
+           rd_data[t].i = !has_vote_false;
+@@ -373,8 +376,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
+         default:
+           std::abort();
+         }
+-        if (!pval)
++        if (!pval) {
+           lane = t;
++        }
+         if (lane < num_threads) {
+           rd_data[t].i = rs1_data[lane].i;
+         } else {
+@@ -1396,6 +1400,11 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
+           next_tmask = ThreadMask(num_threads, rs2_data.at(thread_last).u);
+         }
+       } break;
++      case WctlType::WSCHED: {
++        trace->fetch_stall = true;
++        warp.priority = wctlArgs.priority;
++        warp.yield = wctlArgs.yield;
++      } break;
+       default:
+         std::abort();
+       }
+diff --git a/sim/simx/func_unit.cpp b/sim/simx/func_unit.cpp
+index 42cbeb9a..3d2b7308 100644
+--- a/sim/simx/func_unit.cpp
++++ b/sim/simx/func_unit.cpp
+@@ -368,6 +368,7 @@ void SfuUnit::tick() {
+ 			case WctlType::SPLIT:
+ 			case WctlType::JOIN:
+ 			case WctlType::PRED:
++		  case WctlType::WSCHED:
+ 				output.push(trace, 2+delay);
+ 				break;
+ 			case WctlType::BAR: {
+diff --git a/sim/simx/types.h b/sim/simx/types.h
+index d069bdae..701607a6 100644
+--- a/sim/simx/types.h
++++ b/sim/simx/types.h
+@@ -429,11 +429,14 @@ enum class WctlType {
+   SPLIT,
+   JOIN,
+   BAR,
+-  PRED
++  PRED,
++  WSCHED
+ };
+ 
+ struct IntrWctlArgs {
+-  uint32_t is_neg : 1;
++  uint32_t is_neg   : 1;
++  uint32_t priority : 1;
++  uint32_t yield    : 5;
+ };
+ 
+ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
+@@ -444,6 +447,7 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
+   case WctlType::JOIN:   os << "JOIN"; break;
+   case WctlType::BAR:    os << "BAR"; break;
+   case WctlType::PRED:   os << "PRED"; break;
++  case WctlType::WSCHED: os << "WSCHED"; break;
+   default:
+     assert(false);
+   }
+diff --git a/tests/regression/priority/Makefile b/tests/regression/priority/Makefile
+new file mode 100644
+index 00000000..1f1da053
+--- /dev/null
++++ b/tests/regression/priority/Makefile
+@@ -0,0 +1,14 @@
++ROOT_DIR := $(realpath ../../..)
++include $(ROOT_DIR)/config.mk
++
++PROJECT := priority
++
++SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
++
++SRCS := $(SRC_DIR)/main.cpp
++
++VX_SRCS := $(SRC_DIR)/kernel.cpp
++
++OPTS ?= -n32
++
++include ../common.mk
+\ No newline at end of file
+diff --git a/tests/regression/priority/common.h b/tests/regression/priority/common.h
+new file mode 100644
+index 00000000..b58ec5f5
+--- /dev/null
++++ b/tests/regression/priority/common.h
+@@ -0,0 +1,16 @@
++#ifndef _COMMON_H_
++#define _COMMON_H_
++
++#ifndef TYPE
++#define TYPE float
++#endif
++
++typedef struct {
++  uint32_t grid_dim[2];
++  uint32_t size;
++  uint64_t A_addr;
++  uint64_t B_addr;
++  uint64_t C_addr;
++} kernel_arg_t;
++
++#endif
+diff --git a/tests/regression/priority/kernel.cpp b/tests/regression/priority/kernel.cpp
+new file mode 100644
+index 00000000..9299f0d8
+--- /dev/null
++++ b/tests/regression/priority/kernel.cpp
+@@ -0,0 +1,52 @@
++#include <vx_spawn.h>
++#include "common.h"
++
++void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
++	auto A = reinterpret_cast<TYPE*>(arg->A_addr);
++	auto B = reinterpret_cast<TYPE*>(arg->B_addr);
++	auto C = reinterpret_cast<TYPE*>(arg->C_addr);
++    auto size = arg->size;
++
++    int col = blockIdx.x;
++    int row = blockIdx.y;
++    int idx = row * size + col;
++
++    int wid = vx_warp_id();
++    bool is_compute_warp = ((wid & 1) == 0);
++
++    TYPE sum(0);
++
++    if (is_compute_warp) {
++        //vx_wsched(1, 0); // set warp to high priority
++        auto a = A[idx];
++        auto b = B[idx];
++        for (int e = 0; e < size; ++e) {
++            sum += a * b;
++        }
++    } else {
++        for (int e = 0; e < size; ++e) {
++            const int PDIST = 4;
++            TYPE a_buf[PDIST];
++            TYPE b_buf[PDIST];
++            int issued = 0;
++            #pragma unroll
++            for (; issued < PDIST && e < size; ++issued, ++e) {
++                int a_idx = row * size + e;
++                int b_idx = e * size + col;
++                a_buf[issued] = A[a_idx];
++                b_buf[issued] = B[b_idx];
++            }
++            //vx_wsched(0, 31); // set warp to 31 cycles yield
++            #pragma unroll
++            for (int i = 0; i < issued; ++i) {
++                sum += a_buf[i] * b_buf[i];
++            }
++        }
++    }
++    C[idx] = sum;
++}
++
++int main() {
++	kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
++	return vx_spawn_threads(2, arg->grid_dim, nullptr, (vx_kernel_func_cb)kernel_body, arg);
++}
+diff --git a/tests/regression/priority/main.cpp b/tests/regression/priority/main.cpp
+new file mode 100644
+index 00000000..1fd97c52
+--- /dev/null
++++ b/tests/regression/priority/main.cpp
+@@ -0,0 +1,239 @@
++#include <iostream>
++#include <unistd.h>
++#include <string.h>
++#include <vector>
++#include <chrono>
++#include <vortex.h>
++#include <cmath>
++#include "common.h"
++
++#define FLOAT_ULP 6
++
++#define RT_CHECK(_expr)                                         \
++   do {                                                         \
++     int _ret = _expr;                                          \
++     if (0 == _ret)                                             \
++       break;                                                   \
++     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
++	 cleanup();			                                              \
++     exit(-1);                                                  \
++   } while (false)
++
++///////////////////////////////////////////////////////////////////////////////
++
++template <typename Type>
++class Comparator {};
++
++template <>
++class Comparator<int> {
++public:
++  static const char* type_str() {
++    return "integer";
++  }
++  static int generate() {
++    return rand();
++  }
++  static bool compare(int a, int b, int index, int errors) {
++    if (a != b) {
++      if (errors < 100) {
++        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
++      }
++      return false;
++    }
++    return true;
++  }
++};
++
++template <>
++class Comparator<float> {
++public:
++  static const char* type_str() {
++    return "float";
++  }
++  static float generate() {
++    return static_cast<float>(rand()) / RAND_MAX;
++  }
++  static bool compare(float a, float b, int index, int errors) {
++    union fi_t { float f; int32_t i; };
++    fi_t fa, fb;
++    fa.f = a;
++    fb.f = b;
++    auto d = std::abs(fa.i - fb.i);
++    if (d > FLOAT_ULP) {
++      if (errors < 100) {
++        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
++      }
++      return false;
++    }
++    return true;
++  }
++};
++
++static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, uint32_t height) {
++  for (uint32_t row = 0; row < height; ++row) {
++    for (uint32_t col = 0; col < width; ++col) {
++      TYPE sum(0);
++      for (uint32_t e = 0; e < width; ++e) {
++          sum += A[row * width + e] * B[e * width + col];
++      }
++      out[row * width + col] = sum;
++    }
++  }
++}
++
++const char* kernel_file = "kernel.vxbin";
++uint32_t size = 32;
++
++vx_device_h device = nullptr;
++vx_buffer_h A_buffer = nullptr;
++vx_buffer_h B_buffer = nullptr;
++vx_buffer_h C_buffer = nullptr;
++vx_buffer_h krnl_buffer = nullptr;
++vx_buffer_h args_buffer = nullptr;
++kernel_arg_t kernel_arg = {};
++
++static void show_usage() {
++   std::cout << "Vortex Test." << std::endl;
++   std::cout << "Usage: [-k: kernel] [-n size] [-h: help]" << std::endl;
++}
++
++static void parse_args(int argc, char **argv) {
++  int c;
++  while ((c = getopt(argc, argv, "n:k:h")) != -1) {
++    switch (c) {
++    case 'n':
++      size = atoi(optarg);
++      break;
++    case 'k':
++      kernel_file = optarg;
++      break;
++    case 'h':
++      show_usage();
++      exit(0);
++      break;
++    default:
++      show_usage();
++      exit(-1);
++    }
++  }
++}
++
++void cleanup() {
++  if (device) {
++    vx_mem_free(A_buffer);
++    vx_mem_free(B_buffer);
++    vx_mem_free(C_buffer);
++    vx_mem_free(krnl_buffer);
++    vx_mem_free(args_buffer);
++    vx_dev_close(device);
++  }
++}
++
++int main(int argc, char *argv[]) {
++  // parse command arguments
++  parse_args(argc, argv);
++
++  std::srand(50);
++
++  // open device connection
++  std::cout << "open device connection" << std::endl;
++  RT_CHECK(vx_dev_open(&device));
++
++  uint32_t size_sq = size * size;
++  uint32_t buf_size = size_sq * sizeof(TYPE);
++
++  std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
++  std::cout << "matrix size: " << size << "x" << size << std::endl;
++
++  kernel_arg.grid_dim[0] = size;
++  kernel_arg.grid_dim[1] = size;
++  kernel_arg.size = size;
++
++  // allocate device memory
++  std::cout << "allocate device memory" << std::endl;
++  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &A_buffer));
++  RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
++  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &B_buffer));
++  RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
++  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &C_buffer));
++  RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
++
++  std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
++  std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
++  std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
++
++  // generate source data
++  std::vector<TYPE> h_A(size_sq);
++  std::vector<TYPE> h_B(size_sq);
++  std::vector<TYPE> h_C(size_sq);
++  for (uint32_t i = 0; i < size_sq; ++i) {
++    h_A[i] = Comparator<TYPE>::generate();
++    h_B[i] = Comparator<TYPE>::generate();
++  }
++
++  // upload matrix A buffer
++  {
++    std::cout << "upload matrix A buffer" << std::endl;
++    RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, buf_size));
++  }
++
++  // upload matrix B buffer
++  {
++    std::cout << "upload matrix B buffer" << std::endl;
++    RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, buf_size));
++  }
++
++  // Upload kernel binary
++  std::cout << "Upload kernel binary" << std::endl;
++  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
++
++  // upload kernel argument
++  std::cout << "upload kernel argument" << std::endl;
++  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
++
++  auto time_start = std::chrono::high_resolution_clock::now();
++
++  // start device
++  std::cout << "start device" << std::endl;
++  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
++
++  // wait for completion
++  std::cout << "wait for completion" << std::endl;
++  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
++
++  auto time_end = std::chrono::high_resolution_clock::now();
++  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
++  printf("Elapsed time: %lg ms\n", elapsed);
++
++  // download destination buffer
++  std::cout << "download destination buffer" << std::endl;
++  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, buf_size));
++
++  // verify result
++  std::cout << "verify result" << std::endl;
++  int errors = 0;
++  {
++    std::vector<TYPE> h_ref(size_sq);
++    matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), size, size);
++
++    for (uint32_t i = 0; i < h_ref.size(); ++i) {
++      if (!Comparator<TYPE>::compare(h_C[i], h_ref[i], i, errors)) {
++        ++errors;
++      }
++    }
++  }
++
++  // cleanup
++  std::cout << "cleanup" << std::endl;
++  cleanup();
++
++  if (errors != 0) {
++    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
++    std::cout << "FAILED!" << std::endl;
++    return errors;
++  }
++
++  std::cout << "PASSED!" << std::endl;
++
++  return 0;
++}
+\ No newline at end of file

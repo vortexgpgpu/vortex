@@ -1,0 +1,811 @@
+diff --git a/hw/VX_config.toml b/hw/VX_config.toml
+index 59298827..b68707b6 100644
+--- a/hw/VX_config.toml
++++ b/hw/VX_config.toml
+@@ -29,6 +29,9 @@ XLEN = 32
+ VM_ENABLE = false
+ VM_ENABLED = "expr: 1 if $VM_ENABLE else 0"
+ 
++WLDST_ENABLE = false
++WLDST_ENABLED = "expr: 1 if $WLDST_ENABLE else 0"
++
+ EXT_D_ENABLE = "expr: $XLEN_64"
+ FLEN = "expr: 64 if $EXT_D_ENABLE else 32"
+ 
+diff --git a/hw/rtl/VX_gpu_pkg.sv b/hw/rtl/VX_gpu_pkg.sv
+index 416fa9d4..716440cf 100644
+--- a/hw/rtl/VX_gpu_pkg.sv
++++ b/hw/rtl/VX_gpu_pkg.sv
+@@ -549,9 +549,11 @@ package VX_gpu_pkg;
+     `PACKAGE_ASSERT($bits(fpu_args_t) == INST_ARGS_BITS)
+ 
+     typedef struct packed {
+-        logic [(INST_ARGS_BITS-1-1-12)-1:0] __padding;
++        logic [(INST_ARGS_BITS-1-1-1-2-12)-1:0] __padding;
+         logic is_store;
+         logic is_float;
++        logic is_bulk;
++        logic [1:0] vcnt;
+         logic [11:0] offset;
+     } lsu_args_t;
+     `PACKAGE_ASSERT($bits(lsu_args_t) == INST_ARGS_BITS)
+diff --git a/hw/rtl/VX_trace_pkg.sv b/hw/rtl/VX_trace_pkg.sv
+index 6c8770ae..04a40be4 100644
+--- a/hw/rtl/VX_trace_pkg.sv
++++ b/hw/rtl/VX_trace_pkg.sv
+@@ -169,7 +169,22 @@ package VX_trace_pkg;
+             endcase
+         end
+         EX_LSU: begin
+-            if (op_args.lsu.is_float) begin
++            if (op_args.lsu.is_bulk) begin
++                case (op_args.lsu.vcnt)
++                    2'd1: begin
++                        if (op_args.lsu.is_store) `TRACE(level, ("WST.F2"))
++                        else                      `TRACE(level, ("WLD.F2"))
++                    end
++                    2'd2: begin
++                        if (op_args.lsu.is_store) `TRACE(level, ("WST.F4"))
++                        else                      `TRACE(level, ("WLD.F4"))
++                    end
++                    default: begin
++                        if (op_args.lsu.is_store) `TRACE(level, ("WST.F8"))
++                        else                      `TRACE(level, ("WLD.F8"))
++                    end
++                endcase
++            end else if (op_args.lsu.is_float) begin
+                 case (INST_LSU_BITS'(op_type))
+                     INST_LSU_LW: `TRACE(level, ("FLW"))
+                     INST_LSU_LD: `TRACE(level, ("FLD"))
+@@ -435,7 +450,10 @@ package VX_trace_pkg;
+             `TRACE(level, (", use_PC=%b, use_imm=%b, imm=0x%0h", op_args.alu.use_PC, op_args.alu.use_imm, op_args.alu.imm20))
+         end
+         EX_LSU: begin
+-            `TRACE(level, (", offset=0x%0h", op_args.lsu.offset))
++            if (op_args.lsu.is_bulk)
++                `TRACE(level, (", uop_idx=%0d", op_args.lsu.offset[3:0]))
++            else
++                `TRACE(level, (", offset=0x%0h", op_args.lsu.offset))
+         end
+         EX_SFU: begin
+             if (inst_sfu_is_csr(op_type)) begin
+diff --git a/hw/rtl/core/VX_decode.sv b/hw/rtl/core/VX_decode.sv
+index fe6ce8c1..8fb78a4a 100644
+--- a/hw/rtl/core/VX_decode.sv
++++ b/hw/rtl/core/VX_decode.sv
+@@ -297,7 +297,8 @@ module VX_decode import VX_gpu_pkg::*; #(
+                 op_type = INST_LSU_FENCE;
+                 op_args.lsu.is_store = 0;
+                 op_args.lsu.is_float = 0;
+-                op_args.lsu.offset = 0;
++                op_args.lsu.is_bulk  = 0;
++                op_args.lsu.offset   = 0;
+             end
+             INST_SYS : begin
+                 if (funct3[1:0] != 0) begin
+@@ -332,7 +333,8 @@ module VX_decode import VX_gpu_pkg::*; #(
+                 op_type = INST_OP_BITS'({1'b0, funct3});
+                 op_args.lsu.is_store = 0;
+                 op_args.lsu.is_float = opcode[2];
+-                op_args.lsu.offset = u_12;
++                op_args.lsu.is_bulk  = 0;
++                op_args.lsu.offset   = u_12;
+                 `USED_IREG (rs1);
+             `ifdef EXT_F_ENABLE
+                 `USED_REG (opcode[2], rd, 1'b1);
+@@ -348,7 +350,8 @@ module VX_decode import VX_gpu_pkg::*; #(
+                 op_type = INST_OP_BITS'({1'b1, funct3});
+                 op_args.lsu.is_store = 1;
+                 op_args.lsu.is_float = opcode[2];
+-                op_args.lsu.offset = s_imm;
++                op_args.lsu.is_bulk  = 0;
++                op_args.lsu.offset   = s_imm;
+                 `USED_IREG (rs1);
+             `ifdef EXT_F_ENABLE
+                 `USED_REG (opcode[2], rs2, 1'b1);
+@@ -544,19 +547,6 @@ module VX_decode import VX_gpu_pkg::*; #(
+                         end
+                         op_type = INST_OP_BITS'(funct3);
+                     end
+-                `ifdef EXT_DXA_ENABLE
+-                    7'h03: begin // DXA issue (dimension-specific)
+-                        // funct3 encodes dimensionality: 0=1D .. 4=5D.
+-                        // Expanded into micro-ops by VX_dxa_uops.
+-                        if (funct3 <= 3'd4) begin
+-                            ex_type = EX_SFU;
+-                            op_type = INST_OP_BITS'(INST_SFU_DXA);
+-                            op_args.dxa.op = funct3;
+-                            `USED_IREG (rs1);
+-                            `USED_IREG (rs2);
+-                        end
+-                    end
+-                `endif
+                 `ifdef EXT_TCU_ENABLE
+                     7'h02: begin
+                         if (funct3 == 3'h0) begin
+@@ -584,6 +574,48 @@ module VX_decode import VX_gpu_pkg::*; #(
+                             `USED_FREG (rs2); // float register with load 1 data (int4) or same as rs1
+                         end
+                     end
++                `endif
++                `ifdef EXT_DXA_ENABLE
++                    7'h03: begin
++                        // DXA issue (dimension-specific)
++                        // funct3 encodes dimensionality: 0=1D .. 4=5D.
++                        // Expanded into micro-ops by VX_dxa_uops.
++                        if (funct3 <= 3'd4) begin
++                            ex_type = EX_SFU;
++                            op_type = INST_OP_BITS'(INST_SFU_DXA);
++                            op_args.dxa.op = funct3;
++                            `USED_IREG (rs1);
++                            `USED_IREG (rs2);
++                        end
++                    end
++                `endif
++                `ifdef WLDST_ENABLE
++                    7'h04: begin
++                        // Bulk load/store extension (vx_wld/vx_wst)
++                        // Instruction R-type encoding: rd=first_float, rs1=base(int), rs2=stride(int)
++                        // funct3[2]: 0=load, 1=store
++                        // funct3[1:0]: 1=2regs, 2=4regs, 3=8regs
++                        // Decode remaps: rs2(stride)->rs3 slot; rd(store src)->rs2 slot
++                        ex_type = EX_LSU;
++                        op_type = funct3[2] ? INST_OP_BITS'(INST_LSU_SW) : INST_OP_BITS'(INST_LSU_LW);
++                        op_args.lsu.is_store = funct3[2];
++                        op_args.lsu.is_float = 1'b1;
++                        op_args.lsu.is_bulk  = 1'b1;
++                        op_args.lsu.vcnt     = funct3[1:0];
++                        `USED_IREG (rs1); // integer base address
++                        // rs3 = integer stride (from rs2 field of instruction)
++                        reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, rs2);
++                        use_regs[RV_RS3] = 1'b1;
++                        if (funct3[2]) begin
++                            // store: rd field = first source float -> rs2 slot
++                            reg_ids[RV_RS2]  = make_reg_num(REG_TYPE_F, rd);
++                            use_regs[RV_RS2] = 1'b1;
++                        end else begin
++                            // load: rd field = first destination float -> rd slot
++                            reg_ids[RV_RD]   = make_reg_num(REG_TYPE_F, rd);
++                            use_regs[RV_RD]  = 1'b1;
++                        end
++                    end
+                 `endif
+                     default:;
+                 endcase
+diff --git a/hw/rtl/core/VX_dispatcher.sv b/hw/rtl/core/VX_dispatcher.sv
+index 4856c3d3..cb9bb426 100644
+--- a/hw/rtl/core/VX_dispatcher.sv
++++ b/hw/rtl/core/VX_dispatcher.sv
+@@ -38,38 +38,108 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
+     wire [NUM_EX_UNITS-1:0] operands_ready_in;
+     assign operands_if.ready = operands_ready_in[operands_if.data.ex_type];
+ 
++    // Non-LSU execution units: pass operand data straight through
+     for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_buffers
+-        VX_elastic_buffer #(
+-            .DATAW   (OUT_DATAW),
+-            .SIZE    (2),
+-            .OUT_REG (1)
+-        ) buffer (
+-            .clk        (clk),
+-            .reset      (reset),
+-            .valid_in   (operands_if.valid && (operands_if.data.ex_type == EX_BITS'(i))),
+-            .ready_in   (operands_ready_in[i]),
+-            .data_in    ({
+-                operands_if.data.uuid,
+-                operands_if.data.wis,
+-                operands_if.data.sid,
+-                operands_if.data.tmask,
+-                operands_if.data.PC,
+-                operands_if.data.wb,
+-                operands_if.data.wr_xregs,
+-                operands_if.data.rd,
+-                operands_if.data.op_type,
+-                operands_if.data.op_args,
+-                operands_if.data.rs1_data,
+-                operands_if.data.rs2_data,
+-                operands_if.data.rs3_data,
+-                operands_if.data.sop,
+-                operands_if.data.eop
+-            }),
+-            .data_out   (dispatch_if[i].data),
+-            .valid_out  (dispatch_if[i].valid),
+-            .ready_out  (dispatch_if[i].ready)
+-        );
++        if (i != EX_LSU) begin : g_non_lsu
++            VX_elastic_buffer #(
++                .DATAW   (OUT_DATAW),
++                .SIZE    (2),
++                .OUT_REG (1)
++            ) buffer (
++                .clk        (clk),
++                .reset      (reset),
++                .valid_in   (operands_if.valid && (operands_if.data.ex_type == EX_BITS'(i))),
++                .ready_in   (operands_ready_in[i]),
++                .data_in    ({
++                    operands_if.data.uuid,
++                    operands_if.data.wis,
++                    operands_if.data.sid,
++                    operands_if.data.tmask,
++                    operands_if.data.PC,
++                    operands_if.data.wb,
++                    operands_if.data.wr_xregs,
++                    operands_if.data.rd,
++                    operands_if.data.op_type,
++                    operands_if.data.op_args,
++                    operands_if.data.rs1_data,
++                    operands_if.data.rs2_data,
++                    operands_if.data.rs3_data,
++                    operands_if.data.sop,
++                    operands_if.data.eop
++                }),
++                .data_out   (dispatch_if[i].data),
++                .valid_out  (dispatch_if[i].valid),
++                .ready_out  (dispatch_if[i].ready)
++            );
++        end
++    end
++
++    wire [`SIMD_WIDTH-1:0][`XLEN-1:0] eff_rs1_data;
++    op_args_t eff_op_args;
++
++`ifdef WLDST_ENABLE
++    // Bulk LSU: pre-compute effective base address = rs1 + rs3 * uop_idx.
++    // uop_idx lives in op_args.lsu.offset[3:0]; stride is rs3_data (uniform across lanes).
++    // Multiply via shift-and-add on the 3-bit uop_idx (0-7), no dedicated multiplier needed.
++    wire is_bulk_lsu = operands_if.data.op_args.lsu.is_bulk;
++    wire [2:0] bulk_uop_idx = operands_if.data.op_args.lsu.offset[2:0];
++
++    wire [`SIMD_WIDTH-1:0][`XLEN-1:0] stride_off;
++    for (genvar j = 0; j < `SIMD_WIDTH; ++j) begin : g_stride_off
++        assign stride_off[j] =
++            ({`XLEN{bulk_uop_idx[0]}} & (operands_if.data.rs3_data[j] << 0))
++          + ({`XLEN{bulk_uop_idx[1]}} & (operands_if.data.rs3_data[j] << 1))
++          + ({`XLEN{bulk_uop_idx[2]}} & (operands_if.data.rs3_data[j] << 2));
++    end
++
++    for (genvar j = 0; j < `SIMD_WIDTH; ++j) begin : g_eff_rs1
++        assign eff_rs1_data[j] = is_bulk_lsu
++            ? (operands_if.data.rs1_data[j] + stride_off[j])
++            :  operands_if.data.rs1_data[j];
++    end
++
++    always_comb begin
++        eff_op_args = operands_if.data.op_args;
++        if (is_bulk_lsu) begin
++            eff_op_args.lsu.offset = '0;
++        end
+     end
++`else
++    assign eff_rs1_data = operands_if.data.rs1_data;
++    assign eff_op_args = operands_if.data.op_args;
++`endif
++
++    // LSU: substitute effective base address and cleared offset for bulk ops
++    VX_elastic_buffer #(
++        .DATAW   (OUT_DATAW),
++        .SIZE    (2),
++        .OUT_REG (1)
++    ) lsu_buffer (
++        .clk        (clk),
++        .reset      (reset),
++        .valid_in   (operands_if.valid && (operands_if.data.ex_type == EX_BITS'(EX_LSU))),
++        .ready_in   (operands_ready_in[EX_LSU]),
++        .data_in    ({
++            operands_if.data.uuid,
++            operands_if.data.wis,
++            operands_if.data.sid,
++            operands_if.data.tmask,
++            operands_if.data.PC,
++            operands_if.data.wb,
++            operands_if.data.wr_xregs,
++            operands_if.data.rd,
++            operands_if.data.op_type,
++            eff_op_args,
++            eff_rs1_data,
++            operands_if.data.rs2_data,
++            operands_if.data.rs3_data,
++            operands_if.data.sop,
++            operands_if.data.eop
++        }),
++        .data_out   (dispatch_if[EX_LSU].data),
++        .valid_out  (dispatch_if[EX_LSU].valid),
++        .ready_out  (dispatch_if[EX_LSU].ready)
++    );
+ 
+ `ifdef PERF_ENABLE
+     reg [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] perf_stalls_r;
+diff --git a/hw/rtl/core/VX_ibuffer.sv b/hw/rtl/core/VX_ibuffer.sv
+index 1b421536..e48803db 100644
+--- a/hw/rtl/core/VX_ibuffer.sv
++++ b/hw/rtl/core/VX_ibuffer.sv
+@@ -39,7 +39,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
+     wire [PER_ISSUE_WARPS-1:0] ibuf_ready_in;
+     assign decode_if.ready = ibuf_ready_in[decode_wis];
+ 
+-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_instr_bufs
++    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_bufs
+         VX_ibuffer_if uop_sequencer_if();
+         VX_elastic_buffer #(
+             .DATAW   (OUT_DATAW),
+diff --git a/hw/rtl/core/VX_uop_mux.sv b/hw/rtl/core/VX_uop_mux.sv
+new file mode 100644
+index 00000000..b49ca12c
+--- /dev/null
++++ b/hw/rtl/core/VX_uop_mux.sv
+@@ -0,0 +1,46 @@
++// Copyright © 2019-2023
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++// http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++`include "VX_define.vh"
++
++module VX_uop_mux import VX_gpu_pkg::*; #(
++    parameter NUM_REQS = 1
++) (
++    input  wire [NUM_REQS-1:0] valid_in,
++    input  ibuffer_t           data_in [NUM_REQS],
++    input  wire [NUM_REQS-1:0] done_in,
++
++    output wire                valid_out,
++    output ibuffer_t           data_out,
++    output wire                done_out
++);
++    // Priority select: higher index has higher priority.
++    ibuffer_t uop_data_r;
++    reg       uop_done_r;
++
++    always @(*) begin
++        uop_done_r = 'x;
++        uop_data_r = 'x;
++        for (integer i = 0; i < NUM_REQS; ++i) begin
++            if (valid_in[i]) begin
++                uop_data_r = data_in[i];
++                uop_done_r = done_in[i];
++            end
++        end
++    end
++
++    assign valid_out = (| valid_in);
++    assign data_out = uop_data_r;
++    assign done_out = uop_done_r;
++
++endmodule
+diff --git a/hw/rtl/core/VX_uop_sequencer.sv b/hw/rtl/core/VX_uop_sequencer.sv
+index cb0b91d9..846f6e9f 100644
+--- a/hw/rtl/core/VX_uop_sequencer.sv
++++ b/hw/rtl/core/VX_uop_sequencer.sv
+@@ -30,22 +30,25 @@ module VX_uop_sequencer import
+     `UNUSED_PARAM (WARP_ID)
+     `UNUSED_SPARAM (INSTANCE_ID)
+ 
+-    ibuffer_t base_uop_data;
+-    ibuffer_t dxa_uop_data;
+-    ibuffer_t uop_data;
++    localparam UOP_TCU   = 0;
++    localparam UOP_WLDST = UOP_TCU + `EXT_TCU_ENABLED;
++    localparam UOP_DXA   = UOP_WLDST + `WLDST_ENABLED;
++    localparam UOP_MAX   = UOP_DXA + `EXT_DXA_ENABLED;
+ 
+-    wire is_base_uop_input;
+-    wire is_dxa_uop_input;
++    ibuffer_t uop_data;
+     wire is_uop_input;
+     wire uop_start = input_if.valid && is_uop_input;
+     wire uop_next = output_if.ready;
+     wire uop_done;
+-    wire base_uop_done;
+-    wire dxa_uop_done;
++
++    ibuffer_t uop_data_in [UOP_MAX];
++    wire [UOP_MAX-1:0] uop_valid_in;
++    wire [UOP_MAX-1:0] uop_done_in;
+ 
+ `ifdef EXT_TCU_ENABLE
+ 
+-    assign is_base_uop_input = (input_if.data.ex_type == EX_TCU
++    // TCU uop expansion
++    assign uop_valid_in[UOP_TCU] = (input_if.data.ex_type == EX_TCU
+         && (input_if.data.op_type == INST_TCU_WMMA
+     `ifdef TCU_SPARSE_ENABLE
+          || input_if.data.op_type == INST_TCU_WMMA_SP
+@@ -57,47 +60,56 @@ module VX_uop_sequencer import
+         .clk     (clk),
+         .reset   (reset),
+         .ibuf_in (input_if.data),
+-        .ibuf_out(base_uop_data),
+-        .start   (uop_start && is_base_uop_input),
++        .ibuf_out(uop_data_in[UOP_TCU]),
++        .start   (uop_start && uop_valid_in[UOP_TCU]),
+         .next    (uop_next),
+-        .done    (base_uop_done)
++        .done    (uop_done_in[UOP_TCU])
+     );
+ 
+-`else
+-
+-    assign is_base_uop_input = 0;
+-    assign base_uop_done = 0;
+-    assign base_uop_data = '0;
+-
+ `endif
+ 
+ `ifdef EXT_DXA_ENABLE
+ 
+     // All DXA dimension variants (funct3 0-4) require uop expansion.
+-    assign is_dxa_uop_input = (input_if.data.ex_type == EX_SFU)
+-                            && (input_if.data.op_type == INST_SFU_DXA);
+-
++    assign uop_valid_in[UOP_DXA] = (input_if.data.ex_type == EX_SFU)
++                                 && (input_if.data.op_type == INST_SFU_DXA);
+     VX_dxa_uops dxa_uops (
+         .clk     (clk),
+         .reset   (reset),
+         .ibuf_in (input_if.data),
+-        .ibuf_out(dxa_uop_data),
+-        .start   (uop_start && is_dxa_uop_input),
++        .ibuf_out(uop_data_in[UOP_DXA]),
++        .start   (uop_start && uop_valid_in[UOP_DXA]),
+         .next    (uop_next),
+-        .done    (dxa_uop_done)
++        .done    (uop_done_in[UOP_DXA])
+     );
+ 
+-`else
+-
+-    assign is_dxa_uop_input = 0;
+-    assign dxa_uop_done = 0;
+-    assign dxa_uop_data = '0;
++`endif
+ 
++`ifdef WLDST_ENABLE
++    // Bulk load/store uop expansion
++    assign uop_valid_in[UOP_WLDST] = (input_if.data.ex_type == EX_LSU)
++                                  && (input_if.data.op_args.lsu.is_bulk);
++    VX_uop_wldst wldst_uops (
++        .clk     (clk),
++        .reset   (reset),
++        .ibuf_in (input_if.data),
++        .ibuf_out(uop_data_in[UOP_WLDST]),
++        .start   (uop_start && uop_valid_in[UOP_WLDST]),
++        .next    (uop_next),
++        .done    (uop_done_in[UOP_WLDST])
++    );
+ `endif
+ 
+-    assign is_uop_input = is_base_uop_input || is_dxa_uop_input;
+-    assign uop_data = is_dxa_uop_input ? dxa_uop_data : base_uop_data;
+-    assign uop_done = is_dxa_uop_input ? dxa_uop_done : base_uop_done;
++    VX_uop_mux #(
++        .NUM_REQS (UOP_MAX)
++    ) uop_mux (
++        .valid_in  (uop_valid_in),
++        .data_in   (uop_data_in),
++        .done_in   (uop_done_in),
++        .valid_out (is_uop_input),
++        .data_out  (uop_data),
++        .done_out  (uop_done)
++    );
+ 
+     reg uop_active;
+ 
+diff --git a/hw/rtl/core/VX_uop_wldst.sv b/hw/rtl/core/VX_uop_wldst.sv
+new file mode 100644
+index 00000000..e4da2452
+--- /dev/null
++++ b/hw/rtl/core/VX_uop_wldst.sv
+@@ -0,0 +1,97 @@
++// Copyright © 2019-2023
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++// http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++`include "VX_define.vh"
++
++// VX_uop_wldst: Micro-op sequencer for bulk load/store instructions.
++//
++// Expands one bulk vx_wld/vx_wst instruction into N sequential LSU uops,
++// one per float register.  N is encoded in ibuf_in.op_args.lsu.offset[1:0]
++// which carries funct3[1:0] from the original instruction:
++//   01 (1) -> 2 regs,  10 (2) -> 4 regs,  11 (3) -> 8 regs
++//
++// Decode-stage register layout (from VX_decode.sv):
++//   rs1  = integer base address
++//   rs2  = first float data register (stores only, base f0)
++//   rs3  = integer stride
++//   rd   = first float destination register (loads only, base f10)
++//
++// Each uop increments rd (load) or rs2 (store) by uop_idx.
++// uop_idx is placed in offset[3:0] so the dispatcher can compute:
++//   effective_rs1[lane] = rs1[lane] + rs3[lane] * uop_idx  (shift-and-add)
++
++module VX_uop_wldst import VX_gpu_pkg::*; (
++    input  wire      clk,
++    input  wire      reset,
++    input  wire      start,
++    input  wire      next,
++    input  ibuffer_t ibuf_in,
++    output ibuffer_t ibuf_out,
++    output reg       done
++);
++    // Derive parameters from the incoming instruction
++    wire is_store = ibuf_in.op_args.lsu.is_store;
++
++    // vcnt: 1=2regs, 2=4regs, 3=8regs
++    wire [3:0] uop_count = (4'd1 << ibuf_in.op_args.lsu.vcnt);
++
++    // Uop counter
++    reg [3:0] uop_idx;
++    reg busy;
++
++    always_ff @(posedge clk) begin
++        if (reset) begin
++            uop_idx <= '0;
++            busy    <= 1'b0;
++            done    <= 1'b0;
++        end else if (~busy && start) begin
++            uop_idx <= '0;
++            busy    <= 1'b1;
++            done    <= (uop_count == 4'd1);
++        end else if (busy && next) begin
++            uop_idx <= uop_idx + 4'd1;
++            done    <= (uop_idx == (uop_count - 4'd2));
++            busy    <= ~done;
++        end
++    end
++
++    // Stamp uop_idx into the low bits of uuid so each uop is uniquely traceable
++`ifdef UUID_ENABLE
++    localparam CTR_W = 4;
++    wire [UUID_WIDTH-1:0] uop_uuid = {ibuf_in.uuid[UUID_WIDTH-1:32],
++                                      {uop_idx, ibuf_in.uuid[0 +: (32-CTR_W)]}};
++`else
++    wire [UUID_WIDTH-1:0] uop_uuid = ibuf_in.uuid;
++`endif
++
++    // Preserve register type bits: only add uop_idx to the index field within RV_REGS_BITS
++    wire [NUM_REGS_BITS-1:0] rd  = ibuf_in.rd  + NUM_REGS_BITS'(uop_idx); // rd+idx for loads
++    wire [NUM_REGS_BITS-1:0] rs2 = ibuf_in.rs2 + NUM_REGS_BITS'(uop_idx); // rs2+idx  for stores
++
++    // Build the output uop: copy ibuf_in wholesale, then patch register and offset
++    ibuffer_t ibuf_r;
++
++    always_comb begin
++        ibuf_r = ibuf_in;
++        ibuf_r.uuid = uop_uuid;
++        if (is_store)
++            ibuf_r.rs2 = rs2;  // store: source register
++        else
++            ibuf_r.rd = rd;   // load: destination register
++        // Encode uop_idx in offset[3:0]; dispatcher multiplies by stride
++        ibuf_r.op_args.lsu.offset = {8'd0, uop_idx};
++    end
++
++    assign ibuf_out = ibuf_r;
++
++endmodule
+diff --git a/kernel/include/vx_wldst.h b/kernel/include/vx_wldst.h
+new file mode 100644
+index 00000000..08085fe4
+--- /dev/null
++++ b/kernel/include/vx_wldst.h
+@@ -0,0 +1,201 @@
++// Copyright © 2019-2023
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++// http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++#pragma once
++
++#include <vx_intrinsics.h>
++#include <stdint.h>
++
++namespace vortex {
++
++//
++// Warp-level bulk Load/Store extension
++//
++
++// Warp-Level Collaborative Bulk Load (2 registers)
++// Formal Hardware Algorithm (Warp-Collaborative Swizzle):
++// The hardware crossbar directly routes memory fetched from one thread's
++// base address into the destination registers of a different thread.
++// for (int t = 0; t < WARP_SIZE; ++t) {
++//   if (warp_mask[t]) {
++//     int src_row_base = (t / 2) * 2;
++//     int src_col      = t % 2;
++//     warp_dst[t][0] = *(float*)(warp_base[src_row_base + 0] + src_col * stride);
++//     warp_dst[t][1] = *(float*)(warp_base[src_row_base + 1] + src_col * stride);
++//   }
++// }
++__attribute__((always_inline))
++inline void vx_wld_f2(float dst[2], const void* base, uint32_t stride) {
++  register float _d0 __asm__("f0");
++  register float _d1 __asm__("f1");
++  __asm__ volatile (".insn r %2, 1, 4, %0, %3, %4"
++    : "=f"(_d0), "=f"(_d1)
++    : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride)
++    : "memory");
++  dst[0] = _d0;
++  dst[1] = _d1;
++}
++
++// Warp-Level Collaborative Bulk Load (4 registers)
++// Formal Hardware Algorithm (Warp-Collaborative Swizzle):
++// The hardware crossbar directly routes memory fetched from one thread's
++// base address into the destination registers of a different thread.
++// for (int t = 0; t < WARP_SIZE; ++t) {
++//   if (warp_mask[t]) {
++//     int src_row_base = (t / 4) * 4;
++//     int src_col      = t % 4;
++//     warp_dst[t][0] = *(float*)(warp_base[src_row_base + 0] + src_col * stride);
++//     warp_dst[t][1] = *(float*)(warp_base[src_row_base + 1] + src_col * stride);
++//     warp_dst[t][2] = *(float*)(warp_base[src_row_base + 2] + src_col * stride);
++//     warp_dst[t][3] = *(float*)(warp_base[src_row_base + 3] + src_col * stride);
++//   }
++// }
++__attribute__((always_inline))
++inline void vx_wld_f4(float dst[4], const void* base, uint32_t stride) {
++  register float _d0 __asm__("f0");
++  register float _d1 __asm__("f1");
++  register float _d2 __asm__("f2");
++  register float _d3 __asm__("f3");
++  __asm__ volatile (".insn r %4, 2, 4, %0, %5, %6"
++    : "=f"(_d0), "=f"(_d1), "=f"(_d2), "=f"(_d3)
++    : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride)
++    : "memory");
++  dst[0] = _d0;
++  dst[1] = _d1;
++  dst[2] = _d2;
++  dst[3] = _d3;
++}
++
++// Warp-Level Collaborative Bulk Load (8 registers)
++// Formal Hardware Algorithm (Warp-Collaborative Swizzle):
++// The hardware crossbar directly routes memory fetched from one thread's
++// base address into the destination registers of a different thread.
++// for (int t = 0; t < WARP_SIZE; ++t) {
++//   if (warp_mask[t]) {
++//     int src_row_base = (t / 8) * 8;
++//     int src_col      = t % 8;
++//     warp_dst[t][0] = *(float*)(warp_base[src_row_base + 0] + src_col * stride);
++//     warp_dst[t][1] = *(float*)(warp_base[src_row_base + 1] + src_col * stride);
++//     warp_dst[t][2] = *(float*)(warp_base[src_row_base + 2] + src_col * stride);
++//     warp_dst[t][3] = *(float*)(warp_base[src_row_base + 3] + src_col * stride);
++//     warp_dst[t][4] = *(float*)(warp_base[src_row_base + 4] + src_col * stride);
++//     warp_dst[t][5] = *(float*)(warp_base[src_row_base + 5] + src_col * stride);
++//     warp_dst[t][6] = *(float*)(warp_base[src_row_base + 6] + src_col * stride);
++//     warp_dst[t][7] = *(float*)(warp_base[src_row_base + 7] + src_col * stride);
++//   }
++// }
++__attribute__((always_inline))
++inline void vx_wld_f8(float dst[8], const void* base, uint32_t stride) {
++  register float _d0 __asm__("f0");
++  register float _d1 __asm__("f1");
++  register float _d2 __asm__("f2");
++  register float _d3 __asm__("f3");
++  register float _d4 __asm__("f4");
++  register float _d5 __asm__("f5");
++  register float _d6 __asm__("f6");
++  register float _d7 __asm__("f7");
++  __asm__ volatile (".insn r %8, 3, 4, %0, %9, %10"
++    : "=f"(_d0), "=f"(_d1), "=f"(_d2), "=f"(_d3), "=f"(_d4), "=f"(_d5), "=f"(_d6), "=f"(_d7)
++    : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride)
++    : "memory");
++  dst[0] = _d0;
++  dst[1] = _d1;
++  dst[2] = _d2;
++  dst[3] = _d3;
++  dst[4] = _d4;
++  dst[5] = _d5;
++  dst[6] = _d6;
++  dst[7] = _d7;
++}
++
++// Warp-Level Collaborative Bulk Store (2 registers)
++// Formal Hardware Algorithm (Warp-Collaborative Un-swizzle):
++// The hardware crossbar directly routes registers from one thread
++// to the memory addresses originally provided by different threads.
++// for (int t = 0; t < WARP_SIZE; ++t) {
++//   if (warp_mask[t]) {
++//     int dst_row_base = (t / 2) * 2;
++//     int dst_col      = t % 2;
++//     *(float*)(warp_base[dst_row_base + 0] + dst_col * stride) = warp_src[t][0];
++//     *(float*)(warp_base[dst_row_base + 1] + dst_col * stride) = warp_src[t][1];
++//   }
++// }
++__attribute__((always_inline))
++inline void vx_wst_f2(void* base, const float src[2], uint32_t stride) {
++  register float _d0 __asm__("f0") = src[0];
++  register float _d1 __asm__("f1") = src[1];
++  __asm__ volatile (".insn r %0, 5, 4, %1, %3, %4" :
++    : "i"(RISCV_CUSTOM0), "f"(_d0), "f"(_d1), "r"(base), "r"(stride)
++    : "memory");
++}
++
++// Warp-Level Collaborative Bulk Store (4 registers)
++// Formal Hardware Algorithm (Warp-Collaborative Un-swizzle):
++// The hardware crossbar directly routes registers from one thread
++// to the memory addresses originally provided by different threads.
++// for (int t = 0; t < WARP_SIZE; ++t) {
++//   if (warp_mask[t]) {
++//     int dst_row_base = (t / 4) * 4;
++//     int dst_col      = t % 4;
++//     *(float*)(warp_base[dst_row_base + 0] + dst_col * stride) = warp_src[t][0];
++//     *(float*)(warp_base[dst_row_base + 1] + dst_col * stride) = warp_src[t][1];
++//     *(float*)(warp_base[dst_row_base + 2] + dst_col * stride) = warp_src[t][2];
++//     *(float*)(warp_base[dst_row_base + 3] + dst_col * stride) = warp_src[t][3];
++//   }
++// }
++__attribute__((always_inline))
++inline void vx_wst_f4(void* base, const float src[4], uint32_t stride) {
++  register float _d0 __asm__("f0") = src[0];
++  register float _d1 __asm__("f1") = src[1];
++  register float _d2 __asm__("f2") = src[2];
++  register float _d3 __asm__("f3") = src[3];
++  __asm__ volatile (".insn r %0, 6, 4, %1, %5, %6"
++    :
++    : "i"(RISCV_CUSTOM0), "f"(_d0), "f"(_d1), "f"(_d2), "f"(_d3), "r"(base), "r"(stride)
++    : "memory");
++}
++
++// Warp-Level Collaborative Bulk Store (8 registers)
++// Formal Hardware Algorithm (Warp-Collaborative Un-swizzle):
++// The hardware crossbar directly routes registers from one thread
++// to the memory addresses originally provided by different threads.
++// for (int t = 0; t < WARP_SIZE; ++t) {
++//   if (warp_mask[t]) {
++//     int dst_row_base = (t / 8) * 8;
++//     int dst_col      = t % 8;
++//     *(float*)(warp_base[dst_row_base + 0] + dst_col * stride) = warp_src[t][0];
++//     *(float*)(warp_base[dst_row_base + 1] + dst_col * stride) = warp_src[t][1];
++//     *(float*)(warp_base[dst_row_base + 2] + dst_col * stride) = warp_src[t][2];
++//     *(float*)(warp_base[dst_row_base + 3] + dst_col * stride) = warp_src[t][3];
++//     *(float*)(warp_base[dst_row_base + 4] + dst_col * stride) = warp_src[t][4];
++//     *(float*)(warp_base[dst_row_base + 5] + dst_col * stride) = warp_src[t][5];
++//     *(float*)(warp_base[dst_row_base + 6] + dst_col * stride) = warp_src[t][6];
++//     *(float*)(warp_base[dst_row_base + 7] + dst_col * stride) = warp_src[t][7];
++//   }
++// }
++__attribute__((always_inline))
++inline void vx_wst_f8(void* base, const float src[8], uint32_t stride) {
++  register float _d0 __asm__("f0") = src[0];
++  register float _d1 __asm__("f1") = src[1];
++  register float _d2 __asm__("f2") = src[2];
++  register float _d3 __asm__("f3") = src[3];
++  register float _d4 __asm__("f4") = src[4];
++  register float _d5 __asm__("f5") = src[5];
++  register float _d6 __asm__("f6") = src[6];
++  register float _d7 __asm__("f7") = src[7];
++  __asm__ volatile (".insn r %0, 7, 4, %1, %9, %10" :
++    : "i"(RISCV_CUSTOM0), "f"(_d0), "f"(_d1), "f"(_d2), "f"(_d3), "f"(_d4), "f"(_d5), "f"(_d6), "f"(_d7), "r"(base), "r"(stride)
++    : "memory");
++}
++
++}
+\ No newline at end of file

@@ -1,0 +1,192 @@
+--- a/fedp4_lkgx.h
++++ b/fedp4_lkgx.h
+@@ -42,6 +42,7 @@
+ #include <cstdio>
+ #include <cstring>
+ #include <vector>
++#include <climits>
+
+ #ifndef FEDP_TRACE
+ #define FEDP_TRACE 0
+@@ -88,6 +89,12 @@ public:
+     const auto c_dec = decode_input(c_enc, 8, 23);
+
+     // Fast path: handle specials/zero if any; use sticky seen so far
+     if (const uint32_t fast = decode_special_or_zero(ab_dec, c_dec)) {
+       return f32FromBits(fast);
+     }
+
+     // S1: convert decoded C to common grid
+     const auto c_term = decoded_to_common(c_dec, 8, 23);
+
+     // S1: multiply and local n_groups-reduce into CSA pair per n_groups
+     const auto [prods, mul_sticky] = multiply_to_common(ab_dec, exp_bits, sig_bits);
+
+-    // S2: align all CSA pairs to Emax, with sticky from dropped bits
+-    const auto [aligned, Emax, align_sticky] = alignment(prods, c_term);
++    // S2 (minimal change): align **products only** by passing a zeroed C-term
++    term24_t cz = c_term; cz.S = 0; cz.C = 0; cz.E = INT32_MIN; cz.is_zero = true;
++    const auto [aligned, Emax_p, align_sticky] = alignment(prods, cz);
+
+-    // S3: CSA-accumulate all aligned pairs and perform the CPA here
+-    const auto acc = accumulate(aligned);
++    // S3a: accumulate aligned products (unchanged)
++    const int32_t Vp = accumulate(aligned);
++
++    // S3b (minimal addition): dominance-aware final add of real C at the right domain
++    const auto [V_final, Eref, sticky_final] = add_C_dominance_aware(Vp, Emax_p, c_term, align_sticky);
+
+     // Fast path: handle specials/zero if any; use sticky seen so far
+-    if (acc == 0) {
+-      if (mul_sticky || align_sticky) {
++    if (V_final == 0) {
++      if (mul_sticky || sticky_final) {
+         fflags_ |= (FLAG_NX | FLAG_UF);
+       }
+       LOG("[final-fast] zero=1, fflags=0x%02x\n", fflags_);
+       return f32FromBits(0);
+     }
+
+-    // S4: normalize + round+pack
+-    const norm_t nrm = normalize(acc, Emax, mul_sticky || align_sticky);
++    // S4: normalize + round+pack (use Eref and accumulated sticky)
++    const norm_t nrm = normalize(V_final, Eref, (mul_sticky || sticky_final));
+     const uint32_t out = round_and_pack(nrm);
+     return f32FromBits(out);
+   }
+@@ -295,18 +302,26 @@ private:
+     return std::tuple{out, sticky};
+   }
+
+   // ------------------------- S2: Alignment to Emax (CSA-preserving, 32-bit) --
+   std::tuple<std::vector<term24_t>, int32_t, bool>
+   alignment(const std::vector<term24_t> &groups, const term24_t &cterm) {
+     // Emax over all terms
+     int32_t Emax = INT32_MIN;
+     for (const auto &g : groups) Emax = std::max(Emax, g.E);
+-    Emax = std::max(Emax, cterm.E);
++    Emax = std::max(Emax, cterm.E);
+
+     std::vector<term24_t> out;
+     out.reserve(groups.size() + 1);
+
+     bool sticky = false;
+
+     auto align_one = [&](const term24_t &t, const char *tag, size_t idx) {
+       const uint32_t delta = uint32_t(Emax - t.E);
+
+-      // Shift rails independently
+-      const int32_t Sprime = asr32(t.S, delta);
+-      const int32_t Cprime = asr32(t.C, delta);
+-
+-      // Sticky: any dropped bit from either rail counts
+-      const bool local_sticky = any_dropped32(t.S, delta) || any_dropped32(t.C, delta);
++      // Minimal fix: collapse CSA once, sign-mag shift magnitude, emit S'=V' and C'=0
++      const int32_t V = t.S + (int32_t(t.C) << 1);
++      bool st = false;
++      const int32_t Vshift = sign_mag_shift_right(V, delta, st);
++      const int32_t Sprime = Vshift;
++      const int32_t Cprime = 0;
++      const bool local_sticky = st;
+
+       sticky |= local_sticky;
+
+       term24_t a{};
+       a.S = Sprime;
+       a.C = Cprime;
+       a.E = Emax;
+       a.is_zero = (a.S == 0 && a.C == 0);
+       a.is_inf = false;
+       a.is_nan = false;
+
+       LOG("[align-%s] idx=%zu, delta=0x%x, S'=0x%x, C'=0x%x, sticky+=%d\n",
+           tag, idx, delta, a.S, a.C, (local_sticky ? 1 : 0));
+
+       out.push_back(a);
+     };
+
+     for (size_t i = 0; i < groups.size(); ++i) {
+       align_one(groups[i], "p", i);
+     }
+-    align_one(cterm, "c", 0);
++    align_one(cterm, "c", 0);
+
+     LOG("[alignment] Emax=0x%x, sticky_align=%d, terms=%zu\n",
+         Emax, (sticky ? 1 : 0), out.size());
+
+     return std::tuple{out, Emax, sticky};
+   }
+
+@@ -372,6 +387,64 @@ private:
+     return V;
+   }
+
++  // --- Minimal new helpers: sign-magnitude shifts for alignment / final add ---
++  static inline int32_t sign_mag_shift_right(int32_t v, uint32_t k, bool &sticky){
++    if (k==0 || v==0) return v;
++    uint32_t mag = (v<0)? uint32_t(-v) : uint32_t(v);
++    if (k>=32){ sticky |= (mag!=0); return 0; }
++    sticky |= ((mag & ((1u<<k)-1u)) != 0u);
++    uint32_t mag2 = mag >> k;
++    return (v<0)? -int32_t(mag2) : int32_t(mag2);
++  }
++  static inline int32_t sign_mag_shift_left(int32_t v, uint32_t k, bool &sticky){
++    if (k==0 || v==0) return v;
++    uint64_t mag = (v<0)? uint64_t(-(int64_t)v) : uint64_t(v);
++    uint64_t magL = (mag << k);
++    if (magL > 0x7fffffffULL){ sticky = true; magL = 0x7fffffffULL; } // saturate & sticky on overflow
++    return (v<0)? -int32_t(magL) : int32_t(magL);
++  }
++
++  // --- Minimal new function: dominance-aware final add of C ---
++  std::tuple<int32_t,int32_t,bool>
++  add_C_dominance_aware(int32_t Vp, int32_t Emax_p, const term24_t& cterm, bool sticky_prev) {
++    // Effective unbiassed exponent of Vp if nonzero
++    const uint32_t magVp = (Vp<0)? uint32_t(-Vp) : uint32_t(Vp);
++    const uint32_t nbitsVp = (magVp==0)? 0u : (32u - uint32_t(clz32(magVp)));
++    const int32_t  E_vp_unb = (nbitsVp==0) ? INT32_MIN
++                              : (Emax_p - int32_t(Wc_-1u)) + int32_t(nbitsVp-1u);
++    const int32_t  Ec = cterm.E;
++
++    const bool c_dom = (E_vp_unb==INT32_MIN) ? true : (Ec >= E_vp_unb);
++    const int32_t Eref = c_dom ? Ec : Emax_p;
++
++    bool sticky = sticky_prev;
++    int32_t V_final = 0;
++
++    if (c_dom){
++      if (Ec == Emax_p){
++        V_final = Vp + cterm.S;
++        LOG("[align-c-final] near(Ec) D=0, Vp stays, C=0x%x\n", (uint32_t)cterm.S);
++      } else if (Ec > Emax_p){
++        const uint32_t D = uint32_t(Ec - Emax_p);
++        bool st=false; const int32_t Vps = sign_mag_shift_right(Vp, D, st); sticky |= st;
++        V_final = Vps + cterm.S;
++        LOG("[align-c-final] near(Ec) RIGHT D=0x%x, Vp 0x%x→0x%x, C=0x%x, sticky+=%u\n",
++            D, (uint32_t)Vp, (uint32_t)Vps, (uint32_t)cterm.S, (unsigned)st);
++      } else { // Ec < Emax_p
++        const uint32_t D = uint32_t(Emax_p - Ec);
++        bool st=false; const int32_t Vps = sign_mag_shift_left(Vp, D, st); sticky |= st;
++        V_final = Vps + cterm.S;
++        LOG("[align-c-final] near(Ec) LEFT  D=0x%x, Vp 0x%x→0x%x, C=0x%x, sticky+=%u\n",
++            D, (uint32_t)Vp, (uint32_t)Vps, (uint32_t)cterm.S, (unsigned)st);
++      }
++    } else {
++      const uint32_t D = uint32_t((Emax_p > Ec)? (Emax_p - Ec) : 0);
++      bool st=false; const int32_t Cs = sign_mag_shift_right(cterm.S, D, st); sticky |= st;
++      V_final = Vp + Cs;
++      LOG("[align-c-final] far(Emax_p) RIGHT D=0x%x, C 0x%x→0x%x, Vp=0x%x, sticky+=%u\n",
++          D, (uint32_t)cterm.S, (uint32_t)Cs, (uint32_t)Vp, (unsigned)st);
++    }
++    return {V_final, Eref, sticky};
++  }
++
+   // ------------------------------ S4: Normalize -----------------------------
+   norm_t normalize(int32_t acc, int32_t Emax, bool sticky_prev) {
+     norm_t n{};
+@@ -443,6 +516,7 @@ private:
+   static inline int32_t asr32(int32_t x, uint32_t k) {
+     if (k == 0) return x;
+     if (k >= 31) return (x < 0) ? -1 : 0; // sign saturation after huge shift
+     return (x >= 0) ? (x >> k) : ~((~x) >> k);
+   }

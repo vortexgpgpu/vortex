@@ -1,0 +1,85 @@
+diff --git a/tests/regression/sgemm_tpu/tensor_generic.cpp b/tests/regression/sgemm_tpu/tensor_generic.cpp
+index d4e6f768..f2c1b927 100644
+--- a/tests/regression/sgemm_tpu/tensor_generic.cpp
++++ b/tests/regression/sgemm_tpu/tensor_generic.cpp
+@@ -128,15 +128,40 @@ public:
+   using output_t = Ot;
+ };
+ 
++template <typename T>
++struct raw_unsigned {
++  static_assert(
++    sizeof(T) == 1 || sizeof(T) == 2 ||
++    sizeof(T) == 4 || sizeof(T) == 8,
++    "raw_unsigned_t<T> only supports types of size 1, 2, 4 or 8 bytes"
++  );
++
++  using type = std::conditional_t<
++    sizeof(T) == 1, uint8_t,
++    std::conditional_t<
++      sizeof(T) == 2, uint16_t,
++      std::conditional_t<
++        sizeof(T) == 4, uint32_t,
++        uint64_t  // sizeof(T) == 8
++      >
++    >
++  >;
++};
++
++template <typename T>
++using raw_unsigned_t = typename raw_unsigned<T>::type;
++
+ template <typename D, typename S>
+ D pack_row(const S *base, uint32_t ldm) {
+   static_assert(sizeof(D) % sizeof(S) == 0, "D must be a multiple of S");
+   constexpr uint32_t count = sizeof(D) / sizeof(S);
+   if constexpr (count != 1) {
++    using US = raw_unsigned_t<S>;
+     D packed(0);
+     auto src = base;
+     for (uint32_t i = 0; i < count; ++i) {
+-      packed |= static_cast<D>(*src) << (i * (8u * sizeof(S)));
++      D piece = static_cast<D>(static_cast<US>(*src));
++      packed |= (piece << (i * (8u * sizeof(S))));
+       src += ldm; // move to the next row
+     }
+     return packed;
+@@ -300,6 +325,7 @@ private:
+       auto base = mdata + row * ldm + col * i_ratio;
+       DBG_PRINT("  r=%u → block_m=%u block_k=%u → loads A[%u,%u]\n", r, block_m, block_k, row, col);
+ 
++      assert(reinterpret_cast<uintptr_t>(base) % alignof(Xt) == 0 && "Base pointer must be aligned to sizeof(Xt)");
+       vR[r][lane] = *reinterpret_cast<const Xt *>(base);
+     }
+   }
+@@ -336,6 +362,7 @@ private:
+       auto base = mdata + row * ldm + col;
+       DBG_PRINT("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
+ 
++      assert(reinterpret_cast<uintptr_t>(base) % alignof(Xt) == 0 && "Base pointer must be aligned to sizeof(Xt)");
+       vR[r][lane] = *reinterpret_cast<const Xt *>(base);
+     }
+   }
+@@ -354,6 +381,7 @@ private:
+       auto base = mdata + row * ldm + col;
+       DBG_PRINT("  r=%u → block_m=%u block_n=%u → loads C[%u,%u]\n", r, block_m, block_n, row, col);
+ 
++      assert(reinterpret_cast<uintptr_t>(base) % alignof(Xt) == 0 && "Base pointer must be aligned to sizeof(Xt)");
+       *reinterpret_cast<Xt *>(base) = vR[r][lane];
+     }
+   }
+@@ -525,7 +553,7 @@ using cfg = wmma_config_t<
+     8,
+     4,
+     int32_t,
+-    int8_t,
++    int16_t,
+     DPLEN>;
+ 
+ int main() {
+diff --git a/third_party/ramulator b/third_party/ramulator
+--- a/third_party/ramulator
++++ b/third_party/ramulator
+@@ -1 +1 @@
+-Subproject commit e62c84a6f0e06566ba6e182d308434b4532068a5
++Subproject commit e62c84a6f0e06566ba6e182d308434b4532068a5-dirty
