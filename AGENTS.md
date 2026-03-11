@@ -36,6 +36,8 @@ source ./ci/toolchain_env.sh
 make -s
 ```
 
+`configure` generates a runnable build tree by copying and instantiating `ci/`, `runtime/`, `sim/`, and `tests/` into `build/`. For execution and test automation, prefer the generated scripts and Makefiles under `build/` over the source-tree `.in` files.
+
 ### Common Gotchas:
 
 - If you git pull from origin, modify Makefiles or add/remove directories that participate in build logic, remember to re-run configure from `build/`
@@ -46,6 +48,18 @@ make -s
     ```
 
 - Prefer separate build dirs for major variants (example: `build32/`, `build64/`) to avoid config/tool contamination.
+- `./ci/blackbox.sh` rebuilds the selected runtime driver with `CONFIGS` / `--cores` / `--warps` / `--threads`, but it does **not** rebuild the target app with matching compile-time macros. If the app binary already exists and was built with different values (for example `NUM_THREADS=4`), blackbox can launch a mismatched binary and fail host-side checks.
+
+    ```bash
+    # Rebuild the test/app with the same compile-time overrides first
+    make -C tests/regression/sgemm_tcu clean
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE" make -C tests/regression/sgemm_tcu
+
+    # Then run blackbox with matching runtime overrides
+    CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=8
+    ```
+
+- `make tests` and `make -C tests/regression` build test binaries using their default macros. If you intend to run a test with non-default `NUM_THREADS`, data types, or feature flags, rebuild that specific test explicitly before invoking it.
 
 ## Testing & Debugging
 
@@ -77,6 +91,16 @@ make -C tests/regression/<test-name>
 # run specific test with debug log
 ./ci/blackbox.sh --driver=rtlsim --app=<test-name> --debug=1 --log=run.log
 ```
+
+When using non-default compile-time macros, split the flow into an explicit rebuild step and a run step:
+
+```bash
+make -C tests/regression/<test-name> clean
+CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32 -DEXT_TCU_ENABLE" make -C tests/regression/<test-name>
+CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=<test-name> --threads=8 --args="..."
+```
+
+For multi-suite coverage, `ci/regression.sh` is the canonical source of tested configurations. Use it to discover supported parameter combinations before inventing ad hoc ones.
 
 ## Configuring architecture parameters
 
