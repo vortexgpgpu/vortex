@@ -166,6 +166,17 @@ public:
   static constexpr uint32_t tileN = cfg::tileN;
   static constexpr uint32_t tileK = cfg::tileK * i_ratio;
 
+  // Sparse metadata constants (using actual It, not cfg's fp32 default)
+  static constexpr uint32_t sp_rtl_i_ratio = 32 / It::bits;
+  static constexpr uint32_t sp_meta_cols = (NT * 2 * sp_rtl_i_ratio) / 32;
+  static constexpr uint32_t sp_per_warp_depth = cfg::m_steps * (cfg::k_steps / 2);
+  static constexpr uint32_t sp_cols_per_load = NT / sp_per_warp_depth;
+  static constexpr uint32_t sp_num_meta_loads = (sp_meta_cols + sp_cols_per_load - 1) / sp_cols_per_load;
+  static constexpr uint32_t meta_stride = sp_num_meta_loads * NT;
+  static constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
+  static constexpr uint32_t sparse_regs = cfg::m_steps * sparse_k_steps;
+  static constexpr uint32_t a_k_stride_sp = tileK / 2;
+
   using fragment_a   = fragment_t<matrix_a, input_t, cfg::NRA>;
   using fragment_b   = fragment_t<matrix_b, input_t, cfg::NRB>;
   using fragment_acc = fragment_t<accumulator, output_t, cfg::NRC>;
@@ -266,33 +277,54 @@ public:
           std::swap(block_row, block_col);
         }
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
-        detail::unroll_for<Frag::NR>([&](auto r) {
-          uint32_t block_k, block_n;
-          if constexpr (cfg::nt16_sparse) {
-            block_k = 0;
-            block_n = r;
-          } else {
-            block_k = r / cfg::b_sub_steps_sp;
-            block_n = r % cfg::b_sub_steps_sp;
+
+        if constexpr (src_layout == row_major) {
+          static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
+          // Pre-compute k-group base pointers (elem_row * ldm varies by k-group)
+          constexpr uint32_t num_k_groups = cfg::nt16_sparse ? 1 : (Frag::NR / cfg::b_sub_steps_sp);
+          const input_t* k_bases[num_k_groups];
+          k_bases[0] = base;
+          if constexpr (num_k_groups >= 2) {
+            asm volatile("" : "+r"(k_bases[0])); // prevent reverse strength reduction
+            auto k_ldm_step = k_stride * (uint32_t)ldm;
+            detail::unroll_for<num_k_groups - 1>([&](auto i) {
+              k_bases[i + 1] = k_bases[i] + k_ldm_step;
+            });
           }
-          uint32_t elem_row = block_k * k_stride;
-          uint32_t elem_col = block_n * n_stride;
-          if constexpr (src_layout == row_major) {
-            static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
-            auto ptr = base + elem_row * ldm + elem_col;
+          detail::unroll_for<Frag::NR>([&](auto r) {
+            uint32_t block_k, block_n;
+            if constexpr (cfg::nt16_sparse) { block_k = 0; block_n = r; }
+            else { block_k = r / cfg::b_sub_steps_sp; block_n = r % cfg::b_sub_steps_sp; }
+            uint32_t elem_col = block_n * n_stride;
+            auto ptr = k_bases[block_k] + elem_col;
             if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
               dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
             } else {
               dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
             }
-          } else {
-            // col_major layout
-            std::swap(elem_row, elem_col);
-            auto ptr = base + elem_row * ldm + elem_col;
+          });
+        } else {
+          // col_major: after swap, elem_row = block_n * n_stride, elem_col = block_k * k_stride
+          constexpr uint32_t num_n_groups = cfg::b_sub_steps_sp;
+          const input_t* n_bases[num_n_groups];
+          n_bases[0] = base;
+          if constexpr (num_n_groups >= 2) {
+            asm volatile("" : "+r"(n_bases[0])); // prevent reverse strength reduction
+            auto n_ldm_step = n_stride * (uint32_t)ldm;
+            detail::unroll_for<num_n_groups - 1>([&](auto i) {
+              n_bases[i + 1] = n_bases[i] + n_ldm_step;
+            });
+          }
+          detail::unroll_for<Frag::NR>([&](auto r) {
+            uint32_t block_k, block_n;
+            if constexpr (cfg::nt16_sparse) { block_k = 0; block_n = r; }
+            else { block_k = r / cfg::b_sub_steps_sp; block_n = r % cfg::b_sub_steps_sp; }
+            uint32_t elem_col = block_k * k_stride;
+            auto ptr = n_bases[block_n] + elem_col;
             assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
             dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
-          }
-        });
+          });
+        }
       } else {
         // Dense B load
         uint32_t block_idx = (cfg::b_block_size == NT) ? 0 : (lane / cfg::b_block_size);
@@ -367,17 +399,10 @@ public:
     load_matrix_sync<src_layout, Frag>(dst, src, ldm);
 
     // Load metadata into tail registers (fragA.data[sparse_regs..sparse_regs+num_loads-1])
-    constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
-    constexpr uint32_t sparse_regs = cfg::m_steps * sparse_k_steps;
-    constexpr uint32_t rtl_i_ratio = 32 / It::bits;
-    constexpr uint32_t num_cols = (NT * 2 * rtl_i_ratio) / 32;
-    constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-    constexpr uint32_t cols_per_load = NT / PD;
-    constexpr uint32_t num_loads = (num_cols + cols_per_load - 1) / cols_per_load;
     auto meta_base = reinterpret_cast<const float*>(meta_ptr);
     uint32_t lane_id = vx_thread_id();
     dst.data[sparse_regs] = meta_base[lane_id];
-    if constexpr (num_loads == 2) {
+    if constexpr (sp_num_meta_loads == 2) {
       dst.data[sparse_regs + 1] = meta_base[NT + lane_id];
     }
   }
