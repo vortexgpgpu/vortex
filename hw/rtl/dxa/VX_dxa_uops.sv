@@ -24,6 +24,7 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
     output ibuffer_t ibuf_out,
 
     input wire start,
+    input wire advance,
     input wire [UOP_CTR_W-1:0] uop_idx,
     output wire [UOP_CTR_W-1:0] uop_count
 );
@@ -36,9 +37,11 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
     localparam DXA_MAX_UOPS = 4;
     localparam CTR_W = `CLOG2(DXA_MAX_UOPS);   // 2 bits
 
-    // Truncate the shared uop_idx to the bits DXA actually needs.
+    `UNUSED_VAR ({clk, reset, start, advance, uop_idx})
+
+    // Truncate the wide uop_idx to the bits this expander actually uses.
     wire [CTR_W-1:0] ctr = CTR_W'(uop_idx);
-    `UNUSED_VAR ({clk, reset, start, uop_idx})
+
 
     // Fixed coordinate register bank in the integer register file:
     // x28/x29/x30/x31/x5 = t3/t4/t5/t6/t0.
@@ -149,21 +152,21 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
     // -----------------------------------------------------------------------
     // Output assembly.
     // -----------------------------------------------------------------------
-    assign ibuf_out.uuid     = get_uop_uuid(ibuf_in.uuid, uop_idx);
-    assign ibuf_out.tmask    = ibuf_in.tmask;
-    assign ibuf_out.PC       = ibuf_in.PC;
-    assign ibuf_out.ex_type  = ibuf_in.ex_type;
-    assign ibuf_out.op_type  = ibuf_in.op_type;
-    assign ibuf_out.op_args  = op_args_t'({ibuf_in.op_args[INST_ARGS_BITS-1:3], uop_op});
-    assign ibuf_out.wb       = 1'b0;
-    assign ibuf_out.rd_xregs = ibuf_in.rd_xregs;
-    assign ibuf_out.wr_xregs = '0;   // side-effect ops; no writeback state
-    assign ibuf_out.used_rs  = uop_used_rs;
-    assign ibuf_out.rd       = '0;
-    assign ibuf_out.rs1      = uop_rs1;
-    assign ibuf_out.rs2      = uop_rs2;
-    assign ibuf_out.rs3      = uop_rs3;
-    `UNUSED_VAR (ibuf_in)
+    ibuffer_t ibuf_r;
+    always_comb begin
+        ibuf_r = ibuf_in;
+        ibuf_r.uuid     = get_uop_uuid(ibuf_in.uuid, uop_idx);
+        ibuf_r.op_args  = op_args_t'({ibuf_in.op_args[INST_ARGS_BITS-1:3], uop_op});
+        ibuf_r.wb       = 1'b0;
+        ibuf_r.wr_xregs = '0;
+        ibuf_r.used_rs  = uop_used_rs;
+        ibuf_r.rd       = '0;
+        ibuf_r.rs1      = uop_rs1;
+        ibuf_r.rs2      = uop_rs2;
+        ibuf_r.rs3      = uop_rs3;
+    end
+
+    assign ibuf_out = ibuf_r;
 
 endmodule
 /* verilator lint_on UNUSEDSIGNAL */
