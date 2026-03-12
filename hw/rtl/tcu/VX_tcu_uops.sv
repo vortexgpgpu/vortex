@@ -24,6 +24,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     output ibuffer_t ibuf_out,
 
     input wire start,
+    input wire advance,
     input wire [UOP_CTR_W-1:0] uop_idx,
     output wire [UOP_CTR_W-1:0] uop_count
 );
@@ -45,9 +46,10 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     localparam LG_A_SB = $clog2(TCU_A_SUB_BLOCKS);
     localparam LG_B_SB = $clog2(TCU_B_SUB_BLOCKS);
 
+    `UNUSED_VAR ({clk, reset, start, advance, uop_idx})
+
     // Truncate the wide uop_idx to the bits this expander actually uses.
     wire [`UP(CTR_W)-1:0] ctr = `UP(CTR_W)'(uop_idx);
-    `UNUSED_VAR ({clk, reset, start, uop_idx})
 
 `ifdef TCU_SPARSE_ENABLE
     localparam LG_B_SB_SP = $clog2(TCU_B_SUB_BLOCKS_SP);
