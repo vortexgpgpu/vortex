@@ -146,8 +146,6 @@ clean:
 	$(MAKE) -C jacobi clean
 	$(MAKE) -C pathfinder clean
 	$(MAKE) -C softmax clean
-	$(MAKE) -C sgemm_tcu clean
-	$(MAKE) -C sgemm_tcu_sp clean
 	$(MAKE) -C sgemm2_dxa clean
 	$(MAKE) -C async_barrier clean
 	$(MAKE) -C async_gbarrier clean	$(MAKE) -C packld clean
