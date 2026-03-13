@@ -784,6 +784,7 @@ static inline uint64_t line_base(uint64_t addr) {
 }
 
 // Similar to mem_coalescer
+// Same addresses is combined together / unaligned accesses are split into multiple lines
 static inline void coalesce_to_lines(const std::vector<uint64_t>& addrs, uint32_t bytes, std::unordered_set<uint64_t>& out_lines) {
   for (auto addr : addrs) {
     uint64_t l0 = line_base(addr);
