@@ -36,10 +36,18 @@ public:
     uint32_t ldmB;
     uint32_t ldmC;
     uint32_t ldmD;
-    uint32_t fmt_s;   // input format (A,B)
-    uint32_t fmt_d;   // output/acc format (C,D)
-    uint32_t flags;   // bit0: C_is_zero (ignore ptrC)
+    uint16_t M;
+    uint16_t N;
+    uint16_t K;
+    uint8_t  fmt_s;
+    uint8_t  fmt_d;
+    uint8_t  flags;
+    uint8_t  reserved0;
+    uint16_t reserved1;
+    uint32_t reserved2;
   };
+
+  static_assert(sizeof(Desc) == 64, "DTensorCore::Desc must be 64 bytes");
 
   SimChannel<MemReq> mem_req_out;
   SimChannel<MemRsp> mem_rsp_in;
@@ -100,6 +108,26 @@ private:
   uint32_t op_req_idx_ = 0;
   std::vector<uint64_t> out_req_lines_;
   uint32_t out_req_idx_ = 0;
+
+  // Internal state for iterating through tiles
+  uint32_t tile_m_idx_ = 0;
+  uint32_t tile_n_idx_ = 0;
+  uint32_t tile_k_idx_ = 0;
+  uint32_t tiles_m_ = 1;
+  uint32_t tiles_n_ = 1;
+  uint32_t tiles_k_ = 1;
+
+  // Aggregate mem request counter for descriptor
+  uint64_t total_op_reqs_ = 0;
+  uint64_t total_out_reqs_ = 0;
+
+  void init_tile_state_();
+  bool advance_output_tile_();
+
+  uint64_t tile_ptrA_() const;
+  uint64_t tile_ptrB_() const;
+  uint64_t tile_ptrC_() const;
+  uint64_t tile_ptrD_() const;
 
   void build_req_lists_();
   bool issue_next_op_req_();

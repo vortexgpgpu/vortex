@@ -78,9 +78,15 @@ struct dtensor_desc_t {
   uint32_t ldmB;
   uint32_t ldmC;
   uint32_t ldmD;
-  uint32_t fmt_s;
-  uint32_t fmt_d;
-  uint32_t flags;
+  uint16_t M;
+  uint16_t N;
+  uint16_t K;
+  uint8_t  fmt_s;
+  uint8_t  fmt_d;
+  uint8_t  flags;
+  uint8_t  reserved0;
+  uint16_t reserved1;
+  uint32_t reserved2;
 };
 
 static inline int ulp_diff(float a, float b) {
@@ -175,7 +181,7 @@ int main(int argc, char** argv) {
   RT_CHECK(vx_mem_alloc(device, hB.size() * sizeof(itype_t), VX_MEM_READ,  &B_buf));
   RT_CHECK(vx_mem_address(B_buf, &karg.B_addr));
 
-  RT_CHECK(vx_mem_alloc(device, hD.size() * sizeof(otype_t), VX_MEM_WRITE, &D_buf));
+  RT_CHECK(vx_mem_alloc(device, hD.size() * sizeof(otype_t), VX_MEM_READ_WRITE, &D_buf));
   RT_CHECK(vx_mem_address(D_buf, &karg.D_addr));
 
   dtensor_desc_t desc{};
@@ -190,6 +196,12 @@ int main(int argc, char** argv) {
   desc.fmt_s = vt::ITYPE::id;
   desc.fmt_d = vt::OTYPE::id;
   desc.flags = 0x1; // C=0 (no accumulate)
+  desc.M     = M;
+  desc.N     = N;
+  desc.K     = K;
+  desc.reserved0 = 0;
+  desc.reserved1 = 0;
+  desc.reserved2 = 0;
 
   RT_CHECK(vx_mem_alloc(device, sizeof(dtensor_desc_t), VX_MEM_READ, &desc_buf));
   RT_CHECK(vx_mem_address(desc_buf, &karg.desc_addr));

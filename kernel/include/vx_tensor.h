@@ -437,9 +437,16 @@ struct dtensor_desc_t {
   uint32_t ldmB;
   uint32_t ldmC;
   uint32_t ldmD;
-  uint32_t fmt_s;
-  uint32_t fmt_d;
-  uint32_t flags;
+  uint16_t M;
+  uint16_t N;
+  uint16_t K;
+  uint8_t  fmt_s;
+  uint8_t  fmt_d;
+  uint8_t  flags;
+  uint8_t  reserved0;
+  uint16_t reserved1;
+  uint32_t reserved2;
+  // Total size: 64 bytes (1 cache line)
 };
 
 static __attribute__((always_inline)) void dtensor_start(uint64_t desc_addr) {

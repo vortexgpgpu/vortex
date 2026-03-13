@@ -50,6 +50,14 @@ DTensorCore::DTensorCore(const SimContext& ctx,
   , fragA_(NUM_THREADS * cfg::NRA, 0.0f)
   , fragB_(NUM_THREADS * cfg::NRB, 0.0f)
   , fragC_(NUM_THREADS * cfg::NRC, 0.0f)
+  , tile_m_idx_(0)
+  , tile_n_idx_(0)
+  , tile_k_idx_(0)
+  , tiles_m_(1)
+  , tiles_n_(1)
+  , tiles_k_(1)
+  , total_op_reqs_(0)
+  , total_out_reqs_(0)
 {
   //--
 }
@@ -73,6 +81,14 @@ void DTensorCore::reset() {
   out_req_lines_.clear();
   op_req_idx_ = 0;
   out_req_idx_ = 0;
+  tile_m_idx_ = 0;
+  tile_n_idx_ = 0;
+  tile_k_idx_ = 0;
+  tiles_m_ = 1;
+  tiles_n_ = 1;
+  tiles_k_ = 1;
+  total_op_reqs_ = 0;
+  total_out_reqs_ = 0;
 }
 
 void DTensorCore::start(uint64_t desc_addr) {
@@ -88,6 +104,14 @@ void DTensorCore::start(uint64_t desc_addr) {
   out_req_lines_.clear();
   op_req_idx_ = 0;
   out_req_idx_ = 0;
+  tile_m_idx_ = 0;
+  tile_n_idx_ = 0;
+  tile_k_idx_ = 0;
+  tiles_m_ = 1;
+  tiles_n_ = 1;
+  tiles_k_ = 1;
+  total_op_reqs_ = 0;
+  total_out_reqs_ = 0;
 }
 
 uint32_t DTensorCore::poll() const {
@@ -115,6 +139,7 @@ void DTensorCore::issue_mem_req(uint64_t addr, bool write) {
 void DTensorCore::load_desc() {
   assert(ram_ && "RAM must be attached before DTensor use");
   ram_->read(&desc_, desc_addr_, sizeof(Desc));
+  init_tile_state_();
 }
 
 static inline uint32_t elem_size_bytes(uint32_t fmt_id) {
@@ -131,12 +156,88 @@ static inline uint32_t elem_size_bytes(uint32_t fmt_id) {
   }
 }
 
+void DTensorCore::init_tile_state_() {
+  uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
+  uint32_t i_ratio = 4 / in_sz;
+  uint32_t tile_k_elems = cfg::tileK * i_ratio;
+
+  uint32_t M = desc_.M ? desc_.M : cfg::tileM;
+  uint32_t N = desc_.N ? desc_.N : cfg::tileN;
+  uint32_t K = desc_.K ? desc_.K : tile_k_elems;
+
+  if ((M % cfg::tileM) != 0 || (N % cfg::tileN) != 0 || (K % tile_k_elems) != 0) {
+    std::cout << "[DTCU] Error: M/N/K must be multiples of tile size. "
+              << "M=" << M << ", N=" << N << ", K=" << K
+              << " tileM=" << cfg::tileM
+              << " tileN=" << cfg::tileN
+              << " tileK=" << tile_k_elems << std::endl;
+    std::abort();
+  }
+
+  tiles_m_ = M / cfg::tileM;
+  tiles_n_ = N / cfg::tileN;
+  tiles_k_ = K / tile_k_elems;
+
+  tile_m_idx_ = 0;
+  tile_n_idx_ = 0;
+  tile_k_idx_ = 0;
+  total_op_reqs_ = 0;
+  total_out_reqs_ = 0;
+}
+
+bool DTensorCore::advance_output_tile_() {
+  tile_k_idx_ = 0;
+
+  ++tile_n_idx_;
+  if (tile_n_idx_ < tiles_n_)
+    return true;
+
+  tile_n_idx_ = 0;
+  ++tile_m_idx_;
+  if (tile_m_idx_ < tiles_m_)
+    return true;
+
+  return false;
+}
+
+uint64_t DTensorCore::tile_ptrA_() const {
+  uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
+  uint32_t i_ratio = 4 / in_sz;
+  uint64_t row = uint64_t(tile_m_idx_) * cfg::tileM;
+  uint64_t col = uint64_t(tile_k_idx_) * cfg::tileK * i_ratio;
+  return desc_.ptrA + (row * desc_.ldmA + col) * in_sz;
+}
+
+uint64_t DTensorCore::tile_ptrB_() const {
+  uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
+  uint32_t i_ratio = 4 / in_sz;
+  uint64_t row = uint64_t(tile_k_idx_) * cfg::tileK * i_ratio;
+  uint64_t col = uint64_t(tile_n_idx_) * cfg::tileN;
+  return desc_.ptrB + (row + col * desc_.ldmB) * in_sz;
+}
+
+uint64_t DTensorCore::tile_ptrC_() const {
+  uint32_t out_sz = elem_size_bytes(desc_.fmt_d);
+  uint64_t row = uint64_t(tile_m_idx_) * cfg::tileM;
+  uint64_t col = uint64_t(tile_n_idx_) * cfg::tileN;
+  return desc_.ptrC + (row * desc_.ldmC + col) * out_sz;
+}
+
+uint64_t DTensorCore::tile_ptrD_() const {
+  uint32_t out_sz = elem_size_bytes(desc_.fmt_d);
+  uint64_t row = uint64_t(tile_m_idx_) * cfg::tileM;
+  uint64_t col = uint64_t(tile_n_idx_) * cfg::tileN;
+  return desc_.ptrD + (row * desc_.ldmD + col) * out_sz;
+}
+
 void DTensorCore::load_operands() {
   uint32_t fmt_s = desc_.fmt_s;
   uint32_t fmt_d = desc_.fmt_d;
 
-  if (desc_.flags & 0x1) {
-    std::fill(fragC_.begin(), fragC_.end(), 0.0f);
+  if (tile_k_idx_ == 0) {
+    if (desc_.flags & 0x1) {
+      std::fill(fragC_.begin(), fragC_.end(), 0.0f);
+    }
   }
 
   // Load A (row_major), same mapping as kernel/include/vx_tensor.h
@@ -150,8 +251,8 @@ void DTensorCore::load_operands() {
     uint32_t m_stride  = cfg::a_sub_blocks * cfg::tcM;
     uint32_t k_stride  = cfg::tcK * i_ratio;
 
-    uint64_t base_addr = desc_.ptrA + (uint64_t)block_row * desc_.ldmA * elem_size_bytes(fmt_s)
-                                   + (uint64_t)block_col * i_ratio * elem_size_bytes(fmt_s);
+    uint64_t base_addr = tile_ptrA_() + (uint64_t)block_row * desc_.ldmA * elem_size_bytes(fmt_s)
+                                     + (uint64_t)block_col * i_ratio * elem_size_bytes(fmt_s);
 
     for (uint32_t r = 0; r < cfg::NRA; ++r) {
       uint32_t block_m  = r / cfg::k_steps;
@@ -190,8 +291,8 @@ void DTensorCore::load_operands() {
     uint32_t n_stride  = cfg::b_sub_blocks * cfg::tcN;
     uint32_t k_stride  = cfg::tcK * i_ratio;
 
-    uint64_t base_addr = desc_.ptrB + (uint64_t)block_row * i_ratio * elem_size_bytes(fmt_s)
-                                   + (uint64_t)block_col * desc_.ldmB * elem_size_bytes(fmt_s);
+    uint64_t base_addr = tile_ptrB_() + (uint64_t)block_row * i_ratio * elem_size_bytes(fmt_s)
+                                     + (uint64_t)block_col * desc_.ldmB * elem_size_bytes(fmt_s);
 
     for (uint32_t r = 0; r < cfg::NRB; ++r) {
       uint32_t block_k  = r / cfg::n_steps;
@@ -220,13 +321,13 @@ void DTensorCore::load_operands() {
   }
 
   // Load C accumulator (row_major) unless C_is_zero
-  if ((desc_.flags & 0x1) == 0) {
+  if (tile_k_idx_ == 0 && (desc_.flags & 0x1) == 0) {
     for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
       uint32_t block_row = lane / cfg::tcN;
       uint32_t block_col = lane % cfg::tcN;
 
-      uint64_t base_addr = desc_.ptrC + (uint64_t)block_row * desc_.ldmC * elem_size_bytes(fmt_d)
-                                     + (uint64_t)block_col * elem_size_bytes(fmt_d);
+      uint64_t base_addr = tile_ptrC_() + (uint64_t)block_row * desc_.ldmC * elem_size_bytes(fmt_d)
+                                       + (uint64_t)block_col * elem_size_bytes(fmt_d);
 
       for (uint32_t r = 0; r < cfg::NRC; ++r) {
         uint32_t block_m  = r / cfg::n_steps;
@@ -758,7 +859,7 @@ void DTensorCore::store_output() {
     uint32_t block_row = lane / cfg::tcN;
     uint32_t block_col = lane % cfg::tcN;
 
-    uint64_t base_addr = desc_.ptrD + (uint64_t)block_row * desc_.ldmD * out_sz + (uint64_t)block_col * out_sz;
+    uint64_t base_addr = tile_ptrD_() + (uint64_t)block_row * desc_.ldmD * out_sz + (uint64_t)block_col * out_sz;
 
     for (uint32_t r = 0; r < cfg::NRC; ++r) {
       uint32_t block_m  = r / cfg::n_steps;
@@ -825,7 +926,7 @@ void DTensorCore::build_req_lists_() {
     uint32_t m_stride = cfg::a_sub_blocks * cfg::tcM;
     uint32_t k_stride = cfg::tcK * i_ratio;
 
-    uint64_t base_addr = desc_.ptrA + (uint64_t)block_row * desc_.ldmA * in_sz
+    uint64_t base_addr = tile_ptrA_() + (uint64_t)block_row * desc_.ldmA * in_sz
                                    + (uint64_t)block_col * i_ratio * in_sz;
 
     for (uint32_t r = 0; r < cfg::NRA; ++r) {
@@ -851,7 +952,7 @@ void DTensorCore::build_req_lists_() {
     uint32_t n_stride = cfg::b_sub_blocks * cfg::tcN;
     uint32_t k_stride = cfg::tcK * i_ratio;
 
-    uint64_t base_addr = desc_.ptrB + (uint64_t)block_row * i_ratio * in_sz
+    uint64_t base_addr = tile_ptrB_() + (uint64_t)block_row * i_ratio * in_sz
                                    + (uint64_t)block_col * desc_.ldmB * in_sz;
 
     for (uint32_t r = 0; r < cfg::NRB; ++r) {
@@ -867,12 +968,12 @@ void DTensorCore::build_req_lists_() {
   }
 
   // C - row_major
-  if ((desc_.flags & 0x1) == 0) {
+  if (tile_k_idx_ == 0 && (desc_.flags & 0x1) == 0) {
     for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
       uint32_t block_row = lane / cfg::tcN;
       uint32_t block_col = lane % cfg::tcN;
 
-      uint64_t base_addr = desc_.ptrC + (uint64_t)block_row * desc_.ldmC * out_sz
+      uint64_t base_addr = tile_ptrC_() + (uint64_t)block_row * desc_.ldmC * out_sz
                                      + (uint64_t)block_col * out_sz;
 
       for (uint32_t r = 0; r < cfg::NRC; ++r) {
@@ -889,22 +990,24 @@ void DTensorCore::build_req_lists_() {
   }
 
   // D output (row_major)
-  for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
-    uint32_t block_row = lane / cfg::tcN;
-    uint32_t block_col = lane % cfg::tcN;
+  if (tile_k_idx_ == (tiles_k_ - 1)) {
+    for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+      uint32_t block_row = lane / cfg::tcN;
+      uint32_t block_col = lane % cfg::tcN;
 
-    uint64_t base_addr = desc_.ptrD + (uint64_t)block_row * desc_.ldmD * out_sz
-                                   + (uint64_t)block_col * out_sz;
+      uint64_t base_addr = tile_ptrD_() + (uint64_t)block_row * desc_.ldmD * out_sz
+                                      + (uint64_t)block_col * out_sz;
 
-    for (uint32_t r = 0; r < cfg::NRC; ++r) {
-      uint32_t block_m  = r / cfg::n_steps;
-      uint32_t block_n  = r % cfg::n_steps;
-      uint32_t elem_row = block_m * cfg::tcM;
-      uint32_t elem_col = block_n * cfg::tcN;
+      for (uint32_t r = 0; r < cfg::NRC; ++r) {
+        uint32_t block_m  = r / cfg::n_steps;
+        uint32_t block_n  = r % cfg::n_steps;
+        uint32_t elem_row = block_m * cfg::tcM;
+        uint32_t elem_col = block_n * cfg::tcN;
 
-      uint64_t addr = base_addr + (uint64_t)elem_row * desc_.ldmD * out_sz
-                                + (uint64_t)elem_col * out_sz;
-      out_addrs.push_back(addr);
+        uint64_t addr = base_addr + (uint64_t)elem_row * desc_.ldmD * out_sz
+                                  + (uint64_t)elem_col * out_sz;
+        out_addrs.push_back(addr);
+      }
     }
   }
 
@@ -915,8 +1018,8 @@ void DTensorCore::build_req_lists_() {
   op_req_lines_.assign(op_lines.begin(), op_lines.end());
   out_req_lines_.assign(out_lines.begin(), out_lines.end());
 
-  std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << op_req_lines_.size() << ", output=" << out_req_lines_.size()
-        << ", total=" << (1 + op_req_lines_.size() + out_req_lines_.size()) << std::endl;
+  total_op_reqs_ += op_req_lines_.size();
+  total_out_reqs_ += out_req_lines_.size();
 }
 
 
@@ -960,6 +1063,25 @@ void DTensorCore::tick() {
   case State::DESC_WAIT:
     if (pending_tag_ == 0) {
       load_desc();
+
+      std::cout << "[DTCU DESC] "
+          << "ptrA=0x" << std::hex << desc_.ptrA
+          << " ptrB=0x" << desc_.ptrB
+          << " ptrC=0x" << desc_.ptrC
+          << " ptrD=0x" << desc_.ptrD
+          << std::dec
+          << " ldmA=" << desc_.ldmA
+          << " ldmB=" << desc_.ldmB
+          << " ldmC=" << desc_.ldmC
+          << " ldmD=" << desc_.ldmD
+          << " M=" << desc_.M
+          << " N=" << desc_.N
+          << " K=" << desc_.K
+          << " fmt_s=" << uint32_t(desc_.fmt_s)
+          << " fmt_d=" << uint32_t(desc_.fmt_d)
+          << " flags=" << uint32_t(desc_.flags)
+          << std::endl;
+
       build_req_lists_();
       state_ = State::OP_REQ;
     }
@@ -986,7 +1108,16 @@ void DTensorCore::tick() {
 
   case State::EXECUTE:
     execute_wmma();
-    state_ = State::OUT_REQ;
+
+    if ((tile_k_idx_ + 1) < tiles_k_) {
+      // Repeat over tiles if there's tile left in K dimension
+      ++tile_k_idx_;
+      build_req_lists_();
+      state_ = State::OP_REQ;
+    } else {
+      // Move to output store only if it's the last tile in K dimension
+      state_ = State::OUT_REQ;
+    }
     break;
 
   case State::OUT_REQ:
@@ -999,9 +1130,22 @@ void DTensorCore::tick() {
   case State::OUT_WAIT:
     if (pending_tag_ == 0) {
       store_output();
-      done_ = true;
-      busy_ = false;
-      state_ = State::DONE;
+
+      if (advance_output_tile_()) {
+        // Move to next output tile if there's more tiles in M/N dimension
+        build_req_lists_();
+        state_ = State::OP_REQ;
+      } else {
+        // Mem Req message moved to here
+        std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_
+                  << ", output=" << total_out_reqs_
+                  << ", total=" << (1 + total_op_reqs_ + total_out_reqs_)
+                  << std::endl;
+
+        done_ = true;
+        busy_ = false;
+        state_ = State::DONE;
+      }
     }
     break;
 
