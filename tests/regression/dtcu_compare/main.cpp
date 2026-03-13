@@ -441,13 +441,13 @@ int main(int argc, char** argv) {
 
   // In-core TCU stats
   std::cout << "\n[In-core TCU]" << std::endl;
-  std::cout << "◯ host_ms=" << stats_tcu.host_ms
+  std::cout << "  host_ms=" << stats_tcu.host_ms
             << " cycles=" << stats_tcu.cycles
             << " instrs=" << stats_tcu.instrs
             << " IPC=" << (double(stats_tcu.instrs) / double(stats_tcu.cycles))
             << std::endl;
   
-  std::cout << "◯ loads=" << stats_tcu.loads
+  std::cout << "  loads=" << stats_tcu.loads
             << " stores=" << stats_tcu.stores
             << " stall_lsu=" << stats_tcu.stall_lsu
             << " stall_tcu=" << stats_tcu.stall_tcu
