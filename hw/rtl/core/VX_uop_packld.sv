@@ -46,8 +46,8 @@ module VX_uop_packld import VX_gpu_pkg::*; (
     assign uop_count = is_packlh ? UOP_CTR_W'(2) : UOP_CTR_W'(4);
 
     wire [1:0] idx2 = uop_idx[1:0];
-    wire [XLENB_W-1:0] byte_size = XLENB_W'(is_packlh ? 1 : 0);
-    wire [XLENB_W-1:0] byte_off  = XLENB_W'(is_packlh ? {idx2[0], 1'b0} : idx2);
+    wire [XLENB_W-1:0] byte_size = is_packlh ? '1 : '0;
+    wire [XLENB_W-1:0] byte_off  = is_packlh ? XLENB_W'({idx2[0], 1'b0}) : XLENB_W'(idx2);
 
     ibuffer_t ibuf_r;
     always_comb begin
