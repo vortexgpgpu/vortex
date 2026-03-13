@@ -73,18 +73,26 @@ namespace detail {
 
     static __attribute__((always_inline)) D pack_row(const Type *base, uint32_t ldm) {
       static_assert(sizeof(D) % sizeof(Type) == 0, "D must be a multiple of Type in size");
-      constexpr uint32_t count = sizeof(D) / sizeof(Type);
-      constexpr uint32_t bits = 8 * sizeof(Type);
-      using US = raw_unsigned_t<Type>;
-      using UD = raw_unsigned_t<D>;
-      UD result_u(0);
-      detail::unroll_for<count>([&](auto i) {
-        auto src_u = *reinterpret_cast<const US*>(base); // unsigned cast
-        auto src_d = static_cast<UD>(src_u); // zero-extend
-        result_u |= (src_d << (i * bits));
-        base += ldm; // next row
-      });
-      return *reinterpret_cast<const D*>(&result_u);
+      if constexpr (sizeof(Type) == 1 && sizeof(D) == 4) {
+        // 4 × 1-byte strided loads → single pack-load byte instruction
+        return vx_packlb_f(base, ldm);
+      } else if constexpr (sizeof(Type) == 2 && sizeof(D) == 4) {
+        // 2 × 2-byte strided loads → single pack-load halfword instruction
+        return vx_packlh_f(base, ldm * 2u);
+      } else {
+        constexpr uint32_t count = sizeof(D) / sizeof(Type);
+        constexpr uint32_t bits = 8 * sizeof(Type);
+        using US = raw_unsigned_t<Type>;
+        using UD = raw_unsigned_t<D>;
+        UD result_u(0);
+        detail::unroll_for<count>([&](auto i) {
+          auto src_u = *reinterpret_cast<const US*>(base); // unsigned cast
+          auto src_d = static_cast<UD>(src_u); // zero-extend
+          result_u |= (src_d << (i * bits));
+          base += ldm; // next row
+        });
+        return *reinterpret_cast<const D*>(&result_u);
+      }
     }
   };
 

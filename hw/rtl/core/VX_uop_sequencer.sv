@@ -33,9 +33,9 @@ module VX_uop_sequencer import
     localparam UOP_SEL_W = `LOG2UP(UOP_MAX);
 
     // UOP-expanders signals.
-    wire [UOP_MAX-1:0]   uop_valid_in;
-    ibuffer_t            uop_data_out [UOP_MAX];
-    wire [UOP_CTR_W-1:0] uop_count_out [UOP_MAX];
+    wire [UOP_MAX-1:0]   uop_in_valid;
+    ibuffer_t            uop_out_data [UOP_MAX];
+    wire [UOP_CTR_W-1:0] uop_out_count [UOP_MAX];
 
     reg [UOP_CTR_W-1:0] uop_ctr;    // current uop index within active burst
     reg                 uop_active; // high while emitting a uop burst
@@ -43,7 +43,7 @@ module VX_uop_sequencer import
 
     reg [UOP_SEL_W-1:0] sel_idx_r;
     reg [UOP_CTR_W-1:0] last_ctr_r;
-    ibuffer_t            uop_data;
+    ibuffer_t           uop_data;
 
     logic [UOP_SEL_W-1:0] sel_idx_n;
     wire is_uop_input;
@@ -51,23 +51,26 @@ module VX_uop_sequencer import
         .N (UOP_MAX),
         .REVERSE (1)
     ) priority_enc (
-        .data_in    (uop_valid_in),
+        .data_in    (uop_in_valid),
         `UNUSED_PIN (onehot_out),
         .index_out  (sel_idx_n),
         .valid_out  (is_uop_input)
     );
 
+    // prepare the input data for the uop expanders
+    ibuffer_t uop_in_data;
+    always_comb begin
+        uop_in_data = input_if.data;
+        uop_in_data.uuid = get_uop_uuid(input_if.data.uuid, uop_ctr);
+    end
+
     // uop_start fires for exactly one cycle at the beginning of a new burst.
-    // The ~uop_active guard prevents re-triggering while a burst is in flight.
     wire uop_start = input_if.valid && is_uop_input && ~uop_active;
 
     // downstream accepted a uop this cycle.
     wire uop_next = uop_active && output_if.ready;
 
     // Sequential state machine: track the active burst and uop index.
-    // Counter starts at 1; uop_data register captures expander output so
-    // the downstream sees a registered result (no combinational path from
-    // expander through mux into scoreboard).
     always_ff @(posedge clk) begin
         if (reset) begin
             uop_ctr    <= '0;
@@ -80,48 +83,64 @@ module VX_uop_sequencer import
                 uop_active <= 1'b1;
                 uop_ctr    <= UOP_CTR_W'(1);
                 sel_idx_r  <= sel_idx_n;
-                last_ctr_r <= uop_count_out[sel_idx_n] - UOP_CTR_W'(1);
-                uop_data   <= uop_data_out[sel_idx_n];
-                uop_done   <= (uop_count_out[sel_idx_n] == UOP_CTR_W'(1));
+                last_ctr_r <= uop_out_count[sel_idx_n] - UOP_CTR_W'(1);
+                uop_data   <= uop_out_data[sel_idx_n];
+                uop_done   <= (uop_out_count[sel_idx_n] == UOP_CTR_W'(1));
             end else if (uop_next) begin
                 uop_active <= ~uop_done;
                 uop_ctr    <= uop_done ? '0 : uop_ctr + UOP_CTR_W'(1);
-                uop_data   <= uop_data_out[sel_idx_r];
+                uop_data   <= uop_out_data[sel_idx_r];
                 uop_done   <= (uop_ctr == last_ctr_r);
             end
         end
     end
 
-    wire [UOP_MAX-1:0] uop_start_in;
+    wire [UOP_MAX-1:0] uop_in_start;
     for (genvar i = 0; i < UOP_MAX; ++i) begin : g_start
-        assign uop_start_in[i] = uop_start && uop_valid_in[i];
+        assign uop_in_start[i] = uop_start && uop_in_valid[i];
     end
 
-    wire [UOP_MAX-1:0] uop_next_in;
+    wire [UOP_MAX-1:0] uop_in_next;
     for (genvar i = 0; i < UOP_MAX; ++i) begin : g_next
-        assign uop_next_in[i] = uop_next && uop_valid_in[i];
+        assign uop_in_next[i] = uop_next && uop_in_valid[i];
     end
+
+    // ------------------------------------------------------------------
+    // Pack Load/Store uop expander
+    // ------------------------------------------------------------------
+    assign uop_in_valid[UOP_PACKLD] = (uop_in_data.ex_type == EX_LSU)
+                                   && (uop_in_data.op_args.lsu.pack != 0);
+    VX_uop_packld uop_packld (
+        .clk       (clk),
+        .reset     (reset),
+        .ibuf_in   (uop_in_data),
+        .start     (uop_in_start[UOP_PACKLD]),
+        .advance   (uop_in_next[UOP_PACKLD]),
+        .uop_idx   (uop_ctr),
+        .ibuf_out  (uop_out_data[UOP_PACKLD]),
+        .uop_count (uop_out_count[UOP_PACKLD])
+    );
 
 `ifdef EXT_TCU_ENABLE
     // ------------------------------------------------------------------
     // TCU uop expander
     // ------------------------------------------------------------------
-    assign uop_valid_in[UOP_TCU] = (input_if.data.ex_type == EX_TCU)
-        && (input_if.data.op_type == INST_TCU_WMMA
+    assign uop_in_valid[UOP_TCU] = (uop_in_data.ex_type == EX_TCU)
+        && (uop_in_data.op_type == INST_TCU_WMMA
     `ifdef TCU_SPARSE_ENABLE
-        || input_if.data.op_type == INST_TCU_WMMA_SP
-        || input_if.data.op_type == INST_TCU_META_STORE
+        || uop_in_data.op_type == INST_TCU_WMMA_SP
+        || uop_in_data.op_type == INST_TCU_META_STORE
     `endif
         );
     VX_tcu_uops tcu_uops (
         .clk       (clk),
         .reset     (reset),
-        .ibuf_in   (input_if.data),
-        .start     (uop_start_in[UOP_TCU]),
-        .advance   (uop_next_in[UOP_TCU]),
+        .ibuf_in   (uop_in_data),
+        .start     (uop_in_start[UOP_TCU]),
+        .advance   (uop_in_next[UOP_TCU]),
         .uop_idx   (uop_ctr),
-        .ibuf_out  (uop_data_out[UOP_TCU]),
-        .uop_count (uop_count_out[UOP_TCU])
+        .ibuf_out  (uop_out_data[UOP_TCU]),
+        .uop_count (uop_out_count[UOP_TCU])
     );
 `endif
 
@@ -129,17 +148,17 @@ module VX_uop_sequencer import
     // ------------------------------------------------------------------
     // DXA uop expander
     // ------------------------------------------------------------------
-    assign uop_valid_in[UOP_DXA] = (input_if.data.ex_type == EX_SFU)
-                                && (input_if.data.op_type == INST_SFU_DXA);
+    assign uop_in_valid[UOP_DXA] = (uop_in_data.ex_type == EX_SFU)
+                                && (uop_in_data.op_type == INST_SFU_DXA);
     VX_dxa_uops dxa_uops (
         .clk       (clk),
         .reset     (reset),
-        .ibuf_in   (input_if.data),
-        .start     (uop_start_in[UOP_DXA]),
-        .advance   (uop_next_in[UOP_DXA]),
+        .ibuf_in   (uop_in_data),
+        .start     (uop_in_start[UOP_DXA]),
+        .advance   (uop_in_next[UOP_DXA]),
         .uop_idx   (uop_ctr),
-        .ibuf_out  (uop_data_out[UOP_DXA]),
-        .uop_count (uop_count_out[UOP_DXA])
+        .ibuf_out  (uop_out_data[UOP_DXA]),
+        .uop_count (uop_out_count[UOP_DXA])
     );
 `endif
 

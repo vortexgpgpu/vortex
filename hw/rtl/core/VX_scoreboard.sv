@@ -210,6 +210,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             staging_if[w].data.wr_xregs,
             staging_if[w].data.used_rs,
             staging_if[w].data.rd,
+            staging_if[w].data.bytesel,
             staging_if[w].data.rs1,
             staging_if[w].data.rs2,
             staging_if[w].data.rs3
@@ -239,6 +240,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             scoreboard_if.data.wr_xregs,
             scoreboard_if.data.used_rs,
             scoreboard_if.data.rd,
+            scoreboard_if.data.bytesel,
             scoreboard_if.data.rs1,
             scoreboard_if.data.rs2,
             scoreboard_if.data.rs3

@@ -49,7 +49,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     localparam REG_REM_BITS     = NUM_REGS_BITS - BANK_SEL_BITS;
 
-    localparam META_DATAW       = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NUM_XREGS + NUM_REGS_BITS + 1 + 1;
+    localparam META_DATAW       = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NUM_XREGS + NUM_REGS_BITS + BYTESEL_BITS + 1 + 1;
     localparam OUT_DATAW        = $bits(operands_t);
 
     `UNUSED_VAR (writeback_if.data.sop)
@@ -166,6 +166,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         scoreboard_if.data.op_type,
         scoreboard_if.data.op_args,
         scoreboard_if.data.rd,
+        scoreboard_if.data.bytesel,
         simd_sop,
         simd_eop
     };
@@ -252,7 +253,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     wire [BANK_DATA_SIZE-1:0] gpr_wr_byteen;
     for (genvar i = 0; i < `SIMD_WIDTH; ++i) begin : g_gpr_wr_byteen
-        assign gpr_wr_byteen[i*XLENB+:XLENB] = {XLENB{writeback_if.data.tmask[i]}};
+        assign gpr_wr_byteen[i*XLENB+:XLENB] = writeback_if.data.byteen[i];
     end
 
     // GPR banks
@@ -322,6 +323,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             operands_if.data.op_type,
             operands_if.data.op_args,
             operands_if.data.rd,
+            operands_if.data.bytesel,
             operands_if.data.rs3_data,
             operands_if.data.rs2_data,
             operands_if.data.rs1_data,

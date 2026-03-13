@@ -31,6 +31,9 @@ package VX_gpu_pkg;
 	localparam NB_WIDTH = `UP(NB_BITS);
 
     localparam XLENB    = `XLEN / 8;
+    localparam XLENB_W  = `CLOG2(XLENB);
+    localparam BYTESEL_BITS = (XLENB_W + XLENB_W);
+    localparam [BYTESEL_BITS-1:0] BYTESEL_DEFAULT = {XLENB_W'(XLENB-1), XLENB_W'(0)};
 
 	localparam RV_REGS = 32;
 	localparam RV_REGS_BITS = 5;
@@ -76,7 +79,8 @@ package VX_gpu_pkg;
 
     localparam BAR_SIZE_W = `MAX(NW_WIDTH, NC_WIDTH);
 
-    localparam UOP_TCU = 0;
+    localparam UOP_PACKLD = 0;
+    localparam UOP_TCU = UOP_PACKLD + 1;
     localparam UOP_DXA = UOP_TCU + `EXT_TCU_ENABLED;
     localparam UOP_MAX = UOP_DXA + `EXT_DXA_ENABLED;
     localparam UOP_CTR_W = 8;
@@ -556,7 +560,8 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(fpu_args_t) == INST_ARGS_BITS)
 
     typedef struct packed {
-        logic [(INST_ARGS_BITS-1-1-12)-1:0] __padding;
+        logic [(INST_ARGS_BITS-1-1-12-2)-1:0] __padding;  // 9 bits
+        logic [1:0] pack;  // 0=normal, 1=PACKLB (4×byte), 2=PACKLH (2×halfword)
         logic is_store;
         logic is_float;
         logic [11:0] offset;
@@ -637,6 +642,7 @@ package VX_gpu_pkg;
         logic [NUM_XREGS-1:0]       wr_xregs;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
         logic [NUM_REGS_BITS-1:0]   rd;
+        logic [BYTESEL_BITS-1:0]    bytesel;
         logic [NUM_REGS_BITS-1:0]   rs1;
         logic [NUM_REGS_BITS-1:0]   rs2;
         logic [NUM_REGS_BITS-1:0]   rs3;
@@ -654,6 +660,7 @@ package VX_gpu_pkg;
         logic [NUM_XREGS-1:0]       wr_xregs;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
         logic [NUM_REGS_BITS-1:0]   rd;
+        logic [BYTESEL_BITS-1:0]    bytesel;
         logic [NUM_REGS_BITS-1:0]   rs1;
         logic [NUM_REGS_BITS-1:0]   rs2;
         logic [NUM_REGS_BITS-1:0]   rs3;
@@ -671,6 +678,7 @@ package VX_gpu_pkg;
         logic [NUM_XREGS-1:0]       wr_xregs;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
         logic [NUM_REGS_BITS-1:0]   rd;
+        logic [BYTESEL_BITS-1:0]    bytesel;
         logic [NUM_REGS_BITS-1:0]   rs1;
         logic [NUM_REGS_BITS-1:0]   rs2;
         logic [NUM_REGS_BITS-1:0]   rs3;
@@ -688,6 +696,7 @@ package VX_gpu_pkg;
         logic                               wb;
         logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
+        logic [BYTESEL_BITS-1:0]            bytesel;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs3_data;
@@ -705,6 +714,7 @@ package VX_gpu_pkg;
         logic                               wb;
         logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
+        logic [BYTESEL_BITS-1:0]            bytesel;
         logic [INST_OP_BITS-1:0]            op_type;
         op_args_t                           op_args;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
@@ -723,6 +733,7 @@ package VX_gpu_pkg;
         logic                               wb;
         logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
+        logic [BYTESEL_BITS-1:0]            bytesel;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  data;
         logic                               sop;
         logic                               eop;
@@ -737,6 +748,7 @@ package VX_gpu_pkg;
         logic                               wb;
         logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
+        logic [`SIMD_WIDTH-1:0][XLENB-1:0]  byteen;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  data;
         logic                               sop;
         logic                               eop;

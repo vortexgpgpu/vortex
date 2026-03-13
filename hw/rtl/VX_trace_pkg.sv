@@ -169,7 +169,16 @@ package VX_trace_pkg;
             endcase
         end
         EX_LSU: begin
-            if (op_args.lsu.is_float) begin
+            if (op_args.lsu.pack != 0) begin
+                case (op_args.lsu.pack)
+                    2'd1: begin
+                        `TRACE(level, ("PACKLB.F"))
+                    end
+                    default: begin
+                        `TRACE(level, ("PACKLH.F"))
+                    end
+                endcase
+            end else if (op_args.lsu.is_float) begin
                 case (INST_LSU_BITS'(op_type))
                     INST_LSU_LW: `TRACE(level, ("FLW"))
                     INST_LSU_LD: `TRACE(level, ("FLD"))

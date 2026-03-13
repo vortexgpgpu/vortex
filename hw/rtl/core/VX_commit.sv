@@ -76,6 +76,25 @@ module VX_commit import VX_gpu_pkg::*; #(
     // Writeback
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_writeback
+        wire [XLENB_W-1:0] bytesel_size = commit_arb_if[i].data.bytesel[BYTESEL_BITS-1 -: XLENB_W];
+        wire [XLENB_W-1:0] bytesel_off  = commit_arb_if[i].data.bytesel[0 +: XLENB_W];
+        wire [`SIMD_WIDTH-1:0][`XLEN-1:0] writeback_data;
+        wire [`SIMD_WIDTH-1:0][XLENB-1:0] writeback_byteen;
+
+        wire [XLENB-1:0] size_mask = (bytesel_size == XLENB_W'(7)) ? XLENB'(255) :
+                                     (bytesel_size == XLENB_W'(6)) ? XLENB'(127) :
+                                     (bytesel_size == XLENB_W'(5)) ? XLENB'(63)  :
+                                     (bytesel_size == XLENB_W'(4)) ? XLENB'(31)  :
+                                     (bytesel_size == XLENB_W'(3)) ? XLENB'(15)  :
+                                     (bytesel_size == XLENB_W'(2)) ? XLENB'(7)   :
+                                     (bytesel_size == XLENB_W'(1)) ? XLENB'(3)   : XLENB'(1);
+        wire [XLENB-1:0] base_byteen = size_mask << bytesel_off;
+
+        for (genvar lane = 0; lane < `SIMD_WIDTH; ++lane) begin : g_bytesel
+            assign writeback_data[lane] = commit_arb_if[i].data.data[lane] << (8 * bytesel_off);
+            assign writeback_byteen[lane] = commit_arb_if[i].data.tmask[lane] ? base_byteen : '0;
+        end
+
         assign writeback_if[i].valid     = commit_arb_if[i].valid;
         assign writeback_if[i].data.uuid = commit_arb_if[i].data.uuid;
         assign writeback_if[i].data.wis  = wid_to_wis(commit_arb_if[i].data.wid);
@@ -85,7 +104,8 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.wb   = commit_arb_if[i].data.wb;
         assign writeback_if[i].data.wr_xregs = commit_arb_if[i].data.wr_xregs;
         assign writeback_if[i].data.rd   = commit_arb_if[i].data.rd;
-        assign writeback_if[i].data.data = commit_arb_if[i].data.data;
+        assign writeback_if[i].data.byteen = writeback_byteen;
+        assign writeback_if[i].data.data = writeback_data;
         assign writeback_if[i].data.sop  = commit_arb_if[i].data.sop;
         assign writeback_if[i].data.eop  = commit_arb_if[i].data.eop;
         assign commit_arb_if[i].ready    = 1;
