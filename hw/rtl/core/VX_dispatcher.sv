@@ -38,38 +38,100 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     wire [NUM_EX_UNITS-1:0] operands_ready_in;
     assign operands_if.ready = operands_ready_in[operands_if.data.ex_type];
 
+    // Non-LSU execution units: pass operand data straight through
     for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_buffers
-        VX_elastic_buffer #(
-            .DATAW   (OUT_DATAW),
-            .SIZE    (2),
-            .OUT_REG (1)
-        ) buffer (
-            .clk        (clk),
-            .reset      (reset),
-            .valid_in   (operands_if.valid && (operands_if.data.ex_type == EX_BITS'(i))),
-            .ready_in   (operands_ready_in[i]),
-            .data_in    ({
-                operands_if.data.uuid,
-                operands_if.data.wis,
-                operands_if.data.sid,
-                operands_if.data.tmask,
-                operands_if.data.PC,
-                operands_if.data.wb,
-                operands_if.data.wr_xregs,
-                operands_if.data.rd,
-                operands_if.data.op_type,
-                operands_if.data.op_args,
-                operands_if.data.rs1_data,
-                operands_if.data.rs2_data,
-                operands_if.data.rs3_data,
-                operands_if.data.sop,
-                operands_if.data.eop
-            }),
-            .data_out   (dispatch_if[i].data),
-            .valid_out  (dispatch_if[i].valid),
-            .ready_out  (dispatch_if[i].ready)
-        );
+        if (i != EX_LSU) begin : g_non_lsu
+            VX_elastic_buffer #(
+                .DATAW   (OUT_DATAW),
+                .SIZE    (2),
+                .OUT_REG (1)
+            ) buffer (
+                .clk        (clk),
+                .reset      (reset),
+                .valid_in   (operands_if.valid && (operands_if.data.ex_type == EX_BITS'(i))),
+                .ready_in   (operands_ready_in[i]),
+                .data_in    ({
+                    operands_if.data.uuid,
+                    operands_if.data.wis,
+                    operands_if.data.sid,
+                    operands_if.data.tmask,
+                    operands_if.data.PC,
+                    operands_if.data.wb,
+                    operands_if.data.wr_xregs,
+                    operands_if.data.rd,
+                    operands_if.data.bytesel,
+                    operands_if.data.op_type,
+                    operands_if.data.op_args,
+                    operands_if.data.rs1_data,
+                    operands_if.data.rs2_data,
+                    operands_if.data.rs3_data,
+                    operands_if.data.sop,
+                    operands_if.data.eop
+                }),
+                .data_out   (dispatch_if[i].data),
+                .valid_out  (dispatch_if[i].valid),
+                .ready_out  (dispatch_if[i].ready)
+            );
+        end
     end
+
+    logic [`SIMD_WIDTH-1:0][`XLEN-1:0] eff_rs1_data;
+    op_args_t eff_op_args;
+
+    // Pack-load: compute eff_rs1[lane] = rs1[lane] + rs2[lane] * uop_idx
+    // uop_idx is in op_args.lsu.offset[1:0]; stride lives in rs2_data.
+    // Multiply via shift-and-add on the 2-bit index — no multiplier needed.
+    wire is_pack_lsu = (operands_if.data.op_args.lsu.pack != 2'b00);
+    wire [1:0] pld_uop_idx = operands_if.data.op_args.lsu.offset[1:0];
+
+    for (genvar j = 0; j < `SIMD_WIDTH; ++j) begin : g_eff_rs1
+        wire [`XLEN-1:0] stride_off =
+            ({`XLEN{pld_uop_idx[0]}} & (operands_if.data.rs2_data[j] << 0))
+          + ({`XLEN{pld_uop_idx[1]}} & (operands_if.data.rs2_data[j] << 1));
+        assign eff_rs1_data[j] = is_pack_lsu
+            ? (operands_if.data.rs1_data[j] + stride_off)
+            :  operands_if.data.rs1_data[j];
+    end
+
+    always_comb begin
+        eff_op_args = operands_if.data.op_args;
+        if (is_pack_lsu) begin
+            eff_op_args.lsu.offset = '0;
+        end
+    end
+
+    // LSU: substitute effective base address and cleared offset for bulk ops
+    VX_elastic_buffer #(
+        .DATAW   (OUT_DATAW),
+        .SIZE    (2),
+        .OUT_REG (1)
+    ) lsu_buffer (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (operands_if.valid && (operands_if.data.ex_type == EX_BITS'(EX_LSU))),
+        .ready_in   (operands_ready_in[EX_LSU]),
+        .data_in    ({
+            operands_if.data.uuid,
+            operands_if.data.wis,
+            operands_if.data.sid,
+            operands_if.data.tmask,
+            operands_if.data.PC,
+            operands_if.data.wb,
+            operands_if.data.wr_xregs,
+            operands_if.data.rd,
+            operands_if.data.bytesel,
+            operands_if.data.op_type,
+            eff_op_args,
+            eff_rs1_data,
+            operands_if.data.rs2_data,
+            operands_if.data.rs3_data,
+            operands_if.data.sop,
+            operands_if.data.eop
+        }),
+        .data_out   (dispatch_if[EX_LSU].data),
+        .valid_out  (dispatch_if[EX_LSU].valid),
+        .ready_out  (dispatch_if[EX_LSU].ready)
+    );
 
 `ifdef PERF_ENABLE
     reg [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] perf_stalls_r;

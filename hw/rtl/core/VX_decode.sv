@@ -40,6 +40,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     reg [NUM_SRC_OPDS:0] use_regs;
     reg [NUM_XREGS-1:0] rd_xregs;
     reg [NUM_XREGS-1:0] wr_xregs;
+    reg [BYTESEL_BITS-1:0] bytesel;
     reg is_wstall;
 
     wire [31:0] instr = fetch_if.data.instr;
@@ -157,6 +158,7 @@ module VX_decode import VX_gpu_pkg::*; #(
         use_regs  = '0;
         rd_xregs  = '0;
         wr_xregs  = '0;
+        bytesel   = BYTESEL_DEFAULT;
         is_wstall = 0;
 
         case (opcode)
@@ -297,7 +299,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_type = INST_LSU_FENCE;
                 op_args.lsu.is_store = 0;
                 op_args.lsu.is_float = 0;
-                op_args.lsu.offset = 0;
+                op_args.lsu.pack     = 0;
+                op_args.lsu.offset   = 0;
             end
             INST_SYS : begin
                 if (funct3[1:0] != 0) begin
@@ -332,7 +335,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_type = INST_OP_BITS'({1'b0, funct3});
                 op_args.lsu.is_store = 0;
                 op_args.lsu.is_float = opcode[2];
-                op_args.lsu.offset = u_12;
+                op_args.lsu.pack     = 0;
+                op_args.lsu.offset   = u_12;
                 `USED_IREG (rs1);
             `ifdef EXT_F_ENABLE
                 `USED_REG (opcode[2], rd, 1'b1);
@@ -348,7 +352,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_type = INST_OP_BITS'({1'b1, funct3});
                 op_args.lsu.is_store = 1;
                 op_args.lsu.is_float = opcode[2];
-                op_args.lsu.offset = s_imm;
+                op_args.lsu.pack    = 0;
+                op_args.lsu.offset   = s_imm;
                 `USED_IREG (rs1);
             `ifdef EXT_F_ENABLE
                 `USED_REG (opcode[2], rs2, 1'b1);
@@ -544,19 +549,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                         end
                         op_type = INST_OP_BITS'(funct3);
                     end
-                `ifdef EXT_DXA_ENABLE
-                    7'h03: begin // DXA issue (dimension-specific)
-                        // funct3 encodes dimensionality: 0=1D .. 4=5D.
-                        // Expanded into micro-ops by VX_dxa_uops.
-                        if (funct3 <= 3'd4) begin
-                            ex_type = EX_SFU;
-                            op_type = INST_OP_BITS'(INST_SFU_DXA);
-                            op_args.dxa.op = funct3;
-                            `USED_IREG (rs1);
-                            `USED_IREG (rs2);
-                        end
-                    end
-                `endif
                 `ifdef EXT_TCU_ENABLE
                     7'h02: begin
                         if (funct3 == 3'h0) begin
@@ -592,6 +584,46 @@ module VX_decode import VX_gpu_pkg::*; #(
                     `endif
                     end
                 `endif
+                `ifdef EXT_DXA_ENABLE
+                    7'h03: begin // DXA issue (dimension-specific)
+                        // funct3 encodes dimensionality: 0=1D .. 4=5D.
+                        // Expanded into micro-ops by VX_dxa_uops.
+                        if (funct3 <= 3'd4) begin
+                            ex_type = EX_SFU;
+                            op_type = INST_OP_BITS'(INST_SFU_DXA);
+                            op_args.dxa.op = funct3;
+                            `USED_IREG (rs1);
+                            `USED_IREG (rs2);
+                        end
+                    end
+                `endif
+                    7'h04: begin // Load packing: vx_packlb_f / vx_packlh_f
+                        case (funct3)
+                            3'h1: begin // vx_packlb_f — pack 4 strided bytes into float
+                                ex_type              = EX_LSU;
+                                op_type              = INST_OP_BITS'(INST_LSU_LBU);
+                                op_args.lsu.is_store = 0;
+                                op_args.lsu.is_float = 1;
+                                op_args.lsu.pack     = 2'b01;
+                                op_args.lsu.offset   = '0;
+                                `USED_FREG (rd);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h2: begin // vx_packlh_f — pack 2 strided halfwords into float
+                                ex_type              = EX_LSU;
+                                op_type              = INST_OP_BITS'(INST_LSU_LHU);
+                                op_args.lsu.is_store = 0;
+                                op_args.lsu.is_float = 1;
+                                op_args.lsu.pack     = 2'b10;
+                                op_args.lsu.offset   = '0;
+                                `USED_FREG (rd);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            default:;
+                        endcase
+                    end
                     default:;
                 endcase
             end
@@ -610,8 +642,8 @@ module VX_decode import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
-        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
+        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    bytesel,                  reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
+        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.bytesel,   decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
     );

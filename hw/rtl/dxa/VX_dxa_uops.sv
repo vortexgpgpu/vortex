@@ -155,7 +155,6 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
     ibuffer_t ibuf_r;
     always_comb begin
         ibuf_r = ibuf_in;
-        ibuf_r.uuid     = get_uop_uuid(ibuf_in.uuid, uop_idx);
         ibuf_r.op_args  = op_args_t'({ibuf_in.op_args[INST_ARGS_BITS-1:3], uop_op});
         ibuf_r.wb       = 1'b0;
         ibuf_r.wr_xregs = '0;

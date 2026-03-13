@@ -30,9 +30,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 );
 `ifdef TCU_SPARSE_ENABLE
     localparam MAX_META_COLS = TCU_BLOCK_CAP / 2;  // worst case: 4-bit types
-    localparam MAX_FUSED = NT16_SPARSE
-        ? (TCU_UOPS + MAX_META_COLS)
-        : (TCU_UOPS / 2 + MAX_META_COLS);
+    localparam MAX_FUSED = NT16_SPARSE ? (TCU_UOPS + MAX_META_COLS) : (TCU_UOPS / 2 + MAX_META_COLS);
     localparam CTR_W = $clog2(MAX_FUSED > TCU_UOPS ? MAX_FUSED : TCU_UOPS);
 `else
     localparam CTR_W = $clog2(TCU_UOPS);
@@ -152,77 +150,66 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     // -----------------------------------------------------------------------
     // Output uop assembly.
     // -----------------------------------------------------------------------
-    assign ibuf_out.uuid = get_uop_uuid(ibuf_in.uuid, uop_idx);
-`ifdef TCU_SPARSE_ENABLE
-    if (NT16_SPARSE) begin : g_nt16_tmask
-        assign ibuf_out.tmask = is_sparse
-            ? (is_meta_phase ? ibuf_in.tmask
-                : (eff_ctr[0] ? ibuf_in.tmask & 16'hCCCC
-                               : ibuf_in.tmask & 16'h3333))
-            : ibuf_in.tmask;
-    end else begin : g_def_tmask
-        assign ibuf_out.tmask = ibuf_in.tmask;
-    end
-`else
-    assign ibuf_out.tmask = ibuf_in.tmask;
-`endif
-    assign ibuf_out.PC      = ibuf_in.PC;
-    assign ibuf_out.ex_type = ibuf_in.ex_type;
-`ifdef TCU_SPARSE_ENABLE
-    assign ibuf_out.op_type = meta_uop ? INST_TCU_META_STORE : ibuf_in.op_type;
-`else
-    assign ibuf_out.op_type = ibuf_in.op_type;
-`endif
-    assign ibuf_out.op_args.tcu.fmt_s = ibuf_in.op_args.tcu.fmt_s;
 `ifdef TCU_SPARSE_ENABLE
     /* verilator lint_off UNSIGNED */
     wire meta_use_rs2 = (ctr >= `UP(CTR_W)'(TCU_META_COLS_PER_LOAD));
     /* verilator lint_on UNSIGNED */
-    assign ibuf_out.op_args.tcu.fmt_d = meta_uop ? 4'(ctr) : ibuf_in.op_args.tcu.fmt_d;
-    if (NT16_SPARSE) begin : g_nt16_steps
-        /* verilator lint_off UNUSEDSIGNAL */
-        wire [`UP(CTR_W)-1:0] n_sp_s = `UP(CTR_W)'(eff_ctr[0 +: (LG_N + LG_K)]);
-        wire [`UP(CTR_W)-1:0] m_sp_s = `UP(CTR_W)'(eff_ctr[(LG_N + LG_K) +: LG_M]);
-        /* verilator lint_on UNUSEDSIGNAL */
-        assign ibuf_out.op_args.tcu.step_m = meta_uop ? '0 : (is_sparse ? 4'(m_sp_s) : 4'(m_index));
-        assign ibuf_out.op_args.tcu.step_n = meta_uop ? '0 : (is_sparse ? 4'(n_sp_s) : 4'(n_index));
-        assign ibuf_out.op_args.tcu.step_k = meta_uop ? '0 : (is_sparse ? 4'(0)      : 4'(k_index));
-    end else begin : g_def_steps
-        assign ibuf_out.op_args.tcu.step_m = meta_uop ? '0 : 4'(m_index);
-        assign ibuf_out.op_args.tcu.step_n = meta_uop ? '0 : 4'(n_index);
-        assign ibuf_out.op_args.tcu.step_k = meta_uop ? '0 : 4'(k_index);
-    end
-    assign ibuf_out.wb  = meta_uop ? 1'b0 : 1'b1;
-    assign ibuf_out.rd  = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
-    assign ibuf_out.rs1 = meta_uop
-        ? (is_meta_store
-            ? (meta_use_rs2 ? ibuf_in.rs2 : ibuf_in.rs1)
-            : (meta_use_rs2 ? make_reg_num(REG_TYPE_F, 5'(META_REG1))
-                            : make_reg_num(REG_TYPE_F, 5'(META_REG0))))
-        : make_reg_num(REG_TYPE_F, rs1);
-    assign ibuf_out.rs2 = meta_uop ? ibuf_in.rs2 : make_reg_num(REG_TYPE_F, rs2);
-    assign ibuf_out.rs3 = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
-`else
-    assign ibuf_out.op_args.tcu.fmt_d  = ibuf_in.op_args.tcu.fmt_d;
-    assign ibuf_out.op_args.tcu.step_m = 4'(m_index);
-    assign ibuf_out.op_args.tcu.step_n = 4'(n_index);
-    assign ibuf_out.op_args.tcu.step_k = 4'(k_index);
-    assign ibuf_out.wb  = 1;
-    assign ibuf_out.rd  = make_reg_num(REG_TYPE_F, rs3);
-    assign ibuf_out.rs1 = make_reg_num(REG_TYPE_F, rs1);
-    assign ibuf_out.rs2 = make_reg_num(REG_TYPE_F, rs2);
-    assign ibuf_out.rs3 = make_reg_num(REG_TYPE_F, rs3);
 `endif
-    assign ibuf_out.rd_xregs = ibuf_in.rd_xregs;
-    assign ibuf_out.wr_xregs = ibuf_in.wr_xregs;
-    assign ibuf_out.used_rs  = ibuf_in.used_rs;
 
-    `UNUSED_VAR (ibuf_in.wb)
-    `UNUSED_VAR (ibuf_in.rd)
-`ifndef TCU_SPARSE_ENABLE
-    `UNUSED_VAR (ibuf_in.rs1)
-    `UNUSED_VAR (ibuf_in.rs2)
+    ibuffer_t ibuf_r;
+    always_comb begin
+        ibuf_r = ibuf_in;
+`ifdef TCU_SPARSE_ENABLE
+        if (NT16_SPARSE) begin
+            ibuf_r.tmask = is_sparse
+                ? (is_meta_phase ? ibuf_in.tmask
+                    : (eff_ctr[0] ? ibuf_in.tmask & 16'hCCCC
+                                   : ibuf_in.tmask & 16'h3333))
+                : ibuf_in.tmask;
+        end
+
+        ibuf_r.op_type = meta_uop ? INST_TCU_META_STORE : ibuf_in.op_type;
+        ibuf_r.op_args.tcu.fmt_d = meta_uop ? 4'(ctr) : ibuf_in.op_args.tcu.fmt_d;
+
+        if (NT16_SPARSE) begin
+            /* verilator lint_off UNUSEDSIGNAL */
+            logic [`UP(CTR_W)-1:0] n_sp_s;
+            logic [`UP(CTR_W)-1:0] m_sp_s;
+            /* verilator lint_on UNUSEDSIGNAL */
+            n_sp_s = `UP(CTR_W)'(eff_ctr[0 +: (LG_N + LG_K)]);
+            m_sp_s = `UP(CTR_W)'(eff_ctr[(LG_N + LG_K) +: LG_M]);
+
+            ibuf_r.op_args.tcu.step_m = meta_uop ? '0 : (is_sparse ? 4'(m_sp_s) : 4'(m_index));
+            ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : (is_sparse ? 4'(n_sp_s) : 4'(n_index));
+            ibuf_r.op_args.tcu.step_k = meta_uop ? '0 : (is_sparse ? 4'(0)      : 4'(k_index));
+        end else begin
+            ibuf_r.op_args.tcu.step_m = meta_uop ? '0 : 4'(m_index);
+            ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : 4'(n_index);
+            ibuf_r.op_args.tcu.step_k = meta_uop ? '0 : 4'(k_index);
+        end
+
+        ibuf_r.wb  = meta_uop ? 1'b0 : 1'b1;
+        ibuf_r.rd  = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
+        ibuf_r.rs1 = meta_uop
+            ? (is_meta_store
+                ? (meta_use_rs2 ? ibuf_in.rs2 : ibuf_in.rs1)
+                : (meta_use_rs2 ? make_reg_num(REG_TYPE_F, 5'(META_REG1))
+                                : make_reg_num(REG_TYPE_F, 5'(META_REG0))))
+            : make_reg_num(REG_TYPE_F, rs1);
+        ibuf_r.rs2 = meta_uop ? ibuf_in.rs2 : make_reg_num(REG_TYPE_F, rs2);
+        ibuf_r.rs3 = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
+`else
+        ibuf_r.op_args.tcu.step_m = 4'(m_index);
+        ibuf_r.op_args.tcu.step_n = 4'(n_index);
+        ibuf_r.op_args.tcu.step_k = 4'(k_index);
+        ibuf_r.wb  = 1;
+        ibuf_r.rd  = make_reg_num(REG_TYPE_F, rs3);
+        ibuf_r.rs1 = make_reg_num(REG_TYPE_F, rs1);
+        ibuf_r.rs2 = make_reg_num(REG_TYPE_F, rs2);
+        ibuf_r.rs3 = make_reg_num(REG_TYPE_F, rs3);
 `endif
-    `UNUSED_VAR (ibuf_in.rs3)
+    end
+
+    assign ibuf_out = ibuf_r;
 
 endmodule

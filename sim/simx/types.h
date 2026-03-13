@@ -337,6 +337,7 @@ struct IntrLsuArgs {
   uint32_t width : 3;
   uint32_t is_float : 1;
   uint32_t offset;
+  uint32_t pack : 2;  // 0=normal, 1=PACKLB (4 strided bytes), 2=PACKLH (2 strided halfwords)
 };
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {

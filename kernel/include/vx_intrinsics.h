@@ -467,6 +467,40 @@ inline void vx_barrier_wait(int barrier_id, int phase) {
     );
 }
 
+//
+// Load/Store Packing extensions
+//
+
+// Packed-load 4 bytes into one FP register bit-container.
+// base: pointer to the first byte to load
+// stride: byte offset between consecutive bytes to load
+// fd = bitcast<float>((MEM8[base + 0 * stride] << 0)
+//                   | (MEM8[base + 1 * stride] << 8)
+//                   | (MEM8[base + 2 * stride] << 16)
+//                   | (MEM8[base + 3 * stride] << 24));
+__attribute__((always_inline))
+inline float vx_packlb_f(const void* base, uint32_t stride) {
+  float out;
+  __asm__ volatile (
+    ".insn r %1, 1, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
+  );
+  return out;
+}
+
+// Packed-load 2 halfwords into one FP register bit-container.
+// base: pointer to the first halfword to load
+// stride: byte offset between consecutive halfwords to load
+// fd = bitcast<float>((MEM16[base + 0 * stride] << 0)
+//                   | (MEM16[base + 1 * stride] << 16));
+__attribute__((always_inline))
+inline float vx_packlh_f(const void* base, uint32_t stride) {
+  float out;
+  __asm__ volatile (
+    ".insn r %1, 2, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
+  );
+  return out;
+}
+
 #ifdef __cplusplus
 }
 #endif

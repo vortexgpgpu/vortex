@@ -73,6 +73,13 @@ namespace detail {
 
     static __attribute__((always_inline)) D pack_row(const Type *base, uint32_t ldm) {
       static_assert(sizeof(D) % sizeof(Type) == 0, "D must be a multiple of Type in size");
+      if constexpr (sizeof(Type) == 1 && sizeof(D) == 4) {
+        // 4 × 1-byte strided loads → single pack-load byte instruction
+        return vx_packlb_f(base, ldm);
+      } else if constexpr (sizeof(Type) == 2 && sizeof(D) == 4) {
+        // 2 × 2-byte strided loads → single pack-load halfword instruction
+        return vx_packlh_f(base, ldm * 2u);
+      } else {
       constexpr uint32_t count = sizeof(D) / sizeof(Type);
       constexpr uint32_t bits = 8 * sizeof(Type);
       using US = raw_unsigned_t<Type>;
@@ -85,6 +92,7 @@ namespace detail {
         base += ldm; // next row
       });
       return *reinterpret_cast<const D*>(&result_u);
+    }
     }
   };
 

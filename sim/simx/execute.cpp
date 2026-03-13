@@ -649,6 +649,29 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         uint32_t data_width = 8 * data_bytes;
         Word offset = sext<Word>(lsuArgs.offset, 32);
         const bool debug_mem_exc = (std::getenv("SIMX_MEMEXC_DEBUG") != nullptr);
+        if (lsuArgs.pack != 0) {
+          // Packed-load: rs1=base, rs2=stride; PACKLB packs 4 bytes, PACKLH packs 2 halfwords
+          uint32_t elem_bytes = (lsuArgs.pack == 1) ? 1 : 2;
+          uint32_t num_elems  = (lsuArgs.pack == 1) ? 4 : 2;
+          uint32_t elem_mask  = (elem_bytes == 1) ? 0xffu : 0xffffu;
+          for (uint32_t t = thread_start; t < num_threads; ++t) {
+            if (!warp.tmask.test(t))
+              continue;
+            uint64_t base   = rs1_data[t].u;
+            uint64_t stride = rs2_data[t].u;
+            uint32_t packed = 0;
+            for (uint32_t i = 0; i < num_elems; ++i) {
+              uint64_t elem_addr = base + i * stride;
+              uint64_t elem_data = 0;
+              this->dcache_read(&elem_data, elem_addr, elem_bytes);
+              packed |= (uint32_t)(elem_data & elem_mask) << (8 * elem_bytes * i);
+              trace_data->mem_addrs.at(t) = {elem_addr, elem_bytes};
+            }
+            rd_data[t].u64 = nan_box(packed);
+          }
+          rd_write = true;
+          break;
+        }
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;

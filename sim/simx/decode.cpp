@@ -252,6 +252,8 @@ static op_string_t op_string(const Instr &instr) {
       switch (lsu_type) {
       case LsuType::LOAD: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
+        if (lsuArgs.pack == 1) return {"PACKLB.F", ""};
+        if (lsuArgs.pack == 2) return {"PACKLH.F", ""};
         if (lsuArgs.is_float) {
           switch (lsuArgs.width) {
           case 2: return {"FLW", to_hex_str(lsuArgs.offset)};
@@ -765,14 +767,14 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       }
       auto offset = sext(imm12, width_i_imm);
       instr->setOpType(is_load ? LsuType::LOAD : LsuType::STORE);
-      instr->setArgs(IntrLsuArgs{funct3, is_float, offset});
+      instr->setArgs(IntrLsuArgs{funct3, is_float, offset, 0});
       ibuffer.push_back(instr);
     }
   } break;
   case Opcode::FENCE: {
     auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
     instr->setOpType(LsuType::FENCE);
-    instr->setArgs(IntrLsuArgs{0, 0, 0});
+    instr->setArgs(IntrLsuArgs{0, 0, 0, 0});
     ibuffer.push_back(instr);
   } break;
   case Opcode::AMO: {
@@ -1341,6 +1343,30 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       }
     } break;
   #endif
+    case 4: { // Load/Store Packing extensions
+      switch (funct3) {
+      case 1: { // vx_packlb_f: pack 4 strided bytes into FP register
+        auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
+        instr->setOpType(LsuType::LOAD);
+        instr->setArgs(IntrLsuArgs{0, 1, 0, 1});
+        instr->setDestReg(rd, RegType::Float);
+        instr->setSrcReg(0, rs1, RegType::Integer);
+        instr->setSrcReg(1, rs2, RegType::Integer);
+        ibuffer.push_back(instr);
+      } break;
+      case 2: { // vx_packlh_f: pack 2 strided halfwords into FP register
+        auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
+        instr->setOpType(LsuType::LOAD);
+        instr->setArgs(IntrLsuArgs{0, 1, 0, 2});
+        instr->setDestReg(rd, RegType::Float);
+        instr->setSrcReg(0, rs1, RegType::Integer);
+        instr->setSrcReg(1, rs2, RegType::Integer);
+        ibuffer.push_back(instr);
+      } break;
+      default:
+        std::abort();
+      }
+    } break;
     default:
       std::abort();
     }

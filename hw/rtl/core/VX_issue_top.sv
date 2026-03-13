@@ -29,6 +29,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     input wire [INST_OP_BITS-1:0]           decode_op_type,
     input op_args_t                         decode_op_args,
     input wire                              decode_wb,
+    input wire [BYTESEL_BITS-1:0]           decode_bytesel,
     input wire [NUM_SRC_OPDS-1:0]           decode_used_rs,
     input wire [NUM_REGS_BITS-1:0]          decode_rd,
     input wire [NUM_REGS_BITS-1:0]          decode_rs1,
@@ -43,6 +44,9 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     input wire [`SIMD_WIDTH-1:0]            writeback_tmask[`ISSUE_WIDTH],
     input wire [PC_BITS-1:0]                writeback_PC[`ISSUE_WIDTH],
     input wire [NUM_REGS_BITS-1:0]          writeback_rd[`ISSUE_WIDTH],
+    input wire                              writeback_wb[`ISSUE_WIDTH],
+    input wire [NUM_XREGS-1:0]              writeback_wr_xregs[`ISSUE_WIDTH],
+    input wire [`SIMD_WIDTH-1:0][XLENB-1:0] writeback_byteen[`ISSUE_WIDTH],
     input wire [`SIMD_WIDTH-1:0][`XLEN-1:0] writeback_data[`ISSUE_WIDTH],
     input wire                              writeback_sop[`ISSUE_WIDTH],
     input wire                              writeback_eop[`ISSUE_WIDTH],
@@ -80,6 +84,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     assign decode_if.data.op_type = decode_op_type;
     assign decode_if.data.op_args = decode_op_args;
     assign decode_if.data.wb = decode_wb;
+    assign decode_if.data.bytesel = decode_bytesel;
     assign decode_if.data.used_rs = decode_used_rs;
     assign decode_if.data.rd = decode_rd;
     assign decode_if.data.rs1 = decode_rs1;
@@ -95,6 +100,9 @@ module VX_issue_top import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.tmask = writeback_tmask[i];
         assign writeback_if[i].data.PC = writeback_PC[i];
         assign writeback_if[i].data.rd = writeback_rd[i];
+        assign writeback_if[i].data.wb = writeback_wb[i];
+        assign writeback_if[i].data.wr_xregs = writeback_wr_xregs[i];
+        assign writeback_if[i].data.byteen = writeback_byteen[i];
         assign writeback_if[i].data.data = writeback_data[i];
         assign writeback_if[i].data.sop = writeback_sop[i];
         assign writeback_if[i].data.eop = writeback_eop[i];
