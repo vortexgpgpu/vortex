@@ -1064,22 +1064,11 @@ void DTensorCore::tick() {
     if (pending_tag_ == 0) {
       load_desc();
 
-      std::cout << "[DTCU DESC] "
-          << "ptrA=0x" << std::hex << desc_.ptrA
-          << " ptrB=0x" << desc_.ptrB
-          << " ptrC=0x" << desc_.ptrC
-          << " ptrD=0x" << desc_.ptrD
-          << std::dec
-          << " ldmA=" << desc_.ldmA
-          << " ldmB=" << desc_.ldmB
-          << " ldmC=" << desc_.ldmC
-          << " ldmD=" << desc_.ldmD
-          << " M=" << desc_.M
-          << " N=" << desc_.N
-          << " K=" << desc_.K
-          << " fmt_s=" << uint32_t(desc_.fmt_s)
-          << " fmt_d=" << uint32_t(desc_.fmt_d)
-          << " flags=" << uint32_t(desc_.flags)
+      // For debugging: print descriptor info
+      std::cout << "[DTCU] " << "ptrA=0x" << std::hex << desc_.ptrA << " ptrB=0x" << desc_.ptrB << " ptrC=0x" << desc_.ptrC << " ptrD=0x" << desc_.ptrD //pointer
+          << std::dec << " ldmA=" << desc_.ldmA << " ldmB=" << desc_.ldmB << " ldmC=" << desc_.ldmC << " ldmD=" << desc_.ldmD // leading dimension
+          << " M=" << desc_.M << " N=" << desc_.N << " K=" << desc_.K // matrix size
+          << " fmt_s=" << uint32_t(desc_.fmt_s) << " fmt_d=" << uint32_t(desc_.fmt_d) << " flags=" << uint32_t(desc_.flags) // metadata
           << std::endl;
 
       build_req_lists_();
