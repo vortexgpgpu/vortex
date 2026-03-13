@@ -468,7 +468,7 @@ inline void vx_barrier_wait(int barrier_id, int phase) {
 }
 
 //
-// Load/Store Packing extensions
+// Load Bytes Packing Extension
 //
 
 // Packed-load 4 bytes into one FP register bit-container.
