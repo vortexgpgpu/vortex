@@ -155,6 +155,11 @@ public:
     args_ = static_cast<T>(args);
   }
 
+  void setTmask(const ThreadMask& tmask) {
+    tmask_ = tmask;
+    has_tmask_ = true;
+  }
+
   void setDestReg(uint32_t destReg, RegType type) {
     rdest_ = {type, destReg };
   }
@@ -186,6 +191,14 @@ public:
     return is_uop_;
   }
 
+  bool hasTmask() const {
+    return has_tmask_;
+  }
+
+  const ThreadMask& getTmask() const {
+    return tmask_;
+  }
+
 private:
 
   uint64_t uuid_;
@@ -196,6 +209,8 @@ private:
   RegOpd   rsrc_[MAX_REG_SOURCES];
   RegOpd   rdest_;
   bool     is_uop_;
+  ThreadMask tmask_;
+  bool     has_tmask_ = false;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };
