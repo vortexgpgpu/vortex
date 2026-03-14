@@ -1191,7 +1191,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         if (is_sparse) {
           // Sparse mode uses the packed sparse-A register layout from vx_tensor.h
           // and a synthesized metadata phase, matching the RTL uop expansion.
-#if (NUM_THREADS != 8) && (NUM_THREADS != 32)
+#if (NUM_THREADS != 8) && (NUM_THREADS != 16) && (NUM_THREADS != 32)
         std::abort();
 #else
           constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
@@ -1203,9 +1203,6 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
           if ((cfg::k_steps % 2) != 0) {
           std::abort();
         }
-          if (cfg::nt16_sparse) {
-            std::abort();
-          }
           if ((cfg::b_block_size_sp == 0) || (NUM_THREADS % cfg::b_block_size_sp) != 0) {
             std::abort();
           }
@@ -1215,7 +1212,10 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         }
 
         uint32_t steps = 0;
-          uint32_t steps_count = num_meta_cols + (cfg::m_steps * cfg::n_steps * sparse_k_steps);
+          uint32_t sparse_mma_steps = cfg::nt16_sparse
+                                    ? (cfg::m_steps * cfg::n_steps * cfg::k_steps)
+                                    : (cfg::m_steps * cfg::n_steps * sparse_k_steps);
+          uint32_t steps_count = num_meta_cols + sparse_mma_steps;
           uint32_t steps_shift = (steps_count > 1) ? (32 - log2ceil(steps_count)) : 0;
         uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
         uint32_t uuid_lo = uuid & 0xffffffff;
@@ -1233,6 +1233,34 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
             ibuffer.push_back(instr);
           }
 
+          if (cfg::nt16_sparse) {
+            constexpr uint32_t lg_n = (cfg::n_steps > 1) ? log2ceil(cfg::n_steps) : 0;
+            constexpr uint32_t lg_k = (cfg::k_steps > 1) ? log2ceil(cfg::k_steps) : 0;
+            constexpr uint32_t sparse_step_bits = lg_n + lg_k;
+            constexpr uint32_t sparse_step_mask = (sparse_step_bits != 0) ? ((1u << sparse_step_bits) - 1) : 0;
+            constexpr uint32_t tmask_even = 0x3333;
+            constexpr uint32_t tmask_odd  = 0xCCCC;
+            for (uint32_t eff_ctr = 0; eff_ctr < sparse_mma_steps; ++eff_ctr) {
+              uint32_t n_sp = (sparse_step_bits != 0) ? (eff_ctr & sparse_step_mask) : 0;
+              uint32_t m_sp = eff_ctr >> sparse_step_bits;
+              uint32_t reg_rs1 = ra_base + m_sp;
+              uint32_t reg_rs2 = rb_base + n_sp;
+              uint32_t reg_rs3 = rc_base + (eff_ctr >> 1);
+              uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
+              uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
+              ++steps;
+              auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
+              instr->setOpType(tcu_type);
+              instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m_sp, n_sp, 0});
+              instr->setDestReg(reg_rs3, RegType::Float);
+              instr->setSrcReg(0, reg_rs1, RegType::Float);
+              instr->setSrcReg(1, reg_rs2, RegType::Float);
+              instr->setSrcReg(2, reg_rs3, RegType::Float);
+              instr->setTmask(ThreadMask(NUM_THREADS, (eff_ctr & 1) ? tmask_odd : tmask_even));
+              instr->setParentUUID(uuid);
+              ibuffer.push_back(instr);
+            }
+          } else {
           for (uint32_t k = 0; k < sparse_k_steps; ++k) {
           for (uint32_t m = 0; m < cfg::m_steps; ++m) {
             for (uint32_t n = 0; n < cfg::n_steps; ++n) {
@@ -1254,6 +1282,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
             }
           }
         }
+          }
 #endif
         } else {
           // Dense mode

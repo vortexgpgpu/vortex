@@ -681,7 +681,7 @@ public:
 
     auto fedp = select_FEDP(fmt_s, fmt_d);
 
-    if (cfg::nt16_sparse || (this->arch_.num_threads() != 8 && this->arch_.num_threads() != 32)) {
+    if (this->arch_.num_threads() != 8 && this->arch_.num_threads() != 16 && this->arch_.num_threads() != 32) {
       std::cout << "Error: WMMA_SP unsupported for NUM_THREADS=" << this->arch_.num_threads() << std::endl;
       std::abort();
     }
@@ -732,8 +732,9 @@ public:
             uint32_t off = bit_idx % 32;
             return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) >> off) & 1u;
           };
-          auto bword1 = rs2_data.at(b_off + j * cfg::tcK * kCompression + z * kCompression + 0).u32;
-          auto bword2 = rs2_data.at(b_off + j * cfg::tcK * kCompression + z * kCompression + 1).u32;
+          uint32_t j_sp = cfg::nt16_sparse ? (j % (cfg::tcN / 2)) : j;
+          auto bword1 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 0).u32;
+          auto bword2 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 1).u32;
           uint32_t b_gathered = 0;
           if (is_16bit_sparse_fmt) {
             uint8_t mask_lo = 0;
