@@ -63,14 +63,11 @@ typedef struct {
   // Wait for device ready with milliseconds timeout
   int (*ready_wait) (vx_device_h hdevice, uint64_t timeout);
 
-  // read device configuration registers
-  int (*dcr_read) (vx_device_h hdevice, uint32_t addr, uint32_t* value);
-
   // write device configuration registers
   int (*dcr_write) (vx_device_h hdevice, uint32_t addr, uint32_t value);
 
-  // query device performance counter
-  int (*mpm_query) (vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value);
+  // read device configuration registers
+  int (*dcr_read) (vx_device_h hdevice, uint32_t addr, uint32_t tag, uint32_t* value);
 
 } callbacks_t;
 

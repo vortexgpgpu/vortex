@@ -11,10 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dxa_engine.h"
-
 #ifdef EXT_DXA_ENABLE
 
+#include "dxa_engine.h"
 #include <algorithm>
 #include <limits>
 #include "core.h"
@@ -48,6 +47,17 @@ inline uint64_t ceil_div(uint64_t n, uint64_t d) {
   return (n + d - 1) / d;
 }
 
+inline uint32_t desc_rank(uint32_t meta) {
+  uint32_t r = (meta >> VX_DXA_DESC_META_DIM_LSB) & ((1u << VX_DXA_DESC_META_DIM_BITS) - 1u);
+  if (r == 0) return 1;
+  return std::min(r, 5u);
+}
+
+inline uint32_t desc_elem_bytes(uint32_t meta) {
+  uint32_t enc = (meta >> VX_DXA_DESC_META_ELEMSZ_LSB) & ((1u << VX_DXA_DESC_META_ELEMSZ_BITS) - 1u);
+  return 1u << enc;
+}
+
 } // namespace
 
 // ════════════════════════════════════════════════════════════════════
@@ -62,6 +72,106 @@ void DxaEngine::reset() {
   queue_.clear();
   has_active_ = false;
   active_xfer_ = ActiveTransfer();
+}
+
+int DxaEngine::dcr_write(uint32_t addr, uint32_t value) {
+  uint32_t slot = VX_DCR_DXA_DESC_SLOT(addr);
+  uint32_t word = VX_DCR_DXA_DESC_WORD(addr);
+  auto& d = descriptors_.at(slot);
+  switch (word) {
+  case VX_DCR_DXA_DESC_BASE_LO_OFF:   d.base_addr = (d.base_addr & 0xffffffff00000000ull) | value; break;
+  case VX_DCR_DXA_DESC_BASE_HI_OFF:   d.base_addr = (d.base_addr & 0x00000000ffffffffull) | (uint64_t(value) << 32); break;
+  case VX_DCR_DXA_DESC_SIZE0_OFF:     d.sizes[0] = value; break;
+  case VX_DCR_DXA_DESC_SIZE1_OFF:     d.sizes[1] = value; break;
+  case VX_DCR_DXA_DESC_SIZE2_OFF:     d.sizes[2] = value; break;
+  case VX_DCR_DXA_DESC_SIZE3_OFF:     d.sizes[3] = value; break;
+  case VX_DCR_DXA_DESC_SIZE4_OFF:     d.sizes[4] = value; break;
+  case VX_DCR_DXA_DESC_STRIDE0_OFF:   d.strides[0] = value; break;
+  case VX_DCR_DXA_DESC_STRIDE1_OFF:   d.strides[1] = value; break;
+  case VX_DCR_DXA_DESC_STRIDE2_OFF:   d.strides[2] = value; break;
+  case VX_DCR_DXA_DESC_STRIDE3_OFF:   d.strides[3] = value; break;
+  case VX_DCR_DXA_DESC_META_OFF:      d.meta = value; break;
+  case VX_DCR_DXA_DESC_ESTRIDE0_OFF:  d.element_strides[0] = value; break;
+  case VX_DCR_DXA_DESC_ESTRIDE1_OFF:  d.element_strides[1] = value; break;
+  case VX_DCR_DXA_DESC_ESTRIDE2_OFF:  d.element_strides[2] = value; break;
+  case VX_DCR_DXA_DESC_ESTRIDE3_OFF:  d.element_strides[3] = value; break;
+  case VX_DCR_DXA_DESC_ESTRIDE4_OFF:  d.element_strides[4] = value; break;
+  case VX_DCR_DXA_DESC_TILESIZE01_OFF:
+    d.tile_sizes[0] = uint16_t(value & 0xffff);
+    d.tile_sizes[1] = uint16_t(value >> 16);
+    break;
+  case VX_DCR_DXA_DESC_TILESIZE23_OFF:
+    d.tile_sizes[2] = uint16_t(value & 0xffff);
+    d.tile_sizes[3] = uint16_t(value >> 16);
+    break;
+  case VX_DCR_DXA_DESC_TILESIZE4_OFF: d.tile_sizes[4] = uint16_t(value & 0xffff); break;
+  case VX_DCR_DXA_DESC_CFILL_OFF:     d.cfill = value; break;
+  default: break;
+  }
+  return 0;
+}
+
+const DxaEngine::Descriptor& DxaEngine::read_descriptor(uint32_t slot) const {
+  return descriptors_.at(slot);
+}
+
+bool DxaEngine::build_copy_cfg(const Descriptor& desc, CopyCfg* cfg) const {
+  uint32_t rank = desc_rank(desc.meta);
+  if (rank > 2) {
+    // Current phase supports rank-1 and rank-2 copy paths only.
+    return false;
+  }
+  cfg->rank       = rank;
+  cfg->elem_bytes = desc_elem_bytes(desc.meta);
+  cfg->tile0      = std::max<uint32_t>(1, desc.tile_sizes[0]);
+  cfg->tile1      = (rank >= 2) ? std::max<uint32_t>(1, desc.tile_sizes[1]) : 1u;
+  return true;
+}
+
+bool DxaEngine::estimate_transfer(uint32_t slot, uint32_t* total_elems, uint32_t* elem_bytes) const {
+  if (slot >= VX_DCR_DXA_DESC_COUNT)
+    return false;
+  const auto& desc = descriptors_.at(slot);
+  CopyCfg cfg;
+  if (!build_copy_cfg(desc, &cfg))
+    return false;
+  if (total_elems) *total_elems = cfg.tile0 * cfg.tile1;
+  if (elem_bytes)  *elem_bytes  = cfg.elem_bytes;
+  return true;
+}
+
+bool DxaEngine::execute_copy(uint32_t slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t* bytes_copied) {
+  if (slot >= VX_DCR_DXA_DESC_COUNT)
+    return false;
+  const auto& desc = descriptors_.at(slot);
+  CopyCfg cfg;
+  if (!build_copy_cfg(desc, &cfg))
+    return false;
+
+  uint64_t copied = 0;
+  for (uint32_t y = 0; y < cfg.tile1; ++y) {
+    for (uint32_t x = 0; x < cfg.tile0; ++x) {
+      uint32_t i0 = coords[0] + x;
+      uint32_t i1 = coords[1] + y;
+      uint64_t saddr = uint64_t(smem_addr) + (uint64_t(y) * cfg.tile0 + x) * cfg.elem_bytes;
+      bool in_bounds = (i0 < desc.sizes[0]) && ((cfg.rank < 2) || (i1 < desc.sizes[1]));
+      if (in_bounds) {
+        uint64_t gaddr = desc.base_addr + uint64_t(i0) * cfg.elem_bytes;
+        if (cfg.rank >= 2) gaddr += uint64_t(i1) * uint64_t(desc.strides[0]);
+        uint64_t value = 0;
+        // always g2s (s2g path removed)
+        core_->dcache_read(&value, gaddr, cfg.elem_bytes);
+        core_->dcache_write(&value, saddr, cfg.elem_bytes);
+      } else {
+        uint64_t fill = desc.cfill;
+        core_->dcache_write(&fill, saddr, cfg.elem_bytes);
+      }
+      copied += cfg.elem_bytes;
+    }
+  }
+
+  if (bytes_copied) *bytes_copied = uint32_t(copied);
+  return true;
 }
 
 bool DxaEngine::issue(uint32_t desc_slot,
@@ -122,7 +232,7 @@ bool DxaEngine::decode_request(const Request& req,
                                uint32_t* total_cycles) const {
   uint32_t desc_elems = 0;
   uint32_t desc_elem_bytes = 0;
-  if (!core_->dxa_estimate(req.desc_slot, &desc_elems, &desc_elem_bytes)) {
+  if (!this->estimate_transfer(req.desc_slot, &desc_elems, &desc_elem_bytes)) {
     return false;
   }
 
@@ -198,10 +308,10 @@ void DxaEngine::progress_active_request() {
 
 void DxaEngine::complete_active_request() {
   uint32_t bytes_copied = 0;
-  (void)core_->dxa_copy(active_xfer_.req.desc_slot,
-                        active_xfer_.req.smem_addr,
-                        active_xfer_.req.coords.data(),
-                        &bytes_copied);
+  (void)this->execute_copy(active_xfer_.req.desc_slot,
+                           active_xfer_.req.smem_addr,
+                           active_xfer_.req.coords.data(),
+                           &bytes_copied);
   (void)bytes_copied;
   core_->barrier_event_release(active_xfer_.req.bar_id);
 

@@ -19,8 +19,7 @@ Cluster::Cluster(const SimContext& ctx,
                  const char* name,
                  uint32_t cluster_id,
                  ProcessorImpl* processor,
-                 const Arch &arch,
-                 const DCRS &dcrs)
+                 const Arch &arch)
   : SimObject(ctx, name)
   , mem_req_out(L2_MEM_PORTS, this)
   , mem_rsp_in(L2_MEM_PORTS, this)
@@ -39,7 +38,7 @@ Cluster::Cluster(const SimContext& ctx,
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
     uint32_t socket_id = cluster_id * sockets_per_cluster + i;
     snprintf(sname, 100, "%s-socket%d", name, i);
-    sockets_.at(i) = Socket::Create(sname, socket_id, this, arch, dcrs);
+    sockets_.at(i) = Socket::Create(sname, socket_id, this, arch);
   }
 
   // Create l2cache
@@ -154,4 +153,22 @@ Cluster::PerfStats Cluster::perf_stats() const {
   PerfStats perf_stats;
   perf_stats.l2cache = l2cache_->perf_stats();
   return perf_stats;
+}
+
+int Cluster::dcr_write(uint32_t addr, uint32_t value) {
+  for (auto& socket : sockets_) {
+    int ret = socket->dcr_write(addr, value);
+    if (ret != 0)
+      return ret;
+  }
+  return 0;
+}
+
+int Cluster::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  for (auto& socket : sockets_) {
+    int ret = socket->dcr_read(addr, tag, value);
+    if (ret != 0)
+      return ret;
+  }
+  return 0;
 }

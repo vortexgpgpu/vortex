@@ -41,6 +41,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
     VX_sched_csr_if.slave   sched_csr_if,
 
+    VX_dcr_csr_if           dcr_csr_if,
+
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_warp_ctl_if.master   warp_ctl_if
@@ -147,7 +149,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     `endif
 
         .sched_csr_if   (sched_csr_if),
-        .result_if      (pe_result_if[PE_IDX_CSRS])
+        .result_if      (pe_result_if[PE_IDX_CSRS]),
+        .dcr_csr_if     (dcr_csr_if)
     );
 
 `ifdef EXT_DXA_ENABLE

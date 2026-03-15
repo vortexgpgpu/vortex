@@ -57,7 +57,7 @@ $(KERNEL).bin:
 	$(MAKE) -C $(ROOT_DIR)/kernel clean
 	STACK_BASE_ADDR=0xFF000 $(MAKE) -C $(ROOT_DIR)/kernel
 	$(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL) clean
-	STARTUP_ADDR=0x8000 $(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL)
+	STARTUP_ADDR=0x80000 $(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL)
 	cp $(ROOT_DIR)/tests/kernel/$(KERNEL)/$(KERNEL).bin $(KERNEL).bin
 
 kernel.bin.coe: $(KERNEL).bin

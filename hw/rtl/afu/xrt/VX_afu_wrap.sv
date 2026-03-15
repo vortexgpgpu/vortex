@@ -116,9 +116,12 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	reg vx_reset;
 	wire vx_busy;
 
-	wire                         dcr_wr_valid;
-	wire [VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
-	wire [VX_DCR_DATA_WIDTH-1:0] dcr_wr_data;
+	wire                         dcr_req_valid;
+	wire                         dcr_req_rw;
+	wire [VX_DCR_ADDR_WIDTH-1:0] dcr_req_addr;
+	wire [VX_DCR_DATA_WIDTH-1:0] dcr_req_data;
+	wire                         dcr_rsp_valid;
+	wire [VX_DCR_DATA_WIDTH-1:0] dcr_rsp_data;
 
 	state_e state;
 
@@ -282,9 +285,12 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		.scope_bus_out  (scope_bus_in),
 	`endif
 
-		.dcr_wr_valid	(dcr_wr_valid),
-		.dcr_wr_addr	(dcr_wr_addr),
-		.dcr_wr_data	(dcr_wr_data)
+		.dcr_req_valid	(dcr_req_valid),
+		.dcr_req_rw		(dcr_req_rw),
+		.dcr_req_addr	(dcr_req_addr),
+		.dcr_req_data	(dcr_req_data),
+		.dcr_rsp_valid	(dcr_rsp_valid),
+		.dcr_rsp_data	(dcr_rsp_data)
 	);
 
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
@@ -352,9 +358,12 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		.m_axi_rid    	(m_axi_mem_rid_a),
 		.m_axi_rresp	(m_axi_mem_rresp_a),
 
-		.dcr_wr_valid	(dcr_wr_valid),
-		.dcr_wr_addr	(dcr_wr_addr),
-		.dcr_wr_data	(dcr_wr_data),
+		.dcr_req_valid	(dcr_req_valid),
+		.dcr_req_rw		(dcr_req_rw),
+		.dcr_req_addr	(dcr_req_addr),
+		.dcr_req_data	(dcr_req_data),
+		.dcr_rsp_valid	(dcr_rsp_valid),
+		.dcr_rsp_data	(dcr_rsp_data),
 
 		.busy			(vx_busy)
 	);
@@ -389,14 +398,14 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 			m_axi_mem_rvalid_a[0],
 			m_axi_mem_rready_a[0]
 		}, {
-			dcr_wr_valid,
+			dcr_req_valid,
 			m_axi_mem_awfire_0,
 			m_axi_mem_arfire_0,
 			m_axi_mem_wfire_0,
 			m_axi_mem_bfire_0
 		}, {
-			dcr_wr_addr,
-			dcr_wr_data,
+			dcr_req_addr,
+			dcr_req_data,
 			vx_pending_writes,
 			m_axi_mem_awaddr_u[0],
 			m_axi_mem_awid_a[0],
@@ -428,9 +437,9 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         	vx_pending_writes,
 			vx_busy,
 			vx_reset,
-			dcr_wr_valid,
-			dcr_wr_addr,
-			dcr_wr_data
+			dcr_req_valid,
+			dcr_req_addr,
+			dcr_req_data
 		})
     );
 `endif

@@ -394,24 +394,6 @@
     assign itf.rsp_data  = '0; \
     `UNUSED_VAR (itf.rsp_ready)
 
-`define BUFFER_DCR_BUS_IF(dst, src, ena, latency) \
-    /* verilator lint_off GENUNNAMED */ \
-    if (latency != 0) begin \
-        VX_pipe_register #( \
-            .DATAW (1 + VX_DCR_ADDR_WIDTH + VX_DCR_DATA_WIDTH), \
-            .DEPTH (latency) \
-        ) pipe_reg ( \
-            .clk      (clk), \
-            .reset    (1'b0), \
-            .enable   (1'b1), \
-            .data_in  ({src.write_valid && ena, src.write_addr, src.write_data}), \
-            .data_out ({dst.write_valid, dst.write_addr, dst.write_data}) \
-        ); \
-    end else begin \
-        assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid && ena, src.write_addr, src.write_data}; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
 `define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
     /* verilator lint_off GENUNNAMED */ \
     if ((count) > 1) begin \

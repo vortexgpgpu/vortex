@@ -16,7 +16,6 @@
 #include "mem_sim.h"
 #include "cache_sim.h"
 #include "constants.h"
-#include "dcrs.h"
 #include "cluster.h"
 
 namespace vortex {
@@ -40,9 +39,9 @@ public:
 
   int run();
 
-  bool cycle();
+  int dcr_write(uint32_t addr, uint32_t value);
 
-  void dcr_write(uint32_t addr, uint32_t value);
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
 #ifdef VM_ENABLE
   void set_satp(uint64_t satp);
@@ -59,7 +58,6 @@ private:
   bool is_cycle_initialized_ = false;
   const Arch& arch_;
   std::vector<std::shared_ptr<Cluster>> clusters_;
-  DCRS dcrs_;
   MemSim::Ptr memsim_;
   CacheSim::Ptr l3cache_;
   uint64_t perf_mem_reads_;

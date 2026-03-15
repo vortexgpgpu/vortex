@@ -85,11 +85,17 @@ module VX_core import VX_gpu_pkg::*; #(
 
     base_dcrs_t base_dcrs;
 
-    VX_dcr_data dcr_data (
+    VX_dcr_csr_if dcr_csr_if();
+
+    VX_dcr_data #(
+        .INSTANCE_ID (`SFORMATF(("%s-dcr_data", INSTANCE_ID))),
+        .CORE_ID (CORE_ID)
+    ) dcr_data (
         .clk        (clk),
         .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
-        .base_dcrs  (base_dcrs)
+        .base_dcrs  (base_dcrs),
+        .dcr_csr_if (dcr_csr_if)
     );
 
     `SCOPE_IO_SWITCH (3);
@@ -185,6 +191,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .commit_if      (commit_if),
 
         .sched_csr_if   (sched_csr_if),
+
+        .dcr_csr_if     (dcr_csr_if),
 
     `ifdef EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),

@@ -27,17 +27,19 @@ module testbench;
     reg vx_busy_wait;
     wire vx_busy;
 
-    reg dcr_wr_valid;
-    reg [11:0] dcr_wr_addr;
-    reg [31:0] dcr_wr_data;
+    reg dcr_req_valid;
+    reg dcr_req_rw;
+    reg [11:0] dcr_req_addr;
+    reg [31:0] dcr_req_data;
 
     design_1_wrapper UUD(
         .clk_100MHz     (clk),
         .resetn         (resetn),
         .vx_reset       (~resetn || ~vx_running),
-        .dcr_wr_valid   (dcr_wr_valid),
-        .dcr_wr_addr    (dcr_wr_addr),
-        .dcr_wr_data    (dcr_wr_data),
+        .dcr_req_valid  (dcr_req_valid),
+        .dcr_req_rw     (dcr_req_rw),
+        .dcr_req_addr   (dcr_req_addr),
+        .dcr_req_data   (dcr_req_data),
         .vx_busy        (vx_busy)
     );
 
@@ -72,20 +74,23 @@ module testbench;
             vx_running    <= 0;
             vx_reset_wait <= 0;
             vx_busy_wait  <= 0;
-            dcr_wr_valid  <= 0;
-            dcr_wr_addr   <= 0;
-            dcr_wr_data   <= 0;
+            dcr_req_valid <= 0;
+            dcr_req_rw    <= 0;
+            dcr_req_addr  <= 0;
+            dcr_req_data  <= 0;
         end else begin
             case (cycles)
             1:  begin
-                dcr_wr_valid <= 1;
-                dcr_wr_addr  <= `VX_DCR_BASE_STARTUP_ADDR0;
-                dcr_wr_data  <= `STARTUP_ADDR;
+                dcr_req_valid <= 1;
+                dcr_req_rw    <= 1;
+                dcr_req_addr  <= `VX_DCR_BASE_STARTUP_ADDR0;
+                dcr_req_data  <= `STARTUP_ADDR;
             end
             2: begin
-                dcr_wr_valid <= 0;
-                dcr_wr_addr  <= 0;
-                dcr_wr_data  <= 0;
+                dcr_req_valid <= 0;
+                dcr_req_rw    <= 0;
+                dcr_req_addr  <= 0;
+                dcr_req_data  <= 0;
             end
             3: begin
                 vx_reset_wait <= 1;

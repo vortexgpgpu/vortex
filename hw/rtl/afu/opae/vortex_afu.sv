@@ -77,6 +77,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     localparam CMD_MEM_READ       = `AFU_IMAGE_CMD_MEM_READ;
     localparam CMD_MEM_WRITE      = `AFU_IMAGE_CMD_MEM_WRITE;
     localparam CMD_DCR_WRITE      = `AFU_IMAGE_CMD_DCR_WRITE;
+    localparam CMD_DCR_READ       = `AFU_IMAGE_CMD_DCR_READ;
     localparam CMD_RUN            = `AFU_IMAGE_CMD_RUN;
     localparam CMD_TYPE_WIDTH     = `CLOG2(`AFU_IMAGE_CMD_MAX_VALUE+1);
 
@@ -92,6 +93,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     localparam MMIO_DEV_CAPS      = `AFU_IMAGE_MMIO_DEV_CAPS;
     localparam MMIO_ISA_CAPS      = `AFU_IMAGE_MMIO_ISA_CAPS;
+    localparam MMIO_DCR_RSP       = `AFU_IMAGE_MMIO_DCR_RSP;
 
     localparam CCI_RD_QUEUE_SIZE  = 2 * CCI_RD_WINDOW_SIZE;
     localparam CCI_RD_QUEUE_TAGW  = `CLOG2(CCI_RD_WINDOW_SIZE);
@@ -102,7 +104,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     localparam STATE_MEM_READ     = 2;
     localparam STATE_RUN          = 3;
     localparam STATE_DCR_WRITE    = 4;
-    localparam STATE_WIDTH        = `CLOG2(STATE_DCR_WRITE+1);
+    localparam STATE_DCR_READ     = 5;
+    localparam STATE_WIDTH        = `CLOG2(STATE_DCR_READ+1);
 
     wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
@@ -331,6 +334,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 end
             `endif
             end
+            MMIO_DCR_RSP: begin
+                mmio_rsp.data <= 64'(dcr_rsp_data_r);
+            `ifdef DBG_TRACE_AFU
+                `TRACE(2, ("%t: AFU: MMIO_DCR_RSP: data=0x%0h\n", $time, dcr_rsp_data_r))
+            `endif
+            end
             default: begin
                 mmio_rsp.data <= 64'h0;
             `ifdef DBG_TRACE_AFU
@@ -427,6 +436,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 `endif
                     state <= STATE_DCR_WRITE;
                 end
+                CMD_DCR_READ: begin
+                `ifdef DBG_TRACE_AFU
+                    `TRACE(2, ("%t: AFU: Goto STATE DCR_READ: addr=0x%0h\n", $time, cmd_dcr_addr))
+                `endif
+                    state <= STATE_DCR_READ;
+                end
                 CMD_RUN: begin
                 `ifdef DBG_TRACE_AFU
                     `TRACE(2, ("%t: AFU: Goto STATE RUN\n", $time))
@@ -458,6 +473,15 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             `ifdef DBG_TRACE_AFU
                 `TRACE(2, ("%t: AFU: Goto STATE IDLE\n", $time))
             `endif
+            end
+            STATE_DCR_READ: begin
+                // wait for the DCR read response to be ready before going back to idle
+                if (vx_dcr_rsp_valid) begin
+                    state <= STATE_IDLE;
+                `ifdef DBG_TRACE_AFU
+                    `TRACE(2, ("%t: AFU: Goto STATE IDLE\n", $time))
+                `endif
+                end
             end
             STATE_RUN: begin
                 if (vx_reset) begin
@@ -1016,9 +1040,19 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     // Vortex /////////////////////////////////////////////////////////////////
 
-    wire vx_dcr_wr_valid = (STATE_DCR_WRITE == state);
-    wire [VX_DCR_ADDR_WIDTH-1:0] vx_dcr_wr_addr = cmd_dcr_addr;
-    wire [VX_DCR_DATA_WIDTH-1:0] vx_dcr_wr_data = cmd_dcr_data;
+    wire vx_dcr_req_valid = (STATE_DCR_WRITE == state || STATE_DCR_READ == state);
+    wire vx_dcr_req_rw = (STATE_DCR_WRITE == state);
+    wire [VX_DCR_ADDR_WIDTH-1:0] vx_dcr_req_addr = cmd_dcr_addr;
+    wire [VX_DCR_DATA_WIDTH-1:0] vx_dcr_req_data = cmd_dcr_data;
+    wire                         vx_dcr_rsp_valid;
+    wire [VX_DCR_DATA_WIDTH-1:0] vx_dcr_rsp_data;
+
+    reg [VX_DCR_DATA_WIDTH-1:0] dcr_rsp_data_r;
+    always @(posedge clk) begin
+        if (vx_dcr_rsp_valid) begin
+            dcr_rsp_data_r <= vx_dcr_rsp_data;
+        end
+    end
 
     `SCOPE_IO_SWITCH (2);
 
@@ -1044,9 +1078,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .mem_rsp_ready  (vx_mem_rsp_ready),
 
         // DCR write request
-        .dcr_wr_valid   (vx_dcr_wr_valid),
-        .dcr_wr_addr    (vx_dcr_wr_addr),
-        .dcr_wr_data    (vx_dcr_wr_data),
+        .dcr_req_valid  (vx_dcr_req_valid),
+        .dcr_req_rw     (vx_dcr_req_rw),
+        .dcr_req_addr   (vx_dcr_req_addr),
+        .dcr_req_data   (vx_dcr_req_data),
+        .dcr_rsp_valid  (vx_dcr_rsp_valid),
+        .dcr_rsp_data   (vx_dcr_rsp_data),
 
         // Status
         .busy           (vx_busy)
@@ -1128,7 +1165,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             cp2af_sRxPort.c1TxAlmFull
         },{
             state_changed,
-            vx_dcr_wr_valid, // ack-free
+            vx_dcr_req_valid, // ack-free
             avs_readdatavalid[0], // ack-free
             cp2af_sRxPort.c0.mmioRdValid, // ack-free
             cp2af_sRxPort.c0.mmioWrValid, // ack-free
@@ -1150,8 +1187,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             vx_mem_req_tag[0],
             vx_mem_rsp_data[0],
             vx_mem_rsp_tag[0],
-            vx_dcr_wr_addr,
-            vx_dcr_wr_data,
+            vx_dcr_req_addr,
+            vx_dcr_req_data,
             mmio_req_hdr.address,
             cp2af_sRxPort.c0.hdr.mdata,
             af2cp_sTxPort.c0.hdr.address,

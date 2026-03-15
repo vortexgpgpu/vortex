@@ -49,7 +49,6 @@ using namespace vortex;
 #define MMIO_ISA_ADDR 0x18
 #define MMIO_DCR_ADDR 0x20
 #define MMIO_SCP_ADDR 0x28
-#define MMIO_MEM_ADDR 0x30
 
 #define CTL_AP_START (1 << 0)
 #define CTL_AP_DONE (1 << 1)
@@ -640,9 +639,6 @@ public:
       return err;
     });
 
-    // clear mpm cache
-    mpm_cache_.clear();
-
     return 0;
   }
 
@@ -678,31 +674,29 @@ public:
   }
 
   int dcr_write(uint32_t addr, uint32_t value) {
-    CHECK_ERR(this->write_register(MMIO_DCR_ADDR, addr), {
+    // set bit 31 to signal write mode to the AFU (DCR addr is 12 bits, upper bits are free)
+    CHECK_ERR(this->write_register(MMIO_DCR_ADDR, addr | (1u << 31)), {
       return err;
     });
     CHECK_ERR(this->write_register(MMIO_DCR_ADDR + 4, value), {
       return err;
     });
-    dcrs_.write(addr, value);
     return 0;
   }
 
-  int dcr_read(uint32_t addr, uint32_t *value) const {
-    return dcrs_.read(addr, value);
-  }
-
-  int mpm_query(uint32_t addr, uint32_t core_id, uint64_t *value) {
-    uint32_t offset = addr - VX_CSR_MPM_BASE;
-    if (offset > 31)
-      return -1;
-    if (mpm_cache_.count(core_id) == 0) {
-      uint64_t mpm_mem_addr = IO_MPM_ADDR + core_id * 32 * sizeof(uint64_t);
-      CHECK_ERR(this->download(mpm_cache_[core_id].data(), mpm_mem_addr, 32 * sizeof(uint64_t)), {
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t *value) {
+    // write DCR address (bit 31 = 0 signals read mode to the AFU)
+    CHECK_ERR(this->write_register(MMIO_DCR_ADDR, addr), {
+      return err;
+    });
+    // write tag to trigger DCR read request
+    CHECK_ERR(this->write_register(MMIO_DCR_ADDR + 4, tag), {
+      return err;
+    });
+    // read back response value (AXI read stalls until dcr_rsp_valid)
+    CHECK_ERR(this->read_register(MMIO_DCR_ADDR + 4, value), {
         return err;
       });
-    }
-    *value = mpm_cache_.at(core_id).at(offset);
     return 0;
   }
 
@@ -716,8 +710,6 @@ private:
   uint64_t global_mem_size_;
   uint64_t clock_freqs_;
   uint64_t memory_bw_;
-  DeviceConfig dcrs_;
-  std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
   uint32_t lg2_num_banks_;
   uint32_t lg2_bank_size_;
 

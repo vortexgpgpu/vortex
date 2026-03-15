@@ -32,7 +32,6 @@ class DebugModule;  // Forward declaration (global scope)
 namespace vortex {
 
 class Arch;
-class DCRS;
 class Core;
 class Instr;
 class instr_trace_t;
@@ -78,7 +77,7 @@ struct wspawn_t {
 
 class Emulator {
 public:
-  Emulator(const Arch &arch, const DCRS &dcrs, Core* core);
+  Emulator(const Arch &arch, Core* core);
 
   ~Emulator();
 
@@ -117,6 +116,10 @@ public:
   void dcache_read(void* data, uint64_t addr, uint32_t size);
 
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
+
+  int dcr_write(uint32_t addr, uint32_t value);
+
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
   const auto& active_warps() const {
     return active_warps_;
@@ -162,9 +165,10 @@ private:
   void trigger_ebreak();
 
   const Arch& arch_;
-  const DCRS& dcrs_;
   Core*       core_;
-  ::DebugModule* debug_module_;
+  uint64_t    startup_addr_;
+  uint64_t    startup_arg_;
+  uint32_t    mpm_class_;
 
   std::vector<warp_t> warps_;
   WarpMask    active_warps_;

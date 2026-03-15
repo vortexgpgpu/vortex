@@ -44,7 +44,6 @@ namespace vortex {
 
 class Socket;
 class Arch;
-class DCRS;
 
 class Core : public SimObject<Core> {
 public:
@@ -100,8 +99,7 @@ public:
        const char* name,
        uint32_t core_id,
        Socket* socket,
-       const Arch &arch,
-       const DCRS &dcrs
+       const Arch &arch
   );
 
   ~Core();
@@ -163,15 +161,12 @@ public:
     return emulator_.dcache_write(data, addr, size);
   }
 
+  int dcr_write(uint32_t addr, uint32_t value);
+
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
+
 #ifdef EXT_DXA_ENABLE
-  bool dxa_issue(uint32_t desc_slot,
-                 uint32_t smem_addr,
-                 const uint32_t coords[5],
-                 uint32_t bar_id);
-
-  bool dxa_estimate(uint32_t desc_slot, uint32_t* total_elems, uint32_t* elem_bytes);
-
-  bool dxa_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t* bytes_copied);
+  DxaEngine& dxa_engine() { return *dxa_engine_; }
 #endif
 
 #ifdef EXT_TCU_ENABLE
@@ -207,9 +202,6 @@ private:
   uint32_t core_id_;
   Socket* socket_;
   const Arch& arch_;
-#ifdef EXT_DXA_ENABLE
-  const DCRS& dcrs_;
-#endif
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;
@@ -217,6 +209,10 @@ private:
 
 #ifdef EXT_V_ENABLE
   VecUnit::Ptr vec_unit_;
+#endif
+
+#ifdef EXT_DXA_ENABLE
+  std::unique_ptr<DxaEngine> dxa_engine_;
 #endif
 
   Emulator emulator_;
@@ -245,10 +241,6 @@ private:
 
   uint32_t commit_exe_;
   std::vector<Arbiter> ibuffer_arbs_;
-
-#ifdef EXT_DXA_ENABLE
-  std::unique_ptr<DxaEngine> dxa_engine_;
-#endif
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 

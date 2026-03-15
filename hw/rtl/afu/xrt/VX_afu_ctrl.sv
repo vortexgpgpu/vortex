@@ -57,9 +57,12 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
     output wire                         scope_bus_out,
 `endif
 
-    output wire                         dcr_wr_valid,
-    output wire [VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
-    output wire [VX_DCR_DATA_WIDTH-1:0] dcr_wr_data
+    output wire                         dcr_req_valid,
+    output wire                         dcr_req_rw,
+    output wire [VX_DCR_ADDR_WIDTH-1:0] dcr_req_addr,
+    output wire [VX_DCR_DATA_WIDTH-1:0] dcr_req_data,
+    input  wire                         dcr_rsp_valid,
+    input  wire [VX_DCR_DATA_WIDTH-1:0] dcr_rsp_data
 );
 
     // Address Info
@@ -82,22 +85,6 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
     //        bit 0  - Channel 0 (ap_done)
     //        bit 1  - Channel 1 (ap_ready)
     //        others - reserved
-    // 0x10 : Low 32-bit Data signal of DEV_CAPS
-    // 0x14 : High 32-bit Data signal of DEV_CAPS
-    // 0x18 : Control signal of DEV_CAPS
-    // 0x1C : Low 32-bit Data signal of ISA_CAPS
-    // 0x20 : High 32-bit Data signal of ISA_CAPS
-    // 0x24 : Control signal of ISA_CAPS
-    // 0x28 : Low 32-bit Data signal of DCR
-    // 0x2C : High 32-bit Data signal of DCR
-    // 0x30 : Control signal of DCR
-    // 0x34 : Low 32-bit Data signal of SCP
-    // 0x38 : High 32-bit Data signal of SCP
-    // 0x3C : Control signal of SCP
-    // 0x40 : Low 32-bit Data signal of MEM
-    // 0x44 : High 32-bit Data signal of MEM
-    // 0x48 : Control signal of MEM
-    // (SC = Self Clear, COR = Clear on Read, TOW = Toggle on Write, COH = Clear on Handshake)
 
     // Parameters
     localparam
@@ -161,7 +148,6 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
 
     reg [WSTATE_WIDTH-1:0] wstate;
     reg [ADDR_BITS-1:0] waddr;
-    wire [31:0] wmask;
     wire        s_axi_aw_fire;
     wire        s_axi_w_fire;
     wire        s_axi_b_fire;
@@ -178,12 +164,19 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
     reg         gie_r;
     reg [1:0]   ier_r;
     reg [1:0]   isr_r;
-    reg [31:0]  dcra_r;
+    reg         dcr_req_valid_r;
+    reg         dcra_rw_r;                   // 1=write, 0=read
+    reg [VX_DCR_ADDR_WIDTH-1:0] dcra_addr_r;
     reg [31:0]  dcrv_r;
-    reg         dcr_wr_valid_r;
+    reg         dcr_rsp_valid_r;
+    reg [31:0]  dcr_rsp_data_r;
 
     logic wready_stall;
     logic rvalid_stall;
+    // stall an AXI read of ADDR_DCR_1 only for a DCR read (not a write)
+    wire  dcr_rvalid_stall = (raddr == ADDR_DCR_1) && ~dcra_rw_r && ~dcr_rsp_valid_r;
+
+    `UNUSED_VAR (s_axi_wstrb)
 
 `ifdef SCOPE
 
@@ -217,10 +210,10 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
                                || (s_axi_araddr[ADDR_BITS-1:0] == ADDR_SCP_1);
             end
             if (s_axi_w_fire && waddr == ADDR_SCP_0) begin
-                scope_bus_wdata[31:0] <= (s_axi_wdata & wmask) | (scope_bus_wdata[31:0] & ~wmask);
+                scope_bus_wdata[31:0] <= s_axi_wdata;
             end
             if (s_axi_w_fire && waddr == ADDR_SCP_1) begin
-                scope_bus_wdata[63:32] <= (s_axi_wdata & wmask) | (scope_bus_wdata[63:32] & ~wmask);
+                scope_bus_wdata[63:32] <= s_axi_wdata;
                 cmd_scope_writing <= 1;
                 scope_rdata_valid <= 0;
                 scope_bus_out_r   <= 1;
@@ -254,12 +247,12 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
     assign scope_bus_out = scope_bus_out_r;
 
     assign wready_stall = is_scope_waddr && cmd_scope_writing;
-    assign rvalid_stall = is_scope_raddr && ~scope_rdata_valid;
+    assign rvalid_stall = (is_scope_raddr && ~scope_rdata_valid) || dcr_rvalid_stall;
 
 `else
 
     assign wready_stall = 0;
-    assign rvalid_stall = 0;
+    assign rvalid_stall = dcr_rvalid_stall;
 
 `endif
 
@@ -270,10 +263,6 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
     // AXI Write Response
     assign s_axi_bvalid  = (wstate == WSTATE_RESP);
     assign s_axi_bresp   = 2'b00;  // OKAY
-
-    for (genvar i = 0; i < 4; ++i) begin : g_wmask
-        assign wmask[8 * i +: 8] = {8{s_axi_wstrb[i]}};
-    end
 
     assign s_axi_aw_fire = s_axi_awvalid && s_axi_awready;
     assign s_axi_w_fire  = s_axi_wvalid && s_axi_wready;
@@ -311,11 +300,12 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
             ier_r <= '0;
             isr_r <= '0;
 
-            dcra_r <= '0;
+            dcra_rw_r   <= 1; // default to write mode
+            dcra_addr_r <= '0;
             dcrv_r <= '0;
-            dcr_wr_valid_r <= 0;
+            dcr_req_valid_r <= 0;
         end else begin
-            dcr_wr_valid_r <= 0;
+            dcr_req_valid_r <= 0;
             ap_reset_r <= 0;
 
             if (ap_ready)
@@ -346,11 +336,12 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
                         isr_r <= isr_r ^ s_axi_wdata[1:0];
                 end
                 ADDR_DCR_0: begin
-                    dcra_r <= (s_axi_wdata & wmask) | (dcra_r & ~wmask);
+                    dcra_rw_r   <= s_axi_wdata[31]; // bit 31: 1=write, 0=read
+                    dcra_addr_r <= s_axi_wdata[VX_DCR_ADDR_WIDTH-1:0];
                 end
                 ADDR_DCR_1: begin
-                    dcrv_r <= (s_axi_wdata & wmask) | (dcrv_r & ~wmask);
-                    dcr_wr_valid_r <= 1;
+                    dcrv_r <= s_axi_wdata;
+                    dcr_req_valid_r <= 1;
                 end
                 default:;
                 endcase
@@ -435,8 +426,27 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
                 rdata <= scope_bus_rdata[63:32];
             end
         `endif
+            ADDR_DCR_1: begin
+                rdata <= dcr_rsp_data_r;
+            end
             default:;
         endcase
+    end
+
+    // DCR read response capture
+    always @(posedge clk) begin
+        if (reset) begin
+            dcr_rsp_valid_r <= 0;
+            dcr_rsp_data_r  <= '0;
+        end else begin
+            if (dcr_rsp_valid) begin
+                dcr_rsp_valid_r <= 1;
+                dcr_rsp_data_r  <= 32'(dcr_rsp_data);
+            end
+            if (s_axi_r_fire && (raddr == ADDR_DCR_1)) begin
+                dcr_rsp_valid_r <= 0;
+            end
+        end
     end
 
     assign ap_reset  = ap_reset_r;
@@ -445,8 +455,9 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
 
     assign ap_ctrl_read = s_axi_r_fire && (raddr == ADDR_AP_CTRL);
 
-    assign dcr_wr_valid = dcr_wr_valid_r;
-    assign dcr_wr_addr  = VX_DCR_ADDR_WIDTH'(dcra_r);
-    assign dcr_wr_data  = VX_DCR_DATA_WIDTH'(dcrv_r);
+    assign dcr_req_valid = dcr_req_valid_r;
+    assign dcr_req_rw    = dcra_rw_r;
+    assign dcr_req_addr  = dcra_addr_r;
+    assign dcr_req_data  = VX_DCR_DATA_WIDTH'(dcrv_r);
 
 endmodule

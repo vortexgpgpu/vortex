@@ -223,13 +223,21 @@ module VX_cluster import VX_gpu_pkg::*; #(
     wire [NUM_SOCKETS-1:0] per_socket_busy;
 
     // Generate all sockets
+    
+    VX_dcr_bus_if per_socket_dcr_bus_if[NUM_SOCKETS]();
+    VX_dcr_arb #(
+        .NUM_REQS    (NUM_SOCKETS),
+        .REQ_OUT_BUF ((NUM_SOCKETS > 1) ? 1 : 0)
+    ) dcr_socket_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (dcr_bus_if),
+        .bus_out_if (per_socket_dcr_bus_if)
+    );
+
     for (genvar socket_id = 0; socket_id < NUM_SOCKETS; ++socket_id) begin : g_sockets
 
         `RESET_RELAY (socket_reset, reset);
-
-        VX_dcr_bus_if socket_dcr_bus_if();
-        wire is_base_dcr_addr = (dcr_bus_if.write_addr >= `VX_DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_BASE_STATE_END);
-        `BUFFER_DCR_BUS_IF (socket_dcr_bus_if, dcr_bus_if, is_base_dcr_addr, (NUM_SOCKETS > 1))
 
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * NUM_SOCKETS) + socket_id),
@@ -244,7 +252,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
             .sysmem_perf    (sysmem_perf_tmp),
         `endif
 
-            .dcr_bus_if     (socket_dcr_bus_if),
+            .dcr_bus_if     (per_socket_dcr_bus_if[socket_id]),
 
             .mem_bus_if     (socket_mem_bus_if[socket_id * `L1_MEM_PORTS +: `L1_MEM_PORTS]),
 

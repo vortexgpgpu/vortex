@@ -61,9 +61,12 @@ module Vortex_wrap #(
 	input  wire [1:0]                           m_axi_mem_bresp,
 	input  wire [C_M_AXI_GMEM_ID_WIDTH - 1:0]	m_axi_mem_bid,
 
-	input  wire                         		dcr_wr_valid,
-    input  wire [VX_DCR_ADDR_WIDTH-1:0]		    dcr_wr_addr,
-    input  wire [VX_DCR_DATA_WIDTH-1:0] 		dcr_wr_data,
+	input  wire                         		dcr_req_valid,
+	input  wire                         		dcr_req_rw,
+    input  wire [VX_DCR_ADDR_WIDTH-1:0]		    dcr_req_addr,
+    input  wire [VX_DCR_DATA_WIDTH-1:0] 		dcr_req_data,
+	output wire                         		dcr_rsp_valid,
+	output wire [VX_DCR_DATA_WIDTH-1:0] 		dcr_rsp_data,
 
 	output wire                                 busy
 );
@@ -198,9 +201,12 @@ module Vortex_wrap #(
 		.m_axi_rresp	(m_axi_mem_rresp_a),
 		.m_axi_rlast	(m_axi_mem_rlast_a),
 
-		.dcr_wr_valid	(dcr_wr_valid),
-		.dcr_wr_addr	(dcr_wr_addr),
-		.dcr_wr_data	(dcr_wr_data),
+		.dcr_req_valid	(dcr_req_valid),
+		.dcr_req_rw		(dcr_req_rw),
+		.dcr_req_addr	(dcr_req_addr),
+		.dcr_req_data	(dcr_req_data),
+		.dcr_rsp_valid	(dcr_rsp_valid),
+		.dcr_rsp_data	(dcr_rsp_data),
 
 		.busy           (busy)
 	);

@@ -275,9 +275,12 @@ proc run_setup {} {
     CONFIG.POLARITY {ACTIVE_HIGH} \
   ] $vx_reset
 
-  set dcr_wr_valid [ create_bd_port -dir I dcr_wr_valid ]
-  set dcr_wr_addr [ create_bd_port -dir I -from 11 -to 0 dcr_wr_addr ]
-  set dcr_wr_data [ create_bd_port -dir I -from 31 -to 0 dcr_wr_data ]
+  set dcr_req_valid [ create_bd_port -dir I dcr_req_valid ]
+  set dcr_req_rw    [ create_bd_port -dir I dcr_req_rw ]
+  set dcr_req_addr  [ create_bd_port -dir I -from 11 -to 0 dcr_req_addr ]
+  set dcr_req_data  [ create_bd_port -dir I -from 31 -to 0 dcr_req_data ]
+  set dcr_rsp_valid [ create_bd_port -dir O dcr_rsp_valid ]
+  set dcr_rsp_data  [ create_bd_port -dir O -from 31 -to 0 dcr_rsp_data ]
 
   # Create instance: Vortex_top_0, and set properties
   set block_name Vortex_top
@@ -335,9 +338,12 @@ proc run_setup {} {
   connect_bd_net -net clk_wiz_clk_out1 [get_bd_ports clk_100MHz] [get_bd_pins Vortex_top_0/clk] [get_bd_pins axi_bram_ctrl_0/s_axi_aclk]
   connect_bd_net -net resetn_1 [get_bd_ports resetn] [get_bd_pins axi_bram_ctrl_0/s_axi_aresetn]
   connect_bd_net -net vx_reset_1 [get_bd_ports vx_reset] [get_bd_pins Vortex_top_0/reset]
-  connect_bd_net -net dcr_wr_valid_1 [get_bd_ports dcr_wr_valid] [get_bd_pins Vortex_top_0/dcr_wr_valid]
-  connect_bd_net -net dcr_wr_addr_1 [get_bd_ports dcr_wr_addr] [get_bd_pins Vortex_top_0/dcr_wr_addr]
-  connect_bd_net -net dcr_wr_data_1 [get_bd_ports dcr_wr_data] [get_bd_pins Vortex_top_0/dcr_wr_data]
+  connect_bd_net -net dcr_req_valid_1 [get_bd_ports dcr_req_valid] [get_bd_pins Vortex_top_0/dcr_req_valid]
+  connect_bd_net -net dcr_req_rw_1    [get_bd_ports dcr_req_rw]    [get_bd_pins Vortex_top_0/dcr_req_rw]
+  connect_bd_net -net dcr_req_addr_1  [get_bd_ports dcr_req_addr]  [get_bd_pins Vortex_top_0/dcr_req_addr]
+  connect_bd_net -net dcr_req_data_1  [get_bd_ports dcr_req_data]  [get_bd_pins Vortex_top_0/dcr_req_data]
+  connect_bd_net -net dcr_rsp_valid_1 [get_bd_ports dcr_rsp_valid] [get_bd_pins Vortex_top_0/dcr_rsp_valid]
+  connect_bd_net -net dcr_rsp_data_1  [get_bd_ports dcr_rsp_data]  [get_bd_pins Vortex_top_0/dcr_rsp_data]
 
   # Create address segments
   assign_bd_address -offset 0x00000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces Vortex_top_0/m_axi_mem] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
@@ -354,9 +360,12 @@ proc run_setup {} {
   preplace port resetn -pg 1 -lvl 0 -x 0 -y 20 -defaultsOSRD
   preplace port vx_busy -pg 1 -lvl 4 -x 950 -y 220 -defaultsOSRD
   preplace port vx_reset -pg 1 -lvl 0 -x 0 -y 110 -defaultsOSRD
-  preplace port dcr_wr_valid -pg 1 -lvl 0 -x 0 -y 130 -defaultsOSRD
-  preplace portBus dcr_wr_addr -pg 1 -lvl 0 -x 0 -y 150 -defaultsOSRD
-  preplace portBus dcr_wr_data -pg 1 -lvl 0 -x 0 -y 170 -defaultsOSRD
+  preplace port dcr_req_valid -pg 1 -lvl 0 -x 0 -y 130 -defaultsOSRD
+  preplace port dcr_req_rw    -pg 1 -lvl 0 -x 0 -y 150 -defaultsOSRD
+  preplace portBus dcr_req_addr -pg 1 -lvl 0 -x 0 -y 170 -defaultsOSRD
+  preplace portBus dcr_req_data -pg 1 -lvl 0 -x 0 -y 190 -defaultsOSRD
+  preplace port dcr_rsp_valid -pg 1 -lvl 4 -x 950 -y 230 -defaultsOSRD
+  preplace portBus dcr_rsp_data -pg 1 -lvl 4 -x 950 -y 250 -defaultsOSRD
   preplace inst Vortex_top_0 -pg 1 -lvl 1 -x 190 -y 130 -defaultsOSRD
   preplace inst axi_bram_ctrl_0 -pg 1 -lvl 2 -x 520 -y 140 -defaultsOSRD
   preplace inst axi_bram_ctrl_0_bram -pg 1 -lvl 3 -x 800 -y 140 -defaultsOSRD
@@ -364,9 +373,12 @@ proc run_setup {} {
   preplace netloc clk_wiz_clk_out1 1 0 2 20 30 370
   preplace netloc resetn_1 1 0 2 NJ 20 380J
   preplace netloc vx_reset_1 1 0 1 NJ 110
-  preplace netloc dcr_wr_valid_1 1 0 1 NJ 130
-  preplace netloc dcr_wr_addr_1 1 0 1 NJ 150
-  preplace netloc dcr_wr_data_1 1 0 1 NJ 170
+  preplace netloc dcr_req_valid_1 1 0 1 NJ 130
+  preplace netloc dcr_req_rw_1    1 0 1 NJ 150
+  preplace netloc dcr_req_addr_1  1 0 1 NJ 170
+  preplace netloc dcr_req_data_1  1 0 1 NJ 190
+  preplace netloc dcr_rsp_valid_1 1 1 3 NJ 230 NJ 230 NJ
+  preplace netloc dcr_rsp_data_1  1 1 3 NJ 250 NJ 250 NJ
   preplace netloc axi_bram_ctrl_0_BRAM_PORTB 1 2 1 N 150
   preplace netloc axi_bram_ctrl_0_BRAM_PORTA 1 2 1 N 130
   preplace netloc Vortex_top_0_m_axi_mem 1 1 1 N 120

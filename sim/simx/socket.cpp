@@ -20,8 +20,7 @@ Socket::Socket(const SimContext& ctx,
                 const char* name,
                 uint32_t socket_id,
                 Cluster* cluster,
-                const Arch &arch,
-                const DCRS &dcrs)
+                const Arch &arch)
   : SimObject(ctx, name)
   , mem_req_out(L1_MEM_PORTS, this)
   , mem_rsp_in(L1_MEM_PORTS, this)
@@ -100,7 +99,7 @@ Socket::Socket(const SimContext& ctx,
   for (uint32_t i = 0; i < cores_per_socket; ++i) {
     uint32_t core_id = socket_id * cores_per_socket + i;
     snprintf(sname, 100, "%s-core%d", name, i);
-    cores_.at(i) = Core::Create(sname, core_id, this, arch, dcrs);
+    cores_.at(i) = Core::Create(sname, core_id, this, arch);
   }
 
   // connect cores to caches
@@ -170,4 +169,26 @@ Socket::PerfStats Socket::perf_stats() const {
   perf_stats.icache = icaches_->perf_stats();
   perf_stats.dcache = dcaches_->perf_stats();
   return perf_stats;
+}
+
+int Socket::dcr_write(uint32_t addr, uint32_t value) {
+  for (auto& core : cores_) {
+    int ret = core->dcr_write(addr, value);
+    if (ret != 0)
+      return ret;
+  }
+  return 0;
+}
+
+int Socket::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  for (auto& core : cores_) {
+    uint16_t core_id = tag & 0xfffff;
+    if (core_id != core->id())
+      continue; // skip cores that don't match the tag
+    uint32_t tag_value = tag >> 16;
+    int ret = core->dcr_read(addr, tag_value, value);
+    if (ret != 0)
+      return ret;
+  }
+  return 0;
 }

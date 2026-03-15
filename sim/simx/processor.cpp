@@ -58,7 +58,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   // create clusters
   for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
     snprintf(sname, 100, "cluster%d", i);
-    clusters_.at(i) = Cluster::Create(sname, i, this, arch, dcrs_);
+    clusters_.at(i) = Cluster::Create(sname, i, this, arch);
   }
 
   // create L3 cache
@@ -169,8 +169,22 @@ void ProcessorImpl::reset() {
   perf_mem_pending_reads_ = 0;
 }
 
-void ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
-  dcrs_.write(addr, value);
+int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
+  for (auto& cluster : clusters_) {
+    int ret = cluster->dcr_write(addr, value);
+    if (ret != 0)
+      return ret;
+  }
+  return 0;
+}
+
+int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  for (auto& cluster : clusters_) {
+    int ret = cluster->dcr_read(addr, tag, value);
+    if (ret != 0)
+      return ret;
+  }
+  return 0;
 }
 
 ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
@@ -262,24 +276,12 @@ int Processor::run() {
   return -1;
 }
 
-void Processor::dcr_write(uint32_t addr, uint32_t value) {
+int Processor::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
 }
 
-// advance the simulation by one cycle for SST
-bool Processor::cycle() {
-  try {
-    return impl_->cycle();
-  } catch (const std::exception& e) {
-    std::cerr << "Error: exception: " << e.what() << std::endl;
-  } catch (...) {
-    std::cerr << "Error: unknown exception." << std::endl;
-  }
-  return false;
-}
-
-Emulator* Processor::get_first_emulator() const {
-  return impl_->get_first_emulator();
+int Processor::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  return impl_->dcr_read(addr, tag, value);
 }
 
 #ifdef VM_ENABLE

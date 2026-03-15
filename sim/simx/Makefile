@@ -29,16 +29,7 @@ SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(
 SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/opc_unit.cpp $(SRC_DIR)/dispatcher.cpp
 SRCS += $(SRC_DIR)/execute.cpp $(SRC_DIR)/func_unit.cpp
 SRCS += $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp $(SRC_DIR)/mem_coalescer.cpp
-SRCS += $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
-SRCS += $(SRC_DIR)/dtm/debug_module.cpp $(SRC_DIR)/dtm/jtag_dtm.cpp $(SRC_DIR)/dtm/remote_bitbang.cpp
-
-ifeq ($(USE_SST), 1)
-VORTEX_SST_SRCS := $(SRC_DIR)/sst/vortex_simulator.cpp
-VORTEX_SST_SRCS += $(SRC_DIR)/sst/vortex_gpgpu.cpp
-SST_CFLAGS := $(shell sst-config --ELEMENT_CXXFLAGS)
-SST_LFLAGS := $(shell sst-config --ELEMENT_LDFLAGS)
-CXXFLAGS += $(SST_CFLAGS) -DUSE_SST
-endif
+SRCS += $(SRC_DIR)/types.cpp
 
 # Add V extension sources
 ifneq ($(filter -DEXT_V_ENABLE, $(XCONFIGS)),)

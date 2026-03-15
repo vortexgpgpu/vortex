@@ -14,7 +14,6 @@
 #pragma once
 
 #include <simobject.h>
-#include "dcrs.h"
 #include "arch.h"
 #include "cache_cluster.h"
 #include "local_mem.h"
@@ -69,8 +68,7 @@ public:
           const char* name, 
           uint32_t cluster_id,
           ProcessorImpl* processor,
-          const Arch &arch,
-          const DCRS &dcrs);
+          const Arch &arch);
 
   ~Cluster();
 
@@ -100,9 +98,9 @@ public:
 
   PerfStats perf_stats() const;
 
-  const std::vector<Socket::Ptr>& sockets() const {
-    return sockets_;
-  }
+  int dcr_write(uint32_t addr, uint32_t value);
+
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
 private:
   uint32_t                    cluster_id_;

@@ -71,8 +71,7 @@ _start:
 .type _Exit, @function
 .global _Exit
 _Exit:
-  call vx_perf_dump
-  li t0, IO_MPM_EXITCODE
+  li t0, IO_EXIT_CODE
   sw a0, 0(t0)
   fence
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0

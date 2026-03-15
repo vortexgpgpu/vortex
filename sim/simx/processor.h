@@ -36,11 +36,9 @@ public:
 
   int run();
 
-  bool cycle();
+  int dcr_write(uint32_t addr, uint32_t value);
 
-  void dcr_write(uint32_t addr, uint32_t value);
-
-  Emulator* get_first_emulator() const;
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
 #ifdef VM_ENABLE
   bool is_satp_unset();

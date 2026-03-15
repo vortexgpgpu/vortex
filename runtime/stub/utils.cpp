@@ -169,3 +169,35 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_l
 
   return 0;
 }
+extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value) {
+  if (!(addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))) {
+     printf("Error: invalid MPM CSR address: 0x%x\n", addr);
+     return -1;
+  }
+
+  auto read_one = [&](uint32_t cid, uint64_t* out) -> int {
+    uint32_t lo, hi;
+    uint32_t csr_id = addr - VX_CSR_MPM_BASE;
+    uint32_t tag_lo = (csr_id << 16) | cid;
+    uint32_t tag_hi = ((csr_id + 32) << 16) | cid;
+    CHECK_ERR(vx_dcr_read(hdevice, VX_DCR_BASE_MPM_VALUE, tag_lo, &lo), { return err; });
+    CHECK_ERR(vx_dcr_read(hdevice, VX_DCR_BASE_MPM_VALUE, tag_hi, &hi), { return err; });
+    *out = ((uint64_t)hi << 32) | lo;
+    return 0;
+  };
+
+  if (core_id == 0xffffffff) {
+    uint64_t num_cores;
+    CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores), { return err; });
+    uint64_t sum = 0;
+    for (uint32_t i = 0; i < (uint32_t)num_cores; ++i) {
+      uint64_t cur;
+      CHECK_ERR(read_one(i, &cur), { return err; });
+      sum += cur;
+    }
+    *value = sum;
+  } else {
+    CHECK_ERR(read_one(core_id, value), { return err; });
+  }
+  return 0;
+}

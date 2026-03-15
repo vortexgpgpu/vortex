@@ -44,18 +44,19 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     reg [`VX_DCR_DXA_DESC_COUNT-1:0][`VX_DCR_DXA_DESC_STRIDE-1:0][31:0] dxa_desc_r;
 
-    assign dcr_dxa_desc_write = dcr_bus_if.write_valid
-                             && (dcr_bus_if.write_addr >= `VX_DCR_DXA_DESC_BASE)
-                             && (dcr_bus_if.write_addr < (`VX_DCR_DXA_DESC_BASE + (`VX_DCR_DXA_DESC_COUNT * `VX_DCR_DXA_DESC_STRIDE)));
+    assign dcr_dxa_desc_write = dcr_bus_if.req_valid
+                             && dcr_bus_if.req_data.rw
+                             && (dcr_bus_if.req_data.addr >= `VX_DCR_DXA_DESC_BASE)
+                             && (dcr_bus_if.req_data.addr < (`VX_DCR_DXA_DESC_BASE + (`VX_DCR_DXA_DESC_COUNT * `VX_DCR_DXA_DESC_STRIDE)));
 
-    assign dcr_desc_off = dcr_bus_if.write_addr - `VX_DCR_DXA_DESC_BASE;
+    assign dcr_desc_off = dcr_bus_if.req_data.addr - `VX_DCR_DXA_DESC_BASE;
     assign dcr_desc_off_w = 32'(dcr_desc_off);
     assign dcr_desc_slot = DESC_SLOT_W'(dcr_desc_off_w / `VX_DCR_DXA_DESC_STRIDE);
     assign dcr_desc_word = DESC_WORD_W'(dcr_desc_off_w % `VX_DCR_DXA_DESC_STRIDE);
 
     always @(posedge clk) begin
         if (dcr_dxa_desc_write) begin
-            dxa_desc_r[dcr_desc_slot][dcr_desc_word] <= dcr_bus_if.write_data;
+            dxa_desc_r[dcr_desc_slot][dcr_desc_word] <= dcr_bus_if.req_data.data;
         end
     end
 
