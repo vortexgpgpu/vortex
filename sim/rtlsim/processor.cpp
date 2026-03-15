@@ -169,13 +169,31 @@ public:
     this->cout_flush();
   }
 
-  void dcr_write(uint32_t addr, uint32_t value) {
-    device_->dcr_wr_valid = 1;
-    device_->dcr_wr_addr  = addr;
-    device_->dcr_wr_data  = value;
+  int dcr_write(uint32_t addr, uint32_t value) {
+    device_->dcr_req_valid = 1;
+    device_->dcr_req_rw    = 1;
+    device_->dcr_req_addr  = addr;
+    device_->dcr_req_data  = value;
     this->tick();
-    device_->dcr_wr_valid = 0;
+    device_->dcr_req_valid = 0;
     this->tick();
+    return 0;
+  }
+
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+    device_->dcr_req_valid = 1;
+    device_->dcr_req_rw    = 0;
+    device_->dcr_req_addr  = addr;
+    device_->dcr_req_data  = tag;
+    this->tick();
+    device_->dcr_req_valid = 0;
+    this->tick();
+    // READ response is returned when dcr_rsp_valid is high
+    while (!device_->dcr_rsp_valid) {
+      this->tick();
+    }
+    *value = device_->dcr_rsp_data;
+    return 0;
   }
 
 private:
@@ -367,7 +385,8 @@ private:
   }
 
   void dcr_bus_reset() {
-    device_->dcr_wr_valid = 0;
+    device_->dcr_req_valid = 0;
+    device_->dcr_req_rw    = 0;
   }
 
   void wait(uint32_t cycles) {
@@ -424,6 +443,10 @@ void Processor::run() {
   impl_->run();
 }
 
-void Processor::dcr_write(uint32_t addr, uint32_t value) {
+int Processor::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+int Processor::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  return impl_->dcr_read(addr, tag, value);
 }

@@ -187,15 +187,15 @@ extern int vx_dev_init(callbacks_t* callbacks) {
     return device->ready_wait(timeout);
   };
 
-  callbacks->dcr_read = [](vx_device_h hdevice, uint32_t addr, uint32_t* value) {
+  callbacks->dcr_read = [](vx_device_h hdevice, uint32_t addr, uint32_t tag, uint32_t* value) {
     if (nullptr == hdevice || NULL == value)
       return -1;
     auto device = ((vx_device*)hdevice);
     uint32_t _value;
-    CHECK_ERR(device->dcr_read(addr, &_value), {
+    CHECK_ERR(device->dcr_read(addr, tag, &_value), {
       return err;
     });
-    DBGPRINT("DCR_READ: hdevice=%p, addr=0x%x, value=0x%x\n", hdevice, addr, _value);
+    DBGPRINT("DCR_READ: hdevice=%p, addr=0x%x, tag=0x%x, value=0x%x\n", hdevice, addr, tag, _value);
     *value = _value;
     return 0;
   };
@@ -206,19 +206,6 @@ extern int vx_dev_init(callbacks_t* callbacks) {
     DBGPRINT("DCR_WRITE: hdevice=%p, addr=0x%x, value=0x%x\n", hdevice, addr, value);
     auto device = ((vx_device*)hdevice);
     return device->dcr_write(addr, value);
-  };
-
-  callbacks->mpm_query = [](vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value) {
-    if (nullptr == hdevice)
-      return -1;
-    auto device = ((vx_device*)hdevice);
-    uint64_t _value;
-    CHECK_ERR(device->mpm_query(addr, core_id, &_value), {
-      return err;
-    });
-    DBGPRINT("MPM_QUERY: hdevice=%p, addr=0x%x, core_id=%d, value=0x%lx\n", hdevice, addr, core_id, _value);
-    *value = _value;
-    return 0;
   };
 
   return 0;

@@ -309,15 +309,23 @@ module VX_socket import VX_gpu_pkg::*;
 
     ///////////////////////////////////////////////////////////////////////////
 
+    VX_dcr_bus_if per_core_dcr_bus_if[`SOCKET_SIZE]();
+    VX_dcr_arb #(
+        .NUM_REQS    (`SOCKET_SIZE),
+        .REQ_OUT_BUF ((`SOCKET_SIZE > 1) ? 1 : 0)
+    ) dcr_core_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (dcr_bus_if),
+        .bus_out_if (per_core_dcr_bus_if)
+    );
+
     wire [`SOCKET_SIZE-1:0] per_core_busy;
 
     // Generate all cores
     for (genvar core_id = 0; core_id < `SOCKET_SIZE; ++core_id) begin : g_cores
 
         `RESET_RELAY (core_reset, reset);
-
-        VX_dcr_bus_if core_dcr_bus_if();
-        `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, 1'b1, (`SOCKET_SIZE > 1))
 
         VX_core #(
             .CORE_ID  ((SOCKET_ID * `SOCKET_SIZE) + core_id),
@@ -332,7 +340,7 @@ module VX_socket import VX_gpu_pkg::*;
             .sysmem_perf    (sysmem_perf_tmp),
         `endif
 
-            .dcr_bus_if     (core_dcr_bus_if),
+            .dcr_bus_if     (per_core_dcr_bus_if[core_id]),
 
             .dcache_bus_if  (per_core_dcache_bus_if[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
 

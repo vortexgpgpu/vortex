@@ -24,10 +24,6 @@ module VX_core_top import VX_gpu_pkg::*; #(
     input wire                              clk,
     input wire                              reset,
 
-    input wire                              dcr_write_valid,
-    input wire [VX_DCR_ADDR_WIDTH-1:0]      dcr_write_addr,
-    input wire [VX_DCR_DATA_WIDTH-1:0]      dcr_write_data,
-
     output wire [DCACHE_NUM_REQS-1:0]       dcache_req_valid,
     output wire [DCACHE_NUM_REQS-1:0]       dcache_req_rw,
     output wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE-1:0] dcache_req_byteen,
@@ -64,6 +60,14 @@ module VX_core_top import VX_gpu_pkg::*; #(
     input wire [NB_WIDTH-1:0]               gbar_rsp_id,
     output wire                             gbar_rsp_ready,
 
+    input wire                              dcr_req_valid,
+    input wire                              dcr_req_rw,
+    input wire [VX_DCR_ADDR_WIDTH-1:0]      dcr_req_addr,
+    input wire [VX_DCR_DATA_WIDTH-1:0]      dcr_req_data,
+
+    output wire                             dcr_rsp_valid,
+    output wire [VX_DCR_DATA_WIDTH-1:0]     dcr_rsp_data,
+
     // Status
     output wire                             busy
 );
@@ -96,9 +100,11 @@ module VX_core_top import VX_gpu_pkg::*; #(
 
     VX_dcr_bus_if dcr_bus_if();
 
-    assign dcr_bus_if.write_valid = dcr_write_valid;
-    assign dcr_bus_if.write_addr = dcr_write_addr;
-    assign dcr_bus_if.write_data = dcr_write_data;
+    assign dcr_bus_if.req_valid = dcr_req_valid;
+    assign dcr_bus_if.req_data  = '{rw: dcr_req_rw, addr: dcr_req_addr, data: dcr_req_data};
+
+    assign dcr_rsp_valid = dcr_bus_if.rsp_valid;
+    assign dcr_rsp_data  = dcr_bus_if.rsp_data.data;
 
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),

@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
 	processor.run();
 
 	// read exitcode from @MPM.1
-  ram.read(&exitcode, (IO_MPM_ADDR + 8), 4);
+  ram.read(&exitcode, IO_EXIT_CODE, 4);
 
 	return exitcode;
 }

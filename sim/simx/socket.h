@@ -14,7 +14,6 @@
 #pragma once
 
 #include <simobject.h>
-#include "dcrs.h"
 #include "arch.h"
 #include "cache_cluster.h"
 #include "local_mem.h"
@@ -39,8 +38,7 @@ public:
          const char* name,
          uint32_t socket_id,
          Cluster* cluster,
-         const Arch &arch,
-         const DCRS &dcrs);
+         const Arch &arch);
 
   ~Socket();
 
@@ -71,6 +69,10 @@ public:
   void global_barrier_resume(uint32_t bar_id, uint32_t core_id);
 
   PerfStats perf_stats() const;
+
+  int dcr_write(uint32_t addr, uint32_t value);
+
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
 private:
   uint32_t                socket_id_;

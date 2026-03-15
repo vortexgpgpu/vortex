@@ -21,7 +21,6 @@
 #include "emulator.h"
 #include "instr_trace.h"
 #include "instr.h"
-#include "dcrs.h"
 #include "core.h"
 #include "socket.h"
 #include "cluster.h"
@@ -72,9 +71,8 @@ void warp_t::reset(uint64_t startup_addr) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
+Emulator::Emulator(const Arch &arch, Core* core)
     : arch_(arch)
-    , dcrs_(dcrs)
     , core_(core)
     , warps_(arch.num_warps(), arch.num_threads())
     , barriers_(arch.num_warps() * arch.num_barriers())
@@ -89,15 +87,8 @@ Emulator::~Emulator() {
 }
 
 void Emulator::reset() {
-  uint64_t startup_addr = dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR0);
-#if (XLEN == 64)
-  startup_addr |= (uint64_t(dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32);
-#endif
-
-  uint64_t startup_arg = dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ARG0);
-#if (XLEN == 64)
-  startup_arg |= (uint64_t(dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ARG1)) << 32);
-#endif
+  uint64_t startup_addr = startup_addr_;
+  uint64_t startup_arg  = startup_arg_;
 
   for (auto& warp : warps_) {
     warp.reset(startup_addr);
@@ -465,6 +456,31 @@ void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
 }
 #endif
 
+int Emulator::dcr_write(uint32_t addr, uint32_t value) {
+  switch (addr) {
+  case VX_DCR_BASE_STARTUP_ADDR0: startup_addr_ = (startup_addr_ & ~uint64_t(0xFFFFFFFF)) | value; break;
+  case VX_DCR_BASE_STARTUP_ADDR1: startup_addr_ = (startup_addr_ & uint64_t(0xFFFFFFFF)) | (uint64_t(value) << 32); break;
+  case VX_DCR_BASE_STARTUP_ARG0:  startup_arg_  = (startup_arg_  & ~uint64_t(0xFFFFFFFF)) | value; break;
+  case VX_DCR_BASE_STARTUP_ARG1:  startup_arg_  = (startup_arg_  & uint64_t(0xFFFFFFFF)) | (uint64_t(value) << 32); break;
+  case VX_DCR_BASE_MPM_CLASS:     mpm_class_ = value; break;
+  default: break;
+  }
+  return 0;
+}
+
+int Emulator::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  if (addr == VX_DCR_BASE_MPM_VALUE) {
+    if (tag >= 64)
+      return -1;
+    // lo half at VX_CSR_MPM_BASE+csr_id, hi half at VX_CSR_MPM_BASE_H+csr_id
+    bool is_hi = (tag >= 32);
+    uint32_t idx = tag & 0x1f;
+    uint32_t csr_addr = is_hi ? (VX_CSR_MPM_BASE_H + idx) : (VX_CSR_MPM_BASE + idx);
+    *value = static_cast<uint32_t>(get_csr(csr_addr, 0, 0));
+  }
+  return 0;
+}
+
 void Emulator::dcache_amo_reserve(uint64_t addr) {
   auto type = get_addr_type(addr);
   if (type == AddrType::Global) {
@@ -561,7 +577,7 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
      || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
       auto proc_perf = core_->socket()->cluster()->processor()->perf_stats();
-      auto perf_class = dcrs_.base_dcrs.read(VX_DCR_BASE_MPM_CLASS);
+      auto perf_class = mpm_class_;
       switch (perf_class) {
       case VX_DCR_MPM_CLASS_BASE:
         break;

@@ -33,6 +33,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 `endif
 
     VX_sched_csr_if.slave       sched_csr_if,
+    VX_dcr_csr_if.slave         dcr_csr_if,
     VX_execute_if.slave         execute_if,
     VX_result_if.master         result_if
 );
@@ -54,6 +55,11 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     wire csr_req_valid = execute_if.valid;
     assign execute_if.ready = csr_req_ready;
+
+    // DCR access bridge
+    wire [`VX_CSR_ADDR_BITS-1:0] csr_read_addr = csr_req_valid ? csr_addr : dcr_csr_if.addr;
+    assign dcr_csr_if.ready = ~csr_req_valid;
+    assign dcr_csr_if.value = VX_DCR_DATA_WIDTH'(csr_read_data_ro);
 
     wire [NUM_LANES-1:0][`XLEN-1:0] rs1_data;
     `UNUSED_VAR (rs1_data)
@@ -89,7 +95,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .read_enable    (csr_req_valid && csr_rd_enable),
         .read_uuid      (execute_if.data.header.uuid),
         .read_wid       (execute_if.data.header.wid),
-        .read_addr      (csr_addr),
+        .read_addr      (csr_read_addr),
         .read_data_ro   (csr_read_data_ro),
         .read_data_rw   (csr_read_data_rw),
 

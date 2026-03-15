@@ -124,7 +124,7 @@ package VX_gpu_pkg;
     localparam MEM_FLAGS_WIDTH = (MEM_REQ_FLAG_LOCAL + `LMEM_ENABLED);
 
     localparam VX_DCR_ADDR_WIDTH = `VX_DCR_ADDR_BITS;
-    localparam VX_DCR_DATA_WIDTH = 32;
+    localparam VX_DCR_DATA_WIDTH = `VX_DCR_DATA_BITS;
 
 `ifdef STALL_TIMEOUT
     localparam STALL_TIMEOUT = `STALL_TIMEOUT;
@@ -532,6 +532,16 @@ package VX_gpu_pkg;
         logic [BAR_ADDR_W-1:0] addr;
         logic                  is_done;
     } txbar_t;
+
+    typedef struct packed {
+        logic                            rw;
+        logic [VX_DCR_ADDR_WIDTH-1:0]    addr;
+        logic [VX_DCR_DATA_WIDTH-1:0]    data;
+    } dcr_req_data_t;
+
+    typedef struct packed {
+        logic [VX_DCR_DATA_WIDTH-1:0]    data;
+    } dcr_rsp_data_t;
 
     typedef struct packed {
         logic [`XLEN-1:0]   startup_addr;

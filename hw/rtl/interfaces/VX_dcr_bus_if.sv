@@ -15,20 +15,26 @@
 
 interface VX_dcr_bus_if import VX_gpu_pkg::*; ();
 
-    wire                         write_valid;
-    wire [VX_DCR_ADDR_WIDTH-1:0] write_addr;
-    wire [VX_DCR_DATA_WIDTH-1:0] write_data;
+    wire            req_valid;
+    dcr_req_data_t  req_data;
+
+    wire            rsp_valid;
+    dcr_rsp_data_t  rsp_data;
 
     modport master (
-        output write_valid,
-        output write_addr,
-        output write_data
+        output req_valid,
+        output req_data,
+
+        input  rsp_valid,
+        input  rsp_data
     );
 
     modport slave (
-        input  write_valid,
-        input  write_addr,
-        input  write_data
+        input  req_valid,
+        input  req_data,
+
+        output rsp_valid,
+        output rsp_data
     );
 
 endinterface

@@ -11,15 +11,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#define RISCV_CUSTOM0 0x0B
+`include "VX_define.vh"
 
-#ifdef XLEN_64
-  #define LOAD_IMMEDIATE64(rd, imm) \
-    li   t0, (imm >> 32); \
-    slli t0, t0, 32; \
-    li   rd, (imm & 0xffffffff); \
-    or   rd, rd, t0
-#else
-  #define LOAD_IMMEDIATE64(rd, imm) \
-    li   rd, imm
-#endif
+interface VX_dcr_csr_if import VX_gpu_pkg::*; ();
+
+    wire                            valid;
+    wire [`VX_CSR_ADDR_BITS-1:0]    addr;
+    wire [VX_DCR_DATA_WIDTH-1:0]    value;
+    wire                            ready;
+
+    modport master (
+        output valid,
+        output addr,
+        input  value,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  addr,
+        output value,
+        output ready
+    );
+
+endinterface

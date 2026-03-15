@@ -40,10 +40,15 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
     input wire [MEM_TAG_WIDTH-1:0]          mem_rsp_tag [MEM_NUM_BANKS],
     output wire                             mem_rsp_ready [MEM_NUM_BANKS],
 
-    // DCR write request
-    input  wire                             dcr_wr_valid,
-    input  wire [VX_DCR_ADDR_WIDTH-1:0]     dcr_wr_addr,
-    input  wire [VX_DCR_DATA_WIDTH-1:0]     dcr_wr_data,
+    // DCR write/read request
+    input  wire                             dcr_req_valid,
+    input  wire                             dcr_req_rw,
+    input  wire [VX_DCR_ADDR_WIDTH-1:0]     dcr_req_addr,
+    input  wire [VX_DCR_DATA_WIDTH-1:0]     dcr_req_data,
+
+    // DCR read response
+    output wire                             dcr_rsp_valid,
+    output wire [VX_DCR_DATA_WIDTH-1:0]     dcr_rsp_data,
 
     // Status
     output wire                             busy
@@ -88,9 +93,13 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
         .mem_rsp_tag    (vx_mem_rsp_tag),
         .mem_rsp_ready  (vx_mem_rsp_ready),
 
-        .dcr_wr_valid   (dcr_wr_valid),
-        .dcr_wr_addr    (dcr_wr_addr),
-        .dcr_wr_data    (dcr_wr_data),
+        .dcr_req_valid  (dcr_req_valid),
+        .dcr_req_rw     (dcr_req_rw),
+        .dcr_req_addr   (dcr_req_addr),
+        .dcr_req_data   (dcr_req_data),
+
+        .dcr_rsp_valid  (dcr_rsp_valid),
+        .dcr_rsp_data   (dcr_rsp_data),
 
         .busy           (busy)
     );

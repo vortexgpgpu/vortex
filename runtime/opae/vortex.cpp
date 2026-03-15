@@ -42,6 +42,7 @@ using namespace vortex;
 #define CMD_MEM_WRITE    AFU_IMAGE_CMD_MEM_WRITE
 #define CMD_RUN          AFU_IMAGE_CMD_RUN
 #define CMD_DCR_WRITE    AFU_IMAGE_CMD_DCR_WRITE
+#define CMD_DCR_READ     AFU_IMAGE_CMD_DCR_READ
 
 #define MMIO_CMD_TYPE    (AFU_IMAGE_MMIO_CMD_TYPE * 4)
 #define MMIO_CMD_ARG0    (AFU_IMAGE_MMIO_CMD_ARG0 * 4)
@@ -50,6 +51,7 @@ using namespace vortex;
 #define MMIO_STATUS      (AFU_IMAGE_MMIO_STATUS * 4)
 #define MMIO_DEV_CAPS    (AFU_IMAGE_MMIO_DEV_CAPS * 4)
 #define MMIO_ISA_CAPS    (AFU_IMAGE_MMIO_ISA_CAPS * 4)
+#define MMIO_DCR_RSP     (AFU_IMAGE_MMIO_DCR_RSP * 4)
 #define MMIO_SCOPE_READ  (AFU_IMAGE_MMIO_SCOPE_READ * 4)
 #define MMIO_SCOPE_WRITE (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
 
@@ -407,14 +409,10 @@ public:
     CHECK_ERR(this->dcr_write(VX_DCR_BASE_STARTUP_ARG1, args_addr >> 32), {
       return err;
     });
-
     // start execution
     CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_RUN), {
       return -1;
     });
-
-    // clear mpm cache
-    mpm_cache_.clear();
 
     return 0;
   }
@@ -488,27 +486,31 @@ public:
     CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE), {
       return -1;
     });
-    dcrs_.write(addr, value);
     return 0;
   }
 
-  int dcr_read(uint32_t addr, uint32_t * value) const {
-    return dcrs_.read(addr, value);
-  }
-
-  int mpm_query(uint32_t addr, uint32_t core_id, uint64_t * value) {
-    uint32_t offset = addr - VX_CSR_MPM_BASE;
-    if (offset > 31)
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t * value) {
+    CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_ARG0, addr), {
       return -1;
-    if (mpm_cache_.count(core_id) == 0) {
-      uint64_t mpm_mem_addr = IO_MPM_ADDR + core_id * 32 * sizeof(uint64_t);
-      CHECK_ERR(this->download(mpm_cache_[core_id].data(), mpm_mem_addr, 32 * sizeof(uint64_t)), {
-        return err;
-      });
-    }
-    *value = mpm_cache_.at(core_id).at(offset);
+    });
+    CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_ARG1, tag), {
+      return -1;
+    });
+    CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_DCR_READ), {
+      return -1;
+    });
+    // ensure ready for new command
+    if (this->ready_wait(VX_MAX_TIMEOUT) != 0)
+      return -1;
+    // read back the captured DCR response
+    uint64_t rsp;
+    CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, MMIO_DCR_RSP, &rsp), {
+      return -1;
+    });
+    *value = (uint32_t)rsp;
     return 0;
   }
+
 
 private:
 
@@ -540,7 +542,6 @@ private:
   opae_drv_api_t api_;
   fpga_handle fpga_;
   MemoryAllocator global_mem_;
-  DeviceConfig dcrs_;
   uint64_t dev_caps_;
   uint64_t isa_caps_;
   uint64_t global_mem_size_;
@@ -548,7 +549,6 @@ private:
   uint64_t staging_ioaddr_;
   uint8_t* staging_ptr_;
   uint64_t staging_size_;
-  std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
 };
 
 #include <callbacks.inc>

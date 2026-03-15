@@ -46,7 +46,10 @@ module VX_execute import VX_gpu_pkg::*; #(
     // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if,
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
-    VX_warp_ctl_if.master   warp_ctl_if
+    VX_warp_ctl_if.master   warp_ctl_if,
+
+    // DCR-CSR interface
+    VX_dcr_csr_if           dcr_csr_if
 );
 
 `ifdef EXT_F_ENABLE
@@ -120,7 +123,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
         .sched_csr_if   (sched_csr_if),
-        .warp_ctl_if    (warp_ctl_if)
+        .warp_ctl_if    (warp_ctl_if),
+        .dcr_csr_if     (dcr_csr_if)
     );
 
 endmodule

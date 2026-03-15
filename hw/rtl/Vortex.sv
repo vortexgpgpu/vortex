@@ -36,9 +36,14 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     output wire                             mem_rsp_ready [VX_MEM_PORTS],
 
     // DCR write request
-    input  wire                             dcr_wr_valid,
-    input  wire [VX_DCR_ADDR_WIDTH-1:0]     dcr_wr_addr,
-    input  wire [VX_DCR_DATA_WIDTH-1:0]     dcr_wr_data,
+    input  wire                             dcr_req_valid,
+    input  wire                             dcr_req_rw,
+    input  wire [VX_DCR_ADDR_WIDTH-1:0]     dcr_req_addr,
+    input  wire [VX_DCR_DATA_WIDTH-1:0]     dcr_req_data,
+
+    // DCR read response
+    output wire                             dcr_rsp_valid,
+    output wire [VX_DCR_DATA_WIDTH-1:0]     dcr_rsp_data,
 
     // Status
     output wire                             busy
@@ -129,19 +134,31 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     end
 
     VX_dcr_bus_if dcr_bus_if();
-    assign dcr_bus_if.write_valid = dcr_wr_valid;
-    assign dcr_bus_if.write_addr  = dcr_wr_addr;
-    assign dcr_bus_if.write_data  = dcr_wr_data;
+    assign dcr_bus_if.req_valid = dcr_req_valid;
+    assign dcr_bus_if.req_data.rw = dcr_req_rw;
+    assign dcr_bus_if.req_data.addr = dcr_req_addr;
+    assign dcr_bus_if.req_data.data = dcr_req_data;
+    assign dcr_rsp_valid = dcr_bus_if.rsp_valid;
+    assign dcr_rsp_data = dcr_bus_if.rsp_data;
 
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
     // Generate all clusters
+
+    VX_dcr_bus_if per_cluster_dcr_bus_if[`NUM_CLUSTERS]();
+    VX_dcr_arb #(
+        .NUM_REQS    (`NUM_CLUSTERS),
+        .REQ_OUT_BUF ((`NUM_CLUSTERS > 1) ? 1 : 0)
+    ) dcr_cluster_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (dcr_bus_if),
+        .bus_out_if (per_cluster_dcr_bus_if)
+    );
+
     for (genvar cluster_id = 0; cluster_id < `NUM_CLUSTERS; ++cluster_id) begin : g_clusters
 
         `RESET_RELAY (cluster_reset, reset);
-
-        VX_dcr_bus_if cluster_dcr_bus_if();
-        `BUFFER_DCR_BUS_IF (cluster_dcr_bus_if, dcr_bus_if, 1'b1, (`NUM_CLUSTERS > 1))
 
         VX_cluster #(
             .CLUSTER_ID (cluster_id),
@@ -156,7 +173,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
             .sysmem_perf        (sysmem_perf),
         `endif
 
-            .dcr_bus_if         (cluster_dcr_bus_if),
+            .dcr_bus_if         (per_cluster_dcr_bus_if[cluster_id]),
 
             .mem_bus_if         (per_cluster_mem_bus_if[cluster_id * `L2_MEM_PORTS +: `L2_MEM_PORTS]),
 
