@@ -59,6 +59,15 @@ static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t
   }
 }
 
+template<typename T>
+static void convert_row_to_col_major(T *dst, const T *src, uint32_t rows, uint32_t cols) {
+  for (uint32_t r = 0; r < rows; ++r) {
+    for (uint32_t c = 0; c < cols; ++c) {
+      dst[c * rows + r] = src[r * cols + c];
+    }
+  }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
@@ -828,13 +837,15 @@ int main(int argc, char *argv[]) {
     if constexpr (std::is_same<vt::ITYPE, vt::int4>::value ||
                   std::is_same<vt::ITYPE, vt::uint4>::value ||
                   std::is_same<vt::ITYPE, vt::nvfp4>::value) {
-      // sub-byte matrix B must be in col-major format
-      // we convert the 4-bit row-major to col-major here
+      // sub-byte: existing 4-bit col-major conversion
       std::vector<uint8_t> h_B_col(sizeB);
       convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());
       RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB));
     } else {
-      RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
+      // byte+ types: convert to col-major
+      std::vector<itype_t> h_B_col(sizeB);
+      convert_row_to_col_major(h_B_col.data(), h_B.data(), K, N);
+      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB * sizeof(itype_t)));
     }
   }
 
