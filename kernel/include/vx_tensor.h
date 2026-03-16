@@ -319,7 +319,8 @@ public:
           });
           } else {
           // col_major: after swap, elem_row = block_n * n_stride, elem_col = block_k * k_stride
-          constexpr uint32_t num_n_groups = cfg::b_sub_steps_sp;
+          // NT=16 sparse: each register = separate column group, so num_n_groups = NRB
+          constexpr uint32_t num_n_groups = cfg::nt16_sparse ? Frag::NR : cfg::b_sub_steps_sp;
           const input_t* n_bases[num_n_groups];
           n_bases[0] = base;
           if constexpr (num_n_groups >= 2) {

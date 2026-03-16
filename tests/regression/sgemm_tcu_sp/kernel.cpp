@@ -44,27 +44,14 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   auto pTileA = pA + tile_row * stride_A;
   constexpr uint32_t a_k_stride = ctx::tileK / 2;
 
-  if constexpr (vt::ITYPE::bits < 8) {
-    auto pTileB = pB + tile_col * K;
-    for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
-      ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, pMeta);
-      ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
-      ctx::mma_sync(fragC, fragA, fragB, fragC);
-      pMeta += per_k_tile_words;
-      pTileA += a_k_stride;
-      pTileB += ctx::tileK;
-    }
-  } else {
-    auto pTileB = pB + tile_col;
-    uint32_t b_k_stride = ctx::tileK * N;
-    for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
-      ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, pMeta);
-      ctx::load_matrix_sync<vt::row_major>(fragB, pTileB, N);
-      ctx::mma_sync(fragC, fragA, fragB, fragC);
-      pMeta += per_k_tile_words;
-      pTileA += a_k_stride;
-      pTileB += b_k_stride;
-    }
+  auto pTileB = pB + tile_col * K;
+  for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
+    ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, pMeta);
+    ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
+    ctx::mma_sync(fragC, fragA, fragB, fragC);
+    pMeta += per_k_tile_words;
+    pTileA += a_k_stride;
+    pTileB += ctx::tileK;
   }
 
   auto pTileC = pC + tile_row * N + tile_col;
