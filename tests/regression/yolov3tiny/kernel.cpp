@@ -37,29 +37,35 @@ typedef struct {
 } im2col_args_t;
 
 void im2col_thread(im2col_args_t * __UNIFORM__ args) {
-    int c = blockIdx.x;
-    if (c >= args->channels_col) return;
+    int idx = blockIdx.x;
+    
+    int height_col = args->height_col;
+    int width_col = args->width_col;
+    int N = height_col * width_col;
+    
+    if (idx >= args->channels_col * N) return;
+    
+    int c = idx / N;
+    int spatial_idx = idx % N;
 
     int ksize = args->ksize;
     int stride = args->stride;
     int pad = args->pad;
-    int height_col = args->height_col;
-    int width_col = args->width_col;
 
     int w_offset = c % ksize;
     int h_offset = (c / ksize) % ksize;
     int c_im = c / ksize / ksize;
 
-    for (int h = 0; h < height_col; ++h) {
-        for (int w = 0; w < width_col; ++w) {
-            int im_row = h_offset + h * stride;
-            int im_col = w_offset + w * stride;
-            int col_index = (c * height_col + h) * width_col + w;
-            args->data_col[col_index] = im2col_get_pixel(
-                args->data_im, args->height, args->width,
-                im_row, im_col, c_im, pad);
-        }
-    }
+    int h = spatial_idx / width_col;
+    int w = spatial_idx % width_col;
+
+    int im_row = h_offset + h * stride;
+    int im_col = w_offset + w * stride;
+    
+    // row c, column (h*width_col + w)
+    args->data_col[idx] = im2col_get_pixel(
+        args->data_im, args->height, args->width,
+        im_row, im_col, c_im, pad);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,10 +83,15 @@ typedef struct {
 } gemm_args_t;
 
 void gemm_nn_thread(gemm_args_t * __UNIFORM__ args) {
-    int i = blockIdx.x;
-    if (i >= args->M) return;
-
+    int idx = blockIdx.x;
+    int M = args->M;
     int N = args->N;
+    
+    if (idx >= M * N) return;
+    
+    int i = idx / N;
+    int j = idx % N;
+
     int K = args->K;
     float ALPHA = args->ALPHA;
     float *A = args->A;
@@ -90,18 +101,12 @@ void gemm_nn_thread(gemm_args_t * __UNIFORM__ args) {
     int ldb = args->ldb;
     int ldc = args->ldc;
 
-    // Zero this row first (merged fill_cpu)
-    for (int j = 0; j < N; ++j) {
-        C[i * ldc + j] = 0.0f;
-    }
-
-    // GEMM: C[i,:] = ALPHA * A[i,:] * B
+    float sum = 0.0f;
+    // dot product: A[i,:] * B[:,j]
     for (int k = 0; k < K; ++k) {
-        float A_PART = ALPHA * A[i * lda + k];
-        for (int j = 0; j < N; ++j) {
-            C[i * ldc + j] += A_PART * B[k * ldb + j];
-        }
+        sum += ALPHA * A[i * lda + k] * B[k * ldb + j];
     }
+    C[i * ldc + j] = sum;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,12 +136,17 @@ static inline float logistic_activate(float x) {
 }
 
 void bn_activate_thread(bn_activate_args_t * __UNIFORM__ args) {
-    int f = blockIdx.x;
-    if (f >= args->n) return;
+    int idx = blockIdx.x;
+    int n = args->n;
+    int spatial = args->spatial;
+    
+    if (idx >= n * spatial) return;
+    
+    int f = idx / spatial;
+    int spatial_idx = idx % spatial;
 
     float *output  = args->output;
     float *biases  = args->biases;
-    int spatial    = args->spatial;
     int activation = args->activation;
     int base = f * spatial;
 
@@ -147,27 +157,23 @@ void bn_activate_thread(bn_activate_args_t * __UNIFORM__ args) {
         float b = biases[f];
         float inv_std = 1.0f / sqrtf(v + 0.00001f);
 
-        for (int i = 0; i < spatial; ++i) {
-            float val = (output[base + i] - m) * inv_std;
-            val = val * s + b;
-            if (activation == ACTIVATION_LEAKY) {
-                val = leaky_activate(val);
-            } else if (activation == ACTIVATION_LOGISTIC) {
-                val = logistic_activate(val);
-            }
-            output[base + i] = val;
+        float val = (output[base + spatial_idx] - m) * inv_std;
+        val = val * s + b;
+        if (activation == ACTIVATION_LEAKY) {
+            val = leaky_activate(val);
+        } else if (activation == ACTIVATION_LOGISTIC) {
+            val = logistic_activate(val);
         }
+        output[base + spatial_idx] = val;
     } else {
         float b = biases[f];
-        for (int i = 0; i < spatial; ++i) {
-            float val = output[base + i] + b;
-            if (activation == ACTIVATION_LEAKY) {
-                val = leaky_activate(val);
-            } else if (activation == ACTIVATION_LOGISTIC) {
-                val = logistic_activate(val);
-            }
-            output[base + i] = val;
+        float val = output[base + spatial_idx] + b;
+        if (activation == ACTIVATION_LEAKY) {
+            val = leaky_activate(val);
+        } else if (activation == ACTIVATION_LOGISTIC) {
+            val = logistic_activate(val);
         }
+        output[base + spatial_idx] = val;
     }
 }
 
@@ -300,13 +306,13 @@ void forward_convolutional_layer(layer_config_t *l, float *input, float *workspa
     im2col_args.height_col = out_h;
     im2col_args.width_col = out_w;
     im2col_args.channels_col = k;  // channels_col = c * size * size = k
-    uint32_t im2col_dim = (uint32_t)k;
+    uint32_t im2col_dim = (uint32_t)(k * spatial);
     vx_spawn_threads(1, &im2col_dim, nullptr, (vx_kernel_func_cb)im2col_thread, &im2col_args);
 
     // Step 2: Parallel GEMM (along with merged zero-fill)
     gemm_args_t gemm_args = { m, spatial, k, 1.0f,
                               weights, k, workspace, spatial, output, spatial };
-    uint32_t gemm_dim = (uint32_t)m;
+    uint32_t gemm_dim = (uint32_t)(m * spatial);
     vx_spawn_threads(1, &gemm_dim, nullptr, (vx_kernel_func_cb)gemm_nn_thread, &gemm_args);
 
     // Step 3: Parallel fused BN + bias + activation
@@ -322,7 +328,7 @@ void forward_convolutional_layer(layer_config_t *l, float *input, float *workspa
         bn_args.mean     = reinterpret_cast<float*>(l->rolling_mean_addr);
         bn_args.variance = reinterpret_cast<float*>(l->rolling_variance_addr);
     }
-    uint32_t bn_dim = (uint32_t)n;
+    uint32_t bn_dim = (uint32_t)(n * spatial);
     vx_spawn_threads(1, &bn_dim, nullptr, (vx_kernel_func_cb)bn_activate_thread, &bn_args);
 }
 

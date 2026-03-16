@@ -165,15 +165,17 @@ void mlp_cpu(const TYPE* input, TYPE* output,
 }
 
 // Compare floating point values with ULP tolerance
-bool compare_float(TYPE a, TYPE b, int index, int& errors) {
-    union fi_t { float f; int32_t i; };
-    fi_t fa, fb;
-    fa.f = a;
-    fb.f = b;
-    auto d = std::abs(fa.i - fb.i);
+bool compare_float(TYPE a, TYPE b, int index, int errors) {
+    // Sign-magnitude ordering gives correct ULP distance across zero.
+    auto ordered = [](float f) -> int64_t {
+        union { float f; uint32_t u; } tmp;
+        tmp.f = f;
+        return (tmp.u & 0x80000000u) ? -(int64_t)(tmp.u & 0x7FFFFFFFu) : (int64_t)tmp.u;
+    };
+    auto d = std::abs(ordered(a) - ordered(b));
     if (d > FLOAT_ULP) {
         if (errors < 100) {
-            printf("*** error: [%d] expected=%f, actual=%f (diff=%d ULP)\n", index, b, a, d);
+            printf("*** error: [%d] expected=%f, actual=%f (diff=%d ULP)\n", index, b, a, (int)d);
         }
         return false;
     }
