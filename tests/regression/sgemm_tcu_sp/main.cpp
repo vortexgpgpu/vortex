@@ -684,8 +684,10 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
   constexpr uint32_t mcols = cfg::meta_cols;
   constexpr uint32_t half_k_steps = cfg::k_steps / 2;
   constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-  constexpr uint32_t cols_per_load = NUM_THREADS / PD;
-  constexpr uint32_t num_meta_loads = (mcols + cols_per_load - 1) / cols_per_load;
+  constexpr uint32_t cols_per_load = (NUM_THREADS >= PD) ? (NUM_THREADS / PD) : 1;
+  constexpr uint32_t banks_per_store = (NUM_THREADS < PD) ? NUM_THREADS : PD;
+  constexpr uint32_t stores_per_col = (PD + NUM_THREADS - 1) / NUM_THREADS;
+  constexpr uint32_t num_meta_loads = (PD * mcols + NUM_THREADS - 1) / NUM_THREADS;
   constexpr uint32_t per_k_tile_words = num_meta_loads * NUM_THREADS;
 
   uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
@@ -731,9 +733,12 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
                   uint32_t block_bit = i * meta_row_w + meta_bit;
                   uint32_t word_idx = block_bit / 32;
                   uint32_t bit_idx = block_bit % 32;
-                  uint32_t load_idx = word_idx / cols_per_load;
-                  uint32_t word_in_load = word_idx % cols_per_load;
-                  uint32_t meta_idx = load_idx * NUM_THREADS + word_in_load * PD + sram_row;
+                  uint32_t store_in_col = sram_row / banks_per_store;
+                  uint32_t thread_in_store = sram_row % banks_per_store;
+                  uint32_t flat_store = word_idx * stores_per_col + store_in_col;
+                  uint32_t load_idx = flat_store / cols_per_load;
+                  uint32_t store_in_load = flat_store % cols_per_load;
+                  uint32_t meta_idx = load_idx * NUM_THREADS + store_in_load * banks_per_store + thread_in_store;
                   h_meta[section_base + meta_idx] |= (1u << bit_idx);
                 }
               }
@@ -897,8 +902,7 @@ int main(int argc, char *argv[]) {
   uint32_t num_tile_rows = M / cfg::tileM;
   uint32_t num_k_tiles = K / cfg::tileK;
   constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-  constexpr uint32_t meta_cols_per_load = NUM_THREADS / PD;
-  constexpr uint32_t num_meta_loads = (meta_cols + meta_cols_per_load - 1) / meta_cols_per_load;
+  constexpr uint32_t num_meta_loads = (PD * meta_cols + NUM_THREADS - 1) / NUM_THREADS;
   uint32_t meta_buf_entries = num_tile_rows * num_k_tiles * (num_meta_loads * NUM_THREADS);
   RT_CHECK(vx_mem_alloc(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
   RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_addr));
@@ -1044,8 +1048,7 @@ int main(int argc, char *argv[]) {
     pack_metadata(h_meta_dbg, masks, M, K);
     constexpr uint32_t mcols_d = cfg::meta_cols;
     constexpr uint32_t PD_d = cfg::m_steps * (cfg::k_steps / 2);
-    constexpr uint32_t cols_per_load_d = NUM_THREADS / PD_d;
-    constexpr uint32_t num_meta_loads_d = (mcols_d + cols_per_load_d - 1) / cols_per_load_d;
+    constexpr uint32_t num_meta_loads_d = (PD_d * mcols_d + NUM_THREADS - 1) / NUM_THREADS;
     uint32_t per_k_words_d = num_meta_loads_d * NUM_THREADS;
     std::cout << "Metadata words (tile_row=0, k_tile=0):";
     for (uint32_t w = 0; w < per_k_words_d; ++w) {

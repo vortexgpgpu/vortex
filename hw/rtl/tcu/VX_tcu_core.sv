@@ -80,18 +80,52 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // meta_store: extract per-row write data from rs1_data lanes
     localparam PER_WARP_DEPTH = TCU_META_PER_WARP_DEPTH;
     localparam COLS_PER_LOAD  = TCU_META_COLS_PER_LOAD;
+    localparam BANKS_PER_STORE = TCU_BANKS_PER_STORE;
+    localparam STORES_PER_COL  = TCU_STORES_PER_COL;
     localparam LG_CPL = $clog2((COLS_PER_LOAD > 1) ? COLS_PER_LOAD : 2);
     localparam LG_PD  = $clog2(PER_WARP_DEPTH);
+    localparam LG_SPC = (STORES_PER_COL > 1) ? $clog2(STORES_PER_COL) : 1;
     wire meta_wr_en = execute_fire && is_meta_store;
     wire [PER_WARP_DEPTH-1:0][31:0] meta_wr_data;
-    wire [$clog2(TCU_BLOCK_CAP)-1:0] meta_thread_offset;
-    if (COLS_PER_LOAD > 1) begin : g_meta_off
-        assign meta_thread_offset = {fmt_d[LG_CPL-1:0], {LG_PD{1'b0}}};
-    end else begin : g_meta_off
-        assign meta_thread_offset = '0;
+
+    // Derive actual column index and sub-store index from fmt_d
+    wire [3:0] meta_actual_col_idx;
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire [LG_SPC-1:0] sub_store_idx;
+    /* verilator lint_on UNUSEDSIGNAL */
+    if (STORES_PER_COL > 1) begin : g_meta_spc
+        assign meta_actual_col_idx = 4'(fmt_d >> LG_SPC);
+        assign sub_store_idx = fmt_d[LG_SPC-1:0];
+    end else begin : g_meta_spc
+        assign meta_actual_col_idx = fmt_d;
+        assign sub_store_idx = '0;
     end
-    for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
-        assign meta_wr_data[r] = 32'(execute_if.data.rs1_data[meta_thread_offset + r]);
+
+    // Per-bank write enable for partial-bank writes (NT < PER_WARP_DEPTH)
+    wire [PER_WARP_DEPTH-1:0] meta_wr_bank_en;
+    for (genvar b = 0; b < PER_WARP_DEPTH; ++b) begin : g_bank_en
+        if (STORES_PER_COL > 1) begin : g_partial
+            assign meta_wr_bank_en[b] = (LG_SPC'(b / BANKS_PER_STORE) == sub_store_idx);
+        end else begin : g_partial
+            assign meta_wr_bank_en[b] = 1'b1;
+        end
+    end
+
+    // Write data remapping: partial-bank mode wraps thread indices
+    if (STORES_PER_COL > 1) begin : g_meta_wr_mode
+        for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
+            assign meta_wr_data[r] = 32'(execute_if.data.rs1_data[r % BANKS_PER_STORE]);
+        end
+    end else begin : g_meta_wr_mode
+        wire [$clog2(TCU_BLOCK_CAP)-1:0] meta_thread_offset;
+        if (COLS_PER_LOAD > 1) begin : g_meta_off
+            assign meta_thread_offset = {meta_actual_col_idx[LG_CPL-1:0], {LG_PD{1'b0}}};
+        end else begin : g_meta_off
+            assign meta_thread_offset = '0;
+        end
+        for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
+            assign meta_wr_data[r] = 32'(execute_if.data.rs1_data[meta_thread_offset + r]);
+        end
     end
 
     // meta_store: force rd=0 in mdata_queue header (x0 write is harmless)
@@ -183,8 +217,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .vld_meta_block(vld_meta_block),
         .wr_en         (meta_wr_en),
         .wr_wid        (wid),
-        .wr_col_idx    (fmt_d),
-        .wr_data       (meta_wr_data)
+        .wr_col_idx    (meta_actual_col_idx),
+        .wr_data       (meta_wr_data),
+        .wr_bank_en    (meta_wr_bank_en)
     );
 `endif
 
@@ -201,7 +236,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 assign b_col_dense[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
                 // NT=16 sparse: j_sp = j % 2 (wraps j=2,3 back to lanes 0..15)
                 // NT=8/32: j_sp = j (no wrapping needed)
-                localparam J_SP = NT16_SPARSE ? (j % (TCU_TC_N / 2)) : j;
+                localparam J_SP = SYM_SPARSE ? (j % (TCU_TC_N / 2)) : j;
                 assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
                 assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
             `else
