@@ -31,13 +31,13 @@ namespace {
 constexpr uint32_t kDecodeCycles        = 2;   // FSM decode + desc lookup
 constexpr uint32_t kCompletionCycles    = 1;   // final done signaling
 
-// ── g2s pipeline constants (next-gen NB worker) ─────────────────────
-// AG produces 1 address per cycle.  RRS issues gmem reads with up to
-// kMaxOutstanding concurrent requests.  The single-entry line-cache
-// means consecutive elements on the same L2 line are cache hits (no
-// gmem read needed).
+// ── g2s pipeline constants (line-granularity worker) ─────────────────
+// Tile iterator emits 1 row/cycle.  rd_ctrl issues GMEM line reads with
+// up to kMaxOutstanding concurrent slots.  wr_ctrl splits each GMEM line
+// into SMEM words (RATIO_SPLIT = GMEM_LINE / SMEM_WORD writes per line).
+constexpr uint32_t kSetupCycles         = 6;   // sequential multiply pipeline
 constexpr uint32_t kMaxOutstanding      = 8;   // matches RTL MAX_OUTSTANDING
-constexpr uint32_t kGmemReadLatency     = 8;   // L2 cache-line read latency
+constexpr uint32_t kGmemReadLatency     = 8;   // L2 cache-line read latency (approximate)
 
 // ── s2g serial constants (legacy path, not pipelined yet) ───────────
 constexpr uint32_t kSmemReadCycles      = 2;
@@ -103,7 +103,8 @@ bool DxaEngine::start_next_request() {
   uint32_t total_elems = 0;
   uint32_t elem_bytes = 0;
   uint32_t total_cycles = 0;
-  if (!this->decode_request(req, &total_elems, &elem_bytes, &total_cycles)) {
+  if (!this->decode_request(req, &total_elems, &elem_bytes, &total_cycles,
+                            nullptr, nullptr, nullptr, nullptr, nullptr)) {
     core_->barrier_event_release(req.bar_id);
     return false;
   }
@@ -113,73 +114,103 @@ bool DxaEngine::start_next_request() {
   active_xfer_.elem_bytes = elem_bytes;
   active_xfer_.cycles_left = std::max<uint32_t>(1, total_cycles);
   has_active_ = true;
+
   return true;
 }
 
 bool DxaEngine::decode_request(const Request& req,
                                uint32_t* total_elems,
                                uint32_t* elem_bytes,
-                               uint32_t* total_cycles) const {
-  uint32_t desc_elems = 0;
-  uint32_t desc_elem_bytes = 0;
-  if (!core_->dxa_estimate(req.desc_slot, &desc_elems, &desc_elem_bytes)) {
+                               uint32_t* total_cycles,
+                               uint64_t* gmem_reads_out,
+                               uint64_t* smem_writes_out,
+                               uint64_t* gmem_rsp_blk_out,
+                               uint64_t* gmem_req_blk_out,
+                               uint64_t* smem_wr_blk_out) const {
+  Core::DxaTransferInfo info = {};
+  if (!core_->dxa_estimate(req.desc_slot, &info)) {
     return false;
   }
 
   bool is_s2g = false;  // Always g2s; s2g removed with flags
   uint64_t total = 0;
+  uint64_t num_gmem_reads_v = 0;
+  uint64_t num_smem_writes_v = 0;
+  uint64_t gmem_rsp_blk_v = 0;
+  uint64_t gmem_req_blk_v = 0;
+  uint64_t smem_wr_blk_v = 0;
 
   if (is_s2g) {
-    // s2g: serial per-element model (nextgen RTL currently does instant
-    // completion for s2g, but we still model a small latency so that the
-    // barrier fires a few cycles later, matching RTL's instant-done +
-    // barrier propagation delay).
     uint64_t per_elem = uint64_t(kElemIssueCycles + kSmemReadCycles + kGmemWriteCycles);
-    total = kDecodeCycles + per_elem * desc_elems + kCompletionCycles;
+    total = kDecodeCycles + per_elem * info.total_elems + kCompletionCycles;
   } else {
-    // g2s: pipelined model — mirrors the AG→RRS→WBC pipeline.
-    //
-    // AG issues 1 element/cycle.  The single-entry line-cache absorbs
-    // consecutive accesses to the same L2 line, so the number of gmem
-    // reads (cache misses) ≈ ceil(total_bytes / L2_LINE_SIZE).  With
-    // kMaxOutstanding concurrent reads, the pipeline stalls only when
-    // all slots are occupied.
-    //
-    // Timing breakdown:
-    //   ag_cycles     = desc_elems      (1 elem / cycle)
-    //   stall_cycles  = excess_misses × ceil(read_lat / max_out)
-    //   drain_cycles  = kGmemReadLatency (wait for last response)
-    //
-    // total = decode + ag_cycles + stall_cycles + drain + completion
+    // g2s: line-granularity pipelined model with read dedup + write packing.
+    uint64_t total_bytes = uint64_t(info.total_elems) * info.elem_bytes;
+    uint32_t line_size = std::max<uint32_t>(1, L1_LINE_SIZE);
+    uint32_t smem_word = std::max<uint32_t>(1, LMEM_NUM_BANKS * (XLEN / 8));
+    uint32_t tile_line = info.tile0 * info.elem_bytes;  // T: bytes per tile row
 
-    uint64_t total_bytes = uint64_t(desc_elems) * desc_elem_bytes;
-    uint32_t line_size = std::max<uint32_t>(1, L2_LINE_SIZE);
-    uint64_t num_misses = ceil_div(total_bytes, line_size);
+    // ---- GMEM reads with LLB dedup ----
+    // LLB dedup applies when T <= G (single GMEM line per row).
+    // Count unique GMEM line addresses across all tile rows.
+    if (tile_line <= line_size && info.stride0 > 0 && info.tile1 > 1) {
+      // Simulate LLB: iterate rows, count address changes.
+      uint64_t gmem_base_with_coord = info.gmem_base
+          + uint64_t(req.coords[0]) * info.elem_bytes
+          + uint64_t(req.coords[1]) * info.stride0;
+      uint64_t prev_line = gmem_base_with_coord >> __builtin_ctz(line_size);
+      num_gmem_reads_v = 1;  // first row always reads
+      for (uint32_t r = 1; r < info.tile1; ++r) {
+        uint64_t row_addr = gmem_base_with_coord + uint64_t(r) * info.stride0;
+        uint64_t cur_line = row_addr >> __builtin_ctz(line_size);
+        if (cur_line != prev_line) {
+          ++num_gmem_reads_v;
+          prev_line = cur_line;
+        }
+      }
+    } else {
+      // No dedup or multi-line rows: standard formula.
+      num_gmem_reads_v = ceil_div(total_bytes, line_size);
+    }
 
-    uint64_t ag_cycles = desc_elems;
+    // ---- SMEM writes with packing ----
+    // Packed writes: consecutive data fills SMEM words densely.
+    // Account for initial SMEM misalignment.
+    uint32_t smem_off = req.smem_addr & (smem_word - 1);
+    num_smem_writes_v = ceil_div(total_bytes + smem_off, smem_word);
 
-    // Stall happens when AG has issued more misses than kMaxOutstanding
-    // before any slots free up.  Each "batch" of kMaxOutstanding reads
-    // takes kGmemReadLatency cycles to drain.
-    uint64_t excess = (num_misses > kMaxOutstanding) ? (num_misses - kMaxOutstanding) : 0;
-    uint64_t stall_cycles = excess * ceil_div(kGmemReadLatency, kMaxOutstanding);
+    // GMEM read throughput: limited by outstanding slots.
+    uint64_t excess = (num_gmem_reads_v > kMaxOutstanding) ? (num_gmem_reads_v - kMaxOutstanding) : 0;
+    uint64_t read_stall_cycles = excess * ceil_div(kGmemReadLatency, kMaxOutstanding);
 
-    // After AG finishes, the last outstanding reads take up to
-    // kGmemReadLatency cycles to return.
+    // Drain: wait for last outstanding read.
     uint64_t drain_cycles = kGmemReadLatency;
 
-    total = kDecodeCycles + ag_cycles + stall_cycles + drain_cycles + kCompletionCycles;
+    // Write throughput: 1 SMEM word per cycle.
+    uint64_t write_cycles = num_smem_writes_v;
+
+    // Pipeline: reads and writes overlap. Total ≈ setup + max(read, write) + drain.
+    uint64_t read_total = read_stall_cycles + num_gmem_reads_v;
+    uint64_t pipeline_cycles = std::max(read_total, write_cycles);
+
+    total = kSetupCycles + kDecodeCycles + pipeline_cycles + drain_cycles + kCompletionCycles;
+
+    // Breakdown: attribute stall cycles to bottleneck source.
+    gmem_rsp_blk_v = drain_cycles;     // waiting for GMEM responses to drain
+    gmem_req_blk_v = read_stall_cycles; // backpressure from outstanding limit
+    if (write_cycles > read_total) {
+      smem_wr_blk_v = write_cycles - read_total; // SMEM write was the bottleneck
+    }
   }
 
-  if (total_elems) {
-    *total_elems = desc_elems;
-  }
-  if (elem_bytes) {
-    *elem_bytes = desc_elem_bytes;
-  }
-  if (total_cycles) {
-    *total_cycles = uint32_t(std::min<uint64_t>(total, std::numeric_limits<uint32_t>::max()));
-  }
+  if (total_elems) *total_elems = info.total_elems;
+  if (elem_bytes) *elem_bytes = info.elem_bytes;
+  if (total_cycles) *total_cycles = uint32_t(std::min<uint64_t>(total, std::numeric_limits<uint32_t>::max()));
+  if (gmem_reads_out) *gmem_reads_out = num_gmem_reads_v;
+  if (smem_writes_out) *smem_writes_out = num_smem_writes_v;
+  if (gmem_rsp_blk_out) *gmem_rsp_blk_out = gmem_rsp_blk_v;
+  if (gmem_req_blk_out) *gmem_req_blk_out = gmem_req_blk_v;
+  if (smem_wr_blk_out) *smem_wr_blk_out = smem_wr_blk_v;
   return true;
 }
 

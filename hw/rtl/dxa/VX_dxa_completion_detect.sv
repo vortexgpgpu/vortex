@@ -57,6 +57,15 @@ module VX_dxa_completion_detect import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     end
 `endif
 
+`ifdef DBG_TRACE_DXA
+    always @(posedge clk) begin
+        if (~reset && done_accepted) begin
+            $write("DXA_TL,%0d,DONE_DETECT,bar=%0d\n",
+                $time, done_bar_addr);
+        end
+    end
+`endif
+
     // Priority: emit pending first, then same-cycle fire
     assign done_valid = pending_valid_r || (done_fire && ~pending_valid_r);
     assign done_bar_addr = pending_valid_r ? pending_bar_r : done_fire_bar;

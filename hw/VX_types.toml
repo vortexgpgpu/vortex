@@ -118,6 +118,7 @@ VX_CSR_NUM_BARRIERS = 0xFC4
 VX_DCR_MPM_CLASS_BASE = 0
 VX_DCR_MPM_CLASS_CORE = 1
 VX_DCR_MPM_CLASS_MEM = 2
+# VX_DCR_MPM_CLASS_DXA = 6  # removed: DXA perf counters replaced by DBG_TRACE_DXA
 
 [csr_mpm_base]
 VX_CSR_MCYCLE = 0xB00
@@ -261,3 +262,5 @@ VX_CSR_MPM_LMEM_BANK_ST_H = 0xB9D
 # PERF: coalescer
 VX_CSR_MPM_COALESCER_MISS = 0xB1F  # coalescer misses
 VX_CSR_MPM_COALESCER_MISS_H = 0xB9F
+
+# [csr_mpm_dxa] — removed: DXA perf counters replaced by DBG_TRACE_DXA logs

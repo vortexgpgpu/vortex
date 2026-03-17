@@ -625,7 +625,7 @@ static inline uint64_t dxa_shared_addr(const dxa_copy_cfg_t& cfg, uint32_t smem_
   return uint64_t(smem_addr) + (uint64_t(y) * cfg.tile0 + x) * cfg.elem_bytes;
 }
 
-bool Core::dxa_estimate(uint32_t desc_slot, uint32_t* total_elems, uint32_t* elem_bytes) {
+bool Core::dxa_estimate(uint32_t desc_slot, DxaTransferInfo* info) {
   if (desc_slot >= VX_DCR_DXA_DESC_COUNT)
     return false;
 
@@ -635,11 +635,13 @@ bool Core::dxa_estimate(uint32_t desc_slot, uint32_t* total_elems, uint32_t* ele
     return false;
   }
 
-  if (total_elems) {
-    *total_elems = cfg.tile0 * cfg.tile1;
-  }
-  if (elem_bytes) {
-    *elem_bytes = cfg.elem_bytes;
+  if (info) {
+    info->total_elems = cfg.tile0 * cfg.tile1;
+    info->elem_bytes = cfg.elem_bytes;
+    info->tile0 = cfg.tile0;
+    info->tile1 = cfg.tile1;
+    info->stride0 = (cfg.rank >= 2) ? desc.strides[0] : 0;
+    info->gmem_base = desc.base_addr;
   }
   return true;
 }

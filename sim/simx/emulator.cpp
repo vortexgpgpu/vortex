@@ -305,6 +305,10 @@ void Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, boo
       ++barrier.phase;
     }
     // update count and wrap around
+    if (count == 0) {
+      std::cout << "BUG: barrier_arrive count=0: core=" << core_->id() << " wid=" << wid << " bar_id=0x" << std::hex << bar_id << std::dec << " bar_index=" << bar_index << " is_sync=" << is_sync_bar << std::endl;
+      std::abort();
+    }
     barrier.count = barrier_count_p1 % count;
   }
 }
