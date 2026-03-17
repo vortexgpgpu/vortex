@@ -25,10 +25,9 @@ class Core;
 
 // Cycle-approximate DXA engine for simx.
 //
-// Models the next-gen AG→RRS→WBC pipeline timing:
-//   - g2s: pipelined gmem reads with MAX_OUTSTANDING concurrent slots,
-//     so the dominant cost is cache-line fill latency amortized across
-//     the pipeline depth, plus per-element write-back.
+// Models the line-granularity setup→tile_iter→rd_ctrl→wr_ctrl pipeline:
+//   - g2s: pipelined GMEM line reads → width adaptation → SMEM word writes.
+//     1 SMEM word/cycle at full bank bandwidth.
 //   - s2g: serial per-element (read smem, write gmem).
 //
 // The model counts down modeled cycles.  When the countdown expires it
@@ -96,7 +95,9 @@ private:
   bool execute_copy(uint32_t slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t* bytes_copied);
 
   bool start_next_request();
-  bool decode_request(const Request& req, uint32_t* total_elems, uint32_t* elem_bytes, uint32_t* total_cycles) const;
+  bool decode_request(const Request& req, uint32_t* total_elems, uint32_t* elem_bytes, uint32_t* total_cycles,
+                      uint64_t* gmem_reads_out, uint64_t* smem_writes_out,
+                      uint64_t* gmem_rsp_blk_out, uint64_t* gmem_req_blk_out, uint64_t* smem_wr_blk_out) const;
   void progress_active_request();
   void complete_active_request();
 };

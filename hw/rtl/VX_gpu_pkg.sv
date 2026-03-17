@@ -887,7 +887,7 @@ package VX_gpu_pkg;
     localparam LMEM_TAG_WIDTH       = `MAX(LMEM_TAG_WIDTH_BASE, DXA_DONE_TAG_REQ_W);
     // DXA shared-memory path is dimensioned independently from LSU scalar word size
     // to match the shared-memory service width per request path.
-    localparam DXA_SMEM_WORD_SIZE   = `LSU_LINE_SIZE;
+    localparam DXA_SMEM_WORD_SIZE   = `LMEM_NUM_BANKS * (`XLEN / 8);
     localparam DXA_SMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_SMEM_WORD_SIZE));
 
     // New bank-native DXA SMEM interface params.

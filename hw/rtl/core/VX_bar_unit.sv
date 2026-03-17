@@ -292,7 +292,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     end
 `endif
 
-`ifdef DBG_TRACE_DXA_TIMELINE
+`ifdef DBG_TRACE_DXA
     reg [BAR_ADDR_W-1:0] tl_unlock_bar_r;
     always @(posedge clk) begin
         tl_unlock_bar_r <= store_waddr;
@@ -300,11 +300,11 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     always @(posedge clk) begin
         if (!reset) begin
             if (req_valid && ~req_data.is_global && req_data.is_arrive) begin
-                $write("DXA_TL,%0d,BAR_ARRIVE,%0d,%0d,%0d,count=%0d size_m1=%0d\n",
+                $write("DXA_TL,%0d,BAR_ARRIVE,core=%0d,wid=%0d,bar=%0d,count=%0d,size_m1=%0d\n",
                     $time, CORE_ID, req_wid, store_waddr, count_r, req_data.size_m1);
             end
             if (unlock_valid_r) begin
-                $write("DXA_TL,%0d,BAR_UNLOCK,%0d,0,%0d,mask=%b\n",
+                $write("DXA_TL,%0d,BAR_UNLOCK,core=%0d,bar=%0d,mask=%b\n",
                     $time, CORE_ID, tl_unlock_bar_r, unlock_mask_r);
             end
         end

@@ -56,10 +56,10 @@ void kernel_body(kernel_arg_t* arg) {
   vortex::barrier bar[2] = { vortex::barrier(0), vortex::barrier(1) };
 
   // Only the first hardware warp (warp 0 within the CTA) issues DXA commands.
-  // group_warp_id = vx_warp_id() % __warps_per_group identifies the warp's
-  // position within its CTA (0 = first warp).  __local_group_id is the CTA
-  // group index within the core, NOT the warp-within-CTA index.
-  const bool is_dxa_warp    = (__warps_per_group == 0) ? false : (vx_warp_id() % __warps_per_group == 0);
+  // group_warp_id = vx_warp_id() & (wpg-1) identifies the warp's position
+  // within its CTA (0 = first warp).  Uses AND instead of modulo since
+  // __warps_per_group is always power-of-2, avoiding the expensive REMU insn.
+  const bool is_dxa_warp    = (__warps_per_group == 0) ? false : ((vx_warp_id() & (__warps_per_group - 1)) == 0);
 
   if (mode == 2) {
     // ── Double-buffered pipeline ──────────────────────────────────────
