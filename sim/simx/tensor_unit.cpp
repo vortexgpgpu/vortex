@@ -732,7 +732,7 @@ public:
             uint32_t off = bit_idx % 32;
             return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) >> off) & 1u;
           };
-          uint32_t j_sp = cfg::nt16_sparse ? (j % (cfg::tcN / 2)) : j;
+          uint32_t j_sp = cfg::sym_sparse ? (j % (cfg::tcN / 2)) : j;
           auto bword1 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 0).u32;
           auto bword2 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 1).u32;
           uint32_t b_gathered = 0;
