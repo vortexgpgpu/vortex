@@ -35,7 +35,8 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          wr_en,
     input wire [`LOG2UP(`NUM_WARPS)-1:0] wr_wid,
     input wire [3:0]    wr_col_idx,
-    input wire [PER_WARP_DEPTH-1:0][31:0] wr_data
+    input wire [PER_WARP_DEPTH-1:0][31:0] wr_data,
+    input wire [PER_WARP_DEPTH-1:0] wr_bank_en
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -95,7 +96,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         wire [BANK_ADDRW-1:0] bank_wa = init_active ? init_addr : wr_wid;
 
         for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col
-            wire col_wr = init_active ? bank_wr : (bank_wr && col_wren[c]);
+            wire col_wr = init_active ? bank_wr : (bank_wr && col_wren[c] && wr_bank_en[b]);
             wire [31:0] col_wd = init_active ? COL_INIT : wr_data[b];
             wire [31:0] col_rd;
 

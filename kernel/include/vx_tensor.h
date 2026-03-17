@@ -168,10 +168,10 @@ public:
 
   // Sparse metadata constants (using actual It, not cfg's fp32 default)
   static constexpr uint32_t sp_rtl_i_ratio = 32 / It::bits;
-  static constexpr uint32_t sp_meta_cols = (NT * 2 * sp_rtl_i_ratio) / 32;
+  static constexpr uint32_t sp_meta_cols = (NT * 2 * sp_rtl_i_ratio + 31) / 32;
   static constexpr uint32_t sp_per_warp_depth = cfg::m_steps * (cfg::k_steps / 2);
-  static constexpr uint32_t sp_cols_per_load = NT / sp_per_warp_depth;
-  static constexpr uint32_t sp_num_meta_loads = (sp_meta_cols + sp_cols_per_load - 1) / sp_cols_per_load;
+  static constexpr uint32_t sp_cols_per_load = (NT >= sp_per_warp_depth) ? (NT / sp_per_warp_depth) : 1;
+  static constexpr uint32_t sp_num_meta_loads = (sp_per_warp_depth * sp_meta_cols + NT - 1) / NT;
   static constexpr uint32_t meta_stride = sp_num_meta_loads * NT;
   static constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
   static constexpr uint32_t sparse_regs = cfg::m_steps * sparse_k_steps;
@@ -285,7 +285,7 @@ public:
         uint32_t block_row = (lane_in_blk % b_tcK) * i_ratio;
         // NT=16 sparse: each register = 2 columns × full K (n_stride=2, no K iteration)
         // NT=8/32 sparse: standard interleaved layout
-        uint32_t n_stride  = cfg::nt16_sparse ? 2 : (cfg::b_sub_blocks_sp * cfg::tcN);
+        uint32_t n_stride  = cfg::sym_sparse ? (cfg::tcN / 2) : (cfg::b_sub_blocks_sp * cfg::tcN);
         uint32_t k_stride  = b_tcK * i_ratio;
         if constexpr (src_layout == col_major) {
           std::swap(block_row, block_col);
@@ -295,7 +295,7 @@ public:
           if constexpr (src_layout == row_major) {
             static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
           // Pre-compute k-group base pointers (elem_row * ldm varies by k-group)
-          constexpr uint32_t num_k_groups = cfg::nt16_sparse ? 1 : (Frag::NR / cfg::b_sub_steps_sp);
+          constexpr uint32_t num_k_groups = cfg::sym_sparse ? 1 : (Frag::NR / cfg::b_sub_steps_sp);
           const input_t* k_bases[num_k_groups];
           k_bases[0] = base;
           if constexpr (num_k_groups >= 2) {
@@ -307,7 +307,7 @@ public:
           }
           detail::unroll_for<Frag::NR>([&](auto r) {
             uint32_t block_k, block_n;
-            if constexpr (cfg::nt16_sparse) { block_k = 0; block_n = r; }
+            if constexpr (cfg::sym_sparse) { block_k = 0; block_n = r; }
             else { block_k = r / cfg::b_sub_steps_sp; block_n = r % cfg::b_sub_steps_sp; }
             uint32_t elem_col = block_n * n_stride;
             auto ptr = k_bases[block_k] + elem_col;
@@ -320,7 +320,7 @@ public:
           } else {
           // col_major: after swap, elem_row = block_n * n_stride, elem_col = block_k * k_stride
           // NT=16 sparse: each register = separate column group, so num_n_groups = NRB
-          constexpr uint32_t num_n_groups = cfg::nt16_sparse ? Frag::NR : cfg::b_sub_steps_sp;
+          constexpr uint32_t num_n_groups = cfg::sym_sparse ? Frag::NR : cfg::b_sub_steps_sp;
           const input_t* n_bases[num_n_groups];
           n_bases[0] = base;
           if constexpr (num_n_groups >= 2) {
@@ -332,7 +332,7 @@ public:
           }
           detail::unroll_for<Frag::NR>([&](auto r) {
             uint32_t block_k, block_n;
-            if constexpr (cfg::nt16_sparse) { block_k = 0; block_n = r; }
+            if constexpr (cfg::sym_sparse) { block_k = 0; block_n = r; }
             else { block_k = r / cfg::b_sub_steps_sp; block_n = r % cfg::b_sub_steps_sp; }
             uint32_t elem_col = block_k * k_stride;
             auto ptr = n_bases[block_n] + elem_col;

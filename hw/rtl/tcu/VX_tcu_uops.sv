@@ -29,8 +29,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     output wire [UOP_CTR_W-1:0] uop_count
 );
 `ifdef TCU_SPARSE_ENABLE
-    localparam MAX_META_COLS = TCU_BLOCK_CAP / 2;  // worst case: 4-bit types
-    localparam MAX_FUSED = NT16_SPARSE ? (TCU_UOPS + MAX_META_COLS) : (TCU_UOPS / 2 + MAX_META_COLS);
+    localparam MAX_META_STORES = ((TCU_BLOCK_CAP + 1) / 2) * TCU_STORES_PER_COL;  // worst case: 4-bit types
+    localparam MAX_FUSED = SYM_SPARSE ? (TCU_UOPS + MAX_META_STORES) : (TCU_UOPS / 2 + MAX_META_STORES);
     localparam CTR_W = $clog2(MAX_FUSED > TCU_UOPS ? MAX_FUSED : TCU_UOPS);
 `else
     localparam CTR_W = $clog2(TCU_UOPS);
@@ -56,24 +56,24 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire is_meta_store = (ibuf_in.op_type == INST_TCU_META_STORE);
 
     /* verilator lint_off UNUSEDSIGNAL */
-    wire [4:0] sparse_meta_cols = meta_num_cols(ibuf_in.op_args.tcu.fmt_s);
+    wire [4:0] sparse_meta_total = meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s);
     /* verilator lint_on UNUSEDSIGNAL */
 
     // Combinational meta-phase detection — comparator/subtractor absorbed
     // by the registered uop_data stage in VX_uop_sequencer.
-    wire is_meta_phase = is_sparse && (ctr < `UP(CTR_W)'(sparse_meta_cols));
-    wire [`UP(CTR_W)-1:0] mma_ctr = ctr - `UP(CTR_W)'(sparse_meta_cols);
+    wire is_meta_phase = is_sparse && (ctr < `UP(CTR_W)'(sparse_meta_total));
+    wire [`UP(CTR_W)-1:0] mma_ctr = ctr - `UP(CTR_W)'(sparse_meta_total);
     wire meta_uop = is_meta_store || is_meta_phase;
     localparam META_REG0 = TCU_RA + 4;  // f14 — fragA.data[4]
     localparam META_REG1 = TCU_RA + 5;  // f15 — fragA.data[5]
 
     // Fused meta+MMA uop counts
     assign uop_count = is_meta_store
-        ? UOP_CTR_W'(meta_num_cols(ibuf_in.op_args.tcu.fmt_s))
+        ? UOP_CTR_W'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s))
         : is_sparse
-            ? (NT16_SPARSE
-                ? UOP_CTR_W'(TCU_UOPS + int'(meta_num_cols(ibuf_in.op_args.tcu.fmt_s)))
-                : UOP_CTR_W'(TCU_UOPS / 2 + int'(meta_num_cols(ibuf_in.op_args.tcu.fmt_s))))
+            ? (SYM_SPARSE
+                ? UOP_CTR_W'(TCU_UOPS + int'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s)))
+                : UOP_CTR_W'(TCU_UOPS / 2 + int'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s))))
             : UOP_CTR_W'(TCU_UOPS);
 `else
     // Dense-only: count is a compile-time constant.
@@ -82,6 +82,17 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 
 `ifdef TCU_SPARSE_ENABLE
     wire [`UP(CTR_W)-1:0] eff_ctr = (is_sparse && !is_meta_phase) ? mma_ctr : ctr;
+
+    // Parametric symmetric tmask for sparse mode
+    // sym_mask_lo[t] = 1 for threads where (t % tcN) < (tcN/2)
+    logic [`NUM_THREADS-1:0] sym_mask_lo;
+    if (SYM_SPARSE) begin : g_sym_mask
+        for (genvar t = 0; t < `NUM_THREADS; ++t) begin : g_bit
+            assign sym_mask_lo[t] = ((t % TCU_TC_N) < (TCU_TC_N / 2)) ? 1'b1 : 1'b0;
+        end
+    end else begin : g_sym_mask
+        assign sym_mask_lo = '0;
+    end
 `else
     wire [`UP(CTR_W)-1:0] eff_ctr = ctr;
 `endif
@@ -119,7 +130,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     logic [`UP(CTR_W)-1:0] rs3_offset;
 
 `ifdef TCU_SPARSE_ENABLE
-    if (NT16_SPARSE) begin : g_nt16_off
+    if (SYM_SPARSE) begin : g_sym_off
         wire [`UP(CTR_W)-1:0] n_sp = `UP(CTR_W)'(eff_ctr[0 +: (LG_N + LG_K)]);
         wire [`UP(CTR_W)-1:0] m_sp = `UP(CTR_W)'(eff_ctr[(LG_N + LG_K) +: LG_M]);
         assign rs1_offset = is_sparse ? `UP(CTR_W)'(m_sp)
@@ -162,11 +173,11 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `ifdef TCU_SPARSE_ENABLE
         /* verilator lint_off WIDTHTRUNC */
         /* verilator lint_off WIDTHEXPAND */
-        if (NT16_SPARSE) begin
+        if (SYM_SPARSE) begin
             ibuf_r.tmask = is_sparse
                 ? (is_meta_phase ? ibuf_in.tmask
-                    : (eff_ctr[0] ? ibuf_in.tmask & 16'hCCCC
-                                   : ibuf_in.tmask & 16'h3333))
+                    : (eff_ctr[0] ? ibuf_in.tmask & ~sym_mask_lo
+                                   : ibuf_in.tmask &  sym_mask_lo))
                 : ibuf_in.tmask;
         end
         /* verilator lint_on WIDTHEXPAND */
@@ -175,7 +186,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r.op_type = meta_uop ? INST_TCU_META_STORE : ibuf_in.op_type;
         ibuf_r.op_args.tcu.fmt_d = meta_uop ? 4'(ctr) : ibuf_in.op_args.tcu.fmt_d;
 
-        if (NT16_SPARSE) begin
+        if (SYM_SPARSE) begin
             /* verilator lint_off UNUSEDSIGNAL */
             logic [`UP(CTR_W)-1:0] n_sp_s;
             logic [`UP(CTR_W)-1:0] m_sp_s;
