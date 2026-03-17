@@ -1212,7 +1212,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         }
 
         uint32_t steps = 0;
-          uint32_t sparse_mma_steps = cfg::nt16_sparse
+          uint32_t sparse_mma_steps = cfg::sym_sparse
                                     ? (cfg::m_steps * cfg::n_steps * cfg::k_steps)
                                     : (cfg::m_steps * cfg::n_steps * sparse_k_steps);
           uint32_t steps_count = num_meta_cols + sparse_mma_steps;
@@ -1233,7 +1233,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
             ibuffer.push_back(instr);
           }
 
-          if (cfg::nt16_sparse) {
+          if (cfg::sym_sparse) {
             constexpr uint32_t lg_n = (cfg::n_steps > 1) ? log2ceil(cfg::n_steps) : 0;
             constexpr uint32_t lg_k = (cfg::k_steps > 1) ? log2ceil(cfg::k_steps) : 0;
             constexpr uint32_t sparse_step_bits = lg_n + lg_k;
