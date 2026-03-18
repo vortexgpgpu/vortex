@@ -1,0 +1,420 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_define.vh"
+
+// Dispatches warps for incoming CTAs from the KMU.
+module VX_cta_dispatch import VX_gpu_pkg::*;
+(
+    input wire                      clk,
+    input wire                      reset,
+
+    // from KMU
+    VX_kmu_bus_if.slave             kmu_bus_if,
+
+    // from scheduler
+    input wire [`NUM_WARPS-1:0]     active_warps,
+    input wire                      warp_done,
+    input wire [NW_WIDTH-1:0]       warp_done_wid,
+
+    // to scheduler (one warp per cycle)
+    output wire                     cta_fire,
+    output wire [NW_WIDTH-1:0]      cta_wid,
+    output wire [PC_BITS-1:0]       cta_PC,
+    output wire [`NUM_THREADS-1:0]  cta_tmask,
+    output cta_csrs_t               cta_csrs,
+    output wire                     busy
+);
+    localparam NUM_WARPS    = `NUM_WARPS;
+    localparam NUM_CTA_SLOTS= NUM_WARPS;
+    localparam CS_BITS      = NW_BITS;
+    localparam LMEM_SIZE    = (1 << `LMEM_LOG_SIZE);
+
+    // -------------------------------------------------------------------------
+    // CTA table — in-order FIFO ring.
+    // valid is mirrored in slot_valid_r to keep it off the table read path.
+    // -------------------------------------------------------------------------
+
+    wire                    rem_warps_read;
+    wire                    rem_warps_write;
+    wire [CS_BITS-1:0]      rem_warps_waddr;
+    wire [NW_WIDTH:0]       rem_warps_wdata;
+    wire [CS_BITS-1:0]      rem_warps_raddr;
+    wire [NW_WIDTH:0]       rem_warps_rdata;
+
+    wire                    lmem_size_read;
+    wire                    lmem_size_write;
+    wire [CS_BITS-1:0]      lmem_size_waddr;
+    wire [`LMEM_LOG_SIZE:0] lmem_size_wdata;
+    wire [CS_BITS-1:0]      lmem_size_raddr;
+    wire [`LMEM_LOG_SIZE:0] lmem_size_rdata;
+
+    wire                    wid_to_cta_write;
+    wire [NW_WIDTH-1:0]     wid_to_cta_waddr;
+    wire [CS_BITS-1:0]      wid_to_cta_wdata;
+
+    VX_dp_ram #(
+        .DATAW (NW_WIDTH+1),
+        .SIZE  (NUM_CTA_SLOTS),
+        .OUT_REG (1)
+    ) rem_warps_ram (
+        .clk   (clk),
+        .reset (reset),
+        .wren  (1'b1),
+        .read  (rem_warps_read),
+        .write (rem_warps_write),
+        .waddr (rem_warps_waddr),
+        .wdata (rem_warps_wdata),
+        .raddr (rem_warps_raddr),
+        .rdata (rem_warps_rdata)
+    );
+
+    VX_dp_ram #(
+        .DATAW (`LMEM_LOG_SIZE+1),
+        .SIZE  (NUM_CTA_SLOTS),
+        .OUT_REG (1)
+    ) lmem_size_ram (
+        .clk   (clk),
+        .reset (reset),
+        .wren  (1'b1),
+        .read  (lmem_size_read),
+        .write (lmem_size_write),
+        .waddr (lmem_size_waddr),
+        .wdata (lmem_size_wdata),
+        .raddr (lmem_size_raddr),
+        .rdata (lmem_size_rdata)
+    );
+
+    reg [NUM_CTA_SLOTS-1:0] slot_valid_r;          // one-hot mirror of per-slot valid
+    reg [CS_BITS-1:0]       head_r;                // oldest live slot
+    reg [CS_BITS-1:0]       tail_r;                // next slot to allocate
+    reg [NW_WIDTH:0]        slot_count_r;          // number of occupied slots (0..NUM_WARPS)
+
+    // LMEM ring-buffer
+    reg [`LMEM_LOG_SIZE-1:0] lmem_tail_r;
+    reg [`LMEM_LOG_SIZE:0]   free_size_r;          // available bytes (0..LMEM_SIZE)
+    reg [`LMEM_LOG_SIZE-1:0] cur_lmem_base_r;      // latched at accept, stable through DISPATCH
+
+    // Reverse lookup: warp-ID → CTA slot index
+    wire [CS_BITS-1:0] wid_to_cta_rdata;
+    VX_dp_ram #(
+        .DATAW (CS_BITS),
+        .SIZE  (NUM_WARPS),
+        .OUT_REG (1)
+    ) wid_to_cta_ram (
+        .clk   (clk),
+        .reset (reset),
+        .wren  (1'b1),
+        .read  (1'b1),
+        .write (wid_to_cta_write),
+        .waddr (wid_to_cta_waddr),
+        .wdata (wid_to_cta_wdata),
+        .raddr (warp_done_wid_r),
+        .rdata (wid_to_cta_rdata)
+    );
+
+
+    // Registered retirement signals — break the warp_done_wid → array → compare path
+    reg                 warp_done_r;
+    reg [NW_WIDTH-1:0]  warp_done_wid_r;
+    reg                 warp_done_r_dly;
+    reg                 warp_done_r_dly2;
+    reg [CS_BITS-1:0]   done_slot_dly;
+
+
+    // Pre-registered admission gate — breaks >= comparator off kmu_bus_if.ready
+    reg                 lmem_ok_r;
+
+    // -------------------------------------------------------------------------
+    // FSM + per-dispatch registers
+    // -------------------------------------------------------------------------
+    typedef enum logic { IDLE = 0, DISPATCH = 1 } state_t;
+    state_t state;
+
+    reg [PC_BITS-1:0]               warp_PC;
+    reg [31:0]                      cta_id_r;
+    reg [2:0][31:0]                 block_idx_r;
+    reg [2:0][CTA_TID_WIDTH:0]      block_dim_r;
+    reg [2:0][31:0]                 grid_dim_r;
+    reg [`MEM_ADDR_WIDTH-1:0]       param_r;
+    reg [CTA_TID_WIDTH:0]           block_size_r;
+    reg [2:0][CTA_TID_WIDTH-1:0]    warp_step_r;
+    reg                             warp_fire_r;
+    reg [NW_WIDTH-1:0]              warp_id_r;
+    reg [`NUM_THREADS-1:0]          warp_tmask_r;
+    reg [NW_WIDTH-1:0]              cta_rank_r;
+    reg [2:0][CTA_TID_WIDTH-1:0]    thread_idx_r;
+    reg [CS_BITS-1:0]               cur_slot_r;
+
+    // -------------------------------------------------------------------------
+    // Free-warp selection
+    // -------------------------------------------------------------------------
+    wire [NW_WIDTH-1:0] warp_id_n;
+    wire                warp_ready;
+    VX_priority_encoder #(
+        .N       (NUM_WARPS),
+        .REVERSE (0)
+    ) priority_enc (
+        .data_in   (~active_warps),
+        `UNUSED_PIN(onehot_out),
+        .index_out (warp_id_n),
+        .valid_out (warp_ready)
+    );
+
+    wire kmu_bus_if_fire = kmu_bus_if.valid && kmu_bus_if.ready;
+
+    // -------------------------------------------------------------------------
+    // Power-of-two NUM_THREADS arithmetic — all combinational, zero adders
+    // -------------------------------------------------------------------------
+    // Ceiling division block_size / NUM_THREADS: upper bits + OR of lower bits.
+    // Use NW_WIDTH+1 bits to hold values up to NUM_WARPS without truncation.
+    wire [NW_WIDTH:0] cta_num_warps = (NW_WIDTH+1)'(block_size_r[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|block_size_r[NT_BITS-1:0]);
+
+    // From KMU data at accept time (used to initialise table + cta_size output)
+    wire [NW_WIDTH:0] kmu_num_warps = (NW_WIDTH+1)'(kmu_bus_if.data.block_size[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|kmu_bus_if.data.block_size[NT_BITS-1:0]);
+
+    // Shared block_size decrement: constant subtraction at bit boundary NT_BITS.
+    // Low NT_BITS bits are unchanged; upper bits decrement by 1.
+    wire [CTA_TID_WIDTH:0] block_size_next = {block_size_r[CTA_TID_WIDTH:NT_BITS] - 1'b1, block_size_r[NT_BITS-1:0]};
+
+    // Full-warp test: upper bits non-zero (no comparator)
+    wire is_full_warp = |block_size_r[CTA_TID_WIDTH:NT_BITS];
+    // Last-warp test: ceiling(remaining/NUM_THREADS) == 1.
+    // Covers (upper==1, lower==0) full-last and (upper==0, lower!=0) partial-only cases.
+    wire is_last_warp = (cta_num_warps == (NW_WIDTH+1)'(1));
+
+    // Partial-warp mask: (1 << count) - 1 where count = block_size_r[NT_BITS-1:0]
+    // One-hot decode then OR-prefix; no barrel-shifter subtrahend.
+    wire [`NUM_THREADS-1:0] partial_tmask = (`NUM_THREADS'(1) << block_size_r[NT_BITS-1:0]) - `NUM_THREADS'(1);
+
+    // 3D thread-index carry-propagation (combinational on registered state)
+    wire [CTA_TID_WIDTH:0] next_x = {1'b0, thread_idx_r[0]} + {1'b0, warp_step_r[0]};
+    wire                   wrap_x = (next_x >= {1'b0, block_dim_r[0][CTA_TID_WIDTH-1:0]});
+    wire [CTA_TID_WIDTH:0] next_y = ({1'b0, thread_idx_r[1]} + {1'b0, warp_step_r[1]}) + (CTA_TID_WIDTH+1)'(wrap_x);
+    wire                   wrap_y = (next_y >= {1'b0, block_dim_r[1][CTA_TID_WIDTH-1:0]});
+
+    // -------------------------------------------------------------------------
+    // Retirement decode — operates on registered warp_done_r (one cycle delayed)
+    // -------------------------------------------------------------------------
+    wire [CS_BITS-1:0]  done_slot = wid_to_cta_rdata;
+    reg  [CS_BITS-1:0]  rem_warps_raddr_dly;
+    wire                cta_done = warp_done_r_dly2 && slot_valid_r[done_slot_dly]&& (rem_warps_rdata == (NW_WIDTH+1)'(1));
+
+    wire                head_reclaimable_s1 = (head_r != tail_r) && (!slot_valid_r[head_r]);
+    reg                 head_reclaimable_dly;
+
+    // -------------------------------------------------------------------------
+    // Admission control — kmu_bus_if.ready uses pre-registered lmem_ok_r
+    // -------------------------------------------------------------------------
+    wire table_notfull = (slot_count_r < (NW_WIDTH+1)'(NUM_WARPS));
+
+    assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok_r;
+
+    // -------------------------------------------------------------------------
+    // BRAM access
+    // -------------------------------------------------------------------------
+
+    reg rem_warps_write_r;
+    reg [CS_BITS-1:0] rem_warps_waddr_r;
+    reg [NW_WIDTH:0] rem_warps_wdata_r;
+
+    // rem_warps_ram access — retirement exclusively owns the read port.
+    // cta_size_r is captured at accept time (kmu_num_warps) to avoid contention.
+    assign rem_warps_read  = warp_done_r_dly;
+    assign rem_warps_raddr = rem_warps_raddr_dly;
+
+    assign rem_warps_write = (kmu_bus_if_fire && state == IDLE) || rem_warps_write_r;
+    assign rem_warps_waddr = (kmu_bus_if_fire && state == IDLE) ? tail_r : rem_warps_waddr_r;
+    assign rem_warps_wdata = (kmu_bus_if_fire && state == IDLE) ? (NW_WIDTH+1)'(kmu_num_warps) : rem_warps_wdata_r;
+
+    // lmem_size_ram access
+    assign lmem_size_read  = head_reclaimable_s1 || (cta_done && (done_slot_dly == head_r));
+    assign lmem_size_raddr = head_r;
+    assign lmem_size_write = kmu_bus_if_fire && state == IDLE;
+    assign lmem_size_waddr = tail_r;
+    assign lmem_size_wdata = kmu_bus_if.data.lmem_size;
+
+    // wid_to_cta_ram access
+    assign wid_to_cta_write = (state == DISPATCH) && warp_ready;
+    assign wid_to_cta_waddr = warp_id_n;
+    assign wid_to_cta_wdata = cur_slot_r;
+
+    // -------------------------------------------------------------------------
+    // Sequential
+    // -------------------------------------------------------------------------
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            state           <= IDLE;
+            warp_fire_r     <= 0;
+            warp_id_r       <= '0;
+            warp_tmask_r    <= '0;
+            head_r          <= '0;
+            tail_r          <= '0;
+            lmem_tail_r     <= '0;
+            cur_lmem_base_r <= '0;
+            free_size_r     <= (`LMEM_LOG_SIZE+1)'(LMEM_SIZE);
+            slot_valid_r    <= '0;
+            slot_count_r    <= '0;
+            lmem_ok_r       <= 1'b1;  // pool starts full
+            warp_done_r     <= 0;
+            warp_done_wid_r <= '0;
+            warp_done_r_dly <= 0;
+            warp_done_r_dly2 <= 0;
+            done_slot_dly   <= '0;
+            cur_slot_r      <= '0;
+            rem_warps_waddr_r <= '0;
+            rem_warps_wdata_r <= '0;
+            rem_warps_write_r <= 0;
+            head_reclaimable_dly <= 0;
+
+        end else begin
+
+            // ---- Register retirement signals (break critical path) ----------
+            warp_done_r      <= warp_done;
+            warp_done_wid_r  <= warp_done_wid;
+            warp_done_r_dly  <= warp_done_r;
+            warp_done_r_dly2 <= warp_done_r_dly;
+            done_slot_dly    <= done_slot;
+            rem_warps_raddr_dly <= done_slot;
+
+
+            // ---- Warp retirement -------------------------------------------
+            if (warp_done_r_dly2 && slot_valid_r[done_slot_dly]) begin
+                rem_warps_waddr_r <= done_slot_dly;
+                rem_warps_wdata_r <= rem_warps_rdata - 1;
+                rem_warps_write_r <= 1;
+                if (cta_done) begin
+                    slot_valid_r[done_slot_dly] <= 1'b0;
+                end
+            end else begin
+                rem_warps_write_r <= 0;
+            end
+
+            // ---- Slot count bookkeeping ------------------------------------
+            if ((kmu_bus_if_fire && state == IDLE) && !cta_done)
+                slot_count_r <= slot_count_r + (NW_WIDTH+1)'(1);
+            else if (!(kmu_bus_if_fire && state == IDLE) && cta_done)
+                slot_count_r <= slot_count_r - (NW_WIDTH+1)'(1);
+
+            // ---- Head advancement + free_size bookkeeping ------------------
+            head_reclaimable_dly <= head_reclaimable_s1 || (cta_done && (done_slot_dly == head_r));
+            if (head_reclaimable_dly) begin
+                free_size_r <= free_size_r + lmem_size_rdata - (kmu_bus_if_fire ? kmu_bus_if.data.lmem_size : '0);
+                head_r <= head_r + CS_BITS'(1);
+            end else if (kmu_bus_if_fire) begin
+                free_size_r <= free_size_r - kmu_bus_if.data.lmem_size;
+            end
+
+            // ---- Pre-register lmem_ok for next cycle's ready check ---------
+            // Accounts for the allocation that may happen this cycle so the
+            // check is valid on the very next IDLE cycle.
+            begin
+                logic [`LMEM_LOG_SIZE:0] free_next;
+                if (head_reclaimable_dly)
+                    free_next = free_size_r + lmem_size_rdata - (kmu_bus_if_fire ? kmu_bus_if.data.lmem_size : '0);
+                else if (kmu_bus_if_fire)
+                    free_next = free_size_r - kmu_bus_if.data.lmem_size;
+                else
+                    free_next = free_size_r;
+                lmem_ok_r <= (kmu_bus_if.data.lmem_size == 0) || (free_next >= kmu_bus_if.data.lmem_size);
+            end
+
+            // ---- FSM -------------------------------------------------------
+            case (state)
+                IDLE: begin
+                    if (kmu_bus_if_fire) begin
+                        warp_PC      <= kmu_bus_if.data.PC;
+                        cta_id_r     <= kmu_bus_if.data.cta_id;
+                        block_idx_r  <= kmu_bus_if.data.block_idx;
+                        block_dim_r  <= kmu_bus_if.data.block_dim;
+                        grid_dim_r   <= kmu_bus_if.data.grid_dim;
+                        param_r      <= kmu_bus_if.data.param;
+                        block_size_r <= kmu_bus_if.data.block_size;
+                        warp_step_r  <= kmu_bus_if.data.warp_step;
+                        cta_rank_r   <= '0;
+                        thread_idx_r <= '0;
+
+                        // Latch LMEM base; advance ring-buffer tail
+                        cur_lmem_base_r <= lmem_tail_r;
+                        lmem_tail_r     <= lmem_tail_r + `LMEM_LOG_SIZE'(kmu_bus_if.data.lmem_size);
+
+                        // Allocate slot at tail; cur_cta_slot = tail_r (before increment)
+                        slot_valid_r[tail_r] <= 1'b1;
+                        tail_r <= tail_r + CS_BITS'(1);
+                        cur_slot_r <= tail_r;
+                        state <= DISPATCH;
+                    end
+                end
+
+                DISPATCH: begin
+                    if (warp_ready) begin
+                        warp_fire_r  <= 1;
+                        warp_id_r    <= warp_id_n;
+                        // Full warp: all ones.  Partial: (1<<count)-1, no subtrahend barrel shift.
+                        warp_tmask_r <= is_full_warp ? {`NUM_THREADS{1'b1}} : partial_tmask;
+                    end else begin
+                        warp_fire_r <= 0;
+                    end
+
+                    if (warp_fire_r) begin
+                        cta_rank_r   <= cta_rank_r + NW_WIDTH'(1);
+                        // Single shared adder result used for both decrement and last-warp test
+                        block_size_r <= block_size_next;
+
+                        thread_idx_r[0] <= wrap_x ? CTA_TID_WIDTH'(next_x - {1'b0, block_dim_r[0][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_x);
+                        thread_idx_r[1] <= wrap_y ? CTA_TID_WIDTH'(next_y - {1'b0, block_dim_r[1][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_y);
+                        thread_idx_r[2] <= thread_idx_r[2] + warp_step_r[2] + CTA_TID_WIDTH'(wrap_y);
+
+                        if (is_last_warp) begin
+                            warp_fire_r <= 0;
+                            state       <= IDLE;
+                        end
+                    end
+                end
+
+                default:;
+            endcase
+        end
+    end
+
+    // -------------------------------------------------------------------------
+    // Outputs — all driven combinationally from registered state
+    // -------------------------------------------------------------------------
+    assign cta_fire  = warp_fire_r;
+    assign cta_wid   = warp_id_r;
+    assign cta_PC    = warp_PC;
+    assign cta_tmask = warp_tmask_r;
+
+    reg [NW_WIDTH:0] cta_size_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            cta_size_r <= '0;
+        end else if (kmu_bus_if_fire) begin
+            cta_size_r <= (NW_WIDTH+1)'(kmu_num_warps);
+        end
+    end
+
+    assign cta_csrs.cta_id     = cta_id_r;
+    assign cta_csrs.cta_rank   = cta_rank_r;
+    assign cta_csrs.cta_size   = cta_size_r;
+    assign cta_csrs.thread_idx = thread_idx_r;
+    assign cta_csrs.block_idx  = block_idx_r;
+    assign cta_csrs.block_dim  = block_dim_r;
+    assign cta_csrs.grid_dim   = grid_dim_r;
+    assign cta_csrs.param      = param_r;
+    assign cta_csrs.lmem_addr  = `MEM_ADDR_WIDTH'(`LMEM_BASE_ADDR)
+                               | `MEM_ADDR_WIDTH'(cur_lmem_base_r);
+
+    assign busy = (state == DISPATCH);
+
+endmodule

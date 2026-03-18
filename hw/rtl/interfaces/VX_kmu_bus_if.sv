@@ -1,3 +1,5 @@
+//!/bin/bash
+
 // Copyright © 2019-2023
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,29 +13,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_define.vh"
-
-interface VX_dcr_csr_if import VX_gpu_pkg::*; ();
-
-    wire                            valid;
-    wire [`VX_CSR_ADDR_BITS-1:0]    addr;
-    wire [7:0]                      mpm_class;
-    wire [VX_DCR_DATA_WIDTH-1:0]    value;
-    wire                            ready;
+interface VX_kmu_bus_if import VX_gpu_pkg::*; ();
+    logic      valid;
+    kmu_req_t  data;
+    logic      ready;
 
     modport master (
         output valid,
-        output addr,
-        output mpm_class,
-        input  value,
+        output data,
         input  ready
     );
 
     modport slave (
         input  valid,
-        input  addr,
-        input  mpm_class,
-        output value,
+        input  data,
         output ready
     );
 

@@ -401,6 +401,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     reg [RESET_CTR_WIDTH-1:0] vx_reset_ctr;
     reg  vx_busy_wait;
     reg  vx_reset;
+    reg  vx_start;
     wire vx_busy;
 
     wire is_mmio_wr_cmd = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_req_hdr.address);
@@ -412,8 +413,11 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     always @(posedge clk) begin
         if (reset) begin
-            state    <= STATE_IDLE;
-            vx_reset <= 1;
+            state        <= STATE_IDLE;
+            vx_reset     <= 1;
+            vx_reset_ctr <= RESET_CTR_WIDTH'(`RESET_DELAY-1);
+            vx_start     <= 0;
+            vx_busy_wait <= 0;
         end else begin
             case (state)
             STATE_IDLE: begin
@@ -446,9 +450,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 `ifdef DBG_TRACE_AFU
                     `TRACE(2, ("%t: AFU: Goto STATE RUN\n", $time))
                 `endif
-                    state <= STATE_RUN;
-                    vx_reset_ctr <= RESET_CTR_WIDTH'(`RESET_DELAY-1);
-					vx_reset <= 1;
+                    state        <= STATE_RUN;
+                    vx_start     <= 1;
+                    vx_busy_wait <= 1;
                 end
                 default: begin
                     state <= state;
@@ -484,35 +488,33 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 end
             end
             STATE_RUN: begin
-                if (vx_reset) begin
-                    // wait until the reset network is ready
-					if (vx_reset_ctr == RESET_CTR_WIDTH'(0)) begin
-					`ifdef DBG_TRACE_AFU
-						`TRACE(2, ("%t: AFU: Begin execution\n", $time))
-					`endif
-						vx_busy_wait <= 1;
-						vx_reset <= 0;
-					end
+                vx_start <= 0;
+                if (vx_busy_wait) begin
+                    // wait until processor goes busy
+                    if (!vx_reset && vx_busy) begin
+                    `ifdef DBG_TRACE_AFU
+                        `TRACE(2, ("%t: AFU: Begin execution\n", $time))
+                    `endif
+                        vx_busy_wait <= 0;
+                    end
                 end else begin
-                    if (vx_busy_wait) begin
-						// wait until processor goes busy
-						if (vx_busy) begin
-							vx_busy_wait <= 0;
-						end
-					end else begin
-						// wait until the processor is not busy
-						if (~vx_busy) begin
-						`ifdef DBG_TRACE_AFU
-							`TRACE(2, ("%t: AFU: End execution\n", $time))
-                            `TRACE(2, ("%t: AFU: Goto STATE IDLE\n", $time))
-						`endif
-							state <= STATE_IDLE;
-						end
-					end
+                    // wait until the processor is not busy
+                    if (~vx_busy) begin
+                    `ifdef DBG_TRACE_AFU
+                        `TRACE(2, ("%t: AFU: End execution\n", $time))
+                        `TRACE(2, ("%t: AFU: Goto STATE IDLE\n", $time))
+                    `endif
+                        state <= STATE_IDLE;
+                    end
                 end
             end
             default:;
             endcase
+
+            // auto-de-assert reset after initialization
+            if (vx_reset && vx_reset_ctr == RESET_CTR_WIDTH'(0)) begin
+                vx_reset <= 0;
+            end
 
             // ensure reset network initialization
 			if (vx_reset_ctr != RESET_CTR_WIDTH'(0)) begin
@@ -1085,7 +1087,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .dcr_rsp_valid  (vx_dcr_rsp_valid),
         .dcr_rsp_data   (vx_dcr_rsp_data),
 
-        // Status
+        // Ctrl/status
+        .start          (vx_start),
         .busy           (vx_busy)
     );
 

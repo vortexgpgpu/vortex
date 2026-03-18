@@ -13,28 +13,15 @@
 
 `include "VX_define.vh"
 
-interface VX_dcr_csr_if import VX_gpu_pkg::*; ();
+// Handshake interface for an external cache flush.
+// req:  asserted by the initiator to trigger a full cache flush.
+// done: pulsed by the cache for one cycle when all banks have completed flushing.
+interface VX_cache_flush_if ();
 
-    wire                            valid;
-    wire [`VX_CSR_ADDR_BITS-1:0]    addr;
-    wire [7:0]                      mpm_class;
-    wire [VX_DCR_DATA_WIDTH-1:0]    value;
-    wire                            ready;
+  wire req;
+  wire done;
 
-    modport master (
-        output valid,
-        output addr,
-        output mpm_class,
-        input  value,
-        input  ready
-    );
-
-    modport slave (
-        input  valid,
-        input  addr,
-        input  mpm_class,
-        output value,
-        output ready
-    );
+  modport master (output req, input  done);
+  modport slave  (input  req, output done);
 
 endinterface

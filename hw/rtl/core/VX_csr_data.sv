@@ -38,7 +38,7 @@ import VX_fpu_pkg::*;
     input wire                          clk,
     input wire                          reset,
 
-    input base_dcrs_t                   base_dcrs,
+    input wire [7:0]                    mpm_class,
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t                 sysmem_perf,
@@ -49,10 +49,7 @@ import VX_fpu_pkg::*;
     VX_fpu_csr_if.slave                 fpu_csr_if [`NUM_FPU_BLOCKS],
 `endif
 
-    input wire [PERF_CTR_BITS-1:0]      cycles,
-    input wire [PERF_CTR_BITS-1:0]      instret,
-    input wire [`NUM_WARPS-1:0]         active_warps,
-    input wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks,
+    VX_sched_csr_if.slave               sched_csr_if,
 
     input wire                          read_enable,
     input wire [UUID_WIDTH-1:0]         read_uuid,
@@ -70,14 +67,15 @@ import VX_fpu_pkg::*;
 
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
-    `UNUSED_VAR (write_wid)
-    `UNUSED_VAR (write_data)
-    `UNUSED_VAR (read_enable)
-    `UNUSED_VAR (read_uuid)
+    `UNUSED_VAR ({mpm_class, read_data_rw, read_enable, read_uuid});
+    `UNUSED_VAR ({write_uuid})
 
     // CSRs Write /////////////////////////////////////////////////////////////
 
-    reg [`XLEN-1:0] mscratch;
+    // Scheduler CSRs write interface
+    assign sched_csr_if.csr_wr_valid = write_enable && (write_addr == `VX_CSR_MSCRATCH);
+    assign sched_csr_if.csr_wr_wid   = write_wid;
+    assign sched_csr_if.csr_wr_data  = `MEM_ADDR_WIDTH'(write_data);
 
 `ifdef EXT_F_ENABLE
     reg [`NUM_WARPS-1:0][INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
@@ -123,9 +121,6 @@ import VX_fpu_pkg::*;
 `endif
 
     always @(posedge clk) begin
-        if (reset) begin
-            mscratch <= base_dcrs.startup_arg;
-        end
         if (write_enable) begin
             case (write_addr)
             `ifdef EXT_F_ENABLE
@@ -142,11 +137,9 @@ import VX_fpu_pkg::*;
                 `VX_CSR_MTVEC,
                 `VX_CSR_MEPC,
                 `VX_CSR_PMPCFG0,
-                `VX_CSR_PMPADDR0: begin
-                    // do nothing!
-                end
+                `VX_CSR_PMPADDR0,
                 `VX_CSR_MSCRATCH: begin
-                    mscratch <= write_data;
+                    // do nothing (mscratch handled combinatorially above)
                 end
                 default: begin
                     `ASSERT(0, ("invalid CSR write address: %0h (#%0d)", write_addr, write_uuid));
@@ -156,6 +149,9 @@ import VX_fpu_pkg::*;
     end
 
     // CSRs read //////////////////////////////////////////////////////////////
+
+    // Scheduler CSRs read interface
+    assign sched_csr_if.csr_rd_wid  = read_wid;
 
     reg [`XLEN-1:0] read_data_ro_w;
     reg [`XLEN-1:0] read_data_rw_w;
@@ -175,20 +171,34 @@ import VX_fpu_pkg::*;
             `VX_CSR_FRM        : read_data_rw_w = `XLEN'(fcsr[read_wid][INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
             `VX_CSR_FCSR       : read_data_rw_w = `XLEN'(fcsr[read_wid]);
         `endif
-            `VX_CSR_MSCRATCH   : read_data_rw_w = mscratch;
+            `VX_CSR_MSCRATCH   : read_data_rw_w = `XLEN'(sched_csr_if.mscratch);
+
+            `VX_CSR_CTA_ID          : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.cta_id);
+            `VX_CSR_CTA_RANK        : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.cta_rank);
+            `VX_CSR_CTA_SIZE        : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.cta_size);
+            `VX_CSR_CTA_BLOCK_ID_X  : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.block_idx[0]);
+            `VX_CSR_CTA_BLOCK_ID_Y  : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.block_idx[1]);
+            `VX_CSR_CTA_BLOCK_ID_Z  : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.block_idx[2]);
+            `VX_CSR_CTA_BLOCK_DIM_X : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.block_dim[0]);
+            `VX_CSR_CTA_BLOCK_DIM_Y : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.block_dim[1]);
+            `VX_CSR_CTA_BLOCK_DIM_Z : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.block_dim[2]);
+            `VX_CSR_CTA_GRID_DIM_X  : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.grid_dim[0]);
+            `VX_CSR_CTA_GRID_DIM_Y  : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.grid_dim[1]);
+            `VX_CSR_CTA_GRID_DIM_Z  : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.grid_dim[2]);
+            `VX_CSR_CTA_LMEM_ADDR   : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.lmem_addr);
 
             `VX_CSR_WARP_ID    : read_data_ro_w = `XLEN'(read_wid);
             `VX_CSR_CORE_ID    : read_data_ro_w = `XLEN'(CORE_ID);
-            `VX_CSR_ACTIVE_THREADS: read_data_ro_w = `XLEN'(thread_masks[read_wid]);
-            `VX_CSR_ACTIVE_WARPS: read_data_ro_w = `XLEN'(active_warps);
+            `VX_CSR_ACTIVE_THREADS: read_data_ro_w = `XLEN'(sched_csr_if.thread_masks[read_wid]);
+            `VX_CSR_ACTIVE_WARPS: read_data_ro_w = `XLEN'(sched_csr_if.active_warps);
             `VX_CSR_NUM_THREADS: read_data_ro_w = `XLEN'(`NUM_THREADS);
             `VX_CSR_NUM_WARPS  : read_data_ro_w = `XLEN'(`NUM_WARPS);
             `VX_CSR_NUM_CORES  : read_data_ro_w = `XLEN'(`NUM_CORES * `NUM_CLUSTERS);
             `VX_CSR_LOCAL_MEM_BASE: read_data_ro_w = `XLEN'(`LMEM_BASE_ADDR);
             `VX_CSR_NUM_BARRIERS: read_data_ro_w = `XLEN'(`NUM_BARRIERS);
 
-            `CSR_READ_64(`VX_CSR_MCYCLE, read_data_ro_w, cycles);
-            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_w, instret);
+            `CSR_READ_64(`VX_CSR_MCYCLE, read_data_ro_w, sched_csr_if.cycles);
+            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_w, sched_csr_if.instret);
             `VX_CSR_MPM_RESERVED : read_data_ro_w = 'x;
             `VX_CSR_MPM_RESERVED_H : read_data_ro_w = 'x;
 
@@ -209,7 +219,7 @@ import VX_fpu_pkg::*;
                  || (read_addr >= `VX_CSR_MPM_USER_H && read_addr < (`VX_CSR_MPM_USER_H + 32))) begin
                     read_addr_valid_w = 1;
                 `ifdef PERF_ENABLE
-                    case (base_dcrs.mpm_class)
+                    case (mpm_class)
                     `VX_DCR_MPM_CLASS_CORE: begin
                         case (read_addr)
                         // PERF: pipeline
@@ -305,8 +315,6 @@ import VX_fpu_pkg::*;
 
     assign read_data_ro = read_data_ro_w;
     assign read_data_rw = read_data_rw_w;
-
-    `UNUSED_VAR (base_dcrs)
 
 `ifdef PERF_ENABLE
     `UNUSED_VAR (sysmem_perf.icache);

@@ -24,8 +24,8 @@ module VX_dcr_arb import VX_gpu_pkg::*; #(
     VX_dcr_bus_if.slave  bus_in_if,
     VX_dcr_bus_if.master bus_out_if [NUM_REQS]
 );
-    localparam REQ_DATAW = $bits(dcr_req_data_t);
-    localparam RSP_DATAW = $bits(dcr_rsp_data_t);
+    localparam REQ_DATAW = $bits(dcr_req_t);
+    localparam RSP_DATAW = $bits(dcr_rsp_t);
 
     // broadcast request
 

@@ -27,8 +27,6 @@ module VX_execute import VX_gpu_pkg::*; #(
     input pipeline_perf_t   pipeline_perf,
 `endif
 
-    input base_dcrs_t       base_dcrs,
-
     // Dcache interface
     VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS],
 
@@ -112,7 +110,6 @@ module VX_execute import VX_gpu_pkg::*; #(
         .sysmem_perf    (sysmem_perf),
         .pipeline_perf  (pipeline_perf),
     `endif
-        .base_dcrs      (base_dcrs),
         .dispatch_if    (dispatch_if[EX_SFU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[EX_SFU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
     `ifdef EXT_F_ENABLE

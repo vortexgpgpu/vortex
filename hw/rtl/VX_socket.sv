@@ -45,7 +45,10 @@ module VX_socket import VX_gpu_pkg::*;
     input wire [DXA_SMEM_PORTS_PER_SOCKET-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] dxa_smem_local_core_id,
 `endif
 
-    // Barrier
+    // KMU bus
+    VX_kmu_bus_if.slave     kmu_bus_if[1],
+
+    // Global barrier
     VX_gbar_bus_if.master   gbar_bus_if,
 
     // Status
@@ -56,6 +59,18 @@ module VX_socket import VX_gpu_pkg::*;
     localparam scope_core = 0;
     `SCOPE_IO_SWITCH (`SOCKET_SIZE);
 `endif
+
+    VX_kmu_bus_if per_core_kmu_bus_if[`SOCKET_SIZE]();
+
+    VX_kmu_arb #(
+        .NUM_INPUTS (1),
+        .NUM_OUTPUTS (`SOCKET_SIZE)
+    ) kmu_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (kmu_bus_if),
+        .bus_out_if (per_core_kmu_bus_if[`SOCKET_SIZE-1:0])
+    );
 
     VX_gbar_bus_if per_core_gbar_bus_if[`SOCKET_SIZE]();
 
@@ -96,6 +111,10 @@ module VX_socket import VX_gpu_pkg::*;
 
     `RESET_RELAY (icache_reset, reset);
 
+    // icache is read-only; no dirty data to flush.
+    VX_cache_flush_if icache_flush_if();
+    assign icache_flush_if.req = 1'b0;
+
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("%s-icache", INSTANCE_ID))),
         .NUM_UNITS      (`NUM_ICACHES),
@@ -125,7 +144,8 @@ module VX_socket import VX_gpu_pkg::*;
         .clk            (clk),
         .reset          (icache_reset),
         .core_bus_if    (per_core_icache_bus_if),
-        .mem_bus_if     (icache_mem_bus_if)
+        .mem_bus_if     (icache_mem_bus_if),
+        .cache_flush_if (icache_flush_if)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -173,7 +193,8 @@ module VX_socket import VX_gpu_pkg::*;
         .clk            (clk),
         .reset          (dcache_reset),
         .core_bus_if    (per_core_dcache_bus_if),
-        .mem_bus_if     (dcache_mem_bus_if)
+        .mem_bus_if     (dcache_mem_bus_if),
+        .cache_flush_if (dcache_flush_if)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -320,6 +341,16 @@ module VX_socket import VX_gpu_pkg::*;
         .bus_out_if (per_core_dcr_bus_if)
     );
 
+    VX_cache_flush_if per_core_flush_if[`SOCKET_SIZE]();
+    VX_cache_flush_if dcache_flush_if();
+
+    wire [`SOCKET_SIZE-1:0] per_core_flush_req;
+    for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin : g_flush_if
+        assign per_core_flush_req[i]     = per_core_flush_if[i].req;
+        assign per_core_flush_if[i].done = dcache_flush_if.done;
+    end
+    assign dcache_flush_if.req = (| per_core_flush_req);
+
     wire [`SOCKET_SIZE-1:0] per_core_busy;
 
     // Generate all cores
@@ -342,6 +373,8 @@ module VX_socket import VX_gpu_pkg::*;
 
             .dcr_bus_if     (per_core_dcr_bus_if[core_id]),
 
+            .cache_flush_if (per_core_flush_if[core_id]),
+
             .dcache_bus_if  (per_core_dcache_bus_if[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
 
             .icache_bus_if  (per_core_icache_bus_if[core_id]),
@@ -350,6 +383,8 @@ module VX_socket import VX_gpu_pkg::*;
             .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),
             .dxa_bank_wr_if (per_core_dxa_bank_wr_if[core_id]),
         `endif
+
+            .kmu_bus_if     (per_core_kmu_bus_if[core_id]),
 
             .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
 

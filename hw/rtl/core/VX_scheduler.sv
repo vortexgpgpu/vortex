@@ -24,15 +24,15 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     output sched_perf_t     sched_perf,
 `endif
 
-    // configuration
-    input base_dcrs_t       base_dcrs,
-
     // inputs
     VX_warp_ctl_if.slave    warp_ctl_if,
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_decode_sched_if.slave decode_sched_if,
     VX_issue_sched_if.slave issue_sched_if,
     VX_commit_sched_if.slave commit_sched_if,
+
+    // KMU bus
+    VX_kmu_bus_if.slave     kmu_bus_if,
 
     // outputs
     VX_schedule_if.master   schedule_if,
@@ -56,6 +56,39 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [PC_BITS-1:0]      schedule_pc;
     wire                    schedule_valid;
     wire                    schedule_ready;
+
+    // CTA dispatcher
+    wire cta_fire;
+    wire[NW_WIDTH-1:0] cta_wid;
+    wire[PC_BITS-1:0] cta_PC;
+    wire[`NUM_THREADS-1:0] cta_tmask;
+    cta_csrs_t cta_csrs;
+    wire cta_dispatcher_busy;
+
+    // Per-warp mscratch and CTA CSRs owned by scheduler
+    reg [`NUM_WARPS-1:0][`MEM_ADDR_WIDTH-1:0] mscratch_r;
+    cta_csrs_t [`NUM_WARPS-1:0] cta_csrs_r;
+
+    // Warp retirement: TMC with tmask==0 permanently deactivates the warp
+    wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0);
+
+    VX_cta_dispatch cta_dispatcher(
+        .clk        (clk),
+        .reset      (reset),
+        .kmu_bus_if (kmu_bus_if),
+        .active_warps(active_warps),
+        .warp_done  (cta_warp_done),
+        .warp_done_wid(warp_ctl_if.wid),
+        .cta_fire   (cta_fire),
+        .cta_wid    (cta_wid),
+        .cta_PC     (cta_PC),
+        .cta_tmask  (cta_tmask),
+        .cta_csrs   (cta_csrs),
+        .busy       (cta_dispatcher_busy)
+    );
+
+    assign sched_csr_if.mscratch  = mscratch_r[sched_csr_if.csr_rd_wid];
+    assign sched_csr_if.cta_csrs  = cta_csrs_r[sched_csr_if.csr_rd_wid];
 
     // split/join
     wire                    join_valid;
@@ -101,6 +134,13 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         thread_masks_n  = thread_masks;
         warp_pcs_n      = warp_pcs;
 
+        // dispatch warps
+        if (cta_fire) begin
+            active_warps_n[cta_wid] = 1;
+            warp_pcs_n[cta_wid] = cta_PC;
+            thread_masks_n[cta_wid] = cta_tmask;
+        end
+
         // decode unlock
         if (decode_sched_if.valid && decode_sched_if.unlock) begin
             stalled_warps_n[decode_sched_if.wid] = 0;
@@ -110,7 +150,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         if (wspawn_valid && is_single_warp) begin
             active_warps_n |= wspawn.wmask;
             for (integer i = 0; i < `NUM_WARPS; ++i) begin
-                if (wspawn.wmask[i]) begin
+                if (wspawn.wmask[i] && (NW_WIDTH'(i) != wspawn_wid)) begin
                     thread_masks_n[i][0] = 1;
                     warp_pcs_n[i] = wspawn.pc;
                 end
@@ -170,8 +210,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
     end
 
-    `UNUSED_VAR (base_dcrs)
-
     always @(posedge clk) begin
         if (reset) begin
             stalled_warps   <= '0;
@@ -180,20 +218,12 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             thread_masks    <= '0;
             cycles          <= '0;
             wspawn_valid    <=  0;
-        `ifdef RVTEST_MT
-            // activate all warps as single-thread
-            for (integer i = 0; i < `NUM_WARPS; ++i) begin
-                warp_pcs[i]     <= from_fullPC(base_dcrs.startup_addr);
-                active_warps[i] <= 1;
-                thread_masks[i][0] <= 1;
-            end
-        `else
-            // activate first warp as single-thread
-            warp_pcs[0]     <= from_fullPC(base_dcrs.startup_addr);
-            active_warps[0] <= 1;
-            thread_masks[0][0] <= 1;
-        `endif
-            is_single_warp  <= 1;
+            warp_pcs        <= '0;
+            active_warps    <= '0;
+            thread_masks    <= '0;
+            is_single_warp  <= 0;
+            mscratch_r      <= '0;
+            cta_csrs_r      <= '0;
         end else begin
             active_warps   <= active_warps_n;
             stalled_warps  <= stalled_warps_n;
@@ -210,6 +240,23 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             end
             if (wspawn_valid && is_single_warp) begin
                 wspawn_valid <= 0;
+                // copy mscratch from spawning warp to all newly spawned warps
+                for (integer i = 0; i < `NUM_WARPS; ++i) begin
+                    if (wspawn.wmask[i] && (NW_WIDTH'(i) != wspawn_wid)) begin
+                        mscratch_r[i] <= mscratch_r[wspawn_wid];
+                    end
+                end
+            end
+
+            // CTA dispatch: latch per-warp CTA CSRs and mscratch (param)
+            if (cta_fire) begin
+                cta_csrs_r[cta_wid] <= cta_csrs;
+                mscratch_r[cta_wid] <= cta_csrs.param;
+            end
+
+            // MSCRATCH write-back from CSR unit (CSR instruction)
+            if (sched_csr_if.csr_wr_valid) begin
+                mscratch_r[sched_csr_if.csr_wr_wid] <= sched_csr_if.csr_wr_data;
             end
 
             if (busy) begin
@@ -217,6 +264,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             end
         end
     end
+
+    // Barrier unit
 
     VX_bar_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-barrier", INSTANCE_ID))),
@@ -343,7 +392,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         `UNUSED_PIN (size)
     );
 
-    `BUFFER_EX(busy, (active_warps != 0 || ~pending_warp_empty), 1'b1, 1, 1);
+    wire busy_buf;
+    `BUFFER_EX(busy_buf, (active_warps_n != 0 || ~pending_warp_empty), 1'b1, 1, 1);
+    assign busy = busy_buf || cta_dispatcher_busy;
 
     // export CSRs
     assign sched_csr_if.cycles = cycles;

@@ -30,7 +30,9 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     input wire [NUM_BANKS-1:0] bank_req_fire,
     output wire [NUM_BANKS-1:0] flush_begin,
     output wire [`UP(UUID_WIDTH)-1:0] flush_uuid,
-    input wire [NUM_BANKS-1:0] flush_end
+    input wire [NUM_BANKS-1:0] flush_end,
+    // External (DCR-triggered) flush control
+    VX_cache_flush_if.slave cache_flush_if
 );
     `UNUSED_PARAM (TAG_WIDTH)
 
@@ -90,13 +92,17 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_flush_req_mask
         assign flush_req_mask[i] = core_bus_in_if[i].req_valid && core_bus_in_if[i].req_data.flags[MEM_REQ_FLAG_FLUSH];
     end
-    wire flush_req_enable = (| flush_req_mask);
+    wire flush_req_enable = (| flush_req_mask) || cache_flush_if.req;
 
     reg [NUM_REQS-1:0] lock_released, lock_released_n;
     reg [`UP(UUID_WIDTH)-1:0] flush_uuid_r, flush_uuid_n;
+    reg ext_flush_active_r, ext_flush_active_n;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_out_req
-        wire input_enable = ~flush_req_enable || lock_released[i];
+        // block core requests if an internal or external flush is active,
+        // unless the lock for this specific request has been released
+        wire input_enable = ~(flush_req_enable || ext_flush_active_r) || lock_released[i];
+
         assign core_bus_out_if[i].req_valid = core_bus_in_if[i].req_valid && input_enable;
         assign core_bus_out_if[i].req_data  = core_bus_in_if[i].req_data;
         assign core_bus_in_if[i].req_ready  = core_bus_out_if[i].req_ready && input_enable;
@@ -127,11 +133,13 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         flush_done_n = flush_done;
         lock_released_n = lock_released;
         flush_uuid_n = flush_uuid_r;
+        ext_flush_active_n = ext_flush_active_r;
         case (state)
             // STATE_IDLE:
             default: begin
                 if (flush_req_enable) begin
                     state_n = (BANK_SEL_LATENCY != 0) ? STATE_WAIT1 : STATE_FLUSH;
+                    ext_flush_active_n = cache_flush_if.req;
                     for (integer i = NUM_REQS-1; i >= 0; --i) begin
                         if (flush_req_mask[i]) begin
                             flush_uuid_n = core_bus_out_uuid[i];
@@ -163,8 +171,9 @@ module VX_cache_init import VX_gpu_pkg::*; #(
                 // wait until released flush requests are issued
                 // when returning to IDLE state other requests will unlock
                 lock_released_n = lock_released & ~core_bus_out_ready;
-                if (lock_released_n == 0) begin
+                if (lock_released_n == 0 && (!ext_flush_active_r || !cache_flush_if.req)) begin
                     state_n = STATE_IDLE;
+                    ext_flush_active_n = 1'b0;
                 end
             end
         endcase
@@ -175,15 +184,22 @@ module VX_cache_init import VX_gpu_pkg::*; #(
             state <= STATE_IDLE;
             flush_done <= '0;
             lock_released <= '0;
+            ext_flush_active_r <= 1'b0;
         end else begin
             state <= state_n;
             flush_done <= flush_done_n;
             lock_released <= lock_released_n;
+            ext_flush_active_r <= ext_flush_active_n;
         end
         flush_uuid_r <= flush_uuid_n;
     end
 
     assign flush_begin = {NUM_BANKS{state == STATE_FLUSH}};
     assign flush_uuid = flush_uuid_r;
+
+    // Pulse for one cycle when an externally triggered flush sequence completes.
+    assign cache_flush_if.done = (state == STATE_WAIT2)
+                              && ((flush_done | flush_end) == {NUM_BANKS{1'b1}})
+                              && ext_flush_active_r;
 
 endmodule
