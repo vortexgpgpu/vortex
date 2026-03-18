@@ -97,6 +97,13 @@ module VX_core_top import VX_gpu_pkg::*; #(
     assign dxa_smem_bus_if.rsp_ready = 1'b1;
 `endif
 
+    VX_cache_flush_if cache_flush_if();
+    assign cache_flush_if.done = 1'b1; // no cache in unit test; ack immediately
+
+    VX_kmu_bus_if kmu_bus_if();
+    assign kmu_bus_if.valid = 1'b0;
+    assign kmu_bus_if.data  = '0;
+
     VX_dcr_bus_if dcr_bus_if();
 
     assign dcr_bus_if.req_valid = dcr_req_valid;
@@ -187,6 +194,8 @@ module VX_core_top import VX_gpu_pkg::*; #(
         .dxa_smem_bus_if(dxa_smem_bus_if),
     `endif
 
+        .cache_flush_if (cache_flush_if),
+        .kmu_bus_if     (kmu_bus_if),
         .busy           (busy)
     );
 

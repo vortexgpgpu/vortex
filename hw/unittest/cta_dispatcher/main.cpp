@@ -47,7 +47,6 @@ void sim_trace_enable(bool enable) {
 }
 
 int main(int argc, char **argv) {
-  // Initialize Verilators variables
   Verilated::commandArgs(argc, argv);
 
   vl_simulator<VVX_cta_dispatch_top> sim;
@@ -56,41 +55,62 @@ int main(int argc, char **argv) {
 
   tick = sim.reset(tick);
 
-  sim->task_in_req_valid = 1;
-  sim->num_warps = 4;
-  sim->start_pc = 0x12345678;
-  sim->input_param = 0x87654321;
-  sim->input_cta_x = 1;
-  sim->input_cta_y = 2;
-  sim->input_cta_z = 3;
-  sim->input_cta_id = 13;
-  sim->input_remain_mask = 0b1100;
-  sim->active_warps = 0;
+  // Drive a single KMU request: grid 2x2x1, block 4x1x1
+  sim->task_in_valid  = 1;
+  sim->in_PC          = 0x12345678;
+  sim->in_cta_id      = 0;
+  sim->in_block_idx_x = 0;
+  sim->in_block_idx_y = 0;
+  sim->in_block_idx_z = 0;
+  sim->in_block_dim_x = 4;
+  sim->in_block_dim_y = 1;
+  sim->in_block_dim_z = 1;
+  sim->in_grid_dim_x  = 2;
+  sim->in_grid_dim_y  = 2;
+  sim->in_grid_dim_z  = 1;
+  sim->in_param       = 0x87654321;
+  sim->in_lmem_size   = 0;
+  sim->in_block_size  = 4;
+  sim->in_warp_step_x = NUM_THREADS;
+  sim->in_warp_step_y = 0;
+  sim->in_warp_step_z = 0;
+  sim->active_warps   = 0;
+  sim->warp_done      = 0;
+  sim->warp_done_wid  = 0;
 
-  // Track per-warp countdown timers; expire after 4 cycles → warp slot freed
-  std::vector<int> warp_timer(32, 0);
+  // Per-warp countdown timers: expire after 4 cycles → warp slot freed
+  std::vector<int> warp_timer(NUM_WARPS, 0);
 
   for (int i = 0; i < 30; ++i) {
     tick = sim.step(tick, 2);
 
-    // A new warp was dispatched this cycle; start its timer
-    if (sim->cta_sched_fire) {
-      int w = sim->cta_sched_wid;
+    // Retire after accepting one request
+    if (sim->task_in_ready)
+      sim->task_in_valid = 0;
+
+    // A new warp was dispatched this cycle
+    if (sim->cta_fire) {
+      int w = sim->cta_wid;
       if (warp_timer[w] == 0) warp_timer[w] = 4;
     }
 
-    // Advance timers; rebuild active_warps mask
+    // Advance timers; signal warp_done when a timer expires
+    sim->warp_done = 0;
     uint32_t next_active_warps = 0;
-    for (int w = 0; w < 32; ++w) {
+    for (int w = 0; w < NUM_WARPS; ++w) {
       if (warp_timer[w] > 0) {
         warp_timer[w]--;
-        if (warp_timer[w] > 0)
+        if (warp_timer[w] > 0) {
           next_active_warps |= (1u << w);
+        } else {
+          sim->warp_done     = 1;
+          sim->warp_done_wid = w;
+        }
       }
     }
     sim->active_warps = next_active_warps;
-    sim->task_in_req_valid = 0;
   }
 
+  std::cout << "PASSED!" << std::endl;
   return 0;
 }
