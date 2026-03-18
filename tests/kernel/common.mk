@@ -36,7 +36,7 @@ $(PROJECT).dump: $(PROJECT).elf
 $(PROJECT).vxbin: $(PROJECT).elf
 	OBJCOPY=$(CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
 
-$(PROJECT).elf: $(SRCS)
+$(PROJECT).elf: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
 run-rtlsim: $(PROJECT).vxbin

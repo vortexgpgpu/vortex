@@ -243,8 +243,8 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, dst_buf_size));
 
     // Get Results
-    RT_CHECK(vx_mpm_query(device, VX_CSR_MCYCLE, 0, &cycles_per_core));
-    RT_CHECK(vx_mpm_query(device, VX_CSR_MINSTRET, 0, &instrs_per_core));
+    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE, 0, &cycles_per_core));
+    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &instrs_per_core));
     total_cycles_per_core += cycles_per_core;
     total_instrs_per_core += instrs_per_core;
 
