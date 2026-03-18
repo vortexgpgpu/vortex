@@ -168,7 +168,7 @@ jobs:
           chmod -R +x . # Ensure all files have executable permissions
           if [ "${{ matrix.name }}" == "regression" ]; then
             ./ci/regression.sh --unittest
-            ./ci/regression.sh --isa
+            ./ci/regression.sh --riscv
             # TODO: ./ci/regression.sh --kernel
             ./ci/regression.sh --regression
           else
