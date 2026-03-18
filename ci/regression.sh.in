@@ -33,15 +33,15 @@ unittest()
     make -C hw/unittest > /dev/null
 }
 
-isa()
+riscv()
 {
-    echo "begin isa tests..."
+    echo "begin riscv tests..."
 
     make -C sim/simx
     make -C sim/rtlsim
 
-    make -C tests/riscv/isa run-simx
-    make -C tests/riscv/isa run-rtlsim
+    make -C tests/riscv run-simx
+    make -C tests/riscv run-rtlsim
 
     CONFIGS="-DFPU_TYPE_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
@@ -62,7 +62,7 @@ isa()
         CONFIGS="-DFPU_TYPE_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64fx
     fi
 
-    echo "isa tests done!"
+    echo "riscv tests done!"
 }
 
 kernel()
@@ -823,7 +823,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sp] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sp] [--cupbop] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -837,8 +837,8 @@ while [ "$1" != "" ]; do
         --unittest )
                 tests+=("unittest")
                 ;;
-        --isa )
-                tests+=("isa")
+        --riscv )
+                tests+=("riscv")
                 ;;
         --kernel )
                 tests+=("kernel")
@@ -897,7 +897,7 @@ while [ "$1" != "" ]; do
         --all )
                 tests=()
                 tests+=("unittest")
-                tests+=("isa")
+                tests+=("riscv")
                 tests+=("kernel")
                 tests+=("regression")
                 tests+=("dxa")
