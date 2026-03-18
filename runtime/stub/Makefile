@@ -10,7 +10,7 @@ CXXFLAGS += -fPIC
 
 LDFLAGS += -shared -pthread -ldl
 
-SRCS := $(SRC_DIR)/vortex.cpp $(SRC_DIR)/utils.cpp $(SRC_DIR)/perf.cpp
+SRCS := $(SRC_DIR)/vortex.cpp $(SRC_DIR)/utils.cpp $(SRC_DIR)/perf.cpp $(RT_COMMON_DIR)/utils.cpp
 
 # Debugging
 ifdef DEBUG

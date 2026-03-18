@@ -14,6 +14,7 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 #include "types.h"
 #include "kmu.h"
 
@@ -21,91 +22,78 @@ namespace vortex {
 
 class Core; // forward declaration
 
-// Per-warp dispatch record — one VX_cta_dispatch.sv DISPATCH output.
 struct cta_warp_record_t {
   Word       PC;
   ThreadMask tmask;
-  Word       mscratch;       // lower XLEN bits of param (for VX_CSR_MSCRATCH)
-
-  uint32_t   cta_id;         // global CTA index in the grid
-  uint32_t   cta_rank;       // warp index within the CTA [0 .. cta_size-1]
-  uint32_t   cta_size;       // number of warps in the CTA = ceil(block_size/NT)
-  uint32_t   thread_idx[3];  // first thread's 3-D index within the block
-  uint32_t   block_idx[3];   // block's 3-D position in the grid
-  uint32_t   block_dim[3];   // block dimensions
-  uint32_t   grid_dim[3];    // grid dimensions
-  uint64_t   param;          // full 64-bit kernel argument pointer
-  uint32_t   lmem_addr;      // local-memory base address for this CTA
+  Word       mscratch;
+  uint32_t   cta_id;
+  uint32_t   cta_rank;
+  uint32_t   cta_size;
+  uint32_t   thread_idx[3];
+  uint32_t   block_idx[3];
+  uint32_t   block_dim[3];
+  uint32_t   grid_dim[3];
+  uint64_t   param;
+  uint32_t   lmem_addr;
 };
 
-// Stateful CTA dispatcher — software model of VX_cta_dispatch.sv.
-//
-// Holds a pointer to the processor's Kmu (no copy) and maintains its own
-// per-core CTA iteration state so each core independently walks the grid
-// using round-robin assignment (cta_id % total_cores == core_id).
-//
-// Usage:
-//   CtaDispatcher(core)              — binds to Core to access the KMU
-//   step(active_warps, &wid, &rec)  — called once per Emulator::step();
-//                                      lazily starts dispatch on first call;
-//                                      returns true when a warp was activated
-//   running()                        — true while CTAs remain to dispatch
-//   reset()                          — clears all dispatch state
 class CtaDispatcher {
 public:
   explicit CtaDispatcher(Core* core);
 
-  // Clear all dispatch state; restarts lazily on the next step() call.
-  void reset() {
-    started_      = false;
-    has_cta_      = false;
-    lmem_tail_    = 0;
-  }
+  void reset();
 
-  // Try to dispatch one CTA warp rank into a free warp slot.
-  // Lazily starts on first call (reads KMU config from bound Core).
-  // On success, sets *wid_out and *rec_out and returns true.
+  // Try to dispatch one warp rank into a free warp slot.
+  // Returns true on success and sets *wid_out / *rec_out.
   bool step(const WarpMask& active_warps, uint32_t* wid_out, cta_warp_record_t* rec_out);
 
-  // True while started and at least one more warp rank remains to dispatch.
+  // Notify that a warp has exited; frees its lmem slot when all warps of the CTA are done.
+  void warp_done(uint32_t wid);
+
+  // True while CTAs remain to dispatch or active slots hold live warps.
   bool running() const {
-    return started_ && has_cta_;
+    return has_cta_ || has_pending_ || kmu_->running();
   }
 
 private:
-  // Initialize from the KMU stored in the bound Core (called lazily by step).
-  void do_start();
-
-  // Fill *out with the next warp rank and advance internal state.
-  // Returns false when no CTA is loaded (should not happen after has_cta_ check).
   bool next_warp(cta_warp_record_t* out);
 
-  // Pull the next CTA assigned to this core from the KMU grid (IDLE state).
-  void load_next_cta();
+  Core*     core_;
+  Kmu*      kmu_;
+  uint32_t  num_threads_;
+  uint32_t  num_warps_;
+  uint32_t  lmem_base_;
+  uint32_t  lmem_capacity_;
 
-  Core*         core_;
-  const Kmu*    kmu_;          // pointer to processor's KMU — no copy
-  bool          started_;
-  uint32_t      total_cores_;
-  uint32_t      core_id_;
-  uint32_t      num_threads_;
-  uint32_t      num_warps_;
-  uint32_t      lmem_capacity_;
-  uint32_t      lmem_tail_;
+  // Ring-buffer allocation pointer (offset from lmem_base_)
+  uint32_t  lmem_tail_;
+  // Total bytes currently available for new allocations
+  uint32_t  free_size_;
 
-  // Per-core CTA grid iteration state
-  uint32_t      iter_cta_id_;
-  uint32_t      iter_block_idx_[3];
-  bool          iter_running_;
+  // Per-slot tracking (indexed 0..num_warps_-1)
+  std::vector<uint32_t> slot_rem_warps_;  // remaining active warps in this slot
+  std::vector<uint32_t> slot_lmem_size_;  // lmem bytes allocated to this slot
+  // Reverse lookup: wid → slot index
+  std::vector<uint32_t> wid_to_slot_;
+  // FIFO ring for in-order slot allocation
+  uint32_t  head_slot_;   // oldest live slot
+  uint32_t  tail_slot_;   // next slot to fill
 
-  // Current CTA dispatch state (DISPATCH FSM registers)
-  bool          has_cta_;
-  kmu_req_t     cta_;
-  uint32_t      cta_size_;
-  uint32_t      rank_;
-  uint32_t      block_size_rem_;
-  uint32_t      thread_idx_[3];
-  uint32_t      lmem_addr_;
+  // Currently-in-flight CTA (being dispatched warp-rank by warp-rank)
+  bool      has_cta_;
+  uint32_t  cur_slot_;    // slot index assigned to the current in-flight CTA
+  kmu_req_t cta_;
+  uint32_t  cta_size_;
+  uint32_t  rank_;
+  uint32_t  block_size_rem_;
+  uint32_t  thread_idx_[3];
+  uint32_t  lmem_addr_;
+
+  // CTA fetched from KMU but blocked on lmem admission
+  bool      has_pending_;
+  kmu_req_t pending_cta_;
+  Word      cur_kernel_pc_;
+  std::vector<bool> warp_init_mask_;
 };
 
 } // namespace vortex

@@ -64,6 +64,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire[`NUM_THREADS-1:0] cta_tmask;
     cta_csrs_t cta_csrs;
     wire cta_dispatcher_busy;
+    wire cta_init;
 
     // Per-warp mscratch and CTA CSRs owned by scheduler
     reg [`NUM_WARPS-1:0][`MEM_ADDR_WIDTH-1:0] mscratch_r;
@@ -84,6 +85,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .cta_PC     (cta_PC),
         .cta_tmask  (cta_tmask),
         .cta_csrs   (cta_csrs),
+        .cta_init   (cta_init),
         .busy       (cta_dispatcher_busy)
     );
 
@@ -137,7 +139,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // dispatch warps
         if (cta_fire) begin
             active_warps_n[cta_wid] = 1;
-            warp_pcs_n[cta_wid] = cta_PC;
+            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - PC_BITS'(2));
             thread_masks_n[cta_wid] = cta_tmask;
         end
 

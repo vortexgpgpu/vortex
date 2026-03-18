@@ -113,6 +113,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
 
     VX_cache_flush_if cache_flush_if();
     assign cache_flush_if.req = 0;
+    `UNUSED_VAR (cache_flush_if.done)
 
     // Core request
     for (genvar i = 0; i < NUM_REQS; ++i) begin

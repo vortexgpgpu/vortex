@@ -31,12 +31,13 @@ module VX_kmu_top import VX_gpu_pkg::*;
     VX_kmu_bus_if kmu_bus_if();
 
     // Tie off ready so KMU advances through CTAs immediately
-    assign kmu_bus_if.req_ready = 1'b1;
+    assign kmu_bus_if.ready = 1'b1;
 
-    /* verilator lint_off UNUSED */
-    logic kmu_req_valid_unused;
-    assign kmu_req_valid_unused = kmu_bus_if.req_valid;
-    /* verilator lint_on UNUSED */
+    `UNUSED_VAR (kmu_bus_if.valid)
+    `UNUSED_VAR (kmu_bus_if.data)
+
+    wire kmu_busy;
+    `UNUSED_VAR (kmu_busy)
 
     VX_kmu kmu (
         .clk           (clk),
@@ -46,6 +47,7 @@ module VX_kmu_top import VX_gpu_pkg::*;
         .dcr_req_addr  (dcr_req_addr),
         .dcr_req_data  (dcr_req_data),
         .start         (start),
+        .busy          (kmu_busy),
         .kmu_bus_if    (kmu_bus_if)
     );
 

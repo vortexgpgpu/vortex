@@ -18,7 +18,6 @@
 
 namespace vortex {
 
-// Mirrors the kmu_req_t struct from VX_gpu_pkg.sv
 struct kmu_req_t {
   uint64_t PC;
   uint64_t param;
@@ -31,9 +30,6 @@ struct kmu_req_t {
   uint32_t warp_step[3];
 };
 
-// Software model of VX_kmu.sv: configuration store only.
-// DCR writes set the kernel launch parameters; start() activates the launch.
-// CTA grid iteration is the dispatcher's responsibility (one iterator per core).
 class Kmu {
 public:
   Kmu();
@@ -42,25 +38,18 @@ public:
 
   void dcr_write(uint32_t addr, uint32_t value);
 
-  // Called by ProcessorImpl::run() to activate a kernel launch.
-  // Sets active() = true when config is valid (non-zero block_size and grid dims).
+  // Called by ProcessorImpl::run() to arm a kernel launch.
   void start();
 
-  // True after a successful start() call.
-  bool active() const { return active_; }
+  // True while CTAs remain to be issued.
+  bool running() const { return running_; }
 
-  // Config accessors (read-only after DCR writes)
-  uint64_t PC()             const { return PC_;           }
-  uint64_t param()          const { return param_;        }
-  uint32_t block_dim(int i) const { return block_dim_[i]; }
-  uint32_t grid_dim(int i)  const { return grid_dim_[i];  }
-  uint32_t lmem_size()      const { return lmem_size_;    }
-  uint32_t block_size()     const { return block_size_;   }
-  uint32_t warp_step(int i) const { return warp_step_[i]; }
+  // Called by CtaDispatcher when ready for the next CTA.
+  // Fills *req with the next CTA's parameters and advances the iterator.
+  // Returns false when the grid is exhausted.
+  bool step(kmu_req_t* req);
 
 private:
-  bool     active_;
-  // Config registers (written via DCR)
   uint64_t PC_;
   uint64_t param_;
   uint32_t block_dim_[3];
@@ -68,6 +57,9 @@ private:
   uint32_t lmem_size_;
   uint32_t block_size_;
   uint32_t warp_step_[3];
+  bool     running_;
+  uint32_t cta_id_;
+  uint32_t block_idx_[3];
 };
 
 } // namespace vortex

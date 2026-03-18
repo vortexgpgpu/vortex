@@ -33,6 +33,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
     output wire [PC_BITS-1:0]       cta_PC,
     output wire [`NUM_THREADS-1:0]  cta_tmask,
     output cta_csrs_t               cta_csrs,
+    output wire                     cta_init,
     output wire                     busy
 );
     localparam NUM_WARPS    = `NUM_WARPS;
@@ -134,6 +135,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
 
     // Pre-registered admission gate — breaks >= comparator off kmu_bus_if.ready
     reg                 lmem_ok_r;
+
+    // Kernel initialization tracking
+    reg [PC_BITS-1:0]   cur_kernel_pc_r;
+    reg [NUM_WARPS-1:0] warp_init_mask_r;
+    reg                 warp_skip_init_r;
 
     // -------------------------------------------------------------------------
     // FSM + per-dispatch registers
@@ -258,6 +264,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
             warp_fire_r     <= 0;
             warp_id_r       <= '0;
             warp_tmask_r    <= '0;
+            cur_kernel_pc_r <= '0;
+            warp_init_mask_r<= '0;
+            warp_skip_init_r<= 0;
             head_r          <= '0;
             tail_r          <= '0;
             lmem_tail_r     <= '0;
@@ -333,6 +342,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
             case (state)
                 IDLE: begin
                     if (kmu_bus_if_fire) begin
+                        if (kmu_bus_if.data.PC != cur_kernel_pc_r) begin
+                            cur_kernel_pc_r <= kmu_bus_if.data.PC;
+                            warp_init_mask_r <= '0;
+                        end
                         warp_PC      <= kmu_bus_if.data.PC;
                         cta_id_r     <= kmu_bus_if.data.cta_id;
                         block_idx_r  <= kmu_bus_if.data.block_idx;
@@ -362,6 +375,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
                         warp_id_r    <= warp_id_n;
                         // Full warp: all ones.  Partial: (1<<count)-1, no subtrahend barrel shift.
                         warp_tmask_r <= is_full_warp ? {`NUM_THREADS{1'b1}} : partial_tmask;
+                        warp_skip_init_r <= warp_init_mask_r[warp_id_n];
                     end else begin
                         warp_fire_r <= 0;
                     end
@@ -371,6 +385,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
                         // Single shared adder result used for both decrement and last-warp test
                         block_size_r <= block_size_next;
 
+                        warp_init_mask_r[warp_id_r] <= 1'b1;
                         thread_idx_r[0] <= wrap_x ? CTA_TID_WIDTH'(next_x - {1'b0, block_dim_r[0][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_x);
                         thread_idx_r[1] <= wrap_y ? CTA_TID_WIDTH'(next_y - {1'b0, block_dim_r[1][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_y);
                         thread_idx_r[2] <= thread_idx_r[2] + warp_step_r[2] + CTA_TID_WIDTH'(wrap_y);
@@ -394,6 +409,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
     assign cta_wid   = warp_id_r;
     assign cta_PC    = warp_PC;
     assign cta_tmask = warp_tmask_r;
+    assign cta_init  = ~warp_skip_init_r;
 
     reg [NW_WIDTH:0] cta_size_r;
     always @(posedge clk) begin

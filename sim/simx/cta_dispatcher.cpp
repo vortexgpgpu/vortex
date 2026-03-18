@@ -17,61 +17,101 @@
 #include "cluster.h"
 #include "processor_impl.h"
 #include <VX_config.h>
+#include <cassert>
 
 using namespace vortex;
 
 CtaDispatcher::CtaDispatcher(Core* core)
   : core_(core)
-  , kmu_(nullptr)
-  , started_(false)
-  , total_cores_(1)
-  , core_id_(0)
-  , num_threads_(1)
-  , num_warps_(1)
-  , lmem_capacity_(0)
+  , kmu_(&core->socket()->cluster()->processor()->kmu())
+  , num_threads_(core->arch().num_threads())
+  , num_warps_(core->arch().num_warps())
+  , lmem_base_(core->arch().local_mem_base())
+  , lmem_capacity_(1u << LMEM_LOG_SIZE)
   , lmem_tail_(0)
-  , iter_cta_id_(0)
-  , iter_running_(false)
+  , free_size_(1u << LMEM_LOG_SIZE)
+  , slot_rem_warps_(num_warps_, 0)
+  , slot_lmem_size_(num_warps_, 0)
+  , wid_to_slot_(num_warps_, num_warps_)  // num_warps_ = invalid/unassigned
+  , head_slot_(0)
+  , tail_slot_(0)
   , has_cta_(false)
+  , cur_slot_(0)
   , cta_size_(0)
   , rank_(0)
   , block_size_rem_(0)
   , lmem_addr_(0)
+  , has_pending_(false)
+  , cur_kernel_pc_(0)
+  , warp_init_mask_(num_warps_, false)
 {
-  iter_block_idx_[0] = iter_block_idx_[1] = iter_block_idx_[2] = 0;
   thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
 }
 
-void CtaDispatcher::do_start() {
-  const auto& arch = core_->arch();
-
-  // Bind to the processor's KMU — no copy, just a pointer.
-  // ProcessorImpl::run() already called kmu_.start(); we only read config here.
-  kmu_ = &core_->socket()->cluster()->processor()->kmu();
-
-  // Initialize per-core iteration state from scratch
-  iter_cta_id_        = 0;
-  iter_block_idx_[0]  = iter_block_idx_[1] = iter_block_idx_[2] = 0;
-  iter_running_       = kmu_->active();
-
-  total_cores_   = arch.num_cores() * arch.num_clusters();
-  core_id_       = core_->id();
-  num_threads_   = arch.num_threads();
-  num_warps_     = arch.num_warps();
-  lmem_capacity_ = 1u << LMEM_LOG_SIZE;
-  lmem_tail_     = 0;
-  started_       = true;
-
-  load_next_cta();
+void CtaDispatcher::reset() {
+  lmem_tail_ = 0;
+  free_size_  = lmem_capacity_;
+  has_cta_    = false;
+  has_pending_= false;
+  head_slot_  = 0;
+  tail_slot_  = 0;
+  for (uint32_t i = 0; i < num_warps_; ++i) {
+    slot_rem_warps_[i] = 0;
+    slot_lmem_size_[i] = 0;
+    wid_to_slot_[i]    = num_warps_;  // invalid
+  }
+  cur_kernel_pc_ = 0;
+  for (uint32_t i = 0; i < num_warps_; ++i) {
+    warp_init_mask_[i] = false;
+  }
 }
 
 bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_warp_record_t* rec_out) {
-  if (!started_) {
-    do_start();
-  }
-  if (!has_cta_) return false;
+  if (!has_cta_) {
+    // Load next CTA: use stashed pending CTA if available, else request from KMU.
+    if (!has_pending_) {
+      if (!kmu_->step(&pending_cta_)) return false;
+      has_pending_ = true;
+    }
 
-  // find lowest-index free warp slot
+    // Admission control: wait until enough lmem is free.
+    if (pending_cta_.lmem_size > 0 && free_size_ < pending_cta_.lmem_size)
+      return false;
+
+    if (pending_cta_.PC != cur_kernel_pc_) {
+      cur_kernel_pc_ = pending_cta_.PC;
+      for (uint32_t i = 0; i < num_warps_; ++i) {
+        warp_init_mask_[i] = false;
+      }
+    }
+
+    // Accept the pending CTA.
+    cta_ = pending_cta_;
+    has_pending_ = false;
+
+    cta_size_       = (cta_.block_size + num_threads_ - 1) / num_threads_;
+    rank_           = 0;
+    block_size_rem_ = cta_.block_size;
+    thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
+
+    // Allocate lmem slot.
+    lmem_addr_ = 0;
+    if (cta_.lmem_size > 0) {
+      lmem_addr_  = lmem_base_ + lmem_tail_;
+      lmem_tail_  = (lmem_tail_ + cta_.lmem_size) & (lmem_capacity_ - 1);
+      free_size_  -= cta_.lmem_size;
+    }
+
+    // Claim the next FIFO slot.
+    cur_slot_ = tail_slot_;
+    tail_slot_ = (tail_slot_ + 1) % num_warps_;
+    slot_lmem_size_[cur_slot_] = cta_.lmem_size;
+    slot_rem_warps_[cur_slot_] = cta_size_;
+
+    has_cta_ = true;
+  }
+
+  // Find lowest-index free warp slot.
   int free_wid = -1;
   for (int wid = 0; wid < (int)num_warps_; ++wid) {
     if (!active_warps.test(wid)) {
@@ -82,14 +122,40 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
   if (free_wid < 0) return false;
 
   if (!next_warp(rec_out)) return false;
+
+  // If kernel already initialized on this warp, skip the prologue
+  if (warp_init_mask_[free_wid]) {
+    rec_out->PC -= 8;
+  } else {
+    warp_init_mask_[free_wid] = true;
+  }
+
+  wid_to_slot_[free_wid] = cur_slot_;
   *wid_out = uint32_t(free_wid);
   return true;
+}
+
+void CtaDispatcher::warp_done(uint32_t wid) {
+  uint32_t slot = wid_to_slot_[wid];
+  if (slot >= num_warps_) return;  // not a CTA-dispatcher warp
+  wid_to_slot_[wid] = num_warps_;  // clear assignment
+  assert(slot_rem_warps_[slot] > 0);
+  if (--slot_rem_warps_[slot] == 0) {
+    // All warps of this CTA are done; reclaim lmem.
+    free_size_ += slot_lmem_size_[slot];
+    slot_lmem_size_[slot] = 0;
+    // Advance FIFO head past any completed slots.
+    if (slot == head_slot_) {
+      while (head_slot_ != tail_slot_ && slot_rem_warps_[head_slot_] == 0) {
+        head_slot_ = (head_slot_ + 1) % num_warps_;
+      }
+    }
+  }
 }
 
 bool CtaDispatcher::next_warp(cta_warp_record_t* out) {
   if (!has_cta_) return false;
 
-  // Fill warp record for current rank
   out->PC       = Word(cta_.PC);
   out->mscratch = Word(cta_.param);
   out->param    = cta_.param;
@@ -115,86 +181,30 @@ bool CtaDispatcher::next_warp(cta_warp_record_t* out) {
 
   out->lmem_addr = lmem_addr_;
 
-  // Thread mask: full warp or partial last warp
+  // Thread mask: full warp or partial last warp.
   out->tmask.resize(num_threads_);
   out->tmask.reset();
   uint32_t active = (block_size_rem_ >= num_threads_) ? num_threads_ : block_size_rem_;
   for (uint32_t t = 0; t < active; ++t) out->tmask.set(t);
 
-  // Advance thread_idx by warp_step with 3-D carry propagation
-  // (mirrors VX_cta_dispatch.sv DISPATCH FSM thread_idx advancement)
+  // Advance thread_idx with 3-D carry propagation.
+  // warp_step[d] == 0 means the warp fully covers dimension d, so always carry.
   uint32_t next_x = thread_idx_[0] + cta_.warp_step[0];
-  bool wrap_x = (cta_.block_dim[0] > 0) && (next_x >= cta_.block_dim[0]);
-  thread_idx_[0] = wrap_x ? (next_x - cta_.block_dim[0]) : next_x;
+  bool wrap_x = (cta_.warp_step[0] == 0) || ((cta_.block_dim[0] > 0) && (next_x >= cta_.block_dim[0]));
+  thread_idx_[0] = (cta_.block_dim[0] > 0) ? (next_x % cta_.block_dim[0]) : next_x;
 
   uint32_t next_y = thread_idx_[1] + (wrap_x ? cta_.warp_step[1] : 0);
-  bool wrap_y = (cta_.block_dim[1] > 0) && (next_y >= cta_.block_dim[1]);
-  thread_idx_[1] = wrap_y ? (next_y - cta_.block_dim[1]) : next_y;
+  bool wrap_y = (cta_.warp_step[1] == 0 && wrap_x) || ((cta_.block_dim[1] > 0) && (next_y >= cta_.block_dim[1]));
+  thread_idx_[1] = (cta_.block_dim[1] > 0) ? (next_y % cta_.block_dim[1]) : next_y;
 
   thread_idx_[2] += (wrap_y ? cta_.warp_step[2] : 0);
 
-  // Decrement remaining thread count for this CTA
   block_size_rem_ -= (block_size_rem_ >= num_threads_) ? num_threads_ : block_size_rem_;
 
   ++rank_;
   if (rank_ >= cta_size_) {
-    // CTA fully dispatched: load next CTA
-    load_next_cta();
+    has_cta_ = false;
   }
 
   return true;
-}
-
-void CtaDispatcher::load_next_cta() {
-  has_cta_ = false;
-  while (iter_running_) {
-    // Build CTA request from KMU config + local iteration state
-    kmu_req_t req;
-    req.PC         = kmu_->PC();
-    req.param      = kmu_->param();
-    req.cta_id     = iter_cta_id_;
-    req.lmem_size  = kmu_->lmem_size();
-    req.block_size = kmu_->block_size();
-    for (int i = 0; i < 3; ++i) {
-      req.block_idx[i] = iter_block_idx_[i];
-      req.block_dim[i] = kmu_->block_dim(i);
-      req.grid_dim[i]  = kmu_->grid_dim(i);
-      req.warp_step[i] = kmu_->warp_step(i);
-    }
-
-    // Advance iteration state (X innermost, Z outermost — mirrors VX_kmu.sv)
-    ++iter_cta_id_;
-    ++iter_block_idx_[0];
-    if (iter_block_idx_[0] >= kmu_->grid_dim(0)) {
-      iter_block_idx_[0] = 0;
-      ++iter_block_idx_[1];
-      if (iter_block_idx_[1] >= kmu_->grid_dim(1)) {
-        iter_block_idx_[1] = 0;
-        ++iter_block_idx_[2];
-        if (iter_block_idx_[2] >= kmu_->grid_dim(2)) {
-          iter_running_ = false;
-        }
-      }
-    }
-
-    // Round-robin assignment: this core handles CTAs where cta_id % total_cores == core_id
-    if (req.cta_id % total_cores_ != core_id_) continue;
-
-    cta_            = req;
-    cta_size_       = (req.block_size + num_threads_ - 1) / num_threads_;
-    rank_           = 0;
-    block_size_rem_ = req.block_size;
-    thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
-
-    // Assign LMEM slot: ring-buffer allocation, one slot per CTA
-    lmem_addr_ = 0;
-    if (req.lmem_size > 0) {
-      lmem_addr_ = lmem_tail_;
-      lmem_tail_ = (lmem_tail_ + req.lmem_size) & (lmem_capacity_ - 1);
-    }
-
-    has_cta_ = true;
-    return;
-  }
-  // No more CTAs assigned to this core
 }

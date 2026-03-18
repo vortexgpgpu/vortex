@@ -40,9 +40,9 @@ warp_t::warp_t(uint32_t num_threads)
 {
 }
 
-void warp_t::reset(uint64_t startup_addr) {
+void warp_t::reset() {
   this->tmask.reset();
-  this->PC = startup_addr;
+  this->PC   = 0;
   this->uuid = 0;
   this->fcsr = 0;
 
@@ -93,7 +93,7 @@ Emulator::~Emulator() {
 
 void Emulator::reset() {
   for (auto& warp : warps_) {
-    warp.reset(0);
+    warp.reset();
   }
 
   for (auto& barrier : barriers_) {
@@ -110,7 +110,7 @@ void Emulator::reset() {
 void Emulator::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   auto& warp = warps_[wid];
 
-  warp.reset(rec.PC);
+  warp.PC       = rec.PC;
   warp.tmask    = rec.tmask;
   warp.mscratch = rec.mscratch;
 
@@ -276,6 +276,7 @@ bool Emulator::setTmask(uint32_t wid, const ThreadMask& tmask) {
   // deactivate warp if no active threads
   if (!tmask.any()) {
     active_warps_.reset(wid);
+    cta_dispatcher_.warp_done(wid);
     return false;
   }
   return true;
@@ -612,6 +613,19 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_CTA_ID:       return warps_.at(wid).cta_csrs.cta_id;
   case VX_CSR_CTA_RANK:     return warps_.at(wid).cta_csrs.cta_rank;
   case VX_CSR_CTA_SIZE:     return warps_.at(wid).cta_csrs.cta_size;
+  case VX_CSR_CTA_THREAD_ID_X:
+  case VX_CSR_CTA_THREAD_ID_Y:
+  case VX_CSR_CTA_THREAD_ID_Z: {
+    auto& cta = warps_.at(wid).cta_csrs;
+    uint32_t x = cta.thread_idx[0] + tid;
+    uint32_t y = cta.thread_idx[1] + x / cta.block_dim[0];
+    uint32_t z = cta.thread_idx[2] + y / cta.block_dim[1];
+    x %= cta.block_dim[0];
+    y %= cta.block_dim[1];
+    if (addr == VX_CSR_CTA_THREAD_ID_X) return x;
+    if (addr == VX_CSR_CTA_THREAD_ID_Y) return y;
+    return z;
+  }
   case VX_CSR_CTA_BLOCK_ID_X:  return warps_.at(wid).cta_csrs.block_idx[0];
   case VX_CSR_CTA_BLOCK_ID_Y:  return warps_.at(wid).cta_csrs.block_idx[1];
   case VX_CSR_CTA_BLOCK_ID_Z:  return warps_.at(wid).cta_csrs.block_idx[2];

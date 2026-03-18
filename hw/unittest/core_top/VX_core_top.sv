@@ -100,6 +100,7 @@ module VX_core_top import VX_gpu_pkg::*; #(
 
     VX_cache_flush_if cache_flush_if();
     assign cache_flush_if.done = 1'b1; // no cache in unit test; ack immediately
+    `UNUSED_VAR (cache_flush_if.req)
 
     VX_kmu_bus_if kmu_bus_if();
     assign kmu_bus_if.valid = 1'b0;

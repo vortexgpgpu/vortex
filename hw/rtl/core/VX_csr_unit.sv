@@ -118,11 +118,26 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign gtid[i] = (`XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`XLEN'(execute_if.data.header.wid) << NT_BITS) + wtid[i];
     end
 
+    // Per-lane CTA thread IDs
+    wire [NUM_LANES-1:0][`XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cta_tid
+        wire [CTA_TID_WIDTH:0] tx = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[0]) + (CTA_TID_WIDTH+1)'(wtid[i]);
+        wire cx = (tx >= sched_csr_if.cta_csrs.block_dim[0]);
+        wire [CTA_TID_WIDTH:0] ty = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[1]) + (CTA_TID_WIDTH+1)'(cx);
+        wire cy = (ty >= sched_csr_if.cta_csrs.block_dim[1]);
+        assign cta_tid_x[i] = cx ? `XLEN'(tx) - `XLEN'(sched_csr_if.cta_csrs.block_dim[0]) : `XLEN'(tx);
+        assign cta_tid_y[i] = cy ? `XLEN'(ty) - `XLEN'(sched_csr_if.cta_csrs.block_dim[1]) : `XLEN'(ty);
+        assign cta_tid_z[i] = `XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + `XLEN'(cy);
+    end
+
     always @(*) begin
         csr_rd_enable = 0;
         case (csr_addr)
-        `VX_CSR_THREAD_ID : csr_read_data = wtid;
-        `VX_CSR_MHARTID   : csr_read_data = gtid;
+        `VX_CSR_THREAD_ID       : csr_read_data = wtid;
+        `VX_CSR_MHARTID         : csr_read_data = gtid;
+        `VX_CSR_CTA_THREAD_ID_X : csr_read_data = cta_tid_x;
+        `VX_CSR_CTA_THREAD_ID_Y : csr_read_data = cta_tid_y;
+        `VX_CSR_CTA_THREAD_ID_Z : csr_read_data = cta_tid_z;
         default : begin
             csr_read_data = {NUM_LANES{csr_read_data_ro | csr_read_data_rw}};
             csr_rd_enable = 1;

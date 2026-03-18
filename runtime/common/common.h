@@ -61,5 +61,5 @@ inline bool is_aligned(uint64_t addr, uint64_t alignment) {
   return 0 == (addr & (alignment - 1));
 }
 
-int prepare_kernel_launch_params(vx_device_h hdevice, uint32_t dimension, const uint32_t *block_dim,
+void prepare_kernel_launch_params(uint32_t threads_per_warp, uint32_t dimension, const uint32_t *block_dim,
     uint32_t* block_size, uint32_t* warp_step_x, uint32_t* warp_step_y, uint32_t* warp_step_z);
