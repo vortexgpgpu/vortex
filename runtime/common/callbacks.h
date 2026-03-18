@@ -54,8 +54,9 @@ typedef struct {
   // Copy bytes from device memory to host
   int (*copy_from_dev) (void* host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size);
 
-  // Start device execution
-  int (*start) (vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments);
+  // Start device execution with work group
+  int (*start_wg) (vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments,
+                   uint32_t dim, const uint32_t* grid_dim, const uint32_t * block_dim, uint32_t lmem_size);
 
   // Wait for device ready with milliseconds timeout
   int (*ready_wait) (vx_device_h hdevice, uint64_t timeout);

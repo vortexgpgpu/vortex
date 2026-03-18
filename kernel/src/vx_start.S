@@ -21,6 +21,45 @@
 .type   _start, @function
 _start:
 
+#ifdef KMU_ENABLE
+
+  # set global pointer register
+  la    gp, __global_pointer
+
+  # set stack pointer register
+  LOAD_IMMEDIATE64(sp, STACK_BASE_ADDR)
+  csrr  t0, VX_CSR_MHARTID
+  sll   t1, t0, STACK_LOG2_SIZE
+  sub   sp, sp, t1
+
+  # set thread pointer register
+  # use address space after BSS region
+  la    t1, __tbss_size
+  mul   t0, t0, t1
+  la    tp, _end
+  add   tp, tp, t0
+
+  # initialize TLS for all warps
+  call  __init_tls
+
+  # initialize trap vector
+  # la t0, trap_entry
+  # csrw mtvec, t0
+
+#ifdef HAVE_INITFINI_ARRAY
+  # run global initialization functions
+  call  __libc_init_array
+#endif
+
+  # call main program routine
+  csrr  a0, VX_CSR_MSCRATCH
+  call  kernel_main
+
+  # shutdown warp
+  .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
+
+#else
+
   # initialize per-thread registers
   csrr  t0, VX_CSR_NUM_WARPS  # get num warps
   la    t1, init_regs_all
@@ -70,7 +109,6 @@ _start:
 _Exit:
   li t0, IO_EXIT_CODE
   sw a0, 0(t0)
-  fence
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
 
 .section .text
@@ -116,6 +154,8 @@ init_tls_all:
   call  __init_tls
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
   ret
+
+#endif
 
 .section .data
 	.global __dso_handle
