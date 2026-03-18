@@ -4,7 +4,6 @@
 #include <vector>
 #include <vortex.h>
 #include "common.h"
-#include "VX_types.h"
 
 #define FLOAT_ULP 6
 
@@ -30,7 +29,7 @@ public:
     return "integer";
   }
   static int generate() {
-    return rand() % 100;
+    return rand();
   }
   static bool compare(int a, int b, int index, int errors) {
     if (a != b) {
@@ -71,12 +70,11 @@ public:
 };
 
 const char* kernel_file = "kernel.vxbin";
-uint32_t size = 64;
+uint32_t size = 16;
 
 vx_device_h device = nullptr;
 vx_buffer_h src0_buffer = nullptr;
 vx_buffer_h src1_buffer = nullptr;
-vx_buffer_h src2_buffer = nullptr;
 vx_buffer_h dst_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
@@ -112,7 +110,6 @@ void cleanup() {
   if (device) {
     vx_mem_free(src0_buffer);
     vx_mem_free(src1_buffer);
-    vx_mem_free(src2_buffer);
     vx_mem_free(dst_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
@@ -130,170 +127,77 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
+  uint32_t num_points = size;
+  uint32_t buf_size = num_points * sizeof(TYPE);
 
-  // Temporary
-  /*size = 8;*/
-
-  // Assignments
-  uint32_t A_buf_size   = size * size * sizeof(TYPE);
-  uint32_t dst_buf_size = size * sizeof(TYPE);
-
-  std::cout << "number of points: " << size << std::endl;
+  std::cout << "number of points: " << num_points << std::endl;
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
+  std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
-  kernel_arg.size = size;
-
+  kernel_arg.num_points = num_points;
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, A_buf_size, VX_MEM_READ_WRITE, &src0_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src0_buffer));
   RT_CHECK(vx_mem_address(src0_buffer, &kernel_arg.src0_addr));
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_READ_WRITE, &src1_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src1_buffer));
   RT_CHECK(vx_mem_address(src1_buffer, &kernel_arg.src1_addr));
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_READ_WRITE, &src2_buffer));
-  RT_CHECK(vx_mem_address(src2_buffer, &kernel_arg.src2_addr));
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_READ_WRITE, &dst_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &dst_buffer));
   RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
 
   std::cout << "dev_src0=0x" << std::hex << kernel_arg.src0_addr << std::endl;
   std::cout << "dev_src1=0x" << std::hex << kernel_arg.src1_addr << std::endl;
-  std::cout << "dev_src2=0x" << std::hex << kernel_arg.src2_addr << std::endl;
   std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::endl;
 
   // allocate host buffers
   std::cout << "allocate host buffers" << std::endl;
-  std::vector<TYPE> h_src0( (size * size));
-  std::vector<TYPE> h_src1(size);
-  std::vector<TYPE> h_src2(size);
-  std::vector<TYPE> h_dst(size);
+  std::vector<TYPE> h_src0(num_points);
+  std::vector<TYPE> h_src1(num_points);
+  std::vector<TYPE> h_dst(num_points);
 
-  for (uint32_t i = 0; i < size * size; ++i) {
+  for (uint32_t i = 0; i < num_points; ++i) {
     h_src0[i] = Comparator<TYPE>::generate();
+    h_src1[i] = Comparator<TYPE>::generate();
   }
-
-  for(uint32_t i = 0; i < size; i++){
-    h_src1[i] = 0.0f;
-    h_src2[i] = Comparator<TYPE>::generate();
-  }
-
-
-  // Temporary (Debug)
-  /*double A[8*8] = {*/
-  /*  10, 1, 0, 0, 0, 0, 0, 0,*/
-  /*   1,10, 1, 0, 0, 0, 0, 0,*/
-  /*   0, 1,10, 1, 0, 0, 0, 0,*/
-  /*   0, 0, 1,10, 1, 0, 0, 0,*/
-  /*   0, 0, 0, 1,10, 1, 0, 0,*/
-  /*   0, 0, 0, 0, 1,10, 1, 0,*/
-  /*   0, 0, 0, 0, 0, 1,10, 1,*/
-  /*   0, 0, 0, 0, 0, 0, 1,10*/
-  /*};*/
-  /*double b[8] = {11, 12, 12, 12, 12, 12, 12, 11};*/
-  /**/
-  /**/
-  /*for(uint32_t i = 0; i < size * size; i++){*/
-  /*  h_src0[i] = A[i];*/
-  /*}*/
-  /*for(uint32_t i = 0; i < size; i++){*/
-  /*  h_src1[i] = 0.0;*/
-  /*  h_src2[i] = b[i];*/
-  /*}*/
-
 
   // upload source buffer0
   std::cout << "upload source buffer0" << std::endl;
-  RT_CHECK(vx_copy_to_dev(src0_buffer, h_src0.data(), 0, A_buf_size));
+  RT_CHECK(vx_copy_to_dev(src0_buffer, h_src0.data(), 0, buf_size));
 
-  // upload source buffer0
+  // upload source buffer1
   std::cout << "upload source buffer1" << std::endl;
-  RT_CHECK(vx_copy_to_dev(src1_buffer, h_src1.data(), 0, dst_buf_size));
+  RT_CHECK(vx_copy_to_dev(src1_buffer, h_src1.data(), 0, buf_size));
 
-  // upload source buffer0
-  std::cout << "upload source buffer2" << std::endl;
-  RT_CHECK(vx_copy_to_dev(src2_buffer, h_src2.data(), 0, dst_buf_size));
-
-
-  // upload program
-  std::cout << "upload program" << std::endl;
+  // Upload kernel binary
+  std::cout << "Upload kernel binary" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
 
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
+  // start device
+  std::cout << "start device" << std::endl;
+  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 1, &num_points, nullptr, 0));
 
-
-  uint64_t total_cycles_per_core(0);
-  uint64_t total_instrs_per_core(0);
-  uint64_t cycles_per_core;
-  uint64_t instrs_per_core;
-
-  /*uint64_t iteration = 30;*/
-  uint64_t iteration = 1;
-
-  for(uint32_t k = 0; k < iteration; k++){
-
-    // start device
-    std::cout << "start device" << std::endl;
-    RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
-
-    // wait for completion
-    std::cout << "wait for completion" << std::endl;
-    RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
-
-    // download destination buffer
-    std::cout << "download destination buffer" << std::endl;
-    RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, dst_buf_size));
-
-    // Get Results
-    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE, 0, &cycles_per_core));
-    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &instrs_per_core));
-    total_cycles_per_core += cycles_per_core;
-    total_instrs_per_core += instrs_per_core;
-
-    /*printf("%d %d\n", cycles_per_core, instrs_per_core);*/
-
-    // Prepare next run
-    for(uint32_t i = 0; i < size; i++){
-        h_src1[i] = h_dst[i];
-    }
-
-    // upload source buffer0
-    std::cout << "upload source buffer1" << std::endl;
-    RT_CHECK(vx_copy_to_dev(src1_buffer, h_src1.data(), 0, dst_buf_size));
-
-    printf("%d\n",k);
-  }
-
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, dst_buf_size));
+  RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, buf_size));
 
   // verify result
   std::cout << "verify result" << std::endl;
-
-  // Run Golden result test
-  std::vector<TYPE> h_gold(size);
-  std::vector<TYPE> h_result(size);
-  for(uint32_t i = 0; i < size; i++){
-        h_gold[i] = 0.0f;
-  }
-
-  jacobi_cpu(h_src0.data(), h_gold.data(), h_result.data(), h_src2.data(), size, iteration);
-
-
-  // Check for errors
   int errors = 0;
-  for (uint32_t i = 0; i < size; ++i) {
-    auto ref = h_result[i];
+  for (uint32_t i = 0; i < num_points; ++i) {
+    auto ref = h_src0[i] + h_src1[i];
     auto cur = h_dst[i];
     if (!Comparator<TYPE>::compare(cur, ref, i, errors)) {
       ++errors;
     }
-    printf("%f\n", h_dst[i]);
   }
-  printf("total_cycles=%ld total_insn=%ld\n", total_cycles_per_core, total_instrs_per_core);
 
   // cleanup
   std::cout << "cleanup" << std::endl;

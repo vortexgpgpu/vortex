@@ -15,6 +15,7 @@ all:
 	$(MAKE) -C sort
 	$(MAKE) -C fence
 	$(MAKE) -C vecadd
+	$(MAKE) -C vecadd_v2
 	$(MAKE) -C sgemm
 	$(MAKE) -C conv3
 	$(MAKE) -C relu
@@ -48,6 +49,7 @@ run-simx:
 	$(MAKE) -C sort run-simx
 	$(MAKE) -C fence run-simx
 	$(MAKE) -C vecadd run-simx
+	$(MAKE) -C vecadd_v2 run-simx
 	$(MAKE) -C sgemm run-simx
 	$(MAKE) -C conv3 run-simx
 	$(MAKE) -C relu run-simx
@@ -77,6 +79,7 @@ run-rtlsim:
 	$(MAKE) -C sort run-rtlsim
 	$(MAKE) -C fence run-rtlsim
 	$(MAKE) -C vecadd run-rtlsim
+	$(MAKE) -C vecadd_v2 run-rtlsim
 	$(MAKE) -C sgemm run-rtlsim
 	$(MAKE) -C conv3 run-rtlsim
 	$(MAKE) -C relu run-rtlsim
@@ -105,6 +108,7 @@ clean:
 	$(MAKE) -C diverge clean
 	$(MAKE) -C sort clean
 	$(MAKE) -C fence clean
+	$(MAKE) -C vecadd_v2 clean
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C sgemm clean
 	$(MAKE) -C sgemm_tcu clean

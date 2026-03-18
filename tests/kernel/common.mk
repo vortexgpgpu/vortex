@@ -36,7 +36,7 @@ $(PROJECT).dump: $(PROJECT).elf
 $(PROJECT).bin: $(PROJECT).elf
 	$(CP) -O binary $< $@
 
-$(PROJECT).elf: $(SRCS)
+$(PROJECT).elf: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
 run-rtlsim: $(PROJECT).bin
