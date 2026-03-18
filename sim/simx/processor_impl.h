@@ -17,6 +17,7 @@
 #include "cache_sim.h"
 #include "constants.h"
 #include "cluster.h"
+#include "kmu.h"
 
 namespace vortex {
 
@@ -35,6 +36,8 @@ public:
 
   void attach_ram(RAM* mem);
 
+  void reset();
+
   int run();
 
   int dcr_write(uint32_t addr, uint32_t value);
@@ -47,11 +50,12 @@ public:
 
   PerfStats perf_stats() const;
 
+  const Kmu& kmu() const { return kmu_; }
+
 private:
 
-  void reset();
-
   const Arch& arch_;
+  Kmu         kmu_;
   std::vector<std::shared_ptr<Cluster>> clusters_;
   MemSim::Ptr memsim_;
   CacheSim::Ptr l3cache_;

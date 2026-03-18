@@ -136,8 +136,7 @@ void ProcessorImpl::set_satp(uint64_t satp) {
 #endif
 
 int ProcessorImpl::run() {
-  SimPlatform::instance().reset();
-  this->reset();
+  kmu_.start();
 
   bool done;
   int exitcode = 0;
@@ -158,6 +157,7 @@ int ProcessorImpl::run() {
 }
 
 void ProcessorImpl::reset() {
+  SimPlatform::instance().reset();
   perf_mem_reads_ = 0;
   perf_mem_writes_ = 0;
   perf_mem_latency_ = 0;
@@ -165,6 +165,11 @@ void ProcessorImpl::reset() {
 }
 
 int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
+  // KMU DCRs are stored in the processor-level KMU and not broadcast to cores
+  if (addr >= VX_DCR_KMU_STATE_BEGIN && addr < VX_DCR_KMU_STATE_END) {
+    kmu_.dcr_write(addr, value);
+    return 0;
+  }
   for (auto& cluster : clusters_) {
     int ret = cluster->dcr_write(addr, value);
     if (ret != 0)
@@ -212,6 +217,10 @@ Processor::~Processor() {
 
 void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
+}
+
+void Processor::reset() {
+  impl_->reset();
 }
 
 int Processor::run() {

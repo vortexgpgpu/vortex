@@ -33,6 +33,8 @@ public:
 
   void attach_ram(RAM* mem);
 
+  void reset();
+
   int run();
 
   int dcr_write(uint32_t addr, uint32_t value);

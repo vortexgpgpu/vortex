@@ -20,6 +20,7 @@
 #include <mem.h>
 #include "types.h"
 #include "instr.h"
+#include "cta_dispatcher.h"
 #ifdef EXT_TCU_ENABLE
 #include "tensor_unit.h"
 #endif
@@ -48,6 +49,31 @@ struct ipdom_entry_t {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+struct cta_csrs_t {
+  uint32_t cta_id;
+  uint32_t cta_rank;
+  uint32_t cta_size;
+  uint32_t thread_idx[3];
+  uint32_t block_idx[3];
+  uint32_t block_dim[3];
+  uint32_t grid_dim[3];
+  uint32_t lmem_addr;
+
+  cta_csrs_t()
+    : cta_id(0)
+    , cta_rank(0)
+    , cta_size(0)
+    , lmem_addr(0)
+  {
+    thread_idx[0] = thread_idx[1] = thread_idx[2] = 0;
+    block_idx[0]  = block_idx[1]  = block_idx[2]  = 0;
+    block_dim[0]  = block_dim[1]  = block_dim[2]  = 1;
+    grid_dim[0]   = grid_dim[1]   = grid_dim[2]   = 1;
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 struct warp_t {
   std::vector<std::vector<Word>>    ireg_file;
   std::vector<std::vector<uint64_t>>freg_file;
@@ -57,6 +83,12 @@ struct warp_t {
   Word                              PC;
   Byte                              fcsr;
   uint32_t                          uuid;
+
+  // Per-warp MSCRATCH (holds kernel arg pointer, set at CTA dispatch)
+  Word                              mscratch;
+
+  // CTA CSR values set at dispatch time
+  cta_csrs_t                        cta_csrs;
 
   warp_t(uint32_t num_threads);
 
@@ -162,11 +194,13 @@ private:
   void trigger_ecall();
   void trigger_ebreak();
 
+  void activate_warp(uint32_t wid, const cta_warp_record_t& rec);
+
   const Arch& arch_;
   Core*       core_;
-  uint64_t    startup_addr_;
-  uint64_t    startup_arg_;
   uint32_t    mpm_class_;
+
+  CtaDispatcher cta_dispatcher_;
 
   std::vector<warp_t> warps_;
   WarpMask    active_warps_;
@@ -175,7 +209,6 @@ private:
   std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;
   uint32_t    ipdom_size_;
-  Word        csr_mscratch_;
   wspawn_t    wspawn_;
 
   PoolAllocator<Instr, 64> instr_pool_;

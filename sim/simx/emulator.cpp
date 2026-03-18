@@ -35,7 +35,10 @@ warp_t::warp_t(uint32_t num_threads)
   , tmask(num_threads)
   , PC(0)
   , uuid(0)
-{}
+  , mscratch(0)
+  , cta_csrs()
+{
+}
 
 void warp_t::reset(uint64_t startup_addr) {
   this->tmask.reset();
@@ -74,6 +77,8 @@ void warp_t::reset(uint64_t startup_addr) {
 Emulator::Emulator(const Arch &arch, Core* core)
     : arch_(arch)
     , core_(core)
+    , mpm_class_(0)
+    , cta_dispatcher_(core)
     , warps_(arch.num_warps(), arch.num_threads())
     , barriers_(arch.num_warps() * arch.num_barriers())
     , ipdom_size_(arch.num_threads()-1)
@@ -87,35 +92,56 @@ Emulator::~Emulator() {
 }
 
 void Emulator::reset() {
-  uint64_t startup_addr = startup_addr_;
-  uint64_t startup_arg  = startup_arg_;
-
   for (auto& warp : warps_) {
-    warp.reset(startup_addr);
+    warp.reset(0);
   }
 
   for (auto& barrier : barriers_) {
     barrier.reset();
   }
 
-  csr_mscratch_ = startup_arg;
-
   stalled_warps_.reset();
   active_warps_.reset();
-
-  #ifdef RVTEST_MT
-    // activate all warps with a single thread
-    for (int i = 0; i < arch_.num_warps(); ++i) {
-      active_warps_.set(i); // activate warp (i)
-      warps_[i].tmask.set(0); // activate thread (0) or warp (i)
-    }
-  #else
-    // activate first warp as single-thread
-    active_warps_.set(0);
-    warps_[0].tmask.set(0);
-  #endif
-
   wspawn_.valid = false;
+
+  cta_dispatcher_.reset();
+}
+
+void Emulator::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
+  auto& warp = warps_[wid];
+
+  warp.reset(rec.PC);
+  warp.tmask    = rec.tmask;
+  warp.mscratch = rec.mscratch;
+
+  warp.cta_csrs.cta_id        = rec.cta_id;
+  warp.cta_csrs.cta_rank      = rec.cta_rank;
+  warp.cta_csrs.cta_size      = rec.cta_size;
+  warp.cta_csrs.thread_idx[0] = rec.thread_idx[0];
+  warp.cta_csrs.thread_idx[1] = rec.thread_idx[1];
+  warp.cta_csrs.thread_idx[2] = rec.thread_idx[2];
+  warp.cta_csrs.block_idx[0]  = rec.block_idx[0];
+  warp.cta_csrs.block_idx[1]  = rec.block_idx[1];
+  warp.cta_csrs.block_idx[2]  = rec.block_idx[2];
+  warp.cta_csrs.block_dim[0]  = rec.block_dim[0];
+  warp.cta_csrs.block_dim[1]  = rec.block_dim[1];
+  warp.cta_csrs.block_dim[2]  = rec.block_dim[2];
+  warp.cta_csrs.grid_dim[0]   = rec.grid_dim[0];
+  warp.cta_csrs.grid_dim[1]   = rec.grid_dim[1];
+  warp.cta_csrs.grid_dim[2]   = rec.grid_dim[2];
+  warp.cta_csrs.lmem_addr     = rec.lmem_addr;
+
+  warp.ibuffer.clear();
+  while (!warp.ipdom_stack.empty()) warp.ipdom_stack.pop();
+
+  active_warps_.set(wid);
+  stalled_warps_.reset(wid);
+
+  DP(3, "*** Dispatch CTA warp: cid=" << core_->id()
+     << ", wid=" << wid << ", cta_id=" << rec.cta_id
+     << ", rank=" << rec.cta_rank << "/" << rec.cta_size
+     << ", tmask=" << rec.tmask
+     << ", PC=0x" << std::hex << rec.PC << std::dec);
 }
 
 void Emulator::attach_ram(RAM* ram) {
@@ -142,13 +168,24 @@ uint32_t Emulator::fetch(uint32_t wid, uint64_t uuid) {
 instr_trace_t* Emulator::step() {
   int scheduled_warp = -1;
 
+  // Dispatch one CTA warp
+  {
+    uint32_t wid;
+    cta_warp_record_t rec;
+    if (cta_dispatcher_.step(active_warps_, &wid, &rec)) {
+      activate_warp(wid, rec);
+    }
+  }
+
   // process pending wspawn when we are down to a single active warp
   if (wspawn_.valid && active_warps_.count() == 1) {
     DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC << std::dec);
+    auto spawning_mscratch = warps_.at(0).mscratch;
     for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
       auto& warp = warps_.at(i);
       warp.PC = wspawn_.nextPC;
       warp.tmask.set(0);
+      warp.mscratch = spawning_mscratch;
       active_warps_.set(i);
       stalled_warps_.reset(i);
       DT(3, core_->name() << " warp-state: wid=" << i << ", active=true, stalled=false, tmask=" << warp.tmask);
@@ -209,7 +246,7 @@ instr_trace_t* Emulator::step() {
 }
 
 bool Emulator::running() const {
-  return active_warps_.any();
+  return active_warps_.any() || cta_dispatcher_.running();
 }
 
 int Emulator::get_exitcode() const {
@@ -457,26 +494,33 @@ void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
 #endif
 
 int Emulator::dcr_write(uint32_t addr, uint32_t value) {
-  switch (addr) {
-  case VX_DCR_BASE_STARTUP_ADDR0: startup_addr_ = (startup_addr_ & ~uint64_t(0xFFFFFFFF)) | value; break;
-  case VX_DCR_BASE_STARTUP_ADDR1: startup_addr_ = (startup_addr_ & uint64_t(0xFFFFFFFF)) | (uint64_t(value) << 32); break;
-  case VX_DCR_BASE_STARTUP_ARG0:  startup_arg_  = (startup_arg_  & ~uint64_t(0xFFFFFFFF)) | value; break;
-  case VX_DCR_BASE_STARTUP_ARG1:  startup_arg_  = (startup_arg_  & uint64_t(0xFFFFFFFF)) | (uint64_t(value) << 32); break;
-  case VX_DCR_BASE_MPM_CLASS:     mpm_class_ = value; break;
-  default: break;
-  }
+  __unused(addr);
+  __unused(value);
+  // KMU DCRs are handled at ProcessorImpl level and never reach here.
   return 0;
 }
 
 int Emulator::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
-  if (addr == VX_DCR_BASE_MPM_VALUE) {
-    if (tag >= 64)
-      return -1;
-    // lo half at VX_CSR_MPM_BASE+csr_id, hi half at VX_CSR_MPM_BASE_H+csr_id
-    bool is_hi = (tag >= 32);
-    uint32_t idx = tag & 0x1f;
-    uint32_t csr_addr = is_hi ? (VX_CSR_MPM_BASE_H + idx) : (VX_CSR_MPM_BASE + idx);
+  // tag arrives as (mpm_class << 6) | mpm_tag_idx after socket strips core_id
+  switch (addr) {
+  case VX_DCR_BASE_CACHE_FLUSH:
+    // no-op in SimX (no real cache to flush)
+    *value = 0;
+    break;
+  case VX_DCR_BASE_MPM_VALUE: {
+    uint32_t mpm_class   = tag >> 6;
+    uint32_t mpm_tag_idx = tag & 0x3f;
+    bool     is_hi       = (mpm_tag_idx >> 5) & 1;
+    uint32_t idx         = mpm_tag_idx & 0x1f;
+    uint32_t csr_addr    = is_hi ? (VX_CSR_MPM_BASE_H + idx) : (VX_CSR_MPM_BASE + idx);
+    auto saved_class = mpm_class_;
+    mpm_class_ = mpm_class;
     *value = static_cast<uint32_t>(get_csr(csr_addr, 0, 0));
+    mpm_class_ = saved_class;
+    break;
+  }
+  default:
+    break;
   }
   return 0;
 }
@@ -563,7 +607,21 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_NUM_CORES:  return uint32_t(arch_.num_cores()) * arch_.num_clusters();
   case VX_CSR_LOCAL_MEM_BASE: return arch_.local_mem_base();
   case VX_CSR_NUM_BARRIERS: return arch_.num_barriers();
-  case VX_CSR_MSCRATCH:   return csr_mscratch_;
+  case VX_CSR_MSCRATCH:   return warps_.at(wid).mscratch;
+
+  case VX_CSR_CTA_ID:       return warps_.at(wid).cta_csrs.cta_id;
+  case VX_CSR_CTA_RANK:     return warps_.at(wid).cta_csrs.cta_rank;
+  case VX_CSR_CTA_SIZE:     return warps_.at(wid).cta_csrs.cta_size;
+  case VX_CSR_CTA_BLOCK_ID_X:  return warps_.at(wid).cta_csrs.block_idx[0];
+  case VX_CSR_CTA_BLOCK_ID_Y:  return warps_.at(wid).cta_csrs.block_idx[1];
+  case VX_CSR_CTA_BLOCK_ID_Z:  return warps_.at(wid).cta_csrs.block_idx[2];
+  case VX_CSR_CTA_BLOCK_DIM_X: return warps_.at(wid).cta_csrs.block_dim[0];
+  case VX_CSR_CTA_BLOCK_DIM_Y: return warps_.at(wid).cta_csrs.block_dim[1];
+  case VX_CSR_CTA_BLOCK_DIM_Z: return warps_.at(wid).cta_csrs.block_dim[2];
+  case VX_CSR_CTA_GRID_DIM_X:  return warps_.at(wid).cta_csrs.grid_dim[0];
+  case VX_CSR_CTA_GRID_DIM_Y:  return warps_.at(wid).cta_csrs.grid_dim[1];
+  case VX_CSR_CTA_GRID_DIM_Z:  return warps_.at(wid).cta_csrs.grid_dim[2];
+  case VX_CSR_CTA_LMEM_ADDR:   return warps_.at(wid).cta_csrs.lmem_addr;
 
   CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
   CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
@@ -691,7 +749,7 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
     warps_.at(wid).fcsr = value & 0xff;
     break;
   case VX_CSR_MSCRATCH:
-    csr_mscratch_ = value;
+    warps_.at(wid).mscratch = value;
     break;
   case VX_CSR_SATP:
   #ifdef VM_ENABLE
