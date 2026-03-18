@@ -15,64 +15,87 @@
 
 module VX_cta_dispatch_top import VX_gpu_pkg::*;
 (
-    input wire                      clk,
-    input wire                      reset,
+    input wire                          clk,
+    input wire                          reset,
 
     // KMU bus input (struct fields flattened for C++ testbench driving)
-    input  wire                     task_in_req_valid,
-    output wire                     task_in_req_ready,
-    input  wire [31:0]              num_warps,
-    input  wire [`XLEN-1:0]         start_pc,
-    input  wire [`XLEN-1:0]         input_param,
-    input  wire [31:0]              input_cta_x,
-    input  wire [31:0]              input_cta_y,
-    input  wire [31:0]              input_cta_z,
-    input  wire [31:0]              input_cta_id,
-    input  wire [`NUM_THREADS-1:0]  input_remain_mask,
+    input  wire                         task_in_valid,
+    output wire                         task_in_ready,
+    input  wire [PC_BITS-1:0]           in_PC,
+    input  wire [31:0]                  in_cta_id,
+    input  wire [31:0]                  in_block_idx_x,
+    input  wire [31:0]                  in_block_idx_y,
+    input  wire [31:0]                  in_block_idx_z,
+    input  wire [CTA_TID_WIDTH:0]       in_block_dim_x,
+    input  wire [CTA_TID_WIDTH:0]       in_block_dim_y,
+    input  wire [CTA_TID_WIDTH:0]       in_block_dim_z,
+    input  wire [31:0]                  in_grid_dim_x,
+    input  wire [31:0]                  in_grid_dim_y,
+    input  wire [31:0]                  in_grid_dim_z,
+    input  wire [`MEM_ADDR_WIDTH-1:0]   in_param,
+    input  wire [`LMEM_LOG_SIZE:0]      in_lmem_size,
+    input  wire [CTA_TID_WIDTH:0]       in_block_size,
+    input  wire [CTA_TID_WIDTH-1:0]     in_warp_step_x,
+    input  wire [CTA_TID_WIDTH-1:0]     in_warp_step_y,
+    input  wire [CTA_TID_WIDTH-1:0]     in_warp_step_z,
 
-    input  wire [`NUM_WARPS-1:0]    active_warps,
+    input  wire [`NUM_WARPS-1:0]        active_warps,
+    input  wire                         warp_done,
+    input  wire [NW_WIDTH-1:0]          warp_done_wid,
 
-    // Scheduler dispatch outputs
-    output wire                     cta_sched_fire,
-    output wire [NW_WIDTH-1:0]      cta_sched_wid,
-    output wire [PC_BITS-1:0]       cta_sched_PC,
-    output wire [`NUM_THREADS-1:0]  cta_sched_tmask,
-
-    // CSR outputs
-    output wire                     cta_csr_valid,
-    output wire [NW_WIDTH-1:0]      cta_csr_wid
+    // Outputs
+    output wire                         cta_fire,
+    output wire [NW_WIDTH-1:0]          cta_wid
 );
 
     VX_kmu_bus_if kmu_bus();
 
-    assign kmu_bus.req_valid        = task_in_req_valid;
-    assign task_in_req_ready        = kmu_bus.req_ready;
-    assign kmu_bus.req_data.PC      = start_pc;
-    assign kmu_bus.req_data.num_warps = num_warps;
-    assign kmu_bus.req_data.tmask   = input_remain_mask;
-    assign kmu_bus.req_data.cta_id  = input_cta_id;
-    assign kmu_bus.req_data.cta_x   = input_cta_x;
-    assign kmu_bus.req_data.cta_y   = input_cta_y;
-    assign kmu_bus.req_data.cta_z   = input_cta_z;
-    assign kmu_bus.req_data.param   = input_param;
+    assign kmu_bus.valid             = task_in_valid;
+    assign task_in_ready             = kmu_bus.ready;
+    assign kmu_bus.data.PC           = in_PC;
+    assign kmu_bus.data.cta_id       = in_cta_id;
+    assign kmu_bus.data.block_idx[0] = in_block_idx_x;
+    assign kmu_bus.data.block_idx[1] = in_block_idx_y;
+    assign kmu_bus.data.block_idx[2] = in_block_idx_z;
+    assign kmu_bus.data.block_dim[0] = in_block_dim_x;
+    assign kmu_bus.data.block_dim[1] = in_block_dim_y;
+    assign kmu_bus.data.block_dim[2] = in_block_dim_z;
+    assign kmu_bus.data.grid_dim[0]  = in_grid_dim_x;
+    assign kmu_bus.data.grid_dim[1]  = in_grid_dim_y;
+    assign kmu_bus.data.grid_dim[2]  = in_grid_dim_z;
+    assign kmu_bus.data.param        = in_param;
+    assign kmu_bus.data.lmem_size    = in_lmem_size;
+    assign kmu_bus.data.block_size   = in_block_size;
+    assign kmu_bus.data.warp_step[0] = in_warp_step_x;
+    assign kmu_bus.data.warp_step[1] = in_warp_step_y;
+    assign kmu_bus.data.warp_step[2] = in_warp_step_z;
 
-    /* verilator lint_off UNUSED */
-    cta_csrs_t cta_csr_data_w;
-    /* verilator lint_on UNUSED */
+    wire [PC_BITS-1:0]      cta_PC;
+    wire [`NUM_THREADS-1:0] cta_tmask;
+    cta_csrs_t              cta_csrs;
+    wire                    cta_init;
+    wire                    busy;
+
+    `UNUSED_VAR (cta_PC)
+    `UNUSED_VAR (cta_tmask)
+    `UNUSED_VAR (cta_csrs)
+    `UNUSED_VAR (cta_init)
+    `UNUSED_VAR (busy)
 
     VX_cta_dispatch cta_dispatch (
-        .clk             (clk),
-        .reset           (reset),
-        .kmu_bus_if      (kmu_bus),
-        .active_warps    (active_warps),
-        .cta_sched_fire  (cta_sched_fire),
-        .cta_sched_wid   (cta_sched_wid),
-        .cta_sched_PC    (cta_sched_PC),
-        .cta_sched_tmask (cta_sched_tmask),
-        .cta_csr_valid   (cta_csr_valid),
-        .cta_csr_wid     (cta_csr_wid),
-        .cta_csr_data    (cta_csr_data_w)
+        .clk           (clk),
+        .reset         (reset),
+        .kmu_bus_if    (kmu_bus),
+        .active_warps  (active_warps),
+        .warp_done     (warp_done),
+        .warp_done_wid (warp_done_wid),
+        .cta_fire      (cta_fire),
+        .cta_wid       (cta_wid),
+        .cta_PC        (cta_PC),
+        .cta_tmask     (cta_tmask),
+        .cta_csrs      (cta_csrs),
+        .cta_init      (cta_init),
+        .busy          (busy)
     );
 
 endmodule
-

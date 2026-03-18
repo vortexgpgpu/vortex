@@ -52,7 +52,7 @@ public:
 
   PerfStats perf_stats() const;
 
-  const Kmu& kmu() const { return kmu_; }
+  Kmu& kmu() { return kmu_; }
 
 private:
 

@@ -632,9 +632,11 @@ public:
   int start_wg(uint64_t krnl_addr, uint64_t args_addr, uint32_t dimension,
                const uint32_t *grid_dim, const uint32_t *block_dim, uint32_t lmem_size) {
     // setup kernel launch parameters
+    uint64_t threads_per_warp;
+    CHECK_ERR(this->get_caps(VX_CAPS_NUM_THREADS, &threads_per_warp), { return err; });
     uint32_t block_size, warp_step_x, warp_step_y, warp_step_z;
-    CHECK_ERR(prepare_kernel_launch_params(this, dimension, block_dim,
-        &block_size, &warp_step_x, &warp_step_y, &warp_step_z), { return err; });
+    prepare_kernel_launch_params(threads_per_warp, dimension, block_dim,
+        &block_size, &warp_step_x, &warp_step_y, &warp_step_z);
 
     // configure kernel launch
     CHECK_ERR(this->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, krnl_addr & 0xffffffff), { return err; });

@@ -22,29 +22,6 @@
 #include <vortex.h>
 #include <assert.h>
 
-int prepare_kernel_launch_params(vx_device_h hdevice, uint32_t dimension, const uint32_t *block_dim,
-  uint32_t* block_size, uint32_t* warp_step_x, uint32_t* warp_step_y, uint32_t* warp_step_z) {
-  uint64_t threads_per_warp;
-  CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_THREADS, &threads_per_warp), {
-    return err;
-  });
-  // block size in number of threads
-  uint32_t _block_size = 1;
-  for (uint32_t i = 0; i < dimension; ++i) {
-    _block_size *= block_dim ? block_dim[i] : 1;
-  }
-  *block_size = _block_size;
-  uint32_t dim_x = (dimension > 0 && block_dim) ? block_dim[0] : 1;
-  uint32_t dim_y = (dimension > 1 && block_dim) ? block_dim[1] : 1;
-  uint32_t dim_z = (dimension > 2 && block_dim) ? block_dim[2] : 1;
-
-  *warp_step_x = threads_per_warp % dim_x;
-  *warp_step_y = (threads_per_warp / dim_x) % dim_y;
-  *warp_step_z = (threads_per_warp / (dim_x * dim_y)) % dim_z;
-
-  return 0;
-}
-
 extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint64_t size, vx_buffer_h* hbuffer) {
   if (nullptr == hdevice || nullptr == content || size <= 8 || nullptr == hbuffer)
     return -1;

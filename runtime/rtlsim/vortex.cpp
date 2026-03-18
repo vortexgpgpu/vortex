@@ -209,14 +209,14 @@ public:
 
   int start_wg(uint64_t krnl_addr, uint64_t args_addr, uint32_t dimension,
               const uint32_t* grid_dim, const uint32_t* block_dim, uint32_t lmem_size) {
-    // ensure prior run completed
+     // ensure prior run completed
     if (future_.valid()) {
       future_.wait();
     }
 
     // setup kernel launch parameters
     uint32_t block_size, warp_step_x, warp_step_y, warp_step_z;
-    prepare_kernel_launch_params(this, dimension, block_dim,
+    prepare_kernel_launch_params(NUM_THREADS, dimension, block_dim,
         &block_size, &warp_step_x, &warp_step_y, &warp_step_z);
 
     // configure kernel launch

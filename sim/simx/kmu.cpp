@@ -20,7 +20,6 @@ Kmu::Kmu() {
 }
 
 void Kmu::reset() {
-  active_       = false;
   PC_           = 0;
   param_        = 0;
   block_dim_[0] = block_dim_[1] = block_dim_[2] = 1;
@@ -28,6 +27,9 @@ void Kmu::reset() {
   lmem_size_    = 0;
   block_size_   = 0;
   warp_step_[0] = warp_step_[1] = warp_step_[2] = 1;
+  running_      = false;
+  cta_id_       = 0;
+  block_idx_[0] = block_idx_[1] = block_idx_[2] = 0;
 }
 
 void Kmu::dcr_write(uint32_t addr, uint32_t value) {
@@ -52,8 +54,58 @@ void Kmu::dcr_write(uint32_t addr, uint32_t value) {
 }
 
 void Kmu::start() {
-  active_ = (block_size_ > 0)
-          && (grid_dim_[0] > 0)
-          && (grid_dim_[1] > 0)
-          && (grid_dim_[2] > 0);
+  running_ = (block_size_ > 0)
+           && (grid_dim_[0] > 0)
+           && (grid_dim_[1] > 0)
+           && (grid_dim_[2] > 0);
+  if (running_) {
+    cta_id_       = 0;
+    block_idx_[0] = block_idx_[1] = block_idx_[2] = 0;
+  }
+}
+
+bool Kmu::step(kmu_req_t* req) {
+  if (!running_) return false;
+
+  req->PC           = PC_;
+  req->param        = param_;
+  req->cta_id       = cta_id_;
+  req->block_idx[0] = block_idx_[0];
+  req->block_idx[1] = block_idx_[1];
+  req->block_idx[2] = block_idx_[2];
+  req->block_dim[0] = block_dim_[0];
+  req->block_dim[1] = block_dim_[1];
+  req->block_dim[2] = block_dim_[2];
+  req->grid_dim[0]  = grid_dim_[0];
+  req->grid_dim[1]  = grid_dim_[1];
+  req->grid_dim[2]  = grid_dim_[2];
+  req->lmem_size    = lmem_size_;
+  req->block_size   = block_size_;
+  req->warp_step[0] = warp_step_[0];
+  req->warp_step[1] = warp_step_[1];
+  req->warp_step[2] = warp_step_[2];
+
+  // Advance the CTA iterator (X-innermost, Z-outermost)
+  ++cta_id_;
+  uint32_t bx = block_idx_[0] + 1;
+  if (bx == grid_dim_[0]) {
+    block_idx_[0] = 0;
+    uint32_t by = block_idx_[1] + 1;
+    if (by == grid_dim_[1]) {
+      block_idx_[1] = 0;
+      uint32_t bz = block_idx_[2] + 1;
+      if (bz == grid_dim_[2]) {
+        block_idx_[2] = 0;
+        running_ = false;
+      } else {
+        block_idx_[2] = bz;
+      }
+    } else {
+      block_idx_[1] = by;
+    }
+  } else {
+    block_idx_[0] = bx;
+  }
+
+  return true;
 }

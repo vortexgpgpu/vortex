@@ -343,7 +343,7 @@ public:
 
     // setup kernel launch parameters
     uint32_t block_size, warp_step_x, warp_step_y, warp_step_z;
-    prepare_kernel_launch_params(this, dimension, block_dim,
+    prepare_kernel_launch_params(arch_.num_threads(), dimension, block_dim,
         &block_size, &warp_step_x, &warp_step_y, &warp_step_z);
 
     // configure kernel launch

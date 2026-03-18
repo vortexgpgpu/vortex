@@ -83,6 +83,9 @@ void Cluster::reset() {
   for (auto& gbar : gbarriers_) {
     gbar.reset();
   }
+  for (auto& socket : sockets_) {
+    socket->reset();
+  }
 }
 
 void Cluster::tick() {

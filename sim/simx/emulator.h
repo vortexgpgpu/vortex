@@ -94,7 +94,7 @@ struct warp_t {
 
   warp_t(uint32_t num_threads);
 
-  void reset(uint64_t startup_addr);
+  void reset();
 };
 
 ///////////////////////////////////////////////////////////////////////////////

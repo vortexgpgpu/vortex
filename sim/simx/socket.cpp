@@ -119,7 +119,9 @@ Socket::~Socket() {
 }
 
 void Socket::reset() {
-  //--
+  for (auto& core : cores_) {
+    core->reset();
+  }
 }
 
 void Socket::tick() {
