@@ -22,6 +22,29 @@
 #include <vortex.h>
 #include <assert.h>
 
+int prepare_kernel_launch_params(vx_device_h hdevice, uint32_t dimension, const uint32_t *block_dim,
+  uint32_t* block_size, uint32_t* warp_step_x, uint32_t* warp_step_y, uint32_t* warp_step_z) {
+  uint64_t threads_per_warp;
+  CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_THREADS, &threads_per_warp), {
+    return err;
+  });
+  // block size in number of threads
+  uint32_t _block_size = 1;
+  for (uint32_t i = 0; i < dimension; ++i) {
+    _block_size *= block_dim ? block_dim[i] : 1;
+  }
+  *block_size = _block_size;
+  uint32_t dim_x = (dimension > 0 && block_dim) ? block_dim[0] : 1;
+  uint32_t dim_y = (dimension > 1 && block_dim) ? block_dim[1] : 1;
+  uint32_t dim_z = (dimension > 2 && block_dim) ? block_dim[2] : 1;
+
+  *warp_step_x = threads_per_warp % dim_x;
+  *warp_step_y = (threads_per_warp / dim_x) % dim_y;
+  *warp_step_z = (threads_per_warp / (dim_x * dim_y)) % dim_z;
+
+  return 0;
+}
+
 extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint64_t size, vx_buffer_h* hbuffer) {
   if (nullptr == hdevice || nullptr == content || size <= 8 || nullptr == hbuffer)
     return -1;
@@ -139,8 +162,8 @@ extern int vx_upload_file(vx_device_h hdevice, const char* filename, vx_buffer_h
   return 0;
 }
 
-int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_localmem) {
-   // check group size
+int vx_check_occupancy(vx_device_h hdevice, uint32_t block_size, uint32_t* max_localmem) {
+   // check block size
   uint64_t warps_per_core, threads_per_warp;
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_WARPS, &warps_per_core), {
     return err;
@@ -149,14 +172,14 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_l
     return err;
   });
   uint32_t threads_per_core = warps_per_core * threads_per_warp;
-  if (group_size > threads_per_core) {
-    printf("Error: cannot schedule kernel with group_size > threads_per_core (%d,%d)\n", group_size, threads_per_core);
+  if (block_size > threads_per_core) {
+    printf("Error: cannot schedule kernel with block_size > threads_per_core (%d,%d)\n", block_size, threads_per_core);
     return -1;
   }
 
-  // calculate groups occupancy
-  int warps_per_group = (group_size + threads_per_warp-1) / threads_per_warp;
-  int groups_per_core = warps_per_core / warps_per_group;
+  // calculate blocks occupancy
+  int warps_per_block = (block_size + threads_per_warp-1) / threads_per_warp;
+  int blocks_per_core = warps_per_core / warps_per_block;
 
   // check local memory capacity
   if (max_localmem) {
@@ -164,12 +187,21 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_l
     CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size), {
       return err;
     });
-    *max_localmem = local_mem_size / groups_per_core;
+    uint32_t localmem = *max_localmem;
+    if (localmem != 0) {
+      if (local_mem_size < localmem) {
+        printf("Error: device local memory size %lu is smaller than required %u\n", local_mem_size, localmem);
+        return -1;
+      }
+    } else {
+      *max_localmem = local_mem_size / blocks_per_core;
+    }
   }
 
   return 0;
 }
-extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value) {
+
+extern int vx_mpm_query(vx_device_h hdevice, uint32_t mpm_class, uint32_t addr, uint32_t core_id, uint64_t* value) {
   if (!(addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))) {
      printf("Error: invalid MPM CSR address: 0x%x\n", addr);
      return -1;
@@ -178,8 +210,9 @@ extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, ui
   auto read_one = [&](uint32_t cid, uint64_t* out) -> int {
     uint32_t lo, hi;
     uint32_t csr_id = addr - VX_CSR_MPM_BASE;
-    uint32_t tag_lo = (csr_id << 16) | cid;
-    uint32_t tag_hi = ((csr_id + 32) << 16) | cid;
+    uint32_t clss_sh= mpm_class << (16+6);
+    uint32_t tag_lo = clss_sh | ((csr_id << 16) | cid);
+    uint32_t tag_hi = clss_sh | (((csr_id + 32) << 16) | cid);
     CHECK_ERR(vx_dcr_read(hdevice, VX_DCR_BASE_MPM_VALUE, tag_lo, &lo), { return err; });
     CHECK_ERR(vx_dcr_read(hdevice, VX_DCR_BASE_MPM_VALUE, tag_hi, &hi), { return err; });
     *out = ((uint64_t)hi << 32) | lo;

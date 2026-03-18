@@ -31,26 +31,26 @@
 
 class ProfilingMode {
 public:
-  ProfilingMode() : perf_class_(0) {
+  ProfilingMode() : mpm_class_(0) {
     auto profiling_s = getenv("VORTEX_PROFILING");
     if (profiling_s) {
-      perf_class_ = std::atoi(profiling_s);
+      mpm_class_ = std::atoi(profiling_s);
     }
   }
 
   ~ProfilingMode() {}
 
-  int perf_class() const {
-    return perf_class_;
+  int mpm_class() const {
+    return mpm_class_;
   }
 
 private:
-  int perf_class_;
+  int mpm_class_;
 };
 
 int get_profiling_mode() {
   static ProfilingMode gProfilingMode;
-  return gProfilingMode.perf_class();
+  return gProfilingMode.mpm_class();
 }
 
 static inline double safe_div(double num, double den) {
@@ -192,6 +192,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
   uint64_t clock_hz = 0;
   uint64_t peak_mem_bw_MBps = 0;
 
+  const auto mpm_class = get_profiling_mode();
+
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores), { return err; });
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_CLUSTERS, &num_clusters), { return err; });
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_SOCKET_SIZE, &socket_size), { return err; });
@@ -219,16 +221,14 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
   for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
     auto &c = cores[core_id];
 
-    CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MCYCLE, core_id, &c.cycles), { return err; });
-    CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MINSTRET, core_id, &c.instrs), { return err; });
+    CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MCYCLE, core_id, &c.cycles), { return err; });
+    CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MINSTRET, core_id, &c.instrs), { return err; });
 
     total_instrs += c.instrs;
     max_cycles = std::max<uint64_t>(max_cycles, c.cycles);
   }
 
-  const auto perf_class = get_profiling_mode();
-
-  switch (perf_class) {
+  switch (mpm_class) {
   case VX_DCR_MPM_CLASS_BASE:
     break;
 
@@ -239,38 +239,38 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       auto &c = cores[core_id];
 
       // Query Core Specifics
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCHED_IDLE, core_id, &c.sched_idle), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_ACTIVE_WARPS, core_id, &c.active_warps), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALLED_WARPS, core_id, &c.stalled_warps), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_ISSUED_WARPS, core_id, &c.issued_warps), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_ISSUED_THREADS, core_id, &c.issued_threads), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_SCHED_IDLE, core_id, &c.sched_idle), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ACTIVE_WARPS, core_id, &c.active_warps), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALLED_WARPS, core_id, &c.stalled_warps), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ISSUED_WARPS, core_id, &c.issued_warps), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ISSUED_THREADS, core_id, &c.issued_threads), { return err; });
 
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALL_FETCH, core_id, &c.stall_fetch), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALL_IBUF, core_id, &c.stall_ibuf), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALL_SCRB, core_id, &c.stall_scrb), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALL_OPDS, core_id, &c.stall_opds), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALL_ALU, core_id, &c.stall_alu), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALL_FPU, core_id, &c.stall_fpu), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALL_LSU, core_id, &c.stall_lsu), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALL_SFU, core_id, &c.stall_sfu), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STALL_TCU, core_id, &c.stall_tcu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALL_FETCH, core_id, &c.stall_fetch), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALL_IBUF, core_id, &c.stall_ibuf), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALL_SCRB, core_id, &c.stall_scrb), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALL_OPDS, core_id, &c.stall_opds), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALL_ALU, core_id, &c.stall_alu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALL_FPU, core_id, &c.stall_fpu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALL_LSU, core_id, &c.stall_lsu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALL_SFU, core_id, &c.stall_sfu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STALL_TCU, core_id, &c.stall_tcu), { return err; });
 
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_INSTR_ALU, core_id, &c.instr_alu), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_INSTR_FPU, core_id, &c.instr_fpu), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_INSTR_LSU, core_id, &c.instr_lsu), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_INSTR_SFU, core_id, &c.instr_sfu), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_INSTR_TCU, core_id, &c.instr_tcu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_INSTR_ALU, core_id, &c.instr_alu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_INSTR_FPU, core_id, &c.instr_fpu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_INSTR_LSU, core_id, &c.instr_lsu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_INSTR_SFU, core_id, &c.instr_sfu), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_INSTR_TCU, core_id, &c.instr_tcu), { return err; });
 
       // Branches
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_BRANCHES, core_id, &c.branches), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_DIVERGENCE, core_id, &c.divergence), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_BRANCHES, core_id, &c.branches), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DIVERGENCE, core_id, &c.divergence), { return err; });
 
       // Memory (front-end + LSU)
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_IFETCHES, core_id, &c.ifetches), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_IFETCH_LT, core_id, &c.ifetch_lt), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_LOADS, core_id, &c.loads), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_LOAD_LT, core_id, &c.load_lt), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STORES, core_id, &c.stores), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_IFETCHES, core_id, &c.ifetches), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_IFETCH_LT, core_id, &c.ifetch_lt), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LOADS, core_id, &c.loads), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LOAD_LT, core_id, &c.load_lt), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STORES, core_id, &c.stores), { return err; });
 
       // Per-Core report
       const uint64_t cycles = c.cycles;
@@ -360,8 +360,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     }
 
     // Query global MPM counters
-    CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_READS, 0, &tot.mem_reads), { return err; });
-    CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_WRITES, 0, &tot.mem_writes), { return err; });
+    CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_READS, 0, &tot.mem_reads), { return err; });
+    CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_WRITES, 0, &tot.mem_writes), { return err; });
 
     // Core Summary
     uint64_t tot_cycles_wide = tot.cycles * issue_width;
@@ -436,9 +436,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
       if (lmem_en) {
         uint64_t r = 0, w = 0, bst = 0;
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_LMEM_READS, core_id, &r), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_LMEM_WRITES, core_id, &w), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_LMEM_BANK_ST, core_id, &bst), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LMEM_READS, core_id, &r), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LMEM_WRITES, core_id, &w), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LMEM_BANK_ST, core_id, &bst), { return err; });
 
         lmem_tot.reads += r;
         lmem_tot.writes += w;
@@ -449,7 +449,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
 
       if (dcache_en) {
         uint64_t cm = 0;
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_COALESCER_MISS, core_id, &cm), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_COALESCER_MISS, core_id, &cm), { return err; });
         coalescer_miss_tot += cm;
         perf_print_core(stream, core_id, "coalescer: misses=%" PRIu64, cm);
       }
@@ -463,9 +463,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
 
       if (icache_en) {
         uint64_t r = 0, m = 0, st = 0;
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_ICACHE_READS, rep_core, &r), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_ICACHE_MISS_R, rep_core, &m), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_ICACHE_MSHR_ST, rep_core, &st), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ICACHE_READS, rep_core, &r), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ICACHE_MISS_R, rep_core, &m), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_ICACHE_MSHR_ST, rep_core, &st), { return err; });
 
         icache_tot.reads += r;
         icache_tot.miss_r += m;
@@ -476,12 +476,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       }
       if (dcache_en) {
         uint64_t r = 0, w = 0, mr = 0, mw = 0, bst = 0, mst = 0;
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_DCACHE_READS, rep_core, &r), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_DCACHE_WRITES, rep_core, &w), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_DCACHE_MISS_R, rep_core, &mr), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_DCACHE_MISS_W, rep_core, &mw), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_DCACHE_BANK_ST, rep_core, &bst), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_DCACHE_MSHR_ST, rep_core, &mst), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_READS, rep_core, &r), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_WRITES, rep_core, &w), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_MISS_R, rep_core, &mr), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_MISS_W, rep_core, &mw), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_BANK_ST, rep_core, &bst), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DCACHE_MSHR_ST, rep_core, &mst), { return err; });
 
         dcache_tot.reads += r;
         dcache_tot.writes += w;
@@ -502,12 +502,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
         if (rep_core >= num_cores)
           continue;
         uint64_t r = 0, w = 0, mr = 0, mw = 0, bst = 0, mst = 0;
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_READS, rep_core, &r), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_WRITES, rep_core, &w), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_MISS_R, rep_core, &mr), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_MISS_W, rep_core, &mw), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_BANK_ST, rep_core, &bst), { return err; });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_MSHR_ST, rep_core, &mst), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_READS, rep_core, &r), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_WRITES, rep_core, &w), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_MISS_R, rep_core, &mr), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_MISS_W, rep_core, &mw), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_BANK_ST, rep_core, &bst), { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L2CACHE_MSHR_ST, rep_core, &mst), { return err; });
 
         l2_tot.reads += r;
         l2_tot.writes += w;
@@ -523,12 +523,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
 
     // Global L3
     if (l3_en) {
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_READS, 0, &l3_tot.reads), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_WRITES, 0, &l3_tot.writes), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_MISS_R, 0, &l3_tot.miss_r), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_MISS_W, 0, &l3_tot.miss_w), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_BANK_ST, 0, &l3_tot.bank_st), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_MSHR_ST, 0, &l3_tot.mshr_st), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_READS, 0, &l3_tot.reads), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_WRITES, 0, &l3_tot.writes), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_MISS_R, 0, &l3_tot.miss_r), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_MISS_W, 0, &l3_tot.miss_w), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_BANK_ST, 0, &l3_tot.bank_st), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_L3CACHE_MSHR_ST, 0, &l3_tot.mshr_st), { return err; });
 
       perf_print(stream, "l3cache: reqs=%" PRIu64 ", miss_r=%" PRIu64 " (hit=%d%%), miss_w=%" PRIu64 " (hit=%d%%)",
                  l3_tot.reads + l3_tot.writes, l3_tot.miss_r, calc_ratio(l3_tot.miss_r, l3_tot.reads),
@@ -538,10 +538,10 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     // Global DRAM
     {
       uint64_t r = 0, w = 0, lat = 0, bst = 0;
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_READS, 0, &r), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_WRITES, 0, &w), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_LT, 0, &lat), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_BANK_ST, 0, &bst), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_READS, 0, &r), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_WRITES, 0, &w), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_LT, 0, &lat), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_MEM_BANK_ST, 0, &bst), { return err; });
 
       double avg_lat = safe_div((double)lat, (double)r);
       perf_print(stream, "memory: reqs=%" PRIu64 " (r=%" PRIu64 ", w=%" PRIu64 "), lat=%.1f cyc, bank_st=%" PRIu64 " (utility=%d%%)",
@@ -549,7 +549,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     }
   } break;
   default:
-    fprintf(stream, "Error: invalid profiling class: %d)", perf_class);
+    fprintf(stream, "Error: invalid profiling class: %d)", mpm_class);
     return -1;
   }
 

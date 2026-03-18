@@ -169,32 +169,26 @@ extern int vx_dev_init(callbacks_t* callbacks) {
     return device->download(host_ptr, buffer->addr + src_offset, size);
   };
 
-  callbacks->copy_dev_to_dev = [](vx_buffer_h hdest_buffer, uint64_t dest_offset, vx_buffer_h hsrc_buffer, uint64_t src_offset, uint64_t size) {
-    if (nullptr == hdest_buffer || nullptr == hsrc_buffer)
-      return -1;
-    auto dest_buffer = ((vx_buffer*)hdest_buffer);
-    auto src_buffer = ((vx_buffer*)hsrc_buffer);
-    if (dest_buffer->device != src_buffer->device)
-      return -1;
-    auto device = ((vx_device*)dest_buffer->device);
-    if ((dest_offset + size) > dest_buffer->size
-     || (src_offset + size) > src_buffer->size)
-      return -1;
-    DBGPRINT("COPY_DEV_TO_DEV: hdest_buffer=%p, dest_offset=%ld, hsrc_buffer=%p, src_offset=%ld, size=%ld\n",
-             hdest_buffer, dest_offset, hsrc_buffer, src_offset, size);
-    return device->copy(dest_buffer->addr + dest_offset,
-                        src_buffer->addr + src_offset,
-                        size);
-  };
-
-  callbacks->start = [](vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments) {
+  callbacks->start_wg = [](vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments,
+    uint32_t dimension, const uint32_t* grid_dim, const uint32_t * block_dim, uint32_t lmem_size) {
     if (nullptr == hdevice || nullptr == hkernel || nullptr == harguments)
       return -1;
-    DBGPRINT("START: hdevice=%p, hkernel=%p, harguments=%p\n", hdevice, hkernel, harguments);
+    DBGPRINT("START_WG: hdevice=%p, hkernel=%p, harguments=%p, dimension=%d", hdevice, hkernel, harguments, dimension);
+    for (uint32_t i = 0; i < dimension; ++i) {
+      DBGPRINT(", grid_dim[%d]=%d", i, grid_dim[i]);
+    }
+    if (block_dim) {
+      for (uint32_t i = 0; i < dimension; ++i) {
+        DBGPRINT(", block_dim[%d]=%d", i, block_dim[i]);
+      }
+    } else {
+      DBGPRINT("%s", ", block_dim=null");
+    }
+    DBGPRINT(", lmem_size=%d\n", lmem_size);
     auto device = ((vx_device*)hdevice);
     auto kernel = ((vx_buffer*)hkernel);
     auto arguments = ((vx_buffer*)harguments);
-    return device->start(kernel->addr, arguments->addr);
+    return device->start_wg(kernel->addr, arguments->addr, dimension, grid_dim, block_dim, lmem_size);
   };
 
   callbacks->ready_wait = [](vx_device_h hdevice, uint64_t timeout) {

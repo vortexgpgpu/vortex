@@ -51,22 +51,6 @@
     _cleanup \
   } while (false)
 
-class DeviceConfig {
-public:
-  void write(uint32_t addr, uint32_t value) {
-    store_[addr] = value;
-  }
-  int read(uint32_t addr, uint32_t* value) const {
-    auto it = store_.find(addr);
-    if (it == store_.end())
-      return -1;
-    *value = it->second;
-    return 0;
-  }
-private:
-  std::unordered_map<uint32_t, uint32_t> store_;
-};
-
 inline uint64_t aligned_size(uint64_t size, uint64_t alignment) {
   assert(0 == (alignment & (alignment - 1)));
   return (size + alignment - 1) & ~(alignment - 1);
@@ -76,3 +60,6 @@ inline bool is_aligned(uint64_t addr, uint64_t alignment) {
   assert(0 == (alignment & (alignment - 1)));
   return 0 == (addr & (alignment - 1));
 }
+
+int prepare_kernel_launch_params(vx_device_h hdevice, uint32_t dimension, const uint32_t *block_dim,
+    uint32_t* block_size, uint32_t* warp_step_x, uint32_t* warp_step_y, uint32_t* warp_step_z);

@@ -33,15 +33,20 @@ CFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/hw
 CFLAGS += -DXLEN_$(XLEN)
 
 PROJECT := libvortex
+PROJECT2 := libvortex2
 
-SRCS = $(SRC_DIR)/vx_start.S $(SRC_DIR)/vx_syscalls.c $(SRC_DIR)/vx_print.S $(SRC_DIR)/tinyprintf.c $(SRC_DIR)/vx_print.c $(SRC_DIR)/vx_spawn.c $(SRC_DIR)/vx_serial.S
+SRCS := $(SRC_DIR)/vx_start.S $(SRC_DIR)/vx_syscalls.c $(SRC_DIR)/vx_print.S $(SRC_DIR)/tinyprintf.c $(SRC_DIR)/vx_print.c $(SRC_DIR)/vx_spawn.c $(SRC_DIR)/vx_serial.S
 
-OBJS = $(addsuffix .o, $(notdir $(SRCS)))
+OBJS := $(addsuffix .o, $(notdir $(SRCS)))
+OBJS2 := $(addsuffix .2.o, $(notdir $(SRCS)))
 
-all: $(PROJECT).a $(PROJECT).dump
+all: $(PROJECT).a $(PROJECT).dump $(PROJECT2).a $(PROJECT2).dump
 
 $(PROJECT).dump: $(PROJECT).a
 	$(DP) -D $(PROJECT).a > $(PROJECT).dump
+
+$(PROJECT2).dump: $(PROJECT2).a
+	$(DP) -D $(PROJECT2).a > $(PROJECT2).dump
 
 %.S.o: $(SRC_DIR)/%.S
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -49,7 +54,16 @@ $(PROJECT).dump: $(PROJECT).a
 %.c.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+%.S.2.o: $(SRC_DIR)/%.S
+	$(CC) $(CFLAGS) -DKMU_ENABLE -c $< -o $@
+
+%.c.2.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) -DKMU_ENABLE -c $< -o $@
+
 $(PROJECT).a: $(OBJS)
+	$(AR) rcs $@ $^
+
+$(PROJECT2).a: $(OBJS2)
 	$(AR) rcs $@ $^
 
 .depend: $(SRCS)

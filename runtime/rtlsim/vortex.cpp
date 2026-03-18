@@ -183,6 +183,14 @@ public:
     if (src_addr + asize > GLOBAL_MEM_SIZE)
       return -1;
 
+    // flush GPU caches before reading back results
+    {
+      uint32_t dummy;
+      for (uint32_t cid = 0; cid < NUM_CORES * NUM_CLUSTERS; ++cid) {
+        this->dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
+      }
+    }
+
     ram_.enable_acl(false);
     ram_.read((uint8_t*)dest, src_addr, size);
     ram_.enable_acl(true);
@@ -199,28 +207,34 @@ public:
     return 0;
   }
 
-  int copy(uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
-    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-    if (src_addr + asize > GLOBAL_MEM_SIZE || dest_addr + asize > GLOBAL_MEM_SIZE)
-      return -1;
-
-    ram_.enable_acl(false);
-    ram_.copy(dest_addr, src_addr, size);
-    ram_.enable_acl(true);
-    return 0;
-  }
-
-  int start(uint64_t krnl_addr, uint64_t args_addr) {
+  int start_wg(uint64_t krnl_addr, uint64_t args_addr, uint32_t dimension,
+              const uint32_t* grid_dim, const uint32_t* block_dim, uint32_t lmem_size) {
     // ensure prior run completed
     if (future_.valid()) {
       future_.wait();
     }
 
-    // set kernel info
-    this->dcr_write(VX_DCR_BASE_STARTUP_ADDR0, krnl_addr & 0xffffffff);
-    this->dcr_write(VX_DCR_BASE_STARTUP_ADDR1, krnl_addr >> 32);
-    this->dcr_write(VX_DCR_BASE_STARTUP_ARG0, args_addr & 0xffffffff);
-    this->dcr_write(VX_DCR_BASE_STARTUP_ARG1, args_addr >> 32);
+    // setup kernel launch parameters
+    uint32_t block_size, warp_step_x, warp_step_y, warp_step_z;
+    prepare_kernel_launch_params(this, dimension, block_dim,
+        &block_size, &warp_step_x, &warp_step_y, &warp_step_z);
+
+    // configure kernel launch
+    this->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, krnl_addr & 0xffffffff);
+    this->dcr_write(VX_DCR_KMU_STARTUP_ADDR1, krnl_addr >> 32);
+    this->dcr_write(VX_DCR_KMU_STARTUP_ARG0, args_addr & 0xffffffff);
+    this->dcr_write(VX_DCR_KMU_STARTUP_ARG1, args_addr >> 32);
+    uint32_t grid_regs[] = {VX_DCR_KMU_GRID_DIM_X, VX_DCR_KMU_GRID_DIM_Y, VX_DCR_KMU_GRID_DIM_Z};
+    uint32_t block_regs[] = {VX_DCR_KMU_BLOCK_DIM_X, VX_DCR_KMU_BLOCK_DIM_Y, VX_DCR_KMU_BLOCK_DIM_Z};
+    for (uint32_t i = 0; i < 3; ++i) {
+      this->dcr_write(grid_regs[i], (i < dimension) ? grid_dim[i] : 1);
+      this->dcr_write(block_regs[i], (i < dimension && block_dim) ? block_dim[i] : 1);
+    }
+    this->dcr_write(VX_DCR_KMU_LMEM_SIZE, lmem_size);
+    this->dcr_write(VX_DCR_KMU_BLOCK_SIZE, block_size);
+    this->dcr_write(VX_DCR_KMU_WARP_STEP_X, warp_step_x);
+    this->dcr_write(VX_DCR_KMU_WARP_STEP_Y, warp_step_y);
+    this->dcr_write(VX_DCR_KMU_WARP_STEP_Z, warp_step_z);
 
     // start new run
     future_ = std::async(std::launch::async, [&]{

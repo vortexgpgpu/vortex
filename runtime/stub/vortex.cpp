@@ -20,34 +20,6 @@
 #include <dlfcn.h>
 #include <iostream>
 
-int get_profiling_mode();
-
-static int dcr_initialize(vx_device_h hdevice) {
-  const uint64_t startup_addr(STARTUP_ADDR);
-
-  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff), {
-    return err;
-  });
-
-  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR1, startup_addr >> 32), {
-    return err;
-  });
-
-  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG0, 0), {
-    return err;
-  });
-
-  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG1, 0), {
-    return err;
-  });
-
-  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_MPM_CLASS, 0), {
-    return err;
-  });
-
-  return 0;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 static callbacks_t g_callbacks;
@@ -84,10 +56,6 @@ extern int vx_dev_open(vx_device_h* hdevice) {
   vx_device_h _hdevice;
 
   CHECK_ERR((g_callbacks.dev_open)(&_hdevice), {
-    return err;
-  });
-
-  CHECK_ERR(dcr_initialize(_hdevice), {
     return err;
   });
 
@@ -144,13 +112,22 @@ extern int vx_copy_dev_to_dev(vx_buffer_h hdest_buffer, uint64_t dest_offset, vx
 }
 
 extern int vx_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments) {
-  int profiling_mode = get_profiling_mode();
-  if (profiling_mode != 0) {
-    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_MPM_CLASS, profiling_mode), {
-      return err;
-    });
+  // schedule a CTA on each core
+  uint64_t num_cores;
+  CHECK_ERR ((g_callbacks.dev_caps)(hdevice, VX_CAPS_NUM_CORES, &num_cores), { return err; });
+  return (g_callbacks.start_wg)(hdevice, hkernel, harguments, 1, (const uint32_t*)&num_cores, nullptr, 0);
+}
+
+extern int vx_start_wg(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments,
+                       uint32_t dimension, const uint32_t* grid_dim, const uint32_t * block_dim, uint32_t lmem_size) {
+  uint32_t block_size = 1;
+  if (block_dim) {
+    for (uint32_t i = 0; i < dimension; ++i) {
+      block_size *= block_dim[i];
   }
-  return (g_callbacks.start)(hdevice, hkernel, harguments);
+  }
+  CHECK_ERR(vx_check_occupancy(hdevice, block_size, &lmem_size), { return err; });
+  return (g_callbacks.start_wg)(hdevice, hkernel, harguments, dimension, grid_dim, block_dim, lmem_size);
 }
 
 extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {

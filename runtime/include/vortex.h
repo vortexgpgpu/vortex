@@ -115,6 +115,10 @@ int vx_copy_dev_to_dev(vx_buffer_h hdest_buffer, uint64_t dest_offset, vx_buffer
 // Start device execution
 int vx_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments);
 
+// Start device execution with work group
+int vx_start_wg(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments,
+                uint32_t dimension, const uint32_t* grid_dim, const uint32_t * block_dim, uint32_t lmem_size);
+
 // Wait for device ready with milliseconds timeout
 int vx_ready_wait(vx_device_h hdevice, uint64_t timeout);
 
@@ -125,7 +129,7 @@ int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value);
 int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t tag, uint32_t* value);
 
 // query device performance counter
-int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value);
+int vx_mpm_query(vx_device_h hdevice, uint32_t mpm_class, uint32_t addr, uint32_t core_id, uint64_t* value);
 
 ////////////////////////////// UTILITY FUNCTIONS //////////////////////////////
 
@@ -142,7 +146,7 @@ int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, vx_
 int vx_upload_file(vx_device_h hdevice, const char* filename, vx_buffer_h* hbuffer);
 
 // calculate cooperative threads array occupancy
-int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_localmem);
+int vx_check_occupancy(vx_device_h hdevice, uint32_t block_size, uint32_t* max_localmem);
 
 // performance counters
 int vx_dump_perf(vx_device_h hdevice, FILE* stream);
