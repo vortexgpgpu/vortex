@@ -143,28 +143,20 @@ public:
   #ifndef NDEBUG
     std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
   #endif
+    // pulse start for one cycle
+    device_->start = 1;
+    this->tick();
+    device_->start = 0;
 
-    // reset device
-    this->reset();
-
-    // start
-    device_->reset = 0;
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
-      device_->mem_req_ready[b] = 1;
-    }
-
-    // wait on device to go busy
+    // wait for device to go busy
     while (!device_->busy) {
       this->tick();
     }
 
-    // wait on device to go idle
+    // wait for device to go idle
     while (device_->busy) {
       this->tick();
     }
-
-    // stop
-    device_->reset = 1;
 
     this->cout_flush();
   }
@@ -221,10 +213,15 @@ private:
       device_->clk = 1;
       this->eval();
     }
+
+    device_->start = 0;
+    device_->reset = 0;
+    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      device_->mem_req_ready[b] = 1;
+    }
   }
 
   void tick() {
-
     device_->clk = 0;
     this->eval();
 

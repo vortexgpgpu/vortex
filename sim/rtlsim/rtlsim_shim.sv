@@ -50,7 +50,8 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
     output wire                             dcr_rsp_valid,
     output wire [VX_DCR_DATA_WIDTH-1:0]     dcr_rsp_data,
 
-    // Status
+    // ctrl/status
+    input  wire                             start,
     output wire                             busy
 );
     localparam DST_LDATAW = `CLOG2(MEM_DATA_WIDTH);
@@ -101,6 +102,7 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
         .dcr_rsp_valid  (dcr_rsp_valid),
         .dcr_rsp_data   (dcr_rsp_data),
 
+        .start          (start),
         .busy           (busy)
     );
 

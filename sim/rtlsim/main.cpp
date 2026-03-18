@@ -69,11 +69,23 @@ int main(int argc, char **argv) {
 
 	// setup base DCRs
 	const uint64_t startup_addr(STARTUP_ADDR);
-	processor.dcr_write(VX_DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff);
+	processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
 #if (XLEN == 64)
-    processor.dcr_write(VX_DCR_BASE_STARTUP_ADDR1, startup_addr >> 32);
+    processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR1, startup_addr >> 32);
 #endif
-	processor.dcr_write(VX_DCR_BASE_MPM_CLASS, 0);
+    processor.dcr_write(VX_DCR_KMU_STARTUP_ARG0, 0);
+    processor.dcr_write(VX_DCR_KMU_STARTUP_ARG1, 0);
+    processor.dcr_write(VX_DCR_KMU_GRID_DIM_X,   1);
+    processor.dcr_write(VX_DCR_KMU_GRID_DIM_Y,   1);
+    processor.dcr_write(VX_DCR_KMU_GRID_DIM_Z,   1);
+    processor.dcr_write(VX_DCR_KMU_BLOCK_DIM_X,  1);
+    processor.dcr_write(VX_DCR_KMU_BLOCK_DIM_Y,  1);
+    processor.dcr_write(VX_DCR_KMU_BLOCK_DIM_Z,  1);
+    processor.dcr_write(VX_DCR_KMU_LMEM_SIZE,    0);
+    processor.dcr_write(VX_DCR_KMU_BLOCK_SIZE,   1);
+    processor.dcr_write(VX_DCR_KMU_WARP_STEP_X,  NUM_THREADS);
+    processor.dcr_write(VX_DCR_KMU_WARP_STEP_Y,  0);
+    processor.dcr_write(VX_DCR_KMU_WARP_STEP_Z,  0);
 
 	// load program
 	{
@@ -94,6 +106,14 @@ int main(int argc, char **argv) {
 #endif
 	// run simulation
 	processor.run();
+
+	// flush GPU caches before reading back results
+	{
+		uint32_t dummy;
+		for (uint32_t cid = 0; cid < NUM_CORES * NUM_CLUSTERS; ++cid) {
+			processor.dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
+		}
+	}
 
 	// read exitcode from @MPM.1
   ram.read(&exitcode, IO_EXIT_CODE, 4);
