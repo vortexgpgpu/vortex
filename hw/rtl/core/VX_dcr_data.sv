@@ -23,50 +23,27 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     // Inputs
     VX_dcr_bus_if.slave     dcr_bus_if,
 
-    // Outputs
-    output base_dcrs_t      base_dcrs,
-
     // DCR-triggered CSR read bypass (for MPM perf counter readback)
-    VX_dcr_csr_if.master    dcr_csr_if
+    VX_dcr_csr_if.master    dcr_csr_if,
+
+    // DCR-triggered cache flush
+    VX_cache_flush_if.master cache_flush_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    base_dcrs_t dcrs;
-
-    always @(posedge clk) begin
-       if (dcr_bus_if.req_valid && dcr_bus_if.req_data.rw) begin
-            case (dcr_bus_if.req_data.addr)
-            `VX_DCR_BASE_STARTUP_ADDR0 : dcrs.startup_addr[31:0] <= dcr_bus_if.req_data.data;
-        `ifdef XLEN_64
-            `VX_DCR_BASE_STARTUP_ADDR1 : dcrs.startup_addr[63:32] <= dcr_bus_if.req_data.data;
-        `endif
-            `VX_DCR_BASE_STARTUP_ARG0 : dcrs.startup_arg[31:0] <= dcr_bus_if.req_data.data;
-        `ifdef XLEN_64
-            `VX_DCR_BASE_STARTUP_ARG1 : dcrs.startup_arg[63:32] <= dcr_bus_if.req_data.data;
-        `endif
-            `VX_DCR_BASE_MPM_CLASS : dcrs.mpm_class <= dcr_bus_if.req_data.data[7:0];
-            default:;
-            endcase
-        end
-    end
-
-    assign base_dcrs = dcrs;
-
     // MPM perf-counter readback via DCR interface ////////////////////////////
-    // Tag encoding (from runtime/stub/utils.cpp):
-    //   req_data.data[21:16] = csr_index (0..31 = lo half, 32..63 = hi half)
-    //   req_data.data[15:0]  = target core_id
 
-    wire [5:0]  mpm_tag_idx    = dcr_bus_if.req_data.data[21:16];
-    wire [15:0] mpm_target_cid = dcr_bus_if.req_data.data[15:0];
+    wire [7:0]  mpm_class      = dcr_bus_if.req_data.data[22 +: 8];
+    wire [5:0]  mpm_tag_idx    = dcr_bus_if.req_data.data[16 +: 6];
+    wire [15:0] mpm_target_cid = dcr_bus_if.req_data.data[0  +:16];
 
     wire [`VX_CSR_ADDR_BITS-1:0] mpm_csr_addr = mpm_tag_idx[5]
         ? (`VX_CSR_ADDR_BITS'(`VX_CSR_MPM_BASE_H) + `VX_CSR_ADDR_BITS'(mpm_tag_idx[4:0]))
         : (`VX_CSR_ADDR_BITS'(`VX_CSR_MPM_BASE)   + `VX_CSR_ADDR_BITS'(mpm_tag_idx[4:0]));
 
     // Latch a read request when it is for this core and addr == MPM_VALUE
-    reg                             dcr_csr_pending_r;
-    reg [`VX_CSR_ADDR_BITS-1:0]     dcr_csr_addr_r;
+    reg                         dcr_csr_pending_r;
+    reg [`VX_CSR_ADDR_BITS-1:0] dcr_csr_addr_r;
 
     wire is_mpm_read = dcr_bus_if.req_valid
                     && ~dcr_bus_if.req_data.rw
@@ -88,17 +65,44 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
 
     assign dcr_csr_if.valid = dcr_csr_pending_r;
     assign dcr_csr_if.addr  = dcr_csr_addr_r;
+    assign dcr_csr_if.mpm_class = mpm_class;
 
     wire dcr_csr_if_fire = dcr_csr_if.valid && dcr_csr_if.ready;
 
-    // Return CSR data on DCR response bus
+    // Cache flush via DCR interface /////////////////////////////////////////
+
+    reg flush_pending_r;
+
+    wire is_flush_read = dcr_bus_if.req_valid
+                      && ~dcr_bus_if.req_data.rw
+                      && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH)
+                      && (mpm_target_cid == 16'(CORE_ID))
+                      && ~flush_pending_r;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            flush_pending_r <= 1'b0;
+        end else if (is_flush_read) begin
+            flush_pending_r <= 1'b1;
+        end else if (cache_flush_if.done) begin
+            flush_pending_r <= 1'b0;
+        end
+    end
+
+    assign cache_flush_if.req = flush_pending_r;
+
+    wire flush_done = flush_pending_r && cache_flush_if.done;
+
+    // Return CSR data or flush-done or flush-done on DCR response bus
     always @(posedge clk) begin
         if (reset) begin
             dcr_bus_if.rsp_valid <= 1'b0;
         end else begin
-            dcr_bus_if.rsp_valid <= dcr_csr_if_fire;
+            dcr_bus_if.rsp_valid <= dcr_csr_if_fire || flush_done;
             if (dcr_csr_if_fire) begin
                 dcr_bus_if.rsp_data <= dcr_csr_if.value;
+            end else if (flush_done) begin
+                dcr_bus_if.rsp_data <= '0;
             end
         end
     end

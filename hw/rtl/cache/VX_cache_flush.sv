@@ -52,8 +52,12 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
 
     reg [CTR_WIDTH-1:0] counter;
 
+    // latch flush_begin that arrives while init is in progress
+    reg flush_pending_r, flush_pending_n;
+
     always @(*) begin
         state_n = state;
+        flush_pending_n = flush_pending_r;
         case (state)
             // STATE_IDLE:
             default : begin
@@ -62,8 +66,14 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
                 end
             end
             STATE_INIT: begin
+                if (flush_begin) begin
+                    flush_pending_n = 1'b1;
+                end
                 if (counter == ((2 ** `CS_LINE_SEL_BITS)-1)) begin
-                    state_n = STATE_IDLE;
+                    // STATE_INIT already invalidated all lines, so if a flush
+                    // was requested during init, generate flush_end now.
+                    state_n = flush_pending_n ? STATE_DONE : STATE_IDLE;
+                    flush_pending_n = 1'b0;
                 end
             end
             STATE_WAIT1: begin
@@ -94,10 +104,12 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
 
     always @(posedge clk) begin
         if (reset) begin
-            state   <= STATE_INIT;
-            counter <= '0;
+            state          <= STATE_INIT;
+            counter        <= '0;
+            flush_pending_r <= 1'b0;
         end else begin
-            state <= state_n;
+            state          <= state_n;
+            flush_pending_r <= flush_pending_n;
             if (state != STATE_IDLE) begin
                 if ((state == STATE_INIT)
                 || ((state == STATE_FLUSH) && flush_ready)) begin

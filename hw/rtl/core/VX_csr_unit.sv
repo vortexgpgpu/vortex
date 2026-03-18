@@ -21,8 +21,6 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     input wire                  clk,
     input wire                  reset,
 
-    input base_dcrs_t           base_dcrs,
-
 `ifdef PERF_ENABLE
     input sysmem_perf_t         sysmem_perf,
     input pipeline_perf_t       pipeline_perf,
@@ -58,6 +56,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     // DCR access bridge
     wire [`VX_CSR_ADDR_BITS-1:0] csr_read_addr = csr_req_valid ? csr_addr : dcr_csr_if.addr;
+    wire [7:0] mpm_class = csr_req_valid ? 0 : dcr_csr_if.mpm_class;
     assign dcr_csr_if.ready = ~csr_req_valid;
     assign dcr_csr_if.value = VX_DCR_DATA_WIDTH'(csr_read_data_ro);
 
@@ -76,17 +75,14 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
 
-        .base_dcrs      (base_dcrs),
+        .mpm_class      (mpm_class),
 
     `ifdef PERF_ENABLE
         .sysmem_perf    (sysmem_perf),
         .pipeline_perf  (pipeline_perf),
     `endif
 
-        .cycles         (sched_csr_if.cycles),
-        .instret        (sched_csr_if.instret),
-        .active_warps   (sched_csr_if.active_warps),
-        .thread_masks   (sched_csr_if.thread_masks),
+        .sched_csr_if   (sched_csr_if),
 
     `ifdef EXT_F_ENABLE
         .fpu_csr_if     (fpu_csr_if),

@@ -15,11 +15,11 @@
 
 interface VX_dcr_bus_if import VX_gpu_pkg::*; ();
 
-    wire            req_valid;
-    dcr_req_data_t  req_data;
+    wire       req_valid;
+    dcr_req_t  req_data;
 
-    wire            rsp_valid;
-    dcr_rsp_data_t  rsp_data;
+    wire       rsp_valid;
+    dcr_rsp_t  rsp_data;
 
     modport master (
         output req_valid,

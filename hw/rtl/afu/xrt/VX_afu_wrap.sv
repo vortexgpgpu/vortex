@@ -66,9 +66,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
 	typedef enum logic [1:0] {
 		STATE_IDLE = 0,
-		STATE_INIT = 1,
-    	STATE_RUN  = 2,
-		STATE_DONE = 3
+    	STATE_RUN  = 1,
+		STATE_DONE = 2
 	} state_e;
 
 	localparam PENDING_WR_SIZEW    = 12; // max outstanding requests size
@@ -113,7 +112,9 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
 	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 	reg [PENDING_WR_SIZEW-1:0] vx_pending_writes;
+	reg vx_busy_wait;
 	reg vx_reset;
+	reg vx_start;
 	wire vx_busy;
 
 	wire                         dcr_req_valid;
@@ -146,46 +147,41 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
 	always @(posedge clk) begin
 		if (reset || ap_reset) begin
-			state    <= STATE_IDLE;
-			vx_reset <= 1;
+			state        <= STATE_IDLE;
+			vx_reset     <= 1;
+			vx_reset_ctr <= (`RESET_DELAY-1);
+			vx_start     <= 0;
+			vx_busy_wait <= 0;
 		end else begin
 			case (state)
 			STATE_IDLE: begin
 				if (ap_start) begin
 				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%t: AFU: Begin initialization\n", $time))
+					`TRACE(2, ("%t: AFU: Goto STATE_RUN\n", $time))
 				`endif
-					state <= STATE_INIT;
-					vx_reset_ctr <= (`RESET_DELAY-1);
-					vx_reset <= 1;
-				end
-			end
-			STATE_INIT: begin
-				if (vx_reset) begin
-					// wait for reset to complete
-					if (vx_reset_ctr == 0) begin
-					`ifdef DBG_TRACE_AFU
-						`TRACE(2, ("%t: AFU: Initialization completed\n", $time))
-					`endif
-						vx_reset <= 0;
-					end
-				end else begin
-					// wait until processor goes busy
-					if (vx_busy) begin
-					`ifdef DBG_TRACE_AFU
-						`TRACE(2, ("%t: AFU: Begin execution\n", $time))
-					`endif
-						state <= STATE_RUN;
-					end
+					state        <= STATE_RUN;
+					vx_start     <= 1;
+					vx_busy_wait <= 1;
 				end
 			end
 			STATE_RUN: begin
-				// wait until the processor is not busy
-				if (~vx_busy) begin
-				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%t: AFU: Execution completed\n", $time))
-				`endif
-					state <= STATE_DONE;
+				vx_start <= 0;
+				if (vx_busy_wait) begin
+					// wait until processor goes busy
+					if (!vx_reset && vx_busy) begin
+					`ifdef DBG_TRACE_AFU
+						`TRACE(2, ("%t: AFU: Begin execution\n", $time))
+					`endif
+						vx_busy_wait <= 0;
+					end
+				end else begin
+					// wait until the processor is not busy
+					if (~vx_busy) begin
+					`ifdef DBG_TRACE_AFU
+						`TRACE(2, ("%t: AFU: Execution completed\n", $time))
+					`endif
+						state <= STATE_DONE;
+					end
 				end
 			end
 			STATE_DONE: begin
@@ -197,7 +193,13 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 					state <= STATE_IDLE;
 				end
 			end
+			default:;
 			endcase
+
+			// auto-de-assert reset after initialization
+			if (vx_reset && vx_reset_ctr == '0) begin
+				vx_reset <= 0;
+			end
 
 			// ensure reset network initialization
 			if (vx_reset_ctr != '0) begin
@@ -365,6 +367,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		.dcr_rsp_valid	(dcr_rsp_valid),
 		.dcr_rsp_data	(dcr_rsp_data),
 
+		.start          (vx_start),
 		.busy			(vx_busy)
 	);
 

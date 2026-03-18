@@ -85,6 +85,8 @@ package VX_gpu_pkg;
     localparam UOP_MAX = UOP_DXA + `EXT_DXA_ENABLED;
     localparam UOP_CTR_W = 8;
 
+    localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
+
 `ifndef NDEBUG
 	localparam UUID_WIDTH = 44;
 `elsif SCOPE
@@ -534,20 +536,38 @@ package VX_gpu_pkg;
     } txbar_t;
 
     typedef struct packed {
-        logic                            rw;
-        logic [VX_DCR_ADDR_WIDTH-1:0]    addr;
-        logic [VX_DCR_DATA_WIDTH-1:0]    data;
-    } dcr_req_data_t;
+        logic                         rw;
+        logic [VX_DCR_ADDR_WIDTH-1:0] addr;
+        logic [VX_DCR_DATA_WIDTH-1:0] data;
+    } dcr_req_t;
 
     typedef struct packed {
-        logic [VX_DCR_DATA_WIDTH-1:0]    data;
-    } dcr_rsp_data_t;
+        logic [VX_DCR_DATA_WIDTH-1:0] data;
+    } dcr_rsp_t;
 
     typedef struct packed {
-        logic [`XLEN-1:0]   startup_addr;
-        logic [`XLEN-1:0]   startup_arg;
-        logic [7:0]         mpm_class;
-    } base_dcrs_t;
+        logic [PC_BITS-1:0] PC;
+        logic [31:0]      cta_id;
+        logic [2:0][31:0] block_idx;
+        logic [2:0][CTA_TID_WIDTH:0] block_dim;
+        logic [2:0][31:0] grid_dim;
+        logic [`MEM_ADDR_WIDTH-1:0] param;
+        logic [`LMEM_LOG_SIZE:0] lmem_size;
+        logic [CTA_TID_WIDTH:0] block_size;
+        logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
+    } kmu_req_t;
+
+    typedef struct packed {
+        logic [31:0]      cta_id;
+        logic [NW_WIDTH-1:0] cta_rank;
+        logic [NW_WIDTH:0] cta_size;
+        logic [2:0][CTA_TID_WIDTH-1:0] thread_idx;
+        logic [2:0][31:0] block_idx;
+        logic [2:0][CTA_TID_WIDTH:0] block_dim;
+        logic [2:0][31:0] grid_dim;
+        logic [`MEM_ADDR_WIDTH-1:0] param;
+        logic [`MEM_ADDR_WIDTH-1:0] lmem_addr;
+    } cta_csrs_t;
 
     //////////////////////// instruction arguments ////////////////////////////
 

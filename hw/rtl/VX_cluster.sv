@@ -33,6 +33,9 @@ module VX_cluster import VX_gpu_pkg::*; #(
     // Memory
     VX_mem_bus_if.master        mem_bus_if [`L2_MEM_PORTS],
 
+    // KMU bus
+    VX_kmu_bus_if.slave         kmu_bus_if[1],
+
     // Status
     output wire                 busy
 );
@@ -50,6 +53,18 @@ module VX_cluster import VX_gpu_pkg::*; #(
         sysmem_perf_tmp.l2cache = l2_perf;
     end
 `endif
+
+    VX_kmu_bus_if per_socket_kmu_bus_if[NUM_SOCKETS]();
+
+    VX_kmu_arb #(
+        .NUM_INPUTS (1),
+        .NUM_OUTPUTS (NUM_SOCKETS)
+    ) kmu_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (kmu_bus_if),
+        .bus_out_if (per_socket_kmu_bus_if)
+    );
 
     VX_gbar_bus_if per_socket_gbar_bus_if[NUM_SOCKETS]();
     VX_gbar_bus_if gbar_bus_if();
@@ -105,6 +120,9 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     `RESET_RELAY (l2_reset, reset);
 
+    VX_cache_flush_if l2_flush_if();
+    assign l2_flush_if.req = 1'b0;
+
     VX_mem_bus_if #(
         .DATA_SIZE (`L2_LINE_SIZE),
         .TAG_WIDTH (L2_MEM_TAG_WIDTH)
@@ -139,7 +157,8 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .cache_perf     (l2_perf),
     `endif
         .core_bus_if    (per_socket_mem_bus_if),
-        .mem_bus_if     (l2_mem_bus_if)
+        .mem_bus_if     (l2_mem_bus_if),
+        .cache_flush_if (l2_flush_if)
     );
 
 `ifdef EXT_DXA_ENABLE
@@ -222,8 +241,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     wire [NUM_SOCKETS-1:0] per_socket_busy;
 
-    // Generate all sockets
-    
     VX_dcr_bus_if per_socket_dcr_bus_if[NUM_SOCKETS]();
     VX_dcr_arb #(
         .NUM_REQS    (NUM_SOCKETS),
@@ -235,6 +252,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .bus_out_if (per_socket_dcr_bus_if)
     );
 
+    // Generate all sockets
     for (genvar socket_id = 0; socket_id < NUM_SOCKETS; ++socket_id) begin : g_sockets
 
         `RESET_RELAY (socket_reset, reset);
@@ -261,6 +279,8 @@ module VX_cluster import VX_gpu_pkg::*; #(
             .dxa_smem_bus_if        (dxa_smem_bus_if[socket_id * DXA_SMEM_PORTS_PER_SOCKET +: DXA_SMEM_PORTS_PER_SOCKET]),
             .dxa_smem_local_core_id (dxa_smem_local_core_id[socket_id * DXA_SMEM_PORTS_PER_SOCKET +: DXA_SMEM_PORTS_PER_SOCKET]),
         `endif
+
+            .kmu_bus_if     (per_socket_kmu_bus_if[socket_id +: 1]),
 
             .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),
 
