@@ -111,6 +111,9 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) mem_bus_if[MEM_PORTS]();
 
+    VX_cache_flush_if cache_flush_if();
+    assign cache_flush_if.req = 0;
+
     // Core request
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign core_bus_if[i].req_valid = core_req_valid[i];
@@ -176,7 +179,8 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (core_bus_if),
-        .mem_bus_if     (mem_bus_if)
+        .mem_bus_if     (mem_bus_if),
+        .cache_flush_if (cache_flush_if)
     );
 
 endmodule
