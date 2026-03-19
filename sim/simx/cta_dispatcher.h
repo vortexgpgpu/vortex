@@ -23,6 +23,7 @@ namespace vortex {
 class Core; // forward declaration
 
 struct cta_warp_record_t {
+  bool       do_init;
   Word       PC;
   ThreadMask tmask;
   Word       mscratch;
@@ -56,7 +57,7 @@ public:
   }
 
 private:
-  bool next_warp(cta_warp_record_t* out);
+  bool next_warp(bool is_init, cta_warp_record_t* out);
 
   Core*     core_;
   Kmu*      kmu_;

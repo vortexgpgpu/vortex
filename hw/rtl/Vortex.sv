@@ -65,7 +65,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     // Kernel Management Unit
     VX_kmu_bus_if kmu_bus_in[1]();
     wire kmu_busy;
-    VX_kmu kmu(
+    VX_kmu #(
+        .INSTANCE_ID ("kmu")
+    ) kmu (
         .clk        (clk),
         .reset      (reset),
         .start      (start),

@@ -14,8 +14,9 @@
 `include "VX_define.vh"
 
 // Dispatches warps for incoming CTAs from the KMU.
-module VX_cta_dispatch import VX_gpu_pkg::*;
-(
+module VX_cta_dispatch import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = ""
+) (
     input wire                      clk,
     input wire                      reset,
 
@@ -36,6 +37,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
     output wire                     cta_init,
     output wire                     busy
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam NUM_WARPS    = `NUM_WARPS;
     localparam NUM_CTA_SLOTS= NUM_WARPS;
     localparam CS_BITS      = NW_BITS;
@@ -133,9 +135,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
     reg [CS_BITS-1:0]   done_slot_dly;
 
 
-    // Pre-registered admission gate — breaks >= comparator off kmu_bus_if.ready
-    reg                 lmem_ok_r;
-
     // Kernel initialization tracking
     reg [PC_BITS-1:0]   cur_kernel_pc_r;
     reg [NUM_WARPS-1:0] warp_init_mask_r;
@@ -148,7 +147,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
     state_t state;
 
     reg [PC_BITS-1:0]               warp_PC;
-    reg [31:0]                      cta_id_r;
     reg [2:0][31:0]                 block_idx_r;
     reg [2:0][CTA_TID_WIDTH:0]      block_dim_r;
     reg [2:0][31:0]                 grid_dim_r;
@@ -220,11 +218,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
     reg                 head_reclaimable_dly;
 
     // -------------------------------------------------------------------------
-    // Admission control — kmu_bus_if.ready uses pre-registered lmem_ok_r
+    // Admission control — kmu_bus_if.ready uses combinational lmem_ok
     // -------------------------------------------------------------------------
     wire table_notfull = (slot_count_r < (NW_WIDTH+1)'(NUM_WARPS));
-
-    assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok_r;
+    wire lmem_ok = (free_size_r >= kmu_bus_if.data.lmem_size);
+    assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok;
 
     // -------------------------------------------------------------------------
     // BRAM access
@@ -274,7 +272,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
             free_size_r     <= (`LMEM_LOG_SIZE+1)'(LMEM_SIZE);
             slot_valid_r    <= '0;
             slot_count_r    <= '0;
-            lmem_ok_r       <= 1'b1;  // pool starts full
             warp_done_r     <= 0;
             warp_done_wid_r <= '0;
             warp_done_r_dly <= 0;
@@ -317,25 +314,15 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
 
             // ---- Head advancement + free_size bookkeeping ------------------
             head_reclaimable_dly <= head_reclaimable_s1 || (cta_done && (done_slot_dly == head_r));
-            if (head_reclaimable_dly) begin
-                free_size_r <= free_size_r + lmem_size_rdata - (kmu_bus_if_fire ? kmu_bus_if.data.lmem_size : '0);
+
+            if (head_reclaimable_s1 || (cta_done && (done_slot_dly == head_r))) begin
                 head_r <= head_r + CS_BITS'(1);
-            end else if (kmu_bus_if_fire) begin
-                free_size_r <= free_size_r - kmu_bus_if.data.lmem_size;
             end
 
-            // ---- Pre-register lmem_ok for next cycle's ready check ---------
-            // Accounts for the allocation that may happen this cycle so the
-            // check is valid on the very next IDLE cycle.
-            begin
-                logic [`LMEM_LOG_SIZE:0] free_next;
-                if (head_reclaimable_dly)
-                    free_next = free_size_r + lmem_size_rdata - (kmu_bus_if_fire ? kmu_bus_if.data.lmem_size : '0);
-                else if (kmu_bus_if_fire)
-                    free_next = free_size_r - kmu_bus_if.data.lmem_size;
-                else
-                    free_next = free_size_r;
-                lmem_ok_r <= (kmu_bus_if.data.lmem_size == 0) || (free_next >= kmu_bus_if.data.lmem_size);
+            if (head_reclaimable_dly) begin
+                free_size_r <= free_size_r + lmem_size_rdata - (kmu_bus_if_fire ? kmu_bus_if.data.lmem_size : '0);
+            end else if (kmu_bus_if_fire) begin
+                free_size_r <= free_size_r - kmu_bus_if.data.lmem_size;
             end
 
             // ---- FSM -------------------------------------------------------
@@ -347,7 +334,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
                             warp_init_mask_r <= '0;
                         end
                         warp_PC      <= kmu_bus_if.data.PC;
-                        cta_id_r     <= kmu_bus_if.data.cta_id;
                         block_idx_r  <= kmu_bus_if.data.block_idx;
                         block_dim_r  <= kmu_bus_if.data.block_dim;
                         grid_dim_r   <= kmu_bus_if.data.grid_dim;
@@ -420,7 +406,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
         end
     end
 
-    assign cta_csrs.cta_id     = cta_id_r;
+    assign cta_csrs.cta_id     = 32'(cur_slot_r);  // local slot index (0..num_warps-1) for barrier indexing
     assign cta_csrs.cta_rank   = cta_rank_r;
     assign cta_csrs.cta_size   = cta_size_r;
     assign cta_csrs.thread_idx = thread_idx_r;
@@ -432,5 +418,37 @@ module VX_cta_dispatch import VX_gpu_pkg::*;
                                | `MEM_ADDR_WIDTH'(cur_lmem_base_r);
 
     assign busy = (state == DISPATCH);
+
+`ifdef DBG_TRACE_PIPELINE
+    always @(posedge clk) begin
+        // CTA accepted from KMU
+        if (kmu_bus_if_fire) begin
+            `TRACE(1, ("%t: %s kmu-accept: slot=%0d, PC=0x%0h, param=0x%0h, cta_id=%0d, lmem_size=%0d, num_warps=%0d, free_size=%0d\n",
+                $time, INSTANCE_ID, tail_r, to_fullPC(kmu_bus_if.data.PC),
+                kmu_bus_if.data.param, kmu_bus_if.data.cta_id,
+                kmu_bus_if.data.lmem_size, kmu_num_warps, free_size_r))
+        end
+        // Warp dispatched to scheduler
+        if (warp_fire_r) begin
+            `TRACE(1, ("%t: %s dispatch: wid=%0d, slot=%0d, PC=0x%0h, tmask=%b, param=0x%0h, lmem_addr=0x%0h, init=%b\n",
+                $time, INSTANCE_ID, warp_id_r, cur_slot_r, to_fullPC(warp_PC),
+                warp_tmask_r, param_r,
+                (`MEM_ADDR_WIDTH'(`LMEM_BASE_ADDR) | `MEM_ADDR_WIDTH'(cur_lmem_base_r)),
+                ~warp_skip_init_r))
+        end
+        // Warp retirement / CTA done
+        if (warp_done_r_dly2 && slot_valid_r[done_slot_dly]) begin
+            `TRACE(1, ("%t: %s warp-done: wid=%0d, slot=%0d, rem_warps=%0d, cta_done=%b, free_size=%0d\n",
+                $time, INSTANCE_ID, warp_done_wid_r, done_slot_dly,
+                rem_warps_rdata - (NW_WIDTH+1)'(1), cta_done, free_size_r))
+        end
+        // Admission gate status when KMU presents a CTA but is stalled
+        if (kmu_bus_if.valid && !kmu_bus_if.ready && state == IDLE) begin
+            `TRACE(4, ("%t: %s stall: table_notfull=%b, lmem_ok=%b, free_size=%0d, lmem_req=%0d, slot_count=%0d\n",
+                $time, INSTANCE_ID, table_notfull, lmem_ok,
+                free_size_r, kmu_bus_if.data.lmem_size, slot_count_r))
+        end
+    end
+`endif
 
 endmodule

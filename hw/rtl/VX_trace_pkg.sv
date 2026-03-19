@@ -468,6 +468,31 @@ package VX_trace_pkg;
         endcase
     endtask
 
+    task trace_kmu_dcr(input int level, input [VX_DCR_ADDR_WIDTH-1:0] addr);
+        case (addr)
+            `VX_DCR_KMU_STARTUP_ADDR0: `TRACE(level, ("STARTUP_ADDR0"))
+        `ifdef XLEN_64
+            `VX_DCR_KMU_STARTUP_ADDR1: `TRACE(level, ("STARTUP_ADDR1"))
+        `endif
+            `VX_DCR_KMU_STARTUP_ARG0:  `TRACE(level, ("STARTUP_ARG0"))
+        `ifdef XLEN_64
+            `VX_DCR_KMU_STARTUP_ARG1:  `TRACE(level, ("STARTUP_ARG1"))
+        `endif
+            `VX_DCR_KMU_GRID_DIM_X:    `TRACE(level, ("GRID_DIM_X"))
+            `VX_DCR_KMU_GRID_DIM_Y:    `TRACE(level, ("GRID_DIM_Y"))
+            `VX_DCR_KMU_GRID_DIM_Z:    `TRACE(level, ("GRID_DIM_Z"))
+            `VX_DCR_KMU_BLOCK_DIM_X:   `TRACE(level, ("BLOCK_DIM_X"))
+            `VX_DCR_KMU_BLOCK_DIM_Y:   `TRACE(level, ("BLOCK_DIM_Y"))
+            `VX_DCR_KMU_BLOCK_DIM_Z:   `TRACE(level, ("BLOCK_DIM_Z"))
+            `VX_DCR_KMU_LMEM_SIZE:     `TRACE(level, ("LMEM_SIZE"))
+            `VX_DCR_KMU_BLOCK_SIZE:    `TRACE(level, ("BLOCK_SIZE"))
+            `VX_DCR_KMU_WARP_STEP_X:   `TRACE(level, ("WARP_STEP_X"))
+            `VX_DCR_KMU_WARP_STEP_Y:   `TRACE(level, ("WARP_STEP_Y"))
+            `VX_DCR_KMU_WARP_STEP_Z:   `TRACE(level, ("WARP_STEP_Z"))
+            default:                   `TRACE(level, ("?"))
+        endcase
+    endtask
+
 `endif
 
 endpackage
