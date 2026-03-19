@@ -163,13 +163,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // Free-warp selection
     // -------------------------------------------------------------------------
+    reg  [NUM_WARPS-1:0] dispatched_warps;
     wire [NW_WIDTH-1:0] warp_id_n;
     wire                warp_ready;
     VX_priority_encoder #(
         .N       (NUM_WARPS),
         .REVERSE (0)
     ) priority_enc (
-        .data_in   (~active_warps),
+        .data_in   (~(active_warps | dispatched_warps)),
         `UNUSED_PIN(onehot_out),
         .index_out (warp_id_n),
         .valid_out (warp_ready)
@@ -271,6 +272,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             cur_lmem_base_r <= '0;
             free_size_r     <= (`LMEM_LOG_SIZE+1)'(LMEM_SIZE);
             slot_valid_r    <= '0;
+            dispatched_warps<= '0;
             slot_count_r    <= '0;
             warp_done_r     <= 0;
             warp_done_wid_r <= '0;
@@ -351,6 +353,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         slot_valid_r[tail_r] <= 1'b1;
                         tail_r <= tail_r + CS_BITS'(1);
                         cur_slot_r <= tail_r;
+                        dispatched_warps <= '0;
                         state <= DISPATCH;
                     end
                 end
@@ -359,6 +362,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                     if (warp_ready) begin
                         warp_fire_r  <= 1;
                         warp_id_r    <= warp_id_n;
+                        dispatched_warps[warp_id_n] <= 1'b1;
                         // Full warp: all ones.  Partial: (1<<count)-1, no subtrahend barrel shift.
                         warp_tmask_r <= is_full_warp ? {`NUM_THREADS{1'b1}} : partial_tmask;
                         warp_skip_init_r <= warp_init_mask_r[warp_id_n];
