@@ -64,6 +64,15 @@ static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t
   }
 }
 
+template<typename T>
+static void convert_row_to_col_major(T *dst, const T *src, uint32_t rows, uint32_t cols) {
+  for (uint32_t r = 0; r < rows; ++r) {
+    for (uint32_t c = 0; c < cols; ++c) {
+      dst[c * rows + r] = src[r * cols + c];
+    }
+  }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
@@ -675,8 +684,10 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
   constexpr uint32_t mcols = cfg::meta_cols;
   constexpr uint32_t half_k_steps = cfg::k_steps / 2;
   constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-  constexpr uint32_t cols_per_load = NUM_THREADS / PD;
-  constexpr uint32_t num_meta_loads = (mcols + cols_per_load - 1) / cols_per_load;
+  constexpr uint32_t cols_per_load = (NUM_THREADS >= PD) ? (NUM_THREADS / PD) : 1;
+  constexpr uint32_t banks_per_store = (NUM_THREADS < PD) ? NUM_THREADS : PD;
+  constexpr uint32_t stores_per_col = (PD + NUM_THREADS - 1) / NUM_THREADS;
+  constexpr uint32_t num_meta_loads = (PD * mcols + NUM_THREADS - 1) / NUM_THREADS;
   constexpr uint32_t per_k_tile_words = num_meta_loads * NUM_THREADS;
 
   uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
@@ -722,9 +733,12 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
                   uint32_t block_bit = i * meta_row_w + meta_bit;
                   uint32_t word_idx = block_bit / 32;
                   uint32_t bit_idx = block_bit % 32;
-                  uint32_t load_idx = word_idx / cols_per_load;
-                  uint32_t word_in_load = word_idx % cols_per_load;
-                  uint32_t meta_idx = load_idx * NUM_THREADS + word_in_load * PD + sram_row;
+                  uint32_t store_in_col = sram_row / banks_per_store;
+                  uint32_t thread_in_store = sram_row % banks_per_store;
+                  uint32_t flat_store = word_idx * stores_per_col + store_in_col;
+                  uint32_t load_idx = flat_store / cols_per_load;
+                  uint32_t store_in_load = flat_store % cols_per_load;
+                  uint32_t meta_idx = load_idx * NUM_THREADS + store_in_load * banks_per_store + thread_in_store;
                   h_meta[section_base + meta_idx] |= (1u << bit_idx);
                 }
               }
@@ -749,6 +763,7 @@ vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
 vx_buffer_h meta_buffer = nullptr;
+vx_buffer_h cycles_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
@@ -795,6 +810,7 @@ void cleanup() {
     vx_mem_free(B_buffer);
     vx_mem_free(C_buffer);
     vx_mem_free(meta_buffer);
+    vx_mem_free(cycles_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -886,11 +902,14 @@ int main(int argc, char *argv[]) {
   uint32_t num_tile_rows = M / cfg::tileM;
   uint32_t num_k_tiles = K / cfg::tileK;
   constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-  constexpr uint32_t meta_cols_per_load = NUM_THREADS / PD;
-  constexpr uint32_t num_meta_loads = (meta_cols + meta_cols_per_load - 1) / meta_cols_per_load;
+  constexpr uint32_t num_meta_loads = (PD * meta_cols + NUM_THREADS - 1) / NUM_THREADS;
   uint32_t meta_buf_entries = num_tile_rows * num_k_tiles * (num_meta_loads * NUM_THREADS);
   RT_CHECK(vx_mem_alloc(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
   RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_addr));
+
+  uint32_t num_blocks = kernel_arg.grid_dim[0] * kernel_arg.grid_dim[1];
+  RT_CHECK(vx_mem_alloc(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
+  RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
@@ -938,13 +957,15 @@ int main(int argc, char *argv[]) {
     if constexpr (std::is_same<vt::ITYPE, vt::int4>::value ||
                   std::is_same<vt::ITYPE, vt::uint4>::value ||
                   std::is_same<vt::ITYPE, vt::nvfp4>::value) {
-      // sub-byte matrix B must be in col-major format
-      // we convert the 4-bit row-major to col-major here
+      // sub-byte: existing 4-bit col-major conversion
       std::vector<uint8_t> h_B_col(sizeB);
       convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());
       RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB));
     } else {
-      RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
+      // byte+ types: convert to col-major
+      std::vector<itype_t> h_B_col(sizeB);
+      convert_row_to_col_major(h_B_col.data(), h_B.data(), K, N);
+      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB * sizeof(itype_t)));
     }
   }
 
@@ -977,6 +998,15 @@ int main(int argc, char *argv[]) {
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
+
+  // download and report cycle counts
+  {
+    std::vector<uint32_t> h_cycles(num_blocks);
+    RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_blocks * sizeof(uint32_t)));
+    uint32_t max_cycles = 0;
+    for (auto c : h_cycles) max_cycles = std::max(max_cycles, c);
+    printf("TCU_CYCLES: max=%u (across %u blocks)\n", max_cycles, num_blocks);
+  }
 
   // download destination buffer
   std::vector<otype_t> h_C(sizeC);
@@ -1018,8 +1048,7 @@ int main(int argc, char *argv[]) {
     pack_metadata(h_meta_dbg, masks, M, K);
     constexpr uint32_t mcols_d = cfg::meta_cols;
     constexpr uint32_t PD_d = cfg::m_steps * (cfg::k_steps / 2);
-    constexpr uint32_t cols_per_load_d = NUM_THREADS / PD_d;
-    constexpr uint32_t num_meta_loads_d = (mcols_d + cols_per_load_d - 1) / cols_per_load_d;
+    constexpr uint32_t num_meta_loads_d = (PD_d * mcols_d + NUM_THREADS - 1) / NUM_THREADS;
     uint32_t per_k_words_d = num_meta_loads_d * NUM_THREADS;
     std::cout << "Metadata words (tile_row=0, k_tile=0):";
     for (uint32_t w = 0; w < per_k_words_d; ++w) {

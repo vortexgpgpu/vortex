@@ -328,6 +328,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         // ================================================================
         // Worker instantiation
         // ================================================================
+
         for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_workers
             VX_dxa_worker #(
                 .INSTANCE_ID(`SFORMATF(("%s-worker%0d", INSTANCE_ID, i))),
@@ -384,16 +385,16 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
     `endif
 
-    `ifdef DBG_TRACE_DXA_TIMELINE
+    `ifdef DBG_TRACE_DXA
         always @(posedge clk) begin
             if (~reset) begin
                 if (issue_fifo_enq) begin
-                    $write("DXA_TL,%0d,ISSUE_ENQ,%0d,%0d,0,ctx=%0d\n",
+                    $write("DXA_TL,%0d,ISSUE_ENQ,core=%0d,wid=%0d,ctx=%0d\n",
                         $time, in_core_id[issue_grant_idx], in_wid[issue_grant_idx],
                         in_ctx_idx[issue_grant_idx]);
                 end
                 if (issue_dispatch) begin
-                    $write("DXA_TL,%0d,DISPATCH,%0d,%0d,%0d,worker=%0d desc=%0d\n",
+                    $write("DXA_TL,%0d,DISPATCH,core=%0d,wid=%0d,bar=%0d,worker=%0d,desc=%0d\n",
                         $time, launch_core_id, launch_wid, launch_bar_addr,
                         idle_worker_idx, launch_desc_slot);
                 end

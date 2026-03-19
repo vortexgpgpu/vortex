@@ -48,10 +48,10 @@ inline int64_t check_boxing(int64_t a) {
   return nan_box(0x7fc00000); // NaN
 }
 
-void Emulator::fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint32_t src_index, const RegOpd& reg) {
+void Emulator::fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint32_t src_index, const RegOpd& reg, const ThreadMask& tmask) {
   __unused(src_index);
   auto& warp = warps_.at(wid);
-  uint32_t num_threads = warp.tmask.size();
+  uint32_t num_threads = tmask.size();
   out.resize(num_threads);
   switch (reg.type) {
   case RegType::None:
@@ -60,7 +60,7 @@ void Emulator::fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint3
     DPH(2, "Src" << src_index << " Reg: " << reg << "={");
     for (uint32_t t = 0; t < num_threads; ++t) {
       if (t) DPN(2, ", ");
-      if (!warp.tmask.test(t)) {
+      if (!tmask.test(t)) {
         DPN(2, "-");
         continue;
       }
@@ -74,7 +74,7 @@ void Emulator::fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint3
     auto& reg_data = warp.ireg_file.at(reg.idx);
     for (uint32_t t = 0; t < num_threads; ++t) {
       if (t) DPN(2, ", ");
-      if (!warp.tmask.test(t)) {
+      if (!tmask.test(t)) {
         DPN(2, "-");
         continue;
       }
@@ -89,7 +89,7 @@ void Emulator::fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint3
     auto& reg_data = warp.freg_file.at(reg.idx);
     for (uint32_t t = 0; t < num_threads; ++t) {
       if (t) DPN(2, ", ");
-      if (!warp.tmask.test(t)) {
+      if (!tmask.test(t)) {
         DPN(2, "-");
         continue;
       }
@@ -124,6 +124,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   auto rsrc2  = instr.getSrcReg(2);
 
   auto num_threads = arch_.num_threads();
+  auto exec_tmask = instr.hasTmask() ? (warp.tmask & instr.getTmask()) : warp.tmask;
+  auto operand_tmask = warp.tmask;
 
   // create instruction trace
   auto trace_alloc = core_->trace_pool().allocate(1);
@@ -133,7 +135,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   trace->cid      = core_->id();
   trace->wid      = wid;
   trace->PC       = warp.PC;
-  trace->tmask    = warp.tmask;
+  trace->tmask    = exec_tmask;
   trace->dst_reg  = rdest;
   trace->src_regs = {rsrc0, rsrc1, rsrc2};
 
@@ -143,27 +145,27 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   std::vector<reg_data_t> rs3_data;
 
   if (instr.is_uop()) {
-    DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
+    DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << exec_tmask
           << ", PC=0x" << std::hex << warp.PC << std::dec << ", parent=#" << instr.getParentUUID() << " (#" << instr.getUUID() << ")");
   } else {
-    DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
+    DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << exec_tmask
           << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << instr.getUUID() << ")");
   }
 
   // fetch register values
-  if (rsrc0.type != RegType::None) fetch_registers(rs1_data, wid, 0, rsrc0);
-  if (rsrc1.type != RegType::None) fetch_registers(rs2_data, wid, 1, rsrc1);
-  if (rsrc2.type != RegType::None) fetch_registers(rs3_data, wid, 2, rsrc2);
+  if (rsrc0.type != RegType::None) fetch_registers(rs1_data, wid, 0, rsrc0, operand_tmask);
+  if (rsrc1.type != RegType::None) fetch_registers(rs2_data, wid, 1, rsrc1, operand_tmask);
+  if (rsrc2.type != RegType::None) fetch_registers(rs3_data, wid, 2, rsrc2, operand_tmask);
 
   uint32_t thread_start = 0;
   for (; thread_start < num_threads; ++thread_start) {
-    if (warp.tmask.test(thread_start))
+    if (exec_tmask.test(thread_start))
       break;
   }
 
   int32_t thread_last = num_threads - 1;
   for (; thread_last >= 0; --thread_last) {
-    if (warp.tmask.test(thread_last))
+    if (exec_tmask.test(thread_last))
       break;
   }
 
@@ -1601,21 +1603,22 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       case TcuType::WMMA: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
-        assert(warp.tmask.count() == num_threads);
+        assert(operand_tmask.count() == num_threads);
         core_->tensor_unit()->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
         rd_write = true;
       } break;
       case TcuType::WMMA_SP: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
-        assert(warp.tmask.count() == num_threads);
+        assert(operand_tmask.count() == num_threads);
+        assert(exec_tmask.any());
         core_->tensor_unit()->wmma_sp(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
         rd_write = true;
       } break;
       case TcuType::META_STORE: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
-        assert(warp.tmask.count() == num_threads);
+        assert(operand_tmask.count() == num_threads);
         core_->tensor_unit()->meta_store(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, rs1_data, trace_data.get());
       } break;
       default:
@@ -1635,7 +1638,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         DPH(2, "Dest Reg: " << rdest << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
-          if (!warp.tmask.test(t)) {
+          if (!exec_tmask.test(t)) {
             DPN(2, "-");
             continue;
           }
@@ -1652,7 +1655,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       DPH(2, "Dest Reg: " << rdest << "={");
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (t) DPN(2, ", ");
-        if (!warp.tmask.test(t)) {
+        if (!exec_tmask.test(t)) {
           DPN(2, "-");
           continue;
         }

@@ -154,6 +154,26 @@ package VX_dxa_pkg;
         logic [BAR_ADDR_W-1:0]    bar_addr;
     } dxa_smem_done_t;
 
+    // ── Line-granularity refactor types ──────────────────────────────────
+
+    // Maximum outer dimensions for tile iteration (dims 1..4 for up to 5D).
+    localparam DXA_MAX_OUTER_DIMS = 4;
+
+    // Setup parameters: precomputed constants for addr_gen, rd_ctrl, cl2smem, wr_ctrl.
+    // All multiplies happen during setup; fast path uses additions only.
+    typedef struct packed {
+        logic [`MEM_ADDR_WIDTH-1:0]  initial_gmem_base;
+        logic [`XLEN-1:0]           initial_smem_base;
+        logic [31:0]                row_len_bytes;
+        logic [31:0]                stride0;
+        logic [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit;
+        logic [31:0]                total_rows;
+        logic [31:0]                total_smem_writes;
+        logic [31:0]                cfill;
+        logic [31:0]                elem_bytes;
+        logic [31:0]                rank;
+    } dxa_setup_params_t;
+
 endpackage
 
 `IGNORE_UNUSED_END

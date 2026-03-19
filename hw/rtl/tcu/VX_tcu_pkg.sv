@@ -80,13 +80,13 @@ package VX_tcu_pkg;
     localparam TCU_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE;
 
 `ifdef TCU_SPARSE_ENABLE
-    // NT=16 symmetric sparse flag
-    localparam NT16_SPARSE = (TCU_LG_BLOCK_CAP == 4);
+    // Symmetric sparse flag (NT=4, NT=16: block_em == block_en)
+    localparam SYM_SPARSE = (TCU_BLOCK_EM == TCU_BLOCK_EN);
 
     // B micro-tiling (sparse 2:4)
     // NT=16: column-pair layout (2 cols × tcK × 2 candidates = NT lanes per block)
     // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)
-    localparam TCU_B_BLOCK_SIZE_SP = NT16_SPARSE ? TCU_BLOCK_CAP : (TCU_TC_K * TCU_TC_N) * 2;
+    localparam TCU_B_BLOCK_SIZE_SP = SYM_SPARSE ? TCU_BLOCK_CAP : (TCU_TC_K * TCU_TC_N) * 2;
     localparam TCU_B_SUB_BLOCKS_SP = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
 
     // Max metadata widths (sized for widest type: 4-bit elements, I_RATIO=8)
@@ -95,19 +95,29 @@ package VX_tcu_pkg;
 
     // Meta-store micro-op expansion parameters
     localparam TCU_META_PER_WARP_DEPTH = TCU_M_STEPS * (TCU_K_STEPS / 2);
-    localparam TCU_META_COLS_PER_LOAD  = TCU_BLOCK_CAP / TCU_META_PER_WARP_DEPTH;
+    localparam TCU_META_COLS_PER_LOAD  = (TCU_BLOCK_CAP >= TCU_META_PER_WARP_DEPTH)
+        ? (TCU_BLOCK_CAP / TCU_META_PER_WARP_DEPTH) : 1;
+
+    // Partial-bank write parameters (NT < PER_WARP_DEPTH)
+    localparam TCU_BANKS_PER_STORE = (TCU_NT < TCU_META_PER_WARP_DEPTH)
+        ? TCU_NT : TCU_META_PER_WARP_DEPTH;
+    localparam TCU_STORES_PER_COL = (TCU_META_PER_WARP_DEPTH + TCU_NT - 1) / TCU_NT;
 
     function automatic logic [4:0] meta_num_cols(input logic [3:0] fmt);
         case (fmt)
             TCU_FP16_ID, TCU_BF16_ID:
-                return 5'(TCU_BLOCK_CAP / 8);   // 16-bit: NT/8
+                return 5'((TCU_BLOCK_CAP + 7) / 8);   // 16-bit: ceil(NT/8)
             TCU_FP8_ID, TCU_BF8_ID, TCU_I8_ID, TCU_U8_ID:
-                return 5'(TCU_BLOCK_CAP / 4);   // 8-bit: NT/4
+                return 5'((TCU_BLOCK_CAP + 3) / 4);   // 8-bit: ceil(NT/4)
             TCU_I4_ID, TCU_U4_ID, TCU_NVFP4_ID:
-                return 5'(TCU_BLOCK_CAP / 2);   // 4-bit: NT/2
+                return 5'((TCU_BLOCK_CAP + 1) / 2);   // 4-bit: ceil(NT/2)
             default:
                 return 5'd1;
         endcase
+    endfunction
+
+    function automatic logic [4:0] meta_total_store_uops(input logic [3:0] fmt);
+        return 5'(meta_num_cols(fmt) * TCU_STORES_PER_COL);
     endfunction
 `endif
 

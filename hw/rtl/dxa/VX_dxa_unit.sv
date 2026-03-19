@@ -137,20 +137,29 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             end
         end
 
-    `ifdef DBG_TRACE_DXA_TX_BAR
+    `ifdef DBG_TRACE_DXA
         always @(posedge clk) begin
             if (~reset) begin
                 if (req_fire) begin
                     `TRACE(1, ("%t: %s dxa-req: op=%0d wid=%0d rs1=0x%0h rs2=0x%0h setup0=%b\n",
                         $time, INSTANCE_ID, dxa_req_bus_if.req_data.op, execute_if.data.header.wid, issue_rs1_data, issue_rs2_data, is_setup0_req))
+                    // Structured trace for pipeline visualization
+                    $write("DXA_PIPE,%0d,DXA_INSTR,op=%0d,wid=%0d,PC=0x%0h\n",
+                        $time, dxa_req_bus_if.req_data.op,
+                        execute_if.data.header.wid,
+                        {execute_if.data.header.PC, 1'b0});
                 end
                 if (tx_setup_valid) begin
                     `TRACE(1, ("%t: %s tx-setup: addr=%0d packed=%b slot=%0d owner=%0d\n",
                         $time, INSTANCE_ID, setup0_bar_addr, setup0_is_packed, setup0_bar_slot, setup0_bar_owner))
+                    $write("DXA_PIPE,%0d,TX_SETUP,bar=%0d,slot=%0d\n",
+                        $time, setup0_bar_addr, setup0_bar_slot);
                 end
                 if (txbar_bus_if.valid && txbar_bus_if.ready) begin
                     `TRACE(1, ("%t: %s tx-bar-fire: addr=%0d done=%b\n",
                         $time, INSTANCE_ID, txbar_bus_if.data.addr, txbar_bus_if.data.is_done))
+                    $write("DXA_PIPE,%0d,TX_BAR_FIRE,bar=%0d,done=%0d\n",
+                        $time, txbar_bus_if.data.addr, txbar_bus_if.data.is_done);
                 end
             end
         end

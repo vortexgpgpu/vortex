@@ -38,8 +38,7 @@ public:
 		, config_(config)
 		, ram_(config.capacity)
 	{
-		uint32_t total_lines = config.capacity / config.line_size;
-		line_bits_ = log2ceil(total_lines);
+		line_bits_ = log2ceil(config.capacity);
 
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());

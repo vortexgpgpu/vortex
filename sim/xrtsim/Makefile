@@ -64,17 +64,17 @@ ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
 	ifneq (,$(filter -DTCU_TYPE_DPI, $(CONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
-	endif
-	ifneq (,$(filter -DTCU_TYPE_DSP, $(CONFIGS)))
+	else ifneq (,$(filter -DTCU_TYPE_DSP, $(CONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
-	endif
-	ifneq (,$(filter -DTCU_TYPE_BHF, $(CONFIGS)))
+	else ifneq (,$(filter -DTCU_TYPE_BHF, $(CONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
-	endif
-	ifneq (,$(filter -DTCU_TYPE_TFR, $(CONFIGS)))
+	else ifneq (,$(filter -DTCU_TYPE_TFR, $(CONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
+	else
+		# No explicit TCU type — VX_config.vh defaults to DPI for simulation
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 	endif
 endif
 

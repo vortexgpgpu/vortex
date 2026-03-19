@@ -15,7 +15,6 @@
 
 module VX_dxa_nb_slot_table #(
     parameter MAX_OUTSTANDING = 4,
-    parameter MEM_ADDR_WIDTH  = 32,
     parameter GMEM_ADDR_WIDTH = 26,
     parameter GMEM_OFF_BITS   = 6
 ) (
@@ -29,14 +28,12 @@ module VX_dxa_nb_slot_table #(
 
     input  wire [`UP(`CLOG2(MAX_OUTSTANDING))-1:0] rsp_slot,
     output wire                       rsp_slot_busy,
-    output wire [MEM_ADDR_WIDTH-1:0] rsp_smem_byte_addr,
     output wire [GMEM_ADDR_WIDTH-1:0] rsp_gmem_line_addr,
     output wire [GMEM_OFF_BITS-1:0]  rsp_gmem_off,
     output wire                       rsp_is_last,
 
     input  wire                        alloc_fire,
     input  wire [`UP(`CLOG2(MAX_OUTSTANDING))-1:0] alloc_slot,
-    input  wire [MEM_ADDR_WIDTH-1:0]   alloc_smem_byte_addr,
     input  wire [GMEM_ADDR_WIDTH-1:0]  alloc_gmem_line_addr,
     input  wire [GMEM_OFF_BITS-1:0]    alloc_gmem_off,
     input  wire                        alloc_is_last,
@@ -50,7 +47,6 @@ module VX_dxa_nb_slot_table #(
     `STATIC_ASSERT(`IS_POW2(MAX_OUTSTANDING), ("MAX_OUTSTANDING must be power of 2"))
 
     reg [MAX_OUTSTANDING-1:0] busy_r;
-    reg [MAX_OUTSTANDING-1:0][MEM_ADDR_WIDTH-1:0] smem_byte_addr_r;
     reg [MAX_OUTSTANDING-1:0][GMEM_ADDR_WIDTH-1:0] gmem_line_addr_r;
     reg [MAX_OUTSTANDING-1:0][GMEM_OFF_BITS-1:0] gmem_off_r;
     reg [MAX_OUTSTANDING-1:0] is_last_r;
@@ -81,7 +77,6 @@ module VX_dxa_nb_slot_table #(
     end
 
     assign rsp_slot_busy      = busy_r[rsp_slot];
-    assign rsp_smem_byte_addr = smem_byte_addr_r[rsp_slot];
     assign rsp_gmem_line_addr = gmem_line_addr_r[rsp_slot];
     assign rsp_gmem_off       = gmem_off_r[rsp_slot];
     assign rsp_is_last        = is_last_r[rsp_slot];
@@ -89,7 +84,6 @@ module VX_dxa_nb_slot_table #(
     always @(posedge clk) begin
         if (reset) begin
             busy_r <= '0;
-            smem_byte_addr_r <= '0;
             gmem_line_addr_r <= '0;
             gmem_off_r <= '0;
             is_last_r <= '0;
@@ -99,7 +93,6 @@ module VX_dxa_nb_slot_table #(
             end
             if (alloc_fire) begin
                 busy_r[alloc_slot] <= 1'b1;
-                smem_byte_addr_r[alloc_slot] <= alloc_smem_byte_addr;
                 gmem_line_addr_r[alloc_slot] <= alloc_gmem_line_addr;
                 gmem_off_r[alloc_slot] <= alloc_gmem_off;
                 is_last_r[alloc_slot] <= alloc_is_last;

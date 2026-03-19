@@ -25,13 +25,15 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
 
   ctx::fill_fragment(fragC, 0);
 
+  uint32_t start_cycles = csr_read(VX_CSR_MCYCLE);
+
   // Per-K-tile metadata reload
   constexpr uint32_t rtl_i_ratio = 32 / vt::ITYPE::bits;
-  constexpr uint32_t meta_cols = (NUM_THREADS * 2 * rtl_i_ratio) / 32;
+  constexpr uint32_t meta_cols = (NUM_THREADS * 2 * rtl_i_ratio + 31) / 32;
   using kcfg = vt::wmma_config_t<NUM_THREADS>;
   constexpr uint32_t PD = kcfg::m_steps * (kcfg::k_steps / 2);
-  constexpr uint32_t meta_cols_per_load = NUM_THREADS / PD;
-  constexpr uint32_t num_meta_loads = (meta_cols + meta_cols_per_load - 1) / meta_cols_per_load;
+  constexpr uint32_t meta_cols_per_load = (NUM_THREADS >= PD) ? (NUM_THREADS / PD) : 1;
+  constexpr uint32_t num_meta_loads = (PD * meta_cols + NUM_THREADS - 1) / NUM_THREADS;
   constexpr uint32_t per_k_tile_words = num_meta_loads * NUM_THREADS;
   uint32_t num_k_tiles = K / ctx::tileK;
   uint32_t tile_row_idx = blockIdx.y;
@@ -42,31 +44,25 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   auto pTileA = pA + tile_row * stride_A;
   constexpr uint32_t a_k_stride = ctx::tileK / 2;
 
-  if constexpr (vt::ITYPE::bits < 8) {
-    auto pTileB = pB + tile_col * K;
-    for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
-      ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, pMeta);
-      ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
-      ctx::mma_sync(fragC, fragA, fragB, fragC);
-      pMeta += per_k_tile_words;
-      pTileA += a_k_stride;
-      pTileB += ctx::tileK;
-    }
-  } else {
-    auto pTileB = pB + tile_col;
-    uint32_t b_k_stride = ctx::tileK * N;
-    for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
-      ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, pMeta);
-      ctx::load_matrix_sync<vt::row_major>(fragB, pTileB, N);
-      ctx::mma_sync(fragC, fragA, fragB, fragC);
-      pMeta += per_k_tile_words;
-      pTileA += a_k_stride;
-      pTileB += b_k_stride;
-    }
+  auto pTileB = pB + tile_col * K;
+  for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
+    ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, pMeta);
+    ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
+    ctx::mma_sync(fragC, fragA, fragB, fragC);
+    pMeta += per_k_tile_words;
+    pTileA += a_k_stride;
+    pTileB += ctx::tileK;
   }
 
   auto pTileC = pC + tile_row * N + tile_col;
   ctx::store_matrix_sync(pTileC, fragC, N);
+
+  uint32_t end_cycles = csr_read(VX_CSR_MCYCLE);
+
+  // Write per-block cycle count
+  auto pCycles = reinterpret_cast<uint32_t*>(arg->cycles_addr);
+  uint32_t block_id = blockIdx.y * arg->grid_dim[0] + blockIdx.x;
+  pCycles[block_id] = end_cycles - start_cycles;
 }
 
 int main() {

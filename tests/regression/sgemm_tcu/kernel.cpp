@@ -26,21 +26,17 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   // Initialize accumulator tile to zero
   ctx::fill_fragment(fragC, 0);
 
+  uint32_t start_cycles = csr_read(VX_CSR_MCYCLE);
+
   for (int i = 0; i < K; i += ctx::tileK) {
     auto pTileA = pA + tile_row * K + i;
 
     // Load A tile
     ctx::load_matrix_sync(fragA, pTileA, K);
 
-    // Load B tile
-    if constexpr (vt::ITYPE::bits < 8) {
-      // For sub-byte matrix B must be in col-major format
-      auto pTileB = pB + tile_col * K + i;
-      ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
-    } else {
-      auto pTileB = pB + i * N + tile_col;
-      ctx::load_matrix_sync(fragB, pTileB, N);
-    }
+    // Load B tile (col-major)
+    auto pTileB = pB + tile_col * K + i;
+    ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
 
     // Matrix multiply-accumulate: c += a * b
     ctx::mma_sync(fragC, fragA, fragB, fragC);
@@ -49,6 +45,13 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   // Store the computed C tile
   auto pTileC = pC + tile_row * N + tile_col;
   ctx::store_matrix_sync(pTileC, fragC, N);
+
+  uint32_t end_cycles = csr_read(VX_CSR_MCYCLE);
+
+  // Write per-block cycle count
+  auto pCycles = reinterpret_cast<uint32_t*>(arg->cycles_addr);
+  uint32_t block_id = blockIdx.y * arg->grid_dim[0] + blockIdx.x;
+  pCycles[block_id] = end_cycles - start_cycles;
 }
 
 int main() {

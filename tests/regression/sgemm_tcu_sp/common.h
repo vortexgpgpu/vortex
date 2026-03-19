@@ -23,6 +23,7 @@ typedef struct {
   uint64_t B_addr;
   uint64_t C_addr;
   uint64_t meta_addr;
+  uint64_t cycles_addr;
 } kernel_arg_t;
 
 #endif

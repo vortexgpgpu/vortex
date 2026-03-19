@@ -165,6 +165,17 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+  struct DxaTransferInfo {
+    uint32_t total_elems;
+    uint32_t elem_bytes;
+    uint32_t tile0;
+    uint32_t tile1;
+    uint32_t stride0;
+    uint64_t gmem_base;
+  };
+
+  bool dxa_estimate(uint32_t desc_slot, DxaTransferInfo* info);
+
 #ifdef EXT_DXA_ENABLE
   DxaEngine& dxa_engine() { return *dxa_engine_; }
 #endif
