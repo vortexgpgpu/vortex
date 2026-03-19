@@ -793,10 +793,16 @@ public:
     uint32_t sub_store = col_idx % cfg::stores_per_col;
     uint32_t bank_begin = sub_store * cfg::banks_per_store;
     uint32_t bank_end = std::min(bank_begin + cfg::banks_per_store, kMetaBanks);
+    uint32_t thread_offset = (cfg::meta_cols_per_load > 1)
+                           ? ((actual_col % cfg::meta_cols_per_load) * kMetaBanks)
+                           : 0;
 
     for (uint32_t bank = bank_begin; bank < bank_end; ++bank) {
+      uint32_t src_idx = (cfg::stores_per_col > 1)
+                       ? (bank - bank_begin)
+                       : (thread_offset + bank);
       sparse_meta_.at(wid).at(bank * kMaxMetaCols + actual_col) =
-          rs1_data.at(bank - bank_begin).u32;
+          rs1_data.at(src_idx).u32;
     }
   }
 
