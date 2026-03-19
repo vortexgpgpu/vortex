@@ -118,8 +118,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
     wire [DXA_NUM_SMEM_OUTPUTS-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] dxa_smem_local_core_id;
 `endif
 
-    `RESET_RELAY (l2_reset, reset);
-
     VX_cache_flush_if l2_flush_if();
     assign l2_flush_if.req = 1'b0;
 
@@ -152,7 +150,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .PASSTHRU       (!`L2_ENABLED)
     ) l2cache (
         .clk            (clk),
-        .reset          (l2_reset),
+        .reset          (reset),
     `ifdef PERF_ENABLE
         .cache_perf     (l2_perf),
     `endif
@@ -255,8 +253,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
     // Generate all sockets
     for (genvar socket_id = 0; socket_id < NUM_SOCKETS; ++socket_id) begin : g_sockets
 
-        `RESET_RELAY (socket_reset, reset);
-
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * NUM_SOCKETS) + socket_id),
             .INSTANCE_ID (`SFORMATF(("%s-socket%0d", INSTANCE_ID, socket_id)))
@@ -264,7 +260,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
             `SCOPE_IO_BIND  (scope_socket+socket_id)
 
             .clk            (clk),
-            .reset          (socket_reset),
+            .reset          (reset),
 
         `ifdef PERF_ENABLE
             .sysmem_perf    (sysmem_perf_tmp),

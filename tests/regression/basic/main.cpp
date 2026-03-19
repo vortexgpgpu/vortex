@@ -89,13 +89,13 @@ int run_memcopy_test(const kernel_arg_t& kernel_arg) {
   auto time_start = std::chrono::high_resolution_clock::now();
 
   // upload source buffer
-  std::cout << "write source buffer to local memory" << std::endl;
+  std::cout << "write source buffer to device memory" << std::endl;
   auto t0 = std::chrono::high_resolution_clock::now();
   RT_CHECK(vx_copy_to_dev(dst_buffer, h_src.data(), 0, buf_size));
   auto t1 = std::chrono::high_resolution_clock::now();
 
   // download destination buffer
-  std::cout << "read destination buffer from local memory" << std::endl;
+  std::cout << "read destination buffer from device memory" << std::endl;
   auto t2 = std::chrono::high_resolution_clock::now();
   RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, buf_size));
   auto t3 = std::chrono::high_resolution_clock::now();
@@ -160,7 +160,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg) {
   auto t3 = std::chrono::high_resolution_clock::now();
 
   // download destination buffer
-  std::cout << "read destination buffer from local memory" << std::endl;
+  std::cout << "read destination buffer from device memory" << std::endl;
   auto t4 = std::chrono::high_resolution_clock::now();
   RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, buf_size));
   auto t5 = std::chrono::high_resolution_clock::now();

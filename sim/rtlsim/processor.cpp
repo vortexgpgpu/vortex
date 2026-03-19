@@ -205,8 +205,11 @@ private:
       std::swap(dram_queue_[b], empty);
     }
 
+    device_->start = 0;
     device_->reset = 1;
 
+    // Hold reset high until all internal pipeline state are initialized.
+    // This mimics the behavior of the reset fanout buffering.
     for (int i = 0; i < RESET_DELAY; ++i) {
       device_->clk = 0;
       this->eval();
@@ -214,8 +217,16 @@ private:
       this->eval();
     }
 
-    device_->start = 0;
     device_->reset = 0;
+
+    // Pump clocks after reset drops to allow internal pipeline states to settle.
+    for (int i = 0; i < RESET_DELAY; ++i) {
+      device_->clk = 0;
+      this->eval();
+      device_->clk = 1;
+      this->eval();
+    }
+
     for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
       device_->mem_req_ready[b] = 1;
     }

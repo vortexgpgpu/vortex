@@ -57,8 +57,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     localparam CCI_DATA_SIZE      = CCI_DATA_WIDTH / 8;
     localparam CCI_ADDR_WIDTH     = $bits(t_ccip_clAddr);
 
-    localparam RESET_CTR_WIDTH    = `CLOG2(`RESET_DELAY+1);
-
     localparam AVS_RD_QUEUE_SIZE  = 32;
     localparam VX_AVS_REQ_TAGW    = VX_MEM_TAG_WIDTH + `CLOG2(LMEM_DATA_WIDTH) - `CLOG2(VX_MEM_DATA_WIDTH);
     localparam CCI_AVS_REQ_TAGW   = CCI_ADDR_WIDTH + `CLOG2(LMEM_DATA_WIDTH) - `CLOG2(CCI_DATA_WIDTH);
@@ -398,9 +396,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire cmd_mem_rd_done;
     reg  cmd_mem_wr_done;
 
-    reg [RESET_CTR_WIDTH-1:0] vx_reset_ctr;
+    reg [`RESET_DELAY-1:0] vx_reset_shift_r;
     reg  vx_busy_wait;
-    reg  vx_reset;
+    wire vx_reset;
     reg  vx_start;
     wire vx_busy;
 
@@ -408,14 +406,20 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [CMD_TYPE_WIDTH-1:0] cmd_type = is_mmio_wr_cmd ? CMD_TYPE_WIDTH'(cp2af_sRxPort.c0.data) : CMD_TYPE_WIDTH'(CMD_IDLE);
 
     initial begin
-        vx_reset = 1; // asserted at initialization
+        vx_reset_shift_r = {`RESET_DELAY{1'b1}};
+// asserted at initialization
     end
+    assign vx_reset = vx_reset_shift_r[`RESET_DELAY-1];
 
     always @(posedge clk) begin
         if (reset) begin
+            vx_reset_shift_r <= {`RESET_DELAY{1'b1}};
+        end else begin
+            vx_reset_shift_r <= {vx_reset_shift_r[`RESET_DELAY-2:0], 1'b0};
+        end
+
+        if (reset) begin
             state        <= STATE_IDLE;
-            vx_reset     <= 1;
-            vx_reset_ctr <= RESET_CTR_WIDTH'(`RESET_DELAY-1);
             vx_start     <= 0;
             vx_busy_wait <= 0;
         end else begin
@@ -447,12 +451,14 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                     state <= STATE_DCR_READ;
                 end
                 CMD_RUN: begin
+                if (!vx_reset) begin
                 `ifdef DBG_TRACE_AFU
                     `TRACE(2, ("%t: AFU: Goto STATE RUN\n", $time))
                 `endif
                     state        <= STATE_RUN;
                     vx_start     <= 1;
                     vx_busy_wait <= 1;
+                end
                 end
                 default: begin
                     state <= state;
@@ -491,7 +497,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 vx_start <= 0;
                 if (vx_busy_wait) begin
                     // wait until processor goes busy
-                    if (!vx_reset && vx_busy) begin
+                    if (vx_busy) begin
                     `ifdef DBG_TRACE_AFU
                         `TRACE(2, ("%t: AFU: Begin execution\n", $time))
                     `endif
@@ -510,16 +516,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             end
             default:;
             endcase
-
-            // auto-de-assert reset after initialization
-            if (vx_reset && vx_reset_ctr == RESET_CTR_WIDTH'(0)) begin
-                vx_reset <= 0;
-            end
-
-            // ensure reset network initialization
-			if (vx_reset_ctr != RESET_CTR_WIDTH'(0)) begin
-				vx_reset_ctr <= vx_reset_ctr - RESET_CTR_WIDTH'(1);
-			end
         end
     end
 
