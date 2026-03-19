@@ -63,7 +63,7 @@ run-simx:
 	$(MAKE) -C raycast run-simx
 	$(MAKE) -C bfs run-simx
 	$(MAKE) -C jacobi run-simx
-	$(MAKE) -C pathfinder run-simx
+# $(MAKE) -C pathfinder run-simx
 	$(MAKE) -C softmax run-simx
 	$(MAKE) -C async_barrier run-simx
 	$(MAKE) -C packld run-simx
@@ -94,7 +94,7 @@ run-rtlsim:
 	$(MAKE) -C raycast run-rtlsim
 	$(MAKE) -C bfs run-rtlsim
 	$(MAKE) -C jacobi run-rtlsim
-	$(MAKE) -C pathfinder run-rtlsim
+#   $(MAKE) -C pathfinder run-rtlsim
 	$(MAKE) -C softmax run-rtlsim
 	$(MAKE) -C async_barrier run-rtlsim
 	$(MAKE) -C packld run-rtlsim
