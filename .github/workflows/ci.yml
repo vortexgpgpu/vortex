@@ -127,6 +127,8 @@ jobs:
           - name: dxa
             xlen: 64
     runs-on: ${{ matrix.os }}
+    env:
+      MAKEFLAGS: "-j2"
     timeout-minutes: 60
 
     steps:
