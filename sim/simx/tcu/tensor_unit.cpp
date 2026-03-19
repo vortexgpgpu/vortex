@@ -518,24 +518,7 @@ static inline void gather_B16(uint8_t mask,
 }
 
 static inline uint32_t meta_num_cols(uint32_t fmt_s) {
-  switch (fmt_s) {
-  case vt::fp16::id:
-  case vt::bf16::id:
-    return NUM_THREADS / 8;
-  case vt::fp8::id:
-  case vt::bf8::id:
-  case vt::int8::id:
-  case vt::uint8::id:
-  case vt::mxfp8::id:
-  case vt::mxint8::id:
-    return NUM_THREADS / 4;
-  case vt::int4::id:
-  case vt::uint4::id:
-  case vt::nvfp4::id:
-    return NUM_THREADS / 2;
-  default:
-    return 1;
-  }
+  return vt::sparse_meta_num_cols(fmt_s, NUM_THREADS);
 }
 
 static inline uint32_t meta_row_width(uint32_t fmt_s) {
@@ -681,29 +664,21 @@ public:
 
     auto fedp = select_FEDP(fmt_s, fmt_d);
 
-    if (this->arch_.num_threads() != 8 && this->arch_.num_threads() != 16 && this->arch_.num_threads() != 32) {
-      std::cout << "Error: WMMA_SP unsupported for NUM_THREADS=" << this->arch_.num_threads() << std::endl;
-      std::abort();
-    }
-
     const bool is_8bit_sparse_fmt =
         (fmt_s == vt::int8::id)  ||
         (fmt_s == vt::uint8::id) ||
         (fmt_s == vt::fp8::id)   ||
-        (fmt_s == vt::bf8::id)   ||
-        (fmt_s == vt::mxfp8::id) ||
-        (fmt_s == vt::mxint8::id);
+        (fmt_s == vt::bf8::id);
     const bool is_16bit_sparse_fmt =
         (fmt_s == vt::fp16::id) ||
         (fmt_s == vt::bf16::id);
     const bool is_4bit_sparse_fmt =
         (fmt_s == vt::int4::id) ||
-        (fmt_s == vt::uint4::id) ||
-        (fmt_s == vt::nvfp4::id);
+        (fmt_s == vt::uint4::id);
     if (!is_8bit_sparse_fmt && !is_16bit_sparse_fmt && !is_4bit_sparse_fmt) {
       std::cout << "Error: WMMA_SP unsupported input format: "
                 << vt::fmt_string(fmt_s) << " (id=" << fmt_s
-                << "). Supported formats: i8, u8, fp8, bf8, mxfp8, mxi8, fp16, bf16, i4, u4, nvfp4." << std::endl;
+                << "). Supported formats: i8, u8, fp8, bf8, fp16, bf16, i4, u4." << std::endl;
       std::abort();
     }
 
@@ -807,17 +782,21 @@ public:
                   ExeTraceData* trace_data) {
     __unused(trace_data);
 
-    constexpr uint32_t meta_per_warp_depth = cfg::m_steps * (cfg::k_steps / 2);
-    constexpr uint32_t meta_cols_per_load = NUM_THREADS / meta_per_warp_depth;
     uint32_t num_cols = meta_num_cols(fmt_s);
-    if (col_idx >= num_cols) {
-      std::cout << "Error: META_STORE column out of range: " << col_idx << std::endl;
+    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
+    if (num_cols == 0 || col_idx >= total_stores) {
+      std::cout << "Error: META_STORE store index out of range: " << col_idx << std::endl;
       std::abort();
     }
 
-    uint32_t thread_offset = (meta_cols_per_load > 1) ? ((col_idx % meta_cols_per_load) * meta_per_warp_depth) : 0;
-    for (uint32_t bank = 0; bank < meta_per_warp_depth; ++bank) {
-      sparse_meta_.at(wid).at(bank * kMaxMetaCols + col_idx) = rs1_data.at(thread_offset + bank).u32;
+    uint32_t actual_col = col_idx / cfg::stores_per_col;
+    uint32_t sub_store = col_idx % cfg::stores_per_col;
+    uint32_t bank_begin = sub_store * cfg::banks_per_store;
+    uint32_t bank_end = std::min(bank_begin + cfg::banks_per_store, kMetaBanks);
+
+    for (uint32_t bank = bank_begin; bank < bank_end; ++bank) {
+      sparse_meta_.at(wid).at(bank * kMaxMetaCols + actual_col) =
+          rs1_data.at(bank - bank_begin).u32;
     }
   }
 
