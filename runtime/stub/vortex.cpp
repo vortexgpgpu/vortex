@@ -122,7 +122,8 @@ extern int vx_start_wg(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h har
       block_size *= block_dim[i];
     }
   }
-  CHECK_ERR(vx_check_occupancy(hdevice, block_size, &lmem_size), { return err; });
+  uint32_t _lmem_size = lmem_size;
+  CHECK_ERR(vx_check_occupancy(hdevice, block_size, &_lmem_size), { return err; });
   return (g_callbacks.start_wg)(hdevice, hkernel, harguments, dimension, grid_dim, block_dim, lmem_size);
 }
 

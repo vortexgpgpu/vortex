@@ -13,7 +13,9 @@
 
 `include "VX_define.vh"
 
-module VX_kmu import VX_gpu_pkg::*; (
+module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
+    parameter `STRING INSTANCE_ID = ""
+) (
     input wire clk,
     input wire reset,
 
@@ -29,6 +31,8 @@ module VX_kmu import VX_gpu_pkg::*; (
 
     VX_kmu_bus_if.master                kmu_bus_if
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+
     // Configuration registers
     reg [`XLEN-1:0] dcr_PC;
     reg [2:0][31:0] dcr_grid_dim;
@@ -125,5 +129,41 @@ module VX_kmu import VX_gpu_pkg::*; (
     assign kmu_bus_if.data.warp_step = dcr_warp_step;
 
     assign busy = running;
+
+`ifdef DBG_TRACE_PIPELINE
+    always @(posedge clk) begin
+        // DCR configuration writes
+        if (dcr_req_valid && dcr_req_rw) begin
+            `TRACE(1, ("%t: %s dcr-write: ", $time, INSTANCE_ID))
+            trace_kmu_dcr(1, dcr_req_addr);
+            `TRACE(1, ("=0x%0h\n", dcr_req_data))
+        end
+        // Kernel start pulse
+        if (start) begin
+            `TRACE(1, ("%t: %s start: PC=0x%0h, param=0x%0h, grid=[%0d,%0d,%0d], block=[%0d,%0d,%0d], lmem_size=%0d\n",
+                $time, INSTANCE_ID,
+                dcr_PC, dcr_param,
+                dcr_grid_dim[0], dcr_grid_dim[1], dcr_grid_dim[2],
+                dcr_block_dim[0], dcr_block_dim[1], dcr_block_dim[2],
+                dcr_lmem_size))
+        end
+        // CTA fired to dispatcher
+        if (kmu_bus_if_fire) begin
+            `TRACE(1, ("%t: %s cta-fire: cta_id=%0d, block_idx=[%0d,%0d,%0d], PC=0x%0h, param=0x%0h, lmem_size=%0d\n",
+                $time, INSTANCE_ID,
+                cta_id,
+                block_idx[0], block_idx[1], block_idx[2],
+                to_fullPC(kmu_bus_if.data.PC), kmu_bus_if.data.param,
+                kmu_bus_if.data.lmem_size))
+        end
+        // KMU stalled (running but dispatcher not ready)
+        if (running && !kmu_bus_if.ready) begin
+            `TRACE(4, ("%t: %s stall: cta_id=%0d, block_idx=[%0d,%0d,%0d]\n",
+                $time, INSTANCE_ID,
+                cta_id,
+                block_idx[0], block_idx[1], block_idx[2]))
+        end
+    end
+`endif
 
 endmodule

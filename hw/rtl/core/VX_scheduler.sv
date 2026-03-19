@@ -73,7 +73,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // Warp retirement: TMC with tmask==0 permanently deactivates the warp
     wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0);
 
-    VX_cta_dispatch cta_dispatcher(
+    VX_cta_dispatch #(
+        .INSTANCE_ID (`SFORMATF(("%s-cta_dispatch", INSTANCE_ID)))
+    ) cta_dispatcher (
         .clk        (clk),
         .reset      (reset),
         .kmu_bus_if (kmu_bus_if),
@@ -139,7 +141,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // dispatch warps
         if (cta_fire) begin
             active_warps_n[cta_wid] = 1;
-            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - PC_BITS'(2));
+            // if executing next CTA on same warp, we can skip prolog and jump to kernel_main at PC-12 (see vx_start.S)
+            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(`XLEN'(12)));
             thread_masks_n[cta_wid] = cta_tmask;
         end
 

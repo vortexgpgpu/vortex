@@ -110,7 +110,8 @@ void Emulator::reset() {
 void Emulator::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   auto& warp = warps_[wid];
 
-  warp.PC       = rec.PC;
+  // if executing next CTA on same warp, we can skip prolog and jump to kernel_main at PC-12 (see vx_start.S)
+  warp.PC       = rec.do_init ? rec.PC : (warp.PC - 12);
   warp.tmask    = rec.tmask;
   warp.mscratch = rec.mscratch;
 
@@ -137,11 +138,11 @@ void Emulator::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   active_warps_.set(wid);
   stalled_warps_.reset(wid);
 
-  DP(3, "*** Dispatch CTA warp: cid=" << core_->id()
-     << ", wid=" << wid << ", cta_id=" << rec.cta_id
-     << ", rank=" << rec.cta_rank << "/" << rec.cta_size
-     << ", tmask=" << rec.tmask
-     << ", PC=0x" << std::hex << rec.PC << std::dec);
+  DP(3, "*** dispatch CTA warp: cid=" << core_->id()
+     << ", wid=" << wid << ", cta_id=" << warp.cta_csrs.cta_id
+     << ", rank=" << warp.cta_csrs.cta_rank << "/" << warp.cta_csrs.cta_size
+     << ", tmask=" << warp.tmask
+     << ", PC=0x" << std::hex << warp.PC << std::dec);
 }
 
 void Emulator::attach_ram(RAM* ram) {
