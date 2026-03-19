@@ -105,8 +105,6 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .TAG_WIDTH (L3_MEM_TAG_WIDTH)
     ) mem_bus_if[`L3_MEM_PORTS]();
 
-    `RESET_RELAY (l3_reset, reset);
-
     VX_cache_flush_if l3_flush_if();
     assign l3_flush_if.req = 1'b0;
 
@@ -134,7 +132,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (
         .clk            (clk),
-        .reset          (l3_reset),
+        .reset          (reset),
 
     `ifdef PERF_ENABLE
         .cache_perf     (l3_perf),
@@ -188,8 +186,6 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     // Generate all clusters
     for (genvar cluster_id = 0; cluster_id < `NUM_CLUSTERS; ++cluster_id) begin : g_clusters
 
-        `RESET_RELAY (cluster_reset, reset);
-
         VX_cluster #(
             .CLUSTER_ID (cluster_id),
             .INSTANCE_ID (`SFORMATF(("cluster%0d", cluster_id)))
@@ -197,7 +193,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
             `SCOPE_IO_BIND (scope_cluster + cluster_id)
 
             .clk                (clk),
-            .reset              (cluster_reset),
+            .reset              (reset),
 
         `ifdef PERF_ENABLE
             .sysmem_perf        (sysmem_perf),

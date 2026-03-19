@@ -109,8 +109,6 @@ module VX_socket import VX_gpu_pkg::*;
         .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
     ) icache_mem_bus_if[1]();
 
-    `RESET_RELAY (icache_reset, reset);
-
     // icache is read-only; no dirty data to flush.
     VX_cache_flush_if icache_flush_if();
     assign icache_flush_if.req = 1'b0;
@@ -142,7 +140,7 @@ module VX_socket import VX_gpu_pkg::*;
         .cache_perf     (icache_perf),
     `endif
         .clk            (clk),
-        .reset          (icache_reset),
+        .reset          (reset),
         .core_bus_if    (per_core_icache_bus_if),
         .mem_bus_if     (icache_mem_bus_if),
         .cache_flush_if (icache_flush_if)
@@ -159,8 +157,6 @@ module VX_socket import VX_gpu_pkg::*;
         .DATA_SIZE (DCACHE_LINE_SIZE),
         .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
     ) dcache_mem_bus_if[`L1_MEM_PORTS]();
-
-    `RESET_RELAY (dcache_reset, reset);
 
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("%s-dcache", INSTANCE_ID))),
@@ -191,7 +187,7 @@ module VX_socket import VX_gpu_pkg::*;
         .cache_perf     (dcache_perf),
     `endif
         .clk            (clk),
-        .reset          (dcache_reset),
+        .reset          (reset),
         .core_bus_if    (per_core_dcache_bus_if),
         .mem_bus_if     (dcache_mem_bus_if),
         .cache_flush_if (dcache_flush_if)
@@ -355,9 +351,6 @@ module VX_socket import VX_gpu_pkg::*;
 
     // Generate all cores
     for (genvar core_id = 0; core_id < `SOCKET_SIZE; ++core_id) begin : g_cores
-
-        `RESET_RELAY (core_reset, reset);
-
         VX_core #(
             .CORE_ID  ((SOCKET_ID * `SOCKET_SIZE) + core_id),
             .INSTANCE_ID (`SFORMATF(("%s-core%0d", INSTANCE_ID, core_id)))
@@ -365,7 +358,7 @@ module VX_socket import VX_gpu_pkg::*;
             `SCOPE_IO_BIND  (scope_core + core_id)
 
             .clk            (clk),
-            .reset          (core_reset),
+            .reset          (reset),
 
         `ifdef PERF_ENABLE
             .sysmem_perf    (sysmem_perf_tmp),

@@ -110,10 +110,10 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	`MP_REPEAT (`PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_TO_ARRAY, MP_SEMI);
 `endif
 
-	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
+	reg [`RESET_DELAY-1:0] vx_reset_shift_r;
 	reg [PENDING_WR_SIZEW-1:0] vx_pending_writes;
 	reg vx_busy_wait;
-	reg vx_reset;
+	wire vx_reset;
 	reg vx_start;
 	wire vx_busy;
 
@@ -142,20 +142,26 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 `endif
 
     initial begin
-        vx_reset = 1; // asserted at initialization
+        vx_reset_shift_r = {`RESET_DELAY{1'b1}};
+// asserted at initialization
     end
+    assign vx_reset = vx_reset_shift_r[`RESET_DELAY-1];
 
 	always @(posedge clk) begin
 		if (reset || ap_reset) begin
+			vx_reset_shift_r <= {`RESET_DELAY{1'b1}};
+		end else begin
+			vx_reset_shift_r <= {vx_reset_shift_r[`RESET_DELAY-2:0], 1'b0};
+		end
+
+		if (reset || ap_reset) begin
 			state        <= STATE_IDLE;
-			vx_reset     <= 1;
-			vx_reset_ctr <= (`RESET_DELAY-1);
 			vx_start     <= 0;
 			vx_busy_wait <= 0;
 		end else begin
 			case (state)
 			STATE_IDLE: begin
-				if (ap_start) begin
+				if (ap_start && !vx_reset) begin
 				`ifdef DBG_TRACE_AFU
 					`TRACE(2, ("%t: AFU: Goto STATE_RUN\n", $time))
 				`endif
@@ -168,7 +174,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 				vx_start <= 0;
 				if (vx_busy_wait) begin
 					// wait until processor goes busy
-					if (!vx_reset && vx_busy) begin
+					if (vx_busy) begin
 					`ifdef DBG_TRACE_AFU
 						`TRACE(2, ("%t: AFU: Begin execution\n", $time))
 					`endif
@@ -196,15 +202,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 			default:;
 			endcase
 
-			// auto-de-assert reset after initialization
-			if (vx_reset && vx_reset_ctr == '0) begin
-				vx_reset <= 0;
-			end
-
-			// ensure reset network initialization
-			if (vx_reset_ctr != '0) begin
-				vx_reset_ctr <= vx_reset_ctr - 1;
-			end
 		end
 	end
 
