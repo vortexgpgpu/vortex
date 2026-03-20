@@ -17,7 +17,7 @@ all: $(PROJECT)
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-run:
+run: $(PROJECT)
 	./$(PROJECT)
 
 clean:
