@@ -162,8 +162,11 @@ int main(int argc, char** argv) {
 
   // ---- alloc device buffers ----
   // Equivalent to set block size to warp size, but here we only use 1 tile
+  uint64_t num_cores = 0;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
+
   kernel_arg_t karg{};
-  karg.grid_dim[0]  = 1;
+  karg.grid_dim[0]  = num_cores;
   karg.grid_dim[1]  = 1;
   karg.block_dim[0] = NUM_THREADS;
   karg.block_dim[1] = 1;

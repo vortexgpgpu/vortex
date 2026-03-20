@@ -1569,22 +1569,18 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       } break;
       case TcuType::DTENSOR_START: { // Disaggregated tensor core command
         //rs1 holds descriptor address
-        if (core_->id() == 0) { // only core 0 can issue dtensor commands
-          auto cluster = core_->socket()->cluster();
-          if (cluster->dtensor()) {
+        auto cluster = core_->socket()->cluster();
+        if (cluster->dtensor()) {
             uint64_t desc_addr = rs1_data[0].u64;
             cluster->dtensor()->start(desc_addr);
-          }
         }
         rd_write = false;
       } break;
       case TcuType::DTENSOR_POLL: {
         uint32_t done = 0;
-        if (core_->id() == 0) { // only core 0 can poll dtensor
-          auto cluster = core_->socket()->cluster();
-          if (cluster->dtensor()) {
-            done = cluster->dtensor()->poll();
-          }
+        auto cluster = core_->socket()->cluster();
+        if (cluster->dtensor()) {
+        done = cluster->dtensor()->poll();
         }
         for (uint32_t t = 0; t < num_threads; ++t) {
           rd_data[t].u32 = done;
