@@ -182,7 +182,9 @@ public:
 
   bool dxa_estimate(uint32_t desc_slot, DxaTransferInfo* info);
 
-  bool dxa_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t* bytes_copied);
+#ifdef EXT_DXA_ENABLE
+  bool dxa_issue(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t bar_id);
+  DxaEngine& dxa_engine() { return *dxa_engine_; }
 #endif
 
 #ifdef EXT_TCU_ENABLE
