@@ -1,5 +1,5 @@
 #include <vx_intrinsics.h>
-#include <vx_spawn.h>
+#include <vx_spawn2.h>
 #include "common.h"
 
 static constexpr uint32_t kMinDrainExtra = 16;
@@ -68,7 +68,7 @@ static inline uint32_t div_batch(const div_inputs_t& inputs) {
   return r0 ^ r1 ^ r2 ^ r3 ^ q0 ^ q1 ^ q2 ^ q3;
 }
 
-void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
+extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t tid = threadIdx.x;
   uint32_t iterations = arg->iterations;
   auto results = reinterpret_cast<lane_result_t*>(arg->results_addr);
@@ -116,11 +116,4 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
   }
 
   results[tid] = result;
-}
-
-int main() {
-  auto arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
-  uint32_t grid_dim = 1;
-  uint32_t block_dim = arg->num_threads;
-  return vx_spawn_threads(1, &grid_dim, &block_dim, (vx_kernel_func_cb)kernel_body, arg);
 }

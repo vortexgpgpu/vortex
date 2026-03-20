@@ -1,4 +1,4 @@
-#include <vx_spawn.h>
+#include <vx_spawn2.h>
 #include <vx_intrinsics.h>
 
 #include "common.h"
@@ -11,7 +11,7 @@
 constexpr uint32_t kDescSrc = 0;
 #endif
 
-void kernel_body(kernel_arg_t* arg) {
+extern "C" void kernel_main(kernel_arg_t* arg) {
   const uint32_t tile_rows = arg->tile_rows;
   const uint32_t tile_cols = arg->tile_cols;
   const uint32_t ncols     = arg->ncols;
@@ -22,7 +22,7 @@ void kernel_body(kernel_arg_t* arg) {
   const uint32_t col_base = blockIdx.x * tile_cols;
 
   // Allocate shared memory for one tile.
-  auto shmem = reinterpret_cast<TYPE*>(__local_mem(num_elems * sizeof(TYPE)));
+  auto shmem = reinterpret_cast<TYPE*>(__local_mem());
 
 #ifdef USE_DXA
   // ── DXA path: issue 2D tile copy, barrier wait ──
@@ -46,10 +46,5 @@ void kernel_body(kernel_arg_t* arg) {
   shmem[l_row * tile_cols + l_col] = src[g_row * ncols + g_col];
   __syncthreads();
 #endif
-}
-
-int main() {
-  auto arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
-  return vx_spawn_threads(2, arg->grid_dim, arg->block_dim,
-                          (vx_kernel_func_cb)kernel_body, arg);
+  (void)num_elems;
 }

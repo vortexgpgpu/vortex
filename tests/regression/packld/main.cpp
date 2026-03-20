@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   std::cout << "start device\n";
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 1, &kernel_arg.num_tasks, nullptr, 0));
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
   // download results

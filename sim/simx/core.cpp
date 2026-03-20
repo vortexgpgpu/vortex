@@ -196,7 +196,8 @@ Core::Core(const SimContext& ctx,
   }
 
 #ifdef EXT_DXA_ENABLE
-  dxa_engine_ = std::make_unique<DxaEngine>(this);
+  snprintf(sname, 100, "%s-dxa", name);
+  dxa_engine_ = DxaEngine::Create(sname, this);
 #endif
 
   this->reset();
@@ -221,22 +222,10 @@ void Core::reset() {
   pending_instrs_.clear();
   pending_ifetches_ = 0;
 
-#ifdef EXT_DXA_ENABLE
-  if (dxa_engine_) {
-    dxa_engine_->reset();
-  }
-#endif
-
   perf_stats_ = PerfStats();
 }
 
 void Core::tick() {
-#ifdef EXT_DXA_ENABLE
-  if (dxa_engine_) {
-    dxa_engine_->tick();
-  }
-#endif
-
   this->commit();
   this->execute();
   this->issue();
@@ -548,137 +537,6 @@ void Core::barrier_event_attach(uint32_t bar_id) {
 void Core::barrier_event_release(uint32_t bar_id) {
   emulator_.barrier_event_release(bar_id);
 }
-
-#ifdef EXT_DXA_ENABLE
-bool Core::dxa_issue(uint32_t desc_slot,
-                     uint32_t smem_addr,
-                     const uint32_t coords[5],
-                     uint32_t bar_id) {
-  if (!dxa_engine_) {
-    return false;
-  }
-  return dxa_engine_->issue(desc_slot, smem_addr, coords, bar_id);
-}
-
-static inline uint32_t dxa_elem_bytes(uint32_t meta) {
-  uint32_t enc = (meta >> VX_DXA_DESC_META_ELEMSZ_LSB) & ((1u << VX_DXA_DESC_META_ELEMSZ_BITS) - 1u);
-  return 1u << enc;
-}
-
-static inline uint32_t dxa_rank(uint32_t meta) {
-  uint32_t rank = (meta >> VX_DXA_DESC_META_DIM_LSB) & ((1u << VX_DXA_DESC_META_DIM_BITS) - 1u);
-  if (rank == 0)
-    return 1;
-  if (rank > 5)
-    return 5;
-  return rank;
-}
-
-struct dxa_copy_cfg_t {
-  bool is_s2g;
-  uint32_t rank;
-  uint32_t elem_bytes;
-  uint32_t tile0;
-  uint32_t tile1;
-};
-
-static inline bool dxa_build_copy_cfg(const DxaDCRS::Descriptor& desc, dxa_copy_cfg_t* cfg) {
-  uint32_t rank = dxa_rank(desc.meta);
-  if (rank > 2) {
-    // Current reboot phase supports rank-1 and rank-2 copy path only.
-    return false;
-  }
-
-  cfg->is_s2g = false;  // Always g2s; s2g removed with flags
-  cfg->rank = rank;
-  cfg->elem_bytes = dxa_elem_bytes(desc.meta);
-  cfg->tile0 = std::max<uint32_t>(1, desc.tile_sizes[0]);
-  cfg->tile1 = (rank >= 2) ? std::max<uint32_t>(1, desc.tile_sizes[1]) : 1u;
-  return true;
-}
-
-static inline bool dxa_in_bounds(const DxaDCRS::Descriptor& desc, const dxa_copy_cfg_t& cfg, uint32_t i0, uint32_t i1) {
-  bool ok0 = (i0 < desc.sizes[0]);
-  bool ok1 = (cfg.rank < 2) || (i1 < desc.sizes[1]);
-  return ok0 && ok1;
-}
-
-static inline uint64_t dxa_global_addr(const DxaDCRS::Descriptor& desc, const dxa_copy_cfg_t& cfg, uint32_t i0, uint32_t i1) {
-  uint64_t addr = desc.base_addr + uint64_t(i0) * cfg.elem_bytes;
-  if (cfg.rank >= 2) {
-    addr += uint64_t(i1) * uint64_t(desc.strides[0]);
-  }
-  return addr;
-}
-
-static inline uint64_t dxa_shared_addr(const dxa_copy_cfg_t& cfg, uint32_t smem_addr, uint32_t x, uint32_t y) {
-  return uint64_t(smem_addr) + (uint64_t(y) * cfg.tile0 + x) * cfg.elem_bytes;
-}
-
-bool Core::dxa_estimate(uint32_t desc_slot, DxaTransferInfo* info) {
-  if (desc_slot >= VX_DCR_DXA_DESC_COUNT)
-    return false;
-
-  auto desc = dcrs_.dxa_dcrs.read_descriptor(desc_slot);
-  dxa_copy_cfg_t cfg;
-  if (!dxa_build_copy_cfg(desc, &cfg)) {
-    return false;
-  }
-
-  if (info) {
-    info->total_elems = cfg.tile0 * cfg.tile1;
-    info->elem_bytes = cfg.elem_bytes;
-    info->tile0 = cfg.tile0;
-    info->tile1 = cfg.tile1;
-    info->stride0 = (cfg.rank >= 2) ? desc.strides[0] : 0;
-    info->gmem_base = desc.base_addr;
-  }
-  return true;
-}
-
-bool Core::dxa_copy(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t* bytes_copied) {
-  if (desc_slot >= VX_DCR_DXA_DESC_COUNT)
-    return false;
-
-  auto desc = dcrs_.dxa_dcrs.read_descriptor(desc_slot);
-  dxa_copy_cfg_t cfg;
-  if (!dxa_build_copy_cfg(desc, &cfg)) {
-    return false;
-  }
-
-  uint64_t copied = 0;
-  for (uint32_t y = 0; y < cfg.tile1; ++y) {
-    for (uint32_t x = 0; x < cfg.tile0; ++x) {
-      uint32_t i0 = coords[0] + x;
-      uint32_t i1 = coords[1] + y;
-      uint64_t saddr = dxa_shared_addr(cfg, smem_addr, x, y);
-      if (dxa_in_bounds(desc, cfg, i0, i1)) {
-        uint64_t gaddr = dxa_global_addr(desc, cfg, i0, i1);
-        uint64_t value = 0;
-        if (cfg.is_s2g) {
-          this->dcache_read(&value, saddr, cfg.elem_bytes);
-          this->dcache_write(&value, gaddr, cfg.elem_bytes);
-        } else {
-          this->dcache_read(&value, gaddr, cfg.elem_bytes);
-          this->dcache_write(&value, saddr, cfg.elem_bytes);
-        }
-      } else {
-        if (!cfg.is_s2g) {
-          uint64_t fill = desc.cfill;
-          this->dcache_write(&fill, saddr, cfg.elem_bytes);
-        }
-      }
-      copied += cfg.elem_bytes;
-    }
-  }
-
-  if (bytes_copied) {
-    *bytes_copied = uint32_t(copied);
-  }
-  return true;
-}
-#endif
-
 
 bool Core::wspawn(uint32_t num_warps, Word nextPC) {
   return emulator_.wspawn(num_warps, nextPC);

@@ -29,7 +29,7 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t n = arg->num_points;
 
   // Allocate local menory
-  auto tbuf = reinterpret_cast<float*>(__local_mem(__warps_per_group * sizeof(float)));
+  auto tbuf = reinterpret_cast<float*>(__local_mem(sizeof(float)));
 
   uint32_t gid  = threadIdx.x + blockIdx.x * blockDim.x;
   uint32_t lane = threadIdx.x & (NUM_THREADS - 1);   // lane in subgroup

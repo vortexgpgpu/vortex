@@ -1,4 +1,4 @@
-#include <vx_spawn.h>
+#include <vx_spawn2.h>
 #include <vx_intrinsics.h>
 #include "common.h"
 
@@ -9,7 +9,7 @@
 //     → result = b0 | (b1<<8) | (b2<<16) | (b3<<24)
 //   For PACKLH: base = &src_u16[t*2*NUM_POINTS + p*2], stride = 2 bytes
 //     → result = h0 | (h1<<16)
-void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
+extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     auto src_ptr  = reinterpret_cast<const uint8_t*>(arg->src_addr);
     auto dst_lb   = reinterpret_cast<float*>(arg->dst_lb_addr);
     auto dst_lh   = reinterpret_cast<float*>(arg->dst_lh_addr);
@@ -26,10 +26,4 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
         const uint8_t* base_lh = src_ptr + (tid * 4 * NUM_POINTS + p * 4);
         dst_lh[tid * NUM_POINTS + p] = vx_packlh_f(base_lh, 2 /*halfword stride*/);
     }
-}
-
-int main() {
-    kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
-    return vx_spawn_threads(1, &arg->num_tasks, nullptr,
-                            (vx_kernel_func_cb)kernel_body, arg);
 }

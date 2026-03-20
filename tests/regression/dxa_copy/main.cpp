@@ -156,7 +156,7 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   std::cout << "start\n";
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 2, kernel_arg.grid_dim, kernel_arg.block_dim, local_mem));
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
   // Kernel execution time is reported by the runtime (cycles, instrs, IPC).

@@ -64,8 +64,9 @@ inline uint32_t desc_elem_bytes(uint32_t meta) {
 // DxaEngine implementation
 // ════════════════════════════════════════════════════════════════════
 
-DxaEngine::DxaEngine(Core* core)
-  : core_(core)
+DxaEngine::DxaEngine(const SimContext& ctx, const char* name, Core* core)
+  : SimObject(ctx, name)
+  , core_(core)
   , has_active_(false) {}
 
 void DxaEngine::reset() {
@@ -109,10 +110,6 @@ int DxaEngine::dcr_write(uint32_t addr, uint32_t value) {
   default: break;
   }
   return 0;
-}
-
-const DxaEngine::Descriptor& DxaEngine::read_descriptor(uint32_t slot) const {
-  return descriptors_.at(slot);
 }
 
 bool DxaEngine::build_copy_cfg(const Descriptor& desc, CopyCfg* cfg) const {
@@ -237,10 +234,19 @@ bool DxaEngine::decode_request(const Request& req,
                                uint64_t* gmem_rsp_blk_out,
                                uint64_t* gmem_req_blk_out,
                                uint64_t* smem_wr_blk_out) const {
-  Core::DxaTransferInfo info = {};
-  if (!core_->dxa_estimate(req.desc_slot, &info)) {
+  if (req.desc_slot >= VX_DCR_DXA_DESC_COUNT)
     return false;
-  }
+  const auto& d = descriptors_.at(req.desc_slot);
+  CopyCfg cfg;
+  if (!build_copy_cfg(d, &cfg))
+    return false;
+
+  const uint32_t total_elems_v = cfg.tile0 * cfg.tile1;
+  const uint32_t elem_bytes_v  = cfg.elem_bytes;
+  const uint32_t tile0         = cfg.tile0;
+  const uint32_t tile1         = cfg.tile1;
+  const uint32_t stride0       = (cfg.rank >= 2) ? d.strides[0] : 0;
+  const uint64_t gmem_base     = d.base_addr;
 
   bool is_s2g = false;  // Always g2s; s2g removed with flags
   uint64_t total = 0;
@@ -252,26 +258,26 @@ bool DxaEngine::decode_request(const Request& req,
 
   if (is_s2g) {
     uint64_t per_elem = uint64_t(kElemIssueCycles + kSmemReadCycles + kGmemWriteCycles);
-    total = kDecodeCycles + per_elem * info.total_elems + kCompletionCycles;
+    total = kDecodeCycles + per_elem * total_elems_v + kCompletionCycles;
   } else {
     // g2s: line-granularity pipelined model with read dedup + write packing.
-    uint64_t total_bytes = uint64_t(info.total_elems) * info.elem_bytes;
+    uint64_t total_bytes = uint64_t(total_elems_v) * elem_bytes_v;
     uint32_t line_size = std::max<uint32_t>(1, L1_LINE_SIZE);
     uint32_t smem_word = std::max<uint32_t>(1, LMEM_NUM_BANKS * (XLEN / 8));
-    uint32_t tile_line = info.tile0 * info.elem_bytes;  // T: bytes per tile row
+    uint32_t tile_line = tile0 * elem_bytes_v;  // T: bytes per tile row
 
     // ---- GMEM reads with LLB dedup ----
     // LLB dedup applies when T <= G (single GMEM line per row).
     // Count unique GMEM line addresses across all tile rows.
-    if (tile_line <= line_size && info.stride0 > 0 && info.tile1 > 1) {
+    if (tile_line <= line_size && stride0 > 0 && tile1 > 1) {
       // Simulate LLB: iterate rows, count address changes.
-      uint64_t gmem_base_with_coord = info.gmem_base
-          + uint64_t(req.coords[0]) * info.elem_bytes
-          + uint64_t(req.coords[1]) * info.stride0;
+      uint64_t gmem_base_with_coord = gmem_base
+          + uint64_t(req.coords[0]) * elem_bytes_v
+          + uint64_t(req.coords[1]) * stride0;
       uint64_t prev_line = gmem_base_with_coord >> __builtin_ctz(line_size);
       num_gmem_reads_v = 1;  // first row always reads
-      for (uint32_t r = 1; r < info.tile1; ++r) {
-        uint64_t row_addr = gmem_base_with_coord + uint64_t(r) * info.stride0;
+      for (uint32_t r = 1; r < tile1; ++r) {
+        uint64_t row_addr = gmem_base_with_coord + uint64_t(r) * stride0;
         uint64_t cur_line = row_addr >> __builtin_ctz(line_size);
         if (cur_line != prev_line) {
           ++num_gmem_reads_v;
@@ -313,8 +319,8 @@ bool DxaEngine::decode_request(const Request& req,
     }
   }
 
-  if (total_elems) *total_elems = info.total_elems;
-  if (elem_bytes) *elem_bytes = info.elem_bytes;
+  if (total_elems) *total_elems = total_elems_v;
+  if (elem_bytes) *elem_bytes = elem_bytes_v;
   if (total_cycles) *total_cycles = uint32_t(std::min<uint64_t>(total, std::numeric_limits<uint32_t>::max()));
   if (gmem_reads_out) *gmem_reads_out = num_gmem_reads_v;
   if (smem_writes_out) *smem_writes_out = num_smem_writes_v;
