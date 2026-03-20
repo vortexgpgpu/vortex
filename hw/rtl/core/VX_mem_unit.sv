@@ -30,6 +30,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 `endif
 
     VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
+    VX_dcr_flush_if.slave   dcr_flush_if,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
     VX_lsu_mem_if #(
@@ -198,7 +199,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_lsu_mem_if #(
         .NUM_LANES (DCACHE_CHANNELS),
         .DATA_SIZE (DCACHE_WORD_SIZE),
-        .TAG_WIDTH (DCACHE_TAG_WIDTH)
+        .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
     ) dcache_coalesced_if[`NUM_LSU_BLOCKS]();
 
 `ifdef PERF_ENABLE
@@ -292,14 +293,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
         VX_mem_bus_if #(
             .DATA_SIZE (DCACHE_WORD_SIZE),
-            .TAG_WIDTH (DCACHE_TAG_WIDTH)
+            .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
         ) dcache_bus_tmp_if[DCACHE_CHANNELS]();
 
         VX_lsu_adapter #(
             .NUM_LANES    (DCACHE_CHANNELS),
             .DATA_SIZE    (DCACHE_WORD_SIZE),
-            .TAG_WIDTH    (DCACHE_TAG_WIDTH),
-            .TAG_SEL_BITS (DCACHE_TAG_WIDTH - UUID_WIDTH),
+            .TAG_WIDTH    (DCACHE_CORE_TAG_WIDTH),
+            .TAG_SEL_BITS (DCACHE_CORE_TAG_WIDTH - UUID_WIDTH),
             .ARBITER      ("P"),
             .REQ_OUT_BUF  (0),
             .RSP_OUT_BUF  (0)
@@ -311,7 +312,24 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         );
 
         for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_dcache_bus_if
-            `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j]);
+            if (i == 0 && j == 0) begin : g_flush_port
+                // Port 0: route through VX_dcr_flush to inject flush requests
+                VX_dcr_flush #(
+                    .WORD_SIZE (DCACHE_WORD_SIZE),
+                    .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
+                ) dcr_flush (
+                    .clk          (clk),
+                    .reset        (reset),
+                    .dcr_flush_if (dcr_flush_if),
+                    .core_bus_if  (dcache_bus_tmp_if[j]),
+                    .dcache_bus_if(dcache_bus_if[0])
+                );
+            end else begin : g_passthru_port
+                // Ports 1+: pass through; tag is zero-extended from
+                // DCACHE_CORE_TAG_WIDTH to DCACHE_TAG_WIDTH on request,
+                // and MSB-stripped on response.
+                `ASSIGN_VX_MEM_BUS_IF_EX (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j], DCACHE_TAG_WIDTH, DCACHE_CORE_TAG_WIDTH, 0);
+            end
         end
 
     end

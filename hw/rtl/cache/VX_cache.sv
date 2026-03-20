@@ -72,8 +72,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     input wire reset,
 
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
-    VX_cache_flush_if.slave cache_flush_if
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
 );
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter: number of banks must be power of 2"))
@@ -135,8 +134,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .bank_req_fire   (per_bank_core_req_fire),
         .flush_begin     (per_bank_flush_begin),
         .flush_uuid      (flush_uuid),
-        .flush_end       (per_bank_flush_end),
-        .cache_flush_if  (cache_flush_if)
+        .flush_end       (per_bank_flush_end)
     );
 
     // Memory response gather /////////////////////////////////////////////////

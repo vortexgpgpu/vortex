@@ -79,10 +79,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 `endif
 
     VX_mem_bus_if.slave     core_bus_if [NUM_INPUTS * NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
-
-    // External (DCR-triggered) flush control
-    VX_cache_flush_if.slave cache_flush_if
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
@@ -146,29 +143,6 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         end
     end
 
-    VX_cache_flush_if cache_unit_flush_if[NUM_CACHES]();
-    wire [NUM_CACHES-1:0] cache_unit_flush_done;
-    reg [NUM_CACHES-1:0] cache_unit_flush_done_r;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            cache_unit_flush_done_r <= '0;
-        end else begin
-            if (cache_flush_if.req) begin
-                cache_unit_flush_done_r <= cache_unit_flush_done_r | cache_unit_flush_done;
-            end else begin
-                cache_unit_flush_done_r <= '0;
-            end
-        end
-    end
-
-    for (genvar i = 0; i < NUM_CACHES; ++i) begin : g_cache_flush_conn
-        assign cache_unit_flush_if[i].req = cache_flush_if.req;
-        assign cache_unit_flush_done[i]   = cache_unit_flush_if[i].done;
-    end
-
-    assign cache_flush_if.done = (&(cache_unit_flush_done_r | cache_unit_flush_done));
-
     for (genvar i = 0; i < NUM_CACHES; ++i) begin : g_cache_wrap
         VX_cache_wrap #(
             .INSTANCE_ID  (`SFORMATF(("%s%0d", INSTANCE_ID, i))),
@@ -200,8 +174,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .clk         (clk),
             .reset       (reset),
             .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
-            .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS]),
-            .cache_flush_if(cache_unit_flush_if[i])
+            .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS])
         );
     end
 

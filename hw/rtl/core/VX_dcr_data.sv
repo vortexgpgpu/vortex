@@ -27,7 +27,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     VX_dcr_csr_if.master    dcr_csr_if,
 
     // DCR-triggered cache flush
-    VX_cache_flush_if.master cache_flush_if
+    VX_dcr_flush_if.master dcr_flush_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -84,14 +84,14 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
             flush_pending_r <= 1'b0;
         end else if (is_flush_read) begin
             flush_pending_r <= 1'b1;
-        end else if (cache_flush_if.done) begin
+        end else if (dcr_flush_if.done) begin
             flush_pending_r <= 1'b0;
         end
     end
 
-    assign cache_flush_if.req = flush_pending_r;
+    assign dcr_flush_if.req = flush_pending_r;
 
-    wire flush_done = flush_pending_r && cache_flush_if.done;
+    wire flush_done = flush_pending_r && dcr_flush_if.done;
 
     // Return CSR data or flush-done or flush-done on DCR response bus
     always @(posedge clk) begin

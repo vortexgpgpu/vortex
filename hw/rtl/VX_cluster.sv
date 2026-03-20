@@ -118,9 +118,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
     wire [DXA_NUM_SMEM_OUTPUTS-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] dxa_smem_local_core_id;
 `endif
 
-    VX_cache_flush_if l2_flush_if();
-    assign l2_flush_if.req = 1'b0;
-
     VX_mem_bus_if #(
         .DATA_SIZE (`L2_LINE_SIZE),
         .TAG_WIDTH (L2_MEM_TAG_WIDTH)
@@ -155,8 +152,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .cache_perf     (l2_perf),
     `endif
         .core_bus_if    (per_socket_mem_bus_if),
-        .mem_bus_if     (l2_mem_bus_if),
-        .cache_flush_if (l2_flush_if)
+        .mem_bus_if     (l2_mem_bus_if)
     );
 
 `ifdef EXT_DXA_ENABLE
