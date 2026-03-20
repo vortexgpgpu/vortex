@@ -139,6 +139,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // Reverse lookup: warp-ID → CTA slot index
     wire [CS_BITS-1:0] wid_to_cta_rdata;
 
+    // Registered retirement signals — break the warp_done_wid → array → compare path
+    reg                 warp_done_r;
+    reg [NW_WIDTH-1:0]  warp_done_wid_r;
+    reg                 warp_done_r_dly;
+    reg                 warp_done_r_dly2;
+    reg [CS_BITS-1:0]   done_slot_dly;
+
 `ifdef USE_DP_RAM
     VX_dp_ram #(
         .DATAW (CS_BITS),
@@ -164,14 +171,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     end
     assign wid_to_cta_rdata = wid_to_cta_mem[warp_done_wid_r];
 `endif
-
-
-    // Registered retirement signals — break the warp_done_wid → array → compare path
-    reg                 warp_done_r;
-    reg [NW_WIDTH-1:0]  warp_done_wid_r;
-    reg                 warp_done_r_dly;
-    reg                 warp_done_r_dly2;
-    reg [CS_BITS-1:0]   done_slot_dly;
 
 
     // Kernel initialization tracking
@@ -220,26 +219,33 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // Power-of-two NUM_THREADS arithmetic — all combinational, zero adders
     // -------------------------------------------------------------------------
-    // Ceiling division block_size / NUM_THREADS: upper bits + OR of lower bits.
-    // Use NW_WIDTH+1 bits to hold values up to NUM_WARPS without truncation.
-    wire [NW_WIDTH:0] cta_num_warps = (NW_WIDTH+1)'(block_size_r[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|block_size_r[NT_BITS-1:0]);
+    wire [NW_WIDTH:0]      cta_num_warps;
+    wire [NW_WIDTH:0]      kmu_num_warps;
+    wire [CTA_TID_WIDTH:0] block_size_next;
+    wire [`NUM_THREADS-1:0] partial_tmask;
 
-    // From KMU data at accept time (used to initialise table + cta_size output)
-    wire [NW_WIDTH:0] kmu_num_warps = (NW_WIDTH+1)'(kmu_bus_if.data.block_size[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|kmu_bus_if.data.block_size[NT_BITS-1:0]);
-
-    // Shared block_size decrement: constant subtraction at bit boundary NT_BITS.
-    // Low NT_BITS bits are unchanged; upper bits decrement by 1.
-    wire [CTA_TID_WIDTH:0] block_size_next = {block_size_r[CTA_TID_WIDTH:NT_BITS] - 1'b1, block_size_r[NT_BITS-1:0]};
+    if (NT_BITS > 0) begin : g_nt_nonzero
+        // Ceiling division block_size / NUM_THREADS: upper bits + OR of lower bits.
+        assign cta_num_warps = (NW_WIDTH+1)'(block_size_r[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|block_size_r[NT_BITS-1:0]);
+        // From KMU data at accept time (used to initialise table + cta_size output)
+        assign kmu_num_warps = (NW_WIDTH+1)'(kmu_bus_if.data.block_size[CTA_TID_WIDTH:NT_BITS]) + (NW_WIDTH+1)'(|kmu_bus_if.data.block_size[NT_BITS-1:0]);
+        // Shared block_size decrement: low NT_BITS bits unchanged; upper bits decrement by 1.
+        assign block_size_next = {block_size_r[CTA_TID_WIDTH:NT_BITS] - 1'b1, block_size_r[NT_BITS-1:0]};
+        // Partial-warp mask: (1 << count) - 1 where count = block_size_r[NT_BITS-1:0]
+        assign partial_tmask = (`NUM_THREADS'(1) << block_size_r[NT_BITS-1:0]) - `NUM_THREADS'(1);
+    end else begin : g_nt_zero
+        // NT_BITS=0: NUM_THREADS=1, each warp has exactly 1 thread, no partial warps.
+        assign cta_num_warps = (NW_WIDTH+1)'(block_size_r);
+        assign kmu_num_warps = (NW_WIDTH+1)'(kmu_bus_if.data.block_size);
+        assign block_size_next = (CTA_TID_WIDTH+1)'(block_size_r - 1'b1);
+        assign partial_tmask = `NUM_THREADS'(0);
+    end
 
     // Full-warp test: upper bits non-zero (no comparator)
     wire is_full_warp = |block_size_r[CTA_TID_WIDTH:NT_BITS];
     // Last-warp test: ceiling(remaining/NUM_THREADS) == 1.
     // Covers (upper==1, lower==0) full-last and (upper==0, lower!=0) partial-only cases.
     wire is_last_warp = (cta_num_warps == (NW_WIDTH+1)'(1));
-
-    // Partial-warp mask: (1 << count) - 1 where count = block_size_r[NT_BITS-1:0]
-    // One-hot decode then OR-prefix; no barrel-shifter subtrahend.
-    wire [`NUM_THREADS-1:0] partial_tmask = (`NUM_THREADS'(1) << block_size_r[NT_BITS-1:0]) - `NUM_THREADS'(1);
 
     // 3D thread-index carry-propagation (combinational on registered state)
     wire [CTA_TID_WIDTH:0] next_x = {1'b0, thread_idx_r[0]} + {1'b0, warp_step_r[0]};
@@ -256,6 +262,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // Two-cycle forwarding: _r covers 1-cycle gap, _rr covers 2-cycle gap
     // (the 2-cycle gap causes a write and read to race at the same clock edge;
     //  the read captures old data, and rem_warps_write_r is already 0 one cycle later)
+    reg rem_warps_write_r;
+    reg [CS_BITS-1:0] rem_warps_waddr_r;
+    reg [NW_WIDTH:0] rem_warps_wdata_r;
     reg rem_warps_write_rr;
     reg [CS_BITS-1:0] rem_warps_waddr_rr;
     reg [NW_WIDTH:0] rem_warps_wdata_rr;
@@ -279,10 +288,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // BRAM access
     // -------------------------------------------------------------------------
-
-    reg rem_warps_write_r;
-    reg [CS_BITS-1:0] rem_warps_waddr_r;
-    reg [NW_WIDTH:0] rem_warps_wdata_r;
 
     // rem_warps_ram access — retirement exclusively owns the read port.
     // cta_size_r is captured at accept time (kmu_num_warps) to avoid contention.

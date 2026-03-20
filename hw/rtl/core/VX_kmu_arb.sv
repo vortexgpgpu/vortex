@@ -1,5 +1,3 @@
-//!/bin/bash
-
 // Copyright © 2019-2023
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +10,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+`include "VX_define.vh"
 
 module VX_kmu_arb import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,
