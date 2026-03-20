@@ -37,10 +37,11 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     reg [`XLEN-1:0] dcr_PC;
     reg [2:0][31:0] dcr_grid_dim;
     reg [2:0][CTA_TID_WIDTH:0] dcr_block_dim;
-    reg [`MEM_ADDR_WIDTH-1:0] dcr_param;
+    reg [`XLEN-1:0] dcr_param;
     reg [CTA_TID_WIDTH:0] dcr_block_size;
     reg [`LMEM_LOG_SIZE:0] dcr_lmem_size;
     reg [2:0][CTA_TID_WIDTH-1:0] dcr_warp_step;
+    `UNUSED_VAR(dcr_param)
 
     // Internal counters for CTA distribution
     reg [31:0] cta_id;
@@ -123,7 +124,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_bus_if.data.block_idx = block_idx;
     assign kmu_bus_if.data.block_dim = dcr_block_dim;
     assign kmu_bus_if.data.grid_dim  = dcr_grid_dim;
-    assign kmu_bus_if.data.param     = dcr_param;
+    assign kmu_bus_if.data.param     = `MEM_ADDR_WIDTH'(dcr_param);
     assign kmu_bus_if.data.block_size= dcr_block_size;
     assign kmu_bus_if.data.lmem_size = dcr_lmem_size;
     assign kmu_bus_if.data.warp_step = dcr_warp_step;

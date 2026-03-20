@@ -68,7 +68,7 @@ import VX_fpu_pkg::*;
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR ({mpm_class, read_data_rw, read_enable, read_uuid});
-    `UNUSED_VAR ({write_uuid})
+    `UNUSED_VAR ({write_data, write_uuid})
 
     // CSRs Write /////////////////////////////////////////////////////////////
 

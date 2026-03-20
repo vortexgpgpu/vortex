@@ -69,6 +69,7 @@ kernel()
 {
     echo "begin kernel tests..."
 
+    make -C kernel
     make -C sim/simx
     make -C sim/rtlsim
 
@@ -122,6 +123,8 @@ regression()
 {
     echo "begin regression tests..."
 
+    make -C kernel
+    make -C runtime/stub
     make -C runtime/simx
     make -C runtime/rtlsim
 
@@ -153,6 +156,7 @@ dxa()
 {
     echo "begin dxa tests..."
 
+    make -C kernel
     make -C runtime/simx
     make -C runtime/rtlsim
 
@@ -181,6 +185,8 @@ opencl()
 {
     echo "begin opencl tests..."
 
+    make -C kernel
+    make -C runtime/stub
     make -C runtime/simx
     make -C runtime/rtlsim
 
@@ -196,6 +202,8 @@ opencl()
 vm(){
     echo "begin vm tests..."
 
+    make -C kernel
+    make -C runtime/stub
     make -C runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C runtime/simx
     make -C tests/opencl run-simx
     make -C tests/regression run-simx
@@ -210,6 +218,8 @@ vm(){
 cache()
 {
     echo "begin cache tests..."
+
+    make -C kernel
 
     # disable local memory
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo --perf=1
@@ -266,6 +276,8 @@ cache()
 config1()
 {
     echo "begin configuration-1 tests..."
+
+    make -C kernel
 
     # warp/threads
     ./ci/blackbox.sh --driver=rtlsim --warps=1 --threads=1 --app=diverge
@@ -332,6 +344,8 @@ config1()
 config2()
 {
     echo "begin configuration-2 tests..."
+
+    make -C kernel
 
     # test opaesim
     ./ci/blackbox.sh --driver=opae --app=printf
@@ -436,6 +450,8 @@ debug()
 {
     echo "begin debugging tests..."
 
+    make -C kernel
+
     test_csv_trace32
 
     if [ "$XLEN" == "64" ]
@@ -456,6 +472,8 @@ scope()
 {
     echo "begin scope tests..."
 
+    make -C kernel
+
     SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
     SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
 
@@ -465,6 +483,8 @@ scope()
 stress()
 {
     echo "begin stress tests..."
+
+    make -C kernel
 
     # test verilator reset values
     CONFIGS="-DVERILATOR_RESET_VALUE=1 -DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
@@ -495,6 +515,8 @@ vector()
 tensor()
 {
     echo "begin tensor tests..."
+
+    make -C kernel
 
     # simx tests
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=2 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
@@ -649,6 +671,8 @@ tensor()
 tensor_sp()
 {
     echo "begin tensor sparse tests..."
+
+    make -C kernel
 
     # simx tests (NT=2)
     make -C tests/regression/sgemm_tcu_sp clean && CONFIGS="-DNUM_THREADS=2 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_sp
