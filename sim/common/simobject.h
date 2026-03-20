@@ -88,7 +88,7 @@ public:
   {}
 
   void bind(SimPort<Pkt>* sink) {
-    __assert(0 == capacity_, "only virtual ports can be used a link!")
+    __vortex_assert(0 == capacity_, "only virtual ports can be used a link!")
     assert(sink_ == nullptr);
     sink->source_ = this;
     sink_ = sink;
@@ -97,7 +97,7 @@ public:
 
   template <typename U>
   void bind(SimPort<U>* sink) {
-    __assert(0 == capacity_, "only virtual ports can be used a link!")
+    __vortex_assert(0 == capacity_, "only virtual ports can be used a link!")
     assert(sink_ == nullptr);
     sink->source_ = this;
     sink_ = sink;
@@ -108,7 +108,7 @@ public:
 
   template <typename U, typename Converter>
   void bind(SimPort<U>* sink, const Converter& converter) {
-    __assert(0 == capacity_, "only virtual ports can be used a link!")
+    __vortex_assert(0 == capacity_, "only virtual ports can be used a link!")
     assert(sink_ == nullptr);
     sink->source_ = this;
     sink_ = sink;
@@ -154,14 +154,14 @@ public:
   }
 
   const Pkt& front() const {
-    __assert(sink_ == nullptr, "cannot be called on a stub port!")
-    __assert(!this->empty(), "port is empty!");
+    __vortex_assert(sink_ == nullptr, "cannot be called on a stub port!")
+    __vortex_assert(!this->empty(), "port is empty!");
     return queue_.front();
   }
 
   Pkt& front() {
-    __assert(sink_ == nullptr, "cannot be called on a stub port!")
-    __assert(!this->empty(), "port is empty!");
+    __vortex_assert(sink_ == nullptr, "cannot be called on a stub port!")
+    __vortex_assert(!this->empty(), "port is empty!");
     return queue_.front().pkt;
   }
 
@@ -465,7 +465,7 @@ private:
   template <typename Pkt>
   void schedule_push(SimPort<Pkt>* port, const Pkt& pkt, uint64_t delay) {
     if (port->capacity() != 0) {
-      __assert(0 == push_list_.count(port), "cannot enqueue a port multiple times during the same cycle!");
+      __vortex_assert(0 == push_list_.count(port), "cannot enqueue a port multiple times during the same cycle!");
       push_list_.push_back(port);
     }
     // schedule update event
@@ -481,7 +481,7 @@ private:
 
   template <typename Pkt>
   void schedule_pop(SimPort<Pkt>* port) {
-    __assert(0 == pop_list_.count(port), "cannot dequeue a port multiple times during the same cycle!");
+    __vortex_assert(0 == pop_list_.count(port), "cannot dequeue a port multiple times during the same cycle!");
     pop_list_.push_back(port);
   }
 
@@ -534,15 +534,15 @@ private:
 
 template <typename Pkt>
 void SimPort<Pkt>::push(const Pkt& pkt, uint64_t delay) {
-  __assert(source_ == nullptr, "cannot be called on a sink port!")
-  __assert(!this->full(), "port is full!");
+  __vortex_assert(source_ == nullptr, "cannot be called on a sink port!")
+  __vortex_assert(!this->full(), "port is full!");
   SimPlatform::instance().schedule_push(this, pkt, delay);
 }
 
 template <typename Pkt>
 uint64_t SimPort<Pkt>::pop() {
-  __assert(sink_ == nullptr, "cannot be called on a stub port!")
-  __assert(!this->empty(), "port is empty!");
+  __vortex_assert(sink_ == nullptr, "cannot be called on a stub port!")
+  __vortex_assert(!this->empty(), "port is empty!");
   SimPlatform::instance().schedule_pop(this);
   return queue_.front().cycles;
 }
