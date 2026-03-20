@@ -989,7 +989,7 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 2, kernel_arg.grid_dim, kernel_arg.block_dim, 0));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

@@ -18,6 +18,8 @@
 #include <array>
 #include <deque>
 #include <cstdint>
+#include <simobject.h>
+#include <VX_types.h>
 
 namespace vortex {
 
@@ -33,7 +35,7 @@ class Core;
 // The model counts down modeled cycles.  When the countdown expires it
 // performs the actual data copy and releases the barrier.
 // Core interaction is limited to dcache_read/write + barrier_event_release.
-class DxaEngine {
+class DxaEngine : public SimObject<DxaEngine> {
 public:
   struct Descriptor {
     uint64_t base_addr;
@@ -45,9 +47,9 @@ public:
     uint32_t cfill;
   };
 
-  explicit DxaEngine(Core* core);
+  DxaEngine(const SimContext& ctx, const char* name, Core* core);
 
-  void reset();
+  virtual void reset();
 
   int dcr_write(uint32_t addr, uint32_t value);
 
@@ -56,7 +58,7 @@ public:
              const uint32_t coords[5],
              uint32_t bar_id);
 
-  void tick();
+  virtual void tick();
 
 private:
   // Decoded copy geometry, derived from a Descriptor.
@@ -89,7 +91,6 @@ private:
   bool has_active_;
   ActiveTransfer active_xfer_;
 
-  const Descriptor& read_descriptor(uint32_t slot) const;
   bool build_copy_cfg(const Descriptor& desc, CopyCfg* cfg) const;
   bool estimate_transfer(uint32_t slot, uint32_t* total_elems, uint32_t* elem_bytes) const;
   bool execute_copy(uint32_t slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t* bytes_copied);

@@ -95,7 +95,8 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  uint32_t grid_one = 1;
+  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 1, &grid_one, &kernel_arg.num_threads, 0));
 
   std::cout << "wait for completion" << std::endl;
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));

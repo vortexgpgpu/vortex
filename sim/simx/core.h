@@ -166,25 +166,7 @@ public:
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
 #ifdef EXT_DXA_ENABLE
-  bool dxa_issue(uint32_t desc_slot,
-                 uint32_t smem_addr,
-                 const uint32_t coords[5],
-                 uint32_t bar_id);
-
-  struct DxaTransferInfo {
-    uint32_t total_elems;
-    uint32_t elem_bytes;
-    uint32_t tile0;
-    uint32_t tile1;
-    uint32_t stride0;
-    uint64_t gmem_base;
-  };
-
-  bool dxa_estimate(uint32_t desc_slot, DxaTransferInfo* info);
-
-#ifdef EXT_DXA_ENABLE
-  bool dxa_issue(uint32_t desc_slot, uint32_t smem_addr, const uint32_t coords[5], uint32_t bar_id);
-  DxaEngine& dxa_engine() { return *dxa_engine_; }
+  DxaEngine::Ptr& dxa_engine() { return dxa_engine_; }
 #endif
 
 #ifdef EXT_TCU_ENABLE
@@ -230,7 +212,7 @@ private:
 #endif
 
 #ifdef EXT_DXA_ENABLE
-  std::unique_ptr<DxaEngine> dxa_engine_;
+  DxaEngine::Ptr dxa_engine_;
 #endif
 
   Emulator emulator_;

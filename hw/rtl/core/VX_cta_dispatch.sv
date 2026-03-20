@@ -66,10 +66,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [NW_WIDTH-1:0]     wid_to_cta_waddr;
     wire [CS_BITS-1:0]      wid_to_cta_wdata;
 
-`ifdef USE_DP_RAM
     VX_dp_ram #(
         .DATAW (NW_WIDTH+1),
         .SIZE  (NUM_CTA_SLOTS),
+        .RDW_MODE ("R"),
         .OUT_REG (1)
     ) rem_warps_ram (
         .clk   (clk),
@@ -82,24 +82,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         .raddr (rem_warps_raddr),
         .rdata (rem_warps_rdata)
     );
-`else
-    reg [NW_WIDTH:0] rem_warps_mem [0:NUM_CTA_SLOTS-1];
-    reg [NW_WIDTH:0] rem_warps_rdata_r;
-    always @(posedge clk) begin
-        if (rem_warps_write) begin
-            rem_warps_mem[rem_warps_waddr] <= rem_warps_wdata;
-        end
-        if (rem_warps_read) begin
-            rem_warps_rdata_r <= rem_warps_mem[rem_warps_raddr];
-        end
-    end
-    assign rem_warps_rdata = rem_warps_rdata_r;
-`endif
 
-`ifdef USE_DP_RAM
     VX_dp_ram #(
         .DATAW (`LMEM_LOG_SIZE+1),
         .SIZE  (NUM_CTA_SLOTS),
+        .RDW_MODE ("R"),
         .OUT_REG (1)
     ) lmem_size_ram (
         .clk   (clk),
@@ -112,19 +99,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         .raddr (lmem_size_raddr),
         .rdata (lmem_size_rdata)
     );
-`else
-    reg [`LMEM_LOG_SIZE:0] lmem_size_mem [0:NUM_CTA_SLOTS-1];
-    reg [`LMEM_LOG_SIZE:0] lmem_size_rdata_r;
-    always @(posedge clk) begin
-        if (lmem_size_write) begin
-            lmem_size_mem[lmem_size_waddr] <= lmem_size_wdata;
-        end
-        if (lmem_size_read) begin
-            lmem_size_rdata_r <= lmem_size_mem[lmem_size_raddr];
-        end
-    end
-    assign lmem_size_rdata = lmem_size_rdata_r;
-`endif
 
     reg [NUM_CTA_SLOTS-1:0] slot_valid_r;          // one-hot mirror of per-slot valid
     reg [CS_BITS-1:0]       head_r;                // oldest live slot
@@ -146,11 +120,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg                 warp_done_r_dly2;
     reg [CS_BITS-1:0]   done_slot_dly;
 
-`ifdef USE_DP_RAM
     VX_dp_ram #(
         .DATAW (CS_BITS),
         .SIZE  (NUM_WARPS),
-        .OUT_REG (0)
+        .RDW_MODE ("R"),
+        .OUT_REG (0),
+        .RADDR_REG (1)
     ) wid_to_cta_ram (
         .clk   (clk),
         .reset (reset),
@@ -162,16 +137,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         .raddr (warp_done_wid_r),
         .rdata (wid_to_cta_rdata)
     );
-`else
-    reg [CS_BITS-1:0] wid_to_cta_mem [0:NUM_WARPS-1];
-    always @(posedge clk) begin
-        if (wid_to_cta_write) begin
-            wid_to_cta_mem[wid_to_cta_waddr] <= wid_to_cta_wdata;
-        end
-    end
-    assign wid_to_cta_rdata = wid_to_cta_mem[warp_done_wid_r];
-`endif
-
 
     // Kernel initialization tracking
     reg [PC_BITS-1:0]   cur_kernel_pc_r;

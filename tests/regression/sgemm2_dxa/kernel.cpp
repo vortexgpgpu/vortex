@@ -1,4 +1,4 @@
-#include <vx_spawn.h>
+#include <vx_spawn2.h>
 #include <vx_dxa.h>
 #include <vx_barrier.h>
 
@@ -18,7 +18,7 @@ static inline void gemm_accumulate(TYPE& sum, const TYPE* shA, const TYPE* shB, 
   }
 }
 
-void kernel_body(kernel_arg_t* arg) {
+extern "C" void kernel_main(kernel_arg_t* arg) {
   auto C = reinterpret_cast<TYPE*>(arg->C_addr);
 
   const uint32_t size      = arg->size;
@@ -43,8 +43,7 @@ void kernel_body(kernel_arg_t* arg) {
   const uint32_t stage_count  = (mode == 2) ? 2u : 1u;
 
   // Allocate shared memory for tile buffers.
-  auto local_ptr = __local_mem(stage_count * stage_elems * sizeof(TYPE));
-  auto shmem = reinterpret_cast<TYPE*>(local_ptr);
+  auto shmem = reinterpret_cast<TYPE*>(__local_mem());
 
   // Stage 0 and stage 1 tile pointers.
   TYPE* shA[2] = { shmem, shmem + stage_elems };
@@ -92,9 +91,9 @@ void kernel_body(kernel_arg_t* arg) {
       gemm_accumulate(sum, shA[cur], shB[cur], tile_size, chunk_k, l_row, l_col);
 
       bar[cur].arrive_and_wait();
-      
+
       cur = nxt;
-      
+
     }
   } else {
     // ── Single-buffered: full-K in one shot ───────────────────────────
@@ -113,10 +112,4 @@ void kernel_body(kernel_arg_t* arg) {
 
   // Store result to global memory.
   C[g_row * size + g_col] = sum;
-}
-
-int main() {
-  auto arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
-  return vx_spawn_threads(2, arg->grid_dim, arg->block_dim,
-                          (vx_kernel_func_cb)kernel_body, arg);
 }
