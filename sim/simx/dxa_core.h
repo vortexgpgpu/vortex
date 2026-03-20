@@ -13,8 +13,6 @@
 
 #pragma once
 
-#ifdef EXT_DXA_ENABLE
-
 #include <array>
 #include <deque>
 #include <vector>
@@ -139,5 +137,3 @@ private:
 };
 
 } // namespace vortex
-
-#endif // EXT_DXA_ENABLE
