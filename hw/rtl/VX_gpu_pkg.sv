@@ -959,6 +959,9 @@ package VX_gpu_pkg;
     localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, `L1_MEM_PORTS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
 `endif
 
+    // If dcache writeback is enabled, MSHR size must be large enough to track all outstanding requests
+    localparam DCACHE_MREQ_SIZE     = `DCACHE_WRITEBACK ? `DCACHE_MSHR_SIZE : `DCACHE_MREQ_SIZE;
+
     /////////////////////////////// L1 Parameters /////////////////////////////
 
     // arbitrate between icache and dcache
@@ -1007,6 +1010,9 @@ package VX_gpu_pkg;
     localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, `L2_MEM_PORTS, `L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
 `endif
 
+    // If L2 writeback is enabled, MSHR size must be large enough to track all outstanding requests
+    localparam L2_MREQ_SIZE         = `L2_WRITEBACK ? `L2_MSHR_SIZE : `L2_MREQ_SIZE;
+
     /////////////////////////////// L3 Parameters /////////////////////////////
 
     // Word size in bytes
@@ -1027,6 +1033,8 @@ package VX_gpu_pkg;
 `else
     localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, `L3_MEM_PORTS, `L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `endif
+    // If L3 writeback is enabled, MSHR size must be large enough to track all outstanding requests
+    localparam L3_MREQ_SIZE         = `L3_WRITEBACK ? `L3_MSHR_SIZE : `L3_MREQ_SIZE;
 
     ///////////////////////////////////////////////////////////////////////////
 

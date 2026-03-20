@@ -168,7 +168,7 @@ module VX_socket import VX_gpu_pkg::*;
         .CRSQ_SIZE      (`DCACHE_CRSQ_SIZE),
         .MSHR_SIZE      (`DCACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (`DCACHE_WRITEBACK ? `DCACHE_MSHR_SIZE : `DCACHE_MREQ_SIZE),
+        .MREQ_SIZE      (DCACHE_MREQ_SIZE),
         .TAG_WIDTH      (DCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`DCACHE_WRITEBACK),

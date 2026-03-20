@@ -93,19 +93,28 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
 
     wire flush_done = flush_pending_r && dcr_flush_if.done;
 
-    // Return CSR data or flush-done or flush-done on DCR response bus
+    // Return CSR data or flush-done on DCR response bus
+    // Use intermediate registers — Vivado (Synth 8-453) forbids procedural
+    // assignment to interface net signals; drive them with continuous assigns.
+    reg         rsp_valid_r;
+    dcr_rsp_t   rsp_data_r;
+
     always @(posedge clk) begin
         if (reset) begin
-            dcr_bus_if.rsp_valid <= 1'b0;
+            rsp_valid_r <= 1'b0;
+            rsp_data_r  <= '0;
         end else begin
-            dcr_bus_if.rsp_valid <= dcr_csr_if_fire || flush_done;
+            rsp_valid_r <= dcr_csr_if_fire || flush_done;
             if (dcr_csr_if_fire) begin
-                dcr_bus_if.rsp_data <= dcr_csr_if.value;
+                rsp_data_r <= dcr_csr_if.value;
             end else if (flush_done) begin
-                dcr_bus_if.rsp_data <= '0;
+                rsp_data_r <= '0;
             end
         end
     end
+
+    assign dcr_bus_if.rsp_valid = rsp_valid_r;
+    assign dcr_bus_if.rsp_data  = rsp_data_r;
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin

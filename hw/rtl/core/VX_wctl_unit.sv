@@ -133,6 +133,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // barrier
 
+    wire [BAR_ADDR_W-1:0] wctl_bar_addr;
+    `CONCAT(wctl_bar_addr, rs1_data[NW_BITS-1:0], rs1_data[16 +: NB_BITS], NW_BITS, NB_BITS)
+
     wire wctl_bar_enable = wctl_valid && is_bar;
 
     assign bar_valid    = wctl_bar_enable || txbar_bus_if.valid;
@@ -186,8 +189,6 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // Scheduler response setup
 
     assign warp_ctl_if.dvstack_wid = execute_if.data.header.wid;
-    wire [BAR_ADDR_W-1:0] wctl_bar_addr;
-    `CONCAT(wctl_bar_addr, rs1_data[NW_BITS-1:0], rs1_data[16 +: NB_BITS], NW_BITS, NB_BITS)
     assign warp_ctl_if.bar_addr = wctl_bar_enable ? wctl_bar_addr : txbar_bus_if.data.addr;
 
     // Send scheduler request
