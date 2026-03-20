@@ -73,6 +73,14 @@ Cluster::Cluster(const SimContext& ctx,
     l2cache_->mem_req_out.at(i).bind(&this->mem_req_out.at(i));
     this->mem_rsp_in.at(i).bind(&l2cache_->mem_rsp_in.at(i));
   }
+
+#ifdef EXT_DXA_ENABLE
+  // Create DxaCore at cluster scope (matches VX_dxa_core placement in RTL).
+  // Descriptors are shared cluster-wide; NUM_DXA_UNITS parallel slices each
+  // process copy requests independently.
+  snprintf(sname, 100, "%s-dxa-core", name);
+  dxa_core_ = DxaCore::Create(sname, this);
+#endif
 }
 
 Cluster::~Cluster() {
@@ -159,6 +167,11 @@ Cluster::PerfStats Cluster::perf_stats() const {
 }
 
 int Cluster::dcr_write(uint32_t addr, uint32_t value) {
+#ifdef EXT_DXA_ENABLE
+  if (addr >= VX_DCR_DXA_STATE_BEGIN && addr < VX_DCR_DXA_STATE_END) {
+    return dxa_core_->dcr_write(addr, value);
+  }
+#endif
   for (auto& socket : sockets_) {
     int ret = socket->dcr_write(addr, value);
     if (ret != 0)

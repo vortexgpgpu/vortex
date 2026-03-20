@@ -195,11 +195,6 @@ Core::Core(const SimContext& ctx,
     commit_arbs_.at(iw) = arbiter;
   }
 
-#ifdef EXT_DXA_ENABLE
-  snprintf(sname, 100, "%s-dxa", name);
-  dxa_engine_ = DxaEngine::Create(sname, this);
-#endif
-
   this->reset();
 }
 
@@ -551,11 +546,6 @@ void Core::attach_ram(RAM* ram) {
 }
 
 int Core::dcr_write(uint32_t addr, uint32_t value) {
-#ifdef EXT_DXA_ENABLE
-  if (addr >= VX_DCR_DXA_STATE_BEGIN && addr < VX_DCR_DXA_STATE_END) {
-    return dxa_engine_->dcr_write(addr, value);
-  }
-#endif
   return emulator_.dcr_write(addr, value);
 }
 

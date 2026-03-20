@@ -49,6 +49,8 @@ FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
+	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/vendor/openc910/C910_RTL_FACTORY/gen_rtl/vfdsu/rtl -I$(THIRD_PARTY_DIR)/cvfpu/vendor/openc910/C910_RTL_FACTORY/gen_rtl/clk/rtl
+	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/vendor/opene906/E906_RTL_FACTORY/gen_rtl/fdsu/rtl -I$(THIRD_PARTY_DIR)/cvfpu/vendor/opene906/E906_RTL_FACTORY/gen_rtl/fpu/rtl -I$(THIRD_PARTY_DIR)/cvfpu/vendor/opene906/E906_RTL_FACTORY/gen_rtl/clk/rtl
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip

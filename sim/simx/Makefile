@@ -44,7 +44,7 @@ endif
 
 # Add DXA extension sources
 ifneq ($(filter -DEXT_DXA_ENABLE, $(XCONFIGS)),)
-	SRCS += $(SRC_DIR)/dxa_engine.cpp
+	SRCS += $(SRC_DIR)/dxa_core.cpp
 endif
 
 # Debugging

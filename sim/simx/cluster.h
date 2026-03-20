@@ -20,6 +20,9 @@
 #include "core.h"
 #include "socket.h"
 #include "constants.h"
+#ifdef EXT_DXA_ENABLE
+#include "dxa_core.h"
+#endif
 
 namespace vortex {
 
@@ -102,6 +105,10 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+#ifdef EXT_DXA_ENABLE
+  DxaCore::Ptr& dxa_core() { return dxa_core_; }
+#endif
+
 private:
   uint32_t                    cluster_id_;
   ProcessorImpl*              processor_;
@@ -109,6 +116,9 @@ private:
   std::vector<core_barrier_t> gbarriers_;
   CacheSim::Ptr               l2cache_;
   uint32_t                    cores_per_socket_;
+#ifdef EXT_DXA_ENABLE
+  DxaCore::Ptr                dxa_core_;
+#endif
 };
 
 } // namespace vortex
