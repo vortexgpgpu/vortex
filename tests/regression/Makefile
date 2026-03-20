@@ -53,7 +53,7 @@ run-simx:
 	$(MAKE) -C vecadd run-simx
 	$(MAKE) -C vecadd_v2 run-simx
 	$(MAKE) -C sgemm run-simx
-    $(MAKE) -C sgemm_v2 run-simx
+	$(MAKE) -C sgemm_v2 run-simx
 	$(MAKE) -C conv3 run-simx
 	$(MAKE) -C relu run-simx
 	$(MAKE) -C sgemv run-simx
@@ -85,7 +85,7 @@ run-rtlsim:
 	$(MAKE) -C vecadd run-rtlsim
 	$(MAKE) -C vecadd_v2 run-rtlsim
 	$(MAKE) -C sgemm run-rtlsim
-    $(MAKE) -C sgemm_v2 run-rtlsim
+	$(MAKE) -C sgemm_v2 run-rtlsim
 	$(MAKE) -C conv3 run-rtlsim
 	$(MAKE) -C relu run-rtlsim
 	$(MAKE) -C sgemv run-rtlsim
