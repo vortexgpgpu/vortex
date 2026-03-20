@@ -107,9 +107,6 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .TAG_WIDTH (L3_MEM_TAG_WIDTH)
     ) mem_bus_if[`L3_MEM_PORTS]();
 
-    VX_cache_flush_if l3_flush_if();
-    assign l3_flush_if.req = 1'b0;
-
     VX_cache_wrap #(
         .INSTANCE_ID    ("l3cache"),
         .CACHE_SIZE     (`L3_CACHE_SIZE),
@@ -141,8 +138,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     `endif
 
         .core_bus_if    (per_cluster_mem_bus_if),
-        .mem_bus_if     (mem_bus_if),
-        .cache_flush_if (l3_flush_if)
+        .mem_bus_if     (mem_bus_if)
     );
 
     for (genvar i = 0; i < `L3_MEM_PORTS; ++i) begin : g_mem_bus_if

@@ -81,8 +81,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 `endif
 
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
-    VX_cache_flush_if.slave cache_flush_if
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
 );
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
@@ -108,40 +107,6 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) mem_bus_tmp_if[MEM_PORTS]();
 
-    // In passthru mode a VX_cache_init instance gates the core bus so that
-    // (a) in-flight requests are drained before a flush is acknowledged and
-    // (b) LSU fence requests (MEM_REQ_FLAG_FLUSH) still propagate to lower
-    //     cache levels.  flush_end is tied high because there are no local
-    //     banks; the FSM therefore completes immediately after STATE_FLUSH.
-    // In non-passthru mode VX_cache's own internal VX_cache_init handles this.
-    VX_mem_bus_if #(
-        .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (TAG_WIDTH)
-    ) core_bus_init_if[NUM_REQS]();
-
-    if (PASSTHRU != 0) begin : g_passthru_init
-        VX_cache_init #(
-            .NUM_REQS         (NUM_REQS),
-            .NUM_BANKS        (NUM_BANKS),
-            .TAG_WIDTH        (TAG_WIDTH),
-            .BANK_SEL_LATENCY (0)
-        ) cache_init (
-            .clk             (clk),
-            .reset           (reset),
-            .core_bus_in_if  (core_bus_if),
-            .core_bus_out_if (core_bus_init_if),
-            .bank_req_fire   ('0),
-            `UNUSED_PIN (flush_begin),
-            `UNUSED_PIN (flush_uuid),
-            .flush_end       ('1),
-            .cache_flush_if  (cache_flush_if)
-        );
-    end else begin : g_no_passthru_init
-        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_init
-            `ASSIGN_VX_MEM_BUS_IF (core_bus_init_if[i], core_bus_if[i]);
-        end
-    end
-
     if (BYPASS_ENABLE) begin : g_bypass
 
         VX_cache_bypass #(
@@ -166,7 +131,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .clk            (clk),
             .reset          (reset),
 
-            .core_bus_in_if (core_bus_init_if),
+            .core_bus_in_if (core_bus_if),
             .core_bus_out_if(core_bus_cache_if),
 
             .mem_bus_in_if  (mem_bus_cache_if),
@@ -176,7 +141,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     end else begin : g_no_bypass
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if
-            `ASSIGN_VX_MEM_BUS_IF (core_bus_cache_if[i], core_bus_init_if[i]);
+            `ASSIGN_VX_MEM_BUS_IF (core_bus_cache_if[i], core_bus_if[i]);
         end
 
         for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_tmp_if
@@ -221,8 +186,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .cache_perf     (cache_perf),
         `endif
             .core_bus_if    (core_bus_cache_if),
-            .mem_bus_if     (mem_bus_cache_if),
-            .cache_flush_if (cache_flush_if)
+            .mem_bus_if     (mem_bus_cache_if)
         );
 
     end else begin : g_passthru

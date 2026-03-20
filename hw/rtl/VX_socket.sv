@@ -109,10 +109,6 @@ module VX_socket import VX_gpu_pkg::*;
         .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
     ) icache_mem_bus_if[1]();
 
-    // icache is read-only; no dirty data to flush.
-    VX_cache_flush_if icache_flush_if();
-    assign icache_flush_if.req = 1'b0;
-
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("%s-icache", INSTANCE_ID))),
         .NUM_UNITS      (`NUM_ICACHES),
@@ -142,8 +138,7 @@ module VX_socket import VX_gpu_pkg::*;
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (per_core_icache_bus_if),
-        .mem_bus_if     (icache_mem_bus_if),
-        .cache_flush_if (icache_flush_if)
+        .mem_bus_if     (icache_mem_bus_if)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -189,8 +184,7 @@ module VX_socket import VX_gpu_pkg::*;
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (per_core_dcache_bus_if),
-        .mem_bus_if     (dcache_mem_bus_if),
-        .cache_flush_if (dcache_flush_if)
+        .mem_bus_if     (dcache_mem_bus_if)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -337,16 +331,6 @@ module VX_socket import VX_gpu_pkg::*;
         .bus_out_if (per_core_dcr_bus_if)
     );
 
-    VX_cache_flush_if per_core_flush_if[`SOCKET_SIZE]();
-    VX_cache_flush_if dcache_flush_if();
-
-    wire [`SOCKET_SIZE-1:0] per_core_flush_req;
-    for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin : g_flush_if
-        assign per_core_flush_req[i]     = per_core_flush_if[i].req;
-        assign per_core_flush_if[i].done = dcache_flush_if.done;
-    end
-    assign dcache_flush_if.req = (| per_core_flush_req);
-
     wire [`SOCKET_SIZE-1:0] per_core_busy;
 
     // Generate all cores
@@ -365,8 +349,6 @@ module VX_socket import VX_gpu_pkg::*;
         `endif
 
             .dcr_bus_if     (per_core_dcr_bus_if[core_id]),
-
-            .cache_flush_if (per_core_flush_if[core_id]),
 
             .dcache_bus_if  (per_core_dcache_bus_if[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
 

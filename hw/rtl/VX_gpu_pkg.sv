@@ -943,12 +943,16 @@ package VX_gpu_pkg;
     localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`LSUQ_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
 
     // Core request tag bits
-    localparam DCACHE_TAG_WIDTH	    = (UUID_WIDTH + DCACHE_TAG_ID_BITS);
+    localparam DCACHE_CORE_TAG_WIDTH = (UUID_WIDTH + DCACHE_TAG_ID_BITS);
+
+    // Core request tag bits on dcache_bus_if port of VX_core (+1 for flush-arb sel bit)
+    localparam DCACHE_TAG_WIDTH	    = (DCACHE_CORE_TAG_WIDTH + 1);
 
     // Memory request data bits
     localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);
 
-    // Memory request tag bits
+    // Memory request tag bits (computed with DCACHE_TAG_WIDTH since
+    // VX_cache_cluster sees the post-arb tag width)
 `ifdef DCACHE_ENABLE
     localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, `L1_MEM_PORTS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES, UUID_WIDTH);
 `else

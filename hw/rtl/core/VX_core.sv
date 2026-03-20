@@ -33,8 +33,6 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_dcr_bus_if.slave     dcr_bus_if,
 
-    VX_cache_flush_if.master cache_flush_if,
-
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
 
     VX_mem_bus_if.master    icache_bus_if,
@@ -91,6 +89,8 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_dcr_csr_if dcr_csr_if();
 
+    VX_dcr_flush_if dcr_flush_if();
+
     VX_dcr_data #(
         .INSTANCE_ID (`SFORMATF(("%s-dcr_data", INSTANCE_ID))),
         .CORE_ID (CORE_ID)
@@ -99,7 +99,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
         .dcr_csr_if (dcr_csr_if),
-        .cache_flush_if(cache_flush_if)
+        .dcr_flush_if(dcr_flush_if)
     );
 
     `SCOPE_IO_SWITCH (3);
@@ -232,6 +232,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
         .lsu_mem_if    (lsu_mem_if),
+        .dcr_flush_if  (dcr_flush_if),
         .dcache_bus_if (dcache_bus_if)
     );
 

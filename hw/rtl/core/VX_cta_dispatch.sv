@@ -40,7 +40,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam NUM_WARPS    = `NUM_WARPS;
     localparam NUM_CTA_SLOTS= NUM_WARPS;
-    localparam CS_BITS      = NW_BITS;
+    localparam CS_BITS      = NW_WIDTH; // UP(NW_BITS): at least 1 to avoid zero-width when NUM_WARPS=1
     localparam LMEM_SIZE    = (1 << `LMEM_LOG_SIZE);
 
     // -------------------------------------------------------------------------
@@ -479,6 +479,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                                | `MEM_ADDR_WIDTH'(cur_lmem_base_r);
 
     assign busy = (state == DISPATCH);
+
+    `UNUSED_VAR (kmu_bus_if.data.cta_id)
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
