@@ -19,6 +19,7 @@ all:
 	$(MAKE) -C vecadd
 	$(MAKE) -C vecadd_v2
 	$(MAKE) -C sgemm
+	$(MAKE) -C sgemm_v2
 	$(MAKE) -C conv3
 	$(MAKE) -C relu
 	$(MAKE) -C sgemv
@@ -32,7 +33,6 @@ all:
 	$(MAKE) -C pathfinder
 	$(MAKE) -C softmax
 	$(MAKE) -C sgemm_tcu
-	$(MAKE) -C sgemm_tcu_v2
 	$(MAKE) -C sgemm_tcu_sp
 	$(MAKE) -C sgemm2_dxa
 	$(MAKE) -C async_barrier
@@ -65,6 +65,7 @@ run-simx:
 	$(MAKE) -C vecadd run-simx
 	$(MAKE) -C vecadd_v2 run-simx
 	$(MAKE) -C sgemm run-simx
+    $(MAKE) -C sgemm_v2 run-simx
 	$(MAKE) -C conv3 run-simx
 	$(MAKE) -C relu run-simx
 	$(MAKE) -C sgemv run-simx
@@ -106,6 +107,7 @@ run-rtlsim:
 	$(MAKE) -C vecadd run-rtlsim
 	$(MAKE) -C vecadd_v2 run-rtlsim
 	$(MAKE) -C sgemm run-rtlsim
+    $(MAKE) -C sgemm_v2 run-rtlsim
 	$(MAKE) -C conv3 run-rtlsim
 	$(MAKE) -C relu run-rtlsim
 	$(MAKE) -C sgemv run-rtlsim
@@ -139,8 +141,8 @@ clean:
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C mpi_vecadd clean
 	$(MAKE) -C sgemm clean
+	$(MAKE) -C sgemm_v2 clean
 	$(MAKE) -C sgemm_tcu clean
-	$(MAKE) -C sgemm_tcu_v2 clean
 	$(MAKE) -C sgemm_tcu_sp clean
 	$(MAKE) -C conv3 clean
 	$(MAKE) -C mpi_neighbor_a2a_conv3 clean
