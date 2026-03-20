@@ -531,8 +531,8 @@ tensor()
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_v2
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_v2
+    make -C tests/regression/sgemm_tcu_v2 clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_v2
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_v2
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=bf16 -DOTYPE=bf16" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
@@ -592,8 +592,8 @@ tensor()
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_v2
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_v2
+    make -C tests/regression/sgemm_tcu_v2 clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_v2
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_v2
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
