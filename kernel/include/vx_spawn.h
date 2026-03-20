@@ -35,21 +35,18 @@ extern __thread dim3_t threadIdx;
 extern dim3_t gridDim;
 extern dim3_t blockDim;
 
-extern __thread uint32_t g_local_group_id;
-extern uint32_t g_warps_per_group;
+extern __thread uint32_t __local_group_id;
+extern uint32_t __warps_per_group;
 
 typedef void (*vx_kernel_func_cb)(void *arg);
 
 typedef void (*vx_serial_cb)(void *arg);
 
-#define __local_group_id g_local_group_id
-#define __warps_per_group g_warps_per_group
-
 #define __local_mem(size) \
-  (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + g_local_group_id * size)
+  (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + __local_group_id * size)
 
 #define __syncthreads() \
-  vx_barrier(g_local_group_id, g_warps_per_group)
+  vx_barrier(__local_group_id, __warps_per_group)
 
 // launch a kernel function with a grid of blocks and block of threads
 int vx_spawn_threads(uint32_t dimension,

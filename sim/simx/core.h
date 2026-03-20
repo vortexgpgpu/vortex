@@ -15,9 +15,6 @@
 
 #include <vector>
 #include <list>
-#ifdef EXT_DXA_ENABLE
-#include <memory>
-#endif
 #include <simobject.h>
 #include "types.h"
 #include "emulator.h"
@@ -36,9 +33,6 @@
 #include "func_unit.h"
 #include "mem_coalescer.h"
 #include "VX_config.h"
-#ifdef EXT_DXA_ENABLE
-#include "dxa_engine.h"
-#endif
 
 namespace vortex {
 
@@ -165,9 +159,6 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
-#ifdef EXT_DXA_ENABLE
-  DxaEngine::Ptr& dxa_engine() { return dxa_engine_; }
-#endif
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr& tensor_unit() {
@@ -211,9 +202,6 @@ private:
   VecUnit::Ptr vec_unit_;
 #endif
 
-#ifdef EXT_DXA_ENABLE
-  DxaEngine::Ptr dxa_engine_;
-#endif
 
   Emulator emulator_;
 

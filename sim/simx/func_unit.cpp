@@ -19,6 +19,8 @@
 #include <util.h>
 #include "debug.h"
 #include "core.h"
+#include "socket.h"
+#include "cluster.h"
 #include "constants.h"
 #include "cache_sim.h"
 #include "VX_types.h"
@@ -411,7 +413,8 @@ bool SfuUnit::execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaTr
 		return true;
 	case DxaType::ISSUE: {
 		runtime.coords[4] = dxa_data.rs1;
-		bool accepted = core_->dxa_engine()->issue(runtime.desc_slot, runtime.smem_addr, runtime.coords.data(), runtime.bar_id);
+		bool accepted = core_->socket()->cluster()->dxa_core()->submit(
+		    core_, runtime.desc_slot, runtime.smem_addr, runtime.coords.data(), runtime.bar_id);
 		return accepted;
 	}
 	default:

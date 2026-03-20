@@ -141,6 +141,7 @@ void ProcessorImpl::set_satp(uint64_t satp) {
 #endif
 
 int ProcessorImpl::run() {
+  this->reset();
   kmu_.start();
 
   bool done;
