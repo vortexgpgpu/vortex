@@ -475,7 +475,7 @@ void Emulator::set_satp(uint64_t satp) {
 #endif
 
 #ifdef VM_ENABLE
-void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
+void Emulator::mem_read(void *data, uint64_t addr, uint32_t size) {
   auto type = get_addr_type(addr);
   if (type == AddrType::Shared) {
     core_->local_mem()->read(data, addr, size);
@@ -490,7 +490,7 @@ void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
   DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
 }
 #else
-void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
+void Emulator::mem_read(void *data, uint64_t addr, uint32_t size) {
   auto type = get_addr_type(addr);
   if (type == AddrType::Shared) {
     core_->local_mem()->read(data, addr, size);
@@ -502,7 +502,7 @@ void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
 #endif
 
 #ifdef VM_ENABLE
-void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
+void Emulator::mem_write(const void* data, uint64_t addr, uint32_t size) {
   auto type = get_addr_type(addr);
   if (addr >= uint64_t(IO_COUT_ADDR)
    && addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
@@ -523,7 +523,7 @@ void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
   DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
 }
 #else
-void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
+void Emulator::mem_write(const void* data, uint64_t addr, uint32_t size) {
   auto type = get_addr_type(addr);
   if (addr >= uint64_t(IO_COUT_ADDR)
    && addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
@@ -782,6 +782,18 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_LMEM_BANK_ST, lmem_perf.bank_stalls);
         }
       } break;
+#ifdef EXT_DXA_ENABLE
+      case VX_DCR_MPM_CLASS_DXA: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_DXA_TRANSFERS,  cluster_perf.dxa.transfers);
+        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_READS, cluster_perf.dxa.gmem_reads);
+        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_DEDUP, cluster_perf.dxa.gmem_dedup);
+        CSR_READ_64(VX_CSR_MPM_DXA_SMEM_WRITES,cluster_perf.dxa.smem_writes);
+        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_LT,    cluster_perf.dxa.total_latency);
+        }
+      } break;
+#endif
       default:
         std::cerr << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
         std::abort();

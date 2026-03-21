@@ -665,7 +665,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             for (uint32_t i = 0; i < num_elems; ++i) {
               uint64_t elem_addr = base + i * stride;
               uint64_t elem_data = 0;
-              this->dcache_read(&elem_data, elem_addr, elem_bytes);
+              this->mem_read(&elem_data, elem_addr, elem_bytes);
               packed |= (uint32_t)(elem_data & elem_mask) << (8 * elem_bytes * i);
               trace_data->mem_addrs.at(t) = {elem_addr, elem_bytes};
             }
@@ -680,7 +680,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].i + offset;
           uint64_t read_data = 0;
           try {
-            this->dcache_read(&read_data, mem_addr, data_bytes);
+            this->mem_read(&read_data, mem_addr, data_bytes);
           } catch (const std::exception& e) {
             if (debug_mem_exc) {
               auto ireg = [&](uint32_t reg_idx) -> Word {
@@ -821,7 +821,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           case 1:
           case 2:
           case 3:
-            this->dcache_write(&write_data, mem_addr, data_bytes);
+            this->mem_write(&write_data, mem_addr, data_bytes);
             break;
           default:
             std::abort();
@@ -849,7 +849,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           this->dcache_amo_reserve(mem_addr);
           rd_data[t].i = sext((Word)read_data, data_width);
         }
@@ -861,7 +861,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           if (this->dcache_amo_check(mem_addr)) {
-            this->dcache_write(&rs2_data[t].u64, mem_addr, data_bytes);
+            this->mem_write(&rs2_data[t].u64, mem_addr, data_bytes);
             rd_data[t].i = 0;
           } else {
             rd_data[t].i = 1;
@@ -875,11 +875,11 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           auto read_data_i = sext((WordI)read_data, data_width);
           auto rs1_data_i  = sext((WordI)rs2_data[t].u64, data_width);
           uint64_t result = read_data_i + rs1_data_i;
-          this->dcache_write(&result, mem_addr, data_bytes);
+          this->mem_write(&result, mem_addr, data_bytes);
           rd_data[t].i = read_data_i;
         }
       } break;
@@ -890,11 +890,11 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           auto read_data_i = sext((WordI)read_data, data_width);
           auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
           uint64_t result = rs1_data_u;
-          this->dcache_write(&result, mem_addr, data_bytes);
+          this->mem_write(&result, mem_addr, data_bytes);
           rd_data[t].i = read_data_i;
         }
       } break;
@@ -905,12 +905,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           auto read_data_i = sext((WordI)read_data, data_width);
           auto read_data_u = zext((Word)read_data, data_width);
           auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
           uint64_t result = read_data_u ^ rs1_data_u;
-          this->dcache_write(&result, mem_addr, data_bytes);
+          this->mem_write(&result, mem_addr, data_bytes);
           rd_data[t].i = read_data_i;
         }
       } break;
@@ -921,12 +921,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           auto read_data_i = sext((WordI)read_data, data_width);
           auto read_data_u = zext((Word)read_data, data_width);
           auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
           uint64_t result = read_data_u | rs1_data_u;
-          this->dcache_write(&result, mem_addr, data_bytes);
+          this->mem_write(&result, mem_addr, data_bytes);
           rd_data[t].i = read_data_i;
         }
       } break;
@@ -937,12 +937,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           auto read_data_i = sext((WordI)read_data, data_width);
           auto read_data_u = zext((Word)read_data, data_width);
           auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
           uint64_t result = read_data_u & rs1_data_u;
-          this->dcache_write(&result, mem_addr, data_bytes);
+          this->mem_write(&result, mem_addr, data_bytes);
           rd_data[t].i = read_data_i;
         }
       } break;
@@ -953,11 +953,11 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           auto read_data_i = sext((WordI)read_data, data_width);
           auto rs1_data_i  = sext((WordI)rs2_data[t].u64, data_width);
           uint64_t result = std::min(read_data_i, rs1_data_i);
-          this->dcache_write(&result, mem_addr, data_bytes);
+          this->mem_write(&result, mem_addr, data_bytes);
           rd_data[t].i = read_data_i;
         }
       } break;
@@ -968,11 +968,11 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           auto read_data_i = sext((WordI)read_data, data_width);
           auto rs1_data_i  = sext((WordI)rs2_data[t].u64, data_width);
           uint64_t result = std::max(read_data_i, rs1_data_i);
-          this->dcache_write(&result, mem_addr, data_bytes);
+          this->mem_write(&result, mem_addr, data_bytes);
           rd_data[t].i = read_data_i;
         }
       } break;
@@ -983,12 +983,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           auto read_data_i = sext((WordI)read_data, data_width);
           auto read_data_u = zext((Word)read_data, data_width);
           auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
           uint64_t result = std::min(read_data_u, rs1_data_u);
-          this->dcache_write(&result, mem_addr, data_bytes);
+          this->mem_write(&result, mem_addr, data_bytes);
           rd_data[t].i = read_data_i;
         }
       } break;
@@ -999,12 +999,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint64_t mem_addr = rs1_data[t].u;
           trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
           uint64_t read_data = 0;
-          this->dcache_read(&read_data, mem_addr, data_bytes);
+          this->mem_read(&read_data, mem_addr, data_bytes);
           auto read_data_i = sext((WordI)read_data, data_width);
           auto read_data_u = zext((Word)read_data, data_width);
           auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
           uint64_t result = std::max(read_data_u, rs1_data_u);
-          this->dcache_write(&result, mem_addr, data_bytes);
+          this->mem_write(&result, mem_addr, data_bytes);
           rd_data[t].i = read_data_i;
         }
       } break;
@@ -1539,7 +1539,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       // DXA runtime packetization is asynchronous and side-effected in SFU.
       // This stage forwards raw operands.
       trace->fetch_stall = false;
-      trace->data = std::make_shared<DxaTraceData>(
+      trace->data = std::make_shared<DxaCore::TraceData>(
           rs1_data.at(thread_last).u,
           rs2_data.at(thread_last).u,
           dxa_op);

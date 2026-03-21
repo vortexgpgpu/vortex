@@ -24,6 +24,13 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 ) (
     input wire clk,
     input wire reset,
+`ifdef PERF_ENABLE
+    output wire [PERF_CTR_BITS-1:0] perf_transfers,
+    output wire [PERF_CTR_BITS-1:0] perf_gmem_reads,
+    output wire [PERF_CTR_BITS-1:0] perf_gmem_dedup,
+    output wire [PERF_CTR_BITS-1:0] perf_smem_writes,
+    output wire [PERF_CTR_BITS-1:0] perf_gmem_lt,
+`endif
 
     // Launch interface (from unified_engine dispatch)
     input wire                          launch_valid,
@@ -205,6 +212,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .out_byte_mask (dd_byte_mask),
         .out_oob       (dd_oob),
         .out_last      (dd_last)
+    `ifdef PERF_ENABLE
+        ,
+        .perf_dedup_hit(dd_perf_dedup_hit)
+    `endif
     );
 
     // ════════════════════════════════════════════════════════════════════
@@ -257,9 +268,13 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .stall_no_slot    (rc_stall_no_slot)
     `ifdef DBG_TRACE_DXA
         ,
-        .prof_gmem_reqs       (rc_prof_gmem_reqs),
-        .prof_gmem_eff_bytes  (rc_prof_gmem_eff_bytes),
-        .prof_gmem_span_cycles(rc_prof_gmem_span_cycles)
+        .perf_gmem_reqs       (rc_perf_gmem_reqs),
+        .perf_gmem_eff_bytes  (rc_perf_gmem_eff_bytes),
+        .perf_gmem_span_cycles(rc_perf_gmem_span_cycles)
+    `elsif PERF_ENABLE
+        ,
+        .perf_gmem_reqs       (rc_perf_gmem_reqs),
+        .perf_gmem_span_cycles(rc_perf_gmem_span_cycles)
     `endif
     );
 
@@ -339,10 +354,13 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .smem_req_fire     (wc_smem_req_fire)
     `ifdef DBG_TRACE_DXA
         ,
-        .prof_smem_writes      (wc_prof_smem_writes),
-        .prof_smem_eff_bytes   (wc_prof_smem_eff_bytes),
-        .prof_smem_span_cycles (wc_prof_smem_span_cycles),
-        .prof_smem_back_to_back(wc_prof_smem_back_to_back)
+        .perf_smem_writes      (wc_perf_smem_writes),
+        .perf_smem_eff_bytes   (wc_perf_smem_eff_bytes),
+        .perf_smem_span_cycles (wc_perf_smem_span_cycles),
+        .perf_smem_back_to_back(wc_perf_smem_back_to_back)
+    `elsif PERF_ENABLE
+        ,
+        .perf_smem_writes      (wc_perf_smem_writes)
     `endif
     );
 
@@ -422,59 +440,59 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign worker_idle = (ts_state_r == TS_IDLE);
 
     // ---- Profiling counters (reason-coded stalls) ----
-    reg [31:0] prof_active_cycles_r;
-    reg [31:0] prof_issue_block_cycles_r;
-    reg [31:0] prof_gmem_req_block_cycles_r;
-    reg [31:0] prof_gmem_rsp_block_cycles_r;
-    reg [31:0] prof_smem_req_block_cycles_r;
-    reg [31:0] prof_no_slot_block_cycles_r;
-    reg [31:0] prof_gmem_req_fire_r;
-    reg [31:0] prof_gmem_rsp_fire_r;
-    reg [31:0] prof_smem_req_fire_r;
-    reg [31:0] prof_pipe_block_cycles_r;
+    reg [31:0] perf_active_cycles_r;
+    reg [31:0] perf_issue_block_cycles_r;
+    reg [31:0] perf_gmem_req_block_cycles_r;
+    reg [31:0] perf_gmem_rsp_block_cycles_r;
+    reg [31:0] perf_smem_req_block_cycles_r;
+    reg [31:0] perf_no_slot_block_cycles_r;
+    reg [31:0] perf_gmem_req_fire_r;
+    reg [31:0] perf_gmem_rsp_fire_r;
+    reg [31:0] perf_smem_req_fire_r;
+    reg [31:0] perf_pipe_block_cycles_r;
 
     always @(posedge clk) begin
         if (reset || setup_start) begin
-            prof_active_cycles_r <= '0;
-            prof_issue_block_cycles_r <= '0;
-            prof_gmem_req_block_cycles_r <= '0;
-            prof_gmem_rsp_block_cycles_r <= '0;
-            prof_smem_req_block_cycles_r <= '0;
-            prof_no_slot_block_cycles_r <= '0;
-            prof_gmem_req_fire_r <= '0;
-            prof_gmem_rsp_fire_r <= '0;
-            prof_smem_req_fire_r <= '0;
-            prof_pipe_block_cycles_r <= '0;
+            perf_active_cycles_r <= '0;
+            perf_issue_block_cycles_r <= '0;
+            perf_gmem_req_block_cycles_r <= '0;
+            perf_gmem_rsp_block_cycles_r <= '0;
+            perf_smem_req_block_cycles_r <= '0;
+            perf_no_slot_block_cycles_r <= '0;
+            perf_gmem_req_fire_r <= '0;
+            perf_gmem_rsp_fire_r <= '0;
+            perf_smem_req_fire_r <= '0;
+            perf_pipe_block_cycles_r <= '0;
         end else begin
             if (active_r) begin
-                prof_active_cycles_r <= prof_active_cycles_r + 32'd1;
+                perf_active_cycles_r <= perf_active_cycles_r + 32'd1;
             end
             if (launch_valid && ~launch_ready) begin
-                prof_issue_block_cycles_r <= prof_issue_block_cycles_r + 32'd1;
+                perf_issue_block_cycles_r <= perf_issue_block_cycles_r + 32'd1;
             end
             if (rc_gmem_rd_req_valid && ~gmem_bus_if.req_ready) begin
-                prof_gmem_req_block_cycles_r <= prof_gmem_req_block_cycles_r + 32'd1;
+                perf_gmem_req_block_cycles_r <= perf_gmem_req_block_cycles_r + 32'd1;
             end
             if (gmem_bus_if.rsp_valid && ~gmem_bus_if.rsp_ready) begin
-                prof_gmem_rsp_block_cycles_r <= prof_gmem_rsp_block_cycles_r + 32'd1;
+                perf_gmem_rsp_block_cycles_r <= perf_gmem_rsp_block_cycles_r + 32'd1;
             end
             if (wc_smem_wr_valid && ~smem_bank_wr_if.wr_ready) begin
-                prof_smem_req_block_cycles_r <= prof_smem_req_block_cycles_r + 32'd1;
+                perf_smem_req_block_cycles_r <= perf_smem_req_block_cycles_r + 32'd1;
             end
             if (rc_stall_no_slot) begin
-                prof_no_slot_block_cycles_r <= prof_no_slot_block_cycles_r + 32'd1;
+                perf_no_slot_block_cycles_r <= perf_no_slot_block_cycles_r + 32'd1;
             end
             if (rc_cl_out_valid && ~rc_cl_out_ready) begin
-                prof_pipe_block_cycles_r <= prof_pipe_block_cycles_r + 32'd1;
+                perf_pipe_block_cycles_r <= perf_pipe_block_cycles_r + 32'd1;
             end
             if (rc_gmem_req_fire) begin
-                prof_gmem_req_fire_r <= prof_gmem_req_fire_r + 32'd1;
+                perf_gmem_req_fire_r <= perf_gmem_req_fire_r + 32'd1;
             end
             if (rc_rsp_fire) begin
-                prof_gmem_rsp_fire_r <= prof_gmem_rsp_fire_r + 32'd1;
+                perf_gmem_rsp_fire_r <= perf_gmem_rsp_fire_r + 32'd1;
             end
             if (wc_smem_req_fire) begin
-                prof_smem_req_fire_r <= prof_smem_req_fire_r + 32'd1;
+                perf_smem_req_fire_r <= perf_smem_req_fire_r + 32'd1;
             end
         end
     end
@@ -553,58 +571,58 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
 `ifdef DBG_TRACE_DXA
     // Wires from rd_ctrl / wr_ctrl profiling outputs
-    wire [31:0] rc_prof_gmem_reqs;
-    wire [31:0] rc_prof_gmem_eff_bytes;
-    wire [31:0] rc_prof_gmem_span_cycles;
-    wire [31:0] wc_prof_smem_writes;
-    wire [31:0] wc_prof_smem_eff_bytes;
-    wire [31:0] wc_prof_smem_span_cycles;
-    wire [31:0] wc_prof_smem_back_to_back;
+    wire [31:0] rc_perf_gmem_reqs;
+    wire [31:0] rc_perf_gmem_eff_bytes;
+    wire [31:0] rc_perf_gmem_span_cycles;
+    wire [31:0] wc_perf_smem_writes;
+    wire [31:0] wc_perf_smem_eff_bytes;
+    wire [31:0] wc_perf_smem_span_cycles;
+    wire [31:0] wc_perf_smem_back_to_back;
 
-    reg [31:0] prof_min_gmem_reads_r;
-    reg [31:0] prof_min_smem_writes_r;
-    reg [31:0] prof_tile_bytes_r;
+    reg [31:0] perf_min_gmem_reads_r;
+    reg [31:0] perf_min_smem_writes_r;
+    reg [31:0] perf_tile_bytes_r;
 
     always @(posedge clk) begin
         if (reset || setup_start) begin
-            prof_min_gmem_reads_r <= '0;
-            prof_min_smem_writes_r <= '0;
-            prof_tile_bytes_r <= '0;
+            perf_min_gmem_reads_r <= '0;
+            perf_min_smem_writes_r <= '0;
+            perf_tile_bytes_r <= '0;
         end else if (setup_done) begin
-            prof_min_gmem_reads_r <= setup_params.total_rows
+            perf_min_gmem_reads_r <= setup_params.total_rows
                 * ((setup_params.row_len_bytes + GMEM_BYTES - 1) / GMEM_BYTES);
-            prof_min_smem_writes_r <= setup_params.total_smem_writes;
-            prof_tile_bytes_r <= setup_params.total_rows * setup_params.row_len_bytes;
+            perf_min_smem_writes_r <= setup_params.total_smem_writes;
+            perf_tile_bytes_r <= setup_params.total_rows * setup_params.row_len_bytes;
         end
     end
 
     // Combinatorial "next" values for counters that may fire on the same cycle
     // as transfer_done (registered values are still N-1 at that edge).
-    wire [31:0] prof_smem_fire_next = prof_smem_req_fire_r + 32'(wc_smem_req_fire);
-    wire [31:0] prof_active_next    = prof_active_cycles_r + 32'(active_r);
+    wire [31:0] perf_smem_fire_next = perf_smem_req_fire_r + 32'(wc_smem_req_fire);
+    wire [31:0] perf_active_next    = perf_active_cycles_r + 32'(active_r);
 
     always @(posedge clk) begin
         if (~reset && active_r && wc_transfer_done) begin
             $display("%t: %s DXA_PROFILE core=%0d wid=%0d bar=%0d active=%0d issue_blk=%0d gmem_req_blk=%0d gmem_rsp_blk=%0d smem_req_blk=%0d noslot_blk=%0d pipe_blk=%0d req_fire=%0d rsp_fire=%0d smem_fire=%0d",
                 $time, INSTANCE_ID, active_core_id_r, active_wid_r, active_bar_addr_r,
-                prof_active_next, prof_issue_block_cycles_r,
-                prof_gmem_req_block_cycles_r, prof_gmem_rsp_block_cycles_r, prof_smem_req_block_cycles_r,
-                prof_no_slot_block_cycles_r, prof_pipe_block_cycles_r,
-                prof_gmem_req_fire_r, prof_gmem_rsp_fire_r, prof_smem_fire_next);
+                perf_active_next, perf_issue_block_cycles_r,
+                perf_gmem_req_block_cycles_r, perf_gmem_rsp_block_cycles_r, perf_smem_req_block_cycles_r,
+                perf_no_slot_block_cycles_r, perf_pipe_block_cycles_r,
+                perf_gmem_req_fire_r, perf_gmem_rsp_fire_r, perf_smem_fire_next);
             $display("%t: %s DXA_PROFILE_EFF gmem_reads=%0d (min=%0d, eff=%0d%%) smem_writes=%0d (min=%0d, eff=%0d%%) latency=%0d cycles",
                 $time, INSTANCE_ID,
-                prof_gmem_req_fire_r, prof_min_gmem_reads_r,
-                (prof_gmem_req_fire_r > 0) ? (prof_min_gmem_reads_r * 100 / prof_gmem_req_fire_r) : 32'd0,
-                prof_smem_fire_next, prof_min_smem_writes_r,
-                (prof_smem_fire_next > 0) ? (prof_min_smem_writes_r * 100 / prof_smem_fire_next) : 32'd0,
-                prof_active_next);
+                perf_gmem_req_fire_r, perf_min_gmem_reads_r,
+                (perf_gmem_req_fire_r > 0) ? (perf_min_gmem_reads_r * 100 / perf_gmem_req_fire_r) : 32'd0,
+                perf_smem_fire_next, perf_min_smem_writes_r,
+                (perf_smem_fire_next > 0) ? (perf_min_smem_writes_r * 100 / perf_smem_fire_next) : 32'd0,
+                perf_active_next);
             $display("%t: %s DXA_PROFILE_DETAIL tile_bytes=%0d gmem: reqs=%0d eff_bytes=%0d span=%0d_cyc smem: writes=%0d eff_bytes=%0d span=%0d_cyc b2b=%0d/%0d pipelined=%0d%%",
                 $time, INSTANCE_ID,
-                prof_tile_bytes_r,
-                rc_prof_gmem_reqs, rc_prof_gmem_eff_bytes, rc_prof_gmem_span_cycles,
-                wc_prof_smem_writes, wc_prof_smem_eff_bytes, wc_prof_smem_span_cycles,
-                wc_prof_smem_back_to_back, wc_prof_smem_writes,
-                (wc_prof_smem_writes > 1) ? (wc_prof_smem_back_to_back * 100 / (wc_prof_smem_writes - 32'd1)) : 32'd0);
+                perf_tile_bytes_r,
+                rc_perf_gmem_reqs, rc_perf_gmem_eff_bytes, rc_perf_gmem_span_cycles,
+                wc_perf_smem_writes, wc_perf_smem_eff_bytes, wc_perf_smem_span_cycles,
+                wc_perf_smem_back_to_back, wc_perf_smem_writes,
+                (wc_perf_smem_writes > 1) ? (wc_perf_smem_back_to_back * 100 / (wc_perf_smem_writes - 32'd1)) : 32'd0);
         end
     end
 `endif
@@ -628,6 +646,46 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             end
         end
     end
+`endif
+
+`ifdef PERF_ENABLE
+`ifndef DBG_TRACE_DXA
+    // Wire declarations for submodule prof outputs
+    wire [31:0] rc_perf_gmem_reqs;
+    wire [31:0] rc_perf_gmem_span_cycles;
+    wire [31:0] wc_perf_smem_writes;
+    wire        dd_perf_dedup_hit;
+`endif
+    // Accumulated DXA perf counters (never reset, sum across all transfers)
+    reg [PERF_CTR_BITS-1:0] perf_transfers_r;
+    reg [PERF_CTR_BITS-1:0] perf_gmem_reads_r;
+    reg [PERF_CTR_BITS-1:0] perf_gmem_dedup_r;
+    reg [PERF_CTR_BITS-1:0] perf_smem_writes_r;
+    reg [PERF_CTR_BITS-1:0] perf_gmem_lt_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_transfers_r  <= '0;
+            perf_gmem_reads_r <= '0;
+            perf_gmem_dedup_r <= '0;
+            perf_smem_writes_r <= '0;
+            perf_gmem_lt_r    <= '0;
+        end else begin
+            if (active_r && wc_transfer_done) begin
+                perf_transfers_r  <= perf_transfers_r + PERF_CTR_BITS'(1);
+                perf_gmem_reads_r <= perf_gmem_reads_r + PERF_CTR_BITS'(rc_perf_gmem_reqs);
+                perf_smem_writes_r <= perf_smem_writes_r + PERF_CTR_BITS'(wc_perf_smem_writes);
+                perf_gmem_lt_r    <= perf_gmem_lt_r + PERF_CTR_BITS'(rc_perf_gmem_span_cycles);
+            end
+            if (dd_perf_dedup_hit) begin
+                perf_gmem_dedup_r <= perf_gmem_dedup_r + PERF_CTR_BITS'(1);
+            end
+        end
+    end
+    assign perf_transfers  = perf_transfers_r;
+    assign perf_gmem_reads = perf_gmem_reads_r;
+    assign perf_gmem_dedup = perf_gmem_dedup_r;
+    assign perf_smem_writes = perf_smem_writes_r;
+    assign perf_gmem_lt    = perf_gmem_lt_r;
 `endif
 
 endmodule

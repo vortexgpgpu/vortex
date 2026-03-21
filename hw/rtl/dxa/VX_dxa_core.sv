@@ -23,7 +23,9 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 ) (
     input wire clk,
     input wire reset,
-
+`ifdef PERF_ENABLE
+    output dxa_perf_t dxa_perf,
+`endif
     VX_dcr_bus_if.slave dcr_bus_if,
 
     VX_dxa_req_bus_if.slave req_bus_if[DXA_NUM_SOCKETS],
@@ -73,6 +75,9 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     ) dxa_unified_engine (
         .clk                (clk),
         .reset              (reset),
+    `ifdef PERF_ENABLE
+        .dxa_perf           (dxa_perf),
+    `endif
         .dcr_bus_if         (dcr_bus_if),
         .cluster_dxa_bus_if (cluster_dxa_bus_if),
         .dxa_gmem_bus_if    (worker_gmem_bus_if),

@@ -300,6 +300,18 @@ import VX_fpu_pkg::*;
                         default:;
                         endcase
                     end
+                `ifdef EXT_DXA_ENABLE
+                    `VX_DCR_MPM_CLASS_DXA: begin
+                        case (read_addr)
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_TRANSFERS,  read_data_ro_w, sysmem_perf.dxa.transfers);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_READS, read_data_ro_w, sysmem_perf.dxa.gmem_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_DEDUP, read_data_ro_w, sysmem_perf.dxa.gmem_dedup);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_SMEM_WRITES,read_data_ro_w, sysmem_perf.dxa.smem_writes);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_LT,    read_data_ro_w, sysmem_perf.dxa.gmem_latency);
+                        default:;
+                        endcase
+                    end
+                `endif
                     default:;
                     endcase
                 `endif

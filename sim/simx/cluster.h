@@ -32,6 +32,9 @@ class Cluster : public SimObject<Cluster> {
 public:
   struct PerfStats {
     CacheSim::PerfStats l2cache;
+#ifdef EXT_DXA_ENABLE
+    DxaCore::PerfStats dxa;
+#endif
   };
 
   struct AsyncClusterBarrier {

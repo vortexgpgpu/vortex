@@ -29,9 +29,7 @@ extern "C" void kernel_main(kernel_arg_t* arg) {
   vortex::barrier bar(0);
   const bool is_dxa_warp = (__warps_per_group == 0) ? false : ((vx_warp_id() & (__warps_per_group - 1)) == 0);
   if (is_dxa_warp) {
-    vx_dxa_issue_2d_wg(kDescSrc, bar.id(),
-                        (uint32_t)(uintptr_t)shmem,
-                        col_base, row_base);
+    vx_dxa_issue_2d_wg(kDescSrc, bar.id(), shmem, col_base, row_base);
   }
   bar.arrive_and_wait();
 

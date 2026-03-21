@@ -50,7 +50,7 @@ inline uint32_t vx_dxa_pack_meta(uint32_t desc_slot, uint32_t barrier_id) {
 // 1D issue: coord0 only, funct3=0.
 inline void vx_dxa_issue_1d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
-                                uint32_t smem_addr,
+                                const void* smem_addr,
                                 uint32_t coord0) {
   register uint32_t c0 __asm__("t3") = coord0;
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
@@ -66,7 +66,7 @@ inline void vx_dxa_issue_1d_wg(uint32_t desc_slot,
 // 2D issue: coord0, coord1, funct3=1.
 inline void vx_dxa_issue_2d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
-                                uint32_t smem_addr,
+                                const void* smem_addr,
                                 uint32_t coord0,
                                 uint32_t coord1) {
   register uint32_t c0 __asm__("t3") = coord0;
@@ -84,7 +84,7 @@ inline void vx_dxa_issue_2d_wg(uint32_t desc_slot,
 // 3D issue: coord0..coord2, funct3=2.
 inline void vx_dxa_issue_3d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
-                                uint32_t smem_addr,
+                                const void* smem_addr,
                                 uint32_t coord0,
                                 uint32_t coord1,
                                 uint32_t coord2) {
@@ -104,7 +104,7 @@ inline void vx_dxa_issue_3d_wg(uint32_t desc_slot,
 // 4D issue: coord0..coord3, funct3=3.
 inline void vx_dxa_issue_4d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
-                                uint32_t smem_addr,
+                                const void* smem_addr,
                                 uint32_t coord0,
                                 uint32_t coord1,
                                 uint32_t coord2,
@@ -126,7 +126,7 @@ inline void vx_dxa_issue_4d_wg(uint32_t desc_slot,
 // 5D issue: coord0..coord4, funct3=4.
 inline void vx_dxa_issue_5d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
-                                uint32_t smem_addr,
+                                const void* smem_addr,
                                 uint32_t coord0,
                                 uint32_t coord1,
                                 uint32_t coord2,

@@ -825,6 +825,16 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] latency;
     } mem_perf_t;
 
+`ifdef EXT_DXA_ENABLE
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] transfers;
+        logic [PERF_CTR_BITS-1:0] gmem_reads;
+        logic [PERF_CTR_BITS-1:0] gmem_dedup;
+        logic [PERF_CTR_BITS-1:0] smem_writes;
+        logic [PERF_CTR_BITS-1:0] gmem_latency;
+    } dxa_perf_t;
+`endif
+
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] idles;
         logic [PERF_CTR_BITS-1:0] active_warps;
@@ -855,6 +865,9 @@ package VX_gpu_pkg;
         lmem_perf_t  lmem;
         coalescer_perf_t coalescer;
         mem_perf_t   mem;
+    `ifdef EXT_DXA_ENABLE
+        dxa_perf_t   dxa;
+    `endif
     } sysmem_perf_t;
 
     typedef struct packed {

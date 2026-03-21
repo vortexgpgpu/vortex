@@ -69,11 +69,11 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                        rsp_fire,
     output wire                        stall_no_slot
 
-`ifdef DBG_TRACE_DXA
+`elsif PERF_ENABLE
     ,
-    output wire [31:0]                 prof_gmem_reqs,
-    output wire [31:0]                 prof_gmem_eff_bytes,
-    output wire [31:0]                 prof_gmem_span_cycles
+    output wire [31:0]                 perf_gmem_reqs,
+    output wire [31:0]                 perf_gmem_eff_bytes,
+    output wire [31:0]                 perf_gmem_span_cycles
 `endif
 );
     localparam RD_SLOT_BITS = `CLOG2(MAX_OUTSTANDING);
@@ -323,7 +323,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `RUNTIME_ASSERT(~(gmem_rd_rsp_valid && gmem_rd_rsp_ready) || rsp_slot_busy,
         ("invalid dxa rd_ctrl gmem rsp slot"))
 
-`ifdef DBG_TRACE_DXA
+`ifdef PERF_ENABLE
     // ---- Per-slot request timestamp for latency measurement ----
     reg [31:0] slot_issue_cycle_r [MAX_OUTSTANDING-1:0];
     reg [31:0] rdp_cycle_ctr_r;
@@ -374,9 +374,40 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
     end
 
-    assign prof_gmem_reqs       = rdp_total_gmem_req_r;
-    assign prof_gmem_eff_bytes  = rdp_total_gmem_eff_bytes_r;
-    assign prof_gmem_span_cycles = (rdp_has_req_r && rdp_last_rsp_cycle_r >= rdp_first_req_cycle_r)
+    assign perf_gmem_reqs       = rdp_total_gmem_req_r;
+    assign perf_gmem_eff_bytes  = rdp_total_gmem_eff_bytes_r;
+    assign perf_gmem_span_cycles = (rdp_has_req_r && rdp_last_rsp_cycle_r >= rdp_first_req_cycle_r)
+                                 ? (rdp_last_rsp_cycle_r - rdp_first_req_cycle_r + 32'd1) : 32'd0;
+
+    // Lightweight PERF_ENABLE-only counters (no eff_bytes, no $display)
+    reg [31:0] rdp_cycle_ctr_r;
+    reg [31:0] rdp_total_gmem_req_r;
+    reg [31:0] rdp_first_req_cycle_r;
+    reg [31:0] rdp_last_rsp_cycle_r;
+    reg        rdp_has_req_r;
+    always @(posedge clk) begin
+        if (reset || !transfer_active) begin
+            rdp_cycle_ctr_r       <= '0;
+            rdp_total_gmem_req_r  <= '0;
+            rdp_first_req_cycle_r <= '0;
+            rdp_last_rsp_cycle_r  <= '0;
+            rdp_has_req_r         <= 1'b0;
+        end else begin
+            rdp_cycle_ctr_r <= rdp_cycle_ctr_r + 32'd1;
+            if (alloc_fire_w) begin
+                rdp_total_gmem_req_r <= rdp_total_gmem_req_r + 32'd1;
+                if (!rdp_has_req_r) begin
+                    rdp_first_req_cycle_r <= rdp_cycle_ctr_r;
+                    rdp_has_req_r <= 1'b1;
+                end
+            end
+            if (release_fire_w) begin
+                rdp_last_rsp_cycle_r <= rdp_cycle_ctr_r;
+            end
+        end
+    end
+    assign perf_gmem_reqs = rdp_total_gmem_req_r;
+    assign perf_gmem_span_cycles = (rdp_has_req_r && rdp_last_rsp_cycle_r >= rdp_first_req_cycle_r)
                                  ? (rdp_last_rsp_cycle_r - rdp_first_req_cycle_r + 32'd1) : 32'd0;
 `endif
 

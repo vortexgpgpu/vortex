@@ -45,6 +45,7 @@ EXT_DMA_ENABLE = false
 EXT_DXA_ENABLE = false
 # Cluster-level DXA engine count (decoupled from NUM_CORES/SOCKET_SIZE).
 NUM_DXA_UNITS = "expr: max(1, up($NUM_CORES / 8))"
+DXA_MEM_PORTS = "expr: min($NUM_DXA_UNITS, up($NUM_CORES / $SOCKET_SIZE) * $L1_MEM_PORTS)"
 
 EXT_M_ENABLED = "expr: 1 if $EXT_M_ENABLE else 0"
 EXT_F_ENABLED = "expr: 1 if $EXT_F_ENABLE else 0"

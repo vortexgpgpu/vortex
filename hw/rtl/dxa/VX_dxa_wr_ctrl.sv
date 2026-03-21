@@ -27,6 +27,12 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 ) (
     input  wire                        clk,
     input  wire                        reset,
+`ifdef PERF_ENABLE
+    output wire [31:0]                 prof_smem_writes,
+    output wire [31:0]                 prof_smem_eff_bytes,
+    output wire [31:0]                 prof_smem_span_cycles,
+    output wire [31:0]                 prof_smem_back_to_back,
+`endif
     input  wire                        transfer_active,
     input  wire                        transfer_start,
 
@@ -54,13 +60,6 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [31:0]                 wr_done_count,
     output wire                        smem_req_fire
 
-`ifdef DBG_TRACE_DXA
-    ,
-    output wire [31:0]                 prof_smem_writes,
-    output wire [31:0]                 prof_smem_eff_bytes,
-    output wire [31:0]                 prof_smem_span_cycles,
-    output wire [31:0]                 prof_smem_back_to_back
-`endif
 );
     // ---- Write queue ----
     localparam WRQ_DATAW = 1 + SMEM_ADDR_WIDTH + SMEM_DATAW + SMEM_BYTES;
@@ -254,14 +253,26 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wrp_curr_eff_bytes = 32'(_eff_cnt);
     end
 
-    assign prof_smem_writes      = wrp_total_smem_writes_r + 32'(wrq_pop);
-    assign prof_smem_eff_bytes   = wrp_total_smem_eff_bytes_r + (wrq_pop ? wrp_curr_eff_bytes : 32'd0);
+    assign perf_smem_writes      = wrp_total_smem_writes_r + 32'(wrq_pop);
+    assign perf_smem_eff_bytes   = wrp_total_smem_eff_bytes_r + (wrq_pop ? wrp_curr_eff_bytes : 32'd0);
     wire [31:0] wrp_eff_first = wrp_has_wr_r ? wrp_first_wr_cycle_r : wrp_cycle_ctr_r;
     wire [31:0] wrp_eff_last  = wrq_pop ? wrp_cycle_ctr_r : wrp_last_wr_cycle_r;
     wire        wrp_eff_has   = wrp_has_wr_r || wrq_pop;
-    assign prof_smem_span_cycles = wrp_eff_has
+    assign perf_smem_span_cycles = wrp_eff_has
                                  ? (wrp_eff_last - wrp_eff_first + 32'd1) : 32'd0;
-    assign prof_smem_back_to_back = wrp_back_to_back_r + 32'(wrq_pop && wrp_prev_fire_r);
+    assign perf_smem_back_to_back = wrp_back_to_back_r + 32'(wrq_pop && wrp_prev_fire_r);
+`endif
+
+`ifdef PERF_ENABLE
+    reg [31:0] wrp_total_smem_writes_r;
+    always @(posedge clk) begin
+        if (reset || transfer_start) begin
+            wrp_total_smem_writes_r <= '0;
+        end else if (wrq_pop) begin
+            wrp_total_smem_writes_r <= wrp_total_smem_writes_r + 32'd1;
+        end
+    end
+    assign perf_smem_writes = wrp_total_smem_writes_r + 32'(wrq_pop);
 `endif
 
 endmodule

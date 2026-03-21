@@ -58,7 +58,7 @@ extern "C" void kernel_main(kernel_arg_t* arg) {
   // group_warp_id = vx_warp_id() & (wpg-1) identifies the warp's position
   // within its CTA (0 = first warp).  Uses AND instead of modulo since
   // __warps_per_group is always power-of-2, avoiding the expensive REMU insn.
-  const bool is_dxa_warp    = (__warps_per_group == 0) ? false : ((vx_warp_id() & (__warps_per_group - 1)) == 0);
+  const bool is_dxa_warp = (__warps_per_group == 0) ? false : ((vx_warp_id() & (__warps_per_group - 1)) == 0);
 
   if (mode == 2) {
     // ── Double-buffered pipeline ──────────────────────────────────────
@@ -68,8 +68,8 @@ extern "C" void kernel_main(kernel_arg_t* arg) {
 
     // Prologue: issue DXA copy for first tiles into buffer 0, on bar[0].
     if (is_dxa_warp) {
-      vx_dxa_issue_2d_wg(kDescA, bar[0].id(), (uint32_t)(uintptr_t)shA[0], 0, row_base);
-      vx_dxa_issue_2d_wg(kDescB, bar[0].id(), (uint32_t)(uintptr_t)shB[0], col_base, 0);
+      vx_dxa_issue_2d_wg(kDescA, bar[0].id(), shA[0], 0, row_base);
+      vx_dxa_issue_2d_wg(kDescB, bar[0].id(), shB[0], col_base, 0);
     }
 
     // K-loop: issue next on bar[nxt] → wait current on bar[cur] → compute.
@@ -80,8 +80,8 @@ extern "C" void kernel_main(kernel_arg_t* arg) {
 
       // (1) Issue DXA for next iteration's tiles on bar[nxt].
       if (has_next && is_dxa_warp) {
-        vx_dxa_issue_2d_wg(kDescA, bar[nxt].id(), (uint32_t)(uintptr_t)shA[nxt], next_k, row_base);
-        vx_dxa_issue_2d_wg(kDescB, bar[nxt].id(), (uint32_t)(uintptr_t)shB[nxt], col_base, next_k);
+        vx_dxa_issue_2d_wg(kDescA, bar[nxt].id(), shA[nxt], next_k, row_base);
+        vx_dxa_issue_2d_wg(kDescB, bar[nxt].id(), shB[nxt], col_base, next_k);
       }
 
       // (2) Wait for current tiles on bar[cur] (DXA completion + CTA sync).
@@ -99,8 +99,8 @@ extern "C" void kernel_main(kernel_arg_t* arg) {
     // ── Single-buffered: full-K in one shot ───────────────────────────
     // DXA fetches the entire A and B tiles (tile_size × size) at once.
     if (is_dxa_warp) {
-      vx_dxa_issue_2d_wg(kDescA, bar[0].id(), (uint32_t)(uintptr_t)shA[0], 0, row_base);
-      vx_dxa_issue_2d_wg(kDescB, bar[0].id(), (uint32_t)(uintptr_t)shB[0], col_base, 0);
+      vx_dxa_issue_2d_wg(kDescA, bar[0].id(), shA[0], 0, row_base);
+      vx_dxa_issue_2d_wg(kDescB, bar[0].id(), shB[0], col_base, 0);
     }
     bar[0].arrive_and_wait();
 

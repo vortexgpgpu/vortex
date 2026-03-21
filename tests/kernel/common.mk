@@ -36,6 +36,9 @@ $(PROJECT).dump: $(PROJECT).elf
 $(PROJECT).vxbin: $(PROJECT).elf
 	OBJCOPY=$(CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
 
+$(VORTEX_KN_PATH)/libvortex.a:
+	$(MAKE) -C $(VORTEX_KN_PATH)
+
 $(PROJECT).elf: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 

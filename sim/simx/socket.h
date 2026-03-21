@@ -74,6 +74,8 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+  Core::Ptr& core(uint32_t idx) { return cores_.at(idx); }
+
 private:
   uint32_t                socket_id_;
   Cluster*                cluster_;
