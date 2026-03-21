@@ -13,60 +13,102 @@
 
 #pragma once
 
-#include <array>
-#include <deque>
-#include <vector>
-#include <cstdint>
+#include <memory>
 #include <simobject.h>
-#include <VX_types.h>
+#include "types.h"
+#include "instr_trace.h"
 
 namespace vortex {
 
 class Core;
 class Cluster;
 
-// Cycle-approximate DXA engine for simx, placed at Cluster scope matching RTL.
+// Cycle-accurate DXA engine for simx, placed at Cluster scope matching RTL.
 //
-// Instantiates NUM_DXA_UNITS parallel DxaSlices that each independently
-// process copy requests.  Requests arrive via submit() called from SfuUnit
-// and are dispatched round-robin to idle slices.
+// Timing and emulation are fully decoupled:
+//   submit()    — timing only; enqueues without touching memory.
+//   gmem_read() — emulation only; reads GMEM with no timing side effects.
+//   execute_copy() (private) — called once at GMEM→SMEM transition;
+//                              writes all tile data to LocalMem RAM directly,
+//                              before any timing signals go out on lmem_req_out.
 //
-// Timing model: countdown-based, derived from the g2s pipelined model
-// (setup → tile_iter → rd_ctrl → wr_ctrl).  Each slice counts down modeled
-// cycles, then executes the actual data copy and releases the barrier.
+// GMEM ports (gmem_req_out/gmem_rsp_in):
+//   Count = kDxaMemPorts (= DXA_MEM_PORTS from config, ≤ NUM_DXA_UNITS).
+//   An internal MemArbiter (TxRxArbiter<MemReq,MemRsp>) maps the NUM_DXA_UNITS
+//   per-slice request channels onto kDxaMemPorts shared L2 ports; responses are
+//   routed back to the originating slice via tag encoding in the arbiter.
 //
-// TODO(phase-2): connect each DxaSlice to real L2 SimChannels so that
-// GMEM reads experience actual CacheSim latency and MSHR contention.
+// SMEM timing channel (lmem_req_out → LocalMem::dxa_req_in):
+//   One DxaSmemReq (no data) per element per cycle; LocalMem stalls its
+//   normal Inputs and releases the barrier on is_last.
 class DxaCore : public SimObject<DxaCore> {
 public:
-  // Descriptor mirrors RTL VX_dxa_desc_t, written via DCR.
-  struct Descriptor {
-    uint64_t base_addr = 0;
-    std::array<uint32_t, 5> sizes = {};
-    std::array<uint32_t, 4> strides = {};
-    uint32_t meta = 0;
-    std::array<uint32_t, 5> element_strides = {};
-    std::array<uint16_t, 5> tile_sizes = {};
-    uint32_t cfill = 0;
+  // Timing-only request from DxaCore → LocalMem DXA channel.
+  // Carries no data — functional writes happen via execute_copy() before the
+  // first timing signal is sent.  LocalMem stalls its Inputs for each received
+  // request and releases the barrier on is_last.
+  struct SmemReq {
+    uint64_t addr;    // smem address (for bank-conflict modeling)
+    uint32_t size;    // element size in bytes
+    uint32_t bar_id;  // barrier to release when is_last
+    Core*    core;    // core that owns the barrier
+    bool     is_last; // triggers barrier_event_release in LocalMem::tick()
+  };
+
+  // Decode-time trace data for DXA instructions.
+  struct TraceData : public ITraceData {
+    using Ptr = std::shared_ptr<TraceData>;
+    Word rs1;
+    Word rs2;
+    uint32_t op;
+    TraceData(Word rs1, Word rs2, uint32_t op)
+      : rs1(rs1), rs2(rs2), op(op) {}
   };
 
   struct PerfStats {
-    uint64_t transfers = 0;
-    uint64_t gmem_reads = 0;
-    uint64_t smem_writes = 0;
-    uint64_t total_latency = 0;
+    uint64_t transfers      = 0;
+    uint64_t gmem_reads     = 0;
+    uint64_t gmem_dedup     = 0;
+    uint64_t smem_writes    = 0;
+    uint64_t total_latency  = 0;
 
     PerfStats& operator+=(const PerfStats& rhs) {
-      transfers    += rhs.transfers;
-      gmem_reads   += rhs.gmem_reads;
-      smem_writes  += rhs.smem_writes;
+      transfers     += rhs.transfers;
+      gmem_reads    += rhs.gmem_reads;
+      gmem_dedup    += rhs.gmem_dedup;
+      smem_writes   += rhs.smem_writes;
       total_latency += rhs.total_latency;
       return *this;
     }
   };
 
+  // Precomputed emulation result for one tile copy, produced by execute_copy()
+  // and passed to submit() so the timing tick path purely replays addresses.
+  struct ExeTraceData : public ITraceData {
+    using Ptr = std::shared_ptr<ExeTraceData>;
+    uint32_t tile0;
+    uint32_t tile1;
+    uint32_t elem_bytes;
+    std::vector<uint64_t> gmem_lines;  // unique CL addrs after CL-granular per-row + cross-row dedup (matches RTL addr_gen+dedup)
+    std::vector<uint64_t> smem_blocks; // DXA_SMEM_WORD_SIZE-aligned SMEM addrs, sorted (matches RTL VX_dxa_wr_ctrl)
+    uint64_t gmem_dedup_hits = 0;      // cross-row boundary CL sharing saved (matches RTL VX_dxa_dedup)
+    ExeTraceData(uint32_t tile0, uint32_t tile1, uint32_t elem_bytes)
+      : tile0(tile0), tile1(tile1), elem_bytes(elem_bytes) {}
+  };
+
+  // GMEM channels — size = kDxaMemPorts.  Bound to L2 DXA ports by Cluster.
+  // Requests flow: arb_->ReqOut → gmem_req_out → L2.
+  // Responses flow: L2 → gmem_rsp_in → arb_->RspIn → arb_->RspOut (per slice).
+  std::vector<SimChannel<MemReq>>     gmem_req_out;
+  std::vector<SimChannel<MemRsp>>     gmem_rsp_in;
+  // Internal arbiter: NUM_DXA_UNITS slice inputs → kDxaMemPorts L2-facing outputs.
+  MemArbiter::Ptr                     arb_;
+  // SMEM timing channel — size = NUM_SOCKETS * SOCKET_SIZE (one per core).
+  // Bound to each core's LocalMem::dxa_req_in by Cluster.
+  std::vector<SimChannel<SmemReq>> lmem_req_out;
+
   DxaCore(const SimContext& ctx, const char* name, Cluster* cluster);
-  virtual ~DxaCore() = default;
+  virtual ~DxaCore();
 
   virtual void reset();
   virtual void tick();
@@ -74,66 +116,32 @@ public:
   // Write a descriptor field via DCR.
   int dcr_write(uint32_t addr, uint32_t value);
 
-  // Called by SfuUnit (via core->socket()->cluster()->dxa_core()) to submit
-  // a DXA copy request.  Returns false (backpressure) if the queue is full.
+  // Emulation only: read tile from GMEM and write to SMEM via mem_write.
+  // No SimChannel activity; no timing side effects.
+  // Returns ExeTraceData::Ptr to pass to submit().
+  ExeTraceData::Ptr execute_copy(Core* core,
+                                 uint32_t desc_slot,
+                                 uint64_t smem_addr,
+                                 const uint32_t coords[5]);
+
+  // Timing only: enqueue a copy request with precomputed exe_data.
+  // Returns false (backpressure) when the internal queue is full.
   bool submit(Core* core,
               uint32_t desc_slot,
-              uint32_t smem_addr,
+              uint64_t smem_addr,
               const uint32_t coords[5],
-              uint32_t bar_id);
+              uint32_t bar_id,
+              ExeTraceData::Ptr exe_data);
 
-  const PerfStats& perf_stats() const { return perf_stats_; }
+  // Emulation only: read size bytes from global memory into data.
+  // No SimChannel activity; no timing side effects.
+  void gmem_read(Core* core, uint64_t addr, void* data, uint32_t size);
+
+  const PerfStats& perf_stats() const;
 
 private:
-  // Decoded copy geometry, derived from a Descriptor.
-  struct CopyCfg {
-    uint32_t rank;
-    uint32_t elem_bytes;
-    uint32_t tile0;
-    uint32_t tile1;
-  };
-
-  struct Request {
-    Core*    core      = nullptr;
-    uint32_t desc_slot = 0;
-    uint32_t smem_addr = 0;
-    uint32_t bar_id    = 0;
-    std::array<uint32_t, 5> coords = {0, 0, 0, 0, 0};
-  };
-
-  struct ActiveTransfer {
-    Request  req;
-    uint32_t total_elems  = 0;
-    uint32_t elem_bytes   = 0;
-    uint32_t cycles_left  = 0;
-    uint64_t issue_cycle  = 0;
-  };
-
-  // One DxaSlice per NUM_DXA_UNITS worker.
-  struct DxaSlice {
-    bool           has_active = false;
-    ActiveTransfer active_xfer;
-  };
-
-  bool build_copy_cfg(const Descriptor& desc, CopyCfg* cfg) const;
-  bool decode_request(const Request& req,
-                      uint32_t* total_elems,
-                      uint32_t* elem_bytes,
-                      uint32_t* total_cycles,
-                      uint64_t* gmem_reads_out,
-                      uint64_t* smem_writes_out) const;
-  bool execute_copy(const Request& req);
-
-  bool start_slice(DxaSlice& slice);
-  void tick_slice(DxaSlice& slice);
-
-  Cluster* cluster_;
-  std::array<Descriptor, VX_DCR_DXA_DESC_COUNT> descriptors_;
-  std::deque<Request> queue_;
-  static constexpr uint32_t kQueueDepth = 8;
-  std::vector<DxaSlice> slices_;   // size = NUM_DXA_UNITS
-  uint64_t cycle_;
-  PerfStats perf_stats_;
+  class Impl;
+  Impl* impl_;
 };
 
 } // namespace vortex

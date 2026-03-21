@@ -26,6 +26,10 @@ module VX_dxa_dedup import VX_gpu_pkg::*; #(
     input  wire                        clk,
     input  wire                        reset,
 
+`ifdef PERF_ENABLE
+    output wire                        perf_dedup_hit,
+`endif
+
     // Input (from addr_gen).
     input  wire                        in_valid,
     output wire                        in_ready,
@@ -100,6 +104,10 @@ module VX_dxa_dedup import VX_gpu_pkg::*; #(
             end
         end
     end
+
+`ifdef PERF_ENABLE
+    assign perf_dedup_hit = can_merge && in_fire;
+`endif
 
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin

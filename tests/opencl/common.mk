@@ -91,7 +91,13 @@ all: $(PROJECT)
 %.c.o: $(SRC_DIR)/%.c
 	$(CC) $(CXXFLAGS) -c $< -o $@
 
-$(PROJECT): $(OBJS) $(VORTEX_KN_PATH)/libvortex.a
+$(VORTEX_KN_PATH)/libvortex.a:
+	$(MAKE) -C $(VORTEX_KN_PATH)
+
+$(VORTEX_RT_PATH)/libvortex.so:
+	$(MAKE) -C $(VORTEX_RT_PATH)
+
+$(PROJECT): $(OBJS) $(VORTEX_KN_PATH)/libvortex.a $(VORTEX_RT_PATH)/libvortex.so
 	$(CXX) $(CXXFLAGS) $(OBJS) $(LDFLAGS) -L$(VORTEX_RT_PATH) -lvortex -L$(POCL_PATH)/lib -lOpenCL -o $@
 
 $(PROJECT).host: $(OBJS)

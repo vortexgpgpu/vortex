@@ -16,6 +16,7 @@
 #include <simobject.h>
 #include <array>
 #include "instr_trace.h"
+#include "dxa_core.h"
 
 namespace vortex {
 
@@ -116,7 +117,7 @@ private:
     std::array<uint32_t, 5> coords = {0, 0, 0, 0, 0};
   };
 
-  bool execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaTraceData& dxa_data);
+  bool execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaCore::TraceData& dxa_data);
 
   std::vector<dxa_runtime_t> dxa_runtime_;
 #endif

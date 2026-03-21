@@ -195,8 +195,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         .DATAW    (BAR_STATEW),
         .SIZE     (1 << BAR_ADDR_BITS),
         .RDW_MODE ("W"),
-        .OUT_REG  (1),
-        .RADDR_REG(1)
+        .OUT_REG  (1)
     ) barrier_state_store (
         .clk   (clk),
         .reset (reset),
@@ -265,36 +264,6 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     assign unlock_valid = unlock_valid_r;
     assign unlock_mask  = unlock_mask_r;
 
-`ifdef DBG_TRACE_DXA
-    always @(posedge clk) begin
-        if (req_valid && ~req_data.is_global && !reset) begin
-            `TRACE(2, ("%t: %s-bar_unit: addr=0x%0h is_event=%b is_arrive=%b phase=%b pending_event=%b pending_phase=%b count_r=%0d events_r=%0d events_n=%0d mask_r=%b unlock=%b wid=%0d size_m1=%0d\n",
-                $time, INSTANCE_ID, store_waddr, req_data.is_event, req_data.is_arrive, req_data.phase,
-                req_data.pending_event, req_data.pending_event_phase,
-                count_r, events_r, events_n, mask_r, unlock_valid_n, req_wid, req_data.size_m1))
-        end
-    end
-`endif
-
-`ifdef DBG_TRACE_DXA
-    reg [BAR_ADDR_W-1:0] tl_unlock_bar_r;
-    always @(posedge clk) begin
-        tl_unlock_bar_r <= store_waddr;
-    end
-    always @(posedge clk) begin
-        if (!reset) begin
-            if (req_valid && ~req_data.is_global && req_data.is_arrive) begin
-                $write("DXA_TL,%0d,BAR_ARRIVE,core=%0d,wid=%0d,bar=%0d,count=%0d,size_m1=%0d\n",
-                    $time, CORE_ID, req_wid, store_waddr, count_r, req_data.size_m1);
-            end
-            if (unlock_valid_r) begin
-                $write("DXA_TL,%0d,BAR_UNLOCK,core=%0d,bar=%0d,mask=%b\n",
-                    $time, CORE_ID, tl_unlock_bar_r, unlock_mask_r);
-            end
-        end
-    end
-`endif
-
     if (USE_GBAR) begin : g_gbar
 
         always @(posedge clk) begin
@@ -326,5 +295,26 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         `UNUSED_VAR ({gbar_req_valid_n, gbar_req_size_m1_n, gbar_req_id_n})
 
     end
+
+`ifdef DBG_TRACE_PIPELINE
+    always @(posedge clk) begin
+        if (req_valid) begin
+            `TRACE(2, ("%t: %s req: wid=%0d, bar_id=%0d, is_global=%b, is_event=%b, is_arrive=%b, is_sync=%b, phase=%b, size_m1=%0d, pending_event=%b\n",
+                $time, INSTANCE_ID, req_wid, req_data.id, req_data.is_global, req_data.is_event, req_data.is_arrive, req_data.is_sync, req_data.phase, req_data.size_m1, req_data.pending_event))
+        end
+        if (USE_GBAR && gbar_req_valid_n && ~gbar_req_valid_r) begin
+            `TRACE(2, ("%t: %s global-req: bar_id=%0d, size_m1=%0d\n",
+                $time, INSTANCE_ID, gbar_req_id_n, gbar_req_size_m1_n))
+        end
+        if (USE_GBAR && gbar_bus_if.rsp_valid && gbar_rsp_ready) begin
+            `TRACE(2, ("%t: %s global-rsp: bar_id=%0d\n",
+                $time, INSTANCE_ID, gbar_bus_if.rsp_data.id))
+        end
+        if (unlock_valid_n) begin
+            `TRACE(2, ("%t: %s unlock: mask=%b\n",
+                $time, INSTANCE_ID, unlock_mask_n))
+        end
+    end
+`endif
 
 endmodule

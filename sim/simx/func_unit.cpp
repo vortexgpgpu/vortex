@@ -380,7 +380,7 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 }
 
 #ifdef EXT_DXA_ENABLE
-bool SfuUnit::execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaTraceData& dxa_data) {
+bool SfuUnit::execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaCore::TraceData& dxa_data) {
 	auto& runtime = dxa_runtime_.at(trace->wid);
 	switch (dxa_type) {
 	case DxaType::SETUP:
@@ -413,8 +413,11 @@ bool SfuUnit::execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaTr
 		return true;
 	case DxaType::ISSUE: {
 		runtime.coords[4] = dxa_data.rs1;
-		bool accepted = core_->socket()->cluster()->dxa_core()->submit(
-		    core_, runtime.desc_slot, runtime.smem_addr, runtime.coords.data(), runtime.bar_id);
+		auto dxa_core = core_->socket()->cluster()->dxa_core();
+		auto exe_data = dxa_core->execute_copy(core_, runtime.desc_slot,
+		                                       runtime.smem_addr, runtime.coords.data());
+		bool accepted = dxa_core->submit(core_, runtime.desc_slot, runtime.smem_addr,
+		                                 runtime.coords.data(), runtime.bar_id, exe_data);
 		return accepted;
 	}
 	default:
@@ -485,7 +488,7 @@ void SfuUnit::tick() {
 #ifdef EXT_DXA_ENABLE
 		} else if (std::get_if<DxaType>(&trace->op_type)) {
 			auto dxa_type = std::get<DxaType>(trace->op_type);
-			auto dxa_data = std::dynamic_pointer_cast<DxaTraceData>(trace->data);
+			auto dxa_data = std::dynamic_pointer_cast<DxaCore::TraceData>(trace->data);
 			assert(dxa_data);
 			if (!this->execute_dxa_op(trace, dxa_type, *dxa_data)) {
 				continue; // DXA request queue backpressure

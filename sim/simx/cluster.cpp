@@ -60,13 +60,6 @@ Cluster::Cluster(const SimContext& ctx,
     2,                      // pipeline latency
   });
 
-  // connect l2cache core interface
-  for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
-    for (uint32_t j = 0; j < L1_MEM_PORTS; ++j) {
-      sockets_.at(i)->mem_req_out.at(j).bind(&l2cache_->core_req_in.at(i * L1_MEM_PORTS + j));
-      l2cache_->core_rsp_out.at(i * L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
-    }
-  }
 
   // connect l2cache memory interface
   for (uint32_t i = 0; i < L2_MEM_PORTS; ++i) {
@@ -75,11 +68,51 @@ Cluster::Cluster(const SimContext& ctx,
   }
 
 #ifdef EXT_DXA_ENABLE
-  // Create DxaCore at cluster scope (matches VX_dxa_core placement in RTL).
-  // Descriptors are shared cluster-wide; NUM_DXA_UNITS parallel slices each
-  // process copy requests independently.
+  // Create DxaCore at cluster scope
   snprintf(sname, 100, "%s-dxa-core", name);
   dxa_core_ = DxaCore::Create(sname, this);
+
+  // Merge socket + DXA GMEM ports into L2 via a 2:1 priority arbiter.
+  // Mirrors RTL VX_mem_arb(NUM_INPUTS=2*L2_SOCKET_REQS, NUM_OUTPUTS=L2_SOCKET_REQS).
+  // TxArbiter output k arbitrates over inputs {2k, 2k+1}:
+  //   input 2k   = socket port k  (high priority, lower index wins in Priority mode)
+  //   input 2k+1 = DXA gmem port k (low priority; idle when k >= kDxaMemPorts)
+  uint32_t kDxaMemPorts = dxa_core_->gmem_req_out.size();
+  snprintf(sname, 100, "%s-l2arb", name);
+  auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority, 2 * L2_NUM_REQS, L2_NUM_REQS);
+  for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
+    for (uint32_t j = 0; j < L1_MEM_PORTS; ++j) {
+      uint32_t port = i * L1_MEM_PORTS + j;
+      sockets_.at(i)->mem_req_out.at(j).bind(&l2arb->ReqIn.at(2 * port));
+      l2arb->RspOut.at(2 * port).bind(&sockets_.at(i)->mem_rsp_in.at(j));
+    }
+  }
+  for (uint32_t i = 0; i < kDxaMemPorts; ++i) {
+    dxa_core_->gmem_req_out.at(i).bind(&l2arb->ReqIn.at(2 * i + 1));
+    l2arb->RspOut.at(2 * i + 1).bind(&dxa_core_->gmem_rsp_in.at(i));
+  }
+  for (uint32_t i = 0; i < L2_NUM_REQS; ++i) {
+    l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
+    l2cache_->core_rsp_out.at(i).bind(&l2arb->RspIn.at(i));
+  }
+  // Wire DXA SMEM timing channel to each core's LocalMem.
+  // LocalMem::dxa_req_in releases the barrier on the is_last element.
+  for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+    for (uint32_t c = 0; c < cores_per_socket_; ++c) {
+      uint32_t lmem_idx = s * cores_per_socket_ + c;
+      dxa_core_->lmem_req_out.at(lmem_idx).bind(
+          &sockets_.at(s)->core(c)->local_mem()->dxa_req_in);
+    }
+  }
+
+#else
+  // connect l2cache core interface
+  for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
+    for (uint32_t j = 0; j < L1_MEM_PORTS; ++j) {
+      sockets_.at(i)->mem_req_out.at(j).bind(&l2cache_->core_req_in.at(i * L1_MEM_PORTS + j));
+      l2cache_->core_rsp_out.at(i * L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
+    }
+  }
 #endif
 }
 
@@ -163,6 +196,9 @@ void Cluster::global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t co
 Cluster::PerfStats Cluster::perf_stats() const {
   PerfStats perf_stats;
   perf_stats.l2cache = l2cache_->perf_stats();
+#ifdef EXT_DXA_ENABLE
+  perf_stats.dxa = dxa_core_->perf_stats();
+#endif
   return perf_stats;
 }
 

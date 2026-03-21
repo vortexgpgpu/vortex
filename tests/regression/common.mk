@@ -93,10 +93,16 @@ kernel.dump: kernel.elf
 kernel.vxbin: kernel.elf
 	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
 
+$(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a:
+	$(MAKE) -C $(VORTEX_KN_PATH)
+	
+$(VORTEX_RT_PATH)/libvortex.so:
+	$(MAKE) -C $(VORTEX_RT_PATH)
+
 kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
 	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o kernel.elf
 
-$(PROJECT): $(SRCS)
+$(PROJECT): $(SRCS) $(VORTEX_RT_PATH)/libvortex.so
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 run-simx: $(PROJECT) kernel.vxbin

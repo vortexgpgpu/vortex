@@ -548,6 +548,40 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
                  r + w, r, w, avg_lat, bst, calc_utility(r + w, bst));
     }
   } break;
+
+  case VX_DCR_MPM_CLASS_DXA: {
+    // DXA counters are cluster-level; query representative core per cluster.
+    uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
+    uint64_t tot_transfers = 0, tot_gmem_reads = 0, tot_gmem_dedup = 0;
+    uint64_t tot_smem_writes = 0, tot_gmem_lt = 0;
+    for (uint32_t c = 0; c < num_clusters; ++c) {
+      uint32_t rep_core = (uint32_t)(c * cores_per_cluster);
+      if (rep_core >= num_cores)
+        break;
+      uint64_t transfers = 0, gmem_reads = 0, gmem_dedup = 0, smem_writes = 0, gmem_lt = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_TRANSFERS,  rep_core, &transfers),  { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_READS, rep_core, &gmem_reads), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_DEDUP, rep_core, &gmem_dedup), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_SMEM_WRITES,rep_core, &smem_writes),{ return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_LT,    rep_core, &gmem_lt),    { return err; });
+      tot_transfers  += transfers;
+      tot_gmem_reads += gmem_reads;
+      tot_gmem_dedup += gmem_dedup;
+      tot_smem_writes+= smem_writes;
+      tot_gmem_lt    += gmem_lt;
+      double avg_lat = safe_div((double)gmem_lt, (double)transfers);
+      int dedup_pct  = calc_percent(gmem_dedup, gmem_reads + gmem_dedup);
+      perf_print_core(stream, rep_core, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), smem_writes=%" PRIu64 ", avg_gmem_lat=%.1f",
+                      transfers, gmem_reads, gmem_dedup, dedup_pct, smem_writes, avg_lat);
+    }
+    {
+      double avg_lat = safe_div((double)tot_gmem_lt, (double)tot_transfers);
+      int dedup_pct  = calc_percent(tot_gmem_dedup, tot_gmem_reads + tot_gmem_dedup);
+      perf_print(stream, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), smem_writes=%" PRIu64 ", avg_gmem_lat=%.1f",
+                 tot_transfers, tot_gmem_reads, tot_gmem_dedup, dedup_pct, tot_smem_writes, avg_lat);
+    }
+  } break;
+
   default:
     fprintf(stream, "Error: invalid profiling class: %d)", mpm_class);
     return -1;

@@ -36,6 +36,9 @@ $(PROJECT).dump: $(PROJECT).elf
 $(PROJECT).bin: $(PROJECT).elf
 	$(CP) -O binary $< $@
 
+$(VORTEX_KN_PATH)/libvortex.a:
+	$(MAKE) -C $(VORTEX_KN_PATH)
+
 $(PROJECT).elf: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 

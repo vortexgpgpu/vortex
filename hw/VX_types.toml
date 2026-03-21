@@ -158,7 +158,7 @@ VX_CSR_CTA_LMEM_ADDR  = 0xCDF
 VX_DCR_MPM_CLASS_BASE = 0
 VX_DCR_MPM_CLASS_CORE = 1
 VX_DCR_MPM_CLASS_MEM = 2
-# VX_DCR_MPM_CLASS_DXA = 6  # removed: DXA perf counters replaced by DBG_TRACE_DXA
+VX_DCR_MPM_CLASS_DXA = 6   # DXA copy-engine perf counters
 
 [csr_mpm_base]
 VX_CSR_MCYCLE = 0xB00
@@ -303,4 +303,15 @@ VX_CSR_MPM_LMEM_BANK_ST_H = 0xB9D
 VX_CSR_MPM_COALESCER_MISS = 0xB1F  # coalescer misses
 VX_CSR_MPM_COALESCER_MISS_H = 0xB9F
 
-# [csr_mpm_dxa] — removed: DXA perf counters replaced by DBG_TRACE_DXA logs
+[csr_mpm_dxa]
+# PERF: DXA copy engine (cluster-level, same value on all cores in cluster)
+VX_CSR_MPM_DXA_TRANSFERS  = 0xB03  # completed DXA tile transfers
+VX_CSR_MPM_DXA_TRANSFERS_H  = 0xB83
+VX_CSR_MPM_DXA_GMEM_READS  = 0xB04  # GMEM cache-line requests issued (after dedup)
+VX_CSR_MPM_DXA_GMEM_READS_H  = 0xB84
+VX_CSR_MPM_DXA_GMEM_DEDUP  = 0xB05  # GMEM cache-line requests saved by intra-row dedup
+VX_CSR_MPM_DXA_GMEM_DEDUP_H  = 0xB85
+VX_CSR_MPM_DXA_SMEM_WRITES  = 0xB06  # SMEM word writes issued
+VX_CSR_MPM_DXA_SMEM_WRITES_H  = 0xB86
+VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
+VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87

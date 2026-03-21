@@ -57,7 +57,7 @@ struct cta_csrs_t {
   uint32_t block_idx[3];
   uint32_t block_dim[3];
   uint32_t grid_dim[3];
-  uint32_t lmem_addr;
+  uint64_t lmem_addr;
 
   cta_csrs_t()
     : cta_id(0)
@@ -143,9 +143,9 @@ public:
 
   int get_exitcode() const;
 
-  void dcache_read(void* data, uint64_t addr, uint32_t size);
+  void mem_read(void* data, uint64_t addr, uint32_t size);
 
-  void dcache_write(const void* data, uint64_t addr, uint32_t size);
+  void mem_write(const void* data, uint64_t addr, uint32_t size);
 
   int dcr_write(uint32_t addr, uint32_t value);
 

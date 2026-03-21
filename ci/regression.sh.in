@@ -125,8 +125,8 @@ dxa()
     CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1"
 
     # single-core with L2 cache
-    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1"
-    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1"
+    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1" --perf=6
+    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1" --perf=6
 
     # multi-core with L2 cache
     CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1" --cores=4

@@ -514,16 +514,4 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 `endif
 
-`ifdef DBG_TRACE_DXA
-    // Lightweight wid=0 dispatch trace for CTA boundary detection.
-    // Visualization tools match kernel_body entry/exit PCs from kernel.dump
-    // against these events to find exact CTA start/end timestamps.
-    always @(posedge clk) begin
-        if (!reset && schedule_fire && schedule_wid == 0) begin
-            $write("DXA_PIPE,%0d,W0_DISPATCH,core=%0d,PC=0x%0h\n",
-                $time, CORE_ID, to_fullPC(schedule_pc));
-        end
-    end
-`endif
-
 endmodule

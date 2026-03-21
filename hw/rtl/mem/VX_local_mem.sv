@@ -335,7 +335,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
 `endif
 
-`ifdef DBG_TRACE_DXA
+`ifdef DBG_TRACE_MEM
+
 `ifdef EXT_DXA_ENABLE
     // ---- DXA write monitoring at local_mem level ----
     reg [31:0] dxa_lm_cycle_ctr_r;
@@ -420,9 +421,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         end
     end
 `endif
-`endif
-
-`ifdef DBG_TRACE_MEM
 
     wire [NUM_BANKS-1:0][TAG_WIDTH-UUID_WIDTH-1:0] per_bank_req_tag_value;
     wire [NUM_BANKS-1:0][`UP(UUID_WIDTH)-1:0] per_bank_req_uuid;

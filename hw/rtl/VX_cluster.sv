@@ -48,9 +48,15 @@ module VX_cluster import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     cache_perf_t l2_perf;
     sysmem_perf_t sysmem_perf_tmp;
+`ifdef EXT_DXA_ENABLE
+    dxa_perf_t dxa_core_perf;
+`endif
     always @(*) begin
         sysmem_perf_tmp = sysmem_perf;
         sysmem_perf_tmp.l2cache = l2_perf;
+    `ifdef EXT_DXA_ENABLE
+        sysmem_perf_tmp.dxa = dxa_core_perf;
+    `endif
     end
 `endif
 
@@ -166,6 +172,9 @@ module VX_cluster import VX_gpu_pkg::*; #(
     ) dxa_core (
         .clk                   (clk),
         .reset                 (reset),
+    `ifdef PERF_ENABLE
+        .dxa_perf              (dxa_core_perf),
+    `endif
         .dcr_bus_if            (dcr_bus_if),
         .req_bus_if            (per_socket_dxa_req_bus_if),
         .smem_bus_if           (dxa_smem_bus_if),
