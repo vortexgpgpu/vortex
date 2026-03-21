@@ -42,10 +42,6 @@ _start:
   # initialize TLS for all warps
   call  __init_tls
 
-  # initialize trap vector
-  # la t0, trap_entry
-  # csrw mtvec, t0
-
 #ifdef HAVE_INITFINI_ARRAY
   # run global initialization functions
   call  __libc_init_array
@@ -86,10 +82,6 @@ _start:
   sub   a2, a2, a0
   li    a1, 0
   call  memset
-
-  # initialize trap vector
-  # la t0, trap_entry
-  # csrw mtvec, t0
 
 #ifdef HAVE_INITFINI_ARRAY
   # run global initialization functions
