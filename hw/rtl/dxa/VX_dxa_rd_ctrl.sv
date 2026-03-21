@@ -34,6 +34,10 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 ) (
     input  wire                        clk,
     input  wire                        reset,
+`ifdef PERF_ENABLE
+    output wire [31:0]                 perf_gmem_reqs,
+    output wire [31:0]                 perf_gmem_span_cycles,
+`endif
     input  wire                        transfer_active,
 
     // CL input (from dedup, valid/ready).
@@ -68,13 +72,6 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                        gmem_req_fire,
     output wire                        rsp_fire,
     output wire                        stall_no_slot
-
-`elsif PERF_ENABLE
-    ,
-    output wire [31:0]                 perf_gmem_reqs,
-    output wire [31:0]                 perf_gmem_eff_bytes,
-    output wire [31:0]                 perf_gmem_span_cycles
-`endif
 );
     localparam RD_SLOT_BITS = `CLOG2(MAX_OUTSTANDING);
     localparam RD_SLOT_W    = `UP(RD_SLOT_BITS);
@@ -324,62 +321,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         ("invalid dxa rd_ctrl gmem rsp slot"))
 
 `ifdef PERF_ENABLE
-    // ---- Per-slot request timestamp for latency measurement ----
-    reg [31:0] slot_issue_cycle_r [MAX_OUTSTANDING-1:0];
-    reg [31:0] rdp_cycle_ctr_r;
-    reg [31:0] rdp_total_gmem_req_r;
-    reg [31:0] rdp_total_gmem_eff_bytes_r;
-    reg [31:0] rdp_first_req_cycle_r;
-    reg [31:0] rdp_last_rsp_cycle_r;
-    reg        rdp_has_req_r;
-
-    // Effective bytes per CL entry: popcount of byte_mask.
-    /* verilator lint_off UNOPTFLAT */
-    reg [31:0] alloc_eff_bytes;
-    always @(*) begin
-        alloc_eff_bytes = '0;
-        for (integer b = 0; b < GMEM_BYTES; b = b + 1) begin
-            alloc_eff_bytes = alloc_eff_bytes + 32'(cl_in_byte_mask[b]);
-        end
-    end
-    /* verilator lint_on UNOPTFLAT */
-
-    always @(posedge clk) begin
-        if (reset || !transfer_active) begin
-            rdp_cycle_ctr_r          <= '0;
-            rdp_total_gmem_req_r     <= '0;
-            rdp_total_gmem_eff_bytes_r <= '0;
-            rdp_first_req_cycle_r    <= '0;
-            rdp_last_rsp_cycle_r     <= '0;
-            rdp_has_req_r            <= 1'b0;
-        end else begin
-            rdp_cycle_ctr_r <= rdp_cycle_ctr_r + 32'd1;
-
-            if (alloc_fire_w) begin
-                slot_issue_cycle_r[rd_free_slot] <= rdp_cycle_ctr_r;
-                rdp_total_gmem_req_r <= rdp_total_gmem_req_r + 32'd1;
-                rdp_total_gmem_eff_bytes_r <= rdp_total_gmem_eff_bytes_r + alloc_eff_bytes;
-                if (!rdp_has_req_r) begin
-                    rdp_first_req_cycle_r <= rdp_cycle_ctr_r;
-                    rdp_has_req_r <= 1'b1;
-                end
-            end
-
-            if (release_fire_w) begin
-                rdp_last_rsp_cycle_r <= rdp_cycle_ctr_r;
-                $display("%0t: rd_ctrl GMEM_REQ_DONE slot=%0d latency=%0d",
-                    $time, rsp_slot,
-                    rdp_cycle_ctr_r - slot_issue_cycle_r[rsp_slot]);
-            end
-        end
-    end
-
-    assign perf_gmem_reqs       = rdp_total_gmem_req_r;
-    assign perf_gmem_eff_bytes  = rdp_total_gmem_eff_bytes_r;
-    assign perf_gmem_span_cycles = (rdp_has_req_r && rdp_last_rsp_cycle_r >= rdp_first_req_cycle_r)
-                                 ? (rdp_last_rsp_cycle_r - rdp_first_req_cycle_r + 32'd1) : 32'd0;
-
-    // Lightweight PERF_ENABLE-only counters (no eff_bytes, no $display)
+    // Lightweight counters (no per-slot timestamps, no eff_bytes, no $display)
     reg [31:0] rdp_cycle_ctr_r;
     reg [31:0] rdp_total_gmem_req_r;
     reg [31:0] rdp_first_req_cycle_r;
@@ -406,7 +348,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             end
         end
     end
-    assign perf_gmem_reqs = rdp_total_gmem_req_r;
+    assign perf_gmem_reqs        = rdp_total_gmem_req_r;
     assign perf_gmem_span_cycles = (rdp_has_req_r && rdp_last_rsp_cycle_r >= rdp_first_req_cycle_r)
                                  ? (rdp_last_rsp_cycle_r - rdp_first_req_cycle_r + 32'd1) : 32'd0;
 `endif

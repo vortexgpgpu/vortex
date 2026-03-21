@@ -266,12 +266,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .gmem_req_fire    (rc_gmem_req_fire),
         .rsp_fire         (rc_rsp_fire),
         .stall_no_slot    (rc_stall_no_slot)
-    `ifdef DBG_TRACE_DXA
-        ,
-        .perf_gmem_reqs       (rc_perf_gmem_reqs),
-        .perf_gmem_eff_bytes  (rc_perf_gmem_eff_bytes),
-        .perf_gmem_span_cycles(rc_perf_gmem_span_cycles)
-    `elsif PERF_ENABLE
+    `ifdef PERF_ENABLE
         ,
         .perf_gmem_reqs       (rc_perf_gmem_reqs),
         .perf_gmem_span_cycles(rc_perf_gmem_span_cycles)
@@ -352,13 +347,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .transfer_done     (wc_transfer_done),
         .wr_done_count     (wc_wr_done_count),
         .smem_req_fire     (wc_smem_req_fire)
-    `ifdef DBG_TRACE_DXA
-        ,
-        .perf_smem_writes      (wc_perf_smem_writes),
-        .perf_smem_eff_bytes   (wc_perf_smem_eff_bytes),
-        .perf_smem_span_cycles (wc_perf_smem_span_cycles),
-        .perf_smem_back_to_back(wc_perf_smem_back_to_back)
-    `elsif PERF_ENABLE
+    `ifdef PERF_ENABLE
         ,
         .perf_smem_writes      (wc_perf_smem_writes)
     `endif
@@ -439,63 +428,6 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     assign worker_idle = (ts_state_r == TS_IDLE);
 
-    // ---- Profiling counters (reason-coded stalls) ----
-    reg [31:0] perf_active_cycles_r;
-    reg [31:0] perf_issue_block_cycles_r;
-    reg [31:0] perf_gmem_req_block_cycles_r;
-    reg [31:0] perf_gmem_rsp_block_cycles_r;
-    reg [31:0] perf_smem_req_block_cycles_r;
-    reg [31:0] perf_no_slot_block_cycles_r;
-    reg [31:0] perf_gmem_req_fire_r;
-    reg [31:0] perf_gmem_rsp_fire_r;
-    reg [31:0] perf_smem_req_fire_r;
-    reg [31:0] perf_pipe_block_cycles_r;
-
-    always @(posedge clk) begin
-        if (reset || setup_start) begin
-            perf_active_cycles_r <= '0;
-            perf_issue_block_cycles_r <= '0;
-            perf_gmem_req_block_cycles_r <= '0;
-            perf_gmem_rsp_block_cycles_r <= '0;
-            perf_smem_req_block_cycles_r <= '0;
-            perf_no_slot_block_cycles_r <= '0;
-            perf_gmem_req_fire_r <= '0;
-            perf_gmem_rsp_fire_r <= '0;
-            perf_smem_req_fire_r <= '0;
-            perf_pipe_block_cycles_r <= '0;
-        end else begin
-            if (active_r) begin
-                perf_active_cycles_r <= perf_active_cycles_r + 32'd1;
-            end
-            if (launch_valid && ~launch_ready) begin
-                perf_issue_block_cycles_r <= perf_issue_block_cycles_r + 32'd1;
-            end
-            if (rc_gmem_rd_req_valid && ~gmem_bus_if.req_ready) begin
-                perf_gmem_req_block_cycles_r <= perf_gmem_req_block_cycles_r + 32'd1;
-            end
-            if (gmem_bus_if.rsp_valid && ~gmem_bus_if.rsp_ready) begin
-                perf_gmem_rsp_block_cycles_r <= perf_gmem_rsp_block_cycles_r + 32'd1;
-            end
-            if (wc_smem_wr_valid && ~smem_bank_wr_if.wr_ready) begin
-                perf_smem_req_block_cycles_r <= perf_smem_req_block_cycles_r + 32'd1;
-            end
-            if (rc_stall_no_slot) begin
-                perf_no_slot_block_cycles_r <= perf_no_slot_block_cycles_r + 32'd1;
-            end
-            if (rc_cl_out_valid && ~rc_cl_out_ready) begin
-                perf_pipe_block_cycles_r <= perf_pipe_block_cycles_r + 32'd1;
-            end
-            if (rc_gmem_req_fire) begin
-                perf_gmem_req_fire_r <= perf_gmem_req_fire_r + 32'd1;
-            end
-            if (rc_rsp_fire) begin
-                perf_gmem_rsp_fire_r <= perf_gmem_rsp_fire_r + 32'd1;
-            end
-            if (wc_smem_req_fire) begin
-                perf_smem_req_fire_r <= perf_smem_req_fire_r + 32'd1;
-            end
-        end
-    end
 
     // ---- Progress watchdog ----
     reg [31:0] stall_ctr_r;
@@ -516,7 +448,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         "*** %s worker no-progress: core=%0d wid=%0d bar=%0d",
         INSTANCE_ID, active_core_id_r, active_wid_r, active_bar_addr_r))
 
+`ifndef DBG_TRACE_DXA
     `UNUSED_VAR (wc_wr_done_count)
+`endif
+    `UNUSED_VAR (rc_stall_no_slot)
     `UNUSED_VAR (wc_smem_wr_addr[SMEM_ADDR_WIDTH-1:BANK_ADDR_WIDTH])
     `UNUSED_VAR (issue_desc_tile23)
     `UNUSED_VAR (issue_desc_tile4)
@@ -529,133 +464,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `UNUSED_VAR (active_notify_smem_done_r)
 `endif
 
-`ifdef DBG_TRACE_DXA
-    always @(posedge clk) begin
-        if (~reset) begin
-            if (setup_start) begin
-                `TRACE(1, ("%t: %s start: core=%0d wid=%0d bar=%0d total=%0d elem=%0d gbase=0x%0h smem=0x%0h desc=%0d\n",
-                    $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
-                    issue_dec.total, issue_dec.elem_bytes, issue_base_addr, launch_smem_addr, launch_desc_slot))
-            end
-            if (launch_invalid_cmd) begin
-                `TRACE(1, ("%t: %s launch-unsupported: core=%0d wid=%0d bar=%0d supported=%0d is_s2g=%0d total=%0d\n",
-                    $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
-                    issue_dec.supported, issue_dec.is_s2g, issue_dec.total))
-            end
-            if (active_r) begin
-                if (rc_gmem_req_fire) begin
-                    `TRACE(2, ("%t: %s gmem-req: addr=0x%0h\n",
-                        $time, INSTANCE_ID, rc_gmem_rd_req_addr))
-                end
-                if (rc_rsp_fire) begin
-                    `TRACE(2, ("%t: %s gmem-rsp: tag=%0d\n",
-                        $time, INSTANCE_ID, gmem_bus_if.rsp_data.tag.value))
-                end
-                if (gmem_bus_if.rsp_valid && ~gmem_bus_if.rsp_ready) begin
-                    `TRACE(2, ("%t: %s gmem-rsp-BLOCKED: tag=%0d rsp_ready=%0b\n",
-                        $time, INSTANCE_ID, gmem_bus_if.rsp_data.tag.value, gmem_bus_if.rsp_ready))
-                end
-                if (wc_smem_req_fire) begin
-                    `TRACE(2, ("%t: %s smem-wr: addr=0x%0h count=%0d\n",
-                        $time, INSTANCE_ID, wc_smem_wr_addr, wc_wr_done_count))
-                end
-            end
-            if (active_r && wc_transfer_done) begin
-                `TRACE(1, ("%t: %s done: core=%0d wid=%0d bar=%0d wr_count=%0d\n",
-                    $time, INSTANCE_ID, active_core_id_r, active_wid_r,
-                    active_bar_addr_r, wc_wr_done_count))
-            end
-        end
-    end
-`endif
-
-`ifdef DBG_TRACE_DXA
-    // Wires from rd_ctrl / wr_ctrl profiling outputs
-    wire [31:0] rc_perf_gmem_reqs;
-    wire [31:0] rc_perf_gmem_eff_bytes;
-    wire [31:0] rc_perf_gmem_span_cycles;
-    wire [31:0] wc_perf_smem_writes;
-    wire [31:0] wc_perf_smem_eff_bytes;
-    wire [31:0] wc_perf_smem_span_cycles;
-    wire [31:0] wc_perf_smem_back_to_back;
-
-    reg [31:0] perf_min_gmem_reads_r;
-    reg [31:0] perf_min_smem_writes_r;
-    reg [31:0] perf_tile_bytes_r;
-
-    always @(posedge clk) begin
-        if (reset || setup_start) begin
-            perf_min_gmem_reads_r <= '0;
-            perf_min_smem_writes_r <= '0;
-            perf_tile_bytes_r <= '0;
-        end else if (setup_done) begin
-            perf_min_gmem_reads_r <= setup_params.total_rows
-                * ((setup_params.row_len_bytes + GMEM_BYTES - 1) / GMEM_BYTES);
-            perf_min_smem_writes_r <= setup_params.total_smem_writes;
-            perf_tile_bytes_r <= setup_params.total_rows * setup_params.row_len_bytes;
-        end
-    end
-
-    // Combinatorial "next" values for counters that may fire on the same cycle
-    // as transfer_done (registered values are still N-1 at that edge).
-    wire [31:0] perf_smem_fire_next = perf_smem_req_fire_r + 32'(wc_smem_req_fire);
-    wire [31:0] perf_active_next    = perf_active_cycles_r + 32'(active_r);
-
-    always @(posedge clk) begin
-        if (~reset && active_r && wc_transfer_done) begin
-            $display("%t: %s DXA_PROFILE core=%0d wid=%0d bar=%0d active=%0d issue_blk=%0d gmem_req_blk=%0d gmem_rsp_blk=%0d smem_req_blk=%0d noslot_blk=%0d pipe_blk=%0d req_fire=%0d rsp_fire=%0d smem_fire=%0d",
-                $time, INSTANCE_ID, active_core_id_r, active_wid_r, active_bar_addr_r,
-                perf_active_next, perf_issue_block_cycles_r,
-                perf_gmem_req_block_cycles_r, perf_gmem_rsp_block_cycles_r, perf_smem_req_block_cycles_r,
-                perf_no_slot_block_cycles_r, perf_pipe_block_cycles_r,
-                perf_gmem_req_fire_r, perf_gmem_rsp_fire_r, perf_smem_fire_next);
-            $display("%t: %s DXA_PROFILE_EFF gmem_reads=%0d (min=%0d, eff=%0d%%) smem_writes=%0d (min=%0d, eff=%0d%%) latency=%0d cycles",
-                $time, INSTANCE_ID,
-                perf_gmem_req_fire_r, perf_min_gmem_reads_r,
-                (perf_gmem_req_fire_r > 0) ? (perf_min_gmem_reads_r * 100 / perf_gmem_req_fire_r) : 32'd0,
-                perf_smem_fire_next, perf_min_smem_writes_r,
-                (perf_smem_fire_next > 0) ? (perf_min_smem_writes_r * 100 / perf_smem_fire_next) : 32'd0,
-                perf_active_next);
-            $display("%t: %s DXA_PROFILE_DETAIL tile_bytes=%0d gmem: reqs=%0d eff_bytes=%0d span=%0d_cyc smem: writes=%0d eff_bytes=%0d span=%0d_cyc b2b=%0d/%0d pipelined=%0d%%",
-                $time, INSTANCE_ID,
-                perf_tile_bytes_r,
-                rc_perf_gmem_reqs, rc_perf_gmem_eff_bytes, rc_perf_gmem_span_cycles,
-                wc_perf_smem_writes, wc_perf_smem_eff_bytes, wc_perf_smem_span_cycles,
-                wc_perf_smem_back_to_back, wc_perf_smem_writes,
-                (wc_perf_smem_writes > 1) ? (wc_perf_smem_back_to_back * 100 / (wc_perf_smem_writes - 32'd1)) : 32'd0);
-        end
-    end
-`endif
-
-`ifdef DBG_TRACE_DXA
-    always @(posedge clk) begin
-        if (~reset) begin
-            if (setup_start) begin
-                $write("DXA_TL,%0d,XFER_START,core=%0d,wid=%0d,bar=%0d,total=%0d,elem=%0d\n",
-                    $time, launch_core_id, launch_wid, launch_bar_addr,
-                    issue_dec.total, issue_dec.elem_bytes);
-            end
-            if (pipeline_start) begin
-                $write("DXA_TL,%0d,SETUP_DONE,core=%0d,wid=%0d,bar=%0d\n",
-                    $time, active_core_id_r, active_wid_r, active_bar_addr_r);
-            end
-            if (active_r && wc_transfer_done) begin
-                $write("DXA_TL,%0d,XFER_DONE,core=%0d,wid=%0d,bar=%0d,wr_count=%0d\n",
-                    $time, active_core_id_r, active_wid_r, active_bar_addr_r,
-                    wc_wr_done_count);
-            end
-        end
-    end
-`endif
-
 `ifdef PERF_ENABLE
-`ifndef DBG_TRACE_DXA
-    // Wire declarations for submodule prof outputs
+    // Wire declarations for submodule perf outputs
     wire [31:0] rc_perf_gmem_reqs;
     wire [31:0] rc_perf_gmem_span_cycles;
     wire [31:0] wc_perf_smem_writes;
     wire        dd_perf_dedup_hit;
-`endif
     // Accumulated DXA perf counters (never reset, sum across all transfers)
     reg [PERF_CTR_BITS-1:0] perf_transfers_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_reads_r;
@@ -686,6 +500,56 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign perf_gmem_dedup = perf_gmem_dedup_r;
     assign perf_smem_writes = perf_smem_writes_r;
     assign perf_gmem_lt    = perf_gmem_lt_r;
+`endif
+
+`ifdef DBG_TRACE_DXA
+    always @(posedge clk) begin
+        if (~reset) begin
+            if (setup_start) begin
+                `TRACE(1, ("%t: %s start: core=%0d wid=%0d bar=%0d total=%0d elem=%0d gbase=0x%0h smem=0x%0h desc=%0d\n",
+                    $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
+                    issue_dec.total, issue_dec.elem_bytes, issue_base_addr, launch_smem_addr, launch_desc_slot))
+                $write("DXA_TL,%0d,XFER_START,core=%0d,wid=%0d,bar=%0d,total=%0d,elem=%0d\n",
+                    $time, launch_core_id, launch_wid, launch_bar_addr,
+                    issue_dec.total, issue_dec.elem_bytes);
+            end
+            if (launch_invalid_cmd) begin
+                `TRACE(1, ("%t: %s launch-unsupported: core=%0d wid=%0d bar=%0d supported=%0d is_s2g=%0d total=%0d\n",
+                    $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
+                    issue_dec.supported, issue_dec.is_s2g, issue_dec.total))
+            end
+            if (pipeline_start) begin
+                $write("DXA_TL,%0d,SETUP_DONE,core=%0d,wid=%0d,bar=%0d\n",
+                    $time, active_core_id_r, active_wid_r, active_bar_addr_r);
+            end
+            if (active_r) begin
+                if (rc_gmem_req_fire) begin
+                    `TRACE(2, ("%t: %s gmem-req: addr=0x%0h\n",
+                        $time, INSTANCE_ID, rc_gmem_rd_req_addr))
+                end
+                if (rc_rsp_fire) begin
+                    `TRACE(2, ("%t: %s gmem-rsp: tag=%0d\n",
+                        $time, INSTANCE_ID, gmem_bus_if.rsp_data.tag.value))
+                end
+                if (gmem_bus_if.rsp_valid && ~gmem_bus_if.rsp_ready) begin
+                    `TRACE(2, ("%t: %s gmem-rsp-BLOCKED: tag=%0d\n",
+                        $time, INSTANCE_ID, gmem_bus_if.rsp_data.tag.value))
+                end
+                if (wc_smem_req_fire) begin
+                    `TRACE(2, ("%t: %s smem-wr: addr=0x%0h count=%0d\n",
+                        $time, INSTANCE_ID, wc_smem_wr_addr, wc_wr_done_count))
+                end
+            end
+            if (active_r && wc_transfer_done) begin
+                `TRACE(1, ("%t: %s done: core=%0d wid=%0d bar=%0d wr_count=%0d\n",
+                    $time, INSTANCE_ID, active_core_id_r, active_wid_r,
+                    active_bar_addr_r, wc_wr_done_count))
+                $write("DXA_TL,%0d,XFER_DONE,core=%0d,wid=%0d,bar=%0d,wr_count=%0d\n",
+                    $time, active_core_id_r, active_wid_r, active_bar_addr_r,
+                    wc_wr_done_count);
+            end
+        end
+    end
 `endif
 
 endmodule
