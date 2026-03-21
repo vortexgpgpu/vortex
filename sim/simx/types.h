@@ -700,6 +700,9 @@ inline std::ostream &operator<<(std::ostream &os, const VpuOpType& type) {
 
 enum class TcuType {
   WMMA,
+  WMMA_RS,
+  WMMA_SS,
+  WGMMA_LOAD,
   WMMA_SP,
   META_STORE,
 };
@@ -715,6 +718,9 @@ struct IntrTcuArgs {
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   switch (type) {
   case TcuType::WMMA: os << "WMMA"; break;
+  case TcuType::WMMA_RS: os << "WMMA_RS"; break;
+  case TcuType::WMMA_SS: os << "WMMA_SS"; break;
+  case TcuType::WGMMA_LOAD: os << "WGMMA_LOAD"; break;
   case TcuType::WMMA_SP: os << "WMMA_SP"; break;
   case TcuType::META_STORE: os << "META_STORE"; break;
   default:

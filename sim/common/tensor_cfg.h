@@ -123,7 +123,7 @@ struct mxint8 {
   static constexpr uint32_t id = 13;
   static constexpr uint32_t bits = 8;
   static constexpr uint32_t scale_bits = 8;
-  static constexpr uint32_t ele_blcok = 32;
+  static constexpr uint32_t ele_block = 32;
   static constexpr const char* name = "mxi8";
 };
 

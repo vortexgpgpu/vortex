@@ -1607,6 +1607,34 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         core_->tensor_unit()->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
         rd_write = true;
       } break;
+      case TcuType::WGMMA_LOAD: {
+        auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
+        trace->data = trace_data;
+        assert(operand_tmask.count() == num_threads);
+        core_->tensor_unit()->wgmma_load(wid, rs1_data, rs2_data, rs3_data, trace_data.get());
+      } break;
+      case TcuType::WMMA_RS: {
+        auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
+        trace->data = trace_data;
+        assert(operand_tmask.count() == num_threads);
+        std::vector<reg_data_t> rs1_staged;
+        std::vector<reg_data_t> rs1_pair_data;
+        std::vector<reg_data_t> rs2_staged;
+        core_->tensor_unit()->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
+                                    false, rs1_staged, rs1_pair_data, rs2_staged, rs3_data, rd_data, trace_data.get());
+        rd_write = true;
+      } break;
+      case TcuType::WMMA_SS: {
+        auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
+        trace->data = trace_data;
+        assert(operand_tmask.count() == num_threads);
+        std::vector<reg_data_t> rs1_staged;
+        std::vector<reg_data_t> rs1_pair_data;
+        std::vector<reg_data_t> rs2_staged;
+        core_->tensor_unit()->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
+                                    true, rs1_staged, rs1_pair_data, rs2_staged, rs3_data, rd_data, trace_data.get());
+        rd_write = true;
+      } break;
       case TcuType::WMMA_SP: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
