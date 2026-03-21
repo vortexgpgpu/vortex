@@ -1167,7 +1167,16 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         uint32_t fmt_d = rd;
         uint32_t fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
-        auto tcu_type = is_sparse ? TcuType::WMMA_SP : TcuType::WMMA;
+        bool is_wgmma_b_smem = (rs2 & (1u << 1)) != 0;
+        bool is_wgmma_a_smem = (rs2 & (1u << 2)) != 0;
+        auto tcu_type = is_sparse ? TcuType::WMMA_SP
+                                  : (is_wgmma_b_smem
+                                      ? (is_wgmma_a_smem ? TcuType::WMMA_SS : TcuType::WMMA_RS)
+                                      : TcuType::WMMA);
+
+        if (is_sparse && (is_wgmma_b_smem || is_wgmma_a_smem)) {
+          std::abort();
+        }
 
         if (is_sparse) {
           // Sparse mode uses the packed sparse-A register layout from vx_tensor.h
@@ -1275,23 +1284,45 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
           }
         } else {
           // Dense mode
+          bool fedp2x_mode = (tcu_type == TcuType::WMMA_RS || tcu_type == TcuType::WMMA_SS)
+                          && ((cfg::k_steps % 2) == 0);
+          uint32_t dense_k_steps = fedp2x_mode ? (cfg::k_steps / 2) : cfg::k_steps;
           uint32_t steps = 0;
-          uint32_t steps_count = cfg::m_steps * cfg::n_steps * cfg::k_steps;
-          uint32_t steps_shift = 32 - log2ceil(steps_count);
+          uint32_t steps_per_mnk = fedp2x_mode ? 2 : 1;
+          uint32_t steps_count = cfg::m_steps * cfg::n_steps * dense_k_steps * steps_per_mnk;
+          uint32_t steps_shift = (steps_count > 1) ? (32 - log2ceil(steps_count)) : 0;
           uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
           uint32_t uuid_lo = uuid & 0xffffffff;
-          for (uint32_t k = 0; k < cfg::k_steps; ++k) {
+          for (uint32_t k = 0; k < dense_k_steps; ++k) {
+            uint32_t k_idx = fedp2x_mode ? (k * 2) : k;
             for (uint32_t m = 0; m < cfg::m_steps; ++m) {
               for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
-                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
+                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k_idx;
+                uint32_t reg_rs2 = rb_base + (k_idx * cfg::n_steps + n) / cfg::b_sub_blocks;
                 uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
+
+                if (fedp2x_mode) {
+                  uint32_t reg_rs1_pair = reg_rs1 + 1;
+
+                  uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
+                  uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
+                  ++steps;
+                  auto load_a_instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
+                  load_a_instr->setOpType(TcuType::WGMMA_LOAD);
+                  load_a_instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k_idx});
+                  load_a_instr->setSrcReg(0, reg_rs1, RegType::Float);
+                  load_a_instr->setSrcReg(1, reg_rs1_pair, RegType::Float);
+                  load_a_instr->setSrcReg(2, reg_rs2, RegType::Float);
+                  load_a_instr->setParentUUID(uuid);
+                  ibuffer.push_back(load_a_instr);
+                }
+
                 uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
                 uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
                 ++steps;
                 auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
                 instr->setOpType(tcu_type);
-                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k});
+                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k_idx});
                 instr->setDestReg(reg_rs3, RegType::Float);
                 instr->setSrcReg(0, reg_rs1, RegType::Float);
                 instr->setSrcReg(1, reg_rs2, RegType::Float);

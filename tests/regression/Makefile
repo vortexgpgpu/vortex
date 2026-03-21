@@ -33,6 +33,7 @@ all:
 	$(MAKE) -C pathfinder
 	$(MAKE) -C softmax
 	$(MAKE) -C sgemm_tcu
+	$(MAKE) -C sgemm_tcu2
 	$(MAKE) -C sgemm_tcu_sp
 	$(MAKE) -C sgemm2_dxa
 	$(MAKE) -C async_barrier
@@ -143,6 +144,7 @@ clean:
 	$(MAKE) -C sgemm clean
 	$(MAKE) -C sgemm_v2 clean
 	$(MAKE) -C sgemm_tcu clean
+	$(MAKE) -C sgemm_tcu2 clean
 	$(MAKE) -C sgemm_tcu_sp clean
 	$(MAKE) -C conv3 clean
 	$(MAKE) -C mpi_neighbor_a2a_conv3 clean
