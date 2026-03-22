@@ -298,6 +298,9 @@ package VX_gpu_pkg;
     localparam INST_VOTE_BITS =  2;
     localparam INST_SHFL_BITS =  2;
 
+    // Warp-Level Lane Gather Extension
+    localparam INST_WGATHER =    4'h8; // ALU_TYPE_OTHER, alu_op[3]=1
+
     ///////////////////////////////////////////////////////////////////////////
 
     localparam INST_M_MUL =      3'b000;

@@ -39,6 +39,7 @@ all:
 	$(MAKE) -C async_barrier
 	$(MAKE) -C async_gbarrier
 	$(MAKE) -C packld
+	$(MAKE) -C wgather
 
 all-mpi:
 	$(MAKE) -C mpi_dotproduct MPI=1 NP=$(NP)
@@ -77,10 +78,11 @@ run-simx:
 	$(MAKE) -C raycast run-simx
 	$(MAKE) -C bfs run-simx
 	$(MAKE) -C jacobi run-simx
-# $(MAKE) -C pathfinder run-simx
+	$(MAKE) -C pathfinder run-simx
 	$(MAKE) -C softmax run-simx
 	$(MAKE) -C async_barrier run-simx
 	$(MAKE) -C packld run-simx
+	$(MAKE) -C wgather run-simx
 
 run-simx-mpi:
 	$(MAKE) -C mpi_dotproduct run-simx MPI=1 NP=$(NP)
@@ -119,10 +121,11 @@ run-rtlsim:
 	$(MAKE) -C raycast run-rtlsim
 	$(MAKE) -C bfs run-rtlsim
 	$(MAKE) -C jacobi run-rtlsim
-#   $(MAKE) -C pathfinder run-rtlsim
+	$(MAKE) -C pathfinder run-rtlsim
 	$(MAKE) -C softmax run-rtlsim
 	$(MAKE) -C async_barrier run-rtlsim
 	$(MAKE) -C packld run-rtlsim
+	$(MAKE) -C wgather run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -162,4 +165,6 @@ clean:
 	$(MAKE) -C softmax clean
 	$(MAKE) -C sgemm2_dxa clean
 	$(MAKE) -C async_barrier clean
-	$(MAKE) -C async_gbarrier clean	$(MAKE) -C packld clean
+	$(MAKE) -C async_gbarrier clean
+	$(MAKE) -C packld clean
+	$(MAKE) -C wgather clean

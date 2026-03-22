@@ -443,6 +443,51 @@ inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cva
 }
 
 //
+// Warp-Level Lane Gather Extension
+//
+
+// Each lane gathers a value from the source lane's register file.
+// S = source lane (compile-time constant, 0-3).
+// The source lane retains its own rd value; lane (S+1) gets v1[S], (S+2) gets v2[S], (S+3) gets v3[S].
+#define __VX_WGATHER(src_lane, self_val, v1, v2, v3) ({ \
+    size_t __ret = (self_val);                          \
+    __asm__ volatile (                                  \
+        ".insn r4 %1, 0, %2, %0, %3, %4, %5"            \
+        : "+r"(__ret)                                   \
+        : "i"(RISCV_CUSTOM1), "i"(src_lane),            \
+          "r"(v1), "r"(v2), "r"(v3)                     \
+    );                                                  \
+    __ret;                                              \
+})
+
+// Warp-level gather with source lane 0.
+inline __attribute__((const)) size_t
+vx_wgather(size_t self_val, size_t v1, size_t v2, size_t v3) {
+    return __VX_WGATHER(0, self_val, v1, v2, v3);
+}
+
+// Warp-level gather with an explicit (compile-time constant) source lane.
+#define vx_wgather_from(src_lane, self_val, v1, v2, v3) \
+    __VX_WGATHER(src_lane, self_val, v1, v2, v3)
+
+// Transpose a 4×4 matrix distributed one row per lane, using 4 wgather instructions.
+//
+// Each lane i must hold one complete row of the matrix in four registers:
+//   a0[i] = M[i][0],  a1[i] = M[i][1],  a2[i] = M[i][2],  a3[i] = M[i][3]
+//
+// After the macro, each lane i holds column i:
+//   out0[i] = M[0][i],  out1[i] = M[1][i],  out2[i] = M[2][i],  out3[i] = M[3][i]
+//
+// Operates within each independent group of 4 lanes (scalable to any NUM_LANES).
+// out0..out3 must be distinct lvalues from a0..a3 (not in-place safe).
+#define vx_transpose4(a0, a1, a2, a3, out0, out1, out2, out3) do { \
+    (out0) = vx_wgather_from(0, (a0), (a1), (a2), (a3));           \
+    (out1) = vx_wgather_from(1, (a1), (a2), (a3), (a0));           \
+    (out2) = vx_wgather_from(2, (a2), (a3), (a0), (a1));           \
+    (out3) = vx_wgather_from(3, (a3), (a0), (a1), (a2));           \
+} while (0)
+
+//
 // Asynchronous Barrier extensions
 //
 
@@ -480,11 +525,11 @@ inline void vx_barrier_wait(int barrier_id, int phase) {
 //                   | (MEM8[base + 3 * stride] << 24));
 __attribute__((always_inline))
 inline float vx_packlb_f(const void* base, uint32_t stride) {
-  float out;
-  __asm__ volatile (
-    ".insn r %1, 1, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
-  );
-  return out;
+    float out;
+    __asm__ volatile (
+        ".insn r %1, 1, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
+    );
+    return out;
 }
 
 // Packed-load 2 halfwords into one FP register bit-container.
@@ -494,11 +539,11 @@ inline float vx_packlb_f(const void* base, uint32_t stride) {
 //                   | (MEM16[base + 1 * stride] << 16));
 __attribute__((always_inline))
 inline float vx_packlh_f(const void* base, uint32_t stride) {
-  float out;
-  __asm__ volatile (
-    ".insn r %1, 2, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
-  );
-  return out;
+    float out;
+    __asm__ volatile (
+        ".insn r %1, 2, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
+    );
+    return out;
 }
 
 #ifdef __cplusplus
