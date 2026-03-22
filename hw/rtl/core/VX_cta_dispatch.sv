@@ -139,7 +139,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     );
 
     // Kernel initialization tracking
-    reg [PC_BITS-1:0]   cur_kernel_pc_r;
+    reg [7:0]           cur_ctx_id_r;
     reg [NUM_WARPS-1:0] warp_init_mask_r;
     reg                 warp_skip_init_r;
 
@@ -284,7 +284,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             warp_fire_r     <= 0;
             warp_id_r       <= '0;
             warp_tmask_r    <= '0;
-            cur_kernel_pc_r <= '0;
+            cur_ctx_id_r    <= '0;
             warp_init_mask_r<= '0;
             warp_skip_init_r<= 0;
             head_r          <= '0;
@@ -358,9 +358,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             case (state)
                 IDLE: begin
                     if (kmu_bus_if_fire) begin
-                        if (kmu_bus_if.data.PC != cur_kernel_pc_r) begin
-                            cur_kernel_pc_r <= kmu_bus_if.data.PC;
-                            warp_init_mask_r <= '0;
+                        if (kmu_bus_if.data.ctx_id != cur_ctx_id_r) begin
+                            cur_ctx_id_r <= kmu_bus_if.data.ctx_id;
+                            warp_init_mask_r  <= '0;
                         end
                         warp_PC      <= kmu_bus_if.data.PC;
                         block_idx_r  <= kmu_bus_if.data.block_idx;

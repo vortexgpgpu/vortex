@@ -47,6 +47,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     reg [31:0] cta_id;
     reg [2:0][31:0] block_idx;
     reg running;
+    reg [7:0] ctx_id_r;
 
     wire kmu_bus_if_fire = kmu_bus_if.valid && kmu_bus_if.ready;
 
@@ -93,10 +94,12 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     always_ff @(posedge clk) begin
         if (reset) begin
             running   <= 0;
+            ctx_id_r  <= '0;
         end else if (start) begin
             running   <= 1;
             cta_id    <= 0;
             block_idx <= '0;
+            ctx_id_r  <= ctx_id_r + 8'(1);
         end else if (kmu_bus_if_fire) begin
             cta_id <= cta_id + 1;
             if (block_x_n == dcr_grid_dim[0]) begin
@@ -119,6 +122,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     end
 
     assign kmu_bus_if.valid          = running;
+    assign kmu_bus_if.data.ctx_id    = ctx_id_r;
     assign kmu_bus_if.data.PC        = from_fullPC(dcr_PC);
     assign kmu_bus_if.data.cta_id    = cta_id;
     assign kmu_bus_if.data.block_idx = block_idx;
