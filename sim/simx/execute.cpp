@@ -27,6 +27,10 @@
 #include "instr.h"
 #include "core.h"
 #include "types.h"
+#ifdef EXT_DXA_ENABLE
+#include "socket.h"
+#include "cluster.h"
+#endif
 #ifdef EXT_V_ENABLE
 #include "processor_impl.h"
 #endif
@@ -1562,17 +1566,25 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       }
     }
 #ifdef EXT_DXA_ENABLE
-    ,[&](DxaType dxa_type) {
-      auto dxaArgs = std::get<IntrDxaArgs>(instrArgs);
-      uint32_t dxa_op = dxaArgs.op;
-      (void)dxa_type;
-      // DXA runtime packetization is asynchronous and side-effected in SFU.
-      // This stage forwards raw operands.
+    ,[&](DxaType /*dxa_type*/) {
+      // Wgather-based DXA: all args packed into 4 lanes of a single instruction.
+      // Lane 0: rs1=smem_addr, rs2=coord2
+      // Lane 1: rs1=meta,      rs2=coord3
+      // Lane 2: rs1=coord0,    rs2=coord4
+      // Lane 3: rs1=coord1,    rs2=0
       trace->fetch_stall = false;
-      trace->data = std::make_shared<DxaCore::TraceData>(
-          rs1_data.at(thread_last).u,
-          rs2_data.at(thread_last).u,
-          dxa_op);
+      uint64_t smem_addr  = static_cast<uint64_t>(rs1_data.at(0).u);
+      uint32_t meta       = rs1_data.at(1).u;
+      uint32_t coords[5]  = { rs1_data.at(2).u, rs1_data.at(3).u,
+                               rs2_data.at(0).u, rs2_data.at(1).u,
+                               rs2_data.at(2).u };
+      uint32_t desc_slot  = meta & 0x0fu;
+      uint32_t raw_bar    = (meta >> 4) & 0x07ffffffu;
+      uint32_t bar_id     = dxa_decode_barrier_id(raw_bar, core_->arch());
+      auto dxa_core = core_->socket()->cluster()->dxa_core();
+      auto td = dxa_core->execute_copy(core_, desc_slot, smem_addr, coords);
+      td->bar_id  = bar_id;
+      trace->data = td;
     }
 #endif
   #ifdef EXT_V_ENABLE

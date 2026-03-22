@@ -56,12 +56,8 @@ public:
 
   // ── Per-request context ──────────────────────────────────────────────
   struct Request {
-    Core*    core      = nullptr;
-    uint32_t desc_slot = 0;
-    uint64_t smem_addr = 0;
-    uint32_t bar_id    = 0;
-    std::array<uint32_t, 5> coords = {0, 0, 0, 0, 0};
-    DxaCore::ExeTraceData::Ptr exe_data; // precomputed in execute_copy()
+    Core*                   core = nullptr;
+    DxaCore::TraceData::Ptr td;
   };
 
   // ── Slice state machine ──────────────────────────────────────────────
@@ -148,36 +144,37 @@ public:
     return 0;
   }
 
-  bool submit(Core* core, uint32_t desc_slot, uint64_t smem_addr,
-              const uint32_t coords[5], uint32_t bar_id,
-              DxaCore::ExeTraceData::Ptr exe_data) {
+  bool submit(Core* core, DxaCore::TraceData::Ptr td) {
     if (queue_.size() >= kQueueDepth)
       return false;
-    Request req;
-    req.core      = core;
-    req.desc_slot = desc_slot;
-    req.smem_addr = smem_addr;
-    req.bar_id    = bar_id;
-    req.exe_data  = exe_data;
-    for (uint32_t i = 0; i < 5; ++i)
-      req.coords[i] = coords[i];
-    queue_.push_back(req);
+    queue_.push_back({core, td});
     DT(4, simobject_->name() << " submit: core=" << core->id()
-       << " slot=" << desc_slot << " bar=" << bar_id);
+       << " slot=" << td->desc_slot << " bar=" << td->bar_id);
     return true;
   }
 
   // Emulation only: build GMEM address list, read tile, write to SMEM.
-  // Returns ExeTraceData carrying precomputed geometry + gmem_lines for timing replay.
-  DxaCore::ExeTraceData::Ptr execute_copy_pub(Core* core, uint32_t desc_slot,
-                                              uint64_t smem_addr,
-                                              const uint32_t coords[5]) {
+  // Returns TraceData with routing fields pre-filled and emulation fields computed.
+  // Always returns non-null; invalid descriptor → tile0=tile1=0, no gmem/smem blocks
+  // (start_slice() releases the barrier via the zero-blocks path).
+  DxaCore::TraceData::Ptr execute_copy_pub(Core* core, uint32_t desc_slot,
+                                           uint64_t smem_addr,
+                                           const uint32_t coords[5]) {
+    auto exe_data       = std::make_shared<DxaCore::TraceData>();
+    exe_data->desc_slot = desc_slot;
+    exe_data->smem_addr = smem_addr;
+    std::copy(coords, coords + 5, exe_data->coords);
+
     if (desc_slot >= VX_DCR_DXA_DESC_COUNT)
-      return nullptr;
+      return exe_data; // invalid slot — zero tile/blocks, bar released in start_slice
     const auto& desc = descriptors_.at(desc_slot);
     CopyCfg cfg;
     if (!build_copy_cfg(desc, &cfg))
-      return nullptr;
+      return exe_data; // invalid config — same
+
+    exe_data->tile0      = cfg.tile0;
+    exe_data->tile1      = cfg.tile1;
+    exe_data->elem_bytes = cfg.elem_bytes;
 
     // Build GMEM cache-line address list matching RTL VX_dxa_addr_gen + VX_dxa_dedup behavior.
     // RTL addr_gen iterates at CL granularity within each row (one entry per CL span, not per element).
@@ -186,7 +183,6 @@ public:
     // (cross-row boundary sharing). Within-row element→CL consolidation is free in the addr_gen.
     uint32_t line_size = std::max<uint32_t>(1, L1_LINE_SIZE);
     uint64_t line_mask = ~uint64_t(line_size - 1);
-    auto exe_data = std::make_shared<DxaCore::ExeTraceData>(cfg.tile0, cfg.tile1, cfg.elem_bytes);
     uint64_t global_prev_cl = ~uint64_t(0); // last emitted CL (persists across rows for cross-row dedup)
     for (uint32_t y = 0; y < cfg.tile1; ++y) {
       uint32_t i1 = coords[1] + y;
@@ -226,13 +222,7 @@ public:
     exe_data->smem_blocks.assign(smem_seen.begin(), smem_seen.end());
     std::sort(exe_data->smem_blocks.begin(), exe_data->smem_blocks.end());
 
-    Request req;
-    req.core      = core;
-    req.desc_slot = desc_slot;
-    req.smem_addr = smem_addr;
-    for (uint32_t i = 0; i < 5; ++i)
-      req.coords[i] = coords[i];
-    execute_copy(req, desc, cfg);
+    execute_copy({core, exe_data}, desc, cfg);
     return exe_data;
   }
 
@@ -297,12 +287,12 @@ private:
   // Called once at GMEM→SMEM transition so data is in LocalMem RAM
   // before the first timing signal is sent on lmem_req_out.
   void execute_copy(const Request& req, const Descriptor& desc, const CopyCfg& cfg) {
+    auto& td = *req.td;
     for (uint32_t y = 0; y < cfg.tile1; ++y) {
       for (uint32_t x = 0; x < cfg.tile0; ++x) {
-        uint32_t i0 = req.coords[0] + x;
-        uint32_t i1 = req.coords[1] + y;
-        uint64_t saddr = uint64_t(req.smem_addr)
-                       + (uint64_t(y) * cfg.tile0 + x) * cfg.elem_bytes;
+        uint32_t i0 = td.coords[0] + x;
+        uint32_t i1 = td.coords[1] + y;
+        uint64_t saddr = td.smem_addr + (uint64_t(y) * cfg.tile0 + x) * cfg.elem_bytes;
         bool in_bounds = (i0 < desc.sizes[0])
                       && ((cfg.rank < 2) || (i1 < desc.sizes[1]));
         if (in_bounds) {
@@ -328,36 +318,29 @@ private:
     auto req = queue_.front();
     queue_.pop_front();
 
-    // exe_data is nullptr when the descriptor was invalid at emulation time.
-    if (!req.exe_data) {
-      DT(3, simobject_->name() << " invalid descriptor slot=" << req.desc_slot
-         << ", releasing bar=" << req.bar_id);
-      req.core->barrier_event_release(req.bar_id);
-      return false;
-    }
-
     // Replay precomputed geometry and addresses from emulation trace.
+    auto& td            = *req.td;
     auto& xfer          = slice.active_xfer;
     xfer.req            = req;
-    xfer.cfg.tile0      = req.exe_data->tile0;
-    xfer.cfg.tile1      = req.exe_data->tile1;
-    xfer.cfg.elem_bytes = req.exe_data->elem_bytes;
+    xfer.cfg.tile0      = td.tile0;
+    xfer.cfg.tile1      = td.tile1;
+    xfer.cfg.elem_bytes = td.elem_bytes;
     xfer.cfg.rank       = 0; // unused in timing path
-    xfer.gmem_lines     = req.exe_data->gmem_lines; // per-row consecutive dedup CL addrs
+    xfer.gmem_lines     = td.gmem_lines;
     xfer.gmem_send_idx  = 0;
     xfer.gmem_pending   = 0;
     xfer.smem_block_idx = 0;
     xfer.issue_cycle    = cycle_;
 
     perf_stats_.gmem_reads  += xfer.gmem_lines.size();
-    perf_stats_.gmem_dedup  += req.exe_data->gmem_dedup_hits;
+    perf_stats_.gmem_dedup  += td.gmem_dedup_hits;
     slice.state = xfer.gmem_lines.empty() ? SliceState::SMEM_WRITE
                                           : SliceState::GMEM_FETCH;
 
     DT(3, simobject_->name() << " start: core=" << req.core->id()
-       << " slot=" << req.desc_slot
+       << " slot=" << td.desc_slot
        << " gmem_lines=" << xfer.gmem_lines.size()
-       << " total_elems=" << req.exe_data->tile0 * req.exe_data->tile1);
+       << " total_elems=" << td.tile0 * td.tile1);
     return true;
   }
 
@@ -398,20 +381,20 @@ private:
     // Emits one DxaSmemReq per XLENB-aligned SMEM word block, matching
     // RTL VX_dxa_cl2smem.sv word-granular SMEM writes with byte enables.
     if (slice.state == SliceState::SMEM_WRITE) {
-      const auto& smem_blocks = xfer.req.exe_data->smem_blocks;
+      const auto& smem_blocks = xfer.req.td->smem_blocks;
       uint32_t total_blocks = smem_blocks.size();
 
       if (xfer.smem_block_idx >= total_blocks) {
         // All timing signals sent; barrier released by LocalMem on is_last.
         // Edge case: no SMEM blocks (empty tile) — release barrier directly.
         if (total_blocks == 0)
-          xfer.req.core->barrier_event_release(xfer.req.bar_id);
+          xfer.req.core->barrier_event_release(xfer.req.td->bar_id);
         uint64_t latency = cycle_ - xfer.issue_cycle;
         ++perf_stats_.transfers;
         perf_stats_.total_latency += latency;
         perf_stats_.smem_writes   += total_blocks;
         DT(3, simobject_->name() << "[" << sidx << "] complete: core="
-           << xfer.req.core->id() << " bar=" << xfer.req.bar_id
+           << xfer.req.core->id() << " bar=" << xfer.req.td->bar_id
            << " smem_blocks=" << total_blocks << " latency=" << latency);
         slice.state = SliceState::IDLE;
         xfer = ActiveTransfer();
@@ -424,9 +407,9 @@ private:
         return; // backpressure from LocalMem
 
       DxaCore::SmemReq sreq;
-      sreq.addr    = smem_blocks[xfer.smem_block_idx]; // XLENB-aligned SMEM word address
-      sreq.size    = XLENB;                             // one SMEM word per signal
-      sreq.bar_id  = xfer.req.bar_id;
+      sreq.addr    = smem_blocks[xfer.smem_block_idx];
+      sreq.size    = XLENB;
+      sreq.bar_id  = xfer.req.td->bar_id;
       sreq.core    = xfer.req.core;
       sreq.is_last = (xfer.smem_block_idx + 1 == total_blocks);
 
@@ -484,16 +467,14 @@ int DxaCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
 }
 
-DxaCore::ExeTraceData::Ptr DxaCore::execute_copy(Core* core, uint32_t desc_slot,
-                                                  uint64_t smem_addr,
-                                                  const uint32_t coords[5]) {
+DxaCore::TraceData::Ptr DxaCore::execute_copy(Core* core, uint32_t desc_slot,
+                                               uint64_t smem_addr,
+                                               const uint32_t coords[5]) {
   return impl_->execute_copy_pub(core, desc_slot, smem_addr, coords);
 }
 
-bool DxaCore::submit(Core* core, uint32_t desc_slot, uint64_t smem_addr,
-                     const uint32_t coords[5], uint32_t bar_id,
-                     ExeTraceData::Ptr exe_data) {
-  return impl_->submit(core, desc_slot, smem_addr, coords, bar_id, exe_data);
+bool DxaCore::submit(Core* core, TraceData::Ptr td) {
+  return impl_->submit(core, td);
 }
 
 void DxaCore::gmem_read(Core* core, uint64_t addr, void* data, uint32_t size) {

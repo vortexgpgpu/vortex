@@ -22,14 +22,7 @@ extern "C" {
 #endif
 
 #define VX_DXA_EXT_OPCODE RISCV_CUSTOM0
-#define VX_DXA_FUNCT7 0x3
-
-// Dimension-specific architected opcodes (funct3 field).
-#define VX_DXA_OP_ISSUE_1D 0
-#define VX_DXA_OP_ISSUE_2D 1
-#define VX_DXA_OP_ISSUE_3D 2
-#define VX_DXA_OP_ISSUE_4D 3
-#define VX_DXA_OP_ISSUE_5D 4
+#define VX_DXA_FUNCT7     0x3
 
 // Packed launch metadata:
 // meta[3:0]   = descriptor slot (up to 16 descriptors)
@@ -42,66 +35,78 @@ extern "C" {
 // +--------+-----+-----+--------+----+---------+
 // 31       25    20    15       12   7         0
 
+// Wgather-based DXA issue.  vx_wgather distributes args into per-lane register
+// slots before the DXA instruction reads them across all 4 lanes:
+//   Lane 0: rs1 = smem_addr,  rs2 = coord2
+//   Lane 1: rs1 = meta,       rs2 = coord3
+//   Lane 2: rs1 = coord0,     rs2 = coord4
+//   Lane 3: rs1 = coord1,     rs2 = 0
+//
+// 1D and 2D: all rs2 lanes are zero, so rs2 = x0 (no second vx_wgather).
+// 3D–5D: rs2 carries coord2..coord4, requiring a second vx_wgather.
 
 inline uint32_t vx_dxa_pack_meta(uint32_t desc_slot, uint32_t barrier_id) {
   return ((desc_slot & 0x0fu) | ((barrier_id & 0x07ffffffu) << 4) | (1u << 31));
 }
 
-// 1D issue: coord0 only, funct3=0.
+// 1D: rs1 = wgather(smem_addr, meta, coord0, 0), rs2 = x0
 inline void vx_dxa_issue_1d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
                                 const void* smem_addr,
                                 uint32_t coord0) {
-  register uint32_t c0 __asm__("t3") = coord0;
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)0u);
   __asm__ volatile (
-      ".insn r %0, %1, %2, x0, %3, %4\n\t"
+      ".insn r %0, 0, %1, x0, %2, x0\n\t"
       :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_OP_ISSUE_1D), "i"(VX_DXA_FUNCT7),
-        "r"(smem_addr), "r"(meta),
-        "r"(c0)
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0)
       : "memory");
 }
 
-// 2D issue: coord0, coord1, funct3=1.
+// 2D: rs1 = wgather(smem_addr, meta, coord0, coord1), rs2 = x0
 inline void vx_dxa_issue_2d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
                                 const void* smem_addr,
                                 uint32_t coord0,
                                 uint32_t coord1) {
-  register uint32_t c0 __asm__("t3") = coord0;
-  register uint32_t c1 __asm__("t4") = coord1;
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
   __asm__ volatile (
-      ".insn r %0, %1, %2, x0, %3, %4\n\t"
+      ".insn r %0, 0, %1, x0, %2, x0\n\t"
       :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_OP_ISSUE_2D), "i"(VX_DXA_FUNCT7),
-        "r"(smem_addr), "r"(meta),
-        "r"(c0), "r"(c1)
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0)
       : "memory");
 }
 
-// 3D issue: coord0..coord2, funct3=2.
+// 3D–5D: rs2 = wgather(coord2, coord3, coord4, 0)
 inline void vx_dxa_issue_3d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
                                 const void* smem_addr,
                                 uint32_t coord0,
                                 uint32_t coord1,
                                 uint32_t coord2) {
-  register uint32_t c0 __asm__("t3") = coord0;
-  register uint32_t c1 __asm__("t4") = coord1;
-  register uint32_t c2 __asm__("t5") = coord2;
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+                                            (size_t)0u,
+                                            (size_t)0u,
+                                            (size_t)0u);
   __asm__ volatile (
-      ".insn r %0, %1, %2, x0, %3, %4\n\t"
+      ".insn r %0, 0, %1, x0, %2, %3\n\t"
       :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_OP_ISSUE_3D), "i"(VX_DXA_FUNCT7),
-        "r"(smem_addr), "r"(meta),
-        "r"(c0), "r"(c1), "r"(c2)
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
       : "memory");
 }
 
-// 4D issue: coord0..coord3, funct3=3.
 inline void vx_dxa_issue_4d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
                                 const void* smem_addr,
@@ -109,21 +114,22 @@ inline void vx_dxa_issue_4d_wg(uint32_t desc_slot,
                                 uint32_t coord1,
                                 uint32_t coord2,
                                 uint32_t coord3) {
-  register uint32_t c0 __asm__("t3") = coord0;
-  register uint32_t c1 __asm__("t4") = coord1;
-  register uint32_t c2 __asm__("t5") = coord2;
-  register uint32_t c3 __asm__("t6") = coord3;
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+                                            (size_t)coord3,
+                                            (size_t)0u,
+                                            (size_t)0u);
   __asm__ volatile (
-      ".insn r %0, %1, %2, x0, %3, %4\n\t"
+      ".insn r %0, 0, %1, x0, %2, %3\n\t"
       :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_OP_ISSUE_4D), "i"(VX_DXA_FUNCT7),
-        "r"(smem_addr), "r"(meta),
-        "r"(c0), "r"(c1), "r"(c2), "r"(c3)
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
       : "memory");
 }
 
-// 5D issue: coord0..coord4, funct3=4.
 inline void vx_dxa_issue_5d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,
                                 const void* smem_addr,
@@ -132,18 +138,19 @@ inline void vx_dxa_issue_5d_wg(uint32_t desc_slot,
                                 uint32_t coord2,
                                 uint32_t coord3,
                                 uint32_t coord4) {
-  register uint32_t c0 __asm__("t3") = coord0;
-  register uint32_t c1 __asm__("t4") = coord1;
-  register uint32_t c2 __asm__("t5") = coord2;
-  register uint32_t c3 __asm__("t6") = coord3;
-  register uint32_t c4 __asm__("t0") = coord4;
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+                                            (size_t)coord3,
+                                            (size_t)coord4,
+                                            (size_t)0u);
   __asm__ volatile (
-      ".insn r %0, %1, %2, x0, %3, %4\n\t"
+      ".insn r %0, 0, %1, x0, %2, %3\n\t"
       :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_OP_ISSUE_5D), "i"(VX_DXA_FUNCT7),
-        "r"(smem_addr), "r"(meta),
-        "r"(c0), "r"(c1), "r"(c2), "r"(c3), "r"(c4)
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
       : "memory");
 }
 

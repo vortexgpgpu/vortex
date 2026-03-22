@@ -27,13 +27,6 @@
 
 using namespace vortex;
 
-#ifdef EXT_DXA_ENABLE
-static inline uint32_t decode_barrier_addr(uint32_t bar_addr_raw, const Arch& arch) {
-  uint32_t cta_no = bar_addr_raw & 0xffffu;
-  uint32_t bar_no = (bar_addr_raw >> 16) & 0x7fffu;
-  return (cta_no * arch.num_barriers() + bar_no) | (bar_addr_raw & 0x80000000u);
-}
-#endif
 
 AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit(ctx, name, core)
@@ -375,59 +368,8 @@ void LsuUnit::tick() {
 
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit(ctx, name, core)
-{
-#ifdef EXT_DXA_ENABLE
-	dxa_runtime_.resize(core->arch().num_warps());
-#endif
-}
+{}
 
-#ifdef EXT_DXA_ENABLE
-bool SfuUnit::execute_dxa_op(instr_trace_t* trace, DxaType dxa_type, const DxaCore::TraceData& dxa_data) {
-	auto& runtime = dxa_runtime_.at(trace->wid);
-	switch (dxa_type) {
-	case DxaType::SETUP:
-		// Clear all coords to prevent stale leakage from previous
-		// higher-dimension instructions on this warp.
-		runtime.coords = {0, 0, 0, 0, 0};
-		// rs1 = smem_addr, rs2 = packed meta
-		runtime.smem_addr = dxa_data.rs1;
-		if (dxa_data.rs2 & 0x80000000u) {
-			// Packed launch metadata:
-			//   rs2[3:0]   = desc_slot
-			//   rs2[30:4]  = raw barrier payload
-			//   rs2[31]    = packed marker
-			uint32_t raw_bar = (dxa_data.rs2 >> 4) & 0x07ffffffu;
-			runtime.desc_slot = dxa_data.rs2 & 0x0fu;
-			runtime.bar_id = decode_barrier_addr(raw_bar, core_->arch());
-		} else {
-			runtime.desc_slot = dxa_data.rs1;
-			runtime.bar_id = decode_barrier_addr(dxa_data.rs2, core_->arch());
-		}
-		core_->barrier_event_attach(runtime.bar_id);
-		return true;
-	case DxaType::COORD01:
-		runtime.coords[0] = dxa_data.rs1;
-		runtime.coords[1] = dxa_data.rs2;
-		return true;
-	case DxaType::COORD23:
-		runtime.coords[2] = dxa_data.rs1;
-		runtime.coords[3] = dxa_data.rs2;
-		return true;
-	case DxaType::ISSUE: {
-		runtime.coords[4] = dxa_data.rs1;
-		auto dxa_core = core_->socket()->cluster()->dxa_core();
-		auto exe_data = dxa_core->execute_copy(core_, runtime.desc_slot,
-		                                       runtime.smem_addr, runtime.coords.data());
-		bool accepted = dxa_core->submit(core_, runtime.desc_slot, runtime.smem_addr,
-		                                 runtime.coords.data(), runtime.bar_id, exe_data);
-		return accepted;
-	}
-	default:
-		std::abort();
-	}
-	return false;
-}
-#endif
 
 void SfuUnit::tick() {
 	// check input queue
@@ -489,12 +431,14 @@ void SfuUnit::tick() {
 			DT(3, this->name() << " execute: op=" << wctl_type << ", " << *trace);
 #ifdef EXT_DXA_ENABLE
 		} else if (std::get_if<DxaType>(&trace->op_type)) {
-			auto dxa_type = std::get<DxaType>(trace->op_type);
-			auto dxa_data = std::dynamic_pointer_cast<DxaCore::TraceData>(trace->data);
-			assert(dxa_data);
-			if (!this->execute_dxa_op(trace, dxa_type, *dxa_data)) {
-				continue; // DXA request queue backpressure
+			[[maybe_unused]] auto dxa_type = std::get<DxaType>(trace->op_type);
+			auto td = std::dynamic_pointer_cast<DxaCore::TraceData>(trace->data);
+			assert(td);
+			auto dxa_core = core_->socket()->cluster()->dxa_core();
+			if (!dxa_core->submit(core_, td)) {
+				continue; // DXA request queue backpressure — try again next cycle
 			}
+			core_->barrier_event_attach(td->bar_id);
 			output.send(trace, 2+delay);
 			DT(3, this->name() << " execute: op=" << dxa_type << ", " << *trace);
 #endif
