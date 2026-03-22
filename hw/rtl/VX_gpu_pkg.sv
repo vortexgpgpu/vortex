@@ -550,6 +550,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic [PC_BITS-1:0] PC;
+        logic [7:0]       ctx_id;
         logic [31:0]      cta_id;
         logic [2:0][31:0] block_idx;
         logic [2:0][CTA_TID_WIDTH:0] block_dim;
