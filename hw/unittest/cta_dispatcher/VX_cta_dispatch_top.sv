@@ -53,6 +53,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     assign kmu_bus.valid             = task_in_valid;
     assign task_in_ready             = kmu_bus.ready;
     assign kmu_bus.data.PC           = in_PC;
+    assign kmu_bus.data.ctx_id       = '0;
     assign kmu_bus.data.cta_id       = in_cta_id;
     assign kmu_bus.data.block_idx[0] = in_block_idx_x;
     assign kmu_bus.data.block_idx[1] = in_block_idx_y;

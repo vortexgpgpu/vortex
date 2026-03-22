@@ -15,14 +15,17 @@
 
 interface VX_issue_sched_if import VX_gpu_pkg::*; ();
 
-    wire [ISSUE_ISW_SIZEW-1:0] issued_warps_cnt;
+    wire                    valid;
+    wire [ISSUE_WIS_W-1:0]  wis;
 
     modport master (
-        output issued_warps_cnt
+        output valid,
+        output wis
     );
 
     modport slave (
-        input issued_warps_cnt
+        input valid,
+        input wis
     );
 
 endinterface

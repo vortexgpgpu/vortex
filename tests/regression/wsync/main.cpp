@@ -19,6 +19,7 @@ const char* kernel_file = "kernel.vxbin";
 uint32_t iterations = 1024;
 
 vx_device_h device = nullptr;
+vx_buffer_h src_buffer = nullptr;
 vx_buffer_h results_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
@@ -52,6 +53,7 @@ static void parse_args(int argc, char** argv) {
 
 void cleanup() {
   if (device) {
+    vx_mem_free(src_buffer);
     vx_mem_free(results_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
@@ -80,6 +82,16 @@ int main(int argc, char* argv[]) {
   std::cout << "iterations: " << kernel_arg.iterations << std::endl;
 
   std::cout << "allocate device memory" << std::endl;
+
+  uint32_t src_size = WSYNC_BUF_LINES * WSYNC_LINE_WORDS * sizeof(uint32_t);
+  RT_CHECK(vx_mem_alloc(device, src_size, VX_MEM_READ_WRITE, &src_buffer));
+  RT_CHECK(vx_mem_address(src_buffer, &kernel_arg.src_addr));
+
+  std::vector<uint32_t> src_data(WSYNC_BUF_LINES * WSYNC_LINE_WORDS);
+  for (uint32_t i = 0; i < src_data.size(); ++i)
+    src_data[i] = i + 1;
+  RT_CHECK(vx_copy_to_dev(src_buffer, src_data.data(), 0, src_size));
+
   uint32_t results_size = kernel_arg.num_threads * sizeof(lane_result_t);
   RT_CHECK(vx_mem_alloc(device, results_size, VX_MEM_READ_WRITE, &results_buffer));
   RT_CHECK(vx_mem_address(results_buffer, &kernel_arg.results_addr));

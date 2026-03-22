@@ -40,6 +40,7 @@ all:
 	$(MAKE) -C async_gbarrier
 	$(MAKE) -C packld
 	$(MAKE) -C wgather
+	$(MAKE) -C wsync
 
 all-mpi:
 	$(MAKE) -C mpi_dotproduct MPI=1 NP=$(NP)
@@ -83,6 +84,7 @@ run-simx:
 	$(MAKE) -C async_barrier run-simx
 	$(MAKE) -C packld run-simx
 	$(MAKE) -C wgather run-simx
+	$(MAKE) -C wsync run-simx
 
 run-simx-mpi:
 	$(MAKE) -C mpi_dotproduct run-simx MPI=1 NP=$(NP)
@@ -126,6 +128,7 @@ run-rtlsim:
 	$(MAKE) -C async_barrier run-rtlsim
 	$(MAKE) -C packld run-rtlsim
 	$(MAKE) -C wgather run-rtlsim
+	$(MAKE) -C wsync run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -167,4 +170,4 @@ clean:
 	$(MAKE) -C async_barrier clean
 	$(MAKE) -C async_gbarrier clean
 	$(MAKE) -C packld clean
-	$(MAKE) -C wgather clean
+	$(MAKE) -C wgather clean	$(MAKE) -C wsync clean

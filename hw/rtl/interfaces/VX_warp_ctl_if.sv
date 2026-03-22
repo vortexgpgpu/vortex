@@ -20,6 +20,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     wire split_valid;
     wire sjoin_valid;
     wire bar_valid;
+    wire wsync_valid;
 
     wire [NW_WIDTH-1:0] wid;
 
@@ -28,6 +29,9 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     split_t   split;
     join_t    sjoin;
     barrier_t bar;
+
+    // Per-warp pipeline drain status (from scheduler)
+    wire [`NUM_WARPS-1:0] warp_pending_alm_empty;
 
     // Return IPDOM stack address
     wire [NW_WIDTH-1:0] dvstack_wid;
@@ -43,6 +47,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output split_valid,
         output sjoin_valid,
         output bar_valid,
+        output wsync_valid,
 
         output wid,
 
@@ -55,6 +60,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output bar_addr,
         input  bar_phase,
 
+        input  warp_pending_alm_empty,
+
         output dvstack_wid,
         input  dvstack_ptr
     );
@@ -65,6 +72,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input split_valid,
         input sjoin_valid,
         input bar_valid,
+        input wsync_valid,
 
         input wid,
 
@@ -76,6 +84,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
         input  bar_addr,
         output bar_phase,
+
+        output warp_pending_alm_empty,
 
         input dvstack_wid,
         output dvstack_ptr

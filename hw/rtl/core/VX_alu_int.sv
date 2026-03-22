@@ -66,7 +66,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
 
     wire [1:0] wg_src_offset = execute_if.data.op_args.alu.imm20[1:0]; // group-relative source index
 
@@ -157,6 +156,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     // src_lane for lane i = (i rounded down to multiple of 4) | wg_src_offset
     wire [NUM_LANES-1:0][`XLEN-1:0] wgather_result;
     if (NUM_LANES > 1) begin : g_wgather
+        wire [NUM_LANES-1:0][`XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
             wire [LANE_BITS-1:0] group_base = LANE_BITS'(i) & ~LANE_BITS'(3); // clear lower 2 bits
             wire [LANE_BITS-1:0] src_lane   = group_base | LANE_BITS'(wg_src_offset);

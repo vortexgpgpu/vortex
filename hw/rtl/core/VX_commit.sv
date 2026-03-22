@@ -67,11 +67,24 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign committed_warps[i] = commit_arb_fire && commit_arb_if[i].data.eop;
     end
 
-    // notify scheduler
-    wire [ISSUE_ISW_SIZEW-1:0] committed_warps_cnt, committed_warps_cnt_r;
-    `POP_COUNT(committed_warps_cnt, committed_warps);
-    `BUFFER(committed_warps_cnt_r, committed_warps_cnt);
-    assign commit_sched_if.committed_warps_cnt = committed_warps_cnt_r;
+    // notify scheduler: build per-warp committed mask from per-slot signals
+    wire [`ISSUE_WIDTH-1:0][NW_WIDTH-1:0] committed_slot_wid;
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_committed_wid
+        assign committed_slot_wid[i] = commit_arb_if[i].data.wid;
+    end
+
+    logic [`NUM_WARPS-1:0] committed_warp_mask;
+    wire  [`NUM_WARPS-1:0] committed_warp_mask_r;
+    always_comb begin
+        committed_warp_mask = '0;
+        for (integer i = 0; i < `ISSUE_WIDTH; ++i) begin
+            if (committed_warps[i]) begin
+                committed_warp_mask[committed_slot_wid[i]] = 1'b1;
+            end
+        end
+    end
+    `BUFFER(committed_warp_mask_r, committed_warp_mask);
+    assign commit_sched_if.committed_warps = committed_warp_mask_r;
 
     // Writeback
 
