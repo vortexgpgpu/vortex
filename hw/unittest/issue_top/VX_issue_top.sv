@@ -73,7 +73,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     VX_decode_if    decode_if();
     VX_dispatch_if  dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_writeback_if writeback_if[`ISSUE_WIDTH]();
-    VX_issue_sched_if issue_sched_if();
+    VX_issue_sched_if issue_sched_if[`ISSUE_WIDTH]();
 
     assign decode_if.valid = decode_valid;
     assign decode_if.data.uuid = decode_uuid;
@@ -127,7 +127,11 @@ module VX_issue_top import VX_gpu_pkg::*; #(
         assign dispatch_if[i].ready = dispatch_ready[i];
     end
 
-    assign issued_warps_cnt = ISSUE_ISW_SIZEW'(issue_sched_if.valid);
+    logic [`ISSUE_WIDTH-1:0] issued_valids;
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_issued_valids
+        assign issued_valids[i] = issue_sched_if[i].valid;
+    end
+    assign issued_warps_cnt = ISSUE_ISW_SIZEW'($countones(issued_valids));
 
 `ifdef PERF_ENABLE
     issue_perf_t issue_perf = '0;
