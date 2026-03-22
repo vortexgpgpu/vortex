@@ -15,14 +15,14 @@
 
 interface VX_commit_sched_if import VX_gpu_pkg::*; ();
 
-    wire [ISSUE_ISW_SIZEW-1:0] committed_warps_cnt;
+    wire [`NUM_WARPS-1:0] committed_warps;
 
     modport master (
-        output committed_warps_cnt
+        output committed_warps
     );
 
     modport slave (
-        input committed_warps_cnt
+        input committed_warps
     );
 
 endinterface

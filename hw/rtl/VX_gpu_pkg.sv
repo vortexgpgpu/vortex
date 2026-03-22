@@ -412,6 +412,7 @@ package VX_gpu_pkg;
 `ifdef EXT_DXA_ENABLE
     localparam INST_SFU_DXA =    4'h9;
 `endif
+    localparam INST_SFU_WSYNC =  4'hA;
     localparam INST_SFU_BITS =   4;
 
     function automatic logic [3:0] inst_sfu_csr(input logic [2:0] funct3);
@@ -424,7 +425,8 @@ package VX_gpu_pkg;
             || (op == INST_SFU_SPLIT)
             || (op == INST_SFU_JOIN)
             || (op == INST_SFU_BAR)
-            || (op == INST_SFU_PRED);
+            || (op == INST_SFU_PRED)
+            || (op == INST_SFU_WSYNC);
     endfunction
 
     function automatic logic inst_sfu_is_csr(input logic [INST_SFU_BITS-1:0] op);

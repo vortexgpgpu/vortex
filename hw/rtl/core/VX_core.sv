@@ -56,7 +56,7 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_decode_if        decode_if();
     VX_sched_csr_if     sched_csr_if();
     VX_decode_sched_if  decode_sched_if();
-    VX_issue_sched_if   issue_sched_if();
+    VX_issue_sched_if   issue_sched_if[`ISSUE_WIDTH]();
     VX_commit_sched_if  commit_sched_if();
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();

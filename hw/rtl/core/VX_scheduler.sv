@@ -28,7 +28,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     VX_warp_ctl_if.slave    warp_ctl_if,
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_decode_sched_if.slave decode_sched_if,
-    VX_issue_sched_if.slave issue_sched_if,
+    VX_issue_sched_if.slave issue_sched_if [`ISSUE_WIDTH],
     VX_commit_sched_if.slave commit_sched_if,
 
     // KMU bus
@@ -192,6 +192,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // barrier unlock handling
         if (bar_unlock_valid) begin
             stalled_warps_n &= ~bar_unlock_mask;
+        end
+
+        // wsync unlock: warp pipeline drained
+        if (warp_ctl_if.wsync_valid) begin
+            stalled_warps_n[warp_ctl_if.wid] = 0;
         end
 
         // Branch handling
@@ -369,37 +374,48 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     reg [PERF_CTR_BITS-1:0] instret;
 
+    wire [`NUM_WARPS-1:0] committed_warps_v = commit_sched_if.committed_warps;
+    wire [`CLOG2(`NUM_WARPS+1)-1:0] committed_warps_cnt_v;
+    `POP_COUNT(committed_warps_cnt_v, committed_warps_v);
+
     always @(posedge clk) begin
         if (reset) begin
             instret <= '0;
         end else begin
-            instret <= instret + PERF_CTR_BITS'(commit_sched_if.committed_warps_cnt);
+            instret <= instret + PERF_CTR_BITS'(committed_warps_cnt_v);
         end
     end
 
-    // Track pending instructions
+    // Track pending instructions per warp
 
-    wire pending_warp_empty;
+    wire [`NUM_WARPS-1:0] pending_warp_empty;
+    wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
 
-    VX_pending_size #(
-        .SIZE      (2048),
-        .INCRW     (ISSUE_ISW_SIZEW),
-        .DECRW     (ISSUE_ISW_SIZEW)
-    ) counter (
-        .clk       (clk),
-        .reset     (reset),
-        .incr      (issue_sched_if.issued_warps_cnt),
-        .decr      (commit_sched_if.committed_warps_cnt),
-        .empty     (pending_warp_empty),
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (full),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
-    );
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_warps
+        localparam logic [ISSUE_ISW_W-1:0] isw = wid_to_isw(i);
+        localparam logic [ISSUE_WIS_W-1:0] wis = wid_to_wis(i);
+
+        VX_pending_size #(
+            .SIZE      (256),
+            .ALM_EMPTY (1)
+        ) per_warp_ctr (
+            .clk       (clk),
+            .reset     (reset),
+            .incr      (issue_sched_if[isw].valid && (issue_sched_if[isw].wis == ISSUE_WIS_W'(wis))),
+            .decr      (commit_sched_if.committed_warps[i]),
+            .empty     (pending_warp_empty[i]),
+            .alm_empty (pending_warp_alm_empty[i]),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
+    end
 
     wire busy_buf;
-    `BUFFER_EX(busy_buf, (active_warps_n != 0 || ~pending_warp_empty), 1'b1, 1, 1);
+    `BUFFER_EX(busy_buf, (active_warps_n != 0 || ~(&pending_warp_empty)), 1'b1, 1, 1);
     assign busy = busy_buf || cta_dispatcher_busy;
+
+    assign warp_ctl_if.warp_pending_alm_empty = pending_warp_alm_empty;
 
     // export CSRs
     assign sched_csr_if.cycles = cycles;

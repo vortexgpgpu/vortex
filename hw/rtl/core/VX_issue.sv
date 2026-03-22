@@ -28,7 +28,7 @@ module VX_issue import VX_gpu_pkg::*; #(
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `ISSUE_WIDTH],
-    VX_issue_sched_if.master issue_sched_if
+    VX_issue_sched_if.master issue_sched_if [`ISSUE_WIDTH]
 );
     `STATIC_ASSERT ((`ISSUE_WIDTH <= `NUM_WARPS), ("invalid parameter"))
 
@@ -51,6 +51,7 @@ module VX_issue import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (`ISSUE_WIDTH);
 
     wire [`ISSUE_WIDTH-1:0] issued_warps;
+    wire [`ISSUE_WIDTH-1:0][ISSUE_WIS_W-1:0] issued_warp_wis;
 
     for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin : g_slices
 
@@ -77,8 +78,9 @@ module VX_issue import VX_gpu_pkg::*; #(
         `endif
             .decode_if    (slice_decode_if),
             .writeback_if (writeback_if[issue_id]),
-            .dispatch_if  (per_issue_dispatch_if),
-            .warp_issued  (issued_warps[issue_id])
+            .dispatch_if      (per_issue_dispatch_if),
+            .warp_issued      (issued_warps[issue_id]),
+            .warp_issued_wis  (issued_warp_wis[issue_id])
         );
 
         // Assign transposed dispatch_if
@@ -87,9 +89,13 @@ module VX_issue import VX_gpu_pkg::*; #(
         end
      end
 
-    wire [ISSUE_ISW_SIZEW-1:0] issued_warps_cnt, issued_warps_cnt_r;
-    `POP_COUNT(issued_warps_cnt, issued_warps);
-    `BUFFER(issued_warps_cnt_r, issued_warps_cnt);
-    assign issue_sched_if.issued_warps_cnt = issued_warps_cnt_r;
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_issue_sched
+        logic issued_r;
+        logic [ISSUE_WIS_W-1:0] issued_wis_r;
+        `BUFFER(issued_r,   issued_warps[i]);
+        `BUFFER(issued_wis_r, issued_warp_wis[i]);
+        assign issue_sched_if[i].valid = issued_r;
+        assign issue_sched_if[i].wis   = issued_wis_r;
+    end
 
 endmodule
