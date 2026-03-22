@@ -143,7 +143,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire                            vx_mem_req_ready [VX_MEM_PORTS];
 
     wire                            vx_mem_rsp_valid [VX_MEM_PORTS];
-    wire [VX_MEM_DATA_WIDTH-1:0]    x_mem_rsp_data [VX_MEM_PORTS];
+    wire [VX_MEM_DATA_WIDTH-1:0]    vx_mem_rsp_data [VX_MEM_PORTS];
     wire [VX_MEM_TAG_WIDTH-1:0]     vx_mem_rsp_tag [VX_MEM_PORTS];
     wire                            vx_mem_rsp_ready [VX_MEM_PORTS];
 
