@@ -390,6 +390,36 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       }
       rd_write = true;
     },
+    [&](WgatherType /*wg_type*/) {
+      auto wgArgs = std::get<IntrWgatherArgs>(instrArgs);
+      uint32_t src_offset = wgArgs.src_lane; // group-relative source index (0-3)
+      // Pre-seed every source lane (one per group of 4) with its current rd value
+      // so the write-back path is a no-op for those lanes (rd_data is zero-initialized).
+      if (rdest.idx != 0) {
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
+          if (!warp.tmask.test(t)) continue;
+          if ((t & 0x3u) == src_offset) {
+            rd_data[t].i = warp.ireg_file.at(rdest.idx).at(t);
+          }
+        }
+      }
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        uint32_t group_base = t & ~0x3u;          // round down to nearest multiple of 4
+        uint32_t sl         = group_base + src_offset; // absolute source lane for this group
+        uint32_t offset     = (t - sl) & 0x3u;    // offset within group, mod 4
+        if (offset == 1) {
+          rd_data[t].i = rs1_data[sl].i;
+        } else if (offset == 2) {
+          rd_data[t].i = rs2_data[sl].i;
+        } else if (offset == 3) {
+          rd_data[t].i = rs3_data[sl].i;
+        }
+        // offset == 0: source lane, already pre-seeded above
+      }
+      rd_write = true;
+    },
     [&](BrType br_type) {
       auto brArgs = std::get<IntrBrArgs>(instrArgs);
       Word offset = sext<Word>(brArgs.offset, 32);

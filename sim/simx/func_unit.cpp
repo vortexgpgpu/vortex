@@ -75,6 +75,8 @@ void AluUnit::tick() {
 				delay = 2;
 		} else if (std::get_if<ShflType>(&trace->op_type)) {
 				delay = 2;
+		} else if (std::get_if<WgatherType>(&trace->op_type)) {
+				delay = 2;
 		} else if (std::	get_if<BrType>(&trace->op_type)) {
 			auto br_type = std::get<BrType>(trace->op_type);
 			switch (br_type) {

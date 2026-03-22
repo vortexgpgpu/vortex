@@ -37,6 +37,7 @@ all:
 	$(MAKE) -C async_barrier
 	$(MAKE) -C async_gbarrier
 	$(MAKE) -C packld
+	$(MAKE) -C wgather
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -65,10 +66,11 @@ run-simx:
 	$(MAKE) -C raycast run-simx
 	$(MAKE) -C bfs run-simx
 	$(MAKE) -C jacobi run-simx
-# $(MAKE) -C pathfinder run-simx
+	$(MAKE) -C pathfinder run-simx
 	$(MAKE) -C softmax run-simx
 	$(MAKE) -C async_barrier run-simx
 	$(MAKE) -C packld run-simx
+	$(MAKE) -C wgather run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -97,10 +99,11 @@ run-rtlsim:
 	$(MAKE) -C raycast run-rtlsim
 	$(MAKE) -C bfs run-rtlsim
 	$(MAKE) -C jacobi run-rtlsim
-#   $(MAKE) -C pathfinder run-rtlsim
+	$(MAKE) -C pathfinder run-rtlsim
 	$(MAKE) -C softmax run-rtlsim
 	$(MAKE) -C async_barrier run-rtlsim
 	$(MAKE) -C packld run-rtlsim
+	$(MAKE) -C wgather run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -138,3 +141,4 @@ clean:
 	$(MAKE) -C async_barrier clean
 	$(MAKE) -C async_gbarrier clean
 	$(MAKE) -C packld clean
+	$(MAKE) -C wgather clean

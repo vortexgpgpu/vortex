@@ -294,6 +294,21 @@ inline std::ostream &operator<<(std::ostream &os, const ShflType& shfl) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+enum class WgatherType {
+  WGATHER
+};
+
+struct IntrWgatherArgs {
+  uint32_t src_lane : 2;
+};
+
+inline std::ostream &operator<<(std::ostream &os, const WgatherType& /*type*/) {
+  os << "WGATHER";
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class MdvType {
   MUL,
   MULHU,
@@ -741,6 +756,7 @@ using OpType = std::variant<
 , CsrType
 , VoteType
 , ShflType
+, WgatherType
 , WctlType
 #ifdef EXT_DXA_ENABLE
 , DxaType
@@ -763,6 +779,7 @@ using IntrArgs = std::variant<
 , IntrAmoArgs
 , IntrFpuArgs
 , IntrCsrArgs
+, IntrWgatherArgs
 , IntrWctlArgs
 #ifdef EXT_DXA_ENABLE
 , IntrDxaArgs

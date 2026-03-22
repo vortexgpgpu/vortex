@@ -35,8 +35,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     localparam LANE_WIDTH     = `UP(LANE_BITS);
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN);
 
-    `UNUSED_VAR (execute_if.data.rs3_data)
-
     wire [NUM_LANES-1:0][`XLEN-1:0] add_result;
     wire [NUM_LANES-1:0][`XLEN:0]   sub_result; // +1 bit for branch compare
     reg  [NUM_LANES-1:0][`XLEN-1:0] shr_zic_result;
@@ -68,6 +66,9 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
+
+    wire [1:0] wg_src_offset = execute_if.data.op_args.alu.imm20[1:0]; // group-relative source index
 
     wire is_br_jal_op = is_br_op && (br_op <= INST_BR_JAL);
     wire is_lui_op = is_alu_op && (alu_op == INST_ALU_LUI || alu_op == INST_ALU_AUIPC);
@@ -152,6 +153,24 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         end
     end
 
+    // WGATHER — grouped: each group of 4 lanes operates independently.
+    // src_lane for lane i = (i rounded down to multiple of 4) | wg_src_offset
+    wire [NUM_LANES-1:0][`XLEN-1:0] wgather_result;
+    if (NUM_LANES > 1) begin : g_wgather
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
+            wire [LANE_BITS-1:0] group_base = LANE_BITS'(i) & ~LANE_BITS'(3); // clear lower 2 bits
+            wire [LANE_BITS-1:0] src_lane   = group_base | LANE_BITS'(wg_src_offset);
+            wire [1:0]           offset     = 2'(i) - wg_src_offset; // (i - src) mod 4
+            assign wgather_result[i] =
+                (offset == 2'd1) ? alu_in1[src_lane] :
+                (offset == 2'd2) ? alu_in2[src_lane] :
+                (offset == 2'd3) ? alu_in3[src_lane] :
+                                   `XLEN'(0); // offset==0: source lane, write suppressed via tmask
+        end
+    end else begin : g_wgather_0
+        assign wgather_result[0] = alu_in1[0];
+    end
+
     // SHFL
     if (NUM_LANES > 1) begin : g_shfl
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
@@ -203,10 +222,11 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         wire [`XLEN-1:0] sub_slt_br_result = (is_sub_op && ~is_br_op) ? sub_result[i][`XLEN-1:0] : slt_br_result;
         always @(*) begin
             if (execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) begin
-                case (alu_op[2])
-                    1'b0: alu_result[i] = vote_result[i];
-                    1'b1: alu_result[i] = shfl_result[i];
-                    default:;
+                case (alu_op[3:2])
+                    2'b00: alu_result[i] = vote_result[i];
+                    2'b01: alu_result[i] = shfl_result[i];
+                    2'b10: alu_result[i] = wgather_result[i];
+                    default: alu_result[i] = vote_result[i];
                 endcase
             end else begin
                 case ({is_alu_w, op_class})
@@ -246,6 +266,21 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         assign last_tid = 0;
     end
 
+    // For WGATHER, suppress write-back for every source lane (one per group of 4).
+    // Lane k is a source if its lower 2 bits equal wg_src_offset.
+    wire [NUM_LANES-1:0] wg_src_mask;
+    for (genvar k = 0; k < NUM_LANES; ++k) begin : g_wg_src_mask
+        assign wg_src_mask[k] = (2'(k) == wg_src_offset);
+    end
+
+    alu_header_t alu_hdr_in;
+    always @(*) begin
+        alu_hdr_in = execute_if.data.header;
+        if ((execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) && alu_op[3]) begin
+            alu_hdr_in.tmask = execute_if.data.header.tmask & ~wg_src_mask;
+        end
+    end
+
     VX_elastic_buffer #(
         .DATAW ($bits(alu_header_t) + (NUM_LANES * `XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH)
     ) rsp_buf (
@@ -253,8 +288,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         .reset    (reset),
         .valid_in (execute_if.valid),
         .ready_in (execute_if.ready),
-        .data_in  ({execute_if.data.header, alu_result,   cbr_dest,   is_br_op,   br_op,   last_tid}),
-        .data_out ({result_if.data.header,  alu_result_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
+        .data_in  ({alu_hdr_in,           alu_result,   cbr_dest,   is_br_op,   br_op,   last_tid}),
+        .data_out ({result_if.data.header, alu_result_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
