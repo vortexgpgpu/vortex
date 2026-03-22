@@ -127,7 +127,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
         assign dispatch_if[i].ready = dispatch_ready[i];
     end
 
-    assign issued_warps_cnt = issue_sched_if.issued_warps_cnt;
+    assign issued_warps_cnt = ISSUE_ISW_SIZEW'(issue_sched_if.valid);
 
 `ifdef PERF_ENABLE
     issue_perf_t issue_perf = '0;

@@ -136,15 +136,15 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     wire                            vx_mem_req_valid [VX_MEM_PORTS];
     wire                            vx_mem_req_rw [VX_MEM_PORTS];
-    wire [VX_MEM_BYTEEN_WIDTH-1:0] vx_mem_req_byteen [VX_MEM_PORTS];
-    wire [VX_MEM_ADDR_WIDTH-1:0]   vx_mem_req_addr [VX_MEM_PORTS];
-    wire [VX_MEM_DATA_WIDTH-1:0]   vx_mem_req_data [VX_MEM_PORTS];
-    wire [VX_MEM_TAG_WIDTH-1:0]    vx_mem_req_tag [VX_MEM_PORTS];
+    wire [VX_MEM_BYTEEN_WIDTH-1:0]  vx_mem_req_byteen [VX_MEM_PORTS];
+    wire [VX_MEM_ADDR_WIDTH-1:0]    vx_mem_req_addr [VX_MEM_PORTS];
+    wire [VX_MEM_DATA_WIDTH-1:0]    vx_mem_req_data [VX_MEM_PORTS];
+    wire [VX_MEM_TAG_WIDTH-1:0]     vx_mem_req_tag [VX_MEM_PORTS];
     wire                            vx_mem_req_ready [VX_MEM_PORTS];
 
     wire                            vx_mem_rsp_valid [VX_MEM_PORTS];
-    wire [VX_MEM_DATA_WIDTH-1:0]   vx_mem_rsp_data [VX_MEM_PORTS];
-    wire [VX_MEM_TAG_WIDTH-1:0]    vx_mem_rsp_tag [VX_MEM_PORTS];
+    wire [VX_MEM_DATA_WIDTH-1:0]    x_mem_rsp_data [VX_MEM_PORTS];
+    wire [VX_MEM_TAG_WIDTH-1:0]     vx_mem_rsp_tag [VX_MEM_PORTS];
     wire                            vx_mem_rsp_ready [VX_MEM_PORTS];
 
     // CMD variables //////////////////////////////////////////////////////////
@@ -1038,7 +1038,16 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     // Vortex /////////////////////////////////////////////////////////////////
 
-    wire vx_dcr_req_valid = (STATE_DCR_WRITE == state || STATE_DCR_READ == state);
+    // Pulse vx_dcr_req_valid for exactly one cycle when entering a DCR state.
+    reg vx_dcr_req_sent_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            vx_dcr_req_sent_r <= 1'b0;
+        end else begin
+            vx_dcr_req_sent_r <= (STATE_DCR_WRITE == state || STATE_DCR_READ == state);
+        end
+    end
+    wire vx_dcr_req_valid = (STATE_DCR_WRITE == state || STATE_DCR_READ == state) && ~vx_dcr_req_sent_r;
     wire vx_dcr_req_rw = (STATE_DCR_WRITE == state);
     wire [VX_DCR_ADDR_WIDTH-1:0] vx_dcr_req_addr = cmd_dcr_addr;
     wire [VX_DCR_DATA_WIDTH-1:0] vx_dcr_req_data = cmd_dcr_data;
