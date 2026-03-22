@@ -76,6 +76,7 @@ package VX_gpu_pkg;
 
     localparam BAR_ADDR_BITS = NW_BITS + NB_BITS;
     localparam BAR_ADDR_W = `UP(BAR_ADDR_BITS);
+    localparam BAR_ID_SHIFT = 8;
 
     localparam BAR_SIZE_W = `MAX(NW_WIDTH, NC_WIDTH);
 

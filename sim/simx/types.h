@@ -55,6 +55,16 @@ typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Decode a packed kernel bar_id (local_group_id | (bar_no << 8)) to a flat barrier index.
+// Preserves the global barrier flag (bit 31).
+inline uint32_t bar_decode_id(uint32_t bar_id_raw, uint32_t num_barriers) {
+  uint32_t cta_no = bar_id_raw & 0xffu;
+  uint32_t bar_no = (bar_id_raw >> 8) & 0x7fffffu;
+  return (cta_no * num_barriers + bar_no) | (bar_id_raw & 0x80000000u);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 union reg_data_t {
   uint8_t  u8;
   uint16_t u16;

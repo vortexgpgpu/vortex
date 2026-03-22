@@ -134,12 +134,12 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // barrier
 
     wire [BAR_ADDR_W-1:0] wctl_bar_addr;
-    `CONCAT(wctl_bar_addr, rs1_data[NW_BITS-1:0], rs1_data[16 +: NB_BITS], NW_BITS, NB_BITS)
+    `CONCAT(wctl_bar_addr, rs1_data[NW_BITS-1:0], rs1_data[BAR_ID_SHIFT +: NB_BITS], NW_BITS, NB_BITS)
 
     wire wctl_bar_enable = wctl_valid && is_bar;
 
     assign bar_valid    = wctl_bar_enable || txbar_bus_if.valid;
-    assign bar.id       = rs1_data[16 +: NB_BITS];
+    assign bar.id       = rs1_data[BAR_ID_SHIFT +: NB_BITS];
     assign bar.is_event = txbar_bus_if.valid && ~wctl_bar_enable;
     assign bar.is_sync  = wctl_bar_enable ? execute_if.data.op_args.wctl.is_sync_bar : 1'b0;
     assign bar.is_global= wctl_bar_enable ? rs1_data[31] : 1'b0;

@@ -1527,9 +1527,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       case WctlType::BAR: {
         uint32_t arg1 = rs1_data[thread_last].u;
         uint32_t arg2 = rs2_data[thread_last].u;
-        uint32_t cta_no = arg1 & 0xffff;
-        uint32_t bar_no = (arg1 >> 16) & 0x7fff;
-        uint32_t bar_id = (cta_no * arch_.num_barriers() + bar_no) | (arg1 & 0x80000000);
+        uint32_t bar_id = bar_decode_id(arg1, arch_.num_barriers());
         trace->data = std::make_shared<BarTraceData>(bar_id, arg2, (bool)wctlArgs.is_sync_bar);
         if (wctlArgs.is_bar_arrive) {
           uint32_t phase = this->get_barrier_phase(bar_id);
@@ -1580,7 +1578,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
                                rs2_data.at(2).u };
       uint32_t desc_slot  = meta & 0x0fu;
       uint32_t raw_bar    = (meta >> 4) & 0x07ffffffu;
-      uint32_t bar_id     = dxa_decode_barrier_id(raw_bar, core_->arch());
+      uint32_t bar_id     = bar_decode_id(raw_bar, core_->arch().num_barriers());
       auto dxa_core = core_->socket()->cluster()->dxa_core();
       auto td = dxa_core->execute_copy(core_, desc_slot, smem_addr, coords);
       td->bar_id  = bar_id;
