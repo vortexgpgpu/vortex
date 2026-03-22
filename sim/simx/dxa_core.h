@@ -24,13 +24,6 @@ namespace vortex {
 class Core;
 class Cluster;
 
-// Decode the packed barrier-address word (meta[30:4]) back to a flat bar_id.
-inline uint32_t dxa_decode_barrier_id(uint32_t bar_addr_raw, const Arch& arch) {
-  uint32_t cta_no = bar_addr_raw & 0xffffu;
-  uint32_t bar_no = (bar_addr_raw >> 16) & 0x7fffu;
-  return (cta_no * arch.num_barriers() + bar_no) | (bar_addr_raw & 0x80000000u);
-}
-
 // Cycle-accurate DXA engine for simx, placed at Cluster scope matching RTL.
 //
 // Timing and emulation are fully decoupled:

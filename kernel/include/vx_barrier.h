@@ -21,7 +21,7 @@ namespace vortex {
 class barrier {
 public:
   barrier(uint32_t id, uint32_t num_warps = __warps_per_group) {
-    bar_id_ = __local_group_id + (id << 16);
+    bar_id_ = __local_group_id + (id << 8);
     num_warps_ = num_warps;
   }
 

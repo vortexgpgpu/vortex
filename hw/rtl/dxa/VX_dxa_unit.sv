@@ -69,7 +69,6 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire req_fire;
         wire [BAR_ADDR_W-1:0] setup_bar_addr;
         wire tx_setup_valid;
-        wire setup_is_packed;
         wire [NB_BITS-1:0] setup_bar_slot;
         wire [NW_BITS-1:0] setup_bar_owner;
 
@@ -98,17 +97,13 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign dxa_req_bus_if.req_data.coords[3] = lane1_rs2;
         assign dxa_req_bus_if.req_data.coords[4] = lane2_rs2;
 
-        // Barrier address from meta (always packed: meta[31]=1).
-        // meta[3:0]  = desc_slot
-        // meta[30:4] = raw barrier payload:
-        //   raw[NW_BITS-1:0]         = bar_owner (warp id)
-        //   raw[16 +: NB_BITS]       = bar_slot (barrier index)
-        assign setup_is_packed = lane1_rs1[31];
-        assign setup_bar_slot = setup_is_packed ? lane1_rs1[20 +: NB_BITS]
-                                                : lane1_rs1[16 +: NB_BITS];
+        // Barrier address from meta.
+        // meta[3:0]                       = desc_slot
+        // meta[4 +: NW_BITS]              = bar_owner (warp id from local_group_id)
+        // meta[(4+BAR_ID_SHIFT) +: NB_BITS] = bar_slot (barrier index)
+        assign setup_bar_slot = lane1_rs1[(4 + BAR_ID_SHIFT) +: NB_BITS];
         if (`NUM_WARPS > 1) begin : g_setup_bar_owner
-            assign setup_bar_owner = setup_is_packed ? lane1_rs1[4 +: NW_BITS]
-                                                     : lane1_rs1[NW_BITS-1:0];
+            assign setup_bar_owner = lane1_rs1[4 +: NW_BITS];
         end else begin : g_setup_bar_owner_wo
             assign setup_bar_owner = '0;
         end
@@ -145,8 +140,8 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                         lane0_rs2, lane1_rs2, lane2_rs2))
                 end
                 if (tx_setup_valid) begin
-                    `TRACE(1, ("%t: %s tx-setup: addr=%0d packed=%b slot=%0d owner=%0d\n",
-                        $time, INSTANCE_ID, setup_bar_addr, setup_is_packed, setup_bar_slot, setup_bar_owner))
+                    `TRACE(1, ("%t: %s tx-setup: addr=%0d slot=%0d owner=%0d\n",
+                        $time, INSTANCE_ID, setup_bar_addr, setup_bar_slot, setup_bar_owner))
                 end
                 if (txbar_bus_if.valid && txbar_bus_if.ready) begin
                     `TRACE(1, ("%t: %s tx-bar-fire: addr=%0d done=%b\n",
@@ -159,5 +154,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     assign result_if.data.header = header_out;
     assign result_if.data.data = '0;
+
+    `UNUSED_PARAM (NUM_LANES)
 
 endmodule

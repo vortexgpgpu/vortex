@@ -98,16 +98,11 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             // desc_slot from meta[3:0]
             assign in_desc_slot[i] = DXA_DESC_SLOT_W'(in_meta[i][DXA_DESC_SLOT_W-1:0]);
 
-            // bar_addr from meta (always packed: meta[31]=1)
-            wire is_packed = in_meta[i][31];
+            // bar_addr from meta: bar_id at [30:4], owner at [4+:NW_BITS], slot at [(4+BAR_ID_SHIFT)+:NB_BITS]
             if (`NUM_WARPS > 1) begin : g_bar_w
-                assign in_bar_addr[i] = is_packed
-                    ? {in_meta[i][4 +: NW_BITS], in_meta[i][20 +: NB_BITS]}
-                    : {in_meta[i][NW_BITS-1:0], in_meta[i][16 +: NB_BITS]};
+                assign in_bar_addr[i] = {in_meta[i][4 +: NW_BITS], in_meta[i][(4 + BAR_ID_SHIFT) +: NB_BITS]};
             end else begin : g_bar_wo
-                assign in_bar_addr[i] = is_packed
-                    ? in_meta[i][20 +: NB_BITS]
-                    : in_meta[i][16 +: NB_BITS];
+                assign in_bar_addr[i] = in_meta[i][(4 + BAR_ID_SHIFT) +: NB_BITS];
             end
         end
 

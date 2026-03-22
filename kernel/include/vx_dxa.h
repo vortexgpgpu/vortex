@@ -46,7 +46,7 @@ extern "C" {
 // 3D–5D: rs2 carries coord2..coord4, requiring a second vx_wgather.
 
 inline uint32_t vx_dxa_pack_meta(uint32_t desc_slot, uint32_t barrier_id) {
-  return ((desc_slot & 0x0fu) | ((barrier_id & 0x07ffffffu) << 4) | (1u << 31));
+  return (barrier_id << 4) | desc_slot;
 }
 
 // 1D: rs1 = wgather(smem_addr, meta, coord0, 0), rs2 = x0
