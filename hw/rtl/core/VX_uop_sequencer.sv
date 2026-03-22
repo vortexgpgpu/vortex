@@ -144,23 +144,8 @@ module VX_uop_sequencer import
     );
 `endif
 
-`ifdef EXT_DXA_ENABLE
-    // ------------------------------------------------------------------
-    // DXA uop expander
-    // ------------------------------------------------------------------
-    assign uop_in_valid[UOP_DXA] = (uop_in_data.ex_type == EX_SFU)
-                                && (uop_in_data.op_type == INST_SFU_DXA);
-    VX_dxa_uops dxa_uops (
-        .clk       (clk),
-        .reset     (reset),
-        .ibuf_in   (uop_in_data),
-        .start     (uop_in_start[UOP_DXA]),
-        .advance   (uop_in_next[UOP_DXA]),
-        .uop_idx   (uop_ctr),
-        .ibuf_out  (uop_out_data[UOP_DXA]),
-        .uop_count (uop_out_count[UOP_DXA])
-    );
-`endif
+// DXA uop expander removed: wgather-based DXA delivers all args in a single
+// instruction — no uop expansion needed (UOP_DXA slot eliminated).
 
     wire uop_hold = is_uop_input && ~uop_active;
 

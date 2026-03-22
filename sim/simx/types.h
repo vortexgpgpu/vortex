@@ -500,25 +500,13 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
 #ifdef EXT_DXA_ENABLE
 
 enum class DxaType {
-  SETUP,
-  COORD01,
-  COORD23,
   ISSUE
 };
 
-struct IntrDxaArgs {
-  uint32_t op : 3;
-};
+struct IntrDxaArgs {};
 
-inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
-  switch (type) {
-  case DxaType::SETUP:   os << "DXA.SETUP"; break;
-  case DxaType::COORD01: os << "DXA.COORD01"; break;
-  case DxaType::COORD23: os << "DXA.COORD23"; break;
-  case DxaType::ISSUE:   os << "DXA.ISSUE"; break;
-  default:
-    assert(false);
-  }
+inline std::ostream &operator<<(std::ostream &os, const DxaType& /*type*/) {
+  os << "DXA.ISSUE";
   return os;
 }
 

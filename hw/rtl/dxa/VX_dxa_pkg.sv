@@ -29,7 +29,8 @@ package VX_dxa_pkg;
     // Architected funct3 encoding: 0=1D, 1=2D, 2=3D, 3=4D, 4=5D.
     // All variants are expanded into micro-ops by VX_dxa_uops.
 
-    localparam DXA_REQ_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + 3 + (2 * `XLEN);
+    // smem_addr(XLEN) + meta(XLEN) + coords[5](5*XLEN) = 7*XLEN total
+    localparam DXA_REQ_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + (7 * `XLEN);
 
     // Keep compatibility with existing global DXA descriptor macros.
     localparam DXA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_DXA_DESC_COUNT);

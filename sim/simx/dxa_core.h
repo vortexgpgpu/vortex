@@ -17,11 +17,19 @@
 #include <simobject.h>
 #include "types.h"
 #include "instr_trace.h"
+#include "arch.h"
 
 namespace vortex {
 
 class Core;
 class Cluster;
+
+// Decode the packed barrier-address word (meta[30:4]) back to a flat bar_id.
+inline uint32_t dxa_decode_barrier_id(uint32_t bar_addr_raw, const Arch& arch) {
+  uint32_t cta_no = bar_addr_raw & 0xffffu;
+  uint32_t bar_no = (bar_addr_raw >> 16) & 0x7fffu;
+  return (cta_no * arch.num_barriers() + bar_no) | (bar_addr_raw & 0x80000000u);
+}
 
 // Cycle-accurate DXA engine for simx, placed at Cluster scope matching RTL.
 //
@@ -55,16 +63,6 @@ public:
     bool     is_last; // triggers barrier_event_release in LocalMem::tick()
   };
 
-  // Decode-time trace data for DXA instructions.
-  struct TraceData : public ITraceData {
-    using Ptr = std::shared_ptr<TraceData>;
-    Word rs1;
-    Word rs2;
-    uint32_t op;
-    TraceData(Word rs1, Word rs2, uint32_t op)
-      : rs1(rs1), rs2(rs2), op(op) {}
-  };
-
   struct PerfStats {
     uint64_t transfers      = 0;
     uint64_t gmem_reads     = 0;
@@ -82,18 +80,23 @@ public:
     }
   };
 
-  // Precomputed emulation result for one tile copy, produced by execute_copy()
-  // and passed to submit() so the timing tick path purely replays addresses.
-  struct ExeTraceData : public ITraceData {
-    using Ptr = std::shared_ptr<ExeTraceData>;
-    uint32_t tile0;
-    uint32_t tile1;
-    uint32_t elem_bytes;
-    std::vector<uint64_t> gmem_lines;  // unique CL addrs after CL-granular per-row + cross-row dedup (matches RTL addr_gen+dedup)
-    std::vector<uint64_t> smem_blocks; // DXA_SMEM_WORD_SIZE-aligned SMEM addrs, sorted (matches RTL VX_dxa_wr_ctrl)
-    uint64_t gmem_dedup_hits = 0;      // cross-row boundary CL sharing saved (matches RTL VX_dxa_dedup)
-    ExeTraceData(uint32_t tile0, uint32_t tile1, uint32_t elem_bytes)
-      : tile0(tile0), tile1(tile1), elem_bytes(elem_bytes) {}
+  // Single trace packet built by execute() and consumed by tick().
+  // Routing fields (desc_slot, smem_addr, coords, bar_id) are set at execute()
+  // time; emulation fields (tile0..gmem_dedup_hits) are filled by execute_copy().
+  struct TraceData : public ITraceData {
+    using Ptr = std::shared_ptr<TraceData>;
+    // routing
+    uint32_t desc_slot = 0;
+    uint64_t smem_addr = 0;
+    uint32_t coords[5] = {};
+    uint32_t bar_id    = 0;
+    // emulation result
+    uint32_t tile0      = 0;
+    uint32_t tile1      = 0;
+    uint32_t elem_bytes = 0;
+    std::vector<uint64_t> gmem_lines;  // unique CL addrs (matches RTL addr_gen+dedup)
+    std::vector<uint64_t> smem_blocks; // DXA_SMEM_WORD_SIZE-aligned SMEM addrs (matches RTL VX_dxa_wr_ctrl)
+    uint64_t gmem_dedup_hits = 0;      // cross-row CL sharing (matches RTL VX_dxa_dedup)
   };
 
   // GMEM channels — size = kDxaMemPorts.  Bound to L2 DXA ports by Cluster.
@@ -116,22 +119,16 @@ public:
   // Write a descriptor field via DCR.
   int dcr_write(uint32_t addr, uint32_t value);
 
-  // Emulation only: read tile from GMEM and write to SMEM via mem_write.
+  // Emulation only: read tile from GMEM into SMEM; fill TraceData emulation fields.
   // No SimChannel activity; no timing side effects.
-  // Returns ExeTraceData::Ptr to pass to submit().
-  ExeTraceData::Ptr execute_copy(Core* core,
-                                 uint32_t desc_slot,
-                                 uint64_t smem_addr,
-                                 const uint32_t coords[5]);
+  TraceData::Ptr execute_copy(Core* core,
+                              uint32_t desc_slot,
+                              uint64_t smem_addr,
+                              const uint32_t coords[5]);
 
-  // Timing only: enqueue a copy request with precomputed exe_data.
+  // Timing only: enqueue the precomputed TraceData packet.
   // Returns false (backpressure) when the internal queue is full.
-  bool submit(Core* core,
-              uint32_t desc_slot,
-              uint64_t smem_addr,
-              const uint32_t coords[5],
-              uint32_t bar_id,
-              ExeTraceData::Ptr exe_data);
+  bool submit(Core* core, TraceData::Ptr td);
 
   // Emulation only: read size bytes from global memory into data.
   // No SimChannel activity; no timing side effects.
