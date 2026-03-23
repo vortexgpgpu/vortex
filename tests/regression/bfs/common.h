@@ -11,14 +11,14 @@ struct Node {
 typedef struct {
   uint32_t num_nodes;
   uint32_t num_edges;
+  uint32_t frontier_size;
 
-  uint64_t nodes_addr;  // Node          Buffer
-  uint64_t edges_addr;  // Edge          Buffer
-  uint64_t mask_addr;  // Mask          Buffer
-  uint64_t nextmask_addr;  // Update Mask   Buffer
-  uint64_t visit_addr;  // Visited       Buffer
-  uint64_t frontier_addr;  // Thread Update Buffer
-  uint64_t cost_addr;   // Cost Buffer
+  uint64_t nodes_addr;
+  uint64_t edges_addr;
+  uint64_t nextmask_addr;
+  uint64_t visit_addr;
+  uint64_t frontier_addr;
+  uint64_t cost_addr;
 } kernel_arg_t;
 
 #endif

@@ -231,7 +231,14 @@ int Tracer::run(const char *output_file) {
     RT_CHECK(vx_upload_bytes(device_, &kernel_arg_, sizeof(kernel_arg_t), &args_buffer_));
 
     // start kernel execution
-    RT_CHECK(vx_start(device_, krnl_buffer_, args_buffer_));
+    {
+      uint64_t num_threads;
+      RT_CHECK(vx_dev_caps(device_, VX_CAPS_NUM_THREADS, &num_threads));
+      uint32_t NT = (uint32_t)num_threads;
+      uint32_t grid_dim[2]  = {(dst_width_ + NT - 1) / NT, dst_height_};
+      uint32_t block_dim[2] = {NT, 1};
+      RT_CHECK(vx_start_g(device_, krnl_buffer_, args_buffer_, 2, grid_dim, block_dim, 0));
+    }
 
     // wait for the kernel to finish
     RT_CHECK(vx_ready_wait(device_, VX_MAX_TIMEOUT));

@@ -178,7 +178,7 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 1, &num_points, nullptr, 0));
+  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

@@ -14,19 +14,38 @@
 #include <common.h>
 #include <vortex.h>
 
-void prepare_kernel_launch_params(uint32_t threads_per_warp, uint32_t dimension, const uint32_t *block_dim,
+int vx_max_occupancy_grid(vx_device_h hdevice, uint32_t ndim, const uint32_t* global_dim,
+    uint32_t* grid_dim, uint32_t* block_dim) {
+  uint64_t num_threads, num_warps;
+  int err;
+  err = vx_dev_caps(hdevice, VX_CAPS_NUM_THREADS, &num_threads); if (err) return err;
+  err = vx_dev_caps(hdevice, VX_CAPS_NUM_WARPS, &num_warps); if (err) return err;
+  uint64_t auto_block[3] = {num_threads, num_warps, 1};
+  for (uint32_t i = 0; i < ndim; ++i) {
+    block_dim[i] = (uint32_t)auto_block[i];
+    grid_dim[i] = (global_dim[i] + block_dim[i] - 1) / block_dim[i];
+  }
+  return 0;
+}
+
+void prepare_kernel_launch_params(uint32_t threads_per_warp, uint32_t num_warps,
+  uint32_t ndim, const uint32_t *block_dim,
+  uint32_t eff_block_dim[3],
   uint32_t* block_size, uint32_t* warp_step_x, uint32_t* warp_step_y, uint32_t* warp_step_z) {
-  // block size in number of threads
+  // auto-select block dimensions when not specified (maximize warp occupancy)
+  uint32_t auto_block_dim[3] = {threads_per_warp, num_warps, 1};
+  const uint32_t* src = block_dim ? block_dim : auto_block_dim;
+  for (uint32_t i = 0; i < 3; ++i) {
+    eff_block_dim[i] = (i < ndim) ? src[i] : 1;
+  }
+
   uint32_t _block_size = 1;
-  for (uint32_t i = 0; i < dimension; ++i) {
-    _block_size *= block_dim ? block_dim[i] : 1;
+  for (uint32_t i = 0; i < ndim; ++i) {
+    _block_size *= eff_block_dim[i];
   }
   *block_size = _block_size;
-  uint32_t dim_x = (dimension > 0 && block_dim) ? block_dim[0] : 1;
-  uint32_t dim_y = (dimension > 1 && block_dim) ? block_dim[1] : 1;
-  uint32_t dim_z = (dimension > 2 && block_dim) ? block_dim[2] : 1;
 
-  *warp_step_x = threads_per_warp % dim_x;
-  *warp_step_y = (threads_per_warp / dim_x) % dim_y;
-  *warp_step_z = (threads_per_warp / (dim_x * dim_y)) % dim_z;
+  *warp_step_x = threads_per_warp % eff_block_dim[0];
+  *warp_step_y = (threads_per_warp / eff_block_dim[0]) % eff_block_dim[1];
+  *warp_step_z = (threads_per_warp / (eff_block_dim[0] * eff_block_dim[1])) % eff_block_dim[2];
 }

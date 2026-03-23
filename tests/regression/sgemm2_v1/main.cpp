@@ -12,8 +12,8 @@
      int _ret = _expr;                                          \
      if (0 == _ret)                                             \
        break;                                                   \
-     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);  \
-	 cleanup();			                                          \
+     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
+	 cleanup();			                                              \
      exit(-1);                                                  \
    } while (false)
 
@@ -176,6 +176,14 @@ int main(int argc, char *argv[]) {
   std::cout << "tile size: " << tile_size << ", chunk_k: " << chunk_k << std::endl;
   std::cout << "local memory: " << local_mem << " bytes" << std::endl;
 
+  kernel_arg.grid_dim[0] = size / tile_size;
+  kernel_arg.grid_dim[1] = size / tile_size;
+  kernel_arg.block_dim[0] = tile_size;
+  kernel_arg.block_dim[1] = tile_size;
+  kernel_arg.size = size;
+  kernel_arg.tile_size = tile_size;
+  kernel_arg.chunk_k = chunk_k;
+
   // check work group occupancy
   RT_CHECK(vx_check_occupancy(device, group_size, &local_mem));
 
@@ -218,17 +226,11 @@ int main(int argc, char *argv[]) {
 
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
-  kernel_arg.size      = size;
-  kernel_arg.tile_size = tile_size;
-  kernel_arg.chunk_k   = chunk_k;
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
-
-  uint32_t grid_dim[2]  = {size / tile_size, size / tile_size};
-  uint32_t block_dim[2] = {tile_size, tile_size};
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, local_mem));
+  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

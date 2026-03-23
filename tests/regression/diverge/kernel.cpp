@@ -1,4 +1,4 @@
-#include <vx_spawn.h>
+#include <vx_spawn2.h>
 #include <assert.h>
 #include <algorithm>
 #include "common.h"
@@ -75,12 +75,11 @@ static __attribute__((noinline)) int nested_chain_1to8(int v, uint32_t id, uint3
   return v;
 }
 
-void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
+extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   int32_t* src_ptr = (int32_t*)arg->src_addr;
   int32_t* dst_ptr = (int32_t*)arg->dst_addr;
 
-  uint32_t task_id = blockIdx.x;
-
+  uint32_t task_id = blockIdx.x * blockDim.x + threadIdx.x;
   int value = src_ptr[task_id];
 
   key_t key;
@@ -152,7 +151,3 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
   dst_ptr[task_id] = value;
 }
 
-int main() {
-  kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
-  return vx_spawn_threads(1, &arg->num_points, nullptr, (vx_kernel_func_cb)kernel_body, arg);
-}

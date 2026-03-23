@@ -114,21 +114,45 @@ extern int vx_copy_dev_to_dev(vx_buffer_h hdest_buffer, uint64_t dest_offset, vx
 extern int vx_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments) {
   // schedule a CTA on each core
   uint64_t num_cores;
-  CHECK_ERR ((g_callbacks.dev_caps)(hdevice, VX_CAPS_NUM_CORES, &num_cores), { return err; });
-  return (g_callbacks.start_wg)(hdevice, hkernel, harguments, 1, (const uint32_t*)&num_cores, nullptr, 0);
+  CHECK_ERR((g_callbacks.dev_caps)(hdevice, VX_CAPS_NUM_CORES, &num_cores), { return err; });
+  uint32_t grid_dim = (uint32_t)num_cores;
+  return vx_start_g(hdevice, hkernel, harguments, 1, &grid_dim, nullptr, 0);
 }
 
-extern int vx_start_wg(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments,
-                       uint32_t dimension, const uint32_t* grid_dim, const uint32_t * block_dim, uint32_t lmem_size) {
-  uint32_t block_size = 1;
-  if (block_dim) {
-    for (uint32_t i = 0; i < dimension; ++i) {
-      block_size *= block_dim[i];
-  }
-  }
+extern int vx_start_g(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments,
+                       uint32_t ndim, const uint32_t* grid_dim, const uint32_t* block_dim, uint32_t lmem_size) {
+  uint64_t num_threads, num_warps;
+  CHECK_ERR((g_callbacks.dev_caps)(hdevice, VX_CAPS_NUM_THREADS, &num_threads), { return err; });
+  CHECK_ERR((g_callbacks.dev_caps)(hdevice, VX_CAPS_NUM_WARPS, &num_warps), { return err; });
+  uint32_t eff_block_dim[3], block_size, warp_step_x, warp_step_y, warp_step_z;
+  prepare_kernel_launch_params(num_threads, num_warps, ndim, block_dim,
+      eff_block_dim, &block_size, &warp_step_x, &warp_step_y, &warp_step_z);
   uint32_t _lmem_size = lmem_size;
   CHECK_ERR(vx_check_occupancy(hdevice, block_size, &_lmem_size), { return err; });
-  return (g_callbacks.start_wg)(hdevice, hkernel, harguments, dimension, grid_dim, block_dim, lmem_size);
+
+  // resolve buffer addresses
+  uint64_t krnl_addr, args_addr;
+  CHECK_ERR(vx_mem_address(hkernel, &krnl_addr), { return err; });
+  CHECK_ERR(vx_mem_address(harguments, &args_addr), { return err; });
+
+  // configure kernel launch DCRs
+  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_KMU_STARTUP_ADDR0, krnl_addr & 0xffffffff), { return err; });
+  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_KMU_STARTUP_ADDR1, krnl_addr >> 32), { return err; });
+  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_KMU_STARTUP_ARG0, args_addr & 0xffffffff), { return err; });
+  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_KMU_STARTUP_ARG1, args_addr >> 32), { return err; });
+  static const uint32_t grid_regs[3] = {VX_DCR_KMU_GRID_DIM_X, VX_DCR_KMU_GRID_DIM_Y, VX_DCR_KMU_GRID_DIM_Z};
+  static const uint32_t block_regs[3] = {VX_DCR_KMU_BLOCK_DIM_X, VX_DCR_KMU_BLOCK_DIM_Y, VX_DCR_KMU_BLOCK_DIM_Z};
+  for (uint32_t i = 0; i < 3; ++i) {
+    CHECK_ERR(vx_dcr_write(hdevice, grid_regs[i], (i < ndim) ? grid_dim[i] : 1), { return err; });
+    CHECK_ERR(vx_dcr_write(hdevice, block_regs[i], eff_block_dim[i]), { return err; });
+  }
+  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_KMU_LMEM_SIZE, lmem_size), { return err; });
+  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_KMU_BLOCK_SIZE, block_size), { return err; });
+  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_KMU_WARP_STEP_X, warp_step_x), { return err; });
+  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_KMU_WARP_STEP_Y, warp_step_y), { return err; });
+  CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_KMU_WARP_STEP_Z, warp_step_z), { return err; });
+
+  return (g_callbacks.start)(hdevice);
 }
 
 extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {

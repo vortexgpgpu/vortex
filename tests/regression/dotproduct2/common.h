@@ -4,8 +4,6 @@
 #define TYPE float
 
 typedef struct {
-  uint32_t grid_dim[1];
-  uint32_t block_dim[1];
   uint32_t num_points;
   uint64_t src0_addr;
   uint64_t src1_addr;

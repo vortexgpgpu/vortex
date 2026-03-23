@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-PROJECT := sgemm_tcu2
+PROJECT := sgemm2_tcu
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 

@@ -61,7 +61,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
   // Write per-block cycle count
   auto pCycles = reinterpret_cast<uint32_t*>(arg->cycles_addr);
-  uint32_t block_id = blockIdx.y * arg->grid_dim[0] + blockIdx.x;
+  uint32_t block_id = blockIdx.y * gridDim.x + blockIdx.x;
   pCycles[block_id] = end_cycles - start_cycles;
 }
 

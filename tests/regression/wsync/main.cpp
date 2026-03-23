@@ -108,7 +108,7 @@ int main(int argc, char* argv[]) {
 
   std::cout << "start device" << std::endl;
   uint32_t grid_one = 1;
-  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 1, &grid_one, &kernel_arg.num_threads, 0));
+  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, &grid_one, &kernel_arg.num_threads, 0));
 
   std::cout << "wait for completion" << std::endl;
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));

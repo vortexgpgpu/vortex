@@ -877,11 +877,8 @@ int main(int argc, char *argv[]) {
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;
 
-  // set block size to warp size
-  kernel_arg.grid_dim[0] = N / cfg::tileN;
-  kernel_arg.grid_dim[1] = M / cfg::tileM;
-  kernel_arg.block_dim[0] = NT; // warp sizeb
-  kernel_arg.block_dim[1] = 1;
+  uint32_t grid_dim[2]  = {N / cfg::tileN, M / cfg::tileM};
+  uint32_t block_dim[2] = {NT, 1};
 
   // set matrix dimensions
   kernel_arg.M = M;
@@ -907,7 +904,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
   RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_addr));
 
-  uint32_t num_blocks = kernel_arg.grid_dim[0] * kernel_arg.grid_dim[1];
+  uint32_t num_blocks = grid_dim[0] * grid_dim[1];
   RT_CHECK(vx_mem_alloc(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
   RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
 
@@ -989,7 +986,7 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 2, kernel_arg.grid_dim, kernel_arg.block_dim, 0));
+  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, 0));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

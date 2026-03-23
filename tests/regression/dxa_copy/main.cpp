@@ -123,10 +123,8 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  kernel_arg.grid_dim[0]  = grid_x;
-  kernel_arg.grid_dim[1]  = grid_y;
-  kernel_arg.block_dim[0] = tile_cols;
-  kernel_arg.block_dim[1] = tile_rows;
+  uint32_t grid_dim[2]  = {grid_x, grid_y};
+  uint32_t block_dim[2] = {tile_cols, tile_rows};
   kernel_arg.tile_rows    = tile_rows;
   kernel_arg.tile_cols    = tile_cols;
   kernel_arg.ncols        = ncols;
@@ -156,7 +154,7 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   std::cout << "start\n";
-  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 2, kernel_arg.grid_dim, kernel_arg.block_dim, local_mem));
+  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, local_mem));
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
   // Kernel execution time is reported by the runtime (cycles, instrs, IPC).

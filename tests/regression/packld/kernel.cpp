@@ -14,7 +14,7 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     auto dst_lb   = reinterpret_cast<float*>(arg->dst_lb_addr);
     auto dst_lh   = reinterpret_cast<float*>(arg->dst_lh_addr);
 
-    uint32_t tid    = blockIdx.x;
+    uint32_t tid    = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t stride = 1; // byte stride between consecutive elements
 
     for (uint32_t p = 0; p < NUM_POINTS; ++p) {

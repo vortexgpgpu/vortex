@@ -161,10 +161,6 @@ int main(int argc, char *argv[]) {
   std::cout << "tile size: " << tile_size << "x" << tile_size << std::endl;
   std::cout << "local memory: " << local_mem << " bytes" << std::endl;
 
-  kernel_arg.grid_dim[0] = size / tile_size;
-  kernel_arg.grid_dim[1] = size / tile_size;
-  kernel_arg.block_dim[0] = tile_size;
-  kernel_arg.block_dim[1] = tile_size;
   kernel_arg.size = size;
   kernel_arg.tile_size = tile_size;
 
@@ -214,7 +210,9 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  uint32_t grid_dim[2]  = {size / tile_size, size / tile_size};
+  uint32_t block_dim[2] = {tile_size, tile_size};
+  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, local_mem));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

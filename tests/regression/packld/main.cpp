@@ -98,7 +98,9 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   std::cout << "start device\n";
-  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 1, &kernel_arg.num_tasks, nullptr, 0));
+  uint32_t grid_dim[1], block_dim[1];
+  RT_CHECK(vx_max_occupancy_grid(device, 1, &num_tasks, grid_dim, block_dim));
+  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
   // download results

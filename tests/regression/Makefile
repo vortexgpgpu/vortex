@@ -17,14 +17,14 @@ all:
 	$(MAKE) -C sort
 	$(MAKE) -C fence
 	$(MAKE) -C vecadd
-	$(MAKE) -C vecadd_v2
+	$(MAKE) -C vecadd_v1
 	$(MAKE) -C sgemm
-	$(MAKE) -C sgemm_v2
+	$(MAKE) -C sgemm_v1
 	$(MAKE) -C conv3
 	$(MAKE) -C relu
 	$(MAKE) -C sgemv
 	$(MAKE) -C sgemm2
-	$(MAKE) -C sgemm2_v2
+	$(MAKE) -C sgemm2_v1
 	$(MAKE) -C madmax
 	$(MAKE) -C stencil3d
 	$(MAKE) -C raycast
@@ -66,14 +66,14 @@ run-simx:
 	$(MAKE) -C sort run-simx
 	$(MAKE) -C fence run-simx
 	$(MAKE) -C vecadd run-simx
-	$(MAKE) -C vecadd_v2 run-simx
+	$(MAKE) -C vecadd_v1 run-simx
 	$(MAKE) -C sgemm run-simx
-    $(MAKE) -C sgemm_v2 run-simx
+	$(MAKE) -C sgemm_v1 run-simx
 	$(MAKE) -C conv3 run-simx
 	$(MAKE) -C relu run-simx
 	$(MAKE) -C sgemv run-simx
 	$(MAKE) -C sgemm2 run-simx
-	$(MAKE) -C sgemm2_v2 run-simx
+	$(MAKE) -C sgemm2_v1 run-simx
 	$(MAKE) -C madmax run-simx
 	$(MAKE) -C stencil3d run-simx
 	$(MAKE) -C raycast run-simx
@@ -110,14 +110,14 @@ run-rtlsim:
 	$(MAKE) -C sort run-rtlsim
 	$(MAKE) -C fence run-rtlsim
 	$(MAKE) -C vecadd run-rtlsim
-	$(MAKE) -C vecadd_v2 run-rtlsim
+	$(MAKE) -C vecadd_v1 run-rtlsim
 	$(MAKE) -C sgemm run-rtlsim
-    $(MAKE) -C sgemm_v2 run-rtlsim
+	$(MAKE) -C sgemm_v1 run-rtlsim
 	$(MAKE) -C conv3 run-rtlsim
 	$(MAKE) -C relu run-rtlsim
 	$(MAKE) -C sgemv run-rtlsim
 	$(MAKE) -C sgemm2 run-rtlsim
-	$(MAKE) -C sgemm2_v2 run-rtlsim
+	$(MAKE) -C sgemm2_v1 run-rtlsim
 	$(MAKE) -C madmax run-rtlsim
 	$(MAKE) -C stencil3d run-rtlsim
 	$(MAKE) -C raycast run-rtlsim
@@ -144,11 +144,10 @@ clean:
 	$(MAKE) -C mpi_diverge clean
 	$(MAKE) -C sort clean
 	$(MAKE) -C fence clean
-	$(MAKE) -C vecadd_v2 clean
 	$(MAKE) -C vecadd clean
-	$(MAKE) -C mpi_vecadd clean
+	$(MAKE) -C vecadd_v1 clean
 	$(MAKE) -C sgemm clean
-	$(MAKE) -C sgemm_v2 clean
+	$(MAKE) -C sgemm_v1 clean
 	$(MAKE) -C sgemm_tcu clean
 	$(MAKE) -C sgemm_tcu2 clean
 	$(MAKE) -C sgemm_tcu_sp clean
@@ -158,7 +157,7 @@ clean:
 	$(MAKE) -C relu clean
 	$(MAKE) -C sgemv clean
 	$(MAKE) -C sgemm2 clean
-	$(MAKE) -C sgemm2_v2 clean
+	$(MAKE) -C sgemm2_v1 clean
 	$(MAKE) -C madmax clean
 	$(MAKE) -C stencil3d clean
 	$(MAKE) -C raycast clean

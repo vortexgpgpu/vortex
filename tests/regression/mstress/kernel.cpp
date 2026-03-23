@@ -1,13 +1,14 @@
-#include <vx_spawn.h>
+#include <vx_spawn2.h>
 #include "common.h"
 
-void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
+extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t stride    = arg->stride;
 	uint32_t* addr_ptr = (uint32_t*)arg->src0_addr;
 	float* src_ptr     = (float*)arg->src1_addr;
 	float* dst_ptr     = (float*)arg->dst_addr;
 
-	uint32_t offset = blockIdx.x * stride;
+	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t offset = gid * stride;
 
 	for (uint32_t i = 0; i < stride; ++i) {
 		float value = 0.0f;
@@ -18,9 +19,4 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 		}
 		dst_ptr[offset+i] = value;
 	}
-}
-
-int main() {
-	kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
-	return vx_spawn_threads(1, &arg->num_tasks, nullptr, (vx_kernel_func_cb)kernel_body, arg);
 }

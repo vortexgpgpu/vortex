@@ -83,8 +83,6 @@ int main(int argc, char *argv[]) {
   std::cout << "number of points: " << size << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
-  kernel_arg.grid_dim[0] = size;
-  kernel_arg.grid_dim[1] = size;
   kernel_arg.size = size;
 
   // allocate buffers
@@ -103,7 +101,14 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  {
+    uint64_t num_threads;
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
+    uint32_t NT = (uint32_t)num_threads;
+    uint32_t grid_dim[2]  = {(size + NT - 1) / NT, size};
+    uint32_t block_dim[2] = {NT, 1};
+    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, 0));
+  }
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

@@ -207,40 +207,11 @@ public:
     return 0;
   }
 
-  int start_wg(uint64_t krnl_addr, uint64_t args_addr, uint32_t dimension,
-              const uint32_t* grid_dim, const uint32_t* block_dim, uint32_t lmem_size) {
-     // ensure prior run completed
-    if (future_.valid()) {
-      future_.wait();
-    }
-
-    // setup kernel launch parameters
-    uint32_t block_size, warp_step_x, warp_step_y, warp_step_z;
-    prepare_kernel_launch_params(NUM_THREADS, dimension, block_dim,
-        &block_size, &warp_step_x, &warp_step_y, &warp_step_z);
-
-    // configure kernel launch
-    this->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, krnl_addr & 0xffffffff);
-    this->dcr_write(VX_DCR_KMU_STARTUP_ADDR1, krnl_addr >> 32);
-    this->dcr_write(VX_DCR_KMU_STARTUP_ARG0, args_addr & 0xffffffff);
-    this->dcr_write(VX_DCR_KMU_STARTUP_ARG1, args_addr >> 32);
-    uint32_t grid_regs[] = {VX_DCR_KMU_GRID_DIM_X, VX_DCR_KMU_GRID_DIM_Y, VX_DCR_KMU_GRID_DIM_Z};
-    uint32_t block_regs[] = {VX_DCR_KMU_BLOCK_DIM_X, VX_DCR_KMU_BLOCK_DIM_Y, VX_DCR_KMU_BLOCK_DIM_Z};
-    for (uint32_t i = 0; i < 3; ++i) {
-      this->dcr_write(grid_regs[i], (i < dimension) ? grid_dim[i] : 1);
-      this->dcr_write(block_regs[i], (i < dimension && block_dim) ? block_dim[i] : 1);
-    }
-    this->dcr_write(VX_DCR_KMU_LMEM_SIZE, lmem_size);
-    this->dcr_write(VX_DCR_KMU_BLOCK_SIZE, block_size);
-    this->dcr_write(VX_DCR_KMU_WARP_STEP_X, warp_step_x);
-    this->dcr_write(VX_DCR_KMU_WARP_STEP_Y, warp_step_y);
-    this->dcr_write(VX_DCR_KMU_WARP_STEP_Z, warp_step_z);
-
-    // start new run
+  int start() {
+    // DCRs already written by stub; just trigger execution
     future_ = std::async(std::launch::async, [&]{
       processor_.run();
     });
-
     return 0;
   }
 

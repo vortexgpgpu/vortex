@@ -142,21 +142,15 @@ int main(int argc, char *argv[]) {
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
-  uint32_t threadsPerBlock = 16;
-  uint32_t blocksPerGrid = (num_points+threadsPerBlock-1) / threadsPerBlock;
+  kernel_arg.num_points = num_points;
+
+  uint32_t grid_dim[1], block_dim[1];
+  RT_CHECK(vx_max_occupancy_grid(device, 1, &num_points, grid_dim, block_dim));
+  uint32_t blocksPerGrid = grid_dim[0];
+  uint32_t threadsPerBlock = block_dim[0];
 
   std::cout << "threads per block: " << threadsPerBlock << std::endl;
   std::cout << "blocks per grid: " << blocksPerGrid << std::endl;
-
-  if (num_points != (blocksPerGrid * threadsPerBlock)) {
-    std::cout << "Warning: number of points is not a multiple of threads per block!" << std::endl;
-    cleanup();
-    return -1;
-  }
-
-  kernel_arg.num_points = num_points;
-  kernel_arg.block_dim[0] = threadsPerBlock;
-  kernel_arg.grid_dim[0] = blocksPerGrid;
 
   uint32_t dst_buf_size = blocksPerGrid * sizeof(TYPE);
   // allocate device memory
@@ -201,7 +195,11 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  {
+    uint32_t num_warps = (threadsPerBlock + NUM_THREADS - 1) / NUM_THREADS;
+    uint32_t lmem_size = num_warps * sizeof(float);
+    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, lmem_size));
+  }
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

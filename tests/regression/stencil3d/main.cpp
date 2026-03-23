@@ -228,14 +228,7 @@ int main(int argc, char *argv[])
     std::cout << "matrix size: " << size << "x" << size << "x" << size << std::endl;
     std::cout << "block size: " << block_size << "x" << block_size << "x" << block_size << std::endl;
 
-    kernel_arg.grid_dim[0] = size / block_size;
-    kernel_arg.grid_dim[1] = size / block_size;
-    kernel_arg.grid_dim[2] = size / block_size;
-    kernel_arg.block_dim[0] = block_size;
-    kernel_arg.block_dim[1] = block_size;
-    kernel_arg.block_dim[2] = block_size;
     kernel_arg.size = size;
-    kernel_arg.block_size = block_size;
 
     // allocate device memory
     std::cout << "allocate device memory" << std::endl;
@@ -272,7 +265,11 @@ int main(int argc, char *argv[])
 
     // start device
     std::cout << "start device" << std::endl;
-    RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+    {
+        uint32_t grid_dim[3]  = {size / block_size, size / block_size, size / block_size};
+        uint32_t block_dim[3] = {block_size, block_size, block_size};
+        RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 3, grid_dim, block_dim, 0));
+    }
 
     // wait for completion
     std::cout << "wait for completion" << std::endl;

@@ -420,37 +420,11 @@ public:
     return 0;
   }
 
-  int start_wg(uint64_t krnl_addr, uint64_t args_addr, uint32_t dimension,
-               const uint32_t *grid_dim, const uint32_t *block_dim, uint32_t lmem_size) {
-    // setup kernel launch parameters
-    uint64_t threads_per_warp;
-    CHECK_ERR(this->get_caps(VX_CAPS_NUM_THREADS, &threads_per_warp), { return err; });
-    uint32_t block_size, warp_step_x, warp_step_y, warp_step_z;
-    prepare_kernel_launch_params(threads_per_warp, dimension, block_dim,
-        &block_size, &warp_step_x, &warp_step_y, &warp_step_z);
-
-    // configure kernel launch
-    CHECK_ERR(this->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, krnl_addr & 0xffffffff), { return err; });
-    CHECK_ERR(this->dcr_write(VX_DCR_KMU_STARTUP_ADDR1, krnl_addr >> 32), { return err; });
-    CHECK_ERR(this->dcr_write(VX_DCR_KMU_STARTUP_ARG0, args_addr & 0xffffffff), { return err; });
-    CHECK_ERR(this->dcr_write(VX_DCR_KMU_STARTUP_ARG1, args_addr >> 32), { return err; });
-    uint32_t grid_regs[] = {VX_DCR_KMU_GRID_DIM_X, VX_DCR_KMU_GRID_DIM_Y, VX_DCR_KMU_GRID_DIM_Z};
-    uint32_t block_regs[] = {VX_DCR_KMU_BLOCK_DIM_X, VX_DCR_KMU_BLOCK_DIM_Y, VX_DCR_KMU_BLOCK_DIM_Z};
-    for (uint32_t i = 0; i < 3; ++i) {
-      CHECK_ERR(this->dcr_write(grid_regs[i], (i < dimension) ? grid_dim[i] : 1), { return err; });
-      CHECK_ERR(this->dcr_write(block_regs[i], (i < dimension && block_dim) ? block_dim[i] : 1), { return err; });
-    }
-    CHECK_ERR(this->dcr_write(VX_DCR_KMU_LMEM_SIZE, lmem_size), { return err; });
-    CHECK_ERR(this->dcr_write(VX_DCR_KMU_BLOCK_SIZE, block_size), { return err; });
-    CHECK_ERR(this->dcr_write(VX_DCR_KMU_WARP_STEP_X, warp_step_x), { return err; });
-    CHECK_ERR(this->dcr_write(VX_DCR_KMU_WARP_STEP_Y, warp_step_y), { return err; });
-    CHECK_ERR(this->dcr_write(VX_DCR_KMU_WARP_STEP_Z, warp_step_z), { return err; });
-
-    // start execution
+  int start() {
+    // DCRs already written by stub; just trigger execution
     CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_RUN), {
       return -1;
     });
-
     return 0;
   }
 

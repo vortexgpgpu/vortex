@@ -169,26 +169,11 @@ extern int vx_dev_init(callbacks_t* callbacks) {
     return device->download(host_ptr, buffer->addr + src_offset, size);
   };
 
-  callbacks->start_wg = [](vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments,
-    uint32_t dimension, const uint32_t* grid_dim, const uint32_t * block_dim, uint32_t lmem_size) {
-    if (nullptr == hdevice || nullptr == hkernel || nullptr == harguments)
+  callbacks->start = [](vx_device_h hdevice)->int {
+    if (nullptr == hdevice)
       return -1;
-    DBGPRINT("START_WG: hdevice=%p, hkernel=%p, harguments=%p, dimension=%d", hdevice, hkernel, harguments, dimension);
-    for (uint32_t i = 0; i < dimension; ++i) {
-      DBGPRINT(", grid_dim[%d]=%d", i, grid_dim[i]);
-    }
-    if (block_dim) {
-      for (uint32_t i = 0; i < dimension; ++i) {
-        DBGPRINT(", block_dim[%d]=%d", i, block_dim[i]);
-      }
-    } else {
-      DBGPRINT("%s", ", block_dim=null");
-    }
-    DBGPRINT(", lmem_size=%d\n", lmem_size);
-    auto device = ((vx_device*)hdevice);
-    auto kernel = ((vx_buffer*)hkernel);
-    auto arguments = ((vx_buffer*)harguments);
-    return device->start_wg(kernel->addr, arguments->addr, dimension, grid_dim, block_dim, lmem_size);
+    DBGPRINT("START: hdevice=%p\n", hdevice);
+    return ((vx_device*)hdevice)->start();
   };
 
   callbacks->ready_wait = [](vx_device_h hdevice, uint64_t timeout) {

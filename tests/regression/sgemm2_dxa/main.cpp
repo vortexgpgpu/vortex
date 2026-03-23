@@ -198,10 +198,8 @@ int main(int argc, char* argv[]) {
   std::cout << "occupancy: max_localmem=" << max_localmem << " bytes\n";
   RT_CHECK(max_localmem < local_mem);
 
-  kernel_arg.grid_dim[0] = size / tile_size;
-  kernel_arg.grid_dim[1] = size / tile_size;
-  kernel_arg.block_dim[0] = tile_size;
-  kernel_arg.block_dim[1] = tile_size;
+  uint32_t grid_dim[2]  = {size / tile_size, size / tile_size};
+  uint32_t block_dim[2] = {tile_size, tile_size};
   kernel_arg.size = size;
   kernel_arg.tile_size = tile_size;
   kernel_arg.chunk_k = chunk_k;
@@ -245,7 +243,7 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   std::cout << "start device\n";
-  RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 2, kernel_arg.grid_dim, kernel_arg.block_dim, local_mem));
+  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, local_mem));
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
   RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, buf_size));

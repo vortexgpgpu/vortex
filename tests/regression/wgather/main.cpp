@@ -111,7 +111,7 @@ int main(int argc, char* argv[]) {
     // 1D grid: num_warps blocks, threads_per_warp threads each
     uint32_t grid_dim[1]  = {num_warps};
     uint32_t block_dim[1] = {threads_per_warp};
-    RT_CHECK(vx_start_wg(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
+    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
     RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
     // ---- Verify basic wgather (dst_buffer) ----
