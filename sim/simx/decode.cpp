@@ -1267,7 +1267,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
           }
         }
       } break;
-  #ifdef TCU_WGMMA_ENABLE
+    #ifdef TCU_WGMMA_ENABLE
       case 1: { // WGMMA_SYNC
         namespace vt = vortex::tensor;
         using wg_cfg = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 4, 32>;
@@ -1297,7 +1297,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
           ibuffer.push_back(uop);
         }
       } break;
-  #endif // TCU_WGMMA_ENABLE
+    #endif // TCU_WGMMA_ENABLE
       default:
         std::abort();
       }
