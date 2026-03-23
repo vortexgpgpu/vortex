@@ -465,93 +465,35 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
   }
 }
 
-static inline void gather_B8(uint8_t mask0,
-                             uint8_t mask1,
-                             uint32_t bword0,
-                             uint32_t bword1,
-                             uint32_t& b_gathered) {
-  assert(__builtin_popcount(mask0 & 0x0f) == 2 && "mask0 must select exactly 2 of 4");
-  assert(__builtin_popcount(mask1 & 0x0f) == 2 && "mask1 must select exactly 2 of 4");
-
-  uint8_t out[4];
-  uint32_t out_idx = 0;
-
-  for (uint32_t i = 0; i < 4; ++i) {
-    if (mask0 & (1u << i)) {
-      out[out_idx++] = (bword0 >> (i * 8)) & 0xff;
-    }
+// Format-agnostic sparse gather: for each bword, iterate over its elem_count packed
+// elements, collect those flagged by lo_mask/hi_mask respectively, and pack them
+// sequentially into the output word. Works for elem_bits = 4, 8, or 16.
+static inline uint32_t gather_sparse(uint32_t bword0, uint32_t bword1,
+                                     uint32_t lo_mask, uint32_t hi_mask,
+                                     uint32_t elem_bits) {
+  uint32_t elem_count = 32 / elem_bits;
+  uint32_t elem_mask  = (elem_bits < 32) ? ((1u << elem_bits) - 1u) : ~0u;
+  assert(__builtin_popcount(lo_mask) + __builtin_popcount(hi_mask) == elem_count &&
+         "gather_sparse: total selected elements must equal elem_count");
+  uint32_t out = 0, k = 0;
+  for (uint32_t i = 0; i < elem_count; ++i) {
+    if (lo_mask & (1u << i))
+      out |= ((bword0 >> (i * elem_bits)) & elem_mask) << (k++ * elem_bits);
   }
-  for (uint32_t i = 0; i < 4; ++i) {
-    if (mask1 & (1u << i)) {
-      out[out_idx++] = (bword1 >> (i * 8)) & 0xff;
-    }
+  for (uint32_t i = 0; i < elem_count; ++i) {
+    if (hi_mask & (1u << i))
+      out |= ((bword1 >> (i * elem_bits)) & elem_mask) << (k++ * elem_bits);
   }
-
-  assert(out_idx == 4 && "gather_B8 must output exactly 4 elements");
-  b_gathered = (uint32_t(out[0]) << 0)
-             | (uint32_t(out[1]) << 8)
-             | (uint32_t(out[2]) << 16)
-             | (uint32_t(out[3]) << 24);
-}
-
-static inline void gather_B16(uint8_t mask,
-                              uint32_t bword0,
-                              uint32_t bword1,
-                              uint32_t& b_gathered) {
-  assert(__builtin_popcount(mask & 0x0f) == 2 && "mask must select exactly 2 of 4");
-
-  uint16_t in[4] = {
-      static_cast<uint16_t>((bword0 >> 0) & 0xffff),
-      static_cast<uint16_t>((bword0 >> 16) & 0xffff),
-      static_cast<uint16_t>((bword1 >> 0) & 0xffff),
-      static_cast<uint16_t>((bword1 >> 16) & 0xffff),
-  };
-
-  uint16_t out[2];
-  uint32_t out_idx = 0;
-  for (uint32_t i = 0; i < 4; ++i) {
-    if (mask & (1u << i)) {
-      out[out_idx++] = in[i];
-    }
-  }
-  assert(out_idx == 2 && "gather_B16 must output exactly 2 elements");
-  b_gathered = (uint32_t(out[0]) << 0) | (uint32_t(out[1]) << 16);
+  return out;
 }
 
 static inline uint32_t meta_num_cols(uint32_t fmt_s) {
   return vt::sparse_meta_num_cols(fmt_s, NUM_THREADS);
 }
 
-static inline uint32_t meta_row_width(uint32_t fmt_s) {
-  switch (fmt_s) {
-  case vt::fp16::id:
-  case vt::bf16::id:
-    return cfg::tcK * 2 * 2;
-  case vt::int4::id:
-  case vt::uint4::id:
-  case vt::nvfp4::id:
-    return cfg::tcK * 2 * 8;
-  default:
-    return cfg::tcK * 2 * 4;
-  }
-}
-
-static inline uint8_t first_selected_4(uint8_t mask) {
-  for (uint32_t i = 0; i < 4; ++i) {
-    if (mask & (1u << i)) {
-      return i;
-    }
-  }
-  return 0;
-}
-
-static inline uint8_t last_selected_4(uint8_t mask) {
-  for (int i = 3; i >= 0; --i) {
-    if (mask & (1u << i)) {
-      return i;
-    }
-  }
-  return 3;
+static inline uint32_t meta_row_width(uint32_t elem_bits) {
+  // Each K-step uses (32/elem_bits) meta bits per half (lo and hi), 2 halves per row.
+  return cfg::tcK * 2 * (32 / elem_bits);
 }
 
 class TensorUnit::Impl {
@@ -614,6 +556,37 @@ public:
     }
   }
 
+  void meta_store(uint32_t wid,
+                  uint32_t fmt_s,
+                  uint32_t col_idx,
+                  const std::vector<reg_data_t>& rs1_data,
+                  ExeTraceData* trace_data) {
+    __unused(trace_data);
+
+    uint32_t num_cols = meta_num_cols(fmt_s);
+    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
+    if (num_cols == 0 || col_idx >= total_stores) {
+      std::cout << "Error: META_STORE store index out of range: " << col_idx << std::endl;
+      std::abort();
+    }
+
+    uint32_t actual_col = col_idx / cfg::stores_per_col;
+    uint32_t sub_store = col_idx % cfg::stores_per_col;
+    uint32_t bank_begin = sub_store * cfg::banks_per_store;
+    uint32_t bank_end = std::min(bank_begin + cfg::banks_per_store, kMetaBanks);
+    uint32_t thread_offset = (cfg::meta_cols_per_load > 1)
+                           ? ((actual_col % cfg::meta_cols_per_load) * kMetaBanks)
+                           : 0;
+
+    for (uint32_t bank = bank_begin; bank < bank_end; ++bank) {
+      uint32_t src_idx = (cfg::stores_per_col > 1)
+                       ? (bank - bank_begin)
+                       : (thread_offset + bank);
+      sparse_meta_.at(wid).at(bank * kMaxMetaCols + actual_col) =
+          rs1_data.at(src_idx).u32;
+    }
+  }
+
   void wmma(uint32_t wid,
             uint32_t fmt_s,
             uint32_t fmt_d,
@@ -653,6 +626,82 @@ public:
           DTN(3, "0x" << b_col[q].u32);
         }
         DTN(3, "}, c_val=0x" << c_val << ", d_val=0x" << d_val << std::dec << std::endl);
+      }
+    }
+  }
+
+  void wmma_sp(uint32_t wid,
+               uint32_t fmt_s,
+               uint32_t fmt_d,
+               uint32_t step_m,
+               uint32_t step_n,
+               uint32_t step_k,
+               const std::vector<reg_data_t>& rs1_data,
+               const std::vector<reg_data_t>& rs2_data,
+               const std::vector<reg_data_t>& rs3_data,
+               std::vector<reg_data_t>& rd_data,
+               ExeTraceData* trace_data) {
+    __unused(trace_data);
+
+    if (!vt::sparse_format_supported(fmt_s)) {
+      std::cout << "Error: WMMA_SP unsupported input format: "
+                << vt::fmt_string(fmt_s) << " (id=" << fmt_s
+                << "). Supported formats: i8, u8, fp8, bf8, fp16, bf16, i4, u4." << std::endl;
+      std::abort();
+    }
+
+    constexpr uint32_t kCompression = 2;
+    if ((this->arch_.num_threads() % cfg::b_block_size_sp) != 0) {
+      std::cout << "Error: NUM_THREADS must be divisible by sparse B block size" << std::endl;
+      std::abort();
+    }
+
+    auto fedp = select_FEDP(fmt_s, fmt_d);
+
+    uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
+    uint32_t b_off = (step_n % cfg::b_sub_blocks_sp) * cfg::b_block_size_sp;
+    uint32_t bank = step_m * (cfg::k_steps / 2) + step_k;
+
+    auto meta_bit = [&](uint32_t bit_idx) {
+      uint32_t col = bit_idx / 32;
+      uint32_t off = bit_idx % 32;
+      return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) >> off) & 1u;
+    };
+
+    // meta_bits = number of metadata bits per K-step per half = 32 / elem_bits
+    uint32_t ebits     = elem_bits(fmt_s);
+    uint32_t meta_bits = 32 / ebits;
+
+    for (uint32_t i = 0; i < cfg::tcM; ++i) {
+      for (uint32_t j = 0; j < cfg::tcN; ++j) {
+        auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
+        auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
+
+        reg_data_t a_row_sparse[cfg::tcK];
+        reg_data_t b_col_sparse[cfg::tcK];
+        uint32_t row_base = i * meta_row_width(ebits);
+        uint32_t j_sp = cfg::sym_sparse ? (j % (cfg::tcN / 2)) : j;
+        for (uint32_t z = 0; z < cfg::tcK; ++z) {
+          a_row_sparse[z].u32 = a_row[z].u32;
+          auto bword1 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 0).u32;
+          auto bword2 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 1).u32;
+          uint32_t lo_mask = 0, hi_mask = 0;
+          for (uint32_t bit = 0; bit < meta_bits; ++bit) {
+            lo_mask |= meta_bit(row_base + meta_bits * z + bit) << bit;
+            hi_mask |= meta_bit(row_base + meta_bits * (cfg::tcK + z) + bit) << bit;
+          }
+          b_col_sparse[z].u32 = gather_sparse(bword1, bword2, lo_mask, hi_mask, ebits);
+        }
+
+        auto d_val = fedp(a_row_sparse, b_col_sparse, c_val);
+        rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
+
+        DTH(3, simobject_->name() << " SP_FEDP: wid=" << wid << ", i=" << i << ", j=" << j
+            << ", m=" << step_m << ", n=" << step_n << ", a0=0x" << std::hex << a_row_sparse[0].u32
+            << ", a1=0x" << a_row_sparse[1].u32
+            << ", bg0=0x" << b_col_sparse[0].u32
+            << ", bg1=0x" << b_col_sparse[1].u32
+            << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
       }
     }
   }
@@ -705,163 +754,6 @@ public:
               << ", d=0x" << d_val << std::dec << std::endl);
         }
       }
-    }
-  }
-
-  void wmma_sp(uint32_t wid,
-               uint32_t fmt_s,
-               uint32_t fmt_d,
-               uint32_t step_m,
-               uint32_t step_n,
-               uint32_t step_k,
-               const std::vector<reg_data_t>& rs1_data,
-               const std::vector<reg_data_t>& rs2_data,
-               const std::vector<reg_data_t>& rs3_data,
-               std::vector<reg_data_t>& rd_data,
-               ExeTraceData* trace_data) {
-    __unused(trace_data);
-
-    auto fedp = select_FEDP(fmt_s, fmt_d);
-
-    const bool is_8bit_sparse_fmt =
-        (fmt_s == vt::int8::id)  ||
-        (fmt_s == vt::uint8::id) ||
-        (fmt_s == vt::fp8::id)   ||
-        (fmt_s == vt::bf8::id);
-    const bool is_16bit_sparse_fmt =
-        (fmt_s == vt::fp16::id) ||
-        (fmt_s == vt::bf16::id);
-    const bool is_4bit_sparse_fmt =
-        (fmt_s == vt::int4::id) ||
-        (fmt_s == vt::uint4::id);
-    if (!is_8bit_sparse_fmt && !is_16bit_sparse_fmt && !is_4bit_sparse_fmt) {
-      std::cout << "Error: WMMA_SP unsupported input format: "
-                << vt::fmt_string(fmt_s) << " (id=" << fmt_s
-                << "). Supported formats: i8, u8, fp8, bf8, fp16, bf16, i4, u4." << std::endl;
-      std::abort();
-    }
-
-    constexpr uint32_t kCompression = 2;
-    if ((this->arch_.num_threads() % cfg::b_block_size_sp) != 0) {
-      std::cout << "Error: NUM_THREADS must be divisible by sparse B block size" << std::endl;
-      std::abort();
-    }
-
-    uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
-    uint32_t b_off = (step_n % cfg::b_sub_blocks_sp) * cfg::b_block_size_sp;
-    uint32_t bank = step_m * (cfg::k_steps / 2) + step_k;
-
-    for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      for (uint32_t j = 0; j < cfg::tcN; ++j) {
-        auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
-        auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
-
-        reg_data_t a_row_sparse[cfg::tcK];
-        reg_data_t b_col_sparse[cfg::tcK];
-        uint32_t row_base = i * meta_row_width(fmt_s);
-        for (uint32_t z = 0; z < cfg::tcK; ++z) {
-          a_row_sparse[z].u32 = a_row[z].u32;
-          auto meta_bit = [&](uint32_t bit_idx) {
-            uint32_t col = bit_idx / 32;
-            uint32_t off = bit_idx % 32;
-            return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) >> off) & 1u;
-          };
-          uint32_t j_sp = cfg::sym_sparse ? (j % (cfg::tcN / 2)) : j;
-          auto bword1 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 0).u32;
-          auto bword2 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 1).u32;
-          uint32_t b_gathered = 0;
-          if (is_16bit_sparse_fmt) {
-            uint8_t mask_lo = 0;
-            uint8_t mask_hi = 0;
-            for (uint32_t bit = 0; bit < 2; ++bit) {
-              mask_lo |= meta_bit(row_base + 2 * z + bit) << bit;
-              mask_hi |= meta_bit(row_base + 2 * (cfg::tcK + z) + bit) << bit;
-            }
-            uint8_t grp_mask = uint8_t((mask_hi << 2) | mask_lo);
-            gather_B16(grp_mask, bword1, bword2, b_gathered);
-          } else if (is_8bit_sparse_fmt) {
-            uint8_t mask_lo = 0;
-            uint8_t mask_hi = 0;
-            for (uint32_t bit = 0; bit < 4; ++bit) {
-              mask_lo |= meta_bit(row_base + 4 * z + bit) << bit;
-              mask_hi |= meta_bit(row_base + 4 * (cfg::tcK + z) + bit) << bit;
-            }
-            gather_B8(mask_lo, mask_hi, bword1, bword2, b_gathered);
-          } else { // 4-bit sparse format
-            uint8_t grp_mask_lo = 0;
-            uint8_t grp_mask_hi = 0;
-            for (uint32_t bit = 0; bit < 8; ++bit) {
-              grp_mask_lo |= meta_bit(row_base + 8 * z + bit) << bit;
-              grp_mask_hi |= meta_bit(row_base + 8 * (cfg::tcK + z) + bit) << bit;
-            }
-
-            uint32_t packed = 0;
-            for (uint32_t sg = 0; sg < 2; ++sg) {
-              uint8_t mask = (grp_mask_lo >> (sg * 4)) & 0xf;
-              uint8_t idx0 = first_selected_4(mask);
-              uint8_t idx1 = last_selected_4(mask);
-              uint32_t base = sg * 4;
-              uint32_t nib0 = (bword1 >> ((base + idx0) * 4)) & 0xf;
-              uint32_t nib1 = (bword1 >> ((base + idx1) * 4)) & 0xf;
-              packed |= nib0 << ((sg * 2 + 0) * 4);
-              packed |= nib1 << ((sg * 2 + 1) * 4);
-            }
-            for (uint32_t sg = 0; sg < 2; ++sg) {
-              uint8_t mask = (grp_mask_hi >> (sg * 4)) & 0xf;
-              uint8_t idx0 = first_selected_4(mask);
-              uint8_t idx1 = last_selected_4(mask);
-              uint32_t base = sg * 4;
-              uint32_t nib0 = (bword2 >> ((base + idx0) * 4)) & 0xf;
-              uint32_t nib1 = (bword2 >> ((base + idx1) * 4)) & 0xf;
-              packed |= nib0 << (((sg + 2) * 2 + 0) * 4);
-              packed |= nib1 << (((sg + 2) * 2 + 1) * 4);
-            }
-            b_gathered = packed;
-          }
-          b_col_sparse[z].u32 = b_gathered;
-        }
-
-        auto d_val = fedp(a_row_sparse, b_col_sparse, c_val);
-        rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
-
-        DTH(3, simobject_->name() << " SP_FEDP: wid=" << wid << ", i=" << i << ", j=" << j
-            << ", m=" << step_m << ", n=" << step_n << ", a0=0x" << std::hex << a_row_sparse[0].u32
-            << ", a1=0x" << a_row_sparse[1].u32
-            << ", bg0=0x" << b_col_sparse[0].u32
-            << ", bg1=0x" << b_col_sparse[1].u32
-            << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
-      }
-    }
-  }
-
-  void meta_store(uint32_t wid,
-                  uint32_t fmt_s,
-                  uint32_t col_idx,
-                  const std::vector<reg_data_t>& rs1_data,
-                  ExeTraceData* trace_data) {
-    __unused(trace_data);
-
-    uint32_t num_cols = meta_num_cols(fmt_s);
-    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
-    if (num_cols == 0 || col_idx >= total_stores) {
-      std::cout << "Error: META_STORE store index out of range: " << col_idx << std::endl;
-      std::abort();
-    }
-
-    uint32_t actual_col = col_idx / cfg::stores_per_col;
-    uint32_t sub_store = col_idx % cfg::stores_per_col;
-    uint32_t bank_begin = sub_store * cfg::banks_per_store;
-    uint32_t bank_end = std::min(bank_begin + cfg::banks_per_store, kMetaBanks);
-    uint32_t thread_offset = (cfg::meta_cols_per_load > 1)
-                           ? ((actual_col % cfg::meta_cols_per_load) * kMetaBanks)
-                           : 0;
-
-    for (uint32_t bank = bank_begin; bank < bank_end; ++bank) {
-      uint32_t src_idx = (cfg::stores_per_col > 1)
-                       ? (bank - bank_begin)
-                       : (thread_offset + bank);
-      sparse_meta_.at(wid).at(bank * kMaxMetaCols + actual_col) =
-          rs1_data.at(src_idx).u32;
     }
   }
 
