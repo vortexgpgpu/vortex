@@ -130,6 +130,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     logic [`ISSUE_WIDTH-1:0] issued_valids;
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_issued_valids
         assign issued_valids[i] = issue_sched_if[i].valid;
+        `UNUSED_VAR (issue_sched_if[i].wis)
     end
     assign issued_warps_cnt = ISSUE_ISW_SIZEW'($countones(issued_valids));
 
