@@ -1131,16 +1131,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         uint32_t fmt_d = rd;
         uint32_t fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
-        bool is_wgmma_b_smem = (rs2 & (1u << 1)) != 0;
-        bool is_wgmma_a_smem = (rs2 & (1u << 2)) != 0;
-        auto tcu_type = is_sparse ? TcuType::WMMA_SP
-                                  : (is_wgmma_b_smem
-                                      ? (is_wgmma_a_smem ? TcuType::WMMA_SS : TcuType::WMMA_RS)
-                                      : TcuType::WMMA);
-
-        if (is_sparse && (is_wgmma_b_smem || is_wgmma_a_smem)) {
-          std::abort();
-        }
+        auto tcu_type = is_sparse ? TcuType::WMMA_SP : TcuType::WMMA;
 
         if (is_sparse) {
           // Sparse mode uses the packed sparse-A register layout from vx_tensor.h
@@ -1247,46 +1238,24 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         }
           }
         } else {
-          // Dense mode
-          bool fedp2x_mode = (tcu_type == TcuType::WMMA_RS || tcu_type == TcuType::WMMA_SS)
-                          && ((cfg::k_steps % 2) == 0);
-          uint32_t dense_k_steps = fedp2x_mode ? (cfg::k_steps / 2) : cfg::k_steps;
+          // Dense mode (WMMA from RF)
           uint32_t steps = 0;
-          uint32_t steps_per_mnk = fedp2x_mode ? 2 : 1;
-          uint32_t steps_count = cfg::m_steps * cfg::n_steps * dense_k_steps * steps_per_mnk;
+          uint32_t steps_count = cfg::m_steps * cfg::n_steps * cfg::k_steps;
           uint32_t steps_shift = (steps_count > 1) ? (32 - log2ceil(steps_count)) : 0;
           uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
           uint32_t uuid_lo = uuid & 0xffffffff;
-          for (uint32_t k = 0; k < dense_k_steps; ++k) {
-            uint32_t k_idx = fedp2x_mode ? (k * 2) : k;
+          for (uint32_t k = 0; k < cfg::k_steps; ++k) {
             for (uint32_t m = 0; m < cfg::m_steps; ++m) {
               for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k_idx;
-                uint32_t reg_rs2 = rb_base + (k_idx * cfg::n_steps + n) / cfg::b_sub_blocks;
+                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
+                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
                 uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
-
-                if (fedp2x_mode) {
-                  uint32_t reg_rs1_pair = reg_rs1 + 1;
-
-                  uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
-                  uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
-                  ++steps;
-                  auto load_a_instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-                  load_a_instr->setOpType(TcuType::WGMMA_LOAD);
-                  load_a_instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k_idx});
-                  load_a_instr->setSrcReg(0, reg_rs1, RegType::Float);
-                  load_a_instr->setSrcReg(1, reg_rs1_pair, RegType::Float);
-                  load_a_instr->setSrcReg(2, reg_rs2, RegType::Float);
-                  load_a_instr->setParentUUID(uuid);
-                  ibuffer.push_back(load_a_instr);
-                }
-
                 uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
                 uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
                 ++steps;
                 auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
                 instr->setOpType(tcu_type);
-                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k_idx});
+                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k});
                 instr->setDestReg(reg_rs3, RegType::Float);
                 instr->setSrcReg(0, reg_rs1, RegType::Float);
                 instr->setSrcReg(1, reg_rs2, RegType::Float);
@@ -1303,36 +1272,37 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
           }
         }
       } break;
-      case 1: { // META_STORE
+  #ifdef TCU_WGMMA_ENABLE
+      case 1: { // WGMMA_SYNC
         namespace vt = vortex::tensor;
-        using cfg = vt::wmma_config_t<NUM_THREADS>;
-        static_assert(cfg::num_meta_loads <= 2, "sparse metadata decode assumes at most two loads");
-
-        uint32_t fmt_meta = rd;
-        if (!vt::sparse_format_supported(fmt_meta)) {
-          std::abort();
-        }
-        uint32_t meta_total_stores = vt::sparse_meta_total_store_uops(fmt_meta, cfg::stores_per_col, NUM_THREADS);
-        if (meta_total_stores == 0) {
-          std::abort();
-        }
-
-        uint32_t steps_shift = (meta_total_stores > 1) ? (32 - log2ceil(meta_total_stores)) : 0;
+        using wg_cfg = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 4, 32>;
+        uint32_t fmt_d = rd;   // Ot::id from rd field (matches mma_sync convention)
+        uint32_t fmt_s = rs1;  // It::id from rs1 field
+        // rs2 = flags (0=dense, reserved for future sparse WGMMA)
+        // smem descriptors are always in a0 (x10) and a1 (x11) — implicit convention
+        constexpr uint32_t a0 = 10, a1 = 11;
+        // Emit NRC=32 uops, one per accumulator register f0..f31
+        constexpr uint32_t nrc = wg_cfg::m_steps * wg_cfg::n_steps;
+        uint32_t steps_shift = (nrc > 1) ? (32 - log2ceil(nrc)) : 0;
         uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
         uint32_t uuid_lo = uuid & 0xffffffff;
-        for (uint32_t flat_store = 0; flat_store < meta_total_stores; ++flat_store) {
-          uint32_t load_idx = flat_store / cfg::meta_cols_per_load;
-          uint32_t reg_rs1 = load_idx ? rs2 : rs1;
-          uint32_t uuid_lo_x = (flat_store << steps_shift) | uuid_lo;
+        for (uint32_t i = 0; i < nrc; ++i) {
+          uint32_t step_m = i / wg_cfg::n_steps;
+          uint32_t step_n = i % wg_cfg::n_steps;
+          uint32_t uuid_lo_x = (i << steps_shift) | uuid_lo;
           uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
-          auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-          instr->setOpType(TcuType::META_STORE);
-          instr->setArgs(IntrTcuArgs{fmt_meta, flat_store, 0, 0, 0});
-          instr->setSrcReg(0, reg_rs1, RegType::Float);
-          instr->setParentUUID(uuid);
-          ibuffer.push_back(instr);
+          auto uop = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
+          uop->setOpType(TcuType::WGMMA);
+          uop->setArgs(IntrTcuArgs{fmt_s, fmt_d, step_m, step_n, 0});
+          uop->setDestReg(i, RegType::Float);        // f_i = output
+          uop->setSrcReg(0, i, RegType::Float);       // f_i = accumulator C in
+          uop->setSrcReg(1, a0, RegType::Integer);    // a0 (x10) = smem A descriptor
+          uop->setSrcReg(2, a1, RegType::Integer);    // a1 (x11) = smem B descriptor
+          uop->setParentUUID(uuid);
+          ibuffer.push_back(uop);
         }
       } break;
+  #endif // TCU_WGMMA_ENABLE
       default:
         std::abort();
       }

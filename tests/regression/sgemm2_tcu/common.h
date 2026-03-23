@@ -15,8 +15,8 @@
 #define OTYPE fp32
 #endif
 
-#ifndef TCU_WGMMA_ENABLE
-#define TCU_WGMMA_ENABLE
+#ifndef CTA_SIZE
+#define CTA_SIZE NUM_THREADS
 #endif
 
 typedef struct {

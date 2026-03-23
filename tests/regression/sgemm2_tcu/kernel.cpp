@@ -4,12 +4,7 @@
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
-
-enum : uint32_t {
-  MODE_RS = 0,
-  MODE_SS = 1,
-};
+using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, false, 32>;
 
 extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -19,58 +14,56 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t M = arg->M;
   uint32_t N = arg->N;
   uint32_t K = arg->K;
-  uint32_t mode = arg->mode;
 
-  vt::smem_matrix_desc a_desc{arg->A_desc};
-  vt::smem_matrix_desc b_desc{arg->B_desc};
-
-  ctx::fragment_a   fragA;
-  ctx::fragment_b   fragB;
-  ctx::fragment_acc fragC;
-
-  // calculate tile row & column based on block index
+  // Calculate output tile origin for this block
   uint32_t tile_row = blockIdx.y * ctx::tileM;
   uint32_t tile_col = blockIdx.x * ctx::tileN;
 
+  // Shared memory: A tile [tileM x tileK] followed by B tile [tileK x tileN],
+  // both stored row-major.
+  auto smem  = reinterpret_cast<ctx::input_t *>(__local_mem());
+  auto A_smem = smem;
+  auto B_smem = smem + ctx::tileM * ctx::tileK;
+
   // Initialize accumulator tile to zero
+  ctx::fragment_acc fragC;
   ctx::fill_fragment(fragC, 0);
 
-  (void)M;
-  uint32_t tile_row_idx = tile_row / ctx::tileM;
-  uint32_t tile_col_idx = tile_col / ctx::tileN;
+  uint32_t tid = threadIdx.x;
 
-  for (uint32_t i = 0, k_idx = 0; i < K; i += ctx::tileK, ++k_idx) {
-    auto pTileA = pA + tile_row * K + i;
-
-    // Load A tile (register source in RS, descriptor source in SS)
-    if (mode == MODE_SS) {
-      ctx::load_matrix_sync_smem(fragA, a_desc, tile_row_idx, k_idx, K);
-    } else
-    {
-      ctx::load_matrix_sync(fragA, pTileA, K);
+  // Loop over K tiles
+  for (uint32_t k = 0; k < K; k += ctx::tileK) {
+    // Cooperative load: A tile [tile_row .. tile_row+tileM, k .. k+tileK] into A_smem
+    uint32_t a_size = ctx::tileM * ctx::tileK;
+    for (uint32_t i = tid; i < a_size; i += CTA_SIZE) {
+      uint32_t r = i / ctx::tileK;
+      uint32_t c = i % ctx::tileK;
+      A_smem[r * ctx::tileK + c] = pA[(tile_row + r) * K + (k + c)];
     }
 
-    // Load B tile (descriptor source in RS/SS)
-    if constexpr (vt::ITYPE::bits < 8) {
-      // For sub-byte matrix B must be in col-major format
-      auto pTileB = pB + tile_col * K + i;
-      ctx::load_matrix_sync_smem<vt::col_major>(fragB, b_desc, tile_col_idx, k_idx, K);
-      (void)pTileB;
-    } else {
-      auto pTileB = pB + i * N + tile_col;
-      ctx::load_matrix_sync_smem(fragB, b_desc, tile_col_idx, k_idx, N);
-      (void)pTileB;
+    // Cooperative load: B tile [k .. k+tileK, tile_col .. tile_col+tileN] into B_smem
+    uint32_t b_size = ctx::tileK * ctx::tileN;
+    for (uint32_t i = tid; i < b_size; i += CTA_SIZE) {
+      uint32_t r = i / ctx::tileN;
+      uint32_t c = i % ctx::tileN;
+      B_smem[r * ctx::tileN + c] = pB[(k + r) * N + (tile_col + c)];
     }
 
-    // Matrix multiply-accumulate
-    if (mode == MODE_SS) {
-      ctx::wgmma_sync<vt::wgmma_ss>(fragC, fragA, fragB, fragC);
-    } else {
-      ctx::wgmma_sync<vt::wgmma_rs>(fragC, fragA, fragB, fragC);
-    }
+    // Ensure all smem writes are visible before WGMMA reads
+    __syncthreads();
+
+    // Build smem descriptors: leading_bytes = row stride in bytes
+    auto desc_a = vt::vx_make_smem_desc(A_smem, ctx::tileK * sizeof(ctx::input_t));
+    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileN * sizeof(ctx::input_t));
+
+    // Execute WGMMA: C += A * B
+    ctx::wgmma_sync(fragC, desc_a, desc_b, fragC);
+
+    // Sync after WGMMA
+    __syncthreads();
   }
 
-  // Store the computed C tile
+  // Store the computed C tile to global memory
   auto pTileC = pC + tile_row * N + tile_col;
   ctx::store_matrix_sync(pTileC, fragC, N);
 }
