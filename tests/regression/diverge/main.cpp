@@ -228,7 +228,11 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   std::cout << "start device\n";
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  {
+    uint32_t grid_dim[1], block_dim[1];
+    RT_CHECK(vx_max_occupancy_grid(device, 1, &num_points, grid_dim, block_dim));
+    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
+  }
 
   std::cout << "wait for completion\n";
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));

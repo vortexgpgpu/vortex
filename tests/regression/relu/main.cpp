@@ -167,7 +167,11 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  {
+    uint32_t grid_dim[1], block_dim[1];
+    RT_CHECK(vx_max_occupancy_grid(device, 1, &num_points, grid_dim, block_dim));
+    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
+  }
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

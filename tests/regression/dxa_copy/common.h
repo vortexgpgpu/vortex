@@ -8,8 +8,6 @@
 #endif
 
 typedef struct {
-  uint32_t grid_dim[2];
-  uint32_t block_dim[2];
   uint32_t tile_rows;    // rows per CTA tile
   uint32_t tile_cols;    // cols per CTA tile
   uint32_t ncols;        // total columns in source array

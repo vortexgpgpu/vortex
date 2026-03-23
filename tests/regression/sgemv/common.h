@@ -6,7 +6,6 @@
 #endif
 
 typedef struct {
-  uint32_t grid_dim[2];
   uint64_t A_addr;
   uint64_t x_addr;
   uint64_t y_addr;

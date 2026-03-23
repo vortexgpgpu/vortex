@@ -231,11 +231,14 @@ int main(int argc, char *argv[]) {
   /*uint64_t iteration = 30;*/
   uint64_t iteration = 1;
 
+  uint32_t grid_dim[1], block_dim[1];
+  RT_CHECK(vx_max_occupancy_grid(device, 1, &size, grid_dim, block_dim));
+
   for(uint32_t k = 0; k < iteration; k++){
 
     // start device
     std::cout << "start device" << std::endl;
-    RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
 
     // wait for completion
     std::cout << "wait for completion" << std::endl;

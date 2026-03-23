@@ -3,7 +3,6 @@
 #include <stdint.h>
 
 typedef struct {
-  uint32_t grid_dim[2];
   uint32_t size;
   uint64_t dst_addr;
 } kernel_arg_t;

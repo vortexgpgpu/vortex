@@ -94,8 +94,6 @@ int main(int argc, char *argv[]) {
   uint32_t y_size = M * sizeof(float);
 
   // Initialize kernel arguments
-  kernel_arg.grid_dim[0] = M;  // 1 thread per output row
-  kernel_arg.grid_dim[1] = 1;
   kernel_arg.M = M;
   kernel_arg.N = N;
 
@@ -136,7 +134,11 @@ int main(int argc, char *argv[]) {
   // Execute kernel
   auto time_start = std::chrono::high_resolution_clock::now();
   std::cout << "Launching kernel" << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  {
+    uint32_t grid_dim[1], block_dim[1];
+    RT_CHECK(vx_max_occupancy_grid(device, 1, &M, grid_dim, block_dim));
+    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
+  }
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();

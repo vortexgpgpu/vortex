@@ -1,7 +1,7 @@
-#include <vx_spawn2.h>
+#include <vx_spawn.h>
 #include "common.h"
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+void kernel_body(kernel_arg_t *arg) {
   auto A_ptr = reinterpret_cast<TYPE*>(arg->A_addr);
   auto B_ptr = reinterpret_cast<TYPE*>(arg->B_addr);
   auto C_ptr = reinterpret_cast<TYPE*>(arg->C_addr);
@@ -20,8 +20,9 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   //   local_A: [tile_size × chunk_k], row-major (row = l_row, col = k_local)
   //   local_B: [chunk_k × tile_size], row-major (row = k_local, col = l_col)
   auto tile_elems_a = tile_size * chunk_k;
-  auto local_ptr = reinterpret_cast<TYPE*>(__local_mem());
-  auto local_A = local_ptr;
+  auto tile_elems_b = chunk_k * tile_size;
+  auto local_ptr = __local_mem((tile_elems_a + tile_elems_b) * sizeof(TYPE));
+  auto local_A = reinterpret_cast<TYPE*>(local_ptr);
   auto local_B = local_A + tile_elems_a;
 
   TYPE sum(0);
@@ -46,4 +47,9 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   }
 
   C_ptr[g_row * size + g_col] = sum;
+}
+
+int main() {
+  auto arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
+	return vx_spawn_threads(2, arg->grid_dim, arg->block_dim, (vx_kernel_func_cb)kernel_body, arg);
 }
