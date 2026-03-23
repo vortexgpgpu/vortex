@@ -1271,29 +1271,30 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       case 1: { // WGMMA_SYNC
         namespace vt = vortex::tensor;
         using wg_cfg = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 4, 32>;
-        uint32_t fmt_d = rd;   // Ot::id from rd field (matches mma_sync convention)
+        uint32_t fmt_d = rd;   // Ot::id from rd field
         uint32_t fmt_s = rs1;  // It::id from rs1 field
-        // rs2 = flags (0=dense, reserved for future sparse WGMMA)
-        // smem descriptors are always in a0 (x10) and a1 (x11) — implicit convention
+        bool is_sparse = (rs2 & 1) != 0;
+        // smem descriptors in a0 (x10) = A, a1 (x11) = B; meta implicit after A in smem
         constexpr uint32_t a0 = 10, a1 = 11;
-        // Emit k_steps * NRC uops: K-step outer, accumulator-register inner.
-        // RF serves as accumulator across K-steps, same as wmma step_k.
-        constexpr uint32_t nrc        = wg_cfg::m_steps * wg_cfg::n_steps;
-        constexpr uint32_t total_uops = wg_cfg::k_steps * nrc;
+        constexpr uint32_t nrc = wg_cfg::m_steps * wg_cfg::n_steps;
+        // Sparse uses k_steps/2 (A is 2:4 compressed); dense uses k_steps
+        uint32_t k_count = is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
+        uint32_t total_uops = k_count * nrc;
         uint32_t steps_shift = (total_uops > 1) ? (32 - log2ceil(total_uops)) : 0;
         uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
         uint32_t uuid_lo = uuid & 0xffffffff;
         uint32_t uop_idx = 0;
-        for (uint32_t k = 0; k < wg_cfg::k_steps; ++k) {
+        TcuType tcu_type = is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA;
+        for (uint32_t k = 0; k < k_count; ++k) {
           for (uint32_t i = 0; i < nrc; ++i) {
             uint32_t step_m = i / wg_cfg::n_steps;
             uint32_t step_n = i % wg_cfg::n_steps;
             uint32_t uuid_lo_x = (uop_idx++ << steps_shift) | uuid_lo;
             uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
             auto uop = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-            uop->setOpType(TcuType::WGMMA);
+            uop->setOpType(tcu_type);
             uop->setArgs(IntrTcuArgs{fmt_s, fmt_d, step_m, step_n, k});
-            uop->setDestReg(i, RegType::Float);        // f_i = output
+            uop->setDestReg(i, RegType::Float);        // f_i = output accumulator
             uop->setSrcReg(0, i, RegType::Float);       // f_i = accumulator C in
             uop->setSrcReg(1, a0, RegType::Integer);    // a0 (x10) = smem A descriptor
             uop->setSrcReg(2, a1, RegType::Integer);    // a1 (x11) = smem B descriptor

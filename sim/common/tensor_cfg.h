@@ -13,7 +13,6 @@
 
 #pragma once
 
-#include <VX_config.h>
 #include <stdint.h>
 #include <type_traits>
 #include <algorithm>

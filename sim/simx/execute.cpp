@@ -1653,14 +1653,16 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         rd_write = true;
       } break;
   #ifdef TCU_WGMMA_ENABLE
-      case TcuType::WGMMA: {
+      case TcuType::WGMMA:
+      case TcuType::WGMMA_SP: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
         assert(operand_tmask.count() == num_threads);
+        bool is_sparse_wg = (tcu_type == TcuType::WGMMA_SP);
         core_->tensor_unit()->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                                     tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
                                     rs2_data.at(0).u32, rs3_data.at(0).u32,
-                                    rs1_data, rd_data, trace_data.get());
+                                    rs1_data, rd_data, trace_data.get(), is_sparse_wg);
         rd_write = true;
       } break;
   #endif // TCU_WGMMA_ENABLE

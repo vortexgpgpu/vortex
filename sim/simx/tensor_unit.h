@@ -71,7 +71,8 @@ public:
 	           uint32_t b_desc,
 	           const std::vector<reg_data_t>& rs1_data,
 	           std::vector<reg_data_t>& rd_data,
-	           ExeTraceData* trace_data);
+	           ExeTraceData* trace_data,
+	           bool is_sparse = false);
 
 	void meta_store(uint32_t wid,
 					uint32_t fmt_s,
