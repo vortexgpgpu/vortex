@@ -597,110 +597,70 @@ public:
             const std::vector<reg_data_t>& rs2_data,
             const std::vector<reg_data_t>& rs3_data,
             std::vector<reg_data_t>& rd_data,
-            ExeTraceData* trace_data) {
-    __unused(wid);
+            ExeTraceData* trace_data,
+            bool is_sparse) {
     __unused(trace_data);
-    __unused(step_k);
 
-    auto fedp = select_FEDP(fmt_s, fmt_d);
+    if (is_sparse) {
+      if (!vt::sparse_format_supported(fmt_s)) {
+        std::cout << "Error: WMMA_SP unsupported input format: "
+                  << vt::fmt_string(fmt_s) << " (id=" << fmt_s
+                  << "). Supported formats: i8, u8, fp8, bf8, fp16, bf16, i4, u4." << std::endl;
+        std::abort();
+      }
+      if ((arch_.num_threads() % cfg::b_block_size_sp) != 0) {
+        std::cout << "Error: NUM_THREADS must be divisible by sparse B block size" << std::endl;
+        std::abort();
+      }
+    }
 
+    auto fedp  = select_FEDP(fmt_s, fmt_d);
     uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
-    uint32_t b_off = (step_n % cfg::b_sub_blocks) * cfg::b_block_size;
+    uint32_t b_off = is_sparse
+                   ? (step_n % cfg::b_sub_blocks_sp) * cfg::b_block_size_sp
+                   : (step_n % cfg::b_sub_blocks)    * cfg::b_block_size;
+
+    // Sparse-only: metadata bank index and per-element bit width
+    constexpr uint32_t kCompression = 2;
+    uint32_t bank      = step_m * (cfg::k_steps / 2) + step_k;
+    uint32_t ebits     = is_sparse ? elem_bits(fmt_s) : 0;
+    uint32_t meta_bits = is_sparse ? (32 / ebits) : 0;
+
+    auto meta_bit = [&](uint32_t bit_idx) {
+      return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + bit_idx / 32) >> (bit_idx % 32)) & 1u;
+    };
 
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
       for (uint32_t j = 0; j < cfg::tcN; ++j) {
         auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
-        auto b_col = rs2_data.data() + b_off + j * cfg::tcK;
         auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
+
+        reg_data_t b_buf[cfg::tcK];
+        const reg_data_t* b_col;
+        if (is_sparse) {
+          uint32_t row_base = i * meta_row_width(ebits);
+          uint32_t j_sp = cfg::sym_sparse ? (j % (cfg::tcN / 2)) : j;
+          for (uint32_t z = 0; z < cfg::tcK; ++z) {
+            uint32_t b_idx = b_off + j_sp * cfg::tcK * kCompression + z * kCompression;
+            uint32_t lo = 0, hi = 0;
+            for (uint32_t b = 0; b < meta_bits; ++b) {
+              lo |= meta_bit(row_base + meta_bits * z           + b) << b;
+              hi |= meta_bit(row_base + meta_bits * (cfg::tcK + z) + b) << b;
+            }
+            b_buf[z].u32 = gather_sparse(rs2_data.at(b_idx).u32, rs2_data.at(b_idx + 1).u32, lo, hi, ebits);
+          }
+          b_col = b_buf;
+        } else {
+          b_col = rs2_data.data() + b_off + j * cfg::tcK;
+        }
+
         auto d_val = fedp(a_row, b_col, c_val);
         rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
 
-        DTH(3, simobject_->name() << " FEDP: wid=" << wid << ", i=" << i << ", j=" << j << ", m=" << step_m << ", n=" << step_n << ", a_row={" << std::hex);
-        for (uint32_t q = 0; q < cfg::tcK; ++q) {
-          if (q) DTN(3, ", ");
-          DTN(3, "0x" << a_row[q].u32);
-        }
-        DTN(3, "}, b_col={");
-        for (uint32_t q = 0; q < cfg::tcK; ++q) {
-          if (q) DTN(3, ", ");
-          DTN(3, "0x" << b_col[q].u32);
-        }
-        DTN(3, "}, c_val=0x" << c_val << ", d_val=0x" << d_val << std::dec << std::endl);
-      }
-    }
-  }
-
-  void wmma_sp(uint32_t wid,
-               uint32_t fmt_s,
-               uint32_t fmt_d,
-               uint32_t step_m,
-               uint32_t step_n,
-               uint32_t step_k,
-               const std::vector<reg_data_t>& rs1_data,
-               const std::vector<reg_data_t>& rs2_data,
-               const std::vector<reg_data_t>& rs3_data,
-               std::vector<reg_data_t>& rd_data,
-               ExeTraceData* trace_data) {
-    __unused(trace_data);
-
-    if (!vt::sparse_format_supported(fmt_s)) {
-      std::cout << "Error: WMMA_SP unsupported input format: "
-                << vt::fmt_string(fmt_s) << " (id=" << fmt_s
-                << "). Supported formats: i8, u8, fp8, bf8, fp16, bf16, i4, u4." << std::endl;
-      std::abort();
-    }
-
-    constexpr uint32_t kCompression = 2;
-    if ((this->arch_.num_threads() % cfg::b_block_size_sp) != 0) {
-      std::cout << "Error: NUM_THREADS must be divisible by sparse B block size" << std::endl;
-      std::abort();
-    }
-
-    auto fedp = select_FEDP(fmt_s, fmt_d);
-
-    uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
-    uint32_t b_off = (step_n % cfg::b_sub_blocks_sp) * cfg::b_block_size_sp;
-    uint32_t bank = step_m * (cfg::k_steps / 2) + step_k;
-
-    auto meta_bit = [&](uint32_t bit_idx) {
-      uint32_t col = bit_idx / 32;
-      uint32_t off = bit_idx % 32;
-      return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) >> off) & 1u;
-    };
-
-    // meta_bits = number of metadata bits per K-step per half = 32 / elem_bits
-    uint32_t ebits     = elem_bits(fmt_s);
-    uint32_t meta_bits = 32 / ebits;
-
-    for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      for (uint32_t j = 0; j < cfg::tcN; ++j) {
-        auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
-        auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
-
-        reg_data_t a_row_sparse[cfg::tcK];
-        reg_data_t b_col_sparse[cfg::tcK];
-        uint32_t row_base = i * meta_row_width(ebits);
-        uint32_t j_sp = cfg::sym_sparse ? (j % (cfg::tcN / 2)) : j;
-        for (uint32_t z = 0; z < cfg::tcK; ++z) {
-          a_row_sparse[z].u32 = a_row[z].u32;
-          auto bword1 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 0).u32;
-          auto bword2 = rs2_data.at(b_off + j_sp * cfg::tcK * kCompression + z * kCompression + 1).u32;
-          uint32_t lo_mask = 0, hi_mask = 0;
-          for (uint32_t bit = 0; bit < meta_bits; ++bit) {
-            lo_mask |= meta_bit(row_base + meta_bits * z + bit) << bit;
-            hi_mask |= meta_bit(row_base + meta_bits * (cfg::tcK + z) + bit) << bit;
-          }
-          b_col_sparse[z].u32 = gather_sparse(bword1, bword2, lo_mask, hi_mask, ebits);
-        }
-
-        auto d_val = fedp(a_row_sparse, b_col_sparse, c_val);
-        rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
-
-        DTH(3, simobject_->name() << " SP_FEDP: wid=" << wid << ", i=" << i << ", j=" << j
-            << ", m=" << step_m << ", n=" << step_n << ", a0=0x" << std::hex << a_row_sparse[0].u32
-            << ", a1=0x" << a_row_sparse[1].u32
-            << ", bg0=0x" << b_col_sparse[0].u32
-            << ", bg1=0x" << b_col_sparse[1].u32
+        DTH(3, simobject_->name() << (is_sparse ? " SP_FEDP" : " FEDP")
+            << ": wid=" << wid << ", i=" << i << ", j=" << j
+            << ", m=" << step_m << ", n=" << step_n << std::hex
+            << ", a0=0x" << a_row[0].u32 << ", b0=0x" << b_col[0].u32
             << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
       }
     }
@@ -884,8 +844,9 @@ void TensorUnit::wmma(uint32_t wid,
                       const std::vector<reg_data_t>& rs2_data,
                       const std::vector<reg_data_t>& rs3_data,
                       std::vector<reg_data_t>& rd_data,
-                      ExeTraceData* trace_data) {
-  impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
+                      ExeTraceData* trace_data,
+                      bool is_sparse) {
+  impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data, is_sparse);
 }
 
 void TensorUnit::wgmma(uint32_t wid,
@@ -899,20 +860,6 @@ void TensorUnit::wgmma(uint32_t wid,
                        std::vector<reg_data_t>& rd_data,
                        ExeTraceData* trace_data) {
   impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, a_desc, b_desc, rs1_data, rd_data, trace_data);
-}
-
-void TensorUnit::wmma_sp(uint32_t wid,
-                         uint32_t fmt_s,
-                         uint32_t fmt_d,
-                         uint32_t step_m,
-                         uint32_t step_n,
-                         uint32_t step_k,
-                         const std::vector<reg_data_t>& rs1_data,
-                         const std::vector<reg_data_t>& rs2_data,
-                         const std::vector<reg_data_t>& rs3_data,
-                         std::vector<reg_data_t>& rd_data,
-                         ExeTraceData* trace_data) {
-  impl_->wmma_sp(wid, fmt_s, fmt_d, step_m, step_n, step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
 }
 
 void TensorUnit::meta_store(uint32_t wid,

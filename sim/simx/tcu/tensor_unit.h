@@ -49,16 +49,17 @@ public:
   virtual void tick();
 
 	void wmma(uint32_t wid,
-				uint32_t fmt_s,
-				uint32_t fmt_d,
-				uint32_t step_m,
-				uint32_t step_n,
-				uint32_t step_k,
-	          	const std::vector<reg_data_t>& rs1_data,
-					  const std::vector<reg_data_t>& rs2_data,
-					  const std::vector<reg_data_t>& rs3_data,
-					  std::vector<reg_data_t>& rd_data,
-					  ExeTraceData* trace_data);
+	          uint32_t fmt_s,
+	          uint32_t fmt_d,
+	          uint32_t step_m,
+	          uint32_t step_n,
+	          uint32_t step_k,
+	          const std::vector<reg_data_t>& rs1_data,
+	          const std::vector<reg_data_t>& rs2_data,
+	          const std::vector<reg_data_t>& rs3_data,
+	          std::vector<reg_data_t>& rd_data,
+	          ExeTraceData* trace_data,
+	          bool is_sparse);
 
 	void wgmma(uint32_t wid,
 	           uint32_t fmt_s,
@@ -70,18 +71,6 @@ public:
 	           const std::vector<reg_data_t>& rs1_data,
 	           std::vector<reg_data_t>& rd_data,
 	           ExeTraceData* trace_data);
-
-	void wmma_sp(uint32_t wid,
-				uint32_t fmt_s,
-				uint32_t fmt_d,
-				uint32_t step_m,
-				uint32_t step_n,
-        		uint32_t step_k,
-				const std::vector<reg_data_t>& rs1_data,
-				const std::vector<reg_data_t>& rs2_data,
-				const std::vector<reg_data_t>& rs3_data,
-				std::vector<reg_data_t>& rd_data,
-				ExeTraceData* trace_data);
 
 	void meta_store(uint32_t wid,
 					uint32_t fmt_s,
