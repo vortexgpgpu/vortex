@@ -715,6 +715,7 @@ enum class TcuType {
   WMMA,
   WGMMA,
   WMMA_SP,
+  WGMMA_SP,
   META_STORE,
 };
 
@@ -731,6 +732,7 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   case TcuType::WMMA:       os << "WMMA"; break;
   case TcuType::WGMMA:      os << "WGMMA"; break;
   case TcuType::WMMA_SP:    os << "WMMA_SP"; break;
+  case TcuType::WGMMA_SP:   os << "WGMMA_SP"; break;
   case TcuType::META_STORE: os << "META_STORE"; break;
   default:
     assert(false);
