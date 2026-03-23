@@ -655,7 +655,7 @@ inline typename T::dtype generate_B_value() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, 4, 32>; // NR=32 matches WGMMA kernel context
 
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
@@ -885,7 +885,8 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, 0));
+  uint32_t smem_size = (cfg::tileM * cfg::tileK + cfg::tileK * cfg::tileN) * sizeof(itype_t);
+  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, smem_size));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

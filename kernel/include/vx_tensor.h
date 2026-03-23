@@ -24,55 +24,17 @@ enum mem_layout {
   col_major
 };
 
-enum wgmma_source_mode {
-  wgmma_rs,
-  wgmma_ss
-};
-
-enum wgmma_smem_swizzle {
-  wgmma_swizzle_none = 0,
-  wgmma_swizzle_128b = 1,
-  wgmma_swizzle_64b  = 2,
-  wgmma_swizzle_32b  = 3
-};
-
+// Shared-memory matrix descriptor (32-bit packed):
+//   bits[31:16] = row stride in bytes (leading dimension)
+//   bits[15:0]  = byte offset from LMEM_BASE_ADDR (max 64 KB)
 struct smem_matrix_desc {
-  uint64_t value;
+  uint32_t value;
 };
 
-static __attribute__((always_inline)) constexpr uint64_t matrix_descriptor_encode(uint64_t x) {
-  return (x & 0x3fffu);
-}
-
-static __attribute__((always_inline)) smem_matrix_desc make_smem_matrix_desc(
-    uint64_t base_addr,
-    uint32_t leading_byte_offset,
-    uint32_t stride_byte_offset,
-    wgmma_smem_swizzle swizzle = wgmma_swizzle_none) {
-  // v1 keeps full 32-bit base address and 14-bit 16B-encoded offsets.
-  assert(base_addr <= 0xffffffffull && "base_addr must fit in 32 bits");
-  uint64_t desc = 0;
-  desc |= (base_addr & 0xffffffffull);
-  desc |= (matrix_descriptor_encode(leading_byte_offset) & 0x3fffull) << 32;
-  desc |= (matrix_descriptor_encode(stride_byte_offset) & 0x3fffull) << 46;
-  desc |= (uint64_t(swizzle) & 0x3ull) << 62;
-  return {desc};
-}
-
-static __attribute__((always_inline)) constexpr uint64_t smem_desc_base_addr(const smem_matrix_desc& desc) {
-  return (desc.value & 0xffffffffull);
-}
-
-static __attribute__((always_inline)) constexpr uint32_t smem_desc_leading(const smem_matrix_desc& desc) {
-  return uint32_t((desc.value >> 32) & 0x3fffull);
-}
-
-static __attribute__((always_inline)) constexpr uint32_t smem_desc_stride(const smem_matrix_desc& desc) {
-  return uint32_t((desc.value >> 46) & 0x3fffull);
-}
-
-static __attribute__((always_inline)) constexpr wgmma_smem_swizzle smem_desc_swizzle(const smem_matrix_desc& desc) {
-  return wgmma_smem_swizzle((desc.value >> 62) & 0x3ull);
+// Build a smem descriptor from a pointer and row stride in bytes.
+static __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
+  uint32_t offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ptr)) - LMEM_BASE_ADDR;
+  return {((leading_bytes & 0xFFFFu) << 16) | (offset & 0xFFFFu)};
 }
 
 namespace detail {
@@ -182,13 +144,14 @@ namespace detail {
   };
 }
 
-template <uint32_t NT, // number of threads per warp
-          typename It, // input type (A,B)
-          typename Ot, // output type (C,D)
-          bool is_sparse = false> // sparse mode flag
+template <uint32_t NT,              // number of threads per warp
+          typename It,              // input type (A,B)
+          typename Ot,              // output type (C,D)
+          bool is_sparse = false,   // sparse mode flag
+          uint32_t NR_ = 8>        // registers per C/D fragment (8 for WMMA, 32 for WGMMA)
 struct wmma_context {
 private:
-  using cfg = wmma_config_t<NT>;
+  using cfg = wmma_config_t<NT, fp32, fp32, 4, NR_>;
 
   enum frag_use_t { matrix_a, matrix_b, accumulator };
 
@@ -227,8 +190,6 @@ public:
   static constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
   static constexpr uint32_t sparse_regs = cfg::m_steps * sparse_k_steps;
   static constexpr uint32_t a_k_stride_sp = tileK / 2;
-  static constexpr uint32_t wgmma_flag_src_b_smem = 1u << 1;
-  static constexpr uint32_t wgmma_flag_src_a_smem = 1u << 2;
 
   using fragment_a   = fragment_t<matrix_a, input_t, cfg::NRA>;
   using fragment_b   = fragment_t<matrix_b, input_t, cfg::NRB>;
@@ -461,39 +422,6 @@ public:
     }
   }
 
-  template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync_smem(Frag &dst,
-                                                                    const smem_matrix_desc& desc,
-                                                                    uint32_t mn_idx,
-                                                                    uint32_t k_idx,
-                                                                    size_t ldm) {
-    static_assert(!is_sparse, "WGMMA SMEM path is dense-only for now");
-    static_assert(Frag::NR >= 4, "WGMMA descriptor metadata requires at least 4 fragment registers");
-
-    auto swizzle = smem_desc_swizzle(desc);
-    (void)swizzle; // Swizzle is intentionally ignored in v1.
-
-    // Encode per-tile metadata into fragment registers
-    uint64_t tile_addr = smem_desc_base_addr(desc)
-                       + uint64_t(mn_idx) * smem_desc_stride(desc)
-                       + uint64_t(k_idx)  * smem_desc_leading(desc);
-    uint32_t lane = vx_thread_id();
-    uint32_t m0 = (lane == 0) ? 0xffffffffu : 0u;
-    uint32_t m1 = (lane == 1) ? 0xffffffffu : 0u;
-    uint32_t m2 = (lane == 2) ? 0xffffffffu : 0u;
-    uint32_t m3 = (lane == 3) ? 0xffffffffu : 0u;
-    uint32_t lane_word = 0;
-    lane_word |= uint32_t(tile_addr & 0xffffffffull) & m0;
-    lane_word |= uint32_t(tile_addr >> 32) & m1;
-    lane_word |= uint32_t(ldm) & m2;
-    lane_word |= uint32_t(src_layout == col_major) & m3;
-    vreg_t meta_word;
-    *reinterpret_cast<uint32_t*>(&meta_word) = lane_word;
-    detail::unroll_for<Frag::NR>([&](auto r) {
-      dst.data[r] = meta_word;
-    });
-  }
-
   template <mem_layout dst_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
     static_assert(Frag::Use == accumulator, "only accumulator fragment can be stored");
@@ -522,12 +450,6 @@ public:
         *ptr = *reinterpret_cast<const output_t*>(&tmp);
       }
     });
-  }
-
-  template <int FMT_S>
-  static __attribute__((always_inline)) void meta_store_expand(float d0, float d1) {
-    __asm__ volatile(".insn r 0x0b, 1, 2, x%[fmt], %[d0], %[d1]"
-      :: [fmt]"i"(FMT_S), [d0]"f"(d0), [d1]"f"(d1));
   }
 
   template <typename FragD, typename FragA, typename FragB, typename FragC>
@@ -597,72 +519,83 @@ public:
     fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
   }
 
-  template <wgmma_source_mode SrcMode, typename FragD, typename FragA, typename FragB, typename FragC>
+  // WGMMA (Warp Group Matrix Multiply-Accumulate) — shared-memory source mode.
+  // Both A and B tiles are read directly from shared memory via 32-bit base addresses.
+  // The full 32-element accumulator occupies f0..f31; A and B addresses are passed
+  // in integer registers a0 and a1 respectively.
+  // Instruction encoding: CUSTOM0, funct3=2, funct7=(Ot::id<<4)|It::id
+  // Requires NRC == 32 (instantiate wmma_context with NR=32).
+  template <typename FragD, typename FragC>
   static __attribute__((always_inline)) void wgmma_sync(FragD &fragD,
-                                                         const FragA &fragA,
-                                                         const FragB &fragB,
+                                                         smem_matrix_desc desc_a,
+                                                         smem_matrix_desc desc_b,
                                                          const FragC &fragC) {
-    static_assert(!is_sparse, "WGMMA source modes are dense-only in this revision");
-    static_assert(FragA::Use == matrix_a, "A must be matrix_a");
-    static_assert(FragB::Use == matrix_b, "B must be matrix_b");
+    static_assert(FragC::NR == 32, "wgmma_sync requires NRC=32; use wmma_context<NT,It,Ot,false,32>");
+    static_assert(FragD::NR == 32, "wgmma_sync requires NRC=32; use wmma_context<NT,It,Ot,false,32>");
     static_assert(FragC::Use == accumulator, "C must be accumulator");
     static_assert(FragD::Use == accumulator, "D must be accumulator");
 
-    constexpr int flags = (is_sparse ? 1 : 0)
-                        | wgmma_flag_src_b_smem
-                        | ((SrcMode == wgmma_ss) ? wgmma_flag_src_a_smem : 0);
+    constexpr int flags = 0; // no sparsity for WGMMA SS
 
-    register float fd0 __asm__("f0") = fragC.data[0];
-    register float fd1 __asm__("f1") = fragC.data[1];
-    register float fd2 __asm__("f2") = fragC.data[2];
-    register float fd3 __asm__("f3") = fragC.data[3];
-    register float fd4 __asm__("f4") = fragC.data[4];
-    register float fd5 __asm__("f5") = fragC.data[5];
-    register float fd6 __asm__("f6") = fragC.data[6];
-    register float fd7 __asm__("f7") = fragC.data[7];
+    // Seed all 32 accumulator registers from fragC
+    register float fd0  __asm__("f0")  = fragC.data[0];
+    register float fd1  __asm__("f1")  = fragC.data[1];
+    register float fd2  __asm__("f2")  = fragC.data[2];
+    register float fd3  __asm__("f3")  = fragC.data[3];
+    register float fd4  __asm__("f4")  = fragC.data[4];
+    register float fd5  __asm__("f5")  = fragC.data[5];
+    register float fd6  __asm__("f6")  = fragC.data[6];
+    register float fd7  __asm__("f7")  = fragC.data[7];
+    register float fd8  __asm__("f8")  = fragC.data[8];
+    register float fd9  __asm__("f9")  = fragC.data[9];
+    register float fd10 __asm__("f10") = fragC.data[10];
+    register float fd11 __asm__("f11") = fragC.data[11];
+    register float fd12 __asm__("f12") = fragC.data[12];
+    register float fd13 __asm__("f13") = fragC.data[13];
+    register float fd14 __asm__("f14") = fragC.data[14];
+    register float fd15 __asm__("f15") = fragC.data[15];
+    register float fd16 __asm__("f16") = fragC.data[16];
+    register float fd17 __asm__("f17") = fragC.data[17];
+    register float fd18 __asm__("f18") = fragC.data[18];
+    register float fd19 __asm__("f19") = fragC.data[19];
+    register float fd20 __asm__("f20") = fragC.data[20];
+    register float fd21 __asm__("f21") = fragC.data[21];
+    register float fd22 __asm__("f22") = fragC.data[22];
+    register float fd23 __asm__("f23") = fragC.data[23];
+    register float fd24 __asm__("f24") = fragC.data[24];
+    register float fd25 __asm__("f25") = fragC.data[25];
+    register float fd26 __asm__("f26") = fragC.data[26];
+    register float fd27 __asm__("f27") = fragC.data[27];
+    register float fd28 __asm__("f28") = fragC.data[28];
+    register float fd29 __asm__("f29") = fragC.data[29];
+    register float fd30 __asm__("f30") = fragC.data[30];
+    register float fd31 __asm__("f31") = fragC.data[31];
 
-    register float fa0 __asm__("f10") = fragA.data[0];
-    register float fa1 __asm__("f11") = fragA.data[1];
-    register float fa2 __asm__("f12") = fragA.data[2];
-    register float fa3 __asm__("f13") = fragA.data[3];
-    register float fa4 __asm__("f14") = fragA.data[4];
-    register float fa5 __asm__("f15") = fragA.data[5];
-    register float fa6 __asm__("f16") = fragA.data[6];
-    register float fa7 __asm__("f17") = fragA.data[7];
+    // A and B smem base addresses in integer registers a0, a1
+    register uint32_t ra __asm__("a0") = desc_a.value;
+    register uint32_t rb __asm__("a1") = desc_b.value;
 
-    if constexpr (FragB::NR == 8) {
-      register float fb0 __asm__("f24")  = fragB.data[0];
-      register float fb1 __asm__("f25")  = fragB.data[1];
-      register float fb2 __asm__("f26")  = fragB.data[2];
-      register float fb3 __asm__("f27")  = fragB.data[3];
-      register float fb4 __asm__("f28")  = fragB.data[4];
-      register float fb5 __asm__("f29")  = fragB.data[5];
-      register float fb6 __asm__("f30")  = fragB.data[6];
-      register float fb7 __asm__("f31")  = fragB.data[7];
+    // Encoding matches mma_sync convention: rd=x(Ot::id), rs1=x(It::id), rs2=x(flags).
+    // funct7=2 routes to the TCU decoder (same as mma_sync); smem descriptors in a0/a1.
+    __asm__ volatile (".insn r %[insn], 1, 2, x%[fmd], x%[fms], x%[flags]"
+      : "+f"(fd0),  "+f"(fd1),  "+f"(fd2),  "+f"(fd3),
+        "+f"(fd4),  "+f"(fd5),  "+f"(fd6),  "+f"(fd7),
+        "+f"(fd8),  "+f"(fd9),  "+f"(fd10), "+f"(fd11),
+        "+f"(fd12), "+f"(fd13), "+f"(fd14), "+f"(fd15),
+        "+f"(fd16), "+f"(fd17), "+f"(fd18), "+f"(fd19),
+        "+f"(fd20), "+f"(fd21), "+f"(fd22), "+f"(fd23),
+        "+f"(fd24), "+f"(fd25), "+f"(fd26), "+f"(fd27),
+        "+f"(fd28), "+f"(fd29), "+f"(fd30), "+f"(fd31)
+      : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+        "r"(ra), "r"(rb)
+    );
 
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
-        : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
-      );
-    } else {
-      static_assert(FragB::NR == 4, "Unsupported number of registers for FragB");
-
-      register float fb0 __asm__("f28") = fragB.data[0];
-      register float fb1 __asm__("f29") = fragB.data[1];
-      register float fb2 __asm__("f30") = fragB.data[2];
-      register float fb3 __asm__("f31") = fragB.data[3];
-
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
-        : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
-      );
-    }
-
-    fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
+    fragD.data = {
+      fd0,  fd1,  fd2,  fd3,  fd4,  fd5,  fd6,  fd7,
+      fd8,  fd9,  fd10, fd11, fd12, fd13, fd14, fd15,
+      fd16, fd17, fd18, fd19, fd20, fd21, fd22, fd23,
+      fd24, fd25, fd26, fd27, fd28, fd29, fd30, fd31
+    };
   }
 };
 

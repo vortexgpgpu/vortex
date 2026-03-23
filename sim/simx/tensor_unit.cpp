@@ -22,7 +22,8 @@
 using namespace vortex;
 
 namespace vt = vortex::tensor;
-using cfg = vt::wmma_config_t<NUM_THREADS>;
+using cfg   = vt::wmma_config_t<NUM_THREADS>;
+using wg_cfg = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 4, 32>;
 
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
@@ -555,14 +556,6 @@ static inline uint8_t last_selected_4(uint8_t mask) {
 
 class TensorUnit::Impl {
 public:
-  struct WgmmaState {
-    std::vector<reg_data_t> a;
-    std::vector<reg_data_t> a_pair;
-    std::vector<reg_data_t> b;
-    bool a_valid = false;
-    bool b_valid = false;
-  };
-
   struct SmemTileMeta {
     uint64_t base = 0;
     uint32_t ldm = 0;
@@ -574,7 +567,6 @@ public:
     , core_(core)
     , arch_(arch)
     , perf_stats_()
-    , wgmma_state_(arch.num_warps())
     , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
   {
     //--
@@ -586,13 +578,6 @@ public:
 
   void reset() {
     perf_stats_ = PerfStats();
-    for (auto& state : wgmma_state_) {
-      state.a_valid = false;
-      state.b_valid = false;
-      state.a.clear();
-      state.a_pair.clear();
-      state.b.clear();
-    }
     for (auto& meta : sparse_meta_) {
       for (uint32_t bank = 0; bank < kMetaBanks; ++bank) {
         for (uint32_t col = 0; col < kMaxMetaCols; ++col) {
@@ -612,12 +597,10 @@ public:
       int delay = 0;
       switch (tcu_type) {
       case TcuType::WMMA:
-      case TcuType::WMMA_RS:
-      case TcuType::WMMA_SS:
+      case TcuType::WGMMA:
       case TcuType::WMMA_SP:
         delay = 4;
         break;
-      case TcuType::WGMMA_LOAD:
       case TcuType::META_STORE:
         delay = 1;
         break;
@@ -679,114 +662,50 @@ public:
              uint32_t fmt_d,
              uint32_t step_m,
              uint32_t step_n,
-             uint32_t step_k,
-             bool a_from_smem,
+             uint32_t a_desc,
+             uint32_t b_desc,
              const std::vector<reg_data_t>& rs1_data,
-             const std::vector<reg_data_t>& rs1_pair_data,
-             const std::vector<reg_data_t>& rs2_data,
-             const std::vector<reg_data_t>& rs3_data,
              std::vector<reg_data_t>& rd_data,
              ExeTraceData* trace_data) {
     __unused(wid);
     __unused(trace_data);
 
-    auto& state = wgmma_state_.at(wid);
-    auto& a_src = rs1_data.empty() ? state.a : rs1_data;
-    auto& a_pair_src = rs1_pair_data.empty() ? state.a_pair : rs1_pair_data;
-    auto& b_src = rs2_data.empty() ? state.b : rs2_data;
-
-    if (a_src.empty() || b_src.empty()) {
-      std::abort();
-    }
-
     auto fedp = select_FEDP(fmt_s, fmt_d);
-
-    auto meta_b = decode_smem_meta(b_src);
-    auto meta_a = a_from_smem ? decode_smem_meta(a_src) : SmemTileMeta{};
-
-    uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
     uint32_t ratio = elem_ratio(fmt_s);
-    uint32_t k_words = cfg::tcK;
-    bool fedp2x = ((cfg::k_steps % 2) == 0) && ((step_k + 1) < cfg::k_steps);
+    uint32_t k_words = wg_cfg::tcK;
 
-    reg_data_t a_tile0[cfg::tcM][cfg::tcK];
-    reg_data_t a_tile1[cfg::tcM][cfg::tcK];
-    reg_data_t b_tile0[cfg::tcN][cfg::tcK];
-    reg_data_t b_tile1[cfg::tcN][cfg::tcK];
+    // Decode packed descriptors: bits[31:16] = ldm_bytes, bits[15:0] = smem offset
+    uint32_t e_bytes = elem_bits(fmt_s) / 8;
+    SmemTileMeta meta_a = {LMEM_BASE_ADDR + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
+    SmemTileMeta meta_b = {LMEM_BASE_ADDR + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
 
-    for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      for (uint32_t z = 0; z < k_words; ++z) {
-        uint32_t k0 = (step_k * k_words + z) * ratio;
-        uint32_t k1 = ((step_k + 1) * k_words + z) * ratio;
-        if (a_from_smem) {
-          uint32_t a_row_idx = step_m * cfg::tcM + i;
-          a_tile0[i][z].u32 = load_smem_word(meta_a, a_row_idx, k0, fmt_s, false);
-          if (fedp2x) {
-            a_tile1[i][z].u32 = load_smem_word(meta_a, a_row_idx, k1, fmt_s, false);
+    // Seed accumulator from input fragC (rs1_data)
+    rd_data = rs1_data;
+
+    // Accumulate over all k_steps internally
+    for (uint32_t k = 0; k < wg_cfg::k_steps; ++k) {
+      for (uint32_t i = 0; i < wg_cfg::tcM; ++i) {
+        for (uint32_t j = 0; j < wg_cfg::tcN; ++j) {
+          reg_data_t a_row[wg_cfg::tcK];
+          reg_data_t b_col[wg_cfg::tcK];
+          for (uint32_t z = 0; z < k_words; ++z) {
+            uint32_t k_elem = (k * k_words + z) * ratio;
+            uint32_t a_row_idx = step_m * wg_cfg::tcM + i;
+            uint32_t b_col_idx = step_n * wg_cfg::tcN + j;
+            a_row[z].u32 = load_smem_word(meta_a, a_row_idx, k_elem, fmt_s, false);
+            b_col[z].u32 = load_smem_word(meta_b, k_elem, b_col_idx, fmt_s, true);
           }
-        } else {
-          a_tile0[i][z].u32 = a_src.at(a_off + i * cfg::tcK + z).u32;
-          if (fedp2x) {
-            if (a_pair_src.empty()) {
-              std::abort();
-            }
-            a_tile1[i][z].u32 = a_pair_src.at(a_off + i * cfg::tcK + z).u32;
-          }
+          auto t = i * wg_cfg::tcN + j;
+          auto d_val = fedp(a_row, b_col, rd_data.at(t).u32);
+          rd_data.at(t).u64 = nan_box(d_val);
+
+          DTH(3, simobject_->name() << " WGMMA FEDP: wid=" << wid << ", i=" << i << ", j=" << j
+              << ", m=" << step_m << ", n=" << step_n << ", k=" << k << std::hex
+              << ", a_row[0]=0x" << a_row[0].u32 << ", b_col[0]=0x" << b_col[0].u32
+              << ", d=0x" << d_val << std::dec << std::endl);
         }
       }
     }
-
-    bool b_pack_along_row = !meta_b.col_major;
-    for (uint32_t j = 0; j < cfg::tcN; ++j) {
-      uint32_t b_col_idx = step_n * cfg::tcN + j;
-      for (uint32_t z = 0; z < k_words; ++z) {
-        uint32_t k0 = (step_k * k_words + z) * ratio;
-        uint32_t k1 = ((step_k + 1) * k_words + z) * ratio;
-        b_tile0[j][z].u32 = load_smem_word(meta_b, k0, b_col_idx, fmt_s, b_pack_along_row);
-        if (fedp2x) {
-          b_tile1[j][z].u32 = load_smem_word(meta_b, k1, b_col_idx, fmt_s, b_pack_along_row);
-        }
-      }
-    }
-
-    for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      for (uint32_t j = 0; j < cfg::tcN; ++j) {
-        reg_data_t a_row0[cfg::tcK];
-        reg_data_t b_col0[cfg::tcK];
-        reg_data_t a_row1[cfg::tcK];
-        reg_data_t b_col1[cfg::tcK];
-
-        for (uint32_t z = 0; z < k_words; ++z) {
-          a_row0[z].u32 = a_tile0[i][z].u32;
-          b_col0[z].u32 = b_tile0[j][z].u32;
-          if (fedp2x) {
-            a_row1[z].u32 = a_tile1[i][z].u32;
-            b_col1[z].u32 = b_tile1[j][z].u32;
-          }
-        }
-
-        auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
-        auto d_val = fedp(a_row0, b_col0, c_val);
-        if (fedp2x) {
-          d_val = fedp(a_row1, b_col1, d_val);
-        }
-        rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
-      }
-    }
-  }
-
-  void wgmma_load(uint32_t wid,
-                  const std::vector<reg_data_t>& rs1_data,
-                  const std::vector<reg_data_t>& rs1_pair_data,
-                  const std::vector<reg_data_t>& rs2_data,
-                  ExeTraceData* trace_data) {
-    __unused(trace_data);
-    auto& state = wgmma_state_.at(wid);
-    state.a = rs1_data;
-    state.a_pair = rs1_pair_data;
-    state.b = rs2_data;
-    state.a_valid = true;
-    state.b_valid = true;
   }
 
   void wmma_sp(uint32_t wid,
@@ -951,17 +870,6 @@ public:
   }
 
 private:
-  SmemTileMeta decode_smem_meta(const std::vector<reg_data_t>& rs_data) const {
-    if (rs_data.size() < 4) {
-      std::abort();
-    }
-    SmemTileMeta meta;
-    meta.base = uint64_t(rs_data.at(0).u32) | (uint64_t(rs_data.at(1).u32) << 32);
-    meta.ldm = rs_data.at(2).u32;
-    meta.col_major = (rs_data.at(3).u32 & 0x1) != 0;
-    return meta;
-  }
-
   uint32_t elem_bits(uint32_t fmt_s) const {
     switch (fmt_s) {
     case vt::fp32::id:
@@ -1024,7 +932,6 @@ private:
   Core*         core_;
   Arch          arch_;
   PerfStats     perf_stats_;
-  std::vector<WgmmaState> wgmma_state_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
 };
 
@@ -1036,17 +943,9 @@ op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
     return {"WMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
              + "." + std::to_string(args.step_k), ""};
-  case TcuType::WMMA_RS:
-    return {"WMMA_RS." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
-             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
-             + "." + std::to_string(args.step_k), ""};
-  case TcuType::WMMA_SS:
-    return {"WMMA_SS." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
-             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
-             + "." + std::to_string(args.step_k), ""};
-  case TcuType::WGMMA_LOAD:
-    return {"WGMMA_LOAD." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
-             + "." + std::to_string(args.step_k), ""};
+  case TcuType::WGMMA:
+    return {"WGMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
+             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
   case TcuType::WMMA_SP:
     return {"WMMA_SP." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
@@ -1102,23 +1001,12 @@ void TensorUnit::wgmma(uint32_t wid,
                        uint32_t fmt_d,
                        uint32_t step_m,
                        uint32_t step_n,
-                       uint32_t step_k,
-                       bool a_from_smem,
+                       uint32_t a_desc,
+                       uint32_t b_desc,
                        const std::vector<reg_data_t>& rs1_data,
-                       const std::vector<reg_data_t>& rs1_pair_data,
-                       const std::vector<reg_data_t>& rs2_data,
-                       const std::vector<reg_data_t>& rs3_data,
                        std::vector<reg_data_t>& rd_data,
                        ExeTraceData* trace_data) {
-  impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, a_from_smem, rs1_data, rs1_pair_data, rs2_data, rs3_data, rd_data, trace_data);
-}
-
-void TensorUnit::wgmma_load(uint32_t wid,
-                            const std::vector<reg_data_t>& rs1_data,
-                            const std::vector<reg_data_t>& rs1_pair_data,
-                            const std::vector<reg_data_t>& rs2_data,
-                            ExeTraceData* trace_data) {
-  impl_->wgmma_load(wid, rs1_data, rs1_pair_data, rs2_data, trace_data);
+  impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, a_desc, b_desc, rs1_data, rd_data, trace_data);
 }
 
 void TensorUnit::wmma_sp(uint32_t wid,

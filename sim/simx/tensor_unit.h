@@ -61,24 +61,15 @@ public:
 					  ExeTraceData* trace_data);
 
 	void wgmma(uint32_t wid,
-				   uint32_t fmt_s,
-				   uint32_t fmt_d,
-				   uint32_t step_m,
-				   uint32_t step_n,
-				   uint32_t step_k,
-				   bool a_from_smem,
-				   const std::vector<reg_data_t>& rs1_data,
-				   const std::vector<reg_data_t>& rs1_pair_data,
-				   const std::vector<reg_data_t>& rs2_data,
-				   const std::vector<reg_data_t>& rs3_data,
-				   std::vector<reg_data_t>& rd_data,
-				   ExeTraceData* trace_data);
-
-	void wgmma_load(uint32_t wid,
-					   const std::vector<reg_data_t>& rs1_data,
-					   const std::vector<reg_data_t>& rs1_pair_data,
-					   const std::vector<reg_data_t>& rs2_data,
-					   ExeTraceData* trace_data);
+	           uint32_t fmt_s,
+	           uint32_t fmt_d,
+	           uint32_t step_m,
+	           uint32_t step_n,
+	           uint32_t a_desc,
+	           uint32_t b_desc,
+	           const std::vector<reg_data_t>& rs1_data,
+	           std::vector<reg_data_t>& rd_data,
+	           ExeTraceData* trace_data);
 
 	void wmma_sp(uint32_t wid,
 				uint32_t fmt_s,
