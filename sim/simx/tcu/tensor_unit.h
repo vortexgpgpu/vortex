@@ -66,6 +66,7 @@ public:
 	           uint32_t fmt_d,
 	           uint32_t step_m,
 	           uint32_t step_n,
+	           uint32_t step_k,
 	           uint32_t a_desc,
 	           uint32_t b_desc,
 	           const std::vector<reg_data_t>& rs1_data,

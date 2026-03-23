@@ -1281,25 +1281,30 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         // rs2 = flags (0=dense, reserved for future sparse WGMMA)
         // smem descriptors are always in a0 (x10) and a1 (x11) — implicit convention
         constexpr uint32_t a0 = 10, a1 = 11;
-        // Emit NRC=32 uops, one per accumulator register f0..f31
+        // Emit k_steps * NRC uops: K-step outer, accumulator-register inner.
+        // RF serves as accumulator across K-steps, same as wmma step_k.
         constexpr uint32_t nrc = wg_cfg::m_steps * wg_cfg::n_steps;
-        uint32_t steps_shift = (nrc > 1) ? (32 - log2ceil(nrc)) : 0;
+        constexpr uint32_t total_uops = wg_cfg::k_steps * nrc;
+        uint32_t steps_shift = (total_uops > 1) ? (32 - log2ceil(total_uops)) : 0;
         uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
         uint32_t uuid_lo = uuid & 0xffffffff;
+        uint32_t uop_idx = 0;
+        for (uint32_t k = 0; k < wg_cfg::k_steps; ++k) {
         for (uint32_t i = 0; i < nrc; ++i) {
           uint32_t step_m = i / wg_cfg::n_steps;
           uint32_t step_n = i % wg_cfg::n_steps;
-          uint32_t uuid_lo_x = (i << steps_shift) | uuid_lo;
+            uint32_t uuid_lo_x = (uop_idx++ << steps_shift) | uuid_lo;
           uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
           auto uop = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
           uop->setOpType(TcuType::WGMMA);
-          uop->setArgs(IntrTcuArgs{fmt_s, fmt_d, step_m, step_n, 0});
+            uop->setArgs(IntrTcuArgs{fmt_s, fmt_d, step_m, step_n, k});
           uop->setDestReg(i, RegType::Float);        // f_i = output
           uop->setSrcReg(0, i, RegType::Float);       // f_i = accumulator C in
           uop->setSrcReg(1, a0, RegType::Integer);    // a0 (x10) = smem A descriptor
           uop->setSrcReg(2, a1, RegType::Integer);    // a1 (x11) = smem B descriptor
           uop->setParentUUID(uuid);
           ibuffer.push_back(uop);
+        }
         }
       } break;
   #endif // TCU_WGMMA_ENABLE
