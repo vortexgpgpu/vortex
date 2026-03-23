@@ -1658,7 +1658,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         trace->data = trace_data;
         assert(operand_tmask.count() == num_threads);
         core_->tensor_unit()->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
-                                    tpuArgs.step_m, tpuArgs.step_n,
+                                    tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
                                     rs2_data.at(0).u32, rs3_data.at(0).u32,
                                     rs1_data, rd_data, trace_data.get());
         rd_write = true;

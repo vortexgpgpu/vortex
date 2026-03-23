@@ -671,6 +671,7 @@ public:
              uint32_t fmt_d,
              uint32_t step_m,
              uint32_t step_n,
+             uint32_t step_k,
              uint32_t a_desc,
              uint32_t b_desc,
              const std::vector<reg_data_t>& rs1_data,
@@ -680,39 +681,34 @@ public:
     __unused(trace_data);
 
     auto fedp = select_FEDP(fmt_s, fmt_d);
-    uint32_t ratio = elem_ratio(fmt_s);
-    uint32_t k_words = wg_cfg::tcK;
+    uint32_t ratio    = elem_ratio(fmt_s);
+    uint32_t k_words  = wg_cfg::tcK;
+    uint32_t e_bytes  = elem_bits(fmt_s) / 8;
 
     // Decode packed descriptors: bits[31:16] = ldm_bytes, bits[15:0] = smem offset
-    uint32_t e_bytes = elem_bits(fmt_s) / 8;
     SmemTileMeta meta_a = {LMEM_BASE_ADDR + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
     SmemTileMeta meta_b = {LMEM_BASE_ADDR + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
 
-    // Seed accumulator from input fragC (rs1_data)
-    rd_data = rs1_data;
-
-    // Accumulate over all k_steps internally
-    for (uint32_t k = 0; k < wg_cfg::k_steps; ++k) {
-      for (uint32_t i = 0; i < wg_cfg::tcM; ++i) {
-        for (uint32_t j = 0; j < wg_cfg::tcN; ++j) {
-          reg_data_t a_row[wg_cfg::tcK];
-          reg_data_t b_col[wg_cfg::tcK];
-          for (uint32_t z = 0; z < k_words; ++z) {
-            uint32_t k_elem = (k * k_words + z) * ratio;
-            uint32_t a_row_idx = step_m * wg_cfg::tcM + i;
-            uint32_t b_col_idx = step_n * wg_cfg::tcN + j;
-            a_row[z].u32 = load_smem_word(meta_a, a_row_idx, k_elem, fmt_s, false);
-            b_col[z].u32 = load_smem_word(meta_b, k_elem, b_col_idx, fmt_s, true);
-          }
-          auto t = i * wg_cfg::tcN + j;
-          auto d_val = fedp(a_row, b_col, rd_data.at(t).u32);
-          rd_data.at(t).u64 = nan_box(d_val);
-
-          DTH(3, simobject_->name() << " WGMMA FEDP: wid=" << wid << ", i=" << i << ", j=" << j
-              << ", m=" << step_m << ", n=" << step_n << ", k=" << k << std::hex
-              << ", a_row[0]=0x" << a_row[0].u32 << ", b_col[0]=0x" << b_col[0].u32
-              << ", d=0x" << d_val << std::dec << std::endl);
+    // Single K-step: RF (rs1_data) is the accumulator, updated each step_k uop.
+    for (uint32_t i = 0; i < wg_cfg::tcM; ++i) {
+      for (uint32_t j = 0; j < wg_cfg::tcN; ++j) {
+        reg_data_t a_row[wg_cfg::tcK];
+        reg_data_t b_col[wg_cfg::tcK];
+        for (uint32_t z = 0; z < k_words; ++z) {
+          uint32_t k_elem    = (step_k * k_words + z) * ratio;
+          uint32_t a_row_idx = step_m * wg_cfg::tcM + i;
+          uint32_t b_col_idx = step_n * wg_cfg::tcN + j;
+          a_row[z].u32 = load_smem_word(meta_a, a_row_idx, k_elem, fmt_s, false);
+          b_col[z].u32 = load_smem_word(meta_b, k_elem, b_col_idx, fmt_s, true);
         }
+        auto t = i * wg_cfg::tcN + j;
+        auto d_val = fedp(a_row, b_col, rs1_data.at(t).u32);
+        rd_data.at(t).u64 = nan_box(d_val);
+
+        DTH(3, simobject_->name() << " WGMMA FEDP: wid=" << wid << ", i=" << i << ", j=" << j
+            << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k << std::hex
+            << ", a_row[0]=0x" << a_row[0].u32 << ", b_col[0]=0x" << b_col[0].u32
+            << ", c=0x" << rs1_data.at(t).u32 << ", d=0x" << d_val << std::dec << std::endl);
       }
     }
   }
@@ -854,12 +850,13 @@ void TensorUnit::wgmma(uint32_t wid,
                        uint32_t fmt_d,
                        uint32_t step_m,
                        uint32_t step_n,
+                       uint32_t step_k,
                        uint32_t a_desc,
                        uint32_t b_desc,
                        const std::vector<reg_data_t>& rs1_data,
                        std::vector<reg_data_t>& rd_data,
                        ExeTraceData* trace_data) {
-  impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, a_desc, b_desc, rs1_data, rd_data, trace_data);
+  impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, a_desc, b_desc, rs1_data, rd_data, trace_data);
 }
 
 void TensorUnit::meta_store(uint32_t wid,
