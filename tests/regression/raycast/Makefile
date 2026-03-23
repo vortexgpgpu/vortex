@@ -13,4 +13,6 @@ CXXFLAGS += -DASSETS_PATHS='"$(SRC_DIR)"'
 
 OPTS ?=
 
+KERNEL_LIB := vortex2
+
 include ../common.mk

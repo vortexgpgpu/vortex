@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-PROJECT := vecadd_v2
+PROJECT := vecadd
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 
