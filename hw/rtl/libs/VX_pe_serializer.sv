@@ -29,41 +29,47 @@ module VX_pe_serializer #(
 
     // input
     input wire                          valid_in,
+    input wire [NUM_LANES-1:0]          mask_in,
     input wire [NUM_LANES-1:0][DATA_IN_WIDTH-1:0] data_in,
     input wire [TAG_WIDTH-1:0]          tag_in,
     output wire                         ready_in,
 
     // PE
     output wire                         pe_enable,
+    output wire [NUM_PES-1:0]           pe_mask_out,
     output wire [NUM_PES-1:0][DATA_IN_WIDTH-1:0] pe_data_out,
     input wire [NUM_PES-1:0][DATA_OUT_WIDTH-1:0] pe_data_in,
 
     // output
     output wire                         valid_out,
+    output wire [NUM_LANES-1:0]         mask_out,
     output wire [NUM_LANES-1:0][DATA_OUT_WIDTH-1:0] data_out,
     output wire [TAG_WIDTH-1:0]         tag_out,
     input wire                          ready_out
 );
     wire                    valid_out_u;
+    wire [NUM_LANES-1:0]    mask_out_u;
     wire [NUM_LANES-1:0][DATA_OUT_WIDTH-1:0] data_out_u;
     wire [TAG_WIDTH-1:0]    tag_out_u;
     wire                    ready_out_u;
 
     wire [NUM_PES-1:0][DATA_IN_WIDTH-1:0] pe_data_out_w;
+    wire [NUM_PES-1:0]      pe_mask_out_w;
     wire pe_valid_in;
+    wire [NUM_PES-1:0]      pe_mask_in_w;
     wire [TAG_WIDTH-1:0] pe_tag_in;
     wire enable;
 
     VX_shift_register #(
-        .DATAW  (1 + TAG_WIDTH),
+        .DATAW  (1 + NUM_PES + TAG_WIDTH),
         .DEPTH  (PE_REG + LATENCY),
         .RESETW (1)
     ) shift_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({valid_in,    tag_in}),
-        .data_out ({pe_valid_in, pe_tag_in})
+        .data_in  ({valid_in,    pe_mask_out_w, tag_in}),
+        .data_out ({pe_valid_in, pe_mask_in_w, pe_tag_in})
     );
 
     VX_pipe_register #(
@@ -78,6 +84,7 @@ module VX_pe_serializer #(
     );
 
     assign pe_enable = enable;
+    assign pe_mask_out = pe_mask_out_w;
 
     if (NUM_LANES != NUM_PES) begin : g_serialize
 
@@ -89,6 +96,7 @@ module VX_pe_serializer #(
 
         for (genvar i = 0; i < NUM_PES; ++i) begin : g_pe_data_out_w
             assign pe_data_out_w[i] = data_in[batch_in_idx * NUM_PES + i];
+            assign pe_mask_out_w[i] = mask_in[batch_in_idx * NUM_PES + i];
         end
 
         always @(posedge clk) begin
@@ -106,16 +114,20 @@ module VX_pe_serializer #(
         end
 
         reg [BATCH_SIZE-1:0][(NUM_PES * DATA_OUT_WIDTH)-1:0] data_out_r, data_out_n;
+        reg [BATCH_SIZE-1:0][NUM_PES-1:0] mask_out_r, mask_out_n;
 
         always @(*) begin
             data_out_n = data_out_r;
+            mask_out_n = mask_out_r;
             if (pe_valid_in) begin
                 data_out_n[batch_out_idx] = pe_data_in;
+                mask_out_n[batch_out_idx] = pe_mask_in_w;
             end
         end
 
         always @(posedge clk) begin
             data_out_r <= data_out_n;
+            mask_out_r <= mask_out_n;
         end
 
         assign enable      = ready_out_u || ~valid_out_u;
@@ -123,23 +135,24 @@ module VX_pe_serializer #(
 
         assign valid_out_u = batch_out_done;
         assign data_out_u  = data_out_n;
+        assign mask_out_u  = mask_out_n;
         assign tag_out_u   = pe_tag_in;
 
     end else begin : g_passthru
 
         assign pe_data_out_w = data_in;
-
+        assign pe_mask_out_w = mask_in;
         assign enable      = ready_out_u || ~pe_valid_in;
         assign ready_in    = enable;
-
         assign valid_out_u = pe_valid_in;
         assign data_out_u  = pe_data_in;
+        assign mask_out_u  = pe_mask_in_w;
         assign tag_out_u   = pe_tag_in;
 
     end
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_LANES * DATA_OUT_WIDTH + TAG_WIDTH),
+        .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH),
         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
     ) out_buf (
@@ -147,8 +160,9 @@ module VX_pe_serializer #(
         .reset     (reset),
         .valid_in  (valid_out_u),
         .ready_in  (ready_out_u),
-        .data_in   ({data_out_u, tag_out_u}),
-        .data_out  ({data_out, tag_out}),
+
+        .data_in   ({data_out_u, mask_out_u, tag_out_u}),
+        .data_out  ({data_out, mask_out, tag_out}),
         .valid_out (valid_out),
         .ready_out (ready_out)
     );

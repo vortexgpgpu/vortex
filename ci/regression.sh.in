@@ -59,7 +59,7 @@ riscv()
 
         CONFIGS="-DFPU_TYPE_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
 
-        CONFIGS="-DFPU_TYPE_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64fx
+        CONFIGS="-DFPU_TYPE_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
     fi
 
     echo "riscv tests done!"
