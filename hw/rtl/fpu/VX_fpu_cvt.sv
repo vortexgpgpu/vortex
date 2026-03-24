@@ -70,10 +70,13 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign data_in[i][`XLEN + INST_FPU_BITS + INST_FMT_BITS +: INST_FRM_BITS] = frm;
     end
 
+    // XLEN=64 needs one extra pipeline stage to separate Stage0 (negate) from Stage1 (LZC).
+    localparam CVT_LATENCY = (`XLEN == 64) ? `LATENCY_FCVT + 1 : `LATENCY_FCVT;
+
     VX_pe_serializer #(
         .NUM_LANES  (NUM_LANES),
         .NUM_PES    (NUM_PES),
-        .LATENCY    (`LATENCY_FCVT),
+        .LATENCY    (CVT_LATENCY),
         .DATA_IN_WIDTH (DATAW),
         .DATA_OUT_WIDTH (`FP_FLAGS_BITS + `XLEN),
         .TAG_WIDTH  (TAG_WIDTH),
@@ -115,13 +118,14 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         wire is_itof   = pe_op_type[1];
         wire is_ftoi   = ~pe_op_type[1];
-        wire is_ftof   = pe_op_type[2];
         wire is_signed = ~pe_op_type[0];
-        wire is_dst_64 = is_ftof ?  pe_fmt[0] : (is_itof ? pe_fmt[0] : pe_fmt[1]);
-        wire is_src_64 = is_ftof ? ~pe_fmt[0] : (is_itof ? pe_fmt[1] : pe_fmt[0]);
+        // F64 float removed: I2F always targets F32 (is_dst_64=0); F2I always from F32 (is_src_64=0).
+        // fmt[1] selects 64-bit integer (I64); fmt[0] selected F64 float (now unused).
+        wire is_dst_64 = is_ftoi ? pe_fmt[1] : 1'b0; // F2I→I64 if fmt[1]; I2F→F32 always
+        wire is_src_64 = is_itof ? pe_fmt[1] : 1'b0; // I2F from I64 if fmt[1]; F2I from F32 always
 
         VX_fcvt_unit #(
-            .LATENCY (`LATENCY_FCVT),
+            .LATENCY (CVT_LATENCY),
             .OUT_REG (1)
         ) fcvt_unit (
             .clk        (clk),
@@ -130,7 +134,6 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .frm        (pe_frm),
             .is_itof    (is_itof),
             .is_ftoi    (is_ftoi),
-            .is_ftof    (is_ftof),
             .is_signed  (is_signed),
             .is_dst_64  (is_dst_64),
             .is_src_64  (is_src_64),
