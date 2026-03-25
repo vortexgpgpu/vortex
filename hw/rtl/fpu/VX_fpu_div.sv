@@ -155,32 +155,16 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 `else
 
     for (genvar i = 0; i < NUM_PES; ++i) begin : g_fdivs
-        reg [63:0] r;
-        `UNUSED_VAR (r)
-        fflags_t f;
-        wire f_fmt_pe = pe_shared_in[INST_FRM_BITS +: 1]; // fmt[0]
-
-        always @(*) begin
-            dpi_fdiv (
-                pe_enable,
-                int'(f_fmt_pe),
-                64'(pe_data_in[i][0 +: `XLEN]),     // a
-                64'(pe_data_in[i][`XLEN +: `XLEN]),  // b
-                pe_shared_in[0 +: INST_FRM_BITS], // frm
-                r,
-                f
-            );
-        end
-
-        VX_shift_register #(
-            .DATAW    (`FP_FLAGS_BITS + `XLEN),
-            .DEPTH    (`LATENCY_FDIV)
-        ) shift_req_dpi (
-            .clk      (clk),
-            `UNUSED_PIN (reset),
-            .enable   (pe_enable),
-            .data_in  ({f, r[`XLEN-1:0]}),
-            .data_out (pe_data_out[i])
+        VX_fdiv_unit fdiv_unit (
+            .clk    (clk),
+            .reset  (reset),
+            .enable (pe_enable),
+            .fmt    (pe_shared_in[INST_FRM_BITS +: INST_FMT_BITS]),
+            .frm    (pe_shared_in[0 +: INST_FRM_BITS]),
+            .dataa  (pe_data_in[i][0      +: 32]),
+            .datab  (pe_data_in[i][`XLEN  +: 32]),
+            .result (pe_data_out[i][0     +: 32]),
+            .fflags (pe_data_out[i][`XLEN +: `FP_FLAGS_BITS])
         );
     end
 
