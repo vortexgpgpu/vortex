@@ -19,7 +19,8 @@ module VX_pe_serializer #(
     parameter NUM_PES        = 1,
     parameter LATENCY        = 1,
     parameter DATA_IN_WIDTH  = 1,
-    parameter DATA_OUT_WIDTH = 1,
+    parameter DATA_OUT_WIDTH = DATA_IN_WIDTH,
+    parameter SHARED_WIDTH   = 0,
     parameter TAG_WIDTH      = 0,
     parameter PE_REG         = 0,
     parameter OUT_BUF        = 0
@@ -31,37 +32,42 @@ module VX_pe_serializer #(
     input wire                          valid_in,
     input wire [NUM_LANES-1:0]          mask_in,
     input wire [NUM_LANES-1:0][DATA_IN_WIDTH-1:0] data_in,
-    input wire [TAG_WIDTH-1:0]          tag_in,
+    input wire [`UP(SHARED_WIDTH)-1:0]  shared_in,
+    input wire [`UP(TAG_WIDTH)-1:0]     tag_in,
     output wire                         ready_in,
 
     // PE
     output wire                         pe_enable,
     output wire [NUM_PES-1:0]           pe_mask_out,
     output wire [NUM_PES-1:0][DATA_IN_WIDTH-1:0] pe_data_out,
+    output wire [`UP(SHARED_WIDTH)-1:0] pe_shared_out,
     input wire [NUM_PES-1:0][DATA_OUT_WIDTH-1:0] pe_data_in,
 
     // output
     output wire                         valid_out,
     output wire [NUM_LANES-1:0]         mask_out,
     output wire [NUM_LANES-1:0][DATA_OUT_WIDTH-1:0] data_out,
-    output wire [TAG_WIDTH-1:0]         tag_out,
+    output wire [`UP(TAG_WIDTH)-1:0]    tag_out,
     input wire                          ready_out
 );
+    localparam SHARED_WIDTH_S = `UP(SHARED_WIDTH);
+    localparam TAG_WIDTH_S = `UP(TAG_WIDTH);
+
     wire                    valid_out_u;
     wire [NUM_LANES-1:0]    mask_out_u;
     wire [NUM_LANES-1:0][DATA_OUT_WIDTH-1:0] data_out_u;
-    wire [TAG_WIDTH-1:0]    tag_out_u;
+    wire [TAG_WIDTH_S-1:0]  tag_out_u;
     wire                    ready_out_u;
 
     wire [NUM_PES-1:0][DATA_IN_WIDTH-1:0] pe_data_out_w;
     wire [NUM_PES-1:0]      pe_mask_out_w;
-    wire pe_valid_in;
+    wire                    pe_valid_in;
     wire [NUM_PES-1:0]      pe_mask_in_w;
-    wire [TAG_WIDTH-1:0] pe_tag_in;
+    wire [TAG_WIDTH_S-1:0]  pe_tag_in;
     wire enable;
 
     VX_shift_register #(
-        .DATAW  (1 + NUM_PES + TAG_WIDTH),
+        .DATAW  (1 + NUM_PES + TAG_WIDTH_S),
         .DEPTH  (PE_REG + LATENCY),
         .RESETW (1)
     ) shift_reg (
@@ -73,14 +79,14 @@ module VX_pe_serializer #(
     );
 
     VX_pipe_register #(
-        .DATAW  (NUM_PES * DATA_IN_WIDTH),
+        .DATAW  (NUM_PES * DATA_IN_WIDTH + SHARED_WIDTH_S),
         .DEPTH  (PE_REG)
     ) pe_data_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  (pe_data_out_w),
-        .data_out (pe_data_out)
+        .data_in  ({pe_data_out_w, shared_in}),
+        .data_out ({pe_data_out,   pe_shared_out})
     );
 
     assign pe_enable = enable;
@@ -152,7 +158,7 @@ module VX_pe_serializer #(
     end
 
     VX_elastic_buffer #(
-        .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH),
+        .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH_S),
         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
     ) out_buf (
