@@ -47,28 +47,18 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
-    localparam DATAW = `XLEN + INST_FRM_BITS + INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS;
+    localparam DATAW = `XLEN;
 
     `UNUSED_VAR ({datab, datac})
-
-    wire [NUM_LANES-1:0][DATAW-1:0] data_in;
 
     wire [NUM_LANES-1:0] mask_out;
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] data_out;
     fflags_t [NUM_LANES-1:0] fflags_out;
 
     wire pe_enable;
-    wire [NUM_PES-1:0] pe_mask_out;
-    `UNUSED_VAR (pe_mask_out)
+    wire [NUM_PES-1:0][`XLEN-1:0] pe_data_in;
+    wire [INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS-1:0] pe_shared_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] pe_data_out;
-    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
-        assign data_in[i][0  +: `XLEN] = dataa[i];
-        assign data_in[i][`XLEN +: INST_FPU_BITS] = op_type;
-        assign data_in[i][`XLEN + INST_FPU_BITS +: INST_FMT_BITS] = fmt;
-        assign data_in[i][`XLEN + INST_FPU_BITS + INST_FMT_BITS +: INST_FRM_BITS] = frm;
-    end
 
     // XLEN=64 needs one extra pipeline stage to separate Stage0 (negate) from Stage1 (LZC).
     localparam CVT_LATENCY = (`XLEN == 64) ? `LATENCY_FCVT + 1 : `LATENCY_FCVT;
@@ -79,6 +69,7 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .LATENCY    (CVT_LATENCY),
         .DATA_IN_WIDTH (DATAW),
         .DATA_OUT_WIDTH (`FP_FLAGS_BITS + `XLEN),
+        .SHARED_WIDTH (INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS),
         .TAG_WIDTH  (TAG_WIDTH),
         .PE_REG     (0),
         .OUT_BUF    (2)
@@ -87,12 +78,14 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .reset      (reset),
         .valid_in   (valid_in),
         .mask_in    (mask_in),
-        .data_in    (data_in),
+        .data_in    (dataa),
+        .shared_in  ({op_type, fmt, frm}),
         .tag_in     (tag_in),
         .ready_in   (ready_in),
         .pe_enable  (pe_enable),
-        .pe_mask_out(pe_mask_out),
+        `UNUSED_PIN (pe_mask_out),
         .pe_data_out(pe_data_in),
+        .pe_shared_out(pe_shared_in),
         .pe_data_in (pe_data_out),
         .valid_out  (valid_out),
         .mask_out   (mask_out),
@@ -110,11 +103,12 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_PES; ++i) begin : g_fcvt_units
 
-        wire [INST_FPU_BITS-1:0] pe_op_type = pe_data_in[0][`XLEN +: INST_FPU_BITS];
-        wire [INST_FMT_BITS-1:0] pe_fmt = pe_data_in[0][`XLEN + INST_FPU_BITS +: INST_FMT_BITS];
-        wire [INST_FRM_BITS-1:0] pe_frm = pe_data_in[0][`XLEN + INST_FPU_BITS + INST_FMT_BITS +: INST_FRM_BITS];
+        wire [INST_FRM_BITS-1:0] pe_frm = pe_shared_in[0 +: INST_FRM_BITS];
+        wire [INST_FMT_BITS-1:0] pe_fmt = pe_shared_in[INST_FRM_BITS +: INST_FMT_BITS];
+        wire [INST_FPU_BITS-1:0] pe_op_type = pe_shared_in[INST_FRM_BITS + INST_FMT_BITS +: INST_FPU_BITS];
 
         `UNUSED_VAR (pe_op_type)
+        `UNUSED_VAR (pe_fmt[0])
 
         wire is_itof   = pe_op_type[1];
         wire is_ftoi   = ~pe_op_type[1];

@@ -51,7 +51,7 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     output wire valid_out,
     input wire  ready_out
 );
-    localparam DATAW = 2 * `XLEN + INST_FRM_BITS + INST_FMT_BITS;
+    localparam DATAW = 2 * `XLEN;
 
     `UNUSED_VAR (op_type)
     `UNUSED_VAR (datac)
@@ -63,16 +63,13 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
 
     wire pe_enable;
-    wire [NUM_PES-1:0] pe_mask_out;
-    `UNUSED_VAR (pe_mask_out)
     wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
+    wire [INST_FMT_BITS + INST_FRM_BITS-1:0] pe_shared_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] pe_data_out;
+    `UNUSED_VAR (pe_shared_in)
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
-        assign data_in[i][0          +: `XLEN]        = dataa[i];
-        assign data_in[i][`XLEN      +: `XLEN]        = datab[i];
-        assign data_in[i][2*`XLEN    +: INST_FRM_BITS] = frm;
-        assign data_in[i][2*`XLEN + INST_FRM_BITS +: INST_FMT_BITS] = fmt;
+        assign data_in[i] = {datab[i], dataa[i]};
     end
 
     VX_pe_serializer #(
@@ -81,6 +78,7 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .LATENCY    (`LATENCY_FDIV),
         .DATA_IN_WIDTH (DATAW),
         .DATA_OUT_WIDTH (`FP_FLAGS_BITS + `XLEN),
+        .SHARED_WIDTH (INST_FMT_BITS + INST_FRM_BITS),
         .TAG_WIDTH  (TAG_WIDTH),
         .PE_REG     (0),
         .OUT_BUF    (2)
@@ -90,11 +88,13 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .valid_in   (valid_in),
         .mask_in    (mask_in),
         .data_in    (data_in),
+        .shared_in  ({fmt, frm}),
         .tag_in     (tag_in),
         .ready_in   (ready_in),
         .pe_enable  (pe_enable),
-        .pe_mask_out(pe_mask_out),
+        `UNUSED_PIN (pe_mask_out),
         .pe_data_out(pe_data_in),
+        .pe_shared_out(pe_shared_in),
         .pe_data_in (pe_data_out),
         .valid_out  (valid_out),
         .mask_out   (mask_out),
@@ -158,7 +158,7 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         reg [63:0] r;
         `UNUSED_VAR (r)
         fflags_t f;
-        wire f_fmt_pe = pe_data_in[0][2*`XLEN + INST_FRM_BITS];
+        wire f_fmt_pe = pe_shared_in[INST_FRM_BITS +: 1]; // fmt[0]
 
         always @(*) begin
             dpi_fdiv (
@@ -166,7 +166,7 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 int'(f_fmt_pe),
                 64'(pe_data_in[i][0 +: `XLEN]),     // a
                 64'(pe_data_in[i][`XLEN +: `XLEN]),  // b
-                pe_data_in[0][2*`XLEN +: INST_FRM_BITS], // frm
+                pe_shared_in[0 +: INST_FRM_BITS], // frm
                 r,
                 f
             );

@@ -51,7 +51,7 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
-    localparam DATAW = 2 * `XLEN + INST_FRM_BITS + INST_FPU_BITS + INST_FMT_BITS;
+    localparam DATAW = 2 * `XLEN;
 
     `UNUSED_VAR (datac)
 
@@ -62,17 +62,13 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     fflags_t [NUM_LANES-1:0] fflags_out;
 
     wire pe_enable;
-    wire [NUM_PES-1:0] pe_mask_out;
-    `UNUSED_VAR (pe_mask_out)
     wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
+    wire [INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS-1:0] pe_shared_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] pe_data_out;
+    `UNUSED_VAR (pe_shared_in)
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
-        assign data_in[i][0                                              +: `XLEN]         = dataa[i];
-        assign data_in[i][`XLEN                                          +: `XLEN]         = datab[i];
-        assign data_in[i][2*`XLEN                                        +: INST_FRM_BITS]  = frm;
-        assign data_in[i][2*`XLEN + INST_FRM_BITS                        +: INST_FPU_BITS]  = op_type;
-        assign data_in[i][2*`XLEN + INST_FRM_BITS + INST_FPU_BITS        +: INST_FMT_BITS]  = fmt;
+        assign data_in[i] = {datab[i], dataa[i]};
     end
 
     VX_pe_serializer #(
@@ -81,6 +77,7 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .LATENCY    (`LATENCY_FNCP),
         .DATA_IN_WIDTH (DATAW),
         .DATA_OUT_WIDTH (`FP_FLAGS_BITS + `XLEN),
+        .SHARED_WIDTH (INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS),
         .TAG_WIDTH  (TAG_WIDTH),
         .PE_REG     (0),
         .OUT_BUF    (2)
@@ -90,11 +87,13 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .valid_in   (valid_in),
         .mask_in    (mask_in),
         .data_in    (data_in),
+        .shared_in ({op_type, fmt, frm}),
         .tag_in     (tag_in),
         .ready_in   (ready_in),
         .pe_enable  (pe_enable),
-        .pe_mask_out(pe_mask_out),
+        `UNUSED_PIN (pe_mask_out),
         .pe_data_out(pe_data_in),
+        .pe_shared_out(pe_shared_in),
         .pe_data_in (pe_data_out),
         .valid_out  (valid_out),
         .mask_out   (mask_out),
@@ -121,8 +120,8 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .enable     (pe_enable),
-            .frm        (pe_data_in[0][2*`XLEN +: INST_FRM_BITS]),
-            .op_type    (pe_data_in[0][2*`XLEN + INST_FRM_BITS +: INST_FPU_BITS]),
+            .frm        (pe_shared_in[0 +: INST_FRM_BITS]),
+            .op_type    (pe_shared_in[INST_FRM_BITS + INST_FMT_BITS +: INST_FPU_BITS]),
             .dataa      (pe_data_in[i][0 +: 32]),
             .datab      (pe_data_in[i][`XLEN +: 32]),
             .result     (pe_data_out[i][0 +: 32]),
@@ -140,8 +139,8 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .enable     (pe_enable),
-            .frm        (pe_data_in[0][2*`XLEN +: INST_FRM_BITS]),
-            .op_type    (pe_data_in[0][2*`XLEN + INST_FRM_BITS +: INST_FPU_BITS]),
+            .frm        (pe_shared_in[0 +: INST_FRM_BITS]),
+            .op_type    (pe_shared_in[INST_FRM_BITS + INST_FMT_BITS +: INST_FPU_BITS]),
             .dataa      (pe_data_in[i][0 +: 32]),
             .datab      (pe_data_in[i][`XLEN +: 32]),
             .result     (pe_data_out[i][0 +: 32]),
@@ -153,9 +152,9 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     // Simulation path: use DPI functions for F32 and F64
     for (genvar i = 0; i < NUM_PES; ++i) begin : g_fncp_units
-        wire [INST_FRM_BITS-1:0]  frm_pe     = pe_data_in[0][2*`XLEN +: INST_FRM_BITS];
-        wire [INST_FPU_BITS-1:0]  op_type_pe = pe_data_in[0][2*`XLEN + INST_FRM_BITS +: INST_FPU_BITS];
-        wire                      f_fmt_pe   = pe_data_in[0][2*`XLEN + INST_FRM_BITS + INST_FPU_BITS]; // fmt[0]
+        wire [INST_FRM_BITS-1:0]  frm_pe     = pe_shared_in[0 +: INST_FRM_BITS];
+        wire [INST_FPU_BITS-1:0]  op_type_pe = pe_shared_in[INST_FRM_BITS + INST_FMT_BITS +: INST_FPU_BITS];
+        wire                      f_fmt_pe   = pe_shared_in[INST_FRM_BITS +: 1]; // fmt[0]
         wire                      is_fcmp_pe = (op_type_pe == INST_FPU_CMP);
 
         reg [`XLEN-1:0] res_ncp;
