@@ -61,7 +61,13 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
     //   3D-5D (funct3 2-4) -> 4 uops:  SETUP, COORD01, COORD23, ISSUE
     // The sequencer reads this on the start cycle and latches last_ctr.
     // -----------------------------------------------------------------------
-    assign uop_count = (ibuf_in.op_args[2:0] <= 3'd1)
+    // 1D/2D (funct3 0-1) → 3 uops; 3D-5D (funct3 2-4) → 4 uops.
+    // funct3=5 is 2D multicast (EXT_DXA_MULTICAST_ENABLE) → 3 uops.
+    assign uop_count = (ibuf_in.op_args[2:0] <= 3'd1
+                    `ifdef EXT_DXA_MULTICAST_ENABLE
+                        || ibuf_in.op_args[2:0] == 3'd5
+                    `endif
+                       )
         ? UOP_CTR_W'(3)
         : UOP_CTR_W'(4);
 
@@ -72,7 +78,12 @@ module VX_dxa_uops import VX_gpu_pkg::*; (
     // -----------------------------------------------------------------------
     reg [2:0] dim_w = ibuf_in.op_args[2:0];
 
-    wire has_coord23 = (dim_w >= 3'd2);
+    // funct3=5 is 2D multicast — no COORD23 step (same as 1D/2D).
+    wire has_coord23 = (dim_w >= 3'd2)
+`ifdef EXT_DXA_MULTICAST_ENABLE
+        && (dim_w != 3'd5)
+`endif
+        ;
 
     // -----------------------------------------------------------------------
     // Combinational operand decode (uop_idx-index -> register operands).

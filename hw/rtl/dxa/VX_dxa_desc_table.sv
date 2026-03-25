@@ -32,6 +32,11 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [NUM_READ_PORTS-1:0][31:0] read_size0,
     output wire [NUM_READ_PORTS-1:0][31:0] read_size1,
     output wire [NUM_READ_PORTS-1:0][31:0] read_stride0
+`ifdef EXT_DXA_MULTICAST_ENABLE
+    ,
+    output wire [NUM_READ_PORTS-1:0][31:0] read_smem_stride,
+    output wire [NUM_READ_PORTS-1:0][31:0] read_bar_stride
+`endif
 );
     localparam DESC_SLOT_W = DXA_DESC_SLOT_W;
     localparam DESC_WORD_W = DXA_DESC_WORD_W;
@@ -76,6 +81,10 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign read_size0[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_SIZE0_OFF];
         assign read_size1[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_SIZE1_OFF];
         assign read_stride0[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_STRIDE0_OFF];
+    `ifdef EXT_DXA_MULTICAST_ENABLE
+        assign read_smem_stride[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_SMEM_STRIDE_OFF];
+        assign read_bar_stride[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_BAR_STRIDE_OFF];
+    `endif
     end
 
 endmodule
