@@ -34,9 +34,13 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam WORKER_W      = `UP(WORKER_BITS);
 
     // ISSUE FIFO entry: all launch args packed (no ctx_table accumulation).
-    // {core_id, uuid, wid, bar_addr, desc_slot, smem_addr, coords[5]}
+    // {core_id, uuid, wid, bar_addr, desc_slot, smem_addr, coords[5], [multicast fields]}
     localparam ISSUE_FIFO_W = NC_WIDTH + UUID_WIDTH + NW_WIDTH
-                            + BAR_ADDR_W + DXA_DESC_SLOT_W + `XLEN + (5 * `XLEN);
+                            + BAR_ADDR_W + DXA_DESC_SLOT_W + `XLEN + (5 * `XLEN)
+`ifdef EXT_DXA_MULTICAST_ENABLE
+                            + 1 + `NUM_WARPS  // is_multicast + cta_mask
+`endif
+                            ;
     localparam ISSUE_FIFO_DEPTH = `NUM_CORES * `NUM_WARPS;
 
     if (ENABLE) begin : g_dxa_unified
@@ -56,6 +60,11 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_DXA_UNITS-1:0][31:0] issue_stride0_raw;
         wire [NUM_DXA_UNITS-1:0] worker_idle;
 
+    `ifdef EXT_DXA_MULTICAST_ENABLE
+        wire [NUM_DXA_UNITS-1:0][31:0] issue_smem_stride;
+        wire [NUM_DXA_UNITS-1:0][31:0] issue_bar_stride;
+    `endif
+
         VX_dxa_desc_table #(
             .NUM_READ_PORTS(NUM_DXA_UNITS)
         ) desc_table (
@@ -72,6 +81,11 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             .read_size0     (issue_size0_raw),
             .read_size1     (issue_size1_raw),
             .read_stride0   (issue_stride0_raw)
+        `ifdef EXT_DXA_MULTICAST_ENABLE
+            ,
+            .read_smem_stride(issue_smem_stride),
+            .read_bar_stride (issue_bar_stride)
+        `endif
         );
 
         // ================================================================
@@ -88,12 +102,19 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_DXA_UNITS-1:0][4:0][`XLEN-1:0]       in_coords;
         wire [NUM_DXA_UNITS-1:0][BAR_ADDR_W-1:0]       in_bar_addr;
         wire [NUM_DXA_UNITS-1:0][DXA_DESC_SLOT_W-1:0]  in_desc_slot;
+    `ifdef EXT_DXA_MULTICAST_ENABLE
+        wire [NUM_DXA_UNITS-1:0]                        in_is_multicast;
+        wire [NUM_DXA_UNITS-1:0][`NUM_WARPS-1:0]        in_cta_mask;
+    `endif
 
         for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_decode
             assign in_valid[i] = ~reset && (cluster_dxa_bus_if[i].req_valid === 1'b1);
-            assign {in_core_id[i], in_uuid[i], in_wid[i],
-                    in_smem_addr[i], in_meta[i], in_coords[i]}
-                = cluster_dxa_bus_if[i].req_data;
+            assign in_core_id[i]  = cluster_dxa_bus_if[i].req_data.core_id;
+            assign in_uuid[i]     = cluster_dxa_bus_if[i].req_data.uuid;
+            assign in_wid[i]      = cluster_dxa_bus_if[i].req_data.wid;
+            assign in_smem_addr[i]= cluster_dxa_bus_if[i].req_data.smem_addr;
+            assign in_meta[i]     = cluster_dxa_bus_if[i].req_data.meta;
+            assign in_coords[i]   = cluster_dxa_bus_if[i].req_data.coords;
 
             // desc_slot from meta[3:0]
             assign in_desc_slot[i] = DXA_DESC_SLOT_W'(in_meta[i][DXA_DESC_SLOT_W-1:0]);
@@ -104,6 +125,11 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             end else begin : g_bar_wo
                 assign in_bar_addr[i] = in_meta[i][(4 + BAR_ID_SHIFT) +: NB_BITS];
             end
+
+        `ifdef EXT_DXA_MULTICAST_ENABLE
+            assign in_is_multicast[i] = cluster_dxa_bus_if[i].req_data.is_multicast;
+            assign in_cta_mask[i]     = cluster_dxa_bus_if[i].req_data.cta_mask;
+        `endif
         end
 
         // ================================================================
@@ -138,6 +164,11 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             in_desc_slot[issue_grant_idx],
             in_smem_addr[issue_grant_idx],
             in_coords[issue_grant_idx]
+        `ifdef EXT_DXA_MULTICAST_ENABLE
+            ,
+            in_is_multicast[issue_grant_idx],
+            in_cta_mask[issue_grant_idx]
+        `endif
         };
 
         wire issue_fifo_out_valid;
@@ -166,9 +197,17 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [DXA_DESC_SLOT_W-1:0]   fifo_desc_slot;
         wire [`XLEN-1:0]             fifo_smem_addr;
         wire [4:0][`XLEN-1:0]        fifo_coords;
+    `ifdef EXT_DXA_MULTICAST_ENABLE
+        wire                         fifo_is_multicast;
+        wire [`NUM_WARPS-1:0]        fifo_cta_mask;
+    `endif
 
         assign {fifo_core_id, fifo_uuid, fifo_wid,
-                fifo_bar_addr, fifo_desc_slot, fifo_smem_addr, fifo_coords}
+                fifo_bar_addr, fifo_desc_slot, fifo_smem_addr, fifo_coords
+            `ifdef EXT_DXA_MULTICAST_ENABLE
+                , fifo_is_multicast, fifo_cta_mask
+            `endif
+                }
             = issue_fifo_dout;
 
         // ================================================================
@@ -202,6 +241,10 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [DXA_DESC_SLOT_W-1:0] launch_desc_slot = fifo_desc_slot;
         wire [`XLEN-1:0]           launch_smem_addr = fifo_smem_addr;
         wire [4:0][`XLEN-1:0]      launch_coords    = fifo_coords;
+    `ifdef EXT_DXA_MULTICAST_ENABLE
+        wire                       launch_is_multicast = fifo_is_multicast;
+        wire [`NUM_WARPS-1:0]      launch_cta_mask     = fifo_cta_mask;
+    `endif
 
         for (genvar w = 0; w < NUM_DXA_UNITS; ++w) begin : g_launch
             assign launch_valid_w[w] = issue_dispatch && (idle_worker_idx == WORKER_W'(w));
@@ -253,6 +296,12 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 .issue_size0_raw   (issue_size0_raw[i]),
                 .issue_size1_raw   (issue_size1_raw[i]),
                 .issue_stride0_raw (issue_stride0_raw[i]),
+            `ifdef EXT_DXA_MULTICAST_ENABLE
+                .launch_is_multicast(launch_is_multicast),
+                .launch_cta_mask    (launch_cta_mask),
+                .issue_smem_stride  (issue_smem_stride[i]),
+                .issue_bar_stride   (issue_bar_stride[i]),
+            `endif
                 .gmem_bus_if       (dxa_gmem_bus_if[i]),
                 .smem_bank_wr_if   (dxa_smem_bank_wr_if[i]),
                 .smem_core_id      (dxa_smem_core_id[i]),

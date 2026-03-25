@@ -54,11 +54,11 @@ extern "C" void kernel_main(kernel_arg_t* arg) {
   // barriers (one per stage); single-buffer uses only bar[0].
   vortex::barrier bar[2] = { vortex::barrier(0), vortex::barrier(1) };
 
-  // Only the first hardware warp (warp 0 within the CTA) issues DXA commands.
-  // group_warp_id = vx_warp_id() & (wpg-1) identifies the warp's position
-  // within its CTA (0 = first warp).  Uses AND instead of modulo since
-  // __warps_per_group is always power-of-2, avoiding the expensive REMU insn.
-  const bool is_dxa_warp = (__warps_per_group == 0) ? false : ((vx_warp_id() & (__warps_per_group - 1)) == 0);
+  // Only the first hardware warp (rank 0 within the CTA) issues DXA commands.
+  // cta_rank is the warp's position within its CTA, assigned by the KMU/CTA
+  // dispatcher. This is stable across CTA recycling, unlike the global warp_id
+  // which can be assigned non-consecutively when warps are reused.
+  const bool is_dxa_warp = (csr_read(VX_CSR_CTA_RANK) == 0);
 
   if (mode == 2) {
     // ── Double-buffered pipeline ──────────────────────────────────────
