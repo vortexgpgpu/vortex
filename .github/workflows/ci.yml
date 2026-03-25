@@ -135,7 +135,7 @@ jobs:
           - name: dxa
             xlen: 64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout code
