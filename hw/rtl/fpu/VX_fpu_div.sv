@@ -106,7 +106,8 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     `UNUSED_VAR (pe_data_in)
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
-        assign result[i]     = data_out[i][0 +: `XLEN];
+        // NaN-box F32 result in 64-bit register (upper 32 bits must be all 1s per RISC-V spec)
+        assign result[i]     = (`XLEN > 32) ? {32'hffffffff, data_out[i][0 +: 32]} : data_out[i][0 +: `XLEN];
         assign fflags_out[i] = data_out[i][`XLEN +: `FP_FLAGS_BITS];
     end
 
