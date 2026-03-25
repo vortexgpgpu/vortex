@@ -27,7 +27,7 @@ extern "C" void kernel_main(kernel_arg_t* arg) {
 #ifdef USE_DXA
   // ── DXA path: issue 2D tile copy, barrier wait ──
   vortex::barrier bar(0);
-  const bool is_dxa_warp = (__warps_per_group == 0) ? false : ((vx_warp_id() & (__warps_per_group - 1)) == 0);
+  const bool is_dxa_warp = (csr_read(VX_CSR_CTA_RANK) == 0);
   if (is_dxa_warp) {
     vx_dxa_issue_2d_wg(kDescSrc, bar.id(), shmem, col_base, row_base);
   }

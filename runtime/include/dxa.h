@@ -216,6 +216,23 @@ static inline int vx_dxa_program_desc_5d(
   return 0;
 }
 
+#ifdef EXT_DXA_MULTICAST_ENABLE
+// Program multicast stride fields for an existing DXA descriptor.
+//   smem_stride_bytes: byte offset between consecutive CTAs' SMEM bases
+//   bar_stride: barrier stride (reserved for future use, set to 0)
+static inline int vx_dxa_program_desc_multicast(
+    vx_device_h dev, uint32_t slot,
+    uint32_t smem_stride_bytes, uint32_t bar_stride) {
+  uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
+  int ret;
+  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_SMEM_STRIDE_OFF, smem_stride_bytes);
+  if (ret) return ret;
+  ret = vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_BAR_STRIDE_OFF, bar_stride);
+  if (ret) return ret;
+  return 0;
+}
+#endif
+
 #ifdef __cplusplus
 }
 #endif

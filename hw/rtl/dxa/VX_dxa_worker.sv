@@ -55,6 +55,13 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input wire [31:0] issue_size1_raw,
     input wire [31:0] issue_stride0_raw,
 
+`ifdef EXT_DXA_MULTICAST_ENABLE
+    input wire                       launch_is_multicast,
+    input wire [`NUM_WARPS-1:0]      launch_cta_mask,
+    input wire [31:0]                issue_smem_stride,
+    input wire [31:0]                issue_bar_stride,
+`endif
+
     VX_mem_bus_if.master gmem_bus_if,
     VX_dxa_bank_wr_if.master smem_bank_wr_if,
     output wire [NC_WIDTH-1:0] smem_core_id,
@@ -123,6 +130,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [NW_WIDTH-1:0]     active_wid_r;
     reg [BAR_ADDR_W-1:0]   active_bar_addr_r;
     reg                    active_notify_smem_done_r;
+`ifdef EXT_DXA_MULTICAST_ENABLE
+    reg                    active_is_multicast_r;
+    reg [`NUM_WARPS-1:0]   active_cta_mask_r;
+    reg [31:0]             active_smem_stride_r;
+    reg [31:0]             active_bar_stride_r;
+`endif
 
     wire active_r = (ts_state_r == TS_ACTIVE);
 
@@ -347,6 +360,13 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .transfer_done     (wc_transfer_done),
         .wr_done_count     (wc_wr_done_count),
         .smem_req_fire     (wc_smem_req_fire)
+    `ifdef EXT_DXA_MULTICAST_ENABLE
+        ,
+        .is_multicast      (active_is_multicast_r),
+        .cta_mask          (active_cta_mask_r),
+        .smem_stride       (active_smem_stride_r),
+        .bar_stride        (active_bar_stride_r)
+    `endif
     `ifdef PERF_ENABLE
         ,
         .perf_smem_writes      (wc_perf_smem_writes)
@@ -408,6 +428,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     active_notify_smem_done_r <= DXA_DONE_META_ENABLE;
                 `else
                     active_notify_smem_done_r <= 1'b0;
+                `endif
+                `ifdef EXT_DXA_MULTICAST_ENABLE
+                    active_is_multicast_r <= launch_is_multicast;
+                    active_cta_mask_r     <= launch_cta_mask;
+                    active_smem_stride_r  <= issue_smem_stride;
+                    active_bar_stride_r   <= issue_bar_stride;
                 `endif
                 end
             end

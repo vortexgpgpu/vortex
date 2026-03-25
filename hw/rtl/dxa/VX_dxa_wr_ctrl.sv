@@ -57,6 +57,13 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [31:0]                 wr_done_count,
     output wire                        smem_req_fire
 
+`ifdef EXT_DXA_MULTICAST_ENABLE
+    ,
+    input  wire                        is_multicast,
+    input  wire [`NUM_WARPS-1:0]       cta_mask,
+    input  wire [31:0]                 smem_stride,
+    input  wire [31:0]                 bar_stride
+`endif
 );
     // ---- Write queue ----
     localparam WRQ_DATAW = 1 + SMEM_ADDR_WIDTH + SMEM_DATAW + SMEM_BYTES;
@@ -122,6 +129,81 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     assign {wrq_head_last, wrq_head_addr, wrq_head_data, wrq_head_byteen} = wrq_data_out;
 
+`ifdef EXT_DXA_MULTICAST_ENABLE
+    // ── Multicast replay state machine ──
+    // For each queued SMEM word, iterate over all set bits in cta_mask.
+    // CTA 0's write goes to the original address; CTA N's write goes to
+    // addr + N * smem_stride_words. The write queue only pops after all
+    // replay copies for the current word have been issued.
+    localparam MC_NW_BITS = `CLOG2(`NUM_WARPS);
+    wire [SMEM_ADDR_WIDTH-1:0] smem_stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_BITS);
+
+    // Track which CTAs still need a write for the current queue head.
+    // Initialized to cta_mask when a new word appears; cleared one bit at a time.
+    reg [`NUM_WARPS-1:0] replay_remaining_r;
+
+    // Find the lowest set bit in replay_remaining_r — this is the next CTA to write.
+    wire [MC_NW_BITS-1:0] replay_next_idx;
+    wire replay_has_remaining;
+
+    VX_priority_encoder #(
+        .N (`NUM_WARPS)
+    ) replay_pe (
+        .data_in   (replay_remaining_r),
+        .index_out (replay_next_idx),
+        .valid_out (replay_has_remaining),
+        `UNUSED_PIN (onehot_out)
+    );
+
+    // Compute replayed SMEM address: base + cta_index * stride
+    wire [SMEM_ADDR_WIDTH-1:0] replay_addr_offset = SMEM_ADDR_WIDTH'(replay_next_idx) * smem_stride_words;
+    wire [SMEM_ADDR_WIDTH-1:0] replay_addr = wrq_head_addr + replay_addr_offset;
+
+    // Is this the last CTA for the current word?
+    wire replay_is_last = replay_has_remaining
+        && (replay_remaining_r == (`NUM_WARPS'(1) << replay_next_idx));
+
+    // Write output logic
+    wire mc_write_valid;
+    wire mc_write_fire;
+    wire mc_pop;
+
+    if (1) begin : g_mc_out
+        // When multicast: write is valid when queue has data AND replay has remaining CTAs.
+        // When not multicast: write is valid when queue has data (normal path).
+        assign mc_write_valid = transfer_active && ~wrq_empty
+                             && (!is_multicast || replay_has_remaining);
+        assign mc_write_fire = mc_write_valid && smem_wr_ready;
+        // Pop when all CTAs written (multicast: last bit; normal: immediate)
+        assign mc_pop = mc_write_fire && (!is_multicast || replay_is_last);
+    end
+
+    always @(posedge clk) begin
+        if (reset || transfer_start) begin
+            replay_remaining_r <= '0;
+        end else if (transfer_active && is_multicast) begin
+            if (replay_remaining_r == '0 && !wrq_empty) begin
+                // New word from queue: load the full cta_mask
+                replay_remaining_r <= cta_mask;
+            end else if (mc_write_fire && replay_has_remaining) begin
+                // Clear the bit we just wrote
+                replay_remaining_r <= replay_remaining_r & ~(`NUM_WARPS'(1) << replay_next_idx);
+            end
+        end
+    end
+
+    assign smem_wr_valid    = mc_write_valid;
+    assign smem_wr_addr     = is_multicast ? replay_addr : wrq_head_addr;
+    assign smem_wr_data     = wrq_head_data;
+    assign smem_wr_byteen   = wrq_head_byteen;
+    assign wrq_pop          = mc_pop;
+    assign smem_wr_last_pkt = mc_pop && wrq_head_last;
+    assign smem_req_fire    = mc_write_fire;
+
+    `UNUSED_VAR (bar_stride)  // used by completion logic (future)
+
+`else
+    // ── Normal (non-multicast) path ──
     assign smem_wr_valid  = transfer_active && ~wrq_empty;
     assign smem_wr_addr   = wrq_head_addr;
     assign smem_wr_data   = wrq_head_data;
@@ -129,6 +211,7 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign wrq_pop        = smem_wr_valid && smem_wr_ready;
     assign smem_wr_last_pkt = wrq_pop && wrq_head_last;
     assign smem_req_fire  = wrq_pop;
+`endif
 
 
     // ════════════════════════════════════════════════════════════════════
@@ -190,6 +273,23 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             if (transfer_active && wrq_pop) begin
                 `TRACE(2, ("%t: wr_ctrl pop: addr=0x%0h count=%0d total=%0d last=%0b done=%0b\n",
                     $time, wrq_head_addr, wr_count_next, total_smem_writes, wrq_head_last, transfer_done))
+            end
+            // Structured SMEM write event for timeline visualization
+            if (smem_req_fire) begin
+`ifdef EXT_DXA_MULTICAST_ENABLE
+                if (is_multicast) begin
+                    // verilator lint_off WIDTHEXPAND
+                    $write("DXA_PIPE,%0d,SMEM_WR,addr=0x%0h,byteen=0x%0h,cta=%0d,last=%0d\n",
+                        $time, smem_wr_addr, smem_wr_byteen, replay_next_idx, smem_wr_last_pkt);
+                    // verilator lint_on WIDTHEXPAND
+                end else begin
+                    $write("DXA_PIPE,%0d,SMEM_WR,addr=0x%0h,byteen=0x%0h,last=%0d\n",
+                        $time, smem_wr_addr, smem_wr_byteen, smem_wr_last_pkt);
+                end
+`else
+                $write("DXA_PIPE,%0d,SMEM_WR,addr=0x%0h,byteen=0x%0h,last=%0d\n",
+                    $time, smem_wr_addr, smem_wr_byteen, smem_wr_last_pkt);
+`endif
             end
         end
     end

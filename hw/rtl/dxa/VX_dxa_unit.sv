@@ -97,6 +97,16 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign dxa_req_bus_if.req_data.coords[3] = lane1_rs2;
         assign dxa_req_bus_if.req_data.coords[4] = lane2_rs2;
 
+    `ifdef EXT_DXA_MULTICAST_ENABLE
+        // Multicast: funct3 >= 5 signals multicast variant.
+        // rs2 lane 0 carries the cta_mask instead of coord2.
+        wire is_multicast = (execute_if.data.op_args.dxa.op >= 3'd5);
+        assign dxa_req_bus_if.req_data.is_multicast = is_multicast;
+        assign dxa_req_bus_if.req_data.cta_mask = is_multicast
+            ? execute_if.data.rs2_data[0][`NUM_WARPS-1:0]
+            : '0;
+    `endif
+
         // Barrier address from meta.
         // meta[3:0]                       = desc_slot
         // meta[4 +: NW_BITS]              = bar_owner (warp id from local_group_id)

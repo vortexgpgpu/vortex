@@ -25,7 +25,11 @@ module VX_dxa_core_ctrl import VX_gpu_pkg::*; #(
     VX_dxa_req_bus_if.slave per_socket_dxa_bus_if[DXA_NUM_SOCKETS],
     VX_dxa_req_bus_if.master cluster_dxa_bus_if[NUM_DXA_UNITS]
 );
-    localparam DXA_REQ_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + (7 * `XLEN);
+    localparam DXA_REQ_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + (7 * `XLEN)
+`ifdef EXT_DXA_MULTICAST_ENABLE
+        + 1 + `NUM_WARPS
+`endif
+        ;
     localparam DXA_REQ_SEL_COUNT = `MIN(DXA_NUM_SOCKETS, NUM_DXA_UNITS);
     localparam DXA_REQ_NUM_REQS = (DXA_NUM_SOCKETS > NUM_DXA_UNITS)
                                 ? `CDIV(DXA_NUM_SOCKETS, NUM_DXA_UNITS)
