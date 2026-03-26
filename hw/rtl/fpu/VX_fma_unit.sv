@@ -214,7 +214,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign {r1_sig_a, r1_sig_b, r1_sig_c, r1_exp_prod, r1_exp_c, r1_s_prod, r1_s_c, r1_frm, r1_exc} = s0_data;
 
     // =========================================================================
-    // Stage 1: Multiply  (MUL_LATENCY-1 remaining cycles after pipe_pre_mul)
+    // Stage 1: Multiply  (MUL_LATENCY cycles)
     // =========================================================================
 
     wire [PROD_BITS-1:0] raw_prod;
@@ -233,14 +233,14 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign raw_prod = PROD_BITS'(r1_sig_a) * PROD_BITS'(r1_sig_b);
     end
 
-    // Pipeline register for MUL stage (depth reduced by 1: pipe_pre_mul absorbs one cycle)
+    // Pipeline register for MUL stage: MUL_LATENCY already excludes INI_LATENCY
     // Carry forward: raw_prod, exp_prod, s_prod, sig_c, exp_c, s_c, frm, exc
     localparam MUL_DATAW = PROD_BITS + 10 + 1 + SIG_BITS + 10 + 1 + INST_FRM_BITS + 4;
 
     wire [MUL_DATAW-1:0] s1_data;
     VX_pipe_register #(
         .DATAW (MUL_DATAW),
-        .DEPTH (MUL_LATENCY - 1)
+        .DEPTH (MUL_LATENCY)
     ) pipe_mul (
         .clk     (clk),
         .reset   (reset),
@@ -303,9 +303,15 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [ALN_BITS-1:0] aln_c    = ALN_BITS'(c_ext >> (ALN_BITS + shift_c));
     wire                stick_c  = (c_ext << (ALN_BITS - shift_c)) != '0;
 
+    // Pre-compute magnitude comparison in ALN stage (before register) to reduce
+    // critical-path depth in the ACC stage.  This moves the 51-bit comparator's
+    // CARRY8 chain out of the timing-critical ALN→ACC path.
+    wire aln_prod_gte_c = (aln_prod >= aln_c);
+
     // Pipeline register for ALN stage
     // Pass s1_s_prod and s1_s_c explicitly for correct sign selection in ACC stage.
-    localparam ALN_DATAW = ALN_BITS + 1 + ALN_BITS + 1 + 1 + 1 + 1 + 10 + INST_FRM_BITS + 4;
+    // +1 bit for the pre-computed magnitude comparison result.
+    localparam ALN_DATAW = ALN_BITS + 1 + ALN_BITS + 1 + 1 + 1 + 1 + 1 + 10 + INST_FRM_BITS + 4;
 
     wire [ALN_DATAW-1:0] s2_data;
     VX_pipe_register #(
@@ -315,7 +321,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({aln_prod,  stick_prod, aln_c,  stick_c, s1_eff_sub, s1_s_prod, s1_s_c, s1_max_exp, s1_frm, s1_exc}),
+        .data_in ({aln_prod,  stick_prod, aln_c,  stick_c, aln_prod_gte_c, s1_eff_sub, s1_s_prod, s1_s_c, s1_max_exp, s1_frm, s1_exc}),
         .data_out(s2_data)
     );
 
@@ -323,6 +329,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire                     s2_stick_prod;
     wire [ALN_BITS-1:0]      s2_aln_c;
     wire                     s2_stick_c;
+    wire                     s2_prod_gte_c;
     wire                     s2_eff_sub;
     wire                     s2_s_prod;
     wire                     s2_s_c;
@@ -331,29 +338,32 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [3:0]               s2_exc;
 
     assign {s2_aln_prod, s2_stick_prod, s2_aln_c, s2_stick_c,
-            s2_eff_sub, s2_s_prod, s2_s_c, s2_max_exp, s2_frm, s2_exc} = s2_data;
+            s2_prod_gte_c, s2_eff_sub, s2_s_prod, s2_s_c, s2_max_exp, s2_frm, s2_exc} = s2_data;
 
     // =========================================================================
     // Stage 3: Accumulate (1 cycle)
     // =========================================================================
     // Both operands are positive magnitudes in sign-magnitude form.
     // Result sign is determined by the larger magnitude.
+    // The magnitude comparison (prod >= c) was pre-computed and registered
+    // in the ALN stage to shorten this stage's critical path.
 
     wire [ACC_BITS-1:0] acc_sum;
     wire                acc_sign;
     wire                acc_sticky;
 
     wire [ACC_BITS-1:0] add_result = {1'b0, s2_aln_prod} + {1'b0, s2_aln_c};
-    // For subtraction compute both directions and pick non-negative
+    // Single subtraction: prod - c.  When prod < c the result is negative
+    // (two's-complement); we negate it to get |c - prod|.  This replaces the
+    // old separate sub_ba adder and the combinational magnitude comparator,
+    // which together created a 4×CARRY8 + 10-LUT critical path.
     wire [ACC_BITS-1:0] sub_ab     = {1'b0, s2_aln_prod} - {1'b0, s2_aln_c};
-    wire [ACC_BITS-1:0] sub_ba     = {1'b0, s2_aln_c}    - {1'b0, s2_aln_prod};
-    wire                prod_gte_c_mag = (s2_aln_prod >= s2_aln_c);
 
-    assign acc_sum    = s2_eff_sub ? (prod_gte_c_mag ? sub_ab : sub_ba) : add_result;
+    assign acc_sum    = s2_eff_sub ? (s2_prod_gte_c ? sub_ab : (~sub_ab + 1'b1)) : add_result;
     // For subtraction: result sign follows the larger-magnitude operand.
-    // prod_gte_c_mag=1 → product won → use product sign; else C sign.
+    // s2_prod_gte_c=1 → product won → use product sign; else C sign.
     // For addition: both operands share the same sign; use product sign.
-    assign acc_sign   = s2_eff_sub ? (prod_gte_c_mag ? s2_s_prod : s2_s_c) : s2_s_prod;
+    assign acc_sign   = s2_eff_sub ? (s2_prod_gte_c ? s2_s_prod : s2_s_c) : s2_s_prod;
     assign acc_sticky = s2_stick_prod | s2_stick_c;
 
     // Pipeline register for ACC stage (also carry eff_sub for zero-sign in NRM)
@@ -498,6 +508,5 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .data_in ({nrm_result,  nrm_fflags}),
         .data_out({result,      fflags})
     );
-
 
 endmodule

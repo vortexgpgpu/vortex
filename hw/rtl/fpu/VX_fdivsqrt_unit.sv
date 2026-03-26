@@ -328,9 +328,9 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [W_BITS-1:0] DS_a_plus  = DS_in + ulp_a;
         wire [W_BITS-1:0] DS_a_minus = DS_in - ulp_a;
 
-        // --- Sign A: exact CPA on carry-save W (31-bit signed, no modular wrapping) ---
-        wire signed [CS_BITS:0] W_a_sum = $signed(Ws_in) + $signed(Wc_in);
-        wire q_a = ~W_a_sum[CS_BITS];  // 1 iff W ≥ 0 (subtract), 0 iff W < 0 (add)
+        // --- Sign A: mod-2^31 CPA; |W|<2^29 so bit 30 is unambiguous sign ---
+        wire [CS_BITS:0] W_a_sum = {1'b0, Ws_in} + {1'b0, Wc_in};
+        wire q_a = ~W_a_sum[CS_BITS-1];  // 1 iff W ≥ 0 (subtract), 0 iff W < 0 (add)
 
         // --- Step A CSA: W_next = W2s_a + W2c_a + X_a (3:2 CSA) ---
         // carry_in=q_a absorbed into LSB of 2*Ws; X_a sign bit: val[29]=0 always.
@@ -338,8 +338,8 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [CS_BITS-1:0] W2s_a  = {Ws_in[CS_BITS-2:0], q_a};   // 2*Ws with ci at bit0
         wire [CS_BITS-1:0] W2c_a  = {Wc_in[CS_BITS-2:0], 1'b0};  // 2*Wc
         wire [CS_BITS-1:0] Ws_a   = W2s_a ^ W2c_a ^ X_a;
-        wire [CS_BITS-1:0] Wca_raw = (W2s_a & W2c_a) | (W2c_a & X_a) | (W2s_a & X_a);
-        wire [CS_BITS-1:0] Wc_a   = {Wca_raw[CS_BITS-2:0], 1'b0};  // carry shifted left 1
+        wire [W_BITS-1:0]  Wca_raw = (W2s_a[W_BITS-1:0] & W2c_a[W_BITS-1:0]) | (W2c_a[W_BITS-1:0] & X_a[W_BITS-1:0]) | (W2s_a[W_BITS-1:0] & X_a[W_BITS-1:0]);
+        wire [CS_BITS-1:0] Wc_a   = {Wca_raw, 1'b0};                // carry shifted left 1
 
         // DS update after step A (SQRT: S ± ulp_a; DIV: unchanged)
         wire [W_BITS-1:0] DS_a = sq_in ? (q_a ? DS_a_plus : DS_a_minus) : DS_in;
@@ -354,17 +354,17 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [W_BITS-1:0] DS_b_plus  = DS_a + ulp_b;
         wire [W_BITS-1:0] DS_b_minus = DS_a - ulp_b;
 
-        // --- Sign B: exact CPA on carry-save W_a ---
-        wire signed [CS_BITS:0] W_b_sum = $signed(Ws_a) + $signed(Wc_a);
-        wire q_b = ~W_b_sum[CS_BITS];
+        // --- Sign B: mod-2^31 CPA; |W|<2^29 so bit 30 is unambiguous sign ---
+        wire [CS_BITS:0] W_b_sum = {1'b0, Ws_a} + {1'b0, Wc_a};
+        wire q_b = ~W_b_sum[CS_BITS-1];
 
         // --- Step B CSA ---
         wire [CS_BITS-1:0] X_b    = q_b ? {1'b1, ~val_b_neg} : {1'b0, val_b_add};
         wire [CS_BITS-1:0] W2s_b  = {Ws_a[CS_BITS-2:0], q_b};
         wire [CS_BITS-1:0] W2c_b  = {Wc_a[CS_BITS-2:0], 1'b0};
         wire [CS_BITS-1:0] Ws_b   = W2s_b ^ W2c_b ^ X_b;
-        wire [CS_BITS-1:0] Wcb_raw = (W2s_b & W2c_b) | (W2c_b & X_b) | (W2s_b & X_b);
-        wire [CS_BITS-1:0] Wc_b   = {Wcb_raw[CS_BITS-2:0], 1'b0};
+        wire [W_BITS-1:0]  Wcb_raw = (W2s_b[W_BITS-1:0] & W2c_b[W_BITS-1:0]) | (W2c_b[W_BITS-1:0] & X_b[W_BITS-1:0]) | (W2s_b[W_BITS-1:0] & X_b[W_BITS-1:0]);
+        wire [CS_BITS-1:0] Wc_b   = {Wcb_raw, 1'b0};
 
         // DS update after step B
         wire [W_BITS-1:0] DS_b = sq_in ? (q_b ? DS_b_plus : DS_b_minus) : DS_a;
