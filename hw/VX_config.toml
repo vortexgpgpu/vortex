@@ -123,17 +123,25 @@ LSUQ_IN_SIZE = "expr: (2 * ($SIMD_WIDTH / $NUM_LSU_LANES))"
 LSUQ_OUT_SIZE = "expr: max($LSUQ_IN_SIZE, $LSU_LINE_SIZE / ($XLEN / 8))"
 
 [fpu]
-# FPU_TYPE is a string enum: 'DPI'|'DSP'|'FPNEW'
-FPU_TYPE = "expr: 'DSP' if $SYNTHESIS else ('DPI' if $DPI_ENABLE else 'FPNEW')"
+# FPU_TYPE is a string enum: 'DPI'|'DSP'|'FPNEW'|'STD'
+# synthesis: ASIC=>STD, FPGA=>DSP; 64-bit=>FPNEW (STD/DSP are F32-only)
+# simulation: DPI=>DPI, else STD; 64-bit=>FPNEW (unless DPI)
+FPU_TYPE = "expr: ('FPNEW' if $XLEN_64 else ('STD' if $ASIC else 'DSP')) if $SYNTHESIS else ('DPI' if $DPI_ENABLE else ('FPNEW' if $XLEN_64 else 'STD'))"
 FPU_RV64F = "expr: $XLEN_64 and $FLEN_32"
 
 NUM_FPU_LANES = "expr: $SIMD_WIDTH"
 NUM_FPU_BLOCKS = "expr: $ISSUE_WIDTH"
 FPUQ_SIZE = "expr: 2 * ($SIMD_WIDTH // $NUM_FPU_LANES)"
 
-LATENCY_FMA  = "expr: 4 if ($FPU_TYPE_DPI or $FPU_TYPE_FPNEW or ($FPU_TYPE_DSP and $QUARTUS)) else (16 if ($FPU_TYPE_DSP and $VIVADO) else 4)"
-LATENCY_FDIV = "expr: 15 if $FPU_TYPE_DPI else (16 if $FPU_TYPE_FPNEW else (15 if ($FPU_TYPE_DSP and $QUARTUS) else (28 if ($FPU_TYPE_DSP and $VIVADO) else 16)))"
-LATENCY_FSQRT= "expr: 10 if $FPU_TYPE_DPI else (16 if $FPU_TYPE_FPNEW else (10 if ($FPU_TYPE_DSP and $QUARTUS) else (28 if ($FPU_TYPE_DSP and $VIVADO) else 16)))"
+# local helpers (lowercase = not emitted)
+fpu_dsp_quartus = "expr: $FPU_TYPE_DSP and $QUARTUS"
+fpu_dsp_vivado  = "expr: $FPU_TYPE_DSP and $VIVADO"
+fpu_rtl         = "expr: $FPU_TYPE_STD or ($FPU_TYPE_DSP and not ($QUARTUS or $VIVADO))"
+
+# NOTE: for FPU_TYPE_STD, LATENCY_FDIV must equal LATENCY_FSQRT (shared serializer in VX_fpu_std)
+LATENCY_FMA  = "expr: 4  if ($FPU_TYPE_DPI or $FPU_TYPE_FPNEW or $fpu_rtl or $fpu_dsp_quartus) else (16 if $fpu_dsp_vivado else 4)"
+LATENCY_FDIV = "expr: 15 if $FPU_TYPE_DPI else (16 if ($FPU_TYPE_FPNEW or $fpu_rtl) else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else 16)))"
+LATENCY_FSQRT= "expr: 10 if $FPU_TYPE_DPI else (16 if ($FPU_TYPE_FPNEW or $fpu_rtl) else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else 16)))"
 LATENCY_FNCP = 2
 LATENCY_FCVT = 5
 
@@ -282,7 +290,7 @@ DEBUG_LEVEL = 3
 [[enum]]
 XLEN = [32, 64]
 FLEN = [32, 64]
-FPU_TYPE = ["DPI", "DSP", "FPNEW"]
+FPU_TYPE = ["DPI", "DSP", "FPNEW", "STD"]
 TCU_TYPE = ["DPI", "DSP", "BHF", "TFR"]
 VM_ADDR_MODE = ["BARE", "SV32", "SV39", "SV48", "SV57"]
 

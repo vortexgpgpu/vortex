@@ -19,8 +19,6 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_TYPE_DSP
-
 module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; (
     input  wire        clk,
     input  wire        reset,
@@ -474,5 +472,3 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; (
 
 
 endmodule
-
-`endif

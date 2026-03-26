@@ -16,10 +16,9 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_TYPE_DSP
-
 module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY  = 1,
+    parameter XLEN     = `XLEN,
     parameter EXP_BITS = 8,
     parameter MAN_BITS = 23,
     parameter OUT_REG  = 0
@@ -32,9 +31,9 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire [INST_FPU_BITS-1:0] op_type,
     input wire [INST_FRM_BITS-1:0] frm,
 
-    input wire [31:0]  dataa,
-    input wire [31:0]  datab,
-    output wire [31:0] result,
+    input wire [31:0]       dataa,
+    input wire [31:0]       datab,
+    output wire [XLEN-1:0]  result,
 
     output wire [`FP_FLAGS_BITS-1:0] fflags
 );
@@ -226,21 +225,35 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         endcase
     end
 
+    // Extend 32-bit result to XLEN bits:
+    //   CMP/CLASS (integer output)  → zero-extend
+    //   MVXW      (float → int reg) → sign-extend
+    //   SGNJ/MVWX/MIN/MAX (FP out)  → NaN-box upper bits
+    wire [XLEN-1:0] result_xlen_s0;
+    if (XLEN > 32) begin : g_result_ext
+        wire is_int_result = op_mod_s0[3]             // CMP
+                          || (op_mod_s0[2:0] == 3'd3); // CLASS
+        wire is_mvxw      = (op_mod_s0[2:0] == 3'd4) && !op_mod_s0[3];
+        assign result_xlen_s0 = is_int_result ? XLEN'(result_s0)
+                              : is_mvxw       ? {{(XLEN-32){result_s0[31]}}, result_s0}
+                              :                 {32'hffffffff, result_s0};
+    end else begin : g_no_result_ext
+        assign result_xlen_s0 = result_s0;
+    end
+
     wire fflags_NV;
 
     VX_pipe_register #(
-        .DATAW (32 + 1),
+        .DATAW (XLEN + 1),
         .DEPTH (OUT_REG)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({result_s0, fflags_NV_s0}),
-        .data_out ({result,    fflags_NV})
+        .data_in  ({result_xlen_s0, fflags_NV_s0}),
+        .data_out ({result,         fflags_NV})
     );
                     // NV, DZ, OF, UF, NX
     assign fflags = {fflags_NV, 1'b0, 1'b0, 1'b0, 1'b0};
 
 endmodule
-
-`endif

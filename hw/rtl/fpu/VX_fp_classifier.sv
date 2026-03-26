@@ -13,8 +13,6 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_TYPE_DSP
-
 module VX_fp_classifier import VX_fpu_pkg::*; #(
     parameter MAN_BITS = 23,
     parameter EXP_BITS = 8
@@ -40,5 +38,3 @@ module VX_fp_classifier import VX_fpu_pkg::*; #(
     assign clss_o.is_signaling = is_signaling;
 
 endmodule
-
-`endif

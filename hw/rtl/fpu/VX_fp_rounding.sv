@@ -16,8 +16,6 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_TYPE_DSP
-
 module VX_fp_rounding import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter DAT_WIDTH = 2 // Width of the abolute value, without sign bit
 ) (
@@ -75,5 +73,3 @@ module VX_fp_rounding import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                                                               : sign_i;
 
 endmodule
-
-`endif
