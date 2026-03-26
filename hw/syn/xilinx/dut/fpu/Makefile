@@ -1,4 +1,12 @@
 PROJECT = VX_fpu_dsp
+
+ifneq (,$(filter -DFPU_TYPE_FPNEW, $(CONFIGS)))
+PROJECT = VX_fpu_fpnew
+endif
+ifneq (,$(filter -DFPU_TYPE_STD, $(CONFIGS)))
+PROJECT = VX_fpu_std
+endif
+
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
 FPU_IP = 1
