@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // Single-lane pipelined fused F32 FDIV + FSQRT.
-// Pipeline: 1 PRE + 13 SRT + 1 CONV + 1 NRM = 16 cycles = LATENCY_FDIV.
+// Pipeline: 1 PRE + 13 SRT + 1 CONV + 1 NRM = 16 cycles (LATENCY default).
 // Supports all RISC-V rounding modes. Produces fflags: NV, DZ, OF, UF, NX.
 //
 // DIV: Non-restoring radix-2 NR algorithm identical to VX_fdiv_unit.
@@ -44,7 +44,9 @@
 
 `include "VX_fpu_define.vh"
 
-module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; (
+module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+    parameter LATENCY = 16
+) (
     input  wire        clk,
     input  wire        reset,
     input  wire        enable,
@@ -64,6 +66,9 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; (
     // =========================================================================
     // Parameters
     // =========================================================================
+    localparam PRE_LATENCY  = 1;
+    localparam CONV_LATENCY = 1;
+    localparam NRM_LATENCY  = 1;
     localparam MAN_BITS    = 23;
     localparam EXP_BITS    = 8;
     localparam SIG_BITS    = MAN_BITS + 1;          // 24
@@ -71,6 +76,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; (
     localparam W_BITS      = 30;
     localparam NR_BITS     = 26;
     localparam NR_STAGES   = NR_BITS / 2;           // 13
+    `STATIC_ASSERT(LATENCY == (PRE_LATENCY + NR_STAGES + CONV_LATENCY + NRM_LATENCY), ("VX_fdivsqrt_unit: LATENCY must be %0d, got %0d", PRE_LATENCY+NR_STAGES+CONV_LATENCY+NRM_LATENCY, LATENCY))
 
     localparam EXC_LO  = 0;
     localparam FRM_LO  = EXC_LO  + 5;

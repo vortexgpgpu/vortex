@@ -180,7 +180,9 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         end
 
         for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
-            VX_fma_unit fma_unit (
+            VX_fma_unit #(
+                .LATENCY (`LATENCY_FMA)
+            ) fma_unit (
                 .clk     (clk),
                 .reset   (reset),
                 .enable  (pe_enable),
@@ -267,7 +269,9 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         end
 
         for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_units
-            VX_fdivsqrt_unit fdiv_sqrt_unit (
+            VX_fdivsqrt_unit #(
+                .LATENCY (`LATENCY_FDIV)
+            ) fdiv_sqrt_unit (
                 .clk     (clk),
                 .reset   (reset),
                 .enable  (pe_enable),
