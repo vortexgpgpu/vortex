@@ -12,8 +12,10 @@
 // limitations under the License.
 
 // Single-lane pipelined fused F32 FDIV + FSQRT.
-// Pipeline: 1 PRE + 13 SRT + 1 CONV + 1 NRM = 16 cycles (LATENCY default).
-// Supports all RISC-V rounding modes. Produces fflags: NV, DZ, OF, UF, NX.
+// Pipeline: 1 PRE + 1 INI + 13 SRT + 1 CONV + 1 NRM = 17 cycles (LATENCY default).
+// W stored as 31-bit carry-save (Ws, Wc); binary W_cv recovered via CPA at CONV.
+// Timing: CPA sign_a(1.0ns) + precomp X(1.1ns) + mux(0.1ns) + CSA(0.2ns) +
+//         CPA sign_b(1.0ns) + mux(0.1ns) + CSA(0.2ns) + FF(0.1ns) = 2.8ns/stage
 //
 // DIV: Non-restoring radix-2 NR algorithm identical to VX_fdiv_unit.
 //   W, D scaled ×32; D ∈ [2^28, 2^29); NR invariant |W| ≤ D.
@@ -25,27 +27,28 @@
 //   to maintain |W_0| ≤ D_eff_0.
 //   NR→binary CONV: S_final = Q*2^27 directly encodes man/G/R/S bits.
 //
-// NR SQRT step k (two per stage):
+// NR SQRT step k:
 //   D_eff = 2*S + ulp_k  (computed from current S and compile-time ulp)
 //   W_next = 2*W ∓ D_eff  (sign chosen by sign of W, same structure as DIV)
 //   S_next = S ± ulp_k    (update partial quotient)
 //
-// State vector (108 bits):
-//   [107]     is_sqrt
-//   [106]     nr_offset  (SQRT: 1 when Q_0=1.5, i.e. odd-biased-exp + sig≥1.125)
-//   [105:76]  W[29:0]
-//   [75:46]   DS[29:0]   (D for DIV, S for SQRT)
-//   [45:20]   q_bits[25:0]
-//   [19]      q_int
-//   [18:9]    exp_r[9:0]
-//   [8]       sign_r
-//   [7:5]     frm[2:0]
-//   [4:0]     exc[4:0]
+// State vector (140 bits):
+//   [139]      is_sqrt
+//   [138]      nr_offset  (SQRT: 1 when Q_0=1.5, i.e. odd-biased-exp + sig≥1.125)
+//   [137:107]  Wc[30:0]   (carry-save carry component)
+//   [106:76]   Ws[30:0]   (carry-save sum component)
+//   [75:46]    DS[29:0]   (D for DIV, S for SQRT)
+//   [45:20]    q_bits[25:0]
+//   [19]       q_int
+//   [18:9]     exp_r[9:0]
+//   [8]        sign_r
+//   [7:5]      frm[2:0]
+//   [4:0]      exc[4:0]
 
 `include "VX_fpu_define.vh"
 
 module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
-    parameter LATENCY = 16
+    parameter LATENCY = 17
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -67,6 +70,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // Parameters
     // =========================================================================
     localparam PRE_LATENCY  = 1;
+    localparam INI_LATENCY  = 1;
     localparam CONV_LATENCY = 1;
     localparam NRM_LATENCY  = 1;
     localparam MAN_BITS    = 23;
@@ -74,9 +78,10 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam SIG_BITS    = MAN_BITS + 1;          // 24
     localparam SUBLZC_BITS = `LOG2UP(SIG_BITS);     // 5
     localparam W_BITS      = 30;
+    localparam CS_BITS     = W_BITS + 1;            // 31: carry-save component width
     localparam NR_BITS     = 26;
     localparam NR_STAGES   = NR_BITS / 2;           // 13
-    `STATIC_ASSERT(LATENCY == (PRE_LATENCY + NR_STAGES + CONV_LATENCY + NRM_LATENCY), ("VX_fdivsqrt_unit: LATENCY must be %0d, got %0d", PRE_LATENCY+NR_STAGES+CONV_LATENCY+NRM_LATENCY, LATENCY))
+    `STATIC_ASSERT(LATENCY == (PRE_LATENCY + INI_LATENCY + NR_STAGES + CONV_LATENCY + NRM_LATENCY), ("VX_fdivsqrt_unit: LATENCY must be %0d, got %0d", PRE_LATENCY+INI_LATENCY+NR_STAGES+CONV_LATENCY+NRM_LATENCY, LATENCY))
 
     localparam EXC_LO  = 0;
     localparam FRM_LO  = EXC_LO  + 5;
@@ -85,10 +90,11 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam QI_LO   = EXP_LO  + 10;             // 19
     localparam QB_LO   = QI_LO   + 1;              // 20
     localparam DS_LO   = QB_LO   + NR_BITS;        // 46  (D for DIV, S for SQRT)
-    localparam W_LO    = DS_LO   + W_BITS;         // 76
-    localparam NRO_LO  = W_LO    + W_BITS;         // 106 (nr_offset)
-    localparam SQ_LO   = NRO_LO  + 1;             // 107 (is_sqrt)
-    localparam STAGE_W = SQ_LO   + 1;             // 108
+    localparam W_LO    = DS_LO   + W_BITS;         // 76  (Ws, CS_BITS=31 wide)
+    localparam WC_LO   = W_LO    + CS_BITS;        // 107 (Wc, CS_BITS=31 wide)
+    localparam NRO_LO  = WC_LO   + CS_BITS;        // 138 (nr_offset)
+    localparam SQ_LO   = NRO_LO  + 1;             // 139 (is_sqrt)
+    localparam STAGE_W = SQ_LO   + 1;             // 140
 
     // =========================================================================
     // Input classification and LZC normalization (shared for DIV and SQRT)
@@ -142,12 +148,6 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire rzro_div = (zero_a | inf_b) & ~rnan_div;
     wire [4:0] exc0_div = {rnan_div, rinf_div, rzro_div, dz0_div, nv0_div};
 
-    // Divisor D0 = sig_b_norm * 32 ∈ [2^28, 2^29); W0 = (sig_a - q_int*sig_b)*32 ∈ [0, D0)
-    wire [W_BITS-1:0]   D0_div      = {1'b0, sig_b_norm, 5'b0};
-    wire                q_int0_div  = (sig_a_norm >= sig_b_norm);
-    wire [SIG_BITS-1:0] pre_diff    = sig_a_norm - (q_int0_div ? sig_b_norm : {SIG_BITS{1'b0}});
-    wire [W_BITS-1:0]   W0_div      = {1'b0, pre_diff, 5'b0};
-
     // =========================================================================
     // PRE: SQRT path
     // =========================================================================
@@ -188,30 +188,100 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                              :                  (ma32 - W_BITS'(1 << 25));   // Case 3
 
     // =========================================================================
-    // PRE pipeline register (latency cycle 1)
+    // PRE pipeline register (latency cycle 1): capture normalize+exp+exc outputs.
+    // Splits the PRE path: cycle 1 ≤1.9 ns (LZC+normalize+exc),
+    // cycle 2 ≤1.3 ns (q_int0_div+pre_diff+pack state).
     // =========================================================================
+    // INI intermediate register layout (145 bits):
+    localparam INI_SIG_LO   = 0;                               // sig_a_norm [23:0]  24b
+    localparam INI_SIGB_LO  = INI_SIG_LO   + SIG_BITS;        // sig_b_norm [23:0]  24b
+    localparam INI_EXPD_LO  = INI_SIGB_LO  + SIG_BITS;        // exp_r0_div [9:0]   10b
+    localparam INI_EXPS_LO  = INI_EXPD_LO  + 10;              // exp_r0_sqrt[9:0]   10b
+    localparam INI_SGND_LO  = INI_EXPS_LO  + 10;              // sign_r0_div          1b
+    localparam INI_SGNS_LO  = INI_SGND_LO  + 1;               // sign_r0_sq           1b
+    localparam INI_NRO_LO   = INI_SGNS_LO  + 1;               // nr_offset0_sq        1b
+    localparam INI_W0SQ_LO  = INI_NRO_LO   + 1;               // W0_sq[29:0]         30b
+    localparam INI_S0SQ_LO  = INI_W0SQ_LO  + W_BITS;          // S0_sq[29:0]         30b
+    localparam INI_EXCDV_LO = INI_S0SQ_LO  + W_BITS;          // exc0_div[4:0]        5b
+    localparam INI_EXCSQ_LO = INI_EXCDV_LO + 5;               // exc0_sq[4:0]         5b
+    localparam INI_FRM_LO   = INI_EXCSQ_LO + 5;               // frm[2:0]             3b
+    localparam INI_SQRT_LO  = INI_FRM_LO   + INST_FRM_BITS;   // is_sqrt              1b
+    localparam INI_W        = INI_SQRT_LO   + 1;               // = 145
+
+    wire [INI_W-1:0] ini_in;
+    assign ini_in[INI_SIG_LO   +: SIG_BITS]     = sig_a_norm;
+    assign ini_in[INI_SIGB_LO  +: SIG_BITS]     = sig_b_norm;
+    assign ini_in[INI_EXPD_LO  +: 10]           = 10'(exp_r0_div);
+    assign ini_in[INI_EXPS_LO  +: 10]           = 10'(exp_r0_sqrt);
+    assign ini_in[INI_SGND_LO]                  = sign_r0_div;
+    assign ini_in[INI_SGNS_LO]                  = sign_r0_sq;
+    assign ini_in[INI_NRO_LO]                   = nr_offset0_sq;
+    assign ini_in[INI_W0SQ_LO  +: W_BITS]       = W0_sq;
+    assign ini_in[INI_S0SQ_LO  +: W_BITS]       = S0_sq;
+    assign ini_in[INI_EXCDV_LO +: 5]            = exc0_div;
+    assign ini_in[INI_EXCSQ_LO +: 5]            = exc0_sq;
+    assign ini_in[INI_FRM_LO   +: INST_FRM_BITS] = frm;
+    assign ini_in[INI_SQRT_LO]                  = is_sqrt;
+
+    wire [INI_W-1:0] ini_out;
+    VX_pipe_register #(.DATAW(INI_W), .DEPTH(1)) pre_reg (
+        .clk(clk), .reset(reset), .enable(enable),
+        .data_in(ini_in), .data_out(ini_out)
+    );
+
+    // =========================================================================
+    // INI pipeline register (latency cycle 2): compute DIV initial W0, pack SRT state.
+    // =========================================================================
+    wire [SIG_BITS-1:0]      i_sig_a   = ini_out[INI_SIG_LO   +: SIG_BITS];
+    wire [SIG_BITS-1:0]      i_sig_b   = ini_out[INI_SIGB_LO  +: SIG_BITS];
+    wire [9:0]               i_exp_div = ini_out[INI_EXPD_LO  +: 10];
+    wire [9:0]               i_exp_sq  = ini_out[INI_EXPS_LO  +: 10];
+    wire                     i_sgn_div = ini_out[INI_SGND_LO];
+    wire                     i_sgn_sq  = ini_out[INI_SGNS_LO];
+    wire                     i_nro_sq  = ini_out[INI_NRO_LO];
+    wire [W_BITS-1:0]        i_W0_sq   = ini_out[INI_W0SQ_LO  +: W_BITS];
+    wire [W_BITS-1:0]        i_S0_sq   = ini_out[INI_S0SQ_LO  +: W_BITS];
+    wire [4:0]               i_exc_div = ini_out[INI_EXCDV_LO +: 5];
+    wire [4:0]               i_exc_sq  = ini_out[INI_EXCSQ_LO +: 5];
+    wire [INST_FRM_BITS-1:0] i_frm     = ini_out[INI_FRM_LO   +: INST_FRM_BITS];
+    wire                     i_sqrt    = ini_out[INI_SQRT_LO];
+
+    // DIV initial values (24-bit compare + subtract ≤1.3 ns)
+    wire [W_BITS-1:0]   i_D0_div     = {1'b0, i_sig_b, 5'b0};
+    wire                i_q_int0_div = (i_sig_a >= i_sig_b);
+    wire [SIG_BITS-1:0] i_pre_diff   = i_sig_a - (i_q_int0_div ? i_sig_b : {SIG_BITS{1'b0}});
+    wire [W_BITS-1:0]   i_W0_div     = {1'b0, i_pre_diff, 5'b0};
+
     wire [STAGE_W-1:0] srt_stage [0:NR_STAGES];
     wire [STAGE_W-1:0] pre_in;
 
-    assign pre_in[W_LO  +: W_BITS]         = is_sqrt ? W0_sq               : W0_div;
-    assign pre_in[DS_LO +: W_BITS]         = is_sqrt ? S0_sq               : D0_div;
+    // W0 is non-negative, so sign-extend with leading 0.
+    assign pre_in[W_LO  +: CS_BITS]        = i_sqrt ? {1'b0, i_W0_sq} : {1'b0, i_W0_div};
+    assign pre_in[WC_LO +: CS_BITS]        = '0;     // Wc initialized to 0
+    assign pre_in[DS_LO +: W_BITS]         = i_sqrt ? i_S0_sq              : i_D0_div;
     assign pre_in[QB_LO +: NR_BITS]        = {NR_BITS{1'b0}};
-    assign pre_in[QI_LO]                   = is_sqrt ? 1'b1                 : q_int0_div; // SQRT: q_int=1 always
-    assign pre_in[EXP_LO +: 10]            = is_sqrt ? 10'(exp_r0_sqrt)     : 10'(exp_r0_div);
-    assign pre_in[SGN_LO]                  = is_sqrt ? sign_r0_sq           : sign_r0_div;
-    assign pre_in[FRM_LO +: INST_FRM_BITS] = frm;
-    assign pre_in[EXC_LO +: 5]             = is_sqrt ? exc0_sq              : exc0_div;
-    assign pre_in[NRO_LO]                  = is_sqrt ? nr_offset0_sq        : 1'b0;
-    assign pre_in[SQ_LO]                   = is_sqrt;
+    assign pre_in[QI_LO]                   = i_sqrt ? 1'b1                 : i_q_int0_div;
+    assign pre_in[EXP_LO +: 10]            = i_sqrt ? i_exp_sq             : i_exp_div;
+    assign pre_in[SGN_LO]                  = i_sqrt ? i_sgn_sq             : i_sgn_div;
+    assign pre_in[FRM_LO +: INST_FRM_BITS] = i_frm;
+    assign pre_in[EXC_LO +: 5]             = i_sqrt ? i_exc_sq             : i_exc_div;
+    assign pre_in[NRO_LO]                  = i_sqrt ? i_nro_sq             : 1'b0;
+    assign pre_in[SQ_LO]                   = i_sqrt;
 
-    VX_pipe_register #(.DATAW(STAGE_W), .DEPTH(1)) pre_reg (
+    VX_pipe_register #(.DATAW(STAGE_W), .DEPTH(1)) ini_reg (
         .clk(clk), .reset(reset), .enable(enable),
         .data_in(pre_in), .data_out(srt_stage[0])
     );
 
     // =========================================================================
-    // SRT stages 1..13 (latency cycles 2..14)
-    // Each stage performs two NR steps (A and B).
+    // SRT stages 1..13 (latency cycles 3..15)
+    // Each stage performs two NR steps (A and B) using carry-save W.
+    // W stored as 31-bit carry-save (Ws, Wc): actual W = Ws + Wc (signed integers).
+    //
+    // Sign detection: q = ~sign($signed(Ws)+$signed(Wc)) — exact 31-bit CPA.
+    // CSA step: X = (q ? ~val_neg : val_add); carry_in=q absorbed into LSB of 2*Ws.
+    //   val_add = D_S30 - D_ulp  (precomputed from FF state, independent of q)
+    //   val_neg = D_S30 + D_ulp  (negated via ~val_neg + carry_in when q=1)
     //
     // DIV step:        W = 2W ∓ D  (∓: subtract when W≥0, add when W<0)
     // SQRT step NRO=0: W = (q ? 2W-2S : 2W+2S) - ulp;  S = S ± ulp
@@ -219,17 +289,18 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     //
     // SQRT ULP schedule (stage k ∈ [0,12]):
     //   nr_offset=0: ulp_A = 2^(26-2k), ulp_B = 2^(25-2k)
-    //   nr_offset=1: ulp_A = 2^(25-2k), ulp_B = 2^(24-2k)  (one position earlier)
+    //   nr_offset=1: ulp_A = 2^(25-2k), ulp_B = 2^(24-2k)
     // =========================================================================
     for (genvar k = 0; k < NR_STAGES; k++) begin : g_srt
-        // Compile-time ULP constants (no runtime cost, just mux between two constants)
+        // Compile-time ULP constants
         localparam [W_BITS-1:0] ULP_A_NRO0 = W_BITS'(1) << (26 - 2*k);
         localparam [W_BITS-1:0] ULP_B_NRO0 = W_BITS'(1) << (25 - 2*k);
         localparam [W_BITS-1:0] ULP_A_NRO1 = W_BITS'(1) << (25 - 2*k);
         localparam [W_BITS-1:0] ULP_B_NRO1 = W_BITS'(1) << (24 - 2*k);
 
         // Unpack state
-        wire [W_BITS-1:0]        W_in   = srt_stage[k][W_LO  +: W_BITS];
+        wire [CS_BITS-1:0]       Ws_in  = srt_stage[k][W_LO  +: CS_BITS];
+        wire [CS_BITS-1:0]       Wc_in  = srt_stage[k][WC_LO +: CS_BITS];
         wire [W_BITS-1:0]        DS_in  = srt_stage[k][DS_LO +: W_BITS];
         wire [NR_BITS-1:0]       qb_in  = srt_stage[k][QB_LO +: NR_BITS];
         wire                     qi_in  = srt_stage[k][QI_LO];
@@ -240,49 +311,72 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire                     nro_in = srt_stage[k][NRO_LO];
         wire                     sq_in  = srt_stage[k][SQ_LO];
 
-        // Runtime ULP selection (2-way mux on compile-time constants)
+        // Runtime ULP selection
         wire [W_BITS-1:0] ulp_a = nro_in ? ULP_A_NRO1 : ULP_A_NRO0;
         wire [W_BITS-1:0] ulp_b = nro_in ? ULP_B_NRO1 : ULP_B_NRO0;
 
-        // --- NR Step A ---
-        // DIV:        W = 2W ∓ D      (∓: subtract when q=1, add when q=0)
-        // SQRT NRO=0: W = (q ? 2W-2S : 2W+2S) - ulp_a
-        // SQRT NRO=1: W = (q ? 2W- S : 2W+ S) - ulp_a/2
-        wire [W_BITS:0] D_S_a   = sq_in ? (nro_in ? {1'b0, DS_in} : {DS_in, 1'b0})
-                                        : {1'b0, DS_in};
-        wire [W_BITS:0] D_ulp_a = sq_in ? {1'b0, nro_in ? (ulp_a >> 1) : ulp_a}
-                                        : (W_BITS+1)'(0);
-        wire q_a = ~W_in[W_BITS-1];                      // 1 iff W_in ≥ 0
-        wire [W_BITS:0] Wa_pm = q_a ? ({W_in, 1'b0} - D_S_a) : ({W_in, 1'b0} + D_S_a);
-        wire [W_BITS:0] Wa31  = Wa_pm - D_ulp_a;
-        `UNUSED_VAR (Wa31[W_BITS])                        // invariant guarantees carry is valid
-        wire [W_BITS-1:0] W_a = Wa31[W_BITS-1:0];
+        // --- Step A precomputed operands (from FF state, independent of sign_a) ---
+        // D_S_a30: effective D in 30 bits (DIV=DS_in; SQRT NRO=0: 2*S; SQRT NRO=1: S)
+        wire [W_BITS-1:0] D_S_a30 = sq_in ? (nro_in ? DS_in : {DS_in[W_BITS-2:0], 1'b0})
+                                           : DS_in;
+        wire [W_BITS-1:0] D_ulp_a = sq_in ? (nro_in ? (ulp_a >> 1) : ulp_a) : '0;
+        // val_a_add[29]=0 (D_S_a30-D_ulp_a ≥ 0, < 2^29); val_a_neg[29]=0 (sum < 2^29)
+        wire [W_BITS-1:0] val_a_add = D_S_a30 - D_ulp_a;   // addend when q_a=0
+        wire [W_BITS-1:0] val_a_neg = D_S_a30 + D_ulp_a;   // magnitude to negate when q_a=1
 
-        // DS update: DIV → unchanged; SQRT → S ± ulp_a
-        wire [W_BITS-1:0] DS_a = sq_in ? (q_a ? DS_in + ulp_a : DS_in - ulp_a)
-                                       : DS_in;
+        // DS precompute for step-A update (SQRT only, from FF, parallel with sign CPA)
+        wire [W_BITS-1:0] DS_a_plus  = DS_in + ulp_a;
+        wire [W_BITS-1:0] DS_a_minus = DS_in - ulp_a;
 
-        // --- NR Step B ---
-        wire [W_BITS:0] D_S_b   = sq_in ? (nro_in ? {1'b0, DS_a} : {DS_a, 1'b0})
-                                        : {1'b0, DS_a};
-        wire [W_BITS:0] D_ulp_b = sq_in ? {1'b0, nro_in ? (ulp_b >> 1) : ulp_b}
-                                        : (W_BITS+1)'(0);
-        wire q_b = ~W_a[W_BITS-1];
-        wire [W_BITS:0] Wb_pm = q_b ? ({W_a, 1'b0} - D_S_b) : ({W_a, 1'b0} + D_S_b);
-        wire [W_BITS:0] Wb31  = Wb_pm - D_ulp_b;
-        `UNUSED_VAR (Wb31[W_BITS])
-        wire [W_BITS-1:0] W_b = Wb31[W_BITS-1:0];
+        // --- Sign A: exact CPA on carry-save W (31-bit signed, no modular wrapping) ---
+        wire signed [CS_BITS:0] W_a_sum = $signed(Ws_in) + $signed(Wc_in);
+        wire q_a = ~W_a_sum[CS_BITS];  // 1 iff W ≥ 0 (subtract), 0 iff W < 0 (add)
 
-        wire [W_BITS-1:0] DS_b = sq_in ? (q_b ? DS_a + ulp_b : DS_a - ulp_b)
-                                       : DS_a;
+        // --- Step A CSA: W_next = W2s_a + W2c_a + X_a (3:2 CSA) ---
+        // carry_in=q_a absorbed into LSB of 2*Ws; X_a sign bit: val[29]=0 always.
+        wire [CS_BITS-1:0] X_a    = q_a ? {1'b1, ~val_a_neg} : {1'b0, val_a_add};
+        wire [CS_BITS-1:0] W2s_a  = {Ws_in[CS_BITS-2:0], q_a};   // 2*Ws with ci at bit0
+        wire [CS_BITS-1:0] W2c_a  = {Wc_in[CS_BITS-2:0], 1'b0};  // 2*Wc
+        wire [CS_BITS-1:0] Ws_a   = W2s_a ^ W2c_a ^ X_a;
+        wire [CS_BITS-1:0] Wca_raw = (W2s_a & W2c_a) | (W2c_a & X_a) | (W2s_a & X_a);
+        wire [CS_BITS-1:0] Wc_a   = {Wca_raw[CS_BITS-2:0], 1'b0};  // carry shifted left 1
 
-        // Accumulate NR bits for DIV CONV (shifted in LSB-first; MSBs fall off)
+        // DS update after step A (SQRT: S ± ulp_a; DIV: unchanged)
+        wire [W_BITS-1:0] DS_a = sq_in ? (q_a ? DS_a_plus : DS_a_minus) : DS_in;
+
+        // --- Step B precomputed operands ---
+        wire [W_BITS-1:0] D_S_b30 = sq_in ? (nro_in ? DS_a : {DS_a[W_BITS-2:0], 1'b0})
+                                           : DS_a;
+        wire [W_BITS-1:0] D_ulp_b = sq_in ? (nro_in ? (ulp_b >> 1) : ulp_b) : '0;
+        wire [W_BITS-1:0] val_b_add = D_S_b30 - D_ulp_b;
+        wire [W_BITS-1:0] val_b_neg = D_S_b30 + D_ulp_b;
+
+        wire [W_BITS-1:0] DS_b_plus  = DS_a + ulp_b;
+        wire [W_BITS-1:0] DS_b_minus = DS_a - ulp_b;
+
+        // --- Sign B: exact CPA on carry-save W_a ---
+        wire signed [CS_BITS:0] W_b_sum = $signed(Ws_a) + $signed(Wc_a);
+        wire q_b = ~W_b_sum[CS_BITS];
+
+        // --- Step B CSA ---
+        wire [CS_BITS-1:0] X_b    = q_b ? {1'b1, ~val_b_neg} : {1'b0, val_b_add};
+        wire [CS_BITS-1:0] W2s_b  = {Ws_a[CS_BITS-2:0], q_b};
+        wire [CS_BITS-1:0] W2c_b  = {Wc_a[CS_BITS-2:0], 1'b0};
+        wire [CS_BITS-1:0] Ws_b   = W2s_b ^ W2c_b ^ X_b;
+        wire [CS_BITS-1:0] Wcb_raw = (W2s_b & W2c_b) | (W2c_b & X_b) | (W2s_b & X_b);
+        wire [CS_BITS-1:0] Wc_b   = {Wcb_raw[CS_BITS-2:0], 1'b0};
+
+        // DS update after step B
+        wire [W_BITS-1:0] DS_b = sq_in ? (q_b ? DS_b_plus : DS_b_minus) : DS_a;
+
+        // Accumulate NR bits (shifted in LSB-first; top 2 bits of each stage discarded)
         `UNUSED_VAR (qb_in[NR_BITS-1:NR_BITS-2])
         wire [NR_BITS-1:0] qb_new = {qb_in[NR_BITS-3:0], q_a, q_b};
 
         // Pack output state
         wire [STAGE_W-1:0] s_out;
-        assign s_out[W_LO  +: W_BITS]         = W_b;
+        assign s_out[W_LO  +: CS_BITS]        = Ws_b;
+        assign s_out[WC_LO +: CS_BITS]        = Wc_b;
         assign s_out[DS_LO +: W_BITS]         = DS_b;
         assign s_out[QB_LO +: NR_BITS]        = qb_new;
         assign s_out[QI_LO]                   = qi_in;
@@ -302,7 +396,8 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // =========================================================================
     // CONV (combinational after srt_stage[NR_STAGES])
     // =========================================================================
-    wire [W_BITS-1:0]        W_cv   = srt_stage[NR_STAGES][W_LO  +: W_BITS];
+    wire [CS_BITS-1:0]       Ws_cv  = srt_stage[NR_STAGES][W_LO  +: CS_BITS];
+    wire [CS_BITS-1:0]       Wc_cv  = srt_stage[NR_STAGES][WC_LO +: CS_BITS];
     wire [W_BITS-1:0]        DS_cv  = srt_stage[NR_STAGES][DS_LO +: W_BITS];
     wire [NR_BITS-1:0]       qb_cv  = srt_stage[NR_STAGES][QB_LO +: NR_BITS];
     wire                     qi_cv  = srt_stage[NR_STAGES][QI_LO];
@@ -312,6 +407,12 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [4:0]               exc_cv = srt_stage[NR_STAGES][EXC_LO +: 5];
     wire                     nro_cv = srt_stage[NR_STAGES][NRO_LO];
     wire                     sq_cv  = srt_stage[NR_STAGES][SQ_LO];
+
+    // Carry-save → binary CPA: W_cv = (Ws_cv + Wc_cv)[W_BITS-1:0]
+    // Invariant |W| < 2^29 guarantees result fits in W_BITS=30 signed bits.
+    wire signed [CS_BITS:0] W_cv_sum = $signed(Ws_cv) + $signed(Wc_cv);
+    wire [W_BITS-1:0] W_cv = W_cv_sum[W_BITS-1:0];
+    `UNUSED_VAR (W_cv_sum[CS_BITS:W_BITS])
 
     // ---- DIV CONV: NR → binary (same as VX_fdiv_unit) ----
     wire [NR_BITS:0] Q_frac = {qb_cv, 1'b0} - {1'b0, {NR_BITS{1'b1}}}; // 2*qb - (2^26-1)
@@ -367,7 +468,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire signed [9:0] exp_res       = sq_cv ? exp_res_sq : exp_res_div;
 
     // =========================================================================
-    // CONV pipeline register (latency cycle 15)
+    // CONV pipeline register (latency cycle 16)
     // =========================================================================
     localparam CONV_W = 24 + 1 + 1 + 1 + 10 + 1 + INST_FRM_BITS + 5;  // 46
 
@@ -435,7 +536,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign nrm_fflags.NX = nx_flag | of_flag | uf_flag;
 
     // =========================================================================
-    // NRM pipeline register (latency cycle 16 = LATENCY_FDIV)
+    // NRM pipeline register (latency cycle 17 = LATENCY)
     // =========================================================================
     VX_pipe_register #(.DATAW(32 + `FP_FLAGS_BITS), .DEPTH(1)) nrm_reg (
         .clk(clk), .reset(reset), .enable(enable),

@@ -137,10 +137,10 @@ FPUQ_SIZE = "expr: 2 * ($SIMD_WIDTH // $NUM_FPU_LANES)"
 fpu_dsp_quartus = "expr: $FPU_TYPE_DSP and $QUARTUS"
 fpu_dsp_vivado  = "expr: $FPU_TYPE_DSP and $VIVADO"
 
-# NOTE: for FPU_TYPE_STD && FPU_TYPE_FPNEW, LATENCY_FDIV must equal LATENCY_FSQRT (shared serializer in VX_fpu_std)
+# NOTE: for FPU_TYPE_STD, LATENCY_FDIV must equal LATENCY_FSQRT (shared serializer in VX_fpu_std)
 LATENCY_FMA  = "expr: 16 if $fpu_dsp_vivado else 5"
-LATENCY_FDIV = "expr: 15 if $FPU_TYPE_DPI else (16 if ($FPU_TYPE_FPNEW or $FPU_TYPE_STD) else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else 16)))"
-LATENCY_FSQRT= "expr: 10 if $FPU_TYPE_DPI else (16 if ($FPU_TYPE_FPNEW or $FPU_TYPE_STD) else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else 16)))"
+LATENCY_FDIV = "expr: 15 if $FPU_TYPE_DPI else (16 if $FPU_TYPE_FPNEW else (17 if $FPU_TYPE_STD else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else 17))))"
+LATENCY_FSQRT= "expr: 10 if $FPU_TYPE_DPI else (16 if $FPU_TYPE_FPNEW else (17 if $FPU_TYPE_STD else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else 17))))"
 LATENCY_FNCP = 2
 LATENCY_FCVT = 5
 
