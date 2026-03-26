@@ -1171,5 +1171,40 @@ public:
   }
 };
 
+
+// #ifdef TCU_OP
+// TCU_OP BEGIN
+
+  typedef struct {
+    uintptr_t A, B, C, D;   // 4 pointers
+  } mma_ptrs_t;
+
+  typedef struct {
+    uint32_t M, N, K;
+    uint8_t fmt_s, fmt_d;
+    uint8_t sparse;
+  } mma_cfg_t;
+
+  static __attribute__((always_inline)) void mma_op(uintptr_t rs1_val,
+                                                    uintptr_t rs2_val)
+  {
+    // force the encoded rs1/rs2 to x10/x11
+    asm volatile(
+        "mv x10, %[v1]
+	"
+        "mv x11, %[v2]
+	"
+        ".insn r %[opc], 3, 2, x0, x10, x11
+"
+        :
+        : [opc]"i"(RISCV_CUSTOM0),
+          [v1]"r"(rs1_val),
+          [v2]"r"(rs2_val)
+        : "x10", "x11", "memory");
+  }
+
+// TCU_OP END
+// #endif
+
 } // namespace tensor
 } // namespace vortex

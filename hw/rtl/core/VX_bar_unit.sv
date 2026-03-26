@@ -350,4 +350,29 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     end
 `endif
 
+`ifdef TCU_OP // Debugging Traces
+    always @(posedge clk) begin
+        if (~reset) begin
+            if (req_valid) begin
+                `TRACE(1, ("%t: [bar] req wid=%0d addr=%0d event=%0b arrive=%0b sync=%0b global=%0b phase=%0b size_m1=%0d id=%0d state(mask=%b count=%0d events=%0d phase=%0b)\n",
+                    $time, req_wid, store_raddr, req_data.is_event, req_data.is_arrive, req_data.is_sync, req_data.is_global, req_data.phase, req_data.size_m1, req_data.id,
+                    mask_r, count_r, events_r, phase_r))
+            end
+            if (unlock_valid_n) begin
+                `TRACE(1, ("%t: [bar] unlock_n mask=%b next(mask=%b count=%0d events=%0d phase=%0b)\n",
+                    $time, unlock_mask_n, mask_n, count_n, events_n, phase_n))
+            end
+            if (unlock_valid_r) begin
+                `TRACE(1, ("%t: [bar] unlock_r mask=%b\n", $time, unlock_mask_r))
+            end
+            if (gbar_req_valid_r && gbar_bus_if.req_ready) begin
+                `TRACE(1, ("%t: [bar] gbar req fire id=%0d size_m1=%0d\n", $time, gbar_req_id_r, gbar_req_size_m1_r))
+            end
+            if (gbar_bus_if.rsp_valid && gbar_rsp_ready) begin
+                `TRACE(1, ("%t: [bar] gbar rsp id=%0d (pending_id=%0d)\n", $time, gbar_bus_if.rsp_data.id, gbar_req_id_r))
+            end
+        end
+    end
+`endif
+
 endmodule

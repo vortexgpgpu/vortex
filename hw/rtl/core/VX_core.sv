@@ -108,6 +108,14 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_mem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 
+`ifdef TCU_OP
+    VX_lsu_mem_if #(
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
+        .DATA_SIZE (LSU_WORD_SIZE),
+        .TAG_WIDTH (LSU_TAG_WIDTH)
+    ) tcu_lsu_mem_if();
+`endif
+
     // VX_lsu_scheduler instantiated per-LSU-block; all blocks have NUM_CLIENTS=2.
     // Block 0 wires client 1 to the warp-level TCU AGU; other blocks tie it off.
     // LSU client interfaces flow from execute as client 0.
@@ -351,6 +359,9 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .sched_unlock_if (sched_unlock_if),
     `endif
 
+    `ifdef TCU_OP
+        .tcu_lsu_mem_if (tcu_lsu_mem_if),
+    `endif
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if)
     );
@@ -444,6 +455,9 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `endif
+    `ifdef TCU_OP
+        .tcu_lsu_mem_if(tcu_lsu_mem_if),
     `endif
         .empty         (mem_unit_empty),
         .lsu_mem_if    (lsu_mem_if),

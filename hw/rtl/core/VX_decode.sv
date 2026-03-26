@@ -714,6 +714,22 @@ module VX_decode import
                             `USED_FREG (rs2);
                             `USED_FREG (rs3);
                         end
+                    `ifdef TCU_OP
+                        else if (funct3 == 3'h3) begin // MMA_OP
+                            ex_type = EX_TCU;
+                            op_type = INST_OP_BITS'(INST_TCU_MMA_OP);
+                            op_args.tcu.fmt_s  = '0;
+                            op_args.tcu.fmt_d  = '0;
+                        
+                            op_args.tcu.step_m = '0;
+                            op_args.tcu.step_n = '0;
+                            op_args.tcu.step_k = '0;
+
+                            `USED_IREG (rs1);
+                            `USED_IREG (rs2);
+
+                        end
+                    `endif // TCU_OP
                     end
                 `endif
                 `ifdef VX_CFG_EXT_DXA_ENABLE

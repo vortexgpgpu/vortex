@@ -57,6 +57,10 @@ import VX_raster_pkg::*;
     VX_sched_unlock_if.master sched_unlock_if,
 `endif
 
+`ifdef TCU_OP
+    VX_txbar_bus_if.slave   tcu_txbar_bus_if,
+`endif
+
     VX_sched_csr_if.slave   sched_csr_if,
 
     VX_dcr_csr_if           dcr_csr_if,
@@ -214,16 +218,57 @@ import VX_raster_pkg::*;
         .dxa_req_bus_if (dxa_req_bus_if)
     );
 
+`ifdef TCU_OP
+    // Arbitrate txbar events (DXA mem done > TCU).
+    assign txbar_bus_if.valid = dxa_txbar_bus_if.valid || tcu_txbar_bus_if.valid;
+    assign txbar_bus_if.data  = dxa_txbar_bus_if.valid ? dxa_txbar_bus_if.data
+                                                       : tcu_txbar_bus_if.data;
+    assign dxa_txbar_bus_if.ready = txbar_bus_if.ready;
+    assign tcu_txbar_bus_if.ready = txbar_bus_if.ready && ~dxa_txbar_bus_if.valid;
+`else
     // The only txbar producer is the SMEM-completion path through
     // dxa_txbar_bus_if (DXA release); no arbitration is needed.
     assign txbar_bus_if.valid     = dxa_txbar_bus_if.valid;
     assign txbar_bus_if.data      = dxa_txbar_bus_if.data;
     assign dxa_txbar_bus_if.ready = txbar_bus_if.ready;
+`endif // TCU_OP
+`else
+`ifdef TCU_OP
+    assign txbar_bus_if.valid = tcu_txbar_bus_if.valid;
+    assign txbar_bus_if.data  = tcu_txbar_bus_if.data;
+    assign tcu_txbar_bus_if.ready = txbar_bus_if.ready;
 `else
     assign txbar_bus_if.valid = 1'b0;
     assign txbar_bus_if.data = 'x;
     `UNUSED_VAR (txbar_bus_if.ready)
+`endif // TCU_OP
 `endif
+
+`ifdef TCU_OP
+    // Debugging Trace
+    always @(posedge clk) begin
+        if (~reset) begin
+        `ifdef VX_CFG_EXT_DXA_ENABLE
+            if ((dxa_txbar_bus_if.valid && dxa_txbar_bus_if.ready)
+             || (tcu_txbar_bus_if.valid && tcu_txbar_bus_if.ready)) begin
+                `TRACE(1, ("%t: [sfu-txbar] in: dxa_mem(v=%0b r=%0b a=%0d d=%0b) tcu(v=%0b r=%0b a=%0d d=%0b)\n",
+                    $time,
+                    dxa_txbar_bus_if.valid, dxa_txbar_bus_if.ready, dxa_txbar_bus_if.data.addr, dxa_txbar_bus_if.data.is_done,
+                    tcu_txbar_bus_if.valid, tcu_txbar_bus_if.ready, tcu_txbar_bus_if.data.addr, tcu_txbar_bus_if.data.is_done))
+            end
+        `else
+            if (tcu_txbar_bus_if.valid && tcu_txbar_bus_if.ready) begin
+                `TRACE(1, ("%t: [sfu-txbar] in: tcu(v=%0b r=%0b a=%0d d=%0b)\n",
+                    $time, tcu_txbar_bus_if.valid, tcu_txbar_bus_if.ready, tcu_txbar_bus_if.data.addr, tcu_txbar_bus_if.data.is_done))
+            end
+        `endif
+            if (txbar_bus_if.valid && txbar_bus_if.ready) begin
+                `TRACE(1, ("%t: [sfu-txbar] out: v=%0b r=%0b a=%0d d=%0b\n",
+                    $time, txbar_bus_if.valid, txbar_bus_if.ready, txbar_bus_if.data.addr, txbar_bus_if.data.is_done))
+            end
+        end
+    end
+`endif // TCU_OP
 
 // The hit window has no FF consumers left. TEX was the last one — it spilled
 // its 2x2 quad's eight (u,v) operands into window slots because no RISC-V encoding

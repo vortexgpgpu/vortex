@@ -256,4 +256,24 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         assign result_if.data.data[i] = bar_rsp_valid_r ? `VX_CFG_XLEN'(bar_phase_r) : `VX_CFG_XLEN'(dvstack_ptr_r);
     end
 
+`ifdef TCU_OP
+    // Debugging trace
+    always @(posedge clk) begin
+        if (~reset) begin
+            if (txbar_bus_if.valid && txbar_bus_if.ready) begin
+                `TRACE(1, ("%t: [wctl-txbar] consume txbar addr=%0d done=%0b\n",
+                    $time, txbar_bus_if.data.addr, txbar_bus_if.data.is_done))
+            end
+            if (wctl_bar_enable && execute_fire) begin
+                `TRACE(1, ("%t: [wctl-txbar] sw_bar execute wid=%0d addr=%0d id=%0d arrive=%0b sync=%0b phase=%0b\n",
+                    $time, execute_if.data.header.wid, wctl_bar_addr, bar.id, bar.is_arrive, bar.is_sync, bar.phase))
+            end
+            if (bar_valid && wctl_valid) begin
+                `TRACE(1, ("%t: [wctl-txbar] warp_ctl bar_valid wid=%0d addr=%0d is_event=%0b arrive=%0b sync=%0b global=%0b phase=%0b size_m1=%0d\n",
+                    $time, execute_if.data.header.wid, warp_ctl_if.bar_addr, bar.is_event, bar.is_arrive, bar.is_sync, bar.is_global, bar.phase, bar.size_m1))
+            end
+        end
+    end
+`endif
+
 endmodule

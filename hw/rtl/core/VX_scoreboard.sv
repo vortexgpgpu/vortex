@@ -375,4 +375,30 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .ready_out (scoreboard_if.ready)
     );
 
+`ifdef EXT_TCU_ENABLE
+    always @(posedge clk) begin
+        if (!reset && scoreboard_if.valid && scoreboard_if.ready) begin
+            if (scoreboard_if.data.ex_type == EX_TCU && scoreboard_if.data.op_type == INST_TCU_WMMA) begin
+                `TRACE(1, ("%t: [VX_scoreboard] Issuing TCU u-op. ISSUE_ID=%0d, sel_wis=%0d, ex_type=%0d, op_type=0x%0h, uuid=#%0d, PC=0x%0h\n", $time, ISSUE_ID, scoreboard_if.data.wis, scoreboard_if.data.ex_type, scoreboard_if.data.op_type, scoreboard_if.data.uuid, to_fullPC(scoreboard_if.data.PC)))
+            end 
+            else if (scoreboard_if.data.ex_type == EX_LSU) begin
+                // Bit[3] distinguishes store (1xxx) from load (0xxx), exclude fence (1111)
+                if (scoreboard_if.data.op_type[3] && (scoreboard_if.data.op_type != INST_LSU_FENCE)) begin
+                    `TRACE(1, ("%t: [VX_scoreboard] Issuing store u-op. ISSUE_ID=%0d, sel_wis=%0d, op_type=0x%0h, uuid=#%0d, PC=0x%0h\n", $time, ISSUE_ID, scoreboard_if.data.wis, scoreboard_if.data.op_type, scoreboard_if.data.uuid, to_fullPC(scoreboard_if.data.PC)))
+                end else begin
+                    `TRACE(1, ("%t: [VX_scoreboard] Issuing load u-op. ISSUE_ID=%0d, sel_wis=%0d, op_type=0x%0h, uuid=#%0d, PC=0x%0h\n", $time, ISSUE_ID, scoreboard_if.data.wis, scoreboard_if.data.op_type, scoreboard_if.data.uuid, to_fullPC(scoreboard_if.data.PC)))
+                end
+            end 
+        `ifdef TCU_OP
+            else if (scoreboard_if.data.ex_type == EX_TCU && scoreboard_if.data.op_type == INST_TCU_MMA_OP) begin
+                `TRACE(1, ("%t: [VX_scoreboard] Issuing TCU MMA_OP. ISSUE_ID=%0d, sel_wis=%0d, ex_type=%0d, op_type=0x%0h, uuid=#%0d, PC=0x%0h\n", $time, ISSUE_ID, scoreboard_if.data.wis, scoreboard_if.data.ex_type, scoreboard_if.data.op_type, scoreboard_if.data.uuid, to_fullPC(scoreboard_if.data.PC)))
+            end
+        `endif
+            else begin
+                `TRACE(1, ("%t: [VX_scoreboard] Issuing u-op. ISSUE_ID=%0d, sel_wis=%0d, ex_type=%0d, op_type=0x%0h, uuid=#%0d, PC=0x%0h\n", $time, ISSUE_ID, scoreboard_if.data.wis, scoreboard_if.data.ex_type, scoreboard_if.data.op_type, scoreboard_if.data.uuid, to_fullPC(scoreboard_if.data.PC)))
+            end
+        end
+    end
+`endif
+
 endmodule

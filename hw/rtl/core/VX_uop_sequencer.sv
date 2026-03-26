@@ -125,6 +125,7 @@ module VX_uop_sequencer import
     );
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
+`ifndef TCU_OP
     // ------------------------------------------------------------------
     // TCU uop expander
     // ------------------------------------------------------------------
@@ -150,6 +151,12 @@ module VX_uop_sequencer import
         .ibuf_out  (uop_out_data[UOP_TCU]),
         .uop_count (uop_out_count[UOP_TCU])
     );
+
+`else   
+    assign uop_in_valid[UOP_TCU]  = 1'b0;
+    assign uop_out_data[UOP_TCU]  = '0;
+    assign uop_out_count[UOP_TCU] = '0;
+`endif
 `endif
 
 `ifdef EXT_GFX_ANY_ENABLE

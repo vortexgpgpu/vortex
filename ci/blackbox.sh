@@ -171,7 +171,7 @@ main() {
     set_driver_path
     set_app_path
 
-    if [ $SAIF -eq 1 ] && [ "$DRIVER" = "simx" ]; then
+if [ $SAIF -eq 1 ] && [ "$DRIVER" = "simx" ]; then
         echo "Error: SAIF is not supported with the simx driver"
         exit 1
     fi
@@ -180,6 +180,8 @@ main() {
         echo "Error: VCD is not supported with the simx driver"
         exit 1
     fi
+
+    compile_start=$(date +%s)
 
     # execute on default installed GPU
     if [ "$DRIVER" = "gpu" ]; then
@@ -216,9 +218,21 @@ main() {
     fi
 
     build_driver
+    compile_end=$(date +%s)
+
+    run_start=$(date +%s)
     run_app
     status=$?
+    run_end=$(date +%s)
 
+compile_secs=$((compile_end - compile_start))
+    run_secs=$((run_end - run_start))
+    echo "Compile time (s): $compile_secs"
+    echo "Run time (s): $run_secs"
+    if [ -n "$LOGFILE" ]; then
+        echo "Compile time (s): $compile_secs" >> "$LOGFILE"
+        echo "Run time (s): $run_secs" >> "$LOGFILE"
+    fi
     exit $status
 }
 

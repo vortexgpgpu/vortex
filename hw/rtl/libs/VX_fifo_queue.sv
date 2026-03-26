@@ -36,10 +36,18 @@ module VX_fifo_queue #(
     output wire [SIZEW-1:0] size
 );
     `STATIC_ASSERT(OUT_REG == 0 || OUT_REG == 1, ("OUT_REG must be 0 or 1!"))
+
+`ifdef TCU_OP
+    `STATIC_ASSERT((DEPTH == 1) || (ALM_FULL > 0), ("alm_full must be greater than 0!"))
+    `STATIC_ASSERT((DEPTH == 1) || (ALM_FULL < DEPTH), ("alm_full must be smaller than size!"))
+    `STATIC_ASSERT((DEPTH == 1) || (ALM_EMPTY > 0), ("alm_empty must be greater than 0!"))
+    `STATIC_ASSERT((DEPTH == 1) || (ALM_EMPTY < DEPTH), ("alm_empty must be smaller than size!"))
+`else
     `STATIC_ASSERT(ALM_FULL > 0, ("alm_full must be greater than 0!"))
     `STATIC_ASSERT(ALM_FULL < DEPTH, ("alm_full must be smaller than size!"))
     `STATIC_ASSERT(ALM_EMPTY > 0, ("alm_empty must be greater than 0!"))
     `STATIC_ASSERT(ALM_EMPTY < DEPTH, ("alm_empty must be smaller than size!"))
+`endif
     `STATIC_ASSERT(`IS_POW2(DEPTH), ("depth must be a power of 2!"))
 
     VX_pending_size #(

@@ -615,6 +615,9 @@ package VX_gpu_pkg;
     // TCU_LD — warp-level load into a metadata SRAM namespace.
     localparam INST_TCU_LD         = 4'h5;
 `endif
+`ifdef TCU_OP
+    localparam INST_TCU_MMA_OP = 4'h3;
+`endif
     localparam INST_TCU_BITS = 4;
 `endif
 
@@ -1362,13 +1365,20 @@ package VX_gpu_pkg;
     localparam LSU_TAG_WIDTH        = (UUID_WIDTH + LSU_TAG_ID_BITS);
     localparam LSU_NUM_REQS	        = `VX_CFG_NUM_LSU_BLOCKS * `VX_CFG_NUM_LSU_LANES;
 
+`ifdef TCU_OP
+    localparam TCU_LSU_BLOCKS       = 1;
+`else
+    localparam TCU_LSU_BLOCKS       = 0;
+`endif
+    localparam NUM_LSU_TOTAL        = `VX_CFG_NUM_LSU_BLOCKS + TCU_LSU_BLOCKS;
+
     // Mem-side queue depth: derived, not a config knob. Its CLOG2 sets the
     // dcache-facing tag-id width (DCACHE_TAG_ID_BITS) and the word-coalescer's
     // slot count, so it must cover both the outstanding pool and one LSU
     // line's worth of words; sizing it below either would truncate slot ids
     // (response aliasing) or cap MLP at the coalescer.
     localparam LSU_QUEUE_OUT_SIZE   = `MAX(`VX_CFG_LSU_PENDING_SIZE, `VX_CFG_LSU_LINE_SIZE / LSU_WORD_SIZE);
-    localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(`VX_CFG_NUM_LSU_BLOCKS);
+    localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(NUM_LSU_TOTAL);
     localparam LMEM_TAG_WIDTH       = LMEM_TAG_WIDTH_BASE;
 
     // Width of the tag carried over VX_lsu_sched_if: lsu_header + op_type
@@ -1478,7 +1488,12 @@ package VX_gpu_pkg;
 
     // Input request size (using coalesced memory blocks)
     localparam DCACHE_CHANNELS	    = `UP((`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE);
+
+`ifdef TCU_OP
+    localparam DCACHE_NUM_REQS	    = NUM_LSU_TOTAL * DCACHE_CHANNELS;
+`else
     localparam DCACHE_NUM_REQS	    = `VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS;
+`endif
 
     // Core request tag Id bits
     localparam DCACHE_MERGED_REQS   = (`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
