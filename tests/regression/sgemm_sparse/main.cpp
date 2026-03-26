@@ -29,7 +29,6 @@
 using namespace vortex;
 namespace vt = sparse;
 
-static bool g_enable_sparse = true;
 static uint32_t g_sparsity_degree = 2; // Default: 2:4 sparsity
 
 static size_t align_up(size_t value, size_t alignment) {
@@ -491,65 +490,77 @@ void cleanup() {
 
 
 static SparseMat pruneAndCompressMatrixA(const std::vector<itype_t>& denseA,
-                                         uint32_t M, uint32_t K,
-                                         uint32_t sparsity_degree) {
-  SparseMat out;
-  out.rows = M;
-  out.cols = K;
-  // Reserve space based on sparsity degree: 1:4 -> K/4 values per row, 2:4 -> K/2 values per row
-  uint32_t values_per_block = sparsity_degree;
-  out.values.reserve(M * K * values_per_block / 4);
-  out.meta.reserve(M * K / 4); // 1 byte for every 4 values
+  uint32_t M, uint32_t K,
+  uint32_t sparsity_degree) {
+SparseMat out;
+out.rows = M;
+out.cols = K;
 
-  const itype_t* src = denseA.data();
+uint32_t values_per_block = sparsity_degree;
+uint32_t kblocks = K / 4;
 
-  for (uint32_t r = 0; r < M; ++r) {
-    for (uint32_t c = 0; c < K; c += 4) {
-      itype_t blk[4] = {src[r * K + c],
-                        src[r * K + c + 1],
-                        src[r * K + c + 2],
-                        src[r * K + c + 3]};
+out.values.reserve(M * K * values_per_block / 4);
+out.meta.resize(M * kblocks);   
 
-      // Randomly select N out of 4 positions to keep (N = sparsity_degree)
-      uint32_t idx[4] = {0, 1, 2, 3};
-      // Shuffle the indices
-      for (uint32_t i = 3; i > 0; --i) {
-        uint32_t j = rand() % (i + 1);
-        std::swap(idx[i], idx[j]);
-      }
-      
-      // Select first N shuffled indices
-      uint8_t mask = 0;
-      std::vector<uint8_t> kept_indices;
-      
-      if (sparsity_degree == 1) {
-        // 1:4 sparsity - keep only one value
-        uint8_t keep0 = idx[0];
-        kept_indices.push_back(keep0);
-        mask = (1u << keep0);
-      } else { // sparsity_degree == 2
-        // 2:4 sparsity - keep two values
-        uint8_t keep0 = idx[0];
-        uint8_t keep1 = idx[1];
-        kept_indices.push_back(keep0);
-        kept_indices.push_back(keep1);
-        mask = (1u << keep0) | (1u << keep1);
-      }
-      
-      // Sort kept indices to store values in original order
-      std::sort(kept_indices.begin(), kept_indices.end());
-      
-      // Store values in original order (position order)
-      for (uint32_t i = 0; i < 4; ++i) {
-        if (mask & (1u << i)) {
-          out.values.push_back(blk[i]);
-        }
-      }
+const itype_t* src = denseA.data();
 
-      out.meta.push_back(mask);
-    }
-  }
-  return out;
+// --- First pass: generate sparse values and metadata ---
+for (uint32_t r = 0; r < M; ++r) {
+for (uint32_t c = 0; c < K; c += 4) {
+
+itype_t blk[4] = {
+src[r*K + c],
+src[r*K + c + 1],
+src[r*K + c + 2],
+src[r*K + c + 3]
+};
+
+uint32_t idx[4] = {0,1,2,3};
+
+for (uint32_t i = 3; i > 0; --i) {
+uint32_t j = rand() % (i + 1);
+std::swap(idx[i], idx[j]);
+}
+
+uint8_t mask = 0;
+std::vector<uint8_t> kept_indices;
+
+if (sparsity_degree == 1) {
+uint8_t keep0 = idx[0];
+kept_indices.push_back(keep0);
+mask = (1u << keep0);
+} else {
+uint8_t keep0 = idx[0];
+uint8_t keep1 = idx[1];
+kept_indices.push_back(keep0);
+kept_indices.push_back(keep1);
+mask = (1u << keep0) | (1u << keep1);
+}
+
+std::sort(kept_indices.begin(), kept_indices.end());
+
+for (uint32_t i = 0; i < 4; ++i) {
+if (mask & (1u << i))
+out.values.push_back(blk[i]);
+}
+
+uint32_t kb = c / 4;
+out.meta[r * kblocks + kb] = mask;  // temporary row-major
+}
+}
+
+// --- Second pass: reorder metadata so K blocks come first ---
+std::vector<uint8_t> reordered_meta(M * kblocks);
+
+for (uint32_t kb = 0; kb < kblocks; ++kb) {
+for (uint32_t r = 0; r < M; ++r) {
+reordered_meta[kb * M + r] = out.meta[r * kblocks + kb];
+}
+}
+
+out.meta.swap(reordered_meta);
+
+return out;
 }
 
 
@@ -719,11 +730,10 @@ int main(int argc, char *argv[]) {
   // Print metadata
   std::cout << "\n=== Metadata (" << sparseA.meta.size() << " entries; padded size "
             << meta_size << " bytes) ===" << std::endl;
-  size_t meta_idx = 0;
   for (uint32_t m = 0; m < M; ++m) {
     std::cout << "Row " << m << " metadata: ";
     for (uint32_t blk = 0; blk < K / 4; ++blk) {
-      uint8_t mask = sparseA.meta[meta_idx++];
+      uint8_t mask = sparseA.meta[blk * M + m];
       std::cout << "0b";
       for (int i = 3; i >= 0; --i) {
         std::cout << ((mask >> i) & 1);
@@ -735,12 +745,11 @@ int main(int argc, char *argv[]) {
   
   // Print metadata with position interpretation
   std::cout << "\n=== Metadata Interpretation (showing kept positions) ===" << std::endl;
-  meta_idx = 0;
   val_idx = 0;
   for (uint32_t m = 0; m < M; ++m) {
     std::cout << "Row " << m << ": ";
     for (uint32_t blk = 0; blk < K / 4; ++blk) {
-      uint8_t mask = sparseA.meta[meta_idx++];
+      uint8_t mask = sparseA.meta[blk * M + m];
       std::cout << "[";
       bool first = true;
       for (uint32_t i = 0; i < 4; ++i) {

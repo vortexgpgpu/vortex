@@ -656,10 +656,12 @@ enum class TcuType {
 };
 
 struct IntrTcuArgs {
-  uint32_t fmt_s  : 4;
-  uint32_t fmt_d  : 4;
-  uint32_t step_m : 4;
-  uint32_t step_n : 4;
+  uint32_t fmt_s          : 4;
+  uint32_t fmt_d          : 4;
+  uint32_t step_m         : 4;
+  uint32_t step_n         : 4;
+  uint32_t step_k         : 4;
+  uint32_t sparsity_degree: 4;  // 0 = dense, 1 or 2 = 1:4 / 2:4
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {

@@ -68,18 +68,6 @@ public:
 
   void store(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, MemTraceData* trace_data);
 
-	void wmma(uint32_t wid,
-			 	    uint32_t fmt_s,
-						uint32_t fmt_d,
-			 	    uint32_t step_m,
-						uint32_t step_n,
-	          const std::vector<reg_data_t>& rs1_data,
-					  const std::vector<reg_data_t>& rs2_data,
-					  const std::vector<reg_data_t>& rs3_data,
-					  std::vector<reg_data_t>& rd_data,
-					  ExeTraceData* trace_data,
-					  const uint32_t* metadata = nullptr,
-					  uint32_t sparsity_degree = 2);
 
   void tile_gemm_t(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_treg);
   void tile_gemm_u(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_ureg, uint32_t meta_reg);

@@ -27,299 +27,6 @@ inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
 }
 
-template <typename It, typename Ot>
-struct FMA {
-  using itype = typename It::dtype;
-  using otype = typename Ot::dtype;
-  static otype eval(itype a, itype b, otype c) {
-    return static_cast<otype>(a) * static_cast<otype>(b) + c;
-  }
-};
-
-template <>
-struct FMA<vt::fp16, vt::fp32> {
-  static float eval(uint16_t a, uint16_t b, float c) {
-    auto xa = rv_htof_s(a, 0, nullptr);
-    auto xb = rv_htof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
-  }
-};
-
-template <>
-struct FMA<vt::fp16, vt::fp16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
-    auto xa = rv_htof_s(a, 0, nullptr);
-    auto xb = rv_htof_s(b, 0, nullptr);
-    auto xc = rv_htof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftoh_s(xd, 0, nullptr);
-    return xh;
-  }
-};
-
-template <>
-struct FMA<vt::bf16, vt::fp32> {
-  static float eval(uint16_t a, uint16_t b, float c) {
-    auto xa = rv_btof_s(a, 0, nullptr);
-    auto xb = rv_btof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
-  }
-};
-
-template <>
-struct FMA<vt::bf16, vt::bf16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
-    auto xa = rv_btof_s(a, 0, nullptr);
-    auto xb = rv_btof_s(b, 0, nullptr);
-    auto xc = rv_btof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftob_s(xd, 0, nullptr);
-    return xh;
-  }
-};
-
-template <typename It, typename Ot>
-struct FEDP {
-  using itype = typename It::dtype;
-  using otype = typename Ot::dtype;
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
-  constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(itype);
-  static_assert(i_ratio * sizeof(itype) == sizeof(uint32_t), "FEDP: tcK * i_ratio must be <= 32");
-  auto acc = bit_cast<otype>(c_val);
-  for (uint32_t z = 0; z < cfg::tcK; ++z) {
-    auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
-    auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
-    for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc = FMA<It, Ot>::eval(a[i], b[i], acc);
-    }
-  }
-  return bit_cast<uint32_t>(acc);
-  }
-};
-
-template <>
-struct FEDP<vt::int4, vt::int32>{
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
-    auto acc = bit_cast<int32_t>(c_val);
-    for (uint32_t z = 0; z < cfg::tcK; ++z) {
-      auto a = a_row[z].u32;
-      auto b = b_col[z].u32;
-      for (uint32_t i = 0; i < 8; ++i) { // 8 * 4 bits = 32 bits
-        int32_t a_val = (a >> (i * 4)) & 0xF;
-        int32_t b_val = (b >> (i * 4)) & 0xF;
-        if (a_val & 0x8) {
-          a_val |= 0xFFFFFFF0;
-        }
-        if (b_val & 0x8) {
-          b_val |= 0xFFFFFFF0;
-        }
-        acc += a_val * b_val;
-      }
-    }
-    return bit_cast<uint32_t>(acc);
-  }
-};
-
-template <>
-struct FEDP<vt::uint4, vt::int32>{
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
-    auto acc = bit_cast<int32_t>(c_val);
-    for (uint32_t z = 0; z < cfg::tcK; ++z) {
-      auto a = a_row[z].u32;
-      auto b = b_col[z].u32;
-      for (uint32_t i = 0; i < 8; ++i) { // 8 * 4 bits = 32 bits
-        int32_t a_val = (a >> (i * 4)) & 0xF;
-        int32_t b_val = (b >> (i * 4)) & 0xF;
-        acc += a_val * b_val;
-      }
-    }
-    return bit_cast<uint32_t>(acc);
-  }
-};
-
-// Sparse FEDP: uses metadata to select which values from fragB to use
-// fragA is sparse (1:4 or 2:4), fragB is dense
-// metadata contains bitmasks indicating which positions are non-zero
-// sparsity_degree: 1 for 1:4 sparsity (1 of 4 non-zero), 2 for 2:4 sparsity (2 of 4 non-zero)
-template <typename It, typename Ot>
-struct SparseFEDP {
-  using itype = typename It::dtype;
-  using otype = typename Ot::dtype;
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val, const uint32_t* metadata, uint32_t sparsity_degree) {
-    constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(itype);
-    static_assert(i_ratio * sizeof(itype) == sizeof(uint32_t), "SparseFEDP: tcK * i_ratio must be <= 32");
-    auto acc = bit_cast<otype>(c_val);
-    
-    constexpr uint32_t regs_per_block = (i_ratio == 2) ? 2 : 4;
-    
-    // Verify sparsity_degree is valid
-    if (sparsity_degree != 1 && sparsity_degree != 2) {
-      std::cout << "Error: invalid sparsity_degree=" << sparsity_degree << ", must be 1 or 2" << std::endl;
-      std::abort();
-    }
-    
-    // Track compressed index for sparse values
-    uint32_t compressed_idx = 0;
-    
-    for (uint32_t z = 0; z < cfg::tcK; z += regs_per_block) {
-      uint32_t block_idx = z / regs_per_block;
-      uint32_t meta = (block_idx < 8) ? metadata[block_idx] : 0;
-      uint8_t meta_byte = meta & 0xFF;
-      
-      // Count set bits in metadata to verify sparsity_degree
-      uint32_t bits_set = 0;
-      for (uint32_t pos = 0; pos < 4; ++pos) {
-        if (meta_byte & (1u << pos)) {
-          bits_set++;
-        }
-      }
-      
-      // For 1:4 sparsity, expect 1 bit set per 4-element block
-      // For 2:4 sparsity, expect 2 bits set per 4-element block
-      // (Note: bits_set may vary in practice, but we process all set bits)
-      
-      for (uint32_t pos = 0; pos < 4; ++pos) {
-        if (meta_byte & (1u << pos)) {
-          uint32_t reg_idx = z + (pos / i_ratio);
-          uint32_t elem_idx = pos % i_ratio;
-          
-          if (reg_idx < cfg::tcK) {
-            // For sparse formats, a_row contains compressed values
-            // We need to index into the compressed storage
-            uint32_t a_compressed_reg = compressed_idx / i_ratio;
-            uint32_t a_compressed_elem = compressed_idx % i_ratio;
-            
-            if (a_compressed_reg < cfg::tcK) {
-              auto a = reinterpret_cast<const itype *>(&a_row[a_compressed_reg].u32);
-              auto b = reinterpret_cast<const itype *>(&b_col[reg_idx].u32);
-              acc = FMA<It, Ot>::eval(a[a_compressed_elem], b[elem_idx], acc);
-            }
-            compressed_idx++;
-          }
-        }
-      }
-    }
-    return bit_cast<uint32_t>(acc);
-  }
-};
-
-template <>
-struct SparseFEDP<vt::fp32, vt::fp32> {
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val, const uint32_t* metadata, uint32_t sparsity_degree) {
-    __unused(metadata);
-    __unused(sparsity_degree);
-    auto acc = bit_cast<float>(c_val);
-    
-    // fp32 is handled as dense (no compression for fp32)
-    for (uint32_t z = 0; z < cfg::tcK; ++z) {
-      auto a_val = bit_cast<float>(a_row[z].u32);
-      auto b_val = bit_cast<float>(b_col[z].u32);
-      acc = FMA<vt::fp32, vt::fp32>::eval(a_val, b_val, acc);
-    }
-    
-    return bit_cast<uint32_t>(acc);
-  }
-};
-
-using PFN_FEDP = uint32_t (*)(const reg_data_t*, const reg_data_t*, uint32_t);
-using PFN_SparseFEDP = uint32_t (*)(const reg_data_t*, const reg_data_t*, uint32_t, const uint32_t*, uint32_t);
-
-static PFN_SparseFEDP select_SparseFEDP(uint32_t IT, uint32_t OT) {
-  switch (OT) {
-  case vt::fp32::id:
-    switch (IT) {
-    case vt::fp32::id:
-      return SparseFEDP<vt::fp32, vt::fp32>::eval;
-    case vt::fp16::id:
-      return SparseFEDP<vt::fp16, vt::fp32>::eval;
-    case vt::bf16::id:
-      return SparseFEDP<vt::bf16, vt::fp32>::eval;
-    default:
-      std::cout << "Error: unsupported sparse mma format: " << IT << " -> " << OT << "!" << std::endl;
-      std::abort();
-    }
-    break;
-  case vt::fp16::id:
-    switch (IT) {
-    case vt::fp16::id:
-      return SparseFEDP<vt::fp16, vt::fp16>::eval;
-    default:
-      std::cout << "Error: unsupported sparse mma format: " << IT << " -> " << OT << "!" << std::endl;
-      std::abort();
-    }
-    break;
-  case vt::bf16::id:
-    switch (IT) {
-    case vt::bf16::id:
-      return SparseFEDP<vt::bf16, vt::bf16>::eval;
-    default:
-      std::cout << "Error: unsupported sparse mma format: " << IT << " -> " << OT << "!" << std::endl;
-      std::abort();
-    }
-    break;
-  default:
-    std::cout << "Error: unsupported sparse output type: " << OT << "!" << std::endl;
-    std::abort();
-  }
-}
-
-static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
-  switch (OT) {
-  case vt::fp32::id:
-    switch (IT) {
-    case vt::fp16::id:
-      return FEDP<vt::fp16, vt::fp32>::eval;
-    case vt::bf16::id:
-      return FEDP<vt::bf16, vt::fp32>::eval;
-    default:
-      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
-      std::abort();
-    }
-    break;
-  case vt::fp16::id:
-    switch (IT) {
-    case vt::fp16::id:
-      return FEDP<vt::fp16, vt::fp16>::eval;
-    default:
-      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
-      std::abort();
-    }
-    break;
-  case vt::bf16::id:
-    switch (IT) {
-    case vt::bf16::id:
-      return FEDP<vt::bf16, vt::bf16>::eval;
-    default:
-      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
-      std::abort();
-    }
-    break;
-  case vt::int32::id:
-    switch (IT) {
-    case vt::int8::id:
-      return FEDP<vt::int8, vt::int32>::eval;
-    case vt::uint8::id:
-      return FEDP<vt::uint8, vt::int32>::eval;
-    case vt::int4::id:
-      return FEDP<vt::int4, vt::int32>::eval;
-    case vt::uint4::id:
-      return FEDP<vt::uint4, vt::int32>::eval;
-    default:
-      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
-      std::abort();
-    }
-    break;
-  default:
-    std::cout << "Error: unsupported output type: " << OT << "!" << std::endl;
-    std::abort();
-  }
-}
 
 class SparseUnit::Impl {
 public:
@@ -426,6 +133,7 @@ public:
         std::abort();
       }
       #else
+      #ifdef EXT_TCU_ENABLE
       auto tcu_type = std::get<TcuType>(trace->op_type);
       switch (tcu_type) {
       case TcuType::WMMA:
@@ -435,87 +143,16 @@ public:
         std::abort();
       }
       DT(3, simobject_->name() << ": op=" << tcu_type << ", " << *trace);
-      #endif
+      #else
+      // SparseUnit without TCU/VEGETA extensions: no valid ops are expected here.
+      std::abort();
+      #endif // EXT_TCU_ENABLE
+      #endif // EXT_VEGETA_ENABLE
       simobject_->Outputs.at(iw).push(trace, 2 + delay);
       input.pop();
     }
   }
 
-  void wmma(uint32_t fmt_s,
-            uint32_t fmt_d,
-            uint32_t step_m,
-            uint32_t step_n,
-            const std::vector<reg_data_t>& rs1_data,
-            const std::vector<reg_data_t>& rs2_data,
-            const std::vector<reg_data_t>& rs3_data,
-            std::vector<reg_data_t>& rd_data,
-            ExeTraceData* trace_data,
-            const uint32_t* metadata,
-            uint32_t sparsity_degree) {
-    __unused(trace_data);
-
-    // Use provided metadata from integer registers 0-7 for sparse fragA
-    // If metadata is null, use zeros (dense mode fallback)
-    uint32_t meta[8] = {0};
-    if (metadata != nullptr) {
-      for (uint32_t i = 0; i < 8; ++i) {
-        meta[i] = metadata[i];
-      }
-    }
-    
-    // Use sparse FEDP for sparse-dense GEMM
-    auto sparse_fedp = select_SparseFEDP(fmt_s, fmt_d);
-
-    uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
-    uint32_t b_off = (step_n % cfg::b_sub_blocks) * cfg::b_block_size;
-
-    for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      for (uint32_t j = 0; j < cfg::tcN; ++j) {
-        auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
-        auto b_col = rs2_data.data() + b_off + j * cfg::tcK;
-        
-        uint32_t idx = i * cfg::tcN + j;
-        if (idx >= rs3_data.size() || idx >= rd_data.size()) {
-          std::cout << "Error: index out of bounds in sparse_unit wmma: idx=" << idx 
-                    << ", rs3_data.size()=" << rs3_data.size() 
-                    << ", rd_data.size()=" << rd_data.size() << std::endl;
-          std::abort();
-        }
-        
-        auto c_val = rs3_data.at(idx).u32;
-        
-        // Map metadata from fragment registers to K dimension registers
-        uint32_t meta_for_k[8] = {0};
-        for (uint32_t z = 0; z < cfg::tcK && z < 8; ++z) {
-          uint32_t frag_reg_idx = a_off + i * cfg::tcK + z;
-          if (frag_reg_idx < 8) {
-            meta_for_k[z] = meta[frag_reg_idx];
-          }
-        }
-        
-        // Perform sparse-dense FEDP: fragA is sparse, fragB is dense
-        auto d_val = sparse_fedp(a_row, b_col, c_val, meta_for_k, sparsity_degree);
-        rd_data.at(idx).u64 = nan_box(d_val);
-
-        DTH(3, "SparseFEDP: i=" << i << ", j=" << j << ", m=" << step_m << ", n=" << step_n << ", a_row={" << std::hex);
-        for (uint32_t q = 0; q < cfg::tcK; ++q) {
-          if (q) DTN(3, ", ");
-          DTN(3, "0x" << a_row[q].u32);
-        }
-        DTN(3, "}, b_col={");
-        for (uint32_t q = 0; q < cfg::tcK; ++q) {
-          if (q) DTN(3, ", ");
-          DTN(3, "0x" << b_col[q].u32);
-        }
-        DTN(3, "}, metadata={");
-        for (uint32_t q = 0; q < 8 && q < cfg::tcK; ++q) {
-          if (q) DTN(3, ", ");
-          DTN(3, "0x" << meta_for_k[q]);
-        }
-        DTN(3, "}, c_val=0x" << c_val << ", d_val=0x" << d_val << std::dec << std::endl);
-      }
-    }
-  }
 
   // TILE_GEMM_T: Dense tile × Dense tile = Tile (T × T → T)
   // Tiles are 16×16, so this computes: C[16×16] = A[16×16] × B[16×16]
@@ -1016,20 +653,6 @@ private:
   std::vector<std::vector<std::vector<typename vt::uint4::dtype>>> metadata_reg_file_;  // 8 registers, each 16x16 uint4 elements
 };
 
-///////////////////////////////////////////////////////////////////////////////
-
-op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
-  switch (tcu_type) {
-  case TcuType::WMMA:
-    return {"WMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
-             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
-  default:
-    std::abort();
-  }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 SparseUnit::SparseUnit(const SimContext &ctx, const char* name, const Arch& arch, Core* core)
 	: SimObject<SparseUnit>(ctx, name)
 	, Inputs(ISSUE_WIDTH, this)
@@ -1059,22 +682,6 @@ void SparseUnit::load(const Instr &instr, uint32_t wid, uint32_t tid, const std:
 
 void SparseUnit::store(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, MemTraceData* trace_data) {
   impl_->store(instr, wid, tid, rs1_data, trace_data);
-}
-
-void SparseUnit::wmma(uint32_t wid,
-                      uint32_t fmt_s,
-                      uint32_t fmt_d,
-                      uint32_t step_m,
-                      uint32_t step_n,
-                      const std::vector<reg_data_t>& rs1_data,
-                      const std::vector<reg_data_t>& rs2_data,
-                      const std::vector<reg_data_t>& rs3_data,
-                      std::vector<reg_data_t>& rd_data,
-                      ExeTraceData* trace_data,
-                      const uint32_t* metadata,
-                      uint32_t sparsity_degree) {
-  __unused(wid);
-  impl_->wmma(fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data, metadata, sparsity_degree);
 }
 
 void SparseUnit::tile_gemm_t(uint32_t dst_treg, uint32_t src1_treg, uint32_t src2_treg) {
