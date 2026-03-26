@@ -365,7 +365,7 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg)
             default: break;
           }
 
-          switch (gtid) {
+          switch (gtid) { 
             case 0: rs2_val = a_blocks; break;
             case 1: rs2_val = b_blocks; break;
             case 2: rs2_val = curr_k; break;
