@@ -13,13 +13,16 @@
 
 // Single-lane FP32 FMA pipeline: Multiply → Align → Accumulate → Normalize/Round
 // Supports all RISC-V rounding modes and full fflags output.
-// MUL_LATENCY is inferred from LATENCY_FMA: MUL_LATENCY = LATENCY_FMA - 3.
+// MUL_LATENCY is inferred from LATENCY: MUL_LATENCY = LATENCY - 3.
 // When MUL_LATENCY < LATENCY_IMUL, a combinational Wallace tree is used;
 // otherwise an inferred pipelined multiply is used (maps to DSP slices on FPGA).
+// Minimum LATENCY is 5 (1 ini + 1 mul + 1 aln + 1 acc + 1 nrm).
 
 `include "VX_fpu_define.vh"
 
-module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; (
+module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+    parameter LATENCY = 5
+) (
     input  wire        clk,
     input  wire        reset,
     input  wire        enable,
@@ -38,10 +41,12 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; (
     // =========================================================================
     // Latency parameters
     // =========================================================================
-    localparam MUL_LATENCY = `LATENCY_FMA - 3;  // 3 fixed stages: ALN + ACC + NRM
+    localparam INI_LATENCY = 1;
     localparam ALN_LATENCY = 1;
     localparam ACC_LATENCY = 1;
     localparam NRM_LATENCY = 1;
+    localparam MUL_LATENCY = LATENCY - INI_LATENCY - ALN_LATENCY - ACC_LATENCY - NRM_LATENCY;
+    `STATIC_ASSERT(MUL_LATENCY >= 1, ("LATENCY must be >= %0d, got %0d", INI_LATENCY+1+ALN_LATENCY+ACC_LATENCY+NRM_LATENCY, LATENCY))
 
     // =========================================================================
     // F32 field widths
@@ -185,7 +190,31 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; (
     wire [3:0] exc0 = {result_nan, result_inf, result_inf_sign, early_nv};
 
     // =========================================================================
-    // Stage 1: Multiply  (MUL_LATENCY cycles)
+    // Stage 0→1 register: break the classify→LZC→shift→multiply critical path
+    // =========================================================================
+    localparam PRE_MUL_DATAW = 3*SIG_BITS + 10 + 10 + 1 + 1 + INST_FRM_BITS + 4;
+
+    wire [PRE_MUL_DATAW-1:0] s0_data;
+    VX_pipe_register #(
+        .DATAW (PRE_MUL_DATAW),
+        .DEPTH (INI_LATENCY)
+    ) pipe_ini (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in ({sig_a, sig_b, sig_c, exp_prod0, exp_c, s_prod0, s_c0, frm, exc0}),
+        .data_out(s0_data)
+    );
+
+    wire [SIG_BITS-1:0]      r1_sig_a, r1_sig_b, r1_sig_c;
+    wire signed [9:0]        r1_exp_prod, r1_exp_c;
+    wire                     r1_s_prod, r1_s_c;
+    wire [INST_FRM_BITS-1:0] r1_frm;
+    wire [3:0]               r1_exc;
+    assign {r1_sig_a, r1_sig_b, r1_sig_c, r1_exp_prod, r1_exp_c, r1_s_prod, r1_s_c, r1_frm, r1_exc} = s0_data;
+
+    // =========================================================================
+    // Stage 1: Multiply  (MUL_LATENCY-1 remaining cycles after pipe_pre_mul)
     // =========================================================================
 
     wire [PROD_BITS-1:0] raw_prod;
@@ -196,27 +225,27 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; (
             .P     (PROD_BITS),
             .CPA_KS(!`FORCE_BUILTIN_ADDER(PROD_BITS))
         ) u_mul (
-            .a (sig_a),
-            .b (sig_b),
+            .a (r1_sig_a),
+            .b (r1_sig_b),
             .p (raw_prod)
         );
     end else begin : g_mul_infer
-        assign raw_prod = PROD_BITS'(sig_a) * PROD_BITS'(sig_b);
+        assign raw_prod = PROD_BITS'(r1_sig_a) * PROD_BITS'(r1_sig_b);
     end
 
-    // Pipeline register for MUL stage
+    // Pipeline register for MUL stage (depth reduced by 1: pipe_pre_mul absorbs one cycle)
     // Carry forward: raw_prod, exp_prod, s_prod, sig_c, exp_c, s_c, frm, exc
     localparam MUL_DATAW = PROD_BITS + 10 + 1 + SIG_BITS + 10 + 1 + INST_FRM_BITS + 4;
 
     wire [MUL_DATAW-1:0] s1_data;
     VX_pipe_register #(
         .DATAW (MUL_DATAW),
-        .DEPTH (MUL_LATENCY)
+        .DEPTH (MUL_LATENCY - 1)
     ) pipe_mul (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({raw_prod,  exp_prod0, s_prod0, sig_c,  exp_c,  s_c0,  frm, exc0}),
+        .data_in ({raw_prod,  r1_exp_prod, r1_s_prod, r1_sig_c, r1_exp_c, r1_s_c, r1_frm, r1_exc}),
         .data_out(s1_data)
     );
 

@@ -219,7 +219,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign fflags_lanes = 'x;
     `else
         for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
-            VX_fma_unit fma_unit (
+            VX_fma_unit #(
+                .LATENCY (`LATENCY_FMA)
+            ) fma_unit (
                 .clk     (clk),
                 .reset   (reset),
                 .enable  (pe_enable),
@@ -394,7 +396,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign div_has_fflags = 1;
     `else
         for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_div_units
-            VX_fdivsqrt_unit fdiv_unit (
+            VX_fdivsqrt_unit #(
+                .LATENCY (`LATENCY_FDIV)
+            ) fdiv_unit (
                 .clk     (clk),
                 .reset   (reset),
                 .enable  (div_pe_enable),
@@ -503,7 +507,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign sqrt_has_fflags = 1;
     `else
         for (genvar i = 0; i < NUM_PES_SQRT; ++i) begin : g_sqrt_units
-            VX_fdivsqrt_unit fsqrt_unit (
+            VX_fdivsqrt_unit #(
+                .LATENCY (`LATENCY_FSQRT)
+            ) fsqrt_unit (
                 .clk     (clk),
                 .reset   (reset),
                 .enable  (sqrt_pe_enable),

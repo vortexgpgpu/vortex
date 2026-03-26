@@ -118,5 +118,8 @@ int main(int argc, char **argv) {
 	// read exitcode from @MPM.1
   ram.read(&exitcode, IO_EXIT_CODE, 4);
 
-	return exitcode;
+	// Use _exit() to bypass destructors — Verilator's VerilatedScope destructor
+	// calls scopeErase which crashes on strcmp with certain 64-bit module hierarchies.
+	// The simulation is complete at this point; OS will reclaim all resources.
+	_exit(exitcode);
 }
