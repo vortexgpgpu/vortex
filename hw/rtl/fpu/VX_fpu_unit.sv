@@ -197,6 +197,35 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .ready_out  (fpu_rsp_ready)
         );
 
+    `elsif FPU_TYPE_STD
+
+        VX_fpu_std #(
+            .NUM_LANES  (NUM_LANES),
+            .TAG_WIDTH  (TAG_WIDTH),
+            .OUT_BUF    (PARTIAL_BW ? 1 : 3)
+        ) fpu_std (
+            .clk        (clk),
+            .reset      (reset),
+
+            .valid_in   (fpu_req_valid),
+            .mask_in    (per_block_execute_if[block_idx].data.header.tmask),
+            .op_type    (per_block_execute_if[block_idx].data.op_type),
+            .fmt        (fpu_fmt),
+            .frm        (fpu_req_frm),
+            .dataa      (per_block_execute_if[block_idx].data.rs1_data),
+            .datab      (per_block_execute_if[block_idx].data.rs2_data),
+            .datac      (per_block_execute_if[block_idx].data.rs3_data),
+            .tag_in     (fpu_req_tag),
+            .ready_in   (fpu_req_ready),
+
+            .valid_out  (fpu_rsp_valid),
+            .result     (fpu_rsp_result),
+            .has_fflags (fpu_rsp_has_fflags),
+            .fflags     (fpu_rsp_fflags),
+            .tag_out    (fpu_rsp_tag),
+            .ready_out  (fpu_rsp_ready)
+        );
+
     `endif
 
         // handle CSR update

@@ -43,6 +43,8 @@ riscv()
     make -C tests/riscv run-simx
     make -C tests/riscv run-rtlsim
 
+    CONFIGS="-DFPU_TYPE_STD" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
+
     CONFIGS="-DFPU_TYPE_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
     CONFIGS="-DFPU_TYPE_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
@@ -54,6 +56,8 @@ riscv()
         CONFIGS="-DFPU_TYPE_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
 
         CONFIGS="-DFPU_TYPE_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
+
+        CONFIGS="-DFPU_TYPE_STD -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
 
         CONFIGS="-DFPU_TYPE_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
 

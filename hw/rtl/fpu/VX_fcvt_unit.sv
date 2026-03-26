@@ -13,8 +13,6 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_TYPE_DSP
-
 // F32-only float conversion unit (I2F and F2I).
 // F64 (double) support removed; XLEN-wide integer (I32/I64) support kept.
 // LATENCY: use 5 for XLEN=32, 6 for XLEN=64 (separates S0 negate from S1 LZC).
@@ -341,7 +339,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
             // F2I: F32 → I32/I64
             if (fclass_s5.is_nan || fclass_s5.is_inf) begin
                 final_fflags_s5.NV = 1'b1;
-                res_val_64 = is_dst_64_s5 ? nan_inf_64 : {32'h00000000, nan_inf_32};
+                res_val_64 = is_dst_64_s5 ? nan_inf_64 : {{32{nan_inf_32[31]}}, nan_inf_32};
                 res_val_32 = nan_inf_32;
             end else if (f2i_s32_pos_ovf) begin
                 final_fflags_s5.NV = 1'b1;
@@ -402,5 +400,3 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     );
 
 endmodule
-
-`endif

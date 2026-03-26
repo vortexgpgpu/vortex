@@ -13,9 +13,9 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_TYPE_DSP
+`ifdef FPU_TYPE_STD
 
-module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 4,
     parameter TAG_WIDTH = 4,
     parameter OUT_BUF   = 0
@@ -56,27 +56,29 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     localparam NUM_PES_FMA  = `UP(NUM_LANES / `FMA_PE_RATIO);
     localparam NUM_PES_DIV  = `UP(NUM_LANES / `FDIV_PE_RATIO);
-    localparam NUM_PES_SQRT = `UP(NUM_LANES / `FSQRT_PE_RATIO);
     localparam NUM_PES_CVT  = `UP(NUM_LANES / `FCVT_PE_RATIO);
     localparam NUM_PES_NCP  = `UP(NUM_LANES / `FNCP_PE_RATIO);
-    localparam CVT_LATENCY  = (`XLEN == 64) ? `LATENCY_FCVT + 1 : `LATENCY_FCVT;
+
+    localparam CVT_LATENCY = (`XLEN == 64) ? `LATENCY_FCVT + 1 : `LATENCY_FCVT;
 
     localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS + 3 * (NUM_LANES * `XLEN);
     localparam RSP_DATAW = (NUM_LANES * `XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
+    // Per-core request signals
     wire [NUM_FPCORES-1:0] per_core_valid_in;
     wire [NUM_FPCORES-1:0][REQ_DATAW-1:0] per_core_data_in;
     wire [NUM_FPCORES-1:0] per_core_ready_in;
 
-    wire [NUM_FPCORES-1:0][NUM_LANES-1:0] per_core_mask_in;
-    wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_in;
-    wire [NUM_FPCORES-1:0][INST_FPU_BITS-1:0] per_core_op_type;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0] per_core_mask;
+    wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag;
+    wire [NUM_FPCORES-1:0][INST_FPU_BITS-1:0] per_core_op;
     wire [NUM_FPCORES-1:0][INST_FMT_BITS-1:0] per_core_fmt;
     wire [NUM_FPCORES-1:0][INST_FRM_BITS-1:0] per_core_frm;
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_dataa;
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_datab;
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_datac;
 
+    // Per-core response signals
     wire [NUM_FPCORES-1:0] per_core_valid_out;
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_result;
     wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_out;
@@ -84,9 +86,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     fflags_t [NUM_FPCORES-1:0] per_core_fflags;
     wire [NUM_FPCORES-1:0] per_core_ready_out;
 
-    // Decode fpu core type
+    // Decode FPU core selector
     wire [FPCORES_BITS-1:0] core_select = (op_type == INST_FPU_F2F) ? FPCORES_BITS'(FPU_CVT)
-                                                                    : FPCORES_BITS'(op_type[3:2]);
+                                                                     : FPCORES_BITS'(op_type[3:2]);
 
     VX_stream_switch #(
         .DATAW       (REQ_DATAW),
@@ -104,20 +106,22 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .ready_out (per_core_ready_in)
     );
 
-    for (genvar i = 0; i < NUM_FPCORES; ++i) begin : g_per_core_data_in
+    for (genvar i = 0; i < NUM_FPCORES; ++i) begin : g_core_unpack
         assign {
-            per_core_mask_in[i],
-            per_core_tag_in[i],
+            per_core_mask[i],
+            per_core_tag[i],
             per_core_fmt[i],
             per_core_frm[i],
             per_core_dataa[i],
             per_core_datab[i],
             per_core_datac[i],
-            per_core_op_type[i]
+            per_core_op[i]
         } = per_core_data_in[i];
     end
 
-    // FMA core ///////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+    // FMA core
+    ///////////////////////////////////////////////////////////////////////////
 
     begin : g_fma
 
@@ -147,10 +151,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .clk           (clk),
             .reset         (reset),
             .valid_in      (per_core_valid_in[FPU_FMA]),
-            .mask_in       (per_core_mask_in[FPU_FMA]),
+            .mask_in       (per_core_mask[FPU_FMA]),
             .data_in       (lane_data),
-            .shared_in     ({per_core_op_type[FPU_FMA], per_core_fmt[FPU_FMA], per_core_frm[FPU_FMA]}),
-            .tag_in        (per_core_tag_in[FPU_FMA]),
+            .shared_in     ({per_core_op[FPU_FMA], per_core_fmt[FPU_FMA], per_core_frm[FPU_FMA]}),
+            .tag_in        (per_core_tag[FPU_FMA]),
             .ready_in      (per_core_ready_in[FPU_FMA]),
             .pe_enable     (pe_enable),
             `UNUSED_PIN    (pe_mask_out),
@@ -175,49 +179,6 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             assign fflags_lanes[i] = data_out[i][`XLEN+:`FP_FLAGS_BITS];
         end
 
-    `ifdef QUARTUS
-        for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
-            wire [INST_FPU_BITS-1:0] op_pe  = pe_shared[INST_FRM_BITS + INST_FMT_BITS +: INST_FPU_BITS];
-            wire [INST_FMT_BITS-1:0] fmt_pe = pe_shared[INST_FRM_BITS +: INST_FMT_BITS];
-            wire is_madd_pe = op_pe[1];
-            wire is_neg_pe  = op_pe[0];
-            wire is_sub_pe  = fmt_pe[1];
-
-            reg [31:0] a32, b32, c32;
-            always @(*) begin
-                if (is_madd_pe) begin
-                    a32 = {is_neg_pe ^ pe_data_in[i][31], pe_data_in[i][0 +: 31]};
-                    b32 = pe_data_in[i][`XLEN +: 32];
-                    c32 = {(is_neg_pe ^ is_sub_pe) ^ pe_data_in[i][2*`XLEN + 31],
-                           pe_data_in[i][2*`XLEN +: 31]};
-                end else begin
-                    if (is_neg_pe) begin // MUL
-                        a32 = pe_data_in[i][0 +: 32];
-                        b32 = pe_data_in[i][`XLEN +: 32];
-                        c32 = '0;
-                    end else begin // ADD/SUB
-                        a32 = pe_data_in[i][0 +: 32];
-                        b32 = 32'h3f800000; // 1.0f
-                        c32 = {is_sub_pe ^ pe_data_in[i][`XLEN + 31], pe_data_in[i][`XLEN +: 31]};
-                    end
-                end
-            end
-
-            acl_fmadd fmadd (
-                .clk    (clk),
-                .areset (1'b0),
-                .en     (pe_enable),
-                .a      (a32),
-                .b      (b32),
-                .c      (c32),
-                .q      (pe_data_out[i][0 +: 32])
-            );
-            assign pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = 'x;
-        end
-
-        assign per_core_has_fflags[FPU_FMA] = 0;
-        assign fflags_lanes = 'x;
-    `else
         for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
             VX_fma_unit fma_unit (
                 .clk     (clk),
@@ -235,82 +196,32 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         end
 
         assign per_core_has_fflags[FPU_FMA] = 1;
-    `endif
-
         fflags_t merged_fflags;
         `FPU_MERGE_FFLAGS(merged_fflags, fflags_lanes, mask_out, NUM_LANES);
         assign per_core_fflags[FPU_FMA] = merged_fflags;
 
     end
 
-    // Div/Sqrt core //////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+    // DIVSQRT core
+    ///////////////////////////////////////////////////////////////////////////
 
     begin : g_fdivsqrt
 
-        localparam PATH_REQ_DATAW = NUM_LANES + TAG_WIDTH + INST_FMT_BITS + INST_FRM_BITS + 2 * (NUM_LANES * `XLEN);
-        localparam PATH_RSP_DATAW = (NUM_LANES * `XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
+        wire is_sqrt = per_core_op[FPU_DIVSQRT][0];
 
-        wire is_sqrt = per_core_op_type[FPU_DIVSQRT][0];
-
-        wire [1:0] path_valid_in;
-        wire [1:0][PATH_REQ_DATAW-1:0] path_data_in;
-        wire [1:0] path_ready_in;
-
-        wire [1:0][NUM_LANES-1:0] path_mask;
-        wire [1:0][TAG_WIDTH-1:0] path_tag;
-        wire [1:0][INST_FMT_BITS-1:0] path_fmt;
-        wire [1:0][INST_FRM_BITS-1:0] path_frm;
-        wire [1:0][NUM_LANES-1:0][`XLEN-1:0] path_dataa;
-        wire [1:0][NUM_LANES-1:0][`XLEN-1:0] path_datab;
+        wire [NUM_LANES-1:0] mask_out;
+        wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] data_out;
+        wire pe_enable;
+        wire [NUM_PES_DIV-1:0][(2*`XLEN)-1:0] pe_data_in;
+        wire [1+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
+        wire [NUM_PES_DIV-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] pe_data_out;
+        wire [NUM_LANES-1:0][(2*`XLEN)-1:0] lane_data;
 
         `UNUSED_VAR (per_core_datac[FPU_DIVSQRT])
-        `UNUSED_VAR (path_datab[1])
 
-        VX_stream_switch #(
-            .DATAW       (PATH_REQ_DATAW),
-            .NUM_INPUTS  (1),
-            .NUM_OUTPUTS (2),
-            .OUT_BUF     (0)
-        ) req_switch (
-            .clk       (clk),
-            .reset     (reset),
-            .sel_in    (is_sqrt),
-            .valid_in  (per_core_valid_in[FPU_DIVSQRT]),
-            .ready_in  (per_core_ready_in[FPU_DIVSQRT]),
-            .data_in   ({per_core_mask_in[FPU_DIVSQRT], per_core_tag_in[FPU_DIVSQRT], per_core_fmt[FPU_DIVSQRT], per_core_frm[FPU_DIVSQRT], per_core_dataa[FPU_DIVSQRT], per_core_datab[FPU_DIVSQRT]}),
-            .data_out  (path_data_in),
-            .valid_out (path_valid_in),
-            .ready_out (path_ready_in)
-        );
-
-        for (genvar i = 0; i < 2; ++i) begin : g_unpack
-            assign {
-                path_mask[i],
-                path_tag[i],
-                path_fmt[i],
-                path_frm[i],
-                path_dataa[i],
-                path_datab[i]
-            } = path_data_in[i];
-        end
-
-        wire [1:0] path_valid_out;
-        wire [1:0][PATH_RSP_DATAW-1:0] path_data_out;
-        wire [1:0] path_ready_out;
-
-        // DIV path (index 0)
-
-        wire [TAG_WIDTH-1:0] div_tag_out;
-        wire [NUM_LANES-1:0] div_mask_out;
-        wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] div_data_out;
-        wire div_pe_enable;
-        wire [NUM_PES_DIV-1:0][(2*`XLEN)-1:0] div_pe_data_in;
-        wire [INST_FMT_BITS+INST_FRM_BITS-1:0] div_pe_shared;
-        wire [NUM_PES_DIV-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] div_pe_data_out;
-        wire [NUM_LANES-1:0][(2*`XLEN)-1:0] div_lane_data;
-
-        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_lane_data
-            assign div_lane_data[i] = {path_datab[0][i], path_dataa[0][i]};
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lane_data
+            assign lane_data[i] = {per_core_datab[FPU_DIVSQRT][i], per_core_dataa[FPU_DIVSQRT][i]};
         end
 
         VX_pe_serializer #(
@@ -319,231 +230,67 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .LATENCY        (`LATENCY_FDIV),
             .DATA_IN_WIDTH  (2*`XLEN),
             .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`XLEN),
-            .SHARED_WIDTH   (INST_FMT_BITS+INST_FRM_BITS),
+            .SHARED_WIDTH   (1+INST_FMT_BITS+INST_FRM_BITS),
             .TAG_WIDTH      (TAG_WIDTH),
             .PE_REG         (0),
             .OUT_BUF        (2)
-        ) div_pe_ser (
+        ) pe_ser (
             .clk           (clk),
             .reset         (reset),
-            .valid_in      (path_valid_in[0]),
-            .mask_in       (path_mask[0]),
-            .data_in       (div_lane_data),
-            .shared_in     ({path_fmt[0], path_frm[0]}),
-            .tag_in        (path_tag[0]),
-            .ready_in      (path_ready_in[0]),
-            .pe_enable     (div_pe_enable),
+            .valid_in      (per_core_valid_in[FPU_DIVSQRT]),
+            .mask_in       (per_core_mask[FPU_DIVSQRT]),
+            .data_in       (lane_data),
+            .shared_in     ({is_sqrt, per_core_fmt[FPU_DIVSQRT], per_core_frm[FPU_DIVSQRT]}),
+            .tag_in        (per_core_tag[FPU_DIVSQRT]),
+            .ready_in      (per_core_ready_in[FPU_DIVSQRT]),
+            .pe_enable     (pe_enable),
             `UNUSED_PIN    (pe_mask_out),
-            .pe_data_out   (div_pe_data_in),
-            .pe_shared_out (div_pe_shared),
-            .pe_data_in    (div_pe_data_out),
-            .valid_out     (path_valid_out[0]),
-            .mask_out      (div_mask_out),
-            .data_out      (div_data_out),
-            .tag_out       (div_tag_out),
-            .ready_out     (path_ready_out[0])
+            .pe_data_out   (pe_data_in),
+            .pe_shared_out (pe_shared),
+            .pe_data_in    (pe_data_out),
+            .valid_out     (per_core_valid_out[FPU_DIVSQRT]),
+            .mask_out      (mask_out),
+            .data_out      (data_out),
+            .tag_out       (per_core_tag_out[FPU_DIVSQRT]),
+            .ready_out     (per_core_ready_out[FPU_DIVSQRT])
         );
 
-        fflags_t [NUM_LANES-1:0] div_fflags_lanes;
-        wire [NUM_LANES-1:0][`XLEN-1:0] div_result;
+        fflags_t [NUM_LANES-1:0] fflags_lanes;
 
-        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_result
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
             if (`XLEN > 32) begin : g_nan_box
-                assign div_result[i] = {32'hffffffff, div_data_out[i][0+:32]};
+                assign per_core_result[FPU_DIVSQRT][i] = {32'hffffffff, data_out[i][0+:32]};
             end else begin : g_no_nan_box
-                assign div_result[i] = div_data_out[i][0+:`XLEN];
+                assign per_core_result[FPU_DIVSQRT][i] = data_out[i][0+:`XLEN];
             end
-            assign div_fflags_lanes[i] = div_data_out[i][`XLEN+:`FP_FLAGS_BITS];
+            assign fflags_lanes[i] = data_out[i][`XLEN+:`FP_FLAGS_BITS];
         end
 
-        wire div_has_fflags;
-
-    `ifdef QUARTUS
-        for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_div_units
-            acl_fdiv fdiv (
-                .clk    (clk),
-                .areset (1'b0),
-                .en     (div_pe_enable),
-                .a      (div_pe_data_in[i][0 +: 32]),
-                .b      (div_pe_data_in[i][`XLEN +: 32]),
-                .q      (div_pe_data_out[i][0 +: 32])
-            );
-            assign div_pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = 'x;
-        end
-
-        assign div_has_fflags  = 0;
-        assign div_fflags_lanes = 'x;
-    `elsif VIVADO
-        for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_div_units
-            wire [3:0] tuser;
-            xil_fdiv fdiv (
-                .aclk                (clk),
-                .aclken              (div_pe_enable),
-                .s_axis_a_tvalid     (1'b1),
-                .s_axis_a_tdata      (div_pe_data_in[i][0 +: 32]),
-                .s_axis_b_tvalid     (1'b1),
-                .s_axis_b_tdata      (div_pe_data_in[i][`XLEN +: 32]),
-                `UNUSED_PIN (m_axis_result_tvalid),
-                .m_axis_result_tdata (div_pe_data_out[i][0 +: 32]),
-                .m_axis_result_tuser (tuser)
-            );
-                                                          // NV, DZ, OF, UF, NX
-            assign div_pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = {tuser[2], tuser[3], tuser[1], tuser[0], 1'b0};
-        end
-
-        assign div_has_fflags = 1;
-    `else
-        for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_div_units
-            VX_fdivsqrt_unit fdiv_unit (
+        for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_units
+            VX_fdivsqrt_unit fdiv_sqrt_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (div_pe_enable),
-                .fmt     (div_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
-                .frm     (div_pe_shared[0+:INST_FRM_BITS]),
-                .dataa   (div_pe_data_in[i][0+:32]),
-                .datab   (div_pe_data_in[i][`XLEN+:32]),
-                .is_sqrt (1'b0),
-                .result  (div_pe_data_out[i][0+:32]),
-                .fflags  (div_pe_data_out[i][`XLEN+:`FP_FLAGS_BITS])
+                .enable  (pe_enable),
+                .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
+                .frm     (pe_shared[0+:INST_FRM_BITS]),
+                .dataa   (pe_data_in[i][0+:32]),
+                .datab   (pe_data_in[i][`XLEN+:32]),
+                .is_sqrt (pe_shared[INST_FRM_BITS+INST_FMT_BITS]),
+                .result  (pe_data_out[i][0+:32]),
+                .fflags  (pe_data_out[i][`XLEN+:`FP_FLAGS_BITS])
             );
         end
 
-        assign div_has_fflags = 1;
-    `endif
-
-        fflags_t div_merged_fflags;
-        `FPU_MERGE_FFLAGS(div_merged_fflags, div_fflags_lanes, div_mask_out, NUM_LANES);
-        assign path_data_out[0] = {div_result, div_has_fflags, div_merged_fflags, div_tag_out};
-
-        // SQRT path (index 1)
-
-        wire [TAG_WIDTH-1:0] sqrt_tag_out;
-        wire [NUM_LANES-1:0] sqrt_mask_out;
-        wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] sqrt_data_out;
-        wire sqrt_pe_enable;
-        wire [NUM_PES_SQRT-1:0][`XLEN-1:0] sqrt_pe_data_in;
-        wire [INST_FMT_BITS+INST_FRM_BITS-1:0] sqrt_pe_shared;
-        wire [NUM_PES_SQRT-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] sqrt_pe_data_out;
-
-        VX_pe_serializer #(
-            .NUM_LANES      (NUM_LANES),
-            .NUM_PES        (NUM_PES_SQRT),
-            .LATENCY        (`LATENCY_FSQRT),
-            .DATA_IN_WIDTH  (`XLEN),
-            .DATA_OUT_WIDTH (`FP_FLAGS_BITS+`XLEN),
-            .SHARED_WIDTH   (INST_FMT_BITS+INST_FRM_BITS),
-            .TAG_WIDTH      (TAG_WIDTH),
-            .PE_REG         (0),
-            .OUT_BUF        (2)
-        ) sqrt_pe_ser (
-            .clk           (clk),
-            .reset         (reset),
-            .valid_in      (path_valid_in[1]),
-            .mask_in       (path_mask[1]),
-            .data_in       (path_dataa[1]),
-            .shared_in     ({path_fmt[1], path_frm[1]}),
-            .tag_in        (path_tag[1]),
-            .ready_in      (path_ready_in[1]),
-            .pe_enable     (sqrt_pe_enable),
-            `UNUSED_PIN    (pe_mask_out),
-            .pe_data_out   (sqrt_pe_data_in),
-            .pe_shared_out (sqrt_pe_shared),
-            .pe_data_in    (sqrt_pe_data_out),
-            .valid_out     (path_valid_out[1]),
-            .mask_out      (sqrt_mask_out),
-            .data_out      (sqrt_data_out),
-            .tag_out       (sqrt_tag_out),
-            .ready_out     (path_ready_out[1])
-        );
-
-        fflags_t [NUM_LANES-1:0] sqrt_fflags_lanes;
-        wire [NUM_LANES-1:0][`XLEN-1:0] sqrt_result;
-
-        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sqrt_result
-            if (`XLEN > 32) begin : g_nan_box
-                assign sqrt_result[i] = {32'hffffffff, sqrt_data_out[i][0+:32]};
-            end else begin : g_no_nan_box
-                assign sqrt_result[i] = sqrt_data_out[i][0+:`XLEN];
-            end
-            assign sqrt_fflags_lanes[i] = sqrt_data_out[i][`XLEN+:`FP_FLAGS_BITS];
-        end
-
-        wire sqrt_has_fflags;
-
-    `ifdef QUARTUS
-        for (genvar i = 0; i < NUM_PES_SQRT; ++i) begin : g_sqrt_units
-            acl_fsqrt fsqrt (
-                .clk    (clk),
-                .areset (1'b0),
-                .en     (sqrt_pe_enable),
-                .a      (sqrt_pe_data_in[i][0 +: 32]),
-                .q      (sqrt_pe_data_out[i][0 +: 32])
-            );
-            assign sqrt_pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = 'x;
-        end
-
-        assign sqrt_has_fflags  = 0;
-        assign sqrt_fflags_lanes = 'x;
-    `elsif VIVADO
-        for (genvar i = 0; i < NUM_PES_SQRT; ++i) begin : g_sqrt_units
-            wire tuser;
-            xil_fsqrt fsqrt (
-                .aclk                (clk),
-                .aclken              (sqrt_pe_enable),
-                .s_axis_a_tvalid     (1'b1),
-                .s_axis_a_tdata      (sqrt_pe_data_in[i][0 +: 32]),
-                `UNUSED_PIN (m_axis_result_tvalid),
-                .m_axis_result_tdata (sqrt_pe_data_out[i][0 +: 32]),
-                .m_axis_result_tuser (tuser)
-            );
-                                                          // NV, DZ, OF, UF, NX
-            assign sqrt_pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = {tuser, 1'b0, 1'b0, 1'b0, 1'b0};
-        end
-
-        assign sqrt_has_fflags = 1;
-    `else
-        for (genvar i = 0; i < NUM_PES_SQRT; ++i) begin : g_sqrt_units
-            VX_fdivsqrt_unit fsqrt_unit (
-                .clk     (clk),
-                .reset   (reset),
-                .enable  (sqrt_pe_enable),
-                .fmt     (sqrt_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
-                .frm     (sqrt_pe_shared[0+:INST_FRM_BITS]),
-                .dataa   (sqrt_pe_data_in[i][0+:32]),
-                .datab   (32'b0),
-                .is_sqrt (1'b1),
-                .result  (sqrt_pe_data_out[i][0+:32]),
-                .fflags  (sqrt_pe_data_out[i][`XLEN+:`FP_FLAGS_BITS])
-            );
-        end
-
-        assign sqrt_has_fflags = 1;
-    `endif
-
-        fflags_t sqrt_merged_fflags;
-        `FPU_MERGE_FFLAGS(sqrt_merged_fflags, sqrt_fflags_lanes, sqrt_mask_out, NUM_LANES);
-        assign path_data_out[1] = {sqrt_result, sqrt_has_fflags, sqrt_merged_fflags, sqrt_tag_out};
-
-        VX_stream_arb #(
-            .NUM_INPUTS (2),
-            .DATAW      (PATH_RSP_DATAW),
-            .ARBITER    ("P"),
-            .OUT_BUF    (0)
-        ) rsp_arb (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (path_valid_out),
-            .ready_in  (path_ready_out),
-            .data_in   (path_data_out),
-            .data_out  ({per_core_result[FPU_DIVSQRT], per_core_has_fflags[FPU_DIVSQRT], per_core_fflags[FPU_DIVSQRT], per_core_tag_out[FPU_DIVSQRT]}),
-            .valid_out (per_core_valid_out[FPU_DIVSQRT]),
-            .ready_out (per_core_ready_out[FPU_DIVSQRT]),
-            `UNUSED_PIN (sel_out)
-        );
+        assign per_core_has_fflags[FPU_DIVSQRT] = 1;
+        fflags_t merged_fflags;
+        `FPU_MERGE_FFLAGS(merged_fflags, fflags_lanes, mask_out, NUM_LANES);
+        assign per_core_fflags[FPU_DIVSQRT] = merged_fflags;
 
     end
 
-    // CVT core ///////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+    // CVT core
+    ///////////////////////////////////////////////////////////////////////////
 
     begin : g_cvt
 
@@ -570,10 +317,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .clk           (clk),
             .reset         (reset),
             .valid_in      (per_core_valid_in[FPU_CVT]),
-            .mask_in       (per_core_mask_in[FPU_CVT]),
+            .mask_in       (per_core_mask[FPU_CVT]),
             .data_in       (per_core_dataa[FPU_CVT]),
-            .shared_in     ({per_core_op_type[FPU_CVT], per_core_fmt[FPU_CVT], per_core_frm[FPU_CVT]}),
-            .tag_in        (per_core_tag_in[FPU_CVT]),
+            .shared_in     ({per_core_op[FPU_CVT], per_core_fmt[FPU_CVT], per_core_frm[FPU_CVT]}),
+            .tag_in        (per_core_tag[FPU_CVT]),
             .ready_in      (per_core_ready_in[FPU_CVT]),
             .pe_enable     (pe_enable),
             `UNUSED_PIN    (pe_mask_out),
@@ -634,7 +381,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     end
 
-    // NCP core ///////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+    // NCP core
+    ///////////////////////////////////////////////////////////////////////////
 
     begin : g_ncp
 
@@ -666,10 +415,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .clk           (clk),
             .reset         (reset),
             .valid_in      (per_core_valid_in[FPU_NCP]),
-            .mask_in       (per_core_mask_in[FPU_NCP]),
+            .mask_in       (per_core_mask[FPU_NCP]),
             .data_in       (lane_data),
-            .shared_in     ({per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]}),
-            .tag_in        (per_core_tag_in[FPU_NCP]),
+            .shared_in     ({per_core_op[FPU_NCP], per_core_frm[FPU_NCP]}),
+            .tag_in        (per_core_tag[FPU_NCP]),
             .ready_in      (per_core_ready_in[FPU_NCP]),
             .pe_enable     (pe_enable),
             `UNUSED_PIN    (pe_mask_out),
@@ -714,6 +463,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     end
 
+    ///////////////////////////////////////////////////////////////////////////
+    // Response arbitration
     ///////////////////////////////////////////////////////////////////////////
 
     reg [NUM_FPCORES-1:0][RSP_DATAW-1:0] per_core_data_out;

@@ -29,6 +29,7 @@ Key features:
   - Supports [[param]] blocks in TOML to declare parameter variables used only in expr evaluation / unresolved RHS.
   - builtin/param variables are NOT emitted to outputs.
   - Supports "expr:" values in TOML, with $NAME references.
+  - supports local/private variables as lowercase definitions to use with expressions.
   - Unresolved header mode (default for cpp/verilog): emits preprocessor-friendly
     definitions that can be overridden from -D flags.
   - Resolved mode (-r/--resolved): fully evaluates expressions and emits
