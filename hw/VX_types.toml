@@ -162,7 +162,8 @@ VX_CSR_CTA_LMEM_ADDR  = 0xCDF
 VX_DCR_MPM_CLASS_BASE = 0
 VX_DCR_MPM_CLASS_CORE = 1
 VX_DCR_MPM_CLASS_MEM = 2
-VX_DCR_MPM_CLASS_DXA = 6   # DXA copy-engine perf counters
+VX_DCR_MPM_CLASS_DXA = 6
+VX_DCR_MPM_CLASS_TCU = 7
 
 [csr_mpm_base]
 VX_CSR_MCYCLE = 0xB00
@@ -319,3 +320,8 @@ VX_CSR_MPM_DXA_SMEM_WRITES  = 0xB06  # SMEM word writes issued
 VX_CSR_MPM_DXA_SMEM_WRITES_H  = 0xB86
 VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
 VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
+
+[csr_mpm_tcu]
+# PERF: WGMMA tile-buffer (per-core; summed across blocks)
+VX_CSR_MPM_TCU_TBUF_FETCH_ST   = 0xB03  # cycles spent fetching A/B tiles into tile buffer
+VX_CSR_MPM_TCU_TBUF_FETCH_ST_H = 0xB83
