@@ -33,6 +33,7 @@ all:
 	$(MAKE) -C pathfinder
 	$(MAKE) -C softmax
 	$(MAKE) -C sgemm_tcu
+	$(MAKE) -C sgemm_tcu_mx
 	$(MAKE) -C sgemm2_tcu
 	$(MAKE) -C sgemm_tcu_sp
 	$(MAKE) -C sgemm2_dxa
