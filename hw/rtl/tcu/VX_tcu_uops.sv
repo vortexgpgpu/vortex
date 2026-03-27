@@ -76,6 +76,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     end
     // Accumulator register index: m*WG_N_STEPS + n → 0..(WG_M*WG_N-1) (maps to f[0]..f[NRC-1])
     wire [4:0] wg_rs3_off = 5'(wg_m_index) * 5'(TCU_WG_N_STEPS) + 5'(wg_n_index);
+    wire is_first_uop = (wg_k_index == '0 && wg_m_index == '0 && wg_n_index == '0);
 `endif
 
 `ifdef TCU_SPARSE_ENABLE
@@ -215,33 +216,31 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     ibuffer_t ibuf_r;
     always_comb begin
         ibuf_r = ibuf_in;
-`ifdef TCU_SPARSE_ENABLE
+    `ifdef TCU_SPARSE_ENABLE
         n_sp_s = '0;
         m_sp_s = '0;
-`endif
-`ifdef TCU_WGMMA_ENABLE
+    `endif
+    `ifdef TCU_WGMMA_ENABLE
         if (is_wgmma) begin
-            // WGMMA µop (NR=32 tile):
-            //   rd/rs1 → f[TCU_WG_RC + wg_rs3_off] = C/D accumulator fragment (0..NRC-1)
-            //   rs2    → x10 (a0) = desc_a (smem descriptor, integer)
-            //   rs3    → x11 (a1) = desc_b (smem descriptor, integer)
+            // WGMMA µop:
+            //   rd/rs3 → C/D accumulator
+            //   rs1    → x10 (a0) = desc_a
+            //   rs2    → x11 (a1) = desc_b
             ibuf_r.op_args.tcu.step_m = 4'(wg_m_index);
             ibuf_r.op_args.tcu.step_n = 4'(wg_n_index);
             ibuf_r.op_args.tcu.step_k = 4'(wg_k_index);
             ibuf_r.wb  = 1;
             ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
-            ibuf_r.rs1 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);  // C accumulator
             // Descriptors sourced only on the very first uop; per-warp tile cache handles the rest.
-            ibuf_r.rs2 = (wg_k_index == '0 && wg_m_index == '0 && wg_n_index == '0)
-                         ? make_reg_num(REG_TYPE_I, 5'd10)   // x10 = desc_a
-                         : make_reg_num(REG_TYPE_I, 5'd0);
-            ibuf_r.rs3 = (wg_k_index == '0 && wg_m_index == '0 && wg_n_index == '0)
-                         ? make_reg_num(REG_TYPE_I, 5'd11)   // x11 = desc_b
-                         : make_reg_num(REG_TYPE_I, 5'd0);
+            ibuf_r.rs1 = make_reg_num(REG_TYPE_I, 5'd10);
+            ibuf_r.rs2 = make_reg_num(REG_TYPE_I, 5'd11);
+            ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);  // C accumulator
+            ibuf_r.used_rs[0] = is_first_uop;
+            ibuf_r.used_rs[1] = is_first_uop;
         end else
-`endif
+    `endif
         begin
-`ifdef TCU_SPARSE_ENABLE
+    `ifdef TCU_SPARSE_ENABLE
         if (SYM_SPARSE) begin
             ibuf_r.tmask = is_sparse
                 ? (is_meta_phase ? ibuf_in.tmask
@@ -269,7 +268,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
             : make_reg_num(REG_TYPE_F, rs1);
         ibuf_r.rs2 = meta_uop ? ibuf_in.rs2 : make_reg_num(REG_TYPE_F, rs2);
         ibuf_r.rs3 = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
-`else
+    `else
         ibuf_r.op_args.tcu.step_m = 4'(m_index);
         ibuf_r.op_args.tcu.step_n = 4'(n_index);
         ibuf_r.op_args.tcu.step_k = 4'(k_index);
@@ -278,7 +277,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r.rs1 = make_reg_num(REG_TYPE_F, rs1);
         ibuf_r.rs2 = make_reg_num(REG_TYPE_F, rs2);
         ibuf_r.rs3 = make_reg_num(REG_TYPE_F, rs3);
-`endif
+    `endif
         end
     end
 

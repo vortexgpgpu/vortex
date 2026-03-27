@@ -46,33 +46,30 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire reset,
 
 `ifdef PERF_ENABLE
-    output wire [PERF_CTR_BITS-1:0]     tbuf_fetch_stalls,
+    output wire [PERF_CTR_BITS-1:0] tbuf_fetch_stalls,
 `endif
 
     // Execute-side observation
-    input  wire                         req_valid,
-    input  wire [NW_WIDTH-1:0]          req_wid,
-    input  wire                         req_is_sparse,
-    input  wire [3:0]                   req_step_m,
-    input  wire [3:0]                   req_step_n,
-    input  wire [3:0]                   req_step_k,
-    input  wire [3:0]                   req_fmt_s,
-    input  wire [`XLEN-1:0]             req_desc_a,
-    input  wire [`XLEN-1:0]             req_desc_b,
+    input  wire                     req_valid,
+    input  wire [NW_WIDTH-1:0]      req_wid,
+    input  wire                     req_is_sparse,
+    input  wire [3:0]               req_step_m,
+    input  wire [3:0]               req_step_n,
+    input  wire [3:0]               req_step_k,
+    input  wire [3:0]               req_fmt_s,
+    input  wire [`XLEN-1:0]         req_desc_a,
+    input  wire [`XLEN-1:0]         req_desc_b,
 
-    // Bank-parallel LMEM read port
-    VX_tcu_lmem_if.master   tcu_lmem_if,
+    // LMEM read port
+    VX_tcu_lmem_if.master           tcu_lmem_if,
 
     // Tile buffer outputs
-    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]    tbuf_rs1_data,
-    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]    tbuf_rs2_data,
-    output wire                                    tbuf_ready
-
+    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
+    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs2_data,
 `ifdef TCU_SPARSE_ENABLE
-    ,
-    // Per-µop metadata slice for WGMMA_SP (same format as VX_tcu_meta output)
-    output wire [TCU_MAX_META_BLOCK_WIDTH-1:0]     tbuf_vld_meta_block
+    output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
 `endif
+    output wire                     tbuf_ready
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -149,10 +146,10 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
 `ifdef TCU_SPARSE_ENABLE
-    wire is_sparse_wgmma = req_is_sparse;
+    wire is_sparse = req_is_sparse;
 `else
-    wire is_sparse_wgmma = 1'b0;
-    `UNUSED_VAR (is_sparse_wgmma)
+    wire is_sparse = 1'b0;
+    `UNUSED_VAR (is_sparse)
     `UNUSED_VAR (req_is_sparse)
 `endif
 
@@ -195,8 +192,8 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         SEND_FETCH_META = 2'd3
     } send_state_e;
 
-    send_state_e            send_state_r;
-    logic [SLOT_W-1:0]      send_slot_r;
+    send_state_e       send_state_r;
+    logic [SLOT_W-1:0] send_slot_r;
 
     wire in_fetch_a    = (send_state_r == SEND_FETCH_A);
     wire in_fetch_b    = (send_state_r == SEND_FETCH_B);
@@ -261,7 +258,7 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         endcase
     end
 
-    assign tcu_lmem_if.req_data.addr = phase_row_base + BANK_ADDR_WIDTH'(req_ctr_r);
+    assign tcu_lmem_if.req_addr = phase_row_base + BANK_ADDR_WIDTH'(req_ctr_r);
 
     // -----------------------------------------------------------------------
     // Descriptor parsing (combinational) — used only during slot allocation
@@ -285,7 +282,7 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // desc_a_word_base; metadata immediately follows at +A_TOTAL_SP.
     // Dense A occupies A_TOTAL words (no metadata after it).
     wire [LMEM_ADDR_WIDTH-1:0] desc_meta_word_base = desc_a_word_base
-        + LMEM_ADDR_WIDTH'(is_sparse_wgmma ? A_TOTAL_SP : A_TOTAL);
+        + LMEM_ADDR_WIDTH'(is_sparse ? A_TOTAL_SP : A_TOTAL);
     wire [BANK_ADDR_WIDTH-1:0] desc_meta_row_base  = desc_meta_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
     if (BANK_SEL_BITS > 0) begin : g_unused_sparse_word_base_lsbs
         `UNUSED_VAR (desc_b_word_base[BANK_SEL_BITS-1:0])
@@ -534,7 +531,7 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 slot_a_row_base [alloc_idx] <= desc_a_row_base;
                 slot_b_row_base [alloc_idx] <= desc_b_row_base;
             `ifdef TCU_SPARSE_ENABLE
-                slot_is_sparse      [alloc_idx] <= is_sparse_wgmma;
+                slot_is_sparse      [alloc_idx] <= is_sparse;
                 slot_meta_row_base  [alloc_idx] <= desc_meta_row_base;
                 slot_meta_stride    [alloc_idx] <= init_meta_stride;
                 slot_meta_bank_rows [alloc_idx] <= init_meta_rows;
@@ -552,12 +549,12 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 automatic int idx = int'(rsp_ctr_r) * NUM_BANKS + b;
                 if (in_fetch_a && idx < A_TOTAL)
-                    slot_a_buf[send_slot_r][idx] <= tcu_lmem_if.rsp_data.data[b];
+                    slot_a_buf[send_slot_r][idx] <= tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
                 if (in_fetch_b && idx < B_TOTAL)
-                    slot_b_buf[send_slot_r][idx] <= tcu_lmem_if.rsp_data.data[b];
+                    slot_b_buf[send_slot_r][idx] <= tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
             `ifdef TCU_SPARSE_ENABLE
                 if (in_fetch_meta && idx < META_TOTAL_MAX)
-                    slot_meta_buf[send_slot_r][idx] <= tcu_lmem_if.rsp_data.data[b];
+                    slot_meta_buf[send_slot_r][idx] <= tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
             `endif
             end
         end
@@ -604,7 +601,7 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     //           Pairs of consecutive B words are placed for sp_mux gather.
 
 `ifdef TCU_SPARSE_ENABLE
-    wire [OFF_W-1:0] b_off_w = is_sparse_wgmma
+    wire [OFF_W-1:0] b_off_w = is_sparse
         ? (OFF_W'(req_step_n) & OFF_W'(TCU_B_SUB_BLOCKS_SP-1)) << LG_B_BS_SP
         : (OFF_W'(req_step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1))    << LG_B_BS;
 `else
@@ -732,7 +729,7 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
-    assign tbuf_vld_meta_block = TCU_MAX_META_BLOCK_WIDTH'(extracted_meta);
+    assign tbuf_sp_meta = TCU_MAX_META_BLOCK_WIDTH'(extracted_meta);
 `endif
 
     // -----------------------------------------------------------------------
@@ -759,13 +756,13 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         if (!reset) begin
             if (alloc_en)
                 `TRACE(3, ("%t: %s tile-buf: alloc slot=%0d wid=%0d desc_a=0x%0h desc_b=0x%0h sparse=%0b\n",
-                    $time, INSTANCE_ID, alloc_idx, req_wid, req_desc_a, req_desc_b, is_sparse_wgmma))
+                    $time, INSTANCE_ID, alloc_idx, req_wid, req_desc_a, req_desc_b, is_sparse))
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                 `TRACE(3, ("%t: %s tile-buf: rd_req slot=%0d addr=0x%0h state=%0d req_ctr=%0d\n",
-                    $time, INSTANCE_ID, send_slot_r, tcu_lmem_if.req_data.addr, send_state_r, req_ctr_r))
+                    $time, INSTANCE_ID, send_slot_r, tcu_lmem_if.req_addr, send_state_r, req_ctr_r))
             if (tcu_lmem_if.rsp_valid)
                 `TRACE(3, ("%t: %s tile-buf: rd_rsp slot=%0d data[0]=0x%0h state=%0d rsp_ctr=%0d\n",
-                    $time, INSTANCE_ID, send_slot_r, tcu_lmem_if.rsp_data.data[0], send_state_r, rsp_ctr_r))
+                    $time, INSTANCE_ID, send_slot_r, tcu_lmem_if.rsp_data[0 +: `XLEN], send_state_r, rsp_ctr_r))
             if (fetch_done_now)
                 `TRACE(3, ("%t: %s tile-buf: slot=%0d READY (fetch_done)\n",
                     $time, INSTANCE_ID, send_slot_r))

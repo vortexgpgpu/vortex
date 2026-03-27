@@ -78,8 +78,8 @@ module VX_core import VX_gpu_pkg::*; #(
 `ifdef TCU_WGMMA_ENABLE
     localparam TCU_LMEM_BANK_ADDR_W = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`LMEM_NUM_BANKS);
     VX_tcu_lmem_if #(
-        .NUM_BANKS      (`LMEM_NUM_BANKS),
-        .BANK_ADDR_WIDTH(TCU_LMEM_BANK_ADDR_W)
+        .DATA_WIDTH(`LMEM_NUM_BANKS * `XLEN),
+        .ADDR_WIDTH(TCU_LMEM_BANK_ADDR_W)
     ) tcu_lmem_if();
 `endif
 

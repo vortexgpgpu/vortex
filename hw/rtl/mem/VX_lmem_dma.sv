@@ -45,7 +45,7 @@ module VX_lmem_dma import VX_gpu_pkg::*; #(
 
     assign lmem_dma_if.req_valid       = dxa_bank_wr_if.wr_valid || tcu_lmem_if.req_valid;
     assign lmem_dma_if.req_data.rw     = dxa_grant;
-    assign lmem_dma_if.req_data.addr   = dxa_grant ? dxa_bank_wr_if.wr_addr : tcu_lmem_if.req_data.addr;
+    assign lmem_dma_if.req_data.addr   = dxa_grant ? dxa_bank_wr_if.wr_addr : tcu_lmem_if.req_addr;
     assign lmem_dma_if.req_data.data   = dxa_grant ? dxa_bank_wr_if.wr_data : '0;
     assign lmem_dma_if.req_data.byteen = dxa_grant ? dxa_bank_wr_if.wr_byteen : '0;
     assign lmem_dma_if.req_data.flags  = '0;
@@ -64,8 +64,8 @@ module VX_lmem_dma import VX_gpu_pkg::*; #(
             dma_rsp_is_write_r <= lmem_dma_if.req_data.rw;
     end
 
-    assign tcu_lmem_if.rsp_data.data = lmem_dma_if.rsp_data.data;
-    assign tcu_lmem_if.rsp_valid     = lmem_dma_if.rsp_valid && !dma_rsp_is_write_r;
+    assign tcu_lmem_if.rsp_data  = lmem_dma_if.rsp_data.data;
+    assign tcu_lmem_if.rsp_valid = lmem_dma_if.rsp_valid && !dma_rsp_is_write_r;
     assign lmem_dma_if.rsp_ready  = 1'b1;
     `UNUSED_VAR (lmem_dma_if.rsp_data.tag)
 
@@ -123,13 +123,13 @@ module VX_lmem_dma import VX_gpu_pkg::*; #(
     `UNUSED_VAR (reset)
     assign lmem_dma_if.req_valid       = tcu_lmem_if.req_valid;
     assign lmem_dma_if.req_data.rw     = 1'b0;
-    assign lmem_dma_if.req_data.addr   = tcu_lmem_if.req_data.addr;
+    assign lmem_dma_if.req_data.addr   = tcu_lmem_if.req_addr;
     assign lmem_dma_if.req_data.data   = '0;
     assign lmem_dma_if.req_data.byteen = '0;
     assign lmem_dma_if.req_data.flags  = '0;
     assign lmem_dma_if.req_data.tag    = '0;
     assign tcu_lmem_if.req_ready       = lmem_dma_if.req_ready;
-    assign tcu_lmem_if.rsp_data.data   = lmem_dma_if.rsp_data.data;
+    assign tcu_lmem_if.rsp_data        = lmem_dma_if.rsp_data.data;
     assign tcu_lmem_if.rsp_valid       = lmem_dma_if.rsp_valid;
     assign lmem_dma_if.rsp_ready       = 1'b1;
     `UNUSED_VAR (lmem_dma_if.rsp_data.tag)
