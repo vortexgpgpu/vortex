@@ -317,8 +317,10 @@ import VX_fpu_pkg::*;
                 `ifdef EXT_TCU_ENABLE
                     `VX_DCR_MPM_CLASS_TCU: begin
                         case (read_addr)
-                        // PERF: tile-buffer fetch stalls
                         `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_FETCH_ST, read_data_ro_w, pipeline_perf.tcu.tbuf_fetch_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_WGMMA_INSTRS,  read_data_ro_w, pipeline_perf.tcu.wgmma_instrs);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_WGMMA_STALLS,  read_data_ro_w, pipeline_perf.tcu.wgmma_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_READS,    read_data_ro_w, pipeline_perf.tcu.lmem_reads);
                         default:;
                         endcase
                     end

@@ -747,6 +747,9 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         auto tcu_perf = core_->tensor_unit()->perf_stats();
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_TCU_TBUF_FETCH_ST, tcu_perf.tbuf_fetch_stalls);
+        CSR_READ_64(VX_CSR_MPM_TCU_WGMMA_INSTRS,  tcu_perf.wgmma_instrs);
+        CSR_READ_64(VX_CSR_MPM_TCU_WGMMA_STALLS,  tcu_perf.wgmma_stalls);
+        CSR_READ_64(VX_CSR_MPM_TCU_LMEM_READS,    tcu_perf.lmem_reads);
         }
       } break;
     #endif

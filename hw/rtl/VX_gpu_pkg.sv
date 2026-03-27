@@ -828,7 +828,10 @@ package VX_gpu_pkg;
 
 `ifdef EXT_TCU_ENABLE
     typedef struct packed {
-        logic [PERF_CTR_BITS-1:0] tbuf_fetch_stalls;
+        logic [PERF_CTR_BITS-1:0] lmem_reads;        // LMEM read transactions issued by tile buffer
+        logic [PERF_CTR_BITS-1:0] wgmma_stalls;      // cycles: WGMMA valid but stalled (tbuf or mdata)
+        logic [PERF_CTR_BITS-1:0] wgmma_instrs;      // WGMMA µops executed
+        logic [PERF_CTR_BITS-1:0] tbuf_fetch_stalls;  // cycles stalled waiting for LMEM tile fetch
     } tcu_perf_t;
 `endif
 

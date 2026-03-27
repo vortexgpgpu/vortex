@@ -778,6 +778,18 @@ public:
         }
       }
     }
+
+    // Performance counters.
+    // wgmma_instrs: one per µop (each wgmma() call is one µop).
+    ++perf_stats_.wgmma_instrs;
+    // lmem_reads: in RTL each tile fetch issues (A_BANK_ROWS + B_BANK_ROWS) LMEM
+    // transactions, one per warp per outer-loop iteration (first µop only).
+    // Approximate in simx: count reads on first µop of each tile.
+    if (step_m == 0 && step_n == 0 && step_k == 0) {
+      constexpr uint32_t a_bank_rows = (wg_cfg::xtileM * wg_cfg::xtileK + LMEM_NUM_BANKS - 1) / LMEM_NUM_BANKS;
+      constexpr uint32_t b_bank_rows = (wg_cfg::xtileK * wg_cfg::xtileN + LMEM_NUM_BANKS - 1) / LMEM_NUM_BANKS;
+      perf_stats_.lmem_reads += a_bank_rows + b_bank_rows;
+    }
   }
 
   const PerfStats& perf_stats() const {

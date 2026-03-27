@@ -104,56 +104,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef TCU_SPARSE_ENABLE
     wire [`LOG2UP(`NUM_WARPS)-1:0] wid = execute_if.data.header.wid;
-
-    // meta_store: extract per-row write data from rs1_data lanes
-    localparam PER_WARP_DEPTH  = TCU_META_PER_WARP_DEPTH;
-    localparam COLS_PER_LOAD   = TCU_META_COLS_PER_LOAD;
-    localparam BANKS_PER_STORE = TCU_BANKS_PER_STORE;
-    localparam STORES_PER_COL  = TCU_STORES_PER_COL;
-    localparam LG_CPL = $clog2((COLS_PER_LOAD > 1) ? COLS_PER_LOAD : 2);
-    localparam LG_PD  = $clog2(PER_WARP_DEPTH);
-    localparam LG_SPC = (STORES_PER_COL > 1) ? $clog2(STORES_PER_COL) : 1;
     wire meta_wr_en = execute_fire && is_meta_store;
-    wire [PER_WARP_DEPTH-1:0][31:0] meta_wr_data;
-
-    // Derive actual column index and sub-store index from fmt_d
-    wire [3:0] meta_actual_col_idx;
-    wire [LG_SPC-1:0] sub_store_idx;
-    if (STORES_PER_COL > 1) begin : g_meta_spc
-        assign meta_actual_col_idx = 4'(fmt_d >> LG_SPC);
-        assign sub_store_idx = fmt_d[LG_SPC-1:0];
-    end else begin : g_meta_spc
-        assign meta_actual_col_idx = fmt_d;
-        assign sub_store_idx = '0;
-    end
-    `UNUSED_VAR (sub_store_idx)
-
-    // Per-bank write enable for partial-bank writes (NT < PER_WARP_DEPTH)
-    wire [PER_WARP_DEPTH-1:0] meta_wr_bank_en;
-    for (genvar b = 0; b < PER_WARP_DEPTH; ++b) begin : g_bank_en
-        if (STORES_PER_COL > 1) begin : g_partial
-            assign meta_wr_bank_en[b] = (LG_SPC'(b / BANKS_PER_STORE) == sub_store_idx);
-        end else begin : g_partial
-            assign meta_wr_bank_en[b] = 1'b1;
-        end
-    end
-
-    // Write data remapping
-    if (STORES_PER_COL > 1) begin : g_meta_wr_mode
-        for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
-            assign meta_wr_data[r] = 32'(rs1_data[r % BANKS_PER_STORE]);
-        end
-    end else begin : g_meta_wr_mode
-        wire [$clog2(TCU_BLOCK_CAP)-1:0] meta_thread_offset;
-        if (COLS_PER_LOAD > 1) begin : g_meta_off
-            assign meta_thread_offset = {meta_actual_col_idx[LG_CPL-1:0], {LG_PD{1'b0}}};
-        end else begin : g_meta_off
-            assign meta_thread_offset = '0;
-        end
-        for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
-            assign meta_wr_data[r] = 32'(rs1_data[meta_thread_offset + r]);
-        end
-    end
 
     // meta_store: force rd=0 in mdata_queue header
     tcu_header_t mdata_queue_in;
@@ -241,35 +192,32 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     //   WMMA_SP:  from VX_tcu_meta (per-warp register-file metadata store)
     //   WGMMA_SP: from VX_tcu_tile_buf (pre-extracted from SMEM metadata)
-    //   Both produce the same format: TCU_MAX_META_BLOCK_WIDTH bits,
+    //   Both produce TCU_TC_M per-row slices of TCU_MAX_META_ROW_WIDTH bits,
     //   indexed by (step_m, step_k).
 
 `ifdef TCU_SPARSE_ENABLE
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
     VX_tcu_meta #(
-        .INSTANCE_ID     (INSTANCE_ID),
-        .META_BLOCK_WIDTH(TCU_MAX_META_BLOCK_WIDTH),
-        .PER_WARP_DEPTH  (PER_WARP_DEPTH)
+        .INSTANCE_ID  (INSTANCE_ID)
     ) tcu_meta (
-        .clk           (clk),
-        .reset         (reset),
-        .raddr_wid     (wid),
-        .step_m        (step_m),
-        .step_k        (step_k),
-        .vld_meta_block(wmma_sp_meta),
-        .wr_en         (meta_wr_en),
-        .wr_wid        (wid),
-        .wr_col_idx    (meta_actual_col_idx),
-        .wr_data       (meta_wr_data),
-        .wr_bank_en    (meta_wr_bank_en)
+        .clk    (clk),
+        .reset  (reset),
+        .wr_en  (meta_wr_en),
+        .wr_wid (wid),
+        .wr_idx (fmt_d),
+        .wr_data(rs1_data),
+        .rd_wid (wid),
+        .step_m (step_m),
+        .step_k (step_k),
+        .vld_block(wmma_sp_meta)
     );
 
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block;
-`ifdef TCU_WGMMA_ENABLE
-    assign vld_meta_block = is_wgmma ? tbuf_sp_meta : wmma_sp_meta;
-`else
-    assign vld_meta_block = wmma_sp_meta;
-`endif
+    `ifdef TCU_WGMMA_ENABLE
+        assign vld_meta_block = is_wgmma ? tbuf_sp_meta : wmma_sp_meta;
+    `else
+        assign vld_meta_block = wmma_sp_meta;
+    `endif
 `endif
 
     // -----------------------------------------------------------------------
@@ -300,7 +248,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
 
         `ifdef TCU_SPARSE_ENABLE
-            // Single unified vld_mask — works for both WMMA_SP and WGMMA_SP
             VX_tcu_sp_mux #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .ROW_IDX     (i)
