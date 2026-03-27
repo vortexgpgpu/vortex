@@ -4,7 +4,7 @@
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, false, 32>;
+using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, false, 32, 8>;
 
 extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -35,7 +35,7 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     // Cooperative load: A tile [tile_row .. tile_row+tileM, k .. k+tileK] into A_smem
     uint32_t a_size = ctx::tileM * ctx::tileK;
-    for (uint32_t i = tid; i < a_size; i += CTA_SIZE) {
+    for (uint32_t i = tid; i < a_size; i += blockDim.x) {
       uint32_t r = i / ctx::tileK;
       uint32_t c = i % ctx::tileK;
       A_smem[r * ctx::tileK + c] = pA[(tile_row + r) * K + (k + c)];
@@ -43,7 +43,7 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     // Cooperative load: B tile [k .. k+tileK, tile_col .. tile_col+tileN] into B_smem
     uint32_t b_size = ctx::tileK * ctx::tileN;
-    for (uint32_t i = tid; i < b_size; i += CTA_SIZE) {
+    for (uint32_t i = tid; i < b_size; i += blockDim.x) {
       uint32_t r = i / ctx::tileN;
       uint32_t c = i % ctx::tileN;
       B_smem[r * ctx::tileN + c] = pB[(k + r) * N + (tile_col + c)];

@@ -13,35 +13,44 @@
 
 `include "VX_define.vh"
 
-interface VX_dxa_req_bus_if import VX_gpu_pkg::*, VX_dxa_pkg::*; ();
+// Bank-parallel LMEM read port used by the TCU tile buffer.
+// Master drives req_valid/req_data; slave drives req_ready/rsp_valid/rsp_data.
+// Response arrives exactly one cycle after the request is accepted.
+
+interface VX_tcu_lmem_if #(
+    parameter NUM_BANKS       = 4,
+    parameter BANK_ADDR_WIDTH = 12
+) ();
 
     typedef struct packed {
-        logic [NC_WIDTH-1:0]      core_id;
-        logic [UUID_WIDTH-1:0]    uuid;
-        logic [NW_WIDTH-1:0]      wid;
-        logic [`XLEN-1:0]         smem_addr;   // from lane 0 rs1
-        logic [`XLEN-1:0]         meta;        // from lane 1 rs1 (desc[3:0], bar[30:4], 1[31])
-        logic [4:0][`XLEN-1:0]    coords;      // [0]=lane2.rs1,[1]=lane3.rs1,[2]=lane0.rs2,[3]=lane1.rs2,[4]=lane2.rs2
-    `ifdef EXT_DXA_MULTICAST_ENABLE
-        logic                     is_multicast; // funct3 >= 5
-        logic [`NUM_WARPS-1:0]    cta_mask;     // from rs2 lane 3 (multicast only)
-    `endif
+        logic [BANK_ADDR_WIDTH-1:0] addr;
     } req_data_t;
 
-    logic      req_valid;
-    req_data_t req_data;
-    logic      req_ready;
+    typedef struct packed {
+        logic [NUM_BANKS-1:0][`XLEN-1:0] data;
+    } rsp_data_t;
+
+    logic       req_valid;
+    req_data_t  req_data;
+    logic       req_ready;
+
+    logic       rsp_valid;
+    rsp_data_t  rsp_data;
 
     modport master (
         output req_valid,
         output req_data,
-        input  req_ready
+        input  req_ready,
+        input  rsp_valid,
+        input  rsp_data
     );
 
     modport slave (
         input  req_valid,
         input  req_data,
-        output req_ready
+        output req_ready,
+        output rsp_valid,
+        output rsp_data
     );
 
 endinterface

@@ -75,10 +75,22 @@ module VX_core import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_mem_if[`NUM_LSU_BLOCKS]();
 
+`ifdef TCU_WGMMA_ENABLE
+    localparam TCU_LMEM_BANK_ADDR_W = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`LMEM_NUM_BANKS);
+    VX_tcu_lmem_if #(
+        .NUM_BANKS      (`LMEM_NUM_BANKS),
+        .BANK_ADDR_WIDTH(TCU_LMEM_BANK_ADDR_W)
+    ) tcu_lmem_if();
+`endif
+
 `ifdef PERF_ENABLE
     lmem_perf_t lmem_perf;
     coalescer_perf_t coalescer_perf;
     pipeline_perf_t pipeline_perf;
+`ifdef EXT_TCU_ENABLE
+    tcu_perf_t tcu_perf;
+    assign pipeline_perf.tcu = tcu_perf;
+`endif
     sysmem_perf_t sysmem_perf_tmp;
     always @(*) begin
         sysmem_perf_tmp = sysmem_perf;
@@ -185,6 +197,9 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .sysmem_perf    (sysmem_perf_tmp),
         .pipeline_perf  (pipeline_perf),
+    `ifdef EXT_TCU_ENABLE
+        .tcu_perf       (tcu_perf),
+    `endif
     `endif
 
         .lsu_mem_if     (lsu_mem_if),
@@ -196,6 +211,9 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .dcr_csr_if     (dcr_csr_if),
 
+    `ifdef TCU_WGMMA_ENABLE
+        .tcu_lmem_if    (tcu_lmem_if),
+    `endif
     `ifdef EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
@@ -226,6 +244,9 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .lmem_perf     (lmem_perf),
         .coalescer_perf(coalescer_perf),
+    `endif
+    `ifdef TCU_WGMMA_ENABLE
+        .tcu_lmem_if   (tcu_lmem_if),
     `endif
     `ifdef EXT_DXA_ENABLE
         .dxa_bank_wr_if (dxa_bank_wr_if),

@@ -5,7 +5,7 @@
 
 namespace vt = vortex::tensor;
 // NR=32 for WGMMA accumulator; is_sparse=true (A is 2:4 compressed in smem)
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, true, 32>;
+using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, true, 32, 8>;
 
 // smem layout: [A_compressed][meta][B_dense]
 static constexpr uint32_t smem_a_elems  = ctx::tileM * (ctx::tileK / 2);

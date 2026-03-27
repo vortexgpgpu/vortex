@@ -173,7 +173,7 @@ package VX_dxa_pkg;
         logic [31:0]                stride0;
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit;
         logic [31:0]                total_rows;
-        logic [31:0]                total_smem_writes;
+        logic [31:0]                total_lmem_writes;
         logic [31:0]                cfill;
         logic [31:0]                elem_bytes;
         logic [31:0]                rank;

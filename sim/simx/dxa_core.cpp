@@ -392,7 +392,7 @@ private:
         uint64_t latency = cycle_ - xfer.issue_cycle;
         ++perf_stats_.transfers;
         perf_stats_.total_latency += latency;
-        perf_stats_.smem_writes   += total_blocks;
+        perf_stats_.lmem_writes   += total_blocks;
         DT(3, simobject_->name() << "[" << sidx << "] complete: core="
            << xfer.req.core->id() << " bar=" << xfer.req.td->bar_id
            << " smem_blocks=" << total_blocks << " latency=" << latency);

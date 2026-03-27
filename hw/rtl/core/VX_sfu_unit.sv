@@ -155,8 +155,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
     VX_dxa_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-dxa", INSTANCE_ID))),
-        .CORE_ID (CORE_ID),
-        .NUM_LANES (NUM_LANES)
+        .CORE_ID (CORE_ID)
     ) dxa_unit (
         .clk        (clk),
         .reset      (reset),

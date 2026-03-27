@@ -316,8 +316,8 @@ VX_CSR_MPM_DXA_GMEM_READS  = 0xB04  # GMEM cache-line requests issued (after ded
 VX_CSR_MPM_DXA_GMEM_READS_H  = 0xB84
 VX_CSR_MPM_DXA_GMEM_DEDUP  = 0xB05  # GMEM cache-line requests saved by intra-row dedup
 VX_CSR_MPM_DXA_GMEM_DEDUP_H  = 0xB85
-VX_CSR_MPM_DXA_SMEM_WRITES  = 0xB06  # SMEM word writes issued
-VX_CSR_MPM_DXA_SMEM_WRITES_H  = 0xB86
+VX_CSR_MPM_DXA_LMEM_WRITES  = 0xB06  # SMEM word writes issued
+VX_CSR_MPM_DXA_LMEM_WRITES_H  = 0xB86
 VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
 VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
 

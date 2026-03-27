@@ -554,24 +554,27 @@ module VX_decode import VX_gpu_pkg::*; #(
                     end
                 `ifdef EXT_TCU_ENABLE
                     7'h02: begin
-                        if (funct3 == 3'h0) begin
-                            ex_type = EX_TCU;
-                        `ifdef TCU_SPARSE_ENABLE
-                            op_type = rs2[0] ? INST_OP_BITS'(INST_TCU_WMMA_SP)
-                                             : INST_OP_BITS'(INST_TCU_WMMA);
-                        `else
-                            op_type = INST_OP_BITS'(INST_TCU_WMMA);
-                        `endif
-                            op_args.tcu.fmt_s  = rs1[3:0];
-                            op_args.tcu.fmt_d  = rd[3:0];
-                            op_args.tcu.step_m = '0;
-                            op_args.tcu.step_n = '0;
-                            op_args.tcu.step_k = '0;
-                            `USED_FREG (rd);
-                            `USED_FREG (rs1);
-                            `USED_FREG (rs2);
-                            `USED_FREG (rs3);
-                        end
+                        ex_type = EX_TCU;
+                    `ifdef TCU_WGMMA_ENABLE
+                        op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA)
+                                            : INST_OP_BITS'(INST_TCU_WMMA);
+                    `else
+                        op_type = INST_OP_BITS'(INST_TCU_WMMA);
+                    `endif
+                    `ifdef TCU_SPARSE_ENABLE
+                        op_args.tcu.is_sparse = rs2[0];
+                    `else
+                        op_args.tcu.is_sparse = 1'b0;
+                    `endif
+                        op_args.tcu.fmt_s  = rs1[3:0];
+                        op_args.tcu.fmt_d  = rd[3:0];
+                        op_args.tcu.step_m = '0;
+                        op_args.tcu.step_n = '0;
+                        op_args.tcu.step_k = '0;
+                        `USED_FREG (rd);
+                        `USED_FREG (rs1);
+                        `USED_FREG (rs2);
+                        `USED_FREG (rs3);
                     end
                 `endif
                 `ifdef EXT_DXA_ENABLE

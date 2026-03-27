@@ -23,9 +23,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     // Read port: slave sends wid, master returns selected mscratch and cta_csrs
     logic [NW_WIDTH-1:0]            csr_rd_wid;
     logic [`MEM_ADDR_WIDTH-1:0]     mscratch;
-    /* verilator lint_off UNUSEDSIGNAL */
     cta_csrs_t                      cta_csrs;
-    /* verilator lint_on UNUSEDSIGNAL */
 
     // Write port: slave notifies scheduler of MSCRATCH CSR writes
     logic                           csr_wr_valid;

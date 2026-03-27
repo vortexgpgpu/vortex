@@ -21,6 +21,17 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          clk,
     input wire          reset,
 
+`ifdef TCU_WGMMA_ENABLE
+    // Tile buffer operand data (replaces RF rs1/rs2 for WGMMA)
+    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]          tbuf_rs1_data,
+    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]          tbuf_rs2_data,
+    input wire                                          tbuf_ready,
+    `ifdef TCU_SPARSE_ENABLE
+    // Pre-extracted metadata slice for WGMMA_SP (from tile buffer)
+    input wire [TCU_MAX_META_BLOCK_WIDTH-1:0]           tbuf_vld_meta_block,
+    `endif
+`endif
+
     // Inputs
     VX_execute_if.slave execute_if,
 
@@ -62,9 +73,24 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef TCU_SPARSE_ENABLE
     localparam LG_B_BS_SP = $clog2(TCU_B_BLOCK_SIZE_SP);
-
-    wire is_sparse = (execute_if.data.op_type == INST_TCU_WMMA_SP);
+    wire is_sparse = execute_if.data.op_args.tcu.is_sparse;
     wire is_meta_store = (execute_if.data.op_type == INST_TCU_META_STORE);
+`endif
+
+    // -----------------------------------------------------------------------
+    // Operand data mux: WGMMA uses tile buffer, WMMA uses register file
+    // -----------------------------------------------------------------------
+
+    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] rs1_data;
+    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] rs2_data;
+
+`ifdef TCU_WGMMA_ENABLE
+    wire is_wgmma = (execute_if.data.op_type == INST_TCU_WGMMA);
+    assign rs1_data = is_wgmma ? tbuf_rs1_data : execute_if.data.rs1_data;
+    assign rs2_data = is_wgmma ? tbuf_rs2_data : execute_if.data.rs2_data;
+`else
+    assign rs1_data = execute_if.data.rs1_data;
+    assign rs2_data = execute_if.data.rs2_data;
 `endif
 
     wire [3:0] step_m = execute_if.data.op_args.tcu.step_m;
@@ -74,12 +100,16 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [3:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
     wire [3:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
 
+    // -----------------------------------------------------------------------
+    // Sparse metadata: VX_tcu_meta (for WMMA_SP) + optional tile-buffer mux
+    // -----------------------------------------------------------------------
+
 `ifdef TCU_SPARSE_ENABLE
     wire [`LOG2UP(`NUM_WARPS)-1:0] wid = execute_if.data.header.wid;
 
     // meta_store: extract per-row write data from rs1_data lanes
-    localparam PER_WARP_DEPTH = TCU_META_PER_WARP_DEPTH;
-    localparam COLS_PER_LOAD  = TCU_META_COLS_PER_LOAD;
+    localparam PER_WARP_DEPTH  = TCU_META_PER_WARP_DEPTH;
+    localparam COLS_PER_LOAD   = TCU_META_COLS_PER_LOAD;
     localparam BANKS_PER_STORE = TCU_BANKS_PER_STORE;
     localparam STORES_PER_COL  = TCU_STORES_PER_COL;
     localparam LG_CPL = $clog2((COLS_PER_LOAD > 1) ? COLS_PER_LOAD : 2);
@@ -90,9 +120,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Derive actual column index and sub-store index from fmt_d
     wire [3:0] meta_actual_col_idx;
-    /* verilator lint_off UNUSEDSIGNAL */
     wire [LG_SPC-1:0] sub_store_idx;
-    /* verilator lint_on UNUSEDSIGNAL */
     if (STORES_PER_COL > 1) begin : g_meta_spc
         assign meta_actual_col_idx = 4'(fmt_d >> LG_SPC);
         assign sub_store_idx = fmt_d[LG_SPC-1:0];
@@ -100,6 +128,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign meta_actual_col_idx = fmt_d;
         assign sub_store_idx = '0;
     end
+    `UNUSED_VAR (sub_store_idx)
 
     // Per-bank write enable for partial-bank writes (NT < PER_WARP_DEPTH)
     wire [PER_WARP_DEPTH-1:0] meta_wr_bank_en;
@@ -111,7 +140,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
-    // Write data remapping: partial-bank mode wraps thread indices
+    // Write data remapping
     if (STORES_PER_COL > 1) begin : g_meta_wr_mode
         for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
             assign meta_wr_data[r] = 32'(execute_if.data.rs1_data[r % BANKS_PER_STORE]);
@@ -128,7 +157,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
-    // meta_store: force rd=0 in mdata_queue header (x0 write is harmless)
+    // meta_store: force rd=0 in mdata_queue header
     tcu_header_t mdata_queue_in;
     always_comb begin
         mdata_queue_in = execute_if.data.header;
@@ -145,13 +174,16 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
 
+    // -----------------------------------------------------------------------
+    // Pipeline control
+    // -----------------------------------------------------------------------
+
     wire mdata_queue_full;
 
     wire execute_fire = execute_if.valid && execute_if.ready;
     wire result_fire = result_if.valid && result_if.ready;
     wire fedp_enable, fedp_done;
 
-    // FEDP delay handling
     reg [PIPE_LATENCY-1:0] fedp_delay_pipe;
     always @(posedge clk) begin
         if (reset) begin
@@ -169,7 +201,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     assign result_if.valid  = fedp_done;
     assign fedp_enable      = ~result_if.valid || result_if.ready;
+`ifdef TCU_WGMMA_ENABLE
+    assign execute_if.ready = ~mdata_queue_full && fedp_enable && (~is_wgmma || tbuf_ready);
+`else
     assign execute_if.ready = ~mdata_queue_full && fedp_enable;
+`endif
 
     VX_fifo_queue #(
         .DATAW ($bits(tcu_header_t)),
@@ -189,6 +225,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_PIN(size)
     );
 
+    // -----------------------------------------------------------------------
+    // Operand offset computation
+    // -----------------------------------------------------------------------
+
     wire [OFF_W-1:0] a_off = (OFF_W'(step_m) & OFF_W'(TCU_A_SUB_BLOCKS-1)) << LG_A_BS;
 `ifdef TCU_SPARSE_ENABLE
     wire [OFF_W-1:0] b_off = is_sparse
@@ -198,11 +238,16 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [OFF_W-1:0] b_off = (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
 `endif
 
-    wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
+    // -----------------------------------------------------------------------
+    // Unified sparse metadata
+    // -----------------------------------------------------------------------
+    //   WMMA_SP:  from VX_tcu_meta (per-warp register-file metadata store)
+    //   WGMMA_SP: from VX_tcu_tile_buf (pre-extracted from SMEM metadata)
+    //   Both produce the same format: TCU_MAX_META_BLOCK_WIDTH bits,
+    //   indexed by (step_m, step_k).
 
 `ifdef TCU_SPARSE_ENABLE
-    // 2:4 sparsity metadata (sized for worst-case: int4, I_RATIO=8)
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_vld_meta_block;
 
     VX_tcu_meta #(
         .INSTANCE_ID     (INSTANCE_ID),
@@ -214,14 +259,29 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .raddr_wid     (wid),
         .step_m        (step_m),
         .step_k        (step_k),
-        .vld_meta_block(vld_meta_block),
+        .vld_meta_block(wmma_vld_meta_block),
         .wr_en         (meta_wr_en),
         .wr_wid        (wid),
         .wr_col_idx    (meta_actual_col_idx),
         .wr_data       (meta_wr_data),
         .wr_bank_en    (meta_wr_bank_en)
     );
+
+    // Mux: WGMMA_SP uses tile buffer metadata, WMMA_SP uses register metadata
+    `ifdef TCU_WGMMA_ENABLE
+        wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = is_wgmma
+            ? tbuf_vld_meta_block
+            : wmma_vld_meta_block;
+    `else
+        wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_vld_meta_block;
+    `endif
 `endif
+
+    // -----------------------------------------------------------------------
+    // FEDP grid: TCU_TC_M × TCU_TC_N compute elements
+    // -----------------------------------------------------------------------
+
+    wire [TCU_TC_M-1:0][TCU_TC_N-1:0][31:0] d_val;
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_i
         for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_j
@@ -231,36 +291,37 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
         `endif
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
-                assign a_row[k_idx]   = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
+                assign a_row[k_idx] = 32'(rs1_data[a_off + i * TCU_TC_K + k_idx]);
             `ifdef TCU_SPARSE_ENABLE
-                assign b_col_dense[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
-                // NT=16 sparse: j_sp = j % 2 (wraps j=2,3 back to lanes 0..15)
-                // NT=8/32: j_sp = j (no wrapping needed)
+                assign b_col_dense[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
                 localparam J_SP = SYM_SPARSE ? (j % (TCU_TC_N / 2)) : j;
-                assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
-                assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
+                assign b_col_1[k_idx] = 32'(rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
+                assign b_col_2[k_idx] = 32'(rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
             `else
-                assign b_col[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
+                assign b_col[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
             `endif
             end
-            wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
-        `ifdef TCU_SPARSE_ENABLE
-            /* verilator lint_off UNUSEDSIGNAL */
-            wire [TCU_MAX_INPUTS-1:0] vld_mask = '1; // TODO: should connect to input source
-            /* verilator lint_on UNUSEDSIGNAL */
 
-            VX_tcu_sel #(
+`ifdef TCU_WGMMA_ENABLE
+            wire [31:0] c_val = is_wgmma
+                ? 32'(execute_if.data.rs1_data[i * TCU_TC_N + j])
+                : 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
+`else
+            wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
+`endif
+
+        `ifdef TCU_SPARSE_ENABLE
+            // Single unified vld_mask — works for both WMMA_SP and WGMMA_SP
+            VX_tcu_sp_mux #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .ROW_IDX     (i)
-            ) tcu_sel (
-                .fmt_s          (fmt_s),
-                .b_col_1        (b_col_1),
-                .b_col_2        (b_col_2),
-                .vld_meta_block (vld_meta_block),
-                .b_col          (b_col_sparse)
+            ) tcu_sp_mux (
+                .fmt_s     (fmt_s),
+                .b_col_in1 (b_col_1),
+                .b_col_in2 (b_col_2),
+                .vld_mask  (vld_meta_block),
+                .b_col_out (b_col_sparse)
             );
-
-            // Select dense or sparse B column
             assign b_col = is_sparse ? b_col_sparse : b_col_dense;
         `endif
 
