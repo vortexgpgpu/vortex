@@ -22,14 +22,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          reset,
 
 `ifdef TCU_WGMMA_ENABLE
-    // Tile buffer operand data (replaces RF rs1/rs2 for WGMMA)
-    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]          tbuf_rs1_data,
-    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]          tbuf_rs2_data,
-    input wire                                          tbuf_ready,
-    `ifdef TCU_SPARSE_ENABLE
-    // Pre-extracted metadata slice for WGMMA_SP (from tile buffer)
-    input wire [TCU_MAX_META_BLOCK_WIDTH-1:0]           tbuf_vld_meta_block,
-    `endif
+    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
+    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs2_data,
+`ifdef TCU_SPARSE_ENABLE
+    input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
+`endif
+    input wire          tbuf_ready,
 `endif
 
     // Inputs
@@ -143,7 +141,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Write data remapping
     if (STORES_PER_COL > 1) begin : g_meta_wr_mode
         for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
-            assign meta_wr_data[r] = 32'(execute_if.data.rs1_data[r % BANKS_PER_STORE]);
+            assign meta_wr_data[r] = 32'(rs1_data[r % BANKS_PER_STORE]);
         end
     end else begin : g_meta_wr_mode
         wire [$clog2(TCU_BLOCK_CAP)-1:0] meta_thread_offset;
@@ -153,7 +151,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             assign meta_thread_offset = '0;
         end
         for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
-            assign meta_wr_data[r] = 32'(execute_if.data.rs1_data[meta_thread_offset + r]);
+            assign meta_wr_data[r] = 32'(rs1_data[meta_thread_offset + r]);
         end
     end
 
@@ -247,8 +245,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     //   indexed by (step_m, step_k).
 
 `ifdef TCU_SPARSE_ENABLE
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_vld_meta_block;
-
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
     VX_tcu_meta #(
         .INSTANCE_ID     (INSTANCE_ID),
         .META_BLOCK_WIDTH(TCU_MAX_META_BLOCK_WIDTH),
@@ -259,7 +256,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .raddr_wid     (wid),
         .step_m        (step_m),
         .step_k        (step_k),
-        .vld_meta_block(wmma_vld_meta_block),
+        .vld_meta_block(wmma_sp_meta),
         .wr_en         (meta_wr_en),
         .wr_wid        (wid),
         .wr_col_idx    (meta_actual_col_idx),
@@ -267,14 +264,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .wr_bank_en    (meta_wr_bank_en)
     );
 
-    // Mux: WGMMA_SP uses tile buffer metadata, WMMA_SP uses register metadata
-    `ifdef TCU_WGMMA_ENABLE
-        wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = is_wgmma
-            ? tbuf_vld_meta_block
-            : wmma_vld_meta_block;
-    `else
-        wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_vld_meta_block;
-    `endif
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block;
+`ifdef TCU_WGMMA_ENABLE
+    assign vld_meta_block = is_wgmma ? tbuf_sp_meta : wmma_sp_meta;
+`else
+    assign vld_meta_block = wmma_sp_meta;
+`endif
 `endif
 
     // -----------------------------------------------------------------------
@@ -302,13 +297,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             `endif
             end
 
-`ifdef TCU_WGMMA_ENABLE
-            wire [31:0] c_val = is_wgmma
-                ? 32'(execute_if.data.rs1_data[i * TCU_TC_N + j])
-                : 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
-`else
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
-`endif
 
         `ifdef TCU_SPARSE_ENABLE
             // Single unified vld_mask — works for both WMMA_SP and WGMMA_SP
