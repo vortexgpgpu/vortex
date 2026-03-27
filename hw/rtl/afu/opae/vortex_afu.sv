@@ -428,19 +428,19 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 case (cmd_type)
                 CMD_MEM_READ: begin
                 `ifdef DBG_TRACE_AFU
-                    `TRACE(2, ("%t: AFU: Goto STATE MEM_READ: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size))
+                    `TRACE(2, ("%t: AFU: Goto STATE MEM_READ: ia=0x%0h, addr=0x%0h, size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size))
                 `endif
                     state <= STATE_MEM_READ;
                 end
                 CMD_MEM_WRITE: begin
                 `ifdef DBG_TRACE_AFU
-                    `TRACE(2, ("%t: AFU: Goto STATE MEM_WRITE: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size))
+                    `TRACE(2, ("%t: AFU: Goto STATE MEM_WRITE: ia=0x%0h, addr=0x%0h, size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size))
                 `endif
                     state <= STATE_MEM_WRITE;
                 end
                 CMD_DCR_WRITE: begin
                 `ifdef DBG_TRACE_AFU
-                    `TRACE(2, ("%t: AFU: Goto STATE DCR_WRITE: addr=0x%0h data=%0d\n", $time, cmd_dcr_addr, cmd_dcr_data))
+                    `TRACE(2, ("%t: AFU: Goto STATE DCR_WRITE: addr=0x%0h, data=%0d\n", $time, cmd_dcr_addr, cmd_dcr_data))
                 `endif
                     state <= STATE_DCR_WRITE;
                 end

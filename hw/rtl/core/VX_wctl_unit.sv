@@ -165,12 +165,12 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
         if (txbar_bus_if.valid && !reset) begin
-            `TRACE(2, ("%t: %s-wctl: txbar valid=%b ready=%b is_done=%b addr=0x%0h wctl_bar_enable=%b same_addr=%b pending=%b\n",
+            `TRACE(2, ("%t: %s-wctl: txbar valid=%b, ready=%b, is_done=%b, addr=0x%0h, wctl_bar_enable=%b, same_addr=%b, pending=%b\n",
                 $time, INSTANCE_ID, txbar_bus_if.valid, txbar_bus_if.ready, txbar_bus_if.data.is_done,
                 txbar_bus_if.data.addr, wctl_bar_enable, same_bar_addr, bar.pending_event))
         end
         if (wctl_bar_enable && !reset) begin
-            `TRACE(2, ("%t: %s-wctl: BAR wid=%0d bar_addr=0x%0h is_arrive=%b is_sync=%b phase=%b\n",
+            `TRACE(2, ("%t: %s-wctl: BAR wid=%0d, bar_addr=0x%0h, is_arrive=%b, is_sync=%b, phase=%b\n",
                 $time, INSTANCE_ID, execute_if.data.header.wid, wctl_bar_addr,
                 bar.is_arrive, bar.is_sync, bar.phase))
         end

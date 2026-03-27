@@ -47,7 +47,7 @@ module VX_dxa_completion_detect import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
         if (any_dxa_wr && !reset) begin
-            `TRACE(2, ("%t: %s: bank_wr_fire=%b tag=0x%0h is_last=%b done_fire=%b pending=%b valid=%b ready=%b\n",
+            `TRACE(2, ("%t: %s: bank_wr_fire=%b, tag=0x%0h, is_last=%b, done_fire=%b, pending=%b, valid=%b, ready=%b\n",
                 $time, INSTANCE_ID, bank_wr_fire, bank_wr_tag, is_last, done_fire, pending_valid_r, txbar_bus_if.valid, txbar_bus_if.ready))
         end
         if (done_accepted && !reset) begin

@@ -334,13 +334,13 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         always @(posedge clk) begin
             if (~reset) begin
                 if (issue_fifo_enq) begin
-                    `TRACE(1, ("%t: %s issue-enq: input=%0d core=%0d wid=%0d bar=%0d desc=%0d\n",
+                    `TRACE(1, ("%t: %s issue-enq: input=%0d, core=%0d, wid=%0d, bar=%0d, desc=%0d\n",
                         $time, INSTANCE_ID, issue_grant_idx,
                         in_core_id[issue_grant_idx], in_wid[issue_grant_idx],
                         in_bar_addr[issue_grant_idx], in_desc_slot[issue_grant_idx]))
                 end
                 if (issue_dispatch) begin
-                    `TRACE(1, ("%t: %s dispatch-issue: worker=%0d core=%0d wid=%0d bar=%0d desc=%0d\n",
+                    `TRACE(1, ("%t: %s dispatch-issue: worker=%0d, core=%0d, wid=%0d, bar=%0d, desc=%0d\n",
                         $time, INSTANCE_ID, idle_worker_idx,
                         launch_core_id, launch_wid, launch_bar_addr, launch_desc_slot))
                     $write("DXA_TL,%0d,DISPATCH,core=%0d,wid=%0d,bar=%0d,worker=%0d,desc=%0d\n",
