@@ -31,9 +31,11 @@ public:
 
 	struct PerfStats {
 		uint64_t latency = 0;
+		uint64_t tbuf_fetch_stalls = 0; // smem words read for tile buffer per WGMMA
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->latency += rhs.latency;
+			this->tbuf_fetch_stalls += rhs.tbuf_fetch_stalls;
 			return *this;
 		}
 	};

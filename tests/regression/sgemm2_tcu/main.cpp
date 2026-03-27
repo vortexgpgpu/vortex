@@ -26,26 +26,6 @@
 using namespace vortex;
 namespace vt = tensor;
 
-static inline uint64_t desc_encode_field(uint64_t x) {
-  return (x & 0x3fffu);
-}
-
-static inline uint64_t make_smem_desc(uint64_t base_addr,
-                                      uint32_t leading_byte_offset,
-                                      uint32_t stride_byte_offset,
-                                      uint32_t swizzle = 0) {
-  if (base_addr > 0xffffffffull) {
-    std::cout << "Error: descriptor base address exceeds 32-bit range" << std::endl;
-    std::abort();
-  }
-  uint64_t desc = 0;
-  desc |= (base_addr & 0xffffffffull);
-  desc |= (desc_encode_field(leading_byte_offset) & 0x3fffull) << 32;
-  desc |= (desc_encode_field(stride_byte_offset) & 0x3fffull) << 46;
-  desc |= (uint64_t(swizzle) & 0x3ull) << 62;
-  return desc;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t height, const uint8_t *src) {
@@ -655,7 +635,7 @@ inline typename T::dtype generate_B_value() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, 4, 32>; // NR=32 matches WGMMA kernel context
+using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, 32, 8>;
 
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
@@ -681,10 +661,10 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
 
 const char *kernel_file = "kernel.vxbin";
 
-uint32_t xm = 32;
-uint32_t xn = 32;
+uint32_t xm = 64;
+uint32_t xn = 64;
 uint32_t xk = 32;
-uint32_t mode = 0;
+uint32_t warps = 4;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -696,7 +676,7 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Vortex Sgemm TCU2 Test." << std::endl;
-  std::cout << "Usage: [-m: m] [-n: N] [-k: K] [-w: mode(0=RS,1=SS)] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m: m] [-n: N] [-k: K] [-w: warps] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
@@ -713,7 +693,7 @@ static void parse_args(int argc, char **argv) {
       xk = atoi(optarg);
       break;
     case 'w':
-      mode = atoi(optarg);
+      warps = atoi(optarg);
       break;
     case 'h':
       show_usage();
@@ -759,7 +739,14 @@ int main(int argc, char *argv[]) {
   uint64_t NT;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &NT));
   if (NT != NUM_THREADS) {
-    std::cout << "Error: device warp size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
+    std::cout << "Error: device thread size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
+    return -1;
+  }
+
+  uint64_t num_warps;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
+  if (warps > num_warps) {
+    std::cout << "Error: requested warps (" << warps << ") exceeds device's capacity (" << num_warps << ")" << std::endl;
     return -1;
   }
 
@@ -767,23 +754,18 @@ int main(int argc, char *argv[]) {
   uint32_t N = xn;
   uint32_t K = xk;
 
-  if (mode > 1) {
-    std::cout << "Error: mode must be 0 (RS) or 1 (SS)!" << std::endl;
-    return -1;
-  }
-
   if ((M % cfg::tileM) != 0) {
-    std::cout << "Error: M must be a multiple of tensor tileM=" << cfg::tileM << "!" << std::endl;
+    std::cout << "Error: M (" << M << ") must be a multiple of tensor tileM=" << cfg::tileM << "!" << std::endl;
     return -1;
   }
 
   if ((N % cfg::tileN) != 0) {
-    std::cout << "Error: N must be a multiple of tensor tileN=" << cfg::tileN << "!" << std::endl;
+    std::cout << "Error: N (" << N << ") must be a multiple of tensor tileN=" << cfg::tileN << "!" << std::endl;
     return -1;
   }
 
   if ((K % cfg::tileK) != 0) {
-    std::cout << "Error: K must be a multiple of tensor tileK=" << cfg::tileK << "!" << std::endl;
+    std::cout << "Error: K (" << K << ") must be a multiple of tensor tileK=" << cfg::tileK << "!" << std::endl;
     return -1;
   }
 
@@ -791,22 +773,22 @@ int main(int argc, char *argv[]) {
   size_t sizeB = K * N;
   size_t sizeC = M * N;
   uint32_t grid_dim[2]  = {N / cfg::tileN, M / cfg::tileM};
-  uint32_t block_dim[2] = {(uint32_t)NT, 1};
+  uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
   std::cout << "WMMA Core Dimension: M=" << cfg::tcM << ", N=" << cfg::tcN << ", K=" << cfg::tcK << std::endl;
   std::cout << "WMMA Tile Dimension: M=" << cfg::tileM << ", N=" << cfg::tileN << ", K=" << cfg::tileK << std::endl;
+  std::cout << "Grid dimension: " << grid_dim[0] << "x" << grid_dim[1] << std::endl;
+  std::cout << "Block dimension: " << block_dim[0] << "x" << block_dim[1] << std::endl;
   std::cout << "matrix A: " << M << "x" << K << std::endl;
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;
-  std::cout << "WGMMA source mode: " << ((mode == 0) ? "RS" : "SS") << std::endl;
 
   // set matrix dimensions
   kernel_arg.M = M;
   kernel_arg.N = N;
   kernel_arg.K = K;
-  kernel_arg.mode = mode;
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
@@ -820,26 +802,6 @@ int main(int argc, char *argv[]) {
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
-
-  // Build matrix descriptors: K movement uses leading byte offset,
-  // tile-row/tile-col movement uses stride byte offset.
-  uint32_t a_leading_bytes = cfg::tileK * sizeof(itype_t);
-  uint32_t a_stride_bytes = cfg::tileM * K * sizeof(itype_t);
-  auto a_desc = make_smem_desc(kernel_arg.A_addr, a_leading_bytes, a_stride_bytes);
-
-  uint32_t b_leading_bytes = cfg::tileK * sizeof(itype_t);
-  uint32_t b_stride_bytes = cfg::tileN * K * sizeof(itype_t);
-  if constexpr (vt::ITYPE::bits >= 8) {
-    b_leading_bytes = cfg::tileK * N * sizeof(itype_t);
-    b_stride_bytes = cfg::tileN * sizeof(itype_t);
-  }
-  auto b_desc = make_smem_desc(kernel_arg.B_addr, b_leading_bytes, b_stride_bytes);
-
-  kernel_arg.A_desc = a_desc;
-  kernel_arg.B_desc = b_desc;
-
-  std::cout << "A_desc=0x" << std::hex << kernel_arg.A_desc << std::endl;
-  std::cout << "B_desc=0x" << std::hex << kernel_arg.B_desc << std::endl;
 
   // generate source data
   std::vector<itype_t> h_A(sizeA);

@@ -68,6 +68,8 @@ import VX_fpu_pkg::*;
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR ({mpm_class, read_data_rw, read_enable, read_uuid});
+    wire [`MEM_ADDR_WIDTH-1:0] __cta_param = sched_csr_if.cta_csrs.param;
+    `UNUSED_VAR (__cta_param)
     `UNUSED_VAR ({write_data, write_uuid})
 
     // CSRs Write /////////////////////////////////////////////////////////////
@@ -306,8 +308,17 @@ import VX_fpu_pkg::*;
                         `CSR_READ_64(`VX_CSR_MPM_DXA_TRANSFERS,  read_data_ro_w, sysmem_perf.dxa.transfers);
                         `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_READS, read_data_ro_w, sysmem_perf.dxa.gmem_reads);
                         `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_DEDUP, read_data_ro_w, sysmem_perf.dxa.gmem_dedup);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_SMEM_WRITES,read_data_ro_w, sysmem_perf.dxa.smem_writes);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_LMEM_WRITES,read_data_ro_w, sysmem_perf.dxa.lmem_writes);
                         `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_LT,    read_data_ro_w, sysmem_perf.dxa.gmem_latency);
+                        default:;
+                        endcase
+                    end
+                `endif
+                `ifdef EXT_TCU_ENABLE
+                    `VX_DCR_MPM_CLASS_TCU: begin
+                        case (read_addr)
+                        // PERF: tile-buffer fetch stalls
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_FETCH_ST, read_data_ro_w, pipeline_perf.tcu.tbuf_fetch_stalls);
                         default:;
                         endcase
                     end

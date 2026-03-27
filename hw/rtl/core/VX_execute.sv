@@ -25,6 +25,9 @@ module VX_execute import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     input sysmem_perf_t     sysmem_perf,
     input pipeline_perf_t   pipeline_perf,
+`ifdef EXT_TCU_ENABLE
+    output tcu_perf_t       tcu_perf,
+`endif
 `endif
 
     // Dcache interface
@@ -45,6 +48,11 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_sched_csr_if.slave   sched_csr_if,
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_warp_ctl_if.master   warp_ctl_if,
+
+`ifdef TCU_WGMMA_ENABLE
+    // TCU tile-buffer local-memory read port
+    VX_tcu_lmem_if.master   tcu_lmem_if,
+`endif
 
     // DCR-CSR interface
     VX_dcr_csr_if           dcr_csr_if
@@ -95,6 +103,12 @@ module VX_execute import VX_gpu_pkg::*; #(
     ) tcu_unit (
         .clk            (clk),
         .reset          (reset),
+    `ifdef PERF_ENABLE
+        .tcu_perf       (tcu_perf),
+    `endif
+    `ifdef TCU_WGMMA_ENABLE
+        .tcu_lmem_if    (tcu_lmem_if),
+    `endif
         .dispatch_if    (dispatch_if[EX_TCU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[EX_TCU * `ISSUE_WIDTH +: `ISSUE_WIDTH])
     );

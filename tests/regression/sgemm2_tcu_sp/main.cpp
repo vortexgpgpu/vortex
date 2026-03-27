@@ -28,7 +28,7 @@ using namespace vortex;
 namespace vt = tensor;
 
 // WGMMA geometry: same template as the kernel context (NR=32)
-using wg_cfg_t = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 4, 32>;
+using wg_cfg_t = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 32, 8>;
 
 // Sparse parameters based on runtime format (fp16)
 static constexpr uint32_t kRtlIRatio     = 32 / vt::fp16::bits;           // 2

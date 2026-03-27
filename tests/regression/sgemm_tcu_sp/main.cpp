@@ -878,7 +878,7 @@ int main(int argc, char *argv[]) {
   std::cout << "matrix C: " << M << "x" << N << std::endl;
 
   uint32_t grid_dim[2]  = {N / cfg::tileN, M / cfg::tileM};
-  uint32_t block_dim[2] = {NT, 1};
+  uint32_t block_dim[2] = {(uint32_t)NT, 1};
 
   // set matrix dimensions
   kernel_arg.M = M;

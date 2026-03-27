@@ -742,18 +742,26 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_LMEM_BANK_ST, lmem_perf.bank_stalls);
         }
       } break;
-#ifdef EXT_DXA_ENABLE
+    #ifdef EXT_TCU_ENABLE
+      case VX_DCR_MPM_CLASS_TCU: {
+        auto tcu_perf = core_->tensor_unit()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_TCU_TBUF_FETCH_ST, tcu_perf.tbuf_fetch_stalls);
+        }
+      } break;
+    #endif
+    #ifdef EXT_DXA_ENABLE
       case VX_DCR_MPM_CLASS_DXA: {
         auto cluster_perf = core_->socket()->cluster()->perf_stats();
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_DXA_TRANSFERS,  cluster_perf.dxa.transfers);
         CSR_READ_64(VX_CSR_MPM_DXA_GMEM_READS, cluster_perf.dxa.gmem_reads);
         CSR_READ_64(VX_CSR_MPM_DXA_GMEM_DEDUP, cluster_perf.dxa.gmem_dedup);
-        CSR_READ_64(VX_CSR_MPM_DXA_SMEM_WRITES,cluster_perf.dxa.smem_writes);
+        CSR_READ_64(VX_CSR_MPM_DXA_LMEM_WRITES,cluster_perf.dxa.lmem_writes);
         CSR_READ_64(VX_CSR_MPM_DXA_GMEM_LT,    cluster_perf.dxa.total_latency);
         }
       } break;
-#endif
+    #endif
       default:
         std::cerr << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
         std::abort();

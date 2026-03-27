@@ -483,10 +483,10 @@ package VX_gpu_pkg;
 
 `ifdef EXT_TCU_ENABLE
     localparam INST_TCU_WMMA       = 4'h0;
-`ifdef TCU_SPARSE_ENABLE
-    localparam INST_TCU_WMMA_SP    = 4'h1;
-    localparam INST_TCU_META_STORE = 4'h2;
+`ifdef TCU_WGMMA_ENABLE
+    localparam INST_TCU_WGMMA      = 4'h1;
 `endif
+    localparam INST_TCU_META_STORE = 4'h2;
     localparam INST_TCU_BITS = 4;
 `endif
 
@@ -630,7 +630,8 @@ package VX_gpu_pkg;
 
 `ifdef EXT_TCU_ENABLE
     typedef struct packed {
-        logic [(INST_ARGS_BITS-20)-1:0] __padding;
+        logic [(INST_ARGS_BITS-21)-1:0] __padding;
+        logic is_sparse;
         logic [3:0] fmt_d;
         logic [3:0] fmt_s;
         logic [3:0] step_k;
@@ -825,6 +826,12 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] misses;
     } coalescer_perf_t;
 
+`ifdef EXT_TCU_ENABLE
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] tbuf_fetch_stalls;
+    } tcu_perf_t;
+`endif
+
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] reads;
         logic [PERF_CTR_BITS-1:0] writes;
@@ -836,7 +843,7 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] transfers;
         logic [PERF_CTR_BITS-1:0] gmem_reads;
         logic [PERF_CTR_BITS-1:0] gmem_dedup;
-        logic [PERF_CTR_BITS-1:0] smem_writes;
+        logic [PERF_CTR_BITS-1:0] lmem_writes;
         logic [PERF_CTR_BITS-1:0] gmem_latency;
     } dxa_perf_t;
 `endif
@@ -880,6 +887,9 @@ package VX_gpu_pkg;
         sched_perf_t              sched;
         fetch_perf_t              fetch;
         issue_perf_t              issue;
+    `ifdef EXT_TCU_ENABLE
+        tcu_perf_t                tcu;
+    `endif
         logic [PERF_CTR_BITS-1:0] ifetches;
         logic [PERF_CTR_BITS-1:0] loads;
         logic [PERF_CTR_BITS-1:0] stores;
@@ -916,6 +926,20 @@ package VX_gpu_pkg;
     localparam DXA_SMEM_BANK_ADDR_WIDTH = (`LMEM_LOG_SIZE - `CLOG2(`XLEN / 8) - `CLOG2(`LMEM_NUM_BANKS));
 `else
     localparam LMEM_TAG_WIDTH       = LMEM_TAG_WIDTH_BASE;
+`endif
+
+    // LMEM DMA port tag width and enable flag.
+    // DXA writes carry a functional tag (bar_addr + last_pkt);
+    // TCU reads use a minimal tag; no-DMA case still needs a non-zero width.
+`ifdef EXT_DXA_ENABLE
+    localparam LMEM_DMA_TAG_W = DXA_BANK_WR_TAG_WIDTH;
+    localparam LMEM_DMA_EN    = 1;
+`elsif TCU_WGMMA_ENABLE
+    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
+    localparam LMEM_DMA_EN    = 1;
+`else
+    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
+    localparam LMEM_DMA_EN    = 0;
 `endif
 
     ////////////////////////// Icache Parameters //////////////////////////////

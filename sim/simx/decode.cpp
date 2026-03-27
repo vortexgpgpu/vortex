@@ -1131,8 +1131,6 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         uint32_t fmt_d = rd;
         uint32_t fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
-        auto tcu_type = is_sparse ? TcuType::WMMA_SP : TcuType::WMMA;
-
         if (is_sparse) {
           // Sparse mode uses the packed sparse-A register layout from vx_tensor.h
           // and a synthesized metadata phase, matching the RTL uop expansion.
@@ -1183,7 +1181,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
             ++steps;
             auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
             instr->setOpType(TcuType::META_STORE);
-            instr->setArgs(IntrTcuArgs{fmt_s, flat_store, 0, 0, 0});
+            instr->setArgs(IntrTcuArgs{false, fmt_s, flat_store, 0, 0, 0});
             instr->setSrcReg(0, reg_rs1, RegType::Float);
             instr->setParentUUID(uuid);
             ibuffer.push_back(instr);
@@ -1204,8 +1202,8 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
               uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
               ++steps;
               auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-              instr->setOpType(tcu_type);
-              instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m_sp, n_sp, 0});
+              instr->setOpType(TcuType::WMMA);
+              instr->setArgs(IntrTcuArgs{true, fmt_s, fmt_d, m_sp, n_sp, 0});
               instr->setDestReg(reg_rs3, RegType::Float);
               instr->setSrcReg(0, reg_rs1, RegType::Float);
               instr->setSrcReg(1, reg_rs2, RegType::Float);
@@ -1225,8 +1223,8 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
                   uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
                   ++steps;
                   auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-                  instr->setOpType(tcu_type);
-                  instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k});
+                  instr->setOpType(TcuType::WMMA);
+                  instr->setArgs(IntrTcuArgs{true, fmt_s, fmt_d, m, n, k});
                   instr->setDestReg(reg_rs3, RegType::Float);
                   instr->setSrcReg(0, reg_rs1, RegType::Float);
                   instr->setSrcReg(1, reg_rs2, RegType::Float);
@@ -1254,8 +1252,8 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
                 uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
                 ++steps;
                 auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-                instr->setOpType(tcu_type);
-                instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n, k});
+                instr->setOpType(TcuType::WMMA);
+                instr->setArgs(IntrTcuArgs{false, fmt_s, fmt_d, m, n, k});
                 instr->setDestReg(reg_rs3, RegType::Float);
                 instr->setSrcReg(0, reg_rs1, RegType::Float);
                 instr->setSrcReg(1, reg_rs2, RegType::Float);
@@ -1270,7 +1268,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     #ifdef TCU_WGMMA_ENABLE
       case 1: { // WGMMA_SYNC
         namespace vt = vortex::tensor;
-        using wg_cfg = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 4, 32>;
+        using wg_cfg = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 32, 8>;
         uint32_t fmt_d = rd;   // Ot::id from rd field
         uint32_t fmt_s = rs1;  // It::id from rs1 field
         bool is_sparse = (rs2 & 1) != 0;
@@ -1284,7 +1282,6 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
         uint32_t uuid_lo = uuid & 0xffffffff;
         uint32_t uop_idx = 0;
-        TcuType tcu_type = is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA;
         for (uint32_t k = 0; k < k_count; ++k) {
           for (uint32_t i = 0; i < nrc; ++i) {
             uint32_t step_m = i / wg_cfg::n_steps;
@@ -1292,12 +1289,16 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
             uint32_t uuid_lo_x = (uop_idx++ << steps_shift) | uuid_lo;
             uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
             auto uop = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-            uop->setOpType(tcu_type);
-            uop->setArgs(IntrTcuArgs{fmt_s, fmt_d, step_m, step_n, k});
-            uop->setDestReg(i, RegType::Float);        // f_i = output accumulator
-            uop->setSrcReg(0, i, RegType::Float);       // f_i = accumulator C in
-            uop->setSrcReg(1, a0, RegType::Integer);    // a0 (x10) = smem A descriptor
-            uop->setSrcReg(2, a1, RegType::Integer);    // a1 (x11) = smem B descriptor
+            uop->setOpType(TcuType::WGMMA);
+            uop->setArgs(IntrTcuArgs{is_sparse, fmt_s, fmt_d, step_m, step_n, k});
+            uop->setDestReg(i, RegType::Float);       // f_i = output accumulator
+            if (k == 0 && i == 0) {
+              // descriptors sourced once for the entire WGMMA instruction;
+              // per-warp tile cache uses them for all subsequent uops.
+              uop->setSrcReg(0, a0, RegType::Integer);  // a0 (x10) = smem A descriptor
+              uop->setSrcReg(1, a1, RegType::Integer);  // a1 (x11) = smem B descriptor
+            }
+            uop->setSrcReg(2, i, RegType::Float);     // f_i = accumulator C in
             uop->setParentUUID(uuid);
             ibuffer.push_back(uop);
           }
