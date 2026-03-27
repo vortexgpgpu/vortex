@@ -84,6 +84,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0]     tbuf_fetch_stalls_b [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0]     lmem_reads_b        [BLOCK_SIZE];
 `endif
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_tile_bufs
@@ -103,6 +104,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         wire is_wgmma_b = (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA);
 
         wire req_valid_b = per_block_execute_if[block_idx].valid && is_wgmma_b;
+        // req_fire: the execute unit actually consumed this µop this cycle.
+        // Used by tile_buf to clear warp_alloc_pending at the right time,
+        // preventing spurious re-fetch when execute is stalled (e.g. mdata_queue full).
+        wire req_fire_b  = per_block_execute_if[block_idx].valid
+                        && per_block_execute_if[block_idx].ready
+                        && is_wgmma_b;
 
         VX_tcu_tile_buf #(
             .INSTANCE_ID    (`SFORMATF(("%s-tbuf%0d", INSTANCE_ID, block_idx))),
@@ -114,8 +121,10 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .reset            (reset),
         `ifdef PERF_ENABLE
             .tbuf_fetch_stalls(tbuf_fetch_stalls_b[block_idx]),
+            .lmem_reads       (lmem_reads_b[block_idx]),
         `endif
             .req_valid        (req_valid_b),
+            .req_fire         (req_fire_b),
             .req_wid          (per_block_execute_if[block_idx].data.header.wid),
             .req_is_sparse    (per_block_execute_if[block_idx].data.op_args.tcu.is_sparse),
             .req_step_m       (per_block_execute_if[block_idx].data.op_args.tcu.step_m),
@@ -178,18 +187,51 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     logic [PERF_CTR_BITS-1:0] tbuf_fetch_stalls_sum;
+    logic [PERF_CTR_BITS-1:0] lmem_reads_sum;
     always_comb begin
         tbuf_fetch_stalls_sum = '0;
-        for (int bi = 0; bi < BLOCK_SIZE; bi++)
+        lmem_reads_sum        = '0;
+        for (int bi = 0; bi < BLOCK_SIZE; bi++) begin
             tbuf_fetch_stalls_sum += tbuf_fetch_stalls_b[bi];
+            lmem_reads_sum        += lmem_reads_b[bi];
+        end
     end
     assign tcu_perf.tbuf_fetch_stalls = tbuf_fetch_stalls_sum;
+    assign tcu_perf.lmem_reads        = lmem_reads_sum;
+
+    // wgmma_instrs / wgmma_stalls: derived from per_block_execute_if.
+    logic wgmma_fire_b  [BLOCK_SIZE];
+    logic wgmma_stall_b [BLOCK_SIZE];
+    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_wgmma_perf
+        wire is_wgmma_p = (per_block_execute_if[bi].data.op_type == INST_TCU_WGMMA);
+        assign wgmma_fire_b [bi] = per_block_execute_if[bi].valid && per_block_execute_if[bi].ready && is_wgmma_p;
+        assign wgmma_stall_b[bi] = per_block_execute_if[bi].valid && !per_block_execute_if[bi].ready && is_wgmma_p;
+    end
+
+    logic [PERF_CTR_BITS-1:0] wgmma_instrs_ctr_r;
+    logic [PERF_CTR_BITS-1:0] wgmma_stalls_ctr_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            wgmma_instrs_ctr_r <= '0;
+            wgmma_stalls_ctr_r <= '0;
+        end else begin
+            for (int bi = 0; bi < BLOCK_SIZE; bi++) begin
+                if (wgmma_fire_b[bi])  wgmma_instrs_ctr_r <= wgmma_instrs_ctr_r + PERF_CTR_BITS'(1);
+                if (wgmma_stall_b[bi]) wgmma_stalls_ctr_r <= wgmma_stalls_ctr_r + PERF_CTR_BITS'(1);
+            end
+        end
+    end
+    assign tcu_perf.wgmma_instrs = wgmma_instrs_ctr_r;
+    assign tcu_perf.wgmma_stalls = wgmma_stalls_ctr_r;
 `endif
 
 `else // !TCU_WGMMA_ENABLE
 
 `ifdef PERF_ENABLE
     assign tcu_perf.tbuf_fetch_stalls = '0;
+    assign tcu_perf.lmem_reads        = '0;
+    assign tcu_perf.wgmma_instrs      = '0;
+    assign tcu_perf.wgmma_stalls      = '0;
 `endif
 
 `endif // TCU_WGMMA_ENABLE

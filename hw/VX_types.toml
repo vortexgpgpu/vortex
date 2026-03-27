@@ -325,3 +325,9 @@ VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
 # PERF: WGMMA tile-buffer (per-core; summed across blocks)
 VX_CSR_MPM_TCU_TBUF_FETCH_ST   = 0xB03  # cycles spent fetching A/B tiles into tile buffer
 VX_CSR_MPM_TCU_TBUF_FETCH_ST_H = 0xB83
+VX_CSR_MPM_TCU_WGMMA_INSTRS    = 0xB04  # WGMMA µops executed (fire count)
+VX_CSR_MPM_TCU_WGMMA_INSTRS_H  = 0xB84
+VX_CSR_MPM_TCU_WGMMA_STALLS    = 0xB05  # cycles: WGMMA valid but stalled
+VX_CSR_MPM_TCU_WGMMA_STALLS_H  = 0xB85
+VX_CSR_MPM_TCU_LMEM_READS      = 0xB06  # LMEM read transactions issued by tile buffer
+VX_CSR_MPM_TCU_LMEM_READS_H    = 0xB86
