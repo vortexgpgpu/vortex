@@ -44,6 +44,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     localparam NUM_COLS     = META_BLOCK_WIDTH / 32;
     localparam BANK_DEPTH   = `NUM_WARPS;
     localparam BANK_ADDRW   = `LOG2UP(BANK_DEPTH);
+    `UNUSED_PARAM (BANK_ADDRW)
 
     localparam TOTAL_COLS   = PER_WARP_DEPTH * NUM_COLS;
     localparam PACKED_WIDTH = TOTAL_COLS * 32;
@@ -65,19 +66,6 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         assign bank_sel = '0;
     end
 
-    // Post-reset init FSM: runs NUM_WARPS cycles (one per warp)
-    reg [BANK_ADDRW:0] init_counter;
-    wire init_active = ~init_counter[BANK_ADDRW];
-    wire [BANK_ADDRW-1:0] init_addr = init_counter[BANK_ADDRW-1:0];
-
-    always_ff @(posedge clk) begin
-        if (reset) begin
-            init_counter <= 0;
-        end else if (init_active) begin
-            init_counter <= init_counter + 1;
-        end
-    end
-
     // Column write-enable (one-hot from wr_col_idx)
     wire [NUM_COLS-1:0] col_wren;
     for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col_wren
@@ -85,22 +73,14 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     end
 
     // Pack write data and enables for unified RAM
-    wire                   bank_wr = init_active || wr_en;
-    wire [BANK_ADDRW-1:0]  bank_wa = init_active ? init_addr : wr_wid;
-
     wire [TOTAL_COLS-1:0]   packed_wren;
     wire [PACKED_WIDTH-1:0] packed_wdata;
     wire [PACKED_WIDTH-1:0] packed_rdata;
 
     for (genvar b = 0; b < PER_WARP_DEPTH; ++b) begin : g_meta_banks
-        localparam [31:0] COL_INIT_EVEN = {8{4'b0101}};
-        localparam [31:0] COL_INIT_ODD  = {8{4'b1010}};
-        localparam [31:0] COL_INIT = (b % 2 == 0) ? COL_INIT_EVEN : COL_INIT_ODD;
-
         for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col
-            wire col_wr = init_active ? bank_wr : (bank_wr && col_wren[c] && wr_bank_en[b]);
-            assign packed_wren[b * NUM_COLS + c] = col_wr;
-            assign packed_wdata[(b * NUM_COLS + c) * 32 +: 32] = init_active ? COL_INIT : wr_data[b];
+            assign packed_wren[b * NUM_COLS + c] = wr_en && col_wren[c] && wr_bank_en[b];
+            assign packed_wdata[(b * NUM_COLS + c) * 32 +: 32] = wr_data[b];
         end
     end
 
@@ -117,7 +97,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         .read  (1'b1),
         .write (|packed_wren),
         .wren  (packed_wren),
-        .waddr (bank_wa),
+        .waddr (wr_wid),
         .wdata (packed_wdata),
         .raddr (raddr_wid),
         .rdata (packed_rdata)

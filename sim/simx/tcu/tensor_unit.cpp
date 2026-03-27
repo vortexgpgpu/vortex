@@ -521,13 +521,6 @@ public:
 
   void reset() {
     perf_stats_ = PerfStats();
-    for (auto& meta : sparse_meta_) {
-      for (uint32_t bank = 0; bank < kMetaBanks; ++bank) {
-        for (uint32_t col = 0; col < kMaxMetaCols; ++col) {
-          meta[bank * kMaxMetaCols + col] = (bank & 1) ? 0xaaaaaaaau : 0x55555555u;
-        }
-      }
-    }
   }
 
   void tick() {
