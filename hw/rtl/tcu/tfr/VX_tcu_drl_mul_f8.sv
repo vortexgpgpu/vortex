@@ -335,7 +335,7 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
                 `TRACE(4, ("t1=(%0d, 0x%0h, %0d), ", sign_sel[0], sig_low, pre_sum_0));
                 `TRACE(4, ("t2=(%0d, 0x%0h, %0d) ", sign_sel[1], sig_high, pre_sum_1));
                 `TRACE(4, ("| aln_t1=0x%0h, aln_t2=0x%0h ", aligned_sig_low, aligned_sig_high));
-                `TRACE(4, ("-> s=%0d P=0x%0h E=%0d\n", sig_sign, sig_add, final_exp));
+                `TRACE(4, ("-> s=%0d, P=0x%0h, E=%0d\n", sig_sign, sig_add, final_exp));
             end
         end
     `endif

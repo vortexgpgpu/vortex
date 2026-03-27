@@ -755,13 +755,13 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always @(posedge clk) begin
         if (!reset) begin
             if (alloc_en)
-                `TRACE(3, ("%t: %s tile-buf: alloc slot=%0d wid=%0d desc_a=0x%0h desc_b=0x%0h sparse=%0b\n",
+                `TRACE(3, ("%t: %s tile-buf: alloc slot=%0d, wid=%0d, desc_a=0x%0h, desc_b=0x%0h, sparse=%0b\n",
                     $time, INSTANCE_ID, alloc_idx, req_wid, req_desc_a, req_desc_b, is_sparse))
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
-                `TRACE(3, ("%t: %s tile-buf: rd_req slot=%0d addr=0x%0h state=%0d req_ctr=%0d\n",
+                `TRACE(3, ("%t: %s tile-buf: rd_req slot=%0d, addr=0x%0h, state=%0d, req_ctr=%0d\n",
                     $time, INSTANCE_ID, send_slot_r, tcu_lmem_if.req_addr, send_state_r, req_ctr_r))
             if (tcu_lmem_if.rsp_valid)
-                `TRACE(3, ("%t: %s tile-buf: rd_rsp slot=%0d data[0]=0x%0h state=%0d rsp_ctr=%0d\n",
+                `TRACE(3, ("%t: %s tile-buf: rd_rsp slot=%0d, data[0]=0x%0h, state=%0d, rsp_ctr=%0d\n",
                     $time, INSTANCE_ID, send_slot_r, tcu_lmem_if.rsp_data[0 +: `XLEN], send_state_r, rsp_ctr_r))
             if (fetch_done_now)
                 `TRACE(3, ("%t: %s tile-buf: slot=%0d READY (fetch_done)\n",

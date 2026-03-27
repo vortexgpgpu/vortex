@@ -108,7 +108,7 @@ module VX_lmem_dma import VX_gpu_pkg::*; #(
     `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
         if (dxa_txbar_bus_if.valid && !reset) begin
-            `TRACE(2, ("%t: %s: dxa_txbar valid=1 bar_addr=0x%0h ready=%b\n",
+            `TRACE(2, ("%t: %s: dxa_txbar valid=1, bar_addr=0x%0h, ready=%b\n",
                 $time, INSTANCE_ID, dxa_txbar_bus_if.data.addr, dxa_txbar_bus_if.ready))
         end
     end

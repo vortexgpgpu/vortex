@@ -97,7 +97,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef DBG_TRACE_DXA
     always_ff @(posedge clk) begin
         if (~reset && dxa_req_bus_if.req_valid && dxa_req_bus_if.req_ready) begin
-            `TRACE(1, ("%t: %s dxa-req: wid=%0d smem=0x%0h meta=0x%0h c0=%0d c1=%0d c2=%0d c3=%0d c4=%0d\n",
+            `TRACE(1, ("%t: %s dxa-req: wid=%0d, smem=0x%0h, meta=0x%0h, c0=%0d, c1=%0d, c2=%0d, c3=%0d, c4=%0d\n",
                 $time, INSTANCE_ID, dxa_req_bus_if.req_data.wid,
                 dxa_req_bus_if.req_data.smem_addr, dxa_req_bus_if.req_data.meta,
                 dxa_req_bus_if.req_data.coords[0], dxa_req_bus_if.req_data.coords[1],
@@ -105,7 +105,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 dxa_req_bus_if.req_data.coords[4]))
         end
         if (~reset && txbar_bus_if.valid && txbar_bus_if.ready) begin
-            `TRACE(1, ("%t: %s txbar-fire: addr=%0d done=%b\n",
+            `TRACE(1, ("%t: %s txbar-fire: addr=%0d, done=%b\n",
                 $time, INSTANCE_ID, txbar_bus_if.data.addr, txbar_bus_if.data.is_done))
         end
     end

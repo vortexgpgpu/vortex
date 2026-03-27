@@ -267,11 +267,11 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     always @(posedge clk) begin
         if (~reset) begin
             if (wrq_push) begin
-                `TRACE(2, ("%t: wr_ctrl push: addr=0x%0h byteen=0x%0h last=%0b\n",
+                `TRACE(2, ("%t: wr_ctrl push: addr=0x%0h, byteen=0x%0h, last=%0b\n",
                     $time, smem_addr_r, smem_in_byteen, smem_in_last))
             end
             if (transfer_active && wrq_pop) begin
-                `TRACE(2, ("%t: wr_ctrl pop: addr=0x%0h count=%0d total=%0d last=%0b done=%0b\n",
+                `TRACE(2, ("%t: wr_ctrl pop: addr=0x%0h, count=%0d, total=%0d, last=%0b, done=%0b\n",
                     $time, wrq_head_addr, wr_count_next, total_lmem_writes, wrq_head_last, transfer_done))
             end
             // Structured SMEM write event for timeline visualization

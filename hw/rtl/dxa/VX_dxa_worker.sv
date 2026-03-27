@@ -471,7 +471,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     end
 
     `RUNTIME_ASSERT(stall_ctr_r < STALL_TIMEOUT, (
-        "*** %s worker no-progress: core=%0d wid=%0d bar=%0d",
+        "*** %s worker no-progress: core=%0d, wid=%0d, bar=%0d",
         INSTANCE_ID, active_core_id_r, active_wid_r, active_bar_addr_r))
 
 `ifndef DBG_TRACE_DXA
@@ -532,7 +532,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     always @(posedge clk) begin
         if (~reset) begin
             if (setup_start) begin
-                `TRACE(1, ("%t: %s start: core=%0d wid=%0d bar=%0d total=%0d elem=%0d gbase=0x%0h smem=0x%0h desc=%0d\n",
+                `TRACE(1, ("%t: %s start: core=%0d, wid=%0d, bar=%0d, total=%0d, elem=%0d, gbase=0x%0h, smem=0x%0h, desc=%0d\n",
                     $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
                     issue_dec.total, issue_dec.elem_bytes, issue_base_addr, launch_smem_addr, launch_desc_slot))
                 $write("DXA_TL,%0d,XFER_START,core=%0d,wid=%0d,bar=%0d,total=%0d,elem=%0d\n",
@@ -540,7 +540,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     issue_dec.total, issue_dec.elem_bytes);
             end
             if (launch_invalid_cmd) begin
-                `TRACE(1, ("%t: %s launch-unsupported: core=%0d wid=%0d bar=%0d supported=%0d is_s2g=%0d total=%0d\n",
+                `TRACE(1, ("%t: %s launch-unsupported: core=%0d, wid=%0d, bar=%0d, supported=%0d, is_s2g=%0d, total=%0d\n",
                     $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
                     issue_dec.supported, issue_dec.is_s2g, issue_dec.total))
             end
@@ -562,12 +562,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                         $time, INSTANCE_ID, gmem_bus_if.rsp_data.tag.value))
                 end
                 if (wc_smem_req_fire) begin
-                    `TRACE(2, ("%t: %s smem-wr: addr=0x%0h count=%0d\n",
+                    `TRACE(2, ("%t: %s smem-wr: addr=0x%0h, count=%0d\n",
                         $time, INSTANCE_ID, wc_smem_wr_addr, wc_wr_done_count))
                 end
             end
             if (active_r && wc_transfer_done) begin
-                `TRACE(1, ("%t: %s done: core=%0d wid=%0d bar=%0d wr_count=%0d\n",
+                `TRACE(1, ("%t: %s done: core=%0d, wid=%0d, bar=%0d, wr_count=%0d\n",
                     $time, INSTANCE_ID, active_core_id_r, active_wid_r,
                     active_bar_addr_r, wc_wr_done_count))
                 $write("DXA_TL,%0d,XFER_DONE,core=%0d,wid=%0d,bar=%0d,wr_count=%0d\n",

@@ -102,3 +102,16 @@ regno_t to_regno_base(const reg_t& reg, bool has_type, bool is_dp) {
   return regno_t{reg.id, 0};
 }
 ```
+
+## 8. Debug/Trace Macros
+- **arguments inside `DP`, `DPN`, `DPH`, `DT`, `DTN`, `DTH` must be comma-separated**.
+
+Correct:
+```cpp
+DT(2, "req: wid=" << wid << ", pc=0x" << std::hex << pc << std::endl);
+```
+
+Incorrect (space-separated entries):
+```cpp
+DT(2, "req: wid=" << wid << " pc=0x" << std::hex << pc << std::endl);
+```

@@ -79,7 +79,7 @@ public:
 		if (!simobject_->dxa_req_in.empty()) {
 			auto& req = simobject_->dxa_req_in.peek();
 			DT(4, simobject_->name() << "-dxa smem write addr=0x"
-			   << std::hex << (req.addr) << std::dec << " is_last=" << req.is_last);
+			   << std::hex << (req.addr) << std::dec << ", is_last=" << req.is_last);
 			perf_stats_.writes++;
 			if (req.is_last) {
 				req.core->barrier_event_release(req.bar_id);
