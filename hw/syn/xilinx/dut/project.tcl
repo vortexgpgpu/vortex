@@ -169,9 +169,7 @@ proc run_power_report {} {
   reset_switching_activity -all
   set_switching_activity -default_toggle_rate 0.125 -default_static_probability 0.5
   set_switching_activity -deassert_resets
-  report_power \
-    -hierarchical -hierarchical_depth 6 \
-    -file power_vectorless.rpt
+  report_power -file power_vectorless.rpt
   puts "INFO: Vectorless power report -> power_vectorless.rpt"
 
   # ------------------------------------------------------------------
@@ -202,9 +200,7 @@ proc run_power_report {} {
     }
     # Keep resets deasserted — avoids inflating power with reset pulse
     set_switching_activity -deassert_resets
-    report_power \
-      -hierarchical -hierarchical_depth 6 \
-      -file power_vcd.rpt
+    report_power -file power_vcd.rpt
     puts "INFO: VCD-annotated power report -> power_vcd.rpt"
   }
 }

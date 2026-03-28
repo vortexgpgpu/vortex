@@ -43,6 +43,7 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID);
 
     // Per-I_RATIO metadata row widths
+    localparam MRW_R1 = TCU_TC_K * 2 * 1;
     localparam MRW_R2 = TCU_TC_K * 2 * 2;
     localparam MRW_R4 = TCU_TC_K * 2 * 4;
     localparam MRW_R8 = TCU_TC_K * 2 * 8;
@@ -56,14 +57,24 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 
     // Extract metadata row slices for each I_RATIO variant
+    wire [MRW_R1-1:0] meta_row_r1 = vld_mask[MRW_R1 * ROW_IDX +: MRW_R1];
     wire [MRW_R2-1:0] meta_row_r2 = vld_mask[MRW_R2 * ROW_IDX +: MRW_R2];
     wire [MRW_R4-1:0] meta_row_r4 = vld_mask[MRW_R4 * ROW_IDX +: MRW_R4];
     wire [MRW_R8-1:0] meta_row_r8 = vld_mask[MRW_R8 * ROW_IDX +: MRW_R8];
+    // For I_RATIO=1 (tf32), only the lo bits [TCU_TC_K-1:0] are used per k-step;
+    // the hi bits are the complement and are not needed by the mux logic.
+    `UNUSED_VAR (meta_row_r1[MRW_R1-1:TCU_TC_K])
 
-    // Three parallel gather outputs
-    wire [TCU_TC_K-1:0][31:0] b_col_r2, b_col_r4, b_col_r8;
+    // Four parallel gather outputs
+    wire [TCU_TC_K-1:0][31:0] b_col_r1, b_col_r2, b_col_r4, b_col_r8;
 
     for (genvar k = 0; k < TCU_TC_K; ++k) begin : g_bmux
+
+        // ---- I_RATIO=1 path (ELT_W=32) ----
+        begin : g_r1
+            wire mask_lo = meta_row_r1[k];
+            assign b_col_r1[k] = mask_lo ? b_col_in1[k] : b_col_in2[k];
+        end
 
         // ---- I_RATIO=2 path (ELT_W=16) ----
         begin : g_r2
@@ -163,7 +174,7 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always_comb begin
         automatic int unsigned elt_width = tcu_fmt_width(fmt_s);
         case (elt_width)
-            32:      b_col_out = b_col_in1;
+            32:      b_col_out = b_col_r1;
             16:      b_col_out = b_col_r2;
             8:       b_col_out = b_col_r4;
             4:       b_col_out = b_col_r8;

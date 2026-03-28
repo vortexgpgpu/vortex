@@ -714,16 +714,19 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
             uint32_t k_elem_start = kt * tileK_elem + sk * elts_per_sparse_step;
             uint32_t groups_in_step = elts_per_sparse_step / 4;
 
-            for (uint32_t g = 0; g < groups_in_step; ++g) {
-              uint32_t global_group = (k_elem_start / 4) + g;
-              uint8_t mask = masks[physical_row * num_groups_per_row + global_group];
+            // Iterate over individual elements in this sparse step.
+              // Using a flat element loop handles both full groups (I_RATIO >= 2)
+              // and partial groups (I_RATIO = 1, tf32) where elts_per_sparse_step < 4.
+              for (uint32_t e = 0; e < elts_per_sparse_step; ++e) {
+                uint32_t global_elt = k_elem_start + e;
+                uint32_t global_group = global_elt / 4;
+                uint32_t pos_in_group = global_elt % 4;
+                uint8_t mask = masks[physical_row * num_groups_per_row + global_group];
 
-              for (int p = 0; p < 4; ++p) {
-                if (mask & (1 << p)) {
-                  // Map element position to meta_row bit position
-                  uint32_t elt = g * 4 + p;
-                  uint32_t k_reg = elt / (2 * I_RATIO);
-                  uint32_t pos_in_k = elt % (2 * I_RATIO);
+                if (mask & (1u << pos_in_group)) {
+                  // Map element position within step to meta_row bit position
+                  uint32_t k_reg = e / (2 * I_RATIO);
+                  uint32_t pos_in_k = e % (2 * I_RATIO);
                   uint32_t meta_bit;
                   if (pos_in_k < I_RATIO) {
                     meta_bit = k_reg * I_RATIO + pos_in_k;
@@ -742,7 +745,6 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
                   h_meta[section_base + meta_idx] |= (1u << bit_idx);
                 }
               }
-            }
           }
         }
       }
