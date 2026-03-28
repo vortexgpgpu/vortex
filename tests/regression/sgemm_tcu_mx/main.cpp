@@ -130,7 +130,7 @@ static void normalize_scales_for_wmma_metadata(std::vector<uint8_t>& a_scales,
   }
 }
 
-static void pack_meta_mx_dse2(std::vector<uint32_t>& meta,
+static void pack_meta_mx(std::vector<uint32_t>& meta,
                               const std::vector<uint8_t>& a_scales,
                               const std::vector<uint8_t>& b_scales,
                               uint32_t M,
@@ -349,7 +349,7 @@ int main(int argc, char* argv[]) {
   normalize_scales_for_wmma_metadata(h_A_scales, h_B_scales, M, N, K);
 
   std::vector<uint32_t> h_meta_mx;
-  pack_meta_mx_dse2(h_meta_mx, h_A_scales, h_B_scales, M, N, K);
+  pack_meta_mx(h_meta_mx, h_A_scales, h_B_scales, M, N, K);
 
   std::cout << "upload matrix A buffer" << std::endl;
   RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, sizeA * sizeof(itype_t)));

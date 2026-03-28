@@ -242,7 +242,7 @@ public:
   using fragment_acc = fragment_t<accumulator, output_t, cfg::NRC>;
 
   // Per-thread metadata words used only for mxfp8 register plumbing.
-  // DSE2 dense-MX ABI uses two packed words for A and two packed words for B.
+  // dense-MX ABI uses two packed words for A and two packed words for B.
   static inline vreg_t mx_meta_a[2] = {0.0f, 0.0f};
   static inline vreg_t mx_meta_b[2] = {0.0f, 0.0f};
 

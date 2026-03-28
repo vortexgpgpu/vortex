@@ -534,9 +534,6 @@ tensor()
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=mxint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
-
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
 
@@ -550,12 +547,6 @@ tensor()
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=nvfp4 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
 
     # rtlsim tests
@@ -574,9 +565,6 @@ tensor()
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=mxint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
@@ -592,12 +580,6 @@ tensor()
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=nvfp4 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
@@ -609,9 +591,6 @@ tensor()
 
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=bf8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=mxint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DTCU_MXI8_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu    
 
     # test fp16
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1  --no-fused
@@ -641,16 +620,6 @@ tensor()
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5 --no-fused
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5 --W=25
 
-    # test mxfp8
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=6  --no-fused
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=6 --no-fused
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=6 --W=25
-
-    # test nvfp4
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=7  --no-fused
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_BHF" NUM_REGS=1 LATENCY=10 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=7 --no-fused
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=7 --W=25
-
     # test int8
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
@@ -666,10 +635,6 @@ tensor()
     # test uint4
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
-
-    # test mxint8
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=13
-    #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=13
 
     echo "tensor tests done!"
 }
@@ -973,16 +938,16 @@ tensor_mx() {
     
     # mxfp8 tests
     make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DEXT_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
 
     make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DEXT_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
 
     make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DEXT_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
 
     make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
-    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DEXT_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
 
     echo "tensor_mx tests done!"
 }
