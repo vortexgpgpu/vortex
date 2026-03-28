@@ -159,6 +159,7 @@ inline constexpr bool sparse_scale_format(uint32_t fmt) {
 
 inline constexpr bool sparse_format_supported(uint32_t fmt) {
   switch (fmt) {
+  case tf32::id:
   case fp16::id:
   case bf16::id:
   case fp8::id:
@@ -175,6 +176,8 @@ inline constexpr bool sparse_format_supported(uint32_t fmt) {
 
 inline constexpr uint32_t sparse_meta_num_cols(uint32_t fmt, uint32_t nt) {
   switch (fmt) {
+  case tf32::id:
+    return (nt + 15) / 16;
   case fp16::id:
   case bf16::id:
     return (nt + 7) / 8;
@@ -198,9 +201,10 @@ inline constexpr uint32_t sparse_meta_total_store_uops(uint32_t fmt, uint32_t st
 template <uint32_t NT,      // number of threads per warp
           typename It = fp32, // input type (A,B)
           typename Ot = fp32, // output type (C,D)
-          uint32_t XB = 4,  // vector element type size in bytes
           uint32_t NR = 8,  // registers per fragment
-          uint32_t DP = 0   // Dot-Product Length (0 for auto)
+          uint32_t DK = 0,  // K dimension of the tile (0 for auto, inferred from NT and NR)
+          uint32_t DP = 0,  // Dot-Product Length (0 for auto, inferred from NT)
+          uint32_t XB = 4   // vector element type size in bytes
           >
 struct wmma_config_t {
 private:
@@ -226,7 +230,7 @@ public:
 
   static constexpr uint32_t xtileM = 1u << tile_em;
   static constexpr uint32_t xtileN = 1u << tile_en;
-  static constexpr uint32_t xtileK = tile_cap / ((xtileM > xtileN) ? xtileM : xtileN);
+  static constexpr uint32_t xtileK = (DK != 0) ? DK : (tile_cap / ((xtileM > xtileN) ? xtileM : xtileN));
 
   static constexpr uint32_t tcM = 1u << block_em;
   static constexpr uint32_t tcN = 1u << block_en;

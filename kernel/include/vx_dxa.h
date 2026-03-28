@@ -154,14 +154,8 @@ inline void vx_dxa_issue_5d_wg(uint32_t desc_slot,
       : "memory");
 }
 
-// ── Multicast extensions (gated by EXT_DXA_MULTICAST_ENABLE) ──────────
-//
 // Multicast DXA issues read GMEM once and replay SMEM writes to multiple
 // CTAs within the same SM core.  funct3=5 for 2D multicast.
-// rs1 = wgather(smem_addr, meta, coord0, coord1) — same as normal 2D
-// rs2 = cta_mask (each bit = one participating CTA)
-#ifdef EXT_DXA_MULTICAST_ENABLE
-
 inline void vx_dxa_issue_2d_multicast_wg(uint32_t desc_slot,
                                           uint32_t barrier_id,
                                           const void* smem_addr,
@@ -173,15 +167,16 @@ inline void vx_dxa_issue_2d_multicast_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)0,
+                                            (size_t)0,
+                                            (size_t)0,
+                                            (size_t)cta_mask);
   __asm__ volatile (
       ".insn r %0, 5, %1, x0, %2, %3\n\t"
       :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7),
-        "r"(a0), "r"(cta_mask)
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
       : "memory");
 }
-
-#endif // EXT_DXA_MULTICAST_ENABLE
 
 #ifdef __cplusplus
 }

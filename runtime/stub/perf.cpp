@@ -553,33 +553,62 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     // DXA counters are cluster-level; query representative core per cluster.
     uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
     uint64_t tot_transfers = 0, tot_gmem_reads = 0, tot_gmem_dedup = 0;
-    uint64_t tot_smem_writes = 0, tot_gmem_lt = 0;
+    uint64_t tot_lmem_writes = 0, tot_gmem_lt = 0;
     for (uint32_t c = 0; c < num_clusters; ++c) {
       uint32_t rep_core = (uint32_t)(c * cores_per_cluster);
       if (rep_core >= num_cores)
         break;
-      uint64_t transfers = 0, gmem_reads = 0, gmem_dedup = 0, smem_writes = 0, gmem_lt = 0;
+      uint64_t transfers = 0, gmem_reads = 0, gmem_dedup = 0, lmem_writes = 0, gmem_lt = 0;
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_TRANSFERS,  rep_core, &transfers),  { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_READS, rep_core, &gmem_reads), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_DEDUP, rep_core, &gmem_dedup), { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_SMEM_WRITES,rep_core, &smem_writes),{ return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_LMEM_WRITES,rep_core, &lmem_writes),{ return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_LT,    rep_core, &gmem_lt),    { return err; });
       tot_transfers  += transfers;
       tot_gmem_reads += gmem_reads;
       tot_gmem_dedup += gmem_dedup;
-      tot_smem_writes+= smem_writes;
+      tot_lmem_writes+= lmem_writes;
       tot_gmem_lt    += gmem_lt;
       double avg_lat = safe_div((double)gmem_lt, (double)transfers);
       int dedup_pct  = calc_percent(gmem_dedup, gmem_reads + gmem_dedup);
-      perf_print_core(stream, rep_core, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), smem_writes=%" PRIu64 ", avg_gmem_lat=%.1f",
-                      transfers, gmem_reads, gmem_dedup, dedup_pct, smem_writes, avg_lat);
+      perf_print_core(stream, rep_core, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), lmem_writes=%" PRIu64 ", avg_gmem_lat=%.1f",
+                      transfers, gmem_reads, gmem_dedup, dedup_pct, lmem_writes, avg_lat);
     }
     {
       double avg_lat = safe_div((double)tot_gmem_lt, (double)tot_transfers);
       int dedup_pct  = calc_percent(tot_gmem_dedup, tot_gmem_reads + tot_gmem_dedup);
-      perf_print(stream, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), smem_writes=%" PRIu64 ", avg_gmem_lat=%.1f",
-                 tot_transfers, tot_gmem_reads, tot_gmem_dedup, dedup_pct, tot_smem_writes, avg_lat);
+      perf_print(stream, "dxa: transfers=%" PRIu64 ", gmem_reads=%" PRIu64 ", gmem_dedup=%" PRIu64 " (rate=%d%%), lmem_writes=%" PRIu64 ", avg_gmem_lat=%.1f",
+                 tot_transfers, tot_gmem_reads, tot_gmem_dedup, dedup_pct, tot_lmem_writes, avg_lat);
     }
+  } break;
+
+  case VX_DCR_MPM_CLASS_TCU: {
+    if (!tcu_en) {
+      perf_print(stream, "TCU not supported");
+      break;
+    }
+    uint64_t tot_wgmma_instrs = 0, tot_wgmma_stalls = 0;
+    uint64_t tot_tbuf_fetch_st = 0, tot_lmem_reads = 0;
+    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+      uint64_t wgmma_instrs = 0, wgmma_stalls = 0;
+      uint64_t tbuf_fetch_st = 0, lmem_reads = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCU_TBUF_FETCH_ST,  core_id, &tbuf_fetch_st),  { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCU_WGMMA_INSTRS,   core_id, &wgmma_instrs),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCU_WGMMA_STALLS,   core_id, &wgmma_stalls),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCU_LMEM_READS,     core_id, &lmem_reads),     { return err; });
+      double stall_rate = safe_div((double)wgmma_stalls, (double)(wgmma_instrs + wgmma_stalls)) * 100.0;
+      perf_print_core(stream, core_id,
+        "tcu: wgmma_instrs=%" PRIu64 ", wgmma_stalls=%" PRIu64 " (%.1f%%), tbuf_fetch_st=%" PRIu64 ", lmem_reads=%" PRIu64,
+        wgmma_instrs, wgmma_stalls, stall_rate, tbuf_fetch_st, lmem_reads);
+      tot_wgmma_instrs  += wgmma_instrs;
+      tot_wgmma_stalls  += wgmma_stalls;
+      tot_tbuf_fetch_st += tbuf_fetch_st;
+      tot_lmem_reads    += lmem_reads;
+    }
+    double tot_stall_rate = safe_div((double)tot_wgmma_stalls, (double)(tot_wgmma_instrs + tot_wgmma_stalls)) * 100.0;
+    perf_print(stream,
+      "tcu: total_wgmma_instrs=%" PRIu64 ", total_wgmma_stalls=%" PRIu64 " (%.1f%%), total_tbuf_fetch_st=%" PRIu64 ", total_lmem_reads=%" PRIu64,
+      tot_wgmma_instrs, tot_wgmma_stalls, tot_stall_rate, tot_tbuf_fetch_st, tot_lmem_reads);
   } break;
 
   default:

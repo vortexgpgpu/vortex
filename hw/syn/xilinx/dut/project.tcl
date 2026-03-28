@@ -160,6 +160,51 @@ proc run_implementation {} {
   write_checkpoint -force post_impl.dcp
 }
 
+proc run_power_report {} {
+  # ------------------------------------------------------------------
+  # Vectorless baseline: always generated so results are reproducible
+  # without a VCD.  Uses Vivado's internal activity model with resets
+  # deasserted (representative of steady-state operation).
+  # ------------------------------------------------------------------
+  reset_switching_activity -all
+  set_switching_activity -default_toggle_rate 0.125 -default_static_probability 0.5
+  set_switching_activity -deassert_resets
+  report_power -file power_vectorless.rpt
+  puts "INFO: Vectorless power report -> power_vectorless.rpt"
+
+  # ------------------------------------------------------------------
+  # VCD-annotated power: only when VCD_FILE env var is provided.
+  #
+  # Switching activity is read from the VCD; signals absent from the
+  # VCD fall back to Vivado's internal defaults.
+  #
+  # VCD_INST is the DUT instance path in the simulation hierarchy (mirrors
+  # SAIF_INST in the Synopsys flow).  It is stripped from VCD signal paths
+  # so they align with the synthesized netlist.
+  # For Verilator-generated VCDs the scope is typically "TOP.<module>"
+  # (e.g. VCD_INST=TOP.Vortex).  Leave empty if the VCD root scope
+  # already matches the top module name.
+  # ------------------------------------------------------------------
+  if {[info exists ::env(VCD_FILE)] && $::env(VCD_FILE) ne ""} {
+    set vcd_file $::env(VCD_FILE)
+    if {![file exists $vcd_file]} {
+      puts "WARNING: VCD_FILE not found: $vcd_file — skipping VCD-annotated power report"
+      return
+    }
+    puts "INFO: Annotating switching activity from VCD: $vcd_file"
+    reset_switching_activity -all
+    if {[info exists ::env(VCD_INST)] && $::env(VCD_INST) ne ""} {
+      read_vcd -strip_path $::env(VCD_INST) $vcd_file
+    } else {
+      read_vcd $vcd_file
+    }
+    # Keep resets deasserted — avoids inflating power with reset pulse
+    set_switching_activity -deassert_resets
+    report_power -file power_vcd.rpt
+    puts "INFO: VCD-annotated power report -> power_vcd.rpt"
+  }
+}
+
 proc run_report {} {
   # Generate the synthesis report
   report_place_status -file place.rpt
@@ -180,8 +225,8 @@ proc run_report {} {
   # Generate detailed RAM report
   report_ram_utilization -detail -file ram_utilization.rpt
 
-  # Generate power and drc reports
-  report_power -file power.rpt
+  # Generate power report(s) and drc
+  run_power_report
   report_drc -file drc.rpt
 }
 

@@ -29,6 +29,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_txbar_bus_if.master  dxa_txbar_bus_if,
 `endif
 
+`ifdef TCU_WGMMA_ENABLE
+    // TCU bank-parallel LMEM read port
+    VX_tcu_lmem_if.slave    tcu_lmem_if,
+`endif
+
     VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
     VX_dcr_flush_if.slave   dcr_flush_if,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
@@ -38,6 +43,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_dcache_if[`NUM_LSU_BLOCKS]();
+
+`ifdef TCU_WGMMA_ENABLE
+    `STATIC_ASSERT(`LMEM_ENABLED, ("TCU_WGMMA_ENABLE requires LMEM_ENABLE"))
+`endif
 
 `ifdef LMEM_ENABLE
 
@@ -113,85 +122,56 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .mem_bus_if (lmem_adapt_if)
     );
 
-`ifdef EXT_DXA_ENABLE
-    wire dxa_done_valid;
-    wire [BAR_ADDR_W-1:0] dxa_done_bar_addr;
+    VX_mem_bus_if #(
+        .DATA_SIZE  (`LMEM_NUM_BANKS * LSU_WORD_SIZE),
+        .TAG_WIDTH  (LMEM_DMA_TAG_W),
+        .ADDR_WIDTH (LMEM_ADDR_WIDTH - `CLOG2(`LMEM_NUM_BANKS))
+    ) lmem_dma_if();
 
-    // DXA bank-native writes bypass LSU crossbar — dedicated port to VX_local_mem
-    VX_local_mem #(
-        .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
-        .SIZE       (1 << `LMEM_LOG_SIZE),
-        .NUM_REQS   (`NUM_LSU_LANES),
-        .NUM_BANKS  (`LMEM_NUM_BANKS),
-        .WORD_SIZE  (LSU_WORD_SIZE),
-        .ADDR_WIDTH (LMEM_ADDR_WIDTH),
-        .TAG_WIDTH  (LMEM_TAG_WIDTH),
-        .OUT_BUF    (3)
-    ) local_mem (
-        .clk        (clk),
-        .reset      (reset),
-    `ifdef PERF_ENABLE
-        .lmem_perf  (lmem_perf),
+    VX_lmem_dma #(
+        .INSTANCE_ID (`SFORMATF(("%s-lmem-dma", INSTANCE_ID)))
+    ) lmem_dma (
+        .clk         (clk),
+        .reset       (reset),
+    `ifdef EXT_DXA_ENABLE
+        .dxa_bank_wr_if  (dxa_bank_wr_if),
+        .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
-        .mem_bus_if (lmem_adapt_if),
-        .dxa_bank_wr_if(dxa_bank_wr_if),
-        .dxa_done_valid(dxa_done_valid),
-        .dxa_done_ready(dxa_txbar_bus_if.ready),
-        .dxa_done_bar_addr(dxa_done_bar_addr)
+    `ifdef TCU_WGMMA_ENABLE
+        .tcu_lmem_if (tcu_lmem_if),
+    `endif
+        .lmem_dma_if (lmem_dma_if)
     );
 
-    // Connect DXA completion to txbar interface
-    assign dxa_txbar_bus_if.valid = dxa_done_valid;
-    assign dxa_txbar_bus_if.data.addr = dxa_done_bar_addr;
-    assign dxa_txbar_bus_if.data.is_done = 1'b1;
-`ifdef DBG_TRACE_DXA
-    always @(posedge clk) begin
-        if (dxa_done_valid && !reset) begin
-            `TRACE(2, ("%t: %s-mem_unit: dxa_done_valid=1 bar_addr=0x%0h ready=%b\n",
-                $time, INSTANCE_ID, dxa_done_bar_addr, dxa_txbar_bus_if.ready))
-        end
-    end
-`endif
-`else
     VX_local_mem #(
-        .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
-        .SIZE       (1 << `LMEM_LOG_SIZE),
-        .NUM_REQS   (`NUM_LSU_LANES),
-        .NUM_BANKS  (`LMEM_NUM_BANKS),
-        .WORD_SIZE  (LSU_WORD_SIZE),
-        .ADDR_WIDTH (LMEM_ADDR_WIDTH),
-        .TAG_WIDTH  (LMEM_TAG_WIDTH),
-        .OUT_BUF    (3)
+        .INSTANCE_ID (`SFORMATF(("%s-lmem", INSTANCE_ID))),
+        .SIZE        (1 << `LMEM_LOG_SIZE),
+        .NUM_REQS    (`NUM_LSU_LANES),
+        .NUM_BANKS   (`LMEM_NUM_BANKS),
+        .WORD_SIZE   (LSU_WORD_SIZE),
+        .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
+        .TAG_WIDTH   (LMEM_TAG_WIDTH),
+        .DMA_ENABLE  (LMEM_DMA_EN),
+        .DMA_TAG_WIDTH (LMEM_DMA_TAG_W),
+        .OUT_BUF     (3)
     ) local_mem (
-        .clk        (clk),
-        .reset      (reset),
+        .clk         (clk),
+        .reset       (reset),
     `ifdef PERF_ENABLE
-        .lmem_perf  (lmem_perf),
+        .lmem_perf   (lmem_perf),
     `endif
-        .mem_bus_if (lmem_adapt_if)
+        .dma_bus_if  (lmem_dma_if),
+        .lsu_bus_if  (lmem_adapt_if)
     );
-`endif
 
 `else
-
-`ifdef PERF_ENABLE
-    assign lmem_perf = '0;
-`endif
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lsu_dcache_if
         `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if[i], lsu_mem_if[i]);
     end
 
-`ifdef EXT_DXA_ENABLE
-    assign dxa_txbar_bus_if.valid = 1'b0;
-    assign dxa_txbar_bus_if.data.addr = '0;
-    assign dxa_txbar_bus_if.data.is_done = 1'b0;
-    assign dxa_bank_wr_if.wr_ready = 1'b1;
-    `UNUSED_VAR (dxa_bank_wr_if.wr_valid)
-    `UNUSED_VAR (dxa_bank_wr_if.wr_addr)
-    `UNUSED_VAR (dxa_bank_wr_if.wr_data)
-    `UNUSED_VAR (dxa_bank_wr_if.wr_byteen)
-    `UNUSED_VAR (dxa_bank_wr_if.wr_tag)
+`ifdef PERF_ENABLE
+    assign lmem_perf = '0;
 `endif
 
 `endif

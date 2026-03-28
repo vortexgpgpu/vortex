@@ -5,17 +5,18 @@
 
 namespace vt = vortex::tensor;
 // NR=32 for WGMMA accumulator; is_sparse=true (A is 2:4 compressed in smem)
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, true, 32>;
+using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, true, 32, 8>;
 
 // smem layout: [A_compressed][meta][B_dense]
 static constexpr uint32_t smem_a_elems  = ctx::tileM * (ctx::tileK / 2);
 static constexpr uint32_t smem_a_bytes  = smem_a_elems * sizeof(ctx::input_t);
 static constexpr uint32_t smem_b_elems  = ctx::tileK * ctx::tileN;
 static constexpr uint32_t smem_b_bytes  = smem_b_elems * sizeof(ctx::input_t);
-// meta immediately follows A; B follows meta
-static constexpr uint32_t smem_meta_off = smem_a_bytes;
-static constexpr uint32_t smem_b_off    = smem_meta_off + ctx::wg_meta_total_bytes;
-static constexpr uint32_t smem_total    = smem_b_off + smem_b_bytes;
+// meta immediately follows A; B follows meta, bank-row aligned
+static constexpr uint32_t smem_meta_off   = smem_a_bytes;
+static constexpr uint32_t smem_bank_bytes = NUM_THREADS * sizeof(float);
+static constexpr uint32_t smem_b_off      = ((smem_meta_off + ctx::wg_meta_total_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
+static constexpr uint32_t smem_total      = smem_b_off + smem_b_bytes;
 
 extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA  = reinterpret_cast<ctx::input_t *>(arg->A_addr);   // compressed A

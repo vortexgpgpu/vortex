@@ -28,13 +28,13 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire                        clk,
     input  wire                        reset,
 `ifdef PERF_ENABLE
-    output wire [31:0]                 perf_smem_writes,
+    output wire [31:0]                 perf_lmem_writes,
 `endif
     input  wire                        transfer_active,
     input  wire                        transfer_start,
 
     // Params from setup.
-    input  wire [31:0]                 total_smem_writes,
+    input  wire [31:0]                 total_lmem_writes,
     input  wire [`MEM_ADDR_WIDTH-1:0]  initial_smem_base,
 
     // SMEM word input (from cl2smem, valid/ready).
@@ -242,7 +242,7 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire seen_last_next = seen_last_r || (wrq_pop && wrq_head_last);
 
     assign transfer_done = transfer_active
-                        && (wr_count_next >= total_smem_writes)
+                        && (wr_count_next >= total_lmem_writes)
                         && seen_last_next;
 
 
@@ -252,27 +252,27 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
 `ifdef PERF_ENABLE
     // Lightweight write counter (no eff_bytes, no span, no back-to-back)
-    reg [31:0] wrp_total_smem_writes_r;
+    reg [31:0] wrp_total_lmem_writes_r;
     always @(posedge clk) begin
         if (reset || transfer_start) begin
-            wrp_total_smem_writes_r <= '0;
+            wrp_total_lmem_writes_r <= '0;
         end else if (wrq_pop) begin
-            wrp_total_smem_writes_r <= wrp_total_smem_writes_r + 32'd1;
+            wrp_total_lmem_writes_r <= wrp_total_lmem_writes_r + 32'd1;
         end
     end
-    assign perf_smem_writes = wrp_total_smem_writes_r + 32'(wrq_pop);
+    assign perf_lmem_writes = wrp_total_lmem_writes_r + 32'(wrq_pop);
 `endif
 
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
         if (~reset) begin
             if (wrq_push) begin
-                `TRACE(2, ("%t: wr_ctrl push: addr=0x%0h byteen=0x%0h last=%0b\n",
+                `TRACE(2, ("%t: wr_ctrl push: addr=0x%0h, byteen=0x%0h, last=%0b\n",
                     $time, smem_addr_r, smem_in_byteen, smem_in_last))
             end
             if (transfer_active && wrq_pop) begin
-                `TRACE(2, ("%t: wr_ctrl pop: addr=0x%0h count=%0d total=%0d last=%0b done=%0b\n",
-                    $time, wrq_head_addr, wr_count_next, total_smem_writes, wrq_head_last, transfer_done))
+                `TRACE(2, ("%t: wr_ctrl pop: addr=0x%0h, count=%0d, total=%0d, last=%0b, done=%0b\n",
+                    $time, wrq_head_addr, wr_count_next, total_lmem_writes, wrq_head_last, transfer_done))
             end
             // Structured SMEM write event for timeline visualization
             if (smem_req_fire) begin

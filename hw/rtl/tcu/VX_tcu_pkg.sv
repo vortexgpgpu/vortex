@@ -22,11 +22,6 @@ package VX_tcu_pkg;
 
     import VX_gpu_pkg::*;
 
-    // Set configuration parameters
-    localparam TCU_NT = `NUM_THREADS;
-    localparam TCU_NR = 8;
-    localparam TCU_DP = 0;
-
     // Supported floating-point types
     // WARNING: Changing this list requires updating format utility functions below
     localparam TCU_FP32_ID  = 0;
@@ -46,6 +41,17 @@ package VX_tcu_pkg;
     localparam TCU_MXI8_ID  = 13;
     localparam TCU_FMT_WIDTH= 4;
 
+    // Set configuration parameters
+    localparam TCU_NT = `NUM_THREADS;
+
+    localparam TCU_WG_NR = 32;
+    localparam TCU_WG_DK = 8;
+    localparam TCU_WG_DP = 0;
+
+    localparam TCU_NR = 8;
+    localparam TCU_DK = 0;
+    localparam TCU_DP = 0;
+
     // Tile dimensions
     localparam TCU_TILE_CAP = TCU_NT * TCU_NR;
     localparam TCU_LG_TILE_CAP = $clog2(TCU_TILE_CAP);
@@ -54,7 +60,7 @@ package VX_tcu_pkg;
 
     localparam TCU_TILE_M = 1 << TCU_TILE_EM;
     localparam TCU_TILE_N = 1 << TCU_TILE_EN;
-    localparam TCU_TILE_K = TCU_TILE_CAP / ((TCU_TILE_M > TCU_TILE_N) ? TCU_TILE_M : TCU_TILE_N);
+    localparam TCU_TILE_K = (TCU_DK != 0) ? TCU_DK : (TCU_DP != 0) ? TCU_DP : (TCU_TILE_CAP / ((TCU_TILE_M > TCU_TILE_N) ? TCU_TILE_M : TCU_TILE_N));
 
     // Block dimensions
     localparam TCU_BLOCK_CAP = TCU_NT;
@@ -79,15 +85,53 @@ package VX_tcu_pkg;
     localparam TCU_B_BLOCK_SIZE = TCU_TC_K * TCU_TC_N;
     localparam TCU_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE;
 
-`ifdef TCU_SPARSE_ENABLE
+    // WGMMA tile dimensions (NR=TCU_WG_NR=32, DK=8): larger tile, same block geometry
+    localparam TCU_WG_TILE_CAP = TCU_NT * TCU_WG_NR;
+    localparam TCU_WG_LG_TILE_CAP = $clog2(TCU_WG_TILE_CAP);
+    localparam TCU_WG_TILE_EN = TCU_WG_LG_TILE_CAP / 2;
+    localparam TCU_WG_TILE_EM = TCU_WG_LG_TILE_CAP - TCU_WG_TILE_EN;
+
+    localparam TCU_WG_TILE_M = 1 << TCU_WG_TILE_EM;
+    localparam TCU_WG_TILE_N = 1 << TCU_WG_TILE_EN;
+    localparam TCU_WG_TILE_K = (TCU_WG_DK != 0) ? TCU_WG_DK
+                             : (TCU_WG_DP != 0)  ? TCU_WG_DP
+                             : (TCU_WG_TILE_CAP / ((TCU_WG_TILE_M > TCU_WG_TILE_N) ? TCU_WG_TILE_M : TCU_WG_TILE_N));
+
+    // WG step counts: block geometry (TC_M/TC_N/TC_K) unchanged, tile is larger
+    localparam TCU_WG_M_STEPS = TCU_WG_TILE_M / TCU_TC_M;
+    localparam TCU_WG_N_STEPS = TCU_WG_TILE_N / TCU_TC_N;
+    localparam TCU_WG_K_STEPS = TCU_WG_TILE_K / TCU_TC_K;
+
+    localparam TCU_WG_UOPS = TCU_WG_M_STEPS * TCU_WG_N_STEPS * TCU_WG_K_STEPS;
+
+    // WG A/B micro-tiling (block geometry is shared with non-WG)
+    localparam TCU_WG_A_BLOCK_SIZE = TCU_TC_M * TCU_TC_K;
+    localparam TCU_WG_A_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_WG_A_BLOCK_SIZE;
+
+    localparam TCU_WG_B_BLOCK_SIZE = TCU_TC_K * TCU_TC_N;
+    localparam TCU_WG_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_WG_B_BLOCK_SIZE;
+
     // Symmetric sparse flag (NT=4, NT=16: block_em == block_en)
     localparam SYM_SPARSE = (TCU_BLOCK_EM == TCU_BLOCK_EN);
 
     // B micro-tiling (sparse 2:4)
-    // NT=16: column-pair layout (2 cols × tcK × 2 candidates = NT lanes per block)
     // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)
-    localparam TCU_B_BLOCK_SIZE_SP = SYM_SPARSE ? TCU_BLOCK_CAP : (TCU_TC_K * TCU_TC_N) * 2;
-    localparam TCU_B_SUB_BLOCKS_SP = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
+    // NT=16 (SYM_SPARSE): WMMA_SP uses column-pair layout (2 cols × tcK × 2 = NT lanes);
+    //   WGMMA_SP needs the full tcK × tcN × 2 candidate lanes (may exceed TCU_BLOCK_CAP).
+    localparam TCU_B_BLOCK_SIZE_SP    = SYM_SPARSE ? TCU_BLOCK_CAP : (TCU_TC_K * TCU_TC_N) * 2;
+    localparam TCU_B_SUB_BLOCKS_SP    = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
+    // WGMMA_SP always needs the full candidate lane set, regardless of SYM_SPARSE.
+    localparam TCU_WG_B_BLOCK_SIZE_SP = TCU_TC_K * TCU_TC_N * 2;
+    // Width of the tbuf_rs2_data port: wider only when SPARSE is enabled (WGMMA_SP path).
+    // Without SPARSE, only TCU_BLOCK_CAP lanes are ever consumed, so keep the port narrow.
+`ifdef TCU_SPARSE_ENABLE
+    localparam TCU_WG_RS2_WIDTH = TCU_WG_B_BLOCK_SIZE_SP;
+`else
+    localparam TCU_WG_RS2_WIDTH = TCU_BLOCK_CAP;
+`endif
+
+    localparam TCU_MIN_FMT_WIDTH = 4; //int4
+    localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
 
     // Max metadata widths (sized for widest type: 4-bit elements, I_RATIO=8)
     localparam TCU_MAX_META_ROW_WIDTH   = TCU_TC_K * 2 * TCU_MAX_ELT_RATIO;
@@ -103,38 +147,19 @@ package VX_tcu_pkg;
         ? TCU_NT : TCU_META_PER_WARP_DEPTH;
     localparam TCU_STORES_PER_COL = (TCU_META_PER_WARP_DEPTH + TCU_NT - 1) / TCU_NT;
 
-    function automatic logic [4:0] meta_num_cols(input logic [3:0] fmt);
-        case (fmt)
-            TCU_FP16_ID, TCU_BF16_ID:
-                return 5'((TCU_BLOCK_CAP + 7) / 8);   // 16-bit: ceil(NT/8)
-            TCU_FP8_ID, TCU_BF8_ID, TCU_I8_ID, TCU_U8_ID:
-                return 5'((TCU_BLOCK_CAP + 3) / 4);   // 8-bit: ceil(NT/4)
-            TCU_I4_ID, TCU_U4_ID, TCU_NVFP4_ID:
-                return 5'((TCU_BLOCK_CAP + 1) / 2);   // 4-bit: ceil(NT/2)
-            default:
-                return 5'd1;
-        endcase
-    endfunction
-
-    function automatic logic [4:0] meta_total_store_uops(input logic [3:0] fmt);
-        return 5'(meta_num_cols(fmt) * TCU_STORES_PER_COL);
-    endfunction
-`endif
-
     // Register counts
-    //localparam TCU_NRA = (TCU_TILE_M * TCU_TILE_K) / TCU_NT;
+    localparam TCU_NRA = (TCU_TILE_M * TCU_TILE_K) / TCU_NT;
     localparam TCU_NRB = (TCU_TILE_N * TCU_TILE_K) / TCU_NT;
-    //localparam TCU_NRC = (TCU_TILE_M * TCU_TILE_N) / TCU_NT;
+    localparam TCU_NRC = (TCU_TILE_M * TCU_TILE_N) / TCU_NT;
 
     // Register base addresses
-    localparam TCU_RC = 0;
+    localparam TCU_RC    = 0;
+    localparam TCU_WG_RC = TCU_RC;  // WGMMA C accumulator starts at same base
     localparam TCU_RA = 10;
     localparam TCU_RB = (TCU_NRB == 4) ? 28 : 24;
 
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
-    localparam TCU_MIN_FMT_WIDTH = 4; //int4
-    localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
 
     `ifdef TCU_TF32_ENABLE
@@ -194,6 +219,28 @@ package VX_tcu_pkg;
         endcase
     endfunction
 
+    function automatic int unsigned tcu_fmt_width(input logic [3:0] fmt);
+        case (fmt)
+            TCU_FP16_ID, TCU_BF16_ID:
+                return 16;
+            TCU_NVFP4_ID, TCU_I4_ID, TCU_U4_ID:
+                return 4;
+            TCU_FP8_ID,
+            TCU_BF8_ID,
+            TCU_I8_ID,
+            TCU_U8_ID,
+            TCU_MXFP8_ID,
+            TCU_MXI8_ID:
+                return 8;
+            TCU_FP32_ID,
+            TCU_I32_ID,
+            TCU_TF32_ID:
+                return 32;
+            default:
+                return 0;
+        endcase
+    endfunction
+
     function automatic logic tcu_fmt_is_int(input logic [TCU_FMT_WIDTH-1:0] fmt);
         return fmt[TCU_FMT_WIDTH-1];
     endfunction
@@ -204,6 +251,15 @@ package VX_tcu_pkg;
 
     function automatic logic tcu_fmt_is_bfloat(input logic [TCU_FMT_WIDTH-2:0] float_fmt);
         return !float_fmt[0];
+    endfunction
+
+    function automatic logic [4:0] meta_num_cols(input logic [3:0] fmt);
+        automatic int hw = tcu_fmt_width(fmt) / 2;
+        return 5'((TCU_BLOCK_CAP + hw - 1) / hw);
+    endfunction
+
+    function automatic logic [4:0] meta_total_store_uops(input logic [3:0] fmt);
+        return 5'(meta_num_cols(fmt) * TCU_STORES_PER_COL);
     endfunction
 
     // Tracing info
@@ -233,13 +289,9 @@ package VX_tcu_pkg;
                      input op_args_t op_args
     );
         case (INST_TCU_BITS'(op_type))
-            INST_TCU_WMMA
-        `ifdef TCU_SPARSE_ENABLE
-            , INST_TCU_WMMA_SP
-        `endif
-            : begin
+            INST_TCU_WMMA: begin
             `ifdef TCU_SPARSE_ENABLE
-                `TRACE(level, (INST_TCU_BITS'(op_type) == INST_TCU_WMMA_SP ? "WMMA_SP." : "WMMA."));
+                `TRACE(level, (op_args.tcu.is_sparse ? "WMMA.SP." : "WMMA."));
             `else
                 `TRACE(level, ("WMMA."));
             `endif
@@ -248,6 +300,19 @@ package VX_tcu_pkg;
                 trace_fmt(level, op_args.tcu.fmt_d);
                 `TRACE(level, (".%0d.%0d", op_args.tcu.step_m, op_args.tcu.step_n));
             end
+        `ifdef TCU_WGMMA_ENABLE
+            INST_TCU_WGMMA: begin
+            `ifdef TCU_SPARSE_ENABLE
+                `TRACE(level, (op_args.tcu.is_sparse ? "WGMMA.SP." : "WGMMA."));
+            `else
+                `TRACE(level, ("WGMMA."));
+            `endif
+                trace_fmt(level, op_args.tcu.fmt_s);
+                `TRACE(level, ("."));
+                trace_fmt(level, op_args.tcu.fmt_d);
+                `TRACE(level, (".%0d.%0d", op_args.tcu.step_m, op_args.tcu.step_n));
+            end
+        `endif
         `ifdef TCU_SPARSE_ENABLE
             INST_TCU_META_STORE: begin
                 `TRACE(level, ("META_STORE."));

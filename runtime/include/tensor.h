@@ -168,6 +168,11 @@ inline float element_magnitude(const typename TensorT::dtype* data, uint32_t off
 template <typename TensorT>
 inline bool prune_2to4_matrix(typename TensorT::dtype* dense, uint32_t rows, uint32_t cols) {
   constexpr uint32_t kBlock = 4;
+  // For types with i_ratio=1 (one element per 32-bit word, e.g. tf32), the gather
+  // hardware processes each half-group of 2 independently. Each sparse K-step covers
+  // exactly one half-group, so we must guarantee exactly one non-zero per pair of 2
+  // consecutive elements (positions {0,1} and {2,3} within each group of 4).
+  constexpr bool per_half = (sizeof(typename TensorT::dtype) == sizeof(uint32_t));
   uint32_t cols_expanded = detail::expanded_cols<TensorT>(cols);
   if ((cols_expanded % kBlock) != 0) {
     return false;
@@ -177,11 +182,22 @@ inline bool prune_2to4_matrix(typename TensorT::dtype* dense, uint32_t rows, uin
     for (uint32_t group = 0; group < (cols_expanded / kBlock); ++group) {
       uint32_t k_start = group * kBlock;
       uint32_t base = row * cols_expanded + k_start;
-      uint32_t keep0, keep1;
-      detail::select_top2<TensorT>(dense, base, keep0, keep1);
-      for (uint32_t i = 0; i < kBlock; ++i) {
-        if (i != keep0 && i != keep1) {
-          detail::data_accessor_t<TensorT>::write(dense, base + i, 0);
+      if constexpr (per_half) {
+        // 1-of-2 pruning per half: keep the larger-magnitude element from each pair
+        for (uint32_t h = 0; h < 2; ++h) {
+          uint32_t h_base = base + h * 2;
+          float m0 = detail::element_magnitude<TensorT>(dense, h_base + 0);
+          float m1 = detail::element_magnitude<TensorT>(dense, h_base + 1);
+          uint32_t zero_idx = (m0 >= m1) ? 1 : 0;
+          detail::data_accessor_t<TensorT>::write(dense, h_base + zero_idx, 0);
+        }
+      } else {
+        uint32_t keep0, keep1;
+        detail::select_top2<TensorT>(dense, base, keep0, keep1);
+        for (uint32_t i = 0; i < kBlock; ++i) {
+          if (i != keep0 && i != keep1) {
+            detail::data_accessor_t<TensorT>::write(dense, base + i, 0);
+          }
         }
       }
     }

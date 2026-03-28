@@ -33,9 +33,9 @@ struct smem_matrix_desc {
 
 // Build a smem descriptor from a pointer and row stride in bytes.
 static __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
-  uint32_t lmem_base = csr_read(VX_CSR_LOCAL_MEM_BASE);
-  uint32_t offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ptr)) - lmem_base;
-  return {((leading_bytes & 0xFFFFu) << 16) | (offset & 0xFFFFu)};
+  size_t lmem_base = csr_read(VX_CSR_LOCAL_MEM_BASE);
+  uint32_t offset = static_cast<uint32_t>(static_cast<size_t>(reinterpret_cast<uintptr_t>(ptr)) - lmem_base);
+  return {((leading_bytes << 16) | offset)};
 }
 
 namespace detail {
@@ -149,11 +149,12 @@ template <uint32_t NT,              // number of threads per warp
           typename It,              // input type (A,B)
           typename Ot,              // output type (C,D)
           bool is_sparse = false,   // sparse mode flag
-          uint32_t NR_ = 8>        // registers per C/D fragment (8 for WMMA, 32 for WGMMA)
+          uint32_t NR_ = 8,         // registers per C/D fragment
+          uint32_t DK_ = 0          // K dimension of the tile
+          >
 struct wmma_context {
 private:
-  using cfg = wmma_config_t<NT, fp32, fp32, 4, NR_>;
-
+  using cfg = wmma_config_t<NT, fp32, fp32, NR_, DK_>;
   enum frag_use_t { matrix_a, matrix_b, accumulator };
 
   using vreg_t = float;

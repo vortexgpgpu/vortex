@@ -60,14 +60,14 @@ public:
     uint64_t transfers      = 0;
     uint64_t gmem_reads     = 0;
     uint64_t gmem_dedup     = 0;
-    uint64_t smem_writes    = 0;
+    uint64_t lmem_writes    = 0;
     uint64_t total_latency  = 0;
 
     PerfStats& operator+=(const PerfStats& rhs) {
       transfers     += rhs.transfers;
       gmem_reads    += rhs.gmem_reads;
       gmem_dedup    += rhs.gmem_dedup;
-      smem_writes   += rhs.smem_writes;
+      lmem_writes   += rhs.lmem_writes;
       total_latency += rhs.total_latency;
       return *this;
     }
@@ -78,11 +78,12 @@ public:
   // time; emulation fields (tile0..gmem_dedup_hits) are filled by execute_copy().
   struct TraceData : public ITraceData {
     using Ptr = std::shared_ptr<TraceData>;
-    // routing
-    uint32_t desc_slot = 0;
-    uint64_t smem_addr = 0;
-    uint32_t coords[5] = {};
-    uint32_t bar_id    = 0;
+    // inputs
+    uint32_t desc_slot  = 0;
+    uint64_t smem_addr  = 0;
+    uint32_t coords[5]  = {};
+    uint32_t bar_id     = 0;
+    uint32_t cta_mask   = 0;
     // emulation result
     uint32_t tile0      = 0;
     uint32_t tile1      = 0;

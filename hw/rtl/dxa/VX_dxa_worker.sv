@@ -28,7 +28,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [PERF_CTR_BITS-1:0] perf_transfers,
     output wire [PERF_CTR_BITS-1:0] perf_gmem_reads,
     output wire [PERF_CTR_BITS-1:0] perf_gmem_dedup,
-    output wire [PERF_CTR_BITS-1:0] perf_smem_writes,
+    output wire [PERF_CTR_BITS-1:0] perf_lmem_writes,
     output wire [PERF_CTR_BITS-1:0] perf_gmem_lt,
 `endif
 
@@ -178,7 +178,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [GMEM_ADDR_WIDTH-1:0] ag_cl_addr;
     wire [GMEM_BYTES-1:0] ag_byte_mask;
     wire ag_oob, ag_last;
-    wire [31:0] ag_cfill, ag_total_smem_writes;
+    wire [31:0] ag_cfill, ag_total_lmem_writes;
 
     VX_dxa_addr_gen #(
         .GMEM_LINE_SIZE  (GMEM_BYTES),
@@ -195,7 +195,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .out_oob              (ag_oob),
         .out_last             (ag_last),
         .out_cfill            (ag_cfill),
-        .out_total_smem_writes(ag_total_smem_writes)
+        .out_total_lmem_writes(ag_total_lmem_writes)
     );
 
     // ════════════════════════════════════════════════════════════════════
@@ -344,7 +344,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .reset             (reset),
         .transfer_active   (active_r),
         .transfer_start    (pipeline_start),
-        .total_smem_writes (ag_total_smem_writes),
+        .total_lmem_writes (ag_total_lmem_writes),
         .initial_smem_base (`MEM_ADDR_WIDTH'(setup_params.initial_smem_base)),
         .smem_in_valid     (cs_valid),
         .smem_in_ready     (cs_ready),
@@ -369,7 +369,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `endif
     `ifdef PERF_ENABLE
         ,
-        .perf_smem_writes      (wc_perf_smem_writes)
+        .perf_lmem_writes      (wc_perf_lmem_writes)
     `endif
     );
 
@@ -471,7 +471,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     end
 
     `RUNTIME_ASSERT(stall_ctr_r < STALL_TIMEOUT, (
-        "*** %s worker no-progress: core=%0d wid=%0d bar=%0d",
+        "*** %s worker no-progress: core=%0d, wid=%0d, bar=%0d",
         INSTANCE_ID, active_core_id_r, active_wid_r, active_bar_addr_r))
 
 `ifndef DBG_TRACE_DXA
@@ -494,26 +494,26 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Wire declarations for submodule perf outputs
     wire [31:0] rc_perf_gmem_reqs;
     wire [31:0] rc_perf_gmem_span_cycles;
-    wire [31:0] wc_perf_smem_writes;
+    wire [31:0] wc_perf_lmem_writes;
     wire        dd_perf_dedup_hit;
     // Accumulated DXA perf counters (never reset, sum across all transfers)
     reg [PERF_CTR_BITS-1:0] perf_transfers_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_reads_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_dedup_r;
-    reg [PERF_CTR_BITS-1:0] perf_smem_writes_r;
+    reg [PERF_CTR_BITS-1:0] perf_lmem_writes_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_lt_r;
     always @(posedge clk) begin
         if (reset) begin
             perf_transfers_r  <= '0;
             perf_gmem_reads_r <= '0;
             perf_gmem_dedup_r <= '0;
-            perf_smem_writes_r <= '0;
+            perf_lmem_writes_r <= '0;
             perf_gmem_lt_r    <= '0;
         end else begin
             if (active_r && wc_transfer_done) begin
                 perf_transfers_r  <= perf_transfers_r + PERF_CTR_BITS'(1);
                 perf_gmem_reads_r <= perf_gmem_reads_r + PERF_CTR_BITS'(rc_perf_gmem_reqs);
-                perf_smem_writes_r <= perf_smem_writes_r + PERF_CTR_BITS'(wc_perf_smem_writes);
+                perf_lmem_writes_r <= perf_lmem_writes_r + PERF_CTR_BITS'(wc_perf_lmem_writes);
                 perf_gmem_lt_r    <= perf_gmem_lt_r + PERF_CTR_BITS'(rc_perf_gmem_span_cycles);
             end
             if (dd_perf_dedup_hit) begin
@@ -524,7 +524,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign perf_transfers  = perf_transfers_r;
     assign perf_gmem_reads = perf_gmem_reads_r;
     assign perf_gmem_dedup = perf_gmem_dedup_r;
-    assign perf_smem_writes = perf_smem_writes_r;
+    assign perf_lmem_writes = perf_lmem_writes_r;
     assign perf_gmem_lt    = perf_gmem_lt_r;
 `endif
 
@@ -532,7 +532,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     always @(posedge clk) begin
         if (~reset) begin
             if (setup_start) begin
-                `TRACE(1, ("%t: %s start: core=%0d wid=%0d bar=%0d total=%0d elem=%0d gbase=0x%0h smem=0x%0h desc=%0d\n",
+                `TRACE(1, ("%t: %s start: core=%0d, wid=%0d, bar=%0d, total=%0d, elem=%0d, gbase=0x%0h, smem=0x%0h, desc=%0d\n",
                     $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
                     issue_dec.total, issue_dec.elem_bytes, issue_base_addr, launch_smem_addr, launch_desc_slot))
                 $write("DXA_TL,%0d,XFER_START,core=%0d,wid=%0d,bar=%0d,total=%0d,elem=%0d\n",
@@ -540,7 +540,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     issue_dec.total, issue_dec.elem_bytes);
             end
             if (launch_invalid_cmd) begin
-                `TRACE(1, ("%t: %s launch-unsupported: core=%0d wid=%0d bar=%0d supported=%0d is_s2g=%0d total=%0d\n",
+                `TRACE(1, ("%t: %s launch-unsupported: core=%0d, wid=%0d, bar=%0d, supported=%0d, is_s2g=%0d, total=%0d\n",
                     $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
                     issue_dec.supported, issue_dec.is_s2g, issue_dec.total))
             end
@@ -562,12 +562,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                         $time, INSTANCE_ID, gmem_bus_if.rsp_data.tag.value))
                 end
                 if (wc_smem_req_fire) begin
-                    `TRACE(2, ("%t: %s smem-wr: addr=0x%0h count=%0d\n",
+                    `TRACE(2, ("%t: %s smem-wr: addr=0x%0h, count=%0d\n",
                         $time, INSTANCE_ID, wc_smem_wr_addr, wc_wr_done_count))
                 end
             end
             if (active_r && wc_transfer_done) begin
-                `TRACE(1, ("%t: %s done: core=%0d wid=%0d bar=%0d wr_count=%0d\n",
+                `TRACE(1, ("%t: %s done: core=%0d, wid=%0d, bar=%0d, wr_count=%0d\n",
                     $time, INSTANCE_ID, active_core_id_r, active_wid_r,
                     active_bar_addr_r, wc_wr_done_count))
                 $write("DXA_TL,%0d,XFER_DONE,core=%0d,wid=%0d,bar=%0d,wr_count=%0d\n",

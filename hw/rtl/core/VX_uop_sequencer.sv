@@ -127,9 +127,8 @@ module VX_uop_sequencer import
     // ------------------------------------------------------------------
     assign uop_in_valid[UOP_TCU] = (uop_in_data.ex_type == EX_TCU)
         && (uop_in_data.op_type == INST_TCU_WMMA
-    `ifdef TCU_SPARSE_ENABLE
-        || uop_in_data.op_type == INST_TCU_WMMA_SP
-        || uop_in_data.op_type == INST_TCU_META_STORE
+    `ifdef TCU_WGMMA_ENABLE
+        || uop_in_data.op_type == INST_TCU_WGMMA
     `endif
         );
     VX_tcu_uops tcu_uops (
@@ -143,9 +142,6 @@ module VX_uop_sequencer import
         .uop_count (uop_out_count[UOP_TCU])
     );
 `endif
-
-// DXA uop expander removed: wgather-based DXA delivers all args in a single
-// instruction — no uop expansion needed (UOP_DXA slot eliminated).
 
     wire uop_hold = is_uop_input && ~uop_active;
 

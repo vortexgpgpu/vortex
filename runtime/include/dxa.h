@@ -216,7 +216,6 @@ static inline int vx_dxa_program_desc_5d(
   return 0;
 }
 
-#ifdef EXT_DXA_MULTICAST_ENABLE
 // Program multicast stride fields for an existing DXA descriptor.
 //   smem_stride_bytes: byte offset between consecutive CTAs' SMEM bases
 //   bar_stride: barrier stride (reserved for future use, set to 0)
@@ -231,7 +230,6 @@ static inline int vx_dxa_program_desc_multicast(
   if (ret) return ret;
   return 0;
 }
-#endif
 
 #ifdef __cplusplus
 }

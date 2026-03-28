@@ -316,8 +316,8 @@ VX_CSR_MPM_DXA_GMEM_READS  = 0xB04  # GMEM cache-line requests issued (after ded
 VX_CSR_MPM_DXA_GMEM_READS_H  = 0xB84
 VX_CSR_MPM_DXA_GMEM_DEDUP  = 0xB05  # GMEM cache-line requests saved by intra-row dedup
 VX_CSR_MPM_DXA_GMEM_DEDUP_H  = 0xB85
-VX_CSR_MPM_DXA_SMEM_WRITES  = 0xB06  # SMEM word writes issued
-VX_CSR_MPM_DXA_SMEM_WRITES_H  = 0xB86
+VX_CSR_MPM_DXA_LMEM_WRITES  = 0xB06  # SMEM word writes issued
+VX_CSR_MPM_DXA_LMEM_WRITES_H  = 0xB86
 VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
 VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
 
@@ -325,3 +325,9 @@ VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
 # PERF: WGMMA tile-buffer (per-core; summed across blocks)
 VX_CSR_MPM_TCU_TBUF_FETCH_ST   = 0xB03  # cycles spent fetching A/B tiles into tile buffer
 VX_CSR_MPM_TCU_TBUF_FETCH_ST_H = 0xB83
+VX_CSR_MPM_TCU_WGMMA_INSTRS    = 0xB04  # WGMMA µops executed (fire count)
+VX_CSR_MPM_TCU_WGMMA_INSTRS_H  = 0xB84
+VX_CSR_MPM_TCU_WGMMA_STALLS    = 0xB05  # cycles: WGMMA valid but stalled
+VX_CSR_MPM_TCU_WGMMA_STALLS_H  = 0xB85
+VX_CSR_MPM_TCU_LMEM_READS      = 0xB06  # LMEM read transactions issued by tile buffer
+VX_CSR_MPM_TCU_LMEM_READS_H    = 0xB86

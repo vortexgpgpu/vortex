@@ -24,7 +24,7 @@ interface VX_dxa_req_bus_if import VX_gpu_pkg::*, VX_dxa_pkg::*; ();
         logic [4:0][`XLEN-1:0]    coords;      // [0]=lane2.rs1,[1]=lane3.rs1,[2]=lane0.rs2,[3]=lane1.rs2,[4]=lane2.rs2
     `ifdef EXT_DXA_MULTICAST_ENABLE
         logic                     is_multicast; // funct3 >= 5
-        logic [`NUM_WARPS-1:0]    cta_mask;     // from rs2 lane 0 (multicast only)
+        logic [`NUM_WARPS-1:0]    cta_mask;     // from rs2 lane 3 (multicast only)
     `endif
     } req_data_t;
 

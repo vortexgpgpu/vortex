@@ -23,7 +23,7 @@ using namespace vortex;
 
 namespace vt = vortex::tensor;
 using cfg   = vt::wmma_config_t<NUM_THREADS>;
-using wg_cfg = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 4, 32>;
+using wg_cfg = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 32, 8>;
 
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
@@ -511,8 +511,7 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
 }
 
 // Format-agnostic sparse gather: for each bword, iterate over its elem_count packed
-// elements, collect those flagged by lo_mask/hi_mask respectively, and pack them
-// sequentially into the output word. Works for elem_bits = 4, 8, or 16.
+// elements, collect those flagged by lo_mask/hi_mask respectively.
 static inline uint32_t gather_sparse(uint32_t bword0, uint32_t bword1,
                                      uint32_t lo_mask, uint32_t hi_mask,
                                      uint32_t elem_bits) {
@@ -543,7 +542,8 @@ static inline uint32_t meta_row_width(uint32_t elem_bits) {
 
 class TensorUnit::Impl {
 public:
-  struct SmemTileMeta {
+
+  struct lmem_desc_t {
     uint64_t base = 0;
     uint32_t ldm = 0;
     bool col_major = false;
@@ -565,13 +565,6 @@ public:
 
   void reset() {
     perf_stats_ = PerfStats();
-    for (auto& meta : sparse_meta_) {
-      for (uint32_t bank = 0; bank < kMetaBanks; ++bank) {
-        for (uint32_t col = 0; col < kMaxMetaCols; ++col) {
-          meta[bank * kMaxMetaCols + col] = (bank & 1) ? 0xaaaaaaaau : 0x55555555u;
-        }
-      }
-    }
   }
 
   void tick() {
@@ -585,8 +578,6 @@ public:
       switch (tcu_type) {
       case TcuType::WMMA:
       case TcuType::WGMMA:
-      case TcuType::WMMA_SP:
-      case TcuType::WGMMA_SP:
         delay = 4;
         break;
       case TcuType::META_STORE:
@@ -695,7 +686,7 @@ public:
             uint32_t b_idx = b_off + j_sp * cfg::tcK * kCompression + z * kCompression;
             uint32_t lo = 0, hi = 0;
             for (uint32_t b = 0; b < meta_bits; ++b) {
-              lo |= meta_bit(row_base + meta_bits * z           + b) << b;
+              lo |= meta_bit(row_base + meta_bits * z + b) << b;
               hi |= meta_bit(row_base + meta_bits * (cfg::tcK + z) + b) << b;
             }
             b_buf[z].u32 = gather_sparse(rs2_data.at(b_idx).u32, rs2_data.at(b_idx + 1).u32, lo, hi, ebits);
@@ -745,7 +736,6 @@ public:
              std::vector<reg_data_t>& rd_data,
              ExeTraceData* trace_data,
              bool is_sparse) {
-    __unused(wid);
     __unused(trace_data);
 
     auto fedp    = select_FEDP(fmt_s, fmt_d);
@@ -753,9 +743,19 @@ public:
     uint32_t k_words = wg_cfg::tcK;
     uint32_t e_bytes = elem_bits(fmt_s) / 8;
 
-    // Decode packed descriptors: bits[31:16] = ldm_bytes, bits[15:0] = smem offset
-    SmemTileMeta meta_a = {LMEM_BASE_ADDR + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
-    SmemTileMeta meta_b = {LMEM_BASE_ADDR + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
+    lmem_desc_t sd_a, sd_b;
+    if (step_k == 0 && step_m == 0 && step_n == 0) {
+      // Decode packed descriptors only on the very first uop of the WGMMA instruction.
+      // (a_desc / b_desc are valid register values only for this uop per decode.cpp.)
+      sd_a = {LMEM_BASE_ADDR + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
+      sd_b = {LMEM_BASE_ADDR + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
+      // Cache decoded descriptors for all subsequent uops of this WGMMA instruction.
+      lmem_desc_[wid][0] = sd_a;
+      lmem_desc_[wid][1] = sd_b;
+    } else {
+      sd_a = lmem_desc_[wid][0];
+      sd_b = lmem_desc_[wid][1];
+    }
 
     if (is_sparse) {
       if (!vt::sparse_format_supported(fmt_s)) {
@@ -768,8 +768,8 @@ public:
       uint32_t rtl_i_ratio    = 32 / ebits;
       uint32_t meta_row_w     = k_words * 2 * rtl_i_ratio; // bits per tcM row
       uint32_t meta_strd_words = (wg_cfg::tcM * meta_row_w + 31) / 32; // words per bank
-      // Metadata is stored in smem immediately after the compressed A tile
-      uint64_t meta_base = meta_a.base + uint64_t(wg_cfg::xtileM) * meta_a.ldm * e_bytes;
+      // Metadata is stored in lmem immediately after the compressed A tile
+      uint64_t meta_base = sd_a.base + uint64_t(wg_cfg::xtileM) * sd_a.ldm * e_bytes;
       uint32_t wg_bank   = step_m * (wg_cfg::k_steps / 2) + step_k;
 
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
@@ -788,9 +788,9 @@ public:
           uint32_t row_base  = i * meta_row_w;
 
           for (uint32_t z = 0; z < k_words; ++z) {
-            // Load compressed A word from smem
+            // Load compressed A word from lmem
             uint32_t k_elem_a = (step_k * k_words + z) * ratio;
-            a_row[z].u32 = load_smem_word(meta_a, a_row_idx, k_elem_a, fmt_s, false);
+            a_row[z].u32 = load_lmem_word(sd_a, a_row_idx, k_elem_a, fmt_s, false);
 
             // Read lo/hi metadata masks for this row and compressed-K word
             uint32_t lo = 0, hi = 0;
@@ -802,8 +802,8 @@ public:
             // Load 2 consecutive dense B words and sparse-gather the selected elements
             constexpr uint32_t kCompression = 2;
             uint32_t k_elem_b0 = (step_k * k_words + z) * ratio * kCompression;
-            uint32_t bword0 = load_smem_word(meta_b, k_elem_b0,         b_col_idx, fmt_s, true);
-            uint32_t bword1 = load_smem_word(meta_b, k_elem_b0 + ratio, b_col_idx, fmt_s, true);
+            uint32_t bword0 = load_lmem_word(sd_b, k_elem_b0,         b_col_idx, fmt_s, true);
+            uint32_t bword1 = load_lmem_word(sd_b, k_elem_b0 + ratio, b_col_idx, fmt_s, true);
             b_col[z].u32 = gather_sparse(bword0, bword1, lo, hi, ebits);
           }
 
@@ -828,8 +828,8 @@ public:
             uint32_t k_elem    = (step_k * k_words + z) * ratio;
             uint32_t a_row_idx = step_m * wg_cfg::tcM + i;
             uint32_t b_col_idx = step_n * wg_cfg::tcN + j;
-            a_row[z].u32 = load_smem_word(meta_a, a_row_idx, k_elem, fmt_s, false);
-            b_col[z].u32 = load_smem_word(meta_b, k_elem, b_col_idx, fmt_s, true);
+            a_row[z].u32 = load_lmem_word(sd_a, a_row_idx, k_elem, fmt_s, false);
+            b_col[z].u32 = load_lmem_word(sd_b, k_elem, b_col_idx, fmt_s, true);
           }
           auto t = i * wg_cfg::tcN + j;
           auto d_val = fedp(a_row, b_col, rs1_data.at(t).u32);
@@ -842,6 +842,18 @@ public:
               << ", c=0x" << rs1_data.at(t).u32 << ", d=0x" << d_val << std::dec << std::endl);
         }
       }
+    }
+
+    // Performance counters.
+    // wgmma_instrs: one per µop (each wgmma() call is one µop).
+    ++perf_stats_.wgmma_instrs;
+    // lmem_reads: in RTL each tile fetch issues (A_BANK_ROWS + B_BANK_ROWS) LMEM
+    // transactions, one per warp per outer-loop iteration (first µop only).
+    // Approximate in simx: count reads on first µop of each tile.
+    if (step_m == 0 && step_n == 0 && step_k == 0) {
+      constexpr uint32_t a_bank_rows = (wg_cfg::xtileM * wg_cfg::xtileK + LMEM_NUM_BANKS - 1) / LMEM_NUM_BANKS;
+      constexpr uint32_t b_bank_rows = (wg_cfg::xtileK * wg_cfg::xtileN + LMEM_NUM_BANKS - 1) / LMEM_NUM_BANKS;
+      perf_stats_.lmem_reads += a_bank_rows + b_bank_rows;
     }
   }
 
@@ -879,24 +891,20 @@ private:
     return 32 / elem_bits(fmt_s);
   }
 
-  uint32_t load_smem_word(const SmemTileMeta& meta, uint32_t row, uint32_t col, uint32_t fmt_s, bool pack_along_row) const {
+  uint32_t load_lmem_word(const lmem_desc_t& desc, uint32_t row, uint32_t col, uint32_t fmt_s, bool pack_along_row) const {
     auto bits = elem_bits(fmt_s);
-    if (bits == 4) {
-      // Direct-SMEM WGMMA path currently models byte/half/word formats.
-      std::abort();
-    }
+    uint32_t packed = 0;
     uint32_t elem_bytes = bits / 8;
     uint32_t elems_per_word = 4 / elem_bytes;
     uint32_t mask = (elem_bytes == 4) ? 0xffffffffu : ((1u << (8 * elem_bytes)) - 1u);
 
-    uint32_t packed = 0;
     for (uint32_t e = 0; e < elems_per_word; ++e) {
       uint32_t rr = row + (pack_along_row ? e : 0);
       uint32_t cc = col + (pack_along_row ? 0 : e);
-      if (meta.col_major) {
+      if (desc.col_major) {
         std::swap(rr, cc);
       }
-      uint64_t addr = meta.base + uint64_t(rr * meta.ldm + cc) * elem_bytes;
+      uint64_t addr = desc.base + uint64_t(rr * desc.ldm + cc) * elem_bytes;
       uint32_t word = 0;
       core_->mem_read(&word, addr, elem_bytes);
       packed |= (word & mask) << (8 * elem_bytes * e);
@@ -911,8 +919,9 @@ private:
   TensorUnit*   simobject_;
   Core*         core_;
   Arch          arch_;
-  PerfStats     perf_stats_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
+  std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
+  PerfStats     perf_stats_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -920,17 +929,11 @@ private:
 op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
   switch (tcu_type) {
   case TcuType::WMMA:
-    return {"WMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
+    return {"WMMA." + std::string(args.is_sparse ? "SP." : "") + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
              + "." + std::to_string(args.step_k), ""};
   case TcuType::WGMMA:
-    return {"WGMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
-             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
-  case TcuType::WGMMA_SP:
-    return {"WGMMA_SP." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
-             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
-  case TcuType::WMMA_SP:
-    return {"WMMA_SP." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
+    return {"WGMMA." + std::string(args.is_sparse ? "SP." : "") +  std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
              + "." + std::to_string(args.step_k), ""};
   case TcuType::META_STORE:
@@ -1007,11 +1010,11 @@ void TensorUnit::wgmma(uint32_t wid,
                        uint32_t step_k,
                        uint32_t a_desc,
                        uint32_t b_desc,
-                       const std::vector<reg_data_t>& rs1_data,
+                       const std::vector<reg_data_t>& rs3_data,
                        std::vector<reg_data_t>& rd_data,
                        ExeTraceData* trace_data,
                        bool is_sparse) {
-  impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, a_desc, b_desc, rs1_data, rd_data, trace_data, is_sparse);
+  impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, a_desc, b_desc, rs3_data, rd_data, trace_data, is_sparse);
 }
 
 void TensorUnit::meta_store(uint32_t wid,

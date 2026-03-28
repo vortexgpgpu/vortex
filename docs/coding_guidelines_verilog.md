@@ -127,7 +127,7 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
   ```
 
 ## 7. Using `ifdef
--Preserve indent of nested code and shift pre-processor left by one level
+- Preserve indent of nested code and shift pre-processor left by one level
 
 Base version (before):
   ```verilog
@@ -168,4 +168,17 @@ Adding ifdef (after):
           decode_unit = UNIT_ALU;
       end
   end
+  ```
+
+## 8. Trace Macros
+- **Arguments inside the `` `TRACE `` must be comma-separated**.
+
+Correct:
+  ```verilog
+  `TRACE(2, ("%t: %s req: wid=%0d, pc=0x%0h\n", $time, INSTANCE_ID, wid, pc))
+  ```
+
+Incorrect (space-separated entries):
+  ```verilog
+  `TRACE(2, ("%t: %s req: wid=%0d pc=0x%0h\n", $time, INSTANCE_ID, wid, pc))
   ```
