@@ -18,9 +18,9 @@ ifeq ($(DEVICE_FAMILY), arria10)
 	DEVICE = 10AX115N3F40E2SG
 endif
 
-CONFIGS += -DNDEBUG
-CONFIGS += -DQUARTUS
-CONFIGS += -DSYNTHESIS
+CONFIGS += -DSYNTHESIS -DQUARTUS -DNDEBUG
+
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 

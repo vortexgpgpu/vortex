@@ -19,33 +19,23 @@ KERNEL ?= vecadd
 NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
 JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
+CONFIGS += -DSYNTHESIS -DVIVADO -DEXT_F_DISABLE
+
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(filter -DFPU_TYPE_FPNEW, $(CONFIGS)))
+ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(SRC_DIR)
 
-# Add V extension sources
-ifneq (,$(filter -DEXT_V_ENABLE, $(CONFIGS)))
-	RTL_INCLUDE += -I$(RTL_DIR)/vpu
-endif
-
-# Add TCU extension sources
-ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS)))
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
-	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
-	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
-endif
-
 # compilation flags
-CFLAGS += -DNDEBUG -DSYNTHESIS -DVIVADO
+CFLAGS += -DNDEBUG
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
-CFLAGS += -DEXT_F_DISABLE
 
 # update memory layout for 2MB RAM
 CFLAGS += -DSTARTUP_ADDR=32\'h80000
