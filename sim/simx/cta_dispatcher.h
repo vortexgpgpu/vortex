@@ -35,7 +35,7 @@ struct cta_warp_record_t {
   uint32_t   block_dim[3];
   uint32_t   grid_dim[3];
   uint64_t   param;
-  uint32_t   lmem_addr;
+  uint64_t   lmem_addr;
 };
 
 class CtaDispatcher {
@@ -63,7 +63,7 @@ private:
   Kmu*      kmu_;
   uint32_t  num_threads_;
   uint32_t  num_warps_;
-  uint32_t  lmem_base_;
+  uint64_t  lmem_base_;
   uint32_t  lmem_capacity_;
 
   // Ring-buffer allocation pointer (offset from lmem_base_)
@@ -88,7 +88,7 @@ private:
   uint32_t  rank_;
   uint32_t  block_size_rem_;
   uint32_t  thread_idx_[3];
-  uint32_t  lmem_addr_;
+  uint64_t  lmem_addr_;
 
   // CTA fetched from KMU but blocked on lmem admission
   bool      has_pending_;
