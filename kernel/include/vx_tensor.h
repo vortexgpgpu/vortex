@@ -210,6 +210,8 @@ public:
 
   static constexpr uint32_t input_is_subbyte = (It::bits < 8);
 
+  static constexpr bool is_mx = std::is_same_v<It, mxfp8>;
+
   static constexpr uint32_t i_ratio = sizeof(vreg_t) / sizeof(input_t);
   static constexpr uint32_t tileM = cfg::tileM;
   static constexpr uint32_t tileN = cfg::tileN;
@@ -246,7 +248,7 @@ public:
 
   template <typename Frag>
   static __attribute__((always_inline)) void load_mx_metadata(const void* meta_mx_ptr) {
-    if constexpr (std::is_same_v<It, mxfp8>) {
+    if constexpr (is_mx) {
       if (nullptr == meta_mx_ptr) {
         if constexpr (Frag::Use == matrix_a) {
           mx_meta_a[0] = 0.0f;
@@ -573,10 +575,11 @@ public:
     register float fa6 __asm__("f16") = frag_a.data[6];
     register float fa7 __asm__("f17") = frag_a.data[7];
 
-    register float fma0 __asm__("f8")  = std::is_same_v<It, mxfp8> ? mx_meta_a[0] : 0.0f;
-    register float fma1 __asm__("f9")  = std::is_same_v<It, mxfp8> ? mx_meta_a[1] : 0.0f;
-    register float fmb0 __asm__("f18") = std::is_same_v<It, mxfp8> ? mx_meta_b[0] : 0.0f;
-    register float fmb1 __asm__("f19") = std::is_same_v<It, mxfp8> ? mx_meta_b[1] : 0.0f;
+    // frag_meta_mx: caller-saved registers (f8-f9 (A), f18-f19 (B))
+    register float fma0 __asm__("f8")  = is_mx ? mx_meta_a[0] : 0.0f;
+    register float fma1 __asm__("f9")  = is_mx ? mx_meta_a[1] : 0.0f;
+    register float fmb0 __asm__("f18") = is_mx ? mx_meta_b[0] : 0.0f;
+    register float fmb1 __asm__("f19") = is_mx ? mx_meta_b[1] : 0.0f;
 
     if constexpr (FragB::NR == 8) {
 
