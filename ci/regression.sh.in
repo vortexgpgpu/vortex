@@ -963,6 +963,30 @@ tensor_sp()
     echo "tensor_sp tests done!"
 }
 
+tensor_mx() {
+
+    echo "begin tensor tensor_mx tests..."
+
+    make -C kernel
+
+    # simx tests
+    
+    # mxfp8 tests
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DEXT_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DEXT_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DEXT_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DEXT_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+
+    echo "tensor_mx tests done!"
+}
+
 tensor_wg() {
 
     echo "begin tensor tensor_wg tests..."
@@ -1068,7 +1092,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sp] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1130,6 +1154,9 @@ while [ "$1" != "" ]; do
         --tensor_sp )
                 tests+=("tensor_sp")
                 ;;
+        --tensor_mx )
+            tests+=("tensor_mx")
+            ;;
         --tensor_wg )
                 tests+=("tensor_wg")
                 ;;
@@ -1161,6 +1188,7 @@ while [ "$1" != "" ]; do
                 tests+=("vector")
                 tests+=("tensor")
                 tests+=("tensor_sp")
+                tests+=("tensor_mx")
                 tests+=("tensor_wg")
                 tests+=("cupbop")
                 tests+=("dtm")
