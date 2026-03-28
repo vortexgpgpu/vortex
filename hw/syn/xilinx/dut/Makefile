@@ -5,7 +5,12 @@ PREFIX ?= build
 
 BUILD_DIR := $(PREFIX)
 
-.PHONY: unittest scope mem_unit lmem cache fpu tcu core issue vortex top
+VCD            ?=
+VCD_INST ?=
+
+.PHONY: unittest scope mem_unit lmem cache fpu tcu core issue vortex top \
+        unittest-power scope-power mem_unit-power lmem-power cache-power \
+        fpu-power tcu-power core-power issue-power vortex-power top-power
 
 unittest:
 	mkdir -p unittest/$(BUILD_DIR)
@@ -61,3 +66,12 @@ top:
 	mkdir -p top/$(BUILD_DIR)
 	cp top/Makefile top/$(BUILD_DIR)
 	$(MAKE) -C top/$(BUILD_DIR) clean && $(MAKE) -C top/$(BUILD_DIR) > top/$(BUILD_DIR)/build.log 2>&1 &
+
+# Re-run power analysis on an existing build without rebuilding the design.
+# Usage: make <target>-power VCD=<vcd-path> [VCD_INST=<top-module-instance-path>]
+%-power:
+	@target=$*; \
+	if [ ! -d $$target/$(BUILD_DIR) ]; then \
+	  echo "ERROR: $$target/$(BUILD_DIR) not found. Run 'make $$target' first."; exit 1; \
+	fi
+	$(MAKE) -C $*/$(BUILD_DIR) power VCD=$(VCD) VCD_INST=$(VCD_INST)
