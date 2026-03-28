@@ -122,24 +122,6 @@ struct data_accessor_t<vt::uint4> {
   }
 };
 
-template <>
-struct data_accessor_t<vt::nvfp4> {
-  static uint8_t read(const uint8_t *ptr, uint32_t offset) {
-    uint32_t row_off = offset / 2;
-    bool odd = offset & 0x1;
-    uint8_t value8 = ptr[row_off];
-    return odd ? (value8 >> 4) : (value8 & 0x0f); // extract nibble
-  }
-  static void write(uint8_t *ptr, uint32_t offset, uint8_t value) {
-    uint32_t row_off = offset / 2;
-    bool odd = offset & 0x1;
-    uint8_t old_value = ptr[row_off];
-    uint8_t new_value = odd ? ((old_value & 0x0f) | (value << 4))
-                            : ((old_value & 0xf0) | (value & 0x0f));
-    ptr[offset / 2] = new_value;
-  }
-};
-
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Type>
@@ -203,23 +185,6 @@ public:
     return (uint8_t)rand(); // store 2 nibbles in a byte
   }
   static bool compare(uint8_t a, uint8_t b, int index, int errors) {
-    if (a != b) {
-      if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
-      }
-      return false;
-    }
-    return true;
-  }
-};
-
-template <>
-class Comparator<vt::mxint8> {
-public:
-  static int8_t generate() {
-    return (int8_t)(rand() % 256 - 128);
-  }
-  static bool compare(int8_t a, int8_t b, int index, int errors) {
     if (a != b) {
       if (errors < MAX_ERRORS) {
         printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
@@ -337,58 +302,6 @@ public:
   }
 };
 
-// TODO: temp arbitrarily hardcoded scale factors
-constexpr uint8_t SCALE_FACTOR_E8M0_A = 129;  // val = 4, bias = 127
-constexpr uint8_t SCALE_FACTOR_E8M0_B = 131;  // val = 16
-constexpr uint8_t SCALE_FACTOR_E4M3_A = 0x41; // val = 2.25, bias = 7
-constexpr uint8_t SCALE_FACTOR_E4M3_B = 0x33; // val = 0.6875
-
-template <>
-class Comparator<vt::mxfp8> {
-public:
-  static uint8_t generate() {
-    return generate_with_scale(SCALE_FACTOR_E8M0_A);
-  }
-
-  static uint8_t generate_with_scale(uint8_t scale_factor) {
-    auto fvalue = float(rand()) / RAND_MAX;
-    return rv_ftomxfp8_s(bit_cast<uint32_t>(fvalue), scale_factor, 0, nullptr);
-  }
-
-  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
-    if (a != b) {
-      if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
-      }
-      return false;
-    }
-    return true;
-  }
-};
-
-template <>
-class Comparator<vt::nvfp4> {
-public:
-  static uint8_t generate() {
-    return generate_with_scale(SCALE_FACTOR_E4M3_A);
-  }
-
-  static uint8_t generate_with_scale(uint8_t scale_factor) {
-    auto fvalue = float(rand()) / RAND_MAX;
-    return rv_ftonvfp4_s(bit_cast<uint32_t>(fvalue), scale_factor, 0, nullptr);
-  }
-
-  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
-    if (a != b) {
-      if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
-      }
-      return false;
-    }
-    return true;
-  }
-};
-
 template <>
 class Comparator<vt::fp32> {
 public:
@@ -396,8 +309,7 @@ public:
     return static_cast<float>(rand()) / RAND_MAX;
   }
   static bool compare(float a, float b, int index, int errors) {
-    if constexpr (std::is_same<vt::ITYPE, vt::fp8>::value || std::is_same<vt::ITYPE, vt::bf8>::value ||
-                  std::is_same<vt::ITYPE, vt::mxfp8>::value || std::is_same<vt::ITYPE, vt::nvfp4>::value) {
+    if constexpr (std::is_same<vt::ITYPE, vt::fp8>::value || std::is_same<vt::ITYPE, vt::bf8>::value) {
       if (a == 0.0f && b == 0.0f) {
         return true;
       }
@@ -542,52 +454,6 @@ struct muladd_t<vt::tf32, vt::tf32> {
 };
 
 template <>
-struct muladd_t<vt::mxfp8, vt::fp32> {
-  static float eval(uint8_t a, uint8_t b, float c) {
-    constexpr uint8_t sf_a = SCALE_FACTOR_E8M0_A;
-    constexpr uint8_t sf_b = SCALE_FACTOR_E8M0_B;
-    auto fa = bit_cast<float>(rv_mxfp8tof_s(a, sf_a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_mxfp8tof_s(b, sf_b, 0, nullptr));
-    return fa * fb + c;
-  }
-};
-
-template <>
-struct muladd_t<vt::mxfp8, vt::mxfp8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    constexpr uint8_t sf = SCALE_FACTOR_E8M0_A;
-    auto fa = bit_cast<float>(rv_mxfp8tof_s(a, sf, 0, nullptr));
-    auto fb = bit_cast<float>(rv_mxfp8tof_s(b, sf, 0, nullptr));
-    auto fc = bit_cast<float>(rv_mxfp8tof_s(c, sf, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftomxfp8_s(bit_cast<uint32_t>(fd), sf, 0, nullptr);
-  }
-};
-
-template <>
-struct muladd_t<vt::nvfp4, vt::fp32> {
-  static float eval(uint8_t a, uint8_t b, float c) {
-    constexpr uint8_t sf_a = SCALE_FACTOR_E4M3_A;
-    constexpr uint8_t sf_b = SCALE_FACTOR_E4M3_B;
-    auto fa = bit_cast<float>(rv_nvfp4tof_s(a, sf_a, 0, nullptr));
-    auto fb = bit_cast<float>(rv_nvfp4tof_s(b, sf_b, 0, nullptr));
-    return fa * fb + c;
-  }
-};
-
-template <>
-struct muladd_t<vt::nvfp4, vt::nvfp4> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    constexpr uint8_t sf = SCALE_FACTOR_E4M3_A;
-    auto fa = bit_cast<float>(rv_nvfp4tof_s(a, sf, 0, nullptr));
-    auto fb = bit_cast<float>(rv_nvfp4tof_s(b, sf, 0, nullptr));
-    auto fc = bit_cast<float>(rv_nvfp4tof_s(c, sf, 0, nullptr));
-    auto fd = fa * fb + fc;
-    return rv_ftonvfp4_s(bit_cast<uint32_t>(fd), sf, 0, nullptr);
-  }
-};
-
-template <>
 struct muladd_t<vt::int4, vt::int32> {
   static int32_t eval(uint8_t a, uint8_t b, int32_t c) {
     int32_t a_val = a & 0xF;
@@ -611,40 +477,14 @@ struct muladd_t<vt::uint4, vt::int32> {
   }
 };
 
-template <>
-struct muladd_t<vt::mxint8, vt::int32> {
-  static int32_t eval(int8_t a, int8_t b, int32_t c) {
-    constexpr uint8_t sf_a = SCALE_FACTOR_E8M0_A;
-    constexpr uint8_t sf_b = SCALE_FACTOR_E8M0_B;
-    int32_t scale_exp_a = (int32_t)sf_a - 133;
-    float scale_factor_a = std::ldexp(1.0f, scale_exp_a);
-    int32_t scale_exp_b = (int32_t)sf_b - 133;
-    float scale_factor_b = std::ldexp(1.0f, scale_exp_b);
-    float product = (float)a * scale_factor_a * (float)b * scale_factor_b;
-    return (int32_t)product + c;
-  }
-};
-
 template<typename T>
 inline typename T::dtype generate_A_value() {
-  if constexpr (std::is_same_v<T, vt::mxfp8>) {
-    return Comparator<T>::generate_with_scale(SCALE_FACTOR_E8M0_A);
-  } else if constexpr (std::is_same_v<T, vt::nvfp4>) {
-    return Comparator<T>::generate_with_scale(SCALE_FACTOR_E4M3_A);
-  } else {
-    return Comparator<T>::generate();
-  }
+  return Comparator<T>::generate();
 }
 
 template<typename T>
 inline typename T::dtype generate_B_value() {
-  if constexpr (std::is_same_v<T, vt::mxfp8>) {
-    return Comparator<T>::generate_with_scale(SCALE_FACTOR_E8M0_B);
-  } else if constexpr (std::is_same_v<T, vt::nvfp4>) {
-    return Comparator<T>::generate_with_scale(SCALE_FACTOR_E4M3_B);
-  } else {
-    return Comparator<T>::generate();
-  }
+  return Comparator<T>::generate();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -904,7 +744,7 @@ int main(int argc, char *argv[]) {
   constexpr uint32_t num_meta_loads = (PD * meta_cols + NUM_THREADS - 1) / NUM_THREADS;
   uint32_t meta_buf_entries = num_tile_rows * num_k_tiles * (num_meta_loads * NUM_THREADS);
   RT_CHECK(vx_mem_alloc(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
-  RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_addr));
+  RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_sp_addr));
 
   uint32_t num_blocks = grid_dim[0] * grid_dim[1];
   RT_CHECK(vx_mem_alloc(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
@@ -913,7 +753,7 @@ int main(int argc, char *argv[]) {
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
-  std::cout << "meta_addr=0x" << std::hex << kernel_arg.meta_addr << std::endl;
+  std::cout << "meta_sp_addr=0x" << std::hex << kernel_arg.meta_sp_addr << std::endl;
 
   // generate source data
   // Generate full matrix A (M × K), prune in-place, then compress to M × K/2
@@ -954,8 +794,7 @@ int main(int argc, char *argv[]) {
   {
     std::cout << "upload matrix B buffer" << std::endl;
     if constexpr (std::is_same<vt::ITYPE, vt::int4>::value ||
-                  std::is_same<vt::ITYPE, vt::uint4>::value ||
-                  std::is_same<vt::ITYPE, vt::nvfp4>::value) {
+                  std::is_same<vt::ITYPE, vt::uint4>::value) {
       // sub-byte: existing 4-bit col-major conversion
       std::vector<uint8_t> h_B_col(sizeB);
       convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());

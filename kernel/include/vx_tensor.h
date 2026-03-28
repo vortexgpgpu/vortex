@@ -159,6 +159,14 @@ private:
 
   using vreg_t = float;
 
+  static __attribute__((always_inline)) vreg_t mx_word_as_f32(uint32_t value) {
+    union {
+      uint32_t u;
+      vreg_t f;
+    } cvt{value};
+    return cvt.f;
+  }
+
   template <frag_use_t U, typename T, uint32_t N>
   struct fragment_t {
     using Type = T;
@@ -166,6 +174,31 @@ private:
     static constexpr uint32_t NR = N;
     std::array<vreg_t, N> data;
   };
+
+  static __attribute__((always_inline)) uint32_t pack_mx_scale_row4(const uint8_t* base,
+                                                                     uint32_t stride,
+                                                                     uint32_t scale_col) {
+    uint32_t packed = 0;
+    detail::unroll_for<4>([&](auto i) {
+      uint32_t byte = base[i * stride + scale_col];
+      packed |= (byte << (i * 8));
+    });
+    return packed;
+  }
+
+  static __attribute__((always_inline)) uint32_t pack_mx_scale_col4(const uint8_t* base,
+                                                                     uint32_t stride,
+                                                                     uint32_t scale_row,
+                                                                     uint32_t col_start) {
+    uint32_t packed = 0;
+    uint32_t row_off = scale_row * stride;
+    detail::unroll_for<4>([&](auto i) {
+      uint32_t col = col_start + i;
+      uint32_t byte = (col < tileN) ? base[row_off + col] : 0;
+      packed |= (byte << (i * 8));
+    });
+    return packed;
+  }
 
 public:
 
@@ -176,6 +209,8 @@ public:
   using output_acessor_t = detail::data_accessor_t<Ot, vreg_t>;
 
   static constexpr uint32_t input_is_subbyte = (It::bits < 8);
+
+  static constexpr bool is_mx = std::is_same_v<It, mxfp8>;
 
   static constexpr uint32_t i_ratio = sizeof(vreg_t) / sizeof(input_t);
   static constexpr uint32_t tileM = cfg::tileM;
@@ -205,6 +240,37 @@ public:
   using fragment_a   = fragment_t<matrix_a, input_t, cfg::NRA>;
   using fragment_b   = fragment_t<matrix_b, input_t, cfg::NRB>;
   using fragment_acc = fragment_t<accumulator, output_t, cfg::NRC>;
+
+  // Per-thread metadata words used only for mxfp8 register plumbing.
+  // dense-MX ABI uses two packed words for A and two packed words for B.
+  static inline vreg_t mx_meta_a[2] = {0.0f, 0.0f};
+  static inline vreg_t mx_meta_b[2] = {0.0f, 0.0f};
+
+  template <typename Frag>
+  static __attribute__((always_inline)) void load_mx_metadata(const void* meta_mx_ptr) {
+    if constexpr (is_mx) {
+      if (nullptr == meta_mx_ptr) {
+        if constexpr (Frag::Use == matrix_a) {
+          mx_meta_a[0] = 0.0f;
+          mx_meta_a[1] = 0.0f;
+        } else if constexpr (Frag::Use == matrix_b) {
+          mx_meta_b[0] = 0.0f;
+          mx_meta_b[1] = 0.0f;
+        }
+      } else {
+        auto meta_base = reinterpret_cast<const uint32_t*>(meta_mx_ptr);
+        if constexpr (Frag::Use == matrix_a) {
+          mx_meta_a[0] = mx_word_as_f32(meta_base[0]);
+          mx_meta_a[1] = mx_word_as_f32(meta_base[1]);
+        } else if constexpr (Frag::Use == matrix_b) {
+          mx_meta_b[0] = mx_word_as_f32(meta_base[2]);
+          mx_meta_b[1] = mx_word_as_f32(meta_base[3]);
+        }
+      }
+    } else {
+      (void)meta_mx_ptr;
+    }
+  }
 
   template <typename Frag, typename T>
   static __attribute__((always_inline)) void fill_fragment(Frag &dst, T value) {
@@ -286,6 +352,7 @@ public:
           }
         });
       }
+
     } else if constexpr (Frag::Use == matrix_b) {
       if constexpr (is_sparse) {
         // Sparse B load: uses 2x tcK for B block
@@ -385,6 +452,7 @@ public:
           }
         });
       }
+
     } else {
       // Load accumulator matrix C
       uint32_t block_row = lane / cfg::tcN;
@@ -415,22 +483,38 @@ public:
     }
   }
 
+  // Dense-MX overload (4 args): matrix data + packed MX metadata pointer.
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
-                                                               const void *meta_ptr) {
-    static_assert(is_sparse, "meta_ptr is only supported in sparse mode");
-    static_assert(Frag::Use == matrix_a, "meta_ptr is only supported for matrix_a");
+                                                               const void *meta_mx_ptr) {
+    static_assert(!is_sparse, "4-arg load_matrix_sync is dense-MX only");
+    load_matrix_sync<src_layout, Frag>(dst, src, ldm);
+    load_mx_metadata<Frag>(meta_mx_ptr);
+  }
 
-    // Reuse the base function for the standard data load
+  // Sparse overload (5 args): MX pointer first, then SP metadata pointer.
+  // MX is optional in sparse mode (pass nullptr when unused).
+  template <mem_layout src_layout = row_major, typename Frag>
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
+                                                               const void *meta_mx_ptr,
+                                                               const void *meta_sp_ptr) {
+    static_assert(is_sparse, "5-arg load_matrix_sync is sparse only");
+
+    // Reuse base matrix load
     load_matrix_sync<src_layout, Frag>(dst, src, ldm);
 
-    // Load metadata into tail registers (frag_a.data[sparse_regs..sparse_regs+num_loads-1])
-    auto meta_base = reinterpret_cast<const float*>(meta_ptr);
-    uint32_t lane_id = vx_thread_id();
-    dst.data[sparse_regs] = meta_base[lane_id];
-    if constexpr (sp_num_meta_loads == 2) {
-      dst.data[sparse_regs + 1] = meta_base[NT + lane_id];
+    // Sparse metadata (A fragment only)
+    if constexpr (Frag::Use == matrix_a) {
+      auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
+      uint32_t lane_id = vx_thread_id();
+      dst.data[sparse_regs] = meta_base[lane_id];
+      if constexpr (sp_num_meta_loads == 2) {
+        dst.data[sparse_regs + 1] = meta_base[NT + lane_id];
+      }
     }
+
+    // Optional MX metadata sideband
+    load_mx_metadata<Frag>(meta_mx_ptr);
   }
 
   template <mem_layout dst_layout = row_major, typename Frag>
@@ -491,6 +575,12 @@ public:
     register float fa6 __asm__("f16") = frag_a.data[6];
     register float fa7 __asm__("f17") = frag_a.data[7];
 
+    // frag_meta_mx: caller-saved registers (f8-f9 (A), f18-f19 (B))
+    register float fma0 __asm__("f8")  = is_mx ? mx_meta_a[0] : 0.0f;
+    register float fma1 __asm__("f9")  = is_mx ? mx_meta_a[1] : 0.0f;
+    register float fmb0 __asm__("f18") = is_mx ? mx_meta_b[0] : 0.0f;
+    register float fmb1 __asm__("f19") = is_mx ? mx_meta_b[1] : 0.0f;
+
     if constexpr (FragB::NR == 8) {
 
       // frag_b: caller-saved registers (f24-f31)
@@ -506,6 +596,7 @@ public:
       __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
         : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+          "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
           "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
       );
@@ -521,6 +612,7 @@ public:
       __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
         : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+          "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
           "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
       );

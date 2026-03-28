@@ -29,6 +29,31 @@ inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
 }
 
+static inline uint8_t unpack_u8(uint32_t word, uint32_t idx) {
+  return (word >> (idx * 8)) & 0xffu;
+}
+
+#ifdef TCU_MX_ENABLE
+static inline uint8_t unpack_mx_scale(uint32_t w0,
+                                      uint32_t w1,
+                                      uint32_t idx,
+                                      const char* axis_name) {
+  // dense-MX ABI carries two packed words per axis.
+  // For 16x16 tiles this intentionally wraps indices [8..15] to [0..7].
+  if (idx >= 8) {
+    idx &= 0x7;
+  }
+  if (idx < 4) {
+    return unpack_u8(w0, idx);
+  }
+  if (idx < 8) {
+    return unpack_u8(w1, idx - 4);
+  }
+  std::cout << "Error: unsupported mxfp8 scale index for " << axis_name << ": " << idx << std::endl;
+  std::abort();
+}
+#endif
+
 template <typename It, typename Ot>
 struct FMA {
   using itype = typename It::dtype;
@@ -158,17 +183,12 @@ struct FMA<vt::tf32, vt::tf32> {
   }
 };
 
-// TODO: temp arbitrarily hardcoded scale factors
-constexpr uint8_t SCALE_FACTOR_E8M0_A = 129;  // val = 4, bias = 127
-constexpr uint8_t SCALE_FACTOR_E8M0_B = 131;  // val = 16
-constexpr uint8_t SCALE_FACTOR_E4M3_A = 0x41; // val = 2.25, bias = 7
-constexpr uint8_t SCALE_FACTOR_E4M3_B = 0x33; // val = 0.6875
-
+#ifdef TCU_MX_ENABLE
 template <>
 struct FMA<vt::mxfp8, vt::fp32> {
-  static float eval(uint8_t a, uint8_t b, float c) {
-    constexpr uint8_t sf_a = SCALE_FACTOR_E8M0_A; //TODO: input as parameter
-    constexpr uint8_t sf_b = SCALE_FACTOR_E8M0_B;
+  static float eval(uint8_t, uint8_t, float) = delete;
+
+  static float eval(uint8_t a, uint8_t b, float c, uint8_t sf_a, uint8_t sf_b) {
     auto xa = rv_mxfp8tof_s(a, sf_a, 0, nullptr);
     auto xb = rv_mxfp8tof_s(b, sf_b, 0, nullptr);
     auto xab= rv_fmul_s(xa, xb, 0, nullptr);
@@ -177,77 +197,7 @@ struct FMA<vt::mxfp8, vt::fp32> {
     return bit_cast<float>(xd);
   }
 };
-
-template <>
-struct FMA<vt::mxfp8, vt::mxfp8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    constexpr uint8_t sf = SCALE_FACTOR_E8M0_A;
-    auto xa = rv_mxfp8tof_s(a, sf, 0, nullptr);
-    auto xb = rv_mxfp8tof_s(b, sf, 0, nullptr);
-    auto xc = rv_mxfp8tof_s(c, sf, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftomxfp8_s(xd, sf, 0, nullptr);
-    return xh;
-  }
-};
-
-template <>
-struct FMA<vt::nvfp4, vt::fp32> {
-  static float eval(uint8_t a, uint8_t b, float c) {
-    constexpr uint8_t sf_a = SCALE_FACTOR_E4M3_A;
-    constexpr uint8_t sf_b = SCALE_FACTOR_E4M3_B;
-    auto xa = rv_nvfp4tof_s(a, sf_a, 0, nullptr);
-    auto xb = rv_nvfp4tof_s(b, sf_b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
-  }
-};
-
-template <>
-struct FMA<vt::nvfp4, vt::nvfp4> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    constexpr uint8_t sf = SCALE_FACTOR_E4M3_A;
-    auto xa = rv_nvfp4tof_s(a, sf, 0, nullptr);
-    auto xb = rv_nvfp4tof_s(b, sf, 0, nullptr);
-    auto xc = rv_nvfp4tof_s(c, sf, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftonvfp4_s(xd, sf, 0, nullptr);
-    return xh;
-  }
-};
-
-template <>
-struct FMA<vt::mxint8, vt::int32> {
-  static int32_t eval(int8_t a, int8_t b, int32_t c) {
-    constexpr uint8_t sf_a = SCALE_FACTOR_E8M0_A;
-    constexpr uint8_t sf_b = SCALE_FACTOR_E8M0_B;
-    //combined scale: block scale (2^(sf-127)) * implicit scale (2^(-6)) = 2^(sf-133)
-    int32_t scale_exp_a = (int32_t)sf_a - 133;
-    float scale_factor_a = std::ldexp(1.0f, scale_exp_a);
-    int32_t scale_exp_b = (int32_t)sf_b - 133;
-    float scale_factor_b = std::ldexp(1.0f, scale_exp_b);
-    float product = (float)a * scale_factor_a * (float)b * scale_factor_b;
-    return (int32_t)product + c;
-  }
-};
-
-template <>
-struct FMA<vt::mxint8, vt::mxint8> {
-  static int8_t eval(int8_t a, int8_t b, int8_t c) {
-    constexpr uint8_t sf = SCALE_FACTOR_E8M0_A;
-    int32_t scale_exp = (int32_t)sf - 133;
-    float scale_factor = std::ldexp(1.0f, scale_exp);
-    float product = (float)a * (float)b * scale_factor * scale_factor;
-    float result = product + (float)c;
-    //clamp to int8 range [-127, 127]
-    int32_t result_int = (int32_t)result;
-    if (result_int > 127) result_int = 127;
-    if (result_int < -127) result_int = -127;
-    return (int8_t)result_int;
-  }
-};
+#endif
 
 template <typename It, typename Ot>
 struct FEDP {
@@ -308,51 +258,24 @@ struct FEDP<vt::uint4, vt::int32>{
   }
 };
 
-template <>
-struct FEDP<vt::nvfp4, vt::fp32>{
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
-    constexpr uint8_t sf_a = SCALE_FACTOR_E4M3_A;
-    constexpr uint8_t sf_b = SCALE_FACTOR_E4M3_B;
-    auto acc = bit_cast<float>(c_val);
-    for (uint32_t z = 0; z < cfg::tcK; ++z) {
-      auto a = a_row[z].u32;
-      auto b = b_col[z].u32;
-      for (uint32_t i = 0; i < 8; ++i) { // 8 * 4 bits = 32 bits
-        uint8_t a_val = (a >> (i * 4)) & 0xF;
-        uint8_t b_val = (b >> (i * 4)) & 0xF;
-        auto xa = rv_nvfp4tof_s(a_val, sf_a, 0, nullptr);
-        auto xb = rv_nvfp4tof_s(b_val, sf_b, 0, nullptr);
-        auto xab = rv_fmul_s(xa, xb, 0, nullptr);
-        auto xc = bit_cast<uint32_t>(acc);
-        auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-        acc = bit_cast<float>(xd);
-      }
+#ifdef TCU_MX_ENABLE
+static uint32_t fedp_mxfp8_fp32_scaled(const reg_data_t* a_row,
+                                       const reg_data_t* b_col,
+                                       uint32_t c_val,
+                                       uint8_t sf_a,
+                                       uint8_t sf_b) {
+  constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(uint8_t);
+  auto acc = bit_cast<float>(c_val);
+  for (uint32_t z = 0; z < cfg::tcK; ++z) {
+    auto a = reinterpret_cast<const uint8_t*>(&a_row[z].u32);
+    auto b = reinterpret_cast<const uint8_t*>(&b_col[z].u32);
+    for (uint32_t i = 0; i < i_ratio; ++i) {
+      acc = FMA<vt::mxfp8, vt::fp32>::eval(a[i], b[i], acc, sf_a, sf_b);
     }
-    return bit_cast<uint32_t>(acc);
   }
-};
-
-template <>
-struct FEDP<vt::nvfp4, vt::nvfp4>{
-  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
-    constexpr uint8_t sf = SCALE_FACTOR_E4M3_A;
-    auto acc = bit_cast<uint8_t>(c_val & 0xFF);
-    for (uint32_t z = 0; z < cfg::tcK; ++z) {
-      auto a = a_row[z].u32;
-      auto b = b_col[z].u32;
-      for (uint32_t i = 0; i < 8; ++i) { // 8 * 4 bits = 32 bits
-        uint8_t a_val = (a >> (i * 4)) & 0xF;
-        uint8_t b_val = (b >> (i * 4)) & 0xF;
-        auto xa = rv_nvfp4tof_s(a_val, sf, 0, nullptr);
-        auto xb = rv_nvfp4tof_s(b_val, sf, 0, nullptr);
-        auto xc = rv_nvfp4tof_s(acc, sf, 0, nullptr);
-        auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-        acc = rv_ftonvfp4_s(xd, sf, 0, nullptr);
-      }
-    }
-    return bit_cast<uint32_t>(acc);
-  }
-};
+  return bit_cast<uint32_t>(acc);
+}
+#endif
 
 using PFN_FEDP = uint32_t (*)(const reg_data_t*, const reg_data_t*, uint32_t);
 
@@ -370,10 +293,6 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
       return FEDP<vt::bf8, vt::fp32>::eval;
     case vt::tf32::id:
       return FEDP<vt::tf32, vt::fp32>::eval;
-    case vt::mxfp8::id:
-      return FEDP<vt::mxfp8, vt::fp32>::eval;
-    case vt::nvfp4::id:
-      return FEDP<vt::nvfp4, vt::fp32>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
@@ -424,24 +343,6 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
       std::abort();
     }
     break;
-  case vt::mxfp8::id:
-    switch (IT) {
-    case vt::mxfp8::id:
-      return FEDP<vt::mxfp8, vt::mxfp8>::eval;
-    default:
-      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
-      std::abort();
-    }
-    break;
-  case vt::nvfp4::id:
-    switch (IT) {
-    case vt::nvfp4::id:
-      return FEDP<vt::nvfp4, vt::nvfp4>::eval;
-    default:
-      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
-      std::abort();
-    }
-    break;
   case vt::int32::id:
     switch (IT) {
     case vt::int8::id:
@@ -452,8 +353,6 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
       return FEDP<vt::int4, vt::int32>::eval;
     case vt::uint4::id:
       return FEDP<vt::uint4, vt::int32>::eval;
-    case vt::mxint8::id:
-      return FEDP<vt::mxint8, vt::int32>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
@@ -588,10 +487,20 @@ public:
             const std::vector<reg_data_t>& rs1_data,
             const std::vector<reg_data_t>& rs2_data,
             const std::vector<reg_data_t>& rs3_data,
+            const std::vector<reg_data_t>& mx_a0_data,
+            const std::vector<reg_data_t>& mx_a1_data,
+            const std::vector<reg_data_t>& mx_b0_data,
+            const std::vector<reg_data_t>& mx_b1_data,
             std::vector<reg_data_t>& rd_data,
             ExeTraceData* trace_data,
             bool is_sparse) {
     __unused(trace_data);
+#ifndef TCU_MX_ENABLE
+    __unused(mx_a0_data);
+    __unused(mx_a1_data);
+    __unused(mx_b0_data);
+    __unused(mx_b1_data);
+#endif
 
     if (is_sparse) {
       if (!vt::sparse_format_supported(fmt_s)) {
@@ -606,7 +515,17 @@ public:
       }
     }
 
-    auto fedp  = select_FEDP(fmt_s, fmt_d);
+  #ifdef TCU_MX_ENABLE
+    bool use_dynamic_scale_fedp = (!is_sparse)
+                   && (fmt_s == vt::mxfp8::id)
+                   && (fmt_d == vt::fp32::id);
+  #else
+    bool use_dynamic_scale_fedp = false;
+  #endif
+    PFN_FEDP fedp = nullptr;
+    if (!use_dynamic_scale_fedp) {
+      fedp = select_FEDP(fmt_s, fmt_d);
+    }
     uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
     uint32_t b_off = is_sparse
                    ? (step_n % cfg::b_sub_blocks_sp) * cfg::b_block_size_sp
@@ -646,7 +565,32 @@ public:
           b_col = rs2_data.data() + b_off + j * cfg::tcK;
         }
 
-        auto d_val = fedp(a_row, b_col, c_val);
+        uint32_t d_val;
+        if (use_dynamic_scale_fedp) {
+#ifdef TCU_MX_ENABLE
+          constexpr uint32_t meta_lane = 0;
+          if (mx_a0_data.size() <= meta_lane || mx_a1_data.size() <= meta_lane ||
+              mx_b0_data.size() <= meta_lane || mx_b1_data.size() <= meta_lane) {
+            std::cout << "Error: missing MX metadata registers for dynamic-scale WMMA" << std::endl;
+            std::abort();
+          }
+          uint32_t row_idx = step_m * cfg::tcM + i;
+          uint32_t col_idx = step_n * cfg::tcN + j;
+          uint8_t sf_a = unpack_mx_scale(mx_a0_data.at(meta_lane).u32,
+                                         mx_a1_data.at(meta_lane).u32,
+                                         row_idx,
+                                         "A");
+          uint8_t sf_b = unpack_mx_scale(mx_b0_data.at(meta_lane).u32,
+                                         mx_b1_data.at(meta_lane).u32,
+                                         col_idx,
+                                         "B");
+          d_val = fedp_mxfp8_fp32_scaled(a_row, b_col, c_val, sf_a, sf_b);
+#else
+          std::abort();
+#endif
+        } else {
+          d_val = fedp(a_row, b_col, c_val);
+        }
         rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
 
         DTH(3, simobject_->name() << (is_sparse ? " SP_FEDP" : " FEDP")
@@ -810,11 +754,9 @@ private:
     case vt::mxfp8::id:
     case vt::int8::id:
     case vt::uint8::id:
-    case vt::mxint8::id:
       return 8;
     case vt::int4::id:
     case vt::uint4::id:
-    case vt::nvfp4::id:
       return 4;
     default:
       std::abort();
@@ -911,10 +853,29 @@ void TensorUnit::wmma(uint32_t wid,
                       const std::vector<reg_data_t>& rs1_data,
                       const std::vector<reg_data_t>& rs2_data,
                       const std::vector<reg_data_t>& rs3_data,
+                      const std::vector<reg_data_t>& mx_a0_data,
+                      const std::vector<reg_data_t>& mx_a1_data,
+                      const std::vector<reg_data_t>& mx_b0_data,
+                      const std::vector<reg_data_t>& mx_b1_data,
                       std::vector<reg_data_t>& rd_data,
                       ExeTraceData* trace_data,
                       bool is_sparse) {
-  impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data, is_sparse);
+  impl_->wmma(wid,
+              fmt_s,
+              fmt_d,
+              step_m,
+              step_n,
+              step_k,
+              rs1_data,
+              rs2_data,
+              rs3_data,
+              mx_a0_data,
+              mx_a1_data,
+              mx_b0_data,
+              mx_b1_data,
+              rd_data,
+              trace_data,
+              is_sparse);
 }
 
 void TensorUnit::wgmma(uint32_t wid,

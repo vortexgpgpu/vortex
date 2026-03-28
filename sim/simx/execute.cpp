@@ -1647,10 +1647,32 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         trace->data = trace_data;
         assert(operand_tmask.count() == num_threads);
         assert(exec_tmask.count() == num_threads);
+        std::vector<reg_data_t> mx_a0_data(num_threads);
+        std::vector<reg_data_t> mx_a1_data(num_threads);
+        std::vector<reg_data_t> mx_b0_data(num_threads);
+        std::vector<reg_data_t> mx_b1_data(num_threads);
+        auto& f8_data = warp.freg_file.at(8);
+        auto& f9_data = warp.freg_file.at(9);
+        auto& f18_data = warp.freg_file.at(18);
+        auto& f19_data = warp.freg_file.at(19);
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          mx_a0_data[t].u64 = f8_data.at(t);
+          mx_a1_data[t].u64 = f9_data.at(t);
+          mx_b0_data[t].u64 = f18_data.at(t);
+          mx_b1_data[t].u64 = f19_data.at(t);
+        }
         core_->tensor_unit()->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                                    tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
-                                   rs1_data, rs2_data, rs3_data, rd_data,
-                                   trace_data.get(), tpuArgs.is_sparse);
+                                   rs1_data,
+                                   rs2_data,
+                                   rs3_data,
+                                   mx_a0_data,
+                                   mx_a1_data,
+                                   mx_b0_data,
+                                   mx_b1_data,
+                                   rd_data,
+                                   trace_data.get(),
+                                     tpuArgs.is_sparse);
         rd_write = true;
       } break;
   #ifdef TCU_WGMMA_ENABLE

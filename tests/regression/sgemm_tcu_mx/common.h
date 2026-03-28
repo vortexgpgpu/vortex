@@ -4,11 +4,11 @@
 #include <stdint.h>
 
 #ifndef NUM_THREADS
-#define NUM_THREADS 8
+#define NUM_THREADS 4
 #endif
 
 #ifndef ITYPE
-#define ITYPE fp16
+#define ITYPE mxfp8
 #endif
 
 #ifndef OTYPE
@@ -20,8 +20,7 @@ typedef struct {
   uint64_t A_addr;
   uint64_t B_addr;
   uint64_t C_addr;
-  uint64_t meta_sp_addr;
-  uint64_t cycles_addr;
+  uint64_t meta_mx_addr;
 } kernel_arg_t;
 
 #endif

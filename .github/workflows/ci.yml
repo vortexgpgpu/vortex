@@ -121,7 +121,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04]
-        name: [regression, dxa, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor, tensor_sp, tensor_wg]
+        name: [regression, dxa, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor, tensor_sp, tensor_mx, tensor_wg]
         xlen: [32, 64]
         exclude:
           - name: dxa
