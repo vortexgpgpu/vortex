@@ -354,7 +354,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             );
         `endif
 
-        assign result_if.data.data[i * TCU_TC_N + j] = `XLEN'($signed(d_val[i][j]));
+        // NaN-box the fp32 result for XLEN=64: upper 32 bits must be all-1s per RVF spec.
+        if (`XLEN > 32) begin : g_result_nanbox
+            assign result_if.data.data[i * TCU_TC_N + j] = {32'hffffffff, d_val[i][j]};
+        end else begin : g_result_passthrough
+            assign result_if.data.data[i * TCU_TC_N + j] = d_val[i][j];
+        end
 
         `ifdef DBG_TRACE_TCU
             always @(posedge clk) begin

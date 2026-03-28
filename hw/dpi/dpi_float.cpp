@@ -346,7 +346,7 @@ void dpi_f2f(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVal
       *result = nan_box(rv_e5m2tof_s(check_boxing8(a, 0x7C), *frm, fflags));
       break;
     case 6: // tf32
-      *result = nan_box(rv_tf32tof_s(check_boxing19(a, 0x3FE00), *frm, fflags));
+      *result = nan_box(rv_tf32tof_s(check_boxing(a), *frm, fflags));
       break;
     case 7: // nvfp4
       *result = nan_box(rv_e2m1tof_s(check_boxing4(a, 0xFF), *frm, fflags));
