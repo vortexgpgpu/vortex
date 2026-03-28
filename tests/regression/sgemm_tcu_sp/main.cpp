@@ -904,7 +904,7 @@ int main(int argc, char *argv[]) {
   constexpr uint32_t num_meta_loads = (PD * meta_cols + NUM_THREADS - 1) / NUM_THREADS;
   uint32_t meta_buf_entries = num_tile_rows * num_k_tiles * (num_meta_loads * NUM_THREADS);
   RT_CHECK(vx_mem_alloc(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
-  RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_addr));
+  RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_sp_addr));
 
   uint32_t num_blocks = grid_dim[0] * grid_dim[1];
   RT_CHECK(vx_mem_alloc(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
@@ -913,7 +913,7 @@ int main(int argc, char *argv[]) {
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
-  std::cout << "meta_addr=0x" << std::hex << kernel_arg.meta_addr << std::endl;
+  std::cout << "meta_sp_addr=0x" << std::hex << kernel_arg.meta_sp_addr << std::endl;
 
   // generate source data
   // Generate full matrix A (M × K), prune in-place, then compress to M × K/2

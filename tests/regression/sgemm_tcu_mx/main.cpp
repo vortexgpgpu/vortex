@@ -86,18 +86,109 @@ static void matmul_cpu_mxfp8_fp32(otype_t* C,
   }
 }
 
+static inline uint32_t pack4(const uint8_t* v) {
+  return (static_cast<uint32_t>(v[0]) << 0)
+       | (static_cast<uint32_t>(v[1]) << 8)
+       | (static_cast<uint32_t>(v[2]) << 16)
+       | (static_cast<uint32_t>(v[3]) << 24);
+}
+
+static void normalize_scales_for_wmma_metadata(std::vector<uint8_t>& a_scales,
+                                               std::vector<uint8_t>& b_scales,
+                                               uint32_t M,
+                                               uint32_t N,
+                                               uint32_t K) {
+  if constexpr (cfg::tileM <= 8 && cfg::tileN <= 8) {
+    (void)M;
+    (void)N;
+    (void)K;
+    return;
+  }
+
+  uint32_t k_blocks = K / vt::mxfp8::ele_block;
+
+  if constexpr (cfg::tileM > 8) {
+    for (uint32_t tr = 0; tr < M; tr += cfg::tileM) {
+      for (uint32_t r = 8; r < cfg::tileM && (tr + r) < M; ++r) {
+        uint32_t src_r = r - 8;
+        for (uint32_t kb = 0; kb < k_blocks; ++kb) {
+          a_scales[(tr + r) * k_blocks + kb] = a_scales[(tr + src_r) * k_blocks + kb];
+        }
+      }
+    }
+  }
+
+  if constexpr (cfg::tileN > 8) {
+    for (uint32_t tc = 0; tc < N; tc += cfg::tileN) {
+      for (uint32_t c = 8; c < cfg::tileN && (tc + c) < N; ++c) {
+        uint32_t src_c = c - 8;
+        for (uint32_t kb = 0; kb < k_blocks; ++kb) {
+          b_scales[kb * N + (tc + c)] = b_scales[kb * N + (tc + src_c)];
+        }
+      }
+    }
+  }
+}
+
+static void pack_meta_mx_dse2(std::vector<uint32_t>& meta,
+                              const std::vector<uint8_t>& a_scales,
+                              const std::vector<uint8_t>& b_scales,
+                              uint32_t M,
+                              uint32_t N,
+                              uint32_t K) {
+  uint32_t k_blocks = K / vt::mxfp8::ele_block;
+  uint32_t num_tile_rows = M / cfg::tileM;
+  uint32_t num_tile_cols = N / cfg::tileN;
+  uint32_t num_k_steps = K / cfg::tileK;
+  constexpr uint32_t per_step_words = 4;
+
+  meta.assign(num_tile_rows * num_tile_cols * num_k_steps * per_step_words, 0);
+
+  for (uint32_t tr = 0; tr < num_tile_rows; ++tr) {
+    for (uint32_t tc = 0; tc < num_tile_cols; ++tc) {
+      for (uint32_t ks = 0; ks < num_k_steps; ++ks) {
+        uint32_t k0 = ks * cfg::tileK;
+        uint32_t kb = k0 / vt::mxfp8::ele_block;
+
+        uint8_t a_pack[8] = {0};
+        for (uint32_t i = 0; i < 8; ++i) {
+          uint32_t row = tr * cfg::tileM + i;
+          if (row < M) {
+            a_pack[i] = a_scales[row * k_blocks + kb];
+          }
+        }
+
+        uint8_t b_pack[8] = {0};
+        for (uint32_t i = 0; i < 8; ++i) {
+          uint32_t col = tc * cfg::tileN + i;
+          if (col < N) {
+            b_pack[i] = b_scales[kb * N + col];
+          }
+        }
+
+        uint32_t base = (((tr * num_tile_cols + tc) * num_k_steps) + ks) * per_step_words;
+        meta[base + 0] = pack4(&a_pack[0]);
+        meta[base + 1] = pack4(&a_pack[4]);
+        meta[base + 2] = pack4(&b_pack[0]);
+        meta[base + 3] = pack4(&b_pack[4]);
+      }
+    }
+  }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.vxbin";
 
 uint32_t xm = 32;
 uint32_t xn = 32;
-uint32_t xk = 32;
+uint32_t xk = (cfg::tileK > vt::mxfp8::ele_block) ? cfg::tileK : vt::mxfp8::ele_block;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
+vx_buffer_h meta_mx_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
@@ -135,6 +226,7 @@ void cleanup() {
     if (A_buffer) vx_mem_free(A_buffer);
     if (B_buffer) vx_mem_free(B_buffer);
     if (C_buffer) vx_mem_free(C_buffer);
+    if (meta_mx_buffer) vx_mem_free(meta_mx_buffer);
     if (krnl_buffer) vx_mem_free(krnl_buffer);
     if (args_buffer) vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -194,6 +286,10 @@ int main(int argc, char* argv[]) {
   size_t sizeA = M * K;
   size_t sizeB = K * N;
   size_t sizeC = M * N;
+  uint32_t num_tile_rows = M / cfg::tileM;
+  uint32_t num_tile_cols = N / cfg::tileN;
+  uint32_t num_k_steps = K / cfg::tileK;
+  size_t meta_mx_words = static_cast<size_t>(num_tile_rows) * num_tile_cols * num_k_steps * 4;
   uint32_t grid_dim[2] = {N / cfg::tileN, M / cfg::tileM};
   uint32_t block_dim[2] = {(uint32_t)NT, 1};
 
@@ -204,6 +300,7 @@ int main(int argc, char* argv[]) {
   std::cout << "matrix A: " << M << "x" << K << std::endl;
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;
+  std::cout << "meta_mx words: " << meta_mx_words << std::endl;
 
   kernel_arg.M = M;
   kernel_arg.N = N;
@@ -216,10 +313,13 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
   RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
+  RT_CHECK(vx_mem_alloc(device, meta_mx_words * sizeof(uint32_t), VX_MEM_READ, &meta_mx_buffer));
+  RT_CHECK(vx_mem_address(meta_mx_buffer, &kernel_arg.meta_mx_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
+  std::cout << "meta_mx_addr=0x" << std::hex << kernel_arg.meta_mx_addr << std::endl;
 
   std::vector<float> h_A_dense(sizeA);
   std::vector<float> h_B_dense(sizeB);
@@ -246,11 +346,19 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
+  normalize_scales_for_wmma_metadata(h_A_scales, h_B_scales, M, N, K);
+
+  std::vector<uint32_t> h_meta_mx;
+  pack_meta_mx_dse2(h_meta_mx, h_A_scales, h_B_scales, M, N, K);
+
   std::cout << "upload matrix A buffer" << std::endl;
   RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, sizeA * sizeof(itype_t)));
 
   std::cout << "upload matrix B buffer" << std::endl;
   RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
+
+  std::cout << "upload matrix MX metadata buffer" << std::endl;
+  RT_CHECK(vx_copy_to_dev(meta_mx_buffer, h_meta_mx.data(), 0, meta_mx_words * sizeof(uint32_t)));
 
   std::cout << "upload program" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));

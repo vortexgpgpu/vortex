@@ -29,6 +29,29 @@ inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
 }
 
+static inline uint8_t unpack_u8(uint32_t word, uint32_t idx) {
+  return (word >> (idx * 8)) & 0xffu;
+}
+
+static inline uint8_t unpack_mx_scale(uint32_t w0,
+                                      uint32_t w1,
+                                      uint32_t idx,
+                                      const char* axis_name) {
+  // DSE2 dense-MX ABI carries two packed words per axis.
+  // For 16x16 tiles this intentionally wraps indices [8..15] to [0..7].
+  if (idx >= 8) {
+    idx &= 0x7;
+  }
+  if (idx < 4) {
+    return unpack_u8(w0, idx);
+  }
+  if (idx < 8) {
+    return unpack_u8(w1, idx - 4);
+  }
+  std::cout << "Error: unsupported mxfp8 scale index for " << axis_name << ": " << idx << std::endl;
+  std::abort();
+}
+
 template <typename It, typename Ot>
 struct FMA {
   using itype = typename It::dtype;
@@ -354,6 +377,28 @@ struct FEDP<vt::nvfp4, vt::nvfp4>{
   }
 };
 
+static uint32_t fedp_mxfp8_fp32_scaled(const reg_data_t* a_row,
+                                       const reg_data_t* b_col,
+                                       uint32_t c_val,
+                                       uint8_t sf_a,
+                                       uint8_t sf_b) {
+  constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(uint8_t);
+  auto acc = bit_cast<float>(c_val);
+  for (uint32_t z = 0; z < cfg::tcK; ++z) {
+    auto a = reinterpret_cast<const uint8_t*>(&a_row[z].u32);
+    auto b = reinterpret_cast<const uint8_t*>(&b_col[z].u32);
+    for (uint32_t i = 0; i < i_ratio; ++i) {
+      auto xa = rv_mxfp8tof_s(a[i], sf_a, 0, nullptr);
+      auto xb = rv_mxfp8tof_s(b[i], sf_b, 0, nullptr);
+      auto xab = rv_fmul_s(xa, xb, 0, nullptr);
+      auto xc = bit_cast<uint32_t>(acc);
+      auto xd = rv_fadd_s(xab, xc, 0, nullptr);
+      acc = bit_cast<float>(xd);
+    }
+  }
+  return bit_cast<uint32_t>(acc);
+}
+
 using PFN_FEDP = uint32_t (*)(const reg_data_t*, const reg_data_t*, uint32_t);
 
 static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
@@ -588,6 +633,10 @@ public:
             const std::vector<reg_data_t>& rs1_data,
             const std::vector<reg_data_t>& rs2_data,
             const std::vector<reg_data_t>& rs3_data,
+            const std::vector<reg_data_t>& mx_a0_data,
+            const std::vector<reg_data_t>& mx_a1_data,
+            const std::vector<reg_data_t>& mx_b0_data,
+            const std::vector<reg_data_t>& mx_b1_data,
             std::vector<reg_data_t>& rd_data,
             ExeTraceData* trace_data,
             bool is_sparse) {
@@ -607,6 +656,7 @@ public:
     }
 
     auto fedp  = select_FEDP(fmt_s, fmt_d);
+    bool use_mx_scales = (!is_sparse && fmt_s == vt::mxfp8::id && fmt_d == vt::fp32::id);
     uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
     uint32_t b_off = is_sparse
                    ? (step_n % cfg::b_sub_blocks_sp) * cfg::b_block_size_sp
@@ -646,7 +696,23 @@ public:
           b_col = rs2_data.data() + b_off + j * cfg::tcK;
         }
 
-        auto d_val = fedp(a_row, b_col, c_val);
+        uint32_t d_val;
+        if (use_mx_scales) {
+          constexpr uint32_t meta_lane = 0;
+          uint32_t row_idx = step_m * cfg::tcM + i;
+          uint32_t col_idx = step_n * cfg::tcN + j;
+          uint8_t sf_a = unpack_mx_scale(mx_a0_data.at(meta_lane).u32,
+                                         mx_a1_data.at(meta_lane).u32,
+                                         row_idx,
+                                         "A");
+          uint8_t sf_b = unpack_mx_scale(mx_b0_data.at(meta_lane).u32,
+                                         mx_b1_data.at(meta_lane).u32,
+                                         col_idx,
+                                         "B");
+          d_val = fedp_mxfp8_fp32_scaled(a_row, b_col, c_val, sf_a, sf_b);
+        } else {
+          d_val = fedp(a_row, b_col, c_val);
+        }
         rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
 
         DTH(3, simobject_->name() << (is_sparse ? " SP_FEDP" : " FEDP")
@@ -911,10 +977,29 @@ void TensorUnit::wmma(uint32_t wid,
                       const std::vector<reg_data_t>& rs1_data,
                       const std::vector<reg_data_t>& rs2_data,
                       const std::vector<reg_data_t>& rs3_data,
+                      const std::vector<reg_data_t>& mx_a0_data,
+                      const std::vector<reg_data_t>& mx_a1_data,
+                      const std::vector<reg_data_t>& mx_b0_data,
+                      const std::vector<reg_data_t>& mx_b1_data,
                       std::vector<reg_data_t>& rd_data,
                       ExeTraceData* trace_data,
                       bool is_sparse) {
-  impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, rs1_data, rs2_data, rs3_data, rd_data, trace_data, is_sparse);
+  impl_->wmma(wid,
+              fmt_s,
+              fmt_d,
+              step_m,
+              step_n,
+              step_k,
+              rs1_data,
+              rs2_data,
+              rs3_data,
+              mx_a0_data,
+              mx_a1_data,
+              mx_b0_data,
+              mx_b1_data,
+              rd_data,
+              trace_data,
+              is_sparse);
 }
 
 void TensorUnit::wgmma(uint32_t wid,
