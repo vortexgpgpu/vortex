@@ -108,24 +108,6 @@ struct data_accessor_t<vt::uint4> {
   }
 };
 
-template <>
-struct data_accessor_t<vt::nvfp4> {
-  static uint8_t read(const uint8_t *ptr, uint32_t offset) {
-    uint32_t row_off = offset / 2;
-    bool odd = offset & 0x1;
-    uint8_t value8 = ptr[row_off];
-    return odd ? (value8 >> 4) : (value8 & 0x0f); // extract nibble
-  }
-  static void write(uint8_t *ptr, uint32_t offset, uint8_t value) {
-    uint32_t row_off = offset / 2;
-    bool odd = offset & 0x1;
-    uint8_t old_value = ptr[row_off];
-    uint8_t new_value = odd ? ((old_value & 0x0f) | (value << 4))
-                            : ((old_value & 0xf0) | (value & 0x0f));
-    ptr[offset / 2] = new_value;
-  }
-};
-
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Type>
