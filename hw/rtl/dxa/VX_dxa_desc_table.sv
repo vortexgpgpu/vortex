@@ -65,6 +65,9 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
     end
 
+    assign dcr_bus_if.rsp_valid = '0;
+    assign dcr_bus_if.rsp_data  = '0;
+
     `UNUSED_VAR (reset)
 
     for (genvar i = 0; i < NUM_READ_PORTS; ++i) begin : g_read

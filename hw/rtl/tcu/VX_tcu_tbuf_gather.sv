@@ -64,13 +64,16 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // Outputs to VX_tcu_core
-    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
-    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs2_data
+    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]        tbuf_rs1_data,
+    output wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data
 `ifdef TCU_SPARSE_ENABLE
    ,output wire [TCU_MAX_META_BLOCK_WIDTH-1:0]  tbuf_sp_meta
 `endif
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+`ifdef TCU_SPARSE_ENABLE
+    `UNUSED_VAR (meta_stride)
+`endif
 
     // -----------------------------------------------------------------------
     // Derived constants
@@ -87,10 +90,13 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef TCU_SPARSE_ENABLE
     localparam LG_B_BS_SP  = $clog2(TCU_B_BLOCK_SIZE_SP);
-    localparam SP_I_RATIO_16B  = 2;
-    localparam SP_I_RATIO_8B   = 4;
+    localparam SP_I_RATIO_32B    = 1;  // tf32/fp32
+    localparam SP_I_RATIO_16B    = 2;  // fp16/bf16
+    localparam SP_I_RATIO_8B     = 4;  // fp8/bf8/int8/uint8
+    localparam META_ROW_BITS_32B = TCU_TC_K * 2 * SP_I_RATIO_32B;
     localparam META_ROW_BITS_16B = TCU_TC_K * 2 * SP_I_RATIO_16B;
     localparam META_ROW_BITS_8B  = TCU_TC_K * 2 * SP_I_RATIO_8B;
+    localparam META_STRIDE_32B   = (TCU_TC_M * META_ROW_BITS_32B + 31) / 32;
     localparam META_STRIDE_16B   = (TCU_TC_M * META_ROW_BITS_16B + 31) / 32;
     localparam META_STRIDE_8B    = (TCU_TC_M * META_ROW_BITS_8B  + 31) / 32;
     localparam WG_HALF_K         = TCU_WG_K_STEPS / 2;
@@ -147,19 +153,20 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [OFF_W-1:0] b_off = (OFF_W'(req_step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
 `endif
 
-    logic [TCU_BLOCK_CAP-1:0][`XLEN-1:0] rs2_mux;
+    logic [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] rs2_mux;
     always_comb begin
         rs2_mux = '0;
     `ifdef TCU_SPARSE_ENABLE
         if (is_sparse) begin
             // Sparse: pack candidate pairs (b_k0, b_k1) into each lane.
+            // Use j directly (no SYM_SPARSE folding) so all TCU_TC_N columns
+            // get distinct lanes in the wider TCU_WG_RS2_WIDTH output.
             for (int j = 0; j < TCU_TC_N; ++j) begin
-                automatic int j_sp = SYM_SPARSE ? (j % (TCU_TC_N / 2)) : j;
                 for (int k = 0; k < TCU_TC_K; ++k) begin
                     automatic int b_k0  = int'(req_step_k) * TCU_TC_K * 2 + k * 2;
                     automatic int b_k1  = b_k0 + 1;
                     automatic int b_col = int'(req_step_n) * TCU_TC_N + j;
-                    automatic int lane0 = int'(b_off) + j_sp * TCU_TC_K * 2 + k * 2;
+                    automatic int lane0 = j * TCU_TC_K * 2 + k * 2;
                     automatic int lane1 = lane0 + 1;
                     // Candidate b_k0
                     if (b_k0 < TILE_K) begin
@@ -244,15 +251,22 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         extracted_meta = '0;
         begin
             automatic int wg_bank = int'(req_step_m) * WG_HALF_K + int'(req_step_k);
-            case (meta_stride)
-                4'(META_STRIDE_16B): begin
+            case (tcu_fmt_width(req_fmt_s))
+                32: begin // tf32/fp32: i_ratio=1
+                    for (int w = 0; w < META_STRIDE_32B; ++w) begin
+                        automatic int idx = wg_bank * META_STRIDE_32B + w;
+                        if (idx < META_TOTAL_MAX)
+                            extracted_meta[w*32 +: 32] = meta_buf[idx];
+                    end
+                end
+                16: begin // fp16/bf16: i_ratio=2
                     for (int w = 0; w < META_STRIDE_16B; ++w) begin
                         automatic int idx = wg_bank * META_STRIDE_16B + w;
                         if (idx < META_TOTAL_MAX)
                             extracted_meta[w*32 +: 32] = meta_buf[idx];
                     end
                 end
-                default: begin // fp8/bf8/int8/uint8 (META_STRIDE_8B)
+                default: begin // fp8/bf8/int8/uint8: i_ratio=4
                     for (int w = 0; w < META_STRIDE_8B; ++w) begin
                         automatic int idx = wg_bank * META_STRIDE_8B + w;
                         if (idx < META_TOTAL_MAX)

@@ -13,6 +13,8 @@
 
 `include "VX_define.vh"
 
+`ifdef TCU_WGMMA_ENABLE
+
 // Bank-parallel LMEM read port used by the TCU tile buffer.
 // Master drives req_valid/req_addr; slave drives req_ready/rsp_valid/rsp_data.
 // Response arrives exactly one cycle after the request is accepted.
@@ -48,3 +50,5 @@ interface VX_tcu_lmem_if #(
     );
 
 endinterface
+
+`endif // TCU_WGMMA_ENABLE

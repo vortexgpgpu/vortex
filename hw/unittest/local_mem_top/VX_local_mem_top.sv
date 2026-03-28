@@ -59,31 +59,41 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (TAG_WIDTH),
         .ADDR_WIDTH(ADDR_WIDTH)
-    ) mem_bus_if[NUM_REQS]();
-`ifdef EXT_DXA_ENABLE
-    wire dxa_done_valid;
-    wire [BAR_ADDR_W-1:0] dxa_done_bar_addr;
-`endif
+    ) lsu_bus_if[NUM_REQS]();
 
-     // memory request
+    VX_mem_bus_if #(
+        .DATA_SIZE (NUM_BANKS * WORD_SIZE),
+        .TAG_WIDTH (LMEM_DMA_TAG_W),
+        .ADDR_WIDTH(BANK_ADDR_WIDTH)
+    ) dma_bus_if();
+
+    // LSU request
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign mem_bus_if[i].req_valid = mem_req_valid[i];
-        assign mem_bus_if[i].req_data.rw = mem_req_rw[i];
-        assign mem_bus_if[i].req_data.byteen = mem_req_byteen[i];
-        assign mem_bus_if[i].req_data.addr = mem_req_addr[i];
-        assign mem_bus_if[i].req_data.flags = mem_req_flags[i];
-        assign mem_bus_if[i].req_data.data = mem_req_data[i];
-        assign mem_bus_if[i].req_data.tag = mem_req_tag[i];
-        assign mem_req_ready[i] = mem_bus_if[i].req_ready;
+        assign lsu_bus_if[i].req_valid = mem_req_valid[i];
+        assign lsu_bus_if[i].req_data.rw = mem_req_rw[i];
+        assign lsu_bus_if[i].req_data.byteen = mem_req_byteen[i];
+        assign lsu_bus_if[i].req_data.addr = mem_req_addr[i];
+        assign lsu_bus_if[i].req_data.flags = mem_req_flags[i];
+        assign lsu_bus_if[i].req_data.data = mem_req_data[i];
+        assign lsu_bus_if[i].req_data.tag = mem_req_tag[i];
+        assign mem_req_ready[i] = lsu_bus_if[i].req_ready;
     end
 
-    // memory response
+    // LSU response
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign mem_rsp_valid[i] = mem_bus_if[i].rsp_valid;
-        assign mem_rsp_data[i] = mem_bus_if[i].rsp_data.data;
-        assign mem_rsp_tag[i] = mem_bus_if[i].rsp_data.tag;
-        assign mem_bus_if[i].rsp_ready = mem_rsp_ready[i];
+        assign mem_rsp_valid[i] = lsu_bus_if[i].rsp_valid;
+        assign mem_rsp_data[i] = lsu_bus_if[i].rsp_data.data;
+        assign mem_rsp_tag[i] = lsu_bus_if[i].rsp_data.tag;
+        assign lsu_bus_if[i].rsp_ready = mem_rsp_ready[i];
     end
+
+    // DMA port not exercised by this testbench
+    assign dma_bus_if.req_valid = '0;
+    assign dma_bus_if.req_data  = '0;
+    assign dma_bus_if.rsp_ready = '1;
+    `UNUSED_VAR (dma_bus_if.req_ready)
+    `UNUSED_VAR (dma_bus_if.rsp_valid)
+    `UNUSED_VAR (dma_bus_if.rsp_data)
 
     VX_local_mem #(
         .INSTANCE_ID(INSTANCE_ID),
@@ -97,17 +107,8 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
     ) local_mem (
         .clk        (clk),
         .reset      (reset),
-        .mem_bus_if (mem_bus_if)
-    `ifdef EXT_DXA_ENABLE
-        ,
-        .dxa_done_valid(dxa_done_valid),
-        .dxa_done_ready(1'b1),
-        .dxa_done_bar_addr(dxa_done_bar_addr)
-    `endif
+        .lsu_bus_if (lsu_bus_if),
+        .dma_bus_if (dma_bus_if)
     );
-
-`ifdef EXT_DXA_ENABLE
-    `UNUSED_VAR ({dxa_done_valid, dxa_done_bar_addr})
-`endif
 
 endmodule

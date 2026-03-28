@@ -637,7 +637,7 @@ public:
             uint32_t b_idx = b_off + j_sp * cfg::tcK * kCompression + z * kCompression;
             uint32_t lo = 0, hi = 0;
             for (uint32_t b = 0; b < meta_bits; ++b) {
-              lo |= meta_bit(row_base + meta_bits * z           + b) << b;
+              lo |= meta_bit(row_base + meta_bits * z + b) << b;
               hi |= meta_bit(row_base + meta_bits * (cfg::tcK + z) + b) << b;
             }
             b_buf[z].u32 = gather_sparse(rs2_data.at(b_idx).u32, rs2_data.at(b_idx + 1).u32, lo, hi, ebits);

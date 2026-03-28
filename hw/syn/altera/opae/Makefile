@@ -93,6 +93,12 @@ ifneq (,$(filter -DEXT_V_ENABLE, $(CONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
 
+# Add DXA extension sources
+ifneq (,$(filter -DEXT_DXA_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/dxa/VX_dxa_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/dxa
+endif
+
 # compilation flags
 CFLAGS += -DSYNTHESIS -DQUARTUS
 CFLAGS += -DXLEN_$(XLEN)

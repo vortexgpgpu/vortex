@@ -59,8 +59,8 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     // Bank select: same generate-if as original per_warp_raddr
     localparam M_STEP_BITS = `CLOG2(TCU_M_STEPS);
     localparam K_STEP_BITS = `CLOG2(HALF_K_STEPS);
-    if (M_STEP_BITS < 4) `UNUSED_VAR (step_m[3:M_STEP_BITS])
-    if (K_STEP_BITS < 4) `UNUSED_VAR (step_k[3:K_STEP_BITS])
+    `UNUSED_VAR (step_m)
+    `UNUSED_VAR (step_k)
 
     wire [ADDRW_PW-1:0] bank_sel;
     if (K_STEP_BITS > 0 && M_STEP_BITS > 0) begin : g_addr_mk

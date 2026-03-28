@@ -99,7 +99,7 @@ module VX_dxa_smem_core_router import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             .NUM_OUTPUTS (NUM_OUTPUTS),
             .DATAW       (PAYLOAD_W),
             .ARBITER     ("R"),
-            .OUT_BUF     ((NUM_INPUTS != NUM_OUTPUTS) ? 2 : 0)
+            .OUT_BUF     ((NUM_INPUTS != NUM_OUTPUTS) ? 2 : 1)
         ) smem_core_xbar (
             .clk       (clk),
             .reset     (reset),

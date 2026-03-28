@@ -1121,139 +1121,100 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   #ifdef EXT_TCU_ENABLE
     case 2: {
       switch (funct3) {
-      case 0: { // WMMA_SYNC or WMMA_SP_SYNC based on rs2
+      case 0: { // WMMA_SYNC / WMMA_SP_SYNC
         namespace vt = vortex::tensor;
         using cfg = vt::wmma_config_t<NUM_THREADS>;
         static_assert(cfg::num_meta_loads <= 2, "sparse metadata decode assumes at most two loads");
-        uint32_t rc_base = 0;
-        uint32_t ra_base = 10;
-        uint32_t rb_base = (cfg::NRB == 4) ? 28 : 24;
-        uint32_t fmt_d = rd;
-        uint32_t fmt_s = rs1;
+
+        constexpr uint32_t rc_base = 0, ra_base = 10;
+        constexpr uint32_t rb_base = (cfg::NRB == 4) ? 28 : 24;
+        constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
+        uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
+
+        // Validate sparse-specific preconditions
+        uint32_t meta_stores = 0;
         if (is_sparse) {
-          // Sparse mode uses the packed sparse-A register layout from vx_tensor.h
-          // and a synthesized metadata phase, matching the RTL uop expansion.
-          constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
-          constexpr uint32_t meta_reg0 = 14; // f14
-          constexpr uint32_t meta_reg1 = 15; // f15
+          if ((cfg::k_steps % 2) != 0
+           || (cfg::b_block_size_sp == 0) || (NUM_THREADS % cfg::b_block_size_sp) != 0
+           || !vt::sparse_format_supported(fmt_s)) {
+            std::abort();
+          }
+          meta_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
+          if (meta_stores == 0)
+            std::abort();
+        }
+
+        // Derive loop counts: sym_sparse folds k into the flat counter, uses full k_steps
+        uint32_t k_count  = is_sparse ? sparse_k_steps : cfg::k_steps;
+        uint32_t b_sub    = is_sparse ? cfg::b_sub_blocks_sp : cfg::b_sub_blocks;
+        uint32_t mma_steps = (cfg::sym_sparse && is_sparse)
+                           ? (cfg::m_steps * cfg::n_steps * cfg::k_steps)
+                           : (cfg::m_steps * cfg::n_steps * k_count);
+        uint32_t total_steps = meta_stores + mma_steps;
+        uint32_t steps_shift = (total_steps > 1) ? (32 - log2ceil(total_steps)) : 0;
+        uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
+        uint32_t uuid_lo = uuid & 0xffffffff;
+        uint32_t steps = 0;
+
+        // Helper: stamp next uuid slot
+        auto next_uuid = [&]() -> uint64_t {
+          return (static_cast<uint64_t>(uuid_hi) << 32) | ((steps++ << steps_shift) | uuid_lo);
+        };
+
+        // Phase 1: metadata-store uops (sparse only)
+        constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
+        for (uint32_t flat_store = 0; flat_store < meta_stores; ++flat_store) {
+          uint32_t reg_rs1 = (flat_store / cfg::meta_cols_per_load) ? meta_reg1 : meta_reg0;
+          auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
+          instr->setOpType(TcuType::META_STORE);
+          instr->setArgs(IntrTcuArgs{false, fmt_s, flat_store, 0, 0, 0});
+          instr->setSrcReg(0, reg_rs1, RegType::Float);
+          instr->setParentUUID(uuid);
+          ibuffer.push_back(instr);
+        }
+
+        // Phase 2: MMA uops
+        if (cfg::sym_sparse && is_sparse) {
+          // Symmetric-sparse: flatten (m, n, k) into a single counter, alternating
+          // thread-mask halves so each pair of uops covers a full accumulator row.
+          constexpr uint32_t lg_n = (cfg::n_steps > 1) ? log2ceil(cfg::n_steps) : 0;
+          constexpr uint32_t lg_k = (cfg::k_steps > 1) ? log2ceil(cfg::k_steps) : 0;
+          constexpr uint32_t step_bits = lg_n + lg_k;
+          constexpr uint32_t step_mask = step_bits ? ((1u << step_bits) - 1) : 0;
           constexpr uint32_t sym_mask_lo = []() {
             uint32_t mask = 0;
-            for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
-              if ((lane % cfg::tcN) < (cfg::tcN / 2)) {
-                mask |= (1u << lane);
-              }
-            }
+            for (uint32_t lane = 0; lane < NUM_THREADS; ++lane)
+              if ((lane % cfg::tcN) < (cfg::tcN / 2)) mask |= (1u << lane);
             return mask;
           }();
-          constexpr uint32_t all_lanes_mask = []() {
-            return (NUM_THREADS == 32) ? 0xffffffffu : ((1u << NUM_THREADS) - 1);
-          }();
-
-          if ((cfg::k_steps % 2) != 0) {
-            std::abort();
-          }
-          if ((cfg::b_block_size_sp == 0) || (NUM_THREADS % cfg::b_block_size_sp) != 0) {
-            std::abort();
-          }
-          if (!vt::sparse_format_supported(fmt_s)) {
-            std::abort();
-          }
-          uint32_t meta_total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
-          if (meta_total_stores == 0) {
-            std::abort();
-          }
-
-          uint32_t steps = 0;
-          uint32_t sparse_mma_steps = cfg::sym_sparse
-                                    ? (cfg::m_steps * cfg::n_steps * cfg::k_steps)
-                                    : (cfg::m_steps * cfg::n_steps * sparse_k_steps);
-          uint32_t steps_count = meta_total_stores + sparse_mma_steps;
-          uint32_t steps_shift = (steps_count > 1) ? (32 - log2ceil(steps_count)) : 0;
-          uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
-          uint32_t uuid_lo = uuid & 0xffffffff;
-
-          for (uint32_t flat_store = 0; flat_store < meta_total_stores; ++flat_store) {
-            uint32_t load_idx = flat_store / cfg::meta_cols_per_load;
-            uint32_t reg_rs1 = load_idx ? meta_reg1 : meta_reg0;
-            uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
-            uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
-            ++steps;
-            auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-            instr->setOpType(TcuType::META_STORE);
-            instr->setArgs(IntrTcuArgs{false, fmt_s, flat_store, 0, 0, 0});
-            instr->setSrcReg(0, reg_rs1, RegType::Float);
+          constexpr uint32_t all_lanes = (NUM_THREADS == 32) ? 0xffffffffu : ((1u << NUM_THREADS) - 1);
+          for (uint32_t eff = 0; eff < mma_steps; ++eff) {
+            uint32_t n_sp = step_bits ? (eff & step_mask) : 0;
+            uint32_t m_sp = eff >> step_bits;
+            uint32_t reg_rs3 = rc_base + (eff >> 1);
+            auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
+            instr->setOpType(TcuType::WMMA);
+            instr->setArgs(IntrTcuArgs{true, fmt_s, fmt_d, m_sp, n_sp, 0});
+            instr->setDestReg(reg_rs3, RegType::Float);
+            instr->setSrcReg(0, ra_base + m_sp, RegType::Float);
+            instr->setSrcReg(1, rb_base + n_sp, RegType::Float);
+            instr->setSrcReg(2, reg_rs3, RegType::Float);
+            instr->setTmask(ThreadMask(NUM_THREADS, (eff & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
             instr->setParentUUID(uuid);
             ibuffer.push_back(instr);
           }
-
-          if (cfg::sym_sparse) {
-            constexpr uint32_t lg_n = (cfg::n_steps > 1) ? log2ceil(cfg::n_steps) : 0;
-            constexpr uint32_t lg_k = (cfg::k_steps > 1) ? log2ceil(cfg::k_steps) : 0;
-            constexpr uint32_t sparse_step_bits = lg_n + lg_k;
-            constexpr uint32_t sparse_step_mask = (sparse_step_bits != 0) ? ((1u << sparse_step_bits) - 1) : 0;
-            for (uint32_t eff_ctr = 0; eff_ctr < sparse_mma_steps; ++eff_ctr) {
-              uint32_t n_sp = (sparse_step_bits != 0) ? (eff_ctr & sparse_step_mask) : 0;
-              uint32_t m_sp = eff_ctr >> sparse_step_bits;
-              uint32_t reg_rs1 = ra_base + m_sp;
-              uint32_t reg_rs2 = rb_base + n_sp;
-              uint32_t reg_rs3 = rc_base + (eff_ctr >> 1);
-              uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
-              uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
-              ++steps;
-              auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-              instr->setOpType(TcuType::WMMA);
-              instr->setArgs(IntrTcuArgs{true, fmt_s, fmt_d, m_sp, n_sp, 0});
-              instr->setDestReg(reg_rs3, RegType::Float);
-              instr->setSrcReg(0, reg_rs1, RegType::Float);
-              instr->setSrcReg(1, reg_rs2, RegType::Float);
-              instr->setSrcReg(2, reg_rs3, RegType::Float);
-              instr->setTmask(ThreadMask(NUM_THREADS, (eff_ctr & 1) ? (all_lanes_mask & ~sym_mask_lo) : sym_mask_lo));
-              instr->setParentUUID(uuid);
-              ibuffer.push_back(instr);
-            }
-          } else {
-            for (uint32_t k = 0; k < sparse_k_steps; ++k) {
-              for (uint32_t m = 0; m < cfg::m_steps; ++m) {
-                for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-                  uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * sparse_k_steps + k;
-                  uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks_sp;
-                  uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
-                  uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
-                  uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
-                  ++steps;
-                  auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-                  instr->setOpType(TcuType::WMMA);
-                  instr->setArgs(IntrTcuArgs{true, fmt_s, fmt_d, m, n, k});
-                  instr->setDestReg(reg_rs3, RegType::Float);
-                  instr->setSrcReg(0, reg_rs1, RegType::Float);
-                  instr->setSrcReg(1, reg_rs2, RegType::Float);
-                  instr->setSrcReg(2, reg_rs3, RegType::Float);
-                  instr->setParentUUID(uuid);
-                  ibuffer.push_back(instr);
-                }
-              }
-            }
-          }
         } else {
-          // Dense mode (WMMA from RF)
-          uint32_t steps = 0;
-          uint32_t steps_count = cfg::m_steps * cfg::n_steps * cfg::k_steps;
-          uint32_t steps_shift = (steps_count > 1) ? (32 - log2ceil(steps_count)) : 0;
-          uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
-          uint32_t uuid_lo = uuid & 0xffffffff;
-          for (uint32_t k = 0; k < cfg::k_steps; ++k) {
+          // Standard k-major triple loop (dense or non-sym sparse)
+          for (uint32_t k = 0; k < k_count; ++k) {
             for (uint32_t m = 0; m < cfg::m_steps; ++m) {
               for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
-                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
+                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * k_count + k;
+                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / b_sub;
                 uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
-                uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
-                uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
-                ++steps;
-                auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
+                auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
                 instr->setOpType(TcuType::WMMA);
-                instr->setArgs(IntrTcuArgs{false, fmt_s, fmt_d, m, n, k});
+                instr->setArgs(IntrTcuArgs{is_sparse, fmt_s, fmt_d, m, n, k});
                 instr->setDestReg(reg_rs3, RegType::Float);
                 instr->setSrcReg(0, reg_rs1, RegType::Float);
                 instr->setSrcReg(1, reg_rs2, RegType::Float);
