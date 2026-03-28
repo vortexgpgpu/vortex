@@ -9,6 +9,8 @@ all:
 	$(MAKE) -C tcu_fedp
 	$(MAKE) -C cta_dispatcher
 	$(MAKE) -C kmu
+	$(MAKE) -C dxa_core
+	$(MAKE) -C tcu_tbuf
 
 run:
 	$(MAKE) -C generic_queue run
@@ -21,6 +23,8 @@ run:
 	$(MAKE) -C tcu_fedp run
 	$(MAKE) -C cta_dispatcher run
 	$(MAKE) -C kmu run
+	$(MAKE) -C dxa_core run
+	$(MAKE) -C tcu_tbuf run
 
 clean:
 	$(MAKE) -C generic_queue clean
@@ -33,3 +37,5 @@ clean:
 	$(MAKE) -C tcu_fedp clean
 	$(MAKE) -C cta_dispatcher clean
 	$(MAKE) -C kmu clean
+	$(MAKE) -C dxa_core clean
+	$(MAKE) -C tcu_tbuf clean

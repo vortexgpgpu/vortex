@@ -38,7 +38,7 @@
 //   - For WGMMA_SP, step_k counts in half-K units (same as WMMA_SP).
 //
 
-module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID     = "",
     parameter         TCU_TBUF_SIZE   = `NUM_WARPS,
     parameter         NUM_BANKS       = 4,
@@ -68,8 +68,8 @@ module VX_tcu_tile_buf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_tcu_lmem_if.master           tcu_lmem_if,
 
     // Tile buffer outputs
-    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
-    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs2_data,
+    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]        tbuf_rs1_data,
+    output wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data,
 `ifdef TCU_SPARSE_ENABLE
     output wire [TCU_MAX_META_BLOCK_WIDTH-1:0]  tbuf_sp_meta,
 `endif

@@ -115,10 +115,23 @@ package VX_tcu_pkg;
     localparam SYM_SPARSE = (TCU_BLOCK_EM == TCU_BLOCK_EN);
 
     // B micro-tiling (sparse 2:4)
-    // NT=16: column-pair layout (2 cols × tcK × 2 candidates = NT lanes per block)
     // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)
-    localparam TCU_B_BLOCK_SIZE_SP = SYM_SPARSE ? TCU_BLOCK_CAP : (TCU_TC_K * TCU_TC_N) * 2;
-    localparam TCU_B_SUB_BLOCKS_SP = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
+    // NT=16 (SYM_SPARSE): WMMA_SP uses column-pair layout (2 cols × tcK × 2 = NT lanes);
+    //   WGMMA_SP needs the full tcK × tcN × 2 candidate lanes (may exceed TCU_BLOCK_CAP).
+    localparam TCU_B_BLOCK_SIZE_SP    = SYM_SPARSE ? TCU_BLOCK_CAP : (TCU_TC_K * TCU_TC_N) * 2;
+    localparam TCU_B_SUB_BLOCKS_SP    = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
+    // WGMMA_SP always needs the full candidate lane set, regardless of SYM_SPARSE.
+    localparam TCU_WG_B_BLOCK_SIZE_SP = TCU_TC_K * TCU_TC_N * 2;
+    // Width of the tbuf_rs2_data port: wider only when SPARSE is enabled (WGMMA_SP path).
+    // Without SPARSE, only TCU_BLOCK_CAP lanes are ever consumed, so keep the port narrow.
+`ifdef TCU_SPARSE_ENABLE
+    localparam TCU_WG_RS2_WIDTH = TCU_WG_B_BLOCK_SIZE_SP;
+`else
+    localparam TCU_WG_RS2_WIDTH = TCU_BLOCK_CAP;
+`endif
+
+    localparam TCU_MIN_FMT_WIDTH = 4; //int4
+    localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
 
     // Max metadata widths (sized for widest type: 4-bit elements, I_RATIO=8)
     localparam TCU_MAX_META_ROW_WIDTH   = TCU_TC_K * 2 * TCU_MAX_ELT_RATIO;
@@ -147,8 +160,6 @@ package VX_tcu_pkg;
 
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
-    localparam TCU_MIN_FMT_WIDTH = 4; //int4
-    localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
 
     `ifdef TCU_TF32_ENABLE

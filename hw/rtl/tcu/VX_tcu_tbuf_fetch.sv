@@ -28,8 +28,10 @@
 //     slot, width = A_TOTAL*32 bits, WRENW = A_TOTAL for per-word writes.
 //     Frees A_TOTAL*TCU_TBUF_SIZE*32 FFs at no net LUT cost (the LUTRAM
 //     cells replace the previously required slot-index MUX LUTs).
-//   - shared_b_buf kept as FFs: no slot dimension, all B_TOTAL words are read
-//     combinationally in parallel — a RAM address port would not help.
+//   - shared_b_buf (non-sparse): FFs with no slot dimension.  All warps in a
+//     multi-warp CTA share the same physical smem, so one B copy suffices.
+//   - slot_b_ram (sparse): per-slot VX_dp_ram(LUTRAM=1); single-warp CTAs
+//     each have their own smem/B tile so B must not be shared across slots.
 //   - slot_meta_buf (sparse) replaced by VX_dp_ram(LUTRAM=1) same way.
 //   - slot_wid removed: slot index == warp id by construction (direct-mapped).
 //   - slot_in_progress simplified: warp stalls at execute while fetch runs;
@@ -44,7 +46,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter         TCU_TBUF_SIZE   = `NUM_WARPS,
     parameter         NUM_BANKS       = 4,
     parameter         BANK_ADDR_WIDTH = 12,
-    // Tile buffer sizes (in 32-bit words); passed from VX_tcu_tile_buf.
+    // Tile buffer sizes (in 32-bit words); passed from VX_tcu_tbuf.
     parameter         A_TOTAL        = 1,
     parameter         B_TOTAL        = 1
 `ifdef TCU_SPARSE_ENABLE
@@ -108,14 +110,18 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam A_TOTAL_SP      = A_TOTAL / 2;
     localparam A_BANK_ROWS_SP  = (A_TOTAL_SP + NUM_BANKS - 1) / NUM_BANKS;
 
-    localparam SP_I_RATIO_16B    = 2;
-    localparam SP_I_RATIO_8B     = 4;
+    localparam SP_I_RATIO_32B    = 1;  // tf32/fp32
+    localparam SP_I_RATIO_16B    = 2;  // fp16/bf16
+    localparam SP_I_RATIO_8B     = 4;  // fp8/bf8/int8/uint8
+    localparam META_ROW_BITS_32B = TCU_TC_K * 2 * SP_I_RATIO_32B;
     localparam META_ROW_BITS_16B = TCU_TC_K * 2 * SP_I_RATIO_16B;
     localparam META_ROW_BITS_8B  = TCU_TC_K * 2 * SP_I_RATIO_8B;
+    localparam META_STRIDE_32B   = (TCU_TC_M * META_ROW_BITS_32B + 31) / 32;
     localparam META_STRIDE_16B   = (TCU_TC_M * META_ROW_BITS_16B + 31) / 32;
     localparam META_STRIDE_8B    = (TCU_TC_M * META_ROW_BITS_8B  + 31) / 32;
     localparam WG_HALF_K         = TCU_WG_K_STEPS / 2;
     localparam WG_META_BANKS     = TCU_WG_M_STEPS * WG_HALF_K;
+    localparam META_TOTAL_32B    = WG_META_BANKS * META_STRIDE_32B;
     localparam META_TOTAL_16B    = WG_META_BANKS * META_STRIDE_16B;
     localparam META_ROWS_MAX     = (META_TOTAL_MAX + NUM_BANKS - 1) / NUM_BANKS;
 
@@ -151,10 +157,12 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [BANK_ADDR_WIDTH-1:0] slot_a_row_base [TCU_TBUF_SIZE];
     logic [BANK_ADDR_WIDTH-1:0] slot_b_row_base [TCU_TBUF_SIZE];
 
-    // Shared B buffer: all warps in a warp-group use the same desc_b.
-    // Kept as FFs: no slot dimension, all B_TOTAL words read in parallel.
-    logic [31:0]       shared_b_buf [0:B_TOTAL-1];
 `ifndef TCU_SPARSE_ENABLE
+    // Shared B buffer: in the non-sparse (multi-warp CTA) path all warps share
+    // the same physical smem, so desc_b is identical across slots.  One copy
+    // of B suffices.  Kept as FFs: no slot dimension, all B_TOTAL words read
+    // combinationally in parallel — a per-slot RAM address port would not help.
+    logic [31:0]       shared_b_buf [0:B_TOTAL-1];
     logic [`XLEN-1:0]  shared_b_desc;
     logic              shared_b_valid;
     logic              shared_b_dirty;
@@ -222,11 +230,15 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [FETCH_CTR_W-1:0] init_meta_rows;
     always_comb begin
         case (tcu_fmt_width(req_fmt_s))
-            16: begin
+            32: begin  // tf32/fp32: i_ratio=1
+                init_meta_stride = 4'(META_STRIDE_32B);
+                init_meta_rows   = FETCH_CTR_W'((META_TOTAL_32B + NUM_BANKS - 1) / NUM_BANKS);
+            end
+            16: begin  // fp16/bf16: i_ratio=2
                 init_meta_stride = 4'(META_STRIDE_16B);
                 init_meta_rows   = FETCH_CTR_W'((META_TOTAL_16B + NUM_BANKS - 1) / NUM_BANKS);
             end
-            default: begin
+            default: begin  // fp8/bf8/int8/uint8: i_ratio=4
                 init_meta_stride = 4'(META_STRIDE_8B);
                 init_meta_rows   = FETCH_CTR_W'(META_ROWS_MAX);
             end
@@ -521,9 +533,16 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     // -----------------------------------------------------------------------
-    // B data capture → shared_b_buf FFs
+    // B data capture
+    //   Non-sparse: shared_b_buf FFs.  All slots share the same desc_b (all
+    //     warps in a multi-warp CTA share the same physical smem segment),
+    //     so one global copy of B is sufficient.
+    //   Sparse: per-slot slot_b_ram.  Each single-warp CTA has its own smem
+    //     segment with a different desc_b, so B must be stored per-slot to
+    //     prevent later fetches from overwriting earlier slots' B data.
     // -----------------------------------------------------------------------
 
+`ifndef TCU_SPARSE_ENABLE
     always_ff @(posedge clk) begin
         if (tcu_lmem_if.rsp_valid && in_fetch_b) begin
             for (int b = 0; b < NUM_BANKS; ++b) begin
@@ -537,6 +556,43 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     for (genvar w = 0; w < B_TOTAL; ++w) begin : g_hit_b
         assign hit_b_buf[w] = shared_b_buf[w];
     end
+`else // TCU_SPARSE_ENABLE
+    logic [B_TOTAL*32-1:0] b_wdata;
+    logic [B_TOTAL-1:0]    b_wren;
+
+    always_comb begin
+        b_wdata = '0;
+        b_wren  = '0;
+        if (tcu_lmem_if.rsp_valid && in_fetch_b) begin
+            for (int b = 0; b < NUM_BANKS; ++b) begin
+                if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin
+                    b_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
+                    b_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
+                        tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
+                end
+            end
+        end
+    end
+
+    VX_dp_ram #(
+        .DATAW   (B_TOTAL * 32),
+        .SIZE    (TCU_TBUF_SIZE),
+        .WRENW   (B_TOTAL),
+        .LUTRAM  (1),
+        .OUT_REG (0),
+        .RDW_MODE("W")
+    ) slot_b_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (tcu_lmem_if.rsp_valid && in_fetch_b),
+        .wren  (b_wren),
+        .waddr (send_slot_r),
+        .wdata (b_wdata),
+        .raddr (slot_idx),
+        .rdata (hit_b_buf)
+    );
+`endif
 
     // -----------------------------------------------------------------------
     // slot_meta_buf — VX_dp_ram (sparse only, same pattern as slot_a_ram)

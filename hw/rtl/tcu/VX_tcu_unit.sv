@@ -71,7 +71,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Per-block tile buffer outputs
     wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data  [BLOCK_SIZE];
-    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs2_data  [BLOCK_SIZE];
+    wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data [BLOCK_SIZE];
 `ifdef TCU_SPARSE_ENABLE
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta  [BLOCK_SIZE];
 `endif
@@ -111,7 +111,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         && per_block_execute_if[block_idx].ready
                         && is_wgmma_b;
 
-        VX_tcu_tile_buf #(
+        VX_tcu_tbuf #(
             .INSTANCE_ID    (`SFORMATF(("%s-tbuf%0d", INSTANCE_ID, block_idx))),
             .TCU_TBUF_SIZE  (`NUM_WARPS),
             .NUM_BANKS      (`LMEM_NUM_BANKS),

@@ -25,7 +25,7 @@
 // computed; the output mux selects based on fmt_s at runtime.
 //
 // The vld_mask input is a unified metadata slice: it comes from
-// VX_tcu_meta (for WMMA_SP) or from VX_tcu_tile_buf (for WGMMA_SP),
+// VX_tcu_meta (for WMMA_SP) or from VX_tcu_tbuf (for WGMMA_SP),
 // pre-muxed by VX_tcu_core. This module is format-agnostic w.r.t.
 // the metadata source.
 //
