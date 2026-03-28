@@ -8,6 +8,7 @@ CONFIGS += -DEXT_TCU_ENABLE
 include ../../common.mk
 
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces
+RTL_INCLUDE += -I$(UNITTEST_DIR)/tcu_unit
 
 # Add TCU extension sources
 RTL_INCLUDE += -I$(RTL_DIR)/tcu

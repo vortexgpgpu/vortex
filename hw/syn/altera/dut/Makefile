@@ -45,11 +45,6 @@ fpu: ip-gen
 	cp fpu/Makefile fpu/$(BUILD_DIR)
 	$(MAKE) -C fpu/$(BUILD_DIR) clean && $(MAKE) -C fpu/$(BUILD_DIR) > fpu/$(BUILD_DIR)/build.log 2>&1 &
 
-dxa:
-	mkdir -p dxa/$(BUILD_DIR)
-	cp dxa/Makefile dxa/$(BUILD_DIR)
-	$(MAKE) -C dxa/$(BUILD_DIR) clean && $(MAKE) -C dxa/$(BUILD_DIR) > dxa/$(BUILD_DIR)/build.log 2>&1 &
-
 core:
 	mkdir -p core/$(BUILD_DIR)
 	cp core/Makefile core/$(BUILD_DIR)
