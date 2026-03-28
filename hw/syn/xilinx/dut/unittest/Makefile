@@ -1,4 +1,4 @@
-PROJECT = VX_fifo_queue
+PROJECT = Unittest
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
 

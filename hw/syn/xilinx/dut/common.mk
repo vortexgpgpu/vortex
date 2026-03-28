@@ -13,6 +13,7 @@ RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+UNITTEST_DIR := $(VORTEX_HOME)/hw/unittest
 
 NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
 JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))

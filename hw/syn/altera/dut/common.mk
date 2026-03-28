@@ -6,6 +6,7 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/dut
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 AFU_DIR := $(RTL_DIR)/afu/opae
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+UNITTEST_DIR := $(VORTEX_HOME)/hw/unittest
 
 IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 
