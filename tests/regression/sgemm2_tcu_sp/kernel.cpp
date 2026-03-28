@@ -21,7 +21,7 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA  = reinterpret_cast<ctx::input_t *>(arg->A_addr);   // compressed A
   auto pB  = reinterpret_cast<ctx::input_t *>(arg->B_addr);   // dense B
   auto pC  = reinterpret_cast<ctx::output_t*>(arg->C_addr);
-  auto pMeta = reinterpret_cast<const uint32_t*>(arg->meta_addr);
+  auto pMetaSp = reinterpret_cast<const uint32_t*>(arg->meta_sp_addr);
 
   uint32_t M = arg->M;
   uint32_t N = arg->N;
@@ -58,7 +58,7 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     // Cooperative load: metadata for this (tile_row, k_tile) block
     uint32_t tile_row_idx = blockIdx.y;
-    auto pMeta_tile = pMeta + (tile_row_idx * num_k_tiles + k_tile) * meta_words_per_tile;
+    auto pMeta_tile = pMetaSp + (tile_row_idx * num_k_tiles + k_tile) * meta_words_per_tile;
     auto meta_smem = reinterpret_cast<uint32_t*>(smem_base + smem_meta_off);
     for (uint32_t i = tid; i < meta_words_per_tile; i += CTA_SIZE) {
       meta_smem[i] = pMeta_tile[i];

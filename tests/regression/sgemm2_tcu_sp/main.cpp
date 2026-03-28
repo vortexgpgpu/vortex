@@ -240,7 +240,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
   RT_CHECK(vx_mem_alloc(device, meta_words * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
-  RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_addr));
+  RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_sp_addr));
 
   // generate dense A and B
   std::vector<itype_t> h_A_full(sizeA_full);

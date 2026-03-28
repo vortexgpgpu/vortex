@@ -10,7 +10,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
-  auto pMetaBase = reinterpret_cast<const float *>(arg->meta_addr);
+  auto pMetaSpBase = reinterpret_cast<const float *>(arg->meta_sp_addr);
 
   uint32_t M = arg->M;
   uint32_t N = arg->N;
@@ -40,16 +40,16 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
   uint32_t stride_A = K / 2;
 
-  auto pMeta = pMetaBase + tile_row_idx * num_k_tiles * per_k_tile_words;
+  auto pMetaSp = pMetaSpBase + tile_row_idx * num_k_tiles * per_k_tile_words;
   auto pTileA = pA + tile_row * stride_A;
   constexpr uint32_t a_k_stride = ctx::tileK / 2;
 
   auto pTileB = pB + tile_col * K;
   for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
-    ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, pMeta);
+    ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, nullptr, pMetaSp);
     ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
     ctx::mma_sync(fragC, fragA, fragB, fragC);
-    pMeta += per_k_tile_words;
+    pMetaSp += per_k_tile_words;
     pTileA += a_k_stride;
     pTileB += ctx::tileK;
   }

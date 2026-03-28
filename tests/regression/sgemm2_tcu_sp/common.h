@@ -24,7 +24,7 @@ typedef struct {
   uint64_t A_addr;    // compressed A in global memory (M × K/2 elements)
   uint64_t B_addr;    // dense B in global memory (K × N elements)
   uint64_t C_addr;    // output C in global memory (M × N elements)
-  uint64_t meta_addr; // smem-format metadata per tile
+  uint64_t meta_sp_addr; // smem-format sparse metadata per tile
 } kernel_arg_t;
 
 #endif
