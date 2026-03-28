@@ -159,6 +159,7 @@ inline constexpr bool sparse_scale_format(uint32_t fmt) {
 
 inline constexpr bool sparse_format_supported(uint32_t fmt) {
   switch (fmt) {
+  case tf32::id:
   case fp16::id:
   case bf16::id:
   case fp8::id:
@@ -175,6 +176,8 @@ inline constexpr bool sparse_format_supported(uint32_t fmt) {
 
 inline constexpr uint32_t sparse_meta_num_cols(uint32_t fmt, uint32_t nt) {
   switch (fmt) {
+  case tf32::id:
+    return (nt + 15) / 16;
   case fp16::id:
   case bf16::id:
     return (nt + 7) / 8;

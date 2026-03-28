@@ -217,6 +217,27 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         assign per_core_has_fflags[FPU_FMA] = 0;
         assign fflags_lanes = 'x;
+    `elsif VIVADO
+        for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
+            wire [2:0] tuser;
+            xil_fma fma (
+                .aclk                (clk),
+                .aclken              (pe_enable),
+                .s_axis_a_tvalid     (1'b1),
+                .s_axis_a_tdata      (pe_data_in[i][0 +: 32]),
+                .s_axis_b_tvalid     (1'b1),
+                .s_axis_b_tdata      (pe_data_in[i][`XLEN +: 32]),
+                .s_axis_c_tvalid     (1'b1),
+                .s_axis_c_tdata      (pe_data_in[i][2*`XLEN +: 32]),
+                `UNUSED_PIN (m_axis_result_tvalid),
+                .m_axis_result_tdata (pe_data_out[i][0 +: 32]),
+                .m_axis_result_tuser (tuser)
+            );
+                                                          // NV, DZ, OF, UF, NX
+            assign pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = {tuser[2], 1'b0, tuser[1], tuser[0], 1'b0};
+        end
+
+        assign per_core_has_fflags[FPU_FMA] = 1;
     `else
         for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
             VX_fma_unit #(

@@ -466,8 +466,7 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
 }
 
 // Format-agnostic sparse gather: for each bword, iterate over its elem_count packed
-// elements, collect those flagged by lo_mask/hi_mask respectively, and pack them
-// sequentially into the output word. Works for elem_bits = 4, 8, or 16.
+// elements, collect those flagged by lo_mask/hi_mask respectively.
 static inline uint32_t gather_sparse(uint32_t bword0, uint32_t bword1,
                                      uint32_t lo_mask, uint32_t hi_mask,
                                      uint32_t elem_bits) {

@@ -74,9 +74,7 @@ puts "INFO: Generating vectorless baseline power report..."
 reset_switching_activity -all
 set_switching_activity -default_toggle_rate 0.125 -default_static_probability 0.5
 set_switching_activity -deassert_resets
-report_power \
-  -hierarchical -hierarchical_depth 6 \
-  -file power_vectorless.rpt
+report_power -file power_vectorless.rpt
 puts "INFO: Vectorless report written to: power_vectorless.rpt"
 
 # ---- VCD-annotated power ----------------------------------------------------
@@ -98,9 +96,7 @@ if {$strip_path ne ""} {
 set_switching_activity -deassert_resets
 
 puts "INFO: Generating VCD-annotated power report..."
-report_power \
-  -hierarchical -hierarchical_depth 6 \
-  -file power_vcd.rpt
+report_power -file power_vcd.rpt
 puts "INFO: VCD-annotated report written to: power_vcd.rpt"
 
 # ---- Summary ----------------------------------------------------------------
