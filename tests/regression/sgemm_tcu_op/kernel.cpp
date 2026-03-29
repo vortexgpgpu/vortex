@@ -120,8 +120,14 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   const uint32_t warp_tile_id = block_tile_id * warps_per_group + local_warp;
   const bool active_warp = (warp_tile_id < total_tiles);
   vortex::barrier c_tile_bar(local_warp, 1);
-  vortex::barrier ab_tile_bar(2 + local_warp, 1);
-  vortex::barrier tcu_bar(4 + local_warp, 1);
+  vortex::barrier ab_tile_bar[2] = {
+      vortex::barrier(warps_per_group + local_warp, 1),
+      vortex::barrier(2 * warps_per_group + local_warp, 1),
+  };
+  vortex::barrier tcu_bar[2] = {
+      vortex::barrier(3 * warps_per_group + local_warp, 1),
+      vortex::barrier(4 * warps_per_group + local_warp, 1),
+  };
 
   const uint32_t tile_row = (tiles_n == 0) ? 0 : (warp_tile_id / tiles_n) * tile_M;
 
@@ -233,7 +239,8 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           const uint32_t* mma_A_bitmap = reinterpret_cast<const uint32_t *>(A_bitmap_lmem);
           const uint32_t* mma_B_bitmap = reinterpret_cast<const uint32_t *>(B_bitmap_lmem);
           const uint32_t k_tile_idx = k_offset / tile_K;
-          const bool use_half0 = ((dense_iter & 1u) == 0);
+          const uint32_t stage = dense_iter & 1u;
+          const bool use_half0 = (stage == 0);
           const bool first_dense_launch = (dense_iter == 0);
           uint32_t* chunk_A = A_lmem;
           uint32_t* chunk_B = B_lmem;
@@ -270,18 +277,17 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
           if (active_warp && lane0) {mma_D[0] = MARKER;}
           if (active_warp && is_dxa_quad) {
-            vx_dxa_issue_2d_wg(kDescA, ab_tile_bar.id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
+            vx_dxa_issue_2d_wg(kDescA, ab_tile_bar[stage].id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
             if (has_second_k_tile) {
-              vx_dxa_issue_2d_wg(kDescA, ab_tile_bar.id(), chunk_A_elems_hi, 0,
+              vx_dxa_issue_2d_wg(kDescA, ab_tile_bar[stage].id(), chunk_A_elems_hi, 0,
                                  tile_row_idx * tiles_k + k_tile_idx + 1);
             }
-            vx_dxa_issue_2d_wg(kDescB, ab_tile_bar.id(), chunk_B, 0, tile_col_idx * tiles_k + k_tile_idx);
+            vx_dxa_issue_2d_wg(kDescB, ab_tile_bar[stage].id(), chunk_B, 0, tile_col_idx * tiles_k + k_tile_idx);
             if (has_second_k_tile) {
-              vx_dxa_issue_2d_wg(kDescB, ab_tile_bar.id(), chunk_B_elems_hi, 0,
+              vx_dxa_issue_2d_wg(kDescB, ab_tile_bar[stage].id(), chunk_B_elems_hi, 0,
                                  tile_col_idx * tiles_k + k_tile_idx + 1);
             }
           }
-          ab_tile_bar.arrive_and_wait();
           if (active_warp && lane0) {mma_D[0] = MARKER;}
 
           if (gtid == 0) {
@@ -303,16 +309,19 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap);
             rs2_val = static_cast<uint32_t>(kConstSparsity);
           } else if (gtid == 6) {
-            rs2_val = tcu_bar.id();
+            rs2_val = tcu_bar[stage].id();
           } else if (gtid == 7) {
             rs2_val = flags_chunk;
           }
+
           if (active_warp && lane0) {mma_D[0] = PRE_TCU_MARKER;}
+          ab_tile_bar[stage].arrive_and_wait();
           ctx::mma_op(rs1_val, rs2_val);
-          tcu_bar.arrive_and_wait();
+          tcu_bar[stage].arrive_and_wait();
           if (active_warp && (vx_warp_id() == 0) && lane0) {C_lmem[0] = MARKER;}
         }
       } else {
+
         static constexpr uint32_t kConstTilesK = K / tile_K;
 #pragma unroll
         for (uint32_t k_tile_idx = 0; k_tile_idx < kConstTilesK; ++k_tile_idx) {
@@ -388,13 +397,13 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap);
             rs2_val = static_cast<uint32_t>(kConstSparsity);
           } else if (gtid == 6) {
-            rs2_val = tcu_bar.id();
+            rs2_val = tcu_bar[0].id();
           } else if (gtid == 7) {
             rs2_val = flags_chunk;
           }
           if (active_warp && lane0) {mma_D[0] = PRE_TCU_MARKER;}
           ctx::mma_op(rs1_val, rs2_val);
-          tcu_bar.arrive_and_wait();
+          tcu_bar[0].arrive_and_wait();
           if (active_warp && (vx_warp_id() == 0) && lane0) {C_lmem[0] = MARKER;}
         }
       }
