@@ -19,7 +19,7 @@ ROOT_DIR=$SCRIPT_DIR/..
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--log=logfile] [--nohup] [--help]]"
+    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--saif] [--perf=#class] [--log=logfile] [--nohup] [--help]]"
 }
 
 show_help()
@@ -46,6 +46,7 @@ DEFAULTS() {
     DEBUG=0
     DEBUG_LEVEL=0
     SCOPE=0
+    SAIF=0
     HAS_ARGS=0
     PERF_CLASS=0
     CONFIGS="$CONFIGS"
@@ -67,7 +68,8 @@ parse_args() {
             --l3cache)  CONFIGS=$(add_option "$CONFIGS" "-DL3_ENABLE") ;;
             --perf=*)   CONFIGS=$(add_option "$CONFIGS" "-DPERF_ENABLE"); PERF_CLASS=${i#*=} ;;
             --debug=*)  DEBUG=1; DEBUG_LEVEL=${i#*=} ;;
-            --scope)    SCOPE=1; ;;
+            --scope)    SCOPE=1 ;;
+            --saif)     SAIF=1 ;;
             --args=*)   HAS_ARGS=1; ARGS=${i#*=} ;;
             --log=*)    LOGFILE=${i#*=} ;;
             --nohup)    TEMPBUILD=1 ;;
@@ -106,6 +108,7 @@ build_driver() {
     local cmd_opts=""
     [ $DEBUG -ne 0 ] && cmd_opts=$(add_option "$cmd_opts" "DEBUG=$DEBUG_LEVEL")
     [ $SCOPE -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SCOPE=1")
+    [ $SAIF -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SAIF=1")
     [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "DESTDIR=\"$TEMPDIR\"")
     [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")
     cmd_opts=$(add_option "$cmd_opts" "make -C $DRIVER_PATH > /dev/null")
@@ -168,6 +171,10 @@ main() {
 
     if [ $DEBUG -eq 1 ] && [ -f "$APP_PATH/trace.vcd" ]; then
         mv -f $APP_PATH/trace.vcd .
+    fi
+
+    if [ $SAIF -eq 1 ] && [ -f "$APP_PATH/trace.saif" ]; then
+        mv -f $APP_PATH/trace.saif .
     fi
 
     if [ $SCOPE -eq 1 ] && [ -f "$APP_PATH/scope.vcd" ]; then

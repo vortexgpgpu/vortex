@@ -23,6 +23,9 @@
 #ifdef VCD_OUTPUT
 #include "verilated_vcd_c.h"
 #endif
+#ifdef SAIF_OUTPUT
+#include "verilated_saif_c.h"
+#endif
 
 #define MAX_SIM_CYCLES 1000
 
@@ -32,12 +35,18 @@ static uint64_t sim_time = 0;
 #ifdef VCD_OUTPUT
 static VerilatedVcdC* vcd;
 #endif
+#ifdef SAIF_OUTPUT
+static VerilatedSaifC* saif;
+#endif
 
 static void tick() {
     dut->clk ^= 1;
     dut->eval();
 #ifdef VCD_OUTPUT
     vcd->dump(sim_time);
+#endif
+#ifdef SAIF_OUTPUT
+    saif->dump(sim_time);
 #endif
     ++sim_time;
 }
@@ -67,6 +76,12 @@ int main(int argc, char** argv) {
     dut->trace(vcd, 99);
     vcd->open("trace.vcd");
 #endif
+#ifdef SAIF_OUTPUT
+    Verilated::traceEverOn(true);
+    saif = new VerilatedSaifC;
+    dut->trace(saif, 99);
+    saif->open("trace.saif");
+#endif
 
     // ---- tie off unused inputs -------------------------------------------
     dut->dcr_req_valid  = 0;
@@ -87,6 +102,10 @@ int main(int argc, char** argv) {
 #ifdef VCD_OUTPUT
     vcd->close();
     delete vcd;
+#endif
+#ifdef SAIF_OUTPUT
+    saif->close();
+    delete saif;
 #endif
     dut->final();
     delete dut;

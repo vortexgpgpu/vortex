@@ -20,6 +20,9 @@
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
 #endif
+#ifdef SAIF_OUTPUT
+#include <verilated_saif_c.h>
+#endif
 
 #include <bitset>
 #include <cassert>
@@ -256,6 +259,13 @@ public:
             trace_->open("trace.vcd");
         }
 #endif
+#ifdef SAIF_OUTPUT
+        if (cfg_.enable_trace) {
+            saif_ = std::make_unique<VerilatedSaifC>();
+            dut_->trace(saif_.get(), 99);
+            saif_->open("trace.saif");
+        }
+#endif
         dut_->clk = 0;
         dut_->reset = 0;
         idle_dispatch();
@@ -265,6 +275,9 @@ public:
     ~Testbench() {
 #ifdef VCD_OUTPUT
         if (trace_) trace_->close();
+#endif
+#ifdef SAIF_OUTPUT
+        if (saif_) saif_->close();
 #endif
     }
 
@@ -344,6 +357,9 @@ private:
 #ifdef VCD_OUTPUT
     std::unique_ptr<VerilatedVcdC> trace_;
 #endif
+#ifdef SAIF_OUTPUT
+    std::unique_ptr<VerilatedSaifC> saif_;
+#endif
 
     void tick() {
         dut_->clk = 0;
@@ -352,12 +368,20 @@ private:
         if (cfg_.enable_trace && timestamp >= cfg_.trace_start && timestamp < cfg_.trace_end)
             trace_->dump(timestamp);
 #endif
+#ifdef SAIF_OUTPUT
+        if (cfg_.enable_trace && timestamp >= cfg_.trace_start && timestamp < cfg_.trace_end)
+            saif_->dump(timestamp);
+#endif
         timestamp++;
         dut_->clk = 1;
         dut_->eval();
 #ifdef VCD_OUTPUT
         if (cfg_.enable_trace && timestamp >= cfg_.trace_start && timestamp < cfg_.trace_end)
             trace_->dump(timestamp);
+#endif
+#ifdef SAIF_OUTPUT
+        if (cfg_.enable_trace && timestamp >= cfg_.trace_start && timestamp < cfg_.trace_end)
+            saif_->dump(timestamp);
 #endif
         timestamp++;
         cycle_++;

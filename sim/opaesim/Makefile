@@ -135,6 +135,12 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
+# Enable SAIF tracing
+ifdef SAIF
+	VL_FLAGS += --trace-saif
+	CXXFLAGS += -DSAIF_OUTPUT
+endif
+
 # use our OPAE shim
 VL_FLAGS += -DNOPAE
 CXXFLAGS += -DNOPAE

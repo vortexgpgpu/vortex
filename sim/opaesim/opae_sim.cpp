@@ -18,6 +18,9 @@
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
 #endif
+#ifdef SAIF_OUTPUT
+#include <verilated_saif_c.h>
+#endif
 
 #include <iostream>
 #include <fstream>
@@ -96,6 +99,9 @@ public:
 #ifdef VCD_OUTPUT
   , tfp_(nullptr)
 #endif
+#ifdef SAIF_OUTPUT
+  , sfp_(nullptr)
+#endif
   {}
 
   ~Impl() {
@@ -113,6 +119,12 @@ public:
     if (tfp_) {
       tfp_->close();
       delete tfp_;
+    }
+  #endif
+  #ifdef SAIF_OUTPUT
+    if (sfp_) {
+      sfp_->close();
+      delete sfp_;
     }
   #endif
     if (device_) {
@@ -136,6 +148,12 @@ public:
     tfp_ = new VerilatedVcdC();
     device_->trace(tfp_, 99);
     tfp_->open("trace.vcd");
+  #endif
+  #ifdef SAIF_OUTPUT
+    Verilated::traceEverOn(true);
+    sfp_ = new VerilatedSaifC();
+    device_->trace(sfp_, 99);
+    sfp_->open("trace.saif");
   #endif
 
     // allocate RAM
@@ -295,6 +313,11 @@ private:
   #ifdef VCD_OUTPUT
     if (sim_trace_enabled()) {
       tfp_->dump(timestamp);
+    }
+  #endif
+  #ifdef SAIF_OUTPUT
+    if (sim_trace_enabled()) {
+      sfp_->dump(timestamp);
     }
   #endif
     ++timestamp;
@@ -524,6 +547,9 @@ private:
 
 #ifdef VCD_OUTPUT
   VerilatedVcdC *tfp_;
+#endif
+#ifdef SAIF_OUTPUT
+  VerilatedSaifC *sfp_;
 #endif
 };
 

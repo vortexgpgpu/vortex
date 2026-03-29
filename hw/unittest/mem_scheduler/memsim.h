@@ -16,7 +16,12 @@
 #include <iostream>
 #include <unordered_map>
 #include <vector>
+#ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
+#endif
+#ifdef SAIF_OUTPUT
+#include <verilated_saif_c.h>
+#endif
 #include "VVX_mem_scheduler.h"
 #include "ram.h"
 
@@ -36,6 +41,9 @@ private:
     VVX_mem_scheduler *msu_;
 #ifdef VCD_OUTPUT
     VerilatedVcdC* tfp_;
+#endif
+#ifdef SAIF_OUTPUT
+    VerilatedSaifC* sfp_;
 #endif
 
     void eval();
