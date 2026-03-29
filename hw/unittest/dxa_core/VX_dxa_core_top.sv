@@ -32,6 +32,16 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire clk,
     input  wire reset,
 
+`ifdef PERF_ENABLE
+    output wire [PERF_CTR_BITS-1:0] perf_transfers,
+    output wire [PERF_CTR_BITS-1:0] perf_gmem_reads,
+    output wire [PERF_CTR_BITS-1:0] perf_gmem_dedup,
+    output wire [PERF_CTR_BITS-1:0] perf_lmem_writes,
+    output wire [PERF_CTR_BITS-1:0] perf_gmem_latency,
+`endif
+
+    output wire busy,
+
     // -----------------------------------------------------------------------
     // DCR configuration bus (slave)
     // -----------------------------------------------------------------------
@@ -140,6 +150,15 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [`SOCKET_SIZE-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] smem_core_id;
     assign smem_local_core_id = smem_core_id;
 
+`ifdef PERF_ENABLE
+    dxa_perf_t dxa_perf;
+    assign perf_transfers   = dxa_perf.transfers;
+    assign perf_gmem_reads  = dxa_perf.gmem_reads;
+    assign perf_gmem_dedup  = dxa_perf.gmem_dedup;
+    assign perf_lmem_writes = dxa_perf.lmem_writes;
+    assign perf_gmem_latency= dxa_perf.gmem_latency;
+`endif
+
     VX_dxa_core #(
         .INSTANCE_ID     (INSTANCE_ID),
         .DXA_NUM_SOCKETS (1),
@@ -150,11 +169,15 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     ) dxa_core (
         .clk               (clk),
         .reset             (reset),
+    `ifdef PERF_ENABLE
+        .dxa_perf          (dxa_perf),
+    `endif
         .dcr_bus_if        (dcr_bus_if),
         .req_bus_if        (req_bus_if),
         .smem_bus_if       (smem_bus_if),
         .smem_local_core_id(smem_core_id),
-        .gmem_bus_if       (gmem_bus_if)
+        .gmem_bus_if       (gmem_bus_if),
+        .busy              (busy)
     );
 
 endmodule
