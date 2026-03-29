@@ -33,6 +33,33 @@ RTL_INCLUDE += -I$(RTL_DIR)/tcu -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(SR
 
 ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
+TOP := VX_tcu_fedp_dpi
+endif
+
+ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
+TOP := VX_tcu_fedp_dsp
+endif
+
+ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
+RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
+RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
+RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
+RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_primitives.v
+RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_rawFN.v
+RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/isSigNaNRecFN.v
+RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/mulRecFN.v
+RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
+RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+TOP := VX_tcu_fedp_bhf
+endif
+
+ifneq (,$(filter -DTCU_TYPE_TFR, $(XCONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
+TOP := VX_tcu_fedp_tfr
+PARAMS += -GLANE_MASK=1
 endif
 
 # default test: fp16

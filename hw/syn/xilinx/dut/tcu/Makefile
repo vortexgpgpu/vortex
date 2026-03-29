@@ -12,17 +12,17 @@ RTL_INCLUDE += -I$(UNITTEST_DIR)/tcu_unit
 
 # Add TCU extension sources
 RTL_INCLUDE += -I$(RTL_DIR)/tcu
-ifneq (,$(filter -DTCU_TYPE_DPI, $(CONFIGS)))
+ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 endif
-ifneq (,$(filter -DTCU_TYPE_DSP, $(CONFIGS)))
+ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 endif
-ifneq (,$(filter -DTCU_TYPE_BHF, $(CONFIGS)))
+ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 endif
-ifneq (,$(filter -DTCU_TYPE_TFR, $(CONFIGS)))
+ifneq (,$(filter -DTCU_TYPE_TFR, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 endif
