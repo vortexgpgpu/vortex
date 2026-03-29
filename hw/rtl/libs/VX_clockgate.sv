@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+`include "VX_define.vh"
+
 // VX_clockgate — Inference-based integrated clock gating (ICG)
 //
 // Portable across ASIC and FPGA tool flows:
@@ -20,10 +22,11 @@
 //   • Yosys        : keeps behavioural model for simulation
 //
 // The latch is transparent while clk_in is low, so en_latched can
-// only transition during the low phase.  This guarantees clk_out is
+// only transition during the low phase. This guarantees clk_out is
 // glitch-free on the rising edge of clk_in.
-//
+
 `TRACING_OFF
+
 module VX_clockgate (
     input  wire clk_in,   // free-running source clock
     input  wire en,        // active-high gate enable
@@ -32,7 +35,7 @@ module VX_clockgate (
 
     // Negative-level latch: capture enable while clock is low
     // to prevent glitches on the gated clock.
-    
+
     /* verilator lint_off LATCH */
     reg en_latched;
     always @(*) begin
@@ -45,4 +48,5 @@ module VX_clockgate (
     assign clk_out = clk_in & en_latched;
 
 endmodule
+
 `TRACING_ON
