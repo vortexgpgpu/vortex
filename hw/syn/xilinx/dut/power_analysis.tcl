@@ -16,7 +16,7 @@
 #
 # Intended for use with "make power VCD=<path>" after a successful build.
 # Must be run from the DUT build directory (e.g. hw/syn/xilinx/dut/vortex/build/)
-# so that project_1/post_impl.dcp is visible.
+# so that post_impl.dcp is visible.
 #
 # Required environment variable:
 #   VCD_FILE        Path to the VCD produced by rtlsim (Verilator --trace)
@@ -36,9 +36,71 @@
 #   power_vcd.rpt          VCD-annotated estimate (per-module, depth 6)
 # -----------------------------------------------------------------------------
 
+# ---- Helpers ----------------------------------------------------------------
+
+# Scan the VCD header and collect all scope paths (depth-first, dot-separated).
+# Stops at $enddefinitions or after collecting max_scopes entries.
+proc vcd_list_scopes {vcd_file {max_scopes 64}} {
+    set f [open $vcd_file r]
+    set stack {}
+    set scopes {}
+    while {[gets $f line] >= 0} {
+        if {[string match {*$enddefinitions*} $line]} break
+        foreach token [split $line] {
+            # accumulate tokens into a simple state machine
+        }
+        if {[regexp {\$scope\s+\w+\s+(\S+)\s+\$end} $line -> name]} {
+            lappend stack $name
+            lappend scopes [join $stack "."]
+            if {[llength $scopes] >= $max_scopes} break
+        }
+        if {[regexp {\$upscope\s+\$end} $line]} {
+            set stack [lrange $stack 0 end-1]
+        }
+    }
+    close $f
+    return $scopes
+}
+
+# Resolve VCD_INST to an exact scope path.
+# - Exact path  → returned unchanged.
+# - Glob pattern → first VCD scope whose full path OR leaf name matches.
+# - Empty string → returned unchanged.
+# Errors and exits if a glob pattern is given but no scope matches.
+proc resolve_vcd_inst {vcd_file pattern} {
+    if {$pattern eq "" || ![string match {*[*?]*} $pattern]} {
+        return $pattern
+    }
+    set f [open $vcd_file r]
+    set stack {}
+    set found ""
+    while {[gets $f line] >= 0} {
+        if {[string match {*$enddefinitions*} $line]} break
+        if {[regexp {\$scope\s+\w+\s+(\S+)\s+\$end} $line -> name]} {
+            lappend stack $name
+            set full [join $stack "."]
+            if {[string match $pattern $full] || [string match $pattern $name]} {
+                set found $full
+                break
+            }
+        }
+        if {[regexp {\$upscope\s+\$end} $line]} {
+            set stack [lrange $stack 0 end-1]
+        }
+    }
+    close $f
+    if {$found eq ""} {
+        puts "ERROR: VCD_INST pattern '$pattern' did not match any scope in: $vcd_file"
+        puts "       Available scopes:"
+        foreach s [vcd_list_scopes $vcd_file] { puts "         $s" }
+        exit 1
+    }
+    return $found
+}
+
 # ---- Validate environment ---------------------------------------------------
 
-set checkpoint "project_1/post_impl.dcp"
+set checkpoint "post_impl.dcp"
 if {![file exists $checkpoint]} {
   puts "ERROR: $checkpoint not found."
   puts "       Run 'make build' in this directory before running 'make power'."
@@ -47,7 +109,7 @@ if {![file exists $checkpoint]} {
 
 if {![info exists ::env(VCD_FILE)] || $::env(VCD_FILE) eq ""} {
   puts "ERROR: VCD_FILE environment variable is not set."
-  puts "       Usage: make power VCD=<path/to/sim.vcd>"
+  puts "       Usage: make power VCD_FILE=<path/to/sim.vcd>"
   exit 1
 }
 
@@ -58,8 +120,11 @@ if {![file exists $vcd_file]} {
 }
 
 set strip_path ""
-if {[info exists ::env(VCD_INST)]} {
-  set strip_path $::env(VCD_INST)
+if {[info exists ::env(VCD_INST)] && $::env(VCD_INST) ne ""} {
+  set strip_path [resolve_vcd_inst $vcd_file $::env(VCD_INST)]
+  if {[string match {*[*?]*} $::env(VCD_INST)]} {
+    puts "INFO: VCD_INST '$::env(VCD_INST)' resolved to: $strip_path"
+  }
 }
 
 # ---- Open the post-implementation checkpoint --------------------------------
@@ -89,6 +154,26 @@ if {$strip_path ne ""} {
   read_vcd -strip_path $strip_path $vcd_file
 } else {
   read_vcd $vcd_file
+}
+
+# Check annotation coverage: capture the report as a string and scan for
+# the "X% of nets annotated" line that Vivado emits during report_power.
+set pwr_str [report_power -return_string]
+if {[regexp {(\d+)%\s+of nets annotated} $pwr_str -> annot_pct]} {
+  if {$annot_pct == 0} {
+    puts ""
+    puts "ERROR: 0% of nets were annotated from the VCD."
+    if {$strip_path ne ""} {
+      puts "       Strip path '$strip_path' did not match the synthesized netlist hierarchy."
+    } else {
+      puts "       No VCD_INST strip path was given — VCD signal names may not match the netlist."
+    }
+    puts "       Available VCD scopes:"
+    foreach s [vcd_list_scopes $vcd_file] { puts "         $s" }
+    puts "       Re-run with VCD_INST set to the scope containing the DUT signals."
+    exit 1
+  }
+  puts "INFO: VCD annotation coverage: ${annot_pct}% of nets"
 }
 
 # Override reset nets to deasserted — prevents reset pulses at the start of

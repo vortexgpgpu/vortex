@@ -86,7 +86,7 @@ endif
 
 CONFIGS += -DSYNTHESIS -DASIC -DSYNOPSYS
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/hw/VX_config.toml --cflags='$(CONFIGS)')
 
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
