@@ -50,9 +50,10 @@
 module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY = 17
 ) (
-    input  wire        clk,
-    input  wire        reset,
-    input  wire        enable,
+    input  wire clk,
+    input  wire reset,
+    input  wire enable,
+    input  wire mask,
 
     input  wire [INST_FMT_BITS-1:0] fmt,
     input  wire [INST_FRM_BITS-1:0] frm,
@@ -61,7 +62,7 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input  wire [31:0] datab,   // divisor  (DIV only; tie to 0 for SQRT)
     input  wire        is_sqrt,
 
-    output wire [31:0]               result,
+    output wire [31:0] result,
     output wire [`FP_FLAGS_BITS-1:0] fflags
 );
     `UNUSED_VAR (fmt)   // F32-only
@@ -82,6 +83,18 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam NR_BITS     = 26;
     localparam NR_STAGES   = NR_BITS / 2;           // 13
     `STATIC_ASSERT(LATENCY == (PRE_LATENCY + INI_LATENCY + NR_STAGES + CONV_LATENCY + NRM_LATENCY), ("VX_fdivsqrt_unit: LATENCY must be %0d, got %0d", PRE_LATENCY+INI_LATENCY+NR_STAGES+CONV_LATENCY+NRM_LATENCY, LATENCY))
+
+    reg [LATENCY-1:0] mask_pipe;
+    always @(posedge clk) begin
+        if (reset) begin
+            mask_pipe <= '0;
+        end else if (enable) begin
+            mask_pipe <= {mask_pipe[LATENCY-2:0], mask};
+        end
+    end
+    wire valid_ini  = mask_pipe[PRE_LATENCY-1];
+    wire valid_conv = mask_pipe[PRE_LATENCY+INI_LATENCY+NR_STAGES-1];
+    wire valid_nrm  = mask_pipe[PRE_LATENCY+INI_LATENCY+NR_STAGES+CONV_LATENCY-1];
 
     localparam EXC_LO  = 0;
     localparam FRM_LO  = EXC_LO  + 5;
@@ -224,9 +237,15 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign ini_in[INI_SQRT_LO]                  = is_sqrt;
 
     wire [INI_W-1:0] ini_out;
-    VX_pipe_register #(.DATAW(INI_W), .DEPTH(1)) pre_reg (
-        .clk(clk), .reset(reset), .enable(enable),
-        .data_in(ini_in), .data_out(ini_out)
+    VX_pipe_register #(
+        .DATAW (INI_W),
+        .DEPTH (1)
+    ) pre_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable && mask),
+        .data_in  (ini_in),
+        .data_out (ini_out)
     );
 
     // =========================================================================
@@ -268,9 +287,15 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign pre_in[NRO_LO]                  = i_sqrt ? i_nro_sq             : 1'b0;
     assign pre_in[SQ_LO]                   = i_sqrt;
 
-    VX_pipe_register #(.DATAW(STAGE_W), .DEPTH(1)) ini_reg (
-        .clk(clk), .reset(reset), .enable(enable),
-        .data_in(pre_in), .data_out(srt_stage[0])
+    VX_pipe_register #(
+        .DATAW (STAGE_W),
+        .DEPTH (1)
+    ) ini_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable && valid_ini),
+        .data_in  (pre_in),
+        .data_out (srt_stage[0])
     );
 
     // =========================================================================
@@ -387,9 +412,15 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign s_out[NRO_LO]                  = nro_in;
         assign s_out[SQ_LO]                   = sq_in;
 
-        VX_pipe_register #(.DATAW(STAGE_W), .DEPTH(1)) srt_reg (
-            .clk(clk), .reset(reset), .enable(enable),
-            .data_in(s_out), .data_out(srt_stage[k+1])
+        VX_pipe_register #(
+            .DATAW (STAGE_W),
+            .DEPTH (1)
+        ) srt_reg (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (enable && mask_pipe[PRE_LATENCY+INI_LATENCY-1+k]),
+            .data_in  (s_out),
+            .data_out (srt_stage[k+1])
         );
     end
 
@@ -475,9 +506,15 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [CONV_W-1:0] conv_in = {man_cv_out, guard_cv_out, round_cv_out, sticky_cv_out,
                                   exp_res, sgn_cv, frm_cv, exc_cv};
     wire [CONV_W-1:0] conv_out;
-    VX_pipe_register #(.DATAW(CONV_W), .DEPTH(1)) conv_reg (
-        .clk(clk), .reset(reset), .enable(enable),
-        .data_in(conv_in), .data_out(conv_out)
+    VX_pipe_register #(
+        .DATAW (CONV_W),
+        .DEPTH (1)
+    ) conv_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable && valid_conv),
+        .data_in  (conv_in),
+        .data_out (conv_out)
     );
 
     // =========================================================================
@@ -538,10 +575,15 @@ module VX_fdivsqrt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // =========================================================================
     // NRM pipeline register (latency cycle 17 = LATENCY)
     // =========================================================================
-    VX_pipe_register #(.DATAW(32 + `FP_FLAGS_BITS), .DEPTH(1)) nrm_reg (
-        .clk(clk), .reset(reset), .enable(enable),
-        .data_in ({nrm_result, nrm_fflags}),
-        .data_out({result,     fflags})
+    VX_pipe_register #(
+        .DATAW (32 + `FP_FLAGS_BITS),
+        .DEPTH (1)
+    ) nrm_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable && valid_nrm),
+        .data_in  ({nrm_result, nrm_fflags}),
+        .data_out ({result,     fflags})
     );
 
 endmodule

@@ -26,9 +26,10 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter MAN_BITS = 23,  // mantissa bits (excluding hidden bit): 23=F32, 52=F64
     parameter EXP_BITS = 8    // exponent bits: 8=F32, 11=F64
 ) (
-    input  wire        clk,
-    input  wire        reset,
-    input  wire        enable,
+    input  wire clk,
+    input  wire reset,
+    input  wire enable,
+    input  wire mask,
 
     input  wire [INST_FPU_BITS-1:0] op_type,
     input  wire [INST_FMT_BITS-1:0] fmt,
@@ -38,8 +39,8 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input  wire [MAN_BITS+EXP_BITS:0] datab,
     input  wire [MAN_BITS+EXP_BITS:0] datac,
 
-    output wire [MAN_BITS+EXP_BITS:0]   result,
-    output wire [`FP_FLAGS_BITS-1:0]    fflags
+    output wire [MAN_BITS+EXP_BITS:0] result,
+    output wire [`FP_FLAGS_BITS-1:0]  fflags
 );
     // =========================================================================
     // Latency parameters
@@ -50,6 +51,20 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam NRM_LATENCY = 1;
     localparam MUL_LATENCY = LATENCY - INI_LATENCY - ALN_LATENCY - ACC_LATENCY - NRM_LATENCY;
     `STATIC_ASSERT(MUL_LATENCY >= 1, ("LATENCY must be >= %0d, got %0d", INI_LATENCY+1+ALN_LATENCY+ACC_LATENCY+NRM_LATENCY, LATENCY))
+
+    reg [LATENCY-1:0] mask_pipe;
+    always @(posedge clk) begin
+        if (reset) begin
+            mask_pipe <= '0;
+        end else if (enable) begin
+            mask_pipe <= {mask_pipe[LATENCY-2:0], mask};
+        end
+    end
+    // NOTE: pipe_mul (DEPTH=MUL_LATENCY) is a shift chain — must NOT be mask-gated.
+    //       Only single-cycle (DEPTH=1) stages carry mask gating.
+    wire valid_stg2 = mask_pipe[INI_LATENCY+MUL_LATENCY-1];
+    wire valid_stg3 = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY-1];
+    wire valid_stg4 = mask_pipe[INI_LATENCY+MUL_LATENCY+ALN_LATENCY+ACC_LATENCY-1];
 
     // =========================================================================
     // FP field widths
@@ -208,7 +223,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     ) pipe_ini (
         .clk     (clk),
         .reset   (reset),
-        .enable  (enable),
+        .enable  (enable && mask),
         .data_in ({sig_a, sig_b, sig_c, exp_prod0, exp_c, s_prod0, s_c0, frm, exc0}),
         .data_out(s0_data)
     );
@@ -255,7 +270,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({raw_prod,  r1_exp_prod, r1_s_prod, r1_sig_c, r1_exp_c, r1_s_c, r1_frm, r1_exc}),
+        .data_in ({raw_prod, r1_exp_prod, r1_s_prod, r1_sig_c, r1_exp_c, r1_s_c, r1_frm, r1_exc}),
         .data_out(s1_data)
     );
 
@@ -327,8 +342,8 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     ) pipe_aln (
         .clk     (clk),
         .reset   (reset),
-        .enable  (enable),
-        .data_in ({aln_prod,  stick_prod, aln_c,  stick_c, aln_prod_gte_c, s1_eff_sub, s1_s_prod, s1_s_c, s1_max_exp, s1_frm, s1_exc}),
+        .enable  (enable && valid_stg2),
+        .data_in ({aln_prod, stick_prod, aln_c, stick_c, aln_prod_gte_c, s1_eff_sub, s1_s_prod, s1_s_c, s1_max_exp, s1_frm, s1_exc}),
         .data_out(s2_data)
     );
 
@@ -376,8 +391,8 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     ) pipe_acc (
         .clk     (clk),
         .reset   (reset),
-        .enable  (enable),
-        .data_in ({acc_sum,  acc_sign,  acc_sticky, s2_eff_sub, s2_max_exp, s2_frm, s2_exc}),
+        .enable  (enable && valid_stg3),
+        .data_in ({acc_sum, acc_sign, acc_sticky, s2_eff_sub, s2_max_exp, s2_frm, s2_exc}),
         .data_out(s3_data)
     );
 
@@ -501,9 +516,9 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     ) pipe_nrm (
         .clk     (clk),
         .reset   (reset),
-        .enable  (enable),
-        .data_in ({nrm_result,  nrm_fflags}),
-        .data_out({result,      fflags})
+        .enable  (enable && valid_stg4),
+        .data_in ({nrm_result, nrm_fflags}),
+        .data_out({result,     fflags})
     );
 
 endmodule

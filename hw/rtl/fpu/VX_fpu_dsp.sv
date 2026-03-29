@@ -207,7 +207,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             acl_fmadd fmadd (
                 .clk    (clk),
                 .areset (1'b0),
-                .en     (pe_enable && pe_mask_out[i]),
+                .en     (pe_enable),
                 .a      (a32),
                 .b      (b32),
                 .c      (c32),
@@ -215,7 +215,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             );
             assign pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = 'x;
         end
-
+        `UNUSED_VAR (pe_mask_out)
         assign per_core_has_fflags[FPU_FMA] = 0;
         assign fflags_lanes = 'x;
     `elsif VIVADO
@@ -223,7 +223,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [2:0] tuser;
             xil_fma fma (
                 .aclk                (clk),
-                .aclken              (pe_enable && pe_mask_out[i]),
+                .aclken              (pe_enable),
                 .s_axis_a_tvalid     (1'b1),
                 .s_axis_a_tdata      (pe_data_in[i][0 +: 32]),
                 .s_axis_b_tvalid     (1'b1),
@@ -237,7 +237,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                                                           // NV, DZ, OF, UF, NX
             assign pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = {tuser[2], 1'b0, tuser[1], tuser[0], 1'b0};
         end
-
+        `UNUSED_VAR (pe_mask_out)
         assign per_core_has_fflags[FPU_FMA] = 1;
     `else
         for (genvar i = 0; i < NUM_PES_FMA; ++i) begin : g_units
@@ -246,7 +246,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fma_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (pe_enable && pe_mask_out[i]),
+                .enable  (pe_enable),
+                .mask    (pe_mask_out[i]),
                 .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
                 .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
@@ -388,14 +389,14 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             acl_fdiv fdiv (
                 .clk    (clk),
                 .areset (1'b0),
-                .en     (div_pe_enable && div_pe_mask_out[i]),
+                .en     (div_pe_enable),
                 .a      (div_pe_data_in[i][0 +: 32]),
                 .b      (div_pe_data_in[i][`XLEN +: 32]),
                 .q      (div_pe_data_out[i][0 +: 32])
             );
             assign div_pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = 'x;
         end
-
+        `UNUSED_VAR (div_pe_mask_out)
         assign div_has_fflags  = 0;
         assign div_fflags_lanes = 'x;
     `elsif VIVADO
@@ -403,7 +404,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [3:0] tuser;
             xil_fdiv fdiv (
                 .aclk                (clk),
-                .aclken              (div_pe_enable && div_pe_mask_out[i]),
+                .aclken              (div_pe_enable),
                 .s_axis_a_tvalid     (1'b1),
                 .s_axis_a_tdata      (div_pe_data_in[i][0 +: 32]),
                 .s_axis_b_tvalid     (1'b1),
@@ -415,7 +416,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                                                           // NV, DZ, OF, UF, NX
             assign div_pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = {tuser[2], tuser[3], tuser[1], tuser[0], 1'b0};
         end
-
+        `UNUSED_VAR (div_pe_mask_out)
         assign div_has_fflags = 1;
     `else
         for (genvar i = 0; i < NUM_PES_DIV; ++i) begin : g_div_units
@@ -424,7 +425,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fdiv_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (div_pe_enable && div_pe_mask_out[i]),
+                .enable  (div_pe_enable),
+                .mask    (div_pe_mask_out[i]),
                 .fmt     (div_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (div_pe_shared[0+:INST_FRM_BITS]),
                 .dataa   (div_pe_data_in[i][0+:32]),
@@ -503,13 +505,13 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             acl_fsqrt fsqrt (
                 .clk    (clk),
                 .areset (1'b0),
-                .en     (sqrt_pe_enable && sqrt_pe_mask_out[i]),
+                .en     (sqrt_pe_enable),
                 .a      (sqrt_pe_data_in[i][0 +: 32]),
                 .q      (sqrt_pe_data_out[i][0 +: 32])
             );
             assign sqrt_pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = 'x;
         end
-
+        `UNUSED_VAR (sqrt_pe_mask_out)
         assign sqrt_has_fflags  = 0;
         assign sqrt_fflags_lanes = 'x;
     `elsif VIVADO
@@ -517,7 +519,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire tuser;
             xil_fsqrt fsqrt (
                 .aclk                (clk),
-                .aclken              (sqrt_pe_enable && sqrt_pe_mask_out[i]),
+                .aclken              (sqrt_pe_enable),
                 .s_axis_a_tvalid     (1'b1),
                 .s_axis_a_tdata      (sqrt_pe_data_in[i][0 +: 32]),
                 `UNUSED_PIN (m_axis_result_tvalid),
@@ -527,7 +529,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                                                           // NV, DZ, OF, UF, NX
             assign sqrt_pe_data_out[i][`XLEN +: `FP_FLAGS_BITS] = {tuser, 1'b0, 1'b0, 1'b0, 1'b0};
         end
-
+        `UNUSED_VAR (sqrt_pe_mask_out)
         assign sqrt_has_fflags = 1;
     `else
         for (genvar i = 0; i < NUM_PES_SQRT; ++i) begin : g_sqrt_units
@@ -536,7 +538,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fsqrt_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (sqrt_pe_enable && sqrt_pe_mask_out[i]),
+                .enable  (sqrt_pe_enable),
+                .mask    (sqrt_pe_mask_out[i]),
                 .fmt     (sqrt_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (sqrt_pe_shared[0+:INST_FRM_BITS]),
                 .dataa   (sqrt_pe_data_in[i][0+:32]),
@@ -645,7 +648,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fcvt_unit (
                 .clk        (clk),
                 .reset      (reset),
-                .enable     (pe_enable && pe_mask_out[i]),
+                .enable     (pe_enable),
+                .mask       (pe_mask_out[i]),
                 .frm        (pe_frm),
                 .is_itof    (is_itof),
                 .is_ftoi    (is_ftoi),
@@ -729,7 +733,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fncp_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (pe_enable && pe_mask_out[i]),
+                .enable  (pe_enable),
+                .mask    (pe_mask_out[i]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
                 .op_type (pe_shared[INST_FRM_BITS+:INST_FPU_BITS]),
                 .dataa   (pe_data_in[i][0+:32]),

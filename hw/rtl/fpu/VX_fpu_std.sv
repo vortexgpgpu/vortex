@@ -186,7 +186,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fma_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (pe_enable && pe_mask_out[i]),
+                .enable  (pe_enable),
+                .mask    (pe_mask_out[i]),
                 .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
                 .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
@@ -276,7 +277,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fdiv_sqrt_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (pe_enable && pe_mask_out[i]),
+                .enable  (pe_enable),
+                .mask    (pe_mask_out[i]),
                 .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
                 .dataa   (pe_data_in[i][0+:32]),
@@ -368,7 +370,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fcvt_unit (
                 .clk        (clk),
                 .reset      (reset),
-                .enable     (pe_enable && pe_mask_out[i]),
+                .enable     (pe_enable),
+                .mask       (pe_mask_out[i]),
                 .frm        (pe_frm),
                 .is_itof    (is_itof),
                 .is_ftoi    (is_ftoi),
@@ -454,7 +457,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fncp_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (pe_enable && pe_mask_out[i]),
+                .enable  (pe_enable),
+                .mask    (pe_mask_out[i]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
                 .op_type (pe_shared[INST_FRM_BITS+:INST_FPU_BITS]),
                 .dataa   (pe_data_in[i][0+:32]),
