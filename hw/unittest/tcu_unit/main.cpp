@@ -394,19 +394,24 @@ private:
     }
 
     void idle_dispatch() {
-        dut_->dispatch_valid  = 0;
-        dut_->dispatch_tmask  = 0;
-        dut_->dispatch_wb     = 0;
-        dut_->dispatch_rd     = 0;
-        dut_->dispatch_op_type= 0;
-        dut_->dispatch_fmt_s  = 0;
-        dut_->dispatch_fmt_d  = 0;
-        dut_->dispatch_step_m = 0;
-        dut_->dispatch_step_n = 0;
-        dut_->dispatch_step_k = 0;
-        dut_->dispatch_sop    = 0;
-        dut_->dispatch_eop    = 0;
-        // Zero out wide data signals
+        dut_->dispatch_valid     = 0;
+        dut_->dispatch_uuid      = 0;
+        dut_->dispatch_wis       = 0;
+        dut_->dispatch_sid       = 0;
+        dut_->dispatch_tmask     = 0;
+        dut_->dispatch_PC        = 0;
+        dut_->dispatch_wb        = 0;
+        dut_->dispatch_wr_xregs  = 0;
+        dut_->dispatch_rd        = 0;
+        dut_->dispatch_bytesel   = 0;
+        dut_->dispatch_op_type   = 0;
+        dut_->dispatch_fmt_s     = 0;
+        dut_->dispatch_fmt_d     = 0;
+        dut_->dispatch_step_m    = 0;
+        dut_->dispatch_step_n    = 0;
+        dut_->dispatch_step_k    = 0;
+        dut_->dispatch_sop       = 0;
+        dut_->dispatch_eop       = 0;
         std::memset(&dut_->dispatch_rs1_data, 0, sizeof(dut_->dispatch_rs1_data));
         std::memset(&dut_->dispatch_rs2_data, 0, sizeof(dut_->dispatch_rs2_data));
         std::memset(&dut_->dispatch_rs3_data, 0, sizeof(dut_->dispatch_rs3_data));
@@ -420,18 +425,24 @@ private:
         const FmtInfo &fi)
     {
         // Set dispatch fields
-        dut_->dispatch_valid   = 1;
-        dut_->dispatch_tmask   = (1u << NUM_THREADS) - 1;  // all threads active
-        dut_->dispatch_wb      = 1;
-        dut_->dispatch_rd      = 1;  // arbitrary destination register
-        dut_->dispatch_op_type = INST_TCU_WMMA;
-        dut_->dispatch_fmt_s   = fi.id;
-        dut_->dispatch_fmt_d   = TCU_FP32_ID;  // output always fp32
-        dut_->dispatch_step_m  = 0;
-        dut_->dispatch_step_n  = 0;
-        dut_->dispatch_step_k  = 0;
-        dut_->dispatch_sop     = 1;
-        dut_->dispatch_eop     = 1;
+        dut_->dispatch_valid    = 1;
+        dut_->dispatch_uuid     = 0;
+        dut_->dispatch_wis      = 0;
+        dut_->dispatch_sid      = 0;
+        dut_->dispatch_tmask    = (1u << NUM_THREADS) - 1;  // all threads active
+        dut_->dispatch_PC       = 0;
+        dut_->dispatch_wb       = 1;
+        dut_->dispatch_wr_xregs = 0;
+        dut_->dispatch_rd       = 1;  // arbitrary destination register
+        dut_->dispatch_bytesel  = 0;
+        dut_->dispatch_op_type  = INST_TCU_WMMA;
+        dut_->dispatch_fmt_s    = fi.id;
+        dut_->dispatch_fmt_d    = TCU_FP32_ID;  // output always fp32
+        dut_->dispatch_step_m   = 0;
+        dut_->dispatch_step_n   = 0;
+        dut_->dispatch_step_k   = 0;
+        dut_->dispatch_sop      = 1;
+        dut_->dispatch_eop      = 1;
 
         for (int t = 0; t < NUM_THREADS; t++) {
             write_lane(&dut_->dispatch_rs1_data, t, rs1[t]);
