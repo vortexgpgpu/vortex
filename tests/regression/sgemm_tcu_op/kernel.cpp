@@ -262,17 +262,24 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
                   : (chunk_A + dense_half1_a_regs);
           chunk_A_elems = reinterpret_cast<ctx::input_t*>(chunk_A);
           chunk_B_elems = reinterpret_cast<ctx::input_t*>(chunk_B);
+          auto chunk_A_elems_hi = chunk_A_elems + (tile_M * tile_K);
+          auto chunk_B_elems_hi = chunk_B_elems + (tile_K * tile_N);
+          const bool has_second_k_tile = (curr_k > tile_K);
 
           const uint32_t flags_chunk = (((k_offset == 0) ? 1u : 0u) << 1) | (((k_offset + curr_k) == K) ? 1u : 0u);
 
           if (active_warp && lane0) {mma_D[0] = MARKER;}
           if (active_warp && is_dxa_quad) {
             vx_dxa_issue_2d_wg(kDescA, ab_tile_bar.id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
-          }
-          ab_tile_bar.arrive_and_wait();
-          if (active_warp && lane0) {mma_D[0] = MARKER;}
-          if (active_warp && is_dxa_quad) {
+            if (has_second_k_tile) {
+              vx_dxa_issue_2d_wg(kDescA, ab_tile_bar.id(), chunk_A_elems_hi, 0,
+                                 tile_row_idx * tiles_k + k_tile_idx + 1);
+            }
             vx_dxa_issue_2d_wg(kDescB, ab_tile_bar.id(), chunk_B, 0, tile_col_idx * tiles_k + k_tile_idx);
+            if (has_second_k_tile) {
+              vx_dxa_issue_2d_wg(kDescB, ab_tile_bar.id(), chunk_B_elems_hi, 0,
+                                 tile_col_idx * tiles_k + k_tile_idx + 1);
+            }
           }
           ab_tile_bar.arrive_and_wait();
           if (active_warp && lane0) {mma_D[0] = MARKER;}
