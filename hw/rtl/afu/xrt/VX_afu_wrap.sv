@@ -112,7 +112,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
 	reg [`RESET_DELAY-1:0] vx_reset_shift_r;
 	reg [PENDING_WR_SIZEW-1:0] vx_pending_writes;
-	reg vx_busy_wait;
 	wire vx_reset;
 	reg vx_start;
 	wire vx_busy;
@@ -155,9 +154,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		end
 
 		if (reset || ap_reset) begin
-			state        <= STATE_IDLE;
-			vx_start     <= 0;
-			vx_busy_wait <= 0;
+			state    <= STATE_IDLE;
+			vx_start <= 0;
 		end else begin
 			case (state)
 			STATE_IDLE: begin
@@ -165,29 +163,18 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 				`ifdef DBG_TRACE_AFU
 					`TRACE(2, ("%t: AFU: Goto STATE_RUN\n", $time))
 				`endif
-					state        <= STATE_RUN;
-					vx_start     <= 1;
-					vx_busy_wait <= 1;
+					state    <= STATE_RUN;
+					vx_start <= 1;
 				end
 			end
 			STATE_RUN: begin
 				vx_start <= 0;
-				if (vx_busy_wait) begin
-					// wait until processor goes busy
-					if (vx_busy) begin
-					`ifdef DBG_TRACE_AFU
-						`TRACE(2, ("%t: AFU: Begin execution\n", $time))
-					`endif
-						vx_busy_wait <= 0;
-					end
-				end else begin
-					// wait until the processor is not busy
-					if (~vx_busy) begin
-					`ifdef DBG_TRACE_AFU
-						`TRACE(2, ("%t: AFU: Execution completed\n", $time))
-					`endif
-						state <= STATE_DONE;
-					end
+				// vx_start is still asserted this cycle; wait for execution to complete
+				if (!vx_start && !vx_busy) begin
+				`ifdef DBG_TRACE_AFU
+					`TRACE(2, ("%t: AFU: Execution completed\n", $time))
+				`endif
+					state <= STATE_DONE;
 				end
 			end
 			STATE_DONE: begin
@@ -300,6 +287,14 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
 	end
 
+	// Clock gate Vortex when idle
+    wire vx_clk;
+    VX_clockgate vx_clkgate (
+        .clk_in(clk),
+        .en(vx_reset | vx_start | vx_busy),
+        .clk_out(vx_clk)
+    );
+
 	`SCOPE_IO_SWITCH (2);
 
 	Vortex_axi #(
@@ -310,7 +305,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	) vortex_axi (
 		`SCOPE_IO_BIND  (1)
 
-		.clk			(clk),
+		.clk			(vx_clk),
 		.reset			(vx_reset),
 
 		.m_axi_awvalid	(m_axi_mem_awvalid_a),

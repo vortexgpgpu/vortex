@@ -72,3 +72,7 @@ We provide a trace sanitizer tool under ./hw/scripts/trace_csv.py that you can u
 The first column in the CSV trace is UUID (universal unique identifier) of the instruction and the content is sorted by the UUID.
 You can use the UUID to trace the same instruction running on either the RTL hw or SimX simulator.
 This can be very effective if you want to use SimX to debugging your RTL hardware by comparing CSV traces.
+
+## SAIF trace for power analysis
+
+Use the `--saif` flag to capture switching activity during RTL simulation. The trace.saif file will be generated in the current directory. Use `SAIF_FILE` and `SAIF_INST` argument during synthesis build to generate accurate power report.

@@ -124,6 +124,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [NUM_LANES-1:0] mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] data_out;
         wire pe_enable;
+        wire [NUM_PES_FMA-1:0] pe_mask_out;
         wire [NUM_PES_FMA-1:0][(3*`XLEN)-1:0] pe_data_in;
         wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
         wire [NUM_PES_FMA-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] pe_data_out;
@@ -153,7 +154,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .tag_in        (per_core_tag_in[FPU_FMA]),
             .ready_in      (per_core_ready_in[FPU_FMA]),
             .pe_enable     (pe_enable),
-            `UNUSED_PIN    (pe_mask_out),
+            .pe_mask_out   (pe_mask_out),
             .pe_data_out   (pe_data_in),
             .pe_shared_out (pe_shared),
             .pe_data_in    (pe_data_out),
@@ -206,7 +207,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             acl_fmadd fmadd (
                 .clk    (clk),
                 .areset (1'b0),
-                .en     (pe_enable),
+                .en     (pe_enable && pe_mask_out[i]),
                 .a      (a32),
                 .b      (b32),
                 .c      (c32),
@@ -222,7 +223,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [2:0] tuser;
             xil_fma fma (
                 .aclk                (clk),
-                .aclken              (pe_enable),
+                .aclken              (pe_enable && pe_mask_out[i]),
                 .s_axis_a_tvalid     (1'b1),
                 .s_axis_a_tdata      (pe_data_in[i][0 +: 32]),
                 .s_axis_b_tvalid     (1'b1),
@@ -245,7 +246,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fma_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (pe_enable),
+                .enable  (pe_enable && pe_mask_out[i]),
                 .op_type (pe_shared[INST_FRM_BITS+INST_FMT_BITS+:INST_FPU_BITS]),
                 .fmt     (pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
@@ -327,6 +328,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [NUM_LANES-1:0] div_mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] div_data_out;
         wire div_pe_enable;
+        wire [NUM_PES_DIV-1:0] div_pe_mask_out;
         wire [NUM_PES_DIV-1:0][(2*`XLEN)-1:0] div_pe_data_in;
         wire [INST_FMT_BITS+INST_FRM_BITS-1:0] div_pe_shared;
         wire [NUM_PES_DIV-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] div_pe_data_out;
@@ -356,7 +358,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .tag_in        (path_tag[0]),
             .ready_in      (path_ready_in[0]),
             .pe_enable     (div_pe_enable),
-            `UNUSED_PIN    (pe_mask_out),
+            .pe_mask_out   (div_pe_mask_out),
             .pe_data_out   (div_pe_data_in),
             .pe_shared_out (div_pe_shared),
             .pe_data_in    (div_pe_data_out),
@@ -386,7 +388,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             acl_fdiv fdiv (
                 .clk    (clk),
                 .areset (1'b0),
-                .en     (div_pe_enable),
+                .en     (div_pe_enable && div_pe_mask_out[i]),
                 .a      (div_pe_data_in[i][0 +: 32]),
                 .b      (div_pe_data_in[i][`XLEN +: 32]),
                 .q      (div_pe_data_out[i][0 +: 32])
@@ -401,7 +403,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire [3:0] tuser;
             xil_fdiv fdiv (
                 .aclk                (clk),
-                .aclken              (div_pe_enable),
+                .aclken              (div_pe_enable && div_pe_mask_out[i]),
                 .s_axis_a_tvalid     (1'b1),
                 .s_axis_a_tdata      (div_pe_data_in[i][0 +: 32]),
                 .s_axis_b_tvalid     (1'b1),
@@ -422,7 +424,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fdiv_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (div_pe_enable),
+                .enable  (div_pe_enable && div_pe_mask_out[i]),
                 .fmt     (div_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (div_pe_shared[0+:INST_FRM_BITS]),
                 .dataa   (div_pe_data_in[i][0+:32]),
@@ -446,6 +448,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [NUM_LANES-1:0] sqrt_mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] sqrt_data_out;
         wire sqrt_pe_enable;
+        wire [NUM_PES_SQRT-1:0] sqrt_pe_mask_out;
         wire [NUM_PES_SQRT-1:0][`XLEN-1:0] sqrt_pe_data_in;
         wire [INST_FMT_BITS+INST_FRM_BITS-1:0] sqrt_pe_shared;
         wire [NUM_PES_SQRT-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] sqrt_pe_data_out;
@@ -470,7 +473,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .tag_in        (path_tag[1]),
             .ready_in      (path_ready_in[1]),
             .pe_enable     (sqrt_pe_enable),
-            `UNUSED_PIN    (pe_mask_out),
+            .pe_mask_out   (sqrt_pe_mask_out),
             .pe_data_out   (sqrt_pe_data_in),
             .pe_shared_out (sqrt_pe_shared),
             .pe_data_in    (sqrt_pe_data_out),
@@ -500,7 +503,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             acl_fsqrt fsqrt (
                 .clk    (clk),
                 .areset (1'b0),
-                .en     (sqrt_pe_enable),
+                .en     (sqrt_pe_enable && sqrt_pe_mask_out[i]),
                 .a      (sqrt_pe_data_in[i][0 +: 32]),
                 .q      (sqrt_pe_data_out[i][0 +: 32])
             );
@@ -514,7 +517,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             wire tuser;
             xil_fsqrt fsqrt (
                 .aclk                (clk),
-                .aclken              (sqrt_pe_enable),
+                .aclken              (sqrt_pe_enable && sqrt_pe_mask_out[i]),
                 .s_axis_a_tvalid     (1'b1),
                 .s_axis_a_tdata      (sqrt_pe_data_in[i][0 +: 32]),
                 `UNUSED_PIN (m_axis_result_tvalid),
@@ -533,7 +536,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fsqrt_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (sqrt_pe_enable),
+                .enable  (sqrt_pe_enable && sqrt_pe_mask_out[i]),
                 .fmt     (sqrt_pe_shared[INST_FRM_BITS+:INST_FMT_BITS]),
                 .frm     (sqrt_pe_shared[0+:INST_FRM_BITS]),
                 .dataa   (sqrt_pe_data_in[i][0+:32]),
@@ -577,6 +580,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [NUM_LANES-1:0] mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] data_out;
         wire pe_enable;
+        wire [NUM_PES_CVT-1:0] pe_mask_out;
         wire [NUM_PES_CVT-1:0][`XLEN-1:0] pe_data_in;
         wire [INST_FPU_BITS+INST_FMT_BITS+INST_FRM_BITS-1:0] pe_shared;
         wire [NUM_PES_CVT-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] pe_data_out;
@@ -603,7 +607,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .tag_in        (per_core_tag_in[FPU_CVT]),
             .ready_in      (per_core_ready_in[FPU_CVT]),
             .pe_enable     (pe_enable),
-            `UNUSED_PIN    (pe_mask_out),
+            .pe_mask_out   (pe_mask_out),
             .pe_data_out   (pe_data_in),
             .pe_shared_out (pe_shared),
             .pe_data_in    (pe_data_out),
@@ -641,7 +645,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fcvt_unit (
                 .clk        (clk),
                 .reset      (reset),
-                .enable     (pe_enable),
+                .enable     (pe_enable && pe_mask_out[i]),
                 .frm        (pe_frm),
                 .is_itof    (is_itof),
                 .is_ftoi    (is_ftoi),
@@ -668,6 +672,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire [NUM_LANES-1:0] mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] data_out;
         wire pe_enable;
+        wire [NUM_PES_NCP-1:0] pe_mask_out;
         wire [NUM_PES_NCP-1:0][(2*`XLEN)-1:0] pe_data_in;
         wire [INST_FPU_BITS+INST_FRM_BITS-1:0] pe_shared;
         wire [NUM_PES_NCP-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] pe_data_out;
@@ -699,7 +704,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .tag_in        (per_core_tag_in[FPU_NCP]),
             .ready_in      (per_core_ready_in[FPU_NCP]),
             .pe_enable     (pe_enable),
-            `UNUSED_PIN    (pe_mask_out),
+            .pe_mask_out   (pe_mask_out),
             .pe_data_out   (pe_data_in),
             .pe_shared_out (pe_shared),
             .pe_data_in    (pe_data_out),
@@ -724,7 +729,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             ) fncp_unit (
                 .clk     (clk),
                 .reset   (reset),
-                .enable  (pe_enable),
+                .enable  (pe_enable && pe_mask_out[i]),
                 .frm     (pe_shared[0+:INST_FRM_BITS]),
                 .op_type (pe_shared[INST_FRM_BITS+:INST_FPU_BITS]),
                 .dataa   (pe_data_in[i][0+:32]),

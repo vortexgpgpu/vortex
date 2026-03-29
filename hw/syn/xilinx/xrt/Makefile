@@ -16,6 +16,9 @@ TARGET ?= hw
 PLATFORM ?=
 
 PREFIX ?= build$(XLEN)
+
+SAIF_FILE ?=
+SAIF_INST ?=
 MAX_JOBS ?= 8
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
@@ -184,7 +187,7 @@ ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
 endif
 
-.PHONY: all clean gen-sources gen-ast emconfig check-devices
+.PHONY: all clean gen-sources gen-ast emconfig check-devices power
 
 all: check-devices emconfig $(XCLBIN_CONTAINER) report
 
@@ -224,6 +227,16 @@ endif
 
 chipscope:
 	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/bin/vortex_afu.ltx &
+
+# Re-run power analysis on an existing build without rebuilding the design.
+# The Vitis flow writes the routed checkpoint under _x/link/vivado/vpl/prj/prj.runs/impl_1/.
+# Usage: make power SAIF_FILE=<saif-path> [SAIF_INST=<instance-path>] [BUILD_DIR=<path>]
+power:
+	@if [ -z "$(SAIF_FILE)" ]; then \
+	  echo "ERROR: SAIF_FILE not specified. Usage: make power SAIF_FILE=<path/to/trace.saif>"; exit 1; \
+	fi
+	TOOL_DIR=$(SCRIPT_DIR) SAIF_FILE=$(SAIF_FILE) SAIF_INST=$(SAIF_INST) \
+	  BUILD_DIR=$(BUILD_DIR) $(VIVADO) -mode batch -source $(SCRIPT_DIR)/xilinx_power_analysis.tcl
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

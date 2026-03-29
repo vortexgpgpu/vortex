@@ -27,7 +27,8 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_dxa_req_bus_if.slave cluster_dxa_bus_if[NUM_DXA_UNITS],
     VX_mem_bus_if.master dxa_gmem_bus_if[NUM_DXA_UNITS],
     VX_dxa_bank_wr_if.master dxa_smem_bank_wr_if[NUM_DXA_UNITS],
-    output wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0] dxa_smem_core_id
+    output wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0] dxa_smem_core_id,
+    output wire busy
 );
 
     localparam WORKER_BITS   = `CLOG2(NUM_DXA_UNITS);
@@ -356,7 +357,11 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
         `UNUSED_VAR (launch_ready_w)  // workers accept via launch_ready = ~active_r
 
+        // Busy while any input is valid, the issue FIFO has items, or any worker is running.
+        assign busy = (|in_valid) | issue_fifo_out_valid | ~(&worker_idle);
+
     end else begin : g_dxa_unified_off
+        assign busy = 1'b0;
         for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_dxa_off
             assign cluster_dxa_bus_if[i].req_ready = 1'b1;
 `ifdef PERF_ENABLE

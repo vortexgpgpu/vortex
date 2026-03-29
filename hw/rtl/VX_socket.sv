@@ -339,6 +339,18 @@ module VX_socket import VX_gpu_pkg::*;
 
     // Generate all cores
     for (genvar core_id = 0; core_id < `SOCKET_SIZE; ++core_id) begin : g_cores
+        /*
+        wire core_clk;
+        wire core_clk_en = reset
+                        || per_core_kmu_bus_if[core_id].valid
+                        || per_core_dcr_bus_if[core_id].req_valid
+                        || per_core_busy[core_id];
+        VX_clockgate core_icg (
+            .clk_in (clk),
+            .en     (core_clk_en),
+            .clk_out(core_clk)
+        );*/
+
         VX_core #(
             .CORE_ID  ((SOCKET_ID * `SOCKET_SIZE) + core_id),
             .INSTANCE_ID (`SFORMATF(("%s-core%0d", INSTANCE_ID, core_id)))
@@ -371,6 +383,8 @@ module VX_socket import VX_gpu_pkg::*;
         );
     end
 
-    `BUFFER_EX(busy, (| per_core_busy), 1'b1, 1, (`SOCKET_SIZE > 1));
+    wire busy_r;
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy), 1'b1, 1, (`SOCKET_SIZE > 1));
+    assign busy = busy_r | dcr_bus_if.req_valid;
 
 endmodule

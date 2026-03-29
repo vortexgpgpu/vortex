@@ -103,6 +103,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_dcr_flush_if dcr_flush_if();
 
+    wire dcr_busy;
     VX_dcr_data #(
         .INSTANCE_ID (`SFORMATF(("%s-dcr_data", INSTANCE_ID))),
         .CORE_ID (CORE_ID)
@@ -111,11 +112,13 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
         .dcr_csr_if (dcr_csr_if),
-        .dcr_flush_if(dcr_flush_if)
+        .dcr_flush_if(dcr_flush_if),
+        .dcr_busy   (dcr_busy)
     );
 
     `SCOPE_IO_SWITCH (3);
 
+    wire sched_busy;
     VX_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-scheduler", INSTANCE_ID))),
         .CORE_ID (CORE_ID)
@@ -140,7 +143,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .sched_csr_if   (sched_csr_if),
         .gbar_bus_if    (gbar_bus_if),
 
-        .busy           (busy)
+        .busy           (sched_busy)
     );
 
     VX_fetch #(
@@ -256,6 +259,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .dcr_flush_if  (dcr_flush_if),
         .dcache_bus_if (dcache_bus_if)
     );
+
+    assign busy = sched_busy || dcr_busy;
 
 `ifdef PERF_ENABLE
 

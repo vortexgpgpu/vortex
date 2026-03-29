@@ -397,7 +397,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     reg  cmd_mem_wr_done;
 
     reg [`RESET_DELAY-1:0] vx_reset_shift_r;
-    reg  vx_busy_wait;
     wire vx_reset;
     reg  vx_start;
     wire vx_busy;
@@ -419,9 +418,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
 
         if (reset) begin
-            state        <= STATE_IDLE;
-            vx_start     <= 0;
-            vx_busy_wait <= 0;
+            state    <= STATE_IDLE;
+            vx_start <= 0;
         end else begin
             case (state)
             STATE_IDLE: begin
@@ -455,9 +453,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 `ifdef DBG_TRACE_AFU
                     `TRACE(2, ("%t: AFU: Goto STATE RUN\n", $time))
                 `endif
-                    state        <= STATE_RUN;
-                    vx_start     <= 1;
-                    vx_busy_wait <= 1;
+                    state    <= STATE_RUN;
+                    vx_start <= 1;
                 end
                 end
                 default: begin
@@ -495,23 +492,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             end
             STATE_RUN: begin
                 vx_start <= 0;
-                if (vx_busy_wait) begin
-                    // wait until processor goes busy
-                    if (vx_busy) begin
-                    `ifdef DBG_TRACE_AFU
-                        `TRACE(2, ("%t: AFU: Begin execution\n", $time))
-                    `endif
-                        vx_busy_wait <= 0;
-                    end
-                end else begin
-                    // wait until the processor is not busy
-                    if (~vx_busy) begin
-                    `ifdef DBG_TRACE_AFU
-                        `TRACE(2, ("%t: AFU: End execution\n", $time))
-                        `TRACE(2, ("%t: AFU: Goto STATE IDLE\n", $time))
-                    `endif
-                        state <= STATE_IDLE;
-                    end
+                // vx_start is still asserted this cycle; wait for execution to complete
+                if (!vx_start && !vx_busy) begin
+                `ifdef DBG_TRACE_AFU
+                    `TRACE(2, ("%t: AFU: Execution completed\n", $time))
+                    `TRACE(2, ("%t: AFU: Goto STATE IDLE\n", $time))
+                `endif
+                    state <= STATE_IDLE;
                 end
             end
             default:;
@@ -1061,12 +1048,20 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
+    // Clock gate Vortex when idle
+    wire vx_clk;
+    VX_clockgate vx_clkgate (
+        .clk_in(clk),
+        .en(vx_reset | vx_start | vx_busy),
+        .clk_out(vx_clk)
+    );
+
     `SCOPE_IO_SWITCH (2);
 
     Vortex vortex (
         `SCOPE_IO_BIND  (1)
 
-        .clk            (clk),
+        .clk            (vx_clk),
         .reset          (vx_reset),
 
         // Memory request
