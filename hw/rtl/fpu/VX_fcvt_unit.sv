@@ -26,6 +26,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     input wire reset,
 
     input wire enable,
+    input wire mask,
 
     input wire [INST_FRM_BITS-1:0] frm,
 
@@ -52,6 +53,17 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     localparam S_MAN_WIDTH      = `MAX(1 + MAX_MAN, XLEN);
     localparam S_EXP_WIDTH      = `MAX(`CLOG2(XLEN), MAX_EXP + 2) + 2;
     localparam LZC_RESULT_WIDTH = `CLOG2(S_MAN_WIDTH);
+
+    reg [LATENCY-1:0] mask_pipe;
+    always @(posedge clk) begin
+        if (reset) begin
+            mask_pipe <= '0;
+        end else if (enable) begin
+            mask_pipe <= {mask_pipe[LATENCY-2:0], mask};
+        end
+    end
+    localparam STG2_CYC = LATENCY - 5;
+    wire stg2_mask = (STG2_CYC == 0) ? mask : mask_pipe[STG2_CYC-1];
 
     // ======================================================================
     // Stage 0: Unpack & Classify
@@ -106,7 +118,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (enable),
+        .enable   (enable && mask),
         .data_in  ({is_itof,    is_ftoi,    is_signed,    is_dst_64,    input_sign_s0, frm,   fclass,    unpacked_mant_s0, unpacked_exp_s0}),
         .data_out ({is_itof_s1, is_ftoi_s1, is_signed_s1, is_dst_64_s1, input_sign_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1})
     );
@@ -142,7 +154,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (enable),
+        .enable   (enable && stg2_mask),
         .data_in  ({is_itof_s1, is_ftoi_s1, is_signed_s1, is_dst_64_s1, input_sign_s1, mant_is_zero_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1, renorm_shamt_s1}),
         .data_out ({is_itof_s2, is_ftoi_s2, is_signed_s2, is_dst_64_s2, input_sign_s2, mant_is_zero_s2, frm_s2, fclass_s2, unpacked_mant_s2, unpacked_exp_s2, renorm_shamt_s2})
     );
@@ -173,7 +185,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     ) pipe_reg3 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (enable),
+        .enable   (enable && mask_pipe[LATENCY-5]),
         .data_in  ({is_itof_s2, is_ftoi_s2, is_signed_s2, is_dst_64_s2, input_sign_s2, mant_is_zero_s2, frm_s2, fclass_s2, norm_mant_s2, norm_exp_s2,  unpacked_exp_s2}),
         .data_out ({is_itof_s3, is_ftoi_s3, is_signed_s3, is_dst_64_s3, input_sign_s3, mant_is_zero_s3, frm_s3, fclass_s3, norm_mant_s3, norm_exp_s3,  unpacked_exp_s3})
     );
@@ -212,7 +224,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     ) pipe_reg4 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (enable),
+        .enable   (enable && mask_pipe[LATENCY-4]),
         .data_in  ({is_itof_s3, is_ftoi_s3, is_signed_s3, is_dst_64_s3, input_sign_s3, mant_is_zero_s3, frm_s3, fclass_s3, norm_mant_s3, align_shamt_s3, final_exp_s3}),
         .data_out ({is_itof_s4, is_ftoi_s4, is_signed_s4, is_dst_64_s4, input_sign_s4, mant_is_zero_s4, frm_s4, fclass_s4, norm_mant_s4, align_shamt_s4, final_exp_s4})
     );
@@ -261,7 +273,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     ) pipe_reg5 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (enable),
+        .enable   (enable && mask_pipe[LATENCY-3]),
         .data_in  ({is_itof_s4, is_ftoi_s4, is_signed_s4, is_dst_64_s4, input_sign_s4, mant_is_zero_s4, frm_s4, fclass_s4, round_sticky_bits_s4, pre_round_abs_s4, final_exp_s4}),
         .data_out ({is_itof_s5, is_ftoi_s5, is_signed_s5, is_dst_64_s5, input_sign_s5, mant_is_zero_s5, frm_s5, fclass_s5, round_sticky_bits_s5, pre_round_abs_s5, final_exp_s5})
     );
@@ -394,7 +406,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     ) pipe_reg_out (
         .clk      (clk),
         .reset    (reset),
-        .enable   (enable),
+        .enable   (enable && mask_pipe[LATENCY-2]),
         .data_in  ({final_result_s5, final_fflags_s5}),
         .data_out ({result,          fflags})
     );

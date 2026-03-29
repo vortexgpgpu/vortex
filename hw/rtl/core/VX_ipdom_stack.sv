@@ -85,8 +85,8 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
     end else if (`NUM_WARPS > 1) begin : g_W
         `UNUSED_VAR (rd_ptr)
         `UNUSED_VAR (wr_ptr_w)
-        assign waddr = push ? wid : wid;
-        assign raddr = 0;
+        assign waddr = wid;
+        assign raddr = wid;
     end else begin : g_none
         `UNUSED_VAR (rd_ptr)
         `UNUSED_VAR (wr_ptr_w)

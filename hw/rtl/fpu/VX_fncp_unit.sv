@@ -27,6 +27,7 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire reset,
 
     input wire enable,
+    input wire mask,
 
     input wire [INST_FPU_BITS-1:0] op_type,
     input wire [INST_FRM_BITS-1:0] frm,
@@ -37,6 +38,15 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     output wire [`FP_FLAGS_BITS-1:0] fflags
 );
+    reg [LATENCY-1:0] mask_pipe;
+    always @(posedge clk) begin
+        if (reset) begin
+            mask_pipe <= '0;
+        end else if (enable) begin
+            mask_pipe <= {mask_pipe[LATENCY-2:0], mask};
+        end
+    end
+
     localparam  NEG_INF     = 32'h00000001,
                 NEG_NORM    = 32'h00000002,
                 NEG_SUBNORM = 32'h00000004,
@@ -105,7 +115,7 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (enable),
+        .enable   (enable && mask),
         .data_in  ({op_mod,    dataa,    datab,    a_sign,    b_sign,    a_exponent,    a_mantissa,    a_fclass,    b_fclass,    a_smaller,    ab_equal}),
         .data_out ({op_mod_s0, dataa_s0, datab_s0, a_sign_s0, b_sign_s0, a_exponent_s0, a_mantissa_s0, a_fclass_s0, b_fclass_s0, a_smaller_s0, ab_equal_s0})
     );
@@ -249,11 +259,11 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (enable),
+        .enable   (enable && mask_pipe[LATENCY-2]),
         .data_in  ({result_xlen_s0, fflags_NV_s0}),
         .data_out ({result,         fflags_NV})
     );
-                    // NV, DZ, OF, UF, NX
+                    // NV,      DZ,   OF,   UF,   NX
     assign fflags = {fflags_NV, 1'b0, 1'b0, 1'b0, 1'b0};
 
 endmodule
