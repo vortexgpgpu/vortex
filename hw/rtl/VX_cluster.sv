@@ -170,16 +170,17 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .CORE_LOCAL_BITS  (DXA_CORE_LOCAL_BITS),
         .ENABLE           (1)
     ) dxa_core (
-        .clk                   (clk),
-        .reset                 (reset),
+        .clk              (dxa_clk),
+        .reset            (reset),
     `ifdef PERF_ENABLE
-        .dxa_perf              (dxa_core_perf),
+        .dxa_perf         (dxa_core_perf),
     `endif
-        .dcr_bus_if            (dcr_bus_if),
-        .req_bus_if            (per_socket_dxa_req_bus_if),
-        .smem_bus_if           (dxa_smem_bus_if),
-        .smem_local_core_id    (dxa_smem_local_core_id),
-        .gmem_bus_if           (dxa_gmem_bus_if)
+        .dcr_bus_if       (dcr_bus_if),
+        .req_bus_if       (per_socket_dxa_req_bus_if),
+        .smem_bus_if      (dxa_smem_bus_if),
+        .smem_local_core_id(dxa_smem_local_core_id),
+        .gmem_bus_if      (dxa_gmem_bus_if),
+        `UNUSED_PIN (busy)
     );
 
     // LSU+DXA arb: LSU gets priority ("P") to prevent DXA bulk traffic from
@@ -289,6 +290,8 @@ module VX_cluster import VX_gpu_pkg::*; #(
         );
     end
 
-    `BUFFER_EX(busy, (| per_socket_busy), 1'b1, 1, (NUM_SOCKETS > 1));
+    wire busy_r;
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy), 1'b1, 1, (NUM_SOCKETS > 1));
+    assign busy = busy_r | dcr_bus_if.req_valid;
 
 endmodule

@@ -204,10 +204,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
             .busy               (per_cluster_busy[cluster_id])
         );
     end
-
-    wire cluster_busy;
-    `BUFFER_EX(cluster_busy, (| per_cluster_busy), 1'b1, 1, (`NUM_CLUSTERS > 1));
-    assign busy = kmu_busy | cluster_busy;
+    wire busy_r;
+    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy), 1'b1, 1, (`NUM_CLUSTERS > 1));
+    assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid;
 
 `ifdef PERF_ENABLE
 

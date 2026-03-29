@@ -31,7 +31,8 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_dxa_req_bus_if.slave req_bus_if[DXA_NUM_SOCKETS],
     VX_dxa_bank_wr_if.master smem_bus_if[DXA_NUM_SOCKETS * DXA_SMEM_PORTS_PER_SOCKET],
     output wire [DXA_NUM_SOCKETS * DXA_SMEM_PORTS_PER_SOCKET-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] smem_local_core_id,
-    VX_mem_bus_if.master gmem_bus_if[GMEM_OUT_PORTS]
+    VX_mem_bus_if.master gmem_bus_if[GMEM_OUT_PORTS],
+    output wire busy
 );
 
     localparam NUM_SMEM_OUTPUTS  = DXA_NUM_SOCKETS * DXA_SMEM_PORTS_PER_SOCKET;
@@ -68,6 +69,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
     ) worker_gmem_bus_if[NUM_DXA_UNITS]();
 
+    wire engine_busy;
     VX_dxa_unified_engine #(
         .INSTANCE_ID  (`SFORMATF(("%s-unified", INSTANCE_ID))),
         .NUM_DXA_UNITS(NUM_DXA_UNITS),
@@ -82,8 +84,26 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .cluster_dxa_bus_if (cluster_dxa_bus_if),
         .dxa_gmem_bus_if    (worker_gmem_bus_if),
         .dxa_smem_bank_wr_if(worker_bank_wr_if),
-        .dxa_smem_core_id   (worker_smem_core_id)
+        .dxa_smem_core_id   (worker_smem_core_id),
+        .busy               (engine_busy)
     );
+
+    // Collect incoming request-valid from all sockets.
+    wire [DXA_NUM_SOCKETS-1:0] req_bus_valid;
+    for (genvar i = 0; i < DXA_NUM_SOCKETS; ++i) begin : g_req_valid
+        assign req_bus_valid[i] = req_bus_if[i].req_valid;
+    end
+
+    // Registered hold: set on DCR or request activity, clear when engine drains.
+    // Combinatorial assertion OR-ed in for immediate ICG wake-up.
+    reg dxa_busy_r;
+    always @(posedge clk) begin
+        if (reset)
+            dxa_busy_r <= 1'b0;
+        else
+            dxa_busy_r <= dcr_bus_if.req_valid | (|req_bus_valid) | engine_busy;
+    end
+    assign busy = dxa_busy_r | dcr_bus_if.req_valid | (|req_bus_valid);
 
     // Distribute NUM_DXA_UNITS worker gmem buses → GMEM_OUT_PORTS L2-facing buses
     VX_mem_arb #(

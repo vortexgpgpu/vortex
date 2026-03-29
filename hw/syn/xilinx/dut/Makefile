@@ -5,8 +5,8 @@ PREFIX ?= build
 
 BUILD_DIR := $(PREFIX)
 
-VCD_FILE ?=
-VCD_INST ?=
+SAIF_FILE ?=
+SAIF_INST ?=
 
 .PHONY: unittest scope mem_unit lmem cache fpu tcu dxa core issue vortex top
 
@@ -71,10 +71,10 @@ dxa:
 	$(MAKE) -C dxa/$(BUILD_DIR) clean && $(MAKE) -C dxa/$(BUILD_DIR) > dxa/$(BUILD_DIR)/build.log 2>&1 &
 
 # Re-run power analysis on an existing build without rebuilding the design.
-# Usage: make <target>-power VCD_FILE=<vcd-path> [VCD_INST=<top-module-instance-path>]
+# Usage: make <target>-power SAIF_FILE=<saif-path> [SAIF_INST=<top-module-instance-path>]
 %-power:
 	@target=$*; \
 	if [ ! -d $$target/$(BUILD_DIR) ]; then \
 	  echo "ERROR: $$target/$(BUILD_DIR) not found. Run 'make $$target' first."; exit 1; \
 	fi
-	$(MAKE) -C $*/$(BUILD_DIR) power VCD_FILE=$(VCD_FILE) VCD_INST=$(VCD_INST)
+	$(MAKE) -C $*/$(BUILD_DIR) power SAIF_FILE=$(SAIF_FILE) SAIF_INST=$(SAIF_INST)
