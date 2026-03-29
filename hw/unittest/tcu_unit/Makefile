@@ -16,7 +16,7 @@ CXXFLAGS += -I$(ROOT_DIR)/hw
 
 CONFIGS += -DSIMULATION -DSV_DPI -DEXT_TCU_ENABLE
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config $(VORTEX_HOME)/hw/VX_config.toml --cflags '$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/hw/VX_config.toml --cflags='$(CONFIGS)')
 
 SRCS += $(DPI_DIR)/dpi_util.cpp
 SRCS += $(DPI_DIR)/dpi_float.cpp

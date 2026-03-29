@@ -93,8 +93,9 @@ verilator()
 {
     echo "prebuilt verilator..."
     tar -C $TOOLDIR -cvjf verilator.tar.bz2 verilator
+    split -b 50M verilator.tar.bz2 "verilator.tar.bz2.part"
     mkdir -p ./verilator/$OSVERSION
-    mv verilator.tar.bz2 ./verilator/$OSVERSION
+    mv verilator.tar.bz2.part* ./verilator/$OSVERSION
 }
 
 sv2v()
