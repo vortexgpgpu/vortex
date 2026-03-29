@@ -119,14 +119,13 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   const uint32_t block_tile_id = blockIdx.y * gridDim.x + blockIdx.x;
   const uint32_t warp_tile_id = block_tile_id * warps_per_group + local_warp;
   const bool active_warp = (warp_tile_id < total_tiles);
-  vortex::barrier c_tile_bar(local_warp, 1);
-  vortex::barrier ab_tile_bar[2] = {
+  vortex::barrier load_bar[2] = {
+      vortex::barrier(local_warp, 1),
       vortex::barrier(warps_per_group + local_warp, 1),
-      vortex::barrier(2 * warps_per_group + local_warp, 1),
   };
   vortex::barrier tcu_bar[2] = {
+      vortex::barrier(2 * warps_per_group + local_warp, 1),
       vortex::barrier(3 * warps_per_group + local_warp, 1),
-      vortex::barrier(4 * warps_per_group + local_warp, 1),
   };
 
   const uint32_t tile_row = (tiles_n == 0) ? 0 : (warp_tile_id / tiles_n) * tile_M;
@@ -220,14 +219,21 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
       const uint32_t* mma_C = reinterpret_cast<const uint32_t *>(C_lmem);
       const uint32_t* pC_tile = pC + tile_id * tileC_regs;
 
-      if (active_warp && lane0) {mma_D[0] = MARKER;}
-      if (active_warp && is_dxa_quad) {
-        vx_dxa_issue_2d_wg(kDescC, c_tile_bar.id(), C_lmem, 0, tile_id);
-      }
-      c_tile_bar.arrive_and_wait();
-      if (active_warp && lane0) {mma_D[0] = MARKER;}
-
       if constexpr (kDense) {
+        bool have_pending_mma = false;
+        bool have_inflight_mma = false;
+        uint32_t pending_stage = 0;
+        uint32_t inflight_stage = 0;
+        uintptr_t pending_rs1_val = 0;
+        uintptr_t pending_rs2_val = 0;
+
+        // if (active_warp && lane0) {mma_D[0] = MARKER;}
+        if (active_warp && is_dxa_quad) {
+          vx_dxa_issue_2d_wg(kDescC, load_bar[0].id(), C_lmem, 0, tile_id);
+        }
+        // load_bar[0].arrive_and_wait();
+        // if (active_warp && lane0) {mma_D[0] = MARKER;}
+
         static constexpr uint32_t kDenseLaunches =
             1 + ((K > tile_K) ? div_up_constexpr(K - tile_K, 2 * tile_K) : 0);
 #pragma unroll
@@ -275,20 +281,31 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
           const uint32_t flags_chunk = (((k_offset == 0) ? 1u : 0u) << 1) | (((k_offset + curr_k) == K) ? 1u : 0u);
 
-          if (active_warp && lane0) {mma_D[0] = MARKER;}
+          // if (active_warp && lane0) {mma_D[0] = MARKER;}
           if (active_warp && is_dxa_quad) {
-            vx_dxa_issue_2d_wg(kDescA, ab_tile_bar[stage].id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
+            vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
             if (has_second_k_tile) {
-              vx_dxa_issue_2d_wg(kDescA, ab_tile_bar[stage].id(), chunk_A_elems_hi, 0,
+              vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A_elems_hi, 0,
                                  tile_row_idx * tiles_k + k_tile_idx + 1);
             }
-            vx_dxa_issue_2d_wg(kDescB, ab_tile_bar[stage].id(), chunk_B, 0, tile_col_idx * tiles_k + k_tile_idx);
+            vx_dxa_issue_2d_wg(kDescB, load_bar[stage].id(), chunk_B, 0, tile_col_idx * tiles_k + k_tile_idx);
             if (has_second_k_tile) {
-              vx_dxa_issue_2d_wg(kDescB, ab_tile_bar[stage].id(), chunk_B_elems_hi, 0,
+              vx_dxa_issue_2d_wg(kDescB, load_bar[stage].id(), chunk_B_elems_hi, 0,
                                  tile_col_idx * tiles_k + k_tile_idx + 1);
             }
           }
-          if (active_warp && lane0) {mma_D[0] = MARKER;}
+          // if (active_warp && lane0) {mma_D[0] = MARKER;}
+
+          if (have_pending_mma) {
+            if (have_inflight_mma) {
+              tcu_bar[inflight_stage].arrive_and_wait();
+            }
+            load_bar[pending_stage].arrive_and_wait();
+            ctx::mma_op(pending_rs1_val, pending_rs2_val);
+            inflight_stage = pending_stage;
+            have_inflight_mma = true;
+            // if (active_warp && (vx_warp_id() == 0) && lane0) {C_lmem[0] = MARKER;}
+          }
 
           if (gtid == 0) {
             rs1_val = reinterpret_cast<uintptr_t>(chunk_A);
@@ -314,13 +331,29 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             rs2_val = flags_chunk;
           }
 
-          if (active_warp && lane0) {mma_D[0] = PRE_TCU_MARKER;}
-          ab_tile_bar[stage].arrive_and_wait();
-          ctx::mma_op(rs1_val, rs2_val);
-          tcu_bar[stage].arrive_and_wait();
-          if (active_warp && (vx_warp_id() == 0) && lane0) {C_lmem[0] = MARKER;}
+          // if (active_warp && lane0) {mma_D[0] = PRE_TCU_MARKER;}
+          pending_stage = stage;
+          pending_rs1_val = rs1_val;
+          pending_rs2_val = rs2_val;
+          have_pending_mma = true;
+        }
+
+        if (have_pending_mma) {
+          if (have_inflight_mma) {
+            tcu_bar[inflight_stage].arrive_and_wait();
+          }
+          load_bar[pending_stage].arrive_and_wait();
+          ctx::mma_op(pending_rs1_val, pending_rs2_val);
+          tcu_bar[pending_stage].arrive_and_wait();
+          // if (active_warp && (vx_warp_id() == 0) && lane0) {C_lmem[0] = MARKER;}
         }
       } else {
+        if (active_warp && lane0) {mma_D[0] = MARKER;}
+        if (active_warp && is_dxa_quad) {
+          vx_dxa_issue_2d_wg(kDescC, load_bar[0].id(), C_lmem, 0, tile_id);
+        }
+        load_bar[0].arrive_and_wait();
+        if (active_warp && lane0) {mma_D[0] = MARKER;}
 
         static constexpr uint32_t kConstTilesK = K / tile_K;
 #pragma unroll
