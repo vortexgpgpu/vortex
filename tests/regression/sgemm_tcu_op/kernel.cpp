@@ -1,7 +1,8 @@
 
 #include "common.h"
-#include <vx_spawn.h>
+#include <vx_spawn2.h>
 #include <vx_barrier.h>
+#include <vx_dxa.h>
 #include <vx_tensor.h>
 
 #include <VX_config.h>
@@ -25,25 +26,31 @@
 #define SGEMM_CONST_SPARSITY 0
 #endif
 
-#define MARKER 0x12345678 // Generic stage marker value
-#define BLUE_MARKER 0x12345677 // Generic stage marker value
-#define PRE_TCU_MARKER 0x12345679 // Dedicated marker for the point immediately before mma_op
+#define MARKER 0x12345678
+#define BLUE_MARKER 0x12345677
+#define PRE_TCU_MARKER 0x12345679
 
 namespace vt = vortex::tensor;
 using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
-static constexpr uint32_t LMEM_OVERFLOW_MARKER = 0x4c4d454d; // "LMEM"
+static constexpr uint32_t LMEM_OVERFLOW_MARKER = 0x4c4d454d;
+static constexpr uint32_t kDescA = 0;
+static constexpr uint32_t kDescB = 1;
+static constexpr uint32_t kDescC = 2;
 
-// Read 64-bit cycle counter using mcycle/mcycleh CSRs (user-level cycle CSR is not implemented).
+#undef __local_mem
+#define __local_mem(size) \
+  (void*)(csr_read(VX_CSR_CTA_LMEM_ADDR))
+
 static inline uint64_t rdcycle() {
 #if __riscv_xlen == 64
     uint64_t value;
-    asm volatile ("csrr %0, 0xB00" : "=r"(value)); // mcycle
+    asm volatile ("csrr %0, 0xB00" : "=r"(value));
     return value;
 #else
     uint32_t hi0, lo, hi1;
-    asm volatile ("csrr %0, 0xB80" : "=r"(hi0)); // mcycleh
-    asm volatile ("csrr %0, 0xB00" : "=r"(lo));  // mcycle
-    asm volatile ("csrr %0, 0xB80" : "=r"(hi1)); // mcycleh
+    asm volatile ("csrr %0, 0xB80" : "=r"(hi0));
+    asm volatile ("csrr %0, 0xB00" : "=r"(lo));
+    asm volatile ("csrr %0, 0xB80" : "=r"(hi1));
     if (hi0 != hi1) {
         asm volatile ("csrr %0, 0xB00" : "=r"(lo));
     }
@@ -70,8 +77,7 @@ static constexpr uint32_t div_up_constexpr(uint32_t value, uint32_t divisor) {
   return (value + divisor - 1) / divisor;
 }
 
-void kernel_body(kernel_arg_t *__UNIFORM__ arg) 
-{
+extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   if (vx_thread_id() == 0) {(reinterpret_cast<uint32_t *>(arg->D_addr))[0] = MARKER;}
 
   auto pA = reinterpret_cast<uint32_t *>(arg->A_addr);
@@ -113,10 +119,10 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg)
   const uint32_t block_tile_id = blockIdx.y * gridDim.x + blockIdx.x;
   const uint32_t warp_tile_id = block_tile_id * warps_per_group + local_warp;
   const bool active_warp = (warp_tile_id < total_tiles);
-  // One TCU completion barrier per local warp to avoid cross-warp interference.
+  vortex::barrier c_tile_bar(local_warp, 1);
+  vortex::barrier ab_tile_bar(2 + local_warp, 1);
   vortex::barrier tcu_bar(4 + local_warp, 1);
 
-  // calculate the starting tile row based on block + local warp
   const uint32_t tile_row = (tiles_n == 0) ? 0 : (warp_tile_id / tiles_n) * tile_M;
 
   static_assert (LMEM_ENABLED);
@@ -144,21 +150,14 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg)
                                              : sparse_dense_a_regs;
   const uint32_t tileB_regs = (sparsity == 0) ? dense_half0_first_b_regs
                            : sparse_comp_regs;
-  // In sparse mode, skew B base by 16 words so A/B start addresses are 32*n+16 apart.
-  // This avoids first-half A/B loads aliasing on the same bank pattern.
-  // const uint32_t ab_skew_regs = (sparsity > 0 && K >= 32) ? 16 : 0;
-  // Also skew bitmap B base in sparse==2.
-  // Desired A/B bitmap base separation examples:
-  // K=16 -> 16 words, K=32 -> 48 words, K=40 -> 80 words.
-  // bitmap_skew_regs is extra spacing beyond K words.
   const uint32_t bitmap_span = (sparsity == 0) ? 0 : tile_K;
   const uint32_t bitmap_sep_regs = (bitmap_span <= 16)
                                    ? 16
                                    : (((bitmap_span + 31) / 32) * 32 + 16);
   const uint32_t bitmap_skew_regs = (sparsity == 2) ? (bitmap_sep_regs - bitmap_span) : 0;
-  const uint32_t bitmap_regs = (sparsity == 2) ? (2 * bitmap_span) : 
-                               (sparsity == 1) ?      bitmap_span  : 
-                               0; // K words each for A/B bitmaps
+  const uint32_t bitmap_regs = (sparsity == 2) ? (2 * bitmap_span) :
+                               (sparsity == 1) ?      bitmap_span  :
+                               0;
   const uint32_t sparse_regs_per_warp = tileA_regs + tileB_regs + tileC_regs + bitmap_regs + bitmap_skew_regs;
   const uint32_t regs_per_warp = (sparsity == 0) ? (lmem_capacity_bytes / sizeof(uint32_t))
                                                  : sparse_regs_per_warp;
@@ -187,10 +186,9 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg)
                                      : (B_lmem + tileB_regs);
   uint32_t* bitmap_lmem = C_lmem + tileC_regs;
   uint32_t* A_bitmap_lmem = (sparsity == 2) ? bitmap_lmem     : nullptr;
-  uint32_t* B_bitmap_lmem = (sparsity == 2) ? bitmap_lmem + bitmap_span + bitmap_skew_regs : 
-                            (sparsity == 1) ? bitmap_lmem     : 
+  uint32_t* B_bitmap_lmem = (sparsity == 2) ? bitmap_lmem + bitmap_span + bitmap_skew_regs :
+                            (sparsity == 1) ? bitmap_lmem     :
                             nullptr;
-  // D overwrites the C tile in local memory
   uint32_t* D_lmem = C_lmem;
   auto pA_elems = reinterpret_cast<ctx::input_t *>(pA);
   auto pB_elems = reinterpret_cast<ctx::input_t *>(pB);
@@ -199,7 +197,7 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg)
   const uint32_t gtid = vx_thread_id();
   const uint32_t gstride = vx_num_threads();
   const bool lane0 = (gtid == 0);
-
+  const bool is_dxa_quad = (gtid < 4);
 
   if (active_warp && (vx_warp_id() == 0) && lane0) {C_lmem[0] = MARKER;}
 
@@ -208,16 +206,19 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg)
 
     for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
       const uint32_t b_tile_base = tile_col_idx * K * tile_N;
-      
+
       const uint32_t tile_id = tile_row_idx * tiles_n + tile_col_idx;
-      uint32_t* mma_D = pD + tile_id * tileD_regs;
-
+      const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr)
+                                 + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
+      uint32_t* mma_D = reinterpret_cast<uint32_t*>(mma_D_addr);
       const uint32_t* mma_C = reinterpret_cast<const uint32_t *>(C_lmem);
-
       const uint32_t* pC_tile = pC + tile_id * tileC_regs;
 
       if (active_warp && lane0) {mma_D[0] = MARKER;}
-      copy_tile_to_lmem(C_lmem, pC_tile, tileC_regs, gtid, gstride);
+      if (active_warp && is_dxa_quad) {
+        vx_dxa_issue_2d_wg(kDescC, c_tile_bar.id(), C_lmem, 0, tile_id);
+      }
+      c_tile_bar.arrive_and_wait();
       if (active_warp && lane0) {mma_D[0] = MARKER;}
 
       if constexpr (kDense) {
@@ -265,34 +266,40 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg)
           const uint32_t flags_chunk = (((k_offset == 0) ? 1u : 0u) << 1) | (((k_offset + curr_k) == K) ? 1u : 0u);
 
           if (active_warp && lane0) {mma_D[0] = MARKER;}
-          copy_tile_to_lmem(chunk_A_elems, pA_chunk, a_elems, gtid, gstride);
-          if (active_warp && lane0) {mma_D[0] = MARKER;}
-          copy_tile_to_lmem(chunk_B_elems, pB_chunk, b_elems, gtid, gstride);
-          if (active_warp && lane0) {mma_D[0] = MARKER;}
-
-          switch (gtid) {
-            case 0: rs1_val = reinterpret_cast<uintptr_t>(chunk_A); break;
-            case 1: rs1_val = reinterpret_cast<uintptr_t>(chunk_B); break;
-            case 2: rs1_val = reinterpret_cast<uintptr_t>(mma_C); break;
-            case 3: rs1_val = reinterpret_cast<uintptr_t>(mma_D); break;
-            case 4: rs1_val = reinterpret_cast<uintptr_t>(mma_A_bitmap); break;
-            case 5: rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap); break;
-            default: break;
+          if (active_warp && is_dxa_quad) {
+            vx_dxa_issue_2d_wg(kDescA, ab_tile_bar.id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
           }
-
-          switch (gtid) {
-            case 0: rs2_val = a_blocks; break;
-            case 1: rs2_val = b_blocks; break;
-            case 2: rs2_val = curr_k; break;
-            case 3: rs2_val = vt::ITYPE::id; break;
-            case 4: rs2_val = vt::OTYPE::id; break;
-            case 5: rs2_val = static_cast<uint32_t>(kConstSparsity); break;
-            case 6: rs2_val = tcu_bar.id(); break;
-            case 7: rs2_val = flags_chunk; break;
-            default: break;
+          ab_tile_bar.arrive_and_wait();
+          if (active_warp && lane0) {mma_D[0] = MARKER;}
+          if (active_warp && is_dxa_quad) {
+            vx_dxa_issue_2d_wg(kDescB, ab_tile_bar.id(), chunk_B, 0, tile_col_idx * tiles_k + k_tile_idx);
           }
+          ab_tile_bar.arrive_and_wait();
+          if (active_warp && lane0) {mma_D[0] = MARKER;}
 
-          if (gtid == 3) rs1_val = reinterpret_cast<uintptr_t>(mma_D);
+          if (gtid == 0) {
+            rs1_val = reinterpret_cast<uintptr_t>(chunk_A);
+            rs2_val = a_blocks;
+          } else if (gtid == 1) {
+            rs1_val = reinterpret_cast<uintptr_t>(chunk_B);
+            rs2_val = b_blocks;
+          } else if (gtid == 2) {
+            rs1_val = reinterpret_cast<uintptr_t>(mma_C);
+            rs2_val = curr_k;
+          } else if (gtid == 3) {
+            rs1_val = mma_D_addr;
+            rs2_val = vt::ITYPE::id;
+          } else if (gtid == 4) {
+            rs1_val = reinterpret_cast<uintptr_t>(mma_A_bitmap);
+            rs2_val = vt::OTYPE::id;
+          } else if (gtid == 5) {
+            rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap);
+            rs2_val = static_cast<uint32_t>(kConstSparsity);
+          } else if (gtid == 6) {
+            rs2_val = tcu_bar.id();
+          } else if (gtid == 7) {
+            rs2_val = flags_chunk;
+          }
           if (active_warp && lane0) {mma_D[0] = PRE_TCU_MARKER;}
           ctx::mma_op(rs1_val, rs2_val);
           tcu_bar.arrive_and_wait();
@@ -355,29 +362,29 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg)
           copy_tile_to_lmem(chunk_B_elems, pB_chunk, b_elems, gtid, gstride);
           if (active_warp && lane0) {mma_D[0] = MARKER;}
 
-          switch (gtid) {
-            case 0: rs1_val = reinterpret_cast<uintptr_t>(chunk_A); break;
-            case 1: rs1_val = reinterpret_cast<uintptr_t>(chunk_B); break;
-            case 2: rs1_val = reinterpret_cast<uintptr_t>(mma_C); break;
-            case 3: rs1_val = reinterpret_cast<uintptr_t>(mma_D); break;
-            case 4: rs1_val = reinterpret_cast<uintptr_t>(mma_A_bitmap); break;
-            case 5: rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap); break;
-            default: break;
+          if (gtid == 0) {
+            rs1_val = reinterpret_cast<uintptr_t>(chunk_A);
+            rs2_val = a_blocks;
+          } else if (gtid == 1) {
+            rs1_val = reinterpret_cast<uintptr_t>(chunk_B);
+            rs2_val = b_blocks;
+          } else if (gtid == 2) {
+            rs1_val = reinterpret_cast<uintptr_t>(mma_C);
+            rs2_val = curr_k;
+          } else if (gtid == 3) {
+            rs1_val = mma_D_addr;
+            rs2_val = vt::ITYPE::id;
+          } else if (gtid == 4) {
+            rs1_val = reinterpret_cast<uintptr_t>(mma_A_bitmap);
+            rs2_val = vt::OTYPE::id;
+          } else if (gtid == 5) {
+            rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap);
+            rs2_val = static_cast<uint32_t>(kConstSparsity);
+          } else if (gtid == 6) {
+            rs2_val = tcu_bar.id();
+          } else if (gtid == 7) {
+            rs2_val = flags_chunk;
           }
-
-          switch (gtid) { 
-            case 0: rs2_val = a_blocks; break;
-            case 1: rs2_val = b_blocks; break;
-            case 2: rs2_val = curr_k; break;
-            case 3: rs2_val = vt::ITYPE::id; break;
-            case 4: rs2_val = vt::OTYPE::id; break;
-            case 5: rs2_val = static_cast<uint32_t>(kConstSparsity); break;
-            case 6: rs2_val = tcu_bar.id(); break;
-            case 7: rs2_val = flags_chunk; break;
-            default: break;
-          }
-
-          if (gtid == 3) rs1_val = reinterpret_cast<uintptr_t>(mma_D);
           if (active_warp && lane0) {mma_D[0] = PRE_TCU_MARKER;}
           ctx::mma_op(rs1_val, rs2_val);
           tcu_bar.arrive_and_wait();
@@ -387,12 +394,5 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg)
     }
   }
 
-  // Marker: single LMEM write so the cycle shows up in the trace.
   if (active_warp && (vx_warp_id() == 0) && lane0) {A_lmem[0] = MARKER;}
-}
-
-int main() {
-    // vx_printf("Kernel started\n");
-    auto arg = (kernel_arg_t *)csr_read(VX_CSR_MSCRATCH);
-    return vx_spawn_threads(2, arg->grid_dim, arg->block_dim, (vx_kernel_func_cb)kernel_body, arg);
 }

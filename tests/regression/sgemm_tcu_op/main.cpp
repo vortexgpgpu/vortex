@@ -12,6 +12,7 @@
 #include <util.h>
 #include <vector>
 #include <vortex.h>
+#include <dxa.h>
 #include <cstring>
 
 #define FLOAT_ULP 6
@@ -786,6 +787,9 @@ vx_buffer_h B_nz_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
+static constexpr uint32_t kDescA = 0;
+static constexpr uint32_t kDescB = 1;
+static constexpr uint32_t kDescC = 2;
 
 std::string last_build_options;
 
@@ -1150,12 +1154,8 @@ int main(int argc, char *argv[]) {
   std::cout << "matrix A: " << M << "x" << K << std::endl;
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;
-
-  // set block size to warp size
-  kernel_arg.grid_dim[0] = 1; // N / 32; // cfg::tileN;
-  kernel_arg.grid_dim[1] = 1; // M / 32; // cfg::tileM;
-  kernel_arg.block_dim[0] = NT;    // warp sizeb
-  kernel_arg.block_dim[1] = 1;
+  uint32_t grid_dim[2]  = {1, 1};
+  uint32_t block_dim[2] = {(uint32_t)NT, 1};
 
   // set matrix dimensions
   kernel_arg.M = M;
@@ -1438,6 +1438,43 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(C_buffer, h_C_packed.data(), 0, sizeC * sizeof(otype_t)));
   }
 
+  {
+    constexpr uint32_t tile_M = 32;
+    constexpr uint32_t tile_N = 32;
+    const uint32_t tile_c_elems = tile_M * tile_N;
+    const uint32_t total_c_tiles = (M / tile_M) * (N / tile_N);
+
+    RT_CHECK(vx_dxa_program_desc_2d(
+        device, kDescC, kernel_arg.C_addr,
+        tile_c_elems, total_c_tiles,
+        tile_c_elems * sizeof(otype_t),
+        tile_c_elems, 1,
+        sizeof(otype_t)));
+  }
+
+  if (sparsity == 0) {
+    constexpr uint32_t tile_M = 32;
+    constexpr uint32_t tile_N = 32;
+    const uint32_t tile_a_elems = tile_M * input_tile_k;
+    const uint32_t total_a_tiles = (M / tile_M) * (K / input_tile_k);
+    const uint32_t tile_b_elems = input_tile_k * tile_N;
+    const uint32_t total_b_tiles = (N / tile_N) * (K / input_tile_k);
+
+    RT_CHECK(vx_dxa_program_desc_2d(
+        device, kDescA, kernel_arg.A_addr,
+        tile_a_elems, total_a_tiles,
+        tile_a_elems * sizeof(itype_t),
+        tile_a_elems, 1,
+        sizeof(itype_t)));
+
+    RT_CHECK(vx_dxa_program_desc_2d(
+        device, kDescB, kernel_arg.B_addr,
+        tile_b_elems, total_b_tiles,
+        tile_b_elems * sizeof(itype_t),
+        tile_b_elems, 1,
+        sizeof(itype_t)));
+  }
+
   // upload program
   std::cout << "upload program" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
@@ -1450,7 +1487,7 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, 0));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

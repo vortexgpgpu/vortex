@@ -13,4 +13,6 @@ CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
+KERNEL_LIB := vortex2
+
 include ../common.mk
