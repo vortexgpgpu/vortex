@@ -51,11 +51,20 @@ MemSim::MemSim() {
   msu_->trace(tfp_, 99);
   tfp_->open("trace.vcd");
 #endif
+#ifdef SAIF_OUTPUT
+  Verilated::traceEverOn(true);
+  sfp_ = new VerilatedSaifC;
+  msu_->trace(sfp_, 99);
+  sfp_->open("trace.saif");
+#endif
 }
 
 MemSim::~MemSim() {
 #ifdef VCD_OUTPUT
   tfp_->close();
+#endif
+#ifdef SAIF_OUTPUT
+  sfp_->close();
 #endif
   delete msu_;
 }
@@ -63,8 +72,12 @@ MemSim::~MemSim() {
 void MemSim::eval() {
   msu_->eval();
 #ifdef VCD_OUTPUT
-  tfp_->dump(timestamp++);
+  tfp_->dump(timestamp);
 #endif
+#ifdef SAIF_OUTPUT
+  sfp_->dump(timestamp);
+#endif
+  timestamp++;
 }
 
 void MemSim::step() {

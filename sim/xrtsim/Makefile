@@ -134,6 +134,12 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
+# Enable SAIF tracing
+ifdef SAIF
+	VL_FLAGS += --trace-saif
+	CXXFLAGS += -DSAIF_OUTPUT
+endif
+
 # use our XRT shim
 VL_FLAGS += -DNOXRT
 CXXFLAGS += -DNOXRT

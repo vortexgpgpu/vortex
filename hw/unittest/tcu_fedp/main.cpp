@@ -30,6 +30,9 @@
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
 #endif
+#ifdef SAIF_OUTPUT
+#include <verilated_saif_c.h>
+#endif
 
 #include <bitset>
 #include <cmath>
@@ -402,6 +405,9 @@ private:
 #ifdef VCD_OUTPUT
   std::unique_ptr<VerilatedVcdC> trace_;
 #endif
+#ifdef SAIF_OUTPUT
+  std::unique_ptr<VerilatedSaifC> saif_;
+#endif
   TestConfig config_;
   uint64_t cycle_count_;
   std::mt19937 rng_;
@@ -415,6 +421,11 @@ private:
       trace_->dump(timestamp);
     }
   #endif
+  #ifdef SAIF_OUTPUT
+    if (config_.enable_tracing && (timestamp >= config_.trace_start) && (timestamp < config_.trace_end)) {
+      saif_->dump(timestamp);
+    }
+  #endif
     ++timestamp;
 
     dut_->clk = 1;
@@ -422,6 +433,11 @@ private:
   #ifdef VCD_OUTPUT
     if (config_.enable_tracing && (timestamp >= config_.trace_start) && (timestamp < config_.trace_end)) {
       trace_->dump(timestamp);
+    }
+  #endif
+  #ifdef SAIF_OUTPUT
+    if (config_.enable_tracing && (timestamp >= config_.trace_start) && (timestamp < config_.trace_end)) {
+      saif_->dump(timestamp);
     }
   #endif
     ++timestamp;
@@ -592,6 +608,13 @@ public:
       trace_->open("trace.vcd");
     }
 #endif
+#ifdef SAIF_OUTPUT
+    if (config_.enable_tracing) {
+      saif_ = std::make_unique<VerilatedSaifC>();
+      dut_->trace(saif_.get(), 99);
+      saif_->open("trace.saif");
+    }
+#endif
     // Initialize inputs
     dut_->clk = 0;
     dut_->reset = 0;
@@ -612,6 +635,11 @@ public:
 #ifdef VCD_OUTPUT
     if (trace_) {
       trace_->close();
+    }
+#endif
+#ifdef SAIF_OUTPUT
+    if (saif_) {
+      saif_->close();
     }
 #endif
   }
