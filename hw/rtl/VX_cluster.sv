@@ -170,7 +170,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .CORE_LOCAL_BITS  (DXA_CORE_LOCAL_BITS),
         .ENABLE           (1)
     ) dxa_core (
-        .clk              (dxa_clk),
+        .clk              (clk),
         .reset            (reset),
     `ifdef PERF_ENABLE
         .dxa_perf         (dxa_core_perf),
