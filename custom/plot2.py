@@ -23,10 +23,16 @@ SPARSE_MODE_LEVEL_RE = re.compile(
 )
 SPARSITY_TYPE_RE = re.compile(r'\bsparsity\s*=\s*([0-2])\b', re.IGNORECASE)
 BLUE_MARKER_HEX = "0x12345677"
+GREEN_MARKER_HEX = "0x12345676"
 MARKER_HEX = "0x12345678"
 PRE_TCU_MARKER_HEX = "0x12345679"
-MARKER_HEXES = {BLUE_MARKER_HEX.lower(), MARKER_HEX.lower(), PRE_TCU_MARKER_HEX.lower()}
-MARKER_RE = re.compile(r'\b(?:0x12345677|0x12345678|0x12345679)\b', re.IGNORECASE)
+MARKER_HEXES = {
+    GREEN_MARKER_HEX.lower(),
+    BLUE_MARKER_HEX.lower(),
+    MARKER_HEX.lower(),
+    PRE_TCU_MARKER_HEX.lower(),
+}
+MARKER_RE = re.compile(r'\b(?:0x12345676|0x12345677|0x12345678|0x12345679)\b', re.IGNORECASE)
 
 
 def find_log_file(name):
@@ -424,9 +430,12 @@ def main():
         tcu_issue_ticks = dedup_sorted(tcu_issue_ticks)
     if tcu_commit_ticks:
         tcu_commit_ticks = dedup_sorted(tcu_commit_ticks)
-    marker_ticks = [t for t, value in marker_events if value != BLUE_MARKER_HEX.lower()]
+    marker_ticks = [t for t, value in marker_events if value == MARKER_HEX.lower()]
     if marker_ticks:
         marker_ticks = dedup_sorted(marker_ticks)
+    green_marker_ticks = [t for t, value in marker_events if value == GREEN_MARKER_HEX.lower()]
+    if green_marker_ticks:
+        green_marker_ticks = dedup_sorted(green_marker_ticks)
     blue_marker_ticks = [t for t, value in marker_events if value == BLUE_MARKER_HEX.lower()]
     if blue_marker_ticks:
         blue_marker_ticks = dedup_sorted(blue_marker_ticks)
@@ -534,6 +543,7 @@ def main():
         mem["wr_rsp_lmem"],
         tcu_commit_ticks,
         marker_ticks,
+        green_marker_ticks,
         blue_marker_ticks,
         xbar_stall_ticks,
         other_issue_ticks,
@@ -606,6 +616,7 @@ def main():
 
     feop_x_left = map_to_issue_index(feop_ticks)
     marker_x_left = map_to_issue_index(marker_ticks)
+    green_marker_x_left = map_to_issue_index(green_marker_ticks)
     blue_marker_x_left = map_to_issue_index(blue_marker_ticks)
     rd_req_x_left_g = map_to_issue_index(mem["rd_req_global"])
     wr_req_x_left_g = map_to_issue_index(mem["wr_req_global"])
@@ -630,6 +641,7 @@ def main():
         + mem_right["wr_rsp_lmem"]
         + tcu_commit_ticks
         + marker_ticks
+        + green_marker_ticks
         + c_accum_ticks
         + xbar_stall_ticks
     )
@@ -774,6 +786,9 @@ def main():
     if marker_x_left:
         for x in marker_x_left:
             ax1.axvline(x, color="black", linestyle="--", alpha=0.7, linewidth=0.8, zorder=1.2)
+    if green_marker_x_left:
+        for x in green_marker_x_left:
+            ax1.axvline(x, color="green", linestyle="--", alpha=0.7, linewidth=0.8, zorder=1.2)
     if blue_marker_x_left:
         for x in blue_marker_x_left:
             ax1.axvline(x, color="blue", linestyle="--", alpha=0.7, linewidth=0.8, zorder=1.2)

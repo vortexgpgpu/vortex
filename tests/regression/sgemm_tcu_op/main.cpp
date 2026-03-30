@@ -1192,57 +1192,11 @@ int main(int argc, char *argv[]) {
   std::vector<uint32_t> h_B_nz;
   // std::vector<otype_t> h_D(sizeD);
 
-  auto encode_input_value = [](float f) -> itype_t {
-    if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) {
-      return rv_ftoh_s(bit_cast<uint32_t>(f), 0, nullptr);
-    } else if constexpr (std::is_same_v<vt::ITYPE, vt::bf16>) {
-      return rv_ftob_s(bit_cast<uint32_t>(f), 0, nullptr);
-    } else if constexpr (std::is_same_v<vt::ITYPE, vt::fp32>) {
-      return f;
-    } else {
-      return static_cast<itype_t>(f);
-    }
-  };
-
-  // Fill A and B with a single increasing sequence.
-  // For fp32, step raw IEEE-754 bits so the hex dump increments predictably:
-  //   0x3f800000, 0x3f810000, 0x3f820000, ...
-  // For other input types, keep numeric stepping 1.00, 1.01, 1.02, ...
-  if constexpr (std::is_same_v<vt::ITYPE, vt::fp32>) {
-    uint32_t bits = 0x3f800000u;
-    for (uint32_t i = 0; i < sizeA; ++i, bits += 0x00010000u) {
-      h_A[i] = bit_cast<float>(bits);
-    }
-    for (uint32_t i = 0; i < sizeB; ++i, bits += 0x00010000u) {
-      h_B[i] = bit_cast<float>(bits);
-    }
-  } else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) { 
-    uint16_t bits = 0x3c00u; // fp16 encoding of 1.0
-    for (uint32_t i = 0; i < sizeA; ++i, ++bits) {
-      h_A[i] = static_cast<itype_t>(bits); 
-    }
-    for (uint32_t i = 0; i < sizeB; ++i, ++bits) {
-      h_B[i] = static_cast<itype_t>(bits);
-    }
-  } else if constexpr (std::is_same_v<vt::ITYPE, vt::fp8>) { 
-    // uint8_t bits = 0x00;
-    for (uint32_t i = 0; i < sizeA; ++i) {
-      h_A[i] = generate_A_value<vt::ITYPE>(); 
-    }
-    for (uint32_t i = 0; i < sizeB; ++i) {
-      h_B[i] = generate_B_value<vt::ITYPE>();
-    }
-  } else if constexpr (std::is_same_v<vt::ITYPE, vt::int8>) { 
-    uint8_t bits = 0x00;
-    for (uint32_t i = 0; i < sizeA; ++i, ++bits) {
-      h_A[i] = static_cast<itype_t>(bits); 
-    }
-    for (uint32_t i = 0; i < sizeB; ++i, ++bits) {
-      h_B[i] = static_cast<itype_t>(bits);
-    }
-  } else {
-    static_assert(std::is_same_v<vt::ITYPE, vt::fp32> || std::is_same_v<vt::ITYPE, vt::fp16> || std::is_same_v<vt::ITYPE, vt::fp8> || std::is_same_v<vt::ITYPE, vt::int8>,
-                  "Input fill pattern only supports fp32, fp16, fp8 and int8 types");
+  for (uint32_t i = 0; i < sizeA; ++i) {
+    h_A[i] = generate_A_value<vt::ITYPE>();
+  }
+  for (uint32_t i = 0; i < sizeB; ++i) {
+    h_B[i] = generate_B_value<vt::ITYPE>();
   }
 
 #ifdef TCU_DISABLE_S1
@@ -1452,7 +1406,7 @@ int main(int argc, char *argv[]) {
         sizeof(otype_t)));
   }
 
-  if (sparsity == 0) {
+  {
     constexpr uint32_t tile_M = 32;
     constexpr uint32_t tile_N = 32;
     const uint32_t tile_a_elems = tile_M * input_tile_k;
@@ -1460,19 +1414,35 @@ int main(int argc, char *argv[]) {
     const uint32_t tile_b_elems = input_tile_k * tile_N;
     const uint32_t total_b_tiles = (N / tile_N) * (K / input_tile_k);
 
-    RT_CHECK(vx_dxa_program_desc_2d(
-        device, kDescA, kernel_arg.A_addr,
-        tile_a_elems, total_a_tiles,
-        tile_a_elems * sizeof(itype_t),
-        tile_a_elems, 1,
-        sizeof(itype_t)));
+    if (sparsity == 2) {
+      RT_CHECK(vx_dxa_program_desc_1d(
+          device, kDescA, kernel_arg.A_addr,
+          h_A_compressed.size(),
+          tile_a_elems,
+          sizeof(itype_t)));
+    } else {
+      RT_CHECK(vx_dxa_program_desc_2d(
+          device, kDescA, kernel_arg.A_addr,
+          tile_a_elems, total_a_tiles,
+          tile_a_elems * sizeof(itype_t),
+          tile_a_elems, 1,
+          sizeof(itype_t)));
+    }
 
-    RT_CHECK(vx_dxa_program_desc_2d(
-        device, kDescB, kernel_arg.B_addr,
-        tile_b_elems, total_b_tiles,
-        tile_b_elems * sizeof(itype_t),
-        tile_b_elems, 1,
-        sizeof(itype_t)));
+    if (sparsity >= 1) {
+      RT_CHECK(vx_dxa_program_desc_1d(
+          device, kDescB, kernel_arg.B_addr,
+          h_B_compressed.size(),
+          tile_b_elems,
+          sizeof(itype_t)));
+    } else {
+      RT_CHECK(vx_dxa_program_desc_2d(
+          device, kDescB, kernel_arg.B_addr,
+          tile_b_elems, total_b_tiles,
+          tile_b_elems * sizeof(itype_t),
+          tile_b_elems, 1,
+          sizeof(itype_t)));
+    }
   }
 
   // upload program
@@ -1534,4 +1504,3 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
-
