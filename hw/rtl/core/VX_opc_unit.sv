@@ -16,7 +16,9 @@
 // reset all GPRs in debug mode
 `ifdef SIMULATION
 `ifndef NDEBUG
+`ifndef GPR_RESET
 `define GPR_RESET
+`endif
 `endif
 `endif
 
