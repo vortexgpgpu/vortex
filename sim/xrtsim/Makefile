@@ -50,8 +50,7 @@ FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
-	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/vendor/openc910/C910_RTL_FACTORY/gen_rtl/vfdsu/rtl -I$(THIRD_PARTY_DIR)/cvfpu/vendor/openc910/C910_RTL_FACTORY/gen_rtl/clk/rtl
-	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/vendor/opene906/E906_RTL_FACTORY/gen_rtl/fdsu/rtl -I$(THIRD_PARTY_DIR)/cvfpu/vendor/opene906/E906_RTL_FACTORY/gen_rtl/fpu/rtl -I$(THIRD_PARTY_DIR)/cvfpu/vendor/opene906/E906_RTL_FACTORY/gen_rtl/clk/rtl
+	FPU_INCLUDE += -y $(THIRD_PARTY_DIR)/cvfpu/src/stubs
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR)
@@ -92,7 +91,7 @@ RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 
 TOP = vortex_afu_shim
 
-VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
+VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
@@ -150,10 +149,10 @@ PROJECT := libxrtsim.so
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(DESTDIR)/vortex.xml: $(CONFIG_FILE)
-	verilator --xml-only -O0 $(VL_FLAGS) $(TOP) --xml-output $@
+$(DESTDIR)/vortex.json: $(CONFIG_FILE)
+	verilator --json-only -O0 $(VL_FLAGS) $(TOP) --json-only-output $@
 
-$(DESTDIR)/scope.json: $(DESTDIR)/vortex.xml
+$(DESTDIR)/scope.json: $(DESTDIR)/vortex.json
 	$(SCRIPT_DIR)/scope.py $^ -o $@
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(SCOPE_JSON) $(CONFIG_FILE) $(RTL_SRCS)
@@ -162,13 +161,14 @@ $(DESTDIR)/$(PROJECT): $(SRCS) $(SCOPE_JSON) $(CONFIG_FILE) $(RTL_SRCS)
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force
 	@mkdir -p $(@D)
-	@printf '%s\n' "$(VL_FLAGS)" > $@.tmp
+	@printf '%s\n' "$(VL_FLAGS)" "$(CXXFLAGS)" > $@.tmp
 	@if ! cmp -s $@.tmp $@; then \
 	  mv $@.tmp $@; \
+	  rm -rf $(DESTDIR)/$(PROJECT).obj_dir; \
 	else \
 	  rm $@.tmp; \
 	fi
 
 clean:
 	rm -rf $(DESTDIR)/$(PROJECT).obj_dir
-	rm -f $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/$(PROJECT)
+	rm -f $(DESTDIR)/vortex.json $(DESTDIR)/scope.json $(DESTDIR)/$(PROJECT)
