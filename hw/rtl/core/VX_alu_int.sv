@@ -321,13 +321,13 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest})
     );
 
+    `IGNORE_UNOPTFLAT_BEGIN
     wire [PC_BITS-1:0] current_pc = result_if.data.header.PC;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
-    `IGNORE_UNOPTFLAT_BEGIN
         wire [`XLEN-1:0] PC_next = to_fullPC(current_pc) + `XLEN'(4);
-    `IGNORE_UNOPTFLAT_END
         assign result_if.data.data[i] = (is_br_op_r && is_br_static) ? PC_next : alu_result_r[i];
     end
+    `IGNORE_UNOPTFLAT_END
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
