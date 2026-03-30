@@ -38,6 +38,7 @@ FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
+	FPU_INCLUDE += -y $(THIRD_PARTY_DIR)/cvfpu/src/stubs
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 
@@ -79,7 +80,7 @@ SRCS += $(SRC_DIR)/processor.cpp
 TOP = rtlsim_shim
 
 VL_FLAGS = --exe
-VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
+VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
@@ -136,9 +137,10 @@ $(DESTDIR)/lib$(PROJECT).so: $(SRCS) $(CONFIG_FILE) $(RTL_SRCS)
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force
 	@mkdir -p $(@D)
-	@printf '%s\n' "$(VL_FLAGS)" > $@.tmp
+	@printf '%s\n' "$(VL_FLAGS)" "$(CXXFLAGS)" > $@.tmp
 	@if ! cmp -s $@.tmp $@; then \
 	  mv $@.tmp $@; \
+	  rm -rf $(DESTDIR)/$(PROJECT).obj_dir; \
 	else \
 	  rm $@.tmp; \
 	fi

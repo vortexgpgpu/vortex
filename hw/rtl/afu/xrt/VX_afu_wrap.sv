@@ -287,14 +287,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
 	end
 
-	// Clock gate Vortex when idle
-    wire vx_clk;
-    VX_clockgate vx_clkgate (
-        .clk_in(clk),
-        .en(vx_reset | vx_start | vx_busy),
-        .clk_out(vx_clk)
-    );
-
 	`SCOPE_IO_SWITCH (2);
 
 	Vortex_axi #(
@@ -305,7 +297,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	) vortex_axi (
 		`SCOPE_IO_BIND  (1)
 
-		.clk			(vx_clk),
+		.clk			(clk),
 		.reset			(vx_reset),
 
 		.m_axi_awvalid	(m_axi_mem_awvalid_a),

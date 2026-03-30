@@ -89,12 +89,10 @@ CONFIGS += -DSYNTHESIS -DASIC -DSYNOPSYS
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/hw/VX_config.toml --cflags='$(CONFIGS)')
 
 # include paths
-FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifeq (,$(filter -DEXT_F_DISABLE, $(XCONFIGS)))
-	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
-endif
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
-RTL_INCLUDE += $(FPU_INCLUDE)
+ifneq (,$(filter -DEXT_F_ENABLE, $(XCONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/fpu
+endif
 
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
 

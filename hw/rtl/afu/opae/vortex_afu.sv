@@ -1048,20 +1048,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
-    // Clock gate Vortex when idle
-    wire vx_clk;
-    VX_clockgate vx_clkgate (
-        .clk_in(clk),
-        .en(vx_reset | vx_start | vx_busy),
-        .clk_out(vx_clk)
-    );
-
     `SCOPE_IO_SWITCH (2);
 
     Vortex vortex (
         `SCOPE_IO_BIND  (1)
 
-        .clk            (vx_clk),
+        .clk            (clk),
         .reset          (vx_reset),
 
         // Memory request
