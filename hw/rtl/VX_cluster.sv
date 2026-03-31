@@ -175,7 +175,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .dxa_perf         (dxa_core_perf),
     `endif
-        .dcr_bus_if       (dcr_bus_if),
+        .dcr_bus_if       (per_socket_dcr_bus_if[NUM_SOCKETS]),
         .req_bus_if       (per_socket_dxa_req_bus_if),
         .smem_bus_if      (dxa_smem_bus_if),
         .smem_local_core_id(dxa_smem_local_core_id),
@@ -245,10 +245,15 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     wire [NUM_SOCKETS-1:0] per_socket_busy;
 
-    VX_dcr_bus_if per_socket_dcr_bus_if[NUM_SOCKETS]();
+`ifdef EXT_DXA_ENABLE
+    localparam NUM_DCR_REQS = NUM_SOCKETS + 1;  // +1 for DXA core
+`else
+    localparam NUM_DCR_REQS = NUM_SOCKETS;
+`endif
+    VX_dcr_bus_if per_socket_dcr_bus_if[NUM_DCR_REQS]();
     VX_dcr_arb #(
-        .NUM_REQS    (NUM_SOCKETS),
-        .REQ_OUT_BUF ((NUM_SOCKETS > 1) ? 1 : 0)
+        .NUM_REQS    (NUM_DCR_REQS),
+        .REQ_OUT_BUF ((NUM_DCR_REQS > 1) ? 1 : 0)
     ) dcr_socket_arb (
         .clk        (clk),
         .reset      (reset),
