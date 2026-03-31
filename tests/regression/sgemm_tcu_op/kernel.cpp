@@ -285,31 +285,42 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
   if (lane0) {TRACE_STORE(C_lmem, MARKER);}
 
-  for (uint32_t tile_row_idx = tile_row / tile_M; tile_row_idx < tiles_m; ++tile_row_idx) {
-    const uint32_t a_tile_base = tile_row_idx * tile_M * K;
-
-    for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
-      const uint32_t b_tile_base = tile_col_idx * K * tile_N;
-      const uint32_t tile_row_tiles_base = tile_row_idx * tiles_k;
-      const uint32_t tile_col_tiles_base = tile_col_idx * tiles_k;
-
-      const uint32_t tile_id = tile_row_idx * tiles_n + tile_col_idx;
-      const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr) + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
-      uint32_t* mma_D = reinterpret_cast<uint32_t*>(mma_D_addr);
-      const uint32_t* mma_C = reinterpret_cast<const uint32_t *>(C_lmem);
-      const uint32_t* pC_tile = pC + tile_id * tileC_regs;
-
-      if constexpr (kDense) {
+  if constexpr (kDense) {
+#pragma unroll
+    for (uint32_t tile_row_idx = tile_row / tile_M; tile_row_idx < tiles_m; ++tile_row_idx) {
+      const uint32_t a_tile_base = tile_row_idx * tile_M * K;
+#pragma unroll
+      for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
         bool have_pending_mma = false;
         bool have_inflight_mma = false;
         uint32_t pending_stage = 0;
         uint32_t inflight_stage = 0;
         uintptr_t pending_rs1_val = 0;
         uintptr_t pending_rs2_val = 0;
+        uint32_t stage = 0;
+
+        const uint32_t b_tile_base = tile_col_idx * K * tile_N;
+        const uint32_t tile_row_tiles_base = tile_row_idx * tiles_k;
+        const uint32_t tile_col_tiles_base = tile_col_idx * tiles_k;
+
+        const uint32_t tile_id = tile_row_idx * tiles_n + tile_col_idx;
+        const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr) + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
+        uint32_t* mma_D = reinterpret_cast<uint32_t*>(mma_D_addr);
+
+        // A new tile may start on either half. Do not place the next C tile
+        // into a half that is still feeding the currently inflight MMA.
+        // if (have_inflight_mma && stage == inflight_stage) {
+        //   tcu_bar[inflight_stage].arrive_and_wait();
+        //   have_inflight_mma = false;
+        // }
+
+        const uint32_t* mma_C = reinterpret_cast<const uint32_t *>((stage == 0) ? dense_half0 : dense_half1);
+        const uint32_t* pC_tile = pC + tile_id * tileC_regs;
 
         if (is_dxa_quad) {
           // vx_dxa_retile_2d_wg(kDescC, tileC_regs, 1);
-          vx_dxa_issue_2d_wg(kDescC, load_bar[0].id(), C_lmem, 0, tile_id);
+          tcu_bar[stage].arrive_and_wait();
+          vx_dxa_issue_2d_wg(kDescC, load_bar[stage].id(), mma_C, 0, tile_id);
         }
 
         static constexpr uint32_t kDenseLaunches = 1 + ((K > tile_K) ? div_up_constexpr(K - tile_K, 2 * tile_K) : 0);
@@ -319,7 +330,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           // const uint32_t* mma_A_bitmap = reinterpret_cast<const uint32_t *>(A_bitmap_lmem);
           // const uint32_t* mma_B_bitmap = reinterpret_cast<const uint32_t *>(B_bitmap_lmem);
           const uint32_t k_tile_idx = k_offset / tile_K;
-          const uint32_t stage = dense_iter & 1u;
+          // const uint32_t stage = dense_iter & 1u;
           const bool use_half0 = (stage == 0);
           const bool first_dense_launch = (dense_iter == 0);
           uint32_t* chunk_A = A_lmem;
@@ -343,14 +354,19 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           curr_k = (k_remaining < dense_k_cap) ? k_remaining : dense_k_cap;
           uint32_t a_elems = tile_M * curr_k;
           uint32_t b_elems = curr_k * tile_N;
-          chunk_A = use_half0 ? (first_dense_launch ? (dense_half0 + tileC_regs) : dense_half0) : dense_half1;
-          chunk_B = use_half0 ? (chunk_A + (first_dense_launch ? dense_half0_first_a_regs : dense_half0_reuse_a_regs)) : (chunk_A + dense_half1_a_regs);
+          chunk_A = first_dense_launch
+                  ? ((use_half0 ? dense_half0 : dense_half1) + tileC_regs)
+                  :  (use_half0 ? dense_half0 : dense_half1);
+          chunk_B = use_half0
+                  ? (chunk_A + (first_dense_launch ? dense_half0_first_a_regs : dense_half0_reuse_a_regs))
+                  : (chunk_A + dense_half1_a_regs);
           auto chunk_A_elems = reinterpret_cast<ctx::input_t*>(chunk_A);
           auto chunk_B_elems = reinterpret_cast<ctx::input_t*>(chunk_B);
 
           const uint32_t flags_chunk = (((k_offset == 0) ? 1u : 0u) << 1) | (((k_offset + curr_k) == K) ? 1u : 0u);
 
           if (is_dxa_quad) {
+            tcu_bar[stage].arrive_and_wait();
             vx_dxa_retile_2d_wg(kDescA, a_elems, 1);
             vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
             vx_dxa_retile_2d_wg(kDescB, b_elems, 1);
@@ -396,6 +412,8 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           pending_rs1_val = rs1_val;
           pending_rs2_val = rs2_val;
           have_pending_mma = true;
+
+          stage = (stage == 0) ? 1 : 0;
         }
 
         if (have_pending_mma) {
@@ -407,9 +425,34 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           tcu_bar[pending_stage].arrive_and_wait();
           // if (lane0) {C_lmem[0] = MARKER;}
         }
-      } 
-// @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-      else {
+      }
+    }
+  } 
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  else {
+    for (uint32_t tile_row_idx = tile_row / tile_M; tile_row_idx < tiles_m; ++tile_row_idx) {
+      const uint32_t a_tile_base = tile_row_idx * tile_M * K;
+
+      for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
+        const uint32_t b_tile_base = tile_col_idx * K * tile_N;
+        const uint32_t tile_row_tiles_base = tile_row_idx * tiles_k;
+        const uint32_t tile_col_tiles_base = tile_col_idx * tiles_k;
+
+        const uint32_t tile_id = tile_row_idx * tiles_n + tile_col_idx;
+        const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr)
+                                   + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
+        uint32_t* mma_D = reinterpret_cast<uint32_t*>(mma_D_addr);
+        const uint32_t* mma_C = reinterpret_cast<const uint32_t *>(C_lmem);
+        const uint32_t* pC_tile = pC + tile_id * tileC_regs;
+
         if (lane0) {TRACE_STORE(mma_D, MARKER);}
         if (is_dxa_quad) {
           vx_dxa_retile_2d_wg(kDescC, tileC_regs, 1);
