@@ -368,6 +368,7 @@ config2()
         #CONFIGS="-DFPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
         #CONFIGS="-DFPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
         #CONFIGS="-DFPU_TYPE_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-xtrig -xbar -xgbar"
+        :
     else
         CONFIGS="-DFPU_TYPE_STD" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
         CONFIGS="-DFPU_TYPE_STD" ./ci/blackbox.sh --driver=opae --app=dogfood
@@ -948,6 +949,32 @@ tensor_mx() {
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
 
     make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=mxfp8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+
+    # mxint8 tests
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=mxint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=mxint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=mxint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=mxint8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
+
+    # nvfp4 tests
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=nvfp4 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=nvfp4 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=nvfp4 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
+
+    make -C tests/regression/sgemm_tcu_mx clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=nvfp4 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_mx
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
 
     echo "tensor_mx tests done!"

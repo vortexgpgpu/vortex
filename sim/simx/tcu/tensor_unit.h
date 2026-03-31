@@ -67,8 +67,12 @@ public:
 	          const std::vector<reg_data_t>& rs3_data,
 	          const std::vector<reg_data_t>& mx_a0_data,
 	          const std::vector<reg_data_t>& mx_a1_data,
+	          const std::vector<reg_data_t>& mx_a2_data,
+	          const std::vector<reg_data_t>& mx_a3_data,
 	          const std::vector<reg_data_t>& mx_b0_data,
 	          const std::vector<reg_data_t>& mx_b1_data,
+	          const std::vector<reg_data_t>& mx_b2_data,
+	          const std::vector<reg_data_t>& mx_b3_data,
 	          std::vector<reg_data_t>& rd_data,
 	          ExeTraceData* trace_data,
 	          bool is_sparse);
