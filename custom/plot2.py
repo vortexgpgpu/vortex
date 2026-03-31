@@ -73,6 +73,7 @@ def parse_issue_events(lines):
     events = []
     tcu_issue_ticks = []
     dxa_issue_ticks = []
+    dxa_issue_re = re.compile(r'\bdxa_op=(\d+)\b')
 
     for line in lines:
         if "Issuing TCU u-op" in line:
@@ -82,7 +83,11 @@ def parse_issue_events(lines):
             continue
         if "Issuing DXA u-op" in line:
             tick = extract_tick(line)
-            if tick is not None:
+            dxa_match = dxa_issue_re.search(line)
+            dxa_op = int(dxa_match.group(1)) if dxa_match is not None else None
+            # The scoreboard logs both transfer launches and descriptor retiles
+            # as "Issuing DXA u-op". Only count actual launches on the plot.
+            if tick is not None and dxa_op != 6:
                 dxa_issue_ticks.append(tick)
             continue
         if "Issuing u-op" in line:
@@ -133,6 +138,36 @@ def parse_regex_ticks(lines, regex):
             if tick is not None:
                 ticks.append(tick)
     return ticks
+
+
+def parse_tcu_commit_ticks(lines):
+    return parse_regex_ticks(lines, re.compile(r'commit:.*\bex=TCU\b'))
+
+
+def parse_tcu_dispatch_flush_flags(lines):
+    flags = []
+    for line in lines:
+        if "issue0-dispatch:" not in line:
+            continue
+        if "ex=TCU" not in line:
+            continue
+        if "rs2_data={" not in line:
+            continue
+
+        rs2_match = re.search(r'rs2_data=\{([^}]*)\}', line)
+        if rs2_match is None:
+            continue
+
+        rs2_vals = [v.strip() for v in rs2_match.group(1).split(",") if v.strip()]
+        if len(rs2_vals) <= 7:
+            continue
+
+        try:
+            flush_flag = int(rs2_vals[7], 16) & 0x1
+        except ValueError:
+            continue
+        flags.append(bool(flush_flag))
+    return flags
 
 
 def parse_dxa_done_ticks(lines):
@@ -413,13 +448,19 @@ def main():
 
     with open(log_path, "r") as f:
         lines = f.readlines()
+    total_cycles = 0
+    for line in lines:
+        tick = extract_tick(line)
+        if tick is not None and tick > total_cycles:
+            total_cycles = tick
     error_count = sum(len(re.findall(r"\berror\b", line, flags=re.IGNORECASE)) for line in lines)
     has_errors = error_count > 0
     run_meta = parse_run_metadata(lines)
 
     # Issue events (TCU + all scoreboard issues)
     tcu_issue_ticks = parse_pattern_ticks(lines, ["Issuing TCU MMA_OP"])
-    tcu_commit_ticks = parse_regex_ticks(lines, re.compile(r'commit:.*\bex=TCU\b'))
+    tcu_commit_ticks_all = parse_tcu_commit_ticks(lines)
+    tcu_dispatch_flush_flags = parse_tcu_dispatch_flush_flags(lines)
     # Stage markers: only consider explicit MARKER writes (0x12345678).
     marker_events = parse_marker_events(lines, MARKER_RE)
     _, dxa_issue_ticks, issue_events = parse_issue_events(lines)
@@ -451,8 +492,26 @@ def main():
         dxa_issue_ticks = dedup_sorted(dxa_issue_ticks)
     if dxa_done_ticks:
         dxa_done_ticks = dedup_sorted(dxa_done_ticks)
-    if tcu_commit_ticks:
+    tcu_commit_ticks_raw = list(tcu_commit_ticks_all)
+    if tcu_commit_ticks_all:
+        tcu_commit_ticks_all = dedup_sorted(tcu_commit_ticks_all)
+    if tcu_dispatch_flush_flags:
+        if len(tcu_dispatch_flush_flags) != len(tcu_commit_ticks_raw):
+            print(
+                "Warning: TCU dispatch/commit count mismatch "
+                f"(dispatches={len(tcu_dispatch_flush_flags)}, commits={len(tcu_commit_ticks_raw)}); "
+                "flush commit filtering will use chronological pairing."
+            )
+        tcu_commit_ticks = [
+            tick for tick, flush_flag in zip(tcu_commit_ticks_raw, tcu_dispatch_flush_flags)
+            if flush_flag
+        ]
         tcu_commit_ticks = dedup_sorted(tcu_commit_ticks)
+        if not tcu_commit_ticks and tcu_commit_ticks_all:
+            print("No flush-tagged TCU commits found; falling back to all TCU commit ticks.")
+            tcu_commit_ticks = list(tcu_commit_ticks_all)
+    else:
+        tcu_commit_ticks = list(tcu_commit_ticks_all)
     marker_ticks = [t for t, value in marker_events if value == MARKER_HEX.lower()]
     if marker_ticks:
         marker_ticks = dedup_sorted(marker_ticks)
@@ -467,7 +526,7 @@ def main():
         pre_tcu_marker_ticks = dedup_sorted(pre_tcu_marker_ticks)
 
     first_tcu_tick = min(tcu_issue_ticks) if tcu_issue_ticks else None
-    last_tcu_commit = max(tcu_commit_ticks) if tcu_commit_ticks else None
+    last_tcu_commit = max(tcu_commit_ticks_all) if tcu_commit_ticks_all else None
 
     # FEOP assignment (or fallback to FEOP accu activity)
     feop_ticks = parse_pattern_ticks(lines, args.feop_pattern)
@@ -521,7 +580,7 @@ def main():
             stall_pct = (xbar_stall_cycles / denom) * 100.0
 
     # TCU issue->commit stall metrics (per paired TCU op).
-    tcu_pairs = pair_tcu_issue_commit_ticks(tcu_issue_ticks, tcu_commit_ticks)
+    tcu_pairs = pair_tcu_issue_commit_ticks(tcu_issue_ticks, tcu_commit_ticks_all)
     tcu_total_cycles = 0
     tcu_active_cycles = 0
     tcu_stall_cycles = 0
@@ -771,6 +830,7 @@ def main():
             tcu_x_pos["wr_rsp_l"].append(tcu_tick_to_idx[t])
             tcu_y_pos["wr_rsp_l"].append(rel_tick(t))
     c_accum_x_right = [tcu_tick_to_idx[t] for t in c_accum_ticks if t in tcu_tick_to_idx]
+    final_mma_complete_y = rel_tick(last_tcu_commit) if last_tcu_commit is not None else None
     xbar_stall_points_right = [(tcu_tick_to_idx[t], rel_tick(t)) for t in xbar_stall_ticks if t in tcu_tick_to_idx]
     lmem_rsp_matrix_vlines_right = []
     for t, matrix_name in lmem_read_rsp_matrix_events_right:
@@ -798,7 +858,7 @@ def main():
                  markersize=2, color="indigo", label="Mem write rsp (lmem)", zorder=6)
     if feop_ticks:
         ax1.plot(feop_x_left, feop_ticks, marker="o", linestyle="none",
-                 markersize=3, color="orange", label="FEOP work assigned", zorder=4)
+                 markersize=3, color="orange", label="FEOP work assigned", zorder=0.5)
     if y_pos["other"]:
         ax1.plot(x_pos["other"], y_pos["other"], marker=".", linestyle="none",
                  markersize=1, color="gray", label="Issuing u-op", zorder=3)
@@ -930,18 +990,6 @@ def main():
                 label="TCU commit tick" if first else None,
                 zorder=1.5,
             )
-            ax2.text(
-                0.5,
-                y,
-                f"{y}",
-                transform=ax2.get_yaxis_transform(),
-                ha="center",
-                va="bottom",
-                fontsize=8,
-                color="black",
-                bbox=dict(facecolor="white", edgecolor="none", alpha=0.7, pad=0.2),
-                zorder=9,
-            )
             first = False
     if c_accum_x_right:
         first = True
@@ -951,8 +999,6 @@ def main():
             first = False
     if lmem_rsp_matrix_vlines_right:
         matrix_line_style = {
-            "A": ("red", "LMEM rsp: A"),
-            "B": ("blue", "LMEM rsp: B"),
             "Bitmap": ("green", "LMEM rsp: Bitmap"),
         }
         shown_labels = set()
@@ -981,6 +1027,28 @@ def main():
                        linestyles=":", linewidth=1.0,
                        label="xbar queue stall" if first else None, zorder=8)
             first = False
+    if final_mma_complete_y is not None:
+        ax2.axhline(
+            y=final_mma_complete_y,
+            color="black",
+            linestyle="--",
+            alpha=0.45,
+            linewidth=1.0,
+            label="Final MMA complete",
+            zorder=1.6,
+        )
+        ax2.text(
+            0.5,
+            final_mma_complete_y,
+            f"{final_mma_complete_y}",
+            transform=ax2.get_yaxis_transform(),
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="black",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.7, pad=0.2),
+            zorder=9,
+        )
 
     title_parts = ["TCU-only timeline (TCU issue + FEOP + MEM)"]
     details = []
@@ -1026,12 +1094,13 @@ def main():
     # Add FEOP/xbar summary at the bottom of the figure.
     if feop_assigned > 0:
         summary = (
+            f"total cycles={total_cycles} | "
             f"xbar_queue_stall cycles={xbar_stall_cycles} | "
             f"FEOP assigned={feop_assigned} | "
             f"XBAR STALLS % = {stall_pct:.2f}%"
         )
     else:
-        summary = "xbar_queue_stall cycles=0 | FEOP assigned=0 | XBAR STALLS % = N/A"
+        summary = f"total cycles={total_cycles} | xbar_queue_stall cycles=0 | FEOP assigned=0 | XBAR STALLS % = N/A"
     if tcu_stall_pct is not None:
         tcu_summary = (
             f"TCU total cycles={tcu_total_cycles} | "
@@ -1059,9 +1128,9 @@ def main():
         output_name = os.path.join(output_dir, output_name)
     else:
         base = os.path.splitext(os.path.basename(log_path))[0]
-        output_name = os.path.join(output_dir, f"{base}_plot2.png")
+        output_name = os.path.join(output_dir, f"{base}.png")
 
-    bottom_margin = 0.13 if has_errors else 0.09
+    bottom_margin = 0.18 if has_errors else 0.14
     plt.tight_layout(rect=[0, bottom_margin, 1, 1])
     plt.savefig(output_name, bbox_inches="tight")
     print(f"Saved plot to {output_name}")

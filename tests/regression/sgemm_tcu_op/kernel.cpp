@@ -30,6 +30,7 @@
 #define BLUE_MARKER 0x12345677
 #define GREEN_MARKER 0x12345676
 #define PRE_TCU_MARKER 0x12345679
+// #define LMEM_OVERFLOW_MARKER = 0x4c4d454d;
 
 #ifndef SGEMM_TRACE_MARKERS
 #define SGEMM_TRACE_MARKERS 1
@@ -53,7 +54,6 @@
 
 namespace vt = vortex::tensor;
 using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
-static constexpr uint32_t LMEM_OVERFLOW_MARKER = 0x4c4d454d;
 static constexpr uint32_t kDescA = 0;
 static constexpr uint32_t kDescB = 1;
 static constexpr uint32_t kDescC = 2;
@@ -147,10 +147,10 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   static constexpr uint32_t tile_M = 32;
   static constexpr uint32_t tile_N = 32;
   static constexpr uint32_t tile_K = 16 * i_ratio;
-  const uint32_t tiles_n = (N / tile_N);
-  const uint32_t tiles_m = (M / tile_M);
-  const uint32_t tiles_k = (K / tile_K);
-  const uint32_t total_tiles = tiles_n * tiles_m;
+  static constexpr uint32_t tiles_n = (N / tile_N);
+  static constexpr uint32_t tiles_m = (M / tile_M);
+  static constexpr uint32_t tiles_k = (K / tile_K);
+  static constexpr uint32_t total_tiles = tiles_n * tiles_m;
   const uint32_t warps_per_group = (__warps_per_group == 0) ? 1 : __warps_per_group;
   const uint32_t local_warp = (warps_per_group > 1) ? (vx_warp_id() % warps_per_group) : 0;
   const uint32_t block_tile_id = blockIdx.y * gridDim.x + blockIdx.x;
@@ -167,11 +167,11 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   const uint32_t tile_row = (tiles_n == 0) ? 0 : (warp_tile_id / tiles_n) * tile_M;
 
   static_assert (LMEM_ENABLED);
-  const uint32_t input_bytes = sizeof(ctx::input_t);
+  static constexpr uint32_t input_bytes = sizeof(ctx::input_t);
   static constexpr uint32_t tileC_regs = tile_M * tile_N / o_ratio;
   static constexpr uint32_t tileD_regs = tile_M * tile_N / o_ratio;
-  const uint32_t lmem_capacity_bytes = (1u << LMEM_LOG_SIZE);
-  const uint32_t half_lmem_bytes = lmem_capacity_bytes / 2;
+  static constexpr uint32_t lmem_capacity_bytes = (1u << LMEM_LOG_SIZE);
+  static constexpr uint32_t half_lmem_bytes = lmem_capacity_bytes >> 1;
   static constexpr uint32_t dense_half0_first_k = tile_K;
   static constexpr uint32_t dense_half0_reuse_k = 2 * tile_K;
   static constexpr uint32_t dense_half1_k = 2 * tile_K;
@@ -181,44 +181,45 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   static constexpr uint32_t dense_half0_reuse_b_regs = dense_half0_reuse_k * tile_N / i_ratio;
   static constexpr uint32_t dense_half1_a_regs = tile_M * dense_half1_k / i_ratio;
   static constexpr uint32_t dense_half1_b_regs = dense_half1_k * tile_N / i_ratio;
-  const uint32_t dense_half0_first_bytes = (tileC_regs + dense_half0_first_a_regs + dense_half0_first_b_regs) * sizeof(uint32_t);
-  const uint32_t dense_half0_reuse_bytes = (dense_half0_reuse_a_regs + dense_half0_reuse_b_regs) * sizeof(uint32_t);
-  const uint32_t dense_half1_bytes = (dense_half1_a_regs + dense_half1_b_regs) * sizeof(uint32_t);
+  static constexpr uint32_t dense_half0_first_bytes = (tileC_regs + dense_half0_first_a_regs + dense_half0_first_b_regs) * sizeof(uint32_t);
+  static constexpr uint32_t dense_half0_reuse_bytes = (dense_half0_reuse_a_regs + dense_half0_reuse_b_regs) * sizeof(uint32_t);
+  static constexpr uint32_t dense_half1_bytes = (dense_half1_a_regs + dense_half1_b_regs) * sizeof(uint32_t);
+
   static constexpr uint32_t sparse_dense_a_regs = tile_M * tile_K / i_ratio;
   static constexpr uint32_t sparse_dense_a_elems = tile_M * tile_K;
   static constexpr uint32_t sparse_bitmap_regs_per_tile = tile_K;
   static constexpr uint32_t sparse_dense_b_regs = tile_K * tile_N / i_ratio;
   static constexpr uint32_t sparse_dense_b_elems = tile_K * tile_N;
-  const uint32_t sparse_comp_regs = div_up(tile_M * tile_K * input_bytes, sizeof(uint32_t));
-  const uint32_t sparse_first_stage_k = tile_K;
-  const uint32_t sparse_reuse_stage_k = 2 * tile_K;
-  const uint32_t sparse_first_stage_tiles = 1;
-  const uint32_t sparse_reuse_stage_tiles = 2;
-  const uint32_t sparse_first_stage_a_regs = sparse_dense_a_regs;
-  const uint32_t sparse_first_stage_b_regs = sparse_dense_b_regs;
-  const uint32_t sparse_reuse_stage_a_regs = 2 * sparse_dense_a_regs;
-  const uint32_t sparse_reuse_stage_b_regs = 2 * sparse_dense_b_regs;
-  const uint32_t sparse_first_bitmap_sep_regs = (sparse_first_stage_k <= 16)
+  static constexpr uint32_t sparse_comp_regs = div_up_constexpr(tile_M * tile_K * input_bytes, sizeof(uint32_t));
+  static constexpr uint32_t sparse_first_stage_k = tile_K;
+  static constexpr uint32_t sparse_reuse_stage_k = 2 * tile_K;
+  static constexpr uint32_t sparse_first_stage_tiles = 1;
+  static constexpr uint32_t sparse_reuse_stage_tiles = 2;
+  static constexpr uint32_t sparse_first_stage_a_regs = sparse_dense_a_regs;
+  static constexpr uint32_t sparse_first_stage_b_regs = sparse_dense_b_regs;
+  static constexpr uint32_t sparse_reuse_stage_a_regs = 2 * sparse_dense_a_regs;
+  static constexpr uint32_t sparse_reuse_stage_b_regs = 2 * sparse_dense_b_regs;
+  static constexpr uint32_t sparse_first_bitmap_sep_regs = (sparse_first_stage_k <= 16)
                                               ? 16
                                               : (((sparse_first_stage_k + 31) / 32) * 32 + 16);
-  const uint32_t sparse_reuse_bitmap_sep_regs = (sparse_reuse_stage_k <= 16)
+  static constexpr uint32_t sparse_reuse_bitmap_sep_regs = (sparse_reuse_stage_k <= 16)
                                               ? 16
                                               : (((sparse_reuse_stage_k + 31) / 32) * 32 + 16);
-  const uint32_t sparse_first_bitmap_skew_regs = (kSparseA && kSparseB)
+  static constexpr uint32_t sparse_first_bitmap_skew_regs = (kSparseA && kSparseB)
                                                ? (sparse_first_bitmap_sep_regs - sparse_first_stage_k)
                                                : 0;
-  const uint32_t sparse_reuse_bitmap_skew_regs = (kSparseA && kSparseB)
+  static constexpr uint32_t sparse_reuse_bitmap_skew_regs = (kSparseA && kSparseB)
                                                ? (sparse_reuse_bitmap_sep_regs - sparse_reuse_stage_k)
                                                : 0;
-  const uint32_t sparse_first_bitmap_regs = (kSparseA ? (sparse_first_stage_tiles * sparse_bitmap_regs_per_tile) : 0)
+  static constexpr uint32_t sparse_first_bitmap_regs = (kSparseA ? (sparse_first_stage_tiles * sparse_bitmap_regs_per_tile) : 0)
                                           + (kSparseB ? (sparse_first_stage_tiles * sparse_bitmap_regs_per_tile) : 0);
-  const uint32_t sparse_reuse_bitmap_regs = (kSparseA ? (sparse_reuse_stage_tiles * sparse_bitmap_regs_per_tile) : 0)
+  static constexpr uint32_t sparse_reuse_bitmap_regs = (kSparseA ? (sparse_reuse_stage_tiles * sparse_bitmap_regs_per_tile) : 0)
                                           + (kSparseB ? (sparse_reuse_stage_tiles * sparse_bitmap_regs_per_tile) : 0);
-  const uint32_t sparse_first_stage_payload_regs = sparse_first_stage_a_regs
+  static constexpr uint32_t sparse_first_stage_payload_regs = sparse_first_stage_a_regs
                                                  + sparse_first_stage_b_regs
                                                  + sparse_first_bitmap_regs
                                                  + sparse_first_bitmap_skew_regs;
-  const uint32_t sparse_reuse_stage_payload_regs = sparse_reuse_stage_a_regs
+  static constexpr uint32_t sparse_reuse_stage_payload_regs = sparse_reuse_stage_a_regs
                                                  + sparse_reuse_stage_b_regs
                                                  + sparse_reuse_bitmap_regs
                                                  + sparse_reuse_bitmap_skew_regs;
@@ -242,7 +243,9 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
                                       : sparse_reuse_stage_regs_per_warp;
   const uint32_t regs_per_warp = (sparsity == 0) ? (lmem_capacity_bytes / sizeof(uint32_t))
                                                  : sparse_regs_per_warp;
-  const uint32_t lmem_needed_bytes = regs_per_warp * warps_per_group * sizeof(uint32_t);
+  // const uint32_t lmem_needed_bytes = regs_per_warp * warps_per_group * sizeof(uint32_t);
+
+  static constexpr uint32_t LMEM_OVERFLOW_MARKER = 0x4c4d454d;
   if (sparsity == 0 && (dense_half0_first_bytes > half_lmem_bytes
                      || dense_half0_reuse_bytes > half_lmem_bytes
                      || dense_half1_bytes > half_lmem_bytes)) {
@@ -251,17 +254,17 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
     }
     return;
   }
-  if (lmem_needed_bytes > lmem_capacity_bytes) {
-    if (vx_thread_id() == 0) {
-      pD[0] = LMEM_OVERFLOW_MARKER;
-    }
-    return;
-  }
-  uint32_t* local_base = reinterpret_cast<uint32_t *>(__local_mem(lmem_needed_bytes));
-  uint32_t* warp_base = local_base + local_warp * regs_per_warp;
-  uint32_t* dense_half0 = warp_base;
-  uint32_t* dense_half1 = warp_base + (half_lmem_bytes / sizeof(uint32_t));
-  uint32_t* A_lmem = warp_base;
+  // if (lmem_needed_bytes > lmem_capacity_bytes) {
+  //   if (vx_thread_id() == 0) {
+  //     pD[0] = LMEM_OVERFLOW_MARKER;
+  //   }
+  //   return;
+  // }
+  uint32_t* lmem_base = reinterpret_cast<uint32_t *>(__local_mem(lmem_capacity_bytes));
+  // uint32_t* warp_base = lmem_base + local_warp * regs_per_warp;
+  uint32_t* dense_half0 = lmem_base;
+  uint32_t* dense_half1 = lmem_base + (half_lmem_bytes / sizeof(uint32_t));
+  uint32_t* A_lmem = lmem_base;
   uint32_t* B_lmem = A_lmem + tileA_regs;
   uint32_t* C_lmem = (sparsity == 0) ? dense_half0
                                      : (B_lmem + tileB_regs);
@@ -291,8 +294,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
       const uint32_t tile_col_tiles_base = tile_col_idx * tiles_k;
 
       const uint32_t tile_id = tile_row_idx * tiles_n + tile_col_idx;
-      const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr)
-                                 + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
+      const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr) + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
       uint32_t* mma_D = reinterpret_cast<uint32_t*>(mma_D_addr);
       const uint32_t* mma_C = reinterpret_cast<const uint32_t *>(C_lmem);
       const uint32_t* pC_tile = pC + tile_id * tileC_regs;
@@ -306,33 +308,29 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
         uintptr_t pending_rs2_val = 0;
 
         if (is_dxa_quad) {
+          // vx_dxa_retile_2d_wg(kDescC, tileC_regs, 1);
           vx_dxa_issue_2d_wg(kDescC, load_bar[0].id(), C_lmem, 0, tile_id);
         }
-        // load_bar[0].arrive_and_wait();
 
-        static constexpr uint32_t kDenseLaunches =
-            1 + ((K > tile_K) ? div_up_constexpr(K - tile_K, 2 * tile_K) : 0);
+        static constexpr uint32_t kDenseLaunches = 1 + ((K > tile_K) ? div_up_constexpr(K - tile_K, 2 * tile_K) : 0);
 #pragma unroll
         for (uint32_t dense_iter = 0; dense_iter < kDenseLaunches; ++dense_iter) {
           const uint32_t k_offset = (dense_iter == 0) ? 0 : (tile_K + (dense_iter - 1) * 2 * tile_K);
-          if (k_offset >= K) {
-            break;
-          }
-          const uint32_t* mma_A_bitmap = reinterpret_cast<const uint32_t *>(A_bitmap_lmem);
-          const uint32_t* mma_B_bitmap = reinterpret_cast<const uint32_t *>(B_bitmap_lmem);
+          // const uint32_t* mma_A_bitmap = reinterpret_cast<const uint32_t *>(A_bitmap_lmem);
+          // const uint32_t* mma_B_bitmap = reinterpret_cast<const uint32_t *>(B_bitmap_lmem);
           const uint32_t k_tile_idx = k_offset / tile_K;
           const uint32_t stage = dense_iter & 1u;
           const bool use_half0 = (stage == 0);
           const bool first_dense_launch = (dense_iter == 0);
           uint32_t* chunk_A = A_lmem;
           uint32_t* chunk_B = B_lmem;
-          auto chunk_A_elems = reinterpret_cast<ctx::input_t*>(chunk_A);
-          auto chunk_B_elems = reinterpret_cast<ctx::input_t*>(chunk_B);
+          // auto chunk_A_elems = reinterpret_cast<ctx::input_t*>(chunk_A);
+          // auto chunk_B_elems = reinterpret_cast<ctx::input_t*>(chunk_B);
           uint32_t curr_k = tile_K;
-          uint32_t a_elems = tile_M * curr_k;
-          uint32_t b_elems = curr_k * tile_N;
-          uint32_t a_blocks = A_compressed_blocks;
-          uint32_t b_blocks = B_compressed_blocks;
+          // uint32_t a_elems = tile_M * tile_K;
+          // uint32_t b_elems = tile_K * tile_N;
+          // uint32_t a_blocks = A_compressed_blocks;
+          // uint32_t b_blocks = B_compressed_blocks;
           const ctx::input_t* pA_chunk = pA_elems + a_tile_base + k_offset * tile_M;
           const ctx::input_t* pB_chunk = pB_elems + b_tile_base + k_offset * tile_N;
           uintptr_t rs1_val = 0;
@@ -343,31 +341,20 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
                                      : dense_half1_k;
           const uint32_t k_remaining = K - k_offset;
           curr_k = (k_remaining < dense_k_cap) ? k_remaining : dense_k_cap;
-          a_elems = tile_M * curr_k;
-          b_elems = curr_k * tile_N;
+          uint32_t a_elems = tile_M * curr_k;
+          uint32_t b_elems = curr_k * tile_N;
           chunk_A = use_half0 ? (first_dense_launch ? (dense_half0 + tileC_regs) : dense_half0) : dense_half1;
-          chunk_B = use_half0
-                  ? (chunk_A + (first_dense_launch ? dense_half0_first_a_regs : dense_half0_reuse_a_regs))
-                  : (chunk_A + dense_half1_a_regs);
-          chunk_A_elems = reinterpret_cast<ctx::input_t*>(chunk_A);
-          chunk_B_elems = reinterpret_cast<ctx::input_t*>(chunk_B);
-          auto chunk_A_elems_hi = chunk_A_elems + (tile_M * tile_K);
-          auto chunk_B_elems_hi = chunk_B_elems + (tile_K * tile_N);
-          const bool has_second_k_tile = (curr_k > tile_K);
+          chunk_B = use_half0 ? (chunk_A + (first_dense_launch ? dense_half0_first_a_regs : dense_half0_reuse_a_regs)) : (chunk_A + dense_half1_a_regs);
+          auto chunk_A_elems = reinterpret_cast<ctx::input_t*>(chunk_A);
+          auto chunk_B_elems = reinterpret_cast<ctx::input_t*>(chunk_B);
 
           const uint32_t flags_chunk = (((k_offset == 0) ? 1u : 0u) << 1) | (((k_offset + curr_k) == K) ? 1u : 0u);
 
           if (is_dxa_quad) {
+            vx_dxa_retile_2d_wg(kDescA, a_elems, 1);
             vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
-            if (has_second_k_tile) {
-              vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A_elems_hi, 0,
-                                 tile_row_idx * tiles_k + k_tile_idx + 1);
-            }
+            vx_dxa_retile_2d_wg(kDescB, b_elems, 1);
             vx_dxa_issue_2d_wg(kDescB, load_bar[stage].id(), chunk_B, 0, tile_col_idx * tiles_k + k_tile_idx);
-            if (has_second_k_tile) {
-              vx_dxa_issue_2d_wg(kDescB, load_bar[stage].id(), chunk_B_elems_hi, 0,
-                                 tile_col_idx * tiles_k + k_tile_idx + 1);
-            }
           }
 
           if (have_pending_mma) {
@@ -378,15 +365,14 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             ctx::mma_op(pending_rs1_val, pending_rs2_val);
             inflight_stage = pending_stage;
             have_inflight_mma = true;
-            // if (lane0) {C_lmem[0] = MARKER;}
           }
 
           if (gtid == 0) {
             rs1_val = reinterpret_cast<uintptr_t>(chunk_A);
-            rs2_val = a_blocks;
+            // rs2_val = a_blocks;
           } else if (gtid == 1) {
             rs1_val = reinterpret_cast<uintptr_t>(chunk_B);
-            rs2_val = b_blocks;
+            // rs2_val = b_blocks;
           } else if (gtid == 2) {
             rs1_val = reinterpret_cast<uintptr_t>(mma_C);
             rs2_val = curr_k;
@@ -394,10 +380,10 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             rs1_val = mma_D_addr;
             rs2_val = vt::ITYPE::id;
           } else if (gtid == 4) {
-            rs1_val = reinterpret_cast<uintptr_t>(mma_A_bitmap);
+            // rs1_val = reinterpret_cast<uintptr_t>(mma_A_bitmap);
             rs2_val = vt::OTYPE::id;
           } else if (gtid == 5) {
-            rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap);
+            // rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap);
             rs2_val = static_cast<uint32_t>(kConstSparsity);
           } else if (gtid == 6) {
             rs2_val = tcu_bar[stage].id();
@@ -426,13 +412,14 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
       else {
         if (lane0) {TRACE_STORE(mma_D, MARKER);}
         if (is_dxa_quad) {
+          vx_dxa_retile_2d_wg(kDescC, tileC_regs, 1);
           vx_dxa_issue_2d_wg(kDescC, load_bar[0].id(), C_lmem, 0, tile_id);
         }
 
         static constexpr uint32_t kConstTilesK = K / tile_K;
         if (lane0) {TRACE_STORE(mma_D, MARKER);}
         
-        for (uint32_t k_tile_idx = 0; k_tile_idx < kConstTilesK; ) {
+        for (uint32_t k_tile_idx = 0; k_tile_idx < kConstTilesK;) {
           if (lane0) {TRACE_STORE(mma_D, MARKER);}
           const uint32_t k_offset = k_tile_idx * tile_K;
           const bool stage_has_c = (k_tile_idx == 0);
@@ -486,22 +473,23 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
               next_b_elems = tile_N * next_k;
             }
 
-            const uint32_t next_a_regs = bytes_to_regs(next_a_elems * input_bytes);
-            const uint32_t next_b_regs = bytes_to_regs(next_b_elems * input_bytes);
+            const uint32_t next_a_regs = div_up(next_a_elems, i_ratio); // bytes_to_regs(next_a_elems * input_bytes);
+            const uint32_t next_b_regs = div_up(next_b_elems, i_ratio); // bytes_to_regs(next_b_elems * input_bytes);
             const uint32_t next_bitmap_sep_regs = (next_k <= 16)
                                                  ? 16
                                                  : (((next_k + 31) / 32) * 32 + 16);
-            const uint32_t next_bitmap_skew_regs = (kSparseA && kSparseB)
-                                                 ? (next_bitmap_sep_regs - next_k)
-                                                 : 0;
+            // const uint32_t next_bitmap_skew_regs = (kSparseA && kSparseB)
+            //                                      ? (next_bitmap_sep_regs - next_k)
+            //                                      : 0;
             const uint32_t next_bitmap_regs = (kSparseA ? (candidate_tiles * sparse_bitmap_regs_per_tile) : 0)
                                             + (kSparseB ? (candidate_tiles * sparse_bitmap_regs_per_tile) : 0);
             const uint32_t next_total_regs = (stage_has_c ? tileC_regs : 0)
                                            + next_a_regs + next_b_regs
-                                           + next_bitmap_regs + next_bitmap_skew_regs;
-            if (next_a_regs > stage_dense_a_regs_limit
-             || next_b_regs > stage_dense_b_regs_limit
-             || next_total_regs > regs_per_warp) {
+                                           + next_bitmap_regs; // + next_bitmap_skew_regs;
+            if (next_total_regs > (regs_per_warp - 16) // maximum value for next_bitmap_skew_regs is 16
+                // next_a_regs > stage_dense_a_regs_limit ||
+                // next_b_regs > stage_dense_b_regs_limit ||
+                ) { 
               break;
             }
 
@@ -511,8 +499,8 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             b_elems = next_b_elems;
           }
 
-          if (packed_tiles == 0) {
-            packed_tiles = 1;
+          // if (packed_tiles == 0) {
+          //   packed_tiles = 1;
             curr_k = tile_K;
             if constexpr (kSparseA) {
               const uint32_t a_meta_idx = tile_row_tiles_base + k_tile_idx;
@@ -528,7 +516,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             } else {
               b_elems = tile_K * tile_N;
             }
-          }
+          // }
           TRACE_STAGE_PLAN_STORE(mma_D, GREEN_MARKER);
 
           uint32_t a_blocks = A_compressed_blocks;
@@ -583,6 +571,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
                                    a_start + sparse_dense_a_elems);
               }
             } else {
+              vx_dxa_retile_2d_wg(kDescA, tile_M * tile_K, 1);
               vx_dxa_issue_2d_wg(kDescA, load_bar[0].id(), chunk_A, 0, first_a_tile_idx);
               if (!stage_has_c) {
                 vx_dxa_issue_2d_wg(kDescA, load_bar[0].id(), chunk_A_elems_hi, 0,
@@ -596,6 +585,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
                                    b_start + sparse_dense_b_elems);
               }
             } else {
+              vx_dxa_retile_2d_wg(kDescB, tile_K * tile_N, 1);
               vx_dxa_issue_2d_wg(kDescB, load_bar[0].id(), chunk_B, 0, first_b_tile_idx);
               if (!stage_has_c) {
                 vx_dxa_issue_2d_wg(kDescB, load_bar[0].id(), chunk_B_elems_hi, 0,
