@@ -503,7 +503,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_type = INST_OP_BITS'(INST_SFU_WSPAWN);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
-                                is_wstall = 0; // active warp not affected
+                                is_wstall = 1; // should wait for current warp's states to be copied to other warps
                             end
                             3'h2: begin // SPLIT
                                 op_type = INST_OP_BITS'(INST_SFU_SPLIT);
