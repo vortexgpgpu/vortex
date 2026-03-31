@@ -41,19 +41,22 @@ struct ThreadIdx {
 struct BlockIdx {
   struct {
     __attribute__((always_inline)) operator uint32_t() const {
-      return (uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_X);
+      uint32_t __UNIFORM__ value = (uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_X);
+      return value;
     }
   } x;
 
   struct {
     __attribute__((always_inline)) operator uint32_t() const {
-      return (uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_Y);
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_Y);
+      return value;
     }
   } y;
 
   struct {
     __attribute__((always_inline)) operator uint32_t() const {
-      return (uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_Z);
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_ID_Z);
+      return value;
     }
   } z;
 };
@@ -61,19 +64,22 @@ struct BlockIdx {
 struct BlockDim {
   struct {
     __attribute__((always_inline)) operator uint32_t() const {
-      return (uint32_t)csr_read(VX_CSR_CTA_BLOCK_DIM_X);
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_DIM_X);
+      return value;
     }
   } x;
 
   struct {
     __attribute__((always_inline)) operator uint32_t() const {
-      return (uint32_t)csr_read(VX_CSR_CTA_BLOCK_DIM_Y);
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_DIM_Y);
+      return value;
     }
   } y;
 
   struct {
     __attribute__((always_inline)) operator uint32_t() const {
-      return (uint32_t)csr_read(VX_CSR_CTA_BLOCK_DIM_Z);
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_BLOCK_DIM_Z);
+      return value;
     }
   } z;
 };
@@ -81,19 +87,22 @@ struct BlockDim {
 struct GridDim {
   struct {
     __attribute__((always_inline)) operator uint32_t() const {
-      return (uint32_t)csr_read(VX_CSR_CTA_GRID_DIM_X);
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_GRID_DIM_X);
+      return value;
     }
   } x;
 
   struct {
     __attribute__((always_inline)) operator uint32_t() const {
-      return (uint32_t)csr_read(VX_CSR_CTA_GRID_DIM_Y);
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_GRID_DIM_Y);
+      return value;
     }
   } y;
 
   struct {
     __attribute__((always_inline)) operator uint32_t() const {
-      return (uint32_t)csr_read(VX_CSR_CTA_GRID_DIM_Z);
+      uint32_t __UNIFORM__ value =  (uint32_t)csr_read(VX_CSR_CTA_GRID_DIM_Z);
+      return value;
     }
   } z;
 };
@@ -104,13 +113,13 @@ static const BlockDim  blockDim;
 static const GridDim   gridDim;
 
 static __attribute__((always_inline)) uint32_t get_local_cta_id() {
-  uint32_t v;
+  uint32_t __UNIFORM__ v;
   __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_ID));
   return v;
 }
 
 static __attribute__((always_inline)) uint32_t get_warps_per_cta() {
-  uint32_t v;
+  uint32_t __UNIFORM__ v;
   __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_SIZE));
   return v;
 }
