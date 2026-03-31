@@ -30,12 +30,12 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   uint32_t num_k_steps = K / ctx::tileK;
   uint32_t block_id = blockIdx.y * gridDim.x + blockIdx.x;
-  auto pMetaMxTile = pMetaMxBase + block_id * num_k_steps * 4;
+  auto pMetaMxTile = pMetaMxBase + block_id * num_k_steps * ctx::mx_meta_words;
 
   for (int i = 0; i < K; i += ctx::tileK) {
     uint32_t step_idx = static_cast<uint32_t>(i) / ctx::tileK;
     auto pTileA = pA + tile_row * K + i;
-    auto pMetaMx = pMetaMxTile + step_idx * 4;
+    auto pMetaMx = pMetaMxTile + step_idx * ctx::mx_meta_words;
 
     // Load A tile
     ctx::load_matrix_sync(fragA, pTileA, K, pMetaMx);
