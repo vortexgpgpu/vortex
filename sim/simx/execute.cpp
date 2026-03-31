@@ -1462,7 +1462,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         trace->data = std::make_shared<SfuTraceData>(next_tmask.to_ulong(), 0);
       } break;
       case WctlType::WSPAWN: {
-        trace->fetch_stall = true;
+        trace->fetch_stall = true; // should wait for current warp's states to be copied to other warps
         trace->data = std::make_shared<SfuTraceData>(rs1_data.at(thread_last).u, rs2_data.at(thread_last).u);
       } break;
       case WctlType::SPLIT: {
