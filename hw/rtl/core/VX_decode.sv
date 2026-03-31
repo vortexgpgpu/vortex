@@ -503,6 +503,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_type = INST_OP_BITS'(INST_SFU_WSPAWN);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
+                                is_wstall = 0; // active warp not affected
                             end
                             3'h2: begin // SPLIT
                                 op_type = INST_OP_BITS'(INST_SFU_SPLIT);
@@ -531,7 +532,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_type = INST_OP_BITS'(INST_SFU_BAR);
                                 op_args.wctl.is_sync_bar = 0;
                                 op_args.wctl.is_bar_arrive = ~is_rd_zero;
-                                is_wstall = is_rd_zero;
+                                is_wstall = is_rd_zero; // do not wati on arrival
                                 `USED_IREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
