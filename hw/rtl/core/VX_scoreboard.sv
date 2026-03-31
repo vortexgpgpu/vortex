@@ -378,6 +378,14 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 `ifdef EXT_TCU_ENABLE
     always @(posedge clk) begin
         if (!reset && scoreboard_if.valid && scoreboard_if.ready) begin
+        `ifdef EXT_DXA_ENABLE
+            if (scoreboard_if.data.ex_type == EX_SFU && scoreboard_if.data.op_type == INST_SFU_DXA) begin
+                `TRACE(1, ("%t: [VX_scoreboard] Issuing DXA u-op. ISSUE_ID=%0d, sel_wis=%0d, dxa_op=%0d, uuid=#%0d, PC=0x%0h\n",
+                    $time, ISSUE_ID, scoreboard_if.data.wis, scoreboard_if.data.op_args.dxa.op,
+                    scoreboard_if.data.uuid, to_fullPC(scoreboard_if.data.PC)))
+            end
+            else
+        `endif
             if (scoreboard_if.data.ex_type == EX_TCU && scoreboard_if.data.op_type == INST_TCU_WMMA) begin
                 `TRACE(1, ("%t: [VX_scoreboard] Issuing TCU u-op. ISSUE_ID=%0d, sel_wis=%0d, ex_type=%0d, op_type=0x%0h, uuid=#%0d, PC=0x%0h\n", $time, ISSUE_ID, scoreboard_if.data.wis, scoreboard_if.data.ex_type, scoreboard_if.data.op_type, scoreboard_if.data.uuid, to_fullPC(scoreboard_if.data.PC)))
             end 
@@ -396,6 +404,16 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         `endif
             else begin
                 `TRACE(1, ("%t: [VX_scoreboard] Issuing u-op. ISSUE_ID=%0d, sel_wis=%0d, ex_type=%0d, op_type=0x%0h, uuid=#%0d, PC=0x%0h\n", $time, ISSUE_ID, scoreboard_if.data.wis, scoreboard_if.data.ex_type, scoreboard_if.data.op_type, scoreboard_if.data.uuid, to_fullPC(scoreboard_if.data.PC)))
+            end
+        end
+    end
+`elsif EXT_DXA_ENABLE
+    always @(posedge clk) begin
+        if (!reset && scoreboard_if.valid && scoreboard_if.ready) begin
+            if (scoreboard_if.data.ex_type == EX_SFU && scoreboard_if.data.op_type == INST_SFU_DXA) begin
+                `TRACE(1, ("%t: [VX_scoreboard] Issuing DXA u-op. ISSUE_ID=%0d, sel_wis=%0d, dxa_op=%0d, uuid=#%0d, PC=0x%0h\n",
+                    $time, ISSUE_ID, scoreboard_if.data.wis, scoreboard_if.data.op_args.dxa.op,
+                    scoreboard_if.data.uuid, to_fullPC(scoreboard_if.data.PC)))
             end
         end
     end

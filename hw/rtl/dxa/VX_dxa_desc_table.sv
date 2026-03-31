@@ -22,6 +22,12 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; (
 
     VX_dcr_bus_if.slave dcr_bus_if,
 
+    // Runtime descriptor retile (DXA_OP_RETILE): rewrites the TILESIZE01
+    // word of one slot without a DCR round-trip.
+    input wire tile_write_valid,
+    input wire [DXA_DESC_SLOT_W-1:0] tile_write_slot,
+    input wire [31:0] tile_write_data,
+
     input wire [DXA_DESC_SLOT_W-1:0] read_addr,
     output dxa_desc_t read_desc
 );
@@ -44,14 +50,20 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     wire [DXA_DESC_SLOT_W-1:0]  dcr_slot = DXA_DESC_SLOT_W'(dcr_off / STRIDE);
     wire [`CLOG2(STRIDE)-1:0]   dcr_word = `CLOG2(STRIDE)'(dcr_off % STRIDE);
 
+    // DCR writes (boot-time descriptor setup) win over runtime retile; the
+    // two paths are disjoint in practice.
+    wire tile_write = tile_write_valid && ~dcr_write;
+
     wire [STRIDE-1:0] dcr_wren;
     for (genvar j = 0; j < STRIDE; ++j) begin : g_wren
-        assign dcr_wren[j] = dcr_write && (dcr_word == `CLOG2(STRIDE)'(j));
+        assign dcr_wren[j] = (dcr_write && (dcr_word == `CLOG2(STRIDE)'(j)))
+                          || (tile_write && (j == `VX_DCR_DXA_DESC_TILESIZE01_OFF));
     end
 
     wire [ENTRY_W-1:0] dcr_wdata;
     for (genvar j = 0; j < STRIDE; ++j) begin : g_wdata
-        assign dcr_wdata[j*32 +: 32] = dcr_bus_if.req_data.data;
+        assign dcr_wdata[j*32 +: 32] = dcr_write ? dcr_bus_if.req_data.data
+                                                 : tile_write_data;
     end
 
     // ---- BRAM storage ----
@@ -72,10 +84,10 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; (
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
-        .write (dcr_write),
+        .write (dcr_write || tile_write),
         .wren  (dcr_wren),
         .raddr (read_addr),
-        .waddr (dcr_slot),
+        .waddr (dcr_write ? dcr_slot : tile_write_slot),
         .wdata (dcr_wdata),
         .rdata (entry_rdata)
     );

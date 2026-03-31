@@ -28,6 +28,10 @@ package VX_dxa_pkg;
     // VX_local_mem's ADDR_WIDTH = `CLOG2(SIZE) = `VX_CFG_LMEM_LOG_SIZE.
     localparam DXA_SMEM_ADDR_W = `VX_CFG_LMEM_LOG_SIZE;
 
+    // Architected funct3 encoding: 0=1D .. 4=5D (5=2D multicast).
+    // funct3=6 updates TILESIZE01 for 1D descriptors only (runtime retile).
+    localparam DXA_OP_RETILE = 3'd6;
+
     localparam DXA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_DXA_DESC_COUNT);
     localparam DXA_DESC_SLOT_W    = `UP(DXA_DESC_SLOT_BITS);
 
@@ -54,6 +58,7 @@ package VX_dxa_pkg;
         logic [NC_WIDTH-1:0]      core_id;
         logic [UUID_WIDTH-1:0]    uuid;
         logic [NW_WIDTH-1:0]      wid;
+        logic [2:0]               op;          // funct3: transfer dim / multicast / retile
         logic [DXA_SMEM_ADDR_W-1:0]      smem_addr;   // from lane 0 rs1; LMEM byte address
         logic [31:0]                     meta;        // from lane 1 rs1 (desc[3:0], bar[30:4], 1[31]); 32-bit ABI word
         logic [4:0][31:0]                coords;      // [0]=lane2.rs1,[1]=lane3.rs1,[2]=lane0.rs2,[3]=lane1.rs2,[4]=lane2.rs2; element indices, 32-bit ABI

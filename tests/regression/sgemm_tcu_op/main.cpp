@@ -790,6 +790,8 @@ kernel_arg_t kernel_arg = {};
 static constexpr uint32_t kDescA = 0;
 static constexpr uint32_t kDescB = 1;
 static constexpr uint32_t kDescC = 2;
+static constexpr uint32_t kDescABitmap = 3;
+static constexpr uint32_t kDescBBitmap = 4;
 
 std::string last_build_options;
 
@@ -1190,6 +1192,8 @@ int main(int argc, char *argv[]) {
   std::vector<otype_t> h_C_packed;
   std::vector<uint32_t> h_A_nz;
   std::vector<uint32_t> h_B_nz;
+  uint32_t h_A_bitmap_words = 0;
+  uint32_t h_B_bitmap_words = 0;
   // std::vector<otype_t> h_D(sizeD);
 
   for (uint32_t i = 0; i < sizeA; ++i) {
@@ -1232,6 +1236,7 @@ int main(int argc, char *argv[]) {
 
   if (sparsity == 2) {
     std::vector<uint8_t> h_A_bitmap = build_bitmap_A_colmajor_tiled32(h_A, M, K);
+    h_A_bitmap_words = h_A_bitmap.size() / sizeof(uint32_t);
     std::cout << "A bitmap bytes: " << h_A_bitmap.size() << " (bits=" << (M * K) << ")" << std::endl;
     trace_bitmap("A", h_A_bitmap);
 
@@ -1247,6 +1252,7 @@ int main(int argc, char *argv[]) {
   }
   if (sparsity >= 1) {
     std::vector<uint8_t> h_B_bitmap = build_bitmap_B_rowmajor_tiled32N(h_B, K, N);
+    h_B_bitmap_words = h_B_bitmap.size() / sizeof(uint32_t);
     std::cout << "B bitmap bytes: " << h_B_bitmap.size() << " (bits=" << (K * N) << ")" << std::endl;
     trace_bitmap("B", h_B_bitmap);
 
@@ -1406,11 +1412,11 @@ int main(int argc, char *argv[]) {
         sizeof(otype_t)));
   }
 
-  {
-    constexpr uint32_t tile_M = 32;
-    constexpr uint32_t tile_N = 32;
-    const uint32_t tile_a_elems = tile_M * input_tile_k;
-    const uint32_t total_a_tiles = (M / tile_M) * (K / input_tile_k);
+	  {
+	    constexpr uint32_t tile_M = 32;
+	    constexpr uint32_t tile_N = 32;
+	    const uint32_t tile_a_elems = tile_M * input_tile_k;
+	    const uint32_t total_a_tiles = (M / tile_M) * (K / input_tile_k);
     const uint32_t tile_b_elems = input_tile_k * tile_N;
     const uint32_t total_b_tiles = (N / tile_N) * (K / input_tile_k);
 
@@ -1429,21 +1435,37 @@ int main(int argc, char *argv[]) {
           sizeof(itype_t)));
     }
 
-    if (sparsity >= 1) {
-      RT_CHECK(vx_dxa_program_desc_1d(
-          device, kDescB, kernel_arg.B_addr,
-          h_B_compressed.size(),
-          tile_b_elems,
-          sizeof(itype_t)));
-    } else {
-      RT_CHECK(vx_dxa_program_desc_2d(
-          device, kDescB, kernel_arg.B_addr,
-          tile_b_elems, total_b_tiles,
-          tile_b_elems * sizeof(itype_t),
-          tile_b_elems, 1,
-          sizeof(itype_t)));
-    }
-  }
+	    if (sparsity >= 1) {
+	      RT_CHECK(vx_dxa_program_desc_1d(
+	          device, kDescB, kernel_arg.B_addr,
+	          h_B_compressed.size(),
+	          tile_b_elems,
+	          sizeof(itype_t)));
+	    } else {
+	      RT_CHECK(vx_dxa_program_desc_2d(
+	          device, kDescB, kernel_arg.B_addr,
+	          tile_b_elems, total_b_tiles,
+	          tile_b_elems * sizeof(itype_t),
+	          tile_b_elems, 1,
+	          sizeof(itype_t)));
+	    }
+
+	    if (sparsity == 2) {
+	      RT_CHECK(vx_dxa_program_desc_1d(
+	          device, kDescABitmap, kernel_arg.A_bitmap_addr,
+	          h_A_bitmap_words,
+	          input_tile_k,
+	          sizeof(uint32_t)));
+	    }
+
+	    if (sparsity >= 1) {
+	      RT_CHECK(vx_dxa_program_desc_1d(
+	          device, kDescBBitmap, kernel_arg.B_bitmap_addr,
+	          h_B_bitmap_words,
+	          input_tile_k,
+	          sizeof(uint32_t)));
+	    }
+	  }
 
   // upload program
   std::cout << "upload program" << std::endl;

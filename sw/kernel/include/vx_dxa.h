@@ -49,6 +49,24 @@ inline uint32_t vx_dxa_pack_meta(uint32_t desc_slot, uint32_t barrier_id) {
   return (barrier_id << 4) | desc_slot;
 }
 
+// 1D retile: rs1 = wgather(0, desc_slot, tile0, 0), rs2 = x0
+//
+// Only TILESIZE01 is updated in hardware. All other descriptor words remain
+// unchanged. The lower 16 bits carry tile0 and the upper 16 bits are forced
+// to zero, matching the host-side 1D descriptor programming path.
+inline void vx_dxa_retile_1d_wg(uint32_t desc_slot,
+                                uint32_t tile0) {
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)0u,
+                                           (size_t)desc_slot,
+                                           (size_t)tile0,
+                                           (size_t)0u);
+  __asm__ volatile (
+      ".insn r %0, 6, %1, x0, %2, x0\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0)
+      : "memory");
+}
+
 // 1D: rs1 = wgather(smem_addr, meta, coord0, 0), rs2 = x0
 inline void vx_dxa_issue_1d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,

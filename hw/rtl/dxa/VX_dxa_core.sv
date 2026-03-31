@@ -37,10 +37,17 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [DXA_DESC_SLOT_W-1:0] desc_read_addr;
     dxa_desc_t desc_read_data;
 
+    wire tile_write_valid;
+    wire [DXA_DESC_SLOT_W-1:0] tile_write_slot;
+    wire [31:0] tile_write_data;
+
     VX_dxa_desc_table desc_table (
         .clk        (clk),
         .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
+        .tile_write_valid (tile_write_valid),
+        .tile_write_slot  (tile_write_slot),
+        .tile_write_data  (tile_write_data),
         .read_addr  (desc_read_addr),
         .read_desc  (desc_read_data)
     );
@@ -108,15 +115,27 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Pop only when presenting AND dispatch accepts; the head (hence the read
     // address) stays put through IDLE→PRESENT and across any dispatch stall.
+    // DXA_OP_RETILE never dispatches: it is consumed at the queue head as a
+    // single-cycle TILESIZE01 write into the descriptor table.
+    wire queue_head_is_retile =
+        (queue_out_bus_if[0].req_data.op == DXA_OP_RETILE);
+
+    assign tile_write_valid = (fetch_state_r == FETCH_IDLE)
+                           && queue_out_bus_if[0].req_valid
+                           && queue_head_is_retile;
+    assign tile_write_slot  = DXA_DESC_SLOT_W'(queue_out_bus_if[0].req_data.meta[DXA_DESC_SLOT_W-1:0]);
+    assign tile_write_data  = {16'b0, queue_out_bus_if[0].req_data.coords[0][15:0]};
+
     assign queue_out_bus_if[0].req_ready =
-        (fetch_state_r == FETCH_PRESENT) && dispatch_in_if[0].ready;
+        ((fetch_state_r == FETCH_PRESENT) && dispatch_in_if[0].ready)
+     || tile_write_valid;
 
     always @(posedge clk) begin
         if (reset) begin
             fetch_state_r <= FETCH_IDLE;
         end else begin
             case (fetch_state_r)
-                FETCH_IDLE:    if (queue_out_bus_if[0].req_valid) fetch_state_r <= FETCH_PRESENT;
+                FETCH_IDLE:    if (queue_out_bus_if[0].req_valid && ~queue_head_is_retile) fetch_state_r <= FETCH_PRESENT;
                 FETCH_PRESENT: if (dispatch_in_if[0].ready)       fetch_state_r <= FETCH_IDLE;
             endcase
         end

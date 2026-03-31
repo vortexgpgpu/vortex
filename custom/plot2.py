@@ -72,12 +72,18 @@ def dedup_sorted(values):
 def parse_issue_events(lines):
     events = []
     tcu_issue_ticks = []
+    dxa_issue_ticks = []
 
     for line in lines:
         if "Issuing TCU u-op" in line:
             tick = extract_tick(line)
             if tick is not None:
                 tcu_issue_ticks.append(tick)
+            continue
+        if "Issuing DXA u-op" in line:
+            tick = extract_tick(line)
+            if tick is not None:
+                dxa_issue_ticks.append(tick)
             continue
         if "Issuing u-op" in line:
             m = ISSUE_RE.match(line)
@@ -89,7 +95,7 @@ def parse_issue_events(lines):
             op_type = int(m.group(4), 16) if m.group(4) is not None else None
             events.append((tick, wis, ex_type, op_type))
 
-    return tcu_issue_ticks, events
+    return tcu_issue_ticks, dxa_issue_ticks, events
 
 
 def parse_other_issue_ticks(lines):
@@ -127,6 +133,18 @@ def parse_regex_ticks(lines, regex):
             if tick is not None:
                 ticks.append(tick)
     return ticks
+
+
+def parse_dxa_done_ticks(lines):
+    consume_done_ticks = set(parse_regex_ticks(
+        lines,
+        re.compile(r'\[wctl-txbar\]\s+consume txbar addr=\d+ done=1\b')
+    ))
+    dxa_mem_done_ticks = set(parse_regex_ticks(
+        lines,
+        re.compile(r'\[sfu-txbar\].*dxa_mem\(v=1\b.*\bd=1\)')
+    ))
+    return sorted(consume_done_ticks & dxa_mem_done_ticks)
 
 
 def parse_marker_events(lines, regex):
@@ -404,7 +422,7 @@ def main():
     tcu_commit_ticks = parse_regex_ticks(lines, re.compile(r'commit:.*\bex=TCU\b'))
     # Stage markers: only consider explicit MARKER writes (0x12345678).
     marker_events = parse_marker_events(lines, MARKER_RE)
-    _, issue_events = parse_issue_events(lines)
+    _, dxa_issue_ticks, issue_events = parse_issue_events(lines)
     load_issue_ticks = parse_pattern_ticks(lines, ["Issuing load u-op"])
     store_issue_ticks = parse_pattern_ticks(lines, ["Issuing store u-op"])
     other_issue_ticks = parse_other_issue_ticks(lines)
@@ -413,6 +431,7 @@ def main():
         "[feop_accu]: ERROR: xbar queues are full - must stall",
         "[feop_accu]: xbar queues are full - must stall",
     ])
+    dxa_done_ticks = parse_dxa_done_ticks(lines)
 
     tcu_ex_type = args.tcu_ex_type
     if tcu_ex_type is None and not tcu_issue_ticks:
@@ -428,6 +447,10 @@ def main():
         tcu_issue_ticks.append(tick)
     if tcu_issue_ticks:
         tcu_issue_ticks = dedup_sorted(tcu_issue_ticks)
+    if dxa_issue_ticks:
+        dxa_issue_ticks = dedup_sorted(dxa_issue_ticks)
+    if dxa_done_ticks:
+        dxa_done_ticks = dedup_sorted(dxa_done_ticks)
     if tcu_commit_ticks:
         tcu_commit_ticks = dedup_sorted(tcu_commit_ticks)
     marker_ticks = [t for t, value in marker_events if value == MARKER_HEX.lower()]
@@ -546,6 +569,8 @@ def main():
         green_marker_ticks,
         blue_marker_ticks,
         xbar_stall_ticks,
+        dxa_issue_ticks,
+        dxa_done_ticks,
         other_issue_ticks,
         load_issue_ticks,
         store_issue_ticks,
@@ -580,6 +605,8 @@ def main():
     issue_events = []
     for t in tcu_issue_ticks:
         issue_events.append(("tcu", t))
+    for t in dxa_issue_ticks:
+        issue_events.append(("dxa", t))
     for t in load_issue_ticks:
         issue_events.append(("load", t))
     for t in store_issue_ticks:
@@ -589,8 +616,8 @@ def main():
 
     issue_events.sort(key=lambda x: x[1])
 
-    x_pos = {"tcu": [], "load": [], "store": [], "other": [], "feop": [], "rd_req": [], "wr_req": [], "rd_rsp": [], "wr_rsp": []}
-    y_pos = {"tcu": [], "load": [], "store": [], "other": [], "feop": [], "rd_req": [], "wr_req": [], "rd_rsp": [], "wr_rsp": []}
+    x_pos = {"tcu": [], "dxa": [], "load": [], "store": [], "other": [], "feop": [], "rd_req": [], "wr_req": [], "rd_rsp": [], "wr_rsp": []}
+    y_pos = {"tcu": [], "dxa": [], "load": [], "store": [], "other": [], "feop": [], "rd_req": [], "wr_req": [], "rd_rsp": [], "wr_rsp": []}
     issue_ticks_sorted = []
 
     for idx, (kind, tick) in enumerate(issue_events):
@@ -618,6 +645,7 @@ def main():
     marker_x_left = map_to_issue_index(marker_ticks)
     green_marker_x_left = map_to_issue_index(green_marker_ticks)
     blue_marker_x_left = map_to_issue_index(blue_marker_ticks)
+    dxa_done_x_left = map_to_issue_index(dxa_done_ticks)
     rd_req_x_left_g = map_to_issue_index(mem["rd_req_global"])
     wr_req_x_left_g = map_to_issue_index(mem["wr_req_global"])
     rd_rsp_x_left_g = map_to_issue_index(mem["rd_rsp_global"])
@@ -783,6 +811,32 @@ def main():
     if y_pos["tcu"]:
         ax1.plot(x_pos["tcu"], y_pos["tcu"], marker="x", linestyle="none",
                  markersize=4, color="g", label="TCU op issued", zorder=3.5)
+    if x_pos["dxa"]:
+        first = True
+        for x in x_pos["dxa"]:
+            ax1.axvline(
+                x,
+                color="red",
+                linestyle="--",
+                alpha=0.8,
+                linewidth=0.9,
+                label="DXA issue" if first else None,
+                zorder=1.3,
+            )
+            first = False
+    if dxa_done_x_left:
+        first = True
+        for x in dxa_done_x_left:
+            ax1.axvline(
+                x,
+                color="green",
+                linestyle="--",
+                alpha=0.85,
+                linewidth=0.9,
+                label="DXA done" if first else None,
+                zorder=1.35,
+            )
+            first = False
     if marker_x_left:
         for x in marker_x_left:
             ax1.axvline(x, color="black", linestyle="--", alpha=0.7, linewidth=0.8, zorder=1.2)

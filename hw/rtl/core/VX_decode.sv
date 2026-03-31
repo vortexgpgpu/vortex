@@ -733,11 +733,13 @@ module VX_decode import
                     end
                 `endif
                 `ifdef VX_CFG_EXT_DXA_ENABLE
-                    7'h03: begin // DXA issue
+                    7'h03: begin // DXA issue / retile
                         // Multicast is determined by cta_mask (>1 bit set).
                         // Expanded into micro-ops by VX_dxa_uops.
+                        // funct3=6: 1D TILESIZE01-only descriptor retile.
                         ex_type = EX_SFU;
                         op_type = INST_OP_BITS'(INST_SFU_DXA);
+                        op_args.dxa.op = funct3;
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
                     end
