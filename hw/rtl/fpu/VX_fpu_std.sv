@@ -123,6 +123,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // FMA core
     ///////////////////////////////////////////////////////////////////////////
 
+    generate
     begin : g_fma
 
         wire [NUM_LANES-1:0] mask_out;
@@ -205,11 +206,13 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_fflags[FPU_FMA] = merged_fflags;
 
     end
+    endgenerate
 
     ///////////////////////////////////////////////////////////////////////////
     // DIVSQRT core
     ///////////////////////////////////////////////////////////////////////////
 
+    generate
     begin : g_fdivsqrt
 
         wire is_sqrt = per_core_op[FPU_DIVSQRT][0];
@@ -295,11 +298,13 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_fflags[FPU_DIVSQRT] = merged_fflags;
 
     end
+    endgenerate
 
     ///////////////////////////////////////////////////////////////////////////
     // CVT core
     ///////////////////////////////////////////////////////////////////////////
 
+    generate
     begin : g_cvt
 
         wire [NUM_LANES-1:0] mask_out;
@@ -390,11 +395,13 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_fflags[FPU_CVT] = merged_fflags;
 
     end
+    endgenerate
 
     ///////////////////////////////////////////////////////////////////////////
     // NCP core
     ///////////////////////////////////////////////////////////////////////////
 
+    generate
     begin : g_ncp
 
         wire [NUM_LANES-1:0] mask_out;
@@ -474,6 +481,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_fflags[FPU_NCP] = merged_fflags;
 
     end
+    endgenerate
 
     ///////////////////////////////////////////////////////////////////////////
     // Response arbitration
