@@ -24,8 +24,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   uint32_t tile_col = blockIdx.x * ctx::tileN;
 
   ctx::fill_fragment(fragC, 0);
-
-  uint32_t start_cycles = csr_read(VX_CSR_MCYCLE);
+  uint32_t cycles = 0;
 
   // Per-K-tile metadata reload
   constexpr uint32_t rtl_i_ratio = 32 / vt::ITYPE::bits;
@@ -48,7 +47,10 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
     ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, nullptr, pMetaSp);
     ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
+    // __rdcycle_time t0 = vx_rdcycle_sync_begin();
     ctx::mma_sync(fragC, fragA, fragB, fragC);
+    // __rdcycle_time t1 = vx_rdcycle_sync_end();
+    // cycles += vx_rdcycle_sync_diff(t0, t1);
     pMetaSp += per_k_tile_words;
     pTileA += a_k_stride;
     pTileB += ctx::tileK;
@@ -57,11 +59,8 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   auto pTileC = pC + tile_row * N + tile_col;
   ctx::store_matrix_sync(pTileC, fragC, N);
 
-  uint32_t end_cycles = csr_read(VX_CSR_MCYCLE);
-
   // Write per-block cycle count
   auto pCycles = reinterpret_cast<uint32_t*>(arg->cycles_addr);
   uint32_t block_id = blockIdx.y * gridDim.x + blockIdx.x;
-  pCycles[block_id] = end_cycles - start_cycles;
+  pCycles[block_id] = cycles;
 }
-
