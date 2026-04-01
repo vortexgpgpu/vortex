@@ -22,7 +22,17 @@ all:
 	$(MAKE) -C madmax
 	$(MAKE) -C stencil3d
 	$(MAKE) -C veg_ls
-	$(MAKE) -C sgemm_tile
+	$(MAKE) -C sgemm_tcu
+	$(MAKE) -C sgemm_sparse
+	$(MAKE) -C sgemm_vegeta
+	$(MAKE) -C yolov3tiny
+	$(MAKE) -C yolov3tiny_tcu
+	$(MAKE) -C yolov3tiny_sparse
+	$(MAKE) -C mlp
+	$(MAKE) -C mlp_tcu
+	$(MAKE) -C mlp_sparse
+	$(MAKE) -C mlp_vegeta
+	$(MAKE) -C yolov3tiny_vegeta
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -45,7 +55,17 @@ run-simx:
 	$(MAKE) -C madmax run-simx
 	$(MAKE) -C stencil3d run-simx
 	$(MAKE) -C veg_ls run-simx
-	$(MAKE) -C sgemm_tile run-simx
+	$(MAKE) -C sgemm_tcu run-simx
+	$(MAKE) -C sgemm_sparse run-simx
+	$(MAKE) -C sgemm_vegeta run-simx
+	$(MAKE) -C yolov3tiny run-simx
+	$(MAKE) -C yolov3tiny_tcu run-simx
+	$(MAKE) -C yolov3tiny_sparse run-simx
+	$(MAKE) -C mlp run-simx
+	$(MAKE) -C mlp_tcu run-simx
+	$(MAKE) -C mlp_sparse run-simx
+	$(MAKE) -C mlp_vegeta run-simx
+	$(MAKE) -C yolov3tiny_vegeta run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -68,7 +88,17 @@ run-rtlsim:
 	$(MAKE) -C madmax run-rtlsim
 	$(MAKE) -C stencil3d run-rtlsim
 	$(MAKE) -C veg_ls run-rtlsim
-	$(MAKE) -C sgemm_tile run-rtlsim
+	$(MAKE) -C sgemm_tcu run-rtlsim
+	$(MAKE) -C sgemm_sparse run-rtlsim
+	$(MAKE) -C sgemm_vegeta run-rtlsim
+	$(MAKE) -C yolov3tiny run-rtlsim
+	$(MAKE) -C yolov3tiny_tcu run-rtlsim
+	$(MAKE) -C yolov3tiny_sparse run-rtlsim
+	$(MAKE) -C mlp run-rtlsim
+	$(MAKE) -C mlp_tcu run-rtlsim
+	$(MAKE) -C mlp_sparse run-rtlsim
+	$(MAKE) -C mlp_vegeta run-rtlsim
+	$(MAKE) -C yolov3tiny_vegeta run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -91,4 +121,14 @@ clean:
 	$(MAKE) -C madmax clean
 	$(MAKE) -C stencil3d clean
 	$(MAKE) -C veg_ls clean
-	$(MAKE) -C sgemm_tile clean
+	$(MAKE) -C sgemm_tcu clean
+	$(MAKE) -C sgemm_sparse clean
+	$(MAKE) -C sgemm_vegeta clean
+	$(MAKE) -C yolov3tiny clean
+	$(MAKE) -C yolov3tiny_tcu clean
+	$(MAKE) -C yolov3tiny_sparse clean
+	$(MAKE) -C mlp clean
+	$(MAKE) -C mlp_tcu clean
+	$(MAKE) -C mlp_sparse clean
+	$(MAKE) -C mlp_vegeta clean
+	$(MAKE) -C yolov3tiny_vegeta clean

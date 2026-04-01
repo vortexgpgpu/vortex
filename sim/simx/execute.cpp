@@ -1611,7 +1611,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     case VegetaTcuType::TILE_GEMM_T: {
       auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
       trace->data = trace_data;
-      assert(warp.tmask.count() == num_threads);
       
       // Extract tile register indices from instruction
       uint32_t dst_reg = rdest.idx;
@@ -1625,7 +1624,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     case VegetaTcuType::TILE_GEMM_U: {
       auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
       trace->data = trace_data;
-      assert(warp.tmask.count() == num_threads);
       
       // Extract tile register indices from instruction
       uint32_t dst_reg = rdest.idx;
@@ -1640,7 +1638,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     case VegetaTcuType::TILE_GEMM_V: {
       auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
       trace->data = trace_data;
-      assert(warp.tmask.count() == num_threads);
       
       // Extract tile register indices from instruction
       uint32_t dst_reg = rdest.idx;
@@ -1654,7 +1651,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     case VegetaTcuType::TILE_GEMM_R: {
       auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
       trace->data = trace_data;
-      assert(warp.tmask.count() == num_threads);
       
       // Extract tile register indices from instruction
       uint32_t dst_reg = rdest.idx;
@@ -1664,6 +1660,63 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       // Row-wise sparse tile × Dense tile → Tile (T × U → U)
       sparse_unit_->tile_gemm_r(dst_reg, src1_reg, src2_reg, src1_reg);
       rd_write = false;
+    } break;
+    case VegetaTcuType::WMMA: {
+      auto tpuArgs = std::get<IntrVegetaTcuArgs>(instrArgs);
+      auto trace_data = std::make_shared<SparseUnit::ExeTraceData>();
+      trace->data = trace_data;
+      
+      // Get metadata from integer registers a0-a7 (x10-x17) for sparse fragA
+      // These contain metadata values loaded by mma_sync into a0-a7
+      DTH(3, "WMMA: current regfile values:" << std::hex << std::endl);
+      for (uint32_t i = 0; i < 32; ++i) {
+        DTN(3, "  x" << std::setfill('0') << std::setw(2) << i << ": 0x" << warp.ireg_file.at(i).at(0) << std::dec << std::endl);
+      }
+      uint32_t metadata[8] = {0};
+      for (uint32_t reg = 0; reg < 8; ++reg) {
+        // a0-a7 correspond to x10-x17 in RISC-V
+        uint32_t a_reg = 10 + reg;  // a0=10, a1=11, ..., a7=17
+
+        // Get value from integer register a_reg for thread 0 (all threads should have same metadata)
+        if (warp.tmask.test(0) && a_reg < warp.ireg_file.size()) {
+          metadata[reg] = warp.ireg_file.at(a_reg).at(0);
+        }
+      }
+      DTH(3, "WMMA: metadata values:" << std::hex << std::endl);
+      for (uint32_t i = 0; i < 8; ++i) {
+        DTN(3, "  a" << std::setfill('0') << std::setw(1) << i << ": 0x" << metadata[i] << std::dec << std::endl);
+      }
+      
+      // Extract sparsity degree from register t0 (x5)
+      uint32_t sparsity_degree = 2; // default to 2:4
+      const uint32_t t0_reg = 5; // t0 is x5
+      if (warp.tmask.test(0) && t0_reg < warp.ireg_file.size()) {
+        sparsity_degree = static_cast<uint32_t>(warp.ireg_file.at(t0_reg).at(0));
+        // Validate sparsity degree (should be 1 or 2)
+        if (sparsity_degree != 1 && sparsity_degree != 2) {
+          std::cerr << "Warning: Invalid sparsity degree " << sparsity_degree << " in register t0 (x5), using default 2" << std::endl;
+          sparsity_degree = 2;
+        }
+      }
+      
+      // Create updated args with the extracted sparsity degree
+      // Note: The sparsity degree is also used by the hardware instruction via register t0 in mma_sync
+      IntrVegetaTcuArgs updated_args{tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, static_cast<uint32_t>(sparsity_degree)};
+      
+      // Resize rd_data and rs3_data to accommodate WMMA output (tcM * tcN elements)
+      // For sparse WMMA, we need at least tcM * tcN elements
+      namespace vt = vortex::sparse;
+      using cfg = vt::wmma_config_t<NUM_THREADS>;
+      uint32_t wmma_size = cfg::tcM * cfg::tcN;
+      if (rd_data.size() < wmma_size) {
+        rd_data.resize(wmma_size);
+      }
+      if (rs3_data.size() < wmma_size) {
+        rs3_data.resize(wmma_size);
+      }
+      
+      sparse_unit_->wmma(wid, updated_args.fmt_s, updated_args.fmt_d, updated_args.step_m, updated_args.step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get(), metadata, updated_args.sparsity_degree);
+      rd_write = true;
     } break;
     default:
       std::abort();

@@ -64,6 +64,7 @@ Core::Core(const SimContext& ctx,
 #endif
 #ifdef EXT_VEGETA_ENABLE
   , sparse_unit_(SparseUnit::Create("spu", arch, this))
+  , vegeta_lsu_(VegetaLsu::Create("vegeta_lsu", this, 1))
 #endif
   , emulator_(arch, dcrs, this)
   , ibuffers_(arch.num_warps(), IBUF_SIZE)

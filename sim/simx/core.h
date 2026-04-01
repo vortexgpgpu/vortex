@@ -31,6 +31,7 @@
 #endif
 #ifdef EXT_VEGETA_ENABLE
 #include "sparse_unit.h"
+#include "vegeta_lsu.h"
 #endif
 
 #include "dispatcher.h"
@@ -184,6 +185,10 @@ public:
   SparseUnit::Ptr& sparse_unit() {
     return sparse_unit_;
   }
+
+  VegetaLsu::Ptr& vegeta_lsu() {
+    return vegeta_lsu_;
+  }
 #endif
 
   auto& trace_pool() {
@@ -217,6 +222,7 @@ private:
 
 #ifdef EXT_VEGETA_ENABLE
   SparseUnit::Ptr sparse_unit_;
+  VegetaLsu::Ptr vegeta_lsu_;
 #endif
 
   Emulator emulator_;
