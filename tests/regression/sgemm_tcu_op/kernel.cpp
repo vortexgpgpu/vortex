@@ -172,18 +172,14 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   static constexpr uint32_t tileD_regs = tile_M * tile_N / o_ratio;
   static constexpr uint32_t lmem_capacity_bytes = (1u << LMEM_LOG_SIZE);
   static constexpr uint32_t half_lmem_bytes = lmem_capacity_bytes >> 1;
-  static constexpr uint32_t dense_half0_first_k = tile_K;
-  static constexpr uint32_t dense_half0_reuse_k = 2 * tile_K;
-  static constexpr uint32_t dense_half1_k = 2 * tile_K;
-  static constexpr uint32_t dense_half0_first_a_regs = tile_M * dense_half0_first_k / i_ratio;
-  static constexpr uint32_t dense_half0_first_b_regs = dense_half0_first_k * tile_N / i_ratio;
-  static constexpr uint32_t dense_half0_reuse_a_regs = tile_M * dense_half0_reuse_k / i_ratio;
-  static constexpr uint32_t dense_half0_reuse_b_regs = dense_half0_reuse_k * tile_N / i_ratio;
-  static constexpr uint32_t dense_half1_a_regs = tile_M * dense_half1_k / i_ratio;
-  static constexpr uint32_t dense_half1_b_regs = dense_half1_k * tile_N / i_ratio;
-  static constexpr uint32_t dense_half0_first_bytes = (tileC_regs + dense_half0_first_a_regs + dense_half0_first_b_regs) * sizeof(uint32_t);
-  static constexpr uint32_t dense_half0_reuse_bytes = (dense_half0_reuse_a_regs + dense_half0_reuse_b_regs) * sizeof(uint32_t);
-  static constexpr uint32_t dense_half1_bytes = (dense_half1_a_regs + dense_half1_b_regs) * sizeof(uint32_t);
+  static constexpr uint32_t dense_first_k = tile_K;
+  static constexpr uint32_t dense_reuse_k = 2 * tile_K;
+  static constexpr uint32_t dense_first_a_regs = tile_M * dense_first_k / i_ratio;
+  static constexpr uint32_t dense_first_b_regs = dense_first_k * tile_N / i_ratio;
+  static constexpr uint32_t dense_reuse_a_regs = tile_M * dense_reuse_k / i_ratio;
+  static constexpr uint32_t dense_reuse_b_regs = dense_reuse_k * tile_N / i_ratio;
+  static constexpr uint32_t dense_first_bytes = (tileC_regs + dense_first_a_regs + dense_first_b_regs) * sizeof(uint32_t);
+  static constexpr uint32_t dense_reuse_bytes = (dense_reuse_a_regs + dense_reuse_b_regs) * sizeof(uint32_t);
 
   static constexpr uint32_t sparse_dense_a_regs = tile_M * tile_K / i_ratio;
   static constexpr uint32_t sparse_dense_a_elems = tile_M * tile_K;
@@ -223,11 +219,11 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
                                                  + sparse_reuse_stage_b_regs
                                                  + sparse_reuse_bitmap_regs
                                                  + sparse_reuse_bitmap_skew_regs;
-  const uint32_t tileA_regs = (sparsity == 0) ? dense_half0_first_a_regs
-                           : (sparsity == 2) ? sparse_comp_regs
-                                             : sparse_dense_a_regs;
-  const uint32_t tileB_regs = (sparsity == 0) ? dense_half0_first_b_regs
-                           : sparse_comp_regs;
+  const uint32_t tileA_regs = (sparsity == 0) ? dense_first_a_regs
+                            : (sparsity == 2) ? sparse_comp_regs
+                                              : sparse_dense_a_regs;
+  const uint32_t tileB_regs = (sparsity == 0) ? dense_first_b_regs
+                                              : sparse_comp_regs;
   const uint32_t bitmap_span = (sparsity == 0) ? 0 : tile_K;
   const uint32_t bitmap_sep_regs = (bitmap_span <= 16)
                                    ? 16
@@ -243,23 +239,16 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
                                       : sparse_reuse_stage_regs_per_warp;
   const uint32_t regs_per_warp = (sparsity == 0) ? (lmem_capacity_bytes / sizeof(uint32_t))
                                                  : sparse_regs_per_warp;
-  // const uint32_t lmem_needed_bytes = regs_per_warp * warps_per_group * sizeof(uint32_t);
 
   static constexpr uint32_t LMEM_OVERFLOW_MARKER = 0x4c4d454d;
-  if (sparsity == 0 && (dense_half0_first_bytes > half_lmem_bytes
-                     || dense_half0_reuse_bytes > half_lmem_bytes
-                     || dense_half1_bytes > half_lmem_bytes)) {
+  if (sparsity == 0 && (dense_first_bytes > half_lmem_bytes
+                     || dense_reuse_bytes > half_lmem_bytes)) {
     if (vx_thread_id() == 0) {
       pD[0] = LMEM_OVERFLOW_MARKER;
     }
     return;
   }
-  // if (lmem_needed_bytes > lmem_capacity_bytes) {
-  //   if (vx_thread_id() == 0) {
-  //     pD[0] = LMEM_OVERFLOW_MARKER;
-  //   }
-  //   return;
-  // }
+  
   uint32_t* lmem_base = reinterpret_cast<uint32_t *>(__local_mem(lmem_capacity_bytes));
   // uint32_t* warp_base = lmem_base + local_warp * regs_per_warp;
   uint32_t* dense_half0 = lmem_base;
@@ -286,11 +275,6 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   if (lane0) {TRACE_STORE(C_lmem, MARKER);}
 
   if constexpr (kDense) {
-#pragma unroll
-    for (uint32_t tile_row_idx = tile_row / tile_M; tile_row_idx < tiles_m; ++tile_row_idx) {
-      const uint32_t a_tile_base = tile_row_idx * tile_M * K;
-#pragma unroll
-      for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
         bool have_pending_mma = false;
         bool have_inflight_mma = false;
         uint32_t pending_stage = 0;
@@ -298,6 +282,26 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
         uintptr_t pending_rs1_val = 0;
         uintptr_t pending_rs2_val = 0;
         uint32_t stage = 0;
+        auto launch_pending_mma = [&]() {
+          if (!have_pending_mma) {
+            return;
+          }
+          if (have_inflight_mma) {
+            tcu_bar[inflight_stage].arrive_and_wait();
+            have_inflight_mma = false;
+          }
+          load_bar[pending_stage].arrive_and_wait();
+          ctx::mma_op(pending_rs1_val, pending_rs2_val);
+          inflight_stage = pending_stage;
+          have_inflight_mma = true;
+          have_pending_mma = false;
+        };
+#pragma unroll
+    for (uint32_t tile_row_idx = tile_row / tile_M; tile_row_idx < tiles_m; ++tile_row_idx) {
+      const uint32_t a_tile_base = tile_row_idx * tile_M * K;
+#pragma unroll
+      for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
+
 
         const uint32_t b_tile_base = tile_col_idx * K * tile_N;
         const uint32_t tile_row_tiles_base = tile_row_idx * tiles_k;
@@ -307,19 +311,22 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
         const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr) + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
         uint32_t* mma_D = reinterpret_cast<uint32_t*>(mma_D_addr);
 
-        // A new tile may start on either half. Do not place the next C tile
-        // into a half that is still feeding the currently inflight MMA.
-        // if (have_inflight_mma && stage == inflight_stage) {
-        //   tcu_bar[inflight_stage].arrive_and_wait();
-        //   have_inflight_mma = false;
-        // }
 
         const uint32_t* mma_C = reinterpret_cast<const uint32_t *>((stage == 0) ? dense_half0 : dense_half1);
         const uint32_t* pC_tile = pC + tile_id * tileC_regs;
 
+        // Cross-tile pipelining can leave previous-tile work owning this half.
+        if (have_pending_mma && pending_stage == stage) {
+          launch_pending_mma();
+        }
+        if (have_inflight_mma && inflight_stage == stage) {
+          // tcu_bar[inflight_stage].arrive_and_wait();
+          have_inflight_mma = false;
+        }
+
         if (is_dxa_quad) {
           // vx_dxa_retile_2d_wg(kDescC, tileC_regs, 1);
-          tcu_bar[stage].arrive_and_wait();
+          // tcu_bar[stage].arrive_and_wait();
           vx_dxa_issue_2d_wg(kDescC, load_bar[stage].id(), mma_C, 0, tile_id);
         }
 
@@ -347,9 +354,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           uintptr_t rs1_val = 0;
           uintptr_t rs2_val = 0;
 
-          const uint32_t dense_k_cap = use_half0
-                                     ? (first_dense_launch ? dense_half0_first_k : dense_half0_reuse_k)
-                                     : dense_half1_k;
+          const uint32_t dense_k_cap = first_dense_launch ? dense_first_k : dense_reuse_k;
           const uint32_t k_remaining = K - k_offset;
           curr_k = (k_remaining < dense_k_cap) ? k_remaining : dense_k_cap;
           uint32_t a_elems = tile_M * curr_k;
@@ -357,16 +362,14 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           chunk_A = first_dense_launch
                   ? ((use_half0 ? dense_half0 : dense_half1) + tileC_regs)
                   :  (use_half0 ? dense_half0 : dense_half1);
-          chunk_B = use_half0
-                  ? (chunk_A + (first_dense_launch ? dense_half0_first_a_regs : dense_half0_reuse_a_regs))
-                  : (chunk_A + dense_half1_a_regs);
+          chunk_B = chunk_A + (first_dense_launch ? dense_first_a_regs : dense_reuse_a_regs);
           auto chunk_A_elems = reinterpret_cast<ctx::input_t*>(chunk_A);
           auto chunk_B_elems = reinterpret_cast<ctx::input_t*>(chunk_B);
 
           const uint32_t flags_chunk = (((k_offset == 0) ? 1u : 0u) << 1) | (((k_offset + curr_k) == K) ? 1u : 0u);
 
           if (is_dxa_quad) {
-            tcu_bar[stage].arrive_and_wait();
+            // tcu_bar[stage].arrive_and_wait();
             vx_dxa_retile_2d_wg(kDescA, a_elems, 1);
             vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
             vx_dxa_retile_2d_wg(kDescB, b_elems, 1);
@@ -374,13 +377,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           }
 
           if (have_pending_mma) {
-            if (have_inflight_mma) {
-              tcu_bar[inflight_stage].arrive_and_wait();
-            }
-            load_bar[pending_stage].arrive_and_wait();
-            ctx::mma_op(pending_rs1_val, pending_rs2_val);
-            inflight_stage = pending_stage;
-            have_inflight_mma = true;
+            launch_pending_mma();
           }
 
           if (gtid == 0) {
@@ -415,17 +412,16 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
           stage = (stage == 0) ? 1 : 0;
         }
-
-        if (have_pending_mma) {
-          if (have_inflight_mma) {
-            tcu_bar[inflight_stage].arrive_and_wait();
-          }
-          load_bar[pending_stage].arrive_and_wait();
-          ctx::mma_op(pending_rs1_val, pending_rs2_val);
-          tcu_bar[pending_stage].arrive_and_wait();
-          // if (lane0) {C_lmem[0] = MARKER;}
-        }
       }
+    }
+
+    if (have_pending_mma) {
+      launch_pending_mma();
+    }
+    if (have_inflight_mma) {
+      tcu_bar[inflight_stage].arrive_and_wait();
+      have_inflight_mma = false;
+      // if (lane0) {C_lmem[0] = MARKER;}
     }
   } 
   
