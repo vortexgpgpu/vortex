@@ -22,6 +22,7 @@ class Core;
 
 op_string_t op_string(TcuType tcu_type, IntrTcuArgs args);
 
+
 class TensorUnit : public SimObject<TensorUnit> {
 public:
 
@@ -52,7 +53,7 @@ public:
 
   virtual void tick();
 
-	void wmma(uint32_t wid,
+  void wmma(uint32_t wid,
 			 	    uint32_t fmt_s,
 						uint32_t fmt_d,
 			 	    uint32_t step_m,
@@ -62,6 +63,19 @@ public:
 					  const std::vector<reg_data_t>& rs3_data,
 					  std::vector<reg_data_t>& rd_data,
 					  ExeTraceData* trace_data);
+
+  // Sparse WMMA as a member (ABI compatibility)
+  void sparse_wmma(uint32_t fmt_s,
+                   uint32_t fmt_d,
+                   uint32_t step_m,
+                   uint32_t step_n,
+                   uint32_t step_k,
+                   const std::vector<reg_data_t>& rs1_data,
+                   const std::vector<reg_data_t>& rs2_data,
+                   const std::vector<reg_data_t>& rs3_data,
+                   std::vector<reg_data_t>& rd_data,
+                   const uint32_t* metadata_words,
+                   uint32_t sparsity_degree);
 
 	const PerfStats& perf_stats() const;
 

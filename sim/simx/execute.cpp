@@ -32,6 +32,9 @@
 #ifdef EXT_VEGETA_ENABLE
 #include "sparse_unit.h"
 #endif
+#ifdef EXT_TCU_ENABLE
+#include "sparse_cfg.h"
+#endif
 #include "VX_types.h"
 
 using namespace vortex;
@@ -1467,7 +1470,59 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
         assert(warp.tmask.count() == num_threads);
-        tensor_unit_->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
+
+        // If sparsity_degree == 0, run dense WMMA as usual.
+        if (tpuArgs.sparsity_degree == 0) {
+          tensor_unit_->wmma(wid,
+                             tpuArgs.fmt_s, tpuArgs.fmt_d,
+                             tpuArgs.step_m, tpuArgs.step_n,
+                             rs1_data, rs2_data, rs3_data,
+                             rd_data, trace_data.get());
+          rd_write = true;
+          break;
+        }
+
+        // Determine sparsity_degree from the decoded TCU arguments.
+        // 0 = dense, 1 = 1:4 sparsity, 2 = 2:4 sparsity (default).
+        uint32_t sparsity_degree = tpuArgs.sparsity_degree ? tpuArgs.sparsity_degree : 2; // default to 2:4
+        if (sparsity_degree != 1 && sparsity_degree != 2) {
+          std::cerr << "Warning: Invalid sparsity degree " << sparsity_degree
+                    << " in TCU args, using default 2" << std::endl;
+          sparsity_degree = 2;
+        }
+
+        // Pass a single metadata register per thread, selected from the current
+        // A source register mapping: f0->a0, f1->a1, ...
+        uint32_t meta_regs_per_thread = (sparsity_degree == 1) ? 2u : 4u;
+        uint32_t meta_reg_idx = rsrc0.idx % meta_regs_per_thread;
+        uint32_t a_reg = 10 + meta_reg_idx; // a0=10
+        std::vector<uint32_t> metadata_words(num_threads, 0);
+        if (a_reg < warp.ireg_file.size()) {
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!warp.tmask.test(t))
+              continue;
+            metadata_words[t] = static_cast<uint32_t>(warp.ireg_file.at(a_reg).at(t));
+          }
+        }
+
+        // Resize rd_data and rs3_data to accommodate WMMA output (tcM * tcN elements)
+        // For sparse WMMA, we need at least tcM * tcN elements
+        namespace vt = vortex::sparse;
+        using cfg = vt::wmma_config_t<NUM_THREADS>;
+        uint32_t wmma_size = cfg::tcM * cfg::tcN;
+        if (rd_data.size() < wmma_size) {
+          rd_data.resize(wmma_size);
+        }
+        if (rs3_data.size() < wmma_size) {
+          rs3_data.resize(wmma_size);
+        }
+
+        // Run sparse WMMA using metadata and sparsity_degree.
+        tensor_unit_->sparse_wmma(tpuArgs.fmt_s, tpuArgs.fmt_d,
+                    tpuArgs.step_m, tpuArgs.step_n,
+                    tpuArgs.step_k,
+                    rs1_data, rs2_data, rs3_data,
+                    rd_data, metadata_words.data(), sparsity_degree);
         rd_write = true;
       } break;
       default:

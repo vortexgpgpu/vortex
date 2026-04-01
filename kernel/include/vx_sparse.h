@@ -187,7 +187,8 @@ public:
       const void *meta_src = nullptr,
       uint32_t meta_row_base = 0,
       uint32_t meta_col_base = 0,
-      uint32_t sparsity_degree = 2) {
+      uint32_t sparsity_degree = 2,
+      uint32_t matrix_m = 0) {
     uint32_t lane = vx_thread_id();
     if constexpr (Frag::Use == matrix_a) {
       // Load row-major matrix A
@@ -202,74 +203,39 @@ public:
         std::swap(block_row, block_col);
       }
       
-      // Metadata pointer is pre-offset to tile position (like data pointer)
-      const uint32_t* meta_base = meta_src ? reinterpret_cast<const uint32_t*>(meta_src) : nullptr;
-      uint32_t meta_ldm = meta_src ? (ldm / 4) : 0;
-      
       if (meta_src != nullptr) {
-        // SPARSE LOADING: Use metadata to place values in correct k_step registers
-        // data_ldm is K * sparsity_degree / 4 for sparse (compressed values)
-        //   - 1:4 sparsity: ldm / 4 (1 value per 4 positions)
-        //   - 2:4 sparsity: ldm / 2 (2 values per 4 positions)
-        size_t data_ldm = (ldm * sparsity_degree) / 4;
-        // For sparse, don't add block_col to base - we compute sparse_idx separately
-        auto data_base = reinterpret_cast<const input_t*>(src) + block_row * data_ldm;
-        
-        // First, load metadata for each M row that this thread handles
-        // and distribute sparse values to the correct k_step registers
+        // When metadata is provided, record it per-fragment row 
+        const uint32_t* meta_base = reinterpret_cast<const uint32_t*>(meta_src);
+        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
+
         detail::unroll_for<Frag::NR>([&](auto r) {
           uint32_t block_m  = r / cfg::k_steps;
           uint32_t block_k  = r % cfg::k_steps;
           uint32_t elem_row = block_m * m_stride;
-          
-          // Get metadata for this row (absolute position in matrix)
-          uint32_t abs_row = meta_row_base + block_row + elem_row;
-          uint32_t abs_k_block = (meta_col_base / 4);  // K-block index for this tile
-          const uint32_t *meta_ptr = meta_base + static_cast<size_t>(abs_row) * meta_ldm + abs_k_block;
-          uint32_t meta_value = *meta_ptr;
-          dst.metadata[r] = meta_value;
-          
-          // meta_value is a bitmask: bits 0-3 indicate which of 4 K positions have values
-          // block_k indicates which pair of K positions this register is for:
-          //   block_k=0 -> K positions 0,1 (bits 0,1)
-          //   block_k=1 -> K positions 2,3 (bits 2,3)
-          uint8_t meta_byte = meta_value & 0xFF;
-          uint32_t k_start = block_k * cfg::tcK;  // Start K position for this register
-          uint32_t k_end = k_start + cfg::tcK;    // End K position
-          
-          // Count how many sparse values come BEFORE this k_step for this row
-          uint32_t sparse_offset = 0;
-          for (uint32_t pos = 0; pos < k_start; ++pos) {
-            if (meta_byte & (1u << pos)) {
-              sparse_offset++;
-            }
-          }
-          
-          // For fp32 with tcK=2, each register holds 1 fp32 value
-          // block_col determines which position within the tcK pair: 0 or 1
-          // So the target K position is: k_start + block_col
-          uint32_t target_pos = k_start + block_col;
-          
-          vreg_t loaded_val = 0.0f;
-          
-          if (target_pos < 4) {
-            // Count sparse values before target_pos to get the sparse index
-            uint32_t sparse_idx = sparse_offset;
-            for (uint32_t pos = k_start; pos < target_pos; ++pos) {
-              if (meta_byte & (1u << pos)) {
-                sparse_idx++;
-              }
-            }
+          uint32_t elem_col = block_k * k_stride;
+            // ---- metadata addressing ----
+            uint32_t meta_ldm    = ldm / cfg::tcK;
+            uint32_t abs_row     = meta_row_base + block_row + elem_row;
+            uint32_t abs_k_block = (meta_col_base + block_col_offset + elem_col) / cfg::tcK;
             
-            // Check if target position has a sparse value
-            if (meta_byte & (1u << target_pos)) {
-              auto ptr = data_base + elem_row * data_ldm + sparse_idx;
-              loaded_val = *ptr;
+            assert(abs_k_block < meta_ldm && "metadata column out of bounds");
+            const uint32_t* meta_ptr = meta_base + (size_t)abs_row * meta_ldm + abs_k_block;
+            dst.metadata[r] = *meta_ptr;
+
+          if constexpr (src_layout == col_major) {
+            static_assert(input_is_subbyte == false, "col_major layout is not supported for sub-byte matrix_a");
+            std::swap(elem_row, elem_col);
+            auto ptr = base + elem_row * ldm + elem_col;
+            if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
+              dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+            } else {
+              dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
             }
-            // else: loaded_val stays 0.0f (position was pruned)
+          } else {
+            auto ptr = base + elem_row * ldm + elem_col;
+            assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
           }
-          
-          dst.data[r] = loaded_val;
         });
       } else {
         // DENSE LOADING: Original non-sparse path
@@ -382,7 +348,20 @@ public:
       if constexpr (dst_layout == col_major) {
         std::swap(elem_row, elem_col);
       }
-      auto ptr = base + elem_row * ldm + elem_col;
+      int32_t row_adjust = 0;
+      if constexpr (dst_layout == row_major) {
+        const bool block_m_is_even = ((block_m & 1u) == 0u);
+        // `block_row` is the local row index coming from the warp thread lane.
+        if (block_m_is_even) {
+          // Even block_m: push the last local row down by +1.
+          row_adjust = (block_row == (cfg::tcM - 1u)) ? 1 : 0;
+        } else {
+          // Odd block_m: pull the first local row up by -1.
+          row_adjust = (block_row == 0u) ? -1 : 0;
+        }
+      }
+
+      auto ptr = base + (elem_row + static_cast<uint32_t>(row_adjust)) * ldm + elem_col;
       if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
         *reinterpret_cast<vreg_t*>(ptr) = src.data[r];
       } else {
@@ -392,6 +371,10 @@ public:
     });
   }
 
+  // Sparse MMA: uses metadata (from fragment_a) and a scalar sparsity_degree
+  // argument (0 = dense, 1 = 1:4, 2 = 2:4). The same sparsity_degree value
+  // is also carried in the WMMA instruction via the rs2 field so that the
+  // simulator's decode stage can reconstruct it into IntrTcuArgs.
   template <typename FragD, typename FragA, typename FragB, typename FragC>
   static __attribute__((always_inline)) void mma_sync(FragD &fragD, const FragA &fragA, const FragB &fragB, const FragC &fragC, uint32_t sparsity_degree) {
     static_assert(FragA::Use == matrix_a, "A must be matrix_a");
@@ -400,37 +383,7 @@ public:
     static_assert(FragD::Use == accumulator, "D must be accumulator");
 
     // Load metadata values into local variables first to avoid stack offset issues
-    uint32_t m0 = 0, m1 = 0, m2 = 0, m3 = 0, m4 = 0, m5 = 0, m6 = 0, m7 = 0;
-    if constexpr (FragA::Use == matrix_a) {
-      if constexpr (FragA::NR > 0) m0 = fragA.metadata[0];
-      if constexpr (FragA::NR > 1) m1 = fragA.metadata[1];
-      if constexpr (FragA::NR > 2) m2 = fragA.metadata[2];
-      if constexpr (FragA::NR > 3) m3 = fragA.metadata[3];
-      if constexpr (FragA::NR > 4) m4 = fragA.metadata[4];
-      if constexpr (FragA::NR > 5) m5 = fragA.metadata[5];  
-      if constexpr (FragA::NR > 6) m6 = fragA.metadata[6];
-      if constexpr (FragA::NR > 7) m7 = fragA.metadata[7];
-    }
-
-    register uint32_t ma0 __asm__("a0") = m0;
-    register uint32_t ma1 __asm__("a1") = m1;
-    register uint32_t ma2 __asm__("a2") = m2;
-    register uint32_t ma3 __asm__("a3") = m3;
-    register uint32_t ma4 __asm__("a4") = m4;
-    register uint32_t ma5 __asm__("a5") = m5;
-    register uint32_t ma6 __asm__("a6") = m6;
-    register uint32_t ma7 __asm__("a7") = m7;
-    register uint32_t sparsity_reg __asm__("t0") = sparsity_degree;
-
-    // fragA: caller-saved registers (f0-f7)
-    register float fa0 __asm__("f0")  = fragA.data[0];
-    register float fa1 __asm__("f1")  = fragA.data[1];
-    register float fa2 __asm__("f2")  = fragA.data[2];
-    register float fa3 __asm__("f3")  = fragA.data[3];
-    register float fa4 __asm__("f4")  = fragA.data[4];
-    register float fa5 __asm__("f5")  = fragA.data[5];
-    register float fa6 __asm__("f6")  = fragA.data[6];
-    register float fa7 __asm__("f7")  = fragA.data[7];
+    uint32_t m0 = 0, m1 = 0, m2 = 0, m3 = 0;
 
     if constexpr (FragB::NR == 8) {
       // fragB: caller-saved registers (f10-f17)
@@ -463,14 +416,67 @@ public:
       register float fd6 __asm__("f30"); 
       register float fd7 __asm__("f31");
 
-      __asm__ volatile (".insn r %[insn], 0, 3, x%[fmd], x%[fms], %[sparsity_reg]"
-        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [sparsity_reg]"r"(sparsity_reg),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7),
-          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7),
-          "r"(ma0), "r"(ma1), "r"(ma2), "r"(ma3), "r"(ma4), "r"(ma5), "r"(ma6), "r"(ma7)
-      );
+      // Encode sparsity_degree into the rs2 field (x1 for 1:4, x2 for 2:4).
+      // This must be a compile-time constant for the inline asm "i" constraint.
+      if (sparsity_degree == 1) {
+
+
+        if constexpr (FragA::Use == matrix_a) {
+          if constexpr (FragA::NR > 0) m0 = fragA.metadata[0];
+          if constexpr (FragA::NR > 1) m1 = fragA.metadata[1];
+        }
+
+        register uint32_t ma0 __asm__("a0") = m0;
+        register uint32_t ma1 __asm__("a1") = m1;
+
+        register float fa0 __asm__("f0")  = fragA.data[0];
+        register float fa1 __asm__("f1")  = fragA.data[1];
+
+        __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[spar]"
+          : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+          : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [spar]"i"(1),
+            // A registers (2 for 1:4 sparsity)
+            "f"(fa0), "f"(fa1),
+            // B registers
+            "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7),
+            // C registers
+            "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7),
+            // Metadata: only 2 words correspond to sparse A elements
+            "r"(ma0), "r"(ma1)
+        );
+      } else {
+
+        if constexpr (FragA::Use == matrix_a) {
+          if constexpr (FragA::NR > 0) m0 = fragA.metadata[0];
+          if constexpr (FragA::NR > 1) m1 = fragA.metadata[1];
+          if constexpr (FragA::NR > 2) m2 = fragA.metadata[2];
+          if constexpr (FragA::NR > 3) m3 = fragA.metadata[3];
+        }
+
+        register uint32_t ma0 __asm__("a0") = m0;
+        register uint32_t ma1 __asm__("a1") = m1;
+        register uint32_t ma2 __asm__("a2") = m2;
+        register uint32_t ma3 __asm__("a3") = m3;
+
+            // fragA: caller-saved registers (f0-f7)
+        register float fa0 __asm__("f0")  = fragA.data[0];
+        register float fa1 __asm__("f1")  = fragA.data[1];
+        register float fa2 __asm__("f2")  = fragA.data[2];
+        register float fa3 __asm__("f3")  = fragA.data[3];
+
+        __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[spar]"
+          : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+          : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [spar]"i"(2),
+            // A registers (4 for 2:4 sparsity)
+            "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3),
+            // B registers
+            "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7),
+            // C registers
+            "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7),
+            // Metadata: only 4 words correspond to sparse A elements
+            "r"(ma0), "r"(ma1), "r"(ma2), "r"(ma3)
+        );
+      }
 
       // Write results to fragD
       fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
@@ -502,14 +508,66 @@ public:
       register float fd6 __asm__("f16");
       register float fd7 __asm__("f17");
 
-      __asm__ volatile (".insn r %[insn], 0, 3, x%[fmd], x%[fms], %[sparsity_reg]"
-        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [sparsity_reg]"r"(sparsity_reg),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3),
-          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7),
-          "r"(ma0), "r"(ma1), "r"(ma2), "r"(ma3), "r"(ma4), "r"(ma5), "r"(ma6), "r"(ma7)
-      );
+      if (sparsity_degree == 1) {
+
+        if constexpr (FragA::Use == matrix_a) {
+          if constexpr (FragA::NR > 0) m0 = fragA.metadata[0];
+          if constexpr (FragA::NR > 1) m1 = fragA.metadata[1];
+        }
+
+        register uint32_t ma0 __asm__("a0") = m0;
+        register uint32_t ma1 __asm__("a1") = m1;
+
+        register float fa0 __asm__("f0")  = fragA.data[0];
+        register float fa1 __asm__("f1")  = fragA.data[1];
+
+        // 1:4 sparsity => custom op consumes 2 A registers
+        __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[spar]"
+          : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+          : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [spar]"i"(1),
+            // A registers (2 for 1:4 sparsity)
+            "f"(fa0), "f"(fa1),
+            // B registers
+            "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3),
+            // C registers
+            "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7),
+            // Metadata: only 2 words correspond to sparse A elements
+            "r"(ma0), "r"(ma1)
+        );
+      } else {
+
+        if constexpr (FragA::Use == matrix_a) {
+          if constexpr (FragA::NR > 0) m0 = fragA.metadata[0];
+          if constexpr (FragA::NR > 1) m1 = fragA.metadata[1];
+          if constexpr (FragA::NR > 2) m2 = fragA.metadata[2];
+          if constexpr (FragA::NR > 3) m3 = fragA.metadata[3];
+        }
+
+        register uint32_t ma0 __asm__("a0") = m0;
+        register uint32_t ma1 __asm__("a1") = m1;
+        register uint32_t ma2 __asm__("a2") = m2;
+        register uint32_t ma3 __asm__("a3") = m3;
+
+            // fragA: caller-saved registers (f0-f7)
+        register float fa0 __asm__("f0")  = fragA.data[0];
+        register float fa1 __asm__("f1")  = fragA.data[1];
+        register float fa2 __asm__("f2")  = fragA.data[2];
+        register float fa3 __asm__("f3")  = fragA.data[3];
+
+        // 2:4 sparsity (or default) => custom op consumes 4 A registers
+        __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[spar]"
+          : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+          : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [spar]"i"(2),
+            // A registers (4 for 2:4 sparsity)
+            "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3),
+            // B registers
+            "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3),
+            // C registers
+            "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7),
+            // Metadata: only 4 words correspond to sparse A elements
+            "r"(ma0), "r"(ma1), "r"(ma2), "r"(ma3)
+        );
+      }
 
       // Write results to fragD
       fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};

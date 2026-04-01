@@ -66,7 +66,7 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     // load_matrix_sync will calculate absolute positions
     const void *pTileMeta = reinterpret_cast<const void *>(meta_base);
 
-    ctx::load_matrix_sync(fragA, pTileA, K, pTileMeta, tile_row, k_tile, sparsity_degree);
+    ctx::load_matrix_sync(fragA, pTileA, K, pTileMeta, tile_row, k_tile, sparsity_degree, M);
 
     // Matrix multiply-accumulate while fragB stays in registers
     ctx::mma_sync(fragC, fragA, fragB, fragC, sparsity_degree);
