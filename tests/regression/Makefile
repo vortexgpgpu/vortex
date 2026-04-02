@@ -19,6 +19,7 @@ all:
 	$(MAKE) -C vecadd
 	$(MAKE) -C vecadd_v1
 	$(MAKE) -C sgemm
+	$(MAKE) -C sgemmx
 	$(MAKE) -C sgemm_v1
 	$(MAKE) -C conv3
 	$(MAKE) -C relu
@@ -69,6 +70,7 @@ run-simx:
 	$(MAKE) -C vecadd run-simx
 	$(MAKE) -C vecadd_v1 run-simx
 	$(MAKE) -C sgemm run-simx
+	$(MAKE) -C sgemmx run-simx
 	$(MAKE) -C sgemm_v1 run-simx
 	$(MAKE) -C conv3 run-simx
 	$(MAKE) -C relu run-simx
@@ -113,6 +115,7 @@ run-rtlsim:
 	$(MAKE) -C vecadd run-rtlsim
 	$(MAKE) -C vecadd_v1 run-rtlsim
 	$(MAKE) -C sgemm run-rtlsim
+	$(MAKE) -C sgemmx run-rtlsim
 	$(MAKE) -C sgemm_v1 run-rtlsim
 	$(MAKE) -C conv3 run-rtlsim
 	$(MAKE) -C relu run-rtlsim
@@ -148,6 +151,7 @@ clean:
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C vecadd_v1 clean
 	$(MAKE) -C sgemm clean
+	$(MAKE) -C sgemmx clean
 	$(MAKE) -C sgemm_v1 clean
 	$(MAKE) -C sgemm_tcu clean
 	$(MAKE) -C sgemm2_tcu clean
