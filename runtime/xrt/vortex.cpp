@@ -186,7 +186,7 @@ public:
     xrtXclbinGetXSAName(xrtDevice, sz_device_name.data(), device_name_size, nullptr);
     std::string device_name(sz_device_name.data(), device_name_size);
 
-    clock_freqs_ = PLATFORM_CLOCK_RATE;
+    clock_freqs_ = 0;
 
   #endif
 

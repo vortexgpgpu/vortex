@@ -93,7 +93,7 @@ public:
       _value = 1ull << (MEM_ADDR_WIDTH / PLATFORM_MEMORY_NUM_BANKS);
       break;
     case VX_CAPS_CLOCK_RATE:
-      _value = PLATFORM_CLOCK_RATE;
+      _value = 0;
       break;
     case VX_CAPS_PEAK_MEM_BW:
       _value = PLATFORM_MEMORY_PEAK_BW;

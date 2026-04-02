@@ -40,7 +40,7 @@ typedef void* vx_buffer_h;
 #define VX_CAPS_NUM_CLUSTERS        0xA   // number of clusters
 #define VX_CAPS_SOCKET_SIZE         0xB   // number of cores per socket
 #define VX_CAPS_ISSUE_WIDTH         0xC   // issue width per core
-#define VX_CAPS_CLOCK_RATE          0xD   // pipeline clock rate in Hz
+#define VX_CAPS_CLOCK_RATE          0xD   // pipeline clock rate in MHz
 #define VX_CAPS_PEAK_MEM_BW         0xE   // peak memory bandwidth in megabytes per second
 
 // device isa flags
