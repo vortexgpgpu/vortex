@@ -152,6 +152,13 @@ extern fpga_result fpgaReadMMIO64(fpga_handle handle, uint32_t mmio_num, uint64_
   return FPGA_OK;
 }
 
+extern fpga_result fpgaGetUserClock(fpga_handle handle, uint64_t *high_clk, uint64_t *low_clk, int flags) {
+  __unused (handle, flags);
+  if (high_clk) *high_clk = 0;
+  if (low_clk)  *low_clk  = 0;
+  return FPGA_OK;
+}
+
 extern const char *fpgaErrStr(fpga_result e) {
   return "";
 }

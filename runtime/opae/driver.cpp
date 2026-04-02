@@ -78,6 +78,7 @@ int drv_init(opae_drv_api_t* opae_drv_funcs) {
 	SET_API (fpgaGetIOAddress);
 	SET_API (fpgaWriteMMIO64);
 	SET_API (fpgaReadMMIO64);
+	SET_API (fpgaGetUserClock);
 	SET_API (fpgaErrStr);
 
   return 0;

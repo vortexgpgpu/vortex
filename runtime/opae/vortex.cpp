@@ -88,6 +88,7 @@ public:
     , staging_ioaddr_(0)
     , staging_ptr_(nullptr)
     , staging_size_(0)
+    , clock_rate_(0)
   {}
 
   ~vx_device() {
@@ -180,6 +181,14 @@ public:
       this->get_caps(VX_CAPS_NUM_MEM_BANKS, &num_banks);
       this->get_caps(VX_CAPS_MEM_BANK_SIZE, &bank_size);
       global_mem_size_ = num_banks * bank_size;
+
+      // Query actual FPGA clock rate; average high and low user clocks
+      {
+        uint64_t clk_high = 0, clk_low = 0;
+        if (api_.fpgaGetUserClock(fpga_, &clk_high, &clk_low, 0) == FPGA_OK) {
+          clock_rate_ = (clk_high + clk_low) / 2; // in MHz
+        }
+      }
     }
 
   #ifdef SCOPE
@@ -250,7 +259,7 @@ public:
       _value = 1ull << (20 + ((dev_caps_ >> 37) & 0x1f));
       break;
     case VX_CAPS_CLOCK_RATE:
-      _value = PLATFORM_CLOCK_RATE;
+      _value = clock_rate_;
       break;
     case VX_CAPS_PEAK_MEM_BW:
       _value = PLATFORM_MEMORY_PEAK_BW;
@@ -541,6 +550,7 @@ private:
   uint64_t dev_caps_;
   uint64_t isa_caps_;
   uint64_t global_mem_size_;
+  uint64_t clock_rate_;
   uint64_t staging_wsid_;
   uint64_t staging_ioaddr_;
   uint8_t* staging_ptr_;
