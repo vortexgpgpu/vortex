@@ -36,6 +36,8 @@ source ./ci/toolchain_env.sh
 make -s
 ```
 
+Wait until build completes before running anything else in parallel terminals.
+
 `configure` generates a runnable build tree by copying and instantiating `ci/`, `runtime/`, `sim/`, and `tests/` into `build/`. For execution and test automation, prefer the generated scripts and Makefiles under `build/` over the source-tree `.in` files.
 
 ### Common Gotchas:

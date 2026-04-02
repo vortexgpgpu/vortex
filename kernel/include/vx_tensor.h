@@ -167,10 +167,19 @@ private:
     return cvt.f;
   }
 
+  template <bool HasMxMeta>
+  struct mx_meta_storage_t {};
+
+  template <>
+  struct mx_meta_storage_t<true> {
+    std::array<vreg_t, 4> mx_meta;
+  };
+
   template <frag_use_t U, typename T, uint32_t N>
-  struct fragment_t {
+  struct fragment_t : mx_meta_storage_t<(U == matrix_a || U == matrix_b)> {
     using Type = T;
     static constexpr frag_use_t Use = U;
+    static constexpr bool HasMxMeta = (U == matrix_a || U == matrix_b);
     static constexpr uint32_t NR = N;
     std::array<vreg_t, N> data;
   };
@@ -210,7 +219,10 @@ public:
 
   static constexpr uint32_t input_is_subbyte = (It::bits < 8);
 
-  static constexpr bool is_mx = std::is_same_v<It, mxfp8>;
+  static constexpr bool is_mxfp8 = std::is_same_v<It, mxfp8>;
+  static constexpr bool is_mxint8 = std::is_same_v<It, mxint8>;
+  static constexpr bool is_nvfp4 = std::is_same_v<It, nvfp4>;
+  static constexpr bool is_mx = is_mxfp8 || is_mxint8 || is_nvfp4;
 
   static constexpr uint32_t i_ratio = sizeof(vreg_t) / sizeof(input_t);
   static constexpr uint32_t tileM = cfg::tileM;
@@ -241,34 +253,45 @@ public:
   using fragment_b   = fragment_t<matrix_b, input_t, cfg::NRB>;
   using fragment_acc = fragment_t<accumulator, output_t, cfg::NRC>;
 
-  // Per-thread metadata words used only for mxfp8 register plumbing.
-  // dense-MX ABI uses two packed words for A and two packed words for B.
-  static inline vreg_t mx_meta_a[2] = {0.0f, 0.0f};
-  static inline vreg_t mx_meta_b[2] = {0.0f, 0.0f};
+  // Per-thread metadata words used for MX register plumbing.
+  // mxfp8/mxint8 use 2 words per axis; nvfp4 uses 4 words per axis.
+  static constexpr uint32_t mx_meta_slots = is_nvfp4 ? 16 : 8;
+  static constexpr uint32_t mx_meta_words_per_axis = mx_meta_slots / 4;
+  static constexpr uint32_t mx_meta_words = 2 * mx_meta_words_per_axis;
 
   template <typename Frag>
-  static __attribute__((always_inline)) void load_mx_metadata(const void* meta_mx_ptr) {
-    if constexpr (is_mx) {
-      if (nullptr == meta_mx_ptr) {
-        if constexpr (Frag::Use == matrix_a) {
-          mx_meta_a[0] = 0.0f;
-          mx_meta_a[1] = 0.0f;
-        } else if constexpr (Frag::Use == matrix_b) {
-          mx_meta_b[0] = 0.0f;
-          mx_meta_b[1] = 0.0f;
-        }
-      } else {
-        auto meta_base = reinterpret_cast<const uint32_t*>(meta_mx_ptr);
-        if constexpr (Frag::Use == matrix_a) {
-          mx_meta_a[0] = mx_word_as_f32(meta_base[0]);
-          mx_meta_a[1] = mx_word_as_f32(meta_base[1]);
-        } else if constexpr (Frag::Use == matrix_b) {
-          mx_meta_b[0] = mx_word_as_f32(meta_base[2]);
-          mx_meta_b[1] = mx_word_as_f32(meta_base[3]);
-        }
+  static __attribute__((always_inline)) void load_mx_metadata(Frag& frag, const void* meta_mx_ptr) {
+    static_assert(Frag::HasMxMeta, "MX metadata is only valid for matrix_a/matrix_b fragments");
+
+    if constexpr (!is_mx) {
+      (void)frag;
+      (void)meta_mx_ptr;
+      return;
+    }
+
+    if (nullptr == meta_mx_ptr) {
+      return;
+    }
+
+    auto meta_base = reinterpret_cast<const uint32_t*>(meta_mx_ptr);
+    if constexpr (Frag::Use == matrix_a) {
+      frag.mx_meta[0] = mx_word_as_f32(meta_base[0]);
+      frag.mx_meta[1] = mx_word_as_f32(meta_base[1]);
+      if constexpr (is_nvfp4) {
+        frag.mx_meta[2] = mx_word_as_f32(meta_base[2]);
+        frag.mx_meta[3] = mx_word_as_f32(meta_base[3]);
       }
     } else {
-      (void)meta_mx_ptr;
+      static_assert(Frag::Use == matrix_b, "Unsupported MX fragment use");
+      if constexpr (is_nvfp4) {
+        frag.mx_meta[0] = mx_word_as_f32(meta_base[4]);
+        frag.mx_meta[1] = mx_word_as_f32(meta_base[5]);
+        frag.mx_meta[2] = mx_word_as_f32(meta_base[6]);
+        frag.mx_meta[3] = mx_word_as_f32(meta_base[7]);
+      } else {
+        frag.mx_meta[0] = mx_word_as_f32(meta_base[2]);
+        frag.mx_meta[1] = mx_word_as_f32(meta_base[3]);
+      }
     }
   }
 
@@ -488,8 +511,9 @@ public:
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
                                                                const void *meta_mx_ptr) {
     static_assert(!is_sparse, "4-arg load_matrix_sync is dense-MX only");
+    static_assert(Frag::HasMxMeta, "MX metadata load requires matrix_a/matrix_b fragment");
     load_matrix_sync<src_layout, Frag>(dst, src, ldm);
-    load_mx_metadata<Frag>(meta_mx_ptr);
+    load_mx_metadata(dst, meta_mx_ptr);
   }
 
   // Sparse overload (5 args): MX pointer first, then SP metadata pointer.
@@ -499,6 +523,7 @@ public:
                                                                const void *meta_mx_ptr,
                                                                const void *meta_sp_ptr) {
     static_assert(is_sparse, "5-arg load_matrix_sync is sparse only");
+    static_assert(Frag::HasMxMeta, "MX metadata load requires matrix_a/matrix_b fragment");
 
     // Reuse base matrix load
     load_matrix_sync<src_layout, Frag>(dst, src, ldm);
@@ -513,8 +538,7 @@ public:
       }
     }
 
-    // Optional MX metadata sideband
-    load_mx_metadata<Frag>(meta_mx_ptr);
+    load_mx_metadata(dst, meta_mx_ptr);
   }
 
   template <mem_layout dst_layout = row_major, typename Frag>
@@ -575,12 +599,6 @@ public:
     register float fa6 __asm__("f16") = frag_a.data[6];
     register float fa7 __asm__("f17") = frag_a.data[7];
 
-    // frag_meta_mx: caller-saved registers (f8-f9 (A), f18-f19 (B))
-    register float fma0 __asm__("f8")  = is_mx ? mx_meta_a[0] : 0.0f;
-    register float fma1 __asm__("f9")  = is_mx ? mx_meta_a[1] : 0.0f;
-    register float fmb0 __asm__("f18") = is_mx ? mx_meta_b[0] : 0.0f;
-    register float fmb1 __asm__("f19") = is_mx ? mx_meta_b[1] : 0.0f;
-
     if constexpr (FragB::NR == 8) {
 
       // frag_b: caller-saved registers (f24-f31)
@@ -593,13 +611,42 @@ public:
       register float fb6 __asm__("f30")  = frag_b.data[6];
       register float fb7 __asm__("f31")  = frag_b.data[7];
 
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
-        : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
-          "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
-      );
+      if constexpr (is_mx) {
+        register float fma0 __asm__("f8")  = frag_a.mx_meta[0];
+        register float fma1 __asm__("f9")  = frag_a.mx_meta[1];
+        register float fmb0 __asm__("f18") = frag_b.mx_meta[0];
+        register float fmb1 __asm__("f19") = frag_b.mx_meta[1];
+
+        if constexpr (is_nvfp4) {
+          register float fma2 __asm__("f20") = frag_a.mx_meta[2];
+          register float fma3 __asm__("f21") = frag_a.mx_meta[3];
+          register float fmb2 __asm__("f22") = frag_b.mx_meta[2];
+          register float fmb3 __asm__("f23") = frag_b.mx_meta[3];
+
+          __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+            : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+            : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+              "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1), "f"(fma2), "f"(fma3), "f"(fmb2), "f"(fmb3),
+              "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+              "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
+          );
+        } else {
+          __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+            : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+            : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+              "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
+              "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+              "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
+          );
+        }
+      } else {
+        __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+          : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+          : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+            "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+            "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
+        );
+      }
     } else {
       static_assert(FragB::NR == 4, "Unsupported number of registers for FragB");
 
@@ -609,13 +656,42 @@ public:
       register float fb2 __asm__("f30") = frag_b.data[2];
       register float fb3 __asm__("f31") = frag_b.data[3];
 
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
-        : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
-          "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
-      );
+      if constexpr (is_mx) {
+        register float fma0 __asm__("f8")  = frag_a.mx_meta[0];
+        register float fma1 __asm__("f9")  = frag_a.mx_meta[1];
+        register float fmb0 __asm__("f18") = frag_b.mx_meta[0];
+        register float fmb1 __asm__("f19") = frag_b.mx_meta[1];
+
+        if constexpr (is_nvfp4) {
+          register float fma2 __asm__("f20") = frag_a.mx_meta[2];
+          register float fma3 __asm__("f21") = frag_a.mx_meta[3];
+          register float fmb2 __asm__("f22") = frag_b.mx_meta[2];
+          register float fmb3 __asm__("f23") = frag_b.mx_meta[3];
+
+          __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+            : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+            : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+              "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1), "f"(fma2), "f"(fma3), "f"(fmb2), "f"(fmb3),
+              "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+              "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
+          );
+        } else {
+          __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+            : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+            : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+              "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
+              "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+              "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
+          );
+        }
+      } else {
+        __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+          : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+          : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+            "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+            "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
+        );
+      }
     }
 
     // Write results to frag_d

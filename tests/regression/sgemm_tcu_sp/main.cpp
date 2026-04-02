@@ -747,6 +747,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_sp_addr));
 
   uint32_t num_blocks = grid_dim[0] * grid_dim[1];
+  uint64_t num_mma_sync_instrs = uint64_t(num_blocks) * num_k_tiles;
   RT_CHECK(vx_mem_alloc(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
   RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
 
@@ -841,9 +842,18 @@ int main(int argc, char *argv[]) {
   {
     std::vector<uint32_t> h_cycles(num_blocks);
     RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_blocks * sizeof(uint32_t)));
-    uint32_t max_cycles = 0;
-    for (auto c : h_cycles) max_cycles = std::max(max_cycles, c);
-    printf("TCU_CYCLES: max=%u (across %u blocks)\n", max_cycles, num_blocks);
+    uint64_t cycles_sum = 0;
+    uint32_t cycles_max = 0;
+    for (auto cycles : h_cycles) {
+      cycles_sum += cycles;
+      cycles_max = std::max(cycles_max, cycles);
+    }
+    std::cout << std::dec;
+    std::cout << "mma_sync cycles max: " << cycles_max << std::endl;
+    std::cout << "mma_sync cycles total: " << cycles_sum << std::endl;
+    std::cout << "mma_sync cycles average per mma_sync instr: "
+              << (num_mma_sync_instrs ? (double(cycles_sum) / num_mma_sync_instrs) : 0.0)
+              << std::endl;
   }
 
   // download destination buffer

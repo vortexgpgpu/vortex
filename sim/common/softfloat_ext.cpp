@@ -983,9 +983,14 @@ nvfloat4_t f32_to_nvfp4(float32_t a, sffloat8_t scale_factor) {
   //extract e4m3 scale factor
   uint32_t fflags = 0;
   float scale = cvt_custom_to_f32(scale_factor.sf, 4, 3, softfloat_roundingMode, &fflags);
+  if (!std::isfinite(scale) || scale == 0.0f) {
+    scale = 1.0f;
+  }
   //divide input by scale factor
   float scaled_value = vortex::bit_cast<float>(a.v) / scale;
-  //conver scaled value to e2m1
+  //clamp to finite E2M1 range to avoid NaN/Inf payloads in stored nvfp4 values.
+  scaled_value = std::max(-3.0f, std::min(3.0f, scaled_value));
+  //convert scaled value to e2m1
   auto out = cvt_f32_to_custom(scaled_value, 2, 1, softfloat_roundingMode, &fflags);
   softfloat_exceptionFlags |= fflags;
   nvfloat4_t res;
