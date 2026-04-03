@@ -32,7 +32,7 @@ all:
 	$(MAKE) -C pathfinder
 	$(MAKE) -C softmax
 	$(MAKE) -C sgemm_tcu
-	$(MAKE) -C sgemm2_tcu
+	$(MAKE) -C sgemm_tcu_wg
 	$(MAKE) -C sgemm_tcu_sp
 	$(MAKE) -C sgemm_tcu_mx
 	$(MAKE) -C sgemm2_dxa
@@ -131,7 +131,7 @@ clean:
 	$(MAKE) -C sgemmx clean
 	$(MAKE) -C sgemm_v1 clean
 	$(MAKE) -C sgemm_tcu clean
-	$(MAKE) -C sgemm2_tcu clean
+	$(MAKE) -C sgemm_tcu_wg clean
 	$(MAKE) -C sgemm_tcu_sp clean
 	$(MAKE) -C sgemm_tcu_mx clean
 	$(MAKE) -C conv3 clean
