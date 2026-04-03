@@ -45,9 +45,9 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
   auto pTileB = pB + tile_col * K;
   for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
+    __rdcycle_time t0 = vx_rdcycle_sync_begin();
     ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, nullptr, pMetaSp);
     ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
-    __rdcycle_time t0 = vx_rdcycle_sync_begin();
     ctx::mma_sync(fragC, fragA, fragB, fragC);
     __rdcycle_time t1 = vx_rdcycle_sync_end();
     cycles += vx_rdcycle_sync_diff(t0, t1);
