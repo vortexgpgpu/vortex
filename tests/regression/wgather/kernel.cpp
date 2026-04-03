@@ -13,7 +13,7 @@
 //     lane base+2:        rd ← rs2[base+0]  = (base+0)*10 + 2
 //     lane base+3:        rd ← rs3[base+0]  = (base+0)*10 + 3
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     auto dst_ptr = reinterpret_cast<uint32_t*>(arg->dst_addr);
     auto tp_ptr  = reinterpret_cast<uint32_t*>(arg->tp_addr);
 

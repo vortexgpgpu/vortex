@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include "common.h"
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 	auto src0_ptr = reinterpret_cast<TYPE*>(arg->src0_addr);
 	auto dst_ptr  = reinterpret_cast<TYPE*>(arg->dst_addr);
 

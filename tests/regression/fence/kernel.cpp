@@ -1,7 +1,7 @@
 #include <vx_spawn2.h>
 #include "common.h"
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count    = arg->task_size;
 	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
 	int32_t* src1_ptr = (int32_t*)arg->src1_addr;

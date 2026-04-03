@@ -18,7 +18,7 @@ static constexpr uint32_t smem_bank_bytes = NUM_THREADS * sizeof(float);
 static constexpr uint32_t smem_b_off      = ((smem_meta_off + ctx::wg_meta_total_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
 static constexpr uint32_t smem_total      = smem_b_off + smem_b_bytes;
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA  = reinterpret_cast<ctx::input_t *>(arg->A_addr);   // compressed A
   auto pB  = reinterpret_cast<ctx::input_t *>(arg->B_addr);   // dense B
   auto pC  = reinterpret_cast<ctx::output_t*>(arg->C_addr);

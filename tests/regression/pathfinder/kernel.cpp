@@ -3,7 +3,7 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 	auto wall = reinterpret_cast<TYPE*>(arg->src0_addr);
 	auto src  = reinterpret_cast<TYPE*>(arg->src1_addr);
 	auto dst  = reinterpret_cast<TYPE*>(arg->dst_addr);

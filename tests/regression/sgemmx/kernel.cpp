@@ -5,7 +5,7 @@
 #define BLOCK_SIZE_M  (BLOCK_DIM_Y * THREAD_SIZE_Y)
 #define BLOCK_SIZE_N  (BLOCK_DIM_X * THREAD_SIZE_X)
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     const TYPE* A = reinterpret_cast<const TYPE*>(arg->A_addr);
     const TYPE* B = reinterpret_cast<const TYPE*>(arg->B_addr);
     TYPE*       C = reinterpret_cast<TYPE*>(arg->C_addr);

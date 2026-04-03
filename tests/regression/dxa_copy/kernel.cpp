@@ -11,7 +11,7 @@
 constexpr uint32_t kDescSrc = 0;
 #endif
 
-extern "C" void kernel_main(kernel_arg_t* arg) {
+__kernel void kernel_main(kernel_arg_t* arg) {
   const uint32_t tile_rows = arg->tile_rows;
   const uint32_t tile_cols = arg->tile_cols;
   const uint32_t ncols     = arg->ncols;

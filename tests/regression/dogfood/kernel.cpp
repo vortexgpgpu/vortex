@@ -451,6 +451,6 @@ static const PFN_Kernel sc_tests[] = {
 	kernel_iclamp, kernel_trigo, kernel_bar, kernel_gbar,
 };
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 	sc_tests[arg->testid](arg);
 }

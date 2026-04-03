@@ -1,7 +1,7 @@
 #include <vx_spawn2.h>
 #include "common.h"
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 	auto A     = reinterpret_cast<TYPE*>(arg->src0_addr);
 	auto x_old = reinterpret_cast<TYPE*>(arg->src1_addr);
 	auto b     = reinterpret_cast<TYPE*>(arg->src2_addr);

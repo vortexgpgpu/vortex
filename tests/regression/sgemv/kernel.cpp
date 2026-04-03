@@ -2,7 +2,7 @@
 #include "common.h"
 #include "float4.h"
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto A = reinterpret_cast<float*>(arg->A_addr);
   auto x = reinterpret_cast<float*>(arg->x_addr);
   auto y = reinterpret_cast<float*>(arg->y_addr);
