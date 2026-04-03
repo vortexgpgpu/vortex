@@ -62,15 +62,15 @@ llvm()
     *)          parts=$(eval echo {a..b}) ;;
     esac
     echo $parts
-    rm -f llvm-vortex2.tar.bz2.parta*
+    rm -f llvm-vortex21.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/llvm-vortex/$OSVERSION/llvm-vortex2.tar.bz2.parta$x
+        wget $REPOSITORY/llvm-vortex/$OSVERSION/llvm-vortex21.tar.bz2.parta$x
     done
-    cat llvm-vortex2.tar.bz2.parta* > llvm-vortex2.tar.bz2
-    tar -xvf llvm-vortex2.tar.bz2
+    cat llvm-vortex21.tar.bz2.parta* > llvm-vortex21.tar.bz2
+    tar -xvf llvm-vortex21.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/llvm-vortex && mv llvm-vortex $TOOLDIR
-    rm -rf llvm-vortex llvm-vortex2.tar.bz2*
+    rm -rf llvm-vortex llvm-vortex21.tar.bz2*
 }
 
 libcrt32()

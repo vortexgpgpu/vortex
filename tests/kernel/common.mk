@@ -28,6 +28,10 @@ LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
 LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex.a $(LIBC_LIB)
 
+VX_STARTUP_SRC := $(VORTEX_HOME)/kernel/src/vx_start.S
+APP_OBJS = $(addsuffix .o, $(basename $(notdir $(SRCS))))
+KERNEL_STARTUP := $(VORTEX_HOME)/kernel/scripts/kernel_startup.sh
+
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
@@ -39,8 +43,14 @@ $(PROJECT).bin: $(PROJECT).elf
 $(VORTEX_KN_PATH)/libvortex.a:
 	$(MAKE) -C $(VORTEX_KN_PATH)
 
-$(PROJECT).elf: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
-	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+vx_start.o: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
+	$(CC) $(CFLAGS) -c $(SRCS)
+	$(CC) $(CFLAGS) -DNEED_GP -DNEED_TLS -DNEED_INITFINI -c $(VX_STARTUP_SRC) -o $@
+	$(CC) $(CFLAGS) $@ $(APP_OBJS) $(LDFLAGS) -o $@.elf
+	$(CC) $(CFLAGS) $$($(KERNEL_STARTUP) $(DP) $@.elf) -c $(VX_STARTUP_SRC) -o $@ && rm -f $@.elf
+
+$(PROJECT).elf: vx_start.o $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
+	$(CC) $(CFLAGS) vx_start.o $(APP_OBJS) $(LDFLAGS) -o $@
 
 run-rtlsim: $(PROJECT).bin
 	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).bin
@@ -52,4 +62,4 @@ run-simx: $(PROJECT).bin
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.elf *.bin *.dump *.log .depend
+	rm -rf *.elf *.bin *.dump *.o *.log .depend

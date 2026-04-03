@@ -41,12 +41,12 @@ riscv64()
 
 llvm()
 {
-    echo "prebuilt llvm-vortex2..."
-    tar -C $TOOLDIR -cvjf llvm-vortex2.tar.bz2 llvm-vortex
-    split -b 50M llvm-vortex2.tar.bz2 "llvm-vortex2.tar.bz2.part"
+    echo "prebuilt llvm-vortex21..."
+    tar -C $TOOLDIR -cvjf llvm-vortex21.tar.bz2 llvm-vortex
+    split -b 50M llvm-vortex21.tar.bz2 "llvm-vortex21.tar.bz2.part"
     mkdir -p ./llvm-vortex/$OSVERSION
-    mv llvm-vortex2.tar.bz2.part* ./llvm-vortex/$OSVERSION
-    rm llvm-vortex2.tar.bz2
+    mv llvm-vortex21.tar.bz2.part* ./llvm-vortex/$OSVERSION
+    rm llvm-vortex21.tar.bz2
 }
 
 libcrt32()

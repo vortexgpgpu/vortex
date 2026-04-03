@@ -48,14 +48,16 @@ $(PROJECT).dump: $(PROJECT).a
 $(PROJECT2).dump: $(PROJECT2).a
 	$(DP) -D $(PROJECT2).a > $(PROJECT2).dump
 
+STARTUP_FLAGS := -DNEED_GP -DNEED_TLS -DNEED_INITFINI
+
 %.S.o: $(SRC_DIR)/%.S
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(STARTUP_FLAGS) -c $< -o $@
 
 %.c.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 %.S.2.o: $(SRC_DIR)/%.S
-	$(CC) $(CFLAGS) -DKMU_ENABLE -c $< -o $@
+	$(CC) $(CFLAGS) $(STARTUP_FLAGS) -DKMU_ENABLE -c $< -o $@
 
 %.c.2.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -DKMU_ENABLE -c $< -o $@

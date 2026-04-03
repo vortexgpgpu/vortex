@@ -60,6 +60,11 @@ VX_LIBS += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
 VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(VX_LIBS)
 
+VX_STARTUP_SRC := $(VORTEX_HOME)/kernel/src/vx_start.S
+VX_KMU_FLAG := $(if $(filter vortex2,$(KERNEL_LIB)),-DKMU_ENABLE)
+VX_APP_OBJS = $(addsuffix .o, $(basename $(notdir $(VX_SRCS))))
+KERNEL_STARTUP := $(VORTEX_HOME)/kernel/scripts/kernel_startup.sh
+
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -I$(VORTEX_HOME)/runtime/include -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CXXFLAGS += $(CONFIGS)
@@ -99,8 +104,19 @@ $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a:
 $(VORTEX_RT_PATH)/libvortex.so:
 	$(MAKE) -C $(VORTEX_RT_PATH)
 
+ifneq ($(filter %.S,$(VX_SRCS)),)
 kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
-	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o kernel.elf
+	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o $@
+else
+vx_start.o: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
+	$(VX_CXX) $(VX_CFLAGS) -c $(VX_SRCS)
+	$(VX_CXX) $(VX_CFLAGS) -DNEED_GP -DNEED_TLS -DNEED_INITFINI $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@
+	$(VX_CXX) $(VX_CFLAGS) $@ $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@.elf
+	$(VX_CXX) $(VX_CFLAGS) $$($(KERNEL_STARTUP) $(VX_DP) $@.elf) $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@ && rm -f $@.elf
+
+kernel.elf: vx_start.o $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
+	$(VX_CXX) $(VX_CFLAGS) vx_start.o $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@
+endif
 
 $(PROJECT): $(SRCS) $(VORTEX_RT_PATH)/libvortex.so
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
