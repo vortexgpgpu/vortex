@@ -151,13 +151,13 @@ PROJECT := libopae-c-sim.so
 all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/vortex.json: $(CONFIG_FILE)
-	verilator --json-only -O0 $(VL_FLAGS) $(TOP) --json-only-output $@
+	$(VERILATOR_PATH)/bin/verilator --json-only -O0 $(VL_FLAGS) $(TOP) --json-only-output $@
 
 $(DESTDIR)/scope.json: $(DESTDIR)/vortex.json
 	$(SCRIPT_DIR)/scope.py $^ -o $@
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(SCOPE_JSON) $(CONFIG_FILE) $(RTL_SRCS)
-	verilator --build --exe $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
+	$(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force

@@ -284,7 +284,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
         const int occ_pct = (int)std::lround(safe_div(avg_occ, (double)num_warps) * 100.0);
         const double warp_eff = safe_div((double)c.issued_threads, (double)c.issued_warps);
         const int warp_eff_pct = (int)std::lround(safe_div(warp_eff, (double)num_threads) * 100.0);
-        perf_print_core(stream, core_id, "scheduler: idle=%d%%, occupancy=%.1f (%d%%), warp_efficiency=%.1f (%d%%)",
+        perf_print_core(stream, core_id, "scheduler: idle=%d%%, occupancy=%.1f (%d%%), simt_util=%.1f (%d%%)",
                         idle_pct, avg_occ, occ_pct, warp_eff, warp_eff_pct);
 
         // Pipeline stalls report
@@ -319,8 +319,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
         // Memory report
         const double ifetch_avg_lt = safe_div((double)c.ifetch_lt, (double)c.ifetches);
         const double load_avg_lt = safe_div((double)c.load_lt, (double)c.loads);
-        perf_print_core(stream, core_id, "memory: ifetches=%" PRIu64 ", ifetch_latency=%.2f, loads=%" PRIu64 ", load_latency=%.2f, stores=%" PRIu64,
-                        c.ifetches, ifetch_avg_lt, c.loads, load_avg_lt, c.stores);
+        perf_print_core(stream, core_id, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64,
+                        ifetch_avg_lt, load_avg_lt, c.loads, c.stores);
 
         perf_print_core(stream, core_id, "instrs=%" PRIu64 ", cycles=%" PRIu64 ", IPC=%.3f", c.instrs, c.cycles, ipc);
       }
@@ -373,7 +373,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     const int tot_occ_pct = (int)std::lround(safe_div(tot_avg_occ, (double)num_warps) * 100.0);
     const double tot_warp_eff = safe_div((double)tot.issued_threads, (double)tot.issued_warps);
     const int tot_warp_eff_pct = (int)std::lround(safe_div(tot_warp_eff, (double)num_threads) * 100.0);
-    perf_print(stream, "scheduler: idle=%d%%, occupancy=%.1f (%d%%), warp_efficiency=%.1f (%d%%)",
+    perf_print(stream, "scheduler: idle=%d%%, occupancy=%.1f (%d%%), simt_util=%.1f (%d%%)",
                tot_idle_pct, tot_avg_occ, tot_occ_pct, tot_warp_eff, tot_warp_eff_pct);
 
     // Pipeline stalls report
@@ -408,31 +408,10 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     // Memory report
     const double tot_ifetch_avg_lt = safe_div((double)tot.ifetch_lt, (double)tot.ifetches);
     const double tot_load_avg_lt = safe_div((double)tot.load_lt, (double)tot.loads);
-    perf_print(stream, "memory: ifetches=%" PRIu64 ", ifetch_latency=%.2f, loads=%" PRIu64 ", load_latency=%.2f, stores=%" PRIu64,
-               tot.ifetches, tot_ifetch_avg_lt, tot.loads, tot_load_avg_lt, tot.stores);
-
-    // Roofline
-    double avg_threads = safe_div((double)tot.issued_threads, (double)tot.issued_warps);
-    uint64_t warp_flops = tot.instr_fpu + tot.instr_tcu;
-    double thread_flops = (double)warp_flops * avg_threads;
-    double bytes = (double)(tot.mem_reads + tot.mem_writes) * CACHE_BLOCK_SIZE;
-    double intensity = safe_div(thread_flops, bytes);
-    // peak compute: one FPU instruction per cycle with all threads active, across all cores
-    double peak_flops_per_cycle = (double)(num_cores * num_threads * issue_width);
-    double flops_per_cycle = safe_div(thread_flops, (double)max_cycles);
-    int compute_eff_pct = (int)std::lround(safe_div(flops_per_cycle, peak_flops_per_cycle) * 100.0);
-    double mem_bw_per_cycle = safe_div(bytes, (double)max_cycles);
-
-    if (clock_mhz != 0) {
-      double runtime_sec = safe_div((double)max_cycles, (double)clock_mhz * 1e6);
-      double flops = thread_flops / runtime_sec;
-      double mem_bw_MBps = safe_div(bytes / 1e6, runtime_sec);
-      perf_print(stream, "roofline: compute=%.2f GFLOPs/s (%d%% peak), memory=%.2f MB/s, intensity=%.2f FLOPs/Byte, clock=%.2f MHz",
-                 flops / 1e9, compute_eff_pct, mem_bw_MBps, intensity, (double)clock_mhz);
-    } else {
-      perf_print(stream, "roofline: compute=%.4f FLOPs/c (%d%% peak), memory=%.4f Bytes/c, intensity=%.2f FLOPs/Byte",
-                 flops_per_cycle, compute_eff_pct, mem_bw_per_cycle, intensity);
-    }
+    uint64_t read_bytes = tot.mem_reads * CACHE_BLOCK_SIZE;
+    uint64_t write_bytes = tot.mem_writes * CACHE_BLOCK_SIZE;
+    perf_print(stream, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64 ", read_bytes=%" PRIu64 ", write_bytes=%" PRIu64,
+               tot_ifetch_avg_lt, tot_load_avg_lt, tot.loads, tot.stores, read_bytes, write_bytes);
   } break;
 
   case VX_DCR_MPM_CLASS_MEM: {

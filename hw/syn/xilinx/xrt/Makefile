@@ -197,7 +197,7 @@ $(BUILD_DIR)/sources.txt:
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(VERILATOR_PATH)/bin/verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
 
 scope-json: $(BIN_DIR)/scope.json
 $(BIN_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
