@@ -978,24 +978,24 @@ tensor_wg() {
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg
 
     # WGMMA sparse tests (simx)
-    make -C tests/regression/sgemm_tcu_sp_wg clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_sp_wg
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp_wg
-    make -C tests/regression/sgemm_tcu_sp_wg clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_sp_wg
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp_wg
-    make -C tests/regression/sgemm_tcu_sp_wg clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_sp_wg
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp_wg
-    make -C tests/regression/sgemm_tcu_sp_wg clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_sp_wg
-    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp_wg
+    make -C tests/regression/sgemm_tcu_wg_sp clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_wg_sp
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp
+    make -C tests/regression/sgemm_tcu_wg_sp clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_wg_sp
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp
+    make -C tests/regression/sgemm_tcu_wg_sp clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_wg_sp
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp
+    make -C tests/regression/sgemm_tcu_wg_sp clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_wg_sp
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp
 
     # WGMMA sparse tests (rtlsim)
-    make -C tests/regression/sgemm_tcu_sp_wg clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_sp_wg
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp_wg
-    make -C tests/regression/sgemm_tcu_sp_wg clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_sp_wg
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp_wg
-    make -C tests/regression/sgemm_tcu_sp_wg clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_sp_wg
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp_wg
-    make -C tests/regression/sgemm_tcu_sp_wg clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_sp_wg
-    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp_wg
+    make -C tests/regression/sgemm_tcu_wg_sp clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_wg_sp
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
+    make -C tests/regression/sgemm_tcu_wg_sp clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu_wg_sp
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
+    make -C tests/regression/sgemm_tcu_wg_sp clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_wg_sp
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
+    make -C tests/regression/sgemm_tcu_wg_sp clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_wg_sp
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
 
     echo "tensor tensor_wg tests done!"
 }
