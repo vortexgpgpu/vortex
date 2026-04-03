@@ -28,6 +28,15 @@ namespace vt = tensor;
 
 ///////////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+static void convert_row_to_col_major(T *dst, const T *src, uint32_t rows, uint32_t cols) {
+  for (uint32_t r = 0; r < rows; ++r) {
+    for (uint32_t c = 0; c < cols; ++c) {
+      dst[c * rows + r] = src[r * cols + c];
+    }
+  }
+}
+
 static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t height, const uint8_t *src) {
   // Calculate output size and stride
   uint32_t out_bytes = (width * height + 1) / 2;
@@ -657,7 +666,9 @@ int main(int argc, char *argv[]) {
       convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());
       RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB));
     } else {
-      RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
+      std::vector<itype_t> h_B_col(sizeB);
+      convert_row_to_col_major(h_B_col.data(), h_B.data(), K, N);
+      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB * sizeof(itype_t)));
     }
   }
 
