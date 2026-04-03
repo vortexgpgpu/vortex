@@ -41,7 +41,7 @@
 #include <util.h>
 
 #ifndef MEM_CLOCK_RATIO
-#define MEM_CLOCK_RATIO 1.5
+#define MEM_CLOCK_RATIO 1
 #endif
 
 #ifndef TRACE_START_TIME
@@ -110,7 +110,7 @@ public:
     device_->trace(tfp_, 99);
     tfp_->open("trace.vcd");
   #endif
-  
+
   #ifdef SAIF_OUTPUT
     Verilated::traceEverOn(true);
     sfp_ = new VerilatedSaifC();

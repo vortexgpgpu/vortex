@@ -60,7 +60,7 @@ endif
 all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(RTL_SRCS)
-	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -MMD -o ../$@
+	$(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -MMD -o ../$@
 
 run: $(DESTDIR)/$(PROJECT)
 	$(DESTDIR)/$(PROJECT) $(OPTS)

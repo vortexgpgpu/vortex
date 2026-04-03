@@ -18,7 +18,7 @@
 # Usage (from build dir):
 #   python3 tests/regression/sgemmx/roofline.py [--driver=rtlsim] [--cores=1]
 #           [--warps=4] [--threads=4] [--n=128]
-#           [--freq=400] [--bw=51.2] [--perf=1]
+#           [--freq=<auto>] [--bw=51.2] [--perf=1]
 #           [--output=roofline.png]
 #
 # Usage (from source tree, targeting a specific build dir):
@@ -36,7 +36,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-VORTEX_HOME = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
+VORTEX_HOME = os.path.normpath(os.path.join(SCRIPT_DIR, ".."))
+
+
+def read_platform_clock(build_dir):
+    """Read PLATFORM_CLOCK_RATE from generated VX_config.h in the build dir."""
+    for candidate in (build_dir, os.path.join(build_dir, "hw")):
+        cfg = os.path.join(candidate, "VX_config.h") if candidate else None
+        if cfg and os.path.isfile(cfg):
+            with open(cfg) as f:
+                for line in f:
+                    m = re.match(r"#define\s+PLATFORM_CLOCK_RATE\s+(\d+)", line)
+                    if m:
+                        return int(m.group(1))
+    return None
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -61,8 +74,10 @@ def parse_args():
                    help="Issue width (ISSUE_WIDTH)")
     p.add_argument("--n",         type=int, default=32,
                    help="Square matrix dimension N (SGEMM computes N×N × N×N)")
-    p.add_argument("--freq",      type=float, default=400.0,
-                   help="Pipeline clock frequency in MHz")
+    p.add_argument("--freq",      type=float, default=0,
+                   help="Pipeline clock frequency in MHz "
+                        "(0 = per-cycle mode, implies --by-cycle; "
+                        "omit or set >0 to use time domain)")
     p.add_argument("--bw",        type=float, default=None,
                    help="Peak memory bandwidth in GB/s "
                         "(default: PLATFORM_MEMORY_DATA_SIZE × "
@@ -92,12 +107,13 @@ def parse_args():
 def find_blackbox(args):
     """Return (blackbox_path, cwd) for the correct build directory."""
     if args.build_dir:
-        bdir = os.path.abspath(args.build_dir)
+        bdir = os.path.abspath(os.path.expanduser(args.build_dir))
     else:
         # Try the build_test32 / build_test64 sibling of VORTEX_HOME, or VORTEX_HOME itself
         for candidate in (
-            os.path.join(VORTEX_HOME, "build_test32"),
-            os.path.join(VORTEX_HOME, "build_test64"),
+            os.path.join(VORTEX_HOME, "build"),
+            os.path.join(VORTEX_HOME, "build32"),
+            os.path.join(VORTEX_HOME, "build64"),
             VORTEX_HOME,
         ):
             bb = os.path.join(candidate, "ci", "blackbox.sh")
@@ -180,9 +196,6 @@ def parse_perf(output):
       PERF: core0: instrs=X, cycles=Y, IPC=Z
       PERF: core0: memory: ifetches=..., loads=L, ..., stores=S
 
-    Roofline line (class 1, summary):
-      PERF: roofline: compute=..., memory=B Bytes, intensity=I FLOPs/Byte
-
     Returns a dict with aggregated metrics.
     """
     perf = {}
@@ -214,19 +227,18 @@ def parse_perf(output):
 
     perf["cores_seen"] = max(1, len(re.findall(r"PERF: core\d+: instrs=", output)))
 
-    # --- Roofline line: actual bytes transferred ---
-    rl = re.search(
-        r"PERF:\s+roofline:.*?memory=([0-9.]+)\s+Bytes.*?intensity=([0-9.]+)\s+FLOPs/Byte",
+    # --- Memory transactions: actual bytes transferred ---
+    # read_bytes/write_bytes are printed on the summary memory line.
+    mem = re.search(
+        r"PERF:\s+memory:.*?read_bytes=(\d+).*?write_bytes=(\d+)",
         output
     )
-    if rl:
-        perf["actual_bytes"]     = float(rl.group(1))
-        # intensity reported by perf.cpp counts 1 FLOP per FPU instr;
-        # multiply by 2 to get actual FLOP/byte (mul + add = FMA = 2 FLOPs)
-        perf["actual_ai"]        = float(rl.group(2)) * 2.0
+    if mem:
+        perf["actual_bytes"] = int(mem.group(1)) + int(mem.group(2))
+        perf["actual_ai"]    = None  # computed later from flops / actual_bytes
     else:
-        perf["actual_bytes"]     = None
-        perf["actual_ai"]        = None
+        perf["actual_bytes"] = None
+        perf["actual_ai"]    = None
 
     return perf
 
@@ -508,7 +520,10 @@ def print_metrics(args, perf, m):
     print(f"  Config          : {args.cores}C / {args.warps}W / {args.threads}T")
     print(f"  Matrix size     : {args.n} × {args.n}")
     print(f"  Driver          : {args.driver}")
-    print(f"  Clock           : {args.freq:.0f} MHz")
+    if args.by_cycle:
+        print(f"  Domain          : per-cycle")
+    else:
+        print(f"  Clock           : {args.freq:.0f} MHz")
     print()
     print(f"  FLOPs           : {m['flops'] / 1e6:.3f} M  (2·N³)")
     print(f"  Bytes  (ideal)  : {m['bytes_ideal'] / 1024:.1f} KiB"
@@ -520,15 +535,24 @@ def print_metrics(args, perf, m):
     print(f"  Cycles          : {perf['cycles']:,}")
     print(f"  Instrs          : {perf['instrs']:,}")
     print(f"  IPC             : {perf['ipc']:.3f}")
-    print(f"  Exec time       : {m['time_sec'] * 1e3:.3f} ms")
     print()
-    print(f"  Actual GFLOP/s  : {m['gflops_actual']:.4f}")
-    print(f"  Peak GFLOP/s    : {m['gflops_peak']:.2f}"
-          f"  (2 × {args.cores}C × {args.threads}T × {args.freq:.0f} MHz)")
-    print(f"  Compute util.   : {m['util_compute']:.3f} %")
-    print()
-    print(f"  Peak BW         : {m['peak_bw_GBs']:.1f} GB/s")
-    print(f"  Ridge AI        : {m['ridge_ai']:.2f} FLOP/byte")
+    if args.by_cycle:
+        print(f"  Actual FLOP/c   : {m['flops_per_cycle']:.4f}")
+        print(f"  Peak FLOP/c     : {m['peak_flops_per_cycle']:.0f}"
+              f"  (2 × {args.cores}C × {args.threads}T)")
+        print(f"  Compute util.   : {m['util_compute_cycle']:.3f} %")
+        print()
+        print(f"  Peak BW         : {m['peak_bw_per_cycle']:.2f} B/cycle")
+        print(f"  Ridge AI        : {m['ridge_ai_cycle']:.2f} FLOP/byte")
+    else:
+        print(f"  Exec time       : {m['time_sec'] * 1e3:.3f} ms")
+        print(f"  Actual GFLOP/s  : {m['gflops_actual']:.4f}")
+        print(f"  Peak GFLOP/s    : {m['gflops_peak']:.2f}"
+              f"  (2 × {args.cores}C × {args.threads}T × {args.freq:.0f} MHz)")
+        print(f"  Compute util.   : {m['util_compute']:.3f} %")
+        print()
+        print(f"  Peak BW         : {m['peak_bw_GBs']:.1f} GB/s")
+        print(f"  Ridge AI        : {m['ridge_ai']:.2f} FLOP/byte")
     print(f"  AI  (ideal)     : {m['ai_ideal']:.2f} FLOP/byte  (N/6)")
     if m["ai_actual"] is not None:
         print(f"  AI  (actual)    : {m['ai_actual']:.3f} FLOP/byte")
@@ -545,6 +569,13 @@ def print_metrics(args, perf, m):
 
 def main():
     args = parse_args()
+
+    # --freq=0 implies --by-cycle (frequency-independent mode)
+    if args.freq == 0:
+        args.by_cycle = True
+        _, bdir = find_blackbox(args)
+        freq = read_platform_clock(bdir)
+        args.freq = float(freq) if freq else 1.0
 
     output = run_sgemmx_capture(args)
     perf   = parse_perf(output)

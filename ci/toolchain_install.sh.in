@@ -120,15 +120,15 @@ verilator()
     *)              parts=$(eval echo {a..a}) ;;
     esac
     echo $parts
-    rm -f verilator2.tar.bz2.parta*
+    rm -f verilator.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/verilator/$OSVERSION/verilator2.tar.bz2.parta$x
+        wget $REPOSITORY/verilator/$OSVERSION/verilator.tar.bz2.parta$x
     done
-    cat verilator2.tar.bz2.parta* > verilator2.tar.bz2
-    tar -xvf verilator2.tar.bz2
+    cat verilator.tar.bz2.parta* > verilator.tar.bz2
+    tar -xvf verilator.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/verilator && mv verilator $TOOLDIR
-    rm -rf verilator verilator2.tar.bz2*
+    rm -rf verilator verilator.tar.bz2*
 }
 
 sv2v()

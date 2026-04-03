@@ -21,7 +21,7 @@
 #endif
 
 #ifndef MEM_CLOCK_RATIO
-#define MEM_CLOCK_RATIO   1.5
+#define MEM_CLOCK_RATIO   1
 #endif
 
 #ifndef __MAX

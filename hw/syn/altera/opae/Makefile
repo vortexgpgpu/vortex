@@ -177,7 +177,7 @@ endif
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml: setup
-	verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.sv --xml-output $(BUILD_DIR)/vortex.xml
+	$(VERILATOR_PATH)/bin/verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.sv --xml-output $(BUILD_DIR)/vortex.xml
 
 scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
