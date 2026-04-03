@@ -32,15 +32,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // Load A tile
     ctx::load_matrix_sync(fragA, pTileA, K);
 
-    // Load B tile
-    if constexpr (vt::ITYPE::bits < 8) {
-      // For sub-byte matrix B must be in col-major format
+    // Load B tile (col-major for all types)
       auto pTileB = pB + tile_col * K + i;
       ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
-    } else {
-      auto pTileB = pB + i * N + tile_col;
-      ctx::load_matrix_sync(fragB, pTileB, N);
-    }
 
     // Matrix multiply-accumulate: c += a * b
     ctx::mma_sync(fragC, fragA, fragB, fragC);
