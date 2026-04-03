@@ -8,7 +8,7 @@
 
 constexpr uint32_t kDescSrc = 0;
 
-extern "C" void kernel_main(kernel_arg_t* arg) {
+__kernel void kernel_main(kernel_arg_t* arg) {
   const uint32_t cta_id = csr_read(VX_CSR_CTA_ID);
 
   // Early exit for inactive CTAs (active_ctas == 0 means all active)

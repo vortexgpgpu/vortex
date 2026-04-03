@@ -13,7 +13,7 @@ static inline uint32_t xor_0_to_n(uint32_t n) {
   }
 }
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto A_ptr = reinterpret_cast<TYPE*>(arg->A_addr);
   auto B_ptr = reinterpret_cast<TYPE*>(arg->B_addr);
   auto C_ptr = reinterpret_cast<TYPE*>(arg->C_addr);

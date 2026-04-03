@@ -8,7 +8,7 @@
 static constexpr uint32_t kMinDrainExtra = 16;
 static constexpr uint32_t kLoadsPerIter  = 8;
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t tid        = threadIdx.x;
   uint32_t iterations = arg->iterations;
 

@@ -17,6 +17,8 @@
 #include <vx_intrinsics.h>
 #include <stdint.h>
 
+#define __kernel extern "C" __attribute__((annotate("vortex.kernel")))
+
 // flat local thread index = cta_rank * num_threads_per_warp + thread_id
 struct ThreadIdx {
   struct {

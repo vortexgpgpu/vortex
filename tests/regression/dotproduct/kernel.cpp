@@ -1,7 +1,7 @@
 #include <vx_spawn2.h>
 #include "common.h"
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto* __restrict src0 = reinterpret_cast<TYPE*>(arg->src0_addr);
   auto* __restrict src1 = reinterpret_cast<TYPE*>(arg->src1_addr);
   auto* __restrict dst  = reinterpret_cast<TYPE*>(arg->dst_addr);

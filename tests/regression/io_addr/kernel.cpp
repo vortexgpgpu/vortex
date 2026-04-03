@@ -1,7 +1,7 @@
 #include <vx_spawn2.h>
 #include "common.h"
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 	uint64_t* src_ptr = (uint64_t*)arg->src_addr;
 	uint32_t* dst_ptr = (uint32_t*)arg->dst_addr;
 

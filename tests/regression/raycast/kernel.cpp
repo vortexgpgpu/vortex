@@ -2,7 +2,7 @@
 #include <vx_spawn2.h>
 #include "render.h"
 
-extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t y = blockIdx.y;
 

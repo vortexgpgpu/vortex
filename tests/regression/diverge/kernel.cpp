@@ -75,7 +75,7 @@ static __attribute__((noinline)) int nested_chain_1to8(int v, uint32_t id, uint3
   return v;
 }
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   int32_t* src_ptr = (int32_t*)arg->src_addr;
   int32_t* dst_ptr = (int32_t*)arg->dst_addr;
 
@@ -145,7 +145,7 @@ extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // NEW: deep nested branch test (last so host/ref stays simple to mirror)
   uint32_t d = arg->branch_depth;
   if (d > 8) d = 8;
-	
+
   value = nested_chain_1to8(value, task_id, d);
 
   dst_ptr[task_id] = value;

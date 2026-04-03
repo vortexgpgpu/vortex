@@ -20,7 +20,7 @@ static inline float warp_reduce_sum(float x, uint32_t warp_size) {
   return x;
 }
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto* __restrict src0 = reinterpret_cast<float*>(arg->src0_addr);
   auto* __restrict src1 = reinterpret_cast<float*>(arg->src1_addr);
   auto* __restrict dst  = reinterpret_cast<float*>(arg->dst_addr);

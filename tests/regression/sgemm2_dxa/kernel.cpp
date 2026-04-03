@@ -18,7 +18,7 @@ static inline void gemm_accumulate(TYPE& sum, const TYPE* shA, const TYPE* shB, 
   }
 }
 
-extern "C" void kernel_main(kernel_arg_t* arg) {
+__kernel void kernel_main(kernel_arg_t* arg) {
   auto C = reinterpret_cast<TYPE*>(arg->C_addr);
 
   const uint32_t size      = arg->size;

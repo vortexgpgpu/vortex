@@ -1,7 +1,7 @@
 #include <vx_spawn2.h>
 #include "common.h"
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   if (threadIdx.x != 0)
     return;
 

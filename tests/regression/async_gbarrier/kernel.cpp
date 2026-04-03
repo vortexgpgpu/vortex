@@ -3,7 +3,7 @@
 #include "common.h"
 #include <vx_barrier.h>
 
-extern "C" void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   vortex::gbarrier bar1(1), bar2(2);
 
   auto cid = vx_core_id();
