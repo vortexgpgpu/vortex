@@ -87,7 +87,7 @@ Core::Core(const SimContext& ctx,
   local_mem_ = LocalMem::Create(sname, LocalMem::Config{
     (1 << LMEM_LOG_SIZE),
     LSU_WORD_SIZE,
-    LSU_CHANNELS,
+    LSU_NUM_REQS,
     log2ceil(LMEM_NUM_BANKS),
     false
   });
@@ -105,28 +105,25 @@ Core::Core(const SimContext& ctx,
     lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
   }
 
-  // create lmem arbiter
-  snprintf(sname, 100, "%s-lmem_arb", name);
-  auto lmem_arb = LsuArbiter::Create(sname, ArbiterType::RoundRobin, NUM_LSU_BLOCKS, 1);
-
-  // create lmem adapter
-  snprintf(sname, 100, "%s-lsu_lmem_adapter", name);
-  auto lsu_lmem_adapter = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
-
-  // connect lmem switch
+  // create per-block lmem adapters
+  std::vector<LsuMemAdapter::Ptr> lsu_lmem_adapter(NUM_LSU_BLOCKS);
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    lmem_switch_.at(b)->ReqOutLmem.bind(&lmem_arb->ReqIn.at(b));
-    lmem_arb->RspOut.at(b).bind(&lmem_switch_.at(b)->RspInLmem);
+    snprintf(sname, 100, "%s-lsu_lmem_adapter%d", name, b);
+    lsu_lmem_adapter.at(b) = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
   }
 
-  // connect lmem arbiter
-  lmem_arb->ReqOut.at(0).bind(&lsu_lmem_adapter->ReqIn);
-  lsu_lmem_adapter->RspOut.bind(&lmem_arb->RspIn.at(0));
+  // connect lmem switch to per-block adapters
+  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+    lmem_switch_.at(b)->ReqOutLmem.bind(&lsu_lmem_adapter.at(b)->ReqIn);
+    lsu_lmem_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInLmem);
+  }
 
-  // connect lmem adapter
-  for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
-    lsu_lmem_adapter->ReqOut.at(c).bind(&local_mem_->Inputs.at(c));
-    local_mem_->Outputs.at(c).bind(&lsu_lmem_adapter->RspIn.at(c));
+  // connect per-block lmem adapters to local memory ports
+  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+    for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
+      lsu_lmem_adapter.at(b)->ReqOut.at(c).bind(&local_mem_->Inputs.at(b * LSU_CHANNELS + c));
+      local_mem_->Outputs.at(b * LSU_CHANNELS + c).bind(&lsu_lmem_adapter.at(b)->RspIn.at(c));
+    }
   }
 
   if ((NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) {

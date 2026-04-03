@@ -23,8 +23,10 @@ _start:
 
 #ifdef KMU_ENABLE
 
+#ifdef NEED_GP
   # set global pointer register
   la    gp, __global_pointer
+#endif
 
   # set stack pointer register
   LOAD_IMMEDIATE64(sp, STACK_BASE_ADDR)
@@ -32,6 +34,7 @@ _start:
   sll   t1, t0, STACK_LOG2_SIZE
   sub   sp, sp, t1
 
+#ifdef NEED_TLS
   # set thread pointer register
   # use address space after BSS region
   la    t1, __tbss_size
@@ -41,8 +44,9 @@ _start:
 
   # initialize TLS for all warps
   call  __init_tls
+#endif
 
-#ifdef HAVE_INITFINI_ARRAY
+#ifdef NEED_INITFINI
   # run global initialization functions
   call  __libc_init_array
 #endif
@@ -66,6 +70,7 @@ _start:
   li    t0, 1
   .insn r RISCV_CUSTOM0, 0, 0, x0, t0, x0  # tmc t0
 
+#ifdef NEED_TLS
   # initialize TLS for all warps
   csrr  t0, VX_CSR_NUM_WARPS  # get num warps
   la    t1, init_tls_all
@@ -75,6 +80,7 @@ _start:
   call  __init_tls
   li    t0, 1
   .insn r RISCV_CUSTOM0, 0, 0, x0, t0, x0  # tmc t0
+#endif
 
 
   # synchronize all cores after clearing BSS to avoid one core entering `main`
@@ -86,7 +92,7 @@ _start:
   .insn r RISCV_CUSTOM0, 6, 0, t2, t1, t0  # arrive -> token
   .insn r RISCV_CUSTOM0, 7, 0, x0, t1, t2  # wait(token)
 
-#ifdef HAVE_INITFINI_ARRAY
+#ifdef NEED_INITFINI
   # run global initialization functions
   call  __libc_init_array
 #endif
@@ -110,11 +116,13 @@ _Exit:
 .type init_regs, @function
 .local init_regs
 init_regs:
+#ifdef NEED_GP
   # set global pointer register
   .option push
   .option norelax
   la    gp, __global_pointer
   .option pop
+#endif
 
   # set stack pointer register
   LOAD_IMMEDIATE64(sp, STACK_BASE_ADDR)
@@ -122,12 +130,14 @@ init_regs:
   sll   t1, t0, STACK_LOG2_SIZE
   sub   sp, sp, t1
 
+#ifdef NEED_TLS
   # set thread pointer register
   # use address space after BSS region
   la    t1, __tbss_size
   mul   t0, t0, t1
   la    tp, _end
   add   tp, tp, t0
+#endif
   ret
 
 .section .text
@@ -140,6 +150,7 @@ init_regs_all:
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
   ret
 
+#ifdef NEED_TLS
 .section .text
 .type init_tls_all, @function
 .local init_tls_all
@@ -149,6 +160,7 @@ init_tls_all:
   call  __init_tls
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
   ret
+#endif
 
 #endif
 

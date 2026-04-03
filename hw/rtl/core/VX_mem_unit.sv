@@ -76,51 +76,41 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         );
     end
 
-    VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LMEM_TAG_WIDTH)
-    ) lmem_arb_if[1]();
-
-    VX_lsu_mem_arb #(
-        .NUM_INPUTS (`NUM_LSU_BLOCKS),
-        .NUM_OUTPUTS(1),
-        .NUM_LANES  (`NUM_LSU_LANES),
-        .DATA_SIZE  (LSU_WORD_SIZE),
-        .TAG_WIDTH  (LSU_TAG_WIDTH),
-    `ifdef EXT_DXA_ENABLE
-        .OUT_TAG_WIDTH(LMEM_TAG_WIDTH),
-    `endif
-        .TAG_SEL_IDX(0),
-        .ARBITER    ("R"),
-        .REQ_OUT_BUF(0),
-        .RSP_OUT_BUF(2)
-    ) lmem_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (lsu_lmem_if),
-        .bus_out_if (lmem_arb_if)
-    );
+    // Per-block local memory adapters to avoid deadlock when NUM_LSU_BLOCKS > 1.
+    // Each block gets dedicated ports into local memory, eliminating the circular
+    // dependency that arises from sharing a single adapter's unpack/pack buffers.
 
     VX_mem_bus_if #(
         .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LMEM_TAG_WIDTH)
-    ) lmem_adapt_if[`NUM_LSU_LANES]();
+        .TAG_WIDTH (LSU_TAG_WIDTH)
+    ) lmem_adapt_if[LSU_NUM_REQS]();
 
-    VX_lsu_adapter #(
-        .NUM_LANES    (`NUM_LSU_LANES),
-        .DATA_SIZE    (LSU_WORD_SIZE),
-        .TAG_WIDTH    (LMEM_TAG_WIDTH),
-        .TAG_SEL_BITS (LMEM_TAG_WIDTH - UUID_WIDTH),
-        .ARBITER      ("P"),
-        .REQ_OUT_BUF  (3),
-        .RSP_OUT_BUF  (0)
-    ) lmem_adapter (
-        .clk        (clk),
-        .reset      (reset),
-        .lsu_mem_if (lmem_arb_if[0]),
-        .mem_bus_if (lmem_adapt_if)
-    );
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lmem_adapters
+
+        VX_mem_bus_if #(
+            .DATA_SIZE (LSU_WORD_SIZE),
+            .TAG_WIDTH (LSU_TAG_WIDTH)
+        ) lmem_block_if[`NUM_LSU_LANES]();
+
+        VX_lsu_adapter #(
+            .NUM_LANES    (`NUM_LSU_LANES),
+            .DATA_SIZE    (LSU_WORD_SIZE),
+            .TAG_WIDTH    (LSU_TAG_WIDTH),
+            .TAG_SEL_BITS (LSU_TAG_WIDTH - UUID_WIDTH),
+            .ARBITER      ("P"),
+            .REQ_OUT_BUF  (3),
+            .RSP_OUT_BUF  (0)
+        ) lmem_adapter (
+            .clk        (clk),
+            .reset      (reset),
+            .lsu_mem_if (lsu_lmem_if[i]),
+            .mem_bus_if (lmem_block_if)
+        );
+
+        for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin : g_lmem_adapt_if
+            `ASSIGN_VX_MEM_BUS_IF (lmem_adapt_if[i * `NUM_LSU_LANES + j], lmem_block_if[j]);
+        end
+    end
 
     VX_mem_bus_if #(
         .DATA_SIZE  (`LMEM_NUM_BANKS * LSU_WORD_SIZE),
@@ -146,11 +136,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_local_mem #(
         .INSTANCE_ID (`SFORMATF(("%s-lmem", INSTANCE_ID))),
         .SIZE        (1 << `LMEM_LOG_SIZE),
-        .NUM_REQS    (`NUM_LSU_LANES),
+        .NUM_REQS    (LSU_NUM_REQS),
         .NUM_BANKS   (`LMEM_NUM_BANKS),
         .WORD_SIZE   (LSU_WORD_SIZE),
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
-        .TAG_WIDTH   (LMEM_TAG_WIDTH),
+        .TAG_WIDTH   (LSU_TAG_WIDTH),
         .DMA_ENABLE  (LMEM_DMA_EN),
         .DMA_TAG_WIDTH (LMEM_DMA_TAG_W),
         .OUT_BUF     (3)
