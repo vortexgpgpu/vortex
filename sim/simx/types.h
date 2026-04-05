@@ -719,11 +719,13 @@ enum class TcuType {
 
 struct IntrTcuArgs {
   uint32_t is_sparse : 1;
-  uint32_t fmt_s  : 4;
-  uint32_t fmt_d  : 4;
-  uint32_t step_m : 4;
-  uint32_t step_n : 4;
-  uint32_t step_k : 4;
+  uint32_t is_a_smem : 1; // 0=register, 1=shared memory (B is always smem)
+  uint32_t cd_nregs  : 2; // 0=8, 1=16, 2=32 C/D registers
+  uint32_t fmt_s     : 4;
+  uint32_t fmt_d     : 4;
+  uint32_t step_m    : 4;
+  uint32_t step_n    : 4;
+  uint32_t step_k    : 4;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {

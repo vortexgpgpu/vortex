@@ -84,7 +84,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef TCU_WGMMA_ENABLE
     wire is_wgmma = (execute_if.data.op_type == INST_TCU_WGMMA);
-    assign rs1_data = is_wgmma ? tbuf_rs1_data : execute_if.data.rs1_data;
+    wire wg_a_smem = execute_if.data.op_args.tcu.a_from_smem;
+    // A source: tile buffer (smem) or register file
+    assign rs1_data = (is_wgmma && wg_a_smem) ? tbuf_rs1_data : execute_if.data.rs1_data;
+    // B source: always tile buffer (smem) for WGMMA
     assign rs2_data = is_wgmma ? tbuf_rs2_data[TCU_BLOCK_CAP-1:0] : execute_if.data.rs2_data;
 `else
     assign rs1_data = execute_if.data.rs1_data;
@@ -183,7 +186,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef TCU_SPARSE_ENABLE
     wire [OFF_W-1:0] b_off = is_sparse
         ? (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS_SP-1)) << LG_B_BS_SP
-        : (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1))    << LG_B_BS;
+        : (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
 `else
     wire [OFF_W-1:0] b_off = (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
 `endif
@@ -191,15 +194,15 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // Unified sparse metadata
     // -----------------------------------------------------------------------
-    //   WMMA_SP:  from VX_tcu_meta (per-warp register-file metadata store)
-    //   WGMMA_SP: from VX_tcu_tbuf (pre-extracted from SMEM metadata)
-    //   Both produce TCU_TC_M per-row slices of TCU_MAX_META_ROW_WIDTH bits,
-    //   indexed by (step_m, step_k).
+    // WMMA_SP:  from VX_tcu_meta (per-warp register-file metadata store)
+    // WGMMA_SP: from VX_tcu_tbuf (pre-extracted from SMEM metadata)
+    // Both produce TCU_TC_M per-row slices of TCU_MAX_META_ROW_WIDTH bits,
+    // indexed by (step_m, step_k).
 
 `ifdef TCU_SPARSE_ENABLE
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
     VX_tcu_meta #(
-        .INSTANCE_ID  (INSTANCE_ID)
+        .INSTANCE_ID (INSTANCE_ID)
     ) tcu_meta (
         .clk    (clk),
         .reset  (reset),
@@ -354,12 +357,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             );
         `endif
 
-        // NaN-box the fp32 result for XLEN=64: upper 32 bits must be all-1s per RVF spec.
-        if (`XLEN > 32) begin : g_result_nanbox
-            assign result_if.data.data[i * TCU_TC_N + j] = {32'hffffffff, d_val[i][j]};
-        end else begin : g_result_passthrough
-            assign result_if.data.data[i * TCU_TC_N + j] = d_val[i][j];
-        end
+            // NaN-box the fp32 result for XLEN=64: upper 32 bits must be all-1s per RVF spec.
+            if (`XLEN > 32) begin : g_result_nanbox
+                assign result_if.data.data[i * TCU_TC_N + j] = {32'hffffffff, d_val[i][j]};
+            end else begin : g_result_passthrough
+                assign result_if.data.data[i * TCU_TC_N + j] = d_val[i][j];
+            end
 
         `ifdef DBG_TRACE_TCU
             always @(posedge clk) begin

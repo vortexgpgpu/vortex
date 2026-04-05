@@ -630,7 +630,9 @@ package VX_gpu_pkg;
 
 `ifdef EXT_TCU_ENABLE
     typedef struct packed {
-        logic [(INST_ARGS_BITS-21)-1:0] __padding;
+        logic __padding;
+        logic a_from_smem;    // 0=register, 1=shared memory (B is always smem)
+        logic [1:0] cd_nregs; // 0=8, 1=16, 2=32 C/D registers
         logic is_sparse;
         logic [3:0] fmt_d;
         logic [3:0] fmt_s;

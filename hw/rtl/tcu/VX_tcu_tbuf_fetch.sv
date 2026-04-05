@@ -159,10 +159,9 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifndef TCU_SPARSE_ENABLE
     // Shared B buffer: in the non-sparse (multi-warp CTA) path all warps share
-    // the same physical smem, so desc_b is identical across slots.  One copy
-    // of B suffices.  Kept as FFs: no slot dimension, all B_TOTAL words read
-    // combinationally in parallel — a per-slot RAM address port would not help.
-    logic [31:0]       shared_b_buf [0:B_TOTAL-1];
+    // the same physical smem, so desc_b is identical across slots. One copy
+    // of B suffices. Stored in a single-entry LUTRAM (SIZE=1) to avoid
+    // B_TOTAL*32 FFs; async read gives same combinational latency.
     logic [`XLEN-1:0]  shared_b_desc;
     logic              shared_b_valid;
     logic              shared_b_dirty;
@@ -543,19 +542,43 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
 `ifndef TCU_SPARSE_ENABLE
-    always_ff @(posedge clk) begin
+    // shared_b_ram — single-entry LUTRAM (SIZE=1, async read).
+    // Replaces B_TOTAL*32 FFs with LUTRAM cells at no timing cost.
+    logic [B_TOTAL*32-1:0] b_wdata;
+    logic [B_TOTAL-1:0]    b_wren;
+
+    always_comb begin
+        b_wdata = '0;
+        b_wren  = '0;
         if (tcu_lmem_if.rsp_valid && in_fetch_b) begin
             for (int b = 0; b < NUM_BANKS; ++b) begin
-                automatic int idx = int'(rsp_ctr_r) * NUM_BANKS + b;
-                if (idx < B_TOTAL)
-                    shared_b_buf[idx] <= tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
+                if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin
+                    b_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
+                    b_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
+                        tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
+                end
             end
         end
     end
 
-    for (genvar w = 0; w < B_TOTAL; ++w) begin : g_hit_b
-        assign hit_b_buf[w] = shared_b_buf[w];
-    end
+    VX_dp_ram #(
+        .DATAW   (B_TOTAL * 32),
+        .SIZE    (1),
+        .WRENW   (B_TOTAL),
+        .LUTRAM  (1),
+        .OUT_REG (0),
+        .RDW_MODE("W")
+    ) shared_b_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (tcu_lmem_if.rsp_valid && in_fetch_b),
+        .wren  (b_wren),
+        .waddr (1'b0),
+        .wdata (b_wdata),
+        .raddr (1'b0),
+        .rdata (hit_b_buf)
+    );
 `else // TCU_SPARSE_ENABLE
     logic [B_TOTAL*32-1:0] b_wdata;
     logic [B_TOTAL-1:0]    b_wren;

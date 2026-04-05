@@ -97,9 +97,9 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
         assign blk_lmem_if.rsp_data       = tcu_lmem_if.rsp_data;
         assign blk_lmem_if.rsp_valid      = tcu_lmem_if.rsp_valid;
-        assign per_blk_rd_valid[block_idx] = blk_lmem_if.req_valid;
-        assign blk_lmem_if.req_ready       = per_blk_rd_ready[block_idx];
-        assign per_blk_rd_addr[block_idx]  = blk_lmem_if.req_addr;
+        assign per_blk_rd_valid[block_idx]= blk_lmem_if.req_valid;
+        assign blk_lmem_if.req_ready      = per_blk_rd_ready[block_idx];
+        assign per_blk_rd_addr[block_idx] = blk_lmem_if.req_addr;
 
         wire is_wgmma_b = (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA);
 
@@ -131,6 +131,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_step_n       (per_block_execute_if[block_idx].data.op_args.tcu.step_n),
             .req_step_k       (per_block_execute_if[block_idx].data.op_args.tcu.step_k),
             .req_fmt_s        (per_block_execute_if[block_idx].data.op_args.tcu.fmt_s),
+            .req_cd_nregs     (per_block_execute_if[block_idx].data.op_args.tcu.cd_nregs),
             .req_desc_a       (per_block_execute_if[block_idx].data.rs1_data[0]),
             .req_desc_b       (per_block_execute_if[block_idx].data.rs2_data[0]),
             .tcu_lmem_if      (blk_lmem_if),
@@ -152,9 +153,9 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     //   to one tile buffer at a time.
 
     if (BLOCK_SIZE == 1) begin : g_lmem_direct
-        assign tcu_lmem_if.req_valid       = per_blk_rd_valid[0];
-        assign per_blk_rd_ready[0]         = tcu_lmem_if.req_ready;
-        assign tcu_lmem_if.req_addr        = per_blk_rd_addr[0];
+        assign tcu_lmem_if.req_valid = per_blk_rd_valid[0];
+        assign per_blk_rd_ready[0] = tcu_lmem_if.req_ready;
+        assign tcu_lmem_if.req_addr = per_blk_rd_addr[0];
     end else begin : g_lmem_arb
         // Priority arbiter: lowest block index wins
         logic [$clog2(BLOCK_SIZE)-1:0] grant_idx;
@@ -171,8 +172,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
         end
 
-        assign tcu_lmem_if.req_valid      = grant_valid;
-        assign tcu_lmem_if.req_addr       = per_blk_rd_addr[grant_idx];
+        assign tcu_lmem_if.req_valid = grant_valid;
+        assign tcu_lmem_if.req_addr = per_blk_rd_addr[grant_idx];
 
         for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_rd_ready
             assign per_blk_rd_ready[b] = tcu_lmem_if.req_ready

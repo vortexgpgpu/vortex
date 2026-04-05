@@ -475,7 +475,10 @@ inline typename T::dtype generate_B_value() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, 32, 8>;
+using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
+
+static constexpr uint32_t per_warp_M = wg_cfg::xtileM;
+static constexpr uint32_t per_warp_N = wg_cfg::xtileN;
 
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
@@ -594,31 +597,34 @@ int main(int argc, char *argv[]) {
   uint32_t N = xn;
   uint32_t K = xk;
 
-  if ((M % cfg::tileM) != 0) {
-    std::cout << "Error: M (" << M << ") must be a multiple of tensor tileM=" << cfg::tileM << "!" << std::endl;
+  uint32_t cta_M = warps * per_warp_M;
+
+  if ((M % cta_M) != 0) {
+    std::cout << "Error: M (" << M << ") must be a multiple of cta_M=" << cta_M << "!" << std::endl;
     return -1;
   }
 
-  if ((N % cfg::tileN) != 0) {
-    std::cout << "Error: N (" << N << ") must be a multiple of tensor tileN=" << cfg::tileN << "!" << std::endl;
+  if ((N % per_warp_N) != 0) {
+    std::cout << "Error: N (" << N << ") must be a multiple of per_warp_N=" << per_warp_N << "!" << std::endl;
     return -1;
   }
 
-  if ((K % cfg::tileK) != 0) {
-    std::cout << "Error: K (" << K << ") must be a multiple of tensor tileK=" << cfg::tileK << "!" << std::endl;
+  if ((K % wg_cfg::tileK) != 0) {
+    std::cout << "Error: K (" << K << ") must be a multiple of tensor tileK=" << wg_cfg::tileK << "!" << std::endl;
     return -1;
   }
 
   size_t sizeA = M * K;
   size_t sizeB = K * N;
   size_t sizeC = M * N;
-  uint32_t grid_dim[2]  = {N / cfg::tileN, M / cfg::tileM};
+  uint32_t grid_dim[2]  = {N / per_warp_N, M / cta_M};
   uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
-  std::cout << "WMMA Core Dimension: M=" << cfg::tcM << ", N=" << cfg::tcN << ", K=" << cfg::tcK << std::endl;
-  std::cout << "WMMA Tile Dimension: M=" << cfg::tileM << ", N=" << cfg::tileN << ", K=" << cfg::tileK << std::endl;
+  std::cout << "WMMA Core Dimension: M=" << wg_cfg::tcM << ", N=" << wg_cfg::tcN << ", K=" << wg_cfg::tileK << std::endl;
+  std::cout << "WGMMA Per-Warp Tile: M=" << per_warp_M << ", N=" << per_warp_N << ", K=" << wg_cfg::tileK << std::endl;
+  std::cout << "WGMMA CTA Tile: M=" << cta_M << ", N=" << per_warp_N << ", K=" << wg_cfg::tileK << std::endl;
   std::cout << "Grid dimension: " << grid_dim[0] << "x" << grid_dim[1] << std::endl;
   std::cout << "Block dimension: " << block_dim[0] << "x" << block_dim[1] << std::endl;
   std::cout << "matrix A: " << M << "x" << K << std::endl;
@@ -686,7 +692,7 @@ int main(int argc, char *argv[]) {
 
   // start device
   std::cout << "start device" << std::endl;
-  uint32_t smem_size = (cfg::tileM * cfg::tileK + cfg::tileK * cfg::tileN) * sizeof(itype_t);
+  uint32_t smem_size = (cta_M * wg_cfg::tileK + wg_cfg::tileK * per_warp_N) * sizeof(itype_t);
   RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, smem_size));
 
   // wait for completion

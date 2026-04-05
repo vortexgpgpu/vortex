@@ -44,9 +44,8 @@ package VX_tcu_pkg;
     // Set configuration parameters
     localparam TCU_NT = `NUM_THREADS;
 
-    localparam TCU_WG_NR = 32;
-    localparam TCU_WG_DK = 8;
-    localparam TCU_WG_DP = 0;
+    localparam TCU_WG_NRA = 4;  // A registers per warp (fixed)
+    localparam TCU_WG_NR = 32;  // max NRC (C/D registers, variable via cd_nregs)
 
     localparam TCU_NR = 8;
     localparam TCU_DK = 0;
@@ -85,17 +84,12 @@ package VX_tcu_pkg;
     localparam TCU_B_BLOCK_SIZE = TCU_TC_K * TCU_TC_N;
     localparam TCU_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE;
 
-    // WGMMA tile dimensions (NR=TCU_WG_NR=32, DK=8): larger tile, same block geometry
-    localparam TCU_WG_TILE_CAP = TCU_NT * TCU_WG_NR;
-    localparam TCU_WG_LG_TILE_CAP = $clog2(TCU_WG_TILE_CAP);
-    localparam TCU_WG_TILE_EN = TCU_WG_LG_TILE_CAP / 2;
-    localparam TCU_WG_TILE_EM = TCU_WG_LG_TILE_CAP - TCU_WG_TILE_EN;
-
-    localparam TCU_WG_TILE_M = 1 << TCU_WG_TILE_EM;
-    localparam TCU_WG_TILE_N = 1 << TCU_WG_TILE_EN;
-    localparam TCU_WG_TILE_K = (TCU_WG_DK != 0) ? TCU_WG_DK
-                             : (TCU_WG_DP != 0)  ? TCU_WG_DP
-                             : (TCU_WG_TILE_CAP / ((TCU_WG_TILE_M > TCU_WG_TILE_N) ? TCU_WG_TILE_M : TCU_WG_TILE_N));
+    // WGMMA per-warp tile dimensions (NRA=4 fixed, NRC=NR variable).
+    // Derived from block geometry: xtileM = 2*tcM, xtileK = 2*tcK.
+    // m_steps = k_steps = 2 always.
+    localparam TCU_WG_TILE_M = 2 * TCU_TC_M;
+    localparam TCU_WG_TILE_K = 2 * TCU_TC_K;
+    localparam TCU_WG_TILE_N = (TCU_WG_NR * TCU_NT) / TCU_WG_TILE_M;
 
     // WG step counts: block geometry (TC_M/TC_N/TC_K) unchanged, tile is larger
     localparam TCU_WG_M_STEPS = TCU_WG_TILE_M / TCU_TC_M;
@@ -155,6 +149,7 @@ package VX_tcu_pkg;
     // Register base addresses
     localparam TCU_RC    = 0;
     localparam TCU_WG_RC = TCU_RC;  // WGMMA C accumulator starts at same base
+    localparam TCU_WG_RA = 24;     // WGMMA A register base (fixed f24..f27)
     localparam TCU_RA = 10;
     localparam TCU_RB = (TCU_NRB == 4) ? 28 : 24;
 
@@ -310,7 +305,10 @@ package VX_tcu_pkg;
                 trace_fmt(level, op_args.tcu.fmt_s);
                 `TRACE(level, ("."));
                 trace_fmt(level, op_args.tcu.fmt_d);
-                `TRACE(level, (".%0d.%0d", op_args.tcu.step_m, op_args.tcu.step_n));
+                `TRACE(level, (".%0d.%sS.%0d.%0d",
+                    (op_args.tcu.cd_nregs == 2'd0) ? 8 : (op_args.tcu.cd_nregs == 2'd1) ? 16 : 32,
+                    op_args.tcu.a_from_smem ? "S" : "R",
+                    op_args.tcu.step_m, op_args.tcu.step_n));
             end
         `endif
         `ifdef TCU_SPARSE_ENABLE

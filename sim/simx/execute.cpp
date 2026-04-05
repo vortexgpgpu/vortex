@@ -1701,8 +1701,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
         core_->tensor_unit()->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                                     tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
-                                    a_desc, b_desc, rs3_data, rd_data,
-                                    trace_data.get(), tpuArgs.is_sparse);
+                                    a_desc, b_desc, rs1_data, rs2_data, rs3_data, rd_data,
+                                    trace_data.get(), tpuArgs.is_sparse,
+                                    tpuArgs.cd_nregs, tpuArgs.is_a_smem);
         rd_write = true;
       } break;
   #endif // TCU_WGMMA_ENABLE
