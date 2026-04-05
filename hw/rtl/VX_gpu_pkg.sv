@@ -521,8 +521,6 @@ package VX_gpu_pkg;
         logic                   is_sync;
         logic                   phase;
         logic [BAR_SIZE_W-1:0]  size_m1;
-        logic                   pending_event;
-        logic                   pending_event_phase;
     } barrier_t;
 
     typedef struct packed {

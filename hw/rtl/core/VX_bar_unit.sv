@@ -89,24 +89,15 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 
         // local barrier scheduling
         if (req_valid && ~req_data.is_global) begin
-            // Apply any folded txbar event that arrived concurrently with a BAR instruction.
-            // This ensures the event is reflected in events_r before checking unlock.
-            if (req_data.pending_event) begin
-                if (req_data.pending_event_phase) begin
-                    events_n = events_n + EVENT_WIDTH'(1);
-                end else begin
-                    events_n = events_n - EVENT_WIDTH'(1);
-                end
-            end
             if (req_data.is_event) begin
                 // event tracking
                 if (req_data.phase) begin
-                    events_n = events_n + EVENT_WIDTH'(1);
+                    events_n = events_r + EVENT_WIDTH'(1);
                 end else begin
-                    events_n = events_n - EVENT_WIDTH'(1);
+                    events_n = events_r - EVENT_WIDTH'(1);
                 end
-                // unlock warps if decrementing event to 0 and all warps have arrived
-                if ((req_data.phase == 0) && (events_n == EVENT_WIDTH'(0)) && (count_r == 0)) begin
+                // unlock warps if decrementing event to 0 and all all warps have arrived
+                if ((req_data.phase == 0) && (events_r == EVENT_WIDTH'(1)) && (count_r == 0)) begin
                     mask_n = '0;
                     unlock_valid_n = 1; // release waiting warps
                     unlock_mask_n = mask_r;
@@ -116,16 +107,11 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                 // barrier arrival
                 if (count_r == NW_WIDTH'(req_data.size_m1)) begin
                     count_n = '0;
-                    if (events_n == 0) begin
+                    if (events_r == 0) begin
                         mask_n = '0;
                         unlock_valid_n = 1; // release waiting warps
                         unlock_mask_n = req_data.is_sync ? wait_mask : mask_r;
                         phase_n = next_phase; // advance phase
-                    end else if (req_data.is_sync) begin
-                        // All warps arrived but events still outstanding.
-                        // Add arriving warp to wait mask so it gets released
-                        // when events eventually reach 0.
-                        mask_n = wait_mask;
                     end
                 end else begin
                     count_n = next_count;
@@ -321,8 +307,8 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (req_valid) begin
-            `TRACE(2, ("%t: %s req: wid=%0d, bar_id=%0d, is_global=%b, is_event=%b, is_arrive=%b, is_sync=%b, phase=%b, size_m1=%0d, pending_event=%b\n",
-                $time, INSTANCE_ID, req_wid, req_data.id, req_data.is_global, req_data.is_event, req_data.is_arrive, req_data.is_sync, req_data.phase, req_data.size_m1, req_data.pending_event))
+            `TRACE(2, ("%t: %s req: wid=%0d, bar_id=%0d, is_global=%b, is_event=%b, is_arrive=%b, is_sync=%b, phase=%b, size_m1=%0d\n",
+                $time, INSTANCE_ID, req_wid, req_data.id, req_data.is_global, req_data.is_event, req_data.is_arrive, req_data.is_sync, req_data.phase, req_data.size_m1))
         end
         if (USE_GBAR && gbar_req_valid_n && ~gbar_req_valid_r) begin
             `TRACE(2, ("%t: %s global-req: bar_id=%0d, size_m1=%0d\n",
