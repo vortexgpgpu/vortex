@@ -831,7 +831,8 @@ struct mem_addr_size_t {
 enum class ArbiterType {
   Priority,
   RoundRobin,
-  Matrix
+  Matrix,
+  GTO
 };
 
 inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
@@ -839,6 +840,7 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   case ArbiterType::Priority:   os << "Priority"; break;
   case ArbiterType::RoundRobin: os << "RoundRobin"; break;
   case ArbiterType::Matrix:     os << "Matrix"; break;
+  case ArbiterType::GTO:        os << "GTO"; break;
   default: assert(false);
   }
   return os;
@@ -956,6 +958,59 @@ private:
   std::vector<std::vector<bool>> priority_matrix_;
 };
 
+class GTOArbiter : public IArbiterImpl {
+public:
+  GTOArbiter(uint32_t size)
+    : size_(size)
+    , age_(size, 0)
+    , last_grant_(-1u) {
+    this->reset();
+  }
+
+  uint32_t grant(const BitVector<>& requests) override {
+    assert(requests.size() == size_);
+    // Greedy: keep granting the same requester if still active
+    if (last_grant_ < size_ && requests.test(last_grant_)) {
+      this->update_ages(requests, last_grant_);
+      return last_grant_;
+    }
+    // Then-Oldest: find the requester with the highest age
+    uint32_t best = -1u;
+    uint32_t best_age = 0;
+    for (uint32_t i = 0; i < size_; ++i) {
+      if (requests.test(i) && (best == -1u || age_[i] > best_age)) {
+        best = i;
+        best_age = age_[i];
+      }
+    }
+    if (best != -1u) {
+      last_grant_ = best;
+      this->update_ages(requests, best);
+    }
+    return best;
+  }
+
+  void reset() override {
+    std::fill(age_.begin(), age_.end(), 0);
+    last_grant_ = -1u;
+  }
+
+private:
+  void update_ages(const BitVector<>& requests, uint32_t granted) {
+    for (uint32_t i = 0; i < size_; ++i) {
+      if (i == granted || !requests.test(i)) {
+        age_[i] = 0;
+      } else {
+        ++age_[i];
+      }
+    }
+  }
+
+  uint32_t size_;
+  std::vector<uint32_t> age_;
+  uint32_t last_grant_;
+};
+
 class Arbiter {
 public:
   Arbiter(ArbiterType type = ArbiterType::Priority, uint32_t size = 0) {
@@ -968,6 +1023,9 @@ public:
       break;
     case ArbiterType::Matrix:
       impl_ = std::make_shared<MatrixArbiter>(size);
+      break;
+    case ArbiterType::GTO:
+      impl_ = std::make_shared<GTOArbiter>(size);
       break;
     default:
       assert(false); // Should never reach here

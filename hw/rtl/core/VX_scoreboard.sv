@@ -221,7 +221,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (PER_ISSUE_WARPS),
         .DATAW      (OUT_DATAW),
-        .ARBITER    ("C"),
+        .ARBITER    ("G"),
         .OUT_BUF    (3)
     ) out_arb (
         .clk      (clk),
