@@ -264,8 +264,8 @@ public:
   static_assert((m_steps / a_sub_blocks) != 0, "tcK is too small for tile A");
   static_assert((n_steps / b_sub_blocks) != 0, "tcK is too small for tile B");
 
-  static_assert((xtileM * xtileK <= tile_cap), "xtileM * xtileK <= tile_cap");
-  static_assert((xtileN * xtileK <= tile_cap), "xtileN * xtileK <= tile_cap");
+  static_assert(DK != 0 || (xtileM * xtileK <= tile_cap), "xtileM * xtileK <= tile_cap");
+  static_assert(DK != 0 || (xtileN * xtileK <= tile_cap), "xtileN * xtileK <= tile_cap");
   static_assert((xtileM * xtileN <= tile_cap), "xtileM * xtileN <= tile_cap");
 
   static_assert((tcM * tcK <= block_cap), "tcM * tcK <= block_cap");
@@ -291,6 +291,35 @@ public:
   static constexpr uint32_t banks_per_store = (NT < per_warp_depth) ? NT : per_warp_depth;
   static constexpr uint32_t num_meta_loads = (per_warp_depth * meta_cols + NT - 1) / NT;
   static constexpr uint32_t meta_stride = num_meta_loads * NT;  // words per K-tile metadata
+};
+
+// Host-side WGMMA geometry (mirrors wgmma_context in vx_tensor.h)
+//
+// All geometry derived from NT and NRC alone (NRA=4 fixed):
+//   tcM = 2^ceil(log2(NT)/2),  tcN = tcK = 2^floor(log2(NT)/2)
+//   xtileM = 2*tcM,  xtileN = NRC*NT/xtileM,  xtileK = 2*tcK
+//   m_steps = k_steps = 2 (always)
+template <uint32_t NT, typename It, typename Ot, uint32_t NRC_ = 8>
+struct wgmma_config_t {
+private:
+  static constexpr uint32_t clog2(uint32_t x) {
+    return (x < 2) ? 0 : (1 + clog2(x / 2));
+  }
+  static constexpr uint32_t XB = 4;
+  static constexpr uint32_t lg_NT = clog2(NT);
+public:
+  static constexpr uint32_t NRA = 4;
+  static constexpr uint32_t i_ratio = XB / sizeof(typename It::dtype);
+  static constexpr uint32_t tcM = 1u << ((lg_NT + 1) / 2);
+  static constexpr uint32_t tcN = 1u << (lg_NT / 2);
+  static constexpr uint32_t tcK = tcN;
+  static constexpr uint32_t xtileM = 2 * tcM;
+  static constexpr uint32_t xtileN = (NRC_ * NT) / xtileM;
+  static constexpr uint32_t xtileK = 2 * tcK;
+  static constexpr uint32_t tileK = xtileK * i_ratio;
+  static constexpr uint32_t m_steps = 2;
+  static constexpr uint32_t k_steps = 2;
+  static constexpr uint32_t NRC = NRC_;
 };
 
 } // namespace tensor

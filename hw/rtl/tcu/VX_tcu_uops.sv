@@ -58,25 +58,53 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire [`UP(CTR_W)-1:0] ctr = `UP(CTR_W)'(uop_idx);
 
 `ifdef TCU_WGMMA_ENABLE
-    // WGMMA µops: desc_a in x10 (a0), desc_b in x11 (a1); C accumulator in rs3.
     wire is_wgmma = (ibuf_in.op_type == INST_TCU_WGMMA);
+    wire wg_a_from_smem = ibuf_in.op_args.tcu.a_from_smem;
 
-    // WGMMA uses NR=32 tile dimensions — separate index extraction.
-    localparam LG_N_WG = $clog2(TCU_WG_N_STEPS);
-    localparam LG_M_WG = $clog2(TCU_WG_M_STEPS);
-    localparam LG_K_WG = $clog2(TCU_WG_K_STEPS);
+    // Variable NRC based on cd_nregs: 0→8, 1→16, 2→32
+    // Loop order: m (inner) → k → n (outer)
+    // m_steps=2 and k_steps=2 are fixed powers-of-2 (inner); n varies (outer).
+    localparam LG_M_WG = $clog2(TCU_WG_M_STEPS);  // 1
+    localparam LG_K_WG = $clog2(TCU_WG_K_STEPS);   // 1
+    localparam LG_N_WG_MAX = $clog2(TCU_WG_N_STEPS); // 4 (for NRC=32)
+    localparam WG_MK_BITS = LG_M_WG + LG_K_WG;      // 2
 
-    wire [`UP(LG_N_WG)-1:0] wg_n_index = ctr[0 +: `UP(LG_N_WG)];
-    wire [`UP(LG_M_WG)-1:0] wg_m_index = ctr[`UP(LG_N_WG) +: `UP(LG_M_WG)];
+    // Pre-computed uop counts for each cd_nregs value (dense)
+    localparam WG_UOPS_NR8  =  8 * TCU_WG_K_STEPS;
+    localparam WG_UOPS_NR16 = 16 * TCU_WG_K_STEPS;
+    localparam WG_UOPS_NR32 = TCU_WG_UOPS;
+
+    // Mux uop count based on cd_nregs: 0→8, 1→16, 2→32
+    reg [UOP_CTR_W-1:0] wg_uop_cnt;
+    always_comb begin
+        case (ibuf_in.op_args.tcu.cd_nregs)
+            2'd0: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR8);
+            2'd1: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR16);
+            default: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR32);
+        endcase
+    end
+
+    // ctr = n * (m_steps * k_steps) + k * m_steps + m
+    wire [`UP(LG_M_WG)-1:0] wg_m_index = ctr[0 +: `UP(LG_M_WG)];
     wire [`UP(LG_K_WG)-1:0] wg_k_index;
     if (LG_K_WG != 0) begin : g_wg_k_idx
-        assign wg_k_index = ctr[`UP(LG_N_WG)+`UP(LG_M_WG) +: LG_K_WG];
+        assign wg_k_index = ctr[LG_M_WG +: LG_K_WG];
     end else begin : g_wg_k_idx0
         assign wg_k_index = '0;
     end
-    // Accumulator register index: m*WG_N_STEPS + n → 0..(WG_M*WG_N-1) (maps to f[0]..f[NRC-1])
-    wire [4:0] wg_rs3_off = 5'(wg_m_index) * 5'(TCU_WG_N_STEPS) + 5'(wg_n_index);
-    wire is_first_uop = (wg_k_index == '0 && wg_m_index == '0 && wg_n_index == '0);
+    wire [`UP(LG_N_WG_MAX)-1:0] wg_n_index = ctr[WG_MK_BITS +: `UP(LG_N_WG_MAX)];
+
+    // Accumulator register index: n * m_steps + m  (n-major layout)
+    wire [4:0] wg_rs3_off = (5'(wg_n_index) << LG_M_WG) | 5'(wg_m_index);
+    wire is_first_uop = (ctr == '0);
+
+    // Fixed A register base for RS mode: f24..f27
+    localparam [4:0] wg_ra_base = TCU_WG_RA;
+
+    // Register offsets for from-reg mode
+    // A: rs1_off = m * k_steps + k  (NRA=4 registers starting at ra_base)
+    localparam LG_WG_A_SB = $clog2(`UP(TCU_WG_A_SUB_BLOCKS));
+    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = ((`UP(CTR_W)'(wg_m_index) >> LG_WG_A_SB) << `UP(LG_K_WG)) | `UP(CTR_W)'(wg_k_index);
 `endif
 
 `ifdef TCU_SPARSE_ENABLE
@@ -98,13 +126,13 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 
     assign uop_count =
 `ifdef TCU_WGMMA_ENABLE
-        is_wgmma ? UOP_CTR_W'(
+        is_wgmma ? (
     `ifdef TCU_SPARSE_ENABLE
             ibuf_in.op_args.tcu.is_sparse
-                ? (TCU_WG_M_STEPS * TCU_WG_N_STEPS * (TCU_WG_K_STEPS / 2))
+                ? (wg_uop_cnt >> 1)
                 :
     `endif
-            TCU_WG_UOPS) :
+            wg_uop_cnt) :
 `endif
 `ifdef TCU_SPARSE_ENABLE
         is_meta_store ? UOP_CTR_W'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s)) :
@@ -222,20 +250,22 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     `endif
     `ifdef TCU_WGMMA_ENABLE
         if (is_wgmma) begin
-            // WGMMA µop:
-            //   rd/rs3 → C/D accumulator
-            //   rs1    → x10 (a0) = desc_a
-            //   rs2    → x11 (a1) = desc_b
             ibuf_r.op_args.tcu.step_m = 4'(wg_m_index);
             ibuf_r.op_args.tcu.step_n = 4'(wg_n_index);
             ibuf_r.op_args.tcu.step_k = 4'(wg_k_index);
             ibuf_r.wb  = 1;
             ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
-            // Descriptors sourced only on the very first uop; per-warp tile cache handles the rest.
-            ibuf_r.rs1 = make_reg_num(REG_TYPE_I, 5'd10);
+            ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
+            // A source: smem descriptor (x10) or float register
+            if (wg_a_from_smem) begin
+                ibuf_r.rs1 = make_reg_num(REG_TYPE_I, 5'd10);
+                ibuf_r.used_rs[0] = is_first_uop;
+            end else begin
+                ibuf_r.rs1 = make_reg_num(REG_TYPE_F, wg_ra_base + 5'(wg_rs1_reg_off));
+                ibuf_r.used_rs[0] = 1'b1;
+            end
+            // B source: always smem descriptor (x11)
             ibuf_r.rs2 = make_reg_num(REG_TYPE_I, 5'd11);
-            ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);  // C accumulator
-            ibuf_r.used_rs[0] = is_first_uop;
             ibuf_r.used_rs[1] = is_first_uop;
         end else
     `endif

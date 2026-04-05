@@ -1234,39 +1234,55 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   #ifdef TCU_WGMMA_ENABLE
       case 1: { // WGMMA_SYNC
         namespace vt = vortex::tensor;
-        using wg_cfg = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 32, 8>;
-        uint32_t fmt_d = rd;   // Ot::id from rd field
-        uint32_t fmt_s = rs1;  // It::id from rs1 field
+        using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::fp32, vt::fp32>;
+        constexpr uint32_t m_steps = wg_cfg::m_steps;   // always 2
+        constexpr uint32_t k_steps = wg_cfg::k_steps;   // always 2
+        uint32_t fmt_d = rd;
+        uint32_t fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
-        // smem descriptors in a0 (x10) = A, a1 (x11) = B; meta implicit after A in smem
+        uint32_t cd_nregs = (rs2 >> 1) & 0x3;   // 0=8, 1=16, 2=32
+        bool is_a_smem  = (rs2 >> 3) & 1;
+        uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
         constexpr uint32_t a0 = 10, a1 = 11;
-        constexpr uint32_t nrc = wg_cfg::m_steps * wg_cfg::n_steps;
-        // Sparse uses k_steps/2 (A is 2:4 compressed); dense uses k_steps
-        uint32_t k_count = is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
+        uint32_t ra_base = is_a_smem ? 10 : 24; // RS: A at f24..f27 (fixed)
+        uint32_t k_count = is_sparse ? (k_steps / 2) : k_steps;
         uint32_t total_uops = k_count * nrc;
         uint32_t steps_shift = (total_uops > 1) ? (32 - log2ceil(total_uops)) : 0;
         uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
         uint32_t uuid_lo = uuid & 0xffffffff;
+        uint32_t n_steps = nrc / m_steps;
+        // Loop order: m (inner) → k → n (outer), matching RTL
         uint32_t uop_idx = 0;
+        for (uint32_t n = 0; n < n_steps; ++n) {
         for (uint32_t k = 0; k < k_count; ++k) {
-        for (uint32_t i = 0; i < nrc; ++i) {
-          uint32_t step_m = i / wg_cfg::n_steps;
-          uint32_t step_n = i % wg_cfg::n_steps;
+            for (uint32_t m = 0; m < m_steps; ++m) {
+              // C/D register index: n-major layout: r = n * m_steps + m
+              uint32_t r = n * m_steps + m;
             uint32_t uuid_lo_x = (uop_idx++ << steps_shift) | uuid_lo;
           uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
           auto uop = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
             uop->setOpType(TcuType::WGMMA);
-            uop->setArgs(IntrTcuArgs{is_sparse, fmt_s, fmt_d, step_m, step_n, k});
-            uop->setDestReg(i, RegType::Float);        // f_i = output accumulator
-            if (k == 0 && i == 0) {
-              // descriptors sourced once for the entire WGMMA instruction;
-              // per-warp tile cache uses them for all subsequent uops.
-              uop->setSrcReg(0, a0, RegType::Integer);  // a0 (x10) = smem A descriptor
-              uop->setSrcReg(1, a1, RegType::Integer);  // a1 (x11) = smem B descriptor
+              uop->setArgs(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
+                                       fmt_s, fmt_d, m, n, k});
+              uop->setDestReg(r, RegType::Float);
+              if (uop_idx == 1) {
+                // First uop: set smem descriptors
+                if (is_a_smem) {
+                  uop->setSrcReg(0, a0, RegType::Integer);
+                } else {
+                  uint32_t rs1_off = m * k_count + k;
+                  uop->setSrcReg(0, ra_base + rs1_off, RegType::Float);
             }
-            uop->setSrcReg(2, i, RegType::Float);     // f_i = accumulator C in
+                // B always from smem
+                uop->setSrcReg(1, a1, RegType::Integer);
+              } else if (!is_a_smem) {
+                uint32_t rs1_off = m * k_count + k;
+                uop->setSrcReg(0, ra_base + rs1_off, RegType::Float);
+              }
+              uop->setSrcReg(2, r, RegType::Float);
           uop->setParentUUID(uuid);
           ibuffer.push_back(uop);
+        }
         }
         }
       } break;

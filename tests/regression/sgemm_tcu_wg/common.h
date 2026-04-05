@@ -7,6 +7,10 @@
 #define NUM_THREADS 4
 #endif
 
+#ifndef WGMMA_NRC
+  #define WGMMA_NRC 8
+#endif
+
 #ifndef ITYPE
 #define ITYPE fp16
 #endif

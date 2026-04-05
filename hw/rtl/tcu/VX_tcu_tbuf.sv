@@ -61,6 +61,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [3:0]               req_step_n,
     input  wire [3:0]               req_step_k,
     input  wire [3:0]               req_fmt_s,
+    input  wire [1:0]               req_cd_nregs,
     input  wire [`XLEN-1:0]         req_desc_a,
     input  wire [`XLEN-1:0]         req_desc_b,
 
@@ -68,10 +69,10 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_tcu_lmem_if.master           tcu_lmem_if,
 
     // Tile buffer outputs
-    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]        tbuf_rs1_data,
+    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
     output wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data,
 `ifdef TCU_SPARSE_ENABLE
-    output wire [TCU_MAX_META_BLOCK_WIDTH-1:0]  tbuf_sp_meta,
+    output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
 `endif
     output wire                     tbuf_ready
 );
@@ -166,6 +167,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_step_n     (req_step_n),
         .req_step_k     (req_step_k),
         .req_fmt_s      (req_fmt_s),
+        .req_cd_nregs   (req_cd_nregs),
         .a_buf          (hit_a_buf),
         .b_buf          (hit_b_buf),
     `ifdef TCU_SPARSE_ENABLE
