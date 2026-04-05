@@ -51,7 +51,7 @@ Core::Core(const SimContext& ctx,
   , decode_latch_(ctx, "decode_latch", 1, 2)
   , pending_icache_(arch_.num_warps())
   , commit_arbs_(ISSUE_WIDTH)
-  , ibuffer_arbs_(ISSUE_WIDTH, {ArbiterType::RoundRobin, PER_ISSUE_WARPS})
+  , ibuffer_arbs_(ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
 {
   char sname[100];
 

@@ -16,7 +16,7 @@
 `TRACING_OFF
 module VX_generic_arbiter #(
     parameter NUM_REQS     = 1,
-    parameter `STRING TYPE = "P", // P: priority, R: round-robin, M: matrix, C: cyclic
+    parameter `STRING TYPE = "P", // P: priority, R: round-robin, M: matrix, C: cyclic, G: GTO
     parameter STICKY       = 0,   // hold the grant until its request is deasserted
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
@@ -28,7 +28,7 @@ module VX_generic_arbiter #(
     output wire                     grant_valid,
     input  wire                     grant_ready
 );
-    `STATIC_ASSERT((TYPE == "P" || TYPE == "R" || TYPE == "M" || TYPE == "C"), ("invalid parameter"))
+    `STATIC_ASSERT((TYPE == "P" || TYPE == "R" || TYPE == "M" || TYPE == "C" || TYPE == "G"), ("invalid parameter"))
 
     if (TYPE == "P") begin : g_priority
 
@@ -85,6 +85,22 @@ module VX_generic_arbiter #(
             .NUM_REQS (NUM_REQS),
             .STICKY   (STICKY)
         ) cyclic_arbiter (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (requests),
+            .grant_valid  (grant_valid),
+            .grant_index  (grant_index),
+            .grant_onehot (grant_onehot),
+            .grant_ready  (grant_ready)
+        );
+
+    end else if (TYPE == "G") begin : g_gto
+
+        `UNUSED_PARAM (STICKY)
+
+        VX_gto_arbiter #(
+            .NUM_REQS (NUM_REQS)
+        ) gto_arbiter (
             .clk          (clk),
             .reset        (reset),
             .requests     (requests),
