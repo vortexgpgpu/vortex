@@ -84,15 +84,29 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         endcase
     end
 
-    // ctr = n * (m_steps * k_steps) + k * m_steps + m
+    // Dense:  ctr = n * (m_steps * k_steps) + k * m_steps + m
+    // Sparse: ctr = n * m_steps + m  (k always 0, k_count halved)
     wire [`UP(LG_M_WG)-1:0] wg_m_index = ctr[0 +: `UP(LG_M_WG)];
     wire [`UP(LG_K_WG)-1:0] wg_k_index;
+    wire [`UP(LG_N_WG_MAX)-1:0] wg_n_index;
+`ifdef TCU_SPARSE_ENABLE
+    wire wg_is_sparse = ibuf_in.op_args.tcu.is_sparse;
+    if (LG_K_WG != 0) begin : g_wg_k_idx
+        assign wg_k_index = wg_is_sparse ? '0 : ctr[LG_M_WG +: LG_K_WG];
+    end else begin : g_wg_k_idx0
+        assign wg_k_index = '0;
+    end
+    assign wg_n_index = wg_is_sparse
+        ? ctr[LG_M_WG +: `UP(LG_N_WG_MAX)]
+        : ctr[WG_MK_BITS +: `UP(LG_N_WG_MAX)];
+`else
     if (LG_K_WG != 0) begin : g_wg_k_idx
         assign wg_k_index = ctr[LG_M_WG +: LG_K_WG];
     end else begin : g_wg_k_idx0
         assign wg_k_index = '0;
     end
-    wire [`UP(LG_N_WG_MAX)-1:0] wg_n_index = ctr[WG_MK_BITS +: `UP(LG_N_WG_MAX)];
+    assign wg_n_index = ctr[WG_MK_BITS +: `UP(LG_N_WG_MAX)];
+`endif
 
     // Accumulator register index: n * m_steps + m  (n-major layout)
     wire [4:0] wg_rs3_off = (5'(wg_n_index) << LG_M_WG) | 5'(wg_m_index);

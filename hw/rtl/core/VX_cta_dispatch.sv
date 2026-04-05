@@ -246,8 +246,24 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // Admission control — kmu_bus_if.ready uses combinational lmem_ok
     // -------------------------------------------------------------------------
+
+    // Detect when this allocation would straddle the LMEM boundary.
+    // If lmem_tail + lmem_size > LMEM_SIZE, we must pad the tail to 0
+    // (waste the remaining fragment) to avoid addresses escaping the
+    // LSU's LMEM range check.
+    wire [`LMEM_LOG_SIZE:0] lmem_next_tail =
+        {1'b0, lmem_tail_r} + (`LMEM_LOG_SIZE+1)'(kmu_bus_if.data.lmem_size);
+    wire lmem_alloc_wraps = lmem_next_tail[`LMEM_LOG_SIZE];
+
+    // When wrapping, the wasted padding counts against free space.
+    wire [`LMEM_LOG_SIZE:0] lmem_padding =
+        lmem_alloc_wraps ? ((`LMEM_LOG_SIZE+1)'(1 << `LMEM_LOG_SIZE) - {1'b0, lmem_tail_r})
+                         : (`LMEM_LOG_SIZE+1)'(0);
+    wire [`LMEM_LOG_SIZE:0] lmem_total_cost =
+        (`LMEM_LOG_SIZE+1)'(kmu_bus_if.data.lmem_size) + lmem_padding;
+
     wire table_notfull = (slot_count_r < (NW_WIDTH+1)'(NUM_WARPS));
-    wire lmem_ok = (free_size_r >= kmu_bus_if.data.lmem_size);
+    wire lmem_ok = (free_size_r >= lmem_total_cost);
     assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok && !rem_warps_write_r;
 
     // -------------------------------------------------------------------------
@@ -268,7 +284,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign lmem_size_raddr = head_r;
     assign lmem_size_write = kmu_bus_if_fire && state == IDLE;
     assign lmem_size_waddr = tail_r;
-    assign lmem_size_wdata = kmu_bus_if.data.lmem_size;
+    assign lmem_size_wdata = lmem_total_cost;
 
     // wid_to_cta_ram access
     assign wid_to_cta_write = (state == DISPATCH) && warp_ready;
@@ -349,9 +365,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             end
 
             if (head_reclaimable_dly) begin
-                free_size_r <= free_size_r + lmem_size_rdata - (kmu_bus_if_fire ? kmu_bus_if.data.lmem_size : '0);
+                free_size_r <= free_size_r + lmem_size_rdata - (kmu_bus_if_fire ? lmem_total_cost : '0);
             end else if (kmu_bus_if_fire) begin
-                free_size_r <= free_size_r - kmu_bus_if.data.lmem_size;
+                free_size_r <= free_size_r - lmem_total_cost;
             end
 
             // ---- FSM -------------------------------------------------------
@@ -372,9 +388,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         cta_rank_r   <= '0;
                         thread_idx_r <= '0;
 
-                        // Latch LMEM base; advance ring-buffer tail
-                        cur_lmem_base_r <= lmem_tail_r;
-                        lmem_tail_r     <= lmem_tail_r + `LMEM_LOG_SIZE'(kmu_bus_if.data.lmem_size);
+                        // Latch LMEM base; advance ring-buffer tail.
+                        // When the allocation would straddle the LMEM
+                        // boundary, pad the tail to 0 first.
+                        cur_lmem_base_r <= lmem_alloc_wraps ? '0 : lmem_tail_r;
+                        lmem_tail_r     <= lmem_alloc_wraps
+                            ? `LMEM_LOG_SIZE'(kmu_bus_if.data.lmem_size)
+                            : lmem_next_tail[`LMEM_LOG_SIZE-1:0];
 
                         // Allocate slot at tail; cur_cta_slot = tail_r (before increment)
                         slot_valid_r[tail_r] <= 1'b1;

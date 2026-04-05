@@ -1168,7 +1168,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
           uint32_t reg_rs1 = (flat_store / cfg::meta_cols_per_load) ? meta_reg1 : meta_reg0;
           auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
             instr->setOpType(TcuType::META_STORE);
-            instr->setArgs(IntrTcuArgs{false, fmt_s, flat_store, 0, 0, 0});
+          instr->setArgs(IntrTcuArgs{false, 0, 0, fmt_s, flat_store, 0, 0, 0});
             instr->setSrcReg(0, reg_rs1, RegType::Float);
             instr->setParentUUID(uuid);
             ibuffer.push_back(instr);
@@ -1195,7 +1195,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
             uint32_t reg_rs3 = rc_base + (eff >> 1);
             auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
               instr->setOpType(TcuType::WMMA);
-              instr->setArgs(IntrTcuArgs{true, fmt_s, fmt_d, m_sp, n_sp, 0});
+            instr->setArgs(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, n_sp, 0});
               instr->setDestReg(reg_rs3, RegType::Float);
             instr->setSrcReg(0, ra_base + m_sp, RegType::Float);
             instr->setSrcReg(1, rb_base + n_sp, RegType::Float);
@@ -1214,7 +1214,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
                 uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
                 auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
                   instr->setOpType(TcuType::WMMA);
-                instr->setArgs(IntrTcuArgs{is_sparse, fmt_s, fmt_d, m, n, k});
+                instr->setArgs(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
                 instr->setDestReg(reg_rs3, RegType::Float);
                 instr->setSrcReg(0, reg_rs1, RegType::Float);
                 instr->setSrcReg(1, reg_rs2, RegType::Float);
