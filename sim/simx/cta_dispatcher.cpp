@@ -77,7 +77,13 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     // Admission control: wait until the next FIFO slot is free and enough lmem is available.
     if (slot_rem_warps_[tail_slot_] != 0)
       return false;
-    if (free_size_ < pending_cta_.lmem_size)
+    // Account for padding when the allocation would straddle the LMEM boundary.
+    uint32_t lmem_needed = pending_cta_.lmem_size;
+    if (pending_cta_.lmem_size > 0
+        && (lmem_tail_ + pending_cta_.lmem_size > lmem_capacity_)) {
+      lmem_needed += lmem_capacity_ - lmem_tail_;
+    }
+    if (free_size_ < lmem_needed)
       return false;
 
     // Reset Warp initialization states on kernel transitions
@@ -98,17 +104,25 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
 
     // Allocate lmem slot.
+    // When the allocation would straddle the LMEM boundary, pad the tail
+    // to 0 to avoid addresses escaping the LMEM range.
     lmem_addr_ = 0;
+    uint32_t lmem_cost = 0;
     if (cta_.lmem_size > 0) {
+      lmem_cost = cta_.lmem_size;
+      if (lmem_tail_ + cta_.lmem_size > lmem_capacity_) {
+        lmem_cost += lmem_capacity_ - lmem_tail_;
+        lmem_tail_ = 0;
+      }
       lmem_addr_  = lmem_base_ + lmem_tail_;
       lmem_tail_  = (lmem_tail_ + cta_.lmem_size) & (lmem_capacity_ - 1);
-      free_size_  -= cta_.lmem_size;
+      free_size_  -= lmem_cost;
     }
 
     // Claim the next FIFO slot.
     cur_slot_ = tail_slot_;
     tail_slot_ = (tail_slot_ + 1) % num_warps_;
-    slot_lmem_size_[cur_slot_] = cta_.lmem_size;
+    slot_lmem_size_[cur_slot_] = lmem_cost;
     slot_rem_warps_[cur_slot_] = cta_size_;
 
     has_cta_ = true;
