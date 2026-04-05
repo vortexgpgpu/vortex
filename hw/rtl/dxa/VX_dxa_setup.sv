@@ -43,7 +43,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     //   S1: gmem_off0         = coord0 * elem_bytes      (add to gbase)
     //   S2: gmem_off1         = coord1 * stride0          (add to gbase)
     //   S3: total_bytes       = total_rows * row_len_bytes
-    //   S4: done (compute total_lmem_writes from total_bytes)
+    //   S4: done (compute total_smem_writes from total_bytes)
     localparam S_IDLE        = 3'd0;
     localparam S_ROW_LEN     = 3'd1;
     localparam S_GMEM_OFF0   = 3'd2;
@@ -70,7 +70,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [31:0]                r_stride0;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0] r_oob_limit;
     reg [31:0]                r_total_rows;
-    reg [31:0]                r_total_lmem_writes;
+    reg [31:0]                r_total_smem_writes;
+    reg [31:0]                r_total_bytes;
     reg [31:0]                r_cfill;
     reg [31:0]                r_elem_bytes;
     reg [31:0]                r_rank;
@@ -81,7 +82,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [31:0] lat_size1;
     reg [`MEM_ADDR_WIDTH-1:0] lat_gbase;
 
-    // SMEM offset bits for total_lmem_writes computation.
+    // SMEM offset bits for total_smem_writes computation.
     localparam SMEM_OFF_BITS = `CLOG2(SMEM_BYTES);
 
     always @(posedge clk) begin
@@ -156,10 +157,11 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
             S_DONE: begin
                 // mul_out_r = total_rows * row_len_bytes = total_bytes.
-                // Compute packed total_lmem_writes = ceil((total_bytes + smem_off) / SMEM_BYTES).
+                // Compute packed total_smem_writes = ceil((total_bytes + smem_off) / SMEM_BYTES).
                 // With write packing, multiple rows' data may pack into one SMEM word.
-                r_total_lmem_writes <= (mul_out_r + 32'(r_initial_smem_base[SMEM_OFF_BITS-1:0])
+                r_total_smem_writes <= (mul_out_r + 32'(r_initial_smem_base[SMEM_OFF_BITS-1:0])
                                         + SMEM_BYTES - 1) >> SMEM_OFF_BITS;
+                r_total_bytes       <= mul_out_r;  // total_rows * row_len_bytes
                 state_r <= S_IDLE;
             end
 
@@ -170,7 +172,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Output assignments.
     // Delay setup_done by 1 cycle so that registers written in S_DONE
-    // (e.g. r_total_lmem_writes) are stable when downstream captures them.
+    // (e.g. r_total_smem_writes) are stable when downstream captures them.
     reg setup_done_r;
     always @(posedge clk) begin
         if (reset) begin
@@ -187,7 +189,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign setup_params.stride0            = r_stride0;
     assign setup_params.oob_limit          = r_oob_limit;
     assign setup_params.total_rows         = r_total_rows;
-    assign setup_params.total_lmem_writes  = r_total_lmem_writes;
+    assign setup_params.total_smem_writes  = r_total_smem_writes;
+    assign setup_params.total_bytes         = r_total_bytes;
     assign setup_params.cfill              = r_cfill;
     assign setup_params.elem_bytes         = r_elem_bytes;
     assign setup_params.rank               = r_rank;

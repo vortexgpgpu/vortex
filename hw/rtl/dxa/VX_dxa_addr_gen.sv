@@ -36,10 +36,11 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [GMEM_LINE_SIZE-1:0]   out_byte_mask,
     output wire                        out_oob,
     output wire                        out_last,
+    output wire                        out_new_row,
 
     // Pass-through params for downstream (stable during transfer).
     output wire [31:0]                 out_cfill,
-    output wire [31:0]                 out_total_lmem_writes
+    output wire [31:0]                 out_total_smem_writes
 );
     localparam CL_OFF_BITS = `CLOG2(GMEM_LINE_SIZE);
 
@@ -57,10 +58,10 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Pass-through latched params
     reg [31:0]                 cfill_r;
-    reg [31:0]                 total_lmem_writes_r;
+    reg [31:0]                 total_smem_writes_r;
 
     assign out_cfill = cfill_r;
-    assign out_total_lmem_writes = total_lmem_writes_r;
+    assign out_total_smem_writes = total_smem_writes_r;
 
     // ---- Per-row geometry (combinatorial from current row state) ----
     wire [CL_OFF_BITS-1:0] first_off = gmem_base_r[CL_OFF_BITS-1:0];
@@ -105,6 +106,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign out_byte_mask = byte_mask_w;
     assign out_oob       = is_oob;
     assign out_last      = is_last_line && is_last_row;
+    assign out_new_row   = (line_idx_r == 0);
 
     // ---- Advance logic ----
     wire advance = out_valid && out_ready;
@@ -125,7 +127,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             oob_limit_r  <= setup_params.oob_limit[0];
             line_idx_r   <= '0;
             cfill_r      <= setup_params.cfill;
-            total_lmem_writes_r <= setup_params.total_lmem_writes;
+            total_smem_writes_r <= setup_params.total_smem_writes;
         end else if (advance) begin
             if (is_last_line && is_last_row) begin
                 active_r <= 1'b0;
@@ -155,5 +157,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
     end
 `endif
+
+    `UNUSED_VAR (setup_params.total_bytes)
 
 endmodule
