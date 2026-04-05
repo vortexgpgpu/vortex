@@ -96,6 +96,9 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                         unlock_valid_n = 1; // release waiting warps
                         unlock_mask_n = req_data.is_sync ? wait_mask : mask_r;
                         phase_n = next_phase; // advance phase
+                    end else if (req_data.is_sync) begin
+                        // Add arriving warp to wait mask
+                        mask_n = wait_mask;
                     end
                 end else begin
                     count_n = next_count;
@@ -140,6 +143,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                         gbar_req_id_n = req_data.id;
                         gbar_req_size_m1_n = NC_WIDTH'(req_data.size_m1);
                     end else begin
+                        // Add arriving warp to wait mask
                         mask_n = wait_mask;
                     end
                 end else begin

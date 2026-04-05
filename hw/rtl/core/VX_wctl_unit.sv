@@ -143,7 +143,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign bar.id       = rs1_data[BAR_ID_SHIFT +: NB_BITS];
     assign bar.is_event = txbar_bus_if.valid && ~wctl_bar_enable;
     assign bar.is_sync  = execute_if.data.op_args.wctl.is_sync_bar;
-    assign bar.is_global= rs1_data[31];
+    assign bar.is_global= wctl_bar_enable && rs1_data[31];
     assign bar.is_arrive= execute_if.data.op_args.wctl.is_bar_arrive || execute_if.data.op_args.wctl.is_sync_bar;
     assign bar.phase    = wctl_bar_enable ? rs2_data[0] : ~txbar_bus_if.data.is_done;
     assign bar.size_m1  = rs2_data[BAR_SIZE_W-1:0] - BAR_SIZE_W'(1);
