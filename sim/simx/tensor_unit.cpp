@@ -16,6 +16,7 @@
 #include "tensor_cfg.h"
 #include <rvfloats.h>
 #include "core.h"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -536,6 +537,16 @@ static inline uint32_t meta_row_width(uint32_t elem_bits) {
   return cfg::tcK * 2 * (32 / elem_bits);
 }
 
+static inline uint32_t mx_meta_words(uint32_t fmt_s) {
+  if (fmt_s == vt::nvfp4::id) {
+    return 8;
+  }
+  if (fmt_s == vt::mxfp8::id || fmt_s == vt::mxint8::id) {
+    return 4;
+  }
+  return 0;
+}
+
 class TensorUnit::Impl {
 public:
 
@@ -549,8 +560,9 @@ public:
     : simobject_(simobject)
     , core_(core)
     , arch_(arch)
-    , perf_stats_()
     , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
+    , mx_meta_(arch.num_warps())
+    , perf_stats_()
   {
     //--
   }
@@ -561,6 +573,12 @@ public:
 
   void reset() {
     perf_stats_ = PerfStats();
+    for (auto& sparse_meta : sparse_meta_) {
+      std::fill(sparse_meta.begin(), sparse_meta.end(), 0);
+    }
+    for (auto& mx_meta : mx_meta_) {
+      mx_meta.fill(0);
+    }
   }
 
   void tick() {
@@ -592,9 +610,20 @@ public:
   void meta_store(uint32_t wid,
                   uint32_t fmt_s,
                   uint32_t col_idx,
+                  uint32_t meta_kind,
                   const std::vector<reg_data_t>& rs1_data,
                   ExeTraceData* trace_data) {
     __unused(trace_data);
+
+    if (meta_kind == TCU_META_KIND_MX) {
+      uint32_t num_mx_words = mx_meta_words(fmt_s);
+      if (col_idx >= num_mx_words || rs1_data.empty()) {
+        std::cout << "Error: META_STORE MX index out of range: " << col_idx << std::endl;
+        std::abort();
+      }
+      mx_meta_.at(wid).at(col_idx) = rs1_data.at(0).u32;
+      return;
+    }
 
     uint32_t num_cols = meta_num_cols(fmt_s);
     uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
@@ -629,28 +658,10 @@ public:
             const std::vector<reg_data_t>& rs1_data,
             const std::vector<reg_data_t>& rs2_data,
             const std::vector<reg_data_t>& rs3_data,
-            const std::vector<reg_data_t>& mx_a0_data,
-            const std::vector<reg_data_t>& mx_a1_data,
-            const std::vector<reg_data_t>& mx_a2_data,
-            const std::vector<reg_data_t>& mx_a3_data,
-            const std::vector<reg_data_t>& mx_b0_data,
-            const std::vector<reg_data_t>& mx_b1_data,
-            const std::vector<reg_data_t>& mx_b2_data,
-            const std::vector<reg_data_t>& mx_b3_data,
             std::vector<reg_data_t>& rd_data,
             ExeTraceData* trace_data,
             bool is_sparse) {
     __unused(trace_data);
-#ifndef TCU_MX_ENABLE
-    __unused(mx_a0_data);
-    __unused(mx_a1_data);
-  __unused(mx_a2_data);
-  __unused(mx_a3_data);
-    __unused(mx_b0_data);
-    __unused(mx_b1_data);
-  __unused(mx_b2_data);
-  __unused(mx_b3_data);
-#endif
 
     if (is_sparse) {
       if (!vt::sparse_format_supported(fmt_s)) {
@@ -719,40 +730,30 @@ public:
         uint32_t d_val;
         if (use_dynamic_scale_fedp) {
 #ifdef TCU_MX_ENABLE
-          constexpr uint32_t meta_lane = 0;
-          if (mx_a0_data.size() <= meta_lane || mx_a1_data.size() <= meta_lane ||
-              mx_b0_data.size() <= meta_lane || mx_b1_data.size() <= meta_lane) {
-            std::cout << "Error: missing MX metadata registers for dynamic-scale WMMA" << std::endl;
-            std::abort();
-          }
+          const auto& mx_meta_words = mx_meta_.at(wid);
           uint32_t row_idx = step_m * cfg::tcM + i;
           uint32_t col_idx = step_n * cfg::tcN + j;
           if (fmt_s == vt::nvfp4::id) {
-            if (mx_a2_data.size() <= meta_lane || mx_a3_data.size() <= meta_lane ||
-                mx_b2_data.size() <= meta_lane || mx_b3_data.size() <= meta_lane) {
-              std::cout << "Error: missing NVFP4 metadata registers for dynamic-scale WMMA" << std::endl;
-              std::abort();
-            }
-            uint8_t sf_a = unpack_mx_scale_16(mx_a0_data.at(meta_lane).u32,
-                                              mx_a1_data.at(meta_lane).u32,
-                                              mx_a2_data.at(meta_lane).u32,
-                                              mx_a3_data.at(meta_lane).u32,
+            uint8_t sf_a = unpack_mx_scale_16(mx_meta_words.at(0),
+                                              mx_meta_words.at(1),
+                                              mx_meta_words.at(2),
+                                              mx_meta_words.at(3),
                                               row_idx,
                                               "A");
-            uint8_t sf_b = unpack_mx_scale_16(mx_b0_data.at(meta_lane).u32,
-                                              mx_b1_data.at(meta_lane).u32,
-                                              mx_b2_data.at(meta_lane).u32,
-                                              mx_b3_data.at(meta_lane).u32,
+            uint8_t sf_b = unpack_mx_scale_16(mx_meta_words.at(4),
+                                              mx_meta_words.at(5),
+                                              mx_meta_words.at(6),
+                                              mx_meta_words.at(7),
                                               col_idx,
                                               "B");
             d_val = fedp_nvfp4_fp32_scaled(a_row, b_col, c_val, sf_a, sf_b);
           } else {
-            uint8_t sf_a = unpack_mx_scale_8(mx_a0_data.at(meta_lane).u32,
-                                             mx_a1_data.at(meta_lane).u32,
+            uint8_t sf_a = unpack_mx_scale_8(mx_meta_words.at(0),
+                                             mx_meta_words.at(1),
                                              row_idx,
                                              "A");
-            uint8_t sf_b = unpack_mx_scale_8(mx_b0_data.at(meta_lane).u32,
-                                             mx_b1_data.at(meta_lane).u32,
+            uint8_t sf_b = unpack_mx_scale_8(mx_meta_words.at(2),
+                                             mx_meta_words.at(3),
                                              col_idx,
                                              "B");
             if (fmt_s == vt::mxint8::id) {
@@ -986,11 +987,13 @@ private:
   static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
   static constexpr uint32_t kMetaBanks = cfg::m_steps * kSparseKSteps;
   static constexpr uint32_t kMaxMetaCols = NUM_THREADS / 2;
+  static constexpr uint32_t kMxMetaWords = 8;
 
   TensorUnit*   simobject_;
   Core*         core_;
   Arch          arch_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
+  std::vector<std::array<uint32_t, kMxMetaWords>> mx_meta_;
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
   PerfStats     perf_stats_;
 };
@@ -1052,27 +1055,11 @@ void TensorUnit::wmma(uint32_t wid,
                       const std::vector<reg_data_t>& rs1_data,
                       const std::vector<reg_data_t>& rs2_data,
                       const std::vector<reg_data_t>& rs3_data,
-                      const std::vector<reg_data_t>& mx_a0_data,
-                      const std::vector<reg_data_t>& mx_a1_data,
-                      const std::vector<reg_data_t>& mx_a2_data,
-                      const std::vector<reg_data_t>& mx_a3_data,
-                      const std::vector<reg_data_t>& mx_b0_data,
-                      const std::vector<reg_data_t>& mx_b1_data,
-                      const std::vector<reg_data_t>& mx_b2_data,
-                      const std::vector<reg_data_t>& mx_b3_data,
                       std::vector<reg_data_t>& rd_data,
                       ExeTraceData* trace_data,
                       bool is_sparse) {
   impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, step_k,
               rs1_data, rs2_data, rs3_data,
-              mx_a0_data,
-              mx_a1_data,
-              mx_a2_data,
-              mx_a3_data,
-              mx_b0_data,
-              mx_b1_data,
-              mx_b2_data,
-              mx_b3_data,
               rd_data,
               trace_data,
               is_sparse);
@@ -1102,7 +1089,8 @@ void TensorUnit::wgmma(uint32_t wid,
 void TensorUnit::meta_store(uint32_t wid,
                             uint32_t fmt_s,
                             uint32_t col_idx,
+                            uint32_t meta_kind,
                             const std::vector<reg_data_t>& rs1_data,
                             ExeTraceData* trace_data) {
-  impl_->meta_store(wid, fmt_s, col_idx, rs1_data, trace_data);
+  impl_->meta_store(wid, fmt_s, col_idx, meta_kind, rs1_data, trace_data);
 }
