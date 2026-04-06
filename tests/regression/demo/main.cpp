@@ -71,6 +71,8 @@ public:
 
 const char* kernel_file = "kernel.vxbin";
 uint32_t count = 16;
+uint32_t usr_block_x = 0;
+uint32_t usr_block_y = 0;
 
 vx_device_h device = nullptr;
 vx_buffer_h src0_buffer = nullptr;
@@ -82,18 +84,24 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-n words] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-n words] [-x: block_dim_x] [-y: block_dim_y] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "n:k:x:y:h")) != -1) {
     switch (c) {
     case 'n':
       count = atoi(optarg);
       break;
     case 'k':
       kernel_file = optarg;
+      break;
+    case 'x':
+      usr_block_x = atoi(optarg);
+      break;
+    case 'y':
+      usr_block_y = atoi(optarg);
       break;
     case 'h':{
       show_usage();
@@ -133,15 +141,24 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   uint32_t total_threads = num_cores * num_warps * num_threads;
-  uint32_t num_points = count * total_threads;
+
+  // determine 2D launch dimensions
+  uint32_t block_dim_x = (usr_block_x != 0) ? usr_block_x : num_threads;
+  uint32_t block_dim_y = (usr_block_y != 0) ? usr_block_y : 1;
+  uint32_t threads_per_block = block_dim_x * block_dim_y;
+  uint32_t num_blocks = (total_threads + threads_per_block - 1) / threads_per_block;
+  uint32_t num_tasks = num_blocks * threads_per_block;
+  uint32_t dim_x = num_blocks * block_dim_x;
+  uint32_t num_points = count * num_tasks;
   uint32_t buf_size = num_points * sizeof(TYPE);
+
+  kernel_arg.num_tasks = num_tasks;
+  kernel_arg.task_size = count;
+  kernel_arg.dim_x = dim_x;
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
-
-  kernel_arg.num_tasks = total_threads;
-  kernel_arg.task_size = count;
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
@@ -187,10 +204,12 @@ int main(int argc, char *argv[]) {
   // start device
   std::cout << "start device" << std::endl;
   {
-    uint32_t n = kernel_arg.num_tasks;
-    uint32_t grid_dim[1], block_dim[1];
-    RT_CHECK(vx_max_occupancy_grid(device, 1, &n, grid_dim, block_dim));
-    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
+    uint32_t grid[2] = {num_blocks, 1};
+    uint32_t block[2] = {block_dim_x, block_dim_y};
+    std::cout << "grid_dim=" << grid[0] << "x" << grid[1]
+              << ", block_dim=" << block[0] << "x" << block[1]
+              << std::endl;
+    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid, block, 0));
   }
 
   // wait for completion

@@ -8,6 +8,7 @@
 typedef struct {
   uint32_t num_tasks;
   uint32_t task_size;
+  uint32_t dim_x;
   uint64_t src0_addr;
   uint64_t src1_addr;
   uint64_t dst_addr;
