@@ -62,6 +62,17 @@ ifneq (,$(filter -DEXT_F_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/fpu
 endif
 
+# cvfpu (fpnew) sources are referenced when FPU_TYPE_FPNEW is active
+# (SYNTHESIS + XLEN_64 turns this on by default — see hw/VX_config.vh).
+# Use -I so gen_sources.sh copies the *_pkg.sv and .sv files into the build
+# folder; sv2v only scans the single copy directory for sources.
+ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
+	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include \
+	               -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src \
+	               -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl \
+	               -I$(THIRD_PARTY_DIR)/cvfpu/src
+endif
+
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
 
 # Add TCU extension sources
