@@ -80,6 +80,7 @@ Emulator::Emulator(const Arch &arch, Core* core)
     , mpm_class_(0)
     , cta_dispatcher_(core)
     , warps_(arch.num_warps(), arch.num_threads())
+    , sequencers_(arch.num_warps(), Sequencer(arch, core, instr_pool_))
     , barriers_(arch.num_warps() * arch.num_barriers())
     , ipdom_size_(arch.num_threads()-1)
 {
@@ -102,8 +103,9 @@ void Emulator::reset() {
 
   stalled_warps_.reset();
   active_warps_.reset();
-  in_pipeline_.reset();
-  gto_warp_ = -1;
+  for (auto& seq : sequencers_) {
+    seq.reset();
+  }
   wspawn_.valid = false;
 
   cta_dispatcher_.reset();
@@ -134,7 +136,6 @@ void Emulator::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   warp.cta_csrs.grid_dim[2]   = rec.grid_dim[2];
   warp.cta_csrs.lmem_addr     = rec.lmem_addr;
 
-  warp.ibuffer.clear();
   while (!warp.ipdom_stack.empty()) warp.ipdom_stack.pop();
 
   active_warps_.set(wid);
@@ -144,7 +145,9 @@ void Emulator::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
      << ", wid=" << wid << ", cta_id=" << warp.cta_csrs.cta_id
      << ", rank=" << warp.cta_csrs.cta_rank << "/" << warp.cta_csrs.cta_size
      << ", tmask=" << warp.tmask
-     << ", PC=0x" << std::hex << warp.PC << std::dec);
+     << ", PC=0x" << std::hex << warp.PC << std::dec
+     << ", blockIdx=(" << warp.cta_csrs.block_idx[0] << "," << warp.cta_csrs.block_idx[1] << ")"
+     << ", mscratch=0x" << std::hex << warp.mscratch << std::dec);
 }
 
 void Emulator::attach_ram(RAM* ram) {
@@ -156,16 +159,28 @@ void Emulator::attach_ram(RAM* ram) {
 #endif
 }
 
-uint32_t Emulator::fetch(uint32_t wid, uint64_t uuid) {
+instr_trace_t* Emulator::fetch(uint32_t wid, uint64_t uuid) {
   auto& warp = warps_.at(wid);
-  __unused(uuid);
 
   uint32_t instr_code = 0;
   this->icache_read(&instr_code, warp.PC, sizeof(uint32_t));
 
   DP(1, "Fetch: code=0x" << std::hex << instr_code << std::dec << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
          << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
-  return instr_code;
+
+  // Store fetched code for later decode
+  warp.fetched_instr_code = instr_code;
+  warp.fetch_uuid = uuid;
+
+  // Create trace
+  auto trace = core_->trace_pool().allocate(1);
+  new (trace) instr_trace_t(uuid, arch_);
+  trace->cid = core_->id();
+  trace->wid = wid;
+  trace->PC  = warp.PC;
+  trace->tmask = warp.tmask;
+
+  return trace;
 }
 
 instr_trace_t* Emulator::schedule() {
@@ -197,25 +212,12 @@ instr_trace_t* Emulator::schedule() {
     this->resume(0);
   }
 
-  // GTO warp scheduler with in_pipeline_ awareness
-  if (gto_warp_ >= 0) {
-    uint32_t wid = gto_warp_;
-    if (active_warps_.test(wid) && !stalled_warps_.test(wid) && !in_pipeline_.test(wid)) {
+  // find next ready warp
+  for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {
+    if (active_warps_.test(wid) && !stalled_warps_.test(wid)) {
       scheduled_warp = wid;
-    } else if (active_warps_.test(wid) && !stalled_warps_.test(wid) && in_pipeline_.test(wid)) {
-      // Greedy warp is in pipeline — wait for it
-      return nullptr;
+      break;
     }
-  }
-
-  if (scheduled_warp == -1) {
-    for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {
-      if (active_warps_.test(wid) && !stalled_warps_.test(wid) && !in_pipeline_.test(wid)) {
-        scheduled_warp = wid;
-        break;
-      }
-    }
-    gto_warp_ = scheduled_warp;
   }
 
   // Any active warp to schedule?
@@ -226,37 +228,55 @@ instr_trace_t* Emulator::schedule() {
   auto& warp = warps_.at(scheduled_warp);
   assert(warp.tmask.any());
 
-  // fetch next instruction if ibuffer is empty
-  if (warp.ibuffer.empty()) {
-    uint64_t uuid = 0;
-  #ifndef NDEBUG
-    {
-      // generate unique universal instruction ID
-      uint32_t instr_id = warp.uuid++;
-      uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
-      uuid = (uint64_t(g_wid) << 32) | instr_id;
-    }
-  #endif
-
-    // Fetch
-    auto instr_code = this->fetch(scheduled_warp, uuid);
-
-    // decode
-    this->decode(instr_code, scheduled_warp, uuid);
-  } else {
-    // we have a micro-instruction in the ibuffer
-    // adjust PC back to original (incremented in execute())
-    warp.PC -= 4;
+  // Generate UUID
+  uint64_t uuid = 0;
+#ifndef NDEBUG
+  {
+    uint32_t instr_id = warp.uuid++;
+    uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
+    uuid = (uint64_t(g_wid) << 32) | instr_id;
   }
+#endif
 
-  // pop the instruction from the ibuffer
-  auto instr = warp.ibuffer.front();
-  warp.ibuffer.pop_front();
+  // Fetch instruction and create trace
+  auto trace = this->fetch(scheduled_warp, uuid);
 
-  // Execute
-  auto trace = this->execute(*instr, scheduled_warp);
+  // Advance PC
+  warp.PC += 4;
+
+  // Suspend warp until decode resumes it (non-stalling) or commit (stalling)
+  this->suspend(scheduled_warp);
 
   return trace;
+}
+
+void Emulator::decode(instr_trace_t* trace) {
+  assert(trace != nullptr);
+  auto& warp = warps_.at(trace->wid);
+
+  // Decode the fetched instruction code into an Instr object
+  auto instr = this->decode(warp.fetched_instr_code, trace->wid, warp.fetch_uuid);
+
+  // Fill trace metadata from the decoded instruction
+  trace->instr_ptr = instr;
+  trace->fu_type   = instr->getFUType();
+  trace->op_type   = instr->getOpType();
+  trace->dst_reg   = instr->getDestReg();
+  for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
+    trace->src_regs[i] = instr->getSrcReg(i);
+  }
+
+  // Conservative writeback: true if destination register exists
+  trace->wb = (instr->getDestReg().type != RegType::None);
+
+  // Determine fetch_stall: with deferred execution, any instruction that
+  // can change control flow or has side effects must stall
+  trace->fetch_stall = true;
+  if (trace->fu_type == FUType::ALU && !std::holds_alternative<BrType>(trace->op_type)) {
+    trace->fetch_stall = false;
+  } else if (trace->fu_type == FUType::FPU) {
+    trace->fetch_stall = false;
+  }
 }
 
 void Emulator::execute(instr_trace_t* trace) {
@@ -264,15 +284,24 @@ void Emulator::execute(instr_trace_t* trace) {
   assert(trace->instr_ptr != nullptr);
   auto& warp = warps_.at(trace->wid);
 
-  // Restore PC for execution context
+  // Save pipeline PC, then set execution PC for this instruction.
+  // Non-stalling instructions allow multiple in-flight per warp,
+  // so the pipeline PC may already be ahead of this instruction's PC.
+  auto saved_PC = warp.PC;
   warp.PC = trace->PC;
 
   // Perform functional execution
   auto new_trace = this->execute(*trace->instr_ptr, trace->wid);
 
-  // Copy execution results back
+  // The inner execute always does warp.PC += 4, then sets next_pc for branches.
+  // If no branch was taken, warp.PC == trace->PC + 4 — restore the pipeline PC.
+  // If a branch was taken, warp.PC is the branch target — keep it.
+  if (warp.PC == trace->PC + 4) {
+    warp.PC = saved_PC;
+  }
+
+  // Copy execution results back (preserve decode-time fetch_stall for warp resume)
   trace->wb          = new_trace->wb;
-  trace->fetch_stall = new_trace->fetch_stall;
   trace->data        = new_trace->data;
   trace->tmask       = new_trace->tmask;
   trace->pid         = new_trace->pid;
@@ -285,14 +314,6 @@ void Emulator::execute(instr_trace_t* trace) {
 
   // Clear instr_ptr to mark as executed
   trace->instr_ptr = nullptr;
-}
-
-void Emulator::pipeline_lock(uint32_t wid) {
-  in_pipeline_.set(wid);
-}
-
-void Emulator::pipeline_unlock(uint32_t wid) {
-  in_pipeline_.reset(wid);
 }
 
 bool Emulator::running() const {

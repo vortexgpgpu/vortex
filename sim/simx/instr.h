@@ -141,6 +141,8 @@ public:
     , parent_uuid_(uuid)
     , fu_type_(fu_type)
     , is_uop_(false)
+    , is_macro_op_(false)
+    , has_tmask_(false)
   {}
 
   void setFUType(FUType fu_type) {
@@ -191,6 +193,14 @@ public:
     return is_uop_;
   }
 
+  void setMacroOp() {
+    is_macro_op_ = true;
+  }
+
+  bool is_macro_op() const {
+    return is_macro_op_;
+  }
+
   bool hasTmask() const {
     return has_tmask_;
   }
@@ -209,8 +219,9 @@ private:
   RegOpd   rsrc_[MAX_REG_SOURCES];
   RegOpd   rdest_;
   bool     is_uop_;
+  bool     is_macro_op_;
   ThreadMask tmask_;
-  bool     has_tmask_ = false;
+  bool     has_tmask_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };

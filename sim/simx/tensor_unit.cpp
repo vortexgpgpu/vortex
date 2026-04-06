@@ -997,7 +997,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
+op_string_t TensorUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
   switch (tcu_type) {
   case TcuType::WMMA:
     return {"WMMA." + std::string(args.is_sparse ? "SP." : "") + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
@@ -1016,6 +1016,171 @@ op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
   default:
     std::abort();
   }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+uint32_t TcuUopGen::uop_count(const Instr& instr) {
+  if (instr.getFUType() != FUType::TCU)
+    return 1;
+
+  auto tcu_type = std::get<TcuType>(instr.getOpType());
+  auto args = std::get<IntrTcuArgs>(instr.getArgs());
+
+  if (tcu_type == TcuType::WMMA) {
+    using wmma = vt::wmma_config_t<NUM_THREADS>;
+    bool is_sparse = args.is_sparse;
+    uint32_t meta_stores = 0;
+    if (is_sparse) {
+      meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wmma::stores_per_col, NUM_THREADS);
+    }
+    uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
+    uint32_t mma_steps = (wmma::sym_sparse && is_sparse)
+                       ? (wmma::m_steps * wmma::n_steps * wmma::k_steps)
+                       : (wmma::m_steps * wmma::n_steps * k_count);
+    return meta_stores + mma_steps;
+  }
+
+#ifdef TCU_WGMMA_ENABLE
+  if (tcu_type == TcuType::WGMMA) {
+    uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
+    uint32_t k_count = args.is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
+    return k_count * nrc;
+  }
+#endif
+
+  return 1;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
+  auto tcu_type = std::get<TcuType>(macro_instr.getOpType());
+  auto args = std::get<IntrTcuArgs>(macro_instr.getArgs());
+  uint64_t parent_uuid = macro_instr.getUUID();
+  uint32_t total = uop_count(macro_instr);
+
+  // Compute UUID for this micro-op
+  uint32_t uuid_hi = (parent_uuid >> 32) & 0xffffffff;
+  uint32_t uuid_lo = parent_uuid & 0xffffffff;
+  uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
+  uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+
+  auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::TCU);
+  uop_instr->setParentUUID(parent_uuid);
+
+  if (tcu_type == TcuType::WMMA) {
+    using wmma = vt::wmma_config_t<NUM_THREADS>;
+    constexpr uint32_t rc_base = 0, ra_base = 10;
+    constexpr uint32_t rb_base = (wmma::NRB == 4) ? 28 : 24;
+    bool is_sparse = args.is_sparse;
+    uint32_t fmt_s = args.fmt_s;
+    uint32_t fmt_d = args.fmt_d;
+
+    uint32_t meta_stores = 0;
+    if (is_sparse) {
+      meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wmma::stores_per_col, NUM_THREADS);
+    }
+
+    if (uop_index < meta_stores) {
+      // Phase 1: metadata-store uops (sparse only)
+      constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
+      uint32_t flat_store = uop_index;
+      uint32_t reg_rs1 = (flat_store / wmma::meta_cols_per_load) ? meta_reg1 : meta_reg0;
+      uop_instr->setOpType(TcuType::META_STORE);
+      uop_instr->setArgs(IntrTcuArgs{false, 0, 0, fmt_s, flat_store, 0, 0, 0});
+      uop_instr->setSrcReg(0, reg_rs1, RegType::Float);
+    } else {
+      // Phase 2: MMA uops
+      uint32_t mma_idx = uop_index - meta_stores;
+      uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
+
+      if (wmma::sym_sparse && is_sparse) {
+        // Symmetric-sparse: flatten (m, n, k) into a single counter
+        constexpr uint32_t lg_n = (wmma::n_steps > 1) ? log2ceil(wmma::n_steps) : 0;
+        constexpr uint32_t lg_k = (wmma::k_steps > 1) ? log2ceil(wmma::k_steps) : 0;
+        constexpr uint32_t step_bits = lg_n + lg_k;
+        constexpr uint32_t step_mask = step_bits ? ((1u << step_bits) - 1) : 0;
+        constexpr uint32_t sym_mask_lo = []() {
+          uint32_t mask = 0;
+          for (uint32_t lane = 0; lane < NUM_THREADS; ++lane)
+            if ((lane % wmma::tcN) < (wmma::tcN / 2)) mask |= (1u << lane);
+          return mask;
+        }();
+        constexpr uint32_t all_lanes = (NUM_THREADS == 32) ? 0xffffffffu : ((1u << NUM_THREADS) - 1);
+
+        uint32_t n_sp = step_bits ? (mma_idx & step_mask) : 0;
+        uint32_t m_sp = mma_idx >> step_bits;
+        uint32_t reg_rs3 = rc_base + (mma_idx >> 1);
+        uop_instr->setOpType(TcuType::WMMA);
+        uop_instr->setArgs(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, n_sp, 0});
+        uop_instr->setDestReg(reg_rs3, RegType::Float);
+        uop_instr->setSrcReg(0, ra_base + m_sp, RegType::Float);
+        uop_instr->setSrcReg(1, rb_base + n_sp, RegType::Float);
+        uop_instr->setSrcReg(2, reg_rs3, RegType::Float);
+        uop_instr->setTmask(ThreadMask(NUM_THREADS, (mma_idx & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
+      } else {
+        // Standard k-major triple loop (dense or non-sym sparse)
+        uint32_t b_sub = is_sparse ? wmma::b_sub_blocks_sp : wmma::b_sub_blocks;
+        uint32_t mn = wmma::m_steps * wmma::n_steps;
+        uint32_t k = mma_idx / mn;
+        uint32_t rem = mma_idx % mn;
+        uint32_t m = rem / wmma::n_steps;
+        uint32_t n = rem % wmma::n_steps;
+        uint32_t reg_rs1 = ra_base + (m / wmma::a_sub_blocks) * k_count + k;
+        uint32_t reg_rs2 = rb_base + (k * wmma::n_steps + n) / b_sub;
+        uint32_t reg_rs3 = rc_base + m * wmma::n_steps + n;
+        uop_instr->setOpType(TcuType::WMMA);
+        uop_instr->setArgs(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
+        uop_instr->setDestReg(reg_rs3, RegType::Float);
+        uop_instr->setSrcReg(0, reg_rs1, RegType::Float);
+        uop_instr->setSrcReg(1, reg_rs2, RegType::Float);
+        uop_instr->setSrcReg(2, reg_rs3, RegType::Float);
+      }
+    }
+  }
+#ifdef TCU_WGMMA_ENABLE
+  else if (tcu_type == TcuType::WGMMA) {
+    constexpr uint32_t m_steps = wg_cfg::m_steps;
+    constexpr uint32_t k_steps = wg_cfg::k_steps;
+    uint32_t fmt_s = args.fmt_s;
+    uint32_t fmt_d = args.fmt_d;
+    bool is_sparse = args.is_sparse;
+    bool is_a_smem = args.is_a_smem;
+    uint32_t cd_nregs = args.cd_nregs;
+    uint32_t k_count = is_sparse ? (k_steps / 2) : k_steps;
+    uint32_t ra_base = is_a_smem ? 10 : 24;
+    constexpr uint32_t a0 = 10, a1 = 11;
+
+    // Loop order: m (inner) -> k -> n (outer), matching RTL
+    uint32_t mk = m_steps * k_count;
+    uint32_t n = uop_index / mk;
+    uint32_t rem = uop_index % mk;
+    uint32_t k = rem / m_steps;
+    uint32_t m = rem % m_steps;
+    uint32_t r = n * m_steps + m;
+
+    uop_instr->setOpType(TcuType::WGMMA);
+    uop_instr->setArgs(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
+                                   fmt_s, fmt_d, m, n, k});
+    uop_instr->setDestReg(r, RegType::Float);
+    if (uop_index == 0) {
+      if (is_a_smem) {
+        uop_instr->setSrcReg(0, a0, RegType::Integer);
+      } else {
+        uint32_t rs1_off = m * k_count + k;
+        uop_instr->setSrcReg(0, ra_base + rs1_off, RegType::Float);
+      }
+      uop_instr->setSrcReg(1, a1, RegType::Integer);
+    } else if (!is_a_smem) {
+      uint32_t rs1_off = m * k_count + k;
+      uop_instr->setSrcReg(0, ra_base + rs1_off, RegType::Float);
+    }
+    uop_instr->setSrcReg(2, r, RegType::Float);
+  }
+#endif
+
+  return uop_instr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -28,6 +28,7 @@
 
 #ifdef EXT_TCU_ENABLE
 #include "tensor_cfg.h"
+#include "tensor_unit.h"
 #endif
 
 using namespace vortex;
@@ -488,7 +489,7 @@ static op_string_t op_string(const Instr &instr) {
   #ifdef EXT_TCU_ENABLE
     ,[&](TcuType tcu_type)-> op_string_t {
       auto tpuArgs = std::get<IntrTcuArgs>(instrArgs);
-      return op_string(tcu_type, tpuArgs);
+      return TensorUnit::op_string(tcu_type, tpuArgs);
     }
   #endif // EXT_TCU_ENABLE
  );
@@ -520,10 +521,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
-  // get instruction buffer
-  auto& ibuffer = warps_.at(wid).ibuffer;
-
+Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   auto funct2 = (code >> shift_funct2) & mask_funct2;
   auto funct3 = (code >> shift_funct3) & mask_funct3;
@@ -537,24 +535,22 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   auto rs2 = (code >> shift_rs2) & mask_reg;
   auto rs3 = (code >> shift_rs3) & mask_reg;
 
+  auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
+
   switch (op) {
   case Opcode::LUI:
   case Opcode::AUIPC: { // RV32I: LUI / AUIPC
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     auto imm20 = (code >> shift_funct3) << shift_funct3;
     instr->setOpType((op == Opcode::LUI) ? AluType::LUI : AluType::AUIPC);
     instr->setArgs(IntrAluArgs{1, 0, imm20});
     instr->setDestReg(rd, RegType::Integer);
-    ibuffer.push_back(instr);
-    break;
-  }
+  } break;
 #ifdef XLEN_64
   case Opcode::R_W:
   case Opcode::I_W:
 #endif
   case Opcode::R:
   case Opcode::I: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     bool is_w = (op == Opcode::R_W) || (op == Opcode::I_W);
     bool is_imm = (op == Opcode::I) || (op == Opcode::I_W);
     if (op == Opcode::R && funct7 == 0x7) {
@@ -572,38 +568,14 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     } else
     if ((op == Opcode::R || op == Opcode::R_W) && (funct7 & 0x1)) {
       switch (funct3) {
-      case 0: { // RV32M: MUL
-        instr->setOpType(MdvType::MUL);
-        break;
-      }
-      case 1: { // RV32M: MULH
-        instr->setOpType(MdvType::MULH);
-        break;
-      }
-      case 2: { // RV32M: MULHSU
-        instr->setOpType(MdvType::MULHSU);
-        break;
-      }
-      case 3: { // RV32M: MULHU
-        instr->setOpType(MdvType::MULHU);
-        break;
-      }
-      case 4: { // RV32M: DIV
-        instr->setOpType(MdvType::DIV);
-        break;
-      }
-      case 5: { // RV32M: DIVU
-        instr->setOpType(MdvType::DIVU);
-        break;
-      }
-      case 6: { // RV32M: REM
-        instr->setOpType(MdvType::REM);
-        break;
-      }
-      case 7: { // RV32M: REMU
-        instr->setOpType(MdvType::REMU);
-        break;
-      }
+      case 0: instr->setOpType(MdvType::MUL); break;
+      case 1: instr->setOpType(MdvType::MULH); break;
+      case 2: instr->setOpType(MdvType::MULHSU); break;
+      case 3: instr->setOpType(MdvType::MULHU); break;
+      case 4: instr->setOpType(MdvType::DIV); break;
+      case 5: instr->setOpType(MdvType::DIVU); break;
+      case 6: instr->setOpType(MdvType::REM); break;
+      case 7: instr->setOpType(MdvType::REMU); break;
       default:
         std::abort();
       }
@@ -621,38 +593,14 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         imm = sext(imm12, width_i_imm);
       }
       switch (funct3) {
-      case 0: { // RV32I: SUB/ADD
-        instr->setOpType((!is_imm && funct7 == 0x20) ? AluType::SUB : AluType::ADD);
-        break;
-      }
-      case 1: { // RV32I: SLL
-        instr->setOpType(AluType::SLL);
-        break;
-      }
-      case 2: { // RV32I: SLT
-        instr->setOpType(AluType::SLT);
-        break;
-      }
-      case 3: { // RV32I: SLTU
-        instr->setOpType(AluType::SLTU);
-        break;
-      }
-      case 4: { // RV32I: XOR
-        instr->setOpType(AluType::XOR);
-        break;
-      }
-      case 5: { // RV32I: SRA/SRL
-        instr->setOpType((funct7 == 0x20) ? AluType::SRA : AluType::SRL);
-        break;
-      }
-      case 6: { // RV32I: OR
-        instr->setOpType(AluType::OR);
-        break;
-      }
-      case 7: { // RV32I: AND
-        instr->setOpType(AluType::AND);
-        break;
-      }
+      case 0: instr->setOpType((!is_imm && funct7 == 0x20) ? AluType::SUB : AluType::ADD); break;
+      case 1: instr->setOpType(AluType::SLL); break;
+      case 2: instr->setOpType(AluType::SLT); break;
+      case 3: instr->setOpType(AluType::SLTU); break;
+      case 4: instr->setOpType(AluType::XOR); break;
+      case 5: instr->setOpType((funct7 == 0x20) ? AluType::SRA : AluType::SRL); break;
+      case 6: instr->setOpType(AluType::OR); break;
+      case 7: instr->setOpType(AluType::AND); break;
       default:
         std::abort();
       }
@@ -663,10 +611,8 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     if (!is_imm) {
       instr->setSrcReg(1, rs2, RegType::Integer);
     }
-    ibuffer.push_back(instr);
   } break;
   case Opcode::B: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     auto bit_11   = rd & 0x1;
     auto bits_4_1 = rd >> 1;
     auto bit_10_5 = funct7 & 0x3f;
@@ -677,10 +623,8 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     instr->setArgs(IntrBrArgs{funct3, addr});
     instr->setSrcReg(0, rs1, RegType::Integer);
     instr->setSrcReg(1, rs2, RegType::Integer);
-    ibuffer.push_back(instr);
   } break;
   case Opcode::JAL: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     auto unordered  = code >> shift_funct3;
     auto bits_19_12 = unordered & 0xff;
     auto bit_11     = (unordered >> 8) & 0x1;
@@ -691,27 +635,24 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     instr->setOpType(BrType::JAL);
     instr->setArgs(IntrBrArgs{0, addr});
     instr->setDestReg(rd, RegType::Integer);
-    ibuffer.push_back(instr);
   } break;
   case Opcode::JALR: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     auto imm12 = code >> shift_rs2;
     auto addr = sext(imm12, width_i_imm);
     instr->setOpType(BrType::JALR);
     instr->setArgs(IntrBrArgs{0, addr});
     instr->setDestReg(rd, RegType::Integer);
     instr->setSrcReg(0, rs1, RegType::Integer);
-    ibuffer.push_back(instr);
   } break;
   case Opcode::L:
   case Opcode::FL:
   case Opcode::S:
   case Opcode::FS: {
+    instr->setFUType(FUType::LSU);
     bool is_float = (op == Opcode::FL || op == Opcode::FS);
     bool is_load = (op == Opcode::L || op == Opcode::FL);
   #ifdef EXT_V_ENABLE
     if (is_float && funct3 != 0x2 && funct3 != 0x3) {
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
       IntrVlsArgs instArgs{};
       instArgs.mew = (code >> shift_vmew) & mask_vmew;
       instArgs.vm = (code >> shift_vm) & mask_vm;
@@ -747,11 +688,9 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         instr->setSrcReg(2, rd, RegType::Vector);
       }
       instr->setArgs(instArgs);
-      ibuffer.push_back(instr);
     } else
   #endif // EXT_V_ENABLE
     {
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
       instr->setSrcReg(0, rs1, RegType::Integer);
       uint32_t imm12 = 0;
       if (is_load) {
@@ -764,17 +703,15 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       auto offset = sext(imm12, width_i_imm);
       instr->setOpType(is_load ? LsuType::LOAD : LsuType::STORE);
       instr->setArgs(IntrLsuArgs{funct3, is_float, offset, 0});
-      ibuffer.push_back(instr);
     }
   } break;
   case Opcode::FENCE: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
+    instr->setFUType(FUType::LSU);
     instr->setOpType(LsuType::FENCE);
     instr->setArgs(IntrLsuArgs{0, 0, 0, 0});
-    ibuffer.push_back(instr);
   } break;
   case Opcode::AMO: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
+    instr->setFUType(FUType::LSU);
     uint32_t aq = (code >> shift_aq) & mask_aq;
     uint32_t rl = (code >> shift_rl) & mask_rl;
     switch (funct5) {
@@ -796,11 +733,10 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     instr->setDestReg(rd, RegType::Integer);
     instr->setSrcReg(0, rs1, RegType::Integer);
     instr->setSrcReg(1, rs2, RegType::Integer);
-    ibuffer.push_back(instr);
   } break;
   case Opcode::SYS: {
     if (funct3 != 0) { // CSRRW/CSRRS/CSRRC
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
+      instr->setFUType(FUType::SFU);
       instr->setDestReg(rd, RegType::Integer);
       switch (funct3) {
       case 1: case 5: instr->setOpType(CsrType::CSRRW); break;
@@ -816,17 +752,14 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       } else { // zimm
         instr->setArgs(IntrCsrArgs{1, rs1, imm12});
       }
-      ibuffer.push_back(instr);
     } else { // ECALL/EBREACK/URET/SRET/MRET
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
       auto imm12 = code >> shift_rs2;
       instr->setOpType(BrType::SYS);
       instr->setArgs(IntrBrArgs{0, imm12});
-      ibuffer.push_back(instr);
     }
   } break;
   case Opcode::FCI: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::FPU);
+    instr->setFUType(FUType::FPU);
     instr->setArgs(IntrFpuArgs{funct3, rs2, (funct7 & 0x1)});
     switch (funct7) {
     case 0x00: // RV32F: FADD.S
@@ -919,13 +852,12 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     default:
       std::abort();
     }
-    ibuffer.push_back(instr);
   } break;
   case Opcode::FMADD:
   case Opcode::FMSUB:
   case Opcode::FNMADD:
   case Opcode::FNMSUB: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::FPU);
+    instr->setFUType(FUType::FPU);
     instr->setOpType((op == Opcode::FMADD) ? FpuType::FMADD :
                      (op == Opcode::FMSUB) ? FpuType::FMSUB :
                      (op == Opcode::FNMADD) ? FpuType::FNMADD : FpuType::FNMSUB);
@@ -934,11 +866,10 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     instr->setSrcReg(0, rs1, RegType::Float);
     instr->setSrcReg(1, rs2, RegType::Float);
     instr->setSrcReg(2, rs3, RegType::Float);
-    ibuffer.push_back(instr);
   } break;
 #ifdef EXT_V_ENABLE
   case Opcode::VSET: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VPU);
+    instr->setFUType(FUType::VPU);
     uint32_t vm = (code >> shift_vm) & mask_vm;
     switch (funct3) {
     case 0: { // OPIVV
@@ -1011,13 +942,12 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     default:
       std::abort();
     }
-    ibuffer.push_back(instr);
   } break;
 #endif // EXT_V_ENABLE
   case Opcode::EXT1: {
     switch (funct7) {
     case 0: {
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
+      instr->setFUType(FUType::SFU);
       IntrWctlArgs wctlArgs{};
       switch (funct3) {
       case 0: // TMC
@@ -1067,25 +997,15 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         std::abort();
       }
       instr->setArgs(wctlArgs);
-      ibuffer.push_back(instr);
     } break;
     case 1: { // VOTE
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
       instr->setDestReg(rd, RegType::Integer);
       instr->setSrcReg(0, rs1, RegType::Integer);
       switch (funct3) {
-      case 0:
-        instr->setOpType(VoteType::ALL);
-        break;
-      case 1:
-        instr->setOpType(VoteType::ANY);
-        break;
-      case 2:
-        instr->setOpType(VoteType::UNI);
-        break;
-      case 3:
-        instr->setOpType(VoteType::BAL);
-        break;
+      case 0: instr->setOpType(VoteType::ALL); break;
+      case 1: instr->setOpType(VoteType::ANY); break;
+      case 2: instr->setOpType(VoteType::UNI); break;
+      case 3: instr->setOpType(VoteType::BAL); break;
       case 4:
         instr->setOpType(ShflType::UP);
         instr->setSrcReg(1, rs2, RegType::Integer);
@@ -1105,181 +1025,39 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       default:
         std::abort();
       }
-      ibuffer.push_back(instr);
     } break;
 #ifdef EXT_DXA_ENABLE
     case 3: { // DXA issue (wgather-based: single instruction carries all args)
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
+      instr->setFUType(FUType::SFU);
       IntrDxaArgs dxaArgs{};
       instr->setArgs(dxaArgs);
       instr->setOpType(DxaType::ISSUE);
       instr->setSrcReg(0, rs1, RegType::Integer);
       instr->setSrcReg(1, rs2, RegType::Integer);
-      ibuffer.push_back(instr);
     } break;
 #endif
   #ifdef EXT_TCU_ENABLE
     case 2: {
+      instr->setFUType(FUType::TCU);
       switch (funct3) {
-      case 0: { // WMMA_SYNC / WMMA_SP_SYNC
-        namespace vt = vortex::tensor;
-        using cfg = vt::wmma_config_t<NUM_THREADS>;
-        static_assert(cfg::num_meta_loads <= 2, "sparse metadata decode assumes at most two loads");
-
-        constexpr uint32_t rc_base = 0, ra_base = 10;
-        constexpr uint32_t rb_base = (cfg::NRB == 4) ? 28 : 24;
-        constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
+      case 0: { // WMMA_SYNC / WMMA_SP_SYNC — single macro Instr, sequencer expands to micro-ops
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
+        instr->setOpType(TcuType::WMMA);
+        instr->setArgs(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, 0, 0, 0});
+        instr->setMacroOp();
 
-        // Validate sparse-specific preconditions
-        uint32_t meta_stores = 0;
-        if (is_sparse) {
-          if ((cfg::k_steps % 2) != 0
-           || (cfg::b_block_size_sp == 0) || (NUM_THREADS % cfg::b_block_size_sp) != 0
-           || !vt::sparse_format_supported(fmt_s)) {
-            std::abort();
-          }
-          meta_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
-          if (meta_stores == 0)
-            std::abort();
-        }
-
-        // Derive loop counts: sym_sparse folds k into the flat counter, uses full k_steps
-        uint32_t k_count  = is_sparse ? sparse_k_steps : cfg::k_steps;
-        uint32_t b_sub    = is_sparse ? cfg::b_sub_blocks_sp : cfg::b_sub_blocks;
-        uint32_t mma_steps = (cfg::sym_sparse && is_sparse)
-                           ? (cfg::m_steps * cfg::n_steps * cfg::k_steps)
-                           : (cfg::m_steps * cfg::n_steps * k_count);
-        uint32_t total_steps = meta_stores + mma_steps;
-        uint32_t steps_shift = (total_steps > 1) ? (32 - log2ceil(total_steps)) : 0;
-        uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
-        uint32_t uuid_lo = uuid & 0xffffffff;
-        uint32_t steps = 0;
-
-        // Helper: stamp next uuid slot
-        auto next_uuid = [&]() -> uint64_t {
-          return (static_cast<uint64_t>(uuid_hi) << 32) | ((steps++ << steps_shift) | uuid_lo);
-        };
-
-        // Phase 1: metadata-store uops (sparse only)
-        constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
-        for (uint32_t flat_store = 0; flat_store < meta_stores; ++flat_store) {
-          uint32_t reg_rs1 = (flat_store / cfg::meta_cols_per_load) ? meta_reg1 : meta_reg0;
-          auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
-          instr->setOpType(TcuType::META_STORE);
-          instr->setArgs(IntrTcuArgs{false, 0, 0, fmt_s, flat_store, 0, 0, 0});
-          instr->setSrcReg(0, reg_rs1, RegType::Float);
-          instr->setParentUUID(uuid);
-          ibuffer.push_back(instr);
-        }
-
-        // Phase 2: MMA uops
-        if (cfg::sym_sparse && is_sparse) {
-          // Symmetric-sparse: flatten (m, n, k) into a single counter, alternating
-          // thread-mask halves so each pair of uops covers a full accumulator row.
-          constexpr uint32_t lg_n = (cfg::n_steps > 1) ? log2ceil(cfg::n_steps) : 0;
-          constexpr uint32_t lg_k = (cfg::k_steps > 1) ? log2ceil(cfg::k_steps) : 0;
-          constexpr uint32_t step_bits = lg_n + lg_k;
-          constexpr uint32_t step_mask = step_bits ? ((1u << step_bits) - 1) : 0;
-          constexpr uint32_t sym_mask_lo = []() {
-            uint32_t mask = 0;
-            for (uint32_t lane = 0; lane < NUM_THREADS; ++lane)
-              if ((lane % cfg::tcN) < (cfg::tcN / 2)) mask |= (1u << lane);
-            return mask;
-          }();
-          constexpr uint32_t all_lanes = (NUM_THREADS == 32) ? 0xffffffffu : ((1u << NUM_THREADS) - 1);
-          for (uint32_t eff = 0; eff < mma_steps; ++eff) {
-            uint32_t n_sp = step_bits ? (eff & step_mask) : 0;
-            uint32_t m_sp = eff >> step_bits;
-            uint32_t reg_rs3 = rc_base + (eff >> 1);
-            auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
-            instr->setOpType(TcuType::WMMA);
-            instr->setArgs(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, n_sp, 0});
-            instr->setDestReg(reg_rs3, RegType::Float);
-            instr->setSrcReg(0, ra_base + m_sp, RegType::Float);
-            instr->setSrcReg(1, rb_base + n_sp, RegType::Float);
-            instr->setSrcReg(2, reg_rs3, RegType::Float);
-            instr->setTmask(ThreadMask(NUM_THREADS, (eff & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
-            instr->setParentUUID(uuid);
-            ibuffer.push_back(instr);
-          }
-        } else {
-          // Standard k-major triple loop (dense or non-sym sparse)
-          for (uint32_t k = 0; k < k_count; ++k) {
-            for (uint32_t m = 0; m < cfg::m_steps; ++m) {
-              for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * k_count + k;
-                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / b_sub;
-                uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
-                auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
-                instr->setOpType(TcuType::WMMA);
-                instr->setArgs(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
-                instr->setDestReg(reg_rs3, RegType::Float);
-                instr->setSrcReg(0, reg_rs1, RegType::Float);
-                instr->setSrcReg(1, reg_rs2, RegType::Float);
-                instr->setSrcReg(2, reg_rs3, RegType::Float);
-                instr->setParentUUID(uuid);
-                ibuffer.push_back(instr);
-              }
-            }
-          }
-        }
       } break;
     #ifdef TCU_WGMMA_ENABLE
-      case 1: { // WGMMA_SYNC
-        namespace vt = vortex::tensor;
-        using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::fp32, vt::fp32>;
-        constexpr uint32_t m_steps = wg_cfg::m_steps;   // always 2
-        constexpr uint32_t k_steps = wg_cfg::k_steps;   // always 2
-        uint32_t fmt_d = rd;
-        uint32_t fmt_s = rs1;
-        bool is_sparse    = (rs2 & 1) != 0;
-        uint32_t cd_nregs = (rs2 >> 1) & 0x3;   // 0=8, 1=16, 2=32
-        bool is_a_smem  = (rs2 >> 3) & 1;
-        uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
-        constexpr uint32_t a0 = 10, a1 = 11;
-        uint32_t ra_base = is_a_smem ? 10 : 24; // RS: A at f24..f27 (fixed)
-        uint32_t k_count = is_sparse ? (k_steps / 2) : k_steps;
-        uint32_t total_uops = k_count * nrc;
-        uint32_t steps_shift = (total_uops > 1) ? (32 - log2ceil(total_uops)) : 0;
-        uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
-        uint32_t uuid_lo = uuid & 0xffffffff;
-        uint32_t n_steps = nrc / m_steps;
-        // Loop order: m (inner) → k → n (outer), matching RTL
-        uint32_t uop_idx = 0;
-        for (uint32_t n = 0; n < n_steps; ++n) {
-          for (uint32_t k = 0; k < k_count; ++k) {
-            for (uint32_t m = 0; m < m_steps; ++m) {
-              // C/D register index: n-major layout: r = n * m_steps + m
-              uint32_t r = n * m_steps + m;
-              uint32_t uuid_lo_x = (uop_idx++ << steps_shift) | uuid_lo;
-              uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
-              auto uop = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-              uop->setOpType(TcuType::WGMMA);
-              uop->setArgs(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
-                                       fmt_s, fmt_d, m, n, k});
-              uop->setDestReg(r, RegType::Float);
-              if (uop_idx == 1) {
-                // First uop: set smem descriptors
-                if (is_a_smem) {
-                  uop->setSrcReg(0, a0, RegType::Integer);
-                } else {
-                  uint32_t rs1_off = m * k_count + k;
-                  uop->setSrcReg(0, ra_base + rs1_off, RegType::Float);
-                }
-                // B always from smem
-                uop->setSrcReg(1, a1, RegType::Integer);
-              } else if (!is_a_smem) {
-                uint32_t rs1_off = m * k_count + k;
-                uop->setSrcReg(0, ra_base + rs1_off, RegType::Float);
-              }
-              uop->setSrcReg(2, r, RegType::Float);
-              uop->setParentUUID(uuid);
-              ibuffer.push_back(uop);
-            }
-          }
-        }
+      case 1: { // WGMMA_SYNC — single macro Instr, sequencer expands to micro-ops
+        uint32_t fmt_d = rd, fmt_s = rs1;
+        bool is_sparse = (rs2 & 1) != 0;
+        uint32_t cd_nregs = (rs2 >> 1) & 0x3;
+        bool is_a_smem = (rs2 >> 3) & 1;
+        instr->setOpType(TcuType::WGMMA);
+        instr->setArgs(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0});
+        instr->setMacroOp();
+
       } break;
     #endif // TCU_WGMMA_ENABLE
       default:
@@ -1288,24 +1066,21 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     } break;
   #endif
     case 4: { // Load/Store Packing extensions
+      instr->setFUType(FUType::LSU);
       switch (funct3) {
       case 1: { // vx_packlb_f: pack 4 strided bytes into FP register
-        auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
         instr->setOpType(LsuType::LOAD);
         instr->setArgs(IntrLsuArgs{0, 1, 0, 1});
         instr->setDestReg(rd, RegType::Float);
         instr->setSrcReg(0, rs1, RegType::Integer);
         instr->setSrcReg(1, rs2, RegType::Integer);
-        ibuffer.push_back(instr);
       } break;
       case 2: { // vx_packlh_f: pack 2 strided halfwords into FP register
-        auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
         instr->setOpType(LsuType::LOAD);
         instr->setArgs(IntrLsuArgs{0, 1, 0, 2});
         instr->setDestReg(rd, RegType::Float);
         instr->setSrcReg(0, rs1, RegType::Integer);
         instr->setSrcReg(1, rs2, RegType::Integer);
-        ibuffer.push_back(instr);
       } break;
       default:
         std::abort();
@@ -1318,7 +1093,6 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   case Opcode::EXT2: {
     switch (funct3) {
     case 0: { // WGATHER
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
       instr->setOpType(WgatherType::WGATHER);
       instr->setDestReg(rd, RegType::Integer);
       instr->setSrcReg(0, rs1, RegType::Integer);
@@ -1327,7 +1101,6 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       IntrWgatherArgs wgArgs{};
       wgArgs.src_lane = funct2;
       instr->setArgs(wgArgs);
-      ibuffer.push_back(instr);
     } break;
     default:
       std::abort();
@@ -1336,4 +1109,6 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   default:
     std::abort();
   }
+
+  return instr;
 }
