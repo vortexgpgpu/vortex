@@ -123,8 +123,9 @@ dxa()
     make -C runtime/simx
     make -C runtime/rtlsim
 
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --debug=3
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --debug=3
+    # Default config: 4 threads * 4 warps = 16 threads/core, so use 4x4 tiles
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-R4 -C4" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-R4 -C4" --debug=3
 
     CONFIGS="-DEXT_DXA_ENABLE -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=32 --perf=6
     CONFIGS="-DEXT_DXA_ENABLE -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=32 --perf=6
@@ -257,6 +258,12 @@ config1()
     ./ci/blackbox.sh --driver=rtlsim --warps=8 --threads=2 --app=diverge
     ./ci/blackbox.sh --driver=simx --warps=1 --threads=1 --app=diverge
     ./ci/blackbox.sh --driver=simx --warps=2 --threads=16 --app=diverge
+
+    # 2D block dim (block_dim.x < NUM_LANES triggers CTA thread-ID decomposition)
+    ./ci/blackbox.sh --driver=simx --threads=8 --app=demo --args="-x1 -y4"
+    ./ci/blackbox.sh --driver=simx --threads=8 --app=demo --args="-x2 -y4"
+    ./ci/blackbox.sh --driver=rtlsim --threads=8 --app=demo --args="-x1 -y4"
+    ./ci/blackbox.sh --driver=rtlsim --threads=8 --app=demo --args="-x2 -y4"
 
     # cores clustering
     ./ci/blackbox.sh --driver=rtlsim --cores=4 --app=diverge --args="-n1"

@@ -118,16 +118,32 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign gtid[i] = (`XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`XLEN'(execute_if.data.header.wid) << NT_BITS) + wtid[i];
     end
 
-    // Per-lane CTA thread IDs
+    // Per-lane CTA thread IDs via combinational decomposition of flat lane index.
     wire [NUM_LANES-1:0][`XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cta_tid
-        wire [CTA_TID_WIDTH:0] tx = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[0]) + (CTA_TID_WIDTH+1)'(wtid[i]);
-        wire cx = (tx >= sched_csr_if.cta_csrs.block_dim[0]);
-        wire [CTA_TID_WIDTH:0] ty = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[1]) + (CTA_TID_WIDTH+1)'(cx);
-        wire cy = (ty >= sched_csr_if.cta_csrs.block_dim[1]);
-        assign cta_tid_x[i] = cx ? `XLEN'(tx) - `XLEN'(sched_csr_if.cta_csrs.block_dim[0]) : `XLEN'(tx);
-        assign cta_tid_y[i] = cy ? `XLEN'(ty) - `XLEN'(sched_csr_if.cta_csrs.block_dim[1]) : `XLEN'(ty);
-        assign cta_tid_z[i] = `XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + `XLEN'(cy);
+        localparam FLAT_TID_W = `UP(NT_BITS);
+        wire [FLAT_TID_W-1:0] flat_tid;
+        if (PID_BITS != 0) begin : g_pid_tid
+            assign flat_tid = FLAT_TID_W'(execute_if.data.header.pid * NUM_LANES + i);
+        end else begin : g_no_pid_tid
+            assign flat_tid = FLAT_TID_W'(i);
+        end
+
+        wire [CTA_TID_WIDTH:0] dim_x = sched_csr_if.cta_csrs.block_dim[0];
+        wire [CTA_TID_WIDTH:0] dim_y = sched_csr_if.cta_csrs.block_dim[1];
+
+        // When block_dim >= NUM_THREADS, all lanes fit — skip division
+        wire dim_x_no_wrap = (dim_x >= (CTA_TID_WIDTH+1)'(`NUM_THREADS));
+        wire dim_y_no_wrap = (dim_y >= (CTA_TID_WIDTH+1)'(`NUM_THREADS));
+
+        wire [FLAT_TID_W-1:0] lane_off_x = dim_x_no_wrap ? flat_tid : (flat_tid % dim_x[FLAT_TID_W-1:0]);
+        wire [FLAT_TID_W-1:0] carry_y    = dim_x_no_wrap ? FLAT_TID_W'(0) : (flat_tid / dim_x[FLAT_TID_W-1:0]);
+        wire [FLAT_TID_W-1:0] lane_off_y = dim_y_no_wrap ? carry_y : (carry_y % dim_y[FLAT_TID_W-1:0]);
+        wire [FLAT_TID_W-1:0] lane_off_z = dim_y_no_wrap ? FLAT_TID_W'(0) : (carry_y / dim_y[FLAT_TID_W-1:0]);
+
+        assign cta_tid_x[i] = `XLEN'(sched_csr_if.cta_csrs.thread_idx[0]) + `XLEN'(lane_off_x);
+        assign cta_tid_y[i] = `XLEN'(sched_csr_if.cta_csrs.thread_idx[1]) + `XLEN'(lane_off_y);
+        assign cta_tid_z[i] = `XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + `XLEN'(lane_off_z);
     end
 
     always @(*) begin
