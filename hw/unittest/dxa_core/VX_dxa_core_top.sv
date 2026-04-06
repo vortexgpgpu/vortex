@@ -60,15 +60,15 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                          dxa_req_ready,
 
     // -----------------------------------------------------------------------
-    // SMEM bank-write bus (master, SOCKET_SIZE ports)
+    // LMEM bank-write bus (master, SOCKET_SIZE ports)
     // -----------------------------------------------------------------------
-    output wire [`SOCKET_SIZE-1:0]                                              smem_wr_valid,
-    output wire [`SOCKET_SIZE-1:0][DXA_SMEM_BANK_ADDR_WIDTH-1:0]               smem_wr_addr,
-    output wire [`SOCKET_SIZE-1:0][`LMEM_NUM_BANKS-1:0][`XLEN-1:0]             smem_wr_data,
-    output wire [`SOCKET_SIZE-1:0][`LMEM_NUM_BANKS-1:0][`XLEN/8-1:0]           smem_wr_byteen,
-    output wire [`SOCKET_SIZE-1:0][DXA_BANK_WR_TAG_WIDTH-1:0]                  smem_wr_tag,
-    input  wire [`SOCKET_SIZE-1:0]                                              smem_wr_ready,
-    output wire [`SOCKET_SIZE-1:0][DXA_SMEM_LOCAL_CORE_W-1:0]                  smem_local_core_id,
+    output wire [`SOCKET_SIZE-1:0]                                              lmem_req_valid,
+    output wire [`SOCKET_SIZE-1:0]                                              lmem_req_rw,
+    output wire [`SOCKET_SIZE-1:0][DXA_LMEM_BANK_ADDR_WIDTH-1:0]              lmem_req_addr,
+    output wire [`SOCKET_SIZE-1:0][DXA_LMEM_WORD_SIZE*8-1:0]                  lmem_req_data,
+    output wire [`SOCKET_SIZE-1:0][DXA_LMEM_WORD_SIZE-1:0]                    lmem_req_byteen,
+    output wire [`SOCKET_SIZE-1:0][DXA_LMEM_FLAGS_WIDTH-1:0]                  lmem_req_flags,
+    input  wire [`SOCKET_SIZE-1:0]                                              lmem_req_ready,
 
     // -----------------------------------------------------------------------
     // Global memory bus (master, GMEM_OUT_PORTS ports)
@@ -107,20 +107,23 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign req_bus_if[0].req_data  = dxa_req_data;
     assign dxa_req_ready           = req_bus_if[0].req_ready;
 
-    VX_dxa_bank_wr_if #(
-        .NUM_BANKS       (`LMEM_NUM_BANKS),
-        .BANK_ADDR_WIDTH (DXA_SMEM_BANK_ADDR_WIDTH),
-        .WORD_SIZE       (`XLEN / 8),
-        .TAG_WIDTH       (DXA_BANK_WR_TAG_WIDTH)
-    ) smem_bus_if[`SOCKET_SIZE]();
+    VX_mem_bus_if #(
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (LMEM_DMA_TAG_W),
+        .FLAGS_WIDTH (DXA_LMEM_FLAGS_WIDTH),
+        .ADDR_WIDTH  (DXA_LMEM_BANK_ADDR_WIDTH)
+    ) lmem_bus_if[`SOCKET_SIZE]();
 
     for (genvar i = 0; i < `SOCKET_SIZE; i++) begin
-        assign smem_wr_valid[i]          = smem_bus_if[i].wr_valid;
-        assign smem_wr_addr[i]           = smem_bus_if[i].wr_addr;
-        assign smem_wr_data[i]           = smem_bus_if[i].wr_data;
-        assign smem_wr_byteen[i]         = smem_bus_if[i].wr_byteen;
-        assign smem_wr_tag[i]            = smem_bus_if[i].wr_tag;
-        assign smem_bus_if[i].wr_ready   = smem_wr_ready[i];
+        assign lmem_req_valid[i]         = lmem_bus_if[i].req_valid;
+        assign lmem_req_rw[i]            = lmem_bus_if[i].req_data.rw;
+        assign lmem_req_addr[i]          = lmem_bus_if[i].req_data.addr;
+        assign lmem_req_data[i]          = lmem_bus_if[i].req_data.data;
+        assign lmem_req_byteen[i]        = lmem_bus_if[i].req_data.byteen;
+        assign lmem_req_flags[i]         = lmem_bus_if[i].req_data.flags;
+        assign lmem_bus_if[i].req_ready  = lmem_req_ready[i];
+        assign lmem_bus_if[i].rsp_valid  = 1'b0;
+        assign lmem_bus_if[i].rsp_data   = '0;
     end
 
     VX_mem_bus_if #(
@@ -147,9 +150,6 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // DUT
     // -----------------------------------------------------------------------
 
-    wire [`SOCKET_SIZE-1:0][DXA_SMEM_LOCAL_CORE_W-1:0] smem_core_id;
-    assign smem_local_core_id = smem_core_id;
-
 `ifdef PERF_ENABLE
     dxa_perf_t dxa_perf;
     assign perf_transfers   = dxa_perf.transfers;
@@ -159,13 +159,14 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign perf_gmem_latency= dxa_perf.gmem_latency;
 `endif
 
+    `UNUSED_PARAM (ENABLE)
+
     VX_dxa_core #(
         .INSTANCE_ID     (INSTANCE_ID),
         .DXA_NUM_SOCKETS (1),
         .NUM_DXA_UNITS   (NUM_DXA_UNITS),
         .GMEM_OUT_PORTS  (GMEM_OUT_PORTS),
-        .CORE_LOCAL_BITS (CORE_LOCAL_BITS),
-        .ENABLE          (ENABLE)
+        .CORE_LOCAL_BITS (CORE_LOCAL_BITS)
     ) dxa_core (
         .clk               (clk),
         .reset             (reset),
@@ -174,8 +175,7 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `endif
         .dcr_bus_if        (dcr_bus_if),
         .req_bus_if        (req_bus_if),
-        .smem_bus_if       (smem_bus_if),
-        .smem_local_core_id(smem_core_id),
+        .lmem_bus_if       (lmem_bus_if),
         .gmem_bus_if       (gmem_bus_if),
         .busy              (busy)
     );

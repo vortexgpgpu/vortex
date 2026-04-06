@@ -13,14 +13,14 @@
 
 // DXA Read Controller: accepts CL entries from dedup, issues pipelined
 // GMEM reads via slot table, and emits CL data with byte masks to
-// cl2smem. Dedup guarantees each CL address appears at most once.
+// cl2lmem. Dedup guarantees each CL address appears at most once.
 //
 // Two input paths:
 //   1. OOB:    emit cfill immediately (no GMEM read)
 //   2. Normal: allocate slot, issue GMEM read (pipelined, up to MAX_OUTSTANDING)
 //
 // A Response Reorder Buffer (ROB) ensures GMEM responses are emitted
-// to cl2smem in request-issue order, regardless of GMEM response order.
+// to cl2lmem in request-issue order, regardless of GMEM response order.
 
 `include "VX_define.vh"
 
@@ -61,7 +61,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [GMEM_TAG_VALUEW-1:0]  gmem_rd_rsp_tag,
     output wire                        gmem_rd_rsp_ready,
 
-    // CL output (to cl2smem, valid/ready).
+    // CL output (to cl2lmem, valid/ready).
     output wire                        cl_out_valid,
     input  wire                        cl_out_ready,
     output wire [GMEM_DATAW-1:0]       cl_out_data,
@@ -113,7 +113,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `UNUSED_VAR (ofifo_alm_full)
     `UNUSED_VAR (ofifo_size)
 
-    // Output from FIFO to cl2smem.
+    // Output from FIFO to cl2lmem.
     assign cl_out_valid = ~ofifo_empty;
     assign {cl_out_last, cl_out_byte_mask, cl_out_data} = ofifo_data_out;
     assign ofifo_pop = cl_out_valid && cl_out_ready;
@@ -162,7 +162,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // ---- Response Reorder Buffer (ROB) ----
     // GMEM responses may arrive out of order (e.g. due to cache bank
-    // interleaving). The ROB ensures they are emitted to cl2smem in
+    // interleaving). The ROB ensures they are emitted to cl2lmem in
     // the order requests were issued, preserving row ordering in SMEM.
     //
     // alloc_seq_r: sequence counter incremented per request issue.
@@ -172,9 +172,6 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // drain_seq_r when rob_valid_r[drain_seq_idx] is set.
 
     reg [MAX_OUTSTANDING-1:0]       rob_valid_r;
-    reg [GMEM_DATAW-1:0]            rob_data_r  [MAX_OUTSTANDING-1:0];
-    reg [GMEM_BYTES-1:0]            rob_mask_r  [MAX_OUTSTANDING-1:0];
-    reg [MAX_OUTSTANDING-1:0]       rob_last_r;
     reg [RD_SLOT_W-1:0]             slot_seq_r  [MAX_OUTSTANDING-1:0];
     reg [RD_SLOT_W:0]               alloc_seq_r;
     reg [RD_SLOT_W:0]               drain_seq_r;
@@ -185,6 +182,33 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire rob_empty = (alloc_seq_r == drain_seq_r);
     wire rob_full  = (alloc_seq_r[RD_SLOT_W] != drain_seq_r[RD_SLOT_W])
                   && (alloc_seq_r[RD_SLOT_W-1:0] == drain_seq_r[RD_SLOT_W-1:0]);
+
+    // ROB data/mask/last stored in LUTRAM via VX_dp_ram.
+    localparam ROB_ENTRY_DATAW = 1 + GMEM_BYTES + GMEM_DATAW;
+
+    wire rsp_accept;  // forward declaration
+    wire [ROB_ENTRY_DATAW-1:0] rob_rdata;
+
+    VX_dp_ram #(
+        .DATAW  (ROB_ENTRY_DATAW),
+        .SIZE   (MAX_OUTSTANDING),
+        .LUTRAM (1)
+    ) rob_store (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (rsp_accept),
+        .wren  (1'b1),
+        .waddr (slot_seq_r[rsp_slot]),
+        .wdata ({rsp_is_last, slot_byte_mask_r[rsp_slot], gmem_rd_rsp_data}),
+        .raddr (drain_seq_idx),
+        .rdata (rob_rdata)
+    );
+
+    wire                  rob_entry_last;
+    wire [GMEM_BYTES-1:0] rob_entry_mask;
+    wire [GMEM_DATAW-1:0] rob_entry_data;
+    assign {rob_entry_last, rob_entry_mask, rob_entry_data} = rob_rdata;
 
     // ---- Replicate cfill as GMEM-width data for OOB ----
     wire [GMEM_DATAW-1:0] cfill_replicated;
@@ -232,7 +256,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ---- GMEM response handling ----
     // Accept response and store in ROB (slot is released immediately).
     // No backpressure needed: each outstanding read has a reserved ROB entry.
-    wire rsp_accept = gmem_rd_rsp_valid && transfer_active && rsp_slot_busy;
+    assign rsp_accept = gmem_rd_rsp_valid && transfer_active && rsp_slot_busy;
     assign release_fire_w = rsp_accept;
     assign rsp_fire       = release_fire_w;
 
@@ -249,20 +273,14 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [GMEM_BYTES-1:0]  direct_mask = cl_in_byte_mask;
     wire                   direct_last = cl_in_last;
 
-    // ROB state machine.
+    // ROB valid tracking (data/mask/last stored in rob_store LUTRAM).
     always @(posedge clk) begin
         if (reset || ~transfer_active) begin
             rob_valid_r <= '0;
-            rob_last_r  <= '0;
         end else begin
-            // Fill: store GMEM response data at the slot's sequence position.
             if (rsp_accept) begin
                 rob_valid_r[slot_seq_r[rsp_slot]] <= 1'b1;
-                rob_data_r[slot_seq_r[rsp_slot]]  <= gmem_rd_rsp_data;
-                rob_mask_r[slot_seq_r[rsp_slot]]  <= slot_byte_mask_r[rsp_slot];
-                rob_last_r[slot_seq_r[rsp_slot]]  <= rsp_is_last;
             end
-            // Drain: clear entry after pushing to ofifo.
             if (rob_drain) begin
                 rob_valid_r[drain_seq_idx] <= 1'b0;
             end
@@ -282,7 +300,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign ofifo_push = direct_emit || rob_drain;
     assign ofifo_data_in = direct_emit
         ? {direct_last, direct_mask, direct_data}
-        : {rob_last_r[drain_seq_idx], rob_mask_r[drain_seq_idx], rob_data_r[drain_seq_idx]};
+        : {rob_entry_last, rob_entry_mask, rob_entry_data};
 
     // ---- Progress events ----
     assign stall_no_slot = cl_in_valid && !cl_in_oob && !rd_free_found;
@@ -309,8 +327,8 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                         $time, direct_mask, direct_last);
                 end else begin
                     $write("DXA_PIPE,%0d,RC_OUT,type=rob,seq=%0d,mask=0x%0h,last=%0d\n",
-                        $time, drain_seq_idx, rob_mask_r[drain_seq_idx],
-                        rob_last_r[drain_seq_idx]);
+                        $time, drain_seq_idx, rob_entry_mask,
+                        rob_entry_last);
                 end
             end
         end

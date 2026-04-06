@@ -321,13 +321,27 @@
     assign dst.req_data.rw = 0; \
     assign dst.req_data.addr = src.req_data.addr; \
     assign dst.req_data.data = '0; \
-    assign dst.req_data.byteen = '1; \
+    assign dst.req_data.byteen = '0; \
     assign dst.req_data.flags = src.req_data.flags; \
     assign dst.req_data.tag = src.req_data.tag; \
     assign src.req_ready = dst.req_ready; \
     assign src.rsp_valid = dst.rsp_valid; \
     assign src.rsp_data.data = dst.rsp_data.data; \
     assign src.rsp_data.tag = dst.rsp_data.tag; \
+    assign dst.rsp_ready = src.rsp_ready
+
+`define ASSIGN_VX_MEM_BUS_WR_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data.rw = 1; \
+    assign dst.req_data.addr = src.req_data.addr; \
+    assign dst.req_data.data = src.req_data.data; \
+    assign dst.req_data.byteen = src.req_data.byteen; \
+    assign dst.req_data.flags = src.req_data.flags; \
+    assign dst.req_data.tag = src.req_data.tag; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_data.data = '0; \
+    assign src.rsp_data.tag = '0; \
     assign dst.rsp_ready = src.rsp_ready
 
 `define ASSIGN_VX_MEM_BUS_IF_EX(dst, src, TD, TS, UUID) \

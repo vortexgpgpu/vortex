@@ -909,40 +909,31 @@ package VX_gpu_pkg;
     localparam LSU_TAG_WIDTH        = (UUID_WIDTH + LSU_TAG_ID_BITS);
     localparam LSU_NUM_REQS	        = `NUM_LSU_BLOCKS * `NUM_LSU_LANES;
     localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(`NUM_LSU_BLOCKS);
-`ifdef EXT_DXA_ENABLE
-    // DXA completion signaling via SMEM write tags requires route bits
-    // (engine/core) plus metadata bits (barrier address + last-packet bit).
-    localparam DXA_DONE_ROUTE_REQ_W = (`CLOG2(`NUM_DXA_UNITS) + NC_WIDTH);
-    localparam DXA_DONE_META_REQ_W  = (BAR_ADDR_W + 1);
-    localparam DXA_DONE_TAG_REQ_W   = (DXA_DONE_ROUTE_REQ_W + DXA_DONE_META_REQ_W);
-    // Keep inflated until all consumers are converted to bank-native interface.
-    localparam LMEM_TAG_WIDTH       = `MAX(LMEM_TAG_WIDTH_BASE, DXA_DONE_TAG_REQ_W);
-    // DXA shared-memory path is dimensioned independently from LSU scalar word size
-    // to match the shared-memory service width per request path.
-    localparam DXA_SMEM_WORD_SIZE   = `LMEM_NUM_BANKS * (`XLEN / 8);
-    localparam DXA_SMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_SMEM_WORD_SIZE));
-
-    // New bank-native DXA SMEM interface params.
-    // DXA bank-write tag: {last_pkt, bar_addr} — carried on VX_dxa_bank_wr_if.
-    localparam DXA_BANK_WR_TAG_WIDTH = (BAR_ADDR_W + 1);
-    // Bank-level address width for DXA SMEM writes (word-addressed within one bank).
-    localparam DXA_SMEM_BANK_ADDR_WIDTH = (`LMEM_LOG_SIZE - `CLOG2(`XLEN / 8) - `CLOG2(`LMEM_NUM_BANKS));
-`else
     localparam LMEM_TAG_WIDTH       = LMEM_TAG_WIDTH_BASE;
+
+`ifdef EXT_DXA_ENABLE
+    // DXA local-memory path: dimensioned to cover all banks in one request.
+    localparam DXA_LMEM_WORD_SIZE   = `LMEM_NUM_BANKS * (`XLEN / 8);
+    localparam DXA_LMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_LMEM_WORD_SIZE));
+    // DXA completion flags: {last_pkt, bar_addr} — carried in VX_mem_bus_if.flags.
+    localparam DXA_LMEM_FLAGS_WIDTH = (BAR_ADDR_W + 1);
+    // Bank-level address width for DXA LMEM writes (word-addressed within one bank).
+    localparam DXA_LMEM_BANK_ADDR_WIDTH = (`LMEM_LOG_SIZE - `CLOG2(`XLEN / 8) - `CLOG2(`LMEM_NUM_BANKS));
 `endif
 
-    // LMEM DMA port tag width and enable flag.
-    // DXA writes carry a functional tag (bar_addr + last_pkt);
-    // TCU reads use a minimal tag; no-DMA case still needs a non-zero width.
+    // LMEM DMA port tag/flags widths and enable flag.
+    // DXA completion info (bar_addr + last_pkt) is carried in flags;
+    // tag is minimal in all cases.
+    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
 `ifdef EXT_DXA_ENABLE
-    localparam LMEM_DMA_TAG_W = DXA_BANK_WR_TAG_WIDTH;
-    localparam LMEM_DMA_EN    = 1;
+    localparam LMEM_DMA_FLAGS_W = DXA_LMEM_FLAGS_WIDTH;
+    localparam LMEM_DMA_EN      = 1;
 `elsif TCU_WGMMA_ENABLE
-    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
-    localparam LMEM_DMA_EN    = 1;
+    localparam LMEM_DMA_FLAGS_W = MEM_FLAGS_WIDTH;
+    localparam LMEM_DMA_EN      = 1;
 `else
-    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
-    localparam LMEM_DMA_EN    = 0;
+    localparam LMEM_DMA_FLAGS_W = MEM_FLAGS_WIDTH;
+    localparam LMEM_DMA_EN      = 0;
 `endif
 
     ////////////////////////// Icache Parameters //////////////////////////////
