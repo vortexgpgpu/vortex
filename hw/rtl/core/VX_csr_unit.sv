@@ -118,16 +118,25 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign gtid[i] = (`XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`XLEN'(execute_if.data.header.wid) << NT_BITS) + wtid[i];
     end
 
-    // Per-lane CTA thread IDs
+    // Per-lane CTA thread IDs.
+    // When NUM_LANES > block_dim[0], a single warp's lanes span multiple rows of
+    // the block, and the linear thread offset (thread_idx[0] + wtid[i]) may wrap
+    // past block_dim[0] MULTIPLE times. The previous formula used a single
+    // compare+subtract which only handled ONE x-overflow, leaving lanes beyond
+    // 2*block_dim[0] with incorrect (cta_tid_x, cta_tid_y). That matches the
+    // reference simx decomposition in sim/simx/emulator.cpp VX_CSR_CTA_THREAD_ID_*
+    // which uses full divmod. Switch to divmod here for correctness.
     wire [NUM_LANES-1:0][`XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cta_tid
-        wire [CTA_TID_WIDTH:0] tx = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[0]) + (CTA_TID_WIDTH+1)'(wtid[i]);
-        wire cx = (tx >= sched_csr_if.cta_csrs.block_dim[0]);
-        wire [CTA_TID_WIDTH:0] ty = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[1]) + (CTA_TID_WIDTH+1)'(cx);
-        wire cy = (ty >= sched_csr_if.cta_csrs.block_dim[1]);
-        assign cta_tid_x[i] = cx ? `XLEN'(tx) - `XLEN'(sched_csr_if.cta_csrs.block_dim[0]) : `XLEN'(tx);
-        assign cta_tid_y[i] = cy ? `XLEN'(ty) - `XLEN'(sched_csr_if.cta_csrs.block_dim[1]) : `XLEN'(ty);
-        assign cta_tid_z[i] = `XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + `XLEN'(cy);
+        wire [`XLEN-1:0] tx_raw  = `XLEN'(sched_csr_if.cta_csrs.thread_idx[0]) + `XLEN'(wtid[i]);
+        wire [`XLEN-1:0] bdx     = `XLEN'(sched_csr_if.cta_csrs.block_dim[0]);
+        wire [`XLEN-1:0] bdy     = `XLEN'(sched_csr_if.cta_csrs.block_dim[1]);
+        wire [`XLEN-1:0] y_carry = tx_raw / bdx;
+        wire [`XLEN-1:0] ty_raw  = `XLEN'(sched_csr_if.cta_csrs.thread_idx[1]) + y_carry;
+        wire [`XLEN-1:0] z_carry = ty_raw / bdy;
+        assign cta_tid_x[i] = tx_raw % bdx;
+        assign cta_tid_y[i] = ty_raw % bdy;
+        assign cta_tid_z[i] = `XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + z_carry;
     end
 
     always @(*) begin
