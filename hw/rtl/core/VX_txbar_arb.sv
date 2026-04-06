@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_txbar_arb #(
+module VX_txbar_arb import VX_gpu_pkg::*; #(
     parameter NUM_REQS = 1,
     parameter OUT_BUF = 0,
     parameter `STRING ARBITER = "R"
