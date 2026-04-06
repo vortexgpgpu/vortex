@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Read(//home/blaise/dev/ventus/ventus-gpgpu/ventus/src/pipeline/**)",
+      "Read(//home/blaise/dev/ventus/ventus-gpgpu/ventus/src/top/**)",
+      "Read(//home/blaise/dev/ventus/ventus-gpgpu/ventus/src/L1Cache/ICache/**)",
+      "Read(//home/blaise/dev/**)",
+      "WebFetch(domain:forums.developer.nvidia.com)",
+      "WebFetch(domain:salykova.github.io)",
+      "Read(//home/blaise/tools/riscv64-gnu-toolchain/**)"
+    ]
+  }
+}

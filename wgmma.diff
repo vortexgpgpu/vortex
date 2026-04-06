@@ -1,0 +1,2480 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index d9281fac..fa46577e 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -127,7 +127,7 @@ jobs:
+           - name: dxa
+             xlen: 64
+     runs-on: ${{ matrix.os }}
+-    timeout-minutes: 60
++    timeout-minutes: 90
+
+     steps:
+       - name: Checkout code
+diff --git a/ci/regression.sh.in b/ci/regression.sh.in
+index 7b28e6e4..5dc1ad50 100755
+--- a/ci/regression.sh.in
++++ b/ci/regression.sh.in
+@@ -55,11 +55,13 @@ riscv()
+
+         CONFIGS="-DFPU_TYPE_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
+
++        CONFIGS="-DFPU_TYPE_DSP" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
++
+         CONFIGS="-DFPU_TYPE_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
+
+         CONFIGS="-DFPU_TYPE_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
+
+-        CONFIGS="-DFPU_TYPE_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64fx
++        CONFIGS="-DFPU_TYPE_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
+     fi
+
+     echo "riscv tests done!"
+@@ -614,7 +616,7 @@ tensor()
+     #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=13
+     #make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=13
+
+-    # WGMMA tests
++    # WGMMA tests (simx)
+     make -C tests/regression/sgemm2_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm2_tcu
+     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_tcu
+     make -C tests/regression/sgemm2_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm2_tcu
+@@ -622,6 +624,15 @@ tensor()
+     make -C tests/regression/sgemm2_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm2_tcu
+     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_tcu
+
++    # WGMMA tests (rtlsim)
++    make -C tests/regression/sgemm2_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm2_tcu
++    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_tcu
++    make -C tests/regression/sgemm2_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm2_tcu
++    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_tcu
++    make -C tests/regression/sgemm2_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm2_tcu
++    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_tcu
++
++
+     echo "tensor tests done!"
+ }
+
+@@ -881,7 +892,7 @@ tensor_sp()
+     make -C tests/regression/sgemm_tcu_sp clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=bf8 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu_sp
+     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k64"
+
+-    # WGMMA tests
++    # WGMMA tests (simx)
+     make -C tests/regression/sgemm2_tcu_sp clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm2_tcu_sp
+     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_tcu_sp
+     make -C tests/regression/sgemm2_tcu_sp clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm2_tcu_sp
+@@ -889,6 +900,14 @@ tensor_sp()
+     make -C tests/regression/sgemm2_tcu_sp clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm2_tcu_sp
+     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_tcu_sp
+
++    # WGMMA tests (rtlsim)
++    make -C tests/regression/sgemm2_tcu_sp clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm2_tcu_sp
++    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_tcu_sp
++    make -C tests/regression/sgemm2_tcu_sp clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm2_tcu_sp
++    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_tcu_sp
++    make -C tests/regression/sgemm2_tcu_sp clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=tf32 -DOTYPE=fp32" make -C tests/regression/sgemm2_tcu_sp
++    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_tcu_sp
++
+     echo "tensor sp tests done!"
+ }
+
+diff --git a/hw/VX_config.toml b/hw/VX_config.toml
+index 75efb7f3..234c44b0 100644
+--- a/hw/VX_config.toml
++++ b/hw/VX_config.toml
+@@ -40,7 +40,7 @@ EXT_A_ENABLE = false
+ EXT_V_ENABLE = false
+
+ EXT_ZICOND_ENABLE = true
+-EXT_TCU_ENABLE = false
++EXT_TCU_ENABLE = true
+ EXT_DMA_ENABLE = false
+ EXT_DXA_ENABLE = false
+ # Cluster-level DXA engine count (decoupled from NUM_CORES/SOCKET_SIZE).
+@@ -231,7 +231,7 @@ TCU_INT_ENABLE = true
+ TCU_MX_ENABLE = false
+ TCU_MXI8_ENABLE = false
+ TCU_SPARSE_ENABLE = false
+-TCU_WGMMA_ENABLE = false
++TCU_WGMMA_ENABLE = true
+
+ [isa_signatures]
+
+diff --git a/hw/VX_types.toml b/hw/VX_types.toml
+index be7e3e3b..2fc8ec16 100644
+--- a/hw/VX_types.toml
++++ b/hw/VX_types.toml
+@@ -158,7 +158,8 @@ VX_CSR_CTA_LMEM_ADDR  = 0xCDF
+ VX_DCR_MPM_CLASS_BASE = 0
+ VX_DCR_MPM_CLASS_CORE = 1
+ VX_DCR_MPM_CLASS_MEM = 2
+-VX_DCR_MPM_CLASS_DXA = 6   # DXA copy-engine perf counters
++VX_DCR_MPM_CLASS_DXA = 6
++VX_DCR_MPM_CLASS_TCU = 7
+
+ [csr_mpm_base]
+ VX_CSR_MCYCLE = 0xB00
+@@ -315,3 +316,8 @@ VX_CSR_MPM_DXA_LMEM_WRITES  = 0xB06  # SMEM word writes issued
+ VX_CSR_MPM_DXA_LMEM_WRITES_H  = 0xB86
+ VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
+ VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
++
++[csr_mpm_tcu]
++# PERF: WGMMA tile-buffer (per-core; summed across blocks)
++VX_CSR_MPM_TCU_TBUF_FETCH_ST   = 0xB03  # cycles spent fetching A/B tiles into tile buffer
++VX_CSR_MPM_TCU_TBUF_FETCH_ST_H = 0xB83
+diff --git a/hw/rtl/VX_gpu_pkg.sv b/hw/rtl/VX_gpu_pkg.sv
+index ac7285cd..543a03ca 100644
+--- a/hw/rtl/VX_gpu_pkg.sv
++++ b/hw/rtl/VX_gpu_pkg.sv
+@@ -485,8 +485,15 @@ package VX_gpu_pkg;
+     localparam INST_TCU_WMMA       = 4'h0;
+ `ifdef TCU_SPARSE_ENABLE
+     localparam INST_TCU_WMMA_SP    = 4'h1;
+-    localparam INST_TCU_META_STORE = 4'h2;
++
++`endif
++`ifdef TCU_WGMMA_ENABLE
++    localparam INST_TCU_WGMMA      = 4'h2;
++`ifdef TCU_SPARSE_ENABLE
++    localparam INST_TCU_WGMMA_SP   = 4'h3;
+ `endif
++`endif
++    localparam INST_TCU_META_STORE = 4'h4;
+     localparam INST_TCU_BITS = 4;
+ `endif
+
+@@ -825,6 +832,12 @@ package VX_gpu_pkg;
+         logic [PERF_CTR_BITS-1:0] misses;
+     } coalescer_perf_t;
+
++`ifdef EXT_TCU_ENABLE
++    typedef struct packed {
++        logic [PERF_CTR_BITS-1:0] tbuf_fetch_stalls; // cycles in tile-buffer fetch state
++    } tcu_perf_t;
++`endif
++
+     typedef struct packed {
+         logic [PERF_CTR_BITS-1:0] reads;
+         logic [PERF_CTR_BITS-1:0] writes;
+@@ -874,6 +887,9 @@ package VX_gpu_pkg;
+     `ifdef EXT_DXA_ENABLE
+         dxa_perf_t   dxa;
+     `endif
++    `ifdef EXT_TCU_ENABLE
++        tcu_perf_t   tcu;
++    `endif
+     } sysmem_perf_t;
+
+     typedef struct packed {
+diff --git a/hw/rtl/core/VX_core.sv b/hw/rtl/core/VX_core.sv
+index c77052bd..7db89508 100644
+--- a/hw/rtl/core/VX_core.sv
++++ b/hw/rtl/core/VX_core.sv
+@@ -75,15 +75,28 @@ module VX_core import VX_gpu_pkg::*; #(
+         .TAG_WIDTH (LSU_TAG_WIDTH)
+     ) lsu_mem_if[`NUM_LSU_BLOCKS]();
+
++`ifdef TCU_WGMMA_ENABLE
++    VX_mem_bus_if #(
++        .DATA_SIZE (`XLEN / 8),
++        .TAG_WIDTH (LMEM_TAG_WIDTH)
++    ) tcu_lmem_if[`NUM_TCU_BLOCKS]();
++`endif
++
+ `ifdef PERF_ENABLE
+     lmem_perf_t lmem_perf;
+     coalescer_perf_t coalescer_perf;
+     pipeline_perf_t pipeline_perf;
++`ifdef TCU_WGMMA_ENABLE
++    tcu_perf_t   tcu_perf;
++`endif
+     sysmem_perf_t sysmem_perf_tmp;
+     always @(*) begin
+         sysmem_perf_tmp = sysmem_perf;
+         sysmem_perf_tmp.lmem = lmem_perf;
+         sysmem_perf_tmp.coalescer = coalescer_perf;
++    `ifdef TCU_WGMMA_ENABLE
++        sysmem_perf_tmp.tcu = tcu_perf;
++    `endif
+     end
+ `endif
+
+@@ -196,6 +209,12 @@ module VX_core import VX_gpu_pkg::*; #(
+
+         .dcr_csr_if     (dcr_csr_if),
+
++    `ifdef TCU_WGMMA_ENABLE
++        .tcu_lmem_if    (tcu_lmem_if),
++    `ifdef PERF_ENABLE
++        .tcu_perf       (tcu_perf),
++    `endif
++    `endif
+     `ifdef EXT_DXA_ENABLE
+         .dxa_req_bus_if (dxa_req_bus_if),
+         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+@@ -227,6 +246,9 @@ module VX_core import VX_gpu_pkg::*; #(
+         .lmem_perf     (lmem_perf),
+         .coalescer_perf(coalescer_perf),
+     `endif
++    `ifdef TCU_WGMMA_ENABLE
++        .tcu_lmem_if   (tcu_lmem_if),
++    `endif
+     `ifdef EXT_DXA_ENABLE
+         .dxa_bank_wr_if (dxa_bank_wr_if),
+         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+diff --git a/hw/rtl/core/VX_csr_data.sv b/hw/rtl/core/VX_csr_data.sv
+index 35fd120e..ffc93dc8 100644
+--- a/hw/rtl/core/VX_csr_data.sv
++++ b/hw/rtl/core/VX_csr_data.sv
+@@ -311,6 +311,15 @@ import VX_fpu_pkg::*;
+                         default:;
+                         endcase
+                     end
++                `endif
++                `ifdef EXT_TCU_ENABLE
++                    `VX_DCR_MPM_CLASS_TCU: begin
++                        case (read_addr)
++                        // PERF: tile-buffer fetch stalls
++                        `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_FETCH_ST, read_data_ro_w, sysmem_perf.tcu.tbuf_fetch_stalls);
++                        default:;
++                        endcase
++                    end
+                 `endif
+                     default:;
+                     endcase
+diff --git a/hw/rtl/core/VX_decode.sv b/hw/rtl/core/VX_decode.sv
+index dcef1fd5..96d6e7c9 100644
+--- a/hw/rtl/core/VX_decode.sv
++++ b/hw/rtl/core/VX_decode.sv
+@@ -572,6 +572,26 @@ module VX_decode import VX_gpu_pkg::*; #(
+                             `USED_FREG (rs2);
+                             `USED_FREG (rs3);
+                         end
++                    `ifdef TCU_WGMMA_ENABLE
++                        else if (funct3 == 3'h1) begin
++                            ex_type = EX_TCU;
++                        `ifdef TCU_SPARSE_ENABLE
++                            op_type = rs2[0] ? INST_OP_BITS'(INST_TCU_WGMMA_SP)
++                                             : INST_OP_BITS'(INST_TCU_WGMMA);
++                        `else
++                            op_type = INST_OP_BITS'(INST_TCU_WGMMA);
++                        `endif
++                            op_args.tcu.fmt_s  = rs1[3:0];
++                            op_args.tcu.fmt_d  = rd[3:0];
++                            op_args.tcu.step_m = '0;
++                            op_args.tcu.step_n = '0;
++                            op_args.tcu.step_k = '0;
++                            `USED_FREG (rd);
++                            `USED_FREG (rs1);
++                            `USED_FREG (rs2);
++                            `USED_FREG (rs3);
++                        end
++                    `endif
+                     end
+                 `endif
+                 `ifdef EXT_DXA_ENABLE
+diff --git a/hw/rtl/core/VX_execute.sv b/hw/rtl/core/VX_execute.sv
+index 611ebecd..205d76e0 100644
+--- a/hw/rtl/core/VX_execute.sv
++++ b/hw/rtl/core/VX_execute.sv
+@@ -46,6 +46,14 @@ module VX_execute import VX_gpu_pkg::*; #(
+     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
+     VX_warp_ctl_if.master   warp_ctl_if,
+
++`ifdef TCU_WGMMA_ENABLE
++    // TCU tile-buffer local-memory read ports
++    VX_mem_bus_if.master    tcu_lmem_if [`NUM_TCU_BLOCKS],
++`ifdef PERF_ENABLE
++    output tcu_perf_t       tcu_perf,
++`endif
++`endif
++
+     // DCR-CSR interface
+     VX_dcr_csr_if           dcr_csr_if
+ );
+@@ -95,6 +103,12 @@ module VX_execute import VX_gpu_pkg::*; #(
+     ) tcu_unit (
+         .clk            (clk),
+         .reset          (reset),
++    `ifdef TCU_WGMMA_ENABLE
++        .tcu_lmem_if    (tcu_lmem_if),
++    `ifdef PERF_ENABLE
++        .tcu_perf       (tcu_perf),
++    `endif
++    `endif
+         .dispatch_if    (dispatch_if[EX_TCU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
+         .commit_if      (commit_if[EX_TCU * `ISSUE_WIDTH +: `ISSUE_WIDTH])
+     );
+diff --git a/hw/rtl/core/VX_mem_unit.sv b/hw/rtl/core/VX_mem_unit.sv
+index 9b5b0248..e1e82ad5 100644
+--- a/hw/rtl/core/VX_mem_unit.sv
++++ b/hw/rtl/core/VX_mem_unit.sv
+@@ -28,6 +28,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
+     VX_dxa_bank_wr_if.slave dxa_bank_wr_if,
+     VX_txbar_bus_if.master  dxa_txbar_bus_if,
+ `endif
++`ifdef TCU_WGMMA_ENABLE
++    VX_mem_bus_if.slave     tcu_lmem_if [`NUM_TCU_BLOCKS],
++`endif
+
+     VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
+     VX_dcr_flush_if.slave   dcr_flush_if,
+@@ -113,6 +116,22 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
+         .mem_bus_if (lmem_adapt_if)
+     );
+
++`ifdef TCU_WGMMA_ENABLE
++    localparam LMEM_ALL_REQS = `NUM_LSU_LANES + `NUM_TCU_BLOCKS;
++
++    VX_mem_bus_if #(
++        .DATA_SIZE (LSU_WORD_SIZE),
++        .TAG_WIDTH (LMEM_TAG_WIDTH)
++    ) lmem_all_if[LMEM_ALL_REQS]();
++
++    for (genvar ii = 0; ii < `NUM_LSU_LANES; ++ii) begin : g_lmem_all_adapt
++        `ASSIGN_VX_MEM_BUS_IF (lmem_all_if[ii], lmem_adapt_if[ii]);
++    end
++    for (genvar ii = 0; ii < `NUM_TCU_BLOCKS; ++ii) begin : g_lmem_all_tcu
++        `ASSIGN_VX_MEM_BUS_IF (lmem_all_if[`NUM_LSU_LANES + ii], tcu_lmem_if[ii]);
++    end
++`endif
++
+ `ifdef EXT_DXA_ENABLE
+     wire dxa_done_valid;
+     wire [BAR_ADDR_W-1:0] dxa_done_bar_addr;
+@@ -121,7 +140,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
+     VX_local_mem #(
+         .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
+         .SIZE       (1 << `LMEM_LOG_SIZE),
++    `ifdef TCU_WGMMA_ENABLE
++        .NUM_REQS   (LMEM_ALL_REQS),
++    `else
+         .NUM_REQS   (`NUM_LSU_LANES),
++    `endif
+         .NUM_BANKS  (`LMEM_NUM_BANKS),
+         .WORD_SIZE  (LSU_WORD_SIZE),
+         .ADDR_WIDTH (LMEM_ADDR_WIDTH),
+@@ -133,7 +156,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
+     `ifdef PERF_ENABLE
+         .lmem_perf  (lmem_perf),
+     `endif
++    `ifdef TCU_WGMMA_ENABLE
++        .mem_bus_if (lmem_all_if),
++    `else
+         .mem_bus_if (lmem_adapt_if),
++    `endif
+         .dxa_bank_wr_if(dxa_bank_wr_if),
+         .dxa_done_valid(dxa_done_valid),
+         .dxa_done_ready(dxa_txbar_bus_if.ready),
+@@ -156,7 +183,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
+     VX_local_mem #(
+         .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
+         .SIZE       (1 << `LMEM_LOG_SIZE),
++    `ifdef TCU_WGMMA_ENABLE
++        .NUM_REQS   (LMEM_ALL_REQS),
++    `else
+         .NUM_REQS   (`NUM_LSU_LANES),
++    `endif
+         .NUM_BANKS  (`LMEM_NUM_BANKS),
+         .WORD_SIZE  (LSU_WORD_SIZE),
+         .ADDR_WIDTH (LMEM_ADDR_WIDTH),
+@@ -168,7 +199,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
+     `ifdef PERF_ENABLE
+         .lmem_perf  (lmem_perf),
+     `endif
++    `ifdef TCU_WGMMA_ENABLE
++        .mem_bus_if (lmem_all_if)
++    `else
+         .mem_bus_if (lmem_adapt_if)
++    `endif
+     );
+ `endif
+
+@@ -194,6 +229,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
+     `UNUSED_VAR (dxa_bank_wr_if.wr_tag)
+ `endif
+
++`ifdef TCU_WGMMA_ENABLE
++    for (genvar ii = 0; ii < `NUM_TCU_BLOCKS; ++ii) begin : g_tcu_lmem_tieoff
++        assign tcu_lmem_if[ii].req_ready = 1'b0;
++        assign tcu_lmem_if[ii].rsp_valid = 1'b0;
++        assign tcu_lmem_if[ii].rsp_data  = '0;
++    end
++`endif
++
+ `endif
+
+     VX_lsu_mem_if #(
+diff --git a/hw/rtl/core/VX_uop_sequencer.sv b/hw/rtl/core/VX_uop_sequencer.sv
+index 465dba6b..e8b5a0e8 100644
+--- a/hw/rtl/core/VX_uop_sequencer.sv
++++ b/hw/rtl/core/VX_uop_sequencer.sv
+@@ -130,6 +130,12 @@ module VX_uop_sequencer import
+     `ifdef TCU_SPARSE_ENABLE
+         || uop_in_data.op_type == INST_TCU_WMMA_SP
+         || uop_in_data.op_type == INST_TCU_META_STORE
++    `endif
++    `ifdef TCU_WGMMA_ENABLE
++        || uop_in_data.op_type == INST_TCU_WGMMA
++      `ifdef TCU_SPARSE_ENABLE
++        || uop_in_data.op_type == INST_TCU_WGMMA_SP
++      `endif
+     `endif
+         );
+     VX_tcu_uops tcu_uops (
+diff --git a/hw/rtl/fpu/VX_fcvt_unit.sv b/hw/rtl/fpu/VX_fcvt_unit.sv
+index 132f14a3..3976e402 100644
+--- a/hw/rtl/fpu/VX_fcvt_unit.sv
++++ b/hw/rtl/fpu/VX_fcvt_unit.sv
+@@ -1,4 +1,4 @@
+-// Copyright © 2019-2023
++// Copyright © 2019-2026
+ //
+ // Licensed under the Apache License, Version 2.0 (the "License");
+ // you may not use this file except in compliance with the License.
+@@ -11,18 +11,15 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+
+-// Modified port of cast module from fpnew Libray
+-// reference: https://github.com/pulp-platform/fpnew
+-
+ `include "VX_fpu_define.vh"
+
+ `ifdef FPU_TYPE_DSP
+
+-module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+-    parameter LATENCY   = 1,
+-    parameter INT_WIDTH = 32,
+-    parameter MAN_BITS  = 23,
+-    parameter EXP_BITS  = 8,
++module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
++#(
++    parameter LATENCY   = 6,     // Stretched for 300MHz timing
++    parameter XLEN      = `XLEN, // Support 32 or 64
++    parameter FLEN      = `FLEN, // Support 32 or 64
+     parameter OUT_REG   = 0
+ ) (
+     input wire clk,
+@@ -33,287 +30,349 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     input wire [INST_FRM_BITS-1:0] frm,
+
+     input wire is_itof,
++    input wire is_ftoi,
++    input wire is_ftof,
+     input wire is_signed,
++    input wire is_dst_64,     // 1: target is F64/I64, 0: target is F32/I32
++    input wire is_src_64,     // 1: source is F64/I64, 0: source is F32/I32
+
+-    input wire [31:0]  dataa,
+-    output wire [31:0] result,
++    input wire [XLEN-1:0]  dataa,
++    output wire [XLEN-1:0] result,
+
+     output wire [`FP_FLAGS_BITS-1:0] fflags
+ );
+     // Constants
+-    localparam EXP_BIAS = 2**(EXP_BITS-1)-1;
++    localparam F32_EXP = 8;
++    localparam F32_MAN = 23;
++    localparam F32_BIAS = 127;
+
+-    // The internal mantissa includes normal bit or an entire integer
+-    localparam S_MAN_WIDTH = `MAX(1+MAN_BITS, INT_WIDTH);
++    localparam F64_EXP = 11;
++    localparam F64_MAN = 52;
++    localparam F64_BIAS = 1023;
+
+-    // The lower 2p+3 bits of the internal FMA result will be needed for leading-zero detection
+-    localparam LZC_RESULT_WIDTH = `CLOG2(S_MAN_WIDTH);
++    localparam MAX_MAN = (FLEN == 64) ? F64_MAN : F32_MAN;
++    localparam MAX_EXP = (FLEN == 64) ? F64_EXP : F32_EXP;
+
+-    // The internal exponent must be able to represent the smallest denormal input value as signed
+-    // or the number of bits in an integer
+-    localparam S_EXP_WIDTH = `MAX(`CLOG2(INT_WIDTH), `MAX(EXP_BITS, `CLOG2(EXP_BIAS + MAN_BITS))) + 1;
++    // The internal mantissa includes normal bit or an entire integer
++    localparam S_MAN_WIDTH = `MAX(1+MAX_MAN, XLEN);
+
+-    localparam FMT_SHIFT_COMPENSATION = S_MAN_WIDTH - 1 - MAN_BITS;
+-    localparam NUM_FP_STICKY  = 2 * S_MAN_WIDTH - MAN_BITS - 1;   // removed mantissa, 1. and R
+-    localparam NUM_INT_STICKY = 2 * S_MAN_WIDTH - INT_WIDTH;  // removed int and R
++    // The internal exponent must represent un-biased double exponents or integer bit widths
++    localparam S_EXP_WIDTH = `MAX(`CLOG2(XLEN), MAX_EXP + 2) + 2;
++    localparam LZC_RESULT_WIDTH = `CLOG2(S_MAN_WIDTH);
+
+-    // Input processing
++    // ======================================================================
++    // Stage 0: Unpack & Classify
++    // ======================================================================
++
++    wire [63:0] safe_dataa = 64'(dataa);
++    wire [MAX_EXP-1:0] input_fp_exp;
++    wire [MAX_MAN-1:0] input_fp_man;
++    wire               input_fp_sgn;
++
++    generate
++        if (FLEN == 64) begin : g_in_f64
++            assign input_fp_exp = is_src_64 ? safe_dataa[F64_MAN +: F64_EXP] : {{(MAX_EXP-F32_EXP){1'b0}}, safe_dataa[F32_MAN +: F32_EXP]};
++            assign input_fp_man = is_src_64 ? safe_dataa[F64_MAN-1:0]        : {{(MAX_MAN-F32_MAN){1'b0}}, safe_dataa[F32_MAN-1:0]};
++            assign input_fp_sgn = is_src_64 ? safe_dataa[63]                 : safe_dataa[31];
++        end else begin : g_in_f32
++            assign input_fp_exp = safe_dataa[F32_MAN +: F32_EXP];
++            assign input_fp_man = safe_dataa[F32_MAN-1:0];
++            assign input_fp_sgn = safe_dataa[31];
++        end
++    endgenerate
+
+     fclass_t fclass;
+     VX_fp_classifier #(
+-        .EXP_BITS (EXP_BITS),
+-        .MAN_BITS (MAN_BITS)
++        .EXP_BITS (MAX_EXP),
++        .MAN_BITS (MAX_MAN)
+     ) fp_classifier (
+-        .exp_i  (dataa[INT_WIDTH-2:MAN_BITS]),
+-        .man_i  (dataa[MAN_BITS-1:0]),
++        .exp_i  (input_fp_exp),
++        .man_i  (input_fp_man),
+         .clss_o (fclass)
+     );
+
+-    wire [S_MAN_WIDTH-1:0] input_mant;
+-    wire [S_EXP_WIDTH-1:0] input_exp;
+-    wire                   input_sign;
++    wire i_sign = safe_dataa[is_src_64 ? (XLEN-1) : 31] && is_signed;
++    wire [XLEN-1:0] i_mag = i_sign ? (-dataa) : dataa;
+
+-    wire i2f_sign = dataa[INT_WIDTH-1];
+-    wire f2i_sign = dataa[INT_WIDTH-1] && is_signed;
+-    wire [S_MAN_WIDTH-1:0] f2i_mantissa = f2i_sign ? (-dataa) : dataa;
+-    wire [S_MAN_WIDTH-1:0] i2f_mantissa = S_MAN_WIDTH'({fclass.is_normal, dataa[MAN_BITS-1:0]});
+-    assign input_exp  = {1'b0, dataa[MAN_BITS +: EXP_BITS]} + S_EXP_WIDTH'({1'b0, fclass.is_subnormal});
+-    assign input_mant = is_itof ? f2i_mantissa : i2f_mantissa;
+-    assign input_sign = is_itof ? f2i_sign : i2f_sign;
++    logic [S_MAN_WIDTH-1:0] unpacked_mant_s0;
++    logic signed [S_EXP_WIDTH-1:0] unpacked_exp_s0;
++    wire input_sign_s0 = is_itof ? i_sign : input_fp_sgn;
+
+-    // Pipeline stage0
++    always_comb begin
++        if (is_itof) begin
++            unpacked_mant_s0 = S_MAN_WIDTH'(i_mag);
++            unpacked_exp_s0  = S_EXP_WIDTH'(is_src_64 ? 63 : 31);
++        end else begin
++            unpacked_mant_s0 = S_MAN_WIDTH'({fclass.is_normal, input_fp_man});
++            unpacked_exp_s0  = S_EXP_WIDTH'(input_fp_exp) - S_EXP_WIDTH'(is_src_64 ? F64_BIAS : F32_BIAS) + S_EXP_WIDTH'({1'b0, fclass.is_subnormal});
++        end
++    end
++
++    wire [INST_FRM_BITS-1:0] frm_s0 = frm;
+
+-    wire                   is_itof_s0;
+-    wire                   is_signed_s0;
+-    wire [2:0]             rnd_mode_s0;
+-    fclass_t               fclass_s0;
+-    wire                   input_sign_s0;
+-    wire [S_EXP_WIDTH-1:0] fmt_exponent_s0;
+-    wire [S_MAN_WIDTH-1:0] encoded_mant_s0;
++    // Stage 0 -> Stage 1 Pipeline
++    wire is_itof_s1, is_ftoi_s1, is_ftof_s1, is_signed_s1, is_dst_64_s1, input_sign_s1;
++    wire [INST_FRM_BITS-1:0] frm_s1;
++    fclass_t fclass_s1;
++    wire [S_MAN_WIDTH-1:0] unpacked_mant_s1;
++    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s1;
+
+     VX_pipe_register #(
+-        .DATAW (1 + INST_FRM_BITS + 1 + $bits(fclass_t) + 1 + S_EXP_WIDTH + S_MAN_WIDTH),
+-        .DEPTH (LATENCY > 1)
+-    ) pipe_reg0 (
++        .DATAW (6 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + S_EXP_WIDTH),
++        .DEPTH (LATENCY > 5)
++    ) pipe_reg1 (
+         .clk      (clk),
+         .reset    (reset),
+         .enable   (enable),
+-        .data_in  ({is_itof,    is_signed,    frm,         fclass,    input_sign,    input_exp,       input_mant}),
+-        .data_out ({is_itof_s0, is_signed_s0, rnd_mode_s0, fclass_s0, input_sign_s0, fmt_exponent_s0, encoded_mant_s0})
++        .data_in  ({is_itof,    is_ftoi,    is_ftof,    is_signed,    is_dst_64,    input_sign_s0, frm_s0, fclass,    unpacked_mant_s0, unpacked_exp_s0}),
++        .data_out ({is_itof_s1, is_ftoi_s1, is_ftof_s1, is_signed_s1, is_dst_64_s1, input_sign_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1})
+     );
+
+-    // Normalization
++    // ======================================================================
++    // Stage 1: Leading Zero Count (LZC)
++    // ======================================================================
+
+-    wire [LZC_RESULT_WIDTH-1:0] renorm_shamt_s0; // renormalization shift amount
+-    wire mant_is_nonzero_s0;
++    wire [LZC_RESULT_WIDTH-1:0] renorm_shamt_s1;
++    wire mant_is_nonzero_s1;
+
+     VX_lzc #(
+         .N (S_MAN_WIDTH)
+     ) lzc (
+-        .data_in   (encoded_mant_s0),
+-        .data_out  (renorm_shamt_s0),
+-        .valid_out (mant_is_nonzero_s0)
++        .data_in   (unpacked_mant_s1),
++        .data_out  (renorm_shamt_s1),
++        .valid_out (mant_is_nonzero_s1)
+     );
+
+-    wire mant_is_zero_s0 = ~mant_is_nonzero_s0;
++    wire mant_is_zero_s1 = ~mant_is_nonzero_s1;
+
+-    wire [S_MAN_WIDTH-1:0] input_mant_n_s0;    // normalized input mantissa
+-    wire [S_EXP_WIDTH-1:0] input_exp_n_s0;     // unbiased true exponent
++    // Stage 1 -> Stage 2 Pipeline
++    wire is_itof_s2, is_ftoi_s2, is_ftof_s2, is_signed_s2, is_dst_64_s2, input_sign_s2, mant_is_zero_s2;
++    wire [INST_FRM_BITS-1:0] frm_s2;
++    fclass_t fclass_s2;
++    wire [S_MAN_WIDTH-1:0] unpacked_mant_s2;
++    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s2;
++    wire [LZC_RESULT_WIDTH-1:0] renorm_shamt_s2;
+
+-    // Realign input mantissa, append zeroes if destination is wider
+-    assign input_mant_n_s0 = encoded_mant_s0 << renorm_shamt_s0;
++    VX_pipe_register #(
++        .DATAW (7 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + S_EXP_WIDTH + LZC_RESULT_WIDTH),
++        .DEPTH (LATENCY > 4)
++    ) pipe_reg2 (
++        .clk      (clk),
++        .reset    (reset),
++        .enable   (enable),
++        .data_in  ({is_itof_s1, is_ftoi_s1, is_ftof_s1, is_signed_s1, is_dst_64_s1, input_sign_s1, mant_is_zero_s1, frm_s1, fclass_s1, unpacked_mant_s1, unpacked_exp_s1, renorm_shamt_s1}),
++        .data_out ({is_itof_s2, is_ftoi_s2, is_ftof_s2, is_signed_s2, is_dst_64_s2, input_sign_s2, mant_is_zero_s2, frm_s2, fclass_s2, unpacked_mant_s2, unpacked_exp_s2, renorm_shamt_s2})
++    );
+
+-    // Unbias exponent and compensate for shift
+-    wire [S_EXP_WIDTH-1:0] i2f_input_exp_s0 = fmt_exponent_s0 + S_EXP_WIDTH'(FMT_SHIFT_COMPENSATION - EXP_BIAS) - S_EXP_WIDTH'({1'b0, renorm_shamt_s0});
+-    wire [S_EXP_WIDTH-1:0] f2i_input_exp_s0 = S_EXP_WIDTH'(S_MAN_WIDTH-1) - S_EXP_WIDTH'({1'b0, renorm_shamt_s0});
+-    assign input_exp_n_s0 = is_itof_s0 ? f2i_input_exp_s0 : i2f_input_exp_s0;
++    // ======================================================================
++    // Stage 2: Normalize (Left Shift)
++    // ======================================================================
+
+-    // Pipeline stage1
++    wire [S_MAN_WIDTH-1:0] norm_mant_s2 = unpacked_mant_s2 << renorm_shamt_s2;
++    wire signed [S_EXP_WIDTH-1:0] norm_exp_s2 = unpacked_exp_s2 - S_EXP_WIDTH'({1'b0, renorm_shamt_s2});
+
+-    wire                   is_itof_s1;
+-    wire                   is_signed_s1;
+-    wire [2:0]             rnd_mode_s1;
+-    fclass_t               fclass_s1;
+-    wire                   input_sign_s1;
+-    wire                   mant_is_zero_s1;
+-    wire [S_MAN_WIDTH-1:0] input_mant_s1;
+-    wire [S_EXP_WIDTH-1:0] input_exp_s1;
++    // Stage 2 -> Stage 3 Pipeline
++    wire is_itof_s3, is_ftoi_s3, is_ftof_s3, is_signed_s3, is_dst_64_s3, input_sign_s3, mant_is_zero_s3;
++    wire [INST_FRM_BITS-1:0] frm_s3;
++    fclass_t fclass_s3;
++    wire [S_MAN_WIDTH-1:0] norm_mant_s3;
++    wire signed [S_EXP_WIDTH-1:0] norm_exp_s3;
++    wire signed [S_EXP_WIDTH-1:0] unpacked_exp_s3; // pre-renorm exponent, needed for f2i_shamt
+
+     VX_pipe_register #(
+-        .DATAW (1 + INST_FRM_BITS + 1 + $bits(fclass_t) + 1 + 1 + S_MAN_WIDTH + S_EXP_WIDTH),
+-        .DEPTH (LATENCY > 2)
+-    ) pipe_reg1 (
++        .DATAW (7 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + 2*S_EXP_WIDTH),
++        .DEPTH (LATENCY > 3)
++    ) pipe_reg3 (
+         .clk      (clk),
+         .reset    (reset),
+         .enable   (enable),
+-        .data_in  ({is_itof_s0, is_signed_s0, rnd_mode_s0, fclass_s0, input_sign_s0, mant_is_zero_s0, input_mant_n_s0, input_exp_n_s0}),
+-        .data_out ({is_itof_s1, is_signed_s1, rnd_mode_s1, fclass_s1, input_sign_s1, mant_is_zero_s1, input_mant_s1,   input_exp_s1})
++        .data_in  ({is_itof_s2, is_ftoi_s2, is_ftof_s2, is_signed_s2, is_dst_64_s2, input_sign_s2, mant_is_zero_s2, frm_s2, fclass_s2, norm_mant_s2, norm_exp_s2, unpacked_exp_s2}),
++        .data_out ({is_itof_s3, is_ftoi_s3, is_ftof_s3, is_signed_s3, is_dst_64_s3, input_sign_s3, mant_is_zero_s3, frm_s3, fclass_s3, norm_mant_s3, norm_exp_s3, unpacked_exp_s3})
+     );
+
+-    // Perform adjustments to mantissa and exponent
+-
+-    wire [S_EXP_WIDTH-1:0] denorm_shamt = S_EXP_WIDTH'(INT_WIDTH-1) - input_exp_s1;
+-    wire overflow = ($signed(denorm_shamt) <= -$signed(S_EXP_WIDTH'(!is_signed_s1)));
+-    wire underflow = ($signed(input_exp_s1) < S_EXP_WIDTH'($signed(-1)));
+-    reg [S_EXP_WIDTH-1:0] denorm_shamt_q;
+-    always @(*) begin
+-        if (overflow) begin
+-            denorm_shamt_q = '0;
+-        end else if (underflow) begin
+-            denorm_shamt_q = INT_WIDTH+1;
++    // ======================================================================
++    // Stage 3: Calculate Alignment Shift
++    // ======================================================================
++
++    localparam signed [S_EXP_WIDTH-1:0] F32_MIN_EXP = 1 - F32_BIAS;
++    localparam signed [S_EXP_WIDTH-1:0] F64_MIN_EXP = 1 - F64_BIAS;
++
++    wire signed [S_EXP_WIDTH-1:0] target_min_exp_s3 = is_dst_64_s3 ? F64_MIN_EXP : F32_MIN_EXP;
++
++    // F2I shift: use the original unbiased FP exponent (before renorm).
++    // norm_exp = unpacked_exp - renorm_shamt, so using norm_exp would over-shift by renorm_shamt.
++    wire signed [S_EXP_WIDTH-1:0] f2i_shamt_s3 = S_EXP_WIDTH'(S_MAN_WIDTH - 1) - unpacked_exp_s3;
++    wire signed [S_EXP_WIDTH-1:0] f2f_shamt_s3 = target_min_exp_s3 - norm_exp_s3;
++
++    logic [S_EXP_WIDTH-1:0] align_shamt_s3;
++    always_comb begin
++        if (is_itof_s3) begin
++            align_shamt_s3 = '0;
++        end else if (is_ftoi_s3) begin
++            align_shamt_s3 = (f2i_shamt_s3 > S_EXP_WIDTH'(S_MAN_WIDTH + 1)) ? S_EXP_WIDTH'(S_MAN_WIDTH + 1) :
++                             (f2i_shamt_s3 < 0) ? '0 : f2i_shamt_s3;
+         end else begin
+-            denorm_shamt_q = denorm_shamt;
++            align_shamt_s3 = (f2f_shamt_s3 > 0) ? f2f_shamt_s3 : '0;
+         end
+     end
+-    wire [2*S_MAN_WIDTH:0] destination_mant_s1 = is_itof_s1 ? {input_mant_s1, 33'b0} : ({input_mant_s1, 33'b0} >> denorm_shamt_q);
+-    wire [EXP_BITS-1:0] final_exp_s1 = input_exp_s1[EXP_BITS-1:0] + EXP_BITS'(EXP_BIAS);
+-    wire of_before_round_s1 = overflow;
+-
+-    // Pipeline stage2
+-
+-    wire                   is_itof_s2;
+-    wire                   is_signed_s2;
+-    wire [2:0]             rnd_mode_s2;
+-    fclass_t               fclass_s2;
+-    wire                   mant_is_zero_s2;
+-    wire                   input_sign_s2;
+-    wire [2*S_MAN_WIDTH:0] destination_mant_s2;
+-    wire [EXP_BITS-1:0]    final_exp_s2;
+-    wire                   of_before_round_s2;
++
++    wire [MAX_EXP-1:0] final_exp_s3 = is_dst_64_s3 ?
++                                      MAX_EXP'(norm_exp_s3 + S_EXP_WIDTH'(F64_BIAS)) :
++                                      MAX_EXP'(norm_exp_s3 + S_EXP_WIDTH'(F32_BIAS));
++
++    // Stage 3 -> Stage 4 Pipeline
++    wire is_itof_s4, is_ftoi_s4, is_ftof_s4, is_signed_s4, is_dst_64_s4, input_sign_s4, mant_is_zero_s4;
++    wire [INST_FRM_BITS-1:0] frm_s4;
++    fclass_t fclass_s4;
++    wire [S_MAN_WIDTH-1:0] norm_mant_s4;
++    wire [S_EXP_WIDTH-1:0] align_shamt_s4;
++    wire [MAX_EXP-1:0] final_exp_s4;
+
+     VX_pipe_register #(
+-        .DATAW (1 + 1 + INST_FRM_BITS + $bits(fclass_t) + 1 + 1 + (2*S_MAN_WIDTH+1) + EXP_BITS + 1),
+-        .DEPTH (LATENCY > 0)
+-    ) pipe_reg2 (
++        .DATAW (7 + INST_FRM_BITS + $bits(fclass_t) + S_MAN_WIDTH + S_EXP_WIDTH + MAX_EXP),
++        .DEPTH (LATENCY > 2)
++    ) pipe_reg4 (
+         .clk      (clk),
+         .reset    (reset),
+         .enable   (enable),
+-        .data_in  ({is_itof_s1, is_signed_s1, rnd_mode_s1, fclass_s1, mant_is_zero_s1, input_sign_s1, destination_mant_s1, final_exp_s1, of_before_round_s1}),
+-        .data_out ({is_itof_s2, is_signed_s2, rnd_mode_s2, fclass_s2, mant_is_zero_s2, input_sign_s2, destination_mant_s2, final_exp_s2, of_before_round_s2})
++        .data_in  ({is_itof_s3, is_ftoi_s3, is_ftof_s3, is_signed_s3, is_dst_64_s3, input_sign_s3, mant_is_zero_s3, frm_s3, fclass_s3, norm_mant_s3, align_shamt_s3, final_exp_s3}),
++        .data_out ({is_itof_s4, is_ftoi_s4, is_ftof_s4, is_signed_s4, is_dst_64_s4, input_sign_s4, mant_is_zero_s4, frm_s4, fclass_s4, norm_mant_s4, align_shamt_s4, final_exp_s4})
+     );
+
+-    // Rouding and classification
+-
+-    wire [MAN_BITS-1:0]  final_mant_s2;  // mantissa after adjustments
+-    wire [INT_WIDTH-1:0] final_int_s2;   // integer shifted in position
+-    wire [1:0]           f2i_round_sticky_bits_s2, i2f_round_sticky_bits_s2;
+-
+-    // Extract final mantissa and round bit, discard the normal bit (for FP)
+-    assign {final_mant_s2, i2f_round_sticky_bits_s2[1]} = destination_mant_s2[2*S_MAN_WIDTH-1 : 2*S_MAN_WIDTH-1 - (MAN_BITS+1) + 1];
+-    assign {final_int_s2, f2i_round_sticky_bits_s2[1]} = destination_mant_s2[2*S_MAN_WIDTH   : 2*S_MAN_WIDTH   - (INT_WIDTH+1) + 1];
++    // ======================================================================
++    // Stage 4: Align & Extract Sticky (Right Shift)
++    // ======================================================================
+
+-    // Collapse sticky bits
+-    assign i2f_round_sticky_bits_s2[0] = (| destination_mant_s2[NUM_FP_STICKY-1:0]);
+-    assign f2i_round_sticky_bits_s2[0] = (| destination_mant_s2[NUM_INT_STICKY-1:0]);
+-    wire i2f_round_has_sticky_s2 = (| i2f_round_sticky_bits_s2);
+-    wire f2i_round_has_sticky_s2 = (| f2i_round_sticky_bits_s2);
++    wire [2*S_MAN_WIDTH:0] aligned_mant_full_s4 = {norm_mant_s4, {(S_MAN_WIDTH+1){1'b0}}} >> align_shamt_s4;
+
+-    // select RS bits for destination operation
+-    wire [1:0] round_sticky_bits_s2 = is_itof_s2 ? i2f_round_sticky_bits_s2 : f2i_round_sticky_bits_s2;
++    wire [S_MAN_WIDTH-1:0] aligned_mant_s4 = aligned_mant_full_s4[2*S_MAN_WIDTH : S_MAN_WIDTH+1];
++    wire                   guard_bit_s4    = aligned_mant_full_s4[S_MAN_WIDTH];
++    wire                   round_bit_s4    = aligned_mant_full_s4[S_MAN_WIDTH-1];
++    wire                   sticky_bit_s4   = |aligned_mant_full_s4[S_MAN_WIDTH-2:0];
+
+-    // Pack exponent and mantissa into proper rounding form
+-    wire [INT_WIDTH-1:0] fmt_pre_round_abs_s2 = {1'b0, final_exp_s2, final_mant_s2[MAN_BITS-1:0]};
++    wire [6:0] dst_man_width_s4 = is_dst_64_s4 ? 7'(F64_MAN) : 7'(F32_MAN);
+
+-    // Select output with destination format and operation
+-    wire [INT_WIDTH-1:0] pre_round_abs_s2 = is_itof_s2 ? fmt_pre_round_abs_s2 : final_int_s2;
++    logic [1:0] round_sticky_bits_s4;
++    logic [S_MAN_WIDTH-1:0] pre_round_abs_s4;
+
+-    wire [INT_WIDTH-1:0] rounded_abs_s2;
+-    wire rounded_sign_s2;
++    wire [S_MAN_WIDTH-1:0] fp_trunc_s4 = aligned_mant_s4 >> (S_MAN_WIDTH - 1 - dst_man_width_s4);
++    wire [S_MAN_WIDTH-1:0] trunc_mask_s4 = (S_MAN_WIDTH'(1) << (S_MAN_WIDTH - 1 - dst_man_width_s4)) - 1;
++    wire sticky_reduction_s4 = |(aligned_mant_s4 & trunc_mask_s4) | guard_bit_s4 | round_bit_s4 | sticky_bit_s4;
++    wire fp_guard_s4 = fp_trunc_s4[0];
+
+-    // Perform the rounding
+-    VX_fp_rounding #(
+-        .DAT_WIDTH (32)
+-    ) fp_rounding (
+-        .abs_value_i (pre_round_abs_s2),
+-        .sign_i      (input_sign_s2),
+-        .round_sticky_bits_i (round_sticky_bits_s2),
+-        .rnd_mode_i  (rnd_mode_s2),
+-        .effective_subtraction_i (1'b0),
+-        .abs_rounded_o (rounded_abs_s2),
+-        .sign_o      (rounded_sign_s2),
+-        `UNUSED_PIN  (exact_zero_o)
+-    );
+-
+-    // Pipeline stage3
+-
+-    wire                 is_itof_s3;
+-    wire                 is_signed_s3;
+-    fclass_t             fclass_s3;
+-    wire                 mant_is_zero_s3;
+-    wire                 input_sign_s3;
+-    wire                 rounded_sign_s3;
+-    wire [INT_WIDTH-1:0] rounded_abs_s3;
+-    wire                 of_before_round_s3;
+-    wire                 f2i_round_has_sticky_s3;
+-    wire                 i2f_round_has_sticky_s3;
++    always_comb begin
++        if (is_ftoi_s4) begin
++            round_sticky_bits_s4 = {round_bit_s4, sticky_bit_s4};
++            pre_round_abs_s4     = aligned_mant_s4;
++        end else begin
++            round_sticky_bits_s4 = {fp_guard_s4, sticky_reduction_s4};
++            pre_round_abs_s4     = fp_trunc_s4;
++        end
++    end
+
+-    `UNUSED_VAR (fclass_s3)
++    // Stage 4 -> Stage 5 Pipeline
++    wire is_itof_s5, is_ftoi_s5, is_ftof_s5, is_signed_s5, is_dst_64_s5, input_sign_s5, mant_is_zero_s5;
++    wire [INST_FRM_BITS-1:0] frm_s5;
++    fclass_t fclass_s5;
++    wire [1:0] round_sticky_bits_s5;
++    wire [S_MAN_WIDTH-1:0] pre_round_abs_s5;
++    wire [MAX_EXP-1:0] final_exp_s5;
+
+     VX_pipe_register #(
+-        .DATAW (1 + 1 + $bits(fclass_t) + 1 + 1 + 32 + 1 + 1 + 1 + 1),
+-        .DEPTH (LATENCY > 3)
+-    ) pipe_reg3 (
++        .DATAW (7 + INST_FRM_BITS + $bits(fclass_t) + 2 + S_MAN_WIDTH + MAX_EXP),
++        .DEPTH (LATENCY > 1)
++    ) pipe_reg5 (
+         .clk      (clk),
+         .reset    (reset),
+         .enable   (enable),
+-        .data_in  ({is_itof_s2, is_signed_s2, fclass_s2, mant_is_zero_s2, input_sign_s2, rounded_abs_s2, rounded_sign_s2, of_before_round_s2, f2i_round_has_sticky_s2, i2f_round_has_sticky_s2}),
+-        .data_out ({is_itof_s3, is_signed_s3, fclass_s3, mant_is_zero_s3, input_sign_s3, rounded_abs_s3, rounded_sign_s3, of_before_round_s3, f2i_round_has_sticky_s3, i2f_round_has_sticky_s3})
++        .data_in  ({is_itof_s4, is_ftoi_s4, is_ftof_s4, is_signed_s4, is_dst_64_s4, input_sign_s4, mant_is_zero_s4, frm_s4, fclass_s4, round_sticky_bits_s4, pre_round_abs_s4, final_exp_s4}),
++        .data_out ({is_itof_s5, is_ftoi_s5, is_ftof_s5, is_signed_s5, is_dst_64_s5, input_sign_s5, mant_is_zero_s5, frm_s5, fclass_s5, round_sticky_bits_s5, pre_round_abs_s5, final_exp_s5})
+     );
+
+-    // Assemble regular result, nan box short ones. Int zeroes need to be detected
+-    wire [INT_WIDTH-1:0] fmt_result_s3 = mant_is_zero_s3 ? 0 : {rounded_sign_s3, rounded_abs_s3[EXP_BITS+MAN_BITS-1:0]};
++    // ======================================================================
++    // Stage 5: Rounding & Pack
++    // ======================================================================
+
+-    // Negative integer result needs to be brought into two's complement
+-    wire [INT_WIDTH-1:0] rounded_int_res_s3 = rounded_sign_s3 ? (-rounded_abs_s3) : rounded_abs_s3;
+-    wire rounded_int_res_zero_s3 = (rounded_int_res_s3 == 0);
++    wire [S_MAN_WIDTH-1:0] rounded_abs_s5;
++    wire rounded_sign_s5;
+
+-    // F2I Special case handling
++    VX_fp_rounding #(
++        .DAT_WIDTH (S_MAN_WIDTH)
++    ) fp_rounding (
++        .abs_value_i (pre_round_abs_s5),
++        .sign_i      (input_sign_s5),
++        .round_sticky_bits_i (round_sticky_bits_s5),
++        .rnd_mode_i  (frm_s5),
++        .effective_subtraction_i (1'b0),
++        .abs_rounded_o (rounded_abs_s5),
++        .sign_o        (rounded_sign_s5),
++        `UNUSED_PIN  (exact_zero_o)
++    );
+
+-    // Assemble result according to destination format
+-    reg [INT_WIDTH-1:0] f2i_special_result_s3;
+-    always @(*) begin
+-        if (input_sign_s3 && !fclass_s3.is_nan) begin
+-            f2i_special_result_s3[INT_WIDTH-2:0] = '0;            // alone yields 2**(31)-1
+-            f2i_special_result_s3[INT_WIDTH-1]   = is_signed_s3;  // for unsigned casts yields 2**31
++    // Final Assembly Muxing
++    wire [63:0] safe_rounded_abs = 64'(rounded_abs_s5);
++    wire [15:0] final_exp_16     = 16'(final_exp_s5);
++    wire [15:0] safe_dst_exp     = mant_is_zero_s5 ? 16'h0 : final_exp_16;
++
++    wire [63:0] abs_xlen_64      = 64'(rounded_abs_s5[XLEN-1:0]);
++    wire [63:0] safe_int_res     = rounded_sign_s5 ? (-abs_xlen_64) : abs_xlen_64;
++
++    wire [31:0] int_32_res = safe_int_res[31:0];
++    wire [63:0] int_64_res = safe_int_res;
++
++    wire [31:0] fp_32_res  = {rounded_sign_s5, safe_dst_exp[F32_EXP-1:0], safe_rounded_abs[F32_MAN-1:0]};
++    wire [63:0] fp_64_res  = {rounded_sign_s5, safe_dst_exp[F64_EXP-1:0], safe_rounded_abs[F64_MAN-1:0]};
++
++    wire [31:0] nan_inf_32 = is_signed_s5 ? 32'h7FFFFFFF : 32'hFFFFFFFF;
++    wire [63:0] nan_inf_64 = is_signed_s5 ? 64'h7FFFFFFFFFFFFFFF : 64'hFFFFFFFFFFFFFFFF;
++
++    logic [63:0] res_val_64;
++    logic [31:0] res_val_32;
++    fflags_t final_fflags_s5;
++
++    always_comb begin
++        final_fflags_s5 = '0;
++        res_val_64 = '0;
++        res_val_32 = '0;
++
++        if (is_ftoi_s5) begin
++            // F2I Logic (Handle Int32 / Int64 overflow and Special Values)
++            if (fclass_s5.is_nan || fclass_s5.is_inf) begin
++                final_fflags_s5.NV = 1'b1;
++                res_val_64 = is_dst_64_s5 ? nan_inf_64 : {32'h00000000, nan_inf_32};
++                res_val_32 = nan_inf_32;
++            end else begin
++                res_val_64 = is_dst_64_s5 ? int_64_res : {{32{int_32_res[31]}}, int_32_res}; // Sign-extend I32
++                res_val_32 = int_32_res;
++                final_fflags_s5.NX = (|round_sticky_bits_s5);
++            end
+         end else begin
+-            f2i_special_result_s3[INT_WIDTH-2:0] = 2**(INT_WIDTH-1) - 1;   // alone yields 2**(31)-1
+-            f2i_special_result_s3[INT_WIDTH-1]   = ~is_signed_s3;   // for unsigned casts yields 2**31
++            // FP Logic (F2F and I2F)
++            res_val_64 = is_dst_64_s5 ? fp_64_res : {32'hFFFFFFFF, fp_32_res}; // NaN box F32 into 64-bit register
++            res_val_32 = fp_32_res;
++            final_fflags_s5.NX = (|round_sticky_bits_s5);
+         end
+     end
+
+-    // Detect special case from source format (inf, nan, overflow, nan-boxing or negative unsigned)
+-    wire f2i_result_is_special_s3 = fclass_s3.is_nan
+-                                  | fclass_s3.is_inf
+-                                  | of_before_round_s3
+-                                  | (input_sign_s3 & ~is_signed_s3 & ~rounded_int_res_zero_s3);
++    `UNUSED_VAR ({is_itof_s5, is_ftof_s5, fclass_s5, safe_rounded_abs, safe_dst_exp, res_val_64, res_val_32})
+
+-    fflags_t f2i_special_status_s3;
+-    fflags_t i2f_status_s3, f2i_status_s3;
+-    fflags_t tmp_fflags_s3;
+-
+-    // All integer special cases are invalid
+-    assign f2i_special_status_s3 = {1'b1, 4'h0};
+-
+-    // Result selection and output
+-
+-    assign i2f_status_s3 = {4'h0, i2f_round_has_sticky_s3};
+-    assign f2i_status_s3 = f2i_result_is_special_s3 ? f2i_special_status_s3 : {4'h0, f2i_round_has_sticky_s3};
+-
+-    wire [INT_WIDTH-1:0] i2f_result_s3 = fmt_result_s3;
+-    wire [INT_WIDTH-1:0] f2i_result_s3 = f2i_result_is_special_s3 ? f2i_special_result_s3 : rounded_int_res_s3;
+-
+-    wire [INT_WIDTH-1:0] tmp_result_s3 = is_itof_s3 ? i2f_result_s3 : f2i_result_s3;
+-    assign tmp_fflags_s3 = is_itof_s3 ? i2f_status_s3 : f2i_status_s3;
++    wire [XLEN-1:0] final_result_s5;
++    if (XLEN == 64) begin : g_out_x64
++        assign final_result_s5 = res_val_64;
++    end else begin : g_out_x32
++        assign final_result_s5 = res_val_32;
++    end
+
++    // Stage 5 -> Output Register
+     VX_pipe_register #(
+-        .DATAW (32 + `FP_FLAGS_BITS),
++        .DATAW (XLEN + `FP_FLAGS_BITS),
+         .DEPTH (OUT_REG)
+-    ) pipe_reg4 (
++    ) pipe_reg_out (
+         .clk      (clk),
+         .reset    (reset),
+         .enable   (enable),
+-        .data_in  ({tmp_result_s3, tmp_fflags_s3}),
+-        .data_out ({result,        fflags})
++        .data_in  ({final_result_s5, final_fflags_s5}),
++        .data_out ({result,          fflags})
+     );
+
+ endmodule
+diff --git a/hw/rtl/fpu/VX_fpu_cvt.sv b/hw/rtl/fpu/VX_fpu_cvt.sv
+index a4aad7f8..221e1c18 100644
+--- a/hw/rtl/fpu/VX_fpu_cvt.sv
++++ b/hw/rtl/fpu/VX_fpu_cvt.sv
+@@ -30,13 +30,14 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+
+     input wire [TAG_WIDTH-1:0] tag_in,
+
++    input wire [INST_FPU_BITS-1:0] op_type,
++    input wire [INST_FMT_BITS-1:0] fmt,
+     input wire [INST_FRM_BITS-1:0] frm,
+
+-    input wire is_itof,
+-    input wire is_signed,
+-
+-    input wire [NUM_LANES-1:0][31:0]  dataa,
+-    output wire [NUM_LANES-1:0][31:0] result,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datac,
++    output wire [NUM_LANES-1:0][`XLEN-1:0] result,
+
+     output wire has_fflags,
+     output wire [`FP_FLAGS_BITS-1:0] fflags,
+@@ -46,23 +47,27 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     input wire  ready_out,
+     output wire valid_out
+ );
+-    localparam DATAW = 32 + INST_FRM_BITS + 1 + 1;
++    localparam DATAW = `XLEN + INST_FRM_BITS + INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS;
++
++    `UNUSED_VAR ({datab, datac})
+
+     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
+
+     wire [NUM_LANES-1:0] mask_out;
+-    wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
++    wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] data_out;
+     fflags_t [NUM_LANES-1:0] fflags_out;
+
+     wire pe_enable;
++    wire [NUM_PES-1:0] pe_mask_out;
++    `UNUSED_PIN (pe_mask_out)
++    wire [NUM_PES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] pe_data_out;
+     wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
+-    wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
+
+     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
+-        assign data_in[i][0  +: 32] = dataa[i];
+-        assign data_in[i][32 +: INST_FRM_BITS] = frm;
+-        assign data_in[i][32 + INST_FRM_BITS +: 1] = is_itof;
+-        assign data_in[i][32 + INST_FRM_BITS + 1 +: 1] = is_signed;
++        assign data_in[i][0  +: `XLEN] = dataa[i];
++        assign data_in[i][`XLEN +: INST_FPU_BITS] = op_type;
++        assign data_in[i][`XLEN + INST_FPU_BITS +: INST_FMT_BITS] = fmt;
++        assign data_in[i][`XLEN + INST_FPU_BITS + INST_FMT_BITS +: INST_FRM_BITS] = frm;
+     end
+
+     VX_pe_serializer #(
+@@ -70,34 +75,51 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         .NUM_PES    (NUM_PES),
+         .LATENCY    (`LATENCY_FCVT),
+         .DATA_IN_WIDTH (DATAW),
+-        .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
+-        .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
++        .DATA_OUT_WIDTH (`FP_FLAGS_BITS + `XLEN),
++        .TAG_WIDTH  (TAG_WIDTH),
+         .PE_REG     (0),
+         .OUT_BUF    (2)
+     ) pe_serializer (
+         .clk        (clk),
+         .reset      (reset),
+         .valid_in   (valid_in),
++        .mask_in    (mask_in),
+         .data_in    (data_in),
+-        .tag_in     ({mask_in, tag_in}),
++        .tag_in     (tag_in),
+         .ready_in   (ready_in),
+         .pe_enable  (pe_enable),
++        .pe_mask_out(pe_mask_out),
+         .pe_data_out(pe_data_in),
+         .pe_data_in (pe_data_out),
+         .valid_out  (valid_out),
++        .mask_out   (mask_out),
+         .data_out   (data_out),
+-        .tag_out    ({mask_out, tag_out}),
++        .tag_out    (tag_out),
+         .ready_out  (ready_out)
+     );
+
+     `UNUSED_VAR (pe_data_in)
+
+     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
+-        assign result[i] = data_out[i][0 +: 32];
+-        assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
++        assign result[i] = data_out[i][0 +: `XLEN];
++        assign fflags_out[i] = data_out[i][`XLEN +: `FP_FLAGS_BITS];
+     end
+
+     for (genvar i = 0; i < NUM_PES; ++i) begin : g_fcvt_units
++
++        wire [INST_FPU_BITS-1:0] pe_op_type = pe_data_in[0][`XLEN +: INST_FPU_BITS];
++        wire [INST_FMT_BITS-1:0] pe_fmt = pe_data_in[0][`XLEN + INST_FPU_BITS +: INST_FMT_BITS];
++        wire [INST_FRM_BITS-1:0] pe_frm = pe_data_in[0][`XLEN + INST_FPU_BITS + INST_FMT_BITS +: INST_FRM_BITS];
++
++        `UNUSED_VAR (pe_op_type)
++
++        wire is_itof   = pe_op_type[1];
++        wire is_ftoi   = ~pe_op_type[1];
++        wire is_ftof   = pe_op_type[2];
++        wire is_signed = ~pe_op_type[0];
++        wire is_dst_64 = is_ftof ?  pe_fmt[0] : (is_itof ? pe_fmt[0] : pe_fmt[1]);
++        wire is_src_64 = is_ftof ? ~pe_fmt[0] : (is_itof ? pe_fmt[1] : pe_fmt[0]);
++
+         VX_fcvt_unit #(
+             .LATENCY (`LATENCY_FCVT),
+             .OUT_REG (1)
+@@ -105,12 +127,16 @@ module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+             .clk        (clk),
+             .reset      (reset),
+             .enable     (pe_enable),
+-            .frm        (pe_data_in[0][32 +: INST_FRM_BITS]),
+-            .is_itof    (pe_data_in[0][32 + INST_FRM_BITS +: 1]),
+-            .is_signed  (pe_data_in[0][32 + INST_FRM_BITS + 1 +: 1]),
+-            .dataa      (pe_data_in[i][0 +: 32]),
+-            .result     (pe_data_out[i][0 +: 32]),
+-            .fflags     (pe_data_out[i][32 +: `FP_FLAGS_BITS])
++            .frm        (pe_frm),
++            .is_itof    (is_itof),
++            .is_ftoi    (is_ftoi),
++            .is_ftof    (is_ftof),
++            .is_signed  (is_signed),
++            .is_dst_64  (is_dst_64),
++            .is_src_64  (is_src_64),
++            .dataa      (pe_data_in[i][0 +: `XLEN]),
++            .result     (pe_data_out[i][0 +: `XLEN]),
++            .fflags     (pe_data_out[i][`XLEN +: `FP_FLAGS_BITS])
+         );
+     end
+
+diff --git a/hw/rtl/fpu/VX_fpu_div.sv b/hw/rtl/fpu/VX_fpu_div.sv
+index 72a0cd29..84efce93 100644
+--- a/hw/rtl/fpu/VX_fpu_div.sv
++++ b/hw/rtl/fpu/VX_fpu_div.sv
+@@ -27,29 +27,34 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     input wire clk,
+     input wire reset,
+
+-    input wire  valid_in,
+     output wire ready_in,
++    input wire  valid_in,
+
+     input wire [NUM_LANES-1:0] mask_in,
+
+     input wire [TAG_WIDTH-1:0] tag_in,
+
++    input wire [INST_FPU_BITS-1:0] op_type,
++    input wire [INST_FMT_BITS-1:0] fmt,
+     input wire [INST_FRM_BITS-1:0] frm,
+
+-    input wire [NUM_LANES-1:0][31:0]  dataa,
+-    input wire [NUM_LANES-1:0][31:0]  datab,
+-    output wire [NUM_LANES-1:0][31:0] result,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datac,
++    output wire [NUM_LANES-1:0][`XLEN-1:0] result,
+
+     output wire has_fflags,
+     output wire [`FP_FLAGS_BITS-1:0] fflags,
+
+     output wire [TAG_WIDTH-1:0] tag_out,
+
+-    output wire valid_out,
+-    input wire  ready_out
++    input wire  ready_out,
++    output wire valid_out
+ );
+     localparam DATAW = 2 * 32 + INST_FRM_BITS;
+
++    `UNUSED_VAR ({op_type, fmt, datac})
++
+     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
+
+     wire [NUM_LANES-1:0] mask_out;
+@@ -57,8 +62,10 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
+
+     wire pe_enable;
+-    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
++    wire [NUM_PES-1:0] pe_mask_out;
++    `UNUSED_PIN (pe_mask_out)
+     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
++    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
+
+     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
+         assign data_in[i][0  +: 32] = dataa[i];
+@@ -72,22 +79,25 @@ module VX_fpu_div import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         .LATENCY    (`LATENCY_FDIV),
+         .DATA_IN_WIDTH (DATAW),
+         .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
+-        .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
++        .TAG_WIDTH  (TAG_WIDTH),
+         .PE_REG     (0),
+         .OUT_BUF    (2)
+     ) pe_serializer (
+         .clk        (clk),
+         .reset      (reset),
+         .valid_in   (valid_in),
++        .mask_in    (mask_in),
+         .data_in    (data_in),
+-        .tag_in     ({mask_in, tag_in}),
++        .tag_in     (tag_in),
+         .ready_in   (ready_in),
+         .pe_enable  (pe_enable),
++        .pe_mask_out(pe_mask_out),
+         .pe_data_out(pe_data_in),
+         .pe_data_in (pe_data_out),
+         .valid_out  (valid_out),
++        .mask_out   (mask_out),
+         .data_out   (data_out),
+-        .tag_out    ({mask_out, tag_out}),
++        .tag_out    (tag_out),
+         .ready_out  (ready_out)
+     );
+
+diff --git a/hw/rtl/fpu/VX_fpu_dpi.sv b/hw/rtl/fpu/VX_fpu_dpi.sv
+index bffc8652..a12b0f74 100644
+--- a/hw/rtl/fpu/VX_fpu_dpi.sv
++++ b/hw/rtl/fpu/VX_fpu_dpi.sv
+@@ -306,7 +306,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+                 dpi_utof (fcvt_fire, int'(f_fmt), int'(i_fmt), operands[0][i], frm, result_utof[i], fflags_utof[i]);
+                 dpi_ftoi (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftoi[i], fflags_ftoi[i]);
+                 dpi_ftou (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftou[i], fflags_ftou[i]);
+-                dpi_f2f  (fcvt_fire, int'(f_fmt?1:0), int'(f_fmt?0:1), operands[0][i], frm, result_f2f[i], fflags_f2f[i]);
++                dpi_f2f  (fcvt_fire, int'(f_fmt), int'($bits(f_fmt)'(~f_fmt)), operands[0][i], frm, result_f2f[i], fflags_f2f[i]);
+
+                 result_fcvt[i] = is_itof ? result_itof[i][`XLEN-1:0] :
+                                  is_utof ? result_utof[i][`XLEN-1:0] :
+diff --git a/hw/rtl/fpu/VX_fpu_dsp.sv b/hw/rtl/fpu/VX_fpu_dsp.sv
+index d420baae..46404943 100644
+--- a/hw/rtl/fpu/VX_fpu_dsp.sv
++++ b/hw/rtl/fpu/VX_fpu_dsp.sv
+@@ -54,10 +54,8 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     localparam NUM_FPCORES = 4;
+     localparam FPCORES_BITS = `LOG2UP(NUM_FPCORES);
+
+-    localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS + 3 * (NUM_LANES * 32);
+-    localparam RSP_DATAW = (NUM_LANES * 32) + 1 + $bits(fflags_t) + TAG_WIDTH;
+-
+-    `UNUSED_VAR (fmt)
++    localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS + 3 * (NUM_LANES * `XLEN);
++    localparam RSP_DATAW = (NUM_LANES * `XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
+
+     wire [NUM_FPCORES-1:0] per_core_valid_in;
+     wire [NUM_FPCORES-1:0][REQ_DATAW-1:0] per_core_data_in;
+@@ -68,25 +66,25 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     wire [NUM_FPCORES-1:0][INST_FPU_BITS-1:0] per_core_op_type;
+     wire [NUM_FPCORES-1:0][INST_FMT_BITS-1:0] per_core_fmt;
+     wire [NUM_FPCORES-1:0][INST_FRM_BITS-1:0] per_core_frm;
+-    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_dataa;
+-    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_datab;
+-    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_datac;
++    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_dataa;
++    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_datab;
++    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_datac;
+
+     wire [NUM_FPCORES-1:0] per_core_valid_out;
+-    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_result;
++    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_result;
+     wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_out;
+     wire [NUM_FPCORES-1:0] per_core_has_fflags;
+     fflags_t [NUM_FPCORES-1:0] per_core_fflags;
+     wire [NUM_FPCORES-1:0] per_core_ready_out;
+
+-    wire [NUM_LANES-1:0][31:0] dataa_s;
+-    wire [NUM_LANES-1:0][31:0] datab_s;
+-    wire [NUM_LANES-1:0][31:0] datac_s;
++    wire [NUM_LANES-1:0][`XLEN-1:0] dataa_s;
++    wire [NUM_LANES-1:0][`XLEN-1:0] datab_s;
++    wire [NUM_LANES-1:0][`XLEN-1:0] datac_s;
+
+     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data
+-        assign dataa_s[i] = dataa[i][31:0];
+-        assign datab_s[i] = datab[i][31:0];
+-        assign datac_s[i] = datac[i][31:0];
++        assign dataa_s[i] = dataa[i][`XLEN-1:0];
++        assign datab_s[i] = datab[i][`XLEN-1:0];
++        assign datac_s[i] = datac[i][`XLEN-1:0];
+     end
+
+     `UNUSED_VAR (dataa)
+@@ -127,10 +125,6 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+
+     // FMA core ///////////////////////////////////////////////////////////////
+
+-    wire is_madd = per_core_op_type[FPU_FMA][1];
+-    wire is_neg  = per_core_op_type[FPU_FMA][0];
+-    wire is_sub  = per_core_fmt[FPU_FMA][1];
+-
+     VX_fpu_fma #(
+         .NUM_LANES (NUM_LANES),
+         .TAG_WIDTH (TAG_WIDTH)
+@@ -141,10 +135,9 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         .ready_in   (per_core_ready_in[FPU_FMA]),
+         .mask_in    (per_core_mask_in[FPU_FMA]),
+         .tag_in     (per_core_tag_in[FPU_FMA]),
++        .op_type    (per_core_op_type[FPU_FMA]),
++        .fmt        (per_core_fmt[FPU_FMA]),
+         .frm        (per_core_frm[FPU_FMA]),
+-        .is_madd    (is_madd),
+-        .is_sub     (is_sub),
+-        .is_neg     (is_neg),
+         .dataa      (per_core_dataa[FPU_FMA]),
+         .datab      (per_core_datab[FPU_FMA]),
+         .datac      (per_core_datac[FPU_FMA]),
+@@ -167,47 +160,40 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     wire [1:0][INST_FPU_BITS-1:0] div_sqrt_op_type;
+     wire [1:0][INST_FMT_BITS-1:0] div_sqrt_fmt;
+     wire [1:0][INST_FRM_BITS-1:0] div_sqrt_frm;
+-    wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_dataa;
+-    wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_datab;
+-    wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_datac;
++    wire [1:0][NUM_LANES-1:0][`XLEN-1:0] div_sqrt_dataa;
++    wire [1:0][NUM_LANES-1:0][`XLEN-1:0] div_sqrt_datab;
++    wire [1:0][NUM_LANES-1:0][`XLEN-1:0] div_sqrt_datac;
+
+     wire [1:0] div_sqrt_valid_out;
+-    wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_result;
++    wire [1:0][NUM_LANES-1:0][`XLEN-1:0] div_sqrt_result;
+     wire [1:0][TAG_WIDTH-1:0] div_sqrt_tag_out;
+     wire [1:0] div_sqrt_has_fflags;
+     fflags_t [1:0] div_sqrt_fflags;
+     wire [1:0] div_sqrt_ready_out;
+
+-    wire div_sqrt_valid_tmp_in;
+-    wire [REQ_DATAW-1:0] div_sqrt_data_tmp_in;
+-    wire div_sqrt_ready_tmp_in;
+-
+-    VX_elastic_buffer #(
+-        .DATAW (REQ_DATAW)
+-    ) div_sqrt_req_buffer (
+-        .clk       (clk),
+-        .reset     (reset),
+-        .valid_in  (per_core_valid_in[FPU_DIVSQRT]),
+-        .ready_in  (per_core_ready_in[FPU_DIVSQRT]),
+-        .data_in   (per_core_data_in[FPU_DIVSQRT]),
+-        .data_out  (div_sqrt_data_tmp_in),
+-        .valid_out (div_sqrt_valid_tmp_in),
+-        .ready_out (div_sqrt_ready_tmp_in)
+-    );
+-
+-    wire is_sqrt = div_sqrt_data_tmp_in[0]; // op_type[0]
++    wire is_sqrt = per_core_op_type[FPU_DIVSQRT][0]; // op_type[0]
+
+     VX_stream_switch #(
+         .DATAW       (REQ_DATAW),
+         .NUM_INPUTS  (1),
+-        .NUM_OUTPUTS (2)
++        .NUM_OUTPUTS (2),
++        .OUT_BUF     (0)
+     ) div_sqrt_req_switch (
+         .clk       (clk),
+         .reset     (reset),
+         .sel_in    (is_sqrt),
+-        .valid_in  (div_sqrt_valid_tmp_in),
+-        .ready_in  (div_sqrt_ready_tmp_in),
+-        .data_in   (div_sqrt_data_tmp_in),
++        .valid_in  (per_core_valid_in[FPU_DIVSQRT]),
++        .ready_in  (per_core_ready_in[FPU_DIVSQRT]),
++        .data_in   ({
++            per_core_mask_in[FPU_DIVSQRT],
++            per_core_tag_in[FPU_DIVSQRT],
++            per_core_fmt[FPU_DIVSQRT],
++            per_core_frm[FPU_DIVSQRT],
++            per_core_dataa[FPU_DIVSQRT],
++            per_core_datab[FPU_DIVSQRT],
++            per_core_datac[FPU_DIVSQRT],
++            per_core_op_type[FPU_DIVSQRT]
++        }),
+         .data_out  (div_sqrt_data_in),
+         .valid_out (div_sqrt_valid_in),
+         .ready_out (div_sqrt_ready_in)
+@@ -226,11 +212,6 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         } = div_sqrt_data_in[i];
+     end
+
+-    `UNUSED_VAR (div_sqrt_op_type)
+-    `UNUSED_VAR (div_sqrt_fmt)
+-    `UNUSED_VAR (div_sqrt_datab)
+-    `UNUSED_VAR (div_sqrt_datac)
+-
+     VX_fpu_div #(
+         .NUM_LANES (NUM_LANES),
+         .TAG_WIDTH (TAG_WIDTH)
+@@ -241,9 +222,12 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         .ready_in   (div_sqrt_ready_in[0]),
+         .mask_in    (div_sqrt_mask_in[0]),
+         .tag_in     (div_sqrt_tag_in[0]),
++        .op_type    (div_sqrt_op_type[0]),
++        .fmt        (div_sqrt_fmt[0]),
+         .frm        (div_sqrt_frm[0]),
+         .dataa      (div_sqrt_dataa[0]),
+         .datab      (div_sqrt_datab[0]),
++        .datac      (div_sqrt_datac[0]),
+         .has_fflags (div_sqrt_has_fflags[0]),
+         .fflags     (div_sqrt_fflags[0]),
+         .result     (div_sqrt_result[0]),
+@@ -260,10 +244,14 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         .reset      (reset),
+         .valid_in   (div_sqrt_valid_in[1]),
+         .ready_in   (div_sqrt_ready_in[1]),
+-        .mask_in    (div_sqrt_mask_in[1]),
+         .tag_in     (div_sqrt_tag_in[1]),
++        .mask_in    (div_sqrt_mask_in[1]),
++        .op_type    (div_sqrt_op_type[1]),
++        .fmt        (div_sqrt_fmt[1]),
+         .frm        (div_sqrt_frm[1]),
+         .dataa      (div_sqrt_dataa[1]),
++        .datab      (div_sqrt_datab[1]),
++        .datac      (div_sqrt_datac[1]),
+         .has_fflags (div_sqrt_has_fflags[1]),
+         .fflags     (div_sqrt_fflags[1]),
+         .result     (div_sqrt_result[1]),
+@@ -306,91 +294,74 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+
+     // CVT core ///////////////////////////////////////////////////////////////
+
+-    wire is_itof = per_core_op_type[FPU_CVT][1];
+-    wire is_signed = ~per_core_op_type[FPU_CVT][0];
+-    wire cvt_ret_int_in = ~is_itof;
+-    wire cvt_ret_int_out;
+-
+     VX_fpu_cvt #(
+         .NUM_LANES (NUM_LANES),
+-        .TAG_WIDTH (1+TAG_WIDTH)
++        .TAG_WIDTH (TAG_WIDTH)
+     ) fpu_cvt (
+         .clk        (clk),
+         .reset      (reset),
+         .valid_in   (per_core_valid_in[FPU_CVT]),
+         .ready_in   (per_core_ready_in[FPU_CVT]),
+         .mask_in    (per_core_mask_in[FPU_CVT]),
+-        .tag_in     ({cvt_ret_int_in, per_core_tag_in[FPU_CVT]}),
++        .tag_in     (per_core_tag_in[FPU_CVT]),
++        .op_type    (per_core_op_type[FPU_CVT]),
++        .fmt        (per_core_fmt[FPU_CVT]),
+         .frm        (per_core_frm[FPU_CVT]),
+-        .is_itof    (is_itof),
+-        .is_signed  (is_signed),
+         .dataa      (per_core_dataa[FPU_CVT]),
++        .datab      (div_sqrt_datab[FPU_CVT]),
++        .datac      (div_sqrt_datac[FPU_CVT]),
+         .has_fflags (per_core_has_fflags[FPU_CVT]),
+         .fflags     (per_core_fflags[FPU_CVT]),
+         .result     (per_core_result[FPU_CVT]),
+-        .tag_out    ({cvt_ret_int_out, per_core_tag_out[FPU_CVT]}),
++        .tag_out    (per_core_tag_out[FPU_CVT]),
+         .valid_out  (per_core_valid_out[FPU_CVT]),
+         .ready_out  (per_core_ready_out[FPU_CVT])
+     );
+
+     // NCP core ///////////////////////////////////////////////////////////////
+
+-    wire ncp_ret_int_in = (per_core_op_type[FPU_NCP] == INST_FPU_CMP)
+-                      || inst_fpu_is_class(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP])
+-                      || inst_fpu_is_mvxw(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
+-    wire ncp_ret_int_out;
+-
+-    wire ncp_ret_sext_in = inst_fpu_is_mvxw(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
+-    wire ncp_ret_sext_out;
+-
+     VX_fpu_ncp #(
+         .NUM_LANES (NUM_LANES),
+-        .TAG_WIDTH (TAG_WIDTH+2)
++        .TAG_WIDTH (TAG_WIDTH)
+     ) fpu_ncp (
+         .clk        (clk),
+         .reset      (reset),
+         .valid_in   (per_core_valid_in[FPU_NCP]),
+         .ready_in   (per_core_ready_in[FPU_NCP]),
+         .mask_in    (per_core_mask_in[FPU_NCP]),
+-        .tag_in     ({ncp_ret_sext_in, ncp_ret_int_in, per_core_tag_in[FPU_NCP]}),
++        .tag_in     (per_core_tag_in[FPU_NCP]),
+         .op_type    (per_core_op_type[FPU_NCP]),
++        .fmt        (per_core_fmt[FPU_NCP]),
+         .frm        (per_core_frm[FPU_NCP]),
+         .dataa      (per_core_dataa[FPU_NCP]),
+         .datab      (per_core_datab[FPU_NCP]),
++        .datac      (div_sqrt_datac[FPU_NCP]),
+         .result     (per_core_result[FPU_NCP]),
+         .has_fflags (per_core_has_fflags[FPU_NCP]),
+         .fflags     (per_core_fflags[FPU_NCP]),
+-        .tag_out    ({ncp_ret_sext_out, ncp_ret_int_out, per_core_tag_out[FPU_NCP]}),
++        .tag_out    (per_core_tag_out[FPU_NCP]),
+         .valid_out  (per_core_valid_out[FPU_NCP]),
+         .ready_out  (per_core_ready_out[FPU_NCP])
+     );
+
+     ///////////////////////////////////////////////////////////////////////////
+
+-    reg [NUM_FPCORES-1:0][RSP_DATAW+2-1:0] per_core_data_out;
++    reg [NUM_FPCORES-1:0][RSP_DATAW-1:0] per_core_data_out;
+
+     always @(*) begin
+         for (integer i = 0; i < NUM_FPCORES; ++i) begin
+-            per_core_data_out[i][RSP_DATAW+1:2] = {
++            per_core_data_out[i] = {
+                 per_core_result[i],
+                 per_core_has_fflags[i],
+                 per_core_fflags[i],
+                 per_core_tag_out[i]
+             };
+-            per_core_data_out[i][1:0] = '0;
+         end
+-        per_core_data_out[FPU_CVT][1:0] = {1'b1, cvt_ret_int_out};
+-        per_core_data_out[FPU_NCP][1:0] = {ncp_ret_sext_out, ncp_ret_int_out};
+     end
+
+-    wire [NUM_LANES-1:0][31:0] result_s;
+-
+-    wire [1:0] op_ret_int_out;
+-    `UNUSED_VAR (op_ret_int_out)
+-
+     VX_stream_arb #(
+         .NUM_INPUTS (NUM_FPCORES),
+-        .DATAW      (RSP_DATAW + 2),
++        .DATAW      (RSP_DATAW),
+         .ARBITER    ("R"),
+         .OUT_BUF    (OUT_BUF)
+     ) rsp_arb (
+@@ -399,28 +370,12 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         .valid_in  (per_core_valid_out),
+         .ready_in  (per_core_ready_out),
+         .data_in   (per_core_data_out),
+-        .data_out  ({result_s, has_fflags, fflags, tag_out, op_ret_int_out}),
++        .data_out  ({result, has_fflags, fflags, tag_out}),
+         .valid_out (valid_out),
+         .ready_out (ready_out),
+         `UNUSED_PIN (sel_out)
+     );
+
+-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
+-    `ifdef FPU_RV64F
+-        reg [`XLEN-1:0] result_w;
+-        always @(*) begin
+-            case (op_ret_int_out)
+-            2'b11:   result_w = `XLEN'($signed(result_s[i]));
+-            2'b01:   result_w = {32'h00000000, result_s[i]};
+-            default: result_w = {32'hffffffff, result_s[i]};
+-            endcase
+-        end
+-        assign result[i] = result_w;
+-    `else
+-        assign result[i] = result_s[i];
+-    `endif
+-    end
+-
+ endmodule
+
+ `endif
+diff --git a/hw/rtl/fpu/VX_fpu_fma.sv b/hw/rtl/fpu/VX_fpu_fma.sv
+index 899c0d78..2338d293 100644
+--- a/hw/rtl/fpu/VX_fpu_fma.sv
++++ b/hw/rtl/fpu/VX_fpu_fma.sv
+@@ -34,16 +34,14 @@ module VX_fpu_fma import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+
+     input wire [TAG_WIDTH-1:0] tag_in,
+
++    input wire [INST_FPU_BITS-1:0] op_type,
++    input wire [INST_FMT_BITS-1:0] fmt,
+     input wire [INST_FRM_BITS-1:0] frm,
+
+-    input wire  is_madd,
+-    input wire  is_sub,
+-    input wire  is_neg,
+-
+-    input wire [NUM_LANES-1:0][31:0]  dataa,
+-    input wire [NUM_LANES-1:0][31:0]  datab,
+-    input wire [NUM_LANES-1:0][31:0]  datac,
+-    output wire [NUM_LANES-1:0][31:0] result,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datac,
++    output wire [NUM_LANES-1:0][`XLEN-1:0] result,
+
+     output wire has_fflags,
+     output wire [`FP_FLAGS_BITS-1:0] fflags,
+@@ -55,6 +53,12 @@ module VX_fpu_fma import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+ );
+     localparam DATAW = 3 * 32 + INST_FRM_BITS;
+
++    `UNUSED_VAR ({op_type, fmt})
++
++    wire is_madd = op_type[1];
++    wire is_neg  = op_type[0];
++    wire is_sub  = fmt[1];
++
+     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
+
+     wire [NUM_LANES-1:0] mask_out;
+@@ -62,8 +66,10 @@ module VX_fpu_fma import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
+
+     wire pe_enable;
+-    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
++    wire [NUM_PES-1:0] pe_mask_out;
++    `UNUSED_PIN (pe_mask_out)
+     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
++    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
+
+     reg [NUM_LANES-1:0][31:0] a, b, c;
+
+@@ -103,22 +109,25 @@ module VX_fpu_fma import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         .LATENCY    (`LATENCY_FMA),
+         .DATA_IN_WIDTH (DATAW),
+         .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
+-        .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
++        .TAG_WIDTH  (TAG_WIDTH),
+         .PE_REG     (0),
+         .OUT_BUF    (2)
+     ) pe_serializer (
+         .clk        (clk),
+         .reset      (reset),
+         .valid_in   (valid_in),
++        .mask_in    (mask_in),
+         .data_in    (data_in),
+-        .tag_in     ({mask_in, tag_in}),
++        .tag_in     (tag_in),
+         .ready_in   (ready_in),
+         .pe_enable  (pe_enable),
++        .pe_mask_out(pe_mask_out),
+         .pe_data_out(pe_data_in),
+         .pe_data_in (pe_data_out),
+         .valid_out  (valid_out),
++        .mask_out   (mask_out),
+         .data_out   (data_out),
+-        .tag_out    ({mask_out, tag_out}),
++        .tag_out    (tag_out),
+         .ready_out  (ready_out)
+     );
+
+diff --git a/hw/rtl/fpu/VX_fpu_ncp.sv b/hw/rtl/fpu/VX_fpu_ncp.sv
+index 8f83c8bf..0680f81e 100644
+--- a/hw/rtl/fpu/VX_fpu_ncp.sv
++++ b/hw/rtl/fpu/VX_fpu_ncp.sv
+@@ -31,11 +31,13 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     input wire [TAG_WIDTH-1:0] tag_in,
+
+     input wire [INST_FPU_BITS-1:0] op_type,
++    input wire [INST_FMT_BITS-1:0] fmt,
+     input wire [INST_FRM_BITS-1:0] frm,
+
+-    input wire [NUM_LANES-1:0][31:0]  dataa,
+-    input wire [NUM_LANES-1:0][31:0]  datab,
+-    output wire [NUM_LANES-1:0][31:0] result,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datac,
++    output wire [NUM_LANES-1:0][`XLEN-1:0] result,
+
+     output wire has_fflags,
+     output wire [`FP_FLAGS_BITS-1:0] fflags,
+@@ -47,6 +49,8 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+ );
+     localparam DATAW = 2 * 32 + INST_FRM_BITS + INST_FPU_BITS;
+
++    `UNUSED_VAR ({fmt, datac})
++
+     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
+
+     wire [NUM_LANES-1:0] mask_out;
+@@ -54,8 +58,10 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     fflags_t [NUM_LANES-1:0] fflags_out;
+
+     wire pe_enable;
+-    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
++    wire [NUM_PES-1:0] pe_mask_out;
++    `UNUSED_PIN (pe_mask_out)
+     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
++    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
+
+     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
+         assign data_in[i][0  +: 32] = dataa[i];
+@@ -70,22 +76,25 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         .LATENCY    (`LATENCY_FNCP),
+         .DATA_IN_WIDTH (DATAW),
+         .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
+-        .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
++        .TAG_WIDTH  (TAG_WIDTH),
+         .PE_REG     (0),
+         .OUT_BUF    (2)
+     ) pe_serializer (
+         .clk        (clk),
+         .reset      (reset),
+         .valid_in   (valid_in),
++        .mask_in    (mask_in),
+         .data_in    (data_in),
+-        .tag_in     ({mask_in, tag_in}),
++        .tag_in     (tag_in),
+         .ready_in   (ready_in),
+         .pe_enable  (pe_enable),
++        .pe_mask_out(pe_mask_out),
+         .pe_data_out(pe_data_in),
+         .pe_data_in (pe_data_out),
+         .valid_out  (valid_out),
++        .mask_out   (mask_out),
+         .data_out   (data_out),
+-        .tag_out    ({mask_out, tag_out}),
++        .tag_out    (tag_out),
+         .ready_out  (ready_out)
+     );
+
+diff --git a/hw/rtl/fpu/VX_fpu_sqrt.sv b/hw/rtl/fpu/VX_fpu_sqrt.sv
+index 31ff9118..d67a31f7 100644
+--- a/hw/rtl/fpu/VX_fpu_sqrt.sv
++++ b/hw/rtl/fpu/VX_fpu_sqrt.sv
+@@ -34,10 +34,14 @@ module VX_fpu_sqrt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+
+     input wire [TAG_WIDTH-1:0] tag_in,
+
++    input wire [INST_FPU_BITS-1:0] op_type,
++    input wire [INST_FMT_BITS-1:0] fmt,
+     input wire [INST_FRM_BITS-1:0] frm,
+
+-    input wire [NUM_LANES-1:0][31:0]  dataa,
+-    output wire [NUM_LANES-1:0][31:0] result,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
++    input wire [NUM_LANES-1:0][`XLEN-1:0]  datac,
++    output wire [NUM_LANES-1:0][`XLEN-1:0] result,
+
+     output wire has_fflags,
+     output wire [`FP_FLAGS_BITS-1:0] fflags,
+@@ -49,6 +53,8 @@ module VX_fpu_sqrt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+ );
+     localparam DATAW = 32 + INST_FRM_BITS;
+
++    `UNUSED_VAR ({op_type, fmt, datab, datac})
++
+     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
+
+     wire [NUM_LANES-1:0] mask_out;
+@@ -56,8 +62,10 @@ module VX_fpu_sqrt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
+
+     wire pe_enable;
+-    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
++    wire [NUM_PES-1:0] pe_mask_out;
++    `UNUSED_PIN (pe_mask_out)
+     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
++    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
+
+     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
+         assign data_in[i][0  +: 32] = dataa[i];
+@@ -70,22 +78,25 @@ module VX_fpu_sqrt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
+         .LATENCY    (`LATENCY_FSQRT),
+         .DATA_IN_WIDTH (DATAW),
+         .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
+-        .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
++        .TAG_WIDTH  (TAG_WIDTH),
+         .PE_REG     (0),
+         .OUT_BUF    (2)
+     ) pe_serializer (
+         .clk        (clk),
+         .reset      (reset),
+         .valid_in   (valid_in),
++        .mask_in    (mask_in),
+         .data_in    (data_in),
+-        .tag_in     ({mask_in, tag_in}),
++        .tag_in     (tag_in),
+         .ready_in   (ready_in),
+         .pe_enable  (pe_enable),
++        .pe_mask_out(pe_mask_out),
+         .pe_data_out(pe_data_in),
+         .pe_data_in (pe_data_out),
+         .valid_out  (valid_out),
++        .mask_out   (mask_out),
+         .data_out   (data_out),
+-        .tag_out    ({mask_out, tag_out}),
++        .tag_out    (tag_out),
+         .ready_out  (ready_out)
+     );
+
+diff --git a/hw/rtl/libs/VX_pe_serializer.sv b/hw/rtl/libs/VX_pe_serializer.sv
+index 4a66a639..0779ccae 100644
+--- a/hw/rtl/libs/VX_pe_serializer.sv
++++ b/hw/rtl/libs/VX_pe_serializer.sv
+@@ -29,41 +29,47 @@ module VX_pe_serializer #(
+
+     // input
+     input wire                          valid_in,
++    input wire [NUM_LANES-1:0]          mask_in,
+     input wire [NUM_LANES-1:0][DATA_IN_WIDTH-1:0] data_in,
+     input wire [TAG_WIDTH-1:0]          tag_in,
+     output wire                         ready_in,
+
+     // PE
+     output wire                         pe_enable,
++    output wire [NUM_PES-1:0]           pe_mask_out,
+     output wire [NUM_PES-1:0][DATA_IN_WIDTH-1:0] pe_data_out,
+     input wire [NUM_PES-1:0][DATA_OUT_WIDTH-1:0] pe_data_in,
+
+     // output
+     output wire                         valid_out,
++    output wire [NUM_LANES-1:0]         mask_out,
+     output wire [NUM_LANES-1:0][DATA_OUT_WIDTH-1:0] data_out,
+     output wire [TAG_WIDTH-1:0]         tag_out,
+     input wire                          ready_out
+ );
+     wire                    valid_out_u;
++    wire [NUM_LANES-1:0]    mask_out_u;
+     wire [NUM_LANES-1:0][DATA_OUT_WIDTH-1:0] data_out_u;
+     wire [TAG_WIDTH-1:0]    tag_out_u;
+     wire                    ready_out_u;
+
+     wire [NUM_PES-1:0][DATA_IN_WIDTH-1:0] pe_data_out_w;
++    wire [NUM_PES-1:0]      pe_mask_out_w;
+     wire pe_valid_in;
++    wire [NUM_PES-1:0]      pe_mask_in_w;
+     wire [TAG_WIDTH-1:0] pe_tag_in;
+     wire enable;
+
+     VX_shift_register #(
+-        .DATAW  (1 + TAG_WIDTH),
++        .DATAW  (1 + NUM_PES + TAG_WIDTH),
+         .DEPTH  (PE_REG + LATENCY),
+         .RESETW (1)
+     ) shift_reg (
+         .clk      (clk),
+         .reset    (reset),
+         .enable   (enable),
+-        .data_in  ({valid_in,    tag_in}),
+-        .data_out ({pe_valid_in, pe_tag_in})
++        .data_in  ({valid_in,    pe_mask_out_w, tag_in}),
++        .data_out ({pe_valid_in, pe_mask_in_w, pe_tag_in})
+     );
+
+     VX_pipe_register #(
+@@ -78,6 +84,7 @@ module VX_pe_serializer #(
+     );
+
+     assign pe_enable = enable;
++    assign pe_mask_out = pe_mask_out_w;
+
+     if (NUM_LANES != NUM_PES) begin : g_serialize
+
+@@ -89,6 +96,7 @@ module VX_pe_serializer #(
+
+         for (genvar i = 0; i < NUM_PES; ++i) begin : g_pe_data_out_w
+             assign pe_data_out_w[i] = data_in[batch_in_idx * NUM_PES + i];
++            assign pe_mask_out_w[i] = mask_in[batch_in_idx * NUM_PES + i];
+         end
+
+         always @(posedge clk) begin
+@@ -106,16 +114,20 @@ module VX_pe_serializer #(
+         end
+
+         reg [BATCH_SIZE-1:0][(NUM_PES * DATA_OUT_WIDTH)-1:0] data_out_r, data_out_n;
++        reg [BATCH_SIZE-1:0][NUM_PES-1:0] mask_out_r, mask_out_n;
+
+         always @(*) begin
+             data_out_n = data_out_r;
++            mask_out_n = mask_out_r;
+             if (pe_valid_in) begin
+                 data_out_n[batch_out_idx] = pe_data_in;
++                mask_out_n[batch_out_idx] = pe_mask_in_w;
+             end
+         end
+
+         always @(posedge clk) begin
+             data_out_r <= data_out_n;
++            mask_out_r <= mask_out_n;
+         end
+
+         assign enable      = ready_out_u || ~valid_out_u;
+@@ -123,23 +135,24 @@ module VX_pe_serializer #(
+
+         assign valid_out_u = batch_out_done;
+         assign data_out_u  = data_out_n;
++        assign mask_out_u  = mask_out_n;
+         assign tag_out_u   = pe_tag_in;
+
+     end else begin : g_passthru
+
+         assign pe_data_out_w = data_in;
+-
++        assign pe_mask_out_w = mask_in;
+         assign enable      = ready_out_u || ~pe_valid_in;
+         assign ready_in    = enable;
+-
+         assign valid_out_u = pe_valid_in;
+         assign data_out_u  = pe_data_in;
++        assign mask_out_u  = pe_mask_in_w;
+         assign tag_out_u   = pe_tag_in;
+
+     end
+
+     VX_elastic_buffer #(
+-        .DATAW   (NUM_LANES * DATA_OUT_WIDTH + TAG_WIDTH),
++        .DATAW   ((NUM_LANES * DATA_OUT_WIDTH) + NUM_LANES + TAG_WIDTH),
+         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+         .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+     ) out_buf (
+@@ -147,8 +160,9 @@ module VX_pe_serializer #(
+         .reset     (reset),
+         .valid_in  (valid_out_u),
+         .ready_in  (ready_out_u),
+-        .data_in   ({data_out_u, tag_out_u}),
+-        .data_out  ({data_out, tag_out}),
++
++        .data_in   ({data_out_u, mask_out_u, tag_out_u}),
++        .data_out  ({data_out, mask_out, tag_out}),
+         .valid_out (valid_out),
+         .ready_out (ready_out)
+     );
+diff --git a/hw/rtl/tcu/VX_tcu_core.sv b/hw/rtl/tcu/VX_tcu_core.sv
+index e7c270c4..ce8cd27a 100644
+--- a/hw/rtl/tcu/VX_tcu_core.sv
++++ b/hw/rtl/tcu/VX_tcu_core.sv
+@@ -26,6 +26,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+
+     // Outputs
+     VX_result_if.master result_if
++`ifdef TCU_WGMMA_ENABLE
++    ,
++    // Tile buffer data (pre-indexed for current WGMMA µop)
++    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
++    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs2_data,
++    input wire                                 tbuf_ready
++`endif
+ );
+     `UNUSED_SPARAM (INSTANCE_ID);
+
+@@ -66,6 +73,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+     wire is_sparse = (execute_if.data.op_type == INST_TCU_WMMA_SP);
+     wire is_meta_store = (execute_if.data.op_type == INST_TCU_META_STORE);
+ `endif
++`ifdef TCU_WGMMA_ENABLE
++    wire is_wgmma = (execute_if.data.op_type == INST_TCU_WGMMA)
++    `ifdef TCU_SPARSE_ENABLE
++                 || (execute_if.data.op_type == INST_TCU_WGMMA_SP)
++    `endif
++    ;
++`endif
+
+     wire [3:0] step_m = execute_if.data.op_args.tcu.step_m;
+     wire [3:0] step_n = execute_if.data.op_args.tcu.step_n;
+@@ -169,7 +183,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+
+     assign result_if.valid  = fedp_done;
+     assign fedp_enable      = ~result_if.valid || result_if.ready;
++`ifdef TCU_WGMMA_ENABLE
++    assign execute_if.ready = ~mdata_queue_full && fedp_enable && (~is_wgmma || tbuf_ready);
++`else
+     assign execute_if.ready = ~mdata_queue_full && fedp_enable;
++`endif
+
+     VX_fifo_queue #(
+         .DATAW ($bits(tcu_header_t)),
+@@ -231,19 +249,41 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
+         `endif
+             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
+-                assign a_row[k_idx]   = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
++            `ifdef TCU_WGMMA_ENABLE
++                assign a_row[k_idx] = is_wgmma
++                    ? 32'(tbuf_rs1_data[a_off + i * TCU_TC_K + k_idx])
++                    : 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
++            `else
++                assign a_row[k_idx] = 32'(execute_if.data.rs1_data[a_off + i * TCU_TC_K + k_idx]);
++            `endif
+             `ifdef TCU_SPARSE_ENABLE
++            `ifdef TCU_WGMMA_ENABLE
++                assign b_col_dense[k_idx] = is_wgmma
++                    ? 32'(tbuf_rs2_data[b_off + j * TCU_TC_K + k_idx])
++                    : 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
++            `else
+                 assign b_col_dense[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
++            `endif
+                 // NT=16 sparse: j_sp = j % 2 (wraps j=2,3 back to lanes 0..15)
+                 // NT=8/32: j_sp = j (no wrapping needed)
+                 localparam J_SP = SYM_SPARSE ? (j % (TCU_TC_N / 2)) : j;
+                 assign b_col_1[k_idx] = 32'(execute_if.data.rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
+                 assign b_col_2[k_idx] = 32'(execute_if.data.rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
++            `else
++            `ifdef TCU_WGMMA_ENABLE
++                assign b_col[k_idx] = is_wgmma
++                    ? 32'(tbuf_rs2_data[b_off + j * TCU_TC_K + k_idx])
++                    : 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
+             `else
+                 assign b_col[k_idx] = 32'(execute_if.data.rs2_data[b_off + j * TCU_TC_K + k_idx]);
+             `endif
++            `endif
+             end
+-            wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
++            wire [31:0] c_val =
++            `ifdef TCU_WGMMA_ENABLE
++                is_wgmma ? 32'(execute_if.data.rs1_data[i * TCU_TC_N + j]) :
++            `endif
++                32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
+         `ifdef TCU_SPARSE_ENABLE
+             /* verilator lint_off UNUSEDSIGNAL */
+             wire [TCU_MAX_INPUTS-1:0] vld_mask = '1; // TODO: should connect to input source
+diff --git a/hw/rtl/tcu/VX_tcu_pkg.sv b/hw/rtl/tcu/VX_tcu_pkg.sv
+index 12f90067..9947c894 100644
+--- a/hw/rtl/tcu/VX_tcu_pkg.sv
++++ b/hw/rtl/tcu/VX_tcu_pkg.sv
+@@ -133,6 +133,23 @@ package VX_tcu_pkg;
+
+     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
+
++`ifdef TCU_WGMMA_ENABLE
++    // WGMMA uses NR=32 accumulator registers per warp, giving larger tile steps.
++    localparam TCU_WG_NR          = 32;
++    localparam TCU_WG_TILE_CAP    = TCU_NT * TCU_WG_NR;
++    localparam TCU_WG_LG_TILE_CAP = $clog2(TCU_WG_TILE_CAP);
++    localparam TCU_WG_TILE_EN     = TCU_WG_LG_TILE_CAP / 2;
++    localparam TCU_WG_TILE_EM     = TCU_WG_LG_TILE_CAP - TCU_WG_TILE_EN;
++    localparam TCU_WG_TILE_M      = 1 << TCU_WG_TILE_EM;
++    localparam TCU_WG_TILE_N      = 1 << TCU_WG_TILE_EN;
++    localparam TCU_WG_TILE_K      = TCU_WG_TILE_CAP /
++                                    ((TCU_WG_TILE_M > TCU_WG_TILE_N) ? TCU_WG_TILE_M : TCU_WG_TILE_N);
++    localparam TCU_WG_M_STEPS     = TCU_WG_TILE_M / TCU_TC_M;
++    localparam TCU_WG_N_STEPS     = TCU_WG_TILE_N / TCU_TC_N;
++    localparam TCU_WG_K_STEPS     = TCU_WG_TILE_K / TCU_TC_K;
++    localparam TCU_WG_UOPS        = TCU_WG_M_STEPS * TCU_WG_N_STEPS * TCU_WG_K_STEPS;
++`endif
++
+     localparam TCU_MIN_FMT_WIDTH = 4; //int4
+     localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
+     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
+diff --git a/hw/rtl/tcu/VX_tcu_unit.sv b/hw/rtl/tcu/VX_tcu_unit.sv
+index 7f9e974c..2849a9a7 100644
+--- a/hw/rtl/tcu/VX_tcu_unit.sv
++++ b/hw/rtl/tcu/VX_tcu_unit.sv
+@@ -26,6 +26,16 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+
+     // Outputs
+     VX_commit_if.master     commit_if [`ISSUE_WIDTH]
++
++`ifdef TCU_WGMMA_ENABLE
++    ,
++    // Local-memory read ports (one per block, for tile buffer)
++    VX_mem_bus_if.master    tcu_lmem_if [`NUM_TCU_BLOCKS]
++`ifdef PERF_ENABLE
++    ,
++    output tcu_perf_t       tcu_perf
++`endif
++`endif
+ );
+     localparam BLOCK_SIZE = `NUM_TCU_BLOCKS;
+     localparam NUM_LANES  = `NUM_TCU_LANES;
+@@ -53,6 +63,66 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+         .data_t (tcu_result_t)
+     ) per_block_result_if[BLOCK_SIZE]();
+
++`ifdef TCU_WGMMA_ENABLE
++    localparam LMEM_ADDR_WIDTH = `LMEM_LOG_SIZE - $clog2(`XLEN / 8);
++
++    // Per-block tile buffer data
++    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data [BLOCK_SIZE];
++    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs2_data [BLOCK_SIZE];
++    wire                                 tbuf_ready     [BLOCK_SIZE];
++`ifdef PERF_ENABLE
++    wire [PERF_CTR_BITS-1:0]             tbuf_fetch_stalls_b [BLOCK_SIZE];
++`endif
++
++    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_tile_bufs
++        // is_wgmma decode for this block
++        wire is_wgmma_b = (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA)
++        `ifdef TCU_SPARSE_ENABLE
++                       || (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA_SP)
++        `endif
++        ;
++
++        wire exec_fire_b = per_block_execute_if[block_idx].valid
++                        && per_block_execute_if[block_idx].ready;
++
++        VX_tcu_tile_buf #(
++            .INSTANCE_ID     (`SFORMATF(("%s-tbuf%0d", INSTANCE_ID, block_idx))),
++            .LMEM_ADDR_WIDTH (LMEM_ADDR_WIDTH),
++            .TAG_WIDTH       (`UP(UUID_WIDTH))
++        ) tile_buf (
++            .clk           (clk),
++            .reset         (reset),
++            .exec_valid    (per_block_execute_if[block_idx].valid),
++            .exec_fire     (exec_fire_b),
++            .exec_is_wgmma (is_wgmma_b),
++            .exec_step_m   (per_block_execute_if[block_idx].data.op_args.tcu.step_m),
++            .exec_step_n   (per_block_execute_if[block_idx].data.op_args.tcu.step_n),
++            .exec_step_k   (per_block_execute_if[block_idx].data.op_args.tcu.step_k),
++            .exec_desc_a   (per_block_execute_if[block_idx].data.rs2_data[0]),
++            .exec_desc_b   (per_block_execute_if[block_idx].data.rs3_data[0]),
++            .lmem_if       (tcu_lmem_if[block_idx]),
++            .tbuf_rs1_data (tbuf_rs1_data[block_idx]),
++            .tbuf_rs2_data (tbuf_rs2_data[block_idx]),
++            .tbuf_ready    (tbuf_ready[block_idx])
++        `ifdef PERF_ENABLE
++            ,
++            .tbuf_fetch_stalls (tbuf_fetch_stalls_b[block_idx])
++        `endif
++        );
++    end
++
++`ifdef PERF_ENABLE
++    // Sum tbuf_fetch_stalls across all blocks
++    logic [PERF_CTR_BITS-1:0] tbuf_fetch_stalls_sum;
++    always_comb begin
++        tbuf_fetch_stalls_sum = '0;
++        for (int bi = 0; bi < BLOCK_SIZE; bi++)
++            tbuf_fetch_stalls_sum += tbuf_fetch_stalls_b[bi];
++    end
++    assign tcu_perf.tbuf_fetch_stalls = tbuf_fetch_stalls_sum;
++`endif
++`endif
++
+     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
+         VX_tcu_core #(
+             .INSTANCE_ID (`SFORMATF(("%s-fused%0d", INSTANCE_ID, block_idx)))
+@@ -62,6 +132,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+             .reset      (reset),
+             .execute_if (per_block_execute_if[block_idx]),
+             .result_if  (per_block_result_if[block_idx])
++        `ifdef TCU_WGMMA_ENABLE
++            ,
++            .tbuf_rs1_data (tbuf_rs1_data[block_idx]),
++            .tbuf_rs2_data (tbuf_rs2_data[block_idx]),
++            .tbuf_ready    (tbuf_ready[block_idx])
++        `endif
+         );
+     end
+
+diff --git a/hw/rtl/tcu/VX_tcu_uops.sv b/hw/rtl/tcu/VX_tcu_uops.sv
+index 590676b8..83d4eb6f 100644
+--- a/hw/rtl/tcu/VX_tcu_uops.sv
++++ b/hw/rtl/tcu/VX_tcu_uops.sv
+@@ -31,9 +31,18 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+ `ifdef TCU_SPARSE_ENABLE
+     localparam MAX_META_STORES = ((TCU_BLOCK_CAP + 1) / 2) * TCU_STORES_PER_COL;  // worst case: 4-bit types
+     localparam MAX_FUSED = SYM_SPARSE ? (TCU_UOPS + MAX_META_STORES) : (TCU_UOPS / 2 + MAX_META_STORES);
+-    localparam CTR_W = $clog2(MAX_FUSED > TCU_UOPS ? MAX_FUSED : TCU_UOPS);
++    `ifdef TCU_WGMMA_ENABLE
++        localparam MAX_ALL = MAX_FUSED > TCU_WG_UOPS ? MAX_FUSED : TCU_WG_UOPS;
++        localparam CTR_W   = $clog2(MAX_ALL > TCU_UOPS ? MAX_ALL : TCU_UOPS);
++    `else
++        localparam CTR_W = $clog2(MAX_FUSED > TCU_UOPS ? MAX_FUSED : TCU_UOPS);
++    `endif
+ `else
+-    localparam CTR_W = $clog2(TCU_UOPS);
++    `ifdef TCU_WGMMA_ENABLE
++        localparam CTR_W = $clog2(TCU_WG_UOPS > TCU_UOPS ? TCU_WG_UOPS : TCU_UOPS);
++    `else
++        localparam CTR_W = $clog2(TCU_UOPS);
++    `endif
+ `endif
+     `STATIC_ASSERT (CTR_W <= UOP_CTR_W, ("invalid parameter"))
+
+@@ -49,6 +58,26 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+     // Truncate the wide uop_idx to the bits this expander actually uses.
+     wire [`UP(CTR_W)-1:0] ctr = `UP(CTR_W)'(uop_idx);
+
++`ifdef TCU_WGMMA_ENABLE
++    // WGMMA µops: desc_a in x10 (a0), desc_b in x11 (a1); C accumulator in rs3.
++    wire is_wgmma = (ibuf_in.op_type == INST_TCU_WGMMA)
++    `ifdef TCU_SPARSE_ENABLE
++                 || (ibuf_in.op_type == INST_TCU_WGMMA_SP)
++    `endif
++    ;
++
++    // WGMMA uses NR=32 tile dimensions — separate index extraction.
++    localparam LG_N_WG = $clog2(TCU_WG_N_STEPS);  // 2  (N_STEPS=4)
++    localparam LG_M_WG = $clog2(TCU_WG_M_STEPS);  // 3  (M_STEPS=8)
++    localparam LG_K_WG = $clog2(TCU_WG_K_STEPS);  // 2  (K_STEPS=4)
++
++    wire [`UP(LG_N_WG)-1:0] wg_n_index = ctr[0                      +: `UP(LG_N_WG)];
++    wire [`UP(LG_M_WG)-1:0] wg_m_index = ctr[`UP(LG_N_WG)           +: `UP(LG_M_WG)];
++    wire [`UP(LG_K_WG)-1:0] wg_k_index = ctr[`UP(LG_N_WG)+`UP(LG_M_WG) +: `UP(LG_K_WG)];
++    // Accumulator register index: m*N_STEPS + n → 0..31 (maps to f[0]..f[31])
++    wire [4:0] wg_rs3_off = 5'(wg_m_index) * 5'(TCU_WG_N_STEPS) + 5'(wg_n_index);
++`endif
++
+ `ifdef TCU_SPARSE_ENABLE
+     localparam LG_B_SB_SP = $clog2(TCU_B_SUB_BLOCKS_SP);
+
+@@ -68,7 +97,12 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+     localparam META_REG1 = TCU_RA + 5;  // f15 — fragA.data[5]
+
+     // Fused meta+MMA uop counts
+-    assign uop_count = is_meta_store
++    assign uop_count =
++    `ifdef TCU_WGMMA_ENABLE
++        is_wgmma ? UOP_CTR_W'(TCU_WG_M_STEPS * TCU_WG_N_STEPS *
++                       (ibuf_in.op_type == INST_TCU_WGMMA_SP ? TCU_WG_K_STEPS / 2 : TCU_WG_K_STEPS)) :
++    `endif
++        is_meta_store
+         ? UOP_CTR_W'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s))
+         : is_sparse
+             ? (SYM_SPARSE
+@@ -77,7 +111,11 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+             : UOP_CTR_W'(TCU_UOPS);
+ `else
+     // Dense-only: count is a compile-time constant.
+-    assign uop_count = UOP_CTR_W'(TCU_UOPS);
++    assign uop_count =
++    `ifdef TCU_WGMMA_ENABLE
++        is_wgmma ? UOP_CTR_W'(TCU_WG_M_STEPS * TCU_WG_N_STEPS * TCU_WG_K_STEPS) :
++    `endif
++        UOP_CTR_W'(TCU_UOPS);
+ `endif
+
+ `ifdef TCU_SPARSE_ENABLE
+@@ -152,6 +190,13 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+     assign rs1_offset = ((`UP(CTR_W)'(m_index) >> LG_A_SB) << LG_K) | `UP(CTR_W)'(k_index);
+     assign rs2_offset = ((`UP(CTR_W)'(k_index) << LG_N) | `UP(CTR_W)'(n_index)) >> LG_B_SB;
+     assign rs3_offset = (`UP(CTR_W)'(m_index) << LG_N) | `UP(CTR_W)'(n_index);
++`ifdef TCU_WGMMA_ENABLE
++    // Upper bits beyond WMMA usage (widened for WGMMA uop count).
++    `UNUSED_VAR (eff_ctr[`UP(CTR_W)-1 : LG_N+LG_M+LG_K])
++    `UNUSED_VAR (rs1_offset[`UP(CTR_W)-1 : 5])
++    `UNUSED_VAR (rs2_offset[`UP(CTR_W)-1 : 5])
++    `UNUSED_VAR (rs3_offset[`UP(CTR_W)-1 : 5])
++`endif
+ `endif
+
+     wire [4:0] rs1 = TCU_RA + 5'(rs1_offset);
+@@ -167,9 +212,35 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+     /* verilator lint_on UNSIGNED */
+ `endif
+
++`ifdef TCU_SPARSE_ENABLE
++    logic [3:0] n_sp_s;
++    logic [3:0] m_sp_s;
++`endif
++
+     ibuffer_t ibuf_r;
+     always_comb begin
+         ibuf_r = ibuf_in;
++`ifdef TCU_SPARSE_ENABLE
++        n_sp_s = '0;
++        m_sp_s = '0;
++`endif
++`ifdef TCU_WGMMA_ENABLE
++        if (is_wgmma) begin
++            // WGMMA µop (NR=32 tile):
++            //   rd/rs1 → f[TCU_RC + wg_rs3_off] = C/D accumulator fragment (0..31)
++            //   rs2    → x10 (a0) = desc_a (smem descriptor, integer)
++            //   rs3    → x11 (a1) = desc_b (smem descriptor, integer)
++            ibuf_r.op_args.tcu.step_m = 4'(wg_m_index);
++            ibuf_r.op_args.tcu.step_n = 4'(wg_n_index);
++            ibuf_r.op_args.tcu.step_k = 4'(wg_k_index);
++            ibuf_r.wb  = 1;
++            ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_RC + wg_rs3_off);
++            ibuf_r.rs1 = make_reg_num(REG_TYPE_F, TCU_RC + wg_rs3_off);  // C accumulator
++            ibuf_r.rs2 = make_reg_num(REG_TYPE_I, 5'd10);  // x10 = desc_a
++            ibuf_r.rs3 = make_reg_num(REG_TYPE_I, 5'd11);  // x11 = desc_b
++        end else
++`endif
++        begin
+ `ifdef TCU_SPARSE_ENABLE
+         /* verilator lint_off WIDTHTRUNC */
+         /* verilator lint_off WIDTHEXPAND */
+@@ -179,6 +250,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+                     : (eff_ctr[0] ? ibuf_in.tmask & ~sym_mask_lo
+                                    : ibuf_in.tmask &  sym_mask_lo))
+                 : ibuf_in.tmask;
++            n_sp_s = 4'(eff_ctr[0 +: (LG_N + LG_K)]);
++            m_sp_s = 4'(eff_ctr[(LG_N + LG_K) +: LG_M]);
+         end
+         /* verilator lint_on WIDTHEXPAND */
+         /* verilator lint_on WIDTHTRUNC */
+@@ -186,22 +259,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+         ibuf_r.op_type = meta_uop ? INST_TCU_META_STORE : ibuf_in.op_type;
+         ibuf_r.op_args.tcu.fmt_d = meta_uop ? 4'(ctr) : ibuf_in.op_args.tcu.fmt_d;
+
+-        if (SYM_SPARSE) begin
+-            /* verilator lint_off UNUSEDSIGNAL */
+-            logic [`UP(CTR_W)-1:0] n_sp_s;
+-            logic [`UP(CTR_W)-1:0] m_sp_s;
+-            /* verilator lint_on UNUSEDSIGNAL */
+-            n_sp_s = `UP(CTR_W)'(eff_ctr[0 +: (LG_N + LG_K)]);
+-            m_sp_s = `UP(CTR_W)'(eff_ctr[(LG_N + LG_K) +: LG_M]);
+-
+-            ibuf_r.op_args.tcu.step_m = meta_uop ? '0 : (is_sparse ? 4'(m_sp_s) : 4'(m_index));
+-            ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : (is_sparse ? 4'(n_sp_s) : 4'(n_index));
+-            ibuf_r.op_args.tcu.step_k = meta_uop ? '0 : (is_sparse ? 4'(0)      : 4'(k_index));
+-        end else begin
+-            ibuf_r.op_args.tcu.step_m = meta_uop ? '0 : 4'(m_index);
+-            ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : 4'(n_index);
+-            ibuf_r.op_args.tcu.step_k = meta_uop ? '0 : 4'(k_index);
+-        end
++        ibuf_r.op_args.tcu.step_m = meta_uop ? '0 : (is_sparse ? 4'(m_sp_s) : 4'(m_index));
++        ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : (is_sparse ? 4'(n_sp_s) : 4'(n_index));
++        ibuf_r.op_args.tcu.step_k = meta_uop ? '0 : (is_sparse ? 4'(0)      : 4'(k_index));
+
+         ibuf_r.wb  = meta_uop ? 1'b0 : 1'b1;
+         ibuf_r.rd  = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
+@@ -223,6 +283,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
+         ibuf_r.rs2 = make_reg_num(REG_TYPE_F, rs2);
+         ibuf_r.rs3 = make_reg_num(REG_TYPE_F, rs3);
+ `endif
++        end
+     end
+
+     assign ibuf_out = ibuf_r;
+diff --git a/kernel/include/vx_tensor.h b/kernel/include/vx_tensor.h
+index c6af3b39..bf534b31 100644
+--- a/kernel/include/vx_tensor.h
++++ b/kernel/include/vx_tensor.h
+@@ -32,10 +32,13 @@ struct smem_matrix_desc {
+ };
+
+ // Build a smem descriptor from a pointer and row stride in bytes.
++// The offset field encodes the physical byte offset from the LMEM hardware
++// base address (0xffff0000), not the CTA-relative offset.  Because
++// LMEM_BASE_ADDR = 0xffff0000 its lower 16 bits are all zero, so
++// ptr & 0xFFFF == ptr - LMEM_BASE_ADDR for any LMEM pointer.
+ static __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
+-  uint32_t lmem_base = csr_read(VX_CSR_LOCAL_MEM_BASE);
+-  uint32_t offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ptr)) - lmem_base;
+-  return {((leading_bytes & 0xFFFFu) << 16) | (offset & 0xFFFFu)};
++  uint32_t offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ptr)) & 0xFFFFu;
++  return {((leading_bytes & 0xFFFFu) << 16) | offset};
+ }
+
+ namespace detail {
+diff --git a/sim/rtlsim/Makefile b/sim/rtlsim/Makefile
+index 7719aa62..4ee51ef5 100644
+--- a/sim/rtlsim/Makefile
++++ b/sim/rtlsim/Makefile
+@@ -47,18 +47,18 @@ ifneq (,$(filter -DEXT_DXA_ENABLE, $(CONFIGS)))
+ endif
+
+ # Add TCU extension sources
+-ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS)))
++ifneq (,$(filter -DEXT_TCU_ENABLE, $(CONFIGS) $(XCONFIGS)))
+ 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
+ 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+-	ifneq (,$(filter -DTCU_TYPE_DPI, $(CONFIGS)))
++	ifneq (,$(filter -DTCU_TYPE_DPI, $(CONFIGS) $(XCONFIGS)))
+ 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
+-	else ifneq (,$(filter -DTCU_TYPE_DSP, $(CONFIGS)))
++	else ifneq (,$(filter -DTCU_TYPE_DSP, $(CONFIGS) $(XCONFIGS)))
+ 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
+-	else ifneq (,$(filter -DTCU_TYPE_BHF, $(CONFIGS)))
++	else ifneq (,$(filter -DTCU_TYPE_BHF, $(CONFIGS) $(XCONFIGS)))
+ 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+ 		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+ 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
+-	else ifneq (,$(filter -DTCU_TYPE_TFR, $(CONFIGS)))
++	else ifneq (,$(filter -DTCU_TYPE_TFR, $(CONFIGS) $(XCONFIGS)))
+ 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
+ 	else
+ 		# No explicit TCU type — VX_config.vh defaults to DPI for simulation
+diff --git a/sim/simx/core.h b/sim/simx/core.h
+index 8f217981..a60bec7b 100644
+--- a/sim/simx/core.h
++++ b/sim/simx/core.h
+@@ -63,6 +63,9 @@ public:
+   #endif
+   #ifdef EXT_TCU_ENABLE
+     uint64_t tcu_stalls = 0;
++  #ifdef TCU_WGMMA_ENABLE
++    uint64_t tbuf_fetch_stalls = 0;
++  #endif
+   #endif
+     uint64_t branches   = 0;
+     uint64_t divergence = 0;
+diff --git a/sim/simx/emulator.cpp b/sim/simx/emulator.cpp
+index eb8ffabe..c4acd08b 100644
+--- a/sim/simx/emulator.cpp
++++ b/sim/simx/emulator.cpp
+@@ -742,6 +742,16 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
+         CSR_READ_64(VX_CSR_MPM_LMEM_BANK_ST, lmem_perf.bank_stalls);
+         }
+       } break;
++#ifdef EXT_TCU_ENABLE
++      case VX_DCR_MPM_CLASS_TCU: {
++        auto tcu_perf = core_->tensor_unit()->perf_stats();
++        switch (addr) {
++#ifdef TCU_WGMMA_ENABLE
++        CSR_READ_64(VX_CSR_MPM_TCU_TBUF_FETCH_ST, tcu_perf.tbuf_fetch_stalls);
++#endif
++        }
++      } break;
++#endif
+ #ifdef EXT_DXA_ENABLE
+       case VX_DCR_MPM_CLASS_DXA: {
+         auto cluster_perf = core_->socket()->cluster()->perf_stats();
+diff --git a/sim/simx/tensor_unit.cpp b/sim/simx/tensor_unit.cpp
+index c1bf360b..539708a6 100644
+--- a/sim/simx/tensor_unit.cpp
++++ b/sim/simx/tensor_unit.cpp
+@@ -691,6 +691,16 @@ public:
+     SmemTileMeta meta_a = {LMEM_BASE_ADDR + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
+     SmemTileMeta meta_b = {LMEM_BASE_ADDR + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
+
++#ifdef TCU_WGMMA_ENABLE
++    // On the first µop, account for tile buffer fetch: one smem word read per tile element.
++    // xtileK is the K-dimension in 32-bit word units (independent of input element size).
++    if (step_m == 0 && step_n == 0 && step_k == 0) {
++      constexpr uint32_t A_TOTAL = wg_cfg::xtileM * wg_cfg::xtileK; // word reads for A tile
++      constexpr uint32_t B_TOTAL = wg_cfg::xtileN * wg_cfg::xtileK; // word reads for B tile
++      perf_stats_.tbuf_fetch_stalls += A_TOTAL + B_TOTAL;
++    }
++#endif
++
+     if (is_sparse) {
+       if (!vt::sparse_format_supported(fmt_s)) {
+         std::cout << "Error: WGMMA_SP unsupported input format: "
+diff --git a/sim/simx/tensor_unit.h b/sim/simx/tensor_unit.h
+index 7784edab..52b3648e 100644
+--- a/sim/simx/tensor_unit.h
++++ b/sim/simx/tensor_unit.h
+@@ -31,9 +31,15 @@ public:
+
+ 	struct PerfStats {
+ 		uint64_t latency = 0;
++#ifdef TCU_WGMMA_ENABLE
++		uint64_t tbuf_fetch_stalls = 0; // smem words read for tile buffer per WGMMA
++#endif
+
+ 		PerfStats& operator+=(const PerfStats& rhs) {
+ 			this->latency += rhs.latency;
++#ifdef TCU_WGMMA_ENABLE
++			this->tbuf_fetch_stalls += rhs.tbuf_fetch_stalls;
++#endif
+ 			return *this;
+ 		}
+ 	};
+diff --git a/tests/regression/sgemm2_tcu/main.cpp b/tests/regression/sgemm2_tcu/main.cpp
+index 75080905..98b06f77 100644
+--- a/tests/regression/sgemm2_tcu/main.cpp
++++ b/tests/regression/sgemm2_tcu/main.cpp
+@@ -9,6 +9,7 @@
+ #include <util.h>
+ #include <vector>
+ #include <vortex.h>
++#include "VX_types.h"
+
+ #define FLOAT_ULP 6
+ #define MAX_ERRORS 100
+@@ -896,6 +897,19 @@ int main(int argc, char *argv[]) {
+   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+   printf("Elapsed time: %lg ms\n", elapsed);
+
++#ifdef PERF_ENABLE
++  {
++    uint64_t tbuf_fetch_stalls = 0;
++    RT_CHECK(vx_mpm_query(device, VX_DCR_MPM_CLASS_TCU, VX_CSR_MPM_TCU_TBUF_FETCH_ST, 0, &tbuf_fetch_stalls));
++    uint64_t num_wgmma = (uint64_t)(M / cfg::tileM) * (N / cfg::tileN) * (K / cfg::tileK);
++    uint64_t reads_per_wgmma = (uint64_t)cfg::xtileM * cfg::xtileK + (uint64_t)cfg::xtileN * cfg::xtileK;
++    uint64_t expected = num_wgmma * reads_per_wgmma;
++    printf("PERF TCU: tbuf_fetch_stalls=%lu, expected=%lu, %s\n",
++           tbuf_fetch_stalls, expected,
++           (tbuf_fetch_stalls == expected) ? "OK" : "MISMATCH");
++  }
++#endif
++
+   // download destination buffer
+   std::vector<otype_t> h_C(sizeC);
+   std::cout << "download destination buffer" << std::endl;
+diff --git a/third_party/cvfpu b/third_party/cvfpu
+--- a/third_party/cvfpu
++++ b/third_party/cvfpu
+@@ -1 +1 @@
+-Subproject commit 79e453139072df42c9ec8f697132ba485d74e23d
++Subproject commit 79e453139072df42c9ec8f697132ba485d74e23d-dirty
+diff --git a/third_party/ramulator b/third_party/ramulator
+--- a/third_party/ramulator
++++ b/third_party/ramulator
+@@ -1 +1 @@
+-Subproject commit e62c84a6f0e06566ba6e182d308434b4532068a5
++Subproject commit e62c84a6f0e06566ba6e182d308434b4532068a5-dirty
