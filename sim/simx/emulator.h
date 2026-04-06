@@ -21,6 +21,7 @@
 #include "types.h"
 #include "instr.h"
 #include "cta_dispatcher.h"
+#include "sequencer.h"
 #ifdef EXT_TCU_ENABLE
 #include "tcu/tensor_unit.h"
 #endif
@@ -80,12 +81,15 @@ struct cta_csrs_t {
 struct warp_t {
   std::vector<std::vector<Word>>    ireg_file;
   std::vector<std::vector<uint64_t>>freg_file;
-  std::deque<Instr::Ptr>            ibuffer;
   std::stack<ipdom_entry_t>         ipdom_stack;
   ThreadMask                        tmask;
   Word                              PC;
   Byte                              fcsr;
   uint32_t                          uuid;
+
+  // Raw instruction code fetched by schedule(), decoded by decode()
+  uint32_t                          fetched_instr_code;
+  uint64_t                          fetch_uuid;
 
   // Per-warp MSCRATCH (holds kernel arg pointer, set at CTA dispatch)
   Word                              mscratch;
@@ -122,15 +126,20 @@ public:
   void set_satp(uint64_t satp) ;
 #endif
 
-  // Schedule: warp select + fetch + decode -> returns pre-trace (no execution).
+  // Schedule: pick warp, fetch instruction code, create trace.
+  // Suspends the warp. Called from Core::schedule().
   instr_trace_t* schedule();
 
-  // Execute: functional execution of a previously scheduled trace.
-  void execute(instr_trace_t* trace);
+  // Decode: decode fetched instruction code, fill trace metadata.
+  // Resumes warp for non-stalling instructions.
+  // Called from Core::decode().
+  void decode(instr_trace_t* trace);
 
-  // Pipeline tracking: warp has instruction in fetch/decode pipeline.
-  void pipeline_lock(uint32_t wid);
-  void pipeline_unlock(uint32_t wid);
+  Sequencer& sequencer(uint32_t wid) { return sequencers_.at(wid); }
+
+  // Execute: functional execution of one instruction or micro-op.
+  // Called from Core::issue() after sequencer().
+  void execute(instr_trace_t* trace);
 
   bool running() const;
 
@@ -172,9 +181,9 @@ public:
 
 private:
 
-  uint32_t fetch(uint32_t wid, uint64_t uuid);
+  instr_trace_t* fetch(uint32_t wid, uint64_t uuid);
 
-  void decode(uint32_t code, uint32_t wid, uint64_t uuid);
+  Instr::Ptr decode(uint32_t code, uint32_t wid, uint64_t uuid);
 
   instr_trace_t* execute(const Instr &instr, uint32_t wid);
 
@@ -216,8 +225,7 @@ private:
   std::vector<warp_t> warps_;
   WarpMask    active_warps_;
   WarpMask    stalled_warps_;
-  WarpMask    in_pipeline_;
-  int         gto_warp_;
+  std::vector<Sequencer> sequencers_;
   std::vector<warp_barrier_t> barriers_;
   std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;

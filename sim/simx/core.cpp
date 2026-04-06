@@ -248,8 +248,6 @@ void Core::schedule() {
   // advance to fetch stage
   if (fetch_latch_.try_push(trace)) {
     DT(3, this->name() << "-pipeline schedule: " << *trace);
-    // lock warp in pipeline until decode
-    emulator_.pipeline_lock(trace->wid);
     // clear schedule trace
     trace_to_schedule_ = nullptr;
     // track pending instructions
@@ -323,12 +321,13 @@ void Core::decode() {
     trace->log_once(false);
   }
 
-  // release pipeline lock; on fetch_stall transition to real stall
+  // Decode: fill trace metadata from instruction bits
+  emulator_.decode(trace);
+
+  // Resume warp for non-stalling instructions (ALU, FPU);
+  // stalling instructions (LSU, SFU, TCU, branches) stay suspended until commit
   if (!trace->fetch_stall) {
-    emulator_.pipeline_unlock(trace->wid);
-  } else {
-    emulator_.pipeline_unlock(trace->wid);
-    emulator_.suspend(trace->wid);
+    emulator_.resume(trace->wid);
   }
 
   DT(3, this->name() << "-pipeline decode: " << *trace);
@@ -360,12 +359,18 @@ void Core::issue() {
       auto& ibuffer = ibuffers_.at(wid);
       if (ibuffer->empty())
         continue;
-      // check scoreboard
       has_instrs = true;
+
+      // For macro instructions, the sequencer generates micro-ops with the
+      // actual register operands.  Check the scoreboard against the micro-op
+      // so that WAW / RAW hazards between consecutive micro-ops are honoured.
       auto trace = ibuffer->peek();
-      if (scoreboard_.in_use(trace)) {
-        auto uses = scoreboard_.get_uses(trace);
-        if (!trace->log_once(true)) {
+      auto& seq = emulator_.sequencer(wid);
+      auto uop_trace = seq.get(trace);  // returns cached uop or generates next
+
+      if (scoreboard_.in_use(uop_trace)) {
+        auto uses = scoreboard_.get_uses(uop_trace);
+        if (!uop_trace->log_once(true)) {
           DTH(4, "*** scoreboard-stall: dependents={");
           for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
             auto& use = uses.at(j);
@@ -373,11 +378,11 @@ void Core::issue() {
             if (j) DTN(4, ", ");
             DTN(4, use.reg_type << use.reg_id << " (#" << use.uuid << ")");
           }
-          DTN(4, "}, " << *trace << std::endl);
+          DTN(4, "}, " << *uop_trace << std::endl);
         }
         ++perf_stats_.scrb_stalls;
       } else {
-        trace->log_once(false);
+        uop_trace->log_once(false);
         ready_set.set(w); // mark instruction as ready
       }
     }
@@ -388,18 +393,36 @@ void Core::issue() {
       uint32_t wid = w * ISSUE_WIDTH + iw;
       auto& ibuffer = ibuffers_.at(wid);
       auto trace = ibuffer->peek();
-      // functional execution
-      if (trace->instr_ptr) {
-        emulator_.execute(trace);
+
+      // Retrieve the (already-generated) micro-op from the sequencer
+      auto& seq = emulator_.sequencer(wid);
+      auto uop_trace = seq.get(trace);
+
+      // Functional execution (deferred from schedule to issue)
+      if (uop_trace->instr_ptr) {
+        emulator_.execute(uop_trace);
       }
+
       // to operand stage
-      if (operands_.at(iw)->Input.try_send(trace)) {
-        DT(3, this->name() << "-pipeline ibuffer: " << *trace);
-        if (trace->wb) {
+      if (operands_.at(iw)->Input.try_send(uop_trace)) {
+        DT(3, this->name() << "-pipeline ibuffer: " << *uop_trace);
+        if (uop_trace->wb) {
           // update scoreboard
-          scoreboard_.reserve(trace);
+          scoreboard_.reserve(uop_trace);
         }
-        ibuffer->pop();
+        // Advance sequencer; pop ibuffer only when all micro-ops issued
+        seq.advance();
+        if (seq.done()) {
+          // Resume warp for macro instructions that stalled fetch at decode
+          if (trace->instr_ptr && trace->instr_ptr->is_macro_op()) {
+            emulator_.resume(trace->wid);
+            // Macro trace never reaches commit (only micro-ops do),
+            // so remove it from pending tracking and deallocate here.
+            pending_instrs_.remove(trace);
+            trace_pool_.deallocate(trace, 1);
+          }
+          ibuffer->pop();
+        }
       }
     }
 
@@ -482,6 +505,11 @@ void Core::commit() {
         perf_stats_.vinstrs += 1;
       }
     #endif
+      // Resume warp for FUs that lack explicit resume logic (e.g. LSU)
+      if (trace->fetch_stall && trace->fu_type == FUType::LSU) {
+        emulator_.resume(trace->wid);
+      }
+
       // instruction completed
       pending_instrs_.remove(trace);
     }

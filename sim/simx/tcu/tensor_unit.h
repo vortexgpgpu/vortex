@@ -14,16 +14,38 @@
 #pragma once
 
 #include <simobject.h>
+#include <mempool.h>
 #include "instr_trace.h"
+#include "instr.h"
 
 namespace vortex {
 
 class Core;
 
-op_string_t op_string(TcuType tcu_type, IntrTcuArgs args);
+///////////////////////////////////////////////////////////////////////////////
+
+// Micro-op generator for TCU instructions (WMMA/WGMMA).
+// Owned by each per-warp Sequencer.
+class TcuUopGen {
+public:
+  TcuUopGen(PoolAllocator<Instr, 64>& pool) : pool_(pool) {}
+
+  // Returns total micro-op count for a macro instruction (>1 means macro-op).
+  static uint32_t uop_count(const Instr& instr);
+
+  // Generate micro-op Instr at uop_index for the given macro instruction.
+  Instr::Ptr get(const Instr& macro_instr, uint32_t uop_index);
+
+private:
+  PoolAllocator<Instr, 64>& pool_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
 
 class TensorUnit : public SimObject<TensorUnit> {
 public:
+
+  static op_string_t op_string(TcuType tcu_type, IntrTcuArgs args);
 
   struct ExeTraceData : public ITraceData {
     using Ptr = std::shared_ptr<ExeTraceData>;
