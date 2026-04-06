@@ -29,7 +29,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `UNUSED_VAR (execute_if.data.rs3_data)
 
     // Wgather-based layout (lane index = thread_id & 3):
-    //   Lane 0: rs1=smem_addr, rs2=coord2
+    //   Lane 0: rs1=lmem_addr, rs2=coord2
     //   Lane 1: rs1=meta,      rs2=coord3
     //   Lane 2: rs1=coord0,    rs2=coord4
     //   Lane 3: rs1=coord1,    rs2=cta_mask (multicast)
@@ -49,7 +49,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dxa_req_bus_if.req_data.core_id   = NC_WIDTH'(CORE_ID);
     assign dxa_req_bus_if.req_data.uuid      = execute_if.data.header.uuid;
     assign dxa_req_bus_if.req_data.wid       = execute_if.data.header.wid;
-    assign dxa_req_bus_if.req_data.smem_addr = lane0_rs1;
+    assign dxa_req_bus_if.req_data.lmem_addr = lane0_rs1;
     assign dxa_req_bus_if.req_data.meta      = lane1_rs1;
     assign dxa_req_bus_if.req_data.coords[0] = lane2_rs1;
     assign dxa_req_bus_if.req_data.coords[1] = lane3_rs1;
@@ -97,9 +97,9 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef DBG_TRACE_DXA
     always_ff @(posedge clk) begin
         if (~reset && dxa_req_bus_if.req_valid && dxa_req_bus_if.req_ready) begin
-            `TRACE(1, ("%t: %s dxa-req: wid=%0d, smem=0x%0h, meta=0x%0h, c0=%0d, c1=%0d, c2=%0d, c3=%0d, c4=%0d\n",
+            `TRACE(1, ("%t: %s dxa-req: wid=%0d, lmem=0x%0h, meta=0x%0h, c0=%0d, c1=%0d, c2=%0d, c3=%0d, c4=%0d\n",
                 $time, INSTANCE_ID, dxa_req_bus_if.req_data.wid,
-                dxa_req_bus_if.req_data.smem_addr, dxa_req_bus_if.req_data.meta,
+                dxa_req_bus_if.req_data.lmem_addr, dxa_req_bus_if.req_data.meta,
                 dxa_req_bus_if.req_data.coords[0], dxa_req_bus_if.req_data.coords[1],
                 dxa_req_bus_if.req_data.coords[2], dxa_req_bus_if.req_data.coords[3],
                 dxa_req_bus_if.req_data.coords[4]))

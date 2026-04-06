@@ -29,7 +29,7 @@ package VX_dxa_pkg;
     // Architected funct3 encoding: 0=1D, 1=2D, 2=3D, 3=4D, 4=5D.
     // All variants are expanded into micro-ops by VX_dxa_uops.
 
-    // smem_addr(XLEN) + meta(XLEN) + coords[5](5*XLEN) = 7*XLEN total
+    // lmem_addr(XLEN) + meta(XLEN) + coords[5](5*XLEN) = 7*XLEN total
     localparam DXA_REQ_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + (7 * `XLEN)
 `ifdef EXT_DXA_MULTICAST_ENABLE
         + 1 + `NUM_WARPS  // is_multicast + cta_mask
@@ -43,25 +43,6 @@ package VX_dxa_pkg;
     localparam DXA_DESC_WORD_W    = `UP(DXA_DESC_WORD_BITS);
     localparam DXA_DONE_ENGINE_BITS = `CLOG2(`NUM_DXA_UNITS);
     localparam DXA_DONE_ENGINE_W    = `UP(DXA_DONE_ENGINE_BITS);
-    // Legacy tag-route params (still used by old code paths, will be removed in cleanup).
-    localparam DXA_DONE_ROUTE_W     = DXA_DONE_ENGINE_BITS + NC_WIDTH;
-    localparam DXA_DONE_META_W      = BAR_ADDR_W + 1;
-    localparam DXA_DONE_META_ENABLE = (LMEM_TAG_WIDTH >= (DXA_DONE_ROUTE_W + DXA_DONE_META_W));
-
-    // Configurable per-socket DXA bank_wr port count.
-    // Default: SOCKET_SIZE (1:1 passthrough, no socket-level arb).
-    // When < SOCKET_SIZE: socket_arb routes M inputs to N=SOCKET_SIZE cores.
-    localparam DXA_SMEM_PORTS_PER_SOCKET = `SOCKET_SIZE;
-    localparam DXA_SMEM_LOCAL_CORE_BITS  = `CLOG2(`SOCKET_SIZE);
-    localparam DXA_SMEM_LOCAL_CORE_W     = `UP(DXA_SMEM_LOCAL_CORE_BITS);
-
-    // Bank-write interface payload width (for flatten/unflatten in routing).
-    // Per-bank: BANK_ADDR_WIDTH + WORD_WIDTH + WORD_SIZE (addr + data + byteen).
-    // Full payload: NUM_BANKS * per_bank + NUM_BANKS valid bits + TAG_WIDTH.
-    localparam DXA_BANK_WR_WORD_SIZE  = `XLEN / 8;
-    localparam DXA_BANK_WR_WORD_WIDTH = DXA_BANK_WR_WORD_SIZE * 8;
-    localparam DXA_BANK_WR_PER_BANK_W = DXA_SMEM_BANK_ADDR_WIDTH + DXA_BANK_WR_WORD_WIDTH + DXA_BANK_WR_WORD_SIZE;
-    localparam DXA_BANK_WR_DATAW      = `LMEM_NUM_BANKS * (1 + DXA_BANK_WR_PER_BANK_W) + DXA_BANK_WR_TAG_WIDTH;
 
     typedef struct packed {
         logic [31:0] rank;
@@ -137,13 +118,48 @@ package VX_dxa_pkg;
     //     logic smem_rsp_fire;
     // } dxa_xfer_evt_t;
 
+    // DXA descriptor table entry — one per programmed descriptor slot.
+    // Field order matches DCR word offsets (highest offset = MSB).
+    // Total width = VX_DCR_DXA_DESC_STRIDE * 32 bits.
+    localparam DXA_DESC_DATAW = `VX_DCR_DXA_DESC_STRIDE * 32;
+    typedef struct packed {
+    `ifdef EXT_DXA_MULTICAST_ENABLE
+        logic [31:0] _pad0;           // offset 23 (unused)
+        logic [31:0] bar_stride;      // offset 22
+        logic [31:0] lmem_stride;     // offset 21
+    `else
+        logic [2:0][31:0] _pad0;      // offsets 21-23 (unused)
+    `endif
+        logic [31:0] cfill;           // offset 20
+        logic [31:0] tilesize4;       // offset 19
+        logic [31:0] tilesize23;      // offset 18
+        logic [31:0] tilesize01;      // offset 17
+        logic [31:0] estride4;        // offset 16
+        logic [31:0] estride3;        // offset 15
+        logic [31:0] estride2;        // offset 14
+        logic [31:0] estride1;        // offset 13
+        logic [31:0] estride0;        // offset 12
+        logic [31:0] meta;            // offset 11
+        logic [31:0] stride3;         // offset 10
+        logic [31:0] stride2;         // offset 9
+        logic [31:0] stride1;         // offset 8
+        logic [31:0] stride0;         // offset 7
+        logic [31:0] size4;           // offset 6
+        logic [31:0] size3;           // offset 5
+        logic [31:0] size2;           // offset 4
+        logic [31:0] size1;           // offset 3
+        logic [31:0] size0;           // offset 2
+        logic [31:0] base_hi;         // offset 1
+        logic [31:0] base_lo;         // offset 0
+    } dxa_desc_t;
+
     // Next-gen unified-engine skeleton types.
     typedef struct packed {
         logic [NC_WIDTH-1:0]      core_id;
         logic [NW_WIDTH-1:0]      wid;
         logic [BAR_ADDR_W-1:0]    bar_addr;
         logic [`MEM_ADDR_WIDTH-1:0] gmem_base;
-        logic [`XLEN-1:0]         smem_base;
+        logic [`XLEN-1:0]         lmem_base;
         logic [4:0][`XLEN-1:0]    coords;
         dxa_issue_dec_t           dec;
     } dxa_worker_cmd_t;
@@ -157,7 +173,7 @@ package VX_dxa_pkg;
 
     typedef struct packed {
         logic [BAR_ADDR_W-1:0]    bar_addr;
-    } dxa_smem_done_t;
+    } dxa_lmem_done_t;
 
     // ── Line-granularity refactor types ──────────────────────────────────
 
@@ -168,7 +184,7 @@ package VX_dxa_pkg;
     // All multiplies happen during setup; fast path uses additions only.
     typedef struct packed {
         logic [`MEM_ADDR_WIDTH-1:0]  initial_gmem_base;
-        logic [`XLEN-1:0]           initial_smem_base;
+        logic [`XLEN-1:0]           initial_lmem_base;
         logic [31:0]                row_len_bytes;
         logic [31:0]                stride0;
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit;

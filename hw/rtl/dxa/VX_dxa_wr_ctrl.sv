@@ -11,19 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA Write Controller (refactored): thin SMEM write adapter.
-// Accepts packed SMEM words from cl2smem, buffers in FIFO, drains
-// to smem_bank_wr_if with sequential addressing, tracks completion.
-// All data packing/compression logic moved to VX_dxa_cl2smem.
+// DXA Write Controller (refactored): thin LMEM write adapter.
+// Accepts packed LMEM words from cl2lmem, buffers in FIFO, drains
+// to lmem_bus_if with sequential addressing, tracks completion.
+// All data packing/compression logic moved to VX_dxa_cl2lmem.
 
 `include "VX_define.vh"
 
 module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter WR_QUEUE_DEPTH   = 16,
-    parameter SMEM_BYTES       = DXA_SMEM_WORD_SIZE,
-    parameter SMEM_DATAW       = SMEM_BYTES * 8,
-    parameter SMEM_OFF_BITS    = `CLOG2(SMEM_BYTES),
-    parameter SMEM_ADDR_WIDTH  = DXA_SMEM_ADDR_WIDTH
+    parameter LMEM_BYTES       = DXA_LMEM_WORD_SIZE,
+    parameter LMEM_DATAW       = LMEM_BYTES * 8,
+    parameter LMEM_OFF_BITS    = `CLOG2(LMEM_BYTES),
+    parameter LMEM_ADDR_WIDTH  = DXA_LMEM_ADDR_WIDTH
 ) (
     input  wire                        clk,
     input  wire                        reset,
@@ -35,38 +35,38 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Params from setup.
     input  wire [31:0]                 total_lmem_writes,
-    input  wire [`MEM_ADDR_WIDTH-1:0]  initial_smem_base,
+    input  wire [`MEM_ADDR_WIDTH-1:0]  initial_lmem_base,
 
-    // SMEM word input (from cl2smem, valid/ready).
-    input  wire                        smem_in_valid,
-    output wire                        smem_in_ready,
-    input  wire [SMEM_DATAW-1:0]       smem_in_data,
-    input  wire [SMEM_BYTES-1:0]       smem_in_byteen,
-    input  wire                        smem_in_last,
+    // LMEM word input (from cl2lmem, valid/ready).
+    input  wire                        lmem_in_valid,
+    output wire                        lmem_in_ready,
+    input  wire [LMEM_DATAW-1:0]       lmem_in_data,
+    input  wire [LMEM_BYTES-1:0]       lmem_in_byteen,
+    input  wire                        lmem_in_last,
 
-    // SMEM write output.
-    output wire                        smem_wr_valid,
-    output wire [SMEM_ADDR_WIDTH-1:0]  smem_wr_addr,
-    output wire [SMEM_DATAW-1:0]       smem_wr_data,
-    output wire [SMEM_BYTES-1:0]       smem_wr_byteen,
-    input  wire                        smem_wr_ready,
-    output wire                        smem_wr_last_pkt,
+    // LMEM write output.
+    output wire                        lmem_wr_valid,
+    output wire [LMEM_ADDR_WIDTH-1:0]  lmem_wr_addr,
+    output wire [LMEM_DATAW-1:0]       lmem_wr_data,
+    output wire [LMEM_BYTES-1:0]       lmem_wr_byteen,
+    input  wire                        lmem_wr_ready,
+    output wire                        lmem_wr_last_pkt,
 
     // Completion.
     output wire                        transfer_done,
     output wire [31:0]                 wr_done_count,
-    output wire                        smem_req_fire
+    output wire                        lmem_req_fire
 
 `ifdef EXT_DXA_MULTICAST_ENABLE
     ,
     input  wire                        is_multicast,
     input  wire [`NUM_WARPS-1:0]       cta_mask,
-    input  wire [31:0]                 smem_stride,
+    input  wire [31:0]                 lmem_stride,
     input  wire [31:0]                 bar_stride
 `endif
 );
     // ---- Write queue ----
-    localparam WRQ_DATAW = 1 + SMEM_ADDR_WIDTH + SMEM_DATAW + SMEM_BYTES;
+    localparam WRQ_DATAW = 1 + LMEM_ADDR_WIDTH + LMEM_DATAW + LMEM_BYTES;
     localparam WRQ_SIZEW = `CLOG2(WR_QUEUE_DEPTH + 1);
 
     `STATIC_ASSERT(`IS_POW2(WR_QUEUE_DEPTH), ("WR_QUEUE_DEPTH must be power of 2"))
@@ -102,30 +102,30 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ════════════════════════════════════════════════════════════════════
 
     // SMEM address counter.
-    wire [SMEM_ADDR_WIDTH-1:0] initial_smem_word = SMEM_ADDR_WIDTH'(initial_smem_base >> SMEM_OFF_BITS);
-    reg [SMEM_ADDR_WIDTH-1:0]  smem_addr_r;
+    wire [LMEM_ADDR_WIDTH-1:0] initial_lmem_word = LMEM_ADDR_WIDTH'(initial_lmem_base >> LMEM_OFF_BITS);
+    reg [LMEM_ADDR_WIDTH-1:0]  lmem_addr_r;
 
     always @(posedge clk) begin
         if (reset || transfer_start) begin
-            smem_addr_r <= transfer_start ? initial_smem_word : '0;
+            lmem_addr_r <= transfer_start ? initial_lmem_word : '0;
         end else if (wrq_push) begin
-            smem_addr_r <= smem_addr_r + SMEM_ADDR_WIDTH'(1);
+            lmem_addr_r <= lmem_addr_r + LMEM_ADDR_WIDTH'(1);
         end
     end
 
     // Push to write queue.
-    assign smem_in_ready = ~wrq_full;
-    assign wrq_push      = smem_in_valid && smem_in_ready;
-    assign wrq_data_in   = {smem_in_last, smem_addr_r, smem_in_data, smem_in_byteen};
+    assign lmem_in_ready = ~wrq_full;
+    assign wrq_push      = lmem_in_valid && lmem_in_ready;
+    assign wrq_data_in   = {lmem_in_last, lmem_addr_r, lmem_in_data, lmem_in_byteen};
 
     // ════════════════════════════════════════════════════════════════════
     // Stage 2: SMEM write output from queue head
     // ════════════════════════════════════════════════════════════════════
 
     wire wrq_head_last;
-    wire [SMEM_ADDR_WIDTH-1:0] wrq_head_addr;
-    wire [SMEM_DATAW-1:0] wrq_head_data;
-    wire [SMEM_BYTES-1:0] wrq_head_byteen;
+    wire [LMEM_ADDR_WIDTH-1:0] wrq_head_addr;
+    wire [LMEM_DATAW-1:0] wrq_head_data;
+    wire [LMEM_BYTES-1:0] wrq_head_byteen;
 
     assign {wrq_head_last, wrq_head_addr, wrq_head_data, wrq_head_byteen} = wrq_data_out;
 
@@ -133,10 +133,10 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ── Multicast replay state machine ──
     // For each queued SMEM word, iterate over all set bits in cta_mask.
     // CTA 0's write goes to the original address; CTA N's write goes to
-    // addr + N * smem_stride_words. The write queue only pops after all
+    // addr + N * lmem_stride_words. The write queue only pops after all
     // replay copies for the current word have been issued.
     localparam MC_NW_BITS = `CLOG2(`NUM_WARPS);
-    wire [SMEM_ADDR_WIDTH-1:0] smem_stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_BITS);
+    wire [LMEM_ADDR_WIDTH-1:0] lmem_stride_words = LMEM_ADDR_WIDTH'(lmem_stride >> LMEM_OFF_BITS);
 
     // Track which CTAs still need a write for the current queue head.
     // Initialized to cta_mask when a new word appears; cleared one bit at a time.
@@ -156,8 +156,8 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
 
     // Compute replayed SMEM address: base + cta_index * stride
-    wire [SMEM_ADDR_WIDTH-1:0] replay_addr_offset = SMEM_ADDR_WIDTH'(replay_next_idx) * smem_stride_words;
-    wire [SMEM_ADDR_WIDTH-1:0] replay_addr = wrq_head_addr + replay_addr_offset;
+    wire [LMEM_ADDR_WIDTH-1:0] replay_addr_offset = LMEM_ADDR_WIDTH'(replay_next_idx) * lmem_stride_words;
+    wire [LMEM_ADDR_WIDTH-1:0] replay_addr = wrq_head_addr + replay_addr_offset;
 
     // Is this the last CTA for the current word?
     wire replay_is_last = replay_has_remaining
@@ -173,7 +173,7 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         // When not multicast: write is valid when queue has data (normal path).
         assign mc_write_valid = transfer_active && ~wrq_empty
                              && (!is_multicast || replay_has_remaining);
-        assign mc_write_fire = mc_write_valid && smem_wr_ready;
+        assign mc_write_fire = mc_write_valid && lmem_wr_ready;
         // Pop when all CTAs written (multicast: last bit; normal: immediate)
         assign mc_pop = mc_write_fire && (!is_multicast || replay_is_last);
     end
@@ -192,25 +192,25 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
     end
 
-    assign smem_wr_valid    = mc_write_valid;
-    assign smem_wr_addr     = is_multicast ? replay_addr : wrq_head_addr;
-    assign smem_wr_data     = wrq_head_data;
-    assign smem_wr_byteen   = wrq_head_byteen;
+    assign lmem_wr_valid    = mc_write_valid;
+    assign lmem_wr_addr     = is_multicast ? replay_addr : wrq_head_addr;
+    assign lmem_wr_data     = wrq_head_data;
+    assign lmem_wr_byteen   = wrq_head_byteen;
     assign wrq_pop          = mc_pop;
-    assign smem_wr_last_pkt = mc_pop && wrq_head_last;
-    assign smem_req_fire    = mc_write_fire;
+    assign lmem_wr_last_pkt = mc_pop && wrq_head_last;
+    assign lmem_req_fire    = mc_write_fire;
 
     `UNUSED_VAR (bar_stride)  // used by completion logic (future)
 
 `else
     // ── Normal (non-multicast) path ──
-    assign smem_wr_valid  = transfer_active && ~wrq_empty;
-    assign smem_wr_addr   = wrq_head_addr;
-    assign smem_wr_data   = wrq_head_data;
-    assign smem_wr_byteen = wrq_head_byteen;
-    assign wrq_pop        = smem_wr_valid && smem_wr_ready;
-    assign smem_wr_last_pkt = wrq_pop && wrq_head_last;
-    assign smem_req_fire  = wrq_pop;
+    assign lmem_wr_valid  = transfer_active && ~wrq_empty;
+    assign lmem_wr_addr   = wrq_head_addr;
+    assign lmem_wr_data   = wrq_head_data;
+    assign lmem_wr_byteen = wrq_head_byteen;
+    assign wrq_pop        = lmem_wr_valid && lmem_wr_ready;
+    assign lmem_wr_last_pkt = wrq_pop && wrq_head_last;
+    assign lmem_req_fire  = wrq_pop;
 `endif
 
 
@@ -268,27 +268,29 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         if (~reset) begin
             if (wrq_push) begin
                 `TRACE(2, ("%t: wr_ctrl push: addr=0x%0h, byteen=0x%0h, last=%0b\n",
-                    $time, smem_addr_r, smem_in_byteen, smem_in_last))
+                    $time, lmem_addr_r, lmem_in_byteen, lmem_in_last))
             end
             if (transfer_active && wrq_pop) begin
                 `TRACE(2, ("%t: wr_ctrl pop: addr=0x%0h, count=%0d, total=%0d, last=%0b, done=%0b\n",
                     $time, wrq_head_addr, wr_count_next, total_lmem_writes, wrq_head_last, transfer_done))
             end
             // Structured SMEM write event for timeline visualization
-            if (smem_req_fire) begin
+            if (lmem_req_fire) begin
 `ifdef EXT_DXA_MULTICAST_ENABLE
                 if (is_multicast) begin
                     // verilator lint_off WIDTHEXPAND
                     $write("DXA_PIPE,%0d,SMEM_WR,addr=0x%0h,byteen=0x%0h,cta=%0d,last=%0d\n",
-                        $time, smem_wr_addr, smem_wr_byteen, replay_next_idx, smem_wr_last_pkt);
+                        $time, lmem_wr_addr, lmem_wr_byteen, replay_next_idx, lmem_wr_last_pkt);
                     // verilator lint_on WIDTHEXPAND
                 end else begin
                     $write("DXA_PIPE,%0d,SMEM_WR,addr=0x%0h,byteen=0x%0h,last=%0d\n",
-                        $time, smem_wr_addr, smem_wr_byteen, smem_wr_last_pkt);
+                        $time, lmem_wr_addr, lmem_wr_byteen, lmem_wr_last_pkt);
                 end
 `else
-                $write("DXA_PIPE,%0d,SMEM_WR,addr=0x%0h,byteen=0x%0h,last=%0d\n",
-                    $time, smem_wr_addr, smem_wr_byteen, smem_wr_last_pkt);
+                $write("DXA_PIPE,%0d,SMEM_WR,addr=0x%0h,byteen=0x%0h,last=%0d,d0=0x%0h,d8=0x%0h,d16=0x%0h,d24=0x%0h\n",
+                    $time, lmem_wr_addr, lmem_wr_byteen, lmem_wr_last_pkt,
+                    lmem_wr_data[63:0], lmem_wr_data[127:64],
+                    lmem_wr_data[191:128], lmem_wr_data[255:192]);
 `endif
             end
         end

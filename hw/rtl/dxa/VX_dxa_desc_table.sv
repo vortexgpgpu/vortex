@@ -34,60 +34,101 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [NUM_READ_PORTS-1:0][31:0] read_stride0
 `ifdef EXT_DXA_MULTICAST_ENABLE
     ,
-    output wire [NUM_READ_PORTS-1:0][31:0] read_smem_stride,
+    output wire [NUM_READ_PORTS-1:0][31:0] read_lmem_stride,
     output wire [NUM_READ_PORTS-1:0][31:0] read_bar_stride
 `endif
 );
     localparam DESC_SLOT_W = DXA_DESC_SLOT_W;
     localparam DESC_WORD_W = DXA_DESC_WORD_W;
+    localparam NUM_SLOTS   = `VX_DCR_DXA_DESC_COUNT;
+    localparam NUM_WORDS   = `VX_DCR_DXA_DESC_STRIDE;
 
+    // ── DCR write decode ──
     wire dcr_dxa_desc_write;
     wire [VX_DCR_ADDR_WIDTH-1:0] dcr_desc_off;
     wire [31:0] dcr_desc_off_w;
     wire [DESC_SLOT_W-1:0] dcr_desc_slot;
     wire [DESC_WORD_W-1:0] dcr_desc_word;
 
-    reg [`VX_DCR_DXA_DESC_COUNT-1:0][`VX_DCR_DXA_DESC_STRIDE-1:0][31:0] dxa_desc_r;
-
     assign dcr_dxa_desc_write = dcr_bus_if.req_valid
                              && dcr_bus_if.req_data.rw
                              && (dcr_bus_if.req_data.addr >= `VX_DCR_DXA_DESC_BASE)
-                             && (dcr_bus_if.req_data.addr < (`VX_DCR_DXA_DESC_BASE + (`VX_DCR_DXA_DESC_COUNT * `VX_DCR_DXA_DESC_STRIDE)));
+                             && (dcr_bus_if.req_data.addr < (`VX_DCR_DXA_DESC_BASE + (NUM_SLOTS * NUM_WORDS)));
 
     assign dcr_desc_off = dcr_bus_if.req_data.addr - `VX_DCR_DXA_DESC_BASE;
     assign dcr_desc_off_w = 32'(dcr_desc_off);
-    assign dcr_desc_slot = DESC_SLOT_W'(dcr_desc_off_w / `VX_DCR_DXA_DESC_STRIDE);
-    assign dcr_desc_word = DESC_WORD_W'(dcr_desc_off_w % `VX_DCR_DXA_DESC_STRIDE);
+    assign dcr_desc_slot = DESC_SLOT_W'(dcr_desc_off_w / NUM_WORDS);
+    assign dcr_desc_word = DESC_WORD_W'(dcr_desc_off_w % NUM_WORDS);
 
-    always @(posedge clk) begin
-        if (dcr_dxa_desc_write) begin
-            dxa_desc_r[dcr_desc_slot][dcr_desc_word] <= dcr_bus_if.req_data.data;
-        end
+    // ── Write-enable mask: one bit per 32-bit word in the descriptor ──
+    wire [NUM_WORDS-1:0] wren;
+    for (genvar w = 0; w < NUM_WORDS; ++w) begin : g_wren
+        assign wren[w] = dcr_dxa_desc_write && (dcr_desc_word == DESC_WORD_W'(w));
+    end
+
+    // ── Write data: replicate the 32-bit DCR data across all word slots ──
+    wire [DXA_DESC_DATAW-1:0] wdata;
+    for (genvar w = 0; w < NUM_WORDS; ++w) begin : g_wdata
+        assign wdata[w*32 +: 32] = dcr_bus_if.req_data.data;
+    end
+
+    // ── One BRAM per read port (dual-port: DCR writes, worker reads) ──
+    for (genvar i = 0; i < NUM_READ_PORTS; ++i) begin : g_read
+        wire [DXA_DESC_DATAW-1:0] rdata_raw;
+
+        VX_dp_ram #(
+            .DATAW     (DXA_DESC_DATAW),
+            .SIZE      (NUM_SLOTS),
+            .WRENW     (NUM_WORDS),
+            .RDW_MODE  ("R"),
+            .RADDR_REG (1)
+        ) desc_store (
+            .clk   (clk),
+            .reset (reset),
+            .read  (1'b1),
+            .write (dcr_dxa_desc_write),
+            .wren  (wren),
+            .waddr (dcr_desc_slot),
+            .wdata (wdata),
+            .raddr (read_desc_slot[i]),
+            .rdata (rdata_raw)
+        );
+
+        // ── Unpack BRAM output into descriptor struct ──
+        dxa_desc_t desc;
+        assign desc = rdata_raw;
+
+        assign read_base_addr[i]   = `MEM_ADDR_WIDTH'({desc.base_hi, desc.base_lo});
+        assign read_desc_meta[i]   = desc.meta;
+        assign read_desc_tile01[i] = desc.tilesize01;
+        assign read_desc_tile23[i] = desc.tilesize23;
+        assign read_desc_tile4[i]  = desc.tilesize4;
+        assign read_desc_cfill[i]  = desc.cfill;
+        assign read_size0[i]       = desc.size0;
+        assign read_size1[i]       = desc.size1;
+        assign read_stride0[i]     = desc.stride0;
+    `ifdef EXT_DXA_MULTICAST_ENABLE
+        assign read_lmem_stride[i] = desc.lmem_stride;
+        assign read_bar_stride[i]  = desc.bar_stride;
+    `endif
+
+        `UNUSED_VAR (desc._pad0)
+        `UNUSED_VAR (desc.estride0)
+        `UNUSED_VAR (desc.estride1)
+        `UNUSED_VAR (desc.estride2)
+        `UNUSED_VAR (desc.estride3)
+        `UNUSED_VAR (desc.estride4)
+        `UNUSED_VAR (desc.size2)
+        `UNUSED_VAR (desc.size3)
+        `UNUSED_VAR (desc.size4)
+        `UNUSED_VAR (desc.stride1)
+        `UNUSED_VAR (desc.stride2)
+        `UNUSED_VAR (desc.stride3)
     end
 
     assign dcr_bus_if.rsp_valid = '0;
     assign dcr_bus_if.rsp_data  = '0;
 
     `UNUSED_VAR (reset)
-
-    for (genvar i = 0; i < NUM_READ_PORTS; ++i) begin : g_read
-        wire [DESC_SLOT_W-1:0] slot = read_desc_slot[i];
-        assign read_base_addr[i] = `MEM_ADDR_WIDTH'({
-            dxa_desc_r[slot][`VX_DCR_DXA_DESC_BASE_HI_OFF],
-            dxa_desc_r[slot][`VX_DCR_DXA_DESC_BASE_LO_OFF]
-        });
-        assign read_desc_meta[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_META_OFF];
-        assign read_desc_tile01[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_TILESIZE01_OFF];
-        assign read_desc_tile23[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_TILESIZE23_OFF];
-        assign read_desc_tile4[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_TILESIZE4_OFF];
-        assign read_desc_cfill[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_CFILL_OFF];
-        assign read_size0[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_SIZE0_OFF];
-        assign read_size1[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_SIZE1_OFF];
-        assign read_stride0[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_STRIDE0_OFF];
-    `ifdef EXT_DXA_MULTICAST_ENABLE
-        assign read_smem_stride[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_SMEM_STRIDE_OFF];
-        assign read_bar_stride[i] = dxa_desc_r[slot][`VX_DCR_DXA_DESC_BAR_STRIDE_OFF];
-    `endif
-    end
 
 endmodule

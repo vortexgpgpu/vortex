@@ -142,7 +142,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     `UNUSED_VAR (cur_cl_byte_addr[CL_OFF_BITS-1:0])
     `UNUSED_VAR (total_end[31:CL_OFF_BITS])
-    `UNUSED_VAR (setup_params.initial_smem_base)
+    `UNUSED_VAR (setup_params.initial_lmem_base)
     `UNUSED_VAR (setup_params.elem_bytes)
     `UNUSED_VAR (setup_params.rank)
     `UNUSED_VAR (setup_params.oob_limit[DXA_MAX_OUTER_DIMS-1:1])

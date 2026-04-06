@@ -15,8 +15,7 @@
 
 module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_DXA_UNITS = 1,
-    parameter ENABLE = 1
+    parameter NUM_DXA_UNITS = 1
 ) (
     input wire clk,
     input wire reset,
@@ -26,16 +25,13 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_dcr_bus_if.slave dcr_bus_if,
     VX_dxa_req_bus_if.slave cluster_dxa_bus_if[NUM_DXA_UNITS],
     VX_mem_bus_if.master dxa_gmem_bus_if[NUM_DXA_UNITS],
-    VX_dxa_bank_wr_if.master dxa_smem_bank_wr_if[NUM_DXA_UNITS],
-    output wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0] dxa_smem_core_id,
+    VX_mem_bus_if.master dxa_lmem_bus_if[NUM_DXA_UNITS],
+    output wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0] dxa_lmem_core_id,
     output wire busy
 );
 
-    localparam WORKER_BITS   = `CLOG2(NUM_DXA_UNITS);
-    localparam WORKER_W      = `UP(WORKER_BITS);
-
     // ISSUE FIFO entry: all launch args packed (no ctx_table accumulation).
-    // {core_id, uuid, wid, bar_addr, desc_slot, smem_addr, coords[5], [multicast fields]}
+    // {core_id, uuid, wid, bar_addr, desc_slot, lmem_addr, coords[5], [multicast fields]}
     localparam ISSUE_FIFO_W = NC_WIDTH + UUID_WIDTH + NW_WIDTH
                             + BAR_ADDR_W + DXA_DESC_SLOT_W + `XLEN + (5 * `XLEN)
 `ifdef EXT_DXA_MULTICAST_ENABLE
@@ -44,11 +40,9 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                             ;
     localparam ISSUE_FIFO_DEPTH = `NUM_CORES * `NUM_WARPS;
 
-    if (ENABLE) begin : g_dxa_unified
-
-        // ================================================================
-        // Shared descriptor table (single copy) for all workers.
-        // ================================================================
+    // ================================================================
+    // Shared descriptor table (single copy) for all workers.
+    // ================================================================
         wire [NUM_DXA_UNITS-1:0][DXA_DESC_SLOT_W-1:0] issue_desc_slot;
         wire [NUM_DXA_UNITS-1:0][`MEM_ADDR_WIDTH-1:0] issue_base_addr;
         wire [NUM_DXA_UNITS-1:0][31:0] issue_desc_meta;
@@ -62,7 +56,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_DXA_UNITS-1:0] worker_idle;
 
     `ifdef EXT_DXA_MULTICAST_ENABLE
-        wire [NUM_DXA_UNITS-1:0][31:0] issue_smem_stride;
+        wire [NUM_DXA_UNITS-1:0][31:0] issue_lmem_stride;
         wire [NUM_DXA_UNITS-1:0][31:0] issue_bar_stride;
     `endif
 
@@ -84,7 +78,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             .read_stride0   (issue_stride0_raw)
         `ifdef EXT_DXA_MULTICAST_ENABLE
             ,
-            .read_smem_stride(issue_smem_stride),
+            .read_lmem_stride(issue_lmem_stride),
             .read_bar_stride (issue_bar_stride)
         `endif
         );
@@ -98,7 +92,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0]         in_core_id;
         wire [NUM_DXA_UNITS-1:0][UUID_WIDTH-1:0]       in_uuid;
         wire [NUM_DXA_UNITS-1:0][NW_WIDTH-1:0]         in_wid;
-        wire [NUM_DXA_UNITS-1:0][`XLEN-1:0]            in_smem_addr;
+        wire [NUM_DXA_UNITS-1:0][`XLEN-1:0]            in_lmem_addr;
         wire [NUM_DXA_UNITS-1:0][`XLEN-1:0]            in_meta;
         wire [NUM_DXA_UNITS-1:0][4:0][`XLEN-1:0]       in_coords;
         wire [NUM_DXA_UNITS-1:0][BAR_ADDR_W-1:0]       in_bar_addr;
@@ -113,7 +107,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             assign in_core_id[i]  = cluster_dxa_bus_if[i].req_data.core_id;
             assign in_uuid[i]     = cluster_dxa_bus_if[i].req_data.uuid;
             assign in_wid[i]      = cluster_dxa_bus_if[i].req_data.wid;
-            assign in_smem_addr[i]= cluster_dxa_bus_if[i].req_data.smem_addr;
+            assign in_lmem_addr[i]= cluster_dxa_bus_if[i].req_data.lmem_addr;
             assign in_meta[i]     = cluster_dxa_bus_if[i].req_data.meta;
             assign in_coords[i]   = cluster_dxa_bus_if[i].req_data.coords;
 
@@ -134,130 +128,70 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
 
         // ================================================================
-        // ISSUE arbiter: N inputs → 1 FIFO enqueue
-        // Accepted as long as FIFO has room.
+        // ISSUE dispatch: arbitrate N inputs → FIFO ��� first idle worker
         // ================================================================
-        wire [NUM_DXA_UNITS-1:0] issue_grant_onehot;
-        wire [`UP(`CLOG2(NUM_DXA_UNITS))-1:0] issue_grant_idx;
-        wire issue_grant_valid;
-        wire issue_fifo_ready;
 
-        VX_rr_arbiter #(
-            .NUM_REQS (NUM_DXA_UNITS)
-        ) issue_arb (
-            .clk         (clk),
-            .reset       (reset),
-            .requests    (in_valid),
-            .grant_index (issue_grant_idx),
-            .grant_onehot(issue_grant_onehot),
-            .grant_valid (issue_grant_valid),
-            .grant_ready (issue_fifo_ready)
-        );
+        // Pack decoded fields into dispatch data
+        wire [NUM_DXA_UNITS-1:0][ISSUE_FIFO_W-1:0] dispatch_data_in;
+        for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_dispatch_pack
+            assign dispatch_data_in[i] = {
+                in_core_id[i], in_uuid[i], in_wid[i],
+                in_bar_addr[i], in_desc_slot[i], in_lmem_addr[i], in_coords[i]
+            `ifdef EXT_DXA_MULTICAST_ENABLE
+                , in_is_multicast[i], in_cta_mask[i]
+            `endif
+            };
+        end
 
-        // ISSUE FIFO: buffers requests until a worker is available.
-        // Entry = {core_id, uuid, wid, bar_addr, desc_slot, smem_addr, coords[5]}
-        wire issue_fifo_enq = issue_grant_valid && issue_fifo_ready;
-        wire [ISSUE_FIFO_W-1:0] issue_fifo_din = {
-            in_core_id[issue_grant_idx],
-            in_uuid[issue_grant_idx],
-            in_wid[issue_grant_idx],
-            in_bar_addr[issue_grant_idx],
-            in_desc_slot[issue_grant_idx],
-            in_smem_addr[issue_grant_idx],
-            in_coords[issue_grant_idx]
-        `ifdef EXT_DXA_MULTICAST_ENABLE
-            ,
-            in_is_multicast[issue_grant_idx],
-            in_cta_mask[issue_grant_idx]
-        `endif
-        };
+        wire [NUM_DXA_UNITS-1:0]                   launch_valid_w;
+        wire [NUM_DXA_UNITS-1:0][ISSUE_FIFO_W-1:0] launch_data_w;
+        wire [NUM_DXA_UNITS-1:0]                   launch_ready_w;
 
-        wire issue_fifo_out_valid;
-        wire issue_fifo_out_ready;
-        wire [ISSUE_FIFO_W-1:0] issue_fifo_dout;
+        wire [NUM_DXA_UNITS-1:0] dispatch_ready_in;
 
-        VX_elastic_buffer #(
-            .DATAW (ISSUE_FIFO_W),
-            .SIZE  (ISSUE_FIFO_DEPTH)
-        ) issue_fifo (
+        VX_stream_dispatch #(
+            .NUM_INPUTS  (NUM_DXA_UNITS),
+            .NUM_OUTPUTS (NUM_DXA_UNITS),
+            .DATAW       (ISSUE_FIFO_W),
+            .ARBITER     ("R"),
+            .BUFFERED    (ISSUE_FIFO_DEPTH)
+        ) issue_dispatch (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (issue_fifo_enq),
-            .ready_in  (issue_fifo_ready),
-            .data_in   (issue_fifo_din),
-            .valid_out (issue_fifo_out_valid),
-            .ready_out (issue_fifo_out_ready),
-            .data_out  (issue_fifo_dout)
+            .valid_in  (in_valid),
+            .data_in   (dispatch_data_in),
+            .ready_in  (dispatch_ready_in),
+            .valid_out (launch_valid_w),
+            .data_out  (launch_data_w),
+            .ready_out (worker_idle)
         );
 
-        // Unpack FIFO output
-        wire [NC_WIDTH-1:0]          fifo_core_id;
-        wire [UUID_WIDTH-1:0]        fifo_uuid;
-        wire [NW_WIDTH-1:0]          fifo_wid;
-        wire [BAR_ADDR_W-1:0]        fifo_bar_addr;
-        wire [DXA_DESC_SLOT_W-1:0]   fifo_desc_slot;
-        wire [`XLEN-1:0]             fifo_smem_addr;
-        wire [4:0][`XLEN-1:0]        fifo_coords;
+        for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_ready
+            assign cluster_dxa_bus_if[i].req_ready = dispatch_ready_in[i];
+        end
+
+        // Unpack dispatch output — shared bus, only one worker active per cycle
+        wire [ISSUE_FIFO_W-1:0] launch_data = launch_data_w[0];
+
+        wire [NC_WIDTH-1:0]        launch_core_id;
+        wire [UUID_WIDTH-1:0]      launch_uuid;
+        wire [NW_WIDTH-1:0]        launch_wid;
+        wire [BAR_ADDR_W-1:0]      launch_bar_addr;
+        wire [DXA_DESC_SLOT_W-1:0] launch_desc_slot;
+        wire [`XLEN-1:0]           launch_lmem_addr;
+        wire [4:0][`XLEN-1:0]      launch_coords;
     `ifdef EXT_DXA_MULTICAST_ENABLE
-        wire                         fifo_is_multicast;
-        wire [`NUM_WARPS-1:0]        fifo_cta_mask;
+        wire                       launch_is_multicast;
+        wire [`NUM_WARPS-1:0]      launch_cta_mask;
     `endif
 
-        assign {fifo_core_id, fifo_uuid, fifo_wid,
-                fifo_bar_addr, fifo_desc_slot, fifo_smem_addr, fifo_coords
+        assign {launch_core_id, launch_uuid, launch_wid,
+                launch_bar_addr, launch_desc_slot, launch_lmem_addr, launch_coords
             `ifdef EXT_DXA_MULTICAST_ENABLE
-                , fifo_is_multicast, fifo_cta_mask
+                , launch_is_multicast, launch_cta_mask
             `endif
                 }
-            = issue_fifo_dout;
-
-        // ================================================================
-        // ISSUE dispatch: FIFO output → idle worker
-        // ================================================================
-        wire [WORKER_W-1:0] idle_worker_idx;
-        wire idle_worker_found;
-
-        VX_priority_encoder #(
-            .N (NUM_DXA_UNITS)
-        ) idle_sel (
-            .data_in   (worker_idle),
-            .index_out (idle_worker_idx),
-            `UNUSED_PIN (onehot_out),
-            .valid_out (idle_worker_found)
-        );
-
-        wire issue_dispatch = issue_fifo_out_valid && idle_worker_found;
-        assign issue_fifo_out_ready = idle_worker_found;
-
-        // ================================================================
-        // Worker launch signals (all from FIFO — no ctx_table lookup)
-        // ================================================================
-        wire [NUM_DXA_UNITS-1:0] launch_valid_w;
-        wire [NUM_DXA_UNITS-1:0] launch_ready_w;
-
-        wire [NC_WIDTH-1:0]        launch_core_id   = fifo_core_id;
-        wire [UUID_WIDTH-1:0]      launch_uuid      = fifo_uuid;
-        wire [NW_WIDTH-1:0]        launch_wid       = fifo_wid;
-        wire [BAR_ADDR_W-1:0]      launch_bar_addr  = fifo_bar_addr;
-        wire [DXA_DESC_SLOT_W-1:0] launch_desc_slot = fifo_desc_slot;
-        wire [`XLEN-1:0]           launch_smem_addr = fifo_smem_addr;
-        wire [4:0][`XLEN-1:0]      launch_coords    = fifo_coords;
-    `ifdef EXT_DXA_MULTICAST_ENABLE
-        wire                       launch_is_multicast = fifo_is_multicast;
-        wire [`NUM_WARPS-1:0]      launch_cta_mask     = fifo_cta_mask;
-    `endif
-
-        for (genvar w = 0; w < NUM_DXA_UNITS; ++w) begin : g_launch
-            assign launch_valid_w[w] = issue_dispatch && (idle_worker_idx == WORKER_W'(w));
-        end
-
-        // ================================================================
-        // Per-input ready: accepted when FIFO has room and granted
-        // ================================================================
-        for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_ready
-            assign cluster_dxa_bus_if[i].req_ready =
-                in_valid[i] && issue_grant_onehot[i] && issue_fifo_ready;
-        end
+            = launch_data;
 
         // ================================================================
         // Worker instantiation
@@ -285,7 +219,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 .launch_wid        (launch_wid),
                 .launch_bar_addr   (launch_bar_addr),
                 .launch_desc_slot  (launch_desc_slot),
-                .launch_smem_addr  (launch_smem_addr),
+                .launch_lmem_addr  (launch_lmem_addr),
                 .launch_coords     (launch_coords),
                 .issue_desc_slot_out(issue_desc_slot[i]),
                 .issue_base_addr   (issue_base_addr[i]),
@@ -300,12 +234,12 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             `ifdef EXT_DXA_MULTICAST_ENABLE
                 .launch_is_multicast(launch_is_multicast),
                 .launch_cta_mask    (launch_cta_mask),
-                .issue_smem_stride  (issue_smem_stride[i]),
+                .issue_lmem_stride  (issue_lmem_stride[i]),
                 .issue_bar_stride   (issue_bar_stride[i]),
             `endif
                 .gmem_bus_if       (dxa_gmem_bus_if[i]),
-                .smem_bank_wr_if   (dxa_smem_bank_wr_if[i]),
-                .smem_core_id      (dxa_smem_core_id[i]),
+                .lmem_bus_if       (dxa_lmem_bus_if[i]),
+                .lmem_core_id      (dxa_lmem_core_id[i]),
                 .worker_idle       (worker_idle[i])
             `ifdef PERF_ENABLE
                 ,
@@ -334,53 +268,24 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `ifdef DBG_TRACE_DXA
         always @(posedge clk) begin
             if (~reset) begin
-                if (issue_fifo_enq) begin
-                    `TRACE(1, ("%t: %s issue-enq: input=%0d, core=%0d, wid=%0d, bar=%0d, desc=%0d\n",
-                        $time, INSTANCE_ID, issue_grant_idx,
-                        in_core_id[issue_grant_idx], in_wid[issue_grant_idx],
-                        in_bar_addr[issue_grant_idx], in_desc_slot[issue_grant_idx]))
-                end
-                if (issue_dispatch) begin
-                    `TRACE(1, ("%t: %s dispatch-issue: worker=%0d, core=%0d, wid=%0d, bar=%0d, desc=%0d\n",
-                        $time, INSTANCE_ID, idle_worker_idx,
-                        launch_core_id, launch_wid, launch_bar_addr, launch_desc_slot))
-                    $write("DXA_TL,%0d,DISPATCH,core=%0d,wid=%0d,bar=%0d,worker=%0d,desc=%0d\n",
-                        $time, launch_core_id, launch_wid, launch_bar_addr,
-                        idle_worker_idx, launch_desc_slot);
-                end
-                if (issue_fifo_out_valid && ~idle_worker_found) begin
-                    `TRACE(1, ("%t: %s dispatch-stall: no idle worker\n", $time, INSTANCE_ID))
+                for (integer w = 0; w < NUM_DXA_UNITS; ++w) begin
+                    if (launch_valid_w[w]) begin
+                        `TRACE(1, ("%t: %s dispatch-issue: worker=%0d, core=%0d, wid=%0d, bar=%0d, desc=%0d\n",
+                            $time, INSTANCE_ID, w,
+                            launch_core_id, launch_wid, launch_bar_addr, launch_desc_slot))
+                        $write("DXA_TL,%0d,DISPATCH,core=%0d,wid=%0d,bar=%0d,worker=%0d,desc=%0d\n",
+                            $time, launch_core_id, launch_wid, launch_bar_addr,
+                            w, launch_desc_slot);
+                    end
                 end
             end
         end
     `endif
 
-        `UNUSED_VAR (launch_ready_w)  // workers accept via launch_ready = ~active_r
+        `UNUSED_VAR (launch_ready_w)
+        `UNUSED_VAR (launch_data_w)
 
-        // Busy while any input is valid, the issue FIFO has items, or any worker is running.
-        assign busy = (|in_valid) | issue_fifo_out_valid | ~(&worker_idle);
-
-    end else begin : g_dxa_unified_off
-        assign busy = 1'b0;
-        for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_dxa_off
-            assign cluster_dxa_bus_if[i].req_ready = 1'b1;
-`ifdef PERF_ENABLE
-        assign dxa_perf = '0;
-`endif
-            `UNUSED_VAR (cluster_dxa_bus_if[i].req_valid)
-            `UNUSED_VAR (cluster_dxa_bus_if[i].req_data)
-
-            assign dxa_gmem_bus_if[i].req_valid = 1'b0;
-            assign dxa_gmem_bus_if[i].req_data  = '0;
-            assign dxa_gmem_bus_if[i].rsp_ready = 1'b1;
-
-            assign dxa_smem_bank_wr_if[i].wr_valid  = '0;
-            assign dxa_smem_bank_wr_if[i].wr_addr   = '0;
-            assign dxa_smem_bank_wr_if[i].wr_data   = '0;
-            assign dxa_smem_bank_wr_if[i].wr_byteen = '0;
-            assign dxa_smem_bank_wr_if[i].wr_tag    = '0;
-            assign dxa_smem_core_id[i] = '0;
-        end
-    end
+        // Busy while any input is valid or any worker is running.
+        assign busy = (|in_valid) | ~(&worker_idle);
 
 endmodule
