@@ -23,7 +23,7 @@ interface VX_mem_bus_if import VX_gpu_pkg::*; #(
 
     typedef struct packed {
         logic [`UP(UUID_WIDTH)-1:0]           uuid;
-        logic [TAG_WIDTH-`UP(UUID_WIDTH)-1:0] value;
+        logic [`UP(TAG_WIDTH-UUID_WIDTH)-1:0] value;
     } tag_t;
 
     typedef struct packed {
