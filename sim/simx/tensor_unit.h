@@ -65,14 +65,6 @@ public:
 	          const std::vector<reg_data_t>& rs1_data,
 	          const std::vector<reg_data_t>& rs2_data,
 	          const std::vector<reg_data_t>& rs3_data,
-	          const std::vector<reg_data_t>& mx_a0_data,
-	          const std::vector<reg_data_t>& mx_a1_data,
-	          const std::vector<reg_data_t>& mx_a2_data,
-	          const std::vector<reg_data_t>& mx_a3_data,
-	          const std::vector<reg_data_t>& mx_b0_data,
-	          const std::vector<reg_data_t>& mx_b1_data,
-	          const std::vector<reg_data_t>& mx_b2_data,
-	          const std::vector<reg_data_t>& mx_b3_data,
 	          std::vector<reg_data_t>& rd_data,
 	          ExeTraceData* trace_data,
 	          bool is_sparse);
@@ -97,6 +89,7 @@ public:
 	void meta_store(uint32_t wid,
 					uint32_t fmt_s,
 					uint32_t col_idx,
+					uint32_t meta_kind,
 					const std::vector<reg_data_t>& rs1_data,
 					ExeTraceData* trace_data);
 

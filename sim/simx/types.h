@@ -717,6 +717,9 @@ enum class TcuType {
   META_STORE,
 };
 
+constexpr uint32_t TCU_META_KIND_SPARSE = 0;
+constexpr uint32_t TCU_META_KIND_MX     = 1;
+
 struct IntrTcuArgs {
   uint32_t is_sparse : 1;
   uint32_t is_a_smem : 1; // 0=register, 1=shared memory (B is always smem)
@@ -726,6 +729,7 @@ struct IntrTcuArgs {
   uint32_t step_m    : 4;
   uint32_t step_n    : 4;
   uint32_t step_k    : 4;
+  uint32_t meta_kind : 1; // 0=sparse, 1=mx
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {

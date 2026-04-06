@@ -146,7 +146,7 @@ inline const char* fmt_string(uint32_t fmt) {
   }
 }
 
-inline constexpr bool sparse_scale_format(uint32_t fmt) {
+inline constexpr bool mx_scale_format(uint32_t fmt) {
   switch (fmt) {
   case mxfp8::id:
   case nvfp4::id:
