@@ -123,10 +123,6 @@ build_driver() {
 
 run_app() {
     local cmd_opts=""
-    # Force a test rebuild so that CONFIG changes (NUM_THREADS, ITYPE, etc.)
-    # take effect. Test Makefiles bake CONFIGS into the binary, and Make's
-    # timestamp check won't catch define changes on its own.
-    make -C "$APP_PATH" clean > /dev/null 2>&1 || true
     [ $DEBUG -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "DEBUG=1")
     [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VORTEX_RT_PATH=\"$TEMPDIR\"")
     [ $HAS_ARGS -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "OPTS=\"$ARGS\"")
