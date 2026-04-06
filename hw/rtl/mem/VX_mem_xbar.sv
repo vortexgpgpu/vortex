@@ -115,9 +115,11 @@ module VX_mem_xbar import VX_gpu_pkg::*; #(
                 .data_out (req_tag_wide)
             );
             assign bus_out_if[i].req_data.tag.uuid = req_tag_wide[TAG_UUID_W-1:0];
+            assign bus_out_if[i].req_data.tag.value = '0;
         end else begin : g_req_tag_out
             `UNUSED_VAR (req_sel_out)
             assign bus_out_if[i].req_data.tag.uuid = req_tag_out[TAG_UUID_W-1:0];
+            assign bus_out_if[i].req_data.tag.value = '0;
         end
     end
 
@@ -207,6 +209,7 @@ module VX_mem_xbar import VX_gpu_pkg::*; #(
         assign bus_in_if[i].rsp_valid = rsp_valid_out[i];
         assign bus_in_if[i].rsp_data.data = rsp_data_dat;
         assign bus_in_if[i].rsp_data.tag.uuid = rsp_tag_out[TAG_UUID_W-1:0];
+        assign bus_in_if[i].rsp_data.tag.value = '0;
         assign rsp_ready_out[i] = bus_in_if[i].rsp_ready;
     end
 

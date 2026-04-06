@@ -39,7 +39,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
 `ifdef EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
-    VX_mem_bus_if.slave      dxa_lmem_bus_if,
+    VX_mem_bus_if.slave     dxa_lmem_bus_if,
 `endif
 
     // KMU bus

@@ -16,7 +16,7 @@
 `ifdef TCU_WGMMA_ENABLE
 
 //
-// WGMMA tile stream-buffer (per-warp slot cache).
+// WGMMA tile stream-buffer (single-slot cache).
 //
 // Thin wrapper that computes shared parameters and connects:
 //   VX_tcu_tbuf_fetch  — slot management, LMEM fetch FSM, data capture
@@ -27,10 +27,9 @@
 // All LMEM banks are read simultaneously each cycle, yielding NUM_BANKS
 // words/cycle throughput.
 //
-// Each active warp gets its own slot (direct-mapped by wid).  Slots are
-// allocated on the first µop of a new tile (step_m==step_n==step_k==0)
-// and evicted implicitly when the same slot index is re-allocated for a
-// different tile or on the next outer-loop iteration.
+// A single shared slot is allocated on the first uop of a new tile
+// (step_m==step_n==step_k==0) and evicted implicitly when re-allocated
+// for a different tile or on the next outer-loop iteration.
 //
 // Assumptions:
 //   - Tile base addresses (descriptor[15:0]) are bank-aligned.
@@ -40,7 +39,6 @@
 
 module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID     = "",
-    parameter         TCU_TBUF_SIZE   = `NUM_WARPS,
     parameter         NUM_BANKS       = 4,
     parameter         BANK_ADDR_WIDTH = 12
 ) (
@@ -54,8 +52,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Execute-side observation
     input  wire                     req_valid,
-    input  wire                     req_fire,   // execute consumed current µop
-    input  wire [NW_WIDTH-1:0]      req_wid,
+    input  wire                     req_fire,   // execute consumed current uop
     input  wire                     req_is_sparse,
     input  wire [3:0]               req_step_m,
     input  wire [3:0]               req_step_n,
@@ -66,7 +63,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [`XLEN-1:0]         req_desc_b,
 
     // LMEM read port
-    VX_tcu_lmem_if.master           tcu_lmem_if,
+    VX_mem_bus_if.master            tcu_lmem_if,
 
     // Tile buffer outputs
     output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
@@ -114,7 +111,6 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_tcu_tbuf_fetch #(
         .INSTANCE_ID    (`SFORMATF(("%s-fetch", INSTANCE_ID))),
-        .TCU_TBUF_SIZE  (TCU_TBUF_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH),
         .A_TOTAL        (A_TOTAL),
@@ -131,7 +127,6 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `endif
         .req_valid      (req_valid),
         .req_fire       (req_fire),
-        .req_wid        (req_wid),
         .req_is_sparse  (req_is_sparse),
         .req_step_m     (req_step_m),
         .req_step_n     (req_step_n),

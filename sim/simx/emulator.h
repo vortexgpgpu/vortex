@@ -122,7 +122,15 @@ public:
   void set_satp(uint64_t satp) ;
 #endif
 
-  instr_trace_t* step();
+  // Schedule: warp select + fetch + decode -> returns pre-trace (no execution).
+  instr_trace_t* schedule();
+
+  // Execute: functional execution of a previously scheduled trace.
+  void execute(instr_trace_t* trace);
+
+  // Pipeline tracking: warp has instruction in fetch/decode pipeline.
+  void pipeline_lock(uint32_t wid);
+  void pipeline_unlock(uint32_t wid);
 
   bool running() const;
 
@@ -208,6 +216,8 @@ private:
   std::vector<warp_t> warps_;
   WarpMask    active_warps_;
   WarpMask    stalled_warps_;
+  WarpMask    in_pipeline_;
+  int         gto_warp_;
   std::vector<warp_barrier_t> barriers_;
   std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;

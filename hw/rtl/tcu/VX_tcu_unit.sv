@@ -27,7 +27,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef TCU_WGMMA_ENABLE
     // Bank-parallel LMEM read port
-    VX_tcu_lmem_if.master   tcu_lmem_if,
+    VX_mem_bus_if.master     tcu_lmem_if,
 `endif
 
     // Inputs
@@ -77,43 +77,36 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
     wire                                tbuf_ready     [BLOCK_SIZE];
 
-    // Per-block LMEM read port signals
-    wire                         per_blk_rd_valid [BLOCK_SIZE];
-    wire                         per_blk_rd_ready [BLOCK_SIZE];
-    wire [BANK_ADDR_WIDTH-1:0]   per_blk_rd_addr  [BLOCK_SIZE];
-
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0]     tbuf_fetch_stalls_b [BLOCK_SIZE];
     wire [PERF_CTR_BITS-1:0]     lmem_reads_b        [BLOCK_SIZE];
 `endif
 
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_tile_bufs
-        // Per-block lmem interface: tile_buf drives valid/addr; data/data_valid
-        // are broadcast from the module-level arbitrated interface.
-        VX_tcu_lmem_if #(
-            .DATA_WIDTH(`LMEM_NUM_BANKS * `XLEN),
-            .ADDR_WIDTH(BANK_ADDR_WIDTH)
-        ) blk_lmem_if();
+    VX_mem_bus_if #(
+        .DATA_SIZE (`LMEM_NUM_BANKS * (`XLEN / 8)),
+        .TAG_WIDTH (LMEM_DMA_TAG_W),
+        .ADDR_WIDTH(BANK_ADDR_WIDTH)
+    ) per_block_lmem_if[BLOCK_SIZE]();
 
-        assign blk_lmem_if.rsp_data       = tcu_lmem_if.rsp_data;
-        assign blk_lmem_if.rsp_valid      = tcu_lmem_if.rsp_valid;
-        assign per_blk_rd_valid[block_idx]= blk_lmem_if.req_valid;
-        assign blk_lmem_if.req_ready      = per_blk_rd_ready[block_idx];
-        assign per_blk_rd_addr[block_idx] = blk_lmem_if.req_addr;
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_tile_bufs
+        if (BLOCK_SIZE == 1) begin : g_rsp_direct
+            assign per_block_lmem_if[block_idx].rsp_valid = tcu_lmem_if.rsp_valid;
+        end else begin : g_rsp_tagged
+            // Route responses only to the block that made the request (via tag)
+            assign per_block_lmem_if[block_idx].rsp_valid = tcu_lmem_if.rsp_valid
+                && (tcu_lmem_if.rsp_data.tag[$clog2(BLOCK_SIZE)-1:0] == $clog2(BLOCK_SIZE)'(block_idx));
+        end
+        assign per_block_lmem_if[block_idx].rsp_data  = tcu_lmem_if.rsp_data;
 
         wire is_wgmma_b = (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA);
 
         wire req_valid_b = per_block_execute_if[block_idx].valid && is_wgmma_b;
-        // req_fire: the execute unit actually consumed this µop this cycle.
-        // Used by tile_buf to clear warp_alloc_pending at the right time,
-        // preventing spurious re-fetch when execute is stalled (e.g. mdata_queue full).
         wire req_fire_b  = per_block_execute_if[block_idx].valid
                         && per_block_execute_if[block_idx].ready
                         && is_wgmma_b;
 
         VX_tcu_tbuf #(
             .INSTANCE_ID    (`SFORMATF(("%s-tbuf%0d", INSTANCE_ID, block_idx))),
-            .TCU_TBUF_SIZE  (`NUM_WARPS),
             .NUM_BANKS      (`LMEM_NUM_BANKS),
             .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH)
         ) tile_buf (
@@ -125,7 +118,6 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
             .req_valid        (req_valid_b),
             .req_fire         (req_fire_b),
-            .req_wid          (per_block_execute_if[block_idx].data.header.wid),
             .req_is_sparse    (per_block_execute_if[block_idx].data.op_args.tcu.is_sparse),
             .req_step_m       (per_block_execute_if[block_idx].data.op_args.tcu.step_m),
             .req_step_n       (per_block_execute_if[block_idx].data.op_args.tcu.step_n),
@@ -134,7 +126,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_cd_nregs     (per_block_execute_if[block_idx].data.op_args.tcu.cd_nregs),
             .req_desc_a       (per_block_execute_if[block_idx].data.rs1_data[0]),
             .req_desc_b       (per_block_execute_if[block_idx].data.rs2_data[0]),
-            .tcu_lmem_if      (blk_lmem_if),
+            .tcu_lmem_if      (per_block_lmem_if[block_idx]),
             // Tile data outputs
             .tbuf_rs1_data    (tbuf_rs1_data[block_idx]),
             .tbuf_rs2_data    (tbuf_rs2_data[block_idx]),
@@ -153,32 +145,56 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     //   to one tile buffer at a time.
 
     if (BLOCK_SIZE == 1) begin : g_lmem_direct
-        assign tcu_lmem_if.req_valid = per_blk_rd_valid[0];
-        assign per_blk_rd_ready[0] = tcu_lmem_if.req_ready;
-        assign tcu_lmem_if.req_addr = per_blk_rd_addr[0];
+        assign tcu_lmem_if.req_valid       = per_block_lmem_if[0].req_valid;
+        assign per_block_lmem_if[0].req_ready = tcu_lmem_if.req_ready;
+        assign tcu_lmem_if.req_data.rw     = 1'b0;
+        assign tcu_lmem_if.req_data.addr   = per_block_lmem_if[0].req_data.addr;
+        assign tcu_lmem_if.req_data.data   = '0;
+        assign tcu_lmem_if.req_data.byteen = '0;
+        assign tcu_lmem_if.req_data.flags  = '0;
+        assign tcu_lmem_if.req_data.tag    = '0;
+        assign tcu_lmem_if.rsp_ready       = 1'b1;
+        `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)
     end else begin : g_lmem_arb
+        // Extract interface signals into plain arrays for variable indexing
+        wire [BLOCK_SIZE-1:0] blk_req_valid;
+        wire [BANK_ADDR_WIDTH-1:0] blk_req_addr [BLOCK_SIZE];
+        for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_blk_sigs
+            assign blk_req_valid[b] = per_block_lmem_if[b].req_valid;
+            assign blk_req_addr[b]  = per_block_lmem_if[b].req_data.addr;
+        end
+
         // Priority arbiter: lowest block index wins
         logic [$clog2(BLOCK_SIZE)-1:0] grant_idx;
         logic                          grant_valid;
+        logic [BANK_ADDR_WIDTH-1:0]    grant_addr;
 
         always_comb begin
             grant_idx   = '0;
             grant_valid = 1'b0;
+            grant_addr  = '0;
             for (int b = 0; b < BLOCK_SIZE; ++b) begin
-                if (per_blk_rd_valid[b] && !grant_valid) begin
+                if (blk_req_valid[b] && !grant_valid) begin
                     grant_idx   = $clog2(BLOCK_SIZE)'(b);
                     grant_valid = 1'b1;
+                    grant_addr  = blk_req_addr[b];
                 end
             end
         end
 
-        assign tcu_lmem_if.req_valid = grant_valid;
-        assign tcu_lmem_if.req_addr = per_blk_rd_addr[grant_idx];
+        assign tcu_lmem_if.req_valid       = grant_valid;
+        assign tcu_lmem_if.req_data.rw     = 1'b0;
+        assign tcu_lmem_if.req_data.addr   = grant_addr;
+        assign tcu_lmem_if.req_data.data   = '0;
+        assign tcu_lmem_if.req_data.byteen = '0;
+        assign tcu_lmem_if.req_data.flags  = '0;
+        assign tcu_lmem_if.req_data.tag    = LMEM_DMA_TAG_W'(grant_idx);
+        assign tcu_lmem_if.rsp_ready       = 1'b1;
 
         for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_rd_ready
-            assign per_blk_rd_ready[b] = tcu_lmem_if.req_ready
-                                      && grant_valid
-                                      && (grant_idx == $clog2(BLOCK_SIZE)'(b));
+            assign per_block_lmem_if[b].req_ready = tcu_lmem_if.req_ready
+                                                 && grant_valid
+                                                 && (grant_idx == $clog2(BLOCK_SIZE)'(b));
         end
     end
 

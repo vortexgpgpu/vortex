@@ -65,10 +65,10 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // Outputs to VX_tcu_core
-    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]        tbuf_rs1_data,
+    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
     output wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data
 `ifdef TCU_SPARSE_ENABLE
-   ,output wire [TCU_MAX_META_BLOCK_WIDTH-1:0]  tbuf_sp_meta
+   ,output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta
 `endif
 );
     `UNUSED_SPARAM (INSTANCE_ID)

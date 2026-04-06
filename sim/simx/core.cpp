@@ -237,7 +237,7 @@ void Core::schedule() {
   // get next instruction to schedule
   auto trace = trace_to_schedule_;
   if (trace == nullptr) {
-    trace = emulator_.step();
+    trace = emulator_.schedule();
     if (trace == nullptr) {
       ++perf_stats_.sched_idle;
       return;
@@ -248,8 +248,8 @@ void Core::schedule() {
   // advance to fetch stage
   if (fetch_latch_.try_push(trace)) {
     DT(3, this->name() << "-pipeline schedule: " << *trace);
-    // suspend warp until decode
-    emulator_.suspend(trace->wid);
+    // lock warp in pipeline until decode
+    emulator_.pipeline_lock(trace->wid);
     // clear schedule trace
     trace_to_schedule_ = nullptr;
     // track pending instructions
@@ -323,9 +323,12 @@ void Core::decode() {
     trace->log_once(false);
   }
 
-  // release warp
+  // release pipeline lock; on fetch_stall transition to real stall
   if (!trace->fetch_stall) {
-    emulator_.resume(trace->wid);
+    emulator_.pipeline_unlock(trace->wid);
+  } else {
+    emulator_.pipeline_unlock(trace->wid);
+    emulator_.suspend(trace->wid);
   }
 
   DT(3, this->name() << "-pipeline decode: " << *trace);
@@ -385,6 +388,10 @@ void Core::issue() {
       uint32_t wid = w * ISSUE_WIDTH + iw;
       auto& ibuffer = ibuffers_.at(wid);
       auto trace = ibuffer->peek();
+      // functional execution
+      if (trace->instr_ptr) {
+        emulator_.execute(trace);
+      }
       // to operand stage
       if (operands_.at(iw)->Input.try_send(trace)) {
         DT(3, this->name() << "-pipeline ibuffer: " << *trace);

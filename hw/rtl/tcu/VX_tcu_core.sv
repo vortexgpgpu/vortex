@@ -22,7 +22,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          reset,
 
 `ifdef TCU_WGMMA_ENABLE
-    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]        tbuf_rs1_data,
+    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
     input wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data,
 `ifdef TCU_SPARSE_ENABLE
     input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
@@ -108,25 +108,93 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
 `ifdef TCU_SPARSE_ENABLE
-    wire [`LOG2UP(`NUM_WARPS)-1:0] wid = execute_if.data.header.wid;
     wire meta_wr_en = execute_fire && is_meta_store;
+`endif
 
-    // meta_store: force rd=0 in mdata_queue header
+    // Modify header for non-writeback uops:
+    //   meta_store: force rd=0
+    //   non-last-k: force wb=0 (intermediate accumulator result, not RF write)
     tcu_header_t mdata_queue_in;
     always_comb begin
         mdata_queue_in = execute_if.data.header;
+    `ifdef TCU_SPARSE_ENABLE
         if (is_meta_store) begin
             mdata_queue_in.rd = '0;
         end
+    `endif
+        if (!is_last_k) begin
+            mdata_queue_in.wb = 1'b0;
+        end
     end
-`else
-    tcu_header_t mdata_queue_in;
-    always_comb begin
-        mdata_queue_in = execute_if.data.header;
-    end
-`endif
 
     `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
+
+    // -----------------------------------------------------------------------
+    // Internal K accumulation control (Nvidia-style)
+    // -----------------------------------------------------------------------
+    // k=0 (first_k): c_val from RF (rs3_data), no writeback
+    // 0<k<K-1: c_val from internal accumulator, no writeback
+    // k=K-1 (last_k): c_val from internal accumulator, writeback to RF
+    // Accumulator is a multi-tile LUTRAM indexed by {wid, step_m, step_n}.
+
+    wire is_first_k = (step_k == '0);
+
+`ifdef TCU_SPARSE_ENABLE
+    wire [3:0] k_steps_val = is_sparse ? 4'((TCU_K_STEPS / 2) - 1) : 4'(TCU_K_STEPS - 1);
+`else
+    wire [3:0] k_steps_val = 4'(TCU_K_STEPS - 1);
+`endif
+
+`ifdef TCU_WGMMA_ENABLE
+    wire [3:0] wg_k_steps_val;
+  `ifdef TCU_SPARSE_ENABLE
+    assign wg_k_steps_val = execute_if.data.op_args.tcu.is_sparse
+        ? 4'((TCU_WG_K_STEPS / 2) - 1) : 4'(TCU_WG_K_STEPS - 1);
+  `else
+    assign wg_k_steps_val = 4'(TCU_WG_K_STEPS - 1);
+  `endif
+    wire is_last_k = is_wgmma ? (step_k == wg_k_steps_val) : (step_k == k_steps_val);
+`else
+    wire is_last_k = (step_k == k_steps_val);
+`endif
+
+    // -----------------------------------------------------------------------
+    // Multi-tile accumulator (LUTRAM, async read, read-first)
+    // -----------------------------------------------------------------------
+    // One LUTRAM per FEDP element (tcM × tcN instances).
+    // Depth = NUM_WARPS × MAX_TILES.  Width = 32 bits.
+    // MAX_TILES = max(WMMA m_steps*n_steps, WGMMA m_steps*max_n_steps).
+
+`ifdef TCU_WGMMA_ENABLE
+    localparam ACCUM_MAX_N = (TCU_N_STEPS > TCU_WG_N_STEPS) ? TCU_N_STEPS : TCU_WG_N_STEPS;
+    localparam ACCUM_MAX_M = (TCU_M_STEPS > TCU_WG_M_STEPS) ? TCU_M_STEPS : TCU_WG_M_STEPS;
+`else
+    localparam ACCUM_MAX_N = TCU_N_STEPS;
+    localparam ACCUM_MAX_M = TCU_M_STEPS;
+`endif
+    localparam ACCUM_MAX_TILES = ACCUM_MAX_M * ACCUM_MAX_N;
+    localparam ACCUM_TILE_W   = $clog2(ACCUM_MAX_TILES);
+    localparam ACCUM_DEPTH    = `NUM_WARPS * ACCUM_MAX_TILES;
+    localparam ACCUM_ADDRW    = $clog2(ACCUM_DEPTH);
+
+    wire [NW_WIDTH-1:0] exe_wid = execute_if.data.header.wid;
+
+    // Tile index: step_m * ACCUM_MAX_N + step_n
+    wire [ACCUM_TILE_W-1:0] exe_tile_idx = ACCUM_TILE_W'(step_m) * ACCUM_TILE_W'(ACCUM_MAX_N)
+                                          + ACCUM_TILE_W'(step_n);
+    // Read address for accumulator lookup
+    wire [ACCUM_ADDRW-1:0] accum_raddr = {exe_wid, exe_tile_idx};
+
+    // Track is_last_k, warp ID, and tile index through the FEDP pipeline
+    reg [PIPE_LATENCY-1:0] last_k_pipe;
+    reg [PIPE_LATENCY-1:0][NW_WIDTH-1:0] wid_pipe;
+    reg [PIPE_LATENCY-1:0][ACCUM_TILE_W-1:0] tile_pipe;
+
+    // Per-warp inflight counter: tracks non-last-k uops in the FEDP pipeline.
+    // k>0 uops stall until ALL previous k-round results are latched.
+    localparam INFLIGHT_W = $clog2(ACCUM_MAX_TILES + 1);
+    reg [`NUM_WARPS-1:0][INFLIGHT_W-1:0] inflight_k;
+    wire k_stall = !is_first_k && (inflight_k[exe_wid] != '0);
 
     // -----------------------------------------------------------------------
     // Pipeline control
@@ -136,29 +204,63 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire result_fire = result_if.valid && result_if.ready;
     wire fedp_enable, fedp_done;
+    wire fedp_done_raw;           // any FEDP result (including intermediate k)
+
+    // Write-back address from pipeline exit
+    wire [ACCUM_ADDRW-1:0] accum_waddr = {wid_pipe[0], tile_pipe[0]};
+    wire accum_wr = fedp_done_raw && !last_k_pipe[0] && fedp_enable;
 
     reg [PIPE_LATENCY-1:0] fedp_delay_pipe;
     always @(posedge clk) begin
         if (reset) begin
             fedp_delay_pipe <= '0;
+            last_k_pipe     <= '0;
+            for (int w = 0; w < `NUM_WARPS; ++w)
+                inflight_k[w] <= '0;
         end else begin
             if (fedp_enable) begin
                 fedp_delay_pipe <= fedp_delay_pipe >> 1;
+                last_k_pipe     <= last_k_pipe >> 1;
+                for (int s = PIPE_LATENCY-1; s > 0; --s) begin
+                    wid_pipe[s-1]  <= wid_pipe[s];
+                    tile_pipe[s-1] <= tile_pipe[s];
+                end
             end
             if (execute_fire) begin
                 fedp_delay_pipe[PIPE_LATENCY-1] <= 1;
+                last_k_pipe[PIPE_LATENCY-1]     <= is_last_k;
+                wid_pipe[PIPE_LATENCY-1]         <= exe_wid;
+                tile_pipe[PIPE_LATENCY-1]        <= exe_tile_idx;
+            end
+            // Per-warp inflight tracking for k-stall:
+            //   increment when a non-last-k uop enters the pipeline
+            //   decrement when a non-last-k result exits and is latched
+            for (int w = 0; w < `NUM_WARPS; ++w) begin
+                if ((execute_fire && !is_last_k && NW_WIDTH'(w) == exe_wid)
+                 && (accum_wr && NW_WIDTH'(w) == wid_pipe[0])) begin
+                    // simultaneous inc+dec: no change
+                end else if (execute_fire && !is_last_k && NW_WIDTH'(w) == exe_wid) begin
+                    inflight_k[w] <= inflight_k[w] + INFLIGHT_W'(1);
+                end else if (accum_wr && NW_WIDTH'(w) == wid_pipe[0]) begin
+                    inflight_k[w] <= inflight_k[w] - INFLIGHT_W'(1);
+                end
             end
         end
     end
-    assign fedp_done = fedp_delay_pipe[0];
+    assign fedp_done_raw    = fedp_delay_pipe[0];
+    assign fedp_done        = fedp_done_raw; // all uops produce downstream result (wb=0 skips RF write)
 
     assign result_if.valid  = fedp_done;
-    assign fedp_enable      = ~result_if.valid || result_if.ready;
+    assign fedp_enable      = ~fedp_done || result_if.ready;
 `ifdef TCU_WGMMA_ENABLE
-    assign execute_if.ready = ~mdata_queue_full && fedp_enable && (~is_wgmma || tbuf_ready);
+    assign execute_if.ready = ~mdata_queue_full && fedp_enable && !k_stall && (~is_wgmma || tbuf_ready);
 `else
-    assign execute_if.ready = ~mdata_queue_full && fedp_enable;
+    assign execute_if.ready = ~mdata_queue_full && fedp_enable && !k_stall;
 `endif
+
+    // All uops push to the metadata queue; non-last-k have wb=0 in their
+    // header so the writeback stage skips the RF write.
+    wire mdata_push = execute_fire;
 
     VX_fifo_queue #(
         .DATAW ($bits(tcu_header_t)),
@@ -167,7 +269,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) mdata_queue (
         .clk    (clk),
         .reset  (reset),
-        .push   (execute_fire),
+        .push   (mdata_push),
         .pop    (result_fire),
         .data_in(mdata_queue_in),
         .data_out(result_if.data.header),
@@ -207,10 +309,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk    (clk),
         .reset  (reset),
         .wr_en  (meta_wr_en),
-        .wr_wid (wid),
         .wr_idx (fmt_d),
         .wr_data(rs1_data),
-        .rd_wid (wid),
         .step_m (step_m),
         .step_k (step_k),
         .vld_block(wmma_sp_meta)
@@ -262,7 +362,32 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             `endif
             end
 
-            wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
+            // Per-element accumulator LUTRAM (async read, read-first)
+            wire [31:0] accum_rdata;
+
+            VX_dp_ram #(
+                .DATAW     (32),
+                .SIZE      (ACCUM_DEPTH),
+                .LUTRAM    (1),
+                .OUT_REG   (0),
+                .RDW_MODE  ("R"),
+                .RADDR_REG (1)
+            ) accum_ram (
+                .clk   (clk),
+                .reset (reset),
+                .read  (1'b1),
+                .write (accum_wr),
+                .wren  (1'b1),
+                .waddr (accum_waddr),
+                .wdata (d_val[i][j]),
+                .raddr (accum_raddr),
+                .rdata (accum_rdata)
+            );
+
+            // k=0: C from register file; k>0: C from internal accumulator LUTRAM
+            wire [31:0] c_val = is_first_k
+                ? 32'(execute_if.data.rs3_data[i * TCU_TC_N + j])
+                : accum_rdata;
 
         `ifdef TCU_SPARSE_ENABLE
             VX_tcu_sp_mux #(
@@ -380,5 +505,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif // DBG_TRACE_TCU
         end
     end
+
+    // Accumulator write is handled by VX_dp_ram instances inside the FEDP grid.
 
 endmodule

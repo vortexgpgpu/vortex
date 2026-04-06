@@ -103,6 +103,8 @@ void Emulator::reset() {
 
   stalled_warps_.reset();
   active_warps_.reset();
+  in_pipeline_.reset();
+  gto_warp_ = -1;
   wspawn_.valid = false;
   
   cta_dispatcher_.reset();
@@ -167,12 +169,7 @@ uint32_t Emulator::fetch(uint32_t wid, uint64_t uuid) {
   return instr_code;
 }
 
-instr_trace_t* Emulator::step() {
-  // Check debug module flags first - if halted, don't schedule anything
-  if (debug_module_ != nullptr && debug_module_->is_halt_requested()) {
-    return nullptr;
-  }
-
+instr_trace_t* Emulator::schedule() {
   int scheduled_warp = -1;
 
   // Dispatch one CTA warp
@@ -201,17 +198,28 @@ instr_trace_t* Emulator::step() {
     this->resume(0);
   }
 
-  // find next ready warp
+  // GTO warp scheduler with in_pipeline_ awareness
+  if (gto_warp_ >= 0) {
+    uint32_t wid = gto_warp_;
+    if (active_warps_.test(wid) && !stalled_warps_.test(wid) && !in_pipeline_.test(wid)) {
+      scheduled_warp = wid;
+    } else if (active_warps_.test(wid) && !stalled_warps_.test(wid) && in_pipeline_.test(wid)) {
+      // Greedy warp is in pipeline — wait for it
+      return nullptr;
+    }
+  }
+
+  if (scheduled_warp == -1) {
   for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {
-    bool warp_active = active_warps_.test(wid);
-    bool warp_stalled = stalled_warps_.test(wid);
-    if (warp_active && !warp_stalled) {
+      if (active_warps_.test(wid) && !stalled_warps_.test(wid) && !in_pipeline_.test(wid)) {
       scheduled_warp = wid;
       break;
     }
   }
+    gto_warp_ = scheduled_warp;
+  }
 
-  // Any active warp to schedule ?
+  // Any active warp to schedule?
   if (scheduled_warp == -1)
     return nullptr;
   }
@@ -276,6 +284,42 @@ instr_trace_t* Emulator::step() {
   }
 
   return trace;
+}
+
+void Emulator::execute(instr_trace_t* trace) {
+  assert(trace != nullptr);
+  assert(trace->instr_ptr != nullptr);
+  auto& warp = warps_.at(trace->wid);
+
+  // Restore PC for execution context
+  warp.PC = trace->PC;
+
+  // Perform functional execution
+  auto new_trace = this->execute(*trace->instr_ptr, trace->wid);
+
+  // Copy execution results back
+  trace->wb          = new_trace->wb;
+  trace->fetch_stall = new_trace->fetch_stall;
+  trace->data        = new_trace->data;
+  trace->tmask       = new_trace->tmask;
+  trace->pid         = new_trace->pid;
+  trace->sop         = new_trace->sop;
+  trace->eop         = new_trace->eop;
+
+  // Free the temporary trace
+  new_trace->~instr_trace_t();
+  core_->trace_pool().deallocate(new_trace, 1);
+
+  // Clear instr_ptr to mark as executed
+  trace->instr_ptr = nullptr;
+}
+
+void Emulator::pipeline_lock(uint32_t wid) {
+  in_pipeline_.set(wid);
+}
+
+void Emulator::pipeline_unlock(uint32_t wid) {
+  in_pipeline_.reset(wid);
 }
 
 bool Emulator::running() const {
