@@ -49,7 +49,10 @@ module VX_lmem_dma import VX_gpu_pkg::*; #(
     assign lmem_dma_if.req_data.data   = dxa_grant ? dxa_bank_wr_if.wr_data : '0;
     assign lmem_dma_if.req_data.byteen = dxa_grant ? dxa_bank_wr_if.wr_byteen : '0;
     assign lmem_dma_if.req_data.flags  = '0;
-    assign lmem_dma_if.req_data.tag    = dxa_grant ? dxa_bank_wr_if.wr_tag : '0;
+    // tag.uuid is reserved by VX_mem_bus_if (tied to 0 for DXA/TCU DMA);
+    // tag.value carries the DXA completion metadata (bar_addr + last_pkt).
+    assign lmem_dma_if.req_data.tag.uuid  = '0;
+    assign lmem_dma_if.req_data.tag.value = dxa_grant ? dxa_bank_wr_if.wr_tag : '0;
 
     assign dxa_bank_wr_if.wr_ready = lmem_dma_if.req_ready && dxa_grant;
     assign tcu_lmem_if.req_ready   = lmem_dma_if.req_ready && !dxa_grant;
@@ -79,7 +82,9 @@ module VX_lmem_dma import VX_gpu_pkg::*; #(
     assign lmem_dma_if.req_data.data   = dxa_bank_wr_if.wr_data;
     assign lmem_dma_if.req_data.byteen = dxa_bank_wr_if.wr_byteen;
     assign lmem_dma_if.req_data.flags  = '0;
-    assign lmem_dma_if.req_data.tag    = dxa_bank_wr_if.wr_tag;
+    // tag.uuid is reserved by VX_mem_bus_if; tag.value carries DXA metadata.
+    assign lmem_dma_if.req_data.tag.uuid  = '0;
+    assign lmem_dma_if.req_data.tag.value = dxa_bank_wr_if.wr_tag;
     assign dxa_bank_wr_if.wr_ready     = lmem_dma_if.req_ready;
     `UNUSED_VAR (lmem_dma_if.rsp_valid)
     `UNUSED_VAR (lmem_dma_if.rsp_data)
@@ -101,7 +106,7 @@ module VX_lmem_dma import VX_gpu_pkg::*; #(
         .clk          (clk),
         .reset        (reset),
         .bank_wr_fire (dxa_bank_wr_fire),
-        .bank_wr_tag  (DXA_BANK_WR_TAG_WIDTH'(lmem_dma_if.req_data.tag)),
+        .bank_wr_tag  (lmem_dma_if.req_data.tag.value),
         .txbar_bus_if (dxa_txbar_bus_if)
     );
 

@@ -935,7 +935,9 @@ package VX_gpu_pkg;
     // DXA writes carry a functional tag (bar_addr + last_pkt);
     // TCU reads use a minimal tag; no-DMA case still needs a non-zero width.
 `ifdef EXT_DXA_ENABLE
-    localparam LMEM_DMA_TAG_W = DXA_BANK_WR_TAG_WIDTH;
+    // Tag layout: VX_mem_bus_if.tag_t reserves UP(UUID_WIDTH) bits for uuid,
+    // so the functional value (BAR_ADDR_W + 1) must sit above the uuid field.
+    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + DXA_BANK_WR_TAG_WIDTH;
     localparam LMEM_DMA_EN    = 1;
 `elsif TCU_WGMMA_ENABLE
     localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;

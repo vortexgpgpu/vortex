@@ -1573,9 +1573,11 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       trace->fetch_stall = false;
       uint64_t lmem_addr  = static_cast<uint64_t>(rs1_data.at(0).u);
       uint32_t meta       = rs1_data.at(1).u;
-      uint32_t coords[5]  = { rs1_data.at(2).u, rs1_data.at(3).u,
-                               rs2_data.at(0).u, rs2_data.at(1).u,
-                               rs2_data.at(2).u };
+      uint32_t coords[5]  = { static_cast<uint32_t>(rs1_data.at(2).u),
+                               static_cast<uint32_t>(rs1_data.at(3).u),
+                               static_cast<uint32_t>(rs2_data.at(0).u),
+                               static_cast<uint32_t>(rs2_data.at(1).u),
+                               static_cast<uint32_t>(rs2_data.at(2).u) };
       uint32_t cta_mask   = rs2_data.at(3).u;  // lane 3 rs2 = cta_mask (multicast)
       uint32_t desc_slot  = meta & 0x0fu;
       uint32_t raw_bar    = (meta >> 4) & 0x07ffffffu;

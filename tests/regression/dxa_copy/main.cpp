@@ -26,8 +26,8 @@
 const char* kernel_file = "kernel.vxbin";
 uint32_t nrows = 32;
 uint32_t ncols = 32;
-uint32_t tile_rows = 8;
-uint32_t tile_cols = 8;
+uint32_t tile_rows = 4;
+uint32_t tile_cols = 4;
 
 vx_device_h device = nullptr;
 vx_buffer_h src_buffer = nullptr;
