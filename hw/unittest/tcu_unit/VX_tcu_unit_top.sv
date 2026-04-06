@@ -79,16 +79,18 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
 `ifdef TCU_WGMMA_ENABLE
     localparam TCU_LMEM_BANK_ADDR_W = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`LMEM_NUM_BANKS);
 
-    VX_tcu_lmem_if #(
-        .DATA_WIDTH (`LMEM_NUM_BANKS * `XLEN),
+    VX_mem_bus_if #(
+        .DATA_SIZE  (`LMEM_NUM_BANKS * (`XLEN / 8)),
+        .TAG_WIDTH  (`UP(UUID_WIDTH)),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
     ) tcu_lmem_if();
 
-    assign tcu_lmem_req_valid      = tcu_lmem_if.req_valid;
-    assign tcu_lmem_if.req_ready   = tcu_lmem_req_ready;
-    assign tcu_lmem_req_addr       = tcu_lmem_if.req_addr;
-    assign tcu_lmem_if.rsp_valid   = tcu_lmem_rsp_valid;
-    assign tcu_lmem_if.rsp_data    = tcu_lmem_rsp_data;
+    assign tcu_lmem_req_valid         = tcu_lmem_if.req_valid;
+    assign tcu_lmem_if.req_ready      = tcu_lmem_req_ready;
+    assign tcu_lmem_req_addr          = tcu_lmem_if.req_data.addr;
+    assign tcu_lmem_if.rsp_valid      = tcu_lmem_rsp_valid;
+    assign tcu_lmem_if.rsp_data.data  = tcu_lmem_rsp_data;
+    assign tcu_lmem_if.rsp_data.tag   = '0;
 `endif
 
     VX_dispatch_if dispatch_if[`ISSUE_WIDTH]();

@@ -16,34 +16,15 @@
 `ifdef TCU_WGMMA_ENABLE
 
 //
-// Tile-buffer fetch engine (slot management + FSM + LMEM capture).
+// Tile-buffer fetch engine (single-slot + FSM + LMEM capture).
 //
-// Manages a direct-mapped per-warp slot table (slot s serves warp s).
-// Runs a three-phase LMEM fetch FSM: FETCH_A → FETCH_B → [FETCH_META].
-// Exposes the contents of the hit slot as combinational read ports for
-// VX_tcu_tbuf_gather.
-//
-// Storage optimizations vs. original monolithic module:
-//   - slot_a_buf replaced by VX_dp_ram(LUTRAM=1, OUT_REG=0): one RAM row per
-//     slot, width = A_TOTAL*32 bits, WRENW = A_TOTAL for per-word writes.
-//     Frees A_TOTAL*TCU_TBUF_SIZE*32 FFs at no net LUT cost (the LUTRAM
-//     cells replace the previously required slot-index MUX LUTs).
-//   - shared_b_buf (non-sparse): FFs with no slot dimension.  All warps in a
-//     multi-warp CTA share the same physical smem, so one B copy suffices.
-//   - slot_b_ram (sparse): per-slot VX_dp_ram(LUTRAM=1); single-warp CTAs
-//     each have their own smem/B tile so B must not be shared across slots.
-//   - slot_meta_buf (sparse) replaced by VX_dp_ram(LUTRAM=1) same way.
-//   - slot_wid removed: slot index == warp id by construction (direct-mapped).
-//   - slot_in_progress simplified: warp stalls at execute while fetch runs;
-//     stored descriptors always equal the current req, so XLEN-wide descriptor
-//     comparisons are eliminated from the alloc_en critical path (~0.95 ns).
-//   - One-hot FSM (fsm_encoding attribute): single-FF state decode.
-//   - phase_total_rows / phase_row_base expressed as wires for non-sparse path.
+// Manages a single tile-buffer slot shared across all warps.
+// Runs a three-phase LMEM fetch FSM: FETCH_A -> FETCH_B -> [FETCH_META].
+// Exposes slot contents as combinational read ports for VX_tcu_tbuf_gather.
 //
 
 module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID  = "",
-    parameter         TCU_TBUF_SIZE   = `NUM_WARPS,
     parameter         NUM_BANKS       = 4,
     parameter         BANK_ADDR_WIDTH = 12,
     // Tile buffer sizes (in 32-bit words); passed from VX_tcu_tbuf.
@@ -65,8 +46,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Execute-side observation
     input  wire                     req_valid,
-    input  wire                     req_fire,   // execute consumed current µop
-    input  wire [NW_WIDTH-1:0]      req_wid,
+    input  wire                     req_fire,   // execute consumed current uop
     input  wire                     req_is_sparse,
     input  wire [3:0]               req_step_m,
     input  wire [3:0]               req_step_n,
@@ -76,13 +56,13 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [`XLEN-1:0]         req_desc_b,
 
     // LMEM bank-parallel read port (1-cycle latency, pipelined)
-    VX_tcu_lmem_if.master           tcu_lmem_if,
+    VX_mem_bus_if.master            tcu_lmem_if,
 
     // Hit status
     output wire                     tbuf_hit,
     output wire                     tbuf_ready,
 
-    // Hit-slot data (combinational read of slot indexed by req_wid)
+    // Slot data (combinational read)
     output wire [A_TOTAL-1:0][31:0] hit_a_buf,
     output wire [B_TOTAL-1:0][31:0] hit_b_buf
 `ifdef TCU_SPARSE_ENABLE
@@ -97,7 +77,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Derived constants
     // -----------------------------------------------------------------------
 
-    localparam SLOT_W          = `UP($clog2(TCU_TBUF_SIZE));
     localparam BANK_SEL_BITS   = $clog2(NUM_BANKS);
     localparam LMEM_ADDR_W     = BANK_ADDR_WIDTH + BANK_SEL_BITS;
     // Correct word-address shift for any XLEN (2 for 32-bit, 3 for 64-bit).
@@ -144,66 +123,51 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // -----------------------------------------------------------------------
-    // Slot table  (direct-mapped: slot s serves warp s)
+    // Single slot state
     // -----------------------------------------------------------------------
-    // slot_wid is omitted: slot index IS the warp id by construction.
 
-    logic                       slot_valid      [TCU_TBUF_SIZE];
-    logic [`XLEN-1:0]           slot_desc_a     [TCU_TBUF_SIZE];
-    logic [`XLEN-1:0]           slot_desc_b     [TCU_TBUF_SIZE];
-    logic                       slot_fetch_done [TCU_TBUF_SIZE];
-    // Prevents alloc_en from re-firing every cycle after a fetch completes.
-    logic                       warp_alloc_pending [TCU_TBUF_SIZE];
-    logic [BANK_ADDR_WIDTH-1:0] slot_a_row_base [TCU_TBUF_SIZE];
-    logic [BANK_ADDR_WIDTH-1:0] slot_b_row_base [TCU_TBUF_SIZE];
-
-`ifndef TCU_SPARSE_ENABLE
-    // Shared B buffer: in the non-sparse (multi-warp CTA) path all warps share
-    // the same physical smem, so desc_b is identical across slots. One copy
-    // of B suffices. Stored in a single-entry LUTRAM (SIZE=1) to avoid
-    // B_TOTAL*32 FFs; async read gives same combinational latency.
-    logic [`XLEN-1:0]  shared_b_desc;
-    logic              shared_b_valid;
-    logic              shared_b_dirty;
-    logic [SLOT_W-1:0] last_b_fetch_slot_r;
-`endif
+    logic                       slot_valid;
+    logic [`XLEN-1:0]           slot_desc_a;
+    logic [`XLEN-1:0]           slot_desc_b;
+    logic                       slot_fetch_done;
+    logic                       alloc_pending;
+    logic [BANK_ADDR_WIDTH-1:0] slot_a_row_base;
+    logic [BANK_ADDR_WIDTH-1:0] slot_b_row_base;
 
 `ifdef TCU_SPARSE_ENABLE
-    logic                       slot_is_sparse      [TCU_TBUF_SIZE];
-    logic [BANK_ADDR_WIDTH-1:0] slot_meta_row_base  [TCU_TBUF_SIZE];
-    logic [3:0]                 slot_meta_stride    [TCU_TBUF_SIZE];
-    logic [FETCH_CTR_W-1:0]     slot_meta_bank_rows [TCU_TBUF_SIZE];
+    logic                       slot_is_sparse;
+    logic [BANK_ADDR_WIDTH-1:0] slot_meta_row_base;
+    logic [3:0]                 slot_meta_stride;
+    logic [FETCH_CTR_W-1:0]     slot_meta_bank_rows;
 `endif
 
     // -----------------------------------------------------------------------
-    // Slot lookup (O(1), direct-mapped by wid)
+    // Slot lookup
     // -----------------------------------------------------------------------
 
     wire is_first_uop = (req_step_m == '0) && (req_step_n == '0) && (req_step_k == '0);
 
-    // Unified slot index for both hit and alloc.
-    wire [SLOT_W-1:0] slot_idx = SLOT_W'(req_wid);
+    // Descriptor match: always validate against current slot contents.
+    wire desc_match = (slot_desc_a == req_desc_a) && (slot_desc_b == req_desc_b);
 
-    // Hit: slot is valid, data ready, and descriptors match on first µop.
-    assign tbuf_hit = slot_valid[slot_idx]
-                   && slot_fetch_done[slot_idx]
-                   && (!is_first_uop
-                       || (slot_desc_a[slot_idx] == req_desc_a
-                        && slot_desc_b[slot_idx] == req_desc_b));
+    // Hit: slot is valid, data ready, and descriptors match.
+    assign tbuf_hit = slot_valid && slot_fetch_done && desc_match;
 
-    // In-progress: fetch for this warp's slot is running.
-    // Descriptor comparisons omitted: warp stalls at execute during fetch,
-    // so slot descriptors always equal the current req descriptors.
-    wire slot_in_progress = slot_valid[slot_idx] && !slot_fetch_done[slot_idx];
+    // In-progress: fetch for slot is running.
+    wire slot_in_progress = slot_valid && !slot_fetch_done;
 
-    // Allocate (or re-allocate) a slot on the first µop of each new tile.
-    wire alloc_en = req_valid && is_first_uop && !slot_in_progress
-                 && !warp_alloc_pending[slot_idx];
+    // Allocate (re-fetch) on:
+    //   - first uop of every tile (LMEM contents may have changed via DMA
+    //     even if the descriptor address is the same), OR
+    //   - any uop with a descriptor mismatch (handles warp interleaving:
+    //     a different warp may have evicted this warp's tile data).
+    wire alloc_en = req_valid && !slot_in_progress && !alloc_pending
+                 && (is_first_uop || !slot_valid || !slot_fetch_done || !desc_match);
 
     assign tbuf_ready = tbuf_hit && !alloc_en;
 
     // -----------------------------------------------------------------------
-    // Descriptor parsing → row bases (combinational, used only at alloc)
+    // Descriptor parsing -> row bases (combinational, used only at alloc)
     // -----------------------------------------------------------------------
 
     wire [LMEM_ADDR_W-1:0] desc_a_word_base = LMEM_ADDR_W'(req_desc_a[15:0] >> WORD_SIZE_LOG2);
@@ -257,7 +221,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     } send_state_e;
 
     (* fsm_encoding = "one_hot" *) send_state_e send_state_r;
-    logic [SLOT_W-1:0] send_slot_r;
 
     wire in_fetch_a    = (send_state_r == SEND_FETCH_A);
     wire in_fetch_b    = (send_state_r == SEND_FETCH_B);
@@ -274,31 +237,30 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [FETCH_CTR_W-1:0] rsp_ctr_r;
     logic                   req_inflight_r;
 
-    // Per-phase termination threshold and row base as wires (non-sparse).
-    // Sparse path retains always_comb for the three-way case.
+    // Per-phase termination threshold and row base.
 `ifndef TCU_SPARSE_ENABLE
     wire [FETCH_CTR_W-1:0]     phase_total_rows =
         in_fetch_a ? FETCH_CTR_W'(A_BANK_ROWS) : FETCH_CTR_W'(B_BANK_ROWS);
 
     wire [BANK_ADDR_WIDTH-1:0] phase_row_base =
-        in_fetch_a ? slot_a_row_base[send_slot_r] : slot_b_row_base[send_slot_r];
+        in_fetch_a ? slot_a_row_base : slot_b_row_base;
 `else
     logic [FETCH_CTR_W-1:0]     phase_total_rows;
     logic [BANK_ADDR_WIDTH-1:0] phase_row_base;
     always_comb begin
         case (send_state_r)
             SEND_FETCH_A: begin
-                phase_total_rows = FETCH_CTR_W'(slot_is_sparse[send_slot_r]
+                phase_total_rows = FETCH_CTR_W'(slot_is_sparse
                                    ? A_BANK_ROWS_SP : A_BANK_ROWS);
-                phase_row_base   = slot_a_row_base[send_slot_r];
+                phase_row_base   = slot_a_row_base;
             end
             SEND_FETCH_B: begin
                 phase_total_rows = FETCH_CTR_W'(B_BANK_ROWS);
-                phase_row_base   = slot_b_row_base[send_slot_r];
+                phase_row_base   = slot_b_row_base;
             end
             SEND_FETCH_META: begin
-                phase_total_rows = slot_meta_bank_rows[send_slot_r];
-                phase_row_base   = slot_meta_row_base[send_slot_r];
+                phase_total_rows = slot_meta_bank_rows;
+                phase_row_base   = slot_meta_row_base;
             end
             default: begin
                 phase_total_rows = '0;
@@ -317,8 +279,14 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire can_issue = in_fetch && !all_requested
                   && (!req_inflight_r || tcu_lmem_if.rsp_valid);
 
-    assign tcu_lmem_if.req_valid = can_issue;
-    assign tcu_lmem_if.req_addr  = phase_row_base + BANK_ADDR_WIDTH'(req_ctr_r);
+    assign tcu_lmem_if.req_valid       = can_issue;
+    assign tcu_lmem_if.req_data.rw     = 1'b0;
+    assign tcu_lmem_if.req_data.addr   = phase_row_base + BANK_ADDR_WIDTH'(req_ctr_r);
+    assign tcu_lmem_if.req_data.data   = '0;
+    assign tcu_lmem_if.req_data.byteen = '0;
+    assign tcu_lmem_if.req_data.flags  = '0;
+    assign tcu_lmem_if.req_data.tag    = '0;
+    assign tcu_lmem_if.rsp_ready       = 1'b1;
 
     // -----------------------------------------------------------------------
     // Phase-done detection
@@ -326,7 +294,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef TCU_SPARSE_ENABLE
     wire last_rsp_a = in_fetch_a && tcu_lmem_if.rsp_valid
-                   && (rsp_ctr_r == (slot_is_sparse[send_slot_r]
+                   && (rsp_ctr_r == (slot_is_sparse
                        ? FETCH_CTR_W'(A_BANK_ROWS_SP - 1)
                        : FETCH_CTR_W'(A_BANK_ROWS    - 1)));
 `else
@@ -337,12 +305,10 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                    && (rsp_ctr_r == FETCH_CTR_W'(B_BANK_ROWS - 1));
 `ifdef TCU_SPARSE_ENABLE
     wire last_rsp_meta = in_fetch_meta && tcu_lmem_if.rsp_valid
-                      && (rsp_ctr_r == slot_meta_bank_rows[send_slot_r] - FETCH_CTR_W'(1));
-    wire fetch_done_now = (last_rsp_b && !slot_is_sparse[send_slot_r]) || last_rsp_meta;
+                      && (rsp_ctr_r == slot_meta_bank_rows - FETCH_CTR_W'(1));
+    wire fetch_done_now = (last_rsp_b && !slot_is_sparse) || last_rsp_meta;
 `else
-    wire b_cached       = shared_b_valid && !shared_b_dirty
-                       && (slot_desc_b[send_slot_r] == shared_b_desc);
-    wire fetch_done_now = last_rsp_b || (last_rsp_a && b_cached);
+    wire fetch_done_now = last_rsp_b;
 `endif
 
     // -----------------------------------------------------------------------
@@ -352,7 +318,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always_ff @(posedge clk) begin
         if (reset) begin
             send_state_r   <= SEND_IDLE;
-            send_slot_r    <= '0;
             req_ctr_r      <= '0;
             rsp_ctr_r      <= '0;
             req_inflight_r <= 1'b0;
@@ -365,14 +330,11 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             case (send_state_r)
             // -----------------------------------------------------------------
             SEND_IDLE: begin
-                for (int s = TCU_TBUF_SIZE-1; s >= 0; s--) begin
-                    if (slot_valid[s] && !slot_fetch_done[s]) begin
-                        send_slot_r    <= SLOT_W'(s);
-                        req_ctr_r      <= '0;
-                        rsp_ctr_r      <= '0;
-                        req_inflight_r <= 1'b0;
-                        send_state_r   <= SEND_FETCH_A;
-                    end
+                if (slot_valid && !slot_fetch_done) begin
+                    req_ctr_r      <= '0;
+                    rsp_ctr_r      <= '0;
+                    req_inflight_r <= 1'b0;
+                    send_state_r   <= SEND_FETCH_A;
                 end
             end
             // -----------------------------------------------------------------
@@ -383,11 +345,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     req_ctr_r      <= '0;
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
-                `ifdef TCU_SPARSE_ENABLE
                     send_state_r   <= SEND_FETCH_B;
-                `else
-                    send_state_r   <= b_cached ? SEND_IDLE : SEND_FETCH_B;
-                `endif
                 end else if (tcu_lmem_if.rsp_valid) begin
                     rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
                 end
@@ -401,7 +359,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
                 `ifdef TCU_SPARSE_ENABLE
-                    send_state_r <= slot_is_sparse[send_slot_r] ? SEND_FETCH_META : SEND_IDLE;
+                    send_state_r <= slot_is_sparse ? SEND_FETCH_META : SEND_IDLE;
                 `else
                     send_state_r <= SEND_IDLE;
                 `endif
@@ -436,77 +394,51 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     always_ff @(posedge clk) begin
         if (reset) begin
-            for (int s = 0; s < TCU_TBUF_SIZE; ++s) begin
-                slot_valid[s]         <= 1'b0;
-                slot_fetch_done[s]    <= 1'b0;
-                warp_alloc_pending[s] <= 1'b0;
-            end
-        `ifndef TCU_SPARSE_ENABLE
-            shared_b_valid        <= 1'b0;
-            shared_b_dirty        <= 1'b1;
-            shared_b_desc         <= '0;
-            last_b_fetch_slot_r   <= '0;
-        `endif
+            slot_valid      <= 1'b0;
+            slot_fetch_done <= 1'b0;
+            alloc_pending   <= 1'b0;
         end else begin
-        `ifndef TCU_SPARSE_ENABLE
-            if (alloc_en && (slot_idx == last_b_fetch_slot_r)
-                         && shared_b_valid && (req_desc_b == shared_b_desc))
-                shared_b_dirty <= 1'b1;
-            if (last_rsp_b) begin
-                shared_b_valid      <= 1'b1;
-                shared_b_dirty      <= 1'b0;
-                shared_b_desc       <= slot_desc_b[send_slot_r];
-                last_b_fetch_slot_r <= send_slot_r;
-            end
-        `endif
             if (fetch_done_now)
-                slot_fetch_done[send_slot_r] <= 1'b1;
+                slot_fetch_done <= 1'b1;
 
             if (alloc_en) begin
-                slot_valid      [slot_idx] <= 1'b1;
-                slot_fetch_done [slot_idx] <= 1'b0;
-                slot_desc_a     [slot_idx] <= req_desc_a;
-                slot_desc_b     [slot_idx] <= req_desc_b;
-                slot_a_row_base [slot_idx] <= desc_a_row_base;
-                slot_b_row_base [slot_idx] <= desc_b_row_base;
+                slot_valid      <= 1'b1;
+                slot_fetch_done <= 1'b0;
+                slot_desc_a     <= req_desc_a;
+                slot_desc_b     <= req_desc_b;
+                slot_a_row_base <= desc_a_row_base;
+                slot_b_row_base <= desc_b_row_base;
             `ifdef TCU_SPARSE_ENABLE
-                slot_is_sparse      [slot_idx] <= is_sparse;
-                slot_meta_row_base  [slot_idx] <= desc_meta_row_base;
-                slot_meta_stride    [slot_idx] <= init_meta_stride;
-                slot_meta_bank_rows [slot_idx] <= init_meta_rows;
+                slot_is_sparse      <= is_sparse;
+                slot_meta_row_base  <= desc_meta_row_base;
+                slot_meta_stride    <= init_meta_stride;
+                slot_meta_bank_rows <= init_meta_rows;
             `endif
             end
 
             if (alloc_en)
-                warp_alloc_pending[slot_idx] <= 1'b1;
-            if (req_fire && is_first_uop)
-                warp_alloc_pending[slot_idx] <= 1'b0;
+                alloc_pending <= 1'b1;
+            if (req_fire)
+                alloc_pending <= 1'b0;
         end
     end
 
     // -----------------------------------------------------------------------
-    // slot_a_buf — VX_dp_ram (LUTRAM, async read)
-    //
-    // One RAM row per slot; width = A_TOTAL*32 bits; WRENW = A_TOTAL enables
-    // single-word writes.  Each response cycle, NUM_BANKS consecutive words
-    // are written via a sparse wren mask decoded from rsp_ctr_r + bank index.
-    //
-    // Area: A_TOTAL*TCU_TBUF_SIZE*32 FFs replaced by A_TOTAL*32 LUTRAM cells.
-    // Timing: async read is combinational, same latency as the prior FF MUX.
+    // A data capture — single-entry LUTRAM (SIZE=1, async read)
     // -----------------------------------------------------------------------
 
     logic [A_TOTAL*32-1:0] a_wdata;
     logic [A_TOTAL-1:0]    a_wren;
 
     always_comb begin
-        a_wdata = '0;
-        a_wren  = '0;
+        a_wdata = {A_TOTAL{32'b0}};
+        a_wren  = {A_TOTAL{1'b0}};
         if (tcu_lmem_if.rsp_valid && in_fetch_a) begin
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < A_TOTAL) begin
                     a_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
                     a_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
+                        tcu_lmem_if.rsp_data.data[b * `XLEN +: `XLEN];
                 end
             end
         end
@@ -514,7 +446,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_dp_ram #(
         .DATAW   (A_TOTAL * 32),
-        .SIZE    (TCU_TBUF_SIZE),
+        .SIZE    (1),
         .WRENW   (A_TOTAL),
         .LUTRAM  (1),
         .OUT_REG (0),
@@ -525,37 +457,28 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .read  (1'b1),
         .write (tcu_lmem_if.rsp_valid && in_fetch_a),
         .wren  (a_wren),
-        .waddr (send_slot_r),
+        .waddr (1'b0),
         .wdata (a_wdata),
-        .raddr (slot_idx),
+        .raddr (1'b0),
         .rdata (hit_a_buf)
     );
 
     // -----------------------------------------------------------------------
-    // B data capture
-    //   Non-sparse: shared_b_buf FFs.  All slots share the same desc_b (all
-    //     warps in a multi-warp CTA share the same physical smem segment),
-    //     so one global copy of B is sufficient.
-    //   Sparse: per-slot slot_b_ram.  Each single-warp CTA has its own smem
-    //     segment with a different desc_b, so B must be stored per-slot to
-    //     prevent later fetches from overwriting earlier slots' B data.
+    // B data capture — single-entry LUTRAM (SIZE=1, async read)
     // -----------------------------------------------------------------------
 
-`ifndef TCU_SPARSE_ENABLE
-    // shared_b_ram — single-entry LUTRAM (SIZE=1, async read).
-    // Replaces B_TOTAL*32 FFs with LUTRAM cells at no timing cost.
     logic [B_TOTAL*32-1:0] b_wdata;
     logic [B_TOTAL-1:0]    b_wren;
 
     always_comb begin
-        b_wdata = '0;
-        b_wren  = '0;
+        b_wdata = {B_TOTAL{32'b0}};
+        b_wren  = {B_TOTAL{1'b0}};
         if (tcu_lmem_if.rsp_valid && in_fetch_b) begin
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin
                     b_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
                     b_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
+                        tcu_lmem_if.rsp_data.data[b * `XLEN +: `XLEN];
                 end
             end
         end
@@ -568,7 +491,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .LUTRAM  (1),
         .OUT_REG (0),
         .RDW_MODE("W")
-    ) shared_b_ram (
+    ) slot_b_ram (
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
@@ -579,46 +502,9 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .raddr (1'b0),
         .rdata (hit_b_buf)
     );
-`else // TCU_SPARSE_ENABLE
-    logic [B_TOTAL*32-1:0] b_wdata;
-    logic [B_TOTAL-1:0]    b_wren;
-
-    always_comb begin
-        b_wdata = '0;
-        b_wren  = '0;
-        if (tcu_lmem_if.rsp_valid && in_fetch_b) begin
-            for (int b = 0; b < NUM_BANKS; ++b) begin
-                if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin
-                    b_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
-                    b_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
-                end
-            end
-        end
-    end
-
-    VX_dp_ram #(
-        .DATAW   (B_TOTAL * 32),
-        .SIZE    (TCU_TBUF_SIZE),
-        .WRENW   (B_TOTAL),
-        .LUTRAM  (1),
-        .OUT_REG (0),
-        .RDW_MODE("W")
-    ) slot_b_ram (
-        .clk   (clk),
-        .reset (reset),
-        .read  (1'b1),
-        .write (tcu_lmem_if.rsp_valid && in_fetch_b),
-        .wren  (b_wren),
-        .waddr (send_slot_r),
-        .wdata (b_wdata),
-        .raddr (slot_idx),
-        .rdata (hit_b_buf)
-    );
-`endif
 
     // -----------------------------------------------------------------------
-    // slot_meta_buf — VX_dp_ram (sparse only, same pattern as slot_a_ram)
+    // Metadata capture — single-entry LUTRAM (sparse only)
     // -----------------------------------------------------------------------
 
 `ifdef TCU_SPARSE_ENABLE
@@ -633,7 +519,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < META_TOTAL_MAX) begin
                     meta_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
                     meta_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
+                        tcu_lmem_if.rsp_data.data[b * `XLEN +: `XLEN];
                 end
             end
         end
@@ -641,7 +527,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_dp_ram #(
         .DATAW   (META_TOTAL_MAX * 32),
-        .SIZE    (TCU_TBUF_SIZE),
+        .SIZE    (1),
         .WRENW   (META_TOTAL_MAX),
         .LUTRAM  (1),
         .OUT_REG (0),
@@ -652,14 +538,14 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .read  (1'b1),
         .write (tcu_lmem_if.rsp_valid && in_fetch_meta),
         .wren  (meta_wren),
-        .waddr (send_slot_r),
+        .waddr (1'b0),
         .wdata (meta_wdata),
-        .raddr (slot_idx),
+        .raddr (1'b0),
         .rdata (hit_meta_buf)
     );
 
-    assign hit_is_sparse   = slot_is_sparse[slot_idx];
-    assign hit_meta_stride = slot_meta_stride[slot_idx];
+    assign hit_is_sparse   = slot_is_sparse;
+    assign hit_meta_stride = slot_meta_stride;
 `endif
 
     // -----------------------------------------------------------------------
@@ -692,16 +578,16 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always @(posedge clk) begin
         if (!reset) begin
             if (alloc_en)
-                `TRACE(3, ("%t: %s tbuf-fetch: alloc slot=%0d wid=%0d desc_a=0x%0h desc_b=0x%0h sparse=%0b\n",
-                    $time, INSTANCE_ID, slot_idx, req_wid, req_desc_a, req_desc_b, is_sparse))
+                `TRACE(3, ("%t: %s tbuf-fetch: alloc desc_a=0x%0h desc_b=0x%0h sparse=%0b\n",
+                    $time, INSTANCE_ID, req_desc_a, req_desc_b, is_sparse))
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
-                `TRACE(3, ("%t: %s tbuf-fetch: rd_req slot=%0d addr=0x%0h phase=%0d req_ctr=%0d\n",
-                    $time, INSTANCE_ID, send_slot_r, tcu_lmem_if.req_addr, send_state_r, req_ctr_r))
+                `TRACE(3, ("%t: %s tbuf-fetch: rd_req addr=0x%0h phase=%0d req_ctr=%0d\n",
+                    $time, INSTANCE_ID, tcu_lmem_if.req_data.addr, send_state_r, req_ctr_r))
             if (tcu_lmem_if.rsp_valid)
-                `TRACE(3, ("%t: %s tbuf-fetch: rd_rsp slot=%0d data[0]=0x%0h phase=%0d rsp_ctr=%0d\n",
-                    $time, INSTANCE_ID, send_slot_r, tcu_lmem_if.rsp_data[0 +: `XLEN], send_state_r, rsp_ctr_r))
+                `TRACE(3, ("%t: %s tbuf-fetch: rd_rsp data[0]=0x%0h phase=%0d rsp_ctr=%0d\n",
+                    $time, INSTANCE_ID, tcu_lmem_if.rsp_data.data[0 +: `XLEN], send_state_r, rsp_ctr_r))
             if (fetch_done_now)
-                `TRACE(3, ("%t: %s tbuf-fetch: slot=%0d READY\n", $time, INSTANCE_ID, send_slot_r))
+                `TRACE(3, ("%t: %s tbuf-fetch: READY\n", $time, INSTANCE_ID))
         end
     end
 `endif

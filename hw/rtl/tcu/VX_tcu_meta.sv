@@ -23,12 +23,10 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
 
     // Write port (meta_store instruction)
     input wire          wr_en,
-    input wire [`LOG2UP(`NUM_WARPS)-1:0] wr_wid,
-    input wire [3:0]    wr_idx, // flat store index within the warp's metadata block
+    input wire [3:0]    wr_idx, // flat store index within the metadata block
     input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] wr_data,
 
     // Read port (from FEDP path)
-    input wire [`LOG2UP(`NUM_WARPS)-1:0] rd_wid,
     input wire [3:0]    step_m,
     input wire [3:0]    step_k,
     output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_block
@@ -45,9 +43,6 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     localparam HALF_K_STEPS = TCU_K_STEPS / 2;
     localparam ADDRW_PW     = `CLOG2(PER_WARP_DEPTH);
     localparam NUM_COLS     = META_BLOCK_WIDTH / 32;
-    localparam BANK_DEPTH   = `NUM_WARPS;
-    localparam BANK_ADDRW   = `LOG2UP(BANK_DEPTH);
-    `UNUSED_PARAM (BANK_ADDRW)
 
     localparam TOTAL_COLS   = PER_WARP_DEPTH * NUM_COLS;
     localparam PACKED_WIDTH = TOTAL_COLS * 32;
@@ -73,7 +68,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         assign bank_sel = '0;
     end
 
-    // Write decode: flat store index → actual column, sub-store, bank-enable, write data
+    // Write decode: flat store index -> actual column, sub-store, bank-enable, write data
     wire [3:0] meta_actual_col_idx;
     wire [LG_SPC-1:0] sub_store_idx;
     if (STORES_PER_COL > 1) begin : g_meta_spc
@@ -131,7 +126,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
 
     VX_dp_ram #(
         .DATAW    (PACKED_WIDTH),
-        .SIZE     (BANK_DEPTH),
+        .SIZE     (1),
         .WRENW    (TOTAL_COLS),
         .LUTRAM   (1),
         .OUT_REG  (0),
@@ -143,9 +138,9 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         .read  (1'b1),
         .write (|packed_wren),
         .wren  (packed_wren),
-        .waddr (wr_wid),
+        .waddr (1'b0),
         .wdata (packed_wdata),
-        .raddr (rd_wid),
+        .raddr (1'b0),
         .rdata (packed_rdata)
     );
 

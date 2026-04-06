@@ -51,7 +51,7 @@ module VX_execute import VX_gpu_pkg::*; #(
 
 `ifdef TCU_WGMMA_ENABLE
     // TCU tile-buffer local-memory read port
-    VX_tcu_lmem_if.master   tcu_lmem_if,
+    VX_mem_bus_if.master    tcu_lmem_if,
 `endif
 
     // DCR-CSR interface

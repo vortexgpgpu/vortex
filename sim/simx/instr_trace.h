@@ -23,6 +23,8 @@
 
 namespace vortex {
 
+class Instr;
+
 class ITraceData {
 public:
     using Ptr = std::shared_ptr<ITraceData>;
@@ -81,6 +83,8 @@ public:
   OpType     op_type;
 
   ITraceData::Ptr data;
+
+  std::shared_ptr<Instr> instr_ptr;
 
   int  pid;
   bool sop;
