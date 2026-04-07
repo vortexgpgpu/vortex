@@ -61,7 +61,7 @@ Wait until build completes before running anything else in parallel terminals.
     CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=8
     ```
 
-- `make tests` and `make -C tests/regression` build test binaries using their default macros. If you intend to run a test with non-default `NUM_THREADS`, data types, or feature flags, rebuild that specific test explicitly before invoking it.
+- `make tests` and `make -C tests/regression` build test binaries using their default macros. If you intend to run a test with non-default thread count, data types, or feature flags use `CONFIGS` + `blackbox.sh`
 
 ## Testing & Debugging
 
@@ -94,12 +94,18 @@ make -C tests/regression/<test-name>
 ./ci/blackbox.sh --driver=rtlsim --app=<test-name> --debug=1 --log=run.log
 ```
 
-When using non-default compile-time macros, split the flow into an explicit rebuild step and a run step:
+When using non-default compile-time macros, pass them directly via `CONFIGS` on the same command:
 
 ```bash
-make -C tests/regression/<test-name> clean
-CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32 -DEXT_TCU_ENABLE" make -C tests/regression/<test-name>
-CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=<test-name> --threads=8 --args="..."
+CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32 -DEXT_TCU_ENABLE" \
+./ci/blackbox.sh --driver=simx --app=<test-name> --threads=8 --args="..."
+```
+
+### Roofline Perf Plot
+
+Example to run sgemm_tcu test with perf collection and generate roofline plot (Peak vs Actual FLOPS, Compute vs Memory BW)
+```bash
+/usr/bin/python3 ../perf/roofline.py --app=sgemm_tcu --driver=simx --cores=1 --warps=4 --threads=8 --issue-width=2 --n=32 --perf=1 --by-cycle --output=sgemm_tcu_roofline.png
 ```
 
 For multi-suite coverage, `ci/regression.sh` is the canonical source of tested configurations. Use it to discover supported parameter combinations before inventing ad hoc ones.
@@ -133,8 +139,8 @@ For parameters not exposed as explicit flags, use `CONFIGS` with `-D...` overrid
 
 Example: To enable TCU, select FEDP backend, and set I/O data types:
 ```bash
-make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DITYPE=bf16 -DOTYPE=fp32" \
+./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=4
 ```
 
 ### Editing default config files
