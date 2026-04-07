@@ -36,6 +36,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     VX_scoreboard_if scoreboard_if();
     VX_operands_if operands_if();
 
+    wire [NUM_EX_UNITS-1:0] dispatch_ready;
+
     VX_ibuffer #(
         .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID))),
         .ISSUE_ID (ISSUE_ID)
@@ -58,6 +60,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.scb_stalls),
     `endif
+        .dispatch_ready (dispatch_ready),
         .writeback_if   (writeback_if),
         .ibuffer_if     (ibuffer_if),
         .scoreboard_if  (scoreboard_if)
@@ -88,6 +91,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .perf_instrs    (issue_perf.dispatch_instrs),
     `endif
         .operands_if    (operands_if),
+        .dispatch_ready (dispatch_ready),
         .dispatch_if    (dispatch_if)
     );
 
