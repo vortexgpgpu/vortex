@@ -90,6 +90,18 @@ endif
 endif
 endif
 
+CONFIG_STAMP = config.stamp
+
+# Force rebuild when CONFIGS (defines) change between runs.
+$(CONFIG_STAMP): FORCE
+	@printf '%s\n' '$(VX_CFLAGS)' '$(CXXFLAGS)' > $@.tmp
+	@if ! cmp -s $@.tmp $@; then \
+	  mv $@.tmp $@; \
+	else \
+	  rm $@.tmp; \
+	fi
+FORCE:
+
 all: $(PROJECT) kernel.vxbin kernel.dump
 
 kernel.dump: kernel.elf
@@ -105,21 +117,21 @@ $(VORTEX_RT_PATH)/libvortex.so:
 	$(MAKE) -C $(VORTEX_RT_PATH)
 
 ifneq ($(filter %.S,$(VX_SRCS)),)
-kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
-	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o $@
+kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+	$(VX_CXX) $(VX_CFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(VX_LDFLAGS) -o $@
 else
-vx_start.o: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
+vx_start.o: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
 	$(VX_CXX) $(VX_CFLAGS) -c $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) -DNEED_GP -DNEED_TLS -DNEED_INITFINI $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@
 	$(VX_CXX) $(VX_CFLAGS) $@ $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@.elf
 	$(VX_CXX) $(VX_CFLAGS) $$($(KERNEL_STARTUP) $(VX_DP) $@.elf) $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@ && rm -f $@.elf
 
-kernel.elf: vx_start.o $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
+kernel.elf: vx_start.o $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
 	$(VX_CXX) $(VX_CFLAGS) vx_start.o $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@
 endif
 
-$(PROJECT): $(SRCS) $(VORTEX_RT_PATH)/libvortex.so
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+$(PROJECT): $(SRCS) $(VORTEX_RT_PATH)/libvortex.so $(CONFIG_STAMP)
+	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(LDFLAGS) -o $@
 
 run-simx: $(PROJECT) kernel.vxbin
 	LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
@@ -149,6 +161,7 @@ clean-host:
 	rm -rf $(PROJECT) *.o *.log .depend
 
 clean: clean-kernel clean-host
+	rm -f $(CONFIG_STAMP) $(CONFIG_STAMP).tmp
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

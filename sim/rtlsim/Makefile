@@ -140,7 +140,7 @@ $(CONFIG_FILE): force
 	@printf '%s\n' "$(VL_FLAGS)" "$(CXXFLAGS)" > $@.tmp
 	@if ! cmp -s $@.tmp $@; then \
 	  mv $@.tmp $@; \
-	  rm -rf $(DESTDIR)/$(PROJECT).obj_dir; \
+	  rm -rf $(DESTDIR)/$(PROJECT).obj_dir $(DESTDIR)/lib$(PROJECT).so.obj_dir; \
 	else \
 	  rm $@.tmp; \
 	fi
