@@ -108,7 +108,6 @@ public:
 	           uint32_t a_desc,
 	           uint32_t b_desc,
 	           const std::vector<reg_data_t>& rs1_data,
-	           const std::vector<reg_data_t>& rs2_data,
 	           const std::vector<reg_data_t>& rs3_data,
 	           std::vector<reg_data_t>& rd_data,
 	           ExeTraceData* trace_data,
