@@ -271,24 +271,35 @@ void Emulator::decode(instr_trace_t* trace) {
 
   // Fill trace metadata from the decoded instruction
   trace->instr_ptr = instr;
-  trace->fu_type   = instr->getFUType();
-  trace->op_type   = instr->getOpType();
-  trace->dst_reg   = instr->getDestReg();
+  trace->fu_type   = instr->get_fu_type();
+  trace->op_type   = instr->get_op_type();
+  trace->dst_reg   = instr->get_dest_reg();
   for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
-    trace->src_regs[i] = instr->getSrcReg(i);
+    trace->src_regs[i] = instr->get_src_reg(i);
   }
 
   // Conservative writeback: true if destination register exists
-  trace->wb = (instr->getDestReg().type != RegType::None);
+  trace->wb = (instr->get_dest_reg().type != RegType::None);
 
-  // Determine fetch_stall: with deferred execution, any instruction that
-  // can change control flow or has side effects must stall
-  trace->fetch_stall = true;
-  if (trace->fu_type == FUType::ALU && !std::holds_alternative<BrType>(trace->op_type)) {
-    trace->fetch_stall = false;
-  } else if (trace->fu_type == FUType::FPU) {
-    trace->fetch_stall = false;
+  // Determine is_wstall: mirrors RTL VX_decode.sv is_wstall.
+  // Branches, system calls, and SFU warp-control (except async barrier arrive)
+  // stall the warp until commit. All other instructions (ALU, FPU, LSU) do not.
+  {
+    bool wstall = false;
+    if (trace->fu_type == FUType::ALU && std::holds_alternative<BrType>(trace->op_type)) {
+      wstall = true;
+    } else if (trace->fu_type == FUType::SFU) {
+      wstall = true;
+      if (auto* wctl = std::get_if<WctlType>(&trace->op_type)) {
+        if (*wctl == WctlType::BAR) {
+          auto& args = std::get<IntrWctlArgs>(instr->get_args());
+          wstall = !args.is_bar_arrive;
   }
+      }
+    }
+    instr->set_wstall(wstall);
+  }
+  trace->fetch_stall = instr->is_wstall();
 }
 
 void Emulator::execute(instr_trace_t* trace) {

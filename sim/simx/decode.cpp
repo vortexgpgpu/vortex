@@ -34,8 +34,8 @@
 using namespace vortex;
 
 static op_string_t op_string(const Instr &instr) {
-  auto op_type = instr.getOpType();
-  auto instrArgs = instr.getArgs();
+  auto op_type = instr.get_op_type();
+  auto instrArgs = instr.get_args();
   return visit_var(op_type,
     [&](AluType alu_type)-> op_string_t {
       auto aluArgs = std::get<IntrAluArgs>(instrArgs);
@@ -501,13 +501,13 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
   auto sintr = ::op_string(instr);
   int sep = 0;
   os << sintr.op;
-  auto rd = instr.getDestReg();
+  auto rd = instr.get_dest_reg();
   if (rd.type != RegType::None) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << rd;
   }
   for (uint32_t i = 0; i < Instr::MAX_REG_SOURCES; ++i) {
-    auto rs = instr.getSrcReg(i);
+    auto rs = instr.get_src_reg(i);
     if (rs.type != RegType::None) {
       if (sep++ != 0) { os << ", "; } else { os << " "; }
       os << rs;
@@ -541,9 +541,9 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
   case Opcode::LUI:
   case Opcode::AUIPC: { // RV32I: LUI / AUIPC
     auto imm20 = (code >> shift_funct3) << shift_funct3;
-    instr->setOpType((op == Opcode::LUI) ? AluType::LUI : AluType::AUIPC);
-    instr->setArgs(IntrAluArgs{1, 0, imm20});
-    instr->setDestReg(rd, RegType::Integer);
+    instr->set_op_type((op == Opcode::LUI) ? AluType::LUI : AluType::AUIPC);
+    instr->set_args(IntrAluArgs{1, 0, imm20});
+    instr->set_dest_reg(rd, RegType::Integer);
   } break;
 #ifdef XLEN_64
   case Opcode::R_W:
@@ -563,23 +563,23 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
       } else {
         std::abort();
       }
-      instr->setOpType(AluType::CZERO);
-      instr->setArgs(IntrAluArgs{0, 0, imm});
+      instr->set_op_type(AluType::CZERO);
+      instr->set_args(IntrAluArgs{0, 0, imm});
     } else
     if ((op == Opcode::R || op == Opcode::R_W) && (funct7 & 0x1)) {
       switch (funct3) {
-      case 0: instr->setOpType(MdvType::MUL); break;
-      case 1: instr->setOpType(MdvType::MULH); break;
-      case 2: instr->setOpType(MdvType::MULHSU); break;
-      case 3: instr->setOpType(MdvType::MULHU); break;
-      case 4: instr->setOpType(MdvType::DIV); break;
-      case 5: instr->setOpType(MdvType::DIVU); break;
-      case 6: instr->setOpType(MdvType::REM); break;
-      case 7: instr->setOpType(MdvType::REMU); break;
+      case 0: instr->set_op_type(MdvType::MUL); break;
+      case 1: instr->set_op_type(MdvType::MULH); break;
+      case 2: instr->set_op_type(MdvType::MULHSU); break;
+      case 3: instr->set_op_type(MdvType::MULHU); break;
+      case 4: instr->set_op_type(MdvType::DIV); break;
+      case 5: instr->set_op_type(MdvType::DIVU); break;
+      case 6: instr->set_op_type(MdvType::REM); break;
+      case 7: instr->set_op_type(MdvType::REMU); break;
       default:
         std::abort();
       }
-      instr->setArgs(IntrMdvArgs{is_w});
+      instr->set_args(IntrMdvArgs{is_w});
     } else {
       uint32_t imm = 0;
       if (funct3 == 0x1 || funct3 == 0x5) {
@@ -593,23 +593,23 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
         imm = sext(imm12, width_i_imm);
       }
       switch (funct3) {
-      case 0: instr->setOpType((!is_imm && funct7 == 0x20) ? AluType::SUB : AluType::ADD); break;
-      case 1: instr->setOpType(AluType::SLL); break;
-      case 2: instr->setOpType(AluType::SLT); break;
-      case 3: instr->setOpType(AluType::SLTU); break;
-      case 4: instr->setOpType(AluType::XOR); break;
-      case 5: instr->setOpType((funct7 == 0x20) ? AluType::SRA : AluType::SRL); break;
-      case 6: instr->setOpType(AluType::OR); break;
-      case 7: instr->setOpType(AluType::AND); break;
+      case 0: instr->set_op_type((!is_imm && funct7 == 0x20) ? AluType::SUB : AluType::ADD); break;
+      case 1: instr->set_op_type(AluType::SLL); break;
+      case 2: instr->set_op_type(AluType::SLT); break;
+      case 3: instr->set_op_type(AluType::SLTU); break;
+      case 4: instr->set_op_type(AluType::XOR); break;
+      case 5: instr->set_op_type((funct7 == 0x20) ? AluType::SRA : AluType::SRL); break;
+      case 6: instr->set_op_type(AluType::OR); break;
+      case 7: instr->set_op_type(AluType::AND); break;
       default:
         std::abort();
       }
-      instr->setArgs(IntrAluArgs{is_imm, is_w, imm});
+      instr->set_args(IntrAluArgs{is_imm, is_w, imm});
     }
-    instr->setDestReg(rd, RegType::Integer);
-    instr->setSrcReg(0, rs1, RegType::Integer);
+    instr->set_dest_reg(rd, RegType::Integer);
+    instr->set_src_reg(0, rs1, RegType::Integer);
     if (!is_imm) {
-      instr->setSrcReg(1, rs2, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
     }
   } break;
   case Opcode::B: {
@@ -619,10 +619,10 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
     auto bit_12   = funct7 >> 6;
     auto imm12 = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
     auto addr = sext(imm12, width_i_imm+1);
-    instr->setOpType(BrType::BR);
-    instr->setArgs(IntrBrArgs{funct3, addr});
-    instr->setSrcReg(0, rs1, RegType::Integer);
-    instr->setSrcReg(1, rs2, RegType::Integer);
+    instr->set_op_type(BrType::BR);
+    instr->set_args(IntrBrArgs{funct3, addr});
+    instr->set_src_reg(0, rs1, RegType::Integer);
+    instr->set_src_reg(1, rs2, RegType::Integer);
   } break;
   case Opcode::JAL: {
     auto unordered  = code >> shift_funct3;
@@ -632,23 +632,23 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
     auto bit_20     = (unordered >> 19) & 0x1;
     auto imm20 = (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     auto addr = sext(imm20, width_j_imm+1);
-    instr->setOpType(BrType::JAL);
-    instr->setArgs(IntrBrArgs{0, addr});
-    instr->setDestReg(rd, RegType::Integer);
+    instr->set_op_type(BrType::JAL);
+    instr->set_args(IntrBrArgs{0, addr});
+    instr->set_dest_reg(rd, RegType::Integer);
   } break;
   case Opcode::JALR: {
     auto imm12 = code >> shift_rs2;
     auto addr = sext(imm12, width_i_imm);
-    instr->setOpType(BrType::JALR);
-    instr->setArgs(IntrBrArgs{0, addr});
-    instr->setDestReg(rd, RegType::Integer);
-    instr->setSrcReg(0, rs1, RegType::Integer);
+    instr->set_op_type(BrType::JALR);
+    instr->set_args(IntrBrArgs{0, addr});
+    instr->set_dest_reg(rd, RegType::Integer);
+    instr->set_src_reg(0, rs1, RegType::Integer);
   } break;
   case Opcode::L:
   case Opcode::FL:
   case Opcode::S:
   case Opcode::FS: {
-    instr->setFUType(FUType::LSU);
+    instr->set_fu_type(FUType::LSU);
     bool is_float = (op == Opcode::FL || op == Opcode::FS);
     bool is_load = (op == Opcode::L || op == Opcode::FL);
   #ifdef EXT_V_ENABLE
@@ -665,189 +665,189 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
       default:
         std::abort();
       }
-      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
       auto mop = (code >> shift_vmop) & mask_vmop;
       switch (mop) {
       case 0b00:
-        instr->setOpType(is_load ? VlsType::VL : VlsType::VS);
+        instr->set_op_type(is_load ? VlsType::VL : VlsType::VS);
         instArgs.umop = rs2;
         break;
       case 0b10:
-        instr->setOpType(is_load ? VlsType::VLS : VlsType::VSS);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(is_load ? VlsType::VLS : VlsType::VSS);
+        instr->set_src_reg(1, rs2, RegType::Integer);
         break;
       case 0b01:
       case 0b11:
-        instr->setOpType(is_load ? VlsType::VLX : VlsType::VSX);
-        instr->setSrcReg(1, rs2, RegType::Vector);
+        instr->set_op_type(is_load ? VlsType::VLX : VlsType::VSX);
+        instr->set_src_reg(1, rs2, RegType::Vector);
         break;
       }
       if (is_load) {
-        instr->setDestReg(rd, RegType::Vector);
+        instr->set_dest_reg(rd, RegType::Vector);
       } else {
-        instr->setSrcReg(2, rd, RegType::Vector);
+        instr->set_src_reg(2, rd, RegType::Vector);
       }
-      instr->setArgs(instArgs);
+      instr->set_args(instArgs);
     } else
   #endif // EXT_V_ENABLE
     {
-      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
       uint32_t imm12 = 0;
       if (is_load) {
         imm12 = code >> shift_rs2;
-        instr->setDestReg(rd, is_float ? RegType::Float : RegType::Integer);
+        instr->set_dest_reg(rd, is_float ? RegType::Float : RegType::Integer);
       } else {
         imm12 = (funct7 << width_reg) | rd;
-        instr->setSrcReg(1, rs2, is_float ? RegType::Float : RegType::Integer);
+        instr->set_src_reg(1, rs2, is_float ? RegType::Float : RegType::Integer);
       }
       auto offset = sext(imm12, width_i_imm);
-      instr->setOpType(is_load ? LsuType::LOAD : LsuType::STORE);
-      instr->setArgs(IntrLsuArgs{funct3, is_float, offset, 0});
+      instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
+      instr->set_args(IntrLsuArgs{funct3, is_float, offset, 0});
     }
   } break;
   case Opcode::FENCE: {
-    instr->setFUType(FUType::LSU);
-    instr->setOpType(LsuType::FENCE);
-    instr->setArgs(IntrLsuArgs{0, 0, 0, 0});
+    instr->set_fu_type(FUType::LSU);
+    instr->set_op_type(LsuType::FENCE);
+    instr->set_args(IntrLsuArgs{0, 0, 0, 0});
   } break;
   case Opcode::AMO: {
-    instr->setFUType(FUType::LSU);
+    instr->set_fu_type(FUType::LSU);
     uint32_t aq = (code >> shift_aq) & mask_aq;
     uint32_t rl = (code >> shift_rl) & mask_rl;
     switch (funct5) {
-    case 0x00: instr->setOpType(AmoType::AMOADD); break;
-    case 0x01: instr->setOpType(AmoType::AMOSWAP); break;
-    case 0x02: instr->setOpType(AmoType::LR); break;
-    case 0x03: instr->setOpType(AmoType::SC); break;
-    case 0x04: instr->setOpType(AmoType::AMOXOR); break;
-    case 0x08: instr->setOpType(AmoType::AMOOR); break;
-    case 0x0c: instr->setOpType(AmoType::AMOAND); break;
-    case 0x10: instr->setOpType(AmoType::AMOMIN); break;
-    case 0x14: instr->setOpType(AmoType::AMOMAX); break;
-    case 0x18: instr->setOpType(AmoType::AMOMINU); break;
-    case 0x1c: instr->setOpType(AmoType::AMOMAXU); break;
+    case 0x00: instr->set_op_type(AmoType::AMOADD); break;
+    case 0x01: instr->set_op_type(AmoType::AMOSWAP); break;
+    case 0x02: instr->set_op_type(AmoType::LR); break;
+    case 0x03: instr->set_op_type(AmoType::SC); break;
+    case 0x04: instr->set_op_type(AmoType::AMOXOR); break;
+    case 0x08: instr->set_op_type(AmoType::AMOOR); break;
+    case 0x0c: instr->set_op_type(AmoType::AMOAND); break;
+    case 0x10: instr->set_op_type(AmoType::AMOMIN); break;
+    case 0x14: instr->set_op_type(AmoType::AMOMAX); break;
+    case 0x18: instr->set_op_type(AmoType::AMOMINU); break;
+    case 0x1c: instr->set_op_type(AmoType::AMOMAXU); break;
     default:
       std::abort();
     }
-    instr->setArgs(IntrAmoArgs{funct3, aq, rl});
-    instr->setDestReg(rd, RegType::Integer);
-    instr->setSrcReg(0, rs1, RegType::Integer);
-    instr->setSrcReg(1, rs2, RegType::Integer);
+    instr->set_args(IntrAmoArgs{funct3, aq, rl});
+    instr->set_dest_reg(rd, RegType::Integer);
+    instr->set_src_reg(0, rs1, RegType::Integer);
+    instr->set_src_reg(1, rs2, RegType::Integer);
   } break;
   case Opcode::SYS: {
     if (funct3 != 0) { // CSRRW/CSRRS/CSRRC
-      instr->setFUType(FUType::SFU);
-      instr->setDestReg(rd, RegType::Integer);
+      instr->set_fu_type(FUType::SFU);
+      instr->set_dest_reg(rd, RegType::Integer);
       switch (funct3) {
-      case 1: case 5: instr->setOpType(CsrType::CSRRW); break;
-      case 2: case 6: instr->setOpType(CsrType::CSRRS); break;
-      case 3: case 7: instr->setOpType(CsrType::CSRRC); break;
+      case 1: case 5: instr->set_op_type(CsrType::CSRRW); break;
+      case 2: case 6: instr->set_op_type(CsrType::CSRRS); break;
+      case 3: case 7: instr->set_op_type(CsrType::CSRRC); break;
       default:
         std::abort();
       }
       auto imm12 = code >> shift_rs2;
       if (funct3 < 5) {
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setArgs(IntrCsrArgs{0, 0, imm12});
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_args(IntrCsrArgs{0, 0, imm12});
       } else { // zimm
-        instr->setArgs(IntrCsrArgs{1, rs1, imm12});
+        instr->set_args(IntrCsrArgs{1, rs1, imm12});
       }
     } else { // ECALL/EBREACK/URET/SRET/MRET
       auto imm12 = code >> shift_rs2;
-      instr->setOpType(BrType::SYS);
-      instr->setArgs(IntrBrArgs{0, imm12});
+      instr->set_op_type(BrType::SYS);
+      instr->set_args(IntrBrArgs{0, imm12});
     }
   } break;
   case Opcode::FCI: {
-    instr->setFUType(FUType::FPU);
-    instr->setArgs(IntrFpuArgs{funct3, rs2, (funct7 & 0x1)});
+    instr->set_fu_type(FUType::FPU);
+    instr->set_args(IntrFpuArgs{funct3, rs2, (funct7 & 0x1)});
     switch (funct7) {
     case 0x00: // RV32F: FADD.S
     case 0x01: // RV32D: FADD.D
-      instr->setOpType(FpuType::FADD);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FADD);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x04: // RV32F: FSUB.S
     case 0x05: // RV32D: FSUB.D
-      instr->setOpType(FpuType::FSUB);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FSUB);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x08: // RV32F: FMUL.S
     case 0x09: // RV32D: FMUL.D
-      instr->setOpType(FpuType::FMUL);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FMUL);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x10: // RV32F: FSGNJ.S, FSGNJN.S, FSGNJX.S
     case 0x11: // RV32D: FSGNJ.D, FSGNJN.D, FSGNJX.D
-      instr->setOpType(FpuType::FSGNJ);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FSGNJ);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x14: // RV32F: FMIN.S, FMAX.S
     case 0x15: // RV32D: FMIN.D, FMAX.D
-      instr->setOpType(FpuType::FMINMAX);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FMINMAX);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x0c: // RV32F: FDIV.S
     case 0x0d: // RV32D: FDIV.D
-      instr->setOpType(FpuType::FDIV);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FDIV);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x20: // FCVT.S.D
     case 0x21: // FCVT.D.S
-      instr->setOpType(FpuType::F2F);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
+      instr->set_op_type(FpuType::F2F);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
       break;
     case 0x2c: // FSQRT.S
     case 0x2d: // FSQRT.D
-      instr->setOpType(FpuType::FSQRT);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
+      instr->set_op_type(FpuType::FSQRT);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
       break;
     case 0x50: // FLE.S, FLT.S, FEQ.S
     case 0x51: // FLE.D, FLT.D, FEQ.D
-      instr->setOpType(FpuType::FCMP);
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FCMP);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x60: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
     case 0x61: // FCVT.W.S, FCVT.WU.S, FCVT.L.S, FCVT.LU.S
-      instr->setOpType(FpuType::F2I);
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::None);
+      instr->set_op_type(FpuType::F2I);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::None);
       break;
     case 0x68: // FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
     case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
-      instr->setOpType(FpuType::I2F);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::None);
+      instr->set_op_type(FpuType::I2F);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::None);
       break;
     case 0x70: // FCLASS.S, FMV.X.S
     case 0x71: // FCLASS.D, FMV.X.D
-      instr->setOpType((funct3 != 0) ? FpuType::FCLASS : FpuType::FMVXW);
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Float);
+      instr->set_op_type((funct3 != 0) ? FpuType::FCLASS : FpuType::FMVXW);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Float);
       break;
     case 0x78: // FMV.S.X
     case 0x79: // FMV.D.X
-      instr->setOpType(FpuType::FMVWX);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->set_op_type(FpuType::FMVWX);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Integer);
       break;
     default:
       std::abort();
@@ -857,85 +857,85 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
   case Opcode::FMSUB:
   case Opcode::FNMADD:
   case Opcode::FNMSUB: {
-    instr->setFUType(FUType::FPU);
-    instr->setOpType((op == Opcode::FMADD) ? FpuType::FMADD :
+    instr->set_fu_type(FUType::FPU);
+    instr->set_op_type((op == Opcode::FMADD) ? FpuType::FMADD :
                      (op == Opcode::FMSUB) ? FpuType::FMSUB :
                      (op == Opcode::FNMADD) ? FpuType::FNMADD : FpuType::FNMSUB);
-    instr->setArgs(IntrFpuArgs{funct3, funct2, (funct7 & 0x1)});
-    instr->setDestReg(rd, RegType::Float);
-    instr->setSrcReg(0, rs1, RegType::Float);
-    instr->setSrcReg(1, rs2, RegType::Float);
-    instr->setSrcReg(2, rs3, RegType::Float);
+    instr->set_args(IntrFpuArgs{funct3, funct2, (funct7 & 0x1)});
+    instr->set_dest_reg(rd, RegType::Float);
+    instr->set_src_reg(0, rs1, RegType::Float);
+    instr->set_src_reg(1, rs2, RegType::Float);
+    instr->set_src_reg(2, rs3, RegType::Float);
   } break;
 #ifdef EXT_V_ENABLE
   case Opcode::VSET: {
-    instr->setFUType(FUType::VPU);
+    instr->set_fu_type(FUType::VPU);
     uint32_t vm = (code >> shift_vm) & mask_vm;
     switch (funct3) {
     case 0: { // OPIVV
-      instr->setOpType(VopType::OPIVV);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Vector);
-      instr->setSrcReg(1, rs2, RegType::Vector);
+      instr->set_op_type(VopType::OPIVV);
+      instr->set_args(IntrVopArgs{vm, funct6, 0});
+      instr->set_dest_reg(rd, RegType::Vector);
+      instr->set_src_reg(0, rs1, RegType::Vector);
+      instr->set_src_reg(1, rs2, RegType::Vector);
     } break;
     case 1: { // OPFVV
-      instr->setOpType(VopType::OPFVV);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, (funct6 == 16) ? RegType::Float : RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Vector);
-      instr->setSrcReg(1, rs2, RegType::Vector);
+      instr->set_op_type(VopType::OPFVV);
+      instr->set_args(IntrVopArgs{vm, funct6, 0});
+      instr->set_dest_reg(rd, (funct6 == 16) ? RegType::Float : RegType::Vector);
+      instr->set_src_reg(0, rs1, RegType::Vector);
+      instr->set_src_reg(1, rs2, RegType::Vector);
     } break;
     case 2: { // OPMVV
-      instr->setOpType(VopType::OPMVV);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, (funct6 == 16) ? RegType::Integer : RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Vector);
-      instr->setSrcReg(1, rs2, RegType::Vector);
+      instr->set_op_type(VopType::OPMVV);
+      instr->set_args(IntrVopArgs{vm, funct6, 0});
+      instr->set_dest_reg(rd, (funct6 == 16) ? RegType::Integer : RegType::Vector);
+      instr->set_src_reg(0, rs1, RegType::Vector);
+      instr->set_src_reg(1, rs2, RegType::Vector);
     } break;
     case 3: { // OPIVI
-      instr->setOpType(VopType::OPIVI);
-      instr->setArgs(IntrVopArgs{vm, funct6, rs1});
-      instr->setDestReg(rd, RegType::Vector);
-      instr->setSrcReg(1, rs2, RegType::Vector);
+      instr->set_op_type(VopType::OPIVI);
+      instr->set_args(IntrVopArgs{vm, funct6, rs1});
+      instr->set_dest_reg(rd, RegType::Vector);
+      instr->set_src_reg(1, rs2, RegType::Vector);
     } break;
     case 4: { // OPIVX
-      instr->setOpType(VopType::OPIVX);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::Vector);
+      instr->set_op_type(VopType::OPIVX);
+      instr->set_args(IntrVopArgs{vm, funct6, 0});
+      instr->set_dest_reg(rd, RegType::Vector);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Vector);
     } break;
     case 5: { // OPFVF
-      instr->setOpType(VopType::OPFVF);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Vector);
+      instr->set_op_type(VopType::OPFVF);
+      instr->set_args(IntrVopArgs{vm, funct6, 0});
+      instr->set_dest_reg(rd, RegType::Vector);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Vector);
     } break;
     case 6: { // OPMVX
-      instr->setOpType(VopType::OPMVX);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, (funct6 == 16) ? RegType::Integer : RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::Vector);
+      instr->set_op_type(VopType::OPMVX);
+      instr->set_args(IntrVopArgs{vm, funct6, 0});
+      instr->set_dest_reg(rd, (funct6 == 16) ? RegType::Integer : RegType::Vector);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Vector);
     } break;
     case 7: {
-      instr->setDestReg(rd, RegType::Integer);
+      instr->set_dest_reg(rd, RegType::Integer);
       if ((code >> 30) == 0b10) { // vsetvl
-        instr->setOpType(VsetType::VSETVL);
-        instr->setArgs(IntrVsetArgs{0, 0});
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(VsetType::VSETVL);
+        instr->set_args(IntrVsetArgs{0, 0});
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
       } else {
         auto zimm = (code >> shift_vzimm) & mask_vzimm;
         if ((code >> 30) == 0b11) { // vsetivli
-          instr->setOpType(VsetType::VSETIVLI);
-          instr->setArgs(IntrVsetArgs{zimm, rs1});
+          instr->set_op_type(VsetType::VSETIVLI);
+          instr->set_args(IntrVsetArgs{zimm, rs1});
         } else { // vsetvli
-          instr->setOpType(VsetType::VSETVLI);
-          instr->setArgs(IntrVsetArgs{zimm, 0});
-          instr->setSrcReg(0, rs1, RegType::Integer);
+          instr->set_op_type(VsetType::VSETVLI);
+          instr->set_args(IntrVsetArgs{zimm, 0});
+          instr->set_src_reg(0, rs1, RegType::Integer);
         }
       }
     } break;
@@ -947,80 +947,80 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
   case Opcode::EXT1: {
     switch (funct7) {
     case 0: {
-      instr->setFUType(FUType::SFU);
+      instr->set_fu_type(FUType::SFU);
       IntrWctlArgs wctlArgs{};
       switch (funct3) {
       case 0: // TMC
-        instr->setOpType(WctlType::TMC);
-        instr->setSrcReg(0, rs1, RegType::Integer);
+        instr->set_op_type(WctlType::TMC);
+        instr->set_src_reg(0, rs1, RegType::Integer);
         break;
       case 1: // WSPAWN
-        instr->setOpType(WctlType::WSPAWN);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(WctlType::WSPAWN);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
         break;
       case 2: // SPLIT
-        instr->setOpType(WctlType::SPLIT);
-        instr->setDestReg(rd, RegType::Integer);
-        instr->setSrcReg(0, rs1, RegType::Integer);
+        instr->set_op_type(WctlType::SPLIT);
+        instr->set_dest_reg(rd, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer);
         wctlArgs.is_cond_neg = (rs2 != 0);
         break;
       case 3: // JOIN
-        instr->setOpType(WctlType::JOIN);
-        instr->setSrcReg(0, rs1, RegType::Integer);
+        instr->set_op_type(WctlType::JOIN);
+        instr->set_src_reg(0, rs1, RegType::Integer);
         break;
       case 4: // BAR
-        instr->setOpType(WctlType::BAR);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(WctlType::BAR);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
         wctlArgs.is_sync_bar = 1;
         wctlArgs.is_bar_arrive = 0;
         break;
       case 5: // PRED
-        instr->setOpType(WctlType::PRED);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(WctlType::PRED);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
         wctlArgs.is_cond_neg = (rd != 0);
         break;
       case 6: // BAR ARRIVE / WAIT
-        instr->setOpType(WctlType::BAR);
-        instr->setDestReg(rd, RegType::Integer);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(WctlType::BAR);
+        instr->set_dest_reg(rd, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
         wctlArgs.is_sync_bar = 0;
         wctlArgs.is_bar_arrive = (rd != 0);
         break;
       case 7: // WSYNC
-        instr->setOpType(WctlType::WSYNC);
+        instr->set_op_type(WctlType::WSYNC);
         break;
       default:
         std::abort();
       }
-      instr->setArgs(wctlArgs);
+      instr->set_args(wctlArgs);
     } break;
     case 1: { // VOTE
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
       switch (funct3) {
-      case 0: instr->setOpType(VoteType::ALL); break;
-      case 1: instr->setOpType(VoteType::ANY); break;
-      case 2: instr->setOpType(VoteType::UNI); break;
-      case 3: instr->setOpType(VoteType::BAL); break;
+      case 0: instr->set_op_type(VoteType::ALL); break;
+      case 1: instr->set_op_type(VoteType::ANY); break;
+      case 2: instr->set_op_type(VoteType::UNI); break;
+      case 3: instr->set_op_type(VoteType::BAL); break;
       case 4:
-        instr->setOpType(ShflType::UP);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(ShflType::UP);
+        instr->set_src_reg(1, rs2, RegType::Integer);
         break;
       case 5:
-        instr->setOpType(ShflType::DOWN);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(ShflType::DOWN);
+        instr->set_src_reg(1, rs2, RegType::Integer);
         break;
       case 6:
-        instr->setOpType(ShflType::BFLY);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(ShflType::BFLY);
+        instr->set_src_reg(1, rs2, RegType::Integer);
         break;
       case 7:
-        instr->setOpType(ShflType::IDX);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(ShflType::IDX);
+        instr->set_src_reg(1, rs2, RegType::Integer);
         break;
       default:
         std::abort();
@@ -1028,59 +1028,59 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
     } break;
 #ifdef EXT_DXA_ENABLE
     case 3: { // DXA issue (wgather-based: single instruction carries all args)
-      instr->setFUType(FUType::SFU);
-        IntrDxaArgs dxaArgs{};
-        instr->setArgs(dxaArgs);
-      instr->setOpType(DxaType::ISSUE);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::Integer);
+      instr->set_fu_type(FUType::SFU);
+      IntrDxaArgs dxaArgs{};
+      instr->set_args(dxaArgs);
+      instr->set_op_type(DxaType::ISSUE);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
     } break;
 #endif
   #ifdef EXT_TCU_ENABLE
     case 2: {
-      instr->setFUType(FUType::TCU);
+      instr->set_fu_type(FUType::TCU);
       switch (funct3) {
       case 0: { // WMMA_SYNC / WMMA_SP_SYNC — single macro Instr, sequencer expands to micro-ops
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
-              instr->setOpType(TcuType::WMMA);
-        instr->setArgs(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, 0, 0, 0});
-        instr->setMacroOp();
+        instr->set_op_type(TcuType::WMMA);
+        instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, 0, 0, 0});
+        instr->set_macro_op();
 
       } break;
-  #ifdef TCU_WGMMA_ENABLE
+    #ifdef TCU_WGMMA_ENABLE
       case 1: { // WGMMA_SYNC — single macro Instr, sequencer expands to micro-ops
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
         uint32_t cd_nregs = (rs2 >> 1) & 0x3;
-        bool is_a_smem  = (rs2 >> 3) & 1;
-        instr->setOpType(TcuType::WGMMA);
-        instr->setArgs(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0});
-        instr->setMacroOp();
+        bool is_a_smem = (rs2 >> 3) & 1;
+        instr->set_op_type(TcuType::WGMMA);
+        instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0});
+        instr->set_macro_op();
 
       } break;
-  #endif // TCU_WGMMA_ENABLE
+    #endif // TCU_WGMMA_ENABLE
       default:
         std::abort();
       }
     } break;
   #endif
     case 4: { // Load/Store Packing extensions
-      instr->setFUType(FUType::LSU);
+      instr->set_fu_type(FUType::LSU);
       switch (funct3) {
       case 1: { // vx_packlb_f: pack 4 strided bytes into FP register
-        instr->setOpType(LsuType::LOAD);
-        instr->setArgs(IntrLsuArgs{0, 1, 0, 1});
-        instr->setDestReg(rd, RegType::Float);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(LsuType::LOAD);
+        instr->set_args(IntrLsuArgs{0, 1, 0, 1});
+        instr->set_dest_reg(rd, RegType::Float);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
       } break;
       case 2: { // vx_packlh_f: pack 2 strided halfwords into FP register
-        instr->setOpType(LsuType::LOAD);
-        instr->setArgs(IntrLsuArgs{0, 1, 0, 2});
-        instr->setDestReg(rd, RegType::Float);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
+        instr->set_op_type(LsuType::LOAD);
+        instr->set_args(IntrLsuArgs{0, 1, 0, 2});
+        instr->set_dest_reg(rd, RegType::Float);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
       } break;
       default:
         std::abort();
@@ -1093,14 +1093,14 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
   case Opcode::EXT2: {
     switch (funct3) {
     case 0: { // WGATHER
-      instr->setOpType(WgatherType::WGATHER);
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::Integer);
-      instr->setSrcReg(2, rs3, RegType::Integer);
+      instr->set_op_type(WgatherType::WGATHER);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
+      instr->set_src_reg(2, rs3, RegType::Integer);
       IntrWgatherArgs wgArgs{};
       wgArgs.src_lane = funct2;
-      instr->setArgs(wgArgs);
+      instr->set_args(wgArgs);
     } break;
     default:
       std::abort();

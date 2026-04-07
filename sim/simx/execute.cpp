@@ -119,21 +119,21 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
 
   auto next_pc = warp.PC + 4;
 
-  auto fu_type = instr.getFUType();
-  auto op_type = instr.getOpType();
-  auto instrArgs = instr.getArgs();
-  auto rdest  = instr.getDestReg();
-  auto rsrc0  = instr.getSrcReg(0);
-  auto rsrc1  = instr.getSrcReg(1);
-  auto rsrc2  = instr.getSrcReg(2);
+  auto fu_type = instr.get_fu_type();
+  auto op_type = instr.get_op_type();
+  auto instrArgs = instr.get_args();
+  auto rdest  = instr.get_dest_reg();
+  auto rsrc0  = instr.get_src_reg(0);
+  auto rsrc1  = instr.get_src_reg(1);
+  auto rsrc2  = instr.get_src_reg(2);
 
   auto num_threads = arch_.num_threads();
-  auto exec_tmask = instr.hasTmask() ? (warp.tmask & instr.getTmask()) : warp.tmask;
+  auto exec_tmask = instr.has_tmask() ? (warp.tmask & instr.get_tmask()) : warp.tmask;
   auto operand_tmask = warp.tmask;
 
   // create instruction trace
   auto trace_alloc = core_->trace_pool().allocate(1);
-  auto trace = new (trace_alloc) instr_trace_t(instr.getUUID(), arch_);
+  auto trace = new (trace_alloc) instr_trace_t(instr.get_uuid(), arch_);
   trace->fu_type  = fu_type;
   trace->op_type  = op_type;
   trace->cid      = core_->id();
@@ -150,10 +150,10 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
 
   if (instr.is_uop()) {
     DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << exec_tmask
-          << ", PC=0x" << std::hex << warp.PC << std::dec << ", parent=#" << instr.getParentUUID() << " (#" << instr.getUUID() << ")");
+          << ", PC=0x" << std::hex << warp.PC << std::dec << ", parent=#" << instr.get_parent_uuid() << " (#" << instr.get_uuid() << ")");
   } else {
     DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << exec_tmask
-          << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << instr.getUUID() << ")");
+          << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << instr.get_uuid() << ")");
   }
 
   // fetch register values
@@ -472,6 +472,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
         next_pc = warp.PC + offset;
         trace->fetch_stall = true;
+        // stats
+        core_->perf_stats().branches += 1;
         rd_write = true;
       } break;
       case BrType::JALR: { // RV32I: JALR
