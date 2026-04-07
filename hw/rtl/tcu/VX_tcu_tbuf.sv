@@ -61,6 +61,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [1:0]               req_cd_nregs,
     input  wire [`XLEN-1:0]         req_desc_a,
     input  wire [`XLEN-1:0]         req_desc_b,
+    input  wire                     req_a_is_smem,
 
     // LMEM read port
     VX_mem_bus_if.master            tcu_lmem_if,
@@ -134,6 +135,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_fmt_s      (req_fmt_s),
         .req_desc_a     (req_desc_a),
         .req_desc_b     (req_desc_b),
+        .req_a_is_smem(req_a_is_smem),
         .tcu_lmem_if    (tcu_lmem_if),
         .tbuf_hit       (tbuf_hit),
         .tbuf_ready     (tbuf_ready),

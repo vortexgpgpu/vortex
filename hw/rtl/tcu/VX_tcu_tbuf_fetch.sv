@@ -54,6 +54,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [3:0]               req_fmt_s,
     input  wire [`XLEN-1:0]         req_desc_a,
     input  wire [`XLEN-1:0]         req_desc_b,
+    input  wire                     req_a_is_smem,
 
     // LMEM bank-parallel read port (1-cycle latency, pipelined)
     VX_mem_bus_if.master            tcu_lmem_if,
@@ -131,6 +132,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [`XLEN-1:0]           slot_desc_b;
     logic                       slot_fetch_done;
     logic                       alloc_pending;
+    logic                       slot_a_from_smem;
     logic [BANK_ADDR_WIDTH-1:0] slot_a_row_base;
     logic [BANK_ADDR_WIDTH-1:0] slot_b_row_base;
 
@@ -147,8 +149,10 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire is_first_uop = (req_step_m == '0) && (req_step_n == '0) && (req_step_k == '0);
 
-    // Descriptor match: always validate against current slot contents.
-    wire desc_match = (slot_desc_a == req_desc_a) && (slot_desc_b == req_desc_b);
+    // Descriptor match: validate against current slot contents.
+    // RS mode (a_from_smem=0): A comes from registers, only check B descriptor.
+    wire desc_match = (slot_desc_b == req_desc_b)
+                   && (req_a_is_smem ? (slot_desc_a == req_desc_a) : 1'b1);
 
     // Hit: slot is valid, data ready, and descriptors match.
     assign tbuf_hit = slot_valid && slot_fetch_done && desc_match;
@@ -334,7 +338,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     req_ctr_r      <= '0;
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
-                    send_state_r   <= SEND_FETCH_A;
+                    // RS mode: A comes from registers, skip FETCH_A
+                    send_state_r   <= slot_a_from_smem ? SEND_FETCH_A : SEND_FETCH_B;
                 end
             end
             // -----------------------------------------------------------------
@@ -404,6 +409,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (alloc_en) begin
                 slot_valid      <= 1'b1;
                 slot_fetch_done <= 1'b0;
+                slot_a_from_smem <= req_a_is_smem;
                 slot_desc_a     <= req_desc_a;
                 slot_desc_b     <= req_desc_b;
                 slot_a_row_base <= desc_a_row_base;
