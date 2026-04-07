@@ -71,6 +71,14 @@ CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -L$(VORTEX_RT_PATH) -lvortex
 
+# Auto-rebuild when CONFIGS changes (avoids manual 'make clean')
+CONFIGS_STAMP := .configs.stamp
+CURRENT_CONFIGS := $(CONFIGS)
+PREV_CONFIGS := $(shell cat $(CONFIGS_STAMP) 2>/dev/null)
+ifneq ($(CURRENT_CONFIGS),$(PREV_CONFIGS))
+$(shell echo '$(CURRENT_CONFIGS)' > $(CONFIGS_STAMP))
+endif
+
 # Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
@@ -105,21 +113,21 @@ $(VORTEX_RT_PATH)/libvortex.so:
 	$(MAKE) -C $(VORTEX_RT_PATH)
 
 ifneq ($(filter %.S,$(VX_SRCS)),)
-kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
-	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o $@
+kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIGS_STAMP)
+	$(VX_CXX) $(VX_CFLAGS) $(filter-out $(CONFIGS_STAMP),$^) $(VX_LDFLAGS) -o $@
 else
-vx_start.o: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
+vx_start.o: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIGS_STAMP)
 	$(VX_CXX) $(VX_CFLAGS) -c $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) -DNEED_GP -DNEED_TLS -DNEED_INITFINI $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@
 	$(VX_CXX) $(VX_CFLAGS) $@ $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@.elf
 	$(VX_CXX) $(VX_CFLAGS) $$($(KERNEL_STARTUP) $(VX_DP) $@.elf) $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@ && rm -f $@.elf
 
-kernel.elf: vx_start.o $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a
+kernel.elf: vx_start.o $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIGS_STAMP)
 	$(VX_CXX) $(VX_CFLAGS) vx_start.o $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@
 endif
 
-$(PROJECT): $(SRCS) $(VORTEX_RT_PATH)/libvortex.so
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+$(PROJECT): $(SRCS) $(VORTEX_RT_PATH)/libvortex.so $(CONFIGS_STAMP)
+	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIGS_STAMP),$^) $(LDFLAGS) -o $@
 
 run-simx: $(PROJECT) kernel.vxbin
 	LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
@@ -146,7 +154,7 @@ clean-kernel:
 	rm -rf *.elf *.vxbin *.dump
 
 clean-host:
-	rm -rf $(PROJECT) *.o *.log .depend
+	rm -rf $(PROJECT) *.o *.log .depend $(CONFIGS_STAMP)
 
 clean: clean-kernel clean-host
 
