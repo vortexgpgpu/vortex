@@ -354,6 +354,7 @@ void Core::issue() {
   for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
     bool has_instrs = false;
     BitVector<> ready_set(PER_ISSUE_WARPS);
+    BitVector<> suppress_set(PER_ISSUE_WARPS);
     for (uint32_t w = 0; w < PER_ISSUE_WARPS; ++w) {
       uint32_t wid = w * ISSUE_WIDTH + iw;
       auto& ibuffer = ibuffers_.at(wid);
@@ -384,12 +385,23 @@ void Core::issue() {
       } else {
         uop_trace->log_once(false);
         ready_set.set(w); // mark instruction as ready
+        // suppress warps whose target FU dispatcher input is full
+        if (dispatchers_.at((int)uop_trace->fu_type)->Inputs.at(iw).full()) {
+          suppress_set.set(w);
+        }
       }
     }
 
     if (ready_set.any()) {
+      // Only suppress when at least one warp can issue to a free FU;
+      // otherwise let all warps through so the pipeline absorbs transient stalls.
+      BitVector<> eff_suppress(PER_ISSUE_WARPS);
+      auto unsuppressed = ready_set & ~suppress_set;
+      if (unsuppressed.any()) {
+        eff_suppress = suppress_set;
+      }
       // select one instruction from ready set
-      auto w = ibuffer_arbs_.at(iw).grant(ready_set);
+      auto w = ibuffer_arbs_.at(iw).grant(ready_set, eff_suppress);
       uint32_t wid = w * ISSUE_WIDTH + iw;
       auto& ibuffer = ibuffers_.at(wid);
       auto trace = ibuffer->peek();

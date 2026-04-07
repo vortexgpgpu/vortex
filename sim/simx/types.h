@@ -851,6 +851,11 @@ public:
   IArbiterImpl() {}
   virtual ~IArbiterImpl() {}
   virtual uint32_t grant(const BitVector<>& requests) = 0;
+  virtual uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) {
+    // Default: ignore suppress mask, subclasses may override.
+    __unused (suppress);
+    return this->grant(requests);
+  }
   virtual void reset() = 0;
 };
 
@@ -968,17 +973,25 @@ public:
   }
 
   uint32_t grant(const BitVector<>& requests) override {
+    BitVector<> no_suppress(size_);
+    return this->grant(requests, no_suppress);
+  }
+
+  uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) override {
     assert(requests.size() == size_);
-    // Greedy: keep granting the same requester if still active
-    if (last_grant_ < size_ && requests.test(last_grant_)) {
+    assert(suppress.size() == size_);
+    // Effective requests: eligible for selection (not suppressed).
+    // Age tracking still uses `requests` so suppressed warps keep aging.
+    // Greedy: keep granting the same requester if still active and unsuppressed
+    if (last_grant_ < size_ && requests.test(last_grant_) && !suppress.test(last_grant_)) {
       this->update_ages(requests, last_grant_);
       return last_grant_;
     }
-    // Then-Oldest: find the requester with the highest age
+    // Then-Oldest: find the unsuppressed requester with the highest age
     uint32_t best = -1u;
     uint32_t best_age = 0;
     for (uint32_t i = 0; i < size_; ++i) {
-      if (requests.test(i) && (best == -1u || age_[i] > best_age)) {
+      if (requests.test(i) && !suppress.test(i) && (best == -1u || age_[i] > best_age)) {
         best = i;
         best_age = age_[i];
       }
@@ -1036,6 +1049,10 @@ public:
 
   uint32_t grant(const BitVector<>& requests) {
     return impl_->grant(requests);
+  }
+
+  uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) {
+    return impl_->grant(requests, suppress);
   }
 
   void reset() {
