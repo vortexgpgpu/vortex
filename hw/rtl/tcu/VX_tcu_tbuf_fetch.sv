@@ -505,9 +505,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < A_TOTAL) begin
                     a_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
-                    // Tile buffer stores 32-bit elements; take the low 32 bits of each bank word.
                     a_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data[b * `XLEN +: 32];
+                        tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
                 end
             end
         end
@@ -557,9 +556,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin
                     b_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
-                    // Tile buffer stores 32-bit elements; take the low 32 bits of each bank word.
                     b_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data[b * `XLEN +: 32];
+                        tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
                 end
             end
         end
@@ -596,9 +594,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin
                     b_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
-                    // Tile buffer stores 32-bit elements; take the low 32 bits of each bank word.
                     b_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data[b * `XLEN +: 32];
+                        tcu_lmem_if.rsp_data[b * `XLEN +: `XLEN];
                 end
             end
         end

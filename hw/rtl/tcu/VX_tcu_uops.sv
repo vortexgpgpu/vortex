@@ -118,9 +118,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     // Register offsets for from-reg mode
     // A: rs1_off = m * k_steps + k  (NRA=4 registers starting at ra_base)
     localparam LG_WG_A_SB = $clog2(`UP(TCU_WG_A_SUB_BLOCKS));
-    // Only the low 5 bits are used to form a float register number (f0..f31);
-    // build the offset at 5 bits directly and discard any higher bits via masking.
-    wire [4:0] wg_rs1_reg_off = 5'(((`UP(CTR_W)'(wg_m_index) >> LG_WG_A_SB) << `UP(LG_K_WG)) | `UP(CTR_W)'(wg_k_index));
+    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = ((`UP(CTR_W)'(wg_m_index) >> LG_WG_A_SB) << `UP(LG_K_WG)) | `UP(CTR_W)'(wg_k_index);
 `endif
 
 `ifdef TCU_SPARSE_ENABLE
@@ -277,7 +275,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                 ibuf_r.rs1 = make_reg_num(REG_TYPE_I, 5'd10);
                 ibuf_r.used_rs[0] = is_first_uop;
             end else begin
-                ibuf_r.rs1 = make_reg_num(REG_TYPE_F, wg_ra_base + wg_rs1_reg_off);
+                ibuf_r.rs1 = make_reg_num(REG_TYPE_F, wg_ra_base + 5'(wg_rs1_reg_off));
                 ibuf_r.used_rs[0] = 1'b1;
             end
             // B source: always smem descriptor (x11)
