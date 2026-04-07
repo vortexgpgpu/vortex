@@ -231,11 +231,16 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     end
 
     // WMMA K-step gating for internal accumulation
-    wire wmma_is_first_k = (k_index == '0);
+    // SYM_SPARSE flattens (m, n_col, n_step) into eff_ctr with step_k=0 always
+    // (k_count = K_STEPS/2 = 1), so every uop is both first-k and last-k.
+    // k_index would incorrectly alias with the upper bits of m_sp_s.
 `ifdef TCU_SPARSE_ENABLE
+    wire wmma_is_first_k = (SYM_SPARSE && is_sparse) ? 1'b1 : (k_index == '0);
     wire wmma_is_last_k = is_sparse
-        ? (k_index == `UP(LG_K)'(TCU_K_STEPS / 2 - 1))
+        ? (SYM_SPARSE ? 1'b1 : (k_index == `UP(LG_K)'(TCU_K_STEPS / 2 - 1)))
         : (k_index == `UP(LG_K)'(TCU_K_STEPS - 1));
+`else
+    wire wmma_is_first_k = (k_index == '0);
 `else
     wire wmma_is_last_k = (k_index == `UP(LG_K)'(TCU_K_STEPS - 1));
 `endif
