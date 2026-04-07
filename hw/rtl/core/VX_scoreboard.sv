@@ -24,6 +24,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     output reg [PERF_CTR_BITS-1:0] perf_stalls,
 `endif
 
+    input wire [NUM_EX_UNITS-1:0] dispatch_ready,
     VX_writeback_if.slave   writeback_if,
     VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
     VX_scoreboard_if.master scoreboard_if
@@ -194,11 +195,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 
     wire [PER_ISSUE_WARPS-1:0] arb_valid_in;
+    wire [PER_ISSUE_WARPS-1:0] arb_suppress;
     wire [PER_ISSUE_WARPS-1:0][OUT_DATAW-1:0] arb_data_in;
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
+        // valid: data-hazard check only (drives age tracking in GTO)
         assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
+        // suppress: FU-full check (skips selection without resetting age)
+        assign arb_suppress[w] = ~dispatch_ready[staging_if[w].data.ex_type];
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
             staging_if[w].data.tmask,
@@ -218,18 +223,60 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];
     end
 
-    VX_stream_arb #(
-        .NUM_INPUTS (PER_ISSUE_WARPS),
-        .DATAW      (OUT_DATAW),
-        .ARBITER    ("G"),
-        .OUT_BUF    (3)
+    // GTO arbiter with suppress: FU-stalled warps keep aging but are
+    // skipped for selection, preserving their priority for when the FU drains.
+    // Only suppress when at least one warp can issue to a free FU; otherwise
+    // let all warps through so the pipeline buffers absorb transient stalls.
+
+    localparam LOG_NUM_REQS = `CLOG2(PER_ISSUE_WARPS);
+
+    wire any_unsuppressed = |(arb_valid_in & ~arb_suppress);
+    wire [PER_ISSUE_WARPS-1:0] eff_suppress = any_unsuppressed ? arb_suppress : '0;
+
+    wire                    arb_valid;
+    wire [LOG_NUM_REQS-1:0] arb_index;
+    wire [PER_ISSUE_WARPS-1:0] arb_onehot;
+    wire                    arb_ready;
+
+    VX_gto_arbiter #(
+        .NUM_REQS (PER_ISSUE_WARPS)
     ) out_arb (
-        .clk      (clk),
-        .reset    (reset),
-        .valid_in (arb_valid_in),
-        .ready_in (arb_ready_in),
-        .data_in  (arb_data_in),
-        .data_out ({
+        .clk          (clk),
+        .reset        (reset),
+        .requests     (arb_valid_in),
+        .suppress     (eff_suppress),
+        .grant_valid  (arb_valid),
+        .grant_index  (arb_index),
+        .grant_onehot (arb_onehot),
+        .grant_ready  (arb_ready)
+    );
+
+    wire valid_out_w;
+    wire [OUT_DATAW-1:0] data_out_w;
+    wire ready_out_w;
+
+    assign valid_out_w = arb_valid;
+    assign data_out_w  = arb_data_in[arb_index];
+
+    for (genvar i = 0; i < PER_ISSUE_WARPS; ++i) begin : g_arb_ready_in
+        assign arb_ready_in[i] = ready_out_w && arb_onehot[i];
+    end
+
+    assign arb_ready = ready_out_w;
+
+    VX_elastic_buffer #(
+        .DATAW   (LOG_NUM_REQS + OUT_DATAW),
+        .SIZE    (`TO_OUT_BUF_SIZE(3)),
+        .OUT_REG (`TO_OUT_BUF_REG(3)),
+        .LUTRAM  (`TO_OUT_BUF_LUTRAM(3))
+    ) out_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (valid_out_w),
+        .ready_in  (ready_out_w),
+        .data_in   ({arb_index, data_out_w}),
+        .data_out  ({
+            scoreboard_if.data.wis,
             scoreboard_if.data.uuid,
             scoreboard_if.data.tmask,
             scoreboard_if.data.PC,
@@ -246,8 +293,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             scoreboard_if.data.rs3
         }),
         .valid_out (scoreboard_if.valid),
-        .ready_out (scoreboard_if.ready),
-        .sel_out   (scoreboard_if.data.wis)
+        .ready_out (scoreboard_if.ready)
     );
 
 endmodule

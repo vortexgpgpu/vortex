@@ -36,6 +36,7 @@ module VX_gto_arbiter #(
     input  wire                     clk,
     input  wire                     reset,
     input  wire [NUM_REQS-1:0]      requests,
+    input  wire [NUM_REQS-1:0]      suppress = '0,
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,
     output wire                     grant_valid,
@@ -45,13 +46,18 @@ module VX_gto_arbiter #(
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
+        `UNUSED_VAR (suppress)
         `UNUSED_VAR (grant_ready)
 
         assign grant_index  = '0;
         assign grant_onehot = requests;
-        assign grant_valid  = requests[0];
+        assign grant_valid  = requests[0] && ~suppress[0];
 
     end else begin : g_arbiter
+
+        // Effective requests: eligible for selection (not suppressed).
+        // Age tracking still uses `requests` so suppressed warps keep aging.
+        wire [NUM_REQS-1:0] eff_requests = requests & ~suppress;
 
         // -- Greedy: sticky grant ------------------------------------------
 
@@ -64,9 +70,11 @@ module VX_gto_arbiter #(
             end
         end
 
-        wire retain_grant = |(prev_grant & requests);
+        wire retain_grant = |(prev_grant & eff_requests);
 
         // -- Per-requester age counters ------------------------------------
+        // Age is driven by `requests`, not `eff_requests`: a suppressed
+        // requester keeps aging so it retains priority when unsuppressed.
 
         reg [NUM_REQS-1:0][AGE_W-1:0] age_r;
         wire grant_fire = grant_valid && grant_ready;
@@ -90,22 +98,20 @@ module VX_gto_arbiter #(
         end
 
         // -- Find oldest requester -----------------------------------------
-        // Compute the maximum age among active requesters, then build a mask
-        // of requesters at that maximum age.  Priority-encode the mask to
-        // break ties (lowest index wins).
+        // Only consider non-suppressed requesters for selection.
 
         reg [AGE_W-1:0] max_age;
         always @(*) begin
             max_age = '0;
             for (int i = 0; i < NUM_REQS; ++i) begin
-                if (requests[i] && (age_r[i] > max_age))
+                if (eff_requests[i] && (age_r[i] > max_age))
                     max_age = age_r[i];
             end
         end
 
         wire [NUM_REQS-1:0] oldest_mask;
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_oldest
-            assign oldest_mask[i] = requests[i] && (age_r[i] == max_age);
+            assign oldest_mask[i] = eff_requests[i] && (age_r[i] == max_age);
         end
 
         wire [LOG_NUM_REQS-1:0] oldest_index;
@@ -135,7 +141,7 @@ module VX_gto_arbiter #(
             `UNUSED_PIN (valid_out)
         );
 
-        assign grant_valid  = |requests;
+        assign grant_valid  = |eff_requests;
         assign grant_index  = retain_grant ? greedy_index  : oldest_index;
         assign grant_onehot = retain_grant ? greedy_onehot : oldest_onehot;
 

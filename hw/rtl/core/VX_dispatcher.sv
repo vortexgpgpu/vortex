@@ -28,6 +28,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     VX_operands_if.slave    operands_if,
 
     // outputs
+    output wire [NUM_EX_UNITS-1:0] dispatch_ready,
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -37,6 +38,9 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
 
     wire [NUM_EX_UNITS-1:0] operands_ready_in;
     assign operands_if.ready = operands_ready_in[operands_if.data.ex_type];
+
+    // FU-availability feedback to scoreboard to avoid head-of-line blocking
+    assign dispatch_ready = operands_ready_in;
 
     // Non-LSU execution units: pass operand data straight through
     for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_buffers
