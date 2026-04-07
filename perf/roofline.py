@@ -27,6 +27,7 @@
 import argparse
 import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -65,7 +66,7 @@ def parse_args():
                    choices=["rtlsim", "simx", "opae", "xrt"],
                    help="Vortex driver")
     p.add_argument("--app",       default="sgemmx",
-                   choices=["sgemmx", "sgemm_tcu"],
+                   choices=["sgemmx", "sgemm_tcu", "sgemm_tcu_mx"],
                    help="Regression app to run")
     p.add_argument("--cores",     type=int, default=1,
                    help="Number of cores (NUM_CORES)")
@@ -95,6 +96,8 @@ def parse_args():
                    help="PLATFORM_MEMORY_NUM_BANKS")
     p.add_argument("--perf",      type=int, default=1, choices=[0, 1, 2],
                    help="VORTEX_PROFILING class (0=off, 1=pipeline, 2=memsys)")
+    p.add_argument("--configs",   default="",
+                   help="Additional CONFIGS macros (e.g. '-DITYPE=fp8 -DOTYPE=fp32')")
     p.add_argument("--by-cycle",  action="store_true",
                    help="Plot in cycle domain (FLOP/cycle vs FLOP/B) "
                         "instead of time domain (GFLOP/s vs FLOP/B). "
@@ -108,7 +111,7 @@ def parse_args():
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# Run sgemmx via blackbox.sh
+# Run selected app via blackbox.sh
 # ────────────────────────────────────────────────────────────────────────────
 
 def find_blackbox(args):
@@ -148,7 +151,7 @@ def run_app_capture(args):
     blackbox, cwd = find_blackbox(args)
 
     m_dim, n_dim, k_dim = _matrix_dims(args)
-    if args.app == "sgemm_tcu":
+    if args.app in ("sgemm_tcu", "sgemm_tcu_mx"):
         app_args = f"-m{m_dim} -n{n_dim} -k{k_dim}"
     else:
         app_args = f"-n{n_dim}"
@@ -175,8 +178,12 @@ def run_app_capture(args):
         configs.append(f"-DPLATFORM_MEMORY_NUM_BANKS={args.mem_banks}")
     if args.mem_data_size is not None:
         configs.append(f"-DPLATFORM_MEMORY_DATA_SIZE={args.mem_data_size}")
-    if args.app == "sgemm_tcu":
+    if args.app in ("sgemm_tcu", "sgemm_tcu_mx"):
         configs.append("-DEXT_TCU_ENABLE")
+    if args.app == "sgemm_tcu_mx":
+        configs.append("-DTCU_MX_ENABLE")
+    if args.configs:
+        configs.extend(shlex.split(args.configs))
 
     env = os.environ.copy()
     existing = env.get("CONFIGS", "")
@@ -198,7 +205,7 @@ def run_app_capture(args):
     output = result.stdout
     sys.stdout.write(output)
     if result.returncode != 0:
-        print(f"ERROR: sgemmx exited with status {result.returncode}")
+        print(f"ERROR: {args.app} exited with status {result.returncode}")
         sys.exit(result.returncode)
     return output
 
