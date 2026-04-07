@@ -549,8 +549,10 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [B_TOTAL-1:0]    b_wren;
 
     always_comb begin
+        /* verilator lint_off WIDTHCONCAT */
         b_wdata = '0;
         b_wren  = '0;
+        /* verilator lint_on WIDTHCONCAT */
         if (tcu_lmem_if.rsp_valid && in_fetch_b) begin
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin
@@ -586,8 +588,10 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [B_TOTAL-1:0]    b_wren;
 
     always_comb begin
+        /* verilator lint_off WIDTHCONCAT */
         b_wdata = '0;
         b_wren  = '0;
+        /* verilator lint_on WIDTHCONCAT */
         if (tcu_lmem_if.rsp_valid && in_fetch_b) begin
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin

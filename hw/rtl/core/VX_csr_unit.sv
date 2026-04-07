@@ -119,14 +119,16 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     end
 
     // Per-lane CTA thread IDs
+    // Use proper quotient/remainder to handle cases where NUM_LANES > block_dim
+    // (e.g., NUM_THREADS=32 with block_dim={4,4} needs multi-carry propagation).
     wire [NUM_LANES-1:0][`XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cta_tid
         wire [CTA_TID_WIDTH:0] tx = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[0]) + (CTA_TID_WIDTH+1)'(wtid[i]);
-        wire cx = (tx >= sched_csr_if.cta_csrs.block_dim[0]);
-        wire [CTA_TID_WIDTH:0] ty = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[1]) + (CTA_TID_WIDTH+1)'(cx);
-        wire cy = (ty >= sched_csr_if.cta_csrs.block_dim[1]);
-        assign cta_tid_x[i] = cx ? `XLEN'(tx) - `XLEN'(sched_csr_if.cta_csrs.block_dim[0]) : `XLEN'(tx);
-        assign cta_tid_y[i] = cy ? `XLEN'(ty) - `XLEN'(sched_csr_if.cta_csrs.block_dim[1]) : `XLEN'(ty);
+        wire [CTA_TID_WIDTH:0] cx = tx / sched_csr_if.cta_csrs.block_dim[0];
+        wire [CTA_TID_WIDTH:0] ty = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[1]) + cx;
+        wire [CTA_TID_WIDTH:0] cy = ty / sched_csr_if.cta_csrs.block_dim[1];
+        assign cta_tid_x[i] = `XLEN'(tx - cx * sched_csr_if.cta_csrs.block_dim[0]);
+        assign cta_tid_y[i] = `XLEN'(ty - cy * sched_csr_if.cta_csrs.block_dim[1]);
         assign cta_tid_z[i] = `XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + `XLEN'(cy);
     end
 
