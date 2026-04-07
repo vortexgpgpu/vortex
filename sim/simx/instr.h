@@ -142,58 +142,59 @@ public:
     , fu_type_(fu_type)
     , is_uop_(false)
     , is_macro_op_(false)
+    , is_wstall_(false)
     , has_tmask_(false)
   {}
 
-  void setFUType(FUType fu_type) {
+  void set_fu_type(FUType fu_type) {
     fu_type_ = fu_type;
   }
 
-  template <typename T> void setOpType(T op_type) {
+  template <typename T> void set_op_type(T op_type) {
     op_type_ = static_cast<T>(op_type);
   }
 
-  template <typename T> void setArgs(T args) {
+  template <typename T> void set_args(T args) {
     args_ = static_cast<T>(args);
   }
 
-  void setTmask(const ThreadMask& tmask) {
+  void set_tmask(const ThreadMask& tmask) {
     tmask_ = tmask;
     has_tmask_ = true;
   }
 
-  void setDestReg(uint32_t destReg, RegType type) {
+  void set_dest_reg(uint32_t destReg, RegType type) {
     rdest_ = {type, destReg };
   }
 
-  void setSrcReg(uint32_t index, uint32_t srcReg, RegType type) {
+  void set_src_reg(uint32_t index, uint32_t srcReg, RegType type) {
     rsrc_[index] = { type, srcReg};
   }
 
-  void setParentUUID(uint64_t parent_uuid) {
+  void set_parent_uuid(uint64_t parent_uuid) {
     parent_uuid_ = parent_uuid;
     is_uop_ = true;
   }
 
-  FUType getFUType() const { return fu_type_; }
+  FUType get_fu_type() const { return fu_type_; }
 
-  OpType getOpType() const { return op_type_; }
+  OpType get_op_type() const { return op_type_; }
 
-  const IntrArgs& getArgs() const { return args_; }
+  const IntrArgs& get_args() const { return args_; }
 
-  RegOpd getSrcReg(uint32_t i) const { return rsrc_[i]; }
+  RegOpd get_src_reg(uint32_t i) const { return rsrc_[i]; }
 
-  RegOpd getDestReg() const { return rdest_; }
+  RegOpd get_dest_reg() const { return rdest_; }
 
-  uint64_t getUUID() const { return uuid_; }
+  uint64_t get_uuid() const { return uuid_; }
 
-  uint64_t getParentUUID() const { return parent_uuid_; }
+  uint64_t get_parent_uuid() const { return parent_uuid_; }
 
   bool is_uop() const {
     return is_uop_;
   }
 
-  void setMacroOp() {
+  void set_macro_op() {
     is_macro_op_ = true;
   }
 
@@ -201,11 +202,19 @@ public:
     return is_macro_op_;
   }
 
-  bool hasTmask() const {
+  void set_wstall(bool value) {
+    is_wstall_ = value;
+  }
+
+  bool is_wstall() const {
+    return is_wstall_;
+  }
+
+  bool has_tmask() const {
     return has_tmask_;
   }
 
-  const ThreadMask& getTmask() const {
+  const ThreadMask& get_tmask() const {
     return tmask_;
   }
 
@@ -220,6 +229,7 @@ private:
   RegOpd   rdest_;
   bool     is_uop_;
   bool     is_macro_op_;
+  bool     is_wstall_;
   ThreadMask tmask_;
   bool     has_tmask_;
 

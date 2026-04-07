@@ -47,7 +47,7 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
     state_.uop_index = 0;
 
     // Bind the appropriate generator based on FU type
-    switch (trace->instr_ptr->getFUType()) {
+    switch (trace->instr_ptr->get_fu_type()) {
   #ifdef EXT_TCU_ENABLE
     case FUType::TCU:
       state_.uop_count = TcuUopGen::uop_count(*trace->instr_ptr);
@@ -69,19 +69,19 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
 
     // Allocate micro-op trace and fill metadata (like decode does)
     auto uop_trace = core_->trace_pool().allocate(1);
-    new (uop_trace) instr_trace_t(uop_instr->getUUID(), arch_);
+    new (uop_trace) instr_trace_t(uop_instr->get_uuid(), arch_);
     uop_trace->cid       = trace->cid;
     uop_trace->wid       = trace->wid;
     uop_trace->PC        = trace->PC;
-    uop_trace->tmask     = uop_instr->getTmask().any() ? uop_instr->getTmask() : trace->tmask;
+    uop_trace->tmask     = uop_instr->get_tmask().any() ? uop_instr->get_tmask() : trace->tmask;
     uop_trace->instr_ptr = uop_instr;
-    uop_trace->fu_type   = uop_instr->getFUType();
-    uop_trace->op_type   = uop_instr->getOpType();
-    uop_trace->dst_reg   = uop_instr->getDestReg();
+    uop_trace->fu_type   = uop_instr->get_fu_type();
+    uop_trace->op_type   = uop_instr->get_op_type();
+    uop_trace->dst_reg   = uop_instr->get_dest_reg();
     for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
-      uop_trace->src_regs[i] = uop_instr->getSrcReg(i);
+      uop_trace->src_regs[i] = uop_instr->get_src_reg(i);
     }
-    uop_trace->wb = (uop_instr->getDestReg().type != RegType::None);
+    uop_trace->wb = (uop_instr->get_dest_reg().type != RegType::None);
 
     state_.current_uop = uop_trace;
     return uop_trace;

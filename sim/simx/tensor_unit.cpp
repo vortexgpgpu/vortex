@@ -1021,11 +1021,11 @@ op_string_t TensorUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
 ///////////////////////////////////////////////////////////////////////////////
 
 uint32_t TcuUopGen::uop_count(const Instr& instr) {
-  if (instr.getFUType() != FUType::TCU)
+  if (instr.get_fu_type() != FUType::TCU)
     return 1;
 
-  auto tcu_type = std::get<TcuType>(instr.getOpType());
-  auto args = std::get<IntrTcuArgs>(instr.getArgs());
+  auto tcu_type = std::get<TcuType>(instr.get_op_type());
+  auto args = std::get<IntrTcuArgs>(instr.get_args());
 
   if (tcu_type == TcuType::WMMA) {
     using wmma = vt::wmma_config_t<NUM_THREADS>;
@@ -1055,9 +1055,9 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
 ///////////////////////////////////////////////////////////////////////////////
 
 Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
-  auto tcu_type = std::get<TcuType>(macro_instr.getOpType());
-  auto args = std::get<IntrTcuArgs>(macro_instr.getArgs());
-  uint64_t parent_uuid = macro_instr.getUUID();
+  auto tcu_type = std::get<TcuType>(macro_instr.get_op_type());
+  auto args = std::get<IntrTcuArgs>(macro_instr.get_args());
+  uint64_t parent_uuid = macro_instr.get_uuid();
   uint32_t total = uop_count(macro_instr);
 
   // Compute UUID for this micro-op
@@ -1067,7 +1067,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
 
   auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::TCU);
-  uop_instr->setParentUUID(parent_uuid);
+  uop_instr->set_parent_uuid(parent_uuid);
 
   if (tcu_type == TcuType::WMMA) {
     using wmma = vt::wmma_config_t<NUM_THREADS>;
@@ -1087,9 +1087,9 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
       uint32_t flat_store = uop_index;
       uint32_t reg_rs1 = (flat_store / wmma::meta_cols_per_load) ? meta_reg1 : meta_reg0;
-      uop_instr->setOpType(TcuType::META_STORE);
-      uop_instr->setArgs(IntrTcuArgs{false, 0, 0, fmt_s, flat_store, 0, 0, 0});
-      uop_instr->setSrcReg(0, reg_rs1, RegType::Float);
+      uop_instr->set_op_type(TcuType::META_STORE);
+      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, flat_store, 0, 0, 0});
+      uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
     } else {
       // Phase 2: MMA uops
       uint32_t mma_idx = uop_index - meta_stores;
@@ -1112,13 +1112,13 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t n_sp = step_bits ? (mma_idx & step_mask) : 0;
         uint32_t m_sp = mma_idx >> step_bits;
         uint32_t reg_rs3 = rc_base + (mma_idx >> 1);
-        uop_instr->setOpType(TcuType::WMMA);
-        uop_instr->setArgs(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, n_sp, 0});
-        uop_instr->setDestReg(reg_rs3, RegType::Float);
-        uop_instr->setSrcReg(0, ra_base + m_sp, RegType::Float);
-        uop_instr->setSrcReg(1, rb_base + n_sp, RegType::Float);
-        uop_instr->setSrcReg(2, reg_rs3, RegType::Float);
-        uop_instr->setTmask(ThreadMask(NUM_THREADS, (mma_idx & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
+        uop_instr->set_op_type(TcuType::WMMA);
+        uop_instr->set_args(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, n_sp, 0});
+        uop_instr->set_dest_reg(reg_rs3, RegType::Float);
+        uop_instr->set_src_reg(0, ra_base + m_sp, RegType::Float);
+        uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
+        uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
+        uop_instr->set_tmask(ThreadMask(NUM_THREADS, (mma_idx & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
       } else {
         // Standard k-major triple loop (dense or non-sym sparse)
         uint32_t b_sub = is_sparse ? wmma::b_sub_blocks_sp : wmma::b_sub_blocks;
@@ -1130,12 +1130,12 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t reg_rs1 = ra_base + (m / wmma::a_sub_blocks) * k_count + k;
         uint32_t reg_rs2 = rb_base + (k * wmma::n_steps + n) / b_sub;
         uint32_t reg_rs3 = rc_base + m * wmma::n_steps + n;
-        uop_instr->setOpType(TcuType::WMMA);
-        uop_instr->setArgs(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
-        uop_instr->setDestReg(reg_rs3, RegType::Float);
-        uop_instr->setSrcReg(0, reg_rs1, RegType::Float);
-        uop_instr->setSrcReg(1, reg_rs2, RegType::Float);
-        uop_instr->setSrcReg(2, reg_rs3, RegType::Float);
+        uop_instr->set_op_type(TcuType::WMMA);
+        uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
+        uop_instr->set_dest_reg(reg_rs3, RegType::Float);
+        uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
+        uop_instr->set_src_reg(1, reg_rs2, RegType::Float);
+        uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
       }
     }
   }
@@ -1160,23 +1160,23 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t m = rem % m_steps;
     uint32_t r = n * m_steps + m;
 
-    uop_instr->setOpType(TcuType::WGMMA);
-    uop_instr->setArgs(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
+    uop_instr->set_op_type(TcuType::WGMMA);
+    uop_instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
                                    fmt_s, fmt_d, m, n, k});
-    uop_instr->setDestReg(r, RegType::Float);
+    uop_instr->set_dest_reg(r, RegType::Float);
     if (uop_index == 0) {
       if (is_a_smem) {
-        uop_instr->setSrcReg(0, a0, RegType::Integer);
+        uop_instr->set_src_reg(0, a0, RegType::Integer);
       } else {
         uint32_t rs1_off = m * k_count + k;
-        uop_instr->setSrcReg(0, ra_base + rs1_off, RegType::Float);
+        uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
       }
-      uop_instr->setSrcReg(1, a1, RegType::Integer);
+      uop_instr->set_src_reg(1, a1, RegType::Integer);
     } else if (!is_a_smem) {
       uint32_t rs1_off = m * k_count + k;
-      uop_instr->setSrcReg(0, ra_base + rs1_off, RegType::Float);
+      uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
     }
-    uop_instr->setSrcReg(2, r, RegType::Float);
+    uop_instr->set_src_reg(2, r, RegType::Float);
   }
 #endif
 

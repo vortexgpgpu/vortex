@@ -116,10 +116,10 @@ public:
             const std::vector<reg_data_t> &rs2_data,
             MemTraceData *trace_data) {
     auto &states = vpu_states_.at(wid);
-    auto vls_type = std::get<VlsType>(instr.getOpType());
-    auto lsuArgs = std::get<IntrVlsArgs>(instr.getArgs());
+    auto vls_type = std::get<VlsType>(instr.get_op_type());
+    auto lsuArgs = std::get<IntrVlsArgs>(instr.get_args());
     uint32_t vmask = lsuArgs.vm;
-    uint32_t vd = instr.getDestReg().idx;
+    uint32_t vd = instr.get_dest_reg().idx;
     uint32_t vsewb = 1 << states.vtype.vsew;
     assert(lsuArgs.width == states.vtype.vsew && "vsew and width must match!");
     auto &vreg_file = states.vreg_file.at(tid);
@@ -267,7 +267,7 @@ public:
       // vloxseg6e8.v, vloxseg6e16.v, vloxseg6e32.v, vloxseg6e64.v
       // vloxseg7e8.v, vloxseg7e16.v, vloxseg7e32.v, vloxseg7e64.v
       // vloxseg8e8.v, vloxseg8e16.v, vloxseg8e32.v, vloxseg8e64.v
-      uint32_t vs2 = instr.getSrcReg(1).idx;
+      uint32_t vs2 = instr.get_src_reg(1).idx;
       uint32_t nfields = lsuArgs.nf + 1;
       uint32_t eew = lsuArgs.width & 0x3;
 
@@ -300,12 +300,12 @@ public:
              const std::vector<reg_data_t> &rs2_data,
              MemTraceData *trace_data) {
     auto &states = vpu_states_.at(wid);
-    auto vls_type = std::get<VlsType>(instr.getOpType());
-    auto lsuArgs = std::get<IntrVlsArgs>(instr.getArgs());
+    auto vls_type = std::get<VlsType>(instr.get_op_type());
+    auto lsuArgs = std::get<IntrVlsArgs>(instr.get_args());
     uint32_t vmask = lsuArgs.vm;
     uint32_t vsewb = 1 << states.vtype.vsew;
     assert(lsuArgs.width == states.vtype.vsew && "vsew and width must match!");
-    uint32_t vs3 = instr.getSrcReg(2).idx;
+    uint32_t vs3 = instr.get_src_reg(2).idx;
     auto &vreg_file = states.vreg_file.at(tid);
     uint64_t base_addr = rs1_data.at(tid).i;
     base_addr &= 0xFFFFFFFC; // TODO: riscv-tests fix
@@ -429,7 +429,7 @@ public:
       // vsoxseg6ei8.v, vsoxseg6ei16.v, vsoxseg6ei32.v, vsoxseg6ei64.v
       // vsoxseg7ei8.v, vsoxseg7ei16.v, vsoxseg7ei32.v, vsoxseg7ei64.v
       // vsoxseg8ei8.v, vsoxseg8ei16.v, vsoxseg8ei32.v, vsoxseg8ei64.v
-      uint32_t vs2 = instr.getSrcReg(1).idx;
+      uint32_t vs2 = instr.get_src_reg(1).idx;
       uint32_t nfields = lsuArgs.nf + 1;
       uint32_t eew = lsuArgs.width & 0x3;
 
@@ -460,11 +460,11 @@ public:
                  std::vector<reg_data_t> &rd_data,
                  ExeTraceData *trace_data) {
     auto &states = vpu_states_.at(wid);
-    auto op_type = instr.getOpType();
-    auto instrArgs = instr.getArgs();
+    auto op_type = instr.get_op_type();
+    auto instrArgs = instr.get_args();
 
-    uint32_t rdest = instr.getDestReg().idx;
-    uint32_t rsrc0 = instr.getSrcReg(0).idx;
+    uint32_t rdest = instr.get_dest_reg().idx;
+    uint32_t rsrc0 = instr.get_src_reg(0).idx;
 
     auto vset_type = std::get<VsetType>(op_type);
     auto vsetArgs = std::get<IntrVsetArgs>(instrArgs);
@@ -536,12 +536,12 @@ public:
                ExeTraceData *trace_data) {
     auto &states = vpu_states_.at(wid);
     auto &vreg_file = states.vreg_file.at(tid);
-    auto op_type = instr.getOpType();
-    auto instrArgs = instr.getArgs();
+    auto op_type = instr.get_op_type();
+    auto instrArgs = instr.get_args();
 
-    uint32_t rdest = instr.getDestReg().idx;
-    uint32_t rsrc0 = instr.getSrcReg(0).idx;
-    uint32_t rsrc1 = instr.getSrcReg(1).idx;
+    uint32_t rdest = instr.get_dest_reg().idx;
+    uint32_t rsrc0 = instr.get_src_reg(0).idx;
+    uint32_t rsrc1 = instr.get_src_reg(1).idx;
 
     VpuOpType vpu_op = VpuOpType::ARITH;
 
