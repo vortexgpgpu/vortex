@@ -145,10 +145,22 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire active_r = (ts_state_r == TS_ACTIVE);
 
     // ---- Launch acceptance ----
+    // CRITICAL: launch_supported MUST NOT be checked at the IDLE→DESC_WAIT
+    // transition. issue_dec is computed combinationally from desc_table BRAM
+    // outputs which have 1-cycle latency. When the unified engine pops the
+    // FIFO every cycle (any worker idle), the BRAM input changes faster than
+    // its output, so during IDLE the BRAM output reflects the PREVIOUS FIFO
+    // entry's slot — not the current launch's slot. Checking issue_dec.* in
+    // IDLE silently drops valid launches whose previous neighbor in the FIFO
+    // had supported=0 stale data, causing cores to wait on a barrier whose
+    // DXA completion never fires (manifests as a multi-core scheduler stall
+    // — see VX_scheduler.sv timeout). The supported check is correctly
+    // performed in TS_DESC_WAIT below, where BRAM rdata is now valid for
+    // THIS worker's active slot (raddr was captured at the IDLE edge).
     wire launch_use_nb = ~issue_dec.is_s2g;
     wire launch_supported = launch_use_nb && issue_dec.supported && (issue_dec.total != 0);
-    wire launch_valid_cmd = launch_valid && launch_supported;
-    wire launch_invalid_cmd = launch_valid && ~launch_supported;
+    wire launch_valid_cmd = launch_valid;  // accept unconditionally; validate in DESC_WAIT
+    wire launch_invalid_cmd = (ts_state_r == TS_DESC_WAIT) && ~launch_supported;
 
     assign launch_ready = (ts_state_r == TS_IDLE);
 
@@ -492,14 +504,21 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 end
             end
             TS_DESC_WAIT: begin
-                // BRAM output now valid — start setup and latch multicast fields.
-            `ifdef EXT_DXA_MULTICAST_ENABLE
-                active_is_multicast_r <= launch_is_multicast;
-                active_cta_mask_r     <= launch_cta_mask;
-                active_smem_stride_r  <= issue_smem_stride;
-                active_bar_stride_r   <= issue_bar_stride;
-            `endif
-                ts_state_r <= TS_SETUP;
+                // BRAM output now valid for THIS worker's active slot.
+                // Validate launch_supported here (deferred from IDLE — see
+                // comment near launch_valid_cmd above). If unsupported, abort
+                // back to IDLE without doing the transfer.
+                if (~launch_supported) begin
+                    ts_state_r <= TS_IDLE;
+                end else begin
+                `ifdef EXT_DXA_MULTICAST_ENABLE
+                    active_is_multicast_r <= launch_is_multicast;
+                    active_cta_mask_r     <= launch_cta_mask;
+                    active_smem_stride_r  <= issue_smem_stride;
+                    active_bar_stride_r   <= issue_bar_stride;
+                `endif
+                    ts_state_r <= TS_SETUP;
+                end
             end
             TS_SETUP: begin
                 if (setup_done) begin
