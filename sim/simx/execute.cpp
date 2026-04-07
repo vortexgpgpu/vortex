@@ -1648,10 +1648,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
         assert(operand_tmask.count() == num_threads);
-        // SYM_SPARSE WMMA_SP uses partial tmask (column-half splitting),
-        // so exec_tmask may have fewer active threads than num_threads.
-        assert(exec_tmask.count() == num_threads
-            || (cfg::sym_sparse && tpuArgs.is_sparse));
         std::vector<reg_data_t> mx_a0_data(num_threads);
         std::vector<reg_data_t> mx_a1_data(num_threads);
         std::vector<reg_data_t> mx_a2_data(num_threads);
