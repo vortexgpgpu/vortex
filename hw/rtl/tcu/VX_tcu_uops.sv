@@ -241,7 +241,6 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         : (k_index == `UP(LG_K)'(TCU_K_STEPS - 1));
 `else
     wire wmma_is_first_k = (k_index == '0);
-`else
     wire wmma_is_last_k = (k_index == `UP(LG_K)'(TCU_K_STEPS - 1));
 `endif
 

@@ -269,24 +269,8 @@ void Emulator::decode(instr_trace_t* trace) {
   // Conservative writeback: true if destination register exists
   trace->wb = (instr->get_dest_reg().type != RegType::None);
 
-  // Determine is_wstall: mirrors RTL VX_decode.sv is_wstall.
-  // Branches, system calls, and SFU warp-control (except async barrier arrive)
-  // stall the warp until commit. All other instructions (ALU, FPU, LSU) do not.
-  {
-    bool wstall = false;
-    if (trace->fu_type == FUType::ALU && std::holds_alternative<BrType>(trace->op_type)) {
-      wstall = true;
-    } else if (trace->fu_type == FUType::SFU) {
-      wstall = true;
-      if (auto* wctl = std::get_if<WctlType>(&trace->op_type)) {
-        if (*wctl == WctlType::BAR) {
-          auto& args = std::get<IntrWctlArgs>(instr->get_args());
-          wstall = !args.is_bar_arrive;
-        }
-      }
-    }
-    instr->set_wstall(wstall);
-  }
+  // is_wstall is set during instruction decode (decode.cpp) to mirror
+  // RTL VX_decode.sv is_wstall. Transfer to trace for pipeline use.
   trace->fetch_stall = instr->is_wstall();
 }
 

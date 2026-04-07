@@ -623,6 +623,7 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
     instr->set_args(IntrBrArgs{funct3, addr});
     instr->set_src_reg(0, rs1, RegType::Integer);
     instr->set_src_reg(1, rs2, RegType::Integer);
+    instr->set_wstall(true);
   } break;
   case Opcode::JAL: {
     auto unordered  = code >> shift_funct3;
@@ -635,6 +636,7 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
     instr->set_op_type(BrType::JAL);
     instr->set_args(IntrBrArgs{0, addr});
     instr->set_dest_reg(rd, RegType::Integer);
+    instr->set_wstall(true);
   } break;
   case Opcode::JALR: {
     auto imm12 = code >> shift_rs2;
@@ -643,6 +645,7 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
     instr->set_args(IntrBrArgs{0, addr});
     instr->set_dest_reg(rd, RegType::Integer);
     instr->set_src_reg(0, rs1, RegType::Integer);
+    instr->set_wstall(true);
   } break;
   case Opcode::L:
   case Opcode::FL:
@@ -756,6 +759,7 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
       auto imm12 = code >> shift_rs2;
       instr->set_op_type(BrType::SYS);
       instr->set_args(IntrBrArgs{0, imm12});
+      instr->set_wstall(true);
     }
   } break;
   case Opcode::FCI: {
@@ -953,34 +957,40 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
       case 0: // TMC
         instr->set_op_type(WctlType::TMC);
         instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_wstall(true);
         break;
       case 1: // WSPAWN
         instr->set_op_type(WctlType::WSPAWN);
         instr->set_src_reg(0, rs1, RegType::Integer);
         instr->set_src_reg(1, rs2, RegType::Integer);
+        instr->set_wstall(true);
         break;
       case 2: // SPLIT
         instr->set_op_type(WctlType::SPLIT);
         instr->set_dest_reg(rd, RegType::Integer);
         instr->set_src_reg(0, rs1, RegType::Integer);
         wctlArgs.is_cond_neg = (rs2 != 0);
+        instr->set_wstall(true);
         break;
       case 3: // JOIN
         instr->set_op_type(WctlType::JOIN);
         instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_wstall(true);
         break;
-      case 4: // BAR
+      case 4: // BAR (sync)
         instr->set_op_type(WctlType::BAR);
         instr->set_src_reg(0, rs1, RegType::Integer);
         instr->set_src_reg(1, rs2, RegType::Integer);
         wctlArgs.is_sync_bar = 1;
         wctlArgs.is_bar_arrive = 0;
+        instr->set_wstall(true);
         break;
       case 5: // PRED
         instr->set_op_type(WctlType::PRED);
         instr->set_src_reg(0, rs1, RegType::Integer);
         instr->set_src_reg(1, rs2, RegType::Integer);
         wctlArgs.is_cond_neg = (rd != 0);
+        instr->set_wstall(true);
         break;
       case 6: // BAR ARRIVE / WAIT
         instr->set_op_type(WctlType::BAR);
@@ -989,9 +999,11 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
         instr->set_src_reg(1, rs2, RegType::Integer);
         wctlArgs.is_sync_bar = 0;
         wctlArgs.is_bar_arrive = (rd != 0);
+        instr->set_wstall(rd == 0); // stall on wait, not on arrive
         break;
       case 7: // WSYNC
         instr->set_op_type(WctlType::WSYNC);
+        instr->set_wstall(true);
         break;
       default:
         std::abort();
@@ -1046,7 +1058,7 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
         instr->set_op_type(TcuType::WMMA);
         instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, 0, 0, 0});
         instr->set_macro_op();
-
+        instr->set_wstall(true);
       } break;
     #ifdef TCU_WGMMA_ENABLE
       case 1: { // WGMMA_SYNC — single macro Instr, sequencer expands to micro-ops
@@ -1057,7 +1069,7 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
         instr->set_op_type(TcuType::WGMMA);
         instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0});
         instr->set_macro_op();
-
+        instr->set_wstall(true);
       } break;
     #endif // TCU_WGMMA_ENABLE
       default:

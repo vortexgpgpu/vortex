@@ -550,11 +550,11 @@ private:
   uint64_t dev_caps_;
   uint64_t isa_caps_;
   uint64_t global_mem_size_;
-  uint64_t clock_rate_;
   uint64_t staging_wsid_;
   uint64_t staging_ioaddr_;
   uint8_t* staging_ptr_;
   uint64_t staging_size_;
+  uint64_t clock_rate_;
 };
 
 #include <callbacks.inc>

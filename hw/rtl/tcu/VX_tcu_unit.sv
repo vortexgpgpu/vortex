@@ -126,6 +126,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_cd_nregs     (per_block_execute_if[block_idx].data.op_args.tcu.cd_nregs),
             .req_desc_a       (per_block_execute_if[block_idx].data.rs1_data[0]),
             .req_desc_b       (per_block_execute_if[block_idx].data.rs2_data[0]),
+            .req_a_is_smem    (per_block_execute_if[block_idx].data.op_args.tcu.a_from_smem),
             .tcu_lmem_if      (per_block_lmem_if[block_idx]),
             // Tile data outputs
             .tbuf_rs1_data    (tbuf_rs1_data[block_idx]),
