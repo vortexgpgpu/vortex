@@ -9,6 +9,12 @@
    sudo apt-get install build-essential cmake ccache zlib1g-dev libtinfo-dev libncurses-dev uuid-dev libboost-serialization-dev libpng-dev libhwloc-dev
    ```
 
+   (Optional) for roofline/perf plotting:
+
+   ```
+   sudo apt-get install python3-numpy python3-matplotlib
+   ```
+
 2. Download the Vortex codebase:
 
    ```
@@ -40,6 +46,12 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
 
    ```
    sudo yum install libpng-devel boost boost-devel boost-serialization libuuid-devel opencl-headers hwloc hwloc-devel gmp-devel compat-hwloc1
+   ```
+
+   (Optional) for roofline/perf plotting:
+
+   ```
+   sudo yum install python3-numpy python3-matplotlib
    ```
 
 2. Upgrade GCC to 11:

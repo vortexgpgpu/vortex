@@ -13,16 +13,16 @@
 # limitations under the License.
 #
 # Vortex SGEMM Roofline Plotter
-# Runs the regression/sgemmx kernel via ci/blackbox.sh and plots the roofline.
+# Runs a SGEMM-style regression kernel via ci/blackbox.sh and plots roofline metrics.
 #
 # Usage (from build dir):
-#   python3 tests/regression/sgemmx/roofline.py [--driver=rtlsim] [--cores=1]
+#   python3 perf/roofline.py [--app=sgemmx] [--driver=rtlsim] [--cores=1]
 #           [--warps=4] [--threads=4] [--n=128]
 #           [--freq=<auto>] [--bw=51.2] [--perf=1]
 #           [--output=roofline.png]
 #
 # Usage (from source tree, targeting a specific build dir):
-#   python3 tests/regression/sgemmx/roofline.py --build-dir=build_test32 ...
+#   python3 perf/roofline.py --build-dir=build_test32 ...
 
 import argparse
 import os
@@ -64,6 +64,9 @@ def parse_args():
     p.add_argument("--driver",    default="rtlsim",
                    choices=["rtlsim", "simx", "opae", "xrt"],
                    help="Vortex driver")
+    p.add_argument("--app",       default="sgemmx",
+                   choices=["sgemmx", "sgemm_tcu"],
+                   help="Regression app to run")
     p.add_argument("--cores",     type=int, default=1,
                    help="Number of cores (NUM_CORES)")
     p.add_argument("--warps",     type=int, default=4,
@@ -74,6 +77,10 @@ def parse_args():
                    help="Issue width (ISSUE_WIDTH)")
     p.add_argument("--n",         type=int, default=32,
                    help="Square matrix dimension N (SGEMM computes N×N × N×N)")
+    p.add_argument("--m",         type=int, default=None,
+                   help="M dimension for non-square SGEMM (default: use --n)")
+    p.add_argument("--k",         type=int, default=None,
+                   help="K dimension for non-square SGEMM (default: use --n)")
     p.add_argument("--freq",      type=float, default=0,
                    help="Pipeline clock frequency in MHz "
                         "(0 = per-cycle mode, implies --by-cycle; "
@@ -129,15 +136,28 @@ def find_blackbox(args):
     return bb, bdir
 
 
-def run_sgemmx_capture(args):
-    """Run sgemmx via blackbox.sh and return captured stdout+stderr."""
+def _matrix_dims(args):
+    m_dim = args.m if args.m is not None else args.n
+    n_dim = args.n
+    k_dim = args.k if args.k is not None else args.n
+    return m_dim, n_dim, k_dim
+
+
+def run_app_capture(args):
+    """Run the selected app via blackbox.sh and return captured stdout+stderr."""
     blackbox, cwd = find_blackbox(args)
+
+    m_dim, n_dim, k_dim = _matrix_dims(args)
+    if args.app == "sgemm_tcu":
+        app_args = f"-m{m_dim} -n{n_dim} -k{k_dim}"
+    else:
+        app_args = f"-n{n_dim}"
 
     cmd = [
         blackbox,
         f"--driver={args.driver}",
-        "--app=sgemmx",
-        f"--args=-n{args.n}",
+        f"--app={args.app}",
+        f"--args={app_args}",
     ]
     if args.perf:
         cmd.append(f"--perf={args.perf}")
@@ -155,6 +175,8 @@ def run_sgemmx_capture(args):
         configs.append(f"-DPLATFORM_MEMORY_NUM_BANKS={args.mem_banks}")
     if args.mem_data_size is not None:
         configs.append(f"-DPLATFORM_MEMORY_DATA_SIZE={args.mem_data_size}")
+    if args.app == "sgemm_tcu":
+        configs.append("-DEXT_TCU_ENABLE")
 
     env = os.environ.copy()
     existing = env.get("CONFIGS", "")
@@ -248,7 +270,7 @@ def parse_perf(output):
 # ────────────────────────────────────────────────────────────────────────────
 
 def compute_metrics(args, perf):
-    n        = args.n
+    m_dim, n_dim, k_dim = _matrix_dims(args)
     freq_hz  = args.freq * 1e6                          # MHz → Hz
     num_hw_threads    = args.cores * args.warps * args.threads
     # Compute throughput threads: one warp issues per cycle per core, executing
@@ -257,14 +279,14 @@ def compute_metrics(args, perf):
     num_compute_threads = args.cores * args.threads
 
     # --- Workload FLOPs ---
-    # SGEMM: C = A × B  → 2·N³ FLOPs (N³ muls + N³ adds, or N³ FMAs)
-    flops = 2.0 * n ** 3
+    # SGEMM: C[M×N] = A[M×K] × B[K×N] → 2·M·N·K FLOPs
+    flops = 2.0 * m_dim * n_dim * k_dim
 
     # --- Arithmetic intensity ---
     # Ideal (Roofline "capacity" model): one-pass, perfect reuse
-    #   load A (N² f32) + load B (N² f32) + store C (N² f32)
-    bytes_ideal = 3 * n * n * 4                         # bytes, float32
-    ai_ideal    = flops / bytes_ideal                   # FLOP/byte  (= N/6)
+    #   load A (M·K f32) + load B (K·N f32) + store C (M·N f32)
+    bytes_ideal = (m_dim * k_dim + k_dim * n_dim + m_dim * n_dim) * 4
+    ai_ideal    = flops / bytes_ideal
 
     # Actual (from profiler cache-line accounting), if available
     if perf.get("actual_bytes") is not None:
@@ -443,9 +465,9 @@ def plot_roofline(args, perf, m, outfile):
     ax.set_xlabel("Arithmetic Intensity  (FLOP / byte)", fontsize=12)
     ax.set_ylabel(y_label, fontsize=12)
     ax.set_title(
-        f"Vortex SGEMM Roofline — "
+        f"Vortex SGEMM Roofline — {args.app} — "
         f"{args.cores}C / {args.warps}W / {args.threads}T, "
-        f"N={args.n}, {args.driver}, {domain_tag}",
+        f"M={_matrix_dims(args)[0]}, N={_matrix_dims(args)[1]}, K={_matrix_dims(args)[2]}, {args.driver}, {domain_tag}",
         fontsize=12, fontweight="bold",
     )
     ax.legend(fontsize=9, loc="upper left")
@@ -513,12 +535,14 @@ def _annotate(ax, ai, gfl, color, label):
 # ────────────────────────────────────────────────────────────────────────────
 
 def print_metrics(args, perf, m):
+    m_dim, n_dim, k_dim = _matrix_dims(args)
     sep = "═" * 56
     print(f"\n{sep}")
     print("  Vortex SGEMM Roofline Metrics")
     print(sep)
+    print(f"  App             : {args.app}")
     print(f"  Config          : {args.cores}C / {args.warps}W / {args.threads}T")
-    print(f"  Matrix size     : {args.n} × {args.n}")
+    print(f"  Matrix size     : M={m_dim}, N={n_dim}, K={k_dim}")
     print(f"  Driver          : {args.driver}")
     if args.by_cycle:
         print(f"  Domain          : per-cycle")
@@ -577,7 +601,7 @@ def main():
         freq = read_platform_clock(bdir)
         args.freq = float(freq) if freq else 1.0
 
-    output = run_sgemmx_capture(args)
+    output = run_app_capture(args)
     perf   = parse_perf(output)
 
     print(f"\nParsed ({perf['cores_seen']} core(s)): "
