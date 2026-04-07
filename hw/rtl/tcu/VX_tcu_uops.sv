@@ -118,7 +118,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     // Register offsets for from-reg mode
     // A: rs1_off = m * k_steps + k  (NRA=4 registers starting at ra_base)
     localparam LG_WG_A_SB = $clog2(`UP(TCU_WG_A_SUB_BLOCKS));
+    /* verilator lint_off UNUSEDSIGNAL */
     wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = ((`UP(CTR_W)'(wg_m_index) >> LG_WG_A_SB) << `UP(LG_K_WG)) | `UP(CTR_W)'(wg_k_index);
+    /* verilator lint_on UNUSEDSIGNAL */
 `endif
 
 `ifdef TCU_SPARSE_ENABLE
