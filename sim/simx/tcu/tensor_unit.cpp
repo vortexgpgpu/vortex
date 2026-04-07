@@ -549,8 +549,8 @@ public:
     : simobject_(simobject)
     , core_(core)
     , arch_(arch)
-    , perf_stats_()
     , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
+    , perf_stats_()
   {
     //--
   }
@@ -787,7 +787,6 @@ public:
              uint32_t a_desc,
              uint32_t b_desc,
              const std::vector<reg_data_t>& rs1_data,
-             const std::vector<reg_data_t>& rs2_data,
              const std::vector<reg_data_t>& rs3_data,
              std::vector<reg_data_t>& rd_data,
              ExeTraceData* trace_data,
@@ -1252,7 +1251,6 @@ void TensorUnit::wgmma(uint32_t wid,
                        uint32_t a_desc,
                        uint32_t b_desc,
                        const std::vector<reg_data_t>& rs1_data,
-                       const std::vector<reg_data_t>& rs2_data,
                        const std::vector<reg_data_t>& rs3_data,
                        std::vector<reg_data_t>& rd_data,
                        ExeTraceData* trace_data,
@@ -1260,7 +1258,7 @@ void TensorUnit::wgmma(uint32_t wid,
                        uint32_t cd_nregs,
                        uint32_t is_a_smem) {
   impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, a_desc, b_desc,
-               rs1_data, rs2_data, rs3_data, rd_data, trace_data,
+               rs1_data, rs3_data, rd_data, trace_data,
                is_sparse, cd_nregs, is_a_smem);
 }
 
