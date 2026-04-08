@@ -44,23 +44,16 @@ riscv()
     make -C tests/riscv run-rtlsim
 
     CONFIGS="-DFPU_TYPE_STD" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
-
     CONFIGS="-DFPU_TYPE_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
-
     CONFIGS="-DFPU_TYPE_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
-
     CONFIGS="-DFPU_TYPE_DSP" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
     if [ "$XLEN" == "64" ]
     then
         CONFIGS="-DFPU_TYPE_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
-
         CONFIGS="-DFPU_TYPE_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
-
         CONFIGS="-DFPU_TYPE_STD -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
-
         CONFIGS="-DFPU_TYPE_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
-
         CONFIGS="-DFPU_TYPE_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
     fi
 
@@ -576,192 +569,112 @@ tensor_sp()
 
     # simx tests (NT=2)
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m4 -n4 -k16" --debug=3 --log=run_simx.log
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m4 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m4 -n4 -k32"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m4 -n4 -k32"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m4 -n4 -k8"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m4 -n4 -k8"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m4 -n4 -k4"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m4 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m4 -n4 -k16"
 
     # simx tests (NT=4)
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n4 -k32"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n4 -k32"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n4 -k8"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n4 -k8"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n4 -k4"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n4 -k16"
 
     # simx tests (NT=8)
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n8 -k64"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n8 -k64"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n8 -k16"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n8 -k16"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n8 -k8"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m8 -n8 -k32"
 
     # simx tests (NT=16)
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n8 -k64"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n8 -k64"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n8 -k16"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n8 -k16"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n8 -k8"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n8 -k32"
 
     # simx tests (NT=32)
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n16 -k64"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n16 -k64"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n16 -k128"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n16 -k128"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n16 -k32"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n16 -k32"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n16 -k16"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n16 -k64"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --args="-m16 -n16 -k64"
 
     # rtlsim tests (NT=2)
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m4 -n4 -k16" --debug=3 --log=run_rtlsim.log
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m4 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m4 -n4 -k32"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m4 -n4 -k32"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m4 -n4 -k8"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m4 -n4 -k8"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m4 -n4 -k4"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m4 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m4 -n4 -k16"
 
     # rtlsim tests (NT=4)
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n4 -k32"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n4 -k32"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n4 -k8"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n4 -k8"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n4 -k4"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n4 -k16"
-
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n4 -k16"
 
     # rtlsim tests (NT=8)
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n8 -k64"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n8 -k64"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n8 -k16"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n8 -k16"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n8 -k8"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m8 -n8 -k32"
 
     # rtlsim tests (NT=16)
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=2 -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n8 -k64"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n8 -k64"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n8 -k16"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n8 -k16"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n8 -k8"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n8 -k32"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n8 -k32"
 
     # rtlsim tests (NT=32)
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k64"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k64"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=int4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k128"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=uint4 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k128"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=2 -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k32"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k32"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k16"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k64"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DTCU_TYPE_DPI -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_sp --args="-m16 -n16 -k64"
 
     echo "tensor_sp tests done!"
@@ -777,29 +690,20 @@ tensor_mx() {
 
     # mxfp8 tests
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
 
     # mxint8 tests
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
 
     # nvfp4 tests
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
 
     echo "tensor_mx tests done!"
