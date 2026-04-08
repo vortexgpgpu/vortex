@@ -554,7 +554,6 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [LG_TCU_FEOP_STEPS:0]   set_steps_raw    = (LG_TCU_FEOP_STEPS+1)'(vertical_steps * horizontal_steps);
     wire [LG_TCU_FEOP_STEPS:0]   set_steps        = (set_steps_raw == '0) ? (LG_TCU_FEOP_STEPS+1)'(1) : set_steps_raw;
     wire [LG_TCU_FEOP_M_STEPS:0] vertical_skips   = (LG_TCU_FEOP_M_STEPS+1)'(32'(a_zeros) >> LG_TCU_FEOP_BLOCK_M_SIZE);
-    wire [LG_TCU_FEOP_N_STEPS:0] horizontal_skips = (LG_TCU_FEOP_N_STEPS+1)'(32'(b_zeros) >> LG_TCU_FEOP_BLOCK_N_SIZE);
 
     reg [LG_TCU_FEOP_STEPS-1:0] step; // step increments from 0 -> set_steps
     reg [`XLEN-1:0] set;
@@ -665,9 +664,6 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 // BITMAP PROCESSING
 
     // Set Extraction
-    // TODO: Fix the flattening here
-    wire [TCU_TC_M_OP-1:0][`XLEN-1:0] a_set = a_set_flat_processed;
-    wire [TCU_TC_N_OP-1:0][`XLEN-1:0] b_set = b_set_flat;
 
     // Bitmap extraction for sparse case
     wire [TCU_TC_M_OP-1:0] a_bitmap_in;
@@ -869,6 +865,9 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         );
 
     `ifdef DBG_TRACE_TCU
+        // wire [LG_TCU_FEOP_N_STEPS:0] horizontal_skips = (LG_TCU_FEOP_N_STEPS+1)'(32'(b_zeros) >> LG_TCU_FEOP_BLOCK_N_SIZE);
+        // wire [TCU_TC_N_OP-1:0][`XLEN-1:0] b_set = b_set_flat;
+        // wire [TCU_TC_M_OP-1:0][`XLEN-1:0] a_set = a_set_flat_processed;
         always @(posedge clk) begin
             if (issue_busy) begin
                 `TRACE(1, ("%t: FEOP-enq(%0d): wid=%0d, a_elem(idx=%0d)=0x%0h, set=%0d, m=%0d, n=%0d, id=%0d, step=%0d\n", $time, id, execute_if.data.header.wid,  ((32'(m) + 32'(id)) >> lg_i_ratio), a_elem, set, m, n, id, step));
@@ -876,53 +875,53 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 `TRACE_ARRAY1D(1, "0x%0h", b_row, (TCU_FEOP_BLOCK_N_SIZE >> lg_i_ratio));
                 `TRACE(1, ("\n"));
 
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("a_set="));
-                `TRACE_ARRAY1D(1, "0x%0h", a_set, (TCU_TC_M_OP >> lg_i_ratio));
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("b_set="));
-                `TRACE_ARRAY1D(1, "0x%0h", b_set, (TCU_TC_N_OP >> lg_i_ratio));
-                `TRACE(1, ("\n"));
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("a_set="));
+                // `TRACE_ARRAY1D(1, "0x%0h", a_set, (TCU_TC_M_OP >> lg_i_ratio));
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("b_set="));
+                // `TRACE_ARRAY1D(1, "0x%0h", b_set, (TCU_TC_N_OP >> lg_i_ratio));
+                // `TRACE(1, ("\n"));
 
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("a_bitmap_in="));
-                `TRACE_ARRAY1D(1, "%b", a_bitmap_in, TCU_TC_M_OP);
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("b_bitmap_in="));
-                `TRACE_ARRAY1D(1, "%b", b_bitmap_in, TCU_TC_N_OP);
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("a_bitmap_out="));
-                `TRACE_ARRAY1D(1, "%b", a_bitmap_out, TCU_TC_M_OP);
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("b_bitmap_out="));
-                `TRACE_ARRAY1D(1, "%b", b_bitmap_out, TCU_TC_N_OP);
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("a_addresses="));
-                `TRACE_ARRAY1D(1, "%x", a_addresses, TCU_TC_M_OP);
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("b_addresses="));
-                `TRACE_ARRAY1D(1, "%x", b_addresses, TCU_TC_N_OP);
-                `TRACE(1, ("\n"));
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("a_bitmap_in="));
+                // `TRACE_ARRAY1D(1, "%b", a_bitmap_in, TCU_TC_M_OP);
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("b_bitmap_in="));
+                // `TRACE_ARRAY1D(1, "%b", b_bitmap_in, TCU_TC_N_OP);
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("a_bitmap_out="));
+                // `TRACE_ARRAY1D(1, "%b", a_bitmap_out, TCU_TC_M_OP);
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("b_bitmap_out="));
+                // `TRACE_ARRAY1D(1, "%b", b_bitmap_out, TCU_TC_N_OP);
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("a_addresses="));
+                // `TRACE_ARRAY1D(1, "%x", a_addresses, TCU_TC_M_OP);
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("b_addresses="));
+                // `TRACE_ARRAY1D(1, "%x", b_addresses, TCU_TC_N_OP);
+                // `TRACE(1, ("\n"));
 
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("a_offset=%0d b_offset=%0d\n", a_offset, b_offset));
-                `TRACE(1, ("a_zeros=%0d a_non_zeros=%0d vertical_steps=%0d vertical_skips=%0d\n",     a_zeros, a_non_zeros, vertical_steps, vertical_skips));
-                `TRACE(1, ("b_zeros=%0d b_non_zeros=%0d horizontal_steps=%0d horizontal_skips=%0d\n", b_zeros, b_non_zeros, horizontal_steps, horizontal_skips));
-                `TRACE(1, ("last_set_in_block_a=%b last_set_in_block_b=%b, last step_in_block_a=%b last_step_in_block_b=%b\n", last_set_in_block_a, last_set_in_block_b, last_step_in_block_a, last_step_in_block_b));
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("a_offset=%0d b_offset=%0d\n", a_offset, b_offset));
+                // `TRACE(1, ("a_zeros=%0d a_non_zeros=%0d vertical_steps=%0d vertical_skips=%0d\n",     a_zeros, a_non_zeros, vertical_steps, vertical_skips));
+                // `TRACE(1, ("b_zeros=%0d b_non_zeros=%0d horizontal_steps=%0d horizontal_skips=%0d\n", b_zeros, b_non_zeros, horizontal_steps, horizontal_skips));
+                // `TRACE(1, ("last_set_in_block_a=%b last_set_in_block_b=%b, last step_in_block_a=%b last_step_in_block_b=%b\n", last_set_in_block_a, last_set_in_block_b, last_step_in_block_a, last_step_in_block_b));
                 
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("a_step_addresses="));
-                `TRACE_ARRAY1D(1, "%x", a_step_addresses, TCU_FEOP_BLOCK_M_SIZE);
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("b_step_addresses="));
-                `TRACE_ARRAY1D(1, "%x", b_step_addresses, TCU_FEOP_BLOCK_N_SIZE);
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("a_step_valids="));
-                `TRACE_ARRAY1D(1, "%b", a_step_valids, TCU_FEOP_BLOCK_M_SIZE);
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("b_step_valids="));
-                `TRACE_ARRAY1D(1, "%b", b_step_valids, TCU_FEOP_BLOCK_N_SIZE);
-                `TRACE(1, ("\n"));
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("a_step_addresses="));
+                // `TRACE_ARRAY1D(1, "%x", a_step_addresses, TCU_FEOP_BLOCK_M_SIZE);
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("b_step_addresses="));
+                // `TRACE_ARRAY1D(1, "%x", b_step_addresses, TCU_FEOP_BLOCK_N_SIZE);
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("a_step_valids="));
+                // `TRACE_ARRAY1D(1, "%b", a_step_valids, TCU_FEOP_BLOCK_M_SIZE);
+                // `TRACE(1, ("\n"));
+                // `TRACE(1, ("b_step_valids="));
+                // `TRACE_ARRAY1D(1, "%b", b_step_valids, TCU_FEOP_BLOCK_N_SIZE);
+                // `TRACE(1, ("\n"));
             end
         end
     `endif // DBG_TRACE_TCU
