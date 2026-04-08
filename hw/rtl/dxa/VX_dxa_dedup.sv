@@ -37,6 +37,7 @@ module VX_dxa_dedup import VX_gpu_pkg::*; #(
     input  wire [GMEM_LINE_SIZE-1:0]   in_byte_mask,
     input  wire                        in_oob,
     input  wire                        in_last,
+    input  wire                        in_new_row,
 
     // Output (to rd_ctrl).
     output wire                        out_valid,
@@ -54,8 +55,12 @@ module VX_dxa_dedup import VX_gpu_pkg::*; #(
     reg                        mreg_last_r;
 
     // Can we merge the incoming entry with the merge register?
-    // Same address AND same oob status (don't merge OOB with non-OOB).
-    wire can_merge = mreg_valid_r && (in_cl_addr == mreg_addr_r) && (in_oob == mreg_oob_r);
+    // Same address AND same oob status AND same row (never merge across row boundaries
+    // to guarantee contiguous byte masks for downstream barrel shift).
+    wire can_merge = mreg_valid_r
+                  && (in_cl_addr == mreg_addr_r)
+                  && (in_oob == mreg_oob_r)
+                  && !in_new_row;
 
     // Need flush: mreg has data and incoming can't merge (different address).
     wire need_flush = mreg_valid_r && in_valid && !can_merge;

@@ -71,6 +71,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0] r_oob_limit;
     reg [31:0]                r_total_rows;
     reg [31:0]                r_total_smem_writes;
+    reg [31:0]                r_total_bytes;
     reg [31:0]                r_cfill;
     reg [31:0]                r_elem_bytes;
     reg [31:0]                r_rank;
@@ -160,6 +161,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 // With write packing, multiple rows' data may pack into one SMEM word.
                 r_total_smem_writes <= (mul_out_r + 32'(r_initial_smem_base[SMEM_OFF_BITS-1:0])
                                         + SMEM_BYTES - 1) >> SMEM_OFF_BITS;
+                r_total_bytes       <= mul_out_r;  // total_rows * row_len_bytes
                 state_r <= S_IDLE;
             end
 
@@ -188,6 +190,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign setup_params.oob_limit          = r_oob_limit;
     assign setup_params.total_rows         = r_total_rows;
     assign setup_params.total_smem_writes  = r_total_smem_writes;
+    assign setup_params.total_bytes         = r_total_bytes;
     assign setup_params.cfill              = r_cfill;
     assign setup_params.elem_bytes         = r_elem_bytes;
     assign setup_params.rank               = r_rank;
