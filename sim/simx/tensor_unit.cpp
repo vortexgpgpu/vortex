@@ -1116,15 +1116,17 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
   if (tcu_type == TcuType::WMMA) {
     using wmma = vt::wmma_config_t<NUM_THREADS>;
     bool is_sparse = args.is_sparse;
-    uint32_t meta_stores = 0;
+    bool is_mx = vt::mx_scale_format(args.fmt_s);
+    uint32_t sparse_meta_stores = 0;
     if (is_sparse) {
-      meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wmma::stores_per_col, NUM_THREADS);
+      sparse_meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wmma::stores_per_col, NUM_THREADS);
     }
+    uint32_t mx_meta_stores = is_mx ? mx_meta_words(args.fmt_s) : 0;
     uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
     uint32_t mma_steps = (wmma::sym_sparse && is_sparse)
                        ? (wmma::m_steps * wmma::n_steps * wmma::k_steps)
                        : (wmma::m_steps * wmma::n_steps * k_count);
-    return meta_stores + mma_steps;
+    return sparse_meta_stores + mx_meta_stores + mma_steps;
   }
 
 #ifdef TCU_WGMMA_ENABLE
@@ -1163,22 +1165,39 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t fmt_s = args.fmt_s;
     uint32_t fmt_d = args.fmt_d;
 
-    uint32_t meta_stores = 0;
+    bool is_mx = vt::mx_scale_format(fmt_s);
+    uint32_t sparse_meta_stores = 0;
     if (is_sparse) {
-      meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wmma::stores_per_col, NUM_THREADS);
+      sparse_meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wmma::stores_per_col, NUM_THREADS);
     }
+    uint32_t mx_meta_stores = is_mx ? mx_meta_words(fmt_s) : 0;
+    uint32_t total_meta_stores = sparse_meta_stores + mx_meta_stores;
 
-    if (uop_index < meta_stores) {
-      // Phase 1: metadata-store uops (sparse only)
+    if (uop_index < sparse_meta_stores) {
+      // Phase 1a: sparse metadata-store uops
       constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
       uint32_t flat_store = uop_index;
       uint32_t reg_rs1 = (flat_store / wmma::meta_cols_per_load) ? meta_reg1 : meta_reg0;
       uop_instr->set_op_type(TcuType::META_STORE);
-      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, flat_store, 0, 0, 0});
+      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, flat_store, 0, 0, 0, TCU_META_KIND_SPARSE});
+      uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
+    } else if (uop_index < total_meta_stores) {
+      // Phase 1b: MX scale metadata-store uops
+      uint32_t mx_store = uop_index - sparse_meta_stores;
+      uint32_t reg_rs1 = 0;
+      if (fmt_s == vt::nvfp4::id) {
+        constexpr uint32_t nvfp4_regs[] = {8, 9, 20, 21, 18, 19, 22, 23};
+        reg_rs1 = nvfp4_regs[mx_store];
+      } else {
+        constexpr uint32_t mx8_regs[] = {8, 9, 18, 19};
+        reg_rs1 = mx8_regs[mx_store];
+      }
+      uop_instr->set_op_type(TcuType::META_STORE);
+      uop_instr->set_args(IntrTcuArgs{0, 0, 0, fmt_s, mx_store, 0, 0, 0, TCU_META_KIND_MX});
       uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
     } else {
       // Phase 2: MMA uops
-      uint32_t mma_idx = uop_index - meta_stores;
+      uint32_t mma_idx = uop_index - total_meta_stores;
       uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
 
       if (wmma::sym_sparse && is_sparse) {

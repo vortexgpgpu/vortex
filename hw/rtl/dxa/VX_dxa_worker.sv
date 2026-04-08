@@ -63,7 +63,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `endif
 
     VX_mem_bus_if.master gmem_bus_if,
-    VX_dxa_bank_wr_if.master smem_bank_wr_if,
+    VX_mem_bus_if.master smem_bus_if,
     output wire [NC_WIDTH-1:0] smem_core_id,
 
     output wire worker_idle
@@ -81,10 +81,6 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam SMEM_DATAW      = SMEM_BYTES * 8;
     localparam SMEM_OFF_BITS   = `CLOG2(SMEM_BYTES);
     localparam SMEM_ADDR_WIDTH = DXA_LMEM_ADDR_WIDTH;
-    // Bank-native output params
-    localparam NUM_BANKS       = `LMEM_NUM_BANKS;
-    localparam BANK_WORD_SIZE  = `XLEN / 8;
-    localparam BANK_WORD_WIDTH = BANK_WORD_SIZE * 8;
     localparam BANK_ADDR_WIDTH = DXA_LMEM_BANK_ADDR_WIDTH;
 
 `ifdef DXA_NB_MAX_OUTSTANDING
@@ -430,7 +426,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `endif
     );
 
-    assign wc_smem_wr_ready = smem_bank_wr_if.wr_ready;
+    assign wc_smem_wr_ready = smem_bus_if.req_ready;
 
     // ---- gmem bus wiring ----
     assign gmem_bus_if.req_valid     = rc_gmem_rd_req_valid;
@@ -442,31 +438,28 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign gmem_bus_if.req_data.tag.uuid = active_uuid_r;
     assign gmem_bus_if.req_data.tag.value = rc_gmem_rd_req_tag;
 
-    // ---- smem bank-native write ----
-    // After SMEM word size uncap, SMEM word covers all banks (direct mapping).
-    assign smem_bank_wr_if.wr_valid = wc_smem_wr_valid;
-    assign smem_bank_wr_if.wr_addr = BANK_ADDR_WIDTH'(wc_smem_wr_addr);
-    for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_bank_wr
-        assign smem_bank_wr_if.wr_data[b]   = wc_smem_wr_data[b * BANK_WORD_WIDTH +: BANK_WORD_WIDTH];
-        assign smem_bank_wr_if.wr_byteen[b] = wc_smem_wr_byteen[b * BANK_WORD_SIZE +: BANK_WORD_SIZE];
-    end
+    // ---- smem write via VX_mem_bus_if ----
+    assign smem_bus_if.req_valid       = wc_smem_wr_valid;
+    assign smem_bus_if.req_data.rw     = 1'b1;
+    assign smem_bus_if.req_data.addr   = BANK_ADDR_WIDTH'(wc_smem_wr_addr);
+    assign smem_bus_if.req_data.data   = wc_smem_wr_data;
+    assign smem_bus_if.req_data.byteen = wc_smem_wr_byteen;
+    assign smem_bus_if.req_data.tag    = '0;
+    assign smem_bus_if.rsp_ready       = 1'b0;
 
-    // Completion tag: {last_pkt, bar_addr}.
-    // With OOO refactoring, transfer_done fires on the same cycle as the truly
-    // final wrq_pop (when all_cls_done && wrq becomes empty). Use transfer_done
-    // to tag the final SMEM write for barrier done signaling.
+    // Completion flags: {last_pkt, bar_addr}.
 `ifdef EXT_DXA_MULTICAST_ENABLE
-    wire smem_wr_tag_last = active_notify_smem_done_r && (
+    wire smem_wr_flags_last = active_notify_smem_done_r && (
         active_is_multicast_r ? wc_mc_cta_done : wc_smem_wr_last_pkt);
-    wire [BAR_ADDR_W-1:0] smem_wr_tag_bar = active_is_multicast_r
+    wire [BAR_ADDR_W-1:0] smem_wr_flags_bar = active_is_multicast_r
         ? BAR_ADDR_W'(active_bar_addr_r + BAR_ADDR_W'(wc_mc_cta_bar_offset))
         : active_bar_addr_r;
-    assign smem_bank_wr_if.wr_tag = {smem_wr_tag_last, smem_wr_tag_bar};
+    assign smem_bus_if.req_data.flags = {smem_wr_flags_last, smem_wr_flags_bar};
 `elsif EXT_DXA_ENABLE
-    wire smem_wr_tag_last = wc_smem_wr_last_pkt && active_notify_smem_done_r;
-    assign smem_bank_wr_if.wr_tag = {smem_wr_tag_last, active_bar_addr_r};
+    wire smem_wr_flags_last = wc_smem_wr_last_pkt && active_notify_smem_done_r;
+    assign smem_bus_if.req_data.flags = {smem_wr_flags_last, active_bar_addr_r};
 `else
-    assign smem_bank_wr_if.wr_tag = {wc_smem_wr_last_pkt, {BAR_ADDR_W{1'b0}}};
+    assign smem_bus_if.req_data.flags = {wc_smem_wr_last_pkt, {BAR_ADDR_W{1'b0}}};
 `endif
 
     // Core-id sideband for routing in DXA core router.
@@ -494,7 +487,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     active_wid_r        <= launch_wid;
                     active_bar_addr_r   <= launch_bar_addr;
                 `ifdef EXT_DXA_ENABLE
-                    active_notify_smem_done_r <= DXA_DONE_META_ENABLE;
+                    active_notify_smem_done_r <= 1'b1;
                 `else
                     active_notify_smem_done_r <= 1'b0;
                 `endif

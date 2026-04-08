@@ -393,11 +393,11 @@ static op_string_t op_string(const Instr &instr) {
 #endif
   #ifdef EXT_V_ENABLE
     ,[&](VsetType vset_type)-> op_string_t {
-      auto vsetArgs = std::get<IntrVsetArgs>(instrArgs);
+      auto vset_args = std::get<IntrVset_args>(instrArgs);
       switch (vset_type) {
-      case VsetType::VSETVLI:  return {"VSETVLI", vsetArgs.to_string(vset_type)};
-      case VsetType::VSETIVLI: return {"VSETIVLI", vsetArgs.to_string(vset_type)};
-      case VsetType::VSETVL:   return {"VSETVL", vsetArgs.to_string(vset_type)};
+      case VsetType::VSETVLI:  return {"VSETVLI", vset_args.to_string(vset_type)};
+      case VsetType::VSETIVLI: return {"VSETIVLI", vset_args.to_string(vset_type)};
+      case VsetType::VSETVL:   return {"VSETVL", vset_args.to_string(vset_type)};
       default:
         std::abort();
       }
@@ -928,17 +928,17 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Integer);
       if ((code >> 30) == 0b10) { // vsetvl
         instr->set_op_type(VsetType::VSETVL);
-        instr->set_args(IntrVsetArgs{0, 0});
+        instr->set_args(IntrVset_args{0, 0});
         instr->set_src_reg(0, rs1, RegType::Integer);
         instr->set_src_reg(1, rs2, RegType::Integer);
       } else {
         auto zimm = (code >> shift_vzimm) & mask_vzimm;
         if ((code >> 30) == 0b11) { // vsetivli
           instr->set_op_type(VsetType::VSETIVLI);
-          instr->set_args(IntrVsetArgs{zimm, rs1});
+          instr->set_args(IntrVset_args{zimm, rs1});
         } else { // vsetvli
           instr->set_op_type(VsetType::VSETVLI);
-          instr->set_args(IntrVsetArgs{zimm, 0});
+          instr->set_args(IntrVset_args{zimm, 0});
           instr->set_src_reg(0, rs1, RegType::Integer);
         }
       }
@@ -1055,139 +1055,10 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
       case 0: { // WMMA_SYNC / WMMA_SP_SYNC — single macro Instr, sequencer expands to micro-ops
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
-        bool is_mx = vt::mx_scale_format(fmt_s);
-
-        // Validate metadata preconditions for sparse and MX paths independently.
-        uint32_t sparse_meta_stores = 0;
-        if (is_sparse) {
-          if ((cfg::k_steps % 2) != 0
-           || (cfg::b_block_size_sp == 0) || (NUM_THREADS % cfg::b_block_size_sp) != 0
-           || !vt::sparse_format_supported(fmt_s)) {
-            std::abort();
-          }
-          sparse_meta_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
-          if (sparse_meta_stores == 0)
-            std::abort();
-        }
-
-        uint32_t mx_meta_stores = 0;
-        if (is_mx) {
-          mx_meta_stores = (fmt_s == vt::nvfp4::id) ? 8 : 4;
-        }
-
-        // Derive loop counts: sym_sparse folds k into the flat counter, uses full k_steps
-        uint32_t k_count  = is_sparse ? sparse_k_steps : cfg::k_steps;
-        uint32_t b_sub    = is_sparse ? cfg::b_sub_blocks_sp : cfg::b_sub_blocks;
-        uint32_t mma_steps = (cfg::sym_sparse && is_sparse)
-                           ? (cfg::m_steps * cfg::n_steps * cfg::k_steps)
-                           : (cfg::m_steps * cfg::n_steps * k_count);
-        uint32_t total_steps = sparse_meta_stores + mx_meta_stores + mma_steps;
-        uint32_t steps_shift = (total_steps > 1) ? (32 - log2ceil(total_steps)) : 0;
-        uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
-        uint32_t uuid_lo = uuid & 0xffffffff;
-        uint32_t steps = 0;
-
-        // Helper: stamp next uuid slot
-        auto next_uuid = [&]() -> uint64_t {
-          return (static_cast<uint64_t>(uuid_hi) << 32) | ((steps++ << steps_shift) | uuid_lo);
-        };
-
-        // Phase 1: metadata-store uops (sparse bank then MX bank)
-        constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
-        for (uint32_t sparse_store = 0; sparse_store < sparse_meta_stores; ++sparse_store) {
-          uint32_t reg_rs1 = (sparse_store / cfg::meta_cols_per_load) ? meta_reg1 : meta_reg0;
-          auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
-          instr->setOpType(TcuType::META_STORE);
-          instr->setArgs(IntrTcuArgs{0, 0, 0, fmt_s, sparse_store, 0, 0, 0, TCU_META_KIND_SPARSE});
-          instr->setSrcReg(0, reg_rs1, RegType::Float);
-          instr->setParentUUID(uuid);
-          ibuffer.push_back(instr);
-        }
-
-        for (uint32_t mx_store = 0; mx_store < mx_meta_stores; ++mx_store) {
-          uint32_t reg_rs1 = 0;
-          if (fmt_s == vt::nvfp4::id) {
-            switch (mx_store) {
-            case 0: reg_rs1 = 8;  break;  // A0
-            case 1: reg_rs1 = 9;  break;  // A1
-            case 2: reg_rs1 = 20; break;  // A2
-            case 3: reg_rs1 = 21; break;  // A3
-            case 4: reg_rs1 = 18; break;  // B0
-            case 5: reg_rs1 = 19; break;  // B1
-            case 6: reg_rs1 = 22; break;  // B2
-            case 7: reg_rs1 = 23; break;  // B3
-            default:
-              std::abort();
-            }
-          } else {
-            switch (mx_store) {
-            case 0: reg_rs1 = 8;  break;  // A0
-            case 1: reg_rs1 = 9;  break;  // A1
-            case 2: reg_rs1 = 18; break;  // B0
-            case 3: reg_rs1 = 19; break;  // B1
-            default:
-              std::abort();
-            }
-          }
-          auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
-          instr->setOpType(TcuType::META_STORE);
-          instr->setArgs(IntrTcuArgs{0, 0, 0, fmt_s, mx_store, 0, 0, 0, TCU_META_KIND_MX});
-          instr->setSrcReg(0, reg_rs1, RegType::Float);
-          instr->setParentUUID(uuid);
-          ibuffer.push_back(instr);
-        }
-
-        // Phase 2: MMA uops
-        if (cfg::sym_sparse && is_sparse) {
-          // Symmetric-sparse: flatten (m, n, k) into a single counter, alternating
-          // thread-mask halves so each pair of uops covers a full accumulator row.
-          constexpr uint32_t lg_n = (cfg::n_steps > 1) ? log2ceil(cfg::n_steps) : 0;
-          constexpr uint32_t lg_k = (cfg::k_steps > 1) ? log2ceil(cfg::k_steps) : 0;
-          constexpr uint32_t step_bits = lg_n + lg_k;
-          constexpr uint32_t step_mask = step_bits ? ((1u << step_bits) - 1) : 0;
-          constexpr uint32_t sym_mask_lo = []() {
-            uint32_t mask = 0;
-            for (uint32_t lane = 0; lane < NUM_THREADS; ++lane)
-              if ((lane % cfg::tcN) < (cfg::tcN / 2)) mask |= (1u << lane);
-            return mask;
-          }();
-          constexpr uint32_t all_lanes = (NUM_THREADS == 32) ? 0xffffffffu : ((1u << NUM_THREADS) - 1);
-          for (uint32_t eff = 0; eff < mma_steps; ++eff) {
-            uint32_t n_sp = step_bits ? (eff & step_mask) : 0;
-            uint32_t m_sp = eff >> step_bits;
-            uint32_t reg_rs3 = rc_base + (eff >> 1);
-            auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
-            instr->setOpType(TcuType::WMMA);
-            instr->setArgs(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, n_sp, 0, TCU_META_KIND_SPARSE});
-            instr->setDestReg(reg_rs3, RegType::Float);
-            instr->setSrcReg(0, ra_base + m_sp, RegType::Float);
-            instr->setSrcReg(1, rb_base + n_sp, RegType::Float);
-            instr->setSrcReg(2, reg_rs3, RegType::Float);
-            instr->setTmask(ThreadMask(NUM_THREADS, (eff & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
-            instr->setParentUUID(uuid);
-            ibuffer.push_back(instr);
-          }
-        } else {
-          // Standard k-major triple loop (dense or non-sym sparse)
-          for (uint32_t k = 0; k < k_count; ++k) {
-            for (uint32_t m = 0; m < cfg::m_steps; ++m) {
-              for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-                uint32_t reg_rs1 = ra_base + (m / cfg::a_sub_blocks) * k_count + k;
-                uint32_t reg_rs2 = rb_base + (k * cfg::n_steps + n) / b_sub;
-                uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
-                auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
-                instr->setOpType(TcuType::WMMA);
-                instr->setArgs(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k, TCU_META_KIND_SPARSE});
-                instr->setDestReg(reg_rs3, RegType::Float);
-                instr->setSrcReg(0, reg_rs1, RegType::Float);
-                instr->setSrcReg(1, reg_rs2, RegType::Float);
-                instr->setSrcReg(2, reg_rs3, RegType::Float);
-                instr->setParentUUID(uuid);
-                ibuffer.push_back(instr);
-              }
-            }
-          }
-        }
+        instr->set_op_type(TcuType::WMMA);
+        instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, 0, 0, 0, 0});
+        instr->set_macro_op();
+        instr->set_wstall(true);
       } break;
     #ifdef TCU_WGMMA_ENABLE
       case 1: { // WGMMA_SYNC — single macro Instr, sequencer expands to micro-ops
