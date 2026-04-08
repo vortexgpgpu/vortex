@@ -790,6 +790,26 @@ tensor_wg() {
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
     CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp
 
+    # WGMMA+DXA dense tests — rotate NRC across NT/Type/Driver
+    # SimX:   NT=8  int8/NRC=8   NT=16 fp16/NRC=16   NT=32 tf32/NRC=32
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DEXT_DXA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DEXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DEXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_dxa
+    # RTLsim: NT=8  fp16/NRC=32  NT=16 int8/NRC=8    NT=32 tf32/NRC=16
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DEXT_DXA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DEXT_DXA_ENABLE -DITYPE=int8 -DOTYPE=int32 -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DEXT_DXA_ENABLE -DITYPE=tf32 -DOTYPE=fp32 -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_dxa
+
+    # WGMMA+DXA sparse tests — rotate NRC across NT/Driver (fp16/fp32)
+    # SimX:   NT=8/NRC=32  NT=16/NRC=8   NT=32/NRC=16
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DEXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DEXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DEXT_DXA_ENABLE -DWGMMA_NRC=16" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_wg_sp_dxa
+    # RTLsim: NT=8/NRC=8   NT=16/NRC=32  NT=32/NRC=8
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DEXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DEXT_DXA_ENABLE -DWGMMA_NRC=32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DEXT_DXA_ENABLE -DWGMMA_NRC=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu_wg_sp_dxa
+
     echo "tensor tensor_wg tests done!"
 }
 
