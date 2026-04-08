@@ -187,7 +187,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_CTA_GRID_DIM_X  : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.grid_dim[0]);
             `VX_CSR_CTA_GRID_DIM_Y  : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.grid_dim[1]);
             `VX_CSR_CTA_GRID_DIM_Z  : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.grid_dim[2]);
-            `VX_CSR_CTA_LMEM_ADDR   : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.smem_addr);
+            `VX_CSR_CTA_LMEM_ADDR   : read_data_rw_w = `XLEN'(sched_csr_if.cta_csrs.lmem_addr);
 
             `VX_CSR_WARP_ID    : read_data_ro_w = `XLEN'(read_wid);
             `VX_CSR_CORE_ID    : read_data_ro_w = `XLEN'(CORE_ID);
@@ -308,7 +308,7 @@ import VX_fpu_pkg::*;
                         `CSR_READ_64(`VX_CSR_MPM_DXA_TRANSFERS,  read_data_ro_w, sysmem_perf.dxa.transfers);
                         `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_READS, read_data_ro_w, sysmem_perf.dxa.gmem_reads);
                         `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_DEDUP, read_data_ro_w, sysmem_perf.dxa.gmem_dedup);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_LMEM_WRITES,read_data_ro_w, sysmem_perf.dxa.smem_writes);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_LMEM_WRITES,read_data_ro_w, sysmem_perf.dxa.lmem_writes);
                         `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_LT,    read_data_ro_w, sysmem_perf.dxa.gmem_latency);
                         default:;
                         endcase

@@ -25,7 +25,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef EXT_DXA_ENABLE
-    VX_mem_bus_if.slave     dxa_smem_bus_if,
+    VX_mem_bus_if.slave     dxa_lmem_bus_if,
     VX_txbar_bus_if.master  dxa_txbar_bus_if,
 `endif
 
@@ -115,7 +115,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     // DMA arbiter: merge DXA writes and/or TCU reads onto single DMA port.
     localparam DMA_DATA_SIZE  = `LMEM_NUM_BANKS * LSU_WORD_SIZE;
     localparam DMA_ADDR_WIDTH = LMEM_ADDR_WIDTH - `CLOG2(`LMEM_NUM_BANKS);
-    localparam DMA_IN_TAG_W   = SMEM_DMA_TAG_W;
+    localparam DMA_IN_TAG_W   = LMEM_DMA_TAG_W;
 `ifdef EXT_DXA_ENABLE
 `ifdef TCU_WGMMA_ENABLE
     localparam NUM_DMA_INPUTS = 2;
@@ -132,7 +132,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE   (DMA_DATA_SIZE),
         .TAG_WIDTH   (DMA_OUT_TAG_W),
-        .FLAGS_WIDTH (SMEM_DMA_FLAGS_W),
+        .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
         .ADDR_WIDTH  (DMA_ADDR_WIDTH)
     ) lmem_dma_if();
 
@@ -141,14 +141,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         VX_mem_bus_if #(
             .DATA_SIZE   (DMA_DATA_SIZE),
             .TAG_WIDTH   (DMA_IN_TAG_W),
-            .FLAGS_WIDTH (SMEM_DMA_FLAGS_W),
+            .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
             .ADDR_WIDTH  (DMA_ADDR_WIDTH)
         ) dma_arb_in_if[NUM_DMA_INPUTS]();
 
         VX_mem_bus_if #(
             .DATA_SIZE   (DMA_DATA_SIZE),
             .TAG_WIDTH   (DMA_OUT_TAG_W),
-            .FLAGS_WIDTH (SMEM_DMA_FLAGS_W),
+            .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
             .ADDR_WIDTH  (DMA_ADDR_WIDTH)
         ) dma_arb_out_if[1]();
 
@@ -156,7 +156,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         // Wire DXA and/or TCU into the arbiter input array.
         // Index 0 = DXA (highest priority), Index 1 = TCU (when both enabled).
     `ifdef EXT_DXA_ENABLE
-        `ASSIGN_VX_MEM_BUS_IF (dma_arb_in_if[0], dxa_smem_bus_if);
+        `ASSIGN_VX_MEM_BUS_IF (dma_arb_in_if[0], dxa_lmem_bus_if);
     `ifdef TCU_WGMMA_ENABLE
         `ASSIGN_VX_MEM_BUS_IF (dma_arb_in_if[1], tcu_lmem_if);
     `endif
@@ -169,7 +169,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .NUM_OUTPUTS (1),
             .DATA_SIZE   (DMA_DATA_SIZE),
             .TAG_WIDTH   (DMA_IN_TAG_W),
-            .FLAGS_WIDTH (SMEM_DMA_FLAGS_W),
+            .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
             .ADDR_WIDTH  (DMA_ADDR_WIDTH),
             .ARBITER     ("P")
         ) lmem_dma_arb (
@@ -192,12 +192,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         VX_dxa_completion #(
             .INSTANCE_ID (`SFORMATF(("%s-lmem-dma-compl_det", INSTANCE_ID))),
             .NUM_BANKS   (`LMEM_NUM_BANKS),
-            .FLAGS_WIDTH (DXA_SMEM_FLAGS_WIDTH)
+            .FLAGS_WIDTH (DXA_LMEM_FLAGS_WIDTH)
         ) dxa_completion_detect (
             .clk           (clk),
             .reset         (reset),
             .bank_wr_fire  (dxa_bank_wr_fire),
-            .bank_wr_flags (DXA_SMEM_FLAGS_WIDTH'(lmem_dma_if.req_data.flags)),
+            .bank_wr_flags (DXA_LMEM_FLAGS_WIDTH'(lmem_dma_if.req_data.flags)),
             .txbar_bus_if  (dxa_txbar_bus_if)
         );
 
@@ -231,7 +231,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .WORD_SIZE   (LSU_WORD_SIZE),
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
         .TAG_WIDTH   (LSU_TAG_WIDTH),
-        .DMA_ENABLE  (SMEM_DMA_EN),
+        .DMA_ENABLE  (LMEM_DMA_EN),
         .DMA_TAG_WIDTH (DMA_OUT_TAG_W),
         .OUT_BUF     (3)
     ) local_mem (

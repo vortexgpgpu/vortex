@@ -39,7 +39,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Pass-through params for downstream (stable during transfer).
     output wire [31:0]                 out_cfill,
-    output wire [31:0]                 out_total_smem_writes
+    output wire [31:0]                 out_total_lmem_writes
 );
     localparam CL_OFF_BITS = `CLOG2(GMEM_LINE_SIZE);
 
@@ -57,10 +57,10 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Pass-through latched params
     reg [31:0]                 cfill_r;
-    reg [31:0]                 total_smem_writes_r;
+    reg [31:0]                 total_lmem_writes_r;
 
     assign out_cfill = cfill_r;
-    assign out_total_smem_writes = total_smem_writes_r;
+    assign out_total_lmem_writes = total_lmem_writes_r;
 
     // ---- Per-row geometry (combinatorial from current row state) ----
     wire [CL_OFF_BITS-1:0] first_off = gmem_base_r[CL_OFF_BITS-1:0];
@@ -125,7 +125,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             oob_limit_r  <= setup_params.oob_limit[0];
             line_idx_r   <= '0;
             cfill_r      <= setup_params.cfill;
-            total_smem_writes_r <= setup_params.total_smem_writes;
+            total_lmem_writes_r <= setup_params.total_lmem_writes;
         end else if (advance) begin
             if (is_last_line && is_last_row) begin
                 active_r <= 1'b0;
@@ -142,7 +142,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     `UNUSED_VAR (cur_cl_byte_addr[CL_OFF_BITS-1:0])
     `UNUSED_VAR (total_end[31:CL_OFF_BITS])
-    `UNUSED_VAR (setup_params.initial_smem_base)
+    `UNUSED_VAR (setup_params.initial_lmem_base)
     `UNUSED_VAR (setup_params.elem_bytes)
     `UNUSED_VAR (setup_params.rank)
     `UNUSED_VAR (setup_params.oob_limit[DXA_MAX_OUTER_DIMS-1:1])

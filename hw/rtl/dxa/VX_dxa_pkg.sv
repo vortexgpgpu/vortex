@@ -29,7 +29,7 @@ package VX_dxa_pkg;
     // Architected funct3 encoding: 0=1D, 1=2D, 2=3D, 3=4D, 4=5D.
     // All variants are expanded into micro-ops by VX_dxa_uops.
 
-    // smem_addr(XLEN) + meta(XLEN) + coords[5](5*XLEN) = 7*XLEN total
+    // lmem_addr(XLEN) + meta(XLEN) + coords[5](5*XLEN) = 7*XLEN total
     localparam DXA_REQ_DATAW = NC_WIDTH + UUID_WIDTH + NW_WIDTH + (7 * `XLEN)
 `ifdef EXT_DXA_MULTICAST_ENABLE
         + 1 + `NUM_WARPS  // is_multicast + cta_mask
@@ -126,7 +126,7 @@ package VX_dxa_pkg;
     `ifdef EXT_DXA_MULTICAST_ENABLE
         logic [31:0] _pad0;           // offset 23 (unused)
         logic [31:0] bar_stride;      // offset 22
-        logic [31:0] smem_stride;     // offset 21
+        logic [31:0] lmem_stride;     // offset 21
     `else
         logic [2:0][31:0] _pad0;      // offsets 21-23 (unused)
     `endif
@@ -159,7 +159,7 @@ package VX_dxa_pkg;
         logic [NW_WIDTH-1:0]      wid;
         logic [BAR_ADDR_W-1:0]    bar_addr;
         logic [`MEM_ADDR_WIDTH-1:0] gmem_base;
-        logic [`XLEN-1:0]         smem_base;
+        logic [`XLEN-1:0]         lmem_base;
         logic [4:0][`XLEN-1:0]    coords;
         dxa_issue_dec_t           dec;
     } dxa_worker_cmd_t;
@@ -173,7 +173,7 @@ package VX_dxa_pkg;
 
     typedef struct packed {
         logic [BAR_ADDR_W-1:0]    bar_addr;
-    } dxa_smem_done_t;
+    } dxa_lmem_done_t;
 
     // ── Line-granularity refactor types ──────────────────────────────────
 
@@ -184,12 +184,12 @@ package VX_dxa_pkg;
     // All multiplies happen during setup; fast path uses additions only.
     typedef struct packed {
         logic [`MEM_ADDR_WIDTH-1:0]  initial_gmem_base;
-        logic [`XLEN-1:0]           initial_smem_base;
+        logic [`XLEN-1:0]           initial_lmem_base;
         logic [31:0]                row_len_bytes;
         logic [31:0]                stride0;
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit;
         logic [31:0]                total_rows;
-        logic [31:0]                total_smem_writes;
+        logic [31:0]                total_lmem_writes;
         logic [31:0]                cfill;
         logic [31:0]                elem_bytes;
         logic [31:0]                rank;

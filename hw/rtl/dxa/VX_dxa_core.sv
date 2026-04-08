@@ -28,24 +28,24 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_dcr_bus_if.slave dcr_bus_if,
 
     VX_dxa_req_bus_if.slave req_bus_if[DXA_NUM_SOCKETS],
-    VX_mem_bus_if.master smem_bus_if[DXA_NUM_SOCKETS * `SOCKET_SIZE],
+    VX_mem_bus_if.master lmem_bus_if[DXA_NUM_SOCKETS * `SOCKET_SIZE],
     VX_mem_bus_if.master gmem_bus_if[GMEM_OUT_PORTS],
     output wire busy
 );
-    localparam NUM_SMEM_OUTPUTS = DXA_NUM_SOCKETS * `SOCKET_SIZE;
-    localparam ROUTER_SEL_W     = `UP(`CLOG2(NUM_SMEM_OUTPUTS));
+    localparam NUM_LMEM_OUTPUTS = DXA_NUM_SOCKETS * `SOCKET_SIZE;
+    localparam ROUTER_SEL_W     = `UP(`CLOG2(NUM_LMEM_OUTPUTS));
     `UNUSED_PARAM (CORE_LOCAL_BITS)
 
     VX_dxa_req_bus_if cluster_dxa_bus_if[NUM_DXA_UNITS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE   (DXA_SMEM_WORD_SIZE),
-        .TAG_WIDTH   (SMEM_DMA_TAG_W),
-        .FLAGS_WIDTH (DXA_SMEM_FLAGS_WIDTH),
-        .ADDR_WIDTH  (DXA_SMEM_BANK_ADDR_WIDTH)
-    ) worker_smem_bus_if[NUM_DXA_UNITS]();
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (LMEM_DMA_TAG_W),
+        .FLAGS_WIDTH (DXA_LMEM_FLAGS_WIDTH),
+        .ADDR_WIDTH  (DXA_LMEM_BANK_ADDR_WIDTH)
+    ) worker_lmem_bus_if[NUM_DXA_UNITS]();
 
-    wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0] worker_smem_core_id;
+    wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0] worker_lmem_core_id;
 
     // Request distribution: DXA_NUM_SOCKETS → NUM_DXA_UNITS
     wire [DXA_NUM_SOCKETS-1:0]                       req_valid_in;
@@ -105,8 +105,8 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .dcr_bus_if         (dcr_bus_if),
         .cluster_dxa_bus_if (cluster_dxa_bus_if),
         .dxa_gmem_bus_if    (worker_gmem_bus_if),
-        .dxa_smem_bus_if    (worker_smem_bus_if),
-        .dxa_smem_core_id   (worker_smem_core_id),
+        .dxa_lmem_bus_if    (worker_lmem_bus_if),
+        .dxa_lmem_core_id   (worker_lmem_core_id),
         .busy               (engine_busy)
     );
 
@@ -145,25 +145,25 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [NUM_DXA_UNITS-1:0][ROUTER_SEL_W-1:0] worker_output_sel;
 
     for (genvar w = 0; w < NUM_DXA_UNITS; ++w) begin : g_worker_sel
-        assign worker_output_sel[w] = ROUTER_SEL_W'(worker_smem_core_id[w]);
+        assign worker_output_sel[w] = ROUTER_SEL_W'(worker_lmem_core_id[w]);
     end
 
-    // Route worker SMEM writes to per-core output ports.
+    // Route worker LMEM writes to per-core output ports.
     VX_mem_xbar #(
         .NUM_INPUTS  (NUM_DXA_UNITS),
-        .NUM_OUTPUTS (NUM_SMEM_OUTPUTS),
-        .DATA_SIZE   (DXA_SMEM_WORD_SIZE),
-        .TAG_WIDTH   (SMEM_DMA_TAG_W),
-        .FLAGS_WIDTH (DXA_SMEM_FLAGS_WIDTH),
-        .ADDR_WIDTH  (DXA_SMEM_BANK_ADDR_WIDTH),
+        .NUM_OUTPUTS (NUM_LMEM_OUTPUTS),
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (LMEM_DMA_TAG_W),
+        .FLAGS_WIDTH (DXA_LMEM_FLAGS_WIDTH),
+        .ADDR_WIDTH  (DXA_LMEM_BANK_ADDR_WIDTH),
         .ARBITER     ("R"),
-        .REQ_OUT_BUF ((NUM_DXA_UNITS != NUM_SMEM_OUTPUTS) ? 2 : 0)
-    ) dxa_smem_xbar (
+        .REQ_OUT_BUF ((NUM_DXA_UNITS != NUM_LMEM_OUTPUTS) ? 2 : 0)
+    ) dxa_lmem_xbar (
         .clk        (clk),
         .reset      (reset),
         .sel_in     (worker_output_sel),
-        .bus_in_if  (worker_smem_bus_if),
-        .bus_out_if (smem_bus_if)
+        .bus_in_if  (worker_lmem_bus_if),
+        .bus_out_if (lmem_bus_if)
     );
 
 endmodule

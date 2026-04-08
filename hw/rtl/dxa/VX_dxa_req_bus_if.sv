@@ -19,7 +19,7 @@ interface VX_dxa_req_bus_if import VX_gpu_pkg::*, VX_dxa_pkg::*; ();
         logic [NC_WIDTH-1:0]      core_id;
         logic [UUID_WIDTH-1:0]    uuid;
         logic [NW_WIDTH-1:0]      wid;
-        logic [`XLEN-1:0]         smem_addr;   // from lane 0 rs1
+        logic [`XLEN-1:0]         lmem_addr;   // from lane 0 rs1
         logic [`XLEN-1:0]         meta;        // from lane 1 rs1 (desc[3:0], bar[30:4], 1[31])
         logic [4:0][`XLEN-1:0]    coords;      // [0]=lane2.rs1,[1]=lane3.rs1,[2]=lane0.rs2,[3]=lane1.rs2,[4]=lane2.rs2
     `ifdef EXT_DXA_MULTICAST_ENABLE
