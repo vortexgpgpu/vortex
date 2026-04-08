@@ -61,7 +61,7 @@ package VX_dxa_pkg;
     localparam DXA_BANK_WR_WORD_SIZE  = `XLEN / 8;
     localparam DXA_BANK_WR_WORD_WIDTH = DXA_BANK_WR_WORD_SIZE * 8;
     localparam DXA_BANK_WR_PER_BANK_W = DXA_LMEM_BANK_ADDR_WIDTH + DXA_BANK_WR_WORD_WIDTH + DXA_BANK_WR_WORD_SIZE;
-    localparam DXA_BANK_WR_DATAW      = `LMEM_NUM_BANKS * (1 + DXA_BANK_WR_PER_BANK_W) + DXA_BANK_WR_TAG_WIDTH;
+    localparam DXA_BANK_WR_DATAW      = `LMEM_NUM_BANKS * (1 + DXA_BANK_WR_PER_BANK_W) + DXA_LMEM_FLAGS_WIDTH;
 
     typedef struct packed {
         logic [31:0] rank;
