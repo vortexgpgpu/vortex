@@ -65,7 +65,7 @@ Wait until build completes before running anything else in parallel terminals.
 
 ## Testing & Debugging
 
-All commands below should run from `build/` (where generated `ci/` scripts and resolved env are expected).
+All commands below MUST run directly from the `build/` directory (where generated `ci/` scripts and resolved env are expected).
 
 ### Smoke tests
 
