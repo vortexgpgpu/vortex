@@ -36,6 +36,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [GMEM_LINE_SIZE-1:0]   out_byte_mask,
     output wire                        out_oob,
     output wire                        out_last,
+    output wire                        out_new_row,
 
     // Pass-through params for downstream (stable during transfer).
     output wire [31:0]                 out_cfill,
@@ -105,6 +106,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign out_byte_mask = byte_mask_w;
     assign out_oob       = is_oob;
     assign out_last      = is_last_line && is_last_row;
+    assign out_new_row   = (line_idx_r == 0);
 
     // ---- Advance logic ----
     wire advance = out_valid && out_ready;
@@ -155,5 +157,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
     end
 `endif
+
+    `UNUSED_VAR (setup_params.total_bytes)
 
 endmodule

@@ -28,7 +28,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [PERF_CTR_BITS-1:0] perf_transfers,
     output wire [PERF_CTR_BITS-1:0] perf_gmem_reads,
     output wire [PERF_CTR_BITS-1:0] perf_gmem_dedup,
-    output wire [PERF_CTR_BITS-1:0] perf_smem_writes,
+    output wire [PERF_CTR_BITS-1:0] perf_lmem_writes,
     output wire [PERF_CTR_BITS-1:0] perf_gmem_lt,
 `endif
 
@@ -63,7 +63,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `endif
 
     VX_mem_bus_if.master gmem_bus_if,
-    VX_mem_bus_if.master smem_bus_if,
+    VX_dxa_bank_wr_if.master smem_bank_wr_if,
     output wire [NC_WIDTH-1:0] smem_core_id,
 
     output wire worker_idle
@@ -82,6 +82,9 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam SMEM_OFF_BITS   = `CLOG2(SMEM_BYTES);
     localparam SMEM_ADDR_WIDTH = DXA_LMEM_ADDR_WIDTH;
     // Bank-native output params
+    localparam NUM_BANKS       = `LMEM_NUM_BANKS;
+    localparam BANK_WORD_SIZE  = `XLEN / 8;
+    localparam BANK_WORD_WIDTH = BANK_WORD_SIZE * 8;
     localparam BANK_ADDR_WIDTH = DXA_LMEM_BANK_ADDR_WIDTH;
 
 `ifdef DXA_NB_MAX_OUTSTANDING
@@ -116,17 +119,22 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
 
     // ---- Transfer state ----
-    // FSM: IDLE → SETUP → ACTIVE → IDLE
-    localparam TS_IDLE   = 2'd0;
-    localparam TS_SETUP  = 2'd1;
-    localparam TS_ACTIVE = 2'd2;
+    // FSM: IDLE → DESC_WAIT → SETUP → ACTIVE → IDLE
+    // DESC_WAIT absorbs 1-cycle BRAM read latency from desc_table.
+    localparam TS_IDLE      = 3'd0;
+    localparam TS_DESC_WAIT = 3'd1;
+    localparam TS_SETUP     = 3'd2;
+    localparam TS_ACTIVE    = 3'd3;
 
-    reg [1:0]              ts_state_r;
+    reg [2:0]              ts_state_r;
     reg [NC_WIDTH-1:0]     active_core_id_r;
     reg [UUID_WIDTH-1:0]   active_uuid_r;
     reg [NW_WIDTH-1:0]     active_wid_r;
     reg [BAR_ADDR_W-1:0]   active_bar_addr_r;
     reg                    active_notify_smem_done_r;
+    // Latched launch-interface signals (held stable across DESC_WAIT/SETUP).
+    reg [`XLEN-1:0]        active_smem_addr_r;
+    reg [4:0][`XLEN-1:0]   active_coords_r;
 `ifdef EXT_DXA_MULTICAST_ENABLE
     reg                    active_is_multicast_r;
     reg [`NUM_WARPS-1:0]   active_cta_mask_r;
@@ -145,7 +153,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign launch_ready = (ts_state_r == TS_IDLE);
 
     // ---- Setup phase ----
-    wire setup_start = launch_valid_cmd && (ts_state_r == TS_IDLE);
+    // setup_start fires in DESC_WAIT state, after BRAM output is valid.
+    wire setup_start = (ts_state_r == TS_DESC_WAIT);
     wire setup_done;
     dxa_setup_params_t setup_params;
 
@@ -157,8 +166,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .start       (setup_start),
         .issue_dec   (issue_dec),
         .gmem_base   (issue_base_addr),
-        .smem_base   (launch_smem_addr),
-        .coords      (launch_coords),
+        .smem_base   (active_smem_addr_r),
+        .coords      (active_coords_r),
         .cfill       (issue_desc_cfill),
         .setup_done  (setup_done),
         .setup_params(setup_params)
@@ -175,6 +184,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [GMEM_ADDR_WIDTH-1:0] ag_cl_addr;
     wire [GMEM_BYTES-1:0] ag_byte_mask;
     wire ag_oob, ag_last;
+    wire ag_new_row;
     wire [31:0] ag_cfill, ag_total_smem_writes;
 
     VX_dxa_addr_gen #(
@@ -191,6 +201,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .out_byte_mask        (ag_byte_mask),
         .out_oob              (ag_oob),
         .out_last             (ag_last),
+        .out_new_row          (ag_new_row),
         .out_cfill            (ag_cfill),
         .out_total_smem_writes(ag_total_smem_writes)
     );
@@ -216,6 +227,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .in_byte_mask  (ag_byte_mask),
         .in_oob        (ag_oob),
         .in_last       (ag_last),
+        .in_new_row    (ag_new_row),
         .out_valid     (dd_valid),
         .out_ready     (dd_ready),
         .out_cl_addr   (dd_cl_addr),
@@ -229,18 +241,39 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
 
     // ════════════════════════════════════════════════════════════════════
-    // Stage 3: Read Controller (GMEM reads + ROB reorder)
+    // Stage 2.5: SMEM Address Tracker (per-CL SMEM byte address)
+    // ════════════════════════════════════════════════════════════════════
+
+    wire [`MEM_ADDR_WIDTH-1:0] dd_smem_byte_addr;
+    VX_dxa_smem_addr_tracker #(
+        .GMEM_BYTES  (GMEM_BYTES),
+        .SMEM_ADDR_W (`MEM_ADDR_WIDTH)
+    ) smem_addr_tracker (
+        .clk              (clk),
+        .reset            (reset),
+        .start            (pipeline_start),
+        .initial_smem_base(`MEM_ADDR_WIDTH'(setup_params.initial_smem_base)),
+        .valid            (dd_valid),
+        .ready            (dd_ready),
+        .byte_mask        (dd_byte_mask),
+        .smem_byte_addr   (dd_smem_byte_addr)
+    );
+
+    // ════════════════════════════════════════════════════════════════════
+    // Stage 3: Read Controller (GMEM reads, out-of-order emission)
     // ════════════════════════════════════════════════════════════════════
 
     wire rc_gmem_rd_req_valid;
     wire [GMEM_ADDR_WIDTH-1:0] rc_gmem_rd_req_addr;
     wire [GMEM_TAG_VALUEW-1:0] rc_gmem_rd_req_tag;
     wire rc_gmem_req_fire, rc_rsp_fire, rc_stall_no_slot;
+    wire rc_all_cls_done;
 
     wire rc_cl_out_valid, rc_cl_out_ready;
     wire [GMEM_DATAW-1:0] rc_cl_out_data;
     wire [GMEM_BYTES-1:0] rc_cl_out_byte_mask;
     wire rc_cl_out_last;
+    wire [`MEM_ADDR_WIDTH-1:0] rc_cl_out_smem_byte_addr;
 
     VX_dxa_rd_ctrl #(
         .MAX_OUTSTANDING (MAX_OUTSTANDING),
@@ -259,6 +292,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .cl_in_byte_mask  (dd_byte_mask),
         .cl_in_oob        (dd_oob),
         .cl_in_last       (dd_last),
+        .cl_in_smem_byte_addr(dd_smem_byte_addr),
         .cfill            (ag_cfill),
         .gmem_rd_req_valid(rc_gmem_rd_req_valid),
         .gmem_rd_req_addr (rc_gmem_rd_req_addr),
@@ -273,9 +307,11 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .cl_out_data      (rc_cl_out_data),
         .cl_out_byte_mask (rc_cl_out_byte_mask),
         .cl_out_last      (rc_cl_out_last),
+        .cl_out_smem_byte_addr(rc_cl_out_smem_byte_addr),
         .gmem_req_fire    (rc_gmem_req_fire),
         .rsp_fire         (rc_rsp_fire),
-        .stall_no_slot    (rc_stall_no_slot)
+        .stall_no_slot    (rc_stall_no_slot),
+        .all_cls_done     (rc_all_cls_done)
     `ifdef PERF_ENABLE
         ,
         .perf_gmem_reqs       (rc_perf_gmem_reqs),
@@ -291,29 +327,30 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [SMEM_DATAW-1:0] cs_data;
     wire [SMEM_BYTES-1:0] cs_byteen;
     wire cs_last;
-
-    // Initial byte offset within first SMEM word for misaligned smem_base.
-    localparam SMEM_OFF_W = `CLOG2(SMEM_BYTES);
-    wire [SMEM_OFF_W:0] initial_byte_offset = {1'b0, setup_params.initial_smem_base[SMEM_OFF_W-1:0]};
+    wire [SMEM_ADDR_WIDTH-1:0] cs_smem_word_addr;
+    wire cs_idle;
 
     VX_dxa_cl2smem #(
-        .CL_SIZE       (GMEM_BYTES),
-        .SMEM_WORD_SIZE(SMEM_BYTES)
+        .CL_SIZE        (GMEM_BYTES),
+        .SMEM_WORD_SIZE (SMEM_BYTES),
+        .SMEM_ADDR_WIDTH(SMEM_ADDR_WIDTH)
     ) cl2smem (
         .clk                 (clk),
         .reset               (reset),
         .start               (pipeline_start),
-        .initial_byte_offset (initial_byte_offset),
         .cl_in_valid         (rc_cl_out_valid),
         .cl_in_ready         (rc_cl_out_ready),
         .cl_in_data          (rc_cl_out_data),
         .cl_in_byte_mask     (rc_cl_out_byte_mask),
         .cl_in_last          (rc_cl_out_last),
+        .cl_in_smem_byte_addr(rc_cl_out_smem_byte_addr),
         .smem_out_valid      (cs_valid),
         .smem_out_ready      (cs_ready),
         .smem_out_data       (cs_data),
         .smem_out_byteen     (cs_byteen),
-        .smem_out_last       (cs_last)
+        .smem_out_last       (cs_last),
+        .smem_out_word_addr  (cs_smem_word_addr),
+        .idle                (cs_idle)
     );
 
     // ════════════════════════════════════════════════════════════════════
@@ -327,6 +364,11 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire wc_smem_wr_last_pkt;
     wire wc_transfer_done;
     wire [31:0] wc_wr_done_count;
+`ifdef EXT_DXA_MULTICAST_ENABLE
+    wire wc_mc_cta_done;
+    wire [31:0] wc_mc_cta_bar_offset;
+    `UNUSED_VAR (wc_mc_cta_bar_offset)
+`endif
     wire wc_smem_req_fire;
     wire wc_smem_wr_ready;
 
@@ -342,12 +384,16 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .transfer_active   (active_r),
         .transfer_start    (pipeline_start),
         .total_smem_writes (ag_total_smem_writes),
+        .total_bytes       (setup_params.total_bytes),
         .initial_smem_base (`MEM_ADDR_WIDTH'(setup_params.initial_smem_base)),
+        .all_cls_done      (rc_all_cls_done),
+        .cl2smem_idle      (cs_idle),
         .smem_in_valid     (cs_valid),
         .smem_in_ready     (cs_ready),
         .smem_in_data      (cs_data),
         .smem_in_byteen    (cs_byteen),
         .smem_in_last      (cs_last),
+        .smem_in_word_addr (cs_smem_word_addr),
         .smem_wr_valid     (wc_smem_wr_valid),
         .smem_wr_addr      (wc_smem_wr_addr),
         .smem_wr_data      (wc_smem_wr_data),
@@ -362,15 +408,17 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .is_multicast      (active_is_multicast_r),
         .cta_mask          (active_cta_mask_r),
         .smem_stride       (active_smem_stride_r),
-        .bar_stride        (active_bar_stride_r)
+        .bar_stride        (active_bar_stride_r),
+        .mc_cta_done       (wc_mc_cta_done),
+        .mc_cta_bar_offset (wc_mc_cta_bar_offset)
     `endif
     `ifdef PERF_ENABLE
         ,
-        .perf_smem_writes      (wc_perf_smem_writes)
+        .perf_lmem_writes      (wc_perf_lmem_writes)
     `endif
     );
 
-    assign wc_smem_wr_ready = smem_bus_if.req_ready;
+    assign wc_smem_wr_ready = smem_bank_wr_if.wr_ready;
 
     // ---- gmem bus wiring ----
     assign gmem_bus_if.req_valid     = rc_gmem_rd_req_valid;
@@ -382,28 +430,37 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign gmem_bus_if.req_data.tag.uuid = active_uuid_r;
     assign gmem_bus_if.req_data.tag.value = rc_gmem_rd_req_tag;
 
-    // ---- smem write via VX_mem_bus_if ----
+    // ---- smem bank-native write ----
     // After SMEM word size uncap, SMEM word covers all banks (direct mapping).
-    assign smem_bus_if.req_valid       = wc_smem_wr_valid;
-    assign smem_bus_if.req_data.rw     = 1'b1;
-    assign smem_bus_if.req_data.addr   = BANK_ADDR_WIDTH'(wc_smem_wr_addr);
-    assign smem_bus_if.req_data.data   = wc_smem_wr_data;
-    assign smem_bus_if.req_data.byteen = wc_smem_wr_byteen;
-    assign smem_bus_if.req_data.tag    = '0;
-    assign smem_bus_if.rsp_ready       = 1'b0;
+    assign smem_bank_wr_if.wr_valid = wc_smem_wr_valid;
+    assign smem_bank_wr_if.wr_addr = BANK_ADDR_WIDTH'(wc_smem_wr_addr);
+    for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_bank_wr
+        assign smem_bank_wr_if.wr_data[b]   = wc_smem_wr_data[b * BANK_WORD_WIDTH +: BANK_WORD_WIDTH];
+        assign smem_bank_wr_if.wr_byteen[b] = wc_smem_wr_byteen[b * BANK_WORD_SIZE +: BANK_WORD_SIZE];
+    end
 
-    // Completion flags: {last_pkt, bar_addr}.
-`ifdef EXT_DXA_ENABLE
-    wire smem_wr_flags_last = wc_smem_wr_last_pkt && active_notify_smem_done_r;
-    assign smem_bus_if.req_data.flags = {smem_wr_flags_last, active_bar_addr_r};
+    // Completion tag: {last_pkt, bar_addr}.
+    // With OOO refactoring, transfer_done fires on the same cycle as the truly
+    // final wrq_pop (when all_cls_done && wrq becomes empty). Use transfer_done
+    // to tag the final SMEM write for barrier done signaling.
+`ifdef EXT_DXA_MULTICAST_ENABLE
+    wire smem_wr_tag_last = active_notify_smem_done_r && (
+        active_is_multicast_r ? wc_mc_cta_done : wc_smem_wr_last_pkt);
+    wire [BAR_ADDR_W-1:0] smem_wr_tag_bar = active_is_multicast_r
+        ? BAR_ADDR_W'(active_bar_addr_r + BAR_ADDR_W'(wc_mc_cta_bar_offset))
+        : active_bar_addr_r;
+    assign smem_bank_wr_if.wr_tag = {smem_wr_tag_last, smem_wr_tag_bar};
+`elsif EXT_DXA_ENABLE
+    wire smem_wr_tag_last = wc_smem_wr_last_pkt && active_notify_smem_done_r;
+    assign smem_bank_wr_if.wr_tag = {smem_wr_tag_last, active_bar_addr_r};
 `else
-    assign smem_bus_if.req_data.flags = {wc_smem_wr_last_pkt, {BAR_ADDR_W{1'b0}}};
+    assign smem_bank_wr_if.wr_tag = {wc_smem_wr_last_pkt, {BAR_ADDR_W{1'b0}}};
 `endif
 
     // Core-id sideband for routing in DXA core router.
     assign smem_core_id = active_core_id_r;
 
-    // ---- Transfer FSM (IDLE → SETUP → ACTIVE → IDLE) ----
+    // ---- Transfer FSM (IDLE → DESC_WAIT → SETUP → ACTIVE → IDLE) ----
 
     always @(posedge clk) begin
         if (reset) begin
@@ -416,24 +473,33 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end else begin
             case (ts_state_r)
             TS_IDLE: begin
-                if (setup_start) begin
-                    ts_state_r          <= TS_SETUP;
+                if (launch_valid_cmd) begin
+                    // Accept launch, issue desc_table BRAM read.
+                    // Data will be valid next cycle (DESC_WAIT).
+                    ts_state_r          <= TS_DESC_WAIT;
                     active_core_id_r    <= launch_core_id;
                     active_uuid_r       <= launch_uuid;
                     active_wid_r        <= launch_wid;
                     active_bar_addr_r   <= launch_bar_addr;
                 `ifdef EXT_DXA_ENABLE
-                    active_notify_smem_done_r <= 1'b1;
+                    active_notify_smem_done_r <= DXA_DONE_META_ENABLE;
                 `else
                     active_notify_smem_done_r <= 1'b0;
                 `endif
-                `ifdef EXT_DXA_MULTICAST_ENABLE
-                    active_is_multicast_r <= launch_is_multicast;
-                    active_cta_mask_r     <= launch_cta_mask;
-                    active_smem_stride_r  <= issue_smem_stride;
-                    active_bar_stride_r   <= issue_bar_stride;
-                `endif
+                    // Latch launch-interface signals before they disappear.
+                    active_smem_addr_r  <= launch_smem_addr;
+                    active_coords_r     <= launch_coords;
                 end
+            end
+            TS_DESC_WAIT: begin
+                // BRAM output now valid — start setup and latch multicast fields.
+            `ifdef EXT_DXA_MULTICAST_ENABLE
+                active_is_multicast_r <= launch_is_multicast;
+                active_cta_mask_r     <= launch_cta_mask;
+                active_smem_stride_r  <= issue_smem_stride;
+                active_bar_stride_r   <= issue_bar_stride;
+            `endif
+                ts_state_r <= TS_SETUP;
             end
             TS_SETUP: begin
                 if (setup_done) begin
@@ -492,26 +558,26 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Wire declarations for submodule perf outputs
     wire [31:0] rc_perf_gmem_reqs;
     wire [31:0] rc_perf_gmem_span_cycles;
-    wire [31:0] wc_perf_smem_writes;
+    wire [31:0] wc_perf_lmem_writes;
     wire        dd_perf_dedup_hit;
     // Accumulated DXA perf counters (never reset, sum across all transfers)
     reg [PERF_CTR_BITS-1:0] perf_transfers_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_reads_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_dedup_r;
-    reg [PERF_CTR_BITS-1:0] perf_smem_writes_r;
+    reg [PERF_CTR_BITS-1:0] perf_lmem_writes_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_lt_r;
     always @(posedge clk) begin
         if (reset) begin
             perf_transfers_r  <= '0;
             perf_gmem_reads_r <= '0;
             perf_gmem_dedup_r <= '0;
-            perf_smem_writes_r <= '0;
+            perf_lmem_writes_r <= '0;
             perf_gmem_lt_r    <= '0;
         end else begin
             if (active_r && wc_transfer_done) begin
                 perf_transfers_r  <= perf_transfers_r + PERF_CTR_BITS'(1);
                 perf_gmem_reads_r <= perf_gmem_reads_r + PERF_CTR_BITS'(rc_perf_gmem_reqs);
-                perf_smem_writes_r <= perf_smem_writes_r + PERF_CTR_BITS'(wc_perf_smem_writes);
+                perf_lmem_writes_r <= perf_lmem_writes_r + PERF_CTR_BITS'(wc_perf_lmem_writes);
                 perf_gmem_lt_r    <= perf_gmem_lt_r + PERF_CTR_BITS'(rc_perf_gmem_span_cycles);
             end
             if (dd_perf_dedup_hit) begin
@@ -522,7 +588,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign perf_transfers  = perf_transfers_r;
     assign perf_gmem_reads = perf_gmem_reads_r;
     assign perf_gmem_dedup = perf_gmem_dedup_r;
-    assign perf_smem_writes = perf_smem_writes_r;
+    assign perf_lmem_writes = perf_lmem_writes_r;
     assign perf_gmem_lt    = perf_gmem_lt_r;
 `endif
 

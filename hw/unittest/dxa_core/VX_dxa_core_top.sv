@@ -20,8 +20,8 @@
 
 module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
-    parameter         NUM_DXA_UNITS  = 1,
-    parameter         GMEM_OUT_PORTS = 1,
+    parameter         NUM_DXA_UNITS  = `NUM_DXA_UNITS,
+    parameter         GMEM_OUT_PORTS = `NUM_DXA_UNITS,
     parameter         CORE_LOCAL_BITS = 0,
     parameter         ENABLE          = 1,
     // gmem bus geometry (matches VX_mem_bus_if defaults for L1_LINE_SIZE)

@@ -11,16 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA Read Controller: accepts CL entries from dedup, issues pipelined
-// GMEM reads via slot table, and emits CL data with byte masks to
-// cl2smem. Dedup guarantees each CL address appears at most once.
-//
-// Two input paths:
-//   1. OOB:    emit cfill immediately (no GMEM read)
-//   2. Normal: allocate slot, issue GMEM read (pipelined, up to MAX_OUTSTANDING)
-//
-// A Response Reorder Buffer (ROB) ensures GMEM responses are emitted
-// to cl2smem in request-issue order, regardless of GMEM response order.
+// DXA Read Controller (OOO v2 — scoreboard + response FIFO):
+//   - Uses VX_dxa_scoreboard for metadata (offset, length, smem_addr) per slot.
+//   - GMEM responses are stored in a response FIFO along with compact metadata.
+//   - Slots are released immediately on response arrival (not on drain).
+//   - Credit counter prevents response FIFO overflow; gmem_rd_rsp_ready NEVER
+//     depends on FIFO fullness.
+//   - OOB entries bypass directly to output with priority over FIFO drain.
 
 `include "VX_define.vh"
 
@@ -47,6 +44,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [GMEM_BYTES-1:0]       cl_in_byte_mask,
     input  wire                        cl_in_oob,
     input  wire                        cl_in_last,
+    input  wire [`MEM_ADDR_WIDTH-1:0]  cl_in_smem_byte_addr,
 
     // Params from setup (stable during transfer).
     input  wire [31:0]                 cfill,
@@ -67,11 +65,15 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [GMEM_DATAW-1:0]       cl_out_data,
     output wire [GMEM_BYTES-1:0]       cl_out_byte_mask,
     output wire                        cl_out_last,
+    output wire [`MEM_ADDR_WIDTH-1:0]  cl_out_smem_byte_addr,
 
     // Progress events.
     output wire                        gmem_req_fire,
     output wire                        rsp_fire,
-    output wire                        stall_no_slot
+    output wire                        stall_no_slot,
+
+    // Completion signal: all CLs emitted.
+    output wire                        all_cls_done
 );
     localparam RD_SLOT_BITS = `CLOG2(MAX_OUTSTANDING);
     localparam RD_SLOT_W    = `UP(RD_SLOT_BITS);
@@ -79,267 +81,286 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `STATIC_ASSERT(`IS_POW2(MAX_OUTSTANDING), ("MAX_OUTSTANDING must be power of 2"))
     `STATIC_ASSERT(GMEM_TAG_VALUEW >= RD_SLOT_W, ("gmem tag too narrow for slot encoding"))
 
-    // ---- Output FIFO ----
-    localparam OUT_FIFO_DATAW = GMEM_DATAW + GMEM_BYTES + 1;
-    localparam OUT_FIFO_DEPTH = 4;
-    localparam OUT_FIFO_SIZEW = `CLOG2(OUT_FIFO_DEPTH + 1);
+    // ════════════════════════════════════════════════════════════════════
+    // Response FIFO — stores data + compact metadata from scoreboard
+    // ════════════════════════════════════════════════════════════════════
+    // Payload: {is_last, cl_data, offset, length, smem_addr}
+    localparam RSP_FIFO_DATAW = 1 + GMEM_DATAW + GMEM_OFF_BITS + (GMEM_OFF_BITS+1) + `MEM_ADDR_WIDTH;
+    localparam RSP_FIFO_DEPTH = MAX_OUTSTANDING;
+    localparam RSP_FIFO_SIZEW = `CLOG2(RSP_FIFO_DEPTH + 1);
 
-    wire [OUT_FIFO_DATAW-1:0] ofifo_data_in, ofifo_data_out;
-    wire ofifo_empty, ofifo_full;
-    wire ofifo_alm_empty, ofifo_alm_full;
-    wire [OUT_FIFO_SIZEW-1:0] ofifo_size;
-    wire ofifo_push, ofifo_pop;
+    wire [RSP_FIFO_DATAW-1:0] rsp_fifo_data_in, rsp_fifo_data_out;
+    wire rsp_fifo_empty, rsp_fifo_full;
+    wire rsp_fifo_push, rsp_fifo_pop;
+    wire [RSP_FIFO_SIZEW-1:0] rsp_fifo_size;
+    wire rsp_fifo_alm_empty, rsp_fifo_alm_full;
 
     VX_fifo_queue #(
-        .DATAW   (OUT_FIFO_DATAW),
-        .DEPTH   (OUT_FIFO_DEPTH),
-        .OUT_REG (1),
+        .DATAW   (RSP_FIFO_DATAW),
+        .DEPTH   (RSP_FIFO_DEPTH),
+        .OUT_REG (0),
         .LUTRAM  (1)
-    ) out_fifo (
+    ) rsp_fifo (
         .clk      (clk),
         .reset    (reset),
-        .push     (ofifo_push),
-        .pop      (ofifo_pop),
-        .data_in  (ofifo_data_in),
-        .data_out (ofifo_data_out),
-        .empty    (ofifo_empty),
-        .alm_empty(ofifo_alm_empty),
-        .full     (ofifo_full),
-        .alm_full (ofifo_alm_full),
-        .size     (ofifo_size)
+        .push     (rsp_fifo_push),
+        .pop      (rsp_fifo_pop),
+        .data_in  (rsp_fifo_data_in),
+        .data_out (rsp_fifo_data_out),
+        .empty    (rsp_fifo_empty),
+        .alm_empty(rsp_fifo_alm_empty),
+        .full     (rsp_fifo_full),
+        .alm_full (rsp_fifo_alm_full),
+        .size     (rsp_fifo_size)
     );
 
-    `UNUSED_VAR (ofifo_alm_empty)
-    `UNUSED_VAR (ofifo_alm_full)
-    `UNUSED_VAR (ofifo_size)
+    `UNUSED_VAR (rsp_fifo_alm_empty)
+    `UNUSED_VAR (rsp_fifo_alm_full)
+    `UNUSED_VAR (rsp_fifo_size)
 
-    // Output from FIFO to cl2smem.
-    assign cl_out_valid = ~ofifo_empty;
-    assign {cl_out_last, cl_out_byte_mask, cl_out_data} = ofifo_data_out;
-    assign ofifo_pop = cl_out_valid && cl_out_ready;
+    // Unpack response FIFO output.
+    wire                       rsp_fifo_is_last;
+    wire [GMEM_DATAW-1:0]     rsp_fifo_cl_data;
+    wire [GMEM_OFF_BITS-1:0]  rsp_fifo_offset;
+    wire [GMEM_OFF_BITS:0]    rsp_fifo_length;
+    wire [`MEM_ADDR_WIDTH-1:0] rsp_fifo_smem_addr;
 
-    // ---- Slot table ----
+    assign {rsp_fifo_is_last, rsp_fifo_cl_data, rsp_fifo_offset,
+            rsp_fifo_length, rsp_fifo_smem_addr} = rsp_fifo_data_out;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Scoreboard — metadata-only (offset, length, smem_addr)
+    // ════════════════════════════════════════════════════════════════════
+
     wire rd_free_found;
     wire [RD_SLOT_W-1:0] rd_free_slot;
-    wire line_inflight_found;
-    wire rsp_slot_busy;
-    wire [GMEM_ADDR_WIDTH-1:0] rsp_gmem_line_addr;
-    wire [GMEM_OFF_BITS-1:0] rsp_gmem_off;
-    wire rsp_is_last;
 
     wire [RD_SLOT_W-1:0] rsp_slot = RD_SLOT_W'(gmem_rd_rsp_tag[RD_SLOT_W-1:0]);
+    wire rsp_slot_busy;
+    wire [GMEM_OFF_BITS-1:0] rsp_sb_offset;
+    wire [GMEM_OFF_BITS:0]   rsp_sb_length;
+    wire [`MEM_ADDR_WIDTH-1:0] rsp_sb_smem_addr;
 
     wire alloc_fire_w;
-    wire release_fire_w;
+    wire sb_release_fire;
 
-    VX_dxa_nb_slot_table #(
+    // Allocation metadata extraction: find first set bit (offset) and popcount (length).
+    wire [GMEM_OFF_BITS-1:0] alloc_offset;
+    wire                     alloc_mask_valid;
+    VX_priority_encoder #(.N(GMEM_BYTES)) alloc_ctz (
+        .data_in   (cl_in_byte_mask),
+        .index_out (alloc_offset),
+        .valid_out (alloc_mask_valid),
+        `UNUSED_PIN(onehot_out)
+    );
+
+    wire [GMEM_OFF_BITS:0] alloc_length;
+    VX_popcount #(.N(GMEM_BYTES)) alloc_pc (
+        .data_in  (cl_in_byte_mask),
+        .data_out (alloc_length)
+    );
+
+    `UNUSED_VAR (alloc_mask_valid)
+
+    VX_dxa_scoreboard #(
         .MAX_OUTSTANDING (MAX_OUTSTANDING),
-        .GMEM_ADDR_WIDTH (GMEM_ADDR_WIDTH),
-        .GMEM_OFF_BITS   (GMEM_OFF_BITS)
-    ) slot_table (
-        .clk                 (clk),
-        .reset               (reset),
-        .q_line_addr         (cl_in_addr),
-        .q_inflight_found    (line_inflight_found),
-        .q_free_found        (rd_free_found),
-        .q_free_slot         (rd_free_slot),
-        .rsp_slot            (rsp_slot),
-        .rsp_slot_busy       (rsp_slot_busy),
-        .rsp_gmem_line_addr  (rsp_gmem_line_addr),
-        .rsp_gmem_off        (rsp_gmem_off),
-        .rsp_is_last         (rsp_is_last),
-        .alloc_fire          (alloc_fire_w),
-        .alloc_slot          (rd_free_slot),
-        .alloc_gmem_line_addr(cl_in_addr),
-        .alloc_gmem_off      ('0),
-        .alloc_is_last       (cl_in_last),
-        .release_fire        (release_fire_w),
-        .release_slot        (rsp_slot)
+        .GMEM_OFF_BITS   (GMEM_OFF_BITS),
+        .SMEM_ADDR_W     (`MEM_ADDR_WIDTH)
+    ) scoreboard (
+        .clk            (clk),
+        .reset          (reset),
+        .free_found     (rd_free_found),
+        .free_slot      (rd_free_slot),
+        .alloc_fire     (alloc_fire_w),
+        .alloc_slot     (rd_free_slot),
+        .alloc_offset   (alloc_offset),
+        .alloc_length   (alloc_length),
+        .alloc_smem_addr(cl_in_smem_byte_addr),
+        .rsp_slot       (rsp_slot),
+        .rsp_slot_busy  (rsp_slot_busy),
+        .rsp_offset     (rsp_sb_offset),
+        .rsp_length     (rsp_sb_length),
+        .rsp_smem_addr  (rsp_sb_smem_addr),
+        .release_fire   (sb_release_fire),
+        .release_slot   (rsp_slot)
     );
 
-    // Per-slot byte mask storage.
-    reg [GMEM_BYTES-1:0] slot_byte_mask_r [MAX_OUTSTANDING-1:0];
+    // Sidecar register for is_last (not stored in scoreboard).
+    reg [MAX_OUTSTANDING-1:0] slot_is_last_r;
 
-    // ---- Response Reorder Buffer (ROB) ----
-    // GMEM responses may arrive out of order (e.g. due to cache bank
-    // interleaving). The ROB ensures they are emitted to cl2smem in
-    // the order requests were issued, preserving row ordering in SMEM.
-    //
-    // alloc_seq_r: sequence counter incremented per request issue.
-    // drain_seq_r: sequence counter incremented per ROB drain.
-    // Each slot records its sequence via slot_seq_r[slot].
-    // On response, data is stored at rob_*[seq]. Drain emits from
-    // drain_seq_r when rob_valid_r[drain_seq_idx] is set.
+    always @(posedge clk) begin
+        if (reset || !transfer_active) begin
+            slot_is_last_r <= '0;
+        end else if (alloc_fire_w) begin
+            slot_is_last_r[rd_free_slot] <= cl_in_last;
+        end
+    end
 
-    reg [MAX_OUTSTANDING-1:0]       rob_valid_r;
-    reg [RD_SLOT_W-1:0]             slot_seq_r  [MAX_OUTSTANDING-1:0];
-    reg [RD_SLOT_W:0]               alloc_seq_r;
-    reg [RD_SLOT_W:0]               drain_seq_r;
+    // ════════════════════════════════════════════════════════════════════
+    // Credit counter — prevents response FIFO overflow
+    // ════════════════════════════════════════════════════════════════════
+    localparam CREDIT_W = `CLOG2(RSP_FIFO_DEPTH + 1);
+    reg [CREDIT_W-1:0] credit_r;
 
-    wire [RD_SLOT_W-1:0] alloc_seq_idx = alloc_seq_r[RD_SLOT_W-1:0];
-    wire [RD_SLOT_W-1:0] drain_seq_idx = drain_seq_r[RD_SLOT_W-1:0];
+    always @(posedge clk) begin
+        if (reset || !transfer_active)
+            credit_r <= CREDIT_W'(RSP_FIFO_DEPTH);
+        else begin
+            case ({alloc_fire_w, rsp_fifo_pop})
+                2'b10: credit_r <= credit_r - CREDIT_W'(1);
+                2'b01: credit_r <= credit_r + CREDIT_W'(1);
+                default: ;
+            endcase
+        end
+    end
 
-    wire rob_empty = (alloc_seq_r == drain_seq_r);
-    wire rob_full  = (alloc_seq_r[RD_SLOT_W] != drain_seq_r[RD_SLOT_W])
-                  && (alloc_seq_r[RD_SLOT_W-1:0] == drain_seq_r[RD_SLOT_W-1:0]);
+    wire has_credit = (credit_r > 0);
 
-    // ROB data/mask/last stored in LUTRAM via VX_dp_ram.
-    localparam ROB_ENTRY_DATAW = 1 + GMEM_BYTES + GMEM_DATAW;
-
-    wire rsp_accept;  // forward declaration
-    wire [ROB_ENTRY_DATAW-1:0] rob_rdata;
-
-    VX_dp_ram #(
-        .DATAW  (ROB_ENTRY_DATAW),
-        .SIZE   (MAX_OUTSTANDING),
-        .LUTRAM (1)
-    ) rob_store (
-        .clk   (clk),
-        .reset (reset),
-        .read  (1'b1),
-        .write (rsp_accept),
-        .wren  (1'b1),
-        .waddr (slot_seq_r[rsp_slot]),
-        .wdata ({rsp_is_last, slot_byte_mask_r[rsp_slot], gmem_rd_rsp_data}),
-        .raddr (drain_seq_idx),
-        .rdata (rob_rdata)
-    );
-
-    wire                  rob_entry_last;
-    wire [GMEM_BYTES-1:0] rob_entry_mask;
-    wire [GMEM_DATAW-1:0] rob_entry_data;
-    assign {rob_entry_last, rob_entry_mask, rob_entry_data} = rob_rdata;
-
-    // ---- Replicate cfill as GMEM-width data for OOB ----
+    // ════════════════════════════════════════════════════════════════════
+    // Replicate cfill as GMEM-width data for OOB
+    // ════════════════════════════════════════════════════════════════════
     wire [GMEM_DATAW-1:0] cfill_replicated;
     for (genvar i = 0; i < GMEM_BYTES / 4; ++i) begin : g_cfill
         assign cfill_replicated[i*32 +: 32] = cfill;
     end
 
-    // ---- Input classification ----
-    // OOB: use cfill, emit directly. Needs ROB drained (output ordering).
-    // Normal: issue GMEM read, can pipeline; blocked when ROB full.
-    wire accept_oob    = cl_in_valid && cl_in_oob && rob_empty && !ofifo_full;
-    // want_normal: valid signal for GMEM request (must NOT depend on gmem_rd_req_ready).
-    wire want_normal   = cl_in_valid && !cl_in_oob && rd_free_found && !rob_full;
+    // ════════════════════════════════════════════════════════════════════
+    // Input classification
+    // ════════════════════════════════════════════════════════════════════
+    // OOB bypasses slot table, emitted directly.
+    // Normal requires a free slot AND credit (room in response FIFO).
+    wire oob_emit = cl_in_valid && cl_in_oob;
+    wire want_normal = cl_in_valid && !cl_in_oob && rd_free_found && has_credit;
     wire accept_normal = want_normal && gmem_rd_req_ready;
 
-    wire cl_accept = accept_oob || accept_normal;
+    // OOB has priority over FIFO drain. Since oob_emit suppresses fifo_emit,
+    // the output path drives OOB data, so cl_out_ready is for the OOB handshake.
+    wire accept_oob = oob_emit && cl_out_ready;
 
+    wire cl_accept = accept_oob || accept_normal;
     assign cl_in_ready = cl_accept;
 
-    // ---- GMEM request ----
-    // Valid must be independent of ready to avoid combinational deadlock.
+    // ════════════════════════════════════════════════════════════════════
+    // GMEM request
+    // ════════════════════════════════════════════════════════════════════
     assign gmem_rd_req_valid = want_normal;
     assign gmem_rd_req_addr  = cl_in_addr;
     assign gmem_rd_req_tag   = GMEM_TAG_VALUEW'(rd_free_slot);
     assign alloc_fire_w      = accept_normal;
     assign gmem_req_fire     = alloc_fire_w;
 
-    // Store per-slot byte mask and sequence on allocation.
-    always @(posedge clk) begin
-        if (alloc_fire_w) begin
-            slot_byte_mask_r[rd_free_slot] <= cl_in_byte_mask;
-            slot_seq_r[rd_free_slot]       <= alloc_seq_idx;
-        end
+    // ════════════════════════════════════════════════════════════════════
+    // GMEM response — push to response FIFO, release slot immediately
+    // ════════════════════════════════════════════════════════════════════
+    // CRITICAL: gmem_rd_rsp_ready MUST NOT depend on rsp_fifo_full.
+    // Credit counter guarantees space exists.
+    wire rsp_accept = gmem_rd_rsp_valid && transfer_active && rsp_slot_busy;
+
+    assign gmem_rd_rsp_ready = transfer_active;  // NEVER depends on FIFO fullness
+    assign rsp_fire = rsp_accept;
+
+    // Release slot on response arrival (not on drain).
+    assign sb_release_fire = rsp_accept;
+
+    // Pack response FIFO input.
+    assign rsp_fifo_push = rsp_accept;
+    assign rsp_fifo_data_in = {slot_is_last_r[rsp_slot], gmem_rd_rsp_data,
+                               rsp_sb_offset, rsp_sb_length, rsp_sb_smem_addr};
+
+    // ════════════════════════════════════════════════════════════════════
+    // Output — OOB bypass has priority over FIFO drain
+    // ════════════════════════════════════════════════════════════════════
+    wire fifo_emit = !rsp_fifo_empty && !oob_emit;
+    assign cl_out_valid = oob_emit || fifo_emit;
+    assign rsp_fifo_pop = fifo_emit && cl_out_ready;
+
+    // Reconstruct byte mask from offset + length.
+    wire [GMEM_BYTES-1:0] reconstructed_mask;
+    /* verilator lint_off WIDTHEXPAND */
+    /* verilator lint_off CMPCONST */
+    for (genvar i = 0; i < GMEM_BYTES; ++i) begin : g_mask_recon
+        assign reconstructed_mask[i] = ((GMEM_OFF_BITS+1)'(i) >= {1'b0, rsp_fifo_offset})
+                                    && ((GMEM_OFF_BITS+1)'(i) < (GMEM_OFF_BITS+1)'(rsp_fifo_offset) + rsp_fifo_length);
     end
+    /* verilator lint_on CMPCONST */
+    /* verilator lint_on WIDTHEXPAND */
 
-    // Allocation sequence counter.
+    assign cl_out_data          = oob_emit ? cfill_replicated    : rsp_fifo_cl_data;
+    assign cl_out_byte_mask     = oob_emit ? cl_in_byte_mask     : reconstructed_mask;
+    assign cl_out_last          = oob_emit ? cl_in_last          : rsp_fifo_is_last;
+    assign cl_out_smem_byte_addr = oob_emit ? cl_in_smem_byte_addr : rsp_fifo_smem_addr;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Completion tracking — issue/done counters
+    // ════════════════════════════════════════════════════════════════════
+    reg        seen_last_input_r;
+    reg [31:0] issue_count_r;
+    reg [31:0] done_count_r;
+
     always @(posedge clk) begin
-        if (reset || ~transfer_active) begin
-            alloc_seq_r <= '0;
-        end else if (alloc_fire_w) begin
-            alloc_seq_r <= alloc_seq_r + (RD_SLOT_W+1)'(1);
-        end
-    end
-
-    // ---- GMEM response handling ----
-    // Accept response and store in ROB (slot is released immediately).
-    // No backpressure needed: each outstanding read has a reserved ROB entry.
-    assign rsp_accept = gmem_rd_rsp_valid && transfer_active && rsp_slot_busy;
-    assign release_fire_w = rsp_accept;
-    assign rsp_fire       = release_fire_w;
-
-    assign gmem_rd_rsp_ready = transfer_active && rsp_slot_busy;
-
-    // ---- ROB fill and drain ----
-    wire rob_head_valid = rob_valid_r[drain_seq_idx];
-    wire rob_drain      = rob_head_valid && !ofifo_full;
-
-    // Direct emit (OOB only): mutually exclusive with ROB drain
-    // because direct_emit requires rob_empty.
-    wire direct_emit = accept_oob;
-    wire [GMEM_DATAW-1:0] direct_data = cfill_replicated;
-    wire [GMEM_BYTES-1:0]  direct_mask = cl_in_byte_mask;
-    wire                   direct_last = cl_in_last;
-
-    // ROB valid tracking (data/mask/last stored in rob_store LUTRAM).
-    always @(posedge clk) begin
-        if (reset || ~transfer_active) begin
-            rob_valid_r <= '0;
+        if (reset || !transfer_active) begin
+            seen_last_input_r <= 1'b0;
+            issue_count_r     <= 32'd0;
+            done_count_r      <= 32'd0;
         end else begin
-            if (rsp_accept) begin
-                rob_valid_r[slot_seq_r[rsp_slot]] <= 1'b1;
+            if (cl_accept && cl_in_last) begin
+                seen_last_input_r <= 1'b1;
             end
-            if (rob_drain) begin
-                rob_valid_r[drain_seq_idx] <= 1'b0;
+            if (accept_oob || alloc_fire_w) begin
+                issue_count_r <= issue_count_r + 32'd1;
+            end
+            if (cl_out_valid && cl_out_ready) begin
+                done_count_r <= done_count_r + 32'd1;
             end
         end
     end
 
-    // Drain sequence counter.
-    always @(posedge clk) begin
-        if (reset || ~transfer_active) begin
-            drain_seq_r <= '0;
-        end else if (rob_drain) begin
-            drain_seq_r <= drain_seq_r + (RD_SLOT_W+1)'(1);
-        end
-    end
+    assign all_cls_done = transfer_active
+                       && seen_last_input_r
+                       && (issue_count_r == done_count_r)
+                       && rsp_fifo_empty;
 
-    // ---- Output FIFO push ----
-    assign ofifo_push = direct_emit || rob_drain;
-    assign ofifo_data_in = direct_emit
-        ? {direct_last, direct_mask, direct_data}
-        : {rob_entry_last, rob_entry_mask, rob_entry_data};
-
-    // ---- Progress events ----
+    // ════════════════════════════════════════════════════════════════════
+    // Progress events + assertions
+    // ════════════════════════════════════════════════════════════════════
     assign stall_no_slot = cl_in_valid && !cl_in_oob && !rd_free_found;
 
-    `UNUSED_VAR (line_inflight_found)
-    `UNUSED_VAR (rsp_gmem_line_addr)
-    `UNUSED_VAR (rsp_gmem_off)
     `UNUSED_VAR (gmem_rd_rsp_tag[GMEM_TAG_VALUEW-1:RD_SLOT_W])
+
+    `RUNTIME_ASSERT(!(rsp_accept) || rsp_slot_busy,
+        ("dxa rd_ctrl: gmem rsp to non-busy slot"))
+
+    `RUNTIME_ASSERT(credit_r <= CREDIT_W'(RSP_FIFO_DEPTH),
+        ("dxa rd_ctrl credit overflow"))
+
+    `RUNTIME_ASSERT(!(rsp_fifo_push && rsp_fifo_full),
+        ("dxa rd_ctrl rsp_fifo overflow"))
 
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
         if (~reset && transfer_active) begin
             if (alloc_fire_w) begin
-                $write("DXA_PIPE,%0d,GMEM_REQ,addr=0x%0h,slot=%0d,seq=%0d\n",
-                    $time, cl_in_addr, rd_free_slot, alloc_seq_idx);
+                $write("DXA_PIPE,%0d,GMEM_REQ,addr=0x%0h,slot=%0d,smem=0x%0h\n",
+                    $time, cl_in_addr, rd_free_slot, cl_in_smem_byte_addr);
             end
-            if (release_fire_w) begin
-                $write("DXA_PIPE,%0d,GMEM_RSP,slot=%0d,seq=%0d\n",
-                    $time, rsp_slot, slot_seq_r[rsp_slot]);
+            if (rsp_accept) begin
+                $write("DXA_PIPE,%0d,GMEM_RSP,slot=%0d\n",
+                    $time, rsp_slot);
             end
-            if (ofifo_push) begin
-                if (direct_emit) begin
-                    $write("DXA_PIPE,%0d,RC_OUT,type=oob,mask=0x%0h,last=%0d\n",
-                        $time, direct_mask, direct_last);
+            if (cl_out_valid && cl_out_ready) begin
+                if (oob_emit) begin
+                    $write("DXA_PIPE,%0d,RC_OUT,type=oob,mask=0x%0h,smem=0x%0h,last=%0d\n",
+                        $time, cl_out_byte_mask, cl_out_smem_byte_addr, cl_out_last);
                 end else begin
-                    $write("DXA_PIPE,%0d,RC_OUT,type=rob,seq=%0d,mask=0x%0h,last=%0d\n",
-                        $time, drain_seq_idx, rob_entry_mask,
-                        rob_entry_last);
+                    $write("DXA_PIPE,%0d,RC_OUT,type=fifo,mask=0x%0h,smem=0x%0h,last=%0d\n",
+                        $time, cl_out_byte_mask, cl_out_smem_byte_addr, cl_out_last);
                 end
             end
         end
     end
 `endif
 
-    `RUNTIME_ASSERT(~(gmem_rd_rsp_valid && gmem_rd_rsp_ready) || rsp_slot_busy,
-        ("invalid dxa rd_ctrl gmem rsp slot"))
-
 `ifdef PERF_ENABLE
-    // Lightweight counters (no per-slot timestamps, no eff_bytes, no $display)
     reg [31:0] rdp_cycle_ctr_r;
     reg [31:0] rdp_total_gmem_req_r;
     reg [31:0] rdp_first_req_cycle_r;
@@ -361,7 +382,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     rdp_has_req_r <= 1'b1;
                 end
             end
-            if (release_fire_w) begin
+            if (rsp_accept) begin
                 rdp_last_rsp_cycle_r <= rdp_cycle_ctr_r;
             end
         end
