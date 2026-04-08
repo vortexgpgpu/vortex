@@ -16,7 +16,7 @@
 /* verilator lint_off UNUSEDSIGNAL */
 module VX_dxa_issue_decode import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter GMEM_BYTES = `L2_LINE_SIZE,
-    parameter LMEM_BYTES = LSU_WORD_SIZE
+    parameter SMEM_BYTES = LSU_WORD_SIZE
 ) (
     input wire [31:0] issue_desc_meta,
     input wire [31:0] issue_desc_tile01,
@@ -51,7 +51,7 @@ module VX_dxa_issue_decode import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire issue_supported_w = (issue_rank_w <= 2)
                           && (issue_elem_bytes_w != 0)
                           && (issue_elem_bytes_w <= GMEM_BYTES)
-                          && (issue_elem_bytes_w <= LMEM_BYTES);
+                          && (issue_elem_bytes_w <= SMEM_BYTES);
 
     assign issue_dec.rank = issue_rank_w;
     assign issue_dec.elem_bytes = issue_elem_bytes_w;
