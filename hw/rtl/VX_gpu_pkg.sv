@@ -930,9 +930,6 @@ package VX_gpu_pkg;
     // tag is minimal in all cases.
     localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
 `ifdef EXT_DXA_ENABLE
-    // Tag layout: VX_mem_bus_if.tag_t reserves UP(UUID_WIDTH) bits for uuid,
-    // so the functional value (BAR_ADDR_W + 1) must sit above the uuid field.
-    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + DXA_LMEM_FLAGS_WIDTH;
     localparam LMEM_DMA_FLAGS_W = DXA_LMEM_FLAGS_WIDTH;
     localparam LMEM_DMA_EN      = 1;
 `elsif TCU_WGMMA_ENABLE
