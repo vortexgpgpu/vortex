@@ -11,30 +11,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA CL-to-LMEM width converter (v2).
+// DXA CL-to-SMEM width converter (v2).
 //
-// General-purpose format converter: works for any CL/LMEM ratio.
+// General-purpose format converter: works for any CL/SMEM ratio.
 // Handles sparse byte masks via prefix-sum scatter.
-// Supports initial LMEM byte offset for misaligned launches.
+// Supports initial SMEM byte offset for misaligned launches.
 // Uses 2-state FSM (ACCEPT/DRAIN) with overlap: accept fires on the
 // last drain cycle to eliminate pipeline bubbles.
 //
-// Key protocol property: lmem_out_valid and lmem_out_data are purely
-// register-driven (no dependency on lmem_out_ready), preventing
+// Key protocol property: smem_out_valid and smem_out_data are purely
+// register-driven (no dependency on smem_out_ready), preventing
 // combinational deadlock in the valid/ready handshake.
 
 `include "VX_define.vh"
 
-module VX_dxa_cl2lmem import VX_gpu_pkg::*; #(
+module VX_dxa_cl2smem import VX_gpu_pkg::*; #(
     parameter CL_SIZE        = `L1_LINE_SIZE,
-    parameter LMEM_WORD_SIZE = 16
+    parameter SMEM_WORD_SIZE = 16
 ) (
     input  wire clk,
     input  wire reset,
     input  wire start,
 
-    // Initial byte offset within first LMEM word (from setup).
-    input  wire [`CLOG2(LMEM_WORD_SIZE):0] initial_byte_offset,
+    // Initial byte offset within first SMEM word (from setup).
+    input  wire [`CLOG2(SMEM_WORD_SIZE):0] initial_byte_offset,
 
     // CL input (from rd_ctrl, valid/ready).
     input  wire                        cl_in_valid,
@@ -43,20 +43,20 @@ module VX_dxa_cl2lmem import VX_gpu_pkg::*; #(
     input  wire [CL_SIZE-1:0]          cl_in_byte_mask,
     input  wire                        cl_in_last,
 
-    // LMEM word output (to wr_ctrl, valid/ready).
-    output wire                        lmem_out_valid,
-    input  wire                        lmem_out_ready,
-    output wire [LMEM_WORD_SIZE*8-1:0] lmem_out_data,
-    output wire [LMEM_WORD_SIZE-1:0]   lmem_out_byteen,
-    output wire                        lmem_out_last
+    // SMEM word output (to wr_ctrl, valid/ready).
+    output wire                        smem_out_valid,
+    input  wire                        smem_out_ready,
+    output wire [SMEM_WORD_SIZE*8-1:0] smem_out_data,
+    output wire [SMEM_WORD_SIZE-1:0]   smem_out_byteen,
+    output wire                        smem_out_last
 );
     localparam CL_BITS = `CLOG2(CL_SIZE);
     localparam COUNT_W = CL_BITS + 1;
-    localparam FILL_CAP = CL_SIZE + LMEM_WORD_SIZE;
+    localparam FILL_CAP = CL_SIZE + SMEM_WORD_SIZE;
     localparam FILL_W   = `CLOG2(FILL_CAP + 1);
 
     `STATIC_ASSERT(`IS_POW2(CL_SIZE), ("CL_SIZE must be power of 2"))
-    `STATIC_ASSERT(`IS_POW2(LMEM_WORD_SIZE), ("LMEM_WORD_SIZE must be power of 2"))
+    `STATIC_ASSERT(`IS_POW2(SMEM_WORD_SIZE), ("SMEM_WORD_SIZE must be power of 2"))
 
     // ════════════════════════════════════════════════════════════
     // Sub-A: Prefix-Sum Scatter (combinatorial)
@@ -91,9 +91,9 @@ module VX_dxa_cl2lmem import VX_gpu_pkg::*; #(
     // DRAIN:  emit SL words. On the LAST drain cycle (drain_will_empty),
     //         simultaneously accept next CL if available (zero bubble).
     //
-    // Output (lmem_out_valid, lmem_out_data) is purely register-driven:
-    //   lmem_out_valid = (state == DRAIN)
-    //   lmem_out_data  = fb_data_r[SL-1:0]
+    // Output (smem_out_valid, smem_out_data) is purely register-driven:
+    //   smem_out_valid = (state == DRAIN)
+    //   smem_out_data  = fb_data_r[SL-1:0]
     // This prevents valid/ready combinational deadlock.
 
     localparam FB_ACCEPT = 1'b0;
@@ -108,25 +108,25 @@ module VX_dxa_cl2lmem import VX_gpu_pkg::*; #(
     // ── Output (register-driven, no combinational dependency) ──
     // Only emit when buffer has a full SL word, OR when last pending
     // with any remaining data. Never emit partial words mid-stream.
-    wire has_full_word = (fb_level_r >= FILL_W'(LMEM_WORD_SIZE));
+    wire has_full_word = (fb_level_r >= FILL_W'(SMEM_WORD_SIZE));
     wire has_last_partial = fb_last_pending_r && (fb_level_r > 0);
-    assign lmem_out_valid = (fb_state_r == FB_DRAIN) && (has_full_word || has_last_partial);
-    assign lmem_out_data  = fb_data_r[LMEM_WORD_SIZE*8-1:0];
+    assign smem_out_valid = (fb_state_r == FB_DRAIN) && (has_full_word || has_last_partial);
+    assign smem_out_data  = fb_data_r[SMEM_WORD_SIZE*8-1:0];
 
     // Byteen: mark valid bytes, but mask out initial offset bytes on first word.
     // The offset bytes are zeros pre-loaded by initial_byte_offset — they must
-    // not be written to LMEM (would overwrite existing data with zeros).
-    for (genvar i = 0; i < LMEM_WORD_SIZE; ++i) begin : g_byteen
+    // not be written to SMEM (would overwrite existing data with zeros).
+    for (genvar i = 0; i < SMEM_WORD_SIZE; ++i) begin : g_byteen
         wire byte_has_data  = (FILL_W'(i) < fb_level_r);
         wire byte_is_offset = fb_first_word_r
             && (FILL_W'(i) < FILL_W'(initial_byte_offset));
-        assign lmem_out_byteen[i] = byte_has_data && !byte_is_offset;
+        assign smem_out_byteen[i] = byte_has_data && !byte_is_offset;
     end
 
-    wire drain_will_empty = (fb_level_r <= FILL_W'(LMEM_WORD_SIZE));
-    assign lmem_out_last  = fb_last_pending_r && drain_will_empty;
+    wire drain_will_empty = (fb_level_r <= FILL_W'(SMEM_WORD_SIZE));
+    assign smem_out_last  = fb_last_pending_r && drain_will_empty;
 
-    wire drain_fire = lmem_out_valid && lmem_out_ready;
+    wire drain_fire = smem_out_valid && smem_out_ready;
 
     // ── Input acceptance ──
     // ACCEPT state: always accept (room guaranteed by FILL_CAP design).
@@ -158,7 +158,7 @@ module VX_dxa_cl2lmem import VX_gpu_pkg::*; #(
                     fb_data_r <= fb_data_r | ((FILL_CAP*8)'(compressed_data) << fb_bit_offset);
                     fb_level_r <= new_level_accept;
                     fb_last_pending_r <= cl_in_last;
-                    if ((new_level_accept >= FILL_W'(LMEM_WORD_SIZE)) || cl_in_last) begin
+                    if ((new_level_accept >= FILL_W'(SMEM_WORD_SIZE)) || cl_in_last) begin
                         fb_state_r <= FB_DRAIN;
                     end
                 end
@@ -174,7 +174,7 @@ module VX_dxa_cl2lmem import VX_gpu_pkg::*; #(
                         fb_data_r  <= (FILL_CAP*8)'(compressed_data);
                         fb_level_r <= FILL_W'(valid_count);
                         fb_last_pending_r <= cl_in_last;
-                        if ((FILL_W'(valid_count) >= FILL_W'(LMEM_WORD_SIZE)) || cl_in_last) begin
+                        if ((FILL_W'(valid_count) >= FILL_W'(SMEM_WORD_SIZE)) || cl_in_last) begin
                             fb_state_r <= FB_DRAIN;
                         end else begin
                             fb_state_r <= FB_ACCEPT;
@@ -189,10 +189,10 @@ module VX_dxa_cl2lmem import VX_gpu_pkg::*; #(
                         end
                     end else begin
                         // More words to drain.
-                        fb_data_r  <= fb_data_r >> (LMEM_WORD_SIZE * 8);
-                        fb_level_r <= fb_level_r - FILL_W'(LMEM_WORD_SIZE);
+                        fb_data_r  <= fb_data_r >> (SMEM_WORD_SIZE * 8);
+                        fb_level_r <= fb_level_r - FILL_W'(SMEM_WORD_SIZE);
                     end
-                end else if (!lmem_out_valid) begin
+                end else if (!smem_out_valid) begin
                     // Residual < SL and more data coming (not last).
                     // Keep residual in buffer, go back to ACCEPT.
                     fb_state_r <= FB_ACCEPT;
@@ -204,7 +204,7 @@ module VX_dxa_cl2lmem import VX_gpu_pkg::*; #(
     end
 
 `ifdef DBG_TRACE_DXA
-    wire drain_fire_dbg = lmem_out_valid && lmem_out_ready;
+    wire drain_fire_dbg = smem_out_valid && smem_out_ready;
     wire cl_in_fire_dbg = cl_in_valid && cl_in_ready;
     always @(posedge clk) begin
         if (~reset) begin
@@ -215,8 +215,8 @@ module VX_dxa_cl2lmem import VX_gpu_pkg::*; #(
             end
             if (drain_fire_dbg) begin
                 $write("DXA_PIPE,%0d,CS_OUT,byteen=0x%0h,level=%0d,last=%0d,first_word=%0d,data0=0x%0h,data8=0x%0h\n",
-                    $time, lmem_out_byteen, fb_level_r, lmem_out_last, fb_first_word_r,
-                    lmem_out_data[63:0], lmem_out_data[127:64]);
+                    $time, smem_out_byteen, fb_level_r, smem_out_last, fb_first_word_r,
+                    smem_out_data[63:0], smem_out_data[127:64]);
             end
         end
     end

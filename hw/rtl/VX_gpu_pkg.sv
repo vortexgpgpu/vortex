@@ -570,7 +570,7 @@ package VX_gpu_pkg;
         logic [2:0][CTA_TID_WIDTH:0] block_dim;
         logic [2:0][31:0] grid_dim;
         logic [`MEM_ADDR_WIDTH-1:0] param;
-        logic [`MEM_ADDR_WIDTH-1:0] lmem_addr;
+        logic [`MEM_ADDR_WIDTH-1:0] smem_addr;
     } cta_csrs_t;
 
     //////////////////////// instruction arguments ////////////////////////////
@@ -850,7 +850,7 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] transfers;
         logic [PERF_CTR_BITS-1:0] gmem_reads;
         logic [PERF_CTR_BITS-1:0] gmem_dedup;
-        logic [PERF_CTR_BITS-1:0] lmem_writes;
+        logic [PERF_CTR_BITS-1:0] smem_writes;
         logic [PERF_CTR_BITS-1:0] gmem_latency;
     } dxa_perf_t;
 `endif
@@ -917,27 +917,27 @@ package VX_gpu_pkg;
 
 `ifdef EXT_DXA_ENABLE
     // DXA local-memory path: dimensioned to cover all banks in one request.
-    localparam DXA_LMEM_WORD_SIZE   = `LMEM_NUM_BANKS * (`XLEN / 8);
-    localparam DXA_LMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_LMEM_WORD_SIZE));
+    localparam DXA_SMEM_WORD_SIZE   = `LMEM_NUM_BANKS * (`XLEN / 8);
+    localparam DXA_SMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_SMEM_WORD_SIZE));
     // DXA completion flags: {last_pkt, bar_addr} — carried in VX_mem_bus_if.flags.
-    localparam DXA_LMEM_FLAGS_WIDTH = (BAR_ADDR_W + 1);
-    // Bank-level address width for DXA LMEM writes (word-addressed within one bank).
-    localparam DXA_LMEM_BANK_ADDR_WIDTH = (`LMEM_LOG_SIZE - `CLOG2(`XLEN / 8) - `CLOG2(`LMEM_NUM_BANKS));
+    localparam DXA_SMEM_FLAGS_WIDTH = (BAR_ADDR_W + 1);
+    // Bank-level address width for DXA SMEM writes (word-addressed within one bank).
+    localparam DXA_SMEM_BANK_ADDR_WIDTH = (`LMEM_LOG_SIZE - `CLOG2(`XLEN / 8) - `CLOG2(`LMEM_NUM_BANKS));
 `endif
 
-    // LMEM DMA port tag/flags widths and enable flag.
+    // SMEM DMA port tag/flags widths and enable flag.
     // DXA completion info (bar_addr + last_pkt) is carried in flags;
     // tag is minimal in all cases.
-    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
+    localparam SMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
 `ifdef EXT_DXA_ENABLE
-    localparam LMEM_DMA_FLAGS_W = DXA_LMEM_FLAGS_WIDTH;
-    localparam LMEM_DMA_EN      = 1;
+    localparam SMEM_DMA_FLAGS_W = DXA_SMEM_FLAGS_WIDTH;
+    localparam SMEM_DMA_EN      = 1;
 `elsif TCU_WGMMA_ENABLE
-    localparam LMEM_DMA_FLAGS_W = MEM_FLAGS_WIDTH;
-    localparam LMEM_DMA_EN      = 1;
+    localparam SMEM_DMA_FLAGS_W = MEM_FLAGS_WIDTH;
+    localparam SMEM_DMA_EN      = 1;
 `else
-    localparam LMEM_DMA_FLAGS_W = MEM_FLAGS_WIDTH;
-    localparam LMEM_DMA_EN      = 0;
+    localparam SMEM_DMA_FLAGS_W = MEM_FLAGS_WIDTH;
+    localparam SMEM_DMA_EN      = 0;
 `endif
 
     ////////////////////////// Icache Parameters //////////////////////////////

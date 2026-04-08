@@ -39,7 +39,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
 `ifdef EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
-    VX_mem_bus_if.slave     dxa_lmem_bus_if,
+    VX_mem_bus_if.slave     dxa_smem_bus_if,
 `endif
 
     // KMU bus
@@ -79,7 +79,7 @@ module VX_core import VX_gpu_pkg::*; #(
     localparam TCU_LMEM_BANK_ADDR_W = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`LMEM_NUM_BANKS);
     VX_mem_bus_if #(
         .DATA_SIZE  (`LMEM_NUM_BANKS * LSU_WORD_SIZE),
-        .TAG_WIDTH  (LMEM_DMA_TAG_W),
+        .TAG_WIDTH  (SMEM_DMA_TAG_W),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
     ) tcu_lmem_if();
 `endif
@@ -253,7 +253,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .tcu_lmem_if   (tcu_lmem_if),
     `endif
     `ifdef EXT_DXA_ENABLE
-        .dxa_lmem_bus_if(dxa_lmem_bus_if),
+        .dxa_smem_bus_if(dxa_smem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
         .lsu_mem_if    (lsu_mem_if),

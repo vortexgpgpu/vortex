@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
     dut->dxa_req_valid  = 0;
     dut->gmem_req_ready = ~0ULL; // all ready
     dut->gmem_rsp_valid = 0;
-    dut->lmem_req_ready = ~0ULL; // all ready
+    dut->smem_req_ready = ~0ULL; // all ready
 
     reset_dut();
 

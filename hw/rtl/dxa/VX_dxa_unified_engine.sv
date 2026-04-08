@@ -25,13 +25,13 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_dcr_bus_if.slave dcr_bus_if,
     VX_dxa_req_bus_if.slave cluster_dxa_bus_if[NUM_DXA_UNITS],
     VX_mem_bus_if.master dxa_gmem_bus_if[NUM_DXA_UNITS],
-    VX_mem_bus_if.master dxa_lmem_bus_if[NUM_DXA_UNITS],
-    output wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0] dxa_lmem_core_id,
+    VX_mem_bus_if.master dxa_smem_bus_if[NUM_DXA_UNITS],
+    output wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0] dxa_smem_core_id,
     output wire busy
 );
 
     // ISSUE FIFO entry: all launch args packed (no ctx_table accumulation).
-    // {core_id, uuid, wid, bar_addr, desc_slot, lmem_addr, coords[5], [multicast fields]}
+    // {core_id, uuid, wid, bar_addr, desc_slot, smem_addr, coords[5], [multicast fields]}
     localparam ISSUE_FIFO_W = NC_WIDTH + UUID_WIDTH + NW_WIDTH
                             + BAR_ADDR_W + DXA_DESC_SLOT_W + `XLEN + (5 * `XLEN)
 `ifdef EXT_DXA_MULTICAST_ENABLE
@@ -56,7 +56,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_DXA_UNITS-1:0] worker_idle;
 
     `ifdef EXT_DXA_MULTICAST_ENABLE
-        wire [NUM_DXA_UNITS-1:0][31:0] issue_lmem_stride;
+        wire [NUM_DXA_UNITS-1:0][31:0] issue_smem_stride;
         wire [NUM_DXA_UNITS-1:0][31:0] issue_bar_stride;
     `endif
 
@@ -78,7 +78,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             .read_stride0   (issue_stride0_raw)
         `ifdef EXT_DXA_MULTICAST_ENABLE
             ,
-            .read_lmem_stride(issue_lmem_stride),
+            .read_smem_stride(issue_smem_stride),
             .read_bar_stride (issue_bar_stride)
         `endif
         );
@@ -92,7 +92,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_DXA_UNITS-1:0][NC_WIDTH-1:0]         in_core_id;
         wire [NUM_DXA_UNITS-1:0][UUID_WIDTH-1:0]       in_uuid;
         wire [NUM_DXA_UNITS-1:0][NW_WIDTH-1:0]         in_wid;
-        wire [NUM_DXA_UNITS-1:0][`XLEN-1:0]            in_lmem_addr;
+        wire [NUM_DXA_UNITS-1:0][`XLEN-1:0]            in_smem_addr;
         wire [NUM_DXA_UNITS-1:0][`XLEN-1:0]            in_meta;
         wire [NUM_DXA_UNITS-1:0][4:0][`XLEN-1:0]       in_coords;
         wire [NUM_DXA_UNITS-1:0][BAR_ADDR_W-1:0]       in_bar_addr;
@@ -107,7 +107,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             assign in_core_id[i]  = cluster_dxa_bus_if[i].req_data.core_id;
             assign in_uuid[i]     = cluster_dxa_bus_if[i].req_data.uuid;
             assign in_wid[i]      = cluster_dxa_bus_if[i].req_data.wid;
-            assign in_lmem_addr[i]= cluster_dxa_bus_if[i].req_data.lmem_addr;
+            assign in_smem_addr[i]= cluster_dxa_bus_if[i].req_data.smem_addr;
             assign in_meta[i]     = cluster_dxa_bus_if[i].req_data.meta;
             assign in_coords[i]   = cluster_dxa_bus_if[i].req_data.coords;
 
@@ -136,7 +136,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         for (genvar i = 0; i < NUM_DXA_UNITS; ++i) begin : g_dispatch_pack
             assign dispatch_data_in[i] = {
                 in_core_id[i], in_uuid[i], in_wid[i],
-                in_bar_addr[i], in_desc_slot[i], in_lmem_addr[i], in_coords[i]
+                in_bar_addr[i], in_desc_slot[i], in_smem_addr[i], in_coords[i]
             `ifdef EXT_DXA_MULTICAST_ENABLE
                 , in_is_multicast[i], in_cta_mask[i]
             `endif
@@ -178,7 +178,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [NW_WIDTH-1:0]        launch_wid;
         wire [BAR_ADDR_W-1:0]      launch_bar_addr;
         wire [DXA_DESC_SLOT_W-1:0] launch_desc_slot;
-        wire [`XLEN-1:0]           launch_lmem_addr;
+        wire [`XLEN-1:0]           launch_smem_addr;
         wire [4:0][`XLEN-1:0]      launch_coords;
     `ifdef EXT_DXA_MULTICAST_ENABLE
         wire                       launch_is_multicast;
@@ -186,7 +186,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `endif
 
         assign {launch_core_id, launch_uuid, launch_wid,
-                launch_bar_addr, launch_desc_slot, launch_lmem_addr, launch_coords
+                launch_bar_addr, launch_desc_slot, launch_smem_addr, launch_coords
             `ifdef EXT_DXA_MULTICAST_ENABLE
                 , launch_is_multicast, launch_cta_mask
             `endif
@@ -201,7 +201,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_transfers;
         wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_gmem_reads;
         wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_gmem_dedup;
-        wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_lmem_writes;
+        wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_smem_writes;
         wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_gmem_lt;
 `endif
 
@@ -219,7 +219,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 .launch_wid        (launch_wid),
                 .launch_bar_addr   (launch_bar_addr),
                 .launch_desc_slot  (launch_desc_slot),
-                .launch_lmem_addr  (launch_lmem_addr),
+                .launch_smem_addr  (launch_smem_addr),
                 .launch_coords     (launch_coords),
                 .issue_desc_slot_out(issue_desc_slot[i]),
                 .issue_base_addr   (issue_base_addr[i]),
@@ -234,19 +234,19 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             `ifdef EXT_DXA_MULTICAST_ENABLE
                 .launch_is_multicast(launch_is_multicast),
                 .launch_cta_mask    (launch_cta_mask),
-                .issue_lmem_stride  (issue_lmem_stride[i]),
+                .issue_smem_stride  (issue_smem_stride[i]),
                 .issue_bar_stride   (issue_bar_stride[i]),
             `endif
                 .gmem_bus_if       (dxa_gmem_bus_if[i]),
-                .lmem_bus_if       (dxa_lmem_bus_if[i]),
-                .lmem_core_id      (dxa_lmem_core_id[i]),
+                .smem_bus_if       (dxa_smem_bus_if[i]),
+                .smem_core_id      (dxa_smem_core_id[i]),
                 .worker_idle       (worker_idle[i])
             `ifdef PERF_ENABLE
                 ,
                 .perf_transfers  (worker_perf_transfers[i]),
                 .perf_gmem_reads (worker_perf_gmem_reads[i]),
                 .perf_gmem_dedup (worker_perf_gmem_dedup[i]),
-                .perf_lmem_writes(worker_perf_lmem_writes[i]),
+                .perf_smem_writes(worker_perf_smem_writes[i]),
                 .perf_gmem_lt    (worker_perf_gmem_lt[i])
             `endif
             );
@@ -259,7 +259,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 dxa_perf.transfers  += worker_perf_transfers[w];
                 dxa_perf.gmem_reads += worker_perf_gmem_reads[w];
                 dxa_perf.gmem_dedup += worker_perf_gmem_dedup[w];
-                dxa_perf.lmem_writes+= worker_perf_lmem_writes[w];
+                dxa_perf.smem_writes+= worker_perf_smem_writes[w];
                 dxa_perf.gmem_latency += worker_perf_gmem_lt[w];
             end
         end

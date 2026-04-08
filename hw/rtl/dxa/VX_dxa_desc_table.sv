@@ -34,7 +34,7 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [NUM_READ_PORTS-1:0][31:0] read_stride0
 `ifdef EXT_DXA_MULTICAST_ENABLE
     ,
-    output wire [NUM_READ_PORTS-1:0][31:0] read_lmem_stride,
+    output wire [NUM_READ_PORTS-1:0][31:0] read_smem_stride,
     output wire [NUM_READ_PORTS-1:0][31:0] read_bar_stride
 `endif
 );
@@ -108,7 +108,7 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign read_size1[i]       = desc.size1;
         assign read_stride0[i]     = desc.stride0;
     `ifdef EXT_DXA_MULTICAST_ENABLE
-        assign read_lmem_stride[i] = desc.lmem_stride;
+        assign read_smem_stride[i] = desc.smem_stride;
         assign read_bar_stride[i]  = desc.bar_stride;
     `endif
 
