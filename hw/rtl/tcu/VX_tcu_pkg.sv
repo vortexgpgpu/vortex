@@ -106,7 +106,12 @@ package VX_tcu_pkg;
     localparam TCU_WG_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_WG_B_BLOCK_SIZE;
 
     // Symmetric sparse flag (NT=4, NT=16: block_em == block_en)
+    // WGMMA always uses full interleaved layout, so SYM_SPARSE is forced off.
+`ifdef TCU_WGMMA_ENABLE
+    localparam SYM_SPARSE = 0;
+`else
     localparam SYM_SPARSE = (TCU_BLOCK_EM == TCU_BLOCK_EN);
+`endif
 
     // B micro-tiling (sparse 2:4)
     // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)

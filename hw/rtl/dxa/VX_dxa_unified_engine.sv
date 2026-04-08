@@ -201,7 +201,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_transfers;
         wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_gmem_reads;
         wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_gmem_dedup;
-        wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_smem_writes;
+        wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_lmem_writes;
         wire [NUM_DXA_UNITS-1:0][PERF_CTR_BITS-1:0] worker_perf_gmem_lt;
 `endif
 
@@ -246,7 +246,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 .perf_transfers  (worker_perf_transfers[i]),
                 .perf_gmem_reads (worker_perf_gmem_reads[i]),
                 .perf_gmem_dedup (worker_perf_gmem_dedup[i]),
-                .perf_smem_writes(worker_perf_smem_writes[i]),
+                .perf_lmem_writes(worker_perf_lmem_writes[i]),
                 .perf_gmem_lt    (worker_perf_gmem_lt[i])
             `endif
             );
@@ -259,7 +259,7 @@ module VX_dxa_unified_engine import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 dxa_perf.transfers  += worker_perf_transfers[w];
                 dxa_perf.gmem_reads += worker_perf_gmem_reads[w];
                 dxa_perf.gmem_dedup += worker_perf_gmem_dedup[w];
-                dxa_perf.lmem_writes+= worker_perf_smem_writes[w];
+                dxa_perf.lmem_writes+= worker_perf_lmem_writes[w];
                 dxa_perf.gmem_latency += worker_perf_gmem_lt[w];
             end
         end

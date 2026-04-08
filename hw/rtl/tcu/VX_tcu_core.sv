@@ -76,22 +76,55 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // -----------------------------------------------------------------------
-    // Operand data mux: WGMMA uses tile buffer, WMMA uses register file
+    // WGMMA / WMMA abstraction layer
     // -----------------------------------------------------------------------
+    // All WGMMA-vs-WMMA runtime differences are resolved here behind a
+    // common interface.  Downstream code uses only these wires and never
+    // references tbuf_* or is_wgmma directly.
 
     wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] rs1_data;
-    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] rs2_data;
+    wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] rs2_data;
+    wire exe_ready_extra;              // additional ready gating (tbuf_ready)
+    wire [3:0] last_k_steps;          // final step_k value for is_last_k
+
+    // WMMA K-step limit (needed before the mux region for last_k_steps)
+`ifdef TCU_SPARSE_ENABLE
+    wire [3:0] k_steps_val = is_sparse ? 4'((TCU_K_STEPS / 2) - 1) : 4'(TCU_K_STEPS - 1);
+`else
+    wire [3:0] k_steps_val = 4'(TCU_K_STEPS - 1);
+`endif
 
 `ifdef TCU_WGMMA_ENABLE
     wire is_wgmma = (execute_if.data.op_type == INST_TCU_WGMMA);
     wire wg_a_smem = execute_if.data.op_args.tcu.a_from_smem;
-    // A source: tile buffer (smem) or register file
+
+    // A/B operand mux: tile buffer (smem) or register file
     assign rs1_data = (is_wgmma && wg_a_smem) ? tbuf_rs1_data : execute_if.data.rs1_data;
-    // B source: always tile buffer (smem) for WGMMA
-    assign rs2_data = is_wgmma ? tbuf_rs2_data[TCU_BLOCK_CAP-1:0] : execute_if.data.rs2_data;
+    /* verilator lint_off WIDTHEXPAND */
+    assign rs2_data = is_wgmma ? tbuf_rs2_data
+                               : TCU_WG_RS2_WIDTH'(execute_if.data.rs2_data);
+    /* verilator lint_on WIDTHEXPAND */
+
+  `ifdef TCU_SPARSE_ENABLE
+    // Sparse metadata mux: tile-buffer vs register-file metadata
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = is_wgmma ? tbuf_sp_meta : wmma_sp_meta;
+    // K-step limit: WGMMA and WMMA have different tile-K sizes
+    wire [3:0] wg_k_steps_val = execute_if.data.op_args.tcu.is_sparse
+        ? 4'((TCU_WG_K_STEPS / 2) - 1) : 4'(TCU_WG_K_STEPS - 1);
+  `else
+    wire [3:0] wg_k_steps_val = 4'(TCU_WG_K_STEPS - 1);
+  `endif
+
+    assign last_k_steps   = is_wgmma ? wg_k_steps_val : k_steps_val;
+    assign exe_ready_extra = ~is_wgmma || tbuf_ready;
 `else
     assign rs1_data = execute_if.data.rs1_data;
     assign rs2_data = execute_if.data.rs2_data;
+  `ifdef TCU_SPARSE_ENABLE
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
+  `endif
+    assign last_k_steps   = k_steps_val;
+    assign exe_ready_extra = 1'b1;
 `endif
 
     wire [3:0] step_m = execute_if.data.op_args.tcu.step_m;
@@ -138,25 +171,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Accumulator is a multi-tile LUTRAM indexed by {wid, step_m, step_n}.
 
     wire is_first_k = (step_k == '0);
-
-`ifdef TCU_SPARSE_ENABLE
-    wire [3:0] k_steps_val = is_sparse ? 4'((TCU_K_STEPS / 2) - 1) : 4'(TCU_K_STEPS - 1);
-`else
-    wire [3:0] k_steps_val = 4'(TCU_K_STEPS - 1);
-`endif
-
-`ifdef TCU_WGMMA_ENABLE
-    wire [3:0] wg_k_steps_val;
-  `ifdef TCU_SPARSE_ENABLE
-    assign wg_k_steps_val = execute_if.data.op_args.tcu.is_sparse
-        ? 4'((TCU_WG_K_STEPS / 2) - 1) : 4'(TCU_WG_K_STEPS - 1);
-  `else
-    assign wg_k_steps_val = 4'(TCU_WG_K_STEPS - 1);
-  `endif
-    wire is_last_k = is_wgmma ? (step_k == wg_k_steps_val) : (step_k == k_steps_val);
-`else
-    wire is_last_k = (step_k == k_steps_val);
-`endif
+    wire is_last_k  = (step_k == last_k_steps);
 
     // -----------------------------------------------------------------------
     // Multi-tile accumulator (LUTRAM, async read, read-first)
@@ -266,11 +281,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     assign result_if.valid  = fedp_done;
     assign fedp_enable      = ~fedp_done || result_if.ready;
-`ifdef TCU_WGMMA_ENABLE
-    assign execute_if.ready = ~mdata_queue_full && fedp_enable && !k_stall && (~is_wgmma || tbuf_ready);
-`else
-    assign execute_if.ready = ~mdata_queue_full && fedp_enable && !k_stall;
-`endif
+    assign execute_if.ready = ~mdata_queue_full && fedp_enable && !k_stall && exe_ready_extra;
 
     // All uops push to the metadata queue; non-last-k have wb=0 in their
     // header so the writeback stage skips the RF write.
@@ -330,12 +341,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .vld_block(wmma_sp_meta)
     );
 
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block;
-    `ifdef TCU_WGMMA_ENABLE
-        assign vld_meta_block = is_wgmma ? tbuf_sp_meta : wmma_sp_meta;
-    `else
-        assign vld_meta_block = wmma_sp_meta;
-    `endif
+    // vld_meta_block is muxed in the operand mux region above
 `endif
 
     // -----------------------------------------------------------------------
@@ -355,22 +361,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 assign a_row[k_idx] = 32'(rs1_data[a_off + i * TCU_TC_K + k_idx]);
             `ifdef TCU_SPARSE_ENABLE
                 assign b_col_dense[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
-                // WGMMA_SP: tbuf_rs2_data is wide (TCU_WG_RS2_WIDTH lanes);
-                //   use j directly — gather already placed each column's pair at j*tcK*2.
-                // WMMA_SP: rs2_data comes from the register file (TCU_BLOCK_CAP lanes);
-                //   SYM_SPARSE folds j to the packed column-pair layout.
                 localparam J_SP = SYM_SPARSE ? (j % (TCU_TC_N / 2)) : j;
-            `ifdef TCU_WGMMA_ENABLE
-                assign b_col_1[k_idx] = 32'(is_wgmma
-                    ? tbuf_rs2_data[j * TCU_TC_K * 2 + k_idx * 2]
-                    : rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
-                assign b_col_2[k_idx] = 32'(is_wgmma
-                    ? tbuf_rs2_data[j * TCU_TC_K * 2 + k_idx * 2 + 1]
-                    : rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
-            `else
                 assign b_col_1[k_idx] = 32'(rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
                 assign b_col_2[k_idx] = 32'(rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2 + 1]);
-            `endif
             `else
                 assign b_col[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
             `endif
