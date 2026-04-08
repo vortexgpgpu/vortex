@@ -40,8 +40,8 @@ module VX_socket import VX_gpu_pkg::*;
 `ifdef EXT_DXA_ENABLE
     // DXA control path
     VX_dxa_req_bus_if.master dxa_req_bus_if,
-    // DXA LMEM write path (one port per core)
-    VX_mem_bus_if.slave     dxa_lmem_bus_if [`SOCKET_SIZE],
+    // DXA SMEM write path (one port per core)
+    VX_mem_bus_if.slave     dxa_smem_bus_if [`SOCKET_SIZE],
 `endif
 
     // KMU bus
@@ -280,7 +280,7 @@ module VX_socket import VX_gpu_pkg::*;
     assign dxa_req_bus_if.req_data  = dxa_req_data_out[0];
     assign dxa_req_ready_out[0] = dxa_req_bus_if.req_ready;
 
-    // DXA LMEM writes: 1:1 mapping from cluster to per-core
+    // DXA SMEM writes: 1:1 mapping from cluster to per-core
 
 `endif
 
@@ -334,7 +334,7 @@ module VX_socket import VX_gpu_pkg::*;
 
         `ifdef EXT_DXA_ENABLE
             .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),
-            .dxa_lmem_bus_if(dxa_lmem_bus_if[core_id]),
+            .dxa_smem_bus_if(dxa_smem_bus_if[core_id]),
         `endif
 
             .kmu_bus_if     (per_core_kmu_bus_if[core_id]),
