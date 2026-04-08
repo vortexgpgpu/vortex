@@ -465,7 +465,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_csrs.block_dim  = block_dim_r;
     assign cta_csrs.grid_dim   = grid_dim_r;
     assign cta_csrs.param      = param_r;
-    assign cta_csrs.smem_addr  = `MEM_ADDR_WIDTH'(`LMEM_BASE_ADDR)
+    assign cta_csrs.lmem_addr  = `MEM_ADDR_WIDTH'(`LMEM_BASE_ADDR)
                                | `MEM_ADDR_WIDTH'(cur_lmem_base_r);
 
     assign busy = (state == DISPATCH);

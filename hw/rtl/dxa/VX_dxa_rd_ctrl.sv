@@ -13,14 +13,14 @@
 
 // DXA Read Controller: accepts CL entries from dedup, issues pipelined
 // GMEM reads via slot table, and emits CL data with byte masks to
-// cl2smem. Dedup guarantees each CL address appears at most once.
+// cl2lmem. Dedup guarantees each CL address appears at most once.
 //
 // Two input paths:
 //   1. OOB:    emit cfill immediately (no GMEM read)
 //   2. Normal: allocate slot, issue GMEM read (pipelined, up to MAX_OUTSTANDING)
 //
 // A Response Reorder Buffer (ROB) ensures GMEM responses are emitted
-// to cl2smem in request-issue order, regardless of GMEM response order.
+// to cl2lmem in request-issue order, regardless of GMEM response order.
 
 `include "VX_define.vh"
 
@@ -61,7 +61,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [GMEM_TAG_VALUEW-1:0]  gmem_rd_rsp_tag,
     output wire                        gmem_rd_rsp_ready,
 
-    // CL output (to cl2smem, valid/ready).
+    // CL output (to cl2lmem, valid/ready).
     output wire                        cl_out_valid,
     input  wire                        cl_out_ready,
     output wire [GMEM_DATAW-1:0]       cl_out_data,
@@ -113,7 +113,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `UNUSED_VAR (ofifo_alm_full)
     `UNUSED_VAR (ofifo_size)
 
-    // Output from FIFO to cl2smem.
+    // Output from FIFO to cl2lmem.
     assign cl_out_valid = ~ofifo_empty;
     assign {cl_out_last, cl_out_byte_mask, cl_out_data} = ofifo_data_out;
     assign ofifo_pop = cl_out_valid && cl_out_ready;
@@ -162,7 +162,7 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // ---- Response Reorder Buffer (ROB) ----
     // GMEM responses may arrive out of order (e.g. due to cache bank
-    // interleaving). The ROB ensures they are emitted to cl2smem in
+    // interleaving). The ROB ensures they are emitted to cl2lmem in
     // the order requests were issued, preserving row ordering in SMEM.
     //
     // alloc_seq_r: sequence counter incremented per request issue.
