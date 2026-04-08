@@ -919,8 +919,9 @@ package VX_gpu_pkg;
     // DXA local-memory path: dimensioned to cover all banks in one request.
     localparam DXA_LMEM_WORD_SIZE   = `LMEM_NUM_BANKS * (`XLEN / 8);
     localparam DXA_LMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_LMEM_WORD_SIZE));
-    // DXA completion flags: {last_pkt, bar_addr} — carried in VX_mem_bus_if.flags.
-    localparam DXA_LMEM_FLAGS_WIDTH = (BAR_ADDR_W + 1);
+    // DXA completion tag: {last_pkt, bar_addr}.
+    localparam DXA_BANK_WR_TAG_WIDTH = (BAR_ADDR_W + 1);
+    localparam DXA_LMEM_FLAGS_WIDTH = DXA_BANK_WR_TAG_WIDTH;
     // Bank-level address width for DXA LMEM writes (word-addressed within one bank).
     localparam DXA_LMEM_BANK_ADDR_WIDTH = (`LMEM_LOG_SIZE - `CLOG2(`XLEN / 8) - `CLOG2(`LMEM_NUM_BANKS));
 `endif
@@ -930,6 +931,9 @@ package VX_gpu_pkg;
     // tag is minimal in all cases.
     localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
 `ifdef EXT_DXA_ENABLE
+    // Tag layout: VX_mem_bus_if.tag_t reserves UP(UUID_WIDTH) bits for uuid,
+    // so the functional value (BAR_ADDR_W + 1) must sit above the uuid field.
+    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + DXA_BANK_WR_TAG_WIDTH;
     localparam LMEM_DMA_FLAGS_W = DXA_LMEM_FLAGS_WIDTH;
     localparam LMEM_DMA_EN      = 1;
 `elsif TCU_WGMMA_ENABLE
