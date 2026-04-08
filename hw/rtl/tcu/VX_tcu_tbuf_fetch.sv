@@ -477,10 +477,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [B_TOTAL-1:0]    b_wren;
 
     always_comb begin
-        /* verilator lint_off WIDTHCONCAT */
-        b_wdata = '0;
-        b_wren  = '0;
-        /* verilator lint_on WIDTHCONCAT */
+        b_wdata = {B_TOTAL{32'b0}};
+        b_wren  = {B_TOTAL{1'b0}};
         if (tcu_lmem_if.rsp_valid && in_fetch_b) begin
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin
@@ -510,46 +508,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .raddr (1'b0),
         .rdata (hit_b_buf)
     );
-`else // TCU_SPARSE_ENABLE
-    logic [B_TOTAL*32-1:0] b_wdata;
-    logic [B_TOTAL-1:0]    b_wren;
-
-    always_comb begin
-        /* verilator lint_off WIDTHCONCAT */
-        b_wdata = '0;
-        b_wren  = '0;
-        /* verilator lint_on WIDTHCONCAT */
-        if (tcu_lmem_if.rsp_valid && in_fetch_b) begin
-            for (int b = 0; b < NUM_BANKS; ++b) begin
-                if (int'(rsp_ctr_r) * NUM_BANKS + b < B_TOTAL) begin
-                    b_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
-                    // Tile buffer stores 32-bit elements; take the low 32 bits of each bank word.
-                    b_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data[b * `XLEN +: 32];
-                end
-            end
-        end
-    end
-
-    VX_dp_ram #(
-        .DATAW   (B_TOTAL * 32),
-        .SIZE    (TCU_TBUF_SIZE),
-        .WRENW   (B_TOTAL),
-        .LUTRAM  (1),
-        .OUT_REG (0),
-        .RDW_MODE("W")
-    ) slot_b_ram (
-        .clk   (clk),
-        .reset (reset),
-        .read  (1'b1),
-        .write (tcu_lmem_if.rsp_valid && in_fetch_b),
-        .wren  (b_wren),
-        .waddr (send_slot_r),
-        .wdata (b_wdata),
-        .raddr (slot_idx),
-        .rdata (hit_b_buf)
-    );
-`endif
 
     // -----------------------------------------------------------------------
     // Metadata capture — single-entry LUTRAM (sparse only)
