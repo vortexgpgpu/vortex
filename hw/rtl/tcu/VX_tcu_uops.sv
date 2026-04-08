@@ -360,6 +360,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
             : make_reg_num(REG_TYPE_F, rs1);
         ibuf_r.rs2 = meta_uop ? ibuf_in.rs2 : make_reg_num(REG_TYPE_F, rs2);
         ibuf_r.rs3 = meta_uop ? '0 : (wmma_is_first_k ? make_reg_num(REG_TYPE_F, rs3) : '0);
+        ibuf_r.used_rs[0] = 1'b1;
+        ibuf_r.used_rs[1] = 1'b1;
         ibuf_r.used_rs[2] = !meta_uop && wmma_is_first_k;
     `else
         ibuf_r.op_args.tcu.step_m = 4'(m_index);
@@ -370,6 +372,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r.rs1 = make_reg_num(REG_TYPE_F, rs1);
         ibuf_r.rs2 = make_reg_num(REG_TYPE_F, rs2);
         ibuf_r.rs3 = wmma_is_first_k ? make_reg_num(REG_TYPE_F, rs3) : '0;
+        ibuf_r.used_rs[0] = 1'b1;
+        ibuf_r.used_rs[1] = 1'b1;
         ibuf_r.used_rs[2] = wmma_is_first_k;
     `endif
         end

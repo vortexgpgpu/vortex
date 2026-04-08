@@ -701,6 +701,8 @@ package VX_gpu_pkg;
         logic [NUM_REGS_BITS-1:0]   rs1;
         logic [NUM_REGS_BITS-1:0]   rs2;
         logic [NUM_REGS_BITS-1:0]   rs3;
+        logic                       sop;
+        logic                       eop;
     } ibuffer_t;
 
     typedef struct packed {
@@ -719,6 +721,8 @@ package VX_gpu_pkg;
         logic [NUM_REGS_BITS-1:0]   rs1;
         logic [NUM_REGS_BITS-1:0]   rs2;
         logic [NUM_REGS_BITS-1:0]   rs3;
+        logic                       sop;
+        logic                       eop;
     } scoreboard_t;
 
     typedef struct packed {

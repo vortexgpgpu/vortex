@@ -545,14 +545,28 @@ public:
     bool col_major = false;
   };
 
+  // Shared accumulator dimensions: max of WMMA and WGMMA tile counts
+  static constexpr uint32_t kAccumMaxM = (cfg::m_steps > wg_cfg::m_steps) ? cfg::m_steps : wg_cfg::m_steps;
+#ifdef TCU_WGMMA_ENABLE
+  static constexpr uint32_t kWgMaxN = 32;
+  static constexpr uint32_t kAccumMaxN = (cfg::n_steps > kWgMaxN) ? cfg::n_steps : kWgMaxN;
+#else
+  static constexpr uint32_t kAccumMaxN = cfg::n_steps;
+#endif
+
   Impl(TensorUnit* simobject, const Arch& arch, Core* core)
     : simobject_(simobject)
     , core_(core)
     , arch_(arch)
     , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
+  #ifndef NDEBUG
+    , accum_busy_(false)
+    , accum_owner_(0)
+    , accum_tile_ctr_(0)
+  #endif
     , perf_stats_()
   {
-    //--
+    memset(accum_, 0, sizeof(accum_));
   }
 
   ~Impl() {
@@ -692,10 +706,21 @@ public:
       return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + bit_idx / 32) >> (bit_idx % 32)) & 1u;
     };
 
+    bool is_first_k = (step_k == 0);
+    uint32_t k_count = is_sparse ? (cfg::k_steps / 2) : cfg::k_steps;
+    bool is_last_k  = (step_k == k_count - 1);
+
+  #ifndef NDEBUG
+    accum_check_owner(wid, is_first_k, is_last_k);
+  #endif
+
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
       for (uint32_t j = 0; j < cfg::tcN; ++j) {
         auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
-        auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
+        // k=0: C from register file; k>0: C from internal accumulator
+        auto c_val = is_first_k
+            ? rs3_data.at(i * cfg::tcN + j).u32
+            : accum_[step_m][step_n][i][j];
 
         reg_data_t b_buf[cfg::tcK];
         const reg_data_t* b_col;
@@ -767,15 +792,24 @@ public:
         } else {
           d_val = fedp(a_row, b_col, c_val);
         }
-        rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
+        // Store result in accumulator
+        accum_[step_m][step_n][i][j] = d_val;
+
+        // Only write back to register file on last K-step
+        if (is_last_k) {
+          rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
+        }
 
         DTH(3, simobject_->name() << " FEDP"
             << ": wid=" << wid << ", i=" << i << ", j=" << j
-            << ", m=" << step_m << ", n=" << step_n << std::hex
+            << ", m=" << step_m << ", n=" << step_n
+            << ", k=" << step_k << (is_last_k ? " [last]" : "") << std::hex
             << ", a0=0x" << a_row[0].u32 << ", b0=0x" << b_col[0].u32
             << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
       }
     }
+
+    trace_data->is_last_k = is_last_k;
   }
 
   void wgmma(uint32_t wid,
@@ -813,6 +847,14 @@ public:
       sd_a = lmem_desc_[wid][0];
       sd_b = lmem_desc_[wid][1];
     }
+
+    bool is_first_k = (step_k == 0);
+    uint32_t wg_k_count = is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
+    bool is_last_k  = (step_k == wg_k_count - 1);
+
+  #ifndef NDEBUG
+    accum_check_owner(wid, is_first_k, is_last_k);
+  #endif
 
     if (is_sparse) {
       if (!vt::sparse_format_supported(fmt_s)) {
@@ -867,14 +909,19 @@ public:
           }
 
           auto t = i * cfg::tcN + j;
-          auto d_val = fedp(a_row, b_col, rs3_data.at(t).u32);
-          rd_data.at(t).u64 = nan_box(d_val);
+          auto c_val = is_first_k ? rs3_data.at(t).u32 : accum_[step_m][step_n][i][j];
+          auto d_val = fedp(a_row, b_col, c_val);
+          accum_[step_m][step_n][i][j] = d_val;
+          if (is_last_k) {
+            rd_data.at(t).u64 = nan_box(d_val);
+          }
 
           DTH(3, simobject_->name() << " FEDP: wid=" << wid
               << ", i=" << i << ", j=" << j
-              << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k << std::hex
+              << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k
+              << (is_last_k ? " [last]" : "") << std::hex
               << ", a_row[0]=0x" << a_row[0].u32 << ", b_col[0]=0x" << b_col[0].u32
-              << ", c=0x" << rs3_data.at(t).u32 << ", d=0x" << d_val << std::dec << std::endl);
+              << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
         }
       }
     } else {
@@ -900,17 +947,24 @@ public:
             }
           }
           auto t = i * cfg::tcN + j;
-          auto d_val = fedp(a_row, b_col, rs3_data.at(t).u32);
-          rd_data.at(t).u64 = nan_box(d_val);
+          auto c_val = is_first_k ? rs3_data.at(t).u32 : accum_[step_m][step_n][i][j];
+          auto d_val = fedp(a_row, b_col, c_val);
+          accum_[step_m][step_n][i][j] = d_val;
+          if (is_last_k) {
+            rd_data.at(t).u64 = nan_box(d_val);
+          }
 
           DTH(3, simobject_->name() << " FEDP: wid=" << wid
               << ", i=" << i << ", j=" << j
-              << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k << std::hex
+              << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k
+              << (is_last_k ? " [last]" : "") << std::hex
               << ", a_row[0]=0x" << a_row[0].u32 << ", b_col[0]=0x" << b_col[0].u32
-              << ", c=0x" << rs3_data.at(t).u32 << ", d=0x" << d_val << std::dec << std::endl);
+              << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
         }
       }
     }
+
+    trace_data->is_last_k = is_last_k;
 
     // Performance counters.
     ++perf_stats_.wgmma_instrs;
@@ -986,11 +1040,41 @@ private:
   static constexpr uint32_t kMetaBanks = cfg::m_steps * kSparseKSteps;
   static constexpr uint32_t kMaxMetaCols = NUM_THREADS / 2;
 
+#ifndef NDEBUG
+  // Debug-only check to detect if multiple warps are interleaving K-accumulation on the same tile,
+  // which would indicate a bug in the instruction scheduling or warp grouping logic.
+  void accum_check_owner(uint32_t wid, bool is_first_k, bool is_last_k) {
+    if (!accum_busy_) {
+      accum_busy_ = true;
+      accum_owner_ = wid;
+      accum_tile_ctr_ = is_last_k ? 0 : 1;
+    } else {
+      if (accum_owner_ != wid) {
+        std::cout << "ERROR: warp interleave detected during TCU K-accumulation! "
+                  << "owner=" << accum_owner_ << ", intruder=" << wid << std::endl;
+        std::abort();
+      }
+      if (is_first_k && !is_last_k)
+        ++accum_tile_ctr_;
+      else if (!is_first_k && is_last_k)
+        --accum_tile_ctr_;
+      if (is_last_k && accum_tile_ctr_ == 0)
+        accum_busy_ = false;
+    }
+  }
+#endif
+
   TensorUnit*   simobject_;
   Core*         core_;
   Arch          arch_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
+  uint32_t accum_[kAccumMaxM][kAccumMaxN][cfg::tcM][cfg::tcN];
+#ifndef NDEBUG
+  bool          accum_busy_;
+  uint32_t      accum_owner_;
+  uint32_t      accum_tile_ctr_;
+#endif
   PerfStats     perf_stats_;
 };
 
@@ -1126,15 +1210,24 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t rem = mma_idx % mn;
         uint32_t m = rem / wmma::n_steps;
         uint32_t n = rem % wmma::n_steps;
+        bool uop_is_last_k = (k == k_count - 1);
         uint32_t reg_rs1 = ra_base + (m / wmma::a_sub_blocks) * k_count + k;
         uint32_t reg_rs2 = rb_base + (k * wmma::n_steps + n) / b_sub;
         uint32_t reg_rs3 = rc_base + m * wmma::n_steps + n;
         uop_instr->set_op_type(TcuType::WMMA);
         uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
-        uop_instr->set_dest_reg(reg_rs3, RegType::Float);
+        // Only last-k uop sets dest (wb=1); non-last-k have wb=0,
+        // preventing scoreboard stalls between K-steps. Matches RTL.
+        if (uop_is_last_k) {
+          uop_instr->set_dest_reg(reg_rs3, RegType::Float);
+        }
         uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
         uop_instr->set_src_reg(1, reg_rs2, RegType::Float);
-        uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
+        // Only first-k reads C from register file; k>0 reads from
+        // accumulator. Matches RTL used_rs[2] = wmma_is_first_k.
+        if (k == 0) {
+          uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
+        }
       }
     }
   }
@@ -1159,10 +1252,15 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t m = rem % m_steps;
     uint32_t r = n * m_steps + m;
 
+    bool uop_is_last_k = (k == k_count - 1);
+
     uop_instr->set_op_type(TcuType::WGMMA);
     uop_instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
                                    fmt_s, fmt_d, m, n, k});
-    uop_instr->set_dest_reg(r, RegType::Float);
+    // Only last-k uop sets dest (wb=1); matches RTL wb=0 for non-last-k.
+    if (uop_is_last_k) {
+      uop_instr->set_dest_reg(r, RegType::Float);
+    }
     if (uop_index == 0) {
       if (is_a_smem) {
         uop_instr->set_src_reg(0, a0, RegType::Integer);
@@ -1175,7 +1273,10 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t rs1_off = m * k_count + k;
       uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
     }
-    uop_instr->set_src_reg(2, r, RegType::Float);
+    // Only first-k reads C from register file; matches RTL used_rs[2].
+    if (k == 0) {
+      uop_instr->set_src_reg(2, r, RegType::Float);
+    }
   }
 #endif
 

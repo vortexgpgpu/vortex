@@ -82,6 +82,8 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
       uop_trace->src_regs[i] = uop_instr->get_src_reg(i);
     }
     uop_trace->wb = (uop_instr->get_dest_reg().type != RegType::None);
+    uop_trace->sop = (state_.uop_index == 0);
+    uop_trace->eop = (state_.uop_index == state_.uop_count - 1);
 
     state_.current_uop = uop_trace;
     return uop_trace;

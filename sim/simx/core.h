@@ -230,6 +230,9 @@ private:
   uint32_t commit_exe_;
   std::vector<Arbiter> ibuffer_arbs_;
 
+  // FU lock: prevent warp interleaving during multi-uop sequences
+  BitVector<> fu_locked_;
+
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 
   friend class LsuUnit;

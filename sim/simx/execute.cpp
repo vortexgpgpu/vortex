@@ -1690,7 +1690,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
                                    rd_data,
                                    trace_data.get(),
                                      tpuArgs.is_sparse);
-        rd_write = true;
+        rd_write = trace_data->is_last_k;
       } break;
   #ifdef TCU_WGMMA_ENABLE
       case TcuType::WGMMA: {
@@ -1705,7 +1705,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
                                     a_desc, b_desc, rs1_data, rs3_data, rd_data,
                                     trace_data.get(), tpuArgs.is_sparse,
                                     tpuArgs.cd_nregs, tpuArgs.is_a_smem);
-        rd_write = true;
+        rd_write = trace_data->is_last_k;
       } break;
   #endif // TCU_WGMMA_ENABLE
       case TcuType::META_STORE: {
