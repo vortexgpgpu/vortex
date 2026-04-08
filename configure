@@ -174,3 +174,6 @@ SOURCE_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 THIRD_PARTY_DIR=$SOURCE_DIR/third_party
 
 copy_files "$SOURCE_DIR" "$CURRENT_DIR"
+
+# generate hardware configuration files
+make -C hw config
