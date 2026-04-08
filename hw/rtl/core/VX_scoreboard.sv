@@ -199,11 +199,21 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0][OUT_DATAW-1:0] arb_data_in;
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
+    reg  [NUM_EX_UNITS-1:0] fu_locked;
+
+    wire [PER_ISSUE_WARPS-1:0] fu_lock_block;
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_fu_lock_block
+        wire [EX_BITS-1:0] w_ex = staging_if[w].data.ex_type;
+        // only block new sequences (sop=1), only owner warp will have sop=0.
+        assign fu_lock_block[w] = fu_locked[w_ex] && staging_if[w].data.sop;
+    end
+
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
-        // valid: data-hazard check only (drives age tracking in GTO)
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
+        // valid: data-hazard + FU-lock check (drives age tracking in GTO)
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && ~fu_lock_block[w];
         // suppress: FU-full check (skips selection without resetting age)
         assign arb_suppress[w] = ~dispatch_ready[staging_if[w].data.ex_type];
+
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
             staging_if[w].data.tmask,
@@ -218,7 +228,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             staging_if[w].data.bytesel,
             staging_if[w].data.rs1,
             staging_if[w].data.rs2,
-            staging_if[w].data.rs3
+            staging_if[w].data.rs3,
+            staging_if[w].data.sop,
+            staging_if[w].data.eop
         };
         assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];
     end
@@ -264,6 +276,36 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     assign arb_ready = ready_out_w;
 
+    // FU lock: prevent warp interleaving during multi-uop sequences.
+    // When a uop with sop=1, eop=0 issues, lock the target FU for that warp.
+    // Other warps targeting the same FU are blocked until eop=1.
+
+    wire issue_fire = valid_out_w && ready_out_w;
+
+    wire [PER_ISSUE_WARPS-1:0] staging_sop_vec, staging_eop_vec;
+    wire [PER_ISSUE_WARPS-1:0][EX_BITS-1:0] staging_ex_vec;
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_staging_sop_eop
+        assign staging_sop_vec[w] = staging_if[w].data.sop;
+        assign staging_eop_vec[w] = staging_if[w].data.eop;
+        assign staging_ex_vec[w]  = staging_if[w].data.ex_type;
+    end
+
+    wire issue_sop = staging_sop_vec[arb_index];
+    wire issue_eop = staging_eop_vec[arb_index];
+    wire [EX_BITS-1:0] issue_ex = staging_ex_vec[arb_index];
+
+    always @(posedge clk) begin
+        if (reset) begin
+            fu_locked <= '0;
+        end else if (issue_fire) begin
+            if (issue_sop && ~issue_eop) begin
+                fu_locked[issue_ex] <= 1'b1;
+            end else if (issue_eop && ~issue_sop) begin
+                fu_locked[issue_ex] <= 1'b0;
+            end
+        end
+    end
+
     VX_elastic_buffer #(
         .DATAW   (LOG_NUM_REQS + OUT_DATAW),
         .SIZE    (`TO_OUT_BUF_SIZE(3)),
@@ -290,7 +332,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             scoreboard_if.data.bytesel,
             scoreboard_if.data.rs1,
             scoreboard_if.data.rs2,
-            scoreboard_if.data.rs3
+            scoreboard_if.data.rs3,
+            scoreboard_if.data.sop,
+            scoreboard_if.data.eop
         }),
         .valid_out (scoreboard_if.valid),
         .ready_out (scoreboard_if.ready)

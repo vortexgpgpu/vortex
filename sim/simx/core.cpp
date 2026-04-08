@@ -52,6 +52,7 @@ Core::Core(const SimContext& ctx,
   , pending_icache_(arch_.num_warps())
   , commit_arbs_(ISSUE_WIDTH)
   , ibuffer_arbs_(ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
+  , fu_locked_((uint32_t)FUType::Count, 0)
 {
   char sname[100];
 
@@ -384,9 +385,15 @@ void Core::issue() {
         ++perf_stats_.scrb_stalls;
       } else {
         uop_trace->log_once(false);
+        // FU lock: block warps whose target FU is locked by another warp
+        auto fu = (int)uop_trace->fu_type;
+        // only block new sequences (sop=1), only owner warp will have sop=0.
+        if (fu_locked_.test(fu) && uop_trace->sop) {
+          continue; // blocked by FU lock
+        }
         ready_set.set(w); // mark instruction as ready
         // suppress warps whose target FU dispatcher input is full
-        if (dispatchers_.at((int)uop_trace->fu_type)->Inputs.at(iw).full()) {
+        if (dispatchers_.at(fu)->Inputs.at(iw).full()) {
           suppress_set.set(w);
         }
       }
@@ -421,6 +428,15 @@ void Core::issue() {
         if (uop_trace->wb) {
           // update scoreboard
           scoreboard_.reserve(uop_trace);
+        }
+        // Update FU lock state
+        {
+          auto fu = (int)uop_trace->fu_type;
+          if (uop_trace->sop && !uop_trace->eop) {
+            fu_locked_.set(fu);
+          } else if (uop_trace->eop && !uop_trace->sop) {
+            fu_locked_.reset(fu);
+          }
         }
         // Advance sequencer; pop ibuffer only when all micro-ops issued
         seq.advance();

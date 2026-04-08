@@ -49,6 +49,7 @@ public:
 
   struct ExeTraceData : public ITraceData {
     using Ptr = std::shared_ptr<ExeTraceData>;
+    bool is_last_k = true; // false for non-last K-steps (suppress rd writeback)
   };
 
 	struct PerfStats {

@@ -162,7 +162,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Multi-tile accumulator (LUTRAM, async read, read-first)
     // -----------------------------------------------------------------------
     // One LUTRAM per FEDP element (tcM × tcN instances).
-    // Depth = NUM_WARPS × MAX_TILES.  Width = 32 bits.
+    // Depth = MAX_TILES (shared by all warps).  Width = 32 bits.
     // MAX_TILES = max(WMMA m_steps*n_steps, WGMMA m_steps*max_n_steps).
 
 `ifdef TCU_WGMMA_ENABLE
@@ -174,7 +174,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
     localparam ACCUM_MAX_TILES = ACCUM_MAX_M * ACCUM_MAX_N;
     localparam ACCUM_TILE_W   = $clog2(ACCUM_MAX_TILES);
-    localparam ACCUM_DEPTH    = `NUM_WARPS * ACCUM_MAX_TILES;
+    localparam ACCUM_DEPTH    = ACCUM_MAX_TILES;
     localparam ACCUM_ADDRW    = $clog2(ACCUM_DEPTH);
 
     wire [NW_WIDTH-1:0] exe_wid = execute_if.data.header.wid;
@@ -183,7 +183,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [ACCUM_TILE_W-1:0] exe_tile_idx = ACCUM_TILE_W'(step_m) * ACCUM_TILE_W'(ACCUM_MAX_N)
                                           + ACCUM_TILE_W'(step_n);
     // Read address for accumulator lookup
-    wire [ACCUM_ADDRW-1:0] accum_raddr = {exe_wid, exe_tile_idx};
+    wire [ACCUM_ADDRW-1:0] accum_raddr = ACCUM_ADDRW'(exe_tile_idx);
 
     // Track is_last_k, warp ID, and tile index through the FEDP pipeline
     reg [PIPE_LATENCY-1:0] last_k_pipe;
@@ -196,6 +196,20 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     reg [`NUM_WARPS-1:0][INFLIGHT_W-1:0] inflight_k;
     wire k_stall = !is_first_k && (inflight_k[exe_wid] != '0);
 
+`ifdef SIMULATION
+    // Detect illegal warp interleaving: a different warp must not enter
+    // the TCU while another warp has non-last_k uops still in the FEDP pipeline.
+    wire [`NUM_WARPS-1:0] inflight_mask;
+    for (genvar w = 0; w < `NUM_WARPS; ++w) begin : g_inflight_mask
+        assign inflight_mask[w] = (inflight_k[w] != '0);
+    end
+    wire [`NUM_WARPS-1:0] other_inflight = inflight_mask & ~(`NUM_WARPS'(1) << exe_wid);
+
+    `RUNTIME_ASSERT(~execute_fire || (other_inflight == '0),
+        ("%s warp interleave during K-accumulation! wid=%0d entering while inflight_mask=%b (#%0d)",
+            INSTANCE_ID, exe_wid, inflight_mask, execute_if.data.header.uuid))
+`endif
+
     // -----------------------------------------------------------------------
     // Pipeline control
     // -----------------------------------------------------------------------
@@ -207,7 +221,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire fedp_done_raw;           // any FEDP result (including intermediate k)
 
     // Write-back address from pipeline exit
-    wire [ACCUM_ADDRW-1:0] accum_waddr = {wid_pipe[0], tile_pipe[0]};
+    wire [ACCUM_ADDRW-1:0] accum_waddr = ACCUM_ADDRW'(tile_pipe[0]);
     wire accum_wr = fedp_done_raw && !last_k_pipe[0] && fedp_enable;
 
     reg [PIPE_LATENCY-1:0] fedp_delay_pipe;
