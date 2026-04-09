@@ -386,10 +386,10 @@ void Core::issue() {
       } else {
         uop_trace->log_once(false);
         // FU lock: block warps whose target FU is locked by another warp.
-        // Owner warp's uops have fu_lock=1 (set by uop expander) and bypass.
+        // fu_lock=1 means acquire request; blocked when FU already locked.
         auto fu = (int)uop_trace->fu_type;
         bool uop_fu_lock = uop_trace->instr_ptr->get_fu_lock();
-        if (fu_locked_.test(fu) && !uop_fu_lock) {
+        if (fu_locked_.test(fu) && uop_fu_lock) {
           continue; // blocked by FU lock
         }
         ready_set.set(w); // mark instruction as ready
@@ -427,13 +427,15 @@ void Core::issue() {
           // update scoreboard
           scoreboard_.reserve(uop_trace);
         }
-        // Update FU lock state
+        // Update FU lock state: 10=acquire, 01=release
         {
-          auto fu = (int)uop_trace->fu_type;
-          if (uop_trace->instr_ptr->get_fu_unlock()) {
-            fu_locked_.reset(fu);
-          } else if (uop_trace->instr_ptr->get_fu_lock()) {
-            fu_locked_.set(fu);
+          auto fui = (int)uop_trace->fu_type;
+          bool fl = uop_trace->instr_ptr->get_fu_lock();
+          bool ful = uop_trace->instr_ptr->get_fu_unlock();
+          if (fl && !ful) {
+            fu_locked_.set(fui);
+          } else if (!fl && ful) {
+            fu_locked_.reset(fui);
           }
         }
         // Advance sequencer; pop ibuffer only when all micro-ops issued

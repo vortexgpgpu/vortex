@@ -1305,8 +1305,8 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 #endif
 
   // fu_lock/fu_unlock: prevent warp interleaving during TCU K-accumulation.
-  // fu_lock=1 on all uops identifies the owner; fu_unlock=1 on last releases.
-  uop_instr->set_fu_lock(true);
+  // 10=acquire (first), 00=middle, 01=release (last), 11=default (non-sequenced).
+  uop_instr->set_fu_lock(uop_index == 0);
   uop_instr->set_fu_unlock(uop_index == total - 1);
 
   return uop_instr;

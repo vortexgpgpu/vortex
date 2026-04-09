@@ -204,9 +204,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0] fu_lock_block;
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_fu_lock_block
         wire [EX_BITS-1:0] w_ex = staging_if[w].data.ex_type;
-        // Block warps when FU is locked. Owner warp's uops have fu_lock=1
-        // (set by the uop expander) and bypass the block.
-        assign fu_lock_block[w] = fu_locked[w_ex] && ~staging_if[w].data.fu_lock;
+        // Block warps when FU is locked. fu_lock=1 means acquire request.
+        assign fu_lock_block[w] = fu_locked[w_ex] && staging_if[w].data.fu_lock;
     end
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
@@ -276,9 +275,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     assign arb_ready = ready_out_w;
 
     // FU lock: prevent warp interleaving during multi-uop sequences.
-    // fu_lock=1 on all uops of a locked sequence (set by uop expander).
-    // fu_unlock=1 on the last uop releases the lock.
-    // Non-owner warps have fu_lock=0 and are blocked while fu_locked is set.
+    // 10=acquire (first uop), 00=middle, 01=release (last uop), 11=default.
 
     wire issue_fire = valid_out_w && ready_out_w;
 
@@ -299,10 +296,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         if (reset) begin
             fu_locked <= '0;
         end else if (issue_fire) begin
-            if (issue_fu_unlock) begin
-                fu_locked[issue_ex] <= 1'b0;
-            end else if (issue_fu_lock) begin
+            if (issue_fu_lock && ~issue_fu_unlock) begin
                 fu_locked[issue_ex] <= 1'b1;
+            end else if (~issue_fu_lock && issue_fu_unlock) begin
+                fu_locked[issue_ex] <= 1'b0;
             end
         end
     end
