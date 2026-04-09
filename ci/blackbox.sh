@@ -74,6 +74,7 @@ parse_args() {
             --log=*)    LOGFILE=${i#*=} ;;
             --nohup)    TEMPBUILD=1 ;;
             --help)     show_help; exit 0 ;;
+            --*)        echo "Invalid argument: $i"; show_usage; exit 1 ;;
             *)          show_usage; exit 1 ;;
         esac
     done
@@ -139,6 +140,11 @@ main() {
     parse_args "$@"
     set_driver_path
     set_app_path
+
+    if [ $SAIF -eq 1 ] && [ "$DRIVER" = "simx" ]; then
+        echo "Error: SAIF is not supported with the simx driver"
+        exit 1
+    fi
 
     # execute on default installed GPU
     if [ "$DRIVER" = "gpu" ]; then
