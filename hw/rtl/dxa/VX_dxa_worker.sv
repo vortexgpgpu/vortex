@@ -119,12 +119,18 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
 
     // ---- Transfer state ----
-    // FSM: IDLE → DESC_WAIT → SETUP → ACTIVE → IDLE
-    // DESC_WAIT absorbs 1-cycle BRAM read latency from desc_table.
-    localparam TS_IDLE      = 3'd0;
-    localparam TS_DESC_WAIT = 3'd1;
-    localparam TS_SETUP     = 3'd2;
-    localparam TS_ACTIVE    = 3'd3;
+    // FSM: IDLE → DESC_WAIT → DESC_LATCH → SETUP → ACTIVE → IDLE
+    // DESC_WAIT  absorbs 1-cycle BRAM read latency from desc_table.
+    // DESC_LATCH adds a register cut between BRAM-derived combinational
+    //            decode (VX_dxa_issue_decode) and VX_dxa_setup's S_IDLE
+    //            input-latching. This breaks the ~18-logic-level path
+    //            `desc_table rdata → issue_decode → lat_stride0_reg`
+    //            that limited Fmax on U55C. Adds 1 cycle of launch latency.
+    localparam TS_IDLE       = 3'd0;
+    localparam TS_DESC_WAIT  = 3'd1;
+    localparam TS_DESC_LATCH = 3'd2;
+    localparam TS_SETUP      = 3'd3;
+    localparam TS_ACTIVE     = 3'd4;
 
     reg [2:0]              ts_state_r;
     reg [NC_WIDTH-1:0]     active_core_id_r;
@@ -158,15 +164,70 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // performed in TS_DESC_WAIT below, where BRAM rdata is now valid for
     // THIS worker's active slot (raddr was captured at the IDLE edge).
     wire launch_use_nb = ~issue_dec.is_s2g;
-    wire launch_supported = launch_use_nb && issue_dec.supported && (issue_dec.total != 0);
+    // NOTE: issue_dec.total is always non-zero after decode normalization —
+    // VX_dxa_issue_decode canonicalizes zero tile0/tile1 extents to 1
+    // (lines 39-42), so tile0_w * tile1_w is always >= 1. Including a
+    // `(issue_dec.total != 0)` predicate here was functionally dead code,
+    // but it dragged the entire desc_table BRAM → issue_total DSP48E2
+    // multiply into the TS_DESC_WAIT → next-state FSM combinational cone,
+    // creating a ~3.86 ns, 10-logic-level critical path. Dropping the
+    // dead check eliminates that path entirely. See Fix #6 in the DXA
+    // FPGA timing work.
+    wire launch_supported = launch_use_nb && issue_dec.supported;
     wire launch_valid_cmd = launch_valid;  // accept unconditionally; validate in DESC_WAIT
     wire launch_invalid_cmd = (ts_state_r == TS_DESC_WAIT) && ~launch_supported;
 
     assign launch_ready = (ts_state_r == TS_IDLE);
 
+    // ---- Register cut for BRAM-derived signals feeding VX_dxa_setup ----
+    // The combinational path from desc_table BRAM rdata through
+    // VX_dxa_issue_decode into VX_dxa_setup's S_IDLE input-latching was
+    // the Fmax-limiting critical path on U55C (18 logic levels / 6.60 ns
+    // in placed timing). We register issue_dec, issue_base_addr, and
+    // issue_desc_cfill one cycle ahead of TS_DESC_LATCH so that
+    // setup_start sees registered values, cutting the path.
+    //
+    // Fix #8 (2026-04-09): these staging registers intentionally sample
+    // EVERY CYCLE instead of being gated by `(ts_state_r == TS_DESC_WAIT)`.
+    // With the earlier gated form, Vivado's retiming + FSM one-hot
+    // extraction produced a 169-sink CE tree driven by a single FSM
+    // state-bit flop, which became a 0-LUT/2.9 ns pure-routing
+    // critical path (WNS = +0.232 ns at 300 MHz). Removing the CE
+    // dissolves that tree entirely because the staging regs no longer
+    // need a control signal to gate their updates.
+    //
+    // Functional correctness is preserved:
+    //   - On the TS_DESC_WAIT -> TS_DESC_LATCH edge, the _q regs sample
+    //     issue_dec/issue_base_addr/issue_desc_cfill which are valid for
+    //     THIS worker's slot (BRAM out of shared desc_table).
+    //   - In TS_DESC_LATCH, VX_dxa_setup's S_IDLE case latches lat_*
+    //     from the _q versions (via setup_start = 1 pulse).
+    //   - After that, VX_dxa_setup has all it needs in its own regs;
+    //     the _q regs may be overwritten with unrelated desc_table
+    //     traffic during TS_SETUP/TS_ACTIVE/TS_IDLE, but nothing reads
+    //     them in those states.
+    dxa_issue_dec_t              issue_dec_q;
+    reg [`MEM_ADDR_WIDTH-1:0]    issue_base_addr_q;
+    reg [31:0]                   issue_desc_cfill_q;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            issue_dec_q        <= '0;
+            issue_base_addr_q  <= '0;
+            issue_desc_cfill_q <= '0;
+        end else begin
+            // Always clock — no CE. See note above.
+            issue_dec_q        <= issue_dec;
+            issue_base_addr_q  <= issue_base_addr;
+            issue_desc_cfill_q <= issue_desc_cfill;
+        end
+    end
+
     // ---- Setup phase ----
-    // setup_start fires in DESC_WAIT state, after BRAM output is valid.
-    wire setup_start = (ts_state_r == TS_DESC_WAIT);
+    // setup_start fires in TS_DESC_LATCH (one cycle after DESC_WAIT),
+    // after issue_dec_q / issue_base_addr_q / issue_desc_cfill_q have
+    // been captured from their BRAM-derived combinational sources.
+    wire setup_start = (ts_state_r == TS_DESC_LATCH);
     wire setup_done;
     dxa_setup_params_t setup_params;
 
@@ -176,11 +237,11 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .clk         (clk),
         .reset       (reset),
         .start       (setup_start),
-        .issue_dec   (issue_dec),
-        .gmem_base   (issue_base_addr),
+        .issue_dec   (issue_dec_q),
+        .gmem_base   (issue_base_addr_q),
         .smem_base   (active_smem_addr_r),
         .coords      (active_coords_r),
-        .cfill       (issue_desc_cfill),
+        .cfill       (issue_desc_cfill_q),
         .setup_done  (setup_done),
         .setup_params(setup_params)
     );
@@ -219,6 +280,43 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
 
     // ════════════════════════════════════════════════════════════════════
+    // Stage 1.5: addr_gen → dedup elastic buffer (Fix #5 register cut)
+    // ════════════════════════════════════════════════════════════════════
+    // Breaks the combinational path:
+    //   addr_gen/gmem_base_r  →  cur_cl_addr carry chain  →  dedup/can_merge
+    //                         →  rd_ctrl handshake  →  cl2smem barrel_pe/fb_data_r
+    // Placed routed WNS at 300 MHz was -1.778 ns before this cut; the 17-level
+    // path above was dominated by addr_gen's cur_cl_addr adder feeding directly
+    // into dedup's can_merge compare in the same cycle. A 1-entry elastic buffer
+    // at the addr_gen→dedup boundary adds 1 cycle of pipeline latency and gets
+    // the carry chain into its own clock period. Negligible perf cost for a DMA.
+    localparam AG2DD_DATAW =
+          GMEM_ADDR_WIDTH   // cl_addr
+        + GMEM_BYTES        // byte_mask
+        + 1                 // oob
+        + 1                 // last
+        + 1;                // new_row
+
+    wire                       ag2dd_valid, ag2dd_ready;
+    wire [GMEM_ADDR_WIDTH-1:0] ag2dd_cl_addr;
+    wire [GMEM_BYTES-1:0]      ag2dd_byte_mask;
+    wire                       ag2dd_oob, ag2dd_last, ag2dd_new_row;
+
+    VX_elastic_buffer #(
+        .DATAW (AG2DD_DATAW),
+        .SIZE  (1)
+    ) ag2dd_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (ag_valid),
+        .ready_in  (ag_ready),
+        .data_in   ({ag_cl_addr, ag_byte_mask, ag_oob, ag_last, ag_new_row}),
+        .data_out  ({ag2dd_cl_addr, ag2dd_byte_mask, ag2dd_oob, ag2dd_last, ag2dd_new_row}),
+        .valid_out (ag2dd_valid),
+        .ready_out (ag2dd_ready)
+    );
+
+    // ════════════════════════════════════════════════════════════════════
     // Stage 2: Intra-Row Dedup
     // ════════════════════════════════════════════════════════════════════
 
@@ -233,13 +331,13 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     ) dedup (
         .clk           (clk),
         .reset         (reset),
-        .in_valid      (ag_valid),
-        .in_ready      (ag_ready),
-        .in_cl_addr    (ag_cl_addr),
-        .in_byte_mask  (ag_byte_mask),
-        .in_oob        (ag_oob),
-        .in_last       (ag_last),
-        .in_new_row    (ag_new_row),
+        .in_valid      (ag2dd_valid),
+        .in_ready      (ag2dd_ready),
+        .in_cl_addr    (ag2dd_cl_addr),
+        .in_byte_mask  (ag2dd_byte_mask),
+        .in_oob        (ag2dd_oob),
+        .in_last       (ag2dd_last),
+        .in_new_row    (ag2dd_new_row),
         .out_valid     (dd_valid),
         .out_ready     (dd_ready),
         .out_cl_addr   (dd_cl_addr),
@@ -272,6 +370,55 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     );
 
     // ════════════════════════════════════════════════════════════════════
+    // Stage 2.75: dedup → rd_ctrl elastic buffer (Fix #9 register cut)
+    // ════════════════════════════════════════════════════════════════════
+    // Breaks the 9-level combinational cone:
+    //   dedup output  →  rd_ctrl's cl_in_valid/cl_in_oob
+    //                 →  oob_emit / fifo_emit decode
+    //                 →  rsp_fifo_pop
+    //                 →  rd_ptr update
+    //                 →  rsp_fifo BRAM ENARDEN
+    // that became the top critical path after Fix #8 removed the Fix #1
+    // CE tree (~2.847 ns / 9 LUTs / 73% route, WNS = +0.120 ns at 300 MHz).
+    //
+    // Adding this buffer completes the symmetric register-cut pattern:
+    //   addr_gen -> ag2dd_buf -> dedup -> dd2rc_buf -> rd_ctrl -> rc2cs_buf -> cl2smem
+    // so every cross-module handshake in the DXA pipeline has its own
+    // pipeline register boundary.
+    //
+    // Payload includes dd_smem_byte_addr — the per-CL SMEM byte address
+    // computed by VX_dxa_smem_addr_tracker. The tracker continues to be
+    // driven by the dd_valid/dd_ready handshake (i.e. it advances at the
+    // dedup->buffer boundary), and the computed address is carried
+    // alongside the other fields through the buffer to rd_ctrl.
+    localparam DD2RC_DATAW =
+          GMEM_ADDR_WIDTH     // cl_addr
+        + GMEM_BYTES          // byte_mask
+        + 1                   // oob
+        + 1                   // last
+        + `MEM_ADDR_WIDTH;    // smem_byte_addr
+
+    wire                       dd2rc_valid, dd2rc_ready;
+    wire [GMEM_ADDR_WIDTH-1:0] dd2rc_cl_addr;
+    wire [GMEM_BYTES-1:0]      dd2rc_byte_mask;
+    wire                       dd2rc_oob, dd2rc_last;
+    wire [`MEM_ADDR_WIDTH-1:0] dd2rc_smem_byte_addr;
+
+    VX_elastic_buffer #(
+        .DATAW (DD2RC_DATAW),
+        .SIZE  (1)
+    ) dd2rc_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (dd_valid),
+        .ready_in  (dd_ready),
+        .data_in   ({dd_cl_addr, dd_byte_mask, dd_oob, dd_last, dd_smem_byte_addr}),
+        .data_out  ({dd2rc_cl_addr, dd2rc_byte_mask, dd2rc_oob, dd2rc_last, dd2rc_smem_byte_addr}),
+        .valid_out (dd2rc_valid),
+        .ready_out (dd2rc_ready)
+    );
+
+    // ════════════════════════════════════════════════════════════════════
     // Stage 3: Read Controller (GMEM reads, out-of-order emission)
     // ════════════════════════════════════════════════════════════════════
 
@@ -298,13 +445,13 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .clk              (clk),
         .reset            (reset),
         .transfer_active  (active_r),
-        .cl_in_valid      (dd_valid),
-        .cl_in_ready      (dd_ready),
-        .cl_in_addr       (dd_cl_addr),
-        .cl_in_byte_mask  (dd_byte_mask),
-        .cl_in_oob        (dd_oob),
-        .cl_in_last       (dd_last),
-        .cl_in_smem_byte_addr(dd_smem_byte_addr),
+        .cl_in_valid      (dd2rc_valid),
+        .cl_in_ready      (dd2rc_ready),
+        .cl_in_addr       (dd2rc_cl_addr),
+        .cl_in_byte_mask  (dd2rc_byte_mask),
+        .cl_in_oob        (dd2rc_oob),
+        .cl_in_last       (dd2rc_last),
+        .cl_in_smem_byte_addr(dd2rc_smem_byte_addr),
         .cfill            (ag_cfill),
         .gmem_rd_req_valid(rc_gmem_rd_req_valid),
         .gmem_rd_req_addr (rc_gmem_rd_req_addr),
@@ -342,6 +489,42 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [SMEM_ADDR_WIDTH-1:0] cs_smem_word_addr;
     wire cs_idle;
 
+    // ════════════════════════════════════════════════════════════════════
+    // Stage 3.5: rd_ctrl → cl2smem elastic buffer (Fix #4 register cut)
+    // ════════════════════════════════════════════════════════════════════
+    // Breaks the dominant post-physopt critical path where dedup/can_merge
+    // → rd_ctrl handshake → cl2smem/barrel_pe leading-zero count → cl2smem/
+    // fb_data_r load all happened in one cycle (17 logic levels, 5.09 ns).
+    // A 1-entry elastic buffer at the rd_ctrl→cl2smem boundary isolates the
+    // cl2smem barrel-shift compression cone from the upstream merge/flush
+    // decision. Adds 1 cycle of latency on CL responses entering cl2smem —
+    // negligible vs GMEM read latency (~50+ cycles per request).
+    localparam RC2CS_DATAW =
+          GMEM_DATAW        // cl_data  (e.g. 512 bits)
+        + GMEM_BYTES        // byte_mask
+        + 1                 // last
+        + `MEM_ADDR_WIDTH;  // smem_byte_addr
+
+    wire                       rc2cs_valid, rc2cs_ready;
+    wire [GMEM_DATAW-1:0]      rc2cs_cl_data;
+    wire [GMEM_BYTES-1:0]      rc2cs_byte_mask;
+    wire                       rc2cs_last;
+    wire [`MEM_ADDR_WIDTH-1:0] rc2cs_smem_byte_addr;
+
+    VX_elastic_buffer #(
+        .DATAW (RC2CS_DATAW),
+        .SIZE  (1)
+    ) rc2cs_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (rc_cl_out_valid),
+        .ready_in  (rc_cl_out_ready),
+        .data_in   ({rc_cl_out_data, rc_cl_out_byte_mask, rc_cl_out_last, rc_cl_out_smem_byte_addr}),
+        .data_out  ({rc2cs_cl_data, rc2cs_byte_mask, rc2cs_last, rc2cs_smem_byte_addr}),
+        .valid_out (rc2cs_valid),
+        .ready_out (rc2cs_ready)
+    );
+
     VX_dxa_cl2smem #(
         .CL_SIZE        (GMEM_BYTES),
         .SMEM_WORD_SIZE (SMEM_BYTES),
@@ -350,12 +533,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .clk                 (clk),
         .reset               (reset),
         .start               (pipeline_start),
-        .cl_in_valid         (rc_cl_out_valid),
-        .cl_in_ready         (rc_cl_out_ready),
-        .cl_in_data          (rc_cl_out_data),
-        .cl_in_byte_mask     (rc_cl_out_byte_mask),
-        .cl_in_last          (rc_cl_out_last),
-        .cl_in_smem_byte_addr(rc_cl_out_smem_byte_addr),
+        .cl_in_valid         (rc2cs_valid),
+        .cl_in_ready         (rc2cs_ready),
+        .cl_in_data          (rc2cs_cl_data),
+        .cl_in_byte_mask     (rc2cs_byte_mask),
+        .cl_in_last          (rc2cs_last),
+        .cl_in_smem_byte_addr(rc2cs_smem_byte_addr),
         .smem_out_valid      (cs_valid),
         .smem_out_ready      (cs_ready),
         .smem_out_data       (cs_data),
@@ -399,7 +582,9 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .total_bytes       (setup_params.total_bytes),
         .initial_smem_base (`MEM_ADDR_WIDTH'(setup_params.initial_smem_base)),
         .all_cls_done      (rc_all_cls_done),
-        .cl2smem_idle      (cs_idle),
+        // cl2smem stage is idle only when BOTH the rc2cs elastic buffer
+        // (Fix #4) AND the cl2smem module itself are empty.
+        .cl2smem_idle      (cs_idle && ~rc2cs_valid),
         .smem_in_valid     (cs_valid),
         .smem_in_ready     (cs_ready),
         .smem_in_data      (cs_data),
@@ -508,6 +693,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 // Validate launch_supported here (deferred from IDLE — see
                 // comment near launch_valid_cmd above). If unsupported, abort
                 // back to IDLE without doing the transfer.
+                // In parallel, issue_dec_q / issue_base_addr_q /
+                // issue_desc_cfill_q are captured at this clock edge (see
+                // register-cut always_ff above), becoming stable one cycle
+                // later in TS_DESC_LATCH.
                 if (~launch_supported) begin
                     ts_state_r <= TS_IDLE;
                 end else begin
@@ -517,8 +706,14 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     active_smem_stride_r  <= issue_smem_stride;
                     active_bar_stride_r   <= issue_bar_stride;
                 `endif
-                    ts_state_r <= TS_SETUP;
+                    ts_state_r <= TS_DESC_LATCH;
                 end
+            end
+            TS_DESC_LATCH: begin
+                // issue_dec_q and friends are now stable (registered from
+                // TS_DESC_WAIT). setup_start pulses this cycle; VX_dxa_setup
+                // latches from the registered inputs in its S_IDLE case.
+                ts_state_r <= TS_SETUP;
             end
             TS_SETUP: begin
                 if (setup_done) begin
@@ -615,12 +810,21 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     always @(posedge clk) begin
         if (~reset) begin
             if (setup_start) begin
-                `TRACE(1, ("%t: %s start: core=%0d, wid=%0d, bar=%0d, total=%0d, elem=%0d, gbase=0x%0h, smem=0x%0h, desc=%0d\n",
-                    $time, INSTANCE_ID, launch_core_id, launch_wid, launch_bar_addr,
-                    issue_dec.total, issue_dec.elem_bytes, issue_base_addr, launch_smem_addr, launch_desc_slot))
+                // NOTE: setup_start fires in TS_DESC_LATCH, at which point
+                // the raw issue_dec / issue_base_addr / launch_desc_slot
+                // combinational signals may already belong to the NEXT
+                // FIFO head (the shared launch bus can advance immediately
+                // after this worker leaves TS_IDLE). Use the registered
+                // _q copies captured during TS_DESC_WAIT to print this
+                // worker's actual transfer; otherwise the trace would lie.
+                // Active launch-interface fields (core_id/wid/bar) were
+                // already latched in TS_IDLE, so they remain accurate.
+                `TRACE(1, ("%t: %s start: core=%0d, wid=%0d, bar=%0d, total=%0d, elem=%0d, gbase=0x%0h, smem=0x%0h\n",
+                    $time, INSTANCE_ID, active_core_id_r, active_wid_r, active_bar_addr_r,
+                    issue_dec_q.total, issue_dec_q.elem_bytes, issue_base_addr_q, active_smem_addr_r))
                 $write("DXA_TL,%0d,XFER_START,core=%0d,wid=%0d,bar=%0d,total=%0d,elem=%0d\n",
-                    $time, launch_core_id, launch_wid, launch_bar_addr,
-                    issue_dec.total, issue_dec.elem_bytes);
+                    $time, active_core_id_r, active_wid_r, active_bar_addr_r,
+                    issue_dec_q.total, issue_dec_q.elem_bytes);
             end
             if (launch_invalid_cmd) begin
                 `TRACE(1, ("%t: %s launch-unsupported: core=%0d, wid=%0d, bar=%0d, supported=%0d, is_s2g=%0d, total=%0d\n",

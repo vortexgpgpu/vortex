@@ -95,11 +95,27 @@ module VX_dxa_rd_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [RSP_FIFO_SIZEW-1:0] rsp_fifo_size;
     wire rsp_fifo_alm_empty, rsp_fifo_alm_full;
 
+    // rsp_fifo: wide (~530-bit) GMEM response payload. Pre-fix config was
+    //   `OUT_REG=0, LUTRAM=1`, which placed 512-bit cl_data in distributed
+    //   RAM with an async read path — the dominant LUT consumer inside
+    //   rd_ctrl on U55C (~14K LUTs). Two orthogonal fixes applied:
+    //     1. OUT_REG=1 — add an output register stage so downstream
+    //        cl2smem/wr_ctrl consumers see a register boundary, not a
+    //        530-bit comb mux from LUTRAM. Show-ahead FIFO semantics are
+    //        preserved by VX_fifo_queue's empty->non-empty bypass path.
+    //     2. LUTRAM=0 — move the underlying DP-RAM storage to BRAM so the
+    //        wide payload lives in block RAM (a few BRAM18/36 tiles) rather
+    //        than burning ~14K LUTs on the wide LUTRAM mux tree. BRAM with
+    //        OUT_REG=1 matches the existing VX_fifo_queue drain timing (1
+    //        cycle data_out_r → downstream).
+    //   Total cost: 1 cycle of drain latency (negligible — DMA throughput
+    //   is bound by GMEM read latency, not FIFO drain), plus a few BRAM
+    //   tiles (plenty of headroom on U55C).
     VX_fifo_queue #(
         .DATAW   (RSP_FIFO_DATAW),
         .DEPTH   (RSP_FIFO_DEPTH),
-        .OUT_REG (0),
-        .LUTRAM  (1)
+        .OUT_REG (1),
+        .LUTRAM  (0)
     ) rsp_fifo (
         .clk      (clk),
         .reset    (reset),

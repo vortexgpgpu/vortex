@@ -28,8 +28,11 @@
 using namespace vortex;
 namespace vt = tensor;
 
-// WGMMA geometry: same template as the kernel context (NR=32)
-using wg_cfg_t = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 32, 8>;
+// WGMMA geometry: same template as the kernel context.
+// Ported 2026-04-09 from old 5-arg wmma_config_t<..., 32, 8> to the current
+// 4-arg wgmma_config_t<..., WGMMA_NRC>. The rest of main.cpp already used
+// xtileM/xtileN from the config, so only the typedef itself needed updating.
+using wg_cfg_t = vt::wgmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, WGMMA_NRC>;
 
 // Sparse parameters based on runtime format (fp16)
 static constexpr uint32_t kRtlIRatio     = 32 / vt::fp16::bits;           // 2
