@@ -1234,24 +1234,32 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t rem = mma_idx % mn;
         uint32_t m = rem / wmma::n_steps;
         uint32_t n = rem % wmma::n_steps;
-        bool uop_is_last_k = (k == k_count - 1);
         uint32_t reg_rs1 = ra_base + (m / wmma::a_sub_blocks) * k_count + k;
         uint32_t reg_rs2 = rb_base + (k * wmma::n_steps + n) / b_sub;
         uint32_t reg_rs3 = rc_base + m * wmma::n_steps + n;
         uop_instr->set_op_type(TcuType::WMMA);
         uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
+    #ifdef TCU_ACC_ENABLE
         // Only last-k uop sets dest (wb=1); non-last-k have wb=0,
         // preventing scoreboard stalls between K-steps. Matches RTL.
+        bool uop_is_last_k = (k == k_count - 1);
         if (uop_is_last_k) {
           uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         }
+    #else
+        uop_instr->set_dest_reg(reg_rs3, RegType::Float);
+    #endif
         uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
         uop_instr->set_src_reg(1, reg_rs2, RegType::Float);
+    #ifdef TCU_ACC_ENABLE
         // Only first-k reads C from register file; k>0 reads from
         // accumulator. Matches RTL used_rs[2] = wmma_is_first_k.
         if (k == 0) {
           uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
         }
+    #else
+        uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
+    #endif
       }
     }
   }
@@ -1276,15 +1284,18 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t m = rem % m_steps;
     uint32_t r = n * m_steps + m;
 
-    bool uop_is_last_k = (k == k_count - 1);
-
     uop_instr->set_op_type(TcuType::WGMMA);
     uop_instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
                                    fmt_s, fmt_d, m, n, k});
+  #ifdef TCU_ACC_ENABLE
     // Only last-k uop sets dest (wb=1); matches RTL wb=0 for non-last-k.
+    bool uop_is_last_k = (k == k_count - 1);
     if (uop_is_last_k) {
       uop_instr->set_dest_reg(r, RegType::Float);
     }
+  #else
+    uop_instr->set_dest_reg(r, RegType::Float);
+  #endif
     if (uop_index == 0) {
       if (is_a_smem) {
         uop_instr->set_src_reg(0, a0, RegType::Integer);
@@ -1297,17 +1308,23 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t rs1_off = m * k_count + k;
       uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
     }
+  #ifdef TCU_ACC_ENABLE
     // Only first-k reads C from register file; matches RTL used_rs[2].
     if (k == 0) {
       uop_instr->set_src_reg(2, r, RegType::Float);
     }
+  #else
+    uop_instr->set_src_reg(2, r, RegType::Float);
+  #endif
   }
 #endif
 
+#ifdef TCU_WLOCK_ENABLE
   // fu_lock/fu_unlock: prevent warp interleaving during TCU K-accumulation.
   // 10=acquire (first), 00=middle, 01=release (last), 11=default (non-sequenced).
   uop_instr->set_fu_lock(uop_index == 0);
   uop_instr->set_fu_unlock(uop_index == total - 1);
+#endif
 
   return uop_instr;
 }

@@ -385,13 +385,15 @@ void Core::issue() {
         ++perf_stats_.scrb_stalls;
       } else {
         uop_trace->log_once(false);
+        auto fu = (int)uop_trace->fu_type;
+    #ifdef TCU_WLOCK_ENABLE
         // FU lock: block warps whose target FU is locked by another warp.
         // fu_lock=1 means acquire request; blocked when FU already locked.
-        auto fu = (int)uop_trace->fu_type;
         bool uop_fu_lock = uop_trace->instr_ptr->get_fu_lock();
         if (fu_locked_.test(fu) && uop_fu_lock) {
           continue; // blocked by FU lock
         }
+    #endif
         ready_set.set(w); // mark instruction as ready
         // suppress warps whose target FU dispatcher input is full
         if (dispatchers_.at(fu)->Inputs.at(iw).full()) {
@@ -427,6 +429,7 @@ void Core::issue() {
           // update scoreboard
           scoreboard_.reserve(uop_trace);
         }
+    #ifdef TCU_WLOCK_ENABLE
         // Update FU lock state: 10=acquire, 01=release
         {
           auto fui = (int)uop_trace->fu_type;
@@ -438,6 +441,7 @@ void Core::issue() {
             fu_locked_.reset(fui);
           }
         }
+    #endif
         // Advance sequencer; pop ibuffer only when all micro-ops issued
         if (seq.advance()) {
           // Resume warp for macro instructions that stalled fetch at decode
