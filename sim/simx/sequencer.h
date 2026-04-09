@@ -42,11 +42,8 @@ public:
   // For simple instructions, returns the input trace (pass-through).
   instr_trace_t* get(instr_trace_t* trace);
 
-  // Advance to next micro-op (call after successful pipeline send).
-  void advance();
-
-  // True when all micro-ops for current instruction have been issued.
-  bool done() const;
+  // Advance to next micro-op. Returns true when all micro-ops have been issued.
+  bool advance();
 
 private:
 

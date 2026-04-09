@@ -70,8 +70,6 @@ module VX_uop_sequencer import
     // downstream accepted a uop this cycle.
     wire uop_next = uop_active && output_if.ready;
 
-    reg uop_first; // high for the first uop in a burst
-
     // Sequential state machine: track the active burst and uop index.
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -80,7 +78,6 @@ module VX_uop_sequencer import
             last_ctr_r <= '0;
             uop_active <= 1'b0;
             uop_done   <= 1'b0;
-            uop_first  <= 1'b0;
         end else begin
             if (uop_start) begin
                 uop_active <= 1'b1;
@@ -89,13 +86,11 @@ module VX_uop_sequencer import
                 last_ctr_r <= uop_out_count[sel_idx_n] - UOP_CTR_W'(1);
                 uop_data   <= uop_out_data[sel_idx_n];
                 uop_done   <= (uop_out_count[sel_idx_n] == UOP_CTR_W'(1));
-                uop_first  <= 1'b1;
             end else if (uop_next) begin
                 uop_active <= ~uop_done;
                 uop_ctr    <= uop_done ? '0 : uop_ctr + UOP_CTR_W'(1);
                 uop_data   <= uop_out_data[sel_idx_r];
                 uop_done   <= (uop_ctr == last_ctr_r);
-                uop_first  <= 1'b0;
             end
         end
     end
@@ -154,8 +149,7 @@ module VX_uop_sequencer import
     always_comb begin
         if (uop_active) begin
             output_if.data     = uop_data;
-            output_if.data.sop = uop_first;
-            output_if.data.eop = uop_done;
+            // fu_lock is set by the uop expander (e.g. VX_tcu_uops)
         end else begin
             output_if.data = input_if.data;
         end

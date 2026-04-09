@@ -791,7 +791,7 @@ public:
   // Load A fragment (NRA=4 config)
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
-    stactic_assert(Frag::Use == matrix_a, "only matrix_a fragment can be loaded from registers in wgmma_context");
+    static_assert(Frag::Use == matrix_a, "only matrix_a fragment can be loaded from registers in wgmma_context");
     ctx_a::template load_matrix_sync<src_layout>(dst, src, ldm);
   }
 

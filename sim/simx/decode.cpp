@@ -517,6 +517,13 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << sintr.arg;
   }
+  if (instr.fu_lock_) {
+    os << " [fu_lock";
+    if (instr.fu_unlock_) {
+      os << ",fu_unlock";
+    }
+    os << "]";
+  }
   return os;
 }
 }

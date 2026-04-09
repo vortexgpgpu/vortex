@@ -385,10 +385,11 @@ void Core::issue() {
         ++perf_stats_.scrb_stalls;
       } else {
         uop_trace->log_once(false);
-        // FU lock: block warps whose target FU is locked by another warp
+        // FU lock: block warps whose target FU is locked by another warp.
+        // Owner warp's uops have fu_lock=1 (set by uop expander) and bypass.
         auto fu = (int)uop_trace->fu_type;
-        // only block new sequences (sop=1), only owner warp will have sop=0.
-        if (fu_locked_.test(fu) && uop_trace->sop) {
+        bool uop_fu_lock = uop_trace->instr_ptr->get_fu_lock();
+        if (fu_locked_.test(fu) && !uop_fu_lock) {
           continue; // blocked by FU lock
         }
         ready_set.set(w); // mark instruction as ready
@@ -417,14 +418,11 @@ void Core::issue() {
       auto& seq = emulator_.sequencer(wid);
       auto uop_trace = seq.get(trace);
 
-      // Functional execution (deferred from schedule to issue)
-      if (uop_trace->instr_ptr) {
-        emulator_.execute(uop_trace);
-      }
-
       // to operand stage
       if (operands_.at(iw)->Input.try_send(uop_trace)) {
-        DT(3, this->name() << "-pipeline ibuffer: " << *uop_trace);
+        // perform functional simulation once
+        emulator_.execute(uop_trace);
+        DT(3, this->name() << "-pipeline issue: " << *uop_trace);
         if (uop_trace->wb) {
           // update scoreboard
           scoreboard_.reserve(uop_trace);
@@ -432,21 +430,21 @@ void Core::issue() {
         // Update FU lock state
         {
           auto fu = (int)uop_trace->fu_type;
-          if (uop_trace->sop && !uop_trace->eop) {
-            fu_locked_.set(fu);
-          } else if (uop_trace->eop && !uop_trace->sop) {
+          if (uop_trace->instr_ptr->get_fu_unlock()) {
             fu_locked_.reset(fu);
+          } else if (uop_trace->instr_ptr->get_fu_lock()) {
+            fu_locked_.set(fu);
           }
         }
         // Advance sequencer; pop ibuffer only when all micro-ops issued
-        seq.advance();
-        if (seq.done()) {
+        if (seq.advance()) {
           // Resume warp for macro instructions that stalled fetch at decode
-          if (trace->instr_ptr && trace->instr_ptr->is_macro_op()) {
+          if (trace->instr_ptr->is_macro_op()) {
             emulator_.resume(trace->wid);
             // Macro trace never reaches commit (only micro-ops do),
             // so remove it from pending tracking and deallocate here.
             pending_instrs_.remove(trace);
+            trace->~instr_trace_t();
             trace_pool_.deallocate(trace, 1);
           }
           ibuffer->pop();
@@ -543,6 +541,7 @@ void Core::commit() {
     }
 
     // delete the trace
+    trace->~instr_trace_t();
     trace_pool_.deallocate(trace, 1);
 
     commit_arb->Outputs.at(0).pop();

@@ -1053,7 +1053,9 @@ private:
     } else {
       if (accum_owner_ != wid) {
         std::cout << "ERROR: warp interleave detected during TCU K-accumulation! "
-                  << "owner=" << accum_owner_ << ", intruder=" << wid << std::endl;
+                  << "owner=" << accum_owner_ << ", intruder=" << wid
+                  << ", first_k=" << is_first_k << ", last_k=" << is_last_k
+                  << ", tile_ctr=" << accum_tile_ctr_ << std::endl;
         std::abort();
       }
       if (is_first_k && !is_last_k)
@@ -1301,6 +1303,11 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     }
   }
 #endif
+
+  // fu_lock/fu_unlock: prevent warp interleaving during TCU K-accumulation.
+  // fu_lock=1 on all uops identifies the owner; fu_unlock=1 on last releases.
+  uop_instr->set_fu_lock(true);
+  uop_instr->set_fu_unlock(uop_index == total - 1);
 
   return uop_instr;
 }

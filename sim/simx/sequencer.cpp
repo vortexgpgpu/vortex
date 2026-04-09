@@ -42,7 +42,7 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
     return state_.current_uop;
 
   // Activate sequencing for macro-op instructions
-  if (!state_.active && trace->instr_ptr && trace->instr_ptr->is_macro_op()) {
+  if (!state_.active && trace->instr_ptr->is_macro_op()) {
     state_.active = true;
     state_.uop_index = 0;
 
@@ -82,8 +82,6 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
       uop_trace->src_regs[i] = uop_instr->get_src_reg(i);
     }
     uop_trace->wb = (uop_instr->get_dest_reg().type != RegType::None);
-    uop_trace->sop = (state_.uop_index == 0);
-    uop_trace->eop = (state_.uop_index == state_.uop_count - 1);
 
     state_.current_uop = uop_trace;
     return uop_trace;
@@ -94,7 +92,7 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
   return trace;
 }
 
-void Sequencer::advance() {
+bool Sequencer::advance() {
   state_.current_uop = nullptr;
   if (state_.active) {
     ++state_.uop_index;
@@ -102,8 +100,5 @@ void Sequencer::advance() {
       state_.active = false;
     }
   }
-}
-
-bool Sequencer::done() const {
   return !state_.active;
 }

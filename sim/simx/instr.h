@@ -144,6 +144,8 @@ public:
     , is_macro_op_(false)
     , is_wstall_(false)
     , has_tmask_(false)
+    , fu_lock_(false)
+    , fu_unlock_(false)
   {}
 
   void set_fu_type(FUType fu_type) {
@@ -218,6 +220,12 @@ public:
     return tmask_;
   }
 
+  void set_fu_lock(bool value) { fu_lock_ = value; }
+  bool get_fu_lock() const { return fu_lock_; }
+
+  void set_fu_unlock(bool value) { fu_unlock_ = value; }
+  bool get_fu_unlock() const { return fu_unlock_; }
+
 private:
 
   uint64_t uuid_;
@@ -232,6 +240,8 @@ private:
   bool     is_wstall_;
   ThreadMask tmask_;
   bool     has_tmask_;
+  bool     fu_lock_;
+  bool     fu_unlock_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };

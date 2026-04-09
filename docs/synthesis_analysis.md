@@ -156,8 +156,8 @@ CONFIGS="-DEXT_TCU_ENABLE" make tcu
 # Synthesize a 4-core Vortex without the platform wrapper
 CONFIGS="-DNUM_CORES=4 -DL2_ENABLE" make vortex
 
-# Run power analysis on an existing DUT build
-make tcu-power SAIF_FILE=/path/to/trace.saif SAIF_INST=TOP.rtlsim_shim.vortex
+# Run power analysis on an existing tcu
+make tcu-power SAIF_FILE=/path/to/trace.saif SAIF_INST=*.tensor_unit
 ```
 
 Each target creates its build under `<target>/<BUILD_DIR>/` (e.g., `tcu/build/`).
