@@ -20,7 +20,6 @@ module VX_tcu_uops import
     VX_gpu_pkg::*; (
     input clk,
     input reset,
-
     input  ibuffer_t ibuf_in,
     output ibuffer_t ibuf_out,
     input  wire      start,
@@ -61,8 +60,22 @@ module VX_tcu_uops import
         assign k_index = 0;
     end
 
-    // Register offsets
-    wire [CTR_W-1:0] rs1_offset = ((CTR_W'(m_index) >> LG_A_SB) << LG_K) | CTR_W'(k_index);
+    // Register offsets — match sim/simx/decode.cpp WMMA rs1:
+    // Dense:  rs1 = ra + (m / a_sub_blocks) * k_steps + k
+    // Sparse: NRA_compressed = NRA * sparsity_degree / 4
+    //         m_steps_per_reg = m_steps / NRA_compressed
+    //         rs1 = ra + m / m_steps_per_reg
+    wire is_dense_wmma = (ibuf_in.op_args.tcu.sparsity_degree == 2'b00);
+    wire [CTR_W-1:0] rs1_offset_dense =
+        CTR_W'((CTR_W'(m_index) >> LG_A_SB) * CTR_W'(TCU_K_STEPS) + CTR_W'(k_index));
+    wire [CTR_W-1:0] rs1_offset_sparse_14 =
+        CTR_W'(CTR_W'(m_index) / CTR_W'(TCU_MSPG_14));
+    wire [CTR_W-1:0] rs1_offset_sparse_24 =
+        CTR_W'(CTR_W'(m_index) / CTR_W'(TCU_MSPG_24));
+    wire [CTR_W-1:0] rs1_offset_sparse = (ibuf_in.op_args.tcu.sparsity_degree == 2'd2)
+        ? rs1_offset_sparse_24
+        : rs1_offset_sparse_14;
+    wire [CTR_W-1:0] rs1_offset = is_dense_wmma ? rs1_offset_dense : rs1_offset_sparse;
     wire [CTR_W-1:0] rs2_offset = ((CTR_W'(k_index) << LG_N) | CTR_W'(n_index)) >> LG_B_SB;
     wire [CTR_W-1:0] rs3_offset = (CTR_W'(m_index) << LG_N) | CTR_W'(n_index);
 
@@ -71,6 +84,13 @@ module VX_tcu_uops import
     wire [4:0] rs2 = TCU_RB + 5'(rs2_offset);
     wire [4:0] rs3 = TCU_RC + 5'(rs3_offset);
 
+    // Sparse WMMA metadata ireg mapping follows sim execute path:
+    // current A register fX maps to metadata register aX, i.e.
+    // rs4_idx = (encoded_rs1 - 32) + 10 == rs1_idx + 10.
+    wire [NUM_REGS_BITS-1:0] rs1_regnum = make_reg_num(REG_TYPE_F, rs1);
+    wire [RV_REGS_BITS-1:0]  rs1_idx    = get_reg_idx(rs1_regnum);
+    wire [RV_REGS_BITS-1:0]  rs4_idx    = rs1_idx + RV_REGS_BITS'(10);
+
 `ifdef UUID_ENABLE
     wire [31:0] uuid_lo = {counter, ibuf_in.uuid[0 +: (32-CTR_W)]};
     wire [UUID_WIDTH-1:0] uuid = {ibuf_in.uuid[UUID_WIDTH-1:32], uuid_lo};
@@ -78,7 +98,9 @@ module VX_tcu_uops import
     wire [UUID_WIDTH-1:0] uuid = ibuf_in.uuid;
 `endif
 
-    // Output uop generation
+    // Output uop generation:
+    // start from ibuf_in, then override fields we change for WMMA uops
+
     assign ibuf_out.uuid      = uuid;
     assign ibuf_out.tmask     = ibuf_in.tmask;
     assign ibuf_out.PC        = ibuf_in.PC;
@@ -86,20 +108,23 @@ module VX_tcu_uops import
     assign ibuf_out.op_type   = ibuf_in.op_type;
     assign ibuf_out.op_args.tcu.fmt_s = ibuf_in.op_args.tcu.fmt_s;
     assign ibuf_out.op_args.tcu.fmt_d = ibuf_in.op_args.tcu.fmt_d;
-    assign ibuf_out.op_args.tcu.step_m = 4'(m_index);
-    assign ibuf_out.op_args.tcu.step_n = 4'(n_index);
     assign ibuf_out.wb        = 1;
     assign ibuf_out.used_rs   = ibuf_in.used_rs;
-    assign ibuf_out.rs1       = make_reg_num(REG_TYPE_F, rs1);
-    assign ibuf_out.rs2       = make_reg_num(REG_TYPE_F, rs2);
-    assign ibuf_out.rs3       = make_reg_num(REG_TYPE_F, rs3);
-    assign ibuf_out.rd        = make_reg_num(REG_TYPE_F, rs3);
-    `UNUSED_VAR (ibuf_in.wb)
-    `UNUSED_VAR (ibuf_in.rd)
-    `UNUSED_VAR (ibuf_in.rs1)
-    `UNUSED_VAR (ibuf_in.rs2)
-    `UNUSED_VAR (ibuf_in.rs3)
-
+    assign ibuf_out.op_args.tcu.step_m = 4'(m_index);
+    assign ibuf_out.op_args.tcu.step_n = 4'(n_index);
+    assign ibuf_out.op_args.tcu.step_k = 4'(k_index);
+    assign ibuf_out.op_args.tcu.sparsity_degree = ibuf_in.op_args.tcu.sparsity_degree;
+    assign ibuf_out.rs1 = rs1_regnum;
+    assign ibuf_out.rs2 = make_reg_num(REG_TYPE_F, rs2);
+    assign ibuf_out.rs3 = make_reg_num(REG_TYPE_F, rs3);
+    assign ibuf_out.rd  = make_reg_num(REG_TYPE_F, rs3);
+    assign ibuf_out.rs4 = is_dense_wmma ? '0 : make_reg_num(REG_TYPE_I, rs4_idx);
+    `UNUSED_VAR (ibuf_in.wb);
+    `UNUSED_VAR (ibuf_in.rs1);
+    `UNUSED_VAR (ibuf_in.rs2);
+    `UNUSED_VAR (ibuf_in.rs3);
+    `UNUSED_VAR (ibuf_in.rs4);
+    `UNUSED_VAR (ibuf_in.rd);
     reg busy;
 
     always_ff @(posedge clk) begin

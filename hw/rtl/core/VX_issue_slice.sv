@@ -183,6 +183,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
                 VX_trace_pkg::trace_reg_idx(1, ibuffer_if[i].data.rs2);
                 `TRACE(1, (", rs3="))
                 VX_trace_pkg::trace_reg_idx(1, ibuffer_if[i].data.rs3);
+                `TRACE(1, (", rs4="))
+                VX_trace_pkg::trace_reg_idx(1, ibuffer_if[i].data.rs4);
                 `TRACE(1, (", "))
                 VX_trace_pkg::trace_op_args(1, ibuffer_if[i].data.ex_type, ibuffer_if[i].data.op_type, ibuffer_if[i].data.op_args);
                 `TRACE(1, (" (#%0d)\n", ibuffer_if[i].data.uuid))
@@ -202,6 +204,17 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
             `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `SIMD_WIDTH)
             `TRACE(1, (", rs3_data="))
             `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs3_data, `SIMD_WIDTH)
+            `TRACE(1, (", rs4_data="))
+            `TRACE(1, ("{"))
+            begin : g_trace_rs4_lo8
+                integer k_rs4;
+                for (k_rs4 = `SIMD_WIDTH - 1; k_rs4 >= 0; k_rs4--) begin
+                    if (k_rs4 != `SIMD_WIDTH - 1)
+                        `TRACE(1, (", "));
+                    `TRACE(1, ("0b%08b", operands_if.data.rs4_data[k_rs4][7:0]));
+                end
+            end
+            `TRACE(1, ("}"))
             `TRACE(1, (", "))
            VX_trace_pkg::trace_op_args(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
             `TRACE(1, (", sop=%b, eop=%b (#%0d)\n", operands_if.data.sop, operands_if.data.eop, operands_if.data.uuid))

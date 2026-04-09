@@ -34,7 +34,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (ISSUE_ID)
     `UNUSED_VAR (writeback_if.data.sop)
 
-    localparam NUM_OPDS = NUM_SRC_OPDS + 1;
+    localparam NUM_OPDS = NUM_SRC_OPDS + 1;  // rd + rs1..rs4
     localparam IN_DATAW = $bits(ibuffer_t);
 
     VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
@@ -131,8 +131,19 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                            && writeback_if.data.eop;
 
         wire [NUM_OPDS-1:0] [NUM_REGS_BITS-1:0] ibf_opds, stg_opds;
-        assign ibf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
-        assign stg_opds = {staging_if[w].data.rs3, staging_if[w].data.rs2, staging_if[w].data.rs1, staging_if[w].data.rd};
+        // Operand ordering: {rs4, rs3, rs2, rs1, rd}, so index 0 remains rd.
+        assign ibf_opds = {
+            ibuffer_if[w].data.rs4,
+                           ibuffer_if[w].data.rs3,
+                           ibuffer_if[w].data.rs2,
+                           ibuffer_if[w].data.rs1,
+                           ibuffer_if[w].data.rd};
+        assign stg_opds = {
+            staging_if[w].data.rs4,
+                           staging_if[w].data.rs3,
+                           staging_if[w].data.rs2,
+                           staging_if[w].data.rs1,
+                           staging_if[w].data.rd};
 
         wire [NUM_OPDS-1:0] ibf_used_rs = {ibuffer_if[w].data.used_rs, ibuffer_if[w].data.wb};
         wire [NUM_OPDS-1:0] stg_used_rs = {staging_if[w].data.used_rs, staging_if[w].data.wb};
@@ -158,8 +169,17 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask;
         for (genvar i = 0; i < REG_TYPES; ++i) begin : g_in_use_mask
-            wire [RV_REGS-1:0] ibf_reg_mask = ibf_opd_mask[0][i] | ibf_opd_mask[1][i] | ibf_opd_mask[2][i] | ibf_opd_mask[3][i];
-            wire [RV_REGS-1:0] stg_reg_mask = stg_opd_mask[0][i] | stg_opd_mask[1][i] | stg_opd_mask[2][i] | stg_opd_mask[3][i];
+            // All operands (rd + up to NUM_SRC_OPDS sources) participate via ibf/stg_opd_mask;
+            wire [RV_REGS-1:0] ibf_reg_mask = ibf_opd_mask[0][i]
+                                            | ibf_opd_mask[1][i]
+                                            | ibf_opd_mask[2][i]
+                                            | ibf_opd_mask[3][i]
+                                            | ibf_opd_mask[4][i];
+            wire [RV_REGS-1:0] stg_reg_mask = stg_opd_mask[0][i]
+                                            | stg_opd_mask[1][i]
+                                            | stg_opd_mask[2][i]
+                                            | stg_opd_mask[3][i]
+                                            | stg_opd_mask[4][i];
             wire [RV_REGS-1:0] regs_mask = ibuffer_fire ? ibf_reg_mask : stg_reg_mask;
             assign in_use_mask[i] = inuse_regs_n[i * RV_REGS +: RV_REGS] & regs_mask;
         end
@@ -278,7 +298,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             scoreboard_if.data.rd,
             scoreboard_if.data.rs1,
             scoreboard_if.data.rs2,
-            scoreboard_if.data.rs3
+            scoreboard_if.data.rs3,
+            scoreboard_if.data.rs4
         }),
         .valid_out (scoreboard_if.valid),
         .ready_out (scoreboard_if.ready),

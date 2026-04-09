@@ -46,8 +46,8 @@ module VX_decode import VX_gpu_pkg::*; #(
     reg [EX_BITS-1:0] ex_type;
     reg [INST_OP_BITS-1:0] op_type;
     op_args_t op_args;
-    reg [NUM_REGS_BITS-1:0] rd_v, rs1_v, rs2_v, rs3_v;
-    reg use_rd, use_rs1, use_rs2, use_rs3;
+    reg [NUM_REGS_BITS-1:0] rd_v, rs1_v, rs2_v, rs3_v, rs4_v;
+    reg use_rd, use_rs1, use_rs2, use_rs3, use_rs4;
     reg is_wstall;
 
     wire [31:0] instr = fetch_if.data.instr;
@@ -70,6 +70,8 @@ module VX_decode import VX_gpu_pkg::*; #(
     `UNUSED_VAR (use_rs1)
     `UNUSED_VAR (use_rs2)
     `UNUSED_VAR (use_rs3)
+    `UNUSED_VAR (use_rs4)
+    `UNUSED_VAR (rs4_v)
 
     wire is_itype_sh = funct3[0] && ~funct3[1];
     wire is_fpu_csr = (u_12 <= `VX_CSR_FCSR);
@@ -149,10 +151,12 @@ module VX_decode import VX_gpu_pkg::*; #(
         rs1_v     = 'x;
         rs2_v     = 'x;
         rs3_v     = 'x;
+        rs4_v     = 'x;
         use_rd    = 0;
         use_rs1   = 0;
         use_rs2   = 0;
         use_rs3   = 0;
+        use_rs4   = 0;
         is_wstall = 0;
 
         case (opcode)
@@ -518,17 +522,25 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `ifdef EXT_TCU_ENABLE
                     7'h02: begin
                         case (funct3)
-                            3'h0: begin // WMMA
+                            3'h0: begin // WMMA (dense/sparse)
                                 ex_type = EX_TCU;
                                 op_type = INST_OP_BITS'(INST_TCU_WMMA);
-                                op_args.tcu.fmt_s  = rs1[3:0];
-                                op_args.tcu.fmt_d  = rd[3:0];
-                                op_args.tcu.step_m = '0;
-                                op_args.tcu.step_n = '0;
+                                op_args.tcu.fmt_s   = rs1[3:0];
+                                op_args.tcu.fmt_d   = rd[3:0];
+                                op_args.tcu.step_m  = '0;
+                                op_args.tcu.step_n  = '0;
+                                op_args.tcu.step_k  = '0;
+                                op_args.tcu.sparsity_degree = rs2[1:0];
                                 `USED_IREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                                 `USED_IREG (rs3);
+                                if (rs2[1:0] != 2'b00) begin
+                                    // Sparse WMMA metadata source is an integer reg (a0..),
+                                    // while exact per-uop rs4 is resolved later in VX_tcu_uops.
+                                    use_rs4 = 1'b1;
+                                    rs4_v   = make_reg_num(REG_TYPE_I, 5'(10)); // a0 base
+                                end
                             end
                             default:;
                         endcase
@@ -544,7 +556,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     // disable write to integer register r0
     wire wb = use_rd && (rd_v != 0);
 
-    wire [2:0] used_rs = {use_rs3, use_rs2, use_rs1};
+    wire [NUM_SRC_OPDS-1:0] used_rs = {use_rs4, use_rs3, use_rs2, use_rs1};
 
     VX_elastic_buffer #(
         .DATAW (OUT_DATAW),
@@ -554,8 +566,8 @@ module VX_decode import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                used_rs,                rd_v,              rs1_v,              rs2_v,              rs3_v}),
-        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
+        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                used_rs,                rd_v,              rs1_v,              rs2_v,              rs3_v,              rs4_v}),
+        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3, decode_if.data.rs4}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
     );

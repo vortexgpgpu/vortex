@@ -169,7 +169,11 @@ def append_reg(text, reg, sep):
 
 def reg_value(rtype, value):
     if rtype == 1:
-        ivalue = int(value, 16)
+        s = str(value).strip()
+        if s.startswith("0b") or s.startswith("0B"):
+            ivalue = int(s, 2)
+        else:
+            ivalue = int(s, 16)
         ivalue32 = ivalue & 0xFFFFFFFF
         return "0x{:x}".format(ivalue32)
     else:
@@ -224,9 +228,11 @@ def parse_rtlsim(log_lines):
     rs1_pattern = r"rs1=(\d+)"
     rs2_pattern = r"rs2=(\d+)"
     rs3_pattern = r"rs3=(\d+)"
+    rs4_pattern = r"rs4=(\d+)"
     rs1_data_pattern = r"rs1_data=\{(.+?)\}"
     rs2_data_pattern = r"rs2_data=\{(.+?)\}"
     rs3_data_pattern = r"rs3_data=\{(.+?)\}"
+    rs4_data_pattern = r"rs4_data=\{(.+?)\}"
     rd_data_pattern = r"data=\{(.+?)\}"
     eop_pattern = r"eop=(\d)"
     uuid_pattern = r"#(\d+)"
@@ -268,6 +274,8 @@ def parse_rtlsim(log_lines):
                     trace["rs1"] = re.search(rs1_pattern, line).group(1)
                     trace["rs2"] = re.search(rs2_pattern, line).group(1)
                     trace["rs3"] = re.search(rs3_pattern, line).group(1)
+                    m_rs4 = re.search(rs4_pattern, line)
+                    trace["rs4"] = m_rs4.group(1) if m_rs4 else ""
                     trace["ibuf_ticks"] = timestamp
                     instr_data[uuid] = trace
                     if uuid in schd_ticks:
@@ -287,6 +295,10 @@ def parse_rtlsim(log_lines):
                             merge_data(trace, 'rs2_data', simd_data(re.search(rs2_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
                         if used_rs[2]:
                             merge_data(trace, 'rs3_data', simd_data(re.search(rs3_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
+                        if len(used_rs) > 3 and used_rs[3]:
+                            m_rs4d = re.search(rs4_data_pattern, line)
+                            if m_rs4d:
+                                merge_data(trace, 'rs4_data', simd_data(m_rs4d.group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
                         trace["issued"] = True
                         trace["issue_ticks"] = timestamp
                         instr_data[uuid] = trace
@@ -322,6 +334,10 @@ def parse_rtlsim(log_lines):
                                 if used_rs[2]:
                                     operands, sep = append_value(operands, trace["rs3"], trace["rs3_data"], tmask_arr, sep)
                                     del trace["rs3_data"]
+                                if (len(used_rs) > 3 and used_rs[3] and "rs4_data" in trace
+                                        and trace.get("rs4", "") != ""):
+                                    operands, sep = append_value(operands, trace["rs4"], trace["rs4_data"], tmask_arr, sep)
+                                    del trace["rs4_data"]
                                 trace["operands"] = operands
                                 cycles = (timestamp - trace["issue_ticks"] + 1) // 2
                                 perf_exec.update(uuid, cycles)
@@ -332,6 +348,8 @@ def parse_rtlsim(log_lines):
                                 del trace["rs1"]
                                 del trace["rs2"]
                                 del trace["rs3"]
+                                if "rs4" in trace:
+                                    del trace["rs4"]
                                 del trace["issued"]
                                 del instr_data[uuid]
                                 entries.append(trace)

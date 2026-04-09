@@ -68,9 +68,15 @@ package VX_tcu_pkg;
     localparam TCU_B_BLOCK_SIZE = TCU_TC_K * TCU_TC_N;
     localparam TCU_B_SUB_BLOCKS = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE;
 
-    // Register counts
-    //localparam TCU_NRA = (TCU_TILE_M * TCU_TILE_K) / TCU_NT;
+    // Register counts (match sim tensor_cfg / decode WMMA)
+    localparam TCU_NRA = (TCU_TILE_M * TCU_TILE_K) / TCU_NT;
     localparam TCU_NRB = (TCU_TILE_N * TCU_TILE_K) / TCU_NT;
+
+    // Sparse: m_steps per compressed A reg (tensor_unit local_m / decode)
+    localparam TCU_NRA_CMPR_14 = (TCU_NRA * 1) / 4;
+    localparam TCU_NRA_CMPR_24 = (TCU_NRA * 2) / 4;
+    localparam TCU_MSPG_14 = (TCU_NRA_CMPR_14 != 0) ? (TCU_M_STEPS / TCU_NRA_CMPR_14) : TCU_M_STEPS;
+    localparam TCU_MSPG_24 = (TCU_NRA_CMPR_24 != 0) ? (TCU_M_STEPS / TCU_NRA_CMPR_24) : TCU_M_STEPS;
     //localparam TCU_NRC = (TCU_TILE_M * TCU_TILE_N) / TCU_NT;
 
     // Register base addresses
@@ -113,7 +119,25 @@ package VX_tcu_pkg;
     endtask
 `endif
 
-    `DECL_EXECUTE_T (tcu_exe_t, `NUM_TCU_LANES);
+    // TCU execute payload: full-warp, carries 3 source vectors plus metadata (rs4) and sparsity degree (t0)
+    typedef struct packed {
+        logic [UUID_WIDTH-1:0]              uuid;
+        logic [NW_WIDTH-1:0]                wid;
+        logic [`NUM_TCU_LANES-1:0]          tmask;
+        logic [PC_BITS-1:0]                 PC;
+        logic [INST_ALU_BITS-1:0]           op_type;
+        op_args_t                           op_args;
+        logic                               wb;
+        logic [NUM_REGS_BITS-1:0]           rd;
+        logic [`NUM_TCU_LANES-1:0][`XLEN-1:0] rs1_data;
+        logic [`NUM_TCU_LANES-1:0][`XLEN-1:0] rs2_data;
+        logic [`NUM_TCU_LANES-1:0][`XLEN-1:0] rs3_data;
+        logic [`NUM_TCU_LANES-1:0][`XLEN-1:0] rs4_data;  // sparse metadata (a0-a7 packed per lane)
+        logic [`LOG2UP(`NUM_THREADS / `NUM_TCU_LANES)-1:0] pid;
+        logic                               sop;
+        logic                               eop;
+    } tcu_exe_t;
+
     `DECL_RESULT_T (tcu_res_t, `NUM_TCU_LANES);
 
 endpackage

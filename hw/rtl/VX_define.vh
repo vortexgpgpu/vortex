@@ -448,6 +448,7 @@
         logic [__lanes__-1:0][`XLEN-1:0] rs1_data; \
         logic [__lanes__-1:0][`XLEN-1:0] rs2_data; \
         logic [__lanes__-1:0][`XLEN-1:0] rs3_data; \
+        logic [__lanes__-1:0][`XLEN-1:0] rs4_data; \
         logic [`LOG2UP(`NUM_THREADS / __lanes__)-1:0] pid; \
         logic                           sop; \
         logic                           eop; \

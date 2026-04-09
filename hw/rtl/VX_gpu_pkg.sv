@@ -92,7 +92,7 @@ package VX_gpu_pkg;
 
 	localparam OFFSET_BITS = 12;
 
-    localparam NUM_SRC_OPDS = 3;
+    localparam NUM_SRC_OPDS = 4;
     localparam SRC_OPD_BITS = `CLOG2(NUM_SRC_OPDS);
     localparam SRC_OPD_WIDTH = `UP(SRC_OPD_BITS);
 
@@ -532,11 +532,13 @@ package VX_gpu_pkg;
 
 `ifdef EXT_TCU_ENABLE
     typedef struct packed {
-        logic [(INST_ARGS_BITS-16)-1:0] __padding;
+        logic [(INST_ARGS_BITS-18-4)-1:0] __padding;
         logic [3:0] fmt_d;
         logic [3:0] fmt_s;
         logic [3:0] step_n;
         logic [3:0] step_m;
+        logic [3:0] step_k;  // K-step index for this uop (matches VX_tcu_uops metadata_index formula)
+        logic [1:0] sparsity_degree; // 0=dense, 1=1:4 sparse, 2=2:4 sparse
     } tcu_args_t;
     `PACKAGE_ASSERT($bits(tcu_args_t) == INST_ARGS_BITS)
 `endif
@@ -577,6 +579,7 @@ package VX_gpu_pkg;
         logic [NUM_REGS_BITS-1:0]   rs1;
         logic [NUM_REGS_BITS-1:0]   rs2;
         logic [NUM_REGS_BITS-1:0]   rs3;
+        logic [NUM_REGS_BITS-1:0]   rs4;       // TCU sparse: metadata ireg (a0-a7)
     } decode_t;
 
     typedef struct packed {
@@ -592,6 +595,7 @@ package VX_gpu_pkg;
         logic [NUM_REGS_BITS-1:0]   rs1;
         logic [NUM_REGS_BITS-1:0]   rs2;
         logic [NUM_REGS_BITS-1:0]   rs3;
+        logic [NUM_REGS_BITS-1:0]   rs4;       // TCU sparse: metadata ireg (a0-a7)
     } ibuffer_t;
 
     typedef struct packed {
@@ -608,6 +612,7 @@ package VX_gpu_pkg;
         logic [NUM_REGS_BITS-1:0]   rs1;
         logic [NUM_REGS_BITS-1:0]   rs2;
         logic [NUM_REGS_BITS-1:0]   rs3;
+        logic [NUM_REGS_BITS-1:0]   rs4;
     } scoreboard_t;
 
     typedef struct packed {
@@ -624,6 +629,7 @@ package VX_gpu_pkg;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs3_data;
+        logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs4_data;  // TCU sparse: metadata from a0-a7
         logic                               sop;
         logic                               eop;
     } operands_t;
@@ -642,6 +648,7 @@ package VX_gpu_pkg;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs3_data;
+        logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs4_data;  // TCU sparse: metadata from a0-a7
         logic                               sop;
         logic                               eop;
     } dispatch_t;

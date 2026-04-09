@@ -62,7 +62,8 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.rd,
                 decode_if.data.rs1,
                 decode_if.data.rs2,
-                decode_if.data.rs3
+                decode_if.data.rs3,
+                decode_if.data.rs4
             }),
             .ready_in (ibuf_ready_in[w]),
             .valid_out(uop_sequencer_if.valid),

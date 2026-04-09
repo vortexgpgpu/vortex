@@ -1125,9 +1125,6 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         if (sparsity_degree != 1 && sparsity_degree != 2) {
           sparsity_degree = 0;
         }
-        const uint32_t a_compression_ratio = (sparsity_degree == 1) ? 4
-                                         : (sparsity_degree == 2) ? 2
-                                                                  : 1;
         uint32_t steps = 0;
         uint32_t steps_count = cfg::m_steps * cfg::n_steps * cfg::k_steps;
         uint32_t steps_shift = 32 - log2ceil(steps_count);
