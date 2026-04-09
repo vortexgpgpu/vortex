@@ -164,9 +164,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             mdata_queue_in.rd = '0;
         end
     `endif
+    `ifdef TCU_ACC_ENABLE
         if (!is_last_k) begin
             mdata_queue_in.wb = 1'b0;
         end
+    `endif
     end
 
     `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
@@ -182,17 +184,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire is_first_k = (step_k == '0);
     wire is_last_k  = (step_k == last_k_steps);
-`else
-    wire is_last_k  = 1'b1;
-`endif
 
-`ifdef TCU_ACC_ENABLE
     // -----------------------------------------------------------------------
     // Multi-tile accumulator (LUTRAM, async read, read-first)
     // -----------------------------------------------------------------------
     // One LUTRAM per FEDP element (tcM × tcN instances).
-    // Depth = MAX_TILES (shared by all warps).  Width = 32 bits.
-    // MAX_TILES = max(WMMA m_steps*n_steps, WGMMA m_steps*max_n_steps).
+    // Width = 32 bits.
+    // TCU_WLOCK_ENABLE=on:  shared accumulator, depth = MAX_TILES
+    // TCU_WLOCK_ENABLE=off: per-warp accumulator, depth = NUM_WARPS * MAX_TILES
 
   `ifdef TCU_WGMMA_ENABLE
     localparam ACCUM_MAX_N = (TCU_N_STEPS > TCU_WG_N_STEPS) ? TCU_N_STEPS : TCU_WG_N_STEPS;
@@ -203,7 +202,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
   `endif
     localparam ACCUM_MAX_TILES = ACCUM_MAX_M * ACCUM_MAX_N;
     localparam ACCUM_TILE_W   = $clog2(ACCUM_MAX_TILES);
+  `ifdef TCU_WLOCK_ENABLE
     localparam ACCUM_DEPTH    = ACCUM_MAX_TILES;
+  `else
+    localparam ACCUM_DEPTH    = `NUM_WARPS * ACCUM_MAX_TILES;
+  `endif
     localparam ACCUM_ADDRW    = $clog2(ACCUM_DEPTH);
 
     wire [NW_WIDTH-1:0] exe_wid = execute_if.data.header.wid;
@@ -212,7 +215,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [ACCUM_TILE_W-1:0] exe_tile_idx = ACCUM_TILE_W'(step_m) * ACCUM_TILE_W'(ACCUM_MAX_N)
                                           + ACCUM_TILE_W'(step_n);
     // Read address for accumulator lookup
+  `ifdef TCU_WLOCK_ENABLE
     wire [ACCUM_ADDRW-1:0] accum_raddr = ACCUM_ADDRW'(exe_tile_idx);
+  `else
+    wire [ACCUM_ADDRW-1:0] accum_raddr = {exe_wid, exe_tile_idx};
+  `endif
 
     // Track is_last_k, warp ID, and tile index through the FEDP pipeline
     reg [PIPE_LATENCY-1:0] last_k_pipe;
@@ -226,6 +233,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire k_stall = !is_first_k && (inflight_k[exe_wid] != '0);
 
   `ifdef SIMULATION
+    `ifdef TCU_WLOCK_ENABLE
     // Detect illegal warp interleaving: a different warp must not enter
     // the TCU while another warp has non-last_k uops still in the FEDP pipeline.
     wire [`NUM_WARPS-1:0] inflight_mask;
@@ -237,6 +245,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `RUNTIME_ASSERT(~execute_fire || (other_inflight == '0),
         ("%s warp interleave during K-accumulation! wid=%0d entering while inflight_mask=%b (#%0d)",
             INSTANCE_ID, exe_wid, inflight_mask, execute_if.data.header.uuid))
+    `endif
   `endif
 `else
     wire k_stall = 1'b0;
@@ -250,11 +259,16 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire result_fire = result_if.valid && result_if.ready;
     wire fedp_enable, fedp_done;
-    wire fedp_done_raw;           // any FEDP result (including intermediate k)
 
 `ifdef TCU_ACC_ENABLE
+    wire fedp_done_raw;           // any FEDP result (including intermediate k)
+
     // Write-back address from pipeline exit
+  `ifdef TCU_WLOCK_ENABLE
     wire [ACCUM_ADDRW-1:0] accum_waddr = ACCUM_ADDRW'(tile_pipe[0]);
+  `else
+    wire [ACCUM_ADDRW-1:0] accum_waddr = {wid_pipe[0], tile_pipe[0]};
+  `endif
     wire accum_wr = fedp_done_raw && !last_k_pipe[0] && fedp_enable;
 `endif
 
@@ -303,8 +317,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
         end
     end
+`ifdef TCU_ACC_ENABLE
     assign fedp_done_raw    = fedp_delay_pipe[0];
     assign fedp_done        = fedp_done_raw; // all uops produce downstream result (wb=0 skips RF write)
+`else
+    assign fedp_done        = fedp_delay_pipe[0];
+`endif
 
     assign result_if.valid  = fedp_done;
     assign fedp_enable      = ~fedp_done || result_if.ready;
@@ -544,7 +562,5 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif // DBG_TRACE_TCU
         end
     end
-
-    // Accumulator write is handled by VX_dp_ram instances inside the FEDP grid.
 
 endmodule

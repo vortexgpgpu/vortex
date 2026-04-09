@@ -412,8 +412,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     `endif
     `endif
         end
+        // FU lock: 10=acquire (first), 00=middle, 01=release (last), 11=default.
     `ifdef TCU_WLOCK_ENABLE
-        // FU lock: 10=acquire (first), 00=middle, 01=release (last).
         ibuf_r.fu_lock   = (uop_idx == UOP_CTR_W'(0));
         ibuf_r.fu_unlock = (uop_idx == (uop_count - UOP_CTR_W'(1)));
     `endif
