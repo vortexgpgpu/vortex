@@ -204,39 +204,73 @@ public:
       }
       
       if (meta_src != nullptr) {
-        // When metadata is provided, record it per-fragment row 
-        const uint32_t* meta_base = reinterpret_cast<const uint32_t*>(meta_src);
-        auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
+        // SPARSE LOADING: compressed A values + metadata
+        // Parameters (repurposed for sparse):
+        //   src      = pointer to compressed values for (tile_row, k_block)
+        //   ldm      = values_per_row (compressed row stride)
+        //   meta_src = pointer to metadata for (tile_row, k_block)
+        //   meta_row_base = kblocks (metadata row stride)
+        //   sparsity_degree = 1 (1:4) or 2 (2:4)
+        const uint32_t* meta_base_ptr = reinterpret_cast<const uint32_t*>(meta_src);
+        auto values_base = reinterpret_cast<const input_t*>(src);
+        uint32_t values_per_row = ldm;
+        uint32_t meta_stride = meta_row_base;  // kblocks
 
-        detail::unroll_for<Frag::NR>([&](auto r) {
-          uint32_t block_m  = r / cfg::k_steps;
-          uint32_t block_k  = r % cfg::k_steps;
-          uint32_t elem_row = block_m * m_stride;
-          uint32_t elem_col = block_k * k_stride;
-            // ---- metadata addressing ----
-            uint32_t meta_ldm    = ldm / cfg::tcK;
-            uint32_t abs_row     = meta_row_base + block_row + elem_row;
-            uint32_t abs_k_block = (meta_col_base + block_col_offset + elem_col) / cfg::tcK;
-            
-            assert(abs_k_block < meta_ldm && "metadata column out of bounds");
-            const uint32_t* meta_ptr = meta_base + (size_t)abs_row * meta_ldm + abs_k_block;
-            dst.metadata[r] = *meta_ptr;
+        // Hoist lane-dependent computation out of unrolled loop
+        uint32_t local_row = lane / sparsity_degree;
+        uint32_t comp_idx  = lane % sparsity_degree;
+        uint32_t rows_per_reg = NT / sparsity_degree;
 
-          if constexpr (src_layout == col_major) {
-            static_assert(input_is_subbyte == false, "col_major layout is not supported for sub-byte matrix_a");
-            std::swap(elem_row, elem_col);
-            auto ptr = base + elem_row * ldm + elem_col;
-            if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
-              dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+        // Pre-compute base pointers for row 'local_row', then stride per register
+        auto val_row_ptr  = values_base + local_row * values_per_row + comp_idx * i_ratio;
+        auto meta_row_ptr = meta_base_ptr + local_row * meta_stride;
+        uint32_t val_stride  = rows_per_reg * values_per_row;
+        uint32_t meta_row_stride = rows_per_reg * meta_stride;
+
+        // NRA_compressed known per sparsity_degree: NR*s/4
+        // Branch once on sparsity_degree, then unroll with compile-time bound
+        if (sparsity_degree == 1) {
+          // 1:4: NRA_compressed = NR/4 = 2 (for NR=8)
+          constexpr uint32_t NRA_comp = Frag::NR / 4;
+          detail::unroll_for<NRA_comp>([&](auto r) {
+            dst.data[r] = *reinterpret_cast<const vreg_t*>(val_row_ptr);
+            if constexpr (i_ratio == 1) {
+              dst.metadata[r] = *meta_row_ptr;
             } else {
-              dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
+              // Pack multiple k-block masks (i_ratio masks per thread)
+              constexpr uint32_t kblocks_per_thread = i_ratio;
+              uint32_t packed_meta = 0;
+              for (uint32_t kb = 0; kb < kblocks_per_thread; ++kb) {
+                packed_meta |= (meta_row_ptr[kb] & 0xFu) << (kb * 4u);
+              }
+              dst.metadata[r] = packed_meta;
             }
-          } else {
-            auto ptr = base + elem_row * ldm + elem_col;
-            assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
-            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
-          }
-        });
+            val_row_ptr += val_stride;
+            meta_row_ptr += meta_row_stride;
+          });
+          detail::unroll_for<Frag::NR - NRA_comp>([&](auto r) {
+            dst.data[NRA_comp + r] = 0;
+            dst.metadata[NRA_comp + r] = 0;
+          });
+        } else {
+          // 2:4: NRA_compressed = NR/2 = 4 (for NR=8)
+          constexpr uint32_t NRA_comp = Frag::NR / 2;
+          detail::unroll_for<NRA_comp>([&](auto r) {
+            dst.data[r] = *reinterpret_cast<const vreg_t*>(val_row_ptr);
+            if constexpr (i_ratio == 1) {
+              dst.metadata[r] = *meta_row_ptr;
+            } else {
+              // fp16 2:4: comp_idx selects k-block
+              dst.metadata[r] = meta_row_ptr[comp_idx];
+            }
+            val_row_ptr += val_stride;
+            meta_row_ptr += meta_row_stride;
+          });
+          detail::unroll_for<Frag::NR - NRA_comp>([&](auto r) {
+            dst.data[NRA_comp + r] = 0;
+            dst.metadata[NRA_comp + r] = 0;
+          });
+        }
       } else {
         // DENSE LOADING: Original non-sparse path
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
@@ -348,20 +382,7 @@ public:
       if constexpr (dst_layout == col_major) {
         std::swap(elem_row, elem_col);
       }
-      int32_t row_adjust = 0;
-      if constexpr (dst_layout == row_major) {
-        const bool block_m_is_even = ((block_m & 1u) == 0u);
-        // `block_row` is the local row index coming from the warp thread lane.
-        if (block_m_is_even) {
-          // Even block_m: push the last local row down by +1.
-          row_adjust = (block_row == (cfg::tcM - 1u)) ? 1 : 0;
-        } else {
-          // Odd block_m: pull the first local row up by -1.
-          row_adjust = (block_row == 0u) ? -1 : 0;
-        }
-      }
-
-      auto ptr = base + (elem_row + static_cast<uint32_t>(row_adjust)) * ldm + elem_col;
+      auto ptr = base + elem_row * ldm + elem_col;
       if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
         *reinterpret_cast<vreg_t*>(ptr) = src.data[r];
       } else {

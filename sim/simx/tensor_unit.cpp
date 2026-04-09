@@ -405,175 +405,115 @@ void sparse_wmma(uint32_t fmt_s,
   switch (fmt_s) {
   case sv::fp16::id:
   case sv::bf16::id: element_bits = 16; break;
-  case sv::fp32::id:
-  default:           element_bits = 32; break;
+  case sv::int8::id:
+  case sv::uint8::id: element_bits = 8; break;
+  case sv::int4::id:
+  case sv::uint4::id: element_bits = 4; break;
+  default: element_bits = 32; break;
   }
-
-  // I_RATIO: number of elements packed per 32-bit register
   const uint32_t I_RATIO = 32u / element_bits;
-
-  // Metadata is provided as one word per lane (selected in execute.cpp).
-  const uint32_t meta_regs_per_thread = 1u;
-
-  uint32_t meta_bits_per_step = scfg::tcK;
-  if (I_RATIO == 2u && sparsity_degree == 1u) {
-    meta_bits_per_step = scfg::tcK * I_RATIO;
-  }
-  const uint32_t bit_offset = step_k * meta_bits_per_step;
 
   auto fedp_regs = select_FEDP_regs(fmt_s, fmt_d);
 
   uint32_t a_off = (step_m % scfg::a_sub_blocks) * scfg::a_block_size;
   uint32_t b_off = (step_n % scfg::b_sub_blocks) * scfg::b_block_size;
 
-  // Debug: dump metadata words
-  DTH(3, "SparseWMMA: m=" << step_m << ", n=" << step_n << ", k=" << step_k
-  << ", bit_offset=" << bit_offset
-  << ", metadata_words={");
-  for (uint32_t idx = 0; idx < scfg::tcM * scfg::tcN; ++idx) {
-  if (idx) DTN(3, ", ");
-  DTN(3, "[");
-  for (uint32_t r = 0; r < meta_regs_per_thread; ++r) {
-  if (r) DTN(3, ",");
-  DTN(3, "0b" << std::bitset<8>(metadata_words[idx * meta_regs_per_thread + r] & 0xFFu));
-  }
-  DTN(3, "]");
-  }
-  DTN(3, "}" << std::endl);
+  // Compute local_m: which sub-m within the shared A register
+  uint32_t NRA_compressed = scfg::NRA * sparsity_degree / 4;
+  uint32_t m_steps_per_reg = scfg::m_steps / NRA_compressed;
+  uint32_t local_m = step_m % m_steps_per_reg;
 
   for (uint32_t i = 0; i < scfg::tcM; ++i) {
-  for (uint32_t j = 0; j < scfg::tcN; ++j) {
-  auto b_col = rs2_data.data() + b_off + j * scfg::tcK;
+    for (uint32_t j = 0; j < scfg::tcN; ++j) {
+      auto b_col = rs2_data.data() + b_off + j * scfg::tcK;
 
-  uint32_t idx = i * scfg::tcN + j;
-  if (idx >= rs3_data.size() || idx >= rd_data.size()) {
-  std::cout << "Error: index out of bounds in sparse_wmma: idx=" << idx
-    << ", rs3_data.size()=" << rs3_data.size()
-    << ", rd_data.size()=" << rd_data.size() << std::endl;
-  std::abort();
-  }
-
-  auto c_val = rs3_data.at(idx).u32;
-
-  // Get metadata word.
-  // For fp16 2:4 with one metadata reg/thread, metadata is selected by (i,k):
-  //   k=0 -> lanes 0,2 for i=0,1
-  //   k=1 -> lanes 1,3 for i=0,1
-  uint32_t meta_lane_idx = idx;
-  if (I_RATIO == 2u && sparsity_degree == 2u) {
-    meta_lane_idx = i * scfg::tcN + step_k;
-  }
-  const uint32_t meta_word = metadata_words[meta_lane_idx];
-
-  // Extract active mask for this k-step.
-  // fp32: tcK bits per step (existing behavior).
-  // fp16: one nibble (4 bits) per step, because each step spans tcK packed
-  // registers and each packed register holds two fp16 elements.
-  uint32_t active_mask = 0u;
-  uint32_t compressed_idx = 0u;
-  if (I_RATIO == 2u) {
-    // fp16 2:4: consume metadata in pair order per k-step:
-    // k=0 -> bits [3:2], k=1 -> bits [1:0].
-    const uint32_t meta4 = meta_word & 0xFu;
-    const uint32_t pair_shift = (step_k == 0u) ? 2u : 0u;
-    active_mask = (meta4 >> pair_shift) & 0x3u;
-    if (step_k == 1u) {
-      compressed_idx = __builtin_popcount((meta4 >> 2u) & 0x3u);
-    }
-  } else {
-    const uint32_t mask_width = meta_bits_per_step;
-    const uint32_t step_bit_offset = bit_offset;
-    const uint32_t bit_mask = (1u << mask_width) - 1u;
-    active_mask = (meta_word >> step_bit_offset) & bit_mask;
-
-    // Count set bits in metadata below the current step window.
-    const uint32_t lower_mask = (step_bit_offset == 0u)
-      ? 0u
-      : ((1u << step_bit_offset) - 1u);
-    compressed_idx = __builtin_popcount(meta_word & lower_mask);
-  }
-  const uint32_t a_thread_base = i * scfg::tcN; // row i starts at thread i*tcN
-  
-  std::array<reg_data_t, scfg::tcK> a_row_masked{};
-  if (I_RATIO == 1u) {
-      for (uint32_t z = 0; z < scfg::tcK; ++z) {
-          if (active_mask & (1u << z)) {
-              // compressed_idx selects which thread within row i's group
-              a_row_masked[z] = rs1_data[a_off + a_thread_base + compressed_idx];
-              ++compressed_idx;
-          }
+      uint32_t idx = i * scfg::tcN + j;
+      if (idx >= rs3_data.size() || idx >= rd_data.size()) {
+        std::cout << "Error: index out of bounds in sparse_wmma: idx=" << idx
+          << ", rs3_data.size()=" << rs3_data.size()
+          << ", rd_data.size()=" << rd_data.size() << std::endl;
+        std::abort();
       }
-  } else {
-      const uint32_t elem_mask = (1u << element_bits) - 1u;
-      if (I_RATIO == 2u) {
-              const uint32_t src_idx = a_off + a_thread_base + step_k;
-              const uint32_t src_packed = (src_idx < rs1_data.size())
-                                        ? rs1_data[src_idx].u32
-                                        : 0u;
-              const uint32_t lo = src_packed & elem_mask;
-              const uint32_t hi = (src_packed >> element_bits) & elem_mask;
-              const uint32_t meta4 = meta_word & 0xFu;
-              uint32_t val_rank = 0u;
-              for (uint32_t pos = 0; pos < 4u; ++pos) {
-                if (meta4 & (1u << pos)) {
-                  const uint32_t val = (val_rank == 0u) ? lo : hi;
-                  const uint32_t dst_reg = pos / 2u;          // 0 -> a_row[0], 1 -> a_row[1]
-                  const uint32_t dst_lane = pos % 2u;         // low/high 16b within packed reg
-                  a_row_masked[dst_reg].u32 |= (val << (dst_lane * element_bits));
-                  ++val_rank;
-                }
-              }
+
+      auto c_val = rs3_data.at(idx).u32;
+
+      std::array<reg_data_t, scfg::tcK> a_row_masked{};
+
+      if (I_RATIO == 1u) {
+        // fp32 path: each register holds 1 scalar value
+        uint32_t meta_thread = (local_m * scfg::tcM + i) * sparsity_degree;
+        uint32_t mask = metadata_words[meta_thread] & 0xFu;
+
+        uint32_t sub_shift = step_k * scfg::tcK;
+        uint32_t sub_mask = (mask >> sub_shift) & ((1u << scfg::tcK) - 1u);
+        uint32_t compressed_base = (sub_shift == 0u)
+          ? 0u : __builtin_popcount(mask & ((1u << sub_shift) - 1u));
+
+        uint32_t c = 0;
+        for (uint32_t z = 0; z < scfg::tcK; ++z) {
+          if (sub_mask & (1u << z)) {
+            uint32_t a_thread = meta_thread + compressed_base + c;
+            a_row_masked[z] = rs1_data[a_off + a_thread];
+            ++c;
+          }
+        }
       } else {
-          for (uint32_t z = 0; z < scfg::tcK; ++z) {
-              uint32_t packed = 0u;
-              for (uint32_t e = 0; e < I_RATIO; ++e) {
-                  const uint32_t bit_pos = z * I_RATIO + e;
-                  if (active_mask & (1u << bit_pos)) {
-                      const uint32_t elem = (rs1_data[a_off + a_thread_base + compressed_idx].u32
-                                             >> (e * element_bits)) & elem_mask;
-                      packed |= elem << (e * element_bits);
-                      ++compressed_idx;
-                  }
-              }
-              a_row_masked[z].u32 = packed;
+        // fp16/bf16/int8/int4 path: multiple elements packed per register
+        // Must unpack compressed values and scatter to correct positions
+        const uint32_t elem_mask = (element_bits < 32) ? ((1u << element_bits) - 1u) : 0xFFFFFFFFu;
+
+        if (sparsity_degree >= I_RATIO) {
+          // e.g. fp16 2:4: each thread handles 1 k-block
+          // step_k selects which thread (= which k-block)
+          uint32_t a_thread = (local_m * scfg::tcM + i) * sparsity_degree + step_k;
+          uint32_t meta4 = metadata_words[a_thread] & 0xFu;
+          uint32_t src_packed = rs1_data[a_off + a_thread].u32;
+
+          // Unpack and scatter: sparsity_degree values packed in register
+          uint32_t val_rank = 0;
+          for (uint32_t pos = 0; pos < 4u; ++pos) {
+            if (meta4 & (1u << pos)) {
+              uint32_t val = (src_packed >> (val_rank * element_bits)) & elem_mask;
+              uint32_t dst_reg = pos / I_RATIO;
+              uint32_t dst_lane = pos % I_RATIO;
+              a_row_masked[dst_reg].u32 |= (val << (dst_lane * element_bits));
+              ++val_rank;
+            }
           }
+        } else {
+          // e.g. fp16 1:4: each thread handles multiple k-blocks
+          // Metadata has packed masks: (kblock1_mask << 4) | kblock0_mask
+          uint32_t a_thread = (local_m * scfg::tcM + i) * sparsity_degree;
+          uint32_t meta_word = metadata_words[a_thread];
+          uint32_t meta4 = (meta_word >> (step_k * 4u)) & 0xFu;
+          uint32_t src_packed = rs1_data[a_off + a_thread].u32;
+
+          // Extract the compressed value for this k-block from the packed register
+          // For 1:4, there's 1 value per k-block, stored at position step_k
+          uint32_t comp_val = (src_packed >> (step_k * element_bits)) & elem_mask;
+
+          // Scatter the single value to correct position
+          for (uint32_t pos = 0; pos < 4u; ++pos) {
+            if (meta4 & (1u << pos)) {
+              uint32_t dst_reg = pos / I_RATIO;
+              uint32_t dst_lane = pos % I_RATIO;
+              a_row_masked[dst_reg].u32 |= (comp_val << (dst_lane * element_bits));
+              break; // only 1 value for 1:4
+            }
+          }
+        }
       }
-  }
-  const reg_data_t* a_row_for_fedp = a_row_masked.data();
 
-  auto d_val = fedp_regs(a_row_for_fedp, b_col, c_val, scfg::tcK);
-  rd_data.at(idx).u64 = nan_box(d_val);
+      auto d_val = fedp_regs(a_row_masked.data(), b_col, c_val, scfg::tcK);
+      rd_data.at(idx).u64 = nan_box(d_val);
 
-  // Debug output
-  auto print_u32 = [&](uint32_t fmt, uint32_t x) {
-  __unused(x);
-  if (fmt == sv::fp32::id || fmt == vt::fp32::id) {
-    DTN(3, std::setprecision(8) << bit_cast<float>(x));
-  } else {
-    DTN(3, "0x" << std::hex << x << std::dec);
-  }
-  };
-  __unused(print_u32);
-
-  DTH(3, "SparseFEDP: i=" << i << ", j=" << j
-  << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k
-  << ", active_mask=0b" << std::bitset<4>(active_mask)
-  << ", a_row={");
-  for (uint32_t q = 0; q < scfg::tcK; ++q) {
-  if (q) DTN(3, ", ");
-  print_u32(fmt_s, a_row_for_fedp[q].u32);
-  }
-  DTN(3, "}, b_col={");
-  for (uint32_t q = 0; q < scfg::tcK; ++q) {
-  if (q) DTN(3, ", ");
-  print_u32(fmt_s, b_col[q].u32);
-  }
-  DTN(3, "}, meta_word=0b" << std::bitset<4>(meta_word & 0xFu));
-  DTN(3, ", sparsity_degree=" << sparsity_degree);
-  DTN(3, ", c_val="); print_u32(fmt_d, c_val);
-  DTN(3, ", d_val="); print_u32(fmt_d, d_val);
-  DTN(3, std::endl);
-  }
+      DTH(3, "SparseFEDP: i=" << i << ", j=" << j
+        << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k
+        << ", local_m=" << local_m
+        << ", sparsity_degree=" << sparsity_degree
+        << ", I_RATIO=" << I_RATIO
+        << std::endl);
+    }
   }
 }
 

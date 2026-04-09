@@ -120,16 +120,22 @@ void sparse_gemm_thread(sparse_gemm_args_t * __UNIFORM__ args) {
     auto pB        = args->B;
     auto pC        = args->C;
 
-    for (uint32_t k_tile = 0; k_tile < K; k_tile += ctx::tileK) {
-        ctx::load_matrix_sync(fragB, pB + k_tile * N + tile_col, N);
+    uint32_t kblocks = K / 4;
 
-        // @mitul: /4 corrected
-        size_t row_offset_vals = (size_t)tile_row * values_per_row;
-        size_t col_offset_vals = (k_tile / 4) * sparsity_degree;
-        auto pTileA = pA_values + row_offset_vals + col_offset_vals;
-        ctx::load_matrix_sync(fragA, pTileA, K,
-                              reinterpret_cast<const void *>(meta_base),
-                              tile_row, k_tile, sparsity_degree);
+    // Hoist base pointers out of the loop
+    auto pTileA_base = pA_values + tile_row * values_per_row;
+    const uint32_t *pMeta_base = meta_base + tile_row * kblocks;
+    auto pB_base = pB + tile_col;
+
+    for (uint32_t k_tile = 0; k_tile < K; k_tile += ctx::tileK) {
+        ctx::load_matrix_sync(fragB, pB_base + k_tile * N, N);
+
+        uint32_t k_block = k_tile / 4;
+        ctx::load_matrix_sync(fragA,
+                              pTileA_base + k_block * sparsity_degree,
+                              values_per_row,
+                              reinterpret_cast<const void *>(pMeta_base + k_block),
+                              kblocks, 0, sparsity_degree, 0);
 
         ctx::mma_sync(fragC, fragA, fragB, fragC, sparsity_degree);
     }

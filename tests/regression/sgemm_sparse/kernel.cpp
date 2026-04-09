@@ -32,13 +32,10 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
     return;
 
   // Sparse A layout: data (values) first, then metadata (padded to 4-byte alignment)
-  // Values size: (M * K * sparsity_degree / 4) * sizeof(input_t) bytes
-  //   - 1:4 sparsity: (M * K / 4) * sizeof(input_t)
-  //   - 2:4 sparsity: (M * K / 2) * sizeof(input_t)
-  // Metadata size: (M * K / 4) * sizeof(uint32_t) bytes
   constexpr size_t meta_entry_bytes = sizeof(uint32_t);
   uint32_t sparsity_degree = arg->sparsity_degree;
-  size_t values_per_row = K * sparsity_degree / 4; // K/4 for 1:4, K/2 for 2:4
+  uint32_t values_per_row = K * sparsity_degree / 4;
+  uint32_t kblocks = K / 4;
   size_t values_size = static_cast<size_t>(M) * values_per_row * sizeof(ctx::input_t);
   size_t meta_offset = align_up_size(values_size, meta_entry_bytes);
   const uint8_t *base_ptr = reinterpret_cast<const uint8_t *>(pA_values);
@@ -47,28 +44,25 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   // Initialize accumulator
   ctx::fill_fragment(fragC, 0);
 
+  auto pTileA_base = pA_values + tile_row * values_per_row;
+  const uint32_t *pMeta_base = meta_base + tile_row * kblocks;
+
   for (uint32_t k_tile = 0; k_tile < K; k_tile += ctx::tileK) {
-    // Keep fragB resident while we iterate over sparse A tiles that consume it.
+    // Load dense B tile
     if constexpr (vt::ITYPE::bits < 8) {
-      auto pTileB = pB + tile_col * K + k_tile;
-      ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
+      ctx::load_matrix_sync<vt::col_major>(fragB, pB + tile_col * K + k_tile, K);
     } else {
-      auto pTileB = pB + k_tile * N + tile_col;
-      ctx::load_matrix_sync(fragB, pTileB, N);
+      ctx::load_matrix_sync(fragB, pB + k_tile * N + tile_col, N);
     }
 
-    // Base pointers for sparse A data/metadata corresponding to this tile
-    size_t row_offset_vals = static_cast<size_t>(tile_row) * values_per_row;
-    size_t col_offset_vals = (k_tile / 4) * sparsity_degree; // sparsity_degree stored values per 4-column block
-    auto pTileA = pA_values + row_offset_vals + col_offset_vals;
-    
-    // Pass metadata base pointer (not offset) along with tile position
-    // load_matrix_sync will calculate absolute positions
-    const void *pTileMeta = reinterpret_cast<const void *>(meta_base);
+    // Load sparse A tile
+    uint32_t k_block = k_tile / 4;
+    ctx::load_matrix_sync(fragA,
+                           pTileA_base + k_block * sparsity_degree,
+                           values_per_row,
+                           reinterpret_cast<const void *>(pMeta_base + k_block),
+                           kblocks, 0, sparsity_degree, 0);
 
-    ctx::load_matrix_sync(fragA, pTileA, K, pTileMeta, tile_row, k_tile, sparsity_degree, M);
-
-    // Matrix multiply-accumulate while fragB stays in registers
     ctx::mma_sync(fragC, fragA, fragB, fragC, sparsity_degree);
   }
 
