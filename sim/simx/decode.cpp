@@ -1136,10 +1136,16 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         for (uint32_t k = 0; k < cfg::k_steps; ++k) {
           for (uint32_t m = 0; m < cfg::m_steps; ++m) {
             for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-              // Sparse A register indexing follows compressed K progression.
-              uint32_t rs1 = ra_base
-                           + (m / cfg::a_sub_blocks) * (cfg::k_steps / a_compression_ratio)
-                           + k / a_compression_ratio;
+              uint32_t rs1;
+              if (sparsity_degree > 0) {
+                // Sparse: each reg covers multiple m-steps, k is compressed away
+                uint32_t NRA_compressed = cfg::NRA * sparsity_degree / 4;
+                uint32_t m_steps_per_reg = cfg::m_steps / NRA_compressed;
+                rs1 = ra_base + m / m_steps_per_reg;
+              } else {
+                // Dense: original formula
+                rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
+              }
               uint32_t rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
               uint32_t rs3 = rc_base + m * cfg::n_steps + n;
               uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;

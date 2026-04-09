@@ -29,7 +29,7 @@
 using namespace vortex;
 namespace vt = sparse;
 
-static uint32_t g_sparsity_degree = 2; // Default: 2:4 sparsity
+static uint32_t g_sparsity_degree = 1; // Default: 2:4 sparsity
 
 static size_t align_up(size_t value, size_t alignment) {
   if (alignment == 0)
@@ -545,20 +545,9 @@ out.values.push_back(blk[i]);
 }
 
 uint32_t kb = c / 4;
-out.meta[r * kblocks + kb] = mask;  // temporary row-major
+out.meta[r * kblocks + kb] = mask;  // row-major: meta[row * kblocks + kb]
 }
 }
-
-// --- Second pass: reorder metadata so K blocks come first ---
-std::vector<uint8_t> reordered_meta(M * kblocks);
-
-for (uint32_t kb = 0; kb < kblocks; ++kb) {
-for (uint32_t r = 0; r < M; ++r) {
-reordered_meta[kb * M + r] = out.meta[r * kblocks + kb];
-}
-}
-
-out.meta.swap(reordered_meta);
 
 return out;
 }
@@ -733,7 +722,7 @@ int main(int argc, char *argv[]) {
   for (uint32_t m = 0; m < M; ++m) {
     std::cout << "Row " << m << " metadata: ";
     for (uint32_t blk = 0; blk < K / 4; ++blk) {
-      uint8_t mask = sparseA.meta[blk * M + m];
+      uint8_t mask = sparseA.meta[m * (K / 4) + blk];
       std::cout << "0b";
       for (int i = 3; i >= 0; --i) {
         std::cout << ((mask >> i) & 1);
@@ -749,7 +738,7 @@ int main(int argc, char *argv[]) {
   for (uint32_t m = 0; m < M; ++m) {
     std::cout << "Row " << m << ": ";
     for (uint32_t blk = 0; blk < K / 4; ++blk) {
-      uint8_t mask = sparseA.meta[blk * M + m];
+      uint8_t mask = sparseA.meta[m * (K / 4) + blk];
       std::cout << "[";
       bool first = true;
       for (uint32_t i = 0; i < 4; ++i) {
