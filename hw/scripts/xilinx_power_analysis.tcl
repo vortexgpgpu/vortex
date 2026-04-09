@@ -33,6 +33,7 @@
 #                     DUT flow: TOP.rtlsim_shim.vortex
 #                     XRT flow: TOP.vortex_afu_shim.vortex_afu
 #                   Leave unset if the SAIF root scope already matches.
+#                   If left unset, the script will attempt to auto-detect this.
 #   OUT_DIR         Directory for output reports.
 #                   Defaults to <BUILD_DIR>/bin if BUILD_DIR is set,
 #                   otherwise the current working directory.
@@ -40,6 +41,7 @@
 # Outputs:
 #   power_vectorless.rpt   Baseline vectorless estimate (12.5% toggle rate)
 #   power_saif.rpt         SAIF-annotated estimate
+#   read_saif_mismatch.rpt Mismatched nets log for debugging SAIF_INST alignment
 # -----------------------------------------------------------------------------
 
 # ---- Resolve checkpoint -----------------------------------------------------
@@ -103,6 +105,40 @@ file mkdir $out_dir
 puts "INFO: Opening checkpoint: $checkpoint"
 open_checkpoint $checkpoint
 
+# ---- Auto-detect SAIF Instance Path -----------------------------------------
+# If SAIF_INST wasn't explicitly provided, parse the SAIF file to find the
+# hierarchical path leading to the current Vivado top-level module.
+
+if {$strip_path eq ""} {
+  puts "INFO: SAIF_INST not provided. Auto-detecting SAIF path prefix..."
+
+  set synth_top [string tolower [get_property TOP [current_design]]]
+  set current_path_list {}
+  set fp [open $saif_file r]
+
+  while {[gets $fp line] >= 0} {
+    if {[regexp {\(SCOPE\s+\(INSTANCE\s+([^\s\)]+)} $line match inst_name]} {
+      lappend current_path_list $inst_name
+      # Check if the SAIF instance name matches Vivado's top module
+      if {[string tolower $inst_name] eq $synth_top} {
+        set strip_path [join $current_path_list "."]
+        puts "INFO: Auto-detected SAIF path prefix: $strip_path"
+        break
+      }
+    } elseif {[regexp {\(UPSCOPE} $line]} {
+      # Pop the stack if we exit a scope before finding our module
+      if {[llength $current_path_list] > 0} {
+        set current_path_list [lreplace $current_path_list end end]
+      }
+    }
+  }
+  close $fp
+
+  if {$strip_path eq ""} {
+    puts "WARNING: Could not auto-detect SAIF path prefix for top module '$synth_top'."
+  }
+}
+
 # ---- Vectorless baseline ----------------------------------------------------
 # Provides a reference so SAIF and vectorless results can be compared.
 
@@ -121,10 +157,11 @@ puts "INFO: Reading SAIF: $saif_file"
 reset_switching_activity -all
 if {$strip_path ne ""} {
   puts "INFO: Stripping SAIF path prefix: $strip_path"
-  read_saif -strip_path $strip_path $saif_file
+  read_saif -strip_path $strip_path -out_file $out_dir/read_saif_mismatch.rpt $saif_file
 } else {
-  read_saif $saif_file
+  read_saif -out_file $out_dir/read_saif_mismatch.rpt $saif_file
 }
+puts "INFO: SAIF mismatch report written to: $out_dir/read_saif_mismatch.rpt"
 
 # Deassert resets to avoid inflating steady-state power from reset pulses.
 set_switching_activity -deassert_resets

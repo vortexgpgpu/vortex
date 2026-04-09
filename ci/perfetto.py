@@ -65,7 +65,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 # Intermediate Representation
 # -----------------------------
 
-STAGES_CANON = {"schedule", "fetch", "decode", "ibuffer", "dispatch", "operands", "execute", "commit"}
+STAGES_CANON = {"schedule", "fetch", "decode", "issue", "dispatch", "operands", "execute", "commit"}
 
 @dataclass
 class InstructionStageEvent:
@@ -511,8 +511,8 @@ class RtlParser(ParserBase):
       return "fetch"
     if p.endswith("-decode") and a == "decode":
       return "decode"
-    if "ibuffer" in p and a in ("ibuffer", "decode"):
-      return "ibuffer"
+    if "issue" in p and a in ("issue", "decode"):
+      return "issue"
     if p.endswith("-dispatcher") and a == "dispatch":
       return "dispatch"
     if "-execute" in p or "-issue" in p:

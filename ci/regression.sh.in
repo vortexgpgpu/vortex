@@ -443,6 +443,26 @@ test_csv_trace32()
     ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
     ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
     diff trace_rtlsim.csv trace_simx.csv
+
+    # test CSV trace generation for TCU
+    DEBUG=3 CONFIGS="-DEXT_TCU_ENABLE" make -C sim/simx > /dev/null
+    DEBUG=3 CONFIGS="-DEXT_TCU_ENABLE -DGPR_RESET" make -C sim/rtlsim > /dev/null
+    CONFIGS="-DEXT_TCU_ENABLE" make -C runtime/simx > /dev/null
+    CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --debug=3 > run_simx.log
+    CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --debug=3 > run_rtlsim.log
+    ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
+    ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
+    diff trace_rtlsim.csv trace_simx.csv
+
+    # test CSV trace generation for DXA
+    DEBUG=3 CONFIGS="-DEXT_DXA_ENABLE" make -C sim/simx > /dev/null
+    DEBUG=3 CONFIGS="-DEXT_DXA_ENABLE -DGPR_RESET" make -C sim/rtlsim > /dev/null
+    CONFIGS="-DEXT_DXA_ENABLE" make -C runtime/simx > /dev/null
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_dxa --debug=3 > run_simx.log
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_dxa --debug=3 > run_rtlsim.log
+    ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
+    ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
+    diff trace_rtlsim.csv trace_simx.csv
 }
 
 test_csv_trace64()
@@ -475,6 +495,15 @@ debug()
     CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
     CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=xrt --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
     CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
+
+    # test perfetto trace generation
+    DEBUG=3 CONFIGS="-DEXT_TCU_ENABLE" make -C sim/simx > /dev/null
+    DEBUG=3 CONFIGS="-DEXT_TCU_ENABLE -DGPR_RESET" make -C sim/rtlsim > /dev/null
+    CONFIGS="-DEXT_TCU_ENABLE" make -C runtime/simx > /dev/null
+    CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --debug=3 > run_simx.log 2>&1
+    ./ci/perfetto.py run_simx.log -t simx -o trace_simx.perfetto.json
+    CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --debug=3 > run_rtlsim.log 2>&1
+    ./ci/perfetto.py run_rtlsim.log -t rtlsim -o trace_rtlsim.perfetto.json
 
     echo "debugging tests done!"
 }
@@ -509,6 +538,9 @@ synthesis()
     echo "begin synthesis tests..."
 
     make -C hw/syn/yosys
+
+    # synthesis with TCU + TF32 + sparse + WGMMA + DXA
+    CONFIGS="-DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DTCU_SPARSE_ENABLE -DTCU_WGMMA_ENABLE -DEXT_DXA_ENABLE" make -C hw/syn/yosys
 
     echo "synthesis tests done!"
 }

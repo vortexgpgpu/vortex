@@ -20,10 +20,9 @@
 #include "types.h"
 #include "arch.h"
 #include "debug.h"
+#include "instr.h"
 
 namespace vortex {
-
-class Instr;
 
 class ITraceData {
 public:

@@ -307,7 +307,7 @@ void Emulator::execute(instr_trace_t* trace) {
     warp.PC = saved_PC;
   }
 
-  // Copy execution results back (preserve decode-time fetch_stall for warp resume)
+  // Copy execution results back.
   trace->wb          = new_trace->wb;
   trace->data        = new_trace->data;
   trace->tmask       = new_trace->tmask;
@@ -318,9 +318,6 @@ void Emulator::execute(instr_trace_t* trace) {
   // Free the temporary trace
   new_trace->~instr_trace_t();
   core_->trace_pool().deallocate(new_trace, 1);
-
-  // Clear instr_ptr to mark as executed
-  trace->instr_ptr = nullptr;
 }
 
 bool Emulator::running() const {
