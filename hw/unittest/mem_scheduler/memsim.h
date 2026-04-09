@@ -22,6 +22,10 @@
 #ifdef SAIF_OUTPUT
 #include <verilated_saif_c.h>
 #endif
+
+#if defined(VCD_OUTPUT) && defined(SAIF_OUTPUT)
+#error "VCD_OUTPUT and SAIF_OUTPUT cannot both be defined"
+#endif
 #include "VVX_mem_scheduler.h"
 #include "ram.h"
 

@@ -19,7 +19,7 @@ ROOT_DIR=$SCRIPT_DIR/..
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--saif] [--perf=#class] [--log=logfile] [--nohup] [--help]]"
+    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--saif] [--perf=#class] [--vcd_file=#file] [--saif_file=#file] [--log=logfile] [--nohup] [--help]]"
 }
 
 show_help()
@@ -52,6 +52,8 @@ DEFAULTS() {
     CONFIGS="$CONFIGS"
     TEMPBUILD=0
     LOGFILE=run.log
+    VCD_FILE=$PWD/trace.vcd
+    SAIF_FILE=$PWD/trace.saif
 }
 
 parse_args() {
@@ -70,6 +72,8 @@ parse_args() {
             --debug=*)  DEBUG=1; DEBUG_LEVEL=${i#*=} ;;
             --scope)    SCOPE=1 ;;
             --saif)     SAIF=1 ;;
+            --vcd_file=*)  VCD_FILE=${i#*=} ;;
+            --saif_file=*) SAIF_FILE=${i#*=} ;;
             --args=*)   HAS_ARGS=1; ARGS=${i#*=} ;;
             --log=*)    LOGFILE=${i#*=} ;;
             --nohup)    TEMPBUILD=1 ;;
@@ -157,6 +161,8 @@ main() {
     fi
 
     export VORTEX_PROFILING=$PERF_CLASS
+    export VCD_FILE=$VCD_FILE
+    export SAIF_FILE=$SAIF_FILE
 
     make -C "$ROOT_DIR/hw" config > /dev/null
     make -C "$ROOT_DIR/runtime/stub" > /dev/null
@@ -175,18 +181,6 @@ main() {
     build_driver
     run_app
     status=$?
-
-    if [ $DEBUG -eq 1 ] && [ -f "$APP_PATH/trace.vcd" ]; then
-        mv -f $APP_PATH/trace.vcd .
-    fi
-
-    if [ $SAIF -eq 1 ] && [ -f "$APP_PATH/trace.saif" ]; then
-        mv -f $APP_PATH/trace.saif .
-    fi
-
-    if [ $SCOPE -eq 1 ] && [ -f "$APP_PATH/scope.vcd" ]; then
-        mv -f $APP_PATH/scope.vcd .
-    fi
 
     exit $status
 }

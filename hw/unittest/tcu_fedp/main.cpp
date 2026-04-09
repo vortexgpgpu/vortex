@@ -34,8 +34,13 @@
 #include <verilated_saif_c.h>
 #endif
 
+#if defined(VCD_OUTPUT) && defined(SAIF_OUTPUT)
+#error "VCD_OUTPUT and SAIF_OUTPUT cannot both be defined"
+#endif
+
 #include <bitset>
 #include <cmath>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -605,14 +610,16 @@ public:
     if (config_.enable_tracing) {
       trace_ = std::make_unique<VerilatedVcdC>();
       dut_->trace(trace_.get(), 99);
-      trace_->open("trace.vcd");
+      const char* vcd_file = std::getenv("VCD_FILE");
+      trace_->open(vcd_file ? vcd_file : "trace.vcd");
     }
 #endif
 #ifdef SAIF_OUTPUT
     if (config_.enable_tracing) {
       saif_ = std::make_unique<VerilatedSaifC>();
       dut_->trace(saif_.get(), 99);
-      saif_->open("trace.saif");
+      const char* saif_file = std::getenv("SAIF_FILE");
+      saif_->open(saif_file ? saif_file : "trace.saif");
     }
 #endif
     // Initialize inputs

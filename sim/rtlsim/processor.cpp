@@ -23,7 +23,12 @@
 #include <verilated_saif_c.h>
 #endif
 
+#if defined(VCD_OUTPUT) && defined(SAIF_OUTPUT)
+#error "VCD_OUTPUT and SAIF_OUTPUT cannot both be defined"
+#endif
 
+
+#include <cstdlib>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -108,14 +113,16 @@ public:
     Verilated::traceEverOn(true);
     tfp_ = new VerilatedVcdC();
     device_->trace(tfp_, 99);
-    tfp_->open("trace.vcd");
+    const char* vcd_file = std::getenv("VCD_FILE");
+    tfp_->open(vcd_file ? vcd_file : "trace.vcd");
   #endif
 
   #ifdef SAIF_OUTPUT
     Verilated::traceEverOn(true);
     sfp_ = new VerilatedSaifC();
     device_->trace(sfp_, 99);
-    sfp_->open("trace.saif");
+    const char* saif_file = std::getenv("SAIF_FILE");
+    sfp_->open(saif_file ? saif_file : "trace.saif");
   #endif
 
     ram_ = nullptr;

@@ -14,6 +14,7 @@
 #include "scope.h"
 #include <VX_config.h>
 #include <nlohmann_json.hpp>
+#include <cstdlib>
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -400,7 +401,8 @@ int vx_scope_stop(vx_device_h hdevice) {
 
   std::cout << "[SCOPE] dump header..." << std::endl;
 
-  std::ofstream ofs("scope.vcd");
+  const char* vcd_file = std::getenv("VCD_FILE");
+  std::ofstream ofs(vcd_file ? vcd_file : "trace.vcd");
 
   dump_header(ofs, taps);
 
