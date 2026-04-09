@@ -208,11 +208,6 @@ def parse_simx(log_lines):
                         del trace["operands_list"]
 
                     # Ensure required fields exist
-                    if "uuid" not in trace: trace["uuid"] = uuid
-                    if "PC" not in trace: trace["PC"] = "0x0"
-                    if "core_id" not in trace: trace["core_id"] = 0
-                    if "warp_id" not in trace: trace["warp_id"] = 0
-                    if "tmask" not in trace: trace["tmask"] = "0000"
                     if "destination" not in trace: trace["destination"] = ""
                     if "operands" not in trace: trace["operands"] = ""
 

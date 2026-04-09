@@ -14,7 +14,6 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-`IGNORE_UNOPTFLAT_BEGIN
 module VX_transpose #(
     parameter DATAW = 1,
     parameter N = 1,
@@ -30,5 +29,4 @@ module VX_transpose #(
     end
 
 endmodule
-`IGNORE_UNOPTFLAT_END
 `TRACING_ON
