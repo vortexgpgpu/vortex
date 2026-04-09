@@ -199,6 +199,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0][OUT_DATAW-1:0] arb_data_in;
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
+`ifdef TCU_WLOCK_ENABLE
     reg  [NUM_EX_UNITS-1:0] fu_locked;
 
     wire [PER_ISSUE_WARPS-1:0] fu_lock_block;
@@ -207,10 +208,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         // Block warps when FU is locked. fu_lock=1 means acquire request.
         assign fu_lock_block[w] = fu_locked[w_ex] && staging_if[w].data.fu_lock;
     end
+`endif
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
         // valid: data-hazard + FU-lock check (drives age tracking in GTO)
+    `ifdef TCU_WLOCK_ENABLE
         assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w] && ~fu_lock_block[w];
+    `else
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
+    `endif
         // suppress: FU-full check (skips selection without resetting age)
         assign arb_suppress[w] = ~dispatch_ready[staging_if[w].data.ex_type];
 
@@ -239,6 +245,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     // let all warps through so the pipeline buffers absorb transient stalls.
 
     localparam LOG_NUM_REQS = `CLOG2(PER_ISSUE_WARPS);
+
+    /* verilator lint_off ASCRANGE */
+    /* verilator lint_off WIDTHTRUNC */
 
     wire any_unsuppressed = |(arb_valid_in & ~arb_suppress);
     wire [PER_ISSUE_WARPS-1:0] eff_suppress = any_unsuppressed ? arb_suppress : '0;
@@ -274,6 +283,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     assign arb_ready = ready_out_w;
 
+`ifdef TCU_WLOCK_ENABLE
     // FU lock: prevent warp interleaving during multi-uop sequences.
     // 10=acquire (first uop), 00=middle, 01=release (last uop), 11=default.
 
@@ -303,6 +313,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
     end
+`endif
 
     VX_elastic_buffer #(
         .DATAW   (LOG_NUM_REQS + OUT_DATAW),
@@ -335,5 +346,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .valid_out (scoreboard_if.valid),
         .ready_out (scoreboard_if.ready)
     );
+
+    /* verilator lint_on ASCRANGE */
+    /* verilator lint_on WIDTHTRUNC */
 
 endmodule

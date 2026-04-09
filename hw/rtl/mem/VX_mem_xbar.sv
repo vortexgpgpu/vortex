@@ -54,7 +54,9 @@ module VX_mem_xbar import VX_gpu_pkg::*; #(
     wire [NUM_OUTPUTS-1:0]                req_valid_out;
     wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
     wire [SEL_COUNT-1:0][`UP(`CLOG2(NUM_INPUTS))-1:0] req_sel_out;
+    `IGNORE_UNOPTFLAT_BEGIN
     wire [NUM_OUTPUTS-1:0]                req_ready_out;
+    `IGNORE_UNOPTFLAT_END
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_data_in
         assign req_valid_in[i] = bus_in_if[i].req_valid;
