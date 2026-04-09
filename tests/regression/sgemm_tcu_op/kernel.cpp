@@ -108,13 +108,13 @@ static inline uint32_t bytes_to_blocks_128(uint32_t bytes) {
   return div_up(bytes, 128);
 }
 
-static inline uint32_t meta_tile_start(const uint32_t* offsets, uint32_t idx) {
+static inline uint32_t meta_tile_offset(const uint32_t* offsets, uint32_t idx) {
   return (idx == 0) ? 0 : offsets[idx - 1];
 }
 
-static inline uint32_t meta_tile_end(const uint32_t* offsets, uint32_t idx) {
-  return offsets[idx];
-}
+// static inline uint32_t meta_tile_end(const uint32_t* offsets, uint32_t idx) {
+//   return offsets[idx];
+// }
 
 extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   auto pA = reinterpret_cast<uint32_t *>(arg->A_addr);
@@ -142,6 +142,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   ctx::fragment_acc fragC;
 
   static constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(ctx::input_t);
+  static constexpr uint32_t lg_i_ratio = __builtin_ctz(i_ratio);
   static constexpr uint32_t o_ratio = sizeof(uint32_t) / sizeof(ctx::output_t);
 
   static constexpr uint32_t tile_M = 32;
@@ -168,6 +169,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
   static_assert (LMEM_ENABLED);
   static constexpr uint32_t input_bytes = sizeof(ctx::input_t);
+  static constexpr uint32_t lg_input_bytes = __builtin_ctz(input_bytes);
   static constexpr uint32_t tileC_regs = tile_M * tile_N / o_ratio;
   static constexpr uint32_t tileD_regs = tile_M * tile_N / o_ratio;
   static constexpr uint32_t lmem_capacity_bytes = (1u << LMEM_LOG_SIZE);
@@ -224,14 +226,21 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
                                               : sparse_dense_a_regs;
   const uint32_t tileB_regs = (sparsity == 0) ? dense_first_b_regs
                                               : sparse_comp_regs;
-  const uint32_t bitmap_span = (sparsity == 0) ? 0 : tile_K;
-  const uint32_t bitmap_sep_regs = (bitmap_span <= 16)
-                                   ? 16
-                                   : (((bitmap_span + 31) / 32) * 32 + 16);
-  const uint32_t bitmap_skew_regs = (sparsity == 2) ? (bitmap_sep_regs - bitmap_span) : 0;
-  const uint32_t bitmap_regs = (sparsity == 2) ? (2 * bitmap_span) :
-                               (sparsity == 1) ?      bitmap_span  :
-                               0;
+
+  const uint32_t bitmap_span_1_tile  = (sparsity == 0) ? 0 : tile_K;
+  const uint32_t bitmap_span_2_tiles = (sparsity == 0) ? 0 : 2 * tile_K;
+  const uint32_t bitmap_sep_regs_1_tile = (bitmap_span_1_tile <= 16)
+                                        ? 16
+                                        : (((bitmap_span_1_tile + 31) / 32) * 32 + 16);
+  const uint32_t bitmap_sep_regs_2_tiles = (bitmap_span_2_tiles <= 16)
+                                         ? 16
+                                         : (((bitmap_span_2_tiles + 31) / 32) * 32 + 16);
+  const uint32_t bitmap_skew_regs_1_tile  = (sparsity == 2) ? (bitmap_sep_regs_1_tile  - bitmap_span_1_tile)  : 0;
+  const uint32_t bitmap_skew_regs_2_tiles = (sparsity == 2) ? (bitmap_sep_regs_2_tiles - bitmap_span_2_tiles) : 0;
+
+  // const uint32_t bitmap_regs = (sparsity == 2) ? (2 * bitmap_span_1_tile) :
+  //                              (sparsity == 1) ?      bitmap_span_1_tile  :
+  //                              0;
   const uint32_t sparse_first_stage_regs_per_warp = tileC_regs + sparse_first_stage_payload_regs;
   const uint32_t sparse_reuse_stage_regs_per_warp = sparse_reuse_stage_payload_regs;
   const uint32_t sparse_regs_per_warp = (sparse_first_stage_regs_per_warp > sparse_reuse_stage_regs_per_warp)
@@ -478,25 +487,103 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           const uint32_t dense_k_cap = first_dense_launch ? dense_first_k : dense_reuse_k;
           const uint32_t k_remaining = K - k_offset;
           curr_k = (k_remaining < dense_k_cap) ? k_remaining : dense_k_cap;
-          uint32_t a_elems = tile_M * curr_k;
-          uint32_t b_elems = curr_k * tile_N;
-          chunk_A = (use_half0 ? half0_base : half1_base);
-          chunk_B = chunk_A + (first_dense_launch ? dense_first_a_regs : dense_reuse_a_regs);
+          // uint32_t 
+          // uint32_t b_elems = curr_k * tile_N;
           auto chunk_A_elems = reinterpret_cast<ctx::input_t*>(chunk_A);
           auto chunk_B_elems = reinterpret_cast<ctx::input_t*>(chunk_B);
 
           const uint32_t flags_chunk = (((k_offset == 0) ? 1u : 0u) << 1) | (((k_offset + curr_k) == K) ? 1u : 0u);
 
+          // NEW BEGIN
+          /* Extraction of compressed elements */
+          uint32_t a_offset;
+          uint32_t a_elems; 
+          uint32_t a_blocks;
+          if constexpr (kSparseA) {
+            const uint32_t a_meta_idx = tile_row_idx * kDenseLaunches + dense_iter;
+            a_offset = meta_tile_offset(pA_nz, a_meta_idx); // Where the current DXA transaction starts
+            a_elems  = meta_tile_offset(pA_nz, a_meta_idx+1) - a_offset; // How many elements the current DXA transaction carrries
+            a_blocks = div_up((a_elems << lg_input_bytes), 128);
+          }
+          else {
+            a_elems = tile_M * curr_k;
+            a_blocks = 0;
+          }
+          const uint32_t b_meta_idx = tile_col_idx * kDenseLaunches + dense_iter;
+          uint32_t b_offset  = meta_tile_offset(pB_nz, b_meta_idx); // Where the current DXA transaction starts
+          uint32_t b_elems   = meta_tile_offset(pB_nz, b_meta_idx+1) - b_offset; // How many elements the current DXA transaction carrries
+          uint32_t b_blocks = div_up((b_elems << lg_input_bytes), 128);
+          
+          /* Formation of pointers */
+          uint32_t* A_bitmap_lmem;
+          uint32_t* B_bitmap_lmem;
+          if constexpr (kSparseA) {
+            A_bitmap_lmem = (use_half0 ? half0_base : half1_base);
+            B_bitmap_lmem = A_bitmap_lmem + (first_dense_launch ? (tile_K + bitmap_skew_regs_1_tile) : (2 * tile_K + bitmap_skew_regs_2_tiles));
+          } else {
+            A_bitmap_lmem = nullptr;
+            B_bitmap_lmem = (use_half0 ? half0_base : half1_base) + (first_dense_launch ? tile_K : 2 * tile_K);
+          }
+          
+          // if constexpr (kSparseA) {
+          chunk_A = B_bitmap_lmem + (first_dense_launch ? tile_K : 2 * tile_K);
+          // } else {
+          //   chunk_A = (use_half0 ? half0_base : half1_base);
+          // }
+
+          if constexpr (kSparseA) {
+            chunk_B = chunk_A + div_up((a_elems << lg_input_bytes), 4); // (first_dense_launch ? dense_first_a_regs : dense_reuse_a_regs);
+          } else {
+            chunk_B = chunk_A + (first_dense_launch ? dense_first_a_regs : dense_reuse_a_regs);
+          }
+
+          const uint32_t b_payload_regs = bytes_to_regs(b_elems << lg_input_bytes);
+          uint32_t* stage_base = use_half0 ? half0_base : half1_base;
+          uint32_t* chunk_B_end = chunk_B + b_payload_regs;
+          uint32_t* stage_limit = first_dense_launch ? const_cast<uint32_t*>(mma_C)
+                                                     : (stage_base + half_lmem_regs);
+          if (chunk_B_end > stage_limit) {
+            if (lane0) {
+              pD[0] = LMEM_OVERFLOW_MARKER;
+            }
+            return;
+          }
+
+          /* Start DXA transactions */
           if (is_dxa_quad) {
             if (first_dense_launch) {
               vx_dxa_issue_2d_wg(kDescC, load_bar[stage].id(), mma_C, 0, tile_id);
             }
-            // tcu_bar[stage].arrive_and_wait();
-            vx_dxa_retile_2d_wg(kDescA, a_elems, 1);
-            vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
-            vx_dxa_retile_2d_wg(kDescB, b_elems, 1);
-            vx_dxa_issue_2d_wg(kDescB, load_bar[stage].id(), chunk_B, 0, tile_col_idx * tiles_k + k_tile_idx);
+            if constexpr (kSparseA) {
+              const uint32_t a_bitmap_start = tile_row_idx * K + k_offset;
+              vx_dxa_retile_1d_wg(kDescABitmap, curr_k);
+              vx_dxa_issue_1d_wg(kDescABitmap, load_bar[stage].id(), A_bitmap_lmem, a_bitmap_start);
+              vx_dxa_retile_1d_wg(kDescA, a_elems);
+              vx_dxa_issue_1d_wg(kDescA, load_bar[stage].id(), chunk_A, a_offset);
+            } else {
+              vx_dxa_retile_2d_wg(kDescA, a_elems, 1);
+              vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A, 0, tile_row_tiles_base + k_tile_idx);
+            }
+
+            const uint32_t b_bitmap_start = tile_col_idx * K + k_offset;
+            vx_dxa_retile_1d_wg(kDescBBitmap, curr_k);
+            vx_dxa_issue_1d_wg(kDescBBitmap, load_bar[stage].id(), B_bitmap_lmem, b_bitmap_start);
+            vx_dxa_retile_1d_wg(kDescB, b_elems);
+            vx_dxa_issue_1d_wg(kDescB, load_bar[stage].id(), chunk_B, b_offset);
           }
+
+          // NEW END
+          
+          // if (is_dxa_quad) {
+          //   if (first_dense_launch) {
+          //     vx_dxa_issue_2d_wg(kDescC, load_bar[stage].id(), mma_C, 0, tile_id);
+          //   }
+          //   // tcu_bar[stage].arrive_and_wait();
+          //   vx_dxa_retile_2d_wg(kDescA, a_elems, 1);
+          //   vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
+          //   vx_dxa_retile_2d_wg(kDescB, b_elems, 1);
+          //   vx_dxa_issue_2d_wg(kDescB, load_bar[stage].id(), chunk_B, 0, tile_col_idx * tiles_k + k_tile_idx);
+          // }
 
           if (have_pending_mma) {
             launch_pending_mma();
@@ -504,10 +591,10 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
           if (gtid == 0) {
             rs1_val = reinterpret_cast<uintptr_t>(chunk_A);
-            // rs2_val = a_blocks;
+            rs2_val = a_blocks;
           } else if (gtid == 1) {
             rs1_val = reinterpret_cast<uintptr_t>(chunk_B);
-            // rs2_val = b_blocks;
+            rs2_val = b_blocks;
           } else if (gtid == 2) {
             rs1_val = reinterpret_cast<uintptr_t>(mma_C);
             rs2_val = curr_k;
@@ -515,11 +602,11 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             rs1_val = mma_D_addr;
             rs2_val = vt::ITYPE::id;
           } else if (gtid == 4) {
-            // rs1_val = reinterpret_cast<uintptr_t>(mma_A_bitmap);
+            rs1_val = reinterpret_cast<uintptr_t>(A_bitmap_lmem);
             rs2_val = vt::OTYPE::id;
           } else if (gtid == 5) {
-            // rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap);
-            rs2_val = 0; // static_cast<uint32_t>(kConstSparsity);
+            rs1_val = reinterpret_cast<uintptr_t>(B_bitmap_lmem);
+            rs2_val = static_cast<uint32_t>(kConstSparsity);
           } else if (gtid == 6) {
             rs2_val = tcu_bar[stage].id();
           } else if (gtid == 7) {
