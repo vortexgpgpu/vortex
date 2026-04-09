@@ -240,8 +240,8 @@ TCU_MX_ENABLE = false
 TCU_MXI8_ENABLE = false
 TCU_SPARSE_ENABLE = false
 TCU_WGMMA_ENABLE = false
-TCU_ACC_ENABLE = true
-TCU_WLOCK_ENABLE = true
+TCU_ACC_ENABLE = false
+TCU_WLOCK_ENABLE = false
 
 [isa_signatures]
 

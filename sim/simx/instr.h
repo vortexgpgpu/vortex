@@ -144,8 +144,8 @@ public:
     , is_macro_op_(false)
     , is_wstall_(false)
     , has_tmask_(false)
-    , fu_lock_(false)
-    , fu_unlock_(false)
+    , fu_lock_(true)
+    , fu_unlock_(true)
   {}
 
   void set_fu_type(FUType fu_type) {
