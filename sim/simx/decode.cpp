@@ -393,7 +393,7 @@ static op_string_t op_string(const Instr &instr) {
 #endif
   #ifdef EXT_V_ENABLE
     ,[&](VsetType vset_type)-> op_string_t {
-      auto vset_args = std::get<IntrVset_args>(instrArgs);
+      auto vset_args = std::get<IntrVsetArgs>(instrArgs);
       switch (vset_type) {
       case VsetType::VSETVLI:  return {"VSETVLI", vset_args.to_string(vset_type)};
       case VsetType::VSETIVLI: return {"VSETIVLI", vset_args.to_string(vset_type)};
@@ -935,17 +935,17 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Integer);
       if ((code >> 30) == 0b10) { // vsetvl
         instr->set_op_type(VsetType::VSETVL);
-        instr->set_args(IntrVset_args{0, 0});
+        instr->set_args(IntrVsetArgs{0, 0});
         instr->set_src_reg(0, rs1, RegType::Integer);
         instr->set_src_reg(1, rs2, RegType::Integer);
       } else {
         auto zimm = (code >> shift_vzimm) & mask_vzimm;
         if ((code >> 30) == 0b11) { // vsetivli
           instr->set_op_type(VsetType::VSETIVLI);
-          instr->set_args(IntrVset_args{zimm, rs1});
+          instr->set_args(IntrVsetArgs{zimm, rs1});
         } else { // vsetvli
           instr->set_op_type(VsetType::VSETVLI);
-          instr->set_args(IntrVset_args{zimm, 0});
+          instr->set_args(IntrVsetArgs{zimm, 0});
           instr->set_src_reg(0, rs1, RegType::Integer);
         }
       }

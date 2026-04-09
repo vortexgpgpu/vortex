@@ -65,8 +65,8 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.rs1,
                 decode_if.data.rs2,
                 decode_if.data.rs3,
-                1'b0, // fu_lock
-                1'b0  // fu_unlock
+                1'b1, // fu_lock
+                1'b1  // fu_unlock
             }),
             .ready_in (ibuf_ready_in[w]),
             .valid_out(ibuffer_tmp_if.valid),

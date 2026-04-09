@@ -377,10 +377,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r.used_rs[2] = wmma_is_first_k;
     `endif
         end
-        // Lock the FU during the entire macro-op sequence.
-        // fu_lock=1 on all uops identifies this as part of a locked sequence.
-        // fu_unlock=1 on the last uop releases the lock after issue.
-        ibuf_r.fu_lock   = 1'b1;
+        // FU lock: 10=acquire (first), 00=middle, 01=release (last).
+        ibuf_r.fu_lock   = (uop_idx == UOP_CTR_W'(0));
         ibuf_r.fu_unlock = (uop_idx == (uop_count - UOP_CTR_W'(1)));
     end
 
