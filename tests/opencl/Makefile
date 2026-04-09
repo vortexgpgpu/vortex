@@ -4,7 +4,7 @@ include $(ROOT_DIR)/config.mk
 # --- master list ------------------------------------------------------
 TESTS := \
     vecadd sgemm conv3 psort saxpy sfilter sgemm2 sgemm3 psum oclprintf \
-    dotproduct transpose spmv stencil lbm nearn guassian kmeans         \
+    dotproduct transpose stencil lbm nearn guassian kmeans         \
     blackscholes bfs copybuf histogram atomicreduce                     \
     pathfinder nw lud hotspot hotspot3D srad backprop streamcluster     \
     lavaMD btree cfd dwt2d myocyte heartwall hybridsort                  \

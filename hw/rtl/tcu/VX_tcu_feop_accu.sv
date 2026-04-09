@@ -128,6 +128,7 @@ module VX_tcu_feop_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     end
 
+    `UNUSED_VAR(xbar_collisions)
     always @(posedge clk) begin
         if (~reset && enable && (|xbar_queue_push || |xbar_queue_pop)) begin
             `TRACE(1, ("%t: [feop_accu]: xbar_queue_push=%b, xbar_queue_pop=%b\n", $time, xbar_queue_push, xbar_queue_pop));
@@ -138,9 +139,9 @@ module VX_tcu_feop_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         if (|xbar_use_queue) begin
             `TRACE(1, ("%t: [feop_accu]: using queue for inputs: xbar_use_queue=%b\n", $time, xbar_use_queue));
         end
-        if (enable && xbar_collisions > 0) begin
-            `TRACE(1, ("%t: [feop_accu]: xbar collisions=%0d\n", $time, xbar_collisions));
-        end
+        // if (enable && xbar_collisions > 0) begin
+        //     `TRACE(1, ("%t: [feop_accu]: xbar collisions=%0d\n", $time, xbar_collisions));
+        // end
     end
 
 // QUEUES
