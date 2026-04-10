@@ -596,9 +596,9 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
 
 const char *kernel_file = "kernel.vxbin";
 
-uint32_t xm = 32;
-uint32_t xn = 32;
-uint32_t xk = 32;
+uint32_t xm = 64;
+uint32_t xn = 64;
+uint32_t xk = 64;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;

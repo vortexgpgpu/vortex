@@ -28,26 +28,26 @@
 using namespace vortex;
 namespace vt = tensor;
 
-// WGMMA geometry: same template as the kernel context (NR=32)
-using wg_cfg_t = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 32, 8>;
+// WGMMA geometry
+using wg_cfg_t = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
 
-// Sparse parameters based on runtime format (fp16)
-static constexpr uint32_t kRtlIRatio     = 32 / vt::fp16::bits;           // 2
-static constexpr uint32_t kTcK           = wg_cfg_t::tcK;                   // 2
-static constexpr uint32_t kTcM           = wg_cfg_t::tcM;                   // 4
-static constexpr uint32_t kMSteps        = wg_cfg_t::m_steps;               // 4
-static constexpr uint32_t kKSteps        = wg_cfg_t::k_steps;               // 8
-static constexpr uint32_t kHalfKSteps    = kKSteps / 2;                     // 4
-static constexpr uint32_t kMetaRowBits   = kTcK * 2 * kRtlIRatio;          // 8
-static constexpr uint32_t kMetaStrWords  = (kTcM * kMetaRowBits + 31) / 32; // 1
-static constexpr uint32_t kWgMetaBanks   = kMSteps * kHalfKSteps;           // 16
-static constexpr uint32_t kWordsPerTile  = kWgMetaBanks * kMetaStrWords;    // 16
+// Sparse parameters derived from wg_cfg_t
+static constexpr uint32_t kRtlIRatio     = 32 / vt::ITYPE::bits;
+static constexpr uint32_t kTcK           = wg_cfg_t::tcK;
+static constexpr uint32_t kTcM           = wg_cfg_t::tcM;
+static constexpr uint32_t kMSteps        = wg_cfg_t::m_steps;
+static constexpr uint32_t kKSteps        = wg_cfg_t::k_steps;
+static constexpr uint32_t kHalfKSteps    = kKSteps / 2;
+static constexpr uint32_t kMetaRowBits   = kTcK * 2 * kRtlIRatio;
+static constexpr uint32_t kMetaStrWords  = (kTcM * kMetaRowBits + 31) / 32;
+static constexpr uint32_t kWgMetaBanks   = kMSteps * kHalfKSteps;
+static constexpr uint32_t kWordsPerTile  = kWgMetaBanks * kMetaStrWords;
 
 // dense elements covered by one sparse step
-static constexpr uint32_t kDensePerSpStep = kTcK * kRtlIRatio * 2; // 8
+static constexpr uint32_t kDensePerSpStep = kTcK * kRtlIRatio * 2;
 
-using itype_t = vt::fp16::dtype;   // uint16_t
-using otype_t = vt::fp32::dtype;   // float
+using itype_t = vt::ITYPE::dtype;
+using otype_t = vt::OTYPE::dtype;
 
 // CPU reference matmul using pruned (zero-padded) A
 static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
@@ -75,9 +75,8 @@ static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
 static void pack_metadata_wg(std::vector<uint32_t> &h_meta,
                               const std::vector<uint8_t> &masks,
                               uint32_t M, uint32_t K) {
-  // Retrieve tileM/tileK from wg context (fp16 i_ratio)
-  constexpr uint32_t tileM      = wg_cfg_t::xtileM;         // 16
-  constexpr uint32_t tileK_elem = wg_cfg_t::tcK * kRtlIRatio * kHalfKSteps * 2; // = xtileK * i_ratio
+  constexpr uint32_t tileM      = wg_cfg_t::xtileM;
+  constexpr uint32_t tileK_elem = wg_cfg_t::tileK;
   uint32_t num_tile_rows = M / tileM;
   uint32_t num_k_tiles   = K / tileK_elem;
   uint32_t num_groups_per_row = K / 4; // groups of 4 fp16 elements per row
@@ -133,9 +132,9 @@ static void pack_metadata_wg(std::vector<uint32_t> &h_meta,
 
 const char *kernel_file = "kernel.vxbin";
 
-uint32_t xm = 32;
-uint32_t xn = 32;
-uint32_t xk = 32;
+uint32_t xm = 64;
+uint32_t xn = 64;
+uint32_t xk = 64;
 uint32_t warps = 4;
 
 vx_device_h device      = nullptr;
@@ -225,10 +224,10 @@ int main(int argc, char *argv[]) {
 
   uint32_t M = xm, N = xn, K = xk;
 
-  // Tile dimension constants (fp16 context)
+  // Tile dimension constants
   constexpr uint32_t tileM     = wg_cfg_t::xtileM;
   constexpr uint32_t tileN     = wg_cfg_t::xtileN;
-  constexpr uint32_t tileK_elem = kTcK * kRtlIRatio * kHalfKSteps * 2; // 32 fp16 elements
+  constexpr uint32_t tileK_elem = wg_cfg_t::tileK;
 
   if ((M % tileM) != 0) { std::cout << "M must be multiple of " << tileM << std::endl; return -1; }
   if ((N % tileN) != 0) { std::cout << "N must be multiple of " << tileN << std::endl; return -1; }
@@ -296,13 +295,13 @@ int main(int argc, char *argv[]) {
   }
 
   // Prune A in-place (2:4) then compress
-  if (!vt::prune_2to4_matrix<vt::fp16>(h_A_full.data(), M, K)) {
+  if (!vt::prune_2to4_matrix<vt::ITYPE>(h_A_full.data(), M, K)) {
     std::cerr << "prune_2to4_matrix failed" << std::endl;
     cleanup(); return -1;
   }
   std::vector<itype_t> h_A_sp(sizeA_sp);
   std::vector<uint8_t> masks;
-  if (!vt::compress_2to4_matrix<vt::fp16>(h_A_sp.data(), h_A_full.data(), masks, M, K)) {
+  if (!vt::compress_2to4_matrix<vt::ITYPE>(h_A_sp.data(), h_A_full.data(), masks, M, K)) {
     std::cerr << "compress_2to4_matrix failed" << std::endl;
     cleanup(); return -1;
   }

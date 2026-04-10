@@ -118,7 +118,7 @@ def parse_simx(log_lines):
                     current_debug_uuid = uuid
 
                     if uuid not in instr_data:
-                        instr_data[uuid] = {}
+                        instr_data[uuid] = {"uuid": uuid}
 
                     instr_data[uuid]["opcode"] = opcode
                     instr_data[uuid]["lineno"] = lineno
@@ -211,7 +211,11 @@ def parse_simx(log_lines):
                     if "destination" not in trace: trace["destination"] = ""
                     if "operands" not in trace: trace["operands"] = ""
 
-                    entries.append(trace)
+                    # Only append entries that went through the schedule stage
+                    # (have PC set). TCU sub-operations only have DEBUG lines
+                    # and lack pipeline fields — skip them.
+                    if "PC" in trace:
+                        entries.append(trace)
 
                     # Cleanup
                     del instr_data[uuid]
@@ -314,6 +318,7 @@ def parse_rtlsim(log_lines):
     rd_data_pattern = r"data=\{(.+?)\}"
     eop_pattern = r"eop=(\d)"
     uuid_pattern = r"\(#(\d+)\)"
+    parent_pattern = r"parent=#(\d+)"
 
     entries = []
     instr_data = {}
@@ -352,6 +357,11 @@ def parse_rtlsim(log_lines):
                     schd_ticks[uuid] = timestamp
 
                 elif is_decode:
+                    # Skip TCU micro-ops (uuid != parent uuid)
+                    parent_match = re.search(parent_pattern, line)
+                    if parent_match and int(parent_match.group(1)) != uuid:
+                        continue
+
                     trace = {}
                     trace["uuid"] = uuid
                     trace["PC"] = re.search(pc_pattern, line).group(1)
