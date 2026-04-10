@@ -6,7 +6,7 @@
 #include <vx_barrier.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, false, 32, 8>;
+using ctx = vt::wgmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, false, 8>;
 
 // DXA descriptor slots (programmed by host in main.cpp).
 constexpr uint32_t kDescA = 0;
@@ -20,14 +20,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t K = arg->K;
 
   // Calculate output tile origin for this block.
-  uint32_t tile_row = blockIdx.y * ctx::tileM;
-  uint32_t tile_col = blockIdx.x * ctx::tileN;
+  uint32_t tile_row = blockIdx.y * ctx::xtileM;
+  uint32_t tile_col = blockIdx.x * ctx::xtileN;
 
-  // Shared memory: A tile [tileM x tileK] followed by B tile [tileK x tileN],
+  // Shared memory: A tile [xtileM x tileK] followed by B tile [tileK x xtileN],
   // both stored row-major.
   auto smem   = reinterpret_cast<ctx::input_t *>(__local_mem());
   auto A_smem = smem;
-  auto B_smem = smem + ctx::tileM * ctx::tileK;
+  auto B_smem = smem + ctx::xtileM * ctx::tileK;
 
   // Initialize accumulator tile to zero.
   ctx::fragment_acc fragC;
@@ -53,7 +53,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     // Build smem descriptors: leading_bytes = row stride in bytes.
     auto desc_a = vt::vx_make_smem_desc(A_smem, ctx::tileK * sizeof(ctx::input_t));
-    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::tileN * sizeof(ctx::input_t));
+    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::xtileN * sizeof(ctx::input_t));
 
     // Execute WGMMA: C += A * B
     ctx::wgmma_sync(fragC, desc_a, desc_b, fragC);

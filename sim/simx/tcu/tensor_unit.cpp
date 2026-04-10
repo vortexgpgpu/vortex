@@ -571,11 +571,11 @@ public:
     , arch_(arch)
     , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
     , mx_meta_(arch.num_warps())
-  #ifndef NDEBUG
+#if defined(TCU_WLOCK_ENABLE) && !defined(NDEBUG)
     , accum_busy_(false)
     , accum_owner_(0)
     , accum_tile_ctr_(0)
-  #endif
+#endif
     , perf_stats_()
   {
     memset(accum_, 0, sizeof(accum_));
@@ -675,8 +675,6 @@ public:
             std::vector<reg_data_t>& rd_data,
             ExeTraceData* trace_data,
             bool is_sparse) {
-    __unused(trace_data);
-
     if (is_sparse) {
       if (!vt::sparse_format_supported(fmt_s)) {
         std::cout << "Error: WMMA_SP unsupported input format: "
@@ -690,53 +688,32 @@ public:
       }
     }
 
-  #ifdef TCU_MX_ENABLE
-    bool use_dynamic_scale_fedp = (!is_sparse)
-                   && (((fmt_s == vt::mxfp8::id) && (fmt_d == vt::fp32::id))
-                    || ((fmt_s == vt::mxint8::id) && (fmt_d == vt::int32::id))
-                    || ((fmt_s == vt::nvfp4::id) && (fmt_d == vt::fp32::id)));
-  #else
-    bool use_dynamic_scale_fedp = false;
-  #endif
-    PFN_FEDP fedp = nullptr;
-    if (!use_dynamic_scale_fedp) {
-      fedp = select_FEDP(fmt_s, fmt_d);
-    }
     uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
     uint32_t b_off = is_sparse
                    ? (step_n % cfg::b_sub_blocks_sp) * cfg::b_block_size_sp
                    : (step_n % cfg::b_sub_blocks)    * cfg::b_block_size;
 
-    // Sparse-only: metadata bank index and per-element bit width
-    constexpr uint32_t kCompression = 2;
-    uint32_t bank      = step_m * (cfg::k_steps / 2) + step_k;
-    uint32_t ebits     = is_sparse ? elem_bits(fmt_s) : 0;
-    uint32_t meta_bits = is_sparse ? (32 / ebits) : 0;
-
-    auto meta_bit = [&](uint32_t bit_idx) {
-      return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + bit_idx / 32) >> (bit_idx % 32)) & 1u;
-    };
-
-    bool is_first_k = (step_k == 0);
-    uint32_t k_count = is_sparse ? (cfg::k_steps / 2) : cfg::k_steps;
-    bool is_last_k  = (step_k == k_count - 1);
-
-  #ifndef NDEBUG
-    accum_check_owner(wid, is_first_k, is_last_k);
-  #endif
-
+    // Prepare A tile [tcM][tcK]
+    reg_data_t a_tile[cfg::tcM * cfg::tcK];
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      for (uint32_t j = 0; j < cfg::tcN; ++j) {
-        auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
-        // k=0: C from register file; k>0: C from internal accumulator
-        auto c_val = is_first_k
-            ? rs3_data.at(i * cfg::tcN + j).u32
-            : accum_[step_m][step_n][i][j];
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        a_tile[i * cfg::tcK + z] = rs1_data.at(a_off + i * cfg::tcK + z);
+      }
+    }
 
-        reg_data_t b_buf[cfg::tcK];
-        const reg_data_t* b_col;
-        if (is_sparse) {
-          uint32_t row_base = i * meta_row_width(ebits);
+    // Prepare B tile [tcM][tcN][tcK]
+    reg_data_t b_tile[cfg::tcM * cfg::tcN * cfg::tcK];
+    if (is_sparse) {
+      constexpr uint32_t kCompression = 2;
+      uint32_t ebits = elem_bits(fmt_s);
+      uint32_t meta_bits = 32 / ebits;
+      uint32_t bank = step_m * (cfg::k_steps / 2) + step_k;
+      auto meta_bit = [&](uint32_t bit_idx) {
+        return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + bit_idx / 32) >> (bit_idx % 32)) & 1u;
+      };
+      for (uint32_t i = 0; i < cfg::tcM; ++i) {
+        uint32_t row_base = i * meta_row_width(ebits);
+        for (uint32_t j = 0; j < cfg::tcN; ++j) {
           uint32_t j_sp = cfg::sym_sparse ? (j % (cfg::tcN / 2)) : j;
           for (uint32_t z = 0; z < cfg::tcK; ++z) {
             uint32_t b_idx = b_off + j_sp * cfg::tcK * kCompression + z * kCompression;
@@ -745,70 +722,26 @@ public:
               lo |= meta_bit(row_base + meta_bits * z + b) << b;
               hi |= meta_bit(row_base + meta_bits * (cfg::tcK + z) + b) << b;
             }
-            b_buf[z].u32 = gather_sparse(rs2_data.at(b_idx).u32, rs2_data.at(b_idx + 1).u32, lo, hi, ebits);
+            b_tile[(i * cfg::tcN + j) * cfg::tcK + z].u32 =
+                gather_sparse(rs2_data.at(b_idx).u32, rs2_data.at(b_idx + 1).u32, lo, hi, ebits);
           }
-          b_col = b_buf;
-        } else {
-          b_col = rs2_data.data() + b_off + j * cfg::tcK;
         }
-
-        uint32_t d_val;
-        if (use_dynamic_scale_fedp) {
-#ifdef TCU_MX_ENABLE
-          const auto& mx_meta_words = mx_meta_.at(wid);
-          uint32_t row_idx = step_m * cfg::tcM + i;
-          uint32_t col_idx = step_n * cfg::tcN + j;
-          if (fmt_s == vt::nvfp4::id) {
-            uint8_t sf_a = unpack_mx_scale_16(mx_meta_words.at(0),
-                                              mx_meta_words.at(1),
-                                              mx_meta_words.at(2),
-                                              mx_meta_words.at(3),
-                                              row_idx,
-                                              "A");
-            uint8_t sf_b = unpack_mx_scale_16(mx_meta_words.at(4),
-                                              mx_meta_words.at(5),
-                                              mx_meta_words.at(6),
-                                              mx_meta_words.at(7),
-                                              col_idx,
-                                              "B");
-            d_val = fedp_nvfp4_fp32_scaled(a_row, b_col, c_val, sf_a, sf_b);
-          } else {
-            uint8_t sf_a = unpack_mx_scale_8(mx_meta_words.at(0),
-                                             mx_meta_words.at(1),
-                                             row_idx,
-                                             "A");
-            uint8_t sf_b = unpack_mx_scale_8(mx_meta_words.at(2),
-                                             mx_meta_words.at(3),
-                                             col_idx,
-                                             "B");
-            if (fmt_s == vt::mxint8::id) {
-              d_val = fedp_mxint8_int32_scaled(a_row, b_col, c_val, sf_a, sf_b);
-            } else {
-              d_val = fedp_mxfp8_fp32_scaled(a_row, b_col, c_val, sf_a, sf_b);
-            }
+      }
+    } else {
+      for (uint32_t i = 0; i < cfg::tcM; ++i) {
+        for (uint32_t j = 0; j < cfg::tcN; ++j) {
+          for (uint32_t z = 0; z < cfg::tcK; ++z) {
+            b_tile[(i * cfg::tcN + j) * cfg::tcK + z] = rs2_data.at(b_off + j * cfg::tcK + z);
           }
-#else
-          std::abort();
-#endif
-        } else {
-          d_val = fedp(a_row, b_col, c_val);
         }
-        // Store result in accumulator
-        accum_[step_m][step_n][i][j] = d_val;
-
-        // Only write back to register file on last K-step
-        if (is_last_k) {
-          rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
-        }
-
-        DTH(3, simobject_->name() << " FEDP"
-            << ": wid=" << wid << ", i=" << i << ", j=" << j
-            << ", m=" << step_m << ", n=" << step_n
-            << ", k=" << step_k << (is_last_k ? " [last]" : "") << std::hex
-            << ", a0=0x" << a_row[0].u32 << ", b0=0x" << b_col[0].u32
-            << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
       }
     }
+
+    uint32_t k_count = is_sparse ? (cfg::k_steps / 2) : cfg::k_steps;
+    auto [is_first_k, is_last_k] = k_bounds(wid, step_k, k_count);
+
+    fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
+              is_first_k, is_last_k, a_tile, b_tile, rs3_data, rd_data);
 
     trace_data->is_last_k = is_last_k;
   }
@@ -828,9 +761,12 @@ public:
              bool is_sparse,
              uint32_t cd_nregs,
              uint32_t is_a_smem) {
-    __unused(trace_data);
+    if (is_sparse && !vt::sparse_format_supported(fmt_s)) {
+      std::cout << "Error: WGMMA_SP unsupported input format: "
+                << vt::fmt_string(fmt_s) << " (id=" << fmt_s << ")" << std::endl;
+      std::abort();
+    }
 
-    auto fedp = select_FEDP(fmt_s, fmt_d);
     uint32_t ratio   = elem_ratio(fmt_s);
     uint32_t k_words = cfg::tcK;
     uint32_t e_bytes = elem_bits(fmt_s) / 8;
@@ -849,121 +785,72 @@ public:
       sd_b = lmem_desc_[wid][1];
     }
 
-    bool is_first_k = (step_k == 0);
-    uint32_t wg_k_count = is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
-    bool is_last_k  = (step_k == wg_k_count - 1);
-
-  #ifndef NDEBUG
-    accum_check_owner(wid, is_first_k, is_last_k);
-  #endif
-
-    if (is_sparse) {
-      if (!vt::sparse_format_supported(fmt_s)) {
-        std::cout << "Error: WGMMA_SP unsupported input format: "
-                  << vt::fmt_string(fmt_s) << " (id=" << fmt_s << ")" << std::endl;
-        std::abort();
+    // Prepare A tile [tcM][tcK]
+    reg_data_t a_tile[cfg::tcM * cfg::tcK];
+    for (uint32_t i = 0; i < cfg::tcM; ++i) {
+      uint32_t a_row_idx = step_m * cfg::tcM + i;
+      for (uint32_t z = 0; z < k_words; ++z) {
+        if (is_a_smem) {
+          uint32_t k_elem = (step_k * k_words + z) * ratio;
+          a_tile[i * cfg::tcK + z].u32 = load_lmem_word(sd_a, a_row_idx, k_elem, fmt_s, false);
+        } else {
+          a_tile[i * cfg::tcK + z] = rs1_data.at(i * cfg::tcK + z);
+        }
       }
+    }
 
-      uint32_t ebits          = elem_bits(fmt_s);
-      uint32_t rtl_i_ratio    = 32 / ebits;
-      uint32_t meta_row_w     = k_words * 2 * rtl_i_ratio;
+    // Prepare B tile [tcM][tcN][tcK]
+    reg_data_t b_tile[cfg::tcM * cfg::tcN * cfg::tcK];
+    if (is_sparse) {
+      uint32_t ebits       = elem_bits(fmt_s);
+      uint32_t rtl_i_ratio = 32 / ebits;
+      uint32_t meta_row_w  = k_words * 2 * rtl_i_ratio;
       uint32_t meta_strd_words = (cfg::tcM * meta_row_w + 31) / 32;
       uint64_t meta_base = sd_a.base + uint64_t(wg_cfg::xtileM) * sd_a.ldm * e_bytes;
       uint32_t wg_bank   = step_m * (wg_cfg::k_steps / 2) + step_k;
-
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
         uint32_t word_val = 0;
         core_->mem_read(&word_val,
           meta_base + uint64_t(wg_bank * meta_strd_words + bit_idx / 32) * 4, 4);
         return (word_val >> (bit_idx % 32)) & 1u;
       };
-
       for (uint32_t i = 0; i < cfg::tcM; ++i) {
+        uint32_t row_base = i * meta_row_w;
         for (uint32_t j = 0; j < cfg::tcN; ++j) {
-          reg_data_t a_row[cfg::tcK];
-          reg_data_t b_col[cfg::tcK];
-          uint32_t a_row_idx = step_m * cfg::tcM + i;
           uint32_t b_col_idx = step_n * cfg::tcN + j;
-          uint32_t row_base  = i * meta_row_w;
-
           for (uint32_t z = 0; z < k_words; ++z) {
-            // Load A: from smem or register file
-            if (is_a_smem) {
-              uint32_t k_elem_a = (step_k * k_words + z) * ratio;
-              a_row[z].u32 = load_lmem_word(sd_a, a_row_idx, k_elem_a, fmt_s, false);
-            } else {
-              a_row[z] = rs1_data.at(i * cfg::tcK + z);
-            }
-
             uint32_t lo = 0, hi = 0;
             for (uint32_t b = 0; b < rtl_i_ratio; ++b) {
               lo |= meta_bit_wg(row_base + rtl_i_ratio * z              + b) << b;
               hi |= meta_bit_wg(row_base + rtl_i_ratio * (k_words + z) + b) << b;
             }
-
-            // Load B: always from smem for sparse (needs 2 consecutive dense words)
             constexpr uint32_t kCompression = 2;
             uint32_t k_elem_b0 = (step_k * k_words + z) * ratio * kCompression;
             uint32_t bword0 = load_lmem_word(sd_b, k_elem_b0,         b_col_idx, fmt_s, true);
             uint32_t bword1 = load_lmem_word(sd_b, k_elem_b0 + ratio, b_col_idx, fmt_s, true);
-            b_col[z].u32 = gather_sparse(bword0, bword1, lo, hi, ebits);
+            b_tile[(i * cfg::tcN + j) * cfg::tcK + z].u32 =
+                gather_sparse(bword0, bword1, lo, hi, ebits);
           }
-
-          auto t = i * cfg::tcN + j;
-          auto c_val = is_first_k ? rs3_data.at(t).u32 : accum_[step_m][step_n][i][j];
-          auto d_val = fedp(a_row, b_col, c_val);
-          accum_[step_m][step_n][i][j] = d_val;
-          if (is_last_k) {
-            rd_data.at(t).u64 = nan_box(d_val);
-          }
-
-          DTH(3, simobject_->name() << " FEDP: wid=" << wid
-              << ", i=" << i << ", j=" << j
-              << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k
-              << (is_last_k ? " [last]" : "") << std::hex
-              << ", a_row[0]=0x" << a_row[0].u32 << ", b_col[0]=0x" << b_col[0].u32
-              << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
         }
       }
     } else {
-      // Dense WGMMA path
       for (uint32_t i = 0; i < cfg::tcM; ++i) {
         for (uint32_t j = 0; j < cfg::tcN; ++j) {
-          reg_data_t a_row[cfg::tcK];
-          reg_data_t b_col[cfg::tcK];
+          uint32_t b_col_idx = step_n * cfg::tcN + j;
           for (uint32_t z = 0; z < k_words; ++z) {
-            uint32_t a_row_idx = step_m * cfg::tcM + i;
-            uint32_t b_col_idx = step_n * cfg::tcN + j;
-            // Load A: from smem or register file
-            if (is_a_smem) {
-              uint32_t k_elem = (step_k * k_words + z) * ratio;
-              a_row[z].u32 = load_lmem_word(sd_a, a_row_idx, k_elem, fmt_s, false);
-            } else {
-              a_row[z] = rs1_data.at(i * cfg::tcK + z);
-            }
-            // Load B: always from smem
-            {
-              uint32_t k_elem = (step_k * k_words + z) * ratio;
-              b_col[z].u32 = load_lmem_word(sd_b, k_elem, b_col_idx, fmt_s, true);
-            }
+            uint32_t k_elem = (step_k * k_words + z) * ratio;
+            b_tile[(i * cfg::tcN + j) * cfg::tcK + z].u32 =
+                load_lmem_word(sd_b, k_elem, b_col_idx, fmt_s, true);
           }
-          auto t = i * cfg::tcN + j;
-          auto c_val = is_first_k ? rs3_data.at(t).u32 : accum_[step_m][step_n][i][j];
-          auto d_val = fedp(a_row, b_col, c_val);
-          accum_[step_m][step_n][i][j] = d_val;
-          if (is_last_k) {
-            rd_data.at(t).u64 = nan_box(d_val);
-          }
-
-          DTH(3, simobject_->name() << " FEDP: wid=" << wid
-              << ", i=" << i << ", j=" << j
-              << ", m=" << step_m << ", n=" << step_n << ", k=" << step_k
-              << (is_last_k ? " [last]" : "") << std::hex
-              << ", a_row[0]=0x" << a_row[0].u32 << ", b_col[0]=0x" << b_col[0].u32
-              << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
         }
       }
     }
+
+    uint32_t wg_k_count = is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
+    auto [is_first_k, is_last_k] = k_bounds(wid, step_k, wg_k_count);
+
+    fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
+              is_first_k, is_last_k, a_tile, b_tile, rs3_data, rd_data);
 
     trace_data->is_last_k = is_last_k;
 
@@ -1042,7 +929,97 @@ private:
   static constexpr uint32_t kMaxMetaCols = NUM_THREADS / 2;
   static constexpr uint32_t kMxMetaWords = 8;
 
-#ifndef NDEBUG
+  uint32_t& accum_ref(uint32_t wid, uint32_t sm, uint32_t sn, uint32_t i, uint32_t j) {
+    return accum_[wid][sm][sn][i][j];
+  }
+
+  std::pair<bool, bool> k_bounds(uint32_t wid, uint32_t step_k, uint32_t k_count) {
+#ifdef TCU_ACC_ENABLE
+    bool is_first_k = (step_k == 0);
+    bool is_last_k  = (step_k == k_count - 1);
+  #if defined(TCU_WLOCK_ENABLE) && !defined(NDEBUG)
+    accum_check_owner(wid, is_first_k, is_last_k);
+  #endif
+#else
+    __unused(wid, step_k, k_count);
+    bool is_first_k = true;
+    bool is_last_k  = true;
+#endif
+    return {is_first_k, is_last_k};
+  }
+
+  // Shared FEDP tile computation for both WMMA and WGMMA.
+  // a_tile: [tcM][tcK] flat array of pre-loaded A operand words.
+  // b_tile: [tcM][tcN][tcK] flat array of pre-loaded B operand words
+  //         (for dense, each i-slice is identical; for sparse, already gathered).
+  void fedp_tile(uint32_t wid,
+                 uint32_t step_m, uint32_t step_n, uint32_t step_k,
+                 uint32_t fmt_s, uint32_t fmt_d,
+                 bool is_first_k, bool is_last_k,
+                 const reg_data_t* a_tile,
+                 const reg_data_t* b_tile,
+                 const std::vector<reg_data_t>& rs3_data,
+                 std::vector<reg_data_t>& rd_data) {
+  #ifdef TCU_MX_ENABLE
+    bool use_mx = ((fmt_s == vt::mxfp8::id) && (fmt_d == vt::fp32::id))
+               || ((fmt_s == vt::mxint8::id) && (fmt_d == vt::int32::id))
+               || ((fmt_s == vt::nvfp4::id) && (fmt_d == vt::fp32::id));
+  #else
+    bool use_mx = false;
+  #endif
+    PFN_FEDP fedp = nullptr;
+    if (!use_mx) {
+      fedp = select_FEDP(fmt_s, fmt_d);
+    }
+
+    for (uint32_t i = 0; i < cfg::tcM; ++i) {
+      for (uint32_t j = 0; j < cfg::tcN; ++j) {
+        auto t = i * cfg::tcN + j;
+        auto c_val = is_first_k ? rs3_data.at(t).u32 : accum_ref(wid, step_m, step_n, i, j);
+        auto a_row = &a_tile[i * cfg::tcK];
+        auto b_col = &b_tile[(i * cfg::tcN + j) * cfg::tcK];
+
+        uint32_t d_val;
+        if (use_mx) {
+#ifdef TCU_MX_ENABLE
+          const auto& mx = mx_meta_.at(wid);
+          uint32_t row_idx = step_m * cfg::tcM + i;
+          uint32_t col_idx = step_n * cfg::tcN + j;
+          if (fmt_s == vt::nvfp4::id) {
+            uint8_t sf_a = unpack_mx_scale_16(mx.at(0), mx.at(1), mx.at(2), mx.at(3), row_idx, "A");
+            uint8_t sf_b = unpack_mx_scale_16(mx.at(4), mx.at(5), mx.at(6), mx.at(7), col_idx, "B");
+            d_val = fedp_nvfp4_fp32_scaled(a_row, b_col, c_val, sf_a, sf_b);
+          } else {
+            uint8_t sf_a = unpack_mx_scale_8(mx.at(0), mx.at(1), row_idx, "A");
+            uint8_t sf_b = unpack_mx_scale_8(mx.at(2), mx.at(3), col_idx, "B");
+            if (fmt_s == vt::mxint8::id) {
+              d_val = fedp_mxint8_int32_scaled(a_row, b_col, c_val, sf_a, sf_b);
+            } else {
+              d_val = fedp_mxfp8_fp32_scaled(a_row, b_col, c_val, sf_a, sf_b);
+            }
+          }
+#else
+          std::abort();
+#endif
+        } else {
+          d_val = fedp(a_row, b_col, c_val);
+        }
+
+        accum_ref(wid, step_m, step_n, i, j) = d_val;
+        if (is_last_k) {
+          rd_data.at(t).u64 = nan_box(d_val);
+        }
+        DTH(3, simobject_->name() << " FEDP"
+            << ": wid=" << wid << ", i=" << i << ", j=" << j
+            << ", m=" << step_m << ", n=" << step_n
+            << ", k=" << step_k << (is_last_k ? " [last]" : "") << std::hex
+            << ", a0=0x" << a_row[0].u32 << ", b0=0x" << b_col[0].u32
+            << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
+      }
+    }
+  }
+
+#if defined(TCU_WLOCK_ENABLE) && !defined(NDEBUG)
   // Debug-only check to detect if multiple warps are interleaving K-accumulation on the same tile,
   // which would indicate a bug in the instruction scheduling or warp grouping logic.
   void accum_check_owner(uint32_t wid, bool is_first_k, bool is_last_k) {
@@ -1074,8 +1051,8 @@ private:
   std::vector<std::vector<uint32_t>> sparse_meta_;
   std::vector<std::array<uint32_t, kMxMetaWords>> mx_meta_;
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
-  uint32_t accum_[kAccumMaxM][kAccumMaxN][cfg::tcM][cfg::tcN];
-#ifndef NDEBUG
+  uint32_t accum_[NUM_WARPS][kAccumMaxM][kAccumMaxN][cfg::tcM][cfg::tcN];
+#if defined(TCU_WLOCK_ENABLE) && !defined(NDEBUG)
   bool          accum_busy_;
   uint32_t      accum_owner_;
   uint32_t      accum_tile_ctr_;
@@ -1225,6 +1202,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uop_instr->set_src_reg(0, ra_base + m_sp, RegType::Float);
         uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
         uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
+        // Symmetric sparse: no k-loop, always wb=1 and always reads C from RF
         uop_instr->set_tmask(ThreadMask(NUM_THREADS, (mma_idx & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
       } else {
         // Standard k-major triple loop (dense or non-sym sparse)
@@ -1239,27 +1217,21 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t reg_rs3 = rc_base + m * wmma::n_steps + n;
         uop_instr->set_op_type(TcuType::WMMA);
         uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
-    #ifdef TCU_ACC_ENABLE
-        // Only last-k uop sets dest (wb=1); non-last-k have wb=0,
-        // preventing scoreboard stalls between K-steps. Matches RTL.
-        bool uop_is_last_k = (k == k_count - 1);
+#ifdef TCU_ACC_ENABLE
+        bool uop_is_first_k = (k == 0);
+        bool uop_is_last_k  = (k == k_count - 1);
+#else
+        bool uop_is_first_k = true;
+        bool uop_is_last_k  = true;
+#endif
         if (uop_is_last_k) {
           uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         }
-    #else
-        uop_instr->set_dest_reg(reg_rs3, RegType::Float);
-    #endif
         uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
         uop_instr->set_src_reg(1, reg_rs2, RegType::Float);
-    #ifdef TCU_ACC_ENABLE
-        // Only first-k reads C from register file; k>0 reads from
-        // accumulator. Matches RTL used_rs[2] = wmma_is_first_k.
-        if (k == 0) {
+        if (uop_is_first_k) {
           uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
         }
-    #else
-        uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
-    #endif
       }
     }
   }
@@ -1287,15 +1259,16 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uop_instr->set_op_type(TcuType::WGMMA);
     uop_instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
                                    fmt_s, fmt_d, m, n, k});
-  #ifdef TCU_ACC_ENABLE
-    // Only last-k uop sets dest (wb=1); matches RTL wb=0 for non-last-k.
-    bool uop_is_last_k = (k == k_count - 1);
+#ifdef TCU_ACC_ENABLE
+    bool uop_is_first_k = (k == 0);
+    bool uop_is_last_k  = (k == k_count - 1);
+#else
+    bool uop_is_first_k = true;
+    bool uop_is_last_k  = true;
+#endif
     if (uop_is_last_k) {
       uop_instr->set_dest_reg(r, RegType::Float);
     }
-  #else
-    uop_instr->set_dest_reg(r, RegType::Float);
-  #endif
     if (uop_index == 0) {
       if (is_a_smem) {
         uop_instr->set_src_reg(0, a0, RegType::Integer);
@@ -1308,20 +1281,15 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t rs1_off = m * k_count + k;
       uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
     }
-  #ifdef TCU_ACC_ENABLE
-    // Only first-k reads C from register file; matches RTL used_rs[2].
-    if (k == 0) {
+    if (uop_is_first_k) {
       uop_instr->set_src_reg(2, r, RegType::Float);
     }
-  #else
-    uop_instr->set_src_reg(2, r, RegType::Float);
-  #endif
   }
 #endif
 
-#ifdef TCU_WLOCK_ENABLE
   // fu_lock/fu_unlock: prevent warp interleaving during TCU K-accumulation.
   // 10=acquire (first), 00=middle, 01=release (last), 11=default (non-sequenced).
+#ifdef TCU_WLOCK_ENABLE
   uop_instr->set_fu_lock(uop_index == 0);
   uop_instr->set_fu_unlock(uop_index == total - 1);
 #endif

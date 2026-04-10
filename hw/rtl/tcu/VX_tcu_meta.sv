@@ -23,6 +23,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
 
     // Write port (meta_store instruction)
     input wire          wr_en,
+    input wire [NW_WIDTH-1:0] wid,
     input wire [3:0]    wr_idx, // flat store index within the metadata block
     input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] wr_data,
 
@@ -124,9 +125,19 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         end
     end
 
+  `ifdef TCU_WLOCK_ENABLE
+    localparam META_DEPTH = 1;
+    `UNUSED_VAR (wid)
+  `else
+    localparam META_DEPTH = `NUM_WARPS;
+  `endif
+    localparam META_ADDRW = `CLOG2(META_DEPTH);
+
+    wire [META_ADDRW-1:0] meta_addr = META_ADDRW'(wid);
+
     VX_dp_ram #(
         .DATAW    (PACKED_WIDTH),
-        .SIZE     (1),
+        .SIZE     (META_DEPTH),
         .WRENW    (TOTAL_COLS),
         .LUTRAM   (1),
         .OUT_REG  (0),
@@ -138,9 +149,9 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         .read  (1'b1),
         .write (|packed_wren),
         .wren  (packed_wren),
-        .waddr (1'b0),
+        .waddr (meta_addr),
         .wdata (packed_wdata),
-        .raddr (1'b0),
+        .raddr (meta_addr),
         .rdata (packed_rdata)
     );
 

@@ -45,6 +45,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // Execute-side observation
+    input  wire [NW_WIDTH-1:0]      req_wid,
     input  wire                     req_valid,
     input  wire                     req_fire,   // execute consumed current uop
     input  wire                     req_is_sparse,
@@ -114,6 +115,18 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     localparam FETCH_CTR_W = `CLOG2(MAX_BANK_ROWS + 1);
 
+    // Per-warp slot depth: shared slot when WLOCK on, per-warp when WLOCK off
+  `ifdef TCU_WLOCK_ENABLE
+    localparam SLOT_DEPTH = 1;
+    localparam SLOT_ADDRW = 1;
+    wire [SLOT_ADDRW-1:0] cur_slot = 1'b0;
+    `UNUSED_VAR (req_wid)
+  `else
+    localparam SLOT_DEPTH = `NUM_WARPS;
+    localparam SLOT_ADDRW = NW_WIDTH;
+    wire [SLOT_ADDRW-1:0] cur_slot = req_wid;
+  `endif
+
 `ifndef TCU_SPARSE_ENABLE
     wire is_sparse = 1'b0;
     `UNUSED_VAR (is_sparse)
@@ -124,23 +137,25 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // -----------------------------------------------------------------------
-    // Single slot state
+    // Per-slot state (SLOT_DEPTH entries)
     // -----------------------------------------------------------------------
 
-    logic                       slot_valid;
-    logic [`XLEN-1:0]           slot_desc_a;
-    logic [`XLEN-1:0]           slot_desc_b;
-    logic                       slot_fetch_done;
-    logic                       alloc_pending;
+    logic [SLOT_DEPTH-1:0]                       slot_valid;
+    logic [SLOT_DEPTH-1:0][`XLEN-1:0]            slot_desc_a;
+    logic [SLOT_DEPTH-1:0][`XLEN-1:0]            slot_desc_b;
+    logic [SLOT_DEPTH-1:0]                       slot_fetch_done;
+    logic                                        alloc_pending;
+    logic [SLOT_ADDRW-1:0]                       fetch_slot;
+    // Fetch-phase state (scalar, valid only during FSM active)
     logic                       slot_a_from_smem;
     logic [BANK_ADDR_WIDTH-1:0] slot_a_row_base;
     logic [BANK_ADDR_WIDTH-1:0] slot_b_row_base;
 
 `ifdef TCU_SPARSE_ENABLE
-    logic                       slot_is_sparse;
-    logic [BANK_ADDR_WIDTH-1:0] slot_meta_row_base;
-    logic [3:0]                 slot_meta_stride;
-    logic [FETCH_CTR_W-1:0]     slot_meta_bank_rows;
+    logic [SLOT_DEPTH-1:0]                       slot_is_sparse;
+    logic [BANK_ADDR_WIDTH-1:0]                  slot_meta_row_base;
+    logic [SLOT_DEPTH-1:0][3:0]                  slot_meta_stride;
+    logic [SLOT_DEPTH-1:0][FETCH_CTR_W-1:0]      slot_meta_bank_rows;
 `endif
 
     // -----------------------------------------------------------------------
@@ -151,23 +166,14 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Descriptor match: validate against current slot contents.
     // RS mode (a_from_smem=0): A comes from registers, only check B descriptor.
-    wire desc_match = (slot_desc_b == req_desc_b)
-                   && (req_a_is_smem ? (slot_desc_a == req_desc_a) : 1'b1);
+    wire desc_match = (slot_desc_b[cur_slot] == req_desc_b)
+                   && (req_a_is_smem ? (slot_desc_a[cur_slot] == req_desc_a) : 1'b1);
 
     // Hit: slot is valid, data ready, and descriptors match.
-    assign tbuf_hit = slot_valid && slot_fetch_done && desc_match;
+    assign tbuf_hit = slot_valid[cur_slot] && slot_fetch_done[cur_slot] && desc_match;
 
-    // In-progress: fetch for slot is running.
-    wire slot_in_progress = slot_valid && !slot_fetch_done;
-
-    // Allocate (re-fetch) on:
-    //   - first uop of every tile (LMEM contents may have changed via DMA
-    //     even if the descriptor address is the same), OR
-    //   - any uop with a descriptor mismatch (handles warp interleaving:
-    //     a different warp may have evicted this warp's tile data).
-    wire alloc_en = req_valid && !slot_in_progress && !alloc_pending
-                 && (is_first_uop || !slot_valid || !slot_fetch_done || !desc_match);
-
+    // alloc_en and tbuf_ready are defined after the FSM state declaration (below)
+    wire alloc_en;
     assign tbuf_ready = tbuf_hit && !alloc_en;
 
     // -----------------------------------------------------------------------
@@ -233,6 +239,14 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
     wire in_fetch      = (send_state_r != SEND_IDLE);
 
+    // Allocate (re-fetch) on:
+    //   - first uop of every tile (LMEM contents may have changed via DMA
+    //     even if the descriptor address is the same), OR
+    //   - any uop with a descriptor mismatch (handles warp interleaving:
+    //     a different warp may have evicted this warp's tile data).
+    assign alloc_en = req_valid && !in_fetch && !alloc_pending
+                   && (is_first_uop || !slot_valid[cur_slot] || !slot_fetch_done[cur_slot] || !desc_match);
+
     // -----------------------------------------------------------------------
     // Fetch counters (req: issued requests; rsp: received responses)
     // -----------------------------------------------------------------------
@@ -254,7 +268,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always_comb begin
         case (send_state_r)
             SEND_FETCH_A: begin
-                phase_total_rows = FETCH_CTR_W'(slot_is_sparse
+                phase_total_rows = FETCH_CTR_W'(slot_is_sparse[fetch_slot]
                                    ? A_BANK_ROWS_SP : A_BANK_ROWS);
                 phase_row_base   = slot_a_row_base;
             end
@@ -263,7 +277,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 phase_row_base   = slot_b_row_base;
             end
             SEND_FETCH_META: begin
-                phase_total_rows = slot_meta_bank_rows;
+                phase_total_rows = slot_meta_bank_rows[fetch_slot];
                 phase_row_base   = slot_meta_row_base;
             end
             default: begin
@@ -298,7 +312,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef TCU_SPARSE_ENABLE
     wire last_rsp_a = in_fetch_a && tcu_lmem_if.rsp_valid
-                   && (rsp_ctr_r == (slot_is_sparse
+                   && (rsp_ctr_r == (slot_is_sparse[fetch_slot]
                        ? FETCH_CTR_W'(A_BANK_ROWS_SP - 1)
                        : FETCH_CTR_W'(A_BANK_ROWS    - 1)));
 `else
@@ -309,8 +323,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                    && (rsp_ctr_r == FETCH_CTR_W'(B_BANK_ROWS - 1));
 `ifdef TCU_SPARSE_ENABLE
     wire last_rsp_meta = in_fetch_meta && tcu_lmem_if.rsp_valid
-                      && (rsp_ctr_r == slot_meta_bank_rows - FETCH_CTR_W'(1));
-    wire fetch_done_now = (last_rsp_b && !slot_is_sparse) || last_rsp_meta;
+                      && (rsp_ctr_r == slot_meta_bank_rows[fetch_slot] - FETCH_CTR_W'(1));
+    wire fetch_done_now = (last_rsp_b && !slot_is_sparse[fetch_slot]) || last_rsp_meta;
 `else
     wire fetch_done_now = last_rsp_b;
 `endif
@@ -334,7 +348,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             case (send_state_r)
             // -----------------------------------------------------------------
             SEND_IDLE: begin
-                if (slot_valid && !slot_fetch_done) begin
+                if (slot_valid[fetch_slot] && !slot_fetch_done[fetch_slot]) begin
                     req_ctr_r      <= '0;
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
@@ -364,7 +378,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
                 `ifdef TCU_SPARSE_ENABLE
-                    send_state_r <= slot_is_sparse ? SEND_FETCH_META : SEND_IDLE;
+                    send_state_r <= slot_is_sparse[fetch_slot] ? SEND_FETCH_META : SEND_IDLE;
                 `else
                     send_state_r <= SEND_IDLE;
                 `endif
@@ -399,26 +413,28 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     always_ff @(posedge clk) begin
         if (reset) begin
-            slot_valid      <= 1'b0;
-            slot_fetch_done <= 1'b0;
+            slot_valid      <= '0;
+            slot_fetch_done <= '0;
             alloc_pending   <= 1'b0;
+            fetch_slot      <= '0;
         end else begin
             if (fetch_done_now)
-                slot_fetch_done <= 1'b1;
+                slot_fetch_done[fetch_slot] <= 1'b1;
 
             if (alloc_en) begin
-                slot_valid      <= 1'b1;
-                slot_fetch_done <= 1'b0;
-                slot_a_from_smem <= req_a_is_smem;
-                slot_desc_a     <= req_desc_a;
-                slot_desc_b     <= req_desc_b;
-                slot_a_row_base <= desc_a_row_base;
-                slot_b_row_base <= desc_b_row_base;
+                fetch_slot                  <= cur_slot;
+                slot_valid[cur_slot]        <= 1'b1;
+                slot_fetch_done[cur_slot]   <= 1'b0;
+                slot_a_from_smem            <= req_a_is_smem;
+                slot_desc_a[cur_slot]       <= req_desc_a;
+                slot_desc_b[cur_slot]       <= req_desc_b;
+                slot_a_row_base             <= desc_a_row_base;
+                slot_b_row_base             <= desc_b_row_base;
             `ifdef TCU_SPARSE_ENABLE
-                slot_is_sparse      <= is_sparse;
-                slot_meta_row_base  <= desc_meta_row_base;
-                slot_meta_stride    <= init_meta_stride;
-                slot_meta_bank_rows <= init_meta_rows;
+                slot_is_sparse[cur_slot]      <= is_sparse;
+                slot_meta_row_base            <= desc_meta_row_base;
+                slot_meta_stride[cur_slot]    <= init_meta_stride;
+                slot_meta_bank_rows[cur_slot] <= init_meta_rows;
             `endif
             end
 
@@ -452,7 +468,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_dp_ram #(
         .DATAW   (A_TOTAL * 32),
-        .SIZE    (1),
+        .SIZE    (SLOT_DEPTH),
         .WRENW   (A_TOTAL),
         .LUTRAM  (1),
         .OUT_REG (0),
@@ -463,9 +479,9 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .read  (1'b1),
         .write (tcu_lmem_if.rsp_valid && in_fetch_a),
         .wren  (a_wren),
-        .waddr (1'b0),
+        .waddr (fetch_slot),
         .wdata (a_wdata),
-        .raddr (1'b0),
+        .raddr (cur_slot),
         .rdata (hit_a_buf)
     );
 
@@ -492,7 +508,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_dp_ram #(
         .DATAW   (B_TOTAL * 32),
-        .SIZE    (1),
+        .SIZE    (SLOT_DEPTH),
         .WRENW   (B_TOTAL),
         .LUTRAM  (1),
         .OUT_REG (0),
@@ -503,9 +519,9 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .read  (1'b1),
         .write (tcu_lmem_if.rsp_valid && in_fetch_b),
         .wren  (b_wren),
-        .waddr (1'b0),
+        .waddr (fetch_slot),
         .wdata (b_wdata),
-        .raddr (1'b0),
+        .raddr (cur_slot),
         .rdata (hit_b_buf)
     );
 
@@ -533,7 +549,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_dp_ram #(
         .DATAW   (META_TOTAL_MAX * 32),
-        .SIZE    (1),
+        .SIZE    (SLOT_DEPTH),
         .WRENW   (META_TOTAL_MAX),
         .LUTRAM  (1),
         .OUT_REG (0),
@@ -544,14 +560,14 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .read  (1'b1),
         .write (tcu_lmem_if.rsp_valid && in_fetch_meta),
         .wren  (meta_wren),
-        .waddr (1'b0),
+        .waddr (fetch_slot),
         .wdata (meta_wdata),
-        .raddr (1'b0),
+        .raddr (cur_slot),
         .rdata (hit_meta_buf)
     );
 
-    assign hit_is_sparse   = slot_is_sparse;
-    assign hit_meta_stride = slot_meta_stride;
+    assign hit_is_sparse   = slot_is_sparse[cur_slot];
+    assign hit_meta_stride = slot_meta_stride[cur_slot];
 `endif
 
     // -----------------------------------------------------------------------
