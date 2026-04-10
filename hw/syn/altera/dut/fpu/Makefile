@@ -1,3 +1,5 @@
+include ../../common.mk
+
 PROJECT = VX_fpu_dsp
 
 ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
@@ -9,8 +11,6 @@ endif
 
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
-
-include ../../common.mk
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
