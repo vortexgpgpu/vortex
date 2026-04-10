@@ -268,6 +268,9 @@ package VX_trace_pkg;
                     endcase
                 end
             `endif
+            `ifdef EXT_TCU_ENABLE
+                INST_SFU_WSYNC: `TRACE(level, ("WSYNC"))
+            `endif
                 default: `TRACE(level, ("?"))
             endcase
         end

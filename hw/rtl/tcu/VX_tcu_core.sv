@@ -83,7 +83,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // references tbuf_* or is_wgmma directly.
 
     wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] rs1_data;
+`ifdef TCU_WGMMA_ENABLE
     wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] rs2_data;
+`else
+    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] rs2_data;
+`endif
     wire exe_ready_extra;              // additional ready gating (tbuf_ready)
 
 `ifdef TCU_ACC_ENABLE

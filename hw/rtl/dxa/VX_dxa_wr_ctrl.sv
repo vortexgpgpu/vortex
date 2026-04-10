@@ -197,7 +197,7 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign smem_wr_data     = wrq_head_data;
     assign smem_wr_byteen   = wrq_head_byteen;
     assign wrq_pop          = mc_pop;
-    assign smem_wr_last_pkt = mc_pop && wrq_head_last;
+    assign smem_wr_last_pkt = wrq_head_last && (!is_multicast || replay_is_last);
     assign smem_req_fire    = mc_write_fire;
 
     // Per-CTA done signal: when processing the last queue word, each CTA's
@@ -244,14 +244,15 @@ module VX_dxa_wr_ctrl import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Completion: all three conditions must hold simultaneously:
     //   1. all_cls_done   — rd_ctrl confirms all CLs processed
     //   2. cl2smem_idle   — cl2smem fill buffer fully drained to wr_ctrl
-    //   3. wrq_becoming_empty — this is the last SMEM write leaving wr_ctrl
-    // Without cl2smem_idle, wrq can become momentarily empty while cl2smem
-    // is still draining the last CL, causing premature transfer_done.
-    wire wrq_becoming_empty = wrq_pop && (wrq_size == WRQ_SIZEW'(1));
+    //   3. wrq has exactly one entry — this write is the last SMEM write
+    // smem_wr_last_pkt is carried in req_data.flags and only meaningful when
+    // the write handshake fires (valid && ready). Computing it without
+    // wrq_pop avoids a combinational loop through the xbar ready path.
+    wire wrq_is_last = (wrq_size == WRQ_SIZEW'(1));
 `ifndef EXT_DXA_MULTICAST_ENABLE
-    assign smem_wr_last_pkt = wrq_becoming_empty && all_cls_done && cl2smem_idle;
+    assign smem_wr_last_pkt = wrq_is_last && all_cls_done && cl2smem_idle;
 `endif
-    assign transfer_done = transfer_active && smem_wr_last_pkt;
+    assign transfer_done = transfer_active && wrq_pop && smem_wr_last_pkt;
 
 
     `UNUSED_VAR (wrq_alm_empty)

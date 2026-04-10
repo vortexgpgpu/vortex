@@ -446,6 +446,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign smem_bus_if.req_data.byteen = wc_smem_wr_byteen;
     assign smem_bus_if.req_data.tag    = '0;
     assign smem_bus_if.rsp_ready       = 1'b0;
+    `UNUSED_VAR (smem_bus_if.rsp_valid)
+    `UNUSED_VAR (smem_bus_if.rsp_data)
 
     // Completion flags: {last_pkt, bar_addr}.
 `ifdef EXT_DXA_MULTICAST_ENABLE
