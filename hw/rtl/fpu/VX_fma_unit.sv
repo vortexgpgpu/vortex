@@ -473,7 +473,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire [MAN_BITS:0] abs_rounded = round_up ? man_inc : rnd_man;
 
     // Round carry: mantissa overflowed (e.g. all-1s + 1 → 0)
-    wire round_carry = abs_rounded[MAN_BITS] & ~rnd_man[MAN_BITS];
+    wire round_carry = round_up & (&rnd_man);
 
     wire [MAN_BITS-1:0] final_man = round_carry ? abs_rounded[MAN_BITS:1] : abs_rounded[MAN_BITS-1:0];
 
