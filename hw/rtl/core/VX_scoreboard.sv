@@ -238,7 +238,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     // Only suppress when at least one warp can issue to a free FU; otherwise
     // let all warps through so the pipeline buffers absorb transient stalls.
 
-    localparam LOG_NUM_REQS = `CLOG2(PER_ISSUE_WARPS);
+    localparam LOG_NUM_REQS = `LOG2UP(PER_ISSUE_WARPS);
 
     wire any_unsuppressed = |(arb_valid_in & ~arb_suppress);
     wire [PER_ISSUE_WARPS-1:0] eff_suppress = any_unsuppressed ? arb_suppress : '0;
