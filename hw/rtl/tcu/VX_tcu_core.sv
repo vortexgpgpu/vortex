@@ -379,6 +379,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk    (clk),
         .reset  (reset),
         .wr_en  (meta_wr_en),
+        .wid    (execute_if.data.header.wid),
         .wr_idx (fmt_d),
         .wr_data(rs1_data),
         .step_m (step_m),

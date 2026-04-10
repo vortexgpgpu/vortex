@@ -51,6 +51,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // Execute-side observation
+    input  wire [NW_WIDTH-1:0]      req_wid,
     input  wire                     req_valid,
     input  wire                     req_fire,   // execute consumed current uop
     input  wire                     req_is_sparse,
@@ -126,6 +127,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .tbuf_fetch_stalls(tbuf_fetch_stalls),
         .lmem_reads       (lmem_reads),
     `endif
+        .req_wid        (req_wid),
         .req_valid      (req_valid),
         .req_fire       (req_fire),
         .req_is_sparse  (req_is_sparse),

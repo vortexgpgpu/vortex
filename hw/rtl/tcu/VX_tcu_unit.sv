@@ -116,6 +116,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .tbuf_fetch_stalls(tbuf_fetch_stalls_b[block_idx]),
             .lmem_reads       (lmem_reads_b[block_idx]),
         `endif
+            .req_wid          (per_block_execute_if[block_idx].data.header.wid),
             .req_valid        (req_valid_b),
             .req_fire         (req_fire_b),
             .req_is_sparse    (per_block_execute_if[block_idx].data.op_args.tcu.is_sparse),

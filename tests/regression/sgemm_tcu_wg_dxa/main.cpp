@@ -75,6 +75,40 @@ public:
   }
 };
 
+template <>
+class Comparator<vt::int8> {
+public:
+  static int8_t generate() {
+    return static_cast<int8_t>(rand());
+  }
+  static bool compare(int8_t a, int8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::int32> {
+public:
+  static int32_t generate() {
+    return static_cast<int32_t>(rand());
+  }
+  static bool compare(int32_t a, int32_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename S, typename D>
@@ -97,7 +131,7 @@ struct muladd_t<vt::fp16, vt::fp32> {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, 32, 8>;
+using cfg = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, 8>;
 
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
@@ -211,12 +245,12 @@ int main(int argc, char *argv[]) {
   uint32_t N = xn;
   uint32_t K = xk;
 
-  if ((M % cfg::tileM) != 0) {
-    std::cout << "Error: M (" << M << ") must be a multiple of tileM=" << cfg::tileM << std::endl;
+  if ((M % cfg::xtileM) != 0) {
+    std::cout << "Error: M (" << M << ") must be a multiple of tileM=" << cfg::xtileM << std::endl;
     return -1;
   }
-  if ((N % cfg::tileN) != 0) {
-    std::cout << "Error: N (" << N << ") must be a multiple of tileN=" << cfg::tileN << std::endl;
+  if ((N % cfg::xtileN) != 0) {
+    std::cout << "Error: N (" << N << ") must be a multiple of tileN=" << cfg::xtileN << std::endl;
     return -1;
   }
   if ((K % cfg::tileK) != 0) {
@@ -229,14 +263,14 @@ int main(int argc, char *argv[]) {
   size_t sizeC = M * N;
 
   // Grid: one block per output tile. Block: 1D threads for WGMMA.
-  uint32_t grid_dim[2]  = {N / cfg::tileN, M / cfg::tileM};
+  uint32_t grid_dim[2]  = {N / cfg::xtileN, M / cfg::xtileM};
   uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
   // SMEM: A tile [tileM x tileK] + B tile [tileK x tileN]
-  uint32_t smem_size = (cfg::tileM * cfg::tileK + cfg::tileK * cfg::tileN) * sizeof(itype_t);
+  uint32_t smem_size = (cfg::xtileM * cfg::tileK + cfg::tileK * cfg::xtileN) * sizeof(itype_t);
 
   std::cout << "input type: " << vt::ITYPE::name << ", output type: " << vt::OTYPE::name << std::endl;
-  std::cout << "WGMMA tile: M=" << cfg::tileM << ", N=" << cfg::tileN << ", K=" << cfg::tileK << std::endl;
+  std::cout << "WGMMA tile: M=" << cfg::xtileM << ", N=" << cfg::xtileN << ", K=" << cfg::tileK << std::endl;
   std::cout << "grid: " << grid_dim[0] << "x" << grid_dim[1] << std::endl;
   std::cout << "block: " << block_dim[0] << "x" << block_dim[1] << std::endl;
   std::cout << "matrix A: " << M << "x" << K << std::endl;
@@ -281,7 +315,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dxa_program_desc_2d(device, kDescA, kernel_arg.A_addr,
     /*size0=*/K, /*size1=*/M,
     /*stride0_bytes=*/K * sizeof(itype_t),
-    /*tile0=*/cfg::tileK, /*tile1=*/cfg::tileM,
+    /*tile0=*/cfg::tileK, /*tile1=*/cfg::xtileM,
     /*elem_bytes=*/sizeof(itype_t)));
 
   // Descriptor B: fetches tileN columns x tileK rows from B[k, col].
@@ -290,7 +324,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dxa_program_desc_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
-    /*tile0=*/cfg::tileN, /*tile1=*/cfg::tileK,
+    /*tile0=*/cfg::xtileN, /*tile1=*/cfg::tileK,
     /*elem_bytes=*/sizeof(itype_t)));
 
   // Upload program
