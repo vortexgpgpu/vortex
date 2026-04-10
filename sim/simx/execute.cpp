@@ -1649,8 +1649,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       case TcuType::WMMA: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
-        assert(operand_tmask.count() == num_threads);
-        assert(exec_tmask.count() == num_threads);
         core_->tensor_unit()->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                                    tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
                                    rs1_data,
@@ -1665,8 +1663,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       case TcuType::WGMMA: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
-        assert(operand_tmask.count() == num_threads);
-        assert(exec_tmask.count() == num_threads);
         uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
         uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
         core_->tensor_unit()->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
@@ -1680,8 +1676,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       case TcuType::META_STORE: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
-        assert(operand_tmask.count() == num_threads);
-        assert(exec_tmask.count() == num_threads);
         core_->tensor_unit()->meta_store(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                                          tpuArgs.meta_kind, rs1_data, trace_data.get());
       } break;

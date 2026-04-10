@@ -1195,9 +1195,12 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
         uint32_t n_sp = step_bits ? (mma_idx & step_mask) : 0;
         uint32_t m_sp = mma_idx >> step_bits;
+        // n_sp encodes both actual N step (high bits) and lo/hi half (low lg_k bits).
+        // Extract just the N step for accum indexing; n_sp is still used for B register selection.
+        uint32_t actual_n = lg_k ? (n_sp >> lg_k) : n_sp;
         uint32_t reg_rs3 = rc_base + (mma_idx >> 1);
         uop_instr->set_op_type(TcuType::WMMA);
-        uop_instr->set_args(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, n_sp, 0});
+        uop_instr->set_args(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, actual_n, 0});
         uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         uop_instr->set_src_reg(0, ra_base + m_sp, RegType::Float);
         uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
