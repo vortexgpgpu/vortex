@@ -20,6 +20,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <type_traits>
 
 using namespace vortex;
 
@@ -138,191 +139,173 @@ static inline int32_t mxint8_scaled_i32(int8_t q, uint8_t sf) {
 #endif
 
 template <typename It, typename Ot>
-struct FMA {
+struct FMUL {
   using itype = typename It::dtype;
   using otype = typename Ot::dtype;
-  static otype eval(itype a, itype b, otype c) {
-    return static_cast<otype>(a) * static_cast<otype>(b) + c;
+  static uint32_t eval(itype a, itype b) {
+    return bit_cast<uint32_t>(static_cast<otype>(a) * static_cast<otype>(b));
   }
 };
 
 template <>
-struct FMA<vt::fp16, vt::fp32> {
-  static float eval(uint16_t a, uint16_t b, float c) {
+struct FMUL<vt::fp16, vt::fp32> {
+  static uint32_t eval(uint16_t a, uint16_t b) {
     auto xa = rv_htof_s(a, 0, nullptr);
     auto xb = rv_htof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
+    return rv_fmul_s(xa, xb, 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::fp16, vt::fp16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
+struct FMUL<vt::fp16, vt::fp16> {
+  static uint32_t eval(uint16_t a, uint16_t b) {
     auto xa = rv_htof_s(a, 0, nullptr);
     auto xb = rv_htof_s(b, 0, nullptr);
-    auto xc = rv_htof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftoh_s(xd, 0, nullptr);
-    return xh;
+    return rv_ftoh_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::bf16, vt::fp32> {
-  static float eval(uint16_t a, uint16_t b, float c) {
+struct FMUL<vt::bf16, vt::fp32> {
+  static uint32_t eval(uint16_t a, uint16_t b) {
     auto xa = rv_btof_s(a, 0, nullptr);
     auto xb = rv_btof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
+    return rv_fmul_s(xa, xb, 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::bf16, vt::bf16> {
-  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
+struct FMUL<vt::bf16, vt::bf16> {
+  static uint32_t eval(uint16_t a, uint16_t b) {
     auto xa = rv_btof_s(a, 0, nullptr);
     auto xb = rv_btof_s(b, 0, nullptr);
-    auto xc = rv_btof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftob_s(xd, 0, nullptr);
-    return xh;
+    return rv_ftob_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::fp8, vt::fp32> {
-  static float eval(uint8_t a, uint8_t b, float c) {
+struct FMUL<vt::fp8, vt::fp32> {
+  static uint32_t eval(uint8_t a, uint8_t b) {
     auto xa = rv_e4m3tof_s(a, 0, nullptr);
     auto xb = rv_e4m3tof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
+    return rv_fmul_s(xa, xb, 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::fp8, vt::fp8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+struct FMUL<vt::fp8, vt::fp8> {
+  static uint32_t eval(uint8_t a, uint8_t b) {
     auto xa = rv_e4m3tof_s(a, 0, nullptr);
     auto xb = rv_e4m3tof_s(b, 0, nullptr);
-    auto xc = rv_e4m3tof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftoe4m3_s(xd, 0, nullptr);
-    return xh;
+    return rv_ftoe4m3_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::bf8, vt::fp32> {
-  static float eval(uint8_t a, uint8_t b, float c) {
+struct FMUL<vt::bf8, vt::fp32> {
+  static uint32_t eval(uint8_t a, uint8_t b) {
     auto xa = rv_e5m2tof_s(a, 0, nullptr);
     auto xb = rv_e5m2tof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
+    return rv_fmul_s(xa, xb, 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::bf8, vt::bf8> {
-  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+struct FMUL<vt::bf8, vt::bf8> {
+  static uint32_t eval(uint8_t a, uint8_t b) {
     auto xa = rv_e5m2tof_s(a, 0, nullptr);
     auto xb = rv_e5m2tof_s(b, 0, nullptr);
-    auto xc = rv_e5m2tof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftoe5m2_s(xd, 0, nullptr);
-    return xh;
+    return rv_ftoe5m2_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::tf32, vt::fp32> {
-  static float eval(uint32_t a, uint32_t b, float c) {
+struct FMUL<vt::tf32, vt::fp32> {
+  static uint32_t eval(uint32_t a, uint32_t b) {
     auto xa = rv_tf32tof_s(a, 0, nullptr);
     auto xb = rv_tf32tof_s(b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
+    return rv_fmul_s(xa, xb, 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::tf32, vt::tf32> {
-  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
+struct FMUL<vt::tf32, vt::tf32> {
+  static uint32_t eval(uint32_t a, uint32_t b) {
     auto xa = rv_tf32tof_s(a, 0, nullptr);
     auto xb = rv_tf32tof_s(b, 0, nullptr);
-    auto xc = rv_tf32tof_s(c, 0, nullptr);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftotf32_s(xd, 0, nullptr);
-    return xh;
+    return rv_ftotf32_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
   }
 };
 
 #ifdef TCU_MX_ENABLE
 template <>
-struct FMA<vt::mxfp8, vt::fp32> {
-  static float eval(uint8_t, uint8_t, float) = delete;
-
-  static float eval(uint8_t a, uint8_t b, float c, uint8_t sf_a, uint8_t sf_b) {
+struct FMUL<vt::mxfp8, vt::fp32> {
+  static uint32_t eval(uint8_t a, uint8_t b, uint8_t sf_a, uint8_t sf_b) {
     auto xa = rv_mxfp8tof_s(a, sf_a, 0, nullptr);
     auto xb = rv_mxfp8tof_s(b, sf_b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
+    return rv_fmul_s(xa, xb, 0, nullptr);
   }
 };
 
 template <>
-struct FMA<vt::mxint8, vt::int32> {
-  static int32_t eval(int8_t, int8_t, int32_t) = delete;
-
-  static int32_t eval(int8_t a, int8_t b, int32_t c, uint8_t sf_a, uint8_t sf_b) {
+struct FMUL<vt::mxint8, vt::int32> {
+  static uint32_t eval(int8_t a, int8_t b, uint8_t sf_a, uint8_t sf_b) {
     int32_t xa = mxint8_scaled_i32(a, sf_a);
     int32_t xb = mxint8_scaled_i32(b, sf_b);
-    return madd_wrap_i32(xa, xb, c);
+    return bit_cast<uint32_t>(xa * xb);
   }
 };
 
 template <>
-struct FMA<vt::nvfp4, vt::fp32> {
-  static float eval(uint8_t, uint8_t, float) = delete;
-
-  static float eval(uint8_t a, uint8_t b, float c, uint8_t sf_a, uint8_t sf_b) {
+struct FMUL<vt::nvfp4, vt::fp32> {
+  static uint32_t eval(uint8_t a, uint8_t b, uint8_t sf_a, uint8_t sf_b) {
     auto xa = rv_nvfp4tof_s(a & 0x0f, sf_a, 0, nullptr);
     auto xb = rv_nvfp4tof_s(b & 0x0f, sf_b, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
+    return rv_fmul_s(xa, xb, 0, nullptr);
   }
 };
 #endif
 
+template <typename Ot>
+struct FADD {
+  using otype = typename Ot::dtype;
+  static uint32_t eval(uint32_t x, uint32_t y) {
+    return bit_cast<uint32_t>(bit_cast<otype>(x) + bit_cast<otype>(y));
+  }
+};
+
+template <>
+struct FADD<vt::fp32> {
+  static uint32_t eval(uint32_t x, uint32_t y) {
+    return rv_fadd_s(x, y, 0, nullptr);
+  }
+};
+
 template <typename It, typename Ot>
 struct FEDP {
   using itype = typename It::dtype;
-  using otype = typename Ot::dtype;
   static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
-  constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(itype);
-  static_assert(i_ratio * sizeof(itype) == sizeof(uint32_t), "FEDP: tcK * i_ratio must be <= 32");
-  auto acc = bit_cast<otype>(c_val);
-  for (uint32_t z = 0; z < cfg::tcK; ++z) {
-    auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
-    auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
-    for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc = FMA<It, Ot>::eval(a[i], b[i], acc);
+    constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(itype);
+    static_assert(i_ratio * sizeof(itype) == sizeof(uint32_t), "FEDP: tcK * i_ratio must be <= 32");
+    // Phase 1: per-word partial products
+    uint32_t partial[cfg::tcK];
+    for (uint32_t z = 0; z < cfg::tcK; ++z) {
+      auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
+      auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
+      uint32_t prod = 0;
+      for (uint32_t i = 0; i < i_ratio; ++i) {
+        auto p = FMUL<It, Ot>::eval(a[i], b[i]);
+        prod = FADD<Ot>::eval(p, prod);
+      }
+      partial[z] = prod;
     }
-  }
-  return bit_cast<uint32_t>(acc);
+    // Phase 2: sum partial products, then add c_val
+    uint32_t acc = 0;
+    for (uint32_t z = 0; z < cfg::tcK; ++z) {
+      acc = FADD<Ot>::eval(partial[z], acc);
+    }
+    acc = FADD<Ot>::eval(c_val, acc);
+    return acc;
   }
 };
 
@@ -373,15 +356,15 @@ static uint32_t fedp_mxfp8_fp32_scaled(const reg_data_t* a_row,
                                        uint8_t sf_a,
                                        uint8_t sf_b) {
   constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(uint8_t);
-  auto acc = bit_cast<float>(c_val);
+  uint32_t acc = c_val;
   for (uint32_t z = 0; z < cfg::tcK; ++z) {
     auto a = reinterpret_cast<const uint8_t*>(&a_row[z].u32);
     auto b = reinterpret_cast<const uint8_t*>(&b_col[z].u32);
     for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc = FMA<vt::mxfp8, vt::fp32>::eval(a[i], b[i], acc, sf_a, sf_b);
+      acc = rv_fadd_s(FMUL<vt::mxfp8, vt::fp32>::eval(a[i], b[i], sf_a, sf_b), acc, 0, nullptr);
     }
   }
-  return bit_cast<uint32_t>(acc);
+  return acc;
 }
 
 static uint32_t fedp_mxint8_int32_scaled(const reg_data_t* a_row,
@@ -390,15 +373,15 @@ static uint32_t fedp_mxint8_int32_scaled(const reg_data_t* a_row,
                                          uint8_t sf_a,
                                          uint8_t sf_b) {
   constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(int8_t);
-  auto acc = bit_cast<int32_t>(c_val);
+  uint32_t acc = c_val;
   for (uint32_t z = 0; z < cfg::tcK; ++z) {
     auto a = reinterpret_cast<const int8_t*>(&a_row[z].u32);
     auto b = reinterpret_cast<const int8_t*>(&b_col[z].u32);
     for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc = FMA<vt::mxint8, vt::int32>::eval(a[i], b[i], acc, sf_a, sf_b);
+      acc += FMUL<vt::mxint8, vt::int32>::eval(a[i], b[i], sf_a, sf_b);
     }
   }
-  return bit_cast<uint32_t>(acc);
+  return acc;
 }
 
 static uint32_t fedp_nvfp4_fp32_scaled(const reg_data_t* a_row,
@@ -406,17 +389,17 @@ static uint32_t fedp_nvfp4_fp32_scaled(const reg_data_t* a_row,
                                        uint32_t c_val,
                                        uint8_t sf_a,
                                        uint8_t sf_b) {
-  auto acc = bit_cast<float>(c_val);
+  uint32_t acc = c_val;
   for (uint32_t z = 0; z < cfg::tcK; ++z) {
     uint32_t aw = a_row[z].u32;
     uint32_t bw = b_col[z].u32;
     for (uint32_t i = 0; i < 8; ++i) {
       uint8_t a = (aw >> (i * 4)) & 0x0f;
       uint8_t b = (bw >> (i * 4)) & 0x0f;
-      acc = FMA<vt::nvfp4, vt::fp32>::eval(a, b, acc, sf_a, sf_b);
+      acc = rv_fadd_s(FMUL<vt::nvfp4, vt::fp32>::eval(a, b, sf_a, sf_b), acc, 0, nullptr);
     }
   }
-  return bit_cast<uint32_t>(acc);
+  return acc;
 }
 #endif
 
