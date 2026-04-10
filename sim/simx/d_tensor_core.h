@@ -42,8 +42,8 @@ public:
     uint8_t  fmt_s;
     uint8_t  fmt_d;
     uint8_t  flags;
-    uint8_t  reserved0;
-    uint16_t reserved1;
+    uint8_t  shape_n_size;
+    uint16_t shape_policy;
     uint32_t reserved2;
   };
 
@@ -98,10 +98,6 @@ private:
   uint64_t  tag_alloc_;
   uint64_t  pending_tag_;
 
-  std::vector<float> fragA_; // NUM_THREADS * cfg::NRA
-  std::vector<float> fragB_; // NUM_THREADS * cfg::NRB
-  std::vector<float> fragC_; // NUM_THREADS * cfg::NRC
-
   // Cacheline request lists 
   // For calculating # of cache line accesses during operand load and output store
   std::vector<uint64_t> op_req_lines_;
@@ -109,11 +105,20 @@ private:
   std::vector<uint64_t> out_req_lines_;
   uint32_t out_req_idx_ = 0;
 
+  // Internal Buffers A/B/C (in element units, not bytes)
+  std:vector<uint32_t> a_buf_;
+  std::vector<uint32_t> b_buf_;
+  std::vector<float> accum_buf_;
+
+  uint32_t tile_m_ = 0; // M dimension of native tile (=64)
+  uint32_t tile_n_ = 0; // N dimension of native tile (multiple of 16, up to 128)
+  uint32_t tile_k_ = 0; // K dimension of native tile (depends on data type)
+
   // Internal state for iterating through tiles
-  uint32_t tile_m_idx_ = 0;
+  uint32_t tile_m_idx_ = 0; // Internal index for current tile within big GEMM
   uint32_t tile_n_idx_ = 0;
   uint32_t tile_k_idx_ = 0;
-  uint32_t tiles_m_ = 1;
+  uint32_t tiles_m_ = 1; // # of tiles needed for the entire GEMM
   uint32_t tiles_n_ = 1;
   uint32_t tiles_k_ = 1;
 

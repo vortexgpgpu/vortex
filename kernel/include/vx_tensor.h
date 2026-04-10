@@ -443,8 +443,8 @@ struct dtensor_desc_t {
   uint8_t  fmt_s;
   uint8_t  fmt_d;
   uint8_t  flags;
-  uint8_t  reserved0;
-  uint16_t reserved1;
+  uint8_t  shape_n_size;
+  uint16_t shape_policy;
   uint32_t reserved2;
   // Total size: 64 bytes (1 cache line)
 };
