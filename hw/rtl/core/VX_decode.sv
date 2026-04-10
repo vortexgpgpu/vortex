@@ -58,6 +58,7 @@ module VX_decode import VX_gpu_pkg::*; #(
 
     `UNUSED_VAR (funct2)
     `UNUSED_VAR (funct5)
+    `UNUSED_VAR (frm_is_dyn)
 
     wire is_itype_sh   = funct3[0] && ~funct3[1];
     wire is_csr_fflags = (u_12 == `VX_CSR_FFLAGS);
