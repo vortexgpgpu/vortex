@@ -179,6 +179,8 @@ static inline uint32_t elem_size_bytes(uint32_t fmt_id) {
 }
 
 void DTensorCore::init_tile_state_() {
+  uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
+
   if (desc_.fmt_d != vt::fp32::id) {
     std::cout << "[DTCU] Error: Only supports fp32 output/accumulation" << std::endl;
     std::abort();
@@ -194,12 +196,11 @@ void DTensorCore::init_tile_state_() {
     std::abort();
   }
 
+  // Shape policy is TBD (just set to 0 for now)
   if (desc_.shape_policy != 0) {
     std::cout << "[DTCU] Error: Unsupported shape policy: " << uint32_t(desc_.shape_policy) << std::endl;
     std::abort();
   }
-
-  uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
 
   tile_m_ = 64; // fixed tile M dimension
   tile_n_ = uint32_t(desc_.shape_n_size) * 16; // tile N dimension is determined by shape_n_size (in multiples of 16)
@@ -795,7 +796,7 @@ void DTensorCore::execute_mma() {
 void DTensorCore::store_output() {
   for (uint32_t m = 0; m < tile_m_; ++m) {
     for (uint32_t n = 0; n < tile_n_; ++n) {
-      uint64_t addr = tile_ptrD_() + (uint64_t(m) * desc_.ldmD + n) * 4;
+      uint64_t addr = calculate_base_D_() + (uint64_t(m) * desc_.ldmD + n) * 4;
       float value = accum_buf_[m * tile_n_ + n];
       ram_->write(&value, addr, 4);
     }
@@ -830,7 +831,7 @@ void DTensorCore::build_req_lists_() {
   std::unordered_set<uint64_t> op_lines;
   std::unordered_set<uint64_t> out_lines;
 
-  const uint32_t in_sz  = elem_size_bytes(fmt_s);
+  const uint32_t in_sz  = elem_size_bytes(desc_.fmt_s);
   const uint32_t elems_per_word = 4 / in_sz;
 
   // Match current RAM access granularity

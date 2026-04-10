@@ -106,7 +106,7 @@ private:
   uint32_t out_req_idx_ = 0;
 
   // Internal Buffers A/B/C (in element units, not bytes)
-  std:vector<uint32_t> a_buf_;
+  std::vector<uint32_t> a_buf_;
   std::vector<uint32_t> b_buf_;
   std::vector<float> accum_buf_;
 
@@ -129,10 +129,10 @@ private:
   void init_tile_state_();
   bool advance_output_tile_();
 
-  uint64_t tile_ptrA_() const;
-  uint64_t tile_ptrB_() const;
-  uint64_t tile_ptrC_() const;
-  uint64_t tile_ptrD_() const;
+  uint64_t calculate_base_A_() const;
+  uint64_t calculate_base_B_() const;
+  uint64_t calculate_base_C_() const;
+  uint64_t calculate_base_D_() const;
 
   void build_req_lists_();
   bool issue_next_op_req_();
@@ -142,7 +142,7 @@ private:
 
   void load_desc();
   void load_operands();
-  void execute_wmma();
+  void execute_mma();
   void store_output();
 };
 

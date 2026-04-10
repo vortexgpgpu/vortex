@@ -89,8 +89,8 @@ struct dtensor_desc_t {
   uint8_t  fmt_s;
   uint8_t  fmt_d;
   uint8_t  flags;
-  uint8_t  reserved0;
-  uint16_t reserved1;
+  uint8_t  shape_n_size;
+  uint16_t shape_policy;
   uint32_t reserved2;
 };
 
@@ -129,14 +129,29 @@ int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
 
-  const uint32_t i_ratio = 4 / sizeof(itype_t);
-  const uint32_t tileM = cfg::tileM;
-  const uint32_t tileN = cfg::tileN;
-  const uint32_t tileK = cfg::tileK * i_ratio;
+  // For in-core TCU
+  const uint32_t tcu_i_ratio = 4 / sizeof(itype_t);
+  const uint32_t tcu_tileM = cfg::tileM; // 8
+  const uint32_t tcu_tileN = cfg::tileN; // 4
+  const uint32_t tcu_tileK = cfg::tileK * tcu_i_ratio; // 8 (fp16/bf16)
 
-  const uint32_t M = 2 * tileM;
-  const uint32_t N = 2 * tileN;
-  const uint32_t K = 2 * tileK;
+  // For DTCU
+  const uint32_t dtcu_tileM = 64;
+  const uint32_t dtcu_tileN = 32; // start with N=32
+  const uint32_t dtcu_tileK = (sizeof(itype_t) == 2) ? 16 : 8;
+
+  // Total GEMM size 
+  const uint32_t M = dtcu_tileM;        // 64
+  const uint32_t N = dtcu_tileN;        // 32
+  const uint32_t K = 2 * dtcu_tileK;    // fp16/bf16: 32, fp32: 16
+
+  if ((M % tcu_tileM) != 0 || (N % tcu_tileN) != 0 || (K % tcu_tileK) != 0) {
+    std::cerr << "dtcu_compare: Matrix size does not support in-core TCU"
+              << " M=" << M << " N=" << N << " K=" << K
+              << " tcu_tileM=" << tcu_tileM << " tcu_tileN=" << tcu_tileN << " tcu_tileK=" << tcu_tileK
+              << std::endl;
+    return -1;
+  }
 
   std::vector<itype_t> hA(M * K);
   std::vector<itype_t> hB(K * N);
@@ -211,8 +226,8 @@ int main(int argc, char** argv) {
     // ---- alloc device buffers ----
     kernel_arg_t karg{};
     karg.mode = 0;
-    karg.grid_dim[0] = N / tileN;
-    karg.grid_dim[1] = M / tileM;
+    karg.grid_dim[0] = N / tcu_tileN;
+    karg.grid_dim[1] = M / tcu_tileM;
     karg.block_dim[0] = NUM_THREADS;
     karg.block_dim[1] = 1;
     karg.M = M;
@@ -338,8 +353,8 @@ int main(int argc, char** argv) {
     desc.fmt_s = vt::ITYPE::id;
     desc.fmt_d = vt::OTYPE::id;
     desc.flags = 0x0;
-    desc.reserved0 = 0;
-    desc.reserved1 = 0;
+    desc.shape_n_size = 2; // N=2*16=32
+    desc.shape_policy = 0; // TBD
     desc.reserved2 = 0;
 
     RT_CHECK(vx_mem_alloc(device, sizeof(dtensor_desc_t), VX_MEM_READ, &desc_buf));
