@@ -7,7 +7,7 @@
 #include <VX_types.h>
 #include <vortex.h>
 
-#ifdef USE_DXA
+#ifdef EXT_DXA_ENABLE
 #include <dxa.h>
 #endif
 
@@ -94,10 +94,8 @@ int main(int argc, char* argv[]) {
   const uint32_t dst_elems = dst_rows * ncols;
   const uint32_t dst_bytes = dst_elems * sizeof(TYPE);
 
-#ifdef USE_DXA_MULTICAST
+#ifdef EXT_DXA_ENABLE
   std::cout << "mode: DXA MULTICAST\n";
-#elif defined(USE_DXA)
-  std::cout << "mode: DXA (per-CTA)\n";
 #else
   std::cout << "mode: LSU\n";
 #endif
@@ -153,18 +151,15 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_mem_alloc(device, dst_bytes, VX_MEM_WRITE, &dst_buffer));
   RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
 
-#ifdef USE_DXA
-  // Program DXA descriptor for the shared tile
+#ifdef EXT_DXA_ENABLE
+  // Program DXA descriptor for the shared tile.
   constexpr uint32_t kDescSrc = 0;
   RT_CHECK(vx_dxa_program_desc_2d(device, kDescSrc, kernel_arg.src_addr,
     ncols, nrows, ncols * sizeof(TYPE),
     tile_cols, tile_rows, sizeof(TYPE)));
-#ifdef USE_DXA_MULTICAST
   // Program multicast SMEM stride: byte distance between consecutive CTAs' SMEM bases.
-  // Each CTA is allocated `local_mem` bytes of SMEM.
   RT_CHECK(vx_dxa_program_desc_multicast(device, kDescSrc, local_mem));
   std::cout << "smem_stride: " << local_mem << " bytes\n";
-#endif
 #endif
 
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));

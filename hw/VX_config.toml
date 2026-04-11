@@ -46,6 +46,8 @@ EXT_DXA_ENABLE = false
 # Cluster-level DXA engine count (decoupled from NUM_CORES/SOCKET_SIZE).
 NUM_DXA_UNITS = "expr: max(1, up($NUM_CORES / 8))"
 DXA_MEM_PORTS = "expr: min($NUM_DXA_UNITS, up($NUM_CORES / $SOCKET_SIZE) * $L1_MEM_PORTS)"
+DXA_QUEUE_SIZE = 16
+DXA_MAX_INFLIGHT = 8
 
 EXT_M_ENABLED = "expr: 1 if $EXT_M_ENABLE else 0"
 EXT_F_ENABLED = "expr: 1 if $EXT_F_ENABLE else 0"
@@ -242,6 +244,11 @@ TCU_SPARSE_ENABLE = false
 TCU_WGMMA_ENABLE = false
 TCU_ACC_ENABLE = false
 TCU_WLOCK_ENABLE = false
+
+TCU_SPARSE_ENABLED = "expr: 1 if $TCU_SPARSE_ENABLE else 0"
+TCU_WGMMA_ENABLED = "expr: 1 if $TCU_WGMMA_ENABLE else 0"
+TCU_ACC_ENABLED = "expr: 1 if $TCU_ACC_ENABLE else 0"
+TCU_WLOCK_ENABLED = "expr: 1 if $TCU_WLOCK_ENABLE else 0"
 
 [isa_signatures]
 
