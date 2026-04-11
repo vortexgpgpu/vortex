@@ -228,7 +228,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         wire [WORD_WIDTH-1:0]      bank_sram_wdata;
         wire [WORD_SIZE-1:0]       bank_sram_wren;
 
-        assign bank_sram_addr  = dma_active ? dma_bus_if.req_data.addr
+        assign bank_sram_addr  = dma_active ? BANK_ADDR_WIDTH'(dma_bus_if.req_data.addr)
                                             : per_bank_req_addr[i];
         assign bank_sram_wdata = dma_wr_b   ? dma_bus_if.req_data.data[i*WORD_WIDTH +: WORD_WIDTH]
                                             : per_bank_req_data[i];
@@ -381,10 +381,10 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_MEM
 
     wire [NUM_BANKS-1:0][TAG_WIDTH-UUID_WIDTH-1:0] per_bank_req_tag_value;
-    wire [NUM_BANKS-1:0][`UP(UUID_WIDTH)-1:0] per_bank_req_uuid;
+    wire [NUM_BANKS-1:0][UUID_WIDTH-1:0] per_bank_req_uuid;
 
     wire [NUM_BANKS-1:0][TAG_WIDTH-UUID_WIDTH-1:0] per_bank_rsp_tag_value;
-    wire [NUM_BANKS-1:0][`UP(UUID_WIDTH)-1:0] per_bank_rsp_uuid;
+    wire [NUM_BANKS-1:0][UUID_WIDTH-1:0] per_bank_rsp_uuid;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_req_uuid
         assign per_bank_req_tag_value[i] = per_bank_req_tag[i][TAG_WIDTH-UUID_WIDTH-1:0];

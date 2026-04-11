@@ -305,6 +305,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_lmem_if.req_data.flags  = '0;
     assign tcu_lmem_if.req_data.tag    = '0;
     assign tcu_lmem_if.rsp_ready       = 1'b1;
+    `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)
 
     // -----------------------------------------------------------------------
     // Phase-done detection

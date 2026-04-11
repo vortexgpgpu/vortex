@@ -63,7 +63,7 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
 
     VX_mem_bus_if #(
         .DATA_SIZE (NUM_BANKS * WORD_SIZE),
-        .TAG_WIDTH (LMEM_DMA_TAG_W),
+        .TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
         .ADDR_WIDTH(BANK_ADDR_WIDTH)
     ) dma_bus_if();
 

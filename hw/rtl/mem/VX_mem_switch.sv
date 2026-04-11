@@ -20,6 +20,7 @@ module VX_mem_switch import VX_gpu_pkg::*; #(
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH     = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
     parameter TAG_WIDTH      = 1,
+    parameter FLAGS_WIDTH    = MEM_FLAGS_WIDTH,
     parameter REQ_OUT_BUF    = 0,
     parameter RSP_OUT_BUF    = 0,
     parameter `STRING ARBITER = "R",
@@ -35,7 +36,7 @@ module VX_mem_switch import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    bus_out_if [NUM_OUTPUTS]
 );
     localparam DATA_WIDTH = (8 * DATA_SIZE);
-    localparam REQ_DATAW  = TAG_WIDTH + ADDR_WIDTH + MEM_FLAGS_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
+    localparam REQ_DATAW  = TAG_WIDTH + ADDR_WIDTH + FLAGS_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
     localparam RSP_DATAW  = TAG_WIDTH + DATA_WIDTH;
 
     // handle requests ////////////////////////////////////////////////////////

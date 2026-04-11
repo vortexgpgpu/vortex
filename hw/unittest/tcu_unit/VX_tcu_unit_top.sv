@@ -81,7 +81,7 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
 
     VX_mem_bus_if #(
         .DATA_SIZE  (`LMEM_NUM_BANKS * (`XLEN / 8)),
-        .TAG_WIDTH  (`UP(UUID_WIDTH)),
+        .TAG_WIDTH  (UUID_WIDTH),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
     ) tcu_lmem_if();
 
