@@ -105,7 +105,11 @@ void dpi_assert(int inst, bool cond, int delay) {
 
   auto status = sr.top();
   if (status) {
+#ifndef NDEBUG
     printf("delayed assertion at %s!\n", svGetNameFromScope(svGetScope()));
+#else
+    printf("delayed assertion!\n");
+#endif
     std::abort();
   }
 }

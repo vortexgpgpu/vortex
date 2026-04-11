@@ -13,22 +13,26 @@
 
 `include "VX_define.vh"
 
-interface VX_dxa_req_bus_if import VX_gpu_pkg::*, VX_dxa_pkg::*; ();
+// DXA issue interface: carries request data + descriptor from dispatch to worker.
+interface VX_dxa_worker_req_if import VX_gpu_pkg::*, VX_dxa_pkg::*; ();
 
-    logic      req_valid;
+    logic          valid;
     dxa_req_data_t req_data;
-    logic      req_ready;
+    dxa_desc_t     desc_data;
+    logic          ready;
 
     modport master (
-        output req_valid,
+        output valid,
         output req_data,
-        input  req_ready
+        output desc_data,
+        input  ready
     );
 
     modport slave (
-        input  req_valid,
+        input  valid,
         input  req_data,
-        output req_ready
+        input  desc_data,
+        output ready
     );
 
 endinterface

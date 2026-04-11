@@ -43,25 +43,21 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [`XLEN-1:0] lane3_rs2 = execute_if.data.rs2_data[3];
     `UNUSED_VAR (lane3_rs2)
 
-    wire wb_ready;
+    // Build dxa_req payload
+    dxa_req_data_t dxa_req_data_in;
+    assign dxa_req_data_in.core_id   = NC_WIDTH'(CORE_ID);
+    assign dxa_req_data_in.uuid      = execute_if.data.header.uuid;
+    assign dxa_req_data_in.wid       = execute_if.data.header.wid;
+    assign dxa_req_data_in.smem_addr = lane0_rs1;
+    assign dxa_req_data_in.meta      = lane1_rs1;
+    assign dxa_req_data_in.coords[0] = lane2_rs1;
+    assign dxa_req_data_in.coords[1] = lane3_rs1;
+    assign dxa_req_data_in.coords[2] = lane0_rs2;
+    assign dxa_req_data_in.coords[3] = lane1_rs2;
+    assign dxa_req_data_in.coords[4] = lane2_rs2;
+    assign dxa_req_data_in.cta_mask  = lane3_rs2[`NUM_WARPS-1:0];
 
-    assign dxa_req_bus_if.req_valid = execute_if.valid && wb_ready && txbar_bus_if.ready;
-    assign dxa_req_bus_if.req_data.core_id   = NC_WIDTH'(CORE_ID);
-    assign dxa_req_bus_if.req_data.uuid      = execute_if.data.header.uuid;
-    assign dxa_req_bus_if.req_data.wid       = execute_if.data.header.wid;
-    assign dxa_req_bus_if.req_data.smem_addr = lane0_rs1;
-    assign dxa_req_bus_if.req_data.meta      = lane1_rs1;
-    assign dxa_req_bus_if.req_data.coords[0] = lane2_rs1;
-    assign dxa_req_bus_if.req_data.coords[1] = lane3_rs1;
-    assign dxa_req_bus_if.req_data.coords[2] = lane0_rs2;
-    assign dxa_req_bus_if.req_data.coords[3] = lane1_rs2;
-    assign dxa_req_bus_if.req_data.coords[4] = lane2_rs2;
-`ifdef EXT_DXA_MULTICAST_ENABLE
-    assign dxa_req_bus_if.req_data.cta_mask     = lane3_rs2[`NUM_WARPS-1:0];
-    assign dxa_req_bus_if.req_data.is_multicast = (execute_if.data.op_args.dxa.op == 3'd5);
-`endif
-
-    // meta[3:0]=desc_slot, meta[4+:NW_BITS]=bar_owner, meta[(4+BAR_ID_SHIFT)+:NB_BITS]=bar_slot
+    // Build txbar payload
     wire [BAR_ADDR_W-1:0] bar_addr;
     if (`NUM_WARPS > 1) begin : g_bar_addr
         assign bar_addr = {lane1_rs1[4 +: NW_BITS], lane1_rs1[(4 + BAR_ID_SHIFT) +: NB_BITS]};
@@ -69,9 +65,45 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign bar_addr = lane1_rs1[(4 + BAR_ID_SHIFT) +: NB_BITS];
     end
 
-    assign txbar_bus_if.valid       = execute_if.valid && wb_ready && dxa_req_bus_if.req_ready;
-    assign txbar_bus_if.data.addr   = bar_addr;
-    assign txbar_bus_if.data.is_done = 1'b0;
+    txbar_t txbar_data_in;
+    assign txbar_data_in.addr    = bar_addr;
+    assign txbar_data_in.is_done = 1'b0;
+
+    // Output elastic buffers break the UNOPTFLAT combinatorial loop
+    // between dxa_req_arb and txbar_arb through this unit.
+    wire dxa_buf_ready, txbar_buf_ready, wb_ready;
+    wire accept = dxa_buf_ready && txbar_buf_ready && wb_ready;
+    wire fire   = execute_if.valid && accept;
+
+    assign execute_if.ready = accept;
+
+    VX_elastic_buffer #(
+        .DATAW ($bits(dxa_req_data_t)),
+        .SIZE  (2)
+    ) dxa_req_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (fire),
+        .ready_in  (dxa_buf_ready),
+        .data_in   (dxa_req_data_in),
+        .valid_out (dxa_req_bus_if.req_valid),
+        .ready_out (dxa_req_bus_if.req_ready),
+        .data_out  (dxa_req_bus_if.req_data)
+    );
+
+    VX_elastic_buffer #(
+        .DATAW ($bits(txbar_t)),
+        .SIZE  (2)
+    ) txbar_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (fire),
+        .ready_in  (txbar_buf_ready),
+        .data_in   (txbar_data_in),
+        .valid_out (txbar_bus_if.valid),
+        .ready_out (txbar_bus_if.ready),
+        .data_out  (txbar_bus_if.data)
+    );
 
     sfu_header_t header_out;
 
@@ -81,7 +113,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (execute_if.valid && dxa_req_bus_if.req_ready && txbar_bus_if.ready),
+        .valid_in  (fire),
         .ready_in  (wb_ready),
         .data_in   (execute_if.data.header),
         .data_out  (header_out),
@@ -91,8 +123,6 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     assign result_if.data.header = header_out;
     assign result_if.data.data   = '0;
-
-    assign execute_if.ready = wb_ready && dxa_req_bus_if.req_ready && txbar_bus_if.ready;
 
 `ifdef DBG_TRACE_DXA
     always_ff @(posedge clk) begin
