@@ -140,7 +140,7 @@ dxa()
 
     # single-core without L2 cache
     CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa6
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
 
     # single-core with L2 cache
     CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa

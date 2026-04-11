@@ -86,9 +86,9 @@ module VX_core_top import VX_gpu_pkg::*; #(
     VX_dxa_req_bus_if dxa_req_bus_if();
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
-        .TAG_WIDTH   (`UP(UUID_WIDTH)),
-        .FLAGS_WIDTH (DXA_LMEM_FLAGS_WIDTH),
-        .ADDR_WIDTH  (DXA_LMEM_BANK_ADDR_WIDTH)
+        .TAG_WIDTH   (UUID_WIDTH+1),
+        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) dxa_lmem_bus_if();
 
     assign dxa_req_bus_if.req_valid = 1'b0;

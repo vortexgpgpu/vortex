@@ -113,64 +113,47 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     end
 
     // DMA arbiter: merge DXA writes and/or TCU reads onto single DMA port.
-    localparam DMA_DATA_SIZE  = `LMEM_NUM_BANKS * LSU_WORD_SIZE;
-    localparam DMA_ADDR_WIDTH = LMEM_ADDR_WIDTH - `CLOG2(`LMEM_NUM_BANKS);
-    localparam DMA_IN_TAG_W   = LMEM_DMA_TAG_W;
-`ifdef EXT_DXA_ENABLE
-`ifdef TCU_WGMMA_ENABLE
-    localparam NUM_DMA_INPUTS = 2;
-`else
-    localparam NUM_DMA_INPUTS = 1;
-`endif
-`elsif TCU_WGMMA_ENABLE
-    localparam NUM_DMA_INPUTS = 1;
-`else
-    localparam NUM_DMA_INPUTS = 0;
-`endif
-    localparam DMA_OUT_TAG_W = DMA_IN_TAG_W + (NUM_DMA_INPUTS > 1 ? `CLOG2(NUM_DMA_INPUTS) : 0);
 
     VX_mem_bus_if #(
-        .DATA_SIZE   (DMA_DATA_SIZE),
-        .TAG_WIDTH   (DMA_OUT_TAG_W),
+        .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+        .TAG_WIDTH   (LMEM_DMA_TAG_WIDTH),
         .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
-        .ADDR_WIDTH  (DMA_ADDR_WIDTH)
+        .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
     ) lmem_dma_if();
 
-    if (NUM_DMA_INPUTS > 0) begin : g_lmem_dma
+    localparam LMEM_DMA_IN_TAG_W = `MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W);
+
+    if (LMEM_DMA_INPUTS > 0) begin : g_lmem_dma
 
         VX_mem_bus_if #(
-            .DATA_SIZE   (DMA_DATA_SIZE),
-            .TAG_WIDTH   (DMA_IN_TAG_W),
+            .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+            .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
             .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
-            .ADDR_WIDTH  (DMA_ADDR_WIDTH)
-        ) dma_arb_in_if[NUM_DMA_INPUTS]();
+            .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
+        ) dma_arb_in_if[LMEM_DMA_INPUTS]();
 
         VX_mem_bus_if #(
-            .DATA_SIZE   (DMA_DATA_SIZE),
-            .TAG_WIDTH   (DMA_OUT_TAG_W),
+            .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+            .TAG_WIDTH   (LMEM_DMA_TAG_WIDTH),
             .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
-            .ADDR_WIDTH  (DMA_ADDR_WIDTH)
+            .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
         ) dma_arb_out_if[1]();
 
-
         // Wire DXA and/or TCU into the arbiter input array.
-        // Index 0 = DXA (highest priority), Index 1 = TCU (when both enabled).
     `ifdef EXT_DXA_ENABLE
-        `ASSIGN_VX_MEM_BUS_IF (dma_arb_in_if[0], dxa_lmem_bus_if);
-    `ifdef TCU_WGMMA_ENABLE
-        `ASSIGN_VX_MEM_BUS_IF (dma_arb_in_if[1], tcu_lmem_if);
+        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_DXA_IDX], dxa_lmem_bus_if, LMEM_DMA_IN_TAG_W, DXA_LMEM_OUT_TAG_W, UUID_WIDTH);
     `endif
-    `elsif TCU_WGMMA_ENABLE
-        `ASSIGN_VX_MEM_BUS_IF (dma_arb_in_if[0], tcu_lmem_if);
+    `ifdef TCU_WGMMA_ENABLE
+        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
     `endif
 
         VX_mem_arb #(
-            .NUM_INPUTS  (NUM_DMA_INPUTS),
+            .NUM_INPUTS  (LMEM_DMA_INPUTS),
             .NUM_OUTPUTS (1),
-            .DATA_SIZE   (DMA_DATA_SIZE),
-            .TAG_WIDTH   (DMA_IN_TAG_W),
+            .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+            .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
             .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
-            .ADDR_WIDTH  (DMA_ADDR_WIDTH),
+            .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH),
             .ARBITER     ("P")
         ) lmem_dma_arb (
             .clk         (clk),
@@ -192,12 +175,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         VX_dxa_completion #(
             .INSTANCE_ID (`SFORMATF(("%s-lmem-dma-compl_det", INSTANCE_ID))),
             .NUM_BANKS   (`LMEM_NUM_BANKS),
-            .FLAGS_WIDTH (DXA_LMEM_FLAGS_WIDTH)
+            .FLAGS_WIDTH (DXA_LMEM_FLAGS_W)
         ) dxa_completion_detect (
             .clk           (clk),
             .reset         (reset),
             .bank_wr_fire  (dxa_bank_wr_fire),
-            .bank_wr_flags (DXA_LMEM_FLAGS_WIDTH'(lmem_dma_if.req_data.flags)),
+            .bank_wr_flags (DXA_LMEM_FLAGS_W'(lmem_dma_if.req_data.flags)),
             .txbar_bus_if  (dxa_txbar_bus_if)
         );
 
@@ -232,7 +215,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
         .TAG_WIDTH   (LSU_TAG_WIDTH),
         .DMA_ENABLE  (LMEM_DMA_EN),
-        .DMA_TAG_WIDTH (DMA_OUT_TAG_W),
+        .DMA_TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
         .OUT_BUF     (3)
     ) local_mem (
         .clk         (clk),

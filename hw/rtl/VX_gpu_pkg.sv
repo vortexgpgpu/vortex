@@ -916,27 +916,31 @@ package VX_gpu_pkg;
 `ifdef EXT_DXA_ENABLE
     // DXA local-memory path: dimensioned to cover all banks in one request.
     localparam DXA_LMEM_WORD_SIZE   = `LMEM_NUM_BANKS * (`XLEN / 8);
-    localparam DXA_LMEM_ADDR_WIDTH  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_LMEM_WORD_SIZE));
-    // DXA completion flags: {last_pkt, bar_addr} — carried in VX_mem_bus_if.flags.
-    localparam DXA_LMEM_FLAGS_WIDTH = (BAR_ADDR_W + 1);
-    // Bank-level address width for DXA LMEM writes (word-addressed within one bank).
-    localparam DXA_LMEM_BANK_ADDR_WIDTH = (`LMEM_LOG_SIZE - `CLOG2(`XLEN / 8) - `CLOG2(`LMEM_NUM_BANKS));
+    localparam DXA_LMEM_ADDR_W  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_LMEM_WORD_SIZE));
 `endif
 
-    // LMEM DMA port tag/flags widths and enable flag.
-    // DXA completion info (bar_addr + last_pkt) is carried in flags;
-    // tag is minimal in all cases.
-    localparam LMEM_DMA_TAG_W = `UP(UUID_WIDTH) + 1;
-`ifdef EXT_DXA_ENABLE
-    localparam LMEM_DMA_FLAGS_W = DXA_LMEM_FLAGS_WIDTH;
-    localparam LMEM_DMA_EN      = 1;
-`elsif TCU_WGMMA_ENABLE
-    localparam LMEM_DMA_FLAGS_W = MEM_FLAGS_WIDTH;
-    localparam LMEM_DMA_EN      = 1;
+    // DXA/TCU lmem tag and flags widths (unconditional for DMA arb sizing).
+    localparam DXA_LMEM_FLAGS_W = (BAR_ADDR_W + 1);
+    localparam TCU_LMEM_FLAGS_W = 1;
+    localparam LMEM_DXA_ENGINE_TAG_W = UUID_WIDTH + 1;
+    localparam DXA_LMEM_TAG_W = LMEM_DXA_ENGINE_TAG_W + NC_BITS;
+`ifdef NUM_DXA_UNITS
+    localparam DXA_LMEM_ARB_BITS = `ARB_SEL_BITS(`NUM_DXA_UNITS, 1);
 `else
-    localparam LMEM_DMA_FLAGS_W = MEM_FLAGS_WIDTH;
-    localparam LMEM_DMA_EN      = 0;
+    localparam DXA_LMEM_ARB_BITS = 0;
 `endif
+    localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + DXA_LMEM_ARB_BITS;
+    localparam TCU_LMEM_TAG_W = (UUID_WIDTH + 1) + `ARB_SEL_BITS(`NUM_TCU_BLOCKS, 1);
+
+    // LMEM DMA port parameters.
+    localparam LMEM_DMA_EN         = (`EXT_DXA_ENABLED + `TCU_WGMMA_ENABLED) != 0;
+    localparam LMEM_DMA_DATA_SIZE  = `LMEM_NUM_BANKS * LSU_WORD_SIZE;
+    localparam LMEM_DMA_ADDR_WIDTH = `MEM_ADDR_WIDTH - `CLOG2(`LMEM_NUM_BANKS * LSU_WORD_SIZE);
+    localparam LMEM_DMA_FLAGS_W    = `MAX(DXA_LMEM_FLAGS_W, TCU_LMEM_FLAGS_W);
+    localparam LMEM_DMA_DXA_IDX    = 0;
+    localparam LMEM_DMA_TCU_IDX    = LMEM_DMA_DXA_IDX + `EXT_DXA_ENABLED;
+    localparam LMEM_DMA_INPUTS     = `EXT_DXA_ENABLED + `TCU_WGMMA_ENABLED;
+    localparam LMEM_DMA_TAG_WIDTH  = `MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W) + `ARB_SEL_BITS(LMEM_DMA_INPUTS, 1);
 
     ////////////////////////// Icache Parameters //////////////////////////////
 

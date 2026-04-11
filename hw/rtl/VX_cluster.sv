@@ -113,14 +113,18 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .DATA_SIZE (`L1_LINE_SIZE),
         .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
     ) dxa_gmem_bus_if[DXA_L2_GMEM_PORTS]();
-    localparam DXA_CORE_LOCAL_BITS = `CLOG2(`SOCKET_SIZE);
-    localparam DXA_NUM_LMEM_OUTPUTS = NUM_SOCKETS * `SOCKET_SIZE;
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
-        .TAG_WIDTH   (LMEM_DMA_TAG_W),
-        .FLAGS_WIDTH (DXA_LMEM_FLAGS_WIDTH),
-        .ADDR_WIDTH  (DXA_LMEM_BANK_ADDR_WIDTH)
-    ) dxa_lmem_bus_if[DXA_NUM_LMEM_OUTPUTS]();
+        .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+    ) dxa_lmem_bus_if[1]();
+    VX_mem_bus_if #(
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+    ) per_socket_dxa_lmem_bus_if[NUM_SOCKETS]();
 `endif
 
     VX_mem_bus_if #(
@@ -163,10 +167,9 @@ module VX_cluster import VX_gpu_pkg::*; #(
 `ifdef EXT_DXA_ENABLE
     VX_dxa_core #(
         .INSTANCE_ID      (`SFORMATF(("%s-dxa-core", INSTANCE_ID))),
-        .DXA_NUM_SOCKETS  (NUM_SOCKETS),
+        .NUM_REQS     (NUM_SOCKETS),
         .NUM_DXA_UNITS    (`NUM_DXA_UNITS),
-        .GMEM_OUT_PORTS   (DXA_L2_GMEM_PORTS),
-        .CORE_LOCAL_BITS  (DXA_CORE_LOCAL_BITS)
+        .GMEM_OUT_PORTS   (DXA_L2_GMEM_PORTS)
     ) dxa_core (
         .clk              (clk),
         .reset            (reset),
@@ -175,9 +178,36 @@ module VX_cluster import VX_gpu_pkg::*; #(
     `endif
         .dcr_bus_if       (per_socket_dcr_bus_if[NUM_SOCKETS]),
         .req_bus_if       (per_socket_dxa_req_bus_if),
-        .lmem_bus_if      (dxa_lmem_bus_if),
+        .smem_bus_if      (dxa_lmem_bus_if),
         .gmem_bus_if      (dxa_gmem_bus_if),
         `UNUSED_PIN (busy)
+    );
+
+    // Route DXA lmem requests to per-socket buses using core_id from tag.
+    // Tag value layout: {core_id[NC_BITS-1:0], engine_value[0]}
+    // socket_id = core_id[CORE_LOCAL_BITS +: SOCKET_SEL_BITS]
+    localparam DXA_LMEM_CORE_LOCAL_BITS = `CLOG2(`SOCKET_SIZE);
+    localparam DXA_LMEM_SOCKET_SEL_BITS = `CLOG2(NUM_SOCKETS);
+    wire [`UP(DXA_LMEM_SOCKET_SEL_BITS)-1:0] dxa_lmem_socket_sel;
+    if (NUM_SOCKETS > 1) begin : g_dxa_lmem_sel
+        assign dxa_lmem_socket_sel = dxa_lmem_bus_if[0].req_data.tag.value[1 + DXA_LMEM_CORE_LOCAL_BITS +: DXA_LMEM_SOCKET_SEL_BITS];
+    end else begin : g_dxa_lmem_sel
+        assign dxa_lmem_socket_sel = '0;
+    end
+
+    VX_mem_switch #(
+        .NUM_INPUTS  (1),
+        .NUM_OUTPUTS (NUM_SOCKETS),
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+    ) dxa_lmem_socket_switch (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_sel    (dxa_lmem_socket_sel),
+        .bus_in_if  (dxa_lmem_bus_if),
+        .bus_out_if (per_socket_dxa_lmem_bus_if)
     );
 
     // LSU+DXA arb: LSU gets priority ("P") to prevent DXA bulk traffic from
@@ -280,7 +310,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
         `ifdef EXT_DXA_ENABLE
             .dxa_req_bus_if (per_socket_dxa_req_bus_if[socket_id]),
-            .dxa_lmem_bus_if(dxa_lmem_bus_if[socket_id * `SOCKET_SIZE +: `SOCKET_SIZE]),
+            .dxa_lmem_bus_if(per_socket_dxa_lmem_bus_if[socket_id +: 1]),
         `endif
 
             .kmu_bus_if     (per_socket_kmu_bus_if[socket_id +: 1]),

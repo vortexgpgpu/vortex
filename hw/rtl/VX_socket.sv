@@ -40,8 +40,8 @@ module VX_socket import VX_gpu_pkg::*;
 `ifdef EXT_DXA_ENABLE
     // DXA control path
     VX_dxa_req_bus_if.master dxa_req_bus_if,
-    // DXA LMEM write path (one port per core)
-    VX_mem_bus_if.slave     dxa_lmem_bus_if [`SOCKET_SIZE],
+    // DXA LMEM write path
+    VX_mem_bus_if.slave     dxa_lmem_bus_if [1],
 `endif
 
     // KMU bus
@@ -236,51 +236,55 @@ module VX_socket import VX_gpu_pkg::*;
 
 `ifdef EXT_DXA_ENABLE
 
-    // DXA control request: N:1 arbitration from per-core to cluster
     VX_dxa_req_bus_if per_core_dxa_req_bus_if[`SOCKET_SIZE]();
+    VX_dxa_req_bus_if dxa_req_arb_out_if[1]();
 
-    localparam DXA_REQ_DATAW_LOCAL = NC_WIDTH + UUID_WIDTH + NW_WIDTH + (7 * `XLEN)
-`ifdef EXT_DXA_MULTICAST_ENABLE
-        + 1 + `NUM_WARPS
-`endif
-        ;
-    wire [`SOCKET_SIZE-1:0] dxa_req_valid_in;
-    wire [`SOCKET_SIZE-1:0][DXA_REQ_DATAW_LOCAL-1:0] dxa_req_data_in;
-    wire [`SOCKET_SIZE-1:0] dxa_req_ready_in;
-
-    for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin : g_dxa_req_in
-        assign dxa_req_valid_in[i] = ~reset && per_core_dxa_req_bus_if[i].req_valid;
-        assign dxa_req_data_in[i] = per_core_dxa_req_bus_if[i].req_data;
-        assign per_core_dxa_req_bus_if[i].req_ready = dxa_req_ready_in[i];
-    end
-
-    wire [0:0] dxa_req_valid_out;
-    wire [0:0][DXA_REQ_DATAW_LOCAL-1:0] dxa_req_data_out;
-    wire [0:0] dxa_req_ready_out;
-
-    VX_stream_arb #(
-        .NUM_INPUTS  (`SOCKET_SIZE),
-        .NUM_OUTPUTS (1),
-        .DATAW       (DXA_REQ_DATAW_LOCAL),
-        .ARBITER     ("R"),
-        .OUT_BUF     (2)
+    VX_dxa_req_arb #(
+        .NUM_INPUTS (`SOCKET_SIZE),
+        .OUT_BUF    ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) dxa_req_arb (
         .clk        (clk),
         .reset      (reset),
-        .valid_in   (dxa_req_valid_in),
-        .data_in    (dxa_req_data_in),
-        .ready_in   (dxa_req_ready_in),
-        .valid_out  (dxa_req_valid_out),
-        .data_out   (dxa_req_data_out),
-        .ready_out  (dxa_req_ready_out),
-        `UNUSED_PIN (sel_out)
+        .bus_in_if  (per_core_dxa_req_bus_if),
+        .bus_out_if (dxa_req_arb_out_if)
     );
 
-    assign dxa_req_bus_if.req_valid = dxa_req_valid_out[0];
-    assign dxa_req_bus_if.req_data  = dxa_req_data_out[0];
-    assign dxa_req_ready_out[0] = dxa_req_bus_if.req_ready;
+    assign dxa_req_bus_if.req_valid = dxa_req_arb_out_if[0].req_valid;
+    assign dxa_req_bus_if.req_data  = dxa_req_arb_out_if[0].req_data;
+    assign dxa_req_arb_out_if[0].req_ready = dxa_req_bus_if.req_ready;
 
-    // DXA LMEM writes: 1:1 mapping from cluster to per-core
+    // Route DXA lmem requests to per-core buses using core_local_id from tag.
+    // Tag value layout: {core_id[NC_BITS-1:0], engine_value[0]}
+    // core_local_id = core_id[CORE_LOCAL_BITS-1:0]
+    localparam DXA_LMEM_CORE_LOCAL_BITS = `CLOG2(`SOCKET_SIZE);
+    VX_mem_bus_if #(
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+    ) per_core_dxa_lmem_bus_if[`SOCKET_SIZE]();
+
+    wire [`UP(DXA_LMEM_CORE_LOCAL_BITS)-1:0] dxa_lmem_core_sel;
+    if (`SOCKET_SIZE > 1) begin : g_dxa_lmem_sel
+        assign dxa_lmem_core_sel = dxa_lmem_bus_if[0].req_data.tag.value[1 +: DXA_LMEM_CORE_LOCAL_BITS];
+    end else begin : g_dxa_lmem_sel
+        assign dxa_lmem_core_sel = '0;
+    end
+
+    VX_mem_switch #(
+        .NUM_INPUTS  (1),
+        .NUM_OUTPUTS (`SOCKET_SIZE),
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+    ) dxa_lmem_core_switch (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_sel    (dxa_lmem_core_sel),
+        .bus_in_if  (dxa_lmem_bus_if),
+        .bus_out_if (per_core_dxa_lmem_bus_if)
+    );
 
 `endif
 
@@ -334,7 +338,7 @@ module VX_socket import VX_gpu_pkg::*;
 
         `ifdef EXT_DXA_ENABLE
             .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),
-            .dxa_lmem_bus_if(dxa_lmem_bus_if[core_id]),
+            .dxa_lmem_bus_if(per_core_dxa_lmem_bus_if[core_id]),
         `endif
 
             .kmu_bus_if     (per_core_kmu_bus_if[core_id]),

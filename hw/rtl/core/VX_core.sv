@@ -79,10 +79,8 @@ module VX_core import VX_gpu_pkg::*; #(
     localparam TCU_LMEM_BANK_ADDR_W = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`LMEM_NUM_BANKS);
     VX_mem_bus_if #(
         .DATA_SIZE  (`LMEM_NUM_BANKS * LSU_WORD_SIZE),
-        .TAG_WIDTH  (LMEM_DMA_TAG_W),
-    `ifdef EXT_DXA_ENABLE
-        .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
-    `endif
+        .TAG_WIDTH  (TCU_LMEM_TAG_W),
+        .FLAGS_WIDTH(LMEM_TCU_FLAGS_W),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
     ) tcu_lmem_if();
 `endif
