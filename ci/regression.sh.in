@@ -116,30 +116,51 @@ dxa()
     make -C runtime/simx
     make -C runtime/rtlsim
 
-    # Default config: 4 threads * 4 warps = 16 threads/core, so use 4x4 tiles
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-R4 -C4" --debug=3
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-R4 -C4" --debug=3
+    # dxa_copy 1D-5D
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d1" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d2" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d3" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d4" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d5" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d1" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d2" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d3" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d4" --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d5" --debug=3
+
+    # dxa_multicast
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_multicast --debug=3
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_multicast --debug=3
+
+    CONFIGS="-DEXT_DXA_ENABLE -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=8
+    CONFIGS="-DEXT_DXA_ENABLE -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=8
 
     CONFIGS="-DEXT_DXA_ENABLE -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=32 --perf=6
     CONFIGS="-DEXT_DXA_ENABLE -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=32 --perf=6
 
     # single-core without L2 cache
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1"
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1"
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1"  --threads=32 --perf=6
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1" --threads=32 --perf=6
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
+    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa6
 
     # single-core with L2 cache
-    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1" --perf=6
-    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1" --perf=6
-    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1"  --threads=32 --perf=6
-    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1"  --threads=32 --perf=6
+    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa
+    CONFIGS="-DEXT_DXA_ENABLE -DL2_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa
+
+    # multi-core without L2 cache
+    CONFIGS="-DEXT_DXA_ENABLE -DSTALL_TIMEOUT=1000000"" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2
+    CONFIGS="-DEXT_DXA_ENABLE -DSTALL_TIMEOUT=1000000"" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2
 
     # multi-core with L2 cache
-    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1" --cores=4
-    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1" --cores=4
-    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --args="-n16 -t4 -m1"  --threads=32 --cores=4 --perf=6
-    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --args="-n16 -t4 -m1"  --threads=32 --cores=4 --perf=6
+    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2
+    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2
+
+    # multi-core with 2 sockets
+    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSOCKET_SIZE=2 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=4
+    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSOCKET_SIZE=2 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=4
+
+    # multi-core with 2 clusters
+    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=simx --app=sgemm2_dxa --cores=2 --clusters=2
+    CONFIGS="-DEXT_DXA_ENABLE -DNUM_DXA_UNITS=4 -DSTALL_TIMEOUT=1000000" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_dxa --cores=2 --clusters=2
 
     echo "dxa tests done!"
 }
