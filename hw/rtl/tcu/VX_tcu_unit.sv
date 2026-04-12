@@ -82,8 +82,6 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [PERF_CTR_BITS-1:0]     lmem_reads_b        [BLOCK_SIZE];
 `endif
 
-    localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH;
-
     VX_mem_bus_if #(
         .DATA_SIZE  (`LMEM_NUM_BANKS * (`XLEN / 8)),
         .TAG_WIDTH  (TCU_LMEM_BLK_TAG_W),

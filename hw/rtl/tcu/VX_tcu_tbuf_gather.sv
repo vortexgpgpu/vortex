@@ -88,14 +88,17 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // B-buffer stride shift amounts (replaces runtime actual_N multiply).
     // actual_N = {8,16,32} for cd_nregs = {0,1,2}, always a power of 2.
-    // Using shift+OR instead of multiply removes the multiplier from the
-    // critical path: b_buf index = (row << shift) | col.
-    //   fp32 stride = actual_N   → shift = 3 + cd_nregs
-    //   fp16 stride = actual_N/2 → shift = 2 + cd_nregs
-    //   fp8  stride = actual_N/4 → shift = 1 + cd_nregs
-    wire [2:0] b_stride_shift_32 = 3'd3 + {1'b0, req_cd_nregs};
-    wire [2:0] b_stride_shift_16 = 3'd2 + {1'b0, req_cd_nregs};
-    wire [2:0] b_stride_shift_8  = 3'd1 + {1'b0, req_cd_nregs};
+    // Kernel row stride in B smem = xtileN = (NRC * NT) / xtileM, so the
+    // buffer row stride is actual_N * (TCU_NT / TCU_WG_TILE_M). For NT=8
+    // the factor is 1; for NT=16/32 it is 2 (xtileM=2*tcM scales with NT
+    // in the en==em case but lags otherwise).
+    //   fp32 stride = actual_N   × N_FACTOR → shift = 3 + cd_nregs + LG_N_FACTOR
+    //   fp16 stride = actual_N/2 × N_FACTOR → shift = 2 + cd_nregs + LG_N_FACTOR
+    //   fp8  stride = actual_N/4 × N_FACTOR → shift = 1 + cd_nregs + LG_N_FACTOR
+    localparam LG_N_FACTOR = $clog2(TCU_NT / TCU_WG_TILE_M);
+    wire [2:0] b_stride_shift_32 = 3'd3 + 3'(LG_N_FACTOR) + {1'b0, req_cd_nregs};
+    wire [2:0] b_stride_shift_16 = 3'd2 + 3'(LG_N_FACTOR) + {1'b0, req_cd_nregs};
+    wire [2:0] b_stride_shift_8  = 3'd1 + 3'(LG_N_FACTOR) + {1'b0, req_cd_nregs};
 
     localparam LG_A_BS  = $clog2(TCU_A_BLOCK_SIZE);
     localparam LG_B_BS  = $clog2(TCU_B_BLOCK_SIZE);
