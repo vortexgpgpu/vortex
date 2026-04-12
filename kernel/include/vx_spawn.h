@@ -60,7 +60,7 @@ static __attribute__((always_inline)) uint32_t get_num_sub_groups() {
 
 
 #define __local_mem(size) \
-  (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + __local_group_id() * size)
+  (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + get_local_group_id() * size)
 
 #define __syncthreads() \
   vx_barrier(get_local_group_id(), get_num_sub_groups())
