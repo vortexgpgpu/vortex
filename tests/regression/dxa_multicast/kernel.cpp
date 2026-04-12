@@ -9,7 +9,7 @@
 constexpr uint32_t kDescSrc = 0;
 
 __kernel void kernel_main(kernel_arg_t* arg) {
-  const uint32_t cta_id = csr_read(VX_CSR_CTA_ID);
+  const uint32_t cta_id = get_local_group_id();
 
   // Early exit for inactive CTAs (active_ctas == 0 means all active)
   const uint32_t active = arg->active_ctas;
@@ -26,7 +26,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   auto shmem = reinterpret_cast<TYPE*>(__local_mem());
 
   vortex::barrier bar(0);
-  const bool is_dxa_warp = (csr_read(VX_CSR_CTA_RANK) == 0);
+  const bool is_dxa_warp = (get_sub_group_id() == 0);
 
 #ifdef EXT_DXA_ENABLE
   // ── Multicast path: CTA 0 issues one DXA copy, data replayed to all CTAs ──

@@ -155,7 +155,31 @@ inline void vx_dxa_issue_5d_wg(uint32_t desc_slot,
 }
 
 // Multicast DXA issues read GMEM once and replay SMEM writes to multiple
-// CTAs within the same SM core.  funct3=5 for 2D multicast.
+// CTAs within the same SM core.
+
+// 1D multicast: rs2 = wgather(0, 0, 0, cta_mask)
+inline void vx_dxa_issue_1d_multicast_wg(uint32_t desc_slot,
+                                          uint32_t barrier_id,
+                                          const void* smem_addr,
+                                          uint32_t coord0,
+                                          uint32_t cta_mask) {
+  const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)0u);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)0,
+                                            (size_t)0,
+                                            (size_t)0,
+                                            (size_t)cta_mask);
+  __asm__ volatile (
+      ".insn r %0, 0, %1, x0, %2, %3\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
+      : "memory");
+}
+
+// 2D multicast: rs2 = wgather(0, 0, 0, cta_mask)
 inline void vx_dxa_issue_2d_multicast_wg(uint32_t desc_slot,
                                           uint32_t barrier_id,
                                           const void* smem_addr,
@@ -172,7 +196,82 @@ inline void vx_dxa_issue_2d_multicast_wg(uint32_t desc_slot,
                                             (size_t)0,
                                             (size_t)cta_mask);
   __asm__ volatile (
-      ".insn r %0, 5, %1, x0, %2, %3\n\t"
+      ".insn r %0, 0, %1, x0, %2, %3\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
+      : "memory");
+}
+
+// 3D multicast: rs2 = wgather(coord2, 0, 0, cta_mask)
+inline void vx_dxa_issue_3d_multicast_wg(uint32_t desc_slot,
+                                          uint32_t barrier_id,
+                                          const void* smem_addr,
+                                          uint32_t coord0,
+                                          uint32_t coord1,
+                                          uint32_t coord2,
+                                          uint32_t cta_mask) {
+  const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+                                            (size_t)0,
+                                            (size_t)0,
+                                            (size_t)cta_mask);
+  __asm__ volatile (
+      ".insn r %0, 0, %1, x0, %2, %3\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
+      : "memory");
+}
+
+// 4D multicast: rs2 = wgather(coord2, coord3, 0, cta_mask)
+inline void vx_dxa_issue_4d_multicast_wg(uint32_t desc_slot,
+                                          uint32_t barrier_id,
+                                          const void* smem_addr,
+                                          uint32_t coord0,
+                                          uint32_t coord1,
+                                          uint32_t coord2,
+                                          uint32_t coord3,
+                                          uint32_t cta_mask) {
+  const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+                                            (size_t)coord3,
+                                            (size_t)0,
+                                            (size_t)cta_mask);
+  __asm__ volatile (
+      ".insn r %0, 0, %1, x0, %2, %3\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
+      : "memory");
+}
+
+// 5D multicast: rs2 = wgather(coord2, coord3, coord4, cta_mask)
+inline void vx_dxa_issue_5d_multicast_wg(uint32_t desc_slot,
+                                          uint32_t barrier_id,
+                                          const void* smem_addr,
+                                          uint32_t coord0,
+                                          uint32_t coord1,
+                                          uint32_t coord2,
+                                          uint32_t coord3,
+                                          uint32_t coord4,
+                                          uint32_t cta_mask) {
+  const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+                                            (size_t)coord3,
+                                            (size_t)coord4,
+                                            (size_t)cta_mask);
+  __asm__ volatile (
+      ".insn r %0, 0, %1, x0, %2, %3\n\t"
       :
       : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
       : "memory");

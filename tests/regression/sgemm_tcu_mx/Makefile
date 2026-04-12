@@ -1,6 +1,9 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
+CONFIGS := $(if $(findstring -DEXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DEXT_TCU_ENABLE)
+CONFIGS := $(if $(findstring -DTCU_MX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DTCU_MX_ENABLE)
+
 PROJECT := sgemm_tcu_mx
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)

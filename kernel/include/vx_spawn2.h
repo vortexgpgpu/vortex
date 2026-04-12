@@ -114,25 +114,28 @@ static const BlockIdx  blockIdx;
 static const BlockDim  blockDim;
 static const GridDim   gridDim;
 
-static __attribute__((always_inline)) uint32_t get_local_cta_id() {
+static __attribute__((always_inline)) uint32_t get_local_group_id() {
   uint32_t __UNIFORM__ v;
   __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_ID));
   return v;
 }
 
-static __attribute__((always_inline)) uint32_t get_warps_per_cta() {
+static __attribute__((always_inline)) uint32_t get_sub_group_id() {
+  uint32_t __UNIFORM__ v;
+  __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_RANK));
+  return v;
+}
+
+static __attribute__((always_inline)) uint32_t get_num_sub_groups() {
   uint32_t __UNIFORM__ v;
   __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(VX_CSR_CTA_SIZE));
   return v;
 }
 
-#define __local_group_id get_local_cta_id()
-#define __warps_per_group get_warps_per_cta()
-
 #define __local_mem() \
   (void*)(csr_read(VX_CSR_CTA_LMEM_ADDR))
 
 #define __syncthreads() \
-  vx_barrier(csr_read(VX_CSR_CTA_ID), csr_read(VX_CSR_CTA_SIZE))
+  vx_barrier(get_local_group_id(), get_num_sub_groups())
 
 #endif // __VX_SPAWN2_H__

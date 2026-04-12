@@ -1,6 +1,9 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
+CONFIGS := $(if $(findstring -DEXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DEXT_TCU_ENABLE)
+CONFIGS := $(if $(findstring -DEXT_DXA_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DEXT_DXA_ENABLE)
+
 PROJECT := sgemm_tcu_wg_sp_dxa
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
@@ -9,7 +12,7 @@ SRCS := $(SRC_DIR)/main.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/softf
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
-CONFIGS += -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+CONFIGS += -DTCU_WGMMA_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8
 
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 

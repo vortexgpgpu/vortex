@@ -1046,7 +1046,7 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
       }
     } break;
 #ifdef EXT_DXA_ENABLE
-    case 3: { // DXA issue (wgather-based: single instruction carries all args)
+    case 3: { // DXA issue
       instr->set_fu_type(FUType::SFU);
       IntrDxaArgs dxaArgs{};
       instr->set_args(dxaArgs);

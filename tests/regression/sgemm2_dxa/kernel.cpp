@@ -58,7 +58,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // cta_rank is the warp's position within its CTA, assigned by the KMU/CTA
   // dispatcher. This is stable across CTA recycling, unlike the global warp_id
   // which can be assigned non-consecutively when warps are reused.
-  const bool is_dxa_warp = (csr_read(VX_CSR_CTA_RANK) == 0);
+  const bool is_dxa_warp = (get_sub_group_id() == 0);
 
   if (mode == 2) {
     // ── Double-buffered pipeline ──────────────────────────────────────

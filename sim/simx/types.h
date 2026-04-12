@@ -515,8 +515,11 @@ enum class DxaType {
 
 struct IntrDxaArgs {};
 
-inline std::ostream &operator<<(std::ostream &os, const DxaType& /*type*/) {
-  os << "DXA.ISSUE";
+inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
+  switch (type) {
+  case DxaType::ISSUE: os << "DXA.ISSUE"; break;
+  default: os << "?"; break;
+  }
   return os;
 }
 

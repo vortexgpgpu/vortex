@@ -2,10 +2,7 @@
 #define _COMMON_H_
 
 #include <stdint.h>
-
-#ifndef NUM_THREADS
-#define NUM_THREADS 8
-#endif
+#include <VX_config.h>
 
 #ifndef WGMMA_NRC
   #define WGMMA_NRC 32

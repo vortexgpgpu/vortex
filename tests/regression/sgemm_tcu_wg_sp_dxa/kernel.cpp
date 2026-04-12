@@ -49,7 +49,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   vortex::barrier bar(0);
 
   // Only the first warp in the CTA issues DXA commands.
-  const bool is_dxa_warp = (csr_read(VX_CSR_CTA_RANK) == 0);
+  const bool is_dxa_warp = (get_sub_group_id() == 0);
 
   uint32_t meta_words_per_tile = ctx::wg_meta_total_bytes / 4;
 

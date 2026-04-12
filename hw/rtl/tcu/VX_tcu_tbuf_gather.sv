@@ -86,18 +86,16 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `UNUSED_PARAM (TILE_M)
     `UNUSED_PARAM (TILE_N)
 
-    // Actual per-warp N dimension from cd_nregs: 0→8, 1→16, 2→32
-    // per_warp_N = NRC * NT / TILE_M (in output-type columns)
-    localparam NT_DIV_TM = TCU_NT / TILE_M;
-    reg [5:0] wg_nrc;
-    always_comb begin
-        case (req_cd_nregs)
-            2'd0: wg_nrc = 6'd8;
-            2'd1: wg_nrc = 6'd16;
-            default: wg_nrc = 6'd32;
-        endcase
-    end
-    wire [6:0] actual_N = 7'(wg_nrc) * NT_DIV_TM[2:0];
+    // B-buffer stride shift amounts (replaces runtime actual_N multiply).
+    // actual_N = {8,16,32} for cd_nregs = {0,1,2}, always a power of 2.
+    // Using shift+OR instead of multiply removes the multiplier from the
+    // critical path: b_buf index = (row << shift) | col.
+    //   fp32 stride = actual_N   → shift = 3 + cd_nregs
+    //   fp16 stride = actual_N/2 → shift = 2 + cd_nregs
+    //   fp8  stride = actual_N/4 → shift = 1 + cd_nregs
+    wire [2:0] b_stride_shift_32 = 3'd3 + {1'b0, req_cd_nregs};
+    wire [2:0] b_stride_shift_16 = 3'd2 + {1'b0, req_cd_nregs};
+    wire [2:0] b_stride_shift_8  = 3'd1 + {1'b0, req_cd_nregs};
 
     localparam LG_A_BS  = $clog2(TCU_A_BLOCK_SIZE);
     localparam LG_B_BS  = $clog2(TCU_B_BLOCK_SIZE);
@@ -176,7 +174,7 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             // Sparse: pack candidate pairs (b_k0, b_k1) into each lane.
             // Use j directly (no SYM_SPARSE folding) so all TCU_TC_N columns
             // get distinct lanes in the wider TCU_WG_RS2_WIDTH output.
-            // Use actual_N (runtime) instead of TILE_N (max) for B row stride.
+            // B row stride = actual_N (power of 2); use shift+OR indexing.
             for (int j = 0; j < TCU_TC_N; ++j) begin
                 for (int k = 0; k < TCU_TC_K; ++k) begin
                     automatic int b_k0  = int'(req_step_k) * TCU_TC_K * 2 + k * 2;
@@ -184,23 +182,20 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     automatic int b_col = int'(req_step_n) * TCU_TC_N + j;
                     automatic int lane0 = j * TCU_TC_K * 2 + k * 2;
                     automatic int lane1 = lane0 + 1;
-                    automatic int bN    = int'(actual_N);
                     // Candidate b_k0
                     if (b_k0 < TILE_K) begin
                         case (tcu_fmt_width(req_fmt_s))
                             32:
-                                rs2_mux[lane0] = `XLEN'(b_buf[b_k0 * bN + b_col]);
+                                rs2_mux[lane0] = `XLEN'(b_buf[(b_k0 << b_stride_shift_32) | b_col]);
                             16: begin
-                                automatic int bN_w = bN >> 1;
-                                rs2_mux[lane0][ 0+:16] = b_buf[(b_k0*2+0)*bN_w + b_col/2][(b_col%2)*16+:16];
-                                rs2_mux[lane0][16+:16] = b_buf[(b_k0*2+1)*bN_w + b_col/2][(b_col%2)*16+:16];
+                                rs2_mux[lane0][ 0+:16] = b_buf[((b_k0*2+0) << b_stride_shift_16) | (b_col/2)][(b_col%2)*16+:16];
+                                rs2_mux[lane0][16+:16] = b_buf[((b_k0*2+1) << b_stride_shift_16) | (b_col/2)][(b_col%2)*16+:16];
                             end
                             default: begin // fp8/bf8/int8/uint8
-                                automatic int bN_w = bN >> 2;
-                                rs2_mux[lane0][ 0+:8] = b_buf[(b_k0*4+0)*bN_w + b_col/4][(b_col%4)*8+:8];
-                                rs2_mux[lane0][ 8+:8] = b_buf[(b_k0*4+1)*bN_w + b_col/4][(b_col%4)*8+:8];
-                                rs2_mux[lane0][16+:8] = b_buf[(b_k0*4+2)*bN_w + b_col/4][(b_col%4)*8+:8];
-                                rs2_mux[lane0][24+:8] = b_buf[(b_k0*4+3)*bN_w + b_col/4][(b_col%4)*8+:8];
+                                rs2_mux[lane0][ 0+:8] = b_buf[((b_k0*4+0) << b_stride_shift_8) | (b_col/4)][(b_col%4)*8+:8];
+                                rs2_mux[lane0][ 8+:8] = b_buf[((b_k0*4+1) << b_stride_shift_8) | (b_col/4)][(b_col%4)*8+:8];
+                                rs2_mux[lane0][16+:8] = b_buf[((b_k0*4+2) << b_stride_shift_8) | (b_col/4)][(b_col%4)*8+:8];
+                                rs2_mux[lane0][24+:8] = b_buf[((b_k0*4+3) << b_stride_shift_8) | (b_col/4)][(b_col%4)*8+:8];
                             end
                         endcase
                     end
@@ -208,18 +203,16 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     if (b_k1 < TILE_K) begin
                         case (tcu_fmt_width(req_fmt_s))
                             32:
-                                rs2_mux[lane1] = `XLEN'(b_buf[b_k1 * bN + b_col]);
+                                rs2_mux[lane1] = `XLEN'(b_buf[(b_k1 << b_stride_shift_32) | b_col]);
                             16: begin
-                                automatic int bN_w = bN >> 1;
-                                rs2_mux[lane1][ 0+:16] = b_buf[(b_k1*2+0)*bN_w + b_col/2][(b_col%2)*16+:16];
-                                rs2_mux[lane1][16+:16] = b_buf[(b_k1*2+1)*bN_w + b_col/2][(b_col%2)*16+:16];
+                                rs2_mux[lane1][ 0+:16] = b_buf[((b_k1*2+0) << b_stride_shift_16) | (b_col/2)][(b_col%2)*16+:16];
+                                rs2_mux[lane1][16+:16] = b_buf[((b_k1*2+1) << b_stride_shift_16) | (b_col/2)][(b_col%2)*16+:16];
                             end
                             default: begin // fp8/bf8/int8/uint8
-                                automatic int bN_w = bN >> 2;
-                                rs2_mux[lane1][ 0+:8] = b_buf[(b_k1*4+0)*bN_w + b_col/4][(b_col%4)*8+:8];
-                                rs2_mux[lane1][ 8+:8] = b_buf[(b_k1*4+1)*bN_w + b_col/4][(b_col%4)*8+:8];
-                                rs2_mux[lane1][16+:8] = b_buf[(b_k1*4+2)*bN_w + b_col/4][(b_col%4)*8+:8];
-                                rs2_mux[lane1][24+:8] = b_buf[(b_k1*4+3)*bN_w + b_col/4][(b_col%4)*8+:8];
+                                rs2_mux[lane1][ 0+:8] = b_buf[((b_k1*4+0) << b_stride_shift_8) | (b_col/4)][(b_col%4)*8+:8];
+                                rs2_mux[lane1][ 8+:8] = b_buf[((b_k1*4+1) << b_stride_shift_8) | (b_col/4)][(b_col%4)*8+:8];
+                                rs2_mux[lane1][16+:8] = b_buf[((b_k1*4+2) << b_stride_shift_8) | (b_col/4)][(b_col%4)*8+:8];
+                                rs2_mux[lane1][24+:8] = b_buf[((b_k1*4+3) << b_stride_shift_8) | (b_col/4)][(b_col%4)*8+:8];
                             end
                         endcase
                     end
@@ -229,27 +222,24 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `endif
         begin
             // Dense: format-aware gather.
-            // Use actual_N (runtime) instead of TILE_N (max) for B row stride.
+            // B row stride = actual_N (power of 2); use shift+OR indexing.
             for (int j = 0; j < TCU_TC_N; ++j) begin
                 for (int k = 0; k < TCU_TC_K; ++k) begin
                     automatic int b_row = int'(req_step_k) * TCU_TC_K + k;
                     automatic int n_col = int'(req_step_n) * TCU_TC_N + j;
                     automatic int lane  = int'(b_off) + j * TCU_TC_K + k;
-                    automatic int bN    = int'(actual_N);
                     case (tcu_fmt_width(req_fmt_s))
                         32: // fp32/i32/tf32: i_ratio=1
-                            rs2_mux[lane] = `XLEN'(b_buf[b_row * bN + n_col]);
+                            rs2_mux[lane] = `XLEN'(b_buf[(b_row << b_stride_shift_32) | n_col]);
                         16: begin // fp16/bf16: i_ratio=2
-                            automatic int bN_w = bN >> 1;
-                            rs2_mux[lane][ 0+:16] = b_buf[(b_row*2+0)*bN_w + n_col/2][(n_col%2)*16+:16];
-                            rs2_mux[lane][16+:16] = b_buf[(b_row*2+1)*bN_w + n_col/2][(n_col%2)*16+:16];
+                            rs2_mux[lane][ 0+:16] = b_buf[((b_row*2+0) << b_stride_shift_16) | (n_col/2)][(n_col%2)*16+:16];
+                            rs2_mux[lane][16+:16] = b_buf[((b_row*2+1) << b_stride_shift_16) | (n_col/2)][(n_col%2)*16+:16];
                         end
                         default: begin // fp8/bf8/int8/uint8: i_ratio=4
-                            automatic int bN_w = bN >> 2;
-                            rs2_mux[lane][ 0+:8] = b_buf[(b_row*4+0)*bN_w + n_col/4][(n_col%4)*8+:8];
-                            rs2_mux[lane][ 8+:8] = b_buf[(b_row*4+1)*bN_w + n_col/4][(n_col%4)*8+:8];
-                            rs2_mux[lane][16+:8] = b_buf[(b_row*4+2)*bN_w + n_col/4][(n_col%4)*8+:8];
-                            rs2_mux[lane][24+:8] = b_buf[(b_row*4+3)*bN_w + n_col/4][(n_col%4)*8+:8];
+                            rs2_mux[lane][ 0+:8] = b_buf[((b_row*4+0) << b_stride_shift_8) | (n_col/4)][(n_col%4)*8+:8];
+                            rs2_mux[lane][ 8+:8] = b_buf[((b_row*4+1) << b_stride_shift_8) | (n_col/4)][(n_col%4)*8+:8];
+                            rs2_mux[lane][16+:8] = b_buf[((b_row*4+2) << b_stride_shift_8) | (n_col/4)][(n_col%4)*8+:8];
+                            rs2_mux[lane][24+:8] = b_buf[((b_row*4+3) << b_stride_shift_8) | (n_col/4)][(n_col%4)*8+:8];
                         end
                     endcase
                 end

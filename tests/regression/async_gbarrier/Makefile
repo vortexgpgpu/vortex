@@ -1,6 +1,8 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
+CONFIGS := $(if $(findstring -DNUM_CORES,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DNUM_CORES=2)
+
 PROJECT := async_gbarrier
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)

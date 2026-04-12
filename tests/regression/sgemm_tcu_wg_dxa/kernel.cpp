@@ -37,7 +37,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   vortex::barrier bar(0);
 
   // Only the first warp in the CTA issues DXA commands.
-  const bool is_dxa_warp = (csr_read(VX_CSR_CTA_RANK) == 0);
+  const bool is_dxa_warp = (get_sub_group_id() == 0);
 
   // Loop over K tiles.
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
