@@ -138,9 +138,11 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
                 .cls (cls_b)
             );
 
-            // Select normalized exponents (force subnormals to 1)
-            assign ea_sel[j] = cls_a.is_sub ? 5'b1 : raw_ea;
-            assign eb_sel[j] = cls_b.is_sub ? 5'b1 : raw_eb;
+            // Select normalized exponents (force exp==0 to 1; true zeros are
+            // gated downstream via zero_sel/lane_valid, so the bogus pre_sum
+            // for zero inputs cannot affect the final result).
+            assign ea_sel[j] = (raw_ea == 0) ? 5'b1 : raw_ea;
+            assign eb_sel[j] = (raw_eb == 0) ? 5'b1 : raw_eb;
 
             // Select normalized mantissas (append implicit bit, force 0 if zero/subnormal)
             assign ma_sel[j] = {!cls_a.is_sub && !cls_a.is_zero, raw_ma};
@@ -292,8 +294,14 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire [23:0] sig_add = sig_add_raw[24:1];
         `UNUSED_VAR (sig_add_raw[0])
 
-        // Identify exact cancellation
-        wire mag_is_equal = (aligned_sig_low == aligned_sig_high);
+        // Identify exact cancellation. Post-alignment equality requires the
+        // two pre_sums to be equal (otherwise the shifted operand occupies a
+        // disjoint bit region from the unshifted one — see above). Using the
+        // symmetric pre_sum equality directly avoids waiting on diff_sign /
+        // max-min-mux / diff_abs, which keeps is_zero_out off the
+        // exponent-adder critical path.
+        wire pre_sum_eq = (pre_sum_0 == pre_sum_1);
+        wire mag_is_equal = pre_sum_eq && (man_prod0_v == man_prod1_v);
         wire is_zero_out = do_sub && mag_is_equal;
 
         // Force +0 on exact cancellation
