@@ -620,8 +620,7 @@ package VX_gpu_pkg;
 
 `ifdef EXT_DXA_ENABLE
     typedef struct packed {
-        logic [(INST_ARGS_BITS-3)-1:0] __padding;
-        logic [2:0] op;
+        logic [INST_ARGS_BITS-1:0] __padding;
     } dxa_args_t;
     `PACKAGE_ASSERT($bits(dxa_args_t) == INST_ARGS_BITS)
 `endif

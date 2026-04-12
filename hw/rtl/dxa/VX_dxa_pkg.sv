@@ -122,6 +122,13 @@ package VX_dxa_pkg;
         logic [31:0]                rank;
     } dxa_setup_params_t;
 
+    task trace_ex_op(input int level,
+                     input [INST_OP_BITS-1:0] op_type,
+                     input op_args_t op_args
+    );
+        `TRACE(level, ("DXA.ISSUE"))
+    endtask
+
 endpackage
 
 `endif // VX_DXA_PKG_VH

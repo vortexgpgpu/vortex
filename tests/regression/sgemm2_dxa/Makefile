@@ -1,6 +1,8 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
+CONFIGS := $(if $(findstring -DEXT_DXA_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DEXT_DXA_ENABLE)
+
 PROJECT := sgemm2_dxa
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)

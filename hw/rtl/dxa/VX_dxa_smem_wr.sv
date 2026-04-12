@@ -145,9 +145,13 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire [SMEM_WORD_SIZE-1:0] fb_word_byteen;
     for (genvar i = 0; i < SMEM_WORD_SIZE; ++i) begin : g_byteen
-        wire byte_has_data   = (FILL_W'(i) < fb_level_r);
-        wire byte_is_offset  = is_first_word && (SMEM_OFF_W'(i) < fb_byte_offset_r);
-        assign fb_word_byteen[i] = byte_has_data && !byte_is_offset;
+        wire byte_has_data = (FILL_W'(i) < fb_level_r);
+        if (i < SMEM_WORD_SIZE - 1) begin : g_with_offset
+            wire byte_is_offset = is_first_word && (SMEM_OFF_W'(i) < fb_byte_offset_r);
+            assign fb_word_byteen[i] = byte_has_data && !byte_is_offset;
+        end else begin : g_no_offset
+            assign fb_word_byteen[i] = byte_has_data;
+        end
     end
 
     // ════════════════════════════════════════════════════════════════════

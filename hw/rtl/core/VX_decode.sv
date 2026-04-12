@@ -582,17 +582,13 @@ module VX_decode import VX_gpu_pkg::*; #(
                     end
                 `endif
                 `ifdef EXT_DXA_ENABLE
-                    7'h03: begin // DXA issue (dimension-specific)
-                        // funct3 encodes dimensionality: 0=1D .. 4=5D.
+                    7'h03: begin // DXA issue
                         // Multicast is determined by cta_mask (>1 bit set).
                         // Expanded into micro-ops by VX_dxa_uops.
-                        if (funct3 <= 3'd5) begin
-                            ex_type = EX_SFU;
-                            op_type = INST_OP_BITS'(INST_SFU_DXA);
-                            op_args.dxa.op = funct3;
-                            `USED_IREG (rs1);
-                            `USED_IREG (rs2);
-                        end
+                        ex_type = EX_SFU;
+                        op_type = INST_OP_BITS'(INST_SFU_DXA);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
                     end
                 `endif
                     7'h04: begin // Load packing: vx_packlb_f / vx_packlh_f

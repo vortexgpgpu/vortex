@@ -105,7 +105,9 @@ package VX_trace_pkg;
                     end
                 end
                 ALU_TYPE_OTHER: begin
-                    if (op_type[2]) begin
+                    if (op_type[3]) begin
+                        `TRACE(level, ("WGATHER"))
+                    end else if (op_type[2]) begin
                         case (INST_SHFL_BITS'(op_type))
                             INST_SHFL_UP:  `TRACE(level, ("SHFL.UP"))
                             INST_SHFL_DOWN:`TRACE(level, ("SHFL.DOWN"))
@@ -256,17 +258,7 @@ package VX_trace_pkg;
                     end
                 end
             `ifdef EXT_DXA_ENABLE
-                INST_SFU_DXA: begin
-                    case (op_args.dxa.op)
-                        3'd0: `TRACE(level, ("DXA.SETUP0"))
-                        3'd1: `TRACE(level, ("DXA.SETUP1"))
-                        3'd2: `TRACE(level, ("DXA.COORD01"))
-                        3'd3: `TRACE(level, ("DXA.COORD23"))
-                        3'd4: `TRACE(level, ("DXA.ISSUE"))
-                        3'd5: `TRACE(level, ("DXA.LAUNCH"))
-                        default: `TRACE(level, ("DXA.?"))
-                    endcase
-                end
+                INST_SFU_DXA: VX_dxa_pkg::trace_ex_op(level, op_type, op_args);
             `endif
             `ifdef EXT_TCU_ENABLE
                 INST_SFU_WSYNC: `TRACE(level, ("WSYNC"))

@@ -418,7 +418,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                     end
 
                     if (warp_fire_r) begin
-                        cta_rank_r   <= cta_rank_r + NW_WIDTH'(1);
+                        cta_rank_r <= cta_rank_r + NW_WIDTH'(1);
                         // Single shared adder result used for both decrement and last-warp test
                         block_size_r <= block_size_next;
 
@@ -457,7 +457,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         end
     end
 
-    assign cta_csrs.cta_id     = 32'(cur_slot_r);  // local slot index (0..num_warps-1) for barrier indexing
+    assign cta_csrs.cta_id     = 32'(cur_slot_r);
     assign cta_csrs.cta_rank   = cta_rank_r;
     assign cta_csrs.cta_size   = cta_size_r;
     assign cta_csrs.thread_idx = thread_idx_r;

@@ -37,12 +37,18 @@ all:
 	$(MAKE) -C sgemm_tcu_wg
 	$(MAKE) -C sgemm_tcu_sp
 	$(MAKE) -C sgemm_tcu_mx
+	$(MAKE) -C sgemm_tcu_wg_sp
 	$(MAKE) -C sgemm2_dxa
+	$(MAKE) -C sgemm_tcu_wg_dxa
+	$(MAKE) -C sgemm_tcu_wg_sp_dxa
+	$(MAKE) -C dxa_copy
+	$(MAKE) -C dxa_multicast
 	$(MAKE) -C async_barrier
 	$(MAKE) -C async_gbarrier
 	$(MAKE) -C packld
 	$(MAKE) -C wgather
 	$(MAKE) -C wsync
+	$(MAKE) -C occupancy
 
 all-mpi:
 	$(MAKE) -C mpi_dotproduct MPI=1 NP=$(NP)
@@ -84,10 +90,22 @@ run-simx:
 	$(MAKE) -C jacobi run-simx
 	$(MAKE) -C pathfinder run-simx
 	$(MAKE) -C softmax run-simx
+	$(MAKE) -C sgemm_tcu run-simx
+	$(MAKE) -C sgemm_tcu_wg run-simx
+	$(MAKE) -C sgemm_tcu_sp run-simx
+	$(MAKE) -C sgemm_tcu_mx run-simx
+	$(MAKE) -C sgemm_tcu_wg_sp run-simx
+	$(MAKE) -C sgemm2_dxa run-simx
+	$(MAKE) -C sgemm_tcu_wg_dxa run-simx
+	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-simx
+	$(MAKE) -C dxa_copy run-simx
+	$(MAKE) -C dxa_multicast run-simx
 	$(MAKE) -C async_barrier run-simx
+	$(MAKE) -C async_gbarrier run-simx
 	$(MAKE) -C packld run-simx
 	$(MAKE) -C wgather run-simx
 	$(MAKE) -C wsync run-simx
+	$(MAKE) -C occupancy run-simx
 
 run-simx-mpi:
 	$(MAKE) -C mpi_dotproduct run-simx MPI=1 NP=$(NP)
@@ -129,10 +147,22 @@ run-rtlsim:
 	$(MAKE) -C jacobi run-rtlsim
 	$(MAKE) -C pathfinder run-rtlsim
 	$(MAKE) -C softmax run-rtlsim
+	$(MAKE) -C sgemm_tcu run-rtlsim
+	$(MAKE) -C sgemm_tcu_wg run-rtlsim
+	$(MAKE) -C sgemm_tcu_sp run-rtlsim
+	$(MAKE) -C sgemm_tcu_mx run-rtlsim
+	$(MAKE) -C sgemm_tcu_wg_sp run-rtlsim
+	$(MAKE) -C sgemm2_dxa run-rtlsim
+	$(MAKE) -C sgemm_tcu_wg_dxa run-rtlsim
+	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-rtlsim
+	$(MAKE) -C dxa_copy run-rtlsim
+	$(MAKE) -C dxa_multicast run-rtlsim
 	$(MAKE) -C async_barrier run-rtlsim
+	$(MAKE) -C async_gbarrier run-rtlsim
 	$(MAKE) -C packld run-rtlsim
 	$(MAKE) -C wgather run-rtlsim
 	$(MAKE) -C wsync run-rtlsim
+	$(MAKE) -C occupancy run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -157,6 +187,7 @@ clean:
 	$(MAKE) -C sgemm_tcu_wg clean
 	$(MAKE) -C sgemm_tcu_sp clean
 	$(MAKE) -C sgemm_tcu_mx clean
+	$(MAKE) -C sgemm_tcu_wg_sp clean
 	$(MAKE) -C conv3 clean
 	$(MAKE) -C mpi_neighbor_a2a_conv3 clean
 	$(MAKE) -C mpi_conv3 clean
@@ -172,7 +203,13 @@ clean:
 	$(MAKE) -C pathfinder clean
 	$(MAKE) -C softmax clean
 	$(MAKE) -C sgemm2_dxa clean
+	$(MAKE) -C sgemm_tcu_wg_dxa clean
+	$(MAKE) -C sgemm_tcu_wg_sp_dxa clean
+	$(MAKE) -C dxa_copy clean
+	$(MAKE) -C dxa_multicast clean
 	$(MAKE) -C async_barrier clean
 	$(MAKE) -C async_gbarrier clean
 	$(MAKE) -C packld clean
-	$(MAKE) -C wgather clean	$(MAKE) -C wsync clean
+	$(MAKE) -C wgather clean
+	$(MAKE) -C wsync clean
+	$(MAKE) -C occupancy clean

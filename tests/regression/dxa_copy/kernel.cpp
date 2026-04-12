@@ -36,7 +36,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 #ifdef EXT_DXA_ENABLE
   // ── DXA path: issue N-D tile copy, barrier wait ──
   vortex::barrier bar(0);
-  const bool is_dxa_warp = (csr_read(VX_CSR_CTA_RANK) == 0);
+  const bool is_dxa_warp = (get_sub_group_id() == 0);
   if (is_dxa_warp) {
     switch (ndim) {
     case 1:
