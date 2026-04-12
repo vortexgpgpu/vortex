@@ -912,24 +912,16 @@ package VX_gpu_pkg;
     localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(`NUM_LSU_BLOCKS);
     localparam LMEM_TAG_WIDTH       = LMEM_TAG_WIDTH_BASE;
 
-`ifdef EXT_DXA_ENABLE
-    // DXA local-memory path: dimensioned to cover all banks in one request.
-    localparam DXA_LMEM_WORD_SIZE   = `LMEM_NUM_BANKS * (`XLEN / 8);
-    localparam DXA_LMEM_ADDR_W  = (`MEM_ADDR_WIDTH - `CLOG2(DXA_LMEM_WORD_SIZE));
-`endif
-
-    // DXA/TCU lmem tag and flags widths (unconditional for DMA arb sizing).
+    // DXA lmem tag and flags widths for DMA arb.
     localparam DXA_LMEM_FLAGS_W = (BAR_ADDR_W + 1);
+    localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
+    localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS;
+    localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`NUM_DXA_UNITS, 1);
+
+    // TCU lmem tag and flags widths for DMA arb.
     localparam TCU_LMEM_FLAGS_W = 1;
-    localparam LMEM_DXA_ENGINE_TAG_W = UUID_WIDTH + 1;
-    localparam DXA_LMEM_TAG_W = LMEM_DXA_ENGINE_TAG_W + NC_BITS;
-`ifdef NUM_DXA_UNITS
-    localparam DXA_LMEM_ARB_BITS = `ARB_SEL_BITS(`NUM_DXA_UNITS, 1);
-`else
-    localparam DXA_LMEM_ARB_BITS = 0;
-`endif
-    localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + DXA_LMEM_ARB_BITS;
-    localparam TCU_LMEM_TAG_W = (UUID_WIDTH + 1) + `ARB_SEL_BITS(`NUM_TCU_BLOCKS, 1);
+    localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
+    localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(`NUM_TCU_BLOCKS, 1);
 
     // LMEM DMA port parameters.
     localparam LMEM_DMA_EN         = (`EXT_DXA_ENABLED + `TCU_WGMMA_ENABLED) != 0;

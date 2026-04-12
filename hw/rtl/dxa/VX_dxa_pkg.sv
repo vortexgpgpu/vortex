@@ -20,6 +20,10 @@ package VX_dxa_pkg;
 
     import VX_gpu_pkg::*;
 
+    // DXA local-memory path: dimensioned to cover all banks in one request.
+    localparam DXA_LMEM_WORD_SIZE = `LMEM_NUM_BANKS * (`XLEN / 8);
+    localparam DXA_LMEM_ADDR_W = (`MEM_ADDR_WIDTH - `CLOG2(DXA_LMEM_WORD_SIZE));
+
     localparam DXA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_DXA_DESC_COUNT);
     localparam DXA_DESC_SLOT_W    = `UP(DXA_DESC_SLOT_BITS);
 

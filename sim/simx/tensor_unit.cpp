@@ -497,7 +497,7 @@ static inline uint32_t gather_sparse(uint32_t bword0, uint32_t bword1,
                                      uint32_t elem_bits) {
   uint32_t elem_count = 32 / elem_bits;
   uint32_t elem_mask  = (elem_bits < 32) ? ((1u << elem_bits) - 1u) : ~0u;
-  assert(__builtin_popcount(lo_mask) + __builtin_popcount(hi_mask) == elem_count &&
+  assert((uint32_t)(__builtin_popcount(lo_mask) + __builtin_popcount(hi_mask)) == elem_count &&
          "gather_sparse: total selected elements must equal elem_count");
   uint32_t out = 0, k = 0;
   for (uint32_t i = 0; i < elem_count; ++i) {

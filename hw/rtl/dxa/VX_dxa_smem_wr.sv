@@ -87,7 +87,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam FILL_CAP     = CL_SIZE + SMEM_WORD_SIZE;
     localparam FILL_W       = `CLOG2(FILL_CAP + 1);
 
-    localparam ENGINE_VALUE_W = LMEM_DXA_ENGINE_TAG_W - UUID_WIDTH;
+    localparam ENGINE_VALUE_W = DXA_LMEM_ENGINE_TAG_W - UUID_WIDTH;
     localparam SMEM_TAG_VALUE_W = DXA_LMEM_TAG_W - UUID_WIDTH;
 
     // ════════════════════════════════════════════════════════════════════
