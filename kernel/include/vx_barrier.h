@@ -53,7 +53,7 @@ private:
 class gbarrier {
 public:
   gbarrier(uint32_t id, uint32_t num_cores = vx_num_cores()) {
-    bar_id_ = (id << 16) | 0x80000000;
+    bar_id_ = (id << 8) | 0x80000000;
     num_cores_ = num_cores;
   }
 

@@ -28,9 +28,9 @@ __thread dim3_t threadIdx;
 dim3_t gridDim;
 dim3_t blockDim;
 
-__thread uint32_t g_local_group_id;
-__thread uint32_t g_sub_group_id;
-uint32_t g_num_sub_groups;
+__thread uint32_t __local_group_id;
+__thread uint32_t __sub_group_id;
+uint32_t __num_sub_groups;
 
 typedef struct {
 	vx_kernel_func_cb callback;
@@ -131,8 +131,8 @@ static void __attribute__ ((noinline)) process_thread_groups() {
   uint32_t group_warp_id = warp_id - local_group_id * warps_per_group;
   uint32_t local_task_id = group_warp_id * threads_per_warp + thread_id;
 
-  g_local_group_id = local_group_id;
-  g_sub_group_id = group_warp_id;
+  __local_group_id = local_group_id;
+  __sub_group_id = group_warp_id;
   threadIdx.x = local_task_id % blockDim_x;
   threadIdx.y = (local_task_id / blockDim_x) % blockDim_y;
   threadIdx.z = local_task_id / blockDim_xy;
@@ -255,7 +255,7 @@ int vx_spawn_threads(uint32_t dimension,
     csr_write(VX_CSR_MSCRATCH, &wspawn_args);
 
     // set global variables
-    g_num_sub_groups = warps_per_group;
+    __num_sub_groups = warps_per_group;
 
     // execute callback on other warps
     vx_wspawn(active_warps, process_thread_groups_stub);
@@ -264,9 +264,9 @@ int vx_spawn_threads(uint32_t dimension,
     process_thread_groups_stub();
   } else {
     // set constant workitem attributes
-    g_num_sub_groups = 0;
-    g_local_group_id = 0;
-    g_sub_group_id = 0;
+    __num_sub_groups = 0;
+    __local_group_id = 0;
+    __sub_group_id = 0;
     threadIdx.x = 0;
     threadIdx.y = 0;
     threadIdx.z = 0;

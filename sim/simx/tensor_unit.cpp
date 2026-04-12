@@ -943,6 +943,7 @@ private:
                  const reg_data_t* b_tile,
                  const std::vector<reg_data_t>& rs3_data,
                  std::vector<reg_data_t>& rd_data) {
+    __unused(step_k);
   #ifdef TCU_MX_ENABLE
     bool use_mx = ((fmt_s == vt::mxfp8::id) && (fmt_d == vt::fp32::id))
                || ((fmt_s == vt::mxint8::id) && (fmt_d == vt::int32::id))
@@ -1183,7 +1184,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t actual_n = lg_k ? (n_sp >> lg_k) : n_sp;
         uint32_t reg_rs3 = rc_base + (mma_idx >> 1);
         uop_instr->set_op_type(TcuType::WMMA);
-        uop_instr->set_args(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, actual_n, 0});
+        uop_instr->set_args(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, actual_n, 0, 0});
         uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         uop_instr->set_src_reg(0, ra_base + m_sp, RegType::Float);
         uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
@@ -1202,7 +1203,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t reg_rs2 = rb_base + (k * wmma::n_steps + n) / b_sub;
         uint32_t reg_rs3 = rc_base + m * wmma::n_steps + n;
         uop_instr->set_op_type(TcuType::WMMA);
-        uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
+        uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k, 0});
 #ifdef TCU_ACC_ENABLE
         bool uop_is_first_k = (k == 0);
         bool uop_is_last_k  = (k == k_count - 1);
@@ -1244,7 +1245,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
     uop_instr->set_op_type(TcuType::WGMMA);
     uop_instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
-                                   fmt_s, fmt_d, m, n, k});
+                                   fmt_s, fmt_d, m, n, k, 0});
 #ifdef TCU_ACC_ENABLE
     bool uop_is_first_k = (k == 0);
     bool uop_is_last_k  = (k == k_count - 1);

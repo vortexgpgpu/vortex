@@ -180,6 +180,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         // ------------------------------------------------------------------
         // 2c. Operand Preparation
         // ------------------------------------------------------------------
+
         wire [7:0] ea_sel = cls_a.is_sub ? 8'b1 : raw_ea;
         wire [7:0] eb_sel = cls_b.is_sub ? 8'b1 : raw_eb;
 
@@ -237,19 +238,8 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
             .p(man_prod)
         );
 
-        // Output Formatting
-        always_comb begin
-            case (fmt_f)
-                TCU_FP16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
-            `ifdef TCU_BF16_ENABLE
-                TCU_BF16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
-            `endif
-            `ifdef TCU_TF32_ENABLE
-                TCU_TF32_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
-            `endif
-                default:     result_sig[i] = 'x;
-            endcase
-        end
+        // Output Formatting (identical across all f16/bf16/tf32 variants)
+        assign result_sig[i] = {sign_sel, man_prod, 2'b0};
 
         // Exception Outputs
         assign exceptions[i].is_nan = nan_sel && lane_valid;
