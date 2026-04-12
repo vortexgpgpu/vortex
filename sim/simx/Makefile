@@ -8,7 +8,7 @@ OBJ_DIR = $(DESTDIR)/obj
 CONFIG_FILE = $(DESTDIR)/simx_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/simx
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I$(SRC_DIR) -I$(SW_COMMON_DIR) -I$(ROOT_DIR)/hw
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include

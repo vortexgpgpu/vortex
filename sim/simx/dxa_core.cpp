@@ -470,7 +470,6 @@ private:
       uint32_t total_writes = total_blocks * num_ctas;
 
       // Check if all writes are done.
-      uint32_t write_idx = xfer.smem_block_idx * num_ctas + xfer.mc_cta_idx;
       if (xfer.smem_block_idx >= total_blocks) {
         // All timing signals sent.
         if (total_blocks == 0) {

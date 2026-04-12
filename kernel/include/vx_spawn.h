@@ -35,26 +35,26 @@ extern __thread dim3_t threadIdx;
 extern dim3_t gridDim;
 extern dim3_t blockDim;
 
-extern __thread uint32_t g_local_group_id;
-extern __thread uint32_t g_sub_group_id;
-extern uint32_t g_num_sub_groups;
+extern __thread uint32_t __local_group_id;
+extern __thread uint32_t __sub_group_id;
+extern uint32_t __num_sub_groups;
 
 typedef void (*vx_kernel_func_cb)(void *arg);
 
 typedef void (*vx_serial_cb)(void *arg);
 
 static __attribute__((always_inline)) uint32_t get_local_group_id() {
-  uint32_t __UNIFORM__ v = g_local_group_id;
+  uint32_t __UNIFORM__ v = __local_group_id;
   return v;
 }
 
 static __attribute__((always_inline)) uint32_t get_sub_group_id() {
-  uint32_t __UNIFORM__ v = g_sub_group_id;
+  uint32_t __UNIFORM__ v = __sub_group_id;
   return v;
 }
 
 static __attribute__((always_inline)) uint32_t get_num_sub_groups() {
-  uint32_t __UNIFORM__ v = g_num_sub_groups;
+  uint32_t __UNIFORM__ v = __num_sub_groups;
   return v;
 }
 
