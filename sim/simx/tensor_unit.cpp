@@ -237,24 +237,40 @@ template <> struct FMA<vt::tf32, vt::tf32> {
   }
 };
 
-// Generic FEDP: pure FMA chain — order matches host muladd_t semantics.
+// Generic FEDP: universal rule keyed on output width.
+//   * Wide Ot (fp32): accumulate Σ(a_k*b_k) in fp32, add c_val last — matches
+//     RTL's fp32 reduction tree with final c fold-in.
+//   * Narrow Ot (fp16/bf16/fp8/bf8/…): chain FMA<It,Ot> so the accumulator is
+//     rounded to Ot each step — matches host muladd_t<It,Ot> semantics.
 template <typename It, typename Ot>
 struct FEDP {
   using itype = typename It::dtype;
   static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
     constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(itype);
     static_assert(i_ratio * sizeof(itype) == sizeof(uint32_t), "FEDP: tcK * i_ratio must be <= 32");
-    uint32_t acc = 0;
-    for (uint32_t z = 0; z < cfg::tcK; ++z) {
-      auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
-      auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
-      uint32_t prod = 0;
-      for (uint32_t i = 0; i < i_ratio; ++i) {
-        prod = FMA<It, vt::fp32>::eval(a[i], b[i], prod);
+    if constexpr (std::is_same_v<Ot, vt::fp32>) {
+      uint32_t acc = 0;
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
+        auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
+        uint32_t prod = 0;
+        for (uint32_t i = 0; i < i_ratio; ++i) {
+          prod = FMA<It, vt::fp32>::eval(a[i], b[i], prod);
+        }
+        acc = rv_fadd_s(prod, acc, 0, nullptr);
       }
-      acc = rv_fadd_s(prod, acc, 0, nullptr);
+      return rv_fadd_s(c_val, acc, 0, nullptr);
+    } else {
+      uint32_t acc = c_val;
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
+        auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
+        for (uint32_t i = 0; i < i_ratio; ++i) {
+          acc = FMA<It, Ot>::eval(a[i], b[i], acc);
+        }
+      }
+      return acc;
     }
-    return rv_fadd_s(c_val, acc, 0, nullptr);
   }
 };
 
