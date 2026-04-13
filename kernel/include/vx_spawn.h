@@ -37,7 +37,7 @@ extern dim3_t blockDim;
 
 extern __thread uint32_t __local_group_id;
 extern __thread uint32_t __sub_group_id;
-extern uint32_t __num_sub_groups;
+extern uint32_t __warps_per_group;
 
 typedef void (*vx_kernel_func_cb)(void *arg);
 
@@ -54,7 +54,7 @@ static __attribute__((always_inline)) uint32_t get_sub_group_id() {
 }
 
 static __attribute__((always_inline)) uint32_t get_num_sub_groups() {
-  uint32_t __UNIFORM__ v = __num_sub_groups;
+  uint32_t __UNIFORM__ v = __warps_per_group;
   return v;
 }
 
