@@ -285,14 +285,13 @@ def simd_data(sub_array, index, count, default=0):
     return new_array
 
 def merge_data(trace, key, new_data, mask):
-    if key in trace:
-        merged_data = trace[key]
-        for i in range(len(mask)):
-            if mask[i] == 1:
-                merged_data[i] = new_data[i]
-        trace[key] = merged_data
-    else:
-        trace[key] = new_data
+    if key not in trace:
+        trace[key] = ['-'] * len(mask)
+    merged_data = trace[key]
+    for i in range(len(mask)):
+        if mask[i] == 1:
+            merged_data[i] = new_data[i]
+    trace[key] = merged_data
 
 def parse_rtlsim(log_lines):
     global configs
