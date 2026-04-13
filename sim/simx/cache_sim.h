@@ -20,6 +20,12 @@ namespace vortex {
 
 class CacheSim : public SimObject<CacheSim> {
 public:
+	enum ReplPolicy : uint8_t {
+		RANDOM = 0,
+		FIFO   = 1,
+		PLRU   = 2
+	};
+
 	struct Config {
 		bool    bypass;         // cache bypass
 		uint8_t C;              // log2 cache size
@@ -34,6 +40,7 @@ public:
 		bool    write_reponse;  // enable write response
 		uint16_t mshr_size;     // MSHR buffer size
 		uint8_t latency;        // pipeline latency
+		uint8_t repl_policy;    // replacement policy (ReplPolicy)
 	};
 
 	struct PerfStats {

@@ -71,6 +71,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     false,                    // write response
     L3_MSHR_SIZE,             // mshr size
     2,                        // pipeline latency
+    L3_REPL_POLICY,           // replacement policy
     }
   );
 
