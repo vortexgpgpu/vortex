@@ -8,7 +8,7 @@ CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
 CXXFLAGS += -fPIC
 
-LDFLAGS += -shared -pthread -ldl
+LDFLAGS += -shared -pthread -ldl -Wl,-soname,libvortex.so
 
 SRCS := $(SRC_DIR)/vortex.cpp $(SRC_DIR)/utils.cpp $(SRC_DIR)/perf.cpp $(RT_COMMON_DIR)/utils.cpp
 

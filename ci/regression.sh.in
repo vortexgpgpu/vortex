@@ -277,6 +277,9 @@ cache()
     CONFIGS="-DDCACHE_REPL_POLICY=0" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
     CONFIGS="-DDCACHE_REPL_POLICY=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
     CONFIGS="-DDCACHE_REPL_POLICY=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
+    CONFIGS="-DDCACHE_REPL_POLICY=0" ./ci/blackbox.sh --driver=simx --app=sgemm
+    CONFIGS="-DDCACHE_REPL_POLICY=1" ./ci/blackbox.sh --driver=simx --app=sgemm
+    CONFIGS="-DDCACHE_REPL_POLICY=2" ./ci/blackbox.sh --driver=simx --app=sgemm
 
     # test writeback
     CONFIGS="-DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=0 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=mstress

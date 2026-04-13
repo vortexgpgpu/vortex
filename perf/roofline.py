@@ -6,592 +6,498 @@
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Vortex Roofline + Configuration Search
 #
-# Vortex SGEMM Roofline Plotter
-# Runs a SGEMM-style regression kernel via ci/blackbox.sh and plots roofline metrics.
+# Runs a kernel via ci/blackbox.sh, sweeps microarchitecture knobs to maximize
+# IPC, and (optionally) plots a conventional FLOP/cycle roofline for the
+# winning configuration.
 #
-# Usage (from build dir):
-#   python3 perf/roofline.py [--app=sgemmx] [--driver=rtlsim] [--cores=1]
-#           [--warps=4] [--threads=4] [--n=128]
-#           [--freq=<auto>] [--bw=51.2] [--perf=1]
-#           [--output=roofline.png]
+# Knobs accept a single value or a comma-list:
+#   --threads=8          single
+#   --threads=4,8,16     search space
 #
-# Usage (from source tree, targeting a specific build dir):
-#   python3 perf/roofline.py --build-dir=build_test32 ...
+# Examples — sgemm (N=128, FLOPs = 2·N³ = 4194304):
+#
+#   # Single run with roofline plot:
+#   python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \
+#     --flops=4194304 --plot --output=sgemm128.png
+#
+#   # Search best config (coordinate descent) with plot of the winner:
+#   python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \
+#     --flops=4194304 --plot --output=sgemm128_best.png \
+#     --config=fast \
+#     --threads=4,8,16 --warps=4,8,16 --issue-width=1,2,4 \
+#     --fpu-blocks=1,2,4 --dcache-mshr=8,16,32 --l2-enable=0,1
+#
+#   # Random sampling (50 trials) across a wide space:
+#   python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \
+#     --flops=4194304 --config=random --max-trials=50 \
+#     --threads=4,8,16 --warps=4,8,16,32 --fpu-blocks=1,2,4 \
+#     --dcache-size=16384,32768,65536 --dcache-ways=2,4,8
 
 import argparse
+import itertools
 import os
+import random as rand
 import re
 import shlex
 import subprocess
 import sys
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 VORTEX_HOME = os.path.normpath(os.path.join(SCRIPT_DIR, ".."))
 
 
-def read_platform_clock(build_dir):
-    """Read PLATFORM_CLOCK_RATE from generated VX_config.h in the build dir."""
-    for candidate in (build_dir, os.path.join(build_dir, "hw")):
-        cfg = os.path.join(candidate, "VX_config.h") if candidate else None
-        if cfg and os.path.isfile(cfg):
-            with open(cfg) as f:
-                for line in f:
-                    m = re.match(r"#define\s+PLATFORM_CLOCK_RATE\s+(\d+)", line)
-                    if m:
-                        return int(m.group(1))
-    return None
+# ────────────────────────────────────────────────────────────────────────────
+# Knob table: (arg_name, macro_name, cli_flag, pow2?, is_bool?)
+# Order below is also the priority order used by the 'fast' search.
+# ────────────────────────────────────────────────────────────────────────────
+KNOBS = [
+    ("threads",          "NUM_THREADS",                "--threads",          True,  False),
+    ("warps",            "NUM_WARPS",                  "--warps",            True,  False),
+    ("issue_width",      "ISSUE_WIDTH",                "--issue-width",      True,  False),
+    ("fpu_blocks",       "NUM_FPU_BLOCKS",             "--fpu-blocks",       False, False),
+    ("alu_blocks",       "NUM_ALU_BLOCKS",             "--alu-blocks",       False, False),
+    ("lsu_blocks",       "NUM_LSU_BLOCKS",             "--lsu-blocks",       False, False),
+    ("cores",            "NUM_CORES",                  "--cores",            True,  False),
+    ("ibuf_size",        "IBUF_SIZE",                  "--ibuf-size",        True,  False),
+    ("lsu_inq_size",     "LSUQ_IN_SIZE",               "--lsu-inq-size",     False, False),
+    ("lsu_outq_size",    "LSUQ_OUT_SIZE",              "--lsu-outq-size",    False, False),
+    ("dcache_mshr",      "DCACHE_MSHR_SIZE",           "--dcache-mshr",      False, False),
+    ("dcache_size",      "DCACHE_SIZE",                "--dcache-size",      True,  False),
+    ("dcache_ways",      "DCACHE_NUM_WAYS",            "--dcache-ways",      True,  False),
+    ("dcache_banks",     "DCACHE_NUM_BANKS",           "--dcache-banks",     True,  False),
+    ("dcache_repl",      "DCACHE_REPL_POLICY",         "--dcache-repl",      False, False),
+    ("dcache_writeback", "DCACHE_WRITEBACK",           "--dcache-writeback", False, False),
+    ("icache_size",      "ICACHE_SIZE",                "--icache-size",      True,  False),
+    ("icache_ways",      "ICACHE_NUM_WAYS",            "--icache-ways",      True,  False),
+    ("icache_banks",     "ICACHE_NUM_BANKS",           "--icache-banks",     True,  False),
+    ("icache_mshr",      "ICACHE_MSHR_SIZE",           "--icache-mshr",      False, False),
+    ("icache_repl",      "ICACHE_REPL_POLICY",         "--icache-repl",      False, False),
+    ("icache_writeback", "ICACHE_WRITEBACK",           "--icache-writeback", False, False),
+    ("l2_enable",        "L2_ENABLE",                  "--l2-enable",        False, True),
+    ("l2_size",          "L2_CACHE_SIZE",              "--l2-size",          True,  False),
+    ("l2_ways",          "L2_NUM_WAYS",                "--l2-ways",          True,  False),
+    ("l2_banks",         "L2_NUM_BANKS",               "--l2-banks",         True,  False),
+    ("l2_mshr",          "L2_MSHR_SIZE",               "--l2-mshr",          False, False),
+    ("l2_repl",          "L2_REPL_POLICY",             "--l2-repl",          False, False),
+    ("l2_writeback",     "L2_WRITEBACK",               "--l2-writeback",     False, False),
+    ("mem_banks",        "PLATFORM_MEMORY_NUM_BANKS",  "--mem-banks",        True,  False),
+    ("mem_data_size",    "PLATFORM_MEMORY_DATA_SIZE",  "--mem-data-size",    True,  False),
+]
+
+KNOB_BY_NAME = {k[0]: k for k in KNOBS}
 
 
 # ────────────────────────────────────────────────────────────────────────────
 # Argument parsing
 # ────────────────────────────────────────────────────────────────────────────
 
+class _HelpFmt(argparse.ArgumentDefaultsHelpFormatter,
+               argparse.RawDescriptionHelpFormatter):
+    """Defaults formatter that skips '(default: None)' and keeps raw epilog."""
+    def _get_help_string(self, action):
+        if action.default is None or action.default == "":
+            return action.help
+        return super()._get_help_string(action)
+
+
+EXAMPLES = """\
+Examples — sgemm (N=128, FLOPs = 2·N³ = 4194304):
+
+  # Single run with roofline plot:
+  python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \\
+    --flops=4194304 --plot --output=sgemm128.png
+
+  # Search best config (coordinate descent) with plot of the winner:
+  python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \\
+    --flops=4194304 --plot --output=sgemm128_best.png \\
+    --config=fast \\
+    --threads=4,8,16 --warps=4,8,16 --issue-width=1,2,4 \\
+    --fpu-blocks=1,2,4 --dcache-mshr=8,16,32 --l2-enable=0,1
+
+  # Random sampling (50 trials) across a wide space:
+  python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \\
+    --flops=4194304 --config=random --max-trials=50 \\
+    --threads=4,8,16 --warps=4,8,16,32 --fpu-blocks=1,2,4 \\
+    --dcache-size=16384,32768,65536 --dcache-ways=2,4,8
+"""
+
+
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Vortex SGEMM roofline analyser",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="Vortex roofline analyzer",
+        epilog=EXAMPLES,
+        formatter_class=_HelpFmt,
     )
-    p.add_argument("--driver",    default="rtlsim",
+    p.add_argument("--driver", default="rtlsim", metavar="name",
                    choices=["rtlsim", "simx", "opae", "xrt"],
-                   help="Vortex driver")
-    p.add_argument("--app",       default="sgemmx",
-                   choices=["sgemmx", "sgemm_tcu", "sgemm_tcu_mx"],
-                   help="Regression app to run")
-    p.add_argument("--cores",     type=int, default=1,
-                   help="Number of cores (NUM_CORES)")
-    p.add_argument("--warps",     type=int, default=4,
-                   help="Warps per core (NUM_WARPS)")
-    p.add_argument("--threads",   type=int, default=4,
-                   help="Threads per warp (NUM_THREADS)")
-    p.add_argument("--issue-width", type=int, default=None,
-                   help="Issue width (ISSUE_WIDTH)")
-    p.add_argument("--n",         type=int, default=32,
-                   help="Square matrix dimension N (SGEMM computes N×N × N×N)")
-    p.add_argument("--m",         type=int, default=None,
-                   help="M dimension for non-square SGEMM (default: use --n)")
-    p.add_argument("--k",         type=int, default=None,
-                   help="K dimension for non-square SGEMM (default: use --n)")
-    p.add_argument("--freq",      type=float, default=0,
-                   help="Pipeline clock frequency in MHz "
-                        "(0 = per-cycle mode, implies --by-cycle; "
-                        "omit or set >0 to use time domain)")
-    p.add_argument("--bw",        type=float, default=None,
-                   help="Peak memory bandwidth in GB/s "
-                        "(default: PLATFORM_MEMORY_DATA_SIZE × "
-                        "PLATFORM_MEMORY_NUM_BANKS × freq)")
-    p.add_argument("--mem-data-size", type=int, default=64,
-                   help="PLATFORM_MEMORY_DATA_SIZE in bytes (one port width)")
-    p.add_argument("--mem-banks",     type=int, default=2,
-                   help="PLATFORM_MEMORY_NUM_BANKS")
-    p.add_argument("--perf",      type=int, default=1, choices=[0, 1, 2],
-                   help="VORTEX_PROFILING class (0=off, 1=pipeline, 2=memsys)")
-    p.add_argument("--configs",   default="",
-                   help="Additional CONFIGS macros (e.g. '-DITYPE=fp8 -DOTYPE=fp32')")
-    p.add_argument("--by-cycle",  action="store_true",
-                   help="Plot in cycle domain (FLOP/cycle vs FLOP/B) "
-                        "instead of time domain (GFLOP/s vs FLOP/B). "
-                        "Frequency-independent; reveals micro-architectural limits directly.")
-    p.add_argument("--output",    default="roofline.png",
-                   help="Output image file (extension selects format)")
-    p.add_argument("--build-dir", default=None,
-                   help="Build directory containing ci/blackbox.sh "
-                        "(auto-detected from VORTEX_HOME if omitted)")
+                   help="Vortex driver: rtlsim|simx|opae|xrt")
+    p.add_argument("--app", required=True, metavar="name",
+                   help="Benchmark application")
+    p.add_argument("--args", dest="app_args", default="", metavar="str",
+                   help="App arguments (passed to blackbox.sh --args)")
+    p.add_argument("--perf", type=int, default=1, choices=[0, 1, 2], metavar="n")
+    p.add_argument("--configs", default="", metavar="str",
+                   help="Extra CONFIGS macros")
+    p.add_argument("--build-dir", default=None, metavar="dir")
+
+    # search controls
+    p.add_argument("--config", choices=["single", "random", "fast", "best"],
+                   default=None, metavar="mode",
+                   help="Search strategy: single|random|fast|best (default: single)")
+    p.add_argument("--max-trials", type=int, default=50, metavar="n",
+                   help="Number of random trials for --config=random")
+    p.add_argument("--seed", type=int, default=0, metavar="n")
+
+    # roofline / plot
+    p.add_argument("--plot", action="store_true",
+                   help="Generate roofline PNG")
+    p.add_argument("--flops", type=float, default=None, metavar="f",
+                   help="Total FLOPs performed by the kernel (required with --plot)")
+    p.add_argument("--freq", type=float, default=0, metavar="f",
+                   help="Clock frequency in MHz (0 = cycle-domain plot)")
+    p.add_argument("--bw", type=float, default=None, metavar="f",
+                   help="Peak memory bandwidth in GB/s (default derived)")
+    p.add_argument("--output", default="roofline.png", metavar="file")
+
+    for name, _, flag, _, is_bool in KNOBS:
+        help_text = f"{'bool' if is_bool else 'int'}, single value or comma-list"
+        p.add_argument(flag, default=None, metavar="n", help=help_text)
+
     return p.parse_args()
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# Run selected app via blackbox.sh
+# Range parsing & validation
+# ────────────────────────────────────────────────────────────────────────────
+
+def parse_knob_list(name, raw, is_bool):
+    """Parse '4,8,16' → [4,8,16]. Empty / None → None (knob unused)."""
+    if raw is None or raw == "":
+        return None
+    parts = [x.strip() for x in raw.split(",") if x.strip()]
+    try:
+        if is_bool:
+            return [bool(int(x)) for x in parts]
+        return [int(x) for x in parts]
+    except ValueError:
+        sys.exit(f"ERROR: could not parse {name}={raw!r} as int list")
+
+
+def is_pow2(x):
+    return isinstance(x, int) and x > 0 and (x & (x - 1)) == 0
+
+
+def validate(cfg):
+    """Return (ok, reason) for a concrete config dict."""
+    for name, _, _, pow2, is_bool in KNOBS:
+        v = cfg.get(name)
+        if v is None or is_bool:
+            continue
+        if pow2 and not is_pow2(v):
+            return False, f"{name}={v} not pow2"
+
+    iw, w = cfg.get("issue_width"), cfg.get("warps")
+    if iw is not None and w is not None and iw > w:
+        return False, f"issue_width({iw}) > warps({w})"
+
+    # *_blocks issue at most ISSUE_WIDTH instructions per cycle
+    if iw is not None:
+        for blk in ("alu_blocks", "fpu_blocks", "lsu_blocks"):
+            b = cfg.get(blk)
+            if b is not None and b > iw:
+                return False, f"{blk}({b}) > issue_width({iw})"
+
+    for pref, line in [("icache", 64), ("dcache", 64), ("l2", 64)]:
+        sz = cfg.get(f"{pref}_size")
+        wy = cfg.get(f"{pref}_ways")
+        if sz and wy:
+            if sz % (wy * line) != 0:
+                return False, f"{pref}_size/{pref}_ways not aligned"
+            sets = sz // (wy * line)
+            if not is_pow2(sets):
+                return False, f"{pref} sets({sets}) not pow2"
+    return True, ""
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Blackbox runner
 # ────────────────────────────────────────────────────────────────────────────
 
 def find_blackbox(args):
-    """Return (blackbox_path, cwd) for the correct build directory."""
     if args.build_dir:
         bdir = os.path.abspath(os.path.expanduser(args.build_dir))
-    else:
-        # Try the build_test32 / build_test64 sibling of VORTEX_HOME, or VORTEX_HOME itself
-        for candidate in (
-            os.path.join(VORTEX_HOME, "build"),
-            os.path.join(VORTEX_HOME, "build32"),
-            os.path.join(VORTEX_HOME, "build64"),
-            VORTEX_HOME,
-        ):
-            bb = os.path.join(candidate, "ci", "blackbox.sh")
-            if os.path.isfile(bb):
-                return bb, candidate
-        # Fallback: source-tree blackbox (may lack config.mk)
-        return os.path.join(VORTEX_HOME, "ci", "blackbox.sh"), VORTEX_HOME
-
-    bb = os.path.join(bdir, "ci", "blackbox.sh")
-    if not os.path.isfile(bb):
-        print(f"ERROR: {bb} not found")
-        sys.exit(1)
-    return bb, bdir
+        bb = os.path.join(bdir, "ci", "blackbox.sh")
+        if not os.path.isfile(bb):
+            sys.exit(f"ERROR: {bb} not found")
+        return bb, bdir
+    for cand in (os.path.join(VORTEX_HOME, "build_test32"),
+                 os.path.join(VORTEX_HOME, "build_test64"),
+                 os.path.join(VORTEX_HOME, "build"),
+                 VORTEX_HOME):
+        bb = os.path.join(cand, "ci", "blackbox.sh")
+        if os.path.isfile(bb):
+            return bb, cand
+    return os.path.join(VORTEX_HOME, "ci", "blackbox.sh"), VORTEX_HOME
 
 
-def _matrix_dims(args):
-    m_dim = args.m if args.m is not None else args.n
-    n_dim = args.n
-    k_dim = args.k if args.k is not None else args.n
-    return m_dim, n_dim, k_dim
+def build_configs_env(cfg, extra_configs):
+    tokens = []
+    for name, macro, _, _, is_bool in KNOBS:
+        v = cfg.get(name)
+        if v is None:
+            continue
+        if is_bool:
+            if v:
+                tokens.append(f"-D{macro}")
+        else:
+            tokens.append(f"-D{macro}={v}")
+    if extra_configs:
+        tokens.extend(shlex.split(extra_configs))
+    return " ".join(tokens)
 
 
-def run_app_capture(args):
-    """Run the selected app via blackbox.sh and return captured stdout+stderr."""
-    blackbox, cwd = find_blackbox(args)
-
-    m_dim, n_dim, k_dim = _matrix_dims(args)
-    if args.app in ("sgemm_tcu", "sgemm_tcu_mx"):
-        app_args = f"-m{m_dim} -n{n_dim} -k{k_dim}"
-    else:
-        app_args = f"-n{n_dim}"
-
-    cmd = [
-        blackbox,
-        f"--driver={args.driver}",
-        f"--app={args.app}",
-        f"--args={app_args}",
-    ]
+def run_trial(args, cfg, blackbox, cwd):
+    """Run one simulation; return (ipc, instrs, cycles, bytes_or_None, raw_output)."""
+    cmd = [blackbox, f"--driver={args.driver}", f"--app={args.app}"]
+    if args.app_args:
+        cmd.append(f"--args={args.app_args}")
     if args.perf:
         cmd.append(f"--perf={args.perf}")
 
-    # All GPU microarchitecture parameters are injected via CONFIGS so they
-    # flow through blackbox.sh's "CONFIGS=$CONFIGS" environment handoff and
-    # reach both the RTL build and the simulator.
-    configs = []
-    configs.append(f"-DNUM_CORES={args.cores}")
-    configs.append(f"-DNUM_WARPS={args.warps}")
-    configs.append(f"-DNUM_THREADS={args.threads}")
-    if args.issue_width is not None:
-        configs.append(f"-DISSUE_WIDTH={args.issue_width}")
-    if args.mem_banks is not None:
-        configs.append(f"-DPLATFORM_MEMORY_NUM_BANKS={args.mem_banks}")
-    if args.mem_data_size is not None:
-        configs.append(f"-DPLATFORM_MEMORY_DATA_SIZE={args.mem_data_size}")
-    if args.app in ("sgemm_tcu", "sgemm_tcu_mx"):
-        configs.append("-DEXT_TCU_ENABLE")
-    if args.app == "sgemm_tcu_mx":
-        configs.append("-DTCU_MX_ENABLE")
-    if args.configs:
-        configs.extend(shlex.split(args.configs))
-
     env = os.environ.copy()
-    existing = env.get("CONFIGS", "")
-    env["CONFIGS"] = (existing + " " + " ".join(configs)).strip()
+    env["CONFIGS"] = (env.get("CONFIGS", "") + " "
+                      + build_configs_env(cfg, args.configs)).strip()
 
-    print(f"CWD    : {cwd}")
+    print(f"\n── trial ───────────────────────────────────────────────────")
+    print(f"CONFIG : { {k:v for k,v in cfg.items() if v is not None} }")
     print(f"CMD    : {' '.join(cmd)}")
     print(f"CONFIGS: {env['CONFIGS']}")
-    print()
+    sys.stdout.flush()
 
-    result = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        cwd=cwd,
-        env=env,
-    )
-    output = result.stdout
-    sys.stdout.write(output)
-    if result.returncode != 0:
-        print(f"ERROR: {args.app} exited with status {result.returncode}")
-        sys.exit(result.returncode)
-    return output
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True,
+                            cwd=cwd, env=env, bufsize=1)
+    chunks = []
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        chunks.append(line)
+    rc = proc.wait()
+    output = "".join(chunks)
+    if rc != 0:
+        sys.exit(f"ERROR: {args.app} exited with status {rc} — stopping search")
 
+    m = re.findall(r"PERF:\s+instrs=(\d+),\s*cycles=(\d+),\s*IPC=([0-9.]+)", output)
+    if not m:
+        sys.exit("ERROR: no PERF summary line found (enable --perf=1)")
+    instrs, cycles, ipc = m[-1]
+    instrs, cycles, ipc = int(instrs), int(cycles), float(ipc)
 
-# ────────────────────────────────────────────────────────────────────────────
-# Parse PERF output
-# ────────────────────────────────────────────────────────────────────────────
+    mem = re.search(r"PERF:\s+memory:.*?read_bytes=(\d+).*?write_bytes=(\d+)", output)
+    total_bytes = int(mem.group(1)) + int(mem.group(2)) if mem else None
 
-def parse_perf(output):
-    """
-    Parse PERF lines from kernel output.
-
-    Summary line (always present when VORTEX_PROFILING > 0):
-      PERF: instrs=X, cycles=Y, IPC=Z
-
-    Per-core lines (class 1, pipeline profiling):
-      PERF: core0: instrs=X, cycles=Y, IPC=Z
-      PERF: core0: memory: ifetches=..., loads=L, ..., stores=S
-
-    Returns a dict with aggregated metrics.
-    """
-    perf = {}
-
-    # --- Summary PERF line (instrs/cycles/IPC without "core" prefix) ---
-    summary = re.findall(
-        r"^PERF:\s+instrs=(\d+),\s*cycles=(\d+),\s*IPC=([0-9.]+)",
-        output, re.MULTILINE
-    )
-    if summary:
-        # Last matching summary line is the aggregated one printed by the driver
-        instrs, cycles, ipc = summary[-1]
-        perf["instrs"] = int(instrs)
-        perf["cycles"] = int(cycles)
-        perf["ipc"]    = float(ipc)
-    else:
-        # Fallback: sum per-core lines
-        core_lines = re.findall(
-            r"PERF:\s+core\d+:\s+instrs=(\d+),\s*cycles=(\d+),\s*IPC=([0-9.]+)",
-            output
-        )
-        if not core_lines:
-            print("ERROR: No 'PERF: instrs=...' line found. "
-                  "Enable profiling with --perf=1.")
-            sys.exit(1)
-        perf["instrs"] = sum(int(m[0]) for m in core_lines)
-        perf["cycles"] = max(int(m[1]) for m in core_lines)
-        perf["ipc"]    = sum(float(m[2]) for m in core_lines)
-
-    perf["cores_seen"] = max(1, len(re.findall(r"PERF: core\d+: instrs=", output)))
-
-    # --- Memory transactions: actual bytes transferred ---
-    # read_bytes/write_bytes are printed on the summary memory line.
-    mem = re.search(
-        r"PERF:\s+memory:.*?read_bytes=(\d+).*?write_bytes=(\d+)",
-        output
-    )
-    if mem:
-        perf["actual_bytes"] = int(mem.group(1)) + int(mem.group(2))
-        perf["actual_ai"]    = None  # computed later from flops / actual_bytes
-    else:
-        perf["actual_bytes"] = None
-        perf["actual_ai"]    = None
-
-    return perf
+    print(f">>> IPC = {ipc:.4f}  (instrs={instrs}, cycles={cycles})")
+    return ipc, instrs, cycles, total_bytes, output
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# Roofline maths
+# Search strategies
 # ────────────────────────────────────────────────────────────────────────────
 
-def compute_metrics(args, perf):
-    m_dim, n_dim, k_dim = _matrix_dims(args)
-    freq_hz  = args.freq * 1e6                          # MHz → Hz
-    num_hw_threads    = args.cores * args.warps * args.threads
-    # Compute throughput threads: one warp issues per cycle per core, executing
-    # N_threads SIMT lanes.  N_warps provides occupancy for latency hiding, not
-    # additional per-cycle throughput → do NOT multiply by N_warps here.
-    num_compute_threads = args.cores * args.threads
+def cache_key(cfg):
+    return tuple(sorted(cfg.items()))
 
-    # --- Workload FLOPs ---
-    # SGEMM: C[M×N] = A[M×K] × B[K×N] → 2·M·N·K FLOPs
-    flops = 2.0 * m_dim * n_dim * k_dim
 
-    # --- Arithmetic intensity ---
-    # Ideal (Roofline "capacity" model): one-pass, perfect reuse
-    #   load A (M·K f32) + load B (K·N f32) + store C (M·N f32)
-    bytes_ideal = (m_dim * k_dim + k_dim * n_dim + m_dim * n_dim) * 4
-    ai_ideal    = flops / bytes_ideal
+def enumerate_valid(space):
+    """Cartesian product of space (dict name→list), filtered by validate()."""
+    names = list(space)
+    for combo in itertools.product(*(space[n] for n in names)):
+        cfg = dict(zip(names, combo))
+        ok, _ = validate(cfg)
+        if ok:
+            yield cfg
 
-    # Actual (from profiler cache-line accounting), if available
-    if perf.get("actual_bytes") is not None:
-        bytes_actual = perf["actual_bytes"]
-        ai_actual    = flops / bytes_actual
-    else:
-        bytes_actual = None
-        ai_actual    = None
 
-    # --- Measured performance ---
-    time_sec       = perf["cycles"] / freq_hz
-    gflops_actual  = flops / time_sec / 1e9             # GFLOP/s
+def search_single(args, space, runner):
+    cfg = {k: v[0] for k, v in space.items()}
+    ok, reason = validate(cfg)
+    if not ok:
+        sys.exit(f"ERROR: invalid config: {reason}")
+    ipc, *rest = runner(cfg)
+    return cfg, ipc, rest
 
-    # --- Peak compute ---
-    # One warp issues per cycle per core → N_threads SIMT lanes active.
-    # fmadd.s = 2 FLOPs per lane.
-    # P_peak = 2 × N_cores × N_threads  [FLOP/cycle × freq → GFLOP/s]
-    gflops_peak    = 2.0 * num_compute_threads * freq_hz / 1e9
 
-    # --- Peak memory bandwidth ---
-    if args.bw is not None:
-        peak_bw_GBs = args.bw
-    else:
-        # PLATFORM_MEMORY_DATA_SIZE bytes/port × NUM_BANKS × freq
-        peak_bw_GBs = args.mem_data_size * args.mem_banks * freq_hz / 1e9
+def search_exhaustive(args, space, runner):
+    best = None
+    for cfg in enumerate_valid(space):
+        ipc, *rest = runner(cfg)
+        if best is None or ipc > best[1]:
+            best = (dict(cfg), ipc, rest)
+            print(f"    ★ new best IPC = {ipc:.4f}")
+    if best is None:
+        sys.exit("ERROR: no valid configs in search space")
+    return best
 
-    ridge_ai = gflops_peak / peak_bw_GBs
 
-    # ── Cycle domain ─────────────────────────────────────────────────────────
-    # All quantities below are frequency-independent; they expose micro-
-    # architectural limits directly (no clock assumption needed for plotting).
-    #
-    #   P_peak  [FLOP/cycle] = 2 × N_cores × N_threads
-    #                          (one warp/cycle per core × N_threads SIMT lanes × 2 FLOPs/FMA)
-    #
-    #   BW_peak [B/cycle]    = (B_port × N_banks) / R_clock
-    #                        = peak_bw_GBs × 10⁹ / f_core
-    #                          (memory bytes delivered per core cycle)
-    #
-    #   P_actual [FLOP/cycle] = 2·N³ / cycles
-    #
-    #   I_ridge [FLOP/B]     = P_peak_cycle / BW_peak_cycle  (same as time domain)
-    peak_flops_per_cycle  = 2.0 * num_compute_threads          # FLOP/cycle
-    peak_bw_per_cycle     = peak_bw_GBs * 1e9 / freq_hz        # B/cycle
-    flops_per_cycle       = flops / perf["cycles"]              # FLOP/cycle (measured)
-    ridge_ai_cycle        = peak_flops_per_cycle / peak_bw_per_cycle  # same FLOP/B
+def search_random(args, space, runner, max_trials):
+    rng = rand.Random(args.seed)
+    seen = set()
+    best = None
+    trials = 0
+    # cap at total valid space
+    hard_cap = max_trials * 4
+    attempts = 0
+    while trials < max_trials and attempts < hard_cap:
+        attempts += 1
+        cfg = {n: rng.choice(vals) for n, vals in space.items()}
+        ok, _ = validate(cfg)
+        if not ok:
+            continue
+        k = cache_key(cfg)
+        if k in seen:
+            continue
+        seen.add(k)
+        trials += 1
+        print(f"\n[random {trials}/{max_trials}]")
+        ipc, *rest = runner(cfg)
+        if best is None or ipc > best[1]:
+            best = (dict(cfg), ipc, rest)
+            print(f"    ★ new best IPC = {ipc:.4f}")
+    if best is None:
+        sys.exit("ERROR: no valid configs sampled")
+    return best
 
-    return {
-        "flops":               flops,
-        "bytes_ideal":         bytes_ideal,
-        "bytes_actual":        bytes_actual,
-        "ai_ideal":            ai_ideal,
-        "ai_actual":           ai_actual,
-        "time_sec":            time_sec,
-        "gflops_actual":       gflops_actual,
-        "gflops_peak":         gflops_peak,
-        "peak_bw_GBs":         peak_bw_GBs,
-        "ridge_ai":            ridge_ai,
-        "util_compute":        gflops_actual / gflops_peak * 100,
-        "util_memory":         (gflops_actual / (peak_bw_GBs * ai_actual) * 100
-                                if ai_actual else None),
-        "freq_hz":             freq_hz,
-        "num_hw_threads":      num_hw_threads,
-        "num_compute_threads": num_compute_threads,
-        # cycle-domain equivalents
-        "peak_flops_per_cycle": peak_flops_per_cycle,
-        "peak_bw_per_cycle":    peak_bw_per_cycle,
-        "flops_per_cycle":      flops_per_cycle,
-        "ridge_ai_cycle":       ridge_ai_cycle,
-        "util_compute_cycle":   flops_per_cycle / peak_flops_per_cycle * 100,
-    }
+
+def search_fast(args, space, runner):
+    """Coordinate descent in KNOBS priority order. Stops when a full pass
+    yields no IPC improvement."""
+    seen = {}
+    def eval_cfg(cfg):
+        k = cache_key(cfg)
+        if k in seen:
+            print(f"    (cached IPC={seen[k][0]:.4f})")
+            return seen[k]
+        ok, reason = validate(cfg)
+        if not ok:
+            print(f"    (skip invalid: {reason})")
+            return None
+        ipc, *rest = runner(cfg)
+        seen[k] = (ipc, rest)
+        return seen[k]
+
+    # baseline: first value of each knob
+    cur = {n: vals[0] for n, vals in space.items()}
+    if not validate(cur)[0]:
+        # pick first valid combo
+        for cfg in enumerate_valid(space):
+            cur = cfg
+            break
+    res = eval_cfg(cur)
+    if res is None:
+        sys.exit("ERROR: baseline invalid")
+    best_ipc = res[0]
+    print(f"\n[fast] baseline IPC = {best_ipc:.4f}")
+
+    pass_num = 0
+    while True:
+        pass_num += 1
+        improved = False
+        print(f"\n[fast] pass {pass_num}")
+        for name, _, _, _, _ in KNOBS:
+            if name not in space or len(space[name]) <= 1:
+                continue
+            base_val = cur[name]
+            for v in space[name]:
+                if v == base_val:
+                    continue
+                trial = dict(cur); trial[name] = v
+                print(f"\n[fast] sweep {name}: {base_val} → {v}")
+                r = eval_cfg(trial)
+                if r is None:
+                    continue
+                if r[0] > best_ipc:
+                    best_ipc = r[0]
+                    cur = trial
+                    improved = True
+                    print(f"    ★ new best IPC = {best_ipc:.4f}  (locked {name}={v})")
+        if not improved:
+            print(f"\n[fast] converged at pass {pass_num}, best IPC = {best_ipc:.4f}")
+            break
+    return dict(cur), best_ipc, seen[cache_key(cur)][1]
 
 
 # ────────────────────────────────────────────────────────────────────────────
 # Plot
 # ────────────────────────────────────────────────────────────────────────────
 
-def plot_roofline(args, perf, m, outfile):
-    fig, ax = plt.subplots(figsize=(12, 7))
+def plot_roofline(args, cfg, ipc, instrs, cycles, total_bytes, outfile):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
 
-    ai_range = np.logspace(-3, 4, 3000)
+    by_cycle = (args.freq == 0)
+    freq_hz  = args.freq * 1e6 if args.freq > 0 else 1.0
 
-    by_cycle = args.by_cycle
+    cores      = cfg.get("cores", 1)        or 1
+    threads    = cfg.get("threads", 4)      or 4
+    fpu_blocks = cfg.get("fpu_blocks", 1)   or 1
+    mem_bytes  = cfg.get("mem_data_size", 64) or 64
+    mem_banks  = cfg.get("mem_banks", 2)    or 2
+
+    peak_flops_per_cycle = 2.0 * cores * threads * fpu_blocks
+    peak_bw_GBs = args.bw if args.bw is not None else mem_bytes * mem_banks * freq_hz / 1e9
+    peak_bw_per_cycle = peak_bw_GBs * 1e9 / freq_hz if args.freq > 0 else mem_bytes * mem_banks
+
+    flops_total = args.flops
+    flops_per_cycle = flops_total / cycles
+    ai = (flops_total / total_bytes) if total_bytes else None
 
     if by_cycle:
-        # ── Cycle domain ─────────────────────────────────────────────────────
-        # Y-axis: FLOP/cycle   X-axis: FLOP/B   BW slope: B/cycle
-        #
-        #   P_peak   = 2 × N_cores × N_warps × N_threads      [FLOP/cycle]
-        #   BW_peak  = (B_port × N_banks) / R_clock            [B/cycle]
-        #            = peak_bw_GBs × 10⁹ / f_core
-        #   P(I)     = min(P_peak, BW_peak × I)               [FLOP/cycle]
-        peak_perf  = m["peak_flops_per_cycle"]
-        peak_bw    = m["peak_bw_per_cycle"]
-        act_perf   = m["flops_per_cycle"]
-        ridge      = m["ridge_ai_cycle"]
-        y_label    = "Performance  (FLOP / cycle)"
-        bw_label   = f"{peak_bw:.2f} B/cycle"
-        peak_label = f"Peak compute  {peak_perf:.0f} FLOP/cycle  " \
-                     f"(2 × {args.cores}C × {args.threads}T)"
-        act_label  = f"{act_perf:.3f} FLOP/cycle"
+        peak_perf, peak_bw, act_perf = peak_flops_per_cycle, peak_bw_per_cycle, flops_per_cycle
+        y_label = "Performance (FLOP/cycle)"
+        act_str = f"{act_perf:.3f} FLOP/cycle"
+        bw_str  = f"{peak_bw:.2f} B/cycle"
     else:
-        # ── Time domain ──────────────────────────────────────────────────────
-        # Y-axis: GFLOP/s   X-axis: FLOP/B   BW slope: GB/s
-        #
-        #   P_peak   = 2 × N_cores × N_threads × f_core  [GFLOP/s]
-        #   BW_peak  = B_port × N_banks × f_core          [GB/s]
-        #   P(I)     = min(P_peak, BW_peak × I)           [GFLOP/s]
-        peak_perf  = m["gflops_peak"]
-        peak_bw    = m["peak_bw_GBs"]
-        act_perf   = m["gflops_actual"]
-        ridge      = m["ridge_ai"]
-        y_label    = "Performance  (GFLOP/s)"
-        bw_label   = f"{peak_bw:.1f} GB/s"
-        peak_label = f"Peak compute  {peak_perf:.2f} GFLOP/s"
-        act_label  = f"{act_perf:.4f} GFLOP/s"
+        gflops_peak  = peak_flops_per_cycle * freq_hz / 1e9
+        gflops_act   = flops_total / (cycles / freq_hz) / 1e9
+        peak_perf, peak_bw, act_perf = gflops_peak, peak_bw_GBs, gflops_act
+        y_label = "Performance (GFLOP/s)"
+        act_str = f"{act_perf:.3f} GFLOP/s"
+        bw_str  = f"{peak_bw:.1f} GB/s"
 
-    bw_roof   = peak_bw * ai_range
-    comp_roof = np.full_like(ai_range, peak_perf)
-    roofline  = np.minimum(bw_roof, comp_roof)
+    ridge = peak_perf / peak_bw
 
-    # --- Roofline envelope ---
-    ax.loglog(ai_range, roofline, "b-", linewidth=2.5,
-              label="Roofline (peak BW + peak compute)")
-    ax.axvline(ridge, color="green", linestyle=":", linewidth=1.0, alpha=0.6,
-               label=f"Ridge point  {ridge:.2f} FLOP/B")
-    ax.axhline(peak_perf, color="blue", linestyle="--", linewidth=1.0,
-               alpha=0.5, label=peak_label)
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ai_range = np.logspace(-3, 4, 3000)
+    roof = np.minimum(peak_bw * ai_range, np.full_like(ai_range, peak_perf))
+    ax.loglog(ai_range, roof, "b-", linewidth=2.5, label="Roofline")
+    ax.axhline(peak_perf, color="blue", linestyle="--", linewidth=1, alpha=0.5,
+               label=f"Peak compute {peak_perf:.1f}")
+    ax.axvline(ridge, color="green", linestyle=":", alpha=0.6,
+               label=f"Ridge {ridge:.2f} FLOP/B")
 
-    # Bandwidth slope label
-    bw_mid_ai = ridge * 0.05
-    bw_mid_y  = peak_bw * bw_mid_ai
-    ax.text(bw_mid_ai * 1.4, bw_mid_y * 1.6,
-            bw_label, fontsize=8, color="blue", rotation=35, va="bottom")
+    if ai is not None:
+        ax.plot(ai, act_perf, "ro", markersize=12, zorder=6,
+                label=f"Actual AI={ai:.2f}  ({act_str})")
 
-    # Efficiency iso-lines
-    for eff in (0.25, 0.5, 0.75):
-        ax.axhline(peak_perf * eff, color="gray",
-                   linestyle=":", linewidth=0.5, alpha=0.4)
-        ax.text(ai_range[-1] * 0.98, peak_perf * eff * 1.05,
-                f"{int(eff * 100)}%", fontsize=7, ha="right",
-                color="gray", va="bottom")
+    ax.text(ridge * 0.05 * 1.4, peak_bw * ridge * 0.05 * 1.6,
+            bw_str, fontsize=8, color="blue", rotation=35)
 
-    # --- Operating points ---
-    # 1. Actual AI (from profiler cache-line accounting) — primary point
-    if m["ai_actual"] is not None:
-        ax.plot(m["ai_actual"], act_perf, "ro", markersize=12, zorder=6,
-                label=f"Actual  AI={m['ai_actual']:.2f} FLOP/B  ({act_label})")
-        _annotate(ax, m["ai_actual"], act_perf, "darkred",
-                  f"  actual AI\n  {act_label}")
-
-    # 2. Ideal AI (one-pass, perfect reuse) — shows potential
-    ax.plot(m["ai_ideal"], act_perf, "r^", markersize=10, zorder=5,
-            markerfacecolor="none", markeredgecolor="darkred",
-            label=f"Ideal  AI={m['ai_ideal']:.1f} FLOP/B  "
-                  f"(2N / (3×sizeof(T)) = N/6, perfect reuse)")
-    _annotate(ax, m["ai_ideal"], act_perf * 0.6, "darkred",
-              f"  ideal AI\n  (N/6={m['ai_ideal']:.1f})")
-
-    # Dashed arrow: actual AI → ideal AI (data-reuse gap)
-    if m["ai_actual"] is not None:
-        ax.annotate(
-            "", xy=(m["ai_ideal"], act_perf * 0.65),
-            xytext=(m["ai_actual"] * 1.05, act_perf * 0.95),
-            arrowprops=dict(arrowstyle="->", color="salmon",
-                            lw=1.0, linestyle="dashed"),
-        )
-        ax.text((m["ai_actual"] + m["ai_ideal"]) * 0.7, act_perf * 0.77,
-                "cache\nreuse gap", fontsize=7, color="salmon",
-                ha="center", va="center",
-                bbox=dict(boxstyle="round,pad=0.2",
-                          facecolor="white", edgecolor="salmon", alpha=0.7))
-
-    # --- Labels / title ---
-    domain_tag = "cycle domain" if by_cycle else f"{args.freq:.0f} MHz"
-    ax.set_xlabel("Arithmetic Intensity  (FLOP / byte)", fontsize=12)
-    ax.set_ylabel(y_label, fontsize=12)
-    ax.set_title(
-        f"Vortex SGEMM Roofline — {args.app} — "
-        f"{args.cores}C / {args.warps}W / {args.threads}T, "
-        f"M={_matrix_dims(args)[0]}, N={_matrix_dims(args)[1]}, K={_matrix_dims(args)[2]}, {args.driver}, {domain_tag}",
-        fontsize=12, fontweight="bold",
-    )
+    domain = "cycle domain" if by_cycle else f"{args.freq:.0f} MHz"
+    cfg_str = ", ".join(f"{k}={v}" for k, v in sorted(cfg.items()) if v is not None)
+    ax.set_xlabel("Arithmetic Intensity (FLOP/byte)")
+    ax.set_ylabel(y_label)
+    ax.set_title(f"Vortex Roofline — {args.app} [{args.app_args}] — "
+                 f"{args.driver}, {domain}\nIPC={ipc:.3f}  {cfg_str}",
+                 fontsize=10, fontweight="bold")
     ax.legend(fontsize=9, loc="upper left")
     ax.grid(True, which="both", alpha=0.25)
-
-    # --- Summary text box ---
-    util_c = m["util_compute_cycle"] if by_cycle else m["util_compute"]
-    lines = [
-        f"cycles        = {perf['cycles']:>13,}",
-        f"instrs        = {perf['instrs']:>13,}",
-        f"IPC           = {perf['ipc']:>13.3f}",
-        f"FLOPs         = {m['flops'] / 1e6:>12.2f} M  (2·N³)",
-    ]
-    if by_cycle:
-        lines += [
-            f"actual perf   = {m['flops_per_cycle']:>10.3f} FLOP/cycle",
-            f"peak compute  = {m['peak_flops_per_cycle']:>10.0f} FLOP/cycle",
-            f"peak BW       = {m['peak_bw_per_cycle']:>10.2f} B/cycle",
-            f"ridge AI      = {m['ridge_ai_cycle']:>11.2f} FLOP/B",
-        ]
-    else:
-        lines += [
-            f"exec time     = {m['time_sec'] * 1e3:>12.2f} ms",
-            f"actual perf   = {m['gflops_actual']:>11.4f} GFLOP/s",
-            f"peak compute  = {m['gflops_peak']:>11.2f} GFLOP/s",
-            f"peak BW       = {m['peak_bw_GBs']:>12.1f} GB/s",
-            f"ridge AI      = {m['ridge_ai']:>12.2f} FLOP/B",
-        ]
-    lines += [
-        f"compute util  = {util_c:>11.3f} %",
-        f"ideal AI      = {m['ai_ideal']:>12.2f} FLOP/B  (N/6)",
-    ]
-    if m["util_memory"] is not None:
-        lines.append(f"bw util (act) = {m['util_memory']:>11.3f} %")
-    if m["ai_actual"] is not None:
-        lines.append(f"actual AI     = {m['ai_actual']:>12.2f} FLOP/B")
-        lines.append(f"reuse factor  = {m['ai_actual'] / m['ai_ideal']:>12.4f}×")
-
-    ax.text(
-        0.99, 0.03, "\n".join(lines),
-        transform=ax.transAxes,
-        fontsize=7.5, family="monospace",
-        verticalalignment="bottom", horizontalalignment="right",
-        bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.85),
-    )
-
     plt.tight_layout()
     plt.savefig(outfile, dpi=150)
     plt.close(fig)
     return os.path.abspath(outfile)
-
-
-def _annotate(ax, ai, gfl, color, label):
-    ax.annotate(
-        label,
-        xy=(ai, gfl),
-        xytext=(ai * 3.0, gfl * 1.3),
-        fontsize=8, color=color,
-        arrowprops=dict(arrowstyle="->", color=color, lw=0.8),
-    )
-
-
-# ────────────────────────────────────────────────────────────────────────────
-# Console summary
-# ────────────────────────────────────────────────────────────────────────────
-
-def print_metrics(args, perf, m):
-    m_dim, n_dim, k_dim = _matrix_dims(args)
-    sep = "═" * 56
-    print(f"\n{sep}")
-    print("  Vortex SGEMM Roofline Metrics")
-    print(sep)
-    print(f"  App             : {args.app}")
-    print(f"  Config          : {args.cores}C / {args.warps}W / {args.threads}T")
-    print(f"  Matrix size     : M={m_dim}, N={n_dim}, K={k_dim}")
-    print(f"  Driver          : {args.driver}")
-    if args.by_cycle:
-        print(f"  Domain          : per-cycle")
-    else:
-        print(f"  Clock           : {args.freq:.0f} MHz")
-    print()
-    print(f"  FLOPs           : {m['flops'] / 1e6:.3f} M  (2·N³)")
-    print(f"  Bytes  (ideal)  : {m['bytes_ideal'] / 1024:.1f} KiB"
-          f"  (3·N²·4, perfect reuse)")
-    if m["bytes_actual"] is not None:
-        print(f"  Bytes  (actual) : {m['bytes_actual'] / 1e6:.2f} MB"
-              f"  ({m['bytes_actual'] / m['bytes_ideal']:.0f}× ideal)")
-    print()
-    print(f"  Cycles          : {perf['cycles']:,}")
-    print(f"  Instrs          : {perf['instrs']:,}")
-    print(f"  IPC             : {perf['ipc']:.3f}")
-    print()
-    if args.by_cycle:
-        print(f"  Actual FLOP/c   : {m['flops_per_cycle']:.4f}")
-        print(f"  Peak FLOP/c     : {m['peak_flops_per_cycle']:.0f}"
-              f"  (2 × {args.cores}C × {args.threads}T)")
-        print(f"  Compute util.   : {m['util_compute_cycle']:.3f} %")
-        print()
-        print(f"  Peak BW         : {m['peak_bw_per_cycle']:.2f} B/cycle")
-        print(f"  Ridge AI        : {m['ridge_ai_cycle']:.2f} FLOP/byte")
-    else:
-        print(f"  Exec time       : {m['time_sec'] * 1e3:.3f} ms")
-        print(f"  Actual GFLOP/s  : {m['gflops_actual']:.4f}")
-        print(f"  Peak GFLOP/s    : {m['gflops_peak']:.2f}"
-              f"  (2 × {args.cores}C × {args.threads}T × {args.freq:.0f} MHz)")
-        print(f"  Compute util.   : {m['util_compute']:.3f} %")
-        print()
-        print(f"  Peak BW         : {m['peak_bw_GBs']:.1f} GB/s")
-        print(f"  Ridge AI        : {m['ridge_ai']:.2f} FLOP/byte")
-    print(f"  AI  (ideal)     : {m['ai_ideal']:.2f} FLOP/byte  (N/6)")
-    if m["ai_actual"] is not None:
-        print(f"  AI  (actual)    : {m['ai_actual']:.3f} FLOP/byte")
-        print(f"  Cache reuse     : {m['ai_actual'] / m['ai_ideal']:.4f}×"
-              f"  of ideal  ← data-reuse bottleneck")
-    if m["util_memory"] is not None:
-        print(f"  BW util (act.)  : {m['util_memory']:.3f} %")
-    print(sep)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -601,25 +507,61 @@ def print_metrics(args, perf, m):
 def main():
     args = parse_args()
 
-    # --freq=0 implies --by-cycle (frequency-independent mode)
-    if args.freq == 0:
-        args.by_cycle = True
-        _, bdir = find_blackbox(args)
-        freq = read_platform_clock(bdir)
-        args.freq = float(freq) if freq else 1.0
+    if args.plot and args.flops is None:
+        sys.exit("ERROR: --plot requires --flops")
 
-    output = run_app_capture(args)
-    perf   = parse_perf(output)
+    # Build search space from CLI
+    space = {}
+    for name, _, _, _, is_bool in KNOBS:
+        raw = getattr(args, name.replace("-", "_"))
+        vals = parse_knob_list(name, raw, is_bool)
+        if vals is not None:
+            space[name] = vals
 
-    print(f"\nParsed ({perf['cores_seen']} core(s)): "
-          f"instrs={perf['instrs']}, cycles={perf['cycles']}, "
-          f"IPC={perf['ipc']:.3f}")
+    # Auto-select strategy if not specified
+    if args.config is None:
+        args.config = "random" if any(len(v) > 1 for v in space.values()) else "single"
+    print(f"Strategy: {args.config}")
+    print(f"Search space: { {k:v for k,v in space.items()} }")
 
-    m = compute_metrics(args, perf)
-    print_metrics(args, perf, m)
+    blackbox, cwd = find_blackbox(args)
+    print(f"Blackbox: {blackbox}\nCWD     : {cwd}\n")
 
-    saved = plot_roofline(args, perf, m, args.output)
-    print(f"\nRoofline saved → {saved}")
+    def runner(cfg):
+        return run_trial(args, cfg, blackbox, cwd)
+
+    if args.config == "single":
+        cfg, ipc, rest = search_single(args, space, runner)
+    elif args.config == "random":
+        cfg, ipc, rest = search_random(args, space, runner, args.max_trials)
+    elif args.config == "fast":
+        cfg, ipc, rest = search_fast(args, space, runner)
+    else:
+        cfg, ipc, rest = search_exhaustive(args, space, runner)
+
+    instrs, cycles, total_bytes, _ = rest
+
+    sep = "═" * 64
+    print(f"\n{sep}\n  WINNING CONFIGURATION\n{sep}")
+    print(f"  IPC     : {ipc:.4f}")
+    print(f"  instrs  : {instrs:,}")
+    print(f"  cycles  : {cycles:,}")
+    if total_bytes:
+        print(f"  bytes   : {total_bytes:,}")
+    print(f"  config  :")
+    for k, v in sorted(cfg.items()):
+        if v is not None:
+            print(f"    {k:<20} = {v}")
+    repro = [f"{KNOB_BY_NAME[k][2]}={1 if v is True else (0 if v is False else v)}"
+             for k, v in cfg.items() if v is not None]
+    print(f"\n  Reproduce:")
+    print(f"    python3 perf/roofline.py --driver={args.driver} --app={args.app} "
+          f"--args='{args.app_args}' --config=single " + " ".join(repro))
+    print(sep)
+
+    if args.plot:
+        saved = plot_roofline(args, cfg, ipc, instrs, cycles, total_bytes, args.output)
+        print(f"\nRoofline saved → {saved}")
 
 
 if __name__ == "__main__":

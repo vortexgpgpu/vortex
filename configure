@@ -64,6 +64,10 @@ copy_files() {
                     filename=$(basename -- "$file")
                     filename_no_ext="${filename%.in}"
                     dest_file="$dest_dir/$filename_no_ext"
+                    # skip if dest is up-to-date w.r.t. source and config.mk
+                    if [ -f "$dest_file" ] && [ "$dest_file" -nt "$file" ] && [ "$dest_file" -nt "$CONFIG_STAMP" ]; then
+                        continue
+                    fi
                     mkdir -p "$dest_dir"
                     sed "s|@VORTEX_HOME@|$SOURCE_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@BUILDDIR@|$CURRENT_DIR|g" "$file" > "$dest_file"
                     # apply permissions to bash scripts
@@ -73,6 +77,11 @@ copy_files() {
                     fi
                 else
                     if [ $same_dir -eq 0 ]; then
+                        filename=$(basename -- "$file")
+                        dest_file="$dest_dir/$filename"
+                        if [ -f "$dest_file" ] && [ ! "$file" -nt "$dest_file" ]; then
+                            continue
+                        fi
                         mkdir -p "$dest_dir"
                         cp -p "$file" "$dest_dir"
                     fi
@@ -172,6 +181,13 @@ SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
 SOURCE_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 THIRD_PARTY_DIR=$SOURCE_DIR/third_party
+
+# stamp file tracks config parameter changes; touched only when params change
+CONFIG_STAMP="$CURRENT_DIR/.config.stamp"
+CONFIG_SIG="XLEN=$XLEN TOOLDIR=$TOOLDIR OSVERSION=$OSVERSION PREFIX=$PREFIX SOURCE_DIR=$SOURCE_DIR BUILDDIR=$CURRENT_DIR"
+if [ ! -f "$CONFIG_STAMP" ] || [ "$(cat "$CONFIG_STAMP" 2>/dev/null)" != "$CONFIG_SIG" ]; then
+    echo "$CONFIG_SIG" > "$CONFIG_STAMP"
+fi
 
 copy_files "$SOURCE_DIR" "$CURRENT_DIR"
 

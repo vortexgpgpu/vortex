@@ -117,71 +117,88 @@ struct line_t {
 
 struct set_t {
   std::vector<line_t> lines;
+  uint32_t fifo_ptr;    // next victim for FIFO policy
 
   set_t(uint32_t num_ways)
-      : lines(num_ways) {}
+      : lines(num_ways), fifo_ptr(0) {}
 
   void reset() {
     for (auto &line : lines) {
       line.reset();
     }
+    fifo_ptr = 0;
   }
 
-  // Tag lookup for a core/replay access. Updates LRU counters.
+  // Tag lookup for a core/replay access. Updates PLRU counters on PLRU.
   // - Returns hit line id or -1.
   // - free_line_id: first unused way (if any), else -1.
-  // - repl_line_id: LRU victim candidate (always a valid index when lines is non-empty).
-  int tag_lookup(uint64_t tag, int *free_line_id, int *repl_line_id) {
+  // - repl_line_id: victim candidate chosen per `policy`.
+  int tag_lookup(uint64_t tag, uint8_t policy, uint32_t rand_idx,
+                 int *free_line_id, int *repl_line_id) {
     int hit_line_id = -1;
     *free_line_id = -1;
-
-    // Select replacement among valid lines using max LRU counter.
-    uint32_t max_cnt = 0;
-    bool repl_valid = false;
     *repl_line_id = 0;
+
+    uint32_t max_cnt = 0;
+    bool any_valid = false;
+    bool plru_chosen = false;
 
     for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
       auto &line = lines.at(i);
 
-      // Track first free line.
       if (!line.valid) {
         if (*free_line_id == -1)
           *free_line_id = i;
         continue;
       }
+      any_valid = true;
 
-      // Track LRU line for replacement.
-      if (!repl_valid || line.lru_ctr >= max_cnt) {
-        max_cnt = line.lru_ctr;
-        *repl_line_id = i;
-        repl_valid = true;
-      }
-
-      // Check for tag match.
-      if (line.tag == tag) {
-        hit_line_id = i;
-        line.lru_ctr = 0;
+      // PLRU victim candidate: max counter among valid ways.
+      if (policy == CacheSim::PLRU) {
+        if (!plru_chosen || line.lru_ctr >= max_cnt) {
+          max_cnt = line.lru_ctr;
+          *repl_line_id = i;
+          plru_chosen = true;
+        }
+        if (line.tag == tag) {
+          hit_line_id = i;
+          line.lru_ctr = 0;
+        } else {
+          ++line.lru_ctr;
+        }
       } else {
-        ++line.lru_ctr;
+        if (line.tag == tag) {
+          hit_line_id = i;
+        }
       }
     }
 
-    // If no valid lines exist, pick way 0 (or the free way if present).
-    if (!repl_valid) {
-      *repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
+    // Select victim per policy (for miss path).
+    switch (policy) {
+    case CacheSim::FIFO:
+      *repl_line_id = fifo_ptr % lines.size();
+      break;
+    case CacheSim::RANDOM:
+      *repl_line_id = rand_idx % lines.size();
+      break;
+    case CacheSim::PLRU:
+    default:
+      if (!any_valid)
+        *repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
+      break;
     }
 
     return hit_line_id;
   }
 
-  // Choose a victim line for installing a fill. Does NOT mutate LRU.
-  // Returns the selected line id.
-  int select_victim(int *free_line_id, int *repl_line_id) const {
+  // Choose a victim line for installing a fill. Does NOT mutate state.
+  int select_victim(uint8_t policy, uint32_t rand_idx,
+                    int *free_line_id, int *repl_line_id) const {
     *free_line_id = -1;
     *repl_line_id = 0;
 
     uint32_t max_cnt = 0;
-    bool repl_valid = false;
+    bool any_valid = false;
 
     for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
       const auto &line = lines.at(i);
@@ -190,15 +207,27 @@ struct set_t {
           *free_line_id = i;
         continue;
       }
-      if (!repl_valid || line.lru_ctr >= max_cnt) {
-        max_cnt = line.lru_ctr;
-        *repl_line_id = i;
-        repl_valid = true;
+      any_valid = true;
+      if (policy == CacheSim::PLRU) {
+        if (line.lru_ctr >= max_cnt) {
+          max_cnt = line.lru_ctr;
+          *repl_line_id = i;
+        }
       }
     }
 
-    if (!repl_valid) {
-      *repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
+    switch (policy) {
+    case CacheSim::FIFO:
+      *repl_line_id = fifo_ptr % lines.size();
+      break;
+    case CacheSim::RANDOM:
+      *repl_line_id = rand_idx % lines.size();
+      break;
+    case CacheSim::PLRU:
+    default:
+      if (!any_valid)
+        *repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
+      break;
     }
 
     return (*free_line_id != -1) ? *free_line_id : *repl_line_id;
@@ -384,7 +413,7 @@ public:
             const CacheSim::Config &config,
             const params_t &params,
             uint32_t bank_id)
-      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, params.lines_per_set), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)) {
+      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, params.lines_per_set), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)), rand_ctr_(0) {
     this->reset();
   }
 
@@ -395,6 +424,7 @@ public:
     pending_write_reqs_ = 0;
     pending_fill_reqs_ = 0;
     inflight_fills_ = 0;
+    rand_ctr_ = 0;
     for (auto &set : sets_) {
       set.reset();
     }
@@ -498,7 +528,13 @@ private:
       auto &set = sets_.at(root_peek.set_id);
       int32_t free_line_id = -1;
       int32_t repl_line_id = 0;
-      int32_t victim_line_id = set.select_victim(&free_line_id, &repl_line_id);
+      int32_t victim_line_id = set.select_victim(config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
+      // advance FIFO/RANDOM bookkeeping
+      if (config_.repl_policy == CacheSim::FIFO) {
+        set.fifo_ptr = (set.fifo_ptr + 1) % set.lines.size();
+      } else if (config_.repl_policy == CacheSim::RANDOM) {
+        ++rand_ctr_;
+      }
       auto &victim_line = set.lines.at(victim_line_id);
       if (config_.write_back && victim_line.valid && victim_line.dirty) {
         MemReq mem_req;
@@ -530,7 +566,7 @@ private:
       auto &set = sets_.at(set_id);
       int32_t free_line_id = -1;
       int32_t repl_line_id = 0;
-      int hit_line_id = set.tag_lookup(addr_tag, &free_line_id, &repl_line_id);
+      int hit_line_id = set.tag_lookup(addr_tag, config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
       assert(hit_line_id != -1);
 
       if (bank_req.write && config_.write_back) {
@@ -553,7 +589,7 @@ private:
 
       int32_t free_line_id = -1;
       int32_t repl_line_id = 0;
-      int hit_line_id = set.tag_lookup(addr_tag, &free_line_id, &repl_line_id);
+      int hit_line_id = set.tag_lookup(addr_tag, config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
 
       if (hit_line_id != -1) {
         //
@@ -681,6 +717,7 @@ private:
   uint64_t pending_write_reqs_;
   uint64_t pending_fill_reqs_;
   uint32_t inflight_fills_;
+  uint32_t rand_ctr_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

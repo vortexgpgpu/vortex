@@ -361,7 +361,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             head_reclaimable_dly <= head_reclaimable_s1 || (cta_done && (done_slot_dly == head_r));
 
             if (head_reclaimable_s1 || (cta_done && (done_slot_dly == head_r))) begin
-                head_r <= head_r + CS_BITS'(1);
+                head_r <= head_r + CS_BITS'((NUM_WARPS > 1) ? 1 : 0);
             end
 
             if (head_reclaimable_dly) begin
@@ -398,7 +398,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
                         // Allocate slot at tail; cur_cta_slot = tail_r (before increment)
                         slot_valid_r[tail_r] <= 1'b1;
-                        tail_r <= tail_r + CS_BITS'(1);
+                        tail_r <= tail_r + CS_BITS'((NUM_WARPS > 1) ? 1 : 0);
                         cur_slot_r <= tail_r;
                         dispatched_warps <= '0;
                         state <= DISPATCH;

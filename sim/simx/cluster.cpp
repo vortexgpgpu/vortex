@@ -58,6 +58,7 @@ Cluster::Cluster(const SimContext& ctx,
     false,                  // write response
     L2_MSHR_SIZE,           // mshr size
     2,                      // pipeline latency
+    L2_REPL_POLICY,         // replacement policy
   });
 
 
