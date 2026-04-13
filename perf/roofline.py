@@ -36,13 +36,17 @@
 #     --dcache-size=16384,32768,65536 --dcache-ways=2,4,8
 
 import argparse
+import datetime
 import itertools
+import json
 import os
 import random as rand
 import re
 import shlex
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 VORTEX_HOME = os.path.normpath(os.path.join(SCRIPT_DIR, ".."))
@@ -160,6 +164,13 @@ def parse_args():
     p.add_argument("--bw", type=float, default=None, metavar="f",
                    help="Peak memory bandwidth in GB/s (default derived)")
     p.add_argument("--output", default="roofline.png", metavar="file")
+    p.add_argument("--cache", default="smoke.cache", metavar="file",
+                   help="Persistent trial cache (JSONL, append-only). "
+                        "Delete the file to start over.")
+    p.add_argument("--jobs", type=int, default=1, metavar="n",
+                   help="Parallel blackbox jobs (uses --nohup for isolation)")
+    p.add_argument("--timeout", type=int, default=3600, metavar="n",
+                   help="Per-trial timeout in seconds")
 
     for name, _, flag, _, is_bool in KNOBS:
         help_text = f"{'bool' if is_bool else 'int'}, single value or comma-list"
@@ -232,7 +243,13 @@ def find_blackbox(args):
         if not os.path.isfile(bb):
             sys.exit(f"ERROR: {bb} not found")
         return bb, bdir
-    for cand in (os.path.join(VORTEX_HOME, "build_test32"),
+    # Prefer the current working directory — user typically `cd build_dir`.
+    cwd = os.getcwd()
+    bb = os.path.join(cwd, "ci", "blackbox.sh")
+    if os.path.isfile(bb):
+        return bb, cwd
+    for cand in (os.path.join(VORTEX_HOME, "build2_test32"),
+                 os.path.join(VORTEX_HOME, "build_test32"),
                  os.path.join(VORTEX_HOME, "build_test64"),
                  os.path.join(VORTEX_HOME, "build"),
                  VORTEX_HOME):
@@ -258,47 +275,122 @@ def build_configs_env(cfg, extra_configs):
     return " ".join(tokens)
 
 
-def run_trial(args, cfg, blackbox, cwd):
-    """Run one simulation; return (ipc, instrs, cycles, bytes_or_None, raw_output)."""
+def run_trial(args, cfg, blackbox, cwd, use_nohup):
+    """Run one simulation; return (ipc, instrs, cycles, bytes_or_None, captured_output).
+    Output is fully captured (not streamed) so callers can print it atomically."""
     cmd = [blackbox, f"--driver={args.driver}", f"--app={args.app}"]
     if args.app_args:
         cmd.append(f"--args={args.app_args}")
     if args.perf:
         cmd.append(f"--perf={args.perf}")
+    if use_nohup:
+        cmd.append("--nohup")
 
     env = os.environ.copy()
     env["CONFIGS"] = (env.get("CONFIGS", "") + " "
                       + build_configs_env(cfg, args.configs)).strip()
 
-    print(f"\n── trial ───────────────────────────────────────────────────")
-    print(f"CONFIG : { {k:v for k,v in cfg.items() if v is not None} }")
-    print(f"CMD    : {' '.join(cmd)}")
-    print(f"CONFIGS: {env['CONFIGS']}")
-    sys.stdout.flush()
+    header = (
+        "\n── trial ───────────────────────────────────────────────────\n"
+        f"CONFIG : { {k:v for k,v in cfg.items() if v is not None} }\n"
+        f"CMD    : {' '.join(cmd)}\n"
+        f"CONFIGS: {env['CONFIGS']}\n"
+    )
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True,
-                            cwd=cwd, env=env, bufsize=1)
-    chunks = []
-    for line in proc.stdout:
-        sys.stdout.write(line)
-        chunks.append(line)
-    rc = proc.wait()
-    output = "".join(chunks)
-    if rc != 0:
-        sys.exit(f"ERROR: {args.app} exited with status {rc} — stopping search")
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, cwd=cwd, env=env, timeout=args.timeout)
+    except subprocess.TimeoutExpired as e:
+        partial = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) \
+                  else (e.stdout or "")
+        return None, None, None, None, (
+            header + partial +
+            f"\nERROR: TIMEOUT after {args.timeout}s — killed\n")
+    output = header + proc.stdout
+    if proc.returncode != 0:
+        return None, None, None, None, output + f"\nERROR: exit status {proc.returncode}"
 
-    m = re.findall(r"PERF:\s+instrs=(\d+),\s*cycles=(\d+),\s*IPC=([0-9.]+)", output)
+    m = re.findall(r"PERF:\s+instrs=(\d+),\s*cycles=(\d+),\s*IPC=([0-9.]+)", proc.stdout)
     if not m:
-        sys.exit("ERROR: no PERF summary line found (enable --perf=1)")
-    instrs, cycles, ipc = m[-1]
-    instrs, cycles, ipc = int(instrs), int(cycles), float(ipc)
+        return None, None, None, None, output + "\nERROR: no PERF summary line"
+    instrs, cycles, ipc = int(m[-1][0]), int(m[-1][1]), float(m[-1][2])
 
-    mem = re.search(r"PERF:\s+memory:.*?read_bytes=(\d+).*?write_bytes=(\d+)", output)
+    mem = re.search(r"PERF:\s+memory:.*?read_bytes=(\d+).*?write_bytes=(\d+)", proc.stdout)
     total_bytes = int(mem.group(1)) + int(mem.group(2)) if mem else None
 
-    print(f">>> IPC = {ipc:.4f}  (instrs={instrs}, cycles={cycles})")
+    output += f">>> IPC = {ipc:.4f}  (instrs={instrs}, cycles={cycles})\n"
     return ipc, instrs, cycles, total_bytes, output
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Runner: cache + lock + optional thread pool
+# ────────────────────────────────────────────────────────────────────────────
+
+class Runner:
+    def __init__(self, args, blackbox, cwd, cache_by_key, cache_path):
+        self.args = args
+        self.blackbox = blackbox
+        self.cwd = cwd
+        self.cache = cache_by_key
+        self.cache_path = cache_path
+        self.jobs = max(1, args.jobs)
+        self.use_nohup = self.jobs > 1
+        self.lock = threading.Lock()
+        self.pool = ThreadPoolExecutor(max_workers=self.jobs) if self.jobs > 1 else None
+        self.stop_requested = False
+
+    def _one(self, cfg):
+        """Runs a single trial OR returns cached. Thread-safe. Returns (ipc, instrs, cycles, bytes, None)."""
+        k = cache_key(cfg)
+        with self.lock:
+            if k in self.cache:
+                ipc, rest = self.cache[k]
+                print(f"── cache hit ─ IPC={ipc:.4f}  cfg="
+                      f"{ {kk:vv for kk,vv in cfg.items() if vv is not None} }")
+                sys.stdout.flush()
+                return (ipc, *rest)
+            if self.stop_requested:
+                return (None, None, None, None, None)
+
+        ipc, instrs, cycles, total_bytes, output = run_trial(
+            self.args, cfg, self.blackbox, self.cwd, self.use_nohup)
+
+        with self.lock:
+            sys.stdout.write(output)
+            sys.stdout.flush()
+            if ipc is None:
+                # fail-fast: mark stop and record error; other in-flight jobs will
+                # still finish but no new ones will run.
+                self.stop_requested = True
+                raise SystemExit(f"ERROR: trial failed — stopping "
+                                 f"(cfg={ {k:v for k,v in cfg.items() if v is not None} })")
+            rest = [instrs, cycles, total_bytes, None]
+            self.cache[k] = (ipc, rest)
+            append_cache(self.cache_path, cfg, ipc, instrs, cycles, total_bytes)
+        return (ipc, instrs, cycles, total_bytes, None)
+
+    def run_one(self, cfg):
+        return self._one(cfg)
+
+    def run_batch(self, cfgs):
+        """Run a list of configs; returns list of (cfg, ipc, rest) in input order."""
+        if self.pool is None:
+            return [self._pack(c, self._one(c)) for c in cfgs]
+        futures = {self.pool.submit(self._one, c): i for i, c in enumerate(cfgs)}
+        results = [None] * len(cfgs)
+        for fut in as_completed(futures):
+            i = futures[fut]
+            results[i] = self._pack(cfgs[i], fut.result())
+        return results
+
+    @staticmethod
+    def _pack(cfg, full):
+        ipc, instrs, cycles, total_bytes, _ = full
+        return (cfg, ipc, [instrs, cycles, total_bytes, None])
+
+    def shutdown(self):
+        if self.pool:
+            self.pool.shutdown(wait=True)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -306,7 +398,49 @@ def run_trial(args, cfg, blackbox, cwd):
 # ────────────────────────────────────────────────────────────────────────────
 
 def cache_key(cfg):
-    return tuple(sorted(cfg.items()))
+    return tuple(sorted((k, v) for k, v in cfg.items() if v is not None))
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Persistent trial cache (JSONL, append-only)
+# ────────────────────────────────────────────────────────────────────────────
+
+def load_cache(path):
+    """Load JSONL cache → (map[key]→result, ordered list of entries)."""
+    entries = []
+    by_key = {}
+    if not path or not os.path.isfile(path):
+        return by_key, entries
+    with open(path) as f:
+        for line_no, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                print(f"WARN: {path}:{line_no} malformed, skipping")
+                continue
+            cfg = {k: v for k, v in e.get("config", {}).items() if v is not None}
+            entries.append(e)
+            by_key[cache_key(cfg)] = (
+                e["ipc"], [e["instrs"], e["cycles"], e.get("bytes"), None])
+    return by_key, entries
+
+
+def append_cache(path, cfg, ipc, instrs, cycles, total_bytes):
+    if not path:
+        return
+    entry = {
+        "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+        "config":    {k: v for k, v in cfg.items() if v is not None},
+        "ipc":       ipc,
+        "instrs":    instrs,
+        "cycles":    cycles,
+        "bytes":     total_bytes,
+    }
+    with open(path, "a") as f:
+        f.write(json.dumps(entry, default=str) + "\n")
 
 
 def enumerate_valid(space):
@@ -324,79 +458,59 @@ def search_single(args, space, runner):
     ok, reason = validate(cfg)
     if not ok:
         sys.exit(f"ERROR: invalid config: {reason}")
-    ipc, *rest = runner(cfg)
-    return cfg, ipc, rest
+    results = runner.run_batch([cfg])
+    return results[0]
 
 
 def search_exhaustive(args, space, runner):
-    best = None
-    for cfg in enumerate_valid(space):
-        ipc, *rest = runner(cfg)
-        if best is None or ipc > best[1]:
-            best = (dict(cfg), ipc, rest)
-            print(f"    ★ new best IPC = {ipc:.4f}")
-    if best is None:
+    cfgs = list(enumerate_valid(space))
+    if not cfgs:
         sys.exit("ERROR: no valid configs in search space")
+    print(f"[best] {len(cfgs)} valid configs")
+    results = runner.run_batch(cfgs)
+    best = max(results, key=lambda r: r[1])
+    print(f"[best] winning IPC = {best[1]:.4f}")
     return best
 
 
 def search_random(args, space, runner, max_trials):
     rng = rand.Random(args.seed)
     seen = set()
-    best = None
-    trials = 0
-    # cap at total valid space
+    cfgs = []
     hard_cap = max_trials * 4
     attempts = 0
-    while trials < max_trials and attempts < hard_cap:
+    while len(cfgs) < max_trials and attempts < hard_cap:
         attempts += 1
         cfg = {n: rng.choice(vals) for n, vals in space.items()}
-        ok, _ = validate(cfg)
-        if not ok:
+        if not validate(cfg)[0]:
             continue
         k = cache_key(cfg)
         if k in seen:
             continue
         seen.add(k)
-        trials += 1
-        print(f"\n[random {trials}/{max_trials}]")
-        ipc, *rest = runner(cfg)
-        if best is None or ipc > best[1]:
-            best = (dict(cfg), ipc, rest)
-            print(f"    ★ new best IPC = {ipc:.4f}")
-    if best is None:
+        cfgs.append(cfg)
+    if not cfgs:
         sys.exit("ERROR: no valid configs sampled")
+    print(f"[random] sampled {len(cfgs)} configs")
+    results = runner.run_batch(cfgs)
+    best = max(results, key=lambda r: r[1])
+    print(f"[random] winning IPC = {best[1]:.4f}")
     return best
 
 
 def search_fast(args, space, runner):
-    """Coordinate descent in KNOBS priority order. Stops when a full pass
-    yields no IPC improvement."""
-    seen = {}
-    def eval_cfg(cfg):
-        k = cache_key(cfg)
-        if k in seen:
-            print(f"    (cached IPC={seen[k][0]:.4f})")
-            return seen[k]
-        ok, reason = validate(cfg)
-        if not ok:
-            print(f"    (skip invalid: {reason})")
-            return None
-        ipc, *rest = runner(cfg)
-        seen[k] = (ipc, rest)
-        return seen[k]
-
-    # baseline: first value of each knob
+    """Coordinate descent in KNOBS priority order. Within each knob sweep
+    candidates are dispatched in parallel (respecting --jobs). Stops when a
+    full pass yields no IPC improvement."""
+    # baseline: first value of each knob, else first valid combo
     cur = {n: vals[0] for n, vals in space.items()}
     if not validate(cur)[0]:
-        # pick first valid combo
         for cfg in enumerate_valid(space):
             cur = cfg
             break
-    res = eval_cfg(cur)
-    if res is None:
-        sys.exit("ERROR: baseline invalid")
-    best_ipc = res[0]
+    base_res = runner.run_batch([cur])[0]
+    best_ipc = base_res[1]
+    best_rest = base_res[2]
     print(f"\n[fast] baseline IPC = {best_ipc:.4f}")
 
     pass_num = 0
@@ -408,23 +522,29 @@ def search_fast(args, space, runner):
             if name not in space or len(space[name]) <= 1:
                 continue
             base_val = cur[name]
+            candidates = []
             for v in space[name]:
                 if v == base_val:
                     continue
                 trial = dict(cur); trial[name] = v
-                print(f"\n[fast] sweep {name}: {base_val} → {v}")
-                r = eval_cfg(trial)
-                if r is None:
+                if not validate(trial)[0]:
                     continue
-                if r[0] > best_ipc:
-                    best_ipc = r[0]
-                    cur = trial
+                candidates.append((v, trial))
+            if not candidates:
+                continue
+            print(f"[fast] sweep {name}: {len(candidates)} candidate(s)")
+            results = runner.run_batch([t for _, t in candidates])
+            for (v, _), (cfg_r, ipc_r, rest_r) in zip(candidates, results):
+                if ipc_r > best_ipc:
+                    best_ipc = ipc_r
+                    best_rest = rest_r
+                    cur = cfg_r
                     improved = True
                     print(f"    ★ new best IPC = {best_ipc:.4f}  (locked {name}={v})")
         if not improved:
             print(f"\n[fast] converged at pass {pass_num}, best IPC = {best_ipc:.4f}")
             break
-    return dict(cur), best_ipc, seen[cache_key(cur)][1]
+    return dict(cur), best_ipc, best_rest
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -525,22 +645,47 @@ def main():
     print(f"Search space: { {k:v for k,v in space.items()} }")
 
     blackbox, cwd = find_blackbox(args)
-    print(f"Blackbox: {blackbox}\nCWD     : {cwd}\n")
+    print(f"Blackbox: {blackbox}\nCWD     : {cwd}")
 
-    def runner(cfg):
-        return run_trial(args, cfg, blackbox, cwd)
+    cache_by_key, cache_entries = load_cache(args.cache)
+    if cache_entries:
+        print(f"Cache   : {args.cache} ({len(cache_entries)} prior trials)")
 
-    if args.config == "single":
-        cfg, ipc, rest = search_single(args, space, runner)
-    elif args.config == "random":
-        cfg, ipc, rest = search_random(args, space, runner, args.max_trials)
-    elif args.config == "fast":
-        cfg, ipc, rest = search_fast(args, space, runner)
+        # --config=single + cache present → replay last entry without running
+        if args.config == "single":
+            last = cache_entries[-1]
+            cfg = {k: v for k, v in last["config"].items() if v is not None}
+            print(f"\n[resume] replaying last cache entry "
+                  f"({last.get('timestamp','?')}) — IPC={last['ipc']:.4f}")
+            ipc = last["ipc"]
+            rest = [last["instrs"], last["cycles"], last.get("bytes"), None]
+            _print_winner_and_plot(args, cfg, ipc, rest)
+            return
     else:
-        cfg, ipc, rest = search_exhaustive(args, space, runner)
+        print(f"Cache   : {args.cache} (new)")
+    print()
 
+    runner = Runner(args, blackbox, cwd, cache_by_key, args.cache)
+    if runner.jobs > 1:
+        print(f"Jobs    : {runner.jobs} (parallel, --nohup for isolation)")
+
+    try:
+        if args.config == "single":
+            cfg, ipc, rest = search_single(args, space, runner)
+        elif args.config == "random":
+            cfg, ipc, rest = search_random(args, space, runner, args.max_trials)
+        elif args.config == "fast":
+            cfg, ipc, rest = search_fast(args, space, runner)
+        else:
+            cfg, ipc, rest = search_exhaustive(args, space, runner)
+    finally:
+        runner.shutdown()
+
+    _print_winner_and_plot(args, cfg, ipc, rest)
+
+
+def _print_winner_and_plot(args, cfg, ipc, rest):
     instrs, cycles, total_bytes, _ = rest
-
     sep = "═" * 64
     print(f"\n{sep}\n  WINNING CONFIGURATION\n{sep}")
     print(f"  IPC     : {ipc:.4f}")
