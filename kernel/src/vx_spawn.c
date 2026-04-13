@@ -31,7 +31,6 @@ dim3_t blockDim;
 __thread uint32_t __local_group_id;
 __thread uint32_t __sub_group_id;
 uint32_t __warps_per_group;
-extern uint32_t __warps_per_group __attribute__((alias("__warps_per_group")));
 
 typedef struct {
 	vx_kernel_func_cb callback;
