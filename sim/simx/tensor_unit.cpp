@@ -138,173 +138,120 @@ static inline int32_t mxint8_scaled_i32(int8_t q, uint8_t sf) {
 }
 #endif
 
+// FMA<It, Ot>: fused multiply-add returning an Ot-typed accumulator (bit-packed in uint32).
+// Widens narrow inputs/accumulator to fp32, performs mul+add, rounds once to Ot.
 template <typename It, typename Ot>
-struct FMUL {
+struct FMA {
   using itype = typename It::dtype;
   using otype = typename Ot::dtype;
-  static uint32_t eval(itype a, itype b) {
-    return bit_cast<uint32_t>(static_cast<otype>(a) * static_cast<otype>(b));
+  static uint32_t eval(itype a, itype b, uint32_t c) {
+    otype fa = static_cast<otype>(a);
+    otype fb = static_cast<otype>(b);
+    otype fc = bit_cast<otype>(c);
+    return bit_cast<uint32_t>(fa * fb + fc);
   }
 };
 
-template <>
-struct FMUL<vt::fp16, vt::fp32> {
-  static uint32_t eval(uint16_t a, uint16_t b) {
-    auto xa = rv_htof_s(a, 0, nullptr);
-    auto xb = rv_htof_s(b, 0, nullptr);
-    return rv_fmul_s(xa, xb, 0, nullptr);
+// -- fp16 inputs --
+template <> struct FMA<vt::fp16, vt::fp32> {
+  static uint32_t eval(uint16_t a, uint16_t b, uint32_t c) {
+    auto fa = rv_htof_s(a, 0, nullptr);
+    auto fb = rv_htof_s(b, 0, nullptr);
+    return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
+  }
+};
+template <> struct FMA<vt::fp16, vt::fp16> {
+  static uint32_t eval(uint16_t a, uint16_t b, uint32_t c) {
+    auto fa = rv_htof_s(a, 0, nullptr);
+    auto fb = rv_htof_s(b, 0, nullptr);
+    auto fc = rv_htof_s(uint16_t(c), 0, nullptr);
+    return rv_ftoh_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
   }
 };
 
-template <>
-struct FMUL<vt::fp16, vt::fp16> {
-  static uint32_t eval(uint16_t a, uint16_t b) {
-    auto xa = rv_htof_s(a, 0, nullptr);
-    auto xb = rv_htof_s(b, 0, nullptr);
-    return rv_ftoh_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
+// -- bf16 inputs --
+template <> struct FMA<vt::bf16, vt::fp32> {
+  static uint32_t eval(uint16_t a, uint16_t b, uint32_t c) {
+    auto fa = rv_btof_s(a, 0, nullptr);
+    auto fb = rv_btof_s(b, 0, nullptr);
+    return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
+  }
+};
+template <> struct FMA<vt::bf16, vt::bf16> {
+  static uint32_t eval(uint16_t a, uint16_t b, uint32_t c) {
+    auto fa = rv_btof_s(a, 0, nullptr);
+    auto fb = rv_btof_s(b, 0, nullptr);
+    auto fc = rv_btof_s(uint16_t(c), 0, nullptr);
+    return rv_ftob_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
   }
 };
 
-template <>
-struct FMUL<vt::bf16, vt::fp32> {
-  static uint32_t eval(uint16_t a, uint16_t b) {
-    auto xa = rv_btof_s(a, 0, nullptr);
-    auto xb = rv_btof_s(b, 0, nullptr);
-    return rv_fmul_s(xa, xb, 0, nullptr);
+// -- fp8 inputs --
+template <> struct FMA<vt::fp8, vt::fp32> {
+  static uint32_t eval(uint8_t a, uint8_t b, uint32_t c) {
+    auto fa = rv_e4m3tof_s(a, 0, nullptr);
+    auto fb = rv_e4m3tof_s(b, 0, nullptr);
+    return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
+  }
+};
+template <> struct FMA<vt::fp8, vt::fp8> {
+  static uint32_t eval(uint8_t a, uint8_t b, uint32_t c) {
+    auto fa = rv_e4m3tof_s(a, 0, nullptr);
+    auto fb = rv_e4m3tof_s(b, 0, nullptr);
+    auto fc = rv_e4m3tof_s(uint8_t(c), 0, nullptr);
+    return rv_ftoe4m3_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
   }
 };
 
-template <>
-struct FMUL<vt::bf16, vt::bf16> {
-  static uint32_t eval(uint16_t a, uint16_t b) {
-    auto xa = rv_btof_s(a, 0, nullptr);
-    auto xb = rv_btof_s(b, 0, nullptr);
-    return rv_ftob_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
+// -- bf8 inputs --
+template <> struct FMA<vt::bf8, vt::fp32> {
+  static uint32_t eval(uint8_t a, uint8_t b, uint32_t c) {
+    auto fa = rv_e5m2tof_s(a, 0, nullptr);
+    auto fb = rv_e5m2tof_s(b, 0, nullptr);
+    return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
+  }
+};
+template <> struct FMA<vt::bf8, vt::bf8> {
+  static uint32_t eval(uint8_t a, uint8_t b, uint32_t c) {
+    auto fa = rv_e5m2tof_s(a, 0, nullptr);
+    auto fb = rv_e5m2tof_s(b, 0, nullptr);
+    auto fc = rv_e5m2tof_s(uint8_t(c), 0, nullptr);
+    return rv_ftoe5m2_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
   }
 };
 
-template <>
-struct FMUL<vt::fp8, vt::fp32> {
-  static uint32_t eval(uint8_t a, uint8_t b) {
-    auto xa = rv_e4m3tof_s(a, 0, nullptr);
-    auto xb = rv_e4m3tof_s(b, 0, nullptr);
-    return rv_fmul_s(xa, xb, 0, nullptr);
+// -- tf32 inputs --
+template <> struct FMA<vt::tf32, vt::fp32> {
+  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
+    auto fa = rv_tf32tof_s(a, 0, nullptr);
+    auto fb = rv_tf32tof_s(b, 0, nullptr);
+    return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
+  }
+};
+template <> struct FMA<vt::tf32, vt::tf32> {
+  static uint32_t eval(uint32_t a, uint32_t b, uint32_t c) {
+    auto fa = rv_tf32tof_s(a, 0, nullptr);
+    auto fb = rv_tf32tof_s(b, 0, nullptr);
+    auto fc = rv_tf32tof_s(c, 0, nullptr);
+    return rv_ftotf32_s(rv_fmadd_s(fa, fb, fc, 0, nullptr), 0, nullptr);
   }
 };
 
-template <>
-struct FMUL<vt::fp8, vt::fp8> {
-  static uint32_t eval(uint8_t a, uint8_t b) {
-    auto xa = rv_e4m3tof_s(a, 0, nullptr);
-    auto xb = rv_e4m3tof_s(b, 0, nullptr);
-    return rv_ftoe4m3_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
-  }
-};
-
-template <>
-struct FMUL<vt::bf8, vt::fp32> {
-  static uint32_t eval(uint8_t a, uint8_t b) {
-    auto xa = rv_e5m2tof_s(a, 0, nullptr);
-    auto xb = rv_e5m2tof_s(b, 0, nullptr);
-    return rv_fmul_s(xa, xb, 0, nullptr);
-  }
-};
-
-template <>
-struct FMUL<vt::bf8, vt::bf8> {
-  static uint32_t eval(uint8_t a, uint8_t b) {
-    auto xa = rv_e5m2tof_s(a, 0, nullptr);
-    auto xb = rv_e5m2tof_s(b, 0, nullptr);
-    return rv_ftoe5m2_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
-  }
-};
-
-template <>
-struct FMUL<vt::tf32, vt::fp32> {
-  static uint32_t eval(uint32_t a, uint32_t b) {
-    auto xa = rv_tf32tof_s(a, 0, nullptr);
-    auto xb = rv_tf32tof_s(b, 0, nullptr);
-    return rv_fmul_s(xa, xb, 0, nullptr);
-  }
-};
-
-template <>
-struct FMUL<vt::tf32, vt::tf32> {
-  static uint32_t eval(uint32_t a, uint32_t b) {
-    auto xa = rv_tf32tof_s(a, 0, nullptr);
-    auto xb = rv_tf32tof_s(b, 0, nullptr);
-    return rv_ftotf32_s(rv_fmul_s(xa, xb, 0, nullptr), 0, nullptr);
-  }
-};
-
-#ifdef TCU_MX_ENABLE
-template <>
-struct FMUL<vt::mxfp8, vt::fp32> {
-  static uint32_t eval(uint8_t a, uint8_t b, uint8_t sf_a, uint8_t sf_b) {
-    auto xa = rv_mxfp8tof_s(a, sf_a, 0, nullptr);
-    auto xb = rv_mxfp8tof_s(b, sf_b, 0, nullptr);
-    return rv_fmul_s(xa, xb, 0, nullptr);
-  }
-};
-
-template <>
-struct FMUL<vt::mxint8, vt::int32> {
-  static uint32_t eval(int8_t a, int8_t b, uint8_t sf_a, uint8_t sf_b) {
-    int32_t xa = mxint8_scaled_i32(a, sf_a);
-    int32_t xb = mxint8_scaled_i32(b, sf_b);
-    return bit_cast<uint32_t>(xa * xb);
-  }
-};
-
-template <>
-struct FMUL<vt::nvfp4, vt::fp32> {
-  static uint32_t eval(uint8_t a, uint8_t b, uint8_t sf_a, uint8_t sf_b) {
-    auto xa = rv_nvfp4tof_s(a & 0x0f, sf_a, 0, nullptr);
-    auto xb = rv_nvfp4tof_s(b & 0x0f, sf_b, 0, nullptr);
-    return rv_fmul_s(xa, xb, 0, nullptr);
-  }
-};
-#endif
-
-template <typename Ot>
-struct FADD {
-  using otype = typename Ot::dtype;
-  static uint32_t eval(uint32_t x, uint32_t y) {
-    return bit_cast<uint32_t>(bit_cast<otype>(x) + bit_cast<otype>(y));
-  }
-};
-
-template <>
-struct FADD<vt::fp32> {
-  static uint32_t eval(uint32_t x, uint32_t y) {
-    return rv_fadd_s(x, y, 0, nullptr);
-  }
-};
-
+// Generic FEDP: pure FMA chain — order matches host muladd_t semantics.
 template <typename It, typename Ot>
 struct FEDP {
   using itype = typename It::dtype;
   static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
     constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(itype);
     static_assert(i_ratio * sizeof(itype) == sizeof(uint32_t), "FEDP: tcK * i_ratio must be <= 32");
-    // Phase 1: per-word partial products
-    uint32_t partial[cfg::tcK];
+    uint32_t acc = c_val;
     for (uint32_t z = 0; z < cfg::tcK; ++z) {
       auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
       auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
-      uint32_t prod = 0;
       for (uint32_t i = 0; i < i_ratio; ++i) {
-        auto p = FMUL<It, Ot>::eval(a[i], b[i]);
-        prod = FADD<Ot>::eval(p, prod);
+        acc = FMA<It, Ot>::eval(a[i], b[i], acc);
       }
-      partial[z] = prod;
     }
-    // Phase 2: sum partial products, then add c_val
-    uint32_t acc = 0;
-    for (uint32_t z = 0; z < cfg::tcK; ++z) {
-      acc = FADD<Ot>::eval(partial[z], acc);
-    }
-    acc = FADD<Ot>::eval(c_val, acc);
     return acc;
   }
 };
@@ -350,6 +297,32 @@ struct FEDP<vt::uint4, vt::int32>{
 };
 
 #ifdef TCU_MX_ENABLE
+// Scaled FMA variants for MX microscaling formats (extra scale-factor args).
+template <typename It, typename Ot>
+struct FMA_MX;
+
+template <> struct FMA_MX<vt::mxfp8, vt::fp32> {
+  static uint32_t eval(uint8_t a, uint8_t b, uint8_t sf_a, uint8_t sf_b, uint32_t c) {
+    auto fa = rv_mxfp8tof_s(a, sf_a, 0, nullptr);
+    auto fb = rv_mxfp8tof_s(b, sf_b, 0, nullptr);
+    return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
+  }
+};
+template <> struct FMA_MX<vt::mxint8, vt::int32> {
+  static uint32_t eval(int8_t a, int8_t b, uint8_t sf_a, uint8_t sf_b, uint32_t c) {
+    int32_t xa = mxint8_scaled_i32(a, sf_a);
+    int32_t xb = mxint8_scaled_i32(b, sf_b);
+    return bit_cast<uint32_t>(bit_cast<int32_t>(c) + xa * xb);
+  }
+};
+template <> struct FMA_MX<vt::nvfp4, vt::fp32> {
+  static uint32_t eval(uint8_t a, uint8_t b, uint8_t sf_a, uint8_t sf_b, uint32_t c) {
+    auto fa = rv_nvfp4tof_s(a & 0x0f, sf_a, 0, nullptr);
+    auto fb = rv_nvfp4tof_s(b & 0x0f, sf_b, 0, nullptr);
+    return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
+  }
+};
+
 static uint32_t fedp_mxfp8_fp32_scaled(const reg_data_t* a_row,
                                        const reg_data_t* b_col,
                                        uint32_t c_val,
@@ -361,7 +334,7 @@ static uint32_t fedp_mxfp8_fp32_scaled(const reg_data_t* a_row,
     auto a = reinterpret_cast<const uint8_t*>(&a_row[z].u32);
     auto b = reinterpret_cast<const uint8_t*>(&b_col[z].u32);
     for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc = rv_fadd_s(FMUL<vt::mxfp8, vt::fp32>::eval(a[i], b[i], sf_a, sf_b), acc, 0, nullptr);
+      acc = FMA_MX<vt::mxfp8, vt::fp32>::eval(a[i], b[i], sf_a, sf_b, acc);
     }
   }
   return acc;
@@ -378,7 +351,7 @@ static uint32_t fedp_mxint8_int32_scaled(const reg_data_t* a_row,
     auto a = reinterpret_cast<const int8_t*>(&a_row[z].u32);
     auto b = reinterpret_cast<const int8_t*>(&b_col[z].u32);
     for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc += FMUL<vt::mxint8, vt::int32>::eval(a[i], b[i], sf_a, sf_b);
+      acc = FMA_MX<vt::mxint8, vt::int32>::eval(a[i], b[i], sf_a, sf_b, acc);
     }
   }
   return acc;
@@ -396,7 +369,7 @@ static uint32_t fedp_nvfp4_fp32_scaled(const reg_data_t* a_row,
     for (uint32_t i = 0; i < 8; ++i) {
       uint8_t a = (aw >> (i * 4)) & 0x0f;
       uint8_t b = (bw >> (i * 4)) & 0x0f;
-      acc = rv_fadd_s(FMUL<vt::nvfp4, vt::fp32>::eval(a, b, sf_a, sf_b), acc, 0, nullptr);
+      acc = FMA_MX<vt::nvfp4, vt::fp32>::eval(a, b, sf_a, sf_b, acc);
     }
   }
   return acc;
@@ -922,6 +895,8 @@ private:
     bool is_last_k  = (step_k == k_count - 1);
   #if defined(TCU_WLOCK_ENABLE) && !defined(NDEBUG)
     accum_check_owner(wid, is_first_k, is_last_k);
+  #else
+    __unused(wid);
   #endif
 #else
     __unused(wid, step_k, k_count);
