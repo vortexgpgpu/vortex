@@ -176,8 +176,15 @@ main() {
         # build stub driver
         echo "Running: DESTDIR=$TEMPDIR make -C $ROOT_DIR/runtime/stub"
         DESTDIR="$TEMPDIR" make -C $ROOT_DIR/runtime/stub > /dev/null
-        # register tempdir cleanup on exit
-        trap "rm -rf $TEMPDIR" EXIT
+        # stage a per-invocation copy of the app dir so concurrent trials do not
+        # race on the shared `config.stamp` / build artifacts. Keep it as a
+        # sibling of the original so relative paths (`../../..`, `../common.mk`)
+        # still resolve.
+        STAGED_APP="${APP_PATH%/}.trial.$$.$(date +%N)"
+        cp -r "$APP_PATH" "$STAGED_APP"
+        APP_PATH="$STAGED_APP"
+        # register tempdir + staged app cleanup on exit
+        trap "rm -rf $TEMPDIR $STAGED_APP" EXIT
     fi
 
     build_driver

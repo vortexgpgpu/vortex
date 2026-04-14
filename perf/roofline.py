@@ -359,11 +359,25 @@ class Runner:
             sys.stdout.write(output)
             sys.stdout.flush()
             if ipc is None:
-                # fail-fast: mark stop and record error; other in-flight jobs will
-                # still finish but no new ones will run.
+                # fail-fast: stop on any trial error. Extract the cause from the
+                # captured output (last ERROR: line + a few preceding lines of
+                # context — usually the make / subprocess failure).
                 self.stop_requested = True
-                raise SystemExit(f"ERROR: trial failed — stopping "
-                                 f"(cfg={ {k:v for k,v in cfg.items() if v is not None} })")
+                lines = (output or "").splitlines()
+                err_idx = next((i for i in range(len(lines) - 1, -1, -1)
+                                if lines[i].startswith("ERROR:")), None)
+                if err_idx is not None:
+                    ctx = "\n".join(lines[max(0, err_idx - 5): err_idx + 1])
+                else:
+                    ctx = "\n".join(lines[-10:]) or "<no output captured>"
+                cfg_str = { k: v for k, v in cfg.items() if v is not None }
+                raise SystemExit(
+                    "\n" + "═" * 64 +
+                    "\nTRIAL FAILED — stopping (--jobs=" + str(self.jobs) + ")"
+                    "\n" + "═" * 64 +
+                    f"\nCFG   : {cfg_str}"
+                    f"\nCAUSE :\n{ctx}"
+                    "\n" + "═" * 64)
             rest = [instrs, cycles, total_bytes, None]
             self.cache[k] = (ipc, rest)
             append_cache(self.cache_path, cfg, ipc, instrs, cycles, total_bytes)

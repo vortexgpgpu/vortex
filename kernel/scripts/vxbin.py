@@ -74,8 +74,11 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     # the linker aligns _edata/_end past the last LOAD segment.
     max_vma = max(max_vma, end)
 
-    # Create a binary data from the ELF file using objcopy
-    temp_bin_path = '/tmp/temp_kernel.bin'
+    # Create a binary data from the ELF file using objcopy. Use a per-call
+    # unique tempfile so parallel builds don't race on a shared path.
+    import tempfile
+    fd, temp_bin_path = tempfile.mkstemp(prefix='vxbin_', suffix='.bin')
+    os.close(fd)
     subprocess.check_call([objcopy_path, '-O', 'binary', input_elf, temp_bin_path])
 
     # Read the binary file to determine its size
