@@ -138,15 +138,15 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
                 .cls (cls_b)
             );
 
-            // Select normalized exponents (force exp==0 to 1; true zeros are
-            // gated downstream via zero_sel/lane_valid, so the bogus pre_sum
-            // for zero inputs cannot affect the final result).
+            // Select normalized exponents
             assign ea_sel[j] = (raw_ea == 0) ? 5'b1 : raw_ea;
             assign eb_sel[j] = (raw_eb == 0) ? 5'b1 : raw_eb;
 
-            // Select normalized mantissas (append implicit bit, force 0 if zero/subnormal)
-            assign ma_sel[j] = {!cls_a.is_sub && !cls_a.is_zero, raw_ma};
-            assign mb_sel[j] = {!cls_b.is_sub && !cls_b.is_zero, raw_mb};
+            // Select normalized mantissas
+            assign ma_sel[j] = {(raw_ea != 0), raw_ma};
+            assign mb_sel[j] = {(raw_eb != 0), raw_mb};
+            `UNUSED_VAR (cls_a.is_sub)
+            `UNUSED_VAR (cls_b.is_sub)
 
             assign sign_sel[j] = raw_sa ^ raw_sb;
             assign zero_sel[j] = cls_a.is_zero | cls_b.is_zero;
@@ -268,27 +268,52 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         // 2e. Absolute Difference / Addition
         // ------------------------------------------------------------------
 
-        // Fast magnitude sorting after alignment prevents underflow
-        wire [24:0] mag_0 = {1'b0, aligned_sig_low};
-        wire [24:0] mag_1 = {1'b0, aligned_sig_high};
-        wire mag_0_is_larger = (mag_0 > mag_1);
-
-        wire [24:0] op_a = mag_0_is_larger ? mag_0 : mag_1;
-        wire [24:0] op_b = mag_0_is_larger ? mag_1 : mag_0;
+        wire [24:0] sig_low_ext  = {1'b0, aligned_sig_low};
+        wire [24:0] sig_high_ext = {1'b0, aligned_sig_high};
 
         wire do_sub = sign_sel[0] ^ sign_sel[1];
-        wire [24:0] sig_add_raw;
 
+        wire [24:0] sub_lh;
         VX_ks_adder #(
             .N(25),
             .BYPASS(`FORCE_BUILTIN_ADDER(25))
-        ) sig_adder_f8 (
-            .cin(do_sub),
-            .dataa(op_a),
-            .datab(do_sub ? ~op_b : op_b),
-            .sum(sig_add_raw),
+        ) sig_sub_lh_f8 (
+            .cin(1'b1),
+            .dataa(sig_low_ext),
+            .datab(~sig_high_ext),
+            .sum(sub_lh),
             `UNUSED_PIN(cout)
         );
+
+        wire [24:0] sub_hl;
+        VX_ks_adder #(
+            .N(25),
+            .BYPASS(`FORCE_BUILTIN_ADDER(25))
+        ) sig_sub_hl_f8 (
+            .cin(1'b1),
+            .dataa(sig_high_ext),
+            .datab(~sig_low_ext),
+            .sum(sub_hl),
+            `UNUSED_PIN(cout)
+        );
+
+        wire [24:0] add_raw;
+        VX_ks_adder #(
+            .N(25),
+            .BYPASS(`FORCE_BUILTIN_ADDER(25))
+        ) sig_add_f8 (
+            .cin(1'b0),
+            .dataa(sig_low_ext),
+            .datab(sig_high_ext),
+            .sum(add_raw),
+            `UNUSED_PIN(cout)
+        );
+
+        wire sub_neg = sub_lh[24];
+        wire [24:0] sub_abs = sub_neg ? sub_hl : sub_lh;
+
+        wire mag_0_is_larger = ~sub_neg;
+        wire [24:0] sig_add_raw = do_sub ? sub_abs : add_raw;
 
         // scaling by 1 to avoid renormalization
         wire [23:0] sig_add = sig_add_raw[24:1];

@@ -24,7 +24,6 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
     input wire [7:0]        sf_b,
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
-    output wire [EXP_W-1:0]   max_exp,
     output wire [TCK:0][EXP_W-1:0] exponents,
 
     output wire [TCK:0][24:0] raw_sigs,
@@ -189,19 +188,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
     );
 
     // ======================================================================
-    // 3. Global Maximum Exponent
-    // ======================================================================
-
-    VX_tcu_tfr_max_exp #(
-        .N     (TCK+1),
-        .WIDTH (EXP_W)
-    ) find_max_exp (
-        .exponents (exponents),
-        .max_exp   (max_exp)
-    );
-
-    // ======================================================================
-    // 4. Lane Mask
+    // 3. Lane Mask
     // ======================================================================
 
     VX_tcu_tfr_exceptions #(

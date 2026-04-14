@@ -749,10 +749,10 @@ public:
     lmem_desc_t sd_a, sd_b;
     if (step_k == 0 && step_m == 0 && step_n == 0) {
       if (is_a_smem) {
-        sd_a = {LMEM_BASE_ADDR + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
+        sd_a = {uint64_t(LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
         lmem_desc_[wid][0] = sd_a;
       }
-      sd_b = {LMEM_BASE_ADDR + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
+      sd_b = {uint64_t(LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
       lmem_desc_[wid][1] = sd_b;
     } else {
       sd_a = lmem_desc_[wid][0];
