@@ -17,7 +17,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter LANE_MASK = 0,
     parameter LATENCY = 0,
-    parameter N = 2,
+    parameter N = TCU_TC_K,
     parameter W = 25
 ) (
     input  wire clk,
@@ -45,7 +45,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
 
     // Latency Configuration
     localparam MUL_LATENCY = 1;
-    localparam MXP_LATENCY = (N > 2) ? 1 : 0; // Insert pipe stage before max_exp when N>2
+    localparam MXP_LATENCY = (N > 2) ? 1 : 0;
     localparam ALN_LATENCY = 1;
     localparam ACC_LATENCY = 1;
     localparam NRM_LATENCY = 1;
@@ -105,12 +105,12 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     wire [7:0] cval_top = c_val[31:24];
     wire [6:0] cval_hi = cval_top[7:1] + 7'(cval_top[0]);
 
-    VX_tcu_tfr_mul_exp #(
+    VX_tcu_tfr_mul #(
         .N (N),
         .W (W),
         .WA(ACC_SIG_W),
         .EXP_W (EXP_W)
-    ) mul_exp (
+    ) multiply (
         .clk(clk),
         .valid_in(vld_pipe[S0_IDX]),
         .req_id(req_pipe[S0_IDX]),
@@ -326,7 +326,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     );
 
 `ifdef DBG_TRACE_TCU
-    // Stage 0: Mul/Exp
+    // Stage 0: Multiply
     always_ff @(posedge clk) begin
         if (vld_pipe[S0_IDX]) begin
             `TRACE(4, ("%t: %s FEDP-S0(%0d): fmt_s=%0d, a_row=", $time, INSTANCE_ID, req_pipe[S0_IDX], fmt_s));

@@ -3,7 +3,7 @@
 // See the License for the specific language governing permissions and limitations.
 `include "VX_define.vh"
 
-module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
+module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
     parameter `STRING INSTANCE_ID = "",
     parameter N = 2,            // Number of 32-bit input registers
     parameter W = 25,           // Product width

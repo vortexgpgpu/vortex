@@ -98,7 +98,7 @@ endmodule
 module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter LATENCY = 0,
-    parameter N = 1
+    parameter N = TCU_TC_K
 ) (
     input  wire clk,
     input  wire reset,
