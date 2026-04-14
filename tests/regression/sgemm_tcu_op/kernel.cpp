@@ -632,4 +632,4 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
       // if (lane0) {C_lmem[0] = MARKER;}
     }
   }
-}
+} 
