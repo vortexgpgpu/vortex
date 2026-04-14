@@ -72,7 +72,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     `UNUSED_PARAM (S_TF32)
     `UNUSED_PARAM (S_BF16)
 
-
     // ======================================================================
     // 2. Main Loop (Per TCK Lane)
     // ======================================================================
@@ -181,11 +180,13 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         // 2c. Operand Preparation
         // ------------------------------------------------------------------
 
-        wire [7:0] ea_sel = cls_a.is_sub ? 8'b1 : raw_ea;
-        wire [7:0] eb_sel = cls_b.is_sub ? 8'b1 : raw_eb;
+        wire [7:0] ea_sel = (raw_ea == 0) ? 8'b1 : raw_ea;
+        wire [7:0] eb_sel = (raw_eb == 0) ? 8'b1 : raw_eb;
 
-        wire [10:0] ma_sel = {!cls_a.is_sub, raw_ma};
-        wire [10:0] mb_sel = {!cls_b.is_sub, raw_mb};
+        wire [10:0] ma_sel = {(raw_ea != 0), raw_ma};
+        wire [10:0] mb_sel = {(raw_eb != 0), raw_mb};
+        `UNUSED_VAR (cls_a.is_sub)
+        `UNUSED_VAR (cls_b.is_sub)
 
         wire sign_sel = raw_sa ^ raw_sb;
         wire zero_sel = cls_a.is_zero | cls_b.is_zero;
