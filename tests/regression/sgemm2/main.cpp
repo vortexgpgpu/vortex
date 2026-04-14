@@ -85,7 +85,7 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, 
 }
 
 const char* kernel_file = "kernel.vxbin";
-uint32_t size = 16;
+uint32_t size = 64;
 uint32_t tile_size = 4;
 uint32_t chunk_k = 0;
 

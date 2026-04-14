@@ -37,17 +37,19 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     // Cooperatively load A [cta_M × tileK] into smem
     uint32_t a_size = cta_M * ctx::tileK;
-    for (uint32_t i = tid; i < a_size; i += num_threads) {
-      uint32_t r = i / ctx::tileK;
-      uint32_t c = i % ctx::tileK;
+    for (uint32_t i = 0; i < a_size; i += num_threads) {
+      uint32_t idx = i + tid;
+      uint32_t r = idx / ctx::tileK;
+      uint32_t c = idx % ctx::tileK;
       A_smem[r * ctx::tileK + c] = pA[(tile_row + r) * K + (k + c)];
     }
 
     // Cooperatively load B [tileK × per_warp_N] into smem
     uint32_t b_size = ctx::tileK * ctx::xtileN;
-    for (uint32_t i = tid; i < b_size; i += num_threads) {
-      uint32_t r = i / ctx::xtileN;
-      uint32_t c = i % ctx::xtileN;
+    for (uint32_t i = 0; i < b_size; i += num_threads) {
+      uint32_t idx = i + tid;
+      uint32_t r = idx / ctx::xtileN;
+      uint32_t c = idx % ctx::xtileN;
       B_smem[r * ctx::xtileN + c] = pB[(k + r) * N + (tile_col + c)];
     }
 

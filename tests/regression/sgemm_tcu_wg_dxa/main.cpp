@@ -193,7 +193,7 @@ const char *kernel_file = "kernel.vxbin";
 
 uint32_t xm = 64;
 uint32_t xn = 64;
-uint32_t xk = 32;
+uint32_t xk = 64;
 uint32_t warps = 4;
 
 vx_device_h device = nullptr;

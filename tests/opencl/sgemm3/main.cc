@@ -139,7 +139,7 @@ static void cleanup() {
   if (kernel_bin) free(kernel_bin);
 }
 
-uint32_t size = 16;
+uint32_t size = 64;
 uint32_t tile_size = 4;
 
 static void show_usage() {

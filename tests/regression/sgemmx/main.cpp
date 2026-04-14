@@ -65,7 +65,7 @@ static void matmul_cpu(TYPE* out,
 }
 
 const char* kernel_file = "kernel.vxbin";
-uint32_t size  = 32;
+uint32_t size  = 64;
 float    alpha = 1.0f;
 float    beta  = 0.0f;
 

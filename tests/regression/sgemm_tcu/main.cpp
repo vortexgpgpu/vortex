@@ -510,9 +510,9 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
 
 const char *kernel_file = "kernel.vxbin";
 
-uint32_t xm = 32;
-uint32_t xn = 32;
-uint32_t xk = 32;
+uint32_t xm = 64;
+uint32_t xn = 64;
+uint32_t xk = 64;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
