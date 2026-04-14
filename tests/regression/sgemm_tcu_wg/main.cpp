@@ -506,7 +506,7 @@ const char *kernel_file = "kernel.vxbin";
 
 uint32_t xm = 64;
 uint32_t xn = 64;
-uint32_t xk = 32;
+uint32_t xk = 64;
 uint32_t warps = 4;
 
 vx_device_h device = nullptr;
@@ -598,6 +598,24 @@ int main(int argc, char *argv[]) {
   uint32_t K = xk;
 
   uint32_t cta_M = warps * per_warp_M;
+  uint32_t a_size = cta_M * wg_cfg::tileK;
+  uint32_t b_size = wg_cfg::tileK * wg_cfg::xtileN;
+
+  // Enforce cooperative loading alignment for A_smem
+  if ((a_size % NT) != 0) {
+    std::cerr << "Error: A_smem size (" << a_size
+              << ") is not a perfect multiple of thread count (" << NT
+              << "). Kernel will diverge or OOB!" << std::endl;
+    return -1;
+  }
+
+  // Enforce cooperative loading alignment for B_smem
+  if ((b_size % NT) != 0) {
+    std::cerr << "Error: B_smem size (" << b_size
+              << ") is not a perfect multiple of thread count (" << NT
+              << "). Kernel will diverge or OOB!" << std::endl;
+    return -1;
+  }
 
   if ((M % cta_M) != 0) {
     std::cout << "Error: M (" << M << ") must be a multiple of cta_M=" << cta_M << "!" << std::endl;

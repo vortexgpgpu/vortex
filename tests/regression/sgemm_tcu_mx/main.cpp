@@ -335,8 +335,8 @@ static void matmul_cpu_reference(otype_t* C,
 
 const char* kernel_file = "kernel.vxbin";
 
-uint32_t xm = 32;
-uint32_t xn = 32;
+uint32_t xm = 64;
+uint32_t xn = 64;
 uint32_t xk = (cfg::tileK > vt::ITYPE::ele_block) ? cfg::tileK : vt::ITYPE::ele_block;
 
 vx_device_h device = nullptr;

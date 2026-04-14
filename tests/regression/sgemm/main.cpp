@@ -82,7 +82,7 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, 
 }
 
 const char* kernel_file = "kernel.vxbin";
-uint32_t size = 32;
+uint32_t size = 64;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
