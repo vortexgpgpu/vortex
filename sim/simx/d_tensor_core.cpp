@@ -315,7 +315,7 @@ void DTensorCore::load_operands() {
   // Load B Buffer (col_major)
   for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
     for (uint32_t n = 0; n < tile_n_; ++n) {
-      uint64_t addr = calculate_base_C_() + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc_.ldmB) * in_sz;
+      uint64_t addr = calculate_base_B_() + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc_.ldmB) * in_sz;
       uint32_t word = 0;
       ram_->read(&word, addr, 4);
       b_buf_[kw * tile_n_ + n] = word;
