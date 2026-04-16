@@ -8,11 +8,11 @@
 #endif
 
 #ifndef ITYPE
-#define ITYPE fp32
+#define ITYPE fp16
 #endif
 
 #ifndef OTYPE
-#define OTYPE fp32
+#define OTYPE fp16
 #endif
 
 #define INPUT_DIM   128

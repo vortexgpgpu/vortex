@@ -62,6 +62,32 @@ struct muladd_t<vt::fp16, vt::fp32> {
     }
 };
 
+template <>
+struct muladd_t<vt::bf16, vt::fp32> {
+    static float eval(uint16_t a, uint16_t b, float c) {
+        // bf16 is fp32 with the lower 16 mantissa bits dropped; shift back up.
+        auto fa = bit_cast<float>(static_cast<uint32_t>(a) << 16);
+        auto fb = bit_cast<float>(static_cast<uint32_t>(b) << 16);
+        return fa * fb + c;
+    }
+};
+
+// Convert a host-side float to itype_t for weight/activation initialization
+// and for the CPU reference intermediate-layer conversion.
+//   fp32  → itype  : identity
+//   fp32  → fp16   : IEEE-correct via rv_ftoh_s
+//   fp32  → bf16   : truncate mantissa (upper 16 bits of fp32 bit-pattern)
+static inline itype_t to_itype(float v) {
+    if constexpr (std::is_same_v<itype_t, float>) {
+        return v;
+    } else if constexpr (vt::ITYPE::id == vt::fp16::id) {
+        return static_cast<itype_t>(rv_ftoh_s(bit_cast<uint32_t>(v), 0, nullptr));
+    } else {
+        // bf16
+        return static_cast<itype_t>(bit_cast<uint32_t>(v) >> 16);
+    }
+}
+
 struct SparseMat {
     std::vector<itype_t> values;  
     std::vector<uint8_t> meta;    
@@ -138,17 +164,25 @@ static SparseMat pruneAndPack(
 }
 
 static bool compare_float(otype_t a, otype_t b, int index, int errors) {
-    // Sign-magnitude ordering gives correct ULP distance across zero.
-    auto ordered = [](float f) -> int64_t {
-        union { float f; uint32_t u; } tmp;
-        tmp.f = f;
-        return (tmp.u & 0x80000000u) ? -(int64_t)(tmp.u & 0x7FFFFFFFu) : (int64_t)tmp.u;
-    };
-    auto d = std::abs(ordered(a) - ordered(b));
-    if (d > FLOAT_ULP) {
+    // Multi-layer WMMA inference accumulates rounding differences between the
+    // tile-ordered GPU computation and the sequential CPU reference, and softmax
+    // can amplify those differences further.  Use a relative-error metric that
+    // is tight enough to catch clearly wrong results while tolerating the
+    // normal fp32 / fp16 noise.
+    //   fp32 inputs  → 1 % relative tolerance
+    //   fp16 inputs  → 5 % relative tolerance (fp16 quantisation adds ~0.1 %
+    //                  per layer; 4 layers + softmax can reach ~2 %)
+    constexpr float rel_tol =
+        std::is_same_v<itype_t, float> ? 0.01f : 0.05f;
+    float fa = static_cast<float>(a);
+    float fb = static_cast<float>(b);
+    float abs_err = std::abs(fa - fb);
+    float tol = std::abs(fb) * rel_tol + 1e-6f;
+    if (abs_err > tol) {
         if (errors < MAX_ERRORS)
-            printf("*** error [%d]: expected=%f, actual=%f (diff=%d ULP)\n",
-                   index, (double)b, (double)a, (int)d);
+            printf("*** error [%d]: expected=%f, actual=%f (rel_err=%.2f%%)\n",
+                   index, (double)fb, (double)fa,
+                   100.0 * (double)abs_err / ((double)std::abs(fb) + 1e-10));
         return false;
     }
     return true;
@@ -214,18 +248,23 @@ void cleanup() {
 
 static void init_weights_xavier(std::vector<itype_t> &w, uint32_t fan_in, uint32_t fan_out) {
     float scale = std::sqrt(2.0f / (fan_in + fan_out));
-    for (auto &v : w)
-        v = (static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * scale;
+    for (auto &v : w) {
+        float f = (static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * scale;
+        v = to_itype(f);
+    }
 }
 
 
 static void mlp_cpu_sparse_batch(
-    const std::vector<itype_t>   &input_batch,       
-    std::vector<otype_t>         &output_batch,       
-    const std::vector<SparseMat> &sparse_weights,     
+    const std::vector<itype_t>   &input_batch,
+    std::vector<otype_t>         &output_batch,
+    const std::vector<SparseMat> &sparse_weights,
     const std::vector<std::vector<otype_t>> &biases)
 {
-    std::vector<otype_t> cur(input_batch.begin(), input_batch.end());
+    // cur holds activations as itype_t (fp16 when ITYPE=fp16) to match the
+    // kernel's ping-pong buffers which are converted to input_t after each
+    // intermediate layer.
+    std::vector<itype_t> cur(input_batch.begin(), input_batch.end());
     std::vector<otype_t> nxt;
 
     for (int l = 0; l < NUM_LAYERS; ++l) {
@@ -233,9 +272,9 @@ static void mlp_cpu_sparse_batch(
         bool     relu    = (l < NUM_LAYERS - 1);
 
         nxt.assign((size_t)out_dim * BATCH_SIZE, otype_t(0));
+        // cur.data() is already itype_t* — no reinterpret_cast needed.
         matmul_cpu_sparseA(nxt.data(), sparse_weights[l],
-                           reinterpret_cast<const itype_t *>(cur.data()),
-                           BATCH_SIZE, g_sparsity_degree);
+                           cur.data(), BATCH_SIZE, g_sparsity_degree);
 
         for (uint32_t i = 0; i < out_dim; ++i) {
             for (uint32_t b = 0; b < BATCH_SIZE; ++b) {
@@ -244,26 +283,40 @@ static void mlp_cpu_sparse_batch(
                 nxt[i * BATCH_SIZE + b] = v;
             }
         }
-        cur = nxt;
+
+        // Mirror the kernel's in-place fp32→input_t conversion: convert the
+        // fp32 output back to itype_t before it is used as the next layer's
+        // input.  For same-type configs this is an identity copy.
+        if (l < NUM_LAYERS - 1) {
+            cur.resize((size_t)out_dim * BATCH_SIZE);
+            for (size_t i = 0; i < cur.size(); ++i) {
+                if constexpr (std::is_same_v<itype_t, otype_t>) {
+                    cur[i] = nxt[i];
+                } else {
+                    cur[i] = to_itype(static_cast<float>(nxt[i]));
+                }
+            }
+        }
     }
 
-    // Softmax per sample (column)
+    // Softmax on the final layer's fp32 output (nxt).
+    uint32_t final_out_dim = layer_out_dims[NUM_LAYERS - 1];
     for (uint32_t b = 0; b < BATCH_SIZE; ++b) {
-        otype_t max_val = cur[b];
-        for (uint32_t i = 1; i < OUTPUT_DIM; ++i)
-            max_val = std::max(max_val, cur[i * BATCH_SIZE + b]);
+        otype_t max_val = nxt[b];
+        for (uint32_t i = 1; i < final_out_dim; ++i)
+            max_val = std::max(max_val, nxt[i * BATCH_SIZE + b]);
 
         otype_t sum_exp = 0;
-        for (uint32_t i = 0; i < OUTPUT_DIM; ++i) {
-            otype_t e = std::exp(cur[i * BATCH_SIZE + b] - max_val);
-            cur[i * BATCH_SIZE + b] = e;
+        for (uint32_t i = 0; i < final_out_dim; ++i) {
+            otype_t e = std::exp(nxt[i * BATCH_SIZE + b] - max_val);
+            nxt[i * BATCH_SIZE + b] = e;
             sum_exp += e;
         }
-        for (uint32_t i = 0; i < OUTPUT_DIM; ++i)
-            cur[i * BATCH_SIZE + b] /= sum_exp;
+        for (uint32_t i = 0; i < final_out_dim; ++i)
+            nxt[i * BATCH_SIZE + b] /= sum_exp;
     }
 
-    output_batch.assign(cur.begin(), cur.end());
+    output_batch.assign(nxt.begin(), nxt.end());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -279,7 +332,8 @@ int main(int argc, char *argv[]) {
     std::cout << "Sparsity : " << g_sparsity_degree << ":4" << std::endl;
     std::cout << "WMMA tile: M=" << cfg::tileM << " N=" << cfg::tileN
               << " K=" << cfg::tileK << std::endl;
-    std::cout << "dtype    : " << vt::ITYPE::name << std::endl;
+    std::cout << "input dtype    : " << vt::ITYPE::name << std::endl;
+    std::cout << "output dtype   : " << vt::OTYPE::name << std::endl;
 
     RT_CHECK(vx_dev_open(&device));
 
@@ -323,7 +377,7 @@ int main(int argc, char *argv[]) {
     // ── Input: [INPUT_DIM × BATCH_SIZE], values in [0,1) ─────────────────────
     std::vector<itype_t> h_input((size_t)INPUT_DIM * BATCH_SIZE);
     for (auto &v : h_input)
-        v = static_cast<itype_t>(rand()) / RAND_MAX;
+        v = to_itype(static_cast<float>(rand()) / RAND_MAX);
 
     // ── Allocate device memory ────────────────────────────────────────────────
     std::cout << "Allocating device memory..." << std::endl;

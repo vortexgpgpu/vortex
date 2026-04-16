@@ -12,7 +12,7 @@
 #include "common.h"
 
 namespace vt = vortex::sparse;
-using ctx = vt::wmma_context<NUM_THREADS, vt::fp32, vt::fp32>;
+using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 static inline uint32_t align_up(uint32_t x, uint32_t a) {
     return (x + a - 1) / a * a;
@@ -23,8 +23,33 @@ static inline size_t align_up_size(size_t value, size_t align) {
     return (value + align - 1) & ~(align - 1);
 }
 
+// Convert a float (fp32 layer output / im2col value) to ctx::input_t for
+// loading into the WMMA B matrix.  For fp32/fp32 this is a no-op.
+// For fp16 it uses __fp16 (soft-float via __truncsfhf2).
+// For bf16 it takes the upper 16 bits of the fp32 bit-pattern.
+// Made a template so that the static_assert is dependent on It and is only
+// evaluated for the bf16 branch, not for fp32/fp32 configs.
+template <typename It = ctx::input_t, typename Ot = ctx::output_t>
+static inline It output_to_input(Ot v) {
+    if constexpr (std::is_same_v<It, Ot>) {
+        return v;
+    } else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) {
+        __fp16 h = (__fp16)v;
+        It bits;
+        __builtin_memcpy(&bits, &h, sizeof(bits));
+        return bits;
+    } else {
+        // bf16: upper 16 bits of the fp32 bit-pattern
+        static_assert(sizeof(Ot) == 4 && sizeof(It) == 2,
+                      "output_to_input: unsupported type combination");
+        uint32_t u;
+        __builtin_memcpy(&u, &v, sizeof(u));
+        return static_cast<It>(u >> 16);
+    }
+}
+
 // ---------------------------------------------------------------------------
-// im2col_thread 
+// im2col_thread
 // ---------------------------------------------------------------------------
 
 static inline float im2col_get_pixel(float *im, int height, int width,
@@ -36,8 +61,8 @@ static inline float im2col_get_pixel(float *im, int height, int width,
 }
 
 typedef struct {
-    float    *data_im;   
-    float    *data_col;  
+    float          *data_im;   // input feature map (always fp32 from BN+activation)
+    ctx::input_t   *data_col;  // im2col output → WMMA B matrix (itype_t for fp16/bf16)
     int height, width;
     int ksize, stride, pad;
     int height_col, width_col;
@@ -76,7 +101,7 @@ void im2col_thread(im2col_args_t * __UNIFORM__ args) {
     float val = im2col_get_pixel(
         args->data_im, args->height, args->width,
         im_row, im_col, c_im, pad);
-    args->data_col[c * ldB + spatial_idx] = val;
+    args->data_col[c * ldB + spatial_idx] = output_to_input(val);
 }
 
 // ---------------------------------------------------------------------------
@@ -298,8 +323,9 @@ void forward_convolutional_layer(layer_config_t *l, float *input, void *workspac
     uint32_t N_pad = align_up(N, ctx::tileN);   
 
     auto output  = reinterpret_cast<float*>(l->output_addr);
-    auto weights = reinterpret_cast<ctx::input_t*>(l->weights_addr);  
-    auto ws      = reinterpret_cast<float*>(workspace);
+    auto weights = reinterpret_cast<ctx::input_t*>(l->weights_addr);
+    // Workspace holds ctx::input_t elements (fp16/bf16 for mixed-precision configs).
+    auto ws      = reinterpret_cast<ctx::input_t*>(workspace);
 
 
     im2col_args_t im_args;

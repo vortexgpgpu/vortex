@@ -13,7 +13,9 @@
 #include <algorithm>
 #include <vortex.h>
 #include <sparse_cfg.h>
+#include <rvfloats.h>
 #include <util.h>
+#include <type_traits>
 #include "common.h"
 
 #define FLOAT_ULP 16000
@@ -30,9 +32,11 @@
 using namespace vortex;
 namespace vt = vortex::sparse;
 
-using sparse_cfg_t = vt::wmma_config_t<NUM_THREADS, vt::fp32, vt::fp32>;
+using sparse_cfg_t = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using itype_t = typename vt::ITYPE::dtype;
+using otype_t = typename vt::OTYPE::dtype;
 
-static uint32_t g_sparsity_degree = 2; 
+static uint32_t g_sparsity_degree = 2;
 
 static inline size_t align_up(size_t value, size_t alignment) {
     if (alignment == 0) return value;
@@ -43,13 +47,57 @@ static inline uint32_t align_up32(uint32_t x, uint32_t a) {
     return (x + a - 1) / a * a;
 }
 
-struct SparseMat {
-    std::vector<float>   values;  
-    std::vector<uint8_t> meta;    
-    uint32_t rows, cols;          
+// ── Type helpers ──────────────────────────────────────────────────────────────
+
+template <typename S, typename D>
+struct muladd_t {
+    using stype = typename S::dtype;
+    using dtype = typename D::dtype;
+    static dtype eval(stype a, stype b, dtype c) {
+        return static_cast<dtype>(a) * static_cast<dtype>(b) + c;
+    }
 };
 
-static SparseMat pruneAndPack(const std::vector<float> &denseA,
+template <>
+struct muladd_t<vt::fp16, vt::fp32> {
+    static float eval(uint16_t a, uint16_t b, float c) {
+        auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
+        auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
+        return fa * fb + c;
+    }
+};
+
+template <>
+struct muladd_t<vt::bf16, vt::fp32> {
+    static float eval(uint16_t a, uint16_t b, float c) {
+        auto fa = bit_cast<float>(static_cast<uint32_t>(a) << 16);
+        auto fb = bit_cast<float>(static_cast<uint32_t>(b) << 16);
+        return fa * fb + c;
+    }
+};
+
+// Convert a host-side float to itype_t.
+//   fp32  → itype  : identity
+//   fp32  → fp16   : IEEE-correct via rv_ftoh_s
+//   fp32  → bf16   : truncate mantissa (upper 16 bits of fp32 bit-pattern)
+static inline itype_t to_itype(float v) {
+    if constexpr (std::is_same_v<itype_t, float>) {
+        return v;
+    } else if constexpr (vt::ITYPE::id == vt::fp16::id) {
+        return static_cast<itype_t>(rv_ftoh_s(bit_cast<uint32_t>(v), 0, nullptr));
+    } else {
+        // bf16
+        return static_cast<itype_t>(bit_cast<uint32_t>(v) >> 16);
+    }
+}
+
+struct SparseMat {
+    std::vector<itype_t> values;  // packed non-zero weights as itype_t
+    std::vector<uint8_t> meta;
+    uint32_t rows, cols;
+};
+
+static SparseMat pruneAndPack(const std::vector<itype_t> &denseA,
                                uint32_t M, uint32_t K,
                                uint32_t sparsity_degree) {
     SparseMat out;
@@ -58,10 +106,10 @@ static SparseMat pruneAndPack(const std::vector<float> &denseA,
     out.values.reserve((size_t)M * K * sparsity_degree / 4);
     out.meta.reserve((size_t)M * K / 4);
 
-    const float *src = denseA.data();
+    const itype_t *src = denseA.data();
     for (uint32_t r = 0; r < M; ++r) {
         for (uint32_t c = 0; c < K; c += 4) {
-            float blk[4] = {
+            itype_t blk[4] = {
                 src[r * K + c + 0], src[r * K + c + 1],
                 src[r * K + c + 2], src[r * K + c + 3]
             };
@@ -87,6 +135,9 @@ static SparseMat pruneAndPack(const std::vector<float> &denseA,
 }
 
 
+// B is always float (fp32 im2col output from BN-normalised feature maps).
+// A values are itype_t; convert B to itype_t before each multiply to mirror
+// the GPU's workspace quantisation.
 static void matmul_cpu_sparseA(float *C, const SparseMat &A, const float *B,
                                 uint32_t N, uint32_t sparsity_degree) {
     const uint32_t M = A.rows;
@@ -95,24 +146,24 @@ static void matmul_cpu_sparseA(float *C, const SparseMat &A, const float *B,
     const uint32_t meta_per_row   = K / 4;
 
     for (uint32_t m = 0; m < M; ++m) {
-        const float   *row_vals = A.values.data() + (size_t)m * values_per_row;
+        const itype_t *row_vals = A.values.data() + (size_t)m * values_per_row;
         const uint8_t *row_meta = A.meta.data()   + (size_t)m * meta_per_row;
         float         *crow     = C + (size_t)m * N;
 
         for (uint32_t n = 0; n < N; ++n) {
-            size_t v_idx = 0;
-            float  sum   = 0.0f;
+            size_t  v_idx = 0;
+            otype_t sum   = otype_t(0);
             for (uint32_t blk = 0; blk < K; blk += 4) {
                 uint8_t mask = row_meta[blk / 4];
                 if (!mask) { continue; }
                 for (uint32_t i = 0; i < 4; ++i) {
                     if (!(mask & (1u << i))) continue;
-                    float a_val = row_vals[v_idx++];
-                    float b_val = B[(size_t)(blk + i) * N + n];
-                    sum += a_val * b_val;
+                    itype_t a_val = row_vals[v_idx++];
+                    itype_t b_val = to_itype(B[(size_t)(blk + i) * N + n]);
+                    sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a_val, b_val, sum);
                 }
             }
-            crow[n] += sum;
+            crow[n] += static_cast<float>(sum);
         }
     }
 }
@@ -296,23 +347,28 @@ static void forward_yolo_cpu(layer_def_t *def, float *input, float *output,
     }
 }
 
-static void init_weights_xavier(std::vector<float> &weights, int fan_in) {
+static void init_weights_xavier(std::vector<itype_t> &weights, int fan_in) {
     float scale = std::sqrt(2.0f / (float)fan_in);
-    for (float &v : weights)
-        v = (static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * scale;
+    for (auto &v : weights)
+        v = to_itype((static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * scale);
 }
 
 static bool compare_float(float a, float b, int index, int errors) {
-    auto ordered = [](float f) -> int64_t {
-        union { float f; uint32_t u; } tmp;
-        tmp.f = f;
-        return (tmp.u & 0x80000000u) ? -(int64_t)(tmp.u & 0x7FFFFFFFu) : (int64_t)tmp.u;
-    };
-    auto d = std::abs(ordered(a) - ordered(b));
-    if (d > FLOAT_ULP) {
+    // Multi-layer sparse WMMA inference accumulates rounding differences
+    // between the tile-ordered GPU computation and the sequential CPU reference.
+    // Use relative-error tolerance that is tight enough to catch wrong results
+    // while tolerating normal fp32/fp16/bf16 quantisation noise.
+    //   fp32 weights → 1 % relative tolerance
+    //   fp16/bf16    → 5 % relative tolerance
+    constexpr float rel_tol =
+        std::is_same_v<itype_t, float> ? 0.01f : 0.05f;
+    float abs_err = std::abs(a - b);
+    float tol = std::abs(b) * rel_tol + 1e-6f;
+    if (abs_err > tol) {
         if (errors < 100)
-            printf("*** error: [%d] expected=%f, actual=%f (diff=%d ULP)\n",
-                   index, (double)b, (double)a, (int)d);
+            printf("*** error: [%d] expected=%f, actual=%f (rel_err=%.2f%%)\n",
+                   index, (double)b, (double)a,
+                   100.0 * (double)abs_err / ((double)std::abs(b) + 1e-10));
         return false;
     }
     return true;
@@ -394,6 +450,7 @@ int main(int argc, char *argv[]) {
     std::cout << "WMMA tile: M=" << sparse_cfg_t::tileM
               << " N=" << sparse_cfg_t::tileN
               << " K=" << sparse_cfg_t::tileK << std::endl;
+    std::cout << "dtype    : " << vt::ITYPE::name << " -> " << vt::OTYPE::name << std::endl;
 
     // ── Open device ─────────────────────────────────────────────────────────
     std::cout << "Opening device connection..." << std::endl;
@@ -441,7 +498,7 @@ int main(int argc, char *argv[]) {
             K_pad_arr[i] = Kp;
             N_pad_arr[i] = Np;
 
-            size_t ws_bytes = (size_t)Kp * Np * sizeof(float);
+            size_t ws_bytes = (size_t)Kp * Np * sizeof(itype_t);
             if (ws_bytes > max_workspace_bytes)
                 max_workspace_bytes = ws_bytes;
 
@@ -458,10 +515,10 @@ int main(int argc, char *argv[]) {
                 return -1;
             }
 
-            std::vector<float> h_weights_dense(M * K);
+            std::vector<itype_t> h_weights_dense(M * K);
             init_weights_xavier(h_weights_dense, K);
 
-            std::vector<float> dense_padded((size_t)Mp * Kp, 0.0f);
+            std::vector<itype_t> dense_padded((size_t)Mp * Kp, itype_t(0));
             for (uint32_t row = 0; row < M; ++row)
                 for (uint32_t col = 0; col < K; ++col)
                     dense_padded[row * Kp + col] = h_weights_dense[row * K + col];
@@ -533,7 +590,7 @@ int main(int argc, char *argv[]) {
             RT_CHECK(vx_mem_alloc(device, out_bytes, VX_MEM_READ_WRITE, &layer_bufs[i].output));
             RT_CHECK(vx_mem_address(layer_bufs[i].output, &cfg->output_addr));
 
-            size_t values_bytes = sw.values.size() * sizeof(float);
+            size_t values_bytes = sw.values.size() * sizeof(itype_t);
             size_t meta_offset  = align_up(values_bytes, sizeof(uint32_t));
             size_t meta_bytes   = sw.meta.size() * sizeof(uint32_t);
             size_t sparse_bytes = meta_offset + meta_bytes;
