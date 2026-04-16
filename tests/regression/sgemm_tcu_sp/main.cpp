@@ -748,7 +748,7 @@ int main(int argc, char *argv[]) {
 
   uint32_t num_blocks = grid_dim[0] * grid_dim[1];
   uint64_t num_mma_sync_instrs = uint64_t(num_blocks) * num_k_tiles;
-  RT_CHECK(vx_mem_alloc(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
+  RT_CHECK(vx_mem_alloc(device, num_blocks * 4 * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
   RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
@@ -838,15 +838,23 @@ int main(int argc, char *argv[]) {
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
-  // download and report cycle counts
+  // download per-block (t0, t1) timestamps and report cycle counts.
+  // NOTE: kernel latency = max(t1) - min(t0) assumes NUM_CORES=1 (single mcycle CSR).
   {
-    std::vector<uint32_t> h_cycles(num_blocks);
-    RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_blocks * sizeof(uint32_t)));
+    std::vector<uint32_t> h_cycles(num_blocks * 4);
+    RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_blocks * 4 * sizeof(uint32_t)));
+    uint64_t min_t0 = UINT64_MAX;
+    uint64_t max_t1 = 0;
     uint64_t cycles_sum = 0;
     uint32_t cycles_max = 0;
-    for (auto cycles : h_cycles) {
-      cycles_sum += cycles;
-      cycles_max = std::max(cycles_max, cycles);
+    for (uint32_t i = 0; i < num_blocks; ++i) {
+      uint64_t t0 = ((uint64_t)h_cycles[i*4+0] << 32) | h_cycles[i*4+1];
+      uint64_t t1 = ((uint64_t)h_cycles[i*4+2] << 32) | h_cycles[i*4+3];
+      if (t0 < min_t0) min_t0 = t0;
+      if (t1 > max_t1) max_t1 = t1;
+      uint32_t diff = (uint32_t)(t1 - t0);
+      cycles_sum += diff;
+      if (diff > cycles_max) cycles_max = diff;
     }
     std::cout << std::dec;
     std::cout << "mma_sync cycles max: " << cycles_max << std::endl;
@@ -854,6 +862,7 @@ int main(int argc, char *argv[]) {
     std::cout << "mma_sync cycles average per mma_sync instr: "
               << (num_mma_sync_instrs ? (double(cycles_sum) / num_mma_sync_instrs) : 0.0)
               << std::endl;
+    std::cout << "KERNEL_LATENCY: " << (max_t1 - min_t0) << std::endl;
   }
 
   // download destination buffer
