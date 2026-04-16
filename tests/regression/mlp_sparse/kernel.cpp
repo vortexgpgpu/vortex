@@ -8,9 +8,47 @@
 namespace vt = vortex::sparse;
 using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
-// fp32 -> fp32: input_t == output_t == float
-static_assert(sizeof(ctx::input_t) == sizeof(ctx::output_t),
-              "ITYPE and OTYPE must have equal element size");
+// Convert a single output_t (accumulator) value to input_t for intermediate
+// layer ping-pong buffers.  When ITYPE == OTYPE the function is a no-op.
+// When ITYPE=fp16 / OTYPE=fp32 it performs an IEEE-correct fp32→fp16
+// conversion using the compiler's __fp16 type (resolved via __truncsfhf2
+// from libclang_rt.builtins).
+template <typename It = ctx::input_t, typename Ot = ctx::output_t>
+static inline It output_to_input(Ot v) {
+    if constexpr (std::is_same_v<It, Ot>) {
+        return v;
+    } else if constexpr (std::is_same_v<vt::ITYPE, vt::fp16>) {
+        // IEEE fp32 → fp16
+        __fp16 h = (__fp16)v;
+        It bits;
+        __builtin_memcpy(&bits, &h, sizeof(bits));
+        return bits;
+    } else {
+        // bf16: upper 16 bits of the fp32 bit-pattern
+        // static_assert is dependent on It/Ot so it's only evaluated when
+        // this branch is actually instantiated (i.e. not for same-type configs).
+        static_assert(sizeof(Ot) == 4 && sizeof(It) == 2,
+                      "output_to_input: unsupported type combination");
+        uint32_t u;
+        __builtin_memcpy(&u, &v, sizeof(u));
+        return static_cast<It>(u >> 16);
+    }
+}
+
+// Per-element kernel: converts a buffer of output_t values to input_t
+// in-place.  Safe because sizeof(input_t) <= sizeof(output_t), so each
+// write lands at or before its corresponding read offset.
+typedef struct {
+    ctx::output_t *buf;
+    uint32_t       count;
+} convert_args_t;
+
+static void convert_to_input_thread(convert_args_t *__UNIFORM__ args) {
+    uint32_t idx = blockIdx.x;
+    if (idx >= args->count) return;
+    ctx::output_t val = args->buf[idx];
+    reinterpret_cast<ctx::input_t *>(args->buf)[idx] = output_to_input(val);
+}
 
 static inline size_t align_up_size(size_t value, size_t alignment) {
     if (!alignment) return value;
@@ -181,6 +219,23 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
         uint32_t br_grid[2] = { N, M };
         vx_spawn_threads(2, br_grid, nullptr,
                          (vx_kernel_func_cb)bias_relu_thread, &br_args);
+
+        // ── fp32 → input_t conversion for ping-pong buffers ────────────────
+        // When ITYPE != OTYPE (e.g. fp16 weights / fp32 accumulator) the
+        // intermediate buffers hold fp32 values after bias+relu but the next
+        // layer's WMMA B-matrix load expects input_t (fp16).  Convert the
+        // buffer in-place before it is reused as layer_in.  The final layer
+        // writes directly to the output buffer which stays as output_t.
+        if constexpr (!std::is_same_v<ctx::input_t, ctx::output_t>) {
+            if (layer < arg->num_layers - 1) {
+                uint32_t count = M * N;
+                convert_args_t cv_args;
+                cv_args.buf   = layer_out;
+                cv_args.count = count;
+                vx_spawn_threads(1, &count, nullptr,
+                                 (vx_kernel_func_cb)convert_to_input_thread, &cv_args);
+            }
+        }
     }
 
     // ── Softmax on final output ─────────────────────────────────────────────
