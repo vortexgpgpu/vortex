@@ -133,6 +133,12 @@ endif
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 
+# Optional kernel clock frequency override (in MHz).
+# Leave unset to use the platform-default frequency (~300 MHz on U55C).
+ifdef KERNEL_FREQ
+VPP_FLAGS += --kernel_frequency $(KERNEL_FREQ)
+endif
+
 # register compilation hooks
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE=${SRC_DIR}/pre_opt_hook.tcl"
 
