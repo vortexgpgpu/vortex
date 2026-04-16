@@ -141,6 +141,41 @@ struct FMA<sv::bf16, sv::bf16> {
   }
 };
 
+// Sparse FMA specializations for integer types
+template <>
+struct FMA<sv::int8, sv::int32> {
+  static int32_t eval(int8_t a, int8_t b, int32_t c) {
+    return static_cast<int32_t>(a) * static_cast<int32_t>(b) + c;
+  }
+};
+
+template <>
+struct FMA<sv::uint8, sv::int32> {
+  static int32_t eval(uint8_t a, uint8_t b, int32_t c) {
+    return static_cast<int32_t>(a) * static_cast<int32_t>(b) + c;
+  }
+};
+
+template <>
+struct FMA<sv::int4, sv::int32> {
+  static int32_t eval(uint8_t a, uint8_t b, int32_t c) {
+    int32_t a_val = a & 0xF;
+    if (a_val & 0x8) a_val |= 0xFFFFFFF0; // sign extend
+    int32_t b_val = b & 0xF;
+    if (b_val & 0x8) b_val |= 0xFFFFFFF0; // sign extend
+    return a_val * b_val + c;
+  }
+};
+
+template <>
+struct FMA<sv::uint4, sv::int32> {
+  static int32_t eval(uint8_t a, uint8_t b, int32_t c) {
+    int32_t a_val = a & 0xF;
+    int32_t b_val = b & 0xF;
+    return a_val * b_val + c;
+  }
+};
+
 
 template <typename It, typename Ot>
 struct FEDP {
@@ -179,6 +214,46 @@ struct FEDP_Regs {
       auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
       for (uint32_t i = 0; i < i_ratio; ++i) {
         acc = FMA<It, Ot>::eval(a[i], b[i], acc);
+      }
+    }
+    return bit_cast<uint32_t>(acc);
+  }
+};
+
+// FEDP_Regs specialization for sparse sv::int4 -> sv::int32 (nibble unpacking)
+template <>
+struct FEDP_Regs<sv::int4, sv::int32> {
+  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val, uint32_t regs_used) {
+    auto acc = bit_cast<int32_t>(c_val);
+    uint32_t z_max = std::min<uint32_t>(regs_used, scfg::tcK);
+    for (uint32_t z = 0; z < z_max; ++z) {
+      auto a = a_row[z].u32;
+      auto b = b_col[z].u32;
+      for (uint32_t i = 0; i < 8; ++i) { // 8 nibbles per 32-bit register
+        int32_t a_val = (a >> (i * 4)) & 0xF;
+        int32_t b_val = (b >> (i * 4)) & 0xF;
+        if (a_val & 0x8) a_val |= 0xFFFFFFF0;
+        if (b_val & 0x8) b_val |= 0xFFFFFFF0;
+        acc += a_val * b_val;
+      }
+    }
+    return bit_cast<uint32_t>(acc);
+  }
+};
+
+// FEDP_Regs specialization for sparse sv::uint4 -> sv::int32 (nibble unpacking)
+template <>
+struct FEDP_Regs<sv::uint4, sv::int32> {
+  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val, uint32_t regs_used) {
+    auto acc = bit_cast<int32_t>(c_val);
+    uint32_t z_max = std::min<uint32_t>(regs_used, scfg::tcK);
+    for (uint32_t z = 0; z < z_max; ++z) {
+      auto a = a_row[z].u32;
+      auto b = b_col[z].u32;
+      for (uint32_t i = 0; i < 8; ++i) {
+        int32_t a_val = (a >> (i * 4)) & 0xF;
+        int32_t b_val = (b >> (i * 4)) & 0xF;
+        acc += a_val * b_val;
       }
     }
     return bit_cast<uint32_t>(acc);
@@ -316,6 +391,21 @@ static PFN_FEDP_REGS select_FEDP_regs(uint32_t IT, uint32_t OT) {
       std::abort();
     }
     break;
+  case sv::int32::id:
+    switch (IT) {
+    case sv::int8::id:
+      return FEDP_Regs<sv::int8, sv::int32>::eval;
+    case sv::uint8::id:
+      return FEDP_Regs<sv::uint8, sv::int32>::eval;
+    case sv::int4::id:
+      return FEDP_Regs<sv::int4, sv::int32>::eval;
+    case sv::uint4::id:
+      return FEDP_Regs<sv::uint4, sv::int32>::eval;
+    default:
+      std::cout << "Error: unsupported mma format (regs): " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
+    break;
   default:
     std::cout << "Error: unsupported output type (regs): " << OT << "!" << std::endl;
     std::abort();
@@ -411,7 +501,12 @@ void sparse_wmma(uint32_t fmt_s,
   case sv::uint4::id: element_bits = 4; break;
   default: element_bits = 32; break;
   }
-  const uint32_t I_RATIO = 32u / element_bits;
+
+  // For sub-byte types (int4/uint4), sparse values are stored as bytes
+  // (dtype=uint8_t), so scattering operates at byte granularity.
+  // The FEDP_Regs specializations handle nibble-level processing internally.
+  const uint32_t scatter_bits = std::max(element_bits, 8u);
+  const uint32_t I_RATIO = 32u / scatter_bits;
 
   auto fedp_regs = select_FEDP_regs(fmt_s, fmt_d);
 
@@ -460,7 +555,7 @@ void sparse_wmma(uint32_t fmt_s,
       } else {
         // fp16/bf16/int8/int4 path: multiple elements packed per register
         // Must unpack compressed values and scatter to correct positions
-        const uint32_t elem_mask = (element_bits < 32) ? ((1u << element_bits) - 1u) : 0xFFFFFFFFu;
+        const uint32_t s_elem_mask = (scatter_bits < 32) ? ((1u << scatter_bits) - 1u) : 0xFFFFFFFFu;
 
         if (sparsity_degree >= I_RATIO) {
           // e.g. fp16 2:4: each thread handles 1 k-block
@@ -473,32 +568,40 @@ void sparse_wmma(uint32_t fmt_s,
           uint32_t val_rank = 0;
           for (uint32_t pos = 0; pos < 4u; ++pos) {
             if (meta4 & (1u << pos)) {
-              uint32_t val = (src_packed >> (val_rank * element_bits)) & elem_mask;
+              uint32_t val = (src_packed >> (val_rank * scatter_bits)) & s_elem_mask;
               uint32_t dst_reg = pos / I_RATIO;
               uint32_t dst_lane = pos % I_RATIO;
-              a_row_masked[dst_reg].u32 |= (val << (dst_lane * element_bits));
+              a_row_masked[dst_reg].u32 |= (val << (dst_lane * scatter_bits));
               ++val_rank;
             }
           }
         } else {
-          // e.g. fp16 1:4: each thread handles multiple k-blocks
+          // sparsity_degree < I_RATIO: each thread handles multiple k-blocks
           // Metadata has packed masks: (kblock1_mask << 4) | kblock0_mask
           uint32_t a_thread = (local_m * scfg::tcM + i) * sparsity_degree;
           uint32_t meta_word = metadata_words[a_thread];
           uint32_t meta4 = (meta_word >> (step_k * 4u)) & 0xFu;
           uint32_t src_packed = rs1_data[a_off + a_thread].u32;
 
-          // Extract the compressed value for this k-block from the packed register
-          // For 1:4, there's 1 value per k-block, stored at position step_k
-          uint32_t comp_val = (src_packed >> (step_k * element_bits)) & elem_mask;
+          // Count compressed values before this k-block to find the bit offset
+          uint32_t values_before = 0;
+          for (uint32_t prev_k = 0; prev_k < step_k; ++prev_k) {
+            uint32_t prev_meta = (meta_word >> (prev_k * 4u)) & 0xFu;
+            values_before += __builtin_popcount(prev_meta);
+          }
 
-          // Scatter the single value to correct position
+          // Scatter all non-zero values for this k-block
+          // Use absolute K position (step_k * 4 + pos) for register placement
+          uint32_t val_rank = 0;
           for (uint32_t pos = 0; pos < 4u; ++pos) {
             if (meta4 & (1u << pos)) {
-              uint32_t dst_reg = pos / I_RATIO;
-              uint32_t dst_lane = pos % I_RATIO;
-              a_row_masked[dst_reg].u32 |= (comp_val << (dst_lane * element_bits));
-              break; // only 1 value for 1:4
+              uint32_t comp_offset = values_before + val_rank;
+              uint32_t comp_val = (src_packed >> (comp_offset * scatter_bits)) & s_elem_mask;
+              uint32_t abs_pos = step_k * 4u + pos;
+              uint32_t dst_reg = abs_pos / I_RATIO;
+              uint32_t dst_lane = abs_pos % I_RATIO;
+              a_row_masked[dst_reg].u32 |= (comp_val << (dst_lane * scatter_bits));
+              ++val_rank;
             }
           }
         }
