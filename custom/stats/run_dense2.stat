@@ -5,19 +5,19 @@ BLOCK_M=2, BLOCK_N=16, XBAR_QUEUE_DEPTH=2
 perf=6
 
 PASS
-Total kernel cycles: 42687
-Total kernel instructions: 872
-Kernel body cycles: 42687
+Total kernel cycles: 39034
+Total kernel instructions: 603
+Kernel body cycles: 39034
 Kernel body instructions: N/A
 MUL active cycles: 16384
 XBAR stalls: 0.00% (0 cycles)
 
-PERF6: core0: dxa: transfers=20, gmem_reads=1024, gmem_dedup=0 (rate=0%), smem_writes=512, avg_gmem_lat=829.3
-PERF6: dxa: transfers=20, gmem_reads=1024, gmem_dedup=0 (rate=0%), smem_writes=512, avg_gmem_lat=829.3
-PERF6: instrs=872, cycles=42687, IPC=0.020
+PERF6: core0: dxa: transfers=16, gmem_reads=1024, gmem_dedup=0 (rate=0%), smem_writes=512, avg_gmem_lat=785.6
+PERF6: dxa: transfers=16, gmem_reads=1024, gmem_dedup=0 (rate=0%), smem_writes=512, avg_gmem_lat=785.6
+PERF6: instrs=603, cycles=39034, IPC=0.015
 
 ROI VARIABLES:
-TCU cycles: 16954
+TCU cycles: 16904
 DXA cycles A: N/A
 DXA cycles B: N/A
 DXA cycles C: N/A

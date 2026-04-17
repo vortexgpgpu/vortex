@@ -1144,6 +1144,7 @@ int main(int argc, char *argv[]) {
   uint32_t N = xn;
   uint32_t K = xk;
   const uint32_t input_tile_k = cfg::tileK;
+  const uint32_t dxa_tile_k = 2 * input_tile_k;
 
   if ((M % 32) != 0) {
     std::cout << "Error: M must be a multiple of 32!" << std::endl;
@@ -1155,8 +1156,8 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  if ((K % input_tile_k) != 0) {
-    std::cout << "Error: K must be a multiple of WMMA tileK (" << input_tile_k << ")!" << std::endl;
+  if ((K % dxa_tile_k) != 0) {
+    std::cout << "Error: K must be a multiple of DXA tileK (" << dxa_tile_k << ")!" << std::endl;
     return -1;
   }
 
@@ -1169,6 +1170,7 @@ int main(int argc, char *argv[]) {
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
   std::cout << "WMMA Core Dimension: M=" << cfg::tcM << ", N=" << cfg::tcN << ", K=" << cfg::tcK << std::endl;
   std::cout << "WMMA Tile Dimension: M=" << cfg::tileM << ", N=" << cfg::tileN << ", K=" << cfg::tileK << std::endl;
+  std::cout << "DXA A/B Tile Dimension: M=32, N=32, K=" << dxa_tile_k << std::endl;
   std::cout << "matrix A: " << M << "x" << K << std::endl;
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;
@@ -1317,10 +1319,10 @@ int main(int argc, char *argv[]) {
   std::cout << "Matrix C:" << std::endl;
   print_2d_output_matrix(h_C, M, N, h_C);
   if (sparsity != 2) {
-    h_A_packed = pack_A_colmajor_tiled32(h_A, M, K, 32, input_tile_k);
+    h_A_packed = pack_A_colmajor_tiled32(h_A, M, K, 32, dxa_tile_k);
   }
   if (sparsity == 0) {
-    h_B_packed = pack_B_rowmajor_tiled32(h_B, K, N, input_tile_k, 32);
+    h_B_packed = pack_B_rowmajor_tiled32(h_B, K, N, dxa_tile_k, 32);
   }
   h_C_packed = pack_C_blocked_tiled32(h_C, M, N);
 
@@ -1432,10 +1434,10 @@ int main(int argc, char *argv[]) {
 	  {
 	    constexpr uint32_t tile_M = 32;
 	    constexpr uint32_t tile_N = 32;
-	    const uint32_t tile_a_elems = tile_M * input_tile_k;
-	    const uint32_t total_a_tiles = (M / tile_M) * (K / input_tile_k);
-    const uint32_t tile_b_elems = input_tile_k * tile_N;
-    const uint32_t total_b_tiles = (N / tile_N) * (K / input_tile_k);
+	    const uint32_t tile_a_elems = tile_M * dxa_tile_k;
+	    const uint32_t total_a_tiles = (M / tile_M) * (K / dxa_tile_k);
+    const uint32_t tile_b_elems = dxa_tile_k * tile_N;
+    const uint32_t total_b_tiles = (N / tile_N) * (K / dxa_tile_k);
 
     if (sparsity == 2) {
       RT_CHECK(vx_dxa_program_desc_1d(
