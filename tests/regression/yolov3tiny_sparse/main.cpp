@@ -36,7 +36,7 @@ using sparse_cfg_t = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 
-static uint32_t g_sparsity_degree = 2;
+static uint32_t g_sparsity_degree = 1;
 
 static inline size_t align_up(size_t value, size_t alignment) {
     if (alignment == 0) return value;
