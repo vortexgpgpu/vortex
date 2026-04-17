@@ -38,8 +38,10 @@ typedef struct {
     uint64_t input_addr;        // [INPUT_DIM  × batch_size], dtype = ITYPE
     uint64_t output_addr;       // [OUTPUT_DIM × batch_size], dtype = OTYPE
     uint64_t layer_configs_addr;
-    uint64_t buffer1_addr;      
-    uint64_t buffer2_addr;      
+    uint64_t buffer1_addr;      // [max_hidden × batch_size], dtype = OTYPE
+    uint64_t buffer2_addr;      // [max_hidden × batch_size], dtype = OTYPE
+    uint64_t buffer1_in_addr;   // [max_hidden × batch_size], dtype = ITYPE (downcast of buffer1)
+    uint64_t buffer2_in_addr;   // [max_hidden × batch_size], dtype = ITYPE (downcast of buffer2)
 } kernel_arg_t;
 
 #endif // _COMMON_H_

@@ -489,7 +489,6 @@ void sparse_wmma(uint32_t fmt_s,
   std::vector<reg_data_t>& rd_data,
   const uint32_t* metadata_words,
   uint32_t sparsity_degree) {
-
   // Derive element width from source format
   uint32_t element_bits = 32;
   switch (fmt_s) {
@@ -591,15 +590,14 @@ void sparse_wmma(uint32_t fmt_s,
           }
 
           // Scatter all non-zero values for this k-block
-          // Use absolute K position (step_k * 4 + pos) for register placement
+          // Use local position (pos) for register placement within this step's window
           uint32_t val_rank = 0;
           for (uint32_t pos = 0; pos < 4u; ++pos) {
             if (meta4 & (1u << pos)) {
               uint32_t comp_offset = values_before + val_rank;
               uint32_t comp_val = (src_packed >> (comp_offset * scatter_bits)) & s_elem_mask;
-              uint32_t abs_pos = step_k * 4u + pos;
-              uint32_t dst_reg = abs_pos / I_RATIO;
-              uint32_t dst_lane = abs_pos % I_RATIO;
+              uint32_t dst_reg = pos / I_RATIO;
+              uint32_t dst_lane = pos % I_RATIO;
               a_row_masked[dst_reg].u32 |= (comp_val << (dst_lane * scatter_bits));
               ++val_rank;
             }

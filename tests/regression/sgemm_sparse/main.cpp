@@ -29,7 +29,7 @@
 using namespace vortex;
 namespace vt = sparse;
 
-static uint32_t g_sparsity_degree = 1; // Default: 2:4 sparsity
+static uint32_t g_sparsity_degree = 2; // Default: 2:4 sparsity
 
 static size_t align_up(size_t value, size_t alignment) {
   if (alignment == 0)
