@@ -54,7 +54,7 @@ Cluster::Cluster(const SimContext& ctx,
     L2_NUM_REQS,            // request size
     L2_MEM_PORTS,           // memory ports
     L2_WRITEBACK,           // write-back
-    false,                  // write response
+    true,                   // write response
     L2_MSHR_SIZE,           // mshr size
     2,                      // pipeline latency
   });

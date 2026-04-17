@@ -148,11 +148,9 @@ void DTensorCore::issue_mem_req(uint64_t addr, bool write) {
   req.cid   = 0;
   req.uuid  = 0;
 
-  if (!write) {
-    pending_tag_ = req.tag;
-  } else {
-    pending_tag_ = 0;
-  }
+  // Track both read and write requests until MemRsp arrives.
+  pending_tag_ = req.tag;
+
   // 1-cycle latency for memory access
   // For same-level interconnect, other files (cache_sim) use a 1-cycle latency for the entire request-response round trip too.
   mem_req_out.send(req);
@@ -979,30 +977,39 @@ void DTensorCore::tick() {
     break;
 
   case State::OUT_REQ:
-    // Issue variable number of MemReq
-    if (!issue_next_out_req_()) {
+    // Issue exactly one output write request, then wait for its response.
+    if (issue_next_out_req_()) {
+      state_ = State::OUT_WAIT;
+    } else {
+      pending_tag_ = 0;
       state_ = State::OUT_WAIT;
     }
     break;
 
   case State::OUT_WAIT:
     if (pending_tag_ == 0) {
-      store_output();
-
-      if (advance_output_tile_()) {
-        // Move to next output tile if there's more tiles in M/N dimension
-        build_req_lists_();
-        state_ = State::OP_REQ;
+      if (out_req_idx_ < out_req_lines_.size()) {
+        // More output cache lines remain: issue next write request.
+        state_ = State::OUT_REQ;
       } else {
-        // Mem Req message moved to here
-        std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_
-                  << ", output=" << total_out_reqs_
-                  << ", total=" << (1 + total_op_reqs_ + total_out_reqs_)
-                  << std::endl;
+        // All output write requests have completed.
+        store_output();
 
-        done_ = true;
-        busy_ = false;
-        state_ = State::DONE;
+        if (advance_output_tile_()) {
+          // Move to next output tile if there's more tiles in M/N dimension
+          build_req_lists_();
+          state_ = State::OP_REQ;
+        } else {
+          // Mem Req message moved to here
+          std::cout << "[DTCU] L2 MemReq count: desc=1, op=" << total_op_reqs_
+                    << ", output=" << total_out_reqs_
+                    << ", total=" << (1 + total_op_reqs_ + total_out_reqs_)
+                    << std::endl;
+
+          done_ = true;
+          busy_ = false;
+          state_ = State::DONE;
+        }
       }
     }
     break;
