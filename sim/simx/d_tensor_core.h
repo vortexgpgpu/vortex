@@ -126,6 +126,11 @@ private:
   uint64_t total_op_reqs_ = 0;
   uint64_t total_out_reqs_ = 0;
 
+
+  // Execute latency modelling
+  uint32_t exec_cycles_left_ = 0;
+  uint32_t estimate_execute_cycles_() const;
+
   void init_tile_state_();
   bool advance_output_tile_();
 

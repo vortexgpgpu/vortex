@@ -68,6 +68,7 @@ DTensorCore::DTensorCore(const SimContext& ctx,
   , tiles_k_(1)
   , total_op_reqs_(0)
   , total_out_reqs_(0)
+  , exec_cycles_left_(0)
 {
   //--
 }
@@ -105,6 +106,7 @@ void DTensorCore::reset() {
   tiles_k_ = 1;
   total_op_reqs_ = 0;
   total_out_reqs_ = 0;
+  exec_cycles_left_ = 0;
 }
 
 void DTensorCore::start(uint64_t desc_addr) {
@@ -134,6 +136,7 @@ void DTensorCore::start(uint64_t desc_addr) {
   tiles_k_ = 1;
   total_op_reqs_ = 0;
   total_out_reqs_ = 0;
+  exec_cycles_left_ = 0;
 }
 
 uint32_t DTensorCore::poll() const {
@@ -276,6 +279,34 @@ uint64_t DTensorCore::calculate_base_D_() const {
   uint64_t row = uint64_t(tile_m_idx_) * tile_m_;
   uint64_t col = uint64_t(tile_n_idx_) * tile_n_;
   return desc_.ptrD + (row * desc_.ldmD + col) * out_sz;
+}
+
+uint32_t DTensorCore::estimate_execute_cycles_() const {
+  const uint32_t in_sz = elem_size_bytes(desc_.fmt_s);
+  const uint32_t i_ratio = 4 / in_sz;
+
+  // One in-core WMMA micro-op consumes cfg::tcK 32-bit words,
+  const uint32_t wmma_uop_k = cfg::tcK * i_ratio;
+
+  if ((tile_m_ % cfg::tcM) != 0 || (tile_n_ % cfg::tcN) != 0 || (tile_k_ % wmma_uop_k) != 0) {
+    std::cout << "[DTCU] Error: Tile is not divisible by in-core WMMA micro-op shape"
+              << " tile_m=" << tile_m_ << " tile_n=" << tile_n_ << " tile_k=" << tile_k_
+              << " tcM=" << cfg::tcM << " tcN=" << cfg::tcN << " wmma_uop_k=" << wmma_uop_k
+              << std::endl;
+    std::abort();
+  }
+
+  const uint32_t wmma_uops_m = tile_m_ / cfg::tcM;
+  const uint32_t wmma_uops_n = tile_n_ / cfg::tcN;
+  const uint32_t wmma_uops_k = tile_k_ / wmma_uop_k;
+
+  const uint32_t equivalent_wmma_uops = wmma_uops_m * wmma_uops_n * wmma_uops_k;
+
+  // 4 is the constant used in sim/simx/tensor_unit.cpp
+  // Each in-core WMMA micro-op has delay = 4 cycles.
+  constexpr uint32_t WMMA_UOP_DELAY = 4;
+
+  return std::max(1u, equivalent_wmma_uops * WMMA_UOP_DELAY);
 }
 
 void DTensorCore::load_operands() {
@@ -811,12 +842,21 @@ static inline uint64_t line_base(uint64_t addr) {
 
 // Similar to mem_coalescer
 // Same addresses is combined together / unaligned accesses are split into multiple lines
-static inline void coalesce_to_lines(const std::vector<uint64_t>& addrs, uint32_t bytes, std::unordered_set<uint64_t>& out_lines) {
+static inline void coalesce_to_lines(const std::vector<uint64_t>& addrs, uint32_t bytes, std::vector<uint64_t>& out_lines) {
+  std::unordered_set<uint64_t> seen_lines;
+  seen_lines.reserve(addrs.size() * 2);
+
   for (auto addr : addrs) {
     uint64_t l0 = line_base(addr);
     uint64_t l1 = line_base(addr + bytes - 1);
-    out_lines.insert(l0);
-    out_lines.insert(l1);
+
+    if (seen_lines.insert(l0).second) {
+      out_lines.push_back(l0);
+    }
+
+    if (l1 != l0 && seen_lines.insert(l1).second) {
+      out_lines.push_back(l1);
+    }
   }
 }
 
@@ -825,9 +865,6 @@ void DTensorCore::build_req_lists_() {
   out_req_lines_.clear();
   op_req_idx_ = 0;
   out_req_idx_ = 0;
-
-  std::unordered_set<uint64_t> op_lines;
-  std::unordered_set<uint64_t> out_lines;
 
   const uint32_t in_sz  = elem_size_bytes(desc_.fmt_s);
   const uint32_t elems_per_word = 4 / in_sz;
@@ -877,11 +914,9 @@ void DTensorCore::build_req_lists_() {
   }
 
   // Coalesce in order to only calculate unique cache lines touched
-  coalesce_to_lines(op_addrs,  WORD_BYTES, op_lines);
-  coalesce_to_lines(out_addrs, WORD_BYTES, out_lines);
-
-  op_req_lines_.assign(op_lines.begin(), op_lines.end());
-  out_req_lines_.assign(out_lines.begin(), out_lines.end());
+  // Coalesce while preserving first-touch order
+  coalesce_to_lines(op_addrs, WORD_BYTES, op_req_lines_);
+  coalesce_to_lines(out_addrs, WORD_BYTES, out_req_lines_);
 
   total_op_reqs_ += op_req_lines_.size();
   total_out_reqs_ += out_req_lines_.size();
@@ -957,12 +992,24 @@ void DTensorCore::tick() {
         state_ = State::OP_REQ;
       } else {
         load_operands();
+        // Caculate execution latency for current tile based on # of FMA micro-ops
+        exec_cycles_left_ = estimate_execute_cycles_(); 
         state_ = State::EXECUTE;
       }
     }
     break;
-
+  
   case State::EXECUTE:
+    // Modelling execution latency by waiting for cycles (exec_cycles_left)
+    if (exec_cycles_left_ > 0) {
+      --exec_cycles_left_;
+    }
+
+    if (exec_cycles_left_ != 0) {
+      break;
+    }
+
+    // Execute MMA for one tile
     execute_mma();
 
     if ((tile_k_idx_ + 1) < tiles_k_) {

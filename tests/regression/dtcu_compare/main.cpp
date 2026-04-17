@@ -141,9 +141,9 @@ int main(int argc, char** argv) {
   const uint32_t dtcu_tileK = (sizeof(itype_t) == 2) ? 16 : 8;
 
   // Total GEMM size 
-  const uint32_t M = dtcu_tileM;        // 64
-  const uint32_t N = dtcu_tileN;        // 32
-  const uint32_t K = 2 * dtcu_tileK;    // fp16/bf16: 32, fp32: 16
+  const uint32_t M = 16 * dtcu_tileM;    // 64
+  const uint32_t N = 16 * dtcu_tileN;    // 32
+  const uint32_t K = 16 * dtcu_tileK;    // fp16/bf16: 32, fp32: 16
 
   if ((M % tcu_tileM) != 0 || (N % tcu_tileN) != 0 || (K % tcu_tileK) != 0) {
     std::cerr << "dtcu_compare: Matrix size does not support in-core TCU"
