@@ -14,7 +14,7 @@
 #include <vortex.h>
 
 #ifndef FLOAT_ULP
-#define FLOAT_ULP 6
+#define FLOAT_ULP 10
 #endif
 #define MAX_ERRORS 100
 

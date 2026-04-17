@@ -108,7 +108,7 @@ IO_END_ADDR = "expr: $USER_BASE_ADDR"
 
 [alu]
 NUM_ALU_LANES = "expr: $SIMD_WIDTH"
-NUM_ALU_BLOCKS = "expr: $ISSUE_WIDTH"
+NUM_ALU_BLOCKS = 1
 
 IMUL_DPI = "expr: (not $SYNTHESIS) and $DPI_ENABLE"
 IDIV_DPI = "expr: (not $SYNTHESIS) and $DPI_ENABLE"
@@ -133,7 +133,7 @@ FPU_TYPE = "expr: ('FPNEW' if $XLEN_64 else ('STD' if $ASIC else 'DSP')) if $SYN
 FPU_RV64F = "expr: $XLEN_64 and $FLEN_32"
 
 NUM_FPU_LANES = "expr: $SIMD_WIDTH"
-NUM_FPU_BLOCKS = "expr: $ISSUE_WIDTH"
+NUM_FPU_BLOCKS = 1
 FPUQ_SIZE = "expr: 2 * ($SIMD_WIDTH // $NUM_FPU_LANES)"
 
 # local helpers (lowercase = not emitted)
@@ -155,7 +155,7 @@ FNCP_PE_RATIO = 1
 
 [vpu]
 NUM_VPU_LANES = "expr: $SIMD_WIDTH"
-NUM_VPU_BLOCKS = "expr: $ISSUE_WIDTH"
+NUM_VPU_BLOCKS = 1
 
 [vm]
 MEM_PAGE_LOG2_SIZE = 12
