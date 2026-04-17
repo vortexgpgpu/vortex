@@ -694,8 +694,8 @@ static std::vector<otype_t> pack_C_blocked_tiled32(const std::vector<otype_t>& C
                                                    uint32_t N) {
   constexpr uint32_t TILE_M = 32;
   constexpr uint32_t TILE_N = 32;
-  constexpr uint32_t BLOCK_M = 4;
-  constexpr uint32_t BLOCK_N = 8;
+  constexpr uint32_t BLOCK_M = 2;
+  constexpr uint32_t BLOCK_N = 16;
   const uint32_t blk_cols = TILE_N / BLOCK_N;
   const uint32_t elems_per_tile = TILE_M * TILE_N;
   std::vector<otype_t> packed(C.size());
@@ -1296,8 +1296,9 @@ int main(int argc, char *argv[]) {
   for (uint32_t i = 0; i < sizeC; ++i) {
     uint32_t bits = 0x43800000 + (i * 0x8000); // start at 256.0f, step in 0x8000 increments
     otype_t tmp;
-    std::memcpy(&tmp, &bits, sizeof(tmp));  // bitwise copy, no conversion
-    h_C[i] = tmp;
+    uint32_t zero = 0x0;
+    std::memcpy(&tmp, &zero, sizeof(tmp));  // bitwise copy, no conversion
+    h_C[i] = zero;
   }
 
   std::cout << "Matrix A:" << std::endl;

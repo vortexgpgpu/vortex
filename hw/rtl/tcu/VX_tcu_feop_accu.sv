@@ -38,6 +38,10 @@ module VX_tcu_feop_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire                                        accu_ready_to_flush   // Must be empty in order to commence the flushing
 );
 
+initial begin
+    `TRACE(1, ("[feop_accu]: Parameters: BLOCK_M: %0d, BLOCK_N: %0d, XBAR_QUEUE_DEPTH: %0d\n", BLOCK_M, BLOCK_N, XBAR_QUEUE_DEPTH));
+end
+
     localparam LG_BLOCK_M  = $clog2(BLOCK_M);
     localparam LG_BLOCK_N  = $clog2(BLOCK_N);
     localparam int BANKS   = BLOCK_M * BLOCK_N;

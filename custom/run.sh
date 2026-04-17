@@ -15,6 +15,10 @@ NUM_THREADS=32
 ITYPE=fp16
 OTYPE=fp32
 WARPS=2
+BLOCK_M=2
+BLOCK_N=16
+XBAR_QUEUE_DEPTH=2
+PERF_CLASS=""
 LOG_FILE=run.log
 DO_CLEAN=1
 EXTRA_BUILD_CONFIGS=""
@@ -35,6 +39,10 @@ Options:
   -i <value>   ITYPE compile-time type (default: fp16)
   -o <value>   OTYPE compile-time type (default: fp32)
   -w <value>   blackbox --warps value (default: 1)
+  -M <value>   FEOP BLOCK_M override (default: 2)
+  -N <value>   FEOP BLOCK_N override (default: 16)
+  -Q <value>   FEOP XBAR_QUEUE_DEPTH override (default: 2)
+  -p <value>   blackbox --perf class (default: disabled)
   -l <path>    blackbox log file relative to build/ (default: run.log)
   -C           Skip make clean
   -h           Show this help
@@ -46,7 +54,7 @@ Examples:
 EOF
 }
 
-while getopts ":m:n:k:s:a:b:t:i:o:w:l:Ch" opt; do
+while getopts ":m:n:k:s:a:b:t:i:o:w:M:N:Q:p:l:Ch" opt; do
   case "${opt}" in
     m) M="${OPTARG}" ;;
     n) N="${OPTARG}" ;;
@@ -58,6 +66,10 @@ while getopts ":m:n:k:s:a:b:t:i:o:w:l:Ch" opt; do
     i) ITYPE="${OPTARG}" ;;
     o) OTYPE="${OPTARG}" ;;
     w) WARPS="${OPTARG}" ;;
+    M) BLOCK_M="${OPTARG}" ;;
+    N) BLOCK_N="${OPTARG}" ;;
+    Q) XBAR_QUEUE_DEPTH="${OPTARG}" ;;
+    p) PERF_CLASS="${OPTARG}" ;;
     l) LOG_FILE="${OPTARG}" ;;
     C) DO_CLEAN=0 ;;
     h)
@@ -94,6 +106,21 @@ case "${SPARSITY}" in
     ;;
 esac
 
+if (( BLOCK_M <= 0 || BLOCK_N <= 0 || XBAR_QUEUE_DEPTH <= 0 )); then
+  echo "BLOCK_M, BLOCK_N, and XBAR_QUEUE_DEPTH must be positive integers." >&2
+  exit 1
+fi
+
+if (( 32 % BLOCK_M != 0 || 32 % BLOCK_N != 0 )); then
+  echo "BLOCK_M and BLOCK_N must divide the 32x32 FEOP tile dimensions." >&2
+  exit 1
+fi
+
+if (( (BLOCK_M & (BLOCK_M - 1)) != 0 || (BLOCK_N & (BLOCK_N - 1)) != 0 )); then
+  echo "BLOCK_M and BLOCK_N must be powers of two." >&2
+  exit 1
+fi
+
 BUILD_CONFIGS=(
   "-DTCU_OP"
   "-DNUM_THREADS=${NUM_THREADS}"
@@ -105,6 +132,9 @@ BUILD_CONFIGS=(
   "-DSGEMM_CONST_SPARSITY=${SPARSITY}"
   "-DSGEMM_CONST_A_SPARSITY=${A_SPARSITY}f"
   "-DSGEMM_CONST_B_SPARSITY=${B_SPARSITY}f"
+  "-DTCU_FEOP_BLOCK_M_OVERRIDE=${BLOCK_M}"
+  "-DTCU_FEOP_BLOCK_N_OVERRIDE=${BLOCK_N}"
+  "-DTCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE=${XBAR_QUEUE_DEPTH}"
 )
 
 RUNTIME_ARGS=(
@@ -141,11 +171,20 @@ echo "Build CONFIGS: ${CONFIGS_STR}"
 CONFIGS="${CONFIGS_STR}" make -C "${APP_BUILD_DIR}"
 
 echo "Runtime args: ${APP_ARGS_STR}"
-CONFIGS="-DNUM_THREADS=${NUM_THREADS} -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DTCU_OP -DEXT_DXA_ENABLE" \
-./ci/blackbox.sh \
-  --driver=rtlsim \
-  --app=sgemm_tcu_op \
-  --warps="${WARPS}" \
-  --debug=1 \
-  --log="${LOG_FILE}" \
+BLACKBOX_CMD=(
+  ./ci/blackbox.sh
+  --driver=rtlsim
+  --app=sgemm_tcu_op
+  --warps="${WARPS}"
+  --debug=1
+  --log="${LOG_FILE}"
   --args="${APP_ARGS_STR}"
+  --perf=6
+)
+
+if [[ -n "${PERF_CLASS}" ]]; then
+  BLACKBOX_CMD+=(--perf="${PERF_CLASS}")
+fi
+
+CONFIGS="-DNUM_THREADS=${NUM_THREADS} -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DTCU_OP -DEXT_DXA_ENABLE -DTCU_FEOP_BLOCK_M_OVERRIDE=${BLOCK_M} -DTCU_FEOP_BLOCK_N_OVERRIDE=${BLOCK_N} -DTCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE=${XBAR_QUEUE_DEPTH}" \
+"${BLACKBOX_CMD[@]}"

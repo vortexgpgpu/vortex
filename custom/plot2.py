@@ -22,6 +22,18 @@ SPARSE_MODE_LEVEL_RE = re.compile(
     re.IGNORECASE,
 )
 SPARSITY_TYPE_RE = re.compile(r'\bsparsity\s*=\s*([0-2])\b', re.IGNORECASE)
+FEOP_PARAMS_RE = re.compile(
+    r'\[feop_accu\]:\s*Parameters:\s*'
+    r'BLOCK_M\s*[:=]\s*(\d+),\s*'
+    r'BLOCK_N\s*[:=]\s*(\d+),\s*'
+    r'XBAR_QUEUE_DEPTH\s*[:=]\s*(\d+)',
+    re.IGNORECASE,
+)
+TESTBENCH_RUN_RE = re.compile(r'\b\./([A-Za-z0-9_.+-]+)\b')
+TESTBENCH_MAKE_RE = re.compile(r"/tests/(?:regression|opencl)/([^/'\s]+)")
+FLAGS_LINE_RE = re.compile(r'^\s*Flags:\s*(.+?)\s*$', re.IGNORECASE)
+TCU_TYPE_DEFINED_RE = re.compile(r'\b(TCU_TYPE_[A-Za-z0-9_]+)\b.*\bdefined\b', re.IGNORECASE)
+TCU_OP_TRACE_RE = re.compile(r'\btcu_op(?:_core)?\b', re.IGNORECASE)
 BLUE_MARKER_HEX = "0x12345677"
 GREEN_MARKER_HEX = "0x12345676"
 MARKER_HEX = "0x12345678"
@@ -33,6 +45,21 @@ MARKER_HEXES = {
     PRE_TCU_MARKER_HEX.lower(),
 }
 MARKER_RE = re.compile(r'\b(?:0x12345676|0x12345677|0x12345678|0x12345679)\b', re.IGNORECASE)
+PASS_RE = re.compile(r'^\s*PASSED\b', re.IGNORECASE)
+FAIL_RE = re.compile(r'^\s*FAILED!\s*$', re.IGNORECASE)
+FAIL_COUNT_RE = re.compile(r'ERROR:\s*Found\s+(\d+)\s*/\s*(\d+)\s+errors!', re.IGNORECASE)
+KERNEL_CYCLES_RE = re.compile(r'\bcycles=(\d+)\b')
+PERF_INSTRS_RE = re.compile(r'PERF:\s*instrs=(\d+)', re.IGNORECASE)
+PERF_LINE_RE = re.compile(r'^\s*PERF:\s*(.+?)\s*$', re.IGNORECASE)
+KERNEL_BODY_CYCLES_RE = re.compile(r'Kernel body cycles:\s*(\d+)', re.IGNORECASE)
+KERNEL_BODY_INSTR_RE = re.compile(r'Kernel body instructions:\s*(\d+)', re.IGNORECASE)
+DXA_CYCLES_A_RE = re.compile(r'DXA cycles A:\s*(\d+)', re.IGNORECASE)
+DXA_CYCLES_B_RE = re.compile(r'DXA cycles B:\s*(\d+)', re.IGNORECASE)
+DXA_CYCLES_C_RE = re.compile(r'DXA cycles C:\s*(\d+)', re.IGNORECASE)
+DXA_CYCLES_A_BITMAP_RE = re.compile(r'DXA cycles A bitmap:\s*(\d+)', re.IGNORECASE)
+DXA_CYCLES_B_BITMAP_RE = re.compile(r'DXA cycles B bitmap:\s*(\d+)', re.IGNORECASE)
+ROI_ENABLED_RE = re.compile(r'\bENABLE_ROI(?:\s+is\s+defined)?\b', re.IGNORECASE)
+MUL_ACTIVE_CYCLES_RE = re.compile(r'Issue Busy processing')
 
 
 def find_log_file(name):
@@ -225,10 +252,50 @@ def parse_run_metadata(lines):
         "input_dtype": None,
         "output_dtype": None,
         "sparsity_type": None,
+        "block_m": None,
+        "block_n": None,
+        "queue_depth": None,
+        "flags": [],
+        "tcu_type": None,
+        "testbench": None,
     }
+
+    def add_flag(flag_name):
+        if flag_name not in meta["flags"]:
+            meta["flags"].append(flag_name)
 
     sparsities = []
     for line in lines:
+        if meta["testbench"] is None:
+            m_testbench = TESTBENCH_RUN_RE.search(line)
+            if m_testbench:
+                meta["testbench"] = m_testbench.group(1)
+            else:
+                m_testbench = TESTBENCH_MAKE_RE.search(line)
+                if m_testbench:
+                    meta["testbench"] = m_testbench.group(1)
+
+        m_flags = FLAGS_LINE_RE.search(line)
+        if m_flags:
+            for flag_name in (flag.strip() for flag in m_flags.group(1).split(",")):
+                if flag_name:
+                    upper_flag = flag_name.upper()
+                    if upper_flag.startswith("TCU_TYPE_") and meta["tcu_type"] is None:
+                        meta["tcu_type"] = upper_flag
+                    else:
+                        add_flag(upper_flag)
+            continue
+
+        if ROI_ENABLED_RE.search(line):
+            add_flag("ENABLE_ROI")
+
+        m_tcu_type = TCU_TYPE_DEFINED_RE.search(line)
+        if m_tcu_type:
+            meta["tcu_type"] = m_tcu_type.group(1).upper()
+
+        if TCU_OP_TRACE_RE.search(line):
+            add_flag("TCU_OP")
+
         m_a = MATRIX_A_RE.search(line)
         if m_a:
             m_val, k_val = int(m_a.group(1)), int(m_a.group(2))
@@ -267,6 +334,13 @@ def parse_run_metadata(lines):
         m_sparsity_type = SPARSITY_TYPE_RE.search(line)
         if m_sparsity_type and meta["sparsity_type"] is None:
             meta["sparsity_type"] = int(m_sparsity_type.group(1))
+            continue
+
+        m_feop_params = FEOP_PARAMS_RE.search(line)
+        if m_feop_params and meta["block_m"] is None:
+            meta["block_m"] = int(m_feop_params.group(1))
+            meta["block_n"] = int(m_feop_params.group(2))
+            meta["queue_depth"] = int(m_feop_params.group(3))
 
     if len(sparsities) >= 1:
         meta["A_sparsity"] = sparsities[0]
@@ -274,6 +348,377 @@ def parse_run_metadata(lines):
         meta["B_sparsity"] = sparsities[1]
 
     return meta
+
+
+def parse_perf_info(lines):
+    perf_lines = []
+    perf_class = None
+
+    for line in lines:
+        m_perf = PERF_LINE_RE.match(line)
+        if not m_perf:
+            continue
+
+        perf_text = m_perf.group(1)
+        perf_lines.append(perf_text)
+        perf_text_lower = perf_text.lower()
+
+        if "dxa:" in perf_text_lower:
+            perf_class = 6
+            continue
+
+        if any(token in perf_text_lower for token in (
+                "lmem:",
+                "coalescer:",
+                "icache:",
+                "dcache:",
+                "l2cache:",
+                "l3cache:",
+                "memory: reqs=",
+        )):
+            if perf_class is None or perf_class != 6:
+                perf_class = 2
+            continue
+
+        if any(token in perf_text_lower for token in (
+                "scheduler:",
+                "stalls:",
+                "inst_mix:",
+                "branches:",
+                "memory: ifetches=",
+                "roofline:",
+        )):
+            if perf_class is None:
+                perf_class = 1
+
+    if perf_class is None and perf_lines:
+        perf_class = 0
+
+    all_perf_lines = []
+    if perf_class is not None:
+        all_perf_lines = [f"PERF{perf_class}: {perf_text}" for perf_text in perf_lines]
+
+    memory_lines = []
+    if perf_class == 2:
+        for perf_text in perf_lines:
+            perf_text_lower = perf_text.lower()
+            if perf_text_lower.startswith("instrs="):
+                continue
+            memory_lines.append(perf_text)
+
+    perf1_lines = []
+    if perf_class == 1:
+        global_perf_lines = []
+        core_perf_lines = []
+
+        for perf_text in perf_lines:
+            perf_text_lower = perf_text.lower()
+            if perf_text_lower.startswith("instrs="):
+                continue
+            if re.match(r'^core\d+:\s*', perf_text_lower):
+                core_perf_lines.append(perf_text)
+            else:
+                global_perf_lines.append(perf_text)
+
+        perf1_lines = global_perf_lines if global_perf_lines else core_perf_lines
+
+    return {
+        "perf_class": perf_class,
+        "all_perf_lines": all_perf_lines,
+        "memory_lines": memory_lines,
+        "perf1_lines": perf1_lines,
+    }
+
+
+def parse_run_result(lines):
+    passed = any(PASS_RE.search(line) for line in lines)
+    failed = any(FAIL_RE.search(line) for line in lines)
+
+    error_count = None
+    total_errors = None
+    for line in lines:
+        m_fail_count = FAIL_COUNT_RE.search(line)
+        if m_fail_count:
+            error_count = int(m_fail_count.group(1))
+            total_errors = int(m_fail_count.group(2))
+
+    if passed:
+        return {"status": "PASS", "error_count": 0, "total_errors": total_errors}
+    if failed or error_count is not None:
+        return {"status": "FAIL", "error_count": error_count, "total_errors": total_errors}
+    return {"status": "FAIL", "error_count": error_count, "total_errors": total_errors}
+
+
+def parse_roi_metrics(lines):
+    metrics = {
+        "total_kernel_cycles": None,
+        "total_kernel_instructions": None,
+        "kernel_body_cycles": None,
+        "kernel_body_instructions": None,
+        "tcu_cycles": None,
+        "dxa_cycles_a": None,
+        "dxa_cycles_b": None,
+        "dxa_cycles_c": None,
+        "dxa_cycles_a_bitmap": None,
+        "dxa_cycles_b_bitmap": None,
+        "roi_enabled": False,
+        "mul_active_cycles": 0,
+    }
+
+    metrics["roi_enabled"] = any(ROI_ENABLED_RE.search(line) for line in lines)
+    metrics["mul_active_cycles"] = sum(1 for line in lines if MUL_ACTIVE_CYCLES_RE.search(line))
+
+    for line in lines:
+        m_total_instr = PERF_INSTRS_RE.search(line)
+        if m_total_instr:
+            metrics["total_kernel_instructions"] = int(m_total_instr.group(1))
+            continue
+
+        m_kernel_body = KERNEL_BODY_CYCLES_RE.search(line)
+        if m_kernel_body:
+            metrics["kernel_body_cycles"] = int(m_kernel_body.group(1))
+            continue
+
+        m_kernel_instr = KERNEL_BODY_INSTR_RE.search(line)
+        if m_kernel_instr:
+            metrics["kernel_body_instructions"] = int(m_kernel_instr.group(1))
+            continue
+
+        m_dxa_a = DXA_CYCLES_A_RE.search(line)
+        if m_dxa_a:
+            metrics["dxa_cycles_a"] = int(m_dxa_a.group(1))
+            continue
+
+        m_dxa_b = DXA_CYCLES_B_RE.search(line)
+        if m_dxa_b:
+            metrics["dxa_cycles_b"] = int(m_dxa_b.group(1))
+            continue
+
+        m_dxa_c = DXA_CYCLES_C_RE.search(line)
+        if m_dxa_c:
+            metrics["dxa_cycles_c"] = int(m_dxa_c.group(1))
+            continue
+
+        m_dxa_a_bitmap = DXA_CYCLES_A_BITMAP_RE.search(line)
+        if m_dxa_a_bitmap:
+            metrics["dxa_cycles_a_bitmap"] = int(m_dxa_a_bitmap.group(1))
+            continue
+
+        m_dxa_b_bitmap = DXA_CYCLES_B_BITMAP_RE.search(line)
+        if m_dxa_b_bitmap:
+            metrics["dxa_cycles_b_bitmap"] = int(m_dxa_b_bitmap.group(1))
+
+    for line in reversed(lines):
+        m_cycles = KERNEL_CYCLES_RE.search(line)
+        if m_cycles:
+            metrics["total_kernel_cycles"] = int(m_cycles.group(1))
+            break
+
+    if metrics["kernel_body_cycles"] is None:
+        metrics["kernel_body_cycles"] = metrics["total_kernel_cycles"]
+
+    return metrics
+
+
+def parse_total_kernel_cycles(lines):
+    for line in reversed(lines):
+        m_cycles = KERNEL_CYCLES_RE.search(line)
+        if m_cycles:
+            return int(m_cycles.group(1))
+    return None
+
+
+def format_error_count(error_count, total_errors, unknown_text="unknown"):
+    if error_count is None:
+        return unknown_text
+    if total_errors is None:
+        return str(error_count)
+    return f"{error_count} / {total_errors}"
+
+
+def write_stats_file(log_path, result, metrics, run_meta, perf_info, xbar_stall_cycles, stall_pct):
+    stats_dir = os.path.join(os.path.dirname(__file__), "stats")
+    os.makedirs(stats_dir, exist_ok=True)
+
+    base = os.path.splitext(os.path.basename(log_path))[0]
+    stats_path = os.path.join(stats_dir, f"{base}.stat")
+
+    with open(stats_path, "w") as f:
+        testbench_text = format_testbench(run_meta)
+        title = format_run_details(run_meta)
+        flags_text = format_flags(run_meta)
+        feop_params = format_feop_params(run_meta)
+        perf_text = format_perf_class(perf_info)
+        if testbench_text:
+            f.write(f"{testbench_text}\n")
+        if title:
+            f.write(f"{title}\n")
+        if flags_text:
+            f.write(f"{flags_text}\n")
+        if feop_params:
+            f.write(f"{feop_params}\n")
+        if perf_text:
+            f.write(f"{perf_text}\n")
+        if testbench_text or title or flags_text or feop_params or perf_text:
+            f.write("\n")
+        f.write(f"{result['status']}\n")
+        if result["status"] != "PASS":
+            error_text = format_error_count(result["error_count"], result["total_errors"])
+            f.write(f"Error count: {error_text}\n")
+        total_cycles_text = "N/A" if metrics["total_kernel_cycles"] is None else str(metrics["total_kernel_cycles"])
+        total_instr_text = "N/A" if metrics["total_kernel_instructions"] is None else str(metrics["total_kernel_instructions"])
+        kernel_body_text = "N/A" if metrics["kernel_body_cycles"] is None else str(metrics["kernel_body_cycles"])
+        kernel_instr_text = "N/A" if metrics["kernel_body_instructions"] is None else str(metrics["kernel_body_instructions"])
+        mul_active_text = str(metrics["mul_active_cycles"])
+        xbar_stalls_text = f"{stall_pct:.2f}% ({xbar_stall_cycles} cycles)"
+        f.write(f"Total kernel cycles: {total_cycles_text}\n")
+        f.write(f"Total kernel instructions: {total_instr_text}\n")
+        f.write(f"Kernel body cycles: {kernel_body_text}\n")
+        f.write(f"Kernel body instructions: {kernel_instr_text}\n")
+        f.write(f"MUL active cycles: {mul_active_text}\n")
+        f.write(f"XBAR stalls: {xbar_stalls_text}\n")
+        f.write("\n")
+        all_perf_lines = perf_info["all_perf_lines"]
+        if all_perf_lines:
+            for line in all_perf_lines:
+                f.write(f"{line}\n")
+            f.write("\n")
+        memory_lines = format_memory_section(perf_info)
+        if memory_lines:
+            f.write("MEMORY (perf=2):\n")
+            for line in memory_lines:
+                f.write(f"{line}\n")
+            f.write("\n")
+        perf1_lines = format_perf1_section(perf_info)
+        if perf1_lines:
+            f.write("PERF (perf=1):\n")
+            for line in perf1_lines:
+                f.write(f"{line}\n")
+            f.write("\n")
+        f.write("ROI VARIABLES:\n")
+        for line in format_roi_variables(metrics, run_meta):
+            f.write(f"{line}\n")
+
+    return stats_path
+
+
+def format_run_details(run_meta):
+    details = []
+    if run_meta["sparsity_type"] is not None:
+        details.append(f"Sparsity Mode:{run_meta['sparsity_type']}")
+    if (run_meta["M"] is not None
+            and run_meta["N"] is not None
+            and run_meta["K"] is not None):
+        details.append(f"MxNxK={run_meta['M']}x{run_meta['N']}x{run_meta['K']}")
+    if run_meta["A_sparsity"] is not None:
+        details.append(f"A sparsity={run_meta['A_sparsity']}")
+    if run_meta["B_sparsity"] is not None:
+        details.append(f"B sparsity={run_meta['B_sparsity']}")
+    if run_meta["input_dtype"] is not None:
+        details.append(f"It={run_meta['input_dtype']}")
+    return " | ".join(details)
+
+
+def format_testbench(run_meta):
+    if run_meta["testbench"] is None:
+        return ""
+    return f"Testbench: {run_meta['testbench']}"
+
+
+def format_feop_params(run_meta):
+    if (run_meta["block_m"] is None
+            or run_meta["block_n"] is None
+            or run_meta["queue_depth"] is None):
+        return ""
+    return (
+        f"BLOCK_M={run_meta['block_m']}, "
+        f"BLOCK_N={run_meta['block_n']}, "
+        f"XBAR_QUEUE_DEPTH={run_meta['queue_depth']}"
+    )
+
+
+def format_flags(run_meta):
+    flags = list(run_meta["flags"])
+    if run_meta["tcu_type"] is not None:
+        flags.append(run_meta["tcu_type"])
+    if not flags:
+        return ""
+
+    def flag_sort_key(flag_name):
+        if flag_name == "ENABLE_ROI":
+            return (0, flag_name)
+        if flag_name == "TCU_OP":
+            return (1, flag_name)
+        if flag_name.startswith("TCU_TYPE_"):
+            return (2, flag_name)
+        return (3, flag_name)
+
+    ordered_flags = sorted(flags, key=flag_sort_key)
+    return f"Flags: {', '.join(ordered_flags)}"
+
+
+def format_perf_class(perf_info):
+    perf_class = perf_info["perf_class"]
+    if perf_class is None:
+        return ""
+    return f"perf={perf_class}"
+
+
+def format_memory_section(perf_info):
+    if perf_info["perf_class"] != 2:
+        return []
+    return perf_info["memory_lines"]
+
+
+def format_perf1_section(perf_info):
+    if perf_info["perf_class"] != 1:
+        return []
+
+    formatted_lines = []
+    for line in perf_info["perf1_lines"]:
+        if line.lower().startswith("stalls:"):
+            line = re.sub(r'\bscrb=', 'scoreboard=', line)
+            line = re.sub(r'\bopds=', 'operands=', line)
+        formatted_lines.append(line)
+    return formatted_lines
+
+
+def format_roi_variables(metrics, run_meta):
+    def metric_text(key):
+        value = metrics[key]
+        return "N/A" if value is None else str(value)
+
+    dxa_metric_keys = [
+        "dxa_cycles_a",
+        "dxa_cycles_b",
+        "dxa_cycles_c",
+    ]
+    lines = [f"TCU cycles: {metric_text('tcu_cycles')}"]
+    lines.append(f"DXA cycles A: {metric_text('dxa_cycles_a')}")
+    lines.append(f"DXA cycles B: {metric_text('dxa_cycles_b')}")
+    lines.append(f"DXA cycles C: {metric_text('dxa_cycles_c')}")
+
+    sparsity_type = run_meta["sparsity_type"]
+    if sparsity_type is not None and sparsity_type >= 1:
+        dxa_metric_keys.append("dxa_cycles_a_bitmap")
+        dxa_metric_keys.append("dxa_cycles_b_bitmap")
+        lines.append(f"DXA cycles A bitmap: {metric_text('dxa_cycles_a_bitmap')}")
+        lines.append(f"DXA cycles B bitmap: {metric_text('dxa_cycles_b_bitmap')}")
+
+    if sparsity_type is None:
+        if metrics["dxa_cycles_a_bitmap"] is not None:
+            dxa_metric_keys.append("dxa_cycles_a_bitmap")
+            lines.append(f"DXA cycles A bitmap: {metric_text('dxa_cycles_a_bitmap')}")
+        if metrics["dxa_cycles_b_bitmap"] is not None:
+            dxa_metric_keys.append("dxa_cycles_b_bitmap")
+            lines.append(f"DXA cycles B bitmap: {metric_text('dxa_cycles_b_bitmap')}")
+
+    dxa_total = None
+    if all(metrics[key] is not None for key in dxa_metric_keys):
+        dxa_total = sum(metrics[key] for key in dxa_metric_keys)
+    lines.append(f"DXA cycles total: {'N/A' if dxa_total is None else dxa_total}")
+
+    return lines
 
 
 def classify_mem_line(line):
@@ -448,14 +893,17 @@ def main():
 
     with open(log_path, "r") as f:
         lines = f.readlines()
+    run_result = parse_run_result(lines)
+    roi_metrics = parse_roi_metrics(lines)
     total_cycles = 0
     for line in lines:
         tick = extract_tick(line)
         if tick is not None and tick > total_cycles:
             total_cycles = tick
-    error_count = sum(len(re.findall(r"\berror\b", line, flags=re.IGNORECASE)) for line in lines)
-    has_errors = error_count > 0
+    error_count = run_result["error_count"] if run_result["error_count"] is not None else 0
+    has_errors = run_result["status"] != "PASS"
     run_meta = parse_run_metadata(lines)
+    perf_info = parse_perf_info(lines)
 
     # Issue events (TCU + all scoreboard issues)
     tcu_issue_ticks = parse_pattern_ticks(lines, ["Issuing TCU MMA_OP"])
@@ -561,7 +1009,8 @@ def main():
     if other_issue_ticks:
         other_issue_ticks = dedup_sorted(other_issue_ticks)
 
-    # FEOP window metrics: from first FEOP-assigned tick to last FEOP-assigned tick.
+    # FEOP window metrics: xbar stall cycles are counted in the FEOP window, but the
+    # stall percentage is normalized by MUL-active cycles plus stall cycles.
     feop_first_tick = min(feop_ticks) if feop_ticks else None
     feop_last_tick = max(feop_ticks) if feop_ticks else None
     feop_cycles = 0
@@ -575,9 +1024,6 @@ def main():
             if feop_first_tick <= t <= feop_last_tick
         ]
         xbar_stall_cycles = len(xbar_stalls_in_feop)
-        denom = xbar_stall_cycles + feop_assigned
-        if denom > 0:
-            stall_pct = (xbar_stall_cycles / denom) * 100.0
 
     # TCU issue->commit stall metrics (per paired TCU op).
     tcu_pairs = pair_tcu_issue_commit_ticks(tcu_issue_ticks, tcu_commit_ticks_all)
@@ -611,6 +1057,12 @@ def main():
         tcu_stall_cycles += stall_cycles_this
     if tcu_total_cycles > 0:
         tcu_stall_pct = (tcu_stall_cycles / tcu_total_cycles) * 100.0
+        roi_metrics["tcu_cycles"] = tcu_total_cycles
+
+    mul_active_cycles = roi_metrics["mul_active_cycles"]
+    xbar_stall_denom = xbar_stall_cycles + mul_active_cycles
+    if xbar_stall_denom > 0:
+        stall_pct = (xbar_stall_cycles / xbar_stall_denom) * 100.0
 
     if not any([
         tcu_issue_ticks,
@@ -1051,23 +1503,12 @@ def main():
         )
 
     title_parts = ["TCU-only timeline (TCU issue + FEOP + MEM)"]
-    details = []
-    if run_meta["A_sparsity"] is not None or run_meta["B_sparsity"] is not None:
-        a_sp = run_meta["A_sparsity"] if run_meta["A_sparsity"] is not None else "?"
-        b_sp = run_meta["B_sparsity"] if run_meta["B_sparsity"] is not None else "?"
-        details.append(f"A sparsity={a_sp}, B sparsity={b_sp}")
-    if (run_meta["M"] is not None
-            and run_meta["N"] is not None
-            and run_meta["K"] is not None):
-        details.append(f"MxNxK={run_meta['M']}x{run_meta['N']}x{run_meta['K']}")
-    if run_meta["input_dtype"] is not None:
-        details.append(f"It={run_meta['input_dtype']}")
-    if run_meta["output_dtype"] is not None:
-        details.append(f"Ot={run_meta['output_dtype']}")
-    if run_meta["sparsity_type"] is not None:
-        details.append(f"Sparsity Mode:{run_meta['sparsity_type']}")
+    details = format_run_details(run_meta)
     if details:
-        title_parts.append(" | ".join(details))
+        title_parts.append(details)
+    feop_params = format_feop_params(run_meta)
+    if feop_params:
+        title_parts.append(feop_params)
     ax2.set_title("\n".join(title_parts))
     ax2.set_xlabel("Event index (unique TCU ticks)")
     ax2.set_ylabel("Tick since first TCU issue (cycles)")
@@ -1096,11 +1537,16 @@ def main():
         summary = (
             f"total cycles={total_cycles} | "
             f"xbar_queue_stall cycles={xbar_stall_cycles} | "
-            f"FEOP assigned={feop_assigned} | "
+            f"MUL active cycles={mul_active_cycles} | "
             f"XBAR STALLS % = {stall_pct:.2f}%"
         )
     else:
-        summary = f"total cycles={total_cycles} | xbar_queue_stall cycles=0 | FEOP assigned=0 | XBAR STALLS % = N/A"
+        summary = (
+            f"total cycles={total_cycles} | "
+            f"xbar_queue_stall cycles={xbar_stall_cycles} | "
+            f"MUL active cycles={mul_active_cycles} | "
+            f"XBAR STALLS % = {'N/A' if xbar_stall_denom == 0 else f'{stall_pct:.2f}%'}"
+        )
     if tcu_stall_pct is not None:
         tcu_summary = (
             f"TCU total cycles={tcu_total_cycles} | "
@@ -1112,7 +1558,12 @@ def main():
         tcu_summary = "TCU total cycles=0 | active cycles=0 | stall cycles=0 | TCU STALL % = N/A"
     summary_y = 0.01
     if has_errors:
-        fig.text(0.5, summary_y, f"{error_count} ERRORS FOUND", ha="center", va="bottom",
+        error_text = format_error_count(
+            run_result["error_count"],
+            run_result["total_errors"],
+            unknown_text="UNKNOWN",
+        )
+        fig.text(0.5, summary_y, f"ERRORS FOUND: {error_text}", ha="center", va="bottom",
                  fontsize=10, color="red")
         summary_y = 0.04
     fig.text(0.5, summary_y + 0.03, summary, ha="center", va="bottom", fontsize=10)
@@ -1134,6 +1585,16 @@ def main():
     plt.tight_layout(rect=[0, bottom_margin, 1, 1])
     plt.savefig(output_name, bbox_inches="tight")
     print(f"Saved plot to {output_name}")
+    stats_path = write_stats_file(
+        log_path,
+        run_result,
+        roi_metrics,
+        run_meta,
+        perf_info,
+        xbar_stall_cycles,
+        stall_pct,
+    )
+    print(f"Saved stats to {stats_path}")
 
 
 if __name__ == "__main__":

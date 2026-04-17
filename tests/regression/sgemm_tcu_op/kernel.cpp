@@ -92,6 +92,7 @@ static inline void copy_tile_to_lmem(T* dst,
   }
 }
 
+// TODO: Check if division is created
 static inline uint32_t div_up(uint32_t value, uint32_t divisor) {
   return (value + divisor - 1) / divisor;
 }
@@ -117,6 +118,9 @@ static inline uint32_t meta_tile_offset(const uint32_t* offsets, uint32_t idx) {
 // }
 
 extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
+
+  // TODO: ADD CYCLE - INSTRUCTION COUNTING
+
   auto pA = reinterpret_cast<uint32_t *>(arg->A_addr);
   auto pB = reinterpret_cast<uint32_t *>(arg->B_addr);
   auto pC = reinterpret_cast<uint32_t *>(arg->C_addr);
@@ -238,9 +242,6 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   const uint32_t bitmap_skew_regs_1_tile  = (sparsity == 2) ? (bitmap_sep_regs_1_tile  - bitmap_span_1_tile)  : 0;
   const uint32_t bitmap_skew_regs_2_tiles = (sparsity == 2) ? (bitmap_sep_regs_2_tiles - bitmap_span_2_tiles) : 0;
 
-  // const uint32_t bitmap_regs = (sparsity == 2) ? (2 * bitmap_span_1_tile) :
-  //                              (sparsity == 1) ?      bitmap_span_1_tile  :
-  //                              0;
   const uint32_t sparse_first_stage_regs_per_warp = tileC_regs + sparse_first_stage_payload_regs;
   const uint32_t sparse_reuse_stage_regs_per_warp = sparse_reuse_stage_payload_regs;
   const uint32_t sparse_regs_per_warp = (sparse_first_stage_regs_per_warp > sparse_reuse_stage_regs_per_warp)
@@ -326,10 +327,11 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
         //   // tcu_bar[inflight_stage].arrive_and_wait();
         //   have_inflight_mma = false;
         // }
-
+        // TODO: Eliminate divergence!
         static constexpr uint32_t kDenseLaunches = 1 + ((K > tile_K) ? div_up_constexpr(K - tile_K, 2 * tile_K) : 0);
 #pragma unroll
-        for (uint32_t dense_iter = 0; dense_iter < kDenseLaunches; ++dense_iter) {
+        for (uint32_t dense_iter = 0; dense_iter < kDenseLaunches; ++dense_iter) 
+        {
           const uint32_t k_offset = (dense_iter == 0) ? 0 : (tile_K + (dense_iter - 1) * 2 * tile_K);
           // const uint32_t* mma_A_bitmap = reinterpret_cast<const uint32_t *>(A_bitmap_lmem);
           // const uint32_t* mma_B_bitmap = reinterpret_cast<const uint32_t *>(B_bitmap_lmem);
@@ -349,8 +351,8 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           // uint32_t b_blocks = B_compressed_blocks;
           const ctx::input_t* pA_chunk = pA_elems + a_tile_base + k_offset * tile_M;
           const ctx::input_t* pB_chunk = pB_elems + b_tile_base + k_offset * tile_N;
-          uintptr_t rs1_val = 0;
-          uintptr_t rs2_val = 0;
+          // uintptr_t rs1_val = 0;
+          // uintptr_t rs2_val = 0;
 
           const uint32_t dense_k_cap = first_dense_launch ? dense_first_k : dense_reuse_k;
           const uint32_t k_remaining = K - k_offset;
@@ -364,10 +366,19 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
           const uint32_t flags_chunk = (((k_offset == 0) ? 1u : 0u) << 1) | (((k_offset + curr_k) == K) ? 1u : 0u);
 
+          if (have_inflight_mma && inflight_stage == stage) {
+            tcu_bar[inflight_stage].arrive_and_wait();
+            have_inflight_mma = false;
+          }
+          // tcu_bar[inflight_stage].arrive_and_wait();
+          // tcu_bar[inflight_stage].arrive_and_wait();
+          // tcu_bar[inflight_stage].arrive_and_wait();
+          // tcu_bar[inflight_stage].arrive_and_wait();
+
           if (is_dxa_quad) {
-            if (first_dense_launch) {
-              vx_dxa_issue_2d_wg(kDescC, load_bar[stage].id(), mma_C, 0, tile_id);
-            }
+            // if (first_dense_launch) {
+            //   vx_dxa_issue_2d_wg(kDescC, load_bar[stage].id(), mma_C, 0, tile_id);
+            // }
             // tcu_bar[stage].arrive_and_wait();
             vx_dxa_retile_2d_wg(kDescA, a_elems, 1);
             vx_dxa_issue_2d_wg(kDescA, load_bar[stage].id(), chunk_A, 0, tile_row_idx * tiles_k + k_tile_idx);
@@ -379,29 +390,40 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             launch_pending_mma();
           }
 
+          if (curr_k >= 256 /*|| a_blocks >= 64 || b_blocks >= 64*/) {
+            if (lane0) {
+              pD[0] = LMEM_OVERFLOW_MARKER;
+            }
+            return;
+          }
+          // const uintptr_t rs1_val = (uintptr_t)vx_wgather(
+          //           (size_t)(uintptr_t)chunk_A,
+          //           (size_t)(uintptr_t)chunk_B,
+          //           (size_t)(uintptr_t)nullptr /* mma_C */,
+          //           (size_t)(uintptr_t)mma_D_addr);
+          // const uintptr_t rs2_val = (uintptr_t)vx_wgather(
+          //           (size_t)(uintptr_t)nullptr /*mma_A_bitmap*/,
+          //           (size_t)(uintptr_t)nullptr /*mma_B_bitmap*/,
+          //           (size_t)tcu_bar[stage].id(),
+          //           (size_t)((curr_k << 24) /*| (a_blocks << 18) | (b_blocks << 12)*/ | (vt::OTYPE::id << 8) | 
+          //                    (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
+          
+          uintptr_t rs1_val = 0;
+          uintptr_t rs2_val = 0;
           if (gtid == 0) {
             rs1_val = reinterpret_cast<uintptr_t>(chunk_A);
-            // rs2_val = a_blocks;
+            rs2_val = reinterpret_cast<uintptr_t>(nullptr /*mma_A_bitmap*/);
           } else if (gtid == 1) {
             rs1_val = reinterpret_cast<uintptr_t>(chunk_B);
-            // rs2_val = b_blocks;
+            rs2_val = reinterpret_cast<uintptr_t>(nullptr /*mma_B_bitmap*/);
           } else if (gtid == 2) {
-            rs1_val = reinterpret_cast<uintptr_t>(mma_C);
-            rs2_val = curr_k;
+            rs1_val = reinterpret_cast<uintptr_t>(nullptr /*mma_C*/);
+            rs2_val = tcu_bar[stage].id();
           } else if (gtid == 3) {
             rs1_val = mma_D_addr;
-            rs2_val = vt::ITYPE::id;
-          } else if (gtid == 4) {
-            // rs1_val = reinterpret_cast<uintptr_t>(mma_A_bitmap);
-            rs2_val = vt::OTYPE::id;
-          } else if (gtid == 5) {
-            // rs1_val = reinterpret_cast<uintptr_t>(mma_B_bitmap);
-            rs2_val = static_cast<uint32_t>(kConstSparsity);
-          } else if (gtid == 6) {
-            rs2_val = tcu_bar[stage].id();
-          } else if (gtid == 7) {
-            rs2_val = flags_chunk;
-          }
+            rs2_val = (curr_k << 24) /*| (a_blocks << 18) | (b_blocks << 12)*/ | (vt::OTYPE::id << 8) | 
+                      (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk;
+          } 
 
           pending_stage = stage;
           pending_rs1_val = rs1_val;
@@ -549,6 +571,11 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             return;
           }
 
+          if (have_inflight_mma && inflight_stage == stage) {
+            tcu_bar[inflight_stage].arrive_and_wait();
+            have_inflight_mma = false;
+          }
+
           /* Start DXA transactions */
           if (is_dxa_quad) {
             if (first_dense_launch) {
@@ -589,29 +616,65 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             launch_pending_mma();
           }
 
+          const bool hi = (gtid & 4) != 0;
+
+          // const uintptr_t rs1_val = hi
+          //     ? (uintptr_t)vx_wgather(
+          //           (size_t)(uintptr_t)A_bitmap_lmem,
+          //           (size_t)(uintptr_t)B_bitmap_lmem,
+          //           (size_t)(uintptr_t)0,
+          //           (size_t)(uintptr_t)0)
+          //     : (uintptr_t)vx_wgather(
+          //           (size_t)(uintptr_t)chunk_A,
+          //           (size_t)(uintptr_t)chunk_B,
+          //           (size_t)(uintptr_t)mma_C,
+          //           (size_t)(uintptr_t)mma_D_addr);
+
+          // const uintptr_t rs2_val = hi
+          //     ? (uintptr_t)vx_wgather(
+          //           (size_t)(uintptr_t)vt::OTYPE::id,
+          //           (size_t)(uintptr_t)kConstSparsity,
+          //           (size_t)(uintptr_t)tcu_bar[stage].id(),
+          //           (size_t)(uintptr_t)flags_chunk)
+          //     : (uintptr_t)vx_wgather(
+          //           (size_t)(uintptr_t)a_blocks,
+          //           (size_t)(uintptr_t)b_blocks,
+          //           (size_t)(uintptr_t)curr_k,
+          //           (size_t)(uintptr_t)vt::ITYPE::id);
+          if (curr_k >= 256 || a_blocks >= 64 || b_blocks >= 64) {
+            if (lane0) {
+              pD[0] = LMEM_OVERFLOW_MARKER;
+            }
+            return;
+          }
+
           if (gtid == 0) {
             rs1_val = reinterpret_cast<uintptr_t>(chunk_A);
-            rs2_val = a_blocks;
+            rs2_val = reinterpret_cast<uintptr_t>(A_bitmap_lmem);
+            // rs2_val = a_blocks;
           } else if (gtid == 1) {
             rs1_val = reinterpret_cast<uintptr_t>(chunk_B);
-            rs2_val = b_blocks;
+            rs2_val = reinterpret_cast<uintptr_t>(B_bitmap_lmem);
+            // rs2_val = b_blocks;
           } else if (gtid == 2) {
             rs1_val = reinterpret_cast<uintptr_t>(mma_C);
-            rs2_val = curr_k;
+            rs2_val = tcu_bar[stage].id();
+            // rs2_val = curr_k;
           } else if (gtid == 3) {
             rs1_val = mma_D_addr;
-            rs2_val = vt::ITYPE::id;
-          } else if (gtid == 4) {
-            rs1_val = reinterpret_cast<uintptr_t>(A_bitmap_lmem);
-            rs2_val = vt::OTYPE::id;
-          } else if (gtid == 5) {
-            rs1_val = reinterpret_cast<uintptr_t>(B_bitmap_lmem);
-            rs2_val = static_cast<uint32_t>(kConstSparsity);
-          } else if (gtid == 6) {
-            rs2_val = tcu_bar[stage].id();
-          } else if (gtid == 7) {
-            rs2_val = flags_chunk;
-          }
+            rs2_val = (curr_k << 24) | (a_blocks << 18) | (b_blocks << 12) | (vt::OTYPE::id << 8) | 
+                      (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk;
+            // rs2_val = vt::ITYPE::id;
+          } 
+          
+          // else if (gtid == 4) {
+          //   // rs2_val = vt::OTYPE::id;
+          // } else if (gtid == 5) {
+          //   // rs2_val = static_cast<uint32_t>(kConstSparsity);
+          // } else if (gtid == 6) {
+          // // } else if (gtid == 7) {
+          // //   rs2_val = flags_chunk;
+          // }
 
           pending_stage = stage;
           pending_rs1_val = rs1_val;

@@ -101,8 +101,23 @@ package VX_tcu_pkg;
     localparam TCU_UOPS_OP = TCU_M_STEPS_OP * TCU_N_STEPS_OP * TCU_K_STEPS_OP;
 
     /* Parameters for FEOP steps */
-    localparam TCU_FEOP_BLOCK_M_SIZE = 4;
-    localparam TCU_FEOP_BLOCK_N_SIZE = 8;
+`ifdef TCU_FEOP_BLOCK_M_OVERRIDE
+    localparam TCU_FEOP_BLOCK_M_SIZE = `TCU_FEOP_BLOCK_M_OVERRIDE;
+`else
+    localparam TCU_FEOP_BLOCK_M_SIZE = 2;
+`endif
+
+`ifdef TCU_FEOP_BLOCK_N_OVERRIDE
+    localparam TCU_FEOP_BLOCK_N_SIZE = `TCU_FEOP_BLOCK_N_OVERRIDE;
+`else
+    localparam TCU_FEOP_BLOCK_N_SIZE = 16;
+`endif
+
+`ifdef TCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE
+    localparam TCU_FEOP_XBAR_QUEUE_DEPTH = `TCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE;
+`else
+    localparam TCU_FEOP_XBAR_QUEUE_DEPTH = 1;
+`endif
 
     localparam TCU_FEOP_M_STEPS = TCU_TC_M_OP / TCU_FEOP_BLOCK_M_SIZE; // m-dimension steps to calculate an accu buffer
     localparam TCU_FEOP_N_STEPS = TCU_TC_N_OP / TCU_FEOP_BLOCK_N_SIZE; // n-dimension steps to calculate an accu buffer

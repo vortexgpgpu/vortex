@@ -185,10 +185,28 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire mem_stall = valid_out && ~tcu_lsu_mem_if.req_ready;
 
+    /* Processing of execute_if data */
+    wire [`XLEN-1:0] a_tile_addr_imm = execute_if.data.rs1_data[0];
+    wire [`XLEN-1:0] b_tile_addr_imm = execute_if.data.rs1_data[1];
+    wire [`XLEN-1:0] c_tile_addr_imm = execute_if.data.rs1_data[2];
+    wire [`XLEN-1:0] d_tile_addr_imm = execute_if.data.rs1_data[3];
+
+    wire [`XLEN-1:0] a_bitmap_addr_imm = execute_if.data.rs2_data[0];
+    wire [`XLEN-1:0] b_bitmap_addr_imm = execute_if.data.rs2_data[1];
+    wire [`XLEN-1:0] txbar_bar_id_imm  = execute_if.data.rs2_data[2];
+    wire flush_flag_imm                = execute_if.data.rs2_data[3][0];
+    wire init_flag_imm                 = execute_if.data.rs2_data[3][1];
+    wire [1:0] sparsity_imm            = execute_if.data.rs2_data[3][3:2];
+    wire [3:0] fmt_s_imm               = execute_if.data.rs2_data[3][7:4];
+    wire [3:0] fmt_d_imm               = execute_if.data.rs2_data[3][11:8];
+    wire [5:0] b_blocks_imm            = execute_if.data.rs2_data[3][17:12];
+    wire [5:0] a_blocks_imm            = execute_if.data.rs2_data[3][23:18];
+    wire [7:0] K_imm                   = execute_if.data.rs2_data[3][31:24];
+
     reg  init_r;
     reg  flush_r;
-    wire init_flag  = init_r  | (execute_fire ? execute_if.data.rs2_data[7][1] : 1'b0);
-    wire flush_flag = flush_r | (execute_fire ? execute_if.data.rs2_data[7][0] : 1'b0);
+    wire init_flag  = init_r  | (execute_fire ? init_flag_imm : 1'b0);
+    wire flush_flag = flush_r | (execute_fire ? flush_flag_imm : 1'b0);
 
     /* Set when execute_fire and Cleared when result_fire */
     wire busy = busy_r || execute_fire;
@@ -242,7 +260,8 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 a_tile_addr_valid <= 1'b1;
                 b_tile_addr_valid <= 1'b1;
                 c_tile_addr_valid <= init_flag;
-                bitmap_addr_valid <= (execute_if.data.rs2_data[5][1:0] >= 2'd1) ? 1'b1 : 1'b0;
+                /*                    sparsity mode                     */
+                bitmap_addr_valid <= (sparsity_imm >= 2'd1) ? 1'b1 : 1'b0;
 
                 b_req_blocks_remaining <= '0;
                 c_blocks_requested     <= init_flag ? '0 : $clog2(TCU_C_BLOCKS_IN_ACCU + 1)'(TCU_C_BLOCKS_IN_ACCU);
@@ -265,46 +284,46 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 c_blocks_accumulated <= init_flag ? '0 : $clog2(TCU_C_BLOCKS_IN_ACCU + 1)'(TCU_C_BLOCKS_IN_ACCU);
 
                 // Compute total blocks using the incoming instruction fields to avoid stale values
-                if (2'(execute_if.data.rs2_data[5]) == 2'b00) begin
+                if (sparsity_imm == 2'b00) begin
                     /* a_req_blocks_remaining = K * TCU_TC_M_OP / i_ratio */
-                    a_req_blocks_remaining  <= 32'((`XLEN'(execute_if.data.rs2_data[2]) << LG_TCU_TC_M_OP) >> (32'(calc_lg_i_ratio(4'(execute_if.data.rs2_data[3]))) + LG_REGS_PER_BLOCK));
+                    a_req_blocks_remaining  <= 32'((`XLEN'(K_imm) << LG_TCU_TC_M_OP) >> (32'(calc_lg_i_ratio(fmt_s_imm)) + LG_REGS_PER_BLOCK));
                     /* b_req_blocks_remaining = K * TCU_TC_N_OP / i_ratio */
-                    b_req_blocks_remaining  <= 32'((`XLEN'(execute_if.data.rs2_data[2]) << LG_TCU_TC_N_OP) >> (32'(calc_lg_i_ratio(4'(execute_if.data.rs2_data[3]))) + LG_REGS_PER_BLOCK));
+                    b_req_blocks_remaining  <= 32'((`XLEN'(K_imm) << LG_TCU_TC_N_OP) >> (32'(calc_lg_i_ratio(fmt_s_imm)) + LG_REGS_PER_BLOCK));
                     /* No bitmap in dense case */
                     bitmap_req_blocks_remaining <= '0;
                 end
             `ifndef TCU_DISABLE_S1
-                else if (2'(execute_if.data.rs2_data[5]) == 2'b01) begin
-                    /* a_req_blocks_remaining = A_compressed_blocks */
-                    a_req_blocks_remaining  <= 32'((`XLEN'(execute_if.data.rs2_data[2]) << LG_TCU_TC_M_OP) >> (32'(calc_lg_i_ratio(4'(execute_if.data.rs2_data[3]))) + LG_REGS_PER_BLOCK));
+                else if (sparsity_imm == 2'b01) begin
+                    /* a_req_blocks_remaining = K * TCU_TC_M_OP / i_ratio */
+                    a_req_blocks_remaining  <= 32'((`XLEN'(K_imm) << LG_TCU_TC_M_OP) >> (32'(calc_lg_i_ratio(fmt_s_imm)) + LG_REGS_PER_BLOCK));
                     /* b_req_blocks_remaining = B_compressed_blocks */
-                    b_req_blocks_remaining  <= (`XLEN)'(execute_if.data.rs2_data[1]);
+                    b_req_blocks_remaining  <= (`XLEN)'(b_blocks_imm);
                     /* bitmap_req_blocks_remaining = ceil(K / SETS_PER_S1_BITMAP_BLOCK) */
-                    bitmap_req_blocks_remaining <= 32'((`XLEN'(execute_if.data.rs2_data[2]) + SETS_PER_S1_BITMAP_BLOCK - 1) >> LG_SETS_PER_S1_BITMAP_BLOCK);
+                    bitmap_req_blocks_remaining <= 32'((`XLEN'(K_imm) + SETS_PER_S1_BITMAP_BLOCK - 1) >> LG_SETS_PER_S1_BITMAP_BLOCK);
                 end 
             `endif
                 else begin /* s2 case */
                     /* a_req_blocks_remaining = A_compressed_blocks */
-                    a_req_blocks_remaining  <= (`XLEN)'(execute_if.data.rs2_data[0]);
+                    a_req_blocks_remaining  <= (`XLEN)'(a_blocks_imm);
                     /* b_req_blocks_remaining = B_compressed_blocks */
-                    b_req_blocks_remaining  <= (`XLEN)'(execute_if.data.rs2_data[1]);
+                    b_req_blocks_remaining  <= (`XLEN)'(b_blocks_imm);
                     /* bitmap_req_blocks_remaining = ceil(K * 2 / 32) */
-                    bitmap_req_blocks_remaining <= 32'((`XLEN'(execute_if.data.rs2_data[2]) + 15) >> 4);
+                    bitmap_req_blocks_remaining <= 32'((`XLEN'(K_imm) + 15) >> 4);
                 end
 
                 /* Get configuration from the instruction */
-                a_tile_addr <= (`XLEN)'(execute_if.data.rs1_data[0]);
-                b_tile_addr <= (`XLEN)'(execute_if.data.rs1_data[1]);
-                c_tile_addr <= (`XLEN)'(execute_if.data.rs1_data[2]);
-                d_tile_addr <= (`XLEN)'(execute_if.data.rs1_data[3]);
+                a_tile_addr <= (`XLEN)'(a_tile_addr_imm);
+                b_tile_addr <= (`XLEN)'(b_tile_addr_imm);
+                c_tile_addr <= (`XLEN)'(c_tile_addr_imm);
+                d_tile_addr <= (`XLEN)'(d_tile_addr_imm);
 
-                a_bitmap_addr <= (`XLEN)'(execute_if.data.rs1_data[4]);
-                b_bitmap_addr <= (`XLEN)'(execute_if.data.rs1_data[5]);
+                a_bitmap_addr <= (`XLEN)'(a_bitmap_addr_imm);
+                b_bitmap_addr <= (`XLEN)'(b_bitmap_addr_imm);
                 
-                K <= (`XLEN)'(execute_if.data.rs2_data[2]);
-                fmt_s  <= 4'(execute_if.data.rs2_data[3]);
-                fmt_d  <= 4'(execute_if.data.rs2_data[4]);
-                sparsity <= 2'(execute_if.data.rs2_data[5]);
+                K <= (`XLEN)'(K_imm);
+                fmt_s    <= 4'(fmt_s_imm);
+                fmt_d    <= 4'(fmt_d_imm);
+                sparsity <= 2'(sparsity_imm);
 
                 full_queue_stall_cycles <= '0;
             end
@@ -386,7 +405,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [`XLEN-1:0] req_rd_addr = grant_onehot[0] ? b_bitmap_addr : // Convenient for s1 case, not used in s2 case
                                    grant_onehot[1] ? a_tile_addr   :
                                    grant_onehot[2] ? b_tile_addr   :
-                                                     c_tile_addr;
+                                   c_tile_addr == '0 ? a_tile_addr : c_tile_addr; // If c_tile_addr is NULL, dont load it
 
     always @ (posedge clk) begin
         if (~reset && rd_req_fire) begin
@@ -445,7 +464,9 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         c_tile_addr       <= '0;
                         c_tile_addr_valid <= 1'b0; // Completed all requests for this tile
                     end else begin
-                        c_tile_addr <= c_tile_addr + BYTES_PER_MEM_REQUEST;
+                        if (c_tile_addr != '0) begin
+                            c_tile_addr <= c_tile_addr + BYTES_PER_MEM_REQUEST;
+                        end
                     end
                     c_blocks_requested <= c_blocks_requested + 1'b1;
                 end
@@ -481,11 +502,21 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [$clog2(TCU_FEOP_STEPS):0] c_blk_idx = ($clog2(TCU_FEOP_STEPS+1))'(c_blocks_accumulated >> LG_C_BLOCKS_PER_FEOP_BLOCK);
 
     wire [C_BUF_SLOTS:0][`NUM_THREADS-1:0][`XLEN-1:0] C_feop_block;
-    if (C_BUF_SLOTS > 0) begin : g_c_feop_block
-        assign C_feop_block = {tcu_lsu_mem_if.rsp_data.data, C_buffered};
-    end else begin : g_c_feop_block_no_buffer
-        assign C_feop_block = tcu_lsu_mem_if.rsp_data.data;
-    end
+    // if (C_BUF_SLOTS > 0) begin : g_c_feop_block
+    //     if (c_tile_addr == '0) begin
+    //         assign C_feop_block = '0;
+    //     end else begin
+    //         assign C_feop_block = {tcu_lsu_mem_if.rsp_data.data, C_buffered};
+    //     end
+    // end else begin : g_c_feop_block_no_buffer
+        // if (c_tile_addr == '0) begin
+        //     assign C_feop_block = '0;
+        // end else begin
+        //     assign C_feop_block = tcu_lsu_mem_if.rsp_data.data;
+        // end
+
+    assign C_feop_block = c_tile_addr == '0 ? '0 : tcu_lsu_mem_if.rsp_data.data;
+    // end
 
     always @(posedge clk) begin
         // Load data mechanism
@@ -1004,7 +1035,8 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .BLOCK_M      (TCU_FEOP_BLOCK_M_SIZE),
         .BLOCK_N      (TCU_FEOP_BLOCK_N_SIZE),
         .FACC_LATENCY (FACC_LATENCY),
-        .XBAR_LATENCY (XBAR_LATENCY)
+        .XBAR_LATENCY (XBAR_LATENCY),
+        .XBAR_QUEUE_DEPTH (TCU_FEOP_XBAR_QUEUE_DEPTH)
     ) feop_accu (
         .clk    (clk),
         .reset  (reset),
@@ -1054,7 +1086,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 // ----------------------------------- tx_bar HANDLING ----------------------------------------------
     wire [`XLEN-1:0] txbar_bar_id;
     
-    assign txbar_bar_id = execute_if.data.rs2_data[6];
+    assign txbar_bar_id = txbar_bar_id_imm;
      
     wire [BAR_ADDR_W-1:0] txbar_addr;
     if (`NUM_WARPS > 1) begin : g_txbar_addr_w
@@ -1107,7 +1139,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (execute_if.valid && ~execute_if.ready) begin
                 `TRACE(1, ("%t: [tcu_op_core]: execute stall op_type=0x%0h busy=%b busy_r=%b mqueue_full=%b op_ctx_full=%b txbar_ready=%b result_pending=%b result_pending_r=%b result_pulse=%b result_fire=%b\n",
                     $time, execute_if.data.op_type, busy, busy_r, mqueue_full, op_ctx_full, txbar_bus_if.ready, result_pending, result_pending_r, result_pulse, result_fire));
-                `TRACE(1, ("%t: [tcu_op_core]: stalled payload wid=%0d pc=0x%0h uuid=%0d rs1={A=0x%0h B=0x%0h C=0x%0h D=0x%0h Abm=0x%0h Bbm=0x%0h} rs2={Ablk=%0d Bblk=%0d K=%0d fmt_s=%0d fmt_d=%0d sparse=%0d bar=0x%0h flags=0x%0h}\n",
+                `TRACE(1, ("%t: [tcu_op_core]: stalled payload wid=%0d pc=0x%0h uuid=%0d rs1={0x%0h 0x%0h 0x%0h 0x%0h 0x%0h 0x%0h} rs2={%0d %0d %0d %0d %0d %0d 0x%0h 0x%0h}\n",
                     $time,
                     execute_if.data.header.wid,
                     execute_if.data.header.PC,
@@ -1150,7 +1182,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (execute_fire) begin
                 `TRACE(1, ("%t: [tcu_op_core-txbar] START fire wid=%0d bar_id=0x%0h addr=%0d\n",
                     $time, execute_if.data.header.wid, txbar_bar_id, txbar_addr))
-                `TRACE(1, ("%t: [tcu_op_core]: accepted payload uuid=%0d pc=0x%0h rs1={A=0x%0h B=0x%0h C=0x%0h D=0x%0h Abm=0x%0h Bbm=0x%0h} rs2={Ablk=%0d Bblk=%0d K=%0d fmt_s=%0d fmt_d=%0d sparse=%0d bar=0x%0h flags=0x%0h}\n",
+                `TRACE(1, ("%t: [tcu_op_core]: accepted payload uuid=%0d pc=0x%0h rs1={0x%0h 0x%0h 0x%0h 0x%0h 0x%0h 0x%0h} rs2={%0d %0d %0d %0d %0d %0d 0x%0h 0x%0h}\n",
                     $time,
                     execute_if.data.header.uuid,
                     execute_if.data.header.PC,
@@ -1372,8 +1404,8 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
         else begin
             if (execute_fire) begin
-                init_r  <= execute_if.data.rs2_data[7][1];
-                flush_r <= execute_if.data.rs2_data[7][0];
+                init_r  <= init_flag_imm;
+                flush_r <= flush_flag_imm;
                 `TRACE(1, ("init_flag=%b, flush_flag=%b\n", init_flag, flush_flag));
             end
         end
@@ -1385,9 +1417,9 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         if (~reset) begin
             if (execute_fire) begin
                 `TRACE(1, ("%t: [tcu_op_core] TCU execution fired, \nA_addr=0x%x, B_addr=0x%x, C_addr=0x%x, D_addr=0x%x, \nA_compressed_blocks=%0d, B_compressed_blocks=%0d, K=%0d, fmt_s=%0d, fmt_d=%0d, sparsity=%0d, A_bitmap_addr=0x%x, B_bitmap_addr=0x%x, barrier_ID=0x%x, flags=%b\n", 
-                            $time, execute_if.data.rs1_data[0], execute_if.data.rs1_data[1], execute_if.data.rs1_data[2], execute_if.data.rs1_data[3], 
-                            execute_if.data.rs2_data[0], execute_if.data.rs2_data[1], execute_if.data.rs2_data[2], execute_if.data.rs2_data[3], execute_if.data.rs2_data[4], execute_if.data.rs2_data[5],
-                            execute_if.data.rs1_data[4], execute_if.data.rs1_data[5], execute_if.data.rs2_data[6], execute_if.data.rs2_data[7]));   
+                            $time, a_tile_addr_imm, b_tile_addr_imm, c_tile_addr_imm, d_tile_addr_imm,
+                            a_blocks_imm, b_blocks_imm, K_imm, fmt_s_imm, fmt_d_imm, sparsity_imm,
+                            a_bitmap_addr_imm, b_bitmap_addr_imm, txbar_bar_id_imm, {init_flag_imm, flush_flag_imm}));   
             
             end
             if (execute_if.valid && ~execute_if.ready) begin
