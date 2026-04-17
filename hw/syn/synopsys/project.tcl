@@ -136,6 +136,339 @@ proc uniq {lst} {
 }
 proc basename {p} { return [file tail $p] }
 
+# ------------------------- SRAM Wrapper Generation ------------------------- #
+# Per (family, type) pin tables. Keys map role -> pin basename in the macro.
+# Missing roles are treated as "no such pin on this macro" (not driven).
+# For 2RW macros, roles are suffixed _A and _B for port-A / port-B.
+set ::SRAM_PINS(SAED14_1RW) [dict create \
+  CLK  CE  \
+  CS_N CSB \
+  WE_N WEB \
+  OE_N OEB \
+  ADDR A   \
+  DIN  I   \
+  DOUT O]
+set ::SRAM_PINS(SAED14_2RW) [dict create \
+  CLK_A  CE1  \
+  CS_N_A CSB1 \
+  WE_N_A WEB1 \
+  OE_N_A OEB1 \
+  ADDR_A A1   \
+  DIN_A  I1   \
+  DOUT_A O1   \
+  CLK_B  CE2  \
+  CS_N_B CSB2 \
+  WE_N_B WEB2 \
+  OE_N_B OEB2 \
+  ADDR_B A2   \
+  DIN_B  I2   \
+  DOUT_B O2]
+set ::SRAM_PINS(ASAP7_1RW) [dict create \
+  CLK     clk     \
+  WE      write   \
+  RE      read    \
+  ADDR    ADDRESS \
+  BANKSEL banksel \
+  SDEL    sdel    \
+  DIN     wd      \
+  DOUT    dataout]
+
+# Classify an sram lib-cell name -> dict(family,type,depth,width,name)
+proc sram_classify_cell {name} {
+  # SAED14 / generic: SRAM1RW1024x32 or ram_2rw_128x64
+  if {[regexp -nocase {(\w*(1rw|2rw)(\d+)x(\d+)\w*)} $name _ full kind depth width]} {
+    return [dict create family SAED14 type [string toupper $kind] \
+      depth $depth width $width name $full]
+  }
+  # ASAP7 banked: srambank_<ROWS>x<BANKS>x<WIDTH>_<tech>
+  if {[regexp -nocase {srambank_(\d+)x(\d+)x(\d+)} $name _ rows banks width]} {
+    return [dict create family ASAP7 type 1RW \
+      depth [expr {$rows * $banks}] width $width name $name \
+      rows $rows banks $banks]
+  }
+  return ""
+}
+
+# Introspect pins -> dict: basename -> dict(dir=<in|out|inout>, width=<N>)
+# Bus bits like ADDRESS[3] are collapsed to base "ADDRESS"; width is the count.
+proc sram_introspect_pins {lib_name cell_name} {
+  set out [dict create]
+  foreach_in_collection p [get_lib_pins -quiet "$lib_name/$cell_name/*"] {
+    set pn  [get_attribute $p name]
+    set dir [get_attribute $p pin_direction]
+    regsub {\[\d+\]$} $pn {} base
+    if {[dict exists $out $base]} {
+      dict with out $base { incr width }
+    } else {
+      dict set out $base [dict create dir $dir width 1]
+    }
+  }
+  return $out
+}
+
+# Verify all required roles in the (family,type) pin-table exist on the cell;
+# DIE with full pin list on mismatch. Returns resolved dict(role -> pin_name).
+proc sram_resolve_pins {lib_name cell_name family type pins_found} {
+  set key "${family}_${type}"
+  if {![info exists ::SRAM_PINS($key)]} {
+    DIE "No SRAM pin table defined for '$key'"
+  }
+  set table $::SRAM_PINS($key)
+  set resolved [dict create]
+  set missing [list]
+  dict for {role pin} $table {
+    if {[dict exists $pins_found $pin]} {
+      dict set resolved $role $pin
+    } else {
+      lappend missing "$role=$pin"
+    }
+  }
+  if {[llength $missing]} {
+    puts stderr "---- Actual pins on $lib_name/$cell_name ----"
+    dict for {pn info} $pins_found {
+      puts stderr [format "  %-16s dir=%s width=%d" \
+        $pn [dict get $info dir] [dict get $info width]]
+    }
+    DIE "SRAM pin mismatch on $cell_name ($key): missing [join $missing {, }]. Update ::SRAM_PINS($key) in project.tcl."
+  }
+  return $resolved
+}
+
+# Pin-width lookup helper
+proc sram_pin_width {pins_found pname} {
+  return [dict get $pins_found $pname width]
+}
+
+# Emit one 1RW instance block. $R = role->pinname dict.
+# Family dispatch: SAED14 uses active-low controls + single flat ADDR;
+# ASAP7 srambank uses active-high controls, separate banksel, and sdel tie-off.
+proc sram_emit_sp_inst {fh m R} {
+  set nm     [dict get $m name]
+  set fam    [dict get $m family]
+  switch -- $fam {
+    ASAP7 {
+      # Use ACTUAL macro bus widths (not rows/banks from name-parsing)
+      set row_w [dict get $m pin_w_ADDR]
+      set bs_w  [dict get $m pin_w_BANKSEL]
+      # Split internal_addr: upper bs_w bits -> banksel, lower row_w bits -> ADDRESS
+      puts $fh "            wire \[[expr {$bs_w-1}]:0\]  i_banksel = internal_addr\[[expr {$row_w+$bs_w-1}]:$row_w\];"
+      puts $fh "            wire \[[expr {$row_w-1}]:0\] i_row     = internal_addr\[[expr {$row_w-1}]:0\];"
+      puts $fh "            $nm u_mem ("
+      puts $fh "                .[dict get $R CLK]     ( clk ),"
+      puts $fh "                .[dict get $R WE]      ( write ),"
+      puts $fh "                .[dict get $R RE]      ( read ),"
+      puts $fh "                .[dict get $R ADDR]    ( i_row ),"
+      puts $fh "                .[dict get $R BANKSEL] ( i_banksel ),"
+      puts $fh "                .[dict get $R SDEL]    ( [dict get $m pin_w_SDEL]'b0 ),"
+      puts $fh "                .[dict get $R DIN]     ( wdata ),"
+      puts $fh "                .[dict get $R DOUT]    ( rdata )"
+      puts $fh "            );"
+    }
+    default {
+      # SAED14 / generic 1RW
+      puts $fh "            $nm u_mem ("
+      puts $fh "                .[dict get $R CLK]  ( clk ),"
+      if {[dict exists $R CS_N]} { puts $fh "                .[dict get $R CS_N] ( cs_n )," }
+      if {[dict exists $R CE_N]} { puts $fh "                .[dict get $R CE_N] ( ce_n )," }
+      puts $fh "                .[dict get $R WE_N] ( write_n ),"
+      if {[dict exists $R OE_N]} { puts $fh "                .[dict get $R OE_N] ( read_n )," }
+      puts $fh "                .[dict get $R ADDR] ( internal_addr ),"
+      puts $fh "                .[dict get $R DIN]  ( wdata ),"
+      puts $fh "                .[dict get $R DOUT] ( rdata )"
+      puts $fh "            );"
+    }
+  }
+}
+
+# Emit one 2RW instance block. Port A = write, Port B = read.
+# Currently only SAED14_2RW is supported; other families can extend here.
+proc sram_emit_dp_inst {fh m R} {
+  set nm  [dict get $m name]
+  set fam [dict get $m family]
+  set w   [dict get $m width]
+  switch -- $fam {
+    SAED14 {
+      puts $fh "            $nm u_mem ("
+      puts $fh "                .[dict get $R CLK_A]  ( clk ),"
+      puts $fh "                .[dict get $R CS_N_A] ( 1'b0 ),"
+      puts $fh "                .[dict get $R WE_N_A] ( we_a_n ),"
+      puts $fh "                .[dict get $R OE_N_A] ( 1'b1 ),"
+      puts $fh "                .[dict get $R ADDR_A] ( a1_addr ),"
+      puts $fh "                .[dict get $R DIN_A]  ( wdata ),"
+      puts $fh "                .[dict get $R DOUT_A] ( ),"
+      puts $fh "                .[dict get $R CLK_B]  ( clk ),"
+      puts $fh "                .[dict get $R CS_N_B] ( 1'b0 ),"
+      puts $fh "                .[dict get $R WE_N_B] ( 1'b1 ),"
+      puts $fh "                .[dict get $R OE_N_B] ( ce_b_n ),"
+      puts $fh "                .[dict get $R ADDR_B] ( a2_addr ),"
+      puts $fh "                .[dict get $R DIN_B]  ( ${w}'b0 ),"
+      puts $fh "                .[dict get $R DOUT_B] ( rdata )"
+      puts $fh "            );"
+    }
+    default {
+      DIE "sram_emit_dp_inst: no 2RW emitter for family '$fam'"
+    }
+  }
+}
+
+# Generate VX_sp_ram_asic.v / VX_dp_ram_asic.v by introspecting loaded mem libs.
+# Returns list of generated file paths. Only 1RW is emitted for SP; 2RW for DP.
+# DP wrapper for ASAP7 is not emitted (srambank is single-port).
+proc gen_sram_wrappers {out_dir} {
+  file mkdir $out_dir
+  set sp_mems [list]
+  set dp_mems [list]
+  set all_resolved [dict create]  ;# cell_name -> role dict
+
+  foreach_in_collection lib [get_libs -quiet *] {
+    set lib_name [get_attribute $lib name]
+    foreach_in_collection cell [get_lib_cells -quiet "$lib_name/*"] {
+      set cname [get_attribute $cell name]
+      set info [sram_classify_cell $cname]
+      if {$info eq ""} { continue }
+      set pins_found [sram_introspect_pins $lib_name $cname]
+      set resolved   [sram_resolve_pins $lib_name $cname \
+                        [dict get $info family] [dict get $info type] \
+                        $pins_found]
+      dict set all_resolved $cname $resolved
+      # Attach actual macro pin widths (for slicing internal_addr, etc.)
+      dict for {role pin} $resolved {
+        dict set info pin_w_$role [sram_pin_width $pins_found $pin]
+      }
+      if {[dict get $info type] eq "1RW"} {
+        lappend sp_mems $info
+      } elseif {[dict get $info type] eq "2RW"} {
+        lappend dp_mems $info
+      }
+    }
+  }
+
+  if {[llength $sp_mems] == 0 && [llength $dp_mems] == 0} {
+    DIE "gen_sram_wrappers: no SRAM lib cells found in loaded libraries"
+  }
+
+  # Sort by (width, depth) for deterministic output
+  set sp_mems [lsort -command {apply {{a b} {
+    set wa [dict get $a width]; set wb [dict get $b width]
+    if {$wa != $wb} { return [expr {$wa - $wb}] }
+    return [expr {[dict get $a depth] - [dict get $b depth]}]
+  }}} $sp_mems]
+
+  set generated [list]
+
+  # --- SP wrapper ---
+  if {[llength $sp_mems] > 0} {
+    set fp [file join $out_dir VX_sp_ram_asic.v]
+    set fh [open $fp w]
+    puts $fh "// AUTOMATICALLY GENERATED by project.tcl (gen_sram_wrappers)"
+    puts $fh "(* keep_hierarchy = \"yes\" *)"
+    puts $fh "module VX_sp_ram_asic #("
+    puts $fh "    parameter DATAW = 32,"
+    puts $fh "    parameter SIZE  = 1024,"
+    puts $fh "    parameter WRENW = 1,"
+    puts $fh "    parameter ADDRW = \$clog2(SIZE)"
+    puts $fh ") ("
+    puts $fh "    input  wire             clk,"
+    puts $fh "    input  wire             reset,"
+    puts $fh "    input  wire             read,"
+    puts $fh "    input  wire             write,"
+    puts $fh "    input  wire \[WRENW-1:0\] wren,"
+    puts $fh "    input  wire \[ADDRW-1:0\] addr,"
+    puts $fh "    input  wire \[DATAW-1:0\] wdata,"
+    puts $fh "    output wire \[DATAW-1:0\] rdata"
+    puts $fh ");"
+    puts $fh "    wire write_n = ~write;"
+    puts $fh "    wire read_n  = ~read;"
+    puts $fh "    wire cs_n    = 1'b0;"
+    puts $fh "    wire ce_n    = ~(read | write);"
+    puts $fh ""
+    puts $fh "    generate"
+    set first 1
+    foreach m $sp_mems {
+      set w [dict get $m width]; set d [dict get $m depth]
+      set nm [dict get $m name]
+      set prefix [expr {$first ? "if" : "else if"}]; set first 0
+      # ASAP7: physical address = row_bits + bank_sel_bits (per actual macro pins).
+      # Generic: ceil(log2(depth)).
+      if {[dict get $m family] eq "ASAP7"} {
+        set phy_aw [expr {[dict get $m pin_w_ADDR] + [dict get $m pin_w_BANKSEL]}]
+      } else {
+        set phy_aw [expr {max(1, int(ceil(log($d)/log(2))))}]
+        if {$d == 1} { set phy_aw 1 }
+      }
+      puts $fh "        $prefix (DATAW == $w && SIZE <= $d) begin : g_$nm"
+      puts $fh "            wire \[[expr {$phy_aw-1}]:0\] internal_addr;"
+      puts $fh "            assign internal_addr = (ADDRW < $phy_aw) ?"
+      puts $fh "                { {($phy_aw-ADDRW){1'b0}}, addr } : addr\[[expr {$phy_aw-1}]:0\];"
+      set R [dict get $all_resolved $nm]
+      sram_emit_sp_inst $fh $m $R
+      puts $fh "        end"
+    }
+    puts $fh "    endgenerate"
+    puts $fh "endmodule"
+    close $fh
+    puts "INFO: gen_sram_wrappers: wrote $fp ([llength $sp_mems] 1RW macros)"
+    lappend generated $fp
+  }
+
+  # --- DP wrapper (SAED14-style only; ASAP7 srambank is 1RW) ---
+  if {[llength $dp_mems] > 0} {
+    set dp_mems [lsort -command {apply {{a b} {
+      set wa [dict get $a width]; set wb [dict get $b width]
+      if {$wa != $wb} { return [expr {$wa - $wb}] }
+      return [expr {[dict get $a depth] - [dict get $b depth]}]
+    }}} $dp_mems]
+    set fp [file join $out_dir VX_dp_ram_asic.v]
+    set fh [open $fp w]
+    puts $fh "// AUTOMATICALLY GENERATED by project.tcl (gen_sram_wrappers)"
+    puts $fh "(* keep_hierarchy = \"yes\" *)"
+    puts $fh "module VX_dp_ram_asic #("
+    puts $fh "    parameter DATAW = 32,"
+    puts $fh "    parameter SIZE  = 1024,"
+    puts $fh "    parameter WRENW = 1,"
+    puts $fh "    parameter ADDRW = \$clog2(SIZE)"
+    puts $fh ") ("
+    puts $fh "    input  wire             clk,"
+    puts $fh "    input  wire             reset,"
+    puts $fh "    input  wire             read,"
+    puts $fh "    input  wire             write,"
+    puts $fh "    input  wire \[WRENW-1:0\] wren,"
+    puts $fh "    input  wire \[ADDRW-1:0\] waddr,"
+    puts $fh "    input  wire \[DATAW-1:0\] wdata,"
+    puts $fh "    input  wire \[ADDRW-1:0\] raddr,"
+    puts $fh "    output wire \[DATAW-1:0\] rdata"
+    puts $fh ");"
+    puts $fh "    wire we_a_n = ~write;"
+    puts $fh "    wire ce_b_n = ~read;"
+    puts $fh ""
+    puts $fh "    generate"
+    set first 1
+    foreach m $dp_mems {
+      set w [dict get $m width]; set d [dict get $m depth]
+      set nm [dict get $m name]
+      set prefix [expr {$first ? "if" : "else if"}]; set first 0
+      set phy_aw [expr {max(1, int(ceil(log($d)/log(2))))}]
+      puts $fh "        $prefix (DATAW == $w && SIZE <= $d) begin : g_$nm"
+      puts $fh "            wire \[[expr {$phy_aw-1}]:0\] a1_addr;"
+      puts $fh "            assign a1_addr = (ADDRW < $phy_aw) ?"
+      puts $fh "                { {($phy_aw-ADDRW){1'b0}}, waddr } : waddr\[[expr {$phy_aw-1}]:0\];"
+      puts $fh "            wire \[[expr {$phy_aw-1}]:0\] a2_addr;"
+      puts $fh "            assign a2_addr = (ADDRW < $phy_aw) ?"
+      puts $fh "                { {($phy_aw-ADDRW){1'b0}}, raddr } : raddr\[[expr {$phy_aw-1}]:0\];"
+      set R [dict get $all_resolved $nm]
+      sram_emit_dp_inst $fh $m $R
+      puts $fh "        end"
+    }
+    puts $fh "    endgenerate"
+    puts $fh "endmodule"
+    close $fh
+    puts "INFO: gen_sram_wrappers: wrote $fp ([llength $dp_mems] 2RW macros)"
+    lappend generated $fp
+  }
+
+  return $generated
+}
+
 # ------------------------- Main Flow ------------------------- #
 
 # Setup environment
@@ -273,6 +606,19 @@ puts "=====================\n"
 set_app_var search_path [concat $incdirs [getenv search_path ""] .]
 set_app_var target_library $target_db
 set_app_var link_library   [concat {*}{"*"} $link_dbs]
+
+# ---------------- SRAM wrapper generation (from loaded mem .db) ----------------
+if {$use_mem_libs} {
+  foreach db $gen_dbs {
+    if {[catch {read_db $db} err]} {
+      DIE "read_db failed on $db: $err"
+    }
+  }
+  set sram_out_dir [file normalize "./src"]
+  set sram_files [gen_sram_wrappers $sram_out_dir]
+  # Prepend so they're analyzed before consumers
+  set v_files [concat $v_files $sram_files]
+}
 
 # ---------------- WORK library ----------------
 if {![file exists WORK]} { file mkdir WORK }

@@ -125,8 +125,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         endcase
     end
 
-    generate
-    begin : g_fma
+    if (1) begin : g_fma
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fma;
         reg [NUM_LANES-1:0][63:0] result_fadd;
@@ -199,10 +198,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_ready_in[FPU_FMA] = fma_ready;
 
     end
-    endgenerate
 
-    generate
-    begin : g_fdiv
+    if (1) begin : g_fdiv
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fdiv_r;
         reg [NUM_LANES-1:0][63:0] result_fdiv;
@@ -238,10 +235,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign div_ready_in = fdiv_ready;
 
     end
-    endgenerate
 
-    generate
-    begin : g_fsqrt
+    if (1) begin : g_fsqrt
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fsqrt_r;
         reg [NUM_LANES-1:0][63:0] result_fsqrt;
@@ -277,10 +272,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign sqrt_ready_in = fsqrt_ready;
 
     end
-    endgenerate
 
-    generate
-    begin : g_fcvt
+    if (1) begin : g_fcvt
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fcvt;
         reg [NUM_LANES-1:0][63:0] result_itof;
@@ -343,10 +336,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_ready_in[FPU_CVT] = fcvt_ready;
 
     end
-    endgenerate
 
-    generate
-    begin : g_fncp
+    if (1) begin : g_fncp
 
         reg [NUM_LANES-1:0][`XLEN-1:0]  result_fncp;
         reg [NUM_LANES-1:0][63:0] result_fclss;
@@ -425,7 +416,6 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_ready_in[FPU_NCP] = fncp_ready;
 
     end
-    endgenerate
 
     ///////////////////////////////////////////////////////////////////////////
 

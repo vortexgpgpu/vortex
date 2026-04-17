@@ -150,7 +150,7 @@ CFLAGS += -DXLEN_$(XLEN)
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
-.PHONY: clean gen-sources gen-rams synthesis-nosram synthesis-estsram synthesis
+.PHONY: clean gen-sources synthesis-nosram synthesis-estsram synthesis
 
 all: synthesis
 
@@ -158,12 +158,7 @@ gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
 	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
 
-gen-rams: $(BUILD_DIR)/sources.txt
-	@echo "[Make] Generating SRAM Wrappers from $(SRAM_LIB)..."
-	mkdir -p $(BUILD_DIR)/src
-	python3 $(SRC_DIR)/gen_srams.py $(SRAM_LIB) $(BUILD_DIR)/src
-
-synthesis: $(BUILD_DIR)/sources.txt gen-rams
+synthesis: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); \
 	TOP=$(TOP_LEVEL_ENTITY) \
 	CLOCK_FREQ=$(CLOCK_FREQ) \
