@@ -119,8 +119,7 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     // FMA core ///////////////////////////////////////////////////////////////
 
-    generate
-    begin : g_fma
+    if (1) begin : g_fma
 
         wire [NUM_LANES-1:0] mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] data_out;
@@ -268,12 +267,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_fflags[FPU_FMA] = merged_fflags;
 
     end
-    endgenerate
 
     // Div/Sqrt core //////////////////////////////////////////////////////////
 
-    generate
-    begin : g_fdivsqrt
+    if (1) begin : g_fdivsqrt
 
         localparam PATH_REQ_DATAW = NUM_LANES + TAG_WIDTH + INST_FMT_BITS + INST_FRM_BITS + 2 * (NUM_LANES * `XLEN);
         localparam PATH_RSP_DATAW = (NUM_LANES * `XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
@@ -578,12 +575,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         );
 
     end
-    endgenerate
 
     // CVT core ///////////////////////////////////////////////////////////////
 
-    generate
-    begin : g_cvt
+    if (1) begin : g_cvt
 
         wire [NUM_LANES-1:0] mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] data_out;
@@ -673,12 +668,10 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_fflags[FPU_CVT] = merged_fflags;
 
     end
-    endgenerate
 
     // NCP core ///////////////////////////////////////////////////////////////
 
-    generate
-    begin : g_ncp
+    if (1) begin : g_ncp
 
         wire [NUM_LANES-1:0] mask_out;
         wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+`XLEN)-1:0] data_out;
@@ -757,7 +750,6 @@ module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_fflags[FPU_NCP] = merged_fflags;
 
     end
-    endgenerate
 
     ///////////////////////////////////////////////////////////////////////////
 

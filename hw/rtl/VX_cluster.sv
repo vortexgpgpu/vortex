@@ -13,7 +13,11 @@
 
 `include "VX_define.vh"
 
-module VX_cluster import VX_gpu_pkg::*; #(
+module VX_cluster import VX_gpu_pkg::*;
+`ifdef EXT_DXA_ENABLE
+    import VX_dxa_pkg::*;
+`endif
+#(
     parameter CLUSTER_ID = 0,
     parameter `STRING INSTANCE_ID = ""
 ) (

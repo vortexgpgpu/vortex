@@ -433,8 +433,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         end
                     end
                 end
-
-                default:;
             endcase
         end
     end
