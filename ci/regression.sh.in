@@ -601,8 +601,8 @@ tensor()
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=2 -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=4 -DITYPE=fp16 -DOTYPE=fp32 -DPROFILE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     # test fp16
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1  --no-fused

@@ -71,13 +71,13 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     for (genvar k = 0; k < TCU_TC_K; ++k) begin : g_bmux
 
         // ---- I_RATIO=1 path (ELT_W=32) ----
-        begin : g_r1
+        if (1) begin : g_r1
             wire mask_lo = meta_row_r1[k];
             assign b_col_r1[k] = mask_lo ? b_col_in1[k] : b_col_in2[k];
         end
 
         // ---- I_RATIO=2 path (ELT_W=16) ----
-        begin : g_r2
+        if (1) begin : g_r2
             localparam I_R = 2;
             localparam EW  = 16;
 
@@ -104,7 +104,7 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
 
         // ---- I_RATIO=4 path (ELT_W=8) ----
-        begin : g_r4
+        if (1) begin : g_r4
             localparam I_R = 4;
             localparam EW  = 8;
 
@@ -136,7 +136,7 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
 
         // ---- I_RATIO=8 path (ELT_W=4) ----
-        begin : g_r8
+        if (1) begin : g_r8
             localparam I_R = 8;
             localparam EW  = 4;
 
@@ -167,7 +167,6 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
             assign b_col_r8[k] = {sg3_1, sg3_0, sg2_1, sg2_0, sg1_1, sg1_0, sg0_1, sg0_0};
         end
-
     end
 
     // Output mux: select path based on format
