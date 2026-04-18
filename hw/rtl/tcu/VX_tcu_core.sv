@@ -55,8 +55,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FACC_LATENCY = 2;
     localparam FEDP_LATENCY = FMUL_LATENCY + FACC_LATENCY;
 `else // TCU_TYPE_TFR
-    localparam FMUL_LATENCY = 1;
-    localparam FMXP_LATENCY = (TCU_TC_K > 2) ? 1 : 0;
+    localparam FMUL_LATENCY = (TCU_TC_K > 2) ? 1 : 0;
+    localparam FMXP_LATENCY = 1;
     localparam FALN_LATENCY = 1;
     localparam FACC_LATENCY = 1;
     localparam FRND_LATENCY = 1;
