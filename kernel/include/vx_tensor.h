@@ -593,37 +593,118 @@ public:
     static_assert(FragC::Use == accumulator, "C must be accumulator");
     static_assert(FragD::Use == accumulator, "D must be accumulator");
 
+    // Bank-conflict-free register offset permutations (0 stalls).
+    // SW must place fragment data into registers matching the HW's
+    // permuted offset order.  These are the INVERSE of the forward
+    // formulas in VX_tcu_uops.sv, mapping physical register offset
+    // back to the logical fragment index.
+    constexpr uint32_t b_sub_eff = is_sparse ? cfg::b_sub_blocks_sp : cfg::b_sub_blocks;
+    constexpr bool bcfree_sp = is_sparse && !cfg::sym_sparse;      // sparse non-sym
+    constexpr bool bcfree_a  = !is_sparse && (b_sub_eff == 1);     // dense pattern A
+    constexpr bool bcfree_b  = !is_sparse && (b_sub_eff > 1);      // dense pattern B
+
+    // A inverse: physical offset → logical fragment index
+    constexpr auto ra_idx = [](uint32_t off) constexpr -> uint32_t {
+      if constexpr (bcfree_sp) {
+        // Sparse non-sym: A is identity (off = m*k_count+k)
+        return off;
+      } else if constexpr (bcfree_a) {
+        // Dense Pattern A (b_sub==1): forward A={m[0],~m[hi],k}
+        uint32_t m = ((1 - ((off >> 1) & 1)) << 1) | (off >> 2);
+        uint32_t k = off & 1;
+        return m * cfg::k_steps + k;
+      } else if constexpr (bcfree_b) {
+        // Dense Pattern B (b_sub==2): forward A={k[0],~m,m^k[hi]}
+        uint32_t m = 1 - ((off >> 1) & 1);
+        uint32_t k_hi = m ^ (off & 1);
+        uint32_t k_lo = off >> 2;
+        return m * cfg::k_steps + (k_hi << 1 | k_lo);
+      } else {
+        return off;
+      }
+    };
+
+    // B inverse: physical offset → logical fragment index
+    constexpr auto rb_idx = [](uint32_t off) constexpr -> uint32_t {
+      if constexpr (bcfree_sp) {
+        // Sparse non-sym: forward B={n[hi], ~(n[0]^k), ~k}
+        // Inverse: k = 1-off[0], n[0] = (1-off[1])^k, n[hi] = off[2]
+        uint32_t k = 1 - (off & 1);
+        uint32_t n_lo = (1 - ((off >> 1) & 1)) ^ k;
+        uint32_t n_hi = off >> 2;
+        return k * cfg::n_steps + (n_hi << 1 | n_lo);
+      } else if constexpr (bcfree_b) {
+        // Dense Pattern B (b_sub==2): forward B={k[0],k[hi]^np,~np}
+        uint32_t n_pair = 1 - (off & 1);
+        uint32_t k_hi = ((off >> 1) & 1) ^ n_pair;
+        uint32_t k_lo = off >> 2;
+        return (k_hi << 1 | k_lo) * cfg::b_sub_blocks + n_pair;
+      } else if constexpr (bcfree_a) {
+        // Dense Pattern A (b_sub==1): forward B={n^k,~k}
+        uint32_t k = 1 - (off & 1);
+        uint32_t n = ((off >> 1) & 1) ^ k;
+        return k * cfg::n_steps + n;
+      } else {
+        return off;
+      }
+    };
+
+    // C inverse: physical offset → logical fragment index
+    constexpr auto rc_idx = [](uint32_t off) constexpr -> uint32_t {
+      if constexpr (bcfree_sp) {
+        // Sparse non-sym: forward C={n[hi], m, ~(m^n[0])}
+        // Inverse: m = off[1], n[0] = (1-off[0])^m, n[hi] = off[2]
+        uint32_t m = (off >> 1) & 1;
+        uint32_t n_lo = (1 - (off & 1)) ^ m;
+        uint32_t n_hi = off >> 2;
+        return m * cfg::n_steps + (n_hi << 1 | n_lo);
+      } else if constexpr (bcfree_a) {
+        // Dense Pattern A (b_sub==1): forward C={m[0],~m[hi],XNOR(m[hi],n)}
+        uint32_t m_hi = 1 - ((off >> 1) & 1);
+        uint32_t m = (m_hi << 1) | (off >> 2);
+        uint32_t n = 1 - (m_hi ^ (off & 1));
+        return m * cfg::n_steps + n;
+      } else if constexpr (bcfree_b) {
+        // Dense Pattern B (b_sub==2): forward C={n[0],~m,n[hi]}
+        uint32_t m = 1 - ((off >> 1) & 1);
+        uint32_t n = ((off & 1) << 1) | (off >> 2);
+        return m * cfg::n_steps + n;
+      } else {
+        return off;
+      }
+    };
+
     // frag_c initialized into accumulator registers (f0-f7)
-    register float fd0 __asm__("f0") = frag_c.data[0];
-    register float fd1 __asm__("f1") = frag_c.data[1];
-    register float fd2 __asm__("f2") = frag_c.data[2];
-    register float fd3 __asm__("f3") = frag_c.data[3];
-    register float fd4 __asm__("f4") = frag_c.data[4];
-    register float fd5 __asm__("f5") = frag_c.data[5];
-    register float fd6 __asm__("f6") = frag_c.data[6];
-    register float fd7 __asm__("f7") = frag_c.data[7];
+    register float fd0 __asm__("f0") = frag_c.data[rc_idx(0)];
+    register float fd1 __asm__("f1") = frag_c.data[rc_idx(1)];
+    register float fd2 __asm__("f2") = frag_c.data[rc_idx(2)];
+    register float fd3 __asm__("f3") = frag_c.data[rc_idx(3)];
+    register float fd4 __asm__("f4") = frag_c.data[rc_idx(4)];
+    register float fd5 __asm__("f5") = frag_c.data[rc_idx(5)];
+    register float fd6 __asm__("f6") = frag_c.data[rc_idx(6)];
+    register float fd7 __asm__("f7") = frag_c.data[rc_idx(7)];
 
     // frag_a: caller-saved registers (f10-f17)
-    register float fa0 __asm__("f10") = frag_a.data[0];
-    register float fa1 __asm__("f11") = frag_a.data[1];
-    register float fa2 __asm__("f12") = frag_a.data[2];
-    register float fa3 __asm__("f13") = frag_a.data[3];
-    register float fa4 __asm__("f14") = frag_a.data[4];
-    register float fa5 __asm__("f15") = frag_a.data[5];
-    register float fa6 __asm__("f16") = frag_a.data[6];
-    register float fa7 __asm__("f17") = frag_a.data[7];
+    register float fa0 __asm__("f10") = frag_a.data[ra_idx(0)];
+    register float fa1 __asm__("f11") = frag_a.data[ra_idx(1)];
+    register float fa2 __asm__("f12") = frag_a.data[ra_idx(2)];
+    register float fa3 __asm__("f13") = frag_a.data[ra_idx(3)];
+    register float fa4 __asm__("f14") = frag_a.data[ra_idx(4)];
+    register float fa5 __asm__("f15") = frag_a.data[ra_idx(5)];
+    register float fa6 __asm__("f16") = frag_a.data[ra_idx(6)];
+    register float fa7 __asm__("f17") = frag_a.data[ra_idx(7)];
 
     if constexpr (FragB::NR == 8) {
 
       // frag_b: caller-saved registers (f24-f31)
-      register float fb0 __asm__("f24")  = frag_b.data[0];
-      register float fb1 __asm__("f25")  = frag_b.data[1];
-      register float fb2 __asm__("f26")  = frag_b.data[2];
-      register float fb3 __asm__("f27")  = frag_b.data[3];
-      register float fb4 __asm__("f28")  = frag_b.data[4];
-      register float fb5 __asm__("f29")  = frag_b.data[5];
-      register float fb6 __asm__("f30")  = frag_b.data[6];
-      register float fb7 __asm__("f31")  = frag_b.data[7];
+      register float fb0 __asm__("f24")  = frag_b.data[rb_idx(0)];
+      register float fb1 __asm__("f25")  = frag_b.data[rb_idx(1)];
+      register float fb2 __asm__("f26")  = frag_b.data[rb_idx(2)];
+      register float fb3 __asm__("f27")  = frag_b.data[rb_idx(3)];
+      register float fb4 __asm__("f28")  = frag_b.data[rb_idx(4)];
+      register float fb5 __asm__("f29")  = frag_b.data[rb_idx(5)];
+      register float fb6 __asm__("f30")  = frag_b.data[rb_idx(6)];
+      register float fb7 __asm__("f31")  = frag_b.data[rb_idx(7)];
 
       if constexpr (is_mx) {
         register float fma0 __asm__("f8")  = frag_a.mx_meta[0];
@@ -665,10 +746,10 @@ public:
       static_assert(FragB::NR == 4, "Unsupported number of registers for FragB");
 
       // frag_b: caller-saved registers (f28-f31)
-      register float fb0 __asm__("f28") = frag_b.data[0];
-      register float fb1 __asm__("f29") = frag_b.data[1];
-      register float fb2 __asm__("f30") = frag_b.data[2];
-      register float fb3 __asm__("f31") = frag_b.data[3];
+      register float fb0 __asm__("f28") = frag_b.data[rb_idx(0)];
+      register float fb1 __asm__("f29") = frag_b.data[rb_idx(1)];
+      register float fb2 __asm__("f30") = frag_b.data[rb_idx(2)];
+      register float fb3 __asm__("f31") = frag_b.data[rb_idx(3)];
 
       if constexpr (is_mx) {
         register float fma0 __asm__("f8")  = frag_a.mx_meta[0];
@@ -708,8 +789,15 @@ public:
       }
     }
 
-    // Write results to frag_d
-    frag_d.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
+    // Write results to frag_d (inverse-permute back to logical order)
+    frag_d.data[rc_idx(0)] = fd0;
+    frag_d.data[rc_idx(1)] = fd1;
+    frag_d.data[rc_idx(2)] = fd2;
+    frag_d.data[rc_idx(3)] = fd3;
+    frag_d.data[rc_idx(4)] = fd4;
+    frag_d.data[rc_idx(5)] = fd5;
+    frag_d.data[rc_idx(6)] = fd6;
+    frag_d.data[rc_idx(7)] = fd7;
     }
 };
 

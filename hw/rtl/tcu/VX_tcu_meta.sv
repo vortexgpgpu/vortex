@@ -133,7 +133,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
   `endif
     localparam META_ADDRW = `CLOG2(META_DEPTH);
 
-    wire [META_ADDRW-1:0] meta_addr = META_ADDRW'(wid);
+    wire [`UP(META_ADDRW)-1:0] meta_addr = `UP(META_ADDRW)'(wid);
 
     VX_dp_ram #(
         .DATAW    (PACKED_WIDTH),

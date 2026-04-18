@@ -1192,15 +1192,53 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t rem = mma_idx % mn;
         uint32_t m = rem / wmma::n_steps;
         uint32_t n = rem % wmma::n_steps;
-        uint32_t reg_rs1 = ra_base + (m / wmma::a_sub_blocks) * k_count + k;
-        uint32_t reg_rs2 = rb_base + (k * wmma::n_steps + n) / b_sub;
-        uint32_t reg_rs3 = rc_base + m * wmma::n_steps + n;
+        // Bank-conflict-free register offset formulas (0 stalls).
+        // Permutes A, B, C offsets so all three operands always land in
+        // different GPR banks for every uop.
+        uint32_t reg_rs1, reg_rs2, reg_rs3;
+        if (is_sparse) {
+          // Sparse non-sym: A=identity, B and C permuted for 0 stalls.
+          // B={n[hi], ~(n[0]^k), ~k}, C={n[hi], m, ~(m^n[0])}
+          uint32_t n_hi = n >> 1;
+          uint32_t n_lo = n & 1;
+          uint32_t a_off = (m / wmma::a_sub_blocks) * k_count + k;
+          uint32_t b_off = (n_hi << 2) | ((1 - (n_lo ^ k)) << 1) | (1 - k);
+          uint32_t c_off = (n_hi << 2) | (m << 1) | (1 - (m ^ n_lo));
+          reg_rs1 = ra_base + a_off;
+          reg_rs2 = rb_base + b_off;
+          reg_rs3 = rc_base + c_off;
+        } else if (b_sub == 1) {
+          // Dense Pattern A (NT=4,16,64): m_steps=4, k_steps=2, n_steps=2
+          // A={m[0], ~m[hi], k}, B={n^k, ~k}, C={m[0], ~m[hi], XNOR(m[hi],n)}
+          uint32_t m_hi = m >> 1;
+          uint32_t m_lo = m & 1;
+          uint32_t a_off = (m_lo << 2) | ((1 - m_hi) << 1) | k;
+          uint32_t b_off = ((n ^ k) << 1) | (1 - k);
+          uint32_t c_off = (m_lo << 2) | ((1 - m_hi) << 1) | (1 - (m_hi ^ n));
+          reg_rs1 = ra_base + a_off;
+          reg_rs2 = rb_base + b_off;
+          reg_rs3 = rc_base + c_off;
+        } else {
+          // Dense Pattern B (NT=8,32): m_steps=2, k_steps=4, n_steps=4, b_sub=2
+          // A={k[0], ~m, m^k[hi]}, B={k[0], k[hi]^np, ~np}, C={n[0], ~m, n[hi]}
+          uint32_t k_hi = k >> 1;
+          uint32_t k_lo = k & 1;
+          uint32_t n_pair = n >> 1;
+          uint32_t n_lo = n & 1;
+          uint32_t a_off = (k_lo << 2) | ((1 - m) << 1) | (m ^ k_hi);
+          uint32_t b_off = (k_lo << 2) | ((k_hi ^ n_pair) << 1) | (1 - n_pair);
+          uint32_t c_off = (n_lo << 2) | ((1 - m) << 1) | n_pair;
+          reg_rs1 = ra_base + a_off;
+          reg_rs2 = rb_base + b_off;
+          reg_rs3 = rc_base + c_off;
+        }
         uop_instr->set_op_type(TcuType::WMMA);
         uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k, 0});
 #ifdef TCU_ACC_ENABLE
         bool uop_is_first_k = (k == 0);
         bool uop_is_last_k  = (k == k_count - 1);
 #else
+        (void)k_count;
         bool uop_is_first_k = true;
         bool uop_is_last_k  = true;
 #endif

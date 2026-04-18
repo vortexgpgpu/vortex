@@ -46,8 +46,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     localparam LZC_W = $clog2(ACC_SIG_W);
 
     // Latency Configuration
-    localparam MUL_LATENCY = 1;
-    localparam MXP_LATENCY = (N > 2) ? 1 : 0;
+    localparam MUL_LATENCY = (N > 2) ? 1 : 0;
+    localparam MXP_LATENCY = 1;
     localparam ALN_LATENCY = 1;
     localparam ACC_LATENCY = 1;
     localparam NRM_LATENCY = 1;
