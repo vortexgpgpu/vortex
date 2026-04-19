@@ -119,19 +119,10 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         end
     end
 
-  `ifdef TCU_WLOCK_ENABLE
-    localparam META_DEPTH = 1;
-    `UNUSED_VAR (wid)
-  `else
     localparam META_DEPTH = `NUM_WARPS;
-  `endif
     localparam META_ADDRW = `CLOG2(META_DEPTH);
 
-  `ifdef TCU_WLOCK_ENABLE
-    wire [`UP(META_ADDRW)-1:0] meta_addr = '0;
-  `else
     wire [`UP(META_ADDRW)-1:0] meta_addr = `UP(META_ADDRW)'(wid);
-  `endif
 
     VX_dp_ram #(
         .DATAW    (PACKED_WIDTH),

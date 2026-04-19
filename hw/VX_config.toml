@@ -241,13 +241,8 @@ TCU_MX_ENABLE = false
 TCU_MXI8_ENABLE = false
 TCU_SPARSE_ENABLE = false
 TCU_WGMMA_ENABLE = false
-TCU_ACC_ENABLE = false
-TCU_WLOCK_ENABLE = false
-
 TCU_SPARSE_ENABLED = "expr: 1 if $TCU_SPARSE_ENABLE else 0"
 TCU_WGMMA_ENABLED = "expr: 1 if $TCU_WGMMA_ENABLE else 0"
-TCU_ACC_ENABLED = "expr: 1 if $TCU_ACC_ENABLE else 0"
-TCU_WLOCK_ENABLED = "expr: 1 if $TCU_WLOCK_ENABLE else 0"
 
 [isa_signatures]
 
