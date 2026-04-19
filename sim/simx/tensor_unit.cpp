@@ -530,30 +530,14 @@ public:
     bool col_major = false;
   };
 
-  // Shared accumulator dimensions: max of WMMA and WGMMA tile counts
-  static constexpr uint32_t kAccumMaxM = (cfg::m_steps > wg_cfg::m_steps) ? cfg::m_steps : wg_cfg::m_steps;
-#ifdef TCU_WGMMA_ENABLE
-  static constexpr uint32_t kWgMaxN = 32;
-  static constexpr uint32_t kAccumMaxN = (cfg::n_steps > kWgMaxN) ? cfg::n_steps : kWgMaxN;
-#else
-  static constexpr uint32_t kAccumMaxN = cfg::n_steps;
-#endif
-
   Impl(TensorUnit* simobject, const Arch& arch, Core* core)
     : simobject_(simobject)
     , core_(core)
     , arch_(arch)
     , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
     , mx_meta_(arch.num_warps())
-#if defined(TCU_WLOCK_ENABLE) && !defined(NDEBUG)
-    , accum_busy_(false)
-    , accum_owner_(0)
-    , accum_tile_ctr_(0)
-#endif
     , perf_stats_()
-  {
-    memset(accum_, 0, sizeof(accum_));
-  }
+  {}
 
   ~Impl() {
     // Destructor logic if needed
@@ -711,13 +695,10 @@ public:
       }
     }
 
-    uint32_t k_count = is_sparse ? (cfg::k_steps / 2) : cfg::k_steps;
-    auto [is_first_k, is_last_k] = k_bounds(wid, step_k, k_count);
-
     fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
-              is_first_k, is_last_k, a_tile, b_tile, rs3_data, rd_data);
+              a_tile, b_tile, rs3_data, rd_data);
 
-    trace_data->is_last_k = is_last_k;
+    trace_data->is_last_k = true;
   }
 
   void wgmma(uint32_t wid,
@@ -820,13 +801,10 @@ public:
       }
     }
 
-    uint32_t wg_k_count = is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
-    auto [is_first_k, is_last_k] = k_bounds(wid, step_k, wg_k_count);
-
     fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
-              is_first_k, is_last_k, a_tile, b_tile, rs3_data, rd_data);
+              a_tile, b_tile, rs3_data, rd_data);
 
-    trace_data->is_last_k = is_last_k;
+    trace_data->is_last_k = true;
 
     // Performance counters.
     ++perf_stats_.wgmma_instrs;
@@ -903,40 +881,18 @@ private:
   static constexpr uint32_t kMaxMetaCols = NUM_THREADS / 2;
   static constexpr uint32_t kMxMetaWords = 8;
 
-  uint32_t& accum_ref(uint32_t wid, uint32_t sm, uint32_t sn, uint32_t i, uint32_t j) {
-    return accum_[wid][sm][sn][i][j];
-  }
-
-  std::pair<bool, bool> k_bounds(uint32_t wid, uint32_t step_k, uint32_t k_count) {
-#ifdef TCU_ACC_ENABLE
-    bool is_first_k = (step_k == 0);
-    bool is_last_k  = (step_k == k_count - 1);
-  #if defined(TCU_WLOCK_ENABLE) && !defined(NDEBUG)
-    accum_check_owner(wid, is_first_k, is_last_k);
-  #else
-    __unused(wid);
-  #endif
-#else
-    __unused(wid, step_k, k_count);
-    bool is_first_k = true;
-    bool is_last_k  = true;
-#endif
-    return {is_first_k, is_last_k};
-  }
-
-  // Shared FEDP tile computation for both WMMA and WGMMA.
+  // FEDP tile computation for both WMMA and WGMMA.
   // a_tile: [tcM][tcK] flat array of pre-loaded A operand words.
   // b_tile: [tcM][tcN][tcK] flat array of pre-loaded B operand words
   //         (for dense, each i-slice is identical; for sparse, already gathered).
   void fedp_tile(uint32_t wid,
                  uint32_t step_m, uint32_t step_n, uint32_t step_k,
                  uint32_t fmt_s, uint32_t fmt_d,
-                 bool is_first_k, bool is_last_k,
                  const reg_data_t* a_tile,
                  const reg_data_t* b_tile,
                  const std::vector<reg_data_t>& rs3_data,
                  std::vector<reg_data_t>& rd_data) {
-    __unused(step_k);
+    __unused(wid, step_m, step_n, step_k);
   #ifdef TCU_MX_ENABLE
     bool use_mx = ((fmt_s == vt::mxfp8::id) && (fmt_d == vt::fp32::id))
                || ((fmt_s == vt::mxint8::id) && (fmt_d == vt::int32::id))
@@ -952,7 +908,7 @@ private:
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
       for (uint32_t j = 0; j < cfg::tcN; ++j) {
         auto t = i * cfg::tcN + j;
-        auto c_val = is_first_k ? rs3_data.at(t).u32 : accum_ref(wid, step_m, step_n, i, j);
+        auto c_val = rs3_data.at(t).u32;
         auto a_row = &a_tile[i * cfg::tcK];
         auto b_col = &b_tile[(i * cfg::tcN + j) * cfg::tcK];
 
@@ -982,45 +938,16 @@ private:
           d_val = fedp(a_row, b_col, c_val);
         }
 
-        accum_ref(wid, step_m, step_n, i, j) = d_val;
-        if (is_last_k) {
-          rd_data.at(t).u64 = nan_box(d_val);
-        }
+        rd_data.at(t).u64 = nan_box(d_val);
         DTH(3, simobject_->name() << " FEDP"
             << ": wid=" << wid << ", i=" << i << ", j=" << j
             << ", m=" << step_m << ", n=" << step_n
-            << ", k=" << step_k << (is_last_k ? " [last]" : "") << std::hex
+            << ", k=" << step_k << std::hex
             << ", a0=0x" << a_row[0].u32 << ", b0=0x" << b_col[0].u32
             << ", c=0x" << c_val << ", d=0x" << d_val << std::dec << std::endl);
       }
     }
   }
-
-#if defined(TCU_WLOCK_ENABLE) && !defined(NDEBUG)
-  // Debug-only check to detect if multiple warps are interleaving K-accumulation on the same tile,
-  // which would indicate a bug in the instruction scheduling or warp grouping logic.
-  void accum_check_owner(uint32_t wid, bool is_first_k, bool is_last_k) {
-    if (!accum_busy_) {
-      accum_busy_ = true;
-      accum_owner_ = wid;
-      accum_tile_ctr_ = is_last_k ? 0 : 1;
-    } else {
-      if (accum_owner_ != wid) {
-        std::cout << "ERROR: warp interleave detected during TCU K-accumulation! "
-                  << "owner=" << accum_owner_ << ", intruder=" << wid
-                  << ", first_k=" << is_first_k << ", last_k=" << is_last_k
-                  << ", tile_ctr=" << accum_tile_ctr_ << std::endl;
-        std::abort();
-      }
-      if (is_first_k && !is_last_k)
-        ++accum_tile_ctr_;
-      else if (!is_first_k && is_last_k)
-        --accum_tile_ctr_;
-      if (is_last_k && accum_tile_ctr_ == 0)
-        accum_busy_ = false;
-    }
-  }
-#endif
 
   TensorUnit*   simobject_;
   Core*         core_;
@@ -1028,12 +955,6 @@ private:
   std::vector<std::vector<uint32_t>> sparse_meta_;
   std::vector<std::array<uint32_t, kMxMetaWords>> mx_meta_;
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
-  uint32_t accum_[NUM_WARPS][kAccumMaxM][kAccumMaxN][cfg::tcM][cfg::tcN];
-#if defined(TCU_WLOCK_ENABLE) && !defined(NDEBUG)
-  bool          accum_busy_;
-  uint32_t      accum_owner_;
-  uint32_t      accum_tile_ctr_;
-#endif
   PerfStats     perf_stats_;
 };
 
@@ -1234,22 +1155,10 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         }
         uop_instr->set_op_type(TcuType::WMMA);
         uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k, 0});
-#ifdef TCU_ACC_ENABLE
-        bool uop_is_first_k = (k == 0);
-        bool uop_is_last_k  = (k == k_count - 1);
-#else
-        (void)k_count;
-        bool uop_is_first_k = true;
-        bool uop_is_last_k  = true;
-#endif
-        if (uop_is_last_k) {
-          uop_instr->set_dest_reg(reg_rs3, RegType::Float);
-        }
+        uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
         uop_instr->set_src_reg(1, reg_rs2, RegType::Float);
-        if (uop_is_first_k) {
-          uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
-        }
+        uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
       }
     }
   }
@@ -1277,16 +1186,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uop_instr->set_op_type(TcuType::WGMMA);
     uop_instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
                                    fmt_s, fmt_d, m, n, k, 0});
-#ifdef TCU_ACC_ENABLE
-    bool uop_is_first_k = (k == 0);
-    bool uop_is_last_k  = (k == k_count - 1);
-#else
-    bool uop_is_first_k = true;
-    bool uop_is_last_k  = true;
-#endif
-    if (uop_is_last_k) {
-      uop_instr->set_dest_reg(r, RegType::Float);
-    }
+    uop_instr->set_dest_reg(r, RegType::Float);
     if (uop_index == 0) {
       if (is_a_smem) {
         uop_instr->set_src_reg(0, a0, RegType::Integer);
@@ -1299,17 +1199,8 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t rs1_off = m * k_count + k;
       uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
     }
-    if (uop_is_first_k) {
-      uop_instr->set_src_reg(2, r, RegType::Float);
-    }
+    uop_instr->set_src_reg(2, r, RegType::Float);
   }
-#endif
-
-  // fu_lock/fu_unlock: prevent warp interleaving during TCU K-accumulation.
-  // 10=acquire (first), 00=middle, 01=release (last), 11=default (non-sequenced).
-#ifdef TCU_WLOCK_ENABLE
-  uop_instr->set_fu_lock(uop_index == 0);
-  uop_instr->set_fu_unlock(uop_index == total - 1);
 #endif
 
   return uop_instr;

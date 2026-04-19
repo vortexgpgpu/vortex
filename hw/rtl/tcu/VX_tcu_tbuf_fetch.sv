@@ -115,17 +115,10 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     localparam FETCH_CTR_W = `CLOG2(MAX_BANK_ROWS + 1);
 
-    // Per-warp slot depth: shared slot when WLOCK on, per-warp when WLOCK off
-  `ifdef TCU_WLOCK_ENABLE
-    localparam SLOT_DEPTH = 1;
-    localparam SLOT_ADDRW = 1;
-    wire [SLOT_ADDRW-1:0] cur_slot = 1'b0;
-    `UNUSED_VAR (req_wid)
-  `else
+    // Per-warp slot depth
     localparam SLOT_DEPTH = `NUM_WARPS;
     localparam SLOT_ADDRW = NW_WIDTH;
     wire [SLOT_ADDRW-1:0] cur_slot = req_wid;
-  `endif
 
 `ifndef TCU_SPARSE_ENABLE
     wire is_sparse = 1'b0;
