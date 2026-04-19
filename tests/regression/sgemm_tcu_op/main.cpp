@@ -689,6 +689,60 @@ static std::vector<itype_t> pack_B_rowmajor_tiled32(const std::vector<itype_t>& 
   return packed;
 }
 
+static std::vector<itype_t> pack_A_compressed_dense_slots(const std::vector<itype_t>& A,
+                                                         uint32_t M,
+                                                         uint32_t K,
+                                                         uint32_t tile_M,
+                                                         uint32_t tile_K) {
+  std::vector<itype_t> packed(A.size(), 0);
+  uint32_t tile_id = 0;
+
+  for (uint32_t tile_row = 0; tile_row < M; tile_row += tile_M) {
+    for (uint32_t tile_col = 0; tile_col < K; tile_col += tile_K, ++tile_id) {
+      const uint32_t tile_base = tile_id * tile_M * tile_K;
+      uint32_t write_idx = tile_base;
+      for (uint32_t col = 0; col < tile_K; ++col) {
+        for (uint32_t row = 0; row < tile_M; ++row) {
+          const uint32_t idx = (tile_row + row) * K + (tile_col + col);
+          auto val = data_accessor_t<vt::ITYPE>::read(A.data(), idx);
+          if (val != 0) {
+            packed[write_idx++] = static_cast<itype_t>(val);
+          }
+        }
+      }
+    }
+  }
+
+  return packed;
+}
+
+static std::vector<itype_t> pack_B_compressed_dense_slots(const std::vector<itype_t>& B,
+                                                         uint32_t K,
+                                                         uint32_t N,
+                                                         uint32_t tile_K,
+                                                         uint32_t tile_N) {
+  std::vector<itype_t> packed(B.size(), 0);
+  uint32_t tile_id = 0;
+
+  for (uint32_t tile_col = 0; tile_col < N; tile_col += tile_N) {
+    for (uint32_t tile_row = 0; tile_row < K; tile_row += tile_K, ++tile_id) {
+      const uint32_t tile_base = tile_id * tile_K * tile_N;
+      uint32_t write_idx = tile_base;
+      for (uint32_t row = 0; row < tile_K; ++row) {
+        for (uint32_t col = 0; col < tile_N; ++col) {
+          const uint32_t idx = (tile_row + row) * N + (tile_col + col);
+          auto val = data_accessor_t<vt::ITYPE>::read(B.data(), idx);
+          if (val != 0) {
+            packed[write_idx++] = static_cast<itype_t>(val);
+          }
+        }
+      }
+    }
+  }
+
+  return packed;
+}
+
 static std::vector<otype_t> pack_C_blocked_tiled32(const std::vector<otype_t>& C,
                                                    uint32_t M,
                                                    uint32_t N) {
@@ -791,26 +845,36 @@ static bool check_sparse_tile_lmem_fit(const std::vector<itype_t>& A,
                                        uint32_t M,
                                        uint32_t N,
                                        uint32_t K,
-                                       uint32_t tile_K) {
+                                       uint32_t tile_K,
+                                       bool sparse_a,
+                                       uint32_t* max_a_blocks,
+                                       uint32_t* max_b_blocks) {
   constexpr uint32_t tile_M = 32;
   constexpr uint32_t tile_N = 32;
   constexpr uint32_t tile_payload_bytes = 4 * 1024;
+  const uint32_t b_bitmap_skew_regs = sparse_a ? 16 : 0;
+  const uint32_t b_tile_align_regs = sparse_a ? 16 : 0;
+  const uint32_t b_bitmap_skew_bytes = b_bitmap_skew_regs * sizeof(uint32_t);
+  const uint32_t b_tile_align_bytes = b_tile_align_regs * sizeof(uint32_t);
   const uint32_t tile_elems = tile_M * tile_K;
   const uint32_t bitmap_bytes = div_up_u32(tile_elems, 8);
 
-  uint32_t max_nonzeros = 0;
-  const char* max_matrix = "A";
-  uint32_t max_tile_row = 0;
-  uint32_t max_tile_col = 0;
+  uint32_t max_a_nonzeros = 0;
+  uint32_t max_a_tile_row = 0;
+  uint32_t max_a_tile_col = 0;
+  uint32_t max_b_nonzeros = 0;
+  uint32_t max_b_tile_row = 0;
+  uint32_t max_b_tile_col = 0;
 
-  for (uint32_t tile_row = 0; tile_row < M; tile_row += tile_M) {
-    for (uint32_t tile_col = 0; tile_col < K; tile_col += tile_K) {
-      const uint32_t nonzeros = count_A_tile_nonzeros(A, K, tile_row, tile_col, tile_M, tile_K);
-      if (nonzeros > max_nonzeros) {
-        max_nonzeros = nonzeros;
-        max_matrix = "A";
-        max_tile_row = tile_row;
-        max_tile_col = tile_col;
+  if (sparse_a) {
+    for (uint32_t tile_row = 0; tile_row < M; tile_row += tile_M) {
+      for (uint32_t tile_col = 0; tile_col < K; tile_col += tile_K) {
+        const uint32_t nonzeros = count_A_tile_nonzeros(A, K, tile_row, tile_col, tile_M, tile_K);
+        if (nonzeros > max_a_nonzeros) {
+          max_a_nonzeros = nonzeros;
+          max_a_tile_row = tile_row;
+          max_a_tile_col = tile_col;
+        }
       }
     }
   }
@@ -818,36 +882,67 @@ static bool check_sparse_tile_lmem_fit(const std::vector<itype_t>& A,
   for (uint32_t tile_col = 0; tile_col < N; tile_col += tile_N) {
     for (uint32_t tile_row = 0; tile_row < K; tile_row += tile_K) {
       const uint32_t nonzeros = count_B_tile_nonzeros(B, N, tile_row, tile_col, tile_K, tile_N);
-      if (nonzeros > max_nonzeros) {
-        max_nonzeros = nonzeros;
-        max_matrix = "B";
-        max_tile_row = tile_row;
-        max_tile_col = tile_col;
+      if (nonzeros > max_b_nonzeros) {
+        max_b_nonzeros = nonzeros;
+        max_b_tile_row = tile_row;
+        max_b_tile_col = tile_col;
       }
     }
   }
 
-  const uint32_t compressed_words = div_up_u32(max_nonzeros * sizeof(itype_t), sizeof(uint32_t));
-  const uint32_t compressed_bytes = compressed_words * sizeof(uint32_t);
-  const uint32_t total_bytes = compressed_bytes + bitmap_bytes;
+  const uint32_t max_a_compressed_words = div_up_u32(max_a_nonzeros * sizeof(itype_t), sizeof(uint32_t));
+  const uint32_t max_b_compressed_words = div_up_u32(max_b_nonzeros * sizeof(itype_t), sizeof(uint32_t));
+  const uint32_t max_a_compressed_bytes = max_a_compressed_words * sizeof(uint32_t);
+  const uint32_t max_b_compressed_bytes = max_b_compressed_words * sizeof(uint32_t);
+  const uint32_t max_a_total_bytes = max_a_compressed_bytes + bitmap_bytes;
+  const uint32_t max_b_total_bytes = b_bitmap_skew_bytes + bitmap_bytes + b_tile_align_bytes + max_b_compressed_bytes;
+  *max_a_blocks = div_up_u32(max_a_compressed_bytes, 128);
+  *max_b_blocks = div_up_u32(max_b_compressed_bytes, 128);
 
   std::cout << std::dec
-            << "SMEM Analysis:" << std::endl
-            << "  biggest tile: matrix=" << max_matrix
-            << ", row=" << max_tile_row
-            << ", col=" << max_tile_col
-            << ", nonzeros=" << max_nonzeros
-            << ", compressed_bytes=" << compressed_bytes << std::endl
+            << "SMEM Analysis:" << std::endl;
+  if (sparse_a) {
+    std::cout << "  A biggest tile: row=" << max_a_tile_row
+              << ", col=" << max_a_tile_col
+              << ", nonzeros=" << max_a_nonzeros
+              << ", compressed_bytes=" << max_a_compressed_bytes
+              << ", blocks_128B=" << *max_a_blocks << std::endl;
+  }
+  std::cout << "  B biggest tile: row=" << max_b_tile_row
+            << ", col=" << max_b_tile_col
+            << ", nonzeros=" << max_b_nonzeros
+            << ", compressed_bytes=" << max_b_compressed_bytes
+            << ", blocks_128B=" << *max_b_blocks << std::endl
             << "  bitmap_bytes=" << bitmap_bytes << std::endl
-            << "  total_bytes=" << total_bytes << std::endl
+            << "  B_bitmap_skew_bytes=" << b_bitmap_skew_bytes << std::endl
+            << "  B_tile_align_bytes=" << b_tile_align_bytes << std::endl;
+  if (sparse_a) {
+    std::cout << "  A_total_bytes=" << max_a_total_bytes << std::endl;
+  }
+  std::cout << "  B_total_bytes=" << max_b_total_bytes << std::endl
             << "  tile_budget_bytes=" << tile_payload_bytes << std::endl;
 
-  if (bitmap_bytes > tile_payload_bytes || compressed_bytes > (tile_payload_bytes - bitmap_bytes)) {
+  if (sparse_a && (bitmap_bytes > tile_payload_bytes || max_a_compressed_bytes > (tile_payload_bytes - bitmap_bytes))) {
     std::cout << std::dec
-              << "Error: sparse " << max_matrix << " tile at row " << max_tile_row
-              << ", col " << max_tile_col << " requires " << total_bytes
-              << " bytes in local memory (compressed=" << compressed_bytes
+              << "Error: sparse A tile at row " << max_a_tile_row
+              << ", col " << max_a_tile_col << " requires " << max_a_total_bytes
+              << " bytes in local memory (compressed=" << max_a_compressed_bytes
               << ", bitmap=" << bitmap_bytes << "), exceeding the "
+              << tile_payload_bytes << " byte tile budget."
+              << std::endl;
+    return false;
+  }
+  if (b_bitmap_skew_bytes > tile_payload_bytes
+      || bitmap_bytes > (tile_payload_bytes - b_bitmap_skew_bytes)
+      || b_tile_align_bytes > (tile_payload_bytes - b_bitmap_skew_bytes - bitmap_bytes)
+      || max_b_compressed_bytes > (tile_payload_bytes - b_bitmap_skew_bytes - bitmap_bytes - b_tile_align_bytes)) {
+    std::cout << std::dec
+              << "Error: sparse B tile at row " << max_b_tile_row
+              << ", col " << max_b_tile_col << " requires " << max_b_total_bytes
+              << " bytes in local memory (skew=" << b_bitmap_skew_bytes
+              << ", bitmap=" << bitmap_bytes
+              << ", align=" << b_tile_align_bytes
+              << ", compressed=" << max_b_compressed_bytes << "), exceeding the "
               << tile_payload_bytes << " byte tile budget."
               << std::endl;
     return false;
@@ -1055,88 +1150,70 @@ static void print_2d_output_matrix(std::vector<otype_t> C, int M, int N, std::ve
   }
 }
 
-static std::vector<uint32_t> build_A_tile_offsets(const std::vector<itype_t>& matrix,
-                                                  uint32_t M,
-                                                  uint32_t K,
-                                                  uint32_t tile_M = 32,
-                                                  uint32_t tile_K = cfg::tileK) {
+static std::vector<uint32_t> build_A_tile_blocks(const std::vector<itype_t>& matrix,
+                                                 uint32_t M,
+                                                 uint32_t K,
+                                                 uint32_t tile_M = 32,
+                                                 uint32_t tile_K = cfg::tileK) {
   const uint32_t tile_rows = M / tile_M;
   const uint32_t tile_cols = K / tile_K;
-  const uint32_t tile_groups = 1 + ((tile_cols > 1) ? ((tile_cols - 1 + 1) / 2) : 0);
-  std::vector<uint32_t> metadata(tile_rows * tile_groups, 0);
+  std::vector<uint32_t> metadata(tile_rows * tile_cols, 0);
 
-  // A metadata is tile-row-major and follows the kernel launch grouping:
-  // group 0 loads tile 0, later groups load tile pairs (1,2), (3,4), ...
-  // Each cell stores the cumulative end offset after that group.
-  uint32_t compressed_offset = 0;
   for (uint32_t tile_row = 0; tile_row < tile_rows; ++tile_row) {
-    for (uint32_t group = 0; group < tile_groups; ++group) {
-      const uint32_t tile_col_start = (group == 0) ? 0 : (2 * group - 1);
-      const uint32_t tiles_in_group = (group == 0 || (tile_col_start + 1) >= tile_cols) ? 1 : 2;
-
-      for (uint32_t tile = 0; tile < tiles_in_group; ++tile) {
-        const uint32_t tile_col = tile_col_start + tile;
-        for (uint32_t col = 0; col < tile_K; ++col) {
-          for (uint32_t row = 0; row < tile_M; ++row) {
-            const uint32_t idx = (tile_row * tile_M + row) * K
-                               + (tile_col * tile_K + col);
-            if (data_accessor_t<vt::ITYPE>::read(matrix.data(), idx) != 0) {
-              ++compressed_offset;
-            }
+    for (uint32_t tile_col = 0; tile_col < tile_cols; ++tile_col) {
+      uint32_t nonzeros = 0;
+      for (uint32_t col = 0; col < tile_K; ++col) {
+        for (uint32_t row = 0; row < tile_M; ++row) {
+          const uint32_t idx = (tile_row * tile_M + row) * K
+                             + (tile_col * tile_K + col);
+          if (data_accessor_t<vt::ITYPE>::read(matrix.data(), idx) != 0) {
+            ++nonzeros;
           }
         }
       }
-      metadata[tile_row * tile_groups + group] = compressed_offset;
+      const uint32_t compressed_words = div_up_u32(nonzeros * sizeof(itype_t), sizeof(uint32_t));
+      metadata[tile_row * tile_cols + tile_col] = div_up_u32(compressed_words * sizeof(uint32_t), 128);
     }
   }
 
   return metadata;
 }
 
-static std::vector<uint32_t> build_B_tile_offsets(const std::vector<itype_t>& matrix,
-                                                  uint32_t K,
-                                                  uint32_t N,
-                                                  uint32_t tile_K = cfg::tileK,
-                                                  uint32_t tile_N = 32) {
+static std::vector<uint32_t> build_B_tile_blocks(const std::vector<itype_t>& matrix,
+                                                 uint32_t K,
+                                                 uint32_t N,
+                                                 uint32_t tile_K = cfg::tileK,
+                                                 uint32_t tile_N = 32) {
   const uint32_t tile_rows = K / tile_K;
   const uint32_t tile_cols = N / tile_N;
-  const uint32_t tile_groups = 1 + ((tile_rows > 1) ? ((tile_rows - 1 + 1) / 2) : 0);
-  std::vector<uint32_t> metadata(tile_groups * tile_cols, 0);
+  std::vector<uint32_t> metadata(tile_cols * tile_rows, 0);
 
-  // B metadata is tile-column-major and follows the kernel launch grouping:
-  // group 0 loads tile 0, later groups load tile pairs (1,2), (3,4), ...
-  // Each cell stores the cumulative end offset after that group.
-  uint32_t compressed_offset = 0;
   for (uint32_t tile_col = 0; tile_col < tile_cols; ++tile_col) {
-    for (uint32_t group = 0; group < tile_groups; ++group) {
-      const uint32_t tile_row_start = (group == 0) ? 0 : (2 * group - 1);
-      const uint32_t tiles_in_group = (group == 0 || (tile_row_start + 1) >= tile_rows) ? 1 : 2;
-
-      for (uint32_t tile = 0; tile < tiles_in_group; ++tile) {
-        const uint32_t tile_row = tile_row_start + tile;
-        for (uint32_t row = 0; row < tile_K; ++row) {
-          for (uint32_t col = 0; col < tile_N; ++col) {
-            const uint32_t idx = (tile_row * tile_K + row) * N
-                               + (tile_col * tile_N + col);
-            if (data_accessor_t<vt::ITYPE>::read(matrix.data(), idx) != 0) {
-              ++compressed_offset;
-            }
+    for (uint32_t tile_row = 0; tile_row < tile_rows; ++tile_row) {
+      uint32_t nonzeros = 0;
+      for (uint32_t row = 0; row < tile_K; ++row) {
+        for (uint32_t col = 0; col < tile_N; ++col) {
+          const uint32_t idx = (tile_row * tile_K + row) * N
+                             + (tile_col * tile_N + col);
+          if (data_accessor_t<vt::ITYPE>::read(matrix.data(), idx) != 0) {
+            ++nonzeros;
           }
         }
       }
-      metadata[tile_col * tile_groups + group] = compressed_offset;
+      const uint32_t compressed_words = div_up_u32(nonzeros * sizeof(itype_t), sizeof(uint32_t));
+      metadata[tile_col * tile_rows + tile_row] = div_up_u32(compressed_words * sizeof(uint32_t), 128);
     }
   }
 
   return metadata;
 }
 
-static void print_tile_offset_matrix(const char* name,
-                                     const std::vector<uint32_t>& metadata,
-                                     uint32_t rows,
-                                     uint32_t cols,
-                                     bool col_major_storage) {
-  std::cout << name << " tile offsets (" << rows << "x" << cols << "):" << std::endl;
+static void print_tile_block_matrix(const char* name,
+                                    const std::vector<uint32_t>& metadata,
+                                    uint32_t rows,
+                                    uint32_t cols,
+                                    bool col_major_storage) {
+  std::cout << name << " tile blocks (" << rows << "x" << cols << "):" << std::endl;
   for (uint32_t row = 0; row < rows; ++row) {
     for (uint32_t col = 0; col < cols; ++col) {
       const uint32_t idx = col_major_storage ? (col * rows + row)
@@ -1346,23 +1423,29 @@ int main(int argc, char *argv[]) {
               << ", b_sparsity=" << b_sparsity << std::endl;
   }
 
-  if (sparsity == 2 && !check_sparse_tile_lmem_fit(h_A, h_B, M, N, K, dxa_tile_k)) {
-    cleanup();
-    return -1;
+  if (sparsity >= 1) {
+    uint32_t max_a_blocks = 0;
+    uint32_t max_b_blocks = 0;
+    if (!check_sparse_tile_lmem_fit(h_A, h_B, M, N, K, dxa_tile_k, sparsity == 2, &max_a_blocks, &max_b_blocks)) {
+      cleanup();
+      return -1;
+    }
+    kernel_arg.max_a_blocks = max_a_blocks;
+    kernel_arg.max_b_blocks = max_b_blocks;
   }
   // h_A[0] = 0;
   // h_B[0] = 0;
 
   const uint32_t a_nz_rows = M / 32;
-  const uint32_t a_nz_cols = 1 + (((K / input_tile_k) > 1) ? (((K / input_tile_k) - 1 + 1) / 2) : 0);
-  const uint32_t b_nz_rows = 1 + (((K / input_tile_k) > 1) ? (((K / input_tile_k) - 1 + 1) / 2) : 0);
+  const uint32_t a_nz_cols = K / dxa_tile_k;
+  const uint32_t b_nz_rows = K / dxa_tile_k;
   const uint32_t b_nz_cols = N / 32;
 
   if (sparsity == 2) {
-    h_A_nz = build_A_tile_offsets(h_A, M, K, 32, input_tile_k);
+    h_A_nz = build_A_tile_blocks(h_A, M, K, 32, dxa_tile_k);
   }
   if (sparsity >= 1) {
-    h_B_nz = build_B_tile_offsets(h_B, K, N, input_tile_k, 32);
+    h_B_nz = build_B_tile_blocks(h_B, K, N, dxa_tile_k, 32);
   }
 
   /* Sparsity levels: 
@@ -1428,10 +1511,10 @@ int main(int argc, char *argv[]) {
   print_2d_input_matrix(h_B, K, N);
 
   if (sparsity == 2) {
-    print_tile_offset_matrix("A", h_A_nz, a_nz_rows, a_nz_cols, false);
+    print_tile_block_matrix("A", h_A_nz, a_nz_rows, a_nz_cols, false);
   }
   if (sparsity >= 1) {
-    print_tile_offset_matrix("B", h_B_nz, b_nz_rows, b_nz_cols, true);
+    print_tile_block_matrix("B", h_B_nz, b_nz_rows, b_nz_cols, true);
   }
 
   std::cout << "Matrix C:" << std::endl;
@@ -1449,22 +1532,9 @@ int main(int argc, char *argv[]) {
   std::vector<itype_t> h_B_compressed;
 
   if (sparsity == 2) {
-    h_A_compressed.reserve(M * K);
-    for (uint32_t tile_row = 0; tile_row < M; tile_row += 32) {
-      for (uint32_t tile_col = 0; tile_col < K; tile_col += 32) {
-        for (uint32_t col = 0; col < 32; ++col) {
-          for (uint32_t row = 0; row < 32; ++row) {
-            uint32_t idx = (tile_row + row) * K + (tile_col + col);
-            auto val = data_accessor_t<vt::ITYPE>::read(h_A.data(), idx);
-            if (val != 0) {
-              h_A_compressed.push_back(static_cast<itype_t>(val));
-            }
-          }
-        }
-      }
-    }
+    h_A_compressed = pack_A_compressed_dense_slots(h_A, M, K, 32, dxa_tile_k);
 
-    std::cout << "Compressed A (column-major, non-zero only), count="
+    std::cout << "Compressed A (dense-spaced tile slots, column-major nonzeros), count="
               << h_A_compressed.size() << std::endl;
     for (size_t i = 0; i < h_A_compressed.size(); ++i) {
       printf("0x%04x ", static_cast<uint32_t>(h_A_compressed[i]));
@@ -1472,22 +1542,10 @@ int main(int argc, char *argv[]) {
     printf("\n");
   }
   if (sparsity >= 1) {
-    h_B_compressed.reserve(K * N);
-    for (uint32_t tile_col = 0; tile_col < N; tile_col += 32) {
-      for (uint32_t tile_row = 0; tile_row < K; tile_row += 32) {
-        for (uint32_t row = 0; row < 32; ++row) {
-          for (uint32_t col = 0; col < 32; ++col) {
-            uint32_t idx = (tile_row + row) * N + (tile_col + col);
-            auto val = data_accessor_t<vt::ITYPE>::read(h_B.data(), idx);
-            if (val != 0) {
-              h_B_compressed.push_back(static_cast<itype_t>(val));
-            }
-          }
-        }
-      }
-    }
+    h_B_compressed = pack_B_compressed_dense_slots(h_B, K, N, dxa_tile_k, 32);
 
-    std::cout << "Compressed B (row-major, non-zero only), count="
+    std::cout << "Compressed B "
+              << "(dense-spaced tile slots, row-major nonzeros), count="
               << h_B_compressed.size() << std::endl;
     for (size_t i = 0; i < h_B_compressed.size(); ++i) {
       printf("0x%04x ", static_cast<uint32_t>(h_B_compressed[i]));
@@ -1499,6 +1557,16 @@ int main(int argc, char *argv[]) {
   kernel_arg.B_compressed_blocks = (sparsity >= 1) ? (h_B_compressed.size() * sizeof(itype_t) + 4*32 - 1) / (4*32) : 0; // number of 128B blocks for compressed B (row-major, non-zero only)
   std::cout << "Compressed A blocks: " << kernel_arg.A_compressed_blocks << std::endl;
   std::cout << "Compressed B blocks: " << kernel_arg.B_compressed_blocks << std::endl;
+  std::cout << "Max A tile blocks: " << kernel_arg.max_a_blocks << std::endl;
+  std::cout << "Max B tile blocks: " << kernel_arg.max_b_blocks << std::endl;
+  if (sparsity >= 1) {
+    const uint32_t dense_a_tile_bytes = 32 * dxa_tile_k * sizeof(itype_t);
+    const uint32_t dense_b_tile_bytes = dxa_tile_k * 32 * sizeof(itype_t);
+    if (sparsity == 2) {
+      std::cout << "Sparse A GMEM tile stride bytes: " << dense_a_tile_bytes << std::endl;
+    }
+    std::cout << "Sparse B GMEM tile stride bytes: " << dense_b_tile_bytes << std::endl;
+  }
 
   // upload matrix A buffer
   {
@@ -1549,19 +1617,22 @@ int main(int argc, char *argv[]) {
         sizeof(otype_t)));
   }
 
-	  {
-	    constexpr uint32_t tile_M = 32;
-	    constexpr uint32_t tile_N = 32;
-	    const uint32_t tile_a_elems = tile_M * dxa_tile_k;
-	    const uint32_t total_a_tiles = (M / tile_M) * (K / dxa_tile_k);
+  {
+    constexpr uint32_t tile_M = 32;
+    constexpr uint32_t tile_N = 32;
+    const uint32_t tile_a_elems = tile_M * dxa_tile_k;
+    const uint32_t total_a_tiles = (M / tile_M) * (K / dxa_tile_k);
     const uint32_t tile_b_elems = dxa_tile_k * tile_N;
     const uint32_t total_b_tiles = (N / tile_N) * (K / dxa_tile_k);
 
     if (sparsity == 2) {
-      RT_CHECK(vx_dxa_program_desc_1d(
+      const uint32_t a_transfer_elems =
+          (((kernel_arg.max_a_blocks != 0) ? kernel_arg.max_a_blocks : 1) * 128) / sizeof(itype_t);
+      RT_CHECK(vx_dxa_program_desc_2d(
           device, kDescA, kernel_arg.A_addr,
-          h_A_compressed.size(),
-          tile_a_elems,
+          a_transfer_elems, total_a_tiles,
+          tile_a_elems * sizeof(itype_t),
+          a_transfer_elems, 1,
           sizeof(itype_t)));
     } else {
       RT_CHECK(vx_dxa_program_desc_2d(
@@ -1572,37 +1643,40 @@ int main(int argc, char *argv[]) {
           sizeof(itype_t)));
     }
 
-	    if (sparsity >= 1) {
-	      RT_CHECK(vx_dxa_program_desc_1d(
-	          device, kDescB, kernel_arg.B_addr,
-	          h_B_compressed.size(),
-	          tile_b_elems,
-	          sizeof(itype_t)));
-	    } else {
-	      RT_CHECK(vx_dxa_program_desc_2d(
-	          device, kDescB, kernel_arg.B_addr,
-	          tile_b_elems, total_b_tiles,
-	          tile_b_elems * sizeof(itype_t),
-	          tile_b_elems, 1,
-	          sizeof(itype_t)));
-	    }
+    if (sparsity >= 1) {
+      const uint32_t b_transfer_elems =
+          (((kernel_arg.max_b_blocks != 0) ? kernel_arg.max_b_blocks : 1) * 128) / sizeof(itype_t);
+      RT_CHECK(vx_dxa_program_desc_2d(
+          device, kDescB, kernel_arg.B_addr,
+          b_transfer_elems, total_b_tiles,
+          tile_b_elems * sizeof(itype_t),
+          b_transfer_elems, 1,
+          sizeof(itype_t)));
+    } else {
+      RT_CHECK(vx_dxa_program_desc_2d(
+          device, kDescB, kernel_arg.B_addr,
+          tile_b_elems, total_b_tiles,
+          tile_b_elems * sizeof(itype_t),
+          tile_b_elems, 1,
+          sizeof(itype_t)));
+    }
 
-	    if (sparsity == 2) {
-	      RT_CHECK(vx_dxa_program_desc_1d(
-	          device, kDescABitmap, kernel_arg.A_bitmap_addr,
-	          h_A_bitmap_words,
-	          input_tile_k,
-	          sizeof(uint32_t)));
-	    }
+    if (sparsity == 2) {
+      RT_CHECK(vx_dxa_program_desc_1d(
+          device, kDescABitmap, kernel_arg.A_bitmap_addr,
+          h_A_bitmap_words,
+          dxa_tile_k,
+          sizeof(uint32_t)));
+    }
 
-	    if (sparsity >= 1) {
-	      RT_CHECK(vx_dxa_program_desc_1d(
-	          device, kDescBBitmap, kernel_arg.B_bitmap_addr,
-	          h_B_bitmap_words,
-	          input_tile_k,
-	          sizeof(uint32_t)));
-	    }
-	  }
+    if (sparsity >= 1) {
+      RT_CHECK(vx_dxa_program_desc_1d(
+          device, kDescBBitmap, kernel_arg.B_bitmap_addr,
+          h_B_bitmap_words,
+          dxa_tile_k,
+          sizeof(uint32_t)));
+    }
+  }
 
   // upload program
   std::cout << "upload program" << std::endl;

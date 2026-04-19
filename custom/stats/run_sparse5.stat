@@ -1,0 +1,26 @@
+Testbench: sgemm_tcu_op
+Sparsity Mode:1 | MxNxK=32x64x384 | A sparsity=50% | B sparsity=50.3459% | It=fp16
+Flags: TCU_OP, TCU_TYPE_DPI
+BLOCK_M=2, BLOCK_N=16, XBAR_QUEUE_DEPTH=2
+perf=6
+
+PASS
+Total kernel cycles: 37661
+Total kernel instructions: 904
+Kernel body cycles: 37661
+Kernel body instructions: N/A
+MUL active cycles: 8950
+XBAR stalls: 31.03% (4027 cycles)
+
+PERF6: core0: dxa: transfers=36, gmem_reads=1224, gmem_dedup=0 (rate=0%), smem_writes=612, avg_gmem_lat=452.7
+PERF6: dxa: transfers=36, gmem_reads=1224, gmem_dedup=0 (rate=0%), smem_writes=612, avg_gmem_lat=452.7
+PERF6: instrs=904, cycles=37661, IPC=0.024
+
+ROI VARIABLES:
+TCU cycles: 13664
+DXA cycles A: N/A
+DXA cycles B: N/A
+DXA cycles C: N/A
+DXA cycles A bitmap: N/A
+DXA cycles B bitmap: N/A
+DXA cycles total: N/A

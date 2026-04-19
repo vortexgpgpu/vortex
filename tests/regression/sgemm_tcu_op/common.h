@@ -27,6 +27,8 @@ typedef struct {
   uint64_t B_nz_addr;           
   uint32_t A_compressed_blocks; 
   uint32_t B_compressed_blocks; 
+  uint32_t max_a_blocks;
+  uint32_t max_b_blocks;
   uint8_t  sparsity;            
   uint64_t cycles_addr;
 } kernel_arg_t;
