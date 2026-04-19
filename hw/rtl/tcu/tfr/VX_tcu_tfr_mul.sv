@@ -25,9 +25,9 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
     input wire [7:0]         sf_a,
     input wire [7:0]         sf_b,
 
+    // Outputs: TCK product lanes + C-term (index TCK)
     output wire [TCK:0][EXP_W-1:0] exponents,
-
-    output wire [TCK:0][24:0] raw_sigs,
+    output wire [TCK:0][W-1:0] raw_sigs,
     output wire fedp_excep_t  exceptions,
     output wire [TCK-1:0]     lane_mask
 );
@@ -39,7 +39,7 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
     // ======================================================================
 
     // --- F16 / BF16 / TF32 ------------------------------------------------
-    wire [TCK-1:0][24:0]      mul_f16_sig;
+    wire [TCK-1:0][W-1:0]     mul_f16_sig;
     wire [TCK-1:0][EXP_W-1:0] mul_f16_exp;
     fedp_excep_t [TCK-1:0]    mul_f16_exc;
 
@@ -62,8 +62,8 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
         .exceptions (mul_f16_exc)
     );
 
-    // --- BF8 / BF8 --------------------------------------------------------
-    wire [TCK-1:0][24:0]      mul_f8_sig;
+    // --- FP8 / BF8 --------------------------------------------------------
+    wire [TCK-1:0][W-1:0]     mul_f8_sig;
     wire [TCK-1:0][EXP_W-1:0] mul_f8_exp;
     fedp_excep_t [TCK-1:0]    mul_f8_exc;
 
@@ -87,7 +87,7 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
     );
 
     // --- I8/U8/I4/U4 ------------------------------------------------------
-    wire [TCK-1:0][24:0] mul_int_sig;
+    wire [TCK-1:0][W-1:0] mul_int_sig;
     VX_tcu_tfr_mul_int #(
         .N(N),
         .TCK(TCK)
@@ -120,7 +120,6 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
         .req_id     (req_id),
 
         .fmt_s      (fmt_s),
-
         .c_val      (c_val),
 
         .sig_f16    (mul_f16_sig),
@@ -131,7 +130,7 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
         .exp_f8     (mul_f8_exp),
         .exc_f8     (mul_f8_exc),
 
-         .sig_int   (mul_int_sig),
+        .sig_int    (mul_int_sig),
 
         .sig_out    (raw_sigs),
         .exp_out    (exponents),

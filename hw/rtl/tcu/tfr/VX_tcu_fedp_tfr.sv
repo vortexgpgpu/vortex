@@ -44,8 +44,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     localparam ACC_SIG_W = W + 1 + HR;
 
     // Latency Configuration
-    localparam MUL_LATENCY = (N > 2) ? 1 : 0;
-    localparam MXP_LATENCY = 1;
+    localparam MUL_LATENCY = 1;
+    localparam MXP_LATENCY = (N > 2) ? 1 : 0;
     localparam ALN_LATENCY = 1;
     localparam ACC_LATENCY = 1;
     localparam NRM_LATENCY = 1;
@@ -91,12 +91,12 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     `UNUSED_VAR ({SCALE_FACTOR_E8M0_A, SCALE_FACTOR_E8M0_B, SCALE_FACTOR_E4M3_A, SCALE_FACTOR_E4M3_B})
 
     // ======================================================================
-    // Stage 0: Multiply & Exponent
+    // Stage 0: Multiply
     // ======================================================================
 
-    wire [TCK:0][EXP_W-1:0]   exponents; // Raw exponents
-    wire [TCK:0][W-1:0]       raw_sigs;
-    fedp_excep_t              exceptions;
+    wire [TCK:0][EXP_W-1:0]  exponents;  // TCK products (biased) + C-term
+    wire [TCK:0][W-1:0]      raw_sigs;   // TCK products + C-term
+    fedp_excep_t              exceptions; // Merged (products + C-term)
     wire [TCK-1:0]            lane_mask;
 
     wire is_int = tcu_fmt_is_int(fmt_s);
@@ -110,7 +110,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .W (W),
         .WA(ACC_SIG_W),
         .EXP_W (EXP_W)
-    ) multiply (
+    ) mul_exp (
         .clk(clk),
         .valid_in(vld_pipe[S0_IDX]),
         .req_id(req_pipe[S0_IDX]),
@@ -127,12 +127,12 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .lane_mask(lane_mask)
     );
 
-    wire [TCK:0][EXP_W-1:0]   s1_exponents;
-    fedp_excep_t              s1_exceptions;
-    wire [TCK-1:0]            s1_lane_mask;
-    wire [TCK:0][W-1:0]       s1_raw_sig;
-    wire                      s1_is_int;
-    wire [C_HI_W-1:0]         s1_cval_hi;
+    wire [TCK:0][EXP_W-1:0] s1_exponents;
+    fedp_excep_t            s1_exceptions;
+    wire [TCK-1:0]          s1_lane_mask;
+    wire [TCK:0][W-1:0]     s1_raw_sig;
+    wire                    s1_is_int;
+    wire [C_HI_W-1:0]       s1_cval_hi;
 
     wire [TCK-1:0][W-1:0] pipe_mul_lane_din, pipe_mul_lane_dout;
     `MAP_AOS_SOA(i, TCK, pipe_mul_lane_din[i], raw_sigs[i])
@@ -156,7 +156,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     );
 
     // ======================================================================
-    // Stage 1: Global Maximum Exponent
+    // Stage 1: Max Exponent
     // ======================================================================
 
     wire [EXP_W-1:0] s1_max_exp;
@@ -169,13 +169,13 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .max_exp   (s1_max_exp)
     );
 
-    wire [EXP_W-1:0]          s2_max_exp;
-    wire [TCK:0][EXP_W-1:0]   s2_exponents;
-    fedp_excep_t              s2_exceptions;
-    wire [TCK-1:0]            s2_lane_mask;
-    wire [TCK:0][W-1:0]       s2_raw_sig;
-    wire                      s2_is_int;
-    wire [C_HI_W-1:0]         s2_cval_hi;
+    wire [EXP_W-1:0]        s2_max_exp;
+    wire [TCK:0][EXP_W-1:0] s2_exponents;
+    fedp_excep_t            s2_exceptions;
+    wire [TCK-1:0]          s2_lane_mask;
+    wire [TCK:0][W-1:0]     s2_raw_sig;
+    wire                    s2_is_int;
+    wire [C_HI_W-1:0]       s2_cval_hi;
 
     wire [TCK-1:0][W-1:0] pipe_mxp_lane_din, pipe_mxp_lane_dout;
     `MAP_AOS_SOA(i, TCK, pipe_mxp_lane_din[i], s1_raw_sig[i])
