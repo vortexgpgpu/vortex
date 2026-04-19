@@ -24,9 +24,9 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
     input wire [7:0]        sf_b,
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
+    // Outputs: TCK product lanes + C-term (index TCK)
     output wire [TCK:0][EXP_W-1:0] exponents,
-
-    output wire [TCK:0][24:0] raw_sigs,
+    output wire [TCK:0][W-1:0] raw_sigs,
     output wire fedp_excep_t  exceptions,
     output wire [TCK-1:0]     lane_mask
 );
@@ -37,9 +37,10 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
     // 1. Independent Compute Paths
     // ======================================================================
 
-    fedp_class_t [TCK-1:0] cls_bf16 [2];
-    VX_tcu_tfr_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_BF16_ID)) c_a_bf16 (.val(a_row), .cls(cls_bf16[0]));
-    VX_tcu_tfr_classifier #(.N(2 * N), .WIDTH(16), .FMT(TCU_BF16_ID)) c_b_bf16 (.val(b_col), .cls(cls_bf16[1]));
+    // --- F16 / BF16 / TF32 ------------------------------------------------
+    wire [TCK-1:0][W-1:0]     mul_f16_sig;
+    wire [TCK-1:0][EXP_W-1:0] mul_f16_exp;
+    fedp_excep_t [TCK-1:0]    mul_f16_exc;
 
     fedp_class_t [2*TCK-1:0] cls_fp8 [2];
     VX_tcu_tfr_classifier #(.N(4 * N), .WIDTH(8), .FMT(TCU_FP8_ID)) c_a_fp8 (.val(a_row), .cls(cls_fp8[0]));
@@ -111,8 +112,8 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
         .exp_diff_f8(exp_diff_f8)
     );
 
-    // --- BF8 / BF8 --------------------------------------------------------
-    wire [TCK-1:0][24:0]      mul_f8_sig;
+    // --- FP8 / BF8 --------------------------------------------------------
+    wire [TCK-1:0][W-1:0]     mul_f8_sig;
     wire [TCK-1:0][EXP_W-1:0] mul_f8_exp;
     fedp_excep_t [TCK-1:0]    mul_f8_exc;
 
@@ -136,8 +137,8 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
     );
 
     // --- I8/U8/I4/U4 ------------------------------------------------------
-    wire [TCK-1:0][24:0] mul_int_sig;
-    VX_tcu_drl_mul_int #(
+    wire [TCK-1:0][W-1:0] mul_int_sig;
+    VX_tcu_tfr_mul_int #(
         .N(N),
         .TCK(TCK)
     ) mul_int (
@@ -169,7 +170,6 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
         .req_id     (req_id),
 
         .fmt_s      (fmt_s),
-
         .c_val      (c_val),
 
         .sig_f16    (mul_f16_sig),

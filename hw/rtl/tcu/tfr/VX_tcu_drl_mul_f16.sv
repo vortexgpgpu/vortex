@@ -46,17 +46,32 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     // 1. Constants & Parameters
     // ======================================================================
 
+    localparam F32_BIAS  = 127;
+    localparam S_FP32    = 23;
+    localparam S_SUPER   = 22;
+    // adding +128 to bias base to ensure BIAS in [0..255] range
+    localparam BIAS_BASE = F32_BIAS + S_FP32 - S_SUPER - W + WA - 1 + 128;
+
     localparam E_TF32 = VX_tcu_pkg::exp_bits(TCU_TF32_ID);
     localparam S_TF32 = VX_tcu_pkg::sign_pos(TCU_TF32_ID);
+    localparam B_TF32 = (1 << (E_TF32 - 1)) - 1;
+    localparam [7:0] BIAS_CONST_TF32 = 8'(BIAS_BASE - 2*B_TF32);
 
     localparam E_FP16 = VX_tcu_pkg::exp_bits(TCU_FP16_ID);
     localparam S_FP16 = VX_tcu_pkg::sign_pos(TCU_FP16_ID);
+    localparam B_FP16 = (1 << (E_FP16 - 1)) - 1;
+    localparam [7:0] BIAS_CONST_FP16 = 8'(BIAS_BASE - 2*B_FP16);
 
     localparam E_BF16 = VX_tcu_pkg::exp_bits(TCU_BF16_ID);
     localparam S_BF16 = VX_tcu_pkg::sign_pos(TCU_BF16_ID);
+    localparam B_BF16 = (1 << (E_BF16 - 1)) - 1;
+    localparam [7:0] BIAS_CONST_BF16 = 8'(BIAS_BASE - 2*B_BF16);
 
+    `UNUSED_PARAM (BIAS_CONST_TF32)
+    `UNUSED_PARAM (BIAS_CONST_BF16)
     `UNUSED_PARAM (S_TF32)
     `UNUSED_PARAM (S_BF16)
+
 
     // ======================================================================
     // 2. Main Loop (Per TCK Lane)
@@ -74,6 +89,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         logic [9:0] raw_ma, raw_mb;
         logic       raw_sa, raw_sb;
         logic [7:0] exp_max;
+        logic [7:0] bias_sel;
 
         always_comb begin
             case (fmt_f)
@@ -85,6 +101,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_sa    = a_row[i/2][15+OFF_16];
                     raw_sb    = b_col[i/2][15+OFF_16];
                     exp_max   = 8'h1F;
+                    bias_sel  = BIAS_CONST_FP16;
                 end
             `ifdef TCU_BF16_ENABLE
                 TCU_BF16_ID: begin
@@ -95,6 +112,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_sa    = a_row[i/2][15+OFF_16];
                     raw_sb    = b_col[i/2][15+OFF_16];
                     exp_max   = 8'hFF;
+                    bias_sel  = BIAS_CONST_BF16;
                 end
             `endif
             `ifdef TCU_TF32_ENABLE
@@ -107,6 +125,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                         raw_sa    = a_row[i/2][18];
                         raw_sb    = b_col[i/2][18];
                         exp_max   = 8'hFF;
+                        bias_sel  = BIAS_CONST_TF32;
                     end else begin
                         raw_ea    = '0;
                         raw_eb    = '0;
@@ -115,6 +134,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                         raw_sa    = '0;
                         raw_sb    = '0;
                         exp_max   = 8'hFF;
+                        bias_sel  = '0;
                     end
                 end
             `endif
@@ -126,6 +146,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_sa    = 'x;
                     raw_sb    = 'x;
                     exp_max   = 'x;
+                    bias_sel  = 'x;
                 end
             endcase
         end
@@ -160,11 +181,14 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         // 2c. Operand Preparation
         // ------------------------------------------------------------------
 
-        wire [7:0] ea_sel = (raw_ea == 0) ? 8'b1 : raw_ea;
-        wire [7:0] eb_sel = (raw_eb == 0) ? 8'b1 : raw_eb;
+        wire is_ea_zero = (raw_ea == 0);
+        wire is_eb_zero = (raw_eb == 0);
 
-        wire [10:0] ma_sel = {(raw_ea != 0), raw_ma};
-        wire [10:0] mb_sel = {(raw_eb != 0), raw_mb};
+        wire [7:0] ea_sel = is_ea_zero ? 8'b1 : raw_ea;
+        wire [7:0] eb_sel = is_eb_zero ? 8'b1 : raw_eb;
+
+        wire [10:0] ma_sel = {~is_ea_zero, raw_ma};
+        wire [10:0] mb_sel = {~is_eb_zero, raw_mb};
         `UNUSED_VAR (cls_a.is_sub)
         `UNUSED_VAR (cls_b.is_sub)
 
@@ -182,10 +206,31 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         // 2d. Arithmetic Path
         // ------------------------------------------------------------------
 
-        // Exponent Addition (raw sum, no bias — bias applied in Stage 1)
-        wire [EXP_W-1:0] exp_raw_sum = EXP_W'(ea_sel) + EXP_W'(eb_sel);
+        // Exponent Addition
+        wire [EXP_W-1:0] exp_sum, exp_carry;
+        VX_csa_tree #(
+            .N (3),
+            .W (EXP_W),
+            .S (EXP_W)
+        ) exp_csa (
+            .operands ({EXP_W'(bias_sel), EXP_W'(ea_sel), EXP_W'(eb_sel)}),
+            .sum      (exp_sum),
+            .carry    (exp_carry)
+        );
 
-        assign result_exp[i] = (~zero_sel && lane_valid) ? exp_raw_sum : '0;
+        wire [EXP_W-1:0] exp_final_sum;
+        VX_ks_adder #(
+            .N (EXP_W),
+            .BYPASS (!`FORCE_BUILTIN_ADDER(EXP_W))
+        ) exp_ksa (
+            .cin   (1'b0),
+            .dataa (exp_sum),
+            .datab (exp_carry),
+            .sum   (exp_final_sum),
+            `UNUSED_PIN(cout)
+        );
+
+        assign result_exp[i] = (~zero_sel && lane_valid) ? exp_final_sum : '0;
 
         // Mantissa Multiplication
         wire [21:0] man_prod;
@@ -198,8 +243,19 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
             .p(man_prod)
         );
 
-        // Output Formatting (identical across all f16/bf16/tf32 variants)
-        assign result_sig[i] = {sign_sel, man_prod, 2'b0};
+        // Output Formatting
+        always_comb begin
+            case (fmt_f)
+                TCU_FP16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
+            `ifdef TCU_BF16_ENABLE
+                TCU_BF16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
+            `endif
+            `ifdef TCU_TF32_ENABLE
+                TCU_TF32_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
+            `endif
+                default:     result_sig[i] = 'x;
+            endcase
+        end
 
         // Exception Outputs
         assign exceptions[i].is_nan = nan_sel && lane_valid;

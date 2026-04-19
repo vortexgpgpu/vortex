@@ -46,8 +46,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     localparam LZC_W = $clog2(ACC_SIG_W);
 
     // Latency Configuration
-    localparam MUL_LATENCY = (N > 2) ? 1 : 0;
-    localparam MXP_LATENCY = 1;
+    localparam MUL_LATENCY = 1;
+    localparam MXP_LATENCY = (N > 2) ? 1 : 0;
     localparam ALN_LATENCY = 1;
     localparam ACC_LATENCY = 1;
     localparam NRM_LATENCY = 1;
@@ -93,12 +93,12 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     `UNUSED_VAR ({SCALE_FACTOR_E8M0_A, SCALE_FACTOR_E8M0_B, SCALE_FACTOR_E4M3_A, SCALE_FACTOR_E4M3_B})
 
     // ======================================================================
-    // Stage 0: Multiply & Exponent
+    // Stage 0: Multiply
     // ======================================================================
 
-    wire [TCK:0][EXP_W-1:0]   exponents; // Raw exponents
-    wire [TCK:0][W-1:0]       raw_sigs;
-    fedp_excep_t              exceptions;
+    wire [TCK:0][EXP_W-1:0]  exponents;  // TCK products (biased) + C-term
+    wire [TCK:0][W-1:0]      raw_sigs;   // TCK products + C-term
+    fedp_excep_t              exceptions; // Merged (products + C-term)
     wire [TCK-1:0]            lane_mask;
 
     wire is_int = tcu_fmt_is_int(fmt_s);
@@ -112,7 +112,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .W (W),
         .WA(ACC_SIG_W),
         .EXP_W (EXP_W)
-    ) multiply (
+    ) mul_exp (
         .clk(clk),
         .valid_in(vld_pipe[S0_IDX]),
         .req_id(req_pipe[S0_IDX]),
@@ -156,7 +156,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     );
 
     // ======================================================================
-    // Stage 1: Global Maximum Exponent
+    // Stage 1: Max Exponent
     // ======================================================================
 
     wire [EXP_W-1:0] s1_max_exp;
