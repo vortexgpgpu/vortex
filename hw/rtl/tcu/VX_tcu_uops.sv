@@ -128,19 +128,6 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 
     // Accumulator register index: n * m_steps + m  (n-major layout)
     wire [4:0] wg_rs3_off = (5'(wg_n_index) << LG_M_WG) | 5'(wg_m_index);
-  `ifdef TCU_ACC_ENABLE
-    // K-step gating for internal accumulation (Nvidia-style):
-    //   first_k: read C from RF (rs3); last_k: writeback D to RF (wb/rd)
-    wire wg_is_first_k = (wg_k_index == '0);
-    `ifdef TCU_SPARSE_ENABLE
-    wire wg_is_last_k = wg_is_sparse
-        ? (wg_k_index == `UP(LG_K_WG)'(TCU_WG_K_STEPS / 2 - 1))
-        : (wg_k_index == `UP(LG_K_WG)'(TCU_WG_K_STEPS - 1));
-    `else
-    wire wg_is_last_k = (wg_k_index == `UP(LG_K_WG)'(TCU_WG_K_STEPS - 1));
-    `endif
-  `endif
-
     // Fixed A register base for RS mode: f24..f27
     localparam [4:0] wg_ra_base = TCU_WG_RA;
 
@@ -228,22 +215,6 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         assign k_index = 0;
     end
 
-    // WMMA K-step gating for internal accumulation
-    // SYM_SPARSE flattens (m, n_col, n_step) into eff_ctr with step_k=0 always
-    // (k_count = K_STEPS/2 = 1), so every uop is both first-k and last-k.
-    // k_index would incorrectly alias with the upper bits of m_sp_s.
-`ifdef TCU_ACC_ENABLE
-  `ifdef TCU_SPARSE_ENABLE
-    wire wmma_is_first_k = (SYM_SPARSE && is_sparse) ? 1'b1 : (k_index == '0);
-    wire wmma_is_last_k = is_sparse
-        ? (SYM_SPARSE ? 1'b1 : (k_index == `UP(LG_K)'(TCU_K_STEPS / 2 - 1)))
-        : (k_index == `UP(LG_K)'(TCU_K_STEPS - 1));
-  `else
-    wire wmma_is_first_k = (k_index == '0);
-    wire wmma_is_last_k = (k_index == `UP(LG_K)'(TCU_K_STEPS - 1));
-  `endif
-`endif
-
     // -----------------------------------------------------------------------
     // Register-offset arithmetic.
     // -----------------------------------------------------------------------
@@ -330,18 +301,10 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
             ibuf_r.op_args.tcu.step_m = 4'(wg_m_index);
             ibuf_r.op_args.tcu.step_n = 4'(wg_n_index);
             ibuf_r.op_args.tcu.step_k = 4'(wg_k_index);
-        `ifdef TCU_ACC_ENABLE
-            // Only last-k writes back to RF; only first-k reads C from RF
-            ibuf_r.wb  = wg_is_last_k;
-            ibuf_r.rd  = wg_is_last_k ? make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off) : '0;
-            ibuf_r.rs3 = wg_is_first_k ? make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off) : '0;
-            ibuf_r.used_rs[2] = wg_is_first_k;
-        `else
             ibuf_r.wb  = 1'b1;
             ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
             ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
             ibuf_r.used_rs[2] = 1'b1;
-        `endif
             // Smem descriptors are invariant across the whole WGMMA expansion,
             // so only fetch them on the first uop.
             if (wg_a_from_smem) begin
@@ -374,13 +337,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(n_sp_s) : 4'(n_index));
         ibuf_r.op_args.tcu.step_k = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(0)      : 4'(k_index));
 
-    `ifdef TCU_ACC_ENABLE
-        ibuf_r.wb = meta_uop ? 1'b0 : wmma_is_last_k;
-        ibuf_r.rd = meta_uop ? '0 : (wmma_is_last_k ? make_reg_num(REG_TYPE_F, rs3) : '0);
-    `else
         ibuf_r.wb = meta_uop ? 1'b0 : 1'b1;
         ibuf_r.rd = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
-    `endif
         ibuf_r.rs1 = meta_uop
             ? (is_meta_store
                 ? (meta_use_rs2 ? ibuf_in.rs2 : ibuf_in.rs1)
@@ -388,48 +346,26 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                                 : make_reg_num(REG_TYPE_F, 5'(META_REG0))))
             : make_reg_num(REG_TYPE_F, rs1);
         ibuf_r.rs2 = meta_uop ? ibuf_in.rs2 : make_reg_num(REG_TYPE_F, rs2);
-    `ifdef TCU_ACC_ENABLE
-        ibuf_r.rs3 = meta_uop ? '0 : (wmma_is_first_k ? make_reg_num(REG_TYPE_F, rs3) : '0);
-        ibuf_r.used_rs[0] = 1'b1;
-        ibuf_r.used_rs[1] = 1'b1;
-        ibuf_r.used_rs[2] = !meta_uop && wmma_is_first_k;
-    `else
         ibuf_r.rs3 = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
         ibuf_r.used_rs[0] = 1'b1;
         ibuf_r.used_rs[1] = 1'b1;
         ibuf_r.used_rs[2] = !meta_uop;
-    `endif
     `else
         ibuf_r.op_args.tcu.step_m = 4'(m_index);
         ibuf_r.op_args.tcu.step_n = 4'(n_index);
         ibuf_r.op_args.tcu.step_k = 4'(k_index);
-    `ifdef TCU_ACC_ENABLE
-        ibuf_r.wb  = wmma_is_last_k;
-        ibuf_r.rd  = wmma_is_last_k ? make_reg_num(REG_TYPE_F, rs3) : '0;
-    `else
         ibuf_r.wb  = 1'b1;
         ibuf_r.rd  = make_reg_num(REG_TYPE_F, rs3);
-    `endif
         ibuf_r.rs1 = make_reg_num(REG_TYPE_F, rs1);
         ibuf_r.rs2 = make_reg_num(REG_TYPE_F, rs2);
-    `ifdef TCU_ACC_ENABLE
-        ibuf_r.rs3 = wmma_is_first_k ? make_reg_num(REG_TYPE_F, rs3) : '0;
-        ibuf_r.used_rs[0] = 1'b1;
-        ibuf_r.used_rs[1] = 1'b1;
-        ibuf_r.used_rs[2] = wmma_is_first_k;
-    `else
         ibuf_r.rs3 = make_reg_num(REG_TYPE_F, rs3);
         ibuf_r.used_rs[0] = 1'b1;
         ibuf_r.used_rs[1] = 1'b1;
         ibuf_r.used_rs[2] = 1'b1;
     `endif
-    `endif
         end
-        // FU lock: 10=acquire (first), 00=middle, 01=release (last), 11=default.
-    `ifdef TCU_WLOCK_ENABLE
-        ibuf_r.fu_lock   = (uop_idx == UOP_CTR_W'(0));
-        ibuf_r.fu_unlock = (uop_idx == (uop_count - UOP_CTR_W'(1)));
-    `endif
+        ibuf_r.fu_lock   = 1'b0;
+        ibuf_r.fu_unlock = 1'b0;
     end
 
     assign ibuf_out = ibuf_r;
