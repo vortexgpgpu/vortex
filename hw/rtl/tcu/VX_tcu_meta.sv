@@ -24,7 +24,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     // Write port (meta_store instruction)
     input wire          wr_en,
     input wire [NW_WIDTH-1:0] wid,
-    input wire [3:0]    wr_idx, // flat store index within the metadata block
+    input wire [3:0]    wr_idx, // group index: each group writes COLS_PER_LOAD columns
     input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] wr_data,
 
     // Read port (from FEDP path)
@@ -69,14 +69,16 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         assign bank_sel = '0;
     end
 
-    // Write decode: flat store index -> actual column, sub-store, bank-enable, write data
-    wire [3:0] meta_actual_col_idx;
+    // Write decode: wr_idx is a group index — each group writes COLS_PER_LOAD
+    // columns in parallel, using thread data from a single register read.
+
+    wire [3:0] group_idx;
     wire [LG_SPC-1:0] sub_store_idx;
     if (STORES_PER_COL > 1) begin : g_meta_spc
-        assign meta_actual_col_idx = 4'(wr_idx >> LG_SPC);
+        assign group_idx = 4'(wr_idx >> LG_SPC);
         assign sub_store_idx = wr_idx[LG_SPC-1:0];
     end else begin : g_meta_spc
-        assign meta_actual_col_idx = wr_idx;
+        assign group_idx = wr_idx;
         assign sub_store_idx = '0;
     end
     `UNUSED_VAR (sub_store_idx)
@@ -90,27 +92,10 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         end
     end
 
-    wire [PER_WARP_DEPTH-1:0][31:0] meta_wr_data;
-    if (STORES_PER_COL > 1) begin : g_meta_wr_mode
-        for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
-            assign meta_wr_data[r] = 32'(wr_data[r % BANKS_PER_STORE]);
-        end
-    end else begin : g_meta_wr_mode
-        wire [$clog2(TCU_BLOCK_CAP)-1:0] meta_thread_offset;
-        if (COLS_PER_LOAD > 1) begin : g_meta_off
-            assign meta_thread_offset = {meta_actual_col_idx[LG_CPL-1:0], {LG_PD{1'b0}}};
-        end else begin : g_meta_off
-            assign meta_thread_offset = '0;
-        end
-        for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
-            assign meta_wr_data[r] = 32'(wr_data[meta_thread_offset + r]);
-        end
-    end
-
-    // Column write-enable (one-hot from meta_actual_col_idx)
+    // Column group enable: all COLS_PER_LOAD columns in the selected group
     wire [NUM_COLS-1:0] col_wren;
     for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col_wren
-        assign col_wren[c] = (c[3:0] == meta_actual_col_idx);
+        assign col_wren[c] = (4'(c / COLS_PER_LOAD) == group_idx);
     end
 
     // Pack write data and enables for unified RAM
@@ -120,8 +105,17 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
 
     for (genvar b = 0; b < PER_WARP_DEPTH; ++b) begin : g_meta_banks
         for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col
+            if (STORES_PER_COL > 1) begin : g_wr
+                assign packed_wdata[(b * NUM_COLS + c) * 32 +: 32] =
+                    32'(wr_data[b % BANKS_PER_STORE]);
+            end else begin : g_wr
+                // Thread offset for column c within its group: (c % CPL) * PER_WARP_DEPTH + b
+                localparam int COL_IN_GROUP = c % COLS_PER_LOAD;
+                localparam int THREAD_OFF = COL_IN_GROUP * PER_WARP_DEPTH + b;
+                assign packed_wdata[(b * NUM_COLS + c) * 32 +: 32] =
+                    32'(wr_data[THREAD_OFF]);
+            end
             assign packed_wren[b * NUM_COLS + c] = wr_en && col_wren[c] && meta_wr_bank_en[b];
-            assign packed_wdata[(b * NUM_COLS + c) * 32 +: 32] = meta_wr_data[b];
         end
     end
 
