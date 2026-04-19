@@ -259,7 +259,7 @@ package VX_tcu_pkg;
     endfunction
 
     function automatic logic [4:0] meta_total_store_uops(input logic [3:0] fmt);
-        return 5'(((meta_num_cols(fmt) + TCU_META_COLS_PER_LOAD - 1) / TCU_META_COLS_PER_LOAD)
+        return 5'(((32'(meta_num_cols(fmt)) + TCU_META_COLS_PER_LOAD - 1) / TCU_META_COLS_PER_LOAD)
                   * TCU_STORES_PER_COL);
     endfunction
 
