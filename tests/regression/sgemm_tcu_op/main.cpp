@@ -746,6 +746,117 @@ static std::vector<otype_t> unpack_D_tiled32_rowmajor(const std::vector<otype_t>
 }
 
 
+static uint32_t div_up_u32(uint32_t value, uint32_t divisor) {
+  return (value + divisor - 1) / divisor;
+}
+
+static uint32_t count_A_tile_nonzeros(const std::vector<itype_t>& A,
+                                      uint32_t K,
+                                      uint32_t tile_row,
+                                      uint32_t tile_col,
+                                      uint32_t tile_M,
+                                      uint32_t tile_K) {
+  uint32_t count = 0;
+  for (uint32_t col = 0; col < tile_K; ++col) {
+    for (uint32_t row = 0; row < tile_M; ++row) {
+      const uint32_t idx = (tile_row + row) * K + (tile_col + col);
+      if (data_accessor_t<vt::ITYPE>::read(A.data(), idx) != 0) {
+        ++count;
+      }
+    }
+  }
+  return count;
+}
+
+static uint32_t count_B_tile_nonzeros(const std::vector<itype_t>& B,
+                                      uint32_t N,
+                                      uint32_t tile_row,
+                                      uint32_t tile_col,
+                                      uint32_t tile_K,
+                                      uint32_t tile_N) {
+  uint32_t count = 0;
+  for (uint32_t row = 0; row < tile_K; ++row) {
+    for (uint32_t col = 0; col < tile_N; ++col) {
+      const uint32_t idx = (tile_row + row) * N + (tile_col + col);
+      if (data_accessor_t<vt::ITYPE>::read(B.data(), idx) != 0) {
+        ++count;
+      }
+    }
+  }
+  return count;
+}
+
+static bool check_sparse_tile_lmem_fit(const std::vector<itype_t>& A,
+                                       const std::vector<itype_t>& B,
+                                       uint32_t M,
+                                       uint32_t N,
+                                       uint32_t K,
+                                       uint32_t tile_K) {
+  constexpr uint32_t tile_M = 32;
+  constexpr uint32_t tile_N = 32;
+  constexpr uint32_t tile_payload_bytes = 4 * 1024;
+  const uint32_t tile_elems = tile_M * tile_K;
+  const uint32_t bitmap_bytes = div_up_u32(tile_elems, 8);
+
+  uint32_t max_nonzeros = 0;
+  const char* max_matrix = "A";
+  uint32_t max_tile_row = 0;
+  uint32_t max_tile_col = 0;
+
+  for (uint32_t tile_row = 0; tile_row < M; tile_row += tile_M) {
+    for (uint32_t tile_col = 0; tile_col < K; tile_col += tile_K) {
+      const uint32_t nonzeros = count_A_tile_nonzeros(A, K, tile_row, tile_col, tile_M, tile_K);
+      if (nonzeros > max_nonzeros) {
+        max_nonzeros = nonzeros;
+        max_matrix = "A";
+        max_tile_row = tile_row;
+        max_tile_col = tile_col;
+      }
+    }
+  }
+
+  for (uint32_t tile_col = 0; tile_col < N; tile_col += tile_N) {
+    for (uint32_t tile_row = 0; tile_row < K; tile_row += tile_K) {
+      const uint32_t nonzeros = count_B_tile_nonzeros(B, N, tile_row, tile_col, tile_K, tile_N);
+      if (nonzeros > max_nonzeros) {
+        max_nonzeros = nonzeros;
+        max_matrix = "B";
+        max_tile_row = tile_row;
+        max_tile_col = tile_col;
+      }
+    }
+  }
+
+  const uint32_t compressed_words = div_up_u32(max_nonzeros * sizeof(itype_t), sizeof(uint32_t));
+  const uint32_t compressed_bytes = compressed_words * sizeof(uint32_t);
+  const uint32_t total_bytes = compressed_bytes + bitmap_bytes;
+
+  std::cout << std::dec
+            << "SMEM Analysis:" << std::endl
+            << "  biggest tile: matrix=" << max_matrix
+            << ", row=" << max_tile_row
+            << ", col=" << max_tile_col
+            << ", nonzeros=" << max_nonzeros
+            << ", compressed_bytes=" << compressed_bytes << std::endl
+            << "  bitmap_bytes=" << bitmap_bytes << std::endl
+            << "  total_bytes=" << total_bytes << std::endl
+            << "  tile_budget_bytes=" << tile_payload_bytes << std::endl;
+
+  if (bitmap_bytes > tile_payload_bytes || compressed_bytes > (tile_payload_bytes - bitmap_bytes)) {
+    std::cout << std::dec
+              << "Error: sparse " << max_matrix << " tile at row " << max_tile_row
+              << ", col " << max_tile_col << " requires " << total_bytes
+              << " bytes in local memory (compressed=" << compressed_bytes
+              << ", bitmap=" << bitmap_bytes << "), exceeding the "
+              << tile_payload_bytes << " byte tile budget."
+              << std::endl;
+    return false;
+  }
+
+  return true;
+}
+
+
 static void matmul_cpu(otype_t *D, const itype_t *A, const itype_t *B, otype_t *C, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = 8 / vt::ITYPE::bits;
   uint32_t KS = subbytes ? (K * subbytes) : K;
@@ -1143,7 +1254,8 @@ int main(int argc, char *argv[]) {
   uint32_t M = xm;
   uint32_t N = xn;
   uint32_t K = xk;
-  const uint32_t input_tile_k = cfg::tileK;
+  const uint32_t input_word_ratio = sizeof(uint32_t) / sizeof(itype_t);
+  const uint32_t input_tile_k = 16 * input_word_ratio;
   const uint32_t dxa_tile_k = 2 * input_tile_k;
 
   if ((M % 32) != 0) {
@@ -1199,7 +1311,7 @@ int main(int argc, char *argv[]) {
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
-  std::cout << "D_addr=0x" << std::hex << kernel_arg.D_addr << std::endl;
+  std::cout << "D_addr=0x" << std::hex << kernel_arg.D_addr << std::dec << std::endl;
 
   // generate source data
   std::vector<itype_t> h_A(sizeA);
@@ -1226,11 +1338,17 @@ int main(int argc, char *argv[]) {
 #endif
 
   if (sparsity >= 1) {
-    apply_pruning(h_A, M, K, a_sparsity, 'u');
-    apply_pruning(h_B, K, N, b_sparsity, 'u');
-    std::cout << "Applied pruning with mode=c"
+    char pruning_type = 'u';
+    apply_pruning(h_A, M, K, a_sparsity, pruning_type);
+    apply_pruning(h_B, K, N, b_sparsity, pruning_type);
+    std::cout << "Applied pruning with mode=" << pruning_type
               << ", a_sparsity=" << a_sparsity
               << ", b_sparsity=" << b_sparsity << std::endl;
+  }
+
+  if (sparsity == 2 && !check_sparse_tile_lmem_fit(h_A, h_B, M, N, K, dxa_tile_k)) {
+    cleanup();
+    return -1;
   }
   // h_A[0] = 0;
   // h_B[0] = 0;

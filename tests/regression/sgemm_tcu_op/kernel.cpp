@@ -271,8 +271,9 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   };
 
 
-  if constexpr (kDense) {
-    
+  if constexpr (kDense) 
+  {  
+
 #pragma unroll
     for (uint32_t tile_row_idx = 0; tile_row_idx < tiles_m; ++tile_row_idx) {
       const uint32_t a_tile_base = tile_row_idx * tile_M * K;
@@ -379,7 +380,116 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   
   
   
+else {
+    
+#pragma unroll
+    for (uint32_t tile_row_idx = 0; tile_row_idx < tiles_m; ++tile_row_idx) {
+      const uint32_t a_tile_base = tile_row_idx * tile_M * K;
+#pragma unroll
+      for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
+
+        const uint32_t b_tile_base = tile_col_idx * K * tile_N;
+        const uint32_t tile_row_tiles_base = tile_row_idx * tiles_k;
+        const uint32_t tile_col_tiles_base = tile_col_idx * tiles_k;
+
+        const uint32_t tile_id = tile_row_idx * tiles_n + tile_col_idx;
+        const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr) + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
+        uint32_t* mma_D = reinterpret_cast<uint32_t*>(mma_D_addr);
+
+
+        // const uint32_t* pC_tile = pC + tile_id * tileC_regs;
+
+        // TODO: Eliminate divergence!
+        static constexpr uint32_t kDenseLaunches = div_up_constexpr(K, tile_K);
+#pragma unroll
+        for (uint32_t dense_iter = 0; dense_iter < kDenseLaunches; ++dense_iter) 
+        {
+          const uint32_t k_offset = dense_iter * tile_K;
+          // const uint32_t* mma_A_bitmap = reinterpret_cast<const uint32_t *>(A_bitmap_lmem);
+          // const uint32_t* mma_B_bitmap = reinterpret_cast<const uint32_t *>(B_bitmap_lmem);
+          // uint32_t a_blocks = A_compressed_blocks;
+          // uint32_t b_blocks = B_compressed_blocks;
+          const uint32_t k_tile_idx = k_offset / tile_K;
+          // const uint32_t* mma_C = reinterpret_cast<const uint32_t *>(use_half0 ? half0_C_base : half1_C_base);
+          const ctx::input_t* pA_chunk = pA_gmem + a_tile_base + k_offset * tile_M;
+          const ctx::input_t* pB_chunk = pB_gmem + b_tile_base + k_offset * tile_N;
+
+          const uint32_t k_remaining = K - k_offset;
+          uint32_t curr_k = std::min(k_remaining, tile_K);
+          // uint32_t a_elems = tile_M * curr_k;
+          // uint32_t b_elems = curr_k * tile_N;
+
+          const uint32_t flags_chunk = (uint32_t(dense_iter == 0) << 1) | uint32_t(dense_iter == (kDenseLaunches - 1));
+
+          tcu_bar[current_stage].arrive_and_wait();
+
+          /* In the very first execution, no data are ready so skip the mma_op */
+          if ((tile_row_idx | tile_col_idx | dense_iter) != 0) {
+            launch_pending_mma();
+          }
+
+          if (is_dxa_quad) {
+            // if (first_dense_launch) {
+            //   vx_dxa_issue_2d_wg(kDescC, load_bar[next_stage].id(), mma_C, 0, tile_id);
+            // }
+            // tcu_bar[next_stage].arrive_and_wait();
+            // vx_dxa_retile_2d_wg(kDescA, a_elems, 1);
+            vx_dxa_issue_2d_wg(kDescA, load_bar[next_stage].id(), A_lmem[next_stage], 0, tile_row_idx * tiles_k + k_tile_idx);
+            // vx_dxa_retile_2d_wg(kDescB, b_elems, 1);
+            vx_dxa_issue_2d_wg(kDescB, load_bar[next_stage].id(), B_lmem[next_stage], 0, tile_col_idx * tiles_k + k_tile_idx);
+          }
+
+          // if (curr_k >= 256 || a_blocks >= 64 || b_blocks >= 64) {
+          //   if (lane0) {
+          //     pD[0] = LMEM_OVERFLOW_MARKER;
+          //   }
+          //   return;
+          // }
+
+          // const uintptr_t rs1_val = (uintptr_t)vx_wgather(
+          //           (size_t)(uintptr_t)chunk_A,
+          //           (size_t)(uintptr_t)chunk_B,
+          //           (size_t)(uintptr_t)nullptr /* mma_C */,
+          //           (size_t)(uintptr_t)mma_D_addr);
+          // const uintptr_t rs2_val = (uintptr_t)vx_wgather(
+          //           (size_t)(uintptr_t)nullptr /*mma_A_bitmap*/,
+          //           (size_t)(uintptr_t)nullptr /*mma_B_bitmap*/,
+          //           (size_t)tcu_bar[next_stage].id(),
+          //           (size_t)((curr_k << 24) /*| (a_blocks << 18) | (b_blocks << 12)*/ | (vt::OTYPE::id << 8) | 
+          //                    (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
+          
+          uintptr_t rs1_val = 0;
+          uintptr_t rs2_val = 0;
+          if (gtid == 0) {
+            rs1_val = reinterpret_cast<uintptr_t>(A_lmem[next_stage]);
+            rs2_val = reinterpret_cast<uintptr_t>(nullptr /*mma_A_bitmap*/);
+          } else if (gtid == 1) {
+            rs1_val = reinterpret_cast<uintptr_t>(B_lmem[next_stage]);
+            rs2_val = reinterpret_cast<uintptr_t>(nullptr /*mma_B_bitmap*/);
+          } else if (gtid == 2) {
+            rs1_val = reinterpret_cast<uintptr_t>(nullptr /*mma_C*/);
+            rs2_val = tcu_bar[next_stage].id();
+          } else if (gtid == 3) {
+            rs1_val = mma_D_addr;
+            rs2_val = (curr_k << 24) /*| (a_blocks << 18) | (b_blocks << 12)*/ | (vt::OTYPE::id << 8) | 
+                      (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk;
+          } 
+
+          pending_rs1_val = rs1_val;
+          pending_rs2_val = rs2_val;
+        }
+      }
+    }
+
+    launch_pending_mma();
+    tcu_bar[current_stage].arrive_and_wait();
+  } 
   
+  
+
+
+
+
   
   
 /*
