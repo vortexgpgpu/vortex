@@ -167,6 +167,7 @@
 `ifdef QUARTUS
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define LATENCY_TCU     5
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
@@ -180,6 +181,7 @@
 `elsif VIVADO
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define LATENCY_TCU     5
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
@@ -196,6 +198,7 @@
 `elsif ASIC
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define LATENCY_TCU     4
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define FORCE_BUILTIN_ADDER(w)  0
 `define USE_BLOCK_BRAM
@@ -209,6 +212,7 @@
 `else
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
+`define LATENCY_TCU     4
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM
