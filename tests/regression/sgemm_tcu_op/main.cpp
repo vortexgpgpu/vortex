@@ -1296,7 +1296,7 @@ int main(int argc, char *argv[]) {
   // Fill C with a constant stride of 0x8000 in bit-pattern space
   static_assert(sizeof(otype_t) == sizeof(uint32_t), "C pattern fill assumes 32-bit output type");
   for (uint32_t i = 0; i < sizeC; ++i) {
-    uint32_t bits = 0x43800000 + (i * 0x8000); // start at 256.0f, step in 0x8000 increments
+    // uint32_t bits = 0x43800000 + (i * 0x8000); // start at 256.0f, step in 0x8000 increments
     otype_t tmp;
     uint32_t zero = 0x0;
     std::memcpy(&tmp, &zero, sizeof(tmp));  // bitwise copy, no conversion
