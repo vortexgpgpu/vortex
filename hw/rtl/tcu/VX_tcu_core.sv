@@ -206,13 +206,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam ACCUM_MAX_M = TCU_M_STEPS;
   `endif
     localparam ACCUM_MAX_TILES = ACCUM_MAX_M * ACCUM_MAX_N;
-    localparam ACCUM_TILE_W   = $clog2(ACCUM_MAX_TILES);
+    localparam ACCUM_TILE_W= $clog2(ACCUM_MAX_TILES);
   `ifdef TCU_WLOCK_ENABLE
-    localparam ACCUM_DEPTH    = ACCUM_MAX_TILES;
+    localparam ACCUM_DEPTH = ACCUM_MAX_TILES;
   `else
-    localparam ACCUM_DEPTH    = `NUM_WARPS * ACCUM_MAX_TILES;
+    localparam ACCUM_DEPTH = `NUM_WARPS * ACCUM_MAX_TILES;
   `endif
-    localparam ACCUM_ADDRW    = $clog2(ACCUM_DEPTH);
+    localparam ACCUM_ADDRW = $clog2(ACCUM_DEPTH);
 
     wire [NW_WIDTH-1:0] exe_wid = execute_if.data.header.wid;
 
@@ -470,12 +470,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
             wire [31:0] c_val_r;
 
-            `BUFFER_EX (
-                {c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r},
-                {c_val,   fmt_s,   fmt_d,   b_col,   a_row},
-                fedp_enable,
-                0, // resetw
-                1  // depth
+            VX_pipe_register #(
+                .DATAW (32 + 4 + 4 + TCU_TC_K * 32 + TCU_TC_K * 32)
+            ) pipe_fedp (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (fedp_enable),
+                .data_in  ({c_val,   fmt_s,   fmt_d,   b_col,   a_row}),
+                .data_out ({c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r})
             );
 
         `ifdef TCU_TYPE_DPI
