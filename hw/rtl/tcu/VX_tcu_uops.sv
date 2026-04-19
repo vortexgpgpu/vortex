@@ -310,7 +310,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     // Output uop assembly.
     // -----------------------------------------------------------------------
 `ifdef TCU_SPARSE_ENABLE
-    wire meta_use_rs2 = (ctr >= `UP(CTR_W)'(TCU_META_COLS_PER_LOAD));
+    wire meta_use_rs2 = (ctr >= `UP(CTR_W)'(1));
 `endif
 
 `ifdef TCU_SPARSE_ENABLE

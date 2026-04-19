@@ -194,8 +194,9 @@ inline constexpr uint32_t sparse_meta_num_cols(uint32_t fmt, uint32_t nt) {
   }
 }
 
-inline constexpr uint32_t sparse_meta_total_store_uops(uint32_t fmt, uint32_t stores_per_col, uint32_t nt) {
-  return sparse_meta_num_cols(fmt, nt) * stores_per_col;
+inline constexpr uint32_t sparse_meta_total_store_uops(uint32_t fmt, uint32_t stores_per_col, uint32_t nt, uint32_t cols_per_load) {
+  uint32_t num_cols = sparse_meta_num_cols(fmt, nt);
+  return ((num_cols + cols_per_load - 1) / cols_per_load) * stores_per_col;
 }
 
 template <uint32_t NT,      // number of threads per warp

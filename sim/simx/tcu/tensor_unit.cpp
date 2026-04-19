@@ -614,26 +614,26 @@ public:
     }
 
     uint32_t num_cols = meta_num_cols(fmt_s);
-    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
+    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS, cfg::meta_cols_per_load);
     if (num_cols == 0 || col_idx >= total_stores) {
-      std::cout << "Error: META_STORE store index out of range: " << col_idx << std::endl;
+      std::cout << "Error: META_STORE group index out of range: " << col_idx << std::endl;
       std::abort();
     }
 
-    uint32_t actual_col = col_idx / cfg::stores_per_col;
-    uint32_t sub_store = col_idx % cfg::stores_per_col;
-    uint32_t bank_begin = sub_store * cfg::banks_per_store;
-    uint32_t bank_end = std::min(bank_begin + cfg::banks_per_store, kMetaBanks);
-    uint32_t thread_offset = (cfg::meta_cols_per_load > 1)
-                           ? ((actual_col % cfg::meta_cols_per_load) * kMetaBanks)
-                           : 0;
+    uint32_t group = col_idx;
+    uint32_t col_begin = group * cfg::meta_cols_per_load;
+    uint32_t col_end = std::min(col_begin + cfg::meta_cols_per_load, num_cols);
 
-    for (uint32_t bank = bank_begin; bank < bank_end; ++bank) {
-      uint32_t src_idx = (cfg::stores_per_col > 1)
-                       ? (bank - bank_begin)
-                       : (thread_offset + bank);
-      sparse_meta_.at(wid).at(bank * kMaxMetaCols + actual_col) =
-          rs1_data.at(src_idx).u32;
+    for (uint32_t col = col_begin; col < col_end; ++col) {
+      uint32_t col_in_group = col - col_begin;
+      uint32_t thread_offset = col_in_group * kMetaBanks;
+      for (uint32_t bank = 0; bank < kMetaBanks; ++bank) {
+        uint32_t src_idx = (cfg::stores_per_col > 1)
+                         ? (bank % cfg::banks_per_store)
+                         : (thread_offset + bank);
+        sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) =
+            rs1_data.at(src_idx).u32;
+      }
     }
   }
 
@@ -1075,7 +1075,7 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
     bool is_mx = vt::mx_scale_format(args.fmt_s);
     uint32_t sparse_meta_stores = 0;
     if (is_sparse) {
-      sparse_meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wmma::stores_per_col, NUM_THREADS);
+      sparse_meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wmma::stores_per_col, NUM_THREADS, wmma::meta_cols_per_load);
     }
     uint32_t mx_meta_stores = is_mx ? mx_meta_words(args.fmt_s) : 0;
     uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
@@ -1124,18 +1124,18 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     bool is_mx = vt::mx_scale_format(fmt_s);
     uint32_t sparse_meta_stores = 0;
     if (is_sparse) {
-      sparse_meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wmma::stores_per_col, NUM_THREADS);
+      sparse_meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wmma::stores_per_col, NUM_THREADS, wmma::meta_cols_per_load);
     }
     uint32_t mx_meta_stores = is_mx ? mx_meta_words(fmt_s) : 0;
     uint32_t total_meta_stores = sparse_meta_stores + mx_meta_stores;
 
     if (uop_index < sparse_meta_stores) {
-      // Phase 1a: sparse metadata-store uops
+      // Phase 1a: sparse metadata-store uops (one per group of cols_per_load columns)
       constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
-      uint32_t flat_store = uop_index;
-      uint32_t reg_rs1 = (flat_store / wmma::meta_cols_per_load) ? meta_reg1 : meta_reg0;
+      uint32_t group = uop_index;
+      uint32_t reg_rs1 = (group > 0) ? meta_reg1 : meta_reg0;
       uop_instr->set_op_type(TcuType::META_STORE);
-      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, flat_store, 0, 0, 0, TCU_META_KIND_SPARSE});
+      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, group, 0, 0, 0, TCU_META_KIND_SPARSE});
       uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
     } else if (uop_index < total_meta_stores) {
       // Phase 1b: MX scale metadata-store uops
