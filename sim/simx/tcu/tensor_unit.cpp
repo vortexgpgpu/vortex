@@ -530,6 +530,25 @@ public:
     bool col_major = false;
   };
 
+  // WGMMA v2 tile buffer state — models RTL single-slot + shared B cache.
+  // B tile persists across CTA warps (fetched once per K-tile).
+  // A tile is re-fetched per warp (each warp has different A data).
+  struct TileBufferState {
+    bool     b_valid = false;
+    uint32_t b_desc = 0;        // cached B descriptor
+    uint32_t b_fetch_wid = ~0u; // warp that last fetched B (for dirty check)
+    uint32_t cur_wid = ~0u;     // warp whose A data is currently in buffer
+    uint64_t ready_cycle = 0;   // cycle when current buffer fill completes
+
+    void reset() {
+      b_valid = false;
+      b_desc = 0;
+      b_fetch_wid = ~0u;
+      cur_wid = ~0u;
+      ready_cycle = 0;
+    }
+  };
+
   Impl(TensorUnit* simobject, const Arch& arch, Core* core)
     : simobject_(simobject)
     , core_(core)
@@ -537,14 +556,14 @@ public:
     , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
     , mx_meta_(arch.num_warps())
     , perf_stats_()
+    , tbuf_state_()
   {}
 
-  ~Impl() {
-    // Destructor logic if needed
-  }
+  ~Impl() {}
 
   void reset() {
     perf_stats_ = PerfStats();
+    tbuf_state_.reset();
     for (auto& sparse_meta : sparse_meta_) {
       std::fill(sparse_meta.begin(), sparse_meta.end(), 0);
     }
@@ -554,6 +573,7 @@ public:
   }
 
   void tick() {
+    auto cur_cycle = SimPlatform::instance().cycles();
     for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
       auto& input = simobject_->Inputs.at(iw);
       if (input.empty())
@@ -563,9 +583,26 @@ public:
       int delay = 0;
       switch (tcu_type) {
       case TcuType::WMMA:
-      case TcuType::WGMMA:
         delay = 4;
         break;
+      case TcuType::WGMMA: {
+        auto trace_data = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
+        int fetch_delay = trace_data ? trace_data->fetch_delay : 0;
+        if (fetch_delay > 0) {
+          // First uop with fetch: set buffer ready cycle
+          if (tbuf_state_.ready_cycle <= cur_cycle) {
+            tbuf_state_.ready_cycle = cur_cycle + fetch_delay;
+          }
+          // Clear fetch_delay so we don't re-trigger on subsequent ticks
+          trace_data->fetch_delay = 0;
+        }
+        // Stall if buffer not ready
+        if (cur_cycle < tbuf_state_.ready_cycle) {
+          ++perf_stats_.tbuf_stalls;
+          continue; // don't pop, stall this cycle
+        }
+        delay = 4;
+      } break;
       case TcuType::META_STORE:
         delay = 1;
         break;
@@ -573,6 +610,14 @@ public:
         std::abort();
       }
       if (simobject_->Outputs.at(iw).try_send(trace, 2 + delay)) {
+        // Count B cache hit on successful send
+        if (tcu_type == TcuType::WGMMA) {
+          auto td = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
+          if (td && td->tbuf_cache_hit) {
+            ++perf_stats_.tbuf_cache_hits;
+            DT(2, "TCU tbuf_cache_hit counted, total=" << perf_stats_.tbuf_cache_hits);
+          }
+        }
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
@@ -598,10 +643,34 @@ public:
     }
 
     uint32_t num_cols = meta_num_cols(fmt_s);
+
+    if (meta_kind == TCU_META_KIND_SPARSE_WG) {
+      // WGMMA RS sparse: kernel scatters smem data into interleaved register
+      // layout matching VX_tcu_meta's WMMA PER_WARP_DEPTH (= kMetaBanks) stride.
+      // Thread mapping: src_idx = col_in_group * kMetaBanks + bank.
+      constexpr uint32_t wg_depth = wg_cfg::m_steps * (wg_cfg::k_steps / 2);
+      constexpr uint32_t wg_cols_per_load = NUM_THREADS / wg_depth;
+      uint32_t group = col_idx;
+      uint32_t col_begin = group * wg_cols_per_load;
+      uint32_t col_end = std::min(col_begin + wg_cols_per_load, num_cols);
+      for (uint32_t col = col_begin; col < col_end; ++col) {
+        uint32_t col_in_group = col - col_begin;
+        for (uint32_t bank = 0; bank < wg_depth; ++bank) {
+          uint32_t src_idx = col_in_group * kMetaBanks + bank;
+          sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) =
+              rs1_data.at(src_idx).u32;
+        }
+      }
+      return;
+    }
+
     uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS, cfg::meta_cols_per_load);
-    if (num_cols == 0 || col_idx >= total_stores) {
-      std::cout << "Error: META_STORE group index out of range: " << col_idx << std::endl;
-      std::abort();
+    if (col_idx >= total_stores) {
+      // Flat per-thread store (fallback)
+      for (uint32_t t = 0; t < rs1_data.size(); ++t) {
+        sparse_meta_.at(wid).at(t) = rs1_data.at(t).u32;
+      }
+      return;
     }
 
     uint32_t group = col_idx;
@@ -716,6 +785,7 @@ public:
              bool is_sparse,
              uint32_t cd_nregs,
              uint32_t is_a_smem) {
+    __unused(cd_nregs);
     if (is_sparse && !vt::sparse_format_supported(fmt_s)) {
       std::cout << "Error: WGMMA_SP unsupported input format: "
                 << vt::fmt_string(fmt_s) << " (id=" << fmt_s << ")" << std::endl;
@@ -761,12 +831,23 @@ public:
       uint32_t rtl_i_ratio = 32 / ebits;
       uint32_t meta_row_w  = k_words * 2 * rtl_i_ratio;
       uint32_t meta_strd_words = (cfg::tcM * meta_row_w + 31) / 32;
-      uint64_t meta_base = sd_a.base + uint64_t(wg_cfg::xtileM) * sd_a.ldm * e_bytes;
       uint32_t wg_bank   = step_m * (wg_cfg::k_steps / 2) + step_k;
+      // For SS mode, read metadata from LMEM; for RS mode, use register data
+      uint64_t meta_base = 0;
+      if (is_a_smem) {
+        meta_base = sd_a.base + uint64_t(wg_cfg::xtileM) * sd_a.ldm * e_bytes;
+      }
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
         uint32_t word_val = 0;
-        core_->mem_read(&word_val,
-          meta_base + uint64_t(wg_bank * meta_strd_words + bit_idx / 32) * 4, 4);
+        if (is_a_smem) {
+          // SS mode: read from LMEM using LMEM stride
+          uint32_t word_idx = wg_bank * meta_strd_words + bit_idx / 32;
+          core_->mem_read(&word_val, meta_base + uint64_t(word_idx) * 4, 4);
+        } else {
+          // RS mode: read from sparse_meta_ SRAM using WMMA-compatible stride
+          uint32_t word_idx = wg_bank * kMaxMetaCols + bit_idx / 32;
+          word_val = sparse_meta_.at(wid).at(word_idx);
+        }
         return (word_val >> (bit_idx % 32)) & 1u;
       };
       for (uint32_t i = 0; i < cfg::tcM; ++i) {
@@ -806,18 +887,74 @@ public:
 
     trace_data->is_last_k = true;
 
-    // Performance counters.
-    ++perf_stats_.wgmma_instrs;
+    // --- WGMMA v2 tile buffer: compute fetch cycles for timing layer ---
+    // On first uop, determine how many cycles the fetch unit needs to fill
+    // the tile buffer. The timing layer (tick) uses this to model stalls
+    // and count perf stats.
     if (step_m == 0 && step_n == 0 && step_k == 0) {
-      // A is per-warp: xtileM × xtileK words
-      constexpr uint32_t a_bank_rows = (wg_cfg::xtileM * wg_cfg::xtileK + LMEM_NUM_BANKS - 1) / LMEM_NUM_BANKS;
-      // B is shared: xtileK × tileN words; tileN = nrc * NT / xtileM
-      uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
-      uint32_t tile_n = nrc * NUM_THREADS / wg_cfg::xtileM;
-      uint32_t b_total = wg_cfg::xtileK * tile_n;
-      uint32_t b_bank_rows = (b_total + LMEM_NUM_BANKS - 1) / LMEM_NUM_BANKS;
-      if (is_a_smem) perf_stats_.lmem_reads += a_bank_rows;
-      perf_stats_.lmem_reads += b_bank_rows;
+      constexpr uint32_t a_total    = wg_cfg::xtileM * wg_cfg::xtileK;
+      constexpr uint32_t b_total    = wg_cfg::xtileK * wg_cfg::xtileN;
+      constexpr uint32_t num_banks  = LMEM_NUM_BANKS;
+      constexpr uint32_t a_bank_rows    = (a_total + num_banks - 1) / num_banks;
+      constexpr uint32_t a_bank_rows_sp = ((a_total / 2) + num_banks - 1) / num_banks;
+      constexpr uint32_t b_bank_rows    = (b_total + num_banks - 1) / num_banks;
+
+      // B dirty: same warp re-alloc with same desc (LMEM may be overwritten by DXA)
+      bool b_dirty = tbuf_state_.b_valid
+                  && (wid == tbuf_state_.b_fetch_wid)
+                  && (b_desc == tbuf_state_.b_desc);
+      bool b_cached = tbuf_state_.b_valid && !b_dirty
+                   && (b_desc == tbuf_state_.b_desc);
+
+      // Fetch cycles: A (if smem) + B (if not cached) + meta (if sparse)
+      uint32_t fetch_cycles = 0;
+      if (is_a_smem) {
+        fetch_cycles += is_sparse ? a_bank_rows_sp : a_bank_rows;
+      }
+      if (!b_cached) {
+        fetch_cycles += b_bank_rows;
+      }
+      if (is_sparse && is_a_smem) {
+        uint32_t ratio = elem_ratio(fmt_s);
+        uint32_t meta_row_bits = cfg::tcK * 2 * ratio;
+        uint32_t meta_stride = (cfg::tcM * meta_row_bits + 31) / 32;
+        uint32_t meta_total = wg_cfg::m_steps * (wg_cfg::k_steps / 2) * meta_stride;
+        fetch_cycles += (meta_total + num_banks - 1) / num_banks;
+      }
+
+      // Count LMEM reads: A words + B words (if not cached) + metadata words
+      uint32_t lmem_reads = 0;
+      if (is_a_smem) {
+        lmem_reads += is_sparse ? (a_total / 2) : a_total;
+      }
+      if (!b_cached) {
+        lmem_reads += b_total;
+      }
+      if (is_sparse && is_a_smem) {
+        uint32_t ratio = elem_ratio(fmt_s);
+        uint32_t meta_row_bits_r = cfg::tcK * 2 * ratio;
+        uint32_t meta_stride_r = (cfg::tcM * meta_row_bits_r + 31) / 32;
+        lmem_reads += wg_cfg::m_steps * (wg_cfg::k_steps / 2) * meta_stride_r;
+      }
+      perf_stats_.lmem_reads += lmem_reads;
+
+      trace_data->fetch_delay = fetch_cycles;
+      trace_data->tbuf_cache_hit = b_cached;
+      DT(2, "WGMMA tbuf: wid=" << wid
+         << " b_desc=0x" << std::hex << b_desc << std::dec
+         << " b_valid=" << tbuf_state_.b_valid
+         << " b_dirty=" << b_dirty
+         << " b_cached=" << b_cached
+         << " is_a_smem=" << is_a_smem
+         << " fetch=" << fetch_cycles);
+
+      // Update tile buffer state
+      if (!b_cached) {
+        tbuf_state_.b_valid     = true;
+        tbuf_state_.b_desc      = b_desc;
+        tbuf_state_.b_fetch_wid = wid;
+      }
+      tbuf_state_.cur_wid = wid;
     }
   }
 
@@ -956,6 +1093,7 @@ private:
   std::vector<std::array<uint32_t, kMxMetaWords>> mx_meta_;
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
   PerfStats     perf_stats_;
+  TileBufferState tbuf_state_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1010,7 +1148,16 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
   if (tcu_type == TcuType::WGMMA) {
     uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
     uint32_t k_count = args.is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
-    return k_count * nrc;
+    uint32_t mma_uops = k_count * nrc;
+    uint32_t meta_stores = 0;
+    if (args.is_sparse && !args.is_a_smem) {
+      // RS sparse: META_STORE uops using WGMMA-specific per_warp_depth=2
+      constexpr uint32_t wg_depth = wg_cfg::m_steps * (wg_cfg::k_steps / 2);
+      constexpr uint32_t wg_stores_per_col = (wg_depth + NUM_THREADS - 1) / NUM_THREADS;
+      constexpr uint32_t wg_cols_per_load = (NUM_THREADS >= wg_depth) ? (NUM_THREADS / wg_depth) : 1;
+      meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wg_stores_per_col, NUM_THREADS, wg_cols_per_load);
+    }
+    return meta_stores + mma_uops;
   }
 #endif
 
@@ -1172,34 +1319,60 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     bool is_a_smem = args.is_a_smem;
     uint32_t cd_nregs = args.cd_nregs;
     uint32_t k_count = is_sparse ? (k_steps / 2) : k_steps;
-    uint32_t ra_base = is_a_smem ? 10 : 24;
     constexpr uint32_t a0 = 10, a1 = 11;
 
-    // Loop order: m (inner) -> k -> n (outer), matching RTL
-    uint32_t mk = m_steps * k_count;
-    uint32_t n = uop_index / mk;
-    uint32_t rem = uop_index % mk;
-    uint32_t k = rem / m_steps;
-    uint32_t m = rem % m_steps;
-    uint32_t r = n * m_steps + m;
+    // RS sparse: fused meta-store uops before MMA phase
+    uint32_t meta_stores = 0;
+    if (is_sparse && !is_a_smem) {
+      constexpr uint32_t wg_depth = wg_cfg::m_steps * (wg_cfg::k_steps / 2);
+      constexpr uint32_t wg_stores_per_col = (wg_depth + NUM_THREADS - 1) / NUM_THREADS;
+      constexpr uint32_t wg_cols_per_load = (NUM_THREADS >= wg_depth) ? (NUM_THREADS / wg_depth) : 1;
+      meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wg_stores_per_col, NUM_THREADS, wg_cols_per_load);
+    }
 
-    uop_instr->set_op_type(TcuType::WGMMA);
-    uop_instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
-                                   fmt_s, fmt_d, m, n, k, 0});
-    uop_instr->set_dest_reg(r, RegType::Float);
-    if (uop_index == 0) {
-      if (is_a_smem) {
-        uop_instr->set_src_reg(0, a0, RegType::Integer);
-      } else {
+    if (uop_index < meta_stores) {
+      // Meta-store phase: preload metadata from f26/f27 into VX_tcu_meta SRAM
+      constexpr uint32_t wg_meta_reg0 = 24 + wg_cfg::m_steps * (wg_cfg::k_steps / 2); // f26
+      constexpr uint32_t wg_meta_reg1 = wg_meta_reg0 + 1; // f27
+      uint32_t group = uop_index;
+      uint32_t reg_rs1 = (group > 0) ? wg_meta_reg1 : wg_meta_reg0;
+      uop_instr->set_op_type(TcuType::META_STORE);
+      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, group, 0, 0, 0, TCU_META_KIND_SPARSE_WG});
+      uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
+    } else {
+      // MMA phase
+      uint32_t mma_idx = uop_index - meta_stores;
+      uint32_t ra_base = is_a_smem ? 10 : 24;
+
+      // Loop order: m (inner) -> k -> n (outer), matching RTL
+      uint32_t mk = m_steps * k_count;
+      uint32_t n = mma_idx / mk;
+      uint32_t rem = mma_idx % mk;
+      uint32_t k = rem / m_steps;
+      uint32_t m = rem % m_steps;
+      uint32_t r = n * m_steps + m;
+
+      uop_instr->set_op_type(TcuType::WGMMA);
+      uop_instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
+                                     fmt_s, fmt_d, m, n, k, 0});
+      uop_instr->set_dest_reg(r, RegType::Float);
+      if (mma_idx == 0) {
+        if (is_a_smem) {
+          uop_instr->set_src_reg(0, a0, RegType::Integer);
+        } else {
+          uint32_t rs1_off = m * k_count + k;
+          uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
+        }
+        uop_instr->set_src_reg(1, a1, RegType::Integer);
+      } else if (!is_a_smem) {
         uint32_t rs1_off = m * k_count + k;
         uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
       }
-      uop_instr->set_src_reg(1, a1, RegType::Integer);
-    } else if (!is_a_smem) {
-      uint32_t rs1_off = m * k_count + k;
-      uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
+      uop_instr->set_src_reg(2, r, RegType::Float);
     }
-    uop_instr->set_src_reg(2, r, RegType::Float);
+    // fu_lock on first uop, fu_unlock on last uop
+    uop_instr->set_fu_lock(uop_index == 0);
+    uop_instr->set_fu_unlock(uop_index == (total - 1));
   }
 #endif
 

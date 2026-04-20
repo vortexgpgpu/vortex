@@ -225,11 +225,13 @@ int main(int argc, char *argv[]) {
   uint32_t M = xm, N = xn, K = xk;
 
   // Tile dimension constants
-  constexpr uint32_t tileM     = wg_cfg_t::xtileM;
-  constexpr uint32_t tileN     = wg_cfg_t::xtileN;
+  constexpr uint32_t tileM      = wg_cfg_t::xtileM;
+  constexpr uint32_t tileN      = wg_cfg_t::xtileN;
   constexpr uint32_t tileK_elem = wg_cfg_t::tileK;
 
-  if ((M % tileM) != 0) { std::cout << "M must be multiple of " << tileM << std::endl; return -1; }
+  uint32_t cta_M = warps * tileM;
+
+  if ((M % cta_M) != 0) { std::cout << "M must be multiple of cta_M=" << cta_M << std::endl; return -1; }
   if ((N % tileN) != 0) { std::cout << "N must be multiple of " << tileN << std::endl; return -1; }
   if ((K % tileK_elem) != 0) { std::cout << "K must be multiple of " << tileK_elem << std::endl; return -1; }
 
@@ -242,19 +244,21 @@ int main(int argc, char *argv[]) {
   uint32_t num_k_tiles   = K / tileK_elem;
   size_t meta_words      = (size_t)num_tile_rows * num_k_tiles * kWordsPerTile;
 
-  uint32_t grid_dim[2]  = {N / tileN, M / tileM};
+  uint32_t grid_dim[2]  = {N / tileN, M / cta_M};
   uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
-  // smem: [A_compressed][meta_padded][B_dense]
-  uint32_t smem_a_bytes    = tileM * (tileK_elem / 2) * sizeof(itype_t);
-  uint32_t smem_meta_bytes = kWgMetaBanks * kMetaStrWords * 4;
-  uint32_t smem_b_bytes    = tileK_elem * tileN * sizeof(itype_t);
-  uint32_t smem_bank_bytes = NUM_THREADS * sizeof(float);
-  uint32_t smem_b_off      = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
-  uint32_t smem_size       = smem_b_off + smem_b_bytes;
+  // smem: per-warp [A_compressed][metadata] sections, then shared B
+  uint32_t smem_a_bytes      = tileM * (tileK_elem / 2) * sizeof(itype_t);
+  uint32_t smem_meta_bytes   = kWgMetaBanks * kMetaStrWords * 4;
+  uint32_t smem_bank_bytes   = NUM_THREADS * sizeof(float);
+  uint32_t per_warp_section  = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
+  uint32_t smem_b_bytes      = tileK_elem * tileN * sizeof(itype_t);
+  uint32_t smem_b_off        = ((warps * per_warp_section + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
+  uint32_t smem_size         = smem_b_off + smem_b_bytes;
 
   std::cout << "ITYPE=fp16, OTYPE=fp32 (sparse 2:4 + DXA)" << std::endl;
   std::cout << "tile M=" << tileM << " N=" << tileN << " K=" << tileK_elem << std::endl;
+  std::cout << "cta_M=" << cta_M << " (warps=" << warps << ")" << std::endl;
   std::cout << "grid: " << grid_dim[0] << "x" << grid_dim[1] << std::endl;
   std::cout << "block: " << block_dim[0] << "x" << block_dim[1] << std::endl;
   std::cout << "matrix A: " << M << "x" << K << " (compressed " << M << "x" << K/2 << ")" << std::endl;

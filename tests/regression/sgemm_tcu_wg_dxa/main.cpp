@@ -169,7 +169,7 @@ struct muladd_t<vt::tf32, vt::tf32> {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using cfg = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, 8>;
+using cfg = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
 
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
@@ -283,8 +283,10 @@ int main(int argc, char *argv[]) {
   uint32_t N = xn;
   uint32_t K = xk;
 
-  if ((M % cfg::xtileM) != 0) {
-    std::cout << "Error: M (" << M << ") must be a multiple of tileM=" << cfg::xtileM << std::endl;
+  uint32_t cta_M = warps * cfg::xtileM;
+
+  if ((M % cta_M) != 0) {
+    std::cout << "Error: M (" << M << ") must be a multiple of cta_M=" << cta_M << std::endl;
     return -1;
   }
   if ((N % cfg::xtileN) != 0) {
@@ -300,15 +302,16 @@ int main(int argc, char *argv[]) {
   size_t sizeB = K * N;
   size_t sizeC = M * N;
 
-  // Grid: one block per output tile. Block: 1D threads for WGMMA.
-  uint32_t grid_dim[2]  = {N / cfg::xtileN, M / cfg::xtileM};
+  // Grid: one block per CTA output tile. Block: warps * NT threads.
+  uint32_t grid_dim[2]  = {N / cfg::xtileN, M / cta_M};
   uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
-  // SMEM: A tile [tileM x tileK] + B tile [tileK x tileN]
-  uint32_t smem_size = (cfg::xtileM * cfg::tileK + cfg::tileK * cfg::xtileN) * sizeof(itype_t);
+  // SMEM: A tile [cta_M x tileK] + B tile [tileK x tileN]
+  uint32_t smem_size = (cta_M * cfg::tileK + cfg::tileK * cfg::xtileN) * sizeof(itype_t);
 
   std::cout << "input type: " << vt::ITYPE::name << ", output type: " << vt::OTYPE::name << std::endl;
   std::cout << "WGMMA tile: M=" << cfg::xtileM << ", N=" << cfg::xtileN << ", K=" << cfg::tileK << std::endl;
+  std::cout << "CTA tile: M=" << cta_M << " (warps=" << warps << ")" << std::endl;
   std::cout << "grid: " << grid_dim[0] << "x" << grid_dim[1] << std::endl;
   std::cout << "block: " << block_dim[0] << "x" << block_dim[1] << std::endl;
   std::cout << "matrix A: " << M << "x" << K << std::endl;
@@ -347,13 +350,13 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
 
   // Program DXA descriptors.
-  // Descriptor A: fetches tileK columns x tileM rows from A[row, k].
-  //   dim0 = K-axis (tile0 = tileK), dim1 = M-axis (tile1 = tileM)
+  // Descriptor A: fetches tileK columns x cta_M rows from A[row, k].
+  //   dim0 = K-axis (tile0 = tileK), dim1 = M-axis (tile1 = cta_M)
   //   stride0_bytes = row stride of A = K * sizeof(itype_t)
   RT_CHECK(vx_dxa_program_desc_2d(device, kDescA, kernel_arg.A_addr,
     /*size0=*/K, /*size1=*/M,
     /*stride0_bytes=*/K * sizeof(itype_t),
-    /*tile0=*/cfg::tileK, /*tile1=*/cfg::xtileM,
+    /*tile0=*/cfg::tileK, /*tile1=*/cta_M,
     /*elem_bytes=*/sizeof(itype_t)));
 
   // Descriptor B: fetches tileN columns x tileK rows from B[k, col].

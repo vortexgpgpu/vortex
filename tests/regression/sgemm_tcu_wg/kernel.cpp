@@ -59,8 +59,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     auto A_warp = A_smem + warp_rank * ctx::xtileM * ctx::tileK;
     auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::xtileN * sizeof(ctx::input_t));
 
-  #if defined(WGMMA_RS)
-    // RS: A from registers, B from smem
+  #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+    // RS: A from registers, B from smem (NRC <= 16 only)
     ctx::fragment_a fragA;
     ctx::load_matrix_sync(fragA, A_warp, ctx::tileK);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);

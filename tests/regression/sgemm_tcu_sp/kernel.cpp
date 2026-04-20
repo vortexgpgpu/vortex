@@ -50,7 +50,8 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 #ifdef PROFILE_ENABLE
     __rdcycle_time t0 = vx_rdcycle_sync_begin();
 #endif
-    ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A, nullptr, pMetaSp);
+    ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A);
+    ctx::load_sp_metadata(fragA, pMetaSp);
     ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
     ctx::mma_sync(fragC, fragA, fragB, fragC);
 #ifdef PROFILE_ENABLE

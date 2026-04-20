@@ -11,7 +11,11 @@ SRCS := $(SRC_DIR)/main.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/softf
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
-CONFIGS += -DTCU_WGMMA_ENABLE
+CONFIGS := $(if $(findstring -DNUM_WARPS=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DNUM_WARPS=8)
+CONFIGS := $(if $(findstring -DISSUE_WIDTH=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DISSUE_WIDTH=4)
+CONFIGS += -DTCU_WGMMA_ENABLE -DWGMMA_RS
+
+OPTS := $(OPTS) $(if $(findstring -w,$(OPTS)),,-w 4)
 
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 

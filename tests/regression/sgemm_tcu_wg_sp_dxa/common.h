@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <VX_config.h>
 
+#ifndef WGMMA_NRC
+  #define WGMMA_NRC 8
+#endif
+
 #ifndef ITYPE
 #define ITYPE fp16
 #endif

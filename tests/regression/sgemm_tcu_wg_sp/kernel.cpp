@@ -7,16 +7,14 @@ namespace vt = vortex::tensor;
 
 using ctx = vt::wgmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC>;
 
-// smem layout: [A_compressed][meta][B_dense]
-static constexpr uint32_t smem_a_elems  = ctx::xtileM * (ctx::tileK / 2);
-static constexpr uint32_t smem_a_bytes  = smem_a_elems * sizeof(ctx::input_t);
-static constexpr uint32_t smem_b_elems  = ctx::tileK * ctx::xtileN;
-static constexpr uint32_t smem_b_bytes  = smem_b_elems * sizeof(ctx::input_t);
-// meta immediately follows A; B follows meta, bank-row aligned
-static constexpr uint32_t smem_meta_off   = smem_a_bytes;
-static constexpr uint32_t smem_bank_bytes = NUM_THREADS * sizeof(float);
-static constexpr uint32_t smem_b_off      = ((smem_meta_off + ctx::wg_meta_total_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
-static constexpr uint32_t smem_total      = smem_b_off + smem_b_bytes;
+// Per-warp smem layout: [A_compressed][metadata] (bank-aligned section)
+// Then shared B after all warp sections
+static constexpr uint32_t smem_a_elems     = ctx::xtileM * (ctx::tileK / 2);
+static constexpr uint32_t smem_a_bytes     = smem_a_elems * sizeof(ctx::input_t);
+static constexpr uint32_t smem_b_elems     = ctx::tileK * ctx::xtileN;
+static constexpr uint32_t smem_b_bytes     = smem_b_elems * sizeof(ctx::input_t);
+static constexpr uint32_t smem_bank_bytes  = NUM_THREADS * sizeof(float);
+static constexpr uint32_t per_warp_section = ((smem_a_bytes + ctx::wg_meta_total_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA  = reinterpret_cast<ctx::input_t *>(arg->A_addr);   // compressed A
@@ -28,19 +26,23 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 
-  // Tile origin for this block
-  uint32_t tile_row = blockIdx.y * ctx::xtileM;
+  uint32_t tid = threadIdx.x;
+  uint32_t num_threads = blockDim.x;
+  uint32_t warp_rank = tid / NUM_THREADS;
+  uint32_t num_warps = num_threads / NUM_THREADS;
+
+  // CTA tile dimensions
+  uint32_t cta_M = num_warps * ctx::xtileM;
+  uint32_t tile_row = blockIdx.y * cta_M;
   uint32_t tile_col = blockIdx.x * ctx::xtileN;
 
   auto smem_base = reinterpret_cast<uint8_t*>(__local_mem());
-  auto A_smem = reinterpret_cast<ctx::input_t*>(smem_base);
+  uint32_t smem_b_off = ((num_warps * per_warp_section + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
   auto B_smem = reinterpret_cast<ctx::input_t*>(smem_base + smem_b_off);
 
   // Initialize accumulator to zero
   ctx::fragment_acc fragC;
   ctx::fill_fragment(fragC, 0);
-
-  uint32_t tid = threadIdx.x;
 
   // Strides in global memory
   uint32_t a_sp_stride = K / 2;         // compressed A: K/2 elements per row
@@ -50,23 +52,25 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     uint32_t k_tile = k / ctx::tileK;
 
-    // Cooperative load: compressed A [tile_row..tile_row+xtileM, k/2..k/2+tileK/2)
-    for (uint32_t i = tid; i < smem_a_elems; i += CTA_SIZE) {
-      uint32_t r = i / (ctx::tileK / 2);
-      uint32_t c = i % (ctx::tileK / 2);
-      A_smem[r * (ctx::tileK / 2) + c] = pA[(tile_row + r) * a_sp_stride + (k / 2 + c)];
-    }
+    // Cooperative load: compressed A and metadata for all warps
+    for (uint32_t w = 0; w < num_warps; ++w) {
+      auto A_smem_w = reinterpret_cast<ctx::input_t*>(smem_base + w * per_warp_section);
+      for (uint32_t i = tid; i < smem_a_elems; i += num_threads) {
+        uint32_t r = i / (ctx::tileK / 2);
+        uint32_t c = i % (ctx::tileK / 2);
+        A_smem_w[r * (ctx::tileK / 2) + c] = pA[(tile_row + w * ctx::xtileM + r) * a_sp_stride + (k / 2 + c)];
+      }
 
-    // Cooperative load: metadata for this (tile_row, k_tile) block
-    uint32_t tile_row_idx = blockIdx.y;
-    auto pMeta_tile = pMetaSp + (tile_row_idx * num_k_tiles + k_tile) * meta_words_per_tile;
-    auto meta_smem = reinterpret_cast<uint32_t*>(smem_base + smem_meta_off);
-    for (uint32_t i = tid; i < meta_words_per_tile; i += CTA_SIZE) {
-      meta_smem[i] = pMeta_tile[i];
+      uint32_t tile_row_idx_w = blockIdx.y * num_warps + w;
+      auto pMeta_tile_w = pMetaSp + (tile_row_idx_w * num_k_tiles + k_tile) * meta_words_per_tile;
+      auto meta_smem_w = reinterpret_cast<uint32_t*>(smem_base + w * per_warp_section + smem_a_bytes);
+      for (uint32_t i = tid; i < meta_words_per_tile; i += num_threads) {
+        meta_smem_w[i] = pMeta_tile_w[i];
+      }
     }
 
     // Cooperative load: dense B [k..k+tileK, tile_col..tile_col+xtileN)
-    for (uint32_t i = tid; i < smem_b_elems; i += CTA_SIZE) {
+    for (uint32_t i = tid; i < smem_b_elems; i += num_threads) {
       uint32_t r = i / ctx::xtileN;
       uint32_t c = i % ctx::xtileN;
       B_smem[r * ctx::xtileN + c] = pB[(k + r) * N + (tile_col + c)];
@@ -74,19 +78,27 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     __syncthreads();
 
-    // Build smem descriptors:
-    //   desc_a: compressed A with ldm = (tileK/2) * sizeof(input_t)
-    //           metadata is implicitly at A_smem + xtileM * ldm_bytes
-    //   desc_b: dense B with ldm = xtileN * sizeof(input_t)
-    auto desc_a = vt::vx_make_smem_desc(A_smem, (ctx::tileK / 2) * sizeof(ctx::input_t));
+    // Each warp's A section in smem
+    auto A_warp = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
     auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::xtileN * sizeof(ctx::input_t));
 
+  #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
+    // RS: A + sparse metadata from registers, B from smem (NRC <= 16 only)
+    auto meta_sp = smem_base + warp_rank * per_warp_section + smem_a_bytes;
+    ctx::fragment_a fragA;
+    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK / 2);
+    ctx::load_sp_metadata(fragA, meta_sp);
+    ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
+  #else
+    // SS: both A and B from smem descriptors
+    auto desc_a = vt::vx_make_smem_desc(A_warp, (ctx::tileK / 2) * sizeof(ctx::input_t));
     ctx::wgmma_sync(fragC, desc_a, desc_b, fragC);
+  #endif
 
     __syncthreads();
   }
 
   // Store C tile to global memory
-  auto pTileC = pC + tile_row * N + tile_col;
+  auto pTileC = pC + (tile_row + warp_rank * ctx::xtileM) * N + tile_col;
   ctx::store_matrix_sync(pTileC, fragC, N);
 }

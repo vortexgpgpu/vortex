@@ -136,7 +136,7 @@ package VX_tcu_pkg;
     localparam TCU_MAX_META_ROW_WIDTH   = TCU_TC_K * 2 * TCU_MAX_ELT_RATIO;
     localparam TCU_MAX_META_BLOCK_WIDTH = TCU_NT   * 2 * TCU_MAX_ELT_RATIO;
 
-    // Meta-store micro-op expansion parameters
+    // Meta-store micro-op expansion parameters (WMMA)
     localparam TCU_META_PER_WARP_DEPTH = TCU_M_STEPS * (TCU_K_STEPS / 2);
     localparam TCU_META_COLS_PER_LOAD  = (TCU_BLOCK_CAP >= TCU_META_PER_WARP_DEPTH)
         ? (TCU_BLOCK_CAP / TCU_META_PER_WARP_DEPTH) : 1;
@@ -145,6 +145,14 @@ package VX_tcu_pkg;
     localparam TCU_BANKS_PER_STORE = (TCU_NT < TCU_META_PER_WARP_DEPTH)
         ? TCU_NT : TCU_META_PER_WARP_DEPTH;
     localparam TCU_STORES_PER_COL = (TCU_META_PER_WARP_DEPTH + TCU_NT - 1) / TCU_NT;
+
+`ifdef TCU_WGMMA_ENABLE
+    // Meta-store micro-op expansion parameters (WGMMA RS sparse)
+    localparam TCU_WG_META_PER_WARP_DEPTH = TCU_WG_M_STEPS * (TCU_WG_K_STEPS / 2);
+    localparam TCU_WG_META_COLS_PER_LOAD  = (TCU_BLOCK_CAP >= TCU_WG_META_PER_WARP_DEPTH)
+        ? (TCU_BLOCK_CAP / TCU_WG_META_PER_WARP_DEPTH) : 1;
+    localparam TCU_WG_STORES_PER_COL = (TCU_WG_META_PER_WARP_DEPTH + TCU_NT - 1) / TCU_NT;
+`endif
 
     // Register counts
     localparam TCU_NRA = (TCU_TILE_M * TCU_TILE_K) / TCU_NT;
@@ -262,6 +270,13 @@ package VX_tcu_pkg;
         return 5'(((32'(meta_num_cols(fmt)) + TCU_META_COLS_PER_LOAD - 1) / TCU_META_COLS_PER_LOAD)
                   * TCU_STORES_PER_COL);
     endfunction
+
+`ifdef TCU_WGMMA_ENABLE
+    function automatic logic [4:0] wg_meta_total_store_uops(input logic [3:0] fmt);
+        return 5'(((32'(meta_num_cols(fmt)) + TCU_WG_META_COLS_PER_LOAD - 1) / TCU_WG_META_COLS_PER_LOAD)
+                  * TCU_WG_STORES_PER_COL);
+    endfunction
+`endif
 
     // Tracing info
 `ifdef SIMULATION
