@@ -263,16 +263,6 @@ public:
   static __attribute__((always_inline)) void load_mx_metadata(Frag& frag, const void* meta_mx_ptr) {
     static_assert(Frag::HasMxMeta, "MX metadata is only valid for matrix_a/matrix_b fragments");
 
-    if constexpr (!is_mx) {
-      (void)frag;
-      (void)meta_mx_ptr;
-      return;
-    }
-
-    if (nullptr == meta_mx_ptr) {
-      return;
-    }
-
     auto meta_base = reinterpret_cast<const uint32_t*>(meta_mx_ptr);
     if constexpr (Frag::Use == matrix_a) {
       frag.mx_meta[0] = mx_word_as_f32(meta_base[0]);
@@ -292,6 +282,19 @@ public:
         frag.mx_meta[0] = mx_word_as_f32(meta_base[2]);
         frag.mx_meta[1] = mx_word_as_f32(meta_base[3]);
       }
+    }
+  }
+
+  template <typename Frag>
+  static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
+    static_assert(is_sparse, "load_sp_metadata requires sparse configuration");
+    static_assert(Frag::Use == matrix_a, "sparse metadata load is only valid for matrix_a fragment");
+
+    auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
+    uint32_t lane_id = vx_thread_id();
+    frag.data[sparse_regs] = meta_base[lane_id];
+    if constexpr (sp_num_meta_loads == 2) {
+      frag.data[sparse_regs + 1] = meta_base[NT + lane_id];
     }
   }
 
@@ -504,41 +507,6 @@ public:
         }
       });
     }
-  }
-
-  // Dense-MX overload (4 args): matrix data + packed MX metadata pointer.
-  template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
-                                                               const void *meta_mx_ptr) {
-    static_assert(!is_sparse, "4-arg load_matrix_sync is dense-MX only");
-    static_assert(Frag::HasMxMeta, "MX metadata load requires matrix_a/matrix_b fragment");
-    load_matrix_sync<src_layout, Frag>(dst, src, ldm);
-    load_mx_metadata(dst, meta_mx_ptr);
-  }
-
-  // Sparse overload (5 args): MX pointer first, then SP metadata pointer.
-  // MX is optional in sparse mode (pass nullptr when unused).
-  template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
-                                                               const void *meta_mx_ptr,
-                                                               const void *meta_sp_ptr) {
-    static_assert(is_sparse, "5-arg load_matrix_sync is sparse only");
-    static_assert(Frag::HasMxMeta, "MX metadata load requires matrix_a/matrix_b fragment");
-
-    // Reuse base matrix load
-    load_matrix_sync<src_layout, Frag>(dst, src, ldm);
-
-    // Sparse metadata (A fragment only)
-    if constexpr (Frag::Use == matrix_a) {
-      auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
-      uint32_t lane_id = vx_thread_id();
-      dst.data[sparse_regs] = meta_base[lane_id];
-      if constexpr (sp_num_meta_loads == 2) {
-        dst.data[sparse_regs + 1] = meta_base[NT + lane_id];
-      }
-    }
-
-    load_mx_metadata(dst, meta_mx_ptr);
   }
 
   template <mem_layout dst_layout = row_major, typename Frag>
@@ -876,11 +844,26 @@ public:
     ctx_c::fill_fragment(dst, value);
   }
 
-  // Load A fragment (NRA=4 config)
+  // Load A fragment (NRA=4 config) — 3-arg base
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
-    static_assert(Frag::Use == matrix_a, "only matrix_a fragment can be loaded from registers in wgmma_context");
+    static_assert(Frag::Use == matrix_a, "only matrix_a fragment can be loaded from registers in wgmma context");
     ctx_a::template load_matrix_sync<src_layout>(dst, src, ldm);
+  }
+
+  // Load sparse metadata into fragment_a.
+  // VX_tcu_meta uses WMMA's per_warp_depth (NR=8) for the thread-to-bank mapping,
+  // so we scatter smem data from bank-contiguous to interleaved register layout.
+  template <typename Frag>
+  static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
+    static_assert(Frag::Use == matrix_a, "sparse metadata load is only valid for matrix_a fragment");
+    using rtl_cfg = wmma_config_t<NT>;  // default NR=8 matches RTL's PER_WARP_DEPTH
+    static constexpr uint32_t RTL_DEPTH = rtl_cfg::per_warp_depth;
+    auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
+    uint32_t lane_id = vx_thread_id();
+    uint32_t rtl_bank = lane_id % RTL_DEPTH;
+    uint32_t rtl_col  = lane_id / RTL_DEPTH;
+    frag.data[ctx_a::sparse_regs] = meta_base[rtl_bank * wg_meta_stride_words + rtl_col];
   }
 
   // Store accumulator with n-major register layout: r = n * m_steps + m
@@ -910,8 +893,8 @@ public:
   }
 
   // ---- WGMMA sync intrinsic ----
-  //   SS: wgmma_sync(fragD, desc_a, desc_b, fragC) — any NRC
-  //   RS: wgmma_sync(fragD, fragA,  desc_b, fragC) — NRC <= 16
+  // SS: wgmma_sync(fragD, desc_a, desc_b, fragC) — any NRC
+  // RS: wgmma_sync(fragD, fragA,  desc_b, fragC) — NRC <= 16
 
   template <typename OpA, typename OpB, typename FragD, typename FragC>
   static __attribute__((always_inline)) void wgmma_sync(FragD &frag_d,

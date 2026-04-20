@@ -46,7 +46,8 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire reset,
 
 `ifdef PERF_ENABLE
-    output wire [PERF_CTR_BITS-1:0] tbuf_fetch_stalls,
+    output wire [PERF_CTR_BITS-1:0] tbuf_stalls,
+    output wire [PERF_CTR_BITS-1:0] tbuf_cache_hits,
     output wire [PERF_CTR_BITS-1:0] lmem_reads,
 `endif
 
@@ -124,8 +125,9 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
-        .tbuf_fetch_stalls(tbuf_fetch_stalls),
-        .lmem_reads       (lmem_reads),
+        .tbuf_stalls    (tbuf_stalls),
+        .tbuf_cache_hits(tbuf_cache_hits),
+        .lmem_reads     (lmem_reads),
     `endif
         .req_wid        (req_wid),
         .req_valid      (req_valid),

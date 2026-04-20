@@ -134,6 +134,7 @@ const char *kernel_file = "kernel.vxbin";
 uint32_t xm = 64;
 uint32_t xn = 64;
 uint32_t xk = 64;
+uint32_t warps = 4;
 
 vx_device_h device      = nullptr;
 vx_buffer_h A_buffer    = nullptr;
@@ -146,16 +147,17 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Vortex Sgemm2 TCU Sparse (WGMMA_SP) Test." << std::endl;
-  std::cout << "Usage: [-m M] [-n N] [-k K] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m M] [-n N] [-k K] [-w warps] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:w:h")) != -1) {
     switch (c) {
     case 'm': xm = atoi(optarg); break;
     case 'n': xn = atoi(optarg); break;
     case 'k': xk = atoi(optarg); break;
+    case 'w': warps = atoi(optarg); break;
     case 'h': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
     }
@@ -196,13 +198,22 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  uint64_t num_warps;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
+  if (warps > num_warps) {
+    std::cout << "Error: requested warps (" << warps << ") exceeds device's capacity (" << num_warps << ")" << std::endl;
+    return -1;
+  }
+
   uint32_t M = xm, N = xn, K = xk;
 
   constexpr uint32_t tileM      = wg_cfg_t::xtileM;
   constexpr uint32_t tileN      = wg_cfg_t::xtileN;
   constexpr uint32_t tileK_elem = wg_cfg_t::tileK;
 
-  if ((M % tileM) != 0) { std::cout << "M must be multiple of " << tileM << std::endl; return -1; }
+  uint32_t cta_M = warps * tileM;
+
+  if ((M % cta_M) != 0) { std::cout << "M must be multiple of cta_M=" << cta_M << std::endl; return -1; }
   if ((N % tileN) != 0) { std::cout << "N must be multiple of " << tileN << std::endl; return -1; }
   if ((K % tileK_elem) != 0) { std::cout << "K must be multiple of " << tileK_elem << std::endl; return -1; }
 
@@ -215,11 +226,12 @@ int main(int argc, char *argv[]) {
   uint32_t num_k_tiles   = K / tileK_elem;
   size_t meta_words      = (size_t)num_tile_rows * num_k_tiles * kWordsPerTile;
 
-  uint32_t grid_dim[2]  = {N / tileN, M / tileM};
-  uint32_t block_dim[2] = {(uint32_t)NT, 1};
+  uint32_t grid_dim[2]  = {N / tileN, M / cta_M};
+  uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
   std::cout << "ITYPE=" << vt::ITYPE::bits << "b, OTYPE=" << vt::OTYPE::bits << "b" << std::endl;
   std::cout << "tile M=" << tileM << " N=" << tileN << " K=" << tileK_elem << std::endl;
+  std::cout << "cta_M=" << cta_M << " (warps=" << warps << ")" << std::endl;
   std::cout << "matrix A: " << M << "x" << K << " (compressed " << M << "x" << K/2 << ")" << std::endl;
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;
@@ -282,13 +294,14 @@ int main(int argc, char *argv[]) {
   std::cout << "upload kernel argument" << std::endl;
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
-  // smem: [A_compressed][meta_padded][B_dense]
-  uint32_t smem_a_bytes    = tileM * (tileK_elem / 2) * sizeof(itype_t);
-  uint32_t smem_meta_bytes = kWgMetaBanks * kMetaStrWords * 4;
-  uint32_t smem_b_bytes    = tileK_elem * tileN * sizeof(itype_t);
-  uint32_t smem_bank_bytes = NUM_THREADS * sizeof(float);
-  uint32_t smem_b_off      = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
-  uint32_t smem_size       = smem_b_off + smem_b_bytes;
+  // smem: per-warp [A_compressed][metadata] sections, then shared B
+  uint32_t smem_a_bytes      = tileM * (tileK_elem / 2) * sizeof(itype_t);
+  uint32_t smem_meta_bytes   = kWgMetaBanks * kMetaStrWords * 4;
+  uint32_t smem_bank_bytes   = NUM_THREADS * sizeof(float);
+  uint32_t per_warp_section  = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
+  uint32_t smem_b_bytes      = tileK_elem * tileN * sizeof(itype_t);
+  uint32_t smem_b_off        = ((warps * per_warp_section + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
+  uint32_t smem_size         = smem_b_off + smem_b_bytes;
 
   auto time_start = std::chrono::high_resolution_clock::now();
 

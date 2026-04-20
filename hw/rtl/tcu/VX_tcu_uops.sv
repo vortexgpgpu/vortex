@@ -37,7 +37,14 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `endif
 
 `ifdef TCU_WGMMA_ENABLE
+  `ifdef TCU_SPARSE_ENABLE
+    localparam MAX_WG_META_STORES = ((TCU_BLOCK_CAP + 1) / 2) * TCU_WG_STORES_PER_COL;
+    localparam MAX_WG_UOPS_SP = TCU_WG_UOPS / 2 + MAX_WG_META_STORES;
+    localparam CTR_W_MAX_WMMA = MAX_UOPS > TCU_WG_UOPS ? MAX_UOPS : TCU_WG_UOPS;
+    localparam CTR_W = $clog2(CTR_W_MAX_WMMA > MAX_WG_UOPS_SP ? CTR_W_MAX_WMMA : MAX_WG_UOPS_SP);
+  `else
     localparam CTR_W = $clog2(MAX_UOPS > TCU_WG_UOPS ? MAX_UOPS : TCU_WG_UOPS);
+  `endif
 `else
     localparam CTR_W = $clog2(MAX_UOPS);
 `endif
@@ -92,18 +99,29 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     //   Sparse: ctr = n * m_steps + m  (k always 0)
     // Since n_steps varies by cd_nregs, k-index bit position shifts.
     // m is always bit 0 (m_steps=2). n and k extracted via mux.
-    wire [`UP(LG_M_WG)-1:0] wg_m_index = ctr[0 +: `UP(LG_M_WG)];
+`ifdef TCU_SPARSE_ENABLE
+    wire [`UP(CTR_W)-1:0] wg_idx_ctr = wg_eff_ctr;
+`else
+    wire [`UP(CTR_W)-1:0] wg_idx_ctr = ctr;
+`endif
+    wire [`UP(LG_M_WG)-1:0] wg_m_index = wg_idx_ctr[0 +: `UP(LG_M_WG)];
     reg [`UP(LG_K_WG)-1:0] wg_k_index;
     reg [`UP(LG_N_WG_MAX)-1:0] wg_n_index;
 `ifdef TCU_SPARSE_ENABLE
     wire wg_is_sparse = ibuf_in.op_args.tcu.is_sparse;
+    wire wg_rs_sparse = wg_is_sparse && !wg_a_from_smem;
+    localparam WG_META_REG0 = TCU_WG_RA + TCU_WG_M_STEPS * (TCU_WG_K_STEPS / 2);
+    localparam WG_META_REG1 = WG_META_REG0 + 1;
+    wire [4:0] wg_meta_total = wg_meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s);
+    wire wg_is_meta_phase = wg_rs_sparse && (ctr < `UP(CTR_W)'(wg_meta_total));
+    wire [`UP(CTR_W)-1:0] wg_eff_ctr = wg_rs_sparse ? (ctr - `UP(CTR_W)'(wg_meta_total)) : ctr;
 `endif
     always_comb begin
     `ifdef TCU_SPARSE_ENABLE
         if (wg_is_sparse) begin
             // Sparse: k always 0, n right after m
             wg_k_index = '0;
-            wg_n_index = `UP(LG_N_WG_MAX)'(ctr[LG_M_WG +: `UP(LG_N_WG_MAX)]);
+            wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: `UP(LG_N_WG_MAX)]);
         end else
     `endif
         begin
@@ -111,16 +129,16 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
             // n width varies by cd_nregs; k bit shifts accordingly.
             case (ibuf_in.op_args.tcu.cd_nregs)
                 2'd0: begin // nrc=8, n_steps=4, LG_N=2
-                    wg_n_index = `UP(LG_N_WG_MAX)'(ctr[LG_M_WG +: 2]);
-                    wg_k_index = `UP(LG_K_WG)'(ctr[LG_M_WG + 2 +: `UP(LG_K_WG)]);
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 2]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + 2 +: `UP(LG_K_WG)]);
                 end
                 2'd1: begin // nrc=16, n_steps=8, LG_N=3
-                    wg_n_index = `UP(LG_N_WG_MAX)'(ctr[LG_M_WG +: 3]);
-                    wg_k_index = `UP(LG_K_WG)'(ctr[LG_M_WG + 3 +: `UP(LG_K_WG)]);
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 3]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + 3 +: `UP(LG_K_WG)]);
                 end
                 default: begin // nrc=32, n_steps=16, LG_N=4
-                    wg_n_index = `UP(LG_N_WG_MAX)'(ctr[LG_M_WG +: LG_N_WG_MAX]);
-                    wg_k_index = `UP(LG_K_WG)'(ctr[LG_M_WG + LG_N_WG_MAX +: `UP(LG_K_WG)]);
+                    wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: LG_N_WG_MAX]);
+                    wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + LG_N_WG_MAX +: `UP(LG_K_WG)]);
                 end
             endcase
         end
@@ -160,7 +178,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         is_wgmma ? (
     `ifdef TCU_SPARSE_ENABLE
             ibuf_in.op_args.tcu.is_sparse
-                ? (wg_uop_cnt >> 1)
+                ? (wg_a_from_smem
+                    ? (wg_uop_cnt >> 1)
+                    : ((wg_uop_cnt >> 1) + UOP_CTR_W'(wg_meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s))))
                 :
     `endif
             wg_uop_cnt) :
@@ -298,25 +318,48 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     `endif
     `ifdef TCU_WGMMA_ENABLE
         if (is_wgmma) begin
-            ibuf_r.op_args.tcu.step_m = 4'(wg_m_index);
-            ibuf_r.op_args.tcu.step_n = 4'(wg_n_index);
-            ibuf_r.op_args.tcu.step_k = 4'(wg_k_index);
-            ibuf_r.wb  = 1'b1;
-            ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
-            ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
-            ibuf_r.used_rs[2] = 1'b1;
-            // Smem descriptors are invariant across the whole WGMMA expansion,
-            // so only fetch them on the first uop.
-            if (wg_a_from_smem) begin
-                ibuf_r.rs1 = make_reg_num(REG_TYPE_I, 5'd10);
-                ibuf_r.used_rs[0] = (ctr == '0);
-            end else begin
-                ibuf_r.rs1 = make_reg_num(REG_TYPE_F, wg_ra_base + 5'(wg_rs1_reg_off));
+        `ifdef TCU_SPARSE_ENABLE
+            if (wg_is_meta_phase) begin
+                // RS sparse meta-store phase: preload metadata from f26/f27
+                // into VX_tcu_meta SRAM (same path as WMMA META_STORE).
+                ibuf_r.op_type = INST_TCU_META_STORE;
+                ibuf_r.op_args.tcu.fmt_d = 4'(ctr);
+                ibuf_r.op_args.tcu.step_m = '0;
+                ibuf_r.op_args.tcu.step_n = '0;
+                ibuf_r.op_args.tcu.step_k = '0;
+                ibuf_r.wb  = 1'b0;
+                ibuf_r.rd  = '0;
+                ibuf_r.rs1 = make_reg_num(REG_TYPE_F,
+                    5'(meta_use_rs2 ? WG_META_REG1 : WG_META_REG0));
+                ibuf_r.rs2 = ibuf_in.rs2;
+                ibuf_r.rs3 = '0;
                 ibuf_r.used_rs[0] = 1'b1;
+                ibuf_r.used_rs[1] = 1'b0;
+                ibuf_r.used_rs[2] = 1'b0;
+            end else
+        `endif
+            begin
+                // MMA phase
+                ibuf_r.op_args.tcu.step_m = 4'(wg_m_index);
+                ibuf_r.op_args.tcu.step_n = 4'(wg_n_index);
+                ibuf_r.op_args.tcu.step_k = 4'(wg_k_index);
+                ibuf_r.wb  = 1'b1;
+                ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
+                ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
+                ibuf_r.used_rs[2] = 1'b1;
+                // Smem descriptors are invariant across the whole WGMMA expansion,
+                // so only fetch them on the first MMA uop.
+                if (wg_a_from_smem) begin
+                    ibuf_r.rs1 = make_reg_num(REG_TYPE_I, 5'd10);
+                    ibuf_r.used_rs[0] = (wg_idx_ctr == '0);
+                end else begin
+                    ibuf_r.rs1 = make_reg_num(REG_TYPE_F, wg_ra_base + 5'(wg_rs1_reg_off));
+                    ibuf_r.used_rs[0] = 1'b1;
+                end
+                // B source: always smem descriptor (x11), fetched on first MMA uop
+                ibuf_r.rs2 = make_reg_num(REG_TYPE_I, 5'd11);
+                ibuf_r.used_rs[1] = (wg_idx_ctr == '0);
             end
-            // B source: always smem descriptor (x11), fetched once
-            ibuf_r.rs2 = make_reg_num(REG_TYPE_I, 5'd11);
-            ibuf_r.used_rs[1] = (ctr == '0);
         end else
     `endif
         begin
@@ -364,8 +407,16 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r.used_rs[2] = 1'b1;
     `endif
         end
-        ibuf_r.fu_lock   = 1'b0;
-        ibuf_r.fu_unlock = 1'b0;
+    `ifdef TCU_WGMMA_ENABLE
+        if (is_wgmma) begin
+            ibuf_r.fu_lock   = (uop_idx == '0);
+            ibuf_r.fu_unlock = (uop_idx == (uop_count - UOP_CTR_W'(1)));
+        end else
+    `endif
+        begin
+            ibuf_r.fu_lock   = 1'b0;
+            ibuf_r.fu_unlock = 1'b0;
+        end
     end
 
     assign ibuf_out = ibuf_r;

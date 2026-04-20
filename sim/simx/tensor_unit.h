@@ -49,21 +49,21 @@ public:
 
   struct ExeTraceData : public ITraceData {
     using Ptr = std::shared_ptr<ExeTraceData>;
-    bool is_last_k = true; // false for non-last K-steps (suppress rd writeback)
+    bool is_last_k = true;        // false for non-last K-steps (suppress rd writeback)
+    int  fetch_delay = 0;         // tile buffer fetch cycles (v2 timing model)
+    bool tbuf_cache_hit = false;  // B tile was reused from tile buffer cache
   };
 
 	struct PerfStats {
 		uint64_t latency = 0;
-		uint64_t tbuf_fetch_stalls = 0;
-		uint64_t wgmma_instrs = 0; // WGMMA µops executed
-		uint64_t wgmma_stalls = 0; // not cycle-accurate in simx (always 0)
-		uint64_t lmem_reads   = 0; // LMEM read transactions per wgmma() call
+		uint64_t tbuf_stalls = 0;      // cycles stalled waiting for tbuf data
+		uint64_t tbuf_cache_hits = 0;  // B tile reuse from tile buffer cache
+		uint64_t lmem_reads = 0;   // tile buffer local memory reads
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->latency          += rhs.latency;
-			this->tbuf_fetch_stalls += rhs.tbuf_fetch_stalls;
-			this->wgmma_instrs     += rhs.wgmma_instrs;
-			this->wgmma_stalls     += rhs.wgmma_stalls;
+			this->tbuf_stalls      += rhs.tbuf_stalls;
+			this->tbuf_cache_hits  += rhs.tbuf_cache_hits;
 			this->lmem_reads       += rhs.lmem_reads;
 			return *this;
 		}

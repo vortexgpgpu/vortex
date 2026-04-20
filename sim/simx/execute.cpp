@@ -1651,7 +1651,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
                                    rs3_data,
                                    rd_data,
                                    trace_data.get(),
-                                     tpuArgs.is_sparse);
+                                   tpuArgs.is_sparse);
         rd_write = trace_data->is_last_k;
       } break;
   #ifdef TCU_WGMMA_ENABLE

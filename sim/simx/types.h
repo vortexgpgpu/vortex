@@ -720,8 +720,9 @@ enum class TcuType {
   META_STORE,
 };
 
-constexpr uint32_t TCU_META_KIND_SPARSE = 0;
-constexpr uint32_t TCU_META_KIND_MX     = 1;
+constexpr uint32_t TCU_META_KIND_SPARSE    = 0;
+constexpr uint32_t TCU_META_KIND_MX        = 1;
+constexpr uint32_t TCU_META_KIND_SPARSE_WG = 2;  // WGMMA RS sparse (per_warp_depth=2)
 
 struct IntrTcuArgs {
   uint32_t is_sparse : 1;
@@ -732,7 +733,7 @@ struct IntrTcuArgs {
   uint32_t step_m    : 4;
   uint32_t step_n    : 4;
   uint32_t step_k    : 4;
-  uint32_t meta_kind : 1; // 0=sparse, 1=mx
+  uint32_t meta_kind : 2; // 0=sparse, 1=mx, 2=sparse_wg
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
