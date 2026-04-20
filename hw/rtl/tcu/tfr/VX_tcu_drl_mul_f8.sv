@@ -63,13 +63,13 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     localparam B_BF8 = (1 << (E_BF8 - 1)) - 1;
     localparam [7:0] BIAS_CONST_BF8  = 8'(BIAS_BASE - 2*B_BF8);
 
-    wire is_bfloat = tcu_fmt_is_bfloat(fmt_f);
-
     // ======================================================================
     // 2. Main Loop (Per TCK Lane)
     // ======================================================================
 
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
+
+        wire is_bfloat = tcu_fmt_is_bfloat(fmt_f);
 
         // Per-element valid bits (2 elements -> 1 lane)
         wire [1:0] lane_valid = {vld_mask[i * 4 + 2], vld_mask[i * 4 + 0]};

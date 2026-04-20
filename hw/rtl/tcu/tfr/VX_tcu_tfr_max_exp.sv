@@ -18,7 +18,8 @@ module VX_tcu_tfr_max_exp import VX_tcu_pkg::*; #(
     parameter WIDTH = 8
 ) (
     input  wire [N-1:0][WIDTH-1:0] exponents,
-    output logic [WIDTH-1:0]       max_exp
+    output logic [WIDTH-1:0]       max_exp,
+    output wire [N-1:0][7:0]       shift_amts
 );
 
     // ----------------------------------------------------------------------
@@ -81,5 +82,44 @@ module VX_tcu_tfr_max_exp import VX_tcu_pkg::*; #(
         assign or_red[i+1] = or_red[i] | (sel_exp[i] ? exponents[i] : {WIDTH{1'b0}});
     end
     assign max_exp = or_red[N];
+
+    // ----------------------------------------------------------------------
+    // 4. Shift Amount Outputs (reuses existing diff_mat, no new subtractors)
+    // ----------------------------------------------------------------------
+    //
+    // For winner k, lane i:
+    //   k < i : diff_mat[k][i-1] = exp[k] - exp[i]       (direct)
+    //   k > i : ~diff_mat[i][k-1] + 1 = exp[k] - exp[i]  (two's complement)
+    //   k == i: 0                                        (self)
+    //
+    // The OR-mux produces one's complement for inverted entries;
+    // a per-lane conditional increment corrects to exact shift amounts.
+
+    for (genvar i = 0; i < N; i++) begin : g_shift
+        wire [WIDTH-1:0] sh_or [N:0] /* verilator split_var */;
+        assign sh_or[0] = {WIDTH{1'b0}};
+        for (genvar k = 0; k < N; k++) begin : g_sh_mux
+            if (k == i) begin : g_self
+                assign sh_or[k+1] = sh_or[k];
+            end else if (k < i) begin : g_direct
+                assign sh_or[k+1] = sh_or[k]
+                    | (sel_exp[k] ? diff_mat[k][i-1][WIDTH-1:0] : {WIDTH{1'b0}});
+            end else begin : g_invert
+                assign sh_or[k+1] = sh_or[k]
+                    | (sel_exp[k] ? ~diff_mat[i][k-1][WIDTH-1:0] : {WIDTH{1'b0}});
+            end
+        end
+
+        // +1 correction for one's complement lanes (winner index > i)
+        wire needs_inc;
+        if (i == N-1) begin : g_no_inc
+            assign needs_inc = 1'b0;
+        end else begin : g_calc_inc
+            assign needs_inc = |sel_exp[N-1:i+1];
+        end
+
+        wire [WIDTH-1:0] shift_full = sh_or[N] + WIDTH'(needs_inc);
+        assign shift_amts[i] = (|shift_full[WIDTH-1:8]) ? 8'hFF : shift_full[7:0];
+    end
 
 endmodule
