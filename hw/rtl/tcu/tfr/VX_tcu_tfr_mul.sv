@@ -29,11 +29,11 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
     input wire [7:0]         sf_b,
 
     // Outputs
-    output wire [EXP_W-1:0]         max_exp,
-    output wire [TCK:0][EXP_W-1:0]  exponents,
-    output wire [TCK:0][W-1:0]      raw_sigs,
-    output fedp_excep_t              exception,
-    output wire [TCK-1:0]            lane_mask
+    output wire [EXP_W-1:0]  max_exp,
+    output wire [TCK:0][7:0] shift_amts,
+    output wire [TCK:0][W-1:0] raw_sigs,
+    output fedp_excep_t      exception,
+    output wire [TCK-1:0]    lane_mask
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
@@ -197,16 +197,16 @@ module VX_tcu_tfr_mul import VX_tcu_pkg::*;  #(
         .N     (TCK+1),
         .WIDTH (EXP_W)
     ) find_max_exp (
-        .exponents (r_exponents),
-        .max_exp   (max_exp)
+        .exponents  (r_exponents),
+        .max_exp    (max_exp),
+        .shift_amts (shift_amts)
     );
 
     // ======================================================================
-    // 5. Outputs
+    // 4. Outputs
     // ======================================================================
 
-    assign exponents = r_exponents;
-    assign raw_sigs  = r_raw_sigs;
-    assign lane_mask = r_lane_mask;
+    assign raw_sigs   = r_raw_sigs;
+    assign lane_mask  = r_lane_mask;
 
 endmodule

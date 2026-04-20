@@ -35,8 +35,6 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
 
-    wire is_signed_int = tcu_fmt_is_signed_int(fmt_i);
-
 `ifdef TCU_MXI8_ENABLE
     // --- MXINT8 Scale Factor (shared across all lanes) --------------------
     wire signed [7:0] sf_wo_bias_a = sf_a - 8'd133;
@@ -51,6 +49,8 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
     // 2. Multiplication & Accumulation
     // ----------------------------------------------------------------------
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
+
+        wire is_signed_int = tcu_fmt_is_signed_int(fmt_i);
 
         // --- I8/U8 Processing ---------------------------------------------
         wire signed [16:0] y_prod_i8 [2];
@@ -86,7 +86,7 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
             wire signed [24:0] prod_biased = prod_ext + $signed(trunc_bias);
             assign y_mxi8_scaled[j] = sf_wo_bias[7] ? (prod_biased >>> abs_sf) : (prod_ext <<< sf_wo_bias);
         end
-        
+
         wire [24:0] y_mxi8_add_res;
         VX_ks_adder #(
             .N(25),
