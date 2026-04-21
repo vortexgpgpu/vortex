@@ -95,6 +95,17 @@ sst_tests()
     echo "sst tests done!"
 }
 
+mpi()
+{
+    echo "begin mpi tests..."
+
+    make -C runtime/simx
+
+    make -C tests/regression run-simx-mpi NP=4
+
+    echo "mpi tests done!"
+}
+
 regression()
 {
     echo "begin regression tests..."
@@ -522,7 +533,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--sst_tests] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--mpi] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--sst_tests] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -544,6 +555,9 @@ while [ "$1" != "" ]; do
                 ;;
         --regression )
                 tests+=("regression")
+                ;;
+        --mpi )
+                tests+=("mpi")
                 ;;
         --opencl )
                 tests+=("opencl")
@@ -590,6 +604,7 @@ while [ "$1" != "" ]; do
                 tests+=("isa")
                 tests+=("kernel")
                 tests+=("regression")
+                tests+=("mpi")
                 tests+=("opencl")
                 tests+=("cache")
                 tests+=("vm")

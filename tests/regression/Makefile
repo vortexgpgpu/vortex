@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
-MPI ?= 0
+NP ?= 4
 
 all:
 	$(MAKE) -C basic
@@ -23,16 +23,16 @@ all:
 	$(MAKE) -C sgemm2
 	$(MAKE) -C madmax
 	$(MAKE) -C stencil3d
-ifeq ($(MPI),1)
-	$(MAKE) -C mpi_dotproduct
-	$(MAKE) -C mpi_put_dotproduct
-	$(MAKE) -C mpi_diverge
-	$(MAKE) -C mpi_vecadd
-	$(MAKE) -C mpi_sgemm
-	$(MAKE) -C mpi_blocked_sgemm
-	$(MAKE) -C mpi_conv3
-	$(MAKE) -C mpi_neighbor_a2a_conv3
-endif
+
+all-mpi:
+	$(MAKE) -C mpi_dotproduct MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_put_dotproduct MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_diverge MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_vecadd MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_sgemm MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_blocked_sgemm MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_conv3 MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_neighbor_a2a_conv3 MPI=1 NP=$(NP)
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -54,16 +54,16 @@ run-simx:
 	$(MAKE) -C sgemm2 run-simx
 	$(MAKE) -C madmax run-simx
 	$(MAKE) -C stencil3d run-simx
-ifeq ($(MPI),1)
-	$(MAKE) -C mpi_dotproduct run-simx
-	$(MAKE) -C mpi_put_dotproduct run-simx
-	$(MAKE) -C mpi_diverge run-simx
-	$(MAKE) -C mpi_vecadd run-simx
-	$(MAKE) -C mpi_sgemm run-simx
-	$(MAKE) -C mpi_blocked_sgemm run-simx
-	$(MAKE) -C mpi_conv3 run-simx
-	$(MAKE) -C mpi_neighbor_a2a_conv3 run-simx
-endif
+
+run-simx-mpi:
+	$(MAKE) -C mpi_dotproduct run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_put_dotproduct run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_diverge run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_vecadd run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_sgemm run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_blocked_sgemm run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_conv3 run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_neighbor_a2a_conv3 run-simx MPI=1 NP=$(NP)
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
