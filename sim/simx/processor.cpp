@@ -221,9 +221,12 @@ void Processor::dcr_write(uint32_t addr, uint32_t value) {
 bool Processor::cycle() {
   try {
     return impl_->cycle();
+  } catch (const std::exception& e) {
+    std::cerr << "Error: exception: " << e.what() << std::endl;
   } catch (...) {
-    return false;
+    std::cerr << "Error: unknown exception." << std::endl;
   }
+  return false;
 }
 
 #ifdef VM_ENABLE

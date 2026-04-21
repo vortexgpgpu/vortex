@@ -42,7 +42,7 @@ bool VortexSimulator::init(const std::string& kernelPath) {
         ram_.loadHexImage(kernelPath.c_str());
       } else {
         std::cerr << "Error: only *.bin or *.hex images supported." << std::endl;
-        return -1;
+        return false;
       }
     }
 
