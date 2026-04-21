@@ -17,6 +17,12 @@ uint_fast16_t f64_classify(float64_t);
 float64_t f64_rsqrte7(float64_t);
 float64_t f64_recip7(float64_t);
 
+uint32_t cvt_f32_to_custom(float value, uint32_t exp_bits, uint32_t sig_bits,
+                           uint32_t frm, uint32_t *fflags);
+
+float cvt_custom_to_f32(uint32_t value, uint32_t exp_bits, uint32_t sig_bits,
+                        uint32_t frm, uint32_t *fflags);
+
 #ifdef __cplusplus
 }
 #endif
