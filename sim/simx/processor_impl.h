@@ -38,6 +38,8 @@ public:
 
   int run();
 
+  bool cycle();
+
   void dcr_write(uint32_t addr, uint32_t value);
 
 #ifdef VM_ENABLE
@@ -50,6 +52,7 @@ private:
 
   void reset();
 
+  bool is_cycle_initialized_ = false;
   const Arch& arch_;
   std::vector<std::shared_ptr<Cluster>> clusters_;
   DCRS dcrs_;

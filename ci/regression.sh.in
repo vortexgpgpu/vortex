@@ -78,6 +78,23 @@ kernel()
     echo "kernel tests done!"
 }
 
+sst_tests()
+{
+    echo "begin sst tests..."
+
+    make -C sim/simx USE_SST=1
+    make -C tests/kernel
+
+    cp sim/simx/libvortex.so $SST_ELEMENTS_HOME/lib/sst-elements-library/   # alternatively - $ sst --add-lib-path `pwd` myConfig.py
+
+    sst ci/sst_test_vortex_hello.py
+    sst ci/sst_test_vortex_fibonacci.py
+    sst ci/sst_test_vortex_vecadd.py
+    sst ci/sst_test_vortex_conform.py
+
+    echo "sst tests done!"
+}
+
 regression()
 {
     echo "begin regression tests..."
@@ -505,7 +522,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--sst_tests] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -563,6 +580,9 @@ while [ "$1" != "" ]; do
                 ;;
         --cupbop )
                 tests+=("cupbop")
+                ;;
+        --sst_tests )
+                tests+=("sst_tests")
                 ;;
         --all )
                 tests=()

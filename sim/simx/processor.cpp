@@ -159,6 +159,27 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   return perf;
 }
 
+// Advance the simulation by one cycle for SST - code adapted from run() method
+bool ProcessorImpl::cycle() {
+  if (!is_cycle_initialized_) {
+    std::cout << "ProcessorImpl: Initializing cycle()\n";
+    SimPlatform::instance().reset();
+    this->reset();
+    is_cycle_initialized_ = true;
+  }
+
+  SimPlatform::instance().tick();
+  bool anyRunning = false;
+  for (auto cluster : clusters_) {
+    if (cluster->running()) {
+      anyRunning = true;
+      break;
+    }
+  }
+  perf_mem_latency_ += perf_mem_pending_reads_;
+  return anyRunning;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 Processor::Processor(const Arch& arch)
@@ -194,6 +215,18 @@ int Processor::run() {
 
 void Processor::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+// advance the simulation by one cycle for SST
+bool Processor::cycle() {
+  try {
+    return impl_->cycle();
+  } catch (const std::exception& e) {
+    std::cerr << "Error: exception: " << e.what() << std::endl;
+  } catch (...) {
+    std::cerr << "Error: unknown exception." << std::endl;
+  }
+  return false;
 }
 
 #ifdef VM_ENABLE

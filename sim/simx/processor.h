@@ -35,6 +35,8 @@ public:
 
   int run();
 
+  bool cycle();
+
   void dcr_write(uint32_t addr, uint32_t value);
 #ifdef VM_ENABLE
   bool is_satp_unset();
