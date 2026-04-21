@@ -30,7 +30,7 @@ void unused(Args &&...) {}
 
 #define __unused(...) unused(__VA_ARGS__)
 
-#define __assert(cond, msg)                           \
+#define __vortex_assert(cond, msg)                           \
   if (!(cond)) {                                      \
     std::cerr << "Assertion failed: " << msg << "\n"; \
     std::cerr << "File: " << __FILE__ << "\n";        \
