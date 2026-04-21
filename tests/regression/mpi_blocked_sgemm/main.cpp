@@ -9,7 +9,9 @@
 #include "common.h"
 #include <mpi.h>
 
-#define FLOAT_ULP 6
+// Cannon's algorithm sums partial products in block order while the CPU
+// reference sums linearly, so FP non-associativity permits a wider ULP margin.
+#define FLOAT_ULP 32
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
