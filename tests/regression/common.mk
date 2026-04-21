@@ -65,7 +65,7 @@ CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -L$(VORTEX_RT_PATH) -lvortex
 
-ifdef MPI
+ifeq ($(MPI),1)
 	MPIRUN = mpirun  --allow-run-as-root --oversubscribe -np $(NP)
 else
 	MPIRUN =

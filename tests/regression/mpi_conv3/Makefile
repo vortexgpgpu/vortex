@@ -14,7 +14,7 @@ OPTS ?= -n64
 MPI ?= 0
 NP ?= 1
 
-ifdef MPI
+ifeq ($(MPI),1)
 	CXX = mpic++
 endif
 
