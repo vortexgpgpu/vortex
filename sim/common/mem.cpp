@@ -507,12 +507,12 @@ void RAM::copy(uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
     }
   }
   if (dest_addr > src_addr) {
-    for (uint64_t i = 0; i < size; i++) {
-      *this->get(dest_addr + i) = *this->get(src_addr + i);
-    }
-  } else if (dest_addr < src_addr) {
     for (uint64_t i = size; i > 0; i--) {
       *this->get(dest_addr + i - 1) = *this->get(src_addr + i - 1);
+    }
+  } else if (dest_addr < src_addr) {
+    for (uint64_t i = 0; i < size; i++) {
+      *this->get(dest_addr + i) = *this->get(src_addr + i);
     }
   }
 }

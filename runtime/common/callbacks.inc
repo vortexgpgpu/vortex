@@ -174,6 +174,8 @@ extern int vx_dev_init(callbacks_t* callbacks) {
       return -1;
     auto dest_buffer = ((vx_buffer*)hdest_buffer);
     auto src_buffer = ((vx_buffer*)hsrc_buffer);
+    if (dest_buffer->device != src_buffer->device)
+      return -1;
     auto device = ((vx_device*)dest_buffer->device);
     if ((dest_offset + size) > dest_buffer->size
      || (src_offset + size) > src_buffer->size)
