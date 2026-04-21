@@ -624,7 +624,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         break;
       }
       case 5: { // RV32I: SRA/SRL
-        instr->setOpType((funct7 == 0x20) ? AluType::SRA : AluType::SRL);
+        instr->setOpType((funct7 & 0x20) ? AluType::SRA : AluType::SRL);
         break;
       }
       case 6: { // RV32I: OR
