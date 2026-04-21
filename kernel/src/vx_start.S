@@ -41,12 +41,6 @@ _start:
   li    t0, 1
   .insn r RISCV_CUSTOM0, 0, 0, x0, t0, x0  # tmc t0
 
-  # clear BSS segment
-  la    a0, _edata
-  la    a2, _end
-  sub   a2, a2, a0
-  li    a1, 0
-  call  memset
 
   # initialize trap vector
   # la t0, trap_entry

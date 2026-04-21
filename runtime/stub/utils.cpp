@@ -79,6 +79,15 @@ extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint
     return err;
   });
 
+  auto bss_size = runtime_size - bin_size;
+  if (bss_size > 0) {
+    std::vector<uint8_t> zeros(bss_size, 0);
+    CHECK_ERR(vx_copy_to_dev(_hbuffer, zeros.data(), bin_size, bss_size), {
+      vx_mem_free(_hbuffer);
+      return err;
+    });
+  }
+
   *hbuffer = _hbuffer;
 
   return 0;
