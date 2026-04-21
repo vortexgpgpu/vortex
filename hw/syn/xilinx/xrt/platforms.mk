@@ -23,6 +23,7 @@ ifneq ($(findstring xilinx_u55c,$(XSA)),)
 else ifneq ($(findstring xilinx_u50,$(XSA)),)
   # 8 GB of HBM2 with 32 channels (256 MB per channel)
   CONFIGS += -DPLATFORM_MEMORY_NUM_BANKS=32 -DPLATFORM_MEMORY_ADDR_WIDTH=33
+  CONFIGS += -DPLATFORM_MERGED_MEMORY_INTERFACE
   VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:31]
 else ifneq ($(findstring xilinx_u280,$(XSA)),)
   # 8 GB of HBM2 with 32 channels (256 MB per channel)
