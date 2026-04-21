@@ -249,74 +249,61 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         end
 
         // ------------------------------------------------------------------
-        // 2d. Alignment & Reduction
+        // 2d. Pre-Sort & Alignment
         // ------------------------------------------------------------------
 
         wire [7:0] man_prod0_v = man_prod[0] & {8{lane_valid[0]}};
         wire [7:0] man_prod1_v = man_prod[1] & {8{lane_valid[1]}};
 
-        // Pad to 24 bits (8-bit product + 16-bit static padding)
-        wire [23:0] sig_low  = {man_prod0_v, 16'b0};
-        wire [23:0] sig_high = {man_prod1_v, 16'b0};
+        // Sort products by exponent magnitude (8-bit mux, not 24-bit)
+        wire [7:0] prod_max = diff_sign ? man_prod0_v : man_prod1_v;
+        wire [7:0] prod_min = diff_sign ? man_prod1_v : man_prod0_v;
+        wire       sign_max = diff_sign ? sign_sel[0] : sign_sel[1];
+        wire       sign_min = diff_sign ? sign_sel[1] : sign_sel[0];
 
-        // Single Barrel Shifter
+        // Pad to 24 bits; barrel shift only the min term
+        wire [23:0] sig_max = {prod_max, 16'b0};
         wire diff_ge_32 = diff_abs[5];
         wire [4:0] shamt = diff_abs[4:0];
-        wire [23:0] aligned_sig_low  = diff_sign ? sig_low : (diff_ge_32 ? 24'b0 : (sig_low >> shamt));
-        wire [23:0] aligned_sig_high = diff_sign ? (diff_ge_32 ? 24'b0 : (sig_high >> shamt)) : sig_high;
+        wire [23:0] sig_min_shifted = diff_ge_32 ? 24'b0 : ({prod_min, 16'b0} >> shamt);
 
         // ------------------------------------------------------------------
-        // 2e. Parallel Absolute Difference / Addition
+        // 2e. Add/Sub Reduction
         // ------------------------------------------------------------------
 
-        wire [24:0] sig_low_ext  = {1'b0, aligned_sig_low};
-        wire [24:0] sig_high_ext = {1'b0, aligned_sig_high};
+        wire [24:0] sig_max_ext = {1'b0, sig_max};
+        wire [24:0] sig_min_ext = {1'b0, sig_min_shifted};
 
         wire do_sub = sign_sel[0] ^ sign_sel[1];
 
-        // Three parallel adders: sub(L-H), sub(H-L), add(L+H)
-        wire [24:0] sub_lh_raw;
-        VX_ks_adder #(
-            .N(25),
-            .BYPASS(`FORCE_BUILTIN_ADDER(25))
-        ) sub_lh_adder (
-            .dataa(sig_low_ext),
-            .datab(~sig_high_ext),
-            .cin(1'b1),
-            .sum(sub_lh_raw),
-            `UNUSED_PIN(cout)
-        );
-
-        wire [24:0] sub_hl_raw;
-        VX_ks_adder #(
-            .N(25),
-            .BYPASS(`FORCE_BUILTIN_ADDER(25))
-        ) sub_hl_adder (
-            .dataa(sig_high_ext),
-            .datab(~sig_low_ext),
-            .cin(1'b1),
-            .sum(sub_hl_raw),
-            `UNUSED_PIN(cout)
-        );
-
-        wire [24:0] add_raw_result;
+        wire [24:0] add_raw;
         VX_ks_adder #(
             .N(25),
             .BYPASS(`FORCE_BUILTIN_ADDER(25))
         ) add_adder (
-            .dataa(sig_low_ext),
-            .datab(sig_high_ext),
+            .dataa(sig_max_ext),
+            .datab(sig_min_ext),
             .cin(1'b0),
-            .sum(add_raw_result),
+            .sum(add_raw),
             `UNUSED_PIN(cout)
         );
 
-        // Sign bit of sub_lh determines magnitude comparison — no comparator needed
-        wire sub_neg = sub_lh_raw[24];
-        wire [24:0] sub_abs = sub_neg ? sub_hl_raw : sub_lh_raw;
+        wire [24:0] sub_raw;
+        VX_ks_adder #(
+            .N(25),
+            .BYPASS(`FORCE_BUILTIN_ADDER(25))
+        ) sub_adder (
+            .dataa(sig_max_ext),
+            .datab(~sig_min_ext),
+            .cin(1'b1),
+            .sum(sub_raw),
+            `UNUSED_PIN(cout)
+        );
 
-        wire mag_0_is_larger = ~sub_neg;
-        wire [24:0] sig_add_raw = do_sub ? sub_abs : add_raw_result;
+        wire sub_neg = sub_raw[24];
+        wire [24:0] sub_abs = sub_neg ? -sub_raw : sub_raw;
+
+        wire [24:0] sig_add_raw = do_sub ? sub_abs : add_raw;
 
         // Scaling by 1 to avoid renormalization
         wire [23:0] sig_add = sig_add_raw[24:1];
@@ -328,7 +315,7 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire is_zero_out = do_sub && mag_is_equal;
 
         // Force +0 on exact cancellation
-        wire sig_sign_raw = mag_0_is_larger ? sign_sel[0] : sign_sel[1];
+        wire sig_sign_raw = sub_neg ? sign_min : sign_max;
         wire sig_sign = is_zero_out ? 1'b0 : sig_sign_raw;
 
         assign result_sig[i] = {sig_sign, sig_add};
@@ -359,9 +346,8 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         always_ff @(posedge clk) begin
             if (valid_in && g_lane[i].lane_valid != 0) begin
                 `TRACE(4, ("%t: %s FEDP-REDUCE(%0d) lane=%0d: ", $time, INSTANCE_ID, req_id, i));
-                `TRACE(4, ("t1=(%0d, 0x%0h, %0d), ", sign_sel[0], sig_low, pre_sum_0));
-                `TRACE(4, ("t2=(%0d, 0x%0h, %0d) ", sign_sel[1], sig_high, pre_sum_1));
-                `TRACE(4, ("| aln_t1=0x%0h, aln_t2=0x%0h ", aligned_sig_low, aligned_sig_high));
+                `TRACE(4, ("max=(%0d, 0x%0h, %0d), ", sign_max, sig_max, max_pre_sum));
+                `TRACE(4, ("min=(%0d, 0x%0h) ", sign_min, sig_min_shifted));
                 `TRACE(4, ("-> s=%0d, P=0x%0h, E=%0d\n", sig_sign, sig_add, final_exp));
             end
         end
