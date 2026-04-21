@@ -499,6 +499,24 @@ void RAM::write(const void* data, uint64_t addr, uint64_t size) {
   }
 }
 
+void RAM::copy(uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
+  if (check_acl_) {
+    if (acl_mngr_.check(src_addr, size, 0x1) == false ||
+        acl_mngr_.check(dest_addr, size, 0x2) == false) {
+      throw BadAddress();
+    }
+  }
+  if (dest_addr > src_addr) {
+    for (uint64_t i = size; i > 0; i--) {
+      *this->get(dest_addr + i - 1) = *this->get(src_addr + i - 1);
+    }
+  } else if (dest_addr < src_addr) {
+    for (uint64_t i = 0; i < size; i++) {
+      *this->get(dest_addr + i) = *this->get(src_addr + i);
+    }
+  }
+}
+
 void RAM::set_acl(uint64_t addr, uint64_t size, int flags) {
   if (capacity_ != 0 && (addr + size)> capacity_) {
     throw OutOfRange();

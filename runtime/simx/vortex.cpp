@@ -311,6 +311,23 @@ public:
     return 0;
   }
 
+  int copy(uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+    if (src_addr + asize > GLOBAL_MEM_SIZE || dest_addr + asize > GLOBAL_MEM_SIZE)
+      return -1;
+#ifdef VM_ENABLE
+    uint64_t pAddr_src = page_table_walk(src_addr);
+    uint64_t pAddr_dest = page_table_walk(dest_addr);
+    DBGPRINT("  [RT:copy] Copy data from vAddr = 0x%lx (pAddr=0x%lx) to vAddr = 0x%lx (pAddr=0x%lx)\n", src_addr, pAddr_src, dest_addr, pAddr_dest);
+    src_addr = pAddr_src;  
+    dest_addr = pAddr_dest; 
+#endif
+    ram_.enable_acl(false);
+    ram_.copy(dest_addr, src_addr, size);
+    ram_.enable_acl(true);
+    return 0;
+  }
+
   int start(uint64_t krnl_addr, uint64_t args_addr) {
     // ensure prior run completed
     if (future_.valid()) {
