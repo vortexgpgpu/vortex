@@ -178,6 +178,10 @@ SECTIONS
     *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata .srodata.*)
     *(.sdata .sdata.* .gnu.linkonce.s.*)
   }
+  /* Align _edata to a cache-block boundary so the BSS region begins on a
+     cache line. OPAE upload() requires cache-aligned dev_addr, and the host
+     stub uploads BSS zeros at offset bin_size = _edata - min_vma. */
+  . = ALIGN(64);
   _edata = .; PROVIDE (edata = .);
   . = .;
   __bss_start = .;

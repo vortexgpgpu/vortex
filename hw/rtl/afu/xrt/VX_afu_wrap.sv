@@ -113,7 +113,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
 	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 	reg [PENDING_WR_SIZEW-1:0] vx_pending_writes;
-	reg vx_reset = 1; // asserted at initialization
+	reg vx_reset;
+	initial vx_reset = 1; // asserted at initialization
 	wire vx_busy;
 
 	wire                         dcr_wr_valid;

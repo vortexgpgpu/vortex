@@ -50,8 +50,24 @@ def get_vma_size(elf_file):
         print("Failed to calculate vma size due to an error: {}".format(str(e)))
         sys.exit(-1)
 
+def get_edata(elf_file):
+    # Read the _edata symbol value from the ELF. The kernel uses _edata as the
+    # start of BSS; vxbin pads the binary payload to (_edata - min_vma) so the
+    # host stub's bin_size matches the kernel's view (and stays cache-aligned
+    # for OPAE upload, since the linker aligns _edata).
+    cmd = ['readelf', '-s', '-W', elf_file]
+    output = subprocess.check_output(cmd, universal_newlines=True)
+    regex = re.compile(r'\s*\d+:\s+([0-9a-fA-F]+)\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+_edata$')
+    for line in output.splitlines():
+        match = regex.match(line)
+        if match:
+            return int(match.group(1), 16)
+    print("Error: _edata symbol not found in {}".format(elf_file))
+    sys.exit(-1)
+
 def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     min_vma, max_vma = get_vma_size(input_elf)
+    edata = get_edata(input_elf)
 
     # Create a binary data from the ELF file using objcopy
     temp_bin_path = '/tmp/temp_kernel.bin'
@@ -60,6 +76,12 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     # Read the binary file to determine its size
     with open(temp_bin_path, 'rb') as temp_file:
         binary_data = temp_file.read()
+
+    # Pad the payload up to _edata so that bin_size reflects the kernel's
+    # boundary between data and BSS (and inherits _edata's cache alignment).
+    expected_bin_size = edata - min_vma
+    if len(binary_data) < expected_bin_size:
+        binary_data += b'\x00' * (expected_bin_size - len(binary_data))
 
     # Pack addresses into 64-bit unsigned integer
     min_vma_bytes = struct.pack('<Q', min_vma)

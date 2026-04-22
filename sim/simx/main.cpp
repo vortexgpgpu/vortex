@@ -106,12 +106,14 @@ int main(int argc, char **argv) {
     // load program
     {
       std::string program_ext(fileExtension(program));
-      if (program_ext == "bin") {
+      if (program_ext == "vxbin") {
+        ram.loadVxImage(program);
+      } else if (program_ext == "bin") {
         ram.loadBinImage(program, startup_addr);
       } else if (program_ext == "hex") {
         ram.loadHexImage(program);
       } else {
-        std::cerr << "Error: only *.bin or *.hex images supported." << std::endl;
+        std::cerr << "Error: only *.vxbin, *.bin or *.hex images supported." << std::endl;
         return -1;
       }
     }

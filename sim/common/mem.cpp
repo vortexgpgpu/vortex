@@ -541,6 +541,37 @@ void RAM::loadBinImage(const char* filename, uint64_t destination) {
   this->write(content.data(), destination, size);
 }
 
+void RAM::loadVxImage(const char* filename) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::cerr << "Error: " << filename << " not found" << std::endl;
+    std::abort();
+  }
+
+  uint64_t header[2];
+  ifs.read((char*)header, sizeof(header));
+  uint64_t min_vma = header[0];
+  uint64_t max_vma = header[1];
+
+  ifs.seekg(0, ifs.end);
+  size_t total_size = ifs.tellg();
+  size_t bin_size = total_size - sizeof(header);
+  uint64_t runtime_size = max_vma - min_vma;
+
+  std::vector<uint8_t> content(bin_size);
+  ifs.seekg(sizeof(header), ifs.beg);
+  ifs.read((char*)content.data(), bin_size);
+
+  this->clear();
+  this->write(content.data(), min_vma, bin_size);
+
+  // zero BSS region (host-side equivalent of what the runtime stub does)
+  if (runtime_size > bin_size) {
+    std::vector<uint8_t> zeros(runtime_size - bin_size, 0);
+    this->write(zeros.data(), min_vma + bin_size, runtime_size - bin_size);
+  }
+}
+
 void RAM::loadHexImage(const char* filename) {
   auto hti = [&](char c)->uint32_t {
     if (c >= 'A' && c <= 'F')
