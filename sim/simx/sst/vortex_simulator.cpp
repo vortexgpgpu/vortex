@@ -34,14 +34,17 @@ bool VortexSimulator::init(const std::string& kernelPath) {
     // load program/kernel
     {
       std::string program_ext(fileExtension(kernelPath.c_str()));
-      if (program_ext == "bin") {
+      if (program_ext == "vxbin") {
+        std::cout << "vortex_simulator: Loading vxbin image: " << kernelPath << std::endl;
+        ram_.loadVxImage(kernelPath.c_str());
+      } else if (program_ext == "bin") {
         std::cout << "vortex_simulator: Loading binary image: " << kernelPath << " with startup address: 0x" << std::hex << startup_addr << std::dec << std::endl;
         ram_.loadBinImage(kernelPath.c_str(), startup_addr);
       } else if (program_ext == "hex") {
         std::cout << "vortex_simulator: Loading hex image: " << kernelPath << std::endl;
         ram_.loadHexImage(kernelPath.c_str());
       } else {
-        std::cerr << "Error: only *.bin or *.hex images supported." << std::endl;
+        std::cerr << "Error: only *.vxbin, *.bin or *.hex images supported." << std::endl;
         return false;
       }
     }

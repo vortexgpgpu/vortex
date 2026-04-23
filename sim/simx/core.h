@@ -24,8 +24,8 @@
 #include "scoreboard.h"
 
 #ifdef EXT_V_ENABLE
-#include "voperands.h"
-#include "vec_unit.h"
+#include "vpu/voperands.h"
+#include "vpu/vec_unit.h"
 #else
 #include "operands.h"
 #endif

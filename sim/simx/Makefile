@@ -30,8 +30,8 @@ SRCS += $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp
 SRCS += $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 
 ifeq ($(USE_SST), 1)
-VORTEX_SST_SRCS := $(SRC_DIR)/vortex_simulator.cpp
-VORTEX_SST_SRCS += $(SRC_DIR)/VortexGPGPU.cpp
+VORTEX_SST_SRCS := $(SRC_DIR)/sst/vortex_simulator.cpp
+VORTEX_SST_SRCS += $(SRC_DIR)/sst/vortex_gpgpu.cpp
 SST_CFLAGS := $(shell sst-config --ELEMENT_CXXFLAGS)
 SST_LFLAGS := $(shell sst-config --ELEMENT_LDFLAGS)
 CXXFLAGS += $(SST_CFLAGS) -DUSE_SST
@@ -39,15 +39,15 @@ endif
 
 # Add V extension sources
 ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
-  	SRCS += $(SRC_DIR)/voperands.cpp
-  	SRCS += $(SRC_DIR)/vopc_unit.cpp
-  	SRCS += $(SRC_DIR)/vec_unit.cpp
+  	SRCS += $(SRC_DIR)/vpu/voperands.cpp
+  	SRCS += $(SRC_DIR)/vpu/vopc_unit.cpp
+  	SRCS += $(SRC_DIR)/vpu/vec_unit.cpp
 else
 	SRCS += $(SRC_DIR)/operands.cpp
 endif
 # Add TCU extension sources
 ifneq ($(findstring -DEXT_TCU_ENABLE, $(CONFIGS)),)
-  	SRCS += $(SRC_DIR)/tensor_unit.cpp
+  	SRCS += $(SRC_DIR)/tcu/tensor_unit.cpp
 endif
 
 # Debugging

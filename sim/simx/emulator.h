@@ -21,10 +21,10 @@
 #include "types.h"
 #include "instr.h"
 #ifdef EXT_TCU_ENABLE
-#include "tensor_unit.h"
+#include "tcu/tensor_unit.h"
 #endif
 #ifdef EXT_V_ENABLE
-#include "vec_unit.h"
+#include "vpu/vec_unit.h"
 #endif
 
 namespace vortex {

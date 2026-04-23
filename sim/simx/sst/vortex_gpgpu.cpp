@@ -1,5 +1,5 @@
 #include <sst/core/sst_config.h>
-#include "VortexGPGPU.h"
+#include "vortex_gpgpu.h"
 #include <cstdlib>
 #include <vector>
 #include <utility>

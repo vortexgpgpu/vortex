@@ -1,4 +1,4 @@
-// VortexGPGPU.h
+// vortex_gpgpu.h
 #pragma once
 #include <sst/core/component.h>
 #include <memory>
