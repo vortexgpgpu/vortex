@@ -129,10 +129,7 @@ struct set_t {
     fifo_ptr = 0;
   }
 
-  // Tag lookup for a core/replay access. Updates PLRU counters on PLRU.
-  // - Returns hit line id or -1.
-  // - free_line_id: first unused way (if any), else -1.
-  // - repl_line_id: victim candidate chosen per `policy`.
+  // tag lookup for core/replay access; returns hit id (or -1), fills free/repl line ids
   int tag_lookup(uint64_t tag, uint8_t policy, uint32_t rand_idx,
                  int *free_line_id, int *repl_line_id) {
     int hit_line_id = -1;
@@ -691,9 +688,7 @@ private:
       std::abort();
     }
 
-    // Pop the request that we just processed.
-    // Keep track of in-flight Fill ops so we never enqueue multiple fills ahead of replays
-    // when bank latency > 1.
+    // pop processed request; track in-flight Fills to avoid reordering replays
     const bool popped_fill = (bank_req.type == bank_req_t::Fill);
     pipe_req_->pop();
     if (popped_fill) {

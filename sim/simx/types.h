@@ -988,9 +988,7 @@ public:
   uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) override {
     assert(requests.size() == size_);
     assert(suppress.size() == size_);
-    // Effective requests: eligible for selection (not suppressed).
-    // Age tracking still uses `requests` so suppressed warps keep aging.
-    // Greedy: keep granting the same requester if still active and unsuppressed
+    // greedy: keep granting same requester if still active and unsuppressed
     if (last_grant_ < size_ && requests.test(last_grant_) && !suppress.test(last_grant_)) {
       this->update_ages(requests, last_grant_);
       return last_grant_;

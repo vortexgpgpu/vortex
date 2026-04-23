@@ -44,9 +44,7 @@ public:
   // True while CTAs remain to be issued.
   bool running() const { return running_; }
 
-  // Called by CtaDispatcher when ready for the next CTA.
-  // Fills *req with the next CTA's parameters and advances the iterator.
-  // Returns false when the grid is exhausted.
+  // fill *req with next CTA; returns false when grid is exhausted
   bool step(kmu_req_t* req);
 
 private:

@@ -24,9 +24,7 @@
 
 using namespace vortex;
 
-// Number of DXA GMEM output ports toward L2: min(NUM_DXA_UNITS, L2_NUM_REQS).
-// Mirrors DXA_MEM_PORTS = min($NUM_DXA_UNITS, up($NUM_CORES/$SOCKET_SIZE)*$L1_MEM_PORTS)
-// from VX_config.toml, computed locally so VX_config.h need not be regenerated.
+// number of DXA GMEM output ports toward L2
 static constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(NUM_DXA_UNITS, L2_NUM_REQS);
 
 // ════════════════════════════════════════════════════════════════════
@@ -159,10 +157,7 @@ public:
     return true;
   }
 
-  // Emulation only: build GMEM address list, read tile, write to SMEM.
-  // Returns TraceData with routing fields pre-filled and emulation fields computed.
-  // Always returns non-null; invalid descriptor → tile0=tile1=0, no gmem/smem blocks
-  // (start_slice() releases the barrier via the zero-blocks path).
+  // emulation: build GMEM address list, read tile, write to SMEM
   DxaCore::TraceData::Ptr execute_copy_pub(Core* core, uint32_t desc_slot,
                                            uint64_t smem_addr,
                                            const uint32_t coords[5]) {
@@ -182,10 +177,7 @@ public:
     exe_data->tile1      = cfg.tiles[1];
     exe_data->elem_bytes = cfg.elem_bytes;
 
-    // Build GMEM cache-line address list matching RTL VX_dxa_addr_gen + VX_dxa_dedup behavior.
-    // RTL addr_gen iterates "rows" (innermost tile0 strips) sequentially over all outer dims.
-    // Each row is a contiguous tile0*elem_bytes span in GMEM; outer dims advance via strides.
-    // RTL dedup merges consecutive same-CL entries across the entire transfer.
+    // build GMEM cache-line list: iterate rows (tile0 strips), dedup consecutive same-CL
     uint32_t line_size = std::max<uint32_t>(1, L1_LINE_SIZE);
     uint64_t line_mask = ~uint64_t(line_size - 1);
     uint64_t global_prev_cl = ~uint64_t(0);
@@ -212,7 +204,7 @@ public:
           break;
         }
       }
-      if (!row_in_bounds) continue; // OOB row: RTL uses cfill, no GMEM reads
+      if (!row_in_bounds) continue; // OOB row: cfill, no GMEM reads
 
       // First element GMEM address in this row.
       uint64_t row_gbase = desc.base_addr + uint64_t(coords[0]) * cfg.elem_bytes;
@@ -308,10 +300,7 @@ private:
     return true;
   }
 
-  // ── Functional copy — emulation only, no timing side effects ─────────
-  // Called once at GMEM→SMEM transition so data is in LocalMem RAM
-  // before the first timing signal is sent on lmem_req_out.
-  // Supports 1D-5D with multicast (cta_mask replication).
+  // functional copy: populate LocalMem before timing signals (supports 1D-5D multicast)
   void execute_copy(const Request& req, const Descriptor& desc, const CopyCfg& cfg) {
     auto& td = *req.td;
     // Compute total elements and iterate with a flat linear index.
@@ -459,10 +448,8 @@ private:
       return;
     }
 
-    // ── SMEM_WRITE (timing only — data already in LocalMem RAM) ──────
-    // Emits one DxaSmemReq per XLENB-aligned SMEM word block, matching
-    // RTL VX_dxa_cl2smem.sv word-granular SMEM writes with byte enables.
-    // For multicast, each block is replayed for each CTA before advancing.
+    // SMEM_WRITE (timing only — data already in LocalMem)
+    // emit one DxaSmemReq per XLENB-aligned SMEM word block; multicast replays per CTA
     if (slice.state == SliceState::SMEM_WRITE) {
       const auto& smem_blocks = xfer.req.td->smem_blocks;
       uint32_t total_blocks = smem_blocks.size();

@@ -13,6 +13,8 @@
 
 #include "opc_unit.h"
 #include "core.h"
+#include <iostream>
+#include <simobject.h>
 
 using namespace vortex;
 
@@ -27,16 +29,12 @@ OpcUnit::~OpcUnit() {}
 
 void OpcUnit::reset() {
   total_stalls_ = 0;
+  cur_trace_ = nullptr;
+  release_cycle_ = 0;
 }
 
-void OpcUnit::tick() {
-  if (Input.empty())
-    return;
-  auto trace = Input.peek();
-
+static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
   uint32_t stalls = 0;
-
-  // calculate bank conflict stalls
   for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
     for (uint32_t j = i + 1; j < NUM_SRC_REGS; ++j) {
       if ((trace->src_regs[i].type == RegType::None)
@@ -45,18 +43,33 @@ void OpcUnit::tick() {
       if ((trace->src_regs[i].type == RegType::Integer && trace->src_regs[i].id() == 0)
        || (trace->src_regs[j].type == RegType::Integer && trace->src_regs[j].id() == 0))
         continue; // skip x0
-      // bank conflict
       uint32_t bank_i = trace->src_regs[i].idx % NUM_GPR_BANKS;
       uint32_t bank_j = trace->src_regs[j].idx % NUM_GPR_BANKS;
       if (bank_i == bank_j)
         ++stalls;
     }
   }
+  return stalls;
+}
 
-  total_stalls_ += stalls;
+void OpcUnit::tick() {
+  auto cur_cycle = SimPlatform::instance().cycles();
 
-  if (Output.try_send(trace, 2 + stalls)) {
-    DT(3, this->name() << "-pipeline operands: " << *trace);
+  // forward held uop once its collection phase has elapsed
+  if (cur_trace_ != nullptr && cur_cycle >= release_cycle_) {
+    if (!Output.try_send(cur_trace_, 1))
+      return;
+    DT(3, this->name() << "-pipeline operands: " << *cur_trace_);
+    cur_trace_ = nullptr;
+  }
+
+  // accept next uop into the holding slot
+  if (cur_trace_ == nullptr && !Input.empty()) {
+    auto trace = Input.peek();
+    uint32_t stalls = compute_bank_conflicts(trace);
+    total_stalls_ += stalls;
+    cur_trace_ = trace;
+    release_cycle_ = cur_cycle + 1 + stalls;
     Input.pop();
   }
 }

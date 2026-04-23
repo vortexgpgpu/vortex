@@ -73,11 +73,9 @@ Cluster::Cluster(const SimContext& ctx,
   snprintf(sname, 100, "%s-dxa-core", name);
   dxa_core_ = DxaCore::Create(sname, this);
 
-  // Merge socket + DXA GMEM ports into L2 via a 2:1 priority arbiter.
-  // Mirrors RTL VX_mem_arb(NUM_INPUTS=2*L2_SOCKET_REQS, NUM_OUTPUTS=L2_SOCKET_REQS).
-  // TxArbiter output k arbitrates over inputs {2k, 2k+1}:
-  //   input 2k   = socket port k  (high priority, lower index wins in Priority mode)
-  //   input 2k+1 = DXA gmem port k (low priority; idle when k >= kDxaMemPorts)
+  // merge socket + DXA GMEM ports into L2 via a 2:1 priority arbiter
+  //   input 2k   = socket port k  (high priority)
+  //   input 2k+1 = DXA gmem port k (low priority)
   uint32_t kDxaMemPorts = dxa_core_->gmem_req_out.size();
   snprintf(sname, 100, "%s-l2arb", name);
   auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority, 2 * L2_NUM_REQS, L2_NUM_REQS);

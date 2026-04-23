@@ -24,30 +24,10 @@ namespace vortex {
 class Core;
 class Cluster;
 
-// Cycle-accurate DXA engine for simx, placed at Cluster scope matching RTL.
-//
-// Timing and emulation are fully decoupled:
-//   submit()    — timing only; enqueues without touching memory.
-//   gmem_read() — emulation only; reads GMEM with no timing side effects.
-//   execute_copy() (private) — called once at GMEM→SMEM transition;
-//                              writes all tile data to LocalMem RAM directly,
-//                              before any timing signals go out on lmem_req_out.
-//
-// GMEM ports (gmem_req_out/gmem_rsp_in):
-//   Count = kDxaMemPorts (= DXA_MEM_PORTS from config, ≤ NUM_DXA_UNITS).
-//   An internal MemArbiter (TxRxArbiter<MemReq,MemRsp>) maps the NUM_DXA_UNITS
-//   per-slice request channels onto kDxaMemPorts shared L2 ports; responses are
-//   routed back to the originating slice via tag encoding in the arbiter.
-//
-// SMEM timing channel (lmem_req_out → LocalMem::dxa_req_in):
-//   One DxaSmemReq (no data) per element per cycle; LocalMem stalls its
-//   normal Inputs and releases the barrier on is_last.
+// cycle-accurate DXA engine; timing and emulation are decoupled
 class DxaCore : public SimObject<DxaCore> {
 public:
-  // Timing-only request from DxaCore → LocalMem DXA channel.
-  // Carries no data — functional writes happen via execute_copy() before the
-  // first timing signal is sent.  LocalMem stalls its Inputs for each received
-  // request and releases the barrier on is_last.
+  // timing-only request to LocalMem DXA channel (no data payload)
   struct SmemReq {
     uint64_t addr;    // smem address (for bank-conflict modeling)
     uint32_t size;    // element size in bytes
@@ -73,9 +53,7 @@ public:
     }
   };
 
-  // Single trace packet built by execute() and consumed by tick().
-  // Routing fields (desc_slot, smem_addr, coords, bar_id) are set at execute()
-  // time; emulation fields (tile0..gmem_dedup_hits) are filled by execute_copy().
+  // trace packet: routing fields set at execute(), emulation fields at execute_copy()
   struct TraceData : public ITraceData {
     using Ptr = std::shared_ptr<TraceData>;
     // inputs
@@ -88,20 +66,16 @@ public:
     uint32_t tile0      = 0;
     uint32_t tile1      = 0;
     uint32_t elem_bytes = 0;
-    std::vector<uint64_t> gmem_lines;  // unique CL addrs (matches RTL addr_gen+dedup)
-    std::vector<uint64_t> smem_blocks; // DXA_SMEM_WORD_SIZE-aligned SMEM addrs (matches RTL VX_dxa_wr_ctrl)
-    uint64_t gmem_dedup_hits = 0;      // cross-row CL sharing (matches RTL VX_dxa_dedup)
+    std::vector<uint64_t> gmem_lines;  // unique CL addrs
+    std::vector<uint64_t> smem_blocks; // DXA_SMEM_WORD_SIZE-aligned SMEM addrs
+    uint64_t gmem_dedup_hits = 0;      // cross-row CL sharing
   };
 
-  // GMEM channels — size = kDxaMemPorts.  Bound to L2 DXA ports by Cluster.
-  // Requests flow: arb_->ReqOut → gmem_req_out → L2.
-  // Responses flow: L2 → gmem_rsp_in → arb_->RspIn → arb_->RspOut (per slice).
+  // GMEM ports bound to L2 DXA ports by Cluster (size = kDxaMemPorts)
   std::vector<SimChannel<MemReq>>     gmem_req_out;
   std::vector<SimChannel<MemRsp>>     gmem_rsp_in;
-  // Internal arbiter: NUM_DXA_UNITS slice inputs → kDxaMemPorts L2-facing outputs.
   MemArbiter::Ptr                     arb_;
-  // SMEM timing channel — size = NUM_SOCKETS * SOCKET_SIZE (one per core).
-  // Bound to each core's LocalMem::dxa_req_in by Cluster.
+  // SMEM timing channel, one per core (size = NUM_SOCKETS * SOCKET_SIZE)
   std::vector<SimChannel<SmemReq>> lmem_req_out;
 
   DxaCore(const SimContext& ctx, const char* name, Cluster* cluster);
@@ -113,19 +87,16 @@ public:
   // Write a descriptor field via DCR.
   int dcr_write(uint32_t addr, uint32_t value);
 
-  // Emulation only: read tile from GMEM into SMEM; fill TraceData emulation fields.
-  // No SimChannel activity; no timing side effects.
+  // emulation: read tile from GMEM into SMEM, fill TraceData emulation fields
   TraceData::Ptr execute_copy(Core* core,
                               uint32_t desc_slot,
                               uint64_t smem_addr,
                               const uint32_t coords[5]);
 
-  // Timing only: enqueue the precomputed TraceData packet.
-  // Returns false (backpressure) when the internal queue is full.
+  // timing: enqueue precomputed TraceData; returns false on backpressure
   bool submit(Core* core, TraceData::Ptr td);
 
-  // Emulation only: read size bytes from global memory into data.
-  // No SimChannel activity; no timing side effects.
+  // emulation: read size bytes from global memory
   void gmem_read(Core* core, uint64_t addr, void* data, uint32_t size);
 
   const PerfStats& perf_stats() const;

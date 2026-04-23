@@ -103,9 +103,7 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     block_size_rem_ = cta_.block_size;
     thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
 
-    // Allocate lmem slot.
-    // When the allocation would straddle the LMEM boundary, pad the tail
-    // to 0 to avoid addresses escaping the LMEM range.
+    // allocate lmem slot; pad tail to 0 if it would straddle the LMEM boundary
     lmem_addr_ = 0;
     uint32_t lmem_cost = 0;
     if (cta_.lmem_size > 0) {
@@ -155,9 +153,7 @@ void CtaDispatcher::warp_done(uint32_t wid) {
   wid_to_slot_[wid] = num_warps_;  // clear assignment
   assert(slot_rem_warps_[slot] > 0);
   if (--slot_rem_warps_[slot] == 0) {
-    // Only advance the head and reclaim memory if the oldest CTA finished.
-    // If a younger CTA finishes out-of-order, its rem_warps becomes 0,
-    // but its memory is held until the head pointer reaches it.
+    // only advance head and reclaim memory if the oldest CTA finished
     if (slot == head_slot_) {
       do {
         // Reclaim memory strictly in-order as the head advances
@@ -205,8 +201,7 @@ bool CtaDispatcher::next_warp(bool do_init, cta_warp_record_t* out) {
     out->tmask.set(t);
   }
 
-  // Advance thread_idx with 3-D carry propagation.
-  // Match RTL logic: strictly additive delta + carry bit.
+  // advance thread_idx with 3-D carry propagation (additive delta + carry)
   uint32_t next_x = thread_idx_[0] + cta_.warp_step[0];
   bool wrap_x = (next_x >= cta_.block_dim[0]);
   thread_idx_[0] = wrap_x ? (next_x - cta_.block_dim[0]) : next_x;
