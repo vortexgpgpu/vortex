@@ -18,26 +18,20 @@ interface VX_fetch_if import VX_gpu_pkg::*; ();
     logic  valid;
     fetch_t data;
     logic  ready;
-`ifndef L1_ENABLE
     logic [`NUM_WARPS-1:0] ibuf_pop;
-`endif
 
     modport master (
         output valid,
         output data,
-        input  ready
-    `ifndef L1_ENABLE
-        , input ibuf_pop
-    `endif
+        input  ready,
+        input  ibuf_pop
     );
 
     modport slave (
         input  valid,
         input  data,
-        output ready
-    `ifndef L1_ENABLE
-        , output ibuf_pop
-    `endif
+        output ready,
+        output ibuf_pop
     );
 
 endinterface

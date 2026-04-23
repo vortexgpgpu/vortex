@@ -321,13 +321,53 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~stalled_warps;
 
+    // Per-warp ibuffer occupancy counter (registered full[i] keeps arbitration
+    // off the critical path; full_n feeds an externally registered aggregate
+    // so all_full is valid the same cycle as full[i]).
+    localparam IBUF_CW = $clog2(`IBUF_SIZE + 1);
+
+    wire [`NUM_WARPS-1:0] schedule_onehot;
+    logic [`NUM_WARPS-1:0] ibuf_full, ibuf_full_n;
+
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_ibuf_cnt
+        logic [IBUF_CW-1:0] size_r, size_n;
+        wire incr = schedule_fire && schedule_onehot[i];
+        wire decr = schedule_if.ibuf_pop[i];
+        assign size_n = size_r + IBUF_CW'(incr) - IBUF_CW'(decr);
+        assign ibuf_full_n[i] = (size_n == IBUF_CW'(`IBUF_SIZE));
+        always @(posedge clk) begin
+            if (reset) begin
+                size_r       <= '0;
+                ibuf_full[i] <= 1'b0;
+            end else begin
+                size_r       <= size_n;
+                ibuf_full[i] <= ibuf_full_n[i];
+            end
+        end
+    end
+
+    reg all_ibuf_full;
+    always @(posedge clk) begin
+        if (reset) all_ibuf_full <= 1'b0;
+        else all_ibuf_full <= (& ibuf_full_n);
+    end
+
+    wire [`NUM_WARPS-1:0] preferred_warps = ready_warps & ~ibuf_full;
+`ifndef L1_ENABLE
+    // without L1, we should ensure the icache never stalls,
+    // because it could deadlock dcache response since they share the same bus.
+    wire [`NUM_WARPS-1:0] schedule_warps = preferred_warps;
+`else
+    wire [`NUM_WARPS-1:0] schedule_warps = all_ibuf_full ? ready_warps : preferred_warps;
+`endif
+
     VX_priority_encoder #(
         .N (`NUM_WARPS)
     ) wid_select (
-        .data_in   (ready_warps),
+        .data_in   (schedule_warps),
         .index_out (schedule_wid),
         .valid_out (schedule_valid),
-        `UNUSED_PIN (onehot_out)
+        .onehot_out(schedule_onehot)
     );
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + PC_BITS)-1:0] schedule_data;

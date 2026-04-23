@@ -62,9 +62,7 @@ module VX_issue import VX_gpu_pkg::*; #(
         assign slice_decode_if.data  = decode_if.data;
         assign decode_ready_in[issue_id] = slice_decode_if.ready;
 
-    `ifndef L1_ENABLE
         assign decode_if.ibuf_pop[issue_id * PER_ISSUE_WARPS +: PER_ISSUE_WARPS] = slice_decode_if.ibuf_pop;
-    `endif
 
         VX_issue_slice #(
             .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, issue_id))),

@@ -319,8 +319,6 @@ import VX_fpu_pkg::*;
                         case (read_addr)
                         `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_STALLS,      read_data_ro_w, pipeline_perf.tcu.tbuf_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_CACHE_HITS, read_data_ro_w, pipeline_perf.tcu.tbuf_cache_hits);
-                        `CSR_READ_64(`VX_CSR_MPM_TCU_WGMMA_INSTRS,   read_data_ro_w, pipeline_perf.tcu.wgmma_instrs);
-                        `CSR_READ_64(`VX_CSR_MPM_TCU_WGMMA_STALLS,   read_data_ro_w, pipeline_perf.tcu.wgmma_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_READS,     read_data_ro_w, pipeline_perf.tcu.lmem_reads);
                         default:;
                         endcase
