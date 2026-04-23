@@ -32,7 +32,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     output wire [31:0] d_val
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam FMUL_LATENCY = (N > 2) ? 3 : 2;
+    localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
