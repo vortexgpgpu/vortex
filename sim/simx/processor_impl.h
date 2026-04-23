@@ -21,6 +21,8 @@
 
 namespace vortex {
 
+class Emulator;
+
 class ProcessorImpl {
 public:
   struct PerfStats {
@@ -47,6 +49,8 @@ public:
 #endif
 
   PerfStats perf_stats() const;
+
+  Emulator* get_first_emulator() const;
 
 private:
 

@@ -159,6 +159,10 @@ public:
     return emulator_.dcache_write(data, addr, size);
   }
 
+  Emulator& emulator() {
+    return emulator_;
+  }
+
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr& tensor_unit() {
     return tensor_unit_;

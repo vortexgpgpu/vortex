@@ -27,6 +27,7 @@
 #include "cluster.h"
 #include "processor_impl.h"
 #include "local_mem.h"
+#include "debug_module.h"
 
 using namespace vortex;
 
@@ -76,6 +77,7 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     : arch_(arch)
     , dcrs_(dcrs)
     , core_(core)
+    , debug_module_(nullptr)
     , warps_(arch.num_warps(), arch.num_threads())
     , barriers_(arch.num_barriers(), 0)
     , ipdom_size_(arch.num_threads()-1)
@@ -126,6 +128,10 @@ void Emulator::reset() {
   active_warps_.set(0);
   warps_[0].tmask.set(0);
   wspawn_.valid = false;
+  
+  // Reset last inactive warp tracking
+  last_inactive_warp_id_ = 0;
+  last_inactive_warp_pc_ = 0;
 }
 
 void Emulator::attach_ram(RAM* ram) {
@@ -150,6 +156,11 @@ uint32_t Emulator::fetch(uint32_t wid, uint64_t uuid) {
 }
 
 instr_trace_t* Emulator::step() {
+  // Check debug module flags first - if halted, don't schedule anything
+  if (debug_module_ != nullptr && debug_module_->is_halt_requested()) {
+    return nullptr;
+  }
+
   int scheduled_warp = -1;
 
   // process pending wspawn
@@ -175,8 +186,14 @@ instr_trace_t* Emulator::step() {
     }
   }
 
-  if (scheduled_warp == -1)
+  if (scheduled_warp == -1) {
+    // No warp is ready to execute - check if program has completed
+    if (debug_module_ != nullptr && !active_warps_.any()) {
+      vortex::Word final_pc = (last_inactive_warp_pc_ != 0) ? static_cast<vortex::Word>(last_inactive_warp_pc_) : warps_.at(0).PC;
+      debug_module_->notify_program_completed(final_pc);
+    }
     return nullptr;
+  }
 
   // get scheduled warp
   auto& warp = warps_.at(scheduled_warp);
@@ -197,6 +214,21 @@ instr_trace_t* Emulator::step() {
     // Fetch
     auto instr_code = this->fetch(scheduled_warp, uuid);
 
+    // Check for software breakpoint (EBREAK instruction)
+    if (debug_module_ != nullptr) {
+      bool is_ebreak = (instr_code == 0x00100073) || ((instr_code & 0xFFFF) == 0x9002);
+      if (is_ebreak && debug_module_->has_breakpoint(warp.PC)) {
+        // Software breakpoint hit - update DPC with emulator's PC and halt
+        std::cout << "[EMU] Breakpoint hit at PC=0x" << std::hex << warp.PC << std::dec << std::endl;
+        vortex::Word emulator_pc = warp.PC;  // PC is already Word type
+        debug_module_->direct_write_register(0x7B1, emulator_pc);  // Update DPC register
+        debug_module_->halt_hart(1);  // Cause 1 = ebreak instruction
+        debug_module_->set_halt_requested(true);
+        // No need to suspend - halt_requested_ check at start of step() will prevent execution
+        return nullptr;
+      }
+    }
+
     // decode
     this->decode(instr_code, scheduled_warp, uuid);
   } else {
@@ -212,6 +244,16 @@ instr_trace_t* Emulator::step() {
   // Execute
   auto trace = this->execute(*instr, scheduled_warp);
 
+  // Check for single-step mode - halt after executing one instruction
+  if (debug_module_ != nullptr && debug_module_->is_single_step_active()) {
+    // Update DPC with current PC (which points to next instruction after execution)
+    vortex::Word emulator_pc = warp.PC;  // PC is already Word type
+    debug_module_->direct_write_register(0x7B1, emulator_pc);  // Update DPC register
+    debug_module_->set_halt_requested(true);
+    debug_module_->set_single_step_active(false);
+    // No need to suspend - halt_requested_ check at start of step() will prevent execution
+  }
+
   return trace;
 }
 
@@ -221,6 +263,14 @@ bool Emulator::running() const {
 
 int Emulator::get_exitcode() const {
   return warps_.at(0).ireg_file.at(3).at(0);
+}
+
+void Emulator::set_debug_module(::DebugModule* dm) {
+  debug_module_ = dm;
+}
+
+::DebugModule* Emulator::get_debug_module() const {
+  return debug_module_;
 }
 
 void Emulator::suspend(uint32_t wid) {

@@ -96,7 +96,7 @@ inline const char* fmt_string(uint32_t fmt) {
   case uint8::id: return uint8::name;
   case int4::id:  return int4::name;
   case uint4::id: return uint4::name;
-  default:        return "";
+  default:        return "unknown";
   }
 }
 

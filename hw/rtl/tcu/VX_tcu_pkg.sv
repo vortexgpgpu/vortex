@@ -29,6 +29,7 @@ package VX_tcu_pkg;
     localparam TCU_FP32_ID = 0;
     localparam TCU_FP16_ID = 1;
     localparam TCU_BF16_ID = 2;
+    localparam TCU_TF32_ID = 3;
     localparam TCU_I32_ID  = 8;
     localparam TCU_I8_ID   = 9;
     localparam TCU_U8_ID   = 10;
@@ -82,18 +83,23 @@ package VX_tcu_pkg;
 
     // Tracing info
 `ifdef SIMULATION
-    task trace_fmt(input int level, input [3:0] fmt);
+    function automatic string fmt_string(input [3:0] fmt);
         case (fmt)
-            TCU_FP32_ID: `TRACE(level, ("fp32"))
-            TCU_FP16_ID: `TRACE(level, ("fp16"))
-            TCU_BF16_ID: `TRACE(level, ("bf16"))
-            TCU_I32_ID:  `TRACE(level, ("i32"))
-            TCU_I8_ID:   `TRACE(level, ("i8"))
-            TCU_U8_ID:   `TRACE(level, ("u8"))
-            TCU_I4_ID:   `TRACE(level, ("i4"))
-            TCU_U4_ID:   `TRACE(level, ("u4"))
-            default:     `TRACE(level, ("?"))
+            TCU_FP32_ID: fmt_string = "fp32";
+            TCU_FP16_ID: fmt_string = "fp16";
+            TCU_BF16_ID: fmt_string = "bf16";
+            TCU_TF32_ID: fmt_string = "tf32";
+            TCU_I32_ID:  fmt_string = "i32";
+            TCU_I8_ID:   fmt_string = "i8";
+            TCU_U8_ID:   fmt_string = "u8";
+            TCU_I4_ID:   fmt_string = "i4";
+            TCU_U4_ID:   fmt_string = "u4";
+            default:     fmt_string = "unknown";
         endcase
+    endfunction
+
+    task trace_fmt(input int level, input [3:0] fmt);
+        `TRACE(level, (fmt_string(fmt)))
     endtask
 
     task trace_ex_op(input int level,

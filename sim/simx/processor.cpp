@@ -13,6 +13,8 @@
 
 #include "processor.h"
 #include "processor_impl.h"
+#include "emulator.h"
+#include "core.h"
 
 using namespace vortex;
 
@@ -180,6 +182,25 @@ bool ProcessorImpl::cycle() {
   return anyRunning;
 }
 
+Emulator* ProcessorImpl::get_first_emulator() const {
+  if (clusters_.empty()) {
+    return nullptr;
+  }
+  auto& cluster = clusters_.at(0);
+  if (!cluster || cluster->sockets().empty()) {
+    return nullptr;
+  }
+  auto& socket = cluster->sockets().at(0);
+  if (!socket || socket->cores().empty()) {
+    return nullptr;
+  }
+  auto& core = socket->cores().at(0);
+  if (!core) {
+    return nullptr;
+  }
+  return &core->emulator();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 Processor::Processor(const Arch& arch)
@@ -227,6 +248,10 @@ bool Processor::cycle() {
     std::cerr << "Error: unknown exception." << std::endl;
   }
   return false;
+}
+
+Emulator* Processor::get_first_emulator() const {
+  return impl_->get_first_emulator();
 }
 
 #ifdef VM_ENABLE
