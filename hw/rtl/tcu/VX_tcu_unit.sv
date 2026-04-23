@@ -63,97 +63,127 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) per_block_result_if[BLOCK_SIZE]();
 
     // -----------------------------------------------------------------------
-    // Centralized WGMMA tile buffer (shared across all BLOCK_SIZE cores)
+    // WGMMA tile buffers + LMEM port arbitration
     // -----------------------------------------------------------------------
+    // Per-block tile buffers — each warp has its own A descriptor (per-warp
+    // row offset into A_smem), so a shared tbuf would serve wrong A data to
+    // slices 1..BLOCK_SIZE-1. Each slice's tbuf fetches A and B independently.
 
 `ifdef TCU_WGMMA_ENABLE
     localparam BANK_ADDR_WIDTH = `LMEM_LOG_SIZE - $clog2(`XLEN / 8) - $clog2(`LMEM_NUM_BANKS);
 
-    // Shared tile buffer outputs — broadcast to all BLOCK_SIZE cores
-    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]    shared_tbuf_rs1_data;
-    wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] shared_tbuf_rs2_data;
+    // Per-block tile buffer outputs
+    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]    tbuf_rs1_data [BLOCK_SIZE];
+    wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data [BLOCK_SIZE];
 `ifdef TCU_SPARSE_ENABLE
-    wire [TCU_MAX_META_BLOCK_WIDTH-1:0]     shared_tbuf_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0]    tbuf_sp_meta  [BLOCK_SIZE];
 `endif
-    wire                                    shared_tbuf_ready;
+    wire                                   tbuf_ready    [BLOCK_SIZE];
 
-    // All warps are synchronized via SW barrier (__syncthreads) and execute
-    // the same uop sequence in lockstep. Use block 0's control signals to
-    // drive the single shared tile buffer.
-    wire is_wgmma_shared = (per_block_execute_if[0].data.op_type == INST_TCU_WGMMA);
+`ifdef PERF_ENABLE
+    wire [PERF_CTR_BITS-1:0] tbuf_stalls_b     [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] tbuf_cache_hits_b [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] lmem_reads_b      [BLOCK_SIZE];
+`endif
 
-    wire req_valid_shared = per_block_execute_if[0].valid && is_wgmma_shared;
-    wire req_fire_shared  = per_block_execute_if[0].valid
-                         && per_block_execute_if[0].ready
-                         && is_wgmma_shared;
+    VX_mem_bus_if #(
+        .DATA_SIZE  (`LMEM_NUM_BANKS * (`XLEN / 8)),
+        .TAG_WIDTH  (TCU_LMEM_BLK_TAG_W),
+        .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
+        .ADDR_WIDTH (BANK_ADDR_WIDTH)
+    ) per_block_lmem_if[BLOCK_SIZE]();
 
-    // Single LMEM interface — no per-block arbiter needed
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_tile_bufs
+        wire is_wgmma_b = (per_block_execute_if[block_idx].data.op_type == INST_TCU_WGMMA);
+
+        wire req_valid_b = per_block_execute_if[block_idx].valid && is_wgmma_b;
+        wire req_fire_b  = per_block_execute_if[block_idx].valid
+                        && per_block_execute_if[block_idx].ready
+                        && is_wgmma_b;
+
+        VX_tcu_tbuf #(
+            .INSTANCE_ID    (`SFORMATF(("%s-tbuf%0d", INSTANCE_ID, block_idx))),
+            .NUM_BANKS      (`LMEM_NUM_BANKS),
+            .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH)
+        ) tile_buf (
+            .clk              (clk),
+            .reset            (reset),
+        `ifdef PERF_ENABLE
+            .tbuf_stalls    (tbuf_stalls_b[block_idx]),
+            .tbuf_cache_hits(tbuf_cache_hits_b[block_idx]),
+            .lmem_reads     (lmem_reads_b[block_idx]),
+        `endif
+            .req_wid          (per_block_execute_if[block_idx].data.header.wid),
+            .req_valid        (req_valid_b),
+            .req_fire         (req_fire_b),
+            .req_is_sparse    (per_block_execute_if[block_idx].data.op_args.tcu.is_sparse),
+            .req_step_m       (per_block_execute_if[block_idx].data.op_args.tcu.step_m),
+            .req_step_n       (per_block_execute_if[block_idx].data.op_args.tcu.step_n),
+            .req_step_k       (per_block_execute_if[block_idx].data.op_args.tcu.step_k),
+            .req_fmt_s        (per_block_execute_if[block_idx].data.op_args.tcu.fmt_s),
+            .req_cd_nregs     (per_block_execute_if[block_idx].data.op_args.tcu.cd_nregs),
+            .req_desc_a       (per_block_execute_if[block_idx].data.rs1_data[0]),
+            .req_desc_b       (per_block_execute_if[block_idx].data.rs2_data[0]),
+            .req_a_is_smem    (per_block_execute_if[block_idx].data.op_args.tcu.a_from_smem),
+            .tcu_lmem_if      (per_block_lmem_if[block_idx]),
+            .tbuf_rs1_data    (tbuf_rs1_data[block_idx]),
+            .tbuf_rs2_data    (tbuf_rs2_data[block_idx]),
+        `ifdef TCU_SPARSE_ENABLE
+            .tbuf_sp_meta     (tbuf_sp_meta[block_idx]),
+        `endif
+            .tbuf_ready       (tbuf_ready[block_idx])
+        );
+    end
+
+    // -------------------------------------------------------------------
+    // LMEM port arbitration (BLOCK_SIZE tbuf masters -> 1 LMEM port)
+    // -------------------------------------------------------------------
+
     VX_mem_bus_if #(
         .DATA_SIZE  (`LMEM_NUM_BANKS * (`XLEN / 8)),
         .TAG_WIDTH  (TCU_LMEM_TAG_W),
         .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
         .ADDR_WIDTH (BANK_ADDR_WIDTH)
-    ) tbuf_lmem_if();
+    ) lmem_arb_out_if[1]();
 
-    VX_tcu_tbuf #(
-        .INSTANCE_ID    (`SFORMATF(("%s-tbuf", INSTANCE_ID))),
-        .NUM_BANKS      (`LMEM_NUM_BANKS),
-        .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH)
-    ) shared_tile_buf (
-        .clk              (clk),
-        .reset            (reset),
-    `ifdef PERF_ENABLE
-        .tbuf_stalls    (shared_tbuf_stalls),
-        .tbuf_cache_hits(shared_tbuf_cache_hits),
-        .lmem_reads     (shared_lmem_reads),
-    `endif
-        .req_wid          (per_block_execute_if[0].data.header.wid),
-        .req_valid        (req_valid_shared),
-        .req_fire         (req_fire_shared),
-        .req_is_sparse    (per_block_execute_if[0].data.op_args.tcu.is_sparse),
-        .req_step_m       (per_block_execute_if[0].data.op_args.tcu.step_m),
-        .req_step_n       (per_block_execute_if[0].data.op_args.tcu.step_n),
-        .req_step_k       (per_block_execute_if[0].data.op_args.tcu.step_k),
-        .req_fmt_s        (per_block_execute_if[0].data.op_args.tcu.fmt_s),
-        .req_cd_nregs     (per_block_execute_if[0].data.op_args.tcu.cd_nregs),
-        .req_desc_a       (per_block_execute_if[0].data.rs1_data[0]),
-        .req_desc_b       (per_block_execute_if[0].data.rs2_data[0]),
-        .req_a_is_smem    (per_block_execute_if[0].data.op_args.tcu.a_from_smem),
-        .tcu_lmem_if      (tbuf_lmem_if),
-        // Tile data outputs (broadcast to all cores)
-        .tbuf_rs1_data    (shared_tbuf_rs1_data),
-        .tbuf_rs2_data    (shared_tbuf_rs2_data),
-    `ifdef TCU_SPARSE_ENABLE
-        .tbuf_sp_meta     (shared_tbuf_sp_meta),
-    `endif
-        .tbuf_ready       (shared_tbuf_ready)
+    VX_mem_arb #(
+        .NUM_INPUTS  (BLOCK_SIZE),
+        .NUM_OUTPUTS (1),
+        .DATA_SIZE   (`LMEM_NUM_BANKS * (`XLEN / 8)),
+        .TAG_WIDTH   (TCU_LMEM_BLK_TAG_W),
+        .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
+        .ADDR_WIDTH  (BANK_ADDR_WIDTH),
+        .ARBITER     ("P")
+    ) lmem_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_block_lmem_if),
+        .bus_out_if (lmem_arb_out_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF (tcu_lmem_if, tbuf_lmem_if);
+    `ASSIGN_VX_MEM_BUS_IF (tcu_lmem_if, lmem_arb_out_if[0]);
 
     // -------------------------------------------------------------------
-    // Lockstep synchronization: WGMMA fires on ALL cores simultaneously
-    // -------------------------------------------------------------------
-
-    wire [BLOCK_SIZE-1:0] core_wgmma_can_fire;
-    wire [BLOCK_SIZE-1:0] core_wgmma_presenting;
-    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_wgmma_sync
-        assign core_wgmma_presenting[bi] = per_block_execute_if[bi].valid
-            && (per_block_execute_if[bi].data.op_type == INST_TCU_WGMMA);
-    end
-    wire wgmma_all_go = &core_wgmma_presenting && &core_wgmma_can_fire && shared_tbuf_ready;
-
-    // -------------------------------------------------------------------
-    // Performance counters
+    // Performance counters (aggregated across blocks)
     // -------------------------------------------------------------------
 
 `ifdef PERF_ENABLE
-    wire [PERF_CTR_BITS-1:0] shared_tbuf_stalls;
-    wire [PERF_CTR_BITS-1:0] shared_tbuf_cache_hits;
-    wire [PERF_CTR_BITS-1:0] shared_lmem_reads;
-    assign tcu_perf.tbuf_stalls     = shared_tbuf_stalls;
-    assign tcu_perf.tbuf_cache_hits = shared_tbuf_cache_hits;
-    assign tcu_perf.lmem_reads      = shared_lmem_reads;
+    logic [PERF_CTR_BITS-1:0] tbuf_stalls_sum;
+    logic [PERF_CTR_BITS-1:0] tbuf_cache_hits_sum;
+    logic [PERF_CTR_BITS-1:0] lmem_reads_sum;
+    always_comb begin
+        tbuf_stalls_sum     = '0;
+        tbuf_cache_hits_sum = '0;
+        lmem_reads_sum      = '0;
+        for (int bi = 0; bi < BLOCK_SIZE; bi++) begin
+            tbuf_stalls_sum     += tbuf_stalls_b[bi];
+            tbuf_cache_hits_sum += tbuf_cache_hits_b[bi];
+            lmem_reads_sum      += lmem_reads_b[bi];
+        end
+    end
+    assign tcu_perf.tbuf_stalls     = tbuf_stalls_sum;
+    assign tcu_perf.tbuf_cache_hits = tbuf_cache_hits_sum;
+    assign tcu_perf.lmem_reads      = lmem_reads_sum;
 
     // wgmma_instrs / wgmma_stalls: derived from per_block_execute_if.
     logic wgmma_fire_b  [BLOCK_SIZE];
@@ -205,13 +235,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
         `ifdef TCU_WGMMA_ENABLE
-            .tbuf_rs1_data (shared_tbuf_rs1_data),
-            .tbuf_rs2_data (shared_tbuf_rs2_data),
+            .tbuf_rs1_data (tbuf_rs1_data[block_idx]),
+            .tbuf_rs2_data (tbuf_rs2_data[block_idx]),
         `ifdef TCU_SPARSE_ENABLE
-            .tbuf_sp_meta  (shared_tbuf_sp_meta),
+            .tbuf_sp_meta  (tbuf_sp_meta[block_idx]),
         `endif
-            .tbuf_ready    (wgmma_all_go),
-            .wgmma_can_fire(core_wgmma_can_fire[block_idx]),
+            .tbuf_ready    (tbuf_ready[block_idx]),
         `endif
             .execute_if (per_block_execute_if[block_idx]),
             .result_if  (per_block_result_if[block_idx])

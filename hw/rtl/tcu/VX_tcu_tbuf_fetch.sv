@@ -118,9 +118,10 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FETCH_CTR_W = `CLOG2(MAX_BANK_ROWS + 1);
 
     // Single-slot design: fu_lock prevents warp interleaving during WGMMA
-    // expansion, so only one warp uses the tile buffer at a time. B tile is
-    // persistently cached (shared_b_*) across all CTA warps; A is re-fetched
-    // per warp since each warp has different A data.
+    // expansion, so only one warp uses the tile buffer at a time. With
+    // per-block (per-slice) tbufs, warps in a slice come from different CTAs
+    // and have different desc_b, so there is no cross-warp B reuse; each
+    // WGMMA call fetches A (if SS) and B anew.
     localparam SLOT_DEPTH = 1;
     localparam SLOT_ADDRW = 1;
     wire [SLOT_ADDRW-1:0] cur_slot = 1'b0;
@@ -154,15 +155,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [SLOT_DEPTH-1:0][3:0]                       slot_meta_stride;
     logic [SLOT_DEPTH-1:0][FETCH_CTR_W-1:0]           slot_meta_bank_rows;
 `endif
-
-    // Shared B buffer state: all warps in a CTA share the same physical smem
-    // segment (same desc_b) in both dense and sparse modes. One copy of B
-    // suffices; fetch B once and reuse across slots until a same-warp re-alloc
-    // forces invalidation (LMEM may have been overwritten by DMA).
-    logic [`XLEN-1:0]      shared_b_desc;
-    logic                  shared_b_valid;
-    logic                  shared_b_dirty;
-    logic [NW_WIDTH-1:0] last_b_fetch_wid_r;
 
     // -----------------------------------------------------------------------
     // Slot lookup
@@ -330,21 +322,15 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
     wire last_rsp_b = in_fetch_b && tcu_lmem_if.rsp_valid
                    && (rsp_ctr_r == FETCH_CTR_W'(B_BANK_ROWS - 1));
-    // B is cached when the shared buffer is valid, not dirty, and the target
-    // slot's desc_b matches the shared copy — then B fetch is skipped.
-    wire b_cached       = shared_b_valid && !shared_b_dirty
-                       && (slot_desc_b[fetch_slot] == shared_b_desc);
 
 `ifdef TCU_SPARSE_ENABLE
     wire last_rsp_meta = in_fetch_meta && tcu_lmem_if.rsp_valid
                       && (rsp_ctr_r == slot_meta_bank_rows[fetch_slot] - FETCH_CTR_W'(1));
-    // SS sparse tiles finish after META; RS sparse/dense finish after B (or skip B).
+    // SS sparse tiles finish after META; otherwise after B.
     wire is_ss_sparse = slot_is_sparse[fetch_slot] && slot_a_from_smem[fetch_slot];
-    wire fetch_done_now = is_ss_sparse
-                        ? last_rsp_meta
-                        : (last_rsp_b || (last_rsp_a && b_cached));
+    wire fetch_done_now = is_ss_sparse ? last_rsp_meta : last_rsp_b;
 `else
-    wire fetch_done_now = last_rsp_b || (last_rsp_a && b_cached);
+    wire fetch_done_now = last_rsp_b;
 `endif
 
     // -----------------------------------------------------------------------
@@ -374,17 +360,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         req_inflight_r <= 1'b0;
                         // RS mode: A comes from registers, skip FETCH_A
                         send_state_r   <= slot_a_from_smem[s] ? SEND_FETCH_A : SEND_FETCH_B;
-                        // If B is cached and A is from registers, nothing left
-                        // to fetch for dense — mark done and stay in IDLE.
-                        // For sparse, still need META — jump to FETCH_META.
-                        if (!slot_a_from_smem[s]
-                            && shared_b_valid && !shared_b_dirty
-                            && (slot_desc_b[s] == shared_b_desc)) begin
-                            // RS mode with B cached: nothing to fetch (RS sparse
-                            // metadata goes through VX_tcu_meta SRAM, not tbuf).
-                            slot_fetch_done[s] <= 1'b1;
-                            send_state_r       <= SEND_IDLE;
-                        end
                     end
                 end
             end
@@ -396,15 +371,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     req_ctr_r      <= '0;
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
-                    // Skip B fetch when shared B is cached for this tile.
-                `ifdef TCU_SPARSE_ENABLE
-                    if (b_cached)
-                        send_state_r <= slot_is_sparse[fetch_slot] ? SEND_FETCH_META : SEND_IDLE;
-                    else
-                        send_state_r <= SEND_FETCH_B;
-                `else
-                    send_state_r   <= b_cached ? SEND_IDLE : SEND_FETCH_B;
-                `endif
+                    send_state_r   <= SEND_FETCH_B;
                 end else if (tcu_lmem_if.rsp_valid) begin
                     rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
                 end
@@ -459,25 +426,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             slot_fetch_done    <= '0;
             warp_alloc_pending <= '0;
             fetch_slot         <= '0;
-            shared_b_valid      <= 1'b0;
-            shared_b_dirty      <= 1'b1;
-            shared_b_desc       <= '0;
-            last_b_fetch_wid_r  <= '0;
         end else begin
-            // Same-warp re-alloc: LMEM may have been modified since last
-            // B fetch (e.g. DXA overwrote smem between K-tiles), so
-            // invalidate the shared B cache when the same warp re-allocates
-            // with an identical desc_b.
-            if (alloc_en && (req_wid == last_b_fetch_wid_r)
-                         && shared_b_valid && (req_desc_b == shared_b_desc))
-                shared_b_dirty <= 1'b1;
-            if (last_rsp_b) begin
-                shared_b_valid      <= 1'b1;
-                shared_b_dirty      <= 1'b0;
-                shared_b_desc       <= slot_desc_b[fetch_slot];
-                last_b_fetch_wid_r  <= req_wid;
-            end
-
             if (fetch_done_now)
                 slot_fetch_done[fetch_slot] <= 1'b1;
 
@@ -545,10 +494,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     // -----------------------------------------------------------------------
-    // B data capture — single-entry shared LUTRAM
-    //   All warps in a CTA share the same physical smem (same desc_b) in
-    //   both dense and sparse modes. One copy of B suffices; combined with
-    //   shared_b_* tracking, the FSM skips redundant B fetches via b_cached.
+    // B data capture — single-entry LUTRAM (SIZE=1, async read)
     // -----------------------------------------------------------------------
 
     logic [B_TOTAL*32-1:0] b_wdata;
@@ -638,27 +584,20 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] fetch_stall_ctr_r;
-    reg [PERF_CTR_BITS-1:0] cache_hit_ctr_r;
     reg [PERF_CTR_BITS-1:0] lmem_reads_ctr_r;
-    // B cache hit: new tile allocated and B data already cached from prior fetch.
-    wire b_cache_hit = alloc_en && shared_b_valid && !shared_b_dirty
-                    && (req_desc_b == shared_b_desc);
     always_ff @(posedge clk) begin
         if (reset) begin
             fetch_stall_ctr_r <= '0;
-            cache_hit_ctr_r   <= '0;
             lmem_reads_ctr_r  <= '0;
         end else begin
             if (req_valid && !tbuf_ready)
                 fetch_stall_ctr_r <= fetch_stall_ctr_r + PERF_CTR_BITS'(1);
-            if (b_cache_hit)
-                cache_hit_ctr_r <= cache_hit_ctr_r + PERF_CTR_BITS'(1);
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                 lmem_reads_ctr_r <= lmem_reads_ctr_r + PERF_CTR_BITS'(1);
         end
     end
     assign tbuf_stalls     = fetch_stall_ctr_r;
-    assign tbuf_cache_hits = cache_hit_ctr_r;
+    assign tbuf_cache_hits = '0;
     assign lmem_reads      = lmem_reads_ctr_r;
 `endif
 
