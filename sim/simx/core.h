@@ -216,7 +216,6 @@ private:
 
   TFifo<instr_trace_t*> fetch_latch_;
   TFifo<instr_trace_t*> decode_latch_;
-  instr_trace_t* trace_to_schedule_;
 
   HashTable<instr_trace_t*> pending_icache_;
   std::list<instr_trace_t*, PoolAllocator<instr_trace_t*, 64>> pending_instrs_;
@@ -230,8 +229,11 @@ private:
   uint32_t commit_exe_;
   std::vector<Arbiter> ibuffer_arbs_;
 
-  // FU lock: prevent warp interleaving during multi-uop sequences
-  BitVector<> fu_locked_;
+  // per-slice FU lock preventing warp interleaving during multi-uop sequences
+  std::vector<BitVector<>> fu_locked_;
+
+  // per-warp in-flight count [schedule -> ibuffer pop] for scheduler backpressure
+  std::vector<uint32_t> ibuf_inflight_;
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 

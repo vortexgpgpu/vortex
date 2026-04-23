@@ -42,8 +42,10 @@ private:
 
   void translate(instr_trace_t* trace);
 
-  Core*    core_;
-  uint32_t total_stalls_ = 0;
+  Core*          core_;
+  uint32_t       total_stalls_ = 0;
+  instr_trace_t* cur_trace_ = nullptr;
+  uint64_t       release_cycle_ = 0;
 };
 
 } // namespace vortex

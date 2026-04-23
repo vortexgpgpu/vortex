@@ -126,13 +126,11 @@ public:
   void set_satp(uint64_t satp) ;
 #endif
 
-  // Schedule: pick warp, fetch instruction code, create trace.
-  // Suspends the warp. Called from Core::schedule().
-  instr_trace_t* schedule();
+  // Pick warp, fetch, build trace, suspend warp.
+  // `warp_mask` bits select which warps are eligible this cycle.
+  instr_trace_t* schedule(const WarpMask& warp_mask);
 
-  // Decode: decode fetched instruction code, fill trace metadata.
-  // Resumes warp for non-stalling instructions.
-  // Called from Core::decode().
+  // Decode fetched trace; resumes warp for non-stalling instructions.
   void decode(instr_trace_t* trace);
 
   Sequencer& sequencer(uint32_t wid) { return sequencers_.at(wid); }
@@ -209,8 +207,7 @@ private:
 
   uint32_t get_barrier_phase(uint32_t bar_id) const;
 
-  // temporarily added for riscv-vector tests
-  // TODO: remove once ecall/ebreak are supported
+  // ecall/ebreak trap helpers (riscv-vector tests)
   void trigger_ecall();
   void trigger_ebreak();
 

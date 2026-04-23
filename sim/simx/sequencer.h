@@ -29,9 +29,8 @@ struct instr_trace_t;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Models RTL VX_uop_sequencer: per-warp micro-op expansion for multi-uop
-// instructions (TCU WMMA/WGMMA). Simple instructions pass through unchanged.
-// One Sequencer instance per warp.
+// Per-warp micro-op expander for multi-uop instructions (TCU WMMA/WGMMA).
+// Simple instructions pass through unchanged.
 class Sequencer {
 public:
   Sequencer(const Arch& arch, Core* core, PoolAllocator<Instr, 64>& instr_pool);

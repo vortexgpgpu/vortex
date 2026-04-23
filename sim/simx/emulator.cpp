@@ -184,7 +184,7 @@ instr_trace_t* Emulator::fetch(uint32_t wid, uint64_t uuid) {
   return trace;
 }
 
-instr_trace_t* Emulator::schedule() {
+instr_trace_t* Emulator::schedule(const WarpMask& warp_mask) {
   int scheduled_warp = -1;
 
   // Dispatch one CTA warp
@@ -213,15 +213,14 @@ instr_trace_t* Emulator::schedule() {
     this->resume(0);
   }
 
-  // find next ready warp
+  // pick next ready warp
   for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {
-    if (active_warps_.test(wid) && !stalled_warps_.test(wid)) {
+    if (active_warps_.test(wid) && !stalled_warps_.test(wid) && warp_mask.test(wid)) {
       scheduled_warp = wid;
       break;
     }
   }
 
-  // Any active warp to schedule?
   if (scheduled_warp == -1)
     return nullptr;
   }
@@ -281,8 +280,6 @@ void Emulator::decode(instr_trace_t* trace) {
   // Conservative writeback: true if destination register exists
   trace->wb = (instr->get_dest_reg().type != RegType::None);
 
-  // is_wstall is set during instruction decode (decode.cpp) to mirror
-  // RTL VX_decode.sv is_wstall. Transfer to trace for pipeline use.
   trace->fetch_stall = instr->is_wstall();
 }
 
@@ -291,18 +288,10 @@ void Emulator::execute(instr_trace_t* trace) {
   assert(trace->instr_ptr != nullptr);
   auto& warp = warps_.at(trace->wid);
 
-  // Save pipeline PC, then set execution PC for this instruction.
-  // Non-stalling instructions allow multiple in-flight per warp,
-  // so the pipeline PC may already be ahead of this instruction's PC.
+  // execute at trace's PC; restore pipeline PC if no branch taken
   auto saved_PC = warp.PC;
   warp.PC = trace->PC;
-
-  // Perform functional execution
   auto new_trace = this->execute(*trace->instr_ptr, trace->wid);
-
-  // The inner execute always does warp.PC += 4, then sets next_pc for branches.
-  // If no branch was taken, warp.PC == trace->PC + 4 — restore the pipeline PC.
-  // If a branch was taken, warp.PC is the branch target — keep it.
   if (warp.PC == trace->PC + 4) {
     warp.PC = saved_PC;
   }
@@ -418,7 +407,7 @@ void Emulator::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, boo
     }
     // update count and wrap around
     if (count == 0) {
-      std::cout << "BUG: barrier_arrive count=0: core=" << core_->id() << " wid=" << wid << " bar_id=0x" << std::hex << bar_id << std::dec << " bar_index=" << bar_index << " is_sync=" << is_sync_bar << std::endl;
+      std::cout << "Error: barrier_arrive count=0: core=" << core_->id() << " wid=" << wid << " bar_id=0x" << std::hex << bar_id << std::dec << " bar_index=" << bar_index << " is_sync=" << is_sync_bar << std::endl;
       std::abort();
     }
     barrier.count = barrier_count_p1 % count;
@@ -913,11 +902,7 @@ void Emulator::update_fcrs(uint32_t fflags, uint32_t wid, uint32_t tid) {
   }
 }
 
-// For riscv-vector test functionality, ecall and ebreak must trap
-// These instructions are used in the vector tests to stop execution of the test
-// Therefore, without these instructions, undefined and incorrect behavior happens
-//
-// For now, we need these instructions to trap for testing the riscv-vector isa
+// ecall/ebreak trap by deactivating all warps (used by riscv-vector tests)
 void Emulator::trigger_ecall() {
   active_warps_.reset();
 }

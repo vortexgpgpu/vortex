@@ -52,7 +52,8 @@ Core::Core(const SimContext& ctx,
   , pending_icache_(arch_.num_warps())
   , commit_arbs_(ISSUE_WIDTH)
   , ibuffer_arbs_(ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
-  , fu_locked_((uint32_t)FUType::Count, 0)
+  , fu_locked_(ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
+  , ibuf_inflight_(arch.num_warps(), 0)
 {
   char sname[100];
 
@@ -204,8 +205,6 @@ void Core::reset() {
 
   emulator_.reset();
 
-  trace_to_schedule_ = nullptr;
-
   scoreboard_.reset();
 
   for (auto& arb : ibuffer_arbs_) {
@@ -214,6 +213,8 @@ void Core::reset() {
 
   pending_instrs_.clear();
   pending_ifetches_ = 0;
+
+  std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
 
   perf_stats_ = PerfStats();
 }
@@ -235,28 +236,30 @@ void Core::schedule() {
   perf_stats_.active_warps += emulator_.active_warps().count();
   perf_stats_.stalled_warps += emulator_.stalled_warps().count();
 
-  // get next instruction to schedule
-  auto trace = trace_to_schedule_;
-  if (trace == nullptr) {
-    trace = emulator_.schedule();
-    if (trace == nullptr) {
-      ++perf_stats_.sched_idle;
-      return;
+  // stop when fetch_latch cannot accept
+  if (fetch_latch_.full())
+    return;
+
+  // eligible warps: ibuffer not yet saturated
+  WarpMask warp_mask;
+  for (uint32_t w = 0, nw = arch_.num_warps(); w < nw; ++w) {
+    if (ibuf_inflight_.at(w) < IBUF_SIZE) {
+      warp_mask.set(w);
     }
-    trace_to_schedule_ = trace;
   }
 
-  // advance to fetch stage
-  if (fetch_latch_.try_push(trace)) {
-    DT(3, this->name() << "-pipeline schedule: " << *trace);
-    // clear schedule trace
-    trace_to_schedule_ = nullptr;
-    // track pending instructions
-    pending_instrs_.push_back(trace);
-    // profiling
-    perf_stats_.issued_warps += 1;
-    perf_stats_.issued_threads += trace->tmask.count();
+  auto trace = emulator_.schedule(warp_mask);
+  if (trace == nullptr) {
+    ++perf_stats_.sched_idle;
+    return;
   }
+
+  fetch_latch_.push(trace);
+  DT(3, this->name() << "-pipeline schedule: " << *trace);
+  pending_instrs_.push_back(trace);
+  ++ibuf_inflight_.at(trace->wid);
+  perf_stats_.issued_warps += 1;
+  perf_stats_.issued_threads += trace->tmask.count();
 }
 
 void Core::fetch() {
@@ -363,9 +366,7 @@ void Core::issue() {
         continue;
       has_instrs = true;
 
-      // For macro instructions, the sequencer generates micro-ops with the
-      // actual register operands.  Check the scoreboard against the micro-op
-      // so that WAW / RAW hazards between consecutive micro-ops are honoured.
+      // check scoreboard against sequencer micro-op (handles uop WAW/RAW)
       auto trace = ibuffer->peek();
       auto& seq = emulator_.sequencer(wid);
       auto uop_trace = seq.get(trace);  // returns cached uop or generates next
@@ -389,7 +390,7 @@ void Core::issue() {
         // fu_lock=1 means acquire request; blocked when FU already locked.
         auto fu = (int)uop_trace->fu_type;
         bool uop_fu_lock = uop_trace->instr_ptr->get_fu_lock();
-        if (fu_locked_.test(fu) && uop_fu_lock) {
+        if (fu_locked_.at(iw).test(fu) && uop_fu_lock) {
           continue; // blocked by FU lock
         }
         ready_set.set(w); // mark instruction as ready
@@ -433,9 +434,9 @@ void Core::issue() {
           bool fl = uop_trace->instr_ptr->get_fu_lock();
           bool ful = uop_trace->instr_ptr->get_fu_unlock();
           if (fl && !ful) {
-            fu_locked_.set(fui);
+            fu_locked_.at(iw).set(fui);
           } else if (!fl && ful) {
-            fu_locked_.reset(fui);
+            fu_locked_.at(iw).reset(fui);
           }
         }
         // Advance sequencer; pop ibuffer only when all micro-ops issued
@@ -450,6 +451,9 @@ void Core::issue() {
             trace_pool_.deallocate(trace, 1);
           }
           ibuffer->pop();
+          // Release ibuffer backpressure slot (matches ++ in schedule()).
+          assert(ibuf_inflight_.at(wid) > 0);
+          --ibuf_inflight_.at(wid);
         }
       }
     }

@@ -411,7 +411,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           rd_data[t].i = rs3_data[sl].i;
         }
       }
-      // Mask out source lanes from write-back (RTL suppresses write for these)
+      // mask out source lanes from write-back
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if ((t & 0x3u) == src_offset) {
           exec_tmask.reset(t);
@@ -424,10 +424,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       Word offset = sext<Word>(brArgs.offset, 32);
       switch (br_type) {
       case BrType::BR: {
-        // Vortex assumes warp-uniform branch decisions at the ISA level.
-        // When control-flow divergence is not lowered into explicit split/join,
-        // fall back to the hardware behavior: use the last active lane as the
-        // branch decision source.
+        // warp-uniform branch: use last active lane as decision source on divergence
         bool curr_taken = false;
         uint32_t t = static_cast<uint32_t>(thread_last);
         switch (brArgs.cmp) {
@@ -1562,11 +1559,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     }
 #ifdef EXT_DXA_ENABLE
     ,[&](DxaType /*dxa_type*/) {
-      // Wgather-based DXA: all args packed into 4 lanes of a single instruction.
-      // Lane 0: rs1=lmem_addr, rs2=coord2
-      // Lane 1: rs1=meta,      rs2=coord3
-      // Lane 2: rs1=coord0,    rs2=coord4
-      // Lane 3: rs1=coord1,    rs2=cta_mask (2D multicast) or 0
+      // wgather DXA: args packed into 4 lanes (lmem_addr/meta/coords[0..4]/cta_mask)
       trace->fetch_stall = false;
       uint64_t lmem_addr  = static_cast<uint64_t>(rs1_data.at(0).u);
       uint32_t meta       = rs1_data.at(1).u;
