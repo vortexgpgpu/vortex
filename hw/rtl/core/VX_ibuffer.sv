@@ -73,9 +73,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
             .data_out (ibuffer_tmp_if.data),
             .ready_out(ibuffer_tmp_if.ready)
         );
-    `ifndef L1_ENABLE
         assign decode_if.ibuf_pop[w] = ibuffer_tmp_if.valid && ibuffer_tmp_if.ready;
-    `endif
         if (UOP_MAX > 0) begin : g_uop
             VX_uop_sequencer #(
                 .INSTANCE_ID (`SFORMATF(("%s-uop", INSTANCE_ID))),

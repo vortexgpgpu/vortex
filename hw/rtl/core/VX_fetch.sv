@@ -71,40 +71,16 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .rdata ({rsp_PC, rsp_tmask})
     );
 
-`ifndef L1_ENABLE
-    // Ensure that the ibuffer doesn't fill up.
-    // This resolves potential deadlock if ibuffer fills and the LSU stalls the execute stage due to pending dcache requests.
-    // This issue is particularly prevalent when the icache and dcache are disabled and both requests share the same bus.
-    wire [`NUM_WARPS-1:0] pending_ibuf_full;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_reads
-        VX_pending_size #(
-            .SIZE (`IBUF_SIZE)
-        ) pending_reads (
-            .clk   (clk),
-            .reset (reset),
-            .incr  (icache_req_fire && schedule_if.data.wid == i),
-            .decr  (fetch_if.ibuf_pop[i]),
-            `UNUSED_PIN (empty),
-            `UNUSED_PIN (alm_empty),
-            .full  (pending_ibuf_full[i]),
-            `UNUSED_PIN (alm_full),
-            `UNUSED_PIN (size)
-        );
-    end
-    wire ibuf_ready = ~pending_ibuf_full[schedule_if.data.wid];
-`else
-    wire ibuf_ready = 1'b1;
-`endif
-
     `RUNTIME_ASSERT((!schedule_if.valid || schedule_if.data.PC != 0),
         ("invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", to_fullPC(schedule_if.data.PC), schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.uuid))
 
     // Icache Request
 
-    assign icache_req_valid = schedule_if.valid && ibuf_ready;
+    assign icache_req_valid = schedule_if.valid;
     assign icache_req_addr  = schedule_if.data.PC[2-(`XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH]; // 4-byte aligned addresses
     assign icache_req_tag   = {schedule_if.data.uuid, req_tag};
-    assign schedule_if.ready = icache_req_ready && ibuf_ready;
+    assign schedule_if.ibuf_pop = fetch_if.ibuf_pop;
+    assign schedule_if.ready = icache_req_ready;
 
     VX_elastic_buffer #(
         .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH),

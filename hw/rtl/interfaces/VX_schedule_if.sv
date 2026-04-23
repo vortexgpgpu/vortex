@@ -18,17 +18,20 @@ interface VX_schedule_if import VX_gpu_pkg::*; ();
     logic  valid;
     schedule_t data;
     logic  ready;
+    logic [`NUM_WARPS-1:0] ibuf_pop;
 
     modport master (
         output valid,
         output data,
-        input  ready
+        input  ready,
+        input ibuf_pop
     );
 
     modport slave (
         input  valid,
         input  data,
-        output ready
+        output ready,
+        output ibuf_pop
     );
 
 endinterface
