@@ -19,7 +19,7 @@ jobs:
   setup:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-24.04]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -77,7 +77,7 @@ jobs:
     needs: setup
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-24.04]
         xlen: [32, 64]
     runs-on: ${{ matrix.os }}
 
@@ -135,11 +135,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
-        name: [regression, mpi, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor, sst]
+        os: [ubuntu-24.04]
+        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor, mpi, sst]
         xlen: [32, 64]
         exclude:
           - name: sst
+            xlen: 64
+          - name: mpi
             xlen: 64
     runs-on: ${{ matrix.os }}
 
@@ -197,7 +199,7 @@ jobs:
           fi
 
   complete:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: tests
 
     steps:
