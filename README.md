@@ -58,7 +58,7 @@ Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
 If you are interested in a stable release of Vortex, you can download the latest release [here](https://github.com/vortexgpgpu/vortex/releases/latest). Otherwise, you can pull the most recent, but (potentially) unstable version as shown below. The following steps demonstrate how to build and run Vortex with the default driver: SimX. If you are interested in a different backend, look [here](docs/simulation.md).
 
 ### Supported OS Platforms
-- Ubuntu 18.04, 20.04, 22.04, 24.04
+- Ubuntu 22.04, 24.04
 - Centos 7
 ### Toolchain Dependencies
 The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
