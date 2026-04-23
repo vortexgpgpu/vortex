@@ -28,7 +28,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
 `endif
     input wire          tbuf_ready,
-    output wire         wgmma_can_fire,
 `endif
 
     // Inputs
@@ -107,8 +106,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
   `endif
 
     assign exe_ready_extra = ~is_wgmma || tbuf_ready;
-    // Pipeline-internal readiness (no tbuf dependency) for lockstep sync
-    assign wgmma_can_fire = ~mdata_queue_full && fedp_enable;
 `else
     assign rs1_data = execute_if.data.rs1_data;
     assign rs2_data = execute_if.data.rs2_data;

@@ -648,14 +648,16 @@ public:
       // WGMMA RS sparse: kernel scatters smem data into interleaved register
       // layout matching VX_tcu_meta's WMMA PER_WARP_DEPTH (= kMetaBanks) stride.
       // Thread mapping: src_idx = col_in_group * kMetaBanks + bank.
-      constexpr uint32_t wg_depth = wg_cfg::m_steps * (wg_cfg::k_steps / 2);
-      constexpr uint32_t wg_cols_per_load = NUM_THREADS / wg_depth;
+      // Data goes into kMetaBanks rows (same as WMMA); the reader selects
+      // banks using WMMA-style {step_m, step_k_half} so m=1 lands at bank
+      // (cfg::k_steps/2), not bank 1.
+      constexpr uint32_t wg_cols_per_load = NUM_THREADS / kMetaBanks;
       uint32_t group = col_idx;
       uint32_t col_begin = group * wg_cols_per_load;
       uint32_t col_end = std::min(col_begin + wg_cols_per_load, num_cols);
       for (uint32_t col = col_begin; col < col_end; ++col) {
         uint32_t col_in_group = col - col_begin;
-        for (uint32_t bank = 0; bank < wg_depth; ++bank) {
+        for (uint32_t bank = 0; bank < kMetaBanks; ++bank) {
           uint32_t src_idx = col_in_group * kMetaBanks + bank;
           sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) =
               rs1_data.at(src_idx).u32;
@@ -673,6 +675,23 @@ public:
       return;
     }
 
+    if constexpr (cfg::stores_per_col > 1) {
+      // NT < per_warp_depth: col_idx enumerates (col, store_in_col) pairs.
+      // Each store covers banks_per_store=NT consecutive banks of one column.
+      uint32_t col = col_idx / cfg::stores_per_col;
+      uint32_t store_in_col = col_idx % cfg::stores_per_col;
+      if (col >= num_cols) return;
+      uint32_t bank_base = store_in_col * cfg::banks_per_store;
+      for (uint32_t t = 0; t < cfg::banks_per_store; ++t) {
+        uint32_t bank = bank_base + t;
+        if (bank >= kMetaBanks) break;
+        sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) = rs1_data.at(t).u32;
+      }
+      return;
+    }
+
+    // NT >= per_warp_depth: col_idx enumerates column groups; each group covers
+    // meta_cols_per_load columns across all banks.
     uint32_t group = col_idx;
     uint32_t col_begin = group * cfg::meta_cols_per_load;
     uint32_t col_end = std::min(col_begin + cfg::meta_cols_per_load, num_cols);
@@ -681,9 +700,7 @@ public:
       uint32_t col_in_group = col - col_begin;
       uint32_t thread_offset = col_in_group * kMetaBanks;
       for (uint32_t bank = 0; bank < kMetaBanks; ++bank) {
-        uint32_t src_idx = (cfg::stores_per_col > 1)
-                         ? (bank % cfg::banks_per_store)
-                         : (thread_offset + bank);
+        uint32_t src_idx = thread_offset + bank;
         sparse_meta_.at(wid).at(bank * kMaxMetaCols + col) =
             rs1_data.at(src_idx).u32;
       }
@@ -831,7 +848,12 @@ public:
       uint32_t rtl_i_ratio = 32 / ebits;
       uint32_t meta_row_w  = k_words * 2 * rtl_i_ratio;
       uint32_t meta_strd_words = (cfg::tcM * meta_row_w + 31) / 32;
-      uint32_t wg_bank   = step_m * (wg_cfg::k_steps / 2) + step_k;
+      // Bank encoding mirrors VX_tcu_meta: {step_m, step_k_half} with WMMA
+      // half-K width. WGMMA sparse issues step_k=0, so m=1 maps to bank
+      // (cfg::k_steps/2) (matches RTL's WMMA-style SRAM layout).
+      uint32_t wg_bank_rs = step_m * (cfg::k_steps / 2) + step_k;
+      uint32_t wg_bank_ss = step_m * (wg_cfg::k_steps / 2) + step_k;
+      uint32_t wg_bank = is_a_smem ? wg_bank_ss : wg_bank_rs;
       // For SS mode, read metadata from LMEM; for RS mode, use register data
       uint64_t meta_base = 0;
       if (is_a_smem) {

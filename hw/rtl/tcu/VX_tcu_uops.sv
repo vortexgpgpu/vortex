@@ -150,9 +150,17 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     localparam [4:0] wg_ra_base = TCU_WG_RA;
 
     // Register offsets for from-reg mode
-    // A: rs1_off = m * k_steps + k  (NRA=4 registers starting at ra_base)
+    // Dense A: rs1_off = m * k_steps + k  (NRA=4 regs at ra_base: f24..f27)
+    // Sparse A: rs1_off = m  (NRA compressed to 2 regs f24,f25; f26,f27 hold metadata)
     localparam LG_WG_A_SB = $clog2(`UP(TCU_WG_A_SUB_BLOCKS));
-    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = ((`UP(CTR_W)'(wg_m_index) >> LG_WG_A_SB) << `UP(LG_K_WG)) | `UP(CTR_W)'(wg_k_index);
+    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off_dense = ((`UP(CTR_W)'(wg_m_index) >> LG_WG_A_SB) << `UP(LG_K_WG)) | `UP(CTR_W)'(wg_k_index);
+`ifdef TCU_SPARSE_ENABLE
+    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = (ibuf_in.op_args.tcu.is_sparse && !wg_a_from_smem)
+        ? `UP(CTR_W)'(wg_m_index)
+        : wg_rs1_reg_off_dense;
+`else
+    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = wg_rs1_reg_off_dense;
+`endif
     if (`UP(CTR_W) > 5) begin : g_unused_wg_rs1_off
         `UNUSED_VAR (wg_rs1_reg_off[`UP(CTR_W)-1 : 5])
     end

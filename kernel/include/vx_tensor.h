@@ -866,18 +866,26 @@ public:
   }
 
   // Load sparse metadata into fragment_a.
-  // VX_tcu_meta uses WMMA's per_warp_depth (NR=8) for the thread-to-bank mapping,
-  // so we scatter smem data from bank-contiguous to interleaved register layout.
+  // VX_tcu_meta uses WMMA's per_warp_depth for the thread-to-bank mapping.
+  // WMMA bank encoding: rtl_bank = step_m * (k_steps_wmma/2) + step_k.
+  // WGMMA sparse reads with step_m = wg_m_index, step_k = 0, so only RTL banks
+  // where (rtl_bank % rtl_half_k == 0) are ever consumed. We map each thread's
+  // (rtl_bank, rtl_col) to the WGMMA semantic bank (sem_m * wg_half_k, 0) so the
+  // thread's write lands the correct metadata in the bank WMMA will later read.
   template <typename Frag>
   static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
     static_assert(Frag::Use == matrix_a, "sparse metadata load is only valid for matrix_a fragment");
-    using rtl_cfg = wmma_config_t<NT>;  // default NR=8 matches RTL's PER_WARP_DEPTH
+    using rtl_cfg = wmma_config_t<NT>;
     static constexpr uint32_t RTL_DEPTH = rtl_cfg::per_warp_depth;
+    static constexpr uint32_t RTL_HALF_K = rtl_cfg::k_steps / 2;
+    static constexpr uint32_t WG_HALF_K  = k_steps / 2;
     auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
     uint32_t lane_id = vx_thread_id();
     uint32_t rtl_bank = lane_id % RTL_DEPTH;
     uint32_t rtl_col  = lane_id / RTL_DEPTH;
-    frag.data[ctx_a::sparse_regs] = meta_base[rtl_bank * wg_meta_stride_words + rtl_col];
+    uint32_t sem_m    = rtl_bank / RTL_HALF_K;
+    uint32_t sem_bank = (sem_m < m_steps) ? (sem_m * WG_HALF_K) : 0;
+    frag.data[ctx_a::sparse_regs] = meta_base[sem_bank * wg_meta_stride_words + rtl_col];
   }
 
   // Store accumulator with n-major register layout: r = n * m_steps + m

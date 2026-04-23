@@ -922,7 +922,7 @@ package VX_gpu_pkg;
     // TCU lmem tag and flags widths for DMA arb.
     localparam TCU_LMEM_FLAGS_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
-    localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W; // single shared tbuf, no per-block arbiter
+    localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(`NUM_TCU_BLOCKS, 1);
 
     // LMEM DMA port parameters.
     localparam LMEM_DMA_EN         = (`EXT_DXA_ENABLED + `TCU_WGMMA_ENABLED) != 0;
