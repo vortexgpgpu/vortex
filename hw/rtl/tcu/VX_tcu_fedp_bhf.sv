@@ -47,16 +47,12 @@ module VX_tcu_fedp_bhf #(
 
     wire [TCK-1:0][15:0] a_row16;
     wire [TCK-1:0][15:0] b_col16;
-    wire [N-1:0][18:0]   a_row_tf32;
-    wire [N-1:0][18:0]   b_col_tf32;
 
     for (genvar i = 0; i < N; i++) begin : g_unpack
         assign a_row16[2*i]   = a_row[i][15:0];
         assign a_row16[2*i+1] = a_row[i][31:16];
         assign b_col16[2*i]   = b_col[i][15:0];
         assign b_col16[2*i+1] = b_col[i][31:16];
-        assign a_row_tf32[i]  = a_row[i][18:0];
-        assign b_col_tf32[i]  = b_col[i][18:0];
     end
 
     // Transprecision Multiply
@@ -79,7 +75,6 @@ module VX_tcu_fedp_bhf #(
     for (genvar i = 0; i < TCK; i++) begin : g_prod
         wire [32:0] mult_result_fp16;
         wire [32:0] mult_result_bf16;
-        wire [32:0] mult_result_tf32;
 
         // FP16 multiplication
         VX_tcu_bhf_fmul #(
@@ -123,37 +118,11 @@ module VX_tcu_fedp_bhf #(
             `UNUSED_PIN(fflags)
         );
 
-        if ((i % 2) == 0) begin : g_tf32_even
-            localparam int TF32_IDX = i / 2;
-            VX_tcu_bhf_fmul #(
-                .IN_EXPW (8),
-                .IN_SIGW (10+1),
-                .OUT_EXPW(8),
-                .OUT_SIGW(24),
-                .IN_REC  (0), // TF32 stored in IEEE-like format
-                .OUT_REC (1), // output in recoded format
-                .MUL_LATENCY (FMUL_LATENCY),
-                .RND_LATENCY (FRND_LATENCY)
-            ) tf32_mul (
-                .clk    (clk),
-                .reset  (reset),
-                .enable (enable),
-                .frm    (frm),
-                .a      (a_row_tf32[TF32_IDX]),
-                .b      (b_col_tf32[TF32_IDX]),
-                .y      (mult_result_tf32),
-                `UNUSED_PIN(fflags)
-            );
-        end else begin : g_tf32_odd
-            assign mult_result_tf32 = '0;
-        end
-
         logic [32:0] mult_result_mux;
         always_comb begin
             case(fmt_s_delayed)
                 3'd1: mult_result_mux = mult_result_fp16;
                 3'd2: mult_result_mux = mult_result_bf16;
-                3'd3: mult_result_mux = mult_result_tf32;
                 default: mult_result_mux = 'x;
             endcase
         end

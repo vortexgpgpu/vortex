@@ -136,7 +136,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04]
-        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor, mpi, sst]
+        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor, mpi, sst, dtm]
         xlen: [32, 64]
         exclude:
           - name: sst

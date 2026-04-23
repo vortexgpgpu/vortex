@@ -72,18 +72,6 @@ struct FMA<vt::bf16, vt::fp32> {
 };
 
 template <>
-struct FMA<vt::tf32, vt::fp32> {
-  static float eval(uint32_t a, uint32_t b, float c) {
-    auto xa = rv_xtof_s(a, 8, 10, 0, nullptr);
-    auto xb = rv_xtof_s(b, 8, 10, 0, nullptr);
-    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
-    auto xc = bit_cast<uint32_t>(c);
-    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    return bit_cast<float>(xd);
-  }
-};
-
-template <>
 struct FMA<vt::bf16, vt::bf16> {
   static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
     auto xa = rv_btof_s(a, 0, nullptr);
@@ -157,48 +145,55 @@ struct FEDP<vt::uint4, vt::int32>{
 using PFN_FEDP = uint32_t (*)(const reg_data_t*, const reg_data_t*, uint32_t);
 
 static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
-  switch (IT) {
+  switch (OT) {
+  case vt::fp32::id:
+    switch (IT) {
+    case vt::fp16::id:
+      return FEDP<vt::fp16, vt::fp32>::eval;
+    case vt::bf16::id:
+      return FEDP<vt::bf16, vt::fp32>::eval;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
+    break;
   case vt::fp16::id:
-    switch (OT) {
-    case vt::fp32::id: return FEDP<vt::fp16, vt::fp32>::eval;
-    case vt::fp16::id: return FEDP<vt::fp16, vt::fp16>::eval;
-    default: break;
+    switch (IT) {
+    case vt::fp16::id:
+      return FEDP<vt::fp16, vt::fp16>::eval;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
     }
     break;
   case vt::bf16::id:
-    switch (OT) {
-    case vt::fp32::id: return FEDP<vt::bf16, vt::fp32>::eval;
-    case vt::bf16::id: return FEDP<vt::bf16, vt::bf16>::eval;
-    default: break;
+    switch (IT) {
+    case vt::bf16::id:
+      return FEDP<vt::bf16, vt::bf16>::eval;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
     }
     break;
-  case vt::tf32::id:
-    if (OT == vt::fp32::id) {
-      return FEDP<vt::tf32, vt::fp32>::eval;
-    }
-    break;
-  case vt::int8::id:
-    if (OT == vt::int32::id)
+  case vt::int32::id:
+    switch (IT) {
+    case vt::int8::id:
       return FEDP<vt::int8, vt::int32>::eval;
-    break;
-  case vt::uint8::id:
-    if (OT == vt::int32::id)
+    case vt::uint8::id:
       return FEDP<vt::uint8, vt::int32>::eval;
-    break;
-  case vt::int4::id:
-    if (OT == vt::int32::id)
+    case vt::int4::id:
       return FEDP<vt::int4, vt::int32>::eval;
-    break;
-  case vt::uint4::id:
-    if (OT == vt::int32::id)
+    case vt::uint4::id:
       return FEDP<vt::uint4, vt::int32>::eval;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
     break;
   default:
-    break;
+    std::cout << "Error: unsupported output type: " << OT << "!" << std::endl;
+    std::abort();
   }
-
-  std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
-  std::abort();
 }
 
 class TensorUnit::Impl {

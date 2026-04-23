@@ -78,6 +78,18 @@ kernel()
     echo "kernel tests done!"
 }
 
+dtm()
+{
+    echo "begin dtm tests..."
+
+    make -C sim/simx
+    make -C tests/kernel
+
+    DTM_XLEN=@XLEN@ python3 ci/dtm_test.py
+
+    echo "dtm tests done!"
+}
+
 sst()
 {
     echo "begin sst tests..."
@@ -533,7 +545,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--mpi] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--sst] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--mpi] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--sst] [--dtm] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -598,6 +610,9 @@ while [ "$1" != "" ]; do
         --sst )
                 tests+=("sst")
                 ;;
+        --dtm )
+                tests+=("dtm")
+                ;;
         --all )
                 tests=()
                 tests+=("unittest")
@@ -617,6 +632,7 @@ while [ "$1" != "" ]; do
                 tests+=("vector")
                 tests+=("tensor")
                 tests+=("cupbop")
+                tests+=("dtm")
                 ;;
         -h | --help )
                 show_usage

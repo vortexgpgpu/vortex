@@ -26,9 +26,9 @@
 #include "core.h"
 #include "VX_types.h"
 #include "emulator.h"
-#include "debug_module.h"
-#include "jtag_dtm.h"
-#include "remote_bitbang.h"
+#include "dtm/debug_module.h"
+#include "dtm/jtag_dtm.h"
+#include "dtm/remote_bitbang.h"
 
 using namespace vortex;
 

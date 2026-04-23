@@ -27,7 +27,7 @@
 #include "cluster.h"
 #include "processor_impl.h"
 #include "local_mem.h"
-#include "debug_module.h"
+#include "dtm/debug_module.h"
 
 using namespace vortex;
 
@@ -129,9 +129,8 @@ void Emulator::reset() {
   warps_[0].tmask.set(0);
   wspawn_.valid = false;
   
-  // Reset last inactive warp tracking
-  last_inactive_warp_id_ = 0;
   last_inactive_warp_pc_ = 0;
+  last_inactive_warp_pc_valid_ = false;
 }
 
 void Emulator::attach_ram(RAM* ram) {
@@ -189,7 +188,7 @@ instr_trace_t* Emulator::step() {
   if (scheduled_warp == -1) {
     // No warp is ready to execute - check if program has completed
     if (debug_module_ != nullptr && !active_warps_.any()) {
-      vortex::Word final_pc = (last_inactive_warp_pc_ != 0) ? static_cast<vortex::Word>(last_inactive_warp_pc_) : warps_.at(0).PC;
+      Word final_pc = last_inactive_warp_pc_valid_ ? last_inactive_warp_pc_ : warps_.at(0).PC;
       debug_module_->notify_program_completed(final_pc);
     }
     return nullptr;

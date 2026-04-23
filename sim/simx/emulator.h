@@ -167,9 +167,10 @@ private:
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
 
-  // Track last warp to become inactive (for program completion detection)
-  uint32_t    last_inactive_warp_id_ = 0;  // ID of last warp that became inactive
-  uint32_t    last_inactive_warp_pc_ = 0;  // PC of last warp when it became inactive
+  // PC of the last warp to become inactive, used by the debug module to
+  // report the final PC when the program completes.
+  Word        last_inactive_warp_pc_ = 0;
+  bool        last_inactive_warp_pc_valid_ = false;
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;
