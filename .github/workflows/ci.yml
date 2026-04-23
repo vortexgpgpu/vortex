@@ -136,8 +136,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
-        name: [regression, mpi, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
+        name: [regression, mpi, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor, sst]
         xlen: [32, 64]
+        exclude:
+          - name: sst
+            xlen: 64
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -189,7 +192,6 @@ jobs:
             ./ci/regression.sh --isa
             ./ci/regression.sh --kernel
             ./ci/regression.sh --regression
-            ./ci/regression.sh --sst_tests
           else
             ./ci/regression.sh --${{ matrix.name }}
           fi
