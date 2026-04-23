@@ -356,7 +356,7 @@ void Core::issue() {
 
   // issue ibuffer instructions
   for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-    bool has_instrs = false;
+    bool any_scrb_blocked = false;
     BitVector<> ready_set(PER_ISSUE_WARPS);
     BitVector<> suppress_set(PER_ISSUE_WARPS);
     for (uint32_t w = 0; w < PER_ISSUE_WARPS; ++w) {
@@ -364,7 +364,6 @@ void Core::issue() {
       auto& ibuffer = ibuffers_.at(wid);
       if (ibuffer->empty())
         continue;
-      has_instrs = true;
 
       // check scoreboard against sequencer micro-op (handles uop WAW/RAW)
       auto trace = ibuffer->peek();
@@ -383,7 +382,9 @@ void Core::issue() {
           }
           DTN(4, "}, " << *uop_trace << std::endl);
         }
-        ++perf_stats_.scrb_stalls;
+        // Mirror RTL |(stg_valid_in & ~operands_ready): count once per cycle
+        // per issue slice regardless of how many warps are blocked.
+        any_scrb_blocked = true;
       } else {
         uop_trace->log_once(false);
         // FU lock: block warps whose target FU is locked by another warp.
@@ -459,7 +460,7 @@ void Core::issue() {
     }
 
     // track scoreboard stalls
-    if (has_instrs && !ready_set.any()) {
+    if (any_scrb_blocked) {
       ++perf_stats_.scrb_stalls;
     }
   }
