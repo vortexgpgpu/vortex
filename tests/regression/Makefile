@@ -5,6 +5,7 @@ NP ?= 4
 
 all:
 	$(MAKE) -C basic
+	$(MAKE) -C jalr
 	$(MAKE) -C demo
 	$(MAKE) -C dogfood
 	$(MAKE) -C dropout
@@ -36,6 +37,7 @@ all-mpi:
 
 run-simx:
 	$(MAKE) -C basic run-simx
+	$(MAKE) -C jalr run-simx
 	$(MAKE) -C demo run-simx
 	$(MAKE) -C dogfood run-simx
 	$(MAKE) -C dropout run-simx
@@ -67,6 +69,7 @@ run-simx-mpi:
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
+	$(MAKE) -C jalr run-rtlsim
 	$(MAKE) -C demo run-rtlsim
 	$(MAKE) -C dogfood run-rtlsim
 	$(MAKE) -C dropout run-rtlsim
@@ -88,6 +91,7 @@ run-rtlsim:
 
 clean:
 	$(MAKE) -C basic clean
+	$(MAKE) -C jalr clean
 	$(MAKE) -C demo clean
 	$(MAKE) -C dogfood clean
 	$(MAKE) -C dropout clean
