@@ -149,18 +149,20 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   static constexpr uint32_t tiles_m = (M / tile_M);
   static constexpr uint32_t tiles_k = (K / tile_K);
   static constexpr uint32_t total_tiles = tiles_n * tiles_m;
-  const uint32_t warps_per_group = (__warps_per_group == 0) ? 1 : __warps_per_group;
-  const uint32_t local_warp = (warps_per_group > 1) ? (vx_warp_id() % warps_per_group) : 0;
+  // const uint32_t __UNIFORM__ warps_per_group = /*(__warps_per_group == 0) ? 1 :*/ __warps_per_group;
+  // const uint32_t __UNIFORM__ local_warp = /*(warps_per_group > 1) ?*/ (vx_warp_id() % warps_per_group) /* : 0*/;
   const uint32_t block_tile_id = blockIdx.y * gridDim.x + blockIdx.x;
-  const uint32_t warp_tile_id = block_tile_id * warps_per_group + local_warp;
-  vortex::barrier load_bar[2] = {
-      vortex::barrier(local_warp, 1),
-      vortex::barrier(warps_per_group + local_warp, 1),
-  };
-  vortex::barrier tcu_bar[2] = {
-      vortex::barrier(2 * warps_per_group + local_warp, 1),
-      vortex::barrier(3 * warps_per_group + local_warp, 1),
-  };
+  // const uint32_t warp_tile_id = block_tile_id * warps_per_group + local_warp;
+  // vortex::barrier load_bar[2] = {
+  //     vortex::barrier(local_warp, 1),
+  //     vortex::barrier(warps_per_group + local_warp, 1),
+  // };
+  vortex::barrier load_bar[2] = { vortex::barrier(0, 1), vortex::barrier(1, 1) };
+  // vortex::barrier tcu_bar[2] = {
+  //     vortex::barrier(2 * warps_per_group + local_warp, 1),
+  //     vortex::barrier(3 * warps_per_group + local_warp, 1),
+  // };
+  vortex::barrier tcu_bar[2]  = { vortex::barrier(2, 1), vortex::barrier(3, 1) };
 
   static_assert (LMEM_ENABLED);
   static constexpr uint32_t input_bytes = sizeof(ctx::input_t);
@@ -175,13 +177,13 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
 
   static constexpr uint32_t LMEM_OVERFLOW_MARKER = 0x4c4d454d;
-  if (sparsity == 0 && (tiles_bytes > half_lmem_bytes)) 
-  {
-    if (vx_thread_id() == 0) {
-      pD[0] = LMEM_OVERFLOW_MARKER;
-    }
-    return;
-  }
+  // if (sparsity == 0 && (tiles_bytes > half_lmem_bytes)) 
+  // {
+  //   if (vx_thread_id() == 0) {
+  //     pD[0] = LMEM_OVERFLOW_MARKER;
+  //   }
+  //   return;
+  // }
   
   uint32_t* lmem_base = reinterpret_cast<uint32_t *>(__local_mem(lmem_capacity_bytes));
   uint32_t* half0_base = lmem_base;
@@ -196,18 +198,22 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   const uint32_t gtid = vx_thread_id();
   const bool lane0 = (gtid == 0);
   const bool is_dxa_quad = (gtid < 4);
+  const bool __UNIFORM__ is_dxa_warp = (csr_read(VX_CSR_CTA_RANK) == 0);
 
 
   uint32_t current_stage = 0;
   uint32_t next_stage = 0;
   uintptr_t pending_rs1_val = 0;
   uintptr_t pending_rs2_val = 0;
+  // uintptr_t rs1_val = 0;
+  // uintptr_t rs2_val = 0;
 
   auto launch_pending_mma = [&]() __attribute__((always_inline)) {
     tcu_bar[current_stage].arrive_and_wait();
     load_bar[next_stage].arrive_and_wait();
 
     ctx::mma_op(pending_rs1_val, pending_rs2_val);
+    // ctx::mma_op(rs1_val, rs2_val);
 
     current_stage = next_stage;
     next_stage ^= 1u;
@@ -215,7 +221,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
 
   if constexpr (kDense) 
-  {  
+  {
     uint32_t* A_lmem[2] = {half0_base, half1_base};
     uint32_t* B_lmem[2] = {A_lmem[0] + dense_a_tile_regs, A_lmem[1] + dense_a_tile_regs};
 
@@ -257,7 +263,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             launch_pending_mma();
           }
 
-          if (is_dxa_quad) {
+          if (is_dxa_warp /*is_dxa_quad*/) { // vx_thread_id() < 4
             // if (first_dense_launch) {
             //   vx_dxa_issue_2d_wg(kDescC, load_bar[next_stage].id(), mma_C, 0, tile_id);
             // }
@@ -273,34 +279,25 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
           //   return;
           // }
 
-          // const uintptr_t rs1_val = (uintptr_t)vx_wgather(
-          //           (size_t)(uintptr_t)chunk_A,
-          //           (size_t)(uintptr_t)chunk_B,
-          //           (size_t)(uintptr_t)nullptr /* mma_C */,
-          //           (size_t)(uintptr_t)mma_D_addr);
-          // const uintptr_t rs2_val = (uintptr_t)vx_wgather(
-          //           (size_t)(uintptr_t)nullptr /*mma_A_bitmap*/,
-          //           (size_t)(uintptr_t)nullptr /*mma_B_bitmap*/,
-          //           (size_t)tcu_bar[next_stage].id(),
-          //           (size_t)((curr_k << 24) /*| (a_blocks << 18) | (b_blocks << 12)*/ | (vt::OTYPE::id << 8) | 
-          //                    (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
-          
-          uintptr_t rs1_val = 0;
-          uintptr_t rs2_val = 0;
-          if (gtid == 0) {
-            rs1_val = reinterpret_cast<uintptr_t>(A_lmem[next_stage]);
-            rs2_val = reinterpret_cast<uintptr_t>(nullptr /*mma_A_bitmap*/);
-          } else if (gtid == 1) {
-            rs1_val = reinterpret_cast<uintptr_t>(B_lmem[next_stage]);
-            rs2_val = reinterpret_cast<uintptr_t>(nullptr /*mma_B_bitmap*/);
-          } else if (gtid == 2) {
-            rs1_val = reinterpret_cast<uintptr_t>(nullptr /*mma_C*/);
-            rs2_val = tcu_bar[next_stage].id();
-          } else if (gtid == 3) {
-            rs1_val = mma_D_addr;
-            rs2_val = (curr_k << 24) /*| (a_blocks << 18) | (b_blocks << 12)*/ | (vt::OTYPE::id << 8) | 
-                      (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk;
-          } 
+          // const uint32_t a_lmem = A_lmem[next_stage];
+          // const uint32_t b_lmem = B_lmem[next_stage];
+          uintptr_t rs1_val = 0; // (uintptr_t)A_lmem[next_stage];
+          uintptr_t rs2_val = 0; // (uintptr_t)A_bitmap_lmem[next_stage];
+
+          if (is_dxa_warp) {
+          rs1_val = (uintptr_t)vx_wgather(
+                    (size_t)(uintptr_t)A_lmem[next_stage],
+                    (size_t)(uintptr_t)B_lmem[next_stage],
+                    (size_t)(uintptr_t)nullptr /* mma_C */,
+                    (size_t)(uintptr_t)mma_D_addr);
+                    
+          rs2_val = (uintptr_t)vx_wgather(
+                    (size_t)(uintptr_t)nullptr /*mma_A_bitmap*/,
+                    (size_t)(uintptr_t)nullptr /*mma_B_bitmap*/,
+                    (size_t)tcu_bar[next_stage].id(),
+                    (size_t)((curr_k << 24) /*| (a_blocks << 18) | (b_blocks << 12)*/ | (vt::OTYPE::id << 8) | 
+                             (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
+          }
 
           pending_rs1_val = rs1_val;
           pending_rs2_val = rs2_val;
@@ -322,11 +319,19 @@ else {
   constexpr uint32_t b_bitmap_skew_regs = 16;
   constexpr uint32_t b_tile_align_regs = 16;
 
+  uint32_t a_blocks = 0;
+  if constexpr (kSparseA) 
+  {
+    a_blocks = max_a_blocks;
+  }
+  const uint32_t b_blocks = max_b_blocks;
+
   /* LMEM  */
   uint32_t* A_bitmap_lmem[2] = {nullptr, nullptr};
   uint32_t* A_lmem[2]        = {nullptr, nullptr};
   uint32_t* B_bitmap_lmem[2] = {nullptr, nullptr};
   uint32_t* B_lmem[2]        = {nullptr, nullptr};
+
   if constexpr (kConstSparsity == 2)
   {
     /* LMEM Packing in s = 2 case:
@@ -357,11 +362,11 @@ else {
 #pragma unroll
     for (uint32_t tile_row_idx = 0; tile_row_idx < tiles_m; ++tile_row_idx) {
       const uint32_t a_tile_base = tile_row_idx * tile_M * K;
+      const uint32_t tile_row_tiles_base = tile_row_idx * tiles_k;
 #pragma unroll
       for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
 
         const uint32_t b_tile_base = tile_col_idx * K * tile_N;
-        const uint32_t tile_row_tiles_base = tile_row_idx * tiles_k;
         const uint32_t tile_col_tiles_base = tile_col_idx * tiles_k;
 
         const uint32_t tile_id = tile_row_idx * tiles_n + tile_col_idx;
@@ -389,11 +394,20 @@ else {
           tcu_bar[current_stage].arrive_and_wait();
 
           /* In the very first execution, no data are ready so skip the mma_op */
-          if ((tile_row_idx | tile_col_idx | dense_iter) != 0) {
+          if ((tile_row_idx | tile_col_idx | dense_iter) != 0) 
+          {
             launch_pending_mma();
+            // tcu_bar[current_stage].arrive_and_wait();
+            // load_bar[next_stage].arrive_and_wait();
+
+            // // ctx::mma_op(pending_rs1_val, pending_rs2_val);
+            // ctx::mma_op(rs1_val, rs2_val);
+
+            // current_stage = next_stage;
+            // next_stage ^= 1u;
           }
 
-          if (is_dxa_quad) {
+          if (is_dxa_warp /*is_dxa_quad*/) {
             if constexpr (kSparseA) {
               const uint32_t a_bitmap_start = tile_row_idx * K + k_offset;
               vx_dxa_issue_1d_wg(kDescABitmap, load_bar[next_stage].id(), A_bitmap_lmem[next_stage], a_bitmap_start);
@@ -407,13 +421,6 @@ else {
             vx_dxa_issue_2d_wg(kDescB, load_bar[next_stage].id(), B_lmem[next_stage], 0, tile_col_idx * tiles_k + k_tile_idx);
           }
 
-          uint32_t a_blocks = 0;
-          if constexpr (kSparseA) 
-          {
-            a_blocks = max_a_blocks;
-          }
-          const uint32_t b_blocks = max_b_blocks;
-
           // if (curr_k >= 256 || a_blocks >= 64 || b_blocks >= 64) {
           //   if (lane0) {
           //     pD[0] = LMEM_OVERFLOW_MARKER;
@@ -421,39 +428,47 @@ else {
           //   return;
           // }
 
-          // const uintptr_t rs1_val = (uintptr_t)vx_wgather(
-          //           (size_t)(uintptr_t)chunk_A,
-          //           (size_t)(uintptr_t)chunk_B,
-          //           (size_t)(uintptr_t)nullptr /* mma_C */,
-          //           (size_t)(uintptr_t)mma_D_addr);
-          // const uintptr_t rs2_val = (uintptr_t)vx_wgather(
-          //           (size_t)(uintptr_t)nullptr /*mma_A_bitmap*/,
-          //           (size_t)(uintptr_t)nullptr /*mma_B_bitmap*/,
-          //           (size_t)tcu_bar[next_stage].id(),
-          //           (size_t)((curr_k << 24) | (a_blocks << 18) | (b_blocks << 12) | (vt::OTYPE::id << 8) | 
-          //                    (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
-          
-          uintptr_t rs1_val = 0;
-          uintptr_t rs2_val = 0;
-          if (gtid == 0) {
-            rs1_val = reinterpret_cast<uintptr_t>(A_lmem[next_stage]);
-            rs2_val = reinterpret_cast<uintptr_t>(A_bitmap_lmem[next_stage]);
-          } else if (gtid == 1) {
-            rs1_val = reinterpret_cast<uintptr_t>(B_lmem[next_stage]);
-            rs2_val = reinterpret_cast<uintptr_t>(B_bitmap_lmem[next_stage]);
-          } else if (gtid == 2) {
-            rs1_val = reinterpret_cast<uintptr_t>(nullptr /*mma_C*/);
-            rs2_val = tcu_bar[next_stage].id();
-          } else if (gtid == 3) {
-            rs1_val = mma_D_addr;
-            rs2_val = (curr_k         << 24) | 
-                      (a_blocks       << 18) | 
-                      (b_blocks       << 12) | 
-                      (vt::OTYPE::id  << 8)  | 
-                      (vt::ITYPE::id  << 4)  | 
-                      (kConstSparsity << 2)  | 
-                       flags_chunk;
-          } 
+          uintptr_t rs1_val = 0; // (uintptr_t)A_lmem[next_stage];
+          uintptr_t rs2_val = 0; // (uintptr_t)A_bitmap_lmem[next_stage];
+
+          if (is_dxa_warp) {
+            rs1_val = (uintptr_t)vx_wgather(
+                      (size_t)(uintptr_t)A_lmem[next_stage],
+                      (size_t)(uintptr_t)B_lmem[next_stage],
+                      (size_t)(uintptr_t)nullptr /* mma_C */,
+                      (size_t)(uintptr_t)mma_D_addr);
+            rs2_val = (uintptr_t)vx_wgather(
+                      (size_t)(uintptr_t)A_bitmap_lmem[next_stage],
+                      (size_t)(uintptr_t)B_bitmap_lmem[next_stage],
+                      (size_t)tcu_bar[next_stage].id(),
+                      (size_t)((curr_k << 24)       | 
+                              (a_blocks << 18)      | 
+                              (b_blocks << 12)      | 
+                              (vt::OTYPE::id << 8)  | 
+                              (vt::ITYPE::id << 4)  | 
+                              (kConstSparsity << 2) | 
+                              flags_chunk));
+          }
+
+          // if (gtid == 0) {
+          //   rs1_val = reinterpret_cast<uintptr_t>(A_lmem[next_stage]);
+          //   rs2_val = reinterpret_cast<uintptr_t>(A_bitmap_lmem[next_stage]);
+          // } else if (gtid == 1) {
+          //   rs1_val = reinterpret_cast<uintptr_t>(B_lmem[next_stage]);
+          //   rs2_val = reinterpret_cast<uintptr_t>(B_bitmap_lmem[next_stage]);
+          // } else if (gtid == 2) {
+          //   rs1_val = reinterpret_cast<uintptr_t>(nullptr /*mma_C*/);
+          //   rs2_val = tcu_bar[next_stage].id();
+          // } else if (gtid == 3) {
+          //   rs1_val = mma_D_addr;
+          //   rs2_val = (curr_k         << 24) | 
+          //             (a_blocks       << 18) | 
+          //             (b_blocks       << 12) | 
+          //             (vt::OTYPE::id  << 8)  | 
+          //             (vt::ITYPE::id  << 4)  | 
+          //             (kConstSparsity << 2)  | 
+          //              flags_chunk;
+          // } 
 
           pending_rs1_val = rs1_val;
           pending_rs2_val = rs2_val;
@@ -462,6 +477,15 @@ else {
     }
 
     launch_pending_mma();
+    // tcu_bar[current_stage].arrive_and_wait();
+    // load_bar[next_stage].arrive_and_wait();
+
+    // // ctx::mma_op(pending_rs1_val, pending_rs2_val);
+    // ctx::mma_op(rs1_val, rs2_val);
+
+    // current_stage = next_stage;
+    // next_stage ^= 1u;
+
     tcu_bar[current_stage].arrive_and_wait();
   }
 }
