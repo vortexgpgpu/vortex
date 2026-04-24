@@ -466,7 +466,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             continue;
           rd_data[t].i = next_pc;
         }
-        next_pc = rs1_data[thread_last].i + offset;
+        next_pc = (rs1_data[thread_last].u + offset) & ~Word(1);
         trace->fetch_stall = true;
         rd_write = true;
       } break;
