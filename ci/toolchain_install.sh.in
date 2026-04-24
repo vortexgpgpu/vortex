@@ -115,20 +115,10 @@ pocl()
 
 verilator()
 {
-    case $OSVERSION in
-    "ubuntu/focal") parts=$(eval echo {a..c}) ;;
-    *)              parts=$(eval echo {a..a}) ;;
-    esac
-    echo $parts
-    rm -f verilator.tar.bz2.parta*
-    for x in $parts
-    do
-        wget $REPOSITORY/verilator/$OSVERSION/verilator.tar.bz2.parta$x
-    done
-    cat verilator.tar.bz2.parta* > verilator.tar.bz2
+    wget $REPOSITORY/verilator/$OSVERSION/verilator.tar.bz2
     tar -xvf verilator.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/verilator && mv verilator $TOOLDIR
-    rm -rf verilator verilator.tar.bz2*
+    rm -rf verilator verilator.tar.bz2
 }
 sv2v()
 {
