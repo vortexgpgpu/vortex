@@ -988,8 +988,6 @@ vx_buffer_h C_buffer = nullptr;
 vx_buffer_h D_buffer = nullptr;
 vx_buffer_h A_bitmap_buffer = nullptr;
 vx_buffer_h B_bitmap_buffer = nullptr;
-vx_buffer_h A_nz_buffer = nullptr;
-vx_buffer_h B_nz_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
@@ -999,7 +997,7 @@ static constexpr uint32_t kDescC = 2;
 static constexpr uint32_t kDescABitmap = 3;
 static constexpr uint32_t kDescBBitmap = 4;
 
-std::string last_build_options;
+// std::string last_build_options;
 
 static void show_usage() {
   std::cout << "Vortex Sgemm TCU Test." << std::endl;
@@ -1085,8 +1083,6 @@ void cleanup() {
     vx_mem_free(D_buffer);
     vx_mem_free(A_bitmap_buffer);
     vx_mem_free(B_bitmap_buffer);
-    vx_mem_free(A_nz_buffer);
-    vx_mem_free(B_nz_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -1145,80 +1141,6 @@ static void print_2d_output_matrix(std::vector<otype_t> C, int M, int N, std::ve
       } else {
         printf("%d ", (uint32_t)v);
       }
-    }
-    printf("\n");
-  }
-}
-
-static std::vector<uint32_t> build_A_tile_blocks(const std::vector<itype_t>& matrix,
-                                                 uint32_t M,
-                                                 uint32_t K,
-                                                 uint32_t tile_M = 32,
-                                                 uint32_t tile_K = cfg::tileK) {
-  const uint32_t tile_rows = M / tile_M;
-  const uint32_t tile_cols = K / tile_K;
-  std::vector<uint32_t> metadata(tile_rows * tile_cols, 0);
-
-  for (uint32_t tile_row = 0; tile_row < tile_rows; ++tile_row) {
-    for (uint32_t tile_col = 0; tile_col < tile_cols; ++tile_col) {
-      uint32_t nonzeros = 0;
-      for (uint32_t col = 0; col < tile_K; ++col) {
-        for (uint32_t row = 0; row < tile_M; ++row) {
-          const uint32_t idx = (tile_row * tile_M + row) * K
-                             + (tile_col * tile_K + col);
-          if (data_accessor_t<vt::ITYPE>::read(matrix.data(), idx) != 0) {
-            ++nonzeros;
-          }
-        }
-      }
-      const uint32_t compressed_words = div_up_u32(nonzeros * sizeof(itype_t), sizeof(uint32_t));
-      metadata[tile_row * tile_cols + tile_col] = div_up_u32(compressed_words * sizeof(uint32_t), 128);
-    }
-  }
-
-  return metadata;
-}
-
-static std::vector<uint32_t> build_B_tile_blocks(const std::vector<itype_t>& matrix,
-                                                 uint32_t K,
-                                                 uint32_t N,
-                                                 uint32_t tile_K = cfg::tileK,
-                                                 uint32_t tile_N = 32) {
-  const uint32_t tile_rows = K / tile_K;
-  const uint32_t tile_cols = N / tile_N;
-  std::vector<uint32_t> metadata(tile_cols * tile_rows, 0);
-
-  for (uint32_t tile_col = 0; tile_col < tile_cols; ++tile_col) {
-    for (uint32_t tile_row = 0; tile_row < tile_rows; ++tile_row) {
-      uint32_t nonzeros = 0;
-      for (uint32_t row = 0; row < tile_K; ++row) {
-        for (uint32_t col = 0; col < tile_N; ++col) {
-          const uint32_t idx = (tile_row * tile_K + row) * N
-                             + (tile_col * tile_N + col);
-          if (data_accessor_t<vt::ITYPE>::read(matrix.data(), idx) != 0) {
-            ++nonzeros;
-          }
-        }
-      }
-      const uint32_t compressed_words = div_up_u32(nonzeros * sizeof(itype_t), sizeof(uint32_t));
-      metadata[tile_col * tile_rows + tile_row] = div_up_u32(compressed_words * sizeof(uint32_t), 128);
-    }
-  }
-
-  return metadata;
-}
-
-static void print_tile_block_matrix(const char* name,
-                                    const std::vector<uint32_t>& metadata,
-                                    uint32_t rows,
-                                    uint32_t cols,
-                                    bool col_major_storage) {
-  std::cout << name << " tile blocks (" << rows << "x" << cols << "):" << std::endl;
-  for (uint32_t row = 0; row < rows; ++row) {
-    for (uint32_t col = 0; col < cols; ++col) {
-      const uint32_t idx = col_major_storage ? (col * rows + row)
-                                             : (row * cols + col);
-      printf("%4u ", metadata[idx]);
     }
     printf("\n");
   }
@@ -1397,8 +1319,6 @@ int main(int argc, char *argv[]) {
   std::vector<itype_t> h_A_packed;
   std::vector<itype_t> h_B_packed;
   std::vector<otype_t> h_C_packed;
-  std::vector<uint32_t> h_A_nz;
-  std::vector<uint32_t> h_B_nz;
   uint32_t h_A_bitmap_words = 0;
   uint32_t h_B_bitmap_words = 0;
   // std::vector<otype_t> h_D(sizeD);
@@ -1433,20 +1353,6 @@ int main(int argc, char *argv[]) {
     kernel_arg.max_a_blocks = max_a_blocks;
     kernel_arg.max_b_blocks = max_b_blocks;
   }
-  // h_A[0] = 0;
-  // h_B[0] = 0;
-
-  const uint32_t a_nz_rows = M / 32;
-  const uint32_t a_nz_cols = K / dxa_tile_k;
-  const uint32_t b_nz_rows = K / dxa_tile_k;
-  const uint32_t b_nz_cols = N / 32;
-
-  if (sparsity == 2) {
-    h_A_nz = build_A_tile_blocks(h_A, M, K, 32, dxa_tile_k);
-  }
-  if (sparsity >= 1) {
-    h_B_nz = build_B_tile_blocks(h_B, K, N, dxa_tile_k, 32);
-  }
 
   /* Sparsity levels: 
      0: Both A, B matrices are dense
@@ -1463,11 +1369,6 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_mem_alloc(device, h_A_bitmap.size(), VX_MEM_READ, &A_bitmap_buffer));
     RT_CHECK(vx_mem_address(A_bitmap_buffer, &kernel_arg.A_bitmap_addr));
     RT_CHECK(vx_copy_to_dev(A_bitmap_buffer, h_A_bitmap.data(), 0, h_A_bitmap.size()));
-
-    std::cout << "upload A non-zeros buffer" << std::endl;
-    RT_CHECK(vx_mem_alloc(device, h_A_nz.size() * sizeof(uint32_t), VX_MEM_READ, &A_nz_buffer));
-    RT_CHECK(vx_mem_address(A_nz_buffer, &kernel_arg.A_nz_addr));
-    RT_CHECK(vx_copy_to_dev(A_nz_buffer, h_A_nz.data(), 0, h_A_nz.size() * sizeof(uint32_t)));
   }
   if (sparsity >= 1) {
     std::vector<uint8_t> h_B_bitmap = build_bitmap_B_rowmajor_tiled32N(h_B, K, N);
@@ -1479,19 +1380,10 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_mem_alloc(device, h_B_bitmap.size(), VX_MEM_READ, &B_bitmap_buffer));
     RT_CHECK(vx_mem_address(B_bitmap_buffer, &kernel_arg.B_bitmap_addr));
     RT_CHECK(vx_copy_to_dev(B_bitmap_buffer, h_B_bitmap.data(), 0, h_B_bitmap.size()));
-
-    std::cout << "upload B metadata buffer" << std::endl;
-    RT_CHECK(vx_mem_alloc(device, h_B_nz.size() * sizeof(uint32_t), VX_MEM_READ, &B_nz_buffer));
-    RT_CHECK(vx_mem_address(B_nz_buffer, &kernel_arg.B_nz_addr));
-    RT_CHECK(vx_copy_to_dev(B_nz_buffer, h_B_nz.data(), 0, h_B_nz.size() * sizeof(uint32_t)));
   } 
   if (sparsity == 0) {
     kernel_arg.A_bitmap_addr = 0;
     kernel_arg.B_bitmap_addr = 0;
-    kernel_arg.A_nz_addr = 0;
-    kernel_arg.B_nz_addr = 0;
-  } else if (sparsity == 1) {
-    kernel_arg.A_nz_addr = 0;
   }
   
   // Fill C with a constant stride of 0x8000 in bit-pattern space
@@ -1509,13 +1401,6 @@ int main(int argc, char *argv[]) {
 
   std::cout << "Matrix B:" << std::endl;
   print_2d_input_matrix(h_B, K, N);
-
-  if (sparsity == 2) {
-    print_tile_block_matrix("A", h_A_nz, a_nz_rows, a_nz_cols, false);
-  }
-  if (sparsity >= 1) {
-    print_tile_block_matrix("B", h_B_nz, b_nz_rows, b_nz_cols, true);
-  }
 
   std::cout << "Matrix C:" << std::endl;
   print_2d_output_matrix(h_C, M, N, h_C);
@@ -1553,10 +1438,6 @@ int main(int argc, char *argv[]) {
     printf("\n");
   }
 
-  kernel_arg.A_compressed_blocks = (sparsity == 2) ? (h_A_compressed.size() * sizeof(itype_t) + 4*32 - 1) / (4*32) : 0; // number of 128B blocks for compressed A (column-major, non-zero only)
-  kernel_arg.B_compressed_blocks = (sparsity >= 1) ? (h_B_compressed.size() * sizeof(itype_t) + 4*32 - 1) / (4*32) : 0; // number of 128B blocks for compressed B (row-major, non-zero only)
-  std::cout << "Compressed A blocks: " << kernel_arg.A_compressed_blocks << std::endl;
-  std::cout << "Compressed B blocks: " << kernel_arg.B_compressed_blocks << std::endl;
   std::cout << "Max A tile blocks: " << kernel_arg.max_a_blocks << std::endl;
   std::cout << "Max B tile blocks: " << kernel_arg.max_b_blocks << std::endl;
   if (sparsity >= 1) {

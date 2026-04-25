@@ -29,7 +29,6 @@
 #define BLUE_MARKER 0x12345677
 #define GREEN_MARKER 0x12345676
 #define PRE_TCU_MARKER 0x12345679
-// #define LMEM_OVERFLOW_MARKER = 0x4c4d454d;
 
 #ifndef SGEMM_TRACE_MARKERS
 #define SGEMM_TRACE_MARKERS 1
@@ -63,23 +62,6 @@ static constexpr uint32_t kDescBBitmap = 4;
 #define __local_mem(size) \
   (void*)(csr_read(VX_CSR_CTA_LMEM_ADDR))
 
-static inline uint64_t rdcycle() {
-#if __riscv_xlen == 64
-    uint64_t value;
-    asm volatile ("csrr %0, 0xB00" : "=r"(value));
-    return value;
-#else
-    uint32_t hi0, lo, hi1;
-    asm volatile ("csrr %0, 0xB80" : "=r"(hi0));
-    asm volatile ("csrr %0, 0xB00" : "=r"(lo));
-    asm volatile ("csrr %0, 0xB80" : "=r"(hi1));
-    if (hi0 != hi1) {
-        asm volatile ("csrr %0, 0xB00" : "=r"(lo));
-    }
-    return ((uint64_t)hi1 << 32) | lo;
-#endif
-}
-
 static constexpr uint32_t clog2_constexpr(uint32_t value) {
   return (value <= 1) ? 0 : 1 + clog2_constexpr((value + 1) >> 1);
 }
@@ -95,21 +77,10 @@ static constexpr uint32_t div_up_constexpr(uint32_t value, uint32_t divisor) {
   return (value + divisor - 1) / divisor;
 }
 
-static inline uint32_t bytes_to_regs(uint32_t bytes) {
-  return div_up<sizeof(uint32_t)>(bytes);
-}
-
-static inline uint32_t bytes_to_blocks_128(uint32_t bytes) {
-  return div_up<128>(bytes);
-}
-
-static inline uint32_t meta_tile_offset(const uint32_t* offsets, uint32_t idx) {
-  return (idx == 0) ? 0 : offsets[idx - 1];
-}
 
 
-extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
-
+extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) 
+{
   // TODO: ADD CYCLE - INSTRUCTION COUNTING
 
   auto pA = reinterpret_cast<uint32_t *>(arg->A_addr);
@@ -118,11 +89,11 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   auto pD = reinterpret_cast<uint32_t *>(arg->D_addr);
   auto pA_bitmap = reinterpret_cast<const uint32_t *>(arg->A_bitmap_addr);
   auto pB_bitmap = reinterpret_cast<const uint32_t *>(arg->B_bitmap_addr);
-  auto pA_nz = reinterpret_cast<const uint32_t *>(arg->A_nz_addr);
-  auto pB_nz = reinterpret_cast<const uint32_t *>(arg->B_nz_addr);
+  // auto pA_nz = reinterpret_cast<const uint32_t *>(arg->A_nz_addr);
+  // auto pB_nz = reinterpret_cast<const uint32_t *>(arg->B_nz_addr);
 
-  const uint32_t A_compressed_blocks = arg->A_compressed_blocks;
-  const uint32_t B_compressed_blocks = arg->B_compressed_blocks;
+  // const uint32_t A_compressed_blocks = arg->A_compressed_blocks;
+  // const uint32_t B_compressed_blocks = arg->B_compressed_blocks;
   const uint32_t max_a_blocks = arg->max_a_blocks;
   const uint32_t max_b_blocks = arg->max_b_blocks;
   static constexpr uint32_t M = SGEMM_CONST_M;
@@ -134,12 +105,12 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   static constexpr bool kSparseA = (kConstSparsity == 2);
   static constexpr bool kSparseB = (kConstSparsity >= 1);
 
-  ctx::fragment_a   fragA;
-  ctx::fragment_b   fragB;
-  ctx::fragment_acc fragC;
+  // ctx::fragment_a   fragA;
+  // ctx::fragment_b   fragB;
+  // ctx::fragment_acc fragC;
 
   static constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(ctx::input_t);
-  static constexpr uint32_t lg_i_ratio = __builtin_ctz(i_ratio);
+  // static constexpr uint32_t lg_i_ratio = __builtin_ctz(i_ratio);
   static constexpr uint32_t o_ratio = sizeof(uint32_t) / sizeof(ctx::output_t);
 
   static constexpr uint32_t tile_M = 32;
@@ -149,34 +120,24 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   static constexpr uint32_t tiles_m = (M / tile_M);
   static constexpr uint32_t tiles_k = (K / tile_K);
   static constexpr uint32_t total_tiles = tiles_n * tiles_m;
-  // const uint32_t __UNIFORM__ warps_per_group = /*(__warps_per_group == 0) ? 1 :*/ __warps_per_group;
-  // const uint32_t __UNIFORM__ local_warp = /*(warps_per_group > 1) ?*/ (vx_warp_id() % warps_per_group) /* : 0*/;
   const uint32_t block_tile_id = blockIdx.y * gridDim.x + blockIdx.x;
-  // const uint32_t warp_tile_id = block_tile_id * warps_per_group + local_warp;
-  // vortex::barrier load_bar[2] = {
-  //     vortex::barrier(local_warp, 1),
-  //     vortex::barrier(warps_per_group + local_warp, 1),
-  // };
+
   vortex::barrier load_bar[2] = { vortex::barrier(0, 1), vortex::barrier(1, 1) };
-  // vortex::barrier tcu_bar[2] = {
-  //     vortex::barrier(2 * warps_per_group + local_warp, 1),
-  //     vortex::barrier(3 * warps_per_group + local_warp, 1),
-  // };
   vortex::barrier tcu_bar[2]  = { vortex::barrier(2, 1), vortex::barrier(3, 1) };
 
   static_assert (LMEM_ENABLED);
-  static constexpr uint32_t input_bytes = sizeof(ctx::input_t);
-  static constexpr uint32_t lg_input_bytes = __builtin_ctz(input_bytes);
+  // static constexpr uint32_t input_bytes = sizeof(ctx::input_t);
+  // static constexpr uint32_t lg_input_bytes = __builtin_ctz(input_bytes);
   static constexpr uint32_t tileC_regs = tile_M * tile_N / o_ratio;
   static constexpr uint32_t tileD_regs = tile_M * tile_N / o_ratio;
   static constexpr uint32_t lmem_capacity_bytes = (1u << LMEM_LOG_SIZE);
   static constexpr uint32_t half_lmem_bytes = lmem_capacity_bytes >> 1;
   static constexpr uint32_t dense_a_tile_regs = tile_M * tile_K / i_ratio;
   static constexpr uint32_t dense_b_tile_regs = tile_K * tile_N / i_ratio;
-  static constexpr uint32_t tiles_bytes = (dense_a_tile_regs + dense_b_tile_regs) * sizeof(uint32_t);
+  // static constexpr uint32_t tiles_bytes = (dense_a_tile_regs + dense_b_tile_regs) * sizeof(uint32_t);
 
 
-  static constexpr uint32_t LMEM_OVERFLOW_MARKER = 0x4c4d454d;
+  // static constexpr uint32_t LMEM_OVERFLOW_MARKER = 0x4c4d454d;
   // if (sparsity == 0 && (tiles_bytes > half_lmem_bytes)) 
   // {
   //   if (vx_thread_id() == 0) {
@@ -188,16 +149,16 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   uint32_t* lmem_base = reinterpret_cast<uint32_t *>(__local_mem(lmem_capacity_bytes));
   uint32_t* half0_base = lmem_base;
   uint32_t* half1_base = half0_base + (half_lmem_bytes / sizeof(uint32_t));
-  uint32_t* half1_end  = half1_base + (half_lmem_bytes / sizeof(uint32_t));
+  // uint32_t* half1_end  = half1_base + (half_lmem_bytes / sizeof(uint32_t));
   static constexpr uint32_t half_lmem_regs = half_lmem_bytes / sizeof(uint32_t);
   // uint32_t* half0_C_base = half0_base + half_lmem_regs - tileC_regs;
   // uint32_t* half1_C_base = half1_base + half_lmem_regs - tileC_regs;
   // uint32_t* C_lmem = half0_C_base;
-  auto pA_gmem = reinterpret_cast<ctx::input_t *>(pA);
-  auto pB_gmem = reinterpret_cast<ctx::input_t *>(pB);
-  const uint32_t gtid = vx_thread_id();
-  const bool lane0 = (gtid == 0);
-  const bool is_dxa_quad = (gtid < 4);
+  // auto pA_gmem = reinterpret_cast<ctx::input_t *>(pA);
+  // auto pB_gmem = reinterpret_cast<ctx::input_t *>(pB);
+  // const uint32_t gtid = vx_thread_id();
+  // const bool lane0 = (gtid == 0);
+  // const bool is_dxa_quad = (gtid < 4);
   const bool __UNIFORM__ is_dxa_warp = (csr_read(VX_CSR_CTA_RANK) == 0);
 
 
@@ -205,15 +166,13 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   uint32_t next_stage = 0;
   uintptr_t pending_rs1_val = 0;
   uintptr_t pending_rs2_val = 0;
-  // uintptr_t rs1_val = 0;
-  // uintptr_t rs2_val = 0;
 
+  /* Lambda function is optimized by the compiler */
   auto launch_pending_mma = [&]() __attribute__((always_inline)) {
     tcu_bar[current_stage].arrive_and_wait();
     load_bar[next_stage].arrive_and_wait();
 
     ctx::mma_op(pending_rs1_val, pending_rs2_val);
-    // ctx::mma_op(rs1_val, rs2_val);
 
     current_stage = next_stage;
     next_stage ^= 1u;
@@ -242,7 +201,6 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
         // const uint32_t* pC_tile = pC + tile_id * tileC_regs;
 
-        // TODO: Eliminate divergence!
         static constexpr uint32_t kDenseLaunches = div_up_constexpr(K, tile_K);
 #pragma unroll
         for (uint32_t dense_iter = 0; dense_iter < kDenseLaunches; ++dense_iter) 
@@ -263,7 +221,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             launch_pending_mma();
           }
 
-          if (is_dxa_warp /*is_dxa_quad*/) { // vx_thread_id() < 4
+          if (is_dxa_warp) {
             // if (first_dense_launch) {
             //   vx_dxa_issue_2d_wg(kDescC, load_bar[next_stage].id(), mma_C, 0, tile_id);
             // }
@@ -272,31 +230,22 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
             vx_dxa_issue_2d_wg(kDescB, load_bar[next_stage].id(), B_lmem[next_stage], 0, tile_col_idx * tiles_k + k_tile_idx);
           }
 
-          // if (curr_k >= 256 || a_blocks >= 64 || b_blocks >= 64) {
-          //   if (lane0) {
-          //     pD[0] = LMEM_OVERFLOW_MARKER;
-          //   }
-          //   return;
-          // }
-
-          // const uint32_t a_lmem = A_lmem[next_stage];
-          // const uint32_t b_lmem = B_lmem[next_stage];
-          uintptr_t rs1_val = 0; // (uintptr_t)A_lmem[next_stage];
-          uintptr_t rs2_val = 0; // (uintptr_t)A_bitmap_lmem[next_stage];
+          uintptr_t rs1_val = 0;
+          uintptr_t rs2_val = 0;
 
           if (is_dxa_warp) {
-          rs1_val = (uintptr_t)vx_wgather(
-                    (size_t)(uintptr_t)A_lmem[next_stage],
-                    (size_t)(uintptr_t)B_lmem[next_stage],
-                    (size_t)(uintptr_t)nullptr /* mma_C */,
-                    (size_t)(uintptr_t)mma_D_addr);
-                    
-          rs2_val = (uintptr_t)vx_wgather(
-                    (size_t)(uintptr_t)nullptr /*mma_A_bitmap*/,
-                    (size_t)(uintptr_t)nullptr /*mma_B_bitmap*/,
-                    (size_t)tcu_bar[next_stage].id(),
-                    (size_t)((curr_k << 24) /*| (a_blocks << 18) | (b_blocks << 12)*/ | (vt::OTYPE::id << 8) | 
-                             (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
+            rs1_val = (uintptr_t)vx_wgather(
+                      (size_t)(uintptr_t)A_lmem[next_stage],
+                      (size_t)(uintptr_t)B_lmem[next_stage],
+                      (size_t)(uintptr_t)nullptr /* mma_C */,
+                      (size_t)(uintptr_t)mma_D_addr);
+                      
+            rs2_val = (uintptr_t)vx_wgather(
+                      (size_t)(uintptr_t)nullptr /*mma_A_bitmap*/,
+                      (size_t)(uintptr_t)nullptr /*mma_B_bitmap*/,
+                      (size_t)tcu_bar[next_stage].id(),
+                      (size_t)((curr_k << 24) /*| (a_blocks << 18) | (b_blocks << 12)*/ | (vt::OTYPE::id << 8) | 
+                               (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
           }
 
           pending_rs1_val = rs1_val;
@@ -376,7 +325,6 @@ else {
 
         // const uint32_t* pC_tile = pC + tile_id * tileC_regs;
 
-        // TODO: Eliminate divergence!
         static constexpr uint32_t kDenseLaunches = div_up_constexpr(K, tile_K);
 #pragma unroll
         for (uint32_t dense_iter = 0; dense_iter < kDenseLaunches; ++dense_iter) 
@@ -390,24 +338,15 @@ else {
 
           const uint32_t flags_chunk = (uint32_t(dense_iter == 0) << 1) | uint32_t(dense_iter == (kDenseLaunches - 1));
 
-          // TODO: Duplicate barrier - remove?
           tcu_bar[current_stage].arrive_and_wait();
 
           /* In the very first execution, no data are ready so skip the mma_op */
           if ((tile_row_idx | tile_col_idx | dense_iter) != 0) 
           {
             launch_pending_mma();
-            // tcu_bar[current_stage].arrive_and_wait();
-            // load_bar[next_stage].arrive_and_wait();
-
-            // // ctx::mma_op(pending_rs1_val, pending_rs2_val);
-            // ctx::mma_op(rs1_val, rs2_val);
-
-            // current_stage = next_stage;
-            // next_stage ^= 1u;
           }
 
-          if (is_dxa_warp /*is_dxa_quad*/) {
+          if (is_dxa_warp) {
             if constexpr (kSparseA) {
               const uint32_t a_bitmap_start = tile_row_idx * K + k_offset;
               vx_dxa_issue_1d_wg(kDescABitmap, load_bar[next_stage].id(), A_bitmap_lmem[next_stage], a_bitmap_start);
@@ -421,15 +360,8 @@ else {
             vx_dxa_issue_2d_wg(kDescB, load_bar[next_stage].id(), B_lmem[next_stage], 0, tile_col_idx * tiles_k + k_tile_idx);
           }
 
-          // if (curr_k >= 256 || a_blocks >= 64 || b_blocks >= 64) {
-          //   if (lane0) {
-          //     pD[0] = LMEM_OVERFLOW_MARKER;
-          //   }
-          //   return;
-          // }
-
-          uintptr_t rs1_val = 0; // (uintptr_t)A_lmem[next_stage];
-          uintptr_t rs2_val = 0; // (uintptr_t)A_bitmap_lmem[next_stage];
+          uintptr_t rs1_val = 0;
+          uintptr_t rs2_val = 0;
 
           if (is_dxa_warp) {
             rs1_val = (uintptr_t)vx_wgather(
@@ -450,26 +382,6 @@ else {
                               flags_chunk));
           }
 
-          // if (gtid == 0) {
-          //   rs1_val = reinterpret_cast<uintptr_t>(A_lmem[next_stage]);
-          //   rs2_val = reinterpret_cast<uintptr_t>(A_bitmap_lmem[next_stage]);
-          // } else if (gtid == 1) {
-          //   rs1_val = reinterpret_cast<uintptr_t>(B_lmem[next_stage]);
-          //   rs2_val = reinterpret_cast<uintptr_t>(B_bitmap_lmem[next_stage]);
-          // } else if (gtid == 2) {
-          //   rs1_val = reinterpret_cast<uintptr_t>(nullptr /*mma_C*/);
-          //   rs2_val = tcu_bar[next_stage].id();
-          // } else if (gtid == 3) {
-          //   rs1_val = mma_D_addr;
-          //   rs2_val = (curr_k         << 24) | 
-          //             (a_blocks       << 18) | 
-          //             (b_blocks       << 12) | 
-          //             (vt::OTYPE::id  << 8)  | 
-          //             (vt::ITYPE::id  << 4)  | 
-          //             (kConstSparsity << 2)  | 
-          //              flags_chunk;
-          // } 
-
           pending_rs1_val = rs1_val;
           pending_rs2_val = rs2_val;
         }
@@ -477,14 +389,6 @@ else {
     }
 
     launch_pending_mma();
-    // tcu_bar[current_stage].arrive_and_wait();
-    // load_bar[next_stage].arrive_and_wait();
-
-    // // ctx::mma_op(pending_rs1_val, pending_rs2_val);
-    // ctx::mma_op(rs1_val, rs2_val);
-
-    // current_stage = next_stage;
-    // next_stage ^= 1u;
 
     tcu_bar[current_stage].arrive_and_wait();
   }
