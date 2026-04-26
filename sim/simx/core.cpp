@@ -47,7 +47,7 @@ Core::Core(const SimContext& ctx,
   , func_units_((uint32_t)FUType::Count)
   , lmem_switch_(NUM_LSU_BLOCKS)
   , mem_coalescers_(NUM_LSU_BLOCKS)
-  , fetch_latch_(ctx, "fetch_latch", 1, 2)
+  , fetch_latch_(ctx, "fetch_latch", 2, 2)
   , decode_latch_(ctx, "decode_latch", 1, 2)
   , pending_icache_(arch_.num_warps())
   , commit_arbs_(ISSUE_WIDTH)
