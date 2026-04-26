@@ -179,7 +179,6 @@ BLACKBOX_CMD=(
   --debug=1
   --log="${LOG_FILE}"
   --args="${APP_ARGS_STR}"
-  --perf=6
 )
 
 if [[ -n "${PERF_CLASS}" ]]; then

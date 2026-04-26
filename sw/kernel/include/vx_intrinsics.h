@@ -240,6 +240,23 @@ inline uint64_t vx_rdcycle() {
 #endif
 }
 
+// Return current instruction-retired counter
+inline uint64_t vx_rdinstret_local() {
+#if __riscv_xlen == 64
+    return csr_read(VX_CSR_MINSTRET);
+#elif __riscv_xlen == 32
+    uint32_t hi0, lo, hi1;
+    do {
+        hi0 = csr_read(VX_CSR_MINSTRET_H);
+        lo  = csr_read(VX_CSR_MINSTRET);
+        hi1 = csr_read(VX_CSR_MINSTRET_H);
+    } while (hi0 != hi1);
+    return (((uint64_t)hi0) << 32) | lo;
+#else
+#error "Unsupported RISC-V XLEN"
+#endif
+}
+
 // Warp Sync
 inline void vx_wsync() {
     __asm__ volatile (".insn r %0, 7, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");

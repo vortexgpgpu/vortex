@@ -82,6 +82,8 @@ static constexpr uint32_t div_up_constexpr(uint32_t value, uint32_t divisor) {
 extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) 
 {
   // TODO: ADD CYCLE - INSTRUCTION COUNTING
+  const uint64_t instret_begin = vx_rdinstret_local();
+  const __rdcycle_time cycle_begin = vx_rdcycle_sync_begin();
 
   auto pA = reinterpret_cast<uint32_t *>(arg->A_addr);
   auto pB = reinterpret_cast<uint32_t *>(arg->B_addr);
@@ -261,52 +263,52 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
   
   
   
-else {
+  else {
 
-  /* Constants for the sparse case only */
-  static constexpr uint32_t bitmap_tile_regs = tile_K * tile_M / 32;
-  constexpr uint32_t b_bitmap_skew_regs = 16;
-  constexpr uint32_t b_tile_align_regs = 16;
+    /* Constants for the sparse case only */
+    static constexpr uint32_t bitmap_tile_regs = tile_K * tile_M / 32;
+    constexpr uint32_t b_bitmap_skew_regs = 16;
+    constexpr uint32_t b_tile_align_regs = 16;
 
-  uint32_t a_blocks = 0;
-  if constexpr (kSparseA) 
-  {
-    a_blocks = max_a_blocks;
-  }
-  const uint32_t b_blocks = max_b_blocks;
+    uint32_t a_blocks = 0;
+    if constexpr (kSparseA) 
+    {
+      a_blocks = max_a_blocks;
+    }
+    const uint32_t b_blocks = max_b_blocks;
 
-  /* LMEM  */
-  uint32_t* A_bitmap_lmem[2] = {nullptr, nullptr};
-  uint32_t* A_lmem[2]        = {nullptr, nullptr};
-  uint32_t* B_bitmap_lmem[2] = {nullptr, nullptr};
-  uint32_t* B_lmem[2]        = {nullptr, nullptr};
+    /* LMEM  */
+    uint32_t* A_bitmap_lmem[2] = {nullptr, nullptr};
+    uint32_t* A_lmem[2]        = {nullptr, nullptr};
+    uint32_t* B_bitmap_lmem[2] = {nullptr, nullptr};
+    uint32_t* B_lmem[2]        = {nullptr, nullptr};
 
-  if constexpr (kConstSparsity == 2)
-  {
-    /* LMEM Packing in s = 2 case:
-    ||--A_bitmap--|----A_tile----|--(free space)--||--B_skew_regs--|--B_bitmap--|--B_align_regs--|----B_tile----|--(free space)--||
-    */
-    A_bitmap_lmem[0] = half0_base;
-    A_bitmap_lmem[1] = half1_base;
-    A_lmem[0] = A_bitmap_lmem[0] + bitmap_tile_regs;
-    A_lmem[1] = A_bitmap_lmem[1] + bitmap_tile_regs;
-    B_bitmap_lmem[0] = half0_base + dense_a_tile_regs + b_bitmap_skew_regs;
-    B_bitmap_lmem[1] = half1_base + dense_a_tile_regs + b_bitmap_skew_regs;
-    B_lmem[0] = B_bitmap_lmem[0] + bitmap_tile_regs + b_tile_align_regs;
-    B_lmem[1] = B_bitmap_lmem[1] + bitmap_tile_regs + b_tile_align_regs;
-  }
-  else /* kConstSparsity == 1 */
-  {
-    /* LMEM Packing in s = 1 case:
-    ||----A_tile----|--B_bitmap--|----B_tile----|--(free space)--||
-    */
-    A_lmem[0] = half0_base;
-    A_lmem[1] = half1_base;
-    B_bitmap_lmem[0] = half0_base + dense_a_tile_regs;
-    B_bitmap_lmem[1] = half1_base + dense_a_tile_regs;
-    B_lmem[0] = B_bitmap_lmem[0] + bitmap_tile_regs;
-    B_lmem[1] = B_bitmap_lmem[1] + bitmap_tile_regs;
-  }
+    if constexpr (kConstSparsity == 2)
+    {
+      /* LMEM Packing in s = 2 case:
+      ||--A_bitmap--|----A_tile----|--(free space)--||--B_skew_regs--|--B_bitmap--|--B_align_regs--|----B_tile----|--(free space)--||
+      */
+      A_bitmap_lmem[0] = half0_base;
+      A_bitmap_lmem[1] = half1_base;
+      A_lmem[0] = A_bitmap_lmem[0] + bitmap_tile_regs;
+      A_lmem[1] = A_bitmap_lmem[1] + bitmap_tile_regs;
+      B_bitmap_lmem[0] = half0_base + dense_a_tile_regs + b_bitmap_skew_regs;
+      B_bitmap_lmem[1] = half1_base + dense_a_tile_regs + b_bitmap_skew_regs;
+      B_lmem[0] = B_bitmap_lmem[0] + bitmap_tile_regs + b_tile_align_regs;
+      B_lmem[1] = B_bitmap_lmem[1] + bitmap_tile_regs + b_tile_align_regs;
+    }
+    else /* kConstSparsity == 1 */
+    {
+      /* LMEM Packing in s = 1 case:
+      ||----A_tile----|--B_bitmap--|----B_tile----|--(free space)--||
+      */
+      A_lmem[0] = half0_base;
+      A_lmem[1] = half1_base;
+      B_bitmap_lmem[0] = half0_base + dense_a_tile_regs;
+      B_bitmap_lmem[1] = half1_base + dense_a_tile_regs;
+      B_lmem[0] = B_bitmap_lmem[0] + bitmap_tile_regs;
+      B_lmem[1] = B_bitmap_lmem[1] + bitmap_tile_regs;
+    }
     
 #pragma unroll
     for (uint32_t tile_row_idx = 0; tile_row_idx < tiles_m; ++tile_row_idx) {
@@ -391,5 +393,16 @@ else {
     launch_pending_mma();
 
     tcu_bar[current_stage].arrive_and_wait();
+  }
+
+  const __rdcycle_time cycle_end = vx_rdcycle_sync_end();
+  const uint64_t instret_end = vx_rdinstret_local();
+  const uint64_t total_cycles = vx_rdcycle_sync_diff(cycle_begin, cycle_end);
+  const uint64_t total_instructions = instret_end - instret_begin;
+
+  if (vx_thread_id() == 0) {
+    uint64_t* metrics = reinterpret_cast<uint64_t*>(arg->metrics_addr);
+    metrics[0] = total_cycles;
+    metrics[1] = total_instructions;
   }
 }

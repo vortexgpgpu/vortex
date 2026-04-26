@@ -30,7 +30,7 @@ typedef struct {
   uint32_t max_a_blocks;
   uint32_t max_b_blocks;
   uint8_t  sparsity;            
-  uint64_t cycles_addr;
+  uint64_t metrics_addr;
 } kernel_arg_t;
 
 #endif

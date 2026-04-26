@@ -988,6 +988,7 @@ vx_buffer_h C_buffer = nullptr;
 vx_buffer_h D_buffer = nullptr;
 vx_buffer_h A_bitmap_buffer = nullptr;
 vx_buffer_h B_bitmap_buffer = nullptr;
+vx_buffer_h metrics_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
@@ -1083,6 +1084,7 @@ void cleanup() {
     vx_mem_free(D_buffer);
     vx_mem_free(A_bitmap_buffer);
     vx_mem_free(B_bitmap_buffer);
+    vx_mem_free(metrics_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -1276,6 +1278,7 @@ int main(int argc, char *argv[]) {
   size_t sizeB = K * N;
   size_t sizeC = M * N;
   size_t sizeD = M * N;
+  constexpr size_t metrics_size = 10;
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
@@ -1306,6 +1309,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
   RT_CHECK(vx_mem_alloc(device, sizeD * sizeof(otype_t), VX_MEM_WRITE, &D_buffer));
   RT_CHECK(vx_mem_address(D_buffer, &kernel_arg.D_addr));
+  RT_CHECK(vx_mem_alloc(device, metrics_size * sizeof(uint64_t), VX_MEM_READ_WRITE, &metrics_buffer));
+  RT_CHECK(vx_mem_address(metrics_buffer, &kernel_arg.metrics_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
@@ -1316,6 +1321,7 @@ int main(int argc, char *argv[]) {
   std::vector<itype_t> h_A(sizeA);
   std::vector<itype_t> h_B(sizeB);
   std::vector<otype_t> h_C(sizeC);
+  std::vector<uint64_t> h_metrics(metrics_size, 0);
   std::vector<itype_t> h_A_packed;
   std::vector<itype_t> h_B_packed;
   std::vector<otype_t> h_C_packed;
@@ -1485,6 +1491,11 @@ int main(int argc, char *argv[]) {
   }
 
   {
+    std::cout << "upload metrics buffer" << std::endl;
+    RT_CHECK(vx_copy_to_dev(metrics_buffer, h_metrics.data(), 0, h_metrics.size() * sizeof(uint64_t)));
+  }
+
+  {
     constexpr uint32_t tile_M = 32;
     constexpr uint32_t tile_N = 32;
     const uint32_t tile_c_elems = tile_M * tile_N;
@@ -1586,6 +1597,11 @@ int main(int argc, char *argv[]) {
   std::cout << "download destination buffer" << std::endl;
   RT_CHECK(vx_copy_from_dev(h_D_tiled.data(), D_buffer, 0, sizeD * sizeof(otype_t)));
   auto h_D = unpack_D_tiled32_rowmajor(h_D_tiled, M, N);
+
+  std::cout << "download metrics buffer" << std::endl;
+  RT_CHECK(vx_copy_from_dev(h_metrics.data(), metrics_buffer, 0, h_metrics.size() * sizeof(uint64_t)));
+  std::cout << "Kernel body cycles: " << h_metrics[0] << std::endl;
+  std::cout << "Kernel body instructions: " << h_metrics[1] << std::endl;
 
   std::cout << "Matrix D:" << std::endl;
   print_2d_output_matrix(h_D, M, N, h_C);
