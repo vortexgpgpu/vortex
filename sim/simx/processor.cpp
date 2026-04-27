@@ -247,18 +247,10 @@ Emulator* ProcessorImpl::get_first_emulator() const {
 
 Processor::Processor()
   : impl_(new ProcessorImpl())
-{
-#ifdef VM_ENABLE
-  satp_ = NULL;
-#endif
-}
+{}
 
 Processor::~Processor() {
   delete impl_;
-#ifdef VM_ENABLE
-  if (satp_ != NULL)
-    delete satp_;
-#endif
 }
 
 void Processor::attach_ram(RAM* mem) {
@@ -293,26 +285,3 @@ int Processor::dcr_write(uint32_t addr, uint32_t value) {
 int Processor::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   return impl_->dcr_read(addr, tag, value);
 }
-
-#ifdef VM_ENABLE
-int16_t Processor::set_satp_by_addr(uint64_t base_addr) {
-  uint16_t asid = 0;
-  satp_ = new SATP_t (base_addr,asid);
-  if (satp_ == NULL)
-    return 1;
-  uint64_t satp = satp_->get_satp();
-  impl_->set_satp(satp);
-  return 0;
-}
-bool Processor::is_satp_unset() {
-  return (satp_== NULL);
-}
-uint8_t Processor::get_satp_mode() {
-  assert (satp_!=NULL);
-  return satp_->get_mode();
-}
-uint64_t Processor::get_base_ppn() {
-  assert (satp_!=NULL);
-  return satp_->get_base_ppn();
-}
-#endif

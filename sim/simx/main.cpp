@@ -33,23 +33,16 @@
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-v: vector-test] [-s: stats] [-h: help] <program>" << std::endl;
+   std::cout << "Usage: [-s: stats] [-h: help] <program>" << std::endl;
 }
 
 bool showStats = false;
-bool vector_test = false;
-bool debug_mode = false;
-bool debug_verbose = false;  // Verbose debug module logging
-uint16_t rbb_port = 9823;  // Default OpenOCD remote bitbang port
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
-  	while ((c = getopt(argc, argv, "vsh")) != -1) {
+  	while ((c = getopt(argc, argv, "sh")) != -1) {
     	switch (c) {
-      case 'v':
-        vector_test = true;
-        break;
       case 's':
         showStats = true;
         break;
@@ -198,11 +191,6 @@ int main(int argc, char **argv) {
       }
     } else {
       // run simulation
-    #ifdef EXT_V_ENABLE
-      // vector test exitcode is a special case
-      if (vector_test) return (processor.run() != 1);
-    #endif
-      // else continue as normal
       processor.run();
 
     // flush GPU caches before reading back results
