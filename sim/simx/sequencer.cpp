@@ -17,13 +17,12 @@
 #include "sequencer.h"
 #include "instr_trace.h"
 #include "instr.h"
-#include "arch.h"
 #include "core.h"
 
 using namespace vortex;
 
-Sequencer::Sequencer(const Arch& arch, Core* core, PoolAllocator<Instr, 64>& instr_pool)
-  : arch_(arch)
+Sequencer::Sequencer(const SimContext& ctx, const char* name, Core* core, PoolAllocator<Instr, 64>& instr_pool)
+  : SimObject<Sequencer>(ctx, name)
   , core_(core)
 #ifdef EXT_TCU_ENABLE
   , tcu_uop_gen_(instr_pool)
@@ -32,7 +31,7 @@ Sequencer::Sequencer(const Arch& arch, Core* core, PoolAllocator<Instr, 64>& ins
   __unused(instr_pool);
 }
 
-void Sequencer::reset() {
+void Sequencer::on_reset() {
   state_.reset();
 }
 
@@ -69,7 +68,7 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
 
     // Allocate micro-op trace and fill metadata (like decode does)
     auto uop_trace = core_->trace_pool().allocate(1);
-    new (uop_trace) instr_trace_t(uop_instr->get_uuid(), arch_);
+    new (uop_trace) instr_trace_t(uop_instr->get_uuid());
     uop_trace->cid       = trace->cid;
     uop_trace->wid       = trace->wid;
     uop_trace->PC        = trace->PC;

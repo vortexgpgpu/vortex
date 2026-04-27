@@ -20,27 +20,26 @@ Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint
   : SimObject<Dispatcher>(ctx, name)
   , Inputs(ISSUE_WIDTH, this)
   , Outputs(ISSUE_WIDTH, this)
-  , arch_(core->arch())
   , core_(core)
   , buf_size_(buf_size)
   , block_size_(block_size)
   , num_lanes_(num_lanes)
   , num_blocks_(ISSUE_WIDTH / block_size)
-  , num_packets_(core->arch().num_threads() / num_lanes)
+  , num_packets_(NUM_THREADS / num_lanes)
   , batch_idx_(0)
   , block_pids_(block_size, 0)
 {}
 
 Dispatcher::~Dispatcher() {}
 
-void Dispatcher::reset() {
+void Dispatcher::on_reset() {
   batch_idx_ = 0;
   for (auto& bp : block_pids_) {
     bp = 0;
   }
 }
 
-void Dispatcher::tick() {
+void Dispatcher::on_tick() {
   // process inputs
   uint32_t block_sent = 0;
   for (uint32_t b = 0; b < block_size_; ++b) {
@@ -69,7 +68,7 @@ void Dispatcher::tick() {
       }
       // calculate current packet start and end
       int start(-1), end(-1);
-      for (uint32_t j = block_pid * num_lanes_, n = arch_.num_threads(); j < n; ++j) {
+      for (uint32_t j = block_pid * num_lanes_, n = NUM_THREADS; j < n; ++j) {
         if (!trace->tmask.test(j))
           continue;
         if (start == -1)
@@ -89,7 +88,7 @@ void Dispatcher::tick() {
         input.pop();
         ++block_sent;
       }
-      ThreadMask tmask(arch_.num_threads());
+      ThreadMask tmask(NUM_THREADS);
       for (int j = start * num_lanes_, n = j + num_lanes_; j < n; ++j) {
         tmask[j] = trace->tmask[j];
       }

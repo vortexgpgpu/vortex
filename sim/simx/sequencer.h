@@ -15,6 +15,7 @@
 
 #include <functional>
 #include <memory>
+#include <simobject.h>
 #include "types.h"
 #include "instr.h"
 #ifdef EXT_TCU_ENABLE
@@ -23,19 +24,17 @@
 
 namespace vortex {
 
-class Arch;
 class Core;
 struct instr_trace_t;
 
 ///////////////////////////////////////////////////////////////////////////////
 
 // Per-warp micro-op expander for multi-uop instructions (TCU WMMA/WGMMA).
-// Simple instructions pass through unchanged.
-class Sequencer {
+// Simple instructions pass through unchanged. Mirrors RTL VX_uop_sequencer
+// instantiated inside VX_ibuffer.sv.
+class Sequencer : public SimObject<Sequencer> {
 public:
-  Sequencer(const Arch& arch, Core* core, PoolAllocator<Instr, 64>& instr_pool);
-
-  void reset();
+  Sequencer(const SimContext& ctx, const char* name, Core* core, PoolAllocator<Instr, 64>& instr_pool);
 
   // Get current micro-op trace. Idempotent: returns same trace until advance().
   // For simple instructions, returns the input trace (pass-through).
@@ -43,6 +42,9 @@ public:
 
   // Advance to next micro-op. Returns true when all micro-ops have been issued.
   bool advance();
+
+protected:
+  void on_reset();
 
 private:
 
@@ -67,12 +69,13 @@ private:
     }
   };
 
-  const Arch& arch_;
   Core* core_;
   State state_;
 #ifdef EXT_TCU_ENABLE
   TcuUopGen tcu_uop_gen_;
 #endif
+
+  friend class SimObject<Sequencer>;
 };
 
 } // namespace vortex

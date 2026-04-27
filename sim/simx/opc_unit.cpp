@@ -14,23 +14,47 @@
 #include "opc_unit.h"
 #include "core.h"
 #include <iostream>
+#include <iomanip>
 #include <simobject.h>
 
 using namespace vortex;
 
-OpcUnit::OpcUnit(const SimContext &ctx, const char* name)
+// wid → local slot index inside this OpcUnit.
+inline static constexpr uint32_t wid_to_opc_slot(uint32_t wid) {
+  return (wid / ISSUE_WIDTH) / NUM_OPCS;
+}
+
+void OpcUnit::warp_regs_t::reset() {
+  for (auto& bank : ireg_file) {
+    for (auto& v : bank) v = 0;
+  }
+  for (auto& bank : freg_file) {
+    for (auto& v : bank) v = 0;
+  }
+}
+
+OpcUnit::OpcUnit(const SimContext &ctx, const char* name,
+                 uint32_t num_warp_slots, uint32_t num_threads)
   : SimObject<OpcUnit>(ctx, name)
   , Input(this)
-  , Output(this) {
-  this->reset();
+  , Output(this)
+  , num_threads_(num_threads) {
+  regs_.reserve(num_warp_slots);
+  for (uint32_t i = 0; i < num_warp_slots; ++i) {
+    regs_.emplace_back(num_threads);
+  }
+  this->on_reset();
 }
 
 OpcUnit::~OpcUnit() {}
 
-void OpcUnit::reset() {
+void OpcUnit::on_reset() {
   total_stalls_ = 0;
   cur_trace_ = nullptr;
   release_cycle_ = 0;
+  for (auto& w : regs_) {
+    w.reset();
+  }
 }
 
 static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
@@ -52,7 +76,7 @@ static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
   return stalls;
 }
 
-void OpcUnit::tick() {
+void OpcUnit::on_tick() {
   auto cur_cycle = SimPlatform::instance().cycles();
 
   // forward held uop once its collection phase has elapsed
@@ -74,6 +98,114 @@ void OpcUnit::tick() {
   }
 }
 
-void OpcUnit::writeback(instr_trace_t* trace) {
-  __unused(trace);
+void OpcUnit::read_src(std::vector<reg_data_t>& out,
+                       uint32_t wid,
+                       uint32_t src_index,
+                       const RegOpd& reg,
+                       const ThreadMask& tmask) const {
+  __unused(src_index);
+  uint32_t warp_slot = wid_to_opc_slot(wid);
+  uint32_t num_threads = tmask.size();
+  out.resize(num_threads);
+  switch (reg.type) {
+  case RegType::None:
+    break;
+  case RegType::Integer: {
+    DPH(2, "Src" << src_index << " Reg: " << reg << "={");
+    auto& reg_data = regs_.at(warp_slot).ireg_file.at(reg.idx);
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      if (t) DPN(2, ", ");
+      if (!tmask.test(t)) {
+        DPN(2, "-");
+        continue;
+      }
+      auto& value = out[t];
+      value.u = reg_data.at(t);
+      DPN(2, "0x" << std::hex << value.u << std::dec);
+    }
+    DPN(2, "}" << std::endl);
+  } break;
+  case RegType::Float: {
+    DPH(2, "Src" << src_index << " Reg: " << reg << "={");
+    auto& reg_data = regs_.at(warp_slot).freg_file.at(reg.idx);
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      if (t) DPN(2, ", ");
+      if (!tmask.test(t)) {
+        DPN(2, "-");
+        continue;
+      }
+      auto& value = out[t];
+      value.u64 = reg_data.at(t);
+      if ((value.u64 >> 32) == 0xffffffff) {
+        DPN(2, "0x" << std::hex << value.u32 << std::dec);
+      } else {
+        DPN(2, "0x" << std::hex << value.u64 << std::dec);
+      }
+    }
+    DPN(2, "}" << std::endl);
+  } break;
+#ifdef EXT_V_ENABLE
+  case RegType::Vector:
+    // Vector regfile lives in VecUnit::Impl, not here.
+    DPH(2, "Src" << src_index << " Reg: " << reg << " (vector — owned by VecUnit)" << std::endl);
+    break;
+#endif
+  default:
+    std::abort();
+    break;
+  }
+}
+
+void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
+  if (trace->dst_data.empty())
+    return;
+  uint32_t warp_slot = wid_to_opc_slot(wid);
+  auto& rdest = trace->dst_reg;
+  auto num_threads = num_threads_;
+  switch (rdest.type) {
+  case RegType::None:
+    break;
+  case RegType::Integer: {
+    auto& bank = regs_.at(warp_slot).ireg_file.at(rdest.idx);
+    DPH(2, "Dest Reg: " << rdest << "={");
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      if (t) DPN(2, ", ");
+      if (!trace->tmask.test(t)) {
+        DPN(2, "-");
+        continue;
+      }
+      bank.at(t) = trace->dst_data[t].i;
+      DPN(2, "0x" << std::hex << trace->dst_data[t].u << std::dec);
+    }
+    DPN(2, "}" << std::endl);
+  } break;
+  case RegType::Float: {
+    auto& bank = regs_.at(warp_slot).freg_file.at(rdest.idx);
+    DPH(2, "Dest Reg: " << rdest << "={");
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      if (t) DPN(2, ", ");
+      if (!trace->tmask.test(t)) {
+        DPN(2, "-");
+        continue;
+      }
+      bank.at(t) = trace->dst_data[t].u64;
+      if ((trace->dst_data[t].u64 >> 32) == 0xffffffff) {
+        DPN(2, "0x" << std::hex << trace->dst_data[t].u32 << std::dec);
+      } else {
+        DPN(2, "0x" << std::hex << trace->dst_data[t].u64 << std::dec);
+      }
+    }
+    DPN(2, "}" << std::endl);
+  } break;
+#ifdef EXT_V_ENABLE
+  case RegType::Vector:
+    // Vector regfile is owned by VecUnit::Impl. Log only.
+    DPH(2, "Dest Reg: " << rdest << " (vector — owned by VecUnit)" << std::endl);
+    break;
+#endif
+  default:
+    std::cout << "Unrecognized register write back type: " << rdest.type << std::endl;
+    std::abort();
+    break;
+  }
 }

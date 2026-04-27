@@ -29,29 +29,17 @@
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-v: vector-test] [-s: stats] [-h: help] <program>" << std::endl;
+   std::cout << "Usage: [-v: vector-test] [-s: stats] [-h: help] <program>" << std::endl;
 }
 
-uint32_t num_threads = NUM_THREADS;
-uint32_t num_warps = NUM_WARPS;
-uint32_t num_cores = NUM_CORES;
 bool showStats = false;
 bool vector_test = false;
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
-  	while ((c = getopt(argc, argv, "t:w:c:vsh")) != -1) {
+  	while ((c = getopt(argc, argv, "vsh")) != -1) {
     	switch (c) {
-      case 't':
-        num_threads = atoi(optarg);
-        break;
-      case 'w':
-        num_warps = atoi(optarg);
-        break;
-		  case 'c':
-        num_cores = atoi(optarg);
-        break;
       case 'v':
         vector_test = true;
         break;
@@ -83,14 +71,11 @@ int main(int argc, char **argv) {
   parse_args(argc, argv);
 
   {
-    // create processor configuation
-    Arch arch(num_threads, num_warps, num_cores);
-
     // create memory module
     RAM ram(0, MEM_PAGE_SIZE);
 
     // create processor
-    Processor processor(arch);
+    Processor processor;
 
     // attach memory module
     processor.attach_ram(&ram);
@@ -141,7 +126,7 @@ int main(int argc, char **argv) {
     // flush GPU caches before reading back results
     {
       uint32_t dummy;
-      for (uint32_t cid = 0; cid < num_cores * NUM_CLUSTERS; ++cid) {
+      for (uint32_t cid = 0; cid < NUM_CORES * NUM_CLUSTERS; ++cid) {
         processor.dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
       }
     }

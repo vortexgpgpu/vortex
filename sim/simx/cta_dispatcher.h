@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <simobject.h>
 #include "types.h"
 #include "kmu.h"
 
@@ -38,11 +39,12 @@ struct cta_warp_record_t {
   uint64_t   lmem_addr;
 };
 
-class CtaDispatcher {
+// CTA dispatcher: walks the pending kernel grid and admits one warp rank per
+// step() into a free warp slot. Mirrors the RTL VX_cta_dispatch.sv module.
+class CtaDispatcher : public SimObject<CtaDispatcher> {
 public:
-  explicit CtaDispatcher(Core* core);
-
-  void reset();
+  CtaDispatcher(const SimContext& ctx, const char* name, Core* core);
+  ~CtaDispatcher();
 
   // Try to dispatch one warp rank into a free warp slot.
   // Returns true on success and sets *wid_out / *rec_out.
@@ -55,6 +57,9 @@ public:
   bool running() const {
     return has_cta_ || has_pending_ || kmu_->running();
   }
+
+protected:
+  void on_reset();
 
 private:
   bool next_warp(bool is_init, cta_warp_record_t* out);
@@ -95,6 +100,8 @@ private:
   kmu_req_t pending_cta_;
   Word      cur_kernel_pc_;
   std::vector<bool> warp_init_mask_;
+
+  friend class SimObject<CtaDispatcher>;
 };
 
 } // namespace vortex

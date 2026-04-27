@@ -19,28 +19,61 @@ namespace vortex {
 
 class Core;
 
+// Operand collector partition. Per the RTL split, each (issue_lane, opc_idx)
+// pair owns the integer + float register files for the warps it serves.
+// Routing math (mirrors VX_operands.sv):
+//   lane = wid % ISSUE_WIDTH       — selects which Operands instance
+//   wis  = wid / ISSUE_WIDTH       — warp-in-slice index
+//   opc  = wis % NUM_OPCS          — which OpcUnit within the lane
+//   slot = wis / NUM_OPCS          — local slot inside this OpcUnit
 class OpcUnit : public SimObject<OpcUnit> {
 public:
   SimChannel<instr_trace_t *> Input;
   SimChannel<instr_trace_t *> Output;
 
-  OpcUnit(const SimContext &ctx, const char* name);
+  OpcUnit(const SimContext& ctx, const char* name,
+          uint32_t num_warp_slots, uint32_t num_threads);
   virtual ~OpcUnit();
 
-  virtual void reset();
+  // Functional regfile writeback applied at unit-tick. Slot is derived from
+  // wid via wid_to_opc_slot. No-op when trace->dst_data is empty.
+  void writeback(instr_trace_t* trace, uint32_t wid);
 
-  virtual void tick();
-
-  void writeback(instr_trace_t* trace);
+  // Read one source operand for `wid` into `out[t]` (sized by tmask).
+  void read_src(std::vector<reg_data_t>& out,
+                uint32_t wid,
+                uint32_t src_index,
+                const RegOpd& reg,
+                const ThreadMask& tmask) const;
 
   uint32_t total_stalls() const {
     return total_stalls_;
   }
 
+protected:
+  virtual void on_reset();
+  virtual void on_tick();
+
 private:
+  struct warp_regs_t {
+    std::vector<std::vector<Word>>     ireg_file;   // [reg][thread]
+    std::vector<std::vector<uint64_t>> freg_file;   // [reg][thread]
+    warp_regs_t(uint32_t num_threads)
+      : ireg_file(MAX_NUM_REGS, std::vector<Word>(num_threads, 0))
+      , freg_file(MAX_NUM_REGS, std::vector<uint64_t>(num_threads, 0))
+    {}
+    void reset();
+  };
+
+  std::vector<warp_regs_t> regs_;     // indexed by warp_slot
+  uint32_t num_threads_;
+
   uint32_t total_stalls_ = 0;
   instr_trace_t* cur_trace_ = nullptr;
   uint64_t       release_cycle_ = 0;
+
+  friend class SimObject<OpcUnit>;
+  friend class Operands;  // Operands::get_exit_code reads regs_ directly
 };
 
 } // namespace vortex

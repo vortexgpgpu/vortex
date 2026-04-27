@@ -19,7 +19,6 @@
 
 namespace vortex {
 
-class Arch;
 class RAM;
 class ProcessorImpl;
 #ifdef VM_ENABLE
@@ -28,7 +27,7 @@ class SATP_t;
 
 class Processor {
 public:
-  Processor(const Arch& arch);
+  Processor();
   ~Processor();
 
   void attach_ram(RAM* mem);

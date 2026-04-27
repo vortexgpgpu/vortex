@@ -1,0 +1,92 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "instr.h"
+#include "instr_trace.h"
+#include <simobject.h>
+#include "types.h"
+#include "func_unit.h"
+
+namespace vortex {
+
+class Core;
+
+class VecUnit : public FuncUnit {
+public:
+  using Ptr = std::shared_ptr<VecUnit>;
+
+  struct MemTraceData : public ITraceData {
+    using Ptr = std::shared_ptr<MemTraceData>;
+    std::vector<std::vector<mem_addr_size_t>> mem_addrs;
+    uint32_t vl = 0;
+    uint32_t vnf = 0;
+    MemTraceData(uint32_t num_threads = 0) : mem_addrs(num_threads) {}
+  };
+
+  struct ExeTraceData : public ITraceData {
+    using Ptr = std::shared_ptr<ExeTraceData>;
+    VpuOpType vpu_op;
+    uint32_t vl = 0;
+    uint32_t vlmul = 0;
+  };
+
+  struct PerfStats {
+    uint64_t reads = 0;
+    uint64_t writes = 0;
+    uint64_t latency = 0;
+    uint64_t stalls = 0;
+
+    PerfStats& operator+=(const PerfStats& rhs) {
+      this->reads   += rhs.reads;
+      this->writes  += rhs.writes;
+      this->latency += rhs.latency;
+      this->stalls  += rhs.stalls;
+      return *this;
+    }
+  };
+
+  VecUnit(const SimContext& ctx, const char* name, Core* core);
+  ~VecUnit();
+
+  std::string dumpRegister(uint32_t wid, uint32_t tid, uint32_t reg_idx) const;
+
+  bool get_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word* value);
+
+  bool set_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word value);
+
+  void load(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data, MemTraceData* trace_data);
+
+  void store(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data, MemTraceData* trace_data);
+
+  void configure(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data, std::vector<reg_data_t>& rd_data, ExeTraceData* trace_data);
+
+  void execute(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, std::vector<reg_data_t>& rd_data, ExeTraceData* trace_data);
+
+  const PerfStats& perf_stats() const;
+
+protected:
+  void on_reset() override;
+  void on_tick() override;
+
+private:
+  // Per-trace functional execution for VsetType/VopType. Called only from
+  // this unit's tick() at first peek of a new trace.
+  void execute(instr_trace_t* trace);
+
+  class Impl;
+  Impl* impl_;
+};
+
+}

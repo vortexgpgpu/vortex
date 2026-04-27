@@ -195,6 +195,12 @@ private:
   void schedule(SimChannel<Pkt>* channel, Pkt&& pkt, uint64_t delay);
 
   std::vector<std::shared_ptr<SimObjectBase>> objects_;
+  // Subset views over `objects_` for the per-cycle hot path. A SimObject is
+  // added here only if it overrides on_tick()/on_reset() (auto-detected at
+  // create_object<Impl>() time via member-pointer comparison). Passive
+  // SimObjects pay no per-cycle cost.
+  std::vector<SimObjectBase*> active_tick_;
+  std::vector<SimObjectBase*> active_reset_;
 
   std::vector<LinkedList<SimEventBase, &SimEventBase::list_>> reg_events_;
 
@@ -396,6 +402,31 @@ private:
 // Object Creation & Platform Implementation
 ///////////////////////////////////////////////////////////////////////////////
 
+// Compile-time check that `on_tick()` / `on_reset()` are not publicly
+// callable on `T`. Function-template SFINAE: the (int) overload is selected
+// only when the call expression is well-formed at this (namespace-scope,
+// non-friend) context — i.e. when the member is public. Otherwise the
+// (...) fallback wins. Used by create_object<Impl> to reject derivatives
+// that leave the lifecycle hooks public.
+namespace detail {
+  template <typename T>
+  auto detect_on_tick_public(int)
+      -> decltype(std::declval<T&>().on_tick(), std::true_type{});
+  template <typename T>
+  std::false_type detect_on_tick_public(...);
+
+  template <typename T>
+  auto detect_on_reset_public(int)
+      -> decltype(std::declval<T&>().on_reset(), std::true_type{});
+  template <typename T>
+  std::false_type detect_on_reset_public(...);
+}
+
+template <typename T>
+struct is_on_tick_public  : decltype(detail::detect_on_tick_public<T>(0))  {};
+template <typename T>
+struct is_on_reset_public : decltype(detail::detect_on_reset_public<T>(0)) {};
+
 template <typename Impl>
 class SimObject : public SimObjectBase {
 public:
@@ -410,16 +441,76 @@ protected:
   SimObject(const SimContext& ctx, const std::string& name)
     : SimObjectBase(ctx, name) {}
 
+  // SimObject lifecycle callbacks. Protected so that only SimPlatform (via
+  // do_tick/do_reset below) and the derived class itself can invoke them.
+  // External code that writes `obj->on_tick()` is rejected at access-check
+  // time, and create_object<Impl>() also static_asserts they aren't public.
+  // Each derivative must `friend class SimObject<Self>` so that the auto-
+  // detection below can compare member pointers across access boundaries.
+  void on_tick()  {}
+  void on_reset() {}
+
 private:
   Impl* impl() { return static_cast<Impl*>(this); }
-  void do_reset() override { impl()->reset(); }
-  void do_tick()  override { impl()->tick();  }
+  void do_reset() override { impl()->on_reset(); }
+  void do_tick()  override { impl()->on_tick();  }
+
+  // Auto-detect whether `Impl` overrides on_tick()/on_reset() vs inheriting
+  // the SimObject<Impl> defaults. When inherited, &Impl::on_tick resolves to
+  // the same member as &SimObject<Impl>::on_tick and the cast-then-compare
+  // yields equal. When overridden, the values differ.
+  //
+  // Defined as a static member of SimObject<Impl> so the &Impl::on_tick
+  // and &SimObject<Impl>::on_tick references can see the protected members
+  // (SimObject<Impl> is the friend granter / declarer).
+  template <typename T = Impl>
+  static bool has_own_tick() {
+    using F = void (T::*)();
+    return static_cast<F>(&T::on_tick) != static_cast<F>(&SimObject<Impl>::on_tick);
+  }
+
+  template <typename T = Impl>
+  static bool has_own_reset() {
+    using F = void (T::*)();
+    return static_cast<F>(&T::on_reset) != static_cast<F>(&SimObject<Impl>::on_reset);
+  }
+
+  friend class SimPlatform;
 };
+
+// Detection trait for "is this an immediate SimObject<Impl> CRTP derivative?"
+// Multi-level CRTP (e.g. Derived → Intermediate → SimObject<Intermediate>)
+// makes SimObject<Derived> not a base of Derived, so the static_cast probe
+// fails for those — we treat them conservatively as active.
+template <typename Impl, typename = void>
+struct has_direct_simobject_base : std::false_type {};
+
+template <typename Impl>
+struct has_direct_simobject_base<Impl,
+    std::void_t<decltype(static_cast<SimObject<Impl>*>(std::declval<Impl*>()))>>
+  : std::true_type {};
 
 template <typename Impl, typename... Args>
 std::shared_ptr<Impl> SimPlatform::create_object(Args&&... args) {
+  static_assert(!is_on_tick_public<Impl>::value,
+      "on_tick() must be protected — only SimPlatform may call it");
+  static_assert(!is_on_reset_public<Impl>::value,
+      "on_reset() must be protected — only SimPlatform may call it");
   auto obj = std::make_shared<Impl>(SimContext{}, std::forward<Args>(args)...);
   objects_.push_back(obj);
+  // Auto-skip optimisation only applies to direct SimObject<Impl> CRTP
+  // derivatives; multi-level CRTP derivatives are conservatively kept
+  // active. `if constexpr` avoids instantiating has_own_*<Impl> for the
+  // multi-level case, where &Impl::on_tick is inaccessible to the trait.
+  if constexpr (has_direct_simobject_base<Impl>::value) {
+    if (SimObject<Impl>::template has_own_tick<Impl>())
+      active_tick_.push_back(obj.get());
+    if (SimObject<Impl>::template has_own_reset<Impl>())
+      active_reset_.push_back(obj.get());
+  } else {
+    active_tick_.push_back(obj.get());
+    active_reset_.push_back(obj.get());
+  }
   return obj;
 }
 
@@ -481,8 +572,8 @@ inline void SimPlatform::reset() {
     delete evt;
   }
 
-  // clear sim objects
-  for (auto& object : objects_) {
+  // clear sim objects (only those that override reset())
+  for (auto* object : active_reset_) {
     object->do_reset();
   }
 
@@ -494,7 +585,8 @@ inline void SimPlatform::reset() {
 inline void SimPlatform::tick() {
   // Process immediate events first
   fire_immediate_events();
-  for (auto& object : objects_) {
+  // Tick only objects that override tick() (auto-detected at create_object).
+  for (auto* object : active_tick_) {
     object->do_tick();
     fire_immediate_events();
   }
@@ -517,6 +609,8 @@ inline void SimPlatform::tick() {
 }
 
 inline void SimPlatform::cleanup() {
+  active_tick_.clear();
+  active_reset_.clear();
   objects_.clear();
 
   for (auto& bucket : reg_events_) {

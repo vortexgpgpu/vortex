@@ -14,7 +14,7 @@
 #pragma once
 
 #include <simobject.h>
-#include <array>
+#include <vector>
 #include "instr_trace.h"
 
 namespace vortex {
@@ -35,103 +35,13 @@ public:
 
 	virtual ~FuncUnit() {}
 
-	virtual void reset() {}
-
-	virtual void tick() = 0;
-
 protected:
+	virtual void on_reset() {}
+	virtual void on_tick() = 0;
+
+	friend class SimObject<FuncUnit>;
+
 	Core* core_;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-
-class AluUnit : public FuncUnit {
-public:
-  AluUnit(const SimContext& ctx, const char* name, Core*);
-
-  void tick() override;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class FpuUnit : public FuncUnit {
-public:
-  FpuUnit(const SimContext& ctx, const char* name, Core*);
-
-  void tick() override;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class LsuUnit : public FuncUnit {
-public:
-	LsuUnit(const SimContext& ctx, const char* name, Core*);
-	~LsuUnit();
-
-	void reset() override;
-	void tick() override;
-
-private:
-
- 	struct pending_req_t {
-		instr_trace_t* trace;
-		uint32_t count;
-		bool eop;
-	};
-
-	struct lsu_state_t {
-		HashTable<pending_req_t> pending_rd_reqs;
-		instr_trace_t* fence_trace;
-		bool fence_lock;
-
-		lsu_state_t() : pending_rd_reqs(LSUQ_IN_SIZE) {}
-
-		void reset() {
-			this->pending_rd_reqs.clear();
-			this->fence_trace = nullptr;
-			this->fence_lock = false;
-		}
-	};
-
-	std::array<lsu_state_t, NUM_LSU_BLOCKS> states_;
-	uint64_t pending_loads_;
-	std::vector<mem_addr_size_t> addr_list_;
-	uint32_t remain_addrs_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class SfuUnit : public FuncUnit {
-public:
-	SfuUnit(const SimContext& ctx, const char* name, Core*);
-
-	void tick() override;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-#ifdef EXT_TCU_ENABLE
-
-class TcuUnit : public FuncUnit {
-public:
-	TcuUnit(const SimContext& ctx, const char* name, Core*);
-
-	void tick() override;
-};
-
-#endif
-
-///////////////////////////////////////////////////////////////////////////////
-
-#ifdef EXT_V_ENABLE
-
-class VpuUnit : public FuncUnit {
-public:
-	VpuUnit(const SimContext& ctx, const char* name, Core*);
-
-	void tick() override;
-};
-
-#endif
 
 }

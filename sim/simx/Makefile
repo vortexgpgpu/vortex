@@ -8,7 +8,7 @@ SRC_DIR = $(VORTEX_HOME)/sim/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(SRC_DIR) -I$(SW_COMMON_DIR) -I$(ROOT_DIR)/hw
+CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SW_COMMON_DIR) -I$(ROOT_DIR)/hw
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
@@ -23,28 +23,31 @@ XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)
 
 # Source files definition
 SRCS = $(SW_COMMON_DIR)/util.cpp $(SW_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/dram_sim.cpp
-SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(SRC_DIR)/core.cpp $(SRC_DIR)/emulator.cpp $(SRC_DIR)/kmu.cpp $(SRC_DIR)/cta_dispatcher.cpp
-SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/sequencer.cpp $(SRC_DIR)/opc_unit.cpp $(SRC_DIR)/dispatcher.cpp
-SRCS += $(SRC_DIR)/execute.cpp $(SRC_DIR)/func_unit.cpp
-SRCS += $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp $(SRC_DIR)/mem_coalescer.cpp
-SRCS += $(SRC_DIR)/types.cpp
+SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(SRC_DIR)/core.cpp $(SRC_DIR)/scheduler.cpp $(SRC_DIR)/cta_dispatcher.cpp $(SRC_DIR)/barrier_unit.cpp
+SRCS += $(SRC_DIR)/kmu/kmu.cpp
+SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/scoreboard.cpp $(SRC_DIR)/sequencer.cpp $(SRC_DIR)/opc_unit.cpp $(SRC_DIR)/dispatcher.cpp
+SRCS += $(SRC_DIR)/alu_unit.cpp $(SRC_DIR)/fpu_unit.cpp $(SRC_DIR)/lsu_unit.cpp $(SRC_DIR)/sfu_unit.cpp $(SRC_DIR)/csr_unit.cpp
+SRCS += $(SRC_DIR)/mem/cache.cpp $(SRC_DIR)/mem/memory.cpp $(SRC_DIR)/mem/local_mem.cpp $(SRC_DIR)/mem/mem_coalescer.cpp
+SRCS += $(SRC_DIR)/mem/local_mem_switch.cpp $(SRC_DIR)/mem/lsu_mem_adapter.cpp
 
 # Add V extension sources
 ifneq ($(filter -DEXT_V_ENABLE, $(XCONFIGS)),)
-  	SRCS += $(SRC_DIR)/voperands.cpp
-  	SRCS += $(SRC_DIR)/vopc_unit.cpp
-  	SRCS += $(SRC_DIR)/vec_unit.cpp
+	CXXFLAGS += -I$(SRC_DIR)/vpu
+	SRCS += $(SRC_DIR)/vpu/voperands.cpp
+	SRCS += $(SRC_DIR)/vpu/vopc_unit.cpp
+	SRCS += $(SRC_DIR)/vpu/vec_unit.cpp
 else
 	SRCS += $(SRC_DIR)/operands.cpp
 endif
 # Add TCU extension sources
 ifneq ($(filter -DEXT_TCU_ENABLE, $(XCONFIGS)),)
-  	SRCS += $(SRC_DIR)/tensor_unit.cpp
+	CXXFLAGS += -I$(SRC_DIR)/tcu
+	SRCS += $(SRC_DIR)/tcu/tensor_unit.cpp
 endif
 
 # Add DXA extension sources
 ifneq ($(filter -DEXT_DXA_ENABLE, $(XCONFIGS)),)
-	SRCS += $(SRC_DIR)/dxa_core.cpp
+	SRCS += $(SRC_DIR)/dxa/dxa_core.cpp
 endif
 
 # Debugging
