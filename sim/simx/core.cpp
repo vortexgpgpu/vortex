@@ -347,6 +347,7 @@ void Core::decode() {
 
   // Decode: fill trace metadata from instruction bits
   auto instr = decoder_->decode(trace->code, trace->uuid);
+  DP(1, "Instr: " << *instr << " (#" << trace->uuid << ")");
   trace->instr_ptr = instr;
   trace->fu_type   = instr->get_fu_type();
   trace->op_type   = instr->get_op_type();

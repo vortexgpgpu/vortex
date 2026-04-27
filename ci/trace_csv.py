@@ -77,12 +77,18 @@ def parse_simx(log_lines):
     # Regex for standard TRACE lines
     line_pattern = r"^TRACE\s+(\d+):\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_-]+):\s+(.*)$"
 
-    # Regex for DEBUG lines (contain the data values)
+    # Regex for DEBUG lines (contain the data values).
     # Some instructions have no operands and are logged as "DEBUG Instr: FENCE, ...",
     # so allow an optional trailing comma after the opcode.
     debug_instr_pattern = r"DEBUG Instr:\s+([a-zA-Z0-9_\.]+),?\s+.*#(\d+)"
-    debug_src_pattern = r"DEBUG Src\d+ Reg:\s+(.+)"
-    debug_dest_pattern = r"DEBUG Dest Reg:\s+(.+)"
+    # SimX emits Src/Dest at opc/writeback time which interleaves across uops;
+    # each line carries its own (#uuid) suffix so we attribute by uuid, not by
+    # the most recently seen Instr line.
+    debug_src_pattern = r"DEBUG Src\d+ Reg:\s+(.+?)\s*\(#(\d+)\)\s*$"
+    debug_dest_pattern = r"DEBUG Dest Reg:\s+(.+?)\s*\(#(\d+)\)\s*$"
+    # Fallback for older logs that don't tag Src/Dest with a uuid.
+    debug_src_legacy_pattern = r"DEBUG Src\d+ Reg:\s+(.+)"
+    debug_dest_legacy_pattern = r"DEBUG Dest Reg:\s+(.+)"
 
     # Arg patterns for TRACE lines
     uuid_pattern = r"#(\d+)"
@@ -124,22 +130,55 @@ def parse_simx(log_lines):
                     instr_data[uuid]["lineno"] = lineno
                     continue
 
-                # 2. Capture Source/Dest Registers (with values)
+                # 2. Capture Source/Dest Registers (with values).
+                # Prefer the explicit per-line (#uuid) tag — Src/Dest emits
+                # interleave across uops in the new pipelined SimX, so falling
+                # back to current_debug_uuid would attribute to the wrong uop.
+                # If commit already finalized (instr_data entry deleted), look
+                # back in entries for the most recent matching uuid and patch.
+                src_match = re.search(debug_src_pattern, line)
+                if src_match:
+                    operand_str = src_match.group(1)
+                    src_uuid = int(src_match.group(2))
+                    if src_uuid in instr_data:
+                        target = instr_data[src_uuid]
+                        if "operands_list" not in target:
+                            target["operands_list"] = []
+                        target["operands_list"].append(operand_str)
+                    else:
+                        for prev in reversed(entries):
+                            if prev.get("uuid") == src_uuid:
+                                prev["operands"] = (prev["operands"] + ", " + operand_str) if prev.get("operands") else operand_str
+                                break
+                    continue
+
+                dest_match = re.search(debug_dest_pattern, line)
+                if dest_match:
+                    dest_str = dest_match.group(1)
+                    dest_uuid = int(dest_match.group(2))
+                    if dest_uuid in instr_data:
+                        instr_data[dest_uuid]["destination"] = dest_str
+                    else:
+                        for prev in reversed(entries):
+                            if prev.get("uuid") == dest_uuid:
+                                prev["destination"] = dest_str
+                                break
+                    continue
+
+                # Legacy logs without (#uuid) suffix — attribute to the most
+                # recently seen Instr.
                 if current_debug_uuid is not None:
-                    # Capture Src (Operands)
-                    src_match = re.search(debug_src_pattern, line)
-                    if src_match:
-                        operand_str = src_match.group(1) # e.g. x0={0x0, ...}
+                    legacy_src = re.search(debug_src_legacy_pattern, line)
+                    if legacy_src:
+                        operand_str = legacy_src.group(1)
                         if "operands_list" not in instr_data[current_debug_uuid]:
                             instr_data[current_debug_uuid]["operands_list"] = []
                         instr_data[current_debug_uuid]["operands_list"].append(operand_str)
                         continue
 
-                    # Capture Dest (Destination)
-                    dest_match = re.search(debug_dest_pattern, line)
-                    if dest_match:
-                        dest_str = dest_match.group(1) # e.g. x5={0x4, ...}
-                        instr_data[current_debug_uuid]["destination"] = dest_str
+                    legacy_dest = re.search(debug_dest_legacy_pattern, line)
+                    if legacy_dest:
+                        instr_data[current_debug_uuid]["destination"] = legacy_dest.group(1)
                         continue
 
             # --- TRACE Line Parsing (Captures Pipeline Timing) ---

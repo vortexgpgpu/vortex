@@ -138,14 +138,19 @@ int ProcessorImpl::run() {
   int exitcode = 0;
   do {
     SimPlatform::instance().tick();
-    done = true;
+    bool any_running = false;
     for (auto cluster : clusters_) {
       if (cluster->running()) {
-        done = false;
-        continue;
+        any_running = true;
+      } else {
+        exitcode |= cluster->get_exitcode();
       }
-      exitcode |= cluster->get_exitcode();
     }
+    // Stop only when cores are idle AND no channel still carries an
+    // undelivered packet. Cache pipelines wrap a SimChannel inside TFifo,
+    // so cache-pipe state (and any in-flight cache→memory writethrough)
+    // shows up in the same counter — no per-module busy reporting needed.
+    done = !any_running && (SimChannelBase::inflight_count() == 0);
     perf_mem_latency_ += perf_mem_pending_reads_;
   } while (!done);
 

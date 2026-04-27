@@ -101,58 +101,29 @@ void OpcUnit::on_tick() {
 void OpcUnit::read_src(std::vector<reg_data_t>& out,
                        uint32_t wid,
                        uint32_t src_index,
-                       const RegOpd& reg,
-                       const ThreadMask& tmask) const {
+                       const RegOpd& reg) const {
   __unused(src_index);
-  uint32_t warp_slot = wid_to_opc_slot(wid);
-  uint32_t num_threads = tmask.size();
-  out.resize(num_threads);
+  const auto& slot = regs_[wid_to_opc_slot(wid)];
   switch (reg.type) {
-  case RegType::None:
-    break;
   case RegType::Integer: {
-    DPH(2, "Src" << src_index << " Reg: " << reg << "={");
-    auto& reg_data = regs_.at(warp_slot).ireg_file.at(reg.idx);
-    for (uint32_t t = 0; t < num_threads; ++t) {
-      if (t) DPN(2, ", ");
-      if (!tmask.test(t)) {
-        DPN(2, "-");
-        continue;
-      }
-      auto& value = out[t];
-      value.u = reg_data.at(t);
-      DPN(2, "0x" << std::hex << value.u << std::dec);
+    const auto& src = slot.ireg_file[reg.idx];
+    for (uint32_t t = 0; t < num_threads_; ++t) {
+      out[t].u = src[t];
     }
-    DPN(2, "}" << std::endl);
   } break;
   case RegType::Float: {
-    DPH(2, "Src" << src_index << " Reg: " << reg << "={");
-    auto& reg_data = regs_.at(warp_slot).freg_file.at(reg.idx);
-    for (uint32_t t = 0; t < num_threads; ++t) {
-      if (t) DPN(2, ", ");
-      if (!tmask.test(t)) {
-        DPN(2, "-");
-        continue;
-      }
-      auto& value = out[t];
-      value.u64 = reg_data.at(t);
-      if ((value.u64 >> 32) == 0xffffffff) {
-        DPN(2, "0x" << std::hex << value.u32 << std::dec);
-      } else {
-        DPN(2, "0x" << std::hex << value.u64 << std::dec);
-      }
+    const auto& src = slot.freg_file[reg.idx];
+    for (uint32_t t = 0; t < num_threads_; ++t) {
+      out[t].u64 = src[t];
     }
-    DPN(2, "}" << std::endl);
   } break;
+  case RegType::None:
 #ifdef EXT_V_ENABLE
   case RegType::Vector:
-    // Vector regfile lives in VecUnit::Impl, not here.
-    DPH(2, "Src" << src_index << " Reg: " << reg << " (vector — owned by VecUnit)" << std::endl);
-    break;
 #endif
+    break;
   default:
     std::abort();
-    break;
   }
 }
 
@@ -177,7 +148,7 @@ void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
       bank.at(t) = trace->dst_data[t].i;
       DPN(2, "0x" << std::hex << trace->dst_data[t].u << std::dec);
     }
-    DPN(2, "}" << std::endl);
+    DPN(2, "} (#" << std::dec << trace->uuid << ")" << std::endl);
   } break;
   case RegType::Float: {
     auto& bank = regs_.at(warp_slot).freg_file.at(rdest.idx);
@@ -195,12 +166,12 @@ void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
         DPN(2, "0x" << std::hex << trace->dst_data[t].u64 << std::dec);
       }
     }
-    DPN(2, "}" << std::endl);
+    DPN(2, "} (#" << std::dec << trace->uuid << ")" << std::endl);
   } break;
 #ifdef EXT_V_ENABLE
   case RegType::Vector:
     // Vector regfile is owned by VecUnit::Impl. Log only.
-    DPH(2, "Dest Reg: " << rdest << " (vector — owned by VecUnit)" << std::endl);
+    DPH(2, "Dest Reg: " << rdest << " (vector — owned by VecUnit) (#" << std::dec << trace->uuid << ")" << std::endl);
     break;
 #endif
   default:

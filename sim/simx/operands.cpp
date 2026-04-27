@@ -12,7 +12,9 @@
 // limitations under the License.
 
 #include "operands.h"
+#include <util.h>
 #include "core.h"
+#include "debug.h"
 #include "scheduler.h"
 
 using namespace vortex;
@@ -21,6 +23,71 @@ using namespace vortex;
 inline static constexpr uint32_t wid_to_opc_idx(uint32_t wid) {
   return (wid / ISSUE_WIDTH) % NUM_OPCS;
 }
+
+namespace {
+
+// Emit a "DEBUG SrcN Reg: <reg>={values...} (#uuid)" line for trace_csv.py.
+// Format mirrors the previous in-OpcUnit print so consumers don't break.
+inline void log_src_operand(uint32_t src_index,
+                            const RegOpd& reg,
+                            const std::vector<reg_data_t>& values,
+                            const ThreadMask& tmask,
+                            uint64_t uuid) {
+  // All five params are referenced only inside DPH/DPN, which expand to
+  // no-ops under NDEBUG. Suppress unused-warnings in release builds.
+  __unused(src_index);
+  __unused(reg);
+  __unused(values);
+  __unused(tmask);
+  __unused(uuid);
+  switch (reg.type) {
+  case RegType::None:
+    break;
+  case RegType::Integer: {
+    DPH(2, "Src" << src_index << " Reg: " << reg << "={");
+    for (uint32_t t = 0; t < tmask.size(); ++t) {
+      if (t) DPN(2, ", ");
+      if (!tmask.test(t)) {
+        DPN(2, "-");
+        continue;
+      }
+      DPN(2, "0x" << std::hex << values[t].u << std::dec);
+    }
+    DPN(2, "} (#" << std::dec << uuid << ")" << std::endl);
+  } break;
+  case RegType::Float: {
+    DPH(2, "Src" << src_index << " Reg: " << reg << "={");
+    for (uint32_t t = 0; t < tmask.size(); ++t) {
+      if (t) DPN(2, ", ");
+      if (!tmask.test(t)) {
+        DPN(2, "-");
+        continue;
+      }
+      // NaN-boxed single-precision value lives in the low 32b; print just
+      // those bits so the trace doesn't show the box pattern as noise.
+      if ((values[t].u64 >> 32) == 0xffffffff) {
+        DPN(2, "0x" << std::hex << values[t].u32 << std::dec);
+      } else {
+        DPN(2, "0x" << std::hex << values[t].u64 << std::dec);
+      }
+    }
+    DPN(2, "} (#" << std::dec << uuid << ")" << std::endl);
+  } break;
+#ifdef EXT_V_ENABLE
+  case RegType::Vector:
+    // Vector regfile is owned by VecUnit; per-thread values aren't visible
+    // here, so just record the access for the trace.
+    DPH(2, "Src" << src_index << " Reg: " << reg
+        << " (vector — owned by VecUnit) (#" << std::dec << uuid << ")"
+        << std::endl);
+    break;
+#endif
+  default:
+    std::abort();
+  }
+}
+
+} // namespace
 
 Operands::Operands(const SimContext &ctx, const char* name, Core* core)
     : SimObject<Operands>(ctx, name)
@@ -96,16 +163,19 @@ void Operands::fetch_operands(instr_trace_t* trace) {
   assert(trace != nullptr);
   auto* opc = opc_units_.at(wid_to_opc_idx(trace->wid)).get();
 
-  // Operand snapshot uses the warp's current tmask.
+  // Operand snapshot uses the warp's current tmask. trace->src_data is
+  // pre-sized in instr_trace_t's constructor, so read_src is a tight
+  // copy with no per-call allocation. None entries keep their default
+  // values — downstream units gate per-source consumption on
+  // trace->src_regs[i].type so default values are never read.
   auto& tmask = core_->scheduler().warp(trace->wid).tmask;
-  // Resize to NUM_SRC_REGS; clear unused entries so unit code can reference them.
-  trace->src_data.resize(NUM_SRC_REGS);
   for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
-    if (trace->src_regs[i].type == RegType::None) {
-      trace->src_data[i].clear();
+    if (trace->src_regs[i].type == RegType::None)
       continue;
-    }
-    opc->read_src(trace->src_data[i], trace->wid, i, trace->src_regs[i], tmask);
+    opc->read_src(trace->src_data[i], trace->wid, i, trace->src_regs[i]);
+    // Per-instruction trace line consumed by ci/trace_csv.py to match
+    // each Src to its uuid.
+    log_src_operand(i, trace->src_regs[i], trace->src_data[i], tmask, trace->uuid);
   }
 }
 

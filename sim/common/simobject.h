@@ -72,6 +72,12 @@ public:
   virtual uint32_t size() const = 0;
   virtual uint32_t capacity() const = 0;
 
+  // Process-global count of packets that have been sent but not yet consumed
+  static uint64_t& inflight_count() {
+    static uint64_t count = 0;
+    return count;
+  }
+
 protected:
   explicit SimChannelBase(SimObjectBase* module)
       : module_(module)
@@ -345,6 +351,7 @@ protected:
       sink_->reserve();
     } else {
       ++pending_count_;
+      ++SimChannelBase::inflight_count();
     }
   }
 
@@ -385,7 +392,10 @@ private:
   bool queue_empty() const { return storage_.empty(); }
   uint32_t queue_size() const { return storage_.size(); }
   const Pkt& queue_front() const { return storage_.front(); }
-  void queue_pop() { storage_.pop(); }
+  void queue_pop() {
+    storage_.pop();
+    --SimChannelBase::inflight_count();
+  }
   void queue_push(const Pkt& pkt) { storage_.push(pkt); }
 
   RingQueue<Pkt> storage_;
