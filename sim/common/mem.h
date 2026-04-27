@@ -230,7 +230,9 @@ public:
 
   void tlbRm(uint64_t vaddr);
   void tlbFlush() {
-    tlb_.clear();
+    for (auto& entry : tlb_) {
+      entry.valid = false;
+    }
   }
 
 private:
@@ -268,13 +270,15 @@ private:
   };
 
   struct TLBEntry {
-    TLBEntry() {}
+    TLBEntry() : valid(false) {}
   #ifdef VM_ENABLE
-    TLBEntry(uint32_t pfn, uint32_t flags, uint64_t size_bits)
-      : pfn(pfn)
+    TLBEntry(uint64_t vpn, uint32_t pfn, uint32_t flags, uint64_t size_bits)
+      : vpn(vpn)
+      , pfn(pfn)
       , flags(flags)
       , mru_bit(true)
       , size_bits (size_bits)
+      , valid(true)
     {
       d = bit(7);
       a = bit(6);
@@ -290,18 +294,24 @@ private:
         return (flags) & (1 << idx);
     }
 
+    uint64_t vpn;
     uint32_t pfn;
     uint32_t flags;
     bool mru_bit;
     uint64_t size_bits;
+    bool valid;
     bool d, a, g, u, x, w, r, v;
   #else
-    TLBEntry(uint32_t pfn, uint32_t flags)
-      : pfn(pfn)
+    TLBEntry(uint64_t vpn, uint32_t pfn, uint32_t flags)
+      : vpn(vpn)
+      , pfn(pfn)
       , flags(flags)
+      , valid(true)
     {}
+    uint64_t vpn;
     uint32_t pfn;
     uint32_t flags;
+    bool valid;
   #endif
   };
 
@@ -320,7 +330,10 @@ private:
 
 
 
-  std::unordered_map<uint64_t, TLBEntry> tlb_;
+  // Flat array replacing the unordered_map to model a hardware TLB. Linear
+  // scan over a small fixed-size buffer is cheaper than hash lookup at this
+  // size, and avoids per-insert allocation churn.
+  std::vector<TLBEntry> tlb_;
   uint64_t  pageSize_;
   ADecoder  decoder_;
 #ifndef VM_ENABLE
@@ -377,11 +390,11 @@ public:
   void loadVxImage(const char* filename);
 
   uint8_t& operator[](uint64_t address) {
-    return *this->get(address);
+    return *this->get(address, true); // mutable access forces allocation
   }
 
   const uint8_t& operator[](uint64_t address) const {
-    return *this->get(address);
+    return *this->get(address, false); // returns shared zero_page_ if unallocated
   }
 
   void set_acl(uint64_t addr, uint64_t size, int flags);
@@ -392,13 +405,30 @@ public:
 
 private:
 
-  uint8_t *get(uint64_t address) const;
+  // `allocate=false` returns a pointer into `zero_page_` for unmapped
+  // addresses without growing the page set — read paths use this to avoid
+  // allocator churn on never-written memory. `allocate=true` mints a real
+  // page on demand for write paths.
+  uint8_t *get(uint64_t address, bool allocate) const;
 
   uint64_t capacity_;
   uint32_t page_bits_;
-  mutable std::unordered_map<uint64_t, uint8_t*> pages_;
-  mutable uint8_t* last_page_;
-  mutable uint64_t last_page_index_;
+
+  // 2-level sparse chunk directory: chunk_index → CHUNK_SIZE-entry array of
+  // page pointers. Adjacent pages share a contiguous chunk array for better
+  // locality than a flat page-indexed map; `last_chunk_` caches the most
+  // recently touched chunk for sequential access patterns.
+  static constexpr int CHUNK_BITS = 10;
+  static constexpr int CHUNK_SIZE = 1 << CHUNK_BITS;
+  mutable std::unordered_map<uint64_t, uint8_t**> chunks_;
+  mutable uint8_t** last_chunk_;
+  mutable uint64_t last_chunk_index_;
+
+  // Shared "0xbaadf00d" sentinel page returned for read-without-allocate.
+  // Mutable access through operator[] or `get(addr, true)` will mint a real
+  // page instead.
+  uint8_t* zero_page_;
+
   ACLManager acl_mngr_;
   bool check_acl_;
 };

@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "cache.h"
+#include "mem_block_pool.h"
 #include "debug.h"
 #include "types.h"
 #include <cstring>
@@ -119,8 +120,16 @@ struct line_t {
 };
 
 static inline void line_merge(line_t& line, const std::shared_ptr<mem_block_t>& src, uint64_t byteen) {
-  if (!line.data) {
-    line.data = std::make_shared<mem_block_t>();
+  // Copy-on-write only when shared. line.data may be aliased with in-flight
+  // responses, fill payloads, or writeback messages; mutating in place would
+  // corrupt them. When this cache line is the sole owner, mutate in place to
+  // avoid a heap allocation on the hot path.
+  if (line.data) {
+    if (line.data.use_count() > 1) {
+      line.data = make_mem_block_copy(*line.data);
+    }
+  } else {
+    line.data = make_mem_block();
     std::memset(line.data->data(), 0, line.data->size());
   }
   if (src) {
@@ -146,9 +155,11 @@ struct set_t {
     fifo_ptr = 0;
   }
 
-  // tag lookup for core/replay access; returns hit id (or -1), fills free/repl line ids
-  int tag_lookup(uint64_t tag, uint8_t policy, uint32_t rand_idx,
-                 int *free_line_id, int *repl_line_id) {
+  // Pure tag lookup: returns hit id (or -1), fills free/repl line ids. No mutation.
+  // Callers must invoke update_lru() *after* all stall checks pass, otherwise
+  // PLRU counters drift on retry.
+  int tag_match(uint64_t tag, uint8_t policy, uint32_t rand_idx,
+                int *free_line_id, int *repl_line_id) const {
     int hit_line_id = -1;
     *free_line_id = -1;
     *repl_line_id = 0;
@@ -158,7 +169,7 @@ struct set_t {
     bool plru_chosen = false;
 
     for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
-      auto &line = lines.at(i);
+      const auto &line = lines.at(i);
 
       if (!line.valid) {
         if (*free_line_id == -1)
@@ -167,22 +178,14 @@ struct set_t {
       }
       any_valid = true;
 
-      // PLRU victim candidate: max counter among valid ways.
+      if (line.tag == tag)
+        hit_line_id = i;
+
       if (policy == Cache::PLRU) {
         if (!plru_chosen || line.lru_ctr >= max_cnt) {
           max_cnt = line.lru_ctr;
           *repl_line_id = i;
           plru_chosen = true;
-        }
-        if (line.tag == tag) {
-          hit_line_id = i;
-          line.lru_ctr = 0;
-        } else {
-          ++line.lru_ctr;
-        }
-      } else {
-        if (line.tag == tag) {
-          hit_line_id = i;
         }
       }
     }
@@ -203,6 +206,21 @@ struct set_t {
     }
 
     return hit_line_id;
+  }
+
+  // Apply PLRU age update for a tag access. Pass hit_line_id == -1 for a miss
+  // (all valid lines age, no reset). Call once per *committed* access.
+  void update_lru(int hit_line_id) {
+    for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
+      auto &line = lines.at(i);
+      if (!line.valid)
+        continue;
+      if ((int)i == hit_line_id) {
+        line.lru_ctr = 0;
+      } else {
+        ++line.lru_ctr;
+      }
+    }
   }
 
   // Choose a victim line for installing a fill. Does NOT mutate state.
@@ -399,18 +417,27 @@ public:
     return root_entry;
   }
 
-  // Dequeue the next ready replay request
+  // Dequeue the next ready replay request. Reads are dequeued before writes
+  // so that read responses capture the pre-write cached line state. A
+  // write-through wt-merge entry must not modify the line until any reads
+  // pending on the same fill have completed and captured their response data.
   void dequeue(bank_req_t *out) {
     assert(ready_reqs_ > 0);
+    mshr_entry_t *picked = nullptr;
     for (auto &entry : entries_) {
-      if (entry.bank_req.type == bank_req_t::Replay) {
-        *out = entry.bank_req;
-        entry.bank_req.type = bank_req_t::None;
-        --ready_reqs_;
-        --size_;
+      if (entry.bank_req.type != bank_req_t::Replay)
+        continue;
+      if (!entry.bank_req.write) {
+        picked = &entry;
         break;
       }
+      if (picked == nullptr)
+        picked = &entry;
     }
+    *out = picked->bank_req;
+    picked->bank_req.type = bank_req_t::None;
+    --ready_reqs_;
+    --size_;
   }
 
   void reset() {
@@ -589,22 +616,27 @@ private:
     } break;
 
     case bank_req_t::Replay: {
-      // Check core output backpressure
+      // Check core output backpressure first — no mutation before all stalls clear.
       if (need_core_rsp(bank_req) && this->core_rsp_out.full())
         return; // stall
 
-      // Replay must re-access tags to update LRU and apply the original request
       uint32_t set_id = params_.addr_set_id(bank_req.addr);
       uint64_t addr_tag = params_.addr_tag(bank_req.addr);
 
       auto &set = sets_.at(set_id);
       int32_t free_line_id = -1;
       int32_t repl_line_id = 0;
-      int hit_line_id = set.tag_lookup(addr_tag, config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
+      int hit_line_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
       assert(hit_line_id != -1);
 
       auto &hit_line = set.lines.at(hit_line_id);
       if (bank_req.write) {
+        // Write-through Replay is only used for the wt-merge path (the core
+        // response and memory write were already issued at miss time). Guard
+        // the invariant so a future code change doesn't silently drop a store.
+        if (!config_.write_back) {
+          assert(bank_req.skip_core_rsp && "WT replay without pre-sent store");
+        }
         // Write-miss completed by Fill; Replay completes the store by merging
         // the bytes into the (newly filled) line. Mark dirty only for write-back.
         line_merge(hit_line, bank_req.data, bank_req.byteen);
@@ -620,6 +652,10 @@ private:
         this->core_rsp_out.send(core_rsp);
         DT(3, this->name() << " replay: " << core_rsp);
       }
+
+      // Commit LRU update last — Replay never restalls past this point.
+      if (config_.repl_policy == Cache::PLRU)
+        set.update_lru(hit_line_id);
     } break;
 
     case bank_req_t::Core: {
@@ -630,20 +666,28 @@ private:
 
       int32_t free_line_id = -1;
       int32_t repl_line_id = 0;
-      int hit_line_id = set.tag_lookup(addr_tag, config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
+      // Pure tag match — no LRU mutation. update_lru() runs only after all
+      // stall checks pass, otherwise PLRU counters drift on every retry.
+      int hit_line_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
 
       if (hit_line_id != -1) {
         //
         // Hit handling
         //
+        // Gather all stall conditions BEFORE any mutation. Otherwise a stall
+        // after line_merge or mem_req_out.send leaves the request in the pipe
+        // and replays them on the next tick, causing duplicate writes / merges.
+        const bool need_rsp = need_core_rsp(bank_req);
+        const bool need_mem = bank_req.write && !config_.write_back;
+        if (need_mem && this->mem_req_out.full())
+          return; // stall
+        if (need_rsp && this->core_rsp_out.full())
+          return; // stall
+
         auto &hit_line = set.lines.at(hit_line_id);
-        // Write-through: forward store to memory
         if (bank_req.write) {
+          line_merge(hit_line, bank_req.data, bank_req.byteen);
           if (!config_.write_back) {
-            if (this->mem_req_out.full())
-              return; // stall
-            // Apply write to the cached copy too so subsequent reads get fresh data.
-            line_merge(hit_line, bank_req.data, bank_req.byteen);
             MemReq mem_req;
             mem_req.addr = params_.mem_addr(bank_id_, set_id, addr_tag);
             mem_req.write = true;
@@ -654,16 +698,11 @@ private:
             this->mem_req_out.send(mem_req);
             DT(3, this->name() << " writethrough: " << mem_req);
           } else {
-            // Write-back: byteen-merge into the line and mark dirty.
-            line_merge(hit_line, bank_req.data, bank_req.byteen);
             hit_line.dirty = true;
           }
         }
 
-        // Send response to core
-        if (need_core_rsp(bank_req)) {
-          if (this->core_rsp_out.full())
-            return; // stall
+        if (need_rsp) {
           MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
           if (!bank_req.write) {
             core_rsp.data = hit_line.data;
@@ -684,10 +723,16 @@ private:
           uint32_t pending_root_id = 0;
           bool fill_pending = mshr_.lookup(set_id, addr_tag, &pending_root_id);
 
-          // Check output backpressure
+          const bool need_rsp = need_core_rsp(bank_req);
+          // All stall checks first — anything past this point commits.
           if (this->mem_req_out.full())
             return; // stall
-          if (need_core_rsp(bank_req) && this->core_rsp_out.full())
+          if (need_rsp && this->core_rsp_out.full())
+            return; // stall
+          // The wt-merge replay enqueue needs an MSHR slot, but processInputs()
+          // does not reserve one for write-through writes. Stall here rather
+          // than asserting at enqueue.
+          if (fill_pending && mshr_.full())
             return; // stall
 
           {
@@ -702,7 +747,7 @@ private:
             DT(3, this->name() << " writethrough: " << mem_req);
           }
 
-          if (need_core_rsp(bank_req)) {
+          if (need_rsp) {
             MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
             this->core_rsp_out.send(core_rsp);
             DT(3, this->name() << " core-rsp: " << core_rsp);
@@ -712,7 +757,6 @@ private:
             // Enqueue a no-response replay-write so line_merge runs post-fill.
             // The core response was already sent above; mark this entry to skip
             // it on replay.
-            assert(!mshr_.full());
             bank_req_t merge_req = bank_req;
             merge_req.skip_core_rsp = true;
             mshr_.enqueue(merge_req, set_id, addr_tag);
@@ -751,6 +795,11 @@ private:
         else
           ++perf_stats_.read_misses;
       }
+
+      // Commit LRU update last — request is past all stall points and will pop.
+      // hit_line_id == -1 (miss) ages all valid lines without resetting any.
+      if (config_.repl_policy == Cache::PLRU)
+        set.update_lru(hit_line_id);
 
       // Update pending MSHR size
       --pending_mshr_size_;

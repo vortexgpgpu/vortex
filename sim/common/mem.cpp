@@ -143,15 +143,18 @@ MemoryUnit::MemoryUnit(uint64_t pageSize)
   , TLB_MISS(0)
   , TLB_EVICT(0)
   , PTW(0)
-  , satp_(NULL) {};
-#else
-  {
-    if (pageSize != 0)
-    {
-      tlb_[0] = TLBEntry(0, 077);
-    }
+  , satp_(NULL)
+#endif
+{
+  tlb_.resize(TLB_SIZE);
+#ifndef VM_ENABLE
+  if (pageSize != 0) {
+    // Bootstrap identity entry — preserves prior MemoryUnit behavior when
+    // VM is compiled out but a non-zero pageSize is passed.
+    tlb_[0] = TLBEntry(0, 0, 077);
   }
 #endif
+}
 
 void MemoryUnit::attach(MemDevice &m, uint64_t start, uint64_t end) {
   decoder_.map(start, end, m);
@@ -160,80 +163,59 @@ void MemoryUnit::attach(MemDevice &m, uint64_t start, uint64_t end) {
 
 #ifdef VM_ENABLE
 std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits) {
-
-  //Find entry while accounting for different sizes.
-  for (auto entry : tlb_)
-  {
-    if(entry.first == vAddr >> entry.second.size_bits)
-    {
-        *size_bits = entry.second.size_bits;
+  // Linear scan over the fixed-size TLB array (typical TLB_SIZE = 16-64 fits
+  // in 1-2 cache lines — cheaper than hash lookup, and matches RTL behavior).
+  for (auto& entry : tlb_) {
+    if (entry.valid && entry.vpn == (vAddr >> entry.size_bits)) {
+      *size_bits = entry.size_bits;
         vAddr = vAddr >> (*size_bits);
+
+      // Hit: set mru bit on this entry.
+      entry.mru_bit = true;
+
+      // If every valid entry is now MRU, clear them all and re-mark just
+      // this one — keeps the eviction selector working.
+      bool all_mru = true;
+      for (const auto& e : tlb_) {
+        if (e.valid && !e.mru_bit) {
+          all_mru = false;
+          break;
     }
   }
-
-
-  auto iter = tlb_.find(vAddr);
-  if (iter != tlb_.end()) {
-    TLBEntry e = iter->second;
-
-    //Set mru bit if it is a hit.
-    iter->second.mru_bit = true;
-
-    //If at full capacity and no other unset bits.
-    // Clear all bits except the one we just looked up.
-    if (tlb_.size() == TLB_SIZE)
-    {
-      // bool no_cleared = true;
-      // for (auto& entry : tlb_)
-      // {
-      //   no_cleared = no_cleared & entry.second.mru_bit;
-      // }
-
-      // if(no_cleared)
-      // {
-        for (auto& entry : tlb_)
-        {
-          entry.second.mru_bit = false;
+      if (all_mru) {
+        for (auto& e : tlb_) {
+          e.mru_bit = false;
         }
-        iter->second.mru_bit = true;
-      //}
+        entry.mru_bit = true;
+    }
 
-    }
-    //Check access permissions.
-    if ( (type == ACCESS_TYPE::FETCH) & ((e.r == 0) | (e.x == 0)) )
-    {
+      // Permission check.
+      if ((type == ACCESS_TYPE::FETCH) & ((entry.r == 0) | (entry.x == 0))) {
+        throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+      } else if ((type == ACCESS_TYPE::LOAD) & (entry.r == 0)) {
+        throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+      } else if ((type == ACCESS_TYPE::STORE) & (entry.w == 0)) {
       throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
     }
-    else if ( (type == ACCESS_TYPE::LOAD) & (e.r == 0) )
-    {
-      throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+      return std::make_pair(true, entry.pfn);
     }
-    else if ( (type == ACCESS_TYPE::STORE) & (e.w == 0) )
-    {
-      throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
     }
-    else
-    {
-      //TLB Hit
-      return std::make_pair(true, iter->second.pfn);
-    }
-  } else {
-    //TLB Miss
+  // TLB miss.
     return std::make_pair(false, 0);
-  }
 }
 #else
 MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
-  auto iter = tlb_.find(vAddr / pageSize_);
-  if (iter != tlb_.end()) {
-    if (iter->second.flags & flagMask)
-      return iter->second;
-    else {
+  uint64_t vpn = vAddr / pageSize_;
+  for (const auto& entry : tlb_) {
+    if (entry.valid && entry.vpn == vpn) {
+      if (entry.flags & flagMask) {
+        return entry;
+      } else {
       throw PageFault(vAddr, false);
     }
-  } else {
-    throw PageFault(vAddr, true);
   }
+  }
+  throw PageFault(vAddr, true);
 }
 
 uint64_t MemoryUnit::toPhyAddr(uint64_t addr, uint32_t flagMask) {
@@ -309,37 +291,53 @@ bool MemoryUnit::amo_check(uint64_t addr) {
 #ifdef VM_ENABLE
 
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits) {
-  // HW: evict TLB by Most Recently Used
-  if (tlb_.size() == TLB_SIZE - 1) {
-    for (auto& entry : tlb_)
-    {
-      entry.second.mru_bit = false;
+  uint64_t vpn = virt / pageSize_;
+
+  // 1. Take the first invalid slot if any.
+  for (auto& entry : tlb_) {
+    if (!entry.valid) {
+      entry = TLBEntry(vpn, phys / pageSize_, flags, size_bits);
+      return;
+    }
     }
 
-  } else if (tlb_.size() == TLB_SIZE) {
-    uint64_t del;
-    for (auto entry : tlb_) {
-      if (!entry.second.mru_bit)
-      {
-        del = entry.first;
-        break;
-      }
-    }
-    tlb_.erase(tlb_.find(del));
+  // 2. All slots valid: evict the first non-MRU entry (HW pseudo-LRU).
+  for (auto& entry : tlb_) {
+    if (!entry.mru_bit) {
+      entry = TLBEntry(vpn, phys / pageSize_, flags, size_bits);
     TLB_EVICT++;
+      return;
   }
-  tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags, size_bits);
+  }
+
+  // 3. Fallback: every entry is MRU (lookup() should have cleared this).
+  // Drop slot 0 deterministically rather than abort.
+  tlb_[0] = TLBEntry(vpn, phys / pageSize_, flags, size_bits);
+  TLB_EVICT++;
 }
 #else
 
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags) {
-  tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags);
+  uint64_t vpn = virt / pageSize_;
+  for (auto& entry : tlb_) {
+    if (!entry.valid) {
+      entry = TLBEntry(vpn, phys / pageSize_, flags);
+      return;
+    }
+  }
+  // Fallback eviction when full.
+  tlb_[0] = TLBEntry(vpn, phys / pageSize_, flags);
 }
 #endif
 
 void MemoryUnit::tlbRm(uint64_t va) {
-  if (tlb_.find(va / pageSize_) != tlb_.end())
-    tlb_.erase(tlb_.find(va / pageSize_));
+  uint64_t vpn = va / pageSize_;
+  for (auto& entry : tlb_) {
+    if (entry.valid && entry.vpn == vpn) {
+      entry.valid = false;
+      break;
+    }
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -422,8 +420,8 @@ bool ACLManager::check(uint64_t addr, uint64_t size, int flags) const {
 RAM::RAM(uint64_t capacity, uint32_t page_size)
   : capacity_(capacity)
   , page_bits_(log2ceil(page_size))
-  , last_page_(nullptr)
-  , last_page_index_(0)
+  , last_chunk_(nullptr)
+  , last_chunk_index_(0)
   , check_acl_(false) {
   assert(ispow2(page_size));
   if (capacity != 0) {
@@ -431,23 +429,45 @@ RAM::RAM(uint64_t capacity, uint32_t page_size)
     assert(page_size <= capacity);
     assert(0 == (capacity % page_size));
   }
+
+  // Initialize the shared "0xbaadf00d" sentinel page once. Reads of
+  // never-written addresses return a pointer into this page, so we never
+  // grow the page set just to satisfy reads.
+  zero_page_ = new uint8_t[page_size];
+  for (uint32_t i = 0; i < page_size; ++i) {
+    zero_page_[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
+  }
 }
 
 RAM::~RAM() {
   this->clear();
+  delete[] zero_page_;
 }
 
 void RAM::clear() {
-  for (auto& page : pages_) {
-    delete[] page.second;
+  for (auto& entry : chunks_) {
+    for (int i = 0; i < CHUNK_SIZE; ++i) {
+      delete[] entry.second[i];
   }
+    delete[] entry.second;
+  }
+  chunks_.clear();
+  last_chunk_ = nullptr;
 }
 
 uint64_t RAM::size() const {
-  return uint64_t(pages_.size()) << page_bits_;
+  uint64_t allocated_pages = 0;
+  for (const auto& entry : chunks_) {
+    for (int i = 0; i < CHUNK_SIZE; ++i) {
+      if (entry.second[i]) {
+        allocated_pages++;
+      }
+    }
+  }
+  return allocated_pages << page_bits_;
 }
 
-uint8_t *RAM::get(uint64_t address) const {
+uint8_t *RAM::get(uint64_t address, bool allocate) const {
   if (capacity_ != 0 && address >= capacity_) {
     throw OutOfRange();
   }
@@ -455,37 +475,47 @@ uint8_t *RAM::get(uint64_t address) const {
   uint32_t page_offset = address & (page_size - 1);
   uint64_t page_index  = address >> page_bits_;
 
-  uint8_t* page;
-  if (last_page_ && last_page_index_ == page_index) {
-    page = last_page_;
+  uint64_t chunk_index  = page_index >> CHUNK_BITS;
+  uint32_t chunk_offset = page_index & (CHUNK_SIZE - 1);
+
+  uint8_t** chunk;
+  if (last_chunk_ && last_chunk_index_ == chunk_index) {
+    chunk = last_chunk_;
   } else {
-    auto it = pages_.find(page_index);
-    if (it != pages_.end()) {
-      page = it->second;
+    auto it = chunks_.find(chunk_index);
+    if (it != chunks_.end()) {
+      chunk = it->second;
     } else {
-      uint8_t *ptr = new uint8_t[page_size];
-      // set uninitialized data to "baadf00d"
-      for (uint32_t i = 0; i < page_size; ++i) {
-        ptr[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
-      }
-      pages_.emplace(page_index, ptr);
-      page = ptr;
+      if (!allocate)
+        return zero_page_ + page_offset;
+      chunk = new uint8_t*[CHUNK_SIZE](); // zero-initialized chunk directory
+      chunks_.emplace(chunk_index, chunk);
     }
-    last_page_ = page;
-    last_page_index_ = page_index;
+    last_chunk_ = chunk;
+    last_chunk_index_ = chunk_index;
+  }
+
+  uint8_t* page = chunk[chunk_offset];
+  if (!page) {
+    if (!allocate)
+      return zero_page_ + page_offset;
+    page = new uint8_t[page_size];
+      for (uint32_t i = 0; i < page_size; ++i) {
+      page[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
+      }
+    chunk[chunk_offset] = page;
   }
 
   return page + page_offset;
 }
 
 void RAM::read(void* data, uint64_t addr, uint64_t size) {
-  // printf("====%s (addr= 0x%lx, size= 0x%lx) ====\n", __PRETTY_FUNCTION__,addr,size);
   if (check_acl_ && acl_mngr_.check(addr, size, 0x1) == false) {
     throw BadAddress();
   }
   uint8_t* d = (uint8_t*)data;
   for (uint64_t i = 0; i < size; i++) {
-    d[i] = *this->get(addr + i);
+    d[i] = *this->get(addr + i, false); // read-only — no allocation
   }
 }
 
@@ -495,7 +525,7 @@ void RAM::write(const void* data, uint64_t addr, uint64_t size) {
   }
   const uint8_t* d = (const uint8_t*)data;
   for (uint64_t i = 0; i < size; i++) {
-    *this->get(addr + i) = d[i];
+    *this->get(addr + i, true) = d[i];
   }
 }
 
@@ -616,7 +646,7 @@ void RAM::loadHexImage(const char* filename) {
         for (uint32_t i = 0; i < byteCount; i++) {
           uint32_t addr  = nextAddr + i;
           uint32_t value = hToI(line + 9 + i * 2, 2);
-          *this->get(addr) = value;
+          *this->get(addr, true) = value;
         }
         break;
       case 2:

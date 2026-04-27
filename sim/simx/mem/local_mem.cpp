@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "local_mem.h"
+#include "mem_block_pool.h"
 #include "core.h"
 #include <bitmanip.h>
 #include <vector>
@@ -112,7 +113,7 @@ public:
 				// send xbar response — for reads, capture the line payload.
 				MemRsp bank_rsp{bank_req.tag, bank_req.cid, bank_req.uuid};
 				if (!bank_req.write) {
-					auto rsp_data = std::make_shared<mem_block_t>();
+					auto rsp_data = make_mem_block();
 					uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(MEM_BLOCK_SIZE - 1);
 					ram_.read(rsp_data->data(), line_addr, MEM_BLOCK_SIZE);
 					bank_rsp.data = rsp_data;

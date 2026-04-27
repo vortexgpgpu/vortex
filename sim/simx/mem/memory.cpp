@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <dram_sim.h>
 
+#include "mem_block_pool.h"
 #include "constants.h"
 #include "types.h"
 #include "debug.h"
@@ -134,7 +135,7 @@ public:
 					}
 				} else {
 					// Capture the line at request time; response carries it back.
-					rsp_data = std::make_shared<mem_block_t>();
+					rsp_data = make_mem_block();
 					ram_->read(rsp_data->data(), line_addr, MEM_BLOCK_SIZE);
 				}
 			}

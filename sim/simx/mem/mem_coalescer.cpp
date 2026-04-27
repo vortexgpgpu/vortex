@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "mem_coalescer.h"
+#include "mem_block_pool.h"
 #include <cstring>
 
 using namespace vortex;
@@ -148,7 +149,7 @@ void MemCoalescer::on_tick() {
           if (!cur_mask.test(j) || !in_req.data.at(j))
             continue;
           if (!merged) {
-            merged = std::make_shared<mem_block_t>();
+            merged = make_mem_block();
             std::memset(merged->data(), 0, merged->size());
           }
           uint64_t lane_be = in_req.byteen.at(j);

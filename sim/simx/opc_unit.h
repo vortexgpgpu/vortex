@@ -39,12 +39,15 @@ public:
   // wid via wid_to_opc_slot. No-op when trace->dst_data is empty.
   void writeback(instr_trace_t* trace, uint32_t wid);
 
-  // Read one source operand for `wid` into `out[t]` (sized by tmask).
+  // Read one source operand for `wid` into `out[t]` (sized to num_threads).
+  // Pure regfile primitive — values for inactive lanes are read too; the
+  // downstream unit gates per-lane work on trace->tmask so masked-out
+  // values are never consumed. Trace logging is done by the caller
+  // (Operands::fetch_operands), which owns the per-instruction view.
   void read_src(std::vector<reg_data_t>& out,
                 uint32_t wid,
                 uint32_t src_index,
-                const RegOpd& reg,
-                const ThreadMask& tmask) const;
+                const RegOpd& reg) const;
 
   uint32_t total_stalls() const {
     return total_stalls_;

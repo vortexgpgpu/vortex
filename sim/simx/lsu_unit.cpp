@@ -24,6 +24,7 @@
 #include "processor_impl.h"
 #include "constants.h"
 #include "cache.h"
+#include "mem_block_pool.h"
 #include "VX_types.h"
 #include "VX_config.h"
 
@@ -556,7 +557,7 @@ void LsuUnit::on_tick() {
 				lane_entries.at(i) = entry;
 				if (is_write && entry.size > 0) {
 					// Package the lane's write value into a per-lane block + byteen.
-					auto block = std::make_shared<mem_block_t>();
+					auto block = make_mem_block();
 					std::memset(block->data(), 0, block->size());
 					uint32_t off = entry.addr & (MEM_BLOCK_SIZE - 1);
 					for (uint32_t b = 0; b < entry.size; ++b) {
