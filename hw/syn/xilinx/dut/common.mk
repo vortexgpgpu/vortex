@@ -20,7 +20,7 @@ JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
 CONFIGS += -DSYNTHESIS -DVIVADO -DNDEBUG
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/hw/VX_config.toml --cflags='$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS)')
 
 # Power analysis via SAIF switching-activity annotation.
 # SAIF_FILE : path to the SAIF file produced by rtlsim with SAIF=1 (required for 'power' target)

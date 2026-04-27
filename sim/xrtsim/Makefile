@@ -8,7 +8,7 @@ AFU_DIR := $(RTL_DIR)/afu/xrt
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(SRC_DIR) -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(DESTDIR)
+CXXFLAGS += -I$(SRC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR) -I$(DESTDIR)
 CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
@@ -38,9 +38,9 @@ DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
 CONFIGS += -DSIMULATION -DSV_DPI
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/hw/VX_config.toml --cflags='$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS)')
 
-SRCS = $(SW_COMMON_DIR)/util.cpp $(SW_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/dram_sim.cpp
+SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp
 SRCS += $(DPI_DIR)/dpi_util.cpp $(DPI_DIR)/dpi_float.cpp
 SRCS += $(SRC_DIR)/xrt_c.cpp $(SRC_DIR)/xrt_sim.cpp
 
@@ -52,7 +52,7 @@ ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
 	FPU_INCLUDE += -y $(THIRD_PARTY_DIR)/cvfpu/src/stubs
 endif
-RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR)
 
 # Add TCU extension sources

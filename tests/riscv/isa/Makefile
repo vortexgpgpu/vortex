@@ -15,7 +15,7 @@ TEST_DIR := $(VORTEX_HOME)/tests/riscv/isa
 # Without atomics support, AMO instructions trap and the test fails. Resolve
 # the post-preprocessor value of EXT_A_ENABLED rather than grepping (the
 # header always lists both 0 and 1 branches inside an #ifdef block).
-HAS_EXT_A := $(shell echo 'EXT_A_ENABLED' | gcc -E -P -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
+HAS_EXT_A := $(shell echo 'EXT_A_ENABLED' | gcc -E -P -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
 
 TESTS_32I := $(filter-out $(TEST_DIR)/rv32ui-p-ma_data.bin $(TEST_DIR)/rv32ui-p-fence_i.bin, $(wildcard $(TEST_DIR)/rv32ui-p-*.bin))
 TESTS_32M := $(wildcard $(TEST_DIR)/rv32um-p-*.bin)

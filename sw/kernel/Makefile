@@ -1,4 +1,4 @@
-ROOT_DIR := $(realpath ..)
+ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
 ifeq ($(XLEN),64)
@@ -7,8 +7,8 @@ else
 CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
-INC_DIR := $(VORTEX_HOME)/kernel/include
-SRC_DIR := $(VORTEX_HOME)/kernel/src
+INC_DIR := $(VORTEX_HOME)/sw/kernel/include
+SRC_DIR := $(VORTEX_HOME)/sw/kernel/src
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
@@ -29,7 +29,7 @@ DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -fdata-sections -ffunction-sections -D__VORTEX__
-CFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/hw
+CFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
 CFLAGS += -DXLEN_$(XLEN)
 
 PROJECT := libvortex

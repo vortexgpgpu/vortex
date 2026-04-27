@@ -7,10 +7,10 @@ DESTDIR ?= $(CURDIR)/..
 
 SYN_DIR := $(HW_DIR)/syn/altera/opae
 CONFIG_FILE := $(DESTDIR)/opae_config.stamp
-SRC_DIR := $(VORTEX_HOME)/runtime/opae
+SRC_DIR := $(VORTEX_HOME)/sw/runtime/opae
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/hw -I$(DESTDIR) -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
+CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(DESTDIR) -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
 CXXFLAGS += -DXLEN_$(XLEN)
 
 # Position independent code
@@ -29,7 +29,7 @@ ifeq ($(TARGET), opaesim)
 	CXXFLAGS += -DOPAESIM -I$(SIM_DIR)/opaesim
 else
 	BUILD_DEPS = $(ROOT_DIR)/hw/syn/altera/opae/vortex_opae.h
-	CXXFLAGS += -I$(SYN_DIR) -I$(ROOT_DIR)/hw/syn/altera/opae
+	CXXFLAGS += -I$(SYN_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw/syn/altera/opae
 endif
 
 # Debugging

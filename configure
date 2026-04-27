@@ -175,7 +175,7 @@ if [ "$OSVERSION" == "unsupported" ]; then
 fi
 
 # project subdirectories to build
-SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
+SUBDIRS=("." "!ci" "!perf" "hw*" "sw*" "sim*" "tests*")
 
 # Get the directory of the script
 SOURCE_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -191,5 +191,26 @@ fi
 
 copy_files "$SOURCE_DIR" "$CURRENT_DIR"
 
-# generate hardware configuration files
-make -C hw config
+# generate header files from toml configs:
+#   *.toml --> <build>/hw/*.vh    (Verilog)
+#   *.toml --> <build>/sw/*.h     (C++)
+mkdir -p "$CURRENT_DIR/hw" "$CURRENT_DIR/sw"
+gen_header() {
+    local toml="$1"
+    local out="$2"
+    local fmt="$3"
+    local extra="$4"
+    if [ ! -f "$out" ] || [ "$toml" -nt "$out" ] || [ "$CONFIG_STAMP" -nt "$out" ]; then
+        "$SOURCE_DIR/ci/gen_config.py" --config "$toml" --output "$out" --format "$fmt" $extra
+    fi
+}
+for toml in "$SOURCE_DIR"/*.toml; do
+    [ -f "$toml" ] || continue
+    name=$(basename -- "$toml" .toml)
+    extra=""
+    case "$name" in
+        VX_types) extra="--resolved" ;;
+    esac
+    gen_header "$toml" "$CURRENT_DIR/hw/$name.vh" verilog "$extra"
+    gen_header "$toml" "$CURRENT_DIR/sw/$name.h"  cpp     "$extra"
+done

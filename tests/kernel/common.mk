@@ -20,17 +20,17 @@ DP  = $(LLVM_VORTEX)/bin/llvm-objdump
 CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
-CFLAGS += -I$(VORTEX_HOME)/kernel/include -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
+CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CFLAGS += -DXLEN_$(XLEN) -DNDEBUG $(CONFIGS) -D__VORTEX__
 
 LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc
 LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
-LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex.a $(LIBC_LIB)
+LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/sw/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex.a $(LIBC_LIB)
 
-VX_STARTUP_SRC := $(VORTEX_HOME)/kernel/src/vx_start.S
+VX_STARTUP_SRC := $(VORTEX_HOME)/sw/kernel/src/vx_start.S
 APP_OBJS = $(addsuffix .o, $(basename $(notdir $(SRCS))))
-KERNEL_STARTUP := $(VORTEX_HOME)/kernel/scripts/kernel_startup.sh
+KERNEL_STARTUP := $(VORTEX_HOME)/sw/kernel/scripts/kernel_startup.sh
 
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
