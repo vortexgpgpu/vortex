@@ -118,9 +118,6 @@ void OpcUnit::read_src(std::vector<reg_data_t>& out,
     }
   } break;
   case RegType::None:
-#ifdef EXT_V_ENABLE
-  case RegType::Vector:
-#endif
     break;
   default:
     std::abort();
@@ -168,12 +165,6 @@ void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
     }
     DPN(2, "} (#" << std::dec << trace->uuid << ")" << std::endl);
   } break;
-#ifdef EXT_V_ENABLE
-  case RegType::Vector:
-    // Vector regfile is owned by VecUnit::Impl. Log only.
-    DPH(2, "Dest Reg: " << rdest << " (vector — owned by VecUnit) (#" << std::dec << trace->uuid << ")" << std::endl);
-    break;
-#endif
   default:
     std::cout << "Unrecognized register write back type: " << rdest.type << std::endl;
     std::abort();

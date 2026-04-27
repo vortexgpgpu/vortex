@@ -29,9 +29,6 @@
 #ifdef EXT_TCU_ENABLE
 #include "tensor_unit.h"
 #endif
-#ifdef EXT_V_ENABLE
-#include "vec_unit.h"
-#endif
 
 using namespace vortex;
 
@@ -58,9 +55,6 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   auto core_perf  = core_->perf_stats();
   switch (addr) {
   case VX_CSR_SATP:
-#ifdef VM_ENABLE
-    return core_->processor()->get_satp();
-#endif
   case VX_CSR_PMPCFG0:
   case VX_CSR_PMPADDR0:
   case VX_CSR_MSTATUS:
@@ -121,11 +115,6 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
   CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
   default:
-  #ifdef EXT_V_ENABLE
-    Word value = 0;
-    if (core_->vec_unit()->get_csr(addr, wid, tid, &value))
-      return value;
-  #endif
     if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
      || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
@@ -270,9 +259,6 @@ void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
     warp.mscratch = value;
     break;
   case VX_CSR_SATP:
-  #ifdef VM_ENABLE
-    core_->processor()->set_satp(value);
-  #endif
     break;
   case VX_CSR_MSTATUS:
   case VX_CSR_MEDELEG:
@@ -286,10 +272,6 @@ void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
   case VX_CSR_MCAUSE:
     break;
   default: {
-    #ifdef EXT_V_ENABLE
-      if (core_->vec_unit()->set_csr(addr, wid, tid, value))
-        return;
-    #endif
       std::cerr << "Error: invalid CSR write addr=0x" << std::hex << addr << ", value=0x" << value << std::dec << std::endl;
       std::flush(std::cout);
       std::abort();

@@ -29,12 +29,7 @@
 #include "lsu_mem_adapter.h"
 #include "scoreboard.h"
 
-#ifdef EXT_V_ENABLE
-#include "voperands.h"
-#include "vec_unit.h"
-#else
 #include "operands.h"
-#endif
 
 #include "dispatcher.h"
 #include "func_unit.h"
@@ -70,10 +65,6 @@ public:
     uint64_t lsu_stalls = 0;
     uint64_t sfu_stalls = 0;
     uint64_t csr_stalls = 0;
-  #ifdef EXT_V_ENABLE
-    uint64_t vinstrs = 0;
-    uint64_t vpu_stalls = 0;
-  #endif
   #ifdef EXT_TCU_ENABLE
     uint64_t tcu_stalls = 0;
   #endif
@@ -86,9 +77,6 @@ public:
     uint64_t csr_instrs = 0;
   #ifdef EXT_TCU_ENABLE
     uint64_t tcu_instrs = 0;
-  #endif
-  #ifdef EXT_V_ENABLE
-    uint64_t vpu_instrs = 0;
   #endif
     uint64_t ifetches = 0;
     uint64_t loads = 0;
@@ -165,12 +153,6 @@ public:
   }
 #endif
 
-#ifdef EXT_V_ENABLE
-  VecUnit::Ptr& vec_unit() {
-    return vec_unit_;
-  }
-#endif
-
   auto& trace_pool() {
     return trace_pool_;
   }
@@ -198,10 +180,6 @@ private:
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;
-#endif
-
-#ifdef EXT_V_ENABLE
-  VecUnit::Ptr vec_unit_;
 #endif
 
   CsrUnit::Ptr csr_unit_;

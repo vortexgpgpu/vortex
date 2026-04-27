@@ -332,32 +332,6 @@ void LsuUnit::execute(instr_trace_t* trace) {
 		default:
 			std::abort();
 		}
-#ifdef EXT_V_ENABLE
-	} else if (std::get_if<VlsType>(&trace->op_type)) {
-		auto vls_type = std::get<VlsType>(trace->op_type);
-		auto trace_data = std::make_shared<VecUnit::MemTraceData>(num_threads);
-		trace->data = trace_data;
-		switch (vls_type) {
-		case VlsType::VL:
-		case VlsType::VLS:
-		case VlsType::VLX:
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				core_->vec_unit()->load(instr, trace->wid, t, rs1_data, rs2_data, trace_data.get());
-			}
-			break;
-		case VlsType::VS:
-		case VlsType::VSS:
-		case VlsType::VSX:
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				core_->vec_unit()->store(instr, trace->wid, t, rs1_data, rs2_data, trace_data.get());
-			}
-			break;
-		default:
-			std::abort();
-		}
-#endif
 	} else {
 		std::abort();
 	}
@@ -465,14 +439,6 @@ void LsuUnit::on_tick() {
 			auto amp_type = std::get<AmoType>(trace->op_type);
 			is_write = (amp_type != AmoType::LR);
 		}
-	#ifdef EXT_V_ENABLE
-		else if (std::get_if<VlsType>(&trace->op_type)) {
-			auto vls_type = std::get<VlsType>(trace->op_type);
-			is_write = (vls_type == VlsType::VS
-			         || vls_type == VlsType::VSS
-							 || vls_type == VlsType::VSX);
-		}
-	#endif // EXT_V_ENABLE
 		else {
 			std::abort();
 		}
@@ -506,28 +472,13 @@ void LsuUnit::on_tick() {
 				}
 			}
 			if (trace->data) {
-			#ifdef EXT_V_ENABLE
-				if (std::get_if<VlsType>(&trace->op_type)) {
-					auto trace_data = std::dynamic_pointer_cast<VecUnit::MemTraceData>(trace->data);
-					for (uint32_t t = 0; t < trace_data->mem_addrs.size(); ++t) {
-						if (!trace->tmask.test(t))
-							continue;
-						for (auto addr : trace_data->mem_addrs.at(t)) {
-							addr.tid = t;
-							addr_list_.push_back(addr);
-						}
-					}
-				} else
-			#endif
-				{
-					auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
-					for (uint32_t t = 0; t < trace_data->mem_addrs.size(); ++t) {
-						if (!trace->tmask.test(t))
-							continue;
-						auto entry = trace_data->mem_addrs.at(t);
-						entry.tid = t;
-						addr_list_.push_back(entry);
-					}
+				auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
+				for (uint32_t t = 0; t < trace_data->mem_addrs.size(); ++t) {
+					if (!trace->tmask.test(t))
+						continue;
+					auto entry = trace_data->mem_addrs.at(t);
+					entry.tid = t;
+					addr_list_.push_back(entry);
 				}
 				remain_addrs_ = addr_list_.size();
 			}

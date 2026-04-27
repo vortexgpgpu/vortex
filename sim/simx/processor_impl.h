@@ -44,11 +44,6 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
-#ifdef VM_ENABLE
-  void set_satp(uint64_t satp) { satp_ = satp; }
-  uint64_t get_satp() const    { return satp_; }
-#endif
-
   PerfStats perf_stats() const;
 
   Kmu& kmu()       { return *kmu_; }
@@ -73,9 +68,6 @@ private:
   RAM* ram_ = nullptr;
   uint64_t amo_addr_ = 0;
   bool     amo_valid_ = false;
-#ifdef VM_ENABLE
-  uint64_t satp_ = 0;
-#endif
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;
   uint64_t perf_mem_latency_;

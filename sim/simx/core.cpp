@@ -169,9 +169,6 @@ Core::Core(const SimContext& ctx,
   dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_LSU_BLOCKS, NUM_LSU_LANES);
   dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
   dispatchers_.at((int)FUType::CSR) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
-#ifdef EXT_V_ENABLE
-  dispatchers_.at((int)FUType::VPU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_VPU_BLOCKS, NUM_VPU_LANES);
-#endif
 #ifdef EXT_TCU_ENABLE
   dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name, this, 2, NUM_TCU_BLOCKS, NUM_TCU_LANES);
 #endif
@@ -188,11 +185,6 @@ Core::Core(const SimContext& ctx,
   snprintf(sname, 100, "%s-csr", name);
   csr_unit_ = SimPlatform::instance().create_object<CsrUnit>(sname, this);
   func_units_.at((int)FUType::CSR) = csr_unit_;
-#ifdef EXT_V_ENABLE
-  snprintf(sname, 100, "%s-vpu", name);
-  vec_unit_ = SimPlatform::instance().create_object<VecUnit>(sname, this);
-  func_units_.at((int)FUType::VPU) = vec_unit_;
-#endif
 #ifdef EXT_TCU_ENABLE
   snprintf(sname, 100, "%s-tcu", name);
   tensor_unit_ = SimPlatform::instance().create_object<TensorUnit>(sname, this);
@@ -521,9 +513,6 @@ void Core::execute() {
       #ifdef EXT_TCU_ENABLE
         case FUType::TCU: ++perf_stats_.tcu_stalls; break;
       #endif
-      #ifdef EXT_V_ENABLE
-        case FUType::VPU: ++perf_stats_.vpu_stalls; break;
-      #endif
         default: assert(false);
         }
       }
@@ -560,20 +549,10 @@ void Core::commit() {
     #ifdef EXT_TCU_ENABLE
       case FUType::TCU: ++perf_stats_.tcu_instrs; break;
     #endif
-    #ifdef EXT_V_ENABLE
-      case FUType::VPU: ++perf_stats_.vpu_instrs; break;
-    #endif
       default: assert(false);
       }
       // track committed instructions
       perf_stats_.instrs += 1;
-    #ifdef EXT_V_ENABLE
-      if (std::get_if<VsetType>(&trace->op_type)
-        || std::get_if<VlsType>(&trace->op_type)
-        || std::get_if<VopType>(&trace->op_type)) {
-        perf_stats_.vinstrs += 1;
-      }
-    #endif
       // Resume warp for FUs that lack explicit resume logic (e.g. LSU)
       if (trace->fetch_stall && trace->fu_type == FUType::LSU) {
         scheduler_->resume(trace->wid);
@@ -690,10 +669,3 @@ const Core::PerfStats& Core::perf_stats() const {
   }
   return perf_stats_;
 }
-
-#ifdef VM_ENABLE
-void Core::set_satp(uint64_t satp) {
-  DPH(3, "set satp 0x" << std::hex << satp << " in Core::set_satp\n");
-  csr_unit_->set_csr(VX_CSR_SATP, satp, 0, 0);
-}
-#endif

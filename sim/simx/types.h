@@ -122,9 +122,6 @@ enum class RegType {
   None,
   Integer,
   Float,
-#ifdef EXT_V_ENABLE
-  Vector,
-#endif
   Count
 };
 
@@ -133,9 +130,6 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   case RegType::None: break;
   case RegType::Integer: os << "x"; break;
   case RegType::Float:   os << "f"; break;
-#ifdef EXT_V_ENABLE
-  case RegType::Vector:  os << "v"; break;
-#endif
   default: assert(false);
   }
   return os;
@@ -170,9 +164,6 @@ enum class FUType {
   FPU,
   SFU,
   CSR,
-#ifdef EXT_V_ENABLE
-  VPU,
-#endif
 #ifdef EXT_TCU_ENABLE
   TCU,
 #endif
@@ -186,9 +177,6 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
   case FUType::CSR: os << "CSR"; break;
-#ifdef EXT_V_ENABLE
-  case FUType::VPU: os << "VPU"; break;
-#endif
 #ifdef EXT_TCU_ENABLE
   case FUType::TCU: os << "TCU"; break;
 #endif
@@ -561,168 +549,6 @@ inline std::ostream &operator<<(std::ostream &os, const CsrType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-enum class VsetType {
-  VSETVLI,
-  VSETIVLI,
-  VSETVL
-};
-
-struct IntrVsetArgs {
-  uint32_t zimm: 11;
-  uint32_t uimm: 5;
-
-  std::string to_string(VsetType type) const {
-    std::string str;
-    if (type != VsetType::VSETVL) {
-      str = "zimm=" + to_hex_str(zimm);
-      if (type == VsetType::VSETIVLI) {
-        str += ", uimm=" + to_hex_str(uimm);
-      }
-    }
-    return str;
-  }
-};
-
-inline std::ostream &operator<<(std::ostream &os, const VsetType& type) {
-  switch (type) {
-  case VsetType::VSETVLI:  os << "VSETVLI"; break;
-  case VsetType::VSETIVLI: os << "VSETIVLI"; break;
-  case VsetType::VSETVL:   os << "VSETVL"; break;
-  default:
-    assert(false);
-  }
-  return os;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-enum class VlsType {
-  VL,
-  VLS,
-  VLX,
-  VS,
-  VSS,
-  VSX
-};
-
-struct IntrVlsArgs {
-  uint32_t width:2;
-  uint32_t umop: 5;
-  uint32_t vm: 1;
-  uint32_t mew: 1;
-  uint32_t nf: 3;
-
-  std::string to_string(VlsType type) const {
-    std::string str = "width=" + std::to_string(width);
-    if (type == VlsType::VL) {
-      str +=  ", umop=" + std::to_string(umop);
-    }
-    str += ", vm=" + std::to_string(vm) +
-           ", mew=" + std::to_string(mew) +
-           ", nf=" + std::to_string(nf);
-    return str;
-  }
-};
-
-inline std::ostream &operator<<(std::ostream &os, const VlsType& type) {
-  switch (type) {
-  case VlsType::VL:  os << "VL"; break;
-  case VlsType::VLS: os << "VLS"; break;
-  case VlsType::VLX: os << "VLX"; break;
-  case VlsType::VS:  os << "VS"; break;
-  case VlsType::VSS: os << "VSS"; break;
-  case VlsType::VSX: os << "VSX"; break;
-  default:
-    assert(false);
-  }
-  return os;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-enum class VopType {
-  OPIVV,
-  OPFVV,
-  OPMVV,
-  OPIVI,
-  OPIVX,
-  OPFVF,
-  OPMVX
-};
-
-struct IntrVopArgs {
-  uint32_t vm: 1;
-  uint32_t funct6: 6;
-  uint32_t imm: 5;
-
-  std::string to_string(VopType type) const {
-    std::string str = "vm=" + std::to_string(vm) +
-                      ", funct6=" + std::to_string(funct6);
-    if (type == VopType::OPIVI || type == VopType::OPIVX) {
-      str += ", imm=" + to_hex_str(imm);
-    }
-    return str;
-  }
-};
-
-inline std::ostream &operator<<(std::ostream &os, const VopType& type) {
-  switch (type) {
-  case VopType::OPIVV:    os << "OPIVV"; break;
-  case VopType::OPFVV:    os << "OPFVV"; break;
-  case VopType::OPMVV:    os << "OPMVV"; break;
-  case VopType::OPIVI:    os << "OPIVI"; break;
-  case VopType::OPIVX:    os << "OPIVX"; break;
-  case VopType::OPFVF:    os << "OPFVF"; break;
-  case VopType::OPMVX:    os << "OPMVX"; break;
-  default:
-    assert(false);
-  }
-  return os;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-enum class VpuOpType {
-  VSET    = 0,
-
-  ARITH   = 1,
-  IMUL    = 2,
-  IDIV    = 3,
-
-  FMA     = 4,
-  FDIV    = 5,
-  FSQRT   = 6,
-  FCVT    = 7,
-  FNCP    = 8,
-
-  // reduction
-  ARITH_R = 9,
-  FMA_R   = 10,
-  FNCP_R  = 11
-};
-
-inline std::ostream &operator<<(std::ostream &os, const VpuOpType& type) {
-  switch (type) {
-  case VpuOpType::VSET:    os << "VSET"; break;
-  case VpuOpType::ARITH:   os << "ARITH"; break;
-  case VpuOpType::IMUL:    os << "IMUL"; break;
-  case VpuOpType::IDIV:    os << "IDIV"; break;
-  case VpuOpType::FMA:     os << "FMA"; break;
-  case VpuOpType::FDIV:    os << "FDIV"; break;
-  case VpuOpType::FSQRT:   os << "FSQRT"; break;
-  case VpuOpType::FCVT:    os << "FCVT"; break;
-  case VpuOpType::FNCP:    os << "FNCP"; break;
-  case VpuOpType::ARITH_R: os << "ARITH_R"; break;
-  case VpuOpType::FMA_R:   os << "FMA_R"; break;
-  case VpuOpType::FNCP_R:  os << "FNCP_R"; break;
-  default:
-    assert(false);
-  }
-  return os;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 enum class TcuType {
   WMMA,
   WGMMA,
@@ -773,11 +599,6 @@ using OpType = std::variant<
 #ifdef EXT_DXA_ENABLE
 , DxaType
 #endif
-#ifdef EXT_V_ENABLE
-, VsetType
-, VlsType
-, VopType
-#endif
 #ifdef EXT_TCU_ENABLE
 , TcuType
 #endif
@@ -795,11 +616,6 @@ using IntrArgs = std::variant<
 , IntrWctlArgs
 #ifdef EXT_DXA_ENABLE
 , IntrDxaArgs
-#endif
-#ifdef EXT_V_ENABLE
-, IntrVsetArgs
-, IntrVlsArgs
-, IntrVopArgs
 #endif
 #ifdef EXT_TCU_ENABLE
 , IntrTcuArgs

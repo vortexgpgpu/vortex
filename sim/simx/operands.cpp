@@ -73,15 +73,6 @@ inline void log_src_operand(uint32_t src_index,
     }
     DPN(2, "} (#" << std::dec << uuid << ")" << std::endl);
   } break;
-#ifdef EXT_V_ENABLE
-  case RegType::Vector:
-    // Vector regfile is owned by VecUnit; per-thread values aren't visible
-    // here, so just record the access for the trace.
-    DPH(2, "Src" << src_index << " Reg: " << reg
-        << " (vector — owned by VecUnit) (#" << std::dec << uuid << ")"
-        << std::endl);
-    break;
-#endif
   default:
     std::abort();
   }
