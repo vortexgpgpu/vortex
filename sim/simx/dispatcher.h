@@ -30,12 +30,11 @@ public:
 
 	virtual ~Dispatcher();
 
-	virtual void reset();
-
-	virtual void tick();
+protected:
+	virtual void on_reset();
+	virtual void on_tick();
 
 private:
-	const Arch& arch_;
 	Core*    core_;
 	uint32_t buf_size_;
 	uint32_t block_size_;
@@ -44,6 +43,8 @@ private:
 	uint32_t num_packets_;
 	uint32_t batch_idx_;
 	std::vector<int> block_pids_;
+
+	friend class SimObject<Dispatcher>;
 };
 
 }

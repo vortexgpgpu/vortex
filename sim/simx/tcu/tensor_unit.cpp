@@ -549,12 +549,11 @@ public:
     }
   };
 
-  Impl(TensorUnit* simobject, const Arch& arch, Core* core)
+  Impl(TensorUnit* simobject, Core* core)
     : simobject_(simobject)
     , core_(core)
-    , arch_(arch)
-    , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
-    , mx_meta_(arch.num_warps())
+    , sparse_meta_(NUM_WARPS, std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
+    , mx_meta_(NUM_WARPS)
     , perf_stats_()
     , tbuf_state_()
   {}
@@ -579,6 +578,10 @@ public:
       if (input.empty())
         continue;
       auto trace = input.peek();
+      // Lazy execute on first peek.
+      if (!trace->data) {
+        this->execute_trace(trace);
+      }
       auto tcu_type = std::get<TcuType>(trace->op_type);
       int delay = 0;
       switch (tcu_type) {
@@ -621,6 +624,50 @@ public:
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
+    }
+  }
+
+  void execute_trace(instr_trace_t* trace) {
+    auto& instr = *trace->instr_ptr;
+    auto instrArgs = instr.get_args();
+    auto tpuArgs = std::get<IntrTcuArgs>(instrArgs);
+    auto tcu_type = std::get<TcuType>(trace->op_type);
+    uint32_t wid = trace->wid;
+    uint32_t num_threads = NUM_THREADS;
+    auto& rs1_data = trace->src_data[0];
+    auto& rs2_data = trace->src_data[1];
+    auto& rs3_data = trace->src_data[2];
+
+    trace->dst_data.assign(num_threads, reg_data_t{});
+    auto& rd_data = trace->dst_data;
+
+    auto trace_data = std::make_shared<ExeTraceData>();
+    trace->data = trace_data;
+
+    switch (tcu_type) {
+    case TcuType::WMMA:
+      this->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
+                 tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
+                 rs1_data, rs2_data, rs3_data, rd_data,
+                 trace_data.get(), tpuArgs.is_sparse);
+      break;
+  #ifdef TCU_WGMMA_ENABLE
+    case TcuType::WGMMA: {
+      uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
+      uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
+      this->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
+                  tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
+                  a_desc, b_desc, rs1_data, rs3_data, rd_data,
+                  trace_data.get(), tpuArgs.is_sparse,
+                  tpuArgs.cd_nregs, tpuArgs.is_a_smem);
+    } break;
+  #endif
+    case TcuType::META_STORE:
+      this->meta_store(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
+                       tpuArgs.meta_kind, rs1_data, trace_data.get());
+      break;
+    default:
+      std::abort();
     }
   }
 
@@ -726,7 +773,7 @@ public:
                   << "). Supported formats: i8, u8, fp8, bf8, fp16, bf16, i4, u4." << std::endl;
         std::abort();
       }
-      if ((arch_.num_threads() % cfg::b_block_size_sp) != 0) {
+      if ((NUM_THREADS % cfg::b_block_size_sp) != 0) {
         std::cout << "Error: NUM_THREADS must be divisible by sparse B block size" << std::endl;
         std::abort();
       }
@@ -1110,7 +1157,6 @@ private:
 
   TensorUnit*   simobject_;
   Core*         core_;
-  Arch          arch_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
   std::vector<std::array<uint32_t, kMxMetaWords>> mx_meta_;
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
@@ -1403,22 +1449,20 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TensorUnit::TensorUnit(const SimContext &ctx, const char* name, const Arch& arch, Core* core)
-	: SimObject<TensorUnit>(ctx, name)
-	, Inputs(ISSUE_WIDTH, this)
-	, Outputs(ISSUE_WIDTH, this)
-	, impl_(new Impl(this, arch, core))
+TensorUnit::TensorUnit(const SimContext &ctx, const char* name, Core* core)
+	: FuncUnit(ctx, name, core)
+	, impl_(new Impl(this, core))
 {}
 
 TensorUnit::~TensorUnit() {
   delete impl_;
 }
 
-void TensorUnit::reset() {
+void TensorUnit::on_reset() {
   impl_->reset();
 }
 
-void TensorUnit::tick() {
+void TensorUnit::on_tick() {
   impl_->tick();
 }
 
@@ -1473,3 +1517,4 @@ void TensorUnit::meta_store(uint32_t wid,
                             ExeTraceData* trace_data) {
   impl_->meta_store(wid, fmt_s, col_idx, meta_kind, rs1_data, trace_data);
 }
+

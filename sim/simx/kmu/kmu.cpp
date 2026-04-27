@@ -15,18 +15,25 @@
 
 using namespace vortex;
 
-Kmu::Kmu() {
-  this->reset();
-}
-
-void Kmu::reset() {
-  PC_           = 0;
-  param_        = 0;
+Kmu::Kmu(const SimContext& ctx, const char* name)
+  : SimObject<Kmu>(ctx, name)
+  , PC_(0)
+  , param_(0)
+  , lmem_size_(0)
+  , block_size_(0)
+  , running_(false)
+  , cta_id_(0)
+{
   block_dim_[0] = block_dim_[1] = block_dim_[2] = 1;
   grid_dim_[0]  = grid_dim_[1]  = grid_dim_[2]  = 1;
-  lmem_size_    = 0;
-  block_size_   = 0;
   warp_step_[0] = warp_step_[1] = warp_step_[2] = 1;
+  block_idx_[0] = block_idx_[1] = block_idx_[2] = 0;
+}
+
+void Kmu::on_reset() {
+  // Reset only the per-run progression state. The kernel descriptor (PC,
+  // param, dims, block_size, lmem_size, warp_step) is set by dcr_write()
+  // before run() and must persist across SimPlatform::on_reset().
   running_      = false;
   cta_id_       = 0;
   block_idx_[0] = block_idx_[1] = block_idx_[2] = 0;

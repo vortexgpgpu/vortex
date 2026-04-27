@@ -96,9 +96,27 @@ public:
 				continue;
 
 			auto& bank_req = xbar_req_out.peek();
+
+			// Apply byte-enabled writes from TLM payload to local RAM.
+			if (bank_req.write && bank_req.data) {
+				uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(MEM_BLOCK_SIZE - 1);
+				for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
+					if (bank_req.byteen & (1ull << b)) {
+						uint8_t value = (*bank_req.data)[b];
+						ram_.write(&value, line_addr + b, 1);
+					}
+				}
+			}
+
 			if (!bank_req.write || config_.write_reponse) {
-				// send xbar response
+				// send xbar response — for reads, capture the line payload.
 				MemRsp bank_rsp{bank_req.tag, bank_req.cid, bank_req.uuid};
+				if (!bank_req.write) {
+					auto rsp_data = std::make_shared<mem_block_t>();
+					uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(MEM_BLOCK_SIZE - 1);
+					ram_.read(rsp_data->data(), line_addr, MEM_BLOCK_SIZE);
+					bank_rsp.data = rsp_data;
+				}
 				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))
 					continue; // stall
 			}
@@ -136,7 +154,7 @@ LocalMem::~LocalMem() {
   delete impl_;
 }
 
-void LocalMem::reset() {
+void LocalMem::on_reset() {
   impl_->reset();
 }
 
@@ -148,7 +166,7 @@ void LocalMem::write(const void* data, uint64_t addr, uint32_t size) {
   impl_->write(data, addr, size);
 }
 
-void LocalMem::tick() {
+void LocalMem::on_tick() {
   impl_->tick();
 }
 

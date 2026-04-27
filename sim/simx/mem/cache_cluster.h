@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include "cache_sim.h"
+#include "cache.h"
 
 namespace vortex {
 
@@ -28,7 +28,7 @@ public:
 							const char* name,
 							uint32_t num_inputs,
 							uint32_t num_units,
-							const CacheSim::Config& cache_config)
+							const Cache::Config& cache_config)
 		: SimObject(ctx, name)
 		, core_req_in(num_inputs, std::vector<SimChannel<MemReq>>(cache_config.num_inputs, this))
 		, core_rsp_out(num_inputs, std::vector<SimChannel<MemRsp>>(cache_config.num_inputs, this))
@@ -36,7 +36,7 @@ public:
 		, mem_rsp_in(cache_config.mem_ports, this)
 		, caches_(__MAX(num_units, 0x1)) {
 
-		CacheSim::Config cache_config2(cache_config);
+		Cache::Config cache_config2(cache_config);
 		if (0 == num_units) {
 			num_units = 1;
 			cache_config2.bypass = true;
@@ -67,7 +67,7 @@ public:
 		// Connect caches
 		for (uint32_t i = 0; i < num_units; ++i) {
 			snprintf(sname, 100, "%s%d", name, i);
-			caches_.at(i) = CacheSim::Create(sname, cache_config2);
+			caches_.at(i) = Cache::Create(sname, cache_config2);
 
 			for (uint32_t j = 0; j < cache_config.num_inputs; ++j) {
 				input_arbs.at(j)->ReqOut.at(i).bind(&caches_.at(i)->core_req_in.at(j));
@@ -83,20 +83,22 @@ public:
 
 	~CacheCluster() {}
 
-	void reset() {}
-
-	void tick() {}
-
-	CacheSim::PerfStats perf_stats() const {
-		CacheSim::PerfStats perf;
+	Cache::PerfStats perf_stats() const {
+		Cache::PerfStats perf;
 		for (auto cache : caches_) {
 			perf += cache->perf_stats();
 		}
 		return perf;
 	}
 
+protected:
+	void on_reset() {}
+	void on_tick() {}
+
 private:
-  std::vector<CacheSim::Ptr> caches_;
+  std::vector<Cache::Ptr> caches_;
+
+  friend class SimObject<CacheCluster>;
 };
 
 }

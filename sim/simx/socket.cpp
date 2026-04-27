@@ -19,20 +19,19 @@ using namespace vortex;
 Socket::Socket(const SimContext& ctx,
                 const char* name,
                 uint32_t socket_id,
-                Cluster* cluster,
-                const Arch &arch)
+                Cluster* cluster)
   : SimObject(ctx, name)
   , mem_req_out(L1_MEM_PORTS, this)
   , mem_rsp_in(L1_MEM_PORTS, this)
   , socket_id_(socket_id)
   , cluster_(cluster)
-  , cores_(arch.socket_size())
+  , cores_(SOCKET_SIZE)
 {
   auto cores_per_socket = cores_.size();
 
   char sname[100];
   snprintf(sname, 100, "%s-icache", name);
-  icaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_ICACHES, CacheSim::Config{
+  icaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_ICACHES, Cache::Config{
     !ICACHE_ENABLED,
     log2ceil(ICACHE_SIZE),  // C
     log2ceil(L1_LINE_SIZE), // L
@@ -50,7 +49,7 @@ Socket::Socket(const SimContext& ctx,
   });
 
   snprintf(sname, 100, "%s-dcache", name);
-  dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, CacheSim::Config{
+  dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, Cache::Config{
     !DCACHE_ENABLED,
     log2ceil(DCACHE_SIZE),  // C
     log2ceil(L1_LINE_SIZE), // L
@@ -101,7 +100,7 @@ Socket::Socket(const SimContext& ctx,
   for (uint32_t i = 0; i < cores_per_socket; ++i) {
     uint32_t core_id = socket_id * cores_per_socket + i;
     snprintf(sname, 100, "%s-core%d", name, i);
-    cores_.at(i) = Core::Create(sname, core_id, this, arch);
+    cores_.at(i) = Core::Create(sname, core_id, this);
   }
 
   // connect cores to caches
@@ -120,29 +119,14 @@ Socket::~Socket() {
   //--
 }
 
-void Socket::reset() {
-  for (auto& core : cores_) {
-    core->reset();
-  }
+void Socket::on_reset() {
+  // Cores are SimObjects; reset by SimPlatform.
 }
 
-void Socket::tick() {
+void Socket::on_tick() {
   //--
 }
 
-void Socket::attach_ram(RAM* ram) {
-  for (auto core : cores_) {
-    core->attach_ram(ram);
-  }
-}
-
-#ifdef VM_ENABLE
-void Socket::set_satp(uint64_t satp) {
-  for (auto core : cores_) {
-    core->set_satp(satp);
-  }
-}
-#endif
 
 bool Socket::running() const {
   for (auto& core : cores_) {

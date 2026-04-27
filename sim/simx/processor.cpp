@@ -37,16 +37,18 @@ static void simx_print_backtrace() {
   std::free(symbols);
 }
 
-ProcessorImpl::ProcessorImpl(const Arch& arch)
-  : arch_(arch)
-  , clusters_(arch.num_clusters())
+ProcessorImpl::ProcessorImpl()
+  : clusters_(NUM_CLUSTERS)
 {
   SimPlatform::instance().initialize();
 
 	assert(PLATFORM_MEMORY_DATA_SIZE == MEM_BLOCK_SIZE);
 
+  // create kernel management unit (SimObject)
+  kmu_ = Kmu::Create("kmu");
+
   // create memory simulator
-  memsim_ = MemSim::Create("dram", MemSim::Config{
+  memsim_ = Memory::Create("dram", Memory::Config{
     PLATFORM_MEMORY_NUM_BANKS,
     L3_MEM_PORTS,
     MEM_BLOCK_SIZE,
@@ -56,13 +58,13 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   char sname[100];
 
   // create clusters
-  for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
+  for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
     snprintf(sname, 100, "cluster%d", i);
-    clusters_.at(i) = Cluster::Create(sname, i, this, arch);
+    clusters_.at(i) = Cluster::Create(sname, i, this);
   }
 
   // create L3 cache
-  l3cache_ = CacheSim::Create("l3cache", CacheSim::Config{
+  l3cache_ = Cache::Create("l3cache", Cache::Config{
     !L3_ENABLED,
     log2ceil(L3_CACHE_SIZE),  // C
     log2ceil(MEM_BLOCK_SIZE), // L
@@ -81,7 +83,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   );
 
   // connect L3 core interfaces
-  for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
+  for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
     for (uint32_t j = 0; j < L2_MEM_PORTS; ++j) {
       clusters_.at(i)->mem_req_out.at(j).bind(&l3cache_->core_req_in.at(i * L2_MEM_PORTS + j));
       l3cache_->core_rsp_out.at(i * L2_MEM_PORTS + j).bind(&clusters_.at(i)->mem_rsp_in.at(j));
@@ -111,13 +113,13 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
 #ifndef NDEBUG
   // dump device configuration
   std::cout << "CONFIGS:"
-            << " num_threads=" << arch.num_threads()
-            << ", num_warps=" << arch.num_warps()
-            << ", num_cores=" << arch.num_cores()
-            << ", num_clusters=" << arch.num_clusters()
-            << ", socket_size=" << arch.socket_size()
-            << ", local_mem_base=0x" << std::hex << arch.local_mem_base() << std::dec
-            << ", num_barriers=" << arch.num_barriers()
+            << " num_threads=" << NUM_THREADS
+            << ", num_warps=" << NUM_WARPS
+            << ", num_cores=" << NUM_CORES
+            << ", num_clusters=" << NUM_CLUSTERS
+            << ", socket_size=" << SOCKET_SIZE
+            << ", local_mem_base=0x" << std::hex << LMEM_BASE_ADDR << std::dec
+            << ", num_barriers=" << NUM_BARRIERS
             << std::endl;
 #endif
   // reset the device
@@ -129,21 +131,13 @@ ProcessorImpl::~ProcessorImpl() {
 }
 
 void ProcessorImpl::attach_ram(RAM* ram) {
-  for (auto cluster : clusters_) {
-    cluster->attach_ram(ram);
-  }
+  ram_ = ram;
+  memsim_->attach_ram(ram);
 }
-#ifdef VM_ENABLE
-void ProcessorImpl::set_satp(uint64_t satp) {
-  for (auto cluster : clusters_) {
-    cluster->set_satp(satp);
-  }
-}
-#endif
 
 int ProcessorImpl::run() {
   this->reset();
-  kmu_.start();
+  kmu_->start();
 
   bool done;
   int exitcode = 0;
@@ -174,7 +168,7 @@ void ProcessorImpl::reset() {
 int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
   // KMU DCRs are stored in the processor-level KMU and not broadcast to cores
   if (addr >= VX_DCR_KMU_STATE_BEGIN && addr < VX_DCR_KMU_STATE_END) {
-    kmu_.dcr_write(addr, value);
+    kmu_->dcr_write(addr, value);
     return 0;
   }
   for (auto& cluster : clusters_) {
@@ -246,8 +240,8 @@ Emulator* ProcessorImpl::get_first_emulator() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-Processor::Processor(const Arch& arch)
-  : impl_(new ProcessorImpl(arch))
+Processor::Processor()
+  : impl_(new ProcessorImpl())
 {
 #ifdef VM_ENABLE
   satp_ = NULL;

@@ -14,7 +14,9 @@
 #pragma once
 
 #include <stdint.h>
+#include <array>
 #include <bitset>
+#include <memory>
 #include <queue>
 #include <vector>
 #include <unordered_map>
@@ -31,6 +33,11 @@
 #include "constants.h"
 
 namespace vortex {
+
+// One memory block (a cache line / DRAM transfer unit). Carried by
+// MemReq/MemRsp in TLM data-path mode. Use `shared_ptr<mem_block_t>` so
+// MSHR-coalesced replays share a single fill buffer without copying.
+using mem_block_t = std::array<uint8_t, MEM_BLOCK_SIZE>;
 
 typedef uint8_t Byte;
 
@@ -162,6 +169,7 @@ enum class FUType {
   LSU,
   FPU,
   SFU,
+  CSR,
 #ifdef EXT_V_ENABLE
   VPU,
 #endif
@@ -177,6 +185,7 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::LSU: os << "LSU"; break;
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
+  case FUType::CSR: os << "CSR"; break;
 #ifdef EXT_V_ENABLE
   case FUType::VPU: os << "VPU"; break;
 #endif
@@ -832,6 +841,8 @@ inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
 struct mem_addr_size_t {
   uint64_t addr;
   uint32_t size;
+  uint64_t data = 0;  // write value for stores/AMOs (ignored for loads)
+  uint32_t tid  = 0;  // source thread id (used by LSU response routing)
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1079,6 +1090,10 @@ struct LsuReq {
   uint32_t cid;
   uint64_t uuid;
 
+  // TLM data: per-lane block + byteen for stores/AMOs.
+  std::vector<std::shared_ptr<mem_block_t>> data;
+  std::vector<uint64_t> byteen;
+
   LsuReq(uint32_t size)
     : mask(size)
     , addrs(size, 0)
@@ -1086,6 +1101,8 @@ struct LsuReq {
     , tag(0)
     , cid(0)
     , uuid(0)
+    , data(size)
+    , byteen(size, 0)
   {}
 
   friend std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
@@ -1114,11 +1131,15 @@ struct LsuRsp {
   uint32_t cid;
   uint64_t uuid;
 
+  // TLM data: per-lane block populated for loads/AMO returns.
+  std::vector<std::shared_ptr<mem_block_t>> data;
+
  LsuRsp(uint32_t size)
     : mask(size)
     , tag (0)
     , cid(0)
     , uuid(0)
+    , data(size)
   {}
 
   friend std::ostream &operator<<(std::ostream &os, const LsuRsp& rsp) {
@@ -1130,6 +1151,24 @@ struct LsuRsp {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Memory-op tag. Lives alongside MemReq::write for backward compatibility
+// with the cache hierarchy (which only reads `write`).
+enum class MemOp : uint8_t {
+  READ      = 0,
+  WRITE     = 1,
+  AMO_LR    = 2,
+  AMO_SC    = 3,
+  AMO_ADD   = 4,
+  AMO_SWAP  = 5,
+  AMO_XOR   = 6,
+  AMO_OR    = 7,
+  AMO_AND   = 8,
+  AMO_MIN   = 9,
+  AMO_MAX   = 10,
+  AMO_MINU  = 11,
+  AMO_MAXU  = 12,
+};
+
 struct MemReq {
   uint64_t addr;
   bool     write;
@@ -1137,6 +1176,15 @@ struct MemReq {
   uint32_t tag;
   uint32_t cid;
   uint64_t uuid;
+
+  MemOp    op        = MemOp::READ;
+  uint32_t thread_id = 0;
+
+  // TLM data: populated for stores/AMOs (`data` carries the bytes to write,
+  // `byteen` selects which bytes within MEM_BLOCK_SIZE are valid). For reads,
+  // `data` is null and `byteen` is unused.
+  uint64_t                     byteen = 0;
+  std::shared_ptr<mem_block_t> data;
 
   MemReq(uint64_t _addr = 0,
           bool _write = false,
@@ -1150,6 +1198,7 @@ struct MemReq {
     , tag(_tag)
     , cid(_cid)
     , uuid(_uuid)
+    , op(_write ? MemOp::WRITE : MemOp::READ)
   {}
 
   friend std::ostream &operator<<(std::ostream &os, const MemReq& req) {
@@ -1167,6 +1216,12 @@ struct MemRsp {
   uint64_t tag;
   uint32_t cid;
   uint64_t uuid;
+
+  uint32_t thread_id = 0;
+
+  // TLM data: populated for loads / AMO returns. The shared_ptr lets
+  // MSHR-coalesced replays share a single fill buffer.
+  std::shared_ptr<mem_block_t> data;
 
   MemRsp(uint64_t _tag = 0, uint32_t _cid = 0, uint64_t _uuid = 0)
     : tag (_tag)
@@ -1269,14 +1324,6 @@ public:
     , delay_(delay) {
   }
 
-  void reset() {
-    //--
-  }
-
-  void tick() {
-    //--
-  }
-
   bool empty() const {
     return channel_.empty();
   }
@@ -1311,9 +1358,20 @@ public:
     channel_.pop();
   }
 
+protected:
+  void on_reset() {
+    //--
+  }
+
+  void on_tick() {
+    //--
+  }
+
 private:
   SimChannel<Type> channel_;
   uint32_t delay_;
+
+  friend class SimObject<TFifo<T>>;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1377,49 +1435,55 @@ public:
       ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
   {}
 
-  void reset() {
-    for (auto& arb : arbiters_) {
-      arb.reset();
-    }
-  }
-
-  void tick() {
-    uint32_t I = Inputs.size();
-    uint32_t O = Outputs.size();
-    uint32_t R = 1 << lg2_num_reqs_;
-
-    // skip bypass mode
-    if (I == O)
-      return;
-
-    // process inputs
-    for (uint32_t o = 0; o < O; ++o) {
-      BitVector<> requests(R);
-      for (uint32_t r = 0; r < R; ++r) {
-        uint32_t i = o * R + r;
-        if (i >= I)
-          continue;
-        requests.set(r, !Inputs.at(i).empty());
-      }
-      if (requests.any()) {
-        uint32_t g = arbiters_.at(o).grant(requests);
-        uint32_t i = o * R + g;
-        auto& req_in = Inputs.at(i);
-        auto& req = req_in.peek();
-        if (Outputs.at(o).try_send(RspType(req, i), delay_)) {
-          DT(4, this->name() << " req" << i << "_" << o << ": " << req);
-          req_in.pop();
-        }
-      }
-    }
-  }
-
 protected:
+  void on_reset();
+  void on_tick();
 
   uint32_t delay_;
   uint32_t lg2_num_reqs_;
   std::vector<Arbiter> arbiters_;
+
+  friend class SimObject<TxArbiter<Type>>;
 };
+
+template <typename Type>
+void TxArbiter<Type>::on_reset() {
+  for (auto& arb : arbiters_) {
+    arb.reset();
+  }
+}
+
+template <typename Type>
+void TxArbiter<Type>::on_tick() {
+  uint32_t I = Inputs.size();
+  uint32_t O = Outputs.size();
+  uint32_t R = 1 << lg2_num_reqs_;
+
+  // skip bypass mode
+  if (I == O)
+    return;
+
+  // process inputs
+  for (uint32_t o = 0; o < O; ++o) {
+    BitVector<> requests(R);
+    for (uint32_t r = 0; r < R; ++r) {
+      uint32_t i = o * R + r;
+      if (i >= I)
+        continue;
+      requests.set(r, !Inputs.at(i).empty());
+    }
+    if (requests.any()) {
+      uint32_t g = arbiters_.at(o).grant(requests);
+      uint32_t i = o * R + g;
+      auto& req_in = Inputs.at(i);
+      auto& req = req_in.peek();
+      if (Outputs.at(o).try_send(RspType(req, i), delay_)) {
+        DT(4, this->name() << " req" << i << "_" << o << ": " << req);
+        req_in.pop();
+      }
+    }
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1483,63 +1547,66 @@ public:
       output_sel, ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
   {}
 
-  void reset() {
-    //--
-  }
-
-  void tick() {
-    uint32_t I = Inputs.size();
-    uint32_t O = Outputs.size();
-    if (I == 1 && O == 1)
-      return;
-
-    // process incoming requests
-    for (uint32_t o = 0; o < O; ++o) {
-      int32_t input_idx = -1;
-      bool has_collision = false;
-      for (uint32_t i = 0; i < I; ++i) {
-        auto& req_in = Inputs.at(i);
-        if (req_in.empty())
-          continue;
-        auto& req = req_in.peek();
-        uint32_t output_idx = 0;
-        if (lg2_outputs_ != 0) {
-          // select output index
-          output_idx = output_sel_(req);
-          // skip if input is not going to current output
-          if (output_idx != o)
-            continue;
-        }
-        if (input_idx != -1) {
-          has_collision = true;
-          break;
-        }
-        input_idx = i;
-      }
-      if (input_idx != -1) {
-        auto& req_in = Inputs.at(input_idx);
-        auto& req = req_in.peek();
-        if (Outputs.at(o).try_send(RspType(req, input_idx), delay_)) {
-          DT(4, this->name() << " req" << input_idx << "_" << o << ": " << req);
-          req_in.pop();
-        }
-        collisions_ += has_collision;
-      }
-    }
-  }
-
   uint64_t collisions() const {
     return collisions_;
   }
 
 protected:
+  void on_reset() {
+    //--
+  }
+  void on_tick();
 
   uint32_t delay_;
   uint32_t lg2_inputs_;
   uint32_t lg2_outputs_;
   std::function<uint32_t(const Type& req)> output_sel_;
   uint64_t collisions_;
+
+  friend class SimObject<TxCrossBar<Type>>;
 };
+
+template <typename Type>
+void TxCrossBar<Type>::on_tick() {
+  uint32_t I = Inputs.size();
+  uint32_t O = Outputs.size();
+  if (I == 1 && O == 1)
+    return;
+
+  // process incoming requests
+  for (uint32_t o = 0; o < O; ++o) {
+    int32_t input_idx = -1;
+    bool has_collision = false;
+    for (uint32_t i = 0; i < I; ++i) {
+      auto& req_in = Inputs.at(i);
+      if (req_in.empty())
+        continue;
+      auto& req = req_in.peek();
+      uint32_t output_idx = 0;
+      if (lg2_outputs_ != 0) {
+        // select output index
+        output_idx = output_sel_(req);
+        // skip if input is not going to current output
+        if (output_idx != o)
+          continue;
+      }
+      if (input_idx != -1) {
+        has_collision = true;
+        break;
+      }
+      input_idx = i;
+    }
+    if (input_idx != -1) {
+      auto& req_in = Inputs.at(input_idx);
+      auto& req = req_in.peek();
+      if (Outputs.at(o).try_send(RspType(req, input_idx), delay_)) {
+        DT(4, this->name() << " req" << input_idx << "_" << o << ": " << req);
+        req_in.pop();
+      }
+      collisions_ += has_collision;
+    }
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1612,44 +1679,48 @@ public:
       ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
   {}
 
-  void reset() {
+protected:
+  void on_reset() {
     //--
   }
+  void on_tick();
 
-  void tick() {
-    if (!arbiter_)
-      return;
-
-    uint32_t O = ReqOut.size();
-    uint32_t R = 1 << lg2_num_reqs_;
-
-    // process outgoing responses
-    for (uint32_t o = 0; o < O; ++o) {
-      auto& rsp_in = RspIn.at(o);
-      if (!rsp_in.empty()) {
-        auto& rsp = rsp_in.peek();
-        uint32_t r = 0;
-        Rsp out_rsp(rsp);
-        if (lg2_num_reqs_ != 0) {
-          r = rsp.tag & (R-1);
-          out_rsp.tag = rsp.tag >> lg2_num_reqs_;
-        }
-        uint32_t i = o * R + r;
-        if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
-          DT(4, this->name() << " rsp" << o << "_" << i << ": " << out_rsp);
-          rsp_in.pop();
-        }
-      }
-    }
-  }
-
-protected:
   typedef TxArbiter<Req> ReqArb;
 
   typename ReqArb::Ptr arbiter_;
   uint32_t rsp_delay_;
   uint32_t lg2_num_reqs_;
+
+  friend class SimObject<TxRxArbiter<Req, Rsp>>;
 };
+
+template <typename Req, typename Rsp>
+void TxRxArbiter<Req, Rsp>::on_tick() {
+  if (!arbiter_)
+    return;
+
+  uint32_t O = ReqOut.size();
+  uint32_t R = 1 << lg2_num_reqs_;
+
+  // process outgoing responses
+  for (uint32_t o = 0; o < O; ++o) {
+    auto& rsp_in = RspIn.at(o);
+    if (!rsp_in.empty()) {
+      auto& rsp = rsp_in.peek();
+      uint32_t r = 0;
+      Rsp out_rsp(rsp);
+      if (lg2_num_reqs_ != 0) {
+        r = rsp.tag & (R-1);
+        out_rsp.tag = rsp.tag >> lg2_num_reqs_;
+      }
+      uint32_t i = o * R + r;
+      if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
+        DT(4, this->name() << " rsp" << o << "_" << i << ": " << out_rsp);
+        rsp_in.pop();
+      }
+    }
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1722,50 +1793,6 @@ public:
       ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
   {}
 
-  void reset() {
-    arbiter_.reset();
-  }
-
-  void tick() {
-    if (!crossbar_)
-      return;
-
-    uint32_t I = ReqIn.size();
-    uint32_t O = ReqOut.size();
-    uint32_t R = 1 << lg2_inputs_;
-
-    // process outgoing responses
-    for (uint32_t i = 0; i < I; ++i) {
-      BitVector<> requests(O);
-      for (uint32_t o = 0; o < O; ++o) {
-        auto& rsp_in = RspIn.at(o);
-        if (rsp_in.empty())
-          continue;
-        auto& rsp = rsp_in.peek();
-        // skip if response is not going to current input
-        if (lg2_inputs_ != 0) {
-          uint32_t input_idx = rsp.tag & (R-1);
-          if (input_idx != i)
-            continue;
-        }
-        requests.set(o);
-      }
-      if (requests.any()) {
-        uint32_t g = arbiter_.grant(requests);
-        auto& rsp_in = RspIn.at(g);
-        auto& rsp = rsp_in.peek();
-        Rsp out_rsp(rsp);
-        if (lg2_inputs_ != 0) {
-          out_rsp.tag = rsp.tag >> lg2_inputs_;
-        }
-        if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
-          DT(4, this->name() << " rsp" << g << "_" << i << ": " << out_rsp);
-          rsp_in.pop();
-        }
-      }
-    }
-  }
-
   uint64_t collisions() const {
     if (crossbar_) {
       return crossbar_->collisions();
@@ -1774,77 +1801,61 @@ public:
   }
 
 protected:
+  void on_reset() {
+    arbiter_.reset();
+  }
+  void on_tick();
+
   typedef TxCrossBar<Req> ReqXbar;
 
   typename ReqXbar::Ptr crossbar_;
   Arbiter arbiter_;
   uint32_t rsp_delay_;
   uint32_t lg2_inputs_;
+
+  friend class SimObject<TxRxCrossBar<Req, Rsp>>;
 };
 
-///////////////////////////////////////////////////////////////////////////////
+template <typename Req, typename Rsp>
+void TxRxCrossBar<Req, Rsp>::on_tick() {
+  if (!crossbar_)
+    return;
 
-class LocalMemSwitch : public SimObject<LocalMemSwitch> {
-public:
-  using Ptr = std::shared_ptr<LocalMemSwitch>;
+  uint32_t I = ReqIn.size();
+  uint32_t O = ReqOut.size();
+  uint32_t R = 1 << lg2_inputs_;
 
-  SimChannel<LsuReq> ReqIn;
-  SimChannel<LsuRsp> RspOut;
-
-  SimChannel<LsuReq> ReqOutLmem;
-  SimChannel<LsuRsp> RspInLmem;
-
-  SimChannel<LsuReq> ReqOutDC;
-  SimChannel<LsuRsp> RspInDC;
-
-  LocalMemSwitch(
-    const SimContext& ctx,
-    const char* name,
-    uint32_t delay
-  );
-
-  void reset();
-
-  void tick();
-
-private:
-  uint32_t delay_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class LsuMemAdapter : public SimObject<LsuMemAdapter> {
-public:
-  using Ptr = std::shared_ptr<LsuMemAdapter>;
-
-  SimChannel<LsuReq> ReqIn;
-  SimChannel<LsuRsp> RspOut;
-
-  std::vector<SimChannel<MemReq>> ReqOut;
-  std::vector<SimChannel<MemRsp>> RspIn;
-
-  LsuMemAdapter(
-    const SimContext& ctx,
-    const char* name,
-    uint32_t num_inputs,
-    uint32_t delay
-  );
-
-  LsuMemAdapter(
-    const SimContext& ctx,
-    const char* name,
-    uint32_t num_inputs
-  ) : LsuMemAdapter(ctx, name, num_inputs, 0)
-  {}
-
-  void reset();
-
-  void tick();
-
-private:
-  uint32_t delay_;
-  BitVector<uint32_t> pending_mask_;
-};
+  // process outgoing responses
+  for (uint32_t i = 0; i < I; ++i) {
+    BitVector<> requests(O);
+    for (uint32_t o = 0; o < O; ++o) {
+      auto& rsp_in = RspIn.at(o);
+      if (rsp_in.empty())
+        continue;
+      auto& rsp = rsp_in.peek();
+      // skip if response is not going to current input
+      if (lg2_inputs_ != 0) {
+        uint32_t input_idx = rsp.tag & (R-1);
+        if (input_idx != i)
+          continue;
+      }
+      requests.set(o);
+    }
+    if (requests.any()) {
+      uint32_t g = arbiter_.grant(requests);
+      auto& rsp_in = RspIn.at(g);
+      auto& rsp = rsp_in.peek();
+      Rsp out_rsp(rsp);
+      if (lg2_inputs_ != 0) {
+        out_rsp.tag = rsp.tag >> lg2_inputs_;
+      }
+      if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
+        DT(4, this->name() << " rsp" << g << "_" << i << ": " << out_rsp);
+        rsp_in.pop();
+      }
+    }
+  }
+}
 
 using LsuArbiter  = TxRxArbiter<LsuReq, LsuRsp>;
 using MemArbiter  = TxRxArbiter<MemReq, MemRsp>;

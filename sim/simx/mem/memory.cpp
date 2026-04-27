@@ -11,36 +11,73 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mem_sim.h"
+#include "memory.h"
 #include <vector>
 #include <queue>
+#include <sstream>
+#include <unordered_map>
+#include <iostream>
 #include <stdlib.h>
 #include <dram_sim.h>
 
 #include "constants.h"
 #include "types.h"
 #include "debug.h"
+#include "VX_config.h"
 
 using namespace vortex;
 
-class MemSim::Impl {
+class Memory::Impl {
 private:
-	MemSim*   simobject_;
+	Memory*   simobject_;
 	Config    config_;
 	MemCrossBar::Ptr mem_xbar_;
 	DramSim   dram_sim_;
+	RAM*      ram_;
 	mutable PerfStats perf_stats_;
+	std::unordered_map<int, std::stringstream> print_bufs_;
+
+	// Tap byte writes that fall in the IO_COUT range and route them to the
+	// per-thread print buffer. Returns true if the byte was consumed (no RAM
+	// write needed). Mirrors the RTL AFU sniffer that listens on writes to
+	// the IO_COUT MMIO region.
+	bool io_cout_tap(uint64_t addr, uint8_t byte) {
+		if (addr < uint64_t(IO_COUT_ADDR)
+		 || addr >= (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE))
+			return false;
+		uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE - 1);
+		auto& ss_buf = print_bufs_[tid];
+		char c = (char)byte;
+		ss_buf << c;
+		if (c == '\n') {
+			std::cout << "#" << tid << ": " << ss_buf.str() << std::flush;
+			ss_buf.str("");
+		}
+		return true;
+	}
+
+	void cout_flush() {
+		for (auto& buf : print_bufs_) {
+			auto str = buf.second.str();
+			if (!str.empty()) {
+				std::cout << "#" << buf.first << ": " << str << std::endl;
+			}
+		}
+		print_bufs_.clear();
+	}
 	struct DramCallbackArgs {
-		MemSim::Impl* memsim;
+		Memory::Impl* memsim;
 		MemReq request;
 		uint32_t bank_id;
+		std::shared_ptr<mem_block_t> rsp_data;  // captured at request time for reads
 	};
 
 public:
-	Impl(MemSim* simobject, const Config& config)
+	Impl(Memory* simobject, const Config& config)
 		: simobject_(simobject)
 		, config_(config)
 		, dram_sim_(config.num_banks, config.block_size, config.clock_ratio)
+		, ram_(nullptr)
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
@@ -56,7 +93,7 @@ public:
 	}
 
 	~Impl() {
-		//--
+		this->cout_flush();
 	}
 
 	const PerfStats& perf_stats() const {
@@ -77,8 +114,33 @@ public:
 
 			auto& mem_req = mem_xbar_->ReqOut.at(i).peek();
 
+			std::shared_ptr<mem_block_t> rsp_data;
+			if (ram_) {
+				uint64_t line_addr = mem_req.addr & ~uint64_t(MEM_BLOCK_SIZE - 1);
+				if (mem_req.write) {
+					// Apply byte-enabled write to RAM at request arrival.
+					// IO_COUT-range bytes are tapped to the print buffer and
+					// not stored in RAM (RTL-equivalent AFU sniffer).
+					if (mem_req.data) {
+						for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
+							if (mem_req.byteen & (1ull << b)) {
+								uint8_t value = (*mem_req.data)[b];
+								uint64_t byte_addr = line_addr + b;
+								if (this->io_cout_tap(byte_addr, value))
+									continue;
+								ram_->write(&value, byte_addr, 1);
+							}
+						}
+					}
+				} else {
+					// Capture the line at request time; response carries it back.
+					rsp_data = std::make_shared<mem_block_t>();
+					ram_->read(rsp_data->data(), line_addr, MEM_BLOCK_SIZE);
+				}
+			}
+
 			// enqueue the request to the memory system
-			auto req_args = new DramCallbackArgs{this, mem_req, i};
+			auto req_args = new DramCallbackArgs{this, mem_req, i, rsp_data};
 			dram_sim_.send_request(
 				mem_req.addr,
 				mem_req.write,
@@ -90,6 +152,7 @@ public:
 					} else {
 						// only send a response for read requests
 						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
+						mem_rsp.data = rsp_args->rsp_data;
 						if (rsp_args->memsim->mem_xbar_->RspIn.at(rsp_args->bank_id).try_send(mem_rsp)) {
 							DT(3, rsp_args->memsim->simobject_->name() << " mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);
 							delete rsp_args;
@@ -105,29 +168,37 @@ public:
 			mem_xbar_->ReqOut.at(i).pop();
 		}
 	}
+
+	void attach_ram(RAM* ram) {
+		ram_ = ram;
+	}
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-MemSim::MemSim(const SimContext& ctx, const char* name, const Config& config)
-	: SimObject<MemSim>(ctx, name)
+Memory::Memory(const SimContext& ctx, const char* name, const Config& config)
+	: SimObject<Memory>(ctx, name)
 	, mem_req_in(config.num_ports, this)
 	, mem_rsp_out(config.num_ports, this)
 	, impl_(new Impl(this, config))
 {}
 
-MemSim::~MemSim() {
+Memory::~Memory() {
   delete impl_;
 }
 
-void MemSim::reset() {
+void Memory::on_reset() {
   impl_->reset();
 }
 
-void MemSim::tick() {
+void Memory::on_tick() {
   impl_->tick();
 }
 
-const MemSim::PerfStats &MemSim::perf_stats() const {
+void Memory::attach_ram(RAM* ram) {
+  impl_->attach_ram(ram);
+}
+
+const Memory::PerfStats &Memory::perf_stats() const {
 	return impl_->perf_stats();
 }

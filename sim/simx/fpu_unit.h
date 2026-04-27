@@ -13,41 +13,22 @@
 
 #pragma once
 
-#include "instr_trace.h"
+#include "func_unit.h"
 
 namespace vortex {
 
-class Core;
-
-class VOpcUnit : public SimObject<VOpcUnit> {
+class FpuUnit : public FuncUnit {
 public:
-  SimChannel<instr_trace_t*> Input;
-  SimChannel<instr_trace_t*> Output;
-
-  VOpcUnit(const SimContext &ctx, const char* name, Core* core);
-
-  virtual ~VOpcUnit();
-
-  void writeback(instr_trace_t* trace);
-
-  uint32_t total_stalls() const {
-    return total_stalls_;
-  }
+  FpuUnit(const SimContext& ctx, const char* name, Core*);
 
 protected:
-  virtual void on_reset();
-  virtual void on_tick();
+  void on_tick() override;
 
 private:
+  // Per-unit functional execution. Called only from this unit's tick().
+  void execute(instr_trace_t* trace);
 
-  void translate(instr_trace_t* trace);
-
-  Core*          core_;
-  uint32_t       total_stalls_ = 0;
-  instr_trace_t* cur_trace_ = nullptr;
-  uint64_t       release_cycle_ = 0;
-
-  friend class SimObject<VOpcUnit>;
+  uint32_t latency_of(const instr_trace_t* trace) const;
 };
 
-} // namespace vortex
+}

@@ -11,9 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache_sim.h"
+#include "cache.h"
 #include "debug.h"
 #include "types.h"
+#include <cstring>
 #include <list>
 #include <queue>
 #include <unordered_map>
@@ -40,7 +41,7 @@ struct params_t {
   int32_t tag_select_addr_start;
   int32_t tag_select_addr_end;
 
-  params_t(const CacheSim::Config &config) {
+  params_t(const Cache::Config &config) {
     int32_t offset_bits = config.L - config.W;
     int32_t index_bits = config.C - (config.L + config.A + config.B);
     assert(offset_bits >= 0);
@@ -107,13 +108,29 @@ struct line_t {
   uint32_t lru_ctr;
   bool valid;
   bool dirty;
+  std::shared_ptr<mem_block_t> data;  // line bytes
 
   void reset() {
     valid = false;
     dirty = false;
     lru_ctr = 0;
+    data.reset();
   }
 };
+
+static inline void line_merge(line_t& line, const std::shared_ptr<mem_block_t>& src, uint64_t byteen) {
+  if (!line.data) {
+    line.data = std::make_shared<mem_block_t>();
+    std::memset(line.data->data(), 0, line.data->size());
+  }
+  if (src) {
+    for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
+      if (byteen & (1ull << b)) {
+        (*line.data)[b] = (*src)[b];
+      }
+    }
+  }
+}
 
 struct set_t {
   std::vector<line_t> lines;
@@ -151,7 +168,7 @@ struct set_t {
       any_valid = true;
 
       // PLRU victim candidate: max counter among valid ways.
-      if (policy == CacheSim::PLRU) {
+      if (policy == Cache::PLRU) {
         if (!plru_chosen || line.lru_ctr >= max_cnt) {
           max_cnt = line.lru_ctr;
           *repl_line_id = i;
@@ -172,13 +189,13 @@ struct set_t {
 
     // Select victim per policy (for miss path).
     switch (policy) {
-    case CacheSim::FIFO:
+    case Cache::FIFO:
       *repl_line_id = fifo_ptr % lines.size();
       break;
-    case CacheSim::RANDOM:
+    case Cache::RANDOM:
       *repl_line_id = rand_idx % lines.size();
       break;
-    case CacheSim::PLRU:
+    case Cache::PLRU:
     default:
       if (!any_valid)
         *repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
@@ -205,7 +222,7 @@ struct set_t {
         continue;
       }
       any_valid = true;
-      if (policy == CacheSim::PLRU) {
+      if (policy == Cache::PLRU) {
         if (line.lru_ctr >= max_cnt) {
           max_cnt = line.lru_ctr;
           *repl_line_id = i;
@@ -214,13 +231,13 @@ struct set_t {
     }
 
     switch (policy) {
-    case CacheSim::FIFO:
+    case Cache::FIFO:
       *repl_line_id = fifo_ptr % lines.size();
       break;
-    case CacheSim::RANDOM:
+    case Cache::RANDOM:
       *repl_line_id = rand_idx % lines.size();
       break;
-    case CacheSim::PLRU:
+    case Cache::PLRU:
     default:
       if (!any_valid)
         *repl_line_id = (*free_line_id != -1) ? *free_line_id : 0;
@@ -249,6 +266,16 @@ struct bank_req_t {
   uint32_t mshr_id;
   ReqType type;
   bool write;
+  // For write-through write-misses that piggy-back on a pending fill MSHR:
+  // the core response was already sent at miss time, so Replay must not
+  // emit another response — only run line_merge.
+  bool skip_core_rsp;
+
+  // TLM data:
+  //   For Core writes: incoming write data + byteen.
+  //   For Fill: captured fill data from below (mem_rsp.data).
+  std::shared_ptr<mem_block_t> data;
+  uint64_t byteen;
 
   bank_req_t() {
     this->reset();
@@ -262,6 +289,9 @@ struct bank_req_t {
     mshr_id = 0;
     type = ReqType::None;
     write = false;
+    skip_core_rsp = false;
+    data.reset();
+    byteen = 0;
   }
 
   friend std::ostream &operator<<(std::ostream &os, const bank_req_t &req) {
@@ -407,15 +437,20 @@ public:
 
   CacheBank(const SimContext &ctx,
             const char *name,
-            const CacheSim::Config &config,
+            const Cache::Config &config,
             const params_t &params,
             uint32_t bank_id)
       : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, params.lines_per_set), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)), rand_ctr_(0) {
-    this->reset();
+    this->on_reset();
   }
 
-  void reset() {
-    perf_stats_ = CacheSim::PerfStats();
+  const Cache::PerfStats &perf_stats() const {
+    return perf_stats_;
+  }
+
+protected:
+  void on_reset() {
+    perf_stats_ = Cache::PerfStats();
     pending_mshr_size_ = 0;
     pending_read_reqs_ = 0;
     pending_write_reqs_ = 0;
@@ -428,7 +463,7 @@ public:
     mshr_.reset();
   }
 
-  void tick() {
+  void on_tick() {
     // process input requests
     if (!pipe_req_->full()) {
       this->processInputs();
@@ -441,10 +476,6 @@ public:
 
     // calculate memory latency
     perf_stats_.mem_latency += pending_fill_reqs_;
-  }
-
-  const CacheSim::PerfStats &perf_stats() const {
-    return perf_stats_;
   }
 
 private:
@@ -464,6 +495,7 @@ private:
       bank_req.reset();
       bank_req.type = bank_req_t::Fill;
       bank_req.mshr_id = mem_rsp.tag;
+      bank_req.data = mem_rsp.data;  // capture fill bytes
       pipe_req_->push(bank_req);
       ++inflight_fills_;
       this->mem_rsp_in.pop();
@@ -489,6 +521,8 @@ private:
       bank_req.uuid = core_req.uuid;
       bank_req.req_tag = core_req.tag;
       bank_req.write = core_req.write;
+      bank_req.data = core_req.data;
+      bank_req.byteen = core_req.byteen;
       pipe_req_->push(bank_req);
       DT(3, this->name() << " core-req: " << core_req);
       ++pending_mshr_size_;
@@ -527,9 +561,9 @@ private:
       int32_t repl_line_id = 0;
       int32_t victim_line_id = set.select_victim(config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
       // advance FIFO/RANDOM bookkeeping
-      if (config_.repl_policy == CacheSim::FIFO) {
+      if (config_.repl_policy == Cache::FIFO) {
         set.fifo_ptr = (set.fifo_ptr + 1) % set.lines.size();
-      } else if (config_.repl_policy == CacheSim::RANDOM) {
+      } else if (config_.repl_policy == Cache::RANDOM) {
         ++rand_ctr_;
       }
       auto &victim_line = set.lines.at(victim_line_id);
@@ -539,6 +573,8 @@ private:
         mem_req.write = true;
         mem_req.cid = root_entry.bank_req.cid;
         mem_req.uuid = root_entry.bank_req.uuid;
+        mem_req.data = victim_line.data;
+        mem_req.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);  // full-line writeback
         this->mem_req_out.send(mem_req);
         DT(3, this->name() << " writeback: " << mem_req);
         ++perf_stats_.evictions;
@@ -549,6 +585,7 @@ private:
       victim_line.tag = root_entry.addr_tag;
       victim_line.lru_ctr = 0;
       victim_line.dirty = false;
+      victim_line.data = bank_req.data;  // captured fill bytes
     } break;
 
     case bank_req_t::Replay: {
@@ -566,13 +603,20 @@ private:
       int hit_line_id = set.tag_lookup(addr_tag, config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
       assert(hit_line_id != -1);
 
-      if (bank_req.write && config_.write_back) {
-        // Write-miss completed by Fill; Replay completes the store by marking dirty.
-        set.lines.at(hit_line_id).dirty = true;
+      auto &hit_line = set.lines.at(hit_line_id);
+      if (bank_req.write) {
+        // Write-miss completed by Fill; Replay completes the store by merging
+        // the bytes into the (newly filled) line. Mark dirty only for write-back.
+        line_merge(hit_line, bank_req.data, bank_req.byteen);
+        if (config_.write_back)
+          hit_line.dirty = true;
       }
 
-      if (need_core_rsp(bank_req)) {
+      if (need_core_rsp(bank_req) && !bank_req.skip_core_rsp) {
         MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+        if (!bank_req.write) {
+          core_rsp.data = hit_line.data;
+        }
         this->core_rsp_out.send(core_rsp);
         DT(3, this->name() << " replay: " << core_rsp);
       }
@@ -592,21 +636,26 @@ private:
         //
         // Hit handling
         //
+        auto &hit_line = set.lines.at(hit_line_id);
         // Write-through: forward store to memory
         if (bank_req.write) {
-          auto &hit_line = set.lines.at(hit_line_id);
           if (!config_.write_back) {
             if (this->mem_req_out.full())
               return; // stall
+            // Apply write to the cached copy too so subsequent reads get fresh data.
+            line_merge(hit_line, bank_req.data, bank_req.byteen);
             MemReq mem_req;
             mem_req.addr = params_.mem_addr(bank_id_, set_id, addr_tag);
             mem_req.write = true;
             mem_req.cid = bank_req.cid;
             mem_req.uuid = bank_req.uuid;
+            mem_req.data = bank_req.data;
+            mem_req.byteen = bank_req.byteen;
             this->mem_req_out.send(mem_req);
             DT(3, this->name() << " writethrough: " << mem_req);
           } else {
-            // Write-back: mark dirty.
+            // Write-back: byteen-merge into the line and mark dirty.
+            line_merge(hit_line, bank_req.data, bank_req.byteen);
             hit_line.dirty = true;
           }
         }
@@ -616,6 +665,9 @@ private:
           if (this->core_rsp_out.full())
             return; // stall
           MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+          if (!bank_req.write) {
+            core_rsp.data = hit_line.data;
+          }
           this->core_rsp_out.send(core_rsp);
           DT(3, this->name() << " core-rsp: " << core_rsp);
         }
@@ -624,7 +676,14 @@ private:
         // Miss handling
         //
         // Write-through miss: forward store to memory and respond immediately (no fill/MSHR).
+        // Special case: if the line is currently being filled via a pending MSHR
+        // entry, also enqueue this store so Replay applies line_merge after fill.
+        // Without this, the in-flight fill captures pre-store bytes and any
+        // subsequent read of this line returns stale data.
         if (bank_req.write && !config_.write_back) {
+          uint32_t pending_root_id = 0;
+          bool fill_pending = mshr_.lookup(set_id, addr_tag, &pending_root_id);
+
           // Check output backpressure
           if (this->mem_req_out.full())
             return; // stall
@@ -637,6 +696,8 @@ private:
             mem_req.write = true;
             mem_req.cid = bank_req.cid;
             mem_req.uuid = bank_req.uuid;
+            mem_req.data = bank_req.data;
+            mem_req.byteen = bank_req.byteen;
             this->mem_req_out.send(mem_req);
             DT(3, this->name() << " writethrough: " << mem_req);
           }
@@ -645,6 +706,17 @@ private:
             MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
             this->core_rsp_out.send(core_rsp);
             DT(3, this->name() << " core-rsp: " << core_rsp);
+          }
+
+          if (fill_pending) {
+            // Enqueue a no-response replay-write so line_merge runs post-fill.
+            // The core response was already sent above; mark this entry to skip
+            // it on replay.
+            assert(!mshr_.full());
+            bank_req_t merge_req = bank_req;
+            merge_req.skip_core_rsp = true;
+            mshr_.enqueue(merge_req, set_id, addr_tag);
+            DT(3, this->name() << " mshr-enqueue (wt-merge): " << bank_req);
           }
         } else {
           // MSHR-backed miss (read miss, or write-back write miss).
@@ -697,7 +769,7 @@ private:
     }
   }
 
-  CacheSim::Config config_;
+  Cache::Config config_;
   params_t params_;
   uint32_t bank_id_;
 
@@ -706,20 +778,22 @@ private:
   uint32_t pending_mshr_size_;
   TFifo<bank_req_t>::Ptr pipe_req_;
 
-  CacheSim::PerfStats perf_stats_;
+  Cache::PerfStats perf_stats_;
 
   uint64_t pending_read_reqs_;
   uint64_t pending_write_reqs_;
   uint64_t pending_fill_reqs_;
   uint32_t inflight_fills_;
   uint32_t rand_ctr_;
+
+  friend class SimObject<CacheBank>;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class CacheSim::Impl {
+class Cache::Impl {
 public:
-  Impl(CacheSim *simobject, const Config &config)
+  Impl(Cache *simobject, const Config &config)
       : simobject_(simobject), config_(config), params_(config), banks_(1 << config.B), nc_mem_arbs_(config.mem_ports) {
     char sname[100];
 
@@ -863,6 +937,7 @@ private:
       return false; // stall
     uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
     MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
+    core_rsp.data = mem_rsp.data;  // forward TLM payload through bypass
     simobject_->core_rsp_out.at(req_id).send(core_rsp, 0);
     DT(3, simobject_->name() << " bypass-core-rsp: " << core_rsp);
     return true;
@@ -880,7 +955,7 @@ private:
     return true;
   }
 
-  CacheSim *const simobject_;
+  Cache *const simobject_;
   Config config_;
   params_t params_;
   std::vector<CacheBank::Ptr> banks_;
@@ -892,21 +967,21 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-CacheSim::CacheSim(const SimContext &ctx, const char *name, const Config &config)
-    : SimObject<CacheSim>(ctx, name), core_req_in(config.num_inputs, this), core_rsp_out(config.num_inputs, this), mem_req_out(config.mem_ports, this), mem_rsp_in(config.mem_ports, this), impl_(new Impl(this, config)) {}
+Cache::Cache(const SimContext &ctx, const char *name, const Config &config)
+    : SimObject<Cache>(ctx, name), core_req_in(config.num_inputs, this), core_rsp_out(config.num_inputs, this), mem_req_out(config.mem_ports, this), mem_rsp_in(config.mem_ports, this), impl_(new Impl(this, config)) {}
 
-CacheSim::~CacheSim() {
+Cache::~Cache() {
   delete impl_;
 }
 
-void CacheSim::reset() {
+void Cache::on_reset() {
   impl_->reset();
 }
 
-void CacheSim::tick() {
+void Cache::on_tick() {
   impl_->tick();
 }
 
-CacheSim::PerfStats CacheSim::perf_stats() const {
+Cache::PerfStats Cache::perf_stats() const {
   return impl_->perf_stats();
 }

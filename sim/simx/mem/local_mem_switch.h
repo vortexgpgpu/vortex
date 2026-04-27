@@ -11,59 +11,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include "types.h"
 
 namespace vortex {
 
-class MemCoalescer : public SimObject<MemCoalescer> {
+class LocalMemSwitch : public SimObject<LocalMemSwitch> {
 public:
+  using Ptr = std::shared_ptr<LocalMemSwitch>;
+
   SimChannel<LsuReq> ReqIn;
   SimChannel<LsuRsp> RspOut;
 
-  SimChannel<LsuReq> ReqOut;
-  SimChannel<LsuRsp> RspIn;
+  SimChannel<LsuReq> ReqOutLmem;
+  SimChannel<LsuRsp> RspInLmem;
 
-  struct PerfStats {
-    uint64_t misses = 0;
+  SimChannel<LsuReq> ReqOutDC;
+  SimChannel<LsuRsp> RspInDC;
 
-    PerfStats& operator+=(const PerfStats& rhs) {
-      this->misses += rhs.misses;
-      return *this;
-    }
-  };
-
-  MemCoalescer(
+  LocalMemSwitch(
     const SimContext& ctx,
     const char* name,
-    uint32_t input_size,
-    uint32_t output_size,
-    uint32_t line_size,
-    uint32_t queue_size,
     uint32_t delay
   );
 
-  void reset();
-
-  void tick();
-
-  const PerfStats& perf_stats() const;
+protected:
+  void on_tick();
 
 private:
-
-  struct pending_req_t {
-    uint32_t tag;
-    BitVector<> mask;
-  };
-
-  uint32_t input_size_;
-  uint32_t output_size_;
-  uint32_t output_ratio_;
-
-  HashTable<pending_req_t> pending_rd_reqs_;
-  BitVector<> sent_mask_;
-  uint32_t line_size_;
   uint32_t delay_;
-  PerfStats perf_stats_;
+
+  friend class SimObject<LocalMemSwitch>;
 };
 
 }

@@ -21,12 +21,13 @@
 
 using namespace vortex;
 
-CtaDispatcher::CtaDispatcher(Core* core)
-  : core_(core)
+CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core)
+  : SimObject<CtaDispatcher>(ctx, name)
+  , core_(core)
   , kmu_(&core->socket()->cluster()->processor()->kmu())
-  , num_threads_(core->arch().num_threads())
-  , num_warps_(core->arch().num_warps())
-  , lmem_base_(core->arch().local_mem_base())
+  , num_threads_(NUM_THREADS)
+  , num_warps_(NUM_WARPS)
+  , lmem_base_(LMEM_BASE_ADDR)
   , lmem_capacity_(1u << LMEM_LOG_SIZE)
   , lmem_tail_(0)
   , free_size_(1u << LMEM_LOG_SIZE)
@@ -48,7 +49,9 @@ CtaDispatcher::CtaDispatcher(Core* core)
   thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
 }
 
-void CtaDispatcher::reset() {
+CtaDispatcher::~CtaDispatcher() {}
+
+void CtaDispatcher::on_reset() {
   lmem_tail_ = 0;
   free_size_  = lmem_capacity_;
   has_cta_    = false;

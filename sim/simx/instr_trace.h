@@ -18,7 +18,6 @@
 #include <iostream>
 #include <util.h>
 #include "types.h"
-#include "arch.h"
 #include "debug.h"
 #include "instr.h"
 
@@ -60,13 +59,13 @@ struct instr_trace_t {
 public:
   //--
   const uint64_t uuid;
-  const Arch& arch;
 
   //--
   uint32_t    cid;
   uint32_t    wid;
   ThreadMask  tmask;
   Word        PC;
+  uint32_t    code;
   bool        wb;
 
   //--
@@ -81,6 +80,14 @@ public:
   //--
   OpType     op_type;
 
+  // Operand snapshot captured at issue (ArchState::fetch_operands).
+  // src_data[i][t] is the value of src_regs[i] for thread t.
+  std::vector<std::vector<reg_data_t>> src_data;
+
+  // Destination data computed by the unit's execute(); empty if nothing to
+  // write back. ArchState::commit_writeback consumes this at unit-tick time.
+  std::vector<reg_data_t> dst_data;
+
   ITraceData::Ptr data;
 
   std::shared_ptr<Instr> instr_ptr;
@@ -93,13 +100,13 @@ public:
 
   uint64_t issue_time ;
 
-  instr_trace_t(uint64_t uuid, const Arch& arch)
+  instr_trace_t(uint64_t uuid)
     : uuid(uuid)
-    , arch(arch)
     , cid(0)
     , wid(0)
     , tmask(0)
     , PC(0)
+    , code(0)
     , wb(false)
     , dst_reg({RegType::None, 0})
     , src_regs(NUM_SRC_REGS, {RegType::None, 0})
@@ -116,11 +123,11 @@ public:
 
   instr_trace_t(const instr_trace_t& rhs)
     : uuid(rhs.uuid)
-    , arch(rhs.arch)
     , cid(rhs.cid)
     , wid(rhs.wid)
     , tmask(rhs.tmask)
     , PC(rhs.PC)
+    , code(rhs.code)
     , wb(rhs.wb)
     , dst_reg(rhs.dst_reg)
     , src_regs(rhs.src_regs)
@@ -147,7 +154,7 @@ public:
     os << "cid=" << trace.cid;
     os << ", wid=" << trace.wid;
     os << ", tmask=";
-    for (uint32_t i = 0, n = trace.arch.num_threads(); i < n; ++i) {
+    for (uint32_t i = 0, n = NUM_THREADS; i < n; ++i) {
       os << trace.tmask.test(i);
     }
     os << ", PC=0x" << std::hex << trace.PC << std::dec;

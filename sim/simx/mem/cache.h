@@ -14,11 +14,11 @@
 #pragma once
 
 #include <simobject.h>
-#include "mem_sim.h"
+#include "memory.h"
 
 namespace vortex {
 
-class CacheSim : public SimObject<CacheSim> {
+class Cache : public SimObject<Cache> {
 public:
 	enum ReplPolicy : uint8_t {
 		RANDOM = 0,
@@ -71,18 +71,20 @@ public:
 	std::vector<SimChannel<MemReq>> mem_req_out;
 	std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
-	CacheSim(const SimContext& ctx, const char* name, const Config& config);
-	~CacheSim();
-
-	void reset();
-
-	void tick();
+	Cache(const SimContext& ctx, const char* name, const Config& config);
+	~Cache();
 
 	PerfStats perf_stats() const;
+
+protected:
+	void on_reset();
+	void on_tick();
 
 private:
 	class Impl;
 	Impl* impl_;
+
+	friend class SimObject<Cache>;
 };
 
 }

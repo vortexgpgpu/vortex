@@ -13,46 +13,24 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <VX_config.h>
-#include <mem.h>
+#include <mempool.h>
+#include <simobject.h>
+#include "instr.h"
 
 namespace vortex {
 
-class RAM;
-class ProcessorImpl;
-class Emulator;
-#ifdef VM_ENABLE
-class SATP_t;
-#endif
-
-class Processor {
+// Stateless ISA decoder.
+class Decoder : public SimObject<Decoder> {
 public:
-  Processor();
-  ~Processor();
+  Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 64>& instr_pool);
+  ~Decoder();
 
-  void attach_ram(RAM* mem);
-
-  void reset();
-
-  int run();
-
-  int dcr_write(uint32_t addr, uint32_t value);
-
-  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
-
-#ifdef VM_ENABLE
-  bool is_satp_unset();
-  uint8_t get_satp_mode();
-  uint64_t get_base_ppn();
-  int16_t set_satp_by_addr(uint64_t addr);
-#endif
+  // Decode a 32-bit instruction word into an Instr. uuid is passed through
+  // to the resulting Instr for trace correlation.
+  Instr::Ptr decode(uint32_t code, uint64_t uuid);
 
 private:
-  ProcessorImpl* impl_;
-#ifdef VM_ENABLE
-  SATP_t *satp_;
-#endif
+  PoolAllocator<Instr, 64>& instr_pool_;
 };
 
 }

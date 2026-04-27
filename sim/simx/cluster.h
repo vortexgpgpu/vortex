@@ -14,7 +14,6 @@
 #pragma once
 
 #include <simobject.h>
-#include "arch.h"
 #include "cache_cluster.h"
 #include "local_mem.h"
 #include "core.h"
@@ -31,7 +30,7 @@ class ProcessorImpl;
 class Cluster : public SimObject<Cluster> {
 public:
   struct PerfStats {
-    CacheSim::PerfStats l2cache;
+    Cache::PerfStats l2cache;
 #ifdef EXT_DXA_ENABLE
     DxaCore::PerfStats dxa;
 #endif
@@ -73,8 +72,7 @@ public:
   Cluster(const SimContext& ctx,
           const char* name,
           uint32_t cluster_id,
-          ProcessorImpl* processor,
-          const Arch &arch);
+          ProcessorImpl* processor);
 
   ~Cluster();
 
@@ -85,16 +83,6 @@ public:
   ProcessorImpl* processor() const {
     return processor_;
   }
-
-  void reset();
-
-  void tick();
-
-  void attach_ram(RAM* ram);
-
-  #ifdef VM_ENABLE
-  void set_satp(uint64_t satp);
-  #endif
 
   bool running() const;
 
@@ -112,16 +100,22 @@ public:
   DxaCore::Ptr& dxa_core() { return dxa_core_; }
 #endif
 
+protected:
+  void on_reset();
+  void on_tick();
+
 private:
   uint32_t                    cluster_id_;
   ProcessorImpl*              processor_;
   std::vector<Socket::Ptr>    sockets_;
   std::vector<core_barrier_t> gbarriers_;
-  CacheSim::Ptr               l2cache_;
+  Cache::Ptr               l2cache_;
   uint32_t                    cores_per_socket_;
 #ifdef EXT_DXA_ENABLE
   DxaCore::Ptr                dxa_core_;
 #endif
+
+  friend class SimObject<Cluster>;
 };
 
 } // namespace vortex

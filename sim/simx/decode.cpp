@@ -22,8 +22,7 @@
 #include <util.h>
 #include "debug.h"
 #include "types.h"
-#include "emulator.h"
-#include "arch.h"
+#include "decode.h"
 #include "instr.h"
 
 #ifdef EXT_TCU_ENABLE
@@ -528,7 +527,14 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
+Decoder::Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 64>& instr_pool)
+  : SimObject<Decoder>(ctx, name)
+  , instr_pool_(instr_pool)
+{}
+
+Decoder::~Decoder() {}
+
+Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   auto funct2 = (code >> shift_funct2) & mask_funct2;
   auto funct3 = (code >> shift_funct3) & mask_funct3;
@@ -746,7 +752,7 @@ Instr::Ptr Emulator::decode(uint32_t code, uint32_t /*wid*/, uint64_t uuid) {
   } break;
   case Opcode::SYS: {
     if (funct3 != 0) { // CSRRW/CSRRS/CSRRC
-      instr->set_fu_type(FUType::SFU);
+      instr->set_fu_type(FUType::CSR);
       instr->set_dest_reg(rd, RegType::Integer);
       switch (funct3) {
       case 1: case 5: instr->set_op_type(CsrType::CSRRW); break;

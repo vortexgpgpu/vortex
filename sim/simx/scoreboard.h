@@ -13,104 +13,48 @@
 
 #pragma once
 
+#include <simobject.h>
 #include "instr_trace.h"
 #include <unordered_map>
 #include <vector>
 
 namespace vortex {
 
-class Scoreboard {
+// Mirrors the RTL VX_scoreboard module instantiated inside VX_issue_slice.sv.
+// Tracks per-warp register reservations between issue and writeback.
+class Scoreboard : public SimObject<Scoreboard> {
 public:
+  struct reg_use_t {
+    RegType  reg_type;
+    uint32_t reg_id;
+    FUType   fu_type;
+    OpType   op_type;
+    uint64_t uuid;
+  };
 
-	struct reg_use_t {
-		RegType  reg_type;
-		uint32_t reg_id;
-		FUType   fu_type;
-		OpType   op_type;
-		uint64_t uuid;
-	};
+  Scoreboard(const SimContext& ctx, const char* name);
+  ~Scoreboard();
 
-	Scoreboard(const Arch &arch)
-	: in_use_regs_(arch.num_warps()) {
-		for (auto& in_use_reg : in_use_regs_) {
-			in_use_reg.resize((int)RegType::Count);
-		}
-		this->reset();
-	}
+  bool in_use(instr_trace_t* trace) const;
 
-	void reset() {
-		for (auto& in_use_reg : in_use_regs_) {
-			for (auto& mask : in_use_reg) {
-				mask.reset();
-			}
-		}
-		owners_.clear();
-	}
+  std::vector<reg_use_t> get_uses(instr_trace_t* trace) const;
 
-	bool in_use(instr_trace_t* trace) const {
-		if (trace->wb) {
-			assert(trace->dst_reg.type != RegType::None);
-			if (in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).test(trace->dst_reg.idx)) {
-				return true;
-			}
-		}
-		for (uint32_t i = 0; i < trace->src_regs.size(); ++i) {
-			if (trace->src_regs[i].type != RegType::None) {
-				if (in_use_regs_.at(trace->wid).at((int)trace->src_regs[i].type).test(trace->src_regs[i].idx)) {
-					return true;
-				}
-			}
-		}
-		return false;
-	}
+  void reserve(instr_trace_t* trace);
 
-	std::vector<reg_use_t> get_uses(instr_trace_t* trace) const {
-		std::vector<reg_use_t> out;
-		if (trace->wb) {
-			assert(trace->dst_reg.type != RegType::None);
-			if (in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).test(trace->dst_reg.idx)) {
-				uint32_t reg_id = get_reg_id(trace->dst_reg, trace->wid);
-				auto owner = owners_.at(reg_id);
-				out.push_back({trace->dst_reg.type, trace->dst_reg.idx, owner->fu_type, owner->op_type, owner->uuid});
-			}
-		}
-		for (uint32_t i = 0; i < trace->src_regs.size(); ++i) {
-			if (trace->src_regs[i].type != RegType::None) {
-				if (in_use_regs_.at(trace->wid).at((int)trace->src_regs[i].type).test(trace->src_regs[i].idx)) {
-					uint32_t reg_id = get_reg_id(trace->src_regs[i], trace->wid);
-					auto owner = owners_.at(reg_id);
-					out.push_back({trace->src_regs[i].type, trace->src_regs[i].idx, owner->fu_type, owner->op_type, owner->uuid});
-				}
-			}
-		}
-		return out;
-	}
+  void release(instr_trace_t* trace);
 
-	void reserve(instr_trace_t* trace) {
-		uint32_t reg_id = get_reg_id(trace->dst_reg, trace->wid);
-		assert(trace->wb);
-		in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).set(trace->dst_reg.idx);
-		assert(owners_.count(reg_id) == 0);
-		owners_[reg_id] = trace;
-	}
-
-	void release(instr_trace_t* trace) {
-		uint32_t reg_id = get_reg_id(trace->dst_reg, trace->wid);
-		assert(trace->wb);
-		assert(in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).test(trace->dst_reg.idx));
-		in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).reset(trace->dst_reg.idx);
-		assert(owners_.count(reg_id) != 0);
-		owners_.erase(reg_id);
-	}
+protected:
+  void on_reset();
 
 private:
-
   static uint32_t get_reg_id(const RegOpd& reg, uint32_t wid) {
     return (wid << RegOpd::ID_BITS) | reg.id();
   }
 
-	std::vector<std::vector<RegMask>> in_use_regs_;
-	std::unordered_map<uint32_t, instr_trace_t*> owners_;
+  std::vector<std::vector<RegMask>> in_use_regs_;
+  std::unordered_map<uint32_t, instr_trace_t*> owners_;
+
+  friend class SimObject<Scoreboard>;
 };
 
 }

@@ -11,15 +11,29 @@ TEST_DIR := $(VORTEX_HOME)/tests/riscv/isa
 # - atomics extension
 # - vector extension
 
+# Skip atomic ISA tests when the build is configured without EXT_A_ENABLE.
+# Without atomics support, AMO instructions trap and the test fails. Resolve
+# the post-preprocessor value of EXT_A_ENABLED rather than grepping (the
+# header always lists both 0 and 1 branches inside an #ifdef block).
+HAS_EXT_A := $(shell echo 'EXT_A_ENABLED' | gcc -E -P -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
+
 TESTS_32I := $(filter-out $(TEST_DIR)/rv32ui-p-ma_data.bin $(TEST_DIR)/rv32ui-p-fence_i.bin, $(wildcard $(TEST_DIR)/rv32ui-p-*.bin))
 TESTS_32M := $(wildcard $(TEST_DIR)/rv32um-p-*.bin)
+ifneq ($(HAS_EXT_A),0)
 TESTS_32A := $(wildcard $(TEST_DIR)/rv32ua-p-*.bin)
+else
+TESTS_32A :=
+endif
 TESTS_32F := $(wildcard $(TEST_DIR)/rv32uf-p-*.bin)
 TESTS_32D := $(wildcard $(TEST_DIR)/rv32ud-p-*.bin)
 
 TESTS_64I := $(filter-out $(TEST_DIR)/rv64ui-p-ma_data.bin $(TEST_DIR)/rv64ui-p-fence_i.bin, $(wildcard $(TEST_DIR)/rv64ui-p-*.bin))
 TESTS_64M := $(wildcard $(TEST_DIR)/rv64um-p-*.bin)
+ifneq ($(HAS_EXT_A),0)
 TESTS_64A := $(wildcard $(TEST_DIR)/rv64ua-p-*.bin)
+else
+TESTS_64A :=
+endif
 TESTS_64F := $(wildcard $(TEST_DIR)/rv64uf-p-*.bin)
 TESTS_64D := $(wildcard $(TEST_DIR)/rv64ud-p-*.bin)
 

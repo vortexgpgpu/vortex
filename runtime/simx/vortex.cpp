@@ -13,7 +13,6 @@
 
 #include <common.h>
 
-#include <arch.h>
 #include <constants.h>
 #include <mem.h>
 #include <processor.h>
@@ -35,7 +34,6 @@
 
 #include <util.h>
 
-#include <arch.h>
 #include <array>
 #include <cmath>
 #include <constants.h>
@@ -49,7 +47,7 @@ using namespace vortex;
 class vx_device {
 public:
   vx_device()
-      : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES), ram_(0, MEM_PAGE_SIZE), processor_(arch_), global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE) {
+      : ram_(0, MEM_PAGE_SIZE), processor_(), global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE) {
     // attach memory module
     processor_.attach_ram(&ram_);
 #ifdef VM_ENABLE
@@ -602,7 +600,6 @@ public:
 #endif // VM_ENABLE
 
 private:
-  Arch arch_;
   RAM ram_;
   Processor processor_;
   MemoryAllocator global_mem_;

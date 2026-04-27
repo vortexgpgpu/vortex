@@ -555,11 +555,11 @@ DxaCore::~DxaCore() {
   delete impl_;
 }
 
-void DxaCore::reset() {
+void DxaCore::on_reset() {
   impl_->reset();
 }
 
-void DxaCore::tick() {
+void DxaCore::on_tick() {
   impl_->tick();
 }
 

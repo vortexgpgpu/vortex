@@ -18,16 +18,15 @@ using namespace vortex;
 Cluster::Cluster(const SimContext& ctx,
                  const char* name,
                  uint32_t cluster_id,
-                 ProcessorImpl* processor,
-                 const Arch &arch)
+                 ProcessorImpl* processor)
   : SimObject(ctx, name)
   , mem_req_out(L2_MEM_PORTS, this)
   , mem_rsp_in(L2_MEM_PORTS, this)
   , cluster_id_(cluster_id)
   , processor_(processor)
   , sockets_(NUM_SOCKETS)
-  , gbarriers_(arch.num_barriers())
-  , cores_per_socket_(arch.socket_size())
+  , gbarriers_(NUM_BARRIERS)
+  , cores_per_socket_(SOCKET_SIZE)
 {
   char sname[100];
 
@@ -38,13 +37,13 @@ Cluster::Cluster(const SimContext& ctx,
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
     uint32_t socket_id = cluster_id * sockets_per_cluster + i;
     snprintf(sname, 100, "%s-socket%d", name, i);
-    sockets_.at(i) = Socket::Create(sname, socket_id, this, arch);
+    sockets_.at(i) = Socket::Create(sname, socket_id, this);
   }
 
   // Create l2cache
 
   snprintf(sname, 100, "%s-l2cache", name);
-  l2cache_ = CacheSim::Create(sname, CacheSim::Config{
+  l2cache_ = Cache::Create(sname, Cache::Config{
     !L2_ENABLED,
     log2ceil(L2_CACHE_SIZE),// C
     log2ceil(MEM_BLOCK_SIZE),// L
@@ -119,23 +118,15 @@ Cluster::~Cluster() {
   //--
 }
 
-void Cluster::reset() {
+void Cluster::on_reset() {
   for (auto& gbar : gbarriers_) {
     gbar.reset();
   }
-  for (auto& socket : sockets_) {
-    socket->reset();
-  }
+  // Sockets are SimObjects; reset by SimPlatform.
 }
 
-void Cluster::tick() {
+void Cluster::on_tick() {
   //--
-}
-
-void Cluster::attach_ram(RAM* ram) {
-  for (auto& socket : sockets_) {
-    socket->attach_ram(ram);
-  }
 }
 
 #ifdef VM_ENABLE

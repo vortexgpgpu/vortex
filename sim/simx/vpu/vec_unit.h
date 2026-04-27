@@ -13,18 +13,20 @@
 
 #pragma once
 
-#include "arch.h"
 #include "instr.h"
 #include "instr_trace.h"
 #include <simobject.h>
 #include "types.h"
+#include "func_unit.h"
 
 namespace vortex {
 
 class Core;
 
-class VecUnit : public SimObject<VecUnit> {
+class VecUnit : public FuncUnit {
 public:
+  using Ptr = std::shared_ptr<VecUnit>;
+
   struct MemTraceData : public ITraceData {
     using Ptr = std::shared_ptr<MemTraceData>;
     std::vector<std::vector<mem_addr_size_t>> mem_addrs;
@@ -55,15 +57,8 @@ public:
     }
   };
 
-  std::vector<SimChannel<instr_trace_t*>> Inputs;
-  std::vector<SimChannel<instr_trace_t*>> Outputs;
-
-  VecUnit(const SimContext& ctx, const char* name, const Arch& arch, Core* core);
+  VecUnit(const SimContext& ctx, const char* name, Core* core);
   ~VecUnit();
-
-  void reset();
-
-  void tick();
 
   std::string dumpRegister(uint32_t wid, uint32_t tid, uint32_t reg_idx) const;
 
@@ -81,7 +76,14 @@ public:
 
   const PerfStats& perf_stats() const;
 
+protected:
+  void on_reset() override;
+  void on_tick() override;
+
 private:
+  // Per-trace functional execution for VsetType/VopType. Called only from
+  // this unit's tick() at first peek of a new trace.
+  void execute(instr_trace_t* trace);
 
   class Impl;
   Impl* impl_;

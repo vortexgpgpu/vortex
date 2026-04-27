@@ -14,6 +14,7 @@
 #pragma once
 
 #include <cstdint>
+#include <simobject.h>
 #include "VX_types.h"
 
 namespace vortex {
@@ -30,11 +31,11 @@ struct kmu_req_t {
   uint32_t warp_step[3];
 };
 
-class Kmu {
+// Kernel Management Unit. Mirrors RTL VX_kmu module. Holds the in-flight
+// kernel descriptor and walks the grid producing one CTA per step().
+class Kmu : public SimObject<Kmu> {
 public:
-  Kmu();
-
-  void reset();
+  Kmu(const SimContext& ctx, const char* name);
 
   void dcr_write(uint32_t addr, uint32_t value);
 
@@ -47,6 +48,9 @@ public:
   // fill *req with next CTA; returns false when grid is exhausted
   bool step(kmu_req_t* req);
 
+protected:
+  void on_reset();
+
 private:
   uint64_t PC_;
   uint64_t param_;
@@ -58,6 +62,8 @@ private:
   bool     running_;
   uint32_t cta_id_;
   uint32_t block_idx_[3];
+
+  friend class SimObject<Kmu>;
 };
 
 } // namespace vortex

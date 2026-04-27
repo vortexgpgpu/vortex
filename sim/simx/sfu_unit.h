@@ -13,44 +13,22 @@
 
 #pragma once
 
-#include <simobject.h>
-#include "types.h"
+#include "func_unit.h"
 
 namespace vortex {
 
-class MemSim : public SimObject<MemSim>{
+class SfuUnit : public FuncUnit {
 public:
-	struct Config {
-		uint32_t num_banks;
-		uint32_t num_ports;
-		uint32_t block_size;
-		float clock_ratio;
-	};
+	SfuUnit(const SimContext& ctx, const char* name, Core*);
 
-	struct PerfStats {
-		uint64_t bank_stalls = 0;
-
-		PerfStats& operator+=(const PerfStats& rhs) {
-			this->bank_stalls += rhs.bank_stalls;
-			return *this;
-		}
-	};
-
-	std::vector<SimChannel<MemReq>> mem_req_in;
-	std::vector<SimChannel<MemRsp>> mem_rsp_out;
-
-	MemSim(const SimContext& ctx, const char* name, const Config& config);
-	~MemSim();
-
-	void reset();
-
-	void tick();
-
-	const PerfStats& perf_stats() const;
+protected:
+	void on_tick() override;
 
 private:
-	class Impl;
-	Impl* impl_;
+	// Per-unit functional execution (Wctl only). Called only from this unit's tick().
+	void execute(instr_trace_t* trace);
+
+	uint32_t latency_of(const instr_trace_t* trace) const;
 };
 
-};
+}

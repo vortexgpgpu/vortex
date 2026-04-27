@@ -53,20 +53,21 @@ public:
   LocalMem(const SimContext& ctx, const char* name, const Config& config);
   virtual ~LocalMem();
 
-  void reset();
-
   void read(void* data, uint64_t addr, uint32_t size);
 
   void write(const void* data, uint64_t addr, uint32_t size);
-
-  void tick();
 
   const PerfStats& perf_stats() const;
 
 protected:
 
+  void on_reset();
+  void on_tick();
+
   class Impl;
   Impl* impl_;
+
+  friend class SimObject<LocalMem>;
 };
 
 }

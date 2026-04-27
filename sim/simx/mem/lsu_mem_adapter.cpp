@@ -11,93 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "types.h"
+#include "lsu_mem_adapter.h"
 
 using namespace vortex;
-
-LocalMemSwitch::LocalMemSwitch(
-  const SimContext& ctx,
-  const char* name,
-  uint32_t delay
-) : SimObject<LocalMemSwitch>(ctx, name)
-  , ReqIn(this)
-  , RspOut(this)
-  , ReqOutLmem(this)
-  , RspInLmem(this)
-  , ReqOutDC(this)
-  , RspInDC(this)
-  , delay_(delay)
-{}
-
-void LocalMemSwitch::reset() {}
-
-void LocalMemSwitch::tick() {
-  // process outgoing responses
-  if (!RspInLmem.empty()) {
-    auto& out_rsp = RspInLmem.peek();
-    if (RspOut.try_send(out_rsp, 1)) {
-      DT(4, this->name() << " lmem-rsp: " << out_rsp);
-      RspInLmem.pop();
-    }
-  }
-  if (!RspInDC.empty()) {
-    auto& out_rsp = RspInDC.peek();
-    if (RspOut.try_send(out_rsp, 1)) {
-      DT(4, this->name() << " dc-rsp: " << out_rsp);
-      RspInDC.pop();
-    }
-  }
-
-  // process incoming requests
-  if (!ReqIn.empty()) {
-    auto& in_req = ReqIn.peek();
-
-    LsuReq out_dc_req(in_req.mask.size());
-    out_dc_req.write = in_req.write;
-    out_dc_req.tag   = in_req.tag;
-    out_dc_req.cid   = in_req.cid;
-    out_dc_req.uuid  = in_req.uuid;
-
-    LsuReq out_lmem_req(out_dc_req);
-
-    for (uint32_t i = 0; i < in_req.mask.size(); ++i) {
-      if (in_req.mask.test(i)) {
-        auto type = get_addr_type(in_req.addrs.at(i));
-        if (type == AddrType::Shared) {
-          out_lmem_req.mask.set(i);
-          out_lmem_req.addrs.at(i) = in_req.addrs.at(i);
-        } else {
-          out_dc_req.mask.set(i);
-          out_dc_req.addrs.at(i) = in_req.addrs.at(i);
-        }
-      }
-    }
-
-    bool send_to_dc = !out_dc_req.mask.none();
-    bool send_to_lmem = !out_lmem_req.mask.none();
-
-    // check DC backpressure
-    if (send_to_dc && ReqOutDC.full())
-      return; // stall
-
-    // check LMem backpressure
-    if (send_to_lmem && ReqOutLmem.full())
-      return; // stall
-
-    if (send_to_dc) {
-      ReqOutDC.send(out_dc_req, delay_);
-      DT(4, this->name() << " dc-req: " << out_dc_req);
-    }
-
-    if (send_to_lmem) {
-      ReqOutLmem.send(out_lmem_req, delay_);
-      DT(4, this->name() << " lmem-req: " << out_lmem_req);
-    }
-    ReqIn.pop();
-  }
-}
-
-///////////////////////////////////////////////////////////////////////////////
 
 LsuMemAdapter::LsuMemAdapter(
   const SimContext& ctx,
@@ -116,7 +32,10 @@ LsuMemAdapter::LsuMemAdapter(
   if (num_inputs == 1) {
     // bypass mode
     ReqIn.bind(&ReqOut.at(0), [](const LsuReq& req) {
-      return MemReq{ req.addrs.at(0), req.write, AddrType::Global, req.tag, req.cid, req.uuid };
+      MemReq mr{ req.addrs.at(0), req.write, AddrType::Global, req.tag, req.cid, req.uuid };
+      mr.data   = req.data.at(0);
+      mr.byteen = req.byteen.at(0);
+      return mr;
     });
     RspIn.at(0).bind(&RspOut, [](const MemRsp& rsp) {
       LsuRsp lsuRsp(1);
@@ -124,14 +43,17 @@ LsuMemAdapter::LsuMemAdapter(
       lsuRsp.tag = rsp.tag;
       lsuRsp.cid = rsp.cid;
       lsuRsp.uuid = rsp.uuid;
+      lsuRsp.data.at(0) = rsp.data;
       return lsuRsp;
     });
   }
 }
 
-void LsuMemAdapter::reset() {}
+void LsuMemAdapter::on_reset() {
+  pending_mask_.reset();
+}
 
-void LsuMemAdapter::tick() {
+void LsuMemAdapter::on_tick() {
   uint32_t input_size = ReqOut.size();
   if (input_size == 1)
     return;
@@ -153,6 +75,7 @@ void LsuMemAdapter::tick() {
     out_rsp.tag = rsp_in.tag;
     out_rsp.cid = rsp_in.cid;
     out_rsp.uuid = rsp_in.uuid;
+    out_rsp.data.at(i) = rsp_in.data;
 
     // merge other responses with the same tag
     for (uint32_t j = i + 1; j < input_size; ++j) {
@@ -161,6 +84,7 @@ void LsuMemAdapter::tick() {
       auto& other_rsp = RspIn.at(j).peek();
       if (rsp_in.tag == other_rsp.tag) {
         out_rsp.mask.set(j);
+        out_rsp.data.at(j) = other_rsp.data;
         DT(4, this->name() << "-rsp" << j << ": " << other_rsp);
         RspIn.at(j).pop();
       }
@@ -168,7 +92,7 @@ void LsuMemAdapter::tick() {
 
     // send memory response
     RspOut.send(out_rsp, 1);
-    
+
     // remove input
     DT(4, this->name() << "-rsp" << i << ": " << rsp_in);
     RspIn.at(i).pop();
@@ -190,12 +114,14 @@ void LsuMemAdapter::tick() {
         continue;
 
       MemReq out_req;
-      out_req.write = in_req.write;
-      out_req.addr  = in_req.addrs.at(i);
-      out_req.type  = get_addr_type(in_req.addrs.at(i));
-      out_req.tag   = in_req.tag;
-      out_req.cid   = in_req.cid;
-      out_req.uuid  = in_req.uuid;
+      out_req.write  = in_req.write;
+      out_req.addr   = in_req.addrs.at(i);
+      out_req.type   = get_addr_type(in_req.addrs.at(i));
+      out_req.tag    = in_req.tag;
+      out_req.cid    = in_req.cid;
+      out_req.uuid   = in_req.uuid;
+      out_req.data   = in_req.data.at(i);
+      out_req.byteen = in_req.byteen.at(i);
 
       if (ReqOut.at(i).try_send(out_req, delay_)) {
         DT(4, this->name() << " req" << i << ": " << out_req);

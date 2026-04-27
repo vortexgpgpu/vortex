@@ -17,7 +17,6 @@
 #include <simobject.h>
 #include "types.h"
 #include "instr_trace.h"
-#include "arch.h"
 
 namespace vortex {
 
@@ -81,9 +80,6 @@ public:
   DxaCore(const SimContext& ctx, const char* name, Cluster* cluster);
   virtual ~DxaCore();
 
-  virtual void reset();
-  virtual void tick();
-
   // Write a descriptor field via DCR.
   int dcr_write(uint32_t addr, uint32_t value);
 
@@ -101,9 +97,15 @@ public:
 
   const PerfStats& perf_stats() const;
 
+protected:
+  virtual void on_reset();
+  virtual void on_tick();
+
 private:
   class Impl;
   Impl* impl_;
+
+  friend class SimObject<DxaCore>;
 };
 
 } // namespace vortex

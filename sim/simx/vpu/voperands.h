@@ -29,17 +29,19 @@ public:
 
   virtual ~Operands();
 
-  virtual void reset();
-
-  virtual void tick();
-
   void writeback(instr_trace_t* trace);
 
   uint32_t total_stalls() const;
 
+protected:
+  virtual void on_reset();
+  virtual void on_tick();
+
 private:
   std::vector<VOpcUnit::Ptr> opc_units_;
   TraceArbiter::Ptr rsp_arb_;
+
+  friend class SimObject<Operands>;
 };
 
 } // namespace vortex

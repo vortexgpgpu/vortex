@@ -13,8 +13,8 @@
 
 #pragma once
 
-#include "mem_sim.h"
-#include "cache_sim.h"
+#include "memory.h"
+#include "cache.h"
 #include "constants.h"
 #include "cluster.h"
 #include "kmu.h"
@@ -26,14 +26,14 @@ class Emulator;
 class ProcessorImpl {
 public:
   struct PerfStats {
-    CacheSim::PerfStats l3cache;
-    MemSim::PerfStats memsim;
+    Cache::PerfStats l3cache;
+    Memory::PerfStats memsim;
     uint64_t mem_reads = 0;
     uint64_t mem_writes = 0;
     uint64_t mem_latency = 0;
   };
 
-  ProcessorImpl(const Arch& arch);
+  ProcessorImpl();
   ~ProcessorImpl();
 
   void attach_ram(RAM* mem);
@@ -47,20 +47,37 @@ public:
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
 #ifdef VM_ENABLE
-  void set_satp(uint64_t satp);
+  void set_satp(uint64_t satp) { satp_ = satp; }
+  uint64_t get_satp() const    { return satp_; }
 #endif
 
   PerfStats perf_stats() const;
 
-  Kmu& kmu() { return kmu_; }
+  Kmu& kmu()       { return *kmu_; }
+  RAM* ram() const { return ram_; }
+
+  // LR/SC reservation tracking. Single-slot is sufficient: atomics in this
+  // build are off by default and even when on the suite is single-warp.
+  void amo_reserve(uint64_t addr) {
+    amo_addr_  = addr;
+    amo_valid_ = true;
+  }
+  bool amo_check(uint64_t addr) const {
+    return amo_valid_ && amo_addr_ == addr;
+  }
 
 private:
 
-  const Arch& arch_;
-  Kmu         kmu_;
-  std::vector<std::shared_ptr<Cluster>> clusters_;
-  MemSim::Ptr memsim_;
-  CacheSim::Ptr l3cache_;
+  Kmu::Ptr    kmu_;
+  std::vector<Cluster::Ptr> clusters_;
+  Memory::Ptr memsim_;
+  Cache::Ptr l3cache_;
+  RAM* ram_ = nullptr;
+  uint64_t amo_addr_ = 0;
+  bool     amo_valid_ = false;
+#ifdef VM_ENABLE
+  uint64_t satp_ = 0;
+#endif
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;
   uint64_t perf_mem_latency_;

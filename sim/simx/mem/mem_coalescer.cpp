@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "mem_coalescer.h"
+#include <cstring>
 
 using namespace vortex;
 
@@ -37,11 +38,11 @@ MemCoalescer::MemCoalescer(
   , delay_(delay)
 {}
 
-void MemCoalescer::reset() {
+void MemCoalescer::on_reset() {
   sent_mask_.reset();
 }
 
-void MemCoalescer::tick() {
+void MemCoalescer::on_tick() {
   // process outgoing responses
   if (!RspIn.empty()) {
     auto& rsp_in = RspIn.peek();
@@ -58,12 +59,23 @@ void MemCoalescer::tick() {
       }
     }
 
-    // build memory response
+    // build memory response — replicate each output-lane data block to all
+    // coalesced input lanes (shared_ptr aliasing, no copy)
     LsuRsp out_rsp(input_size_);
     out_rsp.mask = rsp_mask;
     out_rsp.tag = entry.tag;
     out_rsp.cid = rsp_in.cid;
     out_rsp.uuid = rsp_in.uuid;
+    for (uint32_t o = 0; o < output_size_; ++o) {
+      if (!rsp_in.mask.test(o))
+        continue;
+      for (uint32_t r = 0; r < output_ratio_; ++r) {
+        uint32_t i = o * output_ratio_ + r;
+        if (entry.mask.test(i)) {
+          out_rsp.data.at(i) = rsp_in.data.at(o);
+        }
+      }
+    }
 
     // send memory response
     if (RspOut.try_send(out_rsp, 1)) {
@@ -102,6 +114,8 @@ void MemCoalescer::tick() {
 
   BitVector<> out_mask(output_size_);
   std::vector<uint64_t> out_addrs(output_size_);
+  std::vector<std::shared_ptr<mem_block_t>> out_data(output_size_);
+  std::vector<uint64_t> out_byteen(output_size_, 0);
 
   BitVector<> cur_mask(input_size_);
 
@@ -123,6 +137,30 @@ void MemCoalescer::tick() {
         if (match_addr == seed_addr) {
           cur_mask.set(j);
         }
+      }
+
+      // For writes, merge per-lane data + byteen into the coalesced block.
+      if (in_req.write) {
+        std::shared_ptr<mem_block_t> merged;
+        uint64_t merged_byteen = 0;
+        for (uint32_t s = r; s < output_ratio_; ++s) {
+          uint32_t j = o * output_ratio_ + s;
+          if (!cur_mask.test(j) || !in_req.data.at(j))
+            continue;
+          if (!merged) {
+            merged = std::make_shared<mem_block_t>();
+            std::memset(merged->data(), 0, merged->size());
+          }
+          uint64_t lane_be = in_req.byteen.at(j);
+          for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
+            if (lane_be & (1ull << b)) {
+              (*merged)[b] = (*in_req.data.at(j))[b];
+            }
+          }
+          merged_byteen |= lane_be;
+        }
+        out_data.at(o) = merged;
+        out_byteen.at(o) = merged_byteen;
       }
 
       out_mask.set(o);
@@ -147,6 +185,8 @@ void MemCoalescer::tick() {
   out_req.addrs = out_addrs;
   out_req.cid = in_req.cid;
   out_req.uuid = in_req.uuid;
+  out_req.data = std::move(out_data);
+  out_req.byteen = std::move(out_byteen);
 
   // send memory request
   ReqOut.send(out_req, delay_);

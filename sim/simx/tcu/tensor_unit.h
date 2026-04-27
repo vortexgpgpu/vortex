@@ -17,6 +17,7 @@
 #include <mempool.h>
 #include "instr_trace.h"
 #include "instr.h"
+#include "func_unit.h"
 
 namespace vortex {
 
@@ -42,8 +43,9 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class TensorUnit : public SimObject<TensorUnit> {
+class TensorUnit : public FuncUnit {
 public:
+  using Ptr = std::shared_ptr<TensorUnit>;
 
   static op_string_t op_string(TcuType tcu_type, IntrTcuArgs args);
 
@@ -69,15 +71,8 @@ public:
 		}
 	};
 
-  std::vector<SimChannel<instr_trace_t*>> Inputs;
-	std::vector<SimChannel<instr_trace_t*>> Outputs;
-
-  TensorUnit(const SimContext &ctx, const char* name, const Arch& arch, Core* core);
+  TensorUnit(const SimContext &ctx, const char* name, Core* core);
   virtual ~TensorUnit();
-
-  virtual void reset();
-
-  virtual void tick();
 
 	void wmma(uint32_t wid,
 	          uint32_t fmt_s,
@@ -116,6 +111,10 @@ public:
 					ExeTraceData* trace_data);
 
 	const PerfStats& perf_stats() const;
+
+protected:
+  void on_reset() override;
+  void on_tick() override;
 
 private:
 	class Impl;

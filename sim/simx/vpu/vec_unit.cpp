@@ -19,8 +19,8 @@ using namespace vortex;
 
 class VecUnit::Impl {
 public:
-  Impl(VecUnit *simobject, const Arch &arch, Core *core)
-      : simobject_(simobject), core_(core), vpu_states_(arch.num_warps(), arch.num_threads()), num_lanes_(arch.num_warps()), pending_reqs_(arch.num_warps()) {
+  Impl(VecUnit *simobject, Core *core)
+      : simobject_(simobject), core_(core), vpu_states_(NUM_WARPS, NUM_THREADS), num_lanes_(NUM_WARPS), pending_reqs_(NUM_WARPS) {
     this->reset();
   }
 
@@ -38,6 +38,10 @@ public:
         continue;
 
       auto trace = input.peek();
+      // Lazy execute on first peek.
+      if (!trace->data) {
+        this->execute_trace(trace);
+      }
       auto trace_data = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
       auto vpu_op = trace_data->vpu_op;
 
@@ -80,6 +84,41 @@ public:
         DT(3, simobject_->name() << " execute: op=" << vpu_op << ", " << *trace);
         input.pop();
       }
+    }
+  }
+
+  void execute_trace(instr_trace_t* trace) {
+    auto& warp = core_->scheduler().warp(trace->wid);
+    auto& instr = *trace->instr_ptr;
+    uint32_t wid = trace->wid;
+    uint32_t num_threads = NUM_THREADS;
+    auto& rs1_data = trace->src_data[0];
+    auto& rs2_data = trace->src_data[1];
+
+    uint32_t thread_start = 0;
+    for (; thread_start < num_threads; ++thread_start) {
+      if (warp.tmask.test(thread_start)) break;
+    }
+
+    trace->dst_data.assign(num_threads, reg_data_t{});
+    auto& rd_data = trace->dst_data;
+
+    if (std::get_if<VsetType>(&trace->op_type)) {
+      auto trace_data = std::make_shared<ExeTraceData>();
+      trace->data = trace_data;
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t)) continue;
+        this->configure(instr, wid, t, rs1_data, rs2_data, rd_data, trace_data.get());
+      }
+    } else if (std::get_if<VopType>(&trace->op_type)) {
+      auto trace_data = std::make_shared<ExeTraceData>();
+      trace->data = trace_data;
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t)) continue;
+        this->execute(instr, wid, t, rs1_data, rd_data, trace_data.get());
+      }
+    } else {
+      std::abort();
     }
   }
 
@@ -1787,23 +1826,20 @@ private:
 
 VecUnit::VecUnit(const SimContext &ctx,
                  const char *name,
-                 const Arch &arch,
                  Core *core)
-  : SimObject<VecUnit>(ctx, name)
-  , Inputs(ISSUE_WIDTH, this)
-  , Outputs(ISSUE_WIDTH, this)
-  , impl_(new Impl(this, arch, core))
+  : FuncUnit(ctx, name, core)
+  , impl_(new Impl(this, core))
 {}
 
 VecUnit::~VecUnit() {
   delete impl_;
 }
 
-void VecUnit::reset() {
+void VecUnit::on_reset() {
   impl_->reset();
 }
 
-void VecUnit::tick() {
+void VecUnit::on_tick() {
   impl_->tick();
 }
 
@@ -1838,3 +1874,4 @@ void VecUnit::execute(const Instr &instr, uint32_t wid, uint32_t tid, const std:
 const VecUnit::PerfStats &VecUnit::perf_stats() const {
   return impl_->perf_stats();
 }
+

@@ -21,12 +21,12 @@ VOpcUnit::VOpcUnit(const SimContext &ctx, const char* name, Core* core)
   , Input(this)
   , Output(this)
   , core_(core) {
-  this->reset();
+  this->on_reset();
 }
 
 VOpcUnit::~VOpcUnit() {}
 
-void VOpcUnit::reset() {
+void VOpcUnit::on_reset() {
   total_stalls_ = 0;
   cur_trace_ = nullptr;
   release_cycle_ = 0;
@@ -60,7 +60,7 @@ static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
   return std::max(scalar_stalls, vector_stalls);
 }
 
-void VOpcUnit::tick() {
+void VOpcUnit::on_tick() {
   auto cur_cycle = SimPlatform::instance().cycles();
 
   // forward held uop once its collection phase has elapsed

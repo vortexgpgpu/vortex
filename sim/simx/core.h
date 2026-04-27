@@ -15,11 +15,18 @@
 
 #include <vector>
 #include <list>
+#include <sstream>
+#include <unordered_map>
 #include <simobject.h>
+#include <mempool.h>
 #include "types.h"
-#include "emulator.h"
-#include "cache_sim.h"
+#include "scheduler.h"
+#include "decode.h"
+#include "sequencer.h"
+#include "cache.h"
 #include "local_mem.h"
+#include "local_mem_switch.h"
+#include "lsu_mem_adapter.h"
 #include "scoreboard.h"
 
 #ifdef EXT_V_ENABLE
@@ -31,13 +38,18 @@
 
 #include "dispatcher.h"
 #include "func_unit.h"
+#include "alu_unit.h"
+#include "fpu_unit.h"
+#include "lsu_unit.h"
+#include "sfu_unit.h"
+#include "csr_unit.h"
 #include "mem_coalescer.h"
 #include "VX_config.h"
 
 namespace vortex {
 
 class Socket;
-class Arch;
+class ProcessorImpl;
 
 class Core : public SimObject<Core> {
 public:
@@ -57,6 +69,7 @@ public:
     uint64_t fpu_stalls = 0;
     uint64_t lsu_stalls = 0;
     uint64_t sfu_stalls = 0;
+    uint64_t csr_stalls = 0;
   #ifdef EXT_V_ENABLE
     uint64_t vinstrs = 0;
     uint64_t vpu_stalls = 0;
@@ -70,6 +83,7 @@ public:
     uint64_t fpu_instrs = 0;
     uint64_t lsu_instrs = 0;
     uint64_t sfu_instrs = 0;
+    uint64_t csr_instrs = 0;
     #ifdef EXT_TCU_ENABLE
     uint64_t tcu_instrs = 0;
     #endif
@@ -92,20 +106,10 @@ public:
   Core(const SimContext& ctx,
        const char* name,
        uint32_t core_id,
-       Socket* socket,
-       const Arch &arch
+       Socket* socket
   );
 
   ~Core();
-
-  void reset();
-
-  void tick();
-
-  void attach_ram(RAM* ram);
-#ifdef VM_ENABLE
-  void set_satp(uint64_t satp);
-#endif
 
   bool running() const;
 
@@ -131,10 +135,6 @@ public:
     return core_id_;
   }
 
-  const Arch& arch() const {
-    return arch_;
-  }
-
   Socket* socket() const {
     return socket_;
   }
@@ -147,13 +147,12 @@ public:
     return mem_coalescers_.at(idx);
   }
 
-  void mem_read(void* data, uint64_t addr, uint32_t size) {
-    return emulator_.mem_read(data, addr, size);
-  }
+  ProcessorImpl* processor() const;
 
-  void mem_write(const void* data, uint64_t addr, uint32_t size) {
-    return emulator_.mem_write(data, addr, size);
-  }
+  Scheduler&  scheduler()       { return *scheduler_; }
+  CsrUnit&    csr_unit()        { return *csr_unit_; }
+  uint32_t&   mpm_class()       { return mpm_class_; }
+  uint32_t    mpm_class() const { return mpm_class_; }
 
   int dcr_write(uint32_t addr, uint32_t value);
 
@@ -181,6 +180,10 @@ public:
 
   int get_exitcode() const;
 
+protected:
+  void on_reset();
+  void on_tick();
+
 private:
 
   void schedule();
@@ -192,7 +195,6 @@ private:
 
   uint32_t core_id_;
   Socket* socket_;
-  const Arch& arch_;
 
 #ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;
@@ -202,11 +204,15 @@ private:
   VecUnit::Ptr vec_unit_;
 #endif
 
-
-  Emulator emulator_;
+  CsrUnit::Ptr csr_unit_;
+  PoolAllocator<Instr, 64> instr_pool_;
+  Decoder::Ptr decoder_;
+  std::vector<Sequencer::Ptr> sequencers_;
+  uint32_t    mpm_class_;
+  Scheduler::Ptr scheduler_;
 
   std::vector<TFifo<instr_trace_t*>::Ptr> ibuffers_;
-  Scoreboard scoreboard_;
+  Scoreboard::Ptr scoreboard_;
   std::vector<Operands::Ptr> operands_;
   std::vector<Dispatcher::Ptr> dispatchers_;
   std::vector<FuncUnit::Ptr> func_units_;
@@ -227,12 +233,11 @@ private:
   std::vector<TraceArbiter::Ptr> commit_arbs_;
 
   uint32_t commit_exe_;
+  
   std::vector<Arbiter> ibuffer_arbs_;
 
-  // per-slice FU lock preventing warp interleaving during multi-uop sequences
   std::vector<BitVector<>> fu_locked_;
 
-  // per-warp in-flight count [schedule -> ibuffer pop] for scheduler backpressure
   std::vector<uint32_t> ibuf_inflight_;
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
@@ -241,6 +246,8 @@ private:
   friend class AluUnit;
   friend class FpuUnit;
   friend class SfuUnit;
+  friend class CsrUnit;
+  friend class SimObject<Core>;
 };
 
 } // namespace vortex

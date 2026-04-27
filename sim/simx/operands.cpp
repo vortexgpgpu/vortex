@@ -13,24 +13,37 @@
 
 #include "operands.h"
 #include "core.h"
+#include "scheduler.h"
 
 using namespace vortex;
 
-Operands::Operands(const SimContext &ctx, const char* name, Core* /*core*/)
+// wid → which OpcUnit within the issue lane owns this warp.
+inline static constexpr uint32_t wid_to_opc_idx(uint32_t wid) {
+  return (wid / ISSUE_WIDTH) % NUM_OPCS;
+}
+
+Operands::Operands(const SimContext &ctx, const char* name, Core* core)
     : SimObject<Operands>(ctx, name)
     , Input(this)
     , Output(this)
+    , core_(core)
     , opc_units_(NUM_OPCS) {
   static_assert(NUM_OPCS <= PER_ISSUE_WARPS, "invalid NUM_OPCS value");
   char sname[100];
-  // create OPC units
+
+  // Per-OPC warp slot count: each OPC owns the warps where
+  //   (wid % ISSUE_WIDTH == lane) && ((wid/IW) % NUM_OPCS == opc_idx)
+  // Slot count = ceil(NUM_WARPS / (ISSUE_WIDTH * NUM_OPCS)).
+  uint32_t num_warps   = NUM_WARPS;
+  uint32_t num_threads = NUM_THREADS;
+  uint32_t per_opc_warps = (num_warps + (ISSUE_WIDTH * NUM_OPCS) - 1) / (ISSUE_WIDTH * NUM_OPCS);
+
   for (uint32_t i = 0; i < NUM_OPCS; i++) {
     snprintf(sname, 100, "%s-opc%d", name, i);
-    opc_units_.at(i) = OpcUnit::Create(sname);
+    opc_units_.at(i) = SimPlatform::instance().create_object<OpcUnit>(sname, per_opc_warps, num_threads);
   }
 
   if (NUM_OPCS >= 2) {
-    char sname[100];
     snprintf(sname, 100, "%s-rsp_arb", name);
     rsp_arb_ = TraceArbiter::Create(sname, ArbiterType::RoundRobin, NUM_OPCS, 1);
     for (uint32_t i = 0; i < NUM_OPCS; ++i) {
@@ -48,11 +61,11 @@ Operands::~Operands() {
   //--
 }
 
-void Operands::reset() {
+void Operands::on_reset() {
   //--
 }
 
-void Operands::tick() {
+void Operands::on_tick() {
   if (NUM_OPCS < 2)
     return; // pass-thru
 
@@ -60,13 +73,8 @@ void Operands::tick() {
   if (Input.empty())
     return;
   auto trace = this->Input.peek();
-  for (uint32_t i = 0; i < NUM_OPCS; i++) {
-    uint32_t wis = trace->wid / ISSUE_WIDTH;
-    uint32_t index = wis % NUM_OPCS;
-    if (opc_units_.at(index)->Input.try_send(trace)) {
-      Input.pop();
-    }
-    break;
+  if (opc_units_.at(wid_to_opc_idx(trace->wid))->Input.try_send(trace)) {
+    Input.pop();
   }
 }
 
@@ -78,8 +86,31 @@ uint32_t Operands::total_stalls() const {
   return total;
 }
 
+int Operands::get_exit_code() const {
+  // x3 of warp 0, thread 0 (RISC-V _exit convention). Warp 0 routes to
+  // opc_units_[0] slot 0, so read directly via Operands' friend access.
+  return static_cast<int>(opc_units_.at(0)->regs_.at(0).ireg_file.at(3).at(0));
+}
+
+void Operands::fetch_operands(instr_trace_t* trace) {
+  assert(trace != nullptr);
+  auto* opc = opc_units_.at(wid_to_opc_idx(trace->wid)).get();
+
+  // Operand snapshot uses the warp's current tmask.
+  auto& tmask = core_->scheduler().warp(trace->wid).tmask;
+  // Resize to NUM_SRC_REGS; clear unused entries so unit code can reference them.
+  trace->src_data.resize(NUM_SRC_REGS);
+  for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
+    if (trace->src_regs[i].type == RegType::None) {
+      trace->src_data[i].clear();
+      continue;
+    }
+    opc->read_src(trace->src_data[i], trace->wid, i, trace->src_regs[i], tmask);
+  }
+}
+
 void Operands::writeback(instr_trace_t* trace) {
-  uint32_t wis = trace->wid / ISSUE_WIDTH;
-  uint32_t index = wis % NUM_OPCS;
-  opc_units_.at(index)->writeback(trace);
+  assert(trace != nullptr);
+  auto* opc = opc_units_.at(wid_to_opc_idx(trace->wid)).get();
+  opc->writeback(trace, trace->wid);
 }

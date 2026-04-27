@@ -48,11 +48,11 @@ Operands::~Operands() {
   //--
 }
 
-void Operands::reset() {
+void Operands::on_reset() {
   //--
 }
 
-void Operands::tick() {
+void Operands::on_tick() {
   if (NUM_OPCS < 2)
     return; // pass-thru
 
