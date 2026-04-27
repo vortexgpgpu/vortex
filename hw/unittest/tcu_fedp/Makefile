@@ -21,7 +21,7 @@ PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY)
 
 CONFIGS += -DSIMULATION -DSV_DPI -DEXT_TCU_ENABLE
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/hw/VX_config.toml --cflags='$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS)')
 
 SRCS += $(DPI_DIR)/dpi_util.cpp
 SRCS += $(DPI_DIR)/dpi_float.cpp
@@ -32,7 +32,7 @@ SRCS += $(SRC_DIR)/main.cpp
 DBG_TRACE_FLAGS := -DDBG_TRACE_TCU -DFEDP_RTL_WATCH
 
 RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/tcu/VX_tcu_pkg.sv
-RTL_INCLUDE := -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
+RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
 RTL_INCLUDE += -I$(RTL_DIR)/tcu -I$(SRC_DIR)
 
 ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
