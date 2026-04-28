@@ -24,6 +24,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <array>
 
 #include "linked_list.h"
 #include "mempool.h"
@@ -407,6 +408,30 @@ private:
   template <typename U> friend class SimChannelEvent;
   friend class SimChannelBase;
 };
+
+///////////////////////////////////////////////////////////////////////////////
+// make_sim_channels<Pkt, N>(owner)
+//
+// SimChannel<Pkt> is not default-constructible: each instance needs the
+// owning SimObjectBase* at construction. Building a std::array of them would
+// normally require N explicit constructor calls in the brace-init list. This
+// helper expands an index_sequence and constructs N copies of
+// SimChannel<Pkt>(owner) into the array, so callers can write:
+//
+//     std::array<SimChannel<Pkt>, N> Inputs = make_sim_channels<Pkt, N>(this);
+///////////////////////////////////////////////////////////////////////////////
+
+namespace detail {
+template <typename Pkt, std::size_t N, std::size_t... Is>
+inline std::array<SimChannel<Pkt>, N> make_sim_channels_impl(SimObjectBase* owner, std::index_sequence<Is...>) {
+  return std::array<SimChannel<Pkt>, N>{ ((void)Is, SimChannel<Pkt>(owner))... };
+}
+} // namespace detail
+
+template <typename Pkt, std::size_t N>
+inline std::array<SimChannel<Pkt>, N> make_sim_channels(SimObjectBase* owner) {
+  return detail::make_sim_channels_impl<Pkt, N>(owner, std::make_index_sequence<N>{});
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Object Creation & Platform Implementation

@@ -158,22 +158,16 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t block_size, uint32_t* max_l
   int warps_per_block = (block_size + threads_per_warp-1) / threads_per_warp;
   int blocks_per_core = warps_per_core / warps_per_block;
 
-  // check local memory capacity
+  // Compute per-block local-memory budget. Treated as an out-only field:
+  // some external callers (POCL pocl-vortex.c) pass uninitialized memory
+  // here, so reading it as a user-supplied requirement is unsafe.
   if (max_localmem) {
     uint64_t local_mem_size;
     CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size), {
       return err;
     });
-    uint32_t localmem = *max_localmem;
-    if (localmem != 0) {
-      if (local_mem_size < localmem) {
-        printf("Error: device local memory size %lu is smaller than required %u\n", local_mem_size, localmem);
-        return -1;
-      }
-    } else {
       *max_localmem = local_mem_size / blocks_per_core;
     }
-  }
 
   return 0;
 }

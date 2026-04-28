@@ -204,14 +204,13 @@ public:
     func_units_.at((int)FUType::TCU) = tensor_unit_;
   #endif
 
-    // bind commit arbiters
+    // commit arbiters — per-iw inputs are filled at runtime in commit() by
+    // routing per-block FU outputs to commit_arbs_[trace->wid % ISSUE_WIDTH]
+    // (no static binding because the iw is not knowable at setup time when
+    // NUM_*_BLOCKS < ISSUE_WIDTH).
     for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
       snprintf(sname, 100, "%s-commit-arb%d", name.c_str(), iw);
-      auto arbiter = TraceArbiter::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
-      for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
-        func_units_.at(fu)->Outputs.at(iw).bind(&arbiter->Inputs.at(fu));
-      }
-      commit_arbs_.at(iw) = arbiter;
+      commit_arbs_.at(iw) = TraceArbiter::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
     }
 
     this->reset();
@@ -501,15 +500,18 @@ public:
   }
 
   void execute() {
+    // Dispatcher.Outputs are sized per FU's NUM_*_BLOCKS; FU.Inputs match.
+    // Per-block 1:1 forward (the dispatcher already handled IW→NB aggregation).
     for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
       auto& dispatch = dispatchers_.at(fu);
       auto& func_unit = func_units_.at(fu);
-      for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-        if (dispatch->Outputs.at(iw).empty())
+      uint32_t nb = func_unit->num_blocks();
+      for (uint32_t b = 0; b < nb; ++b) {
+        if (dispatch->Outputs.at(b).empty())
           continue;
-        auto trace = dispatch->Outputs.at(iw).peek();
-        if (func_unit->Inputs.at(iw).try_send(trace)) {
-          dispatch->Outputs.at(iw).pop();
+        auto trace = dispatch->Outputs.at(b).peek();
+        if (func_unit->input(b).try_send(trace)) {
+          dispatch->Outputs.at(b).pop();
         } else {
           // track functional unit stalls
           switch ((FUType)fu) {
@@ -529,6 +531,26 @@ public:
   }
 
   void commit() {
+    // Fan-in: route per-block FU outputs to per-iw commit arbs by trace->wid.
+    // Each FU has NUM_*_BLOCKS outputs; the original iw was lost during
+    // dispatcher aggregation, so we recover it from the warp id and try_send
+    // into the matching commit_arb input slot.
+    for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
+      auto& func_unit = func_units_.at(fu);
+      uint32_t nb = func_unit->num_blocks();
+      for (uint32_t b = 0; b < nb; ++b) {
+        auto& fu_out = func_unit->output(b);
+        if (fu_out.empty())
+          continue;
+        auto trace = fu_out.peek();
+        uint32_t iw = trace->wid % ISSUE_WIDTH;
+        auto& arb_in = commit_arbs_.at(iw)->Inputs.at(fu);
+        if (arb_in.try_send(trace)) {
+          fu_out.pop();
+        }
+      }
+    }
+
     // process completed instructions
     for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
       auto& commit_arb = commit_arbs_.at(iw);
@@ -540,10 +562,16 @@ public:
       DT(3, simobject_->name() << "-pipeline commit: " << *trace);
       assert(trace->cid == simobject_->id());
 
-      // update scoreboard
+      // Per-pid writeback: dispatcher splits multi-pid traces into copies
+      // each carrying its own lane-subset tmask + dst_data, mirroring RTL
+      // where every pid pass writes back independently. Scoreboard release
+      // and perf accounting still gate on eop (full instruction completion).
+      if (trace->wb) {
+        operands_.at(iw)->writeback(trace);
+      }
+
       if (trace->eop) {
         if (trace->wb) {
-          operands_.at(iw)->writeback(trace);
           scoreboard_->release(trace);
         }
 
@@ -663,7 +691,7 @@ private:
   Scoreboard::Ptr scoreboard_;
   std::vector<Operands::Ptr> operands_;
   std::vector<Dispatcher::Ptr> dispatchers_;
-  std::vector<FuncUnit::Ptr> func_units_;
+  std::vector<std::shared_ptr<FuncUnitBase>> func_units_;
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;

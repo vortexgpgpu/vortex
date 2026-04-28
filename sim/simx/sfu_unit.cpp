@@ -28,7 +28,7 @@
 using namespace vortex;
 
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit(ctx, name, core)
+	: FuncUnit<NUM_SFU_BLOCKS>(ctx, name, core)
 {}
 
 uint32_t SfuUnit::latency_of(const instr_trace_t* /*trace*/) const {
@@ -37,11 +37,11 @@ uint32_t SfuUnit::latency_of(const instr_trace_t* /*trace*/) const {
 }
 
 void SfuUnit::on_tick() {
-	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-		auto& input = Inputs.at(iw);
+	for (uint32_t b = 0; b < NUM_SFU_BLOCKS; ++b) {
+		auto& input = Inputs.at(b);
 		if (input.empty())
 			continue;
-		auto& output = Outputs.at(iw);
+		auto& output = Outputs.at(b);
 		if (output.full())
 			continue; // stall — no side effects this tick
 		auto trace = input.peek();
@@ -57,10 +57,10 @@ void SfuUnit::on_tick() {
 #ifdef EXT_DXA_ENABLE
 		// DXA: execute_copy mutates DXA state and is non-idempotent, so we
 		// run it once per trace and retain the resulting td across submit
-		// retries via dxa_pending_[iw]. submit() can backpressure on the
+		// retries via dxa_pending_[b]. submit() can backpressure on the
 		// DXA queue.
 		if (std::get_if<DxaType>(&trace->op_type)) {
-			auto& slot = dxa_pending_.at(iw);
+			auto& slot = dxa_pending_.at(b);
 			if (!slot) {
 				auto& rs1_data = trace->src_data[0];
 				auto& rs2_data = trace->src_data[1];

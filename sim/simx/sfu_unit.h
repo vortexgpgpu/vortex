@@ -21,7 +21,7 @@
 
 namespace vortex {
 
-class SfuUnit : public FuncUnit {
+class SfuUnit : public FuncUnit<NUM_SFU_BLOCKS> {
 public:
 	SfuUnit(const SimContext& ctx, const char* name, Core*);
 
@@ -32,9 +32,9 @@ private:
 	uint32_t latency_of(const instr_trace_t* trace) const;
 
 #ifdef EXT_DXA_ENABLE
-	// Per-iw DXA pending slot. When non-empty, a previous tick already ran
+	// Per-block DXA pending slot. When non-empty, a previous tick already ran
 	// execute_copy() for this trace and is retrying submit() on backpressure.
-	std::array<DxaCore::TraceData::Ptr, ISSUE_WIDTH> dxa_pending_;
+	std::array<DxaCore::TraceData::Ptr, NUM_SFU_BLOCKS> dxa_pending_;
 #endif
 };
 

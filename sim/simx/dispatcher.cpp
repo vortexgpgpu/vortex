@@ -19,7 +19,7 @@ using namespace vortex;
 Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes)
   : SimObject<Dispatcher>(ctx, name)
   , Inputs(ISSUE_WIDTH, this)
-  , Outputs(ISSUE_WIDTH, this)
+  , Outputs(block_size, this)  // physical block count, matches downstream FU
   , core_(core)
   , buf_size_(buf_size)
   , block_size_(block_size)
@@ -50,8 +50,9 @@ void Dispatcher::on_tick() {
       continue;
     }
 
-    // check output buffer capacity
-    auto& output = Outputs.at(i);
+    // check output buffer capacity — outputs are sized NUM_BLOCKS;
+    // input[batch_idx*block_size + b] aggregates onto output[b].
+    auto& output = Outputs.at(b);
     if (output.full())
       continue;
 
