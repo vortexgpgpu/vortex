@@ -49,9 +49,9 @@ public:
 
   static op_string_t op_string(TcuType tcu_type, IntrTcuArgs args);
 
-  struct ExeTraceData : public ITraceData {
-    using Ptr = std::shared_ptr<ExeTraceData>;
-    bool is_last_k = true;        // false for non-last K-steps (suppress rd writeback)
+  // Plain output struct: filled by wgmma() and consumed inline by on_tick().
+  // Not stored on the trace — lives only as a tick-local result.
+  struct ExeResult {
     int  fetch_delay = 0;         // tile buffer fetch cycles (v2 timing model)
     bool tbuf_cache_hit = false;  // B tile was reused from tile buffer cache
   };
@@ -84,7 +84,6 @@ public:
 	          const std::vector<reg_data_t>& rs2_data,
 	          const std::vector<reg_data_t>& rs3_data,
 	          std::vector<reg_data_t>& rd_data,
-	          ExeTraceData* trace_data,
 	          bool is_sparse);
 
 	void wgmma(uint32_t wid,
@@ -98,7 +97,7 @@ public:
 	           const std::vector<reg_data_t>& rs1_data,
 	           const std::vector<reg_data_t>& rs3_data,
 	           std::vector<reg_data_t>& rd_data,
-	           ExeTraceData* trace_data,
+	           ExeResult* result,
 	           bool is_sparse,
 	           uint32_t cd_nregs,
 	           uint32_t is_a_smem);
@@ -107,8 +106,7 @@ public:
 					uint32_t fmt_s,
 					uint32_t col_idx,
 					uint32_t meta_kind,
-					const std::vector<reg_data_t>& rs1_data,
-					ExeTraceData* trace_data);
+					const std::vector<reg_data_t>& rs1_data);
 
 	const PerfStats& perf_stats() const;
 

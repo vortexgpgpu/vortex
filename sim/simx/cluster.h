@@ -14,11 +14,7 @@
 #pragma once
 
 #include <simobject.h>
-#include "cache_cluster.h"
-#include "local_mem.h"
-#include "core.h"
-#include "socket.h"
-#include "constants.h"
+#include "cache.h"
 #ifdef EXT_DXA_ENABLE
 #include "dxa_core.h"
 #endif
@@ -36,36 +32,6 @@ public:
 #endif
   };
 
-  struct AsyncClusterBarrier {
-  static constexpr uint32_t MAX_CORES = 32;
-
-  CoreMask   arrived_cores;
-  CoreMask   waiting_cores;
-  uint32_t   arrived_count;
-  uint32_t   expect_cores;
-  uint32_t   generation;
-  std::array<uint32_t, MAX_CORES> wait_phase;
-
-  AsyncClusterBarrier()
-    : arrived_count(0)
-    , expect_cores(0)
-    , generation(0)
-  {
-    arrived_cores.reset();
-    waiting_cores.reset();
-    wait_phase.fill(0);
-  }
-
-  void reset_all() {
-    arrived_cores.reset();
-    waiting_cores.reset();
-    arrived_count = 0;
-    expect_cores  = 0;
-    generation    = 0;
-    wait_phase.fill(0);
-  }
-};
-
   std::vector<SimChannel<MemReq>> mem_req_out;
   std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
@@ -76,13 +42,9 @@ public:
 
   ~Cluster();
 
-  uint32_t id() const {
-    return cluster_id_;
-  }
+  uint32_t id() const { return cluster_id_; }
 
-  ProcessorImpl* processor() const {
-    return processor_;
-  }
+  ProcessorImpl* processor() const { return processor_; }
 
   bool running() const;
 
@@ -96,8 +58,15 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+  // Cache flush walk: dcache → l2cache (sequential to avoid evictions
+  // racing the L2 walk). Caller ticks the simulator until done.
+  void dcache_flush_begin();
+  bool dcache_flush_done() const;
+  void l2_flush_begin();
+  bool l2_flush_done() const;
+
 #ifdef EXT_DXA_ENABLE
-  DxaCore::Ptr& dxa_core() { return dxa_core_; }
+  DxaCore::Ptr& dxa_core();
 #endif
 
 protected:
@@ -105,15 +74,11 @@ protected:
   void on_tick();
 
 private:
-  uint32_t                    cluster_id_;
-  ProcessorImpl*              processor_;
-  std::vector<Socket::Ptr>    sockets_;
-  std::vector<core_barrier_t> gbarriers_;
-  Cache::Ptr               l2cache_;
-  uint32_t                    cores_per_socket_;
-#ifdef EXT_DXA_ENABLE
-  DxaCore::Ptr                dxa_core_;
-#endif
+  uint32_t       cluster_id_;
+  ProcessorImpl* processor_;
+
+  class Impl;
+  Impl* impl_;
 
   friend class SimObject<Cluster>;
 };

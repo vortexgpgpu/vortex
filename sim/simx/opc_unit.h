@@ -35,15 +35,10 @@ public:
           uint32_t num_warp_slots, uint32_t num_threads);
   virtual ~OpcUnit();
 
-  // Functional regfile writeback applied at unit-tick. Slot is derived from
-  // wid via wid_to_opc_slot. No-op when trace->dst_data is empty.
+  // Functional regfile writeback applied at unit-tick.
   void writeback(instr_trace_t* trace, uint32_t wid);
 
-  // Read one source operand for `wid` into `out[t]` (sized to num_threads).
-  // Pure regfile primitive — values for inactive lanes are read too; the
-  // downstream unit gates per-lane work on trace->tmask so masked-out
-  // values are never consumed. Trace logging is done by the caller
-  // (Operands::fetch_operands), which owns the per-instruction view.
+  // Read one source operand for `wid` into `out[t]`
   void read_src(std::vector<reg_data_t>& out,
                 uint32_t wid,
                 uint32_t src_index,

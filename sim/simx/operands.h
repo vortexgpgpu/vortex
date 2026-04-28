@@ -20,9 +20,7 @@ namespace vortex {
 
 class Core;
 
-// Operand collection stage. One instance per issue lane. Each instance owns
-// NUM_OPCS OpcUnits; each OpcUnit holds the regfile partition for the warps
-// that route to it. See OpcUnit's header for the routing math.
+// Operand collection stage. One instance per issue lane.
 class Operands : public SimObject<Operands> {
 public:
   SimChannel<instr_trace_t*> Input;
@@ -33,14 +31,12 @@ public:
   virtual ~Operands();
 
   // Capture register operands at issue time into trace->src_data.
-  // Reads from this lane's OpcUnit selected by (wid/IW)%NUM_OPCS.
   void fetch_operands(instr_trace_t* trace);
 
-  // Apply trace->dst_data to the regfile at unit-tick time. Routes the same
-  // way. No-op if dst_data is empty (e.g. BAR-not-arrive).
+  // Apply trace->dst_data to the regfile at unit-tick time.
   void writeback(instr_trace_t* trace);
 
-  // Read x3 of warp 0, thread 0 — the program exit code by RISC-V convention.
+  // the program exit code by RISC-V tests.
   int get_exit_code() const;
 
   uint32_t total_stalls() const;

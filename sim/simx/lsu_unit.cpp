@@ -19,6 +19,7 @@
 #include <util.h>
 #include "debug.h"
 #include "core.h"
+#include "local_mem_switch.h"
 #include "constants.h"
 #include "mem_block_pool.h"
 #include "VX_types.h"
@@ -116,7 +117,7 @@ void LsuUnit::compute_addrs(instr_trace_t* trace) {
 }
 
 void LsuUnit::process_response(uint32_t b) {
-	auto& lsu_rsp_in = core_->lmem_switch_.at(b)->RspOut;
+	auto& lsu_rsp_in = core_->lmem_switch(b)->RspOut;
 	if (lsu_rsp_in.empty())
 		return;
 	auto& state = states_.at(b);
@@ -247,7 +248,7 @@ void LsuUnit::process_request(uint32_t iw) {
 
 	if (remain_addrs_ != 0) {
 		// check lmem switch backpressure
-		if (core_->lmem_switch_.at(block_idx)->ReqIn.full())
+		if (core_->lmem_switch(block_idx)->ReqIn.full())
 			return; // stall
 
 		// setup memory request
@@ -289,14 +290,14 @@ void LsuUnit::process_request(uint32_t iw) {
 		lsu_req.uuid = trace->uuid;
 
 		// send memory request
-		core_->lmem_switch_.at(block_idx)->ReqIn.send(lsu_req);
+		core_->lmem_switch(block_idx)->ReqIn.send(lsu_req);
 		DT(3, this->name() << " mem-req: " << lsu_req);
 
 		// update stats
 		if (is_write) {
-			core_->perf_stats_.stores += count;
+			core_->perf_stats().stores += count;
 		} else {
-			core_->perf_stats_.loads += count;
+			core_->perf_stats().loads += count;
 			pending_loads_ += count;
 		}
 	}
@@ -310,7 +311,7 @@ void LsuUnit::process_request(uint32_t iw) {
 }
 
 void LsuUnit::on_tick() {
-	core_->perf_stats_.load_latency += pending_loads_;
+	core_->perf_stats().load_latency += pending_loads_;
 
 	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
 		this->process_response(b);

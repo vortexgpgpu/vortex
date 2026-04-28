@@ -556,7 +556,10 @@ public:
     , mx_meta_(NUM_WARPS)
     , perf_stats_()
     , tbuf_state_()
-  {}
+  {
+    exec_done_.fill(false);
+    tbuf_cache_hit_pending_.fill(false);
+  }
 
   ~Impl() {}
 
@@ -569,6 +572,8 @@ public:
     for (auto& mx_meta : mx_meta_) {
       mx_meta.fill(0);
     }
+    exec_done_.fill(false);
+    tbuf_cache_hit_pending_.fill(false);
   }
 
   void tick() {
@@ -578,34 +583,68 @@ public:
       if (input.empty())
         continue;
       auto trace = input.peek();
-      // Lazy execute on first peek.
-      if (!trace->data) {
-        this->execute_trace(trace);
-      }
       auto tcu_type = std::get<TcuType>(trace->op_type);
+
+      // Lazy execute on first peek of this trace. Side effects (LMEM reads,
+      // tile buffer state updates, fetch_delay → ready_cycle) happen here
+      // and persist across stall/backpressure retries via exec_done_[iw].
+      if (!exec_done_.at(iw)) {
+        auto& instr = *trace->instr_ptr;
+        auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
+        uint32_t wid = trace->wid;
+        uint32_t num_threads = NUM_THREADS;
+        auto& rs1_data = trace->src_data[0];
+        auto& rs2_data = trace->src_data[1];
+        auto& rs3_data = trace->src_data[2];
+        trace->dst_data.assign(num_threads, reg_data_t{});
+        auto& rd_data = trace->dst_data;
+
+        switch (tcu_type) {
+        case TcuType::WMMA:
+          this->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
+                     tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
+                     rs1_data, rs2_data, rs3_data, rd_data,
+                     tpuArgs.is_sparse);
+          break;
+      #ifdef TCU_WGMMA_ENABLE
+        case TcuType::WGMMA: {
+          uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
+          uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
+          ExeResult result;
+          this->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
+                      tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
+                      a_desc, b_desc, rs1_data, rs3_data, rd_data,
+                      &result, tpuArgs.is_sparse,
+                      tpuArgs.cd_nregs, tpuArgs.is_a_smem);
+          // Apply timing-layer side effects from the wgmma result.
+          if (result.fetch_delay > 0 && tbuf_state_.ready_cycle <= cur_cycle) {
+            tbuf_state_.ready_cycle = cur_cycle + result.fetch_delay;
+          }
+          tbuf_cache_hit_pending_.at(iw) = result.tbuf_cache_hit;
+        } break;
+      #endif
+        case TcuType::META_STORE:
+          this->meta_store(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
+                           tpuArgs.meta_kind, rs1_data);
+          break;
+        default:
+          std::abort();
+        }
+        exec_done_.at(iw) = true;
+      }
+
       int delay = 0;
       switch (tcu_type) {
       case TcuType::WMMA:
         delay = 4;
         break;
-      case TcuType::WGMMA: {
-        auto trace_data = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
-        int fetch_delay = trace_data ? trace_data->fetch_delay : 0;
-        if (fetch_delay > 0) {
-          // First uop with fetch: set buffer ready cycle
-          if (tbuf_state_.ready_cycle <= cur_cycle) {
-            tbuf_state_.ready_cycle = cur_cycle + fetch_delay;
-          }
-          // Clear fetch_delay so we don't re-trigger on subsequent ticks
-          trace_data->fetch_delay = 0;
-        }
-        // Stall if buffer not ready
+      case TcuType::WGMMA:
         if (cur_cycle < tbuf_state_.ready_cycle) {
           ++perf_stats_.tbuf_stalls;
           continue; // don't pop, stall this cycle
         }
         delay = 4;
-      } break;
+        break;
       case TcuType::META_STORE:
         delay = 1;
         break;
@@ -613,61 +652,15 @@ public:
         std::abort();
       }
       if (simobject_->Outputs.at(iw).try_send(trace, 2 + delay)) {
-        // Count B cache hit on successful send
-        if (tcu_type == TcuType::WGMMA) {
-          auto td = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
-          if (td && td->tbuf_cache_hit) {
-            ++perf_stats_.tbuf_cache_hits;
-            DT(2, "TCU tbuf_cache_hit counted, total=" << perf_stats_.tbuf_cache_hits);
-          }
+        if (tcu_type == TcuType::WGMMA && tbuf_cache_hit_pending_.at(iw)) {
+          ++perf_stats_.tbuf_cache_hits;
+          DT(2, "TCU tbuf_cache_hit counted, total=" << perf_stats_.tbuf_cache_hits);
         }
+        tbuf_cache_hit_pending_.at(iw) = false;
+        exec_done_.at(iw) = false;
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
-    }
-  }
-
-  void execute_trace(instr_trace_t* trace) {
-    auto& instr = *trace->instr_ptr;
-    auto instrArgs = instr.get_args();
-    auto tpuArgs = std::get<IntrTcuArgs>(instrArgs);
-    auto tcu_type = std::get<TcuType>(trace->op_type);
-    uint32_t wid = trace->wid;
-    uint32_t num_threads = NUM_THREADS;
-    auto& rs1_data = trace->src_data[0];
-    auto& rs2_data = trace->src_data[1];
-    auto& rs3_data = trace->src_data[2];
-
-    trace->dst_data.assign(num_threads, reg_data_t{});
-    auto& rd_data = trace->dst_data;
-
-    auto trace_data = std::make_shared<ExeTraceData>();
-    trace->data = trace_data;
-
-    switch (tcu_type) {
-    case TcuType::WMMA:
-      this->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
-                 tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
-                 rs1_data, rs2_data, rs3_data, rd_data,
-                 trace_data.get(), tpuArgs.is_sparse);
-      break;
-  #ifdef TCU_WGMMA_ENABLE
-    case TcuType::WGMMA: {
-      uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
-      uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
-      this->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
-                  tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
-                  a_desc, b_desc, rs1_data, rs3_data, rd_data,
-                  trace_data.get(), tpuArgs.is_sparse,
-                  tpuArgs.cd_nregs, tpuArgs.is_a_smem);
-    } break;
-  #endif
-    case TcuType::META_STORE:
-      this->meta_store(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
-                       tpuArgs.meta_kind, rs1_data, trace_data.get());
-      break;
-    default:
-      std::abort();
     }
   }
 
@@ -675,10 +668,7 @@ public:
                   uint32_t fmt_s,
                   uint32_t col_idx,
                   uint32_t meta_kind,
-                  const std::vector<reg_data_t>& rs1_data,
-                  ExeTraceData* trace_data) {
-    __unused(trace_data);
-
+                  const std::vector<reg_data_t>& rs1_data) {
     if (meta_kind == TCU_META_KIND_MX) {
       uint32_t num_mx_words = mx_meta_words(fmt_s);
       if (col_idx >= num_mx_words || rs1_data.empty()) {
@@ -764,7 +754,6 @@ public:
             const std::vector<reg_data_t>& rs2_data,
             const std::vector<reg_data_t>& rs3_data,
             std::vector<reg_data_t>& rd_data,
-            ExeTraceData* trace_data,
             bool is_sparse) {
     if (is_sparse) {
       if (!vt::sparse_format_supported(fmt_s)) {
@@ -830,8 +819,6 @@ public:
 
     fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
               a_tile, b_tile, rs3_data, rd_data);
-
-    trace_data->is_last_k = true;
   }
 
   void wgmma(uint32_t wid,
@@ -845,7 +832,7 @@ public:
              const std::vector<reg_data_t>& rs1_data,
              const std::vector<reg_data_t>& rs3_data,
              std::vector<reg_data_t>& rd_data,
-             ExeTraceData* trace_data,
+             ExeResult* result,
              bool is_sparse,
              uint32_t cd_nregs,
              uint32_t is_a_smem) {
@@ -909,9 +896,12 @@ public:
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
         uint32_t word_val = 0;
         if (is_a_smem) {
-          // SS mode: read from LMEM using LMEM stride
-          uint32_t word_idx = wg_bank * meta_strd_words + bit_idx / 32;
-          core_->mem_read(&word_val, meta_base + uint64_t(word_idx) * 4, 4);
+          // SS sparse: metadata fetch from LMEM goes through the TBUF NoC
+          // path; the cached buffer should be filled by the read FSM before
+          // execute. Until that path is wired, this branch must not run.
+          (void)meta_base; (void)meta_strd_words; (void)wg_bank;
+          std::cout << "Error: WGMMA SS sparse metadata fetch via LMEM NoC not yet implemented in SimX" << std::endl;
+          std::abort();
         } else {
           // RS mode: read from sparse_meta_ SRAM using WMMA-compatible stride
           uint32_t word_idx = wg_bank * kMaxMetaCols + bit_idx / 32;
@@ -953,8 +943,6 @@ public:
 
     fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
               a_tile, b_tile, rs3_data, rd_data);
-
-    trace_data->is_last_k = true;
 
     // --- WGMMA v2 tile buffer: compute fetch cycles for timing layer ---
     // On first uop, determine how many cycles the fetch unit needs to fill
@@ -1007,8 +995,8 @@ public:
       }
       perf_stats_.lmem_reads += lmem_reads;
 
-      trace_data->fetch_delay = fetch_cycles;
-      trace_data->tbuf_cache_hit = b_cached;
+      result->fetch_delay = fetch_cycles;
+      result->tbuf_cache_hit = b_cached;
       DT(2, "WGMMA tbuf: wid=" << wid
          << " b_desc=0x" << std::hex << b_desc << std::dec
          << " b_valid=" << tbuf_state_.b_valid
@@ -1062,24 +1050,11 @@ private:
   }
 
   uint32_t load_lmem_word(const lmem_desc_t& desc, uint32_t row, uint32_t col, uint32_t fmt_s, bool pack_along_row) const {
-    auto bits = elem_bits(fmt_s);
-    uint32_t packed = 0;
-    uint32_t elem_bytes = bits / 8;
-    uint32_t elems_per_word = 4 / elem_bytes;
-    uint32_t mask = (elem_bytes == 4) ? 0xffffffffu : ((1u << (8 * elem_bytes)) - 1u);
-
-    for (uint32_t e = 0; e < elems_per_word; ++e) {
-      uint32_t rr = row + (pack_along_row ? e : 0);
-      uint32_t cc = col + (pack_along_row ? 0 : e);
-      if (desc.col_major) {
-        std::swap(rr, cc);
-      }
-      uint64_t addr = desc.base + uint64_t(rr * desc.ldm + cc) * elem_bytes;
-      uint32_t word = 0;
-      core_->mem_read(&word, addr, elem_bytes);
-      packed |= (word & mask) << (8 * elem_bytes * e);
-    }
-    return packed;
+    // WGMMA tile data must come from the TBUF NoC fetch, not a back-door
+    // read. Until that fetch path is wired, this routine must not run.
+    (void)desc; (void)row; (void)col; (void)fmt_s; (void)pack_along_row;
+    std::cout << "Error: WGMMA LMEM load via NoC not yet implemented in SimX" << std::endl;
+    std::abort();
   }
 
   static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
@@ -1162,6 +1137,10 @@ private:
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
   PerfStats     perf_stats_;
   TileBufferState tbuf_state_;
+  // Per-iw "execute already happened for this trace" guard. Reset on input.pop().
+  std::array<bool, ISSUE_WIDTH> exec_done_;
+  // Per-iw pending tbuf-cache-hit perf increment, applied at try_send success.
+  std::array<bool, ISSUE_WIDTH> tbuf_cache_hit_pending_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1480,12 +1459,10 @@ void TensorUnit::wmma(uint32_t wid,
                       const std::vector<reg_data_t>& rs2_data,
                       const std::vector<reg_data_t>& rs3_data,
                       std::vector<reg_data_t>& rd_data,
-                      ExeTraceData* trace_data,
                       bool is_sparse) {
   impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, step_k,
               rs1_data, rs2_data, rs3_data,
               rd_data,
-              trace_data,
               is_sparse);
 }
 
@@ -1500,12 +1477,12 @@ void TensorUnit::wgmma(uint32_t wid,
                        const std::vector<reg_data_t>& rs1_data,
                        const std::vector<reg_data_t>& rs3_data,
                        std::vector<reg_data_t>& rd_data,
-                       ExeTraceData* trace_data,
+                       ExeResult* result,
                        bool is_sparse,
                        uint32_t cd_nregs,
                        uint32_t is_a_smem) {
   impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, a_desc, b_desc,
-               rs1_data, rs3_data, rd_data, trace_data,
+               rs1_data, rs3_data, rd_data, result,
                is_sparse, cd_nregs, is_a_smem);
 }
 
@@ -1513,8 +1490,7 @@ void TensorUnit::meta_store(uint32_t wid,
                             uint32_t fmt_s,
                             uint32_t col_idx,
                             uint32_t meta_kind,
-                            const std::vector<reg_data_t>& rs1_data,
-                            ExeTraceData* trace_data) {
-  impl_->meta_store(wid, fmt_s, col_idx, meta_kind, rs1_data, trace_data);
+                            const std::vector<reg_data_t>& rs1_data) {
+  impl_->meta_store(wid, fmt_s, col_idx, meta_kind, rs1_data);
 }
 

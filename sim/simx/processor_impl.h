@@ -48,6 +48,11 @@ public:
 
   Kmu& kmu()       { return *kmu_; }
 
+  // Drain dirty data from caches (write-back path) all the way to DRAM.
+  // Walks L1 dcaches → L2 → L3, ticking the simulator between phases so
+  // each level's evictions reach the next before that level itself flushes.
+  void flush_caches();
+
 private:
 
   Kmu::Ptr    kmu_;

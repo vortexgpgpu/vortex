@@ -20,6 +20,7 @@
 #include <rvfloats.h>
 #include "debug.h"
 #include "core.h"
+#include "csr_unit.h"
 #include "constants.h"
 
 using namespace vortex;

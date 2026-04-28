@@ -25,8 +25,7 @@ public:
   Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 64>& instr_pool);
   ~Decoder();
 
-  // Decode a 32-bit instruction word into an Instr. uuid is passed through
-  // to the resulting Instr for trace correlation.
+  // Decode a 32-bit instruction word into an Instr.
   Instr::Ptr decode(uint32_t code, uint64_t uuid);
 
 private:
