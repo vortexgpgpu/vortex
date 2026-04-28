@@ -102,7 +102,7 @@ void LsuUnit::compute_addrs(instr_trace_t* trace) {
 	for (uint32_t t = 0; t < num_threads; ++t) {
 		if (!tmask.test(t)) continue;
 		mem_addr_size_t e;
-		e.addr = rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset;
+		e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
 		e.size = data_bytes;
 		e.tid  = t;
 		if (is_write) {

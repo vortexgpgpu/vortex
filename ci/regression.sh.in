@@ -64,7 +64,7 @@ kernel()
 {
     echo "begin kernel tests..."
 
-    make -C kernel
+    make -C sw/kernel
     make -C sim/simx
     make -C sim/rtlsim
 
@@ -78,10 +78,10 @@ regression()
 {
     echo "begin regression tests..."
 
-    make -C kernel
-    make -C runtime/stub
-    make -C runtime/simx
-    make -C runtime/rtlsim
+    make -C sw/kernel
+    make -C sw/runtime/stub
+    make -C sw/runtime/simx
+    make -C sw/runtime/rtlsim
 
     make -C tests/regression run-simx
     make -C tests/regression run-rtlsim
@@ -112,9 +112,9 @@ dxa()
 {
     echo "begin dxa tests..."
 
-    make -C kernel
-    make -C runtime/simx
-    make -C runtime/rtlsim
+    make -C sw/kernel
+    make -C sw/runtime/simx
+    make -C sw/runtime/rtlsim
 
     # dxa_copy 1D-5D
     CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_copy --args="-d1" --debug=3
@@ -169,10 +169,10 @@ opencl()
 {
     echo "begin opencl tests..."
 
-    make -C kernel
-    make -C runtime/stub
-    make -C runtime/simx
-    make -C runtime/rtlsim
+    make -C sw/kernel
+    make -C sw/runtime/stub
+    make -C sw/runtime/simx
+    make -C sw/runtime/rtlsim
 
     make -C tests/opencl run-simx
     make -C tests/opencl run-rtlsim
@@ -186,13 +186,13 @@ opencl()
 vm(){
     echo "begin vm tests..."
 
-    make -C kernel
-    make -C runtime/stub
-    make -C runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C runtime/simx
+    make -C sw/kernel
+    make -C sw/runtime/stub
+    make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/simx
     make -C tests/opencl run-simx
     make -C tests/regression run-simx
 
-    make -C runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C runtime/simx
+    make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/simx
     make -C tests/opencl run-simx
     make -C tests/regression run-simx
 
@@ -203,7 +203,7 @@ cache()
 {
     echo "begin cache tests..."
 
-    make -C kernel
+    make -C sw/kernel
 
     # disable local memory
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo --perf=1
@@ -264,7 +264,7 @@ config1()
 {
     echo "begin configuration-1 tests..."
 
-    make -C kernel
+    make -C sw/kernel
 
     # warp/threads
     ./ci/blackbox.sh --driver=rtlsim --warps=1 --threads=1 --app=diverge
@@ -338,7 +338,7 @@ config2()
 {
     echo "begin configuration-2 tests..."
 
-    make -C kernel
+    make -C sw/kernel
 
     # test opaesim
     ./ci/blackbox.sh --driver=opae --app=printf
@@ -459,7 +459,7 @@ debug()
 {
     echo "begin debugging tests..."
 
-    make -C kernel
+    make -C sw/kernel
 
     test_csv_trace32
 
@@ -477,7 +477,7 @@ debug()
     # test perfetto trace generation
     DEBUG=3 CONFIGS="-DEXT_TCU_ENABLE" make -C sim/simx > /dev/null
     DEBUG=3 CONFIGS="-DEXT_TCU_ENABLE -DGPR_RESET" make -C sim/rtlsim > /dev/null
-    DEBUG=3 CONFIGS="-DEXT_TCU_ENABLE" make -C runtime/simx > /dev/null
+    DEBUG=3 CONFIGS="-DEXT_TCU_ENABLE" make -C sw/runtime/simx > /dev/null
     CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --debug=3 --log=run_simx.log
     ./ci/perfetto.py run_simx.log -t simx -o trace_simx.perfetto.json
     CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --debug=3 --log=run_rtlsim.log
@@ -490,7 +490,7 @@ scope()
 {
     echo "begin scope tests..."
 
-    make -C kernel
+    make -C sw/kernel
 
     SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
     SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
@@ -502,7 +502,7 @@ stress()
 {
     echo "begin stress tests..."
 
-    make -C kernel
+    make -C sw/kernel
 
     # test verilator reset values
     CONFIGS="-DVERILATOR_RESET_VALUE=1 -DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
@@ -537,7 +537,7 @@ tensor()
 {
     echo "begin tensor tests..."
 
-    make -C kernel
+    make -C sw/kernel
 
     # simx tests
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --debug=3 --log=run_simx.log
@@ -615,7 +615,7 @@ tensor_sp()
 {
     echo "begin tensor_sp tests..."
 
-    make -C kernel
+    make -C sw/kernel
 
     # simx tests (NT=2)
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_SPARSE_ENABLE -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_sp --debug=3 --log=run_simx.log
@@ -733,7 +733,7 @@ tensor_mx() {
 
     echo "begin tensor tensor_mx tests..."
 
-    make -C kernel
+    make -C sw/kernel
 
     # simx tests
 
@@ -842,7 +842,7 @@ cupbop() {
     rm cupbop.zip
 
     echo "building simx runtime..."
-    make -C runtime/simx
+    make -C sw/runtime/simx
 
     PERF_CLASS=2
     VORTEX_RUNTIME_DIR="runtime"

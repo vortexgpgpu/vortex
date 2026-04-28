@@ -93,6 +93,7 @@ Cluster::Cluster(const SimContext& ctx,
     l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
     l2cache_->core_rsp_out.at(i).bind(&l2arb->RspIn.at(i));
   }
+
   // Wire DXA SMEM timing channel to each core's LocalMem.
   // LocalMem::dxa_req_in releases the barrier on the is_last element.
   for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
@@ -102,7 +103,6 @@ Cluster::Cluster(const SimContext& ctx,
           &sockets_.at(s)->core(c)->local_mem()->dxa_req_in);
     }
   }
-
 #else
   // connect l2cache core interface
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
