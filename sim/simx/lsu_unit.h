@@ -33,7 +33,7 @@ private:
   PoolAllocator<Instr, 64>& pool_;
 };
 
-class LsuUnit : public FuncUnit {
+class LsuUnit : public FuncUnit<NUM_LSU_BLOCKS> {
 public:
 	LsuUnit(const SimContext& ctx, const char* name, Core*);
 	~LsuUnit();
@@ -44,11 +44,11 @@ protected:
 
 private:
 
-	void compute_addrs(instr_trace_t* trace);
+	void compute_addrs(uint32_t b, instr_trace_t* trace);
 
 	void process_response(uint32_t b);
 
-	void process_request(uint32_t iw);
+	void process_request(uint32_t b);
 
   struct mem_addr_size_t {
 		uint64_t addr;
@@ -67,23 +67,25 @@ private:
 	};
 
 	struct lsu_state_t {
-		HashTable<pending_req_t> pending_rd_reqs;
-		instr_trace_t* fence_trace;
-		bool fence_lock;
+		HashTable<pending_req_t>     pending_rd_reqs;
+		instr_trace_t*               fence_trace;
+		bool                         fence_lock;
+		std::vector<mem_addr_size_t> addr_list;
+		uint32_t                     remain_addrs;
 
-		lsu_state_t() : pending_rd_reqs(LSUQ_IN_SIZE) {}
+		lsu_state_t() : pending_rd_reqs(LSUQ_IN_SIZE), fence_trace(nullptr), fence_lock(false), remain_addrs(0) {}
 
 		void reset() {
 			this->pending_rd_reqs.clear();
 			this->fence_trace = nullptr;
 			this->fence_lock = false;
+			this->addr_list.clear();
+			this->remain_addrs = 0;
 		}
 	};
 
 	std::array<lsu_state_t, NUM_LSU_BLOCKS> states_;
 	uint64_t pending_loads_;
-	std::vector<mem_addr_size_t> addr_list_;
-	uint32_t remain_addrs_;
 };
 
 }

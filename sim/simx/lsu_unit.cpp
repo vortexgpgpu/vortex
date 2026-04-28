@@ -72,7 +72,7 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 }
 
 LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit(ctx, name, core)
+	: FuncUnit<NUM_LSU_BLOCKS>(ctx, name, core)
 	, pending_loads_(0)
 {}
 
@@ -84,12 +84,12 @@ void LsuUnit::on_reset() {
 		state.reset();
 	}
 	pending_loads_ = 0;
-	remain_addrs_ = 0;
 }
 
-void LsuUnit::compute_addrs(instr_trace_t* trace) {
+void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	// AGU formula: addr[t] = rs1[t] + stride * rs2[t] + offset
-	addr_list_.clear();
+	auto& state = states_.at(b);
+	state.addr_list.clear();
 	auto lsu_type = std::get<LsuType>(trace->op_type);
 	auto lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
 	auto& tmask = trace->tmask;
@@ -103,17 +103,20 @@ void LsuUnit::compute_addrs(instr_trace_t* trace) {
 	for (uint32_t t = 0; t < num_threads; ++t) {
 		if (!tmask.test(t)) continue;
 		mem_addr_size_t e;
+		// AGU result is XLEN-bit wide (matches RTL VX_lsu_slice.full_addr).
+		// Cast through Word so 32-bit XLEN doesn't carry sign-extended
+		// upper bits into the 64-bit address field.
 		e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
 		e.size = data_bytes;
 		e.tid  = t;
 		if (is_write) {
 			e.data = rs2_data[t].u64;
 		}
-		addr_list_.push_back(e);
+		state.addr_list.push_back(e);
 	}
 	if (is_write && lsu_args.width > 3)
 		std::abort();
-	remain_addrs_ = addr_list_.size();
+	state.remain_addrs = state.addr_list.size();
 }
 
 void LsuUnit::process_response(uint32_t b) {
@@ -124,8 +127,7 @@ void LsuUnit::process_response(uint32_t b) {
 	auto& lsu_rsp = lsu_rsp_in.peek();
 	auto& entry = state.pending_rd_reqs.at(lsu_rsp.tag);
 	auto trace = entry.trace;
-	int iw = trace->wid % ISSUE_WIDTH;
-	auto& output = Outputs.at(iw);
+	auto& output = Outputs.at(b);
 	if (output.full())
 		return; // stall
 	DT(3, this->name() << " mem-rsp: " << lsu_rsp);
@@ -185,21 +187,20 @@ void LsuUnit::process_response(uint32_t b) {
 	lsu_rsp_in.pop();
 }
 
-void LsuUnit::process_request(uint32_t iw) {
-	uint32_t block_idx = iw % NUM_LSU_BLOCKS;
-	auto& state = states_.at(block_idx);
+void LsuUnit::process_request(uint32_t b) {
+	auto& state = states_.at(b);
 	if (state.fence_lock) {
 		// wait for all pending memory operations to complete
 		if (!state.pending_rd_reqs.empty())
 			return;
-		if (!Outputs.at(iw).try_send(state.fence_trace))
+		if (!Outputs.at(b).try_send(state.fence_trace))
 			return;
 		state.fence_lock = false;
 		DT(3, this->name() << " fence-unlock: " << state.fence_trace);
 	}
 
 	// check input queue
-	auto& input = Inputs.at(iw);
+	auto& input = Inputs.at(b);
 	if (input.empty())
 		return;
 
@@ -234,30 +235,30 @@ void LsuUnit::process_request(uint32_t iw) {
 
 	// First time we see this trace: derive the per-lane addr/size/data
 	// list via compute_addrs(). Persists across multi-batch dispatch via
-	// remain_addrs_; rebuilt only when the previous trace is fully drained.
-	if (remain_addrs_ == 0) {
-		this->compute_addrs(trace);
+	// state.remain_addrs; rebuilt only when the previous trace is fully drained.
+	if (state.remain_addrs == 0) {
+		this->compute_addrs(b, trace);
 	}
 
 	// check output backpressure
-	bool direct_commit = (is_write || 0 == addr_list_.size());
-	if (direct_commit && remain_addrs_ <= NUM_LSU_LANES) {
-		if (Outputs.at(iw).full())
+	bool direct_commit = (is_write || 0 == state.addr_list.size());
+	if (direct_commit && state.remain_addrs <= NUM_LSU_LANES) {
+		if (Outputs.at(b).full())
 			return; // stall
 	}
 
-	if (remain_addrs_ != 0) {
+	if (state.remain_addrs != 0) {
 		// check lmem switch backpressure
-		if (core_->lmem_switch(block_idx)->ReqIn.full())
+		if (core_->lmem_switch(b)->ReqIn.full())
 			return; // stall
 
 		// setup memory request
 		LsuReq lsu_req(NUM_LSU_LANES);
 		lsu_req.write = is_write;
-		uint32_t t0 = addr_list_.size() - remain_addrs_;
+		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
 		std::vector<mem_addr_size_t> lane_entries(NUM_LSU_LANES);
 		for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
-			auto& entry = addr_list_.at(t0 + i);
+			auto& entry = state.addr_list.at(t0 + i);
 			lsu_req.mask.set(i);
 			lsu_req.addrs.at(i) = entry.addr;
 			lane_entries.at(i) = entry;
@@ -266,19 +267,19 @@ void LsuUnit::process_request(uint32_t iw) {
 				auto block = make_mem_block();
 				std::memset(block->data(), 0, block->size());
 				uint32_t off = entry.addr & (MEM_BLOCK_SIZE - 1);
-				for (uint32_t b = 0; b < entry.size; ++b) {
-					(*block)[off + b] = uint8_t((entry.data >> (8 * b)) & 0xff);
+				for (uint32_t bo = 0; bo < entry.size; ++bo) {
+					(*block)[off + bo] = uint8_t((entry.data >> (8 * bo)) & 0xff);
 				}
 				lsu_req.data.at(i) = block;
 				lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
 			}
-			--remain_addrs_;
-			if (remain_addrs_ == 0)
+			--state.remain_addrs;
+			if (state.remain_addrs == 0)
 				break;
 		}
 
 		uint32_t count = lsu_req.mask.count();
-		bool is_eop = (remain_addrs_ == 0);
+		bool is_eop = (state.remain_addrs == 0);
 
 		uint32_t tag = 0;
 		if (!is_write) {
@@ -290,7 +291,7 @@ void LsuUnit::process_request(uint32_t iw) {
 		lsu_req.uuid = trace->uuid;
 
 		// send memory request
-		core_->lmem_switch(block_idx)->ReqIn.send(lsu_req);
+		core_->lmem_switch(b)->ReqIn.send(lsu_req);
 		DT(3, this->name() << " mem-req: " << lsu_req);
 
 		// update stats
@@ -302,9 +303,9 @@ void LsuUnit::process_request(uint32_t iw) {
 		}
 	}
 
-	if (remain_addrs_ == 0) {
+	if (state.remain_addrs == 0) {
 		if (direct_commit) {
-			Outputs.at(iw).send(trace);
+			Outputs.at(b).send(trace);
 		}
 		input.pop();
 	}
@@ -317,7 +318,7 @@ void LsuUnit::on_tick() {
 		this->process_response(b);
 	}
 
-	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-		this->process_request(iw);
+	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+		this->process_request(b);
 	}
 }

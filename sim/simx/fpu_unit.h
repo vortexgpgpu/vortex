@@ -17,7 +17,7 @@
 
 namespace vortex {
 
-class FpuUnit : public FuncUnit {
+class FpuUnit : public FuncUnit<NUM_FPU_BLOCKS> {
 public:
   FpuUnit(const SimContext& ctx, const char* name, Core*);
 

@@ -43,7 +43,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class TensorUnit : public FuncUnit {
+class TensorUnit : public FuncUnit<NUM_TCU_BLOCKS> {
 public:
   using Ptr = std::shared_ptr<TensorUnit>;
 

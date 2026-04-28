@@ -578,8 +578,8 @@ public:
 
   void tick() {
     auto cur_cycle = SimPlatform::instance().cycles();
-    for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-      auto& input = simobject_->Inputs.at(iw);
+    for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
+      auto& input = simobject_->Inputs.at(b);
       if (input.empty())
         continue;
       auto trace = input.peek();
@@ -587,8 +587,8 @@ public:
 
       // Lazy execute on first peek of this trace. Side effects (LMEM reads,
       // tile buffer state updates, fetch_delay → ready_cycle) happen here
-      // and persist across stall/backpressure retries via exec_done_[iw].
-      if (!exec_done_.at(iw)) {
+      // and persist across stall/backpressure retries via exec_done_[b].
+      if (!exec_done_.at(b)) {
         auto& instr = *trace->instr_ptr;
         auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
         uint32_t wid = trace->wid;
@@ -620,7 +620,7 @@ public:
           if (result.fetch_delay > 0 && tbuf_state_.ready_cycle <= cur_cycle) {
             tbuf_state_.ready_cycle = cur_cycle + result.fetch_delay;
           }
-          tbuf_cache_hit_pending_.at(iw) = result.tbuf_cache_hit;
+          tbuf_cache_hit_pending_.at(b) = result.tbuf_cache_hit;
         } break;
       #endif
         case TcuType::META_STORE:
@@ -630,7 +630,7 @@ public:
         default:
           std::abort();
         }
-        exec_done_.at(iw) = true;
+        exec_done_.at(b) = true;
       }
 
       int delay = 0;
@@ -651,13 +651,13 @@ public:
       default:
         std::abort();
       }
-      if (simobject_->Outputs.at(iw).try_send(trace, 2 + delay)) {
-        if (tcu_type == TcuType::WGMMA && tbuf_cache_hit_pending_.at(iw)) {
+      if (simobject_->Outputs.at(b).try_send(trace, 2 + delay)) {
+        if (tcu_type == TcuType::WGMMA && tbuf_cache_hit_pending_.at(b)) {
           ++perf_stats_.tbuf_cache_hits;
           DT(2, "TCU tbuf_cache_hit counted, total=" << perf_stats_.tbuf_cache_hits);
         }
-        tbuf_cache_hit_pending_.at(iw) = false;
-        exec_done_.at(iw) = false;
+        tbuf_cache_hit_pending_.at(b) = false;
+        exec_done_.at(b) = false;
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
@@ -1137,10 +1137,10 @@ private:
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
   PerfStats     perf_stats_;
   TileBufferState tbuf_state_;
-  // Per-iw "execute already happened for this trace" guard. Reset on input.pop().
-  std::array<bool, ISSUE_WIDTH> exec_done_;
-  // Per-iw pending tbuf-cache-hit perf increment, applied at try_send success.
-  std::array<bool, ISSUE_WIDTH> tbuf_cache_hit_pending_;
+  // Per-block "execute already happened for this trace" guard. Reset on input.pop().
+  std::array<bool, NUM_TCU_BLOCKS> exec_done_;
+  // Per-block pending tbuf-cache-hit perf increment, applied at try_send success.
+  std::array<bool, NUM_TCU_BLOCKS> tbuf_cache_hit_pending_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -40,7 +40,7 @@ inline int64_t check_boxing(int64_t a) {
 }
 
 FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit(ctx, name, core)
+	: FuncUnit<NUM_FPU_BLOCKS>(ctx, name, core)
 {}
 
 uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
@@ -374,11 +374,11 @@ void FpuUnit::execute(instr_trace_t* trace) {
 }
 
 void FpuUnit::on_tick() {
-	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-		auto& input = Inputs.at(iw);
+	for (uint32_t b = 0; b < NUM_FPU_BLOCKS; ++b) {
+		auto& input = Inputs.at(b);
 		if (input.empty())
 			continue;
-		auto& output = Outputs.at(iw);
+		auto& output = Outputs.at(b);
 		if (output.full())
 			continue; // stall
 		auto trace = input.peek();

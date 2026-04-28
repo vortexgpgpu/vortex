@@ -46,7 +46,7 @@ using namespace vortex;
 #endif
 
 CsrUnit::CsrUnit(const SimContext& ctx, const char* name, Core* core)
-  : FuncUnit(ctx, name, core)
+  : FuncUnit<NUM_SFU_BLOCKS>(ctx, name, core)
 {}
 
 uint32_t CsrUnit::latency_of(const instr_trace_t* /*trace*/) const {
@@ -353,11 +353,11 @@ void CsrUnit::execute(instr_trace_t* trace) {
 }
 
 void CsrUnit::on_tick() {
-  for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-    auto& input = Inputs.at(iw);
+  for (uint32_t b = 0; b < NUM_SFU_BLOCKS; ++b) {
+    auto& input = Inputs.at(b);
     if (input.empty())
       continue;
-    auto& output = Outputs.at(iw);
+    auto& output = Outputs.at(b);
     if (output.full())
       continue; // stall
     auto trace = input.peek();
