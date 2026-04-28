@@ -357,9 +357,8 @@ enum class LsuType {
 
 struct IntrLsuArgs {
   uint32_t width : 3;
-  uint32_t is_float : 1;
-  uint32_t offset;
-  uint32_t pack : 2;  // 0=normal, 1=PACKLB (4 strided bytes), 2=PACKLH (2 strided halfwords)
+  uint32_t stride : 4;  // per-uop multiplier: 0 = regular LD/ST; 0..N-1 = packLD uop_idx
+  int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
 };
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
@@ -651,15 +650,6 @@ inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
   }
   return os;
 }
-
-///////////////////////////////////////////////////////////////////////////////
-
-struct mem_addr_size_t {
-  uint64_t addr;
-  uint32_t size;
-  uint64_t data = 0;  // write value for stores/AMOs (ignored for loads)
-  uint32_t tid  = 0;  // source thread id (used by LSU response routing)
-};
 
 ///////////////////////////////////////////////////////////////////////////////
 

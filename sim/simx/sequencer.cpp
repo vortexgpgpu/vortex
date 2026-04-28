@@ -24,12 +24,11 @@ using namespace vortex;
 Sequencer::Sequencer(const SimContext& ctx, const char* name, Core* core, PoolAllocator<Instr, 64>& instr_pool)
   : SimObject<Sequencer>(ctx, name)
   , core_(core)
+  , lsu_uop_gen_(instr_pool)
 #ifdef EXT_TCU_ENABLE
   , tcu_uop_gen_(instr_pool)
 #endif
-{
-  __unused(instr_pool);
-}
+{}
 
 void Sequencer::on_reset() {
   state_.reset();
@@ -47,6 +46,12 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
 
     // Bind the appropriate generator based on FU type
     switch (trace->instr_ptr->get_fu_type()) {
+    case FUType::LSU:
+      state_.uop_count = LsuUopGen::uop_count(*trace->instr_ptr);
+      state_.gen_fn = [this](const Instr& m, uint32_t i) {
+        return lsu_uop_gen_.get(m, i);
+      };
+      break;
   #ifdef EXT_TCU_ENABLE
     case FUType::TCU:
       state_.uop_count = TcuUopGen::uop_count(*trace->instr_ptr);
@@ -77,6 +82,7 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
     uop_trace->fu_type   = uop_instr->get_fu_type();
     uop_trace->op_type   = uop_instr->get_op_type();
     uop_trace->dst_reg   = uop_instr->get_dest_reg();
+    uop_trace->dst_bytesel= uop_instr->get_dst_bytesel();
     for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
       uop_trace->src_regs[i] = uop_instr->get_src_reg(i);
     }

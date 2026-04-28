@@ -19,40 +19,55 @@
 #include <util.h>
 #include "debug.h"
 #include "core.h"
-#include "socket.h"
-#include "cluster.h"
-#include "processor_impl.h"
 #include "constants.h"
-#include "cache.h"
 #include "mem_block_pool.h"
 #include "VX_types.h"
 #include "VX_config.h"
 
 using namespace vortex;
 
-namespace {
-inline uint64_t nan_box(uint32_t value) {
-  return value | 0xffffffff00000000;
+uint32_t LsuUopGen::uop_count(const Instr& instr) {
+  // PACKLB.F: width=0 (LB), 4 byte-elements
+  // PACKLH.F: width=1 (LH), 2 halfword-elements
+  auto args = std::get<IntrLsuArgs>(instr.get_args());
+  return (args.width == 0) ? 4 : 2;
 }
 
-// Functional RAM access used by the LSU's synchronous AMO and packed-load
-// fast-paths. Global addrs hit the processor-wide RAM; shared addrs hit the
-// per-core LocalMem. The cache hierarchy is bypassed.
-void func_read(Core* core, void* data, uint64_t addr, uint32_t size) {
-  if (get_addr_type(addr) == AddrType::Shared) {
-    core->local_mem()->read(data, addr, size);
-  } else {
-    core->processor()->ram()->read(data, addr, size);
-  }
-}
+Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
+  uint64_t parent_uuid = macro_instr.get_uuid();
+  uint32_t total = uop_count(macro_instr);
 
-void func_write(Core* core, const void* data, uint64_t addr, uint32_t size) {
-  if (get_addr_type(addr) == AddrType::Shared) {
-    core->local_mem()->write(data, addr, size);
-  } else {
-    core->processor()->ram()->write(data, addr, size);
-  }
-}
+  // Embed uop_index in the upper bits of the low half of the UUID so that
+  // each uop has a distinct UUID for trace logging.
+  uint32_t uuid_hi = (parent_uuid >> 32) & 0xffffffff;
+  uint32_t uuid_lo = parent_uuid & 0xffffffff;
+  uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
+  uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+
+  auto args = std::get<IntrLsuArgs>(macro_instr.get_args());
+  // Macro encodes elem-size as width: 0=byte (PACKLB), 1=halfword (PACKLH).
+  // The uop is a regular unsigned load (LBU/LHU = width + 4) so the LSU
+  // doesn't sign-extend the loaded byte/halfword before the bytesel write.
+  uint32_t elem_bytes = 1u << args.width;
+  uint32_t uop_width  = args.width + 4;          // LBU=4, LHU=5
+  uint32_t byte_off   = uop_index * elem_bytes;  // byte offset in dst register
+  // Bytesel: data bytes for this uop's elem + NaN-box bytes (4..7) for Float
+  // dest. The LSU is generic — it reads bytesel and shifts the loaded data
+  // into place; OpcUnit::writeback OR-merges by mask.
+  uint8_t  data_mask  = uint8_t(((1u << elem_bytes) - 1u) << byte_off);
+  bool     dst_float  = (macro_instr.get_dest_reg().type == RegType::Float);
+  uint8_t  bytesel    = data_mask | (dst_float ? 0xF0 : 0);
+
+  auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::LSU);
+  uop_instr->set_parent_uuid(parent_uuid);
+  uop_instr->set_op_type(LsuType::LOAD);
+  uop_instr->set_dest_reg(macro_instr.get_dest_reg().idx, macro_instr.get_dest_reg().type);
+  uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx, RegType::Integer);
+  uop_instr->set_src_reg(1, macro_instr.get_src_reg(1).idx, RegType::Integer);
+  // Per-uop AGU input: stride = uop_index → addr = rs1 + uop_index*rs2 + 0.
+  uop_instr->set_args(IntrLsuArgs{uop_width, /*stride*/ uop_index, /*offset*/ 0});
+  uop_instr->set_dst_bytesel(bytesel);
+  return uop_instr;
 }
 
 LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
@@ -71,496 +86,237 @@ void LsuUnit::on_reset() {
 	remain_addrs_ = 0;
 }
 
-void LsuUnit::execute(instr_trace_t* trace) {
-	// Use the trace's snapshot tmask captured at issue, not the live warp.tmask.
-	// Divergent control flow may have changed warp.tmask after this trace was
-	// issued; the on_tick handler builds its lsu_req from trace->tmask, so any
-	// mismatch here yields lanes whose addr/data were never populated.
+void LsuUnit::compute_addrs(instr_trace_t* trace) {
+	// AGU formula: addr[t] = rs1[t] + stride * rs2[t] + offset
+	addr_list_.clear();
+	auto lsu_type = std::get<LsuType>(trace->op_type);
+	auto lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
 	auto& tmask = trace->tmask;
-	auto& instr = *trace->instr_ptr;
-	auto instrArgs = instr.get_args();
-	uint32_t num_threads = NUM_THREADS;
 	auto& rs1_data = trace->src_data[0];
 	auto& rs2_data = trace->src_data[1];
+	uint32_t num_threads = NUM_THREADS;
+	uint32_t data_bytes = 1u << (lsu_args.width & 0x3);
+	bool is_write = (lsu_type == LsuType::STORE);
+	int64_t  offset = lsu_args.offset;  // already signed via int32_t
+	uint32_t stride = lsu_args.stride;
+	for (uint32_t t = 0; t < num_threads; ++t) {
+		if (!tmask.test(t)) continue;
+		mem_addr_size_t e;
+		e.addr = rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset;
+		e.size = data_bytes;
+		e.tid  = t;
+		if (is_write) {
+			e.data = rs2_data[t].u64;
+		}
+		addr_list_.push_back(e);
+	}
+	if (is_write && lsu_args.width > 3)
+		std::abort();
+	remain_addrs_ = addr_list_.size();
+}
 
-	uint32_t thread_start = 0;
-	for (; thread_start < num_threads; ++thread_start) {
-		if (tmask.test(thread_start)) break;
+void LsuUnit::process_response(uint32_t b) {
+	auto& lsu_rsp_in = core_->lmem_switch_.at(b)->RspOut;
+	if (lsu_rsp_in.empty())
+		return;
+	auto& state = states_.at(b);
+	auto& lsu_rsp = lsu_rsp_in.peek();
+	auto& entry = state.pending_rd_reqs.at(lsu_rsp.tag);
+	auto trace = entry.trace;
+	int iw = trace->wid % ISSUE_WIDTH;
+	auto& output = Outputs.at(iw);
+	if (output.full())
+		return; // stall
+	DT(3, this->name() << " mem-rsp: " << lsu_rsp);
+	assert(entry.count != 0);
+
+	if (entry.is_load) {
+		bool dst_float = (trace->dst_reg.type == RegType::Float);
+		uint32_t data_bytes = 1u << (entry.lsu_args.width & 0x3);
+		uint32_t data_width = 8 * data_bytes;
+		uint8_t  data_bs    = trace->dst_bytesel & 0x0F;
+		uint32_t byte_off   = (data_bs == 0 || data_bs == 0x0F) ? 0
+		                    : (uint32_t)__builtin_ctz(data_bs);
+		bool nan_box = dst_float && (data_bytes < 8);
+
+		for (uint32_t lane = 0; lane < lsu_rsp.mask.size(); ++lane) {
+			if (!lsu_rsp.mask.test(lane))
+				continue;
+			const auto& lane_info = entry.lanes.at(lane);
+			assert(lsu_rsp.data.at(lane) && "LOAD response must carry line payload");
+			uint32_t off = lane_info.addr & (MEM_BLOCK_SIZE - 1);
+			uint64_t read_data = 0;
+			std::memcpy(&read_data, lsu_rsp.data.at(lane)->data() + off, data_bytes);
+			// Format the loaded value at low bits per RISC-V load semantics.
+			uint64_t formatted = 0;
+			switch (entry.lsu_args.width) {
+			case 0: // LB
+			case 1: // LH
+				formatted = (uint64_t)(int64_t)sext((Word)read_data, data_width);
+				break;
+			case 2: // LW (sign-ext for Integer dest; raw bits for Float dest, NaN-boxed below)
+				formatted = dst_float ? read_data
+				                       : (uint64_t)(int64_t)sext((Word)read_data, data_width);
+				break;
+			case 3: // LD
+			case 4: // LBU
+			case 5: // LHU
+			case 6: // LWU
+				formatted = read_data;
+				break;
+			default:
+				std::abort();
+			}
+			// Place at bytesel-specified position; OR-in NaN-box for Float dest.
+			auto& dst = entry.trace->dst_data.at(lane_info.tid);
+			dst.u64 = (formatted << (8 * byte_off))
+			        | (nan_box ? 0xFFFFFFFF00000000ull : 0);
+		}
+	}
+	entry.count -= lsu_rsp.mask.count(); // track remaining
+	if (entry.count == 0) {
+		state.pending_rd_reqs.release(lsu_rsp.tag);
+		if (entry.eop) {
+			output.send(trace, 1);
+		}
+	}
+	pending_loads_ -= lsu_rsp.mask.count();
+	lsu_rsp_in.pop();
+}
+
+void LsuUnit::process_request(uint32_t iw) {
+	uint32_t block_idx = iw % NUM_LSU_BLOCKS;
+	auto& state = states_.at(block_idx);
+	if (state.fence_lock) {
+		// wait for all pending memory operations to complete
+		if (!state.pending_rd_reqs.empty())
+			return;
+		if (!Outputs.at(iw).try_send(state.fence_trace))
+			return;
+		state.fence_lock = false;
+		DT(3, this->name() << " fence-unlock: " << state.fence_trace);
 	}
 
-	trace->dst_data.assign(num_threads, reg_data_t{});
-	auto& rd_data = trace->dst_data;
+	// check input queue
+	auto& input = Inputs.at(iw);
+	if (input.empty())
+		return;
 
-	if (std::get_if<LsuType>(&trace->op_type)) {
-		auto lsu_type = std::get<LsuType>(trace->op_type);
-		auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
-		switch (lsu_type) {
-		case LsuType::LOAD: {
-			auto trace_data = std::make_shared<LsuTraceData>(num_threads);
-			trace->data = trace_data;
-			uint32_t data_bytes = 1 << (lsuArgs.width & 0x3);
-			Word offset = sext<Word>(lsuArgs.offset, 32);
-			if (lsuArgs.pack != 0) {
-				// Packed-load is a Vortex-only multi-element bulk read; keep its
-				// synchronous functional path. The on_tick rsp handler is told
-				// not to overwrite dst_data via the is_load=false flag.
-				uint32_t elem_bytes = (lsuArgs.pack == 1) ? 1 : 2;
-				uint32_t num_elems  = (lsuArgs.pack == 1) ? 4 : 2;
-				uint32_t elem_mask  = (elem_bytes == 1) ? 0xffu : 0xffffu;
-				for (uint32_t t = thread_start; t < num_threads; ++t) {
-					if (!tmask.test(t))
-						continue;
-					uint64_t base   = rs1_data[t].u;
-					uint64_t stride = rs2_data[t].u;
-					uint32_t packed = 0;
-					for (uint32_t i = 0; i < num_elems; ++i) {
-						uint64_t elem_addr = base + i * stride;
-						uint64_t elem_data = 0;
-						func_read(core_,&elem_data, elem_addr, elem_bytes);
-						packed |= (uint32_t)(elem_data & elem_mask) << (8 * elem_bytes * i);
-						trace_data->mem_addrs.at(t) = {elem_addr, elem_bytes};
-					}
-					rd_data[t].u64 = nan_box(packed);
-				}
-				break;
-			}
-			// Async path: record per-thread addrs only; rsp handler fills dst_data.
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t))
-					continue;
-				uint64_t mem_addr = rs1_data[t].i + offset;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-			}
-		} break;
-		case LsuType::STORE: {
-			auto trace_data = std::make_shared<LsuTraceData>(num_threads);
-			trace->data = trace_data;
-			uint32_t data_bytes = 1 << (lsuArgs.width & 0x3);
-			Word offset = sext<Word>(lsuArgs.offset, 32);
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t))
-					continue;
-				uint64_t mem_addr = rs1_data[t].i + offset;
-				uint64_t write_data = rs2_data[t].u64;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes, write_data};
-				if (lsuArgs.width > 3)
-					std::abort();
-			}
-		} break;
-		case LsuType::FENCE:
-			// no compute
-			break;
-		default:
-			std::abort();
-		}
-	} else if (std::get_if<AmoType>(&trace->op_type)) {
-		auto amo_type = std::get<AmoType>(trace->op_type);
-		auto amoArgs = std::get<IntrAmoArgs>(instrArgs);
-		auto trace_data = std::make_shared<LsuTraceData>(num_threads);
-		trace->data = trace_data;
-		uint32_t data_bytes = 1 << (amoArgs.width & 0x3);
-		uint32_t data_width = 8 * data_bytes;
-		switch (amo_type) {
-		case AmoType::LR: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				if (get_addr_type(mem_addr) == AddrType::Global)
-					core_->processor()->amo_reserve(mem_addr);
-				rd_data[t].i = sext((Word)read_data, data_width);
-			}
-		} break;
-		case AmoType::SC: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				if ((get_addr_type(mem_addr) == AddrType::Global && core_->processor()->amo_check(mem_addr))) {
-					func_write(core_,&rs2_data[t].u64, mem_addr, data_bytes);
-					trace_data->mem_addrs.at(t) = {mem_addr, data_bytes, rs2_data[t].u64};
-					rd_data[t].i = 0;
-				} else {
-					// reservation invalid — record the addr but mark the lane as
-					// "no actual write" via size=0 so the cache path skips it.
-					trace_data->mem_addrs.at(t) = {mem_addr, 0, 0};
-					rd_data[t].i = 1;
-				}
-			}
-		} break;
-		case AmoType::AMOADD: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				auto read_data_i = sext((WordI)read_data, data_width);
-				auto rs1_data_i  = sext((WordI)rs2_data[t].u64, data_width);
-				uint64_t result = read_data_i + rs1_data_i;
-				func_write(core_,&result, mem_addr, data_bytes);
-				trace_data->mem_addrs.at(t).data = result;
-				rd_data[t].i = read_data_i;
-			}
-		} break;
-		case AmoType::AMOSWAP: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				auto read_data_i = sext((WordI)read_data, data_width);
-				auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
-				uint64_t result = rs1_data_u;
-				func_write(core_,&result, mem_addr, data_bytes);
-				trace_data->mem_addrs.at(t).data = result;
-				rd_data[t].i = read_data_i;
-			}
-		} break;
-		case AmoType::AMOXOR: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				auto read_data_i = sext((WordI)read_data, data_width);
-				auto read_data_u = zext((Word)read_data, data_width);
-				auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
-				uint64_t result = read_data_u ^ rs1_data_u;
-				func_write(core_,&result, mem_addr, data_bytes);
-				trace_data->mem_addrs.at(t).data = result;
-				rd_data[t].i = read_data_i;
-			}
-		} break;
-		case AmoType::AMOOR: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				auto read_data_i = sext((WordI)read_data, data_width);
-				auto read_data_u = zext((Word)read_data, data_width);
-				auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
-				uint64_t result = read_data_u | rs1_data_u;
-				func_write(core_,&result, mem_addr, data_bytes);
-				trace_data->mem_addrs.at(t).data = result;
-				rd_data[t].i = read_data_i;
-			}
-		} break;
-		case AmoType::AMOAND: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				auto read_data_i = sext((WordI)read_data, data_width);
-				auto read_data_u = zext((Word)read_data, data_width);
-				auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
-				uint64_t result = read_data_u & rs1_data_u;
-				func_write(core_,&result, mem_addr, data_bytes);
-				trace_data->mem_addrs.at(t).data = result;
-				rd_data[t].i = read_data_i;
-			}
-		} break;
-		case AmoType::AMOMIN: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				auto read_data_i = sext((WordI)read_data, data_width);
-				auto rs1_data_i  = sext((WordI)rs2_data[t].u64, data_width);
-				uint64_t result = std::min(read_data_i, rs1_data_i);
-				func_write(core_,&result, mem_addr, data_bytes);
-				trace_data->mem_addrs.at(t).data = result;
-				rd_data[t].i = read_data_i;
-			}
-		} break;
-		case AmoType::AMOMAX: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				auto read_data_i = sext((WordI)read_data, data_width);
-				auto rs1_data_i  = sext((WordI)rs2_data[t].u64, data_width);
-				uint64_t result = std::max(read_data_i, rs1_data_i);
-				func_write(core_,&result, mem_addr, data_bytes);
-				trace_data->mem_addrs.at(t).data = result;
-				rd_data[t].i = read_data_i;
-			}
-		} break;
-		case AmoType::AMOMINU: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				auto read_data_i = sext((WordI)read_data, data_width);
-				auto read_data_u = zext((Word)read_data, data_width);
-				auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
-				uint64_t result = std::min(read_data_u, rs1_data_u);
-				func_write(core_,&result, mem_addr, data_bytes);
-				trace_data->mem_addrs.at(t).data = result;
-				rd_data[t].i = read_data_i;
-			}
-		} break;
-		case AmoType::AMOMAXU: {
-			for (uint32_t t = thread_start; t < num_threads; ++t) {
-				if (!tmask.test(t)) continue;
-				uint64_t mem_addr = rs1_data[t].u;
-				trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-				uint64_t read_data = 0;
-				func_read(core_,&read_data, mem_addr, data_bytes);
-				auto read_data_i = sext((WordI)read_data, data_width);
-				auto read_data_u = zext((Word)read_data, data_width);
-				auto rs1_data_u  = zext((Word)rs2_data[t].u64, data_width);
-				uint64_t result = std::max(read_data_u, rs1_data_u);
-				func_write(core_,&result, mem_addr, data_bytes);
-				trace_data->mem_addrs.at(t).data = result;
-				rd_data[t].i = read_data_i;
-			}
-		} break;
-		default:
-			std::abort();
-		}
-	} else {
+	auto trace = input.peek();
+	if (!std::get_if<LsuType>(&trace->op_type)) {
+		// AMO ops are unsupported in this build (EXT_A_ENABLE=false). The
+		// LSU only talks through lmem_switch_; no functional bypass.
 		std::abort();
+	}
+	auto lsu_type = std::get<LsuType>(trace->op_type);
+	bool is_fence = (lsu_type == LsuType::FENCE);
+	bool is_write = (lsu_type == LsuType::STORE);
+
+	if (is_fence) {
+		// schedule fence lock
+		state.fence_trace = trace;
+		state.fence_lock = true;
+		DT(3, this->name() << " fence-lock: " << *trace);
+		input.pop();
+		return;
+	}
+
+	// check pending queue capacity
+	if (!is_write && state.pending_rd_reqs.full()) {
+		if (!trace->log_once(true)) {
+			DT(4, this->name() << " queue-full: " << *trace);
+		}
+		return;
+	} else {
+		trace->log_once(false);
+	}
+
+	// First time we see this trace: derive the per-lane addr/size/data
+	// list via compute_addrs(). Persists across multi-batch dispatch via
+	// remain_addrs_; rebuilt only when the previous trace is fully drained.
+	if (remain_addrs_ == 0) {
+		this->compute_addrs(trace);
+	}
+
+	// check output backpressure
+	bool direct_commit = (is_write || 0 == addr_list_.size());
+	if (direct_commit && remain_addrs_ <= NUM_LSU_LANES) {
+		if (Outputs.at(iw).full())
+			return; // stall
+	}
+
+	if (remain_addrs_ != 0) {
+		// check lmem switch backpressure
+		if (core_->lmem_switch_.at(block_idx)->ReqIn.full())
+			return; // stall
+
+		// setup memory request
+		LsuReq lsu_req(NUM_LSU_LANES);
+		lsu_req.write = is_write;
+		uint32_t t0 = addr_list_.size() - remain_addrs_;
+		std::vector<mem_addr_size_t> lane_entries(NUM_LSU_LANES);
+		for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
+			auto& entry = addr_list_.at(t0 + i);
+			lsu_req.mask.set(i);
+			lsu_req.addrs.at(i) = entry.addr;
+			lane_entries.at(i) = entry;
+			if (is_write && entry.size > 0) {
+				// Package the lane's write value into a per-lane block + byteen.
+				auto block = make_mem_block();
+				std::memset(block->data(), 0, block->size());
+				uint32_t off = entry.addr & (MEM_BLOCK_SIZE - 1);
+				for (uint32_t b = 0; b < entry.size; ++b) {
+					(*block)[off + b] = uint8_t((entry.data >> (8 * b)) & 0xff);
+				}
+				lsu_req.data.at(i) = block;
+				lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
+			}
+			--remain_addrs_;
+			if (remain_addrs_ == 0)
+				break;
+		}
+
+		uint32_t count = lsu_req.mask.count();
+		bool is_eop = (remain_addrs_ == 0);
+
+		uint32_t tag = 0;
+		if (!is_write) {
+			IntrLsuArgs lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
+			tag = state.pending_rd_reqs.allocate({trace, count, is_eop, std::move(lane_entries), lsu_args, true});
+		}
+		lsu_req.tag  = tag;
+		lsu_req.cid  = trace->cid;
+		lsu_req.uuid = trace->uuid;
+
+		// send memory request
+		core_->lmem_switch_.at(block_idx)->ReqIn.send(lsu_req);
+		DT(3, this->name() << " mem-req: " << lsu_req);
+
+		// update stats
+		if (is_write) {
+			core_->perf_stats_.stores += count;
+		} else {
+			core_->perf_stats_.loads += count;
+			pending_loads_ += count;
+		}
+	}
+
+	if (remain_addrs_ == 0) {
+		if (direct_commit) {
+			Outputs.at(iw).send(trace);
+		}
+		input.pop();
 	}
 }
 
 void LsuUnit::on_tick() {
 	core_->perf_stats_.load_latency += pending_loads_;
 
-	// handle memory responses
 	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-		auto& lsu_rsp_in = core_->lmem_switch_.at(b)->RspOut;
-		if (lsu_rsp_in.empty())
-			continue;
-		auto& state = states_.at(b);
-		auto& lsu_rsp = lsu_rsp_in.peek();
-		auto& entry = state.pending_rd_reqs.at(lsu_rsp.tag);
-		auto trace = entry.trace;
-		int iw = trace->wid % ISSUE_WIDTH;
-		auto& output = Outputs.at(iw);
-		if (output.full())
-			continue; // stall
-		DT(3, this->name() << " mem-rsp: " << lsu_rsp);
-		assert(entry.count != 0);
-
-		// Async LOAD: extract per-lane bytes from the TLM payload and format
-		// into the trace's dst_data using the captured lsu_args.
-		if (entry.is_load) {
-			uint32_t data_bytes = 1u << (entry.lsu_args.width & 0x3);
-			uint32_t data_width = 8 * data_bytes;
-			for (uint32_t lane = 0; lane < lsu_rsp.mask.size(); ++lane) {
-				if (!lsu_rsp.mask.test(lane))
-					continue;
-				const auto& lane_info = entry.lanes.at(lane);
-				assert(lsu_rsp.data.at(lane) && "LOAD response must carry line payload");
-				uint32_t off = lane_info.addr & (MEM_BLOCK_SIZE - 1);
-				uint64_t read_data = 0;
-				std::memcpy(&read_data, lsu_rsp.data.at(lane)->data() + off, data_bytes);
-				auto& dst = entry.trace->dst_data.at(lane_info.tid);
-				switch (entry.lsu_args.width) {
-				case 0: // LB
-				case 1: // LH
-					dst.i = sext((Word)read_data, data_width);
-					break;
-				case 2:
-					if (entry.lsu_args.is_float) {
-						// FLW: NaN-box single-precision float in 64-bit slot.
-						dst.u64 = read_data | 0xffffffff00000000ull;
-					} else {
-						// LW
-						dst.i = sext((Word)read_data, data_width);
-					}
-					break;
-				case 3: // LD
-				case 4: // LBU
-				case 5: // LHU
-				case 6: // LWU
-					dst.u64 = read_data;
-					break;
-				default:
-					std::abort();
-				}
-			}
-		}
-		entry.count -= lsu_rsp.mask.count(); // track remaining
-		if (entry.count == 0) {
-			// full response batch received
-			state.pending_rd_reqs.release(lsu_rsp.tag);
-			// is last batch?
-			if (entry.eop) {
-				output.send(trace, 1);
-			}
-		}
-		pending_loads_ -= lsu_rsp.mask.count();
-		lsu_rsp_in.pop();
+		this->process_response(b);
 	}
 
-	// handle LSU requests
 	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-		uint32_t block_idx = iw % NUM_LSU_BLOCKS;
-		auto& state = states_.at(block_idx);
-		if (state.fence_lock) {
-			// wait for all pending memory operations to complete
-			if (!state.pending_rd_reqs.empty())
-				continue;
-			if (!Outputs.at(iw).try_send(state.fence_trace))
-				continue;
-			state.fence_lock = false;
-			DT(3, this->name() << " fence-unlock: " << state.fence_trace);
-		}
-
-		// check input queue
-		auto& input = Inputs.at(iw);
-		if (input.empty())
-			continue;
-
-		bool is_fence = false;
-		bool is_write = false;
-
-		auto trace = input.peek();
-		if (std::get_if<LsuType>(&trace->op_type)) {
-			auto lsu_type = std::get<LsuType>(trace->op_type);
-			is_fence = (lsu_type == LsuType::FENCE);
-			is_write = (lsu_type == LsuType::STORE);
-		} else if (std::get_if<AmoType>(&trace->op_type)) {
-			auto amp_type = std::get<AmoType>(trace->op_type);
-			is_write = (amp_type != AmoType::LR);
-		}
-		else {
-			std::abort();
-		}
-
-		if (is_fence) {
-			// schedule fence lock
-			state.fence_trace = trace;
-			state.fence_lock = true;
-			DT(3, this->name() << " fence-lock: " << *trace);
-			// remove input
-			input.pop();
-			continue;
-		}
-
-		// check pending queue capacity
-		if (!is_write && state.pending_rd_reqs.full()) {
-			if (!trace->log_once(true)) {
-				DT(4, this->name() << " queue-full: " << *trace);
-			}
-			continue;
-		} else {
-			trace->log_once(false);
-		}
-
-		if (remain_addrs_ == 0) {
-			addr_list_.clear();
-			// Functional execute for LSU/AMO types.
-			if (std::get_if<LsuType>(&trace->op_type) || std::get_if<AmoType>(&trace->op_type)) {
-				if (!trace->data) {
-					this->execute(trace);
-				}
-			}
-			if (trace->data) {
-				auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
-				for (uint32_t t = 0; t < trace_data->mem_addrs.size(); ++t) {
-					if (!trace->tmask.test(t))
-						continue;
-					auto entry = trace_data->mem_addrs.at(t);
-					entry.tid = t;
-					addr_list_.push_back(entry);
-				}
-				remain_addrs_ = addr_list_.size();
-			}
-		}
-
-		// check output backpressure
-		bool direct_commit = (is_write || 0 == addr_list_.size());
-		if (direct_commit && remain_addrs_ <= NUM_LSU_LANES) {
-			if (Outputs.at(iw).full())
-				continue; // stall
-		}
-
-		if (remain_addrs_ != 0) {
-			// check lmem switch backpressure
-			if (core_->lmem_switch_.at(block_idx)->ReqIn.full())
-				continue; // stall
-
-			// setup memory request
-			LsuReq lsu_req(NUM_LSU_LANES);
-			lsu_req.write = is_write;
-			uint32_t t0 = addr_list_.size() - remain_addrs_;
-			std::vector<mem_addr_size_t> lane_entries(NUM_LSU_LANES);
-			for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
-				auto& entry = addr_list_.at(t0 + i);
-				lsu_req.mask.set(i);
-				lsu_req.addrs.at(i) = entry.addr;
-				lane_entries.at(i) = entry;
-				if (is_write && entry.size > 0) {
-					// Package the lane's write value into a per-lane block + byteen.
-					auto block = make_mem_block();
-					std::memset(block->data(), 0, block->size());
-					uint32_t off = entry.addr & (MEM_BLOCK_SIZE - 1);
-					for (uint32_t b = 0; b < entry.size; ++b) {
-						(*block)[off + b] = uint8_t((entry.data >> (8 * b)) & 0xff);
-					}
-					lsu_req.data.at(i) = block;
-					lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
-				}
-				--remain_addrs_;
-				if (remain_addrs_ == 0)
-					break;
-			}
-
-			uint32_t count = lsu_req.mask.count();
-			bool is_eop = (remain_addrs_ == 0);
-
-			uint32_t tag = 0;
-			if (!is_write) {
-				IntrLsuArgs lsu_args{};
-				bool is_load = false;
-				if (std::get_if<LsuType>(&trace->op_type)
-				 && std::get<LsuType>(trace->op_type) == LsuType::LOAD) {
-					lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
-					// Packed-loads were already fulfilled synchronously in execute();
-					// rsp handler must not touch dst_data for them.
-					is_load = (lsu_args.pack == 0);
-				}
-				tag = state.pending_rd_reqs.allocate({trace, count, is_eop, std::move(lane_entries), lsu_args, is_load});
-			}
-			lsu_req.tag  = tag;
-			lsu_req.cid  = trace->cid;
-			lsu_req.uuid = trace->uuid;
-
-			// send memory request
-			core_->lmem_switch_.at(block_idx)->ReqIn.send(lsu_req);
-			DT(3, this->name() << " mem-req: " << lsu_req);
-
-			// update stats
-			if (is_write) {
-				core_->perf_stats_.stores += count;
-			} else {
-				core_->perf_stats_.loads += count;
-				pending_loads_ += count;
-			}
-		}
-
-		if (remain_addrs_ == 0) {
-			if (direct_commit) {
-				Outputs.at(iw).send(trace);
-			}
-			// remove input
-			input.pop();
-		}
+		this->process_request(iw);
 	}
 }

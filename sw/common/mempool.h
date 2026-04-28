@@ -15,6 +15,7 @@
 
 #include <memory>
 #include <cassert>
+#include <cstdlib>
 
 namespace vortex {
 

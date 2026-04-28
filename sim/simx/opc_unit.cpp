@@ -124,12 +124,25 @@ void OpcUnit::read_src(std::vector<reg_data_t>& out,
   }
 }
 
+// Expand an 8-bit bytesel mask into a per-byte 64-bit mask:
+// each set bit i in `bs` produces 0xFF in byte i of the result.
+static inline uint64_t expand_bytesel64(uint8_t bs) {
+  uint64_t m = 0;
+  for (uint32_t b = 0; b < 8; ++b) {
+    if (bs & (1u << b)) m |= 0xFFull << (8 * b);
+  }
+  return m;
+}
+
 void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
   if (trace->dst_data.empty())
     return;
   uint32_t warp_slot = wid_to_opc_slot(wid);
   auto& rdest = trace->dst_reg;
   auto num_threads = num_threads_;
+  // Bytesel: 0xFF (default) collapses to full overwrite. Partial-width writers
+  // (packLD uops) supply a sub-mask so we OR-merge into the regfile slot.
+  uint64_t mask = expand_bytesel64(trace->dst_bytesel);
   switch (rdest.type) {
   case RegType::None:
     break;
@@ -142,7 +155,9 @@ void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
         DPN(2, "-");
         continue;
       }
-      bank.at(t) = trace->dst_data[t].i;
+      Word cur = bank.at(t);
+      Word incoming = trace->dst_data[t].i;
+      bank.at(t) = (cur & ~Word(mask)) | (incoming & Word(mask));
       DPN(2, "0x" << std::hex << trace->dst_data[t].u << std::dec);
     }
     DPN(2, "} (#" << std::dec << trace->uuid << ")" << std::endl);
@@ -156,11 +171,13 @@ void OpcUnit::writeback(instr_trace_t* trace, uint32_t wid) {
         DPN(2, "-");
         continue;
       }
-      bank.at(t) = trace->dst_data[t].u64;
-      if ((trace->dst_data[t].u64 >> 32) == 0xffffffff) {
-        DPN(2, "0x" << std::hex << trace->dst_data[t].u32 << std::dec);
+      uint64_t cur = bank.at(t);
+      uint64_t incoming = trace->dst_data[t].u64;
+      bank.at(t) = (cur & ~mask) | (incoming & mask);
+      if ((bank.at(t) >> 32) == 0xffffffff) {
+        DPN(2, "0x" << std::hex << uint32_t(bank.at(t)) << std::dec);
       } else {
-        DPN(2, "0x" << std::hex << trace->dst_data[t].u64 << std::dec);
+        DPN(2, "0x" << std::hex << bank.at(t) << std::dec);
       }
     }
     DPN(2, "} (#" << std::dec << trace->uuid << ")" << std::endl);

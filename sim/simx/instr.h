@@ -140,6 +140,7 @@ public:
     : uuid_(uuid)
     , parent_uuid_(uuid)
     , fu_type_(fu_type)
+    , dst_bytesel_(0xFF)
     , is_uop_(false)
     , is_macro_op_(false)
     , is_wstall_(false)
@@ -226,6 +227,9 @@ public:
   void set_fu_unlock(bool value) { fu_unlock_ = value; }
   bool get_fu_unlock() const { return fu_unlock_; }
 
+  void set_dst_bytesel(uint8_t value) { dst_bytesel_ = value; }
+  uint8_t get_dst_bytesel() const { return dst_bytesel_; }
+
 private:
 
   uint64_t uuid_;
@@ -235,6 +239,7 @@ private:
   IntrArgs args_;
   RegOpd   rsrc_[MAX_REG_SOURCES];
   RegOpd   rdest_;
+  uint8_t  dst_bytesel_;
   bool     is_uop_;
   bool     is_macro_op_;
   bool     is_wstall_;
