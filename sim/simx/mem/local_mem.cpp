@@ -13,7 +13,7 @@
 
 #include "local_mem.h"
 #include "mem_block_pool.h"
-#include "core.h"
+#include <mem.h>
 #include <bitmanip.h>
 #include <vector>
 #include "types.h"
@@ -63,20 +63,6 @@ public:
 	}
 
 	void tick() {
-#ifdef EXT_DXA_ENABLE
-		// DXA writes take priority and stall normal Inputs for this cycle.
-		if (!simobject_->dxa_req_in.empty()) {
-			auto& req = simobject_->dxa_req_in.peek();
-			DT(4, simobject_->name() << "-dxa smem write addr=0x"
-			   << std::hex << (req.addr) << std::dec << ", is_last=" << req.is_last);
-			perf_stats_.writes++;
-			if (req.is_last) {
-				req.core->barrier_event_release(req.bar_id);
-			}
-			simobject_->dxa_req_in.pop();
-			return; // Inputs stalled this cycle
-		}
-#endif
 		// process bank requets from xbar
 		uint32_t num_banks = (1 << config_.B);
 		for (uint32_t i = 0; i < num_banks; ++i) {
@@ -133,9 +119,6 @@ LocalMem::LocalMem(const SimContext& ctx, const char* name, const Config& config
 	: SimObject<LocalMem>(ctx, name)
 	, Inputs(config.num_reqs, this)
 	, Outputs(config.num_reqs, this)
-#ifdef EXT_DXA_ENABLE
-	, dxa_req_in(this)
-#endif
 	, impl_(new Impl(this, config))
 {}
 
