@@ -15,7 +15,6 @@
 
 #include <simobject.h>
 #include "types.h"
-#include "dxa_core.h"
 
 namespace vortex {
 
@@ -44,11 +43,6 @@ public:
 
   std::vector<SimChannel<MemReq>> Inputs;
   std::vector<SimChannel<MemRsp>> Outputs;
-#ifdef EXT_DXA_ENABLE
-  // DXA timing channel: one request per element, no data.
-  // Stalls Inputs while active; releases barrier on is_last.
-  SimChannel<DxaCore::SmemReq> dxa_req_in;
-#endif
 
   LocalMem(const SimContext& ctx, const char* name, const Config& config);
   virtual ~LocalMem();
