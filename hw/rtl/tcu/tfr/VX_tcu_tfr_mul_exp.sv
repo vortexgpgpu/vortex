@@ -1,6 +1,16 @@
 // Copyright © 2019-2023
-// Licensed under the Apache License, Version 2.0
-// See the License for the specific language governing permissions and limitations.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 `include "VX_define.vh"
 
 module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
@@ -63,7 +73,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .exceptions (mul_f16_exc)
     );
 
-    // --- BF8 / BF8 --------------------------------------------------------
+    // --- FP8 / BF8 --------------------------------------------------------
     wire [TCK-1:0][24:0]      mul_f8_sig;
     wire [TCK-1:0][EXP_W-1:0] mul_f8_exp;
     fedp_excep_t [TCK-1:0]    mul_f8_exc;
@@ -132,7 +142,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .exp_f8     (mul_f8_exp),
         .exc_f8     (mul_f8_exc),
 
-         .sig_int   (mul_int_sig),
+        .sig_int    (mul_int_sig),
 
         .sig_out    (raw_sigs),
         .exp_out    (exponents),

@@ -50,6 +50,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FRND_LATENCY = 1;
     localparam FACC_LATENCY  = $clog2(2 * TCU_TC_K + 1) * (FADD_LATENCY + FRND_LATENCY);
     localparam FEDP_LATENCY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FACC_LATENCY;
+`elsif TCU_TYPE_FPNEW
+    localparam FMUL_LATENCY = 2;
+    localparam FADD_LATENCY = 2;
+    localparam FACC_LATENCY  = $clog2(2 * TCU_TC_K) * FADD_LATENCY;
+    localparam FEDP_LATENCY = FMUL_LATENCY + 1 + FACC_LATENCY + FADD_LATENCY;
 `elsif TCU_TYPE_DPI
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
@@ -301,8 +306,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row(a_row_r),
-                .b_col(b_col_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
@@ -317,8 +322,24 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row(a_row_r),
-                .b_col(b_col_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
+                .c_val (c_val_r),
+                .d_val (d_val[i][j])
+            );
+        `elsif TCU_TYPE_FPNEW
+            VX_tcu_fedp_fpnew #(
+                .INSTANCE_ID (INSTANCE_ID),
+                .LATENCY (FEDP_LATENCY),
+                .N (TCU_TC_K)
+            ) fedp (
+                .clk   (clk),
+                .reset (reset),
+                .enable(fedp_enable),
+                .fmt_s (fmt_s_r),
+                .fmt_d (fmt_d_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
@@ -350,8 +371,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .enable(fedp_enable),
                 .fmt_s (fmt_s_r),
                 .fmt_d (fmt_d_r),
-                .a_row(a_row_r),
-                .b_col(b_col_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
