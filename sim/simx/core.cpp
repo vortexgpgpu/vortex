@@ -340,10 +340,11 @@ void Core::decode() {
   // Decode: fill trace metadata from instruction bits
   auto instr = decoder_->decode(trace->code, trace->uuid);
   DP(1, "Instr: " << *instr << " (#" << trace->uuid << ")");
-  trace->instr_ptr = instr;
-  trace->fu_type   = instr->get_fu_type();
-  trace->op_type   = instr->get_op_type();
-  trace->dst_reg   = instr->get_dest_reg();
+  trace->instr_ptr   = instr;
+  trace->fu_type     = instr->get_fu_type();
+  trace->op_type     = instr->get_op_type();
+  trace->dst_reg     = instr->get_dest_reg();
+  trace->dst_bytesel = instr->get_dst_bytesel();
   for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
     trace->src_regs[i] = instr->get_src_reg(i);
   }

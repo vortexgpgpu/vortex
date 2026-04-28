@@ -52,8 +52,9 @@ public:
     }
   };
 
-  // trace packet: routing fields set at execute(), emulation fields at execute_copy()
-  struct TraceData : public ITraceData {
+  // trace packet: routing fields set at execute(), emulation fields at execute_copy().
+  // No longer attached to instr_trace_t::data; held in SfuUnit's per-iw pending slot.
+  struct TraceData {
     using Ptr = std::shared_ptr<TraceData>;
     // inputs
     uint32_t desc_slot  = 0;

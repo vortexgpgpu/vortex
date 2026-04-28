@@ -18,6 +18,7 @@
 #include <simobject.h>
 #include "types.h"
 #include "instr.h"
+#include "lsu_unit.h"
 #ifdef EXT_TCU_ENABLE
 #include "tensor_unit.h"
 #endif
@@ -71,6 +72,7 @@ private:
 
   Core* core_;
   State state_;
+  LsuUopGen lsu_uop_gen_;
 #ifdef EXT_TCU_ENABLE
   TcuUopGen tcu_uop_gen_;
 #endif

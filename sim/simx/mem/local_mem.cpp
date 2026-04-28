@@ -62,18 +62,6 @@ public:
 		perf_stats_ = PerfStats();
 	}
 
-	void read(void* data, uint64_t addr, uint32_t size) {
-		auto l_addr = to_local_addr(addr);
-		DPH(3, "Local Mem addr=0x" << std::hex << l_addr << std::dec << std::endl);
-		ram_.read(data, l_addr, size);
-	}
-
-	void write(const void* data, uint64_t addr, uint32_t size) {
-		auto l_addr = to_local_addr(addr);
-		DPH(3, "Local Mem addr=0x" << std::hex << l_addr << std::dec << std::endl);
-		ram_.write(data, l_addr, size);
-	}
-
 	void tick() {
 #ifdef EXT_DXA_ENABLE
 		// DXA writes take priority and stall normal Inputs for this cycle.
@@ -157,14 +145,6 @@ LocalMem::~LocalMem() {
 
 void LocalMem::on_reset() {
   impl_->reset();
-}
-
-void LocalMem::read(void* data, uint64_t addr, uint32_t size) {
-  impl_->read(data, addr, size);
-}
-
-void LocalMem::write(const void* data, uint64_t addr, uint32_t size) {
-  impl_->write(data, addr, size);
 }
 
 void LocalMem::on_tick() {

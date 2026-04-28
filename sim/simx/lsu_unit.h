@@ -14,10 +14,24 @@
 #pragma once
 
 #include <array>
+#include <mempool.h>
 #include "func_unit.h"
 #include "instr.h"
 
 namespace vortex {
+
+// Micro-op generator for packed-load macro instructions (PACKLB.F / PACKLH.F).
+class LsuUopGen {
+public:
+  LsuUopGen(PoolAllocator<Instr, 64>& pool) : pool_(pool) {}
+
+  static uint32_t uop_count(const Instr& instr);
+
+  Instr::Ptr get(const Instr& macro_instr, uint32_t uop_index);
+
+private:
+  PoolAllocator<Instr, 64>& pool_;
+};
 
 class LsuUnit : public FuncUnit {
 public:
@@ -29,18 +43,25 @@ protected:
 	void on_tick() override;
 
 private:
-	// Per-unit functional execution for LsuType/AmoType. Called only from
-	// this unit's tick() at first peek of a new trace.
-	void execute(instr_trace_t* trace);
+
+	void compute_addrs(instr_trace_t* trace);
+
+	void process_response(uint32_t b);
+
+	void process_request(uint32_t iw);
+
+  struct mem_addr_size_t {
+		uint64_t addr;
+		uint32_t size;
+		uint64_t data;
+		uint32_t tid;
+	};
 
  	struct pending_req_t {
 		instr_trace_t* trace;
 		uint32_t count;
 		bool eop;
-		// Per-lane addrs+sizes captured at issue time. The response handler
-		// extracts bytes from the TLM payload using these.
 		std::vector<mem_addr_size_t> lanes;
-		// Load formatting captured at issue time (only meaningful for LOADs).
 		IntrLsuArgs lsu_args;
 		bool        is_load;
 	};

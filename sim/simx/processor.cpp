@@ -126,7 +126,6 @@ ProcessorImpl::~ProcessorImpl() {
 }
 
 void ProcessorImpl::attach_ram(RAM* ram) {
-  ram_ = ram;
   memsim_->attach_ram(ram);
 }
 

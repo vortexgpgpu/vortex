@@ -47,17 +47,6 @@ public:
   PerfStats perf_stats() const;
 
   Kmu& kmu()       { return *kmu_; }
-  RAM* ram() const { return ram_; }
-
-  // LR/SC reservation tracking. Single-slot is sufficient: atomics in this
-  // build are off by default and even when on the suite is single-warp.
-  void amo_reserve(uint64_t addr) {
-    amo_addr_  = addr;
-    amo_valid_ = true;
-  }
-  bool amo_check(uint64_t addr) const {
-    return amo_valid_ && amo_addr_ == addr;
-  }
 
 private:
 
@@ -65,9 +54,6 @@ private:
   std::vector<Cluster::Ptr> clusters_;
   Memory::Ptr memsim_;
   Cache::Ptr l3cache_;
-  RAM* ram_ = nullptr;
-  uint64_t amo_addr_ = 0;
-  bool     amo_valid_ = false;
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;
   uint64_t perf_mem_latency_;

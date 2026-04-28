@@ -255,9 +255,11 @@ static op_string_t op_string(const Instr &instr) {
       switch (lsu_type) {
       case LsuType::LOAD: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
-        if (lsuArgs.pack == 1) return {"PACKLB.F", ""};
-        if (lsuArgs.pack == 2) return {"PACKLH.F", ""};
-        if (lsuArgs.is_float) {
+        bool dst_float = (instr.get_dest_reg().type == RegType::Float);
+        // packLD detection: Float dest with sub-word width (LB or LH).
+        if (dst_float && lsuArgs.width == 0) return {"PACKLB.F", ""};
+        if (dst_float && lsuArgs.width == 1) return {"PACKLH.F", ""};
+        if (dst_float) {
           switch (lsuArgs.width) {
           case 2: return {"FLW", to_hex_str(lsuArgs.offset)};
           case 3: return {"FLD", to_hex_str(lsuArgs.offset)};
@@ -280,7 +282,9 @@ static op_string_t op_string(const Instr &instr) {
       }
       case LsuType::STORE: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
-        if (lsuArgs.is_float) {
+        // For stores, the data source (rs2) carries the type info.
+        bool src_float = (instr.get_src_reg(1).type == RegType::Float);
+        if (src_float) {
           switch (lsuArgs.width) {
           case 2: return {"FSW", to_hex_str(lsuArgs.offset)};
           case 3: return {"FSD", to_hex_str(lsuArgs.offset)};
@@ -584,13 +588,13 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       }
       auto offset = sext(imm12, width_i_imm);
       instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
-      instr->set_args(IntrLsuArgs{funct3, is_float, offset, 0});
+      instr->set_args(IntrLsuArgs{funct3, /*stride*/ 0, (int32_t)offset});
     }
   } break;
   case Opcode::FENCE: {
     instr->set_fu_type(FUType::LSU);
     instr->set_op_type(LsuType::FENCE);
-    instr->set_args(IntrLsuArgs{0, 0, 0, 0});
+    instr->set_args(IntrLsuArgs{0, 0, 0});
   } break;
   case Opcode::AMO: {
     instr->set_fu_type(FUType::LSU);
@@ -879,26 +883,24 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       }
     } break;
   #endif
-    case 4: { // Load/Store Packing extensions
+    case 4: { // Load/Store Packing extensions — macro-ops, sequencer expands to N single-elem uops
       instr->set_fu_type(FUType::LSU);
+      instr->set_op_type(LsuType::LOAD);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
       switch (funct3) {
-      case 1: { // vx_packlb_f: pack 4 strided bytes into FP register
-        instr->set_op_type(LsuType::LOAD);
-        instr->set_args(IntrLsuArgs{0, 1, 0, 1});
-        instr->set_dest_reg(rd, RegType::Float);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-        instr->set_src_reg(1, rs2, RegType::Integer);
+      case 1: { // vx_packlb_f: 4 strided bytes (LB-width) → packed FP
+        instr->set_args(IntrLsuArgs{/*width=LB*/ 0, /*stride*/ 0, /*offset*/ 0});
       } break;
-      case 2: { // vx_packlh_f: pack 2 strided halfwords into FP register
-        instr->set_op_type(LsuType::LOAD);
-        instr->set_args(IntrLsuArgs{0, 1, 0, 2});
-        instr->set_dest_reg(rd, RegType::Float);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-        instr->set_src_reg(1, rs2, RegType::Integer);
+      case 2: { // vx_packlh_f: 2 strided halfwords (LH-width) → packed FP
+        instr->set_args(IntrLsuArgs{/*width=LH*/ 1, /*stride*/ 0, /*offset*/ 0});
       } break;
       default:
         std::abort();
       }
+      instr->set_macro_op();
+      instr->set_wstall(true);   // pause fetch while sequencer expands the N uops
     } break;
     default:
       std::abort();

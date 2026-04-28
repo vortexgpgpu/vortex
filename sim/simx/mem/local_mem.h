@@ -53,10 +53,6 @@ public:
   LocalMem(const SimContext& ctx, const char* name, const Config& config);
   virtual ~LocalMem();
 
-  void read(void* data, uint64_t addr, uint32_t size);
-
-  void write(const void* data, uint64_t addr, uint32_t size);
-
   const PerfStats& perf_stats() const;
 
 protected:

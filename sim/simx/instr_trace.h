@@ -23,38 +23,6 @@
 
 namespace vortex {
 
-class ITraceData {
-public:
-    using Ptr = std::shared_ptr<ITraceData>;
-    ITraceData() {}
-    virtual ~ITraceData() {}
-};
-
-struct LsuTraceData : public ITraceData {
-  using Ptr = std::shared_ptr<LsuTraceData>;
-  std::vector<mem_addr_size_t> mem_addrs;
-  LsuTraceData(uint32_t num_threads = 0) : mem_addrs(num_threads) {}
-};
-
-struct SfuTraceData : public ITraceData {
-  using Ptr = std::shared_ptr<SfuTraceData>;
-  Word arg1;
-  Word arg2;
-  SfuTraceData(Word arg1, Word arg2) : arg1(arg1), arg2(arg2) {}
-};
-
-struct BarTraceData : public ITraceData {
-  using Ptr = std::shared_ptr<BarTraceData>;
-  Word bar_id;
-  Word count;
-  int is_sync_bar;
-  BarTraceData(Word bar_id, Word count, bool is_sync_bar)
-    : bar_id(bar_id)
-    , count(count)
-    , is_sync_bar(is_sync_bar)
-  {}
-};
-
 struct instr_trace_t {
 public:
   //--
@@ -80,15 +48,14 @@ public:
   //--
   OpType     op_type;
 
-  // Operand snapshot captured at issue (ArchState::fetch_operands).
-  // src_data[i][t] is the value of src_regs[i] for thread t.
+  // Operands data
   std::vector<std::vector<reg_data_t>> src_data;
 
-  // Destination data computed by the unit's execute(); empty if nothing to
-  // write back. ArchState::commit_writeback consumes this at unit-tick time.
+  // Destination data
   std::vector<reg_data_t> dst_data;
 
-  ITraceData::Ptr data;
+  // Byte write enable
+  uint8_t dst_bytesel;
 
   std::shared_ptr<Instr> instr_ptr;
 
@@ -114,7 +81,7 @@ public:
     , op_type({})
      , src_data(NUM_SRC_REGS, std::vector<reg_data_t>(NUM_THREADS))
     , dst_data(NUM_THREADS)
-    , data(nullptr)
+    , dst_bytesel(0xFF)
     , pid(-1)
     , sop(true)
     , eop(true)
@@ -137,7 +104,7 @@ public:
     , op_type(rhs.op_type)
     , src_data(NUM_SRC_REGS, std::vector<reg_data_t>(NUM_THREADS))
     , dst_data(NUM_THREADS)
-    , data(rhs.data)
+    , dst_bytesel(rhs.dst_bytesel)
     , pid(rhs.pid)
     , sop(rhs.sop)
     , eop(rhs.eop)
