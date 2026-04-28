@@ -17,6 +17,9 @@
 #elif defined(TCU_TYPE_BHF)
 #include "VVX_tcu_fedp_bhf.h"
 #define MODULE VVX_tcu_fedp_bhf
+#elif defined(TCU_TYPE_FPNEW)
+#include "VVX_tcu_fedp_fpnew.h"
+#define MODULE VVX_tcu_fedp_fpnew
 #elif defined(TCU_TYPE_DSP)
 #include "VVX_tcu_fedp_dsp.h"
 #define MODULE VVX_tcu_fedp_dsp

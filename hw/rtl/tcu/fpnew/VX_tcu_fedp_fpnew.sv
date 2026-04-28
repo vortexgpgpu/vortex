@@ -71,7 +71,6 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*; #(
 
     for (genvar i = 0; i < TCK; ++i) begin : g_multiply
         wire [31:0] mult_result_fp16;
-        wire [31:0] mult_result_bf16;
 
         VX_tcu_fpnew_mulfp32 #(
             .SRC_FMT       (fpnew_pkg::FP16),
@@ -86,6 +85,9 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*; #(
             .y      (mult_result_fp16)
         );
 
+    `ifdef TCU_BF16_ENABLE
+        wire [31:0] mult_result_bf16;
+
         VX_tcu_fpnew_mulfp32 #(
             .SRC_FMT       (fpnew_pkg::FP16ALT),
             .FMT_CFG       (5'b10001),
@@ -98,6 +100,7 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*; #(
             .b      (b_col16[i]),
             .y      (mult_result_bf16)
         );
+    `endif
 
         logic [31:0] mult_result_mux;
         always_comb begin
