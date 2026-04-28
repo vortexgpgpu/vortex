@@ -76,6 +76,12 @@ public:
 
 	PerfStats perf_stats() const;
 
+	// Flush API: arm a write-back walk that emits dirty lines via mem_req_out.
+	// flush_done() returns true once the walk completes; the caller is expected
+	// to tick the simulator until then. Write-through caches no-op.
+	void flush_begin();
+	bool flush_done() const;
+
 protected:
 	void on_reset();
 	void on_tick();

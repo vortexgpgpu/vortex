@@ -475,6 +475,27 @@ public:
     return perf_stats_;
   }
 
+  // Flush API (RTL VX_cache_flush analog).
+  // flush_begin() arms the bank; subsequent ticks scan all sets/ways and emit
+  // a writeback request for every dirty line via mem_req_out (write-back only;
+  // write-through caches have nothing to evict). flush_done() reports when the
+  // walk finishes AND the cache is otherwise idle.
+  void flush_begin() {
+    if (!config_.write_back) {
+      flushing_ = false;
+      flush_set_idx_ = 0;
+      flush_way_idx_ = 0;
+      return;
+    }
+    flushing_ = true;
+    flush_set_idx_ = 0;
+    flush_way_idx_ = 0;
+  }
+
+  bool flush_done() const {
+    return !flushing_;
+  }
+
 protected:
   void on_reset() {
     perf_stats_ = Cache::PerfStats();
@@ -488,6 +509,9 @@ protected:
       set.reset();
     }
     mshr_.reset();
+    flushing_ = false;
+    flush_set_idx_ = 0;
+    flush_way_idx_ = 0;
   }
 
   void on_tick() {
@@ -503,6 +527,11 @@ protected:
 
     // calculate memory latency
     perf_stats_.mem_latency += pending_fill_reqs_;
+
+    // flush walk: emit writebacks for dirty lines.
+    if (flushing_) {
+      this->processFlush();
+    }
   }
 
 private:
@@ -835,6 +864,47 @@ private:
   uint32_t inflight_fills_;
   uint32_t rand_ctr_;
 
+  // Flush walk state.
+  bool     flushing_;
+  uint32_t flush_set_idx_;
+  uint32_t flush_way_idx_;
+
+  void processFlush() {
+    // Wait for in-flight requests to drain before walking lines, otherwise an
+    // outstanding fill could install a fresh line behind our scan and leave
+    // a dirty victim un-evicted.
+    if (pending_fill_reqs_ != 0
+     || inflight_fills_ != 0
+     || !pipe_req_->empty()
+     || !mshr_.empty()) {
+      return;
+    }
+    while (flush_set_idx_ < params_.sets_per_bank) {
+      auto &set = sets_.at(flush_set_idx_);
+      while (flush_way_idx_ < set.lines.size()) {
+        auto &line = set.lines.at(flush_way_idx_);
+        if (line.valid && line.dirty) {
+          if (this->mem_req_out.full())
+            return; // stall — try again next cycle
+          MemReq mem_req;
+          mem_req.addr = params_.mem_addr(bank_id_, flush_set_idx_, line.tag);
+          mem_req.write = true;
+          mem_req.data = line.data;
+          mem_req.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);
+          this->mem_req_out.send(mem_req);
+          DT(3, this->name() << " flush-wb: " << mem_req);
+          ++perf_stats_.evictions;
+          line.dirty = false;
+        }
+        ++flush_way_idx_;
+      }
+      ++flush_set_idx_;
+      flush_way_idx_ = 0;
+    }
+    flushing_ = false;
+    DT(3, this->name() << " flush-done");
+  }
+
   friend class SimObject<CacheBank>;
 };
 
@@ -977,6 +1047,21 @@ public:
     return perf_stats;
   }
 
+  void flush_begin() {
+    if (config_.bypass) return;
+    for (auto &bank : banks_) {
+      bank->flush_begin();
+    }
+  }
+
+  bool flush_done() const {
+    if (config_.bypass) return true;
+    for (const auto &bank : banks_) {
+      if (!bank->flush_done()) return false;
+    }
+    return true;
+  }
+
 private:
 
   bool processBypassResponse(const MemRsp &mem_rsp) {
@@ -1033,4 +1118,12 @@ void Cache::on_tick() {
 
 Cache::PerfStats Cache::perf_stats() const {
   return impl_->perf_stats();
+}
+
+void Cache::flush_begin() {
+  impl_->flush_begin();
+}
+
+bool Cache::flush_done() const {
+  return impl_->flush_done();
 }

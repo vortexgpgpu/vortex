@@ -13,7 +13,11 @@
 
 #pragma once
 
+#include <array>
 #include "func_unit.h"
+#ifdef EXT_DXA_ENABLE
+#include "dxa_core.h"
+#endif
 
 namespace vortex {
 
@@ -25,10 +29,13 @@ protected:
 	void on_tick() override;
 
 private:
-	// Per-unit functional execution (Wctl only). Called only from this unit's tick().
-	void execute(instr_trace_t* trace);
-
 	uint32_t latency_of(const instr_trace_t* trace) const;
+
+#ifdef EXT_DXA_ENABLE
+	// Per-iw DXA pending slot. When non-empty, a previous tick already ran
+	// execute_copy() for this trace and is retrying submit() on backpressure.
+	std::array<DxaCore::TraceData::Ptr, ISSUE_WIDTH> dxa_pending_;
+#endif
 };
 
 }

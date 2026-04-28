@@ -13,11 +13,7 @@
 
 #include "processor.h"
 #include "processor_impl.h"
-#include "emulator.h"
-#include "core.h"
-
-#include <cstdlib>
-#include <execinfo.h>
+#include <VX_types.h>
 
 #include <cstdlib>
 #include <execinfo.h>
@@ -134,6 +130,45 @@ void ProcessorImpl::attach_ram(RAM* ram) {
   memsim_->attach_ram(ram);
 }
 
+void ProcessorImpl::flush_caches() {
+  // Phase 1: L1 dcaches walk dirty lines and emit writebacks to L2 (or
+  // directly to memsim if L2 is bypassed). Tick until all dcaches report done
+  // *and* the channels carrying their writebacks have drained, so L2 has
+  // observed every eviction before its own walk begins.
+  for (auto& cluster : clusters_) {
+    cluster->dcache_flush_begin();
+  }
+  while (true) {
+    bool all_done = true;
+    for (auto& cluster : clusters_) {
+      if (!cluster->dcache_flush_done()) { all_done = false; break; }
+    }
+    if (all_done && SimChannelBase::inflight_count() == 0)
+      break;
+    SimPlatform::instance().tick();
+  }
+
+  // Phase 2: L2 caches.
+  for (auto& cluster : clusters_) {
+    cluster->l2_flush_begin();
+  }
+  while (true) {
+    bool all_done = true;
+    for (auto& cluster : clusters_) {
+      if (!cluster->l2_flush_done()) { all_done = false; break; }
+    }
+    if (all_done && SimChannelBase::inflight_count() == 0)
+      break;
+    SimPlatform::instance().tick();
+  }
+
+  // Phase 3: L3 cache (single instance at processor level).
+  l3cache_->flush_begin();
+  while (!l3cache_->flush_done() || SimChannelBase::inflight_count() != 0) {
+    SimPlatform::instance().tick();
+  }
+}
+
 int ProcessorImpl::run() {
   this->reset();
   kmu_->start();
@@ -184,6 +219,15 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
 }
 
 int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  if (addr == VX_DCR_BASE_CACHE_FLUSH) {
+    // Drain dirty cache lines to DRAM before the host reads back results.
+    // RTL handles this via VX_cache_flush state machines; SimX does the
+    // equivalent walk + TLM writebacks here. After flush_caches() returns
+    // every dirty line has reached memsim_'s backing RAM.
+    this->flush_caches();
+    *value = 0;
+    return 0;
+  }
   for (auto& cluster : clusters_) {
     int ret = cluster->dcr_read(addr, tag, value);
     if (ret != 0)

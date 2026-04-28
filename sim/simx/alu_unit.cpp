@@ -19,6 +19,7 @@
 #include <util.h>
 #include "debug.h"
 #include "core.h"
+#include "scheduler.h"
 #include "constants.h"
 
 using namespace vortex;

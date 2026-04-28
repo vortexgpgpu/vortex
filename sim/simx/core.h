@@ -13,38 +13,23 @@
 
 #pragma once
 
-#include <vector>
-#include <list>
-#include <sstream>
-#include <unordered_map>
+#include <memory>
 #include <simobject.h>
 #include <mempool.h>
 #include "types.h"
-#include "scheduler.h"
-#include "decode.h"
-#include "sequencer.h"
-#include "cache.h"
-#include "local_mem.h"
-#include "local_mem_switch.h"
-#include "lsu_mem_adapter.h"
-#include "scoreboard.h"
-
-#include "operands.h"
-
-#include "dispatcher.h"
-#include "func_unit.h"
-#include "alu_unit.h"
-#include "fpu_unit.h"
-#include "lsu_unit.h"
-#include "sfu_unit.h"
-#include "csr_unit.h"
-#include "mem_coalescer.h"
+#include "instr_trace.h"
 #include "VX_config.h"
 
 namespace vortex {
 
 class Socket;
 class ProcessorImpl;
+class Scheduler;
+class CsrUnit;
+class TensorUnit;
+class LocalMem;
+class LocalMemSwitch;
+class MemCoalescer;
 
 class Core : public SimObject<Core> {
 public:
@@ -67,7 +52,7 @@ public:
     uint64_t csr_stalls = 0;
   #ifdef EXT_TCU_ENABLE
     uint64_t tcu_stalls = 0;
-    #endif
+  #endif
     uint64_t branches   = 0;
     uint64_t divergence = 0;
     uint64_t alu_instrs = 0;
@@ -75,9 +60,9 @@ public:
     uint64_t lsu_instrs = 0;
     uint64_t sfu_instrs = 0;
     uint64_t csr_instrs = 0;
-    #ifdef EXT_TCU_ENABLE
+  #ifdef EXT_TCU_ENABLE
     uint64_t tcu_instrs = 0;
-    #endif
+  #endif
     uint64_t ifetches = 0;
     uint64_t loads = 0;
     uint64_t stores = 0;
@@ -127,20 +112,18 @@ public:
     return socket_;
   }
 
-  const LocalMem::Ptr& local_mem() const {
-    return local_mem_;
-  }
+  const std::shared_ptr<LocalMem>& local_mem() const;
 
-  const MemCoalescer::Ptr& mem_coalescer(uint32_t idx) const {
-    return mem_coalescers_.at(idx);
-  }
+  const std::shared_ptr<MemCoalescer>& mem_coalescer(uint32_t idx) const;
+
+  // Used by LsuUnit to drive the per-block load/store switch.
+  const std::shared_ptr<LocalMemSwitch>& lmem_switch(uint32_t idx) const;
 
   ProcessorImpl* processor() const;
 
-  Scheduler&  scheduler()       { return *scheduler_; }
-  CsrUnit&    csr_unit()        { return *csr_unit_; }
-  uint32_t&   mpm_class()       { return mpm_class_; }
-  uint32_t    mpm_class() const { return mpm_class_; }
+  Scheduler&  scheduler();
+  CsrUnit&    csr_unit();
+  uint32_t    mpm_class() const;
 
   int dcr_write(uint32_t addr, uint32_t value);
 
@@ -148,14 +131,10 @@ public:
 
 
 #ifdef EXT_TCU_ENABLE
-  TensorUnit::Ptr& tensor_unit() {
-    return tensor_unit_;
-  }
+  std::shared_ptr<TensorUnit>& tensor_unit();
 #endif
 
-  auto& trace_pool() {
-    return trace_pool_;
-  }
+  PoolAllocator<instr_trace_t, 64>& trace_pool();
 
   const PerfStats& perf_stats() const;
   PerfStats& perf_stats();
@@ -167,64 +146,12 @@ protected:
   void on_tick();
 
 private:
-
-  void schedule();
-  void fetch();
-  void decode();
-  void issue();
-  void execute();
-  void commit();
-
   uint32_t core_id_;
-  Socket* socket_;
+  Socket*  socket_;
 
-#ifdef EXT_TCU_ENABLE
-  TensorUnit::Ptr tensor_unit_;
-#endif
+  class Impl;
+  Impl* impl_;
 
-  CsrUnit::Ptr csr_unit_;
-  PoolAllocator<Instr, 64> instr_pool_;
-  Decoder::Ptr decoder_;
-  std::vector<Sequencer::Ptr> sequencers_;
-  uint32_t    mpm_class_;
-  Scheduler::Ptr scheduler_;
-
-  std::vector<TFifo<instr_trace_t*>::Ptr> ibuffers_;
-  Scoreboard::Ptr scoreboard_;
-  std::vector<Operands::Ptr> operands_;
-  std::vector<Dispatcher::Ptr> dispatchers_;
-  std::vector<FuncUnit::Ptr> func_units_;
-  LocalMem::Ptr local_mem_;
-  std::vector<LocalMemSwitch::Ptr> lmem_switch_;
-  std::vector<MemCoalescer::Ptr> mem_coalescers_;
-
-  TFifo<instr_trace_t*> fetch_latch_;
-  TFifo<instr_trace_t*> decode_latch_;
-
-  HashTable<instr_trace_t*> pending_icache_;
-  std::list<instr_trace_t*, PoolAllocator<instr_trace_t*, 64>> pending_instrs_;
-
-  uint64_t pending_ifetches_;
-
-  mutable PerfStats perf_stats_;
-
-  std::vector<TraceArbiter::Ptr> commit_arbs_;
-
-  uint32_t commit_exe_;
-  
-  std::vector<Arbiter> ibuffer_arbs_;
-
-  std::vector<BitVector<>> fu_locked_;
-
-  std::vector<uint32_t> ibuf_inflight_;
-
-  PoolAllocator<instr_trace_t, 64> trace_pool_;
-
-  friend class LsuUnit;
-  friend class AluUnit;
-  friend class FpuUnit;
-  friend class SfuUnit;
-  friend class CsrUnit;
   friend class SimObject<Core>;
 };
 

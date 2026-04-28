@@ -24,6 +24,10 @@
 #include "processor_impl.h"
 #include "processor_impl.h"
 #include "local_mem.h"
+#include "mem_coalescer.h"
+#ifdef EXT_TCU_ENABLE
+#include "tensor_unit.h"
+#endif
 #include "constants.h"
 #include "VX_types.h"
 #ifdef EXT_TCU_ENABLE

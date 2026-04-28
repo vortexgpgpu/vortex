@@ -14,14 +14,12 @@
 #pragma once
 
 #include <simobject.h>
-#include "cache_cluster.h"
-#include "local_mem.h"
-#include "core.h"
-#include "constants.h"
+#include "cache.h"
 
 namespace vortex {
 
 class Cluster;
+class Core;
 
 class Socket : public SimObject<Socket> {
 public:
@@ -40,13 +38,9 @@ public:
 
   ~Socket();
 
-  uint32_t id() const {
-    return socket_id_;
-  }
+  uint32_t id() const { return socket_id_; }
 
-  Cluster* cluster() const {
-    return cluster_;
-  }
+  Cluster* cluster() const { return cluster_; }
 
   bool running() const;
 
@@ -62,18 +56,22 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
-  Core::Ptr& core(uint32_t idx) { return cores_.at(idx); }
+  std::shared_ptr<Core>& core(uint32_t idx);
+
+  // Forwarded cache flush (write-back eviction walk).
+  void dcache_flush_begin();
+  bool dcache_flush_done() const;
 
 protected:
   void on_reset();
   void on_tick();
 
 private:
-  uint32_t                socket_id_;
-  Cluster*                cluster_;
-  std::vector<Core::Ptr>  cores_;
-  CacheCluster::Ptr       icaches_;
-  CacheCluster::Ptr       dcaches_;
+  uint32_t socket_id_;
+  Cluster* cluster_;
+
+  class Impl;
+  Impl* impl_;
 
   friend class SimObject<Socket>;
 };

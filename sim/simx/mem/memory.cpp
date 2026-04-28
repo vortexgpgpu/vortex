@@ -118,6 +118,13 @@ public:
 			std::shared_ptr<mem_block_t> rsp_data;
 			if (ram_) {
 				uint64_t line_addr = mem_req.addr & ~uint64_t(MEM_BLOCK_SIZE - 1);
+				// Cache fills/writebacks are simulator-internal traffic and
+				// don't carry the kernel's intent (e.g. a write-back cache
+				// reads a write-only buffer to fill the line on write-miss,
+				// matching real-hardware behavior since memory buses lack
+				// per-region read/write permissions). Suppress ACL for the
+				// duration of the access; ACL still guards upload/download.
+				ram_->enable_acl(false);
 				if (mem_req.write) {
 					// Apply byte-enabled write to RAM at request arrival.
 					// IO_COUT-range bytes are tapped to the print buffer and
@@ -138,6 +145,7 @@ public:
 					rsp_data = make_mem_block();
 					ram_->read(rsp_data->data(), line_addr, MEM_BLOCK_SIZE);
 				}
+				ram_->enable_acl(true);
 			}
 
 			// enqueue the request to the memory system
