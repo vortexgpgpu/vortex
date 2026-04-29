@@ -15,9 +15,12 @@
 
 #include <simobject.h>
 #include <mempool.h>
+#include <array>
 #include "instr_trace.h"
 #include "instr.h"
 #include "func_unit.h"
+#include "tcu_tbuf_a.h"
+#include "tcu_shared_b.h"
 
 namespace vortex {
 
@@ -43,24 +46,17 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class TensorUnit : public FuncUnit<NUM_TCU_BLOCKS> {
+class TcuUnit : public FuncUnit<NUM_TCU_BLOCKS> {
 public:
-  using Ptr = std::shared_ptr<TensorUnit>;
+  using Ptr = std::shared_ptr<TcuUnit>;
 
   static op_string_t op_string(TcuType tcu_type, IntrTcuArgs args);
 
-  // Plain output struct: filled by wgmma() and consumed inline by on_tick().
-  // Not stored on the trace — lives only as a tick-local result.
-  struct ExeResult {
-    int  fetch_delay = 0;         // tile buffer fetch cycles (v2 timing model)
-    bool tbuf_cache_hit = false;  // B tile was reused from tile buffer cache
-  };
-
 	struct PerfStats {
 		uint64_t latency = 0;
-		uint64_t tbuf_stalls = 0;      // cycles stalled waiting for tbuf data
-		uint64_t tbuf_cache_hits = 0;  // B tile reuse from tile buffer cache
-		uint64_t lmem_reads = 0;   // tile buffer local memory reads
+		uint64_t tbuf_stalls = 0;      // cycles stalled on TcuTbufA/TcuSharedB readiness
+		uint64_t tbuf_cache_hits = 0;  // WGMMA entries with all lines already resident (cross-WGMMA reuse)
+		uint64_t lmem_reads = 0;       // sum of TcuTbufA + TcuSharedB LmemReqs issued
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->latency          += rhs.latency;
@@ -71,8 +67,8 @@ public:
 		}
 	};
 
-  TensorUnit(const SimContext &ctx, const char* name, Core* core);
-  virtual ~TensorUnit();
+  TcuUnit(const SimContext &ctx, const char* name, Core* core);
+  virtual ~TcuUnit();
 
 	void wmma(uint32_t wid,
 	          uint32_t fmt_s,
@@ -97,7 +93,6 @@ public:
 	           const std::vector<reg_data_t>& rs1_data,
 	           const std::vector<reg_data_t>& rs3_data,
 	           std::vector<reg_data_t>& rd_data,
-	           ExeResult* result,
 	           bool is_sparse,
 	           uint32_t cd_nregs,
 	           uint32_t is_a_smem);
@@ -108,6 +103,11 @@ public:
 					uint32_t meta_kind,
 					const std::vector<reg_data_t>& rs1_data);
 
+	// Phase B: per-block A buffers and shared B buffer (proposal §5.1).
+	// Exposed so that `Core` can bind their LMEM channel pairs.
+	std::array<TcuTbufA::Ptr, NUM_TCU_BLOCKS>& tbuf_a();
+	TcuSharedB::Ptr& shared_b();
+
 	const PerfStats& perf_stats() const;
 
 protected:
@@ -117,6 +117,9 @@ protected:
 private:
 	class Impl;
 	Impl* impl_;
+
+	std::array<TcuTbufA::Ptr, NUM_TCU_BLOCKS> tbuf_a_;
+	TcuSharedB::Ptr shared_b_;
 };
 
 } // namespace vortex

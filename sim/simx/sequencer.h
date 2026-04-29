@@ -20,7 +20,7 @@
 #include "instr.h"
 #include "lsu_unit.h"
 #ifdef EXT_TCU_ENABLE
-#include "tensor_unit.h"
+#include "tcu_unit.h"
 #endif
 
 namespace vortex {
