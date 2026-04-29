@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "tensor_unit.h"
+#include "tcu_unit.h"
 #include "tensor_cfg.h"
 #include <rvfloats.h>
 #include "core.h"
@@ -521,7 +521,7 @@ static inline uint32_t mx_meta_words(uint32_t fmt_s) {
   return 0;
 }
 
-class TensorUnit::Impl {
+class TcuUnit::Impl {
 public:
 
   struct lmem_desc_t {
@@ -530,42 +530,22 @@ public:
     bool col_major = false;
   };
 
-  // WGMMA v2 tile buffer state — models RTL single-slot + shared B cache.
-  // B tile persists across CTA warps (fetched once per K-tile).
-  // A tile is re-fetched per warp (each warp has different A data).
-  struct TileBufferState {
-    bool     b_valid = false;
-    uint32_t b_desc = 0;        // cached B descriptor
-    uint32_t b_fetch_wid = ~0u; // warp that last fetched B (for dirty check)
-    uint32_t cur_wid = ~0u;     // warp whose A data is currently in buffer
-    uint64_t ready_cycle = 0;   // cycle when current buffer fill completes
-
-    void reset() {
-      b_valid = false;
-      b_desc = 0;
-      b_fetch_wid = ~0u;
-      cur_wid = ~0u;
-      ready_cycle = 0;
-    }
-  };
-
-  Impl(TensorUnit* simobject, Core* core)
+  Impl(TcuUnit* simobject, Core* core)
     : simobject_(simobject)
     , core_(core)
     , sparse_meta_(NUM_WARPS, std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
     , mx_meta_(NUM_WARPS)
     , perf_stats_()
-    , tbuf_state_()
   {
     exec_done_.fill(false);
-    tbuf_cache_hit_pending_.fill(false);
+    wgmma_planned_.fill(false);
+    in_wgmma_.fill(false);
   }
 
   ~Impl() {}
 
   void reset() {
     perf_stats_ = PerfStats();
-    tbuf_state_.reset();
     for (auto& sparse_meta : sparse_meta_) {
       std::fill(sparse_meta.begin(), sparse_meta.end(), 0);
     }
@@ -573,11 +553,72 @@ public:
       mx_meta.fill(0);
     }
     exec_done_.fill(false);
-    tbuf_cache_hit_pending_.fill(false);
+    wgmma_planned_.fill(false);
+    in_wgmma_.fill(false);
+    cur_block_ = 0;
   }
 
   void tick() {
-    auto cur_cycle = SimPlatform::instance().cycles();
+  #ifdef TCU_WGMMA_ENABLE
+    // Phase D §5.4: Q-warp lock-step probe.
+    // Pass 1 — identify active WGMMA blocks and prime each one's plan() on
+    // first uop. WMMA / META_STORE blocks are unaffected (no Q-coupling).
+    uint32_t wgmma_active = 0;
+    for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
+      auto& input = simobject_->Inputs.at(b);
+      if (input.empty()) continue;
+      auto trace = input.peek();
+      if (std::get<TcuType>(trace->op_type) != TcuType::WGMMA) continue;
+      wgmma_active |= (1u << b);
+
+      if (wgmma_planned_.at(b)) continue;
+      auto& instr = *trace->instr_ptr;
+      auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
+      if (!(tpuArgs.step_m == 0 && tpuArgs.step_n == 0 && tpuArgs.step_k == 0)) {
+        wgmma_planned_.at(b) = true;
+        continue;
+      }
+      uint32_t wid = trace->wid;
+      auto& rs1_data = trace->src_data[0];
+      auto& rs2_data = trace->src_data[1];
+      uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
+      uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
+      // Drop SharedB only when no other block is mid-WGMMA — otherwise
+      // we'd evict their resident bytes mid-flight.
+      bool any_in_wgmma = false;
+      for (auto v : in_wgmma_) any_in_wgmma = any_in_wgmma || v;
+      if (!any_in_wgmma) simobject_->shared_b()->invalidate();
+      simobject_->tbuf_a().at(b)->invalidate();
+      this->plan_wgmma_lines(b, wid, a_desc, b_desc, tpuArgs);
+      if (simobject_->tbuf_a().at(b)->ready() && simobject_->shared_b()->ready()) {
+        ++perf_stats_.tbuf_cache_hits;
+      }
+      in_wgmma_.at(b) = true;
+      wgmma_planned_.at(b) = true;
+    }
+
+    // Pass 2 — Q-warp lock-step gate. All active WGMMA blocks must have
+    // their A/B operands resident before *any* of them advances. This is
+    // the structural invariant that preserves the documented
+    // `NUM_WARPS > ISSUE_WIDTH` deadlock under shared-B-buffer contention.
+    if (wgmma_active != 0) {
+      uint32_t ready_mask = 0;
+      for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
+        if (!((wgmma_active >> b) & 1u)) continue;
+        auto trace = simobject_->Inputs.at(b).peek();
+        auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
+        bool a_ok = !tpuArgs.is_a_smem
+                 || simobject_->tbuf_a().at(b)->ready();
+        bool b_ok = simobject_->shared_b()->ready();
+        if (a_ok && b_ok) ready_mask |= (1u << b);
+      }
+      if (ready_mask != wgmma_active) {
+        ++perf_stats_.tbuf_stalls;
+        return; // hold all blocks; per-block dispatch deferred to next tick
+      }
+    }
+  #endif
+
     for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
       if (input.empty())
@@ -585,9 +626,9 @@ public:
       auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
 
-      // Lazy execute on first peek of this trace. Side effects (LMEM reads,
-      // tile buffer state updates, fetch_delay → ready_cycle) happen here
-      // and persist across stall/backpressure retries via exec_done_[b].
+      // Lazy execute on first peek of this trace. Side effects (LMEM
+      // accumulator updates) persist across stall/backpressure retries via
+      // exec_done_[b].
       if (!exec_done_.at(b)) {
         auto& instr = *trace->instr_ptr;
         auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
@@ -610,17 +651,12 @@ public:
         case TcuType::WGMMA: {
           uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
           uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
-          ExeResult result;
+          cur_block_ = b;
           this->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                       tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
                       a_desc, b_desc, rs1_data, rs3_data, rd_data,
-                      &result, tpuArgs.is_sparse,
+                      tpuArgs.is_sparse,
                       tpuArgs.cd_nregs, tpuArgs.is_a_smem);
-          // Apply timing-layer side effects from the wgmma result.
-          if (result.fetch_delay > 0 && tbuf_state_.ready_cycle <= cur_cycle) {
-            tbuf_state_.ready_cycle = cur_cycle + result.fetch_delay;
-          }
-          tbuf_cache_hit_pending_.at(b) = result.tbuf_cache_hit;
         } break;
       #endif
         case TcuType::META_STORE:
@@ -636,13 +672,7 @@ public:
       int delay = 0;
       switch (tcu_type) {
       case TcuType::WMMA:
-        delay = 4;
-        break;
       case TcuType::WGMMA:
-        if (cur_cycle < tbuf_state_.ready_cycle) {
-          ++perf_stats_.tbuf_stalls;
-          continue; // don't pop, stall this cycle
-        }
         delay = 4;
         break;
       case TcuType::META_STORE:
@@ -652,15 +682,86 @@ public:
         std::abort();
       }
       if (simobject_->Outputs.at(b).try_send(trace, 2 + delay)) {
-        if (tcu_type == TcuType::WGMMA && tbuf_cache_hit_pending_.at(b)) {
-          ++perf_stats_.tbuf_cache_hits;
-          DT(2, "TCU tbuf_cache_hit counted, total=" << perf_stats_.tbuf_cache_hits);
-        }
-        tbuf_cache_hit_pending_.at(b) = false;
         exec_done_.at(b) = false;
+      #ifdef TCU_WGMMA_ENABLE
+        // WGMMA wind-down: clear plan/in-flight flags on the last uop so
+        // the next WGMMA at this block re-decodes its descriptors.
+        if (tcu_type == TcuType::WGMMA && trace->instr_ptr->get_fu_unlock()) {
+          wgmma_planned_.at(b) = false;
+          in_wgmma_.at(b) = false;
+        }
+      #endif
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
+    }
+  }
+
+  // Plan all line addresses required for the current WGMMA's A and B tiles
+  // into the per-block TcuTbufA (when SS-mode A) and the shared TcuSharedB.
+  // Lines already resident or in-flight are skipped (additive plan).
+  void plan_wgmma_lines(uint32_t b, uint32_t wid,
+                        uint32_t a_desc, uint32_t b_desc,
+                        const IntrTcuArgs& args) {
+    uint32_t fmt_s = args.fmt_s;
+    bool is_sparse = args.is_sparse;
+    bool is_a_smem = args.is_a_smem;
+    uint32_t e_bits = elem_bits(fmt_s);
+    if (e_bits < 8) return;  // 4-bit deferred to Phase E
+    uint32_t e_bytes = e_bits / 8;
+
+    // Decode descriptors (mirrors wgmma()'s first-uop decode at line ~857).
+    lmem_desc_t sd_a{}, sd_b{};
+    if (is_a_smem) {
+      sd_a = {uint64_t(LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
+      lmem_desc_[wid][0] = sd_a;
+    }
+    sd_b = {uint64_t(LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
+    lmem_desc_[wid][1] = sd_b;
+
+    // The gather walks the un-packed K element range:
+    //   tileK = xtileK × i_ratio = xtileK × ratio   (i_ratio = 32 / e_bits)
+    // Sparse compresses K *only on A*; B remains dense in K.
+    uint32_t ratio  = 32 / e_bits;
+    uint32_t tile_k = uint32_t(wg_cfg::xtileK) * ratio;
+    uint32_t a_k    = is_sparse ? (tile_k / 2) : tile_k;
+
+    // A: SS-mode only. xtileM rows × a_k columns. Plus sparse metadata
+    // (Phase E): kMetaBanks × meta_strd_words 32-bit words, packed after A.
+    if (is_a_smem) {
+      std::vector<uint64_t> a_lines;
+      a_lines.reserve(uint32_t(wg_cfg::xtileM) * a_k);
+      for (uint32_t r = 0; r < wg_cfg::xtileM; ++r) {
+        for (uint32_t c = 0; c < a_k; ++c) {
+          uint64_t addr = sd_a.base + (uint64_t(r) * sd_a.ldm + c) * e_bytes;
+          a_lines.push_back(addr & ~uint64_t(MEM_BLOCK_SIZE - 1));
+        }
+      }
+      if (is_sparse) {
+        uint32_t rtl_i_ratio = 32 / e_bits;
+        uint32_t meta_row_w  = cfg::tcK * 2 * rtl_i_ratio;
+        uint32_t meta_strd_words = (cfg::tcM * meta_row_w + 31) / 32;
+        uint32_t total_meta_words = kMetaBanks * meta_strd_words;
+        uint64_t meta_base = sd_a.base + uint64_t(wg_cfg::xtileM) * sd_a.ldm * e_bytes;
+        for (uint32_t w = 0; w < total_meta_words; ++w) {
+          uint64_t addr = meta_base + uint64_t(w) * 4;
+          a_lines.push_back(addr & ~uint64_t(MEM_BLOCK_SIZE - 1));
+        }
+      }
+      simobject_->tbuf_a().at(b)->plan(a_lines);
+    }
+
+    // B: always SS, always dense in K. tileK rows × xtileN columns.
+    {
+      std::vector<uint64_t> b_lines;
+      b_lines.reserve(tile_k * wg_cfg::xtileN);
+      for (uint32_t r = 0; r < tile_k; ++r) {
+        for (uint32_t c = 0; c < wg_cfg::xtileN; ++c) {
+          uint64_t addr = sd_b.base + (uint64_t(r) * sd_b.ldm + c) * e_bytes;
+          b_lines.push_back(addr & ~uint64_t(MEM_BLOCK_SIZE - 1));
+        }
+      }
+      simobject_->shared_b()->plan(b_lines);
     }
   }
 
@@ -832,7 +933,6 @@ public:
              const std::vector<reg_data_t>& rs1_data,
              const std::vector<reg_data_t>& rs3_data,
              std::vector<reg_data_t>& rd_data,
-             ExeResult* result,
              bool is_sparse,
              uint32_t cd_nregs,
              uint32_t is_a_smem) {
@@ -860,6 +960,8 @@ public:
       sd_a = lmem_desc_[wid][0];
       sd_b = lmem_desc_[wid][1];
     }
+    // load_lmem_word distinguishes A vs B by descriptor base.
+    cur_a_desc_base_ = is_a_smem ? sd_a.base : ~uint64_t(0);
 
     // Prepare A tile [tcM][tcK]
     reg_data_t a_tile[cfg::tcM * cfg::tcK];
@@ -896,12 +998,24 @@ public:
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
         uint32_t word_val = 0;
         if (is_a_smem) {
-          // SS sparse: metadata fetch from LMEM goes through the TBUF NoC
-          // path; the cached buffer should be filled by the read FSM before
-          // execute. Until that path is wired, this branch must not run.
-          (void)meta_base; (void)meta_strd_words; (void)wg_bank;
-          std::cout << "Error: WGMMA SS sparse metadata fetch via LMEM NoC not yet implemented in SimX" << std::endl;
-          std::abort();
+          // Phase E: SS-sparse metadata lives in LMEM at meta_base, packed
+          // into kMetaBanks × meta_strd_words 32-bit words. Words are
+          // pre-fetched into the per-block TbufA alongside A-tile data
+          // (see plan_wgmma_lines for is_sparse + is_a_smem).
+          uint32_t word_idx  = wg_bank * meta_strd_words + bit_idx / 32;
+          uint64_t byte_addr = meta_base + uint64_t(word_idx) * 4;
+          auto& tbuf = simobject_->tbuf_a().at(cur_block_);
+          auto line  = tbuf->read_line(byte_addr);
+          if (!line) {
+            std::cout << "Error: TCU metadata buffer miss at 0x"
+                      << std::hex << byte_addr << std::dec << std::endl;
+            std::abort();
+          }
+          uint32_t off = byte_addr & (MEM_BLOCK_SIZE - 1);
+          word_val = (uint32_t((*line)[off    ]))        |
+                     (uint32_t((*line)[off + 1]) << 8)   |
+                     (uint32_t((*line)[off + 2]) << 16)  |
+                     (uint32_t((*line)[off + 3]) << 24);
         } else {
           // RS mode: read from sparse_meta_ SRAM using WMMA-compatible stride
           uint32_t word_idx = wg_bank * kMaxMetaCols + bit_idx / 32;
@@ -943,79 +1057,15 @@ public:
 
     fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
               a_tile, b_tile, rs3_data, rd_data);
-
-    // --- WGMMA v2 tile buffer: compute fetch cycles for timing layer ---
-    // On first uop, determine how many cycles the fetch unit needs to fill
-    // the tile buffer. The timing layer (tick) uses this to model stalls
-    // and count perf stats.
-    if (step_m == 0 && step_n == 0 && step_k == 0) {
-      constexpr uint32_t a_total    = wg_cfg::xtileM * wg_cfg::xtileK;
-      constexpr uint32_t b_total    = wg_cfg::xtileK * wg_cfg::xtileN;
-      constexpr uint32_t num_banks  = LMEM_NUM_BANKS;
-      constexpr uint32_t a_bank_rows    = (a_total + num_banks - 1) / num_banks;
-      constexpr uint32_t a_bank_rows_sp = ((a_total / 2) + num_banks - 1) / num_banks;
-      constexpr uint32_t b_bank_rows    = (b_total + num_banks - 1) / num_banks;
-
-      // B dirty: same warp re-alloc with same desc (LMEM may be overwritten by DXA)
-      bool b_dirty = tbuf_state_.b_valid
-                  && (wid == tbuf_state_.b_fetch_wid)
-                  && (b_desc == tbuf_state_.b_desc);
-      bool b_cached = tbuf_state_.b_valid && !b_dirty
-                   && (b_desc == tbuf_state_.b_desc);
-
-      // Fetch cycles: A (if smem) + B (if not cached) + meta (if sparse)
-      uint32_t fetch_cycles = 0;
-      if (is_a_smem) {
-        fetch_cycles += is_sparse ? a_bank_rows_sp : a_bank_rows;
-      }
-      if (!b_cached) {
-        fetch_cycles += b_bank_rows;
-      }
-      if (is_sparse && is_a_smem) {
-        uint32_t ratio = elem_ratio(fmt_s);
-        uint32_t meta_row_bits = cfg::tcK * 2 * ratio;
-        uint32_t meta_stride = (cfg::tcM * meta_row_bits + 31) / 32;
-        uint32_t meta_total = wg_cfg::m_steps * (wg_cfg::k_steps / 2) * meta_stride;
-        fetch_cycles += (meta_total + num_banks - 1) / num_banks;
-      }
-
-      // Count LMEM reads: A words + B words (if not cached) + metadata words
-      uint32_t lmem_reads = 0;
-      if (is_a_smem) {
-        lmem_reads += is_sparse ? (a_total / 2) : a_total;
-      }
-      if (!b_cached) {
-        lmem_reads += b_total;
-      }
-      if (is_sparse && is_a_smem) {
-        uint32_t ratio = elem_ratio(fmt_s);
-        uint32_t meta_row_bits_r = cfg::tcK * 2 * ratio;
-        uint32_t meta_stride_r = (cfg::tcM * meta_row_bits_r + 31) / 32;
-        lmem_reads += wg_cfg::m_steps * (wg_cfg::k_steps / 2) * meta_stride_r;
-      }
-      perf_stats_.lmem_reads += lmem_reads;
-
-      result->fetch_delay = fetch_cycles;
-      result->tbuf_cache_hit = b_cached;
-      DT(2, "WGMMA tbuf: wid=" << wid
-         << " b_desc=0x" << std::hex << b_desc << std::dec
-         << " b_valid=" << tbuf_state_.b_valid
-         << " b_dirty=" << b_dirty
-         << " b_cached=" << b_cached
-         << " is_a_smem=" << is_a_smem
-         << " fetch=" << fetch_cycles);
-
-      // Update tile buffer state
-      if (!b_cached) {
-        tbuf_state_.b_valid     = true;
-        tbuf_state_.b_desc      = b_desc;
-        tbuf_state_.b_fetch_wid = wid;
-      }
-      tbuf_state_.cur_wid = wid;
-    }
+    __unused(b_desc);
   }
 
   const PerfStats& perf_stats() const {
+    // lmem_reads is sourced live from the new buffer modules so the counter
+    // tracks actual `MemReq` traffic on the TCU LMEM ports.
+    uint64_t lmem_reads = simobject_->shared_b()->reads();
+    for (auto& tbuf : simobject_->tbuf_a()) lmem_reads += tbuf->reads();
+    perf_stats_.lmem_reads = lmem_reads;
     return perf_stats_;
   }
 
@@ -1049,12 +1099,68 @@ private:
     return 32 / elem_bits(fmt_s);
   }
 
-  uint32_t load_lmem_word(const lmem_desc_t& desc, uint32_t row, uint32_t col, uint32_t fmt_s, bool pack_along_row) const {
-    // WGMMA tile data must come from the TBUF NoC fetch, not a back-door
-    // read. Until that fetch path is wired, this routine must not run.
-    (void)desc; (void)row; (void)col; (void)fmt_s; (void)pack_along_row;
-    std::cout << "Error: WGMMA LMEM load via NoC not yet implemented in SimX" << std::endl;
-    std::abort();
+  // Phase B: gather one 32-bit operand word from a TCU line cache.
+  // The buffer is selected by the caller (A → per-block TbufA, B → SharedB).
+  // For sub-32-bit formats, packs `ratio = 32 / e_bits` adjacent elements
+  // along the K direction (col for A, row for B via pack_along_row).
+  template <typename Buf>
+  uint32_t gather_word(Buf& buf, const lmem_desc_t& desc,
+                       uint32_t row, uint32_t col,
+                       uint32_t fmt_s, bool pack_along_row) const {
+    uint32_t e_bits  = elem_bits(fmt_s);
+    uint32_t ratio   = (e_bits >= 32) ? 1 : (32 / e_bits);
+    uint32_t e_bytes = (e_bits >= 8)  ? (e_bits / 8) : 1;  // 4-bit deferred
+    uint32_t result = 0;
+    for (uint32_t r = 0; r < ratio; ++r) {
+      uint32_t cur_row = pack_along_row ? (row + r) : row;
+      uint32_t cur_col = pack_along_row ? col       : (col + r);
+      uint64_t byte_addr;
+      if (desc.col_major) {
+        byte_addr = desc.base + (uint64_t(cur_col) * desc.ldm + cur_row) * e_bytes;
+      } else {
+        byte_addr = desc.base + (uint64_t(cur_row) * desc.ldm + cur_col) * e_bytes;
+      }
+      auto line = buf.read_line(byte_addr);
+      if (!line) {
+        // Caller must call ready() first; this is a programmer error.
+        std::cout << "Error: TCU buffer miss at 0x" << std::hex << byte_addr
+                  << std::dec << std::endl;
+        std::abort();
+      }
+      uint32_t off = byte_addr & (MEM_BLOCK_SIZE - 1);
+      if (e_bits == 32) {
+        result = (uint32_t((*line)[off    ]))        |
+                 (uint32_t((*line)[off + 1]) << 8)   |
+                 (uint32_t((*line)[off + 2]) << 16)  |
+                 (uint32_t((*line)[off + 3]) << 24);
+        return result;
+      } else if (e_bits == 16) {
+        uint32_t val = uint32_t((*line)[off]) | (uint32_t((*line)[off + 1]) << 8);
+        result |= (val & 0xFFFF) << (r * 16);
+      } else if (e_bits == 8) {
+        result |= uint32_t((*line)[off]) << (r * 8);
+      } else {
+        // 4-bit (int4/uint4/nvfp4) deferred to Phase E along with sparse SS metadata.
+        std::cout << "Error: TCU 4-bit operand gather not yet supported" << std::endl;
+        std::abort();
+      }
+    }
+    return result;
+  }
+
+  // Routes A reads through the current block's per-block A buffer;
+  // B reads through the shared B buffer. `cur_block_` is set by tick().
+  uint32_t load_lmem_word(const lmem_desc_t& desc, uint32_t row, uint32_t col,
+                          uint32_t fmt_s, bool pack_along_row) const {
+    // Distinguish A vs B by descriptor base: tick() sets `cur_a_desc_base_` /
+    // `cur_b_desc_base_` before invoking wgmma() so this routine can pick
+    // the correct buffer without altering wgmma()'s signature.
+    auto& tbuf_a = simobject_->tbuf_a().at(cur_block_);
+    auto& shared_b = simobject_->shared_b();
+    if (desc.base == cur_a_desc_base_) {
+      return gather_word(*tbuf_a, desc, row, col, fmt_s, pack_along_row);
+    }
+    return gather_word(*shared_b, desc, row, col, fmt_s, pack_along_row);
   }
 
   static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
@@ -1130,22 +1236,31 @@ private:
     }
   }
 
-  TensorUnit*   simobject_;
+  TcuUnit*   simobject_;
   Core*         core_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
   std::vector<std::array<uint32_t, kMxMetaWords>> mx_meta_;
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
-  PerfStats     perf_stats_;
-  TileBufferState tbuf_state_;
+  mutable PerfStats perf_stats_;
   // Per-block "execute already happened for this trace" guard. Reset on input.pop().
   std::array<bool, NUM_TCU_BLOCKS> exec_done_;
-  // Per-block pending tbuf-cache-hit perf increment, applied at try_send success.
-  std::array<bool, NUM_TCU_BLOCKS> tbuf_cache_hit_pending_;
+  // Per-block "WGMMA lines have been planned into the new buffers" flag.
+  std::array<bool, NUM_TCU_BLOCKS> wgmma_planned_;
+  // Per-block "currently between first and last WGMMA uop" flag.
+  // Used to gate `TcuSharedB::invalidate()` so we only drop the shared B
+  // buffer when no other block is mid-WGMMA.
+  std::array<bool, NUM_TCU_BLOCKS> in_wgmma_;
+  // Set by tick() to the current block index before delegating to wgmma() —
+  // the gather helpers route through `cores_[cur_block_]->tbuf_a()`.
+  uint32_t cur_block_ = 0;
+  // Set by wgmma() once sd_a is decoded; load_lmem_word uses this to
+  // distinguish A reads (per-block TbufA) from B reads (shared SharedB).
+  uint64_t cur_a_desc_base_ = ~uint64_t(0);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-op_string_t TensorUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
+op_string_t TcuUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
   switch (tcu_type) {
   case TcuType::WMMA:
     return {"WMMA." + std::string(args.is_sparse ? "SP." : "") + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
@@ -1391,11 +1506,14 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t mma_idx = uop_index - meta_stores;
       uint32_t ra_base = is_a_smem ? 10 : 24;
 
-      // Loop order: m (inner) -> k -> n (outer), matching RTL
-      uint32_t mk = m_steps * k_count;
-      uint32_t n = mma_idx / mk;
-      uint32_t rem = mma_idx % mk;
-      uint32_t k = rem / m_steps;
+      // Loop order: m (inner) -> n (middle) -> k (outer), matching RTL
+      // (VX_tcu_uops.sv:128). K-outer maximizes per-block A-buffer reuse:
+      // each A_w[m,k] is consumed across the entire (n,m) inner sweep, and
+      // each shared B[k,n] is consumed for m_steps consecutive uops.
+      uint32_t mn = (total - meta_stores) / k_count;
+      uint32_t k = mma_idx / mn;
+      uint32_t rem = mma_idx % mn;
+      uint32_t n = rem / m_steps;
       uint32_t m = rem % m_steps;
       uint32_t r = n * m_steps + m;
 
@@ -1428,28 +1546,44 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TensorUnit::TensorUnit(const SimContext &ctx, const char* name, Core* core)
+TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
 	: FuncUnit(ctx, name, core)
 	, impl_(new Impl(this, core))
-{}
+{
+  char sname[128];
+  for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
+    snprintf(sname, sizeof(sname), "%s-tbuf_a%u", name, b);
+    tbuf_a_.at(b) = TcuTbufA::Create(sname);
+  }
+  snprintf(sname, sizeof(sname), "%s-shared_b", name);
+  shared_b_ = TcuSharedB::Create(sname);
+}
 
-TensorUnit::~TensorUnit() {
+TcuUnit::~TcuUnit() {
   delete impl_;
 }
 
-void TensorUnit::on_reset() {
+std::array<TcuTbufA::Ptr, NUM_TCU_BLOCKS>& TcuUnit::tbuf_a() {
+  return tbuf_a_;
+}
+
+TcuSharedB::Ptr& TcuUnit::shared_b() {
+  return shared_b_;
+}
+
+void TcuUnit::on_reset() {
   impl_->reset();
 }
 
-void TensorUnit::on_tick() {
+void TcuUnit::on_tick() {
   impl_->tick();
 }
 
-const TensorUnit::PerfStats &TensorUnit::perf_stats() const {
+const TcuUnit::PerfStats &TcuUnit::perf_stats() const {
 	return impl_->perf_stats();
 }
 
-void TensorUnit::wmma(uint32_t wid,
+void TcuUnit::wmma(uint32_t wid,
                       uint32_t fmt_s,
                       uint32_t fmt_d,
                       uint32_t step_m,
@@ -1466,7 +1600,7 @@ void TensorUnit::wmma(uint32_t wid,
               is_sparse);
 }
 
-void TensorUnit::wgmma(uint32_t wid,
+void TcuUnit::wgmma(uint32_t wid,
                        uint32_t fmt_s,
                        uint32_t fmt_d,
                        uint32_t step_m,
@@ -1477,16 +1611,15 @@ void TensorUnit::wgmma(uint32_t wid,
                        const std::vector<reg_data_t>& rs1_data,
                        const std::vector<reg_data_t>& rs3_data,
                        std::vector<reg_data_t>& rd_data,
-                       ExeResult* result,
                        bool is_sparse,
                        uint32_t cd_nregs,
                        uint32_t is_a_smem) {
   impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, a_desc, b_desc,
-               rs1_data, rs3_data, rd_data, result,
+               rs1_data, rs3_data, rd_data,
                is_sparse, cd_nregs, is_a_smem);
 }
 
-void TensorUnit::meta_store(uint32_t wid,
+void TcuUnit::meta_store(uint32_t wid,
                             uint32_t fmt_s,
                             uint32_t col_idx,
                             uint32_t meta_kind,

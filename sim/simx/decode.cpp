@@ -27,7 +27,7 @@
 
 #ifdef EXT_TCU_ENABLE
 #include "tensor_cfg.h"
-#include "tensor_unit.h"
+#include "tcu_unit.h"
 #endif
 
 using namespace vortex;
@@ -397,7 +397,7 @@ static op_string_t op_string(const Instr &instr) {
   #ifdef EXT_TCU_ENABLE
     ,[&](TcuType tcu_type)-> op_string_t {
       auto tpuArgs = std::get<IntrTcuArgs>(instrArgs);
-      return TensorUnit::op_string(tcu_type, tpuArgs);
+      return TcuUnit::op_string(tcu_type, tpuArgs);
     }
   #endif // EXT_TCU_ENABLE
  );

@@ -26,12 +26,12 @@
 #include "local_mem.h"
 #include "mem_coalescer.h"
 #ifdef EXT_TCU_ENABLE
-#include "tensor_unit.h"
+#include "tcu_unit.h"
 #endif
 #include "constants.h"
 #include "VX_types.h"
 #ifdef EXT_TCU_ENABLE
-#include "tensor_unit.h"
+#include "tcu_unit.h"
 #endif
 
 using namespace vortex;
@@ -213,7 +213,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
       } break;
     #ifdef EXT_TCU_ENABLE
       case VX_DCR_MPM_CLASS_TCU: {
-        auto tcu_perf = core_->tensor_unit()->perf_stats();
+        auto tcu_perf = core_->tcu_unit()->perf_stats();
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_TCU_TBUF_STALLS,     tcu_perf.tbuf_stalls);
         CSR_READ_64(VX_CSR_MPM_TCU_TBUF_CACHE_HITS, tcu_perf.tbuf_cache_hits);

@@ -26,7 +26,7 @@ class Socket;
 class ProcessorImpl;
 class Scheduler;
 class CsrUnit;
-class TensorUnit;
+class TcuUnit;
 class LocalMem;
 class LocalMemSwitch;
 class MemCoalescer;
@@ -131,7 +131,7 @@ public:
 
 
 #ifdef EXT_TCU_ENABLE
-  std::shared_ptr<TensorUnit>& tensor_unit();
+  std::shared_ptr<TcuUnit>& tcu_unit();
 #endif
 
   PoolAllocator<instr_trace_t, 64>& trace_pool();

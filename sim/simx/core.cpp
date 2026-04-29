@@ -42,7 +42,7 @@
 #include "kmu.h"
 #include "debug.h"
 #ifdef EXT_TCU_ENABLE
-#include "tensor_unit.h"
+#include "tcu_unit.h"
 #endif
 
 using namespace vortex;
@@ -107,11 +107,17 @@ public:
     }
 
     // create local memory
+    // Phase B (proposal §5): TCU acquires its own LMEM ports — Q per-block
+    // TcuTbufA fetchers and 1 shared TcuSharedB fetcher, appended after LSU.
     snprintf(sname, 100, "%s-lmem", name.c_str());
+    uint32_t lmem_num_reqs = LSU_NUM_REQS;
+  #ifdef EXT_TCU_ENABLE
+    lmem_num_reqs += NUM_TCU_BLOCKS + 1;
+  #endif
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << LMEM_LOG_SIZE),
       LSU_WORD_SIZE,
-      LSU_NUM_REQS,
+      lmem_num_reqs,
       log2ceil(LMEM_NUM_BANKS),
       false
     });
@@ -200,8 +206,23 @@ public:
     func_units_.at((int)FUType::CSR) = csr_unit_;
   #ifdef EXT_TCU_ENABLE
     snprintf(sname, 100, "%s-tcu", name.c_str());
-    tensor_unit_ = SimPlatform::instance().create_object<TensorUnit>(sname, simobject_);
-    func_units_.at((int)FUType::TCU) = tensor_unit_;
+    tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
+    func_units_.at((int)FUType::TCU) = tcu_unit_;
+
+    // Phase B (proposal §5.2/§5.3): bind per-block TcuTbufA and the shared
+    // TcuSharedB to dedicated LMEM ports appended after the LSU ports.
+    {
+      auto& tbuf_a = tcu_unit_->tbuf_a();
+      for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
+        uint32_t port = LSU_NUM_REQS + b;
+        tbuf_a.at(b)->lmem_req_out.bind(&local_mem_->Inputs.at(port));
+        local_mem_->Outputs.at(port).bind(&tbuf_a.at(b)->lmem_rsp_in);
+      }
+      auto& shared_b = tcu_unit_->shared_b();
+      uint32_t port = LSU_NUM_REQS + NUM_TCU_BLOCKS;
+      shared_b->lmem_req_out.bind(&local_mem_->Inputs.at(port));
+      local_mem_->Outputs.at(port).bind(&shared_b->lmem_rsp_in);
+    }
   #endif
 
     // commit arbiters — per-iw inputs are filled at runtime in commit() by
@@ -664,7 +685,7 @@ public:
   CsrUnit*      csr_unit()  { return csr_unit_.get(); }
   uint32_t      mpm_class() const { return mpm_class_; }
 #ifdef EXT_TCU_ENABLE
-  std::shared_ptr<TensorUnit>& tensor_unit() { return tensor_unit_; }
+  std::shared_ptr<TcuUnit>& tcu_unit() { return tcu_unit_; }
 #endif
 
   const std::shared_ptr<LocalMem>& local_mem() const { return local_mem_; }
@@ -677,7 +698,7 @@ private:
   Core* simobject_;
 
 #ifdef EXT_TCU_ENABLE
-  TensorUnit::Ptr tensor_unit_;
+  TcuUnit::Ptr tcu_unit_;
 #endif
 
   CsrUnit::Ptr csr_unit_;
@@ -818,8 +839,8 @@ CsrUnit& Core::csr_unit() { return *impl_->csr_unit(); }
 uint32_t Core::mpm_class() const { return impl_->mpm_class(); }
 
 #ifdef EXT_TCU_ENABLE
-std::shared_ptr<TensorUnit>& Core::tensor_unit() {
-  return impl_->tensor_unit();
+std::shared_ptr<TcuUnit>& Core::tcu_unit() {
+  return impl_->tcu_unit();
 }
 #endif
 
