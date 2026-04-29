@@ -1,4 +1,3 @@
-ROOT_DIR := $(realpath ../..)
 include ../common.mk
 
 TARGET ?= opaesim
