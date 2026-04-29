@@ -140,19 +140,22 @@ void SfuUnit::on_tick() {
 				ThreadMask next_tmask = warp.tmask;
 				bool is_divergent = then_tmask.any() && else_tmask.any();
 				auto stack_size = warp.ipdom_stack.size();
-				if (is_divergent) {
-					if (stack_size == sched.ipdom_size()) {
-						std::cout << "IPDOM stack is full! size=" << stack_size << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n" << std::flush;
-						std::abort();
-					}
-					next_tmask = (then_tmask.count() <= else_tmask.count()) ? then_tmask : else_tmask;
-					warp.ipdom_stack.emplace(warp.tmask, next_pc);
-					core_->perf_stats().divergence += 1;
-				}
+				// stack_size captured pre-push is what each pid writes to its
+				// dst_data — it's the kernel-visible value at this PC.
 				for (uint32_t t = thread_start; t < num_threads; ++t) {
 					trace->dst_data[t].i = stack_size;
 				}
+				// ipdom_stack push + tmask update
 				if (trace->eop) {
+					if (is_divergent) {
+						if (stack_size == sched.ipdom_size()) {
+							std::cout << "IPDOM stack is full! size=" << stack_size << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n" << std::flush;
+							std::abort();
+						}
+						next_tmask = (then_tmask.count() <= else_tmask.count()) ? then_tmask : else_tmask;
+						warp.ipdom_stack.emplace(warp.tmask, next_pc);
+						core_->perf_stats().divergence += 1;
+					}
 					release_warp = core_->setTmask(trace->wid, next_tmask);
 				}
 			} break;
@@ -160,21 +163,22 @@ void SfuUnit::on_tick() {
 				auto stack_ptr = rs1_data.at(thread_last).u;
 				auto stack_size = warp.ipdom_stack.size();
 				ThreadMask next_tmask = warp.tmask;
-				if (stack_ptr != stack_size) {
-					if (warp.ipdom_stack.empty()) {
-						std::cout << "IPDOM stack is empty!\n" << std::flush;
-						std::abort();
-					}
-					if (warp.ipdom_stack.top().fallthrough) {
-						next_tmask = warp.ipdom_stack.top().orig_tmask;
-						warp.ipdom_stack.pop();
-					} else {
-						next_tmask = ~warp.tmask & warp.ipdom_stack.top().orig_tmask;
-						warp.PC = warp.ipdom_stack.top().else_PC;
-						warp.ipdom_stack.top().fallthrough = true;
-					}
-				}
+        // ipdom_stack pop + tmask update
 				if (trace->eop) {
+					if (stack_ptr != stack_size) {
+						if (warp.ipdom_stack.empty()) {
+							std::cout << "IPDOM stack is empty!\n" << std::flush;
+							std::abort();
+						}
+						if (warp.ipdom_stack.top().fallthrough) {
+							next_tmask = warp.ipdom_stack.top().orig_tmask;
+							warp.ipdom_stack.pop();
+						} else {
+							next_tmask = ~warp.tmask & warp.ipdom_stack.top().orig_tmask;
+							warp.PC = warp.ipdom_stack.top().else_PC;
+							warp.ipdom_stack.top().fallthrough = true;
+						}
+					}
 					release_warp = core_->setTmask(trace->wid, next_tmask);
 				}
 			} break;
