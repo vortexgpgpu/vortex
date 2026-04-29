@@ -23,9 +23,9 @@ else
 	POCL_CC_FLAGS += POCL_VORTEX_XLEN=32
 endif
 
-VORTEX_RT_SRC ?= $(ROOT_DIR)/runtime
+VORTEX_RT_SRC ?= $(ROOT_DIR)/sw/runtime
 VORTEX_RT_LIB ?= $(VORTEX_RT_SRC)
-VORTEX_KN_PATH ?= $(ROOT_DIR)/kernel
+VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
 
 POCL_PATH ?= $(TOOLDIR)/pocl
 

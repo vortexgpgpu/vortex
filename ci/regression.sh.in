@@ -845,7 +845,7 @@ cupbop() {
     make -C sw/runtime/simx
 
     PERF_CLASS=2
-    VORTEX_RUNTIME_DIR="runtime"
+    VORTEX_RUNTIME_DIR="sw/runtime"
     CUPBOP_RUNTIME_DIR="tests/cupbop/runtime"
 
     tests=("bfs" "nn")

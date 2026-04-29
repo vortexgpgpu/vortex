@@ -5,9 +5,9 @@ TARGET ?= opaesim
 XRT_SYN_DIR ?= $(VORTEX_HOME)/hw/syn/xilinx/xrt
 XRT_DEVICE_INDEX ?= 0
 
-VORTEX_RT_SRC ?= $(ROOT_DIR)/runtime
+VORTEX_RT_SRC ?= $(ROOT_DIR)/sw/runtime
 VORTEX_RT_LIB ?= $(VORTEX_RT_SRC)
-VORTEX_KN_PATH ?= $(ROOT_DIR)/kernel
+VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
 
 KERNEL_LIB ?= vortex
 
