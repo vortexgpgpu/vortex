@@ -31,8 +31,8 @@ struct kmu_req_t {
   uint32_t warp_step[3];
 };
 
-// Kernel Management Unit. Mirrors RTL VX_kmu module. Holds the in-flight
-// kernel descriptor and walks the grid producing one CTA per step().
+// Kernel Management Unit. Holds the in-flight kernel descriptor and walks
+// the grid producing one CTA per step().
 class Kmu : public SimObject<Kmu> {
 public:
   Kmu(const SimContext& ctx, const char* name);

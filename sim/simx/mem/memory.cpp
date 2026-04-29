@@ -40,8 +40,7 @@ private:
 
 	// Tap byte writes that fall in the IO_COUT range and route them to the
 	// per-thread print buffer. Returns true if the byte was consumed (no RAM
-	// write needed). Mirrors the RTL AFU sniffer that listens on writes to
-	// the IO_COUT MMIO region.
+	// write needed).
 	bool io_cout_tap(uint64_t addr, uint8_t byte) {
 		if (addr < uint64_t(IO_COUT_ADDR)
 		 || addr >= (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE))
@@ -128,7 +127,7 @@ public:
 				if (mem_req.write) {
 					// Apply byte-enabled write to RAM at request arrival.
 					// IO_COUT-range bytes are tapped to the print buffer and
-					// not stored in RAM (RTL-equivalent AFU sniffer).
+					// not stored in RAM.
 					if (mem_req.data) {
 						for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
 							if (mem_req.byteen & (1ull << b)) {

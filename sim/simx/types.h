@@ -957,8 +957,8 @@ struct LsuRsp {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Memory-op tag. Lives alongside MemReq::write for backward compatibility
-// with the cache hierarchy (which only reads `write`).
+// Memory-op tag. Lives alongside MemReq::write; the cache hierarchy reads
+// only `write`.
 enum class MemOp : uint8_t {
   READ      = 0,
   WRITE     = 1,

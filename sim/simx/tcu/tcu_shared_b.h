@@ -20,10 +20,10 @@ namespace vortex {
 
 // Shared B-tile line cache for WGMMA, one per `TcuUnit`.
 //
-// Phase B model (proposal §5.3 / §4.10.1): all Q TCU blocks read B from
-// this single buffer — the "M-direction warp tiling" production case
-// where every warp shares the B descriptor. One LMEM port pair feeds
-// the whole TB; the line cache de-duplicates requests across all blocks.
+// All Q TCU blocks read B from this single buffer — the "M-direction warp
+// tiling" production case where every warp shares the B descriptor. One
+// LMEM port pair feeds the whole TB; the line cache de-duplicates requests
+// across all blocks.
 //
 // Same address-keyed contract as `TcuTbufA`: caller plans the set of
 // needed line addresses, waits for `ready()`, and reads from the resident

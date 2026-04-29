@@ -17,7 +17,7 @@
 
 namespace vortex {
 
-// CSR functional unit (FUType::CSR) — RTL counterpart is VX_csr_unit.
+// CSR functional unit (FUType::CSR).
 // Owns CSR semantics: get/set CSR, FPU rounding mode lookup, fflags update.
 // Per-warp fcsr / cta_csrs / mscratch live on the Scheduler and are reached
 // via core_->scheduler().warp(wid).

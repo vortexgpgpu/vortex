@@ -475,7 +475,7 @@ public:
     return perf_stats_;
   }
 
-  // Flush API (RTL VX_cache_flush analog).
+  // Flush API.
   // flush_begin() arms the bank; subsequent ticks scan all sets/ways and emit
   // a writeback request for every dirty line via mem_req_out (write-back only;
   // write-through caches have nothing to evict). flush_done() reports when the

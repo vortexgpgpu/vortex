@@ -106,9 +106,9 @@ public:
       mem_coalescers_.at(b) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSUQ_OUT_SIZE, 1);
     }
 
-    // create local memory
-    // Phase B (proposal §5): TCU acquires its own LMEM ports — Q per-block
-    // TcuTbufA fetchers and 1 shared TcuSharedB fetcher, appended after LSU.
+    // create local memory.
+    // TCU acquires its own LMEM ports — Q per-block TcuTbufA fetchers and
+    // 1 shared TcuSharedB fetcher, appended after the LSU ports.
     snprintf(sname, 100, "%s-lmem", name.c_str());
     uint32_t lmem_num_reqs = LSU_NUM_REQS;
   #ifdef EXT_TCU_ENABLE
@@ -209,8 +209,8 @@ public:
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
     func_units_.at((int)FUType::TCU) = tcu_unit_;
 
-    // Phase B (proposal §5.2/§5.3): bind per-block TcuTbufA and the shared
-    // TcuSharedB to dedicated LMEM ports appended after the LSU ports.
+    // Bind per-block TcuTbufA and the shared TcuSharedB to dedicated LMEM
+    // ports appended after the LSU ports.
     {
       auto& tbuf_a = tcu_unit_->tbuf_a();
       for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
@@ -436,8 +436,8 @@ public:
             }
             DTN(4, "}, " << *uop_trace << std::endl);
           }
-          // Mirror RTL |(stg_valid_in & ~operands_ready): count once per cycle
-          // per issue slice regardless of how many warps are blocked.
+          // Count once per cycle per issue slice regardless of how many
+          // warps are blocked.
           any_scrb_blocked = true;
         } else {
           uop_trace->log_once(false);
@@ -584,9 +584,9 @@ public:
       assert(trace->cid == simobject_->id());
 
       // Per-pid writeback: dispatcher splits multi-pid traces into copies
-      // each carrying its own lane-subset tmask + dst_data, mirroring RTL
-      // where every pid pass writes back independently. Scoreboard release
-      // and perf accounting still gate on eop (full instruction completion).
+      // each carrying its own lane-subset tmask + dst_data; every pid pass
+      // writes back independently. Scoreboard release and perf accounting
+      // gate on eop (full instruction completion).
       if (trace->wb) {
         operands_.at(iw)->writeback(trace);
       }
