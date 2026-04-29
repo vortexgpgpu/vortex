@@ -40,6 +40,7 @@ EXT_A_ENABLE = false
 EXT_V_ENABLE = false
 
 EXT_ZICOND_ENABLE = true
+RDCYC_ENABLE = false
 EXT_TCU_ENABLE = false
 EXT_DMA_ENABLE = false
 EXT_DXA_ENABLE = false
@@ -54,6 +55,7 @@ EXT_A_ENABLED = "expr: 1 if $EXT_A_ENABLE else 0"
 EXT_D_ENABLED = "expr: 1 if $EXT_D_ENABLE else 0"
 EXT_V_ENABLED = "expr: 1 if $EXT_V_ENABLE else 0"
 EXT_ZICOND_ENABLED = "expr: 1 if $EXT_ZICOND_ENABLE else 0"
+RDCYC_ENABLED = "expr: 1 if $RDCYC_ENABLE else 0"
 EXT_TCU_ENABLED = "expr: 1 if $EXT_TCU_ENABLE else 0"
 EXT_DXA_ENABLED = "expr: 1 if $EXT_DXA_ENABLE else 0"
 VLEN = "expr: $XLEN * 4"

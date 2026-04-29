@@ -228,6 +228,13 @@ inline __attribute__((const)) int vx_hart_id() {
 // profiling
 //
 
+// Warp Sync
+inline void vx_wsync() {
+    __asm__ volatile (".insn r %0, 7, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
+}
+
+#ifdef RDCYC_ENABLE
+
 // Return current cycle counter
 inline uint64_t vx_rdcycle() {
 #if __riscv_xlen == 64
@@ -243,11 +250,6 @@ inline uint64_t vx_rdcycle() {
 #else
 #error "Unsupported RISC-V XLEN"
 #endif
-}
-
-// Warp Sync
-inline void vx_wsync() {
-    __asm__ volatile (".insn r %0, 7, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
 }
 
 /* Safely flushes the warp pipeline and reads the 64-bit cycle counter.
@@ -371,6 +373,8 @@ static inline __attribute__((always_inline)) uint64_t vx_rdcycle_sync_diff(__rdc
 #error "Unsupported RISC-V XLEN"
 #endif
 }
+
+#endif // RDCYC_ENABLE
 
 // Memory fence
 inline void vx_fence() {

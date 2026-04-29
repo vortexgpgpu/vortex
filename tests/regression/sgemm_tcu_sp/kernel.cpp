@@ -42,8 +42,9 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   auto pTileA = pA + tile_row * stride_A;
   constexpr uint32_t a_k_stride = ctx::tileK / 2;
 
-  // Measure load + compute + store all together
+#ifdef RDCYC_ENABLE
   __rdcycle_time t0 = vx_rdcycle_sync_begin();
+#endif
 
   auto pTileB = pB + tile_col * K;
   for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
@@ -55,10 +56,11 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
     pTileB += ctx::tileK;
   }
 
-  // Store (now inside measurement)
+  // Store
   auto pTileC = pC + tile_row * N + tile_col;
   ctx::store_matrix_sync(pTileC, fragC, N);
 
+#ifdef RDCYC_ENABLE
   __rdcycle_time t1 = vx_rdcycle_sync_end();
 
   // Write per-block (t0, t1) raw timestamps (hi, lo) x 2
@@ -70,4 +72,5 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
     pCycles[block_id * 4 + 2] = t1.hi;
     pCycles[block_id * 4 + 3] = t1.lo;
   }
+#endif
 }

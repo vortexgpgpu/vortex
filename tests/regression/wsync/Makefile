@@ -11,6 +11,8 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 OPTS ?= -i1024
 
+CONFIGS := -DRDCYC_ENABLE
+
 KERNEL_LIB := vortex2
 
 include ../common.mk

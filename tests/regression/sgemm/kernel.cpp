@@ -26,7 +26,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   auto C = reinterpret_cast<simt_otype_t*>(arg->C_addr);
 
+#ifdef RDCYC_ENABLE
   __rdcycle_time t0 = vx_rdcycle_sync_begin();
+#endif
 
   simt_otype_t sum = 0;
 
@@ -58,6 +60,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   C[row * N + col] = sum;
 
+#ifdef RDCYC_ENABLE
   __rdcycle_time t1 = vx_rdcycle_sync_end();
 
   if (threadIdx.x == 0 && threadIdx.y == 0) {
@@ -68,4 +71,5 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     pCycles[block_id * 4 + 2] = t1.hi;
     pCycles[block_id * 4 + 3] = t1.lo;
   }
+#endif
 }

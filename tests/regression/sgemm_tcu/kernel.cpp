@@ -26,8 +26,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // Initialize accumulator tile to zero
   ctx::fill_fragment(fragC, 0);
 
-  // Measure load + compute + store all together
+#ifdef RDCYC_ENABLE
   __rdcycle_time t0 = vx_rdcycle_sync_begin();
+#endif
 
   for (int i = 0; i < K; i += ctx::tileK) {
     auto pTileA = pA + tile_row * K + i;
@@ -38,10 +39,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     ctx::mma_sync(fragC, fragA, fragB, fragC);
   }
 
-  // Store the computed C tile (now inside measurement)
+  // Store the computed C tile
   auto pTileC = pC + tile_row * N + tile_col;
   ctx::store_matrix_sync(pTileC, fragC, N);
 
+#ifdef RDCYC_ENABLE
   __rdcycle_time t1 = vx_rdcycle_sync_end();
 
   // Write per-block (t0, t1) raw timestamps (hi, lo) x 2
@@ -53,4 +55,5 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     pCycles[block_id * 4 + 2] = t1.hi;
     pCycles[block_id * 4 + 3] = t1.lo;
   }
+#endif
 }

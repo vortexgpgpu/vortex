@@ -557,7 +557,9 @@ void cleanup() {
     vx_mem_free(A_buffer);
     vx_mem_free(B_buffer);
     vx_mem_free(C_buffer);
-    vx_mem_free(cycles_buffer);
+    if (cycles_buffer) {
+      vx_mem_free(cycles_buffer);
+    }
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -638,8 +640,10 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
   uint32_t num_blocks = grid_dim[0] * grid_dim[1];
+#ifdef RDCYC_ENABLE
   RT_CHECK(vx_mem_alloc(device, num_blocks * 4 * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
   RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
+#endif
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
@@ -703,6 +707,7 @@ int main(int argc, char *argv[]) {
   // read back per-block (t0, t1) timestamps; report both per-CTA max diff
   // and global kernel latency = max(t1) - min(t0) across all CTAs.
   // NOTE: max/min reduction is only valid when NUM_CORES=1 (single mcycle CSR).
+#ifdef RDCYC_ENABLE
   {
     std::vector<uint32_t> h_cycles(num_blocks * 4);
     RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_blocks * 4 * sizeof(uint32_t)));
@@ -720,6 +725,7 @@ int main(int argc, char *argv[]) {
     printf("TCU_CYCLES: max=%u (across %u blocks)\n", max_diff, num_blocks);
     printf("KERNEL_LATENCY: %lu\n", (unsigned long)(max_t1 - min_t0));
   }
+#endif
 
   // download destination buffer
   std::vector<otype_t> h_C(sizeC);
