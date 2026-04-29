@@ -102,9 +102,8 @@ public:
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
 
   // ----- Barriers -----
-  // Barrier handling lives on BarrierUnit (a child SimObject of Scheduler,
-  // mirroring VX_bar_unit instantiated inside VX_scheduler.sv). Callers
-  // should reach it via `core_->scheduler().barrier_unit().X()`.
+  // Barrier handling lives on BarrierUnit (a child SimObject of Scheduler).
+  // Callers should reach it via `core_->scheduler().barrier_unit().X()`.
   BarrierUnit& barrier_unit() { return *barrier_unit_; }
 
   // CSR access lives on CsrUnit. FpuUnit reaches its fcsr helpers via

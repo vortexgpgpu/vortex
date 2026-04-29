@@ -236,8 +236,7 @@ bool Scheduler::wspawn(uint32_t num_warps, Word nextPC) {
   return false;
 }
 
-// Barrier handling lives in BarrierUnit (mirrors VX_bar_unit instantiated
-// inside VX_scheduler.sv). See barrier_unit.{h,cpp}.
+// Barrier handling lives in BarrierUnit. See barrier_unit.{h,cpp}.
 
 // ecall/ebreak trap by deactivating all warps (used by riscv-vector tests)
 void Scheduler::trigger_ecall() {

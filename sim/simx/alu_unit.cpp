@@ -297,9 +297,9 @@ void AluUnit::execute(instr_trace_t* trace) {
 			}
 		}
 	} else if (std::get_if<WgatherType>(&trace->op_type)) {
-		// Mirrors VX_alu_int.sv: each group of 4 lanes operates independently;
-		// source lane within a group is suppressed by clearing its tmask bit so
-		// the standard writeback path skips it (regfile keeps its prior value).
+		// Each group of 4 lanes operates independently; source lane within a
+		// group is suppressed by clearing its tmask bit so the standard
+		// writeback path skips it (regfile keeps its prior value).
 		auto wgArgs = std::get<IntrWgatherArgs>(instrArgs);
 		uint32_t src_offset = wgArgs.src_lane;
 		for (uint32_t t = thread_start; t < num_threads; ++t) {

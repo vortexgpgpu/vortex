@@ -31,10 +31,10 @@ public:
 	virtual uint32_t num_blocks() const = 0;
 };
 
-// FuncUnit pipelines have NUM_BLOCKS physical lanes (matching RTL hardware
-// blocks), not ISSUE_WIDTH. The dispatcher upstream aggregates ISSUE_WIDTH
-// issue ports onto NUM_BLOCKS execution ports; commit downstream fans them
-// back out to per-iw arbiters using trace->wid.
+// FuncUnit pipelines have NUM_BLOCKS physical lanes, not ISSUE_WIDTH. The
+// dispatcher upstream aggregates ISSUE_WIDTH issue ports onto NUM_BLOCKS
+// execution ports; commit downstream fans them back out to per-iw arbiters
+// using trace->wid.
 template <uint32_t NUM_BLOCKS>
 class FuncUnit : public FuncUnitBase, public SimObject<FuncUnit<NUM_BLOCKS>> {
 public:

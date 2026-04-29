@@ -221,9 +221,8 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
 int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   if (addr == VX_DCR_BASE_CACHE_FLUSH) {
     // Drain dirty cache lines to DRAM before the host reads back results.
-    // RTL handles this via VX_cache_flush state machines; SimX does the
-    // equivalent walk + TLM writebacks here. After flush_caches() returns
-    // every dirty line has reached memsim_'s backing RAM.
+    // After flush_caches() returns every dirty line has reached memsim_'s
+    // backing RAM.
     this->flush_caches();
     *value = 0;
     return 0;

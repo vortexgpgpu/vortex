@@ -238,10 +238,9 @@ template <> struct FMA<vt::tf32, vt::tf32> {
 };
 
 // Generic FEDP: universal rule keyed on output width.
-//   * Wide Ot (fp32): accumulate Σ(a_k*b_k) in fp32, add c_val last — matches
-//     RTL's fp32 reduction tree with final c fold-in.
+//   * Wide Ot (fp32): accumulate Σ(a_k*b_k) in fp32, add c_val last.
 //   * Narrow Ot (fp16/bf16/fp8/bf8/…): chain FMA<It,Ot> so the accumulator is
-//     rounded to Ot each step — matches host muladd_t<It,Ot> semantics.
+//     rounded to Ot each step.
 template <typename It, typename Ot>
 struct FEDP {
   using itype = typename It::dtype;
@@ -560,7 +559,7 @@ public:
 
   void tick() {
   #ifdef TCU_WGMMA_ENABLE
-    // Phase D §5.4: Q-warp lock-step probe.
+    // Q-warp lock-step probe.
     // Pass 1 — identify active WGMMA blocks and prime each one's plan() on
     // first uop. WMMA / META_STORE blocks are unaffected (no Q-coupling).
     uint32_t wgmma_active = 0;
@@ -597,10 +596,8 @@ public:
       wgmma_planned_.at(b) = true;
     }
 
-    // Pass 2 — Q-warp lock-step gate. All active WGMMA blocks must have
-    // their A/B operands resident before *any* of them advances. This is
-    // the structural invariant that preserves the documented
-    // `NUM_WARPS > ISSUE_WIDTH` deadlock under shared-B-buffer contention.
+    // Pass 2 — lock-step gate. All active WGMMA blocks must have their A/B
+    // operands resident before *any* of them advances.
     if (wgmma_active != 0) {
       uint32_t ready_mask = 0;
       for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
@@ -707,10 +704,9 @@ public:
     bool is_sparse = args.is_sparse;
     bool is_a_smem = args.is_a_smem;
     uint32_t e_bits = elem_bits(fmt_s);
-    if (e_bits < 8) return;  // 4-bit deferred to Phase E
+    if (e_bits < 8) return;
     uint32_t e_bytes = e_bits / 8;
 
-    // Decode descriptors (mirrors wgmma()'s first-uop decode at line ~857).
     lmem_desc_t sd_a{}, sd_b{};
     if (is_a_smem) {
       sd_a = {uint64_t(LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
@@ -726,8 +722,8 @@ public:
     uint32_t tile_k = uint32_t(wg_cfg::xtileK) * ratio;
     uint32_t a_k    = is_sparse ? (tile_k / 2) : tile_k;
 
-    // A: SS-mode only. xtileM rows × a_k columns. Plus sparse metadata
-    // (Phase E): kMetaBanks × meta_strd_words 32-bit words, packed after A.
+    // A: SS-mode only. xtileM rows × a_k columns. Plus sparse metadata:
+    // kMetaBanks × meta_strd_words 32-bit words, packed after A.
     if (is_a_smem) {
       std::vector<uint64_t> a_lines;
       a_lines.reserve(uint32_t(wg_cfg::xtileM) * a_k);
@@ -984,9 +980,8 @@ public:
       uint32_t rtl_i_ratio = 32 / ebits;
       uint32_t meta_row_w  = k_words * 2 * rtl_i_ratio;
       uint32_t meta_strd_words = (cfg::tcM * meta_row_w + 31) / 32;
-      // Bank encoding mirrors VX_tcu_meta: {step_m, step_k_half} with WMMA
-      // half-K width. WGMMA sparse issues step_k=0, so m=1 maps to bank
-      // (cfg::k_steps/2) (matches RTL's WMMA-style SRAM layout).
+      // Bank encoding {step_m, step_k_half} with WMMA half-K width.
+      // WGMMA sparse issues step_k=0, so m=1 maps to bank (cfg::k_steps/2).
       uint32_t wg_bank_rs = step_m * (cfg::k_steps / 2) + step_k;
       uint32_t wg_bank_ss = step_m * (wg_cfg::k_steps / 2) + step_k;
       uint32_t wg_bank = is_a_smem ? wg_bank_ss : wg_bank_rs;
@@ -998,9 +993,9 @@ public:
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
         uint32_t word_val = 0;
         if (is_a_smem) {
-          // Phase E: SS-sparse metadata lives in LMEM at meta_base, packed
-          // into kMetaBanks × meta_strd_words 32-bit words. Words are
-          // pre-fetched into the per-block TbufA alongside A-tile data
+          // SS-sparse metadata lives in LMEM at meta_base, packed into
+          // kMetaBanks × meta_strd_words 32-bit words. Words are pre-fetched
+          // into the per-block TbufA alongside A-tile data
           // (see plan_wgmma_lines for is_sparse + is_a_smem).
           uint32_t word_idx  = wg_bank * meta_strd_words + bit_idx / 32;
           uint64_t byte_addr = meta_base + uint64_t(word_idx) * 4;
@@ -1099,7 +1094,7 @@ private:
     return 32 / elem_bits(fmt_s);
   }
 
-  // Phase B: gather one 32-bit operand word from a TCU line cache.
+  // Gather one 32-bit operand word from a TCU line cache.
   // The buffer is selected by the caller (A → per-block TbufA, B → SharedB).
   // For sub-32-bit formats, packs `ratio = 32 / e_bits` adjacent elements
   // along the K direction (col for A, row for B via pack_along_row).
@@ -1109,7 +1104,7 @@ private:
                        uint32_t fmt_s, bool pack_along_row) const {
     uint32_t e_bits  = elem_bits(fmt_s);
     uint32_t ratio   = (e_bits >= 32) ? 1 : (32 / e_bits);
-    uint32_t e_bytes = (e_bits >= 8)  ? (e_bits / 8) : 1;  // 4-bit deferred
+    uint32_t e_bytes = (e_bits >= 8)  ? (e_bits / 8) : 1;
     uint32_t result = 0;
     for (uint32_t r = 0; r < ratio; ++r) {
       uint32_t cur_row = pack_along_row ? (row + r) : row;
@@ -1140,8 +1135,8 @@ private:
       } else if (e_bits == 8) {
         result |= uint32_t((*line)[off]) << (r * 8);
       } else {
-        // 4-bit (int4/uint4/nvfp4) deferred to Phase E along with sparse SS metadata.
-        std::cout << "Error: TCU 4-bit operand gather not yet supported" << std::endl;
+        // 4-bit (int4/uint4/nvfp4) not supported.
+        std::cout << "Error: TCU 4-bit operand gather not supported" << std::endl;
         std::abort();
       }
     }
@@ -1360,7 +1355,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t total_meta_stores = sparse_meta_stores + mx_meta_stores;
 
     if (uop_index < sparse_meta_stores) {
-      // Phase 1a: sparse metadata-store uops (one per group of cols_per_load columns)
+      // Sparse metadata-store uops (one per group of cols_per_load columns).
       constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
       uint32_t group = uop_index;
       uint32_t reg_rs1 = (group > 0) ? meta_reg1 : meta_reg0;
@@ -1368,7 +1363,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, group, 0, 0, 0, TCU_META_KIND_SPARSE});
       uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
     } else if (uop_index < total_meta_stores) {
-      // Phase 1b: MX scale metadata-store uops
+      // MX scale metadata-store uops.
       uint32_t mx_store = uop_index - sparse_meta_stores;
       uint32_t reg_rs1 = 0;
       if (fmt_s == vt::nvfp4::id) {
@@ -1382,7 +1377,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uop_instr->set_args(IntrTcuArgs{0, 0, 0, fmt_s, mx_store, 0, 0, 0, TCU_META_KIND_MX});
       uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
     } else {
-      // Phase 2: MMA uops
+      // MMA uops.
       uint32_t mma_idx = uop_index - total_meta_stores;
       uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
 
@@ -1506,10 +1501,10 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t mma_idx = uop_index - meta_stores;
       uint32_t ra_base = is_a_smem ? 10 : 24;
 
-      // Loop order: m (inner) -> n (middle) -> k (outer), matching RTL
-      // (VX_tcu_uops.sv:128). K-outer maximizes per-block A-buffer reuse:
-      // each A_w[m,k] is consumed across the entire (n,m) inner sweep, and
-      // each shared B[k,n] is consumed for m_steps consecutive uops.
+      // Loop order: m (inner) -> n (middle) -> k (outer). K-outer maximizes
+      // per-block A-buffer reuse: each A_w[m,k] is consumed across the entire
+      // (n,m) inner sweep, and each shared B[k,n] is consumed for m_steps
+      // consecutive uops.
       uint32_t mn = (total - meta_stores) / k_count;
       uint32_t k = mma_idx / mn;
       uint32_t rem = mma_idx % mn;

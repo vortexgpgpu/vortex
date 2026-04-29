@@ -20,10 +20,10 @@ namespace vortex {
 
 // Per-block A-tile line cache for WGMMA.
 //
-// Phase B model (proposal §5.2 / §4.10.1): holds the active k-stripe's
-// `M_STEPS × lines_per_row` lines for one warp. Lines are fetched via a
-// dedicated LMEM port pair (`lmem_req_out` / `lmem_rsp_in`); responses
-// carry the bank-row bytes that the consumer reads via `read_line()`.
+// Holds the active k-stripe's `M_STEPS × lines_per_row` lines for one warp.
+// Lines are fetched via a dedicated LMEM port pair
+// (`lmem_req_out` / `lmem_rsp_in`); responses carry the bank-row bytes that
+// the consumer reads via `read_line()`.
 //
 // The cache is address-keyed: the consumer (TcuUnit) computes the byte
 // address of each operand it needs, calls `plan()` with the set of line

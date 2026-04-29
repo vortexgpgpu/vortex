@@ -31,8 +31,7 @@ struct instr_trace_t;
 ///////////////////////////////////////////////////////////////////////////////
 
 // Per-warp micro-op expander for multi-uop instructions (TCU WMMA/WGMMA).
-// Simple instructions pass through unchanged. Mirrors RTL VX_uop_sequencer
-// instantiated inside VX_ibuffer.sv.
+// Simple instructions pass through unchanged.
 class Sequencer : public SimObject<Sequencer> {
 public:
   Sequencer(const SimContext& ctx, const char* name, Core* core, PoolAllocator<Instr, 64>& instr_pool);

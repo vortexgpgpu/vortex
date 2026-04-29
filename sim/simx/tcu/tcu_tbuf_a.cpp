@@ -39,9 +39,8 @@ public:
   }
 
   void plan(const std::vector<uint64_t>& line_addrs) {
-    // Phase B: additive plan. Requests any not-resident, not-in-flight line.
-    // Eviction is explicit via `invalidate()`. Phase C will introduce
-    // working-set eviction policies (k-stripe rollover, etc).
+    // Additive plan: requests any not-resident, not-in-flight line.
+    // Eviction is explicit via `invalidate()`.
     std::unordered_set<uint64_t> inflight_set;
     for (auto& kv : inflight_) inflight_set.insert(kv.second);
     for (auto a : line_addrs) {

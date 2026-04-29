@@ -22,7 +22,6 @@ namespace vortex {
 class Core;
 class Scheduler;
 
-// Mirrors the RTL VX_bar_unit module instantiated inside VX_scheduler.sv.
 // Owns per-warp barrier state; resumes waiting warps via the parent Scheduler;
 // participates in cross-core global barriers via Socket.
 class BarrierUnit : public SimObject<BarrierUnit> {

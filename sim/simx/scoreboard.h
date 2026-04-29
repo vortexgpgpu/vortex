@@ -20,7 +20,6 @@
 
 namespace vortex {
 
-// Mirrors the RTL VX_scoreboard module instantiated inside VX_issue_slice.sv.
 // Tracks per-warp register reservations between issue and writeback.
 class Scoreboard : public SimObject<Scoreboard> {
 public:

@@ -39,7 +39,7 @@ public:
   }
 
   void plan(const std::vector<uint64_t>& line_addrs) {
-    // Phase B: additive plan (eviction via `invalidate()` only).
+    // Additive plan; eviction is explicit via `invalidate()`.
     std::unordered_set<uint64_t> inflight_set;
     for (auto& kv : inflight_) inflight_set.insert(kv.second);
     for (auto a : line_addrs) {

@@ -19,9 +19,9 @@ namespace vortex {
 
 class Core;
 
-// Operand collector partition. Per the RTL split, each (issue_lane, opc_idx)
-// pair owns the integer + float register files for the warps it serves.
-// Routing math (mirrors VX_operands.sv):
+// Operand collector partition. Each (issue_lane, opc_idx) pair owns the
+// integer + float register files for the warps it serves.
+// Routing math:
 //   lane = wid % ISSUE_WIDTH       — selects which Operands instance
 //   wis  = wid / ISSUE_WIDTH       — warp-in-slice index
 //   opc  = wis % NUM_OPCS          — which OpcUnit within the lane

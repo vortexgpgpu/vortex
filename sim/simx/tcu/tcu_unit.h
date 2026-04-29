@@ -103,8 +103,8 @@ public:
 					uint32_t meta_kind,
 					const std::vector<reg_data_t>& rs1_data);
 
-	// Phase B: per-block A buffers and shared B buffer (proposal §5.1).
-	// Exposed so that `Core` can bind their LMEM channel pairs.
+	// Per-block A buffers and shared B buffer. Exposed so that `Core`
+	// can bind their LMEM channel pairs.
 	std::array<TcuTbufA::Ptr, NUM_TCU_BLOCKS>& tbuf_a();
 	TcuSharedB::Ptr& shared_b();
 

@@ -40,7 +40,7 @@ struct cta_warp_record_t {
 };
 
 // CTA dispatcher: walks the pending kernel grid and admits one warp rank per
-// step() into a free warp slot. Mirrors the RTL VX_cta_dispatch.sv module.
+// step() into a free warp slot.
 class CtaDispatcher : public SimObject<CtaDispatcher> {
 public:
   CtaDispatcher(const SimContext& ctx, const char* name, Core* core);

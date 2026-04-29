@@ -27,7 +27,6 @@ inline static constexpr uint32_t wid_to_opc_idx(uint32_t wid) {
 namespace {
 
 // Emit a "DEBUG SrcN Reg: <reg>={values...} (#uuid)" line for trace_csv.py.
-// Format mirrors the previous in-OpcUnit print so consumers don't break.
 inline void log_src_operand(uint32_t src_index,
                             const RegOpd& reg,
                             const std::vector<reg_data_t>& values,

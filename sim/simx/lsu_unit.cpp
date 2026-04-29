@@ -103,7 +103,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	for (uint32_t t = 0; t < num_threads; ++t) {
 		if (!tmask.test(t)) continue;
 		mem_addr_size_t e;
-		// AGU result is XLEN-bit wide (matches RTL VX_lsu_slice.full_addr).
+		// AGU result is XLEN-bit wide.
 		// Cast through Word so 32-bit XLEN doesn't carry sign-extended
 		// upper bits into the 64-bit address field.
 		e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
