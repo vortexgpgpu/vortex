@@ -287,9 +287,21 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
 
+	// Per-bank XRT BO base offsets. Each m_axi_mem_<i> port goes to a different
+	// xrt::bo (one per DDR/HBM channel) which XRT places at a different virtual
+	// base address, so a single global PLATFORM_MEMORY_OFFSET cannot cover all
+	// banks. PLATFORM_MEMORY_OFFSET_<i> overrides per bank; each defaults to
+	// PLATFORM_MEMORY_OFFSET so existing single-bank platforms (HBM, VCK5000)
+	// are unchanged.
+	wire [C_M_AXI_MEM_ADDR_WIDTH-1:0] platform_memory_offsets [4];
+	assign platform_memory_offsets[0] = C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET_0);
+	assign platform_memory_offsets[1] = C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET_1);
+	assign platform_memory_offsets[2] = C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET_2);
+	assign platform_memory_offsets[3] = C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET_3);
+
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_addressing
-		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
-		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
+		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + platform_memory_offsets[i];
+		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + platform_memory_offsets[i];
 	end
 
 	`SCOPE_IO_SWITCH (2);
