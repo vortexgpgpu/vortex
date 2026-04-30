@@ -34,6 +34,11 @@
 
 namespace vortex {
 
+// Forward declarations
+class SimPlatform;
+class SimObjectBase;
+template <typename T> class SimChannel;
+
 class SimContext {
 private:
   SimContext() = default;

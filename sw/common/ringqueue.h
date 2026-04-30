@@ -27,7 +27,6 @@ namespace vortex {
 // RingQueue: fixed-capacity FIFO with no allocations on push/pop.
 // - Does not require T to be default-constructible.
 // - Copy constructs allocate fresh storage but DO NOT copy elements by default.
-//   (SimChannel copy semantics intentionally do not copy queue contents.)
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
@@ -73,6 +72,7 @@ public:
   }
 
   bool empty() const { return size_ == 0; }
+  bool full() const { return size_ == capacity_; }
   uint32_t size() const { return size_; }
   uint32_t capacity() const { return capacity_; }
 
@@ -127,13 +127,5 @@ private:
   uint32_t tail_;
   uint32_t size_;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-// Forward Declarations & Base Classes
-///////////////////////////////////////////////////////////////////////////////
-
-class SimPlatform;
-class SimObjectBase;
-template <typename T> class SimChannel;
 
 } // namespace vortex
