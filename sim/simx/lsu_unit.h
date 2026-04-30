@@ -15,8 +15,10 @@
 
 #include <array>
 #include <mempool.h>
+#include <ringqueue.h>
 #include "func_unit.h"
 #include "instr.h"
+#include "VX_config.h"
 
 namespace vortex {
 
@@ -33,6 +35,37 @@ private:
   PoolAllocator<Instr, 64>& pool_;
 };
 
+// Fence controller
+class FenceController {
+public:
+  bool locked() const { return locked_; }
+
+  void engage(instr_trace_t* trace) {
+    trace_ = trace;
+    locked_ = true;
+  }
+
+  // Try to release the lock. Returns true on success (lock cleared,
+  // trace forwarded). Conditions: MSHR empty AND output channel can
+  // accept the trace.
+  bool try_release(SimChannel<instr_trace_t*>& out, bool mshr_empty) {
+    if (!locked_) return false;
+    if (!mshr_empty) return false;
+    if (!out.try_send(trace_)) return false;
+    locked_ = false;
+    trace_ = nullptr;
+    return true;
+  }
+
+  instr_trace_t* trace() const { return trace_; }
+
+  void reset() { trace_ = nullptr; locked_ = false; }
+
+private:
+  instr_trace_t* trace_ = nullptr;
+  bool locked_ = false;
+};
+
 class LsuUnit : public FuncUnit<NUM_LSU_BLOCKS> {
 public:
 	LsuUnit(const SimContext& ctx, const char* name, Core*);
@@ -46,9 +79,12 @@ private:
 
 	void compute_addrs(uint32_t b, instr_trace_t* trace);
 
-	void process_response(uint32_t b);
+	// Per-cycle handlers.
+	void process_response_step(uint32_t b);
+	void process_request_step(uint32_t b);
 
-	void process_request(uint32_t b);
+	// Drain Inputs[b] into req_queue.
+	void ingest_inputs(uint32_t b);
 
   struct mem_addr_size_t {
 		uint64_t addr;
@@ -66,19 +102,18 @@ private:
 		bool        is_load;
 	};
 
+	// Per-block LSU state. Each member is a named hardware sub-block.
 	struct lsu_state_t {
-		HashTable<pending_req_t>     pending_rd_reqs;
-		instr_trace_t*               fence_trace;
-		bool                         fence_lock;
+		RingQueue<instr_trace_t*> req_queue{LSUQ_IN_SIZE};
+		HashTable<pending_req_t>  mshr{LSUQ_IN_SIZE};
+		FenceController           fence;
 		std::vector<mem_addr_size_t> addr_list;
-		uint32_t                     remain_addrs;
-
-		lsu_state_t() : pending_rd_reqs(LSUQ_IN_SIZE), fence_trace(nullptr), fence_lock(false), remain_addrs(0) {}
+		uint32_t                  remain_addrs = 0;
 
 		void reset() {
-			this->pending_rd_reqs.clear();
-			this->fence_trace = nullptr;
-			this->fence_lock = false;
+			this->req_queue.clear();
+			this->mshr.clear();
+			this->fence.reset();
 			this->addr_list.clear();
 			this->remain_addrs = 0;
 		}
