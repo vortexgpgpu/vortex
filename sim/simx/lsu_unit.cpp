@@ -119,16 +119,25 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	state.remain_addrs = state.addr_list.size();
 }
 
-void LsuUnit::process_response(uint32_t b) {
+// Per-cycle response handler. Consumes at most one response packet
+// from lmem_switch and forwards through to writeback when the
+// originating request retires. Mirrors RTL VX_lsu_slice's response
+// formatter (sign-extend, NaN-box) plus VX_mem_scheduler's response
+// demux.
+void LsuUnit::process_response_step(uint32_t b) {
 	auto& lsu_rsp_in = core_->lmem_switch(b)->RspOut;
 	if (lsu_rsp_in.empty())
 		return;
 	auto& state = states_.at(b);
 	auto& lsu_rsp = lsu_rsp_in.peek();
-	auto& entry = state.pending_rd_reqs.at(lsu_rsp.tag);
+	auto& entry = state.mshr.at(lsu_rsp.tag);
 	auto trace = entry.trace;
 	auto& output = Outputs.at(b);
-	if (output.full())
+	// Only stall if THIS response would terminate the request and the
+	// output is full (we'd lose the trace forwarding). Non-terminal
+	// responses can still update entry state without touching output.
+	bool is_terminal = (entry.count == lsu_rsp.mask.count()) && entry.eop;
+	if (is_terminal && output.full())
 		return; // stall
 	DT(3, this->name() << " mem-rsp: " << lsu_rsp);
 	assert(entry.count != 0);
@@ -178,7 +187,7 @@ void LsuUnit::process_response(uint32_t b) {
 	}
 	entry.count -= lsu_rsp.mask.count(); // track remaining
 	if (entry.count == 0) {
-		state.pending_rd_reqs.release(lsu_rsp.tag);
+		state.mshr.release(lsu_rsp.tag);
 		if (entry.eop) {
 			output.send(trace, 1);
 		}
@@ -187,24 +196,45 @@ void LsuUnit::process_response(uint32_t b) {
 	lsu_rsp_in.pop();
 }
 
-void LsuUnit::process_request(uint32_t b) {
+// Drain Inputs[b] into the dispatch-side req_queue. Mirrors RTL's
+// VX_mem_scheduler accepting core_req_valid into req_queue every cycle
+// the queue isn't full, independent of the head's dispatch progress.
+void LsuUnit::ingest_inputs(uint32_t b) {
 	auto& state = states_.at(b);
-	if (state.fence_lock) {
-		// wait for all pending memory operations to complete
-		if (!state.pending_rd_reqs.empty())
-			return;
-		if (!Outputs.at(b).try_send(state.fence_trace))
-			return;
-		state.fence_lock = false;
-		DT(3, this->name() << " fence-unlock: " << state.fence_trace);
+	auto& input = Inputs.at(b);
+	while (!input.empty() && !state.req_queue.full()) {
+		auto trace = input.peek();
+		// Hold a fence at the input head until req_queue is empty so the
+		// fence becomes the next dispatched item — preserves total
+		// barrier semantics on a per-block basis.
+		auto lsu_type_tag = std::get_if<LsuType>(&trace->op_type);
+		if (lsu_type_tag && *lsu_type_tag == LsuType::FENCE && !state.req_queue.empty())
+			break;
+		state.req_queue.push(trace);
+		input.pop();
+	}
+}
+
+// Per-cycle request handler. Dispatches at most one batch (one
+// memory-side mem_req) per call. Mirrors RTL VX_mem_scheduler's
+// req_sent_all-driven dispatch: head trace stays at the queue front
+// until all its batches are issued.
+void LsuUnit::process_request_step(uint32_t b) {
+	auto& state = states_.at(b);
+
+	// If a fence is pending, try to release it. Cannot dispatch new
+	// requests while fence is engaged (per-block total barrier).
+	if (state.fence.locked()) {
+		bool released = state.fence.try_release(Outputs.at(b), state.mshr.empty());
+		if (released)
+			DT(3, this->name() << " fence-unlock: " << state.fence.trace());
+		return;
 	}
 
-	// check input queue
-	auto& input = Inputs.at(b);
-	if (input.empty())
+	if (state.req_queue.empty())
 		return;
 
-	auto trace = input.peek();
+	auto trace = state.req_queue.front();
 	if (!std::get_if<LsuType>(&trace->op_type)) {
 		// AMO ops are unsupported in this build (EXT_A_ENABLE=false). The
 		// LSU only talks through lmem_switch_; no functional bypass.
@@ -215,16 +245,16 @@ void LsuUnit::process_request(uint32_t b) {
 	bool is_write = (lsu_type == LsuType::STORE);
 
 	if (is_fence) {
-		// schedule fence lock
-		state.fence_trace = trace;
-		state.fence_lock = true;
+		// Engage fence lock; the next call will try to release it once
+		// the MSHR drains.
+		state.fence.engage(trace);
 		DT(3, this->name() << " fence-lock: " << *trace);
-		input.pop();
+		state.req_queue.pop();
 		return;
 	}
 
 	// check pending queue capacity
-	if (!is_write && state.pending_rd_reqs.full()) {
+	if (!is_write && state.mshr.full()) {
 		if (!trace->log_once(true)) {
 			DT(4, this->name() << " queue-full: " << *trace);
 		}
@@ -235,7 +265,8 @@ void LsuUnit::process_request(uint32_t b) {
 
 	// First time we see this trace: derive the per-lane addr/size/data
 	// list via compute_addrs(). Persists across multi-batch dispatch via
-	// state.remain_addrs; rebuilt only when the previous trace is fully drained.
+	// state.remain_addrs; rebuilt only when the previous trace is fully
+	// drained.
 	if (state.remain_addrs == 0) {
 		this->compute_addrs(b, trace);
 	}
@@ -284,7 +315,7 @@ void LsuUnit::process_request(uint32_t b) {
 		uint32_t tag = 0;
 		if (!is_write) {
 			IntrLsuArgs lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
-			tag = state.pending_rd_reqs.allocate({trace, count, is_eop, std::move(lane_entries), lsu_args, true});
+			tag = state.mshr.allocate({trace, count, is_eop, std::move(lane_entries), lsu_args, true});
 		}
 		lsu_req.tag  = tag;
 		lsu_req.cid  = trace->cid;
@@ -307,7 +338,7 @@ void LsuUnit::process_request(uint32_t b) {
 		if (direct_commit) {
 			Outputs.at(b).send(trace);
 		}
-		input.pop();
+		state.req_queue.pop();
 	}
 }
 
@@ -315,10 +346,8 @@ void LsuUnit::on_tick() {
 	core_->perf_stats().load_latency += pending_loads_;
 
 	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-		this->process_response(b);
-	}
-
-	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-		this->process_request(b);
+		this->process_response_step(b);
+		this->ingest_inputs(b);
+		this->process_request_step(b);
 	}
 }
