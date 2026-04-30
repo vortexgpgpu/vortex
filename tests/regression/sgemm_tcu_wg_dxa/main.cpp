@@ -279,6 +279,14 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  uint64_t issue_width;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISSUE_WIDTH, &issue_width));
+  if (warps != issue_width) {
+    std::cout << "Error: number of warps in TB (" << warps
+              << ") must match device's ISSUE_WIDTH=" << issue_width << "!" << std::endl;
+    return -1;
+  }
+
   uint32_t M = xm;
   uint32_t N = xn;
   uint32_t K = xk;
