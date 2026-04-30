@@ -19,8 +19,7 @@
 #include "instr_trace.h"
 #include "instr.h"
 #include "func_unit.h"
-#include "tcu_tbuf_a.h"
-#include "tcu_shared_b.h"
+#include "tcu_tbuf.h"
 
 namespace vortex {
 
@@ -103,10 +102,9 @@ public:
 					uint32_t meta_kind,
 					const std::vector<reg_data_t>& rs1_data);
 
-	// Per-block A buffers and shared B buffer. Exposed so that `Core`
-	// can bind their LMEM channel pairs.
-	std::array<TcuTbufA::Ptr, NUM_TCU_BLOCKS>& tbuf_a();
-	TcuSharedB::Ptr& shared_b();
+	// Tile-buffer subsystem (owns abuf×Q + mbuf×Q + bbuf + LMEM arb).
+	// Exposed so that `Core` can bind its single LMEM port pair.
+	TcuTbuf::Ptr& tbuf();
 
 	const PerfStats& perf_stats() const;
 
@@ -118,8 +116,7 @@ private:
 	class Impl;
 	Impl* impl_;
 
-	std::array<TcuTbufA::Ptr, NUM_TCU_BLOCKS> tbuf_a_;
-	TcuSharedB::Ptr shared_b_;
+	TcuTbuf::Ptr tbuf_;
 };
 
 } // namespace vortex

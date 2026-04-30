@@ -839,6 +839,54 @@ public:
   static constexpr uint32_t xtileM  = m_steps * tcM;
   static constexpr uint32_t xtileN  = (NRC_ * NT) / xtileM;
   static constexpr uint32_t tileK   = k_steps * tcK * i_ratio;
+  static constexpr uint32_t n_steps = xtileN / tcN;
+
+  // Block-major SMEM constants (per docs/proposals/wgmma_simx_v3_addendum §3).
+  // BLOCK = micro-tile (tcM × tcK or tcK × tcN), measured in input_t element units.
+  static constexpr uint32_t a_blk_elems  = tcM * tcK * i_ratio; // elements per A block
+  static constexpr uint32_t a_warp_elems = xtileM * tileK;      // elements per warp's A slice
+  static constexpr uint32_t b_blk_elems  = tcK * i_ratio * tcN; // elements per B block
+
+  // Cooperative-load index into A_smem for an (r, c) target in the
+  // row-major-equivalent A view (r ∈ [0, cta_M), c ∈ [0, tileK)).
+  // Block layout: k outermost, m next, then within-block (i × K-elem).
+  static __attribute__((always_inline)) uint32_t a_blockmajor_idx(uint32_t r, uint32_t c) {
+    uint32_t warp_idx  = r / xtileM;
+    uint32_t r_in_warp = r % xtileM;
+    uint32_t m_blk     = r_in_warp / tcM;
+    uint32_t i_in      = r_in_warp % tcM;
+    uint32_t k_blk     = c / (tcK * i_ratio);
+    uint32_t k_in      = c % (tcK * i_ratio);
+    return warp_idx * a_warp_elems
+         + (k_blk * m_steps + m_blk) * a_blk_elems
+         + i_in * (tcK * i_ratio) + k_in;
+  }
+
+  // Cooperative-load index into B_smem for an (r, c) target in the
+  // row-major-equivalent B view (r ∈ [0, tileK_elem), c ∈ [0, xtileN)).
+  // Within-block layout: N outer, K inner — each 32-bit word packs i_ratio
+  // K-elements at one (j, k_word) cell, matching tcu_core's b_off + j*TC_K + k.
+  static __attribute__((always_inline)) uint32_t b_blockmajor_idx(uint32_t r, uint32_t c) {
+    uint32_t k_blk = r / (tcK * i_ratio);
+    uint32_t r_in  = r % (tcK * i_ratio);
+    uint32_t n_blk = c / tcN;
+    uint32_t n_in  = c % tcN;
+    return (k_blk * n_steps + n_blk) * b_blk_elems
+         + n_in * (tcK * i_ratio) + r_in;
+  }
+
+  // Cooperative-load index into per-warp sparse A_smem_w for an (r, c) target
+  // in the row-major compressed-A view (r ∈ [0, xtileM), c ∈ [0, tileK/2)).
+  // Sparse A is K/2 compressed; same per-block shape as dense A but only
+  // K_STEPS/2 half-k blocks. Caller passes a per-warp pointer.
+  static __attribute__((always_inline)) uint32_t a_sp_blockmajor_idx(uint32_t r, uint32_t c) {
+    uint32_t half_k_blk = c / (tcK * i_ratio);
+    uint32_t k_in_elem  = c % (tcK * i_ratio);
+    uint32_t m_blk      = r / tcM;
+    uint32_t i_in       = r % tcM;
+    return (half_k_blk * m_steps + m_blk) * a_blk_elems
+         + i_in * (tcK * i_ratio) + k_in_elem;
+  }
 
   static constexpr uint32_t NRC = NRC_;
 
@@ -858,11 +906,31 @@ public:
     ctx_c::fill_fragment(dst, value);
   }
 
-  // Load A fragment (NRA=4 config) — 3-arg base
+  // Load A fragment (NRA=4 config) — block-major SMEM (RS path).
+  // Per docs/proposals/wgmma_simx_v3_addendum §3.1, A_warp is laid out as:
+  //   A_warp[(k_blk * m_steps + m_blk) * (tcM*tcK*i_ratio) + i_in*(tcK*i_ratio) + k_in_elem]
+  // Each lane reads i_ratio K-elements at one (i_in, k_word) cell of every (m_blk, k_blk) block.
   template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t /*ldm*/) {
     static_assert(Frag::Use == matrix_a, "only matrix_a fragment can be loaded from registers in wgmma context");
-    ctx_a::template load_matrix_sync<src_layout>(dst, src, ldm);
+    static_assert(src_layout == row_major, "wgmma block-major load only accepts row_major caller hint");
+    static_assert(!is_sparse, "wgmma sparse RS load: block-major sparse A is Phase 3");
+    static_assert(tcM * tcK == NT, "wgmma block-major load assumes canonical config (TC_M*TC_K == NT)");
+
+    constexpr uint32_t k_row_elems = tcK * i_ratio;
+    uint32_t lane      = vx_thread_id();
+    uint32_t i_in      = lane / tcK;
+    uint32_t k_in_elem = (lane % tcK) * i_ratio;
+
+    detail::unroll_for<Frag::NR>([&](auto r) {
+      uint32_t m_blk = r / k_steps;
+      uint32_t k_blk = r % k_steps;
+      uint32_t elem_off = (k_blk * m_steps + m_blk) * a_blk_elems
+                       + i_in * k_row_elems
+                       + k_in_elem;
+      auto ptr = reinterpret_cast<const input_t*>(src) + elem_off;
+      dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+    });
   }
 
   // Load sparse metadata into fragment_a.

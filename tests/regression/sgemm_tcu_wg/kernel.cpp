@@ -35,29 +35,29 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   ctx::fill_fragment(fragC, 0);
 
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
-    // Cooperatively load A [cta_M × tileK] into smem
+    // Cooperatively load A [cta_M × tileK] into smem (block-major / k-outer).
     uint32_t a_size = cta_M * ctx::tileK;
     for (uint32_t i = 0; i < a_size; i += num_threads) {
       uint32_t idx = i + tid;
       uint32_t r = idx / ctx::tileK;
       uint32_t c = idx % ctx::tileK;
-      A_smem[r * ctx::tileK + c] = pA[(tile_row + r) * K + (k + c)];
+      A_smem[ctx::a_blockmajor_idx(r, c)] = pA[(tile_row + r) * K + (k + c)];
     }
 
-    // Cooperatively load B [tileK × per_warp_N] into smem
+    // Cooperatively load B [tileK × per_warp_N] into smem (block-major / k-outer).
     uint32_t b_size = ctx::tileK * ctx::xtileN;
     for (uint32_t i = 0; i < b_size; i += num_threads) {
       uint32_t idx = i + tid;
       uint32_t r = idx / ctx::xtileN;
       uint32_t c = idx % ctx::xtileN;
-      B_smem[r * ctx::xtileN + c] = pB[(k + r) * N + (tile_col + c)];
+      B_smem[ctx::b_blockmajor_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
     }
 
     __syncthreads();
 
-    // Each warp's A slice starts at warp_rank * per_warp_M * tileK
-    auto A_warp = A_smem + warp_rank * ctx::xtileM * ctx::tileK;
-    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::xtileN * sizeof(ctx::input_t));
+    // Each warp's A slice starts at warp_rank * a_warp_elems (block-major slice base).
+    auto A_warp = A_smem + warp_rank * ctx::a_warp_elems;
+    auto desc_b = vt::vx_make_smem_desc(B_smem, 0); // stride field unused under block-major
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     // RS: A from registers, B from smem (NRC <= 16 only)
@@ -66,7 +66,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both from smem
-    auto desc_a = vt::vx_make_smem_desc(A_warp, ctx::tileK * sizeof(ctx::input_t));
+    auto desc_a = vt::vx_make_smem_desc(A_warp, 0); // stride field unused under block-major
     ctx::wgmma_sync(fragC, desc_a, desc_b, fragC);
   #endif
 

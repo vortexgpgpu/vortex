@@ -45,8 +45,7 @@ endif
 ifneq ($(filter -DEXT_TCU_ENABLE, $(XCONFIGS)),)
 	CXXFLAGS += -I$(SRC_DIR)/tcu
 	SRCS += $(SRC_DIR)/tcu/tcu_unit.cpp
-	SRCS += $(SRC_DIR)/tcu/tcu_tbuf_a.cpp
-	SRCS += $(SRC_DIR)/tcu/tcu_shared_b.cpp
+	SRCS += $(SRC_DIR)/tcu/tcu_tbuf.cpp
 endif
 
 # Add DXA extension sources

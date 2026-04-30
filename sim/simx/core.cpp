@@ -107,12 +107,12 @@ public:
     }
 
     // create local memory.
-    // TCU acquires its own LMEM ports — Q per-block TcuTbufA fetchers and
-    // 1 shared TcuSharedB fetcher, appended after the LSU ports.
+    // TCU acquires one LMEM port pair (TcuTbuf arbitrates abuf×Q + mbuf×Q
+    // + bbuf onto it internally), appended after the LSU ports.
     snprintf(sname, 100, "%s-lmem", name.c_str());
     uint32_t lmem_num_reqs = LSU_NUM_REQS;
   #ifdef EXT_TCU_ENABLE
-    lmem_num_reqs += NUM_TCU_BLOCKS + 1;
+    lmem_num_reqs += 1;
   #endif
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << LMEM_LOG_SIZE),
@@ -209,19 +209,13 @@ public:
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
     func_units_.at((int)FUType::TCU) = tcu_unit_;
 
-    // Bind per-block TcuTbufA and the shared TcuSharedB to dedicated LMEM
-    // ports appended after the LSU ports.
+    // Bind the TCU tile-buffer subsystem (TcuTbuf) to its dedicated LMEM
+    // port pair, appended after the LSU ports.
     {
-      auto& tbuf_a = tcu_unit_->tbuf_a();
-      for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
-        uint32_t port = LSU_NUM_REQS + b;
-        tbuf_a.at(b)->lmem_req_out.bind(&local_mem_->Inputs.at(port));
-        local_mem_->Outputs.at(port).bind(&tbuf_a.at(b)->lmem_rsp_in);
-      }
-      auto& shared_b = tcu_unit_->shared_b();
-      uint32_t port = LSU_NUM_REQS + NUM_TCU_BLOCKS;
-      shared_b->lmem_req_out.bind(&local_mem_->Inputs.at(port));
-      local_mem_->Outputs.at(port).bind(&shared_b->lmem_rsp_in);
+      auto& tbuf = tcu_unit_->tbuf();
+      uint32_t port = LSU_NUM_REQS;
+      tbuf->lmem_req_out.bind(&local_mem_->Inputs.at(port));
+      local_mem_->Outputs.at(port).bind(&tbuf->lmem_rsp_in);
     }
   #endif
 
