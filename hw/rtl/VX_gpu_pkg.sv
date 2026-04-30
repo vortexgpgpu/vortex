@@ -922,12 +922,13 @@ package VX_gpu_pkg;
     // TCU lmem tag and flags widths for DMA arb.
     localparam TCU_LMEM_FLAGS_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
-    localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(`NUM_TCU_BLOCKS, 1);
+    localparam TCU_LMEM_NUM_MASTERS = (`TCU_SPARSE_ENABLED ? (2 * `NUM_TCU_BLOCKS + 1) : (`NUM_TCU_BLOCKS + 1));
+    localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
     // LMEM DMA port parameters.
     localparam LMEM_DMA_EN         = (`EXT_DXA_ENABLED + `TCU_WGMMA_ENABLED) != 0;
     localparam LMEM_DMA_DATA_SIZE  = `LMEM_NUM_BANKS * LSU_WORD_SIZE;
-    localparam LMEM_DMA_ADDR_WIDTH = `MEM_ADDR_WIDTH - `CLOG2(`LMEM_NUM_BANKS * LSU_WORD_SIZE);
+    localparam LMEM_DMA_ADDR_WIDTH = `LMEM_LOG_SIZE - `CLOG2(`LMEM_NUM_BANKS * LSU_WORD_SIZE);
     localparam LMEM_DMA_FLAGS_W    = `MAX(DXA_LMEM_FLAGS_W, TCU_LMEM_FLAGS_W);
     localparam LMEM_DMA_DXA_IDX    = 0;
     localparam LMEM_DMA_TCU_IDX    = LMEM_DMA_DXA_IDX + `EXT_DXA_ENABLED;

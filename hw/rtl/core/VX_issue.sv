@@ -62,7 +62,7 @@ module VX_issue import VX_gpu_pkg::*; #(
         assign slice_decode_if.data  = decode_if.data;
         assign decode_ready_in[issue_id] = slice_decode_if.ready;
 
-        assign decode_if.ibuf_pop[issue_id * PER_ISSUE_WARPS +: PER_ISSUE_WARPS] = slice_decode_if.ibuf_pop;
+        assign decode_if.ibuf_pop[issue_id * PER_ISSUE_WARPS +: PER_ISSUE_WARPS] = slice_decode_if.ibuf_pop[PER_ISSUE_WARPS-1:0];
 
         VX_issue_slice #(
             .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, issue_id))),
@@ -76,9 +76,9 @@ module VX_issue import VX_gpu_pkg::*; #(
         `endif
             .decode_if    (slice_decode_if),
             .writeback_if (writeback_if[issue_id]),
-            .dispatch_if      (per_issue_dispatch_if),
-            .warp_issued      (issued_warps[issue_id]),
-            .warp_issued_wis  (issued_warp_wis[issue_id])
+            .dispatch_if  (per_issue_dispatch_if),
+            .warp_issued  (issued_warps[issue_id]),
+            .warp_issued_wis(issued_warp_wis[issue_id])
         );
 
         // Assign transposed dispatch_if
