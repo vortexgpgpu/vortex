@@ -54,7 +54,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     localparam LG_M = $clog2(TCU_M_STEPS);
     localparam LG_K = $clog2(TCU_K_STEPS);
 
+`ifdef TCU_SPARSE_ENABLE
     localparam LG_A_SB = $clog2(TCU_A_SUB_BLOCKS);
+`endif
     localparam LG_B_SB = $clog2(TCU_B_SUB_BLOCKS);
 
     `UNUSED_VAR ({clk, reset, start, advance, uop_idx})

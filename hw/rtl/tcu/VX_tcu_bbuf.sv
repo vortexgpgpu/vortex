@@ -111,6 +111,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam DESC_ADDR_W = BANK_ADDR_WIDTH + BANK_SEL_BITS;
     wire [DESC_ADDR_W-1:0]      desc_b_word_base = DESC_ADDR_W'(req_desc_b[15:0] >> WORD_SIZE_LOG2);
     wire [BANK_ADDR_WIDTH-1:0]  desc_b_row_base  = desc_b_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
+    `UNUSED_VAR (req_desc_b[`XLEN-1:16])
     if (BANK_SEL_BITS > 0) begin : g_addr_lsb_unused
         `UNUSED_VAR (desc_b_word_base[BANK_SEL_BITS-1:0])
     end

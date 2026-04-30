@@ -82,11 +82,11 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef TCU_SPARSE_ENABLE
     localparam NUM_LMEM_MASTERS = 2 * BLOCK_SIZE + 1;
+    localparam MBUF_BASE_IDX    = BLOCK_SIZE + 1;
 `else
     localparam NUM_LMEM_MASTERS = BLOCK_SIZE + 1;
 `endif
     localparam BBUF_IDX         = BLOCK_SIZE;
-    localparam MBUF_BASE_IDX    = BLOCK_SIZE + 1;
 
     // -----------------------------------------------------------------------
     // LMEM master fan-in interface array (BLOCK_SIZE abufs + 1 bbuf)
