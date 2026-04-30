@@ -16,31 +16,30 @@
 `ifdef TCU_WGMMA_ENABLE
 
 //
-// WGMMA tile stream-buffer (single-slot cache).
+// TB-level WGMMA tile-buffer subsystem.
 //
-// Thin wrapper that computes shared parameters and connects:
-//   VX_tcu_tbuf_fetch  — slot management, LMEM fetch FSM, data capture
-//   VX_tcu_tbuf_gather — format-aware A/B/meta operand gather
+// Owns the entire tile-buffer + LMEM-port surface for a single TCU:
+//   - BLOCK_SIZE × VX_tcu_abuf  (per-block A buffers, k-stripe storage)
+//   - 1        × VX_tcu_bbuf   (TB-shared B buffer, 1 bank-row)
+//   - BLOCK_SIZE × VX_tcu_mbuf (per-block sparse meta, SS sparse only)
+//   - 1        × VX_mem_arb    (LMEM masters → 1 LMEM port)
 //
-// Prefetches A, B, and optional sparse metadata tiles from local memory
-// using a dedicated bank-parallel read port that bypasses the LSU crossbar.
-// All LMEM banks are read simultaneously each cycle, yielding NUM_BANKS
-// words/cycle throughput.
+// LMEM master count: BLOCK_SIZE (abufs) + 1 (bbuf) + BLOCK_SIZE (mbufs, sparse only).
 //
-// A single shared slot is allocated on the first uop of a new tile
-// (step_m==step_n==step_k==0) and evicted implicitly when re-allocated
-// for a different tile or on the next outer-loop iteration.
+// Inputs are Q-replicated execute-side observations (one per block).
+// Outputs are Q-replicated operand buses; rs2 (B) is broadcast since
+// bbuf serves all Q tcu_cores from one shared storage.
 //
-// Assumptions:
-//   - Tile base addresses (descriptor[15:0]) are bank-aligned.
-//   - Tiles are stored row-major and packed (ldm == tile column count).
-//   - For WGMMA_SP, step_k counts in half-K units (same as WMMA_SP).
+// Lock-step Q invariant (per docs/proposals/wgmma_simx_v3_proposal §4.4):
+// all Q blocks dispatch the same uop in the same cycle, so block 0's
+// (desc_b, step_k, step_n, cd_nregs) is representative for the TB.
 //
 
 module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID     = "",
     parameter         NUM_BANKS       = 4,
-    parameter         BANK_ADDR_WIDTH = 12
+    parameter         BANK_ADDR_WIDTH = 12,
+    parameter         BLOCK_SIZE      = `NUM_TCU_BLOCKS
 ) (
     input  wire clk,
     input  wire reset,
@@ -51,139 +50,245 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire [PERF_CTR_BITS-1:0] lmem_reads,
 `endif
 
-    // Execute-side observation
-    input  wire [NW_WIDTH-1:0]      req_wid,
-    input  wire                     req_valid,
-    input  wire                     req_fire,   // execute consumed current uop
-    input  wire                     req_is_sparse,
-    input  wire [3:0]               req_step_m,
-    input  wire [3:0]               req_step_n,
-    input  wire [3:0]               req_step_k,
-    input  wire [3:0]               req_fmt_s,
-    input  wire [1:0]               req_cd_nregs,
-    input  wire [`XLEN-1:0]         req_desc_a,
-    input  wire [`XLEN-1:0]         req_desc_b,
-    input  wire                     req_a_is_smem,
-
-    // LMEM read port
-    VX_mem_bus_if.master            tcu_lmem_if,
-
-    // Tile buffer outputs
-    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
-    output wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data,
+    // Per-block uop observation (sized BLOCK_SIZE; req_valid pre-gated to WGMMA)
+    input  wire [BLOCK_SIZE-1:0]                     req_valid,
+    input  wire [BLOCK_SIZE-1:0][NW_WIDTH-1:0]       req_wid,
+    input  wire [BLOCK_SIZE-1:0][3:0]                req_step_m,
+    input  wire [BLOCK_SIZE-1:0][3:0]                req_step_k,
+    input  wire [BLOCK_SIZE-1:0][3:0]                req_step_n,
+    input  wire [BLOCK_SIZE-1:0][1:0]                req_cd_nregs,
+    input  wire [BLOCK_SIZE-1:0][`XLEN-1:0]          req_desc_a,
+    input  wire [BLOCK_SIZE-1:0][`XLEN-1:0]          req_desc_b,
+    input  wire [BLOCK_SIZE-1:0]                     req_a_is_smem,
 `ifdef TCU_SPARSE_ENABLE
-    output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
+    input  wire [BLOCK_SIZE-1:0]                     req_is_sparse,
+    input  wire [BLOCK_SIZE-1:0][3:0]                req_fmt_s,
 `endif
-    output wire                     tbuf_ready
+
+    // Single LMEM master out (post-arb)
+    VX_mem_bus_if.master                             tcu_lmem_if,
+
+    // Per-block operand outputs (rs2 is broadcast — bbuf is shared)
+    output wire [BLOCK_SIZE-1:0][TCU_BLOCK_CAP-1:0][`XLEN-1:0]    tbuf_rs1_data,
+    output wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data,
+`ifdef TCU_SPARSE_ENABLE
+    output wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0]    tbuf_sp_meta,
+`endif
+    output wire [BLOCK_SIZE-1:0]                                  tbuf_ready
 );
-
-    // -----------------------------------------------------------------------
-    // Derived tile-dimension and buffer-size constants
-    // -----------------------------------------------------------------------
-
-    localparam TILE_M = TCU_WG_TILE_M;
-    localparam TILE_K = TCU_WG_TILE_K;
-    localparam TILE_N = TCU_WG_TILE_N;
-
-    // Buffer sizes in 32-bit words (format-agnostic; sub-word packing done in gather).
-    localparam A_TOTAL = TILE_M * TILE_K;
-    localparam B_TOTAL = TILE_K * TILE_N;
+    `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR (req_step_m)  // bbuf doesn't use; abufs use per-block
+    // (req_step_n / req_cd_nregs are bbuf-only inputs; abufs ignore them)
 
 `ifdef TCU_SPARSE_ENABLE
-    // Metadata buffer: worst-case format is int8 (I_RATIO=4).
-    localparam SP_I_RATIO_8B     = 4;
-    localparam META_ROW_BITS_8B  = TCU_TC_K * 2 * SP_I_RATIO_8B;
-    localparam META_STRIDE_8B    = (TCU_TC_M * META_ROW_BITS_8B + 31) / 32;
-    localparam WG_HALF_K         = TCU_WG_K_STEPS / 2;
-    localparam WG_META_BANKS     = TCU_WG_M_STEPS * WG_HALF_K;
-    localparam META_TOTAL_MAX    = WG_META_BANKS * META_STRIDE_8B;
+    localparam NUM_LMEM_MASTERS = 2 * BLOCK_SIZE + 1;
+`else
+    localparam NUM_LMEM_MASTERS = BLOCK_SIZE + 1;
 `endif
+    localparam BBUF_IDX         = BLOCK_SIZE;
+    localparam MBUF_BASE_IDX    = BLOCK_SIZE + 1;
 
     // -----------------------------------------------------------------------
-    // Fetch engine
+    // LMEM master fan-in interface array (BLOCK_SIZE abufs + 1 bbuf)
     // -----------------------------------------------------------------------
 
-    wire                     tbuf_hit;
-    wire [A_TOTAL-1:0][31:0] hit_a_buf;
-    wire [B_TOTAL-1:0][31:0] hit_b_buf;
-`ifdef TCU_SPARSE_ENABLE
-    wire                     hit_is_sparse;
-    wire [META_TOTAL_MAX-1:0][31:0] hit_meta_buf;
-    wire [3:0]               hit_meta_stride;
+    VX_mem_bus_if #(
+        .DATA_SIZE  (NUM_BANKS * (`XLEN / 8)),
+        .TAG_WIDTH  (TCU_LMEM_BLK_TAG_W),
+        .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
+        .ADDR_WIDTH (BANK_ADDR_WIDTH)
+    ) lmem_masters[NUM_LMEM_MASTERS]();
+
+    // -----------------------------------------------------------------------
+    // Per-block abufs
+    // -----------------------------------------------------------------------
+
+    wire [BLOCK_SIZE-1:0][TCU_BLOCK_CAP-1:0][`XLEN-1:0] abuf_rs1_data_w;
+    wire [BLOCK_SIZE-1:0]                               abuf_ready_w;
+
+`ifdef PERF_ENABLE
+    wire [BLOCK_SIZE-1:0][PERF_CTR_BITS-1:0] abuf_stalls_w;
+    wire [BLOCK_SIZE-1:0][PERF_CTR_BITS-1:0] abuf_lmem_reads_w;
 `endif
 
-    VX_tcu_tbuf_fetch #(
-        .INSTANCE_ID    (`SFORMATF(("%s-fetch", INSTANCE_ID))),
+    for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_abufs
+        VX_tcu_abuf #(
+            .INSTANCE_ID    (`SFORMATF(("%s-abuf%0d", INSTANCE_ID, b))),
+            .NUM_BANKS      (NUM_BANKS),
+            .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH)
+        ) abuf (
+            .clk            (clk),
+            .reset          (reset),
+        `ifdef PERF_ENABLE
+            .abuf_stalls    (abuf_stalls_w[b]),
+            .lmem_reads     (abuf_lmem_reads_w[b]),
+        `endif
+            .req_wid        (req_wid[b]),
+            .req_valid      (req_valid[b]),
+            .req_step_m     (req_step_m[b]),
+            .req_step_n     (req_step_n[b]),
+            .req_step_k     (req_step_k[b]),
+            .req_desc_a     (req_desc_a[b]),
+            .req_a_is_smem  (req_a_is_smem[b]),
+            .tcu_lmem_if    (lmem_masters[b]),
+            .abuf_ready     (abuf_ready_w[b]),
+            .abuf_rs1_data  (abuf_rs1_data_w[b])
+        );
+    end
+
+    // -----------------------------------------------------------------------
+    // TB-shared bbuf (block 0 representative under lockstep)
+    // -----------------------------------------------------------------------
+
+    wire                                       bbuf_ready_w;
+    wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0]     bbuf_rs2_data_w;
+
+`ifdef PERF_ENABLE
+    wire [PERF_CTR_BITS-1:0] bbuf_stalls_w;
+    wire [PERF_CTR_BITS-1:0] bbuf_lmem_reads_w;
+`endif
+
+    VX_tcu_bbuf #(
+        .INSTANCE_ID    (`SFORMATF(("%s-bbuf", INSTANCE_ID))),
         .NUM_BANKS      (NUM_BANKS),
-        .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH),
-        .A_TOTAL        (A_TOTAL),
-        .B_TOTAL        (B_TOTAL)
-    `ifdef TCU_SPARSE_ENABLE
-       ,.META_TOTAL_MAX (META_TOTAL_MAX)
-    `endif
-    ) tbuf_fetch (
+        .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH)
+    ) bbuf (
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
-        .tbuf_stalls    (tbuf_stalls),
-        .tbuf_cache_hits(tbuf_cache_hits),
-        .lmem_reads     (lmem_reads),
+        .bbuf_stalls    (bbuf_stalls_w),
+        .lmem_reads     (bbuf_lmem_reads_w),
     `endif
-        .req_wid        (req_wid),
-        .req_valid      (req_valid),
-        .req_fire       (req_fire),
-        .req_is_sparse  (req_is_sparse),
-        .req_step_m     (req_step_m),
-        .req_step_n     (req_step_n),
-        .req_step_k     (req_step_k),
-        .req_fmt_s      (req_fmt_s),
-        .req_desc_a     (req_desc_a),
-        .req_desc_b     (req_desc_b),
-        .req_a_is_smem(req_a_is_smem),
-        .tcu_lmem_if    (tcu_lmem_if),
-        .tbuf_hit       (tbuf_hit),
-        .tbuf_ready     (tbuf_ready),
-        .hit_a_buf      (hit_a_buf),
-        .hit_b_buf      (hit_b_buf)
-    `ifdef TCU_SPARSE_ENABLE
-       ,.hit_is_sparse  (hit_is_sparse),
-        .hit_meta_buf   (hit_meta_buf),
-        .hit_meta_stride(hit_meta_stride)
-    `endif
+        .req_valid      (req_valid[0]),
+        .req_step_m     (req_step_m[0]),
+        .req_step_k     (req_step_k[0]),
+        .req_step_n     (req_step_n[0]),
+        .req_cd_nregs   (req_cd_nregs[0]),
+        .req_desc_b     (req_desc_b[0]),
+        .tcu_lmem_if    (lmem_masters[BBUF_IDX]),
+        .bbuf_ready     (bbuf_ready_w),
+        .bbuf_rs2_data  (bbuf_rs2_data_w)
     );
 
+    // Higher blocks' (req_step_n, req_cd_nregs, req_desc_b) are equal to
+    // block 0's under lockstep, but explicitly mark to suppress UNUSEDSIGNAL.
+    if (BLOCK_SIZE > 1) begin : g_bbuf_unused_per_block
+        for (genvar b = 1; b < BLOCK_SIZE; ++b) begin : g_b
+            `UNUSED_VAR (req_step_n[b])
+            `UNUSED_VAR (req_cd_nregs[b])
+            `UNUSED_VAR (req_desc_b[b])
+        end
+    end
+
     // -----------------------------------------------------------------------
-    // Gather (pure combinational)
+    // Per-block sparse meta buffer (SS sparse only)
     // -----------------------------------------------------------------------
 
-    VX_tcu_tbuf_gather #(
-        .INSTANCE_ID    (`SFORMATF(("%s-gather", INSTANCE_ID))),
-        .A_TOTAL        (A_TOTAL),
-        .B_TOTAL        (B_TOTAL)
-    `ifdef TCU_SPARSE_ENABLE
-       ,.META_TOTAL_MAX (META_TOTAL_MAX)
-    `endif
-    ) tbuf_gather (
-        .req_step_m     (req_step_m),
-        .req_step_n     (req_step_n),
-        .req_step_k     (req_step_k),
-        .req_fmt_s      (req_fmt_s),
-        .req_cd_nregs   (req_cd_nregs),
-        .a_buf          (hit_a_buf),
-        .b_buf          (hit_b_buf),
-    `ifdef TCU_SPARSE_ENABLE
-        .is_sparse      (hit_is_sparse),
-        .meta_buf       (hit_meta_buf),
-        .meta_stride    (hit_meta_stride),
-    `endif
-        .tbuf_rs1_data  (tbuf_rs1_data),
-        .tbuf_rs2_data  (tbuf_rs2_data)
-    `ifdef TCU_SPARSE_ENABLE
-       ,.tbuf_sp_meta   (tbuf_sp_meta)
-    `endif
+`ifdef TCU_SPARSE_ENABLE
+    wire [BLOCK_SIZE-1:0]                            mbuf_ready_w;
+    wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0] mbuf_sp_meta_w;
+
+  `ifdef PERF_ENABLE
+    wire [BLOCK_SIZE-1:0][PERF_CTR_BITS-1:0] mbuf_stalls_w;
+    wire [BLOCK_SIZE-1:0][PERF_CTR_BITS-1:0] mbuf_lmem_reads_w;
+  `endif
+
+    for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_mbufs
+        VX_tcu_mbuf #(
+            .INSTANCE_ID    (`SFORMATF(("%s-mbuf%0d", INSTANCE_ID, b))),
+            .NUM_BANKS      (NUM_BANKS),
+            .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH)
+        ) mbuf (
+            .clk            (clk),
+            .reset          (reset),
+        `ifdef PERF_ENABLE
+            .mbuf_stalls    (mbuf_stalls_w[b]),
+            .lmem_reads     (mbuf_lmem_reads_w[b]),
+        `endif
+            .req_valid      (req_valid[b]),
+            .req_is_sparse  (req_is_sparse[b]),
+            .req_a_is_smem  (req_a_is_smem[b]),
+            .req_step_m     (req_step_m[b]),
+            .req_step_n     (req_step_n[b]),
+            .req_step_k     (req_step_k[b]),
+            .req_fmt_s      (req_fmt_s[b]),
+            .req_desc_a     (req_desc_a[b]),
+            .tcu_lmem_if    (lmem_masters[MBUF_BASE_IDX + b]),
+            .mbuf_ready     (mbuf_ready_w[b]),
+            .mbuf_sp_meta   (mbuf_sp_meta_w[b])
+        );
+    end
+`endif
+
+    // -----------------------------------------------------------------------
+    // LMEM port arbitration (NUM_LMEM_MASTERS → 1)
+    // -----------------------------------------------------------------------
+
+    VX_mem_bus_if #(
+        .DATA_SIZE  (NUM_BANKS * (`XLEN / 8)),
+        .TAG_WIDTH  (TCU_LMEM_TAG_W),
+        .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
+        .ADDR_WIDTH (BANK_ADDR_WIDTH)
+    ) lmem_arb_out_if[1]();
+
+    VX_mem_arb #(
+        .NUM_INPUTS  (NUM_LMEM_MASTERS),
+        .NUM_OUTPUTS (1),
+        .DATA_SIZE   (NUM_BANKS * (`XLEN / 8)),
+        .TAG_WIDTH   (TCU_LMEM_BLK_TAG_W),
+        .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
+        .ADDR_WIDTH  (BANK_ADDR_WIDTH),
+        .ARBITER     ("P")
+    ) lmem_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (lmem_masters),
+        .bus_out_if (lmem_arb_out_if)
     );
 
-    `UNUSED_VAR (tbuf_hit)  // consumed implicitly through tbuf_ready
+    `ASSIGN_VX_MEM_BUS_IF (tcu_lmem_if, lmem_arb_out_if[0]);
+
+    // -----------------------------------------------------------------------
+    // Per-block operand outputs
+    //   rs1_data: pass-through from each block's abuf
+    //   rs2_data: broadcast from shared bbuf
+    //   ready:   abuf_ready[b] AND bbuf_ready
+    // -----------------------------------------------------------------------
+
+    for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_outs
+        assign tbuf_rs1_data[b] = abuf_rs1_data_w[b];
+        assign tbuf_rs2_data[b] = bbuf_rs2_data_w;
+    `ifdef TCU_SPARSE_ENABLE
+        assign tbuf_sp_meta[b]  = mbuf_sp_meta_w[b];
+        assign tbuf_ready[b]    = abuf_ready_w[b] && bbuf_ready_w && mbuf_ready_w[b];
+    `else
+        assign tbuf_ready[b]    = abuf_ready_w[b] && bbuf_ready_w;
+    `endif
+    end
+
+    // -----------------------------------------------------------------------
+    // Performance counters (aggregate)
+    // -----------------------------------------------------------------------
+
+`ifdef PERF_ENABLE
+    logic [PERF_CTR_BITS-1:0] stalls_sum;
+    logic [PERF_CTR_BITS-1:0] reads_sum;
+    always_comb begin
+        stalls_sum = bbuf_stalls_w;
+        reads_sum  = bbuf_lmem_reads_w;
+        for (int bi = 0; bi < BLOCK_SIZE; bi++) begin
+            stalls_sum += abuf_stalls_w[bi];
+            reads_sum  += abuf_lmem_reads_w[bi];
+        `ifdef TCU_SPARSE_ENABLE
+            stalls_sum += mbuf_stalls_w[bi];
+            reads_sum  += mbuf_lmem_reads_w[bi];
+        `endif
+        end
+    end
+    assign tbuf_stalls     = stalls_sum;
+    assign tbuf_cache_hits = '0;  // bbuf reuse counted as no-stall, no separate hit metric
+    assign lmem_reads      = reads_sum;
+`endif
 
 endmodule
 

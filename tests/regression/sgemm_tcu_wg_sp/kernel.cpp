@@ -52,13 +52,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     uint32_t k_tile = k / ctx::tileK;
 
-    // Cooperative load: compressed A and metadata for all warps
+    // Cooperative load: compressed A (block-major) and metadata (flat) for all warps
     for (uint32_t w = 0; w < num_warps; ++w) {
       auto A_smem_w = reinterpret_cast<ctx::input_t*>(smem_base + w * per_warp_section);
       for (uint32_t i = tid; i < smem_a_elems; i += num_threads) {
         uint32_t r = i / (ctx::tileK / 2);
         uint32_t c = i % (ctx::tileK / 2);
-        A_smem_w[r * (ctx::tileK / 2) + c] = pA[(tile_row + w * ctx::xtileM + r) * a_sp_stride + (k / 2 + c)];
+        A_smem_w[ctx::a_sp_blockmajor_idx(r, c)] =
+            pA[(tile_row + w * ctx::xtileM + r) * a_sp_stride + (k / 2 + c)];
       }
 
       uint32_t tile_row_idx_w = blockIdx.y * num_warps + w;
@@ -69,18 +70,18 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
       }
     }
 
-    // Cooperative load: dense B [k..k+tileK, tile_col..tile_col+xtileN)
+    // Cooperative load: dense B [k..k+tileK, tile_col..tile_col+xtileN) — block-major
     for (uint32_t i = tid; i < smem_b_elems; i += num_threads) {
       uint32_t r = i / ctx::xtileN;
       uint32_t c = i % ctx::xtileN;
-      B_smem[r * ctx::xtileN + c] = pB[(k + r) * N + (tile_col + c)];
+      B_smem[ctx::b_blockmajor_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
     }
 
     __syncthreads();
 
     // Each warp's A section in smem
     auto A_warp = reinterpret_cast<ctx::input_t*>(smem_base + warp_rank * per_warp_section);
-    auto desc_b = vt::vx_make_smem_desc(B_smem, ctx::xtileN * sizeof(ctx::input_t));
+    auto desc_b = vt::vx_make_smem_desc(B_smem, 0); // stride field unused under block-major
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
     // RS: A + sparse metadata from registers, B from smem (NRC <= 16 only)
@@ -91,7 +92,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both A and B from smem descriptors
-    auto desc_a = vt::vx_make_smem_desc(A_warp, (ctx::tileK / 2) * sizeof(ctx::input_t));
+    auto desc_a = vt::vx_make_smem_desc(A_warp, 0); // stride field unused under block-major
     ctx::wgmma_sync(fragC, desc_a, desc_b, fragC);
   #endif
 
