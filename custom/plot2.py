@@ -29,11 +29,12 @@ FEOP_PARAMS_RE = re.compile(
     r'XBAR_QUEUE_DEPTH\s*[:=]\s*(\d+)',
     re.IGNORECASE,
 )
+CONFIG_WARPS_RE = re.compile(r'\bCONFIGS:.*\bnum_warps=(\d+)\b', re.IGNORECASE)
 TESTBENCH_RUN_RE = re.compile(r'\b\./([A-Za-z0-9_.+-]+)\b')
 TESTBENCH_MAKE_RE = re.compile(r"/tests/(?:regression|opencl)/([^/'\s]+)")
 FLAGS_LINE_RE = re.compile(r'^\s*Flags:\s*(.+?)\s*$', re.IGNORECASE)
 TCU_TYPE_DEFINED_RE = re.compile(r'\b(TCU_TYPE_[A-Za-z0-9_]+)\b.*\bdefined\b', re.IGNORECASE)
-TCU_OP_TRACE_RE = re.compile(r'\btcu_op(?:_core)?\b', re.IGNORECASE)
+TCU_OP_DEFINED_RE = re.compile(r'^\s*TCU_OP\s+defined\s*$', re.IGNORECASE)
 BLUE_MARKER_HEX = "0x12345677"
 GREEN_MARKER_HEX = "0x12345676"
 MARKER_HEX = "0x12345678"
@@ -94,6 +95,10 @@ def extract_tick(line):
 
 def dedup_sorted(values):
     return sorted(set(values))
+
+
+def has_tcu_op_enabled(run_meta):
+    return "TCU_OP" in run_meta["flags"]
 
 
 def parse_issue_events(lines):
@@ -258,6 +263,7 @@ def parse_run_metadata(lines):
         "flags": [],
         "tcu_type": None,
         "testbench": None,
+        "warps": None,
     }
 
     def add_flag(flag_name):
@@ -282,7 +288,7 @@ def parse_run_metadata(lines):
                     upper_flag = flag_name.upper()
                     if upper_flag.startswith("TCU_TYPE_") and meta["tcu_type"] is None:
                         meta["tcu_type"] = upper_flag
-                    else:
+                    elif upper_flag != "TCU_OP":
                         add_flag(upper_flag)
             continue
 
@@ -293,8 +299,13 @@ def parse_run_metadata(lines):
         if m_tcu_type:
             meta["tcu_type"] = m_tcu_type.group(1).upper()
 
-        if TCU_OP_TRACE_RE.search(line):
+        if TCU_OP_DEFINED_RE.search(line):
             add_flag("TCU_OP")
+
+        m_warps = CONFIG_WARPS_RE.search(line)
+        if m_warps and meta["warps"] is None:
+            meta["warps"] = int(m_warps.group(1))
+            continue
 
         m_a = MATRIX_A_RE.search(line)
         if m_a:
@@ -548,6 +559,7 @@ def write_stats_file(log_path, result, metrics, run_meta, perf_info, xbar_stall_
         title = format_run_details(run_meta)
         flags_text = format_flags(run_meta)
         feop_params = format_feop_params(run_meta)
+        arch_params = format_arch_params(run_meta)
         perf_text = format_perf_class(perf_info)
         if testbench_text:
             f.write(f"{testbench_text}\n")
@@ -557,9 +569,11 @@ def write_stats_file(log_path, result, metrics, run_meta, perf_info, xbar_stall_
             f.write(f"{flags_text}\n")
         if feop_params:
             f.write(f"{feop_params}\n")
+        if arch_params:
+            f.write(f"{arch_params}\n")
         if perf_text:
             f.write(f"{perf_text}\n")
-        if testbench_text or title or flags_text or feop_params or perf_text:
+        if testbench_text or title or flags_text or feop_params or arch_params or perf_text:
             f.write("\n")
         f.write(f"{result['status']}\n")
         if result["status"] != "PASS":
@@ -595,7 +609,6 @@ def write_stats_file(log_path, result, metrics, run_meta, perf_info, xbar_stall_
             for line in perf1_lines:
                 f.write(f"{line}\n")
             f.write("\n")
-        f.write("ROI VARIABLES:\n")
         for line in format_roi_variables(metrics, run_meta):
             f.write(f"{line}\n")
 
@@ -635,6 +648,12 @@ def format_feop_params(run_meta):
         f"BLOCK_N={run_meta['block_n']}, "
         f"XBAR_QUEUE_DEPTH={run_meta['queue_depth']}"
     )
+
+
+def format_arch_params(run_meta):
+    if run_meta["warps"] is None:
+        return ""
+    return f"Warps: {run_meta['warps']}"
 
 
 def format_flags(run_meta):
@@ -688,35 +707,9 @@ def format_roi_variables(metrics, run_meta):
         value = metrics[key]
         return "N/A" if value is None else str(value)
 
-    dxa_metric_keys = [
-        "dxa_cycles_a",
-        "dxa_cycles_b",
-        "dxa_cycles_c",
+    lines = [
+        f"TCU cycles (from first TCU issue to last TCU commit): {metric_text('tcu_cycles')}"
     ]
-    lines = [f"TCU cycles: {metric_text('tcu_cycles')}"]
-    lines.append(f"DXA cycles A: {metric_text('dxa_cycles_a')}")
-    lines.append(f"DXA cycles B: {metric_text('dxa_cycles_b')}")
-    lines.append(f"DXA cycles C: {metric_text('dxa_cycles_c')}")
-
-    sparsity_type = run_meta["sparsity_type"]
-    if sparsity_type is not None and sparsity_type >= 1:
-        dxa_metric_keys.append("dxa_cycles_a_bitmap")
-        dxa_metric_keys.append("dxa_cycles_b_bitmap")
-        lines.append(f"DXA cycles A bitmap: {metric_text('dxa_cycles_a_bitmap')}")
-        lines.append(f"DXA cycles B bitmap: {metric_text('dxa_cycles_b_bitmap')}")
-
-    if sparsity_type is None:
-        if metrics["dxa_cycles_a_bitmap"] is not None:
-            dxa_metric_keys.append("dxa_cycles_a_bitmap")
-            lines.append(f"DXA cycles A bitmap: {metric_text('dxa_cycles_a_bitmap')}")
-        if metrics["dxa_cycles_b_bitmap"] is not None:
-            dxa_metric_keys.append("dxa_cycles_b_bitmap")
-            lines.append(f"DXA cycles B bitmap: {metric_text('dxa_cycles_b_bitmap')}")
-
-    dxa_total = None
-    if all(metrics[key] is not None for key in dxa_metric_keys):
-        dxa_total = sum(metrics[key] for key in dxa_metric_keys)
-    lines.append(f"DXA cycles total: {'N/A' if dxa_total is None else dxa_total}")
 
     return lines
 
@@ -856,8 +849,9 @@ def main():
     parser.add_argument(
         "--tcu-op-type",
         type=lambda s: int(s, 0),
-        default=0x3,
-        help="Filter TCU issue events by op_type (hex or decimal). Default: 0x3 (TCU MMA_OP)."
+        default=None,
+        help="Filter TCU issue events by op_type (hex or decimal). "
+             "Default: 0x3 when the log says 'TCU_OP defined', otherwise no op_type filter."
     )
     parser.add_argument(
         "--feop-pattern",
@@ -905,13 +899,26 @@ def main():
     run_meta = parse_run_metadata(lines)
     perf_info = parse_perf_info(lines)
 
+    tcu_op_enabled = has_tcu_op_enabled(run_meta)
+    tcu_op_type = args.tcu_op_type
+    if tcu_op_type is None and tcu_op_enabled:
+        tcu_op_type = 0x3
+
     # Issue events (TCU + all scoreboard issues)
-    tcu_issue_ticks = parse_pattern_ticks(lines, ["Issuing TCU MMA_OP"])
+    if tcu_op_enabled:
+        tcu_issue_ticks = parse_pattern_ticks(lines, ["Issuing TCU MMA_OP"])
+    else:
+        tcu_issue_ticks = parse_pattern_ticks(lines, [
+            "Issuing TCU u-op",
+            "Issuing TCU MMA_OP",
+        ])
     tcu_commit_ticks_all = parse_tcu_commit_ticks(lines)
     tcu_dispatch_flush_flags = parse_tcu_dispatch_flush_flags(lines)
     # Stage markers: only consider explicit MARKER writes (0x12345678).
     marker_events = parse_marker_events(lines, MARKER_RE)
-    _, dxa_issue_ticks, issue_events = parse_issue_events(lines)
+    parsed_tcu_issue_ticks, dxa_issue_ticks, issue_events = parse_issue_events(lines)
+    if not tcu_op_enabled:
+        tcu_issue_ticks.extend(parsed_tcu_issue_ticks)
     load_issue_ticks = parse_pattern_ticks(lines, ["Issuing load u-op"])
     store_issue_ticks = parse_pattern_ticks(lines, ["Issuing store u-op"])
     other_issue_ticks = parse_other_issue_ticks(lines)
@@ -929,7 +936,7 @@ def main():
             print(f"Auto-detected TCU ex_type={tcu_ex_type} (most frequent non-zero ex_type)")
 
     for tick, _, ex_type, op_type in issue_events:
-        if args.tcu_op_type is not None and op_type != args.tcu_op_type:
+        if tcu_op_type is not None and op_type != tcu_op_type:
             continue
         if tcu_ex_type is not None and ex_type != tcu_ex_type:
             continue
@@ -1431,18 +1438,19 @@ def main():
     if tcu_y_pos["tcu_commit"]:
         ax2.plot(tcu_x_pos["tcu_commit"], tcu_y_pos["tcu_commit"], marker="x", linestyle="none",
                  markersize=4, color="black", label="TCU op commit", zorder=7.5)
-        first = True
-        for y in dedup_sorted(tcu_y_pos["tcu_commit"]):
-            ax2.axhline(
-                y=y,
-                color="black",
-                linestyle="--",
-                alpha=0.35,
-                linewidth=0.8,
-                label="TCU commit tick" if first else None,
-                zorder=1.5,
-            )
-            first = False
+        if tcu_op_enabled:
+            first = True
+            for y in dedup_sorted(tcu_y_pos["tcu_commit"]):
+                ax2.axhline(
+                    y=y,
+                    color="black",
+                    linestyle="--",
+                    alpha=0.35,
+                    linewidth=0.8,
+                    label="TCU commit tick" if first else None,
+                    zorder=1.5,
+                )
+                first = False
     if c_accum_x_right:
         first = True
         for x in c_accum_x_right:

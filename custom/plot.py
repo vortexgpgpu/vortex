@@ -2,8 +2,6 @@
 import argparse
 import os
 import re
-import bisect
-import matplotlib.pyplot as plt
 
 TICK_RE = re.compile(r'^\s*\w+\s+(\d+):|^\s*(\d+):')
 ISSUE_RE = re.compile(
@@ -29,11 +27,12 @@ FEOP_PARAMS_RE = re.compile(
     r'XBAR_QUEUE_DEPTH\s*[:=]\s*(\d+)',
     re.IGNORECASE,
 )
+CONFIG_WARPS_RE = re.compile(r'\bCONFIGS:.*\bnum_warps=(\d+)\b', re.IGNORECASE)
 TESTBENCH_RUN_RE = re.compile(r'\b\./([A-Za-z0-9_.+-]+)\b')
 TESTBENCH_MAKE_RE = re.compile(r"/tests/(?:regression|opencl)/([^/'\s]+)")
 FLAGS_LINE_RE = re.compile(r'^\s*Flags:\s*(.+?)\s*$', re.IGNORECASE)
 TCU_TYPE_DEFINED_RE = re.compile(r'\b(TCU_TYPE_[A-Za-z0-9_]+)\b.*\bdefined\b', re.IGNORECASE)
-TCU_OP_TRACE_RE = re.compile(r'\btcu_op(?:_core)?\b', re.IGNORECASE)
+TCU_OP_DEFINED_RE = re.compile(r'^\s*TCU_OP\s+defined\s*$', re.IGNORECASE)
 BLUE_MARKER_HEX = "0x12345677"
 GREEN_MARKER_HEX = "0x12345676"
 MARKER_HEX = "0x12345678"
@@ -94,6 +93,10 @@ def extract_tick(line):
 
 def dedup_sorted(values):
     return sorted(set(values))
+
+
+def has_tcu_op_enabled(run_meta):
+    return "TCU_OP" in run_meta["flags"]
 
 
 def parse_issue_events(lines):
@@ -258,6 +261,7 @@ def parse_run_metadata(lines):
         "flags": [],
         "tcu_type": None,
         "testbench": None,
+        "warps": None,
     }
 
     def add_flag(flag_name):
@@ -282,7 +286,7 @@ def parse_run_metadata(lines):
                     upper_flag = flag_name.upper()
                     if upper_flag.startswith("TCU_TYPE_") and meta["tcu_type"] is None:
                         meta["tcu_type"] = upper_flag
-                    else:
+                    elif upper_flag != "TCU_OP":
                         add_flag(upper_flag)
             continue
 
@@ -293,8 +297,13 @@ def parse_run_metadata(lines):
         if m_tcu_type:
             meta["tcu_type"] = m_tcu_type.group(1).upper()
 
-        if TCU_OP_TRACE_RE.search(line):
+        if TCU_OP_DEFINED_RE.search(line):
             add_flag("TCU_OP")
+
+        m_warps = CONFIG_WARPS_RE.search(line)
+        if m_warps and meta["warps"] is None:
+            meta["warps"] = int(m_warps.group(1))
+            continue
 
         m_a = MATRIX_A_RE.search(line)
         if m_a:
@@ -548,6 +557,7 @@ def write_stats_file(log_path, result, metrics, run_meta, perf_info, xbar_stall_
         title = format_run_details(run_meta)
         flags_text = format_flags(run_meta)
         feop_params = format_feop_params(run_meta)
+        arch_params = format_arch_params(run_meta)
         perf_text = format_perf_class(perf_info)
         if testbench_text:
             f.write(f"{testbench_text}\n")
@@ -557,9 +567,11 @@ def write_stats_file(log_path, result, metrics, run_meta, perf_info, xbar_stall_
             f.write(f"{flags_text}\n")
         if feop_params:
             f.write(f"{feop_params}\n")
+        if arch_params:
+            f.write(f"{arch_params}\n")
         if perf_text:
             f.write(f"{perf_text}\n")
-        if testbench_text or title or flags_text or feop_params or perf_text:
+        if testbench_text or title or flags_text or feop_params or arch_params or perf_text:
             f.write("\n")
         f.write(f"{result['status']}\n")
         if result["status"] != "PASS":
@@ -595,7 +607,6 @@ def write_stats_file(log_path, result, metrics, run_meta, perf_info, xbar_stall_
             for line in perf1_lines:
                 f.write(f"{line}\n")
             f.write("\n")
-        f.write("ROI VARIABLES:\n")
         for line in format_roi_variables(metrics, run_meta):
             f.write(f"{line}\n")
 
@@ -635,6 +646,12 @@ def format_feop_params(run_meta):
         f"BLOCK_N={run_meta['block_n']}, "
         f"XBAR_QUEUE_DEPTH={run_meta['queue_depth']}"
     )
+
+
+def format_arch_params(run_meta):
+    if run_meta["warps"] is None:
+        return ""
+    return f"Warps: {run_meta['warps']}"
 
 
 def format_flags(run_meta):
@@ -688,35 +705,9 @@ def format_roi_variables(metrics, run_meta):
         value = metrics[key]
         return "N/A" if value is None else str(value)
 
-    dxa_metric_keys = [
-        "dxa_cycles_a",
-        "dxa_cycles_b",
-        "dxa_cycles_c",
+    lines = [
+        f"TCU cycles (from first TCU issue to last TCU commit): {metric_text('tcu_cycles')}"
     ]
-    lines = [f"TCU cycles: {metric_text('tcu_cycles')}"]
-    lines.append(f"DXA cycles A: {metric_text('dxa_cycles_a')}")
-    lines.append(f"DXA cycles B: {metric_text('dxa_cycles_b')}")
-    lines.append(f"DXA cycles C: {metric_text('dxa_cycles_c')}")
-
-    sparsity_type = run_meta["sparsity_type"]
-    if sparsity_type is not None and sparsity_type >= 1:
-        dxa_metric_keys.append("dxa_cycles_a_bitmap")
-        dxa_metric_keys.append("dxa_cycles_b_bitmap")
-        lines.append(f"DXA cycles A bitmap: {metric_text('dxa_cycles_a_bitmap')}")
-        lines.append(f"DXA cycles B bitmap: {metric_text('dxa_cycles_b_bitmap')}")
-
-    if sparsity_type is None:
-        if metrics["dxa_cycles_a_bitmap"] is not None:
-            dxa_metric_keys.append("dxa_cycles_a_bitmap")
-            lines.append(f"DXA cycles A bitmap: {metric_text('dxa_cycles_a_bitmap')}")
-        if metrics["dxa_cycles_b_bitmap"] is not None:
-            dxa_metric_keys.append("dxa_cycles_b_bitmap")
-            lines.append(f"DXA cycles B bitmap: {metric_text('dxa_cycles_b_bitmap')}")
-
-    dxa_total = None
-    if all(metrics[key] is not None for key in dxa_metric_keys):
-        dxa_total = sum(metrics[key] for key in dxa_metric_keys)
-    lines.append(f"DXA cycles total: {'N/A' if dxa_total is None else dxa_total}")
 
     return lines
 
@@ -836,17 +827,11 @@ def pair_tcu_issue_commit_ticks(issue_ticks, commit_ticks):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot TCU/FEOP/memory events from a Vortex run log."
+        description="Extract TCU/FEOP/memory stats from a Vortex run log."
     )
     parser.add_argument(
         "name",
         help="Log file name; searched in ../build, current dir, and subdirectories."
-    )
-    parser.add_argument(
-        "--output",
-        "-o",
-        help="Optional output image filename (e.g. ticks.png). "
-             "If omitted, saves to <logname>.png in the log directory."
     )
     parser.add_argument(
         "--tcu-ex-type",
@@ -857,7 +842,8 @@ def main():
         "--tcu-op-type",
         type=lambda s: int(s, 0),
         default=None,
-        help="Filter generic TCU issue events by op_type (hex or decimal). Default: no op_type filter."
+        help="Filter TCU issue events by op_type (hex or decimal). "
+             "Default: 0x3 when the log says 'TCU_OP defined', otherwise no op_type filter."
     )
     parser.add_argument(
         "--feop-pattern",
@@ -905,17 +891,26 @@ def main():
     run_meta = parse_run_metadata(lines)
     perf_info = parse_perf_info(lines)
 
+    tcu_op_enabled = has_tcu_op_enabled(run_meta)
+    tcu_op_type = args.tcu_op_type
+    if tcu_op_type is None and tcu_op_enabled:
+        tcu_op_type = 0x3
+
     # Issue events (TCU + all scoreboard issues)
-    tcu_issue_ticks = parse_pattern_ticks(lines, [
-        "Issuing TCU u-op",
-        "Issuing TCU MMA_OP",
-    ])
+    if tcu_op_enabled:
+        tcu_issue_ticks = parse_pattern_ticks(lines, ["Issuing TCU MMA_OP"])
+    else:
+        tcu_issue_ticks = parse_pattern_ticks(lines, [
+            "Issuing TCU u-op",
+            "Issuing TCU MMA_OP",
+        ])
     tcu_commit_ticks_all = parse_tcu_commit_ticks(lines)
     tcu_dispatch_flush_flags = parse_tcu_dispatch_flush_flags(lines)
     # Stage markers: only consider explicit MARKER writes (0x12345678).
     marker_events = parse_marker_events(lines, MARKER_RE)
     parsed_tcu_issue_ticks, dxa_issue_ticks, issue_events = parse_issue_events(lines)
-    tcu_issue_ticks.extend(parsed_tcu_issue_ticks)
+    if not tcu_op_enabled:
+        tcu_issue_ticks.extend(parsed_tcu_issue_ticks)
     load_issue_ticks = parse_pattern_ticks(lines, ["Issuing load u-op"])
     store_issue_ticks = parse_pattern_ticks(lines, ["Issuing store u-op"])
     other_issue_ticks = parse_other_issue_ticks(lines)
@@ -933,7 +928,7 @@ def main():
             print(f"Auto-detected TCU ex_type={tcu_ex_type} (most frequent non-zero ex_type)")
 
     for tick, _, ex_type, op_type in issue_events:
-        if args.tcu_op_type is not None and op_type != args.tcu_op_type:
+        if tcu_op_type is not None and op_type != tcu_op_type:
             continue
         if tcu_ex_type is not None and ex_type != tcu_ex_type:
             continue
@@ -1116,467 +1111,6 @@ def main():
         if pre_tcu_issue_tick is not None:
             marker_to_tcu_delta = pre_tcu_issue_tick - pre_tcu_marker_tick
 
-    # -------- Build unified x-axis from ALL issue events (left plot) --------
-    issue_events = []
-    for t in tcu_issue_ticks:
-        issue_events.append(("tcu", t))
-    for t in dxa_issue_ticks:
-        issue_events.append(("dxa", t))
-    for t in load_issue_ticks:
-        issue_events.append(("load", t))
-    for t in store_issue_ticks:
-        issue_events.append(("store", t))
-    for t in other_issue_ticks:
-        issue_events.append(("other", t))
-
-    issue_events.sort(key=lambda x: x[1])
-
-    x_pos = {"tcu": [], "dxa": [], "load": [], "store": [], "other": [], "feop": [], "rd_req": [], "wr_req": [], "rd_rsp": [], "wr_rsp": []}
-    y_pos = {"tcu": [], "dxa": [], "load": [], "store": [], "other": [], "feop": [], "rd_req": [], "wr_req": [], "rd_rsp": [], "wr_rsp": []}
-    issue_ticks_sorted = []
-
-    for idx, (kind, tick) in enumerate(issue_events):
-        issue_ticks_sorted.append(tick)
-        x_pos[kind].append(idx)
-        y_pos[kind].append(tick)
-
-    # Map FEOP/memory events onto issue index for the left plot
-    def map_to_issue_index(ticks):
-        mapped = []
-        if not issue_ticks_sorted:
-            return mapped
-        for t in ticks:
-            pos = bisect.bisect_left(issue_ticks_sorted, t)
-            candidates = []
-            if pos > 0:
-                candidates.append((abs(t - issue_ticks_sorted[pos - 1]), pos - 1))
-            if pos < len(issue_ticks_sorted):
-                candidates.append((abs(t - issue_ticks_sorted[pos]), pos))
-            best_idx = min(candidates, key=lambda c: c[0])[1]
-            mapped.append(best_idx)
-        return mapped
-
-    feop_x_left = map_to_issue_index(feop_ticks)
-    marker_x_left = map_to_issue_index(marker_ticks)
-    green_marker_x_left = map_to_issue_index(green_marker_ticks)
-    blue_marker_x_left = map_to_issue_index(blue_marker_ticks)
-    dxa_done_x_left = map_to_issue_index(dxa_done_ticks)
-    rd_req_x_left_g = map_to_issue_index(mem["rd_req_global"])
-    wr_req_x_left_g = map_to_issue_index(mem["wr_req_global"])
-    rd_rsp_x_left_g = map_to_issue_index(mem["rd_rsp_global"])
-    wr_rsp_x_left_g = map_to_issue_index(mem["wr_rsp_global"])
-    rd_req_x_left_l = map_to_issue_index(mem["rd_req_lmem"])
-    wr_req_x_left_l = map_to_issue_index(mem["wr_req_lmem"])
-    rd_rsp_x_left_l = map_to_issue_index(mem["rd_rsp_lmem"])
-    wr_rsp_x_left_l = map_to_issue_index(mem["wr_rsp_lmem"])
-
-    # For the right plot: unified TCU timeline, one index per unique tick
-    tcu_ticks = dedup_sorted(
-        tcu_issue_ticks
-        + feop_ticks
-        + mem_right["rd_req_global"]
-        + mem_right["wr_req_global"]
-        + mem_right["rd_rsp_global"]
-        + mem_right["wr_rsp_global"]
-        + mem_right["rd_req_lmem"]
-        + mem_right["wr_req_lmem"]
-        + mem_right["rd_rsp_lmem"]
-        + mem_right["wr_rsp_lmem"]
-        + tcu_commit_ticks
-        + marker_ticks
-        + green_marker_ticks
-        + c_accum_ticks
-        + xbar_stall_ticks
-    )
-    tcu_ticks = [t for t in tcu_ticks if t >= 4]
-    if first_tcu_tick is not None:
-        tcu_ticks = [t for t in tcu_ticks if t >= first_tcu_tick]
-    tcu_tick_to_idx = {t: i for i, t in enumerate(tcu_ticks)}
-    right_tick0 = first_tcu_tick if first_tcu_tick is not None else (min(tcu_ticks) if tcu_ticks else 0)
-
-    def rel_tick(t):
-        return t - right_tick0
-
-    # Detect bubble jumps on the right plot: consecutive unique-tick deltas > 2.
-    # Exclude jumps that include xbar queue stall ticks.
-    non_xbar_jump_annotations = []
-    if len(tcu_ticks) >= 2:
-        xbar_sorted = xbar_stall_ticks if xbar_stall_ticks else []
-        for i in range(1, len(tcu_ticks)):
-            prev_t = tcu_ticks[i - 1]
-            curr_t = tcu_ticks[i]
-            jump_ticks = curr_t - prev_t
-            if jump_ticks <= 2:
-                continue
-            lo = bisect.bisect_right(xbar_sorted, prev_t)
-            hi = bisect.bisect_right(xbar_sorted, curr_t)
-            has_xbar_stall_in_jump = hi > lo
-            if has_xbar_stall_in_jump:
-                continue
-            non_xbar_jump_annotations.append((i, rel_tick(curr_t), jump_ticks))
-
-    tcu_x_pos = {
-        "tcu": [],
-        "tcu_commit": [],
-        "feop": [],
-        "rd_req_g": [],
-        "wr_req_g": [],
-        "rd_rsp_g": [],
-        "wr_rsp_g": [],
-        "rd_req_l": [],
-        "wr_req_l": [],
-        "rd_rsp_l": [],
-        "wr_rsp_l": [],
-    }
-    tcu_y_pos = {
-        "tcu": [],
-        "tcu_commit": [],
-        "feop": [],
-        "rd_req_g": [],
-        "wr_req_g": [],
-        "rd_rsp_g": [],
-        "wr_rsp_g": [],
-        "rd_req_l": [],
-        "wr_req_l": [],
-        "rd_rsp_l": [],
-        "wr_rsp_l": [],
-    }
-    for t in tcu_issue_ticks:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["tcu"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["tcu"].append(rel_tick(t))
-    for t in tcu_commit_ticks:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["tcu_commit"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["tcu_commit"].append(rel_tick(t))
-    for t in feop_ticks:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["feop"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["feop"].append(rel_tick(t))
-    for t in mem_right["rd_req_global"]:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["rd_req_g"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["rd_req_g"].append(rel_tick(t))
-    for t in mem_right["wr_req_global"]:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["wr_req_g"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["wr_req_g"].append(rel_tick(t))
-    for t in mem_right["rd_rsp_global"]:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["rd_rsp_g"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["rd_rsp_g"].append(rel_tick(t))
-    for t in mem_right["wr_rsp_global"]:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["wr_rsp_g"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["wr_rsp_g"].append(rel_tick(t))
-    for t in mem_right["rd_req_lmem"]:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["rd_req_l"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["rd_req_l"].append(rel_tick(t))
-    for t in mem_right["wr_req_lmem"]:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["wr_req_l"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["wr_req_l"].append(rel_tick(t))
-    for t in mem_right["rd_rsp_lmem"]:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["rd_rsp_l"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["rd_rsp_l"].append(rel_tick(t))
-    for t in mem_right["wr_rsp_lmem"]:
-        if t in tcu_tick_to_idx:
-            tcu_x_pos["wr_rsp_l"].append(tcu_tick_to_idx[t])
-            tcu_y_pos["wr_rsp_l"].append(rel_tick(t))
-    c_accum_x_right = [tcu_tick_to_idx[t] for t in c_accum_ticks if t in tcu_tick_to_idx]
-    final_mma_complete_y = rel_tick(last_tcu_commit) if last_tcu_commit is not None else None
-    xbar_stall_points_right = [(tcu_tick_to_idx[t], rel_tick(t)) for t in xbar_stall_ticks if t in tcu_tick_to_idx]
-    lmem_rsp_matrix_vlines_right = []
-    for t, matrix_name in lmem_read_rsp_matrix_events_right:
-        if t not in tcu_tick_to_idx:
-            continue
-        lmem_rsp_matrix_vlines_right.append((tcu_tick_to_idx[t], matrix_name))
-
-    # ---------------------------
-    #      CREATE 2 SUBPLOTS
-    # ---------------------------
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))
-
-    # LEFT PLOT = unified timeline
-    if mem["wr_req_global"]:
-        ax1.plot(wr_req_x_left_g, mem["wr_req_global"], marker="v", linestyle="none",
-                 markersize=2, color="tab:blue", label="Mem write req (global)", zorder=8)
-    if mem["wr_rsp_global"]:
-        ax1.plot(wr_rsp_x_left_g, mem["wr_rsp_global"], marker="D", linestyle="none",
-                 markersize=2, color="tab:purple", label="Mem write rsp (global)", zorder=6)
-    if mem["wr_req_lmem"]:
-        ax1.plot(wr_req_x_left_l, mem["wr_req_lmem"], marker="v", linestyle="none",
-                 markersize=2, color="blue", label="Mem write req (lmem)", zorder=8)
-    if mem["wr_rsp_lmem"]:
-        ax1.plot(wr_rsp_x_left_l, mem["wr_rsp_lmem"], marker="D", linestyle="none",
-                 markersize=2, color="indigo", label="Mem write rsp (lmem)", zorder=6)
-    if feop_ticks:
-        ax1.plot(feop_x_left, feop_ticks, marker="o", linestyle="none",
-                 markersize=3, color="orange", label="FEOP work assigned", zorder=0.5)
-    if y_pos["other"]:
-        ax1.plot(x_pos["other"], y_pos["other"], marker=".", linestyle="none",
-                 markersize=1, color="gray", label="Issuing u-op", zorder=3)
-    if y_pos["load"]:
-        ax1.plot(x_pos["load"], y_pos["load"], marker=".", linestyle="none",
-                 markersize=2, color="red", label="Issuing load u-op", zorder=3.2)
-    if y_pos["store"]:
-        ax1.plot(x_pos["store"], y_pos["store"], marker=".", linestyle="none",
-                 markersize=2, color="black", label="Issuing store u-op", zorder=3.3)
-    if y_pos["tcu"]:
-        ax1.plot(x_pos["tcu"], y_pos["tcu"], marker="x", linestyle="none",
-                 markersize=4, color="g", label="TCU op issued", zorder=3.5)
-    if x_pos["dxa"]:
-        first = True
-        for x in x_pos["dxa"]:
-            ax1.axvline(
-                x,
-                color="red",
-                linestyle="--",
-                alpha=0.8,
-                linewidth=0.9,
-                label="DXA issue" if first else None,
-                zorder=1.3,
-            )
-            first = False
-    if dxa_done_x_left:
-        first = True
-        for x in dxa_done_x_left:
-            ax1.axvline(
-                x,
-                color="green",
-                linestyle="--",
-                alpha=0.85,
-                linewidth=0.9,
-                label="DXA done" if first else None,
-                zorder=1.35,
-            )
-            first = False
-    if marker_x_left:
-        for x in marker_x_left:
-            ax1.axvline(x, color="black", linestyle="--", alpha=0.7, linewidth=0.8, zorder=1.2)
-    if green_marker_x_left:
-        for x in green_marker_x_left:
-            ax1.axvline(x, color="green", linestyle="--", alpha=0.7, linewidth=0.8, zorder=1.2)
-    if blue_marker_x_left:
-        for x in blue_marker_x_left:
-            ax1.axvline(x, color="blue", linestyle="--", alpha=0.7, linewidth=0.8, zorder=1.2)
-    if marker_to_tcu_delta is not None and pre_tcu_marker_tick is not None and pre_tcu_issue_tick is not None:
-        marker_x = map_to_issue_index([pre_tcu_marker_tick])[0]
-        tcu_x = map_to_issue_index([pre_tcu_issue_tick])[0]
-        ax1.axhline(
-            y=pre_tcu_marker_tick,
-            color="black",
-            linestyle="--",
-            alpha=0.28,
-            linewidth=0.8,
-            zorder=1.1,
-        )
-        ax1.axhline(
-            y=pre_tcu_issue_tick,
-            color="black",
-            linestyle="--",
-            alpha=0.28,
-            linewidth=0.8,
-            zorder=1.1,
-        )
-        mid_x = (marker_x + tcu_x) / 2
-        mid_y = (pre_tcu_marker_tick + pre_tcu_issue_tick) / 2
-        ax1.text(
-            mid_x,
-            mid_y,
-            f"{marker_to_tcu_delta}",
-            ha="center",
-            va="bottom",
-            fontsize=7,
-            color="black",
-            bbox=dict(facecolor="white", edgecolor="none", alpha=0.45, pad=0.1),
-            zorder=9,
-        )
-
-    ax1.set_title("All scoreboard issues (with FEOP + TCU MEM)")
-    ax1.set_xlabel("Issue event index")
-    ax1.set_ylabel("Tick")
-    ax1.grid(True, linestyle="--", alpha=0.3)
-    ax1.legend()
-
-    # RIGHT PLOT = TCU-only timeline
-    if tcu_y_pos["rd_req_g"]:
-        ax2.plot(tcu_x_pos["rd_req_g"], tcu_y_pos["rd_req_g"], marker="^", linestyle="none",
-                 markersize=2, color="tab:blue", label="Mem read req (global)", zorder=6)
-    if tcu_y_pos["wr_req_g"]:
-        ax2.plot(tcu_x_pos["wr_req_g"], tcu_y_pos["wr_req_g"], marker="v", linestyle="none",
-                 markersize=2, color="tab:red", label="Mem write req (global)", zorder=6)
-    if tcu_y_pos["rd_rsp_g"]:
-        ax2.plot(tcu_x_pos["rd_rsp_g"], tcu_y_pos["rd_rsp_g"], marker="s", linestyle="none",
-                 markersize=2, color="tab:cyan", label="Mem read rsp (global)", zorder=6)
-    if tcu_y_pos["wr_rsp_g"]:
-        ax2.plot(tcu_x_pos["wr_rsp_g"], tcu_y_pos["wr_rsp_g"], marker="D", linestyle="none",
-                 markersize=2, color="tab:purple", label="Mem write rsp (global)", zorder=6)
-    if tcu_y_pos["rd_req_l"]:
-        ax2.plot(tcu_x_pos["rd_req_l"], tcu_y_pos["rd_req_l"], marker="^", linestyle="none",
-                 markersize=2, color="dodgerblue", label="Mem read req (lmem)", zorder=6)
-    if tcu_y_pos["wr_req_l"]:
-        ax2.plot(tcu_x_pos["wr_req_l"], tcu_y_pos["wr_req_l"], marker="v", linestyle="none",
-                 markersize=2, color="darkred", label="Mem write req (lmem)", zorder=6)
-    if tcu_y_pos["rd_rsp_l"]:
-        ax2.plot(tcu_x_pos["rd_rsp_l"], tcu_y_pos["rd_rsp_l"], marker="o", linestyle="none",
-                 markersize=1.5, color="black", label="Mem read rsp (lmem)", zorder=6)
-    if tcu_y_pos["wr_rsp_l"]:
-        ax2.plot(tcu_x_pos["wr_rsp_l"], tcu_y_pos["wr_rsp_l"], marker="D", linestyle="none",
-                 markersize=2, color="indigo", label="Mem write rsp (lmem)", zorder=6)
-    if tcu_y_pos["feop"]:
-        ax2.plot(tcu_x_pos["feop"], tcu_y_pos["feop"], marker="o", linestyle="none",
-                 markersize=3, color="orange", label="FEOP work assigned", zorder=4)
-    if tcu_y_pos["tcu"]:
-        ax2.plot(tcu_x_pos["tcu"], tcu_y_pos["tcu"], marker="x", linestyle="none",
-                 markersize=4, color="g", label="TCU op issued", zorder=7)
-    if tcu_y_pos["tcu_commit"]:
-        ax2.plot(tcu_x_pos["tcu_commit"], tcu_y_pos["tcu_commit"], marker="x", linestyle="none",
-                 markersize=4, color="black", label="TCU op commit", zorder=7.5)
-    if c_accum_x_right:
-        first = True
-        for x in c_accum_x_right:
-            ax2.axvline(x, color="gray", linestyle="--", alpha=0.6, linewidth=0.9,
-                        label="C block accumulated" if first else None, zorder=2)
-            first = False
-    if lmem_rsp_matrix_vlines_right:
-        matrix_line_style = {
-            "Bitmap": ("green", "LMEM rsp: Bitmap"),
-        }
-        shown_labels = set()
-        for x, matrix_name in lmem_rsp_matrix_vlines_right:
-            raw = matrix_name.strip().lower()
-            key = "Bitmap" if raw == "bitmap" else raw.upper()
-            if key not in matrix_line_style:
-                continue
-            color, label = matrix_line_style[key]
-            draw_label = label if label not in shown_labels else None
-            ax2.axvline(
-                x,
-                color=color,
-                linestyle=":",
-                alpha=0.8,
-                linewidth=1.0,
-                label=draw_label,
-                zorder=2.2,
-            )
-            if draw_label is not None:
-                shown_labels.add(label)
-    if xbar_stall_points_right:
-        first = True
-        for x, y in xbar_stall_points_right:
-            ax2.hlines(y=y, xmin=x - 0.35, xmax=x + 0.35, colors="orange",
-                       linestyles=":", linewidth=1.0,
-                       label="xbar queue stall" if first else None, zorder=8)
-            first = False
-    if final_mma_complete_y is not None:
-        ax2.axhline(
-            y=final_mma_complete_y,
-            color="black",
-            linestyle="--",
-            alpha=0.45,
-            linewidth=1.0,
-            label="Final MMA complete",
-            zorder=1.6,
-        )
-        ax2.text(
-            0.5,
-            final_mma_complete_y,
-            f"{final_mma_complete_y}",
-            transform=ax2.get_yaxis_transform(),
-            ha="center",
-            va="bottom",
-            fontsize=8,
-            color="black",
-            bbox=dict(facecolor="white", edgecolor="none", alpha=0.7, pad=0.2),
-            zorder=9,
-        )
-
-    title_parts = ["TCU-only timeline (TCU issue + FEOP + MEM)"]
-    details = format_run_details(run_meta)
-    if details:
-        title_parts.append(details)
-    feop_params = format_feop_params(run_meta)
-    if feop_params:
-        title_parts.append(feop_params)
-    ax2.set_title("\n".join(title_parts))
-    ax2.set_xlabel("Event index (unique TCU ticks)")
-    ax2.set_ylabel("Tick since first TCU issue (cycles)")
-    ax2.set_ylim(bottom=0)
-    ax2.grid(True, linestyle="--", alpha=0.3)
-
-    # Label non-xbar vertical jumps with the jump size in ticks.
-    for x, y, jump_ticks in non_xbar_jump_annotations:
-        ax2.annotate(
-            f"{jump_ticks}",
-            xy=(x, y),
-            xytext=(0, 4),
-            textcoords="offset points",
-            ha="center",
-            va="bottom",
-            fontsize=7,
-            color="black",
-            bbox=dict(facecolor="white", edgecolor="none", alpha=0.65, pad=0.2),
-            zorder=9,
-        )
-
-    ax2.legend()
-
-    # Add FEOP/xbar summary at the bottom of the figure.
-    if feop_assigned > 0:
-        summary = (
-            f"total cycles={total_cycles} | "
-            f"xbar_queue_stall cycles={xbar_stall_cycles} | "
-            f"MUL active cycles={mul_active_cycles} | "
-            f"XBAR STALLS % = {stall_pct:.2f}%"
-        )
-    else:
-        summary = (
-            f"total cycles={total_cycles} | "
-            f"xbar_queue_stall cycles={xbar_stall_cycles} | "
-            f"MUL active cycles={mul_active_cycles} | "
-            f"XBAR STALLS % = {'N/A' if xbar_stall_denom == 0 else f'{stall_pct:.2f}%'}"
-        )
-    if tcu_stall_pct is not None:
-        tcu_summary = (
-            f"TCU total cycles={tcu_total_cycles} | "
-            f"active cycles={tcu_active_cycles} | "
-            f"stall cycles={tcu_stall_cycles} | "
-            f"TCU STALL % = {tcu_stall_pct:.2f}%"
-        )
-    else:
-        tcu_summary = "TCU total cycles=0 | active cycles=0 | stall cycles=0 | TCU STALL % = N/A"
-    summary_y = 0.01
-    if has_errors:
-        error_text = format_error_count(
-            run_result["error_count"],
-            run_result["total_errors"],
-            unknown_text="UNKNOWN",
-        )
-        fig.text(0.5, summary_y, f"ERRORS FOUND: {error_text}", ha="center", va="bottom",
-                 fontsize=10, color="red")
-        summary_y = 0.04
-    fig.text(0.5, summary_y + 0.03, summary, ha="center", va="bottom", fontsize=10)
-    fig.text(0.5, summary_y, tcu_summary, ha="center", va="bottom", fontsize=10)
-
-    # ---------------------------
-    # Save
-    # ---------------------------
-    output_dir = os.path.join(os.path.dirname(__file__), "run_OP_MEM")
-    os.makedirs(output_dir, exist_ok=True)
-    if args.output:
-        output_name = os.path.basename(args.output)
-        output_name = os.path.join(output_dir, output_name)
-    else:
-        base = os.path.splitext(os.path.basename(log_path))[0]
-        output_name = os.path.join(output_dir, f"{base}.png")
-
-    bottom_margin = 0.18 if has_errors else 0.14
-    plt.tight_layout(rect=[0, bottom_margin, 1, 1])
-    plt.savefig(output_name, bbox_inches="tight")
-    print(f"Saved plot to {output_name}")
     stats_path = write_stats_file(
         log_path,
         run_result,
@@ -1587,6 +1121,7 @@ def main():
         stall_pct,
     )
     print(f"Saved stats to {stats_path}")
+    return
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ typedef struct {
   uint64_t C_addr;
   uint64_t meta_sp_addr;
   uint64_t cycles_addr;
+  uint64_t metrics_addr;
 } kernel_arg_t;
 
 #endif

@@ -1,4 +1,5 @@
 #include "common.h"
+#include <algorithm>
 #include <chrono>
 #include <climits>
 #include <cmath>
@@ -619,9 +620,8 @@ vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
 vx_buffer_h meta_buffer = nullptr;
-#ifdef PROFILE_ENABLE
 vx_buffer_h cycles_buffer = nullptr;
-#endif
+vx_buffer_h metrics_buffer = nullptr;
 vx_queue_h  queue   = nullptr;
 vx_module_h module_ = nullptr;
 vx_kernel_h kernel  = nullptr;
@@ -669,9 +669,8 @@ void cleanup() {
     if (B_buffer) vx_buffer_release(B_buffer);
     if (C_buffer) vx_buffer_release(C_buffer);
     if (meta_buffer) vx_buffer_release(meta_buffer);
-#ifdef PROFILE_ENABLE
     if (cycles_buffer) vx_buffer_release(cycles_buffer);
-#endif
+    if (metrics_buffer) vx_buffer_release(metrics_buffer);
     if (kernel)  vx_kernel_release(kernel);
     if (module_) vx_module_release(module_);
     if (queue)   vx_queue_release(queue);
@@ -732,6 +731,7 @@ int main(int argc, char *argv[]) {
   size_t sizeA = (M * K) / 2;
   size_t sizeB = K * N;
   size_t sizeC = M * N;
+  constexpr size_t metrics_size = 2;
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
@@ -767,17 +767,17 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_buffer_create(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
   RT_CHECK(vx_buffer_address(meta_buffer, &kernel_arg.meta_sp_addr));
 
-#ifdef PROFILE_ENABLE
   uint32_t num_blocks = grid_dim[0] * grid_dim[1];
-  uint64_t num_mma_sync_instrs = uint64_t(num_blocks) * num_k_tiles;
-  RT_CHECK(vx_buffer_create(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
+  RT_CHECK(vx_buffer_create(device, num_blocks * 2 * sizeof(uint64_t), VX_MEM_WRITE, &cycles_buffer));
   RT_CHECK(vx_buffer_address(cycles_buffer, &kernel_arg.cycles_addr));
-#endif
+  RT_CHECK(vx_buffer_create(device, metrics_size * sizeof(uint64_t), VX_MEM_READ_WRITE, &metrics_buffer));
+  RT_CHECK(vx_buffer_address(metrics_buffer, &kernel_arg.metrics_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
   std::cout << "meta_sp_addr=0x" << std::hex << kernel_arg.meta_sp_addr << std::endl;
+  std::cout << std::dec;
 
   // Generate full matrix A (M × K), prune in-place, then compress to M × K/2.
   std::vector<itype_t> h_A_full(sizeA_full);
@@ -802,6 +802,7 @@ int main(int argc, char *argv[]) {
   }
 
   std::vector<itype_t> h_B(sizeB);
+  std::vector<uint64_t> h_metrics(metrics_size, 0);
   for (uint32_t i = 0; i < sizeB; ++i) {
     h_B[i] = generate_B_value<vt::ITYPE>();
   }
@@ -835,15 +836,19 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_enqueue_write(queue, meta_buffer, 0, h_meta.data(), meta_buf_entries * sizeof(uint32_t), 0, nullptr, nullptr));
   }
 
+  {
+    std::cout << "upload metrics buffer" << std::endl;
+    RT_CHECK(vx_enqueue_write(queue, metrics_buffer, 0, h_metrics.data(),
+                              metrics_size * sizeof(uint64_t), 0, nullptr, nullptr));
+  }
+
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // h_C must outlive the async read enqueued below.
   std::vector<otype_t> h_C(sizeC);
-#ifdef PROFILE_ENABLE
-  std::vector<uint32_t> h_cycles(num_blocks);
-#endif
+  std::vector<uint64_t> h_cycles(num_blocks * 2);
 
   auto time_start = std::chrono::high_resolution_clock::now();
 
@@ -866,18 +871,12 @@ int main(int argc, char *argv[]) {
   std::cout << "download destination buffer" << std::endl;
   vx_event_h read_ev = nullptr;
   RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t), 1, &launch_ev, &read_ev));
-#ifdef PROFILE_ENABLE
   vx_event_h cyc_ev = nullptr;
-  RT_CHECK(vx_enqueue_read(queue, h_cycles.data(), cycles_buffer, 0, num_blocks * sizeof(uint32_t), 1, &read_ev, &cyc_ev));
-#endif
+  RT_CHECK(vx_enqueue_read(queue, h_cycles.data(), cycles_buffer, 0, h_cycles.size() * sizeof(uint64_t), 1, &read_ev, &cyc_ev));
 
   std::cout << "wait for completion" << std::endl;
-#ifdef PROFILE_ENABLE
   RT_CHECK(vx_event_wait_value(cyc_ev, 1, VX_TIMEOUT_INFINITE));
   vx_event_release(cyc_ev);
-#else
-  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
-#endif
   vx_event_release(read_ev);
   vx_event_release(launch_ev);
 
@@ -885,23 +884,35 @@ int main(int argc, char *argv[]) {
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
-#ifdef PROFILE_ENABLE
-  // report cycle counts
   {
-    uint64_t cycles_sum = 0;
-    uint32_t cycles_max = 0;
-    for (auto cycles : h_cycles) {
-      cycles_sum += cycles;
-      cycles_max = std::max(cycles_max, cycles);
+    std::cout << "download metrics buffer" << std::endl;
+    vx_event_h m_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, h_metrics.data(), metrics_buffer, 0,
+                             metrics_size * sizeof(uint64_t), 0, nullptr, &m_ev));
+    RT_CHECK(vx_event_wait_value(m_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(m_ev);
+  }
+
+  // report cycle counts (per-block body start/end pairs)
+  {
+    uint64_t first_body_cycle = ~uint64_t{0};
+    uint64_t last_body_cycle = 0;
+    uint64_t max_block_cycles = 0;
+    for (uint32_t i = 0; i < num_blocks; ++i) {
+      uint64_t start = h_cycles[2 * i + 0];
+      uint64_t end = h_cycles[2 * i + 1];
+      first_body_cycle = std::min(first_body_cycle, start);
+      last_body_cycle = std::max(last_body_cycle, end);
+      max_block_cycles = std::max(max_block_cycles, end - start);
     }
-    std::cout << std::dec;
-    std::cout << "mma_sync cycles max: " << cycles_max << std::endl;
-    std::cout << "mma_sync cycles total: " << cycles_sum << std::endl;
-    std::cout << "mma_sync cycles average per mma_sync instr: "
-              << (num_mma_sync_instrs ? (double(cycles_sum) / num_mma_sync_instrs) : 0.0)
-              << std::endl;
+    h_metrics[0] = last_body_cycle - first_body_cycle;
+    printf("TCU_CYCLES: max-block=%lu, total-body=%lu (across %u blocks)\n",
+           max_block_cycles, h_metrics[0], num_blocks);
   }
 #endif
+
+  std::cout << "Kernel body cycles: " << h_metrics[0] << std::endl;
+  std::cout << "Kernel body instructions: " << h_metrics[1] << std::endl;
 
   // (destination buffer already downloaded into h_C above via vx_enqueue_read)
 

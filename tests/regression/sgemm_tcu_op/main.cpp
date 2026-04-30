@@ -980,6 +980,7 @@ uint32_t xk = 32;
 int sparsity = 0;
 float a_sparsity = 0.0;
 float b_sparsity = 0.0;
+char pruning_type = 'u';
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -1002,13 +1003,14 @@ static constexpr uint32_t kDescBBitmap = 4;
 
 static void show_usage() {
   std::cout << "Vortex Sgemm TCU Test." << std::endl;
-  std::cout << "Usage: [-m: m] [-n: N] [-k: K] [-s: Sparsity_mode] [-a: A_sparsity (0.0 - 1.0)] [-b: B_sparsity (0.0 - 1.0)] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m: m] [-n: N] [-k: K] [-s: Sparsity_mode] [-a: A_sparsity (0.0 - 1.0)] [-b: B_sparsity (0.0 - 1.0)] [-p: pruning_type] [-h: help]" << std::endl;
   std::cout << "  -s  Sparsity Modes: 0: Dense x Dense   1: Dense x Sparse   2: Sparse x Sparse" << std::endl;
+  std::cout << "  -p  Pruning Types: u: unstructured   c: checkered   n: B matrix 2:4 structured" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:i:o:s:a:b:h")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:i:o:s:a:b:p:h")) != -1) {
     switch (c) {
     case 'm':
       xm = atoi(optarg);
@@ -1030,6 +1032,15 @@ static void parse_args(int argc, char **argv) {
     case 'b':
       b_sparsity = atof(optarg);
       std::cout << "B sparsity level set to: " << b_sparsity << std::endl;
+      break;
+    case 'p':
+      pruning_type = optarg[0];
+      if (pruning_type != 'u' && pruning_type != 'c' && pruning_type != 'n') {
+        std::cout << "Error: Pruning type: " << pruning_type << " is not supported!\n";
+        show_usage();
+        exit(-1);
+      }
+      std::cout << "Pruning type set to: " << pruning_type << std::endl;
       break;
     case 'h':
       show_usage();
@@ -1070,6 +1081,27 @@ static void apply_pruning(std::vector<T>& matrix,
       for (uint32_t col = 0; col < cols; ++col) {
         if (((row + col) & 1u) != 0) {
           data_accessor_t<vt::ITYPE>::write(matrix.data(), row * cols + col, 0);
+        }
+      }
+    }
+    return;
+  }
+
+  if (mode == 'n') {
+    for (uint32_t row = 0; row < rows; ++row) {
+      for (uint32_t col = 0; col + 3 < cols; col += 4) {
+        const uint32_t first = static_cast<uint32_t>(std::rand()) % 4;
+        uint32_t second = static_cast<uint32_t>(std::rand()) % 3;
+        if (second >= first) {
+          ++second;
+        }
+        for (uint32_t lane = 0; lane < 4; ++lane) {
+          const uint32_t idx = row * cols + col + lane;
+          if (lane == first || lane == second) {
+            data_accessor_t<vt::ITYPE>::write(matrix.data(), idx, 0);
+          } else if (data_accessor_t<vt::ITYPE>::read(matrix.data(), idx) == 0) {
+            data_accessor_t<vt::ITYPE>::write(matrix.data(), idx, 1);
+          }
         }
       }
     }
@@ -1218,6 +1250,10 @@ int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
+  if (pruning_type == 'n') {
+    sparsity = 1;
+  }
+
   std::srand(50);
 
   // open device connection
@@ -1282,6 +1318,9 @@ int main(int argc, char *argv[]) {
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
+#ifdef TCU_OP
+  std::cout << "TCU_OP defined" << std::endl;
+#endif
   std::cout << "WMMA Core Dimension: M=" << cfg::tcM << ", N=" << cfg::tcN << ", K=" << cfg::tcK << std::endl;
   std::cout << "WMMA Tile Dimension: M=" << cfg::tileM << ", N=" << cfg::tileN << ", K=" << cfg::tileK << std::endl;
   std::cout << "DXA A/B Tile Dimension: M=32, N=32, K=" << dxa_tile_k << std::endl;
@@ -1341,9 +1380,15 @@ int main(int argc, char *argv[]) {
 #endif
 
   if (sparsity >= 1) {
-    char pruning_type = 'u';
-    apply_pruning(h_A, M, K, a_sparsity, pruning_type);
-    apply_pruning(h_B, K, N, b_sparsity, pruning_type);
+    /* u: unstructured sparsity with probability X_sparsity
+       c: checkered sparsity
+       n: NVIDIA 2:4 sparsity */
+    if (pruning_type == 'n') {
+      apply_pruning(h_B, K, N, b_sparsity, pruning_type);
+    } else {
+      apply_pruning(h_A, M, K, a_sparsity, pruning_type);
+      apply_pruning(h_B, K, N, b_sparsity, pruning_type);
+    }
     std::cout << "Applied pruning with mode=" << pruning_type
               << ", a_sparsity=" << a_sparsity
               << ", b_sparsity=" << b_sparsity << std::endl;

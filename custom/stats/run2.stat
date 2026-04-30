@@ -1,21 +1,30 @@
-Testbench: sgemm_tcu_sp
-MxNxK=32x64x384 | It=fp8
-perf=0
+Testbench: sgemm_tcu_op
+Sparsity Mode:0 | MxNxK=32x32x128 | A sparsity=0% | B sparsity=0.146484% | It=fp8
+Flags: TCU_OP, TCU_TYPE_DPI
+BLOCK_M=2, BLOCK_N=16, XBAR_QUEUE_DEPTH=4
+Warps: 2
+perf=2
 
-FAIL
-Error count: unknown
-Total kernel cycles: 95090
-Total kernel instructions: 4712
-Kernel body cycles: 95090
-Kernel body instructions: N/A
-MUL active cycles: 0
+PASS
+Total kernel cycles: 16263
+Total kernel instructions: 209
+Kernel body cycles: 7015
+Kernel body instructions: 60
+MUL active cycles: 4096
 XBAR stalls: 0.00% (0 cycles)
 
-PERF0: instrs=4712, cycles=95090, IPC=0.050
+PERF2: core0: lmem: reqs=3072, bank_stalls=0 (utility=100%)
+PERF2: core0: coalescer: misses=330
+PERF2: core0: icache: reads=209, miss=20 (hit=90%), mshr_st=0 (utility=100%)
+PERF2: core0: dcache: reqs=777, miss_r=325 (hit=0%), miss_w=426 (hit=6%), bank_st=353 (utility=69%)
+PERF2: memory: reqs=935 (r=472, w=463), lat=153.9 cyc, bank_st=0 (utility=100%)
+PERF2: instrs=209, cycles=16263, IPC=0.013
 
-ROI VARIABLES:
-TCU cycles: 25903
-DXA cycles A: N/A
-DXA cycles B: N/A
-DXA cycles C: N/A
-DXA cycles total: N/A
+MEMORY (perf=2):
+core0: lmem: reqs=3072, bank_stalls=0 (utility=100%)
+core0: coalescer: misses=330
+core0: icache: reads=209, miss=20 (hit=90%), mshr_st=0 (utility=100%)
+core0: dcache: reqs=777, miss_r=325 (hit=0%), miss_w=426 (hit=6%), bank_st=353 (utility=69%)
+memory: reqs=935 (r=472, w=463), lat=153.9 cyc, bank_st=0 (utility=100%)
+
+TCU cycles (from first TCU issue to last TCU commit): 4283

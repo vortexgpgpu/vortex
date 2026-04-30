@@ -20,13 +20,9 @@ typedef struct {
   uint64_t A_addr;
   uint64_t B_addr;
   uint64_t C_addr;
-  uint64_t D_addr;              
-  uint64_t A_bitmap_addr;       
-  uint64_t B_bitmap_addr;       
-  // uint64_t A_nz_addr;           
-  // uint64_t B_nz_addr;           
-  // uint32_t A_compressed_blocks; 
-  // uint32_t B_compressed_blocks; 
+  uint64_t D_addr;
+  uint64_t A_bitmap_addr;
+  uint64_t B_bitmap_addr;
   uint32_t max_a_blocks;
   uint32_t max_b_blocks;
   uint8_t  sparsity;            

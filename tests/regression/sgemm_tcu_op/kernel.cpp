@@ -81,7 +81,6 @@ static constexpr uint32_t div_up_constexpr(uint32_t value, uint32_t divisor) {
 
 extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) 
 {
-  // TODO: ADD CYCLE - INSTRUCTION COUNTING
   const uint64_t instret_begin = vx_rdinstret_local();
   const __rdcycle_time cycle_begin = vx_rdcycle_sync_begin();
 

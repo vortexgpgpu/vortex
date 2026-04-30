@@ -16,11 +16,4 @@ PERF6: core0: dxa: transfers=24, gmem_reads=504, gmem_dedup=0 (rate=0%), smem_wr
 PERF6: dxa: transfers=24, gmem_reads=504, gmem_dedup=0 (rate=0%), smem_writes=258, avg_gmem_lat=297.0
 PERF6: instrs=375, cycles=34751, IPC=0.011
 
-ROI VARIABLES:
-TCU cycles: 13477
-DXA cycles A: N/A
-DXA cycles B: N/A
-DXA cycles C: N/A
-DXA cycles A bitmap: N/A
-DXA cycles B bitmap: N/A
-DXA cycles total: N/A
+TCU cycles (from first TCU issue to last TCU commit): 13477

@@ -1,0 +1,13 @@
+Testbench: sgemm_tcu_sp
+MxNxK=128x128x512 | It=fp8
+
+FAIL
+Error count: unknown
+Total kernel cycles: N/A
+Total kernel instructions: N/A
+Kernel body cycles: N/A
+Kernel body instructions: N/A
+MUL active cycles: 0
+XBAR stalls: 0.00% (0 cycles)
+
+TCU cycles (from first TCU issue to last TCU commit): 236638
