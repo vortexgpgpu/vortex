@@ -27,6 +27,10 @@ module VX_axi_adapter #(
     parameter ARBITER        = "R",
     parameter REQ_OUT_BUF    = 0,
     parameter RSP_OUT_BUF    = 0,
+    // Per-bank store-before-load AXI ordering. AW and AR with different IDs
+    // are not ordered by AXI4 (A5); set to 0 in verif environments whose
+    // memory model commits writes synchronously.
+    parameter WRITE_BEFORE_READ = 1,
     parameter DATA_SIZE      = DATA_WIDTH/8
  ) (
     input  wire                     clk,
@@ -246,17 +250,36 @@ module VX_axi_adapter #(
             `UNUSED_PIN (tx_ack)
         );
 
-        assign req_xbar_ready_out[i] = xbar_rw_out ? axi_write_ready : m_axi_arready[i];
+        // Outstanding-write tracker: gate AR while AW is unmatched by B.
+        wire writes_pending;
+        if (WRITE_BEFORE_READ) begin : g_write_tracker
+            reg [7:0] pending_writes_r;
+            wire aw_fire = m_axi_awvalid[i] && m_axi_awready[i];
+            wire b_fire  = m_axi_bvalid[i]  && m_axi_bready[i];
+            always @(posedge clk) begin
+                if (reset) begin
+                    pending_writes_r <= '0;
+                end else if (aw_fire && ~b_fire) begin
+                    pending_writes_r <= pending_writes_r + 8'd1;
+                end else if (~aw_fire && b_fire) begin
+                    pending_writes_r <= pending_writes_r - 8'd1;
+                end
+            end
+            assign writes_pending = (pending_writes_r != '0);
+        end else begin : g_no_write_tracker
+            assign writes_pending = 1'b0;
+        end
+
+        assign req_xbar_ready_out[i] = xbar_rw_out ? axi_write_ready
+                                                   : (m_axi_arready[i] && ~writes_pending);
 
         // AXI write address channel
 
         assign m_axi_awvalid[i] = req_xbar_valid_out[i] && xbar_rw_out && ~m_axi_aw_ack;
 
-    if (INTERLEAVE) begin : g_m_axi_awaddr_i
-        assign m_axi_awaddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << (BANK_SEL_BITS + LOG2_DATA_SIZE)) | (ADDR_WIDTH_OUT'(i) << LOG2_DATA_SIZE);
-    end else begin : g_m_axi_awaddr_ni
-        assign m_axi_awaddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE) | (ADDR_WIDTH_OUT'(i) << (BANK_ADDR_WIDTH + LOG2_DATA_SIZE));
-    end
+    // Each m_axi_mem_<i> drives its own DDR controller, so the byte address
+    // is the compact per-bank cache-line index (bank_sel routed via i).
+    assign m_axi_awaddr[i]  = ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE;
 
         assign m_axi_awid[i]    = TAG_WIDTH_OUT'(xbar_tag_out);
         assign m_axi_awlen[i]   = 8'b00000000;
@@ -285,14 +308,9 @@ module VX_axi_adapter #(
             assign xbar_tag_r_out = READ_TAG_WIDTH'(xbar_tag_out);
         end
 
-        assign m_axi_arvalid[i] = req_xbar_valid_out[i] && ~xbar_rw_out;
+        assign m_axi_arvalid[i] = req_xbar_valid_out[i] && ~xbar_rw_out && ~writes_pending;
 
-        // convert address to byte-addressable space
-    if (INTERLEAVE) begin : g_m_axi_araddr_i
-        assign m_axi_araddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << (BANK_SEL_BITS + LOG2_DATA_SIZE)) | (ADDR_WIDTH_OUT'(i) << LOG2_DATA_SIZE);
-    end else begin : g_m_axi_araddr_ni
-        assign m_axi_araddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE) | (ADDR_WIDTH_OUT'(i) << (BANK_ADDR_WIDTH + LOG2_DATA_SIZE));
-    end
+        assign m_axi_araddr[i]  = ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE;
         assign m_axi_arid[i]    = TAG_WIDTH_OUT'(xbar_tag_r_out);
         assign m_axi_arlen[i]   = 8'b00000000;
         assign m_axi_arsize[i]  = 3'(LOG2_DATA_SIZE);
