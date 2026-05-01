@@ -503,12 +503,12 @@ protected:
     pending_read_reqs_ = 0;
     pending_write_reqs_ = 0;
     pending_fill_reqs_ = 0;
-    inflight_fills_ = 0;
     rand_ctr_ = 0;
     for (auto &set : sets_) {
       set.reset();
     }
     mshr_.reset();
+    inflight_replays_per_set_.assign(params_.sets_per_bank, 0);
     flushing_ = false;
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
@@ -516,14 +516,10 @@ protected:
 
   void on_tick() {
     // process input requests
-    if (!pipe_req_->full()) {
-      this->processInputs();
-    }
+    this->processInputs();
 
     // process pipeline requests
-    if (!pipe_req_->empty()) {
-      this->processRequests();
-    }
+    this->processRequests();
 
     // calculate memory latency
     perf_stats_.mem_latency += pending_fill_reqs_;
@@ -536,31 +532,67 @@ protected:
 
 private:
   void processInputs() {
-    // first: schedule MSHR replay
+    // Step 1: drain mem_rsp_in out-of-band. Fills bypass pipe_req_ — a
+    // stalled Replay at pipe_req_'s head must not block fill processing,
+    // else MSHR locks and the cache→adapter→coalescer→LSU chain deadlocks
+    // under high warp density.
+    if (!this->mem_rsp_in.empty()) {
+      auto &mem_rsp = this->mem_rsp_in.peek();
+      uint32_t mshr_id = mem_rsp.tag;
+      const auto &root_peek = mshr_.peek(mshr_id);
+      uint32_t fill_set_id = root_peek.set_id;
+      bool fill_blocked = (inflight_replays_per_set_.at(fill_set_id) > 0)
+                       || (config_.write_back && this->mem_req_out.full());
+      if (!fill_blocked) {
+        auto &root_entry = mshr_.replay(mshr_id);
+        auto &set = sets_.at(fill_set_id);
+        int32_t free_line_id = -1;
+        int32_t repl_line_id = 0;
+        int32_t victim_line_id = set.select_victim(config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
+        if (config_.repl_policy == Cache::FIFO) {
+          set.fifo_ptr = (set.fifo_ptr + 1) % set.lines.size();
+        } else if (config_.repl_policy == Cache::RANDOM) {
+          ++rand_ctr_;
+        }
+        auto &victim_line = set.lines.at(victim_line_id);
+        if (config_.write_back && victim_line.valid && victim_line.dirty) {
+          MemReq mem_req;
+          mem_req.addr = params_.mem_addr(bank_id_, fill_set_id, victim_line.tag);
+          mem_req.write = true;
+          mem_req.cid = root_entry.bank_req.cid;
+          mem_req.uuid = root_entry.bank_req.uuid;
+          mem_req.data = victim_line.data;
+          mem_req.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);
+          this->mem_req_out.send(mem_req);
+          DT(3, this->name() << " writeback: " << mem_req);
+          ++perf_stats_.evictions;
+        }
+        victim_line.valid = true;
+        victim_line.tag = root_entry.addr_tag;
+        victim_line.lru_ctr = 0;
+        victim_line.dirty = false;
+        victim_line.data = mem_rsp.data;
+        DT(3, this->name() << " fill-rsp: " << mem_rsp);
+        this->mem_rsp_in.pop();
+        --pending_fill_reqs_;
+      }
+    }
+
+    // Step 2: schedule pipeline inputs (replay > core_req) into pipe_req_.
+    if (pipe_req_->full())
+      return;
+
+    // schedule MSHR replay
     if (mshr_.has_ready_reqs()) {
       bank_req_t bank_req;
       mshr_.dequeue(&bank_req);
+      uint32_t set_id = params_.addr_set_id(bank_req.addr);
+      ++inflight_replays_per_set_.at(set_id);
       pipe_req_->push(bank_req);
       return;
     }
 
-    // second: schedule memory fill
-    if (!this->mem_rsp_in.empty() && inflight_fills_ == 0) {
-      auto &mem_rsp = this->mem_rsp_in.peek();
-      bank_req_t bank_req;
-      bank_req.reset();
-      bank_req.type = bank_req_t::Fill;
-      bank_req.mshr_id = mem_rsp.tag;
-      bank_req.data = mem_rsp.data;  // capture fill bytes
-      pipe_req_->push(bank_req);
-      ++inflight_fills_;
-      this->mem_rsp_in.pop();
-      --pending_fill_reqs_;
-      DT(3, this->name() << " fill-rsp: " << mem_rsp);
-      return;
-    }
-
-    // third: schedule core request
+    // schedule core request
     if (!this->core_req_in.empty()) {
       auto &core_req = this->core_req_in.peek();
       // check MSHR occupancy (conservative: any request that may miss and use MSHR)
@@ -592,6 +624,9 @@ private:
   }
 
   void processRequests() {
+    if (pipe_req_->empty())
+      return;
+
     const bank_req_t &bank_req = pipe_req_->peek();
 
     auto need_core_rsp = [&](const bank_req_t &req) {
@@ -601,48 +636,6 @@ private:
     switch (bank_req.type) {
     case bank_req_t::None:
       break;
-
-    case bank_req_t::Fill: {
-      // Check memory output backpressure (conservative: Fill may need to writeback).
-      if (config_.write_back && this->mem_req_out.full())
-        return; // stall
-
-      // Select MSHR pending request for replay
-      auto &root_entry = mshr_.replay(bank_req.mshr_id);
-
-      // Writeback victim if needed
-      const auto &root_peek = mshr_.peek(bank_req.mshr_id);
-      auto &set = sets_.at(root_peek.set_id);
-      int32_t free_line_id = -1;
-      int32_t repl_line_id = 0;
-      int32_t victim_line_id = set.select_victim(config_.repl_policy, rand_ctr_, &free_line_id, &repl_line_id);
-      // advance FIFO/RANDOM bookkeeping
-      if (config_.repl_policy == Cache::FIFO) {
-        set.fifo_ptr = (set.fifo_ptr + 1) % set.lines.size();
-      } else if (config_.repl_policy == Cache::RANDOM) {
-        ++rand_ctr_;
-      }
-      auto &victim_line = set.lines.at(victim_line_id);
-      if (config_.write_back && victim_line.valid && victim_line.dirty) {
-        MemReq mem_req;
-        mem_req.addr = params_.mem_addr(bank_id_, root_entry.set_id, victim_line.tag);
-        mem_req.write = true;
-        mem_req.cid = root_entry.bank_req.cid;
-        mem_req.uuid = root_entry.bank_req.uuid;
-        mem_req.data = victim_line.data;
-        mem_req.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);  // full-line writeback
-        this->mem_req_out.send(mem_req);
-        DT(3, this->name() << " writeback: " << mem_req);
-        ++perf_stats_.evictions;
-      }
-
-      // Install the filled line
-      victim_line.valid = true;
-      victim_line.tag = root_entry.addr_tag;
-      victim_line.lru_ctr = 0;
-      victim_line.dirty = false;
-      victim_line.data = bank_req.data;  // captured fill bytes
-    } break;
 
     case bank_req_t::Replay: {
       // Check core output backpressure first — no mutation before all stalls clear.
@@ -838,13 +831,14 @@ private:
       std::abort();
     }
 
-    // pop processed request; track in-flight Fills to avoid reordering replays
-    const bool popped_fill = (bank_req.type == bank_req_t::Fill);
-    pipe_req_->pop();
-    if (popped_fill) {
-      assert(inflight_fills_ > 0);
-      --inflight_fills_;
+    // pop processed request; release per-set Replay tracking so a deferred
+    // fill into the same set can proceed.
+    if (bank_req.type == bank_req_t::Replay) {
+      uint32_t set_id = params_.addr_set_id(bank_req.addr);
+      assert(inflight_replays_per_set_.at(set_id) > 0);
+      --inflight_replays_per_set_.at(set_id);
     }
+    pipe_req_->pop();
   }
 
   Cache::Config config_;
@@ -861,7 +855,7 @@ private:
   uint64_t pending_read_reqs_;
   uint64_t pending_write_reqs_;
   uint64_t pending_fill_reqs_;
-  uint32_t inflight_fills_;
+  std::vector<uint32_t> inflight_replays_per_set_;
   uint32_t rand_ctr_;
 
   // Flush walk state.
@@ -874,7 +868,6 @@ private:
     // outstanding fill could install a fresh line behind our scan and leave
     // a dirty victim un-evicted.
     if (pending_fill_reqs_ != 0
-     || inflight_fills_ != 0
      || !pipe_req_->empty()
      || !mshr_.empty()) {
       return;
