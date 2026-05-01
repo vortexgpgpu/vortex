@@ -121,9 +121,9 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 
 // Per-cycle response handler. Consumes at most one response packet
 // from lmem_switch and forwards through to writeback when the
-// originating request retires. Mirrors RTL VX_lsu_slice's response
-// formatter (sign-extend, NaN-box) plus VX_mem_scheduler's response
-// demux.
+// originating request retires. Includes the per-lane response
+// formatter (sign-extend, NaN-box) and the response demux that
+// matches each fragment back to its in-flight request entry.
 void LsuUnit::process_response_step(uint32_t b) {
 	auto& lsu_rsp_in = core_->lmem_switch(b)->RspOut;
 	if (lsu_rsp_in.empty())
@@ -196,9 +196,8 @@ void LsuUnit::process_response_step(uint32_t b) {
 	lsu_rsp_in.pop();
 }
 
-// Drain Inputs[b] into the dispatch-side req_queue. Mirrors RTL's
-// VX_mem_scheduler accepting core_req_valid into req_queue every cycle
-// the queue isn't full, independent of the head's dispatch progress.
+// Drain Inputs[b] into the dispatch-side req_queue every cycle the
+// queue isn't full, independent of the head's dispatch progress.
 void LsuUnit::ingest_inputs(uint32_t b) {
 	auto& state = states_.at(b);
 	auto& input = Inputs.at(b);
@@ -216,9 +215,8 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 }
 
 // Per-cycle request handler. Dispatches at most one batch (one
-// memory-side mem_req) per call. Mirrors RTL VX_mem_scheduler's
-// req_sent_all-driven dispatch: head trace stays at the queue front
-// until all its batches are issued.
+// memory-side mem_req) per call. The head trace stays at the queue
+// front until all its batches are issued (req_sent_all-driven).
 void LsuUnit::process_request_step(uint32_t b) {
 	auto& state = states_.at(b);
 

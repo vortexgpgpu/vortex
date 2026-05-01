@@ -875,8 +875,9 @@ public:
 
     if (meta_kind == TCU_META_KIND_SPARSE_WG) {
       // WGMMA RS sparse: kernel scatters smem data into interleaved register
-      // layout matching VX_tcu_meta's WMMA PER_WARP_DEPTH (= kMetaBanks) stride.
-      // Thread mapping: src_idx = col_in_group * kMetaBanks + bank.
+      // layout matching the metadata storage's WMMA PER_WARP_DEPTH
+      // (= kMetaBanks) stride. Thread mapping:
+      //   src_idx = col_in_group * kMetaBanks + bank.
       // Data goes into kMetaBanks rows (same as WMMA); the reader selects
       // banks using WMMA-style {step_m, step_k_half} so m=1 lands at bank
       // (cfg::k_steps/2), not bank 1.
@@ -1623,7 +1624,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     }
 
     if (uop_index < meta_stores) {
-      // Meta-store phase: preload metadata from f26/f27 into VX_tcu_meta SRAM
+      // Meta-store: preload metadata from f26/f27 into the metadata SRAM
       constexpr uint32_t wg_meta_reg0 = 24 + wg_cfg::m_steps * (wg_cfg::k_steps / 2); // f26
       constexpr uint32_t wg_meta_reg1 = wg_meta_reg0 + 1; // f27
       uint32_t group = uop_index;

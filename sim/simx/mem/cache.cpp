@@ -532,10 +532,10 @@ protected:
 
 private:
   void processInputs() {
-    // Step 1: drain mem_rsp_in out-of-band. Fills bypass pipe_req_ — a
-    // stalled Replay at pipe_req_'s head must not block fill processing,
-    // else MSHR locks and the cache→adapter→coalescer→LSU chain deadlocks
-    // under high warp density.
+    // Drain mem_rsp_in out-of-band. Fills bypass pipe_req_ — a stalled
+    // Replay at pipe_req_'s head must not block fill processing, else
+    // the MSHR locks and the cache→adapter→coalescer→LSU chain
+    // deadlocks under high warp density.
     if (!this->mem_rsp_in.empty()) {
       auto &mem_rsp = this->mem_rsp_in.peek();
       uint32_t mshr_id = mem_rsp.tag;
@@ -578,7 +578,7 @@ private:
       }
     }
 
-    // Step 2: schedule pipeline inputs (replay > core_req) into pipe_req_.
+    // Schedule pipeline inputs (replay > core_req) into pipe_req_.
     if (pipe_req_->full())
       return;
 

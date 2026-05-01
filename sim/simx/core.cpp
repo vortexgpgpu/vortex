@@ -107,11 +107,12 @@ public:
     }
 
     // create local memory.
-    // TCU acquires one LMEM port pair (TcuTbuf arbitrates abuf×Q + mbuf×Q
-    // + bbuf onto it internally), appended after the LSU ports.
     snprintf(sname, 100, "%s-lmem", name.c_str());
     uint32_t lmem_num_reqs = LSU_NUM_REQS;
   #ifdef EXT_TCU_ENABLE
+    lmem_num_reqs += 1;
+  #endif
+  #ifdef EXT_DXA_ENABLE
     lmem_num_reqs += 1;
   #endif
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
@@ -187,7 +188,6 @@ public:
     dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, NUM_FPU_BLOCKS, NUM_FPU_LANES);
     dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, NUM_LSU_BLOCKS, NUM_LSU_LANES);
     dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
-    dispatchers_.at((int)FUType::CSR) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
   #ifdef EXT_TCU_ENABLE
     dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, NUM_TCU_BLOCKS, NUM_TCU_LANES);
   #endif
@@ -201,9 +201,6 @@ public:
     func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(sname, simobject_);
     snprintf(sname, 100, "%s-sfu", name.c_str());
     func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(sname, simobject_);
-    snprintf(sname, 100, "%s-csr", name.c_str());
-    csr_unit_ = SimPlatform::instance().create_object<CsrUnit>(sname, simobject_);
-    func_units_.at((int)FUType::CSR) = csr_unit_;
   #ifdef EXT_TCU_ENABLE
     snprintf(sname, 100, "%s-tcu", name.c_str());
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
@@ -534,7 +531,6 @@ public:
           case FUType::FPU: ++perf_stats_.fpu_stalls; break;
           case FUType::LSU: ++perf_stats_.lsu_stalls; break;
           case FUType::SFU: ++perf_stats_.sfu_stalls; break;
-          case FUType::CSR: ++perf_stats_.csr_stalls; break;
         #ifdef EXT_TCU_ENABLE
           case FUType::TCU: ++perf_stats_.tcu_stalls; break;
         #endif
@@ -596,7 +592,6 @@ public:
         case FUType::FPU: ++perf_stats_.fpu_instrs; break;
         case FUType::LSU: ++perf_stats_.lsu_instrs; break;
         case FUType::SFU: ++perf_stats_.sfu_instrs; break;
-        case FUType::CSR: ++perf_stats_.csr_instrs; break;
       #ifdef EXT_TCU_ENABLE
         case FUType::TCU: ++perf_stats_.tcu_instrs; break;
       #endif
@@ -653,7 +648,7 @@ public:
       uint32_t csr_addr    = is_hi ? (VX_CSR_MPM_BASE_H + idx) : (VX_CSR_MPM_BASE + idx);
       auto saved_class = mpm_class_;
       mpm_class_ = mpm_class;
-      *value = static_cast<uint32_t>(csr_unit_->get_csr(csr_addr, 0, 0));
+      *value = static_cast<uint32_t>(this->csr_unit().get_csr(csr_addr, 0, 0));
       mpm_class_ = saved_class;
       break;
     }
@@ -676,11 +671,15 @@ public:
   }
 
   Scheduler*    scheduler() { return scheduler_.get(); }
-  CsrUnit*      csr_unit()  { return csr_unit_.get(); }
+  // CSR is a sub-unit of SFU; reach it through SfuUnit.
+  CsrUnit&      csr_unit()  { return this->sfu_unit()->csr_unit(); }
   uint32_t      mpm_class() const { return mpm_class_; }
 #ifdef EXT_TCU_ENABLE
   std::shared_ptr<TcuUnit>& tcu_unit() { return tcu_unit_; }
 #endif
+  std::shared_ptr<SfuUnit>  sfu_unit() {
+    return std::static_pointer_cast<SfuUnit>(func_units_.at((int)FUType::SFU));
+  }
 
   const std::shared_ptr<LocalMem>& local_mem() const { return local_mem_; }
   const std::shared_ptr<MemCoalescer>& mem_coalescer(uint32_t idx) const { return mem_coalescers_.at(idx); }
@@ -695,7 +694,6 @@ private:
   TcuUnit::Ptr tcu_unit_;
 #endif
 
-  CsrUnit::Ptr csr_unit_;
   PoolAllocator<Instr, 64> instr_pool_;
   Decoder::Ptr decoder_;
   std::vector<Sequencer::Ptr> sequencers_;
@@ -829,7 +827,7 @@ int Core::get_exitcode() const {
 }
 
 Scheduler& Core::scheduler() { return *impl_->scheduler(); }
-CsrUnit& Core::csr_unit() { return *impl_->csr_unit(); }
+CsrUnit& Core::csr_unit() { return impl_->csr_unit(); }
 uint32_t Core::mpm_class() const { return impl_->mpm_class(); }
 
 #ifdef EXT_TCU_ENABLE
@@ -837,6 +835,10 @@ std::shared_ptr<TcuUnit>& Core::tcu_unit() {
   return impl_->tcu_unit();
 }
 #endif
+
+std::shared_ptr<SfuUnit> Core::sfu_unit() {
+  return impl_->sfu_unit();
+}
 
 const std::shared_ptr<LocalMem>& Core::local_mem() const {
   return impl_->local_mem();
