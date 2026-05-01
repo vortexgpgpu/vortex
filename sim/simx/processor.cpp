@@ -131,10 +131,13 @@ void ProcessorImpl::attach_ram(RAM* ram) {
 }
 
 void ProcessorImpl::flush_caches() {
-  // Phase 1: L1 dcaches walk dirty lines and emit writebacks to L2 (or
-  // directly to memsim if L2 is bypassed). Tick until all dcaches report done
-  // *and* the channels carrying their writebacks have drained, so L2 has
-  // observed every eviction before its own walk begins.
+  // Cache hierarchy is drained inside-out so each level only walks
+  // after the level above has emitted all its dirty writebacks and the
+  // channels carrying them have settled.
+
+  // L1 dcaches: walk dirty lines and emit writebacks to L2 (or directly
+  // to memsim when L2 is bypassed). Tick until all dcaches report done
+  // *and* the inflight channels have drained.
   for (auto& cluster : clusters_) {
     cluster->dcache_flush_begin();
   }
@@ -148,7 +151,7 @@ void ProcessorImpl::flush_caches() {
     SimPlatform::instance().tick();
   }
 
-  // Phase 2: L2 caches.
+  // L2 caches.
   for (auto& cluster : clusters_) {
     cluster->l2_flush_begin();
   }
@@ -162,7 +165,7 @@ void ProcessorImpl::flush_caches() {
     SimPlatform::instance().tick();
   }
 
-  // Phase 3: L3 cache (single instance at processor level).
+  // L3 cache (single instance at processor level).
   l3cache_->flush_begin();
   while (!l3cache_->flush_done() || SimChannelBase::inflight_count() != 0) {
     SimPlatform::instance().tick();

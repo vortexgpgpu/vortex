@@ -45,14 +45,6 @@ using namespace vortex;
     case (addr + (VX_CSR_MPM_BASE_H-VX_CSR_MPM_BASE)) : return ((value >> 32) & 0xFFFFFFFF)
 #endif
 
-CsrUnit::CsrUnit(const SimContext& ctx, const char* name, Core* core)
-  : FuncUnit<NUM_SFU_BLOCKS>(ctx, name, core)
-{}
-
-uint32_t CsrUnit::latency_of(const instr_trace_t* /*trace*/) const {
-  return 4;
-}
-
 Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   auto& sched     = core_->scheduler();
   auto& warp      = sched.warp(wid);
@@ -294,7 +286,7 @@ void CsrUnit::update_fcrs(uint32_t fflags, uint32_t wid, uint32_t tid) {
   }
 }
 
-void CsrUnit::execute(instr_trace_t* trace) {
+void CsrUnit::process(instr_trace_t* trace) {
   // Use trace->tmask captured at issue (matches what commit/writeback uses).
   auto& tmask = trace->tmask;
   auto& instr = *trace->instr_ptr;
@@ -349,21 +341,5 @@ void CsrUnit::execute(instr_trace_t* trace) {
   default:
     std::abort();
   }
-  DT(3, this->name() << " execute: op=" << csr_type << ", " << *trace);
-}
-
-void CsrUnit::on_tick() {
-  for (uint32_t b = 0; b < NUM_SFU_BLOCKS; ++b) {
-    auto& input = Inputs.at(b);
-    if (input.empty())
-      continue;
-    auto& output = Outputs.at(b);
-    if (output.full())
-      continue; // stall
-    auto trace = input.peek();
-    uint32_t delay = this->latency_of(trace);
-    this->execute(trace);
-    output.send(trace, delay);
-    input.pop();
-  }
+  DT(3, "csr-unit process: op=" << csr_type << ", " << *trace);
 }

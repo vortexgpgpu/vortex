@@ -27,6 +27,7 @@ class ProcessorImpl;
 class Scheduler;
 class CsrUnit;
 class TcuUnit;
+class SfuUnit;
 class LocalMem;
 class LocalMemSwitch;
 class MemCoalescer;
@@ -49,7 +50,6 @@ public:
     uint64_t fpu_stalls = 0;
     uint64_t lsu_stalls = 0;
     uint64_t sfu_stalls = 0;
-    uint64_t csr_stalls = 0;
   #ifdef EXT_TCU_ENABLE
     uint64_t tcu_stalls = 0;
   #endif
@@ -59,7 +59,6 @@ public:
     uint64_t fpu_instrs = 0;
     uint64_t lsu_instrs = 0;
     uint64_t sfu_instrs = 0;
-    uint64_t csr_instrs = 0;
   #ifdef EXT_TCU_ENABLE
     uint64_t tcu_instrs = 0;
   #endif
@@ -133,6 +132,8 @@ public:
 #ifdef EXT_TCU_ENABLE
   std::shared_ptr<TcuUnit>& tcu_unit();
 #endif
+
+  std::shared_ptr<SfuUnit> sfu_unit();
 
   PoolAllocator<instr_trace_t, 64>& trace_pool();
 

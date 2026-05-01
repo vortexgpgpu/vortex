@@ -13,19 +13,24 @@
 
 #pragma once
 
-#include "func_unit.h"
+#include "instr_trace.h"
 
 namespace vortex {
 
-// CSR functional unit (FUType::CSR).
-// Owns CSR semantics: get/set CSR, FPU rounding mode lookup, fflags update.
-// Per-warp fcsr / cta_csrs / mscratch live on the Scheduler and are reached
-// via core_->scheduler().warp(wid).
-class CsrUnit : public FuncUnit<NUM_SFU_BLOCKS> {
-public:
-  using Ptr = std::shared_ptr<CsrUnit>;
+class Core;
 
-  CsrUnit(const SimContext& ctx, const char* name, Core* core);
+// CSR sub-unit of the SFU. Owns CSR semantics (get/set CSR, FPU rounding
+// mode lookup, fflags update). Plain (non-SimObject) class owned by
+// SfuUnit; per-warp fcsr / cta_csrs / mscratch live on the Scheduler
+// and are reached via core->scheduler().warp(wid).
+class CsrUnit {
+public:
+  explicit CsrUnit(Core* core) : core_(core) {}
+
+  // Execute the CsrType side effects for `trace` (CSRRW / CSRRS / CSRRC).
+  // Caller (SfuUnit) is responsible for the input/output channel push and
+  // the latency.
+  void process(instr_trace_t* trace);
 
   // CSR access surface used by FpuUnit (fcsr lookup / fflags update).
   Word get_csr(uint32_t addr, uint32_t wid, uint32_t tid);
@@ -33,15 +38,8 @@ public:
   uint32_t get_fpu_rm(uint32_t funct3, uint32_t wid, uint32_t tid);
   void update_fcrs(uint32_t fflags, uint32_t wid, uint32_t tid);
 
-protected:
-  void on_tick() override;
-
 private:
-  // Per-unit functional execution (CSRRW / CSRRS / CSRRC). Called only
-  // from this unit's tick().
-  void execute(instr_trace_t* trace);
-
-  uint32_t latency_of(const instr_trace_t* trace) const;
+  Core* core_;
 };
 
-}
+} // namespace vortex

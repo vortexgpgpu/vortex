@@ -163,7 +163,6 @@ enum class FUType {
   LSU,
   FPU,
   SFU,
-  CSR,
 #ifdef EXT_TCU_ENABLE
   TCU,
 #endif
@@ -176,7 +175,6 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::LSU: os << "LSU"; break;
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
-  case FUType::CSR: os << "CSR"; break;
 #ifdef EXT_TCU_ENABLE
   case FUType::TCU: os << "TCU"; break;
 #endif
@@ -991,6 +989,13 @@ struct MemReq {
   // `data` is null and `byteen` is unused.
   uint64_t                     byteen = 0;
   std::shared_ptr<mem_block_t> data;
+
+  // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
+  // Encoded as {notify_done, notify_bar_id}. The per-core LMEM-input
+  // tx_callback snoops these on packet delivery and pulses
+  // barrier_event_release(notify_bar_id) when notify_done is set.
+  bool     notify_done   = false;
+  uint32_t notify_bar_id = 0;
 
   MemReq(uint64_t _addr = 0,
           bool _write = false,

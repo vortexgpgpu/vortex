@@ -621,8 +621,8 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_src_reg(1, rs2, RegType::Integer);
   } break;
   case Opcode::SYS: {
-    if (funct3 != 0) { // CSRRW/CSRRS/CSRRC
-      instr->set_fu_type(FUType::CSR);
+    if (funct3 != 0) { // CSRRW/CSRRS/CSRRC — dispatched to the SFU's CSR sub-unit
+      instr->set_fu_type(FUType::SFU);
       instr->set_dest_reg(rd, RegType::Integer);
       switch (funct3) {
       case 1: case 5: instr->set_op_type(CsrType::CSRRW); break;

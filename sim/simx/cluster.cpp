@@ -20,6 +20,7 @@
 #include "debug.h"
 #ifdef EXT_DXA_ENABLE
 #include "dxa_core.h"
+#include "sfu_unit.h"
 #endif
 
 using namespace vortex;
@@ -100,13 +101,35 @@ public:
       l2cache_->core_rsp_out.at(i).bind(&l2arb->RspIn.at(i));
     }
 
-    // Wire DXA SMEM timing channel to each core's LocalMem.
-    // LocalMem::dxa_req_in releases the barrier on the is_last element.
+    // Per-core SFU.dxa_req_out (DxaUnit decodes onto it) → DxaCore::dxa_req_in[cid].
     for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
       for (uint32_t c = 0; c < cores_per_socket_; ++c) {
-        uint32_t lmem_idx = s * cores_per_socket_ + c;
-        dxa_core_->lmem_req_out.at(lmem_idx).bind(
-            &sockets_.at(s)->core(c)->local_mem()->dxa_req_in);
+        uint32_t cid = s * cores_per_socket_ + c;
+        auto sfu = sockets_.at(s)->core(c)->sfu_unit();
+        sfu->dxa_req_out.bind(&dxa_core_->dxa_req_in.at(cid));
+      }
+    }
+
+    // DxaCore::lmem_req_out[cid] → core's LocalMem.Inputs[port_dxa]. The
+    // DXA completion event is modelled by a SimChannel tx_callback on the
+    // same channel: it snoops every DXA-write packet at delivery (the
+    // cycle the LMEM input receives it) and pulses
+    // core->barrier_event_release for those carrying notify_done.
+    uint32_t port_dxa = LSU_NUM_REQS;
+  #ifdef EXT_TCU_ENABLE
+    port_dxa += 1;
+  #endif
+    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
+      for (uint32_t c = 0; c < cores_per_socket_; ++c) {
+        uint32_t cid = s * cores_per_socket_ + c;
+        Core* core = sockets_.at(s)->core(c).get();
+        auto& ch = dxa_core_->lmem_req_out.at(cid);
+        ch.bind(&core->local_mem()->Inputs.at(port_dxa));
+        ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
+          if (req.write && req.notify_done) {
+            core->barrier_event_release(req.notify_bar_id);
+          }
+        });
       }
     }
 #else

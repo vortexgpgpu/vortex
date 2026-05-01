@@ -28,7 +28,7 @@ SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/soft
 SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(SRC_DIR)/core.cpp $(SRC_DIR)/scheduler.cpp $(SRC_DIR)/cta_dispatcher.cpp $(SRC_DIR)/barrier_unit.cpp
 SRCS += $(SRC_DIR)/kmu/kmu.cpp
 SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/scoreboard.cpp $(SRC_DIR)/sequencer.cpp $(SRC_DIR)/opc_unit.cpp $(SRC_DIR)/dispatcher.cpp
-SRCS += $(SRC_DIR)/alu_unit.cpp $(SRC_DIR)/fpu_unit.cpp $(SRC_DIR)/lsu_unit.cpp $(SRC_DIR)/sfu_unit.cpp $(SRC_DIR)/csr_unit.cpp
+SRCS += $(SRC_DIR)/alu_unit.cpp $(SRC_DIR)/fpu_unit.cpp $(SRC_DIR)/lsu_unit.cpp $(SRC_DIR)/sfu_unit.cpp $(SRC_DIR)/wctl_unit.cpp $(SRC_DIR)/csr_unit.cpp
 SRCS += $(SRC_DIR)/mem/cache.cpp $(SRC_DIR)/mem/cache_cluster.cpp $(SRC_DIR)/mem/memory.cpp $(SRC_DIR)/mem/local_mem.cpp $(SRC_DIR)/mem/mem_coalescer.cpp
 SRCS += $(SRC_DIR)/mem/local_mem_switch.cpp $(SRC_DIR)/mem/lsu_mem_adapter.cpp
 
@@ -51,6 +51,7 @@ endif
 # Add DXA extension sources
 ifneq ($(filter -DEXT_DXA_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/dxa/dxa_core.cpp
+	SRCS += $(SRC_DIR)/dxa/dxa_unit.cpp
 endif
 
 # Debugging
