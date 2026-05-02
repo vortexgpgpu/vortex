@@ -538,7 +538,7 @@ public:
     , perf_stats_()
   {
     exec_done_.fill(false);
-    wgmma_planned_.fill(false);
+    wgmma_planned_warps_.fill(0);
     in_wgmma_.fill(false);
   }
 
@@ -553,7 +553,7 @@ public:
       mx_meta.fill(0);
     }
     exec_done_.fill(false);
-    wgmma_planned_.fill(false);
+    wgmma_planned_warps_.fill(0);
     in_wgmma_.fill(false);
     cta_owner_a_.fill(-1);
     cta_owner_b_ = -1;
@@ -573,14 +573,18 @@ public:
       if (std::get<TcuType>(trace->op_type) != TcuType::WGMMA) continue;
       wgmma_active |= (1u << b);
 
-      if (wgmma_planned_.at(b)) continue;
+      uint32_t wid = trace->wid;
+      uint64_t wid_bit = (uint64_t(1) << wid);
+      if (wgmma_planned_warps_.at(b) & wid_bit) continue;
       auto& instr = *trace->instr_ptr;
       auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
       if (!(tpuArgs.step_m == 0 && tpuArgs.step_n == 0 && tpuArgs.step_k == 0)) {
-        wgmma_planned_.at(b) = true;
+        // Non-first uop arrived at front without a prior plan for its warp —
+        // its first uop must have been already drained, so mark planned and
+        // continue (descriptors persist in lmem_desc_[wid] from that earlier uop).
+        wgmma_planned_warps_.at(b) |= wid_bit;
         continue;
       }
-      uint32_t wid = trace->wid;
       auto& rs1_data = trace->src_data[0];
       auto& rs2_data = trace->src_data[1];
       uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
@@ -605,12 +609,13 @@ public:
       }
       if (block_other_cta_inflight) {
         wgmma_active &= ~(1u << b);
-        wgmma_planned_.at(b) = false;
         continue;
       }
 
       // Drop the shared B buffer only when no other block is mid-WGMMA —
-      // otherwise we'd evict their resident bytes mid-flight.
+      // otherwise we'd evict their resident bytes mid-flight. With IW=1
+      // multiplexing several warps onto the same block, this also keeps
+      // the prior warp's B lines while we additively plan the next warp's.
       bool any_in_wgmma = false;
       for (auto v : in_wgmma_) any_in_wgmma = any_in_wgmma || v;
       auto& tbuf = simobject_->tbuf();
@@ -618,14 +623,18 @@ public:
         tbuf->invalidate_b();
         cta_owner_b_ = -1;
       }
-      tbuf->invalidate_a(b);
-      tbuf->invalidate_m(b);
+      // Only drop the per-block A/M buffers when no warp is currently in flight
+      // on this block — otherwise we'd evict the prior warp's still-needed lines.
+      if (!in_wgmma_.at(b)) {
+        tbuf->invalidate_a(b);
+        tbuf->invalidate_m(b);
+      }
       this->plan_wgmma_lines(b, wid, a_desc, b_desc, tpuArgs);
       if (tbuf->ready_a(b) && tbuf->ready_m(b) && tbuf->ready_b()) {
         ++perf_stats_.tbuf_cache_hits;
       }
       in_wgmma_.at(b) = true;
-      wgmma_planned_.at(b) = true;
+      wgmma_planned_warps_.at(b) |= wid_bit;
       cta_owner_a_.at(b) = new_cta;
       if (cta_owner_b_ == -1) cta_owner_b_ = new_cta;
     }
@@ -661,7 +670,8 @@ public:
     #ifdef TCU_WGMMA_ENABLE
       // CTA-overlap fence deferred this block's WGMMA — skip processing
       // until pass 1 plans it (when the previous CTA's blocks all drain).
-      if (tcu_type == TcuType::WGMMA && !wgmma_planned_.at(b))
+      if (tcu_type == TcuType::WGMMA &&
+          !(wgmma_planned_warps_.at(b) & (uint64_t(1) << trace->wid)))
         continue;
     #endif
 
@@ -723,12 +733,16 @@ public:
       if (simobject_->Outputs.at(b).try_send(trace, 2 + delay)) {
         exec_done_.at(b) = false;
       #ifdef TCU_WGMMA_ENABLE
-        // WGMMA wind-down: clear plan/in-flight flags on the last uop so
-        // the next WGMMA at this block re-decodes its descriptors.
+        // WGMMA wind-down: clear this warp's plan bit on its last uop so the
+        // next WGMMA at this (block, warp) re-decodes its descriptors. Block
+        // stays in_wgmma_ until ALL planned warps drain.
         if (tcu_type == TcuType::WGMMA && trace->instr_ptr->get_fu_unlock()) {
-          wgmma_planned_.at(b) = false;
-          in_wgmma_.at(b) = false;
-          cta_owner_a_.at(b) = -1;
+          uint64_t wid_bit = (uint64_t(1) << trace->wid);
+          wgmma_planned_warps_.at(b) &= ~wid_bit;
+          if (wgmma_planned_warps_.at(b) == 0) {
+            in_wgmma_.at(b) = false;
+            cta_owner_a_.at(b) = -1;
+          }
         }
       #endif
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
@@ -749,10 +763,11 @@ public:
     uint32_t e_bits = elem_bits(fmt_s);
     if (e_bits < 8) return;
     uint32_t e_bytes = e_bits / 8;
-    // NRC is encoded in args.cd_nregs (0→8, 1→16, 2→32). xtileN = NRC for the
-    // canonical (xtileM=2*tcM) layout.
+    // NRC is encoded in args.cd_nregs (0→8, 1→16, 2→32). xtileN follows the
+    // canonical formula: xtileN = NRC * NT / xtileM (matches host-side
+    // wgmma_context::xtileN).
     uint32_t nrc      = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
-    uint32_t xtile_n  = nrc;
+    uint32_t xtile_n  = (nrc * NUM_THREADS) / wg_cfg::xtileM;
 
     lmem_desc_t sd_a{}, sd_b{};
     if (is_a_smem) {
@@ -1055,7 +1070,11 @@ public:
     // load_lmem_word distinguishes A vs B by descriptor base.
     cur_a_desc_base_ = is_a_smem ? sd_a.base : ~uint64_t(0);
     // NRC drives B's xtileN. Encoding: cd_nregs 0/1/2 → NRC 8/16/32.
-    cur_xtile_n_ = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
+    // xtileN = NRC * NT / xtileM (canonical formula, matches host kernel).
+    {
+      uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
+      cur_xtile_n_ = (nrc * NUM_THREADS) / wg_cfg::xtileM;
+    }
 
     // Prepare A tile [tcM][tcK]
     reg_data_t a_tile[cfg::tcM * cfg::tcK];
@@ -1369,8 +1388,11 @@ private:
   mutable PerfStats perf_stats_;
   // Per-block "execute already happened for this trace" guard. Reset on input.pop().
   std::array<bool, NUM_TCU_BLOCKS> exec_done_;
-  // Per-block "WGMMA lines have been planned into the buffers" flag.
-  std::array<bool, NUM_TCU_BLOCKS> wgmma_planned_;
+  // Per-block bitmask of warp IDs whose WGMMA lines are already planned.
+  // Tracked per-warp because IW=1 multiplexes multiple warps' WGMMAs onto a
+  // single block — each warp's plan() runs once on its first uop (additively
+  // into the shared bbuf), then bit clears on fu_unlock.
+  std::array<uint64_t, NUM_TCU_BLOCKS> wgmma_planned_warps_;
   // Per-block "currently between first and last WGMMA uop" flag.
   // Used to gate the shared B buffer invalidation so it's only dropped when
   // no other block is mid-WGMMA.

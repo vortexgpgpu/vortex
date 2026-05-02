@@ -77,8 +77,6 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire [BLOCK_SIZE-1:0]                                  tbuf_ready
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR (req_step_m)  // bbuf doesn't use; abufs use per-block
-    // (req_step_n / req_cd_nregs are bbuf-only inputs; abufs ignore them)
 
 `ifdef TCU_SPARSE_ENABLE
     localparam NUM_LMEM_MASTERS = 2 * BLOCK_SIZE + 1;
@@ -137,7 +135,16 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 
     // -----------------------------------------------------------------------
-    // TB-shared bbuf (block 0 representative under lockstep)
+    // TB-shared bbuf — first-active-block representative.
+    //
+    // Under the dispatch lock-step gate (VX_tcu_unit.sv g_lockstep_gate), all
+    // blocks presenting a WGMMA uop carry identical (desc_b, step_k, step_n,
+    // cd_nregs) for the same warpgroup, so picking any one of them as the
+    // bbuf input is functionally equivalent. We pick the lowest-indexed
+    // active block to keep the mux structure simple. Hardcoding block 0
+    // (the previous design) silently broke when only blocks 1..Q-1 were
+    // active and block 0 had nothing to dispatch — bbuf stayed idle and
+    // higher blocks read stale data.
     // -----------------------------------------------------------------------
 
     wire                                       bbuf_ready_w;
@@ -147,6 +154,64 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [PERF_CTR_BITS-1:0] bbuf_stalls_w;
     wire [PERF_CTR_BITS-1:0] bbuf_lmem_reads_w;
 `endif
+
+    wire                          bbuf_req_valid;
+    wire [3:0]                    bbuf_req_step_m;
+    wire [3:0]                    bbuf_req_step_k;
+    wire [3:0]                    bbuf_req_step_n;
+    wire [1:0]                    bbuf_req_cd_nregs;
+    wire [`XLEN-1:0]              bbuf_req_desc_b;
+
+    if (BLOCK_SIZE == 1) begin : g_bbuf_inputs_n1
+        assign bbuf_req_valid    = req_valid[0];
+        assign bbuf_req_step_m   = req_step_m[0];
+        assign bbuf_req_step_k   = req_step_k[0];
+        assign bbuf_req_step_n   = req_step_n[0];
+        assign bbuf_req_cd_nregs = req_cd_nregs[0];
+        assign bbuf_req_desc_b   = req_desc_b[0];
+    end else begin : g_bbuf_inputs_pe
+        wire [BLOCK_SIZE-1:0] bbuf_sel_oh;
+        wire                  bbuf_sel_valid;
+        VX_priority_encoder #(
+            .N (BLOCK_SIZE)
+        ) bbuf_rep_pe (
+            .data_in    (req_valid),
+            .onehot_out (bbuf_sel_oh),
+            `UNUSED_PIN (index_out),
+            .valid_out  (bbuf_sel_valid)
+        );
+
+        // OR-mux: under lock-step all active inputs match, so OR-ing the
+        // masked values is equivalent to selecting via the one-hot index.
+        logic [3:0]        sel_step_m;
+        logic [3:0]        sel_step_k;
+        logic [3:0]        sel_step_n;
+        logic [1:0]        sel_cd_nregs;
+        logic [`XLEN-1:0]  sel_desc_b;
+        always_comb begin
+            sel_step_m   = '0;
+            sel_step_k   = '0;
+            sel_step_n   = '0;
+            sel_cd_nregs = '0;
+            sel_desc_b   = '0;
+            for (int b = 0; b < BLOCK_SIZE; ++b) begin
+                if (bbuf_sel_oh[b]) begin
+                    sel_step_m   = req_step_m[b];
+                    sel_step_k   = req_step_k[b];
+                    sel_step_n   = req_step_n[b];
+                    sel_cd_nregs = req_cd_nregs[b];
+                    sel_desc_b   = req_desc_b[b];
+                end
+            end
+        end
+
+        assign bbuf_req_valid    = bbuf_sel_valid;
+        assign bbuf_req_step_m   = sel_step_m;
+        assign bbuf_req_step_k   = sel_step_k;
+        assign bbuf_req_step_n   = sel_step_n;
+        assign bbuf_req_cd_nregs = sel_cd_nregs;
+        assign bbuf_req_desc_b   = sel_desc_b;
+    end
 
     VX_tcu_bbuf #(
         .INSTANCE_ID    (`SFORMATF(("%s-bbuf", INSTANCE_ID))),
@@ -159,26 +224,16 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .bbuf_stalls    (bbuf_stalls_w),
         .lmem_reads     (bbuf_lmem_reads_w),
     `endif
-        .req_valid      (req_valid[0]),
-        .req_step_m     (req_step_m[0]),
-        .req_step_k     (req_step_k[0]),
-        .req_step_n     (req_step_n[0]),
-        .req_cd_nregs   (req_cd_nregs[0]),
-        .req_desc_b     (req_desc_b[0]),
+        .req_valid      (bbuf_req_valid),
+        .req_step_m     (bbuf_req_step_m),
+        .req_step_k     (bbuf_req_step_k),
+        .req_step_n     (bbuf_req_step_n),
+        .req_cd_nregs   (bbuf_req_cd_nregs),
+        .req_desc_b     (bbuf_req_desc_b),
         .tcu_lmem_if    (lmem_masters[BBUF_IDX]),
         .bbuf_ready     (bbuf_ready_w),
         .bbuf_rs2_data  (bbuf_rs2_data_w)
     );
-
-    // Higher blocks' (req_step_n, req_cd_nregs, req_desc_b) are equal to
-    // block 0's under lockstep, but explicitly mark to suppress UNUSEDSIGNAL.
-    if (BLOCK_SIZE > 1) begin : g_bbuf_unused_per_block
-        for (genvar b = 1; b < BLOCK_SIZE; ++b) begin : g_b
-            `UNUSED_VAR (req_step_n[b])
-            `UNUSED_VAR (req_cd_nregs[b])
-            `UNUSED_VAR (req_desc_b[b])
-        end
-    end
 
     // -----------------------------------------------------------------------
     // Per-block sparse meta buffer (SS sparse only)
@@ -249,10 +304,38 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF (tcu_lmem_if, lmem_arb_out_if[0]);
 
     // -----------------------------------------------------------------------
+    // Per-block bbuf-key match.
+    //
+    // The bbuf storage is a single resident bank-row keyed on
+    //   (desc_b, step_k, step_n, cd_nregs)
+    // and is driven by the priority-encoded representative input. Other
+    // blocks whose own key differs from the representative would silently
+    // read stale data from the shared rs2 bus. Gate their tbuf_ready until
+    // they become the representative themselves (i.e. all lower-indexed
+    // active blocks have completed their WGMMAs). When all active blocks
+    // share the key (the production case of one CTA's warpgroup at the
+    // same uop), the gate is a no-op and the shared-B optimization is
+    // preserved; when blocks drift out of lockstep the design falls back
+    // to serial execution.
+    // -----------------------------------------------------------------------
+
+    wire [BLOCK_SIZE-1:0] block_key_match;
+    for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_block_match
+        wire same_desc_b = (req_desc_b[b][15:0] == bbuf_req_desc_b[15:0]);
+        wire same_step_k = (req_step_k[b]       == bbuf_req_step_k);
+        wire same_step_n = (req_step_n[b]       == bbuf_req_step_n);
+        wire same_cd_n   = (req_cd_nregs[b]     == bbuf_req_cd_nregs);
+        // Inactive blocks always "match" (they don't consume bbuf data).
+        // Active blocks must match the representative's key.
+        assign block_key_match[b] = !req_valid[b]
+                                  || (same_desc_b && same_step_k && same_step_n && same_cd_n);
+    end
+
+    // -----------------------------------------------------------------------
     // Per-block operand outputs
     //   rs1_data: pass-through from each block's abuf
     //   rs2_data: broadcast from shared bbuf
-    //   ready:   abuf_ready[b] AND bbuf_ready
+    //   ready:   abuf_ready[b] AND bbuf_ready AND key_match[b]
     // -----------------------------------------------------------------------
 
     for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_outs
@@ -260,9 +343,9 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign tbuf_rs2_data[b] = bbuf_rs2_data_w;
     `ifdef TCU_SPARSE_ENABLE
         assign tbuf_sp_meta[b]  = mbuf_sp_meta_w[b];
-        assign tbuf_ready[b]    = abuf_ready_w[b] && bbuf_ready_w && mbuf_ready_w[b];
+        assign tbuf_ready[b]    = abuf_ready_w[b] && bbuf_ready_w && mbuf_ready_w[b] && block_key_match[b];
     `else
-        assign tbuf_ready[b]    = abuf_ready_w[b] && bbuf_ready_w;
+        assign tbuf_ready[b]    = abuf_ready_w[b] && bbuf_ready_w && block_key_match[b];
     `endif
     end
 

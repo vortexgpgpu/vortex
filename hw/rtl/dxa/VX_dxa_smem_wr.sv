@@ -295,8 +295,13 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign smem_wr_last_pkt = is_last_drain && (!is_multicast || replay_is_last);
 
     // Completion flags: bar_stride hardcoded to 1.
+    // Use mc_write_valid (not mc_write_fire) to break a UNOPTFLAT loop:
+    // mc_write_fire = mc_write_valid && smem_bus_if.req_ready, and using
+    // it on the request side closes a comb cycle through the downstream
+    // LMEM arbiter. Flags are sampled by the receiver only when req_valid
+    // && req_ready, so qualifying with req_ready here is redundant.
     wire smem_wr_flags_last = active_notify_smem_done && (
-        is_multicast ? (mc_write_fire && is_last_drain) : smem_wr_last_pkt);
+        is_multicast ? (mc_write_valid && is_last_drain) : smem_wr_last_pkt);
     wire [BAR_ADDR_W-1:0] smem_wr_flags_bar = is_multicast
         ? BAR_ADDR_W'(active_bar_addr + BAR_ADDR_W'(replay_next_idx))
         : active_bar_addr;
