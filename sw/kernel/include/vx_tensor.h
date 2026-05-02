@@ -906,15 +906,22 @@ public:
     ctx_c::fill_fragment(dst, value);
   }
 
-  // Load A fragment (NRA=4 config) — block-major SMEM (RS path).
-  // Per docs/proposals/wgmma_simx_v3_addendum §3.1, A_warp is laid out as:
-  //   A_warp[(k_blk * m_steps + m_blk) * (tcM*tcK*i_ratio) + i_in*(tcK*i_ratio) + k_in_elem]
-  // Each lane reads i_ratio K-elements at one (i_in, k_word) cell of every (m_blk, k_blk) block.
+  // Load A fragment (NRA=4 config) from SMEM (RS path).
+  // Layout selection via `ldm` (in elements):
+  //   ldm == 0  → block-major (cooperative-load layout, per docs/proposals/
+  //               wgmma_simx_v3_addendum §3.1):
+  //                 A_warp[(k_blk * m_steps + m_blk) * (tcM*tcK*i_ratio)
+  //                        + i_in*(tcK*i_ratio) + k_in_elem]
+  //   ldm != 0  → row-major with `ldm` elements per row (DXA-loaded layout):
+  //                 A_warp[(m_blk*tcM + i_in)*ldm
+  //                        + (k_blk*(tcK*i_ratio) + k_in_elem)]
+  // Sparse: K is compressed by 2x → only sparse_k_steps = k_steps/2 K-blocks
+  // exist; m_steps * sparse_k_steps registers carry A data, the remaining
+  // ctx_a::sparse_regs slot is reserved for the metadata word.
   template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t /*ldm*/) {
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
     static_assert(Frag::Use == matrix_a, "only matrix_a fragment can be loaded from registers in wgmma context");
     static_assert(src_layout == row_major, "wgmma block-major load only accepts row_major caller hint");
-    static_assert(!is_sparse, "wgmma sparse RS load: block-major sparse A is Phase 3");
     static_assert(tcM * tcK == NT, "wgmma block-major load assumes canonical config (TC_M*TC_K == NT)");
 
     constexpr uint32_t k_row_elems = tcK * i_ratio;
@@ -922,15 +929,37 @@ public:
     uint32_t i_in      = lane / tcK;
     uint32_t k_in_elem = (lane % tcK) * i_ratio;
 
+    auto load_reg = [&](uint32_t m_blk, uint32_t k_blk) {
+      uint32_t elem_off;
+      if (ldm == 0) {
+        // Block-major SMEM: blocks contiguous, k-block outer.
+        elem_off = (k_blk * m_steps + m_blk) * a_blk_elems
+                 + i_in * k_row_elems
+                 + k_in_elem;
+      } else {
+        // Row-major SMEM: standard row*ldm + col.
+        elem_off = (m_blk * tcM + i_in) * uint32_t(ldm)
+                 + (k_blk * k_row_elems + k_in_elem);
+      }
+      return *reinterpret_cast<const vreg_t*>(
+                 reinterpret_cast<const input_t*>(src) + elem_off);
+    };
+
+    if constexpr (is_sparse) {
+      constexpr uint32_t sp_k_steps_local = k_steps / 2;
+      constexpr uint32_t a_regs           = m_steps * sp_k_steps_local;
+      detail::unroll_for<a_regs>([&](auto r) {
+        uint32_t m_blk = r / sp_k_steps_local;
+        uint32_t k_blk = r % sp_k_steps_local;
+        dst.data[r] = load_reg(m_blk, k_blk);
+      });
+    } else {
     detail::unroll_for<Frag::NR>([&](auto r) {
       uint32_t m_blk = r / k_steps;
       uint32_t k_blk = r % k_steps;
-      uint32_t elem_off = (k_blk * m_steps + m_blk) * a_blk_elems
-                       + i_in * k_row_elems
-                       + k_in_elem;
-      auto ptr = reinterpret_cast<const input_t*>(src) + elem_off;
-      dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+        dst.data[r] = load_reg(m_blk, k_blk);
     });
+  }
   }
 
   // Load sparse metadata into fragment_a.

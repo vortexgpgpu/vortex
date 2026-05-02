@@ -60,9 +60,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     auto desc_b = vt::vx_make_smem_desc(B_smem, 0); // stride field unused under block-major
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)
-    // RS: A from registers, B from smem (NRC <= 16 only)
+    // RS: A from registers, B from smem (NRC <= 16 only).
+    // ldm=0 selects block-major (matches the cooperative-load via
+    // a_blockmajor_idx above).
     ctx::fragment_a fragA;
-    ctx::load_matrix_sync(fragA, A_warp, ctx::tileK);
+    ctx::load_matrix_sync(fragA, A_warp, 0);
     ctx::wgmma_sync(fragC, fragA, desc_b, fragC);
   #else
     // SS: both from smem
