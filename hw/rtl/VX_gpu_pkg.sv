@@ -577,6 +577,21 @@ package VX_gpu_pkg;
         logic [`MEM_ADDR_WIDTH-1:0] lmem_addr;
     } cta_csrs_t;
 
+    typedef struct packed {
+        logic [NW_WIDTH:0]              cta_size;
+        logic [2:0][31:0]               block_idx;
+        logic [2:0][CTA_TID_WIDTH:0]    block_dim;
+        logic [2:0][31:0]               grid_dim;
+        logic [`MEM_ADDR_WIDTH-1:0]     param;
+        logic [`MEM_ADDR_WIDTH-1:0]     lmem_addr;
+    } cta_ctx_t;
+
+    typedef struct packed {
+        logic [NCTA_WIDTH-1:0]          cta_id;
+        logic [NW_WIDTH-1:0]            cta_rank;
+        logic [2:0][CTA_TID_WIDTH-1:0]  thread_idx;
+    } cta_warp_t;
+
     //////////////////////// instruction arguments ////////////////////////////
 
     localparam INST_ARGS_BITS = 3 + ALU_TYPE_BITS + 20;
