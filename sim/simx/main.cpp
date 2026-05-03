@@ -23,7 +23,9 @@
 #include "mem.h"
 #include "constants.h"
 #include <util.h>
+#include <simobject.h>
 #include "core.h"
+#include "scheduler.h"
 #include "VX_types.h"
 
 using namespace vortex;
@@ -116,13 +118,24 @@ int main(int argc, char **argv) {
     // run simulation
     processor.run();
 
-    // flush GPU caches before reading back results
-    {
-      uint32_t dummy;
-      for (uint32_t cid = 0; cid < NUM_CORES * NUM_CLUSTERS; ++cid) {
-        processor.dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
+    if (debug_mode) {
+      // Debug mode: run RBB server in a tick loop until OpenOCD disconnects
+      // and the program has completed naturally.
+      std::cout << "[DEBUG] Starting debug mode on port " << rbb_port << std::endl;
+
+      DebugModule::set_verbose_logging(debug_verbose);
+
+      // Reset processor and kick the KMU. In normal run() mode these are
+      // both done at the top of run(); debug mode replaces run() with its
+      // own tick loop, so it must do them explicitly.
+      processor.reset();
+      processor.start_kmu();
+
+      Core* core = processor.get_first_core();
+      if (core == nullptr) {
+        std::cerr << "[DEBUG] no cores configured" << std::endl;
+        return -1;
       }
-    }
 
     // read exitcode from @MPM.1
     ram.read(&exitcode, IO_EXIT_CODE, 4);

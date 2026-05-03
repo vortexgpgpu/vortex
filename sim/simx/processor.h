@@ -37,6 +37,21 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+  // DTM debug entry point: returns cluster[0].socket[0].core[0], or
+  // nullptr if the processor has no cores configured.
+  Core* get_first_core() const;
+
+  // DTM debug entry point: kick the KMU dispatcher so CTAs start landing
+  // when the simulator is ticked manually (debug-mode loop in main.cpp).
+  // run() does this internally; debug mode replaces run() with its own
+  // tick loop, so it must call this explicitly.
+  void start_kmu();
+
+  // True iff any cluster still has work to do (active warps, in-flight
+  // CTAs) or any SimChannel still has packets in flight. Mirrors the
+  // termination condition used in run().
+  bool any_running() const;
+
 private:
   ProcessorImpl* impl_;
 };

@@ -935,6 +935,9 @@ while [ "$1" != "" ]; do
         --dxa )
                 tests+=("dxa")
                 ;;
+        --dtm )
+                tests+=("dtm")
+                ;;
         --opencl )
                 tests+=("opencl")
                 ;;
@@ -993,6 +996,7 @@ while [ "$1" != "" ]; do
                 tests+=("kernel")
                 tests+=("regression")
                 tests+=("dxa")
+                tests+=("mpi")
                 tests+=("opencl")
                 tests+=("cache")
                 tests+=("vm")

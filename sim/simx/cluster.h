@@ -23,6 +23,8 @@ namespace vortex {
 
 class ProcessorImpl;
 
+class Socket;
+
 class Cluster : public SimObject<Cluster> {
 public:
   struct PerfStats {
@@ -68,6 +70,9 @@ public:
 #ifdef EXT_DXA_ENABLE
   DxaCore::Ptr& dxa_core();
 #endif
+
+  // Used by Processor::get_first_core() (DTM debug entry point).
+  std::shared_ptr<Socket>& socket(uint32_t idx);
 
 protected:
   void on_reset();

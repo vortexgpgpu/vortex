@@ -290,3 +290,28 @@ int Processor::dcr_write(uint32_t addr, uint32_t value) {
 int Processor::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   return impl_->dcr_read(addr, tag, value);
 }
+
+Core* Processor::get_first_core() const {
+  return impl_->get_first_core();
+}
+
+Core* ProcessorImpl::get_first_core() const {
+  if (clusters_.empty()) return nullptr;
+  auto& cluster = clusters_.at(0);
+  if (!cluster) return nullptr;
+  // NUM_SOCKETS / cores-per-socket are macros; we just want index 0.
+  auto& socket = cluster->socket(0);
+  if (!socket) return nullptr;
+  auto& core = socket->core(0);
+  return core.get();
+}
+
+bool ProcessorImpl::any_running() const {
+  for (auto& cluster : clusters_) {
+    if (cluster->running()) return true;
+  }
+  return SimChannelBase::inflight_count() != 0;
+}
+
+void Processor::start_kmu() { impl_->start_kmu(); }
+bool Processor::any_running() const { return impl_->any_running(); }

@@ -253,6 +253,8 @@ public:
   DxaCore::Ptr& dxa_core() { return dxa_core_; }
 #endif
 
+  Socket::Ptr& socket(uint32_t idx) { return sockets_.at(idx); }
+
 private:
   Cluster*                    simobject_;
   std::vector<Socket::Ptr>    sockets_;
@@ -335,3 +337,7 @@ DxaCore::Ptr& Cluster::dxa_core() {
   return impl_->dxa_core();
 }
 #endif
+
+std::shared_ptr<Socket>& Cluster::socket(uint32_t idx) {
+  return impl_->socket(idx);
+}
