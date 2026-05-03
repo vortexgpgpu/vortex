@@ -427,7 +427,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         end
     end
 
-    assign cta_csrs.cta_id     = 32'(cur_slot_r);
+    assign cta_csrs.cta_id     = cur_slot_r;
     assign cta_csrs.cta_rank   = cta_rank_r;
     assign cta_csrs.cta_size   = cta_size_r;
     assign cta_csrs.thread_idx = thread_idx_r;
