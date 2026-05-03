@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/build"
 RUN_SH="${SCRIPT_DIR}/run.sh"
+PLOT_PY="${SCRIPT_DIR}/plot.py"
 
 TESTS="${TESTS:-all}"
 CSV_FILE="${CSV_FILE:-${BUILD_DIR}/run_all.csv}"
@@ -13,14 +14,30 @@ LOG_DIR="${LOG_DIR:-.}"
 DO_CLEAN_FLAG="${DO_CLEAN_FLAG:-}"
 
 CONFIGS=(
-  "-m 64  -n 64  -k 64  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 2"
-  "-m 64  -n 64  -k 128 -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4"
-  "-m 128 -n 64  -k 64  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 4 -N 8  -Q 2"
-  "-m 64  -n 128 -k 64  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 4 -N 8  -Q 4"
-  "-m 128 -n 128 -k 64  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 8"
-  "-m 32  -n 32  -k 32  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 2"
-  "-m 64  -n 64  -k 64  -s 1 -a 0.25 -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4"
-  "-m 64  -n 64  -k 64  -s 2 -a 0.25 -b 0.25 -T 32 -i fp16 -o fp32 -w 2 -M 4 -N 8  -Q 8"
+  # "-m 32  -n 32  -k 256  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run1.log"
+  # "-m 32  -n 32  -k 256  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run2.log"
+  # "-m 32  -n 32  -k 256  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu,sgemm_tcu_sp -l run1.log"
+  # "-m 32  -n 32  -k 256  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu,sgemm_tcu_sp -l run2.log"
+  
+  "-m 64  -n 64  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run3.log"
+  "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run4.log"
+  "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run5.log"
+  "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run6.log"
+  "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run7.log"
+  "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run8.log"
+  "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run9.log"
+  "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run10.log"
+  "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run11.log"
+  "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run12.log"
+
+  # "-m 64  -n 64  -k 64  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 2"
+  # "-m 64  -n 64  -k 128 -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4"
+  # "-m 128 -n 64  -k 64  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 4 -N 8  -Q 2"
+  # "-m 64  -n 128 -k 64  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 4 -N 8  -Q 4"
+  # "-m 128 -n 128 -k 64  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 8"
+  # "-m 32  -n 32  -k 32  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 2"
+  # "-m 64  -n 64  -k 64  -s 1 -a 0.25 -b 0.5  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4"
+  # "-m 64  -n 64  -k 64  -s 2 -a 0.25 -b 0.25 -T 32 -i fp16 -o fp32 -w 2 -M 4 -N 8  -Q 8"
 )
 
 usage() {
@@ -30,9 +47,9 @@ Usage: ./custom/run_all.sh
 Runs custom/run.sh over a predefined configuration sweep.
 
 Environment overrides:
-  TESTS          Test list passed to run.sh -t (default: all)
+  TESTS          Default test list passed to run.sh -t when a config omits -t (default: all)
   CSV_FILE       Manifest CSV path (default: build/run_all.csv)
-  LOG_DIR        Log directory relative to build/ (default: .)
+  LOG_DIR        Default log directory relative to build/ when a config omits -l (default: .)
   DO_CLEAN_FLAG  Set to -C to skip make clean in run.sh
 
 Generated logs:
@@ -81,8 +98,9 @@ make_suffixed_log() {
 }
 
 test_enabled() {
-  local needle="$1"
-  local normalized="${TESTS//,/ }"
+  local test_list="$1"
+  local needle="$2"
+  local normalized="${test_list//,/ }"
   local test
 
   for test in ${normalized}; do
@@ -95,6 +113,22 @@ test_enabled() {
   done
 
   return 1
+}
+
+validate_tests() {
+  local test_list="$1"
+  local normalized="${test_list//,/ }"
+  local test
+
+  for test in ${normalized}; do
+    case "${test}" in
+      all|sgemm_tcu_op|tcu_op|op|sgemm_tcu|ip|sgemm_tcu_sp|ip_sp) ;;
+      *)
+        echo "Unsupported test: ${test}. Expected sgemm_tcu_op, sgemm_tcu, sgemm_tcu_sp, or all." >&2
+        exit 1
+        ;;
+    esac
+  done
 }
 
 append_csv_row() {
@@ -127,6 +161,19 @@ append_csv_row() {
   } >> "${CSV_FILE}"
 }
 
+run_plot_for_log() {
+  local log_file="$1"
+  local log_path="${BUILD_DIR}/${log_file}"
+
+  if [[ ! -f "${log_path}" ]]; then
+    echo "Skipping stats, missing log: ${log_path}" >&2
+    return 1
+  fi
+
+  echo "stats: ${log_file}"
+  PYTHONDONTWRITEBYTECODE=1 python3 "${PLOT_PY}" "${log_path}"
+}
+
 load_config() {
   m=""
   n=""
@@ -141,6 +188,8 @@ load_config() {
   block_m=""
   block_n=""
   queue_depth=""
+  config_tests="${TESTS}"
+  log_file=""
   config_args=()
 
   while [[ $# -gt 0 ]]; do
@@ -158,12 +207,17 @@ load_config() {
       -M) block_m="$2"; config_args+=("$1" "$2"); shift 2 ;;
       -N) block_n="$2"; config_args+=("$1" "$2"); shift 2 ;;
       -Q) queue_depth="$2"; config_args+=("$1" "$2"); shift 2 ;;
+      -p) config_args+=("$1" "$2"); shift 2 ;;
+      -t) config_tests="$2"; config_args+=("$1" "$2"); shift 2 ;;
+      -l) log_file="$2"; config_args+=("$1" "$2"); shift 2 ;;
       *)
         echo "Unsupported config option: $1" >&2
         exit 1
         ;;
     esac
   done
+
+  validate_tests "${config_tests}"
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -173,6 +227,11 @@ fi
 
 if [[ ! -x "${RUN_SH}" ]]; then
   echo "Missing executable run script: ${RUN_SH}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${PLOT_PY}" ]]; then
+  echo "Missing plot script: ${PLOT_PY}" >&2
   exit 1
 fi
 
@@ -190,14 +249,19 @@ run_index=1
 for config in "${CONFIGS[@]}"; do
   read -r -a raw_config_args <<< "${config}"
   load_config "${raw_config_args[@]}"
-  log_file="$(make_log_path "${run_index}")"
+  if [[ -z "${log_file}" ]]; then
+    log_file="$(make_log_path "${run_index}")"
+    config_args+=("-l" "${log_file}")
+  fi
+  if [[ "$(dirname "${log_file}")" != "." ]]; then
+    mkdir -p "${BUILD_DIR}/$(dirname "${log_file}")"
+  fi
 
-  echo "run${run_index}: m=${m} n=${n} k=${k} sparsity=${sparsity} a=${a_sparsity} b=${b_sparsity} threads=${num_threads} queue=${queue_depth}"
+  echo "run${run_index}: tests=${config_tests} log=${log_file} m=${m} n=${n} k=${k} sparsity=${sparsity} a=${a_sparsity} b=${b_sparsity} threads=${num_threads} queue=${queue_depth}"
 
   "${RUN_SH}" \
-    -t "${TESTS}" \
+    -t "${config_tests}" \
     "${config_args[@]}" \
-    -l "${log_file}" \
     ${DO_CLEAN_FLAG}
   status=$?
 
@@ -205,14 +269,19 @@ for config in "${CONFIGS[@]}"; do
     overall_status="${status}"
   fi
 
-  if test_enabled "sgemm_tcu_op"; then
+  if test_enabled "${config_tests}" "sgemm_tcu_op"; then
     append_csv_row "${log_file}" "sgemm_tcu_op" "${status}" "${run_index}" "${m}" "${n}" "${k}" "${sparsity}" "${a_sparsity}" "${b_sparsity}" "${num_threads}" "${itype}" "${otype}" "${warps}" "${block_m}" "${block_n}" "${queue_depth}"
+    run_plot_for_log "${log_file}" || overall_status=$?
   fi
-  if test_enabled "sgemm_tcu"; then
-    append_csv_row "$(make_suffixed_log "${log_file}" "_ip")" "sgemm_tcu" "${status}" "${run_index}" "${m}" "${n}" "${k}" "${sparsity}" "${a_sparsity}" "${b_sparsity}" "${num_threads}" "${itype}" "${otype}" "${warps}" "${block_m}" "${block_n}" "${queue_depth}"
+  if test_enabled "${config_tests}" "sgemm_tcu"; then
+    test_log_file="$(make_suffixed_log "${log_file}" "_ip")"
+    append_csv_row "${test_log_file}" "sgemm_tcu" "${status}" "${run_index}" "${m}" "${n}" "${k}" "${sparsity}" "${a_sparsity}" "${b_sparsity}" "${num_threads}" "${itype}" "${otype}" "${warps}" "${block_m}" "${block_n}" "${queue_depth}"
+    run_plot_for_log "${test_log_file}" || overall_status=$?
   fi
-  if test_enabled "sgemm_tcu_sp"; then
-    append_csv_row "$(make_suffixed_log "${log_file}" "_ip_sp")" "sgemm_tcu_sp" "${status}" "${run_index}" "${m}" "${n}" "${k}" "${sparsity}" "${a_sparsity}" "${b_sparsity}" "${num_threads}" "${itype}" "${otype}" "${warps}" "${block_m}" "${block_n}" "${queue_depth}"
+  if test_enabled "${config_tests}" "sgemm_tcu_sp"; then
+    test_log_file="$(make_suffixed_log "${log_file}" "_ip_sp")"
+    append_csv_row "${test_log_file}" "sgemm_tcu_sp" "${status}" "${run_index}" "${m}" "${n}" "${k}" "${sparsity}" "${a_sparsity}" "${b_sparsity}" "${num_threads}" "${itype}" "${otype}" "${warps}" "${block_m}" "${block_n}" "${queue_depth}"
+    run_plot_for_log "${test_log_file}" || overall_status=$?
   fi
 
   run_index=$((run_index + 1))

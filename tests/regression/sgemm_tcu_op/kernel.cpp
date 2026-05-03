@@ -123,8 +123,9 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
   static constexpr uint32_t total_tiles = tiles_n * tiles_m;
   const uint32_t block_tile_id = blockIdx.y * gridDim.x + blockIdx.x;
 
-  vortex::barrier load_bar[2] = { vortex::barrier(0, 1), vortex::barrier(1, 1) };
-  vortex::barrier tcu_bar[2]  = { vortex::barrier(2, 1), vortex::barrier(3, 1) };
+  static constexpr uint32_t num_warps_per_cta = 1;
+  vortex::barrier load_bar[2] = { vortex::barrier(0, num_warps_per_cta), vortex::barrier(1, num_warps_per_cta) };
+  vortex::barrier tcu_bar[2]  = { vortex::barrier(2, num_warps_per_cta), vortex::barrier(3, num_warps_per_cta) };
 
   static_assert (LMEM_ENABLED);
   // static constexpr uint32_t input_bytes = sizeof(ctx::input_t);

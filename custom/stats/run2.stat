@@ -1,30 +1,32 @@
 Testbench: sgemm_tcu_op
-Sparsity Mode:0 | MxNxK=32x32x128 | A sparsity=0% | B sparsity=0.146484% | It=fp8
+Sparsity Mode:0 | MxNxK=32x32x256 | A sparsity=0% | B sparsity=0% | It=fp16
 Flags: TCU_OP, TCU_TYPE_DPI
-BLOCK_M=2, BLOCK_N=16, XBAR_QUEUE_DEPTH=4
-Warps: 2
+BLOCK_M=2, BLOCK_N=16, XBAR_QUEUE_DEPTH=2
+Threads: 32, Warps: 2
 perf=2
 
 PASS
-Total kernel cycles: 16263
-Total kernel instructions: 209
-Kernel body cycles: 7015
-Kernel body instructions: 60
-MUL active cycles: 4096
+Total kernel cycles: 27696
+Total kernel instructions: 291
+Kernel body cycles: 10974
+Kernel body instructions: 126
+MUL active cycles: 8192
 XBAR stalls: 0.00% (0 cycles)
 
-PERF2: core0: lmem: reqs=3072, bank_stalls=0 (utility=100%)
-PERF2: core0: coalescer: misses=330
-PERF2: core0: icache: reads=209, miss=20 (hit=90%), mshr_st=0 (utility=100%)
-PERF2: core0: dcache: reqs=777, miss_r=325 (hit=0%), miss_w=426 (hit=6%), bank_st=353 (utility=69%)
-PERF2: memory: reqs=935 (r=472, w=463), lat=153.9 cyc, bank_st=0 (utility=100%)
-PERF2: instrs=209, cycles=16263, IPC=0.013
+PERF2: core0: lmem: reqs=9216, bank_stalls=0 (utility=100%)
+PERF2: core0: coalescer: misses=600
+PERF2: core0: icache: reads=291, miss=25 (hit=91%), mshr_st=0 (utility=100%)
+PERF2: core0: dcache: reqs=1353, miss_r=613 (hit=0%), miss_w=680 (hit=8%), bank_st=641 (utility=68%)
+PERF2: memory: reqs=1902 (r=1149, w=753), lat=146.4 cyc, bank_st=0 (utility=100%)
+PERF2: instrs=291, cycles=27696, IPC=0.011
 
 MEMORY (perf=2):
-core0: lmem: reqs=3072, bank_stalls=0 (utility=100%)
-core0: coalescer: misses=330
-core0: icache: reads=209, miss=20 (hit=90%), mshr_st=0 (utility=100%)
-core0: dcache: reqs=777, miss_r=325 (hit=0%), miss_w=426 (hit=6%), bank_st=353 (utility=69%)
-memory: reqs=935 (r=472, w=463), lat=153.9 cyc, bank_st=0 (utility=100%)
+core0: lmem: reqs=9216, bank_stalls=0 (utility=100%)
+core0: coalescer: misses=600
+core0: icache: reads=291, miss=25 (hit=91%), mshr_st=0 (utility=100%)
+core0: dcache: reqs=1353, miss_r=613 (hit=0%), miss_w=680 (hit=8%), bank_st=641 (utility=68%)
+memory: reqs=1902 (r=1149, w=753), lat=146.4 cyc, bank_st=0 (utility=100%)
 
-TCU cycles (from first TCU issue to last TCU commit): 4283
+TCU cycles (from first TCU issue to last TCU commit): 8451
+MULs active: 8192
+TCU utilization: 74.65%

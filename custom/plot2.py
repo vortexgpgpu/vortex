@@ -30,6 +30,7 @@ FEOP_PARAMS_RE = re.compile(
     re.IGNORECASE,
 )
 CONFIG_WARPS_RE = re.compile(r'\bCONFIGS:.*\bnum_warps=(\d+)\b', re.IGNORECASE)
+CONFIG_THREADS_RE = re.compile(r'\bCONFIGS:.*\bnum_threads=(\d+)\b', re.IGNORECASE)
 TESTBENCH_RUN_RE = re.compile(r'\b\./([A-Za-z0-9_.+-]+)\b')
 TESTBENCH_MAKE_RE = re.compile(r"/tests/(?:regression|opencl)/([^/'\s]+)")
 FLAGS_LINE_RE = re.compile(r'^\s*Flags:\s*(.+?)\s*$', re.IGNORECASE)
@@ -61,6 +62,8 @@ DXA_CYCLES_A_BITMAP_RE = re.compile(r'DXA cycles A bitmap:\s*(\d+)', re.IGNORECA
 DXA_CYCLES_B_BITMAP_RE = re.compile(r'DXA cycles B bitmap:\s*(\d+)', re.IGNORECASE)
 ROI_ENABLED_RE = re.compile(r'\bENABLE_ROI(?:\s+is\s+defined)?\b', re.IGNORECASE)
 MUL_ACTIVE_CYCLES_RE = re.compile(r'Issue Busy processing')
+FEOP_ENQ_RE = re.compile(r'\bFEOP-enq\b')
+FEDP_ENQ_RE = re.compile(r'\bFEDP-enq\b')
 
 
 def find_log_file(name):
@@ -263,6 +266,7 @@ def parse_run_metadata(lines):
         "flags": [],
         "tcu_type": None,
         "testbench": None,
+        "num_threads": None,
         "warps": None,
     }
 
@@ -301,6 +305,10 @@ def parse_run_metadata(lines):
 
         if TCU_OP_DEFINED_RE.search(line):
             add_flag("TCU_OP")
+
+        m_threads = CONFIG_THREADS_RE.search(line)
+        if m_threads and meta["num_threads"] is None:
+            meta["num_threads"] = int(m_threads.group(1))
 
         m_warps = CONFIG_WARPS_RE.search(line)
         if m_warps and meta["warps"] is None:
@@ -474,6 +482,8 @@ def parse_roi_metrics(lines):
         "dxa_cycles_b_bitmap": None,
         "roi_enabled": False,
         "mul_active_cycles": 0,
+        "muls_active": None,
+        "tcu_utilization": None,
     }
 
     metrics["roi_enabled"] = any(ROI_ENABLED_RE.search(line) for line in lines)
@@ -529,6 +539,26 @@ def parse_roi_metrics(lines):
         metrics["kernel_body_cycles"] = metrics["total_kernel_cycles"]
 
     return metrics
+
+
+def count_muls_active(lines, run_meta):
+    if has_tcu_op_enabled(run_meta):
+        enq_re = FEOP_ENQ_RE
+        divisor = run_meta["block_m"] or 2
+    else:
+        enq_re = FEDP_ENQ_RE
+        divisor = run_meta["num_threads"] or 32
+
+    enq_count = sum(1 for line in lines if enq_re.search(line))
+    return enq_count / divisor
+
+
+def calculate_tcu_utilization(metrics):
+    kernel_body_cycles = metrics["kernel_body_cycles"]
+    muls_active = metrics["muls_active"]
+    if kernel_body_cycles is None or kernel_body_cycles == 0 or muls_active is None:
+        return None
+    return muls_active / kernel_body_cycles
 
 
 def parse_total_kernel_cycles(lines):
@@ -651,9 +681,14 @@ def format_feop_params(run_meta):
 
 
 def format_arch_params(run_meta):
-    if run_meta["warps"] is None:
+    arch_params = []
+    if run_meta["num_threads"] is not None:
+        arch_params.append(f"Threads: {run_meta['num_threads']}")
+    if run_meta["warps"] is not None:
+        arch_params.append(f"Warps: {run_meta['warps']}")
+    if not arch_params:
         return ""
-    return f"Warps: {run_meta['warps']}"
+    return ", ".join(arch_params)
 
 
 def format_flags(run_meta):
@@ -705,10 +740,20 @@ def format_perf1_section(perf_info):
 def format_roi_variables(metrics, run_meta):
     def metric_text(key):
         value = metrics[key]
-        return "N/A" if value is None else str(value)
+        if value is None:
+            return "N/A"
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value)
+
+    def utilization_text():
+        value = metrics["tcu_utilization"]
+        return "N/A" if value is None else f"{value * 100.0:.2f}%"
 
     lines = [
-        f"TCU cycles (from first TCU issue to last TCU commit): {metric_text('tcu_cycles')}"
+        f"TCU cycles (from first TCU issue to last TCU commit): {metric_text('tcu_cycles')}",
+        f"MULs active: {metric_text('muls_active')}",
+        f"TCU utilization: {utilization_text()}",
     ]
 
     return lines
@@ -897,6 +942,8 @@ def main():
     error_count = run_result["error_count"] if run_result["error_count"] is not None else 0
     has_errors = run_result["status"] != "PASS"
     run_meta = parse_run_metadata(lines)
+    roi_metrics["muls_active"] = count_muls_active(lines, run_meta)
+    roi_metrics["tcu_utilization"] = calculate_tcu_utilization(roi_metrics)
     perf_info = parse_perf_info(lines)
 
     tcu_op_enabled = has_tcu_op_enabled(run_meta)

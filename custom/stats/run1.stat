@@ -1,0 +1,32 @@
+Testbench: sgemm_tcu_op
+Sparsity Mode:0 | MxNxK=32x32x256 | A sparsity=0.0732422% | B sparsity=0.0732422% | It=fp8
+Flags: TCU_OP, TCU_TYPE_DPI
+BLOCK_M=2, BLOCK_N=16, XBAR_QUEUE_DEPTH=2
+Warps: 2
+perf=2
+
+PASS
+Total kernel cycles: 22827
+Total kernel instructions: 236
+Kernel body cycles: 10687
+Kernel body instructions: 80
+MUL active cycles: 8192
+XBAR stalls: 0.00% (0 cycles)
+
+PERF2: core0: lmem: reqs=5120, bank_stalls=0 (utility=100%)
+PERF2: core0: coalescer: misses=420
+PERF2: core0: icache: reads=236, miss=23 (hit=90%), mshr_st=0 (utility=100%)
+PERF2: core0: dcache: reqs=969, miss_r=421 (hit=0%), miss_w=512 (hit=7%), bank_st=449 (utility=68%)
+PERF2: memory: reqs=1260 (r=699, w=561), lat=156.2 cyc, bank_st=0 (utility=100%)
+PERF2: instrs=236, cycles=22827, IPC=0.010
+
+MEMORY (perf=2):
+core0: lmem: reqs=5120, bank_stalls=0 (utility=100%)
+core0: coalescer: misses=420
+core0: icache: reads=236, miss=23 (hit=90%), mshr_st=0 (utility=100%)
+core0: dcache: reqs=969, miss_r=421 (hit=0%), miss_w=512 (hit=7%), bank_st=449 (utility=68%)
+memory: reqs=1260 (r=699, w=561), lat=156.2 cyc, bank_st=0 (utility=100%)
+
+TCU cycles (from first TCU issue to last TCU commit): 8403
+MULs active: 8192
+TCU utilization: 76.65%
