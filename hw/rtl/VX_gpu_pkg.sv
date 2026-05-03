@@ -30,6 +30,10 @@ package VX_gpu_pkg;
 	localparam NT_WIDTH = `UP(NT_BITS);
 	localparam NB_WIDTH = `UP(NB_BITS);
 
+    localparam NUM_CTA_MAX = `NUM_WARPS;
+	localparam NCTA_BITS  = `CLOG2(NUM_CTA_MAX);
+	localparam NCTA_WIDTH = `UP(NCTA_BITS);
+
     localparam XLENB    = `XLEN / 8;
     localparam XLENB_W  = `CLOG2(XLENB);
     localparam BYTESEL_BITS = (XLENB_W + XLENB_W);
