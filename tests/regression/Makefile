@@ -12,6 +12,7 @@ all:
 	$(MAKE) -C dotproduct2
 	$(MAKE) -C mstress
 	$(MAKE) -C io_addr
+	$(MAKE) -C arith
 	$(MAKE) -C printf
 	$(MAKE) -C diverge
 	$(MAKE) -C sort
@@ -69,6 +70,7 @@ run-simx:
 	$(MAKE) -C dotproduct2 run-simx
 	$(MAKE) -C mstress run-simx
 	$(MAKE) -C io_addr run-simx
+	$(MAKE) -C arith run-simx
 	$(MAKE) -C printf run-simx
 	$(MAKE) -C diverge run-simx
 	$(MAKE) -C sort run-simx
@@ -126,6 +128,7 @@ run-rtlsim:
 	$(MAKE) -C dotproduct2 run-rtlsim
 	$(MAKE) -C mstress run-rtlsim
 	$(MAKE) -C io_addr run-rtlsim
+	$(MAKE) -C arith run-rtlsim
 	$(MAKE) -C printf run-rtlsim
 	$(MAKE) -C diverge run-rtlsim
 	$(MAKE) -C sort run-rtlsim
@@ -173,6 +176,7 @@ clean:
 	$(MAKE) -C dotproduct2 clean
 	$(MAKE) -C mstress clean
 	$(MAKE) -C io_addr clean
+	$(MAKE) -C arith clean
 	$(MAKE) -C printf clean
 	$(MAKE) -C diverge clean
 	$(MAKE) -C mpi_diverge clean
