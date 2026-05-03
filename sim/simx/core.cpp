@@ -299,7 +299,7 @@ public:
         uint32_t offset = trace->PC & (MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
         DP(1, "Fetch: code=0x" << std::hex << trace->code << std::dec << ", cid=" << trace->cid
-               << ", wid=" << trace->wid << ", tmask=" << trace->tmask
+               << ", wid=" << trace->wid << ", cta_id=" << trace->cta_id << ", tmask=" << trace->tmask
                << ", PC=0x" << std::hex << trace->PC << " (#" << std::dec << trace->uuid << ")");
         DT(3, simobject_->name() << " icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
         pending_icache_.release(mem_rsp.tag);

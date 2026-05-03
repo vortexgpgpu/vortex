@@ -178,10 +178,11 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   // decode fills in the rest of the metadata).
   auto trace = core_->trace_pool().allocate(1);
   new (trace) instr_trace_t(uuid);
-  trace->cid   = core_->id();
-  trace->wid   = scheduled_warp;
-  trace->PC    = warp.PC;
-  trace->tmask = warp.tmask;
+  trace->cid    = core_->id();
+  trace->wid    = scheduled_warp;
+  trace->cta_id = warp.cta_csrs.cta_id;
+  trace->PC     = warp.PC;
+  trace->tmask  = warp.tmask;
 
   // Advance PC
   warp.PC += 4;
