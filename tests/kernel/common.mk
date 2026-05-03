@@ -38,7 +38,7 @@ $(PROJECT).dump: $(PROJECT).elf
 	$(DP) -D $< > $@
 
 $(PROJECT).vxbin: $(PROJECT).elf
-	OBJCOPY=$(CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
+	OBJCOPY=$(CP) $(VORTEX_HOME)/sw/kernel/scripts/vxbin.py $< $@
 
 $(VORTEX_KN_PATH)/libvortex.a:
 	$(MAKE) -C $(VORTEX_KN_PATH)
