@@ -62,10 +62,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [CS_BITS-1:0]      lmem_size_raddr;
     wire [`LMEM_LOG_SIZE:0] lmem_size_rdata;
 
-    wire                    wid_to_cta_write;
-    wire [NW_WIDTH-1:0]     wid_to_cta_waddr;
-    wire [CS_BITS-1:0]      wid_to_cta_wdata;
-
     VX_dp_ram #(
         .DATAW (NW_WIDTH+1),
         .SIZE  (NUM_CTA_SLOTS),
@@ -110,33 +106,19 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [`LMEM_LOG_SIZE:0]   free_size_r;          // available bytes (0..LMEM_SIZE)
     reg [`LMEM_LOG_SIZE-1:0] cur_lmem_base_r;      // latched at accept, stable through DISPATCH
 
-    // Reverse lookup: warp-ID → CTA slot index
-    wire [CS_BITS-1:0] wid_to_cta_rdata;
+    // Reverse lookup: warp-ID → CTA slot index. A flop array indexed by wid,
+    // updated on each warp dispatch. Combinational read on warp_done lets the
+    // retirement path skip the registered raddr that a DP-RAM would require.
+    reg [NUM_WARPS-1:0][CS_BITS-1:0] cta_slot_per_warp_r;
+    wire [CS_BITS-1:0] done_slot = cta_slot_per_warp_r[warp_done_wid];
 
-    // Registered retirement signals — break the warp_done_wid → array → compare path
+    // Registered retirement signals. The pipeline holds two stages: warp_done_r
+    // captures the retirement event, then warp_done_r_dly aligns with the
+    // rem_warps_ram rdata (OUT_REG=1) for cta_done evaluation.
     reg                 warp_done_r;
-    reg [NW_WIDTH-1:0]  warp_done_wid_r;
     reg                 warp_done_r_dly;
-    reg                 warp_done_r_dly2;
-    reg [CS_BITS-1:0]   done_slot_dly;
-
-    VX_dp_ram #(
-        .DATAW (CS_BITS),
-        .SIZE  (NUM_WARPS),
-        .RDW_MODE ("R"),
-        .OUT_REG (0),
-        .RADDR_REG (1)
-    ) wid_to_cta_ram (
-        .clk   (clk),
-        .reset (reset),
-        .wren  (1'b1),
-        .read  (1'b1),
-        .write (wid_to_cta_write),
-        .waddr (wid_to_cta_waddr),
-        .wdata (wid_to_cta_wdata),
-        .raddr (warp_done_wid_r),
-        .rdata (wid_to_cta_rdata)
-    );
+    reg [CS_BITS-1:0]   done_slot_r;
+    reg [CS_BITS-1:0]   done_slot_r_dly;
 
     // Kernel initialization tracking
     reg [7:0]           cur_ctx_id_r;
@@ -219,26 +201,24 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire                   wrap_y = (next_y >= {1'b0, block_dim_r[1][CTA_TID_WIDTH-1:0]});
 
     // -------------------------------------------------------------------------
-    // Retirement decode — operates on registered warp_done_r (one cycle delayed)
+    // Retirement decode — pipeline:
+    //   T0: warp_done arrives; done_slot = cta_slot_per_warp_r[warp_done_wid].
+    //   T1: warp_done_r/done_slot_r latched; rem_warps_ram read issued.
+    //   T2: rem_warps_rdata available; cta_done evaluated using
+    //       warp_done_r_dly + done_slot_r_dly. One-cycle write forwarding
+    //       handles back-to-back retirements to the same slot.
     // -------------------------------------------------------------------------
-    wire [CS_BITS-1:0]  done_slot = wid_to_cta_rdata;
-    reg  [CS_BITS-1:0]  rem_warps_raddr_dly;
-
-    // Two-cycle forwarding: _r covers 1-cycle gap, _rr covers 2-cycle gap
-    // (the 2-cycle gap causes a write and read to race at the same clock edge;
-    //  the read captures old data, and rem_warps_write_r is already 0 one cycle later)
     reg rem_warps_write_r;
     reg [CS_BITS-1:0] rem_warps_waddr_r;
-    reg [NW_WIDTH:0] rem_warps_wdata_r;
-    reg rem_warps_write_rr;
-    reg [CS_BITS-1:0] rem_warps_waddr_rr;
-    reg [NW_WIDTH:0] rem_warps_wdata_rr;
+    reg [NW_WIDTH:0]  rem_warps_wdata_r;
 
-    wire [NW_WIDTH:0]   rem_warps_rdata_fwd =
-        (rem_warps_write_r  && (rem_warps_waddr_r  == done_slot_dly)) ? rem_warps_wdata_r  :
-        (rem_warps_write_rr && (rem_warps_waddr_rr == done_slot_dly)) ? rem_warps_wdata_rr :
-        rem_warps_rdata;
-    wire                cta_done = warp_done_r_dly2 && slot_valid_r[done_slot_dly]&& (rem_warps_rdata_fwd == (NW_WIDTH+1)'(1));
+    wire [NW_WIDTH:0] rem_warps_rdata_fwd =
+        (rem_warps_write_r && (rem_warps_waddr_r == done_slot_r_dly))
+            ? rem_warps_wdata_r
+            : rem_warps_rdata;
+    wire cta_done = warp_done_r_dly
+                 && slot_valid_r[done_slot_r_dly]
+                 && (rem_warps_rdata_fwd == (NW_WIDTH+1)'(1));
 
     wire                head_reclaimable_s1 = (head_r != tail_r) && (!slot_valid_r[head_r]);
     reg                 head_reclaimable_dly;
@@ -272,24 +252,19 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     // rem_warps_ram access — retirement exclusively owns the read port.
     // cta_size_r is captured at accept time (kmu_num_warps) to avoid contention.
-    assign rem_warps_read  = warp_done_r_dly;
-    assign rem_warps_raddr = rem_warps_raddr_dly;
+    assign rem_warps_read  = warp_done_r;
+    assign rem_warps_raddr = done_slot_r;
 
     assign rem_warps_write = (kmu_bus_if_fire && state == IDLE) || rem_warps_write_r;
     assign rem_warps_waddr = (kmu_bus_if_fire && state == IDLE) ? tail_r : rem_warps_waddr_r;
     assign rem_warps_wdata = (kmu_bus_if_fire && state == IDLE) ? (NW_WIDTH+1)'(kmu_num_warps) : rem_warps_wdata_r;
 
     // lmem_size_ram access
-    assign lmem_size_read  = head_reclaimable_s1 || (cta_done && (done_slot_dly == head_r));
+    assign lmem_size_read  = head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r));
     assign lmem_size_raddr = head_r;
     assign lmem_size_write = kmu_bus_if_fire && state == IDLE;
     assign lmem_size_waddr = tail_r;
     assign lmem_size_wdata = lmem_total_cost;
-
-    // wid_to_cta_ram access
-    assign wid_to_cta_write = (state == DISPATCH) && warp_ready;
-    assign wid_to_cta_waddr = warp_id_n;
-    assign wid_to_cta_wdata = cur_slot_r;
 
     // -------------------------------------------------------------------------
     // Sequential
@@ -312,40 +287,37 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             dispatched_warps<= '0;
             slot_count_r    <= '0;
             warp_done_r     <= 0;
-            warp_done_wid_r <= '0;
             warp_done_r_dly <= 0;
-            warp_done_r_dly2 <= 0;
-            done_slot_dly   <= '0;
+            done_slot_r     <= '0;
+            done_slot_r_dly <= '0;
             cur_slot_r      <= '0;
-            rem_warps_waddr_r  <= '0;
-            rem_warps_wdata_r  <= '0;
-            rem_warps_write_r  <= 0;
-            rem_warps_waddr_rr <= '0;
-            rem_warps_wdata_rr <= '0;
-            rem_warps_write_rr <= 0;
+            rem_warps_waddr_r <= '0;
+            rem_warps_wdata_r <= '0;
+            rem_warps_write_r <= 0;
             head_reclaimable_dly <= 0;
+            cta_slot_per_warp_r <= '0;
 
         end else begin
 
-            // ---- Register retirement signals (break critical path) ----------
-            warp_done_r      <= warp_done;
-            warp_done_wid_r  <= warp_done_wid;
-            warp_done_r_dly  <= warp_done_r;
-            warp_done_r_dly2 <= warp_done_r_dly;
-            if (warp_done_r) done_slot_dly <= done_slot;
-            rem_warps_raddr_dly <= done_slot;
+            // ---- Register retirement signals (1-stage pipeline aligned with
+            //      rem_warps_ram OUT_REG=1 latency) ---------------------------
+            warp_done_r     <= warp_done;
+            warp_done_r_dly <= warp_done_r;
+            if (warp_done) done_slot_r <= done_slot;
+            done_slot_r_dly <= done_slot_r;
 
+            // ---- wid → cta-slot map: latch on warp dispatch ----------------
+            if ((state == DISPATCH) && warp_ready) begin
+                cta_slot_per_warp_r[warp_id_n] <= cur_slot_r;
+            end
 
             // ---- Warp retirement -------------------------------------------
-            rem_warps_write_rr <= rem_warps_write_r;
-            rem_warps_waddr_rr <= rem_warps_waddr_r;
-            rem_warps_wdata_rr <= rem_warps_wdata_r;
-            if (warp_done_r_dly2 && slot_valid_r[done_slot_dly]) begin
-                rem_warps_waddr_r <= done_slot_dly;
+            if (warp_done_r_dly && slot_valid_r[done_slot_r_dly]) begin
+                rem_warps_waddr_r <= done_slot_r_dly;
                 rem_warps_wdata_r <= rem_warps_rdata_fwd - 1;
                 rem_warps_write_r <= 1;
                 if (cta_done) begin
-                    slot_valid_r[done_slot_dly] <= 1'b0;
+                    slot_valid_r[done_slot_r_dly] <= 1'b0;
                 end
             end else begin
                 rem_warps_write_r <= 0;
@@ -358,9 +330,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                 slot_count_r <= slot_count_r - (NW_WIDTH+1)'(1);
 
             // ---- Head advancement + free_size bookkeeping ------------------
-            head_reclaimable_dly <= head_reclaimable_s1 || (cta_done && (done_slot_dly == head_r));
+            head_reclaimable_dly <= head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r));
 
-            if (head_reclaimable_s1 || (cta_done && (done_slot_dly == head_r))) begin
+            if (head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r))) begin
                 head_r <= head_r + CS_BITS'((NUM_WARPS > 1) ? 1 : 0);
             end
 
@@ -471,26 +443,42 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     `UNUSED_VAR (kmu_bus_if.data.cta_id)
 
 `ifdef DBG_TRACE_PIPELINE
+    // Pipeline warp_done_wid alongside the retirement chain so the warp-done
+    // trace message can identify the retiring warp. Debug-only — the datapath
+    // no longer needs warp_done_wid_r.
+    reg [NW_WIDTH-1:0] warp_done_wid_r, warp_done_wid_r_dly;
     always @(posedge clk) begin
-        // CTA accepted from KMU
+        if (reset) begin
+            warp_done_wid_r     <= '0;
+            warp_done_wid_r_dly <= '0;
+        end else begin
+            if (warp_done) warp_done_wid_r <= warp_done_wid;
+            warp_done_wid_r_dly <= warp_done_wid_r;
+        end
+    end
+
+    always @(posedge clk) begin
+        // CTA accepted from KMU. cta_id is the dispatcher slot (= VX_CSR_CTA_ID
+        // value seen by the kernel); kmu_cta_idx is the KMU's global grid-rank
+        // counter for cross-CTA correlation.
         if (kmu_bus_if_fire) begin
-            `TRACE(1, ("%t: %s kmu-accept: slot=%0d, PC=0x%0h, param=0x%0h, cta_id=%0d, lmem_size=%0d, num_warps=%0d, free_size=%0d\n",
+            `TRACE(1, ("%t: %s kmu-accept: cta_id=%0d, PC=0x%0h, param=0x%0h, kmu_cta_idx=%0d, lmem_size=%0d, num_warps=%0d, free_size=%0d\n",
                 $time, INSTANCE_ID, tail_r, to_fullPC(kmu_bus_if.data.PC),
                 kmu_bus_if.data.param, kmu_bus_if.data.cta_id,
                 kmu_bus_if.data.lmem_size, kmu_num_warps, free_size_r))
         end
         // Warp dispatched to scheduler
         if (warp_fire_r) begin
-            `TRACE(1, ("%t: %s dispatch: wid=%0d, slot=%0d, PC=0x%0h, tmask=%b, param=0x%0h, lmem_addr=0x%0h, init=%b\n",
+            `TRACE(1, ("%t: %s dispatch: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, param=0x%0h, lmem_addr=0x%0h, init=%b\n",
                 $time, INSTANCE_ID, warp_id_r, cur_slot_r, to_fullPC(warp_PC),
                 warp_tmask_r, param_r,
                 (`MEM_ADDR_WIDTH'(`LMEM_BASE_ADDR) | `MEM_ADDR_WIDTH'(cur_lmem_base_r)),
                 ~warp_skip_init_r))
         end
         // Warp retirement / CTA done
-        if (warp_done_r_dly2 && slot_valid_r[done_slot_dly]) begin
-            `TRACE(1, ("%t: %s warp-done: wid=%0d, slot=%0d, rem_warps=%0d, cta_done=%b, free_size=%0d\n",
-                $time, INSTANCE_ID, warp_done_wid_r, done_slot_dly,
+        if (warp_done_r_dly && slot_valid_r[done_slot_r_dly]) begin
+            `TRACE(1, ("%t: %s warp-done: wid=%0d, cta_id=%0d, rem_warps=%0d, cta_done=%b, free_size=%0d\n",
+                $time, INSTANCE_ID, warp_done_wid_r_dly, done_slot_r_dly,
                 rem_warps_rdata - (NW_WIDTH+1)'(1), cta_done, free_size_r))
         end
         // Admission gate status when KMU presents a CTA but is stalled
