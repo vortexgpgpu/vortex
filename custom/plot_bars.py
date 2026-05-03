@@ -7,7 +7,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import matplotlib.pyplot as plt
 
-
+ 
 MATRIX_SHAPE = "128x128x512"
 DTYPE = "fp8 -> fp32"
 
