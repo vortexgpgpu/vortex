@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import copy
 import os
 import re
 import shlex
@@ -623,6 +624,78 @@ def _helpers_used(expr: str) -> Set[str]:
 
 
 # -----------------------------
+# Lowercase-local inlining
+# -----------------------------
+# Lowercase keys (failing _has_public_scope) are private symbols used only at
+# expression-evaluation time. They are never emitted as macros, so any reference
+# to one in unresolved output must be substituted with the local's expression.
+
+def _stamp_locations(subtree: ast.AST, src: ast.AST) -> ast.AST:
+  ln = getattr(src, "lineno", 1)
+  co = getattr(src, "col_offset", 0)
+  end_ln = getattr(src, "end_lineno", None)
+  end_co = getattr(src, "end_col_offset", None)
+  for n in ast.walk(subtree):
+    n.lineno = ln
+    n.col_offset = co
+    if end_ln is not None:
+      n.end_lineno = end_ln
+      n.end_col_offset = end_co
+  return subtree
+
+
+def _build_local_asts(toml_defs: Dict[str, Any]) -> Dict[str, ast.AST]:
+  raw_locals: Dict[str, Any] = {k: v for k, v in toml_defs.items() if not _has_public_scope(k)}
+  cache: Dict[str, ast.AST] = {}
+  visiting: Set[str] = set()
+
+  def parse_raw(raw: Any) -> ast.AST:
+    if _is_expr_string(raw):
+      expr = _extract_expr(str(raw))
+      if expr is None:
+        raise ValueError(f"Bad expr syntax in local: {raw}")
+      expr2 = _preprocess_expr(expr)
+      return ast.parse(expr2, mode="eval").body
+    v = _scalar(raw) if isinstance(raw, str) else raw
+    return ast.parse(repr(v), mode="eval").body
+
+  def resolve(key: str) -> ast.AST:
+    if key in cache:
+      return cache[key]
+    if key in visiting:
+      raise ValueError(f"Cycle in lowercase-local references involving '{key}'")
+    visiting.add(key)
+
+    class T(ast.NodeTransformer):
+      def visit_Name(self, n: ast.Name) -> ast.AST:
+        if n.id in raw_locals:
+          return _stamp_locations(copy.deepcopy(resolve(n.id)), n)
+        return n
+
+    node = T().visit(parse_raw(raw_locals[key]))
+    cache[key] = node
+    visiting.remove(key)
+    return node
+
+  for k in raw_locals:
+    resolve(k)
+  return cache
+
+
+def _inline_locals_into(node: ast.AST, locals_ast: Dict[str, ast.AST]) -> ast.AST:
+  if not locals_ast:
+    return node
+
+  class T(ast.NodeTransformer):
+    def visit_Name(self, n: ast.Name) -> ast.AST:
+      if n.id in locals_ast:
+        return _stamp_locations(copy.deepcopy(locals_ast[n.id]), n)
+      return n
+
+  return T().visit(node)
+
+
+# -----------------------------
 # Unresolved macro expression translator
 # -----------------------------
 
@@ -860,7 +933,7 @@ def _emit_unresolved_boolean_define(lines: List[str], d: Dialect, key: str, test
 
 def _emit_unresolved_key(lines: List[str], d: Dialect, key: str, raw: Any,
                          enums: Dict[str, EnumSpec], hex_meta: Dict[str, HexMeta],
-                         params: Set[str]) -> None:
+                         params: Set[str], locals_ast: Dict[str, ast.AST]) -> None:
   if not _has_public_scope(key):
     return
 
@@ -884,6 +957,7 @@ def _emit_unresolved_key(lines: List[str], d: Dialect, key: str, raw: Any,
         raise ValueError(f"Bad expr syntax for {key}: {raw}")
       expr2 = _preprocess_expr(expr)
       tree = ast.parse(expr2, mode="eval")
+      tree.body = _inline_locals_into(tree.body, locals_ast)
       if isinstance(tree.body, ast.IfExp):
         _emit_unresolved_conditional(lines, d, key, tree.body, enums, expr2, params)
       elif isinstance(tree.body, ast.Constant) and isinstance(tree.body.value, (str, int)):
@@ -931,6 +1005,7 @@ def _emit_unresolved_key(lines: List[str], d: Dialect, key: str, raw: Any,
       raise ValueError(f"Bad expr syntax for {key}: {raw}")
     expr2 = _preprocess_expr(expr)
     tree = ast.parse(expr2, mode="eval")
+    tree.body = _inline_locals_into(tree.body, locals_ast)
 
     # SPECIAL CASE: X_ENABLE = "expr: $FLAG"
     if key.endswith("_ENABLE") and isinstance(tree.body, ast.Name):
@@ -1022,10 +1097,12 @@ def emit_unresolved_header(toml_defs: Dict[str, Any], layout: Layout, enums: Dic
   d = Dialect("c" if fmt == "cpp" else "sv")
   tool = os.path.basename(sys.argv[0])
 
+  locals_ast = _build_local_asts(toml_defs)
+
+  # Helpers used by lowercase locals must still be emitted, since locals are
+  # inlined into public-key expressions.
   used: Set[str] = set()
   for k in layout.ordered_keys:
-    if not _has_public_scope(k):
-      continue
     raw = toml_defs.get(k)
     if raw is None or not _is_expr_string(raw):
       continue
@@ -1052,7 +1129,7 @@ def emit_unresolved_header(toml_defs: Dict[str, Any], layout: Layout, enums: Dic
         continue
       if not _has_public_scope(k):
         continue
-      _emit_unresolved_key(sec_lines, d, k, toml_defs[k], enums, hex_meta, params)
+      _emit_unresolved_key(sec_lines, d, k, toml_defs[k], enums, hex_meta, params, locals_ast)
 
     while sec_lines and sec_lines[-1] == "":
       sec_lines.pop()
