@@ -50,11 +50,13 @@ extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint
     return err;
   });
 
+  // Upload the kernel binary payload to device memory.
   CHECK_ERR(vx_copy_to_dev(_hbuffer, bytes, 0, bin_size), {
     vx_mem_free(_hbuffer);
     return err;
   });
 
+  // Zero-initialize the BSS region of the kernel image in device memory.
   auto bss_size = runtime_size - bin_size;
   if (bss_size > 0) {
     std::vector<uint8_t> zeros(bss_size, 0);
