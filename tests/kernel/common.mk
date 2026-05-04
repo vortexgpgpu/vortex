@@ -32,7 +32,7 @@ VX_STARTUP_SRC := $(VORTEX_HOME)/sw/kernel/src/vx_start.S
 APP_OBJS = $(addsuffix .o, $(basename $(notdir $(SRCS))))
 KERNEL_STARTUP := $(VORTEX_HOME)/sw/kernel/scripts/kernel_startup.sh
 
-all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
+all: $(PROJECT).elf $(PROJECT).vxbin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
 	$(DP) -D $< > $@
