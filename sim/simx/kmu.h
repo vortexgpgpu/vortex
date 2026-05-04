@@ -14,6 +14,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <unordered_map>
 #include "VX_types.h"
 
 namespace vortex {
@@ -32,6 +34,8 @@ struct kmu_req_t {
 
 class Kmu {
 public:
+  using mem_reader_t = std::function<void(void*, uint64_t, uint32_t)>;
+
   Kmu();
 
   void reset();
@@ -40,6 +44,26 @@ public:
 
   // Called by ProcessorImpl::run() to arm a kernel launch.
   void start();
+
+  // Device-initiated re-arm (dynamic parallelism). Overrides the current KMU
+  // state in one shot and starts dispatching CTAs. The caller must ensure the
+  // KMU is idle (no CTAs left to dispatch) before invoking this.
+  void arm_child(uint64_t pc,
+                 uint64_t param,
+                 const uint32_t grid_dim[3],
+                 const uint32_t block_dim[3],
+                 uint32_t block_size,
+                 const uint32_t warp_step[3],
+                 uint32_t lmem_size);
+
+  // Attach the memory read path used when a device-side launch request arrives
+  // from a given core.
+  void attach_mem_reader(uint32_t core_id, const mem_reader_t& mem_read);
+
+  // Device-initiated launch request through VX_CSR_KMU_LAUNCH. This models the
+  // CSR write as a launch signal into the KMU, carrying the descriptor address
+  // and source core rather than descriptor decoding logic.
+  void request_child_launch(uint64_t desc_addr, uint32_t core_id);
 
   // True while CTAs remain to be issued.
   bool running() const { return running_; }
@@ -60,6 +84,9 @@ private:
   bool     running_;
   uint32_t cta_id_;
   uint32_t block_idx_[3];
+  std::unordered_map<uint32_t, mem_reader_t> mem_readers_;
+
+  void launch_child(uint64_t desc_addr, const mem_reader_t& mem_read);
 };
 
 } // namespace vortex

@@ -135,6 +135,13 @@ VX_CSR_NUM_CORES = 0xFC2
 VX_CSR_LOCAL_MEM_BASE = 0xFC3
 VX_CSR_NUM_BARRIERS = 0xFC4
 
+[csr_kmu_child]
+# Writing the device-memory address of a `vx_kmu_launch_desc_t` struct to this
+# CSR re-arms the KMU with a new kernel grid (device-side kernel launch,
+# CUDA-style dynamic parallelism). The issuing warp must have ensured the
+# parent grid is fully dispatched before writing this CSR.
+VX_CSR_KMU_LAUNCH = 0xCE0
+
 [csr_cta]
 VX_CSR_CTA_ID   = 0xCD0  # local CTA index
 VX_CSR_CTA_RANK = 0xCD1  # warp index in CTA

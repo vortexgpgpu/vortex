@@ -12,6 +12,10 @@
 // limitations under the License.
 
 #include "kmu.h"
+#include "debug.h"
+#include <cassert>
+#include <cstdlib>
+#include <iostream>
 
 using namespace vortex;
 
@@ -62,6 +66,62 @@ void Kmu::start() {
     cta_id_       = 0;
     block_idx_[0] = block_idx_[1] = block_idx_[2] = 0;
   }
+}
+
+void Kmu::arm_child(uint64_t pc,
+                    uint64_t param,
+                    const uint32_t grid_dim[3],
+                    const uint32_t block_dim[3],
+                    uint32_t block_size,
+                    const uint32_t warp_step[3],
+                    uint32_t lmem_size) {
+  PC_           = pc;
+  param_        = param;
+  for (int i = 0; i < 3; ++i) {
+    grid_dim_[i]  = grid_dim[i];
+    block_dim_[i] = block_dim[i];
+    warp_step_[i] = warp_step[i];
+  }
+  block_size_   = block_size;
+  lmem_size_    = lmem_size;
+  this->start();
+}
+
+void Kmu::attach_mem_reader(uint32_t core_id, const mem_reader_t& mem_read) {
+  mem_readers_[core_id] = mem_read;
+}
+
+void Kmu::request_child_launch(uint64_t desc_addr, uint32_t core_id) {
+  auto it = mem_readers_.find(core_id);
+  if (it == mem_readers_.end()) {
+    std::cerr << "Error: KMU child launch from core #" << core_id
+              << " has no attached memory reader" << std::endl;
+    std::abort();
+  }
+  this->launch_child(desc_addr, it->second);
+}
+
+void Kmu::launch_child(uint64_t desc_addr, const mem_reader_t& mem_read) {
+  // Layout must match vx_kmu_launch_desc_t in kernel/include/vx_launch.h.
+  uint64_t pc = 0, arg = 0;
+  uint32_t grid_dim[3], block_dim[3], warp_step[3];
+  uint32_t block_size = 0, lmem_size = 0;
+
+  mem_read(&pc,         desc_addr + 0,  sizeof(uint64_t));
+  mem_read(&arg,        desc_addr + 8,  sizeof(uint64_t));
+  mem_read(grid_dim,    desc_addr + 16, sizeof(grid_dim));
+  mem_read(block_dim,   desc_addr + 28, sizeof(block_dim));
+  mem_read(&block_size, desc_addr + 40, sizeof(uint32_t));
+  mem_read(warp_step,   desc_addr + 44, sizeof(warp_step));
+  mem_read(&lmem_size,  desc_addr + 56, sizeof(uint32_t));
+
+  // proof-of-life: parent must have drained its own grid before launching
+  assert(!running_ && "VX_CSR_KMU_LAUNCH written while KMU still running");
+  DP(3, "*** device kernel launch: pc=0x" << std::hex << pc
+     << ", arg=0x" << arg << std::dec
+     << ", grid=[" << grid_dim[0] << "," << grid_dim[1] << "," << grid_dim[2] << "]"
+     << ", block=[" << block_dim[0] << "," << block_dim[1] << "," << block_dim[2] << "]");
+  this->arm_child(pc, arg, grid_dim, block_dim, block_size, warp_step, lmem_size);
 }
 
 bool Kmu::step(kmu_req_t* req) {
