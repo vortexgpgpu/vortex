@@ -18,6 +18,8 @@
 #include <memory>
 #include <string>
 
+namespace SST { namespace Interfaces { class StandardMem; } }
+
 namespace vortex {
 
 class VortexSimulator {
@@ -33,6 +35,11 @@ public:
     bool cycle();
 
     bool isHalted() const;
+
+    // Phase 3 SST integration: register the SST memHierarchy interface so
+    // every accepted memory request is mirrored to it (timing-only). Pass
+    // nullptr to disable. Called by VortexGPGPU after init().
+    void set_sst_mem_iface(SST::Interfaces::StandardMem* iface);
 
 private:
     RAM ram_;

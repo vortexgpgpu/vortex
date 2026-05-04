@@ -316,6 +316,7 @@ bool ProcessorImpl::any_running() const {
 void Processor::start_kmu() { impl_->start_kmu(); }
 bool Processor::any_running() const { return impl_->any_running(); }
 bool Processor::cycle() { return impl_->cycle(); }
+Memory* Processor::memsim() { return impl_->memsim(); }
 
 bool ProcessorImpl::cycle() {
   static bool initialized = false;

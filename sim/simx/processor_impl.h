@@ -58,6 +58,9 @@ public:
   // SST single-cycle entry. See Processor::cycle() docstring.
   bool cycle();
 
+  // Phase 3 SST integration: expose the DRAM/Memory model.
+  Memory* memsim() { return memsim_.get(); }
+
   // Drain dirty data from caches (write-back path) all the way to DRAM.
   // Walks L1 dcaches → L2 → L3, ticking the simulator between phases so
   // each level's evictions reach the next before that level itself flushes.

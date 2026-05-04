@@ -38,6 +38,12 @@ private:
 	mutable PerfStats perf_stats_;
 	std::unordered_map<int, std::stringstream> print_bufs_;
 
+public:
+	// Phase 3 SST: hook called for every accepted MemReq just before
+	// enqueueing to dram_sim_. See Memory::set_pre_send_hook().
+	Memory::PreSendHook pre_send_hook_;
+private:
+
 	// Tap byte writes that fall in the IO_COUT range and route them to the
 	// per-thread print buffer. Returns true if the byte was consumed (no RAM
 	// write needed).
@@ -147,6 +153,12 @@ public:
 				ram_->enable_acl(true);
 			}
 
+			// Phase 3 SST: notify external observer (e.g. SST memHierarchy
+			// link) before enqueueing locally. Hook is no-op when unset.
+			if (pre_send_hook_) {
+				pre_send_hook_(mem_req);
+			}
+
 			// enqueue the request to the memory system
 			auto req_args = new DramCallbackArgs{this, mem_req, i, rsp_data};
 			dram_sim_.send_request(
@@ -205,6 +217,10 @@ void Memory::on_tick() {
 
 void Memory::attach_ram(RAM* ram) {
   impl_->attach_ram(ram);
+}
+
+void Memory::set_pre_send_hook(Memory::PreSendHook hook) {
+  impl_->pre_send_hook_ = std::move(hook);
 }
 
 const Memory::PerfStats &Memory::perf_stats() const {

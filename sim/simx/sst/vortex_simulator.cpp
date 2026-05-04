@@ -4,6 +4,8 @@
 #include <util.h>
 #include <VX_config.h>
 #include <VX_types.h>
+#include "memory.h"
+#include <sst/core/interfaces/stdMem.h>
 
 namespace vortex {
 
@@ -66,6 +68,38 @@ bool VortexSimulator::cycle() {
 
 bool VortexSimulator::isHalted() const {
     return halted_;
+}
+
+void VortexSimulator::set_sst_mem_iface(SST::Interfaces::StandardMem* iface) {
+    Memory* mem = proc_->memsim();
+    if (mem == nullptr) return;
+    if (iface == nullptr) {
+        mem->set_pre_send_hook(nullptr);
+        return;
+    }
+    // Mirror every accepted MemReq to the SST memHierarchy as a
+    // StandardMem::Read or Write. The local RAM still owns the data —
+    // SST's response (if any) is acknowledged but not used for the
+    // returned MemRsp. This is observability for memHierarchy timing
+    // models, not a data-routed substitute.
+    mem->set_pre_send_hook([iface](const MemReq& req) {
+        using SST::Interfaces::StandardMem;
+        StandardMem::Request* sst_req;
+        const uint64_t size = MEM_BLOCK_SIZE;
+        const uint64_t addr = req.addr & ~uint64_t(MEM_BLOCK_SIZE - 1);
+        if (req.write) {
+            std::vector<uint8_t> data(size, 0);
+            if (req.data) {
+                for (uint32_t b = 0; b < size; ++b) {
+                    if (req.byteen & (1ull << b)) data[b] = (*req.data)[b];
+                }
+            }
+            sst_req = new StandardMem::Write(addr, size, std::move(data));
+        } else {
+            sst_req = new StandardMem::Read(addr, size);
+        }
+        iface->send(sst_req);
+    });
 }
 
 } // namespace vortex

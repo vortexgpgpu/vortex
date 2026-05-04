@@ -21,6 +21,8 @@ namespace vortex {
 
 class RAM;
 class ProcessorImpl;
+class Core;
+class Memory;
 
 class Processor {
 public:
@@ -59,6 +61,11 @@ public:
   // is still running. This lets SST own the clock while v3 owns the
   // datapath.
   bool cycle();
+
+  // Phase 3 SST integration: returns the global DRAM/Memory model so
+  // the SST::Component can install its pre-send hook and route a copy
+  // of every memory request to an SST memHierarchy link.
+  Memory* memsim();
 
 private:
   ProcessorImpl* impl_;
