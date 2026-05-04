@@ -15,12 +15,14 @@
 
 #include <vector>
 #include <list>
+#include <queue>
 #include <sstream>
 #include <unordered_map>
 #include <cstring>
 
 #include "scheduler.h"
 #include "decode.h"
+#include "decompressor.h"
 #include "sequencer.h"
 #include "cache.h"
 #include "local_mem.h"
@@ -77,6 +79,13 @@ public:
     // create decoder (SimObject)
     snprintf(sname, 100, "%s-decoder", name.c_str());
     decoder_ = SimPlatform::instance().create_object<Decoder>(sname, instr_pool_);
+
+  #ifdef EXT_C_ENABLE
+    // create RVC fetch decompressor (SimObject) — owns per-warp half-word
+    // buffer + refetch queue. Resets via SimObject::on_reset.
+    snprintf(sname, 100, "%s-decompressor", name.c_str());
+    decompressor_ = SimPlatform::instance().create_object<Decompressor>(sname, NUM_WARPS);
+  #endif
 
     // create scoreboard (SimObject)
     snprintf(sname, 100, "%s-scoreboard", name.c_str());
@@ -294,13 +303,28 @@ public:
     if (!icache_rsp.empty()){
       auto& mem_rsp = icache_rsp.peek();
       auto trace = pending_icache_.at(mem_rsp.tag);
+      assert(mem_rsp.data && "icache response must carry line payload");
+
+    #ifdef EXT_C_ENABLE
+      // Decompressor classifies the rsp: emit-ready (sets trace->code) or
+      // queues a refetch internally for cross-word 32-bit completion.
+      bool emit = decompressor_->on_icache_rsp(trace, *mem_rsp.data);
+      bool progressed = !emit || decode_latch_.try_push(trace);
+    #else
+      bool emit = true;
+      bool progressed = false;
       if (decode_latch_.try_push(trace)) {
-        assert(mem_rsp.data && "icache response must carry line payload");
         uint32_t offset = trace->PC & (MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
-        DP(1, "Fetch: code=0x" << std::hex << trace->code << std::dec << ", cid=" << trace->cid
-               << ", wid=" << trace->wid << ", tmask=" << trace->tmask
-               << ", PC=0x" << std::hex << trace->PC << " (#" << std::dec << trace->uuid << ")");
+        progressed = true;
+      }
+    #endif
+      if (progressed) {
+        if (emit) {
+          DP(1, "Fetch: code=0x" << std::hex << trace->code << std::dec << ", cid=" << trace->cid
+                 << ", wid=" << trace->wid << ", tmask=" << trace->tmask
+                 << ", PC=0x" << std::hex << trace->PC << " (#" << std::dec << trace->uuid << ")");
+        }
         DT(3, simobject_->name() << " icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
         pending_icache_.release(mem_rsp.tag);
         icache_rsp.pop();
@@ -308,10 +332,27 @@ public:
       }
     }
 
-    // send icache request
-    if (fetch_latch_.empty())
+    // send icache request — under EXT_C the FSM drains pending refetches
+    // (cross-word completions) before fresh schedule traces.
+    instr_trace_t* trace = nullptr;
+    Word           req_addr = 0;
+    bool           from_refetch = false;
+  #ifdef EXT_C_ENABLE
+    {
+      auto pick = decompressor_->pick_request(fetch_latch_.empty() ? nullptr
+                                                              : fetch_latch_.peek());
+      trace        = pick.trace;
+      req_addr     = pick.addr;
+      from_refetch = pick.from_refetch;
+    }
+  #else
+    if (!fetch_latch_.empty()) {
+      trace    = fetch_latch_.peek();
+      req_addr = trace->PC;
+    }
+  #endif
+    if (trace == nullptr)
       return;
-    auto trace = fetch_latch_.peek();
 
     // Avoid leaking icache tags when the request port back-pressures.
     if (pending_icache_.full()) {
@@ -320,7 +361,7 @@ public:
     }
 
     MemReq mem_req;
-    mem_req.addr  = trace->PC;
+    mem_req.addr  = req_addr;
     mem_req.write = false;
     uint32_t tag = pending_icache_.allocate(trace);
     mem_req.tag   = tag;
@@ -328,7 +369,12 @@ public:
     mem_req.uuid  = trace->uuid;
     if (simobject_->icache_req_out.at(0).try_send(mem_req)) {
       DT(3, simobject_->name() << " icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
+    #ifdef EXT_C_ENABLE
+      decompressor_->commit_request(from_refetch);
+      if (!from_refetch) fetch_latch_.pop();
+    #else
       fetch_latch_.pop();
+    #endif
       ++perf_stats_.ifetches;
       ++pending_ifetches_;
     } else {
@@ -355,7 +401,9 @@ public:
       trace->log_once(false);
     }
 
-    // Decode: fill trace metadata from instruction bits
+    // Decode: fill trace metadata from instruction bits. The decoder
+    // recognises RVC encoding (low 2 bits != 11), expands internally, and
+    // stamps IntrBrArgs.is_rvc.
     auto instr = decoder_->decode(trace->code, trace->uuid);
     DP(1, "Instr: " << *instr << " (#" << trace->uuid << ")");
     trace->instr_ptr   = instr;
@@ -372,6 +420,15 @@ public:
     trace->wb = (dst.type != RegType::None)
              && !(dst.type == RegType::Integer && dst.idx == 0);
     trace->fetch_stall = instr->is_wstall();
+
+    // Advance the warp's PC by the instruction's true size (mirrors the
+    // RTL where VX_scheduler updates warp_pcs on decode_sched_if.valid
+    // using decode_sched_if.is_rvc). Branch/JAL/JALR commit later
+    // overrides warp.PC with the resolved target.
+    {
+      bool is_rvc = (trace->code & 0x3u) != 0x3u;
+      scheduler_->advance_pc(trace->wid, is_rvc ? 2 : 4);
+    }
 
     // Resume warp for non-stalling instructions (ALU, FPU);
     // stalling instructions (LSU, SFU, TCU, branches) stay suspended until commit
@@ -728,6 +785,12 @@ private:
   std::vector<uint32_t> ibuf_inflight_;
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
+
+#ifdef EXT_C_ENABLE
+  // Per-core RVC fetch SimObject (per-warp halfword buffer + refetch
+  // queue + pick/commit_request helpers). See decompressor.h.
+  Decompressor::Ptr decompressor_;
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////

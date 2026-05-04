@@ -263,22 +263,26 @@ module VX_decode import VX_gpu_pkg::*; #(
             INST_JAL: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(INST_BR_JAL);
-                op_args.alu.xtype = ALU_TYPE_BRANCH;
-                op_args.alu.is_w = 0;
-                op_args.alu.use_PC = 1;
-                op_args.alu.use_imm = 1;
-                op_args.alu.imm20 = jal_imm;
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 1;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = jal_imm;
+            `ifdef EXT_C_ENABLE
+                op_args.br.is_rvc = fetch_if.data.is_rvc;
+            `endif
                 is_wstall = 1;
                 `USED_IREG (rd);
             end
             INST_JALR: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(INST_BR_JALR);
-                op_args.alu.xtype = ALU_TYPE_BRANCH;
-                op_args.alu.is_w = 0;
-                op_args.alu.use_PC = 0;
-                op_args.alu.use_imm = 1;
-                op_args.alu.imm20 = `SEXT(20, u_12);
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 0;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = `SEXT(20, u_12);
+            `ifdef EXT_C_ENABLE
+                op_args.br.is_rvc = fetch_if.data.is_rvc;
+            `endif
                 is_wstall = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -286,11 +290,13 @@ module VX_decode import VX_gpu_pkg::*; #(
             INST_B: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(b_type);
-                op_args.alu.xtype = ALU_TYPE_BRANCH;
-                op_args.alu.is_w = 0;
-                op_args.alu.use_PC = 1;
-                op_args.alu.use_imm = 1;
-                op_args.alu.imm20 = `SEXT(20, b_imm);
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 1;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = `SEXT(20, b_imm);
+            `ifdef EXT_C_ENABLE
+                op_args.br.is_rvc = fetch_if.data.is_rvc;
+            `endif
                 is_wstall = 1;
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -319,11 +325,13 @@ module VX_decode import VX_gpu_pkg::*; #(
                 end else begin
                     ex_type = EX_ALU;
                     op_type = INST_OP_BITS'(s_type);
-                    op_args.alu.xtype = ALU_TYPE_BRANCH;
-                    op_args.alu.is_w = 0;
-                    op_args.alu.use_imm = 1;
-                    op_args.alu.use_PC  = 1;
-                    op_args.alu.imm20 = 20'd4;
+                    op_args.br.xtype  = ALU_TYPE_BRANCH;
+                    op_args.br.use_imm= 1;
+                    op_args.br.use_PC = 1;
+                    op_args.br.imm20  = 20'd4;
+                `ifdef EXT_C_ENABLE
+                    op_args.br.is_rvc = fetch_if.data.is_rvc;
+                `endif
                     is_wstall = 1;
                     `USED_IREG (rd);
                 end
@@ -657,9 +665,33 @@ module VX_decode import VX_gpu_pkg::*; #(
 
     wire fetch_fire = fetch_if.valid && fetch_if.ready;
 
-    assign decode_sched_if.valid  = fetch_fire;
-    assign decode_sched_if.wid    = fetch_if.data.wid;
-    assign decode_sched_if.unlock = ~is_wstall;
+    // Register decode_sched_if to break the long combinational path.
+    reg                  decode_sched_valid_r;
+    reg                  decode_sched_unlock_r;
+    reg [NW_WIDTH-1:0]   decode_sched_wid_r;
+`ifdef EXT_C_ENABLE
+    reg                  decode_sched_is_rvc_r;
+`endif
+
+    always @(posedge clk) begin
+        if (reset) begin
+            decode_sched_valid_r <= 1'b0;
+        end else begin
+            decode_sched_valid_r  <= fetch_fire;
+            decode_sched_unlock_r <= ~is_wstall;
+            decode_sched_wid_r    <= fetch_if.data.wid;
+        `ifdef EXT_C_ENABLE
+            decode_sched_is_rvc_r <= fetch_if.data.is_rvc;
+        `endif
+        end
+    end
+
+    assign decode_sched_if.valid  = decode_sched_valid_r;
+    assign decode_sched_if.wid    = decode_sched_wid_r;
+    assign decode_sched_if.unlock = decode_sched_unlock_r;
+`ifdef EXT_C_ENABLE
+    assign decode_sched_if.is_rvc = decode_sched_is_rvc_r;
+`endif
 
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
 

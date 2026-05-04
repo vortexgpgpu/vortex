@@ -183,6 +183,35 @@ opencl()
     echo "opencl tests done!"
 }
 
+rvc()
+{
+    echo "begin rvc tests..."
+
+    # Rebuild kernel + simulators with the C extension enabled.
+    make -C sw/kernel clean && CONFIGS="-DEXT_C_ENABLE" make -C sw/kernel
+    make -C sim/simx clean && CONFIGS="-DEXT_C_ENABLE" make -C sim/simx
+    make -C sim/rtlsim clean && CONFIGS="-DEXT_C_ENABLE" make -C sim/rtlsim
+
+    # ISA conformance for rv*uc-p-* (compressed instruction tests).
+    CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-simx-32c
+    CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-rtlsim-32c
+
+    if [ "$XLEN" == "64" ]
+    then
+        CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-simx-64c
+        CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-rtlsim-64c
+    fi
+
+    # Rebuild stub/simx runtime with EXT_C (so kernels link with the
+    # right -march) then run regression + opencl on simx.
+    make -C sw/runtime/stub
+    make -C sw/runtime/simx clean && CONFIGS="-DEXT_C_ENABLE" make -C sw/runtime/simx
+    CONFIGS="-DEXT_C_ENABLE" make -C tests/regression run-simx
+    CONFIGS="-DEXT_C_ENABLE" make -C tests/opencl run-simx
+
+    echo "rvc tests done!"
+}
+
 vm(){
     echo "begin vm tests..."
 
@@ -869,7 +898,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -903,6 +932,9 @@ while [ "$1" != "" ]; do
                 ;;
         --vm )
                 tests+=("vm")
+                ;;
+        --rvc )
+                tests+=("rvc")
                 ;;
         --config1 )
                 tests+=("config1")
@@ -950,6 +982,7 @@ while [ "$1" != "" ]; do
                 tests+=("opencl")
                 tests+=("cache")
                 tests+=("vm")
+                tests+=("rvc")
                 tests+=("config1")
                 tests+=("config2")
                 tests+=("debug")
