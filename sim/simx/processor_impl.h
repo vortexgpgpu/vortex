@@ -21,8 +21,6 @@
 
 namespace vortex {
 
-class Emulator;
-
 class ProcessorImpl {
 public:
   struct PerfStats {

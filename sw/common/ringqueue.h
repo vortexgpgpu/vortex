@@ -36,7 +36,7 @@ public:
 
   explicit RingQueue(uint32_t cap)
     : capacity_(cap), head_(0), tail_(0), size_(0) {
-    __assert(capacity_ > 0, "RingQueue: capacity must be > 0");
+    __vortex_assert(capacity_ > 0, "RingQueue: capacity must be > 0");
     storage_.reset(new Storage[capacity_]);
   }
 
@@ -77,26 +77,26 @@ public:
   uint32_t capacity() const { return capacity_; }
 
   const T& front() const {
-    __assert(size_ > 0, "RingQueue: empty");
+    __vortex_assert(size_ > 0, "RingQueue: empty");
     return *ptr(head_);
   }
 
   void pop() {
-    __assert(size_ > 0, "RingQueue: empty");
+    __vortex_assert(size_ > 0, "RingQueue: empty");
     ptr(head_)->~T();
     head_ = inc(head_);
     --size_;
   }
 
   void push(const T& v) {
-    __assert(size_ < capacity_, "RingQueue: full");
+    __vortex_assert(size_ < capacity_, "RingQueue: full");
     new (&storage_[tail_]) T(v);
     tail_ = inc(tail_);
     ++size_;
   }
 
   void push(T&& v) {
-    __assert(size_ < capacity_, "RingQueue: full");
+    __vortex_assert(size_ < capacity_, "RingQueue: full");
     new (&storage_[tail_]) T(std::move(v));
     tail_ = inc(tail_);
     ++size_;
