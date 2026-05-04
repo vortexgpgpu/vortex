@@ -44,6 +44,7 @@ void VortexGPGPU::finish() {}
 
 // Advance the GPU execution one cycle based on SST clock handler callback
 bool VortexGPGPU::clockTick(SST::Cycle_t cycle) {
+    (void)cycle;  // SST passes the global cycle count; we don't use it.
     bool running = sim_->cycle();
     if (!running) {
         primaryComponentOKToEndSim();

@@ -56,8 +56,11 @@ endif
 
 # SST integration: build libvortex.so as the SST element library and
 # include the SST::Component wrapper. Requires SST 15.x in PATH.
+# -Wno-deprecated-declarations: SST 15.1 deprecated Handler<> in favor
+# of Handler2<>; the upstream-shaped Component code uses Handler<>.
+# Suppress until vortex_gpgpu.cpp is migrated to Handler2.
 ifeq ($(USE_SST),1)
-	CXXFLAGS += $(shell sst-config --ELEMENT_CXXFLAGS)
+	CXXFLAGS += $(shell sst-config --ELEMENT_CXXFLAGS) -Wno-deprecated-declarations
 	LDFLAGS  += $(shell sst-config --ELEMENT_LDFLAGS)
 	SRCS     += $(SRC_DIR)/sst/vortex_simulator.cpp $(SRC_DIR)/sst/vortex_gpgpu.cpp
 endif
