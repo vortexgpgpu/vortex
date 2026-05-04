@@ -13,6 +13,8 @@
 
 #include "processor.h"
 #include "processor_impl.h"
+#include "socket.h"
+#include "core.h"
 #include <VX_types.h>
 
 #include <cstdlib>

@@ -27,22 +27,37 @@
 #include "core.h"
 #include "scheduler.h"
 #include "VX_types.h"
+#include "dtm/debug_module.h"
+#include "dtm/jtag_dtm.h"
+#include "dtm/remote_bitbang.h"
 
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-s: stats] [-h: help] <program>" << std::endl;
+   std::cout << "Usage: [-s: stats] [-d: debug-mode] [-p <port>: RBB port] [-V: verbose debug logging] [-h: help] <program>" << std::endl;
 }
 
 bool showStats = false;
+bool debug_mode = false;
+bool debug_verbose = false;  // Verbose debug module logging
+uint16_t rbb_port = 9823;    // Default OpenOCD remote bitbang port
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
-  	while ((c = getopt(argc, argv, "sh")) != -1) {
+  	while ((c = getopt(argc, argv, "shdp:V")) != -1) {
     	switch (c) {
       case 's':
         showStats = true;
+        break;
+      case 'd':
+        debug_mode = true;
+        break;
+      case 'p':
+        rbb_port = static_cast<uint16_t>(atoi(optarg));
+        break;
+      case 'V':
+        debug_verbose = true;
         break;
     	case 'h':
       	show_usage();
@@ -56,7 +71,9 @@ static void parse_args(int argc, char **argv) {
 
 	if (optind < argc) {
 		program = argv[optind];
-    std::cout << "Running " << program << "..." << std::endl;
+    if (!debug_mode) {
+      std::cout << "Running " << program << "..." << std::endl;
+    }
 	} else {
 		show_usage();
     exit(-1);
@@ -99,7 +116,7 @@ int main(int argc, char **argv) {
     processor.dcr_write(VX_DCR_KMU_WARP_STEP_Z,  0);
 
     // load program
-    if (program) {
+    {
       std::string program_ext(fileExtension(program));
       if (program_ext == "vxbin") {
         ram.loadVxImage(program);
@@ -115,8 +132,6 @@ int main(int argc, char **argv) {
   #ifndef NDEBUG
     std::cout << "[VXDRV] START: program=" << program << std::endl;
   #endif
-    // run simulation
-    processor.run();
 
     if (debug_mode) {
       // Debug mode: run RBB server in a tick loop until OpenOCD disconnects
@@ -137,8 +152,66 @@ int main(int argc, char **argv) {
         return -1;
       }
 
-    // read exitcode from @MPM.1
-    ram.read(&exitcode, IO_EXIT_CODE, 4);
+      // Prime warp 0's PC to the configured startup address. Unlike the
+      // legacy Emulator (which exposed startup_addr through reset()), the
+      // v3 Scheduler only sets warp PC when the KMU dispatches a CTA.
+      // For DTM debug we want PC visible *before* any cycle has run, so
+      // we initialize it directly. The DCR-driven dispatch path still
+      // works on resume (KMU will re-dispatch through normal scheduling).
+      core->dtm_set_pc(0, static_cast<vortex::Word>(startup_addr));
+
+      DebugModule dm(core, &ram);
+
+      // Halt the hart at startup so the debugger can control execution.
+      // Set DPC to the initial PC so the first RR of DPC reads correctly.
+      vortex::Word initial_pc = core->dtm_get_pc(0);
+      dm.set_debug_mode_enabled(true);
+      dm.direct_write_register(0x7B1, initial_pc);
+      dm.halt_hart(0);
+
+      jtag_dtm_t dtm(&dm);
+      remote_bitbang_t rbb(rbb_port, &dtm);
+
+      std::cout << "[DEBUG] Remote bitbang server ready. Waiting for OpenOCD connection..." << std::endl;
+
+      bool program_completed_notified = false;
+      bool ever_ran = false;
+      while (true) {
+        // Only advance the simulator while the hart is not halted by DTM.
+        // (v3 has no Emulator gate; honoring DM's halt state at the tick
+        // boundary is what implements halt/resume in this branch.)
+        if (!dm.hart_is_halted()) {
+          SimPlatform::instance().tick();
+          if (processor.any_running()) {
+            ever_ran = true;
+          }
+        }
+        rbb.tick();
+
+        // Once the program has actually started, detect natural completion
+        // (no clusters running and no in-flight channel packets) and notify
+        // DebugModule once. The debugger can still resume / inspect after.
+        if (ever_ran && !program_completed_notified && !processor.any_running()) {
+          dm.notify_program_completed(core->dtm_get_pc(0));
+          program_completed_notified = true;
+        }
+      }
+      // Unreachable in practice; debug mode is a long-running session.
+    } else {
+      // run simulation
+      processor.run();
+
+      // flush GPU caches before reading back results
+      {
+        uint32_t dummy;
+        for (uint32_t cid = 0; cid < NUM_CORES * NUM_CLUSTERS; ++cid) {
+          processor.dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
+        }
+      }
+
+      // read exitcode from @MPM.1
+      ram.read(&exitcode, IO_EXIT_CODE, 4);
+    }
   }
 
   return exitcode;
