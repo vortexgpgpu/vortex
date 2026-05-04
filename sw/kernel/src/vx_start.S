@@ -16,12 +16,45 @@
 #include <newlib.h>
 #include "common.h"
 
+#ifdef VM_ENABLE
+// Mode encodings used by the SATP CSR. Defined locally to avoid pulling
+// sim/common/mem.h into the kernel build (these enum values are also
+// declared there).
+#define BARE 0
+#define SV32 1
+#define SV39 8
+#endif
+
 .section .init, "ax"
 .global _start
 .type   _start, @function
 _start:
 
 #ifdef KMU_ENABLE
+
+#ifdef VM_ENABLE
+  # Program SATP with the page-table base PPN and addressing mode. The
+  # runtime has already populated the page table at PAGE_TABLE_BASE_ADDR
+  # before launching this kernel; we just need to point the per-core MMU
+  # at it. STACK and PT regions are MMU-bypass per VMManager::need_trans,
+  # so it is safe to do this before the stack is set up. The non-KMU
+  # path writes SATP from init_regs (every spawned warp).
+#if VM_ADDR_MODE == SV39
+  li    t0, PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, MEM_PAGE_LOG2_SIZE
+  li    t1, 1
+  slli  t1, t1, 63
+  or    t0, t0, t1
+  csrw  satp, t0
+#elif VM_ADDR_MODE == SV32
+  li    t0, PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, MEM_PAGE_LOG2_SIZE
+  li    t1, 1
+  slli  t1, t1, 31
+  or    t0, t0, t1
+  csrw  satp, t0
+#endif
+#endif
 
 #ifdef NEED_GP
   # set global pointer register
@@ -113,6 +146,28 @@ _Exit:
 .type init_regs, @function
 .local init_regs
 init_regs:
+#ifdef VM_ENABLE
+  # SATP is per-core, but each warp on each core writes the same value
+  # idempotently — keeps the non-KMU init path symmetric with _start so
+  # spawned warps don't rely on warp-0's earlier write being visible
+  # before any user-VA access they make.
+#if VM_ADDR_MODE == SV39
+  li    t0, PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, MEM_PAGE_LOG2_SIZE
+  li    t1, 1
+  slli  t1, t1, 63
+  or    t0, t0, t1
+  csrw  satp, t0
+#elif VM_ADDR_MODE == SV32
+  li    t0, PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, MEM_PAGE_LOG2_SIZE
+  li    t1, 1
+  slli  t1, t1, 31
+  or    t0, t0, t1
+  csrw  satp, t0
+#endif
+#endif
+
 #ifdef NEED_GP
   # set global pointer register
   .option push

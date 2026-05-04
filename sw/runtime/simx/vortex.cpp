@@ -17,6 +17,10 @@
 #include <mem.h>
 #include <processor.h>
 #include <util.h>
+#ifdef VM_ENABLE
+#include <vm.h>
+#include <memory>
+#endif
 
 #include <assert.h>
 #include <chrono>
@@ -45,6 +49,13 @@ public:
   }
 
   int init() {
+#ifdef VM_ENABLE
+    // Boot-time VM init: allocate the page table inside RAM, push SATP
+    // into the simulator. Must run after attach_ram (constructor) and
+    // before the first vx_mem_alloc (so phy_to_virt_map can mint VAs).
+    vm_mgr_ = std::make_unique<VMManager>(&ram_);
+    CHECK_ERR(vm_mgr_->init(), { return err; });
+#endif
     return 0;
   }
 
@@ -106,7 +117,11 @@ public:
   }
 
   int mem_alloc(uint64_t size, int flags, uint64_t *dev_addr) {
+#ifdef VM_ENABLE
+    uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
+#else
     uint64_t asize = size;
+#endif
     uint64_t addr = 0;
 
     DBGPRINT("[RT:mem_alloc] size: 0x%lx, asize, 0x%lx,flag : 0x%d\n", size, asize, flags);
@@ -118,11 +133,21 @@ public:
       return err;
     });
     *dev_addr = addr;
+#ifdef VM_ENABLE
+    // Replace the PA in *dev_addr with a freshly-minted VA. After this
+    // call, the user-facing API uses VAs end-to-end (mirrors source
+    // runtime/simx/vortex.cpp:121-142).
+    vm_mgr_->phy_to_virt_map(asize, dev_addr, flags);
+#endif
     return 0;
   }
 
   int mem_reserve(uint64_t dev_addr, uint64_t size, int flags) {
+#ifdef VM_ENABLE
+    uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
+#else
     uint64_t asize = size;
+#endif
     CHECK_ERR(global_mem_.reserve(dev_addr, asize), {
       return err;
     });
@@ -131,11 +156,27 @@ public:
       global_mem_.release(dev_addr);
       return err;
     });
+#ifdef VM_ENABLE
+    // mem_reserve places content at the caller-chosen PA (vs mem_alloc,
+    // which mints a fresh VA). The kernel will later access this region
+    // via that same PA through the MMU, so install identity PTEs.
+    CHECK_ERR(vm_mgr_->install_identity_map(dev_addr, asize), {
+      global_mem_.release(dev_addr);
+      return err;
+    });
+#endif
     return 0;
   }
 
   int mem_free(uint64_t dev_addr) {
+#ifdef VM_ENABLE
+    // dev_addr is a VA; resolve to PA before releasing from the
+    // physical-address-keyed global allocator.
+    uint64_t paddr = vm_mgr_->page_table_walk(dev_addr);
+    return global_mem_.release(paddr);
+#else
     return global_mem_.release(dev_addr);
+#endif
   }
 
   int mem_access(uint64_t dev_addr, uint64_t size, int flags) {
@@ -159,7 +200,10 @@ public:
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
     if (dest_addr + asize > GLOBAL_MEM_SIZE)
       return -1;
-
+#ifdef VM_ENABLE
+    // dest_addr is a VA; translate before touching backing RAM.
+    dest_addr = vm_mgr_->page_table_walk(dest_addr);
+#endif
     ram_.enable_acl(false);
     ram_.write((const uint8_t *)src, dest_addr, size);
     ram_.enable_acl(true);
@@ -185,7 +229,10 @@ public:
         this->dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
       }
     }
-
+#ifdef VM_ENABLE
+    // src_addr is a VA; translate before reading from backing RAM.
+    src_addr = vm_mgr_->page_table_walk(src_addr);
+#endif
     ram_.enable_acl(false);
     ram_.read((uint8_t *)dest, src_addr, size);
     ram_.enable_acl(true);
@@ -239,6 +286,9 @@ private:
   Processor processor_;
   MemoryAllocator global_mem_;
   std::future<void> future_;
+#ifdef VM_ENABLE
+  std::unique_ptr<VMManager> vm_mgr_;
+#endif
 };
 
 #include <callbacks.inc>

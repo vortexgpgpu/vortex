@@ -141,6 +141,16 @@ struct CoreCounters {
   // memory
   uint64_t mem_reads = 0;
   uint64_t mem_writes = 0;
+
+#ifdef VM_ENABLE
+  // VM (icache + dcache MMU summed in hardware)
+  uint64_t tlb_reads = 0;
+  uint64_t tlb_hits = 0;
+  uint64_t tlb_misses = 0;
+  uint64_t tlb_evicts = 0;
+  uint64_t ptw_walks = 0;
+  uint64_t ptw_latency = 0;
+#endif
 };
 
 struct CacheCounters {
@@ -272,6 +282,17 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LOAD_LT, core_id, &c.load_lt), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STORES, core_id, &c.stores), { return err; });
 
+#ifdef VM_ENABLE
+      // VM/MMU lives in its own perf class (CLASS_VM), independent of CORE/MEM.
+      // Hardware sums icache + dcache MMU counters into one bank.
+      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_READS,   core_id, &c.tlb_reads),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_HITS,    core_id, &c.tlb_hits),    { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_MISSES,  core_id, &c.tlb_misses),  { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_EVICTS,  core_id, &c.tlb_evicts),  { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_PTW_WALKS,   core_id, &c.ptw_walks),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_PTW_LATENCY, core_id, &c.ptw_latency), { return err; });
+#endif
+
       if (num_cores > 1) {
         // Per-Core report
         const uint64_t cycles = c.cycles;
@@ -322,6 +343,13 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
         perf_print_core(stream, core_id, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64,
                         ifetch_avg_lt, load_avg_lt, c.loads, c.stores);
 
+#ifdef VM_ENABLE
+        const int tlb_hit_pct = calc_percent(c.tlb_hits, c.tlb_reads);
+        const double ptw_avg_lt = safe_div((double)c.ptw_latency, (double)c.ptw_walks);
+        perf_print_core(stream, core_id, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
+                        c.tlb_reads, tlb_hit_pct, c.tlb_evicts, c.ptw_walks, ptw_avg_lt);
+#endif
+
         perf_print_core(stream, core_id, "instrs=%" PRIu64 ", cycles=%" PRIu64 ", IPC=%.3f", c.instrs, c.cycles, ipc);
       }
 
@@ -358,6 +386,15 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       tot.loads += c.loads;
       tot.load_lt += c.load_lt;
       tot.stores += c.stores;
+
+#ifdef VM_ENABLE
+      tot.tlb_reads += c.tlb_reads;
+      tot.tlb_hits += c.tlb_hits;
+      tot.tlb_misses += c.tlb_misses;
+      tot.tlb_evicts += c.tlb_evicts;
+      tot.ptw_walks += c.ptw_walks;
+      tot.ptw_latency += c.ptw_latency;
+#endif
     }
 
     // Query global MPM counters
@@ -412,6 +449,13 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     uint64_t write_bytes = tot.mem_writes * CACHE_BLOCK_SIZE;
     perf_print(stream, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64 ", read_bytes=%" PRIu64 ", write_bytes=%" PRIu64,
                tot_ifetch_avg_lt, tot_load_avg_lt, tot.loads, tot.stores, read_bytes, write_bytes);
+
+#ifdef VM_ENABLE
+    const int tot_tlb_hit_pct = calc_percent(tot.tlb_hits, tot.tlb_reads);
+    const double tot_ptw_avg_lt = safe_div((double)tot.ptw_latency, (double)tot.ptw_walks);
+    perf_print(stream, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
+               tot.tlb_reads, tot_tlb_hit_pct, tot.tlb_evicts, tot.ptw_walks, tot_ptw_avg_lt);
+#endif
   } break;
 
   case VX_DCR_MPM_CLASS_MEM: {

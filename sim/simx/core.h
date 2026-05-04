@@ -128,6 +128,13 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+#ifdef VM_ENABLE
+  // SATP write — invoked by CsrUnit on kernel `csrw satp`. Fans out to
+  // both per-core MMUs (dcache + icache). Translation itself happens
+  // asynchronously inside the Mmu SimObject; LSU/fetch emit VAs.
+  void set_satp(uint64_t satp);
+#endif
+
 
 #ifdef EXT_TCU_ENABLE
   std::shared_ptr<TcuUnit>& tcu_unit();

@@ -827,6 +827,17 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] misses;
     } coalescer_perf_t;
 
+`ifdef VM_ENABLE
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] tlb_reads;
+        logic [PERF_CTR_BITS-1:0] tlb_hits;
+        logic [PERF_CTR_BITS-1:0] tlb_misses;
+        logic [PERF_CTR_BITS-1:0] tlb_evictions;
+        logic [PERF_CTR_BITS-1:0] ptw_walks;
+        logic [PERF_CTR_BITS-1:0] ptw_latency;
+    } mmu_perf_t;
+`endif
+
 `ifdef EXT_TCU_ENABLE
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] lmem_reads;        // LMEM read transactions issued by tile buffer
@@ -895,6 +906,9 @@ package VX_gpu_pkg;
     `ifdef EXT_TCU_ENABLE
         tcu_perf_t                tcu;
     `endif
+    `ifdef VM_ENABLE
+        mmu_perf_t                mmu;
+    `endif
         logic [PERF_CTR_BITS-1:0] ifetches;
         logic [PERF_CTR_BITS-1:0] loads;
         logic [PERF_CTR_BITS-1:0] stores;
@@ -948,7 +962,20 @@ package VX_gpu_pkg;
     localparam ICACHE_TAG_ID_BITS	= NW_WIDTH;
 
     // Core request tag bits
-    localparam ICACHE_TAG_WIDTH	    = (UUID_WIDTH + ICACHE_TAG_ID_BITS);
+    // Pre-MMU width (what VX_fetch produces). When VM_ENABLE is on, the
+    // iMMU widens this by ICACHE_TLB_SOURCE_BITS for its internal
+    // bypass/TLB/PTW arbiter; the externally-visible icache_bus_if
+    // (ICACHE_TAG_WIDTH below) carries that wider tag.
+    localparam ICACHE_TAG_WIDTH_BASE = (UUID_WIDTH + ICACHE_TAG_ID_BITS);
+`ifdef VM_ENABLE
+    localparam ICACHE_TLB_SOURCE_BITS = `UP(`CLOG2(1));
+    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
+    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
+    localparam ICACHE_ARB_BITS        = `CLOG2(`CDIV(2 * 1 + 1, 1));
+    localparam ICACHE_TAG_WIDTH       = (ICACHE_TAG_WIDTH_BASE + ICACHE_TLB_SOURCE_BITS + ICACHE_ARB_BITS);
+`else
+    localparam ICACHE_TAG_WIDTH       = ICACHE_TAG_WIDTH_BASE;
+`endif
 
     // Memory request data bits
     localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
@@ -982,7 +1009,20 @@ package VX_gpu_pkg;
     localparam DCACHE_CORE_TAG_WIDTH = (UUID_WIDTH + DCACHE_TAG_ID_BITS);
 
     // Core request tag bits on dcache_bus_if port of VX_core (+1 for flush-arb sel bit)
-    localparam DCACHE_TAG_WIDTH	    = (DCACHE_CORE_TAG_WIDTH + 1);
+    // Pre-MMU width (what VX_mem_unit produces, including the flush sel bit).
+    // When VM_ENABLE is on, the dMMU widens this by DCACHE_TLB_SOURCE_BITS
+    // for its internal bypass/TLB/PTW arbiter, so the cache cluster sees
+    // the wider DCACHE_TAG_WIDTH below.
+    localparam DCACHE_TAG_WIDTH_BASE = (DCACHE_CORE_TAG_WIDTH + 1);
+`ifdef VM_ENABLE
+    localparam DCACHE_TLB_SOURCE_BITS = `UP(`CLOG2(DCACHE_NUM_REQS));
+    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
+    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
+    localparam DCACHE_ARB_BITS        = `CLOG2(`CDIV(2 * DCACHE_NUM_REQS + 1, DCACHE_NUM_REQS));
+    localparam DCACHE_TAG_WIDTH       = (DCACHE_TAG_WIDTH_BASE + DCACHE_TLB_SOURCE_BITS + DCACHE_ARB_BITS);
+`else
+    localparam DCACHE_TAG_WIDTH       = DCACHE_TAG_WIDTH_BASE;
+`endif
 
     // Memory request data bits
     localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);

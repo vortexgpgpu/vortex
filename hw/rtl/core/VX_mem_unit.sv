@@ -371,7 +371,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 // Ports 1+: pass through; tag is zero-extended from
                 // DCACHE_CORE_TAG_WIDTH to DCACHE_TAG_WIDTH on request,
                 // and MSB-stripped on response.
-                `ASSIGN_VX_MEM_BUS_IF_EX (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j], DCACHE_TAG_WIDTH, DCACHE_CORE_TAG_WIDTH, 0);
+                `ASSIGN_VX_MEM_BUS_IF_EX (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j], DCACHE_TAG_WIDTH_BASE, DCACHE_CORE_TAG_WIDTH, 0);
             end
         end
 

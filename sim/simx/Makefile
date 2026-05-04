@@ -46,6 +46,12 @@ ifneq ($(filter -DEXT_TCU_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/tcu/tcu_tbuf.cpp
 endif
 
+# Add VM sources
+ifneq ($(filter -DVM_ENABLE, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/mem/mmu.cpp
+	SRCS += $(SRC_DIR)/mem/mmu_tlb.cpp
+endif
+
 # Add DXA extension sources
 ifneq ($(filter -DEXT_DXA_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/dxa/dxa_core.cpp

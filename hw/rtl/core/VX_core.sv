@@ -75,6 +75,16 @@ module VX_core import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_mem_if[`NUM_LSU_BLOCKS]();
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH_BASE)
+    ) mmu_dcache_if[DCACHE_NUM_REQS]();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_TAG_WIDTH_BASE)
+    ) mmu_icache_if[1]();
+
 `ifdef TCU_WGMMA_ENABLE
     localparam TCU_LMEM_BANK_ADDR_W = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`LMEM_NUM_BANKS);
     VX_mem_bus_if #(
@@ -157,7 +167,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .fetch_perf     (pipeline_perf.fetch),
     `endif
-        .icache_bus_if  (icache_bus_if),
+        .icache_bus_if  (mmu_icache_if[0]),
         .schedule_if    (schedule_if),
         .fetch_if       (fetch_if)
     );
@@ -259,8 +269,68 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
         .lsu_mem_if    (lsu_mem_if),
         .dcr_flush_if  (dcr_flush_if),
-        .dcache_bus_if (dcache_bus_if)
+        .dcache_bus_if (mmu_dcache_if)
     );
+
+`ifdef VM_ENABLE
+`ifdef PERF_ENABLE
+    mmu_perf_t dcache_mmu_perf;
+    mmu_perf_t icache_mmu_perf;
+    // Combine icache + dcache MMU counters into the pipeline_perf.mmu
+    // struct so VX_csr_data can read them under MPM_CLASS_CORE.
+    assign pipeline_perf.mmu.tlb_reads     = dcache_mmu_perf.tlb_reads     + icache_mmu_perf.tlb_reads;
+    assign pipeline_perf.mmu.tlb_hits      = dcache_mmu_perf.tlb_hits      + icache_mmu_perf.tlb_hits;
+    assign pipeline_perf.mmu.tlb_misses    = dcache_mmu_perf.tlb_misses    + icache_mmu_perf.tlb_misses;
+    assign pipeline_perf.mmu.tlb_evictions = dcache_mmu_perf.tlb_evictions + icache_mmu_perf.tlb_evictions;
+    assign pipeline_perf.mmu.ptw_walks     = dcache_mmu_perf.ptw_walks     + icache_mmu_perf.ptw_walks;
+    assign pipeline_perf.mmu.ptw_latency   = dcache_mmu_perf.ptw_latency   + icache_mmu_perf.ptw_latency;
+`endif
+
+    // Per-core dcache MMU.
+    VX_mmu #(
+        .NUM_REQS  (DCACHE_NUM_REQS),
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH_BASE)
+    ) dcache_mmu (
+        .clk           (clk),
+        .reset         (reset),
+    `ifdef PERF_ENABLE
+        .mmu_perf      (dcache_mmu_perf),
+    `endif
+        .satp          (sched_csr_if.csr_satp),
+        .lsu_mem_if    (mmu_dcache_if),
+        .dcache_mem_if (dcache_bus_if)
+    );
+
+    // Per-core icache MMU. NUM_REQS=1.
+    VX_mem_bus_if #(
+        .DATA_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_TAG_WIDTH)
+    ) icache_mmu_out_if[1]();
+
+    VX_mmu #(
+        .NUM_REQS  (1),
+        .DATA_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_TAG_WIDTH_BASE)
+    ) icache_mmu (
+        .clk           (clk),
+        .reset         (reset),
+    `ifdef PERF_ENABLE
+        .mmu_perf      (icache_mmu_perf),
+    `endif
+        .satp          (sched_csr_if.csr_satp),
+        .lsu_mem_if    (mmu_icache_if),
+        .dcache_mem_if (icache_mmu_out_if)
+    );
+
+    `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, icache_mmu_out_if[0]);
+`else
+    // No-VM passthrough: same widths on both sides.
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_no_vm
+        `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i], mmu_dcache_if[i]);
+    end
+    `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, mmu_icache_if[0]);
+`endif
 
     assign busy = sched_busy || dcr_busy;
 

@@ -39,7 +39,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     wire icache_req_valid;
     wire [ICACHE_ADDR_WIDTH-1:0] icache_req_addr;
-    wire [ICACHE_TAG_WIDTH-1:0] icache_req_tag;
+    wire [ICACHE_TAG_WIDTH_BASE-1:0] icache_req_tag;
     wire icache_req_ready;
 
     wire [UUID_WIDTH-1:0] rsp_uuid;
@@ -83,7 +83,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign schedule_if.ready = icache_req_ready;
 
     VX_elastic_buffer #(
-        .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH),
+        .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH_BASE),
         .SIZE    (2),
         .OUT_REG (1) // external bus should be registered
     ) req_buf (

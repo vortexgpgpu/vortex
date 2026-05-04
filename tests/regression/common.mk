@@ -96,13 +96,16 @@ CONFIG_STAMP = config.stamp
 all: $(PROJECT) kernel.vxbin kernel.dump
 
 # Force rebuild when CONFIGS (defines) change between runs.
+# PID-suffixed tmp + tolerate concurrent invocations across test
+# Makefiles + blackbox.sh-driven runtime builds (mv -f).
 $(CONFIG_STAMP): FORCE
-	@printf '%s\n' '$(VX_CFLAGS)' '$(CXXFLAGS)' '$(LDFLAGS)' > $@.tmp
-	@if ! cmp -s $@.tmp $@; then \
-	  mv $@.tmp $@; \
-	else \
-	  rm $@.tmp; \
-	fi
+	@TMP=$@.tmp.$$$$ ; \
+	 printf '%s\n' '$(VX_CFLAGS)' '$(CXXFLAGS)' '$(LDFLAGS)' > $$TMP ; \
+	 if ! cmp -s $$TMP $@ 2>/dev/null; then \
+	   mv -f $$TMP $@ ; \
+	 else \
+	   rm -f $$TMP ; \
+	 fi
 FORCE:
 
 kernel.dump: kernel.elf

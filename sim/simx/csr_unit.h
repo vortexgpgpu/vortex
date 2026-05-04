@@ -40,6 +40,11 @@ public:
 
 private:
   Core* core_;
+#ifdef VM_ENABLE
+  // Mirror of the kernel-visible SATP CSR. Forwarded to Core::set_satp
+  // on write so the per-core MMU updates its translation root.
+  uint64_t satp_ = 0;
+#endif
 };
 
 } // namespace vortex

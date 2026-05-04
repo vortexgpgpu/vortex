@@ -62,14 +62,17 @@ $(DESTDIR)/$(PROJECT): $(SRCS) $(BUILD_DEPS) $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
 # updates the timestamp when flags changed.
+# Use a PID-suffixed tmp file and tolerate concurrent invocations
+# (blackbox.sh + tests/regression/*/Makefile both invoke `make -C` here).
 $(CONFIG_FILE): force
 	@mkdir -p $(@D)
-	@printf '%s\n' "$(CXXFLAGS)" > $@.tmp
-	@if ! cmp -s $@.tmp $@; then \
-	  mv $@.tmp $@; \
-	else \
-	  rm $@.tmp; \
-	fi
+	@TMP=$@.tmp.$$$$ ; \
+	 printf '%s\n' "$(CXXFLAGS)" > $$TMP ; \
+	 if ! cmp -s $$TMP $@ 2>/dev/null; then \
+	   mv -f $$TMP $@ ; \
+	 else \
+	   rm -f $$TMP ; \
+	 fi
 
 clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/opaesim clean

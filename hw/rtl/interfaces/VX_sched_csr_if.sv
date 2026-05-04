@@ -25,6 +25,10 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     logic [`MEM_ADDR_WIDTH-1:0]     mscratch;
     cta_csrs_t                      cta_csrs;
 
+`ifdef VM_ENABLE
+    logic [`XLEN-1:0]               csr_satp;
+`endif
+
     // Write port: slave notifies scheduler of MSCRATCH CSR writes
     logic                           csr_wr_valid;
     logic [NW_WIDTH-1:0]            csr_wr_wid;
@@ -37,6 +41,9 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output thread_masks,
         output mscratch,
         output cta_csrs,
+    `ifdef VM_ENABLE
+        input csr_satp,
+    `endif
         input  csr_rd_wid,
         input  csr_wr_valid,
         input  csr_wr_wid,
@@ -50,6 +57,9 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  thread_masks,
         input  mscratch,
         input  cta_csrs,
+    `ifdef VM_ENABLE
+        output csr_satp,
+    `endif
         output csr_rd_wid,
         output csr_wr_valid,
         output csr_wr_wid,

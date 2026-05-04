@@ -288,6 +288,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 		std::vector<mem_addr_size_t> lane_entries(NUM_LSU_LANES);
 		for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
 			auto& entry = state.addr_list.at(t0 + i);
+			// Address goes downstream as VA. The per-core dcache MMU
+			// (under VM_ENABLE) substitutes PA before the request reaches
+			// the cache; with VM off, the address is already the PA.
 			lsu_req.mask.set(i);
 			lsu_req.addrs.at(i) = entry.addr;
 			lane_entries.at(i) = entry;

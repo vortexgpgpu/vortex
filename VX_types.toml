@@ -159,9 +159,10 @@ VX_CSR_CTA_LMEM_ADDR  = 0xCDF
 [dcr_mpm_class]
 VX_DCR_MPM_CLASS_BASE = 0
 VX_DCR_MPM_CLASS_CORE = 1
-VX_DCR_MPM_CLASS_MEM = 2
-VX_DCR_MPM_CLASS_DXA = 6
-VX_DCR_MPM_CLASS_TCU = 7
+VX_DCR_MPM_CLASS_MEM  = 2
+VX_DCR_MPM_CLASS_DXA  = 6
+VX_DCR_MPM_CLASS_TCU  = 7
+VX_DCR_MPM_CLASS_VM   = 8
 
 [csr_mpm_base]
 VX_CSR_MCYCLE = 0xB00
@@ -238,6 +239,21 @@ VX_CSR_MPM_LOAD_LT      = 0xB1D # total LSU load latency
 VX_CSR_MPM_LOAD_LT_H    = 0xB9D
 VX_CSR_MPM_STORES       = 0xB1E # total LSU store requests
 VX_CSR_MPM_STORES_H     = 0xB9E
+
+[csr_mpm_vm]
+# PERF: VM (TLB/PTW). Hardware sums icache + dcache MMU counters.
+VX_CSR_MPM_TLB_READS    = 0xB03 # total TLB lookups
+VX_CSR_MPM_TLB_READS_H  = 0xB83
+VX_CSR_MPM_TLB_HITS     = 0xB04 # TLB hits
+VX_CSR_MPM_TLB_HITS_H   = 0xB84
+VX_CSR_MPM_TLB_MISSES   = 0xB05 # TLB misses (triggered PTW)
+VX_CSR_MPM_TLB_MISSES_H = 0xB85
+VX_CSR_MPM_TLB_EVICTS   = 0xB06 # TLB evictions on fill
+VX_CSR_MPM_TLB_EVICTS_H = 0xB86
+VX_CSR_MPM_PTW_WALKS    = 0xB07 # PTW walks completed
+VX_CSR_MPM_PTW_WALKS_H  = 0xB87
+VX_CSR_MPM_PTW_LATENCY  = 0xB08 # PTW total latency cycles
+VX_CSR_MPM_PTW_LATENCY_H = 0xB88
 
 [csr_mpm_mem]
 # PERF: icache

@@ -655,23 +655,13 @@ void MemoryUnit::set_satp(uint64_t satp)
 
 bool MemoryUnit::need_trans(uint64_t dev_pAddr)
   {
-    // Check if the satp is set and BARE mode
-    if ( is_satp_unset() || (get_mode() == BARE))
+    (void)dev_pAddr;
+    // System PA regions (IO, kernel image, page table, stack) are
+    // identity-mapped at boot via VMManager::install_identity_map(), so
+    // every post-SATP access walks the page table. The only path that
+    // skips translation is one issued before SATP is set (BARE mode).
+    if (is_satp_unset() || (get_mode() == BARE))
       return 0;
-
-    // Check if the address is reserved for system usage
-    // bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr && dev_pAddr < PAGE_TABLE_BASE_ADDR + PT_SIZE_LIMIT);
-    if (PAGE_TABLE_BASE_ADDR <= dev_pAddr)
-      return 0;
-
-    // Check if the address is reserved for IO usage
-    if (dev_pAddr < USER_BASE_ADDR)
-      return 0;
-    // Check if the address falls within the startup address range
-    if ((STARTUP_ADDR <= dev_pAddr) && (dev_pAddr <= (STARTUP_ADDR + 0x40000)))
-      return 0;
-
-    // Now all conditions are not met. Return true because the address needs translation
     return 1;
   }
 

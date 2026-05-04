@@ -44,6 +44,10 @@
 #ifdef EXT_TCU_ENABLE
 #include "tcu_unit.h"
 #endif
+#ifdef VM_ENABLE
+#include "mem/mmu.h"
+#include <mem.h>
+#endif
 
 using namespace vortex;
 
@@ -174,7 +178,38 @@ public:
       }
     }
 
-    // connect dcache adapter
+  #ifdef VM_ENABLE
+    // Per-core dcache MMU (SimObject). Sits between the LSU dcache
+    // adapter and the cache port. Mirrors VX_mmu.sv: TLB lookup +
+    // bypass for non-translated regions; on miss, the embedded PTW
+    // FSM emits PTE fetches via this MMU's own ReqOut[0] (going
+    // through the same cache hierarchy as regular loads — TLM-correct).
+    snprintf(sname, 100, "%s-dcache_mmu", name.c_str());
+    dcache_mmu_ = Mmu::Create(sname, DCACHE_NUM_REQS);
+
+    // Per-core icache MMU (1 port). Fetch reads/writes its upstream
+    // channels (ReqIn[0]/RspOut[0]) directly; the downstream side is
+    // bound to the Core's icache port below.
+    snprintf(sname, 100, "%s-icache_mmu", name.c_str());
+    icache_mmu_ = Mmu::Create(sname, 1);
+
+    // dcache adapter -> dcache MMU -> core's dcache port
+    for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+      for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
+        uint32_t p = b * DCACHE_CHANNELS + c;
+        lsu_dcache_adapter.at(b)->ReqOut.at(c).bind(&dcache_mmu_->ReqIn.at(p));
+        dcache_mmu_->RspOut.at(p).bind(&lsu_dcache_adapter.at(b)->RspIn.at(c));
+        dcache_mmu_->ReqOut.at(p).bind(&simobject_->dcache_req_out.at(p));
+        simobject_->dcache_rsp_in.at(p).bind(&dcache_mmu_->RspIn.at(p));
+      }
+    }
+
+    // icache MMU downstream side -> core's icache port. Upstream side
+    // (ReqIn[0]/RspOut[0]) is consumed directly by fetch() in on_tick.
+    icache_mmu_->ReqOut.at(0).bind(&simobject_->icache_req_out.at(0));
+    simobject_->icache_rsp_in.at(0).bind(&icache_mmu_->RspIn.at(0));
+  #else
+    // No-VM: direct passthrough.
     for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
       for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
         uint32_t p = b * DCACHE_CHANNELS + c;
@@ -182,6 +217,7 @@ public:
         simobject_->dcache_rsp_in.at(p).bind(&lsu_dcache_adapter.at(b)->RspIn.at(c));
       }
     }
+  #endif
 
     // initialize dispatchers
     dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, 2, NUM_ALU_BLOCKS, NUM_ALU_LANES);
@@ -289,8 +325,18 @@ public:
   void fetch() {
     perf_stats_.ifetch_latency += pending_ifetches_;
 
-    // handle icache response — extract instruction word from the TLM line payload
+  #ifdef VM_ENABLE
+    // With VM, fetch reads/writes the icache MMU's upstream channels.
+    // The MMU translates and forwards to simobject_->icache_req_out
+    // downstream (driven by SimChannel binding in the constructor).
+    auto& icache_rsp = icache_mmu_->RspOut.at(0);
+    auto& icache_req = icache_mmu_->ReqIn.at(0);
+  #else
     auto& icache_rsp = simobject_->icache_rsp_in.at(0);
+    auto& icache_req = simobject_->icache_req_out.at(0);
+  #endif
+
+    // handle icache response — extract instruction word from the TLM line payload
     if (!icache_rsp.empty()){
       auto& mem_rsp = icache_rsp.peek();
       auto trace = pending_icache_.at(mem_rsp.tag);
@@ -320,13 +366,15 @@ public:
     }
 
     MemReq mem_req;
+    // Address goes downstream as VA. The icache MMU (under VM_ENABLE)
+    // substitutes PA before forwarding; with VM off, this is just the PA.
     mem_req.addr  = trace->PC;
     mem_req.write = false;
     uint32_t tag = pending_icache_.allocate(trace);
     mem_req.tag   = tag;
     mem_req.cid   = trace->cid;
     mem_req.uuid  = trace->uuid;
-    if (simobject_->icache_req_out.at(0).try_send(mem_req)) {
+    if (icache_req.try_send(mem_req)) {
       DT(3, simobject_->name() << " icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
       fetch_latch_.pop();
       ++perf_stats_.ifetches;
@@ -685,6 +733,16 @@ public:
   const std::shared_ptr<MemCoalescer>& mem_coalescer(uint32_t idx) const { return mem_coalescers_.at(idx); }
   const std::shared_ptr<LocalMemSwitch>& lmem_switch(uint32_t idx) const { return lmem_switch_.at(idx); }
 
+#ifdef VM_ENABLE
+  // SATP write fans out to both per-core MMUs (dcache + icache). They
+  // each maintain an independent TLB but share the same PT base from
+  // SATP.
+  void set_satp(uint64_t satp) {
+    dcache_mmu_->set_satp(satp);
+    icache_mmu_->set_satp(satp);
+  }
+#endif
+
   PoolAllocator<instr_trace_t, 64>& trace_pool() { return trace_pool_; }
 
 private:
@@ -728,6 +786,11 @@ private:
   std::vector<uint32_t> ibuf_inflight_;
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
+
+#ifdef VM_ENABLE
+  Mmu::Ptr dcache_mmu_;
+  Mmu::Ptr icache_mmu_;
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -855,3 +918,7 @@ const std::shared_ptr<LocalMemSwitch>& Core::lmem_switch(uint32_t idx) const {
 PoolAllocator<instr_trace_t, 64>& Core::trace_pool() {
   return impl_->trace_pool();
 }
+
+#ifdef VM_ENABLE
+void Core::set_satp(uint64_t satp) { impl_->set_satp(satp); }
+#endif

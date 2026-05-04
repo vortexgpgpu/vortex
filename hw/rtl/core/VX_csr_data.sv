@@ -122,6 +122,22 @@ import VX_fpu_pkg::*;
     end
 `endif
 
+`ifdef VM_ENABLE
+    // Per-core SATP CSR. Initialized to 0 (BARE mode); kernel writes
+    // it from vx_start.S after the runtime has installed the page table.
+    // Surfaced on sched_csr_if.satp so VX_core can pick it up directly
+    // off the shared interface instead of routing through SFU/execute.
+    reg [`XLEN-1:0] satp;
+    always @(posedge clk) begin
+        if (reset) begin
+            satp <= '0;
+        end else if (write_enable && write_addr == `VX_CSR_SATP) begin
+            satp <= write_data;
+        end
+    end
+    assign sched_csr_if.csr_satp = satp;
+`endif
+
     always @(posedge clk) begin
         if (write_enable) begin
             case (write_addr)
@@ -204,7 +220,11 @@ import VX_fpu_pkg::*;
             `VX_CSR_MPM_RESERVED : read_data_ro_w = 'x;
             `VX_CSR_MPM_RESERVED_H : read_data_ro_w = 'x;
 
+        `ifdef VM_ENABLE
+            `VX_CSR_SATP       : read_data_rw_w = satp;
+        `else
             `VX_CSR_SATP,
+        `endif
             `VX_CSR_MSTATUS,
             `VX_CSR_MNSTATUS,
             `VX_CSR_MEDELEG,
@@ -262,6 +282,20 @@ import VX_fpu_pkg::*;
                         default:;
                         endcase
                     end
+                `ifdef VM_ENABLE
+                    `VX_DCR_MPM_CLASS_VM: begin
+                        case (read_addr)
+                        // PERF: VM/MMU (icache + dcache MMU summed)
+                        `CSR_READ_64(`VX_CSR_MPM_TLB_READS,   read_data_ro_w, pipeline_perf.mmu.tlb_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_TLB_HITS,    read_data_ro_w, pipeline_perf.mmu.tlb_hits);
+                        `CSR_READ_64(`VX_CSR_MPM_TLB_MISSES,  read_data_ro_w, pipeline_perf.mmu.tlb_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_TLB_EVICTS,  read_data_ro_w, pipeline_perf.mmu.tlb_evictions);
+                        `CSR_READ_64(`VX_CSR_MPM_PTW_WALKS,   read_data_ro_w, pipeline_perf.mmu.ptw_walks);
+                        `CSR_READ_64(`VX_CSR_MPM_PTW_LATENCY, read_data_ro_w, pipeline_perf.mmu.ptw_latency);
+                        default:;
+                        endcase
+                    end
+                `endif
                     `VX_DCR_MPM_CLASS_MEM: begin
                         case (read_addr)
                         // PERF: icache

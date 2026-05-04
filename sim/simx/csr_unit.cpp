@@ -50,7 +50,6 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   auto& warp      = sched.warp(wid);
   auto core_perf  = core_->perf_stats();
   switch (addr) {
-  case VX_CSR_SATP:
   case VX_CSR_PMPCFG0:
   case VX_CSR_PMPADDR0:
   case VX_CSR_MSTATUS:
@@ -63,6 +62,12 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_MNSTATUS:
   case VX_CSR_MCAUSE:
     return 0;
+  case VX_CSR_SATP:
+#ifdef VM_ENABLE
+    return (Word)satp_;
+#else
+    return 0;
+#endif
 
   case VX_CSR_FFLAGS: return warp.fcsr & 0x1F;
   case VX_CSR_FRM:    return (warp.fcsr >> 5);
@@ -255,6 +260,10 @@ void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
     warp.mscratch = value;
     break;
   case VX_CSR_SATP:
+#ifdef VM_ENABLE
+    satp_ = value;
+    core_->set_satp(value);
+#endif
     break;
   case VX_CSR_MSTATUS:
   case VX_CSR_MEDELEG:
