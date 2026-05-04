@@ -54,6 +54,14 @@ ifneq ($(filter -DEXT_DXA_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/dxa/dxa_unit.cpp
 endif
 
+# SST integration: build libvortex.so as the SST element library and
+# include the SST::Component wrapper. Requires SST 15.x in PATH.
+ifeq ($(USE_SST),1)
+	CXXFLAGS += $(shell sst-config --ELEMENT_CXXFLAGS)
+	LDFLAGS  += $(shell sst-config --ELEMENT_LDFLAGS)
+	SRCS     += $(SRC_DIR)/sst/vortex_simulator.cpp $(SRC_DIR)/sst/vortex_gpgpu.cpp
+endif
+
 # Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)

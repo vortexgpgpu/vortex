@@ -55,6 +55,9 @@ public:
   void start_kmu() { kmu_->start(); }
   bool any_running() const;
 
+  // SST single-cycle entry. See Processor::cycle() docstring.
+  bool cycle();
+
   // Drain dirty data from caches (write-back path) all the way to DRAM.
   // Walks L1 dcaches → L2 → L3, ticking the simulator between phases so
   // each level's evictions reach the next before that level itself flushes.

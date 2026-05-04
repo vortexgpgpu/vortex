@@ -52,6 +52,14 @@ public:
   // termination condition used in run().
   bool any_running() const;
 
+  // Single-cycle entry point used by the SST integration
+  // (sim/simx/sst/vortex_simulator.cpp). On first call: resets the
+  // SimPlatform and the processor, then kicks the KMU. Each subsequent
+  // call advances SimPlatform::tick() once and returns whether anything
+  // is still running. This lets SST own the clock while v3 owns the
+  // datapath.
+  bool cycle();
+
 private:
   ProcessorImpl* impl_;
 };

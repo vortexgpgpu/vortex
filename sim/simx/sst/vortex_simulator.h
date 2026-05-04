@@ -1,44 +1,40 @@
 // vortex_simulator.h
+//
+// Thin wrapper that owns a v3 Processor + RAM and exposes a single-cycle
+// step() entry point for the SST integration in vortex_gpgpu.cpp.
+//
+// Differences from upstream PR #298:
+//   - No `Arch` member (v3 deleted the class; sizing is via macros).
+//   - `Processor()` constructor takes no args on v3.
+//   - DCR layout uses VX_DCR_KMU_* (KMU dispatch) rather than
+//     VX_DCR_BASE_*; the KMU also needs grid/block dims set up before
+//     the first cycle so warps actually launch.
+
 #pragma once
 
-#include "processor.h"  // for Processor, RAM
-#include "arch.h"       // for Arch
+#include "processor.h"
 #include "constants.h"
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <string>
 
 namespace vortex {
 
-/**
- * A wrapper class used by the SST integration to drive the Vortex GPU
- * one cycle at a time.  It encapsulates the architecture definition,
- * memory subsystem, and processor instance.
- */
 class VortexSimulator {
 public:
     VortexSimulator();
 
-    /**
-     * Initializes the simulator.  If @p kernelPath is non-empty, the
-     * kernel image at the given path will be loaded into memory.
-     * Returns false if the image format is not supported.
-     */
+    // Loads the kernel image at @p kernelPath and primes the KMU DCRs.
+    // Returns false if the image extension is not vxbin/bin/hex.
     bool init(const std::string& kernelPath);
 
-    /**
-     * Advances the simulation by one cycle.  Returns false once the
-     * simulation has completed (i.e. all clusters are halted).
-     */
+    // Advances the simulation by one cycle. Returns false once nothing
+    // is running (program has completed and channels are drained).
     bool cycle();
 
-    /** Returns true if the simulation has finished. */
     bool isHalted() const;
 
 private:
-
-    Arch arch_;
     RAM ram_;
     std::unique_ptr<Processor> proc_;
     bool halted_;
