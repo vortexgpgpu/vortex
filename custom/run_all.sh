@@ -337,12 +337,29 @@ load_config() {
 prepare_worker_build() {
   local worker_build_dir="$1"
 
+  if command -v rsync >/dev/null 2>&1; then
+    mkdir -p "${worker_build_dir}"
+    rsync -a --delete \
+      --exclude '/run_all_workers/' \
+      --exclude '*.log' \
+      --exclude '*.vcd' \
+      "${BUILD_DIR}/" "${worker_build_dir}/"
+    return
+  fi
+
+  rm -rf "${worker_build_dir}"
   mkdir -p "${worker_build_dir}"
-  rsync -a --delete \
-    --exclude '/run_all_workers/' \
-    --exclude '*.log' \
-    --exclude '*.vcd' \
-    "${BUILD_DIR}/" "${worker_build_dir}/"
+  (
+    cd "${BUILD_DIR}" &&
+    tar \
+      --exclude='./run_all_workers' \
+      --exclude='*.log' \
+      --exclude='*.vcd' \
+      -cf - .
+  ) | (
+    cd "${worker_build_dir}" &&
+    tar -xf -
+  )
 }
 
 run_config() {
