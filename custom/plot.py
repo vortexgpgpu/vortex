@@ -576,7 +576,10 @@ def format_error_count(error_count, total_errors, unknown_text="unknown"):
 
 
 def write_stats_file(log_path, result, metrics, run_meta, perf_info, xbar_stall_cycles, stall_pct):
-    stats_dir = os.path.join(os.path.dirname(__file__), "stats")
+    stats_dir = os.environ.get(
+        "STATS_DIR",
+        os.path.join(os.path.dirname(__file__), "stats"),
+    )
     os.makedirs(stats_dir, exist_ok=True)
 
     base = os.path.splitext(os.path.basename(log_path))[0]

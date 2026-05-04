@@ -1,0 +1,11 @@
+file,run,testbench,shape,dtype,a_sparsity,b_sparsity,a_label,b_label,total_cycles,body_cycles,tcu_utilization
+run3.stat,3,sgemm_tcu_op,64x64x512,fp8,0.0976562,0.125122,0,0,87072,70420,93.06
+run4.stat,4,sgemm_tcu_op,64x64x512,fp8,20.4224,20.2606,20,20,83367,63100,84.15
+run5.stat,5,sgemm_tcu_op,64x64x512,fp8,20.4224,59.6832,20,60,71670,51403,56.23
+run6.stat,6,sgemm_tcu_op,64x64x512,fp8,20.4224,90.1123,20,90,55353,35086,73.25
+run7.stat,7,sgemm_tcu_op,64x64x512,fp8,59.9976,20.2606,60,20,57303,37036,73.59
+run8.stat,8,sgemm_tcu_op,64x64x512,fp8,59.9976,59.6832,60,60,48555,28288,52.48
+run9.stat,9,sgemm_tcu_op,64x64x512,fp8,59.9976,90.1123,60,90,41934,21667,61.02
+run10.stat,10,sgemm_tcu_op,64x64x512,fp8,90.1306,20.2606,90,20,44472,24205,31.23
+run11.stat,11,sgemm_tcu_op,64x64x512,fp8,90.1306,59.6832,90,60,39557,19292,21.5
+run12.stat,12,sgemm_tcu_op,64x64x512,fp8,90.1306,90.1123,90,90,35637,15370,24.42

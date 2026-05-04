@@ -3,7 +3,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build"
+BUILD_DIR="${BUILD_DIR:-${ROOT_DIR}/build}"
+MAKE_LOCK_FILE="${MAKE_LOCK_FILE:-}"
+export MAKE_LOCK_FILE
 
 M=64
 N=64
@@ -133,6 +135,14 @@ make_suffixed_log() {
   fi
 }
 
+run_locked_make() {
+  if [[ -n "${MAKE_LOCK_FILE}" ]]; then
+    flock "${MAKE_LOCK_FILE}" "$@"
+  else
+    "$@"
+  fi
+}
+
 run_ip_test() {
   local app="$1"
   local log_file="$2"
@@ -145,7 +155,7 @@ run_ip_test() {
   fi
 
   if [[ "${DO_CLEAN}" -eq 1 ]]; then
-    make -C "${app_build_dir}" clean || return $?
+    run_locked_make make -C "${app_build_dir}" clean || return $?
   fi
 
   local ip_build_configs="-DNUM_THREADS=${NUM_THREADS} -DITYPE=${ITYPE} -DOTYPE=${OTYPE}"
@@ -153,7 +163,7 @@ run_ip_test() {
   local ip_app_args="-m${M} -n${N} -k${K}"
 
   echo "Build CONFIGS (${app}): ${ip_build_configs}"
-  CONFIGS="${ip_build_configs}" make -C "${app_build_dir}" || return $?
+  run_locked_make env CONFIGS="${ip_build_configs}" make -C "${app_build_dir}" || return $?
 
   echo "Runtime args (${app}): ${ip_app_args}"
   local blackbox_cmd=(
@@ -325,7 +335,7 @@ if [[ "${RUN_TCU_OP}" -eq 1 ]]; then
   TCU_OP_READY=1
 
   if [[ "${DO_CLEAN}" -eq 1 ]]; then
-    make -C "${APP_BUILD_DIR}" clean || {
+    run_locked_make make -C "${APP_BUILD_DIR}" clean || {
       STATUS=$?
       TCU_OP_READY=0
     }
@@ -333,7 +343,7 @@ if [[ "${RUN_TCU_OP}" -eq 1 ]]; then
 
   echo "Build CONFIGS: ${CONFIGS_STR}"
   if [[ "${TCU_OP_READY}" -eq 1 ]]; then
-    CONFIGS="${CONFIGS_STR}" make -C "${APP_BUILD_DIR}" || {
+    run_locked_make env CONFIGS="${CONFIGS_STR}" make -C "${APP_BUILD_DIR}" || {
       STATUS=$?
       TCU_OP_READY=0
     }

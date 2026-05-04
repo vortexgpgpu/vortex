@@ -42,6 +42,14 @@ add_option() {
     fi
 }
 
+run_build_cmd() {
+    if [ -n "$MAKE_LOCK_FILE" ]; then
+        flock "$MAKE_LOCK_FILE" sh -c "$1"
+    else
+        eval "$1"
+    fi
+}
+
 DEFAULTS() {
     DRIVER=simx
     TARGET=
@@ -134,7 +142,7 @@ build_driver() {
     [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")
     cmd_opts=$(add_option "$cmd_opts" "make -C $DRIVER_PATH > /dev/null")
     echo "Running: $cmd_opts"
-    eval "$cmd_opts"
+    run_build_cmd "$cmd_opts"
     status=$?
     if [ $status -ne 0 ]; then
         echo "Error building driver: $DRIVER_PATH"
@@ -197,7 +205,7 @@ if [ $SAIF -eq 1 ] && [ "$DRIVER" = "simx" ]; then
     export VCD_FILE=$VCD_FILE
     export SAIF_FILE=$SAIF_FILE
 
-    make -C "$ROOT_DIR/sw/runtime/stub" > /dev/null
+    run_build_cmd "make -C \"$ROOT_DIR/sw/runtime/stub\" > /dev/null"
 
     if [ $TEMPBUILD -eq 1 ]; then
         # setup temp directory
@@ -205,7 +213,7 @@ if [ $SAIF -eq 1 ] && [ "$DRIVER" = "simx" ]; then
         mkdir -p "$TEMPDIR"
         # build stub driver
         echo "Running: DESTDIR=$TEMPDIR make -C $ROOT_DIR/sw/runtime/stub"
-        DESTDIR="$TEMPDIR" make -C $ROOT_DIR/sw/runtime/stub > /dev/null
+        run_build_cmd "DESTDIR=\"$TEMPDIR\" make -C \"$ROOT_DIR/sw/runtime/stub\" > /dev/null"
         # stage a per-invocation copy of the app dir so concurrent trials do not
         # race on the shared `config.stamp` / build artifacts. Keep it as a
         # sibling of the original so relative paths (`../../..`, `../common.mk`)
