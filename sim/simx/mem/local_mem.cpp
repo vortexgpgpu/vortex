@@ -38,6 +38,7 @@ public:
 		: simobject_(simobject)
 		, config_(config)
 		, ram_(config.capacity)
+		, addr_bits_(log2ceil(config.capacity))
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
