@@ -48,18 +48,9 @@ public:
 
   Kmu& kmu()       { return *kmu_; }
 
-  // DTM debug entry: returns cluster[0]→socket[0]→core[0], or nullptr.
-  Core* get_first_core() const;
-
-  // DTM debug entries.
-  void start_kmu() { kmu_->start(); }
   bool any_running() const;
 
-  // SST single-cycle entry. See Processor::cycle() docstring.
-  bool cycle();
-
-  // Phase 3 SST integration: expose the DRAM/Memory model.
-  Memory* memsim() { return memsim_.get(); }
+  class Core* get_first_core() const;
 
   // Drain dirty data from caches (write-back path) all the way to DRAM.
   // Walks L1 dcaches → L2 → L3, ticking the simulator between phases so

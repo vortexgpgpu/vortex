@@ -83,16 +83,6 @@ _start:
 #endif
 
 
-  # synchronize all cores after clearing BSS to avoid one core entering `main`
-  # while another core is still zeroing shared program state.
-  #
-  # Use a global async barrier (id=0 with MSB=1) with count=num_cores.
-  # funct=6 with rd!=0 → BAR ARRIVE; funct=6 with rd=0 → BAR WAIT.
-  csrr  t0, VX_CSR_NUM_CORES
-  li    t1, 0x80000000
-  .insn r RISCV_CUSTOM0, 6, 0, t2, t1, t0  # arrive -> token
-  .insn r RISCV_CUSTOM0, 6, 0, x0, t1, t2  # wait(token)
-
 #ifdef NEED_INITFINI
   # run global initialization functions
   call  __libc_init_array

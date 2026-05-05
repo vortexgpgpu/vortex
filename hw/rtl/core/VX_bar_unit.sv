@@ -54,27 +54,11 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     logic gbar_req_valid_r, gbar_req_valid_n;
     logic [NB_WIDTH-1:0] gbar_req_id_r, gbar_req_id_n;
     logic [NC_WIDTH-1:0] gbar_req_size_m1_r, gbar_req_size_m1_n;
-    wire gbar_req_ready;
-    wire gbar_rsp_valid;
     wire gbar_rsp_ready = ~req_valid;
 
     wire [`NUM_WARPS-1:0] wait_mask = ((`NUM_WARPS)'(1) << req_wid) | mask_r;
     wire [NW_WIDTH-1:0] next_count  = count_r + NW_WIDTH'(1);
     wire next_phase  = ~phase_r;
-
-    // Forward current-cycle TX count update into barrier-arrive checks.
-    // This prevents a read-before-write hazard: if tx_valid fires in the same
-    // clock cycle as the last barrier arrive, the combinational check would see
-    // the stale (pre-update) tx_count_r[write_addr] and incorrectly unlock
-    // warps before the DXA transfer completes (causing wrong results).
-    // Root cause: warp_ctl_if.valid is registered (+1 cycle via wctl_reg) while
-    // tx_bar_if.valid (SETUP) is combinational, creating a 1-cycle overlap window.
-    wire tx_fwd_same_bar = tx_valid && (tx_bar_addr == write_addr);
-    wire [TX_COUNT_W-1:0] tx_count_fwd =
-        tx_fwd_same_bar
-            ? (tx_is_done ? tx_count_r[write_addr] - TX_COUNT_W'(1)
-                          : tx_count_r[write_addr] + TX_COUNT_W'(1))
-            : tx_count_r[write_addr];
 
     always @(*) begin
         mask_n  = mask_r;
@@ -175,14 +159,14 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
             end
 
             // global barrier response handling
-            if (gbar_rsp_valid && gbar_rsp_ready && (gbar_bus_if.rsp_data.id == gbar_req_id_r)) begin
+            if (gbar_bus_if.rsp_valid && gbar_rsp_ready && (gbar_bus_if.rsp_data.id == gbar_req_id_r)) begin
                 unlock_valid_n = 1; // release stalled warps
                 unlock_mask_n = active_warps; // release all active warps
                 phase_n = next_phase; // advance phase
             end
 
             // global barrier request handshake
-            if (gbar_req_valid_r && gbar_req_ready) begin
+            if (gbar_req_valid_r && gbar_bus_if.req_ready) begin
                 gbar_req_valid_n = 0;
             end
         end
@@ -195,7 +179,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     reg [BAR_ADDR_W-1:0]  store_waddr;
     wire [BAR_STATEW-1:0] store_state_wdata = {mask_n, count_n, events_n};
     wire                  store_phase_wdata = phase_n;
-    wire                  store_write = req_valid || gbar_rsp_valid;
+    wire                  store_write = req_valid || gbar_bus_if.rsp_valid;
 
     VX_dp_ram #(
         .DATAW    (BAR_STATEW),
@@ -272,9 +256,6 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 
     if (USE_GBAR) begin : g_gbar
 
-        assign gbar_req_ready = gbar_bus_if.req_ready;
-        assign gbar_rsp_valid = gbar_bus_if.rsp_valid;
-
         always @(posedge clk) begin
             if (reset) begin
                 gbar_req_valid_r <= 0;
@@ -292,9 +273,6 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         assign gbar_bus_if.rsp_ready        = gbar_rsp_ready;
 
     end else begin : g_nogbar
-
-        assign gbar_req_ready = 0;
-        assign gbar_rsp_valid = 0;
 
         assign gbar_req_valid_r = 0;
         assign gbar_req_size_m1_r = 'x;

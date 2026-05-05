@@ -70,10 +70,6 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     edata = get_symbol(input_elf, '_edata')
     end = get_symbol(input_elf, '_end')
 
-    # Extend max_vma to _end so runtime_size covers the BSS region even when
-    # the linker aligns _edata/_end past the last LOAD segment.
-    max_vma = max(max_vma, end)
-
     # Create a binary data from the ELF file using objcopy. Use a per-call
     # unique tempfile so parallel builds don't race on a shared path.
     import tempfile
@@ -93,7 +89,7 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
 
     # Pack addresses into 64-bit unsigned integer
     min_vma_bytes = struct.pack('<Q', min_vma)
-    max_vma_bytes = struct.pack('<Q', max_vma)
+    max_vma_bytes = struct.pack('<Q', max(max_vma, end))
 
     # Write the total size and binary data to the final output file
     with open(output_bin, 'wb') as bin_file:

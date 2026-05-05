@@ -687,8 +687,8 @@ public:
     });
     // read back response value (AXI read stalls until dcr_rsp_valid)
     CHECK_ERR(this->read_register(MMIO_DCR_ADDR + 4, value), {
-        return err;
-      });
+      return err;
+    });
     return 0;
   }
 

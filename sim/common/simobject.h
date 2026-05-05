@@ -43,6 +43,7 @@ class SimContext {
 private:
   SimContext() = default;
   friend class SimPlatform;
+  template <typename T> friend class SimChannel;
 };
 
 // Base class for all simulation objects (Nodes)
@@ -86,14 +87,14 @@ public:
 
 protected:
   explicit SimChannelBase(SimObjectBase* module)
-    : module_(module)
-    , sink_(nullptr)
-    , source_(nullptr)
+      : module_(module)
+      , sink_(nullptr)
+      , source_(nullptr)
   {}
 
   virtual void reserve() = 0;
 
-  SimObjectBase* module_;
+  SimObjectBase*  module_;
   SimChannelBase* sink_;
   SimChannelBase* source_;
 
@@ -101,10 +102,8 @@ protected:
   template <typename T> friend class SimChannel;
 };
 
-///////////////////////////////////////////////////////////////////////////////
 // Events
 ///////////////////////////////////////////////////////////////////////////////
-
 class SimEventBase {
 public:
   virtual ~SimEventBase() = default;
@@ -158,7 +157,7 @@ public:
 
 private:
   Func func_;
-  Pkt  pkt_;
+  Pkt pkt_;
   static inline PoolAllocator<SimCallEvent<Pkt>, 64> allocator_;
 };
 
@@ -371,7 +370,7 @@ protected:
       } else {
         auto* sink = static_cast<SimChannel<Pkt>*>(sink_);
         sink->receive_packet(pkt);
-  }
+      }
       return;
     }
     __vortex_assert(pending_count_ > 0, "pending count underflow");
@@ -474,7 +473,7 @@ public:
 
   template <typename... Args>
   static Ptr Create(Args&&... args) {
-  return SimPlatform::instance().create_object<Impl>(std::forward<Args>(args)...);
+    return SimPlatform::instance().create_object<Impl>(std::forward<Args>(args)...);
   }
 
 protected:
@@ -655,10 +654,10 @@ inline void SimPlatform::cleanup() {
   for (auto& bucket : reg_events_) {
     while(!bucket.empty()) {
       auto it = bucket.begin();
-    auto evt = &*it;
+      auto evt = &*it;
       bucket.erase(it);
-    delete evt;
-  }
+      delete evt;
+    }
   }
 
   while(!imm_events_.empty()) {

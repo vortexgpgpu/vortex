@@ -168,8 +168,8 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t block_size, uint32_t* max_l
     CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size), {
       return err;
     });
-      *max_localmem = local_mem_size / blocks_per_core;
-    }
+    *max_localmem = local_mem_size / blocks_per_core;
+  }
 
   return 0;
 }

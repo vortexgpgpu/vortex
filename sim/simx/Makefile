@@ -79,12 +79,12 @@ ifdef PERF
 endif
 
 # Convert sources to object files (in build directory)
-COMMON_SRCS := $(filter $(SW_COMMON_DIR)/%.cpp,$(SRCS))
+COMMON_SRCS     := $(filter $(SW_COMMON_DIR)/%.cpp,$(SRCS))
 SIM_COMMON_SRCS := $(filter $(SIM_COMMON_DIR)/%.cpp,$(SRCS))
-SRC_SRCS    := $(filter $(SRC_DIR)/%.cpp,$(SRCS))
-COMMON_OBJS := $(patsubst $(SW_COMMON_DIR)/%.cpp,$(OBJ_DIR)/common/%.o,$(COMMON_SRCS))
+SRC_SRCS        := $(filter $(SRC_DIR)/%.cpp,$(SRCS))
+COMMON_OBJS     := $(patsubst $(SW_COMMON_DIR)/%.cpp,$(OBJ_DIR)/common/%.o,$(COMMON_SRCS))
 SIM_COMMON_OBJS := $(patsubst $(SIM_COMMON_DIR)/%.cpp,$(OBJ_DIR)/sim_common/%.o,$(SIM_COMMON_SRCS))
-SRC_OBJS    := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_SRCS))
+SRC_OBJS        := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_SRCS))
 OBJS            := $(COMMON_OBJS) $(SIM_COMMON_OBJS) $(SRC_OBJS)
 MAIN_OBJ    := $(OBJ_DIR)/main.o
 
@@ -181,4 +181,4 @@ clean-exe:
 clean-obj:
 	rm -rf $(OBJ_DIR)
 
-clean: clean-lib clean-exe clean-obj clean-libvortex
+clean: clean-lib clean-exe clean-obj

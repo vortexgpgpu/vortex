@@ -40,6 +40,7 @@ all:
 	$(MAKE) -C sgemm_tcu_mx
 	$(MAKE) -C sgemm_tcu_wg_sp
 	$(MAKE) -C sgemm2_dxa
+	$(MAKE) -C sgemm2_tcu
 	$(MAKE) -C sgemm_tcu_wg_dxa
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa
 	$(MAKE) -C dxa_copy
@@ -98,6 +99,7 @@ run-simx:
 	$(MAKE) -C sgemm_tcu_mx run-simx
 	$(MAKE) -C sgemm_tcu_wg_sp run-simx
 	$(MAKE) -C sgemm2_dxa run-simx
+	$(MAKE) -C sgemm2_tcu run-simx
 	$(MAKE) -C sgemm_tcu_wg_dxa run-simx
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-simx
 	$(MAKE) -C dxa_copy run-simx
@@ -156,6 +158,7 @@ run-rtlsim:
 #	$(MAKE) -C sgemm_tcu_mx run-rtlsim - not supported yet
 	$(MAKE) -C sgemm_tcu_wg_sp run-rtlsim
 	$(MAKE) -C sgemm2_dxa run-rtlsim
+	$(MAKE) -C sgemm2_tcu run-rtlsim
 	$(MAKE) -C sgemm_tcu_wg_dxa run-rtlsim
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-rtlsim
 	$(MAKE) -C dxa_copy run-rtlsim
@@ -207,6 +210,7 @@ clean:
 	$(MAKE) -C pathfinder clean
 	$(MAKE) -C softmax clean
 	$(MAKE) -C sgemm2_dxa clean
+	$(MAKE) -C sgemm2_tcu clean
 	$(MAKE) -C sgemm_tcu_wg_dxa clean
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa clean
 	$(MAKE) -C dxa_copy clean

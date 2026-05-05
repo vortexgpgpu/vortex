@@ -13,8 +13,6 @@
 
 #include "processor.h"
 #include "processor_impl.h"
-#include "socket.h"
-#include "core.h"
 #include <VX_types.h>
 
 #include <cstdlib>
@@ -187,8 +185,8 @@ int ProcessorImpl::run() {
       if (cluster->running()) {
         any_running = true;
       } else {
-      exitcode |= cluster->get_exitcode();
-    }
+        exitcode |= cluster->get_exitcode();
+      }
     }
     // Stop only when cores are idle AND no channel still carries an
     // undelivered packet. Cache pipelines wrap a SimChannel inside TFifo,
@@ -240,6 +238,18 @@ int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   return 0;
 }
 
+Core* ProcessorImpl::get_first_core() const {
+  if (clusters_.empty()) return nullptr;
+  return clusters_.at(0)->get_core(0);
+}
+
+bool ProcessorImpl::any_running() const {
+  for (auto& cluster : clusters_) {
+    if (cluster->running()) return true;
+  }
+  return (SimChannelBase::inflight_count() != 0);
+}
+
 ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   ProcessorImpl::PerfStats perf;
   perf.mem_reads   = perf_mem_reads_;
@@ -268,6 +278,18 @@ void Processor::reset() {
   impl_->reset();
 }
 
+void Processor::start_kmu() {
+  impl_->kmu().start();
+}
+
+bool Processor::any_running() const {
+  return impl_->any_running();
+}
+
+Core* Processor::get_first_core() const {
+  return impl_->get_first_core();
+}
+
 int Processor::run() {
   try {
     return impl_->run();
@@ -291,43 +313,4 @@ int Processor::dcr_write(uint32_t addr, uint32_t value) {
 
 int Processor::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   return impl_->dcr_read(addr, tag, value);
-}
-
-Core* Processor::get_first_core() const {
-  return impl_->get_first_core();
-}
-
-Core* ProcessorImpl::get_first_core() const {
-  if (clusters_.empty()) return nullptr;
-  auto& cluster = clusters_.at(0);
-  if (!cluster) return nullptr;
-  // NUM_SOCKETS / cores-per-socket are macros; we just want index 0.
-  auto& socket = cluster->socket(0);
-  if (!socket) return nullptr;
-  auto& core = socket->core(0);
-  return core.get();
-}
-
-bool ProcessorImpl::any_running() const {
-  for (auto& cluster : clusters_) {
-    if (cluster->running()) return true;
-  }
-  return SimChannelBase::inflight_count() != 0;
-}
-
-void Processor::start_kmu() { impl_->start_kmu(); }
-bool Processor::any_running() const { return impl_->any_running(); }
-bool Processor::cycle() { return impl_->cycle(); }
-Memory* Processor::memsim() { return impl_->memsim(); }
-
-bool ProcessorImpl::cycle() {
-  static bool initialized = false;
-  if (!initialized) {
-    SimPlatform::instance().reset();
-    this->reset();
-    kmu_->start();
-    initialized = true;
-  }
-  SimPlatform::instance().tick();
-  return any_running();
 }

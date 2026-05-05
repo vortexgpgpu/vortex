@@ -571,10 +571,10 @@ class vAddr_t
 #endif
     }
 
-    ~vAddr_t()
-    {
+  ~vAddr_t()
+  {
     delete [] vpn;
-    }
+  }
 };
 #endif
 

@@ -58,7 +58,7 @@ module VX_core_top import VX_gpu_pkg::*; #(
     input wire                              gbar_req_ready,
     input wire                              gbar_rsp_valid,
     input wire [NB_WIDTH-1:0]               gbar_rsp_id,
-    input wire                              gbar_rsp_ready,
+    output wire                             gbar_rsp_ready,
 
     input wire                              dcr_req_valid,
     input wire                              dcr_req_rw,
@@ -80,7 +80,7 @@ module VX_core_top import VX_gpu_pkg::*; #(
     assign gbar_bus_if.req_ready    = gbar_req_ready;
     assign gbar_bus_if.rsp_valid    = gbar_rsp_valid;
     assign gbar_bus_if.rsp_data.id  = gbar_rsp_id;
-    assign gbar_bus_if.rsp_ready    = gbar_rsp_ready;
+    assign gbar_rsp_ready = gbar_bus_if.rsp_ready;
 
 `ifdef EXT_DXA_ENABLE
     VX_dxa_req_bus_if dxa_req_bus_if();
@@ -93,6 +93,7 @@ module VX_core_top import VX_gpu_pkg::*; #(
 
     assign dxa_req_bus_if.req_valid = 1'b0;
     assign dxa_req_bus_if.req_data  = '0;
+    assign dxa_req_bus_if.rsp_ready = 1'b1;
 
     assign dxa_lmem_bus_if.req_valid = 1'b0;
     assign dxa_lmem_bus_if.req_data  = '0;

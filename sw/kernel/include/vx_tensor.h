@@ -94,19 +94,19 @@ namespace detail {
         // 2 × 2-byte strided loads → single pack-load halfword instruction
         return vx_packlh_f(base, ldm * 2u);
       } else {
-      constexpr uint32_t count = sizeof(D) / sizeof(Type);
-      constexpr uint32_t bits = 8 * sizeof(Type);
-      using US = raw_unsigned_t<Type>;
-      using UD = raw_unsigned_t<D>;
-      UD result_u(0);
-      detail::unroll_for<count>([&](auto i) {
-        auto src_u = *reinterpret_cast<const US*>(base); // unsigned cast
-        auto src_d = static_cast<UD>(src_u); // zero-extend
-        result_u |= (src_d << (i * bits));
-        base += ldm; // next row
-      });
-      return *reinterpret_cast<const D*>(&result_u);
-    }
+        constexpr uint32_t count = sizeof(D) / sizeof(Type);
+        constexpr uint32_t bits = 8 * sizeof(Type);
+        using US = raw_unsigned_t<Type>;
+        using UD = raw_unsigned_t<D>;
+        UD result_u(0);
+        detail::unroll_for<count>([&](auto i) {
+          auto src_u = *reinterpret_cast<const US*>(base); // unsigned cast
+          auto src_d = static_cast<UD>(src_u); // zero-extend
+          result_u |= (src_d << (i * bits));
+          base += ldm; // next row
+        });
+        return *reinterpret_cast<const D*>(&result_u);
+      }
     }
   };
 
@@ -145,9 +145,9 @@ namespace detail {
   };
 }
 
-template <uint32_t NT, // number of threads per warp
-          typename It, // input type (A,B)
-          typename Ot, // output type (C,D)
+template <uint32_t NT,              // number of threads per warp
+          typename It,              // input type (A,B)
+          typename Ot,              // output type (C,D)
           bool is_sparse = false,   // sparse mode flag
           uint32_t NR_ = 8,         // registers per C/D fragment
           uint32_t DK_ = 0          // K dimension of the tile
@@ -263,8 +263,8 @@ public:
   static __attribute__((always_inline)) void load_mx_metadata(Frag& frag, const void* meta_mx_ptr) {
     static_assert(Frag::HasMxMeta, "MX metadata is only valid for matrix_a/matrix_b fragments");
 
-        auto meta_base = reinterpret_cast<const uint32_t*>(meta_mx_ptr);
-        if constexpr (Frag::Use == matrix_a) {
+    auto meta_base = reinterpret_cast<const uint32_t*>(meta_mx_ptr);
+    if constexpr (Frag::Use == matrix_a) {
       frag.mx_meta[0] = mx_word_as_f32(meta_base[0]);
       frag.mx_meta[1] = mx_word_as_f32(meta_base[1]);
       if constexpr (is_nvfp4) {
@@ -353,20 +353,6 @@ public:
             dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
           }
         });
-        // Load metadata into tail registers (fragA.data[sparse_regs..sparse_regs+num_loads-1])
-        // meta_ptr is always non-null in sparse path — no runtime check needed
-        {
-          constexpr uint32_t rtl_i_ratio = 32 / It::bits;
-          constexpr uint32_t num_cols = (NT * 2 * rtl_i_ratio) / 32;
-          constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-          constexpr uint32_t cols_per_load = NT / PD;
-          constexpr uint32_t num_loads = (num_cols + cols_per_load - 1) / cols_per_load;
-          auto meta_base = reinterpret_cast<const float*>(meta_ptr);
-          dst.data[sparse_regs] = meta_base[lane];
-          if constexpr (num_loads == 2) {
-            dst.data[sparse_regs + 1] = meta_base[NT + lane];
-          }
-        }
       } else {
         // Dense A load: load all K-steps
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
@@ -410,8 +396,8 @@ public:
         }
         auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
 
-          if constexpr (src_layout == row_major) {
-            static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
+        if constexpr (src_layout == row_major) {
+          static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
           // Pre-compute k-group base pointers (elem_row * ldm varies by k-group)
           constexpr uint32_t num_k_groups = cfg::sym_sparse ? 1 : (Frag::NR / cfg::b_sub_steps_sp);
           const input_t* k_bases[num_k_groups];
@@ -435,7 +421,7 @@ public:
               dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
             }
           });
-          } else {
+        } else {
           // col_major: after swap, elem_row = block_n * n_stride, elem_col = block_k * k_stride
           // NT=16 sparse: each register = separate column group, so num_n_groups = NRB
           constexpr uint32_t num_n_groups = cfg::sym_sparse ? Frag::NR : cfg::b_sub_steps_sp;
@@ -456,7 +442,7 @@ public:
             auto ptr = n_bases[block_n] + elem_col;
             assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
             dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
-        });
+          });
         }
       } else {
         // Dense B load
@@ -694,13 +680,13 @@ public:
               "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
           );
         } else {
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
-        : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
-          "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
-      );
+          __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+            : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+            : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+              "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
+              "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+              "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
+          );
         }
       } else {
         __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
@@ -739,14 +725,14 @@ public:
               "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
           );
         } else {
-      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
-        : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
-        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
-          "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
-          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
-          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
-      );
-    }
+          __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+            : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+            : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+              "f"(fma0), "f"(fma1), "f"(fmb0), "f"(fmb1),
+              "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+              "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
+          );
+        }
       } else {
         __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
           : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
@@ -766,7 +752,7 @@ public:
     frag_d.data[rc_idx(5)] = fd5;
     frag_d.data[rc_idx(6)] = fd6;
     frag_d.data[rc_idx(7)] = fd7;
-    }
+  }
 };
 
 // =============================================================================
@@ -954,12 +940,12 @@ public:
         dst.data[r] = load_reg(m_blk, k_blk);
       });
     } else {
-    detail::unroll_for<Frag::NR>([&](auto r) {
-      uint32_t m_blk = r / k_steps;
-      uint32_t k_blk = r % k_steps;
+      detail::unroll_for<Frag::NR>([&](auto r) {
+        uint32_t m_blk = r / k_steps;
+        uint32_t k_blk = r % k_steps;
         dst.data[r] = load_reg(m_blk, k_blk);
-    });
-  }
+      });
+    }
   }
 
   // Load sparse metadata into fragment_a.
@@ -973,7 +959,7 @@ public:
   static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
     static_assert(Frag::Use == matrix_a, "sparse metadata load is only valid for matrix_a fragment");
     using rtl_cfg = wmma_config_t<NT>;
-    static constexpr uint32_t RTL_DEPTH = rtl_cfg::per_warp_depth;
+    static constexpr uint32_t RTL_DEPTH  = rtl_cfg::per_warp_depth;
     static constexpr uint32_t RTL_HALF_K = rtl_cfg::k_steps / 2;
     static constexpr uint32_t WG_HALF_K  = k_steps / 2;
     auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
@@ -1012,8 +998,8 @@ public:
   }
 
   // ---- WGMMA sync intrinsic ----
-  //   SS: wgmma_sync(fragD, desc_a, desc_b, fragC) — any NRC
-  //   RS: wgmma_sync(fragD, fragA,  desc_b, fragC) — NRC <= 16
+  // SS: wgmma_sync(fragD, desc_a, desc_b, fragC) — any NRC
+  // RS: wgmma_sync(fragD, fragA,  desc_b, fragC) — NRC <= 16
 
   template <typename OpA, typename OpB, typename FragD, typename FragC>
   static __attribute__((always_inline)) void wgmma_sync(FragD &frag_d,
@@ -1044,57 +1030,57 @@ public:
       register uint32_t rb __asm__("a1") = op_b.value;
 
       if constexpr (NRC_ == 32) {
-    register float fd0  __asm__("f0")  = frag_c.data[0];
-    register float fd1  __asm__("f1")  = frag_c.data[1];
-    register float fd2  __asm__("f2")  = frag_c.data[2];
-    register float fd3  __asm__("f3")  = frag_c.data[3];
-    register float fd4  __asm__("f4")  = frag_c.data[4];
-    register float fd5  __asm__("f5")  = frag_c.data[5];
-    register float fd6  __asm__("f6")  = frag_c.data[6];
-    register float fd7  __asm__("f7")  = frag_c.data[7];
-    register float fd8  __asm__("f8")  = frag_c.data[8];
-    register float fd9  __asm__("f9")  = frag_c.data[9];
-    register float fd10 __asm__("f10") = frag_c.data[10];
-    register float fd11 __asm__("f11") = frag_c.data[11];
-    register float fd12 __asm__("f12") = frag_c.data[12];
-    register float fd13 __asm__("f13") = frag_c.data[13];
-    register float fd14 __asm__("f14") = frag_c.data[14];
-    register float fd15 __asm__("f15") = frag_c.data[15];
-    register float fd16 __asm__("f16") = frag_c.data[16];
-    register float fd17 __asm__("f17") = frag_c.data[17];
-    register float fd18 __asm__("f18") = frag_c.data[18];
-    register float fd19 __asm__("f19") = frag_c.data[19];
-    register float fd20 __asm__("f20") = frag_c.data[20];
-    register float fd21 __asm__("f21") = frag_c.data[21];
-    register float fd22 __asm__("f22") = frag_c.data[22];
-    register float fd23 __asm__("f23") = frag_c.data[23];
-    register float fd24 __asm__("f24") = frag_c.data[24];
-    register float fd25 __asm__("f25") = frag_c.data[25];
-    register float fd26 __asm__("f26") = frag_c.data[26];
-    register float fd27 __asm__("f27") = frag_c.data[27];
-    register float fd28 __asm__("f28") = frag_c.data[28];
-    register float fd29 __asm__("f29") = frag_c.data[29];
-    register float fd30 __asm__("f30") = frag_c.data[30];
-    register float fd31 __asm__("f31") = frag_c.data[31];
+        register float fd0  __asm__("f0")  = frag_c.data[0];
+        register float fd1  __asm__("f1")  = frag_c.data[1];
+        register float fd2  __asm__("f2")  = frag_c.data[2];
+        register float fd3  __asm__("f3")  = frag_c.data[3];
+        register float fd4  __asm__("f4")  = frag_c.data[4];
+        register float fd5  __asm__("f5")  = frag_c.data[5];
+        register float fd6  __asm__("f6")  = frag_c.data[6];
+        register float fd7  __asm__("f7")  = frag_c.data[7];
+        register float fd8  __asm__("f8")  = frag_c.data[8];
+        register float fd9  __asm__("f9")  = frag_c.data[9];
+        register float fd10 __asm__("f10") = frag_c.data[10];
+        register float fd11 __asm__("f11") = frag_c.data[11];
+        register float fd12 __asm__("f12") = frag_c.data[12];
+        register float fd13 __asm__("f13") = frag_c.data[13];
+        register float fd14 __asm__("f14") = frag_c.data[14];
+        register float fd15 __asm__("f15") = frag_c.data[15];
+        register float fd16 __asm__("f16") = frag_c.data[16];
+        register float fd17 __asm__("f17") = frag_c.data[17];
+        register float fd18 __asm__("f18") = frag_c.data[18];
+        register float fd19 __asm__("f19") = frag_c.data[19];
+        register float fd20 __asm__("f20") = frag_c.data[20];
+        register float fd21 __asm__("f21") = frag_c.data[21];
+        register float fd22 __asm__("f22") = frag_c.data[22];
+        register float fd23 __asm__("f23") = frag_c.data[23];
+        register float fd24 __asm__("f24") = frag_c.data[24];
+        register float fd25 __asm__("f25") = frag_c.data[25];
+        register float fd26 __asm__("f26") = frag_c.data[26];
+        register float fd27 __asm__("f27") = frag_c.data[27];
+        register float fd28 __asm__("f28") = frag_c.data[28];
+        register float fd29 __asm__("f29") = frag_c.data[29];
+        register float fd30 __asm__("f30") = frag_c.data[30];
+        register float fd31 __asm__("f31") = frag_c.data[31];
 
-    __asm__ volatile (".insn r %[insn], 1, 2, x%[fmd], x%[fms], x%[flags]"
-      : "+f"(fd0),  "+f"(fd1),  "+f"(fd2),  "+f"(fd3),
-        "+f"(fd4),  "+f"(fd5),  "+f"(fd6),  "+f"(fd7),
-        "+f"(fd8),  "+f"(fd9),  "+f"(fd10), "+f"(fd11),
-        "+f"(fd12), "+f"(fd13), "+f"(fd14), "+f"(fd15),
-        "+f"(fd16), "+f"(fd17), "+f"(fd18), "+f"(fd19),
-        "+f"(fd20), "+f"(fd21), "+f"(fd22), "+f"(fd23),
-        "+f"(fd24), "+f"(fd25), "+f"(fd26), "+f"(fd27),
-        "+f"(fd28), "+f"(fd29), "+f"(fd30), "+f"(fd31)
+        __asm__ volatile (".insn r %[insn], 1, 2, x%[fmd], x%[fms], x%[flags]"
+          : "+f"(fd0),  "+f"(fd1),  "+f"(fd2),  "+f"(fd3),
+            "+f"(fd4),  "+f"(fd5),  "+f"(fd6),  "+f"(fd7),
+            "+f"(fd8),  "+f"(fd9),  "+f"(fd10), "+f"(fd11),
+            "+f"(fd12), "+f"(fd13), "+f"(fd14), "+f"(fd15),
+            "+f"(fd16), "+f"(fd17), "+f"(fd18), "+f"(fd19),
+            "+f"(fd20), "+f"(fd21), "+f"(fd22), "+f"(fd23),
+            "+f"(fd24), "+f"(fd25), "+f"(fd26), "+f"(fd27),
+            "+f"(fd28), "+f"(fd29), "+f"(fd30), "+f"(fd31)
           : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags), "r"(ra), "r"(rb)
-      );
+        );
 
-    frag_d.data = {
-      fd0,  fd1,  fd2,  fd3,  fd4,  fd5,  fd6,  fd7,
-      fd8,  fd9,  fd10, fd11, fd12, fd13, fd14, fd15,
-      fd16, fd17, fd18, fd19, fd20, fd21, fd22, fd23,
-      fd24, fd25, fd26, fd27, fd28, fd29, fd30, fd31
-    };
+        frag_d.data = {
+          fd0,  fd1,  fd2,  fd3,  fd4,  fd5,  fd6,  fd7,
+          fd8,  fd9,  fd10, fd11, fd12, fd13, fd14, fd15,
+          fd16, fd17, fd18, fd19, fd20, fd21, fd22, fd23,
+          fd24, fd25, fd26, fd27, fd28, fd29, fd30, fd31
+        };
       } else if constexpr (NRC_ == 16) {
         register float fd0  __asm__("f0")  = frag_c.data[0];
         register float fd1  __asm__("f1")  = frag_c.data[1];

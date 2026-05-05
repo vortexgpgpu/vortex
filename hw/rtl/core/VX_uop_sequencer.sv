@@ -159,7 +159,7 @@ module VX_uop_sequencer import
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (output_if.valid && output_if.ready && uop_active) begin
-            `TRACE(1, ("%t: %s decode: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, WARP_ID, to_fullPC(output_if.data.PC)))
+            `TRACE(1, ("%t: %s decode: wid=%0d, cta_id=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, WARP_ID, output_if.data.cta_id, to_fullPC(output_if.data.PC)))
             VX_trace_pkg::trace_ex_type(1, output_if.data.ex_type);
             `TRACE(1, (", op="))
             VX_trace_pkg::trace_ex_op(1, output_if.data.ex_type, output_if.data.op_type, output_if.data.op_args);

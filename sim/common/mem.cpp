@@ -168,7 +168,7 @@ std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type
   for (auto& entry : tlb_) {
     if (entry.valid && entry.vpn == (vAddr >> entry.size_bits)) {
       *size_bits = entry.size_bits;
-        vAddr = vAddr >> (*size_bits);
+      vAddr = vAddr >> (*size_bits);
 
       // Hit: set mru bit on this entry.
       entry.mru_bit = true;
@@ -180,14 +180,14 @@ std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type
         if (e.valid && !e.mru_bit) {
           all_mru = false;
           break;
-    }
-  }
+        }
+      }
       if (all_mru) {
         for (auto& e : tlb_) {
           e.mru_bit = false;
         }
         entry.mru_bit = true;
-    }
+      }
 
       // Permission check.
       if ((type == ACCESS_TYPE::FETCH) & ((entry.r == 0) | (entry.x == 0))) {
@@ -195,13 +195,13 @@ std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type
       } else if ((type == ACCESS_TYPE::LOAD) & (entry.r == 0)) {
         throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
       } else if ((type == ACCESS_TYPE::STORE) & (entry.w == 0)) {
-      throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
-    }
+        throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+      }
       return std::make_pair(true, entry.pfn);
     }
-    }
+  }
   // TLB miss.
-    return std::make_pair(false, 0);
+  return std::make_pair(false, 0);
 }
 #else
 MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
@@ -211,9 +211,9 @@ MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
       if (entry.flags & flagMask) {
         return entry;
       } else {
-      throw PageFault(vAddr, false);
+        throw PageFault(vAddr, false);
+      }
     }
-  }
   }
   throw PageFault(vAddr, true);
 }
@@ -299,15 +299,15 @@ void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t s
       entry = TLBEntry(vpn, phys / pageSize_, flags, size_bits);
       return;
     }
-    }
+  }
 
   // 2. All slots valid: evict the first non-MRU entry (HW pseudo-LRU).
   for (auto& entry : tlb_) {
     if (!entry.mru_bit) {
       entry = TLBEntry(vpn, phys / pageSize_, flags, size_bits);
-    TLB_EVICT++;
+      TLB_EVICT++;
       return;
-  }
+    }
   }
 
   // 3. Fallback: every entry is MRU (lookup() should have cleared this).
@@ -448,7 +448,7 @@ void RAM::clear() {
   for (auto& entry : chunks_) {
     for (int i = 0; i < CHUNK_SIZE; ++i) {
       delete[] entry.second[i];
-  }
+    }
     delete[] entry.second;
   }
   chunks_.clear();
@@ -500,9 +500,9 @@ uint8_t *RAM::get(uint64_t address, bool allocate) const {
     if (!allocate)
       return zero_page_ + page_offset;
     page = new uint8_t[page_size];
-      for (uint32_t i = 0; i < page_size; ++i) {
+    for (uint32_t i = 0; i < page_size; ++i) {
       page[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
-      }
+    }
     chunk[chunk_offset] = page;
   }
 

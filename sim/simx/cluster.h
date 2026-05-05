@@ -60,6 +60,8 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+  class Core* get_core(uint32_t idx) const;
+
   // Cache flush walk: dcache → l2cache (sequential to avoid evictions
   // racing the L2 walk). Caller ticks the simulator until done.
   void dcache_flush_begin();
@@ -70,9 +72,6 @@ public:
 #ifdef EXT_DXA_ENABLE
   DxaCore::Ptr& dxa_core();
 #endif
-
-  // Used by Processor::get_first_core() (DTM debug entry point).
-  std::shared_ptr<Socket>& socket(uint32_t idx);
 
 protected:
   void on_reset();

@@ -152,6 +152,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] bbuf_stalls_w;
+    wire [PERF_CTR_BITS-1:0] bbuf_cache_hits_w;
     wire [PERF_CTR_BITS-1:0] bbuf_lmem_reads_w;
 `endif
 
@@ -222,6 +223,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .reset          (reset),
     `ifdef PERF_ENABLE
         .bbuf_stalls    (bbuf_stalls_w),
+        .bbuf_cache_hits(bbuf_cache_hits_w),
         .lmem_reads     (bbuf_lmem_reads_w),
     `endif
         .req_valid      (bbuf_req_valid),
@@ -369,7 +371,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
     assign tbuf_stalls     = stalls_sum;
-    assign tbuf_cache_hits = '0;  // bbuf reuse counted as no-stall, no separate hit metric
+    assign tbuf_cache_hits = bbuf_cache_hits_w;  // cycles of resident bbuf reuse (CTA-internal B-tile sharing)
     assign lmem_reads      = reads_sum;
 `endif
 

@@ -512,7 +512,7 @@ public:
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t * value) {
     CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_ARG0, addr), {
       return -1;
-      });
+    });
     CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_ARG1, tag), {
       return -1;
     });

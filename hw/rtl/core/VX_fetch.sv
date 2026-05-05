@@ -53,9 +53,10 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     wire [PC_BITS-1:0] rsp_PC;
     wire [`NUM_THREADS-1:0] rsp_tmask;
+    wire [NCTA_WIDTH-1:0] rsp_cta_id;
 
     VX_dp_ram #(
-        .DATAW (PC_BITS + `NUM_THREADS),
+        .DATAW (PC_BITS + `NUM_THREADS + NCTA_WIDTH),
         .SIZE  (`NUM_WARPS),
         .RDW_MODE ("R"),
         .LUTRAM (1)
@@ -66,9 +67,9 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .write (icache_req_fire),
         .wren  (1'b1),
         .waddr (req_tag),
-        .wdata ({schedule_if.data.PC, schedule_if.data.tmask}),
+        .wdata ({schedule_if.data.PC, schedule_if.data.tmask, schedule_if.data.cta_id}),
         .raddr (rsp_tag),
-        .rdata ({rsp_PC, rsp_tmask})
+        .rdata ({rsp_PC, rsp_tmask, rsp_cta_id})
     );
 
     `RUNTIME_ASSERT((!schedule_if.valid || schedule_if.data.PC != 0),
@@ -107,6 +108,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign fetch_if.valid = icache_bus_if.rsp_valid;
     assign fetch_if.data.tmask = rsp_tmask;
     assign fetch_if.data.wid   = rsp_tag;
+    assign fetch_if.data.cta_id= rsp_cta_id;
     assign fetch_if.data.PC    = rsp_PC;
     assign fetch_if.data.instr = icache_bus_if.rsp_data.data;
     assign fetch_if.data.uuid  = rsp_uuid;
@@ -178,10 +180,10 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (schedule_if.valid && schedule_if.ready) begin
-            `TRACE(1, ("%t: %s req: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if.data.wid, to_fullPC(schedule_if.data.PC), schedule_if.data.tmask, schedule_if.data.uuid))
+            `TRACE(1, ("%t: %s req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if.data.wid, schedule_if.data.cta_id, to_fullPC(schedule_if.data.PC), schedule_if.data.tmask, schedule_if.data.uuid))
         end
         if (fetch_if.valid && fetch_if.ready) begin
-            `TRACE(1, ("%t: %s rsp: wid=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.tmask, fetch_if.data.instr, fetch_if.data.uuid))
+            `TRACE(1, ("%t: %s rsp: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if.data.wid, fetch_if.data.cta_id, to_fullPC(fetch_if.data.PC), fetch_if.data.tmask, fetch_if.data.instr, fetch_if.data.uuid))
         end
     end
 `endif

@@ -332,8 +332,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (br_enable) begin
-            `TRACE(2, ("%t: %s branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, INSTANCE_ID, br_wid, to_fullPC(result_if.data.header.PC), br_taken, to_fullPC(br_dest), result_if.data.header.uuid))
+            `TRACE(2, ("%t: %s branch: wid=%0d, cta_id=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
+                $time, INSTANCE_ID, br_wid, result_if.data.header.cta_id, to_fullPC(result_if.data.header.PC), br_taken, to_fullPC(br_dest), result_if.data.header.uuid))
         end
     end
 `endif
