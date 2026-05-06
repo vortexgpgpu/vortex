@@ -595,6 +595,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         end
     end
 
+
 `ifdef PERF_ENABLE
     wire [NUM_REQS-1:0]  perf_core_reads_per_req;
     wire [NUM_REQS-1:0]  perf_core_writes_per_req;

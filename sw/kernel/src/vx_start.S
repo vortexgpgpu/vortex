@@ -115,12 +115,6 @@ _start:
   .insn r RISCV_CUSTOM0, 0, 0, x0, t0, x0  # tmc t0
 #endif
 
-  # clear BSS segment
-  la    a0, _edata
-  la    a2, _end
-  sub   a2, a2, a0
-  li    a1, 0
-  call  memset
 
 #ifdef NEED_INITFINI
   # run global initialization functions
@@ -217,7 +211,7 @@ init_tls_all:
 #endif
 
 .section .data
-	.global __dso_handle
+	
 	.weak __dso_handle
 __dso_handle:
 	.long	0

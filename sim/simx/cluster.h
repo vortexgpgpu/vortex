@@ -23,6 +23,8 @@ namespace vortex {
 
 class ProcessorImpl;
 
+class Socket;
+
 class Cluster : public SimObject<Cluster> {
 public:
   struct PerfStats {
@@ -57,6 +59,8 @@ public:
   int dcr_write(uint32_t addr, uint32_t value);
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
+
+  class Core* get_core(uint32_t idx) const;
 
   // Cache flush walk: dcache → l2cache (sequential to avoid evictions
   // racing the L2 walk). Caller ticks the simulator until done.

@@ -54,6 +54,9 @@ typedef struct {
   // Copy bytes from device memory to host
   int (*copy_from_dev) (void* host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size);
 
+  // Copy bytes from device memory to device memory
+  int (*copy_dev_to_dev) (vx_buffer_h hdest_buffer, uint64_t dest_offset, vx_buffer_h hsrc_buffer, uint64_t src_offset, uint64_t size);
+
   // Trigger device execution (kernel launch DCRs already written by stub)
   int (*start) (vx_device_h hdevice);
 

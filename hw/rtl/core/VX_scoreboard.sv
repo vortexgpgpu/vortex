@@ -216,6 +216,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         assign arb_data_in[w] = {
             staging_if[w].data.uuid,
+            staging_if[w].data.cta_id,
             staging_if[w].data.tmask,
             staging_if[w].data.PC,
             staging_if[w].data.ex_type,
@@ -318,6 +319,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .data_out  ({
             scoreboard_if.data.wis,
             scoreboard_if.data.uuid,
+            scoreboard_if.data.cta_id,
             scoreboard_if.data.tmask,
             scoreboard_if.data.PC,
             scoreboard_if.data.ex_type,

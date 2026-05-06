@@ -11,7 +11,6 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
 
-  uint32_t M = arg->M;
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 
@@ -30,7 +29,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t cycles = 0;
 #endif
 
-  for (int i = 0; i < K; i += ctx::tileK) {
+  for (uint32_t i = 0; i < K; i += ctx::tileK) {
     auto pTileA = pA + tile_row * K + i;
     auto pTileB = pB + tile_col * K + i;
 

@@ -41,6 +41,13 @@ public:
 
   uint32_t total_stalls() const;
 
+  // DTM debug-only accessor: returns a mutable ref to the integer
+  // register file entry for warp `wid`, register `reg` (lane 0).
+  // Used exclusively by sim/simx/dtm/debug_module.cpp.
+  // The (lane, opc, slot) split for `wid` mirrors Operands::wid_to_opc_idx;
+  // here we are inside one issue-lane already.
+  Word& dtm_ireg(uint32_t wid, uint32_t reg);
+
 protected:
   virtual void on_reset();
   virtual void on_tick();

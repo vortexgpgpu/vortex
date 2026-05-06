@@ -1,6 +1,8 @@
 include ../common.mk
 
 DESTDIR ?= $(CURDIR)
+USE_SST ?= 0
+#SST_PKG ?= SST-14.1 # default SST package name
 
 OBJ_DIR = $(DESTDIR)/obj
 CONFIG_FILE = $(DESTDIR)/simx_config.stamp
@@ -8,7 +10,7 @@ SRC_DIR = $(VORTEX_HOME)/sim/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
+CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SRC_DIR)/dtm -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
@@ -25,10 +27,11 @@ XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)
 SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp
 SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(SRC_DIR)/core.cpp $(SRC_DIR)/scheduler.cpp $(SRC_DIR)/cta_dispatcher.cpp $(SRC_DIR)/barrier_unit.cpp
 SRCS += $(SRC_DIR)/kmu/kmu.cpp
-SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/scoreboard.cpp $(SRC_DIR)/sequencer.cpp $(SRC_DIR)/opc_unit.cpp $(SRC_DIR)/dispatcher.cpp
+SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/decompressor.cpp $(SRC_DIR)/scoreboard.cpp $(SRC_DIR)/sequencer.cpp $(SRC_DIR)/opc_unit.cpp $(SRC_DIR)/dispatcher.cpp
 SRCS += $(SRC_DIR)/alu_unit.cpp $(SRC_DIR)/fpu_unit.cpp $(SRC_DIR)/lsu_unit.cpp $(SRC_DIR)/sfu_unit.cpp $(SRC_DIR)/wctl_unit.cpp $(SRC_DIR)/csr_unit.cpp
 SRCS += $(SRC_DIR)/mem/cache.cpp $(SRC_DIR)/mem/cache_cluster.cpp $(SRC_DIR)/mem/memory.cpp $(SRC_DIR)/mem/local_mem.cpp $(SRC_DIR)/mem/mem_coalescer.cpp
 SRCS += $(SRC_DIR)/mem/local_mem_switch.cpp $(SRC_DIR)/mem/lsu_mem_adapter.cpp
+SRCS += $(SRC_DIR)/dtm/debug_module.cpp $(SRC_DIR)/dtm/jtag_dtm.cpp $(SRC_DIR)/dtm/remote_bitbang.cpp
 
 # Add V extension sources
 ifneq ($(filter -DEXT_V_ENABLE, $(XCONFIGS)),)
@@ -58,6 +61,17 @@ ifneq ($(filter -DEXT_DXA_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/dxa/dxa_unit.cpp
 endif
 
+# SST integration: build libvortex.so as the SST element library and
+# include the SST::Component wrapper. Requires SST 15.x in PATH.
+# -Wno-deprecated-declarations: SST 15.1 deprecated Handler<> in favor
+# of Handler2<>; the upstream-shaped Component code uses Handler<>.
+# Suppress until vortex_gpgpu.cpp is migrated to Handler2.
+ifeq ($(USE_SST),1)
+	CXXFLAGS += $(shell sst-config --ELEMENT_CXXFLAGS) -Wno-deprecated-declarations
+	LDFLAGS  += $(shell sst-config --ELEMENT_LDFLAGS)
+	SRCS     += $(SRC_DIR)/sst/vortex_simulator.cpp $(SRC_DIR)/sst/vortex_gpgpu.cpp
+endif
+
 # Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
@@ -85,14 +99,25 @@ DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d)
 # generate .d files alongside .o files
 CXXFLAGS += -MMD -MP -MF $(@:.o=.d)
 
+ifeq ($(USE_SST), 1)
+VORTEX_SST_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(VORTEX_SST_SRCS))
+DEPS += $(VORTEX_SST_OBJS:.o=.d)
+endif
+
+
 # optional: pipe through ccache if you have it
 CXX := $(if $(shell which ccache),ccache $(CXX),$(CXX))
 
 PROJECT := simx
+VORTEX_LIB := libvortex.so
 
-.PHONY: all force clean clean-lib clean-exe clean-obj
+.PHONY: all force clean clean-lib clean-exe clean-obj libvortex clean-libvortex
 
+ifeq ($(USE_SST), 1)
+all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_LIB)
+else
 all: $(DESTDIR)/$(PROJECT)
+endif
 
 # build common object files
 $(OBJ_DIR)/common/%.o: $(SW_COMMON_DIR)/%.cpp $(CONFIG_FILE)
@@ -109,6 +134,11 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(CONFIG_FILE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+# build SST-specific source object files
+$(VORTEX_SST_OBJS): $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(CONFIG_FILE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(SST_CFLAGS) -c $< -o $@
+
 # build main object file
 $(MAIN_OBJ): $(SRC_DIR)/main.cpp $(CONFIG_FILE)
 	@mkdir -p $(@D)
@@ -121,6 +151,16 @@ $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)
 # Shared library
 $(DESTDIR)/lib$(PROJECT).so: $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -o $@
+
+# Vortex SST simulator component shared library
+libvortex: $(DESTDIR)/$(VORTEX_LIB)
+
+$(DESTDIR)/$(VORTEX_LIB): $(OBJS) $(VORTEX_SST_OBJS)
+	$(CXX) $(CXXFLAGS) $(SST_CFLAGS) \
+	-I./sim/simx \
+	$(OBJS) $(VORTEX_SST_SRCS) \
+	-shared -o $@ \
+	$(LDFLAGS) $(SST_LFLAGS)
 
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force
@@ -137,6 +177,9 @@ $(CONFIG_FILE): force
 
 clean-lib:
 	rm -f $(DESTDIR)/lib$(PROJECT).so
+
+clean-libvortex:
+	rm -f $(DESTDIR)/libvortex.so
 
 clean-exe:
 	rm -f $(DESTDIR)/$(PROJECT)

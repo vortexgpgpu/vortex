@@ -24,6 +24,13 @@ inline static constexpr uint32_t wid_to_opc_idx(uint32_t wid) {
   return (wid / ISSUE_WIDTH) % NUM_OPCS;
 }
 
+// wid → slot inside that OpcUnit. Inverse of OpcUnit's
+// (wis / NUM_OPCS) packing — see opc_unit.h for the lane/wis/opc/slot
+// breakdown.
+inline static constexpr uint32_t wid_to_slot(uint32_t wid) {
+  return (wid / ISSUE_WIDTH) / NUM_OPCS;
+}
+
 namespace {
 
 // Emit a "DEBUG SrcN Reg: <reg>={values...} (#uuid)" line for trace_csv.py.
@@ -141,6 +148,13 @@ uint32_t Operands::total_stalls() const {
     total += opc_unit->total_stalls();
   }
   return total;
+}
+
+Word& Operands::dtm_ireg(uint32_t wid, uint32_t reg) {
+  // DTM debug single-hart access: lane is selected by Core (we are inside
+  // one issue-lane already), so the wid we receive is whole-warp; we look
+  // up its OpcUnit + slot here.
+  return opc_units_.at(wid_to_opc_idx(wid))->dtm_ireg(wid_to_slot(wid), reg);
 }
 
 int Operands::get_exit_code() const {

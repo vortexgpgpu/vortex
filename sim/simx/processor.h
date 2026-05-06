@@ -31,6 +31,12 @@ public:
 
   int run();
 
+  void start_kmu();
+
+  bool any_running() const;
+
+  class Core* get_first_core() const;
+
   int dcr_write(uint32_t addr, uint32_t value);
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);

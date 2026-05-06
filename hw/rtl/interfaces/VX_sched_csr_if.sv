@@ -20,8 +20,12 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     wire [`NUM_WARPS-1:0]           active_warps;
     wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
 
-    // Read port: slave sends wid, master returns selected mscratch and cta_csrs
+    // Read port: slave sends wid + cta_id, master returns selected mscratch
+    // and cta_csrs. csr_rd_cta_id is sourced from execute_if.data.header.cta_id
+    // so the scheduler can index its per-CTA table directly without an
+    // internal cta_id_per_warp_r lookup.
     logic [NW_WIDTH-1:0]            csr_rd_wid;
+    logic [NCTA_WIDTH-1:0]          csr_rd_cta_id;
     logic [`MEM_ADDR_WIDTH-1:0]     mscratch;
     cta_csrs_t                      cta_csrs;
 
@@ -45,6 +49,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input csr_satp,
     `endif
         input  csr_rd_wid,
+        input  csr_rd_cta_id,
         input  csr_wr_valid,
         input  csr_wr_wid,
         input  csr_wr_data
@@ -61,6 +66,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output csr_satp,
     `endif
         output csr_rd_wid,
+        output csr_rd_cta_id,
         output csr_wr_valid,
         output csr_wr_wid,
         output csr_wr_data

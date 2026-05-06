@@ -54,6 +54,7 @@ import VX_fpu_pkg::*;
     input wire                          read_enable,
     input wire [UUID_WIDTH-1:0]         read_uuid,
     input wire [NW_WIDTH-1:0]           read_wid,
+    input wire [NCTA_WIDTH-1:0]         read_cta_id,
     input wire [`VX_CSR_ADDR_BITS-1:0]  read_addr,
     output wire [`XLEN-1:0]             read_data_ro,
     output wire [`XLEN-1:0]             read_data_rw,
@@ -169,7 +170,8 @@ import VX_fpu_pkg::*;
     // CSRs read //////////////////////////////////////////////////////////////
 
     // Scheduler CSRs read interface
-    assign sched_csr_if.csr_rd_wid  = read_wid;
+    assign sched_csr_if.csr_rd_wid = read_wid;
+    assign sched_csr_if.csr_rd_cta_id = read_cta_id;
 
     reg [`XLEN-1:0] read_data_ro_w;
     reg [`XLEN-1:0] read_data_rw_w;

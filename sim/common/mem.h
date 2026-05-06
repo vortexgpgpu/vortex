@@ -385,9 +385,11 @@ public:
 
   void read(void* data, uint64_t addr, uint64_t size) override;
   void write(const void* data, uint64_t addr, uint64_t size) override;
+  void copy (uint64_t dest_addr, uint64_t src_addr, uint64_t size);
 
   void loadBinImage(const char* filename, uint64_t destination);
   void loadHexImage(const char* filename);
+  void loadVxImage(const char* filename);
 
   uint8_t& operator[](uint64_t address) {
     return *this->get(address, true); // mutable access forces allocation

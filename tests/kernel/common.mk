@@ -19,6 +19,7 @@ AR  = $(LLVM_VORTEX)/bin/llvm-ar
 DP  = $(LLVM_VORTEX)/bin/llvm-objdump
 CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
+CFLAGS += -Wall -Wextra -Wfatal-errors -Werror -Wno-unused-command-line-argument
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CFLAGS += -DXLEN_$(XLEN) -DNDEBUG $(CONFIGS) -D__VORTEX__
@@ -32,13 +33,13 @@ VX_STARTUP_SRC := $(VORTEX_HOME)/sw/kernel/src/vx_start.S
 APP_OBJS = $(addsuffix .o, $(basename $(notdir $(SRCS))))
 KERNEL_STARTUP := $(VORTEX_HOME)/sw/kernel/scripts/kernel_startup.sh
 
-all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
+all: $(PROJECT).elf $(PROJECT).vxbin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
 	$(DP) -D $< > $@
 
-$(PROJECT).bin: $(PROJECT).elf
-	$(CP) -O binary $< $@
+$(PROJECT).vxbin: $(PROJECT).elf
+	OBJCOPY=$(CP) $(VORTEX_HOME)/sw/kernel/scripts/vxbin.py $< $@
 
 $(VORTEX_KN_PATH)/libvortex.a:
 	$(MAKE) -C $(VORTEX_KN_PATH)
@@ -52,11 +53,11 @@ vx_start.o: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
 $(PROJECT).elf: vx_start.o $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
 	$(CC) $(CFLAGS) vx_start.o $(APP_OBJS) $(LDFLAGS) -o $@
 
-run-rtlsim: $(PROJECT).bin
-	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).bin
+run-rtlsim: $(PROJECT).vxbin
+	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).vxbin
 
-run-simx: $(PROJECT).bin
-	$(ROOT_DIR)/sim/simx/simx $(PROJECT).bin
+run-simx: $(PROJECT).vxbin
+	$(ROOT_DIR)/sim/simx/simx $(PROJECT).vxbin
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;

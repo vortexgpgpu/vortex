@@ -128,6 +128,7 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
         assign commit_if[i].data = {
             result_tmp_if.data.header.uuid,
             result_tmp_if.data.header.wid,
+            result_tmp_if.data.header.cta_id,
             commit_sid_w,
             commit_tmask_w,
             result_tmp_if.data.header.PC,

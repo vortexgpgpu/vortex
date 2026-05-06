@@ -17,17 +17,26 @@ interface VX_decode_sched_if import VX_gpu_pkg::*; ();
 
     wire                valid;
     wire                unlock;
+`ifdef EXT_C_ENABLE
+    wire                is_rvc;
+`endif
     wire [NW_WIDTH-1:0] wid;
 
     modport master (
         output valid,
         output unlock,
+    `ifdef EXT_C_ENABLE
+        output is_rvc,
+    `endif
         output wid
     );
 
     modport slave (
         input valid,
         input unlock,
+    `ifdef EXT_C_ENABLE
+        input is_rvc,
+    `endif
         input wid
     );
 

@@ -9,7 +9,6 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     const TYPE* A = reinterpret_cast<const TYPE*>(arg->A_addr);
     const TYPE* B = reinterpret_cast<const TYPE*>(arg->B_addr);
     TYPE*       C = reinterpret_cast<TYPE*>(arg->C_addr);
-    int M      = (int)(uint32_t)arg->M;
     int N      = (int)(uint32_t)arg->N;
     int K      = (int)(uint32_t)arg->K;
     TYPE alpha = arg->alpha;

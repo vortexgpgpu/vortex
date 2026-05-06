@@ -32,13 +32,15 @@ struct smem_matrix_desc {
 };
 
 // Build a smem descriptor from a pointer and row stride in bytes.
-static __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
+static inline __attribute__((always_inline)) smem_matrix_desc vx_make_smem_desc(const void* ptr, uint32_t leading_bytes) {
   size_t lmem_base = csr_read(VX_CSR_LOCAL_MEM_BASE);
   uint32_t offset = static_cast<uint32_t>(static_cast<size_t>(reinterpret_cast<uintptr_t>(ptr)) - lmem_base);
   return {((leading_bytes << 16) | offset)};
 }
 
 namespace detail {
+
+  enum class frag_use_t { matrix_a, matrix_b, accumulator };
 
   template <typename F, std::size_t... Is>
   __attribute__((always_inline))
@@ -145,6 +147,9 @@ namespace detail {
   };
 }
 
+// Hoist detail::frag_use_t into the enclosing tensor namespace
+using detail::frag_use_t;
+
 template <uint32_t NT,              // number of threads per warp
           typename It,              // input type (A,B)
           typename Ot,              // output type (C,D)
@@ -155,7 +160,6 @@ template <uint32_t NT,              // number of threads per warp
 struct wmma_context {
 private:
   using cfg = wmma_config_t<NT, fp32, fp32, NR_, DK_>;
-  enum frag_use_t { matrix_a, matrix_b, accumulator };
 
   using vreg_t = float;
 
@@ -176,10 +180,10 @@ private:
   };
 
   template <frag_use_t U, typename T, uint32_t N>
-  struct fragment_t : mx_meta_storage_t<(U == matrix_a || U == matrix_b)> {
+  struct fragment_t : mx_meta_storage_t<(U == frag_use_t::matrix_a || U == frag_use_t::matrix_b)> {
     using Type = T;
     static constexpr frag_use_t Use = U;
-    static constexpr bool HasMxMeta = (U == matrix_a || U == matrix_b);
+    static constexpr bool HasMxMeta = (U == frag_use_t::matrix_a || U == frag_use_t::matrix_b);
     static constexpr uint32_t NR = N;
     std::array<vreg_t, N> data;
   };
@@ -249,9 +253,9 @@ public:
   static constexpr uint32_t wg_meta_stride_bytes  = wg_meta_stride_words * 4;
   static constexpr uint32_t wg_meta_total_bytes   = wg_meta_banks * wg_meta_stride_bytes;
 
-  using fragment_a   = fragment_t<matrix_a, input_t, cfg::NRA>;
-  using fragment_b   = fragment_t<matrix_b, input_t, cfg::NRB>;
-  using fragment_acc = fragment_t<accumulator, output_t, cfg::NRC>;
+  using fragment_a   = fragment_t<frag_use_t::matrix_a, input_t, cfg::NRA>;
+  using fragment_b   = fragment_t<frag_use_t::matrix_b, input_t, cfg::NRB>;
+  using fragment_acc = fragment_t<frag_use_t::accumulator, output_t, cfg::NRC>;
 
   // Per-thread metadata words used for MX register plumbing.
   // mxfp8/mxint8 use 2 words per axis; nvfp4 uses 4 words per axis.
@@ -264,7 +268,7 @@ public:
     static_assert(Frag::HasMxMeta, "MX metadata is only valid for matrix_a/matrix_b fragments");
 
     auto meta_base = reinterpret_cast<const uint32_t*>(meta_mx_ptr);
-    if constexpr (Frag::Use == matrix_a) {
+    if constexpr (Frag::Use == frag_use_t::matrix_a) {
       frag.mx_meta[0] = mx_word_as_f32(meta_base[0]);
       frag.mx_meta[1] = mx_word_as_f32(meta_base[1]);
       if constexpr (is_nvfp4) {
@@ -272,7 +276,7 @@ public:
         frag.mx_meta[3] = mx_word_as_f32(meta_base[3]);
       }
     } else {
-      static_assert(Frag::Use == matrix_b, "Unsupported MX fragment use");
+      static_assert(Frag::Use == frag_use_t::matrix_b, "Unsupported MX fragment use");
       if constexpr (is_nvfp4) {
         frag.mx_meta[0] = mx_word_as_f32(meta_base[4]);
         frag.mx_meta[1] = mx_word_as_f32(meta_base[5]);
@@ -288,7 +292,7 @@ public:
   template <typename Frag>
   static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
     static_assert(is_sparse, "load_sp_metadata requires sparse configuration");
-    static_assert(Frag::Use == matrix_a, "sparse metadata load is only valid for matrix_a fragment");
+    static_assert(Frag::Use == frag_use_t::matrix_a, "sparse metadata load is only valid for matrix_a fragment");
 
     auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
     uint32_t lane_id = vx_thread_id();
@@ -301,7 +305,7 @@ public:
   template <typename Frag, typename T>
   static __attribute__((always_inline)) void fill_fragment(Frag &dst, T value) {
     vreg_t fill_data;
-    if constexpr (Frag::Use == accumulator) {
+    if constexpr (Frag::Use == frag_use_t::accumulator) {
       fill_data = output_acessor_t::bit_fill(value);
     } else {
       fill_data = input_acessor_t::bit_fill(value);
@@ -316,7 +320,7 @@ public:
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
     uint32_t lane = vx_thread_id();
-    if constexpr (Frag::Use == matrix_a) {
+    if constexpr (Frag::Use == frag_use_t::matrix_a) {
       // Load row-major matrix A
       uint32_t block_idx = (cfg::a_block_size == NT) ? 0 : (lane / cfg::a_block_size);
       uint32_t lane_in_blk = (cfg::a_block_size == NT) ? lane : (lane % cfg::a_block_size);
@@ -379,7 +383,7 @@ public:
         });
       }
 
-    } else if constexpr (Frag::Use == matrix_b) {
+    } else if constexpr (Frag::Use == frag_use_t::matrix_b) {
       if constexpr (is_sparse) {
         // Sparse B load: uses 2x tcK for B block
         constexpr uint32_t b_tcK = cfg::tcK * 2;
@@ -511,7 +515,7 @@ public:
 
   template <mem_layout dst_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
-    static_assert(Frag::Use == accumulator, "only accumulator fragment can be stored");
+    static_assert(Frag::Use == frag_use_t::accumulator, "only accumulator fragment can be stored");
     uint32_t lane = vx_thread_id();
     uint32_t block_row = lane / cfg::tcN;
     uint32_t block_col = lane % cfg::tcN;
@@ -542,10 +546,10 @@ public:
   template <typename FragD, typename FragA, typename FragB, typename FragC>
   static __attribute__((always_inline)) void mma_sync(FragD &frag_d, const FragA &frag_a, const FragB &frag_b, const FragC &frag_c) {
     constexpr int flags = is_sparse ? 1 : 0;
-    static_assert(FragA::Use == matrix_a, "A must be matrix_a");
-    static_assert(FragB::Use == matrix_b, "B must be matrix_b");
-    static_assert(FragC::Use == accumulator, "C must be accumulator");
-    static_assert(FragD::Use == accumulator, "D must be accumulator");
+    static_assert(FragA::Use == frag_use_t::matrix_a, "A must be matrix_a");
+    static_assert(FragB::Use == frag_use_t::matrix_b, "B must be matrix_b");
+    static_assert(FragC::Use == frag_use_t::accumulator, "C must be accumulator");
+    static_assert(FragD::Use == frag_use_t::accumulator, "D must be accumulator");
 
     // Bank-conflict-free register offset permutations (0 stalls).
     // SW must place fragment data into registers matching the HW's
@@ -785,7 +789,6 @@ private:
   static constexpr uint32_t lg_NT = clog2(NT);
 
   using vreg_t = float;
-  enum frag_use_t { matrix_a, matrix_b, accumulator };
 
   // Type trait for smem descriptors
   template <typename T> struct is_smem_desc : std::false_type {};
@@ -906,7 +909,7 @@ public:
   // ctx_a::sparse_regs slot is reserved for the metadata word.
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
-    static_assert(Frag::Use == matrix_a, "only matrix_a fragment can be loaded from registers in wgmma context");
+    static_assert(Frag::Use == frag_use_t::matrix_a, "only matrix_a fragment can be loaded from registers in wgmma context");
     static_assert(src_layout == row_major, "wgmma block-major load only accepts row_major caller hint");
     static_assert(tcM * tcK == NT, "wgmma block-major load assumes canonical config (TC_M*TC_K == NT)");
 
@@ -957,7 +960,7 @@ public:
   // thread's write lands the correct metadata in the bank WMMA will later read.
   template <typename Frag>
   static __attribute__((always_inline)) void load_sp_metadata(Frag& frag, const void* meta_sp_ptr) {
-    static_assert(Frag::Use == matrix_a, "sparse metadata load is only valid for matrix_a fragment");
+    static_assert(Frag::Use == frag_use_t::matrix_a, "sparse metadata load is only valid for matrix_a fragment");
     using rtl_cfg = wmma_config_t<NT>;
     static constexpr uint32_t RTL_DEPTH  = rtl_cfg::per_warp_depth;
     static constexpr uint32_t RTL_HALF_K = rtl_cfg::k_steps / 2;
@@ -974,7 +977,7 @@ public:
   // Store accumulator with n-major register layout: r = n * m_steps + m
   template <mem_layout dst_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
-    static_assert(Frag::Use == accumulator, "only accumulator fragment can be stored");
+    static_assert(Frag::Use == frag_use_t::accumulator, "only accumulator fragment can be stored");
     uint32_t lane = vx_thread_id();
     uint32_t base_row = lane / tcN;
     uint32_t base_col = lane % tcN;
@@ -1008,8 +1011,8 @@ public:
                                                          const FragC &frag_c) {
     static_assert(FragC::NR == NRC_, "C fragment size mismatch");
     static_assert(FragD::NR == NRC_, "D fragment size mismatch");
-    static_assert(FragC::Use == accumulator, "C must be accumulator");
-    static_assert(FragD::Use == accumulator, "D must be accumulator");
+    static_assert(FragC::Use == frag_use_t::accumulator, "C must be accumulator");
+    static_assert(FragD::Use == frag_use_t::accumulator, "D must be accumulator");
     static_assert(NRC_ == 8 || NRC_ == 16 || NRC_ == 32,
                   "wgmma_sync supports NRC = 8, 16, or 32");
 
@@ -1017,7 +1020,7 @@ public:
     constexpr bool b_is_smem = is_smem_desc<OpB>::value;
 
     if constexpr (!a_is_smem) {
-      static_assert(static_cast<int>(OpA::Use) == static_cast<int>(matrix_a), "A operand must be matrix_a fragment");
+      static_assert((OpA::Use == frag_use_t::matrix_a), "A operand must be matrix_a fragment");
       static_assert(NRC_ <= 16, "A-from-reg requires NRC <= 16");
     }
     static_assert(b_is_smem, "B must be smem_matrix_desc (SR mode is not supported)");

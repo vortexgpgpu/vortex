@@ -8,7 +8,7 @@ SYN_DIR := $(HW_DIR)/syn/altera/opae
 CONFIG_FILE := $(DESTDIR)/opae_config.stamp
 SRC_DIR := $(VORTEX_HOME)/sw/runtime/opae
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors -Werror
 CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(DESTDIR) -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
 CXXFLAGS += -DXLEN_$(XLEN)
 

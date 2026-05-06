@@ -701,6 +701,24 @@ public:
           uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
           uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
           cur_block_ = b;
+          // CTA lockstep invariant: while any block is mid-WGMMA with a
+          // resident CTA, no other block may execute a WGMMA uop with a
+          // different cta_id. This is the dual of the planning-pass fence
+          // at lines ~593-613 — if we ever reach execute() with a violating
+          // state, the gate has been bypassed somewhere upstream.
+          {
+            int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+            for (uint32_t k = 0; k < NUM_TCU_BLOCKS; ++k) {
+              if (k == b) continue;
+              if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {
+                std::cerr << "*** TCU CTA lockstep violation: block " << b
+                          << " executing WGMMA cta_id=" << this_cta
+                          << " while block " << k << " holds cta_id="
+                          << cta_owner_a_.at(k) << std::endl;
+                std::abort();
+              }
+            }
+          }
           this->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                       tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
                       a_desc, b_desc, rs1_data, rs3_data, rd_data,
@@ -1424,8 +1442,7 @@ op_string_t TcuUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
     std::string src_mode = std::string(args.is_a_smem ? "S" : "R") + "S";
     return {"WGMMA." + std::string(args.is_sparse ? "SP." : "") + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
              + "." + std::to_string(nrc) + "." + src_mode
-             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
-             + "." + std::to_string(args.step_k), ""};
+             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
   }
   case TcuType::META_STORE:
     return {"META_STORE." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::to_string(args.fmt_d), ""};

@@ -15,6 +15,7 @@
 
 #include <simobject.h>
 #include <mem.h>
+#include <functional>
 #include "types.h"
 
 namespace vortex {
@@ -46,6 +47,20 @@ public:
 	// Attach the backing RAM image so reads/writes can carry actual bytes
 	// (TLM data path).
 	void attach_ram(RAM* ram);
+
+	// Phase 3 SST integration: when a non-null hook is installed,
+	// Memory::tick() invokes it on every accepted request just before
+	// the request is enqueued to the local DRAM model. The hook receives
+	// the MemReq by const-ref and can do whatever — typically convert to
+	// an SST::Interfaces::StandardMem::Read/Write and send to a
+	// memHierarchy link.
+	//
+	// The local data path (RAM read/write + dram_sim_) is unchanged —
+	// this is timing-only telemetry, NOT a substitute backing store. We
+	// use a std::function callback to keep sim/simx/mem completely
+	// SST-agnostic (the caller in sim/simx/sst/ owns the conversion).
+	using PreSendHook = std::function<void(const MemReq&)>;
+	void set_pre_send_hook(PreSendHook hook);
 
 	const PerfStats& perf_stats() const;
 

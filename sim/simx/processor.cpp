@@ -238,6 +238,18 @@ int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   return 0;
 }
 
+Core* ProcessorImpl::get_first_core() const {
+  if (clusters_.empty()) return nullptr;
+  return clusters_.at(0)->get_core(0);
+}
+
+bool ProcessorImpl::any_running() const {
+  for (auto& cluster : clusters_) {
+    if (cluster->running()) return true;
+  }
+  return (SimChannelBase::inflight_count() != 0);
+}
+
 ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   ProcessorImpl::PerfStats perf;
   perf.mem_reads   = perf_mem_reads_;
@@ -264,6 +276,18 @@ void Processor::attach_ram(RAM* mem) {
 
 void Processor::reset() {
   impl_->reset();
+}
+
+void Processor::start_kmu() {
+  impl_->kmu().start();
+}
+
+bool Processor::any_running() const {
+  return impl_->any_running();
+}
+
+Core* Processor::get_first_core() const {
+  return impl_->get_first_core();
 }
 
 int Processor::run() {

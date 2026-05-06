@@ -11,18 +11,28 @@ VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
 
 KERNEL_LIB ?= vortex
 
+# Resolve the toml + CONFIGS overrides into the canonical -D... list, the
+# same way sim/simx/Makefile does. Then sniff for extension enables.
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS)')
+
+ifneq (,$(filter -DEXT_C_ENABLE, $(XCONFIGS)))
+	C_EXT := c
+else
+	C_EXT :=
+endif
+
 ifeq ($(XLEN),64)
-	ifeq ($(EXT_V_ENABLE),1)
-		VX_CFLAGS += -march=rv64imafdv_zve64d -mabi=lp64d # vector extension
+	ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
+		VX_CFLAGS += -march=rv64imafd$(C_EXT)v_zve64d -mabi=lp64d # vector extension
 	else
-		VX_CFLAGS += -march=rv64imafd -mabi=lp64d
+		VX_CFLAGS += -march=rv64imafd$(C_EXT) -mabi=lp64d
 	endif
 	STARTUP_ADDR ?= 0x180000000
 else
-	ifeq ($(EXT_V_ENABLE),1)
-		VX_CFLAGS += -march=rv32imafv_zve32f -mabi=ilp32f # vector extension
+	ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
+		VX_CFLAGS += -march=rv32imaf$(C_EXT)v_zve32f -mabi=ilp32f # vector extension
 	else
-		VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
+		VX_CFLAGS += -march=rv32imaf$(C_EXT) -mabi=ilp32f
 	endif
 	STARTUP_ADDR ?= 0x80000000
 endif
@@ -32,6 +42,7 @@ LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +zicond
 LLVM_CFLAGS += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
+LLVM_CFLAGS += -Wno-unused-command-line-argument
 #LLVM_CFLAGS += -mllvm -vortex-branch-divergence=0
 #LLVM_CFLAGS += -mllvm -debug -mllvm -print-after-all
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX)
@@ -49,6 +60,7 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 #VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 #VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
+VX_CFLAGS += -Wall -Wextra -Wfatal-errors -Werror -Wno-unused-command-line-argument
 VX_CFLAGS += -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 VX_CFLAGS += -DXLEN_$(XLEN) -DNDEBUG -D__VORTEX__
@@ -66,7 +78,7 @@ VX_KMU_FLAG := $(if $(filter vortex2,$(KERNEL_LIB)),-DKMU_ENABLE)
 VX_APP_OBJS = $(addsuffix .o, $(basename $(notdir $(VX_SRCS))))
 KERNEL_STARTUP := $(VORTEX_HOME)/sw/kernel/scripts/kernel_startup.sh
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors -Werror
 CXXFLAGS += -I$(VORTEX_HOME)/sw/runtime/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CXXFLAGS += $(CONFIGS)
 

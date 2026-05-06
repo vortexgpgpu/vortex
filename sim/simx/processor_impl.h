@@ -48,6 +48,10 @@ public:
 
   Kmu& kmu()       { return *kmu_; }
 
+  bool any_running() const;
+
+  class Core* get_first_core() const;
+
   // Drain dirty data from caches (write-back path) all the way to DRAM.
   // Walks L1 dcaches → L2 → L3, ticking the simulator between phases so
   // each level's evictions reach the next before that level itself flushes.
