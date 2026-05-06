@@ -52,7 +52,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     TYPE my_val   = local_A0[l_row * tile_size + l_col];
     TYPE my_val_b = local_B0[l_row * tile_size + l_col];
 
-    for (int iter = 0; iter < tile_size; ++iter) {
+    for (uint32_t iter = 0; iter < tile_size; ++iter) {
       my_val   = sqrt(my_val   * my_val   + 0.01f);
       my_val_b = sqrt(my_val_b * my_val_b + 0.01f);
     }

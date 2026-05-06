@@ -32,11 +32,11 @@ static inline void float4_store(float* ptr, float4 v) {
 
 // Element-wise operations
 static inline float4 float4_add(float4 a, float4 b) {
-  return (float4){a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w};
+  return (float4){{a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w}};
 }
 
 static inline float4 float4_mul(float4 a, float4 b) {
-  return (float4){a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w};
+  return (float4){{a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w}};
 }
 
 // Dot product (returns sum of a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w)
@@ -46,7 +46,7 @@ static inline float float4_dot(float4 a, float4 b) {
 
 // Broadcast a scalar to all lanes
 static inline float4 float4_broadcast(float val) {
-  return (float4){val, val, val, val};
+  return (float4){{val, val, val, val}};
 }
 
 #endif // FLOAT4_H

@@ -265,7 +265,7 @@ volatile int barrier_stall;
 
 void barrier_kernel() {
 	unsigned wid = vx_warp_id();
-	for (int i = 0; i <= (wid * 256); ++i) {
+	for (unsigned i = 0; i <= (wid * 256); ++i) {
 		++barrier_stall;
 	}
 	barrier_buffer[wid] = 65 + wid;
@@ -361,7 +361,6 @@ int shfl_buffer[SHFL_GROUP_SZ];
 
 void __attribute__((noinline)) do_shfl() {
 	int num_threads = std::min(vx_num_threads(), VOTE_GROUP_SZ);
-	int tmask = make_full_tmask(num_threads);
 	int tid = vx_thread_id();
 	int value = 65 + tid;
 

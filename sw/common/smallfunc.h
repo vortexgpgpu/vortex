@@ -93,7 +93,7 @@ public:
   explicit operator bool() const { return vtbl_ != nullptr; }
 
   R operator()(Args... args) const {
-    __vortex_assert(vtbl_ != nullptr, "SmallFunction: call on empty");
+    __assert(vtbl_ != nullptr, "SmallFunction: call on empty");
     return vtbl_->invoke(this, std::forward<Args>(args)...);
   }
 

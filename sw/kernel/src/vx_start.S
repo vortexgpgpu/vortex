@@ -156,7 +156,7 @@ init_tls_all:
 #endif
 
 .section .data
-	.global __dso_handle
+	
 	.weak __dso_handle
 __dso_handle:
 	.long	0

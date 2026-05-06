@@ -29,7 +29,7 @@ void *vx_malloc(int sz) {
 }
 
 // we'll hook this function to the vx_mem_free function in the future
-void vx_free(void *ptr) {
+void vx_free(void * /*ptr*/) {
   // Do nothing (for now)
 }
 

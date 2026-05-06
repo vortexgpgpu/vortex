@@ -292,13 +292,13 @@ public:
   }
 
   void send(const Pkt& pkt, uint64_t delay = 1) {
-    __vortex_assert(!this->full(), "channel is full");
+    __assert(!this->full(), "channel is full");
     this->reserve();
     SimPlatform::instance().schedule(this, pkt, delay);
   }
 
   void send(Pkt&& pkt, uint64_t delay = 1) {
-    __vortex_assert(!this->full(), "channel is full");
+    __assert(!this->full(), "channel is full");
     this->reserve();
     SimPlatform::instance().schedule(this, std::move(pkt), delay);
   }
@@ -322,18 +322,18 @@ public:
 
   const Pkt& peek() const {
     this->assert_endpoint();
-    __vortex_assert(!this->queue_empty(), "channel is empty");
+    __assert(!this->queue_empty(), "channel is empty");
     return this->queue_front();
   }
 
   void pop() {
     this->assert_endpoint();
-    __vortex_assert(!this->queue_empty(), "channel is empty");
+    __assert(!this->queue_empty(), "channel is empty");
     this->queue_pop();
   }
 
   [[nodiscard]] bool try_pop(Pkt* out) {
-    __vortex_assert(out != nullptr, "output target is null");
+    __assert(out != nullptr, "output target is null");
     if (this->empty()) return false;
     *out = this->peek();
     this->pop();
@@ -373,7 +373,7 @@ protected:
       }
       return;
     }
-    __vortex_assert(pending_count_ > 0, "pending count underflow");
+    __assert(pending_count_ > 0, "pending count underflow");
     --pending_count_;
     this->queue_push(pkt);
   }
@@ -382,14 +382,14 @@ private:
   bool forwarded() const { return sink_ != nullptr; }
 
   void bind_setup(SimChannelBase* sink) {
-    __vortex_assert(sink != nullptr, "bind target is null");
-    __vortex_assert(sink_ == nullptr, "channel already bound");
+    __assert(sink != nullptr, "bind target is null");
+    __assert(sink_ == nullptr, "channel already bound");
     sink_ = sink;
     sink->source_ = this;
   }
 
   void assert_endpoint() const {
-    __vortex_assert(!forwarded(), "cannot read from a forwarded channel");
+    __assert(!forwarded(), "cannot read from a forwarded channel");
   }
 
   uint32_t occupancy() const { return this->queue_size() + pending_count_; }
