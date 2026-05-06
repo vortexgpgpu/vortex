@@ -250,6 +250,38 @@ inline void vx_wsync() {
     __asm__ volatile (".insn r %0, 7, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
 }
 
+// Graphics extensions (CUSTOM1 / INST_EXT2 family).
+// Encodings:
+//   funct3=1, R4-type, funct2=stage : vx_tex   (texture sample)
+//   funct3=2, R4-type, funct2=0     : vx_om    (output-merger write)
+//   funct3=3, R-type,  funct7=0     : vx_rast  (raster pop)
+// These trap as illegal-instruction unless the corresponding
+// EXT_TEX_ENABLE / EXT_OM_ENABLE / EXT_RASTER_ENABLE is set.
+
+// Texture sample: (stage, u, v, lod) -> texel
+inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
+    unsigned ret;
+    __asm__ volatile (".insn r4 %1, 1, %2, %0, %3, %4, %5"
+        : "=r"(ret)
+        : "i"(RISCV_CUSTOM1), "i"(stage), "r"(u), "r"(v), "r"(lod));
+    return ret;
+}
+
+// Output-merger write: (x, y, face, color, depth)
+inline void vx_om(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
+    unsigned pos_face = (y << 16) | (x << 1) | face;
+    __asm__ volatile (".insn r4 %0, 2, 0, x0, %1, %2, %3"
+        :: "i"(RISCV_CUSTOM1), "r"(pos_face), "r"(color), "r"(depth));
+}
+
+// Raster pop: returns next quad descriptor from the rasterizer.
+inline unsigned vx_rast() {
+    unsigned ret;
+    __asm__ volatile (".insn r %1, 3, 0, %0, x0, x0"
+        : "=r"(ret) : "i"(RISCV_CUSTOM1));
+    return ret;
+}
+
 /* Safely flushes the warp pipeline and reads the 64-bit cycle counter.
  * Automatically handles 32-bit overflow mitigation or native 64-bit reads.
  */

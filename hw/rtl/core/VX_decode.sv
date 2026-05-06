@@ -621,7 +621,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                 endcase
             end
             INST_EXT2: begin
-                if (funct3 == 3'h0) begin // WGATHER: R4-type, funct2=src_lane
+                case (funct3)
+                3'h0: begin // WGATHER: R4-type, funct2=src_lane
                     ex_type = EX_ALU;
                     op_args.alu.xtype = ALU_TYPE_OTHER;
                     op_args.alu.imm20 = {{18{1'b0}}, funct2}; // src_lane in imm20[1:0]
@@ -631,6 +632,35 @@ module VX_decode import VX_gpu_pkg::*; #(
                     `USED_IREG (rs3);
                     op_type = INST_OP_BITS'(INST_WGATHER);
                 end
+            `ifdef EXT_TEX_ENABLE
+                3'h1: begin // vx_tex: R4-type, funct2=stage, rd=texel, rs1=u, rs2=v, rs3=lod
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_TEX);
+                    op_args.tex.stage = funct2[`VX_TEX_STAGE_BITS-1:0];
+                    `USED_IREG (rd);
+                    `USED_IREG (rs1);
+                    `USED_IREG (rs2);
+                    `USED_IREG (rs3);
+                end
+            `endif
+            `ifdef EXT_OM_ENABLE
+                3'h2: begin // vx_om: R4-type, rd=x0, rs1=pos_face, rs2=color, rs3=depth
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_OM);
+                    `USED_IREG (rs1);
+                    `USED_IREG (rs2);
+                    `USED_IREG (rs3);
+                end
+            `endif
+            `ifdef EXT_RASTER_ENABLE
+                3'h3: begin // vx_rast: R-type, rd=quad, rs1=x0, rs2=x0
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_RASTER);
+                    `USED_IREG (rd);
+                end
+            `endif
+                default:;
+                endcase
             end
             default:;
         endcase

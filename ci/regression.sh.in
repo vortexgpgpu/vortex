@@ -165,6 +165,54 @@ dxa()
     echo "dxa tests done!"
 }
 
+graphics()
+{
+    echo "begin graphics tests..."
+
+    make -C sw/kernel
+    make -C sw/runtime/rtlsim
+
+    # ---- minimum smoke (each unit individually) -------------------------
+    CONFIGS="-DEXT_TEX_ENABLE"    ./ci/blackbox.sh --driver=rtlsim --app=tex_smoke
+    CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster_smoke
+    CONFIGS="-DEXT_OM_ENABLE"     ./ci/blackbox.sh --driver=rtlsim --app=om_smoke
+
+    # ---- full PNG-driven tests (with reference image diff) --------------
+    # tex: 64x64 palette texture, point-filter, scale=1.0
+    CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex \
+        --args="-i palette64.png -r palette64_ref_g0.png"
+
+    # om: 32x32 white-box gradient render
+    CONFIGS="-DEXT_OM_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=om \
+        --args="-w 32 -h 32 -c 16777215 -r whitebox_32.png"
+
+    # raster: 32x32 single triangle from cgltrace
+    CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster \
+        --args="-w 32 -h 32 -t triangle.cgltrace -r triangle_ref_32.png"
+
+    # draw3d: full-pipeline (TEX+RASTER+OM) build-and-run smoke. Functional
+    # output is gated on raster bcoord/pos_mask CSR plumbing (deferred);
+    # this verifies the v2 KMU launch path and kernel binary build.
+    CONFIGS="-DEXT_TEX_ENABLE -DEXT_RASTER_ENABLE -DEXT_OM_ENABLE" \
+        ./ci/blackbox.sh --driver=rtlsim --app=draw3d \
+        --args="-w 32 -h 32 -t triangle.cgltrace -o /tmp/draw3d_out.png"
+
+    # ---- multi-extension elaboration sanity -----------------------------
+    CONFIGS="-DEXT_TEX_ENABLE -DEXT_RASTER_ENABLE -DEXT_OM_ENABLE" \
+        ./ci/blackbox.sh --driver=rtlsim --app=tex_smoke
+    CONFIGS="-DEXT_TEX_ENABLE -DEXT_RASTER_ENABLE -DEXT_OM_ENABLE" \
+        ./ci/blackbox.sh --driver=rtlsim --app=raster_smoke
+    CONFIGS="-DEXT_TEX_ENABLE -DEXT_RASTER_ENABLE -DEXT_OM_ENABLE" \
+        ./ci/blackbox.sh --driver=rtlsim --app=om_smoke
+
+    # NOTE: draw3d (full-pipeline test) is gated on raster bcoord/pos_mask
+    # CSR plumbing which is deferred. SimX support is gated on simx_v3
+    # Phase 5 — graphics ops abort on --driver=simx until the SimX
+    # functional model lands.
+
+    echo "graphics tests done!"
+}
+
 opencl()
 {
     echo "begin opencl tests..."
@@ -869,7 +917,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--graphics] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -894,6 +942,9 @@ while [ "$1" != "" ]; do
                 ;;
         --dxa )
                 tests+=("dxa")
+                ;;
+        --graphics )
+                tests+=("graphics")
                 ;;
         --opencl )
                 tests+=("opencl")
@@ -947,6 +998,7 @@ while [ "$1" != "" ]; do
                 tests+=("kernel")
                 tests+=("regression")
                 tests+=("dxa")
+                tests+=("graphics")
                 tests+=("opencl")
                 tests+=("cache")
                 tests+=("vm")

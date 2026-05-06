@@ -32,6 +32,10 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     VX_sched_csr_if.slave       sched_csr_if,
     VX_dcr_csr_if.slave         dcr_csr_if,
+`ifdef EXT_RASTER_ENABLE
+    // Raster CSR read port (per-lane data; latched per pop in VX_raster_csr).
+    VX_sfu_csr_if.master        raster_csr_if,
+`endif
     VX_execute_if.slave         execute_if,
     VX_result_if.master         result_if
 );
@@ -140,12 +144,49 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         `VX_CSR_CTA_THREAD_ID_X : csr_read_data = cta_tid_x;
         `VX_CSR_CTA_THREAD_ID_Y : csr_read_data = cta_tid_y;
         `VX_CSR_CTA_THREAD_ID_Z : csr_read_data = cta_tid_z;
+    `ifdef EXT_RASTER_ENABLE
+        // Raster CSRs are per-lane (different bcoords per quad corner) and
+        // sourced from VX_raster_csr's per-warp+thread storage.
+        `VX_CSR_RASTER_POS_MASK,
+        `VX_CSR_RASTER_PID,
+        `VX_CSR_RASTER_BCOORD_X0,
+        `VX_CSR_RASTER_BCOORD_X1,
+        `VX_CSR_RASTER_BCOORD_X2,
+        `VX_CSR_RASTER_BCOORD_X3,
+        `VX_CSR_RASTER_BCOORD_Y0,
+        `VX_CSR_RASTER_BCOORD_Y1,
+        `VX_CSR_RASTER_BCOORD_Y2,
+        `VX_CSR_RASTER_BCOORD_Y3,
+        `VX_CSR_RASTER_BCOORD_Z0,
+        `VX_CSR_RASTER_BCOORD_Z1,
+        `VX_CSR_RASTER_BCOORD_Z2,
+        `VX_CSR_RASTER_BCOORD_Z3 : csr_read_data = raster_csr_if.read_data;
+    `endif
         default : begin
             csr_read_data = {NUM_LANES{csr_read_data_ro | csr_read_data_rw}};
             csr_rd_enable = 1;
         end
         endcase
     end
+
+`ifdef EXT_RASTER_ENABLE
+    // Drive raster CSR read port. The CSR is read at every csr_req_valid
+    // (the slave-side mux above selects when csr_addr is in raster range).
+    assign raster_csr_if.read_enable = csr_req_valid;
+    assign raster_csr_if.read_uuid   = execute_if.data.header.uuid;
+    assign raster_csr_if.read_wid    = execute_if.data.header.wid;
+    assign raster_csr_if.read_pid    = execute_if.data.header.pid;
+    assign raster_csr_if.read_tmask  = execute_if.data.header.tmask;
+    assign raster_csr_if.read_addr   = csr_read_addr;
+    // Write side unused for raster (read-only state); tied off.
+    assign raster_csr_if.write_enable = 1'b0;
+    assign raster_csr_if.write_addr   = '0;
+    assign raster_csr_if.write_data   = '0;
+    assign raster_csr_if.write_uuid   = '0;
+    assign raster_csr_if.write_wid    = '0;
+    assign raster_csr_if.write_pid    = '0;
+    assign raster_csr_if.write_tmask  = '0;
+`endif
 
     // CSR write
 

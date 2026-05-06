@@ -18,6 +18,15 @@
 #ifdef EXT_DXA_ENABLE
 #include "dxa_core.h"
 #endif
+#ifdef EXT_TEX_ENABLE
+#include "tex_core.h"
+#endif
+#ifdef EXT_OM_ENABLE
+#include "om_core.h"
+#endif
+#ifdef EXT_RASTER_ENABLE
+#include "raster_core.h"
+#endif
 
 namespace vortex {
 

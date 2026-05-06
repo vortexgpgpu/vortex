@@ -521,6 +521,58 @@ inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef EXT_TEX_ENABLE
+
+enum class TexType { SAMPLE };
+
+struct IntrTexArgs {
+  uint32_t stage : 2;  // texture stage (funct2 of CUSTOM1.R4)
+};
+
+inline std::ostream &operator<<(std::ostream &os, const TexType& type) {
+  switch (type) {
+  case TexType::SAMPLE: os << "TEX.SAMPLE"; break;
+  default: os << "?"; break;
+  }
+  return os;
+}
+
+#endif
+
+#ifdef EXT_OM_ENABLE
+
+enum class OmType { WRITE };
+
+struct IntrOmArgs {};
+
+inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
+  switch (type) {
+  case OmType::WRITE: os << "OM.WRITE"; break;
+  default: os << "?"; break;
+  }
+  return os;
+}
+
+#endif
+
+#ifdef EXT_RASTER_ENABLE
+
+enum class RasterType { POP };
+
+struct IntrRasterArgs {};
+
+inline std::ostream &operator<<(std::ostream &os, const RasterType& type) {
+  switch (type) {
+  case RasterType::POP: os << "RASTER.POP"; break;
+  default: os << "?"; break;
+  }
+  return os;
+}
+
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class CsrType {
   CSRRW,
   CSRRS,
@@ -599,6 +651,15 @@ using OpType = std::variant<
 #ifdef EXT_TCU_ENABLE
 , TcuType
 #endif
+#ifdef EXT_TEX_ENABLE
+, TexType
+#endif
+#ifdef EXT_OM_ENABLE
+, OmType
+#endif
+#ifdef EXT_RASTER_ENABLE
+, RasterType
+#endif
 >;
 
 using IntrArgs = std::variant<
@@ -616,6 +677,15 @@ using IntrArgs = std::variant<
 #endif
 #ifdef EXT_TCU_ENABLE
 , IntrTcuArgs
+#endif
+#ifdef EXT_TEX_ENABLE
+, IntrTexArgs
+#endif
+#ifdef EXT_OM_ENABLE
+, IntrOmArgs
+#endif
+#ifdef EXT_RASTER_ENABLE
+, IntrRasterArgs
 #endif
 >;
 

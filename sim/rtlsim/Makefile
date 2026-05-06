@@ -65,6 +65,24 @@ ifneq (,$(filter -DEXT_DXA_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/dxa
 endif
 
+# Add TEX extension sources
+ifneq (,$(filter -DEXT_TEX_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/tex/VX_tex_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/tex
+endif
+
+# Add RASTER extension sources
+ifneq (,$(filter -DEXT_RASTER_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/raster/VX_raster_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/raster
+endif
+
+# Add OM extension sources
+ifneq (,$(filter -DEXT_OM_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/om/VX_om_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/om
+endif
+
 # Add V extension sources
 ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv

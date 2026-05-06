@@ -30,6 +30,20 @@
     `define L1_ENABLE
 `endif
 
+`ifdef EXT_TEX_ENABLE
+    // Per-LOD mip-offset DCR slot: 6 base entries + lod (lod < VX_TEX_LOD_MAX)
+    `define VX_DCR_TEX_MIPOFF(lod) (`VX_DCR_TEX_MIPOFF_BASE + (lod))
+`endif
+
+// Convenience flag: any graphics extension is enabled.
+`ifdef EXT_TEX_ENABLE
+    `define EXT_GFX_ANY_ENABLE
+`elsif EXT_RASTER_ENABLE
+    `define EXT_GFX_ANY_ENABLE
+`elsif EXT_OM_ENABLE
+    `define EXT_GFX_ANY_ENABLE
+`endif
+
 `ifndef NDEBUG
 `define UUID_ENABLE
 `else
@@ -407,6 +421,26 @@
     assign itf.rsp_valid = 0; \
     assign itf.rsp_data  = '0; \
     `UNUSED_VAR (itf.rsp_ready)
+
+// Graphics extension bus_if forwarders (request-only for RASTER/OM,
+// request+response for TEX).
+`define ASSIGN_VX_RASTER_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready
+
+`define ASSIGN_VX_OM_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready
+
+`define ASSIGN_VX_TEX_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_data  = dst.rsp_data; \
+    assign dst.rsp_ready = src.rsp_ready
 
 `define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
     /* verilator lint_off GENUNNAMED */ \
