@@ -56,6 +56,10 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
         byteen: '0,
         flags:  MEM_FLAGS_WIDTH'(1 << MEM_REQ_FLAG_FLUSH),
         tag:    '0
+    `ifdef EXT_A_ENABLE
+        ,
+        amo:    amo_req_t'('0)
+    `endif
     };
     assign dcr_flush_if.done      = flush_bus_if.rsp_valid;
     assign flush_bus_if.rsp_ready = 1'b1;

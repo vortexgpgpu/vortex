@@ -36,7 +36,7 @@ FLEN = "expr: 64 if $EXT_D_ENABLE else 32"
 EXT_M_ENABLE = true
 EXT_F_ENABLE = true
 EXT_C_ENABLE = false
-EXT_A_ENABLE = false
+EXT_A_ENABLE = true
 EXT_V_ENABLE = false
 
 EXT_ZICOND_ENABLE = true
@@ -157,6 +157,10 @@ FDIV_PE_RATIO = 1
 FSQRT_PE_RATIO= 1
 FCVT_PE_RATIO = 1
 FNCP_PE_RATIO = 1
+
+[amo]
+# LR/SC reservation table size.
+AMO_RS_SIZE = 4
 
 [vpu]
 NUM_VPU_LANES = "expr: $SIMD_WIDTH"

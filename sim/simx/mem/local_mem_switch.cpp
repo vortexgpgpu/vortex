@@ -50,17 +50,36 @@ void LocalMemSwitch::on_tick() {
   if (!ReqIn.empty()) {
     auto& in_req = ReqIn.peek();
 
+    const bool in_is_amo = in_req.is_amo();
+
     LsuReq out_dc_req(in_req.mask.size());
     out_dc_req.write = in_req.write;
     out_dc_req.tag   = in_req.tag;
     out_dc_req.cid   = in_req.cid;
     out_dc_req.uuid  = in_req.uuid;
+    out_dc_req.wid   = in_req.wid;
+    // AMO sideband flows down only to the dcache path. LMEM-AMO is
+    // out of scope (proposal §6); enforced below.
+    if (in_is_amo) {
+      out_dc_req.amo = in_req.amo;
+    }
 
-    LsuReq out_lmem_req(out_dc_req);
+    LsuReq out_lmem_req(in_req.mask.size());
+    out_lmem_req.write = in_req.write;
+    out_lmem_req.tag   = in_req.tag;
+    out_lmem_req.cid   = in_req.cid;
+    out_lmem_req.uuid  = in_req.uuid;
+    out_lmem_req.wid   = in_req.wid;
+    // The lmem path never carries AMO traffic — left default-zero.
 
     for (uint32_t i = 0; i < in_req.mask.size(); ++i) {
       if (in_req.mask.test(i)) {
         auto type = get_addr_type(in_req.addrs.at(i));
+        // §3.13: AMO on Shared (LMEM) is unsupported; bail loudly so a
+        // future LMEM-AMO mistake doesn't silently route through the
+        // LMEM path (which has no AMO machinery).
+        assert(!(in_is_amo && type == AddrType::Shared)
+               && "AMO on Shared (LMEM) is unsupported in this build");
         if (type == AddrType::Shared) {
           out_lmem_req.mask.set(i);
           out_lmem_req.addrs.at(i)  = in_req.addrs.at(i);

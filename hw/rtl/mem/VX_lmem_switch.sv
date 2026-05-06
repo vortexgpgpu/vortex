@@ -25,7 +25,8 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     VX_lsu_mem_if.master    global_out_if,
     VX_lsu_mem_if.master    local_out_if
 );
-    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + MEM_FLAGS_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
+    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + MEM_FLAGS_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH
+                         + (`EXT_A_ENABLED * `NUM_LSU_LANES * AMO_REQ_BITS);
     localparam RSP_DATAW = `NUM_LSU_LANES + `NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
 
     wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
@@ -60,6 +61,10 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
             lsu_in_if.req_data.byteen,
             lsu_in_if.req_data.flags,
             lsu_in_if.req_data.tag
+        `ifdef EXT_A_ENABLE
+            ,
+            lsu_in_if.req_data.amo
+        `endif
         }),
         .ready_in  (req_global_ready),
         .valid_out (global_out_if.req_valid),
@@ -83,12 +88,36 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
             lsu_in_if.req_data.byteen,
             lsu_in_if.req_data.flags,
             lsu_in_if.req_data.tag
+        `ifdef EXT_A_ENABLE
+            ,
+            // §3.13: AMO on Shared (LMEM) is unsupported. The local
+            // path strips the AMO sideband; the assertion below fires
+            // if any AMO lane ever ends up on this path.
+            {(`NUM_LSU_LANES * AMO_REQ_BITS){1'b0}}
+        `endif
         }),
         .ready_in  (req_local_ready),
         .valid_out (local_out_if.req_valid),
         .data_out  (local_out_if.req_data),
         .ready_out (local_out_if.req_ready)
     );
+
+`ifdef EXT_A_ENABLE
+    // Synth-time assertion mirror of SimX's local_mem_switch guard
+    // (sim/simx/mem/local_mem_switch.cpp:65). AMO on Shared/LMEM is
+    // out of scope (proposal §6).
+    always_comb begin
+        if (lsu_in_if.req_valid) begin
+            for (int i = 0; i < `NUM_LSU_LANES; i++) begin
+                if (lsu_in_if.req_data.mask[i]
+                 && lsu_in_if.req_data.amo[i].valid
+                 && is_addr_local_mask[i]) begin
+                    `ASSERT(0, ("AMO on Shared (LMEM) is unsupported"));
+                end
+            end
+        end
+    end
+`endif
 
     VX_stream_arb #(
         .NUM_INPUTS (2),

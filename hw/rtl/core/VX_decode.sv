@@ -57,7 +57,9 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire [4:0] rs3 = instr[31:27];
 
     `UNUSED_VAR (funct2)
+`ifndef EXT_A_ENABLE
     `UNUSED_VAR (funct5)
+`endif
     `UNUSED_VAR (frm_is_dyn)
 
     wire is_itype_sh   = funct3[0] && ~funct3[1];
@@ -146,6 +148,28 @@ module VX_decode import VX_gpu_pkg::*; #(
             3'h5: m_type = INST_M_DIVU;
             3'h6: m_type = INST_M_REM;
             3'h7: m_type = INST_M_REMU;
+        endcase
+    end
+`endif
+
+`ifdef EXT_A_ENABLE
+    // Map RVA funct5 (instr[31:27]) to our internal INST_AMO_* enum.
+    // Mirrors sim/simx/decode.cpp:599-622.
+    reg [INST_AMO_BITS-1:0] amo_type;
+    always @(*) begin
+        case (funct5)
+            5'h00: amo_type = INST_AMO_BITS'(INST_AMO_ADD);
+            5'h01: amo_type = INST_AMO_BITS'(INST_AMO_SWAP);
+            5'h02: amo_type = INST_AMO_BITS'(INST_AMO_LR);
+            5'h03: amo_type = INST_AMO_BITS'(INST_AMO_SC);
+            5'h04: amo_type = INST_AMO_BITS'(INST_AMO_XOR);
+            5'h08: amo_type = INST_AMO_BITS'(INST_AMO_OR);
+            5'h0c: amo_type = INST_AMO_BITS'(INST_AMO_AND);
+            5'h10: amo_type = INST_AMO_BITS'(INST_AMO_MIN);
+            5'h14: amo_type = INST_AMO_BITS'(INST_AMO_MAX);
+            5'h18: amo_type = INST_AMO_BITS'(INST_AMO_MINU);
+            5'h1c: amo_type = INST_AMO_BITS'(INST_AMO_MAXU);
+            default: amo_type = INST_AMO_BITS'(INST_AMO_LR);
         endcase
     end
 `endif
@@ -309,6 +333,30 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.pack     = 0;
                 op_args.lsu.offset   = 0;
             end
+        `ifdef EXT_A_ENABLE
+            INST_AMO: begin
+                // RVA: funct3 = 010 (.W) or 011 (.D); we route AMO down
+                // the LSU's load path (every AMO returns to rd). The
+                // bank does the RMW commit; LSU just packs the AMO
+                // sideband on the dcache request.
+                ex_type = EX_LSU;
+                op_type = INST_OP_BITS'({1'b0, funct3}); // load-style width
+                op_args.lsu.is_store = 0;
+                op_args.lsu.is_float = 0;
+                op_args.lsu.pack     = 0;
+                op_args.lsu.offset   = 0;     // AMO has no immediate offset
+                op_args.lsu.amo_valid = 1'b1;
+                op_args.lsu.amo_op   = amo_type;
+                op_args.lsu.amo_aq   = instr[26];
+                op_args.lsu.amo_rl   = instr[25];
+                `USED_IREG (rd);
+                `USED_IREG (rs1);
+                // LR has rs2=x0; the LSU just sees rs2_data=0 as rhs.
+                if (amo_type != INST_AMO_BITS'(INST_AMO_LR)) begin
+                    `USED_IREG (rs2);
+                end
+            end
+        `endif
             INST_SYS : begin
                 if (funct3[1:0] != 0) begin
                     ex_type = EX_SFU;

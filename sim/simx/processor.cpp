@@ -60,6 +60,8 @@ ProcessorImpl::ProcessorImpl()
   }
 
   // create L3 cache
+  // §3.1.3: when L3 is enabled it is the LLC; otherwise the L3 instance
+  // is a transparent bypass arbiter and the L2 (or L1) is the LLC.
   l3cache_ = Cache::Create("l3cache", Cache::Config{
     !L3_ENABLED,
     log2ceil(L3_CACHE_SIZE),  // C
@@ -75,8 +77,32 @@ ProcessorImpl::ProcessorImpl()
     L3_MSHR_SIZE,             // mshr size
     2,                        // pipeline latency
     L3_REPL_POLICY,           // replacement policy
+    L3_ENABLED != 0,          // is_llc when L3 is the LLC
     }
   );
+
+#if EXT_A_ENABLED
+  // §3.1.5 build-time invariant: every cache strictly above the LLC
+  // must be write-through. A write-back intermediate could absorb a
+  // store from hart B without the LLC seeing it; a later SC from hart
+  // A on the same line would spuriously succeed (RVA spec violation:
+  // RVA permits spurious failure, not spurious success).
+#if L3_ENABLED
+  static_assert(!DCACHE_WRITEBACK, "AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L3 is the LLC");
+  static_assert(!L2_WRITEBACK,     "AMO requires write-through L2 (L2_WRITEBACK=0) when L3 is the LLC");
+#elif L2_ENABLED
+  static_assert(!DCACHE_WRITEBACK, "AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L2 is the LLC");
+  // L1 is unconstrained when L1 itself is the LLC.
+#endif
+
+  // Non-LLC AMO passthrough (proposal §3.8) is implemented in the
+  // bank pipeline: AmoProbe entries probe-and-invalidate the local
+  // line then forward via mem_req_out tagged with
+  // AMO_PASSTHRU_TAG_FLAG so the response routes back to core_rsp_out
+  // without installing a fill. Multi-level (L1+L2 / L1+L2+L3) builds
+  // exercise this path; L1-only builds keep the dcache as the LLC and
+  // never enter it.
+#endif
 
   // connect L3 core interfaces
   for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {

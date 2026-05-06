@@ -14,7 +14,12 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_mem_coalescer #(
+module VX_mem_coalescer
+`ifdef EXT_A_ENABLE
+    import VX_gpu_pkg::amo_req_t;
+    import VX_gpu_pkg::AMO_REQ_BITS;
+`endif
+#(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_REQS      = 1,
     parameter ADDR_WIDTH    = 32,
@@ -49,6 +54,10 @@ module VX_mem_coalescer #(
     input wire [NUM_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] in_req_flags,
     input wire [NUM_REQS-1:0][DATA_IN_WIDTH-1:0] in_req_data,
     input wire [TAG_WIDTH-1:0]          in_req_tag,
+`ifdef EXT_A_ENABLE
+    input  amo_req_t [NUM_REQS-1:0]     in_req_amo,
+    output amo_req_t [OUT_REQS-1:0]     out_req_amo,
+`endif
     output wire                         in_req_ready,
 
     // Input response
@@ -115,6 +124,10 @@ module VX_mem_coalescer #(
     logic [OUT_REQS-1:0] batch_valid_r, batch_valid_n;
     logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] seed_addr_r, seed_addr_n;
     logic [OUT_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] seed_flags_r, seed_flags_n;
+`ifdef EXT_A_ENABLE
+    amo_req_t [OUT_REQS-1:0] seed_amo_r, seed_amo_n;
+    amo_req_t [OUT_REQS-1:0] out_req_amo_r, out_req_amo_n;
+`endif
     logic [NUM_REQS-1:0] addr_matches_r, addr_matches_n;
     logic [NUM_REQS-1:0] req_rem_mask_r, req_rem_mask_n;
 
@@ -151,8 +164,42 @@ module VX_mem_coalescer #(
         assign seed_addr_n[i]  = addr_base[batch_idx];
         assign seed_flags_n[i] = req_flags[batch_idx];
 
+    `ifdef EXT_A_ENABLE
+        // Per-batch AMO seed: pick the active lane's amo sideband.
+        amo_req_t [DATA_RATIO-1:0] req_amos;
+        for (genvar j = 0; j < DATA_RATIO; ++j) begin : g_req_amos
+            assign req_amos[j] = in_req_amo[DATA_RATIO * i + j];
+        end
+        assign seed_amo_n[i] = req_amos[batch_idx];
+
+        // Proposal §D6: same-line AMO lanes must serialize, not
+        // coalesce. With SIMT lockstep, all 4 threads of a warp
+        // typically issue an AMO to the same shared word in the same
+        // cycle — without this restriction the address-merge logic
+        // below would fold them into a single cache request and drop
+        // (DATA_RATIO-1) AMO commits. When any active lane in this
+        // batch has amo.valid, force addr_matches to only the seed
+        // lane so the remaining AMO lanes are processed in subsequent
+        // batches via req_rem_mask.
+        wire batch_has_amo;
+        wire [DATA_RATIO-1:0] amo_in_batch;
+        for (genvar j = 0; j < DATA_RATIO; ++j) begin : g_amo_in_batch
+            assign amo_in_batch[j] = req_amos[j].valid
+                                  && in_req_mask[DATA_RATIO * i + j]
+                                  && req_rem_mask_r[DATA_RATIO * i + j];
+        end
+        assign batch_has_amo = | amo_in_batch;
+    `endif
+
         for (genvar j = 0; j < DATA_RATIO; ++j) begin : g_addr_matches_n
+        `ifdef EXT_A_ENABLE
+            assign addr_matches_n[i * DATA_RATIO + j] =
+                (addr_base[j] == seed_addr_n[i])
+             && (~batch_has_amo
+                 || (DATA_RATIO_W'(j) == batch_idx));
+        `else
             assign addr_matches_n[i * DATA_RATIO + j] = (addr_base[j] == seed_addr_n[i]);
+        `endif
         end
     end
 
@@ -195,6 +242,9 @@ module VX_mem_coalescer #(
         out_req_byteen_n = out_req_byteen_r;
         out_req_data_n   = out_req_data_r;
         out_req_tag_n    = out_req_tag_r;
+    `ifdef EXT_A_ENABLE
+        out_req_amo_n    = out_req_amo_r;
+    `endif
         req_rem_mask_n   = req_rem_mask_r;
         in_req_ready_n   = 0;
 
@@ -218,6 +268,9 @@ module VX_mem_coalescer #(
             out_req_byteen_n= req_byteen_merged;
             out_req_data_n  = req_data_merged;
             out_req_tag_n   = {in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
+        `ifdef EXT_A_ENABLE
+            out_req_amo_n   = seed_amo_r;
+        `endif
             req_rem_mask_n  = is_last_batch ? '1 : (req_rem_mask_r & ~current_pmask);
             in_req_ready_n  = is_last_batch;
         end
@@ -225,15 +278,24 @@ module VX_mem_coalescer #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + 1 + 1 + NUM_REQS + OUT_REQS * (1 + 1 + OUT_ADDR_WIDTH + `UP(FLAGS_WIDTH) + OUT_ADDR_WIDTH + `UP(FLAGS_WIDTH) + DATA_OUT_SIZE + DATA_OUT_WIDTH) + OUT_TAG_WIDTH),
+        .DATAW  (1 + NUM_REQS + 1 + 1 + NUM_REQS + OUT_REQS * (1 + 1 + OUT_ADDR_WIDTH + `UP(FLAGS_WIDTH) + OUT_ADDR_WIDTH + `UP(FLAGS_WIDTH) + DATA_OUT_SIZE + DATA_OUT_WIDTH) + OUT_TAG_WIDTH
+                + (`EXT_A_ENABLED * 2 * OUT_REQS * AMO_REQ_BITS)),
         .RESETW (1 + NUM_REQS + 1),
         .INIT_VALUE ({1'b0, {NUM_REQS{1'b1}}, 1'b0})
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({state_n, req_rem_mask_n, out_req_valid_n, out_req_rw_n, addr_matches_n, batch_valid_n, out_req_mask_n, seed_addr_n, seed_flags_n, out_req_addr_n, out_req_flags_n, out_req_byteen_n, out_req_data_n, out_req_tag_n}),
-        .data_out ({state_r, req_rem_mask_r, out_req_valid_r, out_req_rw_r, addr_matches_r, batch_valid_r, out_req_mask_r, seed_addr_r, seed_flags_r, out_req_addr_r, out_req_flags_r, out_req_byteen_r, out_req_data_r, out_req_tag_r})
+        .data_in  ({state_n, req_rem_mask_n, out_req_valid_n, out_req_rw_n, addr_matches_n, batch_valid_n, out_req_mask_n, seed_addr_n, seed_flags_n, out_req_addr_n, out_req_flags_n, out_req_byteen_n, out_req_data_n, out_req_tag_n
+                  `ifdef EXT_A_ENABLE
+                  , seed_amo_n, out_req_amo_n
+                  `endif
+                  }),
+        .data_out ({state_r, req_rem_mask_r, out_req_valid_r, out_req_rw_r, addr_matches_r, batch_valid_r, out_req_mask_r, seed_addr_r, seed_flags_r, out_req_addr_r, out_req_flags_r, out_req_byteen_r, out_req_data_r, out_req_tag_r
+                  `ifdef EXT_A_ENABLE
+                  , seed_amo_r, out_req_amo_r
+                  `endif
+                  })
     );
 
     wire out_rsp_fire = out_rsp_valid && out_rsp_ready;
@@ -282,6 +344,9 @@ module VX_mem_coalescer #(
     end
     assign out_req_data   = out_req_data_r;
     assign out_req_tag    = out_req_tag_r;
+`ifdef EXT_A_ENABLE
+    assign out_req_amo    = out_req_amo_r;
+`endif
 
     assign in_req_ready = in_req_ready_n;
 

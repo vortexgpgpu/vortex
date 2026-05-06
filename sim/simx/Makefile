@@ -31,7 +31,7 @@ SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/decompressor.cpp $(SRC_DIR)/scoreboard.
 SRCS += $(SRC_DIR)/alu_unit.cpp $(SRC_DIR)/fpu_unit.cpp $(SRC_DIR)/lsu_unit.cpp $(SRC_DIR)/sfu_unit.cpp $(SRC_DIR)/wctl_unit.cpp $(SRC_DIR)/csr_unit.cpp
 SRCS += $(SRC_DIR)/mem/cache.cpp $(SRC_DIR)/mem/cache_cluster.cpp $(SRC_DIR)/mem/memory.cpp $(SRC_DIR)/mem/local_mem.cpp $(SRC_DIR)/mem/mem_coalescer.cpp
 SRCS += $(SRC_DIR)/mem/local_mem_switch.cpp $(SRC_DIR)/mem/lsu_mem_adapter.cpp
-SRCS += $(SRC_DIR)/dtm/debug_module.cpp $(SRC_DIR)/dtm/jtag_dtm.cpp $(SRC_DIR)/dtm/remote_bitbang.cpp
+SRCS += $(SRC_DIR)/amo/amo_unit.cpp $(SRC_DIR)/dtm/debug_module.cpp $(SRC_DIR)/dtm/jtag_dtm.cpp $(SRC_DIR)/dtm/remote_bitbang.cpp
 
 # Add V extension sources
 ifneq ($(filter -DEXT_V_ENABLE, $(XCONFIGS)),)

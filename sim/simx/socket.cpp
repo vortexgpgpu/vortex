@@ -46,9 +46,11 @@ public:
       ICACHE_MSHR_SIZE,       // mshr size
       1,                      // pipeline latency
       ICACHE_REPL_POLICY,     // replacement policy
+      false,                  // is_llc (icache never carries AMO state)
     });
 
     snprintf(sname, 100, "%s-dcache", name.c_str());
+    // §3.1.3: L1 dcache is the LLC iff neither L2 nor L3 is enabled.
     dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, Cache::Config{
       !DCACHE_ENABLED,
       log2ceil(DCACHE_SIZE),  // C
@@ -64,6 +66,7 @@ public:
       DCACHE_MSHR_SIZE,       // mshr size
       1,                      // pipeline latency
       DCACHE_REPL_POLICY,     // replacement policy
+      (DCACHE_ENABLED != 0) && (L2_ENABLED == 0) && (L3_ENABLED == 0), // is_llc
     });
 
     // find overlap

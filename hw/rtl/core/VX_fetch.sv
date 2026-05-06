@@ -185,6 +185,11 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign icache_bus_if.req_data.rw     = 1'b0;
     assign icache_bus_if.req_data.byteen = '1;
     assign icache_bus_if.req_data.data   = '0;
+`ifdef EXT_A_ENABLE
+    // icache never carries AMO traffic; tie sideband to zero so the
+    // bank's amo capture stays clean (no X bits propagating).
+    assign icache_bus_if.req_data.amo    = amo_req_t'('0);
+`endif
 
     // Icache Response
 

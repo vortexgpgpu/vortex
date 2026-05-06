@@ -188,7 +188,17 @@ module VX_cluster import VX_gpu_pkg::*;
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
-        .PASSTHRU       (!`L2_ENABLED)
+        .PASSTHRU       (!`L2_ENABLED),
+        // §3.1.2: L2 is the LLC iff L2_ENABLE && !L3_ENABLE.
+`ifdef L3_ENABLE
+        .IS_LLC         (0)
+`else
+    `ifdef L2_ENABLE
+        .IS_LLC         (1)
+    `else
+        .IS_LLC         (0)
+    `endif
+`endif
     ) l2cache (
         .clk            (clk),
         .reset          (reset),

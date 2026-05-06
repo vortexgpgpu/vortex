@@ -14,7 +14,8 @@
 `include "VX_define.vh"
 
 module VX_lsu_unit import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    parameter CORE_ID = 0
 ) (
     `SCOPE_IO_DECL
 
@@ -54,7 +55,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
         VX_lsu_slice #(
-            .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, block_idx)))
+            .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, block_idx))),
+            .CORE_ID     (CORE_ID)
         ) lsu_slice(
             `SCOPE_IO_BIND  (block_idx)
             .clk        (clk),

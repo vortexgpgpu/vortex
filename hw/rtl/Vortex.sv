@@ -54,6 +54,20 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     `STATIC_ASSERT(`IS_POW2(`NUM_CORES), ("NUM_CORES must be a power of 2"));
     `STATIC_ASSERT(`IS_POW2(`SOCKET_SIZE), ("SOCKET_SIZE must be a power of 2"));
 
+    // §3.1.5 invariant: every cache strictly above the LLC must be
+    // write-through. A WB intermediate could absorb a hart-B store
+    // without the LLC seeing it; a later SC from hart-A on the same
+    // line would spuriously succeed. RVA permits spurious failure,
+    // not spurious success.
+`ifdef EXT_A_ENABLE
+  `ifdef L3_ENABLE
+    `STATIC_ASSERT(`DCACHE_WRITEBACK == 0, ("AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L3 is the LLC"));
+    `STATIC_ASSERT(`L2_WRITEBACK == 0,     ("AMO requires write-through L2 (L2_WRITEBACK=0) when L3 is the LLC"));
+  `elsif L2_ENABLE
+    `STATIC_ASSERT(`DCACHE_WRITEBACK == 0, ("AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L2 is the LLC"));
+  `endif
+`endif
+
     VX_dcr_bus_if dcr_bus_if();
     assign dcr_bus_if.req_valid = dcr_req_valid;
     assign dcr_bus_if.req_data.rw = dcr_req_rw;
@@ -126,7 +140,13 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
-        .PASSTHRU       (!`L3_ENABLED)
+        .PASSTHRU       (!`L3_ENABLED),
+        // §3.1.2: L3 is the LLC whenever it's enabled.
+`ifdef L3_ENABLE
+        .IS_LLC         (1)
+`else
+        .IS_LLC         (0)
+`endif
     ) l3cache (
         .clk            (clk),
         .reset          (reset),

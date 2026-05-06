@@ -41,6 +41,7 @@ public:
 		uint16_t mshr_size;     // MSHR buffer size
 		uint8_t latency;        // pipeline latency
 		uint8_t repl_policy;    // replacement policy (ReplPolicy)
+		bool    is_llc;					// is last-level cache
 	};
 
 	struct PerfStats {
