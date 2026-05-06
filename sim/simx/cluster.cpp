@@ -50,6 +50,7 @@ public:
     // Create l2cache
 
     snprintf(sname, 100, "%s-l2cache", name.c_str());
+    // §3.1.3: L2 is the LLC iff L2 is enabled and L3 is not.
     l2cache_ = Cache::Create(sname, Cache::Config{
       !L2_ENABLED,
       log2ceil(L2_CACHE_SIZE),// C
@@ -65,6 +66,7 @@ public:
       L2_MSHR_SIZE,           // mshr size
       2,                      // pipeline latency
       L2_REPL_POLICY,         // replacement policy
+      (L2_ENABLED != 0) && (L3_ENABLED == 0), // is_llc
     });
 
 

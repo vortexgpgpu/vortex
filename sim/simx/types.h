@@ -392,6 +392,23 @@ struct IntrAmoArgs {
   uint32_t rl : 1;
 };
 
+// Per-request AMO sideband. Replaces the scattered is_amo/amo_op/
+// amo_width/amo_rhs/hart_id fields that used to live on LsuReq /
+// MemReq / bank_req_t. `valid` is the predicate (set on AMO requests,
+// clear on plain reads/writes); the rest is only inspected when valid.
+//
+// `hart_id` is the per-thread identity backing the LLC bank's
+// reservation table, computed via make_hart_id(cid, wid, tid). It
+// lives inside amo_req_t (not on the outer MemReq) because no
+// non-AMO codepath needs it.
+struct amo_req_t {
+  bool     valid   = false;
+  AmoType  op      = AmoType::LR;
+  uint8_t  width   = 0;   // 2 (.W) or 3 (.D); matches IntrAmoArgs.width
+  uint64_t rhs     = 0;   // rs2 for this lane
+  uint32_t hart_id = 0;   // make_hart_id(cid, wid, tid)
+};
+
 inline std::ostream &operator<<(std::ostream &os, const AmoType& type) {
   switch (type) {
   case AmoType::LR:      os << "LR"; break;
@@ -898,6 +915,12 @@ struct LsuReq {
   std::vector<std::shared_ptr<mem_block_t>> data;
   std::vector<uint64_t> byteen;
 
+  // Per-lane AMO sideband. amo[i].valid distinguishes AMO lanes from
+  // plain load/store lanes. wid is needed by LsuMemAdapter to compute
+  // the per-lane MemReq.cid via make_hart_id(cid, wid, tid).
+  std::vector<amo_req_t> amo;
+  uint32_t               wid = 0;
+
   LsuReq(uint32_t size)
     : mask(size)
     , addrs(size, 0)
@@ -907,7 +930,10 @@ struct LsuReq {
     , uuid(0)
     , data(size)
     , byteen(size, 0)
+    , amo(size)
   {}
+
+  bool is_amo() const { return !amo.empty() && amo[0].valid; }
 
   friend std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
     os << "rw=" << req.write << ", mask=" << req.mask << ", addr={";
@@ -973,6 +999,56 @@ enum class MemOp : uint8_t {
   AMO_MAXU  = 12,
 };
 
+inline bool memop_is_amo(MemOp op) {
+  return op >= MemOp::AMO_LR && op <= MemOp::AMO_MAXU;
+}
+
+inline MemOp amo_to_memop(AmoType t) {
+  switch (t) {
+  case AmoType::LR:      return MemOp::AMO_LR;
+  case AmoType::SC:      return MemOp::AMO_SC;
+  case AmoType::AMOADD:  return MemOp::AMO_ADD;
+  case AmoType::AMOSWAP: return MemOp::AMO_SWAP;
+  case AmoType::AMOXOR:  return MemOp::AMO_XOR;
+  case AmoType::AMOOR:   return MemOp::AMO_OR;
+  case AmoType::AMOAND:  return MemOp::AMO_AND;
+  case AmoType::AMOMIN:  return MemOp::AMO_MIN;
+  case AmoType::AMOMAX:  return MemOp::AMO_MAX;
+  case AmoType::AMOMINU: return MemOp::AMO_MINU;
+  case AmoType::AMOMAXU: return MemOp::AMO_MAXU;
+  }
+  std::abort();
+}
+
+inline AmoType memop_to_amo(MemOp op) {
+  switch (op) {
+  case MemOp::AMO_LR:    return AmoType::LR;
+  case MemOp::AMO_SC:    return AmoType::SC;
+  case MemOp::AMO_ADD:   return AmoType::AMOADD;
+  case MemOp::AMO_SWAP:  return AmoType::AMOSWAP;
+  case MemOp::AMO_XOR:   return AmoType::AMOXOR;
+  case MemOp::AMO_OR:    return AmoType::AMOOR;
+  case MemOp::AMO_AND:   return AmoType::AMOAND;
+  case MemOp::AMO_MIN:   return AmoType::AMOMIN;
+  case MemOp::AMO_MAX:   return AmoType::AMOMAX;
+  case MemOp::AMO_MINU:  return AmoType::AMOMINU;
+  case MemOp::AMO_MAXU:  return AmoType::AMOMAXU;
+  default:
+    std::abort();
+  }
+}
+
+// Globally-unique per-hart id. Lower bits carry the most entropy
+// (thread, then warp, then core) so the small per-bank reservation
+// table sees fewer hash collisions.
+inline uint32_t make_hart_id(uint32_t cid, uint32_t wid, uint32_t tid) {
+  constexpr uint32_t LOG_WARPS   = log2ceil(NUM_WARPS);
+  constexpr uint32_t LOG_THREADS = log2ceil(NUM_THREADS);
+  return (cid << (LOG_WARPS + LOG_THREADS))
+       | (wid << LOG_THREADS)
+       | tid;
+}
+
 struct MemReq {
   uint64_t addr;
   bool     write;
@@ -989,6 +1065,14 @@ struct MemReq {
   // `data` is null and `byteen` is unused.
   uint64_t                     byteen = 0;
   std::shared_ptr<mem_block_t> data;
+
+  // AMO sideband. `write` is unconditionally false for AMO requests,
+  // including SC: a missing line under SC must miss-and-return-failure
+  // rather than route into the WT write-miss fast path which would
+  // write-and-succeed. The hart identity used by the LLC bank's
+  // reservation table rides on `cid` (which LsuMemAdapter sets to
+  // make_hart_id(cid,wid,tid) per lane), not on a separate field.
+  amo_req_t amo;
 
   // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
   // Encoded as {notify_done, notify_bar_id}. The per-core LMEM-input

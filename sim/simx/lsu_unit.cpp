@@ -90,16 +90,32 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	// AGU formula: addr[t] = rs1[t] + stride * rs2[t] + offset
 	auto& state = states_.at(b);
 	state.addr_list.clear();
-	auto lsu_type = std::get<LsuType>(trace->op_type);
-	auto lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
+	auto* lsu_tag = std::get_if<LsuType>(&trace->op_type);
+	auto* amo_tag = std::get_if<AmoType>(&trace->op_type);
+	const bool is_amo = (amo_tag != nullptr);
 	auto& tmask = trace->tmask;
 	auto& rs1_data = trace->src_data[0];
 	auto& rs2_data = trace->src_data[1];
 	uint32_t num_threads = NUM_THREADS;
-	uint32_t data_bytes = 1u << (lsu_args.width & 0x3);
-	bool is_write = (lsu_type == LsuType::STORE);
-	int64_t  offset = lsu_args.offset;  // already signed via int32_t
-	uint32_t stride = lsu_args.stride;
+	uint32_t data_bytes;
+	bool is_write;
+	int64_t  offset;
+	uint32_t stride;
+	if (is_amo) {
+		auto amo_args = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
+		data_bytes = 1u << (amo_args.width & 0x3);
+		is_write   = false;        // AMO never writes via the regular store path
+		offset     = 0;            // AMO has no immediate offset
+		stride     = 0;            // single-word access — addr = rs1[t]
+	} else {
+		auto lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
+		data_bytes = 1u << (lsu_args.width & 0x3);
+		is_write   = (lsu_tag && *lsu_tag == LsuType::STORE);
+		offset     = lsu_args.offset;
+		stride     = lsu_args.stride;
+		if (is_write && lsu_args.width > 3)
+			std::abort();
+	}
 	for (uint32_t t = 0; t < num_threads; ++t) {
 		if (!tmask.test(t)) continue;
 		mem_addr_size_t e;
@@ -111,11 +127,13 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 		e.tid  = t;
 		if (is_write) {
 			e.data = rs2_data[t].u64;
+		} else if (is_amo) {
+			// AMOs use rs2 as the RMW operand (rhs). LR ignores it (rs2
+			// must be x0 per encoding) so the captured value is 0.
+			e.data = rs2_data[t].u64;
 		}
 		state.addr_list.push_back(e);
 	}
-	if (is_write && lsu_args.width > 3)
-		std::abort();
 	state.remain_addrs = state.addr_list.size();
 }
 
@@ -233,14 +251,23 @@ void LsuUnit::process_request_step(uint32_t b) {
 		return;
 
 	auto trace = state.req_queue.front();
-	if (!std::get_if<LsuType>(&trace->op_type)) {
-		// AMO ops are unsupported in this build (EXT_A_ENABLE=false). The
-		// LSU only talks through lmem_switch_; no functional bypass.
+	auto* lsu_tag = std::get_if<LsuType>(&trace->op_type);
+	auto* amo_tag = std::get_if<AmoType>(&trace->op_type);
+	if (!lsu_tag && !amo_tag) {
+		// Trace landed on the LSU with neither LsuType nor AmoType. This
+		// would only happen on a build mismatch (EXT_A_ENABLE off but
+		// decode emitted AmoType, or unrelated op_type alias).
 		std::abort();
 	}
-	auto lsu_type = std::get<LsuType>(trace->op_type);
-	bool is_fence = (lsu_type == LsuType::FENCE);
-	bool is_write = (lsu_type == LsuType::STORE);
+#if !EXT_A_ENABLED
+	if (amo_tag) {
+		// AMO ops are unsupported in this build.
+		std::abort();
+	}
+#endif
+	const bool is_amo   = (amo_tag != nullptr);
+	const bool is_fence = (lsu_tag && *lsu_tag == LsuType::FENCE);
+	const bool is_write = (lsu_tag && *lsu_tag == LsuType::STORE);
 
 	if (is_fence) {
 		// Engage fence lock; the next call will try to release it once
@@ -251,8 +278,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 		return;
 	}
 
-	// check pending queue capacity
-	if (!is_write && state.mshr.full()) {
+	// check pending queue capacity. AMO always needs a return → reserve
+	// like a load, even though it carries write-bearing semantics.
+	if ((!is_write || is_amo) && state.mshr.full()) {
 		if (!trace->log_once(true)) {
 			DT(4, this->name() << " queue-full: " << *trace);
 		}
@@ -269,8 +297,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 		this->compute_addrs(b, trace);
 	}
 
-	// check output backpressure
-	bool direct_commit = (is_write || 0 == state.addr_list.size());
+	// check output backpressure. AMO always returns to rd, so it is not
+	// direct-commit even though it carries a side-effect write.
+	bool direct_commit = (is_write || 0 == state.addr_list.size()) && !is_amo;
 	if (direct_commit && state.remain_addrs <= NUM_LSU_LANES) {
 		if (Outputs.at(b).full())
 			return; // stall
@@ -284,6 +313,12 @@ void LsuUnit::process_request_step(uint32_t b) {
 		// setup memory request
 		LsuReq lsu_req(NUM_LSU_LANES);
 		lsu_req.write = is_write;
+		lsu_req.wid = trace->wid;
+		uint8_t amo_width = 0;
+		if (is_amo) {
+			auto amoArgs = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
+			amo_width = amoArgs.width & 0x3;
+		}
 		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
 		std::vector<mem_addr_size_t> lane_entries(NUM_LSU_LANES);
 		for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
@@ -301,6 +336,15 @@ void LsuUnit::process_request_step(uint32_t b) {
 				}
 				lsu_req.data.at(i) = block;
 				lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
+			} else if (is_amo) {
+				// Per-lane AMO sideband. op/width are uniform across lanes
+				// of one warp instruction; rhs and hart_id are per-lane.
+				auto& al = lsu_req.amo.at(i);
+				al.valid   = true;
+				al.op      = *amo_tag;
+				al.width   = amo_width;
+				al.rhs     = entry.data;
+				al.hart_id = make_hart_id(trace->cid, trace->wid, entry.tid);
 			}
 			--state.remain_addrs;
 			if (state.remain_addrs == 0)
@@ -311,9 +355,20 @@ void LsuUnit::process_request_step(uint32_t b) {
 		bool is_eop = (state.remain_addrs == 0);
 
 		uint32_t tag = 0;
-		if (!is_write) {
-			IntrLsuArgs lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
-			tag = state.mshr.allocate({trace, count, is_eop, std::move(lane_entries), lsu_args, true});
+		if (!is_write || is_amo) {
+			// MSHR allocation: AMOs need a return, so they're tracked in
+			// the load-style MSHR. Encode AMO width in lsu_args so the
+			// existing response formatter sign-extends correctly.
+			IntrLsuArgs entry_args{};
+			if (is_amo) {
+				auto amoArgs = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
+				entry_args.width  = amoArgs.width & 0x3;
+				entry_args.stride = 0;
+				entry_args.offset = 0;
+			} else {
+				entry_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
+			}
+			tag = state.mshr.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
 		}
 		lsu_req.tag  = tag;
 		lsu_req.cid  = trace->cid;

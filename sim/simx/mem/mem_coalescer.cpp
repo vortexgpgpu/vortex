@@ -113,10 +113,13 @@ void MemCoalescer::on_tick() {
 
   uint64_t addr_mask = ~uint64_t(line_size_-1);
 
+  const bool in_is_amo = in_req.is_amo();
+
   BitVector<> out_mask(output_size_);
   std::vector<uint64_t> out_addrs(output_size_);
   std::vector<std::shared_ptr<mem_block_t>> out_data(output_size_);
   std::vector<uint64_t> out_byteen(output_size_, 0);
+  std::vector<amo_req_t> out_amo(output_size_);
 
   BitVector<> cur_mask(input_size_);
 
@@ -129,14 +132,27 @@ void MemCoalescer::on_tick() {
       uint64_t seed_addr = in_req.addrs.at(i) & addr_mask;
       cur_mask.set(i);
 
-      // coalesce matching requests
-      for (uint32_t s = r + 1; s < output_ratio_; ++s) {
-        uint32_t j = o * output_ratio_ + s;
-        if (sent_mask_.test(j) || !in_req.mask.test(j))
-          continue;
-        uint64_t match_addr = in_req.addrs.at(j) & addr_mask;
-        if (match_addr == seed_addr) {
-          cur_mask.set(j);
+      // RVA gives no commutativity guarantee across AMO operands —
+      // do not coalesce AMO lanes that share a line. Each AMO lane
+      // emits its own bank request (proposal §D6). For non-AMO,
+      // matching addresses still coalesce as before.
+      if (!in_is_amo) {
+        for (uint32_t s = r + 1; s < output_ratio_; ++s) {
+          uint32_t j = o * output_ratio_ + s;
+          if (sent_mask_.test(j) || !in_req.mask.test(j))
+            continue;
+          uint64_t match_addr = in_req.addrs.at(j) & addr_mask;
+          if (match_addr == seed_addr) {
+            cur_mask.set(j);
+          }
+        }
+      }
+
+      if (in_is_amo) {
+        // Carry this lane's full AMO sideband (op, width, rhs, hart_id)
+        // through the output slot. No coalescing across lanes.
+        if (i < in_req.amo.size()) {
+          out_amo.at(o) = in_req.amo.at(i);
         }
       }
 
@@ -165,7 +181,10 @@ void MemCoalescer::on_tick() {
       }
 
       out_mask.set(o);
-      out_addrs.at(o) = seed_addr;
+      // AMOs need the byte-level address downstream so the bank can
+      // place the RMW result at the correct offset within the line.
+      // Non-AMO requests stay line-aligned (no semantic change).
+      out_addrs.at(o) = in_is_amo ? in_req.addrs.at(i) : seed_addr;
       break;
     }
   }
@@ -173,8 +192,10 @@ void MemCoalescer::on_tick() {
   assert(!out_mask.none());
 
   uint32_t tag = 0;
-  if (!in_req.write) {
-    // allocate a response tag for read requests
+  if (!in_req.write || in_is_amo) {
+    // Allocate a response tag for read requests and AMOs (which always
+    // return rd). Without the AMO branch the response would route through
+    // the write path and the LSU MSHR replay would never fire.
     tag = pending_rd_reqs_.allocate(pending_req_t{in_req.tag, cur_mask});
   }
 
@@ -188,6 +209,10 @@ void MemCoalescer::on_tick() {
   out_req.uuid = in_req.uuid;
   out_req.data = std::move(out_data);
   out_req.byteen = std::move(out_byteen);
+  out_req.wid = in_req.wid;
+  if (in_is_amo) {
+    out_req.amo = std::move(out_amo);
+  }
 
   // send memory request
   ReqOut.send(out_req, delay_);

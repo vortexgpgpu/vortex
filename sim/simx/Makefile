@@ -8,7 +8,7 @@ SRC_DIR = $(VORTEX_HOME)/sim/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
+CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/amo -I$(SRC_DIR)/dxa -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
@@ -29,6 +29,7 @@ SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/scoreboard.cpp $(SRC_DIR)/sequencer.cpp
 SRCS += $(SRC_DIR)/alu_unit.cpp $(SRC_DIR)/fpu_unit.cpp $(SRC_DIR)/lsu_unit.cpp $(SRC_DIR)/sfu_unit.cpp $(SRC_DIR)/wctl_unit.cpp $(SRC_DIR)/csr_unit.cpp
 SRCS += $(SRC_DIR)/mem/cache.cpp $(SRC_DIR)/mem/cache_cluster.cpp $(SRC_DIR)/mem/memory.cpp $(SRC_DIR)/mem/local_mem.cpp $(SRC_DIR)/mem/mem_coalescer.cpp
 SRCS += $(SRC_DIR)/mem/local_mem_switch.cpp $(SRC_DIR)/mem/lsu_mem_adapter.cpp
+SRCS += $(SRC_DIR)/amo/amo_unit.cpp
 
 # Add V extension sources
 ifneq ($(filter -DEXT_V_ENABLE, $(XCONFIGS)),)

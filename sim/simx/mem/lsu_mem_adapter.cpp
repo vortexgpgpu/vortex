@@ -35,6 +35,14 @@ LsuMemAdapter::LsuMemAdapter(
       MemReq mr{ req.addrs.at(0), req.write, AddrType::Global, req.tag, req.cid, req.uuid };
       mr.data   = req.data.at(0);
       mr.byteen = req.byteen.at(0);
+      if (!req.amo.empty() && req.amo.at(0).valid) {
+        // AMO MemReq.write is unconditionally false (proposal §3.4):
+        // a missing line under SC must miss-and-return-failure rather
+        // than route into the WT write-miss fast path.
+        mr.write = false;
+        mr.amo   = req.amo.at(0);
+        mr.op    = amo_to_memop(req.amo.at(0).op);
+      }
       return mr;
     });
     RspIn.at(0).bind(&RspOut, [](const MemRsp& rsp) {
@@ -122,6 +130,12 @@ void LsuMemAdapter::on_tick() {
       out_req.uuid   = in_req.uuid;
       out_req.data   = in_req.data.at(i);
       out_req.byteen = in_req.byteen.at(i);
+      if (i < in_req.amo.size() && in_req.amo.at(i).valid) {
+        // Same encoding rules as the single-lane fast path above.
+        out_req.write = false;
+        out_req.amo   = in_req.amo.at(i);
+        out_req.op    = amo_to_memop(in_req.amo.at(i).op);
+      }
 
       if (ReqOut.at(i).try_send(out_req, delay_)) {
         DT(4, this->name() << " req" << i << ": " << out_req);

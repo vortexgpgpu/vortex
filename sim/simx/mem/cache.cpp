@@ -15,6 +15,7 @@
 #include "mem_block_pool.h"
 #include "debug.h"
 #include "types.h"
+#include "amo_unit.h"
 #include <cstring>
 #include <list>
 #include <queue>
@@ -295,6 +296,13 @@ struct bank_req_t {
   std::shared_ptr<mem_block_t> data;
   uint64_t byteen;
 
+  // AMO sideband (LLC bank only). When `amo.valid`, `write` is false
+  // and the bank handles RMW commit through the AmoUnit in the same
+  // cycle as a write-hit. `data` is null for AMOs — `amo.rhs` carries
+  // rs2. The reservation key is `amo.hart_id` (computed upstream as
+  // make_hart_id(cid, wid, tid)).
+  amo_req_t amo;
+
   bank_req_t() {
     this->reset();
   }
@@ -310,6 +318,7 @@ struct bank_req_t {
     skip_core_rsp = false;
     data.reset();
     byteen = 0;
+    amo = amo_req_t{};
   }
 
   friend std::ostream &operator<<(std::ostream &os, const bank_req_t &req) {
@@ -467,7 +476,11 @@ public:
             const Cache::Config &config,
             const params_t &params,
             uint32_t bank_id)
-      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, params.lines_per_set), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)), rand_ctr_(0) {
+      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, params.lines_per_set), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)), rand_ctr_(0)
+#if EXT_A_ENABLED
+      , amo_unit_(__MAX(2u, (uint32_t)AMO_RS_SIZE))
+#endif
+  {
     this->on_reset();
   }
 
@@ -511,6 +524,9 @@ protected:
     flushing_ = false;
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
+#if EXT_A_ENABLED
+    amo_unit_.reset();
+#endif
   }
 
   void on_tick() {
@@ -582,7 +598,9 @@ private:
       // Conservative MSHR occupancy check: any request that may miss must
       // reserve a slot. Counts both currently-allocated entries and
       // in-flight pipe requests that haven't reached MSHR allocation yet.
-      bool needs_mshr = !core_req.write || config_.write_back;
+      // AMO requests always need a return → reserve like a load (proposal §3.7).
+      const bool is_amo = memop_is_amo(core_req.op);
+      bool needs_mshr = !core_req.write || config_.write_back || is_amo;
       if (needs_mshr && (mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
         ++perf_stats_.mshr_stalls;
         return;
@@ -597,6 +615,9 @@ private:
       bank_req.write   = core_req.write;
       bank_req.data    = core_req.data;
       bank_req.byteen  = core_req.byteen;
+      if (is_amo) {
+        bank_req.amo = core_req.amo;
+      }
       pipe_req_->push(bank_req);
       DT(3, this->name() << " core-req: " << core_req);
       ++pending_mshr_size_;
@@ -606,6 +627,88 @@ private:
       return;
     }
   }
+
+#if EXT_A_ENABLED
+  // AMO commit at the LLC bank. Returns false if the cycle stalls
+  // (caller leaves bank_req at the head of pipe_req_); returns true
+  // when the commit completes and the caller should pop pipe_req_.
+  // Mirrors the write-hit pattern: collect all stall conditions
+  // before any mutation.
+  bool commitAmo(const bank_req_t &bank_req, set_t &set, int hit_id, uint32_t set_id) {
+    auto &hit_line = set.lines.at(hit_id);
+    const uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
+    const uint32_t byte_off  = (uint32_t)(bank_req.addr & (MEM_BLOCK_SIZE - 1));
+    const AmoType  op        = bank_req.amo.op;
+    const uint8_t  width     = bank_req.amo.width;
+    const uint32_t hid       = bank_req.amo.hart_id;
+
+    const bool sc_fail  = (op == AmoType::SC) && !amo_unit_.check(hid, line_addr);
+    const bool do_store = (op != AmoType::LR) && !sc_fail;
+
+    // Stall checks (collect all before mutating).
+    if (this->core_rsp_out.full())
+      return false;
+    if (do_store && !config_.write_back && this->mem_req_out.full())
+      return false;
+
+    // Pure compute: read old word, derive new and ret.
+    uint64_t old_word = 0;
+    if (hit_line.data) {
+      old_word = amo_load_word(hit_line.data->data(), byte_off, width);
+    }
+    auto rmw = amo_unit_.compute(op, width, old_word, bank_req.amo.rhs);
+
+    // Build response payload: a fresh block with the relevant word at byte_off.
+    // For LR/AMO* the word carries old_word (LSU sext at width gives rd).
+    // For SC it carries 0 (success) or 1 (failure).
+    auto rsp_block = make_mem_block();
+    std::memset(rsp_block->data(), 0, rsp_block->size());
+    uint64_t rsp_word = (op == AmoType::SC) ? (sc_fail ? 1ull : 0ull)
+                                            : rmw.ret_word;
+    amo_store_word(rsp_block->data(), byte_off, width, rsp_word);
+
+    // Reservation update before commit so a same-cycle invalidate
+    // from the store path doesn't kill our just-installed entry.
+    if (op == AmoType::LR) {
+      amo_unit_.reserve(hid, line_addr);
+    } else if (op == AmoType::SC) {
+      // RVA: SC always invalidates the reservation, success or fail.
+      amo_unit_.clear(hid, line_addr);
+    }
+
+    if (do_store) {
+      // Merge the new word at byte_off into the line.
+      auto store_block = make_mem_block();
+      std::memset(store_block->data(), 0, store_block->size());
+      amo_store_word(store_block->data(), byte_off, width, rmw.new_word);
+      uint64_t byteen = amo_byteen(byte_off, width);
+      line_merge(hit_line, store_block, byteen);
+      if (config_.write_back) {
+        hit_line.dirty = true;
+      } else {
+        // Write-through: emit a write of the merged word downstream.
+        MemReq w;
+        w.addr   = params_.mem_addr(bank_id_, set_id, params_.addr_tag(bank_req.addr));
+        w.write  = true;
+        w.cid    = bank_req.cid;
+        w.uuid   = bank_req.uuid;
+        w.data   = store_block;
+        w.byteen = byteen;
+        this->mem_req_out.send(w);
+        DT(3, this->name() << " amo-writethrough: " << w);
+      }
+      // Break other harts' reservations on this line (proposal §3.9).
+      amo_unit_.invalidate(line_addr, /*except=*/hid);
+    }
+
+    // Send AMO response.
+    MemRsp rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+    rsp.data = rsp_block;
+    this->core_rsp_out.send(rsp);
+    DT(3, this->name() << " amo-rsp op=" << op << " sc_fail=" << sc_fail << ": " << rsp);
+    return true;
+  }
+#endif
 
   // Pipeline tail: process the head of pipe_req_ — at most one bank_req_t per tick.
   void processRequests() {
@@ -664,15 +767,27 @@ private:
     case bank_req_t::Replay: {
       // Replay invariant: the line is present. Fill is mutex with replay in
       // input arbitration (a fill cannot preempt a pending replay's line).
-      if (need_core_rsp(bank_req) && this->core_rsp_out.full())
-        return; // stall
-
       uint32_t set_id   = params_.addr_set_id(bank_req.addr);
       uint64_t addr_tag = params_.addr_tag(bank_req.addr);
       auto &set         = sets_.at(set_id);
       int32_t free_id = -1, repl_id = 0;
       int hit_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_id, &repl_id);
       assert(hit_id != -1 && "replay miss");
+
+#if EXT_A_ENABLED
+      if (bank_req.amo.valid) {
+        assert(config_.is_llc && "AMO replay reached non-LLC bank");
+        if (!this->commitAmo(bank_req, set, hit_id, set_id))
+          return; // stall
+        if (config_.repl_policy == Cache::PLRU)
+          set.update_lru(hit_id);
+        pipe_req_->pop();
+        return;
+      }
+#endif
+
+      if (need_core_rsp(bank_req) && this->core_rsp_out.full())
+        return; // stall
 
       auto &hit_line = set.lines.at(hit_id);
       if (bank_req.write) {
@@ -685,6 +800,17 @@ private:
         line_merge(hit_line, bank_req.data, bank_req.byteen);
         if (config_.write_back)
           hit_line.dirty = true;
+#if EXT_A_ENABLED
+        // Write-back write-miss replay: this is a store from above
+        // (always WT above the LLC, per §3.1.5) reaching the LLC tag
+        // array → break other harts' reservations on the line.
+        // For the WT wt-merge replay, invalidation already fired at
+        // miss time when the writethrough was emitted.
+        if (config_.is_llc && config_.write_back) {
+          uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
+          amo_unit_.invalidate(line_addr, /*except=*/bank_req.amo.hart_id);
+        }
+#endif
       }
       if (need_core_rsp(bank_req) && !bank_req.skip_core_rsp) {
         MemRsp rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
@@ -710,6 +836,18 @@ private:
       int hit_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_id, &repl_id);
 
       if (hit_id != -1) {
+#if EXT_A_ENABLED
+        if (bank_req.amo.valid) {
+          assert(config_.is_llc && "AMO Core+hit reached non-LLC bank");
+          if (!this->commitAmo(bank_req, set, hit_id, set_id))
+            return; // stall
+          if (config_.repl_policy == Cache::PLRU)
+            set.update_lru(hit_id);
+          --pending_mshr_size_;
+          pipe_req_->pop();
+          return;
+        }
+#endif
         // Cache hit.
         const bool need_rsp = need_core_rsp(bank_req);
         const bool need_mem = bank_req.write && !config_.write_back;
@@ -733,7 +871,23 @@ private:
             w.byteen = bank_req.byteen;
             this->mem_req_out.send(w);
             DT(3, this->name() << " writethrough: " << w);
+#if EXT_A_ENABLED
+            // Writethrough commit reaches the LLC tag array → break
+            // other harts' reservations (proposal §3.9).
+            if (config_.is_llc) {
+              uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
+              amo_unit_.invalidate(line_addr, /*except=*/bank_req.amo.hart_id);
+            }
+#endif
           }
+#if EXT_A_ENABLED
+          // Write-back write-hit: also visible to LLC tag array since
+          // we mutated this LLC line. Break other harts' reservations.
+          if (config_.is_llc && config_.write_back) {
+            uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
+            amo_unit_.invalidate(line_addr, /*except=*/bank_req.amo.hart_id);
+          }
+#endif
         }
         if (need_rsp) {
           MemRsp rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
@@ -773,6 +927,15 @@ private:
           w.byteen = bank_req.byteen;
           this->mem_req_out.send(w);
           DT(3, this->name() << " writethrough: " << w);
+
+#if EXT_A_ENABLED
+          // Writethrough write-miss is still a "store from above" reaching
+          // the LLC bank → break other harts' reservations (proposal §3.9).
+          if (config_.is_llc) {
+            uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
+            amo_unit_.invalidate(line_addr, /*except=*/bank_req.amo.hart_id);
+          }
+#endif
 
           if (need_rsp) {
             MemRsp rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
@@ -879,6 +1042,10 @@ private:
   bool     flushing_;
   uint32_t flush_set_idx_;
   uint32_t flush_way_idx_;
+
+#if EXT_A_ENABLED
+  AmoUnit  amo_unit_;
+#endif
 
   friend class SimObject<CacheBank>;
 };
