@@ -275,7 +275,8 @@ struct bank_req_t {
     None = 0,
     Fill = 1,
     Replay = 2,
-    Core = 3
+    Core = 3,
+    AmoProbe = 4  // non-LLC AMO passthrough: probe-and-invalidate then forward
   };
 
   uint64_t addr;
@@ -526,6 +527,9 @@ protected:
     flush_way_idx_ = 0;
 #if EXT_A_ENABLED
     amo_unit_.reset();
+    for (auto &e : amo_passthru_) {
+      e = amo_passthru_entry_t{};
+    }
 #endif
   }
 
@@ -575,6 +579,30 @@ private:
     // 2) fill only when no replay is pending
     if (!this->mem_rsp_in.empty()) {
       auto &mem_rsp = this->mem_rsp_in.peek();
+#if EXT_A_ENABLED
+      // Non-LLC AMO passthrough response: forward straight to core
+      // without filling. The original tag was rewritten to
+      // (mshr_capacity + pid) when the bank emitted the request from
+      // the AmoProbe handler — that namespace partition survives
+      // arbiter tag mangling.
+      if (mem_rsp.tag >= amo_passthru_tag_base()
+       && mem_rsp.tag <  amo_passthru_tag_base() + AMO_PASSTHRU_CAP) {
+        uint32_t pid = mem_rsp.tag - amo_passthru_tag_base();
+        auto &e = amo_passthru_.at(pid);
+        assert(e.valid && "AMO passthru response without entry");
+        if (this->core_rsp_out.full()) {
+          return; // stall
+        }
+        MemRsp core_rsp{e.req_tag, e.cid, e.uuid};
+        core_rsp.data = mem_rsp.data;
+        this->core_rsp_out.send(core_rsp);
+        DT(3, this->name() << " amo-passthru-rsp: " << core_rsp);
+        e.valid = false;
+        this->mem_rsp_in.pop();
+        --pending_fill_reqs_;
+        return;
+      }
+#endif
       uint32_t mshr_id = mem_rsp.tag;
       const auto &root_peek = mshr_.peek(mshr_id);
       bank_req_t bank_req;
@@ -598,16 +626,32 @@ private:
       // Conservative MSHR occupancy check: any request that may miss must
       // reserve a slot. Counts both currently-allocated entries and
       // in-flight pipe requests that haven't reached MSHR allocation yet.
-      // AMO requests always need a return → reserve like a load (proposal §3.7).
+      // AMO requests always need a return; at the LLC they reserve like
+      // a load (proposal §3.7), at non-LLC they don't fill so no MSHR
+      // slot is needed but a passthru side-table slot is.
       const bool is_amo = memop_is_amo(core_req.op);
-      bool needs_mshr = !core_req.write || config_.write_back || is_amo;
+#if EXT_A_ENABLED
+      const bool is_amo_passthru = is_amo && !config_.is_llc;
+      if (is_amo_passthru) {
+        // Need a free passthru-table slot before accepting.
+        bool any_free = false;
+        for (const auto &e : amo_passthru_) { if (!e.valid) { any_free = true; break; } }
+        if (!any_free) {
+          ++perf_stats_.mshr_stalls;
+          return;
+        }
+      }
+#else
+      const bool is_amo_passthru = false;
+#endif
+      bool needs_mshr = (!core_req.write || config_.write_back || is_amo) && !is_amo_passthru;
       if (needs_mshr && (mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
         ++perf_stats_.mshr_stalls;
         return;
       }
       bank_req_t bank_req;
       bank_req.reset();
-      bank_req.type    = bank_req_t::Core;
+      bank_req.type    = is_amo_passthru ? bank_req_t::AmoProbe : bank_req_t::Core;
       bank_req.addr    = core_req.addr;
       bank_req.cid     = core_req.cid;
       bank_req.uuid    = core_req.uuid;
@@ -620,7 +664,11 @@ private:
       }
       pipe_req_->push(bank_req);
       DT(3, this->name() << " core-req: " << core_req);
-      ++pending_mshr_size_;
+      // pending_mshr_size_ tracks Core-typed in-flight requests so the
+      // MSHR pre-reservation in processInputs is conservative. AmoProbe
+      // doesn't allocate an MSHR slot (no fill on the response), so it
+      // stays out of this counter.
+      if (!is_amo_passthru) ++pending_mshr_size_;
       if (core_req.write) ++perf_stats_.writes;
       else                ++perf_stats_.reads;
       this->core_req_in.pop();
@@ -722,6 +770,84 @@ private:
     case bank_req_t::None:
       pipe_req_->pop();
       return;
+
+#if EXT_A_ENABLED
+    case bank_req_t::AmoProbe: {
+      // Non-LLC AMO passthrough (proposal §3.8). Probe the local line
+      // first so any cached copy doesn't shadow the LLC's view: dirty
+      // line → writeback (so the LLC's bytes are fresh before the AMO
+      // RMW commits there); any hit → invalidate (so the next normal
+      // load takes a fresh miss after the AMO completes). Then forward
+      // the original AMO MemReq downstream tagged with
+      // AMO_PASSTHRU_TAG_FLAG so the response routes back to
+      // core_rsp_out without installing a fill.
+      assert(!config_.is_llc && "AmoProbe at LLC is a wiring bug");
+      uint32_t set_id   = params_.addr_set_id(bank_req.addr);
+      uint64_t addr_tag = params_.addr_tag(bank_req.addr);
+      auto &set         = sets_.at(set_id);
+      int32_t free_id = -1, repl_id = 0;
+      int hit_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_id, &repl_id);
+      const bool hit   = (hit_id != -1);
+      const bool dirty = hit && set.lines.at(hit_id).valid && set.lines.at(hit_id).dirty;
+
+      // Stall checks: writeback (if dirty) AND the AMO forward both
+      // need an mem_req_out slot. They serialize across two cycles
+      // when the FIFO can't hold both, mirroring the proposal's
+      // hit-dirty stall note (§3.8).
+      const uint32_t out_slots_needed = (dirty ? 1u : 0u) + 1u;
+      if (this->mem_req_out.size() + out_slots_needed > this->mem_req_out.capacity()) {
+        return; // stall
+      }
+      // Pre-allocate a passthru-table slot before mutating state.
+      uint32_t pid = AMO_PASSTHRU_CAP;
+      for (uint32_t i = 0; i < AMO_PASSTHRU_CAP; ++i) {
+        if (!amo_passthru_.at(i).valid) { pid = i; break; }
+      }
+      if (pid == AMO_PASSTHRU_CAP) {
+        return; // stall — table is full (input gate should normally prevent this)
+      }
+
+      if (dirty) {
+        auto &line = set.lines.at(hit_id);
+        MemReq wb;
+        wb.addr   = params_.mem_addr(bank_id_, set_id, line.tag);
+        wb.write  = true;
+        wb.cid    = bank_req.cid;
+        wb.uuid   = bank_req.uuid;
+        wb.data   = line.data;
+        wb.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);
+        this->mem_req_out.send(wb);
+        DT(3, this->name() << " amo-probe-wb: " << wb);
+        ++perf_stats_.evictions;
+      }
+      if (hit) {
+        auto &line = set.lines.at(hit_id);
+        line.valid = false;
+        line.dirty = false;
+      }
+
+      // Forward AMO downstream. Tag is rewritten so the response
+      // doesn't collide with the MSHR tag namespace.
+      auto &e = amo_passthru_.at(pid);
+      e.valid   = true;
+      e.req_tag = bank_req.req_tag;
+      e.cid     = bank_req.cid;
+      e.uuid    = bank_req.uuid;
+      MemReq amo_fwd;
+      amo_fwd.addr   = bank_req.addr;
+      amo_fwd.write  = false;
+      amo_fwd.tag    = amo_passthru_tag_base() + pid;
+      amo_fwd.cid    = bank_req.cid;
+      amo_fwd.uuid   = bank_req.uuid;
+      amo_fwd.amo    = bank_req.amo;
+      amo_fwd.op     = amo_to_memop(bank_req.amo.op);
+      this->mem_req_out.send(amo_fwd);
+      DT(3, this->name() << " amo-probe-fwd: " << amo_fwd);
+      ++pending_fill_reqs_; // counts as an outstanding mem-roundtrip for perf
+      pipe_req_->pop();
+      return;
+    }
+#endif
 
     case bank_req_t::Fill: {
       // Install the new line. Replay is mutex with fill (priority gating in
@@ -1045,6 +1171,31 @@ private:
 
 #if EXT_A_ENABLED
   AmoUnit  amo_unit_;
+
+  // Non-LLC AMO passthrough table. When config_.is_llc==false, AMOs
+  // probe-and-invalidate the local line, then forward the MemReq
+  // downstream via mem_req_out. The response comes back via
+  // mem_rsp_in but must NOT install a fill — it's a load-style AMO
+  // return that gets forwarded straight to core_rsp_out.
+  //
+  // Identification: arbiters along the path mangle the tag
+  // (req.tag = (req.tag << shift) | input_id) and unshift on the
+  // return — the bank-side tag is preserved across the round-trip.
+  // Bit-flag schemes don't survive (uint32_t can overflow if shifts
+  // accumulate past 32), so we partition the tag NAMESPACE: fill
+  // responses use tag in [0, mshr_capacity), passthru responses use
+  // tag in [mshr_capacity, mshr_capacity + AMO_PASSTHRU_CAP). The
+  // arbiter only adds bits at the LSB, so the partition boundary
+  // remains intact.
+  static constexpr uint32_t AMO_PASSTHRU_CAP = 8;
+  struct amo_passthru_entry_t {
+    bool     valid   = false;
+    uint64_t req_tag = 0;
+    uint32_t cid     = 0;
+    uint64_t uuid    = 0;
+  };
+  std::array<amo_passthru_entry_t, AMO_PASSTHRU_CAP> amo_passthru_;
+  uint32_t amo_passthru_tag_base() const { return mshr_.capacity(); }
 #endif
 
   friend class SimObject<CacheBank>;

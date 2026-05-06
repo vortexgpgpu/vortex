@@ -95,15 +95,13 @@ ProcessorImpl::ProcessorImpl()
   // L1 is unconstrained when L1 itself is the LLC.
 #endif
 
-  // v1 implementation note: AMO non-LLC passthrough (proposal §3.8)
-  // is not yet wired through the bank pipeline. ISA-test configs use
-  // L1-only mode, in which both L2 and L3 instances are bypass-only
-  // (Cache::Config.bypass=true) and act as wires for AMO traffic.
-  // Multi-level configs work too — non-LLC caches stay in bypass
-  // mode here, and the LLC bank owns all AMO state.
-#if L2_ENABLED || L3_ENABLED
-#  warning "EXT_A: ensure non-LLC caches above the LLC are bypass=true; multi-level non-bypass passthrough is not yet implemented (proposal §3.8)."
-#endif
+  // Non-LLC AMO passthrough (proposal §3.8) is implemented in the
+  // bank pipeline: AmoProbe entries probe-and-invalidate the local
+  // line then forward via mem_req_out tagged with
+  // AMO_PASSTHRU_TAG_FLAG so the response routes back to core_rsp_out
+  // without installing a fill. Multi-level (L1+L2 / L1+L2+L3) builds
+  // exercise this path; L1-only builds keep the dcache as the LLC and
+  // never enter it.
 #endif
 
   // connect L3 core interfaces
