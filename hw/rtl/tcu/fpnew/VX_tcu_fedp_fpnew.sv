@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_fedp_fpnew import VX_tcu_pkg::*; #(
+module VX_tcu_fedp_fpnew import VX_tcu_pkg::*, fpnew_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter LATENCY = 0,
     parameter N = 1

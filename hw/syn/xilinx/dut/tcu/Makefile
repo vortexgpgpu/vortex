@@ -23,6 +23,11 @@ RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 endif
+ifneq (,$(filter -DTCU_TYPE_FPNEW, $(XCONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/fpnew
+RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv
+RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src
+endif
 ifneq (,$(filter -DTCU_TYPE_TFR, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 endif

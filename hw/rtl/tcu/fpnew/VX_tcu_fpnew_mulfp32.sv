@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_fpnew_mulfp32 #(
+module VX_tcu_fpnew_mulfp32 import fpnew_pkg::*; #(
     parameter fpnew_pkg::fp_format_e SRC_FMT = fpnew_pkg::FP16,
     parameter fpnew_pkg::fmt_logic_t FMT_CFG = 5'b10100,
     parameter NUM_PIPE_REGS = 3

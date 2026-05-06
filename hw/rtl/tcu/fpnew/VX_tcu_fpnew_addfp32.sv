@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_fpnew_addfp32 #(
+module VX_tcu_fpnew_addfp32 import fpnew_pkg::*; #(
     parameter NUM_PIPE_REGS = 3
 ) (
     input  wire        clk,
