@@ -152,6 +152,72 @@ Default hardware/type parameters are defined in:
 
 Re-run configure and build after changing baseline configuration files.
 
+## Graphics extensions (TEX / RASTER / OM)
+
+Three skybox-era extensions are integrated and gated behind separate
+flags. All three are off by default; enabling them is opt-in via
+`CONFIGS` per build/run.
+
+| Extension | Flag | Op (CUSTOM1 / `INST_EXT2`) | Cluster path |
+|---|---|---|---|
+| Texture sampling | `EXT_TEX_ENABLE` | `vx_tex(stage, u, v, lod)` (R4, funct3=1) | per-socket → `VX_tex_arb` → `VX_tex_core` → `tcache` → L2 |
+| Output merger    | `EXT_OM_ENABLE`  | `vx_om(x, y, face, color, depth)` (R4, funct3=2) | per-socket → `VX_om_arb` → `VX_om_core` → `ocache` → L2 |
+| Rasterizer pop   | `EXT_RASTER_ENABLE` | `vx_rast()` (R, funct3=3, returns packed pos_mask `{pos_y, pos_x, mask}`, 0 ⇒ drained) | `VX_raster_core` → per-socket fan-out via `VX_raster_arb` |
+
+DCR address space (host-side configuration writes):
+- `VX_DCR_TEX_*`     `0x020..0x03F`
+- `VX_DCR_RASTER_*`  `0x040..0x045`
+- `VX_DCR_OM_*`      `0x060..0x071`
+
+CSR address space (per-warp readback for raster bcoords):
+- `VX_CSR_RASTER_*`  `0x7C0..0x7CC`
+- `VX_CSR_OM_*`      `0x7CD..0x7CE`
+
+### Quick smoke (rtlsim)
+
+Three minimum end-to-end tests live under `tests/regression/`:
+
+```bash
+CONFIGS="-DEXT_TEX_ENABLE"    ./ci/blackbox.sh --driver=rtlsim --app=tex_smoke
+CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster_smoke
+CONFIGS="-DEXT_OM_ENABLE"     ./ci/blackbox.sh --driver=rtlsim --app=om_smoke
+# 6-test matrix (each individually + all-three-on combo):
+./ci/regression.sh --graphics
+```
+
+### Standalone unit elaboration
+
+Each unit also has a verilator unittest at `hw/unittest/{tex,om,raster}_unit/`
+that elaborates the cluster-shared unit in isolation (no SFU agent, no
+cluster wrapper) — useful for fast iteration on RTL changes without
+rebuilding the full driver:
+
+```bash
+make -C hw/unittest/tex_core run
+make -C hw/unittest/om_core run
+make -C hw/unittest/raster_core run
+```
+
+### SimX caveat
+
+The C++ functional simulator (`--driver=simx`) does **not** yet model the
+graphics units; running a `vx_tex/om/rast` op under simx triggers an
+abort. Use `--driver=rtlsim` for any kernel that issues graphics ops.
+SimX support is gated on simx_v3 Phase 5 (caches-carry-data) — see
+[docs/proposals/gfx_migration_proposal.md](docs/proposals/gfx_migration_proposal.md)
+§4 Phase 3.
+
+### Migrating a skybox graphics test
+
+The full skybox PNG-driven regression suites (`tests/regression/{tex,om,raster,draw3d}`)
+were written for the **vortex v1 kernel API** (`int main()` + `vx_spawn_threads`).
+Porting one requires translating to feature_gfx's vortex2 API
+(`__kernel void kernel_main(...)` with CUDA-like `blockIdx`/`threadIdx`).
+The smoke tests above show the v2 pattern; the host-side DCR-write
+sequence translates directly from the skybox `TEX_DCR_WRITE` style.
+Helpers `sim/common/{gfxutil,graphics}.{cpp,h}` and `third_party/cocogfx/`
+are vendored from skybox and ready to link against.
+
 ## General Notes
 
 - Keep changes minimal, targeted, and reversible.

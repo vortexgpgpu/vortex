@@ -401,6 +401,21 @@ static op_string_t op_string(const Instr &instr) {
       return TcuUnit::op_string(tcu_type, tpuArgs);
     }
   #endif // EXT_TCU_ENABLE
+  #ifdef EXT_TEX_ENABLE
+    ,[&](TexType /*tex_type*/)-> op_string_t {
+      return {"TEX.SAMPLE", ""};
+    }
+  #endif
+  #ifdef EXT_OM_ENABLE
+    ,[&](OmType /*om_type*/)-> op_string_t {
+      return {"OM.WRITE", ""};
+    }
+  #endif
+  #ifdef EXT_RASTER_ENABLE
+    ,[&](RasterType /*raster_type*/)-> op_string_t {
+      return {"RASTER.POP", ""};
+    }
+  #endif
  );
  return {"", ""};
 }
@@ -928,6 +943,39 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       wgArgs.src_lane = funct2;
       instr->set_args(wgArgs);
     } break;
+#ifdef EXT_TEX_ENABLE
+    case 1: { // vx_tex: R4-type, funct2=stage, rd=texel, rs1=u, rs2=v, rs3=lod
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(TexType::SAMPLE);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
+      instr->set_src_reg(2, rs3, RegType::Integer);
+      IntrTexArgs texArgs{};
+      texArgs.stage = funct2;
+      instr->set_args(texArgs);
+    } break;
+#endif
+#ifdef EXT_OM_ENABLE
+    case 2: { // vx_om: R4-type, rs1=pos_face, rs2=color, rs3=depth
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(OmType::WRITE);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
+      instr->set_src_reg(2, rs3, RegType::Integer);
+      IntrOmArgs omArgs{};
+      instr->set_args(omArgs);
+    } break;
+#endif
+#ifdef EXT_RASTER_ENABLE
+    case 3: { // vx_rast: R-type, rd=quad descriptor
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(RasterType::POP);
+      instr->set_dest_reg(rd, RegType::Integer);
+      IntrRasterArgs rastArgs{};
+      instr->set_args(rastArgs);
+    } break;
+#endif
     default:
       std::abort();
     }

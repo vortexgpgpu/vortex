@@ -10,7 +10,7 @@ SRC_DIR = $(VORTEX_HOME)/sim/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SRC_DIR)/dtm -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
+CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/tex -I$(SRC_DIR)/om -I$(SRC_DIR)/raster -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SRC_DIR)/dtm -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(THIRD_PARTY_DIR)
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
@@ -55,6 +55,28 @@ ifneq ($(filter -DEXT_DXA_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/dxa/dxa_unit.cpp
 endif
 
+# Graphics SW helpers (TextureSampler / DepthTencil / Blender / Rasterizer).
+# Added once if any of TEX/OM/RASTER is enabled.
+ifneq ($(or $(filter -DEXT_TEX_ENABLE, $(XCONFIGS)),$(filter -DEXT_OM_ENABLE, $(XCONFIGS)),$(filter -DEXT_RASTER_ENABLE, $(XCONFIGS))),)
+	SRCS += $(SW_COMMON_DIR)/graphics.cpp
+endif
+
+# Add TEX extension sources (functional cluster-shared TexCore + per-core TexUnit)
+ifneq ($(filter -DEXT_TEX_ENABLE, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/tex/tex_core.cpp
+	SRCS += $(SRC_DIR)/tex/tex_unit.cpp
+endif
+
+# Add OM extension sources
+ifneq ($(filter -DEXT_OM_ENABLE, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/om/om_core.cpp
+	SRCS += $(SRC_DIR)/om/om_unit.cpp
+endif
+
+# Add RASTER extension sources
+ifneq ($(filter -DEXT_RASTER_ENABLE, $(XCONFIGS)),)
+	SRCS += $(SRC_DIR)/raster/raster_core.cpp
+	SRCS += $(SRC_DIR)/raster/raster_unit.cpp
 # SST integration: build libvortex.so as the SST element library and
 # include the SST::Component wrapper. Requires SST 15.x in PATH.
 # -Wno-deprecated-declarations: SST 15.1 deprecated Handler<> in favor

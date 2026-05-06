@@ -108,6 +108,23 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_CTA_GRID_DIM_Z:  return warp.cta_csrs.grid_dim[2];
   case VX_CSR_CTA_LMEM_ADDR:   return warp.cta_csrs.lmem_addr;
 
+#ifdef EXT_RASTER_ENABLE
+  case VX_CSR_RASTER_POS_MASK:  return raster_csrs_.at(wid).at(tid).pos_mask;
+  case VX_CSR_RASTER_PID:       return raster_csrs_.at(wid).at(tid).pid;
+  case VX_CSR_RASTER_BCOORD_X0: return raster_csrs_.at(wid).at(tid).bcoords[0][0];
+  case VX_CSR_RASTER_BCOORD_X1: return raster_csrs_.at(wid).at(tid).bcoords[0][1];
+  case VX_CSR_RASTER_BCOORD_X2: return raster_csrs_.at(wid).at(tid).bcoords[0][2];
+  case VX_CSR_RASTER_BCOORD_X3: return raster_csrs_.at(wid).at(tid).bcoords[0][3];
+  case VX_CSR_RASTER_BCOORD_Y0: return raster_csrs_.at(wid).at(tid).bcoords[1][0];
+  case VX_CSR_RASTER_BCOORD_Y1: return raster_csrs_.at(wid).at(tid).bcoords[1][1];
+  case VX_CSR_RASTER_BCOORD_Y2: return raster_csrs_.at(wid).at(tid).bcoords[1][2];
+  case VX_CSR_RASTER_BCOORD_Y3: return raster_csrs_.at(wid).at(tid).bcoords[1][3];
+  case VX_CSR_RASTER_BCOORD_Z0: return raster_csrs_.at(wid).at(tid).bcoords[2][0];
+  case VX_CSR_RASTER_BCOORD_Z1: return raster_csrs_.at(wid).at(tid).bcoords[2][1];
+  case VX_CSR_RASTER_BCOORD_Z2: return raster_csrs_.at(wid).at(tid).bcoords[2][2];
+  case VX_CSR_RASTER_BCOORD_Z3: return raster_csrs_.at(wid).at(tid).bcoords[2][3];
+#endif
+
   CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
   CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
   default:

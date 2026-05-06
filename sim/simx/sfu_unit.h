@@ -21,13 +21,31 @@
 #ifdef EXT_DXA_ENABLE
 #include "dxa/dxa_unit.h"
 #endif
+#ifdef EXT_TEX_ENABLE
+#include "tex/tex_unit.h"
+#endif
+#ifdef EXT_OM_ENABLE
+#include "om/om_unit.h"
+#endif
+#ifdef EXT_RASTER_ENABLE
+#include "raster/raster_unit.h"
+#endif
 
 namespace vortex {
 
+class TexCore;
+class OmCore;
+class RasterCore;
+
 // SFU has a single dispatch port that fans out to per-op sub-units
-// (WCTL / CSR / DXA) by op_type, then gathers their results back to a
-// single result port. Sub-units are plain non-SimObject helpers owned
-// here.
+// (WCTL / CSR / DXA / TEX / OM / RASTER) by op_type, then gathers their
+// results back to a single result port. Sub-units are plain non-SimObject
+// helpers owned here.
+//
+// TEX takes the DXA-style fire-and-wait path: TexUnit posts a TexReq onto
+// `tex_req_out` and the SFU does NOT push the trace onto its writeback
+// output — TexCore owns the trace until it returns it via `tex_rsp_in`,
+// at which point on_tick() forwards it to the original writeback lane.
 class SfuUnit : public FuncUnit<NUM_SFU_BLOCKS> {
 public:
 	SfuUnit(const SimContext& ctx, const char* name, Core*);
@@ -41,6 +59,27 @@ public:
 	SimChannel<DxaReq> dxa_req_out;
 #endif
 
+#ifdef EXT_TEX_ENABLE
+	// Outbound TEX request / inbound TEX response channels. Cluster binds
+	// these to the cluster-level TexBus arbiter (which fans into TexCore).
+	SimChannel<TexReq> tex_req_out;
+	SimChannel<TexRsp> tex_rsp_in;
+#endif
+
+#ifdef EXT_OM_ENABLE
+	// Outbound OM request channel. Cluster binds to OmCore::om_req_in[cid].
+	// vx_om has no return value — there is no rsp channel; OmCore drives
+	// the R-M-W asynchronously through the ocache.
+	SimChannel<OmReq> om_req_out;
+#endif
+
+#ifdef EXT_RASTER_ENABLE
+	// Outbound RASTER request / inbound response channels. Cluster binds
+	// these to the cluster-level RasterBus arbiter (which fans into RasterCore).
+	SimChannel<RasterReq> raster_req_out;
+	SimChannel<RasterRsp> raster_rsp_in;
+#endif
+
 protected:
 	void on_tick() override;
 
@@ -51,6 +90,15 @@ private:
 	std::unique_ptr<CsrUnit>  csr_unit_;
 #ifdef EXT_DXA_ENABLE
 	std::unique_ptr<DxaUnit>  dxa_unit_;
+#endif
+#ifdef EXT_TEX_ENABLE
+	std::unique_ptr<TexUnit>  tex_unit_;
+#endif
+#ifdef EXT_OM_ENABLE
+	std::unique_ptr<OmUnit>   om_unit_;
+#endif
+#ifdef EXT_RASTER_ENABLE
+	std::unique_ptr<RasterUnit> raster_unit_;
 #endif
 };
 
