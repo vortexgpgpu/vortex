@@ -48,6 +48,7 @@ DEFAULTS() {
     SCOPE=0
     SAIF=0
     HAS_ARGS=0
+    HAS_NP=0
     PERF_CLASS=0
     CONFIGS="$CONFIGS"
     TEMPBUILD=0
@@ -75,6 +76,7 @@ parse_args() {
             --vcd_file=*)  VCD_FILE=${i#*=} ;;
             --saif_file=*) SAIF_FILE=${i#*=} ;;
             --args=*)   HAS_ARGS=1; ARGS=${i#*=} ;;
+            --np=*)     HAS_NP=1; NP=${i#*=} ;;
             --log=*)    LOGFILE=${i#*=} ;;
             --nohup)    TEMPBUILD=1 ;;
             --help)     show_help; exit 0 ;;

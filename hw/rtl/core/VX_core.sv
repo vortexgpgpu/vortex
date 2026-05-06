@@ -42,6 +42,18 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     dxa_lmem_bus_if,
 `endif
 
+`ifdef EXT_TEX_ENABLE
+    VX_tex_bus_if.master    tex_bus_if,
+`endif
+
+`ifdef EXT_OM_ENABLE
+    VX_om_bus_if.master     om_bus_if,
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    VX_raster_bus_if.slave  raster_bus_if,
+`endif
+
     // KMU bus
     VX_kmu_bus_if.slave     kmu_bus_if,
 
@@ -222,6 +234,15 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `endif
+    `ifdef EXT_TEX_ENABLE
+        .tex_bus_if     (tex_bus_if),
+    `endif
+    `ifdef EXT_OM_ENABLE
+        .om_bus_if      (om_bus_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE
+        .raster_bus_if  (raster_bus_if),
     `endif
 
         .warp_ctl_if    (warp_ctl_if),

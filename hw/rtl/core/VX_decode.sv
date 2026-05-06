@@ -287,22 +287,26 @@ module VX_decode import VX_gpu_pkg::*; #(
             INST_JAL: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(INST_BR_JAL);
-                op_args.alu.xtype = ALU_TYPE_BRANCH;
-                op_args.alu.is_w = 0;
-                op_args.alu.use_PC = 1;
-                op_args.alu.use_imm = 1;
-                op_args.alu.imm20 = jal_imm;
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 1;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = jal_imm;
+            `ifdef EXT_C_ENABLE
+                op_args.br.is_rvc = fetch_if.data.is_rvc;
+            `endif
                 is_wstall = 1;
                 `USED_IREG (rd);
             end
             INST_JALR: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(INST_BR_JALR);
-                op_args.alu.xtype = ALU_TYPE_BRANCH;
-                op_args.alu.is_w = 0;
-                op_args.alu.use_PC = 0;
-                op_args.alu.use_imm = 1;
-                op_args.alu.imm20 = `SEXT(20, u_12);
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 0;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = `SEXT(20, u_12);
+            `ifdef EXT_C_ENABLE
+                op_args.br.is_rvc = fetch_if.data.is_rvc;
+            `endif
                 is_wstall = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -310,11 +314,13 @@ module VX_decode import VX_gpu_pkg::*; #(
             INST_B: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(b_type);
-                op_args.alu.xtype = ALU_TYPE_BRANCH;
-                op_args.alu.is_w = 0;
-                op_args.alu.use_PC = 1;
-                op_args.alu.use_imm = 1;
-                op_args.alu.imm20 = `SEXT(20, b_imm);
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 1;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = `SEXT(20, b_imm);
+            `ifdef EXT_C_ENABLE
+                op_args.br.is_rvc = fetch_if.data.is_rvc;
+            `endif
                 is_wstall = 1;
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -367,11 +373,13 @@ module VX_decode import VX_gpu_pkg::*; #(
                 end else begin
                     ex_type = EX_ALU;
                     op_type = INST_OP_BITS'(s_type);
-                    op_args.alu.xtype = ALU_TYPE_BRANCH;
-                    op_args.alu.is_w = 0;
-                    op_args.alu.use_imm = 1;
-                    op_args.alu.use_PC  = 1;
-                    op_args.alu.imm20 = 20'd4;
+                    op_args.br.xtype  = ALU_TYPE_BRANCH;
+                    op_args.br.use_imm= 1;
+                    op_args.br.use_PC = 1;
+                    op_args.br.imm20  = 20'd4;
+                `ifdef EXT_C_ENABLE
+                    op_args.br.is_rvc = fetch_if.data.is_rvc;
+                `endif
                     is_wstall = 1;
                     `USED_IREG (rd);
                 end
@@ -669,7 +677,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                 endcase
             end
             INST_EXT2: begin
-                if (funct3 == 3'h0) begin // WGATHER: R4-type, funct2=src_lane
+                case (funct3)
+                3'h0: begin // WGATHER: R4-type, funct2=src_lane
                     ex_type = EX_ALU;
                     op_args.alu.xtype = ALU_TYPE_OTHER;
                     op_args.alu.imm20 = {{18{1'b0}}, funct2}; // src_lane in imm20[1:0]
@@ -679,6 +688,35 @@ module VX_decode import VX_gpu_pkg::*; #(
                     `USED_IREG (rs3);
                     op_type = INST_OP_BITS'(INST_WGATHER);
                 end
+            `ifdef EXT_TEX_ENABLE
+                3'h1: begin // vx_tex: R4-type, funct2=stage, rd=texel, rs1=u, rs2=v, rs3=lod
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_TEX);
+                    op_args.tex.stage = funct2[`VX_TEX_STAGE_BITS-1:0];
+                    `USED_IREG (rd);
+                    `USED_IREG (rs1);
+                    `USED_IREG (rs2);
+                    `USED_IREG (rs3);
+                end
+            `endif
+            `ifdef EXT_OM_ENABLE
+                3'h2: begin // vx_om: R4-type, rd=x0, rs1=pos_face, rs2=color, rs3=depth
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_OM);
+                    `USED_IREG (rs1);
+                    `USED_IREG (rs2);
+                    `USED_IREG (rs3);
+                end
+            `endif
+            `ifdef EXT_RASTER_ENABLE
+                3'h3: begin // vx_rast: R-type, rd=quad, rs1=x0, rs2=x0
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_RASTER);
+                    `USED_IREG (rd);
+                end
+            `endif
+                default:;
+                endcase
             end
             default:;
         endcase
@@ -695,8 +733,8 @@ module VX_decode import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    bytesel,                  reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
-        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.bytesel,   decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
+        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.cta_id,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    bytesel,                  reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
+        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.cta_id, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.bytesel,   decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
     );
@@ -705,16 +743,40 @@ module VX_decode import VX_gpu_pkg::*; #(
 
     wire fetch_fire = fetch_if.valid && fetch_if.ready;
 
-    assign decode_sched_if.valid  = fetch_fire;
-    assign decode_sched_if.wid    = fetch_if.data.wid;
-    assign decode_sched_if.unlock = ~is_wstall;
+    // Register decode_sched_if to break the long combinational path.
+    reg                  decode_sched_valid_r;
+    reg                  decode_sched_unlock_r;
+    reg [NW_WIDTH-1:0]   decode_sched_wid_r;
+`ifdef EXT_C_ENABLE
+    reg                  decode_sched_is_rvc_r;
+`endif
+
+    always @(posedge clk) begin
+        if (reset) begin
+            decode_sched_valid_r <= 1'b0;
+        end else begin
+            decode_sched_valid_r  <= fetch_fire;
+            decode_sched_unlock_r <= ~is_wstall;
+            decode_sched_wid_r    <= fetch_if.data.wid;
+        `ifdef EXT_C_ENABLE
+            decode_sched_is_rvc_r <= fetch_if.data.is_rvc;
+        `endif
+        end
+    end
+
+    assign decode_sched_if.valid  = decode_sched_valid_r;
+    assign decode_sched_if.wid    = decode_sched_wid_r;
+    assign decode_sched_if.unlock = decode_sched_unlock_r;
+`ifdef EXT_C_ENABLE
+    assign decode_sched_if.is_rvc = decode_sched_is_rvc_r;
+`endif
 
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
-            `TRACE(1, ("%t: %s decode: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, to_fullPC(decode_if.data.PC)))
+            `TRACE(1, ("%t: %s decode: wid=%0d, cta_id=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, decode_if.data.cta_id, to_fullPC(decode_if.data.PC)))
             VX_trace_pkg::trace_ex_type(1, decode_if.data.ex_type);
             `TRACE(1, (", op="))
             VX_trace_pkg::trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);

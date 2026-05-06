@@ -50,6 +50,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks, thread_masks_n;
     reg [`NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
+    reg [`NUM_WARPS-1:0][`MEM_ADDR_WIDTH-1:0] mscratch_r;
+    reg [`NUM_WARPS-1:0][NCTA_WIDTH-1:0] cta_id_per_warp_r;
 
     wire [NW_WIDTH-1:0]     schedule_wid;
     wire [`NUM_THREADS-1:0] schedule_tmask;
@@ -59,16 +61,60 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // CTA dispatcher
     wire cta_fire;
-    wire[NW_WIDTH-1:0] cta_wid;
-    wire[PC_BITS-1:0] cta_PC;
-    wire[`NUM_THREADS-1:0] cta_tmask;
+    wire [NW_WIDTH-1:0] cta_wid;
+    wire [PC_BITS-1:0] cta_PC;
+    wire [`NUM_THREADS-1:0] cta_tmask;
     cta_csrs_t cta_csrs;
     wire cta_dispatcher_busy;
     wire cta_init;
 
-    // Per-warp mscratch and CTA CSRs owned by scheduler
-    reg [`NUM_WARPS-1:0][`MEM_ADDR_WIDTH-1:0] mscratch_r;
-    cta_csrs_t [`NUM_WARPS-1:0] cta_csrs_r;
+    // Per-CTA context.
+    wire                  cta_ctx_write;
+    wire [NCTA_WIDTH-1:0] cta_ctx_waddr;
+    cta_ctx_t             cta_ctx_wdata;
+    wire [NCTA_WIDTH-1:0] cta_ctx_raddr;
+    cta_ctx_t             cta_ctx_rdata;
+
+    VX_dp_ram #(
+        .DATAW     ($bits(cta_ctx_t)),
+        .SIZE      (NUM_CTA_MAX),
+        .RDW_MODE  ("R"),
+        .RADDR_REG (1)
+    ) cta_ctx_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (cta_ctx_write),
+        .wren  (1'b1),
+        .waddr (cta_ctx_waddr),
+        .wdata (cta_ctx_wdata),
+        .raddr (cta_ctx_raddr),
+        .rdata (cta_ctx_rdata)
+    );
+
+    // Per-warp residue.
+    wire                cta_warp_write;
+    wire [NW_WIDTH-1:0] cta_warp_waddr;
+    cta_warp_t          cta_warp_wdata;
+    wire [NW_WIDTH-1:0] cta_warp_raddr;
+    cta_warp_t          cta_warp_rdata;
+
+    VX_dp_ram #(
+        .DATAW     ($bits(cta_warp_t)),
+        .SIZE      (`NUM_WARPS),
+        .RDW_MODE  ("R"),
+        .RADDR_REG (1)
+    ) cta_warp_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (cta_warp_write),
+        .wren  (1'b1),
+        .waddr (cta_warp_waddr),
+        .wdata (cta_warp_wdata),
+        .raddr (cta_warp_raddr),
+        .rdata (cta_warp_rdata)
+    );
 
     // Warp retirement: TMC with tmask==0 permanently deactivates the warp
     wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0);
@@ -92,7 +138,46 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     );
 
     assign sched_csr_if.mscratch  = mscratch_r[sched_csr_if.csr_rd_wid];
-    assign sched_csr_if.cta_csrs  = cta_csrs_r[sched_csr_if.csr_rd_wid];
+
+    // -----------------------------------------------------------------------
+    // Per-CTA + per-warp sp_ram drivers
+    // -----------------------------------------------------------------------
+    //
+    assign cta_warp_write       = cta_fire;
+    assign cta_warp_waddr       = cta_wid;
+    assign cta_warp_wdata.cta_rank   = cta_csrs.cta_rank;
+    assign cta_warp_wdata.thread_idx = cta_csrs.thread_idx;
+
+    assign cta_ctx_write        = cta_fire;
+    assign cta_ctx_waddr        = cta_csrs.cta_id;
+    assign cta_ctx_wdata.cta_size  = cta_csrs.cta_size;
+    assign cta_ctx_wdata.block_idx = cta_csrs.block_idx;
+    assign cta_ctx_wdata.block_dim = cta_csrs.block_dim;
+    assign cta_ctx_wdata.grid_dim  = cta_csrs.grid_dim;
+    assign cta_ctx_wdata.param     = cta_csrs.param;
+    assign cta_ctx_wdata.lmem_addr = cta_csrs.lmem_addr;
+
+    // Reads — sp_ram returns rdata one cycle after raddr is presented.
+    // The CSR-side master (csr_data) supplies both csr_rd_wid and
+    // csr_rd_cta_id directly from execute_if.data.header, so the scheduler
+    // indexes its sp_rams without any internal cta_id lookup. csr_unit
+    // holds execute_if for one cycle (cta_read_done_r) so the read settles
+    // before cta_csrs is consumed.
+    assign cta_warp_raddr = sched_csr_if.csr_rd_wid;
+    assign cta_ctx_raddr  = sched_csr_if.csr_rd_cta_id;
+
+    // cta_csrs.cta_id is the externally-supplied id passed through —
+    // csr_unit holds execute_if stable across the 1-cycle stall, so the
+    // live signal aligns with the sp_ram outputs at the consume cycle.
+    assign sched_csr_if.cta_csrs.cta_id     = sched_csr_if.csr_rd_cta_id;
+    assign sched_csr_if.cta_csrs.cta_rank   = cta_warp_rdata.cta_rank;
+    assign sched_csr_if.cta_csrs.thread_idx = cta_warp_rdata.thread_idx;
+    assign sched_csr_if.cta_csrs.cta_size   = cta_ctx_rdata.cta_size;
+    assign sched_csr_if.cta_csrs.block_idx  = cta_ctx_rdata.block_idx;
+    assign sched_csr_if.cta_csrs.block_dim  = cta_ctx_rdata.block_dim;
+    assign sched_csr_if.cta_csrs.grid_dim   = cta_ctx_rdata.grid_dim;
+    assign sched_csr_if.cta_csrs.param      = cta_ctx_rdata.param;
+    assign sched_csr_if.cta_csrs.lmem_addr  = cta_ctx_rdata.lmem_addr;
 
     // split/join
     wire                    join_valid;
@@ -106,6 +191,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     wire schedule_fire = schedule_valid && schedule_ready;
     wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
+`ifdef EXT_C_ENABLE
+    // PC advance is driven by decompress_finished under EXT_C;
+    `UNUSED_VAR (schedule_if_fire)
+`endif
 
     // branch
     wire [`NUM_ALU_BLOCKS-1:0]               branch_valid;
@@ -214,10 +303,19 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n[schedule_wid] = 1;
         end
 
-        // advance PC
+        // advance PC.
+    `ifdef EXT_C_ENABLE
+        // With RVC, the decompressor may emit a 2-byte instruction.
+        if (decode_sched_if.valid) begin
+            warp_pcs_n[decode_sched_if.wid] =
+                warp_pcs_n[decode_sched_if.wid]
+                + from_fullPC(decode_sched_if.is_rvc ? `XLEN'(2) : `XLEN'(4));
+        end
+    `else
         if (schedule_if_fire) begin
             warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`XLEN'(4));
         end
+    `endif
     end
 
     always @(posedge clk) begin
@@ -233,7 +331,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             thread_masks    <= '0;
             is_single_warp  <= 0;
             mscratch_r      <= '0;
-            cta_csrs_r      <= '0;
         end else begin
             active_warps   <= active_warps_n;
             stalled_warps  <= stalled_warps_n;
@@ -258,10 +355,12 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 end
             end
 
-            // CTA dispatch: latch per-warp CTA CSRs and mscratch (param)
+            // CTA dispatch: latch this warp's cta_id and mscratch (param) in
+            // flops; the per-CTA and per-warp tables (cta_ctx_ram /
+            // cta_warp_ram) are written via their dedicated write ports below.
             if (cta_fire) begin
-                cta_csrs_r[cta_wid] <= cta_csrs;
                 mscratch_r[cta_wid] <= cta_csrs.param;
+                cta_id_per_warp_r[cta_wid] <= cta_csrs.cta_id;
             end
 
             // MSCRATCH write-back from CSR unit (CSR instruction)
@@ -395,8 +494,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign instr_uuid = '0;
 `endif
 
+    // Look up the scheduled warp's CTA-id from the per-warp table.
+    wire [NCTA_WIDTH-1:0] schedule_cta_id = cta_id_per_warp_r[schedule_wid];
+
     VX_elastic_buffer #(
-        .DATAW (`NUM_THREADS + PC_BITS + NW_WIDTH + UUID_WIDTH),
+        .DATAW (`NUM_THREADS + PC_BITS + NW_WIDTH + NCTA_WIDTH + UUID_WIDTH),
         .SIZE  (2),  // need to buffer out ready_in
         .OUT_REG (1) // should be registered for BRAM acces in fetch unit
     ) out_buf (
@@ -404,8 +506,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (schedule_valid),
         .ready_in  (schedule_ready),
-        .data_in   ({schedule_tmask, schedule_pc, schedule_wid, instr_uuid}),
-        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid, schedule_if.data.uuid}),
+        .data_in   ({schedule_tmask, schedule_pc, schedule_wid, schedule_cta_id, instr_uuid}),
+        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid, schedule_if.data.cta_id, schedule_if.data.uuid}),
         .valid_out (schedule_if.valid),
         .ready_out (schedule_if.ready)
     );
@@ -565,7 +667,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     always @(posedge clk) begin
         if (schedule_fire) begin
-            `TRACE(1, ("%t: %s dispatch: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_wid, to_fullPC(schedule_pc), schedule_tmask, instr_uuid))
+            `TRACE(1, ("%t: %s dispatch: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_wid, schedule_cta_id, to_fullPC(schedule_pc), schedule_tmask, instr_uuid))
         end
     end
 `endif

@@ -18,10 +18,21 @@
 #ifdef EXT_DXA_ENABLE
 #include "dxa_core.h"
 #endif
+#ifdef EXT_TEX_ENABLE
+#include "tex_core.h"
+#endif
+#ifdef EXT_OM_ENABLE
+#include "om_core.h"
+#endif
+#ifdef EXT_RASTER_ENABLE
+#include "raster_core.h"
+#endif
 
 namespace vortex {
 
 class ProcessorImpl;
+
+class Socket;
 
 class Cluster : public SimObject<Cluster> {
 public:
@@ -57,6 +68,8 @@ public:
   int dcr_write(uint32_t addr, uint32_t value);
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
+
+  class Core* get_core(uint32_t idx) const;
 
   // Cache flush walk: dcache → l2cache (sequential to avoid evictions
   // racing the L2 walk). Caller ticks the simulator until done.

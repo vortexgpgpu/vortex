@@ -315,6 +315,21 @@ public:
     return 0;
   }
 
+  int copy(uint64_t dest_addr, uint64_t src_addr, uint64_t size){
+    if( dest_addr == src_addr) {
+      return 0;
+    }
+
+    if (dest_addr + size > global_mem_size_ ||
+        src_addr + size > global_mem_size_)
+      return -1;
+
+    CHECK_FPGA_ERR(api_.fpgaCopyBuffer(fpga_, dest_addr, src_addr, size), {
+      return -1;
+    });
+    return 0;
+  }
+
   int upload(uint64_t dev_addr, const void *host_ptr, uint64_t size) {
     // check alignment
     if (!is_aligned(dev_addr, CACHE_BLOCK_SIZE))

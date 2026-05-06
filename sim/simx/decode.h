@@ -25,7 +25,10 @@ public:
   Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 64>& instr_pool);
   ~Decoder();
 
-  // Decode a 32-bit instruction word into an Instr.
+  // Decode an instruction word into an Instr. `code` carries either a
+  // 32-bit RV32I encoding (low2 == 0b11) or a 16-bit RVC in the low half
+  // (low2 != 0b11); the decoder detects RVC, calls rvc_decompress, and
+  // stamps IntrBrArgs.is_rvc accordingly.
   Instr::Ptr decode(uint32_t code, uint64_t uuid);
 
 private:

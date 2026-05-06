@@ -30,6 +30,10 @@ package VX_gpu_pkg;
 	localparam NT_WIDTH = `UP(NT_BITS);
 	localparam NB_WIDTH = `UP(NB_BITS);
 
+    localparam NUM_CTA_MAX = `NUM_WARPS;
+	localparam NCTA_BITS  = `CLOG2(NUM_CTA_MAX);
+	localparam NCTA_WIDTH = `UP(NCTA_BITS);
+
     localparam XLENB    = `XLEN / 8;
     localparam XLENB_W  = `CLOG2(XLENB);
     localparam BYTESEL_BITS = (XLENB_W + XLENB_W);
@@ -102,6 +106,15 @@ package VX_gpu_pkg;
     endfunction
     function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`XLEN-1:0] pc);
         from_fullPC = pc;
+    endfunction
+`elsif EXT_C_ENABLE
+    // With the compressed extension, branch targets and warp PCs may be 2-byte aligned.
+    localparam PC_BITS = (`XLEN-1);
+    function automatic logic [`XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
+        to_fullPC = `XLEN'({pc, 1'b0});
+    endfunction
+    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`XLEN-1:0] pc);
+        from_fullPC = PC_BITS'(pc >> 1);
     endfunction
 `else
     localparam PC_BITS = (`XLEN-2);
@@ -444,6 +457,15 @@ package VX_gpu_pkg;
     localparam INST_SFU_DXA =    4'h9;
 `endif
     localparam INST_SFU_WSYNC =  4'hA;
+`ifdef EXT_TEX_ENABLE
+    localparam INST_SFU_TEX =    4'hB;
+`endif
+`ifdef EXT_OM_ENABLE
+    localparam INST_SFU_OM =     4'hC;
+`endif
+`ifdef EXT_RASTER_ENABLE
+    localparam INST_SFU_RASTER = 4'hD;
+`endif
     localparam INST_SFU_BITS =   4;
 
     function automatic logic [3:0] inst_sfu_csr(input logic [2:0] funct3);
@@ -593,7 +615,7 @@ package VX_gpu_pkg;
     } kmu_req_t;
 
     typedef struct packed {
-        logic [31:0]      cta_id;
+        logic [NCTA_WIDTH-1:0] cta_id;
         logic [NW_WIDTH-1:0] cta_rank;
         logic [NW_WIDTH:0] cta_size;
         logic [2:0][CTA_TID_WIDTH-1:0] thread_idx;
@@ -603,6 +625,20 @@ package VX_gpu_pkg;
         logic [`MEM_ADDR_WIDTH-1:0] param;
         logic [`MEM_ADDR_WIDTH-1:0] lmem_addr;
     } cta_csrs_t;
+
+    typedef struct packed {
+        logic [NW_WIDTH:0]              cta_size;
+        logic [2:0][31:0]               block_idx;
+        logic [2:0][CTA_TID_WIDTH:0]    block_dim;
+        logic [2:0][31:0]               grid_dim;
+        logic [`MEM_ADDR_WIDTH-1:0]     param;
+        logic [`MEM_ADDR_WIDTH-1:0]     lmem_addr;
+    } cta_ctx_t;
+
+    typedef struct packed {
+        logic [NW_WIDTH-1:0]            cta_rank;
+        logic [2:0][CTA_TID_WIDTH-1:0]  thread_idx;
+    } cta_warp_t;
 
     //////////////////////// instruction arguments ////////////////////////////
 
@@ -616,6 +652,21 @@ package VX_gpu_pkg;
         logic [19:0] imm20;
     } alu_args_t;
     `PACKAGE_ASSERT($bits(alu_args_t) == INST_ARGS_BITS)
+
+    // Branch instructions (JAL/JALR/B/SYS) execute on the ALU pipeline.
+    typedef struct packed {
+        logic use_PC;
+        logic use_imm;
+    `ifdef EXT_C_ENABLE
+        logic is_rvc;
+    `else
+        logic __unused;
+    `endif
+        logic [ALU_TYPE_BITS-1:0] xtype;
+        logic [19:0] imm20;
+    } br_args_t;
+    `PACKAGE_ASSERT($bits(br_args_t) == $bits(alu_args_t))
+    `PACKAGE_ASSERT($bits(br_args_t) == INST_ARGS_BITS)
 
     typedef struct packed {
         logic [(INST_ARGS_BITS-INST_FRM_BITS-INST_FMT_BITS)-1:0] __padding;
@@ -679,8 +730,32 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(tcu_args_t) == INST_ARGS_BITS)
 `endif
 
+`ifdef EXT_TEX_ENABLE
+    // vx_tex: funct2 of CUSTOM1 R4-type holds the texture stage (0..VX_TEX_STAGE_COUNT-1)
+    typedef struct packed {
+        logic [INST_ARGS_BITS-`VX_TEX_STAGE_BITS-1:0] __padding;
+        logic [`VX_TEX_STAGE_BITS-1:0]                stage;
+    } tex_args_t;
+    `PACKAGE_ASSERT($bits(tex_args_t) == INST_ARGS_BITS)
+`endif
+
+`ifdef EXT_OM_ENABLE
+    typedef struct packed {
+        logic [INST_ARGS_BITS-1:0] __padding;
+    } om_args_t;
+    `PACKAGE_ASSERT($bits(om_args_t) == INST_ARGS_BITS)
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    typedef struct packed {
+        logic [INST_ARGS_BITS-1:0] __padding;
+    } raster_args_t;
+    `PACKAGE_ASSERT($bits(raster_args_t) == INST_ARGS_BITS)
+`endif
+
     typedef union packed {
         alu_args_t  alu;
+        br_args_t   br;
         fpu_args_t  fpu;
         lsu_args_t  lsu;
         csr_args_t  csr;
@@ -691,6 +766,15 @@ package VX_gpu_pkg;
     `ifdef EXT_TCU_ENABLE
         tcu_args_t  tcu;
     `endif
+    `ifdef EXT_TEX_ENABLE
+        tex_args_t  tex;
+    `endif
+    `ifdef EXT_OM_ENABLE
+        om_args_t   om;
+    `endif
+    `ifdef EXT_RASTER_ENABLE
+        raster_args_t raster;
+    `endif
     } op_args_t;
     `PACKAGE_ASSERT($bits(op_args_t) == INST_ARGS_BITS)
 
@@ -699,14 +783,19 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]  uuid;
         logic [NW_WIDTH-1:0]    wid;
+        logic [NCTA_WIDTH-1:0]  cta_id;
         logic [`NUM_THREADS-1:0] tmask;
         logic [PC_BITS-1:0]     PC;
         logic [31:0]            instr;
+    `ifdef EXT_C_ENABLE
+        logic                   is_rvc;
+    `endif
     } fetch_t;
 
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;
         logic [NW_WIDTH-1:0]        wid;
+        logic [NCTA_WIDTH-1:0]      cta_id;
         logic [`NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
         logic [EX_BITS-1:0]         ex_type;
@@ -725,6 +814,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;
+        logic [NCTA_WIDTH-1:0]      cta_id;
         logic [`NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
         logic [EX_BITS-1:0]         ex_type;
@@ -746,6 +836,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;
         logic [ISSUE_WIS_W-1:0]     wis;
+        logic [NCTA_WIDTH-1:0]      cta_id;
         logic [`NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
         logic [EX_BITS-1:0]         ex_type;
@@ -764,6 +855,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
@@ -785,6 +877,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
@@ -804,6 +897,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [NW_WIDTH-1:0]                wid;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
@@ -819,6 +913,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
@@ -834,6 +929,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [NW_WIDTH-1:0]                wid;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [`NUM_THREADS-1:0]            tmask;
         logic [PC_BITS-1:0]                 PC;
     } schedule_t;
@@ -1037,6 +1133,70 @@ package VX_gpu_pkg;
     // If dcache writeback is enabled, MSHR size must be large enough to track all outstanding requests
     localparam DCACHE_MREQ_SIZE     = `DCACHE_WRITEBACK ? `DCACHE_MSHR_SIZE : `DCACHE_MREQ_SIZE;
 
+    ////////////////////////// Tex / Tcache Parameters ////////////////////////
+`ifdef EXT_TEX_ENABLE
+    // tex unit: per-request queue + per-request tag
+    localparam TEX_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(`TEX_REQ_QUEUE_SIZE));
+    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_REQ_TAG_WIDTH + `CLOG2(`SOCKET_SIZE));
+    localparam TEX_REQ_ARB2_TAG_WIDTH = (TEX_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, `NUM_TEX_CORES));
+
+    localparam TCACHE_WORD_SIZE     = 4;
+    localparam TCACHE_ADDR_WIDTH    = (`MEM_ADDR_WIDTH - `CLOG2(TCACHE_WORD_SIZE));
+    localparam TCACHE_LINE_SIZE     = `L1_LINE_SIZE;
+    localparam TCACHE_NUM_REQS      = `TCACHE_NUM_BANKS;
+
+    // Per-tex-unit memory port count (skybox: 4 * NUM_SFU_LANES bilinear taps)
+    localparam TEX_MEM_REQS         = (4 * `NUM_SFU_LANES);
+
+    localparam TCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
+    localparam TCACHE_TAG_ID_BITS    = (`CLOG2(`TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
+    localparam TCACHE_TAG_WIDTH      = (UUID_WIDTH + TCACHE_TAG_ID_BITS);
+    localparam TCACHE_MEM_DATA_WIDTH = (TCACHE_LINE_SIZE * 8);
+    localparam TCACHE_MEM_PORTS      = 1;
+    // Cache-enabled (NC_ENABLE=0, PASSTHRU=0) tag width = cache_cluster's
+    // CACHE_MEM_TAG_WIDTH + per-cache arb-sel bits.
+    localparam TCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(
+        `TCACHE_MSHR_SIZE, `TCACHE_NUM_BANKS, TCACHE_MEM_PORTS, `NUM_TCACHES, UUID_WIDTH);
+`endif
+
+    ////////////////////////// Raster / Rcache Parameters /////////////////////
+`ifdef EXT_RASTER_ENABLE
+    localparam RCACHE_WORD_SIZE      = 4;
+    localparam RCACHE_ADDR_WIDTH     = (`MEM_ADDR_WIDTH - `CLOG2(RCACHE_WORD_SIZE));
+    localparam RCACHE_LINE_SIZE      = `L1_LINE_SIZE;
+    localparam RCACHE_NUM_REQS       = `RCACHE_NUM_BANKS;
+
+    // Per-raster-unit memory port count (skybox: 9 = 3 vertices * 3 attributes)
+    localparam RASTER_MEM_REQS       = 9;
+
+    localparam RCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(RASTER_MEM_REQS, RCACHE_NUM_REQS);
+    localparam RCACHE_TAG_ID_BITS    = (`CLOG2(`RASTER_MEM_QUEUE_SIZE) + RCACHE_BATCH_SEL_BITS);
+    localparam RCACHE_TAG_WIDTH      = RCACHE_TAG_ID_BITS;
+    localparam RCACHE_MEM_DATA_WIDTH = (RCACHE_LINE_SIZE * 8);
+    localparam RCACHE_MEM_PORTS      = 1;
+    localparam RCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(
+        `RCACHE_MSHR_SIZE, `RCACHE_NUM_BANKS, RCACHE_MEM_PORTS, `NUM_RCACHES, UUID_WIDTH);
+`endif
+
+    ////////////////////////// OM / Ocache Parameters /////////////////////////
+`ifdef EXT_OM_ENABLE
+    localparam OCACHE_WORD_SIZE      = 4;
+    localparam OCACHE_ADDR_WIDTH     = (`MEM_ADDR_WIDTH - `CLOG2(OCACHE_WORD_SIZE));
+    localparam OCACHE_LINE_SIZE      = `L1_LINE_SIZE;
+    localparam OCACHE_NUM_REQS       = `OCACHE_NUM_BANKS;
+
+    // Per-OM-unit memory port count (skybox: 2 * NUM_SFU_LANES — color + depth lanes)
+    localparam OM_MEM_REQS           = (2 * `NUM_SFU_LANES);
+
+    localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(OM_MEM_REQS, OCACHE_NUM_REQS);
+    localparam OCACHE_TAG_ID_BITS    = (`CLOG2(`OM_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
+    localparam OCACHE_TAG_WIDTH      = (UUID_WIDTH + OCACHE_TAG_ID_BITS);
+    localparam OCACHE_MEM_DATA_WIDTH = (OCACHE_LINE_SIZE * 8);
+    localparam OCACHE_MEM_PORTS      = 1;
+    localparam OCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(
+        `OCACHE_MSHR_SIZE, `OCACHE_NUM_BANKS, OCACHE_MEM_PORTS, `NUM_OCACHES, UUID_WIDTH);
+`endif
+
     /////////////////////////////// L1 Parameters /////////////////////////////
 
     // arbitrate between icache and dcache
@@ -1053,7 +1213,14 @@ package VX_gpu_pkg;
 
     // Input request size — socket-only (DXA merges via per-port priority arb)
     localparam L2_SOCKET_REQS       = NUM_SOCKETS * `L1_MEM_PORTS;
-    localparam L2_NUM_REQS          = L2_SOCKET_REQS;
+
+    // Graphics caches add dedicated L2 input slots (one per enabled cache)
+    localparam L2_GFX_REQS          = `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_OM_ENABLED;
+    localparam L2_GFX_TEX_IDX       = L2_SOCKET_REQS;
+    localparam L2_GFX_RASTER_IDX    = L2_GFX_TEX_IDX + `EXT_TEX_ENABLED;
+    localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `EXT_RASTER_ENABLED;
+
+    localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
 
 `ifdef EXT_DXA_ENABLE
 `ifdef NUM_DXA_UNITS

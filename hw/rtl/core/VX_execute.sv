@@ -44,6 +44,18 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_txbar_bus_if.slave  dxa_txbar_bus_if,
 `endif
 
+`ifdef EXT_TEX_ENABLE
+    VX_tex_bus_if.master    tex_bus_if,
+`endif
+
+`ifdef EXT_OM_ENABLE
+    VX_om_bus_if.master     om_bus_if,
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    VX_raster_bus_if.slave  raster_bus_if,
+`endif
+
     // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if,
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
@@ -133,6 +145,15 @@ module VX_execute import VX_gpu_pkg::*; #(
     `ifdef EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `endif
+    `ifdef EXT_TEX_ENABLE
+        .tex_bus_if     (tex_bus_if),
+    `endif
+    `ifdef EXT_OM_ENABLE
+        .om_bus_if      (om_bus_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE
+        .raster_bus_if  (raster_bus_if),
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if),

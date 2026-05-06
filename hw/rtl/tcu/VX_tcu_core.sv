@@ -359,14 +359,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `ifdef DBG_TRACE_TCU
             always @(posedge clk) begin
                 if (execute_if.valid && execute_if.ready) begin
-                    `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, execute_if.data.header.wid, i, j, step_m, step_n))
+                    `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, i, j, step_m, step_n))
                     `TRACE_ARRAY1D(2, "0x%0h", a_row, TCU_TC_K)
                     `TRACE(3, (", b_col="));
                     `TRACE_ARRAY1D(2, "0x%0h", b_col, TCU_TC_K)
                     `TRACE(3, (", c_val=0x%0h (#%0d)\n", c_val, execute_if.data.header.uuid));
                 end
                 if (result_if.valid && result_if.ready) begin
-                    `TRACE(3, ("%t: %s FEDP-deq: wid=%0d, i=%0d, j=%0d, d_val=0x%0h (#%0d)\n", $time, INSTANCE_ID, result_if.data.header.wid, i, j, d_val[i][j], result_if.data.header.uuid));
+                    `TRACE(3, ("%t: %s FEDP-deq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, d_val=0x%0h (#%0d)\n", $time, INSTANCE_ID, result_if.data.header.wid, result_if.data.header.cta_id, i, j, d_val[i][j], result_if.data.header.uuid));
                 end
             end
         `endif // DBG_TRACE_TCU

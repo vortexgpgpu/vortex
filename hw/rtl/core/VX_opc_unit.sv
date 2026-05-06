@@ -51,7 +51,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     localparam REG_REM_BITS     = NUM_REGS_BITS - BANK_SEL_BITS;
 
-    localparam META_DATAW       = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NUM_XREGS + NUM_REGS_BITS + BYTESEL_BITS + 1 + 1;
+    localparam META_DATAW       = UUID_WIDTH + ISSUE_WIS_W + NCTA_WIDTH + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NUM_XREGS + NUM_REGS_BITS + BYTESEL_BITS + 1 + 1;
     localparam OUT_DATAW        = $bits(operands_t);
 
     `UNUSED_VAR (writeback_if.data.sop)
@@ -159,6 +159,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     assign pipe_mdata = {
         scoreboard_if.data.uuid,
         scoreboard_if.data.wis,
+        scoreboard_if.data.cta_id,
         simd_pid,
         simd_out,
         scoreboard_if.data.PC,
@@ -316,6 +317,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         .data_out ({
             operands_if.data.uuid,
             operands_if.data.wis,
+            operands_if.data.cta_id,
             operands_if.data.sid,
             operands_if.data.tmask,
             operands_if.data.PC,

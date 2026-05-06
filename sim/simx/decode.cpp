@@ -23,6 +23,7 @@
 #include "debug.h"
 #include "types.h"
 #include "decode.h"
+#include "decompressor.h"
 #include "instr.h"
 
 #ifdef EXT_TCU_ENABLE
@@ -400,6 +401,21 @@ static op_string_t op_string(const Instr &instr) {
       return TcuUnit::op_string(tcu_type, tpuArgs);
     }
   #endif // EXT_TCU_ENABLE
+  #ifdef EXT_TEX_ENABLE
+    ,[&](TexType /*tex_type*/)-> op_string_t {
+      return {"TEX.SAMPLE", ""};
+    }
+  #endif
+  #ifdef EXT_OM_ENABLE
+    ,[&](OmType /*om_type*/)-> op_string_t {
+      return {"OM.WRITE", ""};
+    }
+  #endif
+  #ifdef EXT_RASTER_ENABLE
+    ,[&](RasterType /*raster_type*/)-> op_string_t {
+      return {"RASTER.POP", ""};
+    }
+  #endif
  );
  return {"", ""};
 }
@@ -444,6 +460,15 @@ Decoder::Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 6
 Decoder::~Decoder() {}
 
 Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
+  // Detect RVC from the raw bits and expand. Mirrors the RTL where
+  // VX_decompressor sets fetch_t.is_rvc and produces a 32-bit instr; here
+  // the decoder owns both detection and expansion in one place.
+  const bool is_rvc = (code & 0x3u) != 0x3u;
+  if (is_rvc) {
+    auto r = rvc_decompress(code & 0xFFFFu);
+    assert(!r.illegal && "illegal RVC encoding");
+    code = r.instr32;
+  }
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   auto funct2 = (code >> shift_funct2) & mask_funct2;
   auto funct3 = (code >> shift_funct3) & mask_funct3;
@@ -542,7 +567,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     auto imm12 = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
     auto addr = sext(imm12, width_i_imm+1);
     instr->set_op_type(BrType::BR);
-    instr->set_args(IntrBrArgs{funct3, addr});
+    instr->set_args(IntrBrArgs{funct3, is_rvc, addr});
     instr->set_src_reg(0, rs1, RegType::Integer);
     instr->set_src_reg(1, rs2, RegType::Integer);
     instr->set_wstall(true);
@@ -556,7 +581,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     auto imm20 = (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     auto addr = sext(imm20, width_j_imm+1);
     instr->set_op_type(BrType::JAL);
-    instr->set_args(IntrBrArgs{0, addr});
+    instr->set_args(IntrBrArgs{0, is_rvc, addr});
     instr->set_dest_reg(rd, RegType::Integer);
     instr->set_wstall(true);
   } break;
@@ -564,7 +589,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     auto imm12 = code >> shift_rs2;
     auto addr = sext(imm12, width_i_imm);
     instr->set_op_type(BrType::JALR);
-    instr->set_args(IntrBrArgs{0, addr});
+    instr->set_args(IntrBrArgs{0, is_rvc, addr});
     instr->set_dest_reg(rd, RegType::Integer);
     instr->set_src_reg(0, rs1, RegType::Integer);
     instr->set_wstall(true);
@@ -641,7 +666,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     } else { // ECALL/EBREACK/URET/SRET/MRET
       auto imm12 = code >> shift_rs2;
       instr->set_op_type(BrType::SYS);
-      instr->set_args(IntrBrArgs{0, imm12});
+      instr->set_args(IntrBrArgs{0, 0, imm12});
       instr->set_wstall(true);
     }
   } break;
@@ -918,6 +943,39 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       wgArgs.src_lane = funct2;
       instr->set_args(wgArgs);
     } break;
+#ifdef EXT_TEX_ENABLE
+    case 1: { // vx_tex: R4-type, funct2=stage, rd=texel, rs1=u, rs2=v, rs3=lod
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(TexType::SAMPLE);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
+      instr->set_src_reg(2, rs3, RegType::Integer);
+      IntrTexArgs texArgs{};
+      texArgs.stage = funct2;
+      instr->set_args(texArgs);
+    } break;
+#endif
+#ifdef EXT_OM_ENABLE
+    case 2: { // vx_om: R4-type, rs1=pos_face, rs2=color, rs3=depth
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(OmType::WRITE);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
+      instr->set_src_reg(2, rs3, RegType::Integer);
+      IntrOmArgs omArgs{};
+      instr->set_args(omArgs);
+    } break;
+#endif
+#ifdef EXT_RASTER_ENABLE
+    case 3: { // vx_rast: R-type, rd=quad descriptor
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(RasterType::POP);
+      instr->set_dest_reg(rd, RegType::Integer);
+      IntrRasterArgs rastArgs{};
+      instr->set_args(rastArgs);
+    } break;
+#endif
     default:
       std::abort();
     }

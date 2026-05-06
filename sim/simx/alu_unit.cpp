@@ -338,7 +338,8 @@ void AluUnit::execute(instr_trace_t* trace) {
 			core_->perf_stats().branches += 1;
 		} break;
 		case BrType::JAL: {
-			Word link_pc = trace->PC + 4;
+			// RVC source returns PC+2; full RV32I returns PC+4.
+			Word link_pc = trace->PC + (brArgs.is_rvc ? 2 : 4);
 			for (uint32_t t = thread_start; t < num_threads; ++t) {
 				if (!tmask.test(t)) continue;
 				rd_data[t].i = link_pc;
@@ -347,7 +348,8 @@ void AluUnit::execute(instr_trace_t* trace) {
 			core_->perf_stats().branches += 1;
 		} break;
 		case BrType::JALR: {
-			Word link_pc = trace->PC + 4;
+			// RVC source returns PC+2; full RV32I returns PC+4.
+			Word link_pc = trace->PC + (brArgs.is_rvc ? 2 : 4);
 			for (uint32_t t = thread_start; t < num_threads; ++t) {
 				if (!tmask.test(t)) continue;
 				rd_data[t].i = link_pc;

@@ -1,6 +1,8 @@
 ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
+NP ?= 4
+
 all:
 	$(MAKE) -C basic
 	$(MAKE) -C demo
@@ -10,6 +12,7 @@ all:
 	$(MAKE) -C dotproduct2
 	$(MAKE) -C mstress
 	$(MAKE) -C io_addr
+	$(MAKE) -C arith
 	$(MAKE) -C printf
 	$(MAKE) -C diverge
 	$(MAKE) -C sort
@@ -37,6 +40,7 @@ all:
 	$(MAKE) -C sgemm_tcu_mx
 	$(MAKE) -C sgemm_tcu_wg_sp
 	$(MAKE) -C sgemm2_dxa
+	$(MAKE) -C sgemm2_tcu
 	$(MAKE) -C sgemm_tcu_wg_dxa
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa
 	$(MAKE) -C dxa_copy
@@ -48,6 +52,16 @@ all:
 	$(MAKE) -C wsync
 	$(MAKE) -C occupancy
 
+all-mpi:
+	$(MAKE) -C mpi_dotproduct MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_put_dotproduct MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_diverge MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_vecadd MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_sgemm MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_blocked_sgemm MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_conv3 MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_neighbor_a2a_conv3 MPI=1 NP=$(NP)
+
 run-simx:
 	$(MAKE) -C basic run-simx
 	$(MAKE) -C demo run-simx
@@ -57,6 +71,7 @@ run-simx:
 	$(MAKE) -C dotproduct2 run-simx
 	$(MAKE) -C mstress run-simx
 	$(MAKE) -C io_addr run-simx
+	$(MAKE) -C arith run-simx
 	$(MAKE) -C printf run-simx
 	$(MAKE) -C diverge run-simx
 	$(MAKE) -C sort run-simx
@@ -84,6 +99,7 @@ run-simx:
 	$(MAKE) -C sgemm_tcu_mx run-simx
 	$(MAKE) -C sgemm_tcu_wg_sp run-simx
 	$(MAKE) -C sgemm2_dxa run-simx
+	$(MAKE) -C sgemm2_tcu run-simx
 	$(MAKE) -C sgemm_tcu_wg_dxa run-simx
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-simx
 	$(MAKE) -C dxa_copy run-simx
@@ -95,6 +111,16 @@ run-simx:
 	$(MAKE) -C wsync run-simx
 	$(MAKE) -C occupancy run-simx
 
+run-simx-mpi:
+	$(MAKE) -C mpi_dotproduct run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_put_dotproduct run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_diverge run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_vecadd run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_sgemm run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_blocked_sgemm run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_conv3 run-simx MPI=1 NP=$(NP)
+	$(MAKE) -C mpi_neighbor_a2a_conv3 run-simx MPI=1 NP=$(NP)
+
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
 	$(MAKE) -C demo run-rtlsim
@@ -104,6 +130,7 @@ run-rtlsim:
 	$(MAKE) -C dotproduct2 run-rtlsim
 	$(MAKE) -C mstress run-rtlsim
 	$(MAKE) -C io_addr run-rtlsim
+	$(MAKE) -C arith run-rtlsim
 	$(MAKE) -C printf run-rtlsim
 	$(MAKE) -C diverge run-rtlsim
 	$(MAKE) -C sort run-rtlsim
@@ -131,6 +158,7 @@ run-rtlsim:
 #	$(MAKE) -C sgemm_tcu_mx run-rtlsim - not supported yet
 	$(MAKE) -C sgemm_tcu_wg_sp run-rtlsim
 	$(MAKE) -C sgemm2_dxa run-rtlsim
+	$(MAKE) -C sgemm2_tcu run-rtlsim
 	$(MAKE) -C sgemm_tcu_wg_dxa run-rtlsim
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-rtlsim
 	$(MAKE) -C dxa_copy run-rtlsim
@@ -151,8 +179,10 @@ clean:
 	$(MAKE) -C dotproduct2 clean
 	$(MAKE) -C mstress clean
 	$(MAKE) -C io_addr clean
+	$(MAKE) -C arith clean
 	$(MAKE) -C printf clean
 	$(MAKE) -C diverge clean
+	$(MAKE) -C mpi_diverge clean
 	$(MAKE) -C sort clean
 	$(MAKE) -C fence clean
 	$(MAKE) -C vecadd clean
@@ -166,6 +196,8 @@ clean:
 	$(MAKE) -C sgemm_tcu_mx clean
 	$(MAKE) -C sgemm_tcu_wg_sp clean
 	$(MAKE) -C conv3 clean
+	$(MAKE) -C mpi_neighbor_a2a_conv3 clean
+	$(MAKE) -C mpi_conv3 clean
 	$(MAKE) -C relu clean
 	$(MAKE) -C sgemv clean
 	$(MAKE) -C sgemm2 clean
@@ -178,6 +210,7 @@ clean:
 	$(MAKE) -C pathfinder clean
 	$(MAKE) -C softmax clean
 	$(MAKE) -C sgemm2_dxa clean
+	$(MAKE) -C sgemm2_tcu clean
 	$(MAKE) -C sgemm_tcu_wg_dxa clean
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa clean
 	$(MAKE) -C dxa_copy clean

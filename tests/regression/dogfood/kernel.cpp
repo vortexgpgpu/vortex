@@ -384,7 +384,6 @@ void kernel_bar(kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto num_cores = vx_num_cores();
 	auto num_warps = vx_num_warps();
-	auto num_threads = vx_num_threads();
 
 	auto cid = vx_core_id();
 	auto wid = vx_warp_id();
@@ -415,8 +414,6 @@ void kernel_bar(kernel_arg_t* __UNIFORM__ arg) {
 void kernel_gbar(kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 	auto num_cores = vx_num_cores();
-	auto num_warps = vx_num_warps();
-	auto num_threads = vx_num_threads();
 
 	auto cid = vx_core_id();
 	auto wid = vx_warp_id();

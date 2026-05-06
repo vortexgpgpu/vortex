@@ -48,6 +48,14 @@ public:
     return total_stalls_;
   }
 
+  // DTM debug-only accessor: returns a mutable ref to the integer
+  // register file entry for warp slot `slot`, register `reg`, lane `lane`.
+  // Used exclusively by sim/simx/dtm/debug_module.cpp (single-hart debug,
+  // typically slot=0 lane=0).
+  Word& dtm_ireg(uint32_t slot, uint32_t reg, uint32_t lane = 0) {
+    return regs_.at(slot).ireg_file.at(reg).at(lane);
+  }
+
 protected:
   virtual void on_reset();
   virtual void on_tick();

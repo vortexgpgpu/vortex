@@ -47,6 +47,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output wire [PERF_CTR_BITS-1:0] bbuf_stalls,
+    output wire [PERF_CTR_BITS-1:0] bbuf_cache_hits,
     output wire [PERF_CTR_BITS-1:0] lmem_reads,
 `endif
 
@@ -273,20 +274,29 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] stall_ctr_r;
+    reg [PERF_CTR_BITS-1:0] hits_ctr_r;
     reg [PERF_CTR_BITS-1:0] reads_ctr_r;
     always_ff @(posedge clk) begin
         if (reset) begin
             stall_ctr_r <= '0;
+            hits_ctr_r  <= '0;
             reads_ctr_r <= '0;
         end else begin
+            // Stall: a request is pending and the resident bank-row doesn't match.
             if (req_valid && !bbuf_ready)
                 stall_ctr_r <= stall_ctr_r + PERF_CTR_BITS'(1);
+            // Hit: a request is pending and the resident bank-row already serves
+            // it (no LMEM refill triggered). Counts cycles of bbuf reuse — a
+            // direct measure of CTA-internal B-tile sharing across warps.
+            if (req_valid && bank_row_resident)
+                hits_ctr_r <= hits_ctr_r + PERF_CTR_BITS'(1);
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                 reads_ctr_r <= reads_ctr_r + PERF_CTR_BITS'(1);
         end
     end
-    assign bbuf_stalls = stall_ctr_r;
-    assign lmem_reads  = reads_ctr_r;
+    assign bbuf_stalls     = stall_ctr_r;
+    assign bbuf_cache_hits = hits_ctr_r;
+    assign lmem_reads      = reads_ctr_r;
 `endif
 
     // -----------------------------------------------------------------------

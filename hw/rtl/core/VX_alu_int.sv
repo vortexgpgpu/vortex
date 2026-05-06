@@ -281,15 +281,23 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         end
     end
 
+`ifdef EXT_C_ENABLE
+    // Capture is_rvc from br_args (which aliases alu_args bit positions).
+    wire is_rvc_in = execute_if.data.op_args.br.is_rvc;
+    wire is_rvc_r;
+`endif
+
     VX_elastic_buffer #(
-        .DATAW ($bits(alu_header_t) + (NUM_LANES * `XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH)
+        .DATAW ($bits(alu_header_t) + (NUM_LANES * `XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH + `EXT_C_ENABLED)
     ) rsp_buf (
         .clk      (clk),
         .reset    (reset),
         .valid_in (execute_if.valid),
         .ready_in (execute_if.ready),
-        .data_in  ({alu_hdr_in,           alu_result,   cbr_dest,   is_br_op,   br_op,   last_tid}),
-        .data_out ({result_if.data.header, alu_result_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
+        .data_in  ({alu_hdr_in,           alu_result,   cbr_dest,   is_br_op,   br_op,   last_tid
+            `ifdef EXT_C_ENABLE , is_rvc_in `endif }),
+        .data_out ({result_if.data.header, alu_result_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r
+            `ifdef EXT_C_ENABLE , is_rvc_r `endif }),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
@@ -324,7 +332,12 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     `IGNORE_UNOPTFLAT_BEGIN
     wire [PC_BITS-1:0] current_pc = result_if.data.header.PC;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
+    `ifdef EXT_C_ENABLE
+        // c.jal/c.jalr return to PC+2 (instruction is 2 bytes).
+        wire [`XLEN-1:0] PC_next = to_fullPC(current_pc) + (is_rvc_r ? `XLEN'(2) : `XLEN'(4));
+    `else
         wire [`XLEN-1:0] PC_next = to_fullPC(current_pc) + `XLEN'(4);
+    `endif
         assign result_if.data.data[i] = (is_br_op_r && is_br_static) ? PC_next : alu_result_r[i];
     end
     `IGNORE_UNOPTFLAT_END
@@ -332,8 +345,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (br_enable) begin
-            `TRACE(2, ("%t: %s branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, INSTANCE_ID, br_wid, to_fullPC(result_if.data.header.PC), br_taken, to_fullPC(br_dest), result_if.data.header.uuid))
+            `TRACE(2, ("%t: %s branch: wid=%0d, cta_id=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
+                $time, INSTANCE_ID, br_wid, result_if.data.header.cta_id, to_fullPC(result_if.data.header.PC), br_taken, to_fullPC(br_dest), result_if.data.header.uuid))
         end
     end
 `endif

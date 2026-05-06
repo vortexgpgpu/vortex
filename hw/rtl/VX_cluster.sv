@@ -110,6 +110,37 @@ module VX_cluster import VX_gpu_pkg::*;
         .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
     ) socket_mem_bus_if[L2_SOCKET_REQS]();
 
+`ifdef EXT_TEX_ENABLE
+    VX_tex_bus_if #(
+        .NUM_LANES (`NUM_SFU_LANES),
+        .TAG_WIDTH (TEX_REQ_ARB1_TAG_WIDTH)
+    ) per_socket_tex_bus_if[NUM_SOCKETS]();
+    VX_mem_bus_if #(
+        .DATA_SIZE (`L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) tcache_l2_bus_if();
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    VX_raster_bus_if #(
+        .NUM_LANES (`NUM_SFU_LANES)
+    ) per_socket_raster_bus_if[NUM_SOCKETS]();
+    VX_mem_bus_if #(
+        .DATA_SIZE (`L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) rcache_l2_bus_if();
+`endif
+
+`ifdef EXT_OM_ENABLE
+    VX_om_bus_if #(
+        .NUM_LANES (`NUM_SFU_LANES)
+    ) per_socket_om_bus_if[NUM_SOCKETS]();
+    VX_mem_bus_if #(
+        .DATA_SIZE (`L1_LINE_SIZE),
+        .TAG_WIDTH (L2_TAG_WIDTH)
+    ) ocache_l2_bus_if();
+`endif
+
 `ifdef EXT_DXA_ENABLE
     import VX_dxa_pkg::*;
     VX_dxa_req_bus_if per_socket_dxa_req_bus_if[NUM_SOCKETS]();
@@ -286,10 +317,20 @@ module VX_cluster import VX_gpu_pkg::*;
 
     wire [NUM_SOCKETS-1:0] per_socket_busy;
 
-`ifdef EXT_DXA_ENABLE
-    localparam NUM_DCR_REQS = NUM_SOCKETS + 1;  // +1 for DXA core
+`ifdef EXT_GFX_ANY_ENABLE
+    localparam NUM_DCR_GFX = 1;
+  `ifdef EXT_DXA_ENABLE
+    localparam DCR_GFX_IDX  = NUM_SOCKETS + 1;
+  `else
+    localparam DCR_GFX_IDX  = NUM_SOCKETS;
+  `endif
 `else
-    localparam NUM_DCR_REQS = NUM_SOCKETS;
+    localparam NUM_DCR_GFX = 0;
+`endif
+`ifdef EXT_DXA_ENABLE
+    localparam NUM_DCR_REQS = NUM_SOCKETS + 1 + NUM_DCR_GFX;  // +1 DXA, +NUM_DCR_GFX gfx
+`else
+    localparam NUM_DCR_REQS = NUM_SOCKETS + NUM_DCR_GFX;
 `endif
     VX_dcr_bus_if per_socket_dcr_bus_if[NUM_DCR_REQS]();
     VX_dcr_arb #(
@@ -327,6 +368,18 @@ module VX_cluster import VX_gpu_pkg::*;
             .dxa_lmem_bus_if(per_socket_dxa_lmem_bus_if[socket_id +: 1]),
         `endif
 
+        `ifdef EXT_TEX_ENABLE
+            .per_socket_tex_bus_if (per_socket_tex_bus_if[socket_id]),
+        `endif
+
+        `ifdef EXT_OM_ENABLE
+            .per_socket_om_bus_if (per_socket_om_bus_if[socket_id]),
+        `endif
+
+        `ifdef EXT_RASTER_ENABLE
+            .per_socket_raster_bus_if (per_socket_raster_bus_if[socket_id]),
+        `endif
+
             .kmu_bus_if     (per_socket_kmu_bus_if[socket_id +: 1]),
 
             .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),
@@ -334,6 +387,45 @@ module VX_cluster import VX_gpu_pkg::*;
             .busy           (per_socket_busy[socket_id])
         );
     end
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Graphics extensions cluster integration
+    ///////////////////////////////////////////////////////////////////////////
+
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_graphics #(
+        .CLUSTER_ID (CLUSTER_ID)
+    ) graphics (
+        .clk        (clk),
+        .reset      (reset),
+    `ifdef EXT_TEX_ENABLE
+        .per_socket_tex_bus_if    (per_socket_tex_bus_if),
+        .tcache_mem_bus_if        (tcache_l2_bus_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE
+        .per_socket_raster_bus_if (per_socket_raster_bus_if),
+        .rcache_mem_bus_if        (rcache_l2_bus_if),
+    `endif
+    `ifdef EXT_OM_ENABLE
+        .per_socket_om_bus_if     (per_socket_om_bus_if),
+        .ocache_mem_bus_if        (ocache_l2_bus_if),
+    `endif
+        .dcr_bus_if               (per_socket_dcr_bus_if[DCR_GFX_IDX])
+    );
+
+`ifdef EXT_TEX_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_TEX_IDX], tcache_l2_bus_if);
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_RASTER_IDX], rcache_l2_bus_if);
+`endif
+
+`ifdef EXT_OM_ENABLE
+    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_OM_IDX], ocache_l2_bus_if);
+`endif
+
+`endif // EXT_GFX_ANY_ENABLE
 
     wire busy_r;
     `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy), 1'b1, 1, (NUM_SOCKETS > 1));
