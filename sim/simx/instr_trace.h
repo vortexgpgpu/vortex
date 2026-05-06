@@ -31,6 +31,7 @@ public:
   //--
   uint32_t    cid;
   uint32_t    wid;
+  uint32_t    cta_id;
   ThreadMask  tmask;
   Word        PC;
   uint32_t    code;
@@ -71,6 +72,7 @@ public:
     : uuid(uuid)
     , cid(0)
     , wid(0)
+    , cta_id(0)
     , tmask(0)
     , PC(0)
     , code(0)
@@ -94,6 +96,7 @@ public:
     : uuid(rhs.uuid)
     , cid(rhs.cid)
     , wid(rhs.wid)
+    , cta_id(rhs.cta_id)
     , tmask(rhs.tmask)
     , PC(rhs.PC)
     , code(rhs.code)
@@ -125,6 +128,7 @@ public:
   friend std::ostream &operator<<(std::ostream &os, const instr_trace_t& trace) {
     os << "cid=" << trace.cid;
     os << ", wid=" << trace.wid;
+    os << ", cta_id=" << trace.cta_id;
     os << ", tmask=";
     for (uint32_t i = 0, n = NUM_THREADS; i < n; ++i) {
       os << trace.tmask.test(i);

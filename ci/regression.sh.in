@@ -74,6 +74,46 @@ kernel()
     echo "kernel tests done!"
 }
 
+dtm()
+{
+    echo "begin dtm tests..."
+
+    make -C sim/simx
+    make -C tests/kernel
+
+    DTM_XLEN=@XLEN@ python3 ci/dtm_test.py
+
+    echo "dtm tests done!"
+}
+
+sst()
+{
+    echo "begin sst tests..."
+
+    make -C sim/simx USE_SST=1
+    make -C tests/kernel
+
+    cp sim/simx/libvortex.so $SST_ELEMENTS_HOME/lib/sst-elements-library/   # alternatively - $ sst --add-lib-path `pwd` myConfig.py
+
+    sst ci/sst_test_vortex_hello.py
+    sst ci/sst_test_vortex_fibonacci.py
+    sst ci/sst_test_vortex_vecadd.py
+    sst ci/sst_test_vortex_conform.py
+
+    echo "sst tests done!"
+}
+
+mpi()
+{
+    echo "begin mpi tests..."
+
+    make -C runtime/simx
+
+    make -C tests/regression run-simx-mpi NP=4
+
+    echo "mpi tests done!"
+}
+
 regression()
 {
     echo "begin regression tests..."
@@ -95,7 +135,7 @@ regression()
     # test global barrier
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
     ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tgbar" --cores=2
-    ./ci/blackbox.sh --driver=xrt  --app=dogfood --args="-n1 -tgbar" --cores=2
+    ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tgbar" --cores=2
 
     # test local barrier
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
@@ -229,6 +269,35 @@ opencl()
     ./ci/blackbox.sh --driver=rtlsim --app=lbm --warps=8
 
     echo "opencl tests done!"
+}
+
+rvc()
+{
+    echo "begin rvc tests..."
+
+    # Rebuild kernel + simulators with the C extension enabled.
+    make -C sw/kernel clean && CONFIGS="-DEXT_C_ENABLE" make -C sw/kernel
+    make -C sim/simx clean && CONFIGS="-DEXT_C_ENABLE" make -C sim/simx
+    make -C sim/rtlsim clean && CONFIGS="-DEXT_C_ENABLE" make -C sim/rtlsim
+
+    # ISA conformance for rv*uc-p-* (compressed instruction tests).
+    CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-simx-32c
+    CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-rtlsim-32c
+
+    if [ "$XLEN" == "64" ]
+    then
+        CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-simx-64c
+        CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-rtlsim-64c
+    fi
+
+    # Rebuild stub/simx runtime with EXT_C (so kernels link with the
+    # right -march) then run regression + opencl on simx.
+    make -C sw/runtime/stub
+    make -C sw/runtime/simx clean && CONFIGS="-DEXT_C_ENABLE" make -C sw/runtime/simx
+    CONFIGS="-DEXT_C_ENABLE" make -C tests/regression run-simx
+    CONFIGS="-DEXT_C_ENABLE" make -C tests/opencl run-simx
+
+    echo "rvc tests done!"
 }
 
 vm(){
@@ -595,6 +664,7 @@ tensor()
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DISSUE_WIDTH=2 -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DITYPE=bf8 -DOTYPE=bf8" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DITYPE=tf32 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DNUM_WARPS=8 -DISSUE_WIDTH=4 -DEXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm2_tcu --args="-w 4"
 
     # rtlsim tests
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DITYPE=int8 -DOTYPE=int32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --debug=3 --log=run_rtlsim.log
@@ -611,6 +681,7 @@ tensor()
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DISSUE_WIDTH=4 -DITYPE=fp16 -DOTYPE=fp32 -DPROFILE_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DITYPE=fp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DITYPE=bf8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DNUM_WARPS=8 -DISSUE_WIDTH=4 -DEXT_TCU_ENABLE -DTCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32" ./ci/blackbox.sh --driver=rtlsim --app=sgemm2_tcu --args="-w 4"
 
     # test fp16
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" NUM_REGS=1 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1  --no-fused
@@ -784,7 +855,6 @@ tensor_mx() {
     make -C sw/kernel
 
     # simx tests
-
     # mxfp8 tests
     CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
     CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
@@ -917,7 +987,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--graphics] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -946,6 +1016,9 @@ while [ "$1" != "" ]; do
         --graphics )
                 tests+=("graphics")
                 ;;
+        --dtm )
+                tests+=("dtm")
+                ;;
         --opencl )
                 tests+=("opencl")
                 ;;
@@ -954,6 +1027,9 @@ while [ "$1" != "" ]; do
                 ;;
         --vm )
                 tests+=("vm")
+                ;;
+        --rvc )
+                tests+=("rvc")
                 ;;
         --config1 )
                 tests+=("config1")
@@ -983,13 +1059,19 @@ while [ "$1" != "" ]; do
                 tests+=("tensor_sp")
                 ;;
         --tensor_mx )
-            tests+=("tensor_mx")
-            ;;
+                tests+=("tensor_mx")
+                ;;
         --tensor_wg )
                 tests+=("tensor_wg")
                 ;;
         --cupbop )
                 tests+=("cupbop")
+                ;;
+        --sst )
+                tests+=("sst")
+                ;;
+        --dtm )
+                tests+=("dtm")
                 ;;
         --all )
                 tests=()
@@ -999,9 +1081,11 @@ while [ "$1" != "" ]; do
                 tests+=("regression")
                 tests+=("dxa")
                 tests+=("graphics")
+                tests+=("mpi")
                 tests+=("opencl")
                 tests+=("cache")
                 tests+=("vm")
+                tests+=("rvc")
                 tests+=("config1")
                 tests+=("config2")
                 tests+=("debug")
@@ -1014,6 +1098,7 @@ while [ "$1" != "" ]; do
                 tests+=("tensor_mx")
                 tests+=("tensor_wg")
                 tests+=("cupbop")
+                tests+=("dtm")
                 ;;
         -h | --help )
                 show_usage

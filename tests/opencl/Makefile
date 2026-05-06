@@ -22,6 +22,8 @@ all:
 	$(MAKE) -C kmeans
 	$(MAKE) -C blackscholes
 	$(MAKE) -C bfs
+	$(MAKE) -C copybuf
+
 
 run-simx:
 	$(MAKE) -C vecadd run-simx
@@ -86,3 +88,4 @@ clean:
 	$(MAKE) -C kmeans clean
 	$(MAKE) -C blackscholes clean
 	$(MAKE) -C bfs clean
+	$(MAKE) -C copybuf clean

@@ -43,6 +43,7 @@ class SimContext {
 private:
   SimContext() = default;
   friend class SimPlatform;
+  template <typename T> friend class SimChannel;
 };
 
 // Base class for all simulation objects (Nodes)
@@ -101,10 +102,8 @@ protected:
   template <typename T> friend class SimChannel;
 };
 
-///////////////////////////////////////////////////////////////////////////////
 // Events
 ///////////////////////////////////////////////////////////////////////////////
-
 class SimEventBase {
 public:
   virtual ~SimEventBase() = default;
@@ -158,7 +157,7 @@ public:
 
 private:
   Func func_;
-  Pkt  pkt_;
+  Pkt pkt_;
   static inline PoolAllocator<SimCallEvent<Pkt>, 64> allocator_;
 };
 
@@ -566,7 +565,6 @@ void SimPlatform::schedule(SimChannel<Pkt>* channel, const Pkt& pkt, uint64_t de
     reg_events_[fire_cycle & WHEEL_MASK].push_back(evt);
   }
 }
-
 template <typename Pkt>
 void SimPlatform::schedule(SimChannel<Pkt>* channel, Pkt&& pkt, uint64_t delay) {
   if (delay == 0) {

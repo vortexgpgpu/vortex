@@ -395,9 +395,25 @@ def parse_rtlsim(log_lines):
                     schd_ticks[uuid] = timestamp
 
                 elif is_decode:
-                    # Skip TCU micro-ops (uuid != parent uuid)
+                    # Skip uop expansion lines (ibuffer-uop) whose uuid differs
+                    # from the parent — they're internal micro-ops.
                     parent_match = re.search(parent_pattern, line)
                     if parent_match and int(parent_match.group(1)) != uuid:
+                        continue
+
+                    # If uuid already populated by the parent decode line, only
+                    # let the ibuffer-uop line update the concrete register names
+                    # (rd/rs1/rs2/rs3); preserve the originating warp's wid.
+                    if parent_match and uuid in instr_data:
+                        trace = instr_data[uuid]
+                        rd_match = re.search(rd_pattern, line)
+                        if rd_match: trace["rd"] = rd_match.group(1)
+                        rs1_match = re.search(rs1_pattern, line)
+                        if rs1_match: trace["rs1"] = rs1_match.group(1)
+                        rs2_match = re.search(rs2_pattern, line)
+                        if rs2_match: trace["rs2"] = rs2_match.group(1)
+                        rs3_match = re.search(rs3_pattern, line)
+                        if rs3_match: trace["rs3"] = rs3_match.group(1)
                         continue
 
                     trace = {}

@@ -98,6 +98,8 @@ int xrtBOWrite(xrtBufferHandle bhdl, const void* src, size_t size, size_t offset
 
 int xrtBORead(xrtBufferHandle bhdl, void* dst, size_t size, size_t offset);
 
+int xrtBOCopy(xrtBufferHandle dst, xrtBufferHandle src, size_t size, size_t src_offset, size_t dst_offset);
+
 int xrtBOSync(xrtBufferHandle bhdl, enum xclBOSyncDirection dir, size_t size, size_t offset);
 
 int xrtKernelWriteRegister(xrtKernelHandle kernelHandle, uint32_t offset, uint32_t data);

@@ -50,8 +50,25 @@ def get_vma_size(elf_file):
         print("Failed to calculate vma size due to an error: {}".format(str(e)))
         sys.exit(-1)
 
+def get_symbol(elf_file, name):
+    # Read a symbol value from the ELF. We use _edata as the start of BSS and
+    # _end as the end of BSS so runtime_size covers the full RW region (the
+    # linker's DATA_SEGMENT_ALIGN can push _edata/_end past the end of the last
+    # LOAD segment when the kernel has little/no data or BSS).
+    cmd = ['readelf', '-s', '-W', elf_file]
+    output = subprocess.check_output(cmd, universal_newlines=True)
+    regex = re.compile(r'\s*\d+:\s+([0-9a-fA-F]+)\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+' + re.escape(name) + r'$')
+    for line in output.splitlines():
+        match = regex.match(line)
+        if match:
+            return int(match.group(1), 16)
+    print("Error: {} symbol not found in {}".format(name, elf_file))
+    sys.exit(-1)
+
 def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     min_vma, max_vma = get_vma_size(input_elf)
+    edata = get_symbol(input_elf, '_edata')
+    end = get_symbol(input_elf, '_end')
 
     # Create a binary data from the ELF file using objcopy. Use a per-call
     # unique tempfile so parallel builds don't race on a shared path.
@@ -64,9 +81,15 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     with open(temp_bin_path, 'rb') as temp_file:
         binary_data = temp_file.read()
 
+    # Pad the payload up to _edata so that bin_size reflects the kernel's
+    # boundary between data and BSS (and inherits _edata's cache alignment).
+    expected_bin_size = edata - min_vma
+    if len(binary_data) < expected_bin_size:
+        binary_data += b'\x00' * (expected_bin_size - len(binary_data))
+
     # Pack addresses into 64-bit unsigned integer
     min_vma_bytes = struct.pack('<Q', min_vma)
-    max_vma_bytes = struct.pack('<Q', max_vma)
+    max_vma_bytes = struct.pack('<Q', max(max_vma, end))
 
     # Write the total size and binary data to the final output file
     with open(output_bin, 'wb') as bin_file:

@@ -240,6 +240,7 @@ enum class BrType {
 
 struct IntrBrArgs {
   uint32_t cmp : 3;
+  uint32_t is_rvc : 1;
   uint32_t offset;
 };
 

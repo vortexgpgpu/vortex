@@ -13,8 +13,8 @@ using ctx = vt::wgmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC
 // Then shared B after all warp sections
 static constexpr uint32_t smem_a_elems     = ctx::xtileM * (ctx::tileK / 2);
 static constexpr uint32_t smem_a_bytes     = smem_a_elems * sizeof(ctx::input_t);
-static constexpr uint32_t smem_b_elems     = ctx::tileK * ctx::xtileN;
-static constexpr uint32_t smem_b_bytes     = smem_b_elems * sizeof(ctx::input_t);
+//static constexpr uint32_t smem_b_elems     = ctx::tileK * ctx::xtileN;
+//static constexpr uint32_t smem_b_bytes     = smem_b_elems * sizeof(ctx::input_t);
 static constexpr uint32_t smem_bank_bytes  = NUM_THREADS * sizeof(float);
 static constexpr uint32_t per_warp_section = ((smem_a_bytes + ctx::wg_meta_total_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
 
@@ -26,7 +26,6 @@ constexpr uint32_t kDescMeta = 2;
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pC  = reinterpret_cast<ctx::output_t*>(arg->C_addr);
 
-  uint32_t M = arg->M;
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 

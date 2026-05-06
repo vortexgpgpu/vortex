@@ -130,7 +130,6 @@ verilator()
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/verilator && mv verilator $TOOLDIR
     rm -rf verilator verilator.tar.bz2*
 }
-
 sv2v()
 {
     wget $REPOSITORY/sv2v/$OSVERSION/sv2v.tar.bz2

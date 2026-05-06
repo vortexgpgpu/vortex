@@ -12,7 +12,6 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
   auto pMetaSpBase = reinterpret_cast<const float *>(arg->meta_sp_addr);
 
-  uint32_t M = arg->M;
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 
@@ -33,7 +32,7 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   constexpr uint32_t meta_cols = (NUM_THREADS * 2 * rtl_i_ratio + 31) / 32;
   using kcfg = vt::wmma_config_t<NUM_THREADS>;
   constexpr uint32_t PD = kcfg::m_steps * (kcfg::k_steps / 2);
-  constexpr uint32_t meta_cols_per_load = (NUM_THREADS >= PD) ? (NUM_THREADS / PD) : 1;
+  //constexpr uint32_t meta_cols_per_load = (NUM_THREADS >= PD) ? (NUM_THREADS / PD) : 1;
   constexpr uint32_t num_meta_loads = (PD * meta_cols + NUM_THREADS - 1) / NUM_THREADS;
   constexpr uint32_t per_k_tile_words = num_meta_loads * NUM_THREADS;
   uint32_t num_k_tiles = K / ctx::tileK;

@@ -5,7 +5,7 @@ DESTDIR ?= $(CURDIR)/..
 CONFIG_FILE := $(DESTDIR)/simx_rt_config.stamp
 SRC_DIR := $(VORTEX_HOME)/sw/runtime/simx
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
 CXXFLAGS += -DXLEN_$(XLEN)

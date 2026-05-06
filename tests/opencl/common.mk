@@ -7,18 +7,28 @@ XRT_DEVICE_INDEX ?= 0
 
 STARTUP_ADDR ?= 0x80000000
 
+# Resolve the toml + CONFIGS overrides into the canonical -D... list, the
+# same way sim/simx/Makefile does. Then sniff for extension enables.
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS)')
+
+ifneq (,$(filter -DEXT_C_ENABLE, $(XCONFIGS)))
+	C_EXT := c
+else
+	C_EXT :=
+endif
+
 ifeq ($(XLEN),64)
-	ifeq ($(EXT_V_ENABLE),1)
-		VX_CFLAGS += -march=rv64imafdv_zve64d -mabi=lp64d # vector extension
+	ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
+		VX_CFLAGS += -march=rv64imafd$(C_EXT)v_zve64d -mabi=lp64d # vector extension
 	else
-		VX_CFLAGS += -march=rv64imafd -mabi=lp64d
+		VX_CFLAGS += -march=rv64imafd$(C_EXT) -mabi=lp64d
 	endif
 	POCL_CC_FLAGS += POCL_VORTEX_XLEN=64
 else
-	ifeq ($(EXT_V_ENABLE),1)
-		VX_CFLAGS += -march=rv32imafv_zve32f -mabi=ilp32f # vector extension
+	ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
+		VX_CFLAGS += -march=rv32imaf$(C_EXT)v_zve32f -mabi=ilp32f # vector extension
 	else
-		VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
+		VX_CFLAGS += -march=rv32imaf$(C_EXT) -mabi=ilp32f
 	endif
 	POCL_CC_FLAGS += POCL_VORTEX_XLEN=32
 endif

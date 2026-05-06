@@ -493,6 +493,7 @@
     typedef struct packed { \
         logic [UUID_WIDTH-1:0]           uuid; \
         logic [NW_WIDTH-1:0]             wid; \
+        logic [NCTA_WIDTH-1:0]           cta_id; \
         logic [__lanes__-1:0]            tmask; \
         logic [`LOG2UP(`NUM_THREADS / __lanes__)-1:0] pid; \
         logic                            sop; \

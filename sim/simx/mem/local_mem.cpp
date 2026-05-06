@@ -25,12 +25,12 @@ protected:
 	LocalMem* simobject_;
 	Config    config_;
 	RAM       ram_;
-	uint32_t 	line_bits_;
+	uint32_t 	addr_bits_;
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
 
 	uint64_t to_local_addr(uint64_t addr) {
-		return bit_getw(addr, 0, line_bits_-1);
+		return bit_getw(addr, 0, addr_bits_-1);
 	}
 
 public:
@@ -38,9 +38,8 @@ public:
 		: simobject_(simobject)
 		, config_(config)
 		, ram_(config.capacity)
+		, addr_bits_(log2ceil(config.capacity))
 	{
-		line_bits_ = log2ceil(config.capacity);
-
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
 		uint32_t lg2_line_size = log2ceil(config_.line_size);

@@ -552,7 +552,6 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
           for (uint32_t i = 0; i < TC_M; ++i) {
             uint32_t physical_row = tr * cfg::tileM + sm * TC_M + i;
             uint32_t k_elem_start = kt * tileK_elem + sk * elts_per_sparse_step;
-            uint32_t groups_in_step = elts_per_sparse_step / 4;
 
             // Iterate over individual elements in this sparse step.
               // Using a flat element loop handles both full groups (I_RATIO >= 2)
