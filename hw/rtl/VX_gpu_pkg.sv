@@ -107,6 +107,15 @@ package VX_gpu_pkg;
     function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`XLEN-1:0] pc);
         from_fullPC = pc;
     endfunction
+`elsif EXT_C_ENABLE
+    // With the compressed extension, branch targets and warp PCs may be 2-byte aligned.
+    localparam PC_BITS = (`XLEN-1);
+    function automatic logic [`XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
+        to_fullPC = `XLEN'({pc, 1'b0});
+    endfunction
+    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`XLEN-1:0] pc);
+        from_fullPC = PC_BITS'(pc >> 1);
+    endfunction
 `else
     localparam PC_BITS = (`XLEN-2);
     function automatic logic [`XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
@@ -604,6 +613,21 @@ package VX_gpu_pkg;
     } alu_args_t;
     `PACKAGE_ASSERT($bits(alu_args_t) == INST_ARGS_BITS)
 
+    // Branch instructions (JAL/JALR/B/SYS) execute on the ALU pipeline.
+    typedef struct packed {
+        logic use_PC;
+        logic use_imm;
+    `ifdef EXT_C_ENABLE
+        logic is_rvc;
+    `else
+        logic __unused;
+    `endif
+        logic [ALU_TYPE_BITS-1:0] xtype;
+        logic [19:0] imm20;
+    } br_args_t;
+    `PACKAGE_ASSERT($bits(br_args_t) == $bits(alu_args_t))
+    `PACKAGE_ASSERT($bits(br_args_t) == INST_ARGS_BITS)
+
     typedef struct packed {
         logic [(INST_ARGS_BITS-INST_FRM_BITS-INST_FMT_BITS)-1:0] __padding;
         logic [INST_FRM_BITS-1:0] frm;
@@ -660,6 +684,7 @@ package VX_gpu_pkg;
 
     typedef union packed {
         alu_args_t  alu;
+        br_args_t   br;
         fpu_args_t  fpu;
         lsu_args_t  lsu;
         csr_args_t  csr;
@@ -682,6 +707,9 @@ package VX_gpu_pkg;
         logic [`NUM_THREADS-1:0] tmask;
         logic [PC_BITS-1:0]     PC;
         logic [31:0]            instr;
+    `ifdef EXT_C_ENABLE
+        logic                   is_rvc;
+    `endif
     } fetch_t;
 
     typedef struct packed {

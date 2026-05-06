@@ -184,8 +184,9 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   trace->PC     = warp.PC;
   trace->tmask  = warp.tmask;
 
-  // Advance PC
-  warp.PC += 4;
+  // PC is advanced at decode (matches RTL: VX_scheduler advances warp_pcs
+  // on decode_sched_if.valid using is_rvc to pick +2 or +4). Branch/JAL/
+  // JALR commit later overrides warp.PC with the resolved target.
 
   // Suspend warp until decode resumes it (non-stalling) or commit (stalling)
   this->suspend(scheduled_warp);
@@ -209,6 +210,10 @@ void Scheduler::resume(uint32_t wid) {
   assert(stalled_warps_.test(wid));
   stalled_warps_.reset(wid);
   DT(3, core_->name() << " warp-state: wid=" << wid << ", stalled=false");
+}
+
+void Scheduler::advance_pc(uint32_t wid, uint32_t inc) {
+  warps_.at(wid).PC += inc;
 }
 
 bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {

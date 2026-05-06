@@ -191,6 +191,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     wire schedule_fire = schedule_valid && schedule_ready;
     wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
+`ifdef EXT_C_ENABLE
+    // PC advance is driven by decompress_finished under EXT_C;
+    `UNUSED_VAR (schedule_if_fire)
+`endif
 
     // branch
     wire [`NUM_ALU_BLOCKS-1:0]               branch_valid;
@@ -299,10 +303,19 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n[schedule_wid] = 1;
         end
 
-        // advance PC
+        // advance PC.
+    `ifdef EXT_C_ENABLE
+        // With RVC, the decompressor may emit a 2-byte instruction.
+        if (decode_sched_if.valid) begin
+            warp_pcs_n[decode_sched_if.wid] =
+                warp_pcs_n[decode_sched_if.wid]
+                + from_fullPC(decode_sched_if.is_rvc ? `XLEN'(2) : `XLEN'(4));
+        end
+    `else
         if (schedule_if_fire) begin
             warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`XLEN'(4));
         end
+    `endif
     end
 
     always @(posedge clk) begin
