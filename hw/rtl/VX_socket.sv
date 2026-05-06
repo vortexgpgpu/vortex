@@ -175,7 +175,15 @@ module VX_socket import VX_gpu_pkg::*;
         .REPL_POLICY    (`DCACHE_REPL_POLICY),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (3),
-        .MEM_OUT_BUF    (2)
+        .MEM_OUT_BUF    (2),
+        // §3.1.2: L1 dcache is the LLC iff neither L2 nor L3 is enabled.
+`ifdef L2_ENABLE
+        .IS_LLC         (0)
+`elsif L3_ENABLE
+        .IS_LLC         (0)
+`else
+        .IS_LLC         (1)
+`endif
     ) dcache (
     `ifdef PERF_ENABLE
         .cache_perf     (dcache_perf),

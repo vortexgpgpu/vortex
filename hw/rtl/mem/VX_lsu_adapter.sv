@@ -29,7 +29,8 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    mem_bus_if [NUM_LANES]
 );
     localparam REQ_ADDR_WIDTH = `MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE);
-    localparam REQ_DATA_WIDTH = 1 + DATA_SIZE + REQ_ADDR_WIDTH + MEM_FLAGS_WIDTH + DATA_SIZE * 8;
+    localparam REQ_DATA_WIDTH = 1 + DATA_SIZE + REQ_ADDR_WIDTH + MEM_FLAGS_WIDTH + DATA_SIZE * 8
+                              + (`EXT_A_ENABLED * AMO_REQ_BITS);
     localparam RSP_DATA_WIDTH = DATA_SIZE * 8;
 
     // handle request unpacking
@@ -48,6 +49,9 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
             lsu_mem_if.req_data.data[i],
             lsu_mem_if.req_data.byteen[i],
             lsu_mem_if.req_data.flags[i]
+        `ifdef EXT_A_ENABLE
+            , lsu_mem_if.req_data.amo[i]
+        `endif
         };
     end
 
@@ -78,6 +82,9 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
             mem_bus_if[i].req_data.data,
             mem_bus_if[i].req_data.byteen,
             mem_bus_if[i].req_data.flags
+        `ifdef EXT_A_ENABLE
+            , mem_bus_if[i].req_data.amo
+        `endif
          } = req_data_out[i];
         assign mem_bus_if[i].req_data.tag = req_tag_out[i];
         assign req_ready_out[i] = mem_bus_if[i].req_ready;

@@ -14,7 +14,8 @@
 `include "VX_define.vh"
 
 module VX_lsu_slice import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    parameter CORE_ID = 0
 ) (
     `SCOPE_IO_DECL
 
@@ -139,7 +140,14 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                            && ~fence_lock;
 
     assign mem_req_mask = execute_if.data.header.tmask;
+`ifdef EXT_A_ENABLE
+    // AMO MemReq.rw is unconditionally 0 (proposal §3.4): a missing
+    // line under SC must miss-and-return-failure, not write-and-succeed.
+    assign mem_req_rw = execute_if.data.op_args.lsu.is_store
+                     && ~execute_if.data.op_args.lsu.amo_valid;
+`else
     assign mem_req_rw = execute_if.data.op_args.lsu.is_store;
+`endif
 
     // address formatting
 
@@ -300,6 +308,34 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire [LSU_TAG_WIDTH-1:0]                lsu_mem_rsp_tag;
     wire                                    lsu_mem_rsp_ready;
 
+`ifdef EXT_A_ENABLE
+    // Per-lane AMO sideband at the scheduler INPUT (driven from
+    // execute_if while it's still valid). The scheduler then carries
+    // these bits through its req_queue and out as mem_req_amo so the
+    // LSU's lsu_mem_if amo bits stay aligned with the mem_req that
+    // actually fires (otherwise LSUQ_IN_SIZE>1 queueing skews them
+    // against execute_if's current state — Phase 4d gap).
+    amo_req_t [NUM_LANES-1:0] core_req_amo;
+    amo_req_t [NUM_LANES-1:0] lsu_mem_req_amo;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_core_req_amo
+        assign core_req_amo[i].valid = execute_if.data.op_args.lsu.amo_valid;
+        assign core_req_amo[i].op    = execute_if.data.op_args.lsu.amo_op;
+        // funct3 of AMO: 010 = .W (width=2), 011 = .D (width=3).
+        // op_type encodes {1'b0, funct3} so we read the low 2 bits.
+        assign core_req_amo[i].width = execute_if.data.op_type[1:0];
+        assign core_req_amo[i].rhs   = execute_if.data.rs2_data[i];
+        // make_hart_id(cid, wid, tid) — packed concatenation, low
+        // bits = tid. Built as a shift+or so the width arithmetic
+        // works regardless of NUM_CORES==1 (NC_BITS=0) corner case.
+        assign core_req_amo[i].hart_id = HART_ID_WIDTH'(
+            (HART_ID_WIDTH'(CORE_ID) << (NW_BITS + NT_BITS))
+          | (HART_ID_WIDTH'(execute_if.data.header.wid) << NT_BITS)
+          |  HART_ID_WIDTH'(i)
+        );
+    end
+`endif
+
     VX_mem_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-memsched", INSTANCE_ID))),
         .CORE_REQS   (NUM_LANES),
@@ -328,6 +364,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .core_req_flags (mem_req_flags),
         .core_req_data  (mem_req_data),
         .core_req_tag   (mem_req_tag),
+    `ifdef EXT_A_ENABLE
+        .core_req_amo   (core_req_amo),
+    `endif
         .core_req_ready (mem_req_ready),
 
         // request queue info
@@ -352,6 +391,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .mem_req_flags  (lsu_mem_req_flags),
         .mem_req_data   (lsu_mem_req_data),
         .mem_req_tag    (lsu_mem_req_tag),
+    `ifdef EXT_A_ENABLE
+        .mem_req_amo    (lsu_mem_req_amo),
+    `endif
         .mem_req_ready  (lsu_mem_req_ready),
 
         // Memory response
@@ -371,6 +413,14 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     assign lsu_mem_if.req_data.data = lsu_mem_req_data;
     assign lsu_mem_if.req_data.tag = lsu_mem_req_tag;
     assign lsu_mem_req_ready = lsu_mem_if.req_ready;
+
+`ifdef EXT_A_ENABLE
+    // Drive lsu_mem_if amo from the scheduler's queued output, not
+    // directly from execute_if (the queue introduces 1+ cycle of skew
+    // so the direct tap exposed amo bits from a *different*
+    // instruction at the cycle mem_req fires).
+    assign lsu_mem_if.req_data.amo = lsu_mem_req_amo;
+`endif
 
     assign lsu_mem_rsp_valid = lsu_mem_if.rsp_valid;
     assign lsu_mem_rsp_mask = lsu_mem_if.rsp_data.mask;

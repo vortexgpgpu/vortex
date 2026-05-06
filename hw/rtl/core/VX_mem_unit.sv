@@ -310,6 +310,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .out_req_flags  (dcache_coalesced_if[i].req_data.flags),
                 .out_req_data   (dcache_coalesced_if[i].req_data.data),
                 .out_req_tag    (dcache_coalesced_if[i].req_data.tag),
+            `ifdef EXT_A_ENABLE
+                .in_req_amo     (lsu_dcache_if[i].req_data.amo),
+                .out_req_amo    (dcache_coalesced_if[i].req_data.amo),
+            `endif
                 .out_req_ready  (dcache_coalesced_if[i].req_ready),
 
                 // Output response

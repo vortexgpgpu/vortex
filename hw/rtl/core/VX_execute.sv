@@ -75,7 +75,8 @@ module VX_execute import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (1);
 
     VX_lsu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-lsu", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-lsu", INSTANCE_ID))),
+        .CORE_ID     (CORE_ID)
     ) lsu_unit (
         `SCOPE_IO_BIND  (0)
         .clk            (clk),

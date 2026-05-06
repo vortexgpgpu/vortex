@@ -125,6 +125,36 @@ package VX_gpu_pkg;
     localparam MEM_REQ_FLAG_LOCAL =  2; // shoud be last since optional
     localparam MEM_FLAGS_WIDTH = (MEM_REQ_FLAG_LOCAL + `LMEM_ENABLED);
 
+    // ===== AMO (RVA) sideband =====================================
+    // Mirrors SimX's amo_req_t (sim/simx/types.h). Fields are only
+    // meaningful when valid==1; the bank's reservation table keys on
+    // hart_id = make_hart_id(cid, wid, tid).
+    localparam INST_AMO_BITS = 4;
+    localparam INST_AMO_LR     = 4'h0;
+    localparam INST_AMO_SC     = 4'h1;
+    localparam INST_AMO_ADD    = 4'h2;
+    localparam INST_AMO_SWAP   = 4'h3;
+    localparam INST_AMO_XOR    = 4'h4;
+    localparam INST_AMO_OR     = 4'h5;
+    localparam INST_AMO_AND    = 4'h6;
+    localparam INST_AMO_MIN    = 4'h7;
+    localparam INST_AMO_MAX    = 4'h8;
+    localparam INST_AMO_MINU   = 4'h9;
+    localparam INST_AMO_MAXU   = 4'hA;
+
+    // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
+    localparam HART_ID_BITS = NC_BITS + NW_BITS + NT_BITS;
+    localparam HART_ID_WIDTH = `UP(HART_ID_BITS);
+
+    typedef struct packed {
+        logic                       valid;
+        logic [INST_AMO_BITS-1:0]   op;
+        logic [1:0]                 width;   // 2 = .W, 3 = .D
+        logic [`XLEN-1:0]           rhs;     // rs2 for this lane
+        logic [HART_ID_WIDTH-1:0]   hart_id;
+    } amo_req_t;
+    localparam AMO_REQ_BITS = $bits(amo_req_t);
+
     localparam VX_DCR_ADDR_WIDTH = `VX_DCR_ADDR_BITS;
     localparam VX_DCR_DATA_WIDTH = `VX_DCR_DATA_BITS;
 
@@ -166,6 +196,7 @@ package VX_gpu_pkg;
     localparam INST_R =          7'b0110011; // register instructions
     localparam INST_V =          7'b1010111; // vector instructions
     localparam INST_FENCE =      7'b0001111; // Fence instructions
+    localparam INST_AMO =        7'b0101111; // RVA atomic memory operations
     localparam INST_SYS =        7'b1110011; // system instructions
 
     // RV64I instruction specific opcodes (for any W instruction)
@@ -593,12 +624,20 @@ package VX_gpu_pkg;
     } fpu_args_t;
     `PACKAGE_ASSERT($bits(fpu_args_t) == INST_ARGS_BITS)
 
+    // lsu_args_t carries AMO sideband in the padding when EXT_A_ENABLE.
+    // Fields amo_valid / amo_op are inspected only when amo_valid==1; for
+    // plain loads/stores they're zero. aq/rl decoded but unused (Vortex
+    // is sequentially consistent today; see proposal §6).
     typedef struct packed {
-        logic [(INST_ARGS_BITS-1-1-12-2)-1:0] __padding;  // 9 bits
-        logic [1:0] pack;  // 0=normal, 1=PACKLB (4×byte), 2=PACKLH (2×halfword)
-        logic is_store;
-        logic is_float;
-        logic [11:0] offset;
+        logic [(INST_ARGS_BITS-1-1-12-2-1-INST_AMO_BITS-2)-1:0] __padding; // 2 bits
+        logic                       amo_valid;                             // 1 bit
+        logic [INST_AMO_BITS-1:0]   amo_op;                                // 4 bits
+        logic                       amo_aq;                                // 1 bit
+        logic                       amo_rl;                                // 1 bit
+        logic [1:0]                 pack;
+        logic                       is_store;
+        logic                       is_float;
+        logic [11:0]                offset;
     } lsu_args_t;
     `PACKAGE_ASSERT($bits(lsu_args_t) == INST_ARGS_BITS)
 

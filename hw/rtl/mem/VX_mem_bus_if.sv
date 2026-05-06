@@ -33,6 +33,12 @@ interface VX_mem_bus_if import VX_gpu_pkg::*; #(
         logic [DATA_SIZE-1:0]   byteen;
         logic [FLAGS_WIDTH-1:0] flags;
         tag_t                   tag;
+    `ifdef EXT_A_ENABLE
+        // AMO sideband. amo.valid==1 means this MemReq is an AMO; rw
+        // is unconditionally 0 in that case (a missing line under SC
+        // must miss-and-return-failure rather than write-and-succeed).
+        amo_req_t               amo;
+    `endif
     } req_data_t;
 
     typedef struct packed {

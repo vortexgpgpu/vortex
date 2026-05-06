@@ -61,7 +61,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter CORE_OUT_BUF          = 3,
 
     // Memory request output register
-    parameter MEM_OUT_BUF           = 3
+    parameter MEM_OUT_BUF           = 3,
+
+    // AMO: this cache instance is the last-level cache (LLC). When 1,
+    // banks instantiate VX_amo_unit and own RVA reservation tracking.
+    // Wired up at the top-level instantiator per amo_rtl_v3_proposal.md
+    // §3.1.2. Default 0; non-LLC banks operate in passthrough mode.
+    parameter IS_LLC                = 0
  ) (
     // PERF
 `ifdef PERF_ENABLE
@@ -90,7 +96,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam BANK_SEL_BITS   = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH  = `UP(BANK_SEL_BITS);
     localparam LINE_ADDR_WIDTH = (`CS_WORD_ADDR_WIDTH - BANK_SEL_BITS - WORD_SEL_BITS);
-    localparam CORE_REQ_DATAW  = LINE_ADDR_WIDTH + 1 + WORD_SEL_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(MEM_FLAGS_WIDTH);
+    localparam CORE_REQ_DATAW  = LINE_ADDR_WIDTH + 1 + WORD_SEL_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(MEM_FLAGS_WIDTH)
+                               + (`EXT_A_ENABLED * AMO_REQ_BITS);
     localparam CORE_RSP_DATAW  = WORD_WIDTH + TAG_WIDTH;
     localparam BANK_MEM_TAG_WIDTH = UUID_WIDTH + MSHR_ADDR_WIDTH;
     localparam MEM_REQ_DATAW   = (`CS_LINE_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + BANK_MEM_TAG_WIDTH + `UP(MEM_FLAGS_WIDTH));
@@ -238,6 +245,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]         per_bank_core_req_tag;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]     per_bank_core_req_idx;
     wire [NUM_BANKS-1:0][`UP(MEM_FLAGS_WIDTH)-1:0]  per_bank_core_req_flags;
+`ifdef EXT_A_ENABLE
+    amo_req_t [NUM_BANKS-1:0]                   per_bank_core_req_amo;
+`endif
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
@@ -262,6 +272,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0]  core_req_data;
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]       core_req_tag;
     wire [NUM_REQS-1:0][`UP(MEM_FLAGS_WIDTH)-1:0] core_req_flags;
+`ifdef EXT_A_ENABLE
+    amo_req_t [NUM_REQS-1:0]                 core_req_amo;
+`endif
     wire [NUM_REQS-1:0]                      core_req_ready;
 
     wire [NUM_REQS-1:0][LINE_ADDR_WIDTH-1:0] core_req_line_addr;
@@ -279,6 +292,9 @@ module VX_cache import VX_gpu_pkg::*; #(
         assign core_req_data[i]   = core_bus2_if[i].req_data.data;
         assign core_req_tag[i]    = core_bus2_if[i].req_data.tag;
         assign core_req_flags[i]  = `UP(MEM_FLAGS_WIDTH)'(core_bus2_if[i].req_data.flags);
+    `ifdef EXT_A_ENABLE
+        assign core_req_amo[i]    = core_bus2_if[i].req_data.amo;
+    `endif
         assign core_bus2_if[i].req_ready = core_req_ready[i];
     end
 
@@ -311,6 +327,10 @@ module VX_cache import VX_gpu_pkg::*; #(
             core_req_data[i],
             core_req_tag[i],
             core_req_flags[i]
+        `ifdef EXT_A_ENABLE
+            ,
+            core_req_amo[i]
+        `endif
         };
     end
 
@@ -354,6 +374,10 @@ module VX_cache import VX_gpu_pkg::*; #(
             per_bank_core_req_data[i],
             per_bank_core_req_tag[i],
             per_bank_core_req_flags[i]
+        `ifdef EXT_A_ENABLE
+            ,
+            per_bank_core_req_amo[i]
+        `endif
         } = core_req_data_out[i];
     end
 
@@ -378,7 +402,8 @@ module VX_cache import VX_gpu_pkg::*; #(
             .MREQ_SIZE    (MREQ_SIZE),
             .TAG_WIDTH    (TAG_WIDTH),
             .CORE_OUT_REG (CORE_RSP_BUF_ENABLE ? 0 : `TO_OUT_BUF_REG(CORE_OUT_BUF)),
-            .MEM_OUT_REG  (MEM_REQ_BUF_ENABLE ? 0 : `TO_OUT_BUF_REG(MEM_OUT_BUF))
+            .MEM_OUT_REG  (MEM_REQ_BUF_ENABLE ? 0 : `TO_OUT_BUF_REG(MEM_OUT_BUF)),
+            .IS_LLC       (IS_LLC)
         ) bank (
             .clk                (clk),
             .reset              (reset),
@@ -399,6 +424,9 @@ module VX_cache import VX_gpu_pkg::*; #(
             .core_req_tag       (per_bank_core_req_tag[bank_id]),
             .core_req_idx       (per_bank_core_req_idx[bank_id]),
             .core_req_flags     (per_bank_core_req_flags[bank_id]),
+        `ifdef EXT_A_ENABLE
+            .core_req_amo       (per_bank_core_req_amo[bank_id]),
+        `endif
             .core_req_ready     (per_bank_core_req_ready[bank_id]),
 
             // Core response

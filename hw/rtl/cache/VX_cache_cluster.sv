@@ -68,7 +68,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter CORE_OUT_BUF          = 3,
 
     // Memory request output buffer
-    parameter MEM_OUT_BUF           = 3
+    parameter MEM_OUT_BUF           = 3,
+
+    // AMO: this cache cluster is the LLC (see amo_rtl_v3_proposal.md §3.1.2).
+    parameter IS_LLC                = 0
  ) (
     input wire clk,
     input wire reset,
@@ -166,7 +169,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .CORE_OUT_BUF ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_BUF),
             .MEM_OUT_BUF  ((NUM_CACHES > 1) ? 2 : MEM_OUT_BUF),
             .NC_ENABLE    (NC_ENABLE),
-            .PASSTHRU     (PASSTHRU)
+            .PASSTHRU     (PASSTHRU),
+            .IS_LLC       (IS_LLC)
         ) cache_wrap (
         `ifdef PERF_ENABLE
             .cache_perf  (perf_cache_unit[i]),
