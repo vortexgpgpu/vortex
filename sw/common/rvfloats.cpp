@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdio.h>
+#include <cstring>
 
 extern "C" {
 #include <softfloat.h>

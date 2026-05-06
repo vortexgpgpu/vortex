@@ -40,7 +40,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   const uint32_t tile_elems_a = tile_size * chunk_k;
   const uint32_t tile_elems_b = chunk_k * tile_size;
   const uint32_t stage_elems  = tile_elems_a + tile_elems_b;
-  const uint32_t stage_count  = (mode == 2) ? 2u : 1u;
+  // const uint32_t stage_count = (mode == 2) ? 2u : 1u;
 
   // Allocate shared memory for tile buffers.
   auto shmem = reinterpret_cast<TYPE*>(__local_mem());

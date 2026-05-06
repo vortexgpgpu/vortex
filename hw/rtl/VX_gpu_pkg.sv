@@ -30,6 +30,10 @@ package VX_gpu_pkg;
 	localparam NT_WIDTH = `UP(NT_BITS);
 	localparam NB_WIDTH = `UP(NB_BITS);
 
+    localparam NUM_CTA_MAX = `NUM_WARPS;
+	localparam NCTA_BITS  = `CLOG2(NUM_CTA_MAX);
+	localparam NCTA_WIDTH = `UP(NCTA_BITS);
+
     localparam XLENB    = `XLEN / 8;
     localparam XLENB_W  = `CLOG2(XLENB);
     localparam BYTESEL_BITS = (XLENB_W + XLENB_W);
@@ -571,7 +575,7 @@ package VX_gpu_pkg;
     } kmu_req_t;
 
     typedef struct packed {
-        logic [31:0]      cta_id;
+        logic [NCTA_WIDTH-1:0] cta_id;
         logic [NW_WIDTH-1:0] cta_rank;
         logic [NW_WIDTH:0] cta_size;
         logic [2:0][CTA_TID_WIDTH-1:0] thread_idx;
@@ -581,6 +585,20 @@ package VX_gpu_pkg;
         logic [`MEM_ADDR_WIDTH-1:0] param;
         logic [`MEM_ADDR_WIDTH-1:0] lmem_addr;
     } cta_csrs_t;
+
+    typedef struct packed {
+        logic [NW_WIDTH:0]              cta_size;
+        logic [2:0][31:0]               block_idx;
+        logic [2:0][CTA_TID_WIDTH:0]    block_dim;
+        logic [2:0][31:0]               grid_dim;
+        logic [`MEM_ADDR_WIDTH-1:0]     param;
+        logic [`MEM_ADDR_WIDTH-1:0]     lmem_addr;
+    } cta_ctx_t;
+
+    typedef struct packed {
+        logic [NW_WIDTH-1:0]            cta_rank;
+        logic [2:0][CTA_TID_WIDTH-1:0]  thread_idx;
+    } cta_warp_t;
 
     //////////////////////// instruction arguments ////////////////////////////
 
@@ -685,6 +703,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]  uuid;
         logic [NW_WIDTH-1:0]    wid;
+        logic [NCTA_WIDTH-1:0]  cta_id;
         logic [`NUM_THREADS-1:0] tmask;
         logic [PC_BITS-1:0]     PC;
         logic [31:0]            instr;
@@ -696,6 +715,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;
         logic [NW_WIDTH-1:0]        wid;
+        logic [NCTA_WIDTH-1:0]      cta_id;
         logic [`NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
         logic [EX_BITS-1:0]         ex_type;
@@ -714,6 +734,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;
+        logic [NCTA_WIDTH-1:0]      cta_id;
         logic [`NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
         logic [EX_BITS-1:0]         ex_type;
@@ -735,6 +756,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;
         logic [ISSUE_WIS_W-1:0]     wis;
+        logic [NCTA_WIDTH-1:0]      cta_id;
         logic [`NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
         logic [EX_BITS-1:0]         ex_type;
@@ -753,6 +775,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
@@ -774,6 +797,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
@@ -793,6 +817,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [NW_WIDTH-1:0]                wid;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
@@ -808,6 +833,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
@@ -823,6 +849,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [NW_WIDTH-1:0]                wid;
+        logic [NCTA_WIDTH-1:0]              cta_id;
         logic [`NUM_THREADS-1:0]            tmask;
         logic [PC_BITS-1:0]                 PC;
     } schedule_t;

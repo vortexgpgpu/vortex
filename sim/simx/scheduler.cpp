@@ -178,10 +178,11 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   // decode fills in the rest of the metadata).
   auto trace = core_->trace_pool().allocate(1);
   new (trace) instr_trace_t(uuid);
-  trace->cid   = core_->id();
-  trace->wid   = scheduled_warp;
-  trace->PC    = warp.PC;
-  trace->tmask = warp.tmask;
+  trace->cid    = core_->id();
+  trace->wid    = scheduled_warp;
+  trace->cta_id = warp.cta_csrs.cta_id;
+  trace->PC     = warp.PC;
+  trace->tmask  = warp.tmask;
 
   // PC is advanced at decode (matches RTL: VX_scheduler advances warp_pcs
   // on decode_sched_if.valid using is_rvc to pick +2 or +4). Branch/JAL/

@@ -727,6 +727,22 @@ public:
     return operands_.at(0)->get_exit_code();
   }
 
+  // DTM debug-only accessors. The simx debug stack (sim/simx/dtm/) reads
+  // and writes warp PC and integer registers directly; in v3 those live
+  // in Scheduler and Operands respectively. Single-hart debug uses lane=0.
+  Word dtm_get_pc(uint32_t wid) const {
+    return scheduler_->warp(wid).PC;
+  }
+  void dtm_set_pc(uint32_t wid, Word pc) {
+    scheduler_->warp(wid).PC = pc;
+  }
+  Word dtm_get_ireg(uint32_t wid, uint32_t reg) {
+    return operands_.at(wid % ISSUE_WIDTH)->dtm_ireg(wid, reg);
+  }
+  void dtm_set_ireg(uint32_t wid, uint32_t reg, Word val) {
+    operands_.at(wid % ISSUE_WIDTH)->dtm_ireg(wid, reg) = val;
+  }
+
   Scheduler*    scheduler() { return scheduler_.get(); }
   // CSR is a sub-unit of SFU; reach it through SfuUnit.
   CsrUnit&      csr_unit()  { return this->sfu_unit()->csr_unit(); }
@@ -892,6 +908,11 @@ int Core::get_exitcode() const {
 Scheduler& Core::scheduler() { return *impl_->scheduler(); }
 CsrUnit& Core::csr_unit() { return impl_->csr_unit(); }
 uint32_t Core::mpm_class() const { return impl_->mpm_class(); }
+
+Word Core::dtm_get_pc(uint32_t wid) const         { return impl_->dtm_get_pc(wid); }
+void Core::dtm_set_pc(uint32_t wid, Word pc)      { impl_->dtm_set_pc(wid, pc); }
+Word Core::dtm_get_ireg(uint32_t wid, uint32_t reg)            { return impl_->dtm_get_ireg(wid, reg); }
+void Core::dtm_set_ireg(uint32_t wid, uint32_t reg, Word val)  { impl_->dtm_set_ireg(wid, reg, val); }
 
 #ifdef EXT_TCU_ENABLE
 std::shared_ptr<TcuUnit>& Core::tcu_unit() {

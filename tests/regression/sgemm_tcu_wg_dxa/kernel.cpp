@@ -15,7 +15,6 @@ constexpr uint32_t kDescB = 1;
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
 
-  uint32_t M = arg->M;
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 

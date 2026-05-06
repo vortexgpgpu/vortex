@@ -15,7 +15,7 @@
 #define __VX_SPAWN_H__
 
 #include <vx_intrinsics.h>
-#include <stdint.h>
+#include <VX_config.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,17 +43,17 @@ typedef void (*vx_kernel_func_cb)(void *arg);
 
 typedef void (*vx_serial_cb)(void *arg);
 
-static __attribute__((always_inline)) uint32_t get_local_group_id() {
+static inline __attribute__((always_inline)) uint32_t get_local_group_id() {
   uint32_t __UNIFORM__ v = __local_group_id;
   return v;
 }
 
-static __attribute__((always_inline)) uint32_t get_sub_group_id() {
+static inline __attribute__((always_inline)) uint32_t get_sub_group_id() {
   uint32_t __UNIFORM__ v = __sub_group_id;
   return v;
 }
 
-static __attribute__((always_inline)) uint32_t get_num_sub_groups() {
+static inline __attribute__((always_inline)) uint32_t get_num_sub_groups() {
   uint32_t __UNIFORM__ v = __warps_per_group;
   return v;
 }

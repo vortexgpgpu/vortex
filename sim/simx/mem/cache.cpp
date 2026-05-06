@@ -579,11 +579,14 @@ private:
     // 3) core request
     if (!this->core_req_in.empty()) {
       auto &core_req = this->core_req_in.peek();
-      // Conservative MSHR occupancy check: any request that may miss must
-      // reserve a slot. Counts both currently-allocated entries and
-      // in-flight pipe requests that haven't reached MSHR allocation yet.
-      bool needs_mshr = !core_req.write || config_.write_back;
-      if (needs_mshr && (mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
+      // Reserve an MSHR slot for every admitted core request. Read misses
+      // and writeback write misses allocate directly; write-through writes
+      // can also need a slot when the line has a pending fill (wt-merge,
+      // emitted in processRequests). Without this conservative gate, a WT
+      // write whose line has a pending fill enters the pipe past MSHR
+      // capacity and deadlocks at processRequests with the Fill it needs
+      // queued behind it.
+      if ((mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
         ++perf_stats_.mshr_stalls;
         return;
       }

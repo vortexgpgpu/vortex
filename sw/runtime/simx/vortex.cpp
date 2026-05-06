@@ -155,6 +155,16 @@ public:
     return 0;
   }
 
+  int copy(uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+    if (src_addr + asize > GLOBAL_MEM_SIZE || dest_addr + asize > GLOBAL_MEM_SIZE)
+      return -1;
+    ram_.enable_acl(false);
+    ram_.copy(dest_addr, src_addr, size);
+    ram_.enable_acl(true);
+    return 0;
+  }
+
   int upload(uint64_t dest_addr, const void *src, uint64_t size) {
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
     if (dest_addr + asize > GLOBAL_MEM_SIZE)

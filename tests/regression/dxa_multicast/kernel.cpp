@@ -16,8 +16,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   if (active != 0 && cta_id >= active)
     return;
 
-  const uint32_t tile_rows = arg->tile_rows;
-  const uint32_t tile_cols = arg->tile_cols;
+  //const uint32_t tile_rows = arg->tile_rows;
+  //const uint32_t tile_cols = arg->tile_cols;
 
   // All CTAs fetch the SAME tile (same coordinates) — this is the multicast scenario.
   const uint32_t row_base = 0;

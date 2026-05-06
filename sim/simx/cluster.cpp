@@ -249,6 +249,14 @@ public:
     return l2cache_->flush_done();
   }
 
+  Core* get_core(uint32_t idx) const {
+    uint32_t sockets_per_cluster = sockets_.size();
+    if (idx >= sockets_per_cluster * cores_per_socket_) return nullptr;
+    uint32_t s = idx / cores_per_socket_;
+    uint32_t c = idx % cores_per_socket_;
+    return sockets_.at(s)->core(c).get();
+  }
+
 #ifdef EXT_DXA_ENABLE
   DxaCore::Ptr& dxa_core() { return dxa_core_; }
 #endif
@@ -312,6 +320,10 @@ int Cluster::dcr_write(uint32_t addr, uint32_t value) {
 
 int Cluster::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   return impl_->dcr_read(addr, tag, value);
+}
+
+Core* Cluster::get_core(uint32_t idx) const {
+  return impl_->get_core(idx);
 }
 
 void Cluster::dcache_flush_begin() {

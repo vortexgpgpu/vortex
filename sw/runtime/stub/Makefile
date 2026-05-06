@@ -4,7 +4,7 @@ DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/sw/runtime/stub
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors -Werror
 CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
 CXXFLAGS += -fPIC
 

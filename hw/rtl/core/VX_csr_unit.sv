@@ -51,8 +51,25 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
     wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm5;
 
-    wire csr_req_valid = execute_if.valid;
-    assign execute_if.ready = csr_req_ready;
+    // sched_csr_if.cta_csrs lives behind a sp_ram with RADDR_REG=1 → valid
+    // one cycle after sched_csr_if.csr_rd_wid (= execute_if.data.header.wid)
+    // is presented. Hold execute_if for one cycle so the read can settle
+    // before we consume cta_csrs combinationally below.
+    reg cta_read_done_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            cta_read_done_r <= 1'b0;
+        end else if (execute_if.valid && execute_if.ready) begin
+            cta_read_done_r <= 1'b0;        // fire: next request must wait
+        end else if (execute_if.valid) begin
+            cta_read_done_r <= 1'b1;        // valid held → cta_csrs ready next cycle
+        end else begin
+            cta_read_done_r <= 1'b0;
+        end
+    end
+
+    wire csr_req_valid = execute_if.valid && cta_read_done_r;
+    assign execute_if.ready = csr_req_ready && cta_read_done_r;
 
     // DCR access bridge
     wire [`VX_CSR_ADDR_BITS-1:0] csr_read_addr = csr_req_valid ? csr_addr : dcr_csr_if.addr;
@@ -91,6 +108,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .read_enable    (csr_req_valid && csr_rd_enable),
         .read_uuid      (execute_if.data.header.uuid),
         .read_wid       (execute_if.data.header.wid),
+        .read_cta_id    (execute_if.data.header.cta_id),
         .read_addr      (csr_read_addr),
         .read_data_ro   (csr_read_data_ro),
         .read_data_rw   (csr_read_data_rw),
