@@ -122,9 +122,9 @@ ProcessorImpl::ProcessorImpl()
   for (uint32_t i = 0; i < L3_MEM_PORTS; ++i) {
     memsim_->mem_req_in.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
       __unused (cycle);
-      perf_mem_reads_  += !req.write;
-      perf_mem_writes_ += req.write;
-      perf_mem_pending_reads_ += !req.write;
+      perf_mem_reads_  += !req.is_write();
+      perf_mem_writes_ += req.is_write();
+      perf_mem_pending_reads_ += !req.is_write();
     });
     memsim_->mem_rsp_out.at(i).tx_callback([&](const MemRsp&, uint64_t cycle){
       __unused (cycle);

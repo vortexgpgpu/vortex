@@ -37,9 +37,11 @@ public:
   // capacity ≥ 2 is conformant. `reservation_size` is a per-bank knob.
   explicit AmoUnit(uint32_t reservation_size);
 
-  // Pure RMW kernel — no reservation touch, no mutation.
-  AmoComputeResult compute(AmoType op, uint8_t width,
-                           uint64_t old_word, uint64_t rhs) const;
+  // Pure RMW kernel — no reservation touch, no mutation. `unsigned_minmax`
+  // selects the unsigned variant of MIN/MAX (signed by default).
+  AmoComputeResult compute(MemOp op, uint8_t width,
+                           uint64_t old_word, uint64_t rhs,
+                           bool unsigned_minmax = false) const;
 
   // LR installs a reservation for (hart_id, line_addr). LRU eviction
   // when the table is full.

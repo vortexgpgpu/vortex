@@ -373,6 +373,94 @@ inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Memory-op tag. Mirrors RTL's mem_op_e (hw/rtl/VX_gpu_pkg.sv): always-present
+// ops (LD/ST/FLUSH) at the low values, EXT_A_ENABLE atomic family contiguous
+// at 3..13.
+enum class MemOp : uint8_t {
+  // Always-present (independent of EXT_A_ENABLE)
+  LD        = 0,
+  ST        = 1,
+  FLUSH     = 2,
+  // Atomic family (only meaningful when EXT_A_ENABLE)
+  AMO_LR    = 3,
+  AMO_SC    = 4,
+  AMO_SWAP  = 5,
+  AMO_ADD   = 6,
+  AMO_AND   = 7,
+  AMO_OR    = 8,
+  AMO_XOR   = 9,
+  // MIN/MAX collapse the signed/unsigned variants — the LSU sets
+  // `flags.amo_unsigned` for AMOMINU/AMOMAXU, and the AMO ALU branches
+  // on the flag. Mirrors RTL which has 12 op slots in 4 bits.
+  AMO_MIN   = 10,
+  AMO_MAX   = 11,
+};
+
+inline bool memop_is_atomic(MemOp op) {
+  return op >= MemOp::AMO_LR && op <= MemOp::AMO_MAX;
+}
+inline bool memop_is_amo_rmw(MemOp op) {
+  return op >= MemOp::AMO_SWAP && op <= MemOp::AMO_MAX;
+}
+inline bool memop_is_write(MemOp op) {
+  return op == MemOp::ST || op == MemOp::AMO_SC || memop_is_amo_rmw(op);
+}
+// Legacy alias — callers spelled this `memop_is_amo` while the dispatch
+// was being staged. Keep until the rename ripple is done.
+inline bool memop_is_amo(MemOp op) { return memop_is_atomic(op); }
+
+// Memory-request flags.
+struct MemFlags {
+  union {
+    uint32_t raw;
+    struct {
+      uint32_t strsp        : 1;  // bit 0: store-response enabled (opt-in)
+      uint32_t io           : 1;  // bit 1: uncacheable I/O
+      uint32_t local        : 1;  // bit 2: LMEM port
+      uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
+    #ifdef EXT_DXA_ENABLE
+      // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
+      uint32_t dxa_notify_done   : 1;   // bit 4
+      uint32_t dxa_notify_bar_id : 8;   // bits 5..12 (covers NUM_BARRIERS + multicast slack)
+    #endif
+    };
+  };
+
+  MemFlags() : raw(0) {}
+  MemFlags(uint32_t r) : raw(r) {}
+
+  bool any()  const { return raw != 0; }
+  bool none() const { return raw == 0; }
+
+  bool operator==(const MemFlags& o) const { return raw == o.raw; }
+  bool operator!=(const MemFlags& o) const { return raw != o.raw; }
+
+  friend std::ostream& operator<<(std::ostream& os, const MemFlags& f) {
+    os << "0x" << std::hex << f.raw << std::dec;
+    return os;
+  }
+};
+static_assert(sizeof(MemFlags) == sizeof(uint32_t), "MemFlags must be 32-bit");
+
+inline std::ostream &operator<<(std::ostream &os, const MemOp& op) {
+  switch (op) {
+  case MemOp::LD:        os << "LD"; break;
+  case MemOp::ST:        os << "ST"; break;
+  case MemOp::FLUSH:     os << "FLUSH"; break;
+  case MemOp::AMO_LR:    os << "AMO_LR"; break;
+  case MemOp::AMO_SC:    os << "AMO_SC"; break;
+  case MemOp::AMO_SWAP:  os << "AMO_SWAP"; break;
+  case MemOp::AMO_ADD:   os << "AMO_ADD"; break;
+  case MemOp::AMO_AND:   os << "AMO_AND"; break;
+  case MemOp::AMO_OR:    os << "AMO_OR"; break;
+  case MemOp::AMO_XOR:   os << "AMO_XOR"; break;
+  case MemOp::AMO_MIN:   os << "AMO_MIN"; break;
+  case MemOp::AMO_MAX:   os << "AMO_MAX"; break;
+  default:               os << "?MemOp" << (int)op; break;
+  }
+  return os;
+}
+
 enum class AmoType {
   LR,
   SC,
@@ -391,23 +479,6 @@ struct IntrAmoArgs {
   uint32_t width : 3;
   uint32_t aq : 1;
   uint32_t rl : 1;
-};
-
-// Per-request AMO sideband. Replaces the scattered is_amo/amo_op/
-// amo_width/amo_rhs/hart_id fields that used to live on LsuReq /
-// MemReq / bank_req_t. `valid` is the predicate (set on AMO requests,
-// clear on plain reads/writes); the rest is only inspected when valid.
-//
-// `hart_id` is the per-thread identity backing the LLC bank's
-// reservation table, computed via make_hart_id(cid, wid, tid). It
-// lives inside amo_req_t (not on the outer MemReq) because no
-// non-AMO codepath needs it.
-struct amo_req_t {
-  bool     valid   = false;
-  AmoType  op      = AmoType::LR;
-  uint8_t  width   = 0;   // 2 (.W) or 3 (.D); matches IntrAmoArgs.width
-  uint64_t rhs     = 0;   // rs2 for this lane
-  uint32_t hart_id = 0;   // make_hart_id(cid, wid, tid)
 };
 
 inline std::ostream &operator<<(std::ostream &os, const AmoType& type) {
@@ -975,39 +1046,37 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 struct LsuReq {
-  BitVector<> mask;
+  MemOp op;
+  MemFlags flags;
   std::vector<uint64_t> addrs;
-  bool     write;
-  uint32_t tag;
-  uint32_t cid;
-  uint64_t uuid;
-
-  // TLM data: per-lane block + byteen for stores/AMOs.
   std::vector<std::shared_ptr<mem_block_t>> data;
   std::vector<uint64_t> byteen;
-
-  // Per-lane AMO sideband. amo[i].valid distinguishes AMO lanes from
-  // plain load/store lanes. wid is needed by LsuMemAdapter to compute
-  // the per-lane MemReq.cid via make_hart_id(cid, wid, tid).
-  std::vector<amo_req_t> amo;
-  uint32_t               wid = 0;
+  BitVector<> mask;
+  std::vector<uint32_t> tids;
+  uint32_t tag;
+  uint32_t cid;
+  uint32_t wid;
+  uint64_t uuid;
 
   LsuReq(uint32_t size)
-    : mask(size)
+    : op(MemOp::LD)
+    , flags()
     , addrs(size, 0)
-    , write(false)
-    , tag(0)
-    , cid(0)
-    , uuid(0)
     , data(size)
     , byteen(size, 0)
-    , amo(size)
+    , mask(size)
+    , tids(size, 0)
+    , tag(0)
+    , cid(0)
+    , wid(0)
+    , uuid(0)
   {}
 
-  bool is_amo() const { return !amo.empty() && amo[0].valid; }
+  bool is_write() const { return memop_is_write(op); }
+  bool is_amo() const { return memop_is_atomic(op); }
 
   friend std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
-    os << "rw=" << req.write << ", mask=" << req.mask << ", addr={";
+    os << "op=" << req.op << ", mask=" << req.mask << ", addr={";
     bool first_addr = true;
     for (size_t i = 0; i < req.mask.size(); ++i) {
       if (!first_addr) os << ", ";
@@ -1052,28 +1121,9 @@ struct LsuRsp {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Memory-op tag. Lives alongside MemReq::write; the cache hierarchy reads
-// only `write`.
-enum class MemOp : uint8_t {
-  READ      = 0,
-  WRITE     = 1,
-  AMO_LR    = 2,
-  AMO_SC    = 3,
-  AMO_ADD   = 4,
-  AMO_SWAP  = 5,
-  AMO_XOR   = 6,
-  AMO_OR    = 7,
-  AMO_AND   = 8,
-  AMO_MIN   = 9,
-  AMO_MAX   = 10,
-  AMO_MINU  = 11,
-  AMO_MAXU  = 12,
-};
-
-inline bool memop_is_amo(MemOp op) {
-  return op >= MemOp::AMO_LR && op <= MemOp::AMO_MAXU;
-}
-
+// Maps RVA AmoType → MemOp. Signed/unsigned MIN/MAX variants collapse onto
+// MemOp::AMO_MIN/MAX; the unsigned distinction rides on flags.amo_unsigned
+// (set per-AMO by the LSU via amo_is_unsigned() below).
 inline MemOp amo_to_memop(AmoType t) {
   switch (t) {
   case AmoType::LR:      return MemOp::AMO_LR;
@@ -1083,30 +1133,17 @@ inline MemOp amo_to_memop(AmoType t) {
   case AmoType::AMOXOR:  return MemOp::AMO_XOR;
   case AmoType::AMOOR:   return MemOp::AMO_OR;
   case AmoType::AMOAND:  return MemOp::AMO_AND;
-  case AmoType::AMOMIN:  return MemOp::AMO_MIN;
-  case AmoType::AMOMAX:  return MemOp::AMO_MAX;
-  case AmoType::AMOMINU: return MemOp::AMO_MINU;
-  case AmoType::AMOMAXU: return MemOp::AMO_MAXU;
+  case AmoType::AMOMIN:
+  case AmoType::AMOMINU: return MemOp::AMO_MIN;
+  case AmoType::AMOMAX:
+  case AmoType::AMOMAXU: return MemOp::AMO_MAX;
   }
   std::abort();
 }
 
-inline AmoType memop_to_amo(MemOp op) {
-  switch (op) {
-  case MemOp::AMO_LR:    return AmoType::LR;
-  case MemOp::AMO_SC:    return AmoType::SC;
-  case MemOp::AMO_ADD:   return AmoType::AMOADD;
-  case MemOp::AMO_SWAP:  return AmoType::AMOSWAP;
-  case MemOp::AMO_XOR:   return AmoType::AMOXOR;
-  case MemOp::AMO_OR:    return AmoType::AMOOR;
-  case MemOp::AMO_AND:   return AmoType::AMOAND;
-  case MemOp::AMO_MIN:   return AmoType::AMOMIN;
-  case MemOp::AMO_MAX:   return AmoType::AMOMAX;
-  case MemOp::AMO_MINU:  return AmoType::AMOMINU;
-  case MemOp::AMO_MAXU:  return AmoType::AMOMAXU;
-  default:
-    std::abort();
-  }
+// True for RVA MIN/MAX unsigned variants; carried as flags.amo_unsigned.
+inline bool amo_is_unsigned(AmoType t) {
+  return t == AmoType::AMOMINU || t == AmoType::AMOMAXU;
 }
 
 // Globally-unique per-hart id. Lower bits carry the most entropy
@@ -1121,57 +1158,44 @@ inline uint32_t make_hart_id(uint32_t cid, uint32_t wid, uint32_t tid) {
 }
 
 struct MemReq {
+  MemOp    op;
   uint64_t addr;
-  bool     write;
-  AddrType type;
-  uint32_t tag;
-  uint32_t cid;
-  uint64_t uuid;
-
-  MemOp    op        = MemOp::READ;
-  uint32_t thread_id = 0;
-
-  // TLM data: populated for stores/AMOs (`data` carries the bytes to write,
-  // `byteen` selects which bytes within MEM_BLOCK_SIZE are valid). For reads,
-  // `data` is null and `byteen` is unused.
-  uint64_t                     byteen = 0;
   std::shared_ptr<mem_block_t> data;
+  uint64_t byteen = 0;
+  uint32_t tag;
+  uint32_t hart_id;
+  uint64_t uuid;
+  MemFlags flags;
 
-  // AMO sideband. `write` is unconditionally false for AMO requests,
-  // including SC: a missing line under SC must miss-and-return-failure
-  // rather than route into the WT write-miss fast path which would
-  // write-and-succeed. The hart identity used by the LLC bank's
-  // reservation table rides on `cid` (which LsuMemAdapter sets to
-  // make_hart_id(cid,wid,tid) per lane), not on a separate field.
-  amo_req_t amo;
-
-  // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
-  // Encoded as {notify_done, notify_bar_id}. The per-core LMEM-input
-  // tx_callback snoops these on packet delivery and pulses
-  // barrier_event_release(notify_bar_id) when notify_done is set.
-  bool     notify_done   = false;
-  uint32_t notify_bar_id = 0;
-
-  MemReq(uint64_t _addr = 0,
-          bool _write = false,
-          AddrType _type = AddrType::Global,
-          uint64_t _tag = 0,
-          uint32_t _cid = 0,
-          uint64_t _uuid = 0
-  ) : addr(_addr)
-    , write(_write)
-    , type(_type)
+  MemReq(MemOp _op = MemOp::LD,
+         uint64_t _addr = 0,
+         const std::shared_ptr<mem_block_t>& _data = nullptr,
+         uint64_t _byteen = 0,
+         uint64_t _tag = 0,
+         uint32_t _hart_id = 0,
+         uint64_t _uuid = 0
+  ) : op(_op)
+    , addr(_addr)
+    , data(_data)
+    , byteen(_byteen)
     , tag(_tag)
-    , cid(_cid)
+    , hart_id(_hart_id)
     , uuid(_uuid)
-    , op(_write ? MemOp::WRITE : MemOp::READ)
   {}
 
+  // Direction (was the `write` field; now derived from op).
+  bool is_write() const { return memop_is_write(op); }
+  // Address class (was the `type` field; computed from addr on demand).
+  AddrType addr_type() const { return get_addr_type(addr); }
+
   friend std::ostream &operator<<(std::ostream &os, const MemReq& req) {
-    os << "rw=" << req.write << ", ";
-    os << "addr=0x" << std::hex << req.addr << std::dec << ", type=" << req.type;
-    os << ", tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
-    os << " (#" << req.uuid << ")";
+    os << "op=" << req.op
+       << ", addr=0x" << std::hex << req.addr << std::dec
+       << ", type=" << req.addr_type()
+       << ", tag=0x" << std::hex << req.tag << std::dec
+       << ", hart_id=" << req.hart_id
+       << ", flags=" << req.flags
+       << " (#" << req.uuid << ")";
     return os;
   }
 };
@@ -1180,23 +1204,22 @@ struct MemReq {
 
 struct MemRsp {
   uint64_t tag;
-  uint32_t cid;
+  uint32_t hart_id;
   uint64_t uuid;
-
-  uint32_t thread_id = 0;
-
-  // TLM data: populated for loads / AMO returns. The shared_ptr lets
-  // MSHR-coalesced replays share a single fill buffer.
   std::shared_ptr<mem_block_t> data;
 
-  MemRsp(uint64_t _tag = 0, uint32_t _cid = 0, uint64_t _uuid = 0)
-    : tag (_tag)
-    , cid(_cid)
+  MemRsp(uint64_t _tag = 0,
+         uint32_t _hart_id = 0,
+         uint64_t _uuid = 0,
+         const std::shared_ptr<mem_block_t>& _data = nullptr
+  ) : tag(_tag)
+    , hart_id(_hart_id)
     , uuid(_uuid)
+    , data(_data)
   {}
 
   friend std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
-    os << "tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
+    os << "tag=0x" << std::hex << rsp.tag << std::dec << ", hart_id=" << rsp.hart_id;
     os << " (#" << rsp.uuid << ")";
     return os;
   }

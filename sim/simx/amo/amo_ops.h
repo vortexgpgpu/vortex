@@ -33,8 +33,9 @@ struct AmoComputeResult {
   uint64_t ret_word;
 };
 
-inline AmoComputeResult amo_compute(AmoType op, uint8_t width,
-                                    uint64_t old_word, uint64_t rhs) {
+inline AmoComputeResult amo_compute(MemOp op, uint8_t width,
+                                    uint64_t old_word, uint64_t rhs,
+                                    bool unsigned_minmax = false) {
   // Mask both inputs to width-sized values; sign-extension at the
   // word boundary is needed for signed comparisons (MIN/MAX).
   const bool is_w = (width == 2);
@@ -50,17 +51,18 @@ inline AmoComputeResult amo_compute(AmoType op, uint8_t width,
 
   uint64_t newv = a;
   switch (op) {
-  case AmoType::LR:      /* no store */ newv = a; break;
-  case AmoType::SC:      newv = b;                break;
-  case AmoType::AMOSWAP: newv = b;                break;
-  case AmoType::AMOADD:  newv = a + b;            break;
-  case AmoType::AMOAND:  newv = a & b;            break;
-  case AmoType::AMOOR:   newv = a | b;            break;
-  case AmoType::AMOXOR:  newv = a ^ b;            break;
-  case AmoType::AMOMIN:  newv = (uint64_t)((ai < bi) ? ai : bi); break;
-  case AmoType::AMOMAX:  newv = (uint64_t)((ai > bi) ? ai : bi); break;
-  case AmoType::AMOMINU: newv = (a < b) ? a : b;  break;
-  case AmoType::AMOMAXU: newv = (a > b) ? a : b;  break;
+  case MemOp::AMO_LR:    /* no store */ newv = a; break;
+  case MemOp::AMO_SC:    newv = b;                break;
+  case MemOp::AMO_SWAP:  newv = b;                break;
+  case MemOp::AMO_ADD:   newv = a + b;            break;
+  case MemOp::AMO_AND:   newv = a & b;            break;
+  case MemOp::AMO_OR:    newv = a | b;            break;
+  case MemOp::AMO_XOR:   newv = a ^ b;            break;
+  // MIN/MAX collapse signed/unsigned variants — flag picks compare style.
+  case MemOp::AMO_MIN:   newv = unsigned_minmax ? ((a < b) ? a : b)
+                                                : (uint64_t)((ai < bi) ? ai : bi); break;
+  case MemOp::AMO_MAX:   newv = unsigned_minmax ? ((a > b) ? a : b)
+                                                : (uint64_t)((ai > bi) ? ai : bi); break;
   default:
     std::abort();
   }

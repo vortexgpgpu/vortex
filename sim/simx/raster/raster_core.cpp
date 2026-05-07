@@ -194,11 +194,9 @@ private:
 
       MemReq mreq;
       mreq.addr  = lf.cl_addr;
-      mreq.write = false;
-      mreq.op    = MemOp::READ;
-      mreq.type  = AddrType::Global;
+      mreq.op    = MemOp::LD;
       mreq.tag   = next_mem_tag_++;
-      mreq.cid   = 0;
+      mreq.hart_id   = 0;
       mreq.uuid  = 0;
 
       PendingRead pr;

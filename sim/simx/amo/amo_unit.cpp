@@ -24,9 +24,10 @@ AmoUnit::AmoUnit(uint32_t reservation_size)
   assert(reservation_size >= 2 && "AMO_RS_SIZE must be >= 2");
 }
 
-AmoComputeResult AmoUnit::compute(AmoType op, uint8_t width,
-                                  uint64_t old_word, uint64_t rhs) const {
-  return amo_compute(op, width, old_word, rhs);
+AmoComputeResult AmoUnit::compute(MemOp op, uint8_t width,
+                                  uint64_t old_word, uint64_t rhs,
+                                  bool unsigned_minmax) const {
+  return amo_compute(op, width, old_word, rhs, unsigned_minmax);
 }
 
 void AmoUnit::reserve(uint32_t hart_id, uint64_t line_addr) {

@@ -46,11 +46,11 @@ public:
   }
 
   // Try to release the lock. Returns true on success (lock cleared,
-  // trace forwarded). Conditions: MSHR empty AND output channel can
-  // accept the trace.
-  bool try_release(SimChannel<instr_trace_t*>& out, bool mshr_empty) {
+  // trace forwarded). Conditions: pending-requests table empty AND
+  // output channel can accept the trace.
+  bool try_release(SimChannel<instr_trace_t*>& out, bool pending_empty) {
     if (!locked_) return false;
-    if (!mshr_empty) return false;
+    if (!pending_empty) return false;
     if (!out.try_send(trace_)) return false;
     locked_ = false;
     trace_ = nullptr;
@@ -105,14 +105,18 @@ private:
 	// Per-block LSU state. Each member is a named hardware sub-block.
 	struct lsu_state_t {
 		RingQueue<instr_trace_t*> req_queue{LSUQ_IN_SIZE};
-		HashTable<pending_req_t>  mshr{LSUQ_IN_SIZE};
+		// In-flight LSU requests, keyed by the tag the LSU allocates on
+		// issue. Stores the originating trace + per-lane (tid, addr, size)
+		// info needed to write the response back to the right registers.
+		// (Not a miss-status table — the cache has its own MSHR for that.)
+		HashTable<pending_req_t>  pending_reqs{LSUQ_IN_SIZE};
 		FenceController           fence;
 		std::vector<mem_addr_size_t> addr_list;
 		uint32_t                  remain_addrs = 0;
 
 		void reset() {
 			this->req_queue.clear();
-			this->mshr.clear();
+			this->pending_reqs.clear();
 			this->fence.reset();
 			this->addr_list.clear();
 			this->remain_addrs = 0;

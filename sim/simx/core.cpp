@@ -117,13 +117,7 @@ public:
 
     // create local memory.
     snprintf(sname, 100, "%s-lmem", name.c_str());
-    uint32_t lmem_num_reqs = LSU_NUM_REQS;
-  #ifdef EXT_TCU_ENABLE
-    lmem_num_reqs += 1;
-  #endif
-  #ifdef EXT_DXA_ENABLE
-    lmem_num_reqs += 1;
-  #endif
+    uint32_t lmem_num_reqs = LSU_NUM_REQS + EXT_TCU_ENABLED + EXT_DXA_ENABLED;
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << LMEM_LOG_SIZE),
       LSU_WORD_SIZE,
@@ -336,8 +330,8 @@ public:
     // (cross-word completions) before fresh schedule traces.
     instr_trace_t* trace = nullptr;
     Word           req_addr = 0;
-    bool           from_refetch = false;
   #ifdef EXT_C_ENABLE
+    bool           from_refetch = false;
     {
       auto pick = decompressor_->pick_request(fetch_latch_.empty() ? nullptr
                                                               : fetch_latch_.peek());
@@ -362,10 +356,10 @@ public:
 
     MemReq mem_req;
     mem_req.addr  = req_addr;
-    mem_req.write = false;
+    // op defaults to MemOp::LD — icache request is a load.
     uint32_t tag = pending_icache_.allocate(trace);
     mem_req.tag   = tag;
-    mem_req.cid   = trace->cid;
+    mem_req.hart_id   = trace->cid;
     mem_req.uuid  = trace->uuid;
     if (simobject_->icache_req_out.at(0).try_send(mem_req)) {
       DT(3, simobject_->name() << " icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);

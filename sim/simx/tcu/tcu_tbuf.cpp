@@ -149,7 +149,8 @@ public:
       uint64_t addr = buf.pending_q_.front();
       uint32_t sub_tag = buf.next_tag_++;
       uint32_t tag = pack_tag(s, sub_tag);
-      MemReq m(addr, /*write*/false, AddrType::Shared, tag, /*cid*/0, /*uuid*/0);
+      MemReq m(MemOp::LD, addr, /*data*/nullptr, /*byteen*/0, tag, /*hart_id*/0, /*uuid*/0);
+      m.flags.local = 1;   // TCU TBUF reads from LMEM
       req.send(m, 1);
       buf.inflight_[sub_tag] = addr;
       buf.pending_q_.pop_front();

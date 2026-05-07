@@ -148,7 +148,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 		return;
 	auto& state = states_.at(b);
 	auto& lsu_rsp = lsu_rsp_in.peek();
-	auto& entry = state.mshr.at(lsu_rsp.tag);
+	auto& entry = state.pending_reqs.at(lsu_rsp.tag);
 	auto trace = entry.trace;
 	auto& output = Outputs.at(b);
 	// Only stall if THIS response would terminate the request and the
@@ -205,7 +205,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 	}
 	entry.count -= lsu_rsp.mask.count(); // track remaining
 	if (entry.count == 0) {
-		state.mshr.release(lsu_rsp.tag);
+		state.pending_reqs.release(lsu_rsp.tag);
 		if (entry.eop) {
 			output.send(trace, 1);
 		}
@@ -241,7 +241,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 	// If a fence is pending, try to release it. Cannot dispatch new
 	// requests while fence is engaged (per-block total barrier).
 	if (state.fence.locked()) {
-		bool released = state.fence.try_release(Outputs.at(b), state.mshr.empty());
+		bool released = state.fence.try_release(Outputs.at(b), state.pending_reqs.empty());
 		if (released)
 			DT(3, this->name() << " fence-unlock: " << state.fence.trace());
 		return;
@@ -271,7 +271,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 
 	if (is_fence) {
 		// Engage fence lock; the next call will try to release it once
-		// the MSHR drains.
+		// the pending-reqs table drains.
 		state.fence.engage(trace);
 		DT(3, this->name() << " fence-lock: " << *trace);
 		state.req_queue.pop();
@@ -280,7 +280,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 
 	// check pending queue capacity. AMO always needs a return → reserve
 	// like a load, even though it carries write-bearing semantics.
-	if ((!is_write || is_amo) && state.mshr.full()) {
+	if ((!is_write || is_amo) && state.pending_reqs.full()) {
 		if (!trace->log_once(true)) {
 			DT(4, this->name() << " queue-full: " << *trace);
 		}
@@ -312,12 +312,15 @@ void LsuUnit::process_request_step(uint32_t b) {
 
 		// setup memory request
 		LsuReq lsu_req(NUM_LSU_LANES);
-		lsu_req.write = is_write;
+		// LsuReq.write is derived from op via is_write(); no separate field.
 		lsu_req.wid = trace->wid;
-		uint8_t amo_width = 0;
+		// Typed op (warp-uniform). For AMO, amo_to_memop() picks the family
+		// member; for plain stores/loads, it's ST/LD. AMO MIN/MAX collapse
+		// signed/unsigned into one op + flag.
+		lsu_req.op = is_amo ? amo_to_memop(*amo_tag)
+		            : (is_write ? MemOp::ST : MemOp::LD);
 		if (is_amo) {
-			auto amoArgs = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
-			amo_width = amoArgs.width & 0x3;
+			lsu_req.flags.amo_unsigned = amo_is_unsigned(*amo_tag);
 		}
 		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
 		std::vector<mem_addr_size_t> lane_entries(NUM_LSU_LANES);
@@ -326,8 +329,10 @@ void LsuUnit::process_request_step(uint32_t b) {
 			lsu_req.mask.set(i);
 			lsu_req.addrs.at(i) = entry.addr;
 			lane_entries.at(i) = entry;
-			if (is_write && entry.size > 0) {
-				// Package the lane's write value into a per-lane block + byteen.
+			if ((is_write || is_amo) && entry.size > 0) {
+				// Package the lane's value into a per-lane block + byteen.
+				// Stores: store data. AMOs: rhs (rs2). The cache extracts
+				// rhs at byte_off using the same path.
 				auto block = make_mem_block();
 				std::memset(block->data(), 0, block->size());
 				uint32_t off = entry.addr & (MEM_BLOCK_SIZE - 1);
@@ -336,16 +341,11 @@ void LsuUnit::process_request_step(uint32_t b) {
 				}
 				lsu_req.data.at(i) = block;
 				lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
-			} else if (is_amo) {
-				// Per-lane AMO sideband. op/width are uniform across lanes
-				// of one warp instruction; rhs and hart_id are per-lane.
-				auto& al = lsu_req.amo.at(i);
-				al.valid   = true;
-				al.op      = *amo_tag;
-				al.width   = amo_width;
-				al.rhs     = entry.data;
-				al.hart_id = make_hart_id(trace->cid, trace->wid, entry.tid);
 			}
+			// Save original thread index so the adapter can recover hart_id
+			// = make_hart_id(cid, wid, tids[i]) — the LSU's pack-by-tmask
+			// makes lane index ≠ tid for divergent warps.
+			lsu_req.tids.at(i) = entry.tid;
 			--state.remain_addrs;
 			if (state.remain_addrs == 0)
 				break;
@@ -356,8 +356,8 @@ void LsuUnit::process_request_step(uint32_t b) {
 
 		uint32_t tag = 0;
 		if (!is_write || is_amo) {
-			// MSHR allocation: AMOs need a return, so they're tracked in
-			// the load-style MSHR. Encode AMO width in lsu_args so the
+			// pending_reqs allocation: AMOs need a return, so they're tracked
+			// the same way as loads. Encode AMO width in lsu_args so the
 			// existing response formatter sign-extends correctly.
 			IntrLsuArgs entry_args{};
 			if (is_amo) {
@@ -368,7 +368,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 			} else {
 				entry_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
 			}
-			tag = state.mshr.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
+			tag = state.pending_reqs.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
 		}
 		lsu_req.tag  = tag;
 		lsu_req.cid  = trace->cid;

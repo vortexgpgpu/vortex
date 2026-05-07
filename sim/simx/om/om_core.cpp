@@ -312,11 +312,9 @@ private:
 
     MemReq mreq;
     mreq.addr  = cl_addr;
-    mreq.write = false;
-    mreq.op    = MemOp::READ;
-    mreq.type  = AddrType::Global;
+    mreq.op    = MemOp::LD;
     mreq.tag   = next_mem_tag_++;
-    mreq.cid   = s.req.tag;
+    mreq.hart_id   = s.req.tag;
     mreq.uuid  = s.req.uuid;
 
     PendingFill pf;
@@ -477,11 +475,10 @@ private:
 
     MemReq mreq;
     mreq.addr   = cl_addr;
-    mreq.write  = true;
-    mreq.op     = MemOp::WRITE;
-    mreq.type   = AddrType::Global;
+    mreq.op = MemOp::ST;
+    mreq.op     = MemOp::ST;
     mreq.tag    = next_mem_tag_++;
-    mreq.cid    = s.req.tag;
+    mreq.hart_id    = s.req.tag;
     mreq.uuid   = s.req.uuid;
     mreq.byteen = uint64_t(0xfu) << off;
 

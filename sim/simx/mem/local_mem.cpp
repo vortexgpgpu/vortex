@@ -72,7 +72,7 @@ public:
 			auto& bank_req = xbar_req_out.peek();
 
 			// Apply byte-enabled writes from TLM payload to local RAM.
-			if (bank_req.write && bank_req.data) {
+			if (bank_req.is_write() && bank_req.data) {
 				uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(MEM_BLOCK_SIZE - 1);
 				for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
 					if (bank_req.byteen & (1ull << b)) {
@@ -82,10 +82,12 @@ public:
 				}
 			}
 
-			if (!bank_req.write || config_.write_reponse) {
+			// Loads always respond. Stores respond when configured globally OR
+			// the request opts in via MEM_FLAG_STRSP (proposal §4.2).
+			if (!bank_req.is_write() || config_.write_reponse || bank_req.flags.strsp) {
 				// send xbar response — for reads, capture the line payload.
-				MemRsp bank_rsp{bank_req.tag, bank_req.cid, bank_req.uuid};
-				if (!bank_req.write) {
+				MemRsp bank_rsp{bank_req.tag, bank_req.hart_id, bank_req.uuid};
+				if (!bank_req.is_write()) {
 					auto rsp_data = make_mem_block();
 					uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(MEM_BLOCK_SIZE - 1);
 					ram_.read(rsp_data->data(), line_addr, MEM_BLOCK_SIZE);
@@ -98,8 +100,8 @@ public:
 			DT(4, simobject_->name() << "-bank" << i << " req : " << bank_req);
 
 			// update perf counters
-			perf_stats_.reads += !bank_req.write;
-			perf_stats_.writes += bank_req.write;
+			perf_stats_.reads += !bank_req.is_write();
+			perf_stats_.writes += bank_req.is_write();
 
 			// remove input
 			xbar_req_out.pop();

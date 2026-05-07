@@ -124,7 +124,7 @@ public:
 				// per-region read/write permissions). Suppress ACL for the
 				// duration of the access; ACL still guards upload/download.
 				ram_->enable_acl(false);
-				if (mem_req.write) {
+				if (mem_req.is_write()) {
 					// Apply byte-enabled write to RAM at request arrival.
 					// IO_COUT-range bytes are tapped to the print buffer and
 					// not stored in RAM.
@@ -151,15 +151,15 @@ public:
 			auto req_args = new DramCallbackArgs{this, mem_req, i, rsp_data};
 			dram_sim_.send_request(
 				mem_req.addr,
-				mem_req.write,
+				mem_req.is_write(),
 				[](void* arg)->bool {
 					auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);
-					if (rsp_args->request.write) {
+					if (rsp_args->request.is_write()) {
 						delete rsp_args;
 						return true;
 					} else {
 						// only send a response for read requests
-						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
+						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.hart_id, rsp_args->request.uuid};
 						mem_rsp.data = rsp_args->rsp_data;
 						if (rsp_args->memsim->mem_xbar_->RspIn.at(rsp_args->bank_id).try_send(mem_rsp)) {
 							DT(3, rsp_args->memsim->simobject_->name() << " mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);

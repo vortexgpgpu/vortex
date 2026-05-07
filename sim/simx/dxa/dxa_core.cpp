@@ -429,10 +429,8 @@ private:
       // bits coming back).
       MemReq mreq;
       mreq.addr  = lw.gmem_cl_addr;
-      mreq.write = false;
-      mreq.type  = AddrType::Global;
       mreq.tag   = slot;
-      mreq.cid   = w.req.core->id();
+      mreq.hart_id   = w.req.core->id();
       mreq.uuid  = w.req.uuid;
 
       auto& ch = gmem_arb_->ReqIn.at(w.worker_id);
@@ -469,10 +467,9 @@ private:
     // Build LMEM MemReq with TLM payload.
     MemReq req;
     req.addr   = lw.smem_word_addr;
-    req.write  = true;
-    req.type   = AddrType::Shared;
+    req.op = MemOp::ST;
     req.tag    = w.req.core->id();           // routing tag
-    req.cid    = w.req.core->id();
+    req.hart_id = w.req.core->id();
     req.uuid   = w.req.uuid;
     // Build byteen carefully: (1<<64)-1 is UB, so synthesize ~0 directly when
     // the span fills the whole 64-byte block.
@@ -512,8 +509,8 @@ private:
     bool is_last_work   = lw.last;
     bool is_last_replay = !w.is_multicast || (w.mc_cta_idx + 1 == w.cta_indices.size());
     if (is_last_work && (w.is_multicast || is_last_replay)) {
-      req.notify_done   = true;
-      req.notify_bar_id = w.req.bar_id + (w.is_multicast ? cta_warp_idx : 0u);
+      req.flags.dxa_notify_done   = 1;
+      req.flags.dxa_notify_bar_id = w.req.bar_id + (w.is_multicast ? cta_warp_idx : 0u);
     }
 
     lmem_ch.send(req);

@@ -32,24 +32,26 @@ LsuMemAdapter::LsuMemAdapter(
   if (num_inputs == 1) {
     // bypass mode
     ReqIn.bind(&ReqOut.at(0), [](const LsuReq& req) {
-      MemReq mr{ req.addrs.at(0), req.write, AddrType::Global, req.tag, req.cid, req.uuid };
-      mr.data   = req.data.at(0);
-      mr.byteen = req.byteen.at(0);
-      if (!req.amo.empty() && req.amo.at(0).valid) {
-        // AMO MemReq.write is unconditionally false (proposal §3.4):
-        // a missing line under SC must miss-and-return-failure rather
-        // than route into the WT write-miss fast path.
-        mr.write = false;
-        mr.amo   = req.amo.at(0);
-        mr.op    = amo_to_memop(req.amo.at(0).op);
-      }
+      MemReq mr(req.op,
+                req.addrs.at(0),
+                req.data.at(0),
+                req.byteen.at(0),
+                req.tag,
+                make_hart_id(req.cid, req.wid, req.tids.at(0)),
+                req.uuid);
+      // Carry warp-uniform attributes (amo_unsigned, …) and tag the
+      // address class once so consumers don't re-derive it.
+      mr.flags = req.flags;
+      auto t = get_addr_type(mr.addr);
+      mr.flags.io    = (t == AddrType::IO);
+      mr.flags.local = (t == AddrType::Shared);
       return mr;
     });
     RspIn.at(0).bind(&RspOut, [](const MemRsp& rsp) {
       LsuRsp lsuRsp(1);
       lsuRsp.mask.set(0);
       lsuRsp.tag = rsp.tag;
-      lsuRsp.cid = rsp.cid;
+      lsuRsp.cid = rsp.hart_id;
       lsuRsp.uuid = rsp.uuid;
       lsuRsp.data.at(0) = rsp.data;
       return lsuRsp;
@@ -81,7 +83,7 @@ void LsuMemAdapter::on_tick() {
     LsuRsp out_rsp(input_size);
     out_rsp.mask.set(i);
     out_rsp.tag = rsp_in.tag;
-    out_rsp.cid = rsp_in.cid;
+    out_rsp.cid = rsp_in.hart_id;   // LsuRsp.cid still named cid; MemRsp.hart_id renamed
     out_rsp.uuid = rsp_in.uuid;
     out_rsp.data.at(i) = rsp_in.data;
 
@@ -122,19 +124,18 @@ void LsuMemAdapter::on_tick() {
         continue;
 
       MemReq out_req;
-      out_req.write  = in_req.write;
-      out_req.addr   = in_req.addrs.at(i);
-      out_req.type   = get_addr_type(in_req.addrs.at(i));
-      out_req.tag    = in_req.tag;
-      out_req.cid    = in_req.cid;
-      out_req.uuid   = in_req.uuid;
-      out_req.data   = in_req.data.at(i);
-      out_req.byteen = in_req.byteen.at(i);
-      if (i < in_req.amo.size() && in_req.amo.at(i).valid) {
-        // Same encoding rules as the single-lane fast path above.
-        out_req.write = false;
-        out_req.amo   = in_req.amo.at(i);
-        out_req.op    = amo_to_memop(in_req.amo.at(i).op);
+      out_req.addr    = in_req.addrs.at(i);
+      out_req.tag     = in_req.tag;
+      out_req.hart_id = make_hart_id(in_req.cid, in_req.wid, in_req.tids.at(i));
+      out_req.uuid    = in_req.uuid;
+      out_req.data    = in_req.data.at(i);
+      out_req.byteen  = in_req.byteen.at(i);
+      out_req.op      = in_req.op;
+      out_req.flags   = in_req.flags;
+      {
+        auto t = get_addr_type(out_req.addr);
+        out_req.flags.io    = (t == AddrType::IO);
+        out_req.flags.local = (t == AddrType::Shared);
       }
 
       if (ReqOut.at(i).try_send(out_req, delay_)) {

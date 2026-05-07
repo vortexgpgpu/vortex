@@ -65,7 +65,7 @@ void MemCoalescer::on_tick() {
     LsuRsp out_rsp(input_size_);
     out_rsp.mask = rsp_mask;
     out_rsp.tag = entry.tag;
-    out_rsp.cid = rsp_in.cid;
+    out_rsp.cid = rsp_in.cid;   // both sides are LsuRsp (cid retained at LSU layer)
     out_rsp.uuid = rsp_in.uuid;
     for (uint32_t o = 0; o < output_size_; ++o) {
       if (!rsp_in.mask.test(o))
@@ -119,7 +119,7 @@ void MemCoalescer::on_tick() {
   std::vector<uint64_t> out_addrs(output_size_);
   std::vector<std::shared_ptr<mem_block_t>> out_data(output_size_);
   std::vector<uint64_t> out_byteen(output_size_, 0);
-  std::vector<amo_req_t> out_amo(output_size_);
+  std::vector<uint32_t> out_tids(output_size_, 0);
 
   BitVector<> cur_mask(input_size_);
 
@@ -149,15 +149,20 @@ void MemCoalescer::on_tick() {
       }
 
       if (in_is_amo) {
-        // Carry this lane's full AMO sideband (op, width, rhs, hart_id)
-        // through the output slot. No coalescing across lanes.
-        if (i < in_req.amo.size()) {
-          out_amo.at(o) = in_req.amo.at(i);
+        // Carry this lane's original tid through the output slot — the
+        // adapter recovers hart_id from cid+wid+tid at the dcache boundary.
+        // No coalescing across lanes for AMO.
+        if (i < in_req.tids.size()) {
+          out_tids.at(o) = in_req.tids.at(i);
         }
       }
 
-      // For writes, merge per-lane data + byteen into the coalesced block.
-      if (in_req.write) {
+      // For writes — and AMOs after the rs2/byteen unification (Stage 3
+      // of the memory-interface refactor) — merge per-lane data + byteen
+      // into the coalesced block. AMOs never coalesce across lanes
+      // (cur_mask only covers lane i), so the merge collapses to a single
+      // lane's payload but uses the same code path.
+      if (in_req.is_write() || in_is_amo) {
         std::shared_ptr<mem_block_t> merged;
         uint64_t merged_byteen = 0;
         for (uint32_t s = r; s < output_ratio_; ++s) {
@@ -192,7 +197,7 @@ void MemCoalescer::on_tick() {
   assert(!out_mask.none());
 
   uint32_t tag = 0;
-  if (!in_req.write || in_is_amo) {
+  if (!in_req.is_write() || in_is_amo) {
     // Allocate a response tag for read requests and AMOs (which always
     // return rd). Without the AMO branch the response would route through
     // the write path and the LSU MSHR replay would never fire.
@@ -203,16 +208,15 @@ void MemCoalescer::on_tick() {
   LsuReq out_req{output_size_};
   out_req.mask = out_mask;
   out_req.tag = tag;
-  out_req.write = in_req.write;
   out_req.addrs = out_addrs;
-  out_req.cid = in_req.cid;
+  out_req.cid = in_req.cid;   // LsuReq layer retains cid naming
   out_req.uuid = in_req.uuid;
   out_req.data = std::move(out_data);
   out_req.byteen = std::move(out_byteen);
+  out_req.op = in_req.op;
+  out_req.flags = in_req.flags;
+  out_req.tids = std::move(out_tids);
   out_req.wid = in_req.wid;
-  if (in_is_amo) {
-    out_req.amo = std::move(out_amo);
-  }
 
   // send memory request
   ReqOut.send(out_req, delay_);

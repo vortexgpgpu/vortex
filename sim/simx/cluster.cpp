@@ -101,19 +101,7 @@ public:
     // contention, matching the RTL `VX_mem_arb` priority ordering.
 #if defined(EXT_DXA_ENABLE) || defined(EXT_TEX_ENABLE) || defined(EXT_OM_ENABLE) || defined(EXT_RASTER_ENABLE)
     constexpr uint32_t kL2Rows = 1
-  #ifdef EXT_DXA_ENABLE
-        + 1
-  #endif
-  #ifdef EXT_TEX_ENABLE
-        + 1
-  #endif
-  #ifdef EXT_OM_ENABLE
-        + 1
-  #endif
-  #ifdef EXT_RASTER_ENABLE
-        + 1
-  #endif
-        ;
+        + EXT_DXA_ENABLED + EXT_TEX_ENABLED + EXT_OM_ENABLED + EXT_RASTER_ENABLED;
     snprintf(sname, 100, "%s-l2arb", name.c_str());
     auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority,
                                     kL2Rows * L2_NUM_REQS, L2_NUM_REQS);
@@ -173,8 +161,8 @@ public:
         auto& ch = dxa_core_->lmem_req_out.at(cid);
         ch.bind(&core->local_mem()->Inputs.at(port_dxa));
         ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
-          if (req.write && req.notify_done) {
-            core->barrier_event_release(req.notify_bar_id);
+          if (req.is_write() && req.flags.dxa_notify_done) {
+            core->barrier_event_release(req.flags.dxa_notify_bar_id);
           }
         });
       }
@@ -208,6 +196,7 @@ public:
       TCACHE_MSHR_SIZE,            // mshr size
       2,                           // pipeline latency
       uint8_t(L2_REPL_POLICY),     // replacement policy (use L2 policy as default)
+      false,                       // is_llc (TCACHE is auxiliary, not LLC)
     });
     tcache_ = tcache;
 
@@ -218,11 +207,7 @@ public:
     }
     // tcache memory side → l2arb. Row index = kL2Rows-1 if no OM, else
     // kL2Rows-2 (OM occupies the last row when both are present).
-    constexpr uint32_t kTexRow = 1
-  #ifdef EXT_DXA_ENABLE
-        + 1
-  #endif
-        ;
+    constexpr uint32_t kTexRow = 1 + EXT_DXA_ENABLED;
     for (uint32_t i = 0; i < kTcacheMemPorts; ++i) {
       tcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kTexRow));
       l2arb->RspOut.at(kL2Rows * i + kTexRow).bind(&tcache->mem_rsp_in.at(i));
@@ -283,6 +268,7 @@ public:
       OCACHE_MSHR_SIZE,             // mshr size
       2,                            // pipeline latency
       uint8_t(L2_REPL_POLICY),      // replacement policy
+      false,                        // is_llc (OCACHE is auxiliary, not LLC)
     });
     ocache_ = ocache;
 
@@ -293,14 +279,7 @@ public:
     }
 
     // ocache memory side → l2arb. Row index is sockets + DXA + TEX (if those are present).
-    constexpr uint32_t kOmRow = 1
-  #ifdef EXT_DXA_ENABLE
-        + 1
-  #endif
-  #ifdef EXT_TEX_ENABLE
-        + 1
-  #endif
-        ;
+    constexpr uint32_t kOmRow = 1 + EXT_DXA_ENABLED + EXT_TEX_ENABLED;
     for (uint32_t i = 0; i < kOcacheMemPorts; ++i) {
       ocache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kOmRow));
       l2arb->RspOut.at(kL2Rows * i + kOmRow).bind(&ocache->mem_rsp_in.at(i));
@@ -344,6 +323,7 @@ public:
       RCACHE_MSHR_SIZE,             // mshr size
       2,                            // pipeline latency
       uint8_t(L2_REPL_POLICY),      // replacement policy
+      false,                        // is_llc (RCACHE is auxiliary, not LLC)
     });
     rcache_ = rcache;
 

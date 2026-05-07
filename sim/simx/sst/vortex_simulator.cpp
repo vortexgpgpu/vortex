@@ -87,7 +87,7 @@ void VortexSimulator::set_sst_mem_iface(SST::Interfaces::StandardMem* iface) {
         StandardMem::Request* sst_req;
         const uint64_t size = MEM_BLOCK_SIZE;
         const uint64_t addr = req.addr & ~uint64_t(MEM_BLOCK_SIZE - 1);
-        if (req.write) {
+        if (req.is_write()) {
             std::vector<uint8_t> data(size, 0);
             if (req.data) {
                 for (uint32_t b = 0; b < size; ++b) {

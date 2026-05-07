@@ -15,7 +15,9 @@
 #include "mem_block_pool.h"
 #include "debug.h"
 #include "types.h"
+#if EXT_A_ENABLED
 #include "amo_unit.h"
+#endif
 #include <cstring>
 #include <list>
 #include <queue>
@@ -280,12 +282,15 @@ struct bank_req_t {
   };
 
   uint64_t addr;
-  uint32_t cid;
+  uint32_t hart_id;   // was `cid`; mirrors MemReq.hart_id (Stage 2 rename).
   uint64_t req_tag;
   uint64_t uuid;
   uint32_t mshr_id;
   ReqType type;
   bool write;
+  MemOp op;           // Stage 3: typed op flows through the bank; AMO state
+                      //   (op/width/rhs/hart_id) is derived from this + byteen
+                      //   + data + hart_id without an `amo_req_t` sideband.
   // For write-through write-misses that piggy-back on a pending fill MSHR:
   // the core response was already sent at miss time, so Replay must not
   // emit another response — only run line_merge.
@@ -297,12 +302,14 @@ struct bank_req_t {
   std::shared_ptr<mem_block_t> data;
   uint64_t byteen;
 
-  // AMO sideband (LLC bank only). When `amo.valid`, `write` is false
-  // and the bank handles RMW commit through the AmoUnit in the same
-  // cycle as a write-hit. `data` is null for AMOs — `amo.rhs` carries
-  // rs2. The reservation key is `amo.hart_id` (computed upstream as
-  // make_hart_id(cid, wid, tid)).
-  amo_req_t amo;
+  // Mirrors MemReq.flags. `flags.amo_unsigned` distinguishes signed vs
+  // unsigned MIN/MAX (proposal §4.2). Other bits ride along for future use.
+  MemFlags flags;
+
+  // AMO state. memop_is_atomic(op) classifies the request; the LSU
+  // packs rs2 into data at byte_off (same path as stores), so the cache
+  // extracts rhs via amo_load_word and width via byteen popcount.
+  // hart_id (reservation key) flows on bank_req.hart_id directly.
 
   bank_req_t() {
     this->reset();
@@ -310,16 +317,17 @@ struct bank_req_t {
 
   void reset() {
     addr = 0;
-    cid = 0;
+    hart_id = 0;
     req_tag = 0;
     uuid = 0;
     mshr_id = 0;
     type = ReqType::None;
     write = false;
+    op = MemOp::LD;
     skip_core_rsp = false;
     data.reset();
     byteen = 0;
-    amo = amo_req_t{};
+    flags = MemFlags{};
   }
 
   friend std::ostream &operator<<(std::ostream &os, const bank_req_t &req) {
@@ -327,7 +335,7 @@ struct bank_req_t {
     os << ", rw=" << std::dec << req.write;
     os << ", type=" << req.type;
     os << ", req_tag=" << req.req_tag;
-    os << ", cid=" << req.cid;
+    os << ", hart_id=" << req.hart_id;
     os << " (#" << req.uuid << ")";
     return os;
   }
@@ -609,7 +617,7 @@ private:
       bank_req.reset();
       bank_req.type    = bank_req_t::Fill;
       bank_req.addr    = params_.mem_addr(bank_id_, root_peek.set_id, root_peek.addr_tag);
-      bank_req.cid     = root_peek.bank_req.cid;
+      bank_req.hart_id     = root_peek.bank_req.hart_id;
       bank_req.uuid    = root_peek.bank_req.uuid;
       bank_req.mshr_id = mshr_id;
       bank_req.data    = mem_rsp.data;
@@ -644,7 +652,7 @@ private:
 #else
       const bool is_amo_passthru = false;
 #endif
-      bool needs_mshr = (!core_req.write || config_.write_back || is_amo) && !is_amo_passthru;
+      bool needs_mshr = (!core_req.is_write() || config_.write_back || is_amo) && !is_amo_passthru;
       if (needs_mshr && (mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
         ++perf_stats_.mshr_stalls;
         return;
@@ -653,15 +661,18 @@ private:
       bank_req.reset();
       bank_req.type    = is_amo_passthru ? bank_req_t::AmoProbe : bank_req_t::Core;
       bank_req.addr    = core_req.addr;
-      bank_req.cid     = core_req.cid;
+      bank_req.hart_id = core_req.hart_id;
       bank_req.uuid    = core_req.uuid;
       bank_req.req_tag = core_req.tag;
-      bank_req.write   = core_req.write;
+      // bank_req.write means "route through the cache write path" — true only
+      // for plain stores. AMOs (op == AMO_SC / AMO RMW) are write-bearing
+      // semantically (memop_is_write returns true) but use the dedicated AMO
+      // commit path, not the write-path; keep bank_req.write false for them.
+      bank_req.write   = (core_req.op == MemOp::ST);
+      bank_req.op      = core_req.op;
       bank_req.data    = core_req.data;
       bank_req.byteen  = core_req.byteen;
-      if (is_amo) {
-        bank_req.amo = core_req.amo;
-      }
+      bank_req.flags   = core_req.flags;
       pipe_req_->push(bank_req);
       DT(3, this->name() << " core-req: " << core_req);
       // pending_mshr_size_ tracks Core-typed in-flight requests so the
@@ -669,7 +680,7 @@ private:
       // doesn't allocate an MSHR slot (no fill on the response), so it
       // stays out of this counter.
       if (!is_amo_passthru) ++pending_mshr_size_;
-      if (core_req.write) ++perf_stats_.writes;
+      if (core_req.is_write()) ++perf_stats_.writes;
       else                ++perf_stats_.reads;
       this->core_req_in.pop();
       return;
@@ -686,12 +697,22 @@ private:
     auto &hit_line = set.lines.at(hit_id);
     const uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
     const uint32_t byte_off  = (uint32_t)(bank_req.addr & (MEM_BLOCK_SIZE - 1));
-    const AmoType  op        = bank_req.amo.op;
-    const uint8_t  width     = bank_req.amo.width;
-    const uint32_t hid       = bank_req.amo.hart_id;
+    const MemOp    op        = bank_req.op;
+    // Width derived from byteen popcount (RVA mandates natural alignment, so
+    // byteen is contiguous: popcount==8 ⇒ .D, popcount==4 ⇒ .W). Mirrors the
+    // RTL bank's derivation in proposal §3.6.
+    const uint8_t  width     = (__builtin_popcountll(bank_req.byteen) >= 8) ? 3 : 2;
+    const uint32_t hid       = bank_req.hart_id;
+    // rhs is the lane's rs2 packed into bank_req.data at byte_off (LSU builds
+    // this the same way as for stores; mem_coalescer also merges it for AMOs).
+    const uint64_t rhs       = bank_req.data
+                             ? amo_load_word(bank_req.data->data(), byte_off, width)
+                             : 0ull;
+    // MIN/MAX signedness: signed by default, unsigned per flag (proposal §4.2).
+    const bool unsigned_minmax = bank_req.flags.amo_unsigned;
 
-    const bool sc_fail  = (op == AmoType::SC) && !amo_unit_.check(hid, line_addr);
-    const bool do_store = (op != AmoType::LR) && !sc_fail;
+    const bool sc_fail  = (op == MemOp::AMO_SC) && !amo_unit_.check(hid, line_addr);
+    const bool do_store = (op != MemOp::AMO_LR) && !sc_fail;
 
     // Stall checks (collect all before mutating).
     if (this->core_rsp_out.full())
@@ -704,22 +725,22 @@ private:
     if (hit_line.data) {
       old_word = amo_load_word(hit_line.data->data(), byte_off, width);
     }
-    auto rmw = amo_unit_.compute(op, width, old_word, bank_req.amo.rhs);
+    auto rmw = amo_unit_.compute(op, width, old_word, rhs, unsigned_minmax);
 
     // Build response payload: a fresh block with the relevant word at byte_off.
     // For LR/AMO* the word carries old_word (LSU sext at width gives rd).
     // For SC it carries 0 (success) or 1 (failure).
     auto rsp_block = make_mem_block();
     std::memset(rsp_block->data(), 0, rsp_block->size());
-    uint64_t rsp_word = (op == AmoType::SC) ? (sc_fail ? 1ull : 0ull)
+    uint64_t rsp_word = (op == MemOp::AMO_SC) ? (sc_fail ? 1ull : 0ull)
                                             : rmw.ret_word;
     amo_store_word(rsp_block->data(), byte_off, width, rsp_word);
 
     // Reservation update before commit so a same-cycle invalidate
     // from the store path doesn't kill our just-installed entry.
-    if (op == AmoType::LR) {
+    if (op == MemOp::AMO_LR) {
       amo_unit_.reserve(hid, line_addr);
-    } else if (op == AmoType::SC) {
+    } else if (op == MemOp::AMO_SC) {
       // RVA: SC always invalidates the reservation, success or fail.
       amo_unit_.clear(hid, line_addr);
     }
@@ -737,8 +758,8 @@ private:
         // Write-through: emit a write of the merged word downstream.
         MemReq w;
         w.addr   = params_.mem_addr(bank_id_, set_id, params_.addr_tag(bank_req.addr));
-        w.write  = true;
-        w.cid    = bank_req.cid;
+        w.op = MemOp::ST;
+        w.hart_id    = bank_req.hart_id;
         w.uuid   = bank_req.uuid;
         w.data   = store_block;
         w.byteen = byteen;
@@ -750,7 +771,7 @@ private:
     }
 
     // Send AMO response.
-    MemRsp rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+    MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
     rsp.data = rsp_block;
     this->core_rsp_out.send(rsp);
     DT(3, this->name() << " amo-rsp op=" << op << " sc_fail=" << sc_fail << ": " << rsp);
@@ -762,8 +783,12 @@ private:
   void processRequests() {
     const bank_req_t &bank_req = pipe_req_->peek();
 
+    // Stores get a response when (a) the cache is configured to always emit
+    // them (config_.write_reponse, global), or (b) the request opts in via
+    // MEM_FLAG_STRSP (per-request, proposal §4.2). Loads/AMOs always have a
+    // response and are not gated by this lambda.
     auto need_core_rsp = [&](const bank_req_t &req) {
-      return (!req.write || config_.write_reponse);
+      return (!req.write) || config_.write_reponse || req.flags.strsp;
     };
 
     switch (bank_req.type) {
@@ -811,8 +836,8 @@ private:
         auto &line = set.lines.at(hit_id);
         MemReq wb;
         wb.addr   = params_.mem_addr(bank_id_, set_id, line.tag);
-        wb.write  = true;
-        wb.cid    = bank_req.cid;
+        wb.op = MemOp::ST;
+        wb.hart_id    = bank_req.hart_id;
         wb.uuid   = bank_req.uuid;
         wb.data   = line.data;
         wb.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);
@@ -831,16 +856,17 @@ private:
       auto &e = amo_passthru_.at(pid);
       e.valid   = true;
       e.req_tag = bank_req.req_tag;
-      e.cid     = bank_req.cid;
+      e.cid     = bank_req.hart_id;
       e.uuid    = bank_req.uuid;
       MemReq amo_fwd;
       amo_fwd.addr   = bank_req.addr;
-      amo_fwd.write  = false;
+      // op already set below; default-construct sets MemOp::LD which we override.
       amo_fwd.tag    = amo_passthru_tag_base() + pid;
-      amo_fwd.cid    = bank_req.cid;
-      amo_fwd.uuid   = bank_req.uuid;
-      amo_fwd.amo    = bank_req.amo;
-      amo_fwd.op     = amo_to_memop(bank_req.amo.op);
+      amo_fwd.hart_id = bank_req.hart_id;
+      amo_fwd.uuid    = bank_req.uuid;
+      amo_fwd.op      = bank_req.op;
+      amo_fwd.byteen  = bank_req.byteen;  // carries width info (popcount-derived at LLC)
+      amo_fwd.data    = bank_req.data;    // carries rhs (extracted at LLC)
       this->mem_req_out.send(amo_fwd);
       DT(3, this->name() << " amo-probe-fwd: " << amo_fwd);
       ++pending_fill_reqs_; // counts as an outstanding mem-roundtrip for perf
@@ -872,8 +898,8 @@ private:
       if (need_writeback) {
         MemReq wb;
         wb.addr   = params_.mem_addr(bank_id_, set_id, victim_line.tag);
-        wb.write  = true;
-        wb.cid    = bank_req.cid;
+        wb.op = MemOp::ST;
+        wb.hart_id    = bank_req.hart_id;
         wb.uuid   = bank_req.uuid;
         wb.data   = victim_line.data;
         wb.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);
@@ -901,7 +927,7 @@ private:
       assert(hit_id != -1 && "replay miss");
 
 #if EXT_A_ENABLED
-      if (bank_req.amo.valid) {
+      if (memop_is_atomic(bank_req.op)) {
         assert(config_.is_llc && "AMO replay reached non-LLC bank");
         if (!this->commitAmo(bank_req, set, hit_id, set_id))
           return; // stall
@@ -934,12 +960,12 @@ private:
         // miss time when the writethrough was emitted.
         if (config_.is_llc && config_.write_back) {
           uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
-          amo_unit_.invalidate(line_addr, /*except=*/bank_req.amo.hart_id);
+          amo_unit_.invalidate(line_addr, /*except=*/bank_req.hart_id);
         }
 #endif
       }
       if (need_core_rsp(bank_req) && !bank_req.skip_core_rsp) {
-        MemRsp rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+        MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
         if (!bank_req.write)
           rsp.data = hit_line.data;
         this->core_rsp_out.send(rsp);
@@ -963,7 +989,7 @@ private:
 
       if (hit_id != -1) {
 #if EXT_A_ENABLED
-        if (bank_req.amo.valid) {
+        if (memop_is_atomic(bank_req.op)) {
           assert(config_.is_llc && "AMO Core+hit reached non-LLC bank");
           if (!this->commitAmo(bank_req, set, hit_id, set_id))
             return; // stall
@@ -990,8 +1016,8 @@ private:
           } else {
             MemReq w;
             w.addr   = params_.mem_addr(bank_id_, set_id, addr_tag);
-            w.write  = true;
-            w.cid    = bank_req.cid;
+            w.op = MemOp::ST;
+            w.hart_id    = bank_req.hart_id;
             w.uuid   = bank_req.uuid;
             w.data   = bank_req.data;
             w.byteen = bank_req.byteen;
@@ -1002,7 +1028,7 @@ private:
             // other harts' reservations (proposal §3.9).
             if (config_.is_llc) {
               uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
-              amo_unit_.invalidate(line_addr, /*except=*/bank_req.amo.hart_id);
+              amo_unit_.invalidate(line_addr, /*except=*/bank_req.hart_id);
             }
 #endif
           }
@@ -1011,12 +1037,12 @@ private:
           // we mutated this LLC line. Break other harts' reservations.
           if (config_.is_llc && config_.write_back) {
             uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
-            amo_unit_.invalidate(line_addr, /*except=*/bank_req.amo.hart_id);
+            amo_unit_.invalidate(line_addr, /*except=*/bank_req.hart_id);
           }
 #endif
         }
         if (need_rsp) {
-          MemRsp rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+          MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
           if (!bank_req.write)
             rsp.data = hit_line.data;
           this->core_rsp_out.send(rsp);
@@ -1046,8 +1072,8 @@ private:
 
           MemReq w;
           w.addr   = params_.mem_addr(bank_id_, set_id, addr_tag);
-          w.write  = true;
-          w.cid    = bank_req.cid;
+          w.op = MemOp::ST;
+          w.hart_id    = bank_req.hart_id;
           w.uuid   = bank_req.uuid;
           w.data   = bank_req.data;
           w.byteen = bank_req.byteen;
@@ -1059,12 +1085,12 @@ private:
           // the LLC bank → break other harts' reservations (proposal §3.9).
           if (config_.is_llc) {
             uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
-            amo_unit_.invalidate(line_addr, /*except=*/bank_req.amo.hart_id);
+            amo_unit_.invalidate(line_addr, /*except=*/bank_req.hart_id);
           }
 #endif
 
           if (need_rsp) {
-            MemRsp rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
+            MemRsp rsp{bank_req.req_tag, bank_req.hart_id, bank_req.uuid};
             this->core_rsp_out.send(rsp);
             DT(3, this->name() << " core-rsp: " << rsp);
           }
@@ -1089,9 +1115,9 @@ private:
           if (!mshr_pending) {
             MemReq fill;
             fill.addr  = params_.mem_addr(bank_id_, set_id, addr_tag);
-            fill.write = false;
+            // op defaults to MemOp::LD — fill is a load.
             fill.tag   = mshr_id; // routes the fill response back here
-            fill.cid   = bank_req.cid;
+            fill.hart_id   = bank_req.hart_id;
             fill.uuid  = bank_req.uuid;
             this->mem_req_out.send(fill);
             DT(3, this->name() << " fill-req: " << fill);
@@ -1131,7 +1157,7 @@ private:
             return; // stall — try again next cycle
           MemReq mem_req;
           mem_req.addr = params_.mem_addr(bank_id_, flush_set_idx_, line.tag);
-          mem_req.write = true;
+          mem_req.op   = MemOp::ST;
           mem_req.data = line.data;
           mem_req.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);
           this->mem_req_out.send(mem_req);
@@ -1317,7 +1343,7 @@ public:
       if (core_req_in.empty())
         continue;
       auto &core_req = core_req_in.peek();
-      if (core_req.type == AddrType::IO) {
+      if (core_req.flags.io) {
         if (this->processBypassRequest(core_req, req_id)) {
           core_req_in.pop();
         }
@@ -1363,7 +1389,7 @@ private:
     if (simobject_->core_rsp_out.at(req_id).full())
       return false; // stall
     uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
-    MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
+    MemRsp core_rsp{tag, mem_rsp.hart_id, mem_rsp.uuid};
     core_rsp.data = mem_rsp.data;  // forward TLM payload through bypass
     simobject_->core_rsp_out.at(req_id).send(core_rsp, 0);
     DT(3, simobject_->name() << " bypass-core-rsp: " << core_rsp);
