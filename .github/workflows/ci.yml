@@ -129,7 +129,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04]
-        name: [regression, dxa, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, vector, cupbop, tensor, tensor_sp, tensor_mx, tensor_wg]
+        name: [regression, amo, dxa, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, vector, cupbop, tensor, tensor_sp, tensor_mx, tensor_wg]
         xlen: [32, 64]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120

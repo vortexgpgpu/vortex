@@ -36,7 +36,7 @@ FLEN = "expr: 64 if $EXT_D_ENABLE else 32"
 EXT_M_ENABLE = true
 EXT_F_ENABLE = true
 EXT_C_ENABLE = false
-EXT_A_ENABLE = true
+EXT_A_ENABLE = false
 EXT_V_ENABLE = false
 
 EXT_ZICOND_ENABLE = true

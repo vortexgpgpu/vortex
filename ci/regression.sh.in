@@ -148,6 +148,52 @@ regression()
     echo "regression tests done!"
 }
 
+amo()
+{
+    echo "begin amo tests..."
+
+    CONFIGS="-DEXT_A_ENABLE" make -C sim/simx
+    CONFIGS="-DEXT_A_ENABLE" make -C sim/rtlsim
+
+    make -C sw/kernel
+    make -C sw/runtime/simx
+    make -C sw/runtime/rtlsim
+
+    # RISC-V 'A' ISA conformance (rv${XLEN}ua-p-{amo*,lrsc}).
+    CONFIGS="-DEXT_A_ENABLE" make -C tests/riscv/isa run-simx-${XLEN}a
+    CONFIGS="-DEXT_A_ENABLE" make -C tests/riscv/isa run-rtlsim-${XLEN}a
+
+    # Baseline (L1 = LLC). Both writethrough and writeback variants.
+    CONFIGS="-DEXT_A_ENABLE" ./ci/blackbox.sh --driver=simx   --app=amo
+    CONFIGS="-DEXT_A_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=0 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_NUM_WAYS=4"                       ./ci/blackbox.sh --driver=simx   --app=amo
+
+    # Multi-core, L1 = LLC. Stresses cross-warp/core LR/SC reservation.
+    CONFIGS="-DEXT_A_ENABLE" ./ci/blackbox.sh --driver=simx   --cores=2 --app=amo
+    CONFIGS="-DEXT_A_ENABLE" ./ci/blackbox.sh --driver=rtlsim --cores=2 --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --cores=2 --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=simx   --cores=2 --app=amo
+
+    # SimX-only multi-level cache coverage. RTLsim equivalents are
+    # gated on the §3.8 non-LLC AMO passthrough work landing in RTL
+    # (see VX_cache_bank.sv g_no_amo_unit branch); without it, an
+    # L1-cached AMO returns stale data instead of forwarding to LLC.
+
+    # L1 + L2 (L2 = LLC) — writethrough then writeback at each level.
+    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1"                                         ./ci/blackbox.sh --driver=simx --cores=2 --l2cache --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1 -DL2_WRITEBACK=1"                        ./ci/blackbox.sh --driver=simx --cores=2 --l2cache --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1"   ./ci/blackbox.sh --driver=simx --cores=2 --l2cache --app=amo
+
+    # L1 + L2 + L3 (L3 = LLC) — multi-cluster, both WB and WT.
+    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1"                                                          ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1"                        ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1"   ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=amo
+
+    echo "amo tests done!"
+}
+
 dxa()
 {
     echo "begin dxa tests..."
@@ -987,7 +1033,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1009,6 +1055,9 @@ while [ "$1" != "" ]; do
                 ;;
         --regression )
                 tests+=("regression")
+                ;;
+        --amo )
+                tests+=("amo")
                 ;;
         --dxa )
                 tests+=("dxa")
@@ -1079,6 +1128,7 @@ while [ "$1" != "" ]; do
                 tests+=("riscv")
                 tests+=("kernel")
                 tests+=("regression")
+                tests+=("amo")
                 tests+=("dxa")
                 tests+=("graphics")
                 tests+=("mpi")

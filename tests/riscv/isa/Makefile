@@ -80,6 +80,9 @@ run-simx-32f:
 run-simx-32d:
 	@for test in  $(TESTS_32D); do $(SIM_DIR)/simx/simx $$test || exit 1; done
 
+run-simx-32a:
+	@for test in  $(TESTS_32A); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+
 run-simx-64im:
 	@for test in  $(TESTS_64I) $(TESTS_64M); do $(SIM_DIR)/simx/simx $$test || exit 1; done
 
@@ -88,6 +91,9 @@ run-simx-64f:
 
 run-simx-64d:
 	@for test in  $(TESTS_64D); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+
+run-simx-64a:
+	@for test in  $(TESTS_64A); do $(SIM_DIR)/simx/simx $$test || exit 1; done
 
 run-simx-32: run-simx-32imafd
 
@@ -110,6 +116,9 @@ run-rtlsim-32im:
 run-rtlsim-32f:
 	@for test in  $(TESTS_32F); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
 
+run-rtlsim-32a:
+	@for test in  $(TESTS_32A); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+
 run-rtlsim-64im:
 	@for test in  $(TESTS_64I) $(TESTS_64M); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
 
@@ -118,6 +127,9 @@ run-rtlsim-64f:
 
 run-rtlsim-64d:
 	@for test in  $(TESTS_64D); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+
+run-rtlsim-64a:
+	@for test in  $(TESTS_64A); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
 
 run-rtlsim-32c:
 	@for test in  $(TESTS_32C); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
