@@ -117,7 +117,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_TAG_W),
-        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) worker_smem_bus_if[NUM_DXA_UNITS]();
 
@@ -164,7 +164,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_TAG_W),
         .TAG_SEL_IDX (DXA_LMEM_TAG_W - UUID_WIDTH),
-        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W),
         .ARBITER     ("R")
     ) lmem_arb (

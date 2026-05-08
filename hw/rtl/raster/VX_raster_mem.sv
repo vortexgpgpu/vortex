@@ -294,7 +294,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .MEM_CHANNELS (RCACHE_NUM_REQS),
         .WORD_SIZE    (`RASTER_DATA_BITS / 8),
         .ADDR_WIDTH   (RCACHE_ADDR_WIDTH),
-        .FLAGS_WIDTH  (MEM_FLAGS_WIDTH),
+        .USER_WIDTH   (0),
         .TAG_WIDTH    (TAG_WIDTH),
         .CORE_QUEUE_SIZE(`RASTER_MEM_QUEUE_SIZE),
         .RSP_PARTIAL  (0),
@@ -310,7 +310,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .core_req_mask  (mem_req_mask),
         .core_req_byteen(mem_req_byteen),
         .core_req_addr  (mem_req_addr_w),
-        .core_req_flags ('0),
+        .core_req_user  ('0),
         .core_req_data  ('0),
         .core_req_tag   (mem_req_tag),
         .core_req_ready (mem_req_ready),
@@ -332,7 +332,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .mem_req_mask   (mem_bus_if.req_data.mask),
         .mem_req_byteen (mem_bus_if.req_data.byteen),
         .mem_req_addr   (mem_bus_if.req_data.addr),
-        .mem_req_flags  (mem_bus_if.req_data.flags),
+        `UNUSED_PIN (mem_req_user),
         .mem_req_data   (mem_bus_if.req_data.data),
         .mem_req_tag    (mem_bus_if.req_data.tag),
         .mem_req_ready  (mem_bus_if.req_ready),
@@ -344,6 +344,9 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .mem_rsp_tag    (mem_bus_if.rsp_data.tag),
         .mem_rsp_ready  (mem_bus_if.rsp_ready)
     );
+
+    // Raster never sets any memory attr; tie off the scheduler-driven LSU bus.
+    assign mem_bus_if.req_data.user = '0;
 
     VX_lsu_adapter #(
         .NUM_LANES    (RCACHE_NUM_REQS),

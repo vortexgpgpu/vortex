@@ -58,22 +58,43 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         assign full_addr[i] = execute_if.data.rs1_data[i] + `SEXT(`XLEN, execute_if.data.op_args.lsu.offset);
     end
 
-    // address type calculation
+    // address type + AMO classification — per-lane mem_bus_attr_t
+    // carried through the scheduler's USER channel and out via the
+    // lsu_mem_if's per-lane req_data.user field.
 
-    wire [NUM_LANES-1:0][MEM_FLAGS_WIDTH-1:0] mem_req_flags;
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_flags
+    mem_bus_attr_t [NUM_LANES-1:0] mem_req_attr_struct;
+    wire [NUM_LANES-1:0][MEM_ATTR_WIDTH-1:0] mem_req_attr;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_attr
         wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is I/O address
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`XLEN'(`IO_END_ADDR) >> MEM_ASHIFT);
-        assign mem_req_flags[i][MEM_REQ_FLAG_FLUSH] = req_is_fence;
-        assign mem_req_flags[i][MEM_REQ_FLAG_IO] = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
+        assign mem_req_attr_struct[i].is_flush  = req_is_fence;
+        assign mem_req_attr_struct[i].is_addr_io = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
     `ifdef LMEM_ENABLE
         // is local memory address
         wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + `XLEN'(1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
-        assign mem_req_flags[i][MEM_REQ_FLAG_LOCAL] = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
+        assign mem_req_attr_struct[i].is_addr_local = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
+    `else
+        assign mem_req_attr_struct[i].is_addr_local = 1'b0;
     `endif
+    `ifdef EXT_A_ENABLE
+        amo_req_t lane_amo;
+        assign lane_amo.amo_valid    = execute_if.data.op_args.lsu.amo_valid;
+        assign lane_amo.amo_op       = execute_if.data.op_args.lsu.amo_op;
+        // amo_unsigned distinguishes signed/unsigned AMOMIN/MAX variants
+        // (decoder collapses MINU/MAXU into MIN/MAX + this bit).
+        assign lane_amo.amo_unsigned = execute_if.data.op_args.lsu.amo_unsigned;
+        // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
+        assign lane_amo.hart_id      = HART_ID_WIDTH'(
+            (HART_ID_WIDTH'(CORE_ID) << (NW_BITS + NT_BITS))
+          | (HART_ID_WIDTH'(execute_if.data.header.wid) << NT_BITS)
+          |  HART_ID_WIDTH'(i)
+        );
+        assign mem_req_attr_struct[i].amo = lane_amo;
+    `endif
+        assign mem_req_attr[i] = mem_req_attr_struct[i];
     end
 
     // schedule memory request
@@ -297,7 +318,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0]                    lsu_mem_req_mask;
     wire [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] lsu_mem_req_byteen;
     wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_mem_req_addr;
-    wire [NUM_LANES-1:0][MEM_FLAGS_WIDTH-1:0] lsu_mem_req_flags;
+    wire [NUM_LANES-1:0][MEM_ATTR_WIDTH-1:0] lsu_mem_req_attr;
     wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] lsu_mem_req_data;
     wire [LSU_TAG_WIDTH-1:0]                lsu_mem_req_tag;
     wire                                    lsu_mem_req_ready;
@@ -308,34 +329,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire [LSU_TAG_WIDTH-1:0]                lsu_mem_rsp_tag;
     wire                                    lsu_mem_rsp_ready;
 
-`ifdef EXT_A_ENABLE
-    // Per-lane AMO sideband at the scheduler INPUT (driven from
-    // execute_if while it's still valid). The scheduler then carries
-    // these bits through its req_queue and out as mem_req_amo so the
-    // LSU's lsu_mem_if amo bits stay aligned with the mem_req that
-    // actually fires (otherwise LSUQ_IN_SIZE>1 queueing skews them
-    // against execute_if's current state — Phase 4d gap).
-    amo_req_t [NUM_LANES-1:0] core_req_amo;
-    amo_req_t [NUM_LANES-1:0] lsu_mem_req_amo;
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_core_req_amo
-        assign core_req_amo[i].valid = execute_if.data.op_args.lsu.amo_valid;
-        assign core_req_amo[i].op    = execute_if.data.op_args.lsu.amo_op;
-        // funct3 of AMO: 010 = .W (width=2), 011 = .D (width=3).
-        // op_type encodes {1'b0, funct3} so we read the low 2 bits.
-        assign core_req_amo[i].width = execute_if.data.op_type[1:0];
-        assign core_req_amo[i].rhs   = execute_if.data.rs2_data[i];
-        // make_hart_id(cid, wid, tid) — packed concatenation, low
-        // bits = tid. Built as a shift+or so the width arithmetic
-        // works regardless of NUM_CORES==1 (NC_BITS=0) corner case.
-        assign core_req_amo[i].hart_id = HART_ID_WIDTH'(
-            (HART_ID_WIDTH'(CORE_ID) << (NW_BITS + NT_BITS))
-          | (HART_ID_WIDTH'(execute_if.data.header.wid) << NT_BITS)
-          |  HART_ID_WIDTH'(i)
-        );
-    end
-`endif
-
     VX_mem_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-memsched", INSTANCE_ID))),
         .CORE_REQS   (NUM_LANES),
@@ -343,7 +336,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .WORD_SIZE   (LSU_WORD_SIZE),
         .LINE_SIZE   (LSU_WORD_SIZE),
         .ADDR_WIDTH  (LSU_ADDR_WIDTH),
-        .FLAGS_WIDTH (MEM_FLAGS_WIDTH),
+        .USER_WIDTH  (MEM_ATTR_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH),
         .CORE_QUEUE_SIZE (`LSUQ_IN_SIZE),
         .MEM_QUEUE_SIZE (`LSUQ_OUT_SIZE),
@@ -361,12 +354,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .core_req_mask  (mem_req_mask),
         .core_req_byteen(mem_req_byteen),
         .core_req_addr  (mem_req_addr),
-        .core_req_flags (mem_req_flags),
+        .core_req_user  (mem_req_attr),
         .core_req_data  (mem_req_data),
         .core_req_tag   (mem_req_tag),
-    `ifdef EXT_A_ENABLE
-        .core_req_amo   (core_req_amo),
-    `endif
         .core_req_ready (mem_req_ready),
 
         // request queue info
@@ -388,12 +378,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .mem_req_mask   (lsu_mem_req_mask),
         .mem_req_byteen (lsu_mem_req_byteen),
         .mem_req_addr   (lsu_mem_req_addr),
-        .mem_req_flags  (lsu_mem_req_flags),
+        .mem_req_user   (lsu_mem_req_attr),
         .mem_req_data   (lsu_mem_req_data),
         .mem_req_tag    (lsu_mem_req_tag),
-    `ifdef EXT_A_ENABLE
-        .mem_req_amo    (lsu_mem_req_amo),
-    `endif
         .mem_req_ready  (lsu_mem_req_ready),
 
         // Memory response
@@ -409,18 +396,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     assign lsu_mem_if.req_data.rw = lsu_mem_req_rw;
     assign lsu_mem_if.req_data.byteen = lsu_mem_req_byteen;
     assign lsu_mem_if.req_data.addr = lsu_mem_req_addr;
-    assign lsu_mem_if.req_data.flags = lsu_mem_req_flags;
+    assign lsu_mem_if.req_data.user = lsu_mem_req_attr;
     assign lsu_mem_if.req_data.data = lsu_mem_req_data;
     assign lsu_mem_if.req_data.tag = lsu_mem_req_tag;
     assign lsu_mem_req_ready = lsu_mem_if.req_ready;
 
-`ifdef EXT_A_ENABLE
-    // Drive lsu_mem_if amo from the scheduler's queued output, not
-    // directly from execute_if (the queue introduces 1+ cycle of skew
-    // so the direct tap exposed amo bits from a *different*
-    // instruction at the cycle mem_req fires).
-    assign lsu_mem_if.req_data.amo = lsu_mem_req_amo;
-`endif
 
     assign lsu_mem_rsp_valid = lsu_mem_if.rsp_valid;
     assign lsu_mem_rsp_mask = lsu_mem_if.rsp_data.mask;
@@ -548,16 +528,16 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
             if (mem_req_rw) begin
                 `TRACE(2, ("%t: %s Wr Req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, to_fullPC(execute_if.data.header.PC), mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
-                `TRACE(2, (", flags="))
-                `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
+                `TRACE(2, (", attr="))
+                `TRACE_ARRAY1D(2, "%b", mem_req_attr, NUM_LANES)
                 `TRACE(2, (", byteen=0x%0h, data=", mem_req_byteen))
                 `TRACE_ARRAY1D(2, "0x%0h", mem_req_data, NUM_LANES)
                 `TRACE(2, (", sop=%b, pid=%0d, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.header.pid, execute_if.data.header.sop, execute_if.data.header.eop, mem_req_tag, execute_if.data.header.uuid))
             end else begin
                 `TRACE(2, ("%t: %s Rd Req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.header.wid, execute_if.data.header.cta_id, to_fullPC(execute_if.data.header.PC), mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
-                `TRACE(2, (", flags="))
-                `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
+                `TRACE(2, (", attr="))
+                `TRACE_ARRAY1D(2, "%b", mem_req_attr, NUM_LANES)
                 `TRACE(2, (", byteen=0x%0h, rd=%0d, pid=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.header.rd, execute_if.data.header.pid, execute_if.data.header.sop, execute_if.data.header.eop, mem_req_tag, execute_if.data.header.uuid))
             end
         end

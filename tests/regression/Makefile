@@ -155,7 +155,6 @@ run-rtlsim:
 	$(MAKE) -C sgemm_tcu run-rtlsim
 	$(MAKE) -C sgemm_tcu_wg run-rtlsim
 	$(MAKE) -C sgemm_tcu_sp run-rtlsim
-#	$(MAKE) -C sgemm_tcu_mx run-rtlsim - not supported yet
 	$(MAKE) -C sgemm_tcu_wg_sp run-rtlsim
 	$(MAKE) -C sgemm2_dxa run-rtlsim
 	$(MAKE) -C sgemm2_tcu run-rtlsim

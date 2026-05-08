@@ -72,7 +72,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_is_nc
         if (CACHE_ENABLE) begin : g_cache
-            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.flags[MEM_REQ_FLAG_IO];
+            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.attr[MEM_ATTR_IO_OFFS];
         end else begin : g_no_cache
             assign core_req_nc_sel[i] = 1'b0;
         end
@@ -154,32 +154,18 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         wire                        core_req_nc_arb_rw;
         wire [WORD_SIZE-1:0]        core_req_nc_arb_byteen;
         wire [CORE_ADDR_WIDTH-1:0]  core_req_nc_arb_addr;
-        wire [MEM_FLAGS_WIDTH-1:0] core_req_nc_arb_flags;
+        wire [MEM_ATTR_WIDTH-1:0] core_req_nc_arb_attr;
         wire [CORE_DATA_WIDTH-1:0]  core_req_nc_arb_data;
         wire [MEM_TAG_NC1_WIDTH-1:0] core_req_nc_arb_tag;
 
-    `ifdef EXT_A_ENABLE
-        amo_req_t core_req_nc_arb_amo_unused;
         assign {
             core_req_nc_arb_rw,
             core_req_nc_arb_addr,
             core_req_nc_arb_data,
             core_req_nc_arb_byteen,
-            core_req_nc_arb_flags,
-            core_req_nc_arb_tag,
-            core_req_nc_arb_amo_unused
-        } = core_bus_nc_arb_if[i].req_data;
-        `UNUSED_VAR (core_req_nc_arb_amo_unused)
-    `else
-        assign {
-            core_req_nc_arb_rw,
-            core_req_nc_arb_addr,
-            core_req_nc_arb_data,
-            core_req_nc_arb_byteen,
-            core_req_nc_arb_flags,
+            core_req_nc_arb_attr,
             core_req_nc_arb_tag
         } = core_bus_nc_arb_if[i].req_data;
-    `endif
 
         logic [MEM_ADDR_WIDTH-1:0] core_req_nc_arb_addr_w;
         logic [WORDS_PER_LINE-1:0][WORD_SIZE-1:0] core_req_nc_arb_byteen_w;
@@ -207,7 +193,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
                 .data_out (core_req_nc_arb_tag_w)
             );
             VX_bits_remove #(
-                .N   (MEM_TAG_NC2_WIDTH),
+                .N   (MEM_TAG_NC1_WIDTH + WSEL_BITS),
                 .S   (WSEL_BITS),
                 .POS (TAG_SEL_IDX)
             ) wsel_remove (
@@ -233,15 +219,8 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
             core_req_nc_arb_addr_w,
             core_req_nc_arb_data_w,
             core_req_nc_arb_byteen_w,
-            core_req_nc_arb_flags,
+            core_req_nc_arb_attr,
             core_req_nc_arb_tag_w
-        `ifdef EXT_A_ENABLE
-            ,
-            // Bypass requests are non-cacheable / IO — never AMO. The
-            // local-mem switch asserts on AMO+Shared (proposal §6) so
-            // anything that reaches here has amo.valid = 0.
-            amo_req_t'('0)
-        `endif
         };
         assign core_bus_nc_arb_if[i].req_ready = mem_bus_out_nc_if[i].req_ready;
 

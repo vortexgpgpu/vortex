@@ -151,13 +151,13 @@ module VX_cluster import VX_gpu_pkg::*;
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
-        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) dxa_lmem_bus_if[1]();
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
-        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) per_socket_dxa_lmem_bus_if[NUM_SOCKETS]();
 `endif
@@ -189,16 +189,8 @@ module VX_cluster import VX_gpu_pkg::*;
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED),
-        // §3.1.2: L2 is the LLC iff L2_ENABLE && !L3_ENABLE.
-`ifdef L3_ENABLE
-        .IS_LLC         (0)
-`else
-    `ifdef L2_ENABLE
-        .IS_LLC         (1)
-    `else
-        .IS_LLC         (0)
-    `endif
-`endif
+        .IS_LLC         (L2_IS_LLC),
+        .AMO_ENABLE     (`EXT_A_ENABLED && L2_IS_LLC)
     ) l2cache (
         .clk            (clk),
         .reset          (reset),
@@ -245,7 +237,7 @@ module VX_cluster import VX_gpu_pkg::*;
         .NUM_OUTPUTS (NUM_SOCKETS),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
-        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) dxa_lmem_socket_switch (
         .clk        (clk),
@@ -319,19 +311,11 @@ module VX_cluster import VX_gpu_pkg::*;
 
 `ifdef EXT_GFX_ANY_ENABLE
     localparam NUM_DCR_GFX = 1;
-  `ifdef EXT_DXA_ENABLE
-    localparam DCR_GFX_IDX  = NUM_SOCKETS + 1;
-  `else
-    localparam DCR_GFX_IDX  = NUM_SOCKETS;
-  `endif
+    localparam DCR_GFX_IDX = NUM_SOCKETS + `EXT_DXA_ENABLED;
 `else
     localparam NUM_DCR_GFX = 0;
 `endif
-`ifdef EXT_DXA_ENABLE
-    localparam NUM_DCR_REQS = NUM_SOCKETS + 1 + NUM_DCR_GFX;  // +1 DXA, +NUM_DCR_GFX gfx
-`else
-    localparam NUM_DCR_REQS = NUM_SOCKETS + NUM_DCR_GFX;
-`endif
+    localparam NUM_DCR_REQS = NUM_SOCKETS + `EXT_DXA_ENABLED + NUM_DCR_GFX;
     VX_dcr_bus_if per_socket_dcr_bus_if[NUM_DCR_REQS]();
     VX_dcr_arb #(
         .NUM_REQS    (NUM_DCR_REQS),

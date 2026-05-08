@@ -84,7 +84,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_addr
         assign req_bank_addr[i] = lsu_bus_if[i].req_data.addr[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-        `UNUSED_VAR (lsu_bus_if[i].req_data.flags)
+        `UNUSED_VAR (lsu_bus_if[i].req_data.attr)
     end
 
     // bank requests dispatch
@@ -171,7 +171,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire dma_rsp_buf_ready; // driven by pipe-buffer or tied 0 when disabled
 
     if (DMA_ENABLE) begin : g_dma_enable
-        `UNUSED_VAR (dma_bus_if.req_data.flags)
+        `UNUSED_VAR (dma_bus_if.req_data.attr)
 
         assign dma_bus_if.req_ready = dma_bus_if.req_data.rw || dma_rsp_buf_ready;
 

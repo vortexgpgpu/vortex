@@ -88,7 +88,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
 
     wire [NUM_REQS-1:0] flush_req_mask;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_flush_req_mask
-        assign flush_req_mask[i] = core_bus_in_if[i].req_valid && core_bus_in_if[i].req_data.flags[MEM_REQ_FLAG_FLUSH];
+        assign flush_req_mask[i] = core_bus_in_if[i].req_valid && core_bus_in_if[i].req_data.attr[MEM_ATTR_FLUSH_OFFS];
     end
     wire flush_req_enable = (| flush_req_mask);
 

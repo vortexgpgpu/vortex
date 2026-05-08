@@ -50,11 +50,7 @@ package VX_gpu_pkg;
     localparam REG_TYPE_I = 0;
     localparam REG_TYPE_F = 1;
 
-`ifdef EXT_F_ENABLE
-	localparam REG_TYPES = 2;
-`else
-	localparam REG_TYPES = 1;
-`endif
+	localparam REG_TYPES = 1 + `EXT_F_ENABLED;
 
 	localparam NUM_REGS = (REG_TYPES * RV_REGS);
 
@@ -133,40 +129,85 @@ package VX_gpu_pkg;
 	localparam NUM_CORES   = `NUM_CORES;
     localparam NUM_SOCKETS = `UP(NUM_CORES / `SOCKET_SIZE);
 
-    localparam MEM_REQ_FLAG_FLUSH =  0;
-    localparam MEM_REQ_FLAG_IO =     1;
-    localparam MEM_REQ_FLAG_LOCAL =  2; // shoud be last since optional
-    localparam MEM_FLAGS_WIDTH = (MEM_REQ_FLAG_LOCAL + `LMEM_ENABLED);
 
     // ===== AMO (RVA) sideband =====================================
     // Mirrors SimX's amo_req_t (sim/simx/types.h). Fields are only
-    // meaningful when valid==1; the bank's reservation table keys on
-    // hart_id = make_hart_id(cid, wid, tid).
-    localparam INST_AMO_BITS = 4;
-    localparam INST_AMO_LR     = 4'h0;
-    localparam INST_AMO_SC     = 4'h1;
-    localparam INST_AMO_ADD    = 4'h2;
-    localparam INST_AMO_SWAP   = 4'h3;
-    localparam INST_AMO_XOR    = 4'h4;
-    localparam INST_AMO_OR     = 4'h5;
-    localparam INST_AMO_AND    = 4'h6;
-    localparam INST_AMO_MIN    = 4'h7;
-    localparam INST_AMO_MAX    = 4'h8;
-    localparam INST_AMO_MINU   = 4'h9;
-    localparam INST_AMO_MAXU   = 4'hA;
+    // meaningful when amo_valid==1; the bank's reservation table keys
+    // on hart_id = make_hart_id(cid, wid, tid).
+    // The bloated INST_AMO_* localparams have been replaced by amo_op_e
+    // (defined below). MINU/MAXU collapse into MIN/MAX + amo_unsigned.
 
     // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
     localparam HART_ID_BITS = NC_BITS + NW_BITS + NT_BITS;
     localparam HART_ID_WIDTH = `UP(HART_ID_BITS);
 
+    // ───────────────────────────────────────────────────────────────────────
+    // Memory-attribute typedef (proposal libs_feature_agnostic_redesign.md v0.4).
+    //
+    // `mem_bus_attr_t` — single attr type shared by every memory bus.
+    // VX_lsu_mem_if carries it per-lane via req_data.user (an opaque
+    // packed mem_bus_attr_t per lane). VX_mem_bus_if carries one scalar
+    // mem_bus_attr_t per request via req_data.attr. The LSU adapter is
+    // a per-lane passthrough between the two.
+    //
+    // Field order is LOAD-BEARING: MEM_ATTR_*_OFFS localparams depend
+    // on it. Don't reorder without updating offsets.
+    // ───────────────────────────────────────────────────────────────────────
+
+    // Typed AMO opcode enum — replaces INST_AMO_* localparams (deletion
+    // in Stage E once consumers fully migrate).
+    // Defined unconditionally so AMO_ENABLE can be a parameter (not ifdef)
+    // on the cache hierarchy. When EXT_A_ENABLE is undefined the struct
+    // bits are still allocated in the attr field but the cache's AMO
+    // logic is generated away by AMO_ENABLE=0.
+    typedef enum logic [3:0] {
+        AMO_OP_LR    = 4'h0,
+        AMO_OP_SC    = 4'h1,
+        AMO_OP_ADD   = 4'h2,
+        AMO_OP_SWAP  = 4'h3,
+        AMO_OP_XOR   = 4'h4,
+        AMO_OP_OR    = 4'h5,
+        AMO_OP_AND   = 4'h6,
+        AMO_OP_MIN   = 4'h7,
+        AMO_OP_MAX   = 4'h8
+        // MINU/MAXU collapse into MIN/MAX + amo_unsigned bit.
+    } amo_op_e;
+
+    // Slim AMO sideband. width derives from byteen popcount at the cache
+    // bank; rhs is read from the request's data field. Includes scalar
+    // hart_id for the LLC reservation table.
     typedef struct packed {
-        logic                       valid;
-        logic [INST_AMO_BITS-1:0]   op;
-        logic [1:0]                 width;   // 2 = .W, 3 = .D
-        logic [`XLEN-1:0]           rhs;     // rs2 for this lane
         logic [HART_ID_WIDTH-1:0]   hart_id;
+        logic                        amo_unsigned;
+        amo_op_e                     amo_op;
+        logic                        amo_valid;
     } amo_req_t;
     localparam AMO_REQ_BITS = $bits(amo_req_t);
+
+    // Cross-cache mem-bus attr — FIXED OFFSETS so arbitration is clean.
+    // Shared by every VX_mem_bus_if instance that carries attr.
+    // is_flush at LSB so dcr_flush can drive it deterministically.
+    typedef struct packed {
+        amo_req_t                    amo;          // at MEM_ATTR_AMO_OFFS=3 (valid + op + unsigned + hart_id)
+        logic                        is_addr_local; // MEM_ATTR_LOCAL_OFFS = 2
+        logic                        is_addr_io;    // MEM_ATTR_IO_OFFS    = 1
+        logic                        is_flush;      // MEM_ATTR_FLUSH_OFFS = 0
+    } mem_bus_attr_t;
+
+    // FIXED bit-position offsets — invariant across all VX_mem_bus_if
+    // instances and cache levels. Don't change without coordinating
+    // every cache/source/arbiter that touches attr.
+    // The amo bits are always allocated; AMO_ENABLE on the cache controls
+    // whether AMO logic is generated, not whether the field is present.
+    localparam MEM_ATTR_FLUSH_OFFS  = 0;
+    localparam MEM_ATTR_IO_OFFS     = 1;
+    localparam MEM_ATTR_LOCAL_OFFS  = 2;
+    localparam MEM_ATTR_AMO_OFFS    = 3;        // amo_req_t cast site (valid + op + unsigned + hart_id)
+
+    // Total width of the mem-bus attr field. Use this as the parameter
+    // default for VX_mem_bus_if's ATTR_WIDTH parameter and as the
+    // wire/reg sizing for any per-cache plumbing.
+    localparam MEM_ATTR_WIDTH = $bits(mem_bus_attr_t);
 
     localparam VX_DCR_ADDR_WIDTH = `VX_DCR_ADDR_BITS;
     localparam VX_DCR_DATA_WIDTH = `VX_DCR_DATA_BITS;
@@ -189,12 +230,13 @@ package VX_gpu_pkg;
 	localparam EX_BITS = `CLOG2(NUM_EX_UNITS);
 	localparam EX_WIDTH = `UP(EX_BITS);
 
+	localparam SFU_BITS = `CLOG2(2);
+	localparam SFU_WIDTH = `UP(SFU_BITS);
+
 	localparam SFU_CSRS = 0;
 	localparam SFU_WCTL = 1;
 
 	localparam NUM_SFU_UNITS = (2);
-	localparam SFU_BITS = `CLOG2(NUM_SFU_UNITS);
-	localparam SFU_WIDTH = `UP(SFU_BITS);
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -679,12 +721,15 @@ package VX_gpu_pkg;
     // Fields amo_valid / amo_op are inspected only when amo_valid==1; for
     // plain loads/stores they're zero. aq/rl decoded but unused (Vortex
     // is sequentially consistent today; see proposal §6).
+    // amo_unsigned distinguishes the U-variants of MIN/MAX (the bloated
+    // MINU/MAXU opcodes collapsed into MIN/MAX + this bit).
     typedef struct packed {
-        logic [(INST_ARGS_BITS-1-1-12-2-1-INST_AMO_BITS-2)-1:0] __padding; // 2 bits
-        logic                       amo_valid;                             // 1 bit
-        logic [INST_AMO_BITS-1:0]   amo_op;                                // 4 bits
-        logic                       amo_aq;                                // 1 bit
-        logic                       amo_rl;                                // 1 bit
+        logic [(INST_ARGS_BITS-1-1-12-2-1-1-$bits(amo_op_e)-2)-1:0] __padding; // 1 bit
+        logic                       amo_valid;
+        logic                       amo_unsigned;
+        amo_op_e                    amo_op;
+        logic                       amo_aq;
+        logic                       amo_rl;
         logic [1:0]                 pack;
         logic                       is_store;
         logic                       is_float;
@@ -814,6 +859,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;
+        logic [NW_WIDTH-1:0]        wid;
         logic [NCTA_WIDTH-1:0]      cta_id;
         logic [`NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
@@ -1048,14 +1094,14 @@ package VX_gpu_pkg;
     localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(`NUM_LSU_BLOCKS);
     localparam LMEM_TAG_WIDTH       = LMEM_TAG_WIDTH_BASE;
 
-    // DXA lmem tag and flags widths for DMA arb.
-    localparam DXA_LMEM_FLAGS_W = (BAR_ADDR_W + 1);
+    // DXA lmem tag and attr widths for DMA arb.
+    localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);
     localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
     localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS;
     localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`NUM_DXA_UNITS, 1);
 
-    // TCU lmem tag and flags widths for DMA arb.
-    localparam TCU_LMEM_FLAGS_W = 1;
+    // TCU lmem tag and attr widths for DMA arb.
+    localparam TCU_LMEM_ATTR_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
     localparam TCU_LMEM_NUM_MASTERS = (`TCU_SPARSE_ENABLED ? (2 * `NUM_TCU_BLOCKS + 1) : (`NUM_TCU_BLOCKS + 1));
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
@@ -1064,7 +1110,7 @@ package VX_gpu_pkg;
     localparam LMEM_DMA_EN         = (`EXT_DXA_ENABLED + `TCU_WGMMA_ENABLED) != 0;
     localparam LMEM_DMA_DATA_SIZE  = `LMEM_NUM_BANKS * LSU_WORD_SIZE;
     localparam LMEM_DMA_ADDR_WIDTH = `LMEM_LOG_SIZE - `CLOG2(`LMEM_NUM_BANKS * LSU_WORD_SIZE);
-    localparam LMEM_DMA_FLAGS_W    = `MAX(DXA_LMEM_FLAGS_W, TCU_LMEM_FLAGS_W);
+    localparam LMEM_DMA_ATTR_W     = `MAX(DXA_LMEM_ATTR_W, TCU_LMEM_ATTR_W);
     localparam LMEM_DMA_DXA_IDX    = 0;
     localparam LMEM_DMA_TCU_IDX    = LMEM_DMA_DXA_IDX + `EXT_DXA_ENABLED;
     localparam LMEM_DMA_INPUTS     = `EXT_DXA_ENABLED + `TCU_WGMMA_ENABLED;
@@ -1132,6 +1178,9 @@ package VX_gpu_pkg;
 
     // If dcache writeback is enabled, MSHR size must be large enough to track all outstanding requests
     localparam DCACHE_MREQ_SIZE     = `DCACHE_WRITEBACK ? `DCACHE_MSHR_SIZE : `DCACHE_MREQ_SIZE;
+
+    // §3.1.2: L1 dcache is the LLC iff neither L2 nor L3 is enabled.
+    localparam DCACHE_IS_LLC        = !`L2_ENABLED && !`L3_ENABLED;
 
     ////////////////////////// Tex / Tcache Parameters ////////////////////////
 `ifdef EXT_TEX_ENABLE
@@ -1223,21 +1272,19 @@ package VX_gpu_pkg;
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
 
 `ifdef EXT_DXA_ENABLE
-`ifdef NUM_DXA_UNITS
+  `ifdef NUM_DXA_UNITS
     localparam L2_DXA_NUM_REQS      = `NUM_DXA_UNITS;
-`else
+  `else
     localparam L2_DXA_NUM_REQS      = 1;
+  `endif
+`else
+    localparam L2_DXA_NUM_REQS      = 0;
 `endif
     // DXA uses a fixed small number of L2 ports (= NUM_DXA_UNITS) to avoid
     // a combinational ready-valid loop when output-select distribution fans
     // out 1 worker across many L2 ports in multi-core configs.
     localparam DXA_L2_GMEM_PORTS    = `MIN(L2_DXA_NUM_REQS, L2_SOCKET_REQS);
-    localparam DXA_L2_ARB_TAG_BITS  = `CLOG2(2);
-`else
-    localparam L2_DXA_NUM_REQS      = 0;
-    localparam DXA_L2_GMEM_PORTS    = 0;
-    localparam DXA_L2_ARB_TAG_BITS  = 0;
-`endif
+    localparam DXA_L2_ARB_TAG_BITS  = `EXT_DXA_ENABLED * `CLOG2(2);
 
     // Core request tag bits (includes DXA arb overhead when enabled)
     localparam L2_TAG_WIDTH         = L1_MEM_ARB_TAG_WIDTH + DXA_L2_ARB_TAG_BITS;
@@ -1254,6 +1301,9 @@ package VX_gpu_pkg;
 
     // If L2 writeback is enabled, MSHR size must be large enough to track all outstanding requests
     localparam L2_MREQ_SIZE         = `L2_WRITEBACK ? `L2_MSHR_SIZE : `L2_MREQ_SIZE;
+
+    // §3.1.2: L2 is the LLC iff L2 is enabled and L3 is not.
+    localparam L2_IS_LLC            = `L2_ENABLED && !`L3_ENABLED;
 
     /////////////////////////////// L3 Parameters /////////////////////////////
 
@@ -1277,6 +1327,9 @@ package VX_gpu_pkg;
 `endif
     // If L3 writeback is enabled, MSHR size must be large enough to track all outstanding requests
     localparam L3_MREQ_SIZE         = `L3_WRITEBACK ? `L3_MSHR_SIZE : `L3_MREQ_SIZE;
+
+    // §3.1.2: L3 is the LLC whenever it is enabled.
+    localparam L3_IS_LLC            = `L3_ENABLED;
 
     ///////////////////////////////////////////////////////////////////////////
 

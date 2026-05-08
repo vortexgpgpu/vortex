@@ -107,11 +107,7 @@ package VX_tcu_pkg;
 
     // Symmetric sparse flag (NT=4, NT=16: block_em == block_en)
     // WGMMA always uses full interleaved layout, so SYM_SPARSE is forced off.
-`ifdef TCU_WGMMA_ENABLE
-    localparam SYM_SPARSE = 0;
-`else
-    localparam SYM_SPARSE = (TCU_BLOCK_EM == TCU_BLOCK_EN);
-`endif
+    localparam SYM_SPARSE = `TCU_WGMMA_ENABLED ? 0 : (TCU_BLOCK_EM == TCU_BLOCK_EN);
 
     // B micro-tiling (sparse 2:4)
     // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)
@@ -123,11 +119,7 @@ package VX_tcu_pkg;
     localparam TCU_WG_B_BLOCK_SIZE_SP = TCU_TC_K * TCU_TC_N * 2;
     // Width of the tbuf_rs2_data port: wider only when SPARSE is enabled (WGMMA_SP path).
     // Without SPARSE, only TCU_BLOCK_CAP lanes are ever consumed, so keep the port narrow.
-`ifdef TCU_SPARSE_ENABLE
-    localparam TCU_WG_RS2_WIDTH = TCU_WG_B_BLOCK_SIZE_SP;
-`else
-    localparam TCU_WG_RS2_WIDTH = TCU_BLOCK_CAP;
-`endif
+    localparam TCU_WG_RS2_WIDTH = `TCU_SPARSE_ENABLED ? TCU_WG_B_BLOCK_SIZE_SP : TCU_BLOCK_CAP;
 
     localparam TCU_MIN_FMT_WIDTH = 4; //int4
     localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;

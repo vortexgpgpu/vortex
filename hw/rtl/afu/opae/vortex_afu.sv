@@ -575,7 +575,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             .mem_rsp_tag_out    (vx_mem_bus_if[i].rsp_data.tag),
             .mem_rsp_ready_out  (vx_mem_bus_if[i].rsp_ready)
         );
-        assign vx_mem_bus_if[i].req_data.flags = '0;
+        assign vx_mem_bus_if[i].req_data.attr = '0;
     end
 
     // adjust CCI mnemory interface to be compatible with VX
@@ -625,7 +625,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .mem_rsp_tag_out    (cci_vx_mem_arb_in_if[1].rsp_data.tag),
         .mem_rsp_ready_out  (cci_vx_mem_arb_in_if[1].rsp_ready)
     );
-    assign cci_vx_mem_arb_in_if[1].req_data.flags = '0;
+    assign cci_vx_mem_arb_in_if[1].req_data.attr = '0;
 
     // arbitrate between CCI and VX memory interfaces
 
@@ -652,7 +652,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .bus_in_if  (cci_vx_mem_arb_in_if),
         .bus_out_if (cci_vx_mem_arb_out_if)
     );
-    `UNUSED_VAR (cci_vx_mem_arb_out_if[0].req_data.flags)
+    `UNUSED_VAR (cci_vx_mem_arb_out_if[0].req_data.attr)
 
     // final merged memory interface
     wire                         mem_req_valid [VX_MEM_PORTS];

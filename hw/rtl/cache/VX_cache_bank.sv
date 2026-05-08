@@ -35,6 +35,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter CRSQ_SIZE         = 1,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE         = 1,
+    // Memory Response Queue Size (sized at the cache wrapper; bank
+    // currently flows responses straight through, so unused locally.)
+    parameter MRSQ_SIZE         = 1,
     // Memory Request Queue Size
     parameter MREQ_SIZE         = 1,
 
@@ -53,18 +56,19 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // core request tag size
     parameter TAG_WIDTH         = UUID_WIDTH + 1,
 
-    // Core response output register
-    parameter CORE_OUT_REG      = 0,
+    // Core response output buffer (TO_OUT_BUF_* encoding)
+    parameter CORE_OUT_BUF      = 0,
 
-    // Memory request output register
-    parameter MEM_OUT_REG       = 0,
+    // Memory request output buffer (TO_OUT_BUF_* encoding)
+    parameter MEM_OUT_BUF       = 0,
 
     // AMO: this bank belongs to the last-level cache. Reservation
-    // table + AMO commit logic synthesize only when 1. Used by Phase 2
-    // bank wiring; tagged unused here so Phase 0 plumbing passes lint.
-    /* verilator lint_off UNUSEDPARAM */
+    // table + AMO commit logic synthesize only when 1.
     parameter IS_LLC            = 0,
-    /* verilator lint_on UNUSEDPARAM */
+
+    // AMO: this bank supports atomic ops. Default 0 — AMO is generated
+    // away. Pulled in from the cache wrapper hierarchy.
+    parameter AMO_ENABLE        = 0,
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE),
     parameter MEM_TAG_WIDTH     = UUID_WIDTH + MSHR_ADDR_WIDTH,
@@ -89,10 +93,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     input wire [`CS_WORD_WIDTH-1:0]     core_req_data,  // data to be written
     input wire [TAG_WIDTH-1:0]          core_req_tag,   // identifier of the request (request id)
     input wire [REQ_SEL_WIDTH-1:0]      core_req_idx,   // index of the request in the core request array
-    input wire [`UP(MEM_FLAGS_WIDTH)-1:0]   core_req_flags,
-`ifdef EXT_A_ENABLE
-    input amo_req_t                     core_req_amo,   // AMO sideband (proposal §3.6)
-`endif
+    input wire [`UP(MEM_ATTR_WIDTH)-1:0]   core_req_attr,
     output wire                         core_req_ready,
 
     // Core Response
@@ -109,7 +110,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     output wire [LINE_SIZE-1:0]         mem_req_byteen,
     output wire [`CS_LINE_WIDTH-1:0]    mem_req_data,
     output wire [MEM_TAG_WIDTH-1:0]     mem_req_tag,
-    output wire [`UP(MEM_FLAGS_WIDTH)-1:0]  mem_req_flags,
+    output wire [`UP(MEM_ATTR_WIDTH)-1:0]  mem_req_attr,
     input  wire                         mem_req_ready,
 
     // Memory response
@@ -125,6 +126,17 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 );
 
     localparam PIPELINE_STAGES = 2;
+
+    // MRSQ_SIZE is sized at the cache wrapper; bank flows responses
+    // straight through, so it is unused locally.
+    `UNUSED_PARAM (MRSQ_SIZE)
+
+    // Extract the AMO sideband from the attr field at the fixed offset.
+    // amo_req_t is always defined; AMO_ENABLE gates the actual AMO logic.
+    amo_req_t core_req_amo;
+    assign core_req_amo = AMO_ENABLE ?
+        amo_req_t'(core_req_attr[MEM_ATTR_AMO_OFFS +: AMO_REQ_BITS])
+      : amo_req_t'('0);
 
 `IGNORE_UNUSED_BEGIN
     wire [`UP(UUID_WIDTH)-1:0] req_uuid_sel, req_uuid_st0, req_uuid_st1;
@@ -147,9 +159,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [REQ_SEL_WIDTH-1:0]        replay_idx;
     wire [MSHR_ADDR_WIDTH-1:0]      replay_id;
     wire                            replay_ready;
-`ifdef EXT_A_ENABLE
     amo_req_t                       replay_amo;
-`endif
 
 
     wire                            valid_sel, valid_st0, valid_st1;
@@ -176,8 +186,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire                            is_dirty_st0, is_dirty_st1;
     wire                            is_replay_st0, is_replay_st1;
     wire                            is_hit_st0, is_hit_st1;
-    wire [`UP(MEM_FLAGS_WIDTH)-1:0] flags_sel, flags_st0, flags_st1;
-`ifdef EXT_A_ENABLE
+    wire [`UP(MEM_ATTR_WIDTH)-1:0] attr_sel, attr_st0, attr_st1;
     amo_req_t                       amo_sel, amo_st0, amo_st1;
     // Forward decls — assigned in the IS_LLC block / S1 commit logic.
     // Needed earlier (in wb_fire gating) to suppress the synthetic
@@ -188,7 +197,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire                            amo_hit_st1;
     wire                            sc_fail_st1;
     wire                            amo_do_store_st1;
-`endif
     wire                            mshr_pending_st0, mshr_pending_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_previd_st0, mshr_previd_st1;
     wire                            mshr_empty;
@@ -239,19 +247,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire flush_enable = flush_grant && flush_valid;
 
     wire creq_grant  = ~init_valid && ~replay_enable && ~fill_enable && ~flush_enable;
-`ifdef EXT_A_ENABLE
     // creq fires from real core_req OR from a pending AMO writeback
     // (the synthetic write produced after an AMO commit at S1). The
     // two paths are mutually exclusive: when amo_wb_pending=1 the sel
     // mux feeds wb data, so a simultaneous real core_req cannot make
     // it into pipe_reg0 — gate accordingly to avoid letting a stuck
     // upstream core_req_valid pull the wb data into the pipe twice.
+    // When AMO_ENABLE=0 the writeback machinery is tied off so amo_wb_path=0.
     wire amo_creq_path = core_req_valid && ~amo_wb_pending;
     wire amo_wb_path   = amo_wb_pending && ~amo_hit_st1;
     wire creq_enable   = creq_grant && (amo_creq_path || amo_wb_path);
-`else
-    wire creq_enable = creq_grant && core_req_valid;
-`endif
 
     assign replay_ready = replay_grant
                        && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) // needed for writethrough
@@ -269,16 +274,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                          && ~mreq_queue_alm_full // needed for fill requests
                          && ~mshr_alm_full // needed for mshr allocation
                          && ~pipe_stall
-`ifdef EXT_A_ENABLE
                          && ~amo_wb_pending     // hold off real core_req while wb fires
-`endif
                          ;
 
     wire init_fire     = init_valid;
     wire replay_fire   = replay_valid && replay_ready;
     wire mem_rsp_fire  = mem_rsp_valid && mem_rsp_ready;
     wire flush_fire    = flush_valid && flush_ready;
-`ifdef EXT_A_ENABLE
     // wb fire: held off when another AMO is committing at S1 this
     // cycle (either chain or different-line). Without this gate the
     // wb would latch the stale pre-chain amo_wb_data_r into pipe_reg0
@@ -290,9 +292,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                       && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall;
     wire core_req_fire = (amo_creq_path || amo_wb_path) && creq_grant
                        && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall;
-`else
-    wire core_req_fire = core_req_valid && core_req_ready;
-`endif
 
     wire [MSHR_ADDR_WIDTH-1:0] mem_rsp_id = mem_rsp_tag[MSHR_ADDR_WIDTH-1:0];
 
@@ -312,7 +311,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign flush_tag = '0;
     end
 
-`ifdef EXT_A_ENABLE
     // ============================================================
     // AMO writeback state machine (Phase 2b.3)
     // ============================================================
@@ -335,7 +333,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     reg [`CS_WORD_WIDTH-1:0]         amo_wb_data_r;
     reg [TAG_WIDTH-1:0]              amo_wb_tag_r;
     reg [REQ_SEL_WIDTH-1:0]          amo_wb_idx_r;
-    reg [`UP(MEM_FLAGS_WIDTH)-1:0]   amo_wb_flags_r;
+    reg [`UP(MEM_ATTR_WIDTH)-1:0]   amo_wb_attr_r;
     // Post-wb forwarding window: cache_data writes at S0 of the wb,
     // so an AMO whose S0-read fired before the wb's S0 still has
     // pre-wb data registered into read_data_st1 by the time it reaches
@@ -346,18 +344,17 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // value to BRAM.
     reg [1:0]                        amo_post_wb_age;
     wire                             amo_post_wb_valid = (amo_post_wb_age != 2'd0);
-`endif
-`ifdef EXT_A_ENABLE
     `ifndef SC_FAIL_ST1_DECLARED
     `define SC_FAIL_ST1_DECLARED
     // sc_fail_st1 / amo_hit_st1 are declared further down where the
     // crsp_queue mux uses them. We forward-declare the boolean we
     // need here.
     `endif
-`endif
 
     assign valid_sel   = init_fire || replay_fire || mem_rsp_fire || flush_fire || core_req_fire;
-`ifdef EXT_A_ENABLE
+    // The amo_wb_* paths collapse to 0 when AMO_ENABLE=0 (the writeback
+    // FSM never fires), so the same mux works whether or not AMOs are
+    // enabled — the synthesizer prunes the dead arms.
     assign rw_sel      = replay_valid ? replay_rw
                        : (amo_wb_pending ? 1'b1 : core_req_rw);
     assign byteen_sel  = replay_valid ? replay_byteen
@@ -372,8 +369,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign tag_sel     = (init_valid | flush_valid) ? (flush_valid ? flush_tag : '0) :
                             (replay_valid ? replay_tag : (mem_rsp_valid ? mem_rsp_tag_s :
                                 (amo_wb_pending ? amo_wb_tag_r : core_req_tag)));
-    assign flags_sel   = amo_wb_pending ? amo_wb_flags_r
-                       : (core_req_valid ? core_req_flags : '0);
+    assign attr_sel   = amo_wb_pending ? amo_wb_attr_r
+                       : (core_req_valid ? core_req_attr : '0);
     // AMO sideband at sel:
     //   * writeback synthetic creq: amo.valid=0 (plain write, no
     //     double-commit at S1).
@@ -391,28 +388,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign amo_sel = replay_valid  ? replay_amo
                    : (amo_wb_pending ? amo_req_t'('0)
                    : (core_req_valid ? core_req_amo : amo_req_t'('0)));
-`else
-    assign rw_sel      = replay_valid ? replay_rw : core_req_rw;
-    assign byteen_sel  = replay_valid ? replay_byteen : core_req_byteen;
-    assign addr_sel    = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel) :
-                            (replay_valid ? replay_addr : (mem_rsp_valid ? mem_rsp_addr : core_req_addr));
-    assign word_idx_sel= replay_valid ? replay_wsel : core_req_wsel;
-    assign req_idx_sel = replay_valid ? replay_idx : core_req_idx;
-    assign tag_sel     = (init_valid | flush_valid) ? (flush_valid ? flush_tag : '0) :
-                            (replay_valid ? replay_tag : (mem_rsp_valid ? mem_rsp_tag_s : core_req_tag));
-    assign flags_sel   = core_req_valid ? core_req_flags : '0;
-`endif
 
     if (WRITE_ENABLE) begin : g_data_sel
         for (genvar i = 0; i < `CS_LINE_WIDTH; ++i) begin : g_i
             if (i < `CS_WORD_WIDTH) begin : g_lo
-            `ifdef EXT_A_ENABLE
                 assign data_sel[i] = replay_valid ? replay_data[i] :
                                       (mem_rsp_valid ? mem_rsp_data[i] :
                                        (amo_wb_pending ? amo_wb_data_r[i] : core_req_data[i]));
-            `else
-                assign data_sel[i] = replay_valid ? replay_data[i] : (mem_rsp_valid ? mem_rsp_data[i] : core_req_data[i]);
-            `endif
             end else begin : g_hi
                 assign data_sel[i] = mem_rsp_data[i]; // only the memory response fills the upper words of data_sel
             end
@@ -421,11 +403,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign data_sel = mem_rsp_data;
         `UNUSED_VAR (core_req_data)
         `UNUSED_VAR (replay_data)
-    `ifdef EXT_A_ENABLE
         // icache (WRITE_ENABLE=0) doesn't read amo_wb_data_r since the
         // wb data only flows through the writable g_data_sel branch.
         `UNUSED_VAR (amo_wb_data_r)
-    `endif
     end
 
     if (UUID_WIDTH != 0) begin : g_req_uuid_sel
@@ -441,22 +421,18 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire is_replay_sel = replay_enable;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_FLAGS_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH
-                + (`EXT_A_ENABLED * AMO_REQ_BITS)),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_ATTR_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH
+                + AMO_REQ_BITS),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_sel, is_init_sel, is_fill_sel, is_flush_sel, is_creq_sel, is_replay_sel, flags_sel, flush_way,     addr_sel, data_sel, rw_sel, byteen_sel, word_idx_sel, req_idx_sel, tag_sel, replay_id
-                  `ifdef EXT_A_ENABLE
+        .data_in  ({valid_sel, is_init_sel, is_fill_sel, is_flush_sel, is_creq_sel, is_replay_sel, attr_sel, flush_way,     addr_sel, data_sel, rw_sel, byteen_sel, word_idx_sel, req_idx_sel, tag_sel, replay_id
                   , amo_sel
-                  `endif
                   }),
-        .data_out ({valid_st0, is_init_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, flags_st0, flush_way_st0, addr_st0, data_st0, rw_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, replay_id_st0
-                  `ifdef EXT_A_ENABLE
+        .data_out ({valid_st0, is_init_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, attr_st0, flush_way_st0, addr_st0, data_st0, rw_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, replay_id_st0
                   , amo_st0
-                  `endif
                   })
     );
 
@@ -558,22 +534,18 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign mshr_id_st0 = is_replay_st0 ? replay_id_st0 : mshr_alloc_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_FLAGS_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_TAG_SEL_BITS + `CS_TAG_SEL_BITS + `CS_LINE_SEL_BITS + `CS_WORD_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1
-                + (`EXT_A_ENABLED * AMO_REQ_BITS)),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_ATTR_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_TAG_SEL_BITS + `CS_TAG_SEL_BITS + `CS_LINE_SEL_BITS + `CS_WORD_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1
+                + AMO_REQ_BITS),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, is_dirty_st0, is_hit_st0, rw_st0, flags_st0, way_idx_st0, evict_tag_st0, line_tag_st0, line_idx_st0, write_word_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_previd_st0, mshr_pending_st0
-                  `ifdef EXT_A_ENABLE
+        .data_in  ({valid_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, is_dirty_st0, is_hit_st0, rw_st0, attr_st0, way_idx_st0, evict_tag_st0, line_tag_st0, line_idx_st0, write_word_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_previd_st0, mshr_pending_st0
                   , amo_st0
-                  `endif
                   }),
-        .data_out ({valid_st1, is_fill_st1, is_flush_st1, is_creq_st1, is_replay_st1, is_dirty_st1, is_hit_st1, rw_st1, flags_st1, way_idx_st1, evict_tag_st1, line_tag_st1, line_idx_st1, write_word_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_previd_st1, mshr_pending_st1
-                  `ifdef EXT_A_ENABLE
+        .data_out ({valid_st1, is_fill_st1, is_flush_st1, is_creq_st1, is_replay_st1, is_dirty_st1, is_hit_st1, rw_st1, attr_st1, way_idx_st1, evict_tag_st1, line_tag_st1, line_idx_st1, write_word_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_previd_st1, mshr_pending_st1
                   , amo_st1
-                  `endif
                   })
     );
 
@@ -665,7 +637,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .MSHR_SIZE   (MSHR_SIZE),
         .WRITEBACK   (WRITEBACK),
         .DATA_WIDTH  (WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + TAG_WIDTH + REQ_SEL_WIDTH
-                    + (`EXT_A_ENABLED * AMO_REQ_BITS))
+                    + AMO_REQ_BITS)
     ) cache_mshr (
         .clk            (clk),
         .reset          (reset),
@@ -684,9 +656,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .dequeue_addr   (replay_addr),
         .dequeue_rw     (replay_rw),
         .dequeue_data   ({replay_wsel, replay_byteen, replay_data, replay_tag, replay_idx
-                       `ifdef EXT_A_ENABLE
                          , replay_amo
-                       `endif
                          }),
         .dequeue_id     (replay_id),
         .dequeue_ready  (replay_ready),
@@ -696,9 +666,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_addr  (addr_st0),
         .allocate_rw    (rw_st0),
         .allocate_data  ({word_idx_st0, byteen_st0, write_word_st0, tag_st0, req_idx_st0
-                       `ifdef EXT_A_ENABLE
                          , amo_st0
-                       `endif
                          }),
         .allocate_id    (mshr_alloc_id_st0),
         .allocate_pending(mshr_pending_st0),
@@ -733,7 +701,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // 2b.3+ deferred: cache-line writeback (cache_data SRAM RMW
     //   timing), reservation table actions, MSHR carry of amo for
     //   miss/replay path.
-`ifdef EXT_A_ENABLE
     wire [63:0] amo_compute_new;
     wire [63:0] amo_compute_ret;
     wire        amo_res_check;
@@ -778,29 +745,41 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         // cycles past amo_wb_fire to cover that window.
         assign amo_fwd_active_st1 = (amo_wb_pending || amo_post_wb_valid)
                                  && (amo_wb_addr_r == addr_st1);
-        /* verilator lint_off UNUSEDSIGNAL */
         wire [`CS_WORD_WIDTH-1:0] amo_line_word_raw_st1 = read_data_st1[word_idx_st1];
         wire [`CS_WORD_WIDTH-1:0] amo_line_word_st1 =
             amo_fwd_active_st1 ? amo_wb_data_r : amo_line_word_raw_st1;
         wire [`CS_WORD_WIDTH-1:0] amo_line_word_shifted_st1 =
             amo_line_word_st1 >> amo_bit_off_st1;
-        /* verilator lint_on UNUSEDSIGNAL */
-        wire [63:0] amo_compute_old = (amo_st1.width == 2'd2)
+        // Width / rhs are no longer carried in amo_req_t (slim form). Derive
+        // width from byteen popcount (.W → 4 bytes set, .D → 8) and rhs by
+        // shifting the request data word by the AMO bit-offset like the
+        // old line word. AMO operands top out at .D (64 bits); upper bits
+        // of the shifted cache word are unused.
+        wire [1:0] amo_width_st1 = ($countones(byteen_st1) == 8) ? 2'd3 : 2'd2;
+        wire [`CS_WORD_WIDTH-1:0] amo_rhs_word_shifted_st1 = write_word_st1 >> amo_bit_off_st1;
+        wire [63:0] amo_rhs_st1 = (amo_width_st1 == 2'd2)
+                                ? 64'({32'h0, amo_rhs_word_shifted_st1[31:0]})
+                                : 64'(amo_rhs_word_shifted_st1[63:0]);
+        wire [63:0] amo_compute_old = (amo_width_st1 == 2'd2)
                                     ? 64'({32'h0, amo_line_word_shifted_st1[31:0]})
                                     : 64'(amo_line_word_shifted_st1[AMO_OLD_BITS-1:0]);
+        if (`CS_WORD_WIDTH > 64) begin : g_amo_upper_unused
+            `UNUSED_VAR (amo_line_word_shifted_st1[`CS_WORD_WIDTH-1:64])
+            `UNUSED_VAR (amo_rhs_word_shifted_st1[`CS_WORD_WIDTH-1:64])
+        end
 
         // Phase 2b.4: drive reservation activity from S1 commit
         // conditions. All three fire from the *original* AMO at S1
-        // (when amo_st1.valid is set), not from the writeback cycle —
+        // (when amo_st1.amo_valid is set), not from the writeback cycle —
         // amo_st1.hart_id is meaningful only on the original. Plain
         // WT writes (rw=1, no AMO) don't yet invalidate; for single-
         // hart conformance there's no other reservation to break,
         // and multi-hart non-AMO writes are a follow-up that needs
         // hart_id propagated on plain writes too.
         wire amo_res_reserve_w    = amo_hit_st1
-                                  && (amo_st1.op == INST_AMO_BITS'(INST_AMO_LR));
+                                  && (amo_st1.amo_op == AMO_OP_LR);
         wire amo_res_clear_w      = amo_hit_st1
-                                  && (amo_st1.op == INST_AMO_BITS'(INST_AMO_SC));
+                                  && (amo_st1.amo_op == AMO_OP_SC);
         wire amo_res_invalidate_w = amo_do_store_st1;
 
         VX_amo_unit #(
@@ -809,10 +788,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         ) amo_unit (
             .clk           (clk),
             .reset         (reset),
-            .compute_op    (amo_st1.op),
-            .compute_width (amo_st1.width),
-            .compute_old   (amo_compute_old),
-            .compute_rhs   (64'(amo_st1.rhs)),
+            .compute_op           (amo_st1.amo_op),
+            .compute_amo_unsigned (amo_st1.amo_unsigned),
+            .compute_width        (amo_width_st1),
+            .compute_old          (amo_compute_old),
+            .compute_rhs          (amo_rhs_st1),
             .compute_new_word (amo_compute_new),
             .compute_ret_word (amo_compute_ret),
             .res_reserve   (amo_res_reserve_w),
@@ -837,7 +817,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // amo_compute_new is consumed by Phase 2b.3 (write-back); for now
     // it's lint-only.
     `UNUSED_VAR (amo_compute_new)
-`endif
 
     // schedule core response
 
@@ -846,17 +825,16 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [REQ_SEL_WIDTH-1:0] crsp_queue_idx;
     wire [TAG_WIDTH-1:0] crsp_queue_tag;
 
-`ifdef EXT_A_ENABLE
     // Fire response for AMO requests on hit at S1. Phase 2b.6: amo is
     // now carried through the MSHR, so a replay re-enters with valid
     // amo bits and commits on the freshly filled line.
-    assign amo_hit_st1 = amo_st1.valid && is_hit_st1 && valid_st1 && is_creq_st1;
-    assign sc_fail_st1 = (amo_st1.op == INST_AMO_BITS'(INST_AMO_SC)) && ~amo_res_check;
+    assign amo_hit_st1 = amo_st1.amo_valid && is_hit_st1 && valid_st1 && is_creq_st1;
+    assign sc_fail_st1 = (amo_st1.amo_op == AMO_OP_SC) && ~amo_res_check;
 
     // do_store: AMO commit other than LR or sc_fail. Triggers the
     // writeback state machine to inject a synthetic write at sel.
     assign amo_do_store_st1 = amo_hit_st1
-                           && (amo_st1.op != INST_AMO_BITS'(INST_AMO_LR))
+                           && (amo_st1.amo_op != AMO_OP_LR)
                            && ~sc_fail_st1;
 
     // Phase 2b.3 + 2b.7: writeback state machine.
@@ -891,7 +869,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                 amo_wb_data_r     <= amo_wb_data_w;
                 amo_wb_tag_r      <= tag_st1;
                 amo_wb_idx_r      <= req_idx_st1;
-                amo_wb_flags_r    <= flags_st1;
+                amo_wb_attr_r    <= attr_st1;
             end else if (amo_do_store_st1 && ~pipe_stall && amo_fwd_active_st1) begin
                 // Chain into the existing wb (or recently-fired wb on
                 // the same line). amo_compute_new was computed against
@@ -906,29 +884,28 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             end
         end
     end
-`endif
 
-`ifdef EXT_A_ENABLE
-    // crsp_queue valid: also fire for the original AMO at S1 (which
-    // has rw=0, do_read_st1=1, so already covered) but suppress for
-    // the writeback synthetic write (rw=1, do_write_st1=1).
+    // crsp_queue valid: also fires for the original AMO at S1 (rw=0,
+    // do_read_st1=1, so already covered) but is suppressed for the
+    // writeback synthetic write (rw=1, do_write_st1=1).
     assign crsp_queue_valid = do_read_st1 && is_hit_st1;
-`else
-    assign crsp_queue_valid = do_read_st1 && is_hit_st1;
-`endif
     assign crsp_queue_idx   = req_idx_st1;
-`ifdef EXT_A_ENABLE
     // Response data mux:
     //   * AMO-SC at hit: 0 (success — only when reservation matches,
     //                    Phase 2b.4) or 1 (fail).
     //   * AMO-other at hit: compute_ret_word (old loaded value at
     //                       width). LSU formatter sexts to XLEN.
     //   * Plain load: read_data_st1[word_idx_st1] (unchanged).
-    /* verilator lint_off UNUSEDSIGNAL */
-    wire [63:0] amo_rsp_word  = (amo_st1.op == INST_AMO_BITS'(INST_AMO_SC))
+    // When AMO_ENABLE=0 amo_hit_st1 is tied off so the AMO arms collapse.
+    // amo_rsp_word is 64-bit-wide for .D AMOs; the bank's response path is
+    // CS_WORD_WIDTH (typically 32-bit), so the upper bits get truncated by
+    // the cast below.
+    wire [63:0] amo_rsp_word  = (amo_st1.amo_op == AMO_OP_SC)
                               ? {63'h0, sc_fail_st1}
                               : amo_compute_ret;
-    /* verilator lint_on UNUSEDSIGNAL */
+    if (`CS_WORD_WIDTH < 64) begin : g_amo_rsp_upper_unused
+        `UNUSED_VAR (amo_rsp_word[63:`CS_WORD_WIDTH])
+    end
     // Phase 2b.7: place the AMO response at the byte-offset slot the
     // LSU coalescer extracts for this request. Without the shift, the
     // response only lands correctly for line-aligned addresses.
@@ -937,15 +914,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     assign crsp_queue_data  = amo_hit_st1
                             ? amo_rsp_aligned
                             : read_data_st1[word_idx_st1];
-`else
-    assign crsp_queue_data  = read_data_st1[word_idx_st1];
-`endif
     assign crsp_queue_tag   = tag_st1;
 
     VX_elastic_buffer #(
         .DATAW   (TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
         .SIZE    (CRSQ_SIZE),
-        .OUT_REG (CORE_OUT_REG)
+        .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
     ) core_rsp_queue (
         .clk       (clk),
         .reset     (reset),
@@ -967,7 +941,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`CS_LINE_ADDR_WIDTH-1:0] mreq_queue_addr;
     wire [MEM_TAG_WIDTH-1:0] mreq_queue_tag;
     wire mreq_queue_rw;
-    wire [`UP(MEM_FLAGS_WIDTH)-1:0] mreq_queue_flags;
+    wire [`UP(MEM_ATTR_WIDTH)-1:0] mreq_queue_attr;
 
     wire is_fill_or_flush_st1 = is_fill_st1 || (is_flush_st1 && WRITEBACK);
     wire do_fill_or_flush_st1 = valid_st1 && is_fill_or_flush_st1;
@@ -1038,20 +1012,20 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     end
 
     assign mreq_queue_pop = mem_req_valid && mem_req_ready;
-    assign mreq_queue_flags = flags_st1;
+    assign mreq_queue_attr = attr_st1;
 
     VX_fifo_queue #(
-        .DATAW    (1 + `CS_LINE_ADDR_WIDTH + LINE_SIZE + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(MEM_FLAGS_WIDTH)),
+        .DATAW    (1 + `CS_LINE_ADDR_WIDTH + LINE_SIZE + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(MEM_ATTR_WIDTH)),
         .DEPTH    (MREQ_SIZE),
         .ALM_FULL (MREQ_SIZE - PIPELINE_STAGES),
-        .OUT_REG  (MEM_OUT_REG)
+        .OUT_REG  (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_queue (
         .clk        (clk),
         .reset      (reset),
         .push       (mreq_queue_push),
         .pop        (mreq_queue_pop),
-        .data_in    ({mreq_queue_rw, mreq_queue_addr, mreq_queue_byteen, mreq_queue_data, mreq_queue_tag, mreq_queue_flags}),
-        .data_out   ({mem_req_rw,    mem_req_addr,    mem_req_byteen,    mem_req_data,    mem_req_tag,    mem_req_flags}),
+        .data_in    ({mreq_queue_rw, mreq_queue_addr, mreq_queue_byteen, mreq_queue_data, mreq_queue_tag, mreq_queue_attr}),
+        .data_out   ({mem_req_rw,    mem_req_addr,    mem_req_byteen,    mem_req_data,    mem_req_tag,    mem_req_attr}),
         .empty      (mreq_queue_empty),
         .alm_full   (mreq_queue_alm_full),
         `UNUSED_PIN (full),

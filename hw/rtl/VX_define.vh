@@ -336,7 +336,7 @@
     assign dst.req_data.addr = src.req_data.addr; \
     assign dst.req_data.data = '0; \
     assign dst.req_data.byteen = '0; \
-    assign dst.req_data.flags = src.req_data.flags; \
+    assign dst.req_data.attr = src.req_data.attr; \
     assign dst.req_data.tag = src.req_data.tag; \
     assign src.req_ready = dst.req_ready; \
     assign src.rsp_valid = dst.rsp_valid; \
@@ -350,7 +350,7 @@
     assign dst.req_data.addr = src.req_data.addr; \
     assign dst.req_data.data = src.req_data.data; \
     assign dst.req_data.byteen = src.req_data.byteen; \
-    assign dst.req_data.flags = src.req_data.flags; \
+    assign dst.req_data.attr = src.req_data.attr; \
     assign dst.req_data.tag = src.req_data.tag; \
     assign src.req_ready = dst.req_ready; \
     assign src.rsp_valid = dst.rsp_valid; \
@@ -365,7 +365,7 @@
     assign dst.req_data.addr = src.req_data.addr; \
     assign dst.req_data.data = src.req_data.data; \
     assign dst.req_data.byteen = src.req_data.byteen; \
-    assign dst.req_data.flags = src.req_data.flags; \
+    assign dst.req_data.attr = src.req_data.attr; \
     if (TD != TS) begin \
         if (UUID != 0) begin \
             if (TD > TS) begin \

@@ -2,9 +2,11 @@
 
 # Part A — RTL refactor
 
-**Date:** 2026-05-06
-**Status:** v1.1 — Part B (SimX) **implemented and validated**;
-Part A (RTL) still proposed.
+**Date:** 2026-05-07
+**Status:** v1.2 — Part B (SimX) **implemented and validated**;
+Part A (RTL) still proposed. v1.2 promotes `hart_id` from inside
+`tag_t` to a **top-level `req_data_t` field** (matches Part B's
+shape; tag stays opaque — see §4.3).
 **Validation:** SimX passes RISC-V AMO ISA tests (10/10), regression
 `amo` (12/12), `dxa_copy`, and `draw3d`.
 **Scope:** Two parts. **Part A** refactors the RTL memory interface
@@ -202,7 +204,7 @@ recommends *not* to do.
 | `op`       | 4    | 11 RVA ops; warp-uniform.                                               | Fold into `MEM_OP_e`.                  |
 | `width`    | 2    | `.W=2`, `.D=3`. RVA mandates natural alignment, so `byteen` already encodes width: `&byteen ⇒ .D`, else `.W`. ([cache_bank](../../hw/rtl/cache/VX_cache_bank.sv#L788), [amo_alu](../../hw/rtl/cache/VX_amo_alu.sv#L35)) | Drop. Derive at the AMO unit.          |
 | `rhs`      | XLEN | LSU drives it from the same `rs2_data[i]` as `data`. Bit-identical for AMO traffic. ([VX_lsu_slice.sv:198-214,327](../../hw/rtl/core/VX_lsu_slice.sv#L198-L214)) | Drop. Reuse `data` (`write_word_st1` at the bank). |
-| `hart_id`  | HART_ID_WIDTH | Reservation-table key in `VX_amo_unit`'s CAM ([amo_unit:88](../../hw/rtl/cache/VX_amo_unit.sv#L88)). Per-lane today; only `tid` varies within a warp. | Move into `tag.hart_id` (next to `uuid`). |
+| `hart_id`  | HART_ID_WIDTH | Reservation-table key in `VX_amo_unit`'s CAM ([amo_unit:88](../../hw/rtl/cache/VX_amo_unit.sv#L88)). Per-lane today; only `tid` varies within a warp. | Promote to top-level `req_data_t.hart_id` (per-lane on LSU side, scalar on bus side); see §4.3. |
 
 **Every field is redundant, derivable, or homed in the wrong place.**
 The struct as a whole has no reason to exist as a separate sideband.
@@ -319,34 +321,53 @@ separate `MEM_OP_AMO_MIN/MAX/MINU/MAXU` ops (still fits in 4 bits,
 14 → 16 used). Both work; the flag form leaves 2 reserved op slots
 free, the explicit form leaves 0.
 
-### 4.3 `tag_t` — identity
+### 4.3 `hart_id` — top-level identity field
 
 ```sv
-// VX_mem_bus_if.sv and VX_lsu_mem_if.sv (same change)
-typedef struct packed {
-    logic [UUID_WIDTH-1:0]                            uuid;
-    logic [HART_ID_WIDTH-1:0]                         hart_id;   // always present
-    logic [TAG_WIDTH-UUID_WIDTH-HART_ID_WIDTH-1:0]    value;
-} tag_t;
+// VX_mem_bus_if.sv and VX_lsu_mem_if.sv
+// `hart_id` is a *top-level* req_data_t field (see §4.4),
+// not a member of `tag_t`.
+logic [HART_ID_WIDTH-1:0]  hart_id;   // always present
 ```
 
-`hart_id` lives next to `uuid` because both are *identity*: who
-issued this. The cache reads `tag.hart_id` directly for the
-reservation key; no cross-module bit-extraction, no layering
-violation.
+`hart_id` rides as a **first-class request attribute**, alongside
+`op` / `addr` / `data` / `byteen` / `flags` — not nested inside
+`tag_t`. Two roles, two structs:
+
+- **`tag_t`** = the *callback identifier*. Producer hands it to the
+  cache; cache returns it on the response so the producer can match
+  request↔response. The cache **does not read tag contents** — it
+  round-trips them opaquely. Routers/arbiters append sel bits on the
+  request and strip them on the response.
+- **`hart_id`** = the *who-asked* attribute. Read by the *consumer*
+  (cache reservation table for AMO LR/SC, future per-hart prefetch
+  tracking, perf counters, QoS arbitration, observability). The
+  producer does not need it back on the response — it knows its own
+  identity.
+
+Keeping these separate has three concrete benefits:
+1. **Cache code is a hot-path read shorter** —
+   `req_data_st1.hart_id` instead of `req_data_st1.tag.hart_id`.
+   The cache no longer needs to know `tag_t`'s internal layout.
+2. **`tag_t` stays evolvable** — each producer/cache pair can pick
+   its own `{uuid, value}` shape; arbiters that compute tag widths
+   don't need to thread `HART_ID_WIDTH` through.
+3. **SimX↔RTL parity is structural** — SimX's `MemReq::hart_id`
+   is already a top-level field (Part B, §13.2). Mirroring at the
+   field level keeps the trace-compare contract simple.
 
 **Always-present (not `EXT_A_ENABLE`-gated).** A general-purpose
-hart-identity field has uses well beyond AMO reservation —
-per-hart prefetch tracking, per-hart cache partitioning, perf
-counters keyed by hart, observability hooks, debug breakpoints,
-QoS arbitration. Gating it on `EXT_A_ENABLE` would force every
-future feature that wants hart identity to either (a) re-introduce
-its own conditional sideband (the same anti-pattern this proposal
-is fixing) or (b) flip an unrelated `EXT_A_ENABLE` switch as a
-side-effect. The cost — `HART_ID_WIDTH` bits per tag flop — is
-small (typ. 4–6 bits, vs. the 30+ bits of `addr` and 32+ of `data`
-that ride alongside) and uniform across configs, which keeps the
-tag layout predictable.
+hart-identity field has uses well beyond AMO reservation. Gating it
+on `EXT_A_ENABLE` would force every future feature that wants hart
+identity to either (a) re-introduce its own conditional sideband
+(the same anti-pattern this proposal is fixing) or (b) flip an
+unrelated `EXT_A_ENABLE` switch as a side-effect. The cost —
+`HART_ID_WIDTH` bits per request flop — is small (typ. 4–6 bits,
+vs. the 30+ bits of `addr` and 32+ of `data` that ride alongside)
+and uniform across configs.
+
+`tag_t` itself stays untouched by this proposal — same shape as
+today, just no longer required to carry hart identity.
 
 ### 4.4 `req_data_t` — the assembled request
 
@@ -354,32 +375,34 @@ tag layout predictable.
 
 ```sv
 typedef struct packed {
-    mem_op_e                op;       // 4 bits — replaces rw + amo.valid + amo.op
-    logic [ADDR_WIDTH-1:0]  addr;
-    logic [DATA_SIZE*8-1:0] data;     // for ST/SC/AMO: store data / rhs
-    logic [DATA_SIZE-1:0]   byteen;   // also encodes AMO access width
-    logic [FLAGS_WIDTH-1:0] flags;    // orthogonal attributes
-    tag_t                   tag;      // {uuid, hart_id?, value}
+    mem_op_e                  op;       // 4 bits — replaces rw + amo.valid + amo.op
+    logic [ADDR_WIDTH-1:0]    addr;
+    logic [DATA_SIZE*8-1:0]   data;     // for ST/SC/AMO: store data / rhs
+    logic [DATA_SIZE-1:0]     byteen;   // also encodes AMO access width
+    logic [FLAGS_WIDTH-1:0]   flags;    // orthogonal attributes
+    logic [HART_ID_WIDTH-1:0] hart_id;  // who-asked (always present, §4.3)
+    tag_t                     tag;      // opaque round-trip token
 } req_data_t;
 ```
 
 - `rw` field deleted (use `mem_op_is_write(op)`).
 - `amo` field deleted entirely.
-- 1 new field added (`op`, 4 bits); `rw` removed (1 bit); `amo`
-  removed (`AMO_REQ_BITS`).
-- Net change vs today: `op (4) − rw (1) − amo_req_t (43) = −40 bits`
-  per `mem_bus_if`.
+- 2 new fields added (`op`, 4 bits; `hart_id`, `HART_ID_WIDTH` bits);
+  `rw` removed (1 bit); `amo` removed (`AMO_REQ_BITS`).
+- Net change vs today (RV32, `HART_ID_WIDTH=4`): `op (4) +
+  hart_id (4) − rw (1) − amo_req_t (43) = −36 bits` per `mem_bus_if`.
 
 **`VX_lsu_mem_if`** (per-lane):
 
 ```sv
 typedef struct packed {
     logic [NUM_LANES-1:0]                  mask;
-    mem_op_e                               op;        // SCALAR — warp-uniform
+    mem_op_e                               op;       // SCALAR — warp-uniform
     logic [NUM_LANES-1:0][ADDR_WIDTH-1:0]  addr;
     logic [NUM_LANES-1:0][DATA_SIZE*8-1:0] data;
     logic [NUM_LANES-1:0][DATA_SIZE-1:0]   byteen;
     logic [NUM_LANES-1:0][FLAGS_WIDTH-1:0] flags;
+    logic [NUM_LANES-1:0][HART_ID_WIDTH-1:0] hart_id; // PER-LANE (see note)
     tag_t                                  tag;
 } req_data_t;
 ```
@@ -387,10 +410,15 @@ typedef struct packed {
 - `op` is **scalar** (warp-uniform — same as `rw` is today). All
   lanes within a SIMD issue execute the same instruction, so per-lane
   storage of `op` is wasteful.
+- `hart_id` is **per-lane**: `make_hart_id(cid, wid, tid)` differs
+  by `tid` across SIMD lanes. The LLC reservation table keys on the
+  per-lane hart_id (Part B Stage 2 implementation discovered this —
+  collapsing to scalar broke AMO test 7 lrsc_counter across
+  divergent lanes).
 - `rw` field deleted.
 - Per-lane `amo[NUM_LANES]` field deleted entirely.
-- Net change vs today (4-lane RV32): `op (4) − rw (1) − 4 × 43 = −169
-  bits` per `lsu_mem_if`.
+- Net change vs today (4-lane RV32): `op (4) + 4 × hart_id (16) −
+  rw (1) − 4 × amo_req_t (172) = −153 bits` per `lsu_mem_if`.
 
 Note: `flags` stays per-lane because some flags (`MEM_FLAG_IO`,
 `MEM_FLAG_LOCAL`) can legitimately differ per lane in a divergent
@@ -428,8 +456,8 @@ For RV32, `NUM_LANES=4`, `HART_ID_WIDTH=4`, `LMEM_ENABLED=1`:
 | `op` (scalar)                   | —                      | 4                     | +4       |
 | `flags` (per-lane × 4)          | 4 × 3 = 12             | 4 × 4 = 16            | +4       |
 | `amo[NUM_LANES]`                | 4 × 43 = 172           | 0                     | −172     |
-| `tag` (`hart_id` field)         | TAG                    | TAG + 4               | +4       |
-| **Total**                       |                        |                       | **−161** |
+| `hart_id` (per-lane × 4)        | 0 (in tag, ad-hoc)     | 4 × 4 = 16            | +16      |
+| **Total**                       |                        |                       | **−149** |
 
 ### 5.2 Per `mem_bus_if`
 
@@ -439,14 +467,14 @@ For RV32, `NUM_LANES=4`, `HART_ID_WIDTH=4`, `LMEM_ENABLED=1`:
 | `op`                            | —     | 4        | +4     |
 | `flags`                         | 3     | 4        | +1     |
 | `amo`                           | 43    | 0        | −43    |
-| `tag`                           | TAG   | TAG + 4  | +4     |
+| `hart_id`                       | 0     | 4        | +4     |
 | **Total**                       |       |          | **−35** |
 
 ### 5.3 RV64 / 8-lane / `HART_ID_WIDTH=6`
 
 | Carrier | Δ |
 |---------|--:|
-| `lsu_mem_if`: `−1 + 4 + (8 × (4−3)) − (8 × 77) + 6 = −599` |
+| `lsu_mem_if`: `−1 + 4 + (8 × (4−3)) − (8 × 77) + (8 × 6) = −553` |
 | `mem_bus_if`: `−1 + 4 + 1 − 77 + 6 = −67` |
 
 These are **per-instance** savings. With `mem_bus_if` instances at
@@ -457,13 +485,15 @@ count saved per LSU+LLC chain is in the **low thousands** for the
 RV64 8-lane case. A representative-config Yosys/Vivado spot-check
 would tighten this estimate.
 
-### 5.4 Caveat: tag widens on the response path
+### 5.4 Note: response path is unaffected
 
-`tag.hart_id` adds `HART_ID_WIDTH` bits to **every** tag flop —
-request *and* response. Per `mem_bus_if`, that's `+4` bits on each
-side (RV32 example). Net savings (§5.2) already account for this on
-the request path; the response-path cost is symmetric and folded
-into the per-instance numbers above.
+Because `hart_id` rides as a top-level **request** field — not in
+`tag_t` — the response path does **not** carry it. The producer
+already knows its own hart_id and matches the response by `tag`
+alone. Compared to the earlier (v1.0-rev1) "hart_id-in-tag" plan,
+this saves `HART_ID_WIDTH` bits per response flop on every carrier
+in the response chain (cache→adapter→arb→producer), at no
+correctness cost.
 
 ---
 
@@ -512,9 +542,9 @@ To prove the design preserves AMO functionality without a sideband:
 
 | RVA op | New encoding                                                              |
 |--------|---------------------------------------------------------------------------|
-| `LR.W`/`LR.D`  | `op=MEM_OP_AMO_LR`, `byteen` selects `.W`/`.D`, `tag.hart_id` set  |
-| `SC.W`/`SC.D`  | `op=MEM_OP_AMO_SC`, `data=rs2`, `tag.hart_id` set                 |
-| `AMOSWAP`      | `op=MEM_OP_AMO_SWAP`, `data=rs2`, `tag.hart_id` set               |
+| `LR.W`/`LR.D`  | `op=MEM_OP_AMO_LR`, `byteen` selects `.W`/`.D`, `hart_id` set      |
+| `SC.W`/`SC.D`  | `op=MEM_OP_AMO_SC`, `data=rs2`, `hart_id` set                     |
+| `AMOSWAP`      | `op=MEM_OP_AMO_SWAP`, `data=rs2`, `hart_id` set                   |
 | `AMOADD`       | `op=MEM_OP_AMO_ADD`, `data=rs2`                                   |
 | `AMOMIN`       | `op=MEM_OP_AMO_MIN`, `flags[AMO_UNSIGNED]=0`                      |
 | `AMOMINU`      | `op=MEM_OP_AMO_MIN`, `flags[AMO_UNSIGNED]=1`                      |
@@ -561,15 +591,18 @@ A 4-stage landing keeps each step under 10 files:
 
 This is purely additive. Run full regression. Ship.
 
-### Stage 2 — Move `hart_id` to `tag_t`
+### Stage 2 — Add top-level `hart_id` field to `req_data_t`
 
-- Update the `tag_t` typedef in both interfaces.
-- Refactor every tag-construction site to per-field assignment (was
-  flat concat). Pre-flight grep:
-  `grep -rn "mem_req_tag\s*=\s*{" hw/rtl/`. Estimated ~5–10 sites,
-  none in `hw/rtl/libs/`.
-- Cache reads `tag.hart_id` in parallel with `amo[*].hart_id`,
-  asserting equality.
+- Add `hart_id` to `req_data_t` in both `VX_mem_bus_if.sv` and
+  `VX_lsu_mem_if.sv` (per-lane on the LSU side, scalar on the bus
+  side). `tag_t` is **untouched**.
+- Producers populate it: LSU drives
+  `req.hart_id[i] = make_hart_id(cid, wid, tid_i)`; DXA/TEX/RASTER/OM/TCU
+  engines drive their owning warp/CTA's hart_id.
+- Cache reads `req.hart_id` in parallel with `amo[*].hart_id`,
+  asserting equality on every AMO request.
+- Pre-flight grep: `grep -rn "amo\[.*\]\.hart_id\|amo\..*\.hart_id" hw/rtl/`
+  to enumerate the call sites the cache cross-checks against.
 
 Regress. Ship.
 
@@ -608,26 +641,24 @@ Confirmed by grep over `hw/rtl/`. Modules fall into four categories:
 
 | File | Stage | What changes |
 |------|------|--------------|
-| `hw/rtl/mem/VX_mem_bus_if.sv` | 1, 2, 3 | `tag_t` widens (`hart_id` field); `req_data_t` adds `op`, drops `rw` and `amo` |
-| `hw/rtl/mem/VX_lsu_mem_if.sv` | 1, 2, 3 | same `tag_t` change; `req_data_t` adds scalar `op`, drops `rw` and per-lane `amo[NUM_LANES]` |
+| `hw/rtl/mem/VX_mem_bus_if.sv` | 1, 2, 3 | `req_data_t` adds `op` and `hart_id` (top-level), drops `rw` and `amo`. `tag_t` untouched. |
+| `hw/rtl/mem/VX_lsu_mem_if.sv` | 1, 2, 3 | `req_data_t` adds scalar `op`, per-lane `hart_id[NUM_LANES]`, drops `rw` and per-lane `amo[NUM_LANES]`. `tag_t` untouched. |
 
 #### B. Producers — **change** (set the new fields)
 
 | File | Stage | What changes |
 |------|------|--------------|
 | `hw/rtl/VX_gpu_pkg.sv` | 1, 3, 4 | new `mem_op_e`, helper functions, flags enum; **delete** `amo_req_t`, `INST_AMO_*`, `AMO_REQ_BITS` |
-| `hw/rtl/core/VX_lsu_slice.sv` | 1, 2, 3 | populate `op`/`tag.hart_id`; drop `core_req_amo` block; drop the `core_req_amo` connection in the `VX_mem_scheduler` instantiation |
+| `hw/rtl/core/VX_lsu_slice.sv` | 1, 2, 3 | populate `op`/per-lane `hart_id`; drop `core_req_amo` block; drop the `core_req_amo` connection in the `VX_mem_scheduler` instantiation |
 | `hw/rtl/core/VX_dcr_flush.sv` | 4 | drive `op = MEM_OP_FLUSH` instead of `flags[FLUSH] = 1` |
-| `hw/rtl/afu/opae/vortex_afu.sv` | 1, 2 | tag-construction site; assign by field for `hart_id` |
-| `hw/rtl/Vortex.sv`, `hw/rtl/VX_socket.sv`, `hw/rtl/VX_cluster.sv` | 2 | tag-construction sites at cache-port wrap-up (TBD by §9-Q3 grep) |
-| `hw/rtl/dxa/VX_dxa_*.sv`, `hw/rtl/tex/VX_tex_*.sv`, `hw/rtl/raster/VX_raster_*.sv`, `hw/rtl/om/VX_om_*.sv`, `hw/rtl/tcu/VX_tcu_*.sv` | 2 | DXA/TEX/RASTER/OM/TCU mem clients also produce `req_data`/`tag`; need their tag-construction updated to set `hart_id` (use the engine's owning warp/CTA id, or 0 for unowned) |
+| `hw/rtl/dxa/VX_dxa_*.sv`, `hw/rtl/tex/VX_tex_*.sv`, `hw/rtl/raster/VX_raster_*.sv`, `hw/rtl/om/VX_om_*.sv`, `hw/rtl/tcu/VX_tcu_*.sv` | 2 | DXA/TEX/RASTER/OM/TCU mem clients also produce `req_data`; set `hart_id` from the engine's owning warp/CTA id (or 0 for unowned). No tag changes (tag stays opaque). |
 
 #### C. Consumers — **change** (read the new fields)
 
 | File | Stage | What changes |
 |------|------|--------------|
 | `hw/rtl/cache/VX_cache.sv` | 1, 3 | dispatch on `op`; drop per-bank `amo` plumbing |
-| `hw/rtl/cache/VX_cache_bank.sv` | 1, 3 | read AMO state from `op_st1`/`tag_st1.hart_id`; derive `width` from `byteen_st1`, `rhs` from `write_word_st1`; **delete** `amo_st0/1`, `replay_amo` |
+| `hw/rtl/cache/VX_cache_bank.sv` | 1, 3 | read AMO state from `op_st1`/`hart_id_st1` (top-level field, not nested in tag); derive `width` from `byteen_st1`, `rhs` from `write_word_st1`; **delete** `amo_st0/1`, `replay_amo` |
 | `hw/rtl/cache/VX_cache_init.sv` | 4 | dispatch on `op == MEM_OP_FLUSH` |
 | `hw/rtl/cache/VX_cache_bypass.sv` | 1 | reads `op` instead of `rw`+`amo.valid` |
 | `hw/rtl/cache/VX_cache_wrap.sv`, `hw/rtl/cache/VX_cache_cluster.sv` | (none) | parameter-thread only; `$bits()`-opaque |
@@ -674,12 +705,12 @@ that way for v1.0 and every future feature in the §6 catalog.
 
 | Category | Files | Edits per file |
 |----------|------:|----------------|
-| A — Interface declarations | 2 | structural (typedef + field list) |
-| B — Producers | 6–10 | small; per-field tag assignments + `op` driver |
+| A — Interface declarations | 2 | structural (field-list edit; `tag_t` untouched) |
+| B — Producers | 5–8 | small; populate `op` and `hart_id` |
 | C — Consumers | 7 | read new field names; ALU op-set update |
 | D — Opaque pass-through | 11 | **none** |
 | E — Libs revert | 2 | revert AMO-commit additions to pre-`0487e1e8` state |
-| **Total touched** | **~17–21** | of which **none stay-modified under `hw/rtl/libs/`** |
+| **Total touched** | **~15–19** | of which **none stay-modified under `hw/rtl/libs/`** |
 
 ---
 
@@ -699,10 +730,15 @@ guaranteed to *not* overwrite `write_word_st1` with the post-RMW value
 before the AMO unit reads it within S1? Looks safe per the existing
 `amo_wb_data_r` separation, but a co-sim assertion would harden it.
 
-**Q3.** Tag-construction site enumeration. Stage 2 needs a full grep
-to ensure no flat-concat tag pack remains. A small hooked-PR test
-that asserts `tag.hart_id == expected_hart_id` at each producer would
-catch regressions.
+**Q3.** Per-lane `hart_id` correctness across producers. Stage 2
+needs a full grep to ensure every producer drives `req.hart_id`
+correctly (per-lane on the LSU side, scalar on the bus side). A
+small hooked-PR test that asserts `req.hart_id == expected_hart_id`
+at each producer (matching what the cache cross-checks against
+`amo[*].hart_id` during the parallel-assert window) would catch
+regressions. Discovered during Part B: per-lane is required because
+the LSU compaction step renumbers lanes, so the lane index ≠
+original tid for divergent warps.
 
 **Q4.** `flags` per-lane vs. scalar in `lsu_mem_if`. Most flags are
 per-lane today (the field is `[NUM_LANES-1:0][FLAGS_WIDTH-1:0]`).
@@ -729,14 +765,15 @@ feature wants it.
 
 The current `amo_req_t` is a microcosm of a deeper design pressure:
 the Vortex memory interface needs an **opcode-based** shape (with
-identity in `tag`, attributes in `flags`, payload in `data`/`byteen`,
-and a research sideband in `user`) to absorb future cache features
+operation in `op`, who-asked in `hart_id`, attributes in `flags`,
+payload in `data`/`byteen`, opaque round-trip in `tag`, and a
+research sideband in `user`) to absorb future cache features
 without per-feature interface churn.
 
 Adopting that shape:
 
-- **Eliminates `amo_req_t` entirely** (~161 bits saved per
-  `lsu_mem_if` at RV32-4-lane; ~599 at RV64-8-lane).
+- **Eliminates `amo_req_t` entirely** (~149 bits saved per
+  `lsu_mem_if` at RV32-4-lane; ~553 at RV64-8-lane).
 - **Touches no files under `hw/rtl/libs/`** after v1.0 lands; the
   AMO commit's libs additions revert to their pre-`0487e1e8` state,
   and the lib IPs propagate `req_data` opaquely going forward.
@@ -1162,11 +1199,12 @@ field accesses sprinkled through cache.cpp.
 
 | Axis                                     | Part A (RTL — proposed) | Part B (SimX — landed)           |
 |------------------------------------------|--------------------------|----------------------------------|
-| Files touched                            | 17–21 (none in `libs/`)  | ~12                              |
-| Per-instance bit savings                 | 161 (RV32-4) / 599 (RV64-8) | C++ struct shrunk by 6 fields  |
+| Files touched                            | 15–19 (none in `libs/`)  | ~12                              |
+| Per-instance bit savings                 | 149 (RV32-4) / 553 (RV64-8) | C++ struct shrunk by 6 fields  |
 | Eliminates `amo_req_t`?                  | ✓                        | ✓                                |
 | Adds typed `op` dispatch?                | ✓ (new `mem_op_e`)       | ✓                                |
-| `hart_id` always-present in identity?    | ✓ (`tag.hart_id`)        | ✓ (`MemReq::hart_id`, per-lane) |
+| `hart_id` placement?                     | top-level `req_data_t.hart_id` (per-lane on LSU side) | top-level `MemReq::hart_id` (per-lane) |
+| `tag_t` touched?                         | **no** (stays opaque)    | n/a                              |
 | `flags` reorganized?                     | ✓ (4 bits, room to grow) | ✓ (`MemFlags` bitfield struct)  |
 | Trace-level bit-compatible RTL↔SimX?     | future (parity asserts)  | future (waiting on Part A)      |
 | Future-proof for §6 catalog?             | ✓                        | ✓                                |

@@ -194,7 +194,7 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign gmem_bus_if.req_data.addr   = ag_cl_addr;
     assign gmem_bus_if.req_data.data   = '0;
     assign gmem_bus_if.req_data.byteen = {GMEM_BYTES{1'b1}};
-    assign gmem_bus_if.req_data.flags  = '0;
+    assign gmem_bus_if.req_data.attr   = '0;
     assign gmem_bus_if.req_data.tag.uuid  = active_uuid;
     assign gmem_bus_if.req_data.tag.value = GMEM_TAG_VALUEW'(alloc_tag);
 

@@ -39,7 +39,8 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     input  wire                          reset,
 
     // Compute kernel (combinational mirror of SimX amo_compute).
-    input  wire [INST_AMO_BITS-1:0]      compute_op,
+    input  amo_op_e                      compute_op,
+    input  wire                          compute_amo_unsigned,
     input  wire [1:0]                    compute_width,
     input  wire [63:0]                   compute_old,
     input  wire [63:0]                   compute_rhs,
@@ -58,6 +59,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     // Pure ALU (no state, no clock).
     VX_amo_alu alu (
         .op       (compute_op),
+        .amo_unsigned (compute_amo_unsigned),
         .width    (compute_width),
         .old_word (compute_old),
         .rhs      (compute_rhs),

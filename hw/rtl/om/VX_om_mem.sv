@@ -206,7 +206,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .MEM_CHANNELS (OCACHE_NUM_REQS),
         .WORD_SIZE    (4),
         .ADDR_WIDTH   (OCACHE_ADDR_WIDTH),
-        .FLAGS_WIDTH  (MEM_FLAGS_WIDTH),
+        .USER_WIDTH   (0),
         .TAG_WIDTH    (TAG_WIDTH),
         .CORE_QUEUE_SIZE(`OM_MEM_QUEUE_SIZE),
         .UUID_WIDTH   (UUID_WIDTH),
@@ -223,7 +223,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .core_req_mask  (mreq_mask_r),
         .core_req_byteen(mreq_byteen_r),
         .core_req_addr  (mreq_addr_r),
-        .core_req_flags ('0),
+        .core_req_user  ('0),
         .core_req_data  (mreq_data_r),
         .core_req_tag   (mreq_tag_r),
         .core_req_ready (mreq_ready_r),
@@ -245,7 +245,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .mem_req_mask   (mem_bus_if.req_data.mask),
         .mem_req_byteen (mem_bus_if.req_data.byteen),
         .mem_req_addr   (mem_bus_if.req_data.addr),
-        .mem_req_flags  (mem_bus_if.req_data.flags),
+        `UNUSED_PIN (mem_req_user),
         .mem_req_data   (mem_bus_if.req_data.data),
         .mem_req_tag    (mem_bus_if.req_data.tag),
         .mem_req_ready  (mem_bus_if.req_ready),
@@ -257,6 +257,9 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .mem_rsp_tag    (mem_bus_if.rsp_data.tag),
         .mem_rsp_ready  (mem_bus_if.rsp_ready)
     );
+
+    // OM never sets any memory attr; tie off the scheduler-driven LSU bus.
+    assign mem_bus_if.req_data.user = '0;
 
     VX_lsu_adapter #(
         .NUM_LANES    (OCACHE_NUM_REQS),

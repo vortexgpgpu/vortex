@@ -92,7 +92,7 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE  (`LMEM_NUM_BANKS * LSU_WORD_SIZE),
         .TAG_WIDTH  (TCU_LMEM_TAG_W),
-        .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
+        .ATTR_WIDTH (LMEM_DMA_ATTR_W),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
     ) tcu_lmem_if();
 `endif

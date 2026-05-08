@@ -92,7 +92,7 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     assign cache_req_data = cache_bus_if[0].req_data.data;
     assign cache_req_tag = cache_bus_if[0].req_data.tag;
     assign cache_bus_if[0].req_ready = cache_req_ready;
-    `UNUSED_VAR (cache_bus_if[0].req_data.flags)
+    `UNUSED_VAR (cache_bus_if[0].req_data.attr)
 
     assign cache_bus_if[0].rsp_valid = cache_rsp_valid;
     assign cache_bus_if[0].rsp_data.tag = cache_rsp_tag;

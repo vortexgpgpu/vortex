@@ -50,17 +50,20 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
 
     assign flush_bus_if.req_valid = dcr_flush_if.req && !flush_inflight_r;
     assign flush_bus_if.req_data  = '{
-        rw:     1'b0,
-        addr:   '0,
-        data:   '0,
-        byteen: '0,
-        flags:  MEM_FLAGS_WIDTH'(1 << MEM_REQ_FLAG_FLUSH),
-        tag:    '0
-    `ifdef EXT_A_ENABLE
-        ,
-        amo:    amo_req_t'('0)
-    `endif
+        rw:      1'b0,
+        addr:    '0,
+        data:    '0,
+        byteen:  '0,
+        attr:    MEM_ATTR_WIDTH'(1 << MEM_ATTR_FLUSH_OFFS),
+        tag:     '0
     };
+    // The flush request only consumes MEM_ATTR_FLUSH_OFFS downstream; the
+    // remaining req_data fields are tied off and intentionally unused.
+    `UNUSED_VAR (flush_bus_if.req_data.rw)
+    `UNUSED_VAR (flush_bus_if.req_data.addr)
+    `UNUSED_VAR (flush_bus_if.req_data.data)
+    `UNUSED_VAR (flush_bus_if.req_data.byteen)
+    `UNUSED_VAR (flush_bus_if.req_data.tag)
     assign dcr_flush_if.done      = flush_bus_if.rsp_valid;
     assign flush_bus_if.rsp_ready = 1'b1;
 

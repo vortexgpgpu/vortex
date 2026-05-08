@@ -51,6 +51,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
             .valid_in (decode_if.valid && decode_wis == ISSUE_WIS_W'(w)),
             .data_in  ({
                 decode_if.data.uuid,
+                decode_if.data.wid,
                 decode_if.data.cta_id,
                 decode_if.data.tmask,
                 decode_if.data.PC,

@@ -94,11 +94,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire is_wgmma = (execute_if.data.op_type == INST_TCU_WGMMA);
     wire wg_a_smem = execute_if.data.op_args.tcu.a_from_smem;
 
-    // A/B operand mux: tile buffer (smem) or register file
+    // A/B operand mux: tile buffer (smem) or register file. The
+    // RF-side rs2_data is NUM_THREADS lanes wide; the WGMMA bbuf can be
+    // wider (TCU_WG_RS2_WIDTH lanes). Pad/truncate to the wgmma width on
+    // the false branch so both arms match TCU_WG_RS2_WIDTH * XLEN bits.
+    localparam WG_RS2_BITS = TCU_WG_RS2_WIDTH * `XLEN;
+    wire [WG_RS2_BITS-1:0] rs2_data_rf = WG_RS2_BITS'(execute_if.data.rs2_data);
     assign rs1_data = (is_wgmma && wg_a_smem) ? tbuf_rs1_data : execute_if.data.rs1_data;
-    /* verilator lint_off WIDTHEXPAND */
-    assign rs2_data = is_wgmma ? tbuf_rs2_data : TCU_WG_RS2_WIDTH'(execute_if.data.rs2_data);
-    /* verilator lint_on WIDTHEXPAND */
+    assign rs2_data = is_wgmma ? tbuf_rs2_data : rs2_data_rf;
 
   `ifdef TCU_SPARSE_ENABLE
     // Sparse metadata mux: tile-buffer (SS mode) vs VX_tcu_meta SRAM (WMMA / RS mode)

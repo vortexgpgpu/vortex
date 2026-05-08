@@ -153,23 +153,26 @@ module VX_decode import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef EXT_A_ENABLE
-    // Map RVA funct5 (instr[31:27]) to our internal INST_AMO_* enum.
-    // Mirrors sim/simx/decode.cpp:599-622.
-    reg [INST_AMO_BITS-1:0] amo_type;
+    // Map RVA funct5 (instr[31:27]) to amo_op_e + amo_unsigned bit.
+    // Mirrors sim/simx/decode.cpp:599-622. MINU/MAXU collapse into
+    // MIN/MAX + amo_unsigned=1.
+    amo_op_e amo_type;
+    reg      amo_unsigned;
     always @(*) begin
+        amo_unsigned = 1'b0;
         case (funct5)
-            5'h00: amo_type = INST_AMO_BITS'(INST_AMO_ADD);
-            5'h01: amo_type = INST_AMO_BITS'(INST_AMO_SWAP);
-            5'h02: amo_type = INST_AMO_BITS'(INST_AMO_LR);
-            5'h03: amo_type = INST_AMO_BITS'(INST_AMO_SC);
-            5'h04: amo_type = INST_AMO_BITS'(INST_AMO_XOR);
-            5'h08: amo_type = INST_AMO_BITS'(INST_AMO_OR);
-            5'h0c: amo_type = INST_AMO_BITS'(INST_AMO_AND);
-            5'h10: amo_type = INST_AMO_BITS'(INST_AMO_MIN);
-            5'h14: amo_type = INST_AMO_BITS'(INST_AMO_MAX);
-            5'h18: amo_type = INST_AMO_BITS'(INST_AMO_MINU);
-            5'h1c: amo_type = INST_AMO_BITS'(INST_AMO_MAXU);
-            default: amo_type = INST_AMO_BITS'(INST_AMO_LR);
+            5'h00: amo_type = AMO_OP_ADD;
+            5'h01: amo_type = AMO_OP_SWAP;
+            5'h02: amo_type = AMO_OP_LR;
+            5'h03: amo_type = AMO_OP_SC;
+            5'h04: amo_type = AMO_OP_XOR;
+            5'h08: amo_type = AMO_OP_OR;
+            5'h0c: amo_type = AMO_OP_AND;
+            5'h10: amo_type = AMO_OP_MIN;
+            5'h14: amo_type = AMO_OP_MAX;
+            5'h18: begin amo_type = AMO_OP_MIN; amo_unsigned = 1'b1; end
+            5'h1c: begin amo_type = AMO_OP_MAX; amo_unsigned = 1'b1; end
+            default: amo_type = AMO_OP_LR;
         endcase
     end
 `endif
@@ -185,6 +188,12 @@ module VX_decode import VX_gpu_pkg::*; #(
         wr_xregs  = '0;
         bytesel   = BYTESEL_DEFAULT;
         is_wstall = 0;
+
+    `ifdef EXT_A_ENABLE
+        // Default the LSU amo sideband to "not an AMO" so plain
+        // loads/stores/fences/packed-loads don't propagate 'x through
+        op_args.lsu.amo_valid = 1'b0;
+    `endif
 
         case (opcode)
             INST_I: begin
@@ -345,14 +354,15 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.is_float = 0;
                 op_args.lsu.pack     = 0;
                 op_args.lsu.offset   = 0;     // AMO has no immediate offset
-                op_args.lsu.amo_valid = 1'b1;
+                op_args.lsu.amo_valid= 1'b1;
                 op_args.lsu.amo_op   = amo_type;
+                op_args.lsu.amo_unsigned = amo_unsigned;
                 op_args.lsu.amo_aq   = instr[26];
                 op_args.lsu.amo_rl   = instr[25];
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
                 // LR has rs2=x0; the LSU just sees rs2_data=0 as rhs.
-                if (amo_type != INST_AMO_BITS'(INST_AMO_LR)) begin
+                if (amo_type != AMO_OP_LR) begin
                     `USED_IREG (rs2);
                 end
             end

@@ -199,7 +199,7 @@ module VX_tcu_mbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_lmem_if.req_data.addr   = fetch_base_r + BANK_ADDR_WIDTH'(req_ctr_r);
     assign tcu_lmem_if.req_data.data   = '0;
     assign tcu_lmem_if.req_data.byteen = '0;
-    assign tcu_lmem_if.req_data.flags  = '0;
+    assign tcu_lmem_if.req_data.attr   = '0;
     assign tcu_lmem_if.req_data.tag    = '0;
     assign tcu_lmem_if.rsp_ready       = 1'b1;
     `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)

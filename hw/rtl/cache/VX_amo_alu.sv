@@ -24,7 +24,8 @@
 // width selects W (32-bit) or D (64-bit). Sign-extension at the word
 // boundary is needed for signed comparisons (MIN/MAX).
 module VX_amo_alu import VX_gpu_pkg::*; (
-    input  wire [INST_AMO_BITS-1:0] op,
+    input  amo_op_e                 op,
+    input  wire                     amo_unsigned, // selects MIN/MAX variant
     input  wire [1:0]               width,        // 2 = .W, 3 = .D
     input  wire [63:0]              old_word,
     input  wire [63:0]              rhs,
@@ -42,18 +43,20 @@ module VX_amo_alu import VX_gpu_pkg::*; (
 
     always @(*) begin
         case (op)
-            INST_AMO_LR:    new_word = a_u;
-            INST_AMO_SC:    new_word = b_u;
-            INST_AMO_SWAP:  new_word = b_u;
-            INST_AMO_ADD:   new_word = a_u + b_u;
-            INST_AMO_AND:   new_word = a_u & b_u;
-            INST_AMO_OR:    new_word = a_u | b_u;
-            INST_AMO_XOR:   new_word = a_u ^ b_u;
-            INST_AMO_MIN:   new_word = (a_s < b_s) ? a_s : b_s;
-            INST_AMO_MAX:   new_word = (a_s > b_s) ? a_s : b_s;
-            INST_AMO_MINU:  new_word = (a_u < b_u) ? a_u : b_u;
-            INST_AMO_MAXU:  new_word = (a_u > b_u) ? a_u : b_u;
-            default:        new_word = a_u;
+            AMO_OP_LR:    new_word = a_u;
+            AMO_OP_SC:    new_word = b_u;
+            AMO_OP_SWAP:  new_word = b_u;
+            AMO_OP_ADD:   new_word = a_u + b_u;
+            AMO_OP_AND:   new_word = a_u & b_u;
+            AMO_OP_OR:    new_word = a_u | b_u;
+            AMO_OP_XOR:   new_word = a_u ^ b_u;
+            AMO_OP_MIN:   new_word = amo_unsigned
+                                  ? ((a_u < b_u) ? a_u : b_u)
+                                  : ((a_s < b_s) ? a_s : b_s);
+            AMO_OP_MAX:   new_word = amo_unsigned
+                                  ? ((a_u > b_u) ? a_u : b_u)
+                                  : ((a_s > b_s) ? a_s : b_s);
+            default:      new_word = a_u;
         endcase
         if (is_w) new_word = {32'h0, new_word[31:0]};
     end

@@ -41,25 +41,21 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire icache_req_ready;
     wire [ICACHE_ADDR_WIDTH-1:0] icache_req_addr;
     wire [ICACHE_TAG_WIDTH-1:0]  icache_req_tag;
-    wire [PC_BITS-1:0]           icache_req_PC;
-    wire [`NUM_THREADS-1:0]      icache_req_tmask;
     wire [NW_WIDTH-1:0]          icache_req_wid;
     wire [UUID_WIDTH-1:0]        icache_req_uuid;
 
     wire [UUID_WIDTH-1:0]   rsp_uuid;
-    wire [NW_WIDTH-1:0]     rsp_wid;
     wire [PC_BITS-1:0]      rsp_PC;
     wire [`NUM_THREADS-1:0] rsp_tmask;
+    wire [NW_WIDTH-1:0]     req_tag;
+    wire [NW_WIDTH-1:0]     rsp_tag;
+    wire [NCTA_WIDTH-1:0]   rsp_cta_id;
 
     wire icache_req_fire = icache_req_valid && icache_req_ready;
 
     assign req_tag = schedule_if.data.wid;
 
     assign {rsp_uuid, rsp_tag} = icache_bus_if.rsp_data.tag;
-
-    wire [PC_BITS-1:0] rsp_PC;
-    wire [`NUM_THREADS-1:0] rsp_tmask;
-    wire [NCTA_WIDTH-1:0] rsp_cta_id;
 
     VX_dp_ram #(
         .DATAW (PC_BITS + `NUM_THREADS + NCTA_WIDTH),
@@ -86,6 +82,10 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // RVC path: VX_decompressor + follow-up request mux
     // ------------------------------------------------------------------------
 
+    wire [PC_BITS-1:0]      icache_req_PC;
+    wire [`NUM_THREADS-1:0] icache_req_tmask;
+    wire [NW_WIDTH-1:0]     rsp_wid;
+
     wire                    follow_req_valid;
     wire [PC_BITS-1:0]      follow_req_PC;
     wire [`NUM_THREADS-1:0] follow_req_tmask;
@@ -93,6 +93,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire [UUID_WIDTH-1:0]   follow_req_uuid;
 
     wire sched_buffered_match;
+    `UNUSED_VAR (rsp_wid)
 
     // ibuffer occupancy is already gated by VX_scheduler (schedule_warps
     // masks out warps with full ibufs), so schedule_if.valid implies space.
@@ -145,8 +146,6 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     assign icache_req_valid = schedule_if.valid;
     assign icache_req_addr  = schedule_if.data.PC[2-(`XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH];
-    assign icache_req_PC    = schedule_if.data.PC;
-    assign icache_req_tmask = schedule_if.data.tmask;
     assign icache_req_wid   = schedule_if.data.wid;
     assign icache_req_uuid  = schedule_if.data.uuid;
     assign icache_req_tag   = {icache_req_uuid, icache_req_wid};
@@ -155,7 +154,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     assign fetch_if.valid       = icache_bus_if.rsp_valid;
     assign fetch_if.data.tmask  = rsp_tmask;
-    assign fetch_if.data.wid    = rsp_wid;
+    assign fetch_if.data.wid    = rsp_tag;
+    assign fetch_if.data.cta_id = rsp_cta_id;
     assign fetch_if.data.PC     = rsp_PC;
     assign fetch_if.data.instr  = icache_bus_if.rsp_data.data;
     assign fetch_if.data.uuid   = rsp_uuid;
@@ -181,26 +181,10 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .ready_out (icache_bus_if.req_ready)
     );
 
-    assign icache_bus_if.req_data.flags  = '0;
+    assign icache_bus_if.req_data.attr   = '0;
     assign icache_bus_if.req_data.rw     = 1'b0;
     assign icache_bus_if.req_data.byteen = '1;
     assign icache_bus_if.req_data.data   = '0;
-`ifdef EXT_A_ENABLE
-    // icache never carries AMO traffic; tie sideband to zero so the
-    // bank's amo capture stays clean (no X bits propagating).
-    assign icache_bus_if.req_data.amo    = amo_req_t'('0);
-`endif
-
-    // Icache Response
-
-    assign fetch_if.valid = icache_bus_if.rsp_valid;
-    assign fetch_if.data.tmask = rsp_tmask;
-    assign fetch_if.data.wid   = rsp_tag;
-    assign fetch_if.data.cta_id= rsp_cta_id;
-    assign fetch_if.data.PC    = rsp_PC;
-    assign fetch_if.data.instr = icache_bus_if.rsp_data.data;
-    assign fetch_if.data.uuid  = rsp_uuid;
-    assign icache_bus_if.rsp_ready = fetch_if.ready;
 
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] perf_fetch_stalls;

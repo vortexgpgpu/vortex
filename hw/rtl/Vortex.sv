@@ -141,12 +141,8 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED),
-        // §3.1.2: L3 is the LLC whenever it's enabled.
-`ifdef L3_ENABLE
-        .IS_LLC         (1)
-`else
-        .IS_LLC         (0)
-`endif
+        .IS_LLC         (L3_IS_LLC),
+        .AMO_ENABLE     (`EXT_A_ENABLED && L3_IS_LLC)
     ) l3cache (
         .clk            (clk),
         .reset          (reset),
@@ -166,7 +162,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         assign mem_req_addr[i]   = mem_bus_if[i].req_data.addr;
         assign mem_req_data[i]   = mem_bus_if[i].req_data.data;
         assign mem_req_tag[i]    = mem_bus_if[i].req_data.tag;
-        `UNUSED_VAR (mem_bus_if[i].req_data.flags)
+        `UNUSED_VAR (mem_bus_if[i].req_data.attr)
         assign mem_bus_if[i].req_ready = mem_req_ready[i];
 
         assign mem_bus_if[i].rsp_valid     = mem_rsp_valid[i];

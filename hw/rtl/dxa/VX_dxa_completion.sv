@@ -16,22 +16,20 @@
 module VX_dxa_completion import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_BANKS = 1,
-    parameter FLAGS_WIDTH = DXA_LMEM_FLAGS_W
+    parameter ATTR_WIDTH = DXA_LMEM_ATTR_W
 ) (
     input  wire                                clk,
     input  wire                                reset,
 
     // DXA bank writes (from dedicated DMA port, all are DXA by definition)
     input  wire [NUM_BANKS-1:0]                bank_wr_fire,
-    input  wire [FLAGS_WIDTH-1:0]              bank_wr_flags,  // completion info: {last_pkt, bar_addr}
+    input  wire [ATTR_WIDTH-1:0]               bank_wr_attr,  // completion info: {last_pkt, bar_addr}, packed into the bus attr field
 
     VX_txbar_bus_if.master                     txbar_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    // Flags format: {last_pkt, bar_addr}
-    // With shared flags across banks, at most 1 done event per DXA write cycle.
-    wire is_last = bank_wr_flags[FLAGS_WIDTH-1];
+    wire is_last = bank_wr_attr[ATTR_WIDTH-1];
     wire any_dxa_wr = |bank_wr_fire;
 
     // Valid/ready handshake: hold valid high until downstream accepts.
@@ -41,14 +39,14 @@ module VX_dxa_completion import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [BAR_ADDR_W-1:0] pending_bar_r;
 
     wire done_fire = any_dxa_wr && is_last;
-    wire [BAR_ADDR_W-1:0] done_fire_bar = bank_wr_flags[BAR_ADDR_W-1:0];
+    wire [BAR_ADDR_W-1:0] done_fire_bar = bank_wr_attr[BAR_ADDR_W-1:0];
     wire done_accepted = txbar_bus_if.valid && txbar_bus_if.ready;
 
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
         if (any_dxa_wr && !reset) begin
-            `TRACE(2, ("%t: %s: bank_wr_fire=%b, flags=0x%0h, is_last=%b, done_fire=%b, pending=%b, valid=%b, ready=%b\n",
-                $time, INSTANCE_ID, bank_wr_fire, bank_wr_flags, is_last, done_fire, pending_valid_r, txbar_bus_if.valid, txbar_bus_if.ready))
+            `TRACE(2, ("%t: %s: bank_wr_fire=%b, attr=0x%0h, is_last=%b, done_fire=%b, pending=%b, valid=%b, ready=%b\n",
+                $time, INSTANCE_ID, bank_wr_fire, bank_wr_attr, is_last, done_fire, pending_valid_r, txbar_bus_if.valid, txbar_bus_if.ready))
         end
         if (done_accepted && !reset) begin
             `TRACE(2, ("%t: %s: ACCEPTED bar_addr=0x%0h\n",

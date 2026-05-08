@@ -117,7 +117,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
         .TAG_WIDTH   (LMEM_DMA_TAG_WIDTH),
-        .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
+        .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
         .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
     ) lmem_dma_if();
 
@@ -128,14 +128,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         VX_mem_bus_if #(
             .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
             .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
-            .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
+            .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
             .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
         ) dma_arb_in_if[LMEM_DMA_INPUTS]();
 
         VX_mem_bus_if #(
             .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
             .TAG_WIDTH   (LMEM_DMA_TAG_WIDTH),
-            .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
+            .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
             .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
         ) dma_arb_out_if[1]();
 
@@ -152,7 +152,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .NUM_OUTPUTS (1),
             .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
             .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
-            .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
+            .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
             .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH),
             .ARBITER     ("P")
         ) lmem_dma_arb (
@@ -175,12 +175,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         VX_dxa_completion #(
             .INSTANCE_ID (`SFORMATF(("%s-lmem-dma-compl_det", INSTANCE_ID))),
             .NUM_BANKS   (`LMEM_NUM_BANKS),
-            .FLAGS_WIDTH (DXA_LMEM_FLAGS_W)
+            .ATTR_WIDTH  (DXA_LMEM_ATTR_W)
         ) dxa_completion_detect (
             .clk           (clk),
             .reset         (reset),
             .bank_wr_fire  (dxa_bank_wr_fire),
-            .bank_wr_flags (DXA_LMEM_FLAGS_W'(lmem_dma_if.req_data.flags)),
+            .bank_wr_attr  (DXA_LMEM_ATTR_W'(lmem_dma_if.req_data.attr)),
             .txbar_bus_if  (dxa_txbar_bus_if)
         );
 
@@ -262,13 +262,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     if ((`NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) begin : g_coalescing
 
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_coalescers
+
             VX_mem_coalescer #(
                 .INSTANCE_ID    (`SFORMATF(("%s-coalescer%0d", INSTANCE_ID, i))),
                 .NUM_REQS       (`NUM_LSU_LANES),
                 .DATA_IN_SIZE   (LSU_WORD_SIZE),
                 .DATA_OUT_SIZE  (DCACHE_WORD_SIZE),
                 .ADDR_WIDTH     (LSU_ADDR_WIDTH),
-                .FLAGS_WIDTH    (MEM_FLAGS_WIDTH),
+                .USER_WIDTH     (MEM_ATTR_WIDTH),
                 .TAG_WIDTH      (LSU_TAG_WIDTH),
                 .UUID_WIDTH     (UUID_WIDTH),
                 .QUEUE_SIZE     (`LSUQ_OUT_SIZE),
@@ -289,7 +290,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .in_req_rw      (lsu_dcache_if[i].req_data.rw),
                 .in_req_byteen  (lsu_dcache_if[i].req_data.byteen),
                 .in_req_addr    (lsu_dcache_if[i].req_data.addr),
-                .in_req_flags   (lsu_dcache_if[i].req_data.flags),
+                .in_req_user    (lsu_dcache_if[i].req_data.user),
+                .in_req_no_merge(lsu_dcache_if[i].req_data.user[0][MEM_ATTR_AMO_OFFS]),
                 .in_req_data    (lsu_dcache_if[i].req_data.data),
                 .in_req_tag     (lsu_dcache_if[i].req_data.tag),
                 .in_req_ready   (lsu_dcache_if[i].req_ready),
@@ -307,13 +309,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .out_req_rw     (dcache_coalesced_if[i].req_data.rw),
                 .out_req_byteen (dcache_coalesced_if[i].req_data.byteen),
                 .out_req_addr   (dcache_coalesced_if[i].req_data.addr),
-                .out_req_flags  (dcache_coalesced_if[i].req_data.flags),
+                .out_req_user   (dcache_coalesced_if[i].req_data.user),
                 .out_req_data   (dcache_coalesced_if[i].req_data.data),
                 .out_req_tag    (dcache_coalesced_if[i].req_data.tag),
-            `ifdef EXT_A_ENABLE
-                .in_req_amo     (lsu_dcache_if[i].req_data.amo),
-                .out_req_amo    (dcache_coalesced_if[i].req_data.amo),
-            `endif
                 .out_req_ready  (dcache_coalesced_if[i].req_ready),
 
                 // Output response

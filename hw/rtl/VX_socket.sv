@@ -188,14 +188,8 @@ module VX_socket import VX_gpu_pkg::*;
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2),
-        // §3.1.2: L1 dcache is the LLC iff neither L2 nor L3 is enabled.
-`ifdef L2_ENABLE
-        .IS_LLC         (0)
-`elsif L3_ENABLE
-        .IS_LLC         (0)
-`else
-        .IS_LLC         (1)
-`endif
+        .IS_LLC         (DCACHE_IS_LLC),
+        .AMO_ENABLE     (`EXT_A_ENABLED && DCACHE_IS_LLC)
     ) dcache (
     `ifdef PERF_ENABLE
         .cache_perf     (dcache_perf),
@@ -359,7 +353,7 @@ module VX_socket import VX_gpu_pkg::*;
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
-        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) per_core_dxa_lmem_bus_if[`SOCKET_SIZE]();
 
@@ -375,7 +369,7 @@ module VX_socket import VX_gpu_pkg::*;
         .NUM_OUTPUTS (`SOCKET_SIZE),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
-        .FLAGS_WIDTH (DXA_LMEM_FLAGS_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) dxa_lmem_core_switch (
         .clk        (clk),

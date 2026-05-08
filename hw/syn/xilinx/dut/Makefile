@@ -8,7 +8,7 @@ BUILD_DIR := $(PREFIX)
 SAIF_FILE ?=
 SAIF_INST ?=
 
-.PHONY: unittest scope mem_unit lmem cache fpu tcu dxa core issue vortex top
+.PHONY: unittest scope mem_unit lmem cache fpu tcu dxa tex raster om core issue vortex top
 
 unittest:
 	mkdir -p unittest/$(BUILD_DIR)
@@ -69,6 +69,21 @@ dxa:
 	mkdir -p dxa/$(BUILD_DIR)
 	cp dxa/Makefile dxa/$(BUILD_DIR)
 	$(MAKE) -C dxa/$(BUILD_DIR) clean && $(MAKE) -C dxa/$(BUILD_DIR) > dxa/$(BUILD_DIR)/build.log 2>&1 &
+
+tex:
+	mkdir -p tex/$(BUILD_DIR)
+	cp tex/Makefile tex/$(BUILD_DIR)
+	$(MAKE) -C tex/$(BUILD_DIR) clean && $(MAKE) -C tex/$(BUILD_DIR) > tex/$(BUILD_DIR)/build.log 2>&1 &
+
+raster:
+	mkdir -p raster/$(BUILD_DIR)
+	cp raster/Makefile raster/$(BUILD_DIR)
+	$(MAKE) -C raster/$(BUILD_DIR) clean && $(MAKE) -C raster/$(BUILD_DIR) > raster/$(BUILD_DIR)/build.log 2>&1 &
+
+om:
+	mkdir -p om/$(BUILD_DIR)
+	cp om/Makefile om/$(BUILD_DIR)
+	$(MAKE) -C om/$(BUILD_DIR) clean && $(MAKE) -C om/$(BUILD_DIR) > om/$(BUILD_DIR)/build.log 2>&1 &
 
 # Re-run power analysis on an existing build without rebuilding the design.
 # Usage: make <target>-power SAIF_FILE=<saif-path> [SAIF_INST=<top-module-instance-path>]

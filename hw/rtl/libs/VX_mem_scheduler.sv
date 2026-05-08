@@ -14,19 +14,14 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_mem_scheduler
-`ifdef EXT_A_ENABLE
-    import VX_gpu_pkg::amo_req_t;
-    import VX_gpu_pkg::AMO_REQ_BITS;
-`endif
-#(
+module VX_mem_scheduler #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_REQS     = 1,
     parameter MEM_CHANNELS  = 1,
     parameter WORD_SIZE     = 4,
     parameter LINE_SIZE     = WORD_SIZE,
     parameter ADDR_WIDTH    = 32 - `CLOG2(WORD_SIZE),
-    parameter FLAGS_WIDTH   = 0,
+    parameter USER_WIDTH    = 0,
     parameter TAG_WIDTH     = 8,
     parameter UUID_WIDTH    = 0, // upper section of the request tag contains the UUID
     parameter CORE_QUEUE_SIZE= 8,
@@ -56,12 +51,9 @@ module VX_mem_scheduler
     input wire [CORE_REQS-1:0]              core_req_mask,
     input wire [CORE_REQS-1:0][WORD_SIZE-1:0] core_req_byteen,
     input wire [CORE_REQS-1:0][ADDR_WIDTH-1:0] core_req_addr,
-    input wire [CORE_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] core_req_flags,
+    input wire [CORE_REQS-1:0][`UP(USER_WIDTH)-1:0] core_req_user,
     input wire [CORE_REQS-1:0][WORD_WIDTH-1:0] core_req_data,
     input wire [TAG_WIDTH-1:0]              core_req_tag,
-`ifdef EXT_A_ENABLE
-    input  amo_req_t [CORE_REQS-1:0]        core_req_amo,
-`endif
     output wire                             core_req_ready,
 
     // Core request queue
@@ -83,12 +75,9 @@ module VX_mem_scheduler
     output wire [MEM_CHANNELS-1:0]          mem_req_mask,
     output wire [MEM_CHANNELS-1:0][LINE_SIZE-1:0] mem_req_byteen,
     output wire [MEM_CHANNELS-1:0][MEM_ADDR_WIDTH-1:0] mem_req_addr,
-    output wire [MEM_CHANNELS-1:0][`UP(FLAGS_WIDTH)-1:0] mem_req_flags,
+    output wire [MEM_CHANNELS-1:0][`UP(USER_WIDTH)-1:0] mem_req_user,
     output wire [MEM_CHANNELS-1:0][LINE_WIDTH-1:0] mem_req_data,
     output wire [MEM_TAG_WIDTH-1:0]         mem_req_tag,
-`ifdef EXT_A_ENABLE
-    output amo_req_t [MEM_CHANNELS-1:0]     mem_req_amo,
-`endif
     input wire                              mem_req_ready,
 
     // Memory response
@@ -126,12 +115,9 @@ module VX_mem_scheduler
     wire                            reqq_rw;
     wire [CORE_REQS-1:0][WORD_SIZE-1:0] reqq_byteen;
     wire [CORE_REQS-1:0][ADDR_WIDTH-1:0] reqq_addr;
-    wire [CORE_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] reqq_flags;
+    wire [CORE_REQS-1:0][`UP(USER_WIDTH)-1:0] reqq_user;
     wire [CORE_REQS-1:0][WORD_WIDTH-1:0] reqq_data;
     wire [REQQ_TAG_WIDTH-1:0]       reqq_tag;
-`ifdef EXT_A_ENABLE
-    amo_req_t [CORE_REQS-1:0]       reqq_amo;
-`endif
     wire                            reqq_ready;
 
     wire                            reqq_valid_s;
@@ -139,12 +125,9 @@ module VX_mem_scheduler
     wire                            reqq_rw_s;
     wire [MERGED_REQS-1:0][LINE_SIZE-1:0] reqq_byteen_s;
     wire [MERGED_REQS-1:0][MEM_ADDR_WIDTH-1:0] reqq_addr_s;
-    wire [MERGED_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] reqq_flags_s;
+    wire [MERGED_REQS-1:0][`UP(USER_WIDTH)-1:0] reqq_user_s;
     wire [MERGED_REQS-1:0][LINE_WIDTH-1:0] reqq_data_s;
     wire [MERGED_TAG_WIDTH-1:0]     reqq_tag_s;
-`ifdef EXT_A_ENABLE
-    amo_req_t [MERGED_REQS-1:0]     reqq_amo_s;
-`endif
     wire                            reqq_ready_s;
 
     wire                            mem_req_valid_s;
@@ -152,12 +135,9 @@ module VX_mem_scheduler
     wire                            mem_req_rw_s;
     wire [MEM_CHANNELS-1:0][LINE_SIZE-1:0] mem_req_byteen_s;
     wire [MEM_CHANNELS-1:0][MEM_ADDR_WIDTH-1:0] mem_req_addr_s;
-    wire [MEM_CHANNELS-1:0][`UP(FLAGS_WIDTH)-1:0] mem_req_flags_s;
+    wire [MEM_CHANNELS-1:0][`UP(USER_WIDTH)-1:0] mem_req_user_s;
     wire [MEM_CHANNELS-1:0][LINE_WIDTH-1:0] mem_req_data_s;
     wire [MEM_TAG_WIDTH-1:0]        mem_req_tag_s;
-`ifdef EXT_A_ENABLE
-    amo_req_t [MEM_CHANNELS-1:0]    mem_req_amo_s;
-`endif
     wire                            mem_req_ready_s;
 
     wire                            mem_rsp_valid_s;
@@ -190,8 +170,7 @@ module VX_mem_scheduler
     end
 
     VX_elastic_buffer #(
-        .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(FLAGS_WIDTH) + WORD_WIDTH) + REQQ_TAG_WIDTH
-                + (`EXT_A_ENABLED * CORE_REQS * AMO_REQ_BITS)),
+        .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(USER_WIDTH) + WORD_WIDTH) + REQQ_TAG_WIDTH),
         .SIZE    (CORE_QUEUE_SIZE),
         .OUT_REG (1)
     ) req_queue (
@@ -199,16 +178,8 @@ module VX_mem_scheduler
         .reset    (reset),
         .valid_in (reqq_valid_in),
         .ready_in (reqq_ready_in),
-        .data_in  ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_flags, core_req_data, reqq_tag_u
-                  `ifdef EXT_A_ENABLE
-                  , core_req_amo
-                  `endif
-                  }),
-        .data_out ({reqq_rw,     reqq_mask,     reqq_byteen,     reqq_addr,     reqq_flags,     reqq_data,     reqq_tag
-                  `ifdef EXT_A_ENABLE
-                  , reqq_amo
-                  `endif
-                  }),
+        .data_in  ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_user, core_req_data, reqq_tag_u}),
+        .data_out ({reqq_rw,     reqq_mask,     reqq_byteen,     reqq_addr,     reqq_user,     reqq_data,     reqq_tag}),
         .valid_out(reqq_valid),
         .ready_out(reqq_ready)
     );
@@ -258,7 +229,7 @@ module VX_mem_scheduler
             .DATA_IN_SIZE   (WORD_SIZE),
             .DATA_OUT_SIZE  (LINE_SIZE),
             .ADDR_WIDTH     (ADDR_WIDTH),
-            .FLAGS_WIDTH    (FLAGS_WIDTH),
+            .USER_WIDTH     (USER_WIDTH),
             .TAG_WIDTH      (REQQ_TAG_WIDTH),
             .UUID_WIDTH     (UUID_WIDTH),
             .QUEUE_SIZE     (MEM_QUEUE_SIZE)
@@ -274,7 +245,8 @@ module VX_mem_scheduler
             .in_req_rw      (reqq_rw),
             .in_req_byteen  (reqq_byteen),
             .in_req_addr    (reqq_addr),
-            .in_req_flags   (reqq_flags),
+            .in_req_user    (reqq_user),
+            .in_req_no_merge('0),
             .in_req_data    (reqq_data),
             .in_req_tag     (reqq_tag),
             .in_req_ready   (reqq_ready),
@@ -292,13 +264,9 @@ module VX_mem_scheduler
             .out_req_rw     (reqq_rw_s),
             .out_req_byteen (reqq_byteen_s),
             .out_req_addr   (reqq_addr_s),
-            .out_req_flags  (reqq_flags_s),
+            .out_req_user   (reqq_user_s),
             .out_req_data   (reqq_data_s),
             .out_req_tag    (reqq_tag_s),
-        `ifdef EXT_A_ENABLE
-            .in_req_amo     (reqq_amo),
-            .out_req_amo    (reqq_amo_s),
-        `endif
             .out_req_ready  (reqq_ready_s),
 
             // Output response
@@ -315,12 +283,9 @@ module VX_mem_scheduler
         assign reqq_rw_s    = reqq_rw;
         assign reqq_byteen_s= reqq_byteen;
         assign reqq_addr_s  = reqq_addr;
-        assign reqq_flags_s = reqq_flags;
+        assign reqq_user_s  = reqq_user;
         assign reqq_data_s  = reqq_data;
         assign reqq_tag_s   = reqq_tag;
-    `ifdef EXT_A_ENABLE
-        assign reqq_amo_s   = reqq_amo;
-    `endif
         assign reqq_ready   = reqq_ready_s;
 
         assign mem_rsp_valid_s = mem_rsp_valid;
@@ -336,11 +301,8 @@ module VX_mem_scheduler
     wire [MEM_BATCHES-1:0][MEM_CHANNELS-1:0] mem_req_mask_b;
     wire [MEM_BATCHES-1:0][MEM_CHANNELS-1:0][LINE_SIZE-1:0] mem_req_byteen_b;
     wire [MEM_BATCHES-1:0][MEM_CHANNELS-1:0][MEM_ADDR_WIDTH-1:0] mem_req_addr_b;
-    wire [MEM_BATCHES-1:0][MEM_CHANNELS-1:0][`UP(FLAGS_WIDTH)-1:0] mem_req_flags_b;
+    wire [MEM_BATCHES-1:0][MEM_CHANNELS-1:0][`UP(USER_WIDTH)-1:0] mem_req_user_b;
     wire [MEM_BATCHES-1:0][MEM_CHANNELS-1:0][LINE_WIDTH-1:0] mem_req_data_b;
-`ifdef EXT_A_ENABLE
-    amo_req_t [MEM_BATCHES-1:0][MEM_CHANNELS-1:0] mem_req_amo_b;
-`endif
 
     wire [BATCH_SEL_WIDTH-1:0] req_batch_idx;
 
@@ -351,20 +313,14 @@ module VX_mem_scheduler
                 assign mem_req_mask_b[i][j]   = reqq_mask_s[r];
                 assign mem_req_byteen_b[i][j] = reqq_byteen_s[r];
                 assign mem_req_addr_b[i][j]   = reqq_addr_s[r];
-                assign mem_req_flags_b[i][j]  = reqq_flags_s[r];
+                assign mem_req_user_b[i][j]   = reqq_user_s[r];
                 assign mem_req_data_b[i][j]   = reqq_data_s[r];
-            `ifdef EXT_A_ENABLE
-                assign mem_req_amo_b[i][j]    = reqq_amo_s[r];
-            `endif
             end else begin : g_padding
                 assign mem_req_mask_b[i][j]   = 0;
                 assign mem_req_byteen_b[i][j] = '0;
                 assign mem_req_addr_b[i][j]   = '0;
-                assign mem_req_flags_b[i][j]  = '0;
+                assign mem_req_user_b[i][j]   = '0;
                 assign mem_req_data_b[i][j]   = '0;
-            `ifdef EXT_A_ENABLE
-                assign mem_req_amo_b[i][j]    = amo_req_t'('0);
-            `endif
             end
         end
     end
@@ -373,11 +329,8 @@ module VX_mem_scheduler
     assign mem_req_rw_s     = reqq_rw_s;
     assign mem_req_byteen_s = mem_req_byteen_b[req_batch_idx];
     assign mem_req_addr_s   = mem_req_addr_b[req_batch_idx];
-    assign mem_req_flags_s  = mem_req_flags_b[req_batch_idx];
+    assign mem_req_user_s   = mem_req_user_b[req_batch_idx];
     assign mem_req_data_s   = mem_req_data_b[req_batch_idx];
-`ifdef EXT_A_ENABLE
-    assign mem_req_amo_s    = mem_req_amo_b[req_batch_idx];
-`endif
 
     if (MEM_BATCHES != 1) begin : g_batch
         reg [MEM_BATCH_BITS-1:0] req_batch_idx_r;
@@ -436,11 +389,10 @@ module VX_mem_scheduler
 
     assign reqq_ready_s = req_sent_all;
 
-    wire [MEM_CHANNELS-1:0][`UP(FLAGS_WIDTH)-1:0] mem_req_flags_u;
+    wire [MEM_CHANNELS-1:0][`UP(USER_WIDTH)-1:0] mem_req_user_u;
 
     VX_elastic_buffer #(
-        .DATAW   (MEM_CHANNELS + 1 + MEM_CHANNELS * (LINE_SIZE + MEM_ADDR_WIDTH + `UP(FLAGS_WIDTH) + LINE_WIDTH) + MEM_TAG_WIDTH
-                + (`EXT_A_ENABLED * MEM_CHANNELS * AMO_REQ_BITS)),
+        .DATAW   (MEM_CHANNELS + 1 + MEM_CHANNELS * (LINE_SIZE + MEM_ADDR_WIDTH + `UP(USER_WIDTH) + LINE_WIDTH) + MEM_TAG_WIDTH),
         .SIZE    (`TO_OUT_BUF_SIZE(MEM_OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_buf (
@@ -448,25 +400,17 @@ module VX_mem_scheduler
         .reset     (reset),
         .valid_in  (mem_req_valid_s),
         .ready_in  (mem_req_ready_s),
-        .data_in   ({mem_req_mask_s, mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_flags_s, mem_req_data_s, mem_req_tag_s
-                    `ifdef EXT_A_ENABLE
-                    , mem_req_amo_s
-                    `endif
-                    }),
-        .data_out  ({mem_req_mask,   mem_req_rw,   mem_req_byteen,   mem_req_addr,   mem_req_flags_u, mem_req_data,   mem_req_tag
-                    `ifdef EXT_A_ENABLE
-                    , mem_req_amo
-                    `endif
-                    }),
+        .data_in   ({mem_req_mask_s, mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_user_s, mem_req_data_s, mem_req_tag_s}),
+        .data_out  ({mem_req_mask,   mem_req_rw,   mem_req_byteen,   mem_req_addr,   mem_req_user_u, mem_req_data,   mem_req_tag}),
         .valid_out (mem_req_valid),
         .ready_out (mem_req_ready)
     );
 
-    if (FLAGS_WIDTH != 0) begin : g_mem_req_flags
-        assign mem_req_flags = mem_req_flags_u;
-    end else begin : g_mem_req_flags_0
-        `UNUSED_VAR (mem_req_flags_u)
-        assign mem_req_flags = '0;
+    if (USER_WIDTH != 0) begin : g_mem_req_user
+        assign mem_req_user = mem_req_user_u;
+    end else begin : g_mem_req_user_0
+        `UNUSED_VAR (mem_req_user_u)
+        assign mem_req_user = '0;
     end
 
     // Handle memory responses ////////////////////////////////////////////////

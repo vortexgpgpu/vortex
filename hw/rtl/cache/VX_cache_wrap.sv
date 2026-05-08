@@ -72,7 +72,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter MEM_OUT_BUF           = 3,
 
     // AMO: this cache is the LLC (see amo_rtl_v3_proposal.md §3.1.2).
-    parameter IS_LLC                = 0
+    parameter IS_LLC                = 0,
+
+    // AMO: this cache supports atomic ops in its banks.
+    parameter AMO_ENABLE            = 0
  ) (
 
     input wire clk,
@@ -190,7 +193,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .TAG_WIDTH    (TAG_WIDTH),
             .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
             .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF),
-            .IS_LLC       (IS_LLC)
+            .IS_LLC       (IS_LLC),
+            .AMO_ENABLE   (AMO_ENABLE)
         ) cache (
             .clk            (clk),
             .reset          (reset),

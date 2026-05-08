@@ -13,6 +13,16 @@
 
 `include "VX_define.vh"
 
+// Splits an LSU request into a global-memory part and a local-memory
+// part using each lane's is_addr_local user bit. Both subsets fire
+// independently with masked-out lanes; lsu_in_if.req_ready waits for
+// whichever subset(s) are non-empty.
+//
+// AMO on the local path is unsupported (proposal §6); the assertion
+// below fires if any active lane reaches this switch with both
+// amo_valid and is_addr_local set. The local-path attr also has its
+// AMO bits stripped so downstream LMEM banks never see amo_valid.
+
 module VX_lmem_switch import VX_gpu_pkg::*; #(
     parameter GLOBAL_OUT_BUF = 0,
     parameter LOCAL_OUT_BUF = 0,
@@ -25,23 +35,25 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     VX_lsu_mem_if.master    global_out_if,
     VX_lsu_mem_if.master    local_out_if
 );
-    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + MEM_FLAGS_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH
-                         + (`EXT_A_ENABLED * `NUM_LSU_LANES * AMO_REQ_BITS);
+    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + MEM_ATTR_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
     localparam RSP_DATAW = `NUM_LSU_LANES + `NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
 
+    // Per-lane is_addr_local from the user bits at the fixed offset.
     wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
+    for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin : g_is_addr_local_mask
+        assign is_addr_local_mask[i] = lsu_in_if.req_data.user[i][MEM_ATTR_LOCAL_OFFS];
+    end
+
+    wire [`NUM_LSU_LANES-1:0] global_mask = lsu_in_if.req_data.mask & ~is_addr_local_mask;
+    wire [`NUM_LSU_LANES-1:0] local_mask  = lsu_in_if.req_data.mask &  is_addr_local_mask;
+
+    wire is_addr_global = |global_mask;
+    wire is_addr_local  = |local_mask;
+
     wire req_global_ready;
     wire req_local_ready;
 
-    for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin : g_is_addr_local_mask
-        assign is_addr_local_mask[i] = lsu_in_if.req_data.flags[i][MEM_REQ_FLAG_LOCAL];
-    end
-
-    wire is_addr_global = | (lsu_in_if.req_data.mask & ~is_addr_local_mask);
-    wire is_addr_local  = | (lsu_in_if.req_data.mask & is_addr_local_mask);
-
-    // Require all active destinations to be ready when a request spans both
-    // global and local memory lanes.
+    // Both subsets must be accepted before we release the LSU input.
     assign lsu_in_if.req_ready = (!is_addr_global || req_global_ready)
                               && (!is_addr_local  || req_local_ready);
 
@@ -54,23 +66,31 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (lsu_in_if.req_valid && is_addr_global),
         .data_in   ({
-            lsu_in_if.req_data.mask & ~is_addr_local_mask,
+            global_mask,
             lsu_in_if.req_data.rw,
             lsu_in_if.req_data.addr,
             lsu_in_if.req_data.data,
             lsu_in_if.req_data.byteen,
-            lsu_in_if.req_data.flags,
+            lsu_in_if.req_data.user,
             lsu_in_if.req_data.tag
-        `ifdef EXT_A_ENABLE
-            ,
-            lsu_in_if.req_data.amo
-        `endif
         }),
         .ready_in  (req_global_ready),
         .valid_out (global_out_if.req_valid),
         .data_out  (global_out_if.req_data),
         .ready_out (global_out_if.req_ready)
     );
+
+    // Strip per-lane AMO bits on the local path so the LMEM banks never
+    // observe amo.amo_valid. Other attr fields pass through unchanged.
+    wire [`NUM_LSU_LANES-1:0][MEM_ATTR_WIDTH-1:0] local_user;
+    for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin : g_local_user
+        mem_bus_attr_t lane_clean;
+        always_comb begin
+            lane_clean      = mem_bus_attr_t'(lsu_in_if.req_data.user[i]);
+            lane_clean.amo  = '0;
+        end
+        assign local_user[i] = MEM_ATTR_WIDTH'(lane_clean);
+    end
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
@@ -81,20 +101,13 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (lsu_in_if.req_valid && is_addr_local),
         .data_in   ({
-            lsu_in_if.req_data.mask & is_addr_local_mask,
+            local_mask,
             lsu_in_if.req_data.rw,
             lsu_in_if.req_data.addr,
             lsu_in_if.req_data.data,
             lsu_in_if.req_data.byteen,
-            lsu_in_if.req_data.flags,
+            local_user,
             lsu_in_if.req_data.tag
-        `ifdef EXT_A_ENABLE
-            ,
-            // §3.13: AMO on Shared (LMEM) is unsupported. The local
-            // path strips the AMO sideband; the assertion below fires
-            // if any AMO lane ever ends up on this path.
-            {(`NUM_LSU_LANES * AMO_REQ_BITS){1'b0}}
-        `endif
         }),
         .ready_in  (req_local_ready),
         .valid_out (local_out_if.req_valid),
@@ -102,22 +115,20 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .ready_out (local_out_if.req_ready)
     );
 
-`ifdef EXT_A_ENABLE
     // Synth-time assertion mirror of SimX's local_mem_switch guard
     // (sim/simx/mem/local_mem_switch.cpp:65). AMO on Shared/LMEM is
     // out of scope (proposal §6).
-    always_comb begin
-        if (lsu_in_if.req_valid) begin
-            for (int i = 0; i < `NUM_LSU_LANES; i++) begin
-                if (lsu_in_if.req_data.mask[i]
-                 && lsu_in_if.req_data.amo[i].valid
-                 && is_addr_local_mask[i]) begin
-                    `ASSERT(0, ("AMO on Shared (LMEM) is unsupported"));
-                end
+    for (genvar lane = 0; lane < `NUM_LSU_LANES; ++lane) begin : g_amo_lmem_assert
+        wire amo_local_lane = lsu_in_if.req_valid
+                           && lsu_in_if.req_data.mask[lane]
+                           && lsu_in_if.req_data.user[lane][MEM_ATTR_AMO_OFFS]    // amo_valid
+                           && lsu_in_if.req_data.user[lane][MEM_ATTR_LOCAL_OFFS]; // is_addr_local
+        always_comb begin
+            if (amo_local_lane) begin
+                `ASSERT(0, ("AMO on Shared (LMEM) is unsupported"));
             end
         end
     end
-`endif
 
     VX_stream_arb #(
         .NUM_INPUTS (2),

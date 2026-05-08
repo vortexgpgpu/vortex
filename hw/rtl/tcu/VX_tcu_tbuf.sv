@@ -78,11 +78,9 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
+    localparam NUM_LMEM_MASTERS = (1 + `TCU_SPARSE_ENABLED) * BLOCK_SIZE + 1;
 `ifdef TCU_SPARSE_ENABLE
-    localparam NUM_LMEM_MASTERS = 2 * BLOCK_SIZE + 1;
     localparam MBUF_BASE_IDX    = BLOCK_SIZE + 1;
-`else
-    localparam NUM_LMEM_MASTERS = BLOCK_SIZE + 1;
 `endif
     localparam BBUF_IDX         = BLOCK_SIZE;
 
@@ -93,7 +91,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE  (NUM_BANKS * (`XLEN / 8)),
         .TAG_WIDTH  (TCU_LMEM_BLK_TAG_W),
-        .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
+        .ATTR_WIDTH (LMEM_DMA_ATTR_W),
         .ADDR_WIDTH (BANK_ADDR_WIDTH)
     ) lmem_masters[NUM_LMEM_MASTERS]();
 
@@ -284,7 +282,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE  (NUM_BANKS * (`XLEN / 8)),
         .TAG_WIDTH  (TCU_LMEM_TAG_W),
-        .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
+        .ATTR_WIDTH (LMEM_DMA_ATTR_W),
         .ADDR_WIDTH (BANK_ADDR_WIDTH)
     ) lmem_arb_out_if[1]();
 
@@ -293,7 +291,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .NUM_OUTPUTS (1),
         .DATA_SIZE   (NUM_BANKS * (`XLEN / 8)),
         .TAG_WIDTH   (TCU_LMEM_BLK_TAG_W),
-        .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
+        .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
         .ADDR_WIDTH  (BANK_ADDR_WIDTH),
         .ARBITER     ("P")
     ) lmem_arb (

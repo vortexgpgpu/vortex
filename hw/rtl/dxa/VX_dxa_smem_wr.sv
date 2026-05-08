@@ -13,7 +13,7 @@
 
 // DXA SMEM Writer: synchronizes in-flight FIFO with BRAM responses,
 // barrel-shifts CL data, and drains SMEM words to the bus.
-// Drives VX_mem_bus_if directly (absorbs bus wiring + completion flags).
+// Drives VX_mem_bus_if directly (absorbs bus wiring + completion attr).
 //
 // Pipeline: IDLE → FETCH (1 cycle BRAM read) → DRAIN (word-by-word SMEM writes)
 // OOB entries use cfill-replicated data (no BRAM read needed but still 1 cycle).
@@ -35,7 +35,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // cfill (stable during transfer).
     input  wire [31:0]                 cfill,
 
-    // Metadata for SMEM bus tag + completion flags.
+    // Metadata for SMEM bus tag + completion attr.
     input  wire [NC_WIDTH-1:0]         active_core_id,
     input  wire [BAR_ADDR_W-1:0]       active_bar_addr,
     input  wire                        active_notify_smem_done,
@@ -294,15 +294,15 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire is_last_drain = lat_last_r && drain_will_empty;
     assign smem_wr_last_pkt = is_last_drain && (!is_multicast || replay_is_last);
 
-    // Completion flags: bar_stride hardcoded to 1.
+    // Completion attr: bar_stride hardcoded to 1.
     // Use mc_write_valid (not mc_write_fire) to break a UNOPTFLAT loop:
     // mc_write_fire = mc_write_valid && smem_bus_if.req_ready, and using
     // it on the request side closes a comb cycle through the downstream
-    // LMEM arbiter. Flags are sampled by the receiver only when req_valid
+    // LMEM arbiter. Attr is sampled by the receiver only when req_valid
     // && req_ready, so qualifying with req_ready here is redundant.
-    wire smem_wr_flags_last = active_notify_smem_done && (
+    wire smem_wr_attr_last = active_notify_smem_done && (
         is_multicast ? (mc_write_valid && is_last_drain) : smem_wr_last_pkt);
-    wire [BAR_ADDR_W-1:0] smem_wr_flags_bar = is_multicast
+    wire [BAR_ADDR_W-1:0] smem_wr_attr_bar = is_multicast
         ? BAR_ADDR_W'(active_bar_addr + BAR_ADDR_W'(replay_next_idx))
         : active_bar_addr;
 
@@ -315,7 +315,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign smem_bus_if.req_data.addr   = smem_wr_addr;
     assign smem_bus_if.req_data.data   = fb_word_data;
     assign smem_bus_if.req_data.byteen = fb_word_byteen;
-    assign smem_bus_if.req_data.flags  = {smem_wr_flags_last, smem_wr_flags_bar};
+    assign smem_bus_if.req_data.attr   = {smem_wr_attr_last, smem_wr_attr_bar};
     assign smem_bus_if.req_data.tag.uuid  = '0;
     assign smem_bus_if.req_data.tag.value = SMEM_TAG_VALUE_W'(active_core_id) << ENGINE_VALUE_W;
     assign smem_bus_if.rsp_ready       = 1'b0;

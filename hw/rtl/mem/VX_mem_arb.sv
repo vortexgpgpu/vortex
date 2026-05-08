@@ -24,7 +24,7 @@ module VX_mem_arb import VX_gpu_pkg::*; #(
     parameter `STRING ARBITER = "R",
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH     = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
-    parameter FLAGS_WIDTH    = MEM_FLAGS_WIDTH
+    parameter ATTR_WIDTH     = MEM_ATTR_WIDTH
 ) (
     input wire              clk,
     input wire              reset,
@@ -34,8 +34,7 @@ module VX_mem_arb import VX_gpu_pkg::*; #(
 );
     localparam DATA_WIDTH   = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
-    localparam REQ_DATAW    = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + FLAGS_WIDTH + TAG_WIDTH
-                            + (`EXT_A_ENABLED * AMO_REQ_BITS);
+    localparam REQ_DATAW    = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + ATTR_WIDTH + TAG_WIDTH;
     localparam RSP_DATAW    = DATA_WIDTH + TAG_WIDTH;
     localparam SEL_COUNT    = `MIN(NUM_INPUTS, NUM_OUTPUTS);
 
@@ -80,12 +79,8 @@ module VX_mem_arb import VX_gpu_pkg::*; #(
             bus_out_if[i].req_data.addr,
             bus_out_if[i].req_data.data,
             bus_out_if[i].req_data.byteen,
-            bus_out_if[i].req_data.flags,
+            bus_out_if[i].req_data.attr,
             req_tag_out
-        `ifdef EXT_A_ENABLE
-            ,
-            bus_out_if[i].req_data.amo
-        `endif
         } = req_data_out[i];
         assign req_ready_out[i] = bus_out_if[i].req_ready;
         
