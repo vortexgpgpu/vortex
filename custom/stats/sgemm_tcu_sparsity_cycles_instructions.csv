@@ -1,0 +1,13 @@
+kernel,a_sparsity,b_sparsity,body_cycles,body_instructions,shape,dtype,source
+sgemm_tcu,0,0,30902,1041,,,custom/stats/run1_ip.stat
+sgemm_tcu,20,20,,,,,
+sgemm_tcu,60,60,,,,,
+sgemm_tcu,90,90,,,,,
+sgemm_tcu_sp,0,0,23515,740,,,custom/stats/run1_ip_sp.stat
+sgemm_tcu_sp,20,20,,,,,
+sgemm_tcu_sp,60,60,,,,,
+sgemm_tcu_sp,90,90,,,,,
+sgemm_tcu_op,0,0,10687,80,32x32x256,fp8,custom/run_all/run3.stat
+sgemm_tcu_op,20,20,10305,114,32x32x256,fp8,custom/run_all/run4.stat
+sgemm_tcu_op,60,60,5422,114,32x32x256,fp8,custom/run_all/run8.stat
+sgemm_tcu_op,90,90,2932,114,32x32x256,fp8,custom/run_all/run12.stat

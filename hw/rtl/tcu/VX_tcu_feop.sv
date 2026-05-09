@@ -235,17 +235,17 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
         else begin
             if (valid_in && enable) begin
                 `TRACE(1, ("%t: [feop %0d]: Started\n", $time, ID));
-                `TRACE(1, ("a_16b=0x%0h\n", 16'(a_16b)));
-                `TRACE(1, ("b_row="));
-                `TRACE_ARRAY1D(1, "0x%0h", b_row, (N/2));
-                `TRACE(1, ("\n"));
+                `TRACE(2, ("a_16b=0x%0h\n", 16'(a_16b)));
+                `TRACE(2, ("b_row="));
+                `TRACE_ARRAY1D(2, "0x%0h", b_row, (N/2));
+                `TRACE(2, ("\n"));
 
-                `TRACE(1, ("feop_output[N] (ID=%0d):\n", ID));
-                `TRACE_ARRAY1D(1, "0x%0h", feop_output, N);
+                `TRACE(2, ("feop_output[N] (ID=%0d):\n", ID));
+                `TRACE_ARRAY1D(2, "0x%0h", feop_output, N);
 
-                `TRACE(1, ("\n%t: feop_output_delayed[N] (ID=%0d):\n", $time, ID));
-                `TRACE_ARRAY1D(1, "0x%0h", feop_output_delayed, N);
-                `TRACE(1, ("\n"));
+                `TRACE(2, ("\n%t: feop_output_delayed[N] (ID=%0d):\n", $time, ID));
+                `TRACE_ARRAY1D(2, "0x%0h", feop_output_delayed, N);
+                `TRACE(2, ("\n"));
             end
         end
     end

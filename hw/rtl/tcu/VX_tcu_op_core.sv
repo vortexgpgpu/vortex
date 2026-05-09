@@ -125,10 +125,10 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always @ (posedge clk) begin
         if (busy) begin
             if (last_step_in_block_a && (rd_req_fire && grant_onehot == MATRIX_ID_BITS'(2))) begin
-                `TRACE(1, ("[tcu_op_core]: [NEW]: Requested & processed an A block, unchanged a_blk_rq_bits=%b\n", a_blk_rq_bits));
+                `TRACE(2, ("[tcu_op_core]: [NEW]: Requested & processed an A block, unchanged a_blk_rq_bits=%b\n", a_blk_rq_bits));
             end
             if (last_step_in_block_a && (rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(4))) begin
-                `TRACE(1, ("[tcu_op_core]: [NEW]: Loaded & processed an A block, a_blk_ld_bits=%b->%b\n", a_blk_rq_bits, ~a_blk_ld_bits));
+                `TRACE(2, ("[tcu_op_core]: [NEW]: Loaded & processed an A block, a_blk_ld_bits=%b->%b\n", a_blk_rq_bits, ~a_blk_ld_bits));
             end
         end
     end
@@ -339,40 +339,40 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     // a_blocks_processed <= a_blocks_processed + 1'b1;
                     if (~(rd_req_fire && grant_onehot == MATRIX_ID_BITS'(2))) begin
                         a_blk_rq_bits <= (a_blk_rq_bits >> 1);
-                        `TRACE(1, ("%t: [NEW] A_processed && ~A_requested: a_blk_rq_bits=%b->%b\n", $time, a_blk_rq_bits, a_blk_rq_bits >> 1));
+                        `TRACE(2, ("%t: [NEW] A_processed && ~A_requested: a_blk_rq_bits=%b->%b\n", $time, a_blk_rq_bits, a_blk_rq_bits >> 1));
                     end
                     if (~(rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(2))) begin
                         a_blk_ld_bits <= a_blk_ld_bits & ~a_active_block;
-                        `TRACE(1, ("%t: [NEW] A_processed && ~A_loaded: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, (a_blk_ld_bits & ~a_active_block)));
+                        `TRACE(2, ("%t: [NEW] A_processed && ~A_loaded: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, (a_blk_ld_bits & ~a_active_block)));
                     end
                     a_active_block <= ~a_active_block; // 01->10, 10->01
-                    `TRACE(1, ("%t: [NEW] A_processed: a_active_block=%b->%b a_blk_req_bits=%b a_blk_ld_bits=%b\n", $time, a_active_block, ~a_active_block, a_blk_rq_bits, a_blk_ld_bits));
+                    `TRACE(2, ("%t: [NEW] A_processed: a_active_block=%b->%b a_blk_req_bits=%b a_blk_ld_bits=%b\n", $time, a_active_block, ~a_active_block, a_blk_rq_bits, a_blk_ld_bits));
                 end
                 if (last_step_in_block_b) begin
                     // b_blocks_processed <= b_blocks_processed + 1'b1;
                     if (~(rd_req_fire && grant_onehot == MATRIX_ID_BITS'(4))) begin
                         b_blk_rq_bits <= (b_blk_rq_bits >> 1);
-                        `TRACE(1, ("%t: [NEW] B_processed && ~B_requested: b_blk_rq_bits=%b->%b\n", $time, b_blk_rq_bits, b_blk_rq_bits >> 1));
+                        `TRACE(2, ("%t: [NEW] B_processed && ~B_requested: b_blk_rq_bits=%b->%b\n", $time, b_blk_rq_bits, b_blk_rq_bits >> 1));
                     end
                     if (~(rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(4))) begin
                         b_blk_ld_bits <= b_blk_ld_bits & ~b_active_block;
-                        `TRACE(1, ("%t: [NEW] B_processed && ~B_loaded: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, (b_blk_ld_bits & ~b_active_block)));
+                        `TRACE(2, ("%t: [NEW] B_processed && ~B_loaded: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, (b_blk_ld_bits & ~b_active_block)));
                     end
                     b_active_block <= ~b_active_block; // 01->10, 10->01
-                    `TRACE(1, ("%t: [NEW] B_processed: b_active_block=%b->%b b_blk_req_bits=%b b_blk_ld_bits=%b\n", $time, b_active_block, ~b_active_block, b_blk_rq_bits, b_blk_ld_bits));
+                    `TRACE(2, ("%t: [NEW] B_processed: b_active_block=%b->%b b_blk_req_bits=%b b_blk_ld_bits=%b\n", $time, b_active_block, ~b_active_block, b_blk_rq_bits, b_blk_ld_bits));
                 end
                 if (last_step_in_bitmap_block) begin
                     // bitmap_blocks_processed <= bitmap_blocks_processed + 1'b1;
                     if (~(rd_req_fire && grant_onehot == MATRIX_ID_BITS'(1))) begin
                         bitmap_blk_rq_bits <= (bitmap_blk_rq_bits >> 1);
-                        `TRACE(1, ("%t: [NEW] Bitmap_processed && ~Bitmap_requested: bitmap_blk_rq_bits=%b->%b\n", $time, bitmap_blk_rq_bits, bitmap_blk_rq_bits >> 1));
+                        `TRACE(2, ("%t: [NEW] Bitmap_processed && ~Bitmap_requested: bitmap_blk_rq_bits=%b->%b\n", $time, bitmap_blk_rq_bits, bitmap_blk_rq_bits >> 1));
                     end
                     if (~(rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(1))) begin
                         bitmap_blk_ld_bits <= bitmap_blk_ld_bits & ~bitmap_active_block;
-                        `TRACE(1, ("%t: [NEW] Bitmap_processed && ~Bitmap_loaded: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, (bitmap_blk_ld_bits & ~bitmap_active_block)));
+                        `TRACE(2, ("%t: [NEW] Bitmap_processed && ~Bitmap_loaded: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, (bitmap_blk_ld_bits & ~bitmap_active_block)));
                     end
                     bitmap_active_block <= ~bitmap_active_block; // 01->10, 10->01
-                    `TRACE(1, ("%t: [NEW] Bitmap_processed: bitmap_active_block=%b->%b bitmap_blk_req_bits=%b bitmap_blk_ld_bits=%b\n", $time, bitmap_active_block, ~bitmap_active_block, bitmap_blk_rq_bits, bitmap_blk_ld_bits));
+                    `TRACE(2, ("%t: [NEW] Bitmap_processed: bitmap_active_block=%b->%b bitmap_blk_req_bits=%b bitmap_blk_ld_bits=%b\n", $time, bitmap_active_block, ~bitmap_active_block, bitmap_blk_rq_bits, bitmap_blk_ld_bits));
                 end
             end
         end
@@ -430,7 +430,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     bitmap_req_blocks_remaining <= bitmap_req_blocks_remaining - 1'b1;
                     if (~last_step_in_bitmap_block) begin
                         bitmap_blk_rq_bits <= {|bitmap_blk_rq_bits, 1'b1};
-                        `TRACE(1, ("%t: [NEW] Bitmap_requested && ~Bitmap_processed: bitmap_blk_rq_bits=%b->%b\n", $time, bitmap_blk_rq_bits, {|bitmap_blk_rq_bits, 1'b1}));
+                        `TRACE(2, ("%t: [NEW] Bitmap_requested && ~Bitmap_processed: bitmap_blk_rq_bits=%b->%b\n", $time, bitmap_blk_rq_bits, {|bitmap_blk_rq_bits, 1'b1}));
                     end
                 end
                 MATRIX_ID_BITS'(2): begin  // A
@@ -443,7 +443,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     a_req_blocks_remaining <= a_req_blocks_remaining - 1'b1;
                     if (~last_step_in_block_a) begin
                         a_blk_rq_bits <= {|a_blk_rq_bits, 1'b1};
-                        `TRACE(1, ("%t: [NEW] A_requested && ~A_processed: a_blk_rq_bits=%b->%b\n", $time, a_blk_rq_bits, {|a_blk_rq_bits, 1'b1}));
+                        `TRACE(2, ("%t: [NEW] A_requested && ~A_processed: a_blk_rq_bits=%b->%b\n", $time, a_blk_rq_bits, {|a_blk_rq_bits, 1'b1}));
                     end
                 end
                 MATRIX_ID_BITS'(4): begin  // B
@@ -456,7 +456,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     b_req_blocks_remaining <= b_req_blocks_remaining - 1'b1;
                     if (~last_step_in_block_b) begin
                         b_blk_rq_bits <= {|b_blk_rq_bits, 1'b1};
-                        `TRACE(1, ("%t: [NEW] B_requested && ~B_processed: b_blk_rq_bits=%b->%b\n", $time, b_blk_rq_bits, {|b_blk_rq_bits, 1'b1}));
+                        `TRACE(2, ("%t: [NEW] B_requested && ~B_processed: b_blk_rq_bits=%b->%b\n", $time, b_blk_rq_bits, {|b_blk_rq_bits, 1'b1}));
                     end
                 end
                 MATRIX_ID_BITS'(8): begin  // C
@@ -527,20 +527,20 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     Bitmap_buffered[bitmap_blk_ld_bits[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
                     if (~last_step_in_bitmap_block) begin
                         bitmap_blk_ld_bits <= {|bitmap_blk_ld_bits, 1'b1}; // 00->01, 01->11, 10->11
-                        `TRACE(1, ("%t: [NEW] Bitmap_loaded && ~Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, {|bitmap_blk_ld_bits, 1'b1}));
+                        `TRACE(2, ("%t: [NEW] Bitmap_loaded && ~Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, {|bitmap_blk_ld_bits, 1'b1}));
                     end else begin
                         bitmap_blk_ld_bits <= ~bitmap_blk_ld_bits; // 01->10, 10->01
-                        `TRACE(1, ("%t: [NEW] Bitmap_loaded && Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, ~bitmap_blk_ld_bits));
+                        `TRACE(2, ("%t: [NEW] Bitmap_loaded && Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, ~bitmap_blk_ld_bits));
                     end 
                 end
                 MATRIX_ID_BITS'(2): begin  // A
                     A_buffered[~a_load_block[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
                     if (~last_step_in_block_a) begin
                         a_blk_ld_bits <= ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11); // 00->a_load_block, 01->11, 10->11        // {|a_blk_ld_bits, 1'b1}; 
-                        `TRACE(1, ("%t: [NEW] A_loaded && ~A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11)));
+                        `TRACE(2, ("%t: [NEW] A_loaded && ~A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11)));
                     end else begin
                         a_blk_ld_bits <= ~a_blk_ld_bits; // 01->10, 10->01
-                        `TRACE(1, ("%t: [NEW] A_loaded && A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ~a_blk_ld_bits));
+                        `TRACE(2, ("%t: [NEW] A_loaded && A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ~a_blk_ld_bits));
                     end 
                     a_load_block <= ~a_load_block; // 01->10, 10->01
                 end
@@ -548,10 +548,10 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     B_buffered[~b_load_block[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
                     if (~last_step_in_block_b) begin
                         b_blk_ld_bits <= ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11); // 00->b_load_block, 01->11, 10->11
-                        `TRACE(1, ("%t: [NEW] B_loaded && ~B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11)));
+                        `TRACE(2, ("%t: [NEW] B_loaded && ~B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11)));
                     end else begin
                         b_blk_ld_bits <= ~b_blk_ld_bits; // 01->10, 10->01
-                        `TRACE(1, ("%t: [NEW] B_loaded && B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ~b_blk_ld_bits));
+                        `TRACE(2, ("%t: [NEW] B_loaded && B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ~b_blk_ld_bits));
                     end 
                     b_load_block <= ~b_load_block; // 01->10, 10->01
                 end
@@ -617,19 +617,19 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     always @ (posedge clk) begin
         if (~reset && last_step_in_set) begin
-            `TRACE(1, ("%t: last_step_in_set: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+            `TRACE(2, ("%t: last_step_in_set: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
         end
         if (~reset && last_step_in_block_a) begin
-            `TRACE(1, ("%t: last_step_in_block_a: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+            `TRACE(2, ("%t: last_step_in_block_a: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
         end
         if (~reset && last_step_in_block_b) begin
-            `TRACE(1, ("%t: last_step_in_block_b: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+            `TRACE(2, ("%t: last_step_in_block_b: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
         end
         if (~reset && last_step_in_execution) begin
-            `TRACE(1, ("%t: last_step_in_execution: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+            `TRACE(2, ("%t: last_step_in_execution: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
         end
         if (~reset && issuing_done) begin
-            `TRACE(1, ("%t: issuing_done: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
+            `TRACE(2, ("%t: issuing_done: set=%0d, m=%0d, n=%0d\n", $time, set, m, n));
         end
         if (reset) begin
             set  <= '0;
@@ -902,9 +902,9 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         always @(posedge clk) begin
             if (issue_busy) begin
                 `TRACE(1, ("%t: FEOP-enq(%0d): wid=%0d, a_elem(idx=%0d)=0x%0h, set=%0d, m=%0d, n=%0d, id=%0d, step=%0d\n", $time, id, execute_if.data.header.wid,  ((32'(m) + 32'(id)) >> lg_i_ratio), a_elem, set, m, n, id, step));
-                `TRACE(1, ("b_row="));
-                `TRACE_ARRAY1D(1, "0x%0h", b_row, (TCU_FEOP_BLOCK_N_SIZE >> lg_i_ratio));
-                `TRACE(1, ("\n"));
+                `TRACE(2, ("b_row="));
+                `TRACE_ARRAY1D(2, "0x%0h", b_row, (TCU_FEOP_BLOCK_N_SIZE >> lg_i_ratio));
+                `TRACE(2, ("\n"));
 
                 // `TRACE(1, ("\n"));
                 // `TRACE(1, ("a_set="));
@@ -1133,7 +1133,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end else begin
             if (result_pulse) begin
                 result_pending_r <= 1'b1;
-                `TRACE (1, ("%t: [tcu_op_core]: result_pulse=%b no_flush_complete=%b flush_flag=%b busy=%b busy_r=%b result_pending_r=%b d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d ready_to_flush_raw=%b ready_to_flush=%b accu_ready_to_flush=%b wr_req_fire=%b\n",
+                `TRACE (2, ("%t: [tcu_op_core]: result_pulse=%b no_flush_complete=%b flush_flag=%b busy=%b busy_r=%b result_pending_r=%b d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d ready_to_flush_raw=%b ready_to_flush=%b accu_ready_to_flush=%b wr_req_fire=%b\n",
                     $time, result_pulse, no_flush_complete, flush_flag, busy, busy_r, result_pending_r, d_lines_ready, d_line_to_flush, d_line_to_flush_delayed, ready_to_flush_raw, ready_to_flush, accu_ready_to_flush, wr_req_fire));
             end
             if (execute_if.valid && ~execute_if.ready) begin
@@ -1164,11 +1164,11 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             //         $time, execute_if.valid, execute_if.ready, execute_fire, busy, busy_r, issue_busy, issuing_done, valid_in_delayed, accumulate_c, feop_enable, accu_queues_ready, op_ctx_empty, op_ctx_full, txbar_bus_if.valid, txbar_bus_if.ready, txbar_done_ready, result_pending, result_pending_r, result_pulse, result_fire, result_fire_hazard));
             // end
             if (ready_to_flush_raw || ready_to_flush || wr_req_fire || valid_out) begin
-                `TRACE(1, ("%t: [tcu_op_core]: flush-state flush_flag=%b ready_to_flush_raw=%b ready_to_flush=%b valid_out=%b mem_stall=%b wr_req_fire=%b d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d accu_ready_to_flush=%b tcu_req_ready=%b\n",
+                `TRACE(2, ("%t: [tcu_op_core]: flush-state flush_flag=%b ready_to_flush_raw=%b ready_to_flush=%b valid_out=%b mem_stall=%b wr_req_fire=%b d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d accu_ready_to_flush=%b tcu_req_ready=%b\n",
                     $time, flush_flag, ready_to_flush_raw, ready_to_flush, valid_out, mem_stall, wr_req_fire, d_lines_ready, d_line_to_flush, d_line_to_flush_delayed, accu_ready_to_flush, tcu_lsu_mem_if.req_ready));
             end
             if (no_flush_complete) begin
-                `TRACE(1, ("%t: [tcu_op_core]: no-flush completion path no_flush_complete=%b flush_flag=%b ready_to_flush_raw=%b d_line_to_flush=%0d result_pending_r=%b execute_valid=%b execute_ready=%b execute_fire=%b\n",
+                `TRACE(2, ("%t: [tcu_op_core]: no-flush completion path no_flush_complete=%b flush_flag=%b ready_to_flush_raw=%b d_line_to_flush=%0d result_pending_r=%b execute_valid=%b execute_ready=%b execute_fire=%b\n",
                     $time, no_flush_complete, flush_flag, ready_to_flush_raw, d_line_to_flush, result_pending_r, execute_if.valid, execute_if.ready, execute_fire));
             end
             if (result_fire) begin
@@ -1180,9 +1180,9 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always @(posedge clk) begin
         if (~reset) begin
             if (execute_fire) begin
-                `TRACE(1, ("%t: [tcu_op_core-txbar] START fire wid=%0d bar_id=0x%0h addr=%0d\n",
+                `TRACE(2, ("%t: [tcu_op_core-txbar] START fire wid=%0d bar_id=0x%0h addr=%0d\n",
                     $time, execute_if.data.header.wid, txbar_bar_id, txbar_addr))
-                `TRACE(1, ("%t: [tcu_op_core]: accepted payload uuid=%0d pc=0x%0h rs1={0x%0h 0x%0h 0x%0h 0x%0h 0x%0h 0x%0h} rs2={%0d %0d %0d %0d %0d %0d 0x%0h 0x%0h}\n",
+                `TRACE(2, ("%t: [tcu_op_core]: accepted payload uuid=%0d pc=0x%0h rs1={0x%0h 0x%0h 0x%0h 0x%0h 0x%0h 0x%0h} rs2={%0d %0d %0d %0d %0d %0d 0x%0h 0x%0h}\n",
                     $time,
                     execute_if.data.header.uuid,
                     execute_if.data.header.PC,
@@ -1202,15 +1202,15 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     execute_if.data.rs2_data[7]))
             end
             if (result_pulse) begin
-                `TRACE(1, ("%t: [tcu_op_core-txbar] RESULT pulse pending=%0b opctx_empty=%0b txbar_ready=%0b\n",
+                `TRACE(2, ("%t: [tcu_op_core-txbar] RESULT pulse pending=%0b opctx_empty=%0b txbar_ready=%0b\n",
                     $time, result_pending_r, op_ctx_empty, txbar_bus_if.ready))
             end
             if (result_fire) begin
-                `TRACE(1, ("%t: [tcu_op_core-txbar] DONE fire wid=%0d addr=%0d\n",
+                `TRACE(2, ("%t: [tcu_op_core-txbar] DONE fire wid=%0d addr=%0d\n",
                     $time, result_if.data.header.wid, op_ctx_bar_addr))
             end
             if (txbar_bus_if.valid && txbar_bus_if.ready) begin
-                `TRACE(1, ("%t: [tcu_op_core-txbar] TXBAR xfer addr=%0d is_done=%0b\n",
+                `TRACE(2, ("%t: [tcu_op_core-txbar] TXBAR xfer addr=%0d is_done=%0b\n",
                     $time, txbar_bus_if.data.addr, txbar_bus_if.data.is_done))
             end
         end
@@ -1406,7 +1406,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (execute_fire) begin
                 init_r  <= init_flag_imm;
                 flush_r <= flush_flag_imm;
-                `TRACE(1, ("init_flag=%b, flush_flag=%b\n", init_flag, flush_flag));
+                `TRACE(2, ("init_flag=%b, flush_flag=%b\n", init_flag, flush_flag));
             end
         end
     end
@@ -1423,7 +1423,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             
             end
             if (execute_if.valid && ~execute_if.ready) begin
-                `TRACE(1, ("%t: [tcu_op_core] pending op snapshot uuid=%0d pc=0x%0h busy=%b busy_r=%b issue_busy=%b issuing_done=%b op_ctx_full=%b mqueue_full=%b txbar_ready=%b ready_to_flush=%b d_lines_ready=%0d\n",
+                `TRACE(2, ("%t: [tcu_op_core] pending op snapshot uuid=%0d pc=0x%0h busy=%b busy_r=%b issue_busy=%b issuing_done=%b op_ctx_full=%b mqueue_full=%b txbar_ready=%b ready_to_flush=%b d_lines_ready=%0d\n",
                             $time,
                             execute_if.data.header.uuid,
                             execute_if.data.header.PC,
@@ -1440,14 +1440,14 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             if (issue_busy) begin
                 `TRACE(1, ("%t: [tcu_op_core] Issue Busy processing, i_ratio=%0d, lg_i_ratio=%0d, ready_to_flush=%0d\n", 
                             $time, i_ratio, lg_i_ratio, ready_to_flush));
-                `TRACE(1, ("%t: c_blk_idx=%0d, step=%0d / %0d, set=%0d, m=%0d / %0d, n=%0d / %0d\n", 
+                `TRACE(2, ("%t: c_blk_idx=%0d, step=%0d / %0d, set=%0d, m=%0d / %0d, n=%0d / %0d\n", 
                             $time, c_blk_idx, step, TCU_FEOP_STEPS, set, m, TCU_TC_M_OP, n, TCU_TC_N_OP));
             end
             if (busy && ready_to_flush) begin
-                `TRACE(1, ("%t: [tcu_op_core] Commit Busy processing\n", $time));
+                `TRACE(2, ("%t: [tcu_op_core] Commit Busy processing\n", $time));
             end
             if (feop_enable && last_step_in_execution) begin
-                `TRACE(1, ("%t: [tcu_op_core] All iterations issued\n", $time));
+                `TRACE(2, ("%t: [tcu_op_core] All iterations issued\n", $time));
             end
             if (result_fire) begin
                 `TRACE(1, ("%t: [tcu_op_core] Result fired downstream\n", $time));
@@ -1464,15 +1464,15 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
             if (rd_req_fire) begin
                 // Print requested info
-                `TRACE(1, ("%t: LMEM: Issuing read request, req_addr[0]=0x%x mask=%b, tag=%b matrix=%0s, c_blocks_requested=%0d\n", 
+                `TRACE(2, ("%t: LMEM: Issuing read request, req_addr[0]=0x%x mask=%b, tag=%b matrix=%0s, c_blocks_requested=%0d\n", 
                             $time, tcu_lsu_mem_if.req_data.addr[0] * LSU_WORD_SIZE, tcu_lsu_mem_if.req_data.mask, tcu_lsu_mem_if.req_data.tag,
                             (grant_onehot == 4'b0001) ? "Bitmap" : (grant_onehot == 4'b0010) ? "A" : (grant_onehot == 4'b0100) ? "B" : "C",
                             c_blocks_requested));
-                `TRACE(1, ("a_req_blocks_remaining=%0d, b_req_blocks_remaining=%0d, total_c_blocks=%0d, bitmap_req_blocks_remaining=%0d\n",
+                `TRACE(2, ("a_req_blocks_remaining=%0d, b_req_blocks_remaining=%0d, total_c_blocks=%0d, bitmap_req_blocks_remaining=%0d\n",
                             a_req_blocks_remaining, b_req_blocks_remaining, TCU_C_BLOCKS_IN_ACCU, bitmap_req_blocks_remaining));
             end
             if (rd_rsp_fire) begin
-                `TRACE(1, ("%t: LMEM: read rsp: tag=%x mask=%b,   matrix=%0s accumulate_c=%b\nc_blocks_loaded=%0d, c_blocks_accumulated=%0d, C_buf_idx=%0d\n", $time,
+                `TRACE(2, ("%t: LMEM: read rsp: tag=%x mask=%b,   matrix=%0s accumulate_c=%b\nc_blocks_loaded=%0d, c_blocks_accumulated=%0d, C_buf_idx=%0d\n", $time,
                             tcu_lsu_mem_if.rsp_data.tag, tcu_lsu_mem_if.rsp_data.mask,
                             (rsp_matrix_id == 4'b0001) ? "Bitmap" : (rsp_matrix_id == 4'b0010) ? "A" : (rsp_matrix_id == 4'b0100) ? "B" : "C",
                             accumulate_c, c_blocks_loaded, c_blocks_accumulated, c_blocks_loaded % (C_BUF_SLOTS+1)));
@@ -1480,22 +1480,22 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 for (integer l = 0; l < `NUM_LSU_LANES; l++) begin
                     if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
                         if (rsp_matrix_id == 4'b0001) begin // Bitmap printing
-                            `TRACE(1, ("    lane[%0d]: data=%b\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
+                            `TRACE(2, ("    lane[%0d]: data=%b\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
                         end else begin
-                            `TRACE(1, ("    lane[%0d]: data=%x\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
+                            `TRACE(2, ("    lane[%0d]: data=%x\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
                         end
                     end
                 end
                 if (rsp_matrix_id == 4'b0001) begin
-                    `TRACE(1, ("\n"));
+                    `TRACE(2, ("\n"));
                     if (sparsity == 2'd2) begin
                         for (integer l = 0; l < `NUM_LSU_LANES; l++) begin
                             if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
                                 if (l < `NUM_LSU_LANES / 2) begin
-                                    `TRACE(1, ("    A_bitmap[%0d]=%b\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
+                                    `TRACE(2, ("    A_bitmap[%0d]=%b\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
                                 end
                                 else if (l >= `NUM_LSU_LANES / 2) begin
-                                    `TRACE(1, ("    B_bitmap[%0d]=%b\n", l - `NUM_LSU_LANES / 2, tcu_lsu_mem_if.rsp_data.data[l]));
+                                    `TRACE(2, ("    B_bitmap[%0d]=%b\n", l - `NUM_LSU_LANES / 2, tcu_lsu_mem_if.rsp_data.data[l]));
                                 end
                             end
                         end
@@ -1504,7 +1504,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     else if (sparsity == 2'd1) begin
                         for (integer l = 0; l < `NUM_LSU_LANES; l++) begin
                             if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
-                                `TRACE(1, ("    B_bitmap[%0d]=%b\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
+                                `TRACE(2, ("    B_bitmap[%0d]=%b\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
                             end
                         end
                     end
@@ -1518,21 +1518,21 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 `TRACE(1, ("ERROR: both MEM read/write are valid\n"));
             end
             if (issue_busy && (32'(d_line_to_flush) == TCU_TC_M_OP * TCU_FEOP_BLOCK_N_SIZE)) begin
-                `TRACE(1, ("%t:[tcu_op_core]: d_line_to_flush=%0d\n", $time, d_line_to_flush));
+                `TRACE(2, ("%t:[tcu_op_core]: d_line_to_flush=%0d\n", $time, d_line_to_flush));
             end
             if (wr_req_fire) begin
-                `TRACE(1, ("%t: [tcu_op_core]: Flushing, d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d\n read_block=%0d read_data=\n", $time, d_lines_ready, d_line_to_flush, d_line_to_flush_delayed, read_block_idx));
-                `TRACE_ARRAY1D(1, "0x%0h ", read_data, TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE);
-                `TRACE(1, ("\n"));
-                `TRACE(1, ("%t: LMEM: Issuing write request, req_addr[0]=0x%x mask=%b, tag=%b\n", 
+                `TRACE(2, ("%t: [tcu_op_core]: Flushing, d_lines_ready=%0d d_line_to_flush=%0d d_line_to_flush_delayed=%0d\n read_block=%0d read_data=\n", $time, d_lines_ready, d_line_to_flush, d_line_to_flush_delayed, read_block_idx));
+                `TRACE_ARRAY1D(2, "0x%0h ", read_data, TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE);
+                `TRACE(2, ("\n"));
+                `TRACE(2, ("%t: LMEM: Issuing write request, req_addr[0]=0x%x mask=%b, tag=%b\n", 
                             $time, d_tile_addr, tcu_lsu_mem_if.req_data.mask, tcu_lsu_mem_if.req_data.tag));
-                `TRACE(1, ("d_line being written to MEM: "));
-                `TRACE_ARRAY1D(1, "0x%0h ", d_line, TCU_FEOP_BLOCK_N_SIZE);
-                `TRACE(1, ("\n"));
+                `TRACE(2, ("d_line being written to MEM: "));
+                `TRACE_ARRAY1D(2, "0x%0h ", d_line, TCU_FEOP_BLOCK_N_SIZE);
+                `TRACE(2, ("\n"));
 
-                `TRACE(1, ("[tcu_op_core]: req_data.data="));
-                `TRACE_ARRAY1D(1, "0x%0h", tcu_lsu_mem_if.req_data.data, `NUM_LSU_LANES);
-                `TRACE(1, ("\n"));
+                `TRACE(2, ("[tcu_op_core]: req_data.data="));
+                `TRACE_ARRAY1D(2, "0x%0h", tcu_lsu_mem_if.req_data.data, `NUM_LSU_LANES);
+                `TRACE(2, ("\n"));
             end
             if (busy_r) begin
             `ifndef TCU_DISABLE_S1
@@ -1545,15 +1545,6 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 end
             `endif
             end
-            // if (busy) begin
-            //     `TRACE(1, ("[tcu_op_core]: issue_busy=%b busy=%b feop_enable=%b issuing_done=%b a_window_ready=%b b_window_ready=%b bitmap_block_ready=%b\n", issue_busy, busy, feop_enable, issuing_done, a_window_ready, b_window_ready, bitmap_block_ready));
-            //     `TRACE(1, ("[tcu_op_core]: accumulate_c=%b accu_queues_ready=%b valid_in_delayed=%b\n", accumulate_c, accu_queues_ready, valid_in_delayed));
-            //     `TRACE(1, ("a_curr_loaded=%b a_next_loaded=%b a_window_ready=%b\n", a_curr_loaded, a_next_loaded, a_window_ready));
-            //     `TRACE(1, ("b_curr_loaded=%b b_next_loaded=%b b_window_ready=%b\n", b_curr_loaded, b_next_loaded, b_window_ready));
-            //     `TRACE(1, ("bitmap_blocks_loaded=%0d bitmap_block_ready=%b\n", bitmap_blocks_loaded, bitmap_block_ready));
-            //     `TRACE(1, ("a_blk_ld_bits=%b a_active_block=%b a_load_block=%b\n", a_blk_ld_bits, a_active_block, a_load_block));
-            //     `TRACE(1, ("b_blk_ld_bits=%b b_active_block=%b b_load_block=%b\n", b_blk_ld_bits, b_active_block, b_load_block));
-            // end
         end
     end
 

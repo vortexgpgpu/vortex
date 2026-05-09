@@ -1,7 +1,7 @@
 Testbench: sgemm_tcu_op
 Sparsity Mode:0 | MxNxK=32x32x256 | A sparsity=0.0732422% | B sparsity=0.0732422% | It=fp8
 Flags: TCU_OP, TCU_TYPE_DPI
-BLOCK_M=2, BLOCK_N=16, XBAR_QUEUE_DEPTH=4
+BLOCK_M=2, BLOCK_N=16, XBAR_QUEUE_DEPTH=2
 Threads: 32, Warps: 2
 perf=2
 

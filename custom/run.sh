@@ -22,6 +22,7 @@ BLOCK_M=2
 BLOCK_N=16
 XBAR_QUEUE_DEPTH=2
 PERF_CLASS=2
+DEBUG_LEVEL=1
 LOG_FILE=run.log
 DO_CLEAN=1
 EXTRA_BUILD_CONFIGS=""
@@ -47,6 +48,7 @@ Options:
   -N <value>   FEOP BLOCK_N override (default: 16)
   -Q <value>   FEOP XBAR_QUEUE_DEPTH override (default: 2)
   -p <value>   blackbox --perf class (default: 2)
+  -d <value>   blackbox --debug level (default: 1)
   -l <path>    blackbox log file relative to build/ (default: run.log)
   -C           Skip make clean
   -h           Show this help
@@ -92,6 +94,19 @@ normalize_long_options() {
           exit 1
         fi
         args+=("-T" "$2")
+        shift 2
+        ;;
+      --debug=*)
+        args+=("-d" "${1#*=}")
+        shift
+        ;;
+      --debug)
+        if [[ $# -lt 2 ]]; then
+          echo "Missing argument for --debug" >&2
+          usage >&2
+          exit 1
+        fi
+        args+=("-d" "$2")
         shift 2
         ;;
       --help)
@@ -171,7 +186,7 @@ run_ip_test() {
     --driver=rtlsim \
     --app="${app}" \
     --warps="${WARPS}" \
-    --debug=1 \
+    --debug="${DEBUG_LEVEL}" \
     --log="${log_file}" \
     --args="${ip_app_args}"
   )
@@ -217,7 +232,7 @@ NORMALIZED_ARGS=()
 normalize_long_options "$@"
 set -- "${NORMALIZED_ARGS[@]}"
 
-while getopts ":m:n:k:s:a:b:t:T:i:o:w:M:N:Q:p:l:Ch" opt; do
+while getopts ":m:n:k:s:a:b:t:T:i:o:w:M:N:Q:p:d:l:Ch" opt; do
   case "${opt}" in
     m) M="${OPTARG}" ;;
     n) N="${OPTARG}" ;;
@@ -234,6 +249,7 @@ while getopts ":m:n:k:s:a:b:t:T:i:o:w:M:N:Q:p:l:Ch" opt; do
     N) BLOCK_N="${OPTARG}" ;;
     Q) XBAR_QUEUE_DEPTH="${OPTARG}" ;;
     p) PERF_CLASS="${OPTARG}" ;;
+    d) DEBUG_LEVEL="${OPTARG}" ;;
     l) LOG_FILE="${OPTARG}" ;;
     C) DO_CLEAN=0 ;;
     h)
@@ -355,7 +371,7 @@ if [[ "${RUN_TCU_OP}" -eq 1 ]]; then
     --driver=rtlsim
     --app=sgemm_tcu_op
     --warps="${WARPS}"
-    --debug=1
+    --debug="${DEBUG_LEVEL}"
     --log="${LOG_FILE}"
     --args="${APP_ARGS_STR}"
   )

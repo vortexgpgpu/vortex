@@ -158,3 +158,92 @@ Vortex's compiler toolchain is **[VOLT](https://github.com/vortexgpgpu/Volt)** (
 ```
 - For additional information, check out the [documentation](docs/index.md)
 
+# Reproducing Figure 3 of the "RTL Design and Analysis of Sparse Tensor Cores for Unstructured Sparsity in RISC-V GPUs" - OSCAR
+
+The Figure 3 is the `custom/stats/sgemm_tcu_sparsity_cycles_instructions.pdf`, generated from `.stat` summaries of the SGEMM TCU runs. The checked-in summaries are enough to regenerate the plot, while the commands below also show how to rerun the simulations from a configured build tree.
+
+### Regenerate the plot from checked-in stats
+
+From the repository root:
+
+```sh
+custom/venv/bin/python custom/plot_sparsity_cycles_instructions.py \
+  --stats-dirs custom/stats custom/run_all \
+  -o custom/stats/sgemm_tcu_sparsity_cycles_instructions.pdf
+```
+
+This also writes `custom/stats/sgemm_tcu_sparsity_cycles_instructions.csv`, which records the data selected for the figure. The plotter requires `matplotlib` and `numpy`; if those packages are installed system-wide, `python3` can be used instead:
+
+```sh
+python3 custom/plot_sparsity_cycles_instructions.py \
+  --stats-dirs custom/stats custom/run_all \
+  -o custom/stats/sgemm_tcu_sparsity_cycles_instructions.pdf
+```
+
+### Rerun the simulations and rebuild the artifact
+
+First build Vortex normally and source the generated toolchain environment:
+
+```sh
+mkdir -p build
+cd build
+../configure --xlen=32 --tooldir=$HOME/tools
+./ci/toolchain_install.sh --all
+source ./ci/toolchain_env.sh
+make -s
+cd ..
+```
+
+Run the six exact configurations used by the figure, one testbench per run. These runs use `rtlsim`, `NUM_THREADS=32`, `fp8` inputs, `fp32` outputs, `warps=2`, `BLOCK_M=2`, `BLOCK_N=16`, `XBAR_QUEUE_DEPTH=4`, and `perf=2`.
+
+```sh
+./custom/run.sh -t sgemm_tcu \
+  -m 32 -n 32 -k 256 -s 0 -a 0.0 -b 0.0 \
+  -T 32 -i fp8 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -d 0 \
+  -l run1.log
+
+./custom/run.sh -t sgemm_tcu_sp \
+  -m 32 -n 32 -k 256 -s 0 -a 0.0 -b 0.0 \
+  -T 32 -i fp8 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -d 0 \
+  -l run1.log
+
+./custom/run.sh -t sgemm_tcu_op \
+  -m 32 -n 32 -k 256 -s 0 -a 0.0 -b 0.0 \
+  -T 32 -i fp8 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -d 0 \
+  -l run1.log
+
+./custom/run.sh -t sgemm_tcu_op \
+  -m 32 -n 32 -k 256 -s 2 -a 0.2 -b 0.2 \
+  -T 32 -i fp8 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -d 0 \
+  -l run4.log
+
+./custom/run.sh -t sgemm_tcu_op \
+  -m 32 -n 32 -k 256 -s 2 -a 0.6 -b 0.6 \
+  -T 32 -i fp8 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -d 0 \
+  -l run8.log
+
+./custom/run.sh -t sgemm_tcu_op \
+  -m 32 -n 32 -k 256 -s 2 -a 0.9 -b 0.9 \
+  -T 32 -i fp8 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -d 0 \
+  -l run12.log
+```
+
+Extract fresh `.stat` summaries from the logs:
+
+```sh
+mkdir -p custom/repro_stats
+STATS_DIR=custom/repro_stats custom/venv/bin/python custom/plot.py build/run1.log
+STATS_DIR=custom/repro_stats custom/venv/bin/python custom/plot.py build/run1_ip.log
+STATS_DIR=custom/repro_stats custom/venv/bin/python custom/plot.py build/run1_ip_sp.log
+STATS_DIR=custom/repro_stats custom/venv/bin/python custom/plot.py build/run4.log
+STATS_DIR=custom/repro_stats custom/venv/bin/python custom/plot.py build/run8.log
+STATS_DIR=custom/repro_stats custom/venv/bin/python custom/plot.py build/run12.log
+```
+
+Finally, regenerate the PDF and the companion CSV from the fresh summaries:
+
+```sh
+custom/venv/bin/python custom/plot_sparsity_cycles_instructions.py \
+  --stats-dirs custom/repro_stats \
+  -o custom/repro_stats/sgemm_tcu_sparsity_cycles_instructions.pdf
+```
