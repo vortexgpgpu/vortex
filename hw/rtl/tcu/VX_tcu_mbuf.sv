@@ -313,7 +313,8 @@ module VX_tcu_mbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     localparam LG_WG_HALF_K = `CLOG2(WG_HALF_K);
-    wire [LG_WG_HALF_K-1:0] step_k_half = (WG_HALF_K == 1) ? '0 : req_step_k[LG_WG_HALF_K-1:0];
+    // Width pinned to UP(.) so WG_HALF_K=1 stays a 1-bit wire (no [-1:0]).
+    wire [`UP(LG_WG_HALF_K)-1:0] step_k_half = (WG_HALF_K == 1) ? '0 : req_step_k[`UP(LG_WG_HALF_K)-1:0];
     if (WG_HALF_K == 1) begin : g_step_k_half_dontuse
         `UNUSED_VAR (req_step_k)
     end

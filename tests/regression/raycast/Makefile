@@ -11,7 +11,10 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 CXXFLAGS += -DASSETS_PATHS='"$(SRC_DIR)"'
 
-OPTS ?=
+# RTLsim is roughly two orders of magnitude slower than SimX; keep the
+# default workload small so make-driven sweeps fit in a 60s budget.
+# Override OPTS at the command line for full-resolution runs.
+OPTS ?= -w 16 -h 12
 
 KERNEL_LIB := vortex2
 

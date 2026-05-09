@@ -94,6 +94,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
           |  HART_ID_WIDTH'(i)
         );
         assign mem_req_attr_struct[i].amo = lane_amo;
+    `else
+        // EXT_A disabled: tie the AMO sideband to zero so the bits don't
+        // propagate as 'x under --x-assign unique (otherwise downstream
+        // checks like VX_lmem_switch's amo-on-LMEM guard fire spuriously).
+        assign mem_req_attr_struct[i].amo = '0;
     `endif
         assign mem_req_attr[i] = mem_req_attr_struct[i];
     end
