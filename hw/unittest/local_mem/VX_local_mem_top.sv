@@ -44,7 +44,7 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
     input  wire [NUM_REQS-1:0]                 mem_req_rw,
     input  wire [NUM_REQS-1:0][WORD_SIZE-1:0]  mem_req_byteen,
     input  wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] mem_req_addr,
-    input  wire [NUM_REQS-1:0][MEM_FLAGS_WIDTH-1:0] mem_req_flags,
+    input  wire [NUM_REQS-1:0][MEM_ATTR_WIDTH-1:0] mem_req_attr,
     input  wire [NUM_REQS-1:0][WORD_SIZE*8-1:0] mem_req_data,
     input  wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  mem_req_tag,
     output wire [NUM_REQS-1:0]                 mem_req_ready,
@@ -73,7 +73,7 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
         assign lsu_bus_if[i].req_data.rw = mem_req_rw[i];
         assign lsu_bus_if[i].req_data.byteen = mem_req_byteen[i];
         assign lsu_bus_if[i].req_data.addr = mem_req_addr[i];
-        assign lsu_bus_if[i].req_data.flags = mem_req_flags[i];
+        assign lsu_bus_if[i].req_data.attr = mem_req_attr[i];
         assign lsu_bus_if[i].req_data.data = mem_req_data[i];
         assign lsu_bus_if[i].req_data.tag = mem_req_tag[i];
         assign mem_req_ready[i] = lsu_bus_if[i].req_ready;

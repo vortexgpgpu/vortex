@@ -27,7 +27,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0] lsu_req_mask,
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][LSU_WORD_SIZE-1:0] lsu_req_byteen,
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_req_addr,
-    input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][MEM_FLAGS_WIDTH-1:0] lsu_req_flags,
+    input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][MEM_ATTR_WIDTH-1:0] lsu_req_user,
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][LSU_WORD_WIDTH-1:0] lsu_req_data,
     input  wire [`NUM_LSU_BLOCKS-1:0][LSU_TAG_WIDTH-1:0] lsu_req_tag,
     output wire [`NUM_LSU_BLOCKS-1:0]                   lsu_req_ready,
@@ -44,7 +44,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     output wire [DCACHE_NUM_REQS-1:0]                   mem_req_rw,
     output wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE-1:0] mem_req_byteen,
     output wire [DCACHE_NUM_REQS-1:0][DCACHE_ADDR_WIDTH-1:0] mem_req_addr,
-    output wire [DCACHE_NUM_REQS-1:0][MEM_FLAGS_WIDTH-1:0] mem_req_flags,
+    output wire [DCACHE_NUM_REQS-1:0][MEM_ATTR_WIDTH-1:0] mem_req_attr,
     output wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE*8-1:0] mem_req_data,
     output wire [DCACHE_NUM_REQS-1:0][DCACHE_TAG_WIDTH-1:0] mem_req_tag,
     input  wire [DCACHE_NUM_REQS-1:0]                   mem_req_ready,
@@ -68,7 +68,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
         assign lsu_mem_if[i].req_data.mask = lsu_req_mask[i];
         assign lsu_mem_if[i].req_data.byteen = lsu_req_byteen[i];
         assign lsu_mem_if[i].req_data.addr = lsu_req_addr[i];
-        assign lsu_mem_if[i].req_data.flags = lsu_req_flags[i];
+        assign lsu_mem_if[i].req_data.user = lsu_req_user[i];
         assign lsu_mem_if[i].req_data.data = lsu_req_data[i];
         assign lsu_mem_if[i].req_data.tag = lsu_req_tag[i];
         assign lsu_req_ready[i] = lsu_mem_if[i].req_ready;
@@ -94,7 +94,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
         assign mem_req_rw[i] = mem_bus_if[i].req_data.rw;
         assign mem_req_byteen[i] = mem_bus_if[i].req_data.byteen;
         assign mem_req_addr[i] = mem_bus_if[i].req_data.addr;
-        assign mem_req_flags[i] = mem_bus_if[i].req_data.flags;
+        assign mem_req_attr[i] = mem_bus_if[i].req_data.attr;
         assign mem_req_data[i] = mem_bus_if[i].req_data.data;
         assign mem_req_tag[i] = mem_bus_if[i].req_data.tag;
         assign mem_bus_if[i].req_ready = mem_req_ready[i];

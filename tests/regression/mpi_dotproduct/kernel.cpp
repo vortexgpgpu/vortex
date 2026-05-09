@@ -7,8 +7,8 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	auto dst_ptr  = reinterpret_cast<TYPE*>(arg->dst_addr);
 	auto num_points = arg->num_points;
 
-	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-	int cacheIndex = threadIdx.x;
+	uint32_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+	uint32_t cacheIndex = threadIdx.x;
 
 	auto cache = reinterpret_cast<TYPE*>(__local_mem(blockDim.x * sizeof(TYPE)));
 
@@ -23,7 +23,7 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 
     __syncthreads();
 
-	int i = blockDim.x/2;
+	uint32_t i = blockDim.x/2;
 	while (i != 0){
 		if (cacheIndex < i)
 			cache[cacheIndex] += cache[cacheIndex + i];

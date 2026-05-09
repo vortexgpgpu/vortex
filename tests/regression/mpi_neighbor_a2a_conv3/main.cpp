@@ -2,6 +2,7 @@
 #include <vector>
 #include <unistd.h>
 #include <cmath>
+#include <cstring>
 #include <mpi.h>
 #include <vortex.h>
 #include "common.h"

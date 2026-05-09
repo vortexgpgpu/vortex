@@ -25,10 +25,10 @@ class Comparator {};
 template <>
 class Comparator<float> {
 public:
-  static float generate(uint32_t idx) {
+  static float generate(uint32_t /*idx*/) {
     return static_cast<float>(rand()) / RAND_MAX;
   }
-  static bool compare(float a, float b, int index, int errors) {
+  static bool compare(float a, float b, int /*index*/, int errors) {
     union { float f; int i; } fa, fb;
     fa.f = a; fb.f = b;
     int d = std::abs(fa.i - fb.i);
@@ -95,8 +95,7 @@ int main(int argc, char* argv[]) {
   uint32_t base = size / world_size;
   uint32_t rem  = size % world_size;
 
-  uint32_t local_size = (rank < rem) ? base + 1 : base;
-  uint32_t start = rank * base + std::min(rank, (int)rem);
+  uint32_t local_size = ((uint32_t)rank < rem) ? base + 1 : base;
 
   // full input on rank 0
   std::vector<TYPE> full_src0, full_src1;
@@ -112,8 +111,8 @@ int main(int argc, char* argv[]) {
   // Scatter setup
   std::vector<int> counts(world_size), displs(world_size);
   for (int r = 0; r < world_size; r++) {
-    counts[r] = (r < rem) ? base + 1 : base;
-    displs[r] = r * base + std::min(r, (int)rem);
+    counts[r] = ((uint32_t)r < rem) ? base + 1 : base;
+    displs[r] = r * base + std::min((uint32_t)r, rem);
   }
 
   std::vector<TYPE> h_src0(local_size);

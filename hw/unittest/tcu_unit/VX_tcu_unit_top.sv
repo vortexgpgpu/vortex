@@ -139,6 +139,7 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     assign commit_data               = commit_if[0].data.data;
     assign commit_sop                = commit_if[0].data.sop;
     assign commit_eop                = commit_if[0].data.eop;
+    `UNUSED_VAR (commit_if[0].data.cta_id)
 
     // ---- DUT -------------------------------------------------------------
     VX_tcu_unit #(

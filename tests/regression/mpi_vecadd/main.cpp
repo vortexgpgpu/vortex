@@ -26,7 +26,7 @@ template <>
 class Comparator<int> {
 public:
   static const char* type_str() { return "integer"; }
-  static int generate(uint32_t idx) { return rand(); }
+  static int generate(uint32_t /*idx*/) { return rand(); }
   static bool compare(int a, int b, int index, int errors) {
     if (a != b && errors < 100) {
       printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
@@ -40,7 +40,7 @@ template <>
 class Comparator<float> {
 public:
   static const char* type_str() { return "float"; }
-  static float generate(uint32_t idx) { return static_cast<float>(rand()) / RAND_MAX; }
+  static float generate(uint32_t /*idx*/) { return static_cast<float>(rand()) / RAND_MAX; }
   static bool compare(float a, float b, int index, int errors) {
     union { float f; int i; } fa, fb;
     fa.f = a; fb.f = b;
