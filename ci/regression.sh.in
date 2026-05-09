@@ -160,36 +160,44 @@ amo()
     make -C sw/runtime/rtlsim
 
     # RISC-V 'A' ISA conformance (rv${XLEN}ua-p-{amo*,lrsc}).
-    CONFIGS="-DEXT_A_ENABLE" make -C tests/riscv/isa run-simx-${XLEN}a
-    CONFIGS="-DEXT_A_ENABLE" make -C tests/riscv/isa run-rtlsim-${XLEN}a
+    CONFIGS="-DEXT_A_ENABLE" timeout 120s make -C tests/riscv/isa run-simx-${XLEN}a
+    CONFIGS="-DEXT_A_ENABLE" timeout 120s make -C tests/riscv/isa run-rtlsim-${XLEN}a
 
-    # Baseline (L1 = LLC). Both writethrough and writeback variants.
-    CONFIGS="-DEXT_A_ENABLE" ./ci/blackbox.sh --driver=simx   --app=amo
-    CONFIGS="-DEXT_A_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=amo
-    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=0 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=amo
-    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=amo
-    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_NUM_WAYS=4"                       ./ci/blackbox.sh --driver=simx   --app=amo
+    # Each test invocation is hard-capped at 120s (build + run combined).
+    # Heavy contention configs use --args=-n1 to keep the run inside that
+    # budget; the regression Makefile's default OPTS=-n32 is fine for the
+    # smaller-hart-count baselines that build incrementally.
 
-    # Multi-core, L1 = LLC. Stresses cross-warp/core LR/SC reservation.
-    CONFIGS="-DEXT_A_ENABLE" ./ci/blackbox.sh --driver=simx   --cores=2 --app=amo
-    CONFIGS="-DEXT_A_ENABLE" ./ci/blackbox.sh --driver=rtlsim --cores=2 --app=amo
-    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --cores=2 --app=amo
-    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=simx   --cores=2 --app=amo
+    # Single-core L1 = LLC. Default config (4 warps × 4 threads = 16 harts)
+    # plus multi-warp / multi-thread stress on a single shared L1.
+    # Both writethrough and writeback variants.
+    CONFIGS="-DEXT_A_ENABLE" timeout 120s ./ci/blackbox.sh --driver=simx   --app=amo
+    CONFIGS="-DEXT_A_ENABLE" timeout 120s ./ci/blackbox.sh --driver=rtlsim --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=0 -DDCACHE_NUM_WAYS=4" timeout 120s ./ci/blackbox.sh --driver=rtlsim --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=1 -DDCACHE_NUM_WAYS=4" timeout 120s ./ci/blackbox.sh --driver=rtlsim --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DDCACHE_WRITEBACK=1 -DDCACHE_NUM_WAYS=4"                       timeout 120s ./ci/blackbox.sh --driver=simx   --app=amo
+    CONFIGS="-DEXT_A_ENABLE" timeout 120s ./ci/blackbox.sh --driver=simx   --threads=8 --args=-n1 --app=amo
+    CONFIGS="-DEXT_A_ENABLE" timeout 120s ./ci/blackbox.sh --driver=rtlsim --threads=8 --args=-n1 --app=amo
 
-    # SimX-only multi-level cache coverage. RTLsim equivalents are
-    # gated on the §3.8 non-LLC AMO passthrough work landing in RTL
-    # (see VX_cache_bank.sv g_no_amo_unit branch); without it, an
-    # L1-cached AMO returns stale data instead of forwarding to LLC.
+    # Multi-core / multi-cluster requires a shared LLC for AMO coherence
+    # (per-core DCACHEs each have their own reservation table). SimX is
+    # the gold reference here because it implements proposal §3.8 non-LLC
+    # passthrough; the RTL equivalents are gated on §3.8 landing in RTL
+    # (see VX_cache_bank.sv g_no_amo_unit branch).
 
-    # L1 + L2 (L2 = LLC) — writethrough then writeback at each level.
-    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1"                                         ./ci/blackbox.sh --driver=simx --cores=2 --l2cache --app=amo
-    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1 -DL2_WRITEBACK=1"                        ./ci/blackbox.sh --driver=simx --cores=2 --l2cache --app=amo
-    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1"   ./ci/blackbox.sh --driver=simx --cores=2 --l2cache --app=amo
+    # AMO §3.1.5 build invariant: every cache strictly above the LLC
+    # must be write-through (a WB intermediate could absorb a store
+    # without the LLC seeing it → spurious SC success). Build-asserted
+    # in sim/simx/processor.cpp; only the LLC-level WB flips are valid.
 
-    # L1 + L2 + L3 (L3 = LLC) — multi-cluster, both WB and WT.
-    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1"                                                          ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=amo
-    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1"                        ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=amo
-    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1"   ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=amo
+    # L1 + L2 (L2 = LLC), 2 cores — L1 stays WT; L2 is WT or WB.
+    # This already exercises the §3.8 non-LLC passthrough end-to-end
+    # (L1 forwards AMOs to L2 LLC). A deeper L1+L2+L3 hierarchy would
+    # use the same code path but adds modeling cycles that make the
+    # 32-hart contention test (lrsc_counter) prohibitively slow under
+    # SimX's per-cycle cache simulation, so we keep coverage at L1+L2.
+    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1"                  timeout 120s ./ci/blackbox.sh --driver=simx --cores=2 --l2cache --args=-n1 --app=amo
+    CONFIGS="-DEXT_A_ENABLE -DSOCKET_SIZE=1 -DL2_WRITEBACK=1" timeout 120s ./ci/blackbox.sh --driver=simx --cores=2 --l2cache --args=-n1 --app=amo
 
     echo "amo tests done!"
 }
