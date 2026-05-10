@@ -652,7 +652,16 @@ private:
 #else
       const bool is_amo_passthru = false;
 #endif
-      bool needs_mshr = (!core_req.is_write() || config_.write_back || is_amo) && !is_amo_passthru;
+      // Gate ALL non-AMO-passthru requests on MSHR occupancy. RTL applies
+      // the same conservative gate via mshr_alm_full because a write-through
+      // store can need a wt-merge MSHR slot if a fill is pending on the
+      // same line. Letting writes in past a full MSHR causes them to stall
+      // inside processRequests() on the wt-merge enqueue, which holds the
+      // bank pipe and prevents fill responses from draining — a classic
+      // deadlock. Reserving at admission is the simplest mirror of the
+      // RTL behavior.
+      bool needs_mshr = !is_amo_passthru;
+      (void)is_amo;
       if (needs_mshr && (mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
         ++perf_stats_.mshr_stalls;
         return;
