@@ -182,17 +182,23 @@ module VX_cache_repl #(
             `UNUSED_VAR (lookup_hit)
             `UNUSED_VAR (lookup_line)
             `UNUSED_VAR (lookup_way)
-            `UNUSED_VAR (repl_valid)
             `UNUSED_VAR (repl_line)
-            reg [WAY_SEL_WIDTH-1:0] victim_idx;
+            localparam STATE_W = 2 * WAY_SEL_WIDTH;
+            reg [STATE_W-1:0] rng_state;
+            // Maximal-period LFSR over STATE_W bits using xnor of top two bits.
+            wire rng_fb = ~(rng_state[STATE_W-1] ^ rng_state[STATE_W-2]);
             always @(posedge clk) begin
                 if (reset) begin
-                    victim_idx <= 0;
-                end else if (~stall) begin
-                    victim_idx <= victim_idx + 1;
+                    rng_state <= {STATE_W{1'b1}};
+                end else if (repl_valid) begin
+                    rng_state <= {rng_state[STATE_W-2:0], rng_fb};
                 end
             end
-            assign repl_way = victim_idx;
+            // XOR-mix LFSR with line index so different lines see different
+            // victim sequences for the same RNG state.
+            assign repl_way = rng_state[WAY_SEL_WIDTH-1:0]
+                            ^ rng_state[STATE_W-1 -: WAY_SEL_WIDTH]
+                            ^ repl_line[WAY_SEL_WIDTH-1:0];
         end
     end else begin : g_disable
         `UNUSED_VAR (clk)
