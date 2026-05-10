@@ -13,6 +13,7 @@
 
 #include "decompressor.h"
 #include "instr_trace.h"
+#include "VX_config.h"
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -96,6 +97,13 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCI(nzuimm, 2, 0b000, rd_, 0b0010011);
             break;
         }
+        case 0b001: { // C.FLD (RV32DC/RV64DC) -> FLD rd', uimm(rs1')
+            uint32_t rd_  = rcp(bits(h, 4, 2));
+            uint32_t rs1_ = rcp(bits(h, 9, 7));
+            uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 6, 5) << 6);
+            out.instr32 = ENCI(uimm, rs1_, 0b011, rd_, 0b0000111);
+            break;
+        }
         case 0b010: { // C.LW -> LW rd', offset(rs1')
             uint32_t rd_  = rcp(bits(h, 4, 2));
             uint32_t rs1_ = rcp(bits(h, 9, 7));
@@ -103,11 +111,27 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCI(uimm, rs1_, 0b010, rd_, 0b0000011);
             break;
         }
-        case 0b011: { // C.FLW -> FLW rd', offset(rs1')
+        case 0b101: { // C.FSD (RV32DC/RV64DC) -> FSD rs2', uimm(rs1')
+            uint32_t rs2_ = rcp(bits(h, 4, 2));
+            uint32_t rs1_ = rcp(bits(h, 9, 7));
+            uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 6, 5) << 6);
+            out.instr32 = ENCS(uimm, rs2_, rs1_, 0b011, 0b0100111);
+            break;
+        }
+        case 0b011: {
+#ifdef XLEN_64
+            // RV64C: C.LD -> LD rd', uimm(rs1')
+            uint32_t rd_  = rcp(bits(h, 4, 2));
+            uint32_t rs1_ = rcp(bits(h, 9, 7));
+            uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 6, 5) << 6);
+            out.instr32 = ENCI(uimm, rs1_, 0b011, rd_, 0b0000011);
+#else
+            // RV32FC: C.FLW -> FLW rd', offset(rs1')
             uint32_t rd_  = rcp(bits(h, 4, 2));
             uint32_t rs1_ = rcp(bits(h, 9, 7));
             uint32_t uimm = (bit(h, 5) << 6) | (bits(h, 12, 10) << 3) | (bit(h, 6) << 2);
             out.instr32 = ENCI(uimm, rs1_, 0b010, rd_, 0b0000111);
+#endif
             break;
         }
         case 0b110: { // C.SW -> SW rs2', offset(rs1')
@@ -117,11 +141,20 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCS(uimm, rs2_, rs1_, 0b010, 0b0100011);
             break;
         }
-        case 0b111: { // C.FSW
+        case 0b111: {
+#ifdef XLEN_64
+            // RV64C: C.SD -> SD rs2', uimm(rs1')
+            uint32_t rs2_ = rcp(bits(h, 4, 2));
+            uint32_t rs1_ = rcp(bits(h, 9, 7));
+            uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 6, 5) << 6);
+            out.instr32 = ENCS(uimm, rs2_, rs1_, 0b011, 0b0100011);
+#else
+            // RV32FC: C.FSW -> FSW rs2', offset(rs1')
             uint32_t rs2_ = rcp(bits(h, 4, 2));
             uint32_t rs1_ = rcp(bits(h, 9, 7));
             uint32_t uimm = (bit(h, 5) << 6) | (bits(h, 12, 10) << 3) | (bit(h, 6) << 2);
             out.instr32 = ENCS(uimm, rs2_, rs1_, 0b010, 0b0100111);
+#endif
             break;
         }
         default:
@@ -142,13 +175,22 @@ DecompResult rvc_decompress(uint32_t word) {
             }
             break;
         }
-        case 0b001: { // C.JAL -> JAL x1, imm  (RV32 only)
+        case 0b001: {
+#ifdef XLEN_64
+            // RV64C: C.ADDIW -> ADDIW rd, rd, imm (rd != 0)
+            uint32_t rd = bits(h, 11, 7);
+            int32_t imm = static_cast<int32_t>(sext_imm(((bit(h,12)<<5) | bits(h,6,2)), 6));
+            if (rd == 0) { out.illegal = true; break; }
+            out.instr32 = ENCI(imm & 0xFFF, rd, 0b000, rd, 0b0011011);
+#else
+            // RV32C: C.JAL -> JAL x1, imm
             uint32_t imm =
                 (bit(h,12)<<11) | (bit(h,8)<<10) | (bits(h,10,9)<<8) | (bit(h,6)<<7) |
                 (bit(h,7)<<6) | (bit(h,2)<<5) | (bit(h,11)<<4) | (bits(h,5,3)<<1);
             int32_t simm = static_cast<int32_t>(sext_imm(imm, 12));
             uint32_t imm21 = static_cast<uint32_t>(simm) & 0x001FFFFF;
             out.instr32 = ENCUJ(imm21, 1, 0b1101111);
+#endif
             break;
         }
         case 0b010: { // C.LI -> ADDI rd, x0, imm (rd=x0 is HINT, treat as NOP)
@@ -187,15 +229,27 @@ DecompResult rvc_decompress(uint32_t word) {
                 uint32_t rd_ = rcp(bits(h,9,7));
                 int32_t imm = static_cast<int32_t>(sext_imm(((bit(h,12)<<5) | bits(h,6,2)), 6));
                 out.instr32 = ENCI(imm & 0xFFF, rd_, 0b111, rd_, 0b0010011);
-            } else { // 0b11: C.SUB/XOR/OR/AND (register form)
+            } else { // 0b11: C.SUB/XOR/OR/AND, or RV64C C.SUBW/C.ADDW (bit12=1)
                 uint32_t rd_  = rcp(bits(h,9,7));
                 uint32_t rs2_ = rcp(bits(h,4,2));
                 uint32_t op2  = bits(h, 6,5);
-                switch (op2) {
-                    case 0b00: out.instr32 = ENCR(0b0100000, rs2_, rd_, 0b000, rd_, 0b0110011); break; // C.SUB
-                    case 0b01: out.instr32 = ENCR(0b0000000, rs2_, rd_, 0b100, rd_, 0b0110011); break; // C.XOR
-                    case 0b10: out.instr32 = ENCR(0b0000000, rs2_, rd_, 0b110, rd_, 0b0110011); break; // C.OR
-                    case 0b11: out.instr32 = ENCR(0b0000000, rs2_, rd_, 0b111, rd_, 0b0110011); break; // C.AND
+                if (bit(h,12) == 0) {
+                    switch (op2) {
+                        case 0b00: out.instr32 = ENCR(0b0100000, rs2_, rd_, 0b000, rd_, 0b0110011); break; // C.SUB
+                        case 0b01: out.instr32 = ENCR(0b0000000, rs2_, rd_, 0b100, rd_, 0b0110011); break; // C.XOR
+                        case 0b10: out.instr32 = ENCR(0b0000000, rs2_, rd_, 0b110, rd_, 0b0110011); break; // C.OR
+                        case 0b11: out.instr32 = ENCR(0b0000000, rs2_, rd_, 0b111, rd_, 0b0110011); break; // C.AND
+                    }
+                } else {
+#ifdef XLEN_64
+                    switch (op2) {
+                        case 0b00: out.instr32 = ENCR(0b0100000, rs2_, rd_, 0b000, rd_, 0b0111011); break; // C.SUBW
+                        case 0b01: out.instr32 = ENCR(0b0000000, rs2_, rd_, 0b000, rd_, 0b0111011); break; // C.ADDW
+                        default:   out.illegal = true; break;
+                    }
+#else
+                    out.illegal = true;
+#endif
                 }
             }
             break;
@@ -240,6 +294,18 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCI(sh, rd, 0b001, rd, 0b0010011);
             break;
         }
+        case 0b001: { // C.FLDSP (RV32DC/RV64DC) -> FLD rd, uimm(x2)
+            uint32_t rd = bits(h, 11, 7);
+            uint32_t uimm = (bit(h, 12) << 5) | (bits(h, 6, 5) << 3) | (bits(h, 4, 2) << 6);
+            out.instr32 = ENCI(uimm, 2, 0b011, rd, 0b0000111);
+            break;
+        }
+        case 0b101: { // C.FSDSP (RV32DC/RV64DC) -> FSD rs2, uimm(x2)
+            uint32_t rs2 = bits(h, 6, 2);
+            uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 9, 7) << 6);
+            out.instr32 = ENCS(uimm, rs2, 2, 0b011, 0b0100111);
+            break;
+        }
         case 0b010: { // C.LWSP
             uint32_t rd = bits(h, 11, 7);
             if (rd == 0) { out.illegal = true; break; }
@@ -247,6 +313,15 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCI(uimm, 2, 0b010, rd, 0b0000011);
             break;
         }
+#ifdef XLEN_64
+        case 0b011: { // RV64C: C.LDSP -> LD rd, uimm(x2), rd != 0
+            uint32_t rd = bits(h, 11, 7);
+            if (rd == 0) { out.illegal = true; break; }
+            uint32_t uimm = (bit(h, 12) << 5) | (bits(h, 6, 5) << 3) | (bits(h, 4, 2) << 6);
+            out.instr32 = ENCI(uimm, 2, 0b011, rd, 0b0000011);
+            break;
+        }
+#endif
         case 0b100: {
             uint32_t rd  = bits(h, 11, 7);
             uint32_t rs2 = bits(h, 6, 2);
@@ -283,6 +358,14 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCS(imm, rs2, 2, 0b010, 0b0100011);
             break;
         }
+#ifdef XLEN_64
+        case 0b111: { // RV64C: C.SDSP -> SD rs2, uimm(x2)
+            uint32_t rs2 = bits(h, 6, 2);
+            uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 9, 7) << 6);
+            out.instr32 = ENCS(uimm, rs2, 2, 0b011, 0b0100011);
+            break;
+        }
+#endif
         default:
             out.illegal = true; break;
         }
