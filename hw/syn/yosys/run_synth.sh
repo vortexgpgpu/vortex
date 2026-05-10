@@ -220,10 +220,15 @@ fi
 
 # -------- optional OpenSTA (run_sta.tcl colocated) --------
 if [[ "$RUN_STA" == "1" ]]; then
+  if ! command -v sta >/dev/null 2>&1; then
+    echo "ERROR: OpenSTA ('sta') not found in PATH; required when RUN_STA=1" >&2
+    exit 1
+  fi
   STA_SCRIPT="$SCRIPT_DIR/run_sta.tcl"
   NETLIST="$NET_POST"; [[ -f "$NETLIST" ]] || NETLIST="$NET_PRE"
-  log "TOP=$TOP NETLIST=$NETLIST LIB_TGT=$LIB_TGT LIB_ROOT=$LIB_ROOT SDC_FILE=$SDC_FILE RPT_DIR=$RPT_DIR  SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" sta $STA_SCRIPT"
-  TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$SDC_FILE" RPT_DIR="$RPT_DIR" SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" sta "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1
+  STA_SDC="${RESOLVED_SDC:-$SDC_FILE}"
+  log "TOP=$TOP NETLIST=$NETLIST LIB_TGT=$LIB_TGT LIB_ROOT=$LIB_ROOT SDC_FILE=$STA_SDC RPT_DIR=$RPT_DIR  SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" sta $STA_SCRIPT"
+  TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$STA_SDC" RPT_DIR="$RPT_DIR" SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" sta "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1
   cat "$RPT_DIR/sta.log"
   stamp "sta"
 fi

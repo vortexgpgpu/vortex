@@ -93,7 +93,9 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire [UUID_WIDTH-1:0]   follow_req_uuid;
 
     wire sched_buffered_match;
-    `UNUSED_VAR (rsp_wid)
+    assign rsp_wid = rsp_tag;
+    `UNUSED_VAR (icache_req_tmask)
+    `UNUSED_VAR (rsp_cta_id)
 
     // ibuffer occupancy is already gated by VX_scheduler (schedule_warps
     // masks out warps with full ibufs), so schedule_if.valid implies space.

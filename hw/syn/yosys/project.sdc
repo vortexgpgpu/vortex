@@ -10,7 +10,7 @@ set reset_names [list \
 set clk_port ""
 foreach n $clk_names {
   set p [get_ports -quiet $n]
-  if {[sizeof_collection $p] > 0} {
+  if {$p ne "" && [llength $p] > 0} {
     set clk_port $p
     set clk_port_name $n
     break
@@ -30,15 +30,19 @@ set_clock_uncertainty $target_uncertainty [get_clocks clk]
 # Virtual Clock (for I/O)
 create_clock -name ext_clk -period $target_period
 
-# I/O Delays
-set in_ports [remove_from_collection [all_inputs] [get_ports $clk_port]]
+# I/O Delays — apply to non-clock inputs only (OpenSTA lacks
+# remove_from_collection, so filter via TCL).
+set in_ports {}
+foreach p [all_inputs] {
+  if {$p ne $clk_port} { lappend in_ports $p }
+}
 set_input_delay  $target_io_delay -clock ext_clk $in_ports
 set_output_delay $target_io_delay -clock ext_clk [all_outputs]
 
 # Prevent synthesis from trying to buffer the global reset tree
 set rst_ports [get_ports -quiet $reset_names]
-if {[sizeof_collection $rst_ports] > 0} {
-  puts "INFO: Found reset ports: [get_object_name $rst_ports]"
+if {$rst_ports ne "" && [llength $rst_ports] > 0} {
+  puts "INFO: Found reset ports: $rst_ports"
   set_ideal_network $rst_ports
 } else {
   puts "WARNING: No reset ports found matching your list."

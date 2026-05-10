@@ -445,18 +445,17 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
     end
 
-    reg all_ibuf_full;
-    always @(posedge clk) begin
-        if (reset) all_ibuf_full <= 1'b0;
-        else all_ibuf_full <= (& ibuf_full_n);
-    end
-
     wire [`NUM_WARPS-1:0] preferred_warps = ready_warps & ~ibuf_full;
 `ifndef L1_ENABLE
     // without L1, we should ensure the icache never stalls,
     // because it could deadlock dcache response since they share the same bus.
     wire [`NUM_WARPS-1:0] schedule_warps = preferred_warps;
 `else
+    reg all_ibuf_full;
+    always @(posedge clk) begin
+        if (reset) all_ibuf_full <= 1'b0;
+        else all_ibuf_full <= (& ibuf_full_n);
+    end
     wire [`NUM_WARPS-1:0] schedule_warps = all_ibuf_full ? ready_warps : preferred_warps;
 `endif
 

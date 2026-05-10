@@ -151,10 +151,9 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCUJ(imm21, 1, 0b1101111);
             break;
         }
-        case 0b010: { // C.LI -> ADDI rd, x0, imm
+        case 0b010: { // C.LI -> ADDI rd, x0, imm (rd=x0 is HINT, treat as NOP)
             uint32_t rd = bits(h, 11, 7);
             int32_t imm = static_cast<int32_t>(sext_imm(((bit(h,12)<<5) | bits(h,6,2)), 6));
-            if (rd == 0) { out.illegal = true; break; }
             out.instr32 = ENCI(imm & 0xFFF, 0, 0b000, rd, 0b0010011);
             break;
         }

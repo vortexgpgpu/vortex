@@ -759,7 +759,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         wire [`CS_WORD_WIDTH-1:0] amo_rhs_word_shifted_st1 = write_word_st1 >> amo_bit_off_st1;
         wire [63:0] amo_rhs_st1 = (amo_width_st1 == 2'd2)
                                 ? 64'({32'h0, amo_rhs_word_shifted_st1[31:0]})
-                                : 64'(amo_rhs_word_shifted_st1[63:0]);
+                                : 64'(amo_rhs_word_shifted_st1[AMO_OLD_BITS-1:0]);
         wire [63:0] amo_compute_old = (amo_width_st1 == 2'd2)
                                     ? 64'({32'h0, amo_line_word_shifted_st1[31:0]})
                                     : 64'(amo_line_word_shifted_st1[AMO_OLD_BITS-1:0]);
