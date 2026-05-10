@@ -151,7 +151,7 @@ package VX_tcu_pkg;
     localparam TCU_WG_RC = TCU_RC;  // WGMMA C accumulator starts at same base
     localparam TCU_WG_RA = 24;     // WGMMA A register base (fixed f24..f27)
     localparam TCU_RA = 10;
-    localparam TCU_RB = (TCU_NRB == 4) ? 28 : 24;
+    localparam TCU_RB = (TCU_NRB == 4) ? 27 : 23;
 
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
