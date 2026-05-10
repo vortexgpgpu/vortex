@@ -22,8 +22,8 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*, fpnew_pkg::*; #(
     input  wire reset,
     input  wire enable,
 
-    input  wire [3:0] fmt_s,
-    input  wire [3:0] fmt_d,
+    input  wire [4:0] fmt_s,
+    input  wire [4:0] fmt_d,
 
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
@@ -43,7 +43,7 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*, fpnew_pkg::*; #(
     localparam FMT_DELAY = FMUL_LATENCY;
     localparam C_DELAY = FMUL_LATENCY + 1 + FRED_LATENCY;
 
-    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
+    `UNUSED_VAR ({fmt_s[4:3], fmt_d, c_val});
 
     wire [15:0] a_row16 [TCK];
     wire [15:0] b_col16 [TCK];

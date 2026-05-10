@@ -25,7 +25,7 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     input wire                      valid_in,
     input wire [31:0]               req_id,
 
-    input wire [3:0]                fmt_s,
+    input wire [4:0]                fmt_s,
     input wire [31:0]               c_val,
 
     // Inputs from the Split Paths

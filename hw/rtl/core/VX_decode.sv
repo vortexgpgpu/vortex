@@ -569,8 +569,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                     `endif
                         op_args.tcu.cd_nregs    = rs2[2:1];
                         op_args.tcu.a_from_smem = rs2[3];
-                        op_args.tcu.fmt_s  = rs1[3:0];
-                        op_args.tcu.fmt_d  = rd[3:0];
+                        op_args.tcu.fmt_s  = rs1[4:0];
+                        op_args.tcu.fmt_d  = rd[4:0];
                         op_args.tcu.step_m = '0;
                         op_args.tcu.step_n = '0;
                         op_args.tcu.step_k = '0;

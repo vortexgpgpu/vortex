@@ -23,8 +23,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     input  wire reset,
     input  wire enable,
 
-    input  wire[3:0] fmt_s,
-    input  wire[3:0] fmt_d,
+    input  wire[4:0] fmt_s,
+    input  wire[4:0] fmt_d,
 
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
@@ -211,10 +211,10 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     wire [31:0] delayed_c;
     wire [7:0] delayed_raw_sf;
     wire [63:0] delayed_temp_sf;
-    wire [3:0] delayed_fmt_s;
+    wire [4:0] delayed_fmt_s;
 
     VX_pipe_register #(
-        .DATAW (4 + 32 + 8 + 64),
+        .DATAW (TCU_FMT_WIDTH + 32 + 8 + 64),
         .DEPTH (FMUL_LATENCY)
     ) pipe_c (
         .clk     (clk),
@@ -265,7 +265,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in (delayed_fmt_s[3] ? acc_i : acc_f[31:0]),
+        .data_in (delayed_fmt_s[4] ? acc_i : acc_f[31:0]),
         .data_out(d_val)
     );
 

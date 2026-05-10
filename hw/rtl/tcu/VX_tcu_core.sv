@@ -103,8 +103,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [3:0] step_n = execute_if.data.op_args.tcu.step_n;
     wire [3:0] step_k = execute_if.data.op_args.tcu.step_k;
 
-    wire [3:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
-    wire [3:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
+    wire [4:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
+    wire [4:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
 
     wire execute_fire = execute_if.valid && execute_if.ready;
 
@@ -283,7 +283,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             assign b_col = is_sparse ? b_col_sparse : b_col_dense;
         `endif
 
-            wire [3:0] fmt_s_r, fmt_d_r;
+            wire [4:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
             wire [31:0] c_val_r;
 

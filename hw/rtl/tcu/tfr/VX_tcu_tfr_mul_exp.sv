@@ -27,7 +27,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
 
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
 
-    input wire [3:0]        fmt_s,
+    input wire [4:0]        fmt_s,
 
     input wire [N-1:0][31:0] a_row,
     input wire [N-1:0][31:0] b_col,
@@ -65,7 +65,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .valid_in   (valid_in),
         .req_id     (req_id),
         .vld_mask   (vld_mask),
-        .fmt_f      (fmt_s[2:0]),
+        .fmt_f      (fmt_s[3:0]),
         .a_row      (a_row),
         .b_col      (b_col),
         .result_sig (mul_f16_sig),
@@ -89,7 +89,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .valid_in   (valid_in),
         .req_id     (req_id),
         .vld_mask   (vld_mask),
-        .fmt_f      (fmt_s[2:0]),
+        .fmt_f      (fmt_s[3:0]),
         .a_row      (a_row),
         .b_col      (b_col),
         .result_sig (mul_f8_sig),
@@ -107,7 +107,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .valid_in   (valid_in),
         .req_id     (req_id),
         .vld_mask   (vld_mask),
-        .fmt_i      (fmt_s[2:0]),
+        .fmt_i      (fmt_s[3:0]),
         .a_row      (a_row),
         .b_col      (b_col),
         .sf_a       (sf_a),

@@ -22,8 +22,8 @@ package VX_tcu_pkg;
 
     import VX_gpu_pkg::*;
 
-    // Supported floating-point types
     // WARNING: Changing this list requires updating format utility functions below
+    // Supported floating-point types (prefer setting bfloat versions to even)
     localparam TCU_FP32_ID  = 0;
     localparam TCU_FP16_ID  = 1;
     localparam TCU_BF16_ID  = 2;
@@ -32,14 +32,15 @@ package VX_tcu_pkg;
     localparam TCU_TF32_ID  = 5;
     localparam TCU_MXFP8_ID = 6;
     localparam TCU_NVFP4_ID = 7;
-    // Supported integer-point types
-    localparam TCU_I32_ID   = 8;
-    localparam TCU_I8_ID    = 9;
-    localparam TCU_U8_ID    = 10;
-    localparam TCU_I4_ID    = 11;
-    localparam TCU_U4_ID    = 12;
-    localparam TCU_MXI8_ID  = 13;
-    localparam TCU_FMT_WIDTH= 4;
+    // Supported integer-point types (prefer setting unsigned versions to even)
+    localparam TCU_I32_ID   = 16;
+    localparam TCU_I8_ID    = 17;
+    localparam TCU_U8_ID    = 18;
+    localparam TCU_I4_ID    = 19;
+    localparam TCU_U4_ID    = 20;
+    localparam TCU_MXI8_ID  = 21;
+
+    localparam TCU_FMT_WIDTH= 5;
 
     // Set configuration parameters
     localparam TCU_NT = `NUM_THREADS;
@@ -214,7 +215,7 @@ package VX_tcu_pkg;
         endcase
     endfunction
 
-    function automatic int unsigned tcu_fmt_width(input logic [3:0] fmt);
+    function automatic int unsigned tcu_fmt_width(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
             TCU_FP16_ID, TCU_BF16_ID:
                 return 16;
@@ -240,11 +241,11 @@ package VX_tcu_pkg;
         return fmt[TCU_FMT_WIDTH-1];
     endfunction
 
-    function automatic logic tcu_fmt_is_signed_int(input logic [TCU_FMT_WIDTH-2:0] int_fmt);
+    function automatic logic tcu_fmt_is_signed_int(input logic [3:0] int_fmt);
         return int_fmt[0];
     endfunction
 
-    function automatic logic tcu_fmt_is_bfloat(input logic [TCU_FMT_WIDTH-2:0] float_fmt);
+    function automatic logic tcu_fmt_is_bfloat(input logic [3:0] float_fmt);
         return !float_fmt[0];
     endfunction
 
@@ -255,7 +256,7 @@ package VX_tcu_pkg;
     // variable-divisor ceil-divide (which expanded to 9 CARRY8 stages and
     // blew the 300 MHz budget). Each arm is a pure constant, so the whole
     // lookup collapses to a single 4→5-bit LUT.
-    function automatic logic [4:0] meta_num_cols(input logic [3:0] fmt);
+    function automatic logic [4:0] meta_num_cols(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
             TCU_FP16_ID, TCU_BF16_ID:
                 return 5'((TCU_BLOCK_CAP + 7)  / 8);   // hw = 16/2 = 8
@@ -271,7 +272,7 @@ package VX_tcu_pkg;
         endcase
     endfunction
 
-    function automatic logic [4:0] meta_total_store_uops(input logic [3:0] fmt);
+    function automatic logic [4:0] meta_total_store_uops(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
             TCU_FP16_ID, TCU_BF16_ID:
                 return 5'(((TCU_BLOCK_CAP + 7)  / 8)  * TCU_STORES_PER_COL);
@@ -289,7 +290,7 @@ package VX_tcu_pkg;
 
     // Tracing info
 `ifdef SIMULATION
-    task trace_fmt(input int level, input [3:0] fmt);
+    task trace_fmt(input int level, input [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
             TCU_FP32_ID:  `TRACE(level, ("fp32"))
             TCU_FP16_ID:  `TRACE(level, ("fp16"))

@@ -84,42 +84,42 @@ struct nvfp4 {
 
 struct int32 {
   using dtype = int32_t;
-  static constexpr uint32_t id = 8;
+  static constexpr uint32_t id = 16;
   static constexpr uint32_t bits = 32;
   static constexpr const char* name = "i32";
 };
 
 struct int8 {
   using dtype = int8_t;
-  static constexpr uint32_t id = 9;
+  static constexpr uint32_t id = 17;
   static constexpr uint32_t bits = 8;
   static constexpr const char* name = "i8";
 };
 
 struct uint8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 10;
+  static constexpr uint32_t id = 18;
   static constexpr uint32_t bits = 8;
   static constexpr const char* name = "u8";
 };
 
 struct int4 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 11;
+  static constexpr uint32_t id = 19;
   static constexpr uint32_t bits = 4;
   static constexpr const char* name = "i4";
 };
 
 struct uint4 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 12;
+  static constexpr uint32_t id = 20;
   static constexpr uint32_t bits = 4;
   static constexpr const char* name = "u4";
 };
 
 struct mxint8 {
   using dtype = int8_t;
-  static constexpr uint32_t id = 13;
+  static constexpr uint32_t id = 21;
   static constexpr uint32_t bits = 8;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 32;

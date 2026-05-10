@@ -104,8 +104,8 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
     input  wire reset,
     input  wire enable,
 
-    input  wire[3:0] fmt_s,
-    input  wire[3:0] fmt_d,
+    input  wire[4:0] fmt_s,
+    input  wire[4:0] fmt_d,
 
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,

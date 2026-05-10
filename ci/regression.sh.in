@@ -560,20 +560,20 @@ tensor()
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR -DUSE_FEDP" NUM_REGS=2 LATENCY=4 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=5 --W=25
 
     # test int8
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=9
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=17
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=17
 
     # test uint8
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=10
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=18
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=18
 
     # test int4
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=11
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=19
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=19
 
     # test uint4
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=12
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=20
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_TYPE_TFR" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=20
 
     echo "tensor tests done!"
 }

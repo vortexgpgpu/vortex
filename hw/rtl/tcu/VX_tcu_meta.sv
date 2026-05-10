@@ -24,7 +24,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     // Write port (meta_store instruction)
     input wire          wr_en,
     input wire [`LOG2UP(`NUM_WARPS)-1:0] wr_wid,
-    input wire [3:0]    wr_idx, // flat store index within the warp's metadata block
+    input wire [4:0]    wr_idx, // flat store index within the warp's metadata block
     input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] wr_data,
 
     // Read port (from FEDP path)
@@ -74,10 +74,10 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     end
 
     // Write decode: flat store index → actual column, sub-store, bank-enable, write data
-    wire [3:0] meta_actual_col_idx;
+    wire [4:0] meta_actual_col_idx;
     wire [LG_SPC-1:0] sub_store_idx;
     if (STORES_PER_COL > 1) begin : g_meta_spc
-        assign meta_actual_col_idx = 4'(wr_idx >> LG_SPC);
+        assign meta_actual_col_idx = 5'(wr_idx >> LG_SPC);
         assign sub_store_idx = wr_idx[LG_SPC-1:0];
     end else begin : g_meta_spc
         assign meta_actual_col_idx = wr_idx;
@@ -114,7 +114,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     // Column write-enable (one-hot from meta_actual_col_idx)
     wire [NUM_COLS-1:0] col_wren;
     for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col_wren
-        assign col_wren[c] = (c[3:0] == meta_actual_col_idx);
+    assign col_wren[c] = (c[TCU_FMT_WIDTH-1:0] == meta_actual_col_idx);
     end
 
     // Pack write data and enables for unified RAM

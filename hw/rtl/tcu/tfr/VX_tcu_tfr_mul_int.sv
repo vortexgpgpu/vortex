@@ -23,7 +23,7 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
     input wire [31:0]               req_id,
 
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
-    input wire [2:0]                fmt_i,
+    input wire [3:0]                fmt_i,
 
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,

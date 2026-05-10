@@ -18,7 +18,7 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
     parameter TCK = 2 * N
 ) (
     input wire [TCU_MAX_INPUTS-1:0] vld_mask,
-    input wire [3:0]                fmt_s,
+    input wire [4:0]                fmt_s,
     output logic [TCK-1:0]          lane_mask
 );
     `UNUSED_VAR (vld_mask)

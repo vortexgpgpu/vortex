@@ -259,29 +259,29 @@ static int float_fmt_width(int exp_bits, int sig_bits) {
 }
 
 static int int_fmt_width(int fmt) {
-  switch (fmt) {
-  case 8:  return 32; // int32
-  case 9:  return 8;  // int8
-  case 10: return 8;  // uint8
-  case 11: return 4;  // int4
-  case 12: return 4;  // uint4
-  default:
-    std::cerr << "Unsupported integer format: " << fmt << std::endl;
-    std::abort();
-  }
+    switch (fmt) {
+    case 16: return 32; // int32
+    case 17: return 8;  // int8
+    case 18: return 8;  // uint8
+    case 19: return 4;  // int4
+    case 20: return 4;  // uint4
+    default:
+        std::cerr << "Unsupported integer format: " << fmt << std::endl;
+        std::abort();
+    }
 }
 
 static int int_fmt_sign(int fmt) {
-  switch (fmt) {
-  case 8:  return true;  // int32
-  case 9:  return true;  // int8
-  case 10: return false; // uint8
-  case 11: return true;  // int4
-  case 12: return false; // uint4
-  default:
-    std::cerr << "Unsupported integer format: " << fmt << std::endl;
-    std::abort();
-  }
+    switch (fmt) {
+    case 16: return true;  // int32
+    case 17: return true;  // int8
+    case 18: return false; // uint8
+    case 19: return true;  // int4
+    case 20: return false; // uint4
+    default:
+        std::cerr << "Unsupported integer format: " << fmt << std::endl;
+        std::abort();
+    }
 }
 
 static void pack_elements(const std::vector<uint32_t> &elements, int element_bits, int num_words, uint32_t *packed) {
@@ -888,7 +888,7 @@ public:
     // reset device under test
     this->reset();
 
-    if (config_.fmt_s >= 8) {
+if (config_.fmt_s >= 16) {
       // test integer formats
       if (!test_integers()) {
         return false;
@@ -977,9 +977,9 @@ TestConfig parse_args(int argc, char **argv) {
     }
   }
 
-  if (config_.fmt_s >= 8) {
+  if (config_.fmt_s >= 16) {
     // Integer formats
-    config_.fmt_d = 8;
+    config_.fmt_d = 16;
     if (config_.exp_bits != 0 || config_.sig_bits != 0) {
       std::cerr << "Error: Exponent and significand bits should not be set for integer formats" << std::endl;
       exit(1);

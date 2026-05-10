@@ -34,7 +34,7 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter ROW_IDX = 0
 ) (
-    input  wire [3:0]                      fmt_s,
+    input  wire [4:0]                      fmt_s,
     input  wire [TCU_TC_K-1:0][31:0]       b_col_in1,
     input  wire [TCU_TC_K-1:0][31:0]       b_col_in2,
     input  wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_mask,
