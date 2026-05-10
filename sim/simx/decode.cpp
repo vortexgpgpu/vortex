@@ -545,7 +545,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       case 2: instr->set_op_type(AluType::SLT); break;
       case 3: instr->set_op_type(AluType::SLTU); break;
       case 4: instr->set_op_type(AluType::XOR); break;
-      case 5: instr->set_op_type((funct7 == 0x20) ? AluType::SRA : AluType::SRL); break;
+      // For RV64I SRAI/SRLI with shamt[5]=1, the upper-imm field is funct6
+      // (bits[31:26]), and bit 25 carries shamt[5] — which makes funct7 read
+      // back as 0x21 instead of 0x20. Match on funct6 (top 6 bits of funct7)
+      // so SRAI with shamt >= 32 isn't mis-decoded as SRLI.
+      case 5: instr->set_op_type((((funct7 >> 1) == 0x10)) ? AluType::SRA : AluType::SRL); break;
       case 6: instr->set_op_type(AluType::OR); break;
       case 7: instr->set_op_type(AluType::AND); break;
       default:
