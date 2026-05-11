@@ -113,6 +113,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire                        gmem_req_fire;
     wire                        stall_no_slot;
 
+`ifdef DXA_OOO_DRAIN_ENABLE
+    // OoO-only: gmem_req → smem_wr progress signals for transfer_done.
+    wire                        pending_empty;
+    wire                        addr_gen_done;
+`endif
+
 `ifdef PERF_ENABLE
     wire [31:0]                 perf_gmem_reqs;
     wire [31:0]                 perf_gmem_span_cycles;
@@ -213,6 +219,11 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .gmem_rsp_valid     (gmem_rsp_valid),
         .gmem_rsp_tag       (gmem_rsp_tag),
         .gmem_rsp_data      (gmem_rsp_data),
+    `ifdef DXA_OOO_DRAIN_ENABLE
+        .rsp_arrived        (rsp_arrived),
+        .pending_empty      (pending_empty),
+        .addr_gen_done      (addr_gen_done),
+    `endif
         .gmem_req_fire      (gmem_req_fire),
         .stall_no_slot      (stall_no_slot)
     );
@@ -286,6 +297,11 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .is_multicast          (active_is_multicast),
         .cta_mask              (active_cta_mask),
         .smem_stride           (active_smem_stride)
+    `ifdef DXA_OOO_DRAIN_ENABLE
+        ,
+        .pending_empty         (pending_empty),
+        .addr_gen_done         (addr_gen_done)
+    `endif
     );
 
     // ════════════════════════════════════════════════════════════════════

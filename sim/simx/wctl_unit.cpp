@@ -115,7 +115,10 @@ bool WctlUnit::process(instr_trace_t* trace) {
     uint32_t arg2 = rs2_data[thread_last].u;
     uint32_t bar_id = bar_decode_id(arg1, NUM_BARRIERS);
     bool is_sync_bar = (bool)wctlArgs.is_sync_bar;
-    if (wctlArgs.is_bar_arrive) {
+    // rs2[31] flags arrive_tx semantics on the same opcode as barrier_arrive.
+    // Lower bits carry the count of pending transactions to register.
+    bool is_tx_arrive = wctlArgs.is_bar_arrive && ((arg2 >> 31) & 0x1);
+    if (wctlArgs.is_bar_arrive && !is_tx_arrive) {
       uint32_t phase = sched.barrier_unit().get_phase(bar_id);
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!warp.tmask.test(t)) continue;
@@ -123,7 +126,11 @@ bool WctlUnit::process(instr_trace_t* trace) {
       }
     }
     if (trace->eop) {
-      if (trace->wb || is_sync_bar) {
+      if (is_tx_arrive) {
+        // Pre-register pending transaction event(s); does not advance arrival count.
+        uint32_t tx_count = arg2 & 0x7fffffff;
+        core_->barrier_event_attach(bar_id, tx_count);
+      } else if (trace->wb || is_sync_bar) {
         core_->barrier_arrive(bar_id, arg2, trace->wid, is_sync_bar);
         if (is_sync_bar) {
           release_warp = false;

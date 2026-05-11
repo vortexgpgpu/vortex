@@ -202,8 +202,6 @@ import VX_raster_pkg::*;
     );
 
 `ifdef EXT_DXA_ENABLE
-    VX_txbar_bus_if dxa_txbar_attach_if();
-
     VX_dxa_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-dxa", INSTANCE_ID))),
         .CORE_ID (CORE_ID)
@@ -212,29 +210,15 @@ import VX_raster_pkg::*;
         .reset      (reset),
         .execute_if (pe_execute_if[PE_IDX_DXA]),
         .result_if  (pe_result_if[PE_IDX_DXA]),
-        .dxa_req_bus_if (dxa_req_bus_if),
-        .txbar_bus_if(dxa_txbar_attach_if)
+        .dxa_req_bus_if (dxa_req_bus_if)
     );
 
-    // Arbitrate between DXA agent and DXA core (prioritizing the DXA agent)
-    VX_txbar_bus_if txbar_arb_if[2]();
-    assign txbar_arb_if[0].valid = dxa_txbar_bus_if.valid;
-    assign txbar_arb_if[0].data  = dxa_txbar_bus_if.data;
-    assign dxa_txbar_bus_if.ready = txbar_arb_if[0].ready;
-    assign txbar_arb_if[1].valid = dxa_txbar_attach_if.valid;
-    assign txbar_arb_if[1].data  = dxa_txbar_attach_if.data;
-    assign dxa_txbar_attach_if.ready = txbar_arb_if[1].ready;
-
-    VX_txbar_arb #(
-        .NUM_REQS (2),
-        .ARBITER  ("P"),
-        .OUT_BUF  (0)
-    ) txbar_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (txbar_arb_if),
-        .bus_out_if (txbar_bus_if)
-    );
+    // The only txbar producer is now the SMEM-completion path coming up
+    // through dxa_txbar_bus_if (DXA release). Software arrive_tx handles
+    // attach via the warp-control path, so no arbitration is needed.
+    assign txbar_bus_if.valid     = dxa_txbar_bus_if.valid;
+    assign txbar_bus_if.data      = dxa_txbar_bus_if.data;
+    assign dxa_txbar_bus_if.ready = txbar_bus_if.ready;
 `else
     assign txbar_bus_if.valid = 1'b0;
     assign txbar_bus_if.data = 'x;

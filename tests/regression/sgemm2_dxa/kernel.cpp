@@ -68,6 +68,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
     // Prologue: issue DXA copy for first tiles into buffer 0, on bar[0].
     if (is_dxa_warp) {
+      bar[0].arrive_tx(2);  // Two pending transactions: A + B
       vx_dxa_issue_2d_wg(kDescA, bar[0].id(), shA[0], 0, row_base);
       vx_dxa_issue_2d_wg(kDescB, bar[0].id(), shB[0], col_base, 0);
     }
@@ -80,6 +81,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
       // (1) Issue DXA for next iteration's tiles on bar[nxt].
       if (has_next && is_dxa_warp) {
+        bar[nxt].arrive_tx(2);  // Two pending transactions: A + B
         vx_dxa_issue_2d_wg(kDescA, bar[nxt].id(), shA[nxt], next_k, row_base);
         vx_dxa_issue_2d_wg(kDescB, bar[nxt].id(), shB[nxt], col_base, next_k);
       }
@@ -99,6 +101,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
     // ── Single-buffered: full-K in one shot ───────────────────────────
     // DXA fetches the entire A and B tiles (tile_size × size) at once.
     if (is_dxa_warp) {
+      bar[0].arrive_tx(2);  // Two pending transactions: A + B
       vx_dxa_issue_2d_wg(kDescA, bar[0].id(), shA[0], 0, row_base);
       vx_dxa_issue_2d_wg(kDescB, bar[0].id(), shB[0], col_base, 0);
     }

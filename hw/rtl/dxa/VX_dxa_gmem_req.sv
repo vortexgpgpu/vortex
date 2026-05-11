@@ -70,6 +70,15 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [TAG_W-1:0]            gmem_rsp_tag,
     output wire [GMEM_DATAW-1:0]       gmem_rsp_data,
 
+`ifdef DXA_OOO_DRAIN_ENABLE
+    // OoO-mode signals (only meaningful when DXA_OOO_DRAIN_ENABLE):
+    //  - rsp_arrived: bitvector from rsp_buf, used to PE the next ready tag.
+    //  - pending_empty / addr_gen_done: drive smem_wr's transfer_done.
+    input  wire [MAX_OUTSTANDING-1:0]  rsp_arrived,
+    output wire                        pending_empty,
+    output wire                        addr_gen_done,
+`endif
+
     // Progress events.
     output wire                        gmem_req_fire,
     output wire                        stall_no_slot
@@ -87,12 +96,16 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     `STATIC_ASSERT(GMEM_TAG_VALUEW >= TAG_W, ("gmem tag too narrow for slot encoding"))
 
-    // ════════════════════════════════════════════════════════════════════
-    // VX_allocator: O(1) tag acquisition/release
-    // ════════════════════════════════════════════════════════════════════
-    wire                alloc_empty, alloc_full;
+    // Common signals shared by both in-order and OoO paths.
+    wire                alloc_full;
     wire [TAG_W-1:0]    alloc_tag;
     wire                alloc_acquire;
+
+`ifndef DXA_OOO_DRAIN_ENABLE
+    // ════════════════════════════════════════════════════════════════════
+    // VX_allocator: O(1) tag acquisition/release  (legacy in-order path)
+    // ════════════════════════════════════════════════════════════════════
+    wire                alloc_empty;
 
     VX_allocator #(
         .SIZE (MAX_OUTSTANDING)
@@ -161,12 +174,103 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             fifo_valid_length, fifo_oob, fifo_last} = fifo_data_out;
     assign fifo_valid = ~fifo_empty;
 
-    // ════════════════════════════════════════════════════════════════════
-    // Issue logic
-    // ════════════════════════════════════════════════════════════════════
-
     wire can_alloc = ~alloc_full && ~pending_full && ~fifo_full;
+    `UNUSED_VAR (fifo_pop)
 
+`else
+    // ════════════════════════════════════════════════════════════════════
+    // OoO path: VX_allocator + VX_dp_ram (indexed metadata) + PE over rsp_arrived
+    // ════════════════════════════════════════════════════════════════════
+    //
+    // We replace the in-order trio { VX_allocator, VX_pending_size,
+    // VX_fifo_queue } with:
+    //   - VX_allocator: same as in-order (tag pool, separate read/release ports)
+    //   - VX_dp_ram:    metadata table indexed by tag (async read)
+    //   - VX_priority_encoder: selects next ready tag from rsp_arrived
+    //
+    // Note: we don't use VX_index_buffer because it ties release_addr to
+    // read_addr, while OoO needs them independent (read = PE pick of next
+    // ready; release = smem_wr's currently-draining tag).
+    //
+    // rsp_arrived itself serves as the "ready" bitvector — it's set on
+    // gmem_rsp_valid and on OOB shortcut, cleared on smem_wr's clear_en.
+    localparam META_DATAW = SMEM_ADDR_W + CL_OFF_BITS + (CL_OFF_BITS+1) + 1 + 1;
+
+    wire alloc_empty;
+
+    VX_allocator #(
+        .SIZE (MAX_OUTSTANDING)
+    ) tag_alloc (
+        .clk          (clk),
+        .reset        (reset),
+        .acquire_en   (alloc_acquire),
+        .acquire_addr (alloc_tag),
+        .release_en   (release_en),
+        .release_addr (release_tag),
+        .empty        (alloc_empty),
+        .full         (alloc_full)
+    );
+
+    wire [META_DATAW-1:0] meta_write_data, meta_read_data;
+    assign meta_write_data = {ag_smem_byte_addr, ag_byte_offset,
+                              ag_valid_length, ag_oob, ag_last};
+
+    VX_dp_ram #(
+        .DATAW   (META_DATAW),
+        .SIZE    (MAX_OUTSTANDING),
+        .LUTRAM  (1),
+        .RDW_MODE ("W"),
+        .OUT_REG (0)
+    ) meta_table (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (alloc_acquire),
+        .wren  (1'b1),
+        .waddr (alloc_tag),
+        .wdata (meta_write_data),
+        .raddr (fifo_tag),
+        .rdata (meta_read_data)
+    );
+
+    // Priority-encode rsp_arrived to pick the next ready tag.
+    // OOB tags become ready instantly (via oob_arrived_en path).
+    wire ready_valid;
+    wire [TAG_W-1:0] ready_tag;
+    VX_priority_encoder #(
+        .N (MAX_OUTSTANDING)
+    ) ready_pe (
+        .data_in   (rsp_arrived),
+        .index_out (ready_tag),
+        .valid_out (ready_valid),
+        `UNUSED_PIN (onehot_out)
+    );
+
+    assign fifo_tag   = ready_tag;
+    assign fifo_valid = ready_valid;
+    assign {fifo_smem_byte_addr, fifo_byte_offset, fifo_valid_length,
+            fifo_oob, fifo_last} = meta_read_data;
+    `UNUSED_VAR (fifo_pop)
+
+    // OoO progress signals for smem_wr's transfer_done logic.
+    reg addr_gen_done_r;
+    always @(posedge clk) begin
+        if (reset || !transfer_active) begin
+            addr_gen_done_r <= 1'b0;
+        end else if (accept && ag_last) begin
+            addr_gen_done_r <= 1'b1;
+        end
+    end
+    assign pending_empty = alloc_empty;
+    assign addr_gen_done = addr_gen_done_r;
+
+    // OoO can_alloc: only allocator full (metadata RAM is co-sized).
+    wire can_alloc = ~alloc_full;
+`endif
+
+    // ════════════════════════════════════════════════════════════════════
+    // Issue logic (common to both paths; can_alloc differs above)
+    // ════════════════════════════════════════════════════════════════════
     wire normal_fire = ag_valid && ~ag_oob && can_alloc && gmem_bus_if.req_ready;
     wire oob_fire    = ag_valid &&  ag_oob && can_alloc;
 
@@ -174,9 +278,12 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     assign ag_ready      = accept;
     assign alloc_acquire = accept;
+
+`ifndef DXA_OOO_DRAIN_ENABLE
     assign fifo_push     = accept;
     assign fifo_data_in  = {alloc_tag, ag_smem_byte_addr, ag_byte_offset,
                             ag_valid_length, ag_oob, ag_last};
+`endif
 
     // OOB arrival: set rsp_arrived immediately.
     assign oob_arrived_en  = oob_fire;

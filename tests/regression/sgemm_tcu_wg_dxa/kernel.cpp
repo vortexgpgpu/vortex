@@ -48,6 +48,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // DXA: load A tile [tile_row .. tile_row+cta_M, k .. k+tileK] into A_smem
     // DXA: load B tile [k .. k+tileK, tile_col .. tile_col+tileN] into B_smem
     if (is_dxa_warp) {
+      bar.arrive_tx(2);  // Two pending transactions: A + B
       vx_dxa_issue_2d_wg(kDescA, bar.id(), A_smem, k, tile_row);
       vx_dxa_issue_2d_wg(kDescB, bar.id(), B_smem, tile_col, k);
     }

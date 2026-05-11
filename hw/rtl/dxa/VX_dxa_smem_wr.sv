@@ -75,6 +75,14 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [`NUM_WARPS-1:0]       cta_mask,
     input  wire [31:0]                 smem_stride
 
+`ifdef DXA_OOO_DRAIN_ENABLE
+    // OoO transfer_done driven by (addr_gen_done && pending_empty)
+    // because lat_last_r is no longer guaranteed to be the last-drained CL.
+    ,
+    input  wire                        pending_empty,
+    input  wire                        addr_gen_done
+`endif
+
 `ifdef PERF_ENABLE
     ,
     output wire [31:0]                 perf_lmem_writes
@@ -302,8 +310,11 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // && req_ready, so qualifying with req_ready here is redundant.
     wire smem_wr_attr_last = active_notify_smem_done && (
         is_multicast ? (mc_write_valid && is_last_drain) : smem_wr_last_pkt);
+    // bar_addr layout (from VX_wctl_unit `CONCAT`): high=wid, low=bar_no.
+    // To target the same bar_no on a different CTA's warp, increment the
+    // wid portion → shift replay_next_idx into the wid bit field.
     wire [BAR_ADDR_W-1:0] smem_wr_attr_bar = is_multicast
-        ? BAR_ADDR_W'(active_bar_addr + BAR_ADDR_W'(replay_next_idx))
+        ? BAR_ADDR_W'(active_bar_addr + (BAR_ADDR_W'(replay_next_idx) << NB_BITS))
         : active_bar_addr;
 
     // ════════════════════════════════════════════════════════════════════
@@ -338,7 +349,15 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     end
 
     assign wr_done_count = wr_count_r;
+`ifdef DXA_OOO_DRAIN_ENABLE
+    // OoO: last-drained CL is not necessarily the last-issued CL. Done is
+    // signalled one cycle after the last release, when pending_size has
+    // observed all releases (addr_gen_done is latched once ag_last fires).
+    assign transfer_done = transfer_active && addr_gen_done && pending_empty;
+    `UNUSED_VAR (smem_wr_last_pkt)
+`else
     assign transfer_done = transfer_active && smem_req_fire && smem_wr_last_pkt;
+`endif
 
 `ifdef PERF_ENABLE
     reg [31:0] wrp_total_lmem_writes_r;

@@ -22,8 +22,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     VX_execute_if.slave     execute_if,
     VX_result_if.master     result_if,
-    VX_dxa_req_bus_if.master dxa_req_bus_if,
-    VX_txbar_bus_if.master  txbar_bus_if
+    VX_dxa_req_bus_if.master dxa_req_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (execute_if.data.rs3_data)
@@ -57,22 +56,12 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dxa_req_data_in.coords[4] = lane2_rs2;
     assign dxa_req_data_in.cta_mask  = lane3_rs2[`NUM_WARPS-1:0];
 
-    // Build txbar payload
-    wire [BAR_ADDR_W-1:0] bar_addr;
-    if (`NUM_WARPS > 1) begin : g_bar_addr
-        assign bar_addr = {lane1_rs1[4 +: NW_BITS], lane1_rs1[(4 + BAR_ID_SHIFT) +: NB_BITS]};
-    end else begin : g_bar_addr_wo
-        assign bar_addr = lane1_rs1[(4 + BAR_ID_SHIFT) +: NB_BITS];
-    end
-
-    txbar_t txbar_data_in;
-    assign txbar_data_in.addr    = bar_addr;
-    assign txbar_data_in.is_done = 1'b0;
-
-    // Output elastic buffers break the UNOPTFLAT combinatorial loop
-    // between dxa_req_arb and txbar_arb through this unit.
-    wire dxa_buf_ready, txbar_buf_ready, wb_ready;
-    wire accept = dxa_buf_ready && txbar_buf_ready && wb_ready;
+    // Output elastic buffer breaks the combinatorial path between
+    // dxa_req_arb and this unit. Barrier transaction registration is now
+    // handled by software arrive_tx (see vx_barrier.h::arrive_tx); this
+    // unit no longer emits txbar attach packets.
+    wire dxa_buf_ready, wb_ready;
+    wire accept = dxa_buf_ready && wb_ready;
     wire fire   = execute_if.valid && accept;
 
     assign execute_if.ready = accept;
@@ -89,20 +78,6 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .valid_out (dxa_req_bus_if.req_valid),
         .ready_out (dxa_req_bus_if.req_ready),
         .data_out  (dxa_req_bus_if.req_data)
-    );
-
-    VX_elastic_buffer #(
-        .DATAW ($bits(txbar_t)),
-        .SIZE  (2)
-    ) txbar_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (fire),
-        .ready_in  (txbar_buf_ready),
-        .data_in   (txbar_data_in),
-        .valid_out (txbar_bus_if.valid),
-        .ready_out (txbar_bus_if.ready),
-        .data_out  (txbar_bus_if.data)
     );
 
     sfu_header_t header_out;
@@ -133,10 +108,6 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 dxa_req_bus_if.req_data.coords[0], dxa_req_bus_if.req_data.coords[1],
                 dxa_req_bus_if.req_data.coords[2], dxa_req_bus_if.req_data.coords[3],
                 dxa_req_bus_if.req_data.coords[4]))
-        end
-        if (~reset && txbar_bus_if.valid && txbar_bus_if.ready) begin
-            `TRACE(1, ("%t: %s txbar-fire: addr=%0d, done=%b\n",
-                $time, INSTANCE_ID, txbar_bus_if.data.addr, txbar_bus_if.data.is_done))
         end
     end
 `endif

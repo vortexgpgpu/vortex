@@ -61,6 +61,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     // DXA: load per-warp compressed A and metadata, plus shared B
     if (is_dxa_warp) {
+      // Pre-register pending transactions: 2 per warp (A + meta) + 1 (shared B).
+      bar.arrive_tx(2 * num_warps + 1);
       for (uint32_t w = 0; w < num_warps; ++w) {
         auto A_smem_w = reinterpret_cast<ctx::input_t*>(smem_base + w * per_warp_section);
         auto meta_smem_w = reinterpret_cast<uint32_t*>(smem_base + w * per_warp_section + smem_a_bytes);

@@ -95,7 +95,7 @@ public:
 
   void global_barrier_resume(uint32_t bar_id);
 
-  void barrier_event_attach(uint32_t bar_id);
+  void barrier_event_attach(uint32_t bar_id, uint32_t count = 1);
 
   void barrier_event_release(uint32_t bar_id);
 

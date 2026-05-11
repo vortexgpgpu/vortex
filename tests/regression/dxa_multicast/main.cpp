@@ -29,6 +29,9 @@ uint32_t ncols = 16;
 uint32_t tile_rows = 16;  // tall tile: all rows
 uint32_t tile_cols = 4;   // narrow: 4 cols
 uint32_t active_ctas = 0; // 0 = all CTAs active
+uint32_t opt_block_x = 0; // 0 = use tile_cols (legacy)
+uint32_t opt_block_y = 0; // 0 = use tile_cols (legacy)
+uint32_t opt_target_ctas = 0; // 0 = use hw cap
 
 vx_device_h device = nullptr;
 vx_buffer_h src_buffer = nullptr;
@@ -38,13 +41,16 @@ vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
-  std::cout << "Usage: [-k kernel] [-r nrows] [-c ncols] [-R tile_rows] [-C tile_cols] [-a active_ctas] [-h]\n";
+  std::cout << "Usage: [-k kernel] [-r nrows] [-c ncols] [-R tile_rows] [-C tile_cols] [-a active_ctas] [-b block_x] [-B block_y] [-N target_ctas] [-h]\n";
 }
 
 static void parse_args(int argc, char** argv) {
   int c;
-  while ((c = getopt(argc, argv, "r:c:R:C:a:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "r:c:R:C:a:b:B:N:k:h")) != -1) {
     switch (c) {
+    case 'b': opt_block_x = atoi(optarg); break;
+    case 'B': opt_block_y = atoi(optarg); break;
+    case 'N': opt_target_ctas = atoi(optarg); break;
     case 'r': nrows = atoi(optarg); break;
     case 'c': ncols = atoi(optarg); break;
     case 'R': tile_rows = atoi(optarg); break;
@@ -72,15 +78,35 @@ int main(int argc, char* argv[]) {
 
   std::srand(42);
 
-  // CTA thread block: tile_cols × tile_cols (square, small)
-  // DXA fetches a larger tile_rows × tile_cols region
-  const uint32_t block_x = tile_cols;
-  const uint32_t block_y = tile_cols;  // square block
+  // CTA thread block: defaults to tile_cols × tile_cols (legacy);
+  // overridable via -b/-B for sweep flexibility (DXA only needs warp 0).
+  const uint32_t block_x = opt_block_x ? opt_block_x : tile_cols;
+  const uint32_t block_y = opt_block_y ? opt_block_y : tile_cols;
   const uint32_t group_size = block_x * block_y;
 
-  // All CTAs fetch the same tile → grid can be anything.
-  // Use ncols/tile_cols CTAs so multicast covers them all.
-  const uint32_t grid_x = ncols / tile_cols;
+  RT_CHECK(vx_dev_open(&device));
+
+  // Query hardware caps first so we can cap the grid to co-resident CTAs.
+  // Multicast only makes semantic sense across CTAs that share a core's
+  // SMEM (so a single dxa_issue with cta_mask can replay to all of them).
+  // Sequential / cross-core CTAs would attach a barrier event that no
+  // multicast release would ever clear → deadlock.
+  uint64_t num_warps_val = 0, num_threads_val = 0;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps_val));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads_val));
+  uint32_t warps_per_cta = group_size / (uint32_t)num_threads_val;
+  if (warps_per_cta == 0) warps_per_cta = 1;
+  uint32_t hw_ctas_per_core = (uint32_t)num_warps_val / warps_per_cta;
+  if (hw_ctas_per_core == 0) hw_ctas_per_core = 1;
+
+  // All CTAs fetch the same tile → grid sized to co-resident CTA count.
+  // -N target_ctas overrides the default cap (hw_ctas_per_core) for sweeps
+  // where we want a fixed N regardless of hw capacity.
+  const uint32_t cap_ctas = opt_target_ctas
+      ? ((opt_target_ctas < hw_ctas_per_core) ? opt_target_ctas : hw_ctas_per_core)
+      : hw_ctas_per_core;
+  const uint32_t grid_x_req = ncols / tile_cols;
+  const uint32_t grid_x = (grid_x_req < cap_ctas) ? grid_x_req : cap_ctas;
   const uint32_t grid_y = 1;
   const uint32_t total_ctas = grid_x * grid_y;
 
@@ -105,8 +131,6 @@ int main(int argc, char* argv[]) {
   std::cout << "grid: " << grid_x << " x " << grid_y << " (" << total_ctas << " CTAs)\n";
   std::cout << "local_mem: " << local_mem << " bytes\n";
 
-  RT_CHECK(vx_dev_open(&device));
-
   uint32_t max_localmem = 0;
   RT_CHECK(vx_check_occupancy(device, group_size, &max_localmem));
   if (local_mem > max_localmem) {
@@ -115,14 +139,7 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  // Get hardware config for num_ctas calculation
-  uint64_t num_warps_val = 0, num_threads_val = 0;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps_val));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads_val));
-  uint32_t warps_per_cta = group_size / (uint32_t)num_threads_val;
-  if (warps_per_cta == 0) warps_per_cta = 1;
-  uint32_t ctas_per_core = (uint32_t)num_warps_val / warps_per_cta;
-  if (ctas_per_core > total_ctas) ctas_per_core = total_ctas;
+  uint32_t ctas_per_core = (hw_ctas_per_core > total_ctas) ? total_ctas : hw_ctas_per_core;
   std::cout << "ctas_per_core: " << ctas_per_core << "\n";
 
   uint32_t grid_dim[2]  = {grid_x, grid_y};

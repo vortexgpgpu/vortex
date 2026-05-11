@@ -42,6 +42,14 @@ public:
     vx_barrier(bar_id_, num_warps_);
   }
 
+  // Pre-register `count` pending transaction events on this barrier.
+  // Used by async data-movement (e.g. DXA multicast) to declare expected
+  // completions BEFORE issuing the operation, so non-issuing CTAs/warps
+  // know to wait. Count is cumulative across multiple calls.
+  void arrive_tx(uint32_t count = 1) {
+    vx_barrier_arrive_tx(bar_id_, count);
+  }
+
   // Packed barrier id (for passing to DXA issue instructions)
   uint32_t id() const { return bar_id_; }
 

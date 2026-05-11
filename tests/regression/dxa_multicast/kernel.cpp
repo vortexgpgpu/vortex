@@ -28,9 +28,23 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   vortex::barrier bar(0);
   const bool is_dxa_warp = (get_sub_group_id() == 0);
 
-#ifdef EXT_DXA_ENABLE
-  // ── Multicast path: CTA 0 issues one DXA copy, data replayed to all CTAs ──
+#if defined(EXT_DXA_ENABLE) && !defined(LSU_ONLY)
+#ifdef DXA_NO_MULTICAST
+  // ── DXA per-CTA path: each CTA issues its own DXA for the SAME tile ──
+  // (Comparison baseline against multicast: same dest tile per CTA, but each
+  //  CTA pays its own GMEM read instead of sharing a single one via replay.)
   if (is_dxa_warp) {
+    bar.arrive_tx(1);
+    vx_dxa_issue_2d_wg(kDescSrc, bar.id(), shmem, col_base, row_base);
+  }
+  bar.arrive_and_wait();
+#else
+  // ── Multicast path: CTA 0 issues one DXA copy, data replayed to all CTAs ──
+  // Every CTA's warp 0 must pre-register the pending transaction on its OWN
+  // local barrier. Without this, non-issuing CTAs would see events==0 at
+  // arrive_and_wait and skip past the DXA completion (race).
+  if (is_dxa_warp) {
+    bar.arrive_tx(1);
     if (cta_id == 0) {
       uint32_t cta_mask = (1u << arg->num_ctas) - 1;
       vx_dxa_issue_2d_multicast_wg(kDescSrc, bar.id(), shmem,
@@ -38,6 +52,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
     }
   }
   bar.arrive_and_wait();
+#endif
 
 #else
   // ── LSU path: each thread loads elements, k-iteration for tall tiles ──
