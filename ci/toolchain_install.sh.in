@@ -16,10 +16,11 @@
 # exit when any command fails
 set -e
 
-TOOLCHAIN_REV=${TOOLCHAIN_REV:=v2.3}
-REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/${TOOLCHAIN_REV}
+TOOLCHAIN_REV=${TOOLCHAIN_REV:=@TOOLCHAIN_REV@}
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 OSVERSION=${OSVERSION:=@OSVERSION@}
+
+REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/${TOOLCHAIN_REV}
 
 riscv32()
 {
