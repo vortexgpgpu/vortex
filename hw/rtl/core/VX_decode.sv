@@ -177,19 +177,17 @@ module VX_decode import VX_gpu_pkg::*; #(
     end
 `endif
 
+`ifdef EXT_C_ENABLE
+    wire decode_is_rvc = fetch_if.data.is_rvc;
+`else
+    wire decode_is_rvc = 1'b0;
+`endif
+
     always @(*) begin
 
         ex_type   = 'x;
         op_type   = 'x;
-        // Initialize to 0 (not 'x') so the unused-field bits in the
-        // op_args packed union (e.g. br_args_t.__unused vs alu_args_t.is_w)
-        // don't pick up random verilator init values. With --x-assign
-        // unique, leaving these as X caused JAL/BR decoders — which write
-        // only the br_args view and never touch the alias bit — to feed
-        // a random is_w into the ALU on some core instances, mis-selecting
-        // the *W variant of the adder and computing the wrong branch
-        // target (e.g. PC+imm truncated to 32 bits).
-        op_args   = '0;
+        op_args   = 'x;
         reg_ids   = 'x;
         use_regs  = '0;
         rd_xregs  = '0;
@@ -308,9 +306,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.br.use_PC = 1;
                 op_args.br.use_imm= 1;
                 op_args.br.imm20  = jal_imm;
-            `ifdef EXT_C_ENABLE
-                op_args.br.is_rvc = fetch_if.data.is_rvc;
-            `endif
+                op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
                 `USED_IREG (rd);
             end
@@ -321,9 +317,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.br.use_PC = 0;
                 op_args.br.use_imm= 1;
                 op_args.br.imm20  = `SEXT(20, u_12);
-            `ifdef EXT_C_ENABLE
-                op_args.br.is_rvc = fetch_if.data.is_rvc;
-            `endif
+                op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -335,9 +329,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.br.use_PC = 1;
                 op_args.br.use_imm= 1;
                 op_args.br.imm20  = `SEXT(20, b_imm);
-            `ifdef EXT_C_ENABLE
-                op_args.br.is_rvc = fetch_if.data.is_rvc;
-            `endif
+                op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -395,9 +387,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     op_args.br.use_imm= 1;
                     op_args.br.use_PC = 1;
                     op_args.br.imm20  = 20'd4;
-                `ifdef EXT_C_ENABLE
-                    op_args.br.is_rvc = fetch_if.data.is_rvc;
-                `endif
+                    op_args.br.is_rvc = decode_is_rvc;
                     is_wstall = 1;
                     `USED_IREG (rd);
                 end

@@ -699,11 +699,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic use_PC;
         logic use_imm;
-    `ifdef EXT_C_ENABLE
         logic is_rvc;
-    `else
-        logic __unused;
-    `endif
         logic [ALU_TYPE_BITS-1:0] xtype;
         logic [19:0] imm20;
     } br_args_t;
