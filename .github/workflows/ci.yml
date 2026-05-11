@@ -28,23 +28,25 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ matrix.os }}-toolchain-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-toolchain-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
@@ -89,23 +91,25 @@ jobs:
         run: |
           sudo bash ./ci/install_dependencies.sh
 
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ matrix.os }}-toolchain-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-toolchain-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
       - name: Export SST paths
         run: |
@@ -153,23 +157,25 @@ jobs:
         run: |
           sudo bash ./ci/install_dependencies.sh
 
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ matrix.os }}-toolchain-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-toolchain-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
       - name: Download Build Artifact
         uses: actions/download-artifact@v4
