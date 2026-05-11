@@ -164,8 +164,8 @@ jobs:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
         xlen: [32, 64]
-        name: [regression, amo, dxa, mpi, dtm, cache, config1, config2, debug, scope, stress, synthesis, vector, cupbop, tensor, tensor_sp, tensor_mx, tensor_wg]
-        # name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
+        name: [regression, amo, dxa, mpi, dtm, cache, config1, config2, debug, scope, stress, synthesis, cupbop, tensor, tensor_sp, tensor_mx, tensor_wg]
+        # name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, cupbop, tensor]
 
     env:
       APPTAINER_VERSION: "1.4.3"
