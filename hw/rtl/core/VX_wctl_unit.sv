@@ -139,13 +139,24 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     wire wctl_bar_enable = wctl_valid && is_bar;
 
+    // arrive_tx variant of barrier_arrive: rs2[31]=1 flags pre-registration
+    // of pending transaction events. Routed through the existing event path
+    // (is_event + phase=1) so VX_bar_unit's increment branch handles it.
+    wire is_tx_arrive   = wctl_bar_enable
+                       && execute_if.data.op_args.wctl.is_bar_arrive
+                       && rs2_data[31];
+
     assign bar_valid    = wctl_bar_enable || txbar_bus_if.valid;
     assign bar.id       = rs1_data[BAR_ID_SHIFT +: NB_BITS];
-    assign bar.is_event = txbar_bus_if.valid && ~wctl_bar_enable;
+    assign bar.is_event = (txbar_bus_if.valid && ~wctl_bar_enable) || is_tx_arrive;
     assign bar.is_sync  = execute_if.data.op_args.wctl.is_sync_bar;
     assign bar.is_global= wctl_bar_enable && rs1_data[31];
-    assign bar.is_arrive= execute_if.data.op_args.wctl.is_bar_arrive || execute_if.data.op_args.wctl.is_sync_bar;
-    assign bar.phase    = wctl_bar_enable ? rs2_data[0] : ~txbar_bus_if.data.is_done;
+    // arrive_tx is not a normal arrival (it does not advance arrive_count)
+    assign bar.is_arrive= (execute_if.data.op_args.wctl.is_bar_arrive && ~rs2_data[31]) || execute_if.data.op_args.wctl.is_sync_bar;
+    // arrive_tx → phase=1 (attach/increment); legacy txbar release → phase=0
+    assign bar.phase    = is_tx_arrive ? 1'b1 : (wctl_bar_enable ? rs2_data[0] : ~txbar_bus_if.data.is_done);
+    // For arrive_tx: size_m1 carries (count - 1); for normal arrive: (num_warps - 1).
+    // bar_unit will + 1 when consuming on the event path so the actual increment is `count`.
     assign bar.size_m1  = rs2_data[BAR_SIZE_W-1:0] - BAR_SIZE_W'(1);
 
     assign txbar_bus_if.ready = ~wctl_bar_enable;

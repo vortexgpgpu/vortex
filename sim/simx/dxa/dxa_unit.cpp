@@ -43,22 +43,24 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace) {
   uint32_t cta_mask  = rs2.at(3).u;
   uint32_t desc_slot = meta & 0x0fu;
   uint32_t raw_bar   = (meta >> 4) & 0x07ffffffu;
-  uint32_t bar_id    = bar_decode_id(raw_bar, NUM_BARRIERS);
 
   DxaReq req;
   req.core      = core_;
   req.uuid      = trace->uuid;
   req.wid       = trace->wid;
   req.desc_slot = desc_slot;
-  req.bar_id    = bar_id;
+  // Keep raw bar_id; multicast offset arithmetic relies on encoded form
+  // (cta_no in low 8 bits → bar_id + cta_idx targets next CTA's same bar).
+  // Release call site decodes via bar_decode_id().
+  req.bar_id    = raw_bar;
   req.cta_mask  = cta_mask;
   req.smem_addr = smem_addr;
   for (int i = 0; i < 5; ++i) req.coords[i] = coords[i];
 
-  // Attach the warp to the barrier *before* the request can race ahead and
-  // release it (DxaCore may fire the completion as early as the cycle
-  // after we send).
-  core_->barrier_event_attach(bar_id);
+  // NOTE: barrier transaction registration is now the kernel's responsibility
+  // via vx_barrier_arrive_tx() (see sw/kernel/include/vx_barrier.h::arrive_tx).
+  // The DXA pipeline only emits release events on completion; pre-registration
+  // happens explicitly per-CTA so multicast destinations correctly wait.
 
   req_out_.send(req);
   DT(4, "dxa-unit submit: core=" << core_->id() << ", wid=" << trace->wid

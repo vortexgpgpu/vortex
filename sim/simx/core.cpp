@@ -860,8 +860,8 @@ void Core::global_barrier_resume(uint32_t bar_id) {
   impl_->scheduler()->barrier_unit().global_resume(bar_id);
 }
 
-void Core::barrier_event_attach(uint32_t bar_id) {
-  impl_->scheduler()->barrier_unit().event_attach(bar_id);
+void Core::barrier_event_attach(uint32_t bar_id, uint32_t count) {
+  impl_->scheduler()->barrier_unit().event_attach(bar_id, count);
 }
 
 void Core::barrier_event_release(uint32_t bar_id) {

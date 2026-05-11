@@ -115,10 +115,10 @@ void BarrierUnit::global_resume(uint32_t bar_id) {
   ++barrier.phase;
 }
 
-void BarrierUnit::event_attach(uint32_t bar_id) {
+void BarrierUnit::event_attach(uint32_t bar_id, uint32_t count) {
   auto bar_index = bar_id & 0x7fffffff;
   auto& barrier = barriers_.at(bar_index);
-  ++barrier.events;
+  barrier.events += count;
 }
 
 void BarrierUnit::event_release(uint32_t bar_id) {

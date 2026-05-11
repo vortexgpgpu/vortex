@@ -33,7 +33,7 @@ public:
   void arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar);
   bool wait(uint32_t bar_id, uint32_t phase, uint32_t wid);
   void global_resume(uint32_t bar_id);
-  void event_attach(uint32_t bar_id);
+  void event_attach(uint32_t bar_id, uint32_t count = 1);
   void event_release(uint32_t bar_id);
 
 protected:

@@ -76,7 +76,10 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
             if (req_data.is_event) begin
                 // event tracking
                 if (req_data.phase) begin
-                    events_n = events_r + EVENT_WIDTH'(1);
+                    // attach/arrive_tx: increment by (size_m1 + 1) so that
+                    // a software arrive_tx(N) adds N events, while legacy
+                    // single-event paths (size_m1=0) add 1.
+                    events_n = events_r + EVENT_WIDTH'(req_data.size_m1) + EVENT_WIDTH'(1);
                 end else begin
                     events_n = events_r - EVENT_WIDTH'(1);
                 end
@@ -123,7 +126,8 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                 if (req_data.is_event) begin
                     // event tracking
                     if (req_data.phase) begin
-                        events_n = events_r + EVENT_WIDTH'(1);
+                        // arrive_tx(N): add (size_m1 + 1)
+                        events_n = events_r + EVENT_WIDTH'(req_data.size_m1) + EVENT_WIDTH'(1);
                     end else begin
                         events_n = events_r - EVENT_WIDTH'(1);
                     end

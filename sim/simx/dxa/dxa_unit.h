@@ -29,7 +29,10 @@ struct DxaReq {
   uint64_t uuid;
   uint32_t wid;
   uint32_t desc_slot;     // descriptor table index
-  uint32_t bar_id;        // decoded (post bar_decode_id)
+  uint32_t bar_id;        // RAW (pre bar_decode_id) — kept raw so that
+                          // multicast offset arithmetic (bar_id + cta_idx)
+                          // increments cta_no in the encoded low byte.
+                          // Decoded only at the release call site.
   uint32_t cta_mask;      // multicast warp mask (>1 bit ⇒ multicast)
   uint64_t smem_addr;
   uint32_t coords[5];
