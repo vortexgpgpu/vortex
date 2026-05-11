@@ -23,17 +23,17 @@ extern "C" {
 
 // ── Internal helpers (not part of public API) ──────────────────────
 
-static inline uint32_t vx_dxa__pack_meta(uint32_t rank, uint32_t elem_size_enc) {
+static inline uint32_t __dxa_pack_meta(uint32_t rank, uint32_t elem_size_enc) {
   return ((rank & ((1u << VX_DXA_DESC_META_DIM_BITS) - 1u)) << VX_DXA_DESC_META_DIM_LSB)
        | ((elem_size_enc & ((1u << VX_DXA_DESC_META_ELEMSZ_BITS) - 1u)) << VX_DXA_DESC_META_ELEMSZ_LSB);
 }
 
-static inline uint32_t vx_dxa__pack_2x16(uint32_t lo, uint32_t hi) {
+static inline uint32_t __dxa_pack_2x16(uint32_t lo, uint32_t hi) {
   return ((hi & 0xffffu) << 16) | (lo & 0xffffu);
 }
 
 // elem_bytes must be a power of 2 (1, 2, 4, 8). Returns log2.
-static inline uint32_t vx_dxa__elem_size_enc(uint32_t elem_bytes) {
+static inline uint32_t __dxa_elem_size_enc(uint32_t elem_bytes) {
   uint32_t enc = 0;
   uint32_t v = elem_bytes;
   while (v > 1) { v >>= 1; ++enc; }
@@ -60,7 +60,7 @@ static inline int vx_dxa_program_desc_1d(
     uint32_t tile0,
     uint32_t elem_bytes) {
   uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
-  uint32_t meta = vx_dxa__pack_meta(1, vx_dxa__elem_size_enc(elem_bytes));
+  uint32_t meta = __dxa_pack_meta(1, __dxa_elem_size_enc(elem_bytes));
   int ret;
 #define VX_DXA__W(off, val) do { ret = vx_dcr_write(dev, dcr + (off), (val)); if (ret) return ret; } while(0)
   VX_DXA__W(VX_DCR_DXA_DESC_BASE_LO_OFF, (uint32_t)(base_addr & 0xffffffffu));
@@ -68,7 +68,7 @@ static inline int vx_dxa_program_desc_1d(
   VX_DXA__W(VX_DCR_DXA_DESC_SIZE0_OFF, size0);
   VX_DXA__W(VX_DCR_DXA_DESC_META_OFF, meta);
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE0_OFF, 1);
-  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, vx_dxa__pack_2x16(tile0, 0));
+  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, __dxa_pack_2x16(tile0, 0));
   VX_DXA__W(VX_DCR_DXA_DESC_CFILL_OFF, 0);
 #undef VX_DXA__W
   return 0;
@@ -87,7 +87,7 @@ static inline int vx_dxa_program_desc_2d(
     uint32_t tile0, uint32_t tile1,
     uint32_t elem_bytes) {
   uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
-  uint32_t meta = vx_dxa__pack_meta(2, vx_dxa__elem_size_enc(elem_bytes));
+  uint32_t meta = __dxa_pack_meta(2, __dxa_elem_size_enc(elem_bytes));
   int ret;
 #define VX_DXA__W(off, val) do { ret = vx_dcr_write(dev, dcr + (off), (val)); if (ret) return ret; } while(0)
   VX_DXA__W(VX_DCR_DXA_DESC_BASE_LO_OFF, (uint32_t)(base_addr & 0xffffffffu));
@@ -98,7 +98,7 @@ static inline int vx_dxa_program_desc_2d(
   VX_DXA__W(VX_DCR_DXA_DESC_META_OFF, meta);
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE0_OFF, 1);
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE1_OFF, 1);
-  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, vx_dxa__pack_2x16(tile0, tile1));
+  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, __dxa_pack_2x16(tile0, tile1));
   VX_DXA__W(VX_DCR_DXA_DESC_CFILL_OFF, 0);
 #undef VX_DXA__W
   return 0;
@@ -117,7 +117,7 @@ static inline int vx_dxa_program_desc_3d(
     uint32_t tile0, uint32_t tile1, uint32_t tile2,
     uint32_t elem_bytes) {
   uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
-  uint32_t meta = vx_dxa__pack_meta(3, vx_dxa__elem_size_enc(elem_bytes));
+  uint32_t meta = __dxa_pack_meta(3, __dxa_elem_size_enc(elem_bytes));
   int ret;
 #define VX_DXA__W(off, val) do { ret = vx_dcr_write(dev, dcr + (off), (val)); if (ret) return ret; } while(0)
   VX_DXA__W(VX_DCR_DXA_DESC_BASE_LO_OFF, (uint32_t)(base_addr & 0xffffffffu));
@@ -131,8 +131,8 @@ static inline int vx_dxa_program_desc_3d(
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE0_OFF, 1);
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE1_OFF, 1);
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE2_OFF, 1);
-  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, vx_dxa__pack_2x16(tile0, tile1));
-  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE23_OFF, vx_dxa__pack_2x16(tile2, 0));
+  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, __dxa_pack_2x16(tile0, tile1));
+  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE23_OFF, __dxa_pack_2x16(tile2, 0));
   VX_DXA__W(VX_DCR_DXA_DESC_CFILL_OFF, 0);
 #undef VX_DXA__W
   return 0;
@@ -151,7 +151,7 @@ static inline int vx_dxa_program_desc_4d(
     uint32_t tile0, uint32_t tile1, uint32_t tile2, uint32_t tile3,
     uint32_t elem_bytes) {
   uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
-  uint32_t meta = vx_dxa__pack_meta(4, vx_dxa__elem_size_enc(elem_bytes));
+  uint32_t meta = __dxa_pack_meta(4, __dxa_elem_size_enc(elem_bytes));
   int ret;
 #define VX_DXA__W(off, val) do { ret = vx_dcr_write(dev, dcr + (off), (val)); if (ret) return ret; } while(0)
   VX_DXA__W(VX_DCR_DXA_DESC_BASE_LO_OFF, (uint32_t)(base_addr & 0xffffffffu));
@@ -168,8 +168,8 @@ static inline int vx_dxa_program_desc_4d(
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE1_OFF, 1);
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE2_OFF, 1);
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE3_OFF, 1);
-  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, vx_dxa__pack_2x16(tile0, tile1));
-  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE23_OFF, vx_dxa__pack_2x16(tile2, tile3));
+  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, __dxa_pack_2x16(tile0, tile1));
+  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE23_OFF, __dxa_pack_2x16(tile2, tile3));
   VX_DXA__W(VX_DCR_DXA_DESC_CFILL_OFF, 0);
 #undef VX_DXA__W
   return 0;
@@ -188,7 +188,7 @@ static inline int vx_dxa_program_desc_5d(
     uint32_t tile0, uint32_t tile1, uint32_t tile2, uint32_t tile3, uint32_t tile4,
     uint32_t elem_bytes) {
   uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
-  uint32_t meta = vx_dxa__pack_meta(5, vx_dxa__elem_size_enc(elem_bytes));
+  uint32_t meta = __dxa_pack_meta(5, __dxa_elem_size_enc(elem_bytes));
   int ret;
 #define VX_DXA__W(off, val) do { ret = vx_dcr_write(dev, dcr + (off), (val)); if (ret) return ret; } while(0)
   VX_DXA__W(VX_DCR_DXA_DESC_BASE_LO_OFF, (uint32_t)(base_addr & 0xffffffffu));
@@ -208,8 +208,8 @@ static inline int vx_dxa_program_desc_5d(
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE2_OFF, 1);
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE3_OFF, 1);
   VX_DXA__W(VX_DCR_DXA_DESC_ESTRIDE4_OFF, 1);
-  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, vx_dxa__pack_2x16(tile0, tile1));
-  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE23_OFF, vx_dxa__pack_2x16(tile2, tile3));
+  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE01_OFF, __dxa_pack_2x16(tile0, tile1));
+  VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE23_OFF, __dxa_pack_2x16(tile2, tile3));
   VX_DXA__W(VX_DCR_DXA_DESC_TILESIZE4_OFF, tile4);
   VX_DXA__W(VX_DCR_DXA_DESC_CFILL_OFF, 0);
 #undef VX_DXA__W
