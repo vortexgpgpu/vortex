@@ -181,7 +181,15 @@ module VX_decode import VX_gpu_pkg::*; #(
 
         ex_type   = 'x;
         op_type   = 'x;
-        op_args   = 'x;
+        // Initialize to 0 (not 'x') so the unused-field bits in the
+        // op_args packed union (e.g. br_args_t.__unused vs alu_args_t.is_w)
+        // don't pick up random verilator init values. With --x-assign
+        // unique, leaving these as X caused JAL/BR decoders — which write
+        // only the br_args view and never touch the alias bit — to feed
+        // a random is_w into the ALU on some core instances, mis-selecting
+        // the *W variant of the adder and computing the wrong branch
+        // target (e.g. PC+imm truncated to 32 bits).
+        op_args   = '0;
         reg_ids   = 'x;
         use_regs  = '0;
         rd_xregs  = '0;
