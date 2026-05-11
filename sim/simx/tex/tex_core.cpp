@@ -39,7 +39,7 @@ constexpr uint64_t kTcacheLineMask = ~uint64_t(MEM_BLOCK_SIZE - 1);
 
 // Per-request slot count. Mirrors `TEX_REQ_QUEUE_SIZE` from VX_config (a
 // rounding helper based on NUM_THREADS / NUM_SFU_LANES; 4 is the upper
-// bound at this config and well-above what the tex_smoke kernel issues).
+// bound at this config and well-above what the tex kernel issues).
 constexpr uint32_t kInflight = 8;
 
 } // namespace

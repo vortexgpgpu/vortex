@@ -39,7 +39,7 @@ struct RasterReq {
 // RasterStamp — per-lane raster output carrying everything the CSR
 // plumbing needs to expose to the kernel (pos_mask + pid + 4-corner
 // barycentric coords on each of 3 axes). `pos_mask = 0` is the "drained"
-// sentinel (matches raster_smoke kernel's `vx_rast() == 0` check).
+// sentinel (matches raster kernel.s `vx_rast() == 0` check).
 struct RasterStamp {
   uint32_t pos_mask = 0;                                  // (pos_y<<18) | (pos_x<<4) | mask
   uint32_t pid      = 0;

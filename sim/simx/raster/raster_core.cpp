@@ -43,7 +43,7 @@ constexpr uint32_t kTileHeaderBytes = sizeof(graphics::rast_tile_header_t);
 
 // Stamp encoding for the kernel's vx_rast() result word. Mirrors the RTL
 // concat in VX_raster_unit.sv:59-62 and the kernel decode in
-// raster_smoke/kernel.cpp:
+// raster/kernel.cpp:
 //   bits[ 3:0]  = mask
 //   bits[17:4]  = pos_x  (VX_RASTER_DIM_BITS-1 = 14 bits)
 //   bits[31:18] = pos_y  (VX_RASTER_DIM_BITS-1 = 14 bits)

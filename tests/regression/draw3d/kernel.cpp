@@ -5,7 +5,7 @@
 // barycentric-interpolated colour/uv/depth from raster bcoord CSRs,
 // optionally samples a texture, and writes the result through vx_om.
 //
-// vx_rast() returns the pos_mask word directly (matches raster_smoke /
+// vx_rast() returns the pos_mask word directly (matches raster /
 // raster kernels). The per-thread pid + bcoords for the popped quad are
 // read back through VX_CSR_RASTER_PID + VX_CSR_RASTER_BCOORD_X/Y/Z[0..3],
 // which simx latches into per-warp+thread CSR storage on each pop.
