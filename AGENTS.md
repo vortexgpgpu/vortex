@@ -173,15 +173,15 @@ CSR address space (per-warp readback for raster bcoords):
 - `VX_CSR_RASTER_*`  `0x7C0..0x7CC`
 - `VX_CSR_OM_*`      `0x7CD..0x7CE`
 
-### Quick smoke (rtlsim)
+### Graphics tests (rtlsim)
 
-Three minimum end-to-end tests live under `tests/regression/`:
+End-to-end PNG-driven tests live under `tests/regression/`:
 
 ```bash
-CONFIGS="-DEXT_TEX_ENABLE"    ./ci/blackbox.sh --driver=rtlsim --app=tex_smoke
-CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster_smoke
-CONFIGS="-DEXT_OM_ENABLE"     ./ci/blackbox.sh --driver=rtlsim --app=om_smoke
-# 6-test matrix (each individually + all-three-on combo):
+CONFIGS="-DEXT_TEX_ENABLE"    ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-i palette64.png -r palette64_ref_g0.png"
+CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-w 32 -h 32 -t triangle.cgltrace -r triangle_ref_32.png"
+CONFIGS="-DEXT_OM_ENABLE"     ./ci/blackbox.sh --driver=rtlsim --app=om --args="-w 32 -h 32 -c 16777215 -r whitebox_32.png"
+# Full graphics matrix:
 ./ci/regression.sh --graphics
 ```
 

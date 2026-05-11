@@ -42,7 +42,6 @@
 namespace vortex {
 
 inline constexpr uint32_t XLENB           = (XLEN / 8);
-inline constexpr uint32_t VLENB           = (VLEN / 8);
 
 inline constexpr uint32_t MAX_NUM_CORES   = 1024;
 inline constexpr uint32_t MAX_NUM_WARPS   = 64;
