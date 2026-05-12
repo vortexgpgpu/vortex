@@ -32,64 +32,68 @@ module VX_dxa_completion import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire is_last = bank_wr_attr[ATTR_WIDTH-1];
     wire any_dxa_wr = |bank_wr_fire;
 
-    // Valid/ready handshake: hold valid high until downstream accepts.
-    // Use a single pending slot to handle backpressure and back-to-back events.
-
-    reg pending_valid_r;
-    reg [BAR_ADDR_W-1:0] pending_bar_r;
-
     wire done_fire = any_dxa_wr && is_last;
     wire [BAR_ADDR_W-1:0] done_fire_bar = bank_wr_attr[BAR_ADDR_W-1:0];
-    wire done_accepted = txbar_bus_if.valid && txbar_bus_if.ready;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Release-event FIFO.
+    //
+    // Multicast can fire popcount(cta_mask) back-to-back release events on
+    // the LAST drain word — one per receiver. A single pending slot would
+    // drop events if downstream (wctl_unit) is slower than the burst rate.
+    //
+    // Depth = NUM_WARPS handles the worst-case intra-core multicast burst
+    // (NUM_WARPS receivers in NUM_WARPS consecutive cycles). The DXA worker
+    // never fires releases faster than 1/cycle, so a per-cycle drain rate
+    // ≥ 1/2 keeps the FIFO bounded. An assertion catches overflow.
+    // ════════════════════════════════════════════════════════════════════
+    wire [BAR_ADDR_W-1:0] fifo_dout;
+    wire fifo_empty;
+    wire fifo_full;
+    wire fifo_push = done_fire;
+    wire fifo_pop  = txbar_bus_if.valid && txbar_bus_if.ready;
+
+    VX_fifo_queue #(
+        .DATAW  (BAR_ADDR_W),
+        .DEPTH  (`NUM_WARPS),
+        .LUTRAM (1)
+    ) compl_fifo (
+        .clk        (clk),
+        .reset      (reset),
+        .push       (fifo_push),
+        .pop        (fifo_pop),
+        .data_in    (done_fire_bar),
+        .data_out   (fifo_dout),
+        .empty      (fifo_empty),
+        .full       (fifo_full),
+        `UNUSED_PIN (alm_empty),
+        `UNUSED_PIN (alm_full),
+        `UNUSED_PIN (size)
+    );
+
+    assign txbar_bus_if.valid        = ~fifo_empty;
+    assign txbar_bus_if.data.addr    = fifo_dout;
+    assign txbar_bus_if.data.is_done = 1'b1;
+
+    `RUNTIME_ASSERT(~(fifo_push && fifo_full),
+        ("%t: %s overflow — multicast release FIFO full, event for bar=0x%0h would be dropped",
+         $time, INSTANCE_ID, done_fire_bar))
 
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
         if (any_dxa_wr && !reset) begin
-            `TRACE(2, ("%t: %s: bank_wr_fire=%b, attr=0x%0h, is_last=%b, done_fire=%b, pending=%b, valid=%b, ready=%b\n",
-                $time, INSTANCE_ID, bank_wr_fire, bank_wr_attr, is_last, done_fire, pending_valid_r, txbar_bus_if.valid, txbar_bus_if.ready))
+            `TRACE(2, ("%t: %s: bank_wr_fire=%b, attr=0x%0h, is_last=%b, done_fire=%b, fifo_empty=%b, valid=%b, ready=%b\n",
+                $time, INSTANCE_ID, bank_wr_fire, bank_wr_attr, is_last, done_fire,
+                fifo_empty, txbar_bus_if.valid, txbar_bus_if.ready))
         end
-        if (done_accepted && !reset) begin
+        if (fifo_pop && !reset) begin
             `TRACE(2, ("%t: %s: ACCEPTED bar_addr=0x%0h\n",
                 $time, INSTANCE_ID, txbar_bus_if.data.addr))
         end
-        if (~reset && done_accepted) begin
+        if (~reset && fifo_pop) begin
             $write("DXA_TL,%0d,DONE_DETECT,%s,bar=%0d\n",
                 $time, INSTANCE_ID, txbar_bus_if.data.addr);
         end
     end
 `endif
-
-    // Priority: emit pending first, then same-cycle fire
-    assign txbar_bus_if.valid        = pending_valid_r || (done_fire && ~pending_valid_r);
-    assign txbar_bus_if.data.addr    = pending_valid_r ? pending_bar_r : done_fire_bar;
-    assign txbar_bus_if.data.is_done = 1'b1;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            pending_valid_r <= 1'b0;
-            pending_bar_r <= '0;
-        end else begin
-            if (pending_valid_r) begin
-                if (done_accepted) begin
-                    // Pending was accepted by downstream
-                    if (done_fire) begin
-                        // New event same cycle — refill pending
-                        pending_valid_r <= 1'b1;
-                        pending_bar_r <= done_fire_bar;
-                    end else begin
-                        pending_valid_r <= 1'b0;
-                        pending_bar_r <= '0;
-                    end
-                end
-                // If !done_accepted: keep pending as-is (hold valid high)
-            end else if (done_fire) begin
-                if (!txbar_bus_if.ready) begin
-                    // Not accepted — queue it in pending
-                    pending_valid_r <= 1'b1;
-                    pending_bar_r <= done_fire_bar;
-                end
-                // If ready=1: accepted immediately, no pending needed
-            end
-        end
-    end
 endmodule
