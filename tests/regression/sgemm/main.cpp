@@ -148,6 +148,15 @@ int main(int argc, char *argv[]) {
   uint32_t global_dim[2] = {size, size};
   uint32_t grid_dim[2], block_dim[2];
   RT_CHECK(vx_max_occupancy_grid(device, 2, global_dim, grid_dim, block_dim));
+
+  // The kernel does not bounds-check (col >= size), we need to enforce it here. 
+  if ((size % block_dim[0]) != 0 || (size % block_dim[1]) != 0) {
+    std::cerr << "Error: matrix size " << size
+              << " must be a multiple of block_dim ("
+              << block_dim[0] << "x" << block_dim[1] << ")." << std::endl;
+    cleanup();
+    return -1;
+  }
   kernel_arg.size = size;
 
   // allocate device memory
