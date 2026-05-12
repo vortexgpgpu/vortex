@@ -214,7 +214,7 @@ import VX_raster_pkg::*;
     );
 
     // The only txbar producer is now the SMEM-completion path coming up
-    // through dxa_txbar_bus_if (DXA release). Software arrive_tx handles
+    // through dxa_txbar_bus_if (DXA release). Software expect_tx handles
     // attach via the warp-control path, so no arbitration is needed.
     assign txbar_bus_if.valid     = dxa_txbar_bus_if.valid;
     assign txbar_bus_if.data      = dxa_txbar_bus_if.data;

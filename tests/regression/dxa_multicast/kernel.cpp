@@ -34,7 +34,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // local barrier. Without this, non-issuing CTAs would see events==0 at
   // arrive_and_wait and skip past the DXA completion (race).
   if (is_dxa_warp) {
-    bar.arrive_tx(1);
+    bar.expect_tx(1);
     if (cta_id == 0) {
       uint32_t cta_mask = (1u << arg->num_ctas) - 1;
       vx_dxa_issue_2d_multicast_wg(kDescSrc, bar.id(), shmem,

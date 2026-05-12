@@ -46,8 +46,8 @@ public:
   // Used by async data-movement (e.g. DXA multicast) to declare expected
   // completions BEFORE issuing the operation, so non-issuing CTAs/warps
   // know to wait. Count is cumulative across multiple calls.
-  void arrive_tx(uint32_t count = 1) {
-    vx_barrier_arrive_tx(bar_id_, count);
+  void expect_tx(uint32_t count = 1) {
+    vx_barrier_expect_tx(bar_id_, count);
   }
 
   // Packed barrier id (for passing to DXA issue instructions)

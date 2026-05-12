@@ -58,7 +58,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Output elastic buffer breaks the combinatorial path between
     // dxa_req_arb and this unit. Barrier transaction registration is now
-    // handled by software arrive_tx (see vx_barrier.h::arrive_tx); this
+    // handled by software expect_tx (see vx_barrier.h::expect_tx); this
     // unit no longer emits txbar attach packets.
     wire dxa_buf_ready, wb_ready;
     wire accept = dxa_buf_ready && wb_ready;

@@ -38,7 +38,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   vortex::barrier bar(0);
   const bool is_dxa_warp = (get_sub_group_id() == 0);
   if (is_dxa_warp) {
-    bar.arrive_tx(1);  // Pre-register 1 pending DXA transaction
+    bar.expect_tx(1);  // Pre-register 1 pending DXA transaction
     switch (ndim) {
     case 1:
       vx_dxa_issue_1d_wg(kDescSrc, bar.id(), shmem, coords[0]);

@@ -544,18 +544,18 @@ inline void vx_barrier_wait(int barrier_id, int phase) {
     );
 }
 
-// Async Transaction Arrive: pre-register N pending transaction events on
+// Async Transaction Expect: pre-register N pending transaction events on
 // the given barrier. Reuses the barrier_arrive opcode but encodes rs2[31]=1
-// to flag tx-arrive semantics. The lower bits of rs2 carry the count N.
+// to flag expect-tx semantics. The lower bits of rs2 carry the count N.
 // Each pending event must be matched by a future release (e.g. DXA SMEM
 // completion). The barrier only flips phase when both arrive_count==0 AND
 // events==0.
 //
 // NOTE: rd must be non-x0 — decode uses (rd != 0) to distinguish arrive
-// vs wait on this opcode. The returned phase is meaningless for arrive_tx
+// vs wait on this opcode. The returned phase is meaningless for expect_tx
 // (we don't advance arrival count) but we keep a real register destination
 // to satisfy the decoder.
-inline void vx_barrier_arrive_tx(int barrier_id, int count) {
+inline void vx_barrier_expect_tx(int barrier_id, int count) {
     int discard;
     int rs2 = count | 0x80000000;
     __asm__ volatile (
