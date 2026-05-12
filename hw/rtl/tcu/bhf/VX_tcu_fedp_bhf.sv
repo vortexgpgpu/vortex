@@ -83,6 +83,10 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
         wire [32:0] mult_result_fp8;
         wire [32:0] mult_result_bf8;
 
+        wire [32:0] mult_result_tf32;
+
+        `UNUSED_VAR (mult_result_bf16, mult_result_fp8, mult_result_bf8, mult_result_tf32);
+
         VX_tcu_bhf_fp8mul #(
             .IN_EXPW (4),
             .IN_SIGW (3+1),
@@ -167,7 +171,6 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
             `UNUSED_PIN(fflags)
         );
 
-        wire [32:0] mult_result_tf32;
         // Only even TCK lanes are valid for TF32
         if ((i % 2) == 0) begin : g_tf32_mul
             VX_tcu_bhf_fmul #(
@@ -193,6 +196,9 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
             // Zero out odd lanes
             assign mult_result_tf32 = 33'h0;
         end
+    `ifndef TCU_TF32_ENABLE
+        `UNUSED_VAR (mult_result_tf32)
+    `endif
 
         logic [32:0] mult_result_mux;
         always_comb begin
