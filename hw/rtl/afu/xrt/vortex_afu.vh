@@ -14,26 +14,12 @@
 `ifndef VORTEX_AFU_VH
 `define VORTEX_AFU_VH
 
+// Synthesis-time base offset added to every m_axi_mem_<i> outgoing AXI byte
+// address so that Vortex's compile-time absolute addresses (STARTUP_ADDR,
+// STACK_BASE_ADDR, ...) land inside the xrt::bo allocation that XRT placed
+// in that bank.
 `ifndef PLATFORM_MEMORY_OFFSET
 `define PLATFORM_MEMORY_OFFSET 0
-`endif
-
-// Per-bank XRT BO base address. Each m_axi_mem_<i> port's outgoing AXI byte
-// address gets this offset added so that Vortex's compile-time absolute
-// addresses (STARTUP_ADDR, STACK_BASE_ADDR, ...) land inside the xrt::bo
-// allocation that XRT placed in that bank. Defaults to PLATFORM_MEMORY_OFFSET
-// (single offset for all banks) for back-compatibility.
-`ifndef PLATFORM_MEMORY_OFFSET_0
-`define PLATFORM_MEMORY_OFFSET_0 `PLATFORM_MEMORY_OFFSET
-`endif
-`ifndef PLATFORM_MEMORY_OFFSET_1
-`define PLATFORM_MEMORY_OFFSET_1 `PLATFORM_MEMORY_OFFSET
-`endif
-`ifndef PLATFORM_MEMORY_OFFSET_2
-`define PLATFORM_MEMORY_OFFSET_2 `PLATFORM_MEMORY_OFFSET
-`endif
-`ifndef PLATFORM_MEMORY_OFFSET_3
-`define PLATFORM_MEMORY_OFFSET_3 `PLATFORM_MEMORY_OFFSET
 `endif
 
 `ifndef PLATFORM_MEMORY_ID_WIDTH

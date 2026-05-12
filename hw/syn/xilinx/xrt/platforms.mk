@@ -35,7 +35,7 @@ else ifneq ($(findstring xilinx_u250,$(XSA)),)
   # see follow-up PR for a DCR-based runtime path.
   CONFIGS += -DPLATFORM_MEMORY_NUM_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=34
   VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:DDR[0]
-  CONFIGS += -DPLATFORM_MEMORY_OFFSET_0=40\'h4000000000
+  CONFIGS += -DPLATFORM_MEMORY_OFFSET=40\'h4000000000
 else ifneq ($(findstring xilinx_u200,$(XSA)),)
   # 64 GB of DDR4 with 4 channels (16 GB per channel)
   CONFIGS += -DPLATFORM_MEMORY_NUM_BANKS=4 -DPLATFORM_MEMORY_ADDR_WIDTH=36
