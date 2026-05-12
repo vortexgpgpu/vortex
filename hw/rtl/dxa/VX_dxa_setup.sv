@@ -11,17 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA Setup: owns transfer lifecycle (IDLE/SETUP/ACTIVE), issue decode,
-// metadata latching, and DSP-based parameter precomputation.
-// Supports 1D-5D tiles with rank-dependent setup latency:
-//   rank 1-2: 6 cycles, rank 3: 8, rank 4: 10, rank 5: 12.
-// Reuses 3 DSP multipliers across phases for area efficiency.
+// DXA Setup: owns transfer lifecycle, issue decode, metadata latching,
+// and DSP-based parameter precomputation. The setup engine runs in
+// parallel with an active transfer's drain: a new request is accepted
+// the cycle the DSPs are idle, the result lands in `staged_*`, and is
+// promoted to the live `r_*` registers the cycle the previous transfer
+// completes. Setup latency now overlaps with drain, eliminating the
+// pipeline bubble for streamed transfers.
+//
+// Rank-dependent setup latency (cycles from launch_accept to staged):
+//   rank 1-2: 3, rank 3: 5, rank 4: 7, rank 5: 9.
+// (Two cycles shorter than before — the dead final-phase multiplier
+// that produced total_bytes was removed.)
 
 `include "VX_define.vh"
 
-module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
-    parameter SMEM_BYTES = DXA_LMEM_WORD_SIZE
-) (
+module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     input  wire                        clk,
     input  wire                        reset,
 
@@ -54,19 +59,29 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [31:0]                 active_smem_stride
 );
     localparam MUL_LATENCY = 2;
-    localparam SMEM_OFF_BITS = `CLOG2(SMEM_BYTES);
 
     // ════════════════════════════════════════════════════════════════════
-    // Transfer state machine: IDLE → SETUP → ACTIVE → IDLE
+    // Transfer state: TS_IDLE / TS_ACTIVE.
+    // (TS_SETUP is gone — setup is tracked separately by setup_state_r.)
     // ════════════════════════════════════════════════════════════════════
-    localparam TS_IDLE   = 2'd0;
-    localparam TS_SETUP  = 2'd1;
-    localparam TS_ACTIVE = 2'd2;
+    localparam TS_IDLE   = 1'b0;
+    localparam TS_ACTIVE = 1'b1;
 
-    reg [1:0] state_r;
-
-    assign req_ready       = (state_r == TS_IDLE);
+    reg state_r;
     assign transfer_active = (state_r == TS_ACTIVE);
+
+    // ════════════════════════════════════════════════════════════════════
+    // Setup engine state: SS_IDLE / SS_RUNNING / SS_STAGED.
+    // ════════════════════════════════════════════════════════════════════
+    localparam SS_IDLE    = 2'd0;
+    localparam SS_RUNNING = 2'd1;
+    localparam SS_STAGED  = 2'd2;
+
+    reg [1:0] setup_state_r;
+
+    // Accept a new request whenever the setup engine has capacity (i.e.,
+    // not currently computing nor holding a staged result).
+    assign req_ready = (setup_state_r == SS_IDLE);
 
     wire launch_accept = req_valid && req_ready;
 
@@ -113,77 +128,79 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     end
 
     // ════════════════════════════════════════════════════════════════════
-    // Latched metadata registers
+    // Active result registers (used live by downstream).
     // ════════════════════════════════════════════════════════════════════
 
-    reg [NC_WIDTH-1:0]     r_core_id;
-    reg [UUID_WIDTH-1:0]   r_uuid;
-    reg [NW_WIDTH-1:0]     r_wid;
-    reg [BAR_ADDR_W-1:0]   r_bar_addr;
-    reg                    r_notify_smem_done;
-    reg                    r_is_multicast;
-    reg [`NUM_WARPS-1:0]   r_cta_mask;
-    reg [31:0]             r_smem_stride;
-
-    assign active_core_id         = r_core_id;
-    assign active_uuid            = r_uuid;
-    assign active_wid             = r_wid;
-    assign active_bar_addr        = r_bar_addr;
-    assign active_notify_smem_done = r_notify_smem_done;
-    assign active_is_multicast    = r_is_multicast;
-    assign active_cta_mask        = r_cta_mask;
-    assign active_smem_stride     = r_smem_stride;
-
-    // ════════════════════════════════════════════════════════════════════
-    // Setup pipeline: 3 parallel DSP multipliers, multi-phase
-    // ════════════════════════════════════════════════════════════════════
-    //
-    // Phase 0 (all ranks):
-    //   mul0: tile0 × elem_bytes → row_len_bytes
-    //   mul1: coord0 × elem_bytes → off0
-    //   mul2: coord1 × stride0   → off1
-    //
-    // Phase 1 (rank≥3):
-    //   mul0: tile1 × tile2 → partial_rows
-    //   mul1: coord2 × stride1 → off2
-    //
-    // Phase 2 (rank≥4):
-    //   mul0: partial_rows × tile3 → partial_rows2
-    //   mul1: coord3 × stride2 → off3
-    //
-    // Phase 3 (rank=5):
-    //   mul0: partial_rows2 × tile4 → total_rows
-    //   mul1: coord4 × stride3 → off4
-    //
-    // Final phase:
-    //   mul0: total_rows × row_len_bytes → total_bytes
-
-    reg [3:0] ctr_r;
-
-    // Latched multiply operands (captured on launch_accept).
-    reg [31:0] lat_tile0, lat_elem_bytes;
-    reg [31:0] lat_coord0, lat_coord1, lat_stride0;
-    reg [31:0] lat_tile1, lat_tile2, lat_tile3, lat_tile4;
-    reg [31:0] lat_coord2, lat_coord3, lat_coord4;
-    reg [31:0] lat_stride1, lat_stride2, lat_stride3;
-    reg [`MEM_ADDR_WIDTH-1:0] lat_gbase;
-
-    // Registered output parameters.
+    reg [NC_WIDTH-1:0]                     r_core_id;
+    reg [UUID_WIDTH-1:0]                   r_uuid;
+    reg [NW_WIDTH-1:0]                     r_wid;
+    reg [BAR_ADDR_W-1:0]                   r_bar_addr;
+    reg                                    r_notify_smem_done;
+    reg                                    r_is_multicast;
+    reg [`NUM_WARPS-1:0]                   r_cta_mask;
+    reg [31:0]                             r_smem_stride;
     reg [`MEM_ADDR_WIDTH-1:0]              r_initial_gmem_base;
     reg [`XLEN-1:0]                        r_initial_smem_base;
     reg [31:0]                             r_row_len_bytes;
-    reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_strides;
+    reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_delta;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_dim_tiles;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_oob_limit;
-    reg [31:0]                             r_total_rows;
-    reg [31:0]                             r_total_smem_writes;
-    reg [31:0]                             r_total_bytes;
     reg [31:0]                             r_cfill;
-    reg [31:0]                             r_elem_bytes;
-    reg [31:0]                             r_rank;
 
-    // ── Multiplier instances ──
+    // ════════════════════════════════════════════════════════════════════
+    // Staged result registers (filled by the setup engine for the next
+    // transfer while the current one is still draining).
+    // ════════════════════════════════════════════════════════════════════
 
+    reg [NC_WIDTH-1:0]                     s_core_id;
+    reg [UUID_WIDTH-1:0]                   s_uuid;
+    reg [NW_WIDTH-1:0]                     s_wid;
+    reg [BAR_ADDR_W-1:0]                   s_bar_addr;
+    reg                                    s_notify_smem_done;
+    reg                                    s_is_multicast;
+    reg [`NUM_WARPS-1:0]                   s_cta_mask;
+    reg [31:0]                             s_smem_stride;
+    reg [`MEM_ADDR_WIDTH-1:0]              s_initial_gmem_base;
+    reg [`XLEN-1:0]                        s_initial_smem_base;
+    reg [31:0]                             s_row_len_bytes;
+    reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_delta;
+    reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_dim_tiles;
+    reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_oob_limit;
+    reg [31:0]                             s_cfill;
+
+    assign active_core_id          = r_core_id;
+    assign active_uuid             = r_uuid;
+    assign active_wid              = r_wid;
+    assign active_bar_addr         = r_bar_addr;
+    assign active_notify_smem_done = r_notify_smem_done;
+    assign active_is_multicast     = r_is_multicast;
+    assign active_cta_mask         = r_cta_mask;
+    assign active_smem_stride      = r_smem_stride;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Setup pipeline: 3 parallel DSP multipliers, multi-phase.
+    // ════════════════════════════════════════════════════════════════════
+    //
+    // Phase 0 (ctr_r=0, always):  mul0 = tile0×elem_bytes (→ row_len_bytes)
+    //                             mul1 = coord0×elem_bytes (→ dim0 offset)
+    //                             mul2 = coord1×stride0   (→ dim1 offset)
+    // Phase 1 (ctr_r=2, rank≥3):  mul1 = coord2×stride1   (→ dim2 offset)
+    // Phase 2 (ctr_r=4, rank≥4):  mul1 = coord3×stride2   (→ dim3 offset)
+    // Phase 3 (ctr_r=6, rank≥5):  mul1 = coord4×stride3   (→ dim4 offset)
+    //
+    // Captures (posedge): ctr_r ∈ {2, 4, 6, 8}.
+
+    reg [3:0] ctr_r;
+
+    // Operand latches — set at launch_accept, consumed across phases.
+    // 'lat_rank' is used to gate which phases run.
+    reg [31:0] lat_rank;
+    reg [31:0] lat_tile0, lat_elem_bytes;
+    reg [31:0] lat_coord0, lat_coord1, lat_stride0;
+    reg [31:0] lat_coord2, lat_coord3, lat_coord4;
+    reg [31:0] lat_stride1, lat_stride2, lat_stride3;
+
+    // Multiplier instances.
     wire [31:0] mul0_result, mul1_result, mul2_result;
     reg  [31:0] mul0_a, mul0_b, mul1_a, mul1_b, mul2_a, mul2_b;
 
@@ -226,210 +243,221 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .result (mul2_result)
     );
 
-    // ── Multiplier input mux (combinatorial, driven by ctr_r and r_rank) ──
+    // Latched dim tiles (for wrap-delta computation).
+    reg [31:0] lat_tile1, lat_tile2, lat_tile3;
 
+    // Multiplier input mux (driven by ctr_r and lat_rank).
+    // Phases 1-3 use the otherwise-idle mul0 to precompute wrap deltas:
+    //   delta_wrap[d] = stride[d] - (tile[d-1] - 1) * stride[d-1].
     always @(*) begin
-        // Defaults
         mul0_a = '0; mul0_b = '0;
         mul1_a = '0; mul1_b = '0;
         mul2_a = '0; mul2_b = '0;
 
         case (ctr_r)
         4'd0: begin
-            // Phase 0: tile0×elem_bytes, coord0×elem_bytes, coord1×stride0
+            // Phase 0: always runs.
             mul0_a = lat_tile0;  mul0_b = lat_elem_bytes;
             mul1_a = lat_coord0; mul1_b = lat_elem_bytes;
             mul2_a = lat_coord1; mul2_b = lat_stride0;
         end
         4'd2: begin
-            if (r_rank <= 2) begin
-                // Final phase: total_rows(=tile1) × row_len_bytes
-                mul0_a = r_total_rows; mul0_b = mul0_result;
-            end else begin
-                // Phase 1: tile1×tile2, coord2×stride1
-                mul0_a = lat_tile1; mul0_b = lat_tile2;
-                mul1_a = lat_coord2; mul1_b = lat_stride1;
+            // Phase 1: rank ≥ 3.
+            if (lat_rank >= 3) begin
+                mul0_a = lat_tile1 - 32'd1; mul0_b = lat_stride0;  // (tile1-1)*stride0
+                mul1_a = lat_coord2;        mul1_b = lat_stride1;
             end
         end
         4'd4: begin
-            if (r_rank == 3) begin
-                // Final phase: partial_rows × row_len_bytes
-                mul0_a = mul0_result; mul0_b = r_row_len_bytes;
-            end else if (r_rank >= 4) begin
-                // Phase 2: partial_rows×tile3, coord3×stride2
-                mul0_a = mul0_result; mul0_b = lat_tile3;
-                mul1_a = lat_coord3;  mul1_b = lat_stride2;
+            // Phase 2: rank ≥ 4.
+            if (lat_rank >= 4) begin
+                mul0_a = lat_tile2 - 32'd1; mul0_b = lat_stride1;  // (tile2-1)*stride1
+                mul1_a = lat_coord3;        mul1_b = lat_stride2;
             end
         end
         4'd6: begin
-            if (r_rank == 4) begin
-                // Final phase: partial_rows2 × row_len_bytes
-                mul0_a = mul0_result; mul0_b = r_row_len_bytes;
-            end else if (r_rank >= 5) begin
-                // Phase 3: partial_rows2×tile4, coord4×stride3
-                mul0_a = mul0_result; mul0_b = lat_tile4;
-                mul1_a = lat_coord4;  mul1_b = lat_stride3;
+            // Phase 3: rank ≥ 5.
+            if (lat_rank >= 5) begin
+                mul0_a = lat_tile3 - 32'd1; mul0_b = lat_stride2;  // (tile3-1)*stride2
+                mul1_a = lat_coord4;        mul1_b = lat_stride3;
             end
-        end
-        4'd8: begin
-            // Final phase for rank 5: total_rows × row_len_bytes
-            mul0_a = mul0_result; mul0_b = r_row_len_bytes;
         end
         default: ;
         endcase
     end
 
-    // ── Done counter: rank-dependent ──
-    // rank 1-2: done at ctr=5; rank R≥3: done at ctr = 2*R+1
-    wire [3:0] done_ctr = (r_rank <= 2) ? 4'd5 : 4'(2 * r_rank[2:0] + 1);
+    // Cycle at which the LAST capture fires (= setup_state goes STAGED).
+    //   rank 1-2: cycle 2 (Phase 0 capture only).
+    //   rank 3:   cycle 4.  rank 4: cycle 6.  rank 5: cycle 8.
+    wire [3:0] done_at_ctr =
+        (lat_rank <= 2) ? 4'd2 :
+        (lat_rank == 3) ? 4'd4 :
+        (lat_rank == 4) ? 4'd6 :
+                          4'd8;
 
     // ════════════════════════════════════════════════════════════════════
-    // State machine + pipeline counter
+    // Promote: copy staged → active and pulse pipeline_start.
+    // Fires when a staged result exists AND the active slot is free
+    // (either idle, or completing this cycle via transfer_done).
     // ════════════════════════════════════════════════════════════════════
 
-    reg setup_done_r;
+    wire promote_now = (setup_state_r == SS_STAGED)
+                    && (state_r == TS_IDLE || transfer_done);
 
-    always @(posedge clk) begin
-        if (reset) begin
-            setup_done_r <= 1'b0;
-        end else begin
-            setup_done_r <= (state_r == TS_SETUP) && (ctr_r == done_ctr - 4'd1);
-        end
-    end
-
-    assign pipeline_start = setup_done_r;
+    reg pipeline_start_r;
+    assign pipeline_start = pipeline_start_r;
 
     // ── OOB limit helpers (subtraction, no DSP needed) ──
     function automatic [31:0] oob_sub(input [31:0] sz, input [31:0] coord);
         oob_sub = (sz > coord) ? (sz - coord) : 32'd0;
     endfunction
 
+    // ════════════════════════════════════════════════════════════════════
+    // Sequential update
+    // ════════════════════════════════════════════════════════════════════
     always @(posedge clk) begin
         if (reset) begin
             state_r            <= TS_IDLE;
+            setup_state_r      <= SS_IDLE;
             ctr_r              <= '0;
+            pipeline_start_r   <= 1'b0;
             r_core_id          <= '0;
             r_uuid             <= '0;
             r_wid              <= '0;
             r_bar_addr         <= '0;
             r_notify_smem_done <= 1'b0;
         end else begin
-            case (state_r)
-            TS_IDLE: begin
+            // Default: pipeline_start is a 1-cycle pulse.
+            pipeline_start_r <= 1'b0;
+
+            // ── Transfer state ───────────────────────────────────────────
+            if (promote_now) begin
+                // Move staged → active and fire pipeline_start.
+                r_core_id           <= s_core_id;
+                r_uuid              <= s_uuid;
+                r_wid               <= s_wid;
+                r_bar_addr          <= s_bar_addr;
+                r_notify_smem_done  <= s_notify_smem_done;
+                r_is_multicast      <= s_is_multicast;
+                r_cta_mask          <= s_cta_mask;
+                r_smem_stride       <= s_smem_stride;
+                r_initial_gmem_base <= s_initial_gmem_base;
+                r_initial_smem_base <= s_initial_smem_base;
+                r_row_len_bytes     <= s_row_len_bytes;
+                r_delta             <= s_delta;
+                r_dim_tiles         <= s_dim_tiles;
+                r_oob_limit         <= s_oob_limit;
+                r_cfill             <= s_cfill;
+                state_r             <= TS_ACTIVE;
+                pipeline_start_r    <= 1'b1;
+                setup_state_r       <= SS_IDLE;
+            end else if (state_r == TS_ACTIVE && transfer_done) begin
+                // Active drain complete, no staged result waiting.
+                state_r <= TS_IDLE;
+            end
+
+            // ── Setup engine ─────────────────────────────────────────────
+            case (setup_state_r)
+            SS_IDLE: begin
                 if (launch_accept) begin
-                    state_r <= TS_SETUP;
-                    ctr_r   <= '0;
-                    // Latch metadata.
-                    r_core_id <= req_data.core_id;
-                    r_uuid    <= req_data.uuid;
-                    r_wid     <= req_data.wid;
-                    r_bar_addr <= launch_bar_addr;
+                    // Latch metadata directly into staged_*.
+                    s_core_id           <= req_data.core_id;
+                    s_uuid              <= req_data.uuid;
+                    s_wid               <= req_data.wid;
+                    s_bar_addr          <= launch_bar_addr;
                 `ifdef EXT_DXA_ENABLE
-                    r_notify_smem_done <= 1'b1;
+                    s_notify_smem_done  <= 1'b1;
                 `else
-                    r_notify_smem_done <= 1'b0;
+                    s_notify_smem_done  <= 1'b0;
                 `endif
-                    // Multicast: active when cta_mask has >1 bit set.
-                    r_is_multicast <= ($countones(req_data.cta_mask) > 1);
-                    r_cta_mask     <= req_data.cta_mask;
-                    r_smem_stride  <= desc_data.smem_stride;
-                    // Latch multiply operands for all dims.
-                    lat_tile0      <= dec_tile0;
-                    lat_elem_bytes <= dec_elem_bytes;
-                    lat_coord0     <= req_data.coords[0][31:0];
-                    lat_coord1     <= (dec_rank >= 2) ? req_data.coords[1][31:0] : 32'd0;
-                    lat_stride0    <= dec_stride0;
-                    lat_tile1      <= dec_tile1;
-                    lat_tile2      <= dec_tile2;
-                    lat_tile3      <= dec_tile3;
-                    lat_tile4      <= dec_tile4;
-                    lat_coord2     <= (dec_rank >= 3) ? req_data.coords[2][31:0] : 32'd0;
-                    lat_coord3     <= (dec_rank >= 4) ? req_data.coords[3][31:0] : 32'd0;
-                    lat_coord4     <= (dec_rank >= 5) ? req_data.coords[4][31:0] : 32'd0;
-                    lat_stride1    <= dec_stride1;
-                    lat_stride2    <= dec_stride2;
-                    lat_stride3    <= dec_stride3;
-                    lat_gbase      <= desc_data.base_addr;
-                    // Direct latches (no multiply needed).
-                    r_initial_smem_base <= req_data.smem_addr;
-                    r_cfill        <= desc_data.cfill;
-                    r_elem_bytes   <= dec_elem_bytes;
-                    r_rank         <= dec_rank;
-                    // Strides (pass-through to addr_gen).
-                    r_strides[0]   <= dec_stride0;
-                    r_strides[1]   <= dec_stride1;
-                    r_strides[2]   <= dec_stride2;
-                    r_strides[3]   <= dec_stride3;
-                    // Dim tile limits.
-                    r_dim_tiles[0] <= dec_tile1;
-                    r_dim_tiles[1] <= dec_tile2;
-                    r_dim_tiles[2] <= dec_tile3;
-                    r_dim_tiles[3] <= dec_tile4;
-                    // For rank 1-2: total_rows is just tile1 (1 for rank 1).
-                    r_total_rows   <= dec_tile1;
-                    // OOB limits per outer dim (subtraction only).
-                    r_oob_limit[0] <= oob_sub(dec_size1, (dec_rank >= 2) ? req_data.coords[1][31:0] : 32'd0);
-                    r_oob_limit[1] <= oob_sub(dec_size2, (dec_rank >= 3) ? req_data.coords[2][31:0] : 32'd0);
-                    r_oob_limit[2] <= oob_sub(dec_size3, (dec_rank >= 4) ? req_data.coords[3][31:0] : 32'd0);
-                    r_oob_limit[3] <= oob_sub(dec_size4, (dec_rank >= 5) ? req_data.coords[4][31:0] : 32'd0);
+                    s_is_multicast      <= ($countones(req_data.cta_mask) > 1);
+                    s_cta_mask          <= req_data.cta_mask;
+                    s_smem_stride       <= desc_data.smem_stride;
+                    s_initial_smem_base <= req_data.smem_addr;
+                    s_cfill             <= desc_data.cfill;
+                    // Rolling-cursor deltas: delta[0] is the inner-dim step.
+                    // Higher deltas are precomputed below (Phase 1-3 captures).
+                    s_delta[0]          <= dec_stride0;
+                    s_delta[1]          <= '0;
+                    s_delta[2]          <= '0;
+                    s_delta[3]          <= '0;
+                    s_dim_tiles[0]      <= dec_tile1;
+                    s_dim_tiles[1]      <= dec_tile2;
+                    s_dim_tiles[2]      <= dec_tile3;
+                    s_dim_tiles[3]      <= dec_tile4;
+                    // OOB limits.
+                    s_oob_limit[0]      <= oob_sub(dec_size1, (dec_rank >= 2) ? req_data.coords[1][31:0] : 32'd0);
+                    s_oob_limit[1]      <= oob_sub(dec_size2, (dec_rank >= 3) ? req_data.coords[2][31:0] : 32'd0);
+                    s_oob_limit[2]      <= oob_sub(dec_size3, (dec_rank >= 4) ? req_data.coords[3][31:0] : 32'd0);
+                    s_oob_limit[3]      <= oob_sub(dec_size4, (dec_rank >= 5) ? req_data.coords[4][31:0] : 32'd0);
+                    // Operand latches (DSP inputs across phases).
+                    lat_rank            <= dec_rank;
+                    lat_tile0           <= dec_tile0;
+                    lat_tile1           <= dec_tile1;
+                    lat_tile2           <= dec_tile2;
+                    lat_tile3           <= dec_tile3;
+                    lat_elem_bytes      <= dec_elem_bytes;
+                    lat_coord0          <= req_data.coords[0][31:0];
+                    lat_coord1          <= (dec_rank >= 2) ? req_data.coords[1][31:0] : 32'd0;
+                    lat_coord2          <= (dec_rank >= 3) ? req_data.coords[2][31:0] : 32'd0;
+                    lat_coord3          <= (dec_rank >= 4) ? req_data.coords[3][31:0] : 32'd0;
+                    lat_coord4          <= (dec_rank >= 5) ? req_data.coords[4][31:0] : 32'd0;
+                    lat_stride0         <= dec_stride0;
+                    lat_stride1         <= dec_stride1;
+                    lat_stride2         <= dec_stride2;
+                    lat_stride3         <= dec_stride3;
+                    // Seed staged base address with desc.base_addr.
+                    s_initial_gmem_base <= desc_data.base_addr;
+                    ctr_r               <= '0;
+                    setup_state_r       <= SS_RUNNING;
                 end
             end
-            TS_SETUP: begin
+            SS_RUNNING: begin
                 ctr_r <= ctr_r + 4'd1;
 
                 // ── Phase 0 capture at ctr=2 ──
                 if (ctr_r == 4'd2) begin
-                    r_row_len_bytes     <= mul0_result;
-                    r_initial_gmem_base <= lat_gbase
+                    s_row_len_bytes     <= mul0_result;
+                    s_initial_gmem_base <= s_initial_gmem_base
                                          + `MEM_ADDR_WIDTH'(mul1_result)
                                          + `MEM_ADDR_WIDTH'(mul2_result);
                 end
 
                 // ── Phase 1 capture at ctr=4 (rank≥3) ──
-                if (ctr_r == 4'd4 && r_rank >= 3) begin
-                    r_total_rows <= mul0_result; // tile1×tile2 (final for rank 3)
-                    r_initial_gmem_base <= r_initial_gmem_base
+                if (ctr_r == 4'd4 && lat_rank >= 3) begin
+                    s_initial_gmem_base <= s_initial_gmem_base
                                          + `MEM_ADDR_WIDTH'(mul1_result);
+                    // delta[1] = stride1 - (tile1-1)*stride0
+                    s_delta[1] <= lat_stride1 - mul0_result;
                 end
 
                 // ── Phase 2 capture at ctr=6 (rank≥4) ──
-                if (ctr_r == 4'd6 && r_rank >= 4) begin
-                    r_total_rows <= mul0_result; // partial_rows×tile3
-                    r_initial_gmem_base <= r_initial_gmem_base
+                if (ctr_r == 4'd6 && lat_rank >= 4) begin
+                    s_initial_gmem_base <= s_initial_gmem_base
                                          + `MEM_ADDR_WIDTH'(mul1_result);
+                    // delta[2] = stride2 - (tile2-1)*stride1
+                    s_delta[2] <= lat_stride2 - mul0_result;
                 end
 
                 // ── Phase 3 capture at ctr=8 (rank=5) ──
-                if (ctr_r == 4'd8 && r_rank >= 5) begin
-                    r_total_rows <= mul0_result; // total_rows final
-                    r_initial_gmem_base <= r_initial_gmem_base
+                if (ctr_r == 4'd8 && lat_rank >= 5) begin
+                    s_initial_gmem_base <= s_initial_gmem_base
                                          + `MEM_ADDR_WIDTH'(mul1_result);
+                    // delta[3] = stride3 - (tile3-1)*stride2
+                    s_delta[3] <= lat_stride3 - mul0_result;
                 end
 
-                // ── Total-bytes capture (2 cycles after final phase load) ──
-                // rank 1-2: final loaded at ctr=2, captured at ctr=4
-                // rank 3: final loaded at ctr=4, captured at ctr=6
-                // rank 4: final loaded at ctr=6, captured at ctr=8
-                // rank 5: final loaded at ctr=8, captured at ctr=10
-                if (ctr_r == done_ctr - 4'd1) begin
-                    r_total_bytes       <= mul0_result;
-                    r_total_smem_writes <= (mul0_result
-                        + 32'(r_initial_smem_base[SMEM_OFF_BITS-1:0])
-                        + SMEM_BYTES - 1) >> SMEM_OFF_BITS;
-                end
-
-                // Transition to ACTIVE.
-                if (ctr_r == done_ctr) begin
-                    state_r <= TS_ACTIVE;
-                    ctr_r   <= '0;
+                // Transition to STAGED at the last capture cycle.
+                if (ctr_r == done_at_ctr) begin
+                    setup_state_r <= SS_STAGED;
+                    ctr_r         <= '0;
                 end
             end
-            TS_ACTIVE: begin
-                if (transfer_done) begin
-                    state_r <= TS_IDLE;
-                end
+            SS_STAGED: begin
+                // Wait for promote_now to consume the staged result.
+                // Handled in the promote block above.
             end
-            default: state_r <= TS_IDLE;
+            default: setup_state_r <= SS_IDLE;
             endcase
         end
     end
@@ -440,15 +468,10 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign setup_params.initial_gmem_base  = r_initial_gmem_base;
     assign setup_params.initial_smem_base  = r_initial_smem_base;
     assign setup_params.row_len_bytes      = r_row_len_bytes;
-    assign setup_params.strides            = r_strides;
+    assign setup_params.delta              = r_delta;
     assign setup_params.dim_tiles          = r_dim_tiles;
     assign setup_params.oob_limit          = r_oob_limit;
-    assign setup_params.total_rows         = r_total_rows;
-    assign setup_params.total_smem_writes  = r_total_smem_writes;
-    assign setup_params.total_bytes        = r_total_bytes;
     assign setup_params.cfill              = r_cfill;
-    assign setup_params.elem_bytes         = r_elem_bytes;
-    assign setup_params.rank               = r_rank;
 
     `UNUSED_VAR (desc_data.size0)
     `UNUSED_VAR (req_data.meta)

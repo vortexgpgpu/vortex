@@ -115,15 +115,13 @@ package VX_dxa_pkg;
         logic [`MEM_ADDR_WIDTH-1:0]  initial_gmem_base;
         logic [`XLEN-1:0]           initial_smem_base;
         logic [31:0]                row_len_bytes;
-        logic [DXA_MAX_OUTER_DIMS-1:0][31:0] strides;    // per-dim strides (stride0..stride3)
+        // Rolling-cursor deltas applied at each outer-dim step:
+        //   delta[0]: dim-0 step                = stride[0]
+        //   delta[d>0]: dim (d-1)→d wrap event  = stride[d] - (tile[d-1]-1)*stride[d-1]
+        logic [DXA_MAX_OUTER_DIMS-1:0][31:0] delta;
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] dim_tiles;  // per-dim tile limits (tile1..tile4)
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit;
-        logic [31:0]                total_rows;
-        logic [31:0]                total_smem_writes;
-        logic [31:0]                total_bytes;
         logic [31:0]                cfill;
-        logic [31:0]                elem_bytes;
-        logic [31:0]                rank;
     } dxa_setup_params_t;
 
     task automatic trace_ex_op(input int level,

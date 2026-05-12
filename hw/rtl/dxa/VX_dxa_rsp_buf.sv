@@ -49,12 +49,15 @@ module VX_dxa_rsp_buf import VX_gpu_pkg::*; #(
 );
     localparam TAG_W = `CLOG2(MAX_OUTSTANDING);
 
-    // ---- BRAM data storage ----
+    // ---- Distributed-RAM data storage ----
+    // LUTRAM=1: ~4 kb fits in distributed RAM (~700 LUTs), freeing the
+    // BRAM tile. OUT_REG=1 keeps the registered output for timing closure
+    // on the smem_wr side.
     VX_dp_ram #(
         .DATAW    (GMEM_DATAW),
         .SIZE     (MAX_OUTSTANDING),
-        .LUTRAM   (0),       // Force BRAM inference
-        .OUT_REG  (1),       // Registered output for timing
+        .LUTRAM   (1),
+        .OUT_REG  (1),
         .RDW_MODE ("W")
     ) data_store (
         .clk   (clk),

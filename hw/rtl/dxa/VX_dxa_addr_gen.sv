@@ -14,7 +14,11 @@
 // DXA Address Generator: CL-aware address + narrow metadata tokens.
 // Supports 1D-5D tiles via nested odometer counters for outer dimensions.
 // Inner loop: CL within a row (dim 0). Outer dims 1..4: odometer advance.
-// Per-dim GMEM offset accumulators avoid runtime multiplies.
+//
+// Single rolling-cursor scheme: gmem_cursor_r is updated by per-wrap
+// deltas precomputed in setup (delta[0]=stride[0], delta[d>0]=stride[d]-
+// (tile[d-1]-1)*stride[d-1]). Replaces the previous 5-input MEM_ADDR-wide
+// adder and four parallel dim_offset accumulators.
 
 `include "VX_define.vh"
 
@@ -40,8 +44,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                        out_last,
 
     // Pass-through params for downstream (stable during transfer).
-    output wire [31:0]                 out_cfill,
-    output wire [31:0]                 out_total_smem_writes
+    output wire [31:0]                 out_cfill
 );
     localparam CL_OFF_BITS = `CLOG2(GMEM_LINE_SIZE);
 
@@ -49,39 +52,31 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // ---- Registered state ----
     reg                        active_r;
-    reg [`MEM_ADDR_WIDTH-1:0]  initial_gmem_base_r; // Base GMEM addr (with coord offsets)
+    reg [`MEM_ADDR_WIDTH-1:0]  gmem_cursor_r;        // Current row's GMEM base
     reg [31:0]                 row_len_r;            // row_len_bytes (constant)
-    reg [31:0]                 line_idx_r;            // CL index within current row
+    reg [31:0]                 line_idx_r;           // CL index within current row
 
-    // Nested odometer counters for outer dimensions (dims 1..4).
-    reg [DXA_MAX_OUTER_DIMS-1:0][31:0]           dim_count_r;   // Current index per dim
-    reg [DXA_MAX_OUTER_DIMS-1:0][31:0]           dim_tile_r;    // Tile limit per dim
-    reg [DXA_MAX_OUTER_DIMS-1:0][31:0]           stride_r;      // Stride per dim
-    reg [DXA_MAX_OUTER_DIMS-1:0][`MEM_ADDR_WIDTH-1:0] dim_offset_r;  // Accumulated GMEM offset per dim
-    reg [DXA_MAX_OUTER_DIMS-1:0][31:0]           oob_limit_r;   // OOB limit per dim
+    // Outer-dim odometer.
+    reg [DXA_MAX_OUTER_DIMS-1:0][31:0] dim_count_r;   // Current index per dim
+    reg [DXA_MAX_OUTER_DIMS-1:0][31:0] dim_tile_r;    // Tile limit per dim
+    reg [DXA_MAX_OUTER_DIMS-1:0][31:0] delta_r;       // Wrap delta per dim
+    reg [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit_r;   // OOB limit per dim
 
-    // SMEM byte address tracking
+    // SMEM byte address tracking.
     reg [`MEM_ADDR_WIDTH-1:0]  smem_byte_addr_r;
 
-    // Pass-through latched params
+    // Pass-through latched params.
     reg [31:0]                 cfill_r;
-    reg [31:0]                 total_smem_writes_r;
 
     assign out_cfill = cfill_r;
-    assign out_total_smem_writes = total_smem_writes_r;
-
-    // ---- GMEM base: sum of initial base + per-dim offsets ----
-    wire [`MEM_ADDR_WIDTH-1:0] gmem_base = initial_gmem_base_r
-        + dim_offset_r[0] + dim_offset_r[1]
-        + dim_offset_r[2] + dim_offset_r[3];
 
     // ---- Per-row geometry (combinatorial from current row state) ----
-    wire [CL_OFF_BITS-1:0] first_off = gmem_base[CL_OFF_BITS-1:0];
+    wire [CL_OFF_BITS-1:0] first_off = gmem_cursor_r[CL_OFF_BITS-1:0];
     wire [31:0] bytes_span = 32'(first_off) + row_len_r;
     wire [31:0] num_lines  = (bytes_span + GMEM_LINE_SIZE - 1) >> CL_OFF_BITS;
 
     // ---- Current CL address ----
-    wire [`MEM_ADDR_WIDTH-1:0] first_cl_base = {gmem_base[`MEM_ADDR_WIDTH-1:CL_OFF_BITS],
+    wire [`MEM_ADDR_WIDTH-1:0] first_cl_base = {gmem_cursor_r[`MEM_ADDR_WIDTH-1:CL_OFF_BITS],
                                                  {CL_OFF_BITS{1'b0}}};
     wire [`MEM_ADDR_WIDTH-1:0] cur_cl_byte_addr = first_cl_base
         + (`MEM_ADDR_WIDTH'(line_idx_r) << CL_OFF_BITS);
@@ -115,77 +110,77 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                       && (dim_count_r[3] + 1 >= dim_tile_r[3]);
 
     // ---- Output ----
-    assign out_valid        = active_r;
-    assign out_cl_addr      = cur_cl_addr;
+    assign out_valid          = active_r;
+    assign out_cl_addr        = cur_cl_addr;
     assign out_smem_byte_addr = smem_byte_addr_r;
-    assign out_byte_offset  = cur_byte_offset;
-    assign out_valid_length = cur_valid_length;
-    assign out_oob          = is_oob;
-    assign out_last         = is_last_line && is_last_outer;
+    assign out_byte_offset    = cur_byte_offset;
+    assign out_valid_length   = cur_valid_length;
+    assign out_oob            = is_oob;
+    assign out_last           = is_last_line && is_last_outer;
 
     // ---- Advance logic ----
     wire advance = out_valid && out_ready;
 
-    // Assume correct input: total_rows > 0.
-    `RUNTIME_ASSERT(!start || (setup_params.total_rows != 0), ("DXA addr_gen: total_rows is 0"))
+    // Which delta to apply on a row-boundary step. Selects delta[0..3]
+    // based on which outer dim wraps. Computed from current dim_count_r
+    // vs dim_tile_r.
+    wire dim0_steps = (dim_count_r[0] + 1 < dim_tile_r[0]);
+    wire dim1_steps = (dim_count_r[1] + 1 < dim_tile_r[1]);
+    wire dim2_steps = (dim_count_r[2] + 1 < dim_tile_r[2]);
+    // dim3 must step otherwise (we already checked is_last_outer).
+
+    wire [`MEM_ADDR_WIDTH-1:0] step_delta =
+        dim0_steps ? `MEM_ADDR_WIDTH'(delta_r[0]) :
+        dim1_steps ? `MEM_ADDR_WIDTH'(delta_r[1]) :
+        dim2_steps ? `MEM_ADDR_WIDTH'(delta_r[2]) :
+                     `MEM_ADDR_WIDTH'(delta_r[3]);
 
     always @(posedge clk) begin
         if (reset) begin
-            active_r          <= 1'b0;
-            initial_gmem_base_r <= '0;
-            line_idx_r        <= '0;
-            smem_byte_addr_r  <= '0;
+            active_r         <= 1'b0;
+            gmem_cursor_r    <= '0;
+            line_idx_r       <= '0;
+            smem_byte_addr_r <= '0;
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
-                dim_count_r[d]  <= '0;
-                dim_offset_r[d] <= '0;
+                dim_count_r[d] <= '0;
             end
         end else if (start) begin
-            active_r            <= 1'b1;
-            initial_gmem_base_r <= setup_params.initial_gmem_base;
-            row_len_r           <= setup_params.row_len_bytes;
-            line_idx_r          <= '0;
-            cfill_r             <= setup_params.cfill;
-            total_smem_writes_r <= setup_params.total_smem_writes;
-            smem_byte_addr_r    <= `MEM_ADDR_WIDTH'(setup_params.initial_smem_base);
+            active_r         <= 1'b1;
+            gmem_cursor_r    <= setup_params.initial_gmem_base;
+            row_len_r        <= setup_params.row_len_bytes;
+            line_idx_r       <= '0;
+            cfill_r          <= setup_params.cfill;
+            smem_byte_addr_r <= `MEM_ADDR_WIDTH'(setup_params.initial_smem_base);
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
-                dim_count_r[d]  <= '0;
-                dim_tile_r[d]   <= setup_params.dim_tiles[d];
-                stride_r[d]     <= setup_params.strides[d];
-                dim_offset_r[d] <= '0;
-                oob_limit_r[d]  <= setup_params.oob_limit[d];
+                dim_count_r[d] <= '0;
+                dim_tile_r[d]  <= setup_params.dim_tiles[d];
+                delta_r[d]     <= setup_params.delta[d];
+                oob_limit_r[d] <= setup_params.oob_limit[d];
             end
         end else if (advance) begin
-            // Advance SMEM byte address by valid_length
+            // Advance SMEM byte address by valid_length.
             smem_byte_addr_r <= smem_byte_addr_r + `MEM_ADDR_WIDTH'(cur_valid_length);
 
             if (is_last_line && is_last_outer) begin
-                // All done
+                // All done.
                 active_r <= 1'b0;
             end else if (is_last_line) begin
-                // Last CL of current row → advance outer dim odometer
-                line_idx_r <= '0;
-                // Ripple-carry odometer: advance dim 0, cascade wraps
-                if (dim_count_r[0] + 1 < dim_tile_r[0]) begin
-                    dim_count_r[0]  <= dim_count_r[0] + 1;
-                    dim_offset_r[0] <= dim_offset_r[0] + `MEM_ADDR_WIDTH'(stride_r[0]);
+                // Last CL of current row → advance odometer + cursor.
+                line_idx_r    <= '0;
+                gmem_cursor_r <= gmem_cursor_r + step_delta;
+                if (dim0_steps) begin
+                    dim_count_r[0] <= dim_count_r[0] + 1;
                 end else begin
-                    dim_count_r[0]  <= '0;
-                    dim_offset_r[0] <= '0;
-                    if (dim_count_r[1] + 1 < dim_tile_r[1]) begin
-                        dim_count_r[1]  <= dim_count_r[1] + 1;
-                        dim_offset_r[1] <= dim_offset_r[1] + `MEM_ADDR_WIDTH'(stride_r[1]);
+                    dim_count_r[0] <= '0;
+                    if (dim1_steps) begin
+                        dim_count_r[1] <= dim_count_r[1] + 1;
                     end else begin
-                        dim_count_r[1]  <= '0;
-                        dim_offset_r[1] <= '0;
-                        if (dim_count_r[2] + 1 < dim_tile_r[2]) begin
-                            dim_count_r[2]  <= dim_count_r[2] + 1;
-                            dim_offset_r[2] <= dim_offset_r[2] + `MEM_ADDR_WIDTH'(stride_r[2]);
+                        dim_count_r[1] <= '0;
+                        if (dim2_steps) begin
+                            dim_count_r[2] <= dim_count_r[2] + 1;
                         end else begin
-                            dim_count_r[2]  <= '0;
-                            dim_offset_r[2] <= '0;
-                            // dim[3] must advance (we already checked is_last_outer)
-                            dim_count_r[3]  <= dim_count_r[3] + 1;
-                            dim_offset_r[3] <= dim_offset_r[3] + `MEM_ADDR_WIDTH'(stride_r[3]);
+                            dim_count_r[2] <= '0;
+                            dim_count_r[3] <= dim_count_r[3] + 1;
                         end
                     end
                 end
@@ -198,10 +193,6 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `UNUSED_VAR (cur_cl_byte_addr[CL_OFF_BITS-1:0])
     `UNUSED_VAR (total_end[31:CL_OFF_BITS])
     `UNUSED_VAR (setup_params.initial_smem_base)
-    `UNUSED_VAR (setup_params.elem_bytes)
-    `UNUSED_VAR (setup_params.rank)
-    `UNUSED_VAR (setup_params.total_bytes)
-    `UNUSED_VAR (setup_params.total_rows)
 
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin

@@ -45,6 +45,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     localparam MAX_OUTSTANDING = `DXA_MAX_INFLIGHT;
     localparam TAG_W = `CLOG2(MAX_OUTSTANDING);
+    localparam SEQ_W = `CLOG2(MAX_OUTSTANDING + 1);
 
     // ════════════════════════════════════════════════════════════════════
     // Inter-module wires
@@ -73,36 +74,22 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire                        ag_oob;
     wire                        ag_last;
     wire [31:0]                 ag_cfill;
-    wire [31:0]                 ag_total_smem_writes;
 
-    // gmem_req → rsp_buf
-    wire                        gmem_rsp_valid;
-    wire [TAG_W-1:0]            gmem_rsp_tag;
-    wire [GMEM_DATAW-1:0]       gmem_rsp_data;
-    wire                        oob_arrived_en;
-    wire [TAG_W-1:0]            oob_arrived_tag;
-
-    // gmem_req ↔ smem_wr (FIFO)
-    wire                        fifo_valid;
-    wire                        fifo_pop;
-    wire [TAG_W-1:0]            fifo_tag;
-    wire [`MEM_ADDR_WIDTH-1:0]  fifo_smem_byte_addr;
-    wire [GMEM_OFF_BITS-1:0]    fifo_byte_offset;
-    wire [GMEM_OFF_BITS:0]      fifo_valid_length;
-    wire                        fifo_oob;
-    wire                        fifo_last;
+    // gmem_req → smem_wr (direct-drain channel; replaces rsp_buf + FIFO).
+    wire                        sw_valid;
+    wire                        sw_ready;
+    wire [TAG_W-1:0]            sw_tag;
+    wire [GMEM_DATAW-1:0]       sw_data;
+    wire [`MEM_ADDR_WIDTH-1:0]  sw_smem_byte_addr;
+    wire [GMEM_OFF_BITS-1:0]    sw_byte_offset;
+    wire [GMEM_OFF_BITS:0]      sw_valid_length;
+    wire                        sw_oob;
+    wire                        sw_last;
+    wire [SEQ_W-1:0]            sw_outstanding;
 
     // smem_wr → gmem_req (release)
     wire                        sw_release_en;
     wire [TAG_W-1:0]            sw_release_tag;
-
-    // rsp_buf ↔ smem_wr
-    wire [MAX_OUTSTANDING-1:0]  rsp_arrived;
-    wire                        rsp_read_en;
-    wire [TAG_W-1:0]            rsp_read_tag;
-    wire [GMEM_DATAW-1:0]       rsp_read_data;
-    wire                        rsp_clear_en;
-    wire [TAG_W-1:0]            rsp_clear_tag;
 
     // smem_wr → setup (completion)
     wire                        transfer_done;
@@ -112,12 +99,6 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // gmem_req → watchdog
     wire                        gmem_req_fire;
     wire                        stall_no_slot;
-
-`ifdef DXA_OOO_DRAIN_ENABLE
-    // OoO-only: gmem_req → smem_wr progress signals for transfer_done.
-    wire                        pending_empty;
-    wire                        addr_gen_done;
-`endif
 
 `ifdef PERF_ENABLE
     wire [31:0]                 perf_gmem_reqs;
@@ -129,9 +110,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Stage 1: Setup
     // ════════════════════════════════════════════════════════════════════
 
-    VX_dxa_setup #(
-        .SMEM_BYTES  (SMEM_BYTES)
-    ) setup (
+    VX_dxa_setup setup (
         .clk                  (clk),
         .reset                (reset),
         .req_valid            (req_if.valid),
@@ -172,8 +151,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .out_valid_length     (ag_valid_length),
         .out_oob              (ag_oob),
         .out_last             (ag_last),
-        .out_cfill            (ag_cfill),
-        .out_total_smem_writes(ag_total_smem_writes)
+        .out_cfill            (ag_cfill)
     );
 
     // ════════════════════════════════════════════════════════════════════
@@ -204,56 +182,26 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .ag_oob             (ag_oob),
         .ag_last            (ag_last),
         .gmem_bus_if        (gmem_bus_if),
-        .fifo_valid         (fifo_valid),
-        .fifo_pop           (fifo_pop),
-        .fifo_tag           (fifo_tag),
-        .fifo_smem_byte_addr(fifo_smem_byte_addr),
-        .fifo_byte_offset   (fifo_byte_offset),
-        .fifo_valid_length  (fifo_valid_length),
-        .fifo_oob           (fifo_oob),
-        .fifo_last          (fifo_last),
+        .sw_valid           (sw_valid),
+        .sw_ready           (sw_ready),
+        .sw_tag             (sw_tag),
+        .sw_data            (sw_data),
+        .sw_smem_byte_addr  (sw_smem_byte_addr),
+        .sw_byte_offset     (sw_byte_offset),
+        .sw_valid_length    (sw_valid_length),
+        .sw_oob             (sw_oob),
+        .sw_last            (sw_last),
+        .sw_outstanding     (sw_outstanding),
         .release_en         (sw_release_en),
         .release_tag        (sw_release_tag),
-        .oob_arrived_en     (oob_arrived_en),
-        .oob_arrived_tag    (oob_arrived_tag),
-        .gmem_rsp_valid     (gmem_rsp_valid),
-        .gmem_rsp_tag       (gmem_rsp_tag),
-        .gmem_rsp_data      (gmem_rsp_data),
-    `ifdef DXA_OOO_DRAIN_ENABLE
-        .rsp_arrived        (rsp_arrived),
-        .pending_empty      (pending_empty),
-        .addr_gen_done      (addr_gen_done),
-    `endif
         .gmem_req_fire      (gmem_req_fire),
         .stall_no_slot      (stall_no_slot)
     );
 
     // ════════════════════════════════════════════════════════════════════
-    // Stage 4: Response Buffer
-    // ════════════════════════════════════════════════════════════════════
-
-    VX_dxa_rsp_buf #(
-        .MAX_OUTSTANDING (MAX_OUTSTANDING),
-        .GMEM_DATAW      (GMEM_DATAW)
-    ) rsp_buf (
-        .clk             (clk),
-        .reset           (reset),
-        .transfer_active (transfer_active),
-        .rsp_write_en    (gmem_rsp_valid),
-        .rsp_write_tag   (gmem_rsp_tag),
-        .rsp_write_data  (gmem_rsp_data),
-        .oob_arrived_en  (oob_arrived_en),
-        .oob_arrived_tag (oob_arrived_tag),
-        .read_en         (rsp_read_en),
-        .read_tag        (rsp_read_tag),
-        .read_data       (rsp_read_data),
-        .rsp_arrived     (rsp_arrived),
-        .clear_en        (rsp_clear_en),
-        .clear_tag       (rsp_clear_tag)
-    );
-
-    // ════════════════════════════════════════════════════════════════════
-    // Stage 5: SMEM Writer
+    // Stage 4: SMEM Writer (rsp_buf is gone — gmem_req drives smem_wr
+    // directly via the sw_* channel; smem_wr's pend slot + deferred-last
+    // register handle OOO drain).
     // ════════════════════════════════════════════════════════════════════
 
     VX_dxa_smem_wr #(
@@ -274,20 +222,16 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .active_core_id        (active_core_id),
         .active_bar_addr       (active_bar_addr),
         .active_notify_smem_done (active_notify_smem_done),
-        .fifo_valid            (fifo_valid),
-        .fifo_pop              (fifo_pop),
-        .fifo_tag              (fifo_tag),
-        .fifo_smem_byte_addr   (fifo_smem_byte_addr),
-        .fifo_byte_offset      (fifo_byte_offset),
-        .fifo_valid_length     (fifo_valid_length),
-        .fifo_oob              (fifo_oob),
-        .fifo_last             (fifo_last),
-        .rsp_arrived           (rsp_arrived),
-        .rsp_read_en           (rsp_read_en),
-        .rsp_read_tag          (rsp_read_tag),
-        .rsp_read_data         (rsp_read_data),
-        .rsp_clear_en          (rsp_clear_en),
-        .rsp_clear_tag         (rsp_clear_tag),
+        .sw_valid              (sw_valid),
+        .sw_ready              (sw_ready),
+        .sw_tag                (sw_tag),
+        .sw_data               (sw_data),
+        .sw_smem_byte_addr     (sw_smem_byte_addr),
+        .sw_byte_offset        (sw_byte_offset),
+        .sw_valid_length       (sw_valid_length),
+        .sw_oob                (sw_oob),
+        .sw_last               (sw_last),
+        .sw_outstanding        (sw_outstanding),
         .release_en            (sw_release_en),
         .release_tag           (sw_release_tag),
         .smem_bus_if           (smem_bus_if),
@@ -297,11 +241,6 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .is_multicast          (active_is_multicast),
         .cta_mask              (active_cta_mask),
         .smem_stride           (active_smem_stride)
-    `ifdef DXA_OOO_DRAIN_ENABLE
-        ,
-        .pending_empty         (pending_empty),
-        .addr_gen_done         (addr_gen_done)
-    `endif
     );
 
     // ════════════════════════════════════════════════════════════════════
@@ -315,7 +254,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .reset            (reset),
         .transfer_active  (transfer_active),
         .gmem_req_fire    (gmem_req_fire),
-        .gmem_rsp_valid   (gmem_rsp_valid),
+        .gmem_rsp_valid   (sw_valid && sw_ready),  // any CL delivered to smem_wr
         .smem_req_fire    (smem_req_fire),
         .active_core_id   (active_core_id),
         .active_wid       (active_wid),
@@ -356,7 +295,6 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `endif
 
     `UNUSED_VAR (stall_no_slot)
-    `UNUSED_VAR (ag_total_smem_writes)
 `ifndef DBG_TRACE_DXA
     `UNUSED_VAR (wr_done_count)
 `endif
@@ -374,9 +312,9 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 if (gmem_req_fire) begin
                     `TRACE(2, ("%t: %s gmem-req-fire\n", $time, INSTANCE_ID))
                 end
-                if (gmem_rsp_valid) begin
-                    `TRACE(2, ("%t: %s gmem-rsp: tag=%0d\n",
-                        $time, INSTANCE_ID, gmem_rsp_tag))
+                if (sw_valid && sw_ready) begin
+                    `TRACE(2, ("%t: %s sw-deliver: tag=%0d, oob=%0d, last=%0d\n",
+                        $time, INSTANCE_ID, sw_tag, sw_oob, sw_last))
                 end
                 if (smem_req_fire) begin
                     `TRACE(2, ("%t: %s smem-wr-fire: count=%0d\n",

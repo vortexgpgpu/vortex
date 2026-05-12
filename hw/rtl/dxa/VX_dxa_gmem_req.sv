@@ -11,12 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA GMEM Request Issuer & In-Flight Tracker.
-// Uses VX_allocator for O(1) tag management.
-// Uses VX_pending_size for credit-based flow control.
-// Uses VX_fifo_queue to track in-flight metadata in issue order.
-// OOB entries bypass GMEM read and enter FIFO directly.
-// Drives VX_mem_bus_if directly (absorbs bus wiring from worker).
+// DXA GMEM Request Issuer & In-Flight Tracker (Phase 4b — direct drain).
+//
+// Manages a slot-table-indexed pool of MAX_OUTSTANDING in-flight tags. On
+// each accept, allocates a free slot and writes per-tag metadata. GMEM
+// responses (out-of-order from the L1) are streamed directly to smem_wr
+// via the `sw_*` channel — no rsp_buf BRAM. OOB entries skip the bus and
+// are presented to smem_wr via an oob_pending[] bitvector.
+//
+// Tag reuse is per-slot via a busy[] bitvector and outstanding counter;
+// release order is independent of issue order (OOO drain in smem_wr).
 
 `include "VX_define.vh"
 
@@ -47,37 +51,21 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // GMEM bus interface (reads only).
     VX_mem_bus_if.master               gmem_bus_if,
 
-    // In-flight FIFO output (to smem_wr).
-    output wire                        fifo_valid,
-    input  wire                        fifo_pop,
-    output wire [TAG_W-1:0]            fifo_tag,
-    output wire [SMEM_ADDR_W-1:0]      fifo_smem_byte_addr,
-    output wire [CL_OFF_BITS-1:0]      fifo_byte_offset,
-    output wire [CL_OFF_BITS:0]        fifo_valid_length,
-    output wire                        fifo_oob,
-    output wire                        fifo_last,
+    // Direct drain channel to smem_wr (replaces rsp_buf + FIFO).
+    output wire                        sw_valid,
+    input  wire                        sw_ready,
+    output wire [TAG_W-1:0]            sw_tag,
+    output wire [GMEM_DATAW-1:0]       sw_data,
+    output wire [SMEM_ADDR_W-1:0]      sw_smem_byte_addr,
+    output wire [CL_OFF_BITS-1:0]      sw_byte_offset,
+    output wire [CL_OFF_BITS:0]        sw_valid_length,
+    output wire                        sw_oob,
+    output wire                        sw_last,
+    output wire [SEQ_W-1:0]            sw_outstanding,  // # slots busy (incl. presented-to-smem_wr).
 
-    // Resource release (from smem_wr).
+    // Resource release (from smem_wr) — per-tag, OOO.
     input  wire                        release_en,
     input  wire [TAG_W-1:0]            release_tag,
-
-    // Set arrival for OOB entries (no GMEM response expected).
-    output wire                        oob_arrived_en,
-    output wire [TAG_W-1:0]            oob_arrived_tag,
-
-    // GMEM response forwarding (to rsp_buf).
-    output wire                        gmem_rsp_valid,
-    output wire [TAG_W-1:0]            gmem_rsp_tag,
-    output wire [GMEM_DATAW-1:0]       gmem_rsp_data,
-
-`ifdef DXA_OOO_DRAIN_ENABLE
-    // OoO-mode signals (only meaningful when DXA_OOO_DRAIN_ENABLE):
-    //  - rsp_arrived: bitvector from rsp_buf, used to PE the next ready tag.
-    //  - pending_empty / addr_gen_done: drive smem_wr's transfer_done.
-    input  wire [MAX_OUTSTANDING-1:0]  rsp_arrived,
-    output wire                        pending_empty,
-    output wire                        addr_gen_done,
-`endif
 
     // Progress events.
     output wire                        gmem_req_fire,
@@ -90,212 +78,107 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `endif
 );
     localparam TAG_W = `CLOG2(MAX_OUTSTANDING);
+    localparam SEQ_W = `CLOG2(MAX_OUTSTANDING + 1);
     localparam GMEM_BYTES = 2**CL_OFF_BITS;
     localparam GMEM_DATAW = GMEM_BYTES * 8;
     localparam GMEM_TAG_VALUEW = GMEM_TAG_WIDTH - UUID_WIDTH;
 
     `STATIC_ASSERT(GMEM_TAG_VALUEW >= TAG_W, ("gmem tag too narrow for slot encoding"))
 
-    // Common signals shared by both in-order and OoO paths.
-    wire                alloc_full;
-    wire [TAG_W-1:0]    alloc_tag;
-    wire                alloc_acquire;
-
-`ifndef DXA_OOO_DRAIN_ENABLE
     // ════════════════════════════════════════════════════════════════════
-    // VX_allocator: O(1) tag acquisition/release  (legacy in-order path)
+    // Slot table: per-tag metadata.
     // ════════════════════════════════════════════════════════════════════
-    wire                alloc_empty;
+    typedef struct packed {
+        logic [SMEM_ADDR_W-1:0]   smem_byte_addr;
+        logic [CL_OFF_BITS-1:0]   byte_offset;
+        logic [CL_OFF_BITS:0]     valid_length;
+        logic                     oob;
+        logic                     last;
+    } slot_t;
 
-    VX_allocator #(
-        .SIZE (MAX_OUTSTANDING)
-    ) tag_alloc (
-        .clk          (clk),
-        .reset        (reset),
-        .acquire_en   (alloc_acquire),
-        .acquire_addr (alloc_tag),
-        .release_en   (release_en),
-        .release_addr (release_tag),
-        .empty        (alloc_empty),
-        .full         (alloc_full)
-    );
-
-    `UNUSED_VAR (alloc_empty)
+    slot_t slot_table_r [MAX_OUTSTANDING];
 
     // ════════════════════════════════════════════════════════════════════
-    // VX_pending_size: credit-based flow control
+    // Per-tag occupancy bookkeeping.
+    //   busy[T]         : slot is currently in flight (issued, not released).
+    //   oob_pending[T]  : OOB slot that hasn't been presented to smem_wr yet.
+    //   outstanding_count_r : # of set bits in busy.
     // ════════════════════════════════════════════════════════════════════
-    wire pending_full;
+    reg [MAX_OUTSTANDING-1:0] busy_r;
+    reg [MAX_OUTSTANDING-1:0] oob_pending_r;
+    reg [SEQ_W-1:0]           outstanding_count_r;
 
-    VX_pending_size #(
-        .SIZE (MAX_OUTSTANDING)
-    ) pending_ctr (
-        .clk   (clk),
-        .reset (reset),
-        .incr  (alloc_acquire),
-        .decr  (release_en),
-        .full  (pending_full),
-        `UNUSED_PIN (empty),
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
-    );
-
-    // ════════════════════════════════════════════════════════════════════
-    // VX_fifo_queue: in-flight metadata tracking (issue order)
-    // ════════════════════════════════════════════════════════════════════
-    localparam FIFO_DATAW = TAG_W + SMEM_ADDR_W + CL_OFF_BITS + (CL_OFF_BITS+1) + 1 + 1;
-
-    wire fifo_full, fifo_empty;
-    wire fifo_push;
-    wire [FIFO_DATAW-1:0] fifo_data_in, fifo_data_out;
-
-    VX_fifo_queue #(
-        .DATAW   (FIFO_DATAW),
-        .DEPTH   (MAX_OUTSTANDING),
-        .OUT_REG (0),
-        .LUTRAM  (1)
-    ) inflight_fifo (
-        .clk      (clk),
-        .reset    (reset),
-        .push     (fifo_push),
-        .pop      (fifo_pop),
-        .data_in  (fifo_data_in),
-        .data_out (fifo_data_out),
-        .empty    (fifo_empty),
-        .full     (fifo_full),
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
-    );
-
-    // Unpack FIFO output.
-    assign {fifo_tag, fifo_smem_byte_addr, fifo_byte_offset,
-            fifo_valid_length, fifo_oob, fifo_last} = fifo_data_out;
-    assign fifo_valid = ~fifo_empty;
-
-    wire can_alloc = ~alloc_full && ~pending_full && ~fifo_full;
-    `UNUSED_VAR (fifo_pop)
-
-`else
-    // ════════════════════════════════════════════════════════════════════
-    // OoO path: VX_allocator + VX_dp_ram (indexed metadata) + PE over rsp_arrived
-    // ════════════════════════════════════════════════════════════════════
-    //
-    // We replace the in-order trio { VX_allocator, VX_pending_size,
-    // VX_fifo_queue } with:
-    //   - VX_allocator: same as in-order (tag pool, separate read/release ports)
-    //   - VX_dp_ram:    metadata table indexed by tag (async read)
-    //   - VX_priority_encoder: selects next ready tag from rsp_arrived
-    //
-    // Note: we don't use VX_index_buffer because it ties release_addr to
-    // read_addr, while OoO needs them independent (read = PE pick of next
-    // ready; release = smem_wr's currently-draining tag).
-    //
-    // rsp_arrived itself serves as the "ready" bitvector — it's set on
-    // gmem_rsp_valid and on OOB shortcut, cleared on smem_wr's clear_en.
-    localparam META_DATAW = SMEM_ADDR_W + CL_OFF_BITS + (CL_OFF_BITS+1) + 1 + 1;
-
-    wire alloc_empty;
-
-    VX_allocator #(
-        .SIZE (MAX_OUTSTANDING)
-    ) tag_alloc (
-        .clk          (clk),
-        .reset        (reset),
-        .acquire_en   (alloc_acquire),
-        .acquire_addr (alloc_tag),
-        .release_en   (release_en),
-        .release_addr (release_tag),
-        .empty        (alloc_empty),
-        .full         (alloc_full)
-    );
-
-    wire [META_DATAW-1:0] meta_write_data, meta_read_data;
-    assign meta_write_data = {ag_smem_byte_addr, ag_byte_offset,
-                              ag_valid_length, ag_oob, ag_last};
-
-    VX_dp_ram #(
-        .DATAW   (META_DATAW),
-        .SIZE    (MAX_OUTSTANDING),
-        .LUTRAM  (1),
-        .RDW_MODE ("W"),
-        .OUT_REG (0)
-    ) meta_table (
-        .clk   (clk),
-        .reset (reset),
-        .read  (1'b1),
-        .write (alloc_acquire),
-        .wren  (1'b1),
-        .waddr (alloc_tag),
-        .wdata (meta_write_data),
-        .raddr (fifo_tag),
-        .rdata (meta_read_data)
-    );
-
-    // Priority-encode rsp_arrived to pick the next ready tag.
-    // OOB tags become ready instantly (via oob_arrived_en path).
-    wire ready_valid;
-    wire [TAG_W-1:0] ready_tag;
+    // Free-tag picker: priority-encode the inverse of busy_r.
+    wire [TAG_W-1:0] free_tag;
+    wire             have_free_tag;
     VX_priority_encoder #(
         .N (MAX_OUTSTANDING)
-    ) ready_pe (
-        .data_in   (rsp_arrived),
-        .index_out (ready_tag),
-        .valid_out (ready_valid),
+    ) free_pe (
+        .data_in   (~busy_r),
+        .index_out (free_tag),
+        .valid_out (have_free_tag),
         `UNUSED_PIN (onehot_out)
     );
 
-    assign fifo_tag   = ready_tag;
-    assign fifo_valid = ready_valid;
-    assign {fifo_smem_byte_addr, fifo_byte_offset, fifo_valid_length,
-            fifo_oob, fifo_last} = meta_read_data;
-    `UNUSED_VAR (fifo_pop)
-
-    // OoO progress signals for smem_wr's transfer_done logic.
-    reg addr_gen_done_r;
-    always @(posedge clk) begin
-        if (reset || !transfer_active) begin
-            addr_gen_done_r <= 1'b0;
-        end else if (accept && ag_last) begin
-            addr_gen_done_r <= 1'b1;
-        end
-    end
-    assign pending_empty = alloc_empty;
-    assign addr_gen_done = addr_gen_done_r;
-
-    // OoO can_alloc: only allocator full (metadata RAM is co-sized).
-    wire can_alloc = ~alloc_full;
-`endif
+    // OOB-tag picker: priority-encode oob_pending_r.
+    wire [TAG_W-1:0] oob_tag;
+    wire             have_oob;
+    VX_priority_encoder #(
+        .N (MAX_OUTSTANDING)
+    ) oob_pe (
+        .data_in   (oob_pending_r),
+        .index_out (oob_tag),
+        .valid_out (have_oob),
+        `UNUSED_PIN (onehot_out)
+    );
 
     // ════════════════════════════════════════════════════════════════════
-    // Issue logic (common to both paths; can_alloc differs above)
+    // Issue logic
     // ════════════════════════════════════════════════════════════════════
+
+    wire can_alloc = have_free_tag;
+
     wire normal_fire = ag_valid && ~ag_oob && can_alloc && gmem_bus_if.req_ready;
     wire oob_fire    = ag_valid &&  ag_oob && can_alloc;
+    wire accept      = normal_fire || oob_fire;
 
-    wire accept = normal_fire || oob_fire;
+    wire [TAG_W-1:0] alloc_tag = free_tag;
 
     assign ag_ready      = accept;
-    assign alloc_acquire = accept;
-
-`ifndef DXA_OOO_DRAIN_ENABLE
-    assign fifo_push     = accept;
-    assign fifo_data_in  = {alloc_tag, ag_smem_byte_addr, ag_byte_offset,
-                            ag_valid_length, ag_oob, ag_last};
-`endif
-
-    // OOB arrival: set rsp_arrived immediately.
-    assign oob_arrived_en  = oob_fire;
-    assign oob_arrived_tag = alloc_tag;
-
     assign gmem_req_fire = normal_fire;
-    assign stall_no_slot = ag_valid && ~ag_oob && alloc_full;
+    assign stall_no_slot = ag_valid && ~ag_oob && ~have_free_tag;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Direct-drain channel arbitration.
+    // Prefer real GMEM responses (so the bus never stalls when smem_wr is
+    // ready). OOB-synthetic CLs fill in cycles when there's no bus rsp.
+    // ════════════════════════════════════════════════════════════════════
+
+    wire bus_rsp_present = gmem_bus_if.rsp_valid;
+    wire [TAG_W-1:0] bus_rsp_tag = TAG_W'(gmem_bus_if.rsp_data.tag.value);
+    wire             present_oob = ~bus_rsp_present && have_oob;
+
+    wire [TAG_W-1:0] present_tag = bus_rsp_present ? bus_rsp_tag : oob_tag;
+    slot_t           present_slot;
+    assign present_slot = slot_table_r[present_tag];
+
+    assign sw_valid          = bus_rsp_present || present_oob;
+    assign sw_tag            = present_tag;
+    assign sw_data           = gmem_bus_if.rsp_data.data;  // don't-care when sw_oob.
+    assign sw_smem_byte_addr = present_slot.smem_byte_addr;
+    assign sw_byte_offset    = present_slot.byte_offset;
+    assign sw_valid_length   = present_slot.valid_length;
+    assign sw_oob            = present_slot.oob;
+    assign sw_last           = present_slot.last;
+    assign sw_outstanding    = outstanding_count_r;
+
+    // The bus is accepted by smem_wr (via sw_ready) only when we present
+    // a real rsp; OOB presentations don't touch the bus port.
+    assign gmem_bus_if.rsp_ready = sw_ready && bus_rsp_present;
 
     // ════════════════════════════════════════════════════════════════════
     // GMEM bus wiring (read-only requests)
     // ════════════════════════════════════════════════════════════════════
-
     assign gmem_bus_if.req_valid       = ag_valid && ~ag_oob && can_alloc;
     assign gmem_bus_if.req_data.rw     = 1'b0;
     assign gmem_bus_if.req_data.addr   = ag_cl_addr;
@@ -305,13 +188,40 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign gmem_bus_if.req_data.tag.uuid  = active_uuid;
     assign gmem_bus_if.req_data.tag.value = GMEM_TAG_VALUEW'(alloc_tag);
 
-    // GMEM responses: always accept when active.
-    assign gmem_bus_if.rsp_ready = transfer_active;
+    // ════════════════════════════════════════════════════════════════════
+    // Sequential update
+    // ════════════════════════════════════════════════════════════════════
+    wire        oob_present_fire = present_oob && sw_ready;
+    wire [MAX_OUTSTANDING-1:0] busy_set        = accept ? (MAX_OUTSTANDING'(1) << alloc_tag) : '0;
+    wire [MAX_OUTSTANDING-1:0] busy_clr        = release_en ? (MAX_OUTSTANDING'(1) << release_tag) : '0;
+    wire [MAX_OUTSTANDING-1:0] oob_pending_set = oob_fire   ? (MAX_OUTSTANDING'(1) << alloc_tag) : '0;
+    wire [MAX_OUTSTANDING-1:0] oob_pending_clr = oob_present_fire ? (MAX_OUTSTANDING'(1) << oob_tag) : '0;
 
-    // Forward GMEM response to rsp_buf.
-    assign gmem_rsp_valid = gmem_bus_if.rsp_valid && transfer_active;
-    assign gmem_rsp_tag   = TAG_W'(gmem_bus_if.rsp_data.tag.value);
-    assign gmem_rsp_data  = gmem_bus_if.rsp_data.data;
+    always @(posedge clk) begin
+        if (reset) begin
+            busy_r              <= '0;
+            oob_pending_r       <= '0;
+            outstanding_count_r <= '0;
+        end else begin
+            if (accept) begin
+                slot_table_r[alloc_tag].smem_byte_addr <= ag_smem_byte_addr;
+                slot_table_r[alloc_tag].byte_offset    <= ag_byte_offset;
+                slot_table_r[alloc_tag].valid_length   <= ag_valid_length;
+                slot_table_r[alloc_tag].oob            <= ag_oob;
+                slot_table_r[alloc_tag].last           <= ag_last;
+            end
+
+            busy_r        <= (busy_r        | busy_set       ) & ~busy_clr;
+            oob_pending_r <= (oob_pending_r | oob_pending_set) & ~oob_pending_clr;
+
+            // Outstanding count: increments on accept, decrements on release.
+            case ({accept, release_en})
+                2'b10: outstanding_count_r <= outstanding_count_r + SEQ_W'(1);
+                2'b01: outstanding_count_r <= outstanding_count_r - SEQ_W'(1);
+                default: ;
+            endcase
+        end
+    end
 
 `ifdef PERF_ENABLE
     reg [31:0] rdp_total_gmem_req_r;
@@ -362,6 +272,7 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     end
 `endif
 
+    `UNUSED_VAR (transfer_active)
     `UNUSED_VAR (gmem_bus_if.req_data.tag.value[GMEM_TAG_VALUEW-1:TAG_W])
 
 endmodule

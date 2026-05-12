@@ -11,12 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// DXA SMEM Writer: synchronizes in-flight FIFO with BRAM responses,
-// barrel-shifts CL data, and drains SMEM words to the bus.
-// Drives VX_mem_bus_if directly (absorbs bus wiring + completion attr).
+// DXA SMEM Writer (Phase 4b — OOO direct drain).
 //
-// Pipeline: IDLE → FETCH (1 cycle BRAM read) → DRAIN (word-by-word SMEM writes)
-// OOB entries use cfill-replicated data (no BRAM read needed but still 1 cycle).
+// Receives CLs directly from gmem_req on the `sw_*` channel, no rsp_buf
+// in the middle. The pend slot is filled asynchronously by whatever rsp
+// (real or OOB-synthetic) gmem_req presents. The CL marked `last` is
+// special — it must drain LAST because its bus packet carries
+// notify_smem_done; we hold it in `defer_*_r` until all other CLs have
+// released, then promote it to pend.
+//
+// Drain itself stays the same as Phase 1: pend → barrel-shift → fb_data_r
+// → SMEM_WORD beats. 1 SMEM-word/cycle steady state.
 
 `include "VX_define.vh"
 
@@ -40,25 +45,19 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [BAR_ADDR_W-1:0]       active_bar_addr,
     input  wire                        active_notify_smem_done,
 
-    // In-flight FIFO interface (from gmem_req).
-    input  wire                        fifo_valid,
-    output wire                        fifo_pop,
-    input  wire [TAG_W-1:0]            fifo_tag,
-    input  wire [`MEM_ADDR_WIDTH-1:0]  fifo_smem_byte_addr,
-    input  wire [CL_OFF_BITS-1:0]      fifo_byte_offset,
-    input  wire [CL_OFF_BITS:0]        fifo_valid_length,
-    input  wire                        fifo_oob,
-    input  wire                        fifo_last,
+    // Direct drain channel (from gmem_req).
+    input  wire                        sw_valid,
+    output wire                        sw_ready,
+    input  wire [TAG_W-1:0]            sw_tag,
+    input  wire [GMEM_DATAW-1:0]       sw_data,
+    input  wire [`MEM_ADDR_WIDTH-1:0]  sw_smem_byte_addr,
+    input  wire [CL_OFF_BITS-1:0]      sw_byte_offset,
+    input  wire [CL_OFF_BITS:0]        sw_valid_length,
+    input  wire                        sw_oob,
+    input  wire                        sw_last,
+    input  wire [SEQ_W-1:0]            sw_outstanding,
 
-    // Response buffer interface.
-    input  wire [MAX_OUTSTANDING-1:0]  rsp_arrived,
-    output wire                        rsp_read_en,
-    output wire [TAG_W-1:0]            rsp_read_tag,
-    input  wire [GMEM_DATAW-1:0]       rsp_read_data,
-    output wire                        rsp_clear_en,
-    output wire [TAG_W-1:0]            rsp_clear_tag,
-
-    // Resource release to gmem_req.
+    // Resource release to gmem_req (per-tag, OOO).
     output wire                        release_en,
     output wire [TAG_W-1:0]            release_tag,
 
@@ -92,6 +91,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam SMEM_OFF_W   = `CLOG2(SMEM_WORD_SIZE);
     localparam SMEM_DATAW   = SMEM_WORD_SIZE * 8;
     localparam TAG_W        = `CLOG2(MAX_OUTSTANDING);
+    localparam SEQ_W        = `CLOG2(MAX_OUTSTANDING + 1);
     localparam FILL_CAP     = CL_SIZE + SMEM_WORD_SIZE;
     localparam FILL_W       = `CLOG2(FILL_CAP + 1);
 
@@ -99,21 +99,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam SMEM_TAG_VALUE_W = DXA_LMEM_TAG_W - UUID_WIDTH;
 
     // ════════════════════════════════════════════════════════════════════
-    // FSM: IDLE → FETCH → DRAIN
-    // ════════════════════════════════════════════════════════════════════
-    localparam S_IDLE  = 2'd0;
-    localparam S_FETCH = 2'd1;
-    localparam S_DRAIN = 2'd2;
-
-    reg [1:0] state_r;
-
-    // ════════════════════════════════════════════════════════════════════
-    // FIFO head synchronization
-    // ════════════════════════════════════════════════════════════════════
-    wire head_ready = fifo_valid && (fifo_oob || rsp_arrived[fifo_tag]);
-
-    // ════════════════════════════════════════════════════════════════════
-    // Cfill replication
+    // Cfill replication (for OOB CLs)
     // ════════════════════════════════════════════════════════════════════
     wire [GMEM_DATAW-1:0] cfill_replicated;
     for (genvar i = 0; i < CL_SIZE / 4; ++i) begin : g_cfill
@@ -121,31 +107,51 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     end
 
     // ════════════════════════════════════════════════════════════════════
-    // Latched CL metadata (captured on FETCH entry)
+    // Pending slot (1-deep skid from sw channel).
     // ════════════════════════════════════════════════════════════════════
-    reg [TAG_W-1:0]            lat_tag_r;
-    reg [`MEM_ADDR_WIDTH-1:0]  lat_smem_byte_addr_r;
-    reg [CL_OFF_BITS-1:0]      lat_byte_offset_r;
-    reg [CL_OFF_BITS:0]        lat_valid_length_r;
-    reg                        lat_oob_r;
-    reg                        lat_last_r;
+    reg                       pend_valid_r;
+    reg [TAG_W-1:0]           pend_tag_r;
+    reg [`MEM_ADDR_WIDTH-1:0] pend_smem_byte_addr_r;
+    reg [CL_OFF_BITS-1:0]     pend_byte_offset_r;
+    reg [CL_OFF_BITS:0]       pend_valid_length_r;
+    reg                       pend_last_r;
+    reg [GMEM_DATAW-1:0]      pend_data_r;
 
     // ════════════════════════════════════════════════════════════════════
-    // Fill buffer (per-CL drain)
+    // Deferred-last slot — holds the CL marked `last` while other CLs
+    // drain ahead of it. Promoted to pend when only this CL remains.
     // ════════════════════════════════════════════════════════════════════
+    reg                       defer_valid_r;
+    reg [TAG_W-1:0]           defer_tag_r;
+    reg [`MEM_ADDR_WIDTH-1:0] defer_smem_byte_addr_r;
+    reg [CL_OFF_BITS-1:0]     defer_byte_offset_r;
+    reg [CL_OFF_BITS:0]       defer_valid_length_r;
+    reg [GMEM_DATAW-1:0]      defer_data_r;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Drain fill buffer
+    // ════════════════════════════════════════════════════════════════════
+    reg                        fb_active_r;
+    reg [TAG_W-1:0]            fb_tag_r;
+    reg                        fb_last_r;
     reg [FILL_CAP*8-1:0]       fb_data_r /*verilator split_var*/;
     reg [FILL_W-1:0]           fb_level_r;
     reg [SMEM_ADDR_WIDTH-1:0]  fb_word_addr_r;
     reg [SMEM_OFF_W-1:0]       fb_byte_offset_r;
     reg [SMEM_ADDR_WIDTH-1:0]  fb_start_word_r;
 
-    // Fill buffer output (register-driven).
+    // ════════════════════════════════════════════════════════════════════
+    // Drain-side combinational
+    // ════════════════════════════════════════════════════════════════════
     wire has_full_word    = (fb_level_r >= FILL_W'(SMEM_WORD_SIZE));
     wire has_last_partial = !has_full_word && (fb_level_r > 0);
-    wire drain_valid      = (state_r == S_DRAIN) && (has_full_word || has_last_partial);
+    wire drain_valid      = fb_active_r && (has_full_word || has_last_partial);
     wire drain_will_empty = (fb_level_r <= FILL_W'(SMEM_WORD_SIZE));
 
+    wire smem_wr_ready_internal;
     wire drain_fire = drain_valid && smem_wr_ready_internal;
+    wire drain_emptying_now = drain_fire && drain_will_empty;
+    wire fb_will_be_empty   = drain_emptying_now || ~fb_active_r;
 
     // SMEM word data and byteen from fill buffer.
     wire [SMEM_DATAW-1:0] fb_word_data = fb_data_r[SMEM_DATAW-1:0];
@@ -163,94 +169,170 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     end
 
     // ════════════════════════════════════════════════════════════════════
-    // Barrel shift: compress valid CL bytes to position 0
+    // sw-channel accept + load scheduling
     // ════════════════════════════════════════════════════════════════════
+    //
+    // The arriving sw CL takes one of three paths:
+    //   (a) Bypass-load into fb_data_r directly (pend is empty AND fb
+    //       is empty/emptying).
+    //   (b) Capture into pend (pend free, but fb is currently busy or
+    //       we'd rather drain a previously-pended CL first).
+    //   (c) Capture into defer_*_r (it's the `last` CL and we still have
+    //       other CLs outstanding to drain first).
+    //
+    // Promotion from defer_*_r to pend (or fb directly) fires when the
+    // last drain leaves only the deferred CL outstanding.
 
-    wire [GMEM_DATAW-1:0] fetch_cl_data = lat_oob_r ? cfill_replicated : rsp_read_data;
-    wire [GMEM_DATAW-1:0] compressed_data = (lat_valid_length_r != 0)
-        ? (fetch_cl_data >> {lat_byte_offset_r, 3'b000})
+    wire sw_is_last_defer = sw_valid && sw_last && (sw_outstanding > SEQ_W'(1));
+    wire can_defer        = sw_is_last_defer && ~defer_valid_r;
+
+    wire can_capture_pend = ~pend_valid_r;
+    wire can_bypass_load  = ~pend_valid_r && fb_will_be_empty;
+
+    // sw_ready conditions:
+    //   - If sw is the last-to-defer: defer is empty → accept.
+    //   - Else: pend can capture → accept.
+    assign sw_ready = sw_is_last_defer ? can_defer : can_capture_pend;
+
+    wire sw_accept       = sw_valid && sw_ready;
+    wire sw_defer_path   = sw_accept && sw_is_last_defer;
+    wire sw_bypass_path  = sw_accept && ~sw_is_last_defer && can_bypass_load;
+    wire sw_pend_path    = sw_accept && ~sw_is_last_defer && ~can_bypass_load;
+
+    // Deferred-CL promotion to fb: fires when fb is emptying and we are
+    // about to be down to 1 outstanding (= just the deferred).
+    // Equivalent: sw_outstanding == 2 && drain_emptying_now, or
+    // sw_outstanding == 1 with fb idle (no other CL in flight).
+    wire promote_defer = defer_valid_r && fb_will_be_empty && ~pend_valid_r
+                      && ((sw_outstanding == SEQ_W'(1))
+                          || (sw_outstanding == SEQ_W'(2) && drain_emptying_now));
+
+    // pend → fb load (existing pend has data ready, fb emptying).
+    wire load_pend_to_fb = pend_valid_r && fb_will_be_empty;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Data + metadata muxing for the cycle's fb-load source (if any).
+    // ════════════════════════════════════════════════════════════════════
+    wire                       use_sw_for_fb    = sw_bypass_path;
+    wire                       use_pend_for_fb  = load_pend_to_fb && ~use_sw_for_fb;
+    wire                       use_defer_for_fb = promote_defer  && ~use_sw_for_fb && ~use_pend_for_fb;
+    wire                       fb_load_now      = use_sw_for_fb || use_pend_for_fb || use_defer_for_fb;
+
+    wire [GMEM_DATAW-1:0]      fb_load_data;
+    wire [`MEM_ADDR_WIDTH-1:0] fb_load_smem_byte_addr;
+    wire [CL_OFF_BITS-1:0]     fb_load_byte_offset;
+    wire [CL_OFF_BITS:0]       fb_load_valid_length;
+    wire [TAG_W-1:0]           fb_load_tag;
+    wire                       fb_load_last;
+    wire                       fb_load_oob;
+
+    assign fb_load_data           = use_sw_for_fb    ? (sw_oob ? cfill_replicated : sw_data)
+                                  : use_pend_for_fb  ? pend_data_r
+                                                     : defer_data_r;
+    assign fb_load_smem_byte_addr = use_sw_for_fb    ? sw_smem_byte_addr
+                                  : use_pend_for_fb  ? pend_smem_byte_addr_r
+                                                     : defer_smem_byte_addr_r;
+    assign fb_load_byte_offset    = use_sw_for_fb    ? sw_byte_offset
+                                  : use_pend_for_fb  ? pend_byte_offset_r
+                                                     : defer_byte_offset_r;
+    assign fb_load_valid_length   = use_sw_for_fb    ? sw_valid_length
+                                  : use_pend_for_fb  ? pend_valid_length_r
+                                                     : defer_valid_length_r;
+    assign fb_load_tag            = use_sw_for_fb    ? sw_tag
+                                  : use_pend_for_fb  ? pend_tag_r
+                                                     : defer_tag_r;
+    assign fb_load_last           = use_sw_for_fb    ? sw_last
+                                  : use_pend_for_fb  ? pend_last_r
+                                                     : 1'b1;  // promoted defer is the last
+    assign fb_load_oob            = use_sw_for_fb    ? sw_oob
+                                  : 1'b0;  // pend/defer paths already hold (cfill-or-data) in their data reg
+
+    wire [GMEM_DATAW-1:0] compressed_data = (fb_load_valid_length != 0)
+        ? (fb_load_data >> {fb_load_byte_offset, 3'b000})
         : '0;
 
-    // SMEM byte decomposition for fill buffer loading.
-    wire [SMEM_OFF_W-1:0]      new_smem_byte_off = lat_smem_byte_addr_r[SMEM_OFF_W-1:0];
-    wire [SMEM_ADDR_WIDTH-1:0] new_start_word    = SMEM_ADDR_WIDTH'(lat_smem_byte_addr_r >> SMEM_OFF_W);
-    wire [FILL_W-1:0]          new_fill_level    = FILL_W'(new_smem_byte_off) + FILL_W'(lat_valid_length_r);
+    wire [SMEM_OFF_W-1:0]      new_smem_byte_off = fb_load_smem_byte_addr[SMEM_OFF_W-1:0];
+    wire [SMEM_ADDR_WIDTH-1:0] new_start_word    = SMEM_ADDR_WIDTH'(fb_load_smem_byte_addr >> SMEM_OFF_W);
+    wire [FILL_W-1:0]          new_fill_level    = FILL_W'(new_smem_byte_off) + FILL_W'(fb_load_valid_length);
     wire [FILL_W+2:0]          new_bit_offset    = {FILL_W'(new_smem_byte_off), 3'b000};
 
     // ════════════════════════════════════════════════════════════════════
-    // FSM + fill buffer state update
+    // Sequential update
     // ════════════════════════════════════════════════════════════════════
-
-    wire do_fetch = (state_r == S_IDLE) && head_ready;
-    assign fifo_pop = do_fetch;
-
-    assign rsp_read_en  = do_fetch && ~fifo_oob;
-    assign rsp_read_tag = fifo_tag;
-
     always @(posedge clk) begin
         if (reset || transfer_start) begin
-            state_r          <= S_IDLE;
+            pend_valid_r     <= 1'b0;
+            defer_valid_r    <= 1'b0;
+            fb_active_r      <= 1'b0;
             fb_data_r        <= '0;
             fb_level_r       <= '0;
             fb_word_addr_r   <= '0;
             fb_byte_offset_r <= '0;
             fb_start_word_r  <= '0;
-            lat_tag_r        <= '0;
-            lat_oob_r        <= 1'b0;
-            lat_last_r       <= 1'b0;
+            fb_tag_r         <= '0;
+            fb_last_r        <= 1'b0;
         end else begin
-            case (state_r)
-            S_IDLE: begin
-                if (head_ready) begin
-                    lat_tag_r            <= fifo_tag;
-                    lat_smem_byte_addr_r <= fifo_smem_byte_addr;
-                    lat_byte_offset_r    <= fifo_byte_offset;
-                    lat_valid_length_r   <= fifo_valid_length;
-                    lat_oob_r            <= fifo_oob;
-                    lat_last_r           <= fifo_last;
-                    state_r              <= S_FETCH;
-                end
+            // ── Drain advance (mid-CL beat shift) ──
+            if (drain_fire && ~drain_will_empty) begin
+                fb_data_r      <= fb_data_r >> SMEM_DATAW;
+                fb_level_r     <= fb_level_r - FILL_W'(SMEM_WORD_SIZE);
+                fb_word_addr_r <= fb_word_addr_r + SMEM_ADDR_WIDTH'(1);
             end
-            S_FETCH: begin
+
+            // ── Load fill buffer with the next CL ──
+            if (fb_load_now) begin
                 fb_data_r        <= (FILL_CAP*8)'(compressed_data) << new_bit_offset;
                 fb_level_r       <= new_fill_level;
                 fb_word_addr_r   <= new_start_word;
                 fb_byte_offset_r <= new_smem_byte_off;
                 fb_start_word_r  <= new_start_word;
-                state_r          <= S_DRAIN;
+                fb_tag_r         <= fb_load_tag;
+                fb_last_r        <= fb_load_last;
+                fb_active_r      <= 1'b1;
+            end else if (drain_emptying_now) begin
+                fb_data_r   <= '0;
+                fb_level_r  <= '0;
+                fb_active_r <= 1'b0;
             end
-            S_DRAIN: begin
-                if (drain_fire) begin
-                    if (drain_will_empty) begin
-                        fb_data_r  <= '0;
-                        fb_level_r <= '0;
-                        state_r    <= S_IDLE;
-                    end else begin
-                        fb_data_r      <= fb_data_r >> (SMEM_WORD_SIZE * 8);
-                        fb_level_r     <= fb_level_r - FILL_W'(SMEM_WORD_SIZE);
-                        fb_word_addr_r <= fb_word_addr_r + SMEM_ADDR_WIDTH'(1);
-                    end
-                end
+
+            // ── pend slot management ──
+            if (sw_pend_path) begin
+                pend_tag_r            <= sw_tag;
+                pend_smem_byte_addr_r <= sw_smem_byte_addr;
+                pend_byte_offset_r    <= sw_byte_offset;
+                pend_valid_length_r   <= sw_valid_length;
+                pend_last_r           <= sw_last;
+                pend_data_r           <= sw_oob ? cfill_replicated : sw_data;
+                pend_valid_r          <= 1'b1;
+            end else if (use_pend_for_fb) begin
+                pend_valid_r <= 1'b0;
             end
-            default: state_r <= S_IDLE;
-            endcase
+
+            // ── defer slot management ──
+            if (sw_defer_path) begin
+                defer_tag_r            <= sw_tag;
+                defer_smem_byte_addr_r <= sw_smem_byte_addr;
+                defer_byte_offset_r    <= sw_byte_offset;
+                defer_valid_length_r   <= sw_valid_length;
+                defer_data_r           <= sw_oob ? cfill_replicated : sw_data;
+                defer_valid_r          <= 1'b1;
+            end else if (use_defer_for_fb) begin
+                defer_valid_r <= 1'b0;
+            end
         end
     end
 
     // ════════════════════════════════════════════════════════════════════
-    // Resource release
+    // Resource release (per-tag, OOO)
     // ════════════════════════════════════════════════════════════════════
-    wire drain_complete = (state_r == S_DRAIN) && drain_fire && drain_will_empty;
+    wire drain_complete = drain_fire && drain_will_empty;
 
-    assign rsp_clear_en  = drain_complete;
-    assign rsp_clear_tag = lat_tag_r;
-    assign release_en    = drain_complete;
-    assign release_tag   = lat_tag_r;
+    assign release_en  = drain_complete;
+    assign release_tag = fb_tag_r;
 
     // ════════════════════════════════════════════════════════════════════
     // SMEM write output (with optional multicast replay)
     // ════════════════════════════════════════════════════════════════════
-
     wire                       smem_wr_valid;
     wire [SMEM_ADDR_WIDTH-1:0] smem_wr_addr;
     wire                       smem_wr_last_pkt;
@@ -262,10 +344,16 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [MC_NW_BITS-1:0] replay_next_idx;
     wire replay_has_remaining;
 
+    // Combinational reload: when replay_remaining_r=0 at a new word boundary,
+    // present cta_mask to the PE this cycle so the first beat of the new
+    // word fires without a 1-cycle reload gap.
+    wire reload_now = is_multicast && drain_valid && (replay_remaining_r == '0);
+    wire [`NUM_WARPS-1:0] replay_remaining_use = reload_now ? cta_mask : replay_remaining_r;
+
     VX_priority_encoder #(
         .N (`NUM_WARPS)
     ) replay_pe (
-        .data_in   (replay_remaining_r),
+        .data_in   (replay_remaining_use),
         .index_out (replay_next_idx),
         .valid_out (replay_has_remaining),
         `UNUSED_PIN (onehot_out)
@@ -274,12 +362,12 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [SMEM_ADDR_WIDTH-1:0] replay_addr = fb_word_addr_r
         + SMEM_ADDR_WIDTH'(replay_next_idx) * smem_stride_words;
     wire replay_is_last = replay_has_remaining
-        && (replay_remaining_r == (`NUM_WARPS'(1) << replay_next_idx));
+        && (replay_remaining_use == (`NUM_WARPS'(1) << replay_next_idx));
 
     wire mc_write_valid = transfer_active && drain_valid
                        && (!is_multicast || replay_has_remaining);
     wire mc_write_fire = mc_write_valid && smem_bus_if.req_ready;
-    wire smem_wr_ready_internal = is_multicast
+    assign smem_wr_ready_internal = is_multicast
         ? (smem_bus_if.req_ready && (!replay_has_remaining || replay_is_last))
         : smem_bus_if.req_ready;
 
@@ -287,10 +375,12 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         if (reset || transfer_start) begin
             replay_remaining_r <= '0;
         end else if (transfer_active && is_multicast) begin
-            if (replay_remaining_r == '0 && drain_valid) begin
+            // Single update: reload from cta_mask on demand, then clear the
+            // bit corresponding to the beat that fires this cycle (if any).
+            if (mc_write_fire && replay_has_remaining) begin
+                replay_remaining_r <= replay_remaining_use & ~(`NUM_WARPS'(1) << replay_next_idx);
+            end else if (reload_now) begin
                 replay_remaining_r <= cta_mask;
-            end else if (mc_write_fire && replay_has_remaining) begin
-                replay_remaining_r <= replay_remaining_r & ~(`NUM_WARPS'(1) << replay_next_idx);
             end
         end
     end
@@ -299,7 +389,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign smem_wr_addr    = is_multicast ? replay_addr : fb_word_addr_r;
     assign smem_req_fire   = mc_write_fire;
 
-    wire is_last_drain = lat_last_r && drain_will_empty;
+    wire is_last_drain = fb_last_r && drain_will_empty;
     assign smem_wr_last_pkt = is_last_drain && (!is_multicast || replay_is_last);
 
     // Completion attr: bar_stride hardcoded to 1.
@@ -310,9 +400,6 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // && req_ready, so qualifying with req_ready here is redundant.
     wire smem_wr_attr_last = active_notify_smem_done && (
         is_multicast ? (mc_write_valid && is_last_drain) : smem_wr_last_pkt);
-    // bar_addr layout (from VX_wctl_unit `CONCAT`): high=wid, low=bar_no.
-    // To target the same bar_no on a different CTA's warp, increment the
-    // wid portion → shift replay_next_idx into the wid bit field.
     wire [BAR_ADDR_W-1:0] smem_wr_attr_bar = is_multicast
         ? BAR_ADDR_W'(active_bar_addr + (BAR_ADDR_W'(replay_next_idx) << NB_BITS))
         : active_bar_addr;
@@ -320,7 +407,6 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ════════════════════════════════════════════════════════════════════
     // SMEM bus wiring
     // ════════════════════════════════════════════════════════════════════
-
     assign smem_bus_if.req_valid       = smem_wr_valid;
     assign smem_bus_if.req_data.rw     = 1'b1;
     assign smem_bus_if.req_data.addr   = smem_wr_addr;
@@ -333,7 +419,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     `UNUSED_VAR (smem_bus_if.rsp_valid)
     `UNUSED_VAR (smem_bus_if.rsp_data)
-
+    `UNUSED_VAR (fb_load_oob)
 
     // ════════════════════════════════════════════════════════════════════
     // Completion tracking
@@ -374,10 +460,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef DBG_TRACE_DXA
     always @(posedge clk) begin
         if (~reset) begin
-            if (do_fetch) begin
-                $write("DXA_PIPE,%0d,SW_FETCH,tag=%0d,oob=%0d,smem=0x%0h,off=%0d,len=%0d,last=%0d\n",
-                    $time, fifo_tag, fifo_oob, fifo_smem_byte_addr,
-                    fifo_byte_offset, fifo_valid_length, fifo_last);
+            if (sw_accept) begin
+                $write("DXA_PIPE,%0d,SW_RX,tag=%0d,oob=%0d,last=%0d,path=%s\n",
+                    $time, sw_tag, sw_oob, sw_last,
+                    sw_defer_path ? "defer" : sw_bypass_path ? "bypass" : "pend");
             end
             if (smem_req_fire) begin
                 $write("DXA_PIPE,%0d,SMEM_WR,addr=0x%0h,byteen=0x%0h,last=%0d\n",
