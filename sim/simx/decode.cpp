@@ -1131,9 +1131,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
-        bool is_mx = vt::mx_scale_format(fmt_s);
-
-        // Validate metadata preconditions for sparse and MX paths independently.
+        // Validate sparse metadata preconditions.
         uint32_t sparse_meta_stores = 0;
         if (is_sparse) {
           if ((cfg::k_steps % 2) != 0
@@ -1146,18 +1144,13 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
             std::abort();
         }
 
-        uint32_t mx_meta_stores = 0;
-        if (is_mx) {
-          mx_meta_stores = (fmt_s == vt::nvfp4::id) ? 8 : 4;
-        }
-
         // Derive loop counts: sym_sparse folds k into the flat counter, uses full k_steps
         uint32_t k_count  = is_sparse ? sparse_k_steps : cfg::k_steps;
         uint32_t b_sub    = is_sparse ? cfg::b_sub_blocks_sp : cfg::b_sub_blocks;
         uint32_t mma_steps = (cfg::sym_sparse && is_sparse)
                            ? (cfg::m_steps * cfg::n_steps * cfg::k_steps)
                            : (cfg::m_steps * cfg::n_steps * k_count);
-        uint32_t total_steps = sparse_meta_stores + mx_meta_stores + mma_steps;
+        uint32_t total_steps = sparse_meta_stores + mma_steps;
         uint32_t steps_shift = (total_steps > 1) ? (32 - log2ceil(total_steps)) : 0;
         uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
         uint32_t uuid_lo = uuid & 0xffffffff;
@@ -1168,46 +1161,13 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
           return (static_cast<uint64_t>(uuid_hi) << 32) | ((steps++ << steps_shift) | uuid_lo);
         };
 
-        // Phase 1: metadata-store uops (sparse bank then MX bank)
+        // Phase 1: sparse metadata-store uops
         constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
         for (uint32_t sparse_store = 0; sparse_store < sparse_meta_stores; ++sparse_store) {
           uint32_t reg_rs1 = (sparse_store / cfg::meta_cols_per_load) ? meta_reg1 : meta_reg0;
           auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
           instr->setOpType(TcuType::META_STORE);
           instr->setArgs(IntrTcuArgs{0, 0, 0, fmt_s, sparse_store, 0, 0, 0, TCU_META_KIND_SPARSE});
-          instr->setSrcReg(0, reg_rs1, RegType::Float);
-          instr->setParentUUID(uuid);
-          ibuffer.push_back(instr);
-        }
-
-        for (uint32_t mx_store = 0; mx_store < mx_meta_stores; ++mx_store) {
-          uint32_t reg_rs1 = 0;
-          if (fmt_s == vt::nvfp4::id) {
-            switch (mx_store) {
-            case 0: reg_rs1 = 8;  break;  // A0
-            case 1: reg_rs1 = 9;  break;  // A1
-            case 2: reg_rs1 = 20; break;  // A2
-            case 3: reg_rs1 = 21; break;  // A3
-            case 4: reg_rs1 = 18; break;  // B0
-            case 5: reg_rs1 = 19; break;  // B1
-            case 6: reg_rs1 = 22; break;  // B2
-            case 7: reg_rs1 = 23; break;  // B3
-            default:
-              std::abort();
-            }
-          } else {
-            switch (mx_store) {
-            case 0: reg_rs1 = 8;  break;  // A0
-            case 1: reg_rs1 = 9;  break;  // A1
-            case 2: reg_rs1 = 18; break;  // B0
-            case 3: reg_rs1 = 19; break;  // B1
-            default:
-              std::abort();
-            }
-          }
-          auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
-          instr->setOpType(TcuType::META_STORE);
-          instr->setArgs(IntrTcuArgs{0, 0, 0, fmt_s, mx_store, 0, 0, 0, TCU_META_KIND_MX});
           instr->setSrcReg(0, reg_rs1, RegType::Float);
           instr->setParentUUID(uuid);
           ibuffer.push_back(instr);
