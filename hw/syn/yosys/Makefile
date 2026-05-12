@@ -54,12 +54,17 @@ endif
 
 CONFIGS += -DSYNTHESIS -DASIC -DYOSYS
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/hw/VX_config.toml --cflags='$(CONFIGS)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/hw/VX_config.toml --cflags='$(CONFIGS) -DXLEN=$(XLEN)')
 
 # include paths
 RTL_INCLUDE = -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 ifneq (,$(filter -DEXT_F_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/fpu
+endif
+
+ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
+	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv
+	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl
 endif
 
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
@@ -128,7 +133,7 @@ all: timing
 
 gen-sources: $(BUILD_DIR)/src
 $(BUILD_DIR)/src:
-	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src
+	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src $(RTL_PKGS)
 
 sv2v: $(BUILD_DIR)/project.v
 $(BUILD_DIR)/project.v: $(BUILD_DIR)/src

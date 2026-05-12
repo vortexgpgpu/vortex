@@ -85,7 +85,7 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
 
         wire [32:0] mult_result_tf32;
 
-        `UNUSED_VAR (mult_result_bf16, mult_result_fp8, mult_result_bf8, mult_result_tf32);
+        `UNUSED_VAR ({mult_result_bf16, mult_result_fp8, mult_result_bf8, mult_result_tf32});
 
         VX_tcu_bhf_fp8mul #(
             .IN_EXPW (4),
