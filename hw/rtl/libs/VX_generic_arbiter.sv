@@ -104,6 +104,7 @@ module VX_generic_arbiter #(
             .clk          (clk),
             .reset        (reset),
             .requests     (requests),
+            .suppress     ({NUM_REQS{1'b0}}),
             .grant_valid  (grant_valid),
             .grant_index  (grant_index),
             .grant_onehot (grant_onehot),
