@@ -29,8 +29,6 @@ uint32_t ndim = 2;
 // Default sizes/tiles per dimension (overridable via CLI).
 uint32_t sizes[DXA_MAX_DIMS] = {32, 32, 1, 1, 1};
 uint32_t tiles[DXA_MAX_DIMS] = {4, 4, 1, 1, 1};
-uint32_t opt_block_x = 0;  // 0 = use group_size (legacy)
-uint32_t opt_block_y = 0;  // 0 = use 1
 
 vx_device_h device = nullptr;
 vx_buffer_h src_buffer = nullptr;
@@ -78,8 +76,6 @@ static void parse_args(int argc, char** argv) {
     if (argv[i][0] != '-') continue;
     if (strcmp(argv[i], "-k") == 0 && i + 1 < argc) { kernel_file = argv[++i]; continue; }
     if (strcmp(argv[i], "-h") == 0) { show_usage(); exit(0); }
-    if (strcmp(argv[i], "-b") == 0 && i + 1 < argc) { opt_block_x = atoi(argv[++i]); continue; }
-    if (strcmp(argv[i], "-B") == 0 && i + 1 < argc) { opt_block_y = atoi(argv[++i]); continue; }
     // -s<d> N and -t<d> N
     if (strlen(argv[i]) == 3 && i + 1 < argc) {
       int d = argv[i][2] - '0';
@@ -155,10 +151,7 @@ int main(int argc, char* argv[]) {
 #endif
 
   uint32_t max_localmem = 0;
-  // Use the effective block size (may be smaller than tile area when -b/-B set).
-  const uint32_t check_block_size =
-      (opt_block_x ? opt_block_x : group_size) * (opt_block_y ? opt_block_y : 1);
-  RT_CHECK(vx_check_occupancy(device, check_block_size, &max_localmem));
+  RT_CHECK(vx_check_occupancy(device, group_size, &max_localmem));
   if (local_mem > max_localmem) {
     std::cout << "Error: tile too large for local memory (" << local_mem
               << " > " << max_localmem << ")\n";
@@ -230,12 +223,8 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   // Launch with flattened 1D grid; kernel decomposes flat group ID.
-  // -b/-B override the legacy block_dim = group_size for sweep flexibility
-  // (e.g. let LSU_KLOOP path use block_dim = NT, k-loop over rows).
-  const uint32_t eff_block_x = opt_block_x ? opt_block_x : group_size;
-  const uint32_t eff_block_y = opt_block_y ? opt_block_y : 1;
   uint32_t grid_dim[1] = {total_groups};
-  uint32_t block_dim[1] = {eff_block_x * eff_block_y};
+  uint32_t block_dim[1] = {group_size};
 
   std::cout << "start\n";
   RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, local_mem));
