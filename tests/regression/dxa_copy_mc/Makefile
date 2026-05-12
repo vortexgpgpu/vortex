@@ -3,7 +3,7 @@ include $(ROOT_DIR)/config.mk
 
 CONFIGS := $(if $(findstring -DEXT_DXA_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DEXT_DXA_ENABLE)
 
-PROJECT := dxa_multicast
+PROJECT := dxa_copy_mc
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 
