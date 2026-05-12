@@ -205,17 +205,25 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     //   T0: warp_done arrives; done_slot = cta_slot_per_warp_r[warp_done_wid].
     //   T1: warp_done_r/done_slot_r latched; rem_warps_ram read issued.
     //   T2: rem_warps_rdata available; cta_done evaluated using
-    //       warp_done_r_dly + done_slot_r_dly. One-cycle write forwarding
-    //       handles back-to-back retirements to the same slot.
+    //       warp_done_r_dly + done_slot_r_dly. Two-cycle write forwarding
+    //       handles back-to-back retirements to the same slot:
+    //         _r  covers 1-cycle gap (write set last cycle, still asserted)
+    //         _rr covers 2-cycle gap (write asserted but not yet visible to a
+    //                                  read sampled at the same RAM cycle —
+    //                                  RDW_MODE="R" + OUT_REG=1 gives the read
+    //                                  the pre-write value)
     // -------------------------------------------------------------------------
     reg rem_warps_write_r;
     reg [CS_BITS-1:0] rem_warps_waddr_r;
     reg [NW_WIDTH:0]  rem_warps_wdata_r;
+    reg rem_warps_write_rr;
+    reg [CS_BITS-1:0] rem_warps_waddr_rr;
+    reg [NW_WIDTH:0]  rem_warps_wdata_rr;
 
     wire [NW_WIDTH:0] rem_warps_rdata_fwd =
-        (rem_warps_write_r && (rem_warps_waddr_r == done_slot_r_dly))
-            ? rem_warps_wdata_r
-            : rem_warps_rdata;
+        (rem_warps_write_r  && (rem_warps_waddr_r  == done_slot_r_dly)) ? rem_warps_wdata_r  :
+        (rem_warps_write_rr && (rem_warps_waddr_rr == done_slot_r_dly)) ? rem_warps_wdata_rr :
+        rem_warps_rdata;
     wire cta_done = warp_done_r_dly
                  && slot_valid_r[done_slot_r_dly]
                  && (rem_warps_rdata_fwd == (NW_WIDTH+1)'(1));
@@ -294,6 +302,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             rem_warps_waddr_r <= '0;
             rem_warps_wdata_r <= '0;
             rem_warps_write_r <= 0;
+            rem_warps_waddr_rr <= '0;
+            rem_warps_wdata_rr <= '0;
+            rem_warps_write_rr <= 0;
             head_reclaimable_dly <= 0;
             cta_slot_per_warp_r <= '0;
 
@@ -312,6 +323,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             end
 
             // ---- Warp retirement -------------------------------------------
+            // Snapshot _r into _rr so 2-cycle forwarding can cover the
+            // window where the rem_warps_ram read started concurrently with
+            // a pending write (RDW_MODE="R" returns the pre-write value).
+            rem_warps_write_rr <= rem_warps_write_r;
+            rem_warps_waddr_rr <= rem_warps_waddr_r;
+            rem_warps_wdata_rr <= rem_warps_wdata_r;
             if (warp_done_r_dly && slot_valid_r[done_slot_r_dly]) begin
                 rem_warps_waddr_r <= done_slot_r_dly;
                 rem_warps_wdata_r <= rem_warps_rdata_fwd - 1;
