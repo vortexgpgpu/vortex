@@ -82,12 +82,50 @@ public:
     vx_barrier(bar_id_, num_cores_);
   }
 
+  // Pre-register `count` pending transaction events on this gbar (per-core).
+  void expect_tx(uint32_t count = 1) {
+    vx_barrier_expect_tx(bar_id_, count);
+  }
+
   // Barrier identifier
   uint32_t id() const { return bar_id_; }
 
 private:
   uint32_t bar_id_;
   uint32_t num_cores_;
+};
+
+// Shared local barrier — all peer CTAs on a core see the same bar slot.
+// Unlike `barrier`, the bar handle does NOT embed the caller's CTA id, so
+// multiple CTAs constructing the same `shared_barrier(id, num_peers)` share
+// one bar_unit slot. Used as a sync point across CTAs for intra-core DXA
+// multicast: every receiver CTA arrives here to guarantee its event-bar
+// `expect_tx` is in effect before the issuer fires the multicast.
+class shared_barrier {
+public:
+  shared_barrier(uint32_t id, uint32_t num_peers) {
+    // bar_addr = {wid=0, bar_id=id} — same slot from every CTA's perspective.
+    bar_id_ = (id << 8);
+    num_peers_ = num_peers;
+  }
+
+  uint32_t arrive() {
+    return vx_barrier_arrive(bar_id_, num_peers_);
+  }
+
+  void wait(uint32_t phase) {
+    vx_barrier_wait(bar_id_, phase);
+  }
+
+  void arrive_and_wait() {
+    vx_barrier(bar_id_, num_peers_);
+  }
+
+  uint32_t id() const { return bar_id_; }
+
+private:
+  uint32_t bar_id_;
+  uint32_t num_peers_;
 };
 
 }
