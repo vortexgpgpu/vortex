@@ -602,14 +602,14 @@ public:
     if constexpr (FragB::NR == 8) {
 
       // frag_b: caller-saved registers (f24-f31)
-      register float fb0 __asm__("f24")  = frag_b.data[0];
-      register float fb1 __asm__("f25")  = frag_b.data[1];
-      register float fb2 __asm__("f26")  = frag_b.data[2];
-      register float fb3 __asm__("f27")  = frag_b.data[3];
-      register float fb4 __asm__("f28")  = frag_b.data[4];
-      register float fb5 __asm__("f29")  = frag_b.data[5];
-      register float fb6 __asm__("f30")  = frag_b.data[6];
-      register float fb7 __asm__("f31")  = frag_b.data[7];
+      register float fb0 __asm__("f23")  = frag_b.data[0];
+      register float fb1 __asm__("f24")  = frag_b.data[1];
+      register float fb2 __asm__("f25")  = frag_b.data[2];
+      register float fb3 __asm__("f26")  = frag_b.data[3];
+      register float fb4 __asm__("f27")  = frag_b.data[4];
+      register float fb5 __asm__("f28")  = frag_b.data[5];
+      register float fb6 __asm__("f29")  = frag_b.data[6];
+      register float fb7 __asm__("f30")  = frag_b.data[7];
 
       if constexpr (is_mx) {
         register float fma0 __asm__("f8")  = frag_a.mx_meta[0];
@@ -621,7 +621,7 @@ public:
           register float fma2 __asm__("f20") = frag_a.mx_meta[2];
           register float fma3 __asm__("f21") = frag_a.mx_meta[3];
           register float fmb2 __asm__("f22") = frag_b.mx_meta[2];
-          register float fmb3 __asm__("f23") = frag_b.mx_meta[3];
+          register float fmb3 __asm__("f31") = frag_b.mx_meta[3];
 
           __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
             : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
@@ -651,10 +651,10 @@ public:
       static_assert(FragB::NR == 4, "Unsupported number of registers for FragB");
 
       // frag_b: caller-saved registers (f28-f31)
-      register float fb0 __asm__("f28") = frag_b.data[0];
-      register float fb1 __asm__("f29") = frag_b.data[1];
-      register float fb2 __asm__("f30") = frag_b.data[2];
-      register float fb3 __asm__("f31") = frag_b.data[3];
+      register float fb0 __asm__("f27") = frag_b.data[0];
+      register float fb1 __asm__("f28") = frag_b.data[1];
+      register float fb2 __asm__("f29") = frag_b.data[2];
+      register float fb3 __asm__("f30") = frag_b.data[3];
 
       if constexpr (is_mx) {
         register float fma0 __asm__("f8")  = frag_a.mx_meta[0];
@@ -666,7 +666,7 @@ public:
           register float fma2 __asm__("f20") = frag_a.mx_meta[2];
           register float fma3 __asm__("f21") = frag_a.mx_meta[3];
           register float fmb2 __asm__("f22") = frag_b.mx_meta[2];
-          register float fmb3 __asm__("f23") = frag_b.mx_meta[3];
+          register float fmb3 __asm__("f31") = frag_b.mx_meta[3];
 
           __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
             : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)

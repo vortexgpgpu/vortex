@@ -1127,7 +1127,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         static_assert(cfg::num_meta_loads <= 2, "sparse metadata decode assumes at most two loads");
 
         constexpr uint32_t rc_base = 0, ra_base = 10;
-        constexpr uint32_t rb_base = (cfg::NRB == 4) ? 28 : 24;
+        constexpr uint32_t rb_base = (cfg::NRB == 4) ? 27 : 23;
         constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
