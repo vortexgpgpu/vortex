@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   container:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     env:
       APPTAINER_VERSION: "1.4.3"
@@ -51,11 +51,11 @@ jobs:
 
   build:
     needs: [container]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-24.04]
         xlen: [32, 64]
 
     env:
@@ -140,14 +140,14 @@ jobs:
 
               mkdir -p build${{ matrix.xlen }}
               pushd build${{ matrix.xlen }}
-              
+
               ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
-              
+
               source ../ci/toolchain_env.sh
-              
+
               make software -s
               make tests -s
-              
+
               popd
           EOF
 
@@ -158,11 +158,11 @@ jobs:
           path: build${{ matrix.xlen }}
   test:
     needs: [container, build]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-24.04]
         xlen: [32, 64]
         name: [regression, amo, dxa, mpi, dtm, cache, config1, config2, debug, scope, stress, synthesis, cupbop, tensor, tensor_sp, tensor_mx, tensor_wg]
         # name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, cupbop, tensor]
@@ -260,18 +260,18 @@ jobs:
               echo "can we find ccache?"
               which ccache || echo "ccache not found"
 
-              
+
               ./configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
-              
+
               pushd build${{ matrix.xlen }}
-              
+
               ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
-              
+
               source ci/toolchain_env.sh
-              
+
               echo "is verilator alive?"
               which verilator || echo "no verilator o.0"
-              
+
               chmod -R +x .
               if [ "${{ matrix.name }}" == "regression" ]; then
                 ./ci/regression.sh --unittest
@@ -285,7 +285,7 @@ jobs:
           EOF
 
   complete:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [test]
     steps:
       - name: Check Completion
