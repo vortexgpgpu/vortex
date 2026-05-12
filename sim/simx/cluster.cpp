@@ -38,6 +38,35 @@
 #include "sfu_unit.h"
 #endif
 
+// Mirror the `*_ENABLED` derived macros that VX_config generates for some
+// extensions (EXT_TCU_ENABLED, EXT_DXA_ENABLED) but not for the older
+// graphics extensions (TEX/OM/RASTER). Without these fallbacks, expressions
+// like `EXT_DXA_ENABLED + EXT_TEX_ENABLED` below fail to compile when
+// EXT_TEX_ENABLE is not set.
+#ifndef EXT_TEX_ENABLED
+#ifdef  EXT_TEX_ENABLE
+#define EXT_TEX_ENABLED 1
+#else
+#define EXT_TEX_ENABLED 0
+#endif
+#endif
+
+#ifndef EXT_OM_ENABLED
+#ifdef  EXT_OM_ENABLE
+#define EXT_OM_ENABLED 1
+#else
+#define EXT_OM_ENABLED 0
+#endif
+#endif
+
+#ifndef EXT_RASTER_ENABLED
+#ifdef  EXT_RASTER_ENABLE
+#define EXT_RASTER_ENABLED 1
+#else
+#define EXT_RASTER_ENABLED 0
+#endif
+#endif
+
 using namespace vortex;
 
 class Cluster::Impl {
@@ -164,7 +193,7 @@ public:
           if (req.is_write() && req.flags.dxa_notify_done) {
             // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,
             // bits[30:8] = bar_no. Decode to flat barrier index before release.
-            uint32_t decoded = bar_decode_id(req.notify_bar_id, NUM_BARRIERS);
+            uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, NUM_BARRIERS);
             core->barrier_event_release(decoded);
           }
         });

@@ -18,6 +18,42 @@
 `include "VX_config.vh"
 `include "VX_types.vh"
 
+// VX_config.vh emits derived `*_ENABLED` macros for some extensions
+// (EXT_TCU_ENABLED, EXT_DXA_ENABLED) but not for older graphics extensions.
+// Provide explicit 0/1 fallbacks here so arithmetic expressions like
+// `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_OM_ENABLED` (used in
+// VX_gpu_pkg.sv) elaborate cleanly when only DXA is enabled.
+`ifndef EXT_TEX_ENABLED
+`ifdef  EXT_TEX_ENABLE
+`define EXT_TEX_ENABLED 1
+`else
+`define EXT_TEX_ENABLED 0
+`endif
+`endif
+
+`ifndef EXT_OM_ENABLED
+`ifdef  EXT_OM_ENABLE
+`define EXT_OM_ENABLED 1
+`else
+`define EXT_OM_ENABLED 0
+`endif
+`endif
+
+`ifndef EXT_RASTER_ENABLED
+`ifdef  EXT_RASTER_ENABLE
+`define EXT_RASTER_ENABLED 1
+`else
+`define EXT_RASTER_ENABLED 0
+`endif
+`endif
+
+// AMO_RS_SIZE is referenced unconditionally by VX_cache_bank's VX_amo_unit
+// instantiation, but VX_config.vh only emits it under EXT_A_ENABLE in newer
+// upstream commits. Provide a benign fallback so non-AMO builds elaborate.
+`ifndef AMO_RS_SIZE
+`define AMO_RS_SIZE 2
+`endif
+
 `ifdef SV_DPI
 `include "dpi_util.vh"
 `endif
