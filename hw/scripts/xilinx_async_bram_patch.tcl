@@ -79,25 +79,11 @@ proc build_parent_child_map {all_cells} {
   return $parent_child_map
 }
 
-proc find_cell_descendants_recursive {parent_cell parent_child_map} {
-  set descendants {}
-  if {[dict exists $parent_child_map $parent_cell]} {
-    set children [dict get $parent_child_map $parent_cell]
-    foreach child $children {
-      # Add the child to the list
-      lappend descendants $child
-      # Recursively add its descendants
-      set sub_descendants [find_cell_descendants_recursive $child $parent_child_map]
-      lappend descendants {*}$sub_descendants
-    }
-  }
-  return $descendants
-}
-
 proc find_cell_descendants {parent_cell} {
-  set all_cells [get_cells -hierarchical]
-  set parent_child_map [build_parent_child_map $all_cells]
-  return [find_cell_descendants_recursive $parent_cell $parent_child_map]
+  current_instance $parent_cell
+  set descendants [get_cells -hierarchical]
+  current_instance
+  return $descendants
 }
 
 proc find_nested_cells {parent_cell name_match {should_exist 1}} {
@@ -120,7 +106,10 @@ proc find_nested_cells {parent_cell name_match {should_exist 1}} {
 
 proc find_cell_nets {cell name_match {should_exist 1}} {
   set matching_nets {}
-  foreach net [get_nets -hierarchical -filter "PARENT_CELL == $cell"] {
+  current_instance $cell
+  set nets [get_nets -hierarchical -filter "PARENT_CELL == $cell"]
+  current_instance
+  foreach net $nets {
     set name [get_property NAME $net]
     if {[regexp $name_match $name]} {
       lappend matching_nets $net
@@ -144,7 +133,10 @@ proc find_cell_net {cell name_match {should_exist 1}} {
 }
 
 proc get_cell_net {cell name} {
+  current_instance $cell
   set net [get_nets -hierarchical -filter "PARENT_CELL == $cell && NAME == $name"]
+  current_instance
+   
   if {[llength $net] == 0} {
     puts "ERROR: No matching net found for '$cell' matching '$name'."
     exit -1
