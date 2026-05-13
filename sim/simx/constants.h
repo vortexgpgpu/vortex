@@ -49,6 +49,7 @@ inline constexpr uint32_t MAX_NUM_WARPS   = 64;
 inline constexpr uint32_t MAX_NUM_REGS    = 32;
 inline constexpr uint32_t LOG_NUM_REGS    = 5;
 inline constexpr uint32_t NUM_SRC_REGS    = 3;
+inline constexpr uint32_t NUM_HIDDEN_SRC_REGS = 4;
 
 inline constexpr uint32_t LSU_WORD_SIZE   = (XLEN / 8);
 inline constexpr uint32_t LSU_CHANNELS    = NUM_LSU_LANES;

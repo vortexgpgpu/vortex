@@ -61,6 +61,13 @@ public:
 				}
 			}
 		}
+		for (uint32_t i = 0; i < trace->hidden_src_regs.size(); ++i) {
+			if (trace->hidden_src_regs[i].type != RegType::None) {
+				if (in_use_regs_.at(trace->wid).at((int)trace->hidden_src_regs[i].type).test(trace->hidden_src_regs[i].idx)) {
+					return true;
+				}
+			}
+		}
 		return false;
 	}
 
@@ -80,6 +87,15 @@ public:
 					uint32_t reg_id = get_reg_id(trace->src_regs[i], trace->wid);
 					auto owner = owners_.at(reg_id);
 					out.push_back({trace->src_regs[i].type, trace->src_regs[i].idx, owner->fu_type, owner->op_type, owner->uuid});
+				}
+			}
+		}
+		for (uint32_t i = 0; i < trace->hidden_src_regs.size(); ++i) {
+			if (trace->hidden_src_regs[i].type != RegType::None) {
+				if (in_use_regs_.at(trace->wid).at((int)trace->hidden_src_regs[i].type).test(trace->hidden_src_regs[i].idx)) {
+					uint32_t reg_id = get_reg_id(trace->hidden_src_regs[i], trace->wid);
+					auto owner = owners_.at(reg_id);
+					out.push_back({trace->hidden_src_regs[i].type, trace->hidden_src_regs[i].idx, owner->fu_type, owner->op_type, owner->uuid});
 				}
 			}
 		}

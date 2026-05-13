@@ -65,6 +65,10 @@ public:
 	          const std::vector<reg_data_t>& rs1_data,
 	          const std::vector<reg_data_t>& rs2_data,
 	          const std::vector<reg_data_t>& rs3_data,
+	          const std::vector<reg_data_t>& mx_a_data,
+	          const std::vector<reg_data_t>& mx_b_data,
+	          const std::vector<reg_data_t>& sp_data0,
+	          const std::vector<reg_data_t>& sp_data1,
 	          std::vector<reg_data_t>& rd_data,
 	          ExeTraceData* trace_data,
 	          bool is_sparse);
@@ -85,13 +89,6 @@ public:
 	           bool is_sparse,
 	           uint32_t cd_nregs,
 	           uint32_t is_a_smem);
-
-	void meta_store(uint32_t wid,
-					uint32_t fmt_s,
-					uint32_t col_idx,
-					uint32_t meta_kind,
-					const std::vector<reg_data_t>& rs1_data,
-					ExeTraceData* trace_data);
 
 	const PerfStats& perf_stats() const;
 

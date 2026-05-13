@@ -28,7 +28,9 @@ using namespace vortex;
 namespace vt = tensor;
 
 static_assert(vt::mx_scale_format(vt::ITYPE::id), "sgemm_tcu_mx only supports MX input formats");
-static_assert(std::is_same<vt::OTYPE, vt::fp32>::value, "sgemm_tcu_mx currently expects fp32 output");
+static_assert((std::is_same<vt::ITYPE, vt::mxint8>::value && std::is_same<vt::OTYPE, vt::int32>::value)
+           || (!std::is_same<vt::ITYPE, vt::mxint8>::value && std::is_same<vt::OTYPE, vt::fp32>::value),
+              "sgemm_tcu_mx expects mxint8/int32 or floating MX/fp32");
 
 using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 using itype_t = typename vt::ITYPE::dtype;
@@ -156,7 +158,17 @@ static float dequantize_mx_value(const itype_t *data,
   }
 }
 
-static void matmul_cpu(float *C,
+static int32_t trunc_shift(int32_t value, int32_t shift) {
+  if (shift >= 0) {
+    return value << shift;
+  }
+  uint32_t abs_shift = static_cast<uint32_t>(-shift);
+  uint32_t mag = value < 0 ? static_cast<uint32_t>(-value) : static_cast<uint32_t>(value);
+  int32_t scaled = static_cast<int32_t>(mag >> abs_shift);
+  return value < 0 ? -scaled : scaled;
+}
+
+static void matmul_cpu(otype_t *C,
                        const itype_t *A,
                        const itype_t *B,
                        const std::vector<uint8_t> &scale_a,
@@ -169,16 +181,29 @@ static void matmul_cpu(float *C,
   uint32_t scale_blocks_k = K_logical / vt::ITYPE::ele_block;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
-      float sum = 0.0f;
-      for (uint32_t k = 0; k < K_logical; ++k) {
-        uint32_t scale_k = k / vt::ITYPE::ele_block;
-        auto a = dequantize_mx_value(A, scale_a, m * K_logical + k,
-                                     m * scale_blocks_k + scale_k, tensor_scale_a);
-        auto b = dequantize_mx_value(B, scale_b, k * N + n,
-                                     scale_k * N + n, tensor_scale_b);
-        sum += a * b;
+      if constexpr (std::is_same<vt::ITYPE, vt::mxint8>::value) {
+        int32_t sum = 0;
+        for (uint32_t k = 0; k < K_logical; ++k) {
+          uint32_t scale_k = k / vt::ITYPE::ele_block;
+          uint8_t sf_a = scale_a[m * scale_blocks_k + scale_k];
+          uint8_t sf_b = scale_b[scale_k * N + n];
+          int32_t shift = static_cast<int32_t>(sf_a) - 133 + static_cast<int32_t>(sf_b) - 133;
+          int32_t product = static_cast<int32_t>(A[m * K_logical + k]) * static_cast<int32_t>(B[k * N + n]);
+          sum += trunc_shift(product, shift);
+        }
+        C[m * N + n] = sum;
+      } else {
+        float sum = 0.0f;
+        for (uint32_t k = 0; k < K_logical; ++k) {
+          uint32_t scale_k = k / vt::ITYPE::ele_block;
+          auto a = dequantize_mx_value(A, scale_a, m * K_logical + k,
+                                       m * scale_blocks_k + scale_k, tensor_scale_a);
+          auto b = dequantize_mx_value(B, scale_b, k * N + n,
+                                       scale_k * N + n, tensor_scale_b);
+          sum += a * b;
+        }
+        C[m * N + n] = sum;
       }
-      C[m * N + n] = sum;
     }
   }
 }
@@ -389,19 +414,23 @@ int main(int argc, char *argv[]) {
   std::vector<otype_t> h_C(sizeC);
   RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t)));
 
-  std::vector<float> h_ref(sizeC);
+  std::vector<otype_t> h_ref(sizeC);
   matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), scale_a, scale_b,
              A_tensor_scale, B_tensor_scale, M, N, K_logical);
 
   int errors = 0;
-  float rel_tol = std::is_same<vt::ITYPE, vt::nvfp4>::value ? 0.25f : 0.05f;
+  float rel_tol = std::is_same<vt::ITYPE, vt::mxint8>::value ? 0.0f :
+                  std::is_same<vt::ITYPE, vt::nvfp4>::value ? 0.25f : 0.05f;
   for (uint32_t i = 0; i < h_ref.size(); ++i) {
-    float diff = std::abs(h_C[i] - h_ref[i]);
-    float tol = std::max(1.0e-3f, std::abs(h_ref[i]) * rel_tol);
+    float actual = static_cast<float>(h_C[i]);
+    float expected = static_cast<float>(h_ref[i]);
+    float diff = std::abs(actual - expected);
+    float tol = std::is_same<vt::ITYPE, vt::mxint8>::value ? 0.0f :
+                std::max(1.0e-3f, std::abs(expected) * rel_tol);
     if (diff > tol) {
       if (errors < MAX_ERRORS) {
         printf("*** error: [%d] expected=%f, actual=%f, diff=%f, tol=%f\n",
-               i, h_ref[i], h_C[i], diff, tol);
+               i, expected, actual, diff, tol);
       }
       ++errors;
     }

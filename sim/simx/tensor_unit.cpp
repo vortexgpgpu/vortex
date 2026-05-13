@@ -351,6 +351,10 @@ public:
     , core_(core)
     , arch_(arch)
     , sparse_meta_(arch.num_warps(), std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
+#ifdef TCU_MX_ENABLE
+    , mx_meta_a_(arch.num_warps(), std::vector<uint32_t>(kMaxMxMetaWords, 0))
+    , mx_meta_b_(arch.num_warps(), std::vector<uint32_t>(kMaxMxMetaWords, 0))
+#endif
     , perf_stats_()
   {
     //--
@@ -365,6 +369,14 @@ public:
     for (auto& sparse_meta : sparse_meta_) {
       std::fill(sparse_meta.begin(), sparse_meta.end(), 0);
     }
+#ifdef TCU_MX_ENABLE
+    for (auto& mx_meta : mx_meta_a_) {
+      std::fill(mx_meta.begin(), mx_meta.end(), 0);
+    }
+    for (auto& mx_meta : mx_meta_b_) {
+      std::fill(mx_meta.begin(), mx_meta.end(), 0);
+    }
+#endif
   }
 
   void tick() {
@@ -375,13 +387,10 @@ public:
       auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       int delay = 0;
-      switch (tcu_type) {
+    switch (tcu_type) {
       case TcuType::WMMA:
       case TcuType::WGMMA:
         delay = 4;
-        break;
-      case TcuType::META_STORE:
-        delay = 1;
         break;
       default:
         std::abort();
@@ -390,38 +399,6 @@ public:
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
       }
-    }
-  }
-
-  void meta_store(uint32_t wid,
-                  uint32_t fmt_s,
-                  uint32_t col_idx,
-                  uint32_t meta_kind,
-                  const std::vector<reg_data_t>& rs1_data,
-                  ExeTraceData* trace_data) {
-    __unused(trace_data);
-
-    uint32_t num_cols = meta_num_cols(fmt_s);
-    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
-    if (num_cols == 0 || col_idx >= total_stores) {
-      std::cout << "Error: META_STORE store index out of range: " << col_idx << std::endl;
-      std::abort();
-    }
-
-    uint32_t actual_col = col_idx / cfg::stores_per_col;
-    uint32_t sub_store = col_idx % cfg::stores_per_col;
-    uint32_t bank_begin = sub_store * cfg::banks_per_store;
-    uint32_t bank_end = std::min(bank_begin + cfg::banks_per_store, kMetaBanks);
-    uint32_t thread_offset = (cfg::meta_cols_per_load > 1)
-                           ? ((actual_col % cfg::meta_cols_per_load) * kMetaBanks)
-                           : 0;
-
-    for (uint32_t bank = bank_begin; bank < bank_end; ++bank) {
-      uint32_t src_idx = (cfg::stores_per_col > 1)
-                       ? (bank - bank_begin)
-                       : (thread_offset + bank);
-      sparse_meta_.at(wid).at(bank * kMaxMetaCols + actual_col) =
-          rs1_data.at(src_idx).u32;
     }
   }
 
@@ -434,10 +411,18 @@ public:
             const std::vector<reg_data_t>& rs1_data,
             const std::vector<reg_data_t>& rs2_data,
             const std::vector<reg_data_t>& rs3_data,
+            const std::vector<reg_data_t>& mx_a_data,
+            const std::vector<reg_data_t>& mx_b_data,
+            const std::vector<reg_data_t>& sp_data0,
+            const std::vector<reg_data_t>& sp_data1,
             std::vector<reg_data_t>& rd_data,
             ExeTraceData* trace_data,
             bool is_sparse) {
     __unused(trace_data);
+  #ifndef TCU_MX_ENABLE
+    __unused(mx_a_data);
+    __unused(mx_b_data);
+  #endif
 
     if (is_sparse) {
       if (!vt::sparse_format_supported(fmt_s)) {
@@ -452,7 +437,16 @@ public:
       }
     }
 
-    auto fedp = select_FEDP(fmt_s, fmt_d);
+    bool is_mx = mx_enabled(fmt_s);
+    if (is_mx) {
+    #ifdef TCU_MX_ENABLE
+      stage_mx_metadata(wid, mx_a_data, mx_b_data);
+    #endif
+    } else if (is_sparse) {
+      stage_sparse_metadata(wid, fmt_s, sp_data0, sp_data1);
+    }
+
+    auto fedp = is_mx ? nullptr : select_FEDP(fmt_s, fmt_d);
     uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
     uint32_t b_off = is_sparse
                    ? (step_n % cfg::b_sub_blocks_sp) * cfg::b_block_size_sp
@@ -492,7 +486,8 @@ public:
           b_col = rs2_data.data() + b_off + j * cfg::tcK;
         }
 
-        auto d_val = fedp(a_row, b_col, c_val);
+        auto d_val = is_mx ? eval_mx_fedp(wid, fmt_s, fmt_d, step_m, step_n, step_k, i, j, a_row, b_col, c_val)
+                           : fedp(a_row, b_col, c_val);
         rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
 
         DTH(3, simobject_->name() << " FEDP"
@@ -521,6 +516,7 @@ public:
              uint32_t cd_nregs,
              uint32_t is_a_smem) {
     __unused(trace_data);
+    __unused(rs2_data);
 
     auto fedp = select_FEDP(fmt_s, fmt_d);
     uint32_t ratio   = elem_ratio(fmt_s);
@@ -672,9 +668,12 @@ private:
     case vt::bf8::id:
     case vt::int8::id:
     case vt::uint8::id:
+    case vt::mxfp8::id:
+    case vt::mxint8::id:
       return 8;
     case vt::int4::id:
     case vt::uint4::id:
+    case vt::nvfp4::id:
       return 4;
     default:
       std::abort();
@@ -683,6 +682,186 @@ private:
 
   uint32_t elem_ratio(uint32_t fmt_s) const {
     return 32 / elem_bits(fmt_s);
+  }
+
+  bool mx_enabled(uint32_t fmt_s) const {
+  #ifdef TCU_MX_ENABLE
+    return vt::mx_scale_format(fmt_s);
+  #else
+    __unused(fmt_s);
+    return false;
+  #endif
+  }
+
+  uint32_t mx_ele_block(uint32_t fmt_s) const {
+    switch (fmt_s) {
+    case vt::mxfp8::id:
+    case vt::mxint8::id:
+      return 32;
+    case vt::nvfp4::id:
+      return 16;
+    default:
+      std::abort();
+    }
+  }
+
+  uint32_t mx_tile_scale_blocks(uint32_t fmt_s) const {
+    uint32_t logical_tile_k = cfg::k_steps * cfg::tcK * elem_ratio(fmt_s);
+    return std::max(1u, logical_tile_k / mx_ele_block(fmt_s));
+  }
+
+  uint8_t meta_byte(const std::vector<uint32_t>& words, uint32_t index) const {
+    uint32_t word = words.at(index / 4);
+    return (word >> (8 * (index & 0x3))) & 0xff;
+  }
+
+  static int32_t trunc_shift(int32_t value, int32_t shift) {
+    if (shift >= 0) {
+      return value << shift;
+    }
+    uint32_t abs_shift = static_cast<uint32_t>(-shift);
+    uint32_t mag = value < 0 ? static_cast<uint32_t>(-value) : static_cast<uint32_t>(value);
+    int32_t scaled = static_cast<int32_t>(mag >> abs_shift);
+    return value < 0 ? -scaled : scaled;
+  }
+
+  void stage_sparse_metadata(uint32_t wid,
+                             uint32_t fmt_s,
+                             const std::vector<reg_data_t>& meta0,
+                             const std::vector<reg_data_t>& meta1) {
+    uint32_t num_cols = meta_num_cols(fmt_s);
+    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
+    if (num_cols == 0 || total_stores == 0 || meta0.empty()) {
+      std::cout << "Error: sparse metadata is unavailable for WMMA_SP." << std::endl;
+      std::abort();
+    }
+
+    for (uint32_t sparse_store = 0; sparse_store < total_stores; ++sparse_store) {
+      uint32_t actual_col = sparse_store / cfg::stores_per_col;
+      uint32_t sub_store = sparse_store % cfg::stores_per_col;
+      uint32_t bank_begin = sub_store * cfg::banks_per_store;
+      uint32_t bank_end = std::min(bank_begin + cfg::banks_per_store, kMetaBanks);
+      uint32_t thread_offset = (cfg::meta_cols_per_load > 1)
+                             ? ((actual_col % cfg::meta_cols_per_load) * kMetaBanks)
+                             : 0;
+      auto& src = (sparse_store / cfg::meta_cols_per_load) ? meta1 : meta0;
+      if (src.empty()) {
+        std::cout << "Error: second sparse metadata register is unavailable." << std::endl;
+        std::abort();
+      }
+      for (uint32_t bank = bank_begin; bank < bank_end; ++bank) {
+        uint32_t src_idx = (cfg::stores_per_col > 1)
+                         ? (bank - bank_begin)
+                         : (thread_offset + bank);
+        sparse_meta_.at(wid).at(bank * kMaxMetaCols + actual_col) = src.at(src_idx).u32;
+      }
+    }
+  }
+
+#ifdef TCU_MX_ENABLE
+  void stage_mx_metadata(uint32_t wid,
+                         const std::vector<reg_data_t>& meta_a,
+                         const std::vector<reg_data_t>& meta_b) {
+    if (meta_a.empty() || meta_b.empty()) {
+      std::cout << "Error: MX metadata is unavailable for WMMA." << std::endl;
+      std::abort();
+    }
+    for (uint32_t lane = 0; lane < NUM_THREADS; ++lane) {
+      mx_meta_a_.at(wid).at(lane) = meta_a.at(lane).u32;
+      mx_meta_b_.at(wid).at(lane) = meta_b.at(lane).u32;
+    }
+  }
+#endif
+
+  uint32_t eval_mx_fedp(uint32_t wid,
+                        uint32_t fmt_s,
+                        uint32_t fmt_d,
+                        uint32_t step_m,
+                        uint32_t step_n,
+                        uint32_t step_k,
+                        uint32_t i,
+                        uint32_t j,
+                        const reg_data_t *a_row,
+                        const reg_data_t *b_col,
+                        uint32_t c_val) const {
+  #ifndef TCU_MX_ENABLE
+    __unused(wid);
+    __unused(fmt_s);
+    __unused(fmt_d);
+    __unused(step_m);
+    __unused(step_n);
+    __unused(step_k);
+    __unused(i);
+    __unused(j);
+    __unused(a_row);
+    __unused(b_col);
+    return c_val;
+  #else
+    uint32_t ratio = elem_ratio(fmt_s);
+    uint32_t scale_blocks_k = mx_tile_scale_blocks(fmt_s);
+    auto scale_a = [&](uint32_t elem_k) {
+      uint32_t row = step_m * cfg::tcM + i;
+      uint32_t block_k = elem_k / mx_ele_block(fmt_s);
+      return meta_byte(mx_meta_a_.at(wid), row * scale_blocks_k + block_k);
+    };
+    auto scale_b = [&](uint32_t elem_k) {
+      uint32_t col = step_n * cfg::tcN + j;
+      uint32_t block_k = elem_k / mx_ele_block(fmt_s);
+      return meta_byte(mx_meta_b_.at(wid), col * scale_blocks_k + block_k);
+    };
+
+    if (fmt_s == vt::mxfp8::id && fmt_d == vt::fp32::id) {
+      float acc = bit_cast<float>(c_val);
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        for (uint32_t e = 0; e < ratio; ++e) {
+          uint32_t elem_k = (step_k * cfg::tcK + z) * ratio + e;
+          uint8_t a = (a_row[z].u32 >> (8 * e)) & 0xff;
+          uint8_t b = (b_col[z].u32 >> (8 * e)) & 0xff;
+          auto xa = rv_mxfp8tof_s(a, scale_a(elem_k), 0, nullptr);
+          auto xb = rv_mxfp8tof_s(b, scale_b(elem_k), 0, nullptr);
+          auto xab = rv_fmul_s(xa, xb, 0, nullptr);
+          auto xd = rv_fadd_s(xab, bit_cast<uint32_t>(acc), 0, nullptr);
+          acc = bit_cast<float>(xd);
+        }
+      }
+      return bit_cast<uint32_t>(acc);
+    }
+
+    if (fmt_s == vt::nvfp4::id && fmt_d == vt::fp32::id) {
+      float acc = bit_cast<float>(c_val);
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        for (uint32_t e = 0; e < ratio; ++e) {
+          uint32_t elem_k = (step_k * cfg::tcK + z) * ratio + e;
+          uint8_t a = (a_row[z].u32 >> (4 * e)) & 0xf;
+          uint8_t b = (b_col[z].u32 >> (4 * e)) & 0xf;
+          auto xa = rv_nvfp4tof_s(a, scale_a(elem_k), 0, nullptr);
+          auto xb = rv_nvfp4tof_s(b, scale_b(elem_k), 0, nullptr);
+          auto xab = rv_fmul_s(xa, xb, 0, nullptr);
+          auto xd = rv_fadd_s(xab, bit_cast<uint32_t>(acc), 0, nullptr);
+          acc = bit_cast<float>(xd);
+        }
+      }
+      return bit_cast<uint32_t>(acc);
+    }
+
+    if (fmt_s == vt::mxint8::id && fmt_d == vt::int32::id) {
+      int32_t acc = bit_cast<int32_t>(c_val);
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        for (uint32_t e = 0; e < ratio; ++e) {
+          uint32_t elem_k = (step_k * cfg::tcK + z) * ratio + e;
+          auto a = static_cast<int8_t>((a_row[z].u32 >> (8 * e)) & 0xff);
+          auto b = static_cast<int8_t>((b_col[z].u32 >> (8 * e)) & 0xff);
+          int32_t shift = static_cast<int32_t>(scale_a(elem_k)) - 133
+                        + static_cast<int32_t>(scale_b(elem_k)) - 133;
+          acc += trunc_shift(static_cast<int32_t>(a) * static_cast<int32_t>(b), shift);
+        }
+      }
+      return bit_cast<uint32_t>(acc);
+    }
+
+    std::cout << "Error: unsupported MX mma format: " << fmt_s << " -> " << fmt_d << "!" << std::endl;
+    std::abort();
+  #endif
   }
 
   uint32_t load_lmem_word(const lmem_desc_t& desc, uint32_t row, uint32_t col, uint32_t fmt_s, bool pack_along_row) const {
@@ -709,10 +888,15 @@ private:
   static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
   static constexpr uint32_t kMetaBanks = cfg::m_steps * kSparseKSteps;
   static constexpr uint32_t kMaxMetaCols = NUM_THREADS / 2;
+  static constexpr uint32_t kMaxMxMetaWords = NUM_THREADS;
   TensorUnit*   simobject_;
   Core*         core_;
   Arch          arch_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
+#ifdef TCU_MX_ENABLE
+  std::vector<std::vector<uint32_t>> mx_meta_a_;
+  std::vector<std::vector<uint32_t>> mx_meta_b_;
+#endif
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
   PerfStats     perf_stats_;
 };
@@ -733,8 +917,6 @@ op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
              + "." + std::to_string(args.step_k), ""};
   }
-  case TcuType::META_STORE:
-    return {"META_STORE." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::to_string(args.fmt_d), ""};
   default:
     std::abort();
   }
@@ -774,11 +956,16 @@ void TensorUnit::wmma(uint32_t wid,
                       const std::vector<reg_data_t>& rs1_data,
                       const std::vector<reg_data_t>& rs2_data,
                       const std::vector<reg_data_t>& rs3_data,
+                      const std::vector<reg_data_t>& mx_a_data,
+                      const std::vector<reg_data_t>& mx_b_data,
+                      const std::vector<reg_data_t>& sp_data0,
+                      const std::vector<reg_data_t>& sp_data1,
                       std::vector<reg_data_t>& rd_data,
                       ExeTraceData* trace_data,
                       bool is_sparse) {
   impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, step_k,
               rs1_data, rs2_data, rs3_data,
+              mx_a_data, mx_b_data, sp_data0, sp_data1,
               rd_data,
               trace_data,
               is_sparse);
@@ -803,13 +990,4 @@ void TensorUnit::wgmma(uint32_t wid,
   impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, a_desc, b_desc,
                rs1_data, rs2_data, rs3_data, rd_data, trace_data,
                is_sparse, cd_nregs, is_a_smem);
-}
-
-void TensorUnit::meta_store(uint32_t wid,
-                            uint32_t fmt_s,
-                            uint32_t col_idx,
-                            uint32_t meta_kind,
-                            const std::vector<reg_data_t>& rs1_data,
-                            ExeTraceData* trace_data) {
-  impl_->meta_store(wid, fmt_s, col_idx, meta_kind, rs1_data, trace_data);
 }

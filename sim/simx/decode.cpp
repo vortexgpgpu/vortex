@@ -1132,15 +1132,13 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
         // Validate sparse metadata preconditions.
-        uint32_t sparse_meta_stores = 0;
         if (is_sparse) {
           if ((cfg::k_steps % 2) != 0
            || (cfg::b_block_size_sp == 0) || (NUM_THREADS % cfg::b_block_size_sp) != 0
            || !vt::sparse_format_supported(fmt_s)) {
             std::abort();
           }
-          sparse_meta_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS);
-          if (sparse_meta_stores == 0)
+          if (cfg::num_meta_loads == 0)
             std::abort();
         }
 
@@ -1150,7 +1148,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         uint32_t mma_steps = (cfg::sym_sparse && is_sparse)
                            ? (cfg::m_steps * cfg::n_steps * cfg::k_steps)
                            : (cfg::m_steps * cfg::n_steps * k_count);
-        uint32_t total_steps = sparse_meta_stores + mma_steps;
+        uint32_t total_steps = mma_steps;
         uint32_t steps_shift = (total_steps > 1) ? (32 - log2ceil(total_steps)) : 0;
         uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
         uint32_t uuid_lo = uuid & 0xffffffff;
@@ -1161,19 +1159,22 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
           return (static_cast<uint64_t>(uuid_hi) << 32) | ((steps++ << steps_shift) | uuid_lo);
         };
 
-        // Phase 1: sparse metadata-store uops
-        constexpr uint32_t meta_reg0 = 14, meta_reg1 = 15;
-        for (uint32_t sparse_store = 0; sparse_store < sparse_meta_stores; ++sparse_store) {
-          uint32_t reg_rs1 = (sparse_store / cfg::meta_cols_per_load) ? meta_reg1 : meta_reg0;
-          auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
-          instr->setOpType(TcuType::META_STORE);
-          instr->setArgs(IntrTcuArgs{0, 0, 0, fmt_s, sparse_store, 0, 0, 0, TCU_META_KIND_SPARSE});
-          instr->setSrcReg(0, reg_rs1, RegType::Float);
-          instr->setParentUUID(uuid);
-          ibuffer.push_back(instr);
-        }
+        auto add_metadata_deps = [&](Instr::Ptr& instr) {
+          uint32_t dep = 0;
+        #ifdef TCU_MX_ENABLE
+          if (vt::mx_scale_format(fmt_s)) {
+            instr->setHiddenSrcReg(dep++, 8, RegType::Float);
+            instr->setHiddenSrcReg(dep++, 9, RegType::Float);
+          }
+        #endif
+          if (is_sparse) {
+            instr->setHiddenSrcReg(dep++, 14, RegType::Float);
+            if (cfg::num_meta_loads == 2) {
+              instr->setHiddenSrcReg(dep++, 15, RegType::Float);
+            }
+          }
+        };
 
-        // Phase 2: MMA uops
         if (cfg::sym_sparse && is_sparse) {
           // Symmetric-sparse: flatten (m, n, k) into a single counter, alternating
           // thread-mask halves so each pair of uops covers a full accumulator row.
@@ -1194,11 +1195,12 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
             uint32_t reg_rs3 = rc_base + (eff >> 1);
             auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
             instr->setOpType(TcuType::WMMA);
-            instr->setArgs(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, n_sp, 0, TCU_META_KIND_SPARSE});
+            instr->setArgs(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, n_sp, 0});
             instr->setDestReg(reg_rs3, RegType::Float);
             instr->setSrcReg(0, ra_base + m_sp, RegType::Float);
             instr->setSrcReg(1, rb_base + n_sp, RegType::Float);
             instr->setSrcReg(2, reg_rs3, RegType::Float);
+            add_metadata_deps(instr);
             instr->setTmask(ThreadMask(NUM_THREADS, (eff & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
             instr->setParentUUID(uuid);
             ibuffer.push_back(instr);
@@ -1213,11 +1215,12 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
                 uint32_t reg_rs3 = rc_base + m * cfg::n_steps + n;
                 auto instr = std::allocate_shared<Instr>(instr_pool_, next_uuid(), FUType::TCU);
                 instr->setOpType(TcuType::WMMA);
-                instr->setArgs(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k, TCU_META_KIND_SPARSE});
+                instr->setArgs(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k});
                 instr->setDestReg(reg_rs3, RegType::Float);
                 instr->setSrcReg(0, reg_rs1, RegType::Float);
                 instr->setSrcReg(1, reg_rs2, RegType::Float);
                 instr->setSrcReg(2, reg_rs3, RegType::Float);
+                add_metadata_deps(instr);
                 instr->setParentUUID(uuid);
                 ibuffer.push_back(instr);
               }

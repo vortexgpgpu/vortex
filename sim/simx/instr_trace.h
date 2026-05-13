@@ -73,6 +73,7 @@ public:
 
   //--
   std::vector<RegOpd> src_regs;
+  std::vector<RegOpd> hidden_src_regs;
 
   //-
   FUType     fu_type;
@@ -100,6 +101,7 @@ public:
     , wb(false)
     , dst_reg({RegType::None, 0})
     , src_regs(NUM_SRC_REGS, {RegType::None, 0})
+    , hidden_src_regs(NUM_HIDDEN_SRC_REGS, {RegType::None, 0})
     , fu_type(FUType::ALU)
     , op_type({})
     , data(nullptr)
@@ -121,6 +123,7 @@ public:
     , wb(rhs.wb)
     , dst_reg(rhs.dst_reg)
     , src_regs(rhs.src_regs)
+    , hidden_src_regs(rhs.hidden_src_regs)
     , fu_type(rhs.fu_type)
     , op_type(rhs.op_type)
     , data(rhs.data)
@@ -155,6 +158,11 @@ public:
     for (uint32_t i = 0; i < trace.src_regs.size(); ++i) {
       if (trace.src_regs[i].type != RegType::None) {
         os << ", rs" << i << "=" << trace.src_regs[i];
+      }
+    }
+    for (uint32_t i = 0; i < trace.hidden_src_regs.size(); ++i) {
+      if (trace.hidden_src_regs[i].type != RegType::None) {
+        os << ", hrs" << i << "=" << trace.hidden_src_regs[i];
       }
     }
     os << ", ex=" << trace.fu_type;

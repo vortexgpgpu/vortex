@@ -714,11 +714,7 @@ inline std::ostream &operator<<(std::ostream &os, const VpuOpType& type) {
 enum class TcuType {
   WMMA,
   WGMMA,
-  META_STORE,
 };
-
-constexpr uint32_t TCU_META_KIND_SPARSE = 0;
-constexpr uint32_t TCU_META_KIND_MX     = 1;
 
 struct IntrTcuArgs {
   uint32_t is_sparse : 1;
@@ -729,14 +725,12 @@ struct IntrTcuArgs {
   uint32_t step_m    : 4;
   uint32_t step_n    : 4;
   uint32_t step_k    : 4;
-  uint32_t meta_kind : 1; // 0=sparse, 1=mx
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   switch (type) {
   case TcuType::WMMA:       os << "WMMA"; break;
   case TcuType::WGMMA:      os << "WGMMA"; break;
-  case TcuType::META_STORE: os << "META_STORE"; break;
   default:
     assert(false);
   }

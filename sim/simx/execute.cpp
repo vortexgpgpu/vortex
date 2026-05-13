@@ -22,6 +22,7 @@
 #include <assert.h>
 #include <util.h>
 #include <rvfloats.h>
+#include <tensor_cfg.h>
 #include "mem.h"
 #include "emulator.h"
 #include "instr.h"
@@ -142,6 +143,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   trace->tmask    = exec_tmask;
   trace->dst_reg  = rdest;
   trace->src_regs = {rsrc0, rsrc1, rsrc2};
+  for (uint32_t i = 0; i < NUM_HIDDEN_SRC_REGS; ++i) {
+    trace->hidden_src_regs.at(i) = instr.getHiddenSrcReg(i);
+  }
 
   std::vector<reg_data_t> rd_data(num_threads);
   std::vector<reg_data_t> rs1_data;
@@ -1649,11 +1653,41 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         trace->data = trace_data;
         assert(operand_tmask.count() == num_threads);
         assert(exec_tmask.count() == num_threads);
+        auto fetch_hidden_freg = [&](uint32_t reg) {
+          std::vector<reg_data_t> data(num_threads);
+          auto& reg_data = warp.freg_file.at(reg);
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (operand_tmask.test(t)) {
+              data[t].u64 = reg_data.at(t);
+            }
+          }
+          return data;
+        };
+        std::vector<reg_data_t> mx_a_data;
+        std::vector<reg_data_t> mx_b_data;
+        std::vector<reg_data_t> sp_data0;
+        std::vector<reg_data_t> sp_data1;
+      #ifdef TCU_MX_ENABLE
+        if (vortex::tensor::mx_scale_format(tpuArgs.fmt_s)) {
+          mx_a_data = fetch_hidden_freg(8);
+          mx_b_data = fetch_hidden_freg(9);
+        }
+      #endif
+        if (tpuArgs.is_sparse) {
+          sp_data0 = fetch_hidden_freg(14);
+          if (vortex::tensor::wmma_config_t<NUM_THREADS>::num_meta_loads == 2) {
+            sp_data1 = fetch_hidden_freg(15);
+          }
+        }
         core_->tensor_unit()->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                                    tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
                                    rs1_data,
                                    rs2_data,
                                    rs3_data,
+                                   mx_a_data,
+                                   mx_b_data,
+                                   sp_data0,
+                                   sp_data1,
                                    rd_data,
                                    trace_data.get(),
                                      tpuArgs.is_sparse);
@@ -1675,14 +1709,6 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         rd_write = true;
       } break;
   #endif // TCU_WGMMA_ENABLE
-      case TcuType::META_STORE: {
-        auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
-        trace->data = trace_data;
-        assert(operand_tmask.count() == num_threads);
-        assert(exec_tmask.count() == num_threads);
-        core_->tensor_unit()->meta_store(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
-                                         tpuArgs.meta_kind, rs1_data, trace_data.get());
-      } break;
       default:
         std::abort();
       }

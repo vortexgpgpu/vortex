@@ -133,7 +133,8 @@ public:
   using Ptr = std::shared_ptr<Instr>;
 
   enum {
-    MAX_REG_SOURCES = 3
+    MAX_REG_SOURCES = NUM_SRC_REGS,
+    MAX_HIDDEN_REG_SOURCES = NUM_HIDDEN_SRC_REGS
   };
 
   Instr(uint64_t uuid, FUType fu_type = FUType::ALU)
@@ -168,6 +169,10 @@ public:
     rsrc_[index] = { type, srcReg};
   }
 
+  void setHiddenSrcReg(uint32_t index, uint32_t srcReg, RegType type) {
+    hidden_rsrc_[index] = {type, srcReg};
+  }
+
   void setParentUUID(uint64_t parent_uuid) {
     parent_uuid_ = parent_uuid;
     is_uop_ = true;
@@ -180,6 +185,8 @@ public:
   const IntrArgs& getArgs() const { return args_; }
 
   RegOpd getSrcReg(uint32_t i) const { return rsrc_[i]; }
+
+  RegOpd getHiddenSrcReg(uint32_t i) const { return hidden_rsrc_[i]; }
 
   RegOpd getDestReg() const { return rdest_; }
 
@@ -207,6 +214,7 @@ private:
   OpType   op_type_;
   IntrArgs args_;
   RegOpd   rsrc_[MAX_REG_SOURCES];
+  RegOpd   hidden_rsrc_[MAX_HIDDEN_REG_SOURCES];
   RegOpd   rdest_;
   bool     is_uop_;
   ThreadMask tmask_;

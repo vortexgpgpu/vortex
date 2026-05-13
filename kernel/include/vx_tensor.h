@@ -454,22 +454,15 @@ public:
     }
   }
 
-  // MX overload (4 args): MX metadata pointer for MX formats.
-  // Backward-compatible sparse-only use maps the 4th arg to sparse metadata.
+  // MX overload (4 args): MX metadata pointer for MX formats
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
                                                               const void *meta_mx_ptr) {
-    static_assert(input_is_mx || is_sparse, "4-arg load_matrix_sync requires MX or sparse metadata");
+    static_assert(input_is_mx, "4-arg load_matrix_sync requires MX metadata");
 
     load_matrix_sync<src_layout, Frag>(dst, src, ldm);
 #ifdef TCU_MX_ENABLE
-    if constexpr (input_is_mx) {
-      load_mx_metadata(dst, meta_mx_ptr);
-    } else {
-      load_sparse_metadata(dst, meta_mx_ptr);
-    }
-#else
-    load_sparse_metadata(dst, meta_mx_ptr);
+    load_mx_metadata(dst, meta_mx_ptr);
 #endif
   }
 
