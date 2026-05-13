@@ -35,7 +35,7 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                   && (dcr_bus_if.req_data.addr >= `VX_DCR_DXA_DESC_BASE)
                   && (dcr_bus_if.req_data.addr < (`VX_DCR_DXA_DESC_BASE + (NUM_SLOTS * STRIDE)));
 
-    wire [31:0] dcr_off = 32'(dcr_bus_if.req_data.addr - `VX_DCR_DXA_DESC_BASE);
+    wire [31:0] dcr_off = 32'(dcr_bus_if.req_data.addr) - 32'(`VX_DCR_DXA_DESC_BASE);
     wire [DXA_DESC_SLOT_W-1:0]  dcr_slot = DXA_DESC_SLOT_W'(dcr_off / STRIDE);
     wire [`CLOG2(STRIDE)-1:0]   dcr_word = `CLOG2(STRIDE)'(dcr_off % STRIDE);
 

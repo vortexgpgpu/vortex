@@ -62,6 +62,13 @@ ifneq (,$(filter -DEXT_F_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/fpu
 endif
 
+# cvfpu packages must be physically present in build_Vortex/src/ before sv2v
+# scans it (sv2v.sh only walks build_Vortex/src). XLEN=64 is the canonical
+# FPNEW path under SYNTHESIS (see sw/VX_config.h).
+ifeq ($(XLEN),64)
+	EXTRA_PKG_FILES += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
+endif
+
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
 
 # Add TCU extension sources
@@ -127,6 +134,9 @@ $(BUILD_DIR)/src:
 
 sv2v: $(BUILD_DIR)/project.v
 $(BUILD_DIR)/project.v: $(BUILD_DIR)/src
+ifneq ($(EXTRA_PKG_FILES),)
+	cp $(EXTRA_PKG_FILES) $(BUILD_DIR)/src/
+endif
 	$(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -o$(BUILD_DIR)/project.v
 	# Remove lines starting $finish or $display from generated source
 	sed -ri '/^[[:space:]]*[$$](finish|display)/d' $(BUILD_DIR)/project.v

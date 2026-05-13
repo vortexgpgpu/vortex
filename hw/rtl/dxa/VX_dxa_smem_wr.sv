@@ -255,7 +255,9 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [SMEM_ADDR_WIDTH-1:0] smem_wr_addr;
     wire                       smem_wr_last_pkt;
 
-    localparam MC_NW_BITS = `CLOG2(`NUM_WARPS);
+    // Use LOG2UP (matches VX_priority_encoder's index_out width). LOG2UP(1)=1,
+    // CLOG2(1)=0 → index_out width mismatch with NUM_WARPS=1 builds.
+    localparam MC_NW_BITS = `LOG2UP(`NUM_WARPS);
     wire [SMEM_ADDR_WIDTH-1:0] smem_stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_W);
 
     reg [`NUM_WARPS-1:0] replay_remaining_r;

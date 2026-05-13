@@ -118,8 +118,13 @@ bool WctlUnit::process(instr_trace_t* trace) {
     // rs2[31] flags arrive_tx semantics on the same opcode as barrier_arrive.
     // Lower bits carry the count of pending transactions to register.
     bool is_tx_arrive = wctlArgs.is_bar_arrive && ((arg2 >> 31) & 0x1);
-    if (wctlArgs.is_bar_arrive && !is_tx_arrive) {
-      uint32_t phase = sched.barrier_unit().get_phase(bar_id);
+    if (wctlArgs.is_bar_arrive) {
+      // RTL writes bar_phase to rd for all is_bar_arrive instructions
+      // (both normal arrive and arrive_tx). Mirror that here so the
+      // CSV trace matches between simx and rtlsim. RTL phase is 1-bit
+      // (toggles 0/1 on release); simx tracks monotonic phase count
+      // so mask to 1 bit for parity.
+      uint32_t phase = sched.barrier_unit().get_phase(bar_id) & 0x1;
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!warp.tmask.test(t)) continue;
         trace->dst_data[t].i = phase;
