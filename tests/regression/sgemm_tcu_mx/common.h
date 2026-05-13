@@ -20,7 +20,12 @@ typedef struct {
   uint64_t A_addr;
   uint64_t B_addr;
   uint64_t C_addr;
-  uint64_t meta_mx_addr;
+  uint64_t MX_A_addr;
+  uint64_t MX_B_addr;
+#ifdef TCU_MX_TLS
+  uint64_t A_tensor_scale_addr;
+  uint64_t B_tensor_scale_addr;
+#endif
 } kernel_arg_t;
 
 #endif

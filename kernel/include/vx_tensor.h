@@ -165,6 +165,9 @@ private:
     static constexpr frag_use_t Use = U;
     static constexpr uint32_t NR = N;
     std::array<vreg_t, N> data;
+#ifdef TCU_MX_ENABLE
+    std::array<vreg_t, 2> mx_meta;
+#endif
   };
 
 public:
@@ -176,6 +179,11 @@ public:
   using output_acessor_t = detail::data_accessor_t<Ot, vreg_t>;
 
   static constexpr uint32_t input_is_subbyte = (It::bits < 8);
+#ifdef TCU_MX_ENABLE
+  static constexpr bool input_is_mx = mx_scale_format(It::id);
+#else
+  static constexpr bool input_is_mx = false;
+#endif
 
   static constexpr uint32_t i_ratio = sizeof(vreg_t) / sizeof(input_t);
   static constexpr uint32_t tileM = cfg::tileM;
@@ -418,17 +426,25 @@ public:
     }
   }
 
-  // Sparse overload (4 args): sparse metadata pointer.
-  template <mem_layout src_layout = row_major, typename Frag>
-  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
-                                                               const void *meta_sp_ptr) {
-    static_assert(is_sparse, "4-arg load_matrix_sync is sparse only");
+#ifdef TCU_MX_ENABLE
+  template <typename Frag>
+  static __attribute__((always_inline)) void load_mx_metadata(Frag &dst, const void *meta_mx_ptr) {
+    if constexpr (input_is_mx && (Frag::Use == matrix_a || Frag::Use == matrix_b)) {
+      uint32_t lane_id = vx_thread_id();
+      if (meta_mx_ptr != nullptr) {
+        auto meta_base = reinterpret_cast<const vreg_t*>(meta_mx_ptr);
+        dst.mx_meta[0] = meta_base[lane_id];
+      } else {
+        dst.mx_meta[0] = vreg_t(0);
+      }
+      dst.mx_meta[1] = vreg_t(0);
+    }
+  }
+#endif
 
-    // Reuse base matrix load
-    load_matrix_sync<src_layout, Frag>(dst, src, ldm);
-
-    // Sparse metadata (A fragment only)
-    if constexpr (Frag::Use == matrix_a) {
+  template <typename Frag>
+  static __attribute__((always_inline)) void load_sparse_metadata(Frag &dst, const void *meta_sp_ptr) {
+    if constexpr (is_sparse && Frag::Use == matrix_a) {
       auto meta_base = reinterpret_cast<const float*>(meta_sp_ptr);
       uint32_t lane_id = vx_thread_id();
       dst.data[sparse_regs] = meta_base[lane_id];
@@ -436,6 +452,39 @@ public:
         dst.data[sparse_regs + 1] = meta_base[NT + lane_id];
       }
     }
+  }
+
+  // MX overload (4 args): MX metadata pointer for MX formats.
+  // Backward-compatible sparse-only use maps the 4th arg to sparse metadata.
+  template <mem_layout src_layout = row_major, typename Frag>
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
+                                                              const void *meta_mx_ptr) {
+    static_assert(input_is_mx || is_sparse, "4-arg load_matrix_sync requires MX or sparse metadata");
+
+    load_matrix_sync<src_layout, Frag>(dst, src, ldm);
+#ifdef TCU_MX_ENABLE
+    if constexpr (input_is_mx) {
+      load_mx_metadata(dst, meta_mx_ptr);
+    } else {
+      load_sparse_metadata(dst, meta_mx_ptr);
+    }
+#else
+    load_sparse_metadata(dst, meta_mx_ptr);
+#endif
+  }
+
+  // MX + sparse overload (5 args): MX metadata in 4th position, sparse metadata in 5th.
+  template <mem_layout src_layout = row_major, typename Frag>
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm,
+                                                              const void *meta_mx_ptr,
+                                                              const void *meta_sp_ptr) {
+    load_matrix_sync<src_layout, Frag>(dst, src, ldm);
+#ifdef TCU_MX_ENABLE
+    load_mx_metadata(dst, meta_mx_ptr);
+#else
+    (void)meta_mx_ptr;
+#endif
+    load_sparse_metadata(dst, meta_sp_ptr);
   }
 
   template <mem_layout dst_layout = row_major, typename Frag>
@@ -496,6 +545,12 @@ public:
     register float fa6 __asm__("f16") = frag_a.data[6];
     register float fa7 __asm__("f17") = frag_a.data[7];
 
+#ifdef TCU_MX_ENABLE
+    // MX block metadata: A in f8, B in f9.
+    register float fmx_a __asm__("f8")  = input_is_mx ? frag_a.mx_meta[0] : vreg_t(0);
+    register float fmx_b __asm__("f9")  = input_is_mx ? frag_b.mx_meta[0] : vreg_t(0);
+#endif
+
     if constexpr (FragB::NR == 8) {
 
       // frag_b: caller-saved registers (f24-f31)
@@ -508,12 +563,25 @@ public:
       register float fb6 __asm__("f30")  = frag_b.data[6];
       register float fb7 __asm__("f31")  = frag_b.data[7];
 
+#ifdef TCU_MX_ENABLE
+      if constexpr (input_is_mx) {
+        __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+          : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+          : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+            "f"(fmx_a), "f"(fmx_b),
+            "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+            "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
+        );
+      } else
+#endif
+      {
       __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
         : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
           "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7)
       );
+      }
     } else {
       static_assert(FragB::NR == 4, "Unsupported number of registers for FragB");
 
@@ -523,12 +591,25 @@ public:
       register float fb2 __asm__("f30") = frag_b.data[2];
       register float fb3 __asm__("f31") = frag_b.data[3];
 
+#ifdef TCU_MX_ENABLE
+      if constexpr (input_is_mx) {
+        __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
+          : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
+          : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+            "f"(fmx_a), "f"(fmx_b),
+            "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+            "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
+        );
+      } else
+#endif
+      {
       __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x%[flags]"
         : "+f"(fd0), "+f"(fd1), "+f"(fd2), "+f"(fd3), "+f"(fd4), "+f"(fd5), "+f"(fd6), "+f"(fd7)
         : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
           "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
           "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3)
       );
+      }
     }
 
     // Write results to frag_d
