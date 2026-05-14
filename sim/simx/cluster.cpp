@@ -164,7 +164,7 @@ public:
           if (req.is_write() && req.flags.dxa_notify_done) {
             // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,
             // bits[30:8] = bar_no. Decode to flat barrier index before release.
-            uint32_t decoded = bar_decode_id(req.notify_bar_id, NUM_BARRIERS);
+            uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, NUM_BARRIERS);
             core->barrier_event_release(decoded);
           }
         });
