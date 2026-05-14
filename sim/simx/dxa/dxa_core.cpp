@@ -447,12 +447,8 @@ private:
 
   // ── smem_wr: drain ready slots, build LMEM MemReqs ───────────────────
   //
-  // In-order mode (default): consume issued_order.front(). Stall on head.
-  // OoO mode (-DDXA_OOO_DRAIN_ENABLE): scan inflight[] in slot-ID order
-  // and pick the lowest-ID slot whose rsp_arrived is set. This mirrors
-  // the RTL's VX_priority_encoder over rsp_arrived bitvector and exposes
-  // the same latency-hiding benefit (a later-issued CL can drain first if
-  // its GMEM response arrived sooner).
+  // In-order: consume issued_order.front(); stall on the head until its
+  // GMEM response has arrived.
   void tick_worker_smem_wr(Worker& w) {
     if (w.issued_order.empty()) {
       // Nothing in flight — if all addr_gen done, transfer is finished.
@@ -460,23 +456,9 @@ private:
       return;
     }
 
-#ifdef DXA_OOO_DRAIN_ENABLE
-    // PE-equivalent: lowest-ID slot that is allocated and ready.
-    int oo_slot = -1;
-    for (uint32_t s = 0; s < uint32_t(w.inflight.size()); ++s) {
-      if (w.inflight[s].allocated && w.inflight[s].rsp_arrived) {
-        oo_slot = int(s);
-        break;
-      }
-    }
-    if (oo_slot < 0) return; // nothing ready
-    uint32_t slot = uint32_t(oo_slot);
-    auto& s = w.inflight[slot];
-#else
     uint32_t slot = w.issued_order.front();
     auto& s = w.inflight[slot];
     if (!s.rsp_arrived) return; // wait
-#endif
 
     // Determine destination core's LMEM port.
     uint32_t cluster_local_cid = w.req.core->id() % kCoresPerCluster;
@@ -547,14 +529,7 @@ private:
       s.allocated = false;
       s.rsp_arrived = false;
       s.rsp_data.reset();
-#ifdef DXA_OOO_DRAIN_ENABLE
-      // In OoO mode the drained slot is not necessarily the head; remove it
-      // wherever it sits in issued_order.
-      auto it = std::find(w.issued_order.begin(), w.issued_order.end(), slot);
-      if (it != w.issued_order.end()) w.issued_order.erase(it);
-#else
       w.issued_order.pop_front();
-#endif
     }
   }
 

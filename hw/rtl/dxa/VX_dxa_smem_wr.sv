@@ -74,14 +74,6 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [`NUM_WARPS-1:0]       cta_mask,
     input  wire [31:0]                 smem_stride
 
-`ifdef DXA_OOO_DRAIN_ENABLE
-    // OoO transfer_done driven by (addr_gen_done && pending_empty)
-    // because lat_last_r is no longer guaranteed to be the last-drained CL.
-    ,
-    input  wire                        pending_empty,
-    input  wire                        addr_gen_done
-`endif
-
 `ifdef PERF_ENABLE
     ,
     output wire [31:0]                 perf_lmem_writes
@@ -435,15 +427,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     end
 
     assign wr_done_count = wr_count_r;
-`ifdef DXA_OOO_DRAIN_ENABLE
-    // OoO: last-drained CL is not necessarily the last-issued CL. Done is
-    // signalled one cycle after the last release, when pending_size has
-    // observed all releases (addr_gen_done is latched once ag_last fires).
-    assign transfer_done = transfer_active && addr_gen_done && pending_empty;
-    `UNUSED_VAR (smem_wr_last_pkt)
-`else
     assign transfer_done = transfer_active && smem_req_fire && smem_wr_last_pkt;
-`endif
 
 `ifdef PERF_ENABLE
     reg [31:0] wrp_total_lmem_writes_r;
