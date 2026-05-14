@@ -1131,6 +1131,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         constexpr uint32_t sparse_k_steps = cfg::k_steps / 2;
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
+        uint32_t sparse_meta_loads = 0;
         // Validate sparse metadata preconditions.
         if (is_sparse) {
           if ((cfg::k_steps % 2) != 0
@@ -1138,7 +1139,9 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
            || !vt::sparse_format_supported(fmt_s)) {
             std::abort();
           }
-          if (cfg::num_meta_loads == 0)
+          uint32_t sparse_meta_cols = vt::sparse_meta_num_cols(fmt_s, NUM_THREADS);
+          sparse_meta_loads = (cfg::per_warp_depth * sparse_meta_cols + NUM_THREADS - 1) / NUM_THREADS;
+          if (sparse_meta_loads == 0 || sparse_meta_loads > 2)
             std::abort();
         }
 
@@ -1169,7 +1172,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         #endif
           if (is_sparse) {
             instr->setHiddenSrcReg(dep++, 14, RegType::Float);
-            if (cfg::num_meta_loads == 2) {
+            if (sparse_meta_loads == 2) {
               instr->setHiddenSrcReg(dep++, 15, RegType::Float);
             }
           }

@@ -1667,6 +1667,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         std::vector<reg_data_t> mx_b_data;
         std::vector<reg_data_t> sp_data0;
         std::vector<reg_data_t> sp_data1;
+        uint32_t sparse_meta_loads = 0;
       #ifdef TCU_MX_ENABLE
         if (vortex::tensor::mx_scale_format(tpuArgs.fmt_s)) {
           mx_a_data = fetch_hidden_freg(8);
@@ -1674,8 +1675,11 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
       #endif
         if (tpuArgs.is_sparse) {
+          sparse_meta_loads = (vortex::tensor::wmma_config_t<NUM_THREADS>::per_warp_depth
+                             * vortex::tensor::sparse_meta_num_cols(tpuArgs.fmt_s, NUM_THREADS)
+                             + NUM_THREADS - 1) / NUM_THREADS;
           sp_data0 = fetch_hidden_freg(14);
-          if (vortex::tensor::wmma_config_t<NUM_THREADS>::num_meta_loads == 2) {
+          if (sparse_meta_loads == 2) {
             sp_data1 = fetch_hidden_freg(15);
           }
         }

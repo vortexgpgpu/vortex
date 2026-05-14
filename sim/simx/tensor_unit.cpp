@@ -442,8 +442,6 @@ public:
     #ifdef TCU_MX_ENABLE
       stage_mx_metadata(wid, mx_a_data, mx_b_data);
     #endif
-    } else if (is_sparse) {
-      stage_sparse_metadata(wid, fmt_s, sp_data0, sp_data1);
     }
 
     auto fedp = is_mx ? nullptr : select_FEDP(fmt_s, fmt_d);
@@ -459,7 +457,20 @@ public:
     uint32_t meta_bits = is_sparse ? (32 / ebits) : 0;
 
     auto meta_bit = [&](uint32_t bit_idx) {
-      return (sparse_meta_.at(wid).at(bank * kMaxMetaCols + bit_idx / 32) >> (bit_idx % 32)) & 1u;
+      uint32_t word_idx = bit_idx / 32;
+      uint32_t bit_pos = bit_idx % 32;
+      uint32_t store_in_col = bank / cfg::banks_per_store;
+      uint32_t thread_in_store = bank % cfg::banks_per_store;
+      uint32_t flat_store = word_idx * cfg::stores_per_col + store_in_col;
+      uint32_t load_idx = flat_store / cfg::meta_cols_per_load;
+      uint32_t store_in_load = flat_store % cfg::meta_cols_per_load;
+      uint32_t lane_idx = store_in_load * cfg::banks_per_store + thread_in_store;
+      auto& src = (load_idx == 0) ? sp_data0 : sp_data1;
+      if (src.empty()) {
+        std::cout << "Error: sparse metadata register is unavailable." << std::endl;
+        std::abort();
+      }
+      return (src.at(lane_idx).u32 >> bit_pos) & 1u;
     };
 
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
@@ -744,9 +755,10 @@ private:
       uint32_t thread_offset = (cfg::meta_cols_per_load > 1)
                              ? ((actual_col % cfg::meta_cols_per_load) * kMetaBanks)
                              : 0;
-      auto& src = (sparse_store / cfg::meta_cols_per_load) ? meta1 : meta0;
+      bool use_meta1 = (cfg::num_meta_loads > 1) && ((sparse_store / cfg::meta_cols_per_load) != 0);
+      auto& src = use_meta1 ? meta1 : meta0;
       if (src.empty()) {
-        std::cout << "Error: second sparse metadata register is unavailable." << std::endl;
+        std::cout << "Error: sparse metadata register is unavailable." << std::endl;
         std::abort();
       }
       for (uint32_t bank = bank_begin; bank < bank_end; ++bank) {

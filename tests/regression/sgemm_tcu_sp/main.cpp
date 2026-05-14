@@ -552,8 +552,6 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
           for (uint32_t i = 0; i < TC_M; ++i) {
             uint32_t physical_row = tr * cfg::tileM + sm * TC_M + i;
             uint32_t k_elem_start = kt * tileK_elem + sk * elts_per_sparse_step;
-            uint32_t groups_in_step = elts_per_sparse_step / 4;
-
             // Iterate over individual elements in this sparse step.
               // Using a flat element loop handles both full groups (I_RATIO >= 2)
               // and partial groups (I_RATIO = 1, tf32) where elts_per_sparse_step < 4.
@@ -748,9 +746,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
   RT_CHECK(vx_mem_address(meta_buffer, &kernel_arg.meta_sp_addr));
 
+#ifdef RDCYC_ENABLE
   uint32_t num_blocks = grid_dim[0] * grid_dim[1];
   uint64_t num_mma_sync_instrs = uint64_t(num_blocks) * num_k_tiles;
-#ifdef RDCYC_ENABLE
   RT_CHECK(vx_mem_alloc(device, num_blocks * 4 * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
   RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
 #endif
@@ -926,7 +924,10 @@ int main(int argc, char *argv[]) {
     std::cout << "  sram_row0 decoded (TC_M=" << cfg::tcM << " rows, " << meta_row_w_d << " bits each):" << std::endl;
     uint32_t sram0_word = h_meta_dbg[0];
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      uint32_t row_bits = (sram0_word >> (i * meta_row_w_d)) & ((1u << meta_row_w_d) - 1);
+      uint64_t row_mask = (meta_row_w_d >= 32)
+                        ? 0xffffffffull
+                        : ((1ull << meta_row_w_d) - 1ull);
+      uint32_t row_bits = static_cast<uint32_t>((static_cast<uint64_t>(sram0_word) >> (i * meta_row_w_d)) & row_mask);
       printf("    TC_M row %u: bits=0x%x (binary:", i, row_bits);
       for (int b = meta_row_w_d-1; b >= 0; --b) printf("%d", (row_bits >> b) & 1);
       printf(")\n");
