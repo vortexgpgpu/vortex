@@ -51,11 +51,21 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
 
   if (is_global) {
     barrier.count = count; // save core count
-    barrier.wait_mask.set(wid); // mark warp arrival
-    if (barrier.wait_mask.count() == active_warps.count() && barrier.events == 0) {
-      // notify global barrier
+    // Track arrivals separately from waiters. Async arrive does NOT suspend
+    // the warp, so it must not appear in wait_mask — otherwise global_resume
+    // would wake it spuriously while it's mid-stalling-instruction.
+    barrier.arrival_mask.set(wid);
+    if (is_sync_bar) {
+      barrier.wait_mask.set(wid);
+    }
+    if (barrier.arrival_mask.count() == active_warps.count() && barrier.events == 0) {
+      // notify global barrier; wait_mask is preserved across the async hop
+      // (it holds the warps that will be resumed by global_resume) and is
+      // cleared there. arrival_mask is local-only and reset here.
       core_->socket()->global_barrier_arrive(bar_id, count, core_->id());
-      barrier.reset();
+      barrier.arrival_mask.reset();
+      barrier.count  = 0;
+      barrier.events = 0;
     }
   } else {
     if (is_sync_bar) {
@@ -104,9 +114,11 @@ bool BarrierUnit::wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
 void BarrierUnit::global_resume(uint32_t bar_id) {
   auto bar_index = bar_id & 0x7fffffff;
   auto& barrier = barriers_.at(bar_index);
-  const auto& active_warps = scheduler_->active_warps();
+  // Only resume warps that actually suspended on this barrier (sync_bar or
+  // bar_wait). Async bar_arrive leaves wait_mask empty so this is a no-op,
+  // which is the correct semantics for fire-and-forget global barriers.
   for (uint32_t i = 0; i < NUM_WARPS; ++i) {
-    if (active_warps.test(i)) {
+    if (barrier.wait_mask.test(i)) {
       DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
       scheduler_->resume(i);
     }
@@ -130,11 +142,13 @@ void BarrierUnit::event_release(uint32_t bar_id) {
   --barrier.events;
   if (barrier.events == 0) {
     if (is_global) {
-      if (barrier.wait_mask.count() == active_warps.count()) {
+      if (barrier.arrival_mask.count() == active_warps.count()) {
         uint32_t num_cores = barrier.count; // was saved in barrier_arrive
         // notify global barrier
         core_->socket()->global_barrier_arrive(bar_id, num_cores, core_->id());
-        barrier.reset();
+        barrier.arrival_mask.reset();
+        barrier.count  = 0;
+        barrier.events = 0;
       }
     } else {
       if (barrier.count == 0) {

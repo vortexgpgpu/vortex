@@ -88,13 +88,15 @@ union reg_data_t {
 ///////////////////////////////////////////////////////////////////////////////
 
 struct warp_barrier_t {
-  WarpMask wait_mask = 0;
-  uint32_t count = 0;
+  WarpMask wait_mask    = 0;  // warps actually suspended on this barrier
+  WarpMask arrival_mask = 0;  // global-barrier per-core arrival tracker
+  uint32_t count  = 0;
   uint32_t events = 0;
-  uint32_t phase = 0;
+  uint32_t phase  = 0;
 
   void reset() {
     wait_mask.reset();
+    arrival_mask.reset();
     count  = 0;
     events = 0;
     phase  = 0;
