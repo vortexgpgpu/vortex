@@ -829,11 +829,30 @@ package VX_gpu_pkg;
 
 `ifdef EXT_TCU_ENABLE
     typedef struct packed {
-        logic [PERF_CTR_BITS-1:0] lmem_reads;        // LMEM read transactions issued by tile buffer
-        logic [PERF_CTR_BITS-1:0] tbuf_cache_hits;   // B tile reuse hits from tile buffer cache
-        logic [PERF_CTR_BITS-1:0] wgmma_stalls;      // cycles: WGMMA valid but stalled (tbuf or mdata)
-        logic [PERF_CTR_BITS-1:0] wgmma_instrs;      // WGMMA µops executed
-        logic [PERF_CTR_BITS-1:0] tbuf_stalls;         // cycles: WGMMA valid but stalled (uop cannot enter TCU core because tbuf data not ready)
+        // --- existing counters ---
+        logic [PERF_CTR_BITS-1:0] lmem_reads;         // total LMEM read transactions (all phases)
+        logic [PERF_CTR_BITS-1:0] tbuf_cache_hits;    // B tile reuse hits from tile buffer cache
+        logic [PERF_CTR_BITS-1:0] wgmma_stalls;       // cycles: WGMMA valid but not ready (combined)
+        logic [PERF_CTR_BITS-1:0] wgmma_instrs;       // WGMMA µops executed
+        logic [PERF_CTR_BITS-1:0] tbuf_stalls;        // cycles: WGMMA stalled waiting for tile fetch
+        // --- stall cause breakdown ---
+        logic [PERF_CTR_BITS-1:0] wgmma_stalls_tbuf;  // cycles: stalled because tbuf_ready=0
+        logic [PERF_CTR_BITS-1:0] wgmma_stalls_mdata; // cycles: stalled because mdata_queue_full
+        logic [PERF_CTR_BITS-1:0] wgmma_stalls_pipe;  // cycles: stalled because fedp_enable=0
+        // --- WMMA baseline ---
+        logic [PERF_CTR_BITS-1:0] wmma_instrs;        // WMMA µops executed
+        logic [PERF_CTR_BITS-1:0] wmma_stalls;        // cycles: WMMA valid but not ready
+        // --- tile buffer fetch behavior ---
+        logic [PERF_CTR_BITS-1:0] tbuf_tile_fetches;  // tile fetches triggered (alloc_en events)
+        logic [PERF_CTR_BITS-1:0] tbuf_fetch_cycles;  // cycles the fetch FSM was active (not IDLE)
+        logic [PERF_CTR_BITS-1:0] fetch_b_cycles;     // cycles the fetch FSM was in FETCH_B phase
+        // --- LMEM fetch engine ---
+        logic [PERF_CTR_BITS-1:0] lmem_reads_a;       // LMEM reads during FETCH_A phase
+        logic [PERF_CTR_BITS-1:0] lmem_reads_b;       // LMEM reads during FETCH_B phase
+        logic [PERF_CTR_BITS-1:0] lmem_reads_meta;    // LMEM reads during FETCH_META phase (sparse)
+        logic [PERF_CTR_BITS-1:0] lmem_rsp_stalls;    // cycles: fetch FSM waiting for LMEM response
+        logic [PERF_CTR_BITS-1:0] lmem_arb_stalls;    // cycles: tile buf wants LMEM but lost arbitration
+        logic [PERF_CTR_BITS-1:0] compute_cycles;     // cycles FEDP pipeline has work in flight
     } tcu_perf_t;
 `endif
 
@@ -850,6 +869,11 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] gmem_dedup;
         logic [PERF_CTR_BITS-1:0] lmem_writes;
         logic [PERF_CTR_BITS-1:0] gmem_latency;
+        logic [PERF_CTR_BITS-1:0] active_cycles;
+        logic [PERF_CTR_BITS-1:0] gmem_stall_cycles;
+        logic [PERF_CTR_BITS-1:0] smem_stall_cycles;
+        logic [PERF_CTR_BITS-1:0] fifo_stall_cycles;
+        logic [PERF_CTR_BITS-1:0] xfer_latency;
     } dxa_perf_t;
 `endif
 
@@ -871,6 +895,7 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] ibf_stalls;
         logic [PERF_CTR_BITS-1:0] scb_stalls;
         logic [PERF_CTR_BITS-1:0] opd_stalls;
+        logic [PERF_CTR_BITS-1:0] tcu_opd_stalls;
         logic [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] dispatch_stalls;
         logic [NUM_EX_UNITS-1:0][PERF_CTR_BITS-1:0] dispatch_instrs;
     } issue_perf_t;

@@ -245,7 +245,8 @@ import VX_fpu_pkg::*;
                         `CSR_READ_64(`VX_CSR_MPM_INSTR_FPU, read_data_ro_w, pipeline_perf.issue.dispatch_instrs[EX_FPU]);
                     `endif
                     `ifdef EXT_TCU_ENABLE
-                        `CSR_READ_64(`VX_CSR_MPM_STALL_TCU, read_data_ro_w, pipeline_perf.issue.dispatch_stalls[EX_TCU]);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_TCU,      read_data_ro_w, pipeline_perf.issue.dispatch_stalls[EX_TCU]);
+                        `CSR_READ_64(`VX_CSR_MPM_STALL_TCU_OPDS, read_data_ro_w, pipeline_perf.issue.tcu_opd_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_INSTR_TCU, read_data_ro_w, pipeline_perf.issue.dispatch_instrs[EX_TCU]);
                     `endif
                         // PERF: branches
@@ -305,11 +306,16 @@ import VX_fpu_pkg::*;
                 `ifdef EXT_DXA_ENABLE
                     `VX_DCR_MPM_CLASS_DXA: begin
                         case (read_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_TRANSFERS,  read_data_ro_w, sysmem_perf.dxa.transfers);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_READS, read_data_ro_w, sysmem_perf.dxa.gmem_reads);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_DEDUP, read_data_ro_w, sysmem_perf.dxa.gmem_dedup);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_LMEM_WRITES,read_data_ro_w, sysmem_perf.dxa.lmem_writes);
-                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_LT,    read_data_ro_w, sysmem_perf.dxa.gmem_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_TRANSFERS,   read_data_ro_w, sysmem_perf.dxa.transfers);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_READS,  read_data_ro_w, sysmem_perf.dxa.gmem_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_DEDUP,  read_data_ro_w, sysmem_perf.dxa.gmem_dedup);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_LMEM_WRITES, read_data_ro_w, sysmem_perf.dxa.lmem_writes);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_LT,     read_data_ro_w, sysmem_perf.dxa.gmem_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_ACTIVE_CYC,  read_data_ro_w, sysmem_perf.dxa.active_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_ST_CYC, read_data_ro_w, sysmem_perf.dxa.gmem_stall_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_SMEM_ST_CYC, read_data_ro_w, sysmem_perf.dxa.smem_stall_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_FIFO_ST_CYC, read_data_ro_w, sysmem_perf.dxa.fifo_stall_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_XFER_LT,     read_data_ro_w, sysmem_perf.dxa.xfer_latency);
                         default:;
                         endcase
                     end
@@ -317,9 +323,25 @@ import VX_fpu_pkg::*;
                 `ifdef EXT_TCU_ENABLE
                     `VX_DCR_MPM_CLASS_TCU: begin
                         case (read_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_STALLS,      read_data_ro_w, pipeline_perf.tcu.tbuf_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_STALLS,     read_data_ro_w, pipeline_perf.tcu.tbuf_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_CACHE_HITS, read_data_ro_w, pipeline_perf.tcu.tbuf_cache_hits);
-                        `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_READS,     read_data_ro_w, pipeline_perf.tcu.lmem_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_READS,      read_data_ro_w, pipeline_perf.tcu.lmem_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_WGMMA_INSTRS,    read_data_ro_w, pipeline_perf.tcu.wgmma_instrs);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_WGMMA_ST_TBUF,   read_data_ro_w, pipeline_perf.tcu.wgmma_stalls_tbuf);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_WGMMA_ST_MDATA,  read_data_ro_w, pipeline_perf.tcu.wgmma_stalls_mdata);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_WGMMA_ST_PIPE,   read_data_ro_w, pipeline_perf.tcu.wgmma_stalls_pipe);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_WMMA_INSTRS,     read_data_ro_w, pipeline_perf.tcu.wmma_instrs);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_WMMA_STALLS,     read_data_ro_w, pipeline_perf.tcu.wmma_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_FETCHES,    read_data_ro_w, pipeline_perf.tcu.tbuf_tile_fetches);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_TBUF_FETCH_CYC,  read_data_ro_w, pipeline_perf.tcu.tbuf_fetch_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_READS_A,    read_data_ro_w, pipeline_perf.tcu.lmem_reads_a);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_READS_B,    read_data_ro_w, pipeline_perf.tcu.lmem_reads_b);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_READS_META, read_data_ro_w, pipeline_perf.tcu.lmem_reads_meta);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_RSP_ST,     read_data_ro_w, pipeline_perf.tcu.lmem_rsp_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_LMEM_ARB_ST,     read_data_ro_w, pipeline_perf.tcu.lmem_arb_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_FETCH_B_CYC,     read_data_ro_w, pipeline_perf.tcu.fetch_b_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_COMPUTE_CYC,     read_data_ro_w, pipeline_perf.tcu.compute_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_TCU_WGMMA_STALLS,    read_data_ro_w, pipeline_perf.tcu.wgmma_stalls);
                         default:;
                         endcase
                     end

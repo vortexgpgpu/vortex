@@ -34,9 +34,10 @@ module VX_issue import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     issue_perf_t per_issue_perf [`ISSUE_WIDTH];
-    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, ibf_stalls, PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
-    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, scb_stalls, PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
-    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, opd_stalls, PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, ibf_stalls,     PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, scb_stalls,     PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, opd_stalls,     PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, tcu_opd_stalls, PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
     for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_issue_perf_units_uses
         `PERF_COUNTER_ADD (issue_perf, per_issue_perf, dispatch_stalls[i], PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
         `PERF_COUNTER_ADD (issue_perf, per_issue_perf, dispatch_instrs[i], PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))

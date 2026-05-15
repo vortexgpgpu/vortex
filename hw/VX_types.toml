@@ -204,6 +204,8 @@ VX_CSR_MPM_STALL_SFU = 0xB0F  # dispatch stage stalled due to SFU pipeline full
 VX_CSR_MPM_STALL_SFU_H = 0xB8F
 VX_CSR_MPM_STALL_TCU = 0xB10  # dispatch stage stalled due to TCU pipeline full
 VX_CSR_MPM_STALL_TCU_H = 0xB90
+VX_CSR_MPM_STALL_TCU_OPDS   = 0xB1F # operands fetch stalled due to bank conflict for a TCU op
+VX_CSR_MPM_STALL_TCU_OPDS_H = 0xB9F
 
 # PERF: branches
 VX_CSR_MPM_BRANCHES     = 0xB11  # total conditional branches
@@ -318,6 +320,16 @@ VX_CSR_MPM_DXA_LMEM_WRITES  = 0xB06  # SMEM word writes issued
 VX_CSR_MPM_DXA_LMEM_WRITES_H  = 0xB86
 VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
 VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
+VX_CSR_MPM_DXA_ACTIVE_CYC  = 0xB08  # cycles any DXA worker is active (transfer in progress)
+VX_CSR_MPM_DXA_ACTIVE_CYC_H  = 0xB88
+VX_CSR_MPM_DXA_GMEM_ST_CYC  = 0xB09  # cycles GMEM read request is stalled (valid but not ready)
+VX_CSR_MPM_DXA_GMEM_ST_CYC_H  = 0xB89
+VX_CSR_MPM_DXA_SMEM_ST_CYC  = 0xB0A  # cycles SMEM write is stalled (valid but not ready)
+VX_CSR_MPM_DXA_SMEM_ST_CYC_H  = 0xB8A
+VX_CSR_MPM_DXA_FIFO_ST_CYC  = 0xB0B  # cycles ISSUE FIFO has items but all workers are busy
+VX_CSR_MPM_DXA_FIFO_ST_CYC_H  = 0xB8B
+VX_CSR_MPM_DXA_XFER_LT      = 0xB0C  # total end-to-end transfer latency (sum across all workers)
+VX_CSR_MPM_DXA_XFER_LT_H    = 0xB8C
 
 [csr_mpm_tcu]
 # PERF: WGMMA tile-buffer (per-core; summed across blocks)
@@ -327,3 +339,35 @@ VX_CSR_MPM_TCU_TBUF_CACHE_HITS= 0xB04  # B tile reuse hits from tile buffer cach
 VX_CSR_MPM_TCU_TBUF_CACHE_HITS_H = 0xB84
 VX_CSR_MPM_TCU_LMEM_READS     = 0xB05  # tile buffer local memory reads
 VX_CSR_MPM_TCU_LMEM_READS_H   = 0xB85
+VX_CSR_MPM_TCU_WGMMA_INSTRS    = 0xB06  # WGMMA µops successfully issued
+VX_CSR_MPM_TCU_WGMMA_INSTRS_H  = 0xB86
+VX_CSR_MPM_TCU_WGMMA_ST_TBUF   = 0xB07  # cycles: WGMMA stalled because tbuf_ready=0
+VX_CSR_MPM_TCU_WGMMA_ST_TBUF_H = 0xB87
+VX_CSR_MPM_TCU_WGMMA_ST_MDATA  = 0xB08  # cycles: WGMMA stalled because mdata_queue_full
+VX_CSR_MPM_TCU_WGMMA_ST_MDATA_H= 0xB88
+VX_CSR_MPM_TCU_WGMMA_ST_PIPE   = 0xB09  # cycles: WGMMA stalled because fedp_enable=0
+VX_CSR_MPM_TCU_WGMMA_ST_PIPE_H = 0xB89
+VX_CSR_MPM_TCU_WMMA_INSTRS     = 0xB0A  # WMMA µops executed
+VX_CSR_MPM_TCU_WMMA_INSTRS_H   = 0xB8A
+VX_CSR_MPM_TCU_WMMA_STALLS     = 0xB0B  # cycles: WMMA valid but stalled
+VX_CSR_MPM_TCU_WMMA_STALLS_H   = 0xB8B
+VX_CSR_MPM_TCU_TBUF_FETCHES    = 0xB0C  # tile-buffer alloc events (tile misses)
+VX_CSR_MPM_TCU_TBUF_FETCHES_H  = 0xB8C
+VX_CSR_MPM_TCU_TBUF_FETCH_CYC  = 0xB0D  # cycles fetch FSM active (not IDLE)
+VX_CSR_MPM_TCU_TBUF_FETCH_CYC_H= 0xB8D
+VX_CSR_MPM_TCU_LMEM_READS_A    = 0xB0E  # LMEM reads during FETCH_A phase
+VX_CSR_MPM_TCU_LMEM_READS_A_H  = 0xB8E
+VX_CSR_MPM_TCU_LMEM_READS_B    = 0xB0F  # LMEM reads during FETCH_B phase
+VX_CSR_MPM_TCU_LMEM_READS_B_H  = 0xB8F
+VX_CSR_MPM_TCU_LMEM_READS_META = 0xB10  # LMEM reads during FETCH_META phase (sparse)
+VX_CSR_MPM_TCU_LMEM_READS_META_H= 0xB90
+VX_CSR_MPM_TCU_LMEM_RSP_ST     = 0xB11  # cycles: fetch FSM waiting for LMEM response
+VX_CSR_MPM_TCU_LMEM_RSP_ST_H   = 0xB91
+VX_CSR_MPM_TCU_LMEM_ARB_ST     = 0xB12  # cycles: tile buf wants LMEM but lost arbitration
+VX_CSR_MPM_TCU_LMEM_ARB_ST_H   = 0xB92
+VX_CSR_MPM_TCU_FETCH_B_CYC     = 0xB13  # cycles the fetch FSM spent in FETCH_B phase
+VX_CSR_MPM_TCU_FETCH_B_CYC_H   = 0xB93
+VX_CSR_MPM_TCU_COMPUTE_CYC     = 0xB14  # cycles FEDP pipeline has work in flight
+VX_CSR_MPM_TCU_COMPUTE_CYC_H   = 0xB94
+VX_CSR_MPM_TCU_WGMMA_STALLS    = 0xB15  # cycles: WGMMA valid but stalled (any reason)
+VX_CSR_MPM_TCU_WGMMA_STALLS_H  = 0xB95

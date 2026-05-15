@@ -32,6 +32,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output wire [PERF_CTR_BITS-1:0] perf_stalls,
+    output wire [PERF_CTR_BITS-1:0] perf_stalls_tcu,
 `endif
 
     VX_writeback_if.slave   writeback_if,
@@ -337,15 +338,20 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     );
 
 `ifdef PERF_ENABLE
+    wire collision_fire = scoreboard_if.valid && pipe_ready_in && has_collision;
     reg [PERF_CTR_BITS-1:0] collisions_r;
+    reg [PERF_CTR_BITS-1:0] collisions_tcu_r;
     always @(posedge clk) begin
         if (reset) begin
-            collisions_r <= '0;
+            collisions_r     <= '0;
+            collisions_tcu_r <= '0;
         end else begin
-            collisions_r <= collisions_r + PERF_CTR_BITS'(scoreboard_if.valid && pipe_ready_in && has_collision);
+            collisions_r     <= collisions_r     + PERF_CTR_BITS'(collision_fire);
+            collisions_tcu_r <= collisions_tcu_r + PERF_CTR_BITS'(collision_fire && (scoreboard_if.data.ex_type == EX_TCU));
         end
     end
-    assign perf_stalls = collisions_r;
+    assign perf_stalls     = collisions_r;
+    assign perf_stalls_tcu = collisions_tcu_r;
 `endif
 
 endmodule

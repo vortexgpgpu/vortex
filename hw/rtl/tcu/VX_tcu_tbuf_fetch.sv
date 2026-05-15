@@ -38,12 +38,16 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire reset,
 
 `ifdef PERF_ENABLE
-    // Cycles where req_valid=1 but tbuf_ready=0 (true stall cycles).
-    output wire [PERF_CTR_BITS-1:0] tbuf_stalls,
-    // B tile reuse hits from tile buffer cache.
-    output wire [PERF_CTR_BITS-1:0] tbuf_cache_hits,
-    // LMEM read transactions accepted (req_valid && req_ready).
-    output wire [PERF_CTR_BITS-1:0] lmem_reads,
+    output wire [PERF_CTR_BITS-1:0] tbuf_stalls,      // cycles: req_valid && !tbuf_ready
+    output wire [PERF_CTR_BITS-1:0] tbuf_cache_hits,  // B tile reuse hits from tile buffer cache
+    output wire [PERF_CTR_BITS-1:0] lmem_reads,       // total LMEM transactions accepted
+    output wire [PERF_CTR_BITS-1:0] tbuf_tile_fetches, // alloc_en events (tile misses)
+    output wire [PERF_CTR_BITS-1:0] tbuf_fetch_cycles, // cycles FSM active (not IDLE)
+    output wire [PERF_CTR_BITS-1:0] fetch_b_cycles,   // cycles FSM in FETCH_B phase
+    output wire [PERF_CTR_BITS-1:0] lmem_reads_a,     // LMEM reads in FETCH_A phase
+    output wire [PERF_CTR_BITS-1:0] lmem_reads_b,     // LMEM reads in FETCH_B phase
+    output wire [PERF_CTR_BITS-1:0] lmem_reads_meta,  // LMEM reads in FETCH_META phase
+    output wire [PERF_CTR_BITS-1:0] lmem_rsp_stalls,  // cycles: FSM in-flight, no rsp yet
 `endif
 
     // Execute-side observation
@@ -126,6 +130,9 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam SLOT_ADDRW = 1;
     wire [SLOT_ADDRW-1:0] cur_slot = 1'b0;
 
+`ifndef DBG_TCU_PERF
+    `UNUSED_VAR (req_wid)
+`endif
 `ifndef TCU_SPARSE_ENABLE
     wire is_sparse = 1'b0;
     `UNUSED_VAR (is_sparse)
@@ -299,7 +306,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     assign tcu_lmem_if.req_valid       = can_issue;
     assign tcu_lmem_if.req_data.rw     = 1'b0;
-    assign tcu_lmem_if.req_data.addr   = phase_row_base + BANK_ADDR_WIDTH'(req_ctr_r);
+    assign tcu_lmem_if.req_data.addr   = LMEM_DMA_ADDR_WIDTH'(phase_row_base + BANK_ADDR_WIDTH'(req_ctr_r));
     assign tcu_lmem_if.req_data.data   = '0;
     assign tcu_lmem_if.req_data.byteen = '0;
     assign tcu_lmem_if.req_data.flags  = '0;
@@ -585,20 +592,57 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] fetch_stall_ctr_r;
     reg [PERF_CTR_BITS-1:0] lmem_reads_ctr_r;
+    reg [PERF_CTR_BITS-1:0] tbuf_tile_fetches_ctr_r;
+    reg [PERF_CTR_BITS-1:0] tbuf_fetch_cycles_ctr_r;
+    reg [PERF_CTR_BITS-1:0] fetch_b_cycles_ctr_r;
+    reg [PERF_CTR_BITS-1:0] lmem_reads_a_ctr_r;
+    reg [PERF_CTR_BITS-1:0] lmem_reads_b_ctr_r;
+    reg [PERF_CTR_BITS-1:0] lmem_reads_meta_ctr_r;
+    reg [PERF_CTR_BITS-1:0] lmem_rsp_stalls_ctr_r;
     always_ff @(posedge clk) begin
         if (reset) begin
-            fetch_stall_ctr_r <= '0;
-            lmem_reads_ctr_r  <= '0;
+            fetch_stall_ctr_r       <= '0;
+            lmem_reads_ctr_r        <= '0;
+            tbuf_tile_fetches_ctr_r <= '0;
+            tbuf_fetch_cycles_ctr_r <= '0;
+            fetch_b_cycles_ctr_r    <= '0;
+            lmem_reads_a_ctr_r      <= '0;
+            lmem_reads_b_ctr_r      <= '0;
+            lmem_reads_meta_ctr_r   <= '0;
+            lmem_rsp_stalls_ctr_r   <= '0;
         end else begin
             if (req_valid && !tbuf_ready)
                 fetch_stall_ctr_r <= fetch_stall_ctr_r + PERF_CTR_BITS'(1);
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                 lmem_reads_ctr_r <= lmem_reads_ctr_r + PERF_CTR_BITS'(1);
+            if (alloc_en)
+                tbuf_tile_fetches_ctr_r <= tbuf_tile_fetches_ctr_r + PERF_CTR_BITS'(1);
+            if (in_fetch)
+                tbuf_fetch_cycles_ctr_r <= tbuf_fetch_cycles_ctr_r + PERF_CTR_BITS'(1);
+            if (in_fetch_b)
+                fetch_b_cycles_ctr_r <= fetch_b_cycles_ctr_r + PERF_CTR_BITS'(1);
+            if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready && in_fetch_a)
+                lmem_reads_a_ctr_r <= lmem_reads_a_ctr_r + PERF_CTR_BITS'(1);
+            if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready && in_fetch_b)
+                lmem_reads_b_ctr_r <= lmem_reads_b_ctr_r + PERF_CTR_BITS'(1);
+`ifdef TCU_SPARSE_ENABLE
+            if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready && in_fetch_meta)
+                lmem_reads_meta_ctr_r <= lmem_reads_meta_ctr_r + PERF_CTR_BITS'(1);
+`endif
+            if (in_fetch && req_inflight_r && !tcu_lmem_if.rsp_valid)
+                lmem_rsp_stalls_ctr_r <= lmem_rsp_stalls_ctr_r + PERF_CTR_BITS'(1);
         end
     end
-    assign tbuf_stalls     = fetch_stall_ctr_r;
-    assign tbuf_cache_hits = '0;
-    assign lmem_reads      = lmem_reads_ctr_r;
+    assign tbuf_stalls      = fetch_stall_ctr_r;
+    assign tbuf_cache_hits  = '0;
+    assign lmem_reads       = lmem_reads_ctr_r;
+    assign tbuf_tile_fetches = tbuf_tile_fetches_ctr_r;
+    assign tbuf_fetch_cycles = tbuf_fetch_cycles_ctr_r;
+    assign fetch_b_cycles   = fetch_b_cycles_ctr_r;
+    assign lmem_reads_a     = lmem_reads_a_ctr_r;
+    assign lmem_reads_b     = lmem_reads_b_ctr_r;
+    assign lmem_reads_meta  = lmem_reads_meta_ctr_r;
+    assign lmem_rsp_stalls  = lmem_rsp_stalls_ctr_r;
 `endif
 
     // -----------------------------------------------------------------------

@@ -30,6 +30,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          tbuf_ready,
 `endif
 
+`ifdef PERF_ENABLE
+`ifdef TCU_WGMMA_ENABLE
+    output wire [PERF_CTR_BITS-1:0] wgmma_stalls_mdata,
+    output wire [PERF_CTR_BITS-1:0] wgmma_stalls_pipe,
+    output wire [PERF_CTR_BITS-1:0] compute_cycles,
+`endif
+`endif
+
     // Inputs
     VX_execute_if.slave execute_if,
 
@@ -372,5 +380,30 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif // DBG_TRACE_TCU
         end
     end
+
+`ifdef PERF_ENABLE
+`ifdef TCU_WGMMA_ENABLE
+    reg [PERF_CTR_BITS-1:0] wgmma_stalls_mdata_ctr_r;
+    reg [PERF_CTR_BITS-1:0] wgmma_stalls_pipe_ctr_r;
+    reg [PERF_CTR_BITS-1:0] compute_cycles_ctr_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            wgmma_stalls_mdata_ctr_r <= '0;
+            wgmma_stalls_pipe_ctr_r  <= '0;
+            compute_cycles_ctr_r     <= '0;
+        end else begin
+            if (execute_if.valid && is_wgmma && mdata_queue_full)
+                wgmma_stalls_mdata_ctr_r <= wgmma_stalls_mdata_ctr_r + PERF_CTR_BITS'(1);
+            if (execute_if.valid && is_wgmma && !fedp_enable)
+                wgmma_stalls_pipe_ctr_r  <= wgmma_stalls_pipe_ctr_r  + PERF_CTR_BITS'(1);
+            if (fedp_delay_pipe != '0)
+                compute_cycles_ctr_r <= compute_cycles_ctr_r + PERF_CTR_BITS'(1);
+        end
+    end
+    assign wgmma_stalls_mdata = wgmma_stalls_mdata_ctr_r;
+    assign wgmma_stalls_pipe  = wgmma_stalls_pipe_ctr_r;
+    assign compute_cycles     = compute_cycles_ctr_r;
+`endif
+`endif
 
 endmodule

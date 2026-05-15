@@ -49,6 +49,13 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire [PERF_CTR_BITS-1:0] tbuf_stalls,
     output wire [PERF_CTR_BITS-1:0] tbuf_cache_hits,
     output wire [PERF_CTR_BITS-1:0] lmem_reads,
+    output wire [PERF_CTR_BITS-1:0] tbuf_tile_fetches,
+    output wire [PERF_CTR_BITS-1:0] tbuf_fetch_cycles,
+    output wire [PERF_CTR_BITS-1:0] fetch_b_cycles,
+    output wire [PERF_CTR_BITS-1:0] lmem_reads_a,
+    output wire [PERF_CTR_BITS-1:0] lmem_reads_b,
+    output wire [PERF_CTR_BITS-1:0] lmem_reads_meta,
+    output wire [PERF_CTR_BITS-1:0] lmem_rsp_stalls,
 `endif
 
     // Execute-side observation
@@ -125,9 +132,16 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
-        .tbuf_stalls    (tbuf_stalls),
-        .tbuf_cache_hits(tbuf_cache_hits),
-        .lmem_reads     (lmem_reads),
+        .tbuf_stalls       (tbuf_stalls),
+        .tbuf_cache_hits   (tbuf_cache_hits),
+        .lmem_reads        (lmem_reads),
+        .tbuf_tile_fetches (tbuf_tile_fetches),
+        .tbuf_fetch_cycles (tbuf_fetch_cycles),
+        .fetch_b_cycles    (fetch_b_cycles),
+        .lmem_reads_a      (lmem_reads_a),
+        .lmem_reads_b      (lmem_reads_b),
+        .lmem_reads_meta   (lmem_reads_meta),
+        .lmem_rsp_stalls   (lmem_rsp_stalls),
     `endif
         .req_wid        (req_wid),
         .req_valid      (req_valid),

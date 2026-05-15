@@ -81,16 +81,26 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire                                   tbuf_ready    [BLOCK_SIZE];
 
 `ifdef PERF_ENABLE
-    wire [PERF_CTR_BITS-1:0] tbuf_stalls_b     [BLOCK_SIZE];
-    wire [PERF_CTR_BITS-1:0] tbuf_cache_hits_b [BLOCK_SIZE];
-    wire [PERF_CTR_BITS-1:0] lmem_reads_b      [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] tbuf_stalls_b        [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] tbuf_cache_hits_b    [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] lmem_reads_b         [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] tbuf_tile_fetches_b  [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] tbuf_fetch_cycles_b  [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] fetch_b_cycles_b     [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] lmem_reads_a_b       [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] lmem_reads_b_b       [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] lmem_reads_meta_b    [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] lmem_rsp_stalls_b    [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] wgmma_stalls_mdata_b [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] wgmma_stalls_pipe_b  [BLOCK_SIZE];
+    wire [PERF_CTR_BITS-1:0] compute_cycles_b     [BLOCK_SIZE];
 `endif
 
     VX_mem_bus_if #(
         .DATA_SIZE  (`LMEM_NUM_BANKS * (`XLEN / 8)),
         .TAG_WIDTH  (TCU_LMEM_BLK_TAG_W),
         .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
-        .ADDR_WIDTH (BANK_ADDR_WIDTH)
+        .ADDR_WIDTH (LMEM_DMA_ADDR_WIDTH)
     ) per_block_lmem_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_tile_bufs
@@ -109,9 +119,16 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .clk              (clk),
             .reset            (reset),
         `ifdef PERF_ENABLE
-            .tbuf_stalls    (tbuf_stalls_b[block_idx]),
-            .tbuf_cache_hits(tbuf_cache_hits_b[block_idx]),
-            .lmem_reads     (lmem_reads_b[block_idx]),
+            .tbuf_stalls       (tbuf_stalls_b[block_idx]),
+            .tbuf_cache_hits   (tbuf_cache_hits_b[block_idx]),
+            .lmem_reads        (lmem_reads_b[block_idx]),
+            .tbuf_tile_fetches (tbuf_tile_fetches_b[block_idx]),
+            .tbuf_fetch_cycles (tbuf_fetch_cycles_b[block_idx]),
+            .fetch_b_cycles    (fetch_b_cycles_b[block_idx]),
+            .lmem_reads_a      (lmem_reads_a_b[block_idx]),
+            .lmem_reads_b      (lmem_reads_b_b[block_idx]),
+            .lmem_reads_meta   (lmem_reads_meta_b[block_idx]),
+            .lmem_rsp_stalls   (lmem_rsp_stalls_b[block_idx]),
         `endif
             .req_wid          (per_block_execute_if[block_idx].data.header.wid),
             .req_valid        (req_valid_b),
@@ -143,7 +160,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .DATA_SIZE  (`LMEM_NUM_BANKS * (`XLEN / 8)),
         .TAG_WIDTH  (TCU_LMEM_TAG_W),
         .FLAGS_WIDTH(LMEM_DMA_FLAGS_W),
-        .ADDR_WIDTH (BANK_ADDR_WIDTH)
+        .ADDR_WIDTH (LMEM_DMA_ADDR_WIDTH)
     ) lmem_arb_out_if[1]();
 
     VX_mem_arb #(
@@ -152,7 +169,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .DATA_SIZE   (`LMEM_NUM_BANKS * (`XLEN / 8)),
         .TAG_WIDTH   (TCU_LMEM_BLK_TAG_W),
         .FLAGS_WIDTH (LMEM_DMA_FLAGS_W),
-        .ADDR_WIDTH  (BANK_ADDR_WIDTH),
+        .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH),
         .ARBITER     ("P")
     ) lmem_arb (
         .clk        (clk),
@@ -171,54 +188,149 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [PERF_CTR_BITS-1:0] tbuf_stalls_sum;
     logic [PERF_CTR_BITS-1:0] tbuf_cache_hits_sum;
     logic [PERF_CTR_BITS-1:0] lmem_reads_sum;
-    always_comb begin
-        tbuf_stalls_sum     = '0;
-        tbuf_cache_hits_sum = '0;
-        lmem_reads_sum      = '0;
-        for (int bi = 0; bi < BLOCK_SIZE; bi++) begin
-            tbuf_stalls_sum     += tbuf_stalls_b[bi];
-            tbuf_cache_hits_sum += tbuf_cache_hits_b[bi];
-            lmem_reads_sum      += lmem_reads_b[bi];
-        end
-    end
-    assign tcu_perf.tbuf_stalls     = tbuf_stalls_sum;
-    assign tcu_perf.tbuf_cache_hits = tbuf_cache_hits_sum;
-    assign tcu_perf.lmem_reads      = lmem_reads_sum;
+    logic [PERF_CTR_BITS-1:0] tbuf_tile_fetches_sum;
+    logic [PERF_CTR_BITS-1:0] tbuf_fetch_cycles_sum;
+    logic [PERF_CTR_BITS-1:0] fetch_b_cycles_sum;
+    logic [PERF_CTR_BITS-1:0] lmem_reads_a_sum;
+    logic [PERF_CTR_BITS-1:0] lmem_reads_b_sum;
+    logic [PERF_CTR_BITS-1:0] lmem_reads_meta_sum;
+    logic [PERF_CTR_BITS-1:0] lmem_rsp_stalls_sum;
+    logic [PERF_CTR_BITS-1:0] wgmma_stalls_mdata_sum;
+    logic [PERF_CTR_BITS-1:0] wgmma_stalls_pipe_sum;
+    logic [PERF_CTR_BITS-1:0] compute_cycles_sum;
 
-    // wgmma_instrs / wgmma_stalls: derived from per_block_execute_if.
-    logic wgmma_fire_b  [BLOCK_SIZE];
-    logic wgmma_stall_b [BLOCK_SIZE];
-    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_wgmma_perf
+    // Per-block combinational signals for instruction-type perf.
+    logic wgmma_fire_b       [BLOCK_SIZE];
+    logic wgmma_stall_b      [BLOCK_SIZE];
+    logic wgmma_stall_tbuf_b [BLOCK_SIZE];
+    logic wmma_fire_b        [BLOCK_SIZE];
+    logic wmma_stall_b       [BLOCK_SIZE];
+
+    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_instr_perf
         wire is_wgmma_p = (per_block_execute_if[bi].data.op_type == INST_TCU_WGMMA);
-        assign wgmma_fire_b [bi] = per_block_execute_if[bi].valid && per_block_execute_if[bi].ready && is_wgmma_p;
-        assign wgmma_stall_b[bi] = per_block_execute_if[bi].valid && !per_block_execute_if[bi].ready && is_wgmma_p;
+        wire is_wmma_p  = (per_block_execute_if[bi].data.op_type == INST_TCU_WMMA);
+        assign wgmma_fire_b      [bi] = per_block_execute_if[bi].valid &&  per_block_execute_if[bi].ready && is_wgmma_p;
+        assign wgmma_stall_b     [bi] = per_block_execute_if[bi].valid && !per_block_execute_if[bi].ready && is_wgmma_p;
+        assign wgmma_stall_tbuf_b[bi] = per_block_execute_if[bi].valid && !tbuf_ready[bi] && is_wgmma_p;
+        assign wmma_fire_b       [bi] = per_block_execute_if[bi].valid &&  per_block_execute_if[bi].ready && is_wmma_p;
+        assign wmma_stall_b      [bi] = per_block_execute_if[bi].valid && !per_block_execute_if[bi].ready && is_wmma_p;
+    end
+
+    // LMEM arbiter stalls per-block: block wants LMEM but lost arbitration.
+    logic [PERF_CTR_BITS-1:0] lmem_arb_stalls_b [BLOCK_SIZE];
+    for (genvar b = 0; b < BLOCK_SIZE; ++b) begin : g_arb_perf
+        reg [PERF_CTR_BITS-1:0] arb_stall_ctr_r;
+        always_ff @(posedge clk) begin
+            if (reset) arb_stall_ctr_r <= '0;
+            else if (per_block_lmem_if[b].req_valid && !per_block_lmem_if[b].req_ready)
+                arb_stall_ctr_r <= arb_stall_ctr_r + PERF_CTR_BITS'(1);
+        end
+        assign lmem_arb_stalls_b[b] = arb_stall_ctr_r;
+    end
+
+    always_comb begin
+        tbuf_stalls_sum      = '0;
+        tbuf_cache_hits_sum  = '0;
+        lmem_reads_sum       = '0;
+        tbuf_tile_fetches_sum = '0;
+        tbuf_fetch_cycles_sum = '0;
+        fetch_b_cycles_sum   = '0;
+        lmem_reads_a_sum     = '0;
+        lmem_reads_b_sum     = '0;
+        lmem_reads_meta_sum  = '0;
+        lmem_rsp_stalls_sum  = '0;
+        wgmma_stalls_mdata_sum = '0;
+        wgmma_stalls_pipe_sum  = '0;
+        compute_cycles_sum     = '0;
+        for (int bi = 0; bi < BLOCK_SIZE; bi++) begin
+            tbuf_stalls_sum      += tbuf_stalls_b[bi];
+            tbuf_cache_hits_sum  += tbuf_cache_hits_b[bi];
+            lmem_reads_sum       += lmem_reads_b[bi];
+            tbuf_tile_fetches_sum += tbuf_tile_fetches_b[bi];
+            tbuf_fetch_cycles_sum += tbuf_fetch_cycles_b[bi];
+            fetch_b_cycles_sum   += fetch_b_cycles_b[bi];
+            lmem_reads_a_sum     += lmem_reads_a_b[bi];
+            lmem_reads_b_sum     += lmem_reads_b_b[bi];
+            lmem_reads_meta_sum  += lmem_reads_meta_b[bi];
+            lmem_rsp_stalls_sum  += lmem_rsp_stalls_b[bi];
+            wgmma_stalls_mdata_sum += wgmma_stalls_mdata_b[bi];
+            wgmma_stalls_pipe_sum  += wgmma_stalls_pipe_b[bi];
+            compute_cycles_sum     += compute_cycles_b[bi];
+        end
     end
 
     logic [PERF_CTR_BITS-1:0] wgmma_instrs_ctr_r;
     logic [PERF_CTR_BITS-1:0] wgmma_stalls_ctr_r;
+    logic [PERF_CTR_BITS-1:0] wgmma_stalls_tbuf_ctr_r;
+    logic [PERF_CTR_BITS-1:0] wmma_instrs_ctr_r;
+    logic [PERF_CTR_BITS-1:0] wmma_stalls_ctr_r;
+    logic [PERF_CTR_BITS-1:0] lmem_arb_stalls_sum;
     always_ff @(posedge clk) begin
         if (reset) begin
-            wgmma_instrs_ctr_r <= '0;
-            wgmma_stalls_ctr_r <= '0;
+            wgmma_instrs_ctr_r      <= '0;
+            wgmma_stalls_ctr_r      <= '0;
+            wgmma_stalls_tbuf_ctr_r <= '0;
+            wmma_instrs_ctr_r       <= '0;
+            wmma_stalls_ctr_r       <= '0;
         end else begin
             for (int bi = 0; bi < BLOCK_SIZE; bi++) begin
-                if (wgmma_fire_b[bi])  wgmma_instrs_ctr_r <= wgmma_instrs_ctr_r + PERF_CTR_BITS'(1);
-                if (wgmma_stall_b[bi]) wgmma_stalls_ctr_r <= wgmma_stalls_ctr_r + PERF_CTR_BITS'(1);
+                if (wgmma_fire_b[bi])       wgmma_instrs_ctr_r      <= wgmma_instrs_ctr_r      + PERF_CTR_BITS'(1);
+                if (wgmma_stall_b[bi])      wgmma_stalls_ctr_r      <= wgmma_stalls_ctr_r      + PERF_CTR_BITS'(1);
+                if (wgmma_stall_tbuf_b[bi]) wgmma_stalls_tbuf_ctr_r <= wgmma_stalls_tbuf_ctr_r + PERF_CTR_BITS'(1);
+                if (wmma_fire_b[bi])        wmma_instrs_ctr_r        <= wmma_instrs_ctr_r        + PERF_CTR_BITS'(1);
+                if (wmma_stall_b[bi])       wmma_stalls_ctr_r        <= wmma_stalls_ctr_r        + PERF_CTR_BITS'(1);
             end
         end
     end
-    assign tcu_perf.wgmma_instrs = wgmma_instrs_ctr_r;
-    assign tcu_perf.wgmma_stalls = wgmma_stalls_ctr_r;
+    always_comb begin
+        lmem_arb_stalls_sum = '0;
+        for (int bi = 0; bi < BLOCK_SIZE; bi++)
+            lmem_arb_stalls_sum += lmem_arb_stalls_b[bi];
+    end
+
+    assign tcu_perf.tbuf_stalls      = tbuf_stalls_sum;
+    assign tcu_perf.tbuf_cache_hits  = tbuf_cache_hits_sum;
+    assign tcu_perf.lmem_reads       = lmem_reads_sum;
+    assign tcu_perf.wgmma_instrs     = wgmma_instrs_ctr_r;
+    assign tcu_perf.wgmma_stalls     = wgmma_stalls_ctr_r;
+    assign tcu_perf.wgmma_stalls_tbuf  = wgmma_stalls_tbuf_ctr_r;
+    assign tcu_perf.wgmma_stalls_mdata = wgmma_stalls_mdata_sum;
+    assign tcu_perf.wgmma_stalls_pipe  = wgmma_stalls_pipe_sum;
+    assign tcu_perf.wmma_instrs      = wmma_instrs_ctr_r;
+    assign tcu_perf.wmma_stalls      = wmma_stalls_ctr_r;
+    assign tcu_perf.tbuf_tile_fetches = tbuf_tile_fetches_sum;
+    assign tcu_perf.tbuf_fetch_cycles = tbuf_fetch_cycles_sum;
+    assign tcu_perf.fetch_b_cycles   = fetch_b_cycles_sum;
+    assign tcu_perf.lmem_reads_a     = lmem_reads_a_sum;
+    assign tcu_perf.lmem_reads_b     = lmem_reads_b_sum;
+    assign tcu_perf.lmem_reads_meta  = lmem_reads_meta_sum;
+    assign tcu_perf.lmem_rsp_stalls  = lmem_rsp_stalls_sum;
+    assign tcu_perf.lmem_arb_stalls  = lmem_arb_stalls_sum;
+    assign tcu_perf.compute_cycles   = compute_cycles_sum;
 `endif
 
 `else // !TCU_WGMMA_ENABLE
 
 `ifdef PERF_ENABLE
-    assign tcu_perf.tbuf_stalls     = '0;
-    assign tcu_perf.tbuf_cache_hits = '0;
-    assign tcu_perf.lmem_reads      = '0;
-    assign tcu_perf.wgmma_instrs    = '0;
-    assign tcu_perf.wgmma_stalls    = '0;
+    assign tcu_perf.tbuf_stalls      = '0;
+    assign tcu_perf.tbuf_cache_hits  = '0;
+    assign tcu_perf.lmem_reads       = '0;
+    assign tcu_perf.wgmma_instrs     = '0;
+    assign tcu_perf.wgmma_stalls     = '0;
+    assign tcu_perf.wgmma_stalls_tbuf  = '0;
+    assign tcu_perf.wgmma_stalls_mdata = '0;
+    assign tcu_perf.wgmma_stalls_pipe  = '0;
+    assign tcu_perf.wmma_instrs      = '0;
+    assign tcu_perf.wmma_stalls      = '0;
+    assign tcu_perf.tbuf_tile_fetches = '0;
+    assign tcu_perf.tbuf_fetch_cycles = '0;
+    assign tcu_perf.fetch_b_cycles   = '0;
+    assign tcu_perf.lmem_reads_a     = '0;
+    assign tcu_perf.lmem_reads_b     = '0;
+    assign tcu_perf.lmem_reads_meta  = '0;
+    assign tcu_perf.lmem_rsp_stalls  = '0;
+    assign tcu_perf.lmem_arb_stalls  = '0;
+    assign tcu_perf.compute_cycles   = '0;
 `endif
 
 `endif // TCU_WGMMA_ENABLE
@@ -241,6 +353,13 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .tbuf_sp_meta  (tbuf_sp_meta[block_idx]),
         `endif
             .tbuf_ready    (tbuf_ready[block_idx]),
+        `endif
+        `ifdef PERF_ENABLE
+        `ifdef TCU_WGMMA_ENABLE
+            .wgmma_stalls_mdata(wgmma_stalls_mdata_b[block_idx]),
+            .wgmma_stalls_pipe (wgmma_stalls_pipe_b[block_idx]),
+            .compute_cycles    (compute_cycles_b[block_idx]),
+        `endif
         `endif
             .execute_if (per_block_execute_if[block_idx]),
             .result_if  (per_block_result_if[block_idx])

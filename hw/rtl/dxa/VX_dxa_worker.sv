@@ -311,18 +311,28 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ════════════════════════════════════════════════════════════════════
 
 `ifdef PERF_ENABLE
+    wire gmem_stall = gmem_bus_if.req_valid && ~gmem_bus_if.req_ready;
+    wire smem_stall = smem_bus_if.req_valid && ~smem_bus_if.req_ready;
     reg [PERF_CTR_BITS-1:0] perf_transfers_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_reads_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_dedup_r;
     reg [PERF_CTR_BITS-1:0] perf_lmem_writes_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_lt_r;
+    reg [PERF_CTR_BITS-1:0] perf_active_cycles_r;
+    reg [PERF_CTR_BITS-1:0] perf_gmem_stall_cycles_r;
+    reg [PERF_CTR_BITS-1:0] perf_smem_stall_cycles_r;
+    reg [PERF_CTR_BITS-1:0] perf_xfer_latency_r;
     always @(posedge clk) begin
         if (reset) begin
-            perf_transfers_r   <= '0;
-            perf_gmem_reads_r  <= '0;
-            perf_gmem_dedup_r  <= '0;
-            perf_lmem_writes_r <= '0;
-            perf_gmem_lt_r     <= '0;
+            perf_transfers_r         <= '0;
+            perf_gmem_reads_r        <= '0;
+            perf_gmem_dedup_r        <= '0;
+            perf_lmem_writes_r       <= '0;
+            perf_gmem_lt_r           <= '0;
+            perf_active_cycles_r     <= '0;
+            perf_gmem_stall_cycles_r <= '0;
+            perf_smem_stall_cycles_r <= '0;
+            perf_xfer_latency_r      <= '0;
         end else begin
             if (transfer_active && transfer_done) begin
                 perf_transfers_r   <= perf_transfers_r + PERF_CTR_BITS'(1);
@@ -330,13 +340,22 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 perf_lmem_writes_r <= perf_lmem_writes_r + PERF_CTR_BITS'(perf_lmem_writes);
                 perf_gmem_lt_r     <= perf_gmem_lt_r + PERF_CTR_BITS'(perf_gmem_span_cycles);
             end
+            perf_active_cycles_r     <= perf_active_cycles_r     + PERF_CTR_BITS'(transfer_active);
+            perf_gmem_stall_cycles_r <= perf_gmem_stall_cycles_r + PERF_CTR_BITS'(transfer_active && gmem_stall);
+            perf_smem_stall_cycles_r <= perf_smem_stall_cycles_r + PERF_CTR_BITS'(transfer_active && smem_stall);
+            perf_xfer_latency_r      <= perf_xfer_latency_r      + PERF_CTR_BITS'(transfer_active);
         end
     end
-    assign dxa_perf.transfers    = perf_transfers_r;
-    assign dxa_perf.gmem_reads   = perf_gmem_reads_r;
-    assign dxa_perf.gmem_dedup   = perf_gmem_dedup_r;
-    assign dxa_perf.lmem_writes  = perf_lmem_writes_r;
-    assign dxa_perf.gmem_latency = perf_gmem_lt_r;
+    assign dxa_perf.transfers         = perf_transfers_r;
+    assign dxa_perf.gmem_reads        = perf_gmem_reads_r;
+    assign dxa_perf.gmem_dedup        = perf_gmem_dedup_r;
+    assign dxa_perf.lmem_writes       = perf_lmem_writes_r;
+    assign dxa_perf.gmem_latency      = perf_gmem_lt_r;
+    assign dxa_perf.active_cycles     = perf_active_cycles_r;
+    assign dxa_perf.gmem_stall_cycles = perf_gmem_stall_cycles_r;
+    assign dxa_perf.smem_stall_cycles = perf_smem_stall_cycles_r;
+    assign dxa_perf.fifo_stall_cycles = '0; // tracked at core level, not per-worker
+    assign dxa_perf.xfer_latency      = perf_xfer_latency_r;
 `endif
 
     `UNUSED_VAR (stall_no_slot)

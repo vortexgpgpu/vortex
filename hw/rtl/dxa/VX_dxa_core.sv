@@ -197,15 +197,30 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign busy = dxa_busy_r | dcr_bus_if.req_valid | (|req_bus_valid);
 
 `ifdef PERF_ENABLE
+    reg [PERF_CTR_BITS-1:0] perf_fifo_stall_cycles_r;
+    wire fifo_stall = dispatch_in_if[0].valid && ~dispatch_in_if[0].ready;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_fifo_stall_cycles_r <= '0;
+        end else begin
+            perf_fifo_stall_cycles_r <= perf_fifo_stall_cycles_r + PERF_CTR_BITS'(fifo_stall);
+        end
+    end
+
     always_comb begin
         dxa_perf = '0;
         for (int w = 0; w < NUM_DXA_UNITS; ++w) begin
-            dxa_perf.transfers   += worker_dxa_perf[w].transfers;
-            dxa_perf.gmem_reads  += worker_dxa_perf[w].gmem_reads;
-            dxa_perf.gmem_dedup  += worker_dxa_perf[w].gmem_dedup;
-            dxa_perf.lmem_writes += worker_dxa_perf[w].lmem_writes;
-            dxa_perf.gmem_latency += worker_dxa_perf[w].gmem_latency;
+            dxa_perf.transfers         += worker_dxa_perf[w].transfers;
+            dxa_perf.gmem_reads        += worker_dxa_perf[w].gmem_reads;
+            dxa_perf.gmem_dedup        += worker_dxa_perf[w].gmem_dedup;
+            dxa_perf.lmem_writes       += worker_dxa_perf[w].lmem_writes;
+            dxa_perf.gmem_latency      += worker_dxa_perf[w].gmem_latency;
+            dxa_perf.active_cycles     += worker_dxa_perf[w].active_cycles;
+            dxa_perf.gmem_stall_cycles += worker_dxa_perf[w].gmem_stall_cycles;
+            dxa_perf.smem_stall_cycles += worker_dxa_perf[w].smem_stall_cycles;
+            dxa_perf.xfer_latency      += worker_dxa_perf[w].xfer_latency;
         end
+        dxa_perf.fifo_stall_cycles = perf_fifo_stall_cycles_r;
     end
 `endif
 

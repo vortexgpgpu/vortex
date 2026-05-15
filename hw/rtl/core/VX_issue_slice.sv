@@ -73,7 +73,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
      `ifdef PERF_ENABLE
-        .perf_stalls    (issue_perf.opd_stalls),
+        .perf_stalls     (issue_perf.opd_stalls),
+        .perf_stalls_tcu (issue_perf.tcu_opd_stalls),
      `endif
         .writeback_if   (writeback_if),
         .scoreboard_if  (scoreboard_if),
