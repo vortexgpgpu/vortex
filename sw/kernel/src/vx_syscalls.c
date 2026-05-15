@@ -53,16 +53,28 @@ int _getpid() {
   return vx_hart_id();
 }
 
+/* __tdata_size / __tbss_offset / __tbss_size are *absolute* linker symbols
+ * (SIZEOF()/offset expressions), so their "address" is a small constant.
+ * Under -mcmodel=medany the compiler materializes a symbol address with a
+ * PC-relative auipc, and on RV64 the ~2GB gap between the code (0x80000000)
+ * and a small absolute value overflows R_RISCV_PCREL_HI20. Read these
+ * symbols with absolute lui/addi addressing instead. (RV32 happened to
+ * work because medany relocations wrap within the 32-bit space.) */
+#define VX_ABS_LINKER_SYM(sym) ({                                  \
+  size_t __v;                                                      \
+  __asm__("lui %0, %%hi(" #sym ")\n\t addi %0, %0, %%lo(" #sym ")" \
+          : "=r"(__v));                                            \
+  __v;                                                             \
+})
+
 void __init_tls(void) {
   extern char __tdata_start[];
-  extern char __tbss_offset[];
-  extern char __tdata_size[];
-  extern char __tbss_size[];
 
   // TLS memory initialization
   register char *__thread_self __asm__ ("tp");
-  memcpy(__thread_self, __tdata_start, (size_t)__tdata_size);
-  memset(__thread_self + (size_t)__tbss_offset, 0, (size_t)__tbss_size);
+  memcpy(__thread_self, __tdata_start, VX_ABS_LINKER_SYM(__tdata_size));
+  memset(__thread_self + VX_ABS_LINKER_SYM(__tbss_offset), 0,
+         VX_ABS_LINKER_SYM(__tbss_size));
 }
 
 #ifdef HAVE_INITFINI_ARRAY
