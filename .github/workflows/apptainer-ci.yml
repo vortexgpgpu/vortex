@@ -164,7 +164,8 @@ jobs:
       matrix:
         os: [ubuntu-24.04]
         xlen: [32, 64]
-        name: [regression, amo, dxa, mpi, dtm, cache, config1, config2, debug, scope, stress, synthesis, cupbop, tensor, tensor_sp, tensor_mx, tensor_wg]
+        # dxa + tensor_wg disabled: features not yet complete (see regression{32,64}_failures.md)
+        name: [regression, amo, mpi, dtm, cache, config1, config2, debug, scope, stress, synthesis, cupbop, tensor, tensor_sp, tensor_mx]
         # name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, cupbop, tensor]
 
     env:

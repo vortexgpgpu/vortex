@@ -252,8 +252,12 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < A_STRIPE_WORDS) begin
                     storage_wren[int'(rsp_ctr_r) * NUM_BANKS + b] = 1'b1;
+                    // Storage is 32-bit-word organized. The LMEM response data
+                    // is contiguous bytes; word b lives at bit offset b*32
+                    // regardless of `XLEN. (The bus is NUM_BANKS*`XLEN wide, so
+                    // for XLEN=64 it over-fetches a 2nd bank-row which we drop.)
                     storage_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data.data[b * `XLEN +: `XLEN];
+                        tcu_lmem_if.rsp_data.data[b * 32 +: 32];
                 end
             end
         end

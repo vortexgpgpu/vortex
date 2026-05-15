@@ -273,7 +273,10 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
             `CONCAT(tmp, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_W],
                 gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
-            assign gpr_rd_addr = {pipe_mdata_st1[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-1 -: SIMD_IDX_W], tmp};
+            // pipe_mdata packs {uuid, wis, cta_id, simd_pid, ...} (see line 159):
+            // skip uuid+wis+cta_id to land on simd_pid. The write path uses
+            // writeback_if.data.sid directly, so the read slice must match it.
+            assign gpr_rd_addr = {pipe_mdata_st1[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-NCTA_WIDTH-1 -: SIMD_IDX_W], tmp};
         end else begin : g_gpr_rd_addr
             `CONCAT(gpr_rd_addr, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_W],
                 gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)

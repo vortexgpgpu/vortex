@@ -60,6 +60,12 @@ XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)
 RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 ifneq (,$(filter -DEXT_F_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/fpu
+	ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl
+	endif
 endif
 
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
@@ -128,8 +134,9 @@ $(BUILD_DIR)/src:
 sv2v: $(BUILD_DIR)/project.v
 $(BUILD_DIR)/project.v: $(BUILD_DIR)/src
 	$(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -o$(BUILD_DIR)/project.v
-	# Remove lines starting $finish or $display from generated source
-	sed -ri '/^[[:space:]]*[$$](finish|display)/d' $(BUILD_DIR)/project.v
+	# Remove severity/control system-task lines yosys can't synthesize
+	# ($fatal/$error/$warning/$info/$stop are used by the cvfpu sources).
+	sed -ri '/^[[:space:]]*[$$](finish|display|fatal|error|warning|info|stop)/d' $(BUILD_DIR)/project.v
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt: $(BUILD_DIR)/project.v

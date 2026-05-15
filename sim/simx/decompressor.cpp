@@ -321,6 +321,13 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCI(uimm, 2, 0b011, rd, 0b0000011);
             break;
         }
+#else
+        case 0b011: { // RV32FC: C.FLWSP -> FLW rd, uimm(x2)
+            uint32_t rd = bits(h, 11, 7);
+            uint32_t uimm = (bit(h, 12) << 5) | (bits(h, 6, 4) << 2) | (bits(h, 3, 2) << 6);
+            out.instr32 = ENCI(uimm, 2, 0b010, rd, 0b0000111);
+            break;
+        }
 #endif
         case 0b100: {
             uint32_t rd  = bits(h, 11, 7);
@@ -363,6 +370,13 @@ DecompResult rvc_decompress(uint32_t word) {
             uint32_t rs2 = bits(h, 6, 2);
             uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 9, 7) << 6);
             out.instr32 = ENCS(uimm, rs2, 2, 0b011, 0b0100011);
+            break;
+        }
+#else
+        case 0b111: { // RV32FC: C.FSWSP -> FSW rs2, uimm(x2)
+            uint32_t rs2 = bits(h, 6, 2);
+            uint32_t uimm = (bits(h, 12, 9) << 2) | (bits(h, 8, 7) << 6);
+            out.instr32 = ENCS(uimm, rs2, 2, 0b010, 0b0100111);
             break;
         }
 #endif

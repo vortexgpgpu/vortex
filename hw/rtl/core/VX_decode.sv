@@ -610,6 +610,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     7'h01: begin // VOTE, SHFL
                         ex_type = EX_ALU;
                         op_args.alu.xtype = ALU_TYPE_OTHER;
+                        op_args.alu.is_w = 0;
                         `USED_IREG (rd);
                         `USED_IREG (rs1);
                         if (funct3[2]) begin
@@ -690,6 +691,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     ex_type = EX_ALU;
                     op_args.alu.xtype = ALU_TYPE_OTHER;
                     op_args.alu.imm20 = {{18{1'b0}}, funct2}; // src_lane in imm20[1:0]
+                    op_args.alu.is_w  = 0;
                     `USED_IREG (rd);
                     `USED_IREG (rs1);
                     `USED_IREG (rs2);

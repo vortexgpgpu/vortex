@@ -64,7 +64,7 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace) {
 
   req_out_.send(req);
   DT(4, "dxa-unit submit: core=" << core_->id() << ", wid=" << trace->wid
-     << ", slot=" << desc_slot << ", bar=" << bar_id
+     << ", slot=" << desc_slot << ", bar=" << raw_bar
      << ", cta_mask=0x" << std::hex << cta_mask << std::dec);
   return trace;
 }

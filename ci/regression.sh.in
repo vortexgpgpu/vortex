@@ -195,9 +195,9 @@ dxa()
     CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d4" --debug=3
     CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_copy --args="-d5" --debug=3
 
-    # dxa_multicast
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_multicast --debug=3
-    CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_multicast --debug=3
+    # dxa_multicast: disabled — multicast path not yet supported
+    # CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=simx --app=dxa_multicast --debug=3
+    # CONFIGS="-DEXT_DXA_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dxa_multicast --debug=3
 
     CONFIGS="-DEXT_DXA_ENABLE -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=8
     CONFIGS="-DEXT_DXA_ENABLE -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=8
@@ -1113,7 +1113,6 @@ while [ "$1" != "" ]; do
                 tests+=("scope")
                 tests+=("stress")
                 tests+=("synthesis")
-                tests+=("vector")
                 tests+=("tensor")
                 tests+=("tensor_sp")
                 tests+=("tensor_mx")

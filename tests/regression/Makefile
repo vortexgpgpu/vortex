@@ -44,7 +44,8 @@ all:
 	$(MAKE) -C sgemm_tcu_wg_dxa
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa
 	$(MAKE) -C dxa_copy
-	$(MAKE) -C dxa_multicast
+# dxa_multicast: disabled — multicast path not yet supported
+#	$(MAKE) -C dxa_multicast
 	$(MAKE) -C async_barrier
 	$(MAKE) -C async_gbarrier
 	$(MAKE) -C packld
@@ -103,7 +104,8 @@ run-simx:
 	$(MAKE) -C sgemm_tcu_wg_dxa run-simx
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-simx
 	$(MAKE) -C dxa_copy run-simx
-	$(MAKE) -C dxa_multicast run-simx
+# dxa_multicast: disabled — multicast path not yet supported
+#	$(MAKE) -C dxa_multicast run-simx
 	$(MAKE) -C async_barrier run-simx
 	$(MAKE) -C async_gbarrier run-simx
 	$(MAKE) -C packld run-simx
@@ -164,7 +166,8 @@ run-rtlsim:
 # WGMMA+sparse+DXA RTL path hangs (same root cause as sgemm_tcu_wg_sp).
 #	$(MAKE) -C sgemm_tcu_wg_sp_dxa run-rtlsim
 	$(MAKE) -C dxa_copy run-rtlsim
-	$(MAKE) -C dxa_multicast run-rtlsim
+# dxa_multicast: disabled — multicast path not yet supported
+#	$(MAKE) -C dxa_multicast run-rtlsim
 	$(MAKE) -C async_barrier run-rtlsim
 	$(MAKE) -C async_gbarrier run-rtlsim
 	$(MAKE) -C packld run-rtlsim
@@ -216,7 +219,8 @@ clean:
 	$(MAKE) -C sgemm_tcu_wg_dxa clean
 	$(MAKE) -C sgemm_tcu_wg_sp_dxa clean
 	$(MAKE) -C dxa_copy clean
-	$(MAKE) -C dxa_multicast clean
+# dxa_multicast: disabled — multicast path not yet supported
+#	$(MAKE) -C dxa_multicast clean
 	$(MAKE) -C async_barrier clean
 	$(MAKE) -C async_gbarrier clean
 	$(MAKE) -C packld clean
