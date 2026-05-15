@@ -67,6 +67,23 @@ void Dispatcher::on_tick() {
         ++block_sent;
         continue;
       }
+      // Compute the total number of packets we'll emit on the first call
+      // for this trace (block_pid==0). Each SIMD group with any active
+      // lane gets one packet; sparse divergent tmasks emit fewer than
+      // num_packets_. Commit uses num_pkts to defer the scoreboard
+      // release until every packet's writeback has applied — without it,
+      // an eop packet that completes ahead of its peers (cache responses
+      // arrive out of order) would release the destination while some
+      // lanes are still stale.
+      if (block_pid == 0) {
+        uint32_t n_pkts = 0;
+        for (uint32_t j = 0; j < NUM_THREADS; j += num_lanes_) {
+          for (uint32_t k = 0; k < num_lanes_; ++k) {
+            if (trace->tmask.test(j + k)) { ++n_pkts; break; }
+          }
+        }
+        trace->num_pkts = n_pkts == 0 ? 1 : n_pkts;
+      }
       // calculate current packet start and end
       int start(-1), end(-1);
       for (uint32_t j = block_pid * num_lanes_, n = NUM_THREADS; j < n; ++j) {

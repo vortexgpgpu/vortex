@@ -42,6 +42,14 @@ public:
 
   void release(instr_trace_t* trace);
 
+  // Per-packet commit notifier. Returns true when every SIMD-split packet
+  // for the instruction owning this destination register has committed
+  // (i.e., when the caller should call release()). For non-split traces
+  // (num_pkts==1) this returns true on the first call. Independent of the
+  // dispatcher's `eop` flag — eop fires on the last DISPATCHED packet,
+  // but cache responses may complete out of order, so we count COMMITS.
+  bool commit_packet(instr_trace_t* trace);
+
 protected:
   void on_reset();
 
@@ -52,6 +60,7 @@ private:
 
   std::vector<std::vector<RegMask>> in_use_regs_;
   std::unordered_map<uint32_t, instr_trace_t*> owners_;
+  std::unordered_map<uint32_t, uint32_t> commit_counts_;
 
   friend class SimObject<Scoreboard>;
 };

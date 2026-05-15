@@ -626,16 +626,20 @@ public:
 
       // Per-pid writeback: dispatcher splits multi-pid traces into copies
       // each carrying its own lane-subset tmask + dst_data; every pid pass
-      // writes back independently. Scoreboard release and perf accounting
-      // gate on eop (full instruction completion).
+      // writes back independently. Scoreboard release counts COMMITS via
+      // num_pkts (set by dispatcher at sop) rather than gating on eop —
+      // cache responses can complete out of order, so a SIMD-split eop
+      // packet may reach commit before its peers; releasing on eop would
+      // expose stale lanes to the next dependent instruction's
+      // fetch_operands. Perf accounting still gates on eop.
       if (trace->wb) {
         operands_.at(iw)->writeback(trace);
+        if (scoreboard_->commit_packet(trace)) {
+          scoreboard_->release(trace);
+        }
       }
 
       if (trace->eop) {
-        if (trace->wb) {
-          scoreboard_->release(trace);
-        }
 
         // instruction mix profiling
         switch (trace->fu_type) {

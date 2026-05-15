@@ -35,6 +35,7 @@ void Scoreboard::on_reset() {
     }
   }
   owners_.clear();
+  commit_counts_.clear();
 }
 
 bool Scoreboard::in_use(instr_trace_t* trace) const {
@@ -91,4 +92,17 @@ void Scoreboard::release(instr_trace_t* trace) {
   in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).reset(trace->dst_reg.idx);
   assert(owners_.count(reg_id) != 0);
   owners_.erase(reg_id);
+  commit_counts_.erase(reg_id);
+}
+
+bool Scoreboard::commit_packet(instr_trace_t* trace) {
+  uint32_t reg_id = get_reg_id(trace->dst_reg, trace->wid);
+  auto& n = commit_counts_[reg_id];
+  ++n;
+  if (n >= trace->num_pkts) {
+    // All packets committed; counter erased by release(). Reset before
+    // erase isn't necessary, release() clears the entry.
+    return true;
+  }
+  return false;
 }

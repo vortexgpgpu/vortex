@@ -64,6 +64,15 @@ public:
   bool sop;
   bool eop;
 
+  // Total number of SIMD-split packets the dispatcher will emit for this
+  // warp instruction. Set on the first packet emit and propagated via the
+  // copy constructor. Commit uses this to defer scoreboard release until
+  // every packet's writeback has applied — otherwise the eop packet's
+  // commit (which may complete before earlier packets when cache responses
+  // arrive out of order) would release the destination while some lanes
+  // are still stale, letting a dependent instruction read pre-load data.
+  uint32_t num_pkts;
+
   bool fetch_stall;
 
   uint64_t issue_time ;
@@ -87,11 +96,14 @@ public:
     , pid(-1)
     , sop(true)
     , eop(true)
+    , num_pkts(1)
     , fetch_stall(false)
     , issue_time(SimPlatform::instance().cycles())
     , log_once_(false)
   {}
 
+  // num_pkts copy propagates the warp-instruction packet count from the
+  // first dispatcher emit to subsequent copies; see field-level comment.
   instr_trace_t(const instr_trace_t& rhs)
     : uuid(rhs.uuid)
     , cid(rhs.cid)
@@ -112,6 +124,7 @@ public:
     , pid(rhs.pid)
     , sop(rhs.sop)
     , eop(rhs.eop)
+    , num_pkts(rhs.num_pkts)
     , fetch_stall(rhs.fetch_stall)
     , issue_time(rhs.issue_time)
     , log_once_(false)
