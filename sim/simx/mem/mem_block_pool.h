@@ -24,23 +24,90 @@ namespace vortex {
 // into a single pool allocation, eliminating the malloc/free hot path that
 // dominates simulator runtime on memory-heavy workloads.
 //
+// Lifetime: the pool is owned by a shared_ptr held inside every block's
+// allocator copy. std::allocate_shared stores a copy of the allocator in
+// the shared_ptr's control block, so each live mem_block_t pins the pool
+// alive. The pool is destroyed exactly when the static singleton drops its
+// reference AND no live blocks remain — destruction order between
+// libsimx.so and the runtime no longer matters. (Before this, the pool
+// was a plain function-local static and freed its chunks ahead of the
+// shared_ptr<mem_block_t> objects held by CacheBank/MSHR/LocalMem,
+// causing heap corruption at vx_dev_close.)
+//
 // SimX is single-threaded; unsynchronized_pool_resource is lock-free.
-inline std::pmr::unsynchronized_pool_resource& mem_block_pool() {
-  static std::pmr::pool_options opts{
-    /* max_blocks_per_chunk        */ 1024,
-    /* largest_required_pool_block */ sizeof(mem_block_t) + 64
-  };
-  static std::pmr::unsynchronized_pool_resource pool{opts};
+
+namespace detail {
+
+struct mem_block_pool_t : public std::pmr::memory_resource {
+  std::pmr::unsynchronized_pool_resource pool;
+
+  explicit mem_block_pool_t(const std::pmr::pool_options& opts) : pool(opts) {}
+
+  void* do_allocate(std::size_t bytes, std::size_t align) override {
+    return pool.allocate(bytes, align);
+  }
+  void do_deallocate(void* p, std::size_t bytes, std::size_t align) override {
+    pool.deallocate(p, bytes, align);
+  }
+  bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+};
+
+// Allocator that owns its pool via shared_ptr. allocate_shared copies this
+// into the control block, so the pool stays alive for as long as any block
+// (or the static singleton in mem_block_pool()) holds a reference.
+template <typename T>
+class pool_allocator {
+public:
+  using value_type = T;
+  template <typename U> friend class pool_allocator;
+
+  explicit pool_allocator(std::shared_ptr<mem_block_pool_t> pool)
+    : pool_(std::move(pool)) {}
+
+  template <typename U>
+  pool_allocator(const pool_allocator<U>& other) noexcept
+    : pool_(other.pool_) {}
+
+  T* allocate(std::size_t n) {
+    return static_cast<T*>(pool_->allocate(n * sizeof(T), alignof(T)));
+  }
+  void deallocate(T* p, std::size_t n) noexcept {
+    pool_->deallocate(p, n * sizeof(T), alignof(T));
+  }
+
+  template <typename U>
+  bool operator==(const pool_allocator<U>& other) const noexcept {
+    return pool_ == other.pool_;
+  }
+  template <typename U>
+  bool operator!=(const pool_allocator<U>& other) const noexcept {
+    return !(*this == other);
+  }
+
+private:
+  std::shared_ptr<mem_block_pool_t> pool_;
+};
+
+inline const std::shared_ptr<mem_block_pool_t>& mem_block_pool_singleton() {
+  static const auto pool = std::make_shared<mem_block_pool_t>(
+    std::pmr::pool_options{
+      /* max_blocks_per_chunk        */ 1024,
+      /* largest_required_pool_block */ sizeof(mem_block_t) + 64
+    });
   return pool;
 }
 
+} // namespace detail
+
 inline std::shared_ptr<mem_block_t> make_mem_block() {
-  std::pmr::polymorphic_allocator<mem_block_t> alloc(&mem_block_pool());
+  detail::pool_allocator<mem_block_t> alloc(detail::mem_block_pool_singleton());
   return std::allocate_shared<mem_block_t>(alloc);
 }
 
 inline std::shared_ptr<mem_block_t> make_mem_block_copy(const mem_block_t& src) {
-  std::pmr::polymorphic_allocator<mem_block_t> alloc(&mem_block_pool());
+  detail::pool_allocator<mem_block_t> alloc(detail::mem_block_pool_singleton());
   return std::allocate_shared<mem_block_t>(alloc, src);
 }
 
