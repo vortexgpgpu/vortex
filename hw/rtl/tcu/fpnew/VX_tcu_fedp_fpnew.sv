@@ -34,14 +34,15 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*, fpnew_pkg::*; #(
 
     localparam TCK = 2 * N;
     localparam LEVELS = $clog2(TCK);
-    localparam FMUL_LATENCY = 2;
-    localparam FADD_LATENCY = 2;
+    localparam FMUL_LATENCY = 6;
+    localparam FMUX_LATENCY = 1;
+    localparam FADD_LATENCY = 7;
     localparam FRED_LATENCY = LEVELS * FADD_LATENCY;
-    localparam TOTAL_LATENCY = FMUL_LATENCY + 1 + FRED_LATENCY + FADD_LATENCY;
+    localparam TOTAL_LATENCY = FMUL_LATENCY + FMUX_LATENCY + FRED_LATENCY + FADD_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
     localparam FMT_DELAY = FMUL_LATENCY;
-    localparam C_DELAY = FMUL_LATENCY + 1 + FRED_LATENCY;
+    localparam C_DELAY = FMUL_LATENCY + FMUX_LATENCY + FRED_LATENCY;
 
     `UNUSED_VAR ({fmt_s[4:3], fmt_d, c_val});
 
@@ -115,7 +116,7 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*, fpnew_pkg::*; #(
 
         VX_pipe_register #(
             .DATAW (32),
-            .DEPTH (1)
+            .DEPTH (FMUX_LATENCY)
         ) pipe_mulsel (
             .clk      (clk),
             .reset    (reset),
