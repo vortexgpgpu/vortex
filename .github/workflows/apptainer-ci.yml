@@ -1,6 +1,12 @@
 name: Apptainer CI
 
-on: [push, pull_request]
+# Auto-triggers disabled to avoid doubling CI runtime alongside ci.yml.
+# Invoke manually from the Actions tab when validating container changes.
+on:
+  workflow_dispatch:
+
+env:
+  CCACHE_DISABLE: 1
 
 jobs:
   container:
@@ -49,8 +55,60 @@ jobs:
           name: vortex-sif
           path: miscs/apptainer/vortex.sif
 
+  setup:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
+
+      - name: Install Dependencies
+        if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          sudo bash ./ci/install_dependencies.sh
+
+      - name: Setup Toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          TOOLDIR=$PWD/tools
+          mkdir -p build
+          cd build
+          ../configure --tooldir=$TOOLDIR
+          ci/toolchain_install.sh --all
+          ci/sst_install.sh
+
+      - name: Setup Third Party
+        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          make -C third_party > /dev/null
+
   build:
-    needs: [container]
+    needs: [container, setup]
     runs-on: ubuntu-24.04
 
     strategy:
@@ -64,8 +122,6 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install Apptainer
         uses: eWaterCycle/setup-apptainer@v2
@@ -78,52 +134,25 @@ jobs:
           name: vortex-sif
           path: miscs/apptainer/
 
-      - name: Access Toolchain Cache
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-          restore-keys: |
-            toolchain-${{ matrix.os }}-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
-      - name: Build Toolchain On Miss
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          echo "Cache miss: building toolchain..."
-          mkdir -p build
-          cd build
-          ../configure --tooldir=${{ github.workspace }}/tools
-          ci/toolchain_install.sh --all
-
-      - name: Save Updated Toolchain Cache
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-
-      - name: Access Third Party Cache
+      - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
-
-      - name: Build Third Party On Miss
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
-        run: |
-          sudo bash ./ci/install_dependencies.sh
-          make -C third_party > /dev/null
-
-      - name: Save Updated Third Party Cache
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
       - name: Run Build In Apptainer
         run: |
@@ -134,18 +163,19 @@ jobs:
             --pwd ${{ github.workspace }} \
             --env APPTAINER_TOOLDIR=/tools \
             --env CCACHE_DISABLE=1 \
+            --env SST_CORE_HOME=/tools/sst-install/sst-core \
+            --env SST_ELEMENTS_HOME=/tools/sst-install/sst-elements \
+            --env PATH=/tools/sst-install/sst-core/bin:/tools/sst-install/sst-elements/bin:$PATH \
             miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
               echo "--- Inside Container ---"
-
-              ./configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
 
               mkdir -p build${{ matrix.xlen }}
               pushd build${{ matrix.xlen }}
 
               ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
 
-              source ../ci/toolchain_env.sh
+              source ci/toolchain_env.sh
 
               make software -s
               make tests -s
@@ -158,17 +188,18 @@ jobs:
         with:
           name: build-${{ matrix.os }}-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
-  test:
-    needs: [container, build]
+  tests:
+    needs: [container, setup, build]
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
 
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-24.04]
         xlen: [32, 64]
         # dxa + tensor_wg disabled: features not yet complete (see regression{32,64}_failures.md)
-        name: [regression, amo, mpi, dtm, cache, config1, config2, debug, scope, stress, synthesis, cupbop, hip, tensor, tensor_sp, tensor_mx]
-        # name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, cupbop, tensor]
+        name: [regression, amo, mpi, dtm, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_mx]
         # hip is rv64-only — chipStar emits Physical64 SPIR-V which POCL
         # refuses on a 32-bit Vortex device (see v3.0 release notes).
         exclude:
@@ -181,8 +212,6 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install Apptainer
         uses: eWaterCycle/setup-apptainer@v2
@@ -195,52 +224,25 @@ jobs:
           name: vortex-sif
           path: miscs/apptainer/
 
-      - name: Access Toolchain Cache
+      - name: Read version pins
+        id: vers
+        run: |
+          source VERSION
+          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-          restore-keys: |
-            toolchain-${{ matrix.os }}-
+          key: ${{ matrix.os }}-toolchain-${{ steps.vers.outputs.toolchain }}
 
-      - name: Build Toolchain On Miss
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          echo "Cache miss: building toolchain..."
-          mkdir -p build
-          cd build
-          ../configure --tooldir=${{ github.workspace }}/tools
-          ci/toolchain_install.sh --all
-
-      - name: Save Updated Toolchain Cache
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-
-      - name: Access Third Party Cache
+      - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
-
-      - name: Build Third Party On Miss
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
-        run: |
-          sudo bash ./ci/install_dependencies.sh
-          make -C third_party > /dev/null
-
-      - name: Save Updated Third Party Cache
-        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
+          key: ${{ matrix.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
@@ -248,7 +250,7 @@ jobs:
           name: build-${{ matrix.os }}-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
 
-      - name: Run Build In Apptainer
+      - name: Run Tests In Apptainer
         run: |
           apptainer exec \
             --writable-tmpfs \
@@ -258,34 +260,20 @@ jobs:
             --pwd ${{ github.workspace }} \
             --env APPTAINER_TOOLDIR=/tools \
             --env CCACHE_DISABLE=1 \
+            --env SST_CORE_HOME=/tools/sst-install/sst-core \
+            --env SST_ELEMENTS_HOME=/tools/sst-install/sst-elements \
+            --env PATH=/tools/sst-install/sst-core/bin:/tools/sst-install/sst-elements/bin:$PATH \
             miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
 
-              echo "--- what is my tooldir? ---"
-              echo $APPTAINER_TOOLDIR
-
-              echo "--- what is in my tooldir? ---"
-              ls $APPTAINER_TOOLDIR
-
-              echo "can we find ccache?"
-              which ccache || echo "ccache not found"
-
-
-              ./configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
-
               pushd build${{ matrix.xlen }}
 
-              ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
-
               source ci/toolchain_env.sh
-
-              echo "is verilator alive?"
-              which verilator || echo "no verilator o.0"
 
               chmod -R +x .
               if [ "${{ matrix.name }}" == "regression" ]; then
                 ./ci/regression.sh --unittest
-                ./ci/regression.sh --isa
+                ./ci/regression.sh --riscv
                 ./ci/regression.sh --kernel
                 ./ci/regression.sh --regression
               else
@@ -296,7 +284,7 @@ jobs:
 
   complete:
     runs-on: ubuntu-24.04
-    needs: [test]
+    needs: [tests]
     steps:
       - name: Check Completion
         run: echo "All tests passed, in Apptainer"

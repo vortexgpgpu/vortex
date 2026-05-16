@@ -15,6 +15,9 @@ name: CI
 
 on: [push, pull_request]
 
+env:
+  CCACHE_DISABLE: 1
+
 jobs:
   setup:
     strategy:
@@ -118,8 +121,8 @@ jobs:
           cd build${{ matrix.xlen }}
           ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
           source ci/toolchain_env.sh
-          make software -s > /dev/null
-          make tests -s > /dev/null
+          make software -s
+          make tests -s
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
@@ -134,7 +137,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04]
         # dxa + tensor_wg disabled: features not yet complete (see regression{32,64}_failures.md)
-        name: [regression, amo, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_mx]
+        name: [regression, amo, mpi, dtm, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_mx]
         xlen: [32, 64]
         # chipStar's hipcc emits Physical64 SPIR-V; POCL refuses it on
         # rv32 Vortex (CL_INVALID_OPERATION). hip is rv64-only until
@@ -195,7 +198,7 @@ jobs:
           if [ "${{ matrix.name }}" == "regression" ]; then
             ./ci/regression.sh --unittest
             ./ci/regression.sh --riscv
-            # TODO: ./ci/regression.sh --kernel
+            ./ci/regression.sh --kernel
             ./ci/regression.sh --regression
           else
             ./ci/regression.sh --${{ matrix.name }}
