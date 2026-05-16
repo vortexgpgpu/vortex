@@ -115,6 +115,7 @@ jobs:
       - name: Build Third Party On Miss
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
+          sudo bash ./ci/install_dependencies.sh
           make -C third_party > /dev/null
 
       - name: Save Updated Third Party Cache
@@ -226,6 +227,7 @@ jobs:
       - name: Build Third Party On Miss
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
+          sudo bash ./ci/install_dependencies.sh
           make -C third_party > /dev/null
 
       - name: Save Updated Third Party Cache

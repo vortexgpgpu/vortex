@@ -31,7 +31,9 @@ check_gcc_version() {
 apt-get update -y
 
 # install system dependencies
-apt-get install -y build-essential valgrind libstdc++6 binutils python3 uuid-dev ccache cmake libffi8
+# libpng-dev + libboost-serialization-dev are required by third_party/cocogfx
+# (src/png.cpp pulls in png.h, src/cgltrace.cpp pulls in boost/serialization).
+apt-get install -y build-essential valgrind libstdc++6 binutils python3 uuid-dev ccache cmake libffi8 libpng-dev libboost-serialization-dev
 
 # Check and install GCC 11 if necessary
 if check_gcc_version; then
