@@ -1,17 +1,18 @@
 Testbench: sgemm_tcu_op
-Sparsity Mode:0 | MxNxK=32x32x128 | A sparsity=0% | B sparsity=0.146484% | It=fp8
+Sparsity Mode:2 | MxNxK=64x64x512 | A sparsity=50.1648% | B sparsity=49.7955% | It=fp8
 Flags: TCU_OP, TCU_TYPE_DPI
 BLOCK_M=2, BLOCK_N=16, XBAR_QUEUE_DEPTH=2
-perf=0
+Threads: 32, Warps: 2
 
-PASS
-Total kernel cycles: 16263
-Total kernel instructions: 209
-Kernel body cycles: 7015
-Kernel body instructions: 60
-MUL active cycles: 4096
-XBAR stalls: 0.00% (0 cycles)
+FAIL
+Error count: unknown
+Total kernel cycles: 650
+Total kernel instructions: N/A
+Kernel body cycles: 650
+Kernel body instructions: N/A
+MUL active cycles: 6209
+XBAR stalls: 29.05% (2542 cycles)
 
-PERF0: instrs=209, cycles=16263, IPC=0.013
-
-TCU cycles (from first TCU issue to last TCU commit): 4283
+TCU cycles (from first TCU issue to last TCU commit): 8761
+MULs active: 6209
+TCU utilization: 955.23%

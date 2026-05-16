@@ -40,7 +40,7 @@ def parse_args():
         "--output",
         default=None,
         type=Path,
-        help="Output PNG path. Defaults to <stats_dir>/run_all_sparsity_linear.png.",
+        help="Output image path. Defaults to <stats_dir>/run_all_sparsity_linear.png. A PDF copy is also written.",
     )
     parser.add_argument(
         "--csv",
@@ -176,6 +176,16 @@ def grouped_series(rows):
     return series
 
 
+def save_figure(fig, output):
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=220, bbox_inches="tight")
+
+    pdf_output = output.with_suffix(".pdf")
+    if pdf_output != output:
+        fig.savefig(pdf_output, bbox_inches="tight")
+    return pdf_output
+
+
 def plot(rows, output, metric):
     series = grouped_series(rows)
     metric_key = "total_cycles" if metric == "total" else "body_cycles"
@@ -233,9 +243,9 @@ def plot(rows, output, metric):
         spine.set_linewidth(1.0)
 
     fig.tight_layout()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output, dpi=220, bbox_inches="tight")
+    pdf_output = save_figure(fig, output)
     plt.close(fig)
+    return pdf_output
 
 
 def main():
@@ -245,8 +255,9 @@ def main():
     csv_output = args.csv or stats_dir / "run_all_sparsity_linear.csv"
     rows = load_rows(stats_dir)
     write_csv(rows, csv_output)
-    plot(rows, output, args.metric)
+    pdf_output = plot(rows, output, args.metric)
     print(f"wrote {output}")
+    print(f"wrote {pdf_output}")
     print(f"wrote {csv_output}")
 
 

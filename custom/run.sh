@@ -181,6 +181,7 @@ run_ip_test() {
   run_locked_make env CONFIGS="${ip_build_configs}" make -C "${app_build_dir}" || return $?
 
   echo "Runtime args (${app}): ${ip_app_args}"
+  echo "Writing log (${app}): ${log_file}"
   local blackbox_cmd=(
     ./ci/blackbox.sh
     --driver=rtlsim \
@@ -366,6 +367,7 @@ if [[ "${RUN_TCU_OP}" -eq 1 ]]; then
   fi
 
   echo "Runtime args: ${APP_ARGS_STR}"
+  echo "Writing log (sgemm_tcu_op): ${LOG_FILE}"
   BLACKBOX_CMD=(
     ./ci/blackbox.sh
     --driver=rtlsim

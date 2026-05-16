@@ -90,11 +90,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
   auto pD = reinterpret_cast<uint32_t *>(arg->D_addr);
   auto pA_bitmap = reinterpret_cast<const uint32_t *>(arg->A_bitmap_addr);
   auto pB_bitmap = reinterpret_cast<const uint32_t *>(arg->B_bitmap_addr);
-  // auto pA_nz = reinterpret_cast<const uint32_t *>(arg->A_nz_addr);
-  // auto pB_nz = reinterpret_cast<const uint32_t *>(arg->B_nz_addr);
 
-  // const uint32_t A_compressed_blocks = arg->A_compressed_blocks;
-  // const uint32_t B_compressed_blocks = arg->B_compressed_blocks;
   const uint32_t max_a_blocks = arg->max_a_blocks;
   const uint32_t max_b_blocks = arg->max_b_blocks;
   static constexpr uint32_t M = SGEMM_CONST_M;
@@ -106,12 +102,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
   static constexpr bool kSparseA = (kConstSparsity == 2);
   static constexpr bool kSparseB = (kConstSparsity >= 1);
 
-  // ctx::fragment_a   fragA;
-  // ctx::fragment_b   fragB;
-  // ctx::fragment_acc fragC;
-
   static constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(ctx::input_t);
-  // static constexpr uint32_t lg_i_ratio = __builtin_ctz(i_ratio);
   static constexpr uint32_t o_ratio = sizeof(uint32_t) / sizeof(ctx::output_t);
 
   static constexpr uint32_t tile_M = 32;
@@ -128,30 +119,17 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
   vortex::barrier tcu_bar[2]  = { vortex::barrier(2, num_warps_per_cta), vortex::barrier(3, num_warps_per_cta) };
 
   static_assert (LMEM_ENABLED);
-  // static constexpr uint32_t input_bytes = sizeof(ctx::input_t);
-  // static constexpr uint32_t lg_input_bytes = __builtin_ctz(input_bytes);
+
   static constexpr uint32_t tileC_regs = tile_M * tile_N / o_ratio;
   static constexpr uint32_t tileD_regs = tile_M * tile_N / o_ratio;
   static constexpr uint32_t lmem_capacity_bytes = (1u << LMEM_LOG_SIZE);
   static constexpr uint32_t half_lmem_bytes = lmem_capacity_bytes >> 1;
   static constexpr uint32_t dense_a_tile_regs = tile_M * tile_K / i_ratio;
   static constexpr uint32_t dense_b_tile_regs = tile_K * tile_N / i_ratio;
-  // static constexpr uint32_t tiles_bytes = (dense_a_tile_regs + dense_b_tile_regs) * sizeof(uint32_t);
-
-
-  // static constexpr uint32_t LMEM_OVERFLOW_MARKER = 0x4c4d454d;
-  // if (sparsity == 0 && (tiles_bytes > half_lmem_bytes)) 
-  // {
-  //   if (vx_thread_id() == 0) {
-  //     pD[0] = LMEM_OVERFLOW_MARKER;
-  //   }
-  //   return;
-  // }
   
   uint32_t* lmem_base = reinterpret_cast<uint32_t *>(__local_mem(lmem_capacity_bytes));
   uint32_t* half0_base = lmem_base;
   uint32_t* half1_base = half0_base + (half_lmem_bytes / sizeof(uint32_t));
-  // uint32_t* half1_end  = half1_base + (half_lmem_bytes / sizeof(uint32_t));
   static constexpr uint32_t half_lmem_regs = half_lmem_bytes / sizeof(uint32_t);
   // uint32_t* half0_C_base = half0_base + half_lmem_regs - tileC_regs;
   // uint32_t* half1_C_base = half1_base + half_lmem_regs - tileC_regs;
@@ -259,9 +237,6 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
     launch_pending_mma();
     tcu_bar[current_stage].arrive_and_wait();
   } 
-  
-  
-  
   
   else {
 

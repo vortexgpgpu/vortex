@@ -33,6 +33,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     parameter TAG_WIDTH         = 16,
 
     // Enable DMA port
+    parameter DMA_DEFER_REQS = 0,
     parameter DMA_ENABLE        = 0,
     parameter DMA_TAG_WIDTH     = 1,
 
@@ -223,6 +224,12 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]  per_bank_rsp_tag;
     wire [NUM_BANKS-1:0]                 per_bank_rsp_ready;
 
+    // Requests on ports [0, DMA_DEFER_REQS) — the TCU LMEM path under
+    // TCU_OP — preempt DMA at the banks; DMA still preempts every other
+    // request port. DMA beats stay all-or-nothing across banks.
+    wire [NUM_BANKS-1:0] dma_defer_conflict;
+    wire dma_ok = ~(| dma_defer_conflict);
+
     // DMA port handshake
     //   rw=0 reads  : accepted when the response pipe-buffer has space.
     //   rw=1 writes : always accepted; no response issued.
@@ -233,9 +240,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     if (DMA_ENABLE) begin : g_dma_enable
         `UNUSED_VAR (dma_bus_if.req_data.attr)
 
-        assign dma_bus_if.req_ready = dma_bus_if.req_data.rw || dma_rsp_buf_ready;
+        assign dma_bus_if.req_ready = dma_ok && (dma_bus_if.req_data.rw || dma_rsp_buf_ready);
 
-        wire dma_rd_fire = dma_bus_if.req_valid && ~dma_bus_if.req_data.rw && dma_rsp_buf_ready;
+        wire dma_rd_fire = dma_bus_if.req_valid && dma_ok && ~dma_bus_if.req_data.rw && dma_rsp_buf_ready;
 
         // Delay tag by 1 cycle to align with SRAM OUT_REG latency
         VX_pipe_buffer #(
@@ -291,14 +298,23 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_data_store
         wire bank_rsp_valid, bank_rsp_ready;
 
-        // DMA active signals (priority over LSU)
+        if (DMA_DEFER_REQS != 0) begin : g_dma_defer
+            assign dma_defer_conflict[i] = per_bank_req_valid[i]
+                                        && (per_bank_req_idx[i] < REQ_SEL_WIDTH'(DMA_DEFER_REQS));
+        end else begin : g_no_dma_defer
+            assign dma_defer_conflict[i] = 1'b0;
+        end
+
+        // DMA active signals (priority over LSU, deferring to the leading ports)
         wire dma_wr_b = DMA_ENABLE
                      && dma_bus_if.req_valid
+                     && dma_ok
                      && dma_bus_if.req_data.rw
                      && (|dma_bus_if.req_data.byteen[i*WORD_SIZE +: WORD_SIZE]);
 
         wire dma_rd_b = DMA_ENABLE
                      && dma_bus_if.req_valid
+                     && dma_ok
                      && ~dma_bus_if.req_data.rw
                      && dma_rsp_buf_ready;
 

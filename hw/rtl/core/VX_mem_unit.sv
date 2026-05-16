@@ -137,8 +137,17 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .mem_bus_if (lmem_block_if)
         );
 
+`ifdef TCU_OP
+        // The local-memory request xbar arbiter is fixed-priority (lowest
+        // index first): give the TCU block ports [0, NUM_LSU_LANES) so its
+        // LMEM traffic preempts LSU traffic.
+        localparam ADAPT_BASE = (i == `VX_CFG_NUM_LSU_BLOCKS) ? 0
+                              : ((i + 1) * `VX_CFG_NUM_LSU_LANES);
+`else
+        localparam ADAPT_BASE = i * `VX_CFG_NUM_LSU_LANES;
+`endif
         for (genvar j = 0; j < `VX_CFG_NUM_LSU_LANES; ++j) begin : g_lmem_adapt_if
-            `ASSIGN_VX_MEM_BUS_IF (lmem_adapt_if[i * `VX_CFG_NUM_LSU_LANES + j], lmem_block_if[j]);
+            `ASSIGN_VX_MEM_BUS_IF (lmem_adapt_if[ADAPT_BASE + j], lmem_block_if[j]);
         end
     end
 
@@ -249,6 +258,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
         .TAG_WIDTH   (LSU_TAG_WIDTH),
         .DMA_ENABLE  (LMEM_DMA_EN),
+`ifdef TCU_OP
+        // TCU ports preempt DMA (DXA) as well: TCU > DXA > LSU.
+        .DMA_DEFER_REQS (`VX_CFG_NUM_LSU_LANES),
+`endif
         .DMA_TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
         .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED),
         .OUT_BUF     (3)
