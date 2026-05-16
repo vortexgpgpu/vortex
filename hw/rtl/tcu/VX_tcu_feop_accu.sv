@@ -247,6 +247,7 @@ end
         .data_in  ({xbar_enable_out,   xbar_slot_out, xbar_from_queue_out}),
         .data_out ({bank_write_bitmap, bank_slots,    bank_from_queue})
     );    
+    `UNUSED_VAR(bank_from_queue)
 
     reg [63:0] sum64;
 `ifdef TCU_TYPE_DPI
@@ -435,9 +436,9 @@ end
 
     // Debug dump placed at end for easy grep in logs
     always_ff @(posedge clk) begin
-        integer r;
-        integer c;
-        integer idx;
+        // integer r;
+        // integer c;
+        // integer idx;
         if (~reset && enable && (|xbar_valid_in || |xbar_enable_out || |bank_write_bitmap)) begin
              `TRACE(2, ("%t: [feop_accu]: |xbar_valid_in=%b write_block[0]=%0d,       |xbar_enable_out=%b, xbar_slot_out[0]=%0d,     |bank_write_bitmap=%b\n", $time, |xbar_valid_in, write_block[0], |xbar_enable_out, xbar_slot_out[0], |bank_write_bitmap));
         end
@@ -450,111 +451,111 @@ end
         if (~reset && enable && write_fire) begin
             `TRACE(2, ("%t: [feop_accu]: WRITE req row_valid=%b col_valid=%b\n",
                        $time, write_addr_row_valid, write_addr_col_valid));
-            `TRACE(2, ("%t: [feop_accu]: WRITE row_addrs: ", $time));
-            for (r = 0; r < BLOCK_M; ++r) begin
-                `TRACE(2, ("%0d ", write_addr_row[r]));
-            end
-            `TRACE(2, ("\n"));
-            `TRACE(2, ("%t: [feop_accu]: WRITE col_addrs: ", $time));
-            for (c = 0; c < BLOCK_N; ++c) begin
-                `TRACE(2, ("%0d ", write_addr_col[c]));
-            end
-            `TRACE(2, ("\n"));
-            `TRACE(2, ("%t: [feop_accu]: WRITE data (%0dx%0d):\n", $time, BLOCK_M, BLOCK_N));
-            for (r = 0; r < BLOCK_M; ++r) begin
-                `TRACE(2, ("  "));
-                for (c = 0; c < BLOCK_N; ++c) begin
-                    idx = r * BLOCK_N + c;
-                    `TRACE(2, ("0x%0h ", write_data[idx]));
-                end
-                `TRACE(2, ("\n"));
-            end
+            // `TRACE(2, ("%t: [feop_accu]: WRITE row_addrs: ", $time));
+            // for (r = 0; r < BLOCK_M; ++r) begin
+            //     `TRACE(2, ("%0d ", write_addr_row[r]));
+            // end
+            // `TRACE(2, ("\n"));
+            // `TRACE(2, ("%t: [feop_accu]: WRITE col_addrs: ", $time));
+            // for (c = 0; c < BLOCK_N; ++c) begin
+            //     `TRACE(2, ("%0d ", write_addr_col[c]));
+            // end
+            // `TRACE(2, ("\n"));
+            // `TRACE(2, ("%t: [feop_accu]: WRITE data (%0dx%0d):\n", $time, BLOCK_M, BLOCK_N));
+            // for (r = 0; r < BLOCK_M; ++r) begin
+            //     `TRACE(2, ("  "));
+            //     for (c = 0; c < BLOCK_N; ++c) begin
+            //         idx = r * BLOCK_N + c;
+            //         `TRACE(2, ("0x%0h ", write_data[idx]));
+            //     end
+            //     `TRACE(2, ("\n"));
+            // end
             `TRACE(2, ("\n"));
         end
         if (~reset && enable && (|bank_write_en)) begin
-            `TRACE(2, ("%t: [feop_accu]: ACCU bank writes (blocks):\n",
-                        $time));
-            for (r = 0; r < BLOCK_M; ++r) begin
-                `TRACE(2, ("  "));
-                for (c = 0; c < BLOCK_N; ++c) begin
-                    idx = r * BLOCK_N + c;
-                    if (bank_write_en[idx]) begin
-                        `TRACE(2, ("%02d:%02d ", bank_waddr[idx], idx));
-                    end else begin
-                        `TRACE(2, ("   -   "));
-                    end
-                end
-                `TRACE(2, ("\n"));
-            end
-            `TRACE(2, ("%t: [feop_accu]: ACCU bank writes (data):\n", $time));
-            for (r = 0; r < BLOCK_M; ++r) begin
-                `TRACE(2, ("  "));
-                for (c = 0; c < BLOCK_N; ++c) begin
-                    idx = r * BLOCK_N + c;
-                    if (bank_write_en[idx]) begin
-                        `TRACE(2, ("0x%0h%s ", bank_wdata[idx], bank_from_queue[idx] ? "(Q)" : "(I)"));
-                    end else begin
-                        `TRACE(2, ("- "));
-                    end
-                end
-                `TRACE(2, ("\n"));
-            end
+            // `TRACE(2, ("%t: [feop_accu]: ACCU bank writes (blocks):\n",
+            //             $time));
+            // for (r = 0; r < BLOCK_M; ++r) begin
+            //     `TRACE(2, ("  "));
+            //     for (c = 0; c < BLOCK_N; ++c) begin
+            //         idx = r * BLOCK_N + c;
+            //         if (bank_write_en[idx]) begin
+            //             `TRACE(2, ("%02d:%02d ", bank_waddr[idx], idx));
+            //         end else begin
+            //             `TRACE(2, ("   -   "));
+            //         end
+            //     end
+            //     `TRACE(2, ("\n"));
+            // end
+            // `TRACE(2, ("%t: [feop_accu]: ACCU bank writes (data):\n", $time));
+            // for (r = 0; r < BLOCK_M; ++r) begin
+            //     `TRACE(2, ("  "));
+            //     for (c = 0; c < BLOCK_N; ++c) begin
+            //         idx = r * BLOCK_N + c;
+            //         if (bank_write_en[idx]) begin
+            //             `TRACE(2, ("0x%0h%s ", bank_wdata[idx], bank_from_queue[idx] ? "(Q)" : "(I)"));
+            //         end else begin
+            //             `TRACE(2, ("- "));
+            //         end
+            //     end
+            //     `TRACE(2, ("\n"));
+            // end
         end
         if (~reset && enable && read_en && (|bank_read_en)) begin
-            `TRACE(2, ("%t: [feop_accu]: ACCU bank reads (blocks) from read_en:\n", $time));
-            for (r = 0; r < BLOCK_M; ++r) begin
-                `TRACE(2, ("  "));
-                for (c = 0; c < BLOCK_N; ++c) begin
-                    idx = r * BLOCK_N + c;
-                    if (bank_read_en[idx]) begin
-                        `TRACE(2, ("%0d:%0d ", bank_raddr[idx], idx));
-                    end else begin
-                        `TRACE(2, ("- "));
-                    end
-                end
-                `TRACE(2, ("\n"));
-            end
-            `TRACE(2, ("%t: [feop_accu]: ACCU bank reads (data) from read_en:\n", $time));
-            for (r = 0; r < BLOCK_M; ++r) begin
-                `TRACE(2, ("  "));
-                for (c = 0; c < BLOCK_N; ++c) begin
-                    idx = r * BLOCK_N + c;
-                    if (bank_read_en[idx]) begin
-                        `TRACE(2, ("0x%0h ", read_data[idx]));
-                    end else begin
-                        `TRACE(2, ("- "));
-                    end
-                end
-                `TRACE(2, ("\n"));
-            end
+            // `TRACE(2, ("%t: [feop_accu]: ACCU bank reads (blocks) from read_en:\n", $time));
+            // for (r = 0; r < BLOCK_M; ++r) begin
+            //     `TRACE(2, ("  "));
+            //     for (c = 0; c < BLOCK_N; ++c) begin
+            //         idx = r * BLOCK_N + c;
+            //         if (bank_read_en[idx]) begin
+            //             `TRACE(2, ("%0d:%0d ", bank_raddr[idx], idx));
+            //         end else begin
+            //             `TRACE(2, ("- "));
+            //         end
+            //     end
+            //     `TRACE(2, ("\n"));
+            // end
+            // `TRACE(2, ("%t: [feop_accu]: ACCU bank reads (data) from read_en:\n", $time));
+            // for (r = 0; r < BLOCK_M; ++r) begin
+            //     `TRACE(2, ("  "));
+            //     for (c = 0; c < BLOCK_N; ++c) begin
+            //         idx = r * BLOCK_N + c;
+            //         if (bank_read_en[idx]) begin
+            //             `TRACE(2, ("0x%0h ", read_data[idx]));
+            //         end else begin
+            //             `TRACE(2, ("- "));
+            //         end
+            //     end
+            //     `TRACE(2, ("\n"));
+            // end
         end
         if (~reset && enable && ~read_en && (|bank_read_en)) begin
-            `TRACE(2, ("%t: [feop_accu]: ACCU bank reads (blocks) for gather:\n", $time));
-            for (r = 0; r < BLOCK_M; ++r) begin
-                `TRACE(2, ("  "));
-                for (c = 0; c < BLOCK_N; ++c) begin
-                    idx = r * BLOCK_N + c;
-                    if (bank_read_en[idx]) begin
-                        `TRACE(2, ("%0d:%0d ", bank_raddr[idx], idx));
-                    end else begin
-                        `TRACE(2, ("- "));
-                    end
-                end
-                `TRACE(2, ("\n"));
-            end
-            `TRACE(2, ("%t: [feop_accu]: ACCU bank reads (data) for gather:\n", $time));
-            for (r = 0; r < BLOCK_M; ++r) begin
-                `TRACE(2, ("  "));
-                for (c = 0; c < BLOCK_N; ++c) begin
-                    idx = r * BLOCK_N + c;
-                    if (bank_read_en[idx]) begin
-                        `TRACE(2, ("0x%0h ", bank_rdata[idx]));
-                    end else begin
-                        `TRACE(2, ("- "));
-                    end
-                end
-                `TRACE(2, ("\n"));
-            end
+            // `TRACE(2, ("%t: [feop_accu]: ACCU bank reads (blocks) for gather:\n", $time));
+            // for (r = 0; r < BLOCK_M; ++r) begin
+            //     `TRACE(2, ("  "));
+            //     for (c = 0; c < BLOCK_N; ++c) begin
+            //         idx = r * BLOCK_N + c;
+            //         if (bank_read_en[idx]) begin
+            //             `TRACE(2, ("%0d:%0d ", bank_raddr[idx], idx));
+            //         end else begin
+            //             `TRACE(2, ("- "));
+            //         end
+            //     end
+            //     `TRACE(2, ("\n"));
+            // end
+            // `TRACE(2, ("%t: [feop_accu]: ACCU bank reads (data) for gather:\n", $time));
+            // for (r = 0; r < BLOCK_M; ++r) begin
+            //     `TRACE(2, ("  "));
+            //     for (c = 0; c < BLOCK_N; ++c) begin
+            //         idx = r * BLOCK_N + c;
+            //         if (bank_read_en[idx]) begin
+            //             `TRACE(2, ("0x%0h ", bank_rdata[idx]));
+            //         end else begin
+            //             `TRACE(2, ("- "));
+            //         end
+            //     end
+            //     `TRACE(2, ("\n"));
+            // end
         end
         if (~reset && enable && read_en) begin
             `TRACE(2, ("%t: [feop_accu]: read_en active, read_block_idx=%0d, |xbar_enable_out=%b, ~overwrite_delayed=%b, |xbar_slot_out[0]=%0d\n",
