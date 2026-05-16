@@ -104,10 +104,23 @@ int main(int argc, char** argv) {
   HIP_CHECK(hipMemcpy(d_b, h_b.data(), nbytes, hipMemcpyHostToDevice));
 
   printf("Execute the kernel '%s'\n", KERNEL_NAME);
-  const uint32_t block_dim = 8;
+  // Clamp block_dim so block_dim*block_dim <= device maxThreadsPerBlock.
+  // Vortex's default build_test{32,64} config exposes max=32, which
+  // fails the hard-coded 8x8=64 launch (hipErrorLaunchFailure). See
+  // tests/hip/vecadd/main.cpp for the same pattern.
+  int dev_id = 0;
+  HIP_CHECK(hipGetDevice(&dev_id));
+  hipDeviceProp_t dev_props{};
+  HIP_CHECK(hipGetDeviceProperties(&dev_props, dev_id));
+  uint32_t block_dim = 8;
+  while (block_dim > 1 &&
+         (int)(block_dim * block_dim) > dev_props.maxThreadsPerBlock)
+    block_dim /= 2;
   const uint32_t grid_dim  = (size + block_dim - 1) / block_dim;
   dim3 block(block_dim, block_dim);
   dim3 grid(grid_dim, grid_dim);
+  printf("block=%ux%u (device max=%d)\n",
+         block_dim, block_dim, dev_props.maxThreadsPerBlock);
 
   auto t0 = std::chrono::high_resolution_clock::now();
   sgemm<<<grid, block, 0, 0>>>(d_a, d_b, d_c, (int)size);

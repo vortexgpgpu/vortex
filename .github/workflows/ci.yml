@@ -134,8 +134,15 @@ jobs:
       matrix:
         os: [ubuntu-24.04]
         # dxa + tensor_wg disabled: features not yet complete (see regression{32,64}_failures.md)
-        name: [regression, amo, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, tensor, tensor_sp, tensor_mx]
+        name: [regression, amo, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_mx]
         xlen: [32, 64]
+        # chipStar's hipcc emits Physical64 SPIR-V; POCL refuses it on
+        # rv32 Vortex (CL_INVALID_OPERATION). hip is rv64-only until
+        # either chipStar grows --offload=spirv32 or the native
+        # HIPVortex toolchain lands (see hip_support_proposal.md).
+        exclude:
+          - name: hip
+            xlen: 32
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
 

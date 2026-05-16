@@ -998,10 +998,31 @@ cupbop() {
     echo "cupbop tests done!"
 }
 
+hip()
+{
+    # chipStar's hipcc emits SPIR-V with OpMemoryModel Physical64; POCL
+    # refuses it on a 32-bit Vortex device with CL_INVALID_OPERATION.
+    # Skip on rv32 -- documented in vortex-toolchain-prebuilt v3.0 README.
+    if [ "$XLEN" == "32" ]; then
+        echo "hip tests skipped for 32-bit (chipStar emits Physical64 SPIR-V; see v3.0 release notes)"
+        return
+    fi
+
+    echo "begin hip tests..."
+
+    make -C sw/runtime/simx
+    make -C sw/runtime/rtlsim
+
+    make -C tests/hip run-simx
+    make -C tests/hip run-rtlsim
+
+    echo "hip tests done!"
+}
+
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1087,6 +1108,9 @@ while [ "$1" != "" ]; do
         --cupbop )
                 tests+=("cupbop")
                 ;;
+        --hip )
+                tests+=("hip")
+                ;;
         --sst )
                 tests+=("sst")
                 ;;
@@ -1118,6 +1142,7 @@ while [ "$1" != "" ]; do
                 tests+=("tensor_mx")
                 tests+=("tensor_wg")
                 tests+=("cupbop")
+                tests+=("hip")
                 tests+=("dtm")
                 ;;
         -h | --help )
