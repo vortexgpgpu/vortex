@@ -60,19 +60,19 @@ riscv64()
 llvm()
 {
     case $OSVERSION in
-    "centos/7") parts=$(eval echo {a..b}) ;;
-    *)          parts=$(eval echo {a..b}) ;;
+    "centos/7") parts=$(eval echo {a..e}) ;;
+    *)          parts=$(eval echo {a..e}) ;;
     esac
     echo $parts
-    rm -f llvm-vortex21.tar.bz2.parta*
+    rm -f llvm-vortex.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/llvm-vortex/$OSVERSION/llvm-vortex21.tar.bz2.parta$x
+        wget $REPOSITORY/llvm-vortex/$OSVERSION/llvm-vortex.tar.bz2.parta$x
     done
-    cat llvm-vortex21.tar.bz2.parta* > llvm-vortex21.tar.bz2
-    tar -xvf llvm-vortex21.tar.bz2
+    cat llvm-vortex.tar.bz2.parta* > llvm-vortex.tar.bz2
+    tar -xvf llvm-vortex.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/llvm-vortex && mv llvm-vortex $TOOLDIR
-    rm -rf llvm-vortex llvm-vortex21.tar.bz2*
+    rm -rf llvm-vortex llvm-vortex.tar.bz2*
 }
 
 libcrt32()
@@ -109,10 +109,18 @@ libc64()
 
 pocl()
 {
-    wget $REPOSITORY/pocl/$OSVERSION/pocl2.tar.bz2
-    tar -xvf pocl2.tar.bz2
+    wget $REPOSITORY/pocl/$OSVERSION/pocl.tar.bz2
+    tar -xvf pocl.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/pocl && mv pocl $TOOLDIR
-    rm -rf pocl2 pocl2.tar.bz2
+    rm -rf pocl.tar.bz2
+}
+
+chipstar()
+{
+    wget $REPOSITORY/chipstar/$OSVERSION/chipstar.tar.bz2
+    tar -xvf chipstar.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/chipstar && mv chipstar $TOOLDIR
+    rm -rf chipstar.tar.bz2
 }
 
 verilator()
@@ -169,12 +177,14 @@ sta()
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
         --pocl ) pocl
+                ;;
+        --chipstar ) chipstar
                 ;;
         --verilator ) verilator
                 ;;
@@ -199,6 +209,7 @@ while [ "$1" != "" ]; do
         --sta ) sta
                 ;;
         --all ) pocl
+                chipstar
                 verilator
                 llvm
                 libcrt32
