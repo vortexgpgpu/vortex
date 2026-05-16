@@ -12,7 +12,7 @@ SRC_DIR := $(VORTEX_HOME)/sw/kernel/src
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
-LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-divergence=0
+LLVM_CFLAGS += -Xclang -target-feature -Xclang +xvortex -mllvm -vortex-branch-divergence=0
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX)
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0
 #LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0

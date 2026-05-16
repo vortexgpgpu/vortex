@@ -298,10 +298,12 @@ The output `libclang_rt.builtins-riscv{32,64}.a` lands at
 `$TOOLDIR/libcrt{32,64}/lib/baremetal/`.
 
 > **Target-feature naming:** v3.0 uses `+xvortex` for the Vortex
-> ISA extension. The legacy `+vortex` name is still recognized by
-> the `vortex_3.x` Clang for backwards-compatibility with older
-> test makefiles (`tests/{kernel,regression}/common.mk`), but new
-> code should use `+xvortex`.
+> ISA extension. The pre-v3 name `+vortex` is **not** recognized
+> by the `vortex_3.x` Clang and will be silently ignored with a
+> "not a recognized feature for this target" warning — codegen
+> then falls back to plain RISC-V without the Vortex extensions.
+> Every consumer (Makefile, build script, CMake) must pass
+> `+xvortex`.
 
 ---
 
