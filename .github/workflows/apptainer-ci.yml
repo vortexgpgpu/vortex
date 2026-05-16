@@ -132,6 +132,7 @@ jobs:
             --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
             --pwd ${{ github.workspace }} \
             --env APPTAINER_TOOLDIR=/tools \
+            --env CCACHE_DISABLE=1 \
             miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
               echo "--- Inside Container ---"
@@ -249,6 +250,7 @@ jobs:
             --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
             --pwd ${{ github.workspace }} \
             --env APPTAINER_TOOLDIR=/tools \
+            --env CCACHE_DISABLE=1 \
             miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
 
