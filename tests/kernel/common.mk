@@ -9,6 +9,7 @@ STARTUP_ADDR ?= 0x80000000
 
 VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
 
+LLVM_CFLAGS += --target=riscv$(XLEN)-unknown-elf
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex

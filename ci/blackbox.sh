@@ -166,7 +166,6 @@ main() {
     export VCD_FILE=$VCD_FILE
     export SAIF_FILE=$SAIF_FILE
 
-    make -C "$ROOT_DIR/hw" config > /dev/null
     make -C "$ROOT_DIR/sw/runtime/stub" > /dev/null
 
     if [ $TEMPBUILD -eq 1 ]; then
