@@ -324,6 +324,42 @@ inline bool quantize_mx_rowwise_blocks(OutT* quantized,
   return true;
 }
 
+template <typename OutT, typename ConvertFn>
+inline bool quantize_mx_colwise_blocks(OutT* quantized,
+                                       std::vector<uint8_t>& scale_meta,
+                                       const float* dense_rowmajor,
+                                       uint32_t K,
+                                       uint32_t N,
+                                       uint32_t block_size,
+                                       ConvertFn convert,
+                                       uint8_t (*select_scale)(float)) {
+  if ((K == 0) || (N == 0) || (block_size == 0) || ((K % block_size) != 0)) {
+    return false;
+  }
+
+  uint32_t k_blocks = K / block_size;
+  scale_meta.resize(k_blocks * N);
+
+  for (uint32_t n = 0; n < N; ++n) {
+    for (uint32_t kb = 0; kb < k_blocks; ++kb) {
+      uint32_t k0 = kb * block_size;
+      float max_abs = 0.0f;
+      for (uint32_t i = 0; i < block_size; ++i) {
+        float v = dense_rowmajor[(k0 + i) * N + n];
+        max_abs = std::max(max_abs, std::abs(v));
+      }
+      uint8_t sf = select_scale(max_abs);
+      scale_meta[kb * N + n] = sf;
+      for (uint32_t i = 0; i < block_size; ++i) {
+        uint32_t k = k0 + i;
+        quantized[n * K + k] = convert(dense_rowmajor[k * N + n], sf);
+      }
+    }
+  }
+
+  return true;
+}
+
 inline bool quantize_mxfp8_a_rowmajor(uint8_t* quantized,
                                       std::vector<uint8_t>& scale_meta,
                                       const float* dense,
@@ -337,7 +373,7 @@ inline bool quantize_mxfp8_a_rowmajor(uint8_t* quantized,
       false, convert, select_mxfp8_scale);
 }
 
-inline bool quantize_mxfp8_b_rowmajor(uint8_t* quantized,
+inline bool quantize_mxfp8_b_colmajor(uint8_t* quantized,
                                       std::vector<uint8_t>& scale_meta,
                                       const float* dense_rowmajor,
                                       uint32_t K,
@@ -345,9 +381,9 @@ inline bool quantize_mxfp8_b_rowmajor(uint8_t* quantized,
   auto convert = [](float v, uint8_t sf) {
     return rv_ftomxfp8_s(bit_cast<uint32_t>(v), sf, 0, nullptr);
   };
-  return quantize_mx_rowwise_blocks<uint8_t>(
+  return quantize_mx_colwise_blocks<uint8_t>(
       quantized, scale_meta, dense_rowmajor, K, N, mxfp8::ele_block,
-      true, convert, select_mxfp8_scale);
+      convert, select_mxfp8_scale);
 }
 
 inline uint8_t select_mxint8_scale(float max_abs) {
@@ -375,7 +411,7 @@ inline bool quantize_mxint8_a_rowmajor(int8_t* quantized,
       false, convert, select_mxint8_scale);
 }
 
-inline bool quantize_mxint8_b_rowmajor(int8_t* quantized,
+inline bool quantize_mxint8_b_colmajor(int8_t* quantized,
                                        std::vector<uint8_t>& scale_meta,
                                        const float* dense_rowmajor,
                                        uint32_t K,
@@ -383,9 +419,9 @@ inline bool quantize_mxint8_b_rowmajor(int8_t* quantized,
   auto convert = [](float v, uint8_t sf) {
     return static_cast<int8_t>(rv_ftomxint8_s(bit_cast<uint32_t>(v), sf, 0, nullptr));
   };
-  return quantize_mx_rowwise_blocks<int8_t>(
+  return quantize_mx_colwise_blocks<int8_t>(
       quantized, scale_meta, dense_rowmajor, K, N, mxint8::ele_block,
-      true, convert, select_mxint8_scale);
+      convert, select_mxint8_scale);
 }
 
 inline float select_nvfp4_tensor_scale(float max_abs) {
@@ -465,6 +501,50 @@ inline bool quantize_nvfp4_rowwise_blocks(uint8_t* quantized,
   return true;
 }
 
+inline bool quantize_nvfp4_colwise_blocks(uint8_t* quantized,
+                                          std::vector<uint8_t>& scale_meta,
+                                          float& tensor_scale,
+                                          const float* dense_rowmajor,
+                                          uint32_t K,
+                                          uint32_t N) {
+  if ((K == 0) || (N == 0) || ((K % nvfp4::ele_block) != 0)) {
+    return false;
+  }
+
+  float tensor_max = 0.0f;
+  for (uint32_t i = 0; i < K * N; ++i) {
+    tensor_max = std::max(tensor_max, std::abs(dense_rowmajor[i]));
+  }
+  tensor_scale = select_nvfp4_tensor_scale(tensor_max);
+
+  uint32_t packed_size = (K * N + 1) / 2;
+  std::fill(quantized, quantized + packed_size, 0);
+
+  uint32_t k_blocks = K / nvfp4::ele_block;
+  scale_meta.resize(k_blocks * N);
+
+  for (uint32_t n = 0; n < N; ++n) {
+    for (uint32_t kb = 0; kb < k_blocks; ++kb) {
+      uint32_t k0 = kb * nvfp4::ele_block;
+      float max_abs = 0.0f;
+      for (uint32_t i = 0; i < nvfp4::ele_block; ++i) {
+        float v = dense_rowmajor[(k0 + i) * N + n] / tensor_scale;
+        max_abs = std::max(max_abs, std::abs(v));
+      }
+      uint8_t sf = select_nvfp4_block_scale(max_abs);
+      scale_meta[kb * N + n] = sf;
+      for (uint32_t i = 0; i < nvfp4::ele_block; ++i) {
+        uint32_t k = k0 + i;
+        float v = dense_rowmajor[k * N + n] / tensor_scale;
+        uint8_t q = rv_ftonvfp4_s(bit_cast<uint32_t>(v), sf, 0, nullptr) & 0x0f;
+        detail::data_accessor_t<nvfp4>::write(quantized, n * K + k, q);
+      }
+    }
+  }
+
+  return true;
+}
+
 inline bool quantize_nvfp4_a_rowmajor(uint8_t* quantized,
                                       std::vector<uint8_t>& scale_meta,
                                       float& tensor_scale,
@@ -475,14 +555,14 @@ inline bool quantize_nvfp4_a_rowmajor(uint8_t* quantized,
                                        dense, rows, cols, false);
 }
 
-inline bool quantize_nvfp4_b_rowmajor(uint8_t* quantized,
+inline bool quantize_nvfp4_b_colmajor(uint8_t* quantized,
                                       std::vector<uint8_t>& scale_meta,
                                       float& tensor_scale,
                                       const float* dense_rowmajor,
                                       uint32_t K,
                                       uint32_t N) {
-  return quantize_nvfp4_rowwise_blocks(quantized, scale_meta, tensor_scale,
-                                       dense_rowmajor, K, N, true);
+  return quantize_nvfp4_colwise_blocks(quantized, scale_meta, tensor_scale,
+                                       dense_rowmajor, K, N);
 }
 
 } // namespace tensor

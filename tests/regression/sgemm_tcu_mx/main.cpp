@@ -39,31 +39,9 @@ using otype_t = typename vt::OTYPE::dtype;
 static constexpr uint32_t kElemsPerByte = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 1;
 static constexpr uint32_t kScalePack = 4;
 
-template <typename T>
-static void convert_row_to_col_major(T *dst, const T *src, uint32_t rows, uint32_t cols) {
-  for (uint32_t r = 0; r < rows; ++r) {
-    for (uint32_t c = 0; c < cols; ++c) {
-      dst[c * rows + r] = src[r * cols + c];
-    }
-  }
-}
-
 static uint8_t read_nibble(const uint8_t *ptr, uint32_t offset) {
   uint8_t value = ptr[offset / 2];
   return (offset & 1) ? (value >> 4) : (value & 0x0f);
-}
-
-static void convert_row_to_col_major_4bit(uint8_t *dst, const uint8_t *src, uint32_t rows, uint32_t cols) {
-  std::fill(dst, dst + ((rows * cols + 1) / 2), 0);
-  for (uint32_t r = 0; r < rows; ++r) {
-    for (uint32_t c = 0; c < cols; ++c) {
-      uint32_t dst_idx = c * rows + r;
-      uint8_t value = read_nibble(src, r * cols + c);
-      uint8_t &out = dst[dst_idx / 2];
-      out = (dst_idx & 1) ? ((out & 0x0f) | (value << 4))
-                          : ((out & 0xf0) | value);
-    }
-  }
 }
 
 static uint32_t pack4(const std::vector<uint8_t> &scales, uint32_t start) {
@@ -188,7 +166,7 @@ static void matmul_cpu(otype_t *C,
           uint8_t sf_a = scale_a[m * scale_blocks_k + scale_k];
           uint8_t sf_b = scale_b[scale_k * N + n];
           int32_t shift = static_cast<int32_t>(sf_a) - 133 + static_cast<int32_t>(sf_b) - 133;
-          int32_t product = static_cast<int32_t>(A[m * K_logical + k]) * static_cast<int32_t>(B[k * N + n]);
+          int32_t product = static_cast<int32_t>(A[m * K_logical + k]) * static_cast<int32_t>(B[n * K_logical + k]);
           sum += trunc_shift(product, shift);
         }
         C[m * N + n] = sum;
@@ -198,7 +176,7 @@ static void matmul_cpu(otype_t *C,
           uint32_t scale_k = k / vt::ITYPE::ele_block;
           auto a = dequantize_mx_value(A, scale_a, m * K_logical + k,
                                        m * scale_blocks_k + scale_k, tensor_scale_a);
-          auto b = dequantize_mx_value(B, scale_b, k * N + n,
+          auto b = dequantize_mx_value(B, scale_b, n * K_logical + k,
                                        scale_k * N + n, tensor_scale_b);
           sum += a * b;
         }
@@ -349,14 +327,14 @@ int main(int argc, char *argv[]) {
   bool ok = false;
   if constexpr (std::is_same<vt::ITYPE, vt::mxfp8>::value) {
     ok = vt::quantize_mxfp8_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
-      && vt::quantize_mxfp8_b_rowmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
+      && vt::quantize_mxfp8_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
   } else if constexpr (std::is_same<vt::ITYPE, vt::mxint8>::value) {
     ok = vt::quantize_mxint8_a_rowmajor(reinterpret_cast<int8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
-      && vt::quantize_mxint8_b_rowmajor(reinterpret_cast<int8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
+      && vt::quantize_mxint8_b_colmajor(reinterpret_cast<int8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
   } else {
     ok = vt::quantize_nvfp4_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, A_tensor_scale,
                                        h_A_dense.data(), M, K_logical)
-      && vt::quantize_nvfp4_b_rowmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, B_tensor_scale,
+      && vt::quantize_nvfp4_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, B_tensor_scale,
                                        h_B_dense.data(), K_logical, N);
   }
   if (!ok) {
@@ -383,15 +361,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, sizeA * sizeof(itype_t)));
-  if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {
-    std::vector<uint8_t> h_B_col(sizeB);
-    convert_row_to_col_major_4bit(h_B_col.data(), reinterpret_cast<const uint8_t*>(h_B.data()), K_logical, N);
-    RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB * sizeof(itype_t)));
-  } else {
-    std::vector<itype_t> h_B_col(sizeB);
-    convert_row_to_col_major(h_B_col.data(), h_B.data(), K_storage, N);
-    RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB * sizeof(itype_t)));
-  }
+  RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
   RT_CHECK(vx_copy_to_dev(MX_A_buffer, h_mx_a.data(), 0, h_mx_a.size() * sizeof(uint32_t)));
   RT_CHECK(vx_copy_to_dev(MX_B_buffer, h_mx_b.data(), 0, h_mx_b.size() * sizeof(uint32_t)));
 #ifdef TCU_MX_TLS
