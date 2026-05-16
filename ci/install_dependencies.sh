@@ -33,7 +33,10 @@ apt-get update -y
 # install system dependencies
 # libpng-dev + libboost-serialization-dev are required by third_party/cocogfx
 # (src/png.cpp pulls in png.h, src/cgltrace.cpp pulls in boost/serialization).
-apt-get install -y build-essential valgrind libstdc++6 binutils python3 uuid-dev ccache cmake libffi8 libpng-dev libboost-serialization-dev
+# opencl-headers ships CL/opencl.h needed by tests/opencl host code; the prebuilt
+# POCL tarball doesn't include host-API headers, so this is the system fallback.
+# ocl-icd-opencl-dev provides libOpenCL.so symlinks for host-side linking.
+apt-get install -y build-essential valgrind libstdc++6 binutils python3 uuid-dev ccache cmake libffi8 libpng-dev libboost-serialization-dev opencl-headers ocl-icd-opencl-dev
 
 # Check and install GCC 11 if necessary
 if check_gcc_version; then

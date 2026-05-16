@@ -18,7 +18,8 @@ The components covered here are:
 4. [compiler-rt for Vortex](#4-compiler-rt-for-vortex) — baremetal builtins
 5. [musl libc for Vortex](#5-musl-libc-for-vortex) — C standard library
 6. [POCL for Vortex](#6-pocl-for-vortex) — OpenCL implementation with the Vortex device target
-7. [OpenSTA](#7-opensta) — static timing analysis (optional)
+7. [chipStar](#7-chipstar-hip-host-runtime) — HIP host runtime layered on POCL
+8. [OpenSTA](#8-opensta) — static timing analysis (optional)
 
 ---
 
@@ -145,17 +146,19 @@ make -j$(nproc) build-qemu
   backend).
 - The linker for both (`ld.lld`).
 
-> **Targets to build:** for the bespoke HIP path
-> ([hip_support_proposal.md](proposals/hip_support_proposal.md)
-> Path A) and chipStar
-> ([chipstar_on_vortex_proposal.md](proposals/chipstar_on_vortex_proposal.md)),
-> the same Clang must serve both host and device compilation. We
-> therefore enable **both `RISCV` and `X86`** in
-> `LLVM_TARGETS_TO_BUILD`, and **enable `lld`** so the host link
-> step has a working `ld.lld`.
+> **Targets to build:** the same Clang must serve both host
+> compilation (HIP host code via chipStar, plus any C++ host tools)
+> and device compilation (Vortex RISC-V kernels). We therefore
+> enable **both `RISCV` and `X86`** in `LLVM_TARGETS_TO_BUILD` and
+> **enable `lld`** so the host link step has a working `ld.lld`.
+
+> **v3.0 pin:** branch `vortex_3.x` (LLVM 20.1.8, commit
+> `87f0227c`). The Vortex-specific `+xvortex` / `+zicond`
+> target-feature flags require this branch — upstream LLVM does
+> not recognize them.
 
 ```bash
-git clone --recursive --branch vortex_2.x https://github.com/vortexgpgpu/llvm.git llvm_vortex
+git clone --recursive --branch vortex_3.x https://github.com/vortexgpgpu/llvm.git llvm_vortex
 cd llvm_vortex
 mkdir build && cd build
 
@@ -172,8 +175,6 @@ cmake -G "Unix Makefiles" \
     -DLLVM_INCLUDE_BENCHMARKS=OFF \
     -DLLVM_INCLUDE_EXAMPLES=OFF \
     -DLLVM_INCLUDE_TESTS=OFF \
-    -DDEFAULT_SYSROOT=$RISCV_TOOLCHAIN_PATH/riscv32-unknown-elf \
-    -DLLVM_DEFAULT_TARGET_TRIPLE="riscv32-unknown-elf" \
     ../llvm
 
 make -j$(nproc)
@@ -182,11 +183,13 @@ make install
 
 ### Notes
 
-- `DEFAULT_SYSROOT` and `LLVM_DEFAULT_TARGET_TRIPLE` keep
-  `riscv32-unknown-elf` as the default triple so existing Vortex
-  build infrastructure (which calls `clang foo.c` without an
-  explicit `-target` flag) continues to work. The X86 backend is
-  available on demand via `clang --target=x86_64-linux-gnu …`.
+- **Do not set** `LLVM_DEFAULT_TARGET_TRIPLE` or `DEFAULT_SYSROOT`
+  to a RISC-V value. v3.0 leaves the default at the host
+  (`x86_64-unknown-linux-gnu`) so that chipStar's `hipcc` and any
+  other host-side tool that invokes `clang++` without an explicit
+  `--target` keeps working. The Vortex device build passes
+  `--target=riscv$(XLEN)-unknown-elf` explicitly (see
+  `tests/{kernel,regression,opencl,hip}/common.mk`).
 - `LLVM_ENABLE_PROJECTS="clang;lld"` adds `lld` so the toolchain
   ships with `ld.lld` (some host-link toolchains require it; the
   Vortex device flow uses it via `-fuse-ld=lld`).
@@ -201,7 +204,7 @@ The translator binary `llvm-spirv` is built separately against an
 installed LLVM and lives alongside it.
 
 ```bash
-git clone --branch llvm_release_180 --depth 1 \
+git clone --branch llvm_release_200 --depth 1 \
     https://github.com/KhronosGroup/SPIRV-LLVM-Translator.git
 cd SPIRV-LLVM-Translator
 mkdir build && cd build
@@ -214,9 +217,9 @@ cmake --build . --target llvm-spirv -j$(nproc)
 cmake --install .
 ```
 
-Match the translator branch (`llvm_release_180` for LLVM 18,
-`llvm_release_170` for LLVM 17, etc.) to the LLVM version you
-just built.
+Match the translator branch to the LLVM major version you built
+(`llvm_release_200` for LLVM 20, `llvm_release_180` for LLVM 18,
+etc.). v3.0 uses `llvm_release_200`.
 
 ---
 
@@ -252,7 +255,7 @@ cmake -G "Unix Makefiles" \
     -DCMAKE_C_COMPILER_TARGET="riscv32-unknown-elf" \
     -DCMAKE_C_FLAGS="--gcc-toolchain=$RISCV_GCC_TOOLCHAIN \
         -march=rv32imaf -mabi=ilp32f \
-        -Xclang -target-feature -Xclang +vortex \
+        -Xclang -target-feature -Xclang +xvortex \
         -Xclang -target-feature -Xclang +zicond \
         -mcmodel=medany -fno-rtti -fno-exceptions \
         -fdata-sections -ffunction-sections" \
@@ -294,6 +297,12 @@ Identical to the 32-bit build except for the substitutions:
 The output `libclang_rt.builtins-riscv{32,64}.a` lands at
 `$TOOLDIR/libcrt{32,64}/lib/baremetal/`.
 
+> **Target-feature naming:** v3.0 uses `+xvortex` for the Vortex
+> ISA extension. The legacy `+vortex` name is still recognized by
+> the `vortex_3.x` Clang for backwards-compatibility with older
+> test makefiles (`tests/{kernel,regression}/common.mk`), but new
+> code should use `+xvortex`.
+
 ---
 
 ## 5. musl libc for Vortex
@@ -316,7 +325,7 @@ CC=$LLVM_PREFIX/bin/clang \
 CFLAGS="--sysroot=$TOOLDIR/riscv32-gnu-toolchain/riscv32-unknown-elf \
         --gcc-toolchain=$TOOLDIR/riscv32-gnu-toolchain \
         -march=rv32imaf -mabi=ilp32f \
-        -Xclang -target-feature -Xclang +vortex \
+        -Xclang -target-feature -Xclang +xvortex \
         -Xclang -target-feature -Xclang +zicond \
         -mcmodel=medany -fno-rtti -fno-exceptions \
         -fdata-sections -ffunction-sections \
@@ -333,7 +342,7 @@ CC=$LLVM_PREFIX/bin/clang \
 CFLAGS="--sysroot=$TOOLDIR/riscv64-gnu-toolchain/riscv64-unknown-elf \
         --gcc-toolchain=$TOOLDIR/riscv64-gnu-toolchain \
         -march=rv64imafd -mabi=lp64d \
-        -Xclang -target-feature -Xclang +vortex \
+        -Xclang -target-feature -Xclang +xvortex \
         -Xclang -target-feature -Xclang +zicond \
         -mcmodel=medany -fno-rtti -fno-exceptions \
         -fdata-sections -ffunction-sections" \
@@ -354,17 +363,18 @@ target. POCL ingests OpenCL-C (and, with SPIR-V enabled,
 SPIR-V via `clCreateProgramWithIL`) and dispatches to the
 Vortex runtime.
 
-> **Active redesign:** the `vortex_2.x` branch is the current
-> baseline. A v3 redesign on top of `upstream/release_6_0` is
-> tracked in
-> [pocl_vortex_v3_proposal.md](proposals/pocl_vortex_v3_proposal.md);
-> consult that proposal for the most current build flags and
-> the integration plan with chipStar and the v3 KMU dispatcher.
+> **v3.0 baseline:** branch `vortex_3.x`, POCL 7.0 derived from
+> `upstream/release_6_0`. Includes the SPIR-V ingestion path
+> (`clCreateProgramWithIL`) and the
+> `cl_ext_buffer_device_address` extension that chipStar's
+> `hipMalloc` relies on. See
+> [pocl_vortex_v3_proposal.md](proposals/pocl_vortex_v3_proposal.md)
+> for the redesign history.
 
-### Baseline (vortex_2.x) build
+### Build
 
 ```bash
-git clone --branch vortex_2.x --recursive https://github.com/vortexgpgpu/pocl
+git clone --branch vortex_3.x --recursive https://github.com/vortexgpgpu/pocl
 cd pocl
 mkdir build && cd build
 
@@ -378,6 +388,8 @@ cmake -G "Unix Makefiles" \
     -DVORTEX_PREFIX=$VORTEX_PREFIX \
     -DENABLE_VORTEX=ON \
     -DENABLE_HOST_CPU_DEVICES=OFF \
+    -DENABLE_SPIRV=ON \
+    -DENABLE_LOADABLE_DRIVERS=OFF \
     -DENABLE_TESTS=OFF \
     -DKERNEL_CACHE_DEFAULT=OFF \
     -DENABLE_ICD=OFF \
@@ -385,8 +397,17 @@ cmake -G "Unix Makefiles" \
 
 make -j$(nproc)
 make install
-cp -r ../include $POCL_PATH    # ship POCL OpenCL headers alongside
+
+# REQUIRED: ship host-side OpenCL headers alongside the POCL install.
+# `make install` with -DENABLE_ICD=OFF does NOT populate $POCL_PATH/include/CL/,
+# so without this step tests/opencl host code fails with
+# "fatal error: CL/opencl.h: No such file or directory".
+cp -r ../include $POCL_PATH
 ```
+
+`ENABLE_SPIRV=ON` requires `llvm-spirv` to be installed under
+`$LLVM_PREFIX` (see
+[§3 SPIRV-LLVM-Translator](#spirv-llvm-translator-optional-required-for-chipstar--spir-v-code-path)).
 
 ### Debug build
 
@@ -397,31 +418,58 @@ cmake -G "Unix Makefiles" \
     ... (same flags otherwise) ..
 ```
 
-### v3 redesign (with SPIR-V + chipStar prerequisites)
+---
 
-The redesign branch lives at `pocl_vortex/vortex_3.x` and is
-based on `upstream/release_6_0`. Configure flags differ — see
-[pocl_vortex_v3_proposal.md §5 Phase 0](proposals/pocl_vortex_v3_proposal.md)
-for the canonical recipe. In short:
+## 7. chipStar (HIP host runtime)
+
+**Purpose**: translate HIP host calls + SPIR-V device kernels to
+OpenCL, so HIP applications can run on POCL/Vortex. Ships
+`hipcc`, `hipconfig`, the `CHIP` host library, and SPIR-V helper
+tools.
+
+> **v3.0 limitation:** chipStar's `hipcc` emits SPIR-V with
+> `OpMemoryModel Physical64` (`--offload=spirv64` is hardcoded),
+> so HIP-on-Vortex is **rv64-only**. POCL rejects the 64-bit
+> SPIR-V on an rv32-configured Vortex device with
+> `CL_INVALID_OPERATION`. See
+> [chipstar_on_vortex_proposal.md](proposals/chipstar_on_vortex_proposal.md)
+> for the full analysis.
 
 ```bash
-cmake .. \
-    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DENABLE_VORTEX=ON \
-    -DENABLE_HOST_CPU_DEVICES=OFF \
-    -DENABLE_SPIRV=ON \
-    -DENABLE_LOADABLE_DRIVERS=OFF \
-    -DWITH_LLVM_CONFIG=$LLVM_PREFIX/bin/llvm-config \
-    -DVORTEX_PREFIX=$VORTEX_PREFIX
+git clone --recursive https://github.com/CHIP-SPV/chipStar.git
+cd chipStar
+mkdir build && cd build
+
+cmake -G "Unix Makefiles" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=$TOOLDIR/chipstar \
+    -DLLVM_CONFIG_BIN=$LLVM_PREFIX/bin/llvm-config \
+    -DCMAKE_C_COMPILER=$LLVM_PREFIX/bin/clang \
+    -DCMAKE_CXX_COMPILER=$LLVM_PREFIX/bin/clang++ \
+    -DCHIP_BUILD_TESTS=OFF \
+    -DCHIP_BUILD_DOCS=OFF \
+    ..
+
+make -j$(nproc)
+make install
 ```
 
-`ENABLE_SPIRV=ON` requires `llvm-spirv` (see
-[§3 SPIRV-LLVM-Translator](#spirv-llvm-translator-optional-required-for-chipstar--spir-v-code-path))
-to be installed under `$LLVM_PREFIX`.
+After install, `$TOOLDIR/chipstar/bin/hipcc` drives a HIP build
+exactly as on AMD/NVIDIA hosts, but offloads to the POCL/Vortex
+OpenCL device.
+
+### Notes
+
+- `hipcc` writes absolute paths into its launcher scripts based
+  on `CMAKE_INSTALL_PREFIX` at install time. If you ever move
+  `$TOOLDIR/chipstar/` to a different path, re-install rather
+  than symlinking — the bin/ launchers will break.
+- chipStar shares the same `clang++` as device-side LLVM (§3),
+  which is why §3 enables both `RISCV` and `X86` targets.
 
 ---
 
-## 7. OpenSTA
+## 8. OpenSTA
 
 **Purpose**: static timing analysis for FPGA / synthesis flows
 (see [synthesis_analysis.md](synthesis_analysis.md)).
@@ -458,25 +506,30 @@ expected layout:
 
 ```
 $TOOLDIR/
-├── verilator/           (verilator + bin + install)
+├── verilator/                  (verilator + bin + install)
 ├── riscv32-gnu-toolchain/
 ├── riscv64-gnu-toolchain/
-├── llvm-vortex/         (clang, ld.lld, llvm-spirv)
+├── llvm-vortex/                (clang, ld.lld, llvm-spirv; LLVM 20.1.8)
 ├── libcrt32/lib/baremetal/libclang_rt.builtins-riscv32.a
 ├── libcrt64/lib/baremetal/libclang_rt.builtins-riscv64.a
 ├── libc32/lib/{libc.a,libm.a}
 ├── libc64/lib/{libc.a,libm.a}
-├── pocl/                (libpocl + headers)
-└── sta/                 (OpenSTA, optional)
+├── pocl/
+│   ├── bin/ etc/ lib/libOpenCL.so* share/pocl/
+│   └── include/CL/*.h          (REQUIRED — see §6; absence breaks tests/opencl)
+├── chipstar/                   (bin/hipcc, lib/libCHIP.so, include/hip/)
+└── sta/                        (OpenSTA, optional)
 ```
 
 The Vortex build script `ci/toolchain_env.sh` exports this layout
 into the shell. Confirm a sane environment with:
 
 ```bash
-$LLVM_PREFIX/bin/clang --version
+$LLVM_PREFIX/bin/clang --version            # expect "clang version 20.1.8"
 $LLVM_PREFIX/bin/ld.lld --version
-$LLVM_PREFIX/bin/llvm-spirv --version       # if installed
+$LLVM_PREFIX/bin/llvm-spirv --version       # if SPIRV-LLVM-Translator installed
 $TOOLDIR/riscv32-gnu-toolchain/bin/riscv32-unknown-elf-gcc --version
 $TOOLDIR/verilator/bin/verilator --version
+$TOOLDIR/chipstar/bin/hipcc --version       # if chipStar installed
+test -f $TOOLDIR/pocl/include/CL/opencl.h && echo "POCL host headers OK"
 ```
