@@ -53,7 +53,11 @@ _start:
 
   # call main program routine
   csrr  a0, VX_CSR_MSCRATCH
-  call  kernel_main
+  # temporarily disable RVC to force 4-byte jal codegen needed by the scheduler's PC-12 next-CTA warp re-entry rewind
+  .option push
+  .option norvc
+  jal   ra, kernel_main
+  .option pop
 
   # shutdown warp
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
