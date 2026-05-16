@@ -624,19 +624,28 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  // The valid tile multiples (cta_M, per_warp_N, tileK) depend on the WGMMA
+  // config (NRC / thread count), so a fixed default -m/-n/-k from the Makefile
+  // cannot satisfy every config. Round the requested dimensions up to the
+  // nearest valid multiple instead of erroring out.
+  auto round_up = [](uint32_t v, uint32_t m) { return ((v + m - 1) / m) * m; };
   if ((M % cta_M) != 0) {
-    std::cout << "Error: M (" << M << ") must be a multiple of cta_M=" << cta_M << "!" << std::endl;
-    return -1;
+    uint32_t M2 = round_up(M, cta_M);
+    std::cout << "Note: M (" << M << ") rounded up to " << M2
+              << " (multiple of cta_M=" << cta_M << ")" << std::endl;
+    M = M2;
   }
-
   if ((N % per_warp_N) != 0) {
-    std::cout << "Error: N (" << N << ") must be a multiple of per_warp_N=" << per_warp_N << "!" << std::endl;
-    return -1;
+    uint32_t N2 = round_up(N, per_warp_N);
+    std::cout << "Note: N (" << N << ") rounded up to " << N2
+              << " (multiple of per_warp_N=" << per_warp_N << ")" << std::endl;
+    N = N2;
   }
-
   if ((K % wg_cfg::tileK) != 0) {
-    std::cout << "Error: K (" << K << ") must be a multiple of tensor tileK=" << wg_cfg::tileK << "!" << std::endl;
-    return -1;
+    uint32_t K2 = round_up(K, wg_cfg::tileK);
+    std::cout << "Note: K (" << K << ") rounded up to " << K2
+              << " (multiple of tensor tileK=" << wg_cfg::tileK << ")" << std::endl;
+    K = K2;
   }
 
   size_t sizeA = M * K;

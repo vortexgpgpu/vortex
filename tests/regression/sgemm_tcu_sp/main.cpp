@@ -911,17 +911,24 @@ int main(int argc, char *argv[]) {
     }
     std::cout << std::endl;
 
-    // Decode metadata bits for sram_row 0 (sm=0, sk=0)
-    // Each sram_row has mcols_d words = mcols_d*32 bits
-    // TC_M rows, each META_ROW_WIDTH bits
+    // Decode metadata bits for sram_row 0 (sm=0, sk=0). Each sram_row has
+    // mcols_d words = mcols_d*32 bits; TC_M rows, each META_ROW_WIDTH bits.
+    // Only meaningful when one sram_row fits in a single 32-bit word — wider
+    // layouts span multiple `h_meta_dbg[]` entries and the raw words printed
+    // above already give a developer what they need to decode by hand.
     constexpr uint32_t meta_row_w_d = cfg::tcK * 2 * cfg::rtl_i_ratio;
     std::cout << "  sram_row0 decoded (TC_M=" << cfg::tcM << " rows, " << meta_row_w_d << " bits each):" << std::endl;
-    uint32_t sram0_word = h_meta_dbg[0];
-    for (uint32_t i = 0; i < cfg::tcM; ++i) {
-      uint32_t row_bits = (sram0_word >> (i * meta_row_w_d)) & ((1u << meta_row_w_d) - 1);
-      printf("    TC_M row %u: bits=0x%x (binary:", i, row_bits);
-      for (int b = meta_row_w_d-1; b >= 0; --b) printf("%d", (row_bits >> b) & 1);
-      printf(")\n");
+    if constexpr (meta_row_w_d > 0 && meta_row_w_d < 32 && cfg::tcM * meta_row_w_d <= 32) {
+      uint32_t sram0_word = h_meta_dbg[0];
+      for (uint32_t i = 0; i < cfg::tcM; ++i) {
+        uint32_t row_bits = (sram0_word >> (i * meta_row_w_d)) & ((1u << meta_row_w_d) - 1);
+        printf("    TC_M row %u: bits=0x%x (binary:", i, row_bits);
+        for (int b = (int)meta_row_w_d - 1; b >= 0; --b) printf("%d", (row_bits >> b) & 1);
+        printf(")\n");
+      }
+    } else {
+      std::cout << "    (per-row binary not displayed: " << (cfg::tcM * meta_row_w_d)
+                << " bits/sram_row > 32; see raw 'Metadata words' above)" << std::endl;
     }
 
     // Show what pruned A looks like for row 0 (full K)
