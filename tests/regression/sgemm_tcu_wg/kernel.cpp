@@ -37,18 +37,30 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   for (uint32_t k = 0; k < K; k += ctx::tileK) {
     uint32_t a_row_base = warp_rank * ctx::xtileM;
-    for (uint32_t i = lane; i < ctx::xtileM * ctx::tileK; i += NUM_THREADS) {
-      uint32_t r = i / ctx::tileK;
-      uint32_t c = i % ctx::tileK;
-      A_smem[(a_row_base + r) * ctx::tileK + c] = pA[(tile_row + a_row_base + r) * K + (k + c)];
+    {
+      auto A_smem_w = reinterpret_cast<uint32_t *>(A_smem);
+      auto pA_w     = reinterpret_cast<const uint32_t *>(pA);
+      uint32_t a_xtileK = ctx::tileK / ctx::i_ratio;
+      for (uint32_t i = lane; i < ctx::xtileM * a_xtileK; i += NUM_THREADS) {
+        uint32_t r = i / a_xtileK;
+        uint32_t c = i % a_xtileK;
+        A_smem_w[(a_row_base + r) * a_xtileK + c] =
+          pA_w[(tile_row + a_row_base + r) * (K / ctx::i_ratio) + (k / ctx::i_ratio + c)];
+      }
     }
 
-    // Cooperatively load B [tileK × per_warp_N] into smem
-    uint32_t b_size = ctx::tileK * ctx::xtileN;
-    for (uint32_t i = tid; i < b_size; i += num_threads) {
-      uint32_t r = i / ctx::xtileN;
-      uint32_t c = i % ctx::xtileN;
-      B_smem[r * ctx::xtileN + c] = pB[(k + r) * N + (tile_col + c)];
+    // Cooperatively load B [tileK × xtileN] into smem
+    {
+      auto B_smem_w = reinterpret_cast<uint32_t *>(B_smem);
+      auto pB_w     = reinterpret_cast<const uint32_t *>(pB);
+      uint32_t b_xtileN = ctx::xtileN / ctx::i_ratio;
+      uint32_t b_size_w = ctx::tileK * b_xtileN;
+      for (uint32_t i = tid; i < b_size_w; i += num_threads) {
+        uint32_t r = i / b_xtileN;
+        uint32_t c = i % b_xtileN;
+        B_smem_w[r * b_xtileN + c] =
+          pB_w[(k + r) * (N / ctx::i_ratio) + (tile_col / ctx::i_ratio + c)];
+      }
     }
 
     __syncthreads();
