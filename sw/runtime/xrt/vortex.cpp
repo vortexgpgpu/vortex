@@ -57,6 +57,32 @@ using namespace vortex;
 #define CTL_AP_RESET (1 << 4)
 #define CTL_AP_RESTART (1 << 7)
 
+// ----- Command Processor regfile -----
+// The AXI-Lite demux in VX_afu_wrap routes host addresses 0x1000..0x1FFF
+// to the CP regfile (mapped to CP's native 0x000-based 12-bit address
+// space). Per VX_cp_axil_regfile §17.4, queue 0 base is at CP-offset 0x100.
+#define CP_BASE              0x1000     // demux split bit
+#define CP_REG_CTRL          (CP_BASE + 0x000)   // bit0 = enable_global
+#define CP_REG_STATUS        (CP_BASE + 0x004)
+#define CP_REG_DEV_CAPS      (CP_BASE + 0x008)
+#define CP_Q_RING_BASE_LO    (CP_BASE + 0x100)
+#define CP_Q_RING_BASE_HI    (CP_BASE + 0x104)
+#define CP_Q_HEAD_ADDR_LO    (CP_BASE + 0x108)
+#define CP_Q_HEAD_ADDR_HI    (CP_BASE + 0x10C)
+#define CP_Q_CMPL_ADDR_LO    (CP_BASE + 0x110)
+#define CP_Q_CMPL_ADDR_HI    (CP_BASE + 0x114)
+#define CP_Q_RING_SIZE_LOG2  (CP_BASE + 0x118)
+#define CP_Q_CONTROL         (CP_BASE + 0x11C)   // bit0 = enable, bits3:2 = prio
+#define CP_Q_TAIL_LO         (CP_BASE + 0x120)
+#define CP_Q_TAIL_HI         (CP_BASE + 0x124)   // atomic commit on write
+#define CP_Q_SEQNUM          (CP_BASE + 0x128)
+#define CP_Q_ERROR           (CP_BASE + 0x12C)
+
+#define CP_RING_SIZE_LOG2    16          // 64 KiB
+#define CP_RING_SIZE         (1u << CP_RING_SIZE_LOG2)
+#define CP_OPCODE_LAUNCH     0x06
+#define CP_LAUNCH_BYTES      12          // 4-byte header + 8-byte arg0
+
 #ifdef CPP_API
 
 typedef xrt::device xrt_device_t;
@@ -279,6 +305,10 @@ public:
     std::cout << "\nPress ENTER to continue after setting up ILA trigger..." << std::endl;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
   #endif
+
+    if (getenv("VORTEX_USE_CP") != nullptr) {
+      CHECK_ERR(this->cp_init(), { return err; });
+    }
 
     return 0;
   }
@@ -631,10 +661,12 @@ public:
 
   int start() {
     // DCRs already written by stub; just trigger execution
+    if (cp_enabled_) return this->cp_post_launch();
     return this->write_register(MMIO_CTL_ADDR, CTL_AP_START);
   }
 
   int ready_wait(uint64_t timeout) {
+    if (cp_enabled_) return this->cp_wait(timeout);
     struct timespec sleep_time;
   #ifndef NDEBUG
     sleep_time.tv_sec = 1;
@@ -692,6 +724,132 @@ public:
     return 0;
   }
 
+  // ----- Command Processor path -----
+  //
+  // When the host sets VORTEX_USE_CP=1 we allocate three device buffers
+  // (ring, consumer-head publish slot, completion slot) and program CP
+  // queue 0 to use them. Subsequent vx_start() calls post a CMD_LAUNCH
+  // into the ring and bump Q_TAIL; ready_wait() polls the cmpl slot.
+  //
+  // DCR programming for the kernel still goes through the legacy AFU_ctrl
+  // path (MMIO 0x20/0x24) before vx_start(), because the upper-layer
+  // vortex2.h KMU helper already emits those writes — the CP only owns
+  // the "go" signal here, not the descriptor build. This keeps the v1
+  // runtime change small while still exercising the full ring path.
+  int cp_init() {
+    CHECK_ERR(this->mem_alloc(CP_RING_SIZE, VX_MEM_READ, &cp_ring_dev_addr_), {
+      return err;
+    });
+    CHECK_ERR(this->mem_alloc(CACHE_BLOCK_SIZE, VX_MEM_WRITE, &cp_head_dev_addr_), {
+      return err;
+    });
+    CHECK_ERR(this->mem_alloc(CACHE_BLOCK_SIZE, VX_MEM_WRITE, &cp_cmpl_dev_addr_), {
+      return err;
+    });
+
+    // Zero ring + slots so the CP doesn't read stale data on the first fetch.
+    std::vector<uint8_t> zeros_cl(CACHE_BLOCK_SIZE, 0);
+    std::vector<uint8_t> zeros_ring(CP_RING_SIZE, 0);
+    CHECK_ERR(this->upload(cp_ring_dev_addr_, zeros_ring.data(), CP_RING_SIZE),
+              { return err; });
+    CHECK_ERR(this->upload(cp_head_dev_addr_, zeros_cl.data(), CACHE_BLOCK_SIZE),
+              { return err; });
+    CHECK_ERR(this->upload(cp_cmpl_dev_addr_, zeros_cl.data(), CACHE_BLOCK_SIZE),
+              { return err; });
+
+    auto wr = [this](uint32_t off, uint32_t val) -> int {
+      return this->write_register(off, val);
+    };
+
+    // Queue 0 programmable state.
+    CHECK_ERR(wr(CP_Q_RING_BASE_LO,   (uint32_t)(cp_ring_dev_addr_ & 0xFFFFFFFFu)), { return err; });
+    CHECK_ERR(wr(CP_Q_RING_BASE_HI,   (uint32_t)(cp_ring_dev_addr_ >> 32)),         { return err; });
+    CHECK_ERR(wr(CP_Q_HEAD_ADDR_LO,   (uint32_t)(cp_head_dev_addr_ & 0xFFFFFFFFu)), { return err; });
+    CHECK_ERR(wr(CP_Q_HEAD_ADDR_HI,   (uint32_t)(cp_head_dev_addr_ >> 32)),         { return err; });
+    CHECK_ERR(wr(CP_Q_CMPL_ADDR_LO,   (uint32_t)(cp_cmpl_dev_addr_ & 0xFFFFFFFFu)), { return err; });
+    CHECK_ERR(wr(CP_Q_CMPL_ADDR_HI,   (uint32_t)(cp_cmpl_dev_addr_ >> 32)),         { return err; });
+    CHECK_ERR(wr(CP_Q_RING_SIZE_LOG2, CP_RING_SIZE_LOG2),                            { return err; });
+    CHECK_ERR(wr(CP_Q_CONTROL,        0x1),                                          { return err; });
+    // Global enable: queue is enabled only when (CP_CTRL.bit0 & Q_CONTROL.bit0).
+    CHECK_ERR(wr(CP_REG_CTRL,         0x1),                                          { return err; });
+
+    cp_enabled_         = true;
+    cp_tail_            = 0;
+    cp_expected_seqnum_ = 0;
+
+    printf("info: CP enabled — ring=0x%lx head=0x%lx cmpl=0x%lx\n",
+           cp_ring_dev_addr_, cp_head_dev_addr_, cp_cmpl_dev_addr_);
+    return 0;
+  }
+
+  int cp_post_launch() {
+    // Build CMD_LAUNCH in a CL-sized scratch buffer (so the device-side
+    // fetcher always loads a full 64 B cache line). The payload is 12 B:
+    //   bytes 0..3 = header { opcode=0x06, flags=0, reserved=0 }
+    //   bytes 4..11 = arg0 (unused by VX_cp_launch in v1)
+    uint8_t cl[CACHE_BLOCK_SIZE] = {0};
+    cl[0] = CP_OPCODE_LAUNCH;
+
+    // Place the descriptor in the ring buffer. We never wrap in the tests
+    // we care about (one launch per vx_start), but the modulo keeps things
+    // correct if the host pushes many.
+    uint64_t ring_offset = cp_tail_ & (CP_RING_SIZE - 1);
+    if (ring_offset + CACHE_BLOCK_SIZE > CP_RING_SIZE) {
+      fprintf(stderr, "[VXDRV] CP ring wraparound mid-CL not yet supported\n");
+      return -1;
+    }
+    CHECK_ERR(this->upload(cp_ring_dev_addr_ + ring_offset, cl, CACHE_BLOCK_SIZE),
+              { return err; });
+
+    // Commit the new tail (Q_TAIL_HI write is the atomic latch).
+    cp_tail_           += CP_LAUNCH_BYTES;
+    cp_expected_seqnum_ += 1;
+    CHECK_ERR(this->write_register(CP_Q_TAIL_LO, (uint32_t)(cp_tail_ & 0xFFFFFFFFu)),
+              { return err; });
+    CHECK_ERR(this->write_register(CP_Q_TAIL_HI, (uint32_t)(cp_tail_ >> 32)),
+              { return err; });
+    return 0;
+  }
+
+  int cp_wait(uint64_t timeout) {
+    struct timespec sleep_time;
+  #ifndef NDEBUG
+    sleep_time.tv_sec = 1; sleep_time.tv_nsec = 0;
+  #else
+    sleep_time.tv_sec = 0; sleep_time.tv_nsec = 1000000;
+  #endif
+    uint64_t sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
+
+    // Poll Q_SEQNUM via the CP regfile (AXI-Lite read). This is the
+    // cheapest sim-advancing op and matches the seqnum the engine bumps
+    // each time it retires a command. xrtsim only ticks the clock during
+    // AXI transactions, so xrtBOSync (no-op) can't make forward
+    // progress on its own — we have to drive register traffic.
+    for (;;) {
+      uint32_t seqnum32 = 0;
+      CHECK_ERR(this->read_register(CP_Q_SEQNUM, &seqnum32), { return err; });
+      if ((uint64_t)seqnum32 >= cp_expected_seqnum_) break;
+      if (0 == timeout) return -1;
+      timeout -= sleep_time_ms;
+    }
+    // Engine retired the CMD_LAUNCH (Phase 2b shortcut: retire fires on
+    // KMU grant, not on actual Vortex completion). Now wait for Vortex
+    // to genuinely finish by polling the legacy AP_DONE bit — the AFU
+    // FSM tracks CP-initiated launches too (sees cp_gpu_if.start), so
+    // AP_DONE eventually rises when vx_busy clears.
+    int drain_spin = 0;
+    for (;;) {
+      uint32_t status = 0;
+      CHECK_ERR(this->read_register(MMIO_CTL_ADDR, &status), { return err; });
+      if (status & CTL_AP_DONE) break;
+      if (++drain_spin > 1000000) {
+        fprintf(stderr, "[CP] timed out waiting for Vortex drain (AP_DONE)\n");
+        return -1;
+      }
+    }
+    return 0;
+  }
+
 private:
 
   MemoryAllocator global_mem_;
@@ -704,6 +862,15 @@ private:
   uint64_t memory_bw_;
   uint32_t lg2_num_banks_;
   uint32_t lg2_bank_size_;
+
+  // Command Processor state. Populated by cp_init() when VORTEX_USE_CP=1
+  // is set in the environment; left zero/disabled otherwise.
+  bool     cp_enabled_         = false;
+  uint64_t cp_ring_dev_addr_   = 0;   // device address of CP ring buffer
+  uint64_t cp_head_dev_addr_   = 0;   // CP-published consumer head pointer
+  uint64_t cp_cmpl_dev_addr_   = 0;   // CP-published retired seqnum
+  uint64_t cp_tail_            = 0;   // next ring write offset (bytes)
+  uint64_t cp_expected_seqnum_ = 0;   // host's seqnum to wait for
 
   uint64_t get_memory_bandwidth(const std::string &device_name) {
     std::string s_name(device_name);

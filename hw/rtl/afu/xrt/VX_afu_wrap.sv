@@ -15,8 +15,34 @@
 
 `include "vortex_afu.vh"
 
+// ============================================================================
+// XRT AFU shim with Command Processor integration.
+//
+// AXI-Lite address space (parent §6.10 / cp_rtl_impl §17):
+//   0x0000..0x0FFF — legacy AP_CTRL + DCR + DEV_CAPS (VX_afu_ctrl, 8b view)
+//   0x1000..0x1FFF — Command Processor regfile, mapped to CP's native
+//                    0x000..0xFFF address space (CP sees addr - 0x1000).
+//                    The bit-12 split is what lets CP_CTRL at CP-offset
+//                    0x000 stay reachable without colliding with the
+//                    legacy AP_CTRL register at host-offset 0x000.
+//
+// Data plane:
+//   * Vortex memory banks 0..N-1 ride the platform AXI4 master ports.
+//   * VX_cp_core has its own axi_m. Bank 0 is shared via VX_axi_arb2 — the
+//     arbiter holds a sticky owner per channel until response completes, so
+//     CP and Vortex can interleave without deadlock. (For sgemm/vecadd the
+//     CP is only active while Vortex is idle anyway, but the arb keeps
+//     correctness if that changes.)
+//
+// Control fan-in to Vortex DCR:
+//   Either legacy AFU_ctrl (DCR writes via the 0x20/0x24 register pair) OR
+//   the CP DCR proxy can issue DCR writes. They never fire concurrently in
+//   a sane host sequence, so the mux is just a "first one wins" combinational
+//   selector keyed on dcr_req_valid. Same for vx_start (OR-combined).
+// ============================================================================
+
 module VX_afu_wrap import VX_gpu_pkg::*; #(
-	parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
+	parameter C_S_AXI_CTRL_ADDR_WIDTH = 16,
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH    = `PLATFORM_MEMORY_ID_WIDTH,
 	parameter C_M_AXI_MEM_DATA_WIDTH  = `PLATFORM_MEMORY_DATA_SIZE * 8,
@@ -113,15 +139,98 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	reg [`RESET_DELAY-1:0] vx_reset_shift_r;
 	reg [PENDING_WR_SIZEW-1:0] vx_pending_writes;
 	wire vx_reset;
-	reg vx_start;
+	reg vx_start_legacy;
+	reg saw_busy;
+	wire vx_start;
 	wire vx_busy;
 
+	// ---- Final DCR signals delivered to Vortex (legacy ∪ CP) ----
 	wire                         dcr_req_valid;
 	wire                         dcr_req_rw;
 	wire [VX_DCR_ADDR_WIDTH-1:0] dcr_req_addr;
 	wire [VX_DCR_DATA_WIDTH-1:0] dcr_req_data;
 	wire                         dcr_rsp_valid;
 	wire [VX_DCR_DATA_WIDTH-1:0] dcr_rsp_data;
+
+	// ========================================================================
+	// AXI-Lite demux: 0x00..0xFF → legacy AFU_ctrl, 0x100..0xFFFF → CP regfile.
+	// Routing is latched at AW/AR fire so mixed-range pipelines stay coherent.
+	// ========================================================================
+	wire                                 lg_awvalid, lg_awready;
+	wire [7:0]                           lg_awaddr;
+	wire                                 lg_wvalid, lg_wready;
+	wire [C_S_AXI_CTRL_DATA_WIDTH-1:0]   lg_wdata;
+	wire [C_S_AXI_CTRL_DATA_WIDTH/8-1:0] lg_wstrb;
+	wire                                 lg_bvalid, lg_bready;
+	wire [1:0]                           lg_bresp;
+	wire                                 lg_arvalid, lg_arready;
+	wire [7:0]                           lg_araddr;
+	wire                                 lg_rvalid, lg_rready;
+	wire [C_S_AXI_CTRL_DATA_WIDTH-1:0]   lg_rdata;
+	wire [1:0]                           lg_rresp;
+
+	VX_cp_axil_s_if #(.ADDR_W(16)) cp_axil ();
+
+	// Bit 12 picks the slave: host addr[12]=1 → CP regfile; addr[12]=0 → legacy.
+	wire is_cp_aw = s_axi_ctrl_awaddr[12];
+	wire is_cp_ar = s_axi_ctrl_araddr[12];
+
+	reg route_cp_w_r, route_cp_w_valid;
+	reg route_cp_r_r, route_cp_r_valid;
+	always @(posedge clk) begin
+		if (reset) begin
+			route_cp_w_r <= 0; route_cp_w_valid <= 0;
+			route_cp_r_r <= 0; route_cp_r_valid <= 0;
+		end else begin
+			if (s_axi_ctrl_awvalid && s_axi_ctrl_awready) begin
+				route_cp_w_r     <= is_cp_aw;
+				route_cp_w_valid <= 1;
+			end else if (s_axi_ctrl_bvalid && s_axi_ctrl_bready) begin
+				route_cp_w_valid <= 0;
+			end
+			if (s_axi_ctrl_arvalid && s_axi_ctrl_arready) begin
+				route_cp_r_r     <= is_cp_ar;
+				route_cp_r_valid <= 1;
+			end else if (s_axi_ctrl_rvalid && s_axi_ctrl_rready) begin
+				route_cp_r_valid <= 0;
+			end
+		end
+	end
+
+	wire route_aw = route_cp_w_valid ? route_cp_w_r : is_cp_aw;
+	wire route_ar = route_cp_r_valid ? route_cp_r_r : is_cp_ar;
+
+	assign lg_awvalid       = s_axi_ctrl_awvalid && !route_aw;
+	assign lg_awaddr        = s_axi_ctrl_awaddr[7:0];
+	assign cp_axil.awvalid  = s_axi_ctrl_awvalid &&  route_aw;
+	// CP sees its own 0x000-based address — drop the bit-12 select.
+	assign cp_axil.awaddr   = {4'd0, s_axi_ctrl_awaddr[11:0]};
+	assign s_axi_ctrl_awready = route_aw ? cp_axil.awready : lg_awready;
+
+	assign lg_wvalid        = s_axi_ctrl_wvalid && !route_cp_w_r;
+	assign lg_wdata         = s_axi_ctrl_wdata;
+	assign lg_wstrb         = s_axi_ctrl_wstrb;
+	assign cp_axil.wvalid   = s_axi_ctrl_wvalid &&  route_cp_w_r;
+	assign cp_axil.wdata    = s_axi_ctrl_wdata;
+	assign cp_axil.wstrb    = s_axi_ctrl_wstrb;
+	assign s_axi_ctrl_wready = route_cp_w_r ? cp_axil.wready : lg_wready;
+
+	assign s_axi_ctrl_bvalid = route_cp_w_r ? cp_axil.bvalid : lg_bvalid;
+	assign s_axi_ctrl_bresp  = route_cp_w_r ? cp_axil.bresp  : lg_bresp;
+	assign cp_axil.bready    = s_axi_ctrl_bready &&  route_cp_w_r;
+	assign lg_bready         = s_axi_ctrl_bready && !route_cp_w_r;
+
+	assign lg_arvalid       = s_axi_ctrl_arvalid && !route_ar;
+	assign lg_araddr        = s_axi_ctrl_araddr[7:0];
+	assign cp_axil.arvalid  = s_axi_ctrl_arvalid &&  route_ar;
+	assign cp_axil.araddr   = {4'd0, s_axi_ctrl_araddr[11:0]};
+	assign s_axi_ctrl_arready = route_ar ? cp_axil.arready : lg_arready;
+
+	assign s_axi_ctrl_rvalid = route_cp_r_r ? cp_axil.rvalid : lg_rvalid;
+	assign s_axi_ctrl_rdata  = route_cp_r_r ? cp_axil.rdata  : lg_rdata;
+	assign s_axi_ctrl_rresp  = route_cp_r_r ? cp_axil.rresp  : lg_rresp;
+	assign cp_axil.rready    = s_axi_ctrl_rready &&  route_cp_r_r;
+	assign lg_rready         = s_axi_ctrl_rready && !route_cp_r_r;
 
 	state_e state;
 
@@ -155,22 +264,37 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
 		if (reset || ap_reset) begin
 			state    <= STATE_IDLE;
-			vx_start <= 0;
+			vx_start_legacy <= 0;
+			saw_busy <= 0;
 		end else begin
 			case (state)
 			STATE_IDLE: begin
+				saw_busy <= 0;
 				if (ap_start && !vx_reset) begin
 				`ifdef DBG_TRACE_AFU
 					`TRACE(2, ("%t: AFU: Goto STATE_RUN\n", $time))
 				`endif
 					state    <= STATE_RUN;
-					vx_start <= 1;
+					vx_start_legacy <= 1;
+				end else if (cp_gpu_if.start && !vx_reset) begin
+					// CP-initiated launch: enter RUN without firing
+					// the legacy vx_start_legacy pulse (CP's gpu_if.start
+					// already feeds the OR-mux into vx_start). This lets
+					// AP_DONE / ready_wait still work in CP mode.
+				`ifdef DBG_TRACE_AFU
+					`TRACE(2, ("%t: AFU: Goto STATE_RUN (CP)\n", $time))
+				`endif
+					state <= STATE_RUN;
 				end
 			end
 			STATE_RUN: begin
-				vx_start <= 0;
-				// vx_start is still asserted this cycle; wait for execution to complete
-				if (!vx_start && !vx_busy) begin
+				vx_start_legacy <= 0;
+				// Track whether Vortex has actually started executing.
+				// Without this guard the FSM would race through RUN→DONE
+				// before vx_busy has time to rise (a problem in the CP
+				// path where we don't pulse vx_start_legacy).
+				if (vx_busy) saw_busy <= 1;
+				if (!vx_start_legacy && saw_busy && !vx_busy) begin
 				`ifdef DBG_TRACE_AFU
 					`TRACE(2, ("%t: AFU: Execution completed\n", $time))
 				`endif
@@ -228,34 +352,40 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		end
 	end
 
+	// ---- Legacy AFU_ctrl with its DCR outputs flowing into the mux ----
+	wire                          lg_dcr_req_valid;
+	wire                          lg_dcr_req_rw;
+	wire [VX_DCR_ADDR_WIDTH-1:0]  lg_dcr_req_addr;
+	wire [VX_DCR_DATA_WIDTH-1:0]  lg_dcr_req_data;
+
 	VX_afu_ctrl #(
-		.S_AXI_ADDR_WIDTH (C_S_AXI_CTRL_ADDR_WIDTH),
+		.S_AXI_ADDR_WIDTH (8),
 		.S_AXI_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH)
 	) afu_ctrl (
 		.clk       		(clk),
 		.reset     		(reset),
 
-		.s_axi_awvalid  (s_axi_ctrl_awvalid),
-		.s_axi_awready  (s_axi_ctrl_awready),
-		.s_axi_awaddr   (s_axi_ctrl_awaddr),
+		.s_axi_awvalid  (lg_awvalid),
+		.s_axi_awready  (lg_awready),
+		.s_axi_awaddr   (lg_awaddr),
 
-		.s_axi_wvalid   (s_axi_ctrl_wvalid),
-		.s_axi_wready   (s_axi_ctrl_wready),
-		.s_axi_wdata    (s_axi_ctrl_wdata),
-		.s_axi_wstrb    (s_axi_ctrl_wstrb),
+		.s_axi_wvalid   (lg_wvalid),
+		.s_axi_wready   (lg_wready),
+		.s_axi_wdata    (lg_wdata),
+		.s_axi_wstrb    (lg_wstrb),
 
-		.s_axi_arvalid  (s_axi_ctrl_arvalid),
-		.s_axi_arready  (s_axi_ctrl_arready),
-		.s_axi_araddr   (s_axi_ctrl_araddr),
+		.s_axi_arvalid  (lg_arvalid),
+		.s_axi_arready  (lg_arready),
+		.s_axi_araddr   (lg_araddr),
 
-		.s_axi_rvalid   (s_axi_ctrl_rvalid),
-		.s_axi_rready   (s_axi_ctrl_rready),
-		.s_axi_rdata    (s_axi_ctrl_rdata),
-		.s_axi_rresp    (s_axi_ctrl_rresp),
+		.s_axi_rvalid   (lg_rvalid),
+		.s_axi_rready   (lg_rready),
+		.s_axi_rdata    (lg_rdata),
+		.s_axi_rresp    (lg_rresp),
 
-		.s_axi_bvalid   (s_axi_ctrl_bvalid),
-		.s_axi_bready   (s_axi_ctrl_bready),
-		.s_axi_bresp    (s_axi_ctrl_bresp),
+		.s_axi_bvalid   (lg_bvalid),
+		.s_axi_bready   (lg_bready),
+		.s_axi_bresp    (lg_bresp),
 
 		.ap_reset  		(ap_reset),
 		.ap_start  		(ap_start),
@@ -271,13 +401,46 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		.scope_bus_out  (scope_bus_in),
 	`endif
 
-		.dcr_req_valid	(dcr_req_valid),
-		.dcr_req_rw		(dcr_req_rw),
-		.dcr_req_addr	(dcr_req_addr),
-		.dcr_req_data	(dcr_req_data),
+		.dcr_req_valid	(lg_dcr_req_valid),
+		.dcr_req_rw		(lg_dcr_req_rw),
+		.dcr_req_addr	(lg_dcr_req_addr),
+		.dcr_req_data	(lg_dcr_req_data),
 		.dcr_rsp_valid	(dcr_rsp_valid),
 		.dcr_rsp_data	(dcr_rsp_data)
 	);
+
+	// ========================================================================
+	// Command Processor
+	// ========================================================================
+	VX_cp_gpu_if cp_gpu_if ();
+	VX_cp_axi_m_if #(.ADDR_W(64), .DATA_W(C_M_AXI_MEM_DATA_WIDTH))
+	    cp_axi_m ();
+
+	wire cp_interrupt;
+	`UNUSED_VAR (cp_interrupt)
+
+	VX_cp_core u_cp_core (
+		.clk        (clk),
+		.reset      (reset),
+		.axil_s     (cp_axil),
+		.axi_m      (cp_axi_m),
+		.gpu_if     (cp_gpu_if),
+		.interrupt  (cp_interrupt)
+	);
+
+	// ---- gpu_if ↔ Vortex DCR fan-in (CP wins on simultaneous valid) ----
+	assign dcr_req_valid = cp_gpu_if.dcr_req_valid | lg_dcr_req_valid;
+	assign dcr_req_rw    = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_rw   : lg_dcr_req_rw;
+	assign dcr_req_addr  = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_addr : lg_dcr_req_addr;
+	assign dcr_req_data  = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_data : lg_dcr_req_data;
+
+	assign cp_gpu_if.dcr_req_ready = 1'b1;          // Vortex DCR always accepts
+	assign cp_gpu_if.dcr_rsp_valid = dcr_rsp_valid;
+	assign cp_gpu_if.dcr_rsp_data  = dcr_rsp_data;
+	assign cp_gpu_if.busy          = vx_busy;
+
+	// Either source can start Vortex; OR-combine.
+	assign vx_start = vx_start_legacy | cp_gpu_if.start;
 
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
@@ -286,6 +449,37 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
 		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
 	end
+
+	// ---- Intermediate Vortex AXI signals (per-bank) — arbiter sits on bank 0 ----
+	wire                              vx_awvalid_a [C_M_AXI_MEM_NUM_BANKS];
+	wire                              vx_awready_a [C_M_AXI_MEM_NUM_BANKS];
+	wire [M_AXI_MEM_ADDR_WIDTH-1:0]   vx_awaddr_a  [C_M_AXI_MEM_NUM_BANKS];
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0]   vx_awid_a    [C_M_AXI_MEM_NUM_BANKS];
+	wire [7:0]                        vx_awlen_a   [C_M_AXI_MEM_NUM_BANKS];
+
+	wire                              vx_wvalid_a  [C_M_AXI_MEM_NUM_BANKS];
+	wire                              vx_wready_a  [C_M_AXI_MEM_NUM_BANKS];
+	wire [C_M_AXI_MEM_DATA_WIDTH-1:0] vx_wdata_a   [C_M_AXI_MEM_NUM_BANKS];
+	wire [C_M_AXI_MEM_DATA_WIDTH/8-1:0] vx_wstrb_a [C_M_AXI_MEM_NUM_BANKS];
+	wire                              vx_wlast_a   [C_M_AXI_MEM_NUM_BANKS];
+
+	wire                              vx_bvalid_a  [C_M_AXI_MEM_NUM_BANKS];
+	wire                              vx_bready_a  [C_M_AXI_MEM_NUM_BANKS];
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0]   vx_bid_a     [C_M_AXI_MEM_NUM_BANKS];
+	wire [1:0]                        vx_bresp_a   [C_M_AXI_MEM_NUM_BANKS];
+
+	wire                              vx_arvalid_a [C_M_AXI_MEM_NUM_BANKS];
+	wire                              vx_arready_a [C_M_AXI_MEM_NUM_BANKS];
+	wire [M_AXI_MEM_ADDR_WIDTH-1:0]   vx_araddr_a  [C_M_AXI_MEM_NUM_BANKS];
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0]   vx_arid_a    [C_M_AXI_MEM_NUM_BANKS];
+	wire [7:0]                        vx_arlen_a   [C_M_AXI_MEM_NUM_BANKS];
+
+	wire                              vx_rvalid_a  [C_M_AXI_MEM_NUM_BANKS];
+	wire                              vx_rready_a  [C_M_AXI_MEM_NUM_BANKS];
+	wire [C_M_AXI_MEM_DATA_WIDTH-1:0] vx_rdata_a   [C_M_AXI_MEM_NUM_BANKS];
+	wire                              vx_rlast_a   [C_M_AXI_MEM_NUM_BANKS];
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0]   vx_rid_a     [C_M_AXI_MEM_NUM_BANKS];
+	wire [1:0]                        vx_rresp_a   [C_M_AXI_MEM_NUM_BANKS];
 
 	`SCOPE_IO_SWITCH (2);
 
@@ -300,11 +494,11 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		.clk			(clk),
 		.reset			(vx_reset),
 
-		.m_axi_awvalid	(m_axi_mem_awvalid_a),
-		.m_axi_awready	(m_axi_mem_awready_a),
-		.m_axi_awaddr	(m_axi_mem_awaddr_u),
-		.m_axi_awid		(m_axi_mem_awid_a),
-		.m_axi_awlen    (m_axi_mem_awlen_a),
+		.m_axi_awvalid	(vx_awvalid_a),
+		.m_axi_awready	(vx_awready_a),
+		.m_axi_awaddr	(vx_awaddr_a),
+		.m_axi_awid		(vx_awid_a),
+		.m_axi_awlen    (vx_awlen_a),
 		`UNUSED_PIN (m_axi_awsize),
 		`UNUSED_PIN (m_axi_awburst),
 		`UNUSED_PIN (m_axi_awlock),
@@ -313,22 +507,22 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		`UNUSED_PIN (m_axi_awqos),
     	`UNUSED_PIN (m_axi_awregion),
 
-		.m_axi_wvalid	(m_axi_mem_wvalid_a),
-		.m_axi_wready	(m_axi_mem_wready_a),
-		.m_axi_wdata	(m_axi_mem_wdata_a),
-		.m_axi_wstrb	(m_axi_mem_wstrb_a),
-		.m_axi_wlast	(m_axi_mem_wlast_a),
+		.m_axi_wvalid	(vx_wvalid_a),
+		.m_axi_wready	(vx_wready_a),
+		.m_axi_wdata	(vx_wdata_a),
+		.m_axi_wstrb	(vx_wstrb_a),
+		.m_axi_wlast	(vx_wlast_a),
 
-		.m_axi_bvalid	(m_axi_mem_bvalid_a),
-		.m_axi_bready	(m_axi_mem_bready_a),
-		.m_axi_bid		(m_axi_mem_bid_a),
-		.m_axi_bresp	(m_axi_mem_bresp_a),
+		.m_axi_bvalid	(vx_bvalid_a),
+		.m_axi_bready	(vx_bready_a),
+		.m_axi_bid		(vx_bid_a),
+		.m_axi_bresp	(vx_bresp_a),
 
-		.m_axi_arvalid	(m_axi_mem_arvalid_a),
-		.m_axi_arready	(m_axi_mem_arready_a),
-		.m_axi_araddr	(m_axi_mem_araddr_u),
-		.m_axi_arid		(m_axi_mem_arid_a),
-		.m_axi_arlen	(m_axi_mem_arlen_a),
+		.m_axi_arvalid	(vx_arvalid_a),
+		.m_axi_arready	(vx_arready_a),
+		.m_axi_araddr	(vx_araddr_a),
+		.m_axi_arid		(vx_arid_a),
+		.m_axi_arlen	(vx_arlen_a),
 		`UNUSED_PIN (m_axi_arsize),
 		`UNUSED_PIN (m_axi_arburst),
 		`UNUSED_PIN (m_axi_arlock),
@@ -337,12 +531,12 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		`UNUSED_PIN (m_axi_arqos),
         `UNUSED_PIN (m_axi_arregion),
 
-		.m_axi_rvalid	(m_axi_mem_rvalid_a),
-		.m_axi_rready	(m_axi_mem_rready_a),
-		.m_axi_rdata	(m_axi_mem_rdata_a),
-		.m_axi_rlast	(m_axi_mem_rlast_a),
-		.m_axi_rid    	(m_axi_mem_rid_a),
-		.m_axi_rresp	(m_axi_mem_rresp_a),
+		.m_axi_rvalid	(vx_rvalid_a),
+		.m_axi_rready	(vx_rready_a),
+		.m_axi_rdata	(vx_rdata_a),
+		.m_axi_rlast	(vx_rlast_a),
+		.m_axi_rid    	(vx_rid_a),
+		.m_axi_rresp	(vx_rresp_a),
 
 		.dcr_req_valid	(dcr_req_valid),
 		.dcr_req_rw		(dcr_req_rw),
@@ -354,6 +548,129 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		.start          (vx_start),
 		.busy			(vx_busy)
 	);
+
+	// ---- Banks 1..N-1: direct passthrough ----
+	for (genvar i = 1; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_bank_passthrough
+		assign m_axi_mem_awvalid_a[i] = vx_awvalid_a[i];
+		assign m_axi_mem_awaddr_u[i]  = vx_awaddr_a[i];
+		assign m_axi_mem_awid_a[i]    = vx_awid_a[i];
+		assign m_axi_mem_awlen_a[i]   = vx_awlen_a[i];
+		assign vx_awready_a[i]        = m_axi_mem_awready_a[i];
+
+		assign m_axi_mem_wvalid_a[i]  = vx_wvalid_a[i];
+		assign m_axi_mem_wdata_a[i]   = vx_wdata_a[i];
+		assign m_axi_mem_wstrb_a[i]   = vx_wstrb_a[i];
+		assign m_axi_mem_wlast_a[i]   = vx_wlast_a[i];
+		assign vx_wready_a[i]         = m_axi_mem_wready_a[i];
+
+		assign vx_bvalid_a[i]         = m_axi_mem_bvalid_a[i];
+		assign vx_bid_a[i]            = m_axi_mem_bid_a[i];
+		assign vx_bresp_a[i]          = m_axi_mem_bresp_a[i];
+		assign m_axi_mem_bready_a[i]  = vx_bready_a[i];
+
+		assign m_axi_mem_arvalid_a[i] = vx_arvalid_a[i];
+		assign m_axi_mem_araddr_u[i]  = vx_araddr_a[i];
+		assign m_axi_mem_arid_a[i]    = vx_arid_a[i];
+		assign m_axi_mem_arlen_a[i]   = vx_arlen_a[i];
+		assign vx_arready_a[i]        = m_axi_mem_arready_a[i];
+
+		assign vx_rvalid_a[i]         = m_axi_mem_rvalid_a[i];
+		assign vx_rdata_a[i]          = m_axi_mem_rdata_a[i];
+		assign vx_rlast_a[i]          = m_axi_mem_rlast_a[i];
+		assign vx_rid_a[i]            = m_axi_mem_rid_a[i];
+		assign vx_rresp_a[i]          = m_axi_mem_rresp_a[i];
+		assign m_axi_mem_rready_a[i]  = vx_rready_a[i];
+	end
+
+	// ---- Bank 0: 2:1 arbiter merges Vortex bank-0 + CP axi_m ----
+	// Pad CP's narrower ID into the platform ID width so the arbiter sees
+	// identical signal widths from both sources.
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_awid_padded =
+	    {{(C_M_AXI_MEM_ID_WIDTH - `VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_m.awid};
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_arid_padded =
+	    {{(C_M_AXI_MEM_ID_WIDTH - `VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_m.arid};
+
+	// Drop the platform offset from the CP address so the arbiter's slave
+	// port sees an offset-relative bank-0 address (matches vx_awaddr_a[0]).
+	wire [M_AXI_MEM_ADDR_WIDTH-1:0] cp_awaddr_offset =
+	    M_AXI_MEM_ADDR_WIDTH'(cp_axi_m.awaddr - `PLATFORM_MEMORY_OFFSET);
+	wire [M_AXI_MEM_ADDR_WIDTH-1:0] cp_araddr_offset =
+	    M_AXI_MEM_ADDR_WIDTH'(cp_axi_m.araddr - `PLATFORM_MEMORY_OFFSET);
+
+	VX_axi_arb2 #(
+		.ADDR_W (M_AXI_MEM_ADDR_WIDTH),
+		.DATA_W (C_M_AXI_MEM_DATA_WIDTH),
+		.ID_W   (C_M_AXI_MEM_ID_WIDTH)
+	) bank0_arb (
+		.clk        (clk),
+		.reset      (reset),
+
+		.s0_awvalid (vx_awvalid_a[0]),  .s0_awready (vx_awready_a[0]),
+		.s0_awaddr  (vx_awaddr_a[0]),   .s0_awid    (vx_awid_a[0]),
+		.s0_awlen   (vx_awlen_a[0]),
+		.s0_wvalid  (vx_wvalid_a[0]),   .s0_wready  (vx_wready_a[0]),
+		.s0_wdata   (vx_wdata_a[0]),    .s0_wstrb   (vx_wstrb_a[0]),
+		.s0_wlast   (vx_wlast_a[0]),
+		.s0_bvalid  (vx_bvalid_a[0]),   .s0_bready  (vx_bready_a[0]),
+		.s0_bid     (vx_bid_a[0]),      .s0_bresp   (vx_bresp_a[0]),
+		.s0_arvalid (vx_arvalid_a[0]),  .s0_arready (vx_arready_a[0]),
+		.s0_araddr  (vx_araddr_a[0]),   .s0_arid    (vx_arid_a[0]),
+		.s0_arlen   (vx_arlen_a[0]),
+		.s0_rvalid  (vx_rvalid_a[0]),   .s0_rready  (vx_rready_a[0]),
+		.s0_rdata   (vx_rdata_a[0]),    .s0_rlast   (vx_rlast_a[0]),
+		.s0_rid     (vx_rid_a[0]),      .s0_rresp   (vx_rresp_a[0]),
+
+		.s1_awvalid (cp_axi_m.awvalid), .s1_awready (cp_axi_m.awready),
+		.s1_awaddr  (cp_awaddr_offset), .s1_awid    (cp_awid_padded),
+		.s1_awlen   (cp_axi_m.awlen),
+		.s1_wvalid  (cp_axi_m.wvalid),  .s1_wready  (cp_axi_m.wready),
+		.s1_wdata   (cp_axi_m.wdata),   .s1_wstrb   (cp_axi_m.wstrb),
+		.s1_wlast   (cp_axi_m.wlast),
+		.s1_bvalid  (cp_axi_m.bvalid),  .s1_bready  (cp_axi_m.bready),
+		.s1_bid     (cp_axi_m_bid_full),.s1_bresp   (cp_axi_m.bresp),
+		.s1_arvalid (cp_axi_m.arvalid), .s1_arready (cp_axi_m.arready),
+		.s1_araddr  (cp_araddr_offset), .s1_arid    (cp_arid_padded),
+		.s1_arlen   (cp_axi_m.arlen),
+		.s1_rvalid  (cp_axi_m.rvalid),  .s1_rready  (cp_axi_m.rready),
+		.s1_rdata   (cp_axi_m.rdata),   .s1_rlast   (cp_axi_m.rlast),
+		.s1_rid     (cp_axi_m_rid_full),.s1_rresp   (cp_axi_m.rresp),
+
+		.m_awvalid  (m_axi_mem_awvalid_a[0]), .m_awready (m_axi_mem_awready_a[0]),
+		.m_awaddr   (m_axi_mem_awaddr_u[0]),  .m_awid    (m_axi_mem_awid_a[0]),
+		.m_awlen    (m_axi_mem_awlen_a[0]),
+		.m_wvalid   (m_axi_mem_wvalid_a[0]),  .m_wready  (m_axi_mem_wready_a[0]),
+		.m_wdata    (m_axi_mem_wdata_a[0]),   .m_wstrb   (m_axi_mem_wstrb_a[0]),
+		.m_wlast    (m_axi_mem_wlast_a[0]),
+		.m_bvalid   (m_axi_mem_bvalid_a[0]),  .m_bready  (m_axi_mem_bready_a[0]),
+		.m_bid      (m_axi_mem_bid_a[0]),     .m_bresp   (m_axi_mem_bresp_a[0]),
+		.m_arvalid  (m_axi_mem_arvalid_a[0]), .m_arready (m_axi_mem_arready_a[0]),
+		.m_araddr   (m_axi_mem_araddr_u[0]),  .m_arid    (m_axi_mem_arid_a[0]),
+		.m_arlen    (m_axi_mem_arlen_a[0]),
+		.m_rvalid   (m_axi_mem_rvalid_a[0]),  .m_rready  (m_axi_mem_rready_a[0]),
+		.m_rdata    (m_axi_mem_rdata_a[0]),   .m_rlast   (m_axi_mem_rlast_a[0]),
+		.m_rid      (m_axi_mem_rid_a[0]),     .m_rresp   (m_axi_mem_rresp_a[0])
+	);
+
+	// Truncate the arbiter's wider ID back to CP's narrower native ID width.
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_m_bid_full;
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_m_rid_full;
+	assign cp_axi_m.bid = cp_axi_m_bid_full[`VX_CP_AXI_TID_WIDTH-1:0];
+	assign cp_axi_m.rid = cp_axi_m_rid_full[`VX_CP_AXI_TID_WIDTH-1:0];
+	`UNUSED_VAR (cp_axi_m_bid_full)
+	`UNUSED_VAR (cp_axi_m_rid_full)
+
+	// The optional AXI4 sideband signals (size/burst) are unused by the
+	// reduced VX_axi_arb2 view — pin them sink-side so lint stays clean.
+	`UNUSED_VAR (cp_axi_m.awsize)
+	`UNUSED_VAR (cp_axi_m.awburst)
+	`UNUSED_VAR (cp_axi_m.arsize)
+	`UNUSED_VAR (cp_axi_m.arburst)
+
+	// We only use addr[12:0] of the AXI-Lite address space; bits 15:13 are
+	// always 0 from the kernel.xml-advertised slave size but Verilator
+	// still flags them — pin to UNUSED.
+	`UNUSED_VAR (s_axi_ctrl_awaddr[15:13])
+	`UNUSED_VAR (s_axi_ctrl_araddr[15:13])
 
     // SCOPE //////////////////////////////////////////////////////////////////////
 
