@@ -103,6 +103,20 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
 
+    `ifdef TCU_METADATA_ENABLE
+        wire [TCU_META_COUNT-1:0][REG_TYPES-1:0][RV_REGS-1:0] ibf_hidden_opd_mask, stg_hidden_opd_mask;
+        for (genvar h = 0; h < TCU_META_COUNT; ++h) begin : g_hidden_opd_masks
+            for (genvar j = 0; j < REG_TYPES; ++j) begin : g_j
+                assign ibf_hidden_opd_mask[h][j] =
+                    (1 << get_reg_idx(ibuffer_if[w].data.hidden_rs[h]))
+                  & {RV_REGS{ibuffer_if[w].data.hidden_used_rs[h] && get_reg_type(ibuffer_if[w].data.hidden_rs[h]) == j}};
+                assign stg_hidden_opd_mask[h][j] =
+                    (1 << get_reg_idx(staging_if[w].data.hidden_rs[h]))
+                  & {RV_REGS{staging_if[w].data.hidden_used_rs[h] && get_reg_type(staging_if[w].data.hidden_rs[h]) == j}};
+            end
+        end
+    `endif
+
         always @(*) begin
             inuse_regs_n  = inuse_regs;
             inuse_xregs_n = inuse_xregs;
@@ -122,8 +136,24 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask;
         for (genvar i = 0; i < REG_TYPES; ++i) begin : g_in_use_mask
-            wire [RV_REGS-1:0] ibf_reg_mask = ibf_opd_mask[0][i] | ibf_opd_mask[1][i] | ibf_opd_mask[2][i] | ibf_opd_mask[3][i];
-            wire [RV_REGS-1:0] stg_reg_mask = stg_opd_mask[0][i] | stg_opd_mask[1][i] | stg_opd_mask[2][i] | stg_opd_mask[3][i];
+            wire [RV_REGS-1:0] ibf_reg_mask_base = ibf_opd_mask[0][i] | ibf_opd_mask[1][i] | ibf_opd_mask[2][i] | ibf_opd_mask[3][i];
+            wire [RV_REGS-1:0] stg_reg_mask_base = stg_opd_mask[0][i] | stg_opd_mask[1][i] | stg_opd_mask[2][i] | stg_opd_mask[3][i];
+        `ifdef TCU_METADATA_ENABLE
+            logic [RV_REGS-1:0] ibf_hidden_reg_mask, stg_hidden_reg_mask;
+            always @(*) begin
+                ibf_hidden_reg_mask = '0;
+                stg_hidden_reg_mask = '0;
+                for (integer h = 0; h < TCU_META_COUNT; ++h) begin
+                    ibf_hidden_reg_mask |= ibf_hidden_opd_mask[h][i];
+                    stg_hidden_reg_mask |= stg_hidden_opd_mask[h][i];
+                end
+            end
+            wire [RV_REGS-1:0] ibf_reg_mask = ibf_reg_mask_base | ibf_hidden_reg_mask;
+            wire [RV_REGS-1:0] stg_reg_mask = stg_reg_mask_base | stg_hidden_reg_mask;
+        `else
+            wire [RV_REGS-1:0] ibf_reg_mask = ibf_reg_mask_base;
+            wire [RV_REGS-1:0] stg_reg_mask = stg_reg_mask_base;
+        `endif
             wire [RV_REGS-1:0] regs_mask = ibuffer_fire ? ibf_reg_mask : stg_reg_mask;
             assign in_use_mask[i] = inuse_regs_n[i * RV_REGS +: RV_REGS] & regs_mask;
         end

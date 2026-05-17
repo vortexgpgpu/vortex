@@ -65,6 +65,9 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
                     operands_if.data.rs1_data,
                     operands_if.data.rs2_data,
                     operands_if.data.rs3_data,
+                `ifdef TCU_METADATA_ENABLE
+                    operands_if.data.tcu_meta_data,
+                `endif
                     operands_if.data.sop,
                     operands_if.data.eop
                 }),
@@ -125,6 +128,9 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
             eff_rs1_data,
             operands_if.data.rs2_data,
             operands_if.data.rs3_data,
+        `ifdef TCU_METADATA_ENABLE
+            operands_if.data.tcu_meta_data,
+        `endif
             operands_if.data.sop,
             operands_if.data.eop
         }),

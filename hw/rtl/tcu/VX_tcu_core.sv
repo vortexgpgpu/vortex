@@ -78,8 +78,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef TCU_SPARSE_ENABLE
     localparam LG_B_BS_SP = $clog2(TCU_B_BLOCK_SIZE_SP);
     wire is_sparse = execute_if.data.op_args.tcu.is_sparse;
-    wire is_meta_store = (execute_if.data.op_type == INST_TCU_META_STORE);
 `endif
+    wire is_wmma = (execute_if.data.op_type == INST_TCU_WMMA);
 
     // -----------------------------------------------------------------------
     // Operand data mux: WGMMA uses tile buffer, WMMA uses register file
@@ -113,23 +113,15 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Sparse metadata: VX_tcu_meta (for WMMA_SP) + optional tile-buffer mux
     // -----------------------------------------------------------------------
 
-`ifdef TCU_SPARSE_ENABLE
     wire [`LOG2UP(`NUM_WARPS)-1:0] wid = execute_if.data.header.wid;
-    wire meta_wr_en = execute_fire && is_meta_store;
-
-    // meta_store: force rd=0 in mdata_queue header
-    tcu_header_t mdata_queue_in;
-    always_comb begin
-        mdata_queue_in = execute_if.data.header;
-        if (is_meta_store) begin
-            mdata_queue_in.rd = '0;
-        end
-    end
-`else
     tcu_header_t mdata_queue_in;
     always_comb begin
         mdata_queue_in = execute_if.data.header;
     end
+`ifndef TCU_MX_ENABLE
+`ifndef TCU_SPARSE_ENABLE
+    `UNUSED_VAR ({is_wmma, wid})
+`endif
 `endif
 
     `UNUSED_VAR ({step_m, step_n, step_k, fmt_s, fmt_d, execute_if.data});
@@ -184,6 +176,61 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_PIN(size)
     );
 
+`ifdef TCU_MX_ENABLE
+    wire mx_capture_en = execute_fire
+                       && is_wmma
+                       && tcu_fmt_is_mx(fmt_s)
+                       && (step_m == 0)
+                       && (step_n == 0)
+                       && (step_k == 0);
+
+    logic [`NUM_WARPS-1:0][TCU_BLOCK_CAP-1:0][31:0] mx_meta_a_store;
+    logic [`NUM_WARPS-1:0][TCU_BLOCK_CAP-1:0][31:0] mx_meta_b_store;
+    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a_sideband;
+    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b_sideband;
+
+    for (genvar t = 0; t < TCU_BLOCK_CAP; ++t) begin : g_mx_sideband
+        assign mx_meta_a_sideband[t] = 32'(execute_if.data.tcu_meta_data[TCU_META_MX_A][t]);
+        assign mx_meta_b_sideband[t] = 32'(execute_if.data.tcu_meta_data[TCU_META_MX_B][t]);
+    end
+
+    always @(posedge clk) begin
+        if (reset) begin
+            mx_meta_a_store <= '0;
+            mx_meta_b_store <= '0;
+        end else if (mx_capture_en) begin
+            mx_meta_a_store[wid] <= mx_meta_a_sideband;
+            mx_meta_b_store[wid] <= mx_meta_b_sideband;
+        end
+    end
+
+    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a_active = mx_capture_en ? mx_meta_a_sideband : mx_meta_a_store[wid];
+    wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b_active = mx_capture_en ? mx_meta_b_sideband : mx_meta_b_store[wid];
+
+    function automatic [7:0] mx_scale_at(
+        input logic [TCU_BLOCK_CAP-1:0][31:0] meta,
+        input logic [4:0] fmt,
+        input logic [7:0] mn_idx,
+        input logic [7:0] k_word_idx
+    );
+        int unsigned scale_k;
+        int unsigned scale_idx;
+        int unsigned word_idx;
+        int unsigned byte_idx;
+        begin
+            case (fmt)
+                TCU_MXFP8_ID, TCU_MXI8_ID: scale_k = int'(k_word_idx) >> 3;
+                TCU_NVFP4_ID:              scale_k = int'(k_word_idx) >> 1;
+                default:                   scale_k = 0;
+            endcase
+            scale_idx = int'(mn_idx) * int'(mx_scale_blocks_k(fmt)) + scale_k;
+            word_idx  = scale_idx >> 2;
+            byte_idx  = scale_idx & 3;
+            mx_scale_at = meta[word_idx][byte_idx * 8 +: 8];
+        end
+    endfunction
+`endif
+
     // -----------------------------------------------------------------------
     // Operand offset computation
     // -----------------------------------------------------------------------
@@ -206,19 +253,33 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // indexed by (step_m, step_k).
 
 `ifdef TCU_SPARSE_ENABLE
+    wire sp_capture_en = execute_fire
+                       && is_wmma
+                       && is_sparse
+                       && (step_m == 0)
+                       && (step_n == 0)
+                       && (step_k == 0);
+
+    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] sp_meta0_sideband;
+    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] sp_meta1_sideband;
+    for (genvar t = 0; t < TCU_BLOCK_CAP; ++t) begin : g_sp_sideband
+        assign sp_meta0_sideband[t] = execute_if.data.tcu_meta_data[TCU_META_SP_0][t];
+        assign sp_meta1_sideband[t] = execute_if.data.tcu_meta_data[TCU_META_SP_1][t];
+    end
+
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
     VX_tcu_meta #(
         .INSTANCE_ID (INSTANCE_ID)
     ) tcu_meta (
-        .clk    (clk),
-        .reset  (reset),
-        .wr_en  (meta_wr_en),
-        .wr_wid (wid),
-        .wr_idx (fmt_d),
-        .wr_data(rs1_data),
-        .rd_wid (wid),
-        .step_m (step_m),
-        .step_k (step_k),
+        .clk        (clk),
+        .reset      (reset),
+        .capture_en (sp_capture_en),
+        .capture_wid(wid),
+        .meta0_data (sp_meta0_sideband),
+        .meta1_data (sp_meta1_sideband),
+        .rd_wid     (wid),
+        .step_m     (step_m),
+        .step_k     (step_k),
         .vld_block(wmma_sp_meta)
     );
 
@@ -243,8 +304,18 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `else
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
         `endif
+        `ifdef TCU_MX_ENABLE
+            wire [TCU_TC_K-1:0][7:0] sf_a, sf_b;
+            wire [7:0] mx_a_idx = 8'(step_m) * 8'(TCU_TC_M) + 8'(i);
+            wire [7:0] mx_b_idx = 8'(step_n) * 8'(TCU_TC_N) + 8'(j);
+        `endif
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
                 assign a_row[k_idx] = 32'(rs1_data[a_off + i * TCU_TC_K + k_idx]);
+            `ifdef TCU_MX_ENABLE
+                wire [7:0] mx_k_idx = 8'(step_k) * 8'(TCU_TC_K) + 8'(k_idx);
+                assign sf_a[k_idx] = mx_scale_at(mx_meta_a_active, fmt_s, mx_a_idx, mx_k_idx);
+                assign sf_b[k_idx] = mx_scale_at(mx_meta_b_active, fmt_s, mx_b_idx, mx_k_idx);
+            `endif
             `ifdef TCU_SPARSE_ENABLE
                 assign b_col_dense[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
                 // WGMMA_SP: tbuf_rs2_data is wide (TCU_WG_RS2_WIDTH lanes);
@@ -286,8 +357,20 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
             wire [4:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
+        `ifdef TCU_MX_ENABLE
+            wire [TCU_TC_K-1:0][7:0] sf_a_r, sf_b_r;
+        `endif
             wire [31:0] c_val_r;
 
+        `ifdef TCU_MX_ENABLE
+            `BUFFER_EX (
+                {c_val_r, sf_b_r, sf_a_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r},
+                {c_val,   sf_b,   sf_a,   fmt_s,   fmt_d,   b_col,   a_row},
+                fedp_enable,
+                0, // resetw
+                1  // depth
+            );
+        `else
             `BUFFER_EX (
                 {c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r},
                 {c_val,   fmt_s,   fmt_d,   b_col,   a_row},
@@ -295,6 +378,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 0, // resetw
                 1  // depth
             );
+        `endif
 
         `ifdef TCU_TYPE_DPI
             VX_tcu_fedp_dpi #(
@@ -309,6 +393,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
                 .b_col (b_col_r),
+            `ifdef TCU_MX_ENABLE
+                .sf_a  (sf_a_r),
+                .sf_b  (sf_b_r),
+            `endif
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );

@@ -258,6 +258,42 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         assign gpr_wr_byteen[i*XLENB+:XLENB] = writeback_if.data.byteen[i];
     end
 
+`ifdef TCU_METADATA_ENABLE
+    wire [ISSUE_WIS_W-1:0] meta_rd_wis_st2 = pipe_mdata_st2[META_DATAW-UUID_WIDTH-1 -: ISSUE_WIS_W];
+    wire [SIMD_IDX_W-1:0] meta_rd_sid_st2 = pipe_mdata_st2[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-1 -: SIMD_IDX_W];
+    wire [PER_OPC_NW_W-1:0] meta_rd_wid_st2 = meta_rd_wis_st2[ISSUE_WIS_W-1 -: PER_OPC_NW_W];
+    wire [PER_OPC_NW_W-1:0] meta_wr_wid = writeback_if.data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_W];
+    wire meta_wr_fire = writeback_if.valid && writeback_if.data.wb;
+
+    logic [TCU_META_COUNT-1:0][`SIMD_WIDTH-1:0][`XLEN-1:0] tcu_meta_data_st2;
+
+    logic [TCU_META_COUNT-1:0][PER_OPC_WARPS-1:0][SIMD_COUNT-1:0][`SIMD_WIDTH-1:0][`XLEN-1:0] tcu_meta_shadow;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            for (integer h = 0; h < TCU_META_COUNT; ++h) begin
+                for (integer w = 0; w < PER_OPC_WARPS; ++w) begin
+                    for (integer s = 0; s < SIMD_COUNT; ++s) begin
+                        tcu_meta_shadow[h][w][s] <= '0;
+                    end
+                end
+            end
+        end else if (meta_wr_fire) begin
+            case (writeback_if.data.rd)
+                make_reg_num(REG_TYPE_F, 5'd8):  tcu_meta_shadow[TCU_META_MX_A][meta_wr_wid][writeback_if.data.sid] <= writeback_if.data.data;
+                make_reg_num(REG_TYPE_F, 5'd9):  tcu_meta_shadow[TCU_META_MX_B][meta_wr_wid][writeback_if.data.sid] <= writeback_if.data.data;
+                make_reg_num(REG_TYPE_F, 5'd14): tcu_meta_shadow[TCU_META_SP_0][meta_wr_wid][writeback_if.data.sid] <= writeback_if.data.data;
+                make_reg_num(REG_TYPE_F, 5'd15): tcu_meta_shadow[TCU_META_SP_1][meta_wr_wid][writeback_if.data.sid] <= writeback_if.data.data;
+                default: begin end
+            endcase
+        end
+    end
+
+    for (genvar h = 0; h < TCU_META_COUNT; ++h) begin : g_tcu_meta_read
+        assign tcu_meta_data_st2[h] = tcu_meta_shadow[h][meta_rd_wid_st2][meta_rd_sid_st2];
+    end
+`endif
+
     // GPR banks
     for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_gpr_rams
         wire gpr_wr_enabled;
@@ -312,6 +348,9 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         .ready_in (pipe_ready_st2),
         .data_in  ({pipe_mdata_st2[META_DATAW-1:2], // remove sop/eop
                     opd_buffer_n_st2, // operand data
+`ifdef TCU_METADATA_ENABLE
+                    tcu_meta_data_st2, // hidden TCU metadata sideband
+`endif
                     pipe_mdata_st2[1:0]}), // sop/eop
         .data_out ({
             operands_if.data.uuid,
@@ -329,6 +368,9 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             operands_if.data.rs3_data,
             operands_if.data.rs2_data,
             operands_if.data.rs1_data,
+`ifdef TCU_METADATA_ENABLE
+            operands_if.data.tcu_meta_data,
+`endif
             operands_if.data.sop,
             operands_if.data.eop
         }),

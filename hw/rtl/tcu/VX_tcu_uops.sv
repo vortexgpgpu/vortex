@@ -28,15 +28,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     input wire [UOP_CTR_W-1:0] uop_idx,
     output wire [UOP_CTR_W-1:0] uop_count
 );
-`ifdef TCU_SPARSE_ENABLE
-    // Worst-case uop count for sparse: fused meta-store + MMA steps.
-    localparam MAX_META_STORES = ((TCU_BLOCK_CAP + 1) / 2) * TCU_STORES_PER_COL;
-    localparam MAX_UOPS = SYM_SPARSE
-        ? (TCU_UOPS + MAX_META_STORES)
-        : (TCU_UOPS / 2 + MAX_META_STORES);
-`else
     localparam MAX_UOPS = TCU_UOPS;
-`endif
 
 `ifdef TCU_WGMMA_ENABLE
     localparam CTR_W = $clog2(MAX_UOPS > TCU_WG_UOPS ? MAX_UOPS : TCU_WG_UOPS);
@@ -56,6 +48,12 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 
     // Truncate the wide uop_idx to the bits this expander actually uses.
     wire [`UP(CTR_W)-1:0] ctr = `UP(CTR_W)'(uop_idx);
+    wire is_first_uop = (ctr == '0);
+`ifndef TCU_MX_ENABLE
+`ifndef TCU_SPARSE_ENABLE
+    `UNUSED_VAR (is_first_uop)
+`endif
+`endif
 
 `ifdef TCU_WGMMA_ENABLE
     wire is_wgmma = (ibuf_in.op_type == INST_TCU_WGMMA);
@@ -110,8 +108,6 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 
     // Accumulator register index: n * m_steps + m  (n-major layout)
     wire [4:0] wg_rs3_off = (5'(wg_n_index) << LG_M_WG) | 5'(wg_m_index);
-    wire is_first_uop = (ctr == '0);
-
     // Fixed A register base for RS mode: f24..f27
     localparam [4:0] wg_ra_base = TCU_WG_RA;
 
@@ -127,17 +123,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     localparam LG_B_SB_SP = $clog2(TCU_B_SUB_BLOCKS_SP);
 
     wire is_sparse = ibuf_in.op_args.tcu.is_sparse;
-    wire is_meta_store = (ibuf_in.op_type == INST_TCU_META_STORE);
-
-    wire [4:0] sparse_meta_total = meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s);
-
-    // Combinational meta-phase detection — comparator/subtractor absorbed
-    // by the registered uop_data stage in VX_uop_sequencer.
-    wire is_meta_phase = is_sparse && (ctr < `UP(CTR_W)'(sparse_meta_total));
-    wire [`UP(CTR_W)-1:0] mma_ctr = ctr - `UP(CTR_W)'(sparse_meta_total);
-    wire meta_uop = is_meta_store || is_meta_phase;
-    localparam META_REG0 = TCU_RA + 4;  // f14 — fragA.data[4]
-    localparam META_REG1 = TCU_RA + 5;  // f15 — fragA.data[5]
+    wire sparse_meta_two_regs =
+        meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s) > 5'(TCU_META_COLS_PER_LOAD);
 `endif
 
     assign uop_count =
@@ -151,16 +138,15 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
             wg_uop_cnt) :
 `endif
 `ifdef TCU_SPARSE_ENABLE
-        is_meta_store ? UOP_CTR_W'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s)) :
         is_sparse ? (SYM_SPARSE
-            ? UOP_CTR_W'(TCU_UOPS + int'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s)))
-            : UOP_CTR_W'(TCU_UOPS / 2 + int'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s)))) :
+            ? UOP_CTR_W'(TCU_UOPS)
+            : UOP_CTR_W'(TCU_UOPS / 2)) :
 `endif
         UOP_CTR_W'(TCU_UOPS);
 
-`ifdef TCU_SPARSE_ENABLE
-    wire [`UP(CTR_W)-1:0] eff_ctr = (is_sparse && !is_meta_phase) ? mma_ctr : ctr;
+    wire [`UP(CTR_W)-1:0] eff_ctr = ctr;
 
+`ifdef TCU_SPARSE_ENABLE
     // Parametric symmetric tmask for sparse mode
     // sym_mask_lo[t] = 1 for threads where (t % tcN) < (tcN/2)
     logic [`NUM_THREADS-1:0] sym_mask_lo;
@@ -171,8 +157,6 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     end else begin : g_sym_mask
         assign sym_mask_lo = '0;
     end
-`else
-    wire [`UP(CTR_W)-1:0] eff_ctr = ctr;
 `endif
 
     // -----------------------------------------------------------------------
@@ -245,13 +229,6 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire [4:0] rs2 = TCU_RB + 5'(rs2_offset);
     wire [4:0] rs3 = TCU_RC + 5'(rs3_offset);
 
-    // -----------------------------------------------------------------------
-    // Output uop assembly.
-    // -----------------------------------------------------------------------
-`ifdef TCU_SPARSE_ENABLE
-    wire meta_use_rs2 = (ctr >= `UP(CTR_W)'(TCU_META_COLS_PER_LOAD));
-`endif
-
 `ifdef TCU_SPARSE_ENABLE
     logic [3:0] n_sp_s;
     logic [3:0] m_sp_s;
@@ -260,6 +237,28 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     ibuffer_t ibuf_r;
     always_comb begin
         ibuf_r = ibuf_in;
+    `ifdef TCU_METADATA_ENABLE
+        ibuf_r.hidden_used_rs = '0;
+        ibuf_r.hidden_rs = '0;
+    `ifdef TCU_MX_ENABLE
+        if (is_first_uop && tcu_fmt_is_mx(ibuf_in.op_args.tcu.fmt_s)) begin
+            ibuf_r.hidden_used_rs[TCU_META_MX_A] = 1'b1;
+            ibuf_r.hidden_used_rs[TCU_META_MX_B] = 1'b1;
+            ibuf_r.hidden_rs[TCU_META_MX_A] = make_reg_num(REG_TYPE_F, 5'd8);
+            ibuf_r.hidden_rs[TCU_META_MX_B] = make_reg_num(REG_TYPE_F, 5'd9);
+        end
+    `endif
+    `ifdef TCU_SPARSE_ENABLE
+        if (is_first_uop && is_sparse) begin
+            ibuf_r.hidden_used_rs[TCU_META_SP_0] = 1'b1;
+            ibuf_r.hidden_rs[TCU_META_SP_0] = make_reg_num(REG_TYPE_F, 5'd14);
+            if (sparse_meta_two_regs) begin
+                ibuf_r.hidden_used_rs[TCU_META_SP_1] = 1'b1;
+                ibuf_r.hidden_rs[TCU_META_SP_1] = make_reg_num(REG_TYPE_F, 5'd15);
+            end
+        end
+    `endif
+    `endif
     `ifdef TCU_SPARSE_ENABLE
         n_sp_s = '0;
         m_sp_s = '0;
@@ -289,31 +288,22 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     `ifdef TCU_SPARSE_ENABLE
         if (SYM_SPARSE) begin
             ibuf_r.tmask = is_sparse
-                ? (is_meta_phase ? ibuf_in.tmask
-                    : (eff_ctr[0] ? ibuf_in.tmask & ~sym_mask_lo
-                                   : ibuf_in.tmask &  sym_mask_lo))
+                ? (eff_ctr[0] ? ibuf_in.tmask & ~sym_mask_lo
+                               : ibuf_in.tmask &  sym_mask_lo)
                 : ibuf_in.tmask;
             n_sp_s = 4'(eff_ctr[0 +: (LG_N + LG_K)]);
             m_sp_s = 4'(eff_ctr[(LG_N + LG_K) +: LG_M]);
         end
 
-        ibuf_r.op_type = meta_uop ? INST_TCU_META_STORE : ibuf_in.op_type;
-        ibuf_r.op_args.tcu.fmt_d = meta_uop ? 5'(ctr) : ibuf_in.op_args.tcu.fmt_d;
+        ibuf_r.op_args.tcu.step_m = SYM_SPARSE && is_sparse ? 4'(m_sp_s) : 4'(m_index);
+        ibuf_r.op_args.tcu.step_n = SYM_SPARSE && is_sparse ? 4'(n_sp_s) : 4'(n_index);
+        ibuf_r.op_args.tcu.step_k = SYM_SPARSE && is_sparse ? 4'(0)      : 4'(k_index);
 
-        ibuf_r.op_args.tcu.step_m = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(m_sp_s) : 4'(m_index));
-        ibuf_r.op_args.tcu.step_n = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(n_sp_s) : 4'(n_index));
-        ibuf_r.op_args.tcu.step_k = meta_uop ? '0 : (SYM_SPARSE && is_sparse ? 4'(0)      : 4'(k_index));
-
-        ibuf_r.wb  = meta_uop ? 1'b0 : 1'b1;
-        ibuf_r.rd  = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
-        ibuf_r.rs1 = meta_uop
-            ? (is_meta_store
-                ? (meta_use_rs2 ? ibuf_in.rs2 : ibuf_in.rs1)
-                : (meta_use_rs2 ? make_reg_num(REG_TYPE_F, 5'(META_REG1))
-                                : make_reg_num(REG_TYPE_F, 5'(META_REG0))))
-            : make_reg_num(REG_TYPE_F, rs1);
-        ibuf_r.rs2 = meta_uop ? ibuf_in.rs2 : make_reg_num(REG_TYPE_F, rs2);
-        ibuf_r.rs3 = meta_uop ? '0 : make_reg_num(REG_TYPE_F, rs3);
+        ibuf_r.wb  = 1'b1;
+        ibuf_r.rd  = make_reg_num(REG_TYPE_F, rs3);
+        ibuf_r.rs1 = make_reg_num(REG_TYPE_F, rs1);
+        ibuf_r.rs2 = make_reg_num(REG_TYPE_F, rs2);
+        ibuf_r.rs3 = make_reg_num(REG_TYPE_F, rs3);
     `else
         ibuf_r.op_args.tcu.step_m = 4'(m_index);
         ibuf_r.op_args.tcu.step_n = 4'(n_index);

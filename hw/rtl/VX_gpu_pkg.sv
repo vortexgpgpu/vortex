@@ -486,8 +486,15 @@ package VX_gpu_pkg;
 `ifdef TCU_WGMMA_ENABLE
     localparam INST_TCU_WGMMA      = 4'h1;
 `endif
-    localparam INST_TCU_META_STORE = 4'h2;
     localparam INST_TCU_BITS = 4;
+
+`ifdef TCU_METADATA_ENABLE
+    localparam TCU_META_MX_A  = 0;
+    localparam TCU_META_MX_B  = 1;
+    localparam TCU_META_SP_0  = 2;
+    localparam TCU_META_SP_1  = 3;
+    localparam TCU_META_COUNT = 4;
+`endif
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
@@ -679,6 +686,10 @@ package VX_gpu_pkg;
         logic [NUM_XREGS-1:0]       rd_xregs;
         logic [NUM_XREGS-1:0]       wr_xregs;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
+    `ifdef TCU_METADATA_ENABLE
+        logic [TCU_META_COUNT-1:0]  hidden_used_rs;
+        logic [TCU_META_COUNT-1:0][NUM_REGS_BITS-1:0] hidden_rs;
+    `endif
         logic [NUM_REGS_BITS-1:0]   rd;
         logic [BYTESEL_BITS-1:0]    bytesel;
         logic [NUM_REGS_BITS-1:0]   rs1;
@@ -697,6 +708,10 @@ package VX_gpu_pkg;
         logic [NUM_XREGS-1:0]       rd_xregs;
         logic [NUM_XREGS-1:0]       wr_xregs;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
+    `ifdef TCU_METADATA_ENABLE
+        logic [TCU_META_COUNT-1:0]  hidden_used_rs;
+        logic [TCU_META_COUNT-1:0][NUM_REGS_BITS-1:0] hidden_rs;
+    `endif
         logic [NUM_REGS_BITS-1:0]   rd;
         logic [BYTESEL_BITS-1:0]    bytesel;
         logic [NUM_REGS_BITS-1:0]   rs1;
@@ -738,6 +753,9 @@ package VX_gpu_pkg;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs3_data;
+    `ifdef TCU_METADATA_ENABLE
+        logic [TCU_META_COUNT-1:0][`SIMD_WIDTH-1:0][`XLEN-1:0] tcu_meta_data;
+    `endif
         logic                               sop;
         logic                               eop;
     } operands_t;
@@ -758,6 +776,9 @@ package VX_gpu_pkg;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs3_data;
+    `ifdef TCU_METADATA_ENABLE
+        logic [TCU_META_COUNT-1:0][`SIMD_WIDTH-1:0][`XLEN-1:0] tcu_meta_data;
+    `endif
         logic                               sop;
         logic                               eop;
     } dispatch_t;

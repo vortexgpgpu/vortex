@@ -655,8 +655,16 @@ module VX_decode import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    bytesel,                  reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
-        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.bytesel,   decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
+        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],
+`ifdef TCU_METADATA_ENABLE
+                     {TCU_META_COUNT{1'b0}},  {TCU_META_COUNT{NUM_REGS_BITS'(0)}},
+`endif
+                     reg_ids[RV_RD],    bytesel,                  reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
+        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs,
+`ifdef TCU_METADATA_ENABLE
+                     decode_if.data.hidden_used_rs, decode_if.data.hidden_rs,
+`endif
+                     decode_if.data.rd, decode_if.data.bytesel,   decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
     );

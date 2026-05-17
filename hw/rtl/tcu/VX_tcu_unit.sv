@@ -51,6 +51,9 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
         .OUT_BUF    (3)
+    `ifdef TCU_METADATA_ENABLE
+       ,.HAS_TCU_META (1)
+    `endif
     ) lane_dispatch (
         .clk        (clk),
         .reset      (reset),

@@ -30,6 +30,14 @@
     `define L1_ENABLE
 `endif
 
+`ifdef EXT_TCU_ENABLE
+    `ifdef TCU_MX_ENABLE
+        `define TCU_METADATA_ENABLE
+    `elsif TCU_SPARSE_ENABLE
+        `define TCU_METADATA_ENABLE
+    `endif
+`endif
+
 `ifndef NDEBUG
 `define UUID_ENABLE
 `else
@@ -441,7 +449,13 @@
     end \
     /* verilator lint_on GENUNNAMED */
 
-`define DECL_EXECUTE_T(__name__, __lanes__) \
+`ifdef TCU_METADATA_ENABLE
+`define DECL_TCU_META_EXECUTE_FIELD(__lanes__) logic [TCU_META_COUNT-1:0][__lanes__-1:0][`XLEN-1:0] tcu_meta_data;
+`else
+`define DECL_TCU_META_EXECUTE_FIELD(__lanes__)
+`endif
+
+`define DECL_EXECUTE_T_EX(__name__, __lanes__, __extra__) \
     typedef struct packed { \
         logic [UUID_WIDTH-1:0]           uuid; \
         logic [NW_WIDTH-1:0]             wid; \
@@ -462,10 +476,17 @@
         logic [__lanes__-1:0][`XLEN-1:0] rs1_data; \
         logic [__lanes__-1:0][`XLEN-1:0] rs2_data; \
         logic [__lanes__-1:0][`XLEN-1:0] rs3_data; \
+        __extra__ \
     } __name__``_execute_t; \
     typedef struct packed { \
         __name__``_header_t              header; \
         logic [__lanes__-1:0][`XLEN-1:0] data; \
     } __name__``_result_t
+
+`define DECL_EXECUTE_T(__name__, __lanes__) \
+    `DECL_EXECUTE_T_EX(__name__, __lanes__,)
+
+`define DECL_TCU_EXECUTE_T(__name__, __lanes__) \
+    `DECL_EXECUTE_T_EX(__name__, __lanes__, `DECL_TCU_META_EXECUTE_FIELD(__lanes__))
 
 `endif // VX_DEFINE_VH

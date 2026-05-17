@@ -17,6 +17,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     parameter BLOCK_SIZE = 1,
     parameter NUM_LANES  = 1,
     parameter OUT_BUF    = 0,
+    parameter HAS_TCU_META = 0,
     parameter MAX_FANOUT = `MAX_FANOUT
 ) (
     input  wire             clk,
@@ -33,7 +34,13 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
 
     `DECL_EXECUTE_T (pe, NUM_LANES);
     localparam IN_DATAW     = $bits(dispatch_t);
-    localparam OUT_DATAW    = $bits(pe_execute_t);
+`ifdef TCU_METADATA_ENABLE
+    localparam TCU_META_DATAW = TCU_META_COUNT * `SIMD_WIDTH * `XLEN;
+    localparam TCU_META_OUT_DATAW = HAS_TCU_META ? TCU_META_DATAW : 0;
+`else
+    localparam TCU_META_OUT_DATAW = 0;
+`endif
+    localparam OUT_DATAW    = $bits(pe_execute_t) + TCU_META_OUT_DATAW;
 
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
     localparam NUM_PACKETS  = `SIMD_WIDTH / NUM_LANES;
@@ -47,10 +54,18 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     localparam FANOUT_ENABLE= (`SIMD_WIDTH > (MAX_FANOUT + MAX_FANOUT /2));
 
     localparam DATA_IN_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH);
+`ifdef TCU_METADATA_ENABLE
+    localparam DATA_IN_TCU_META_OFF = 1 + 1;
+    localparam DATA_IN_OPDS_OFF = DATA_IN_TCU_META_OFF + TCU_META_DATAW;
+`else
     localparam DATA_IN_OPDS_OFF = 1 + 1;
+`endif
 
     typedef struct packed {
         logic [2:0][NUM_LANES-1:0][`XLEN-1:0] rsdata;
+    `ifdef TCU_METADATA_ENABLE
+        logic [TCU_META_COUNT-1:0][NUM_LANES-1:0][`XLEN-1:0] tcu_meta_data;
+    `endif
         logic [NUM_LANES-1:0] tmask;
     } packet_t;
 
@@ -67,6 +82,9 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     wire [BLOCK_SIZE-1:0] block_ready;
     wire [BLOCK_SIZE-1:0][NUM_LANES-1:0] block_tmask;
     wire [BLOCK_SIZE-1:0][2:0][NUM_LANES-1:0][`XLEN-1:0] block_rsdata;
+`ifdef TCU_METADATA_ENABLE
+    wire [BLOCK_SIZE-1:0][TCU_META_COUNT-1:0][NUM_LANES-1:0][`XLEN-1:0] block_tcu_meta_data;
+`endif
     wire [BLOCK_SIZE-1:0][LPID_WIDTH-1:0] block_pid;
     wire [BLOCK_SIZE-1:0] block_sop;
     wire [BLOCK_SIZE-1:0] block_eop;
@@ -125,11 +143,17 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
 
         wire [`SIMD_WIDTH-1:0] dispatch_tmask;
         wire [2:0][`SIMD_WIDTH-1:0][`XLEN-1:0] dispatch_rsdata;
+    `ifdef TCU_METADATA_ENABLE
+        wire [TCU_META_COUNT-1:0][`SIMD_WIDTH-1:0][`XLEN-1:0] dispatch_tcu_meta_data;
+    `endif
 
         assign dispatch_tmask = dispatch_data[issue_idx][DATA_IN_TMASK_OFF +: `SIMD_WIDTH];
         assign dispatch_rsdata[0] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 2 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
         assign dispatch_rsdata[1] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 1 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
         assign dispatch_rsdata[2] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 0 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
+    `ifdef TCU_METADATA_ENABLE
+        assign dispatch_tcu_meta_data = dispatch_data[issue_idx][DATA_IN_TCU_META_OFF +: TCU_META_DATAW];
+    `endif
 
         wire valid_p, ready_p;
 
@@ -144,6 +168,11 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
                     assign packets[i].rsdata[0][j] = dispatch_rsdata[0][k];
                     assign packets[i].rsdata[1][j] = dispatch_rsdata[1][k];
                     assign packets[i].rsdata[2][j] = dispatch_rsdata[2][k];
+                `ifdef TCU_METADATA_ENABLE
+                    for (genvar h = 0; h < TCU_META_COUNT; ++h) begin : g_h
+                        assign packets[i].tcu_meta_data[h][j] = dispatch_tcu_meta_data[h][k];
+                    end
+                `endif
                 end
             end
 
@@ -173,6 +202,9 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
 
             assign block_tmask[block_idx] = block_packet.tmask;
             assign block_rsdata[block_idx] = block_packet.rsdata;
+        `ifdef TCU_METADATA_ENABLE
+            assign block_tcu_meta_data[block_idx] = block_packet.tcu_meta_data;
+        `endif
             assign block_pid[block_idx]   = start_p;
             assign block_sop[block_idx]   = is_first_p;
             assign block_eop[block_idx]   = is_last_p;
@@ -182,6 +214,9 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             assign valid_p = dispatch_valid[issue_idx];
             assign block_tmask[block_idx] = dispatch_tmask;
             assign block_rsdata[block_idx] = dispatch_rsdata;
+        `ifdef TCU_METADATA_ENABLE
+            assign block_tcu_meta_data[block_idx] = dispatch_tcu_meta_data;
+        `endif
             assign block_pid[block_idx]   = 0;
             assign block_sop[block_idx]   = 1;
             assign block_eop[block_idx]   = 1;
@@ -206,31 +241,65 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
         wire warp_sop = block_sop[block_idx] && dispatch_sop;
         wire warp_eop = block_eop[block_idx] && dispatch_eop;
 
-        VX_elastic_buffer #(
-            .DATAW   (OUT_DATAW),
-            .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
-        ) buf_out (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (valid_p),
-            .ready_in  (ready_p),
-            .data_in   ({
-                dispatch_data[issue_idx][IN_DATAW-1 -: UUID_WIDTH],
-                block_wid,
-                block_tmask[block_idx],
-                warp_pid,
-                warp_sop,
-                warp_eop,
-                dispatch_data[issue_idx][DATA_IN_TMASK_OFF-1 : (DATA_IN_OPDS_OFF + NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN)],
-                block_rsdata[block_idx][0],
-                block_rsdata[block_idx][1],
-                block_rsdata[block_idx][2]
-            }),
-            .data_out  (execute_if[block_idx].data),
-            .valid_out (execute_if[block_idx].valid),
-            .ready_out (execute_if[block_idx].ready)
-        );
+        if (HAS_TCU_META) begin : g_buf_out_meta
+        `ifdef TCU_METADATA_ENABLE
+            VX_elastic_buffer #(
+                .DATAW   (OUT_DATAW),
+                .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+            ) buf_out (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (valid_p),
+                .ready_in  (ready_p),
+                .data_in   ({
+                    dispatch_data[issue_idx][IN_DATAW-1 -: UUID_WIDTH],
+                    block_wid,
+                    block_tmask[block_idx],
+                    warp_pid,
+                    warp_sop,
+                    warp_eop,
+                    dispatch_data[issue_idx][DATA_IN_TMASK_OFF-1 : (DATA_IN_OPDS_OFF + NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN)],
+                    block_rsdata[block_idx][0],
+                    block_rsdata[block_idx][1],
+                    block_rsdata[block_idx][2],
+                    block_tcu_meta_data[block_idx]
+                }),
+                .data_out  (execute_if[block_idx].data),
+                .valid_out (execute_if[block_idx].valid),
+                .ready_out (execute_if[block_idx].ready)
+            );
+        `endif
+        end else begin : g_buf_out
+            VX_elastic_buffer #(
+                .DATAW   (OUT_DATAW),
+                .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+            ) buf_out (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (valid_p),
+                .ready_in  (ready_p),
+                .data_in   ({
+                    dispatch_data[issue_idx][IN_DATAW-1 -: UUID_WIDTH],
+                    block_wid,
+                    block_tmask[block_idx],
+                    warp_pid,
+                    warp_sop,
+                    warp_eop,
+                    dispatch_data[issue_idx][DATA_IN_TMASK_OFF-1 : (DATA_IN_OPDS_OFF + NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN)],
+                    block_rsdata[block_idx][0],
+                    block_rsdata[block_idx][1],
+                    block_rsdata[block_idx][2]
+                }),
+                .data_out  (execute_if[block_idx].data),
+                .valid_out (execute_if[block_idx].valid),
+                .ready_out (execute_if[block_idx].ready)
+            );
+        `ifdef TCU_METADATA_ENABLE
+            `UNUSED_VAR (block_tcu_meta_data[block_idx])
+        `endif
+        end
     end
 
     // release the dispatch interface when all packets are sent
