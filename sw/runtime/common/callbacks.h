@@ -11,70 +11,81 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// ============================================================================
+// callbacks.h — runtime dispatcher contract between libvortex.so and each
+// backend's libvortex-<NAME>.so.
+//
+// At vx_dev_open time, the dispatcher (sw/runtime/stub/vortex.cpp) dlopens
+// the backend library named by $VORTEX_DRIVER, resolves vx_dev_init, and
+// calls it to populate a callbacks_t with the backend's implementations.
+// All subsequent vortex.h / vortex2.h calls in libvortex.so flow through
+// the function pointers in callbacks_t.
+//
+// The fields below are intentionally Platform-shaped (parent CP proposal
+// §6.3 / runtime impl proposal §4.3): they operate on opaque void* device
+// contexts and raw uint64_t device addresses. The dispatcher wraps these
+// primitives into refcounted vx::Device / vx::Buffer / vx::Queue /
+// vx::Event objects on top.
+// ============================================================================
+
 #ifndef CALLBACKS_H
 #define CALLBACKS_H
 
 #include <vortex.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-  // open the device and connect to it
-  int (*dev_open) (vx_device_h* hdevice);
 
-  // Close the device when all the operations are done
-  int (*dev_close) (vx_device_h hdevice);
+  // ----- Device lifecycle -----
+  // dev_open creates a backend-private device context (returned as void*).
+  // The dispatcher wraps it in a vx::Device on its side.
+  int (*dev_open)  (void** out_dev_ctx);
+  int (*dev_close) (void*  dev_ctx);
 
-  // return device configurations
-  int (*dev_caps) (vx_device_h hdevice, uint32_t caps_id, uint64_t *value);
+  // ----- Capability + heap queries -----
+  int (*query_caps)  (void* dev_ctx, uint32_t caps_id, uint64_t* out_value);
+  int (*memory_info) (void* dev_ctx, uint64_t* out_free, uint64_t* out_used);
 
-  // allocate device memory and return address
-  int (*mem_alloc) (vx_device_h hdevice, uint64_t size, int flags, vx_buffer_h* hbuffer);
+  // ----- Device memory (raw uint64_t addresses; dispatcher wraps in
+  //                     vx::Buffer) -----
+  int (*mem_alloc)   (void* dev_ctx, uint64_t size, uint32_t flags,
+                      uint64_t* out_dev_addr);
+  int (*mem_reserve) (void* dev_ctx, uint64_t dev_addr, uint64_t size,
+                      uint32_t flags);
+  int (*mem_free)    (void* dev_ctx, uint64_t dev_addr);
+  int (*mem_access)  (void* dev_ctx, uint64_t dev_addr, uint64_t size,
+                      uint32_t flags);
 
-  // reserve memory address range
-  int (*mem_reserve) (vx_device_h hdevice, uint64_t address, uint64_t size, int flags, vx_buffer_h* hbuffer);
+  // ----- DMA primitives (sync; the dispatcher's vx::Queue layer adds the
+  //                      async event wrapping on top) -----
+  int (*mem_upload)  (void* dev_ctx, uint64_t dst_dev_addr, const void* src,
+                      uint64_t size);
+  int (*mem_download)(void* dev_ctx, void* dst, uint64_t src_dev_addr,
+                      uint64_t size);
+  int (*mem_copy)    (void* dev_ctx, uint64_t dst_dev_addr,
+                      uint64_t src_dev_addr, uint64_t size);
 
-  // release device memory
-  int (*mem_free) (vx_buffer_h hbuffer);
+  // ----- Kernel launch (async-style: start kicks off, wait blocks) -----
+  int (*launch_start)(void* dev_ctx);
+  int (*launch_wait) (void* dev_ctx, uint64_t timeout_ms);
 
-  // set device memory access rights
-  int (*mem_access) (vx_buffer_h hbuffer, uint64_t offset, uint64_t size, int flags);
-
-  // return device memory address
-  int (*mem_address) (vx_buffer_h hbuffer, uint64_t* address);
-
-  // get device memory info
-  int (*mem_info) (vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used);
-
-  // Copy bytes from host to device memory
-  int (*copy_to_dev) (vx_buffer_h hbuffer, const void* host_ptr, uint64_t dst_offset, uint64_t size);
-
-  // Copy bytes from device memory to host
-  int (*copy_from_dev) (void* host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size);
-
-  // Copy bytes from device memory to device memory
-  int (*copy_dev_to_dev) (vx_buffer_h hdest_buffer, uint64_t dest_offset, vx_buffer_h hsrc_buffer, uint64_t src_offset, uint64_t size);
-
-  // Trigger device execution (kernel launch DCRs already written by stub)
-  int (*start) (vx_device_h hdevice);
-
-  // Wait for device ready with milliseconds timeout
-  int (*ready_wait) (vx_device_h hdevice, uint64_t timeout);
-
-  // write device configuration registers
-  int (*dcr_write) (vx_device_h hdevice, uint32_t addr, uint32_t value);
-
-  // read device configuration registers
-  int (*dcr_read) (vx_device_h hdevice, uint32_t addr, uint32_t tag, uint32_t* value);
+  // ----- DCR -----
+  int (*dcr_write)   (void* dev_ctx, uint32_t addr, uint32_t value);
+  int (*dcr_read)    (void* dev_ctx, uint32_t addr, uint32_t tag,
+                      uint32_t* out_value);
 
 } callbacks_t;
 
+// Each backend's vortex.cpp implements this function (typically via the
+// shared template in <callbacks.inc>) to populate the table.
 int vx_dev_init(callbacks_t* callbacks);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif // CALLBACKS_H

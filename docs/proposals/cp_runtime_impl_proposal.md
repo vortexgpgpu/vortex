@@ -21,23 +21,35 @@ flag in this document is taken from §8 of the parent proposal verbatim.
 
 ### 1.1 In scope
 
-- C++ class hierarchy for `vx_device`, `vx_queue`, `vx_buffer`,
-  `vx_event`.
+- **Full backend redesign**: drop the existing `sw/runtime/stub/`
+  dispatcher pattern (`dlopen` + `callbacks_t`); replace with
+  compile-time backend selection. Each backend produces a single
+  `libvortex.so` containing both `vortex.h` legacy entry points and
+  `vortex2.h` new entry points.
+- **`vortex.h` is a wrapper over `vortex2.h` from day one** — not a
+  phase-8 follow-on. Every legacy `vx_*` call resolves into one or
+  more `vortex2.h` calls inside the same library. No parallel
+  implementations.
+- C++ class hierarchy for `vx::Device`, `vx::Queue`, `vx::Buffer`,
+  `vx::Event` behind the public C handles.
+- `vx::Platform` abstract interface; one subclass per backend
+  (`PlatformSimX`, `PlatformRtlsim`, `PlatformXrt`).
 - Per-queue ring buffer management in pinned host memory.
 - Event seqnum machinery (signal slot, wait comparator, profile
   writeback parsing).
 - Buffer map/unmap cache-coherence implementation.
-- XRT backend full implementation (v1 target).
-- SimX / rtlsim / stub backends as v1 stubs returning
-  `VX_ERR_NOT_SUPPORTED` for CP-only operations.
-- Legacy `vortex.h` shim re-implementation (phase 8).
-- Build-system integration (Makefile, configure, conditional
-  compilation).
+- SimX backend full implementation (v1 in-process target — drives
+  every existing legacy test through the new wrapper).
+- XRT backend full implementation (v1 hardware target).
+- rtlsim backend full implementation.
+- Build-system rework: `./configure --backend={simx|rtlsim|xrt}`,
+  single `libvortex.so` per build, no `libvortex-<name>.so` indirection.
 - Unit-test, integration-test, and hardware-test plans.
 
 ### 1.2 Out of scope
 
-- OPAE backend (deprecated per parent proposal §7.2).
+- OPAE backend (deprecated per parent proposal §7.2; existing
+  `sw/runtime/opae/` is deleted in commit 1b).
 - Per-block helper headers (`vortex_tex.h`, `vortex_raster.h`,
   `vortex_om.h`, `vortex_dxa.h`) — owned by their respective
   subsystem proposals.
@@ -49,141 +61,215 @@ flag in this document is taken from §8 of the parent proposal verbatim.
 
 ## 2. File layout
 
+The redesign **replaces** the existing dispatcher-based tree with a
+flat per-backend layout. Every backend produces a single
+`libvortex.so` containing both the legacy `vortex.h` API (as a thin
+wrapper) and the new `vortex2.h` API (as the primary implementation).
+
 ```
 sw/runtime/
 ├── include/
-│   ├── vortex.h                       # UNCHANGED in v1 (legacy public API)
-│   └── vortex2.h                      # NEW — async public API (§8 of parent)
+│   ├── vortex.h                       # KEPT, API unchanged. Implementation is the wrapper below.
+│   └── vortex2.h                      # NEW — canonical async API (§8.11 of parent)
 ├── common/
-│   ├── callbacks.{h,inc}              # UNCHANGED — instrumentation hooks
-│   ├── common.{h,cpp}                 # MODIFIED — MemoryAllocator extended for retain
+│   ├── callbacks.{h,inc}              # UNCHANGED — instrumentation hooks (used by Platform impls)
+│   ├── common.{h,cpp}                 # KEPT — MemoryAllocator still needed
 │   ├── scope.{h,cpp}                  # UNCHANGED
-│   ├── vortex2_internal.h             # NEW — internal C++ class declarations
-│   ├── vx_device.cpp                  # NEW — vx_device class implementation
-│   ├── vx_queue.cpp                   # NEW — vx_queue class + ring-buffer mgmt
-│   ├── vx_buffer.cpp                  # NEW — vx_buffer class + map/unmap
-│   ├── vx_event.cpp                   # NEW — vx_event class + wait machinery
-│   ├── vx_command_encoder.cpp         # NEW — fills ring-buffer cache lines (§5.7)
-│   └── vortex2_legacy_shim.cpp        # NEW (phase 8) — legacy vortex.h over vortex2.h
-├── xrt/
-│   ├── vortex.cpp                     # UNCHANGED until phase 8 (then deleted)
-│   ├── vortex2_xrt.cpp                # NEW — XRT-specific vx_device::open, AXI surface
-│   ├── vortex2_xrt_axi.{h,cpp}        # NEW — wraps xrt::ip / xrt::bo for AXI access
-│   └── driver.{h,cpp}                 # UNCHANGED — dynamic loader for libxrt
+│   ├── utils.cpp                      # UNCHANGED
+│   ├── vortex2_internal.h             # NEW — vx::Device/Queue/Buffer/Event class decls + vx::Platform
+│   ├── vx_result.cpp                  # NEW — vx_result_string + result enum helpers
+│   ├── vx_device.cpp                  # NEW — vx::Device class (refcount, Platform owner, queues table)
+│   ├── vx_queue.cpp                   # NEW — vx::Queue + per-queue ring-buffer mgmt
+│   ├── vx_buffer.cpp                  # NEW — vx::Buffer + refcount + map/unmap
+│   ├── vx_event.cpp                   # NEW — vx::Event + wait_all + profile readback
+│   ├── vx_command_encoder.cpp         # NEW — cache-line framing helper (§5.7)
+│   └── vortex_legacy_wrapper.cpp      # NEW — every vx_dev_open / vx_start / vx_copy_* / etc.
+│                                      #       implemented as wrapper over vortex2.h calls.
+│                                      #       Same binary, no dispatcher needed.
 ├── simx/
-│   ├── vortex.cpp                     # UNCHANGED — legacy backend
-│   └── vortex2_simx.cpp               # NEW (stub in v1) — returns VX_ERR_NOT_SUPPORTED
+│   └── platform_simx.cpp              # NEW — vx::Platform subclass over the in-process simx model
 ├── rtlsim/
-│   ├── vortex.cpp                     # UNCHANGED
-│   └── vortex2_rtlsim.cpp             # NEW (stub in v1)
-├── stub/
-│   ├── vortex.cpp                     # UNCHANGED
-│   └── vortex2_stub.cpp               # NEW — in-memory mock backend for unit tests
-├── opae/                              # NOT BUILT in v1 (parent §7.2)
-├── Makefile                           # MODIFIED — see §10
-└── common.mk                          # MODIFIED — see §10
+│   └── platform_rtlsim.cpp            # NEW — vx::Platform subclass over rtlsim
+├── xrt/
+│   ├── platform_xrt.cpp               # NEW — vx::Platform subclass over XRT
+│   └── driver.{h,cpp}                 # KEPT — libxrt dynamic loader (consumed by platform_xrt.cpp)
+├── Makefile                           # REWORKED — see §10
+└── common.mk                          # REWORKED — see §10
+```
+
+**Deleted from the existing tree** in commit 1b:
+
+```
+sw/runtime/stub/                       # the dispatcher pattern + its callbacks_t indirection
+sw/runtime/opae/                       # deprecated backend (parent §7.2)
+sw/runtime/<backend>/vortex.cpp        # old C-API implementations per backend (legacy callbacks_t)
+sw/runtime/stub/perf.cpp               # absorbed into common/utils.cpp or vortex_legacy_wrapper.cpp
 ```
 
 Conventions:
 
-- Every `vortex2_*.cpp` is a v1 deliverable, even if it's a stub.
-  This keeps the symbol surface uniform across backends.
-- Legacy `vortex.cpp` per backend is **not** modified in phases 1-7;
-  it is replaced wholesale by `vortex2_legacy_shim.cpp` in phase 8.
-- All shared C++ machinery lives in `common/`, parameterized over a
-  backend "platform" interface (§4.3).
+- One `platform_<backend>.cpp` per backend. It defines a concrete
+  subclass of `vx::Platform` and exports the single C-linkage symbol
+  `vx::Platform* vx_create_platform()` — picked up by
+  `vx::Device::open` at compile time (§3.1).
+- All shared C++ machinery lives in `common/`, parameterized over
+  the `vx::Platform` interface (§4.3).
+- `vortex_legacy_wrapper.cpp` is built into **every** `libvortex.so`
+  regardless of backend, because the legacy `vortex.h` API must work
+  identically on every backend.
+- No backend depends on any other backend's source. `--backend=simx`
+  doesn't pull in rtlsim or xrt code, and vice versa.
 
 ## 3. Per-backend strategy
 
-| Backend | Phase 1-4 status                                                    | Notes                                                                  |
+| Backend | v1 status                                                           | Notes                                                                  |
 |---------|---------------------------------------------------------------------|------------------------------------------------------------------------|
-| xrt     | **Full vortex2.h implementation** through the CP                    | Only target that drives real CP hardware in v1.                        |
-| simx    | Stub: queue/enqueue/event return `VX_ERR_NOT_SUPPORTED`             | Legacy `vortex.h` path keeps working. CP support deferred to phase X.  |
-| rtlsim  | Stub: same as simx                                                  | Lets rtlsim users keep running legacy tests.                           |
-| stub    | **Full in-memory mock** of `vortex2.h` (no HW, no CP, no simulator) | For unit testing the runtime independent of any backend.               |
-| opae    | Not built                                                           | Architecture proposal §7.2.                                            |
+| simx    | **Full implementation** — Platform subclass over the in-process simx model | Primary backend for unit testing and legacy compatibility. No real CP hardware in v1 — simx implements the wire protocol in-process. |
+| rtlsim  | **Full implementation** — Platform subclass over rtlsim             | Same wire protocol as simx; uses rtlsim's RTL-driven model.            |
+| xrt     | **Full implementation** — Platform subclass over the CP-aware AFU   | Drives real CP hardware (RTL commit 1a + 2 must be in place to run end-to-end). |
+| opae    | **Deleted**                                                         | Per parent §7.2.                                                       |
+| stub    | **Deleted**                                                         | The old dispatcher pattern goes away (§3.1).                           |
 
 The build system (§10) selects exactly one backend per build via
-`./configure --backend={xrt,simx,rtlsim,stub}`. The stub backend is
-also built as a static library used by the unit test harness.
+`./configure --backend={simx,rtlsim,xrt}`. The output is a single
+`libvortex.so` containing both `vortex.h` and `vortex2.h` symbols
+implemented over that backend.
 
 ### 3.1 Backend dispatch model
 
-vortex2.h uses **compile-time single-backend selection** — there is no
-runtime dispatch table, no `dlopen` of a backend plugin, no abstract
-factory registry. The choice is:
+vortex2.h uses **compile-time single-backend selection**. This is a
+**deliberate departure** from the legacy `sw/runtime/stub/`
+dispatcher pattern (which used `dlopen` of `libvortex-<NAME>.so`
+based on the `VORTEX_DRIVER` env var). The legacy dispatcher is
+**deleted** in commit 1b.
 
-1. `./configure --backend=xrt` writes the selected backend name into
+How the new selection works:
+
+1. `./configure --backend=simx` writes `VORTEX_BACKEND=simx` into
    `build/config.mk`.
-2. The Makefile links exactly one `vortex2_<backend>.cpp` into
-   `libvortex.so` per build, matching what legacy `vortex.h` already
-   does (one `vortex.cpp` per backend, picked at configure time).
-3. Every backend exports a single C-linkage factory function:
+2. The runtime Makefile builds exactly one `platform_<backend>.cpp`
+   into `libvortex.so`. Other backends' source files are not
+   compiled or linked.
+3. Each backend exports a single C-linkage factory function:
 
    ```cpp
-   /* In each backend's vortex2_<backend>.cpp */
-   extern "C" std::unique_ptr<vx::Platform> vx_make_platform(uint32_t index);
+   /* In each backend's platform_<backend>.cpp */
+   extern "C" vx::Platform* vx_create_platform();
    ```
 
-   `vx::Device::open(index, &dev)` calls `vx_make_platform(index)` once
-   and stores the returned `unique_ptr` in the new `vx::Device`
-   instance. Because `vx_make_platform` is defined in exactly one TU
-   per build, the linker resolves it unambiguously.
-4. `vx_device_count` is similarly backend-private:
-   `extern "C" vx_result_t vx_count_devices(uint32_t* out);` lives in
-   the same TU as `vx_make_platform`.
+   `vx::Device::open` calls `vx_create_platform()` once at device
+   open time and wraps the returned `Platform*` in the new
+   `vx::Device` instance. Because `vx_create_platform` is defined in
+   exactly one TU per build, the linker resolves it unambiguously.
+4. Backend-specific link dependencies stay scoped to the chosen
+   backend (xrt's `libxrt` loader, simx's `libsimx.so`, etc.) — they
+   don't accumulate across builds.
 
-**Why not runtime dispatch?**
+**Why drop the old `dlopen` dispatcher?**
 
-- Legacy `vortex.h` already works this way; matching the convention
-  avoids surprising existing users.
-- Zero new dispatch machinery to write or test.
-- Backend-specific link dependencies (libxrt, libsimx, etc.) stay
-  scoped to the chosen backend — a runtime dispatch table would force
-  every backend's dependencies onto every build.
-- Upper-layer translators (POCL, chipStar, future Vulkan ICD) choose
-  the active backend by picking which `libvortex.so` they link
-  against. They don't see backend selection through the API.
+- The dispatcher exists only because the legacy build produced
+  multiple per-backend libraries that needed runtime selection. The
+  new build produces *one* `libvortex.so` per backend, picked at
+  configure time, so there is nothing to dispatch between.
+- One less indirection layer to maintain and debug. Stack traces
+  become legible (`vx_dev_open` → `vx_device_open` → `Platform::*`
+  directly, no `g_callbacks.*` in between).
+- POCL, chipStar, SimX harnesses, kernel tests link against
+  `libvortex.so` exactly as today — no rebuild needed because the
+  ELF library name is unchanged.
+- `VORTEX_DRIVER` env var becomes a no-op (silently ignored for
+  backward compatibility with old scripts).
 
-The shared dynamic-loader helpers (e.g. `runtime/xrt/driver.{h,cpp}`
-that `dlopen`s `libxrt.so` to resolve XRT symbols at runtime) are
-reused across legacy `vortex.cpp` and new `vortex2_xrt.cpp` in the
-same backend. They don't get duplicated.
+### 3.2 Legacy `vortex.h` is a wrapper over `vortex2.h` from day one
 
-### 3.2 Coexistence with legacy `vortex.cpp` during phases 1-7
+There is **no transition period**. Every legacy `vortex.h` entry
+point (`vx_dev_open`, `vx_mem_alloc`, `vx_copy_to_dev`, `vx_start`,
+`vx_ready_wait`, `vx_dcr_*`, `vx_mpm_query`, the `vx_upload_*`
+utilities, etc.) is implemented as a thin C wrapper over the
+corresponding `vortex2.h` call, in `common/vortex_legacy_wrapper.cpp`.
+That one file is built into every backend's `libvortex.so`.
 
-During phases 1 through 7 (before the phase 8 shim collapses them
-into one), both the legacy `vortex.cpp` and the new
-`vortex2_<backend>.cpp` are linked into the same `libvortex.so` per
-backend. They expose disjoint C-API symbol sets (`vx_dev_open` etc.
-vs `vx_device_open` etc.), so there is no link-time collision.
+Concretely:
 
-Runtime coexistence rules:
+```cpp
+/* sw/runtime/common/vortex_legacy_wrapper.cpp */
 
-- **Shared sub-helpers**: per-backend driver helpers
-  (`runtime/xrt/driver.{h,cpp}`, OPAE's `runtime/opae/driver.{h,cpp}`
-  when it returns) are shared between legacy and new code paths.
-  `libxrt` is loaded once per process; the handle is held in a
-  process-global, accessed by both `vortex.cpp` and
-  `vortex2_xrt.cpp`.
-- **No shared device state across APIs**: each API opens its own
-  connection to the FPGA. The XRT AFU exposes two parallel control
-  surfaces (legacy MMIO command FSM for `vortex.h`, CP doorbells for
-  `vortex2.h`); the AFU's compatibility mode (parent §17) makes them
-  mutually exclusive within a single process — legacy mode is engaged
-  only when no `vortex2.h` queue is enabled.
-- **Don't mix APIs against the same device in one process.** Use
-  `vortex.h` *or* `vortex2.h`, not both. Mixing is not enforced at
-  link time; the compat-mode check at the AFU prevents data corruption
-  but the failure mode (`VX_ERR_DEVICE_BUSY` from `vx_device_open`
-  when legacy AP_CTRL is active, and vice-versa) is a runtime surprise
-  rather than a compile-time error.
-- **Phase 8** collapses the duality: `vortex.cpp` is deleted; the
-  legacy `vortex.h` entry points are re-implemented in
-  `common/vortex2_legacy_shim.cpp` as wrappers around
-  `vortex2.h`'s default queue (§8). After phase 8, the AFU's
-  compatibility mode can be retired and both APIs share state by
-  construction.
+extern "C" int vx_dev_open(vx_device_h* hdev) {
+    return result_to_int(vx_device_open(0, hdev));
+}
+
+extern "C" int vx_dev_close(vx_device_h hdev) {
+    return result_to_int(vx_device_release(hdev));
+}
+
+extern "C" int vx_mem_alloc(vx_device_h hdev, uint64_t size, int flags,
+                            vx_buffer_h* buf) {
+    return result_to_int(vx_buffer_create(hdev, size, (uint32_t)flags, buf));
+}
+
+extern "C" int vx_mem_free(vx_buffer_h buf) {
+    return result_to_int(vx_buffer_release(buf));
+}
+
+extern "C" int vx_copy_to_dev(vx_buffer_h buf, const void* src,
+                              uint64_t off, uint64_t size) {
+    auto* dev = handle_to_buffer(buf)->device();
+    vx_queue_h q = legacy_default_queue(dev);   /* lazy per-device singleton */
+    vx_event_h ev = nullptr;
+    vx_result_t r = vx_enqueue_write(q, buf, off, src, size, 0, nullptr, &ev);
+    if (r != VX_SUCCESS) return result_to_int(r);
+    r = vx_event_wait_all(1, &ev, VX_MAX_TIMEOUT_NS);
+    vx_event_release(ev);
+    return result_to_int(r);
+}
+
+extern "C" int vx_start(vx_device_h hdev, vx_buffer_h kernel, vx_buffer_h args) {
+    auto* dev = handle_to_device(hdev);
+    vx_queue_h q = legacy_default_queue(dev);
+    vx_launch_info_t li = make_launch_info_from_legacy_dcrs(dev, kernel, args);
+    vx_event_h ev = nullptr;
+    vx_result_t r = vx_enqueue_launch(q, &li, 0, nullptr, &ev);
+    legacy_remember_last_event(dev, ev);   /* for vx_ready_wait */
+    return result_to_int(r);
+}
+
+extern "C" int vx_ready_wait(vx_device_h hdev, uint64_t timeout_ms) {
+    auto* dev = handle_to_device(hdev);
+    vx_event_h ev = legacy_take_last_event(dev);
+    if (!ev) return 0;
+    auto r = vx_event_wait_all(1, &ev, timeout_ms * 1'000'000ull);
+    vx_event_release(ev);
+    return result_to_int(r);
+}
+
+/* … remaining vx_mem_* / vx_dcr_* / vx_upload_* wrappers … */
+```
+
+Each backend's `Platform` subclass implements the per-call hooks
+required by `vortex2.h`; the legacy wrapper file is backend-agnostic
+because it only calls into `vortex2.h` — exactly the same code path
+the new API uses.
+
+Implications:
+
+- **Zero behavioral regression** for legacy callers. Every existing
+  test (vecadd on simx, the regression suite, POCL, chipStar) should
+  pass byte-identically after the redesign because the public
+  `vortex.h` surface is unchanged and the underlying execution is the
+  same Platform implementation that backed it before.
+- **One backend implementation per backend.** Backends no longer
+  implement `callbacks_t` for legacy *and* `vortex2.h` symbols
+  separately; they implement only `vx::Platform`. The legacy wrapper
+  builds on top once.
+- **Phase 8 of the original migration plan disappears.** What was
+  "follow-on: re-implement vortex.h as a shim" is folded into commit
+  1b itself.
+
+`legacy_default_queue(dev)` is a small TLS-keyed singleton stored on
+the `vx::Device` instance — created lazily on the first legacy call
+that needs a queue, destroyed at `vx_dev_close` time. Legacy callers
+never see the queue handle. Multi-threaded legacy code gets the same
+implicit single-queue semantics it had before.
 
 ## 4. Core class design
 
@@ -653,13 +739,13 @@ last reference to the parent `Event` is released. This means an
 event the user retains forever pins its profile slot — documented
 behavior; matches CUDA `cudaEvent_t` semantics.
 
-## 8. Legacy `vortex.h` shim (phase 8)
+## 8. Legacy `vortex.h` wrapper (commit 1b)
 
-In phase 8 of the migration plan, every legacy backend's
-`vortex.cpp` is deleted and replaced by a single
-`common/vortex2_legacy_shim.cpp` that implements every `vx_*`
-function from `vortex.h` over `vortex2.h` primitives. Mapping is in
-§9 of the parent proposal; representative implementations:
+The full-redesign approach (§3.2) collapses the original migration
+plan's phase 8 into commit 1b. Every legacy backend's `vortex.cpp` is
+deleted; a single `common/vortex_legacy_wrapper.cpp` implements every
+legacy `vx_*` function over `vortex2.h` primitives. Mapping is in §9
+of the parent proposal; representative implementations:
 
 ```cpp
 extern "C" int vx_dev_open(vx_device_h* hdev) {
@@ -706,101 +792,90 @@ is destroyed on `vx_dev_close`. Legacy callers see exactly the same
 synchronous semantics they always have; new callers can mix
 `vortex2.h` calls freely.
 
-Once phase 8 lands, the AFU's MMIO compatibility mode can be
-retired (parent §9.3).
+Because the wrapper lands in commit 1b alongside the new runtime,
+the AFU's MMIO compatibility mode can be retired as soon as commit 1c
+(CP RTL integration) brings the new control path online. See parent
+proposal §9.3.
 
-## 9. Stub backend
+## 9. Test backend strategy
 
-A `vortex2_stub.cpp` provides a minimal in-process mock for unit
-tests. It implements `vx::Platform` over plain heap allocations and a
-small in-process command "consumer" thread that mimics the CP:
-fetches commands from the mock ring, completes them (memcpy for
-copy/read/write, no-op for launch/DCR), and writes back completion
-seqnums and profile timestamps.
+There is no separate "mock" or "stub" backend in this redesign — the
+original proposal's §9 ("Stub backend") is dropped. Per §3.2, every
+backend (simx, rtlsim, xrt) is a full Platform implementation and
+serves as both the production target and the unit-test target.
 
-This lets every test in `tests/runtime/` run without any FPGA, RTL
-simulation, or SimX dependency. It also serves as a reference for
-"what the CP is supposed to do" — the stub's consumer thread mirrors
-the CPE FSM at a high level.
+Commit 1b's smoke verification target is **simx**: in-process,
+deterministic, no FPGA required. The minimal smoke test
+([tests/runtime/test_basic.cpp](../../tests/runtime/test_basic.cpp))
+links against `libvortex.so` (simx backend) and exercises both legacy
+`vortex.h` entry points and new `vortex2.h` entry points end-to-end.
+A `PASSED` exit is the commit's verification gate.
 
 ## 10. Build system integration
 
-### 10.1 `configure` flags
+### 10.1 Backend selection
 
 ```
---enable-cp                   default: yes  (build CP-aware code paths)
---backend={xrt,simx,rtlsim,stub}  default: xrt
---cp-num-queues=N             default: 4
---cp-ring-size-bytes=N        default: 65536
---cp-profile-default          default: off
+make -C sw/runtime BACKEND=simx     (default)
+make -C sw/runtime BACKEND=rtlsim
 ```
 
-These set the corresponding `VX_CP_*` macros (parent §10) and pick
-which backend's `vortex2_*.cpp` is linked into `libvortex.so`.
+The top-level `sw/runtime/Makefile` defaults to `simx`. xrt support
+returns in commit 1c (when the CP RTL lands and the AXI shim work is
+ready). OPAE is permanently retired per parent §7.2.
 
-### 10.2 `Makefile` changes
+### 10.2 Per-backend `Makefile`s
 
-Add to `sw/runtime/common.mk`:
+Each backend's `Makefile` (`sw/runtime/<name>/Makefile`) compiles:
 
-```makefile
-VORTEX2_COMMON_SRCS := \
-    common/vx_device.cpp \
-    common/vx_queue.cpp \
-    common/vx_buffer.cpp \
-    common/vx_event.cpp \
-    common/vx_command_encoder.cpp
+- `platform_<name>.cpp` — the backend's `vx::Platform` subclass.
+- `common/vx_result.cpp` + `vx_device.cpp` + `vx_buffer.cpp` +
+  `vx_queue.cpp` + `vx_event.cpp` — vortex2.h runtime, backend-agnostic.
+- `common/vortex_legacy_wrapper.cpp` + `legacy_utils.cpp` +
+  `legacy_perf.cpp` + `utils.cpp` — vortex.h C wrappers + helpers.
 
-ifeq ($(BACKEND),xrt)
-  BACKEND_SRCS += xrt/vortex2_xrt.cpp xrt/vortex2_xrt_axi.cpp
-endif
-ifeq ($(BACKEND),simx)
-  BACKEND_SRCS += simx/vortex2_simx.cpp
-endif
-ifeq ($(BACKEND),rtlsim)
-  BACKEND_SRCS += rtlsim/vortex2_rtlsim.cpp
-endif
-ifeq ($(BACKEND),stub)
-  BACKEND_SRCS += stub/vortex2_stub.cpp
-endif
+into a single `libvortex.so` per build. No `libvortex-<name>.so`
+indirection; no `dlopen` dispatcher.
 
-# Phase 8 only:
-LEGACY_SHIM_SRCS := common/vortex2_legacy_shim.cpp
-```
-
-### 10.3 Conditional compilation
-
-`#ifdef VX_CP_ENABLE` only guards code that allocates ring buffers or
-talks to the CP MMIO surface. The header `vortex2.h` itself is
-always installed (so out-of-tree builds can include it), but its
-implementations may be stubs.
-
-### 10.4 Out-of-tree builds
+### 10.3 Out-of-tree builds
 
 Per the project convention ([feedback-out-of-tree-builds]), all
 build artifacts land under `build/`. `configure` (in the build dir)
 copies the per-backend Makefiles into `build/sw/runtime/<backend>/`
-and the build does not touch the source tree.
+and the build does not touch the source tree. Any edit to a source
+Makefile requires a re-run of `../configure` to take effect
+([feedback-vortex-configure-copies-makefiles]).
 
 ## 11. Test plan
 
-### 11.1 Unit tests (`tests/runtime/`, new directory)
+### 11.1 Smoke test (commit 1b verification gate)
 
-Run against the stub backend. Cover:
+[tests/runtime/test_basic.cpp](../../tests/runtime/test_basic.cpp)
+links against `libvortex.so` (simx backend) and exercises:
 
-- Refcounting: `retain`/`release` on every handle class.
-- Ring buffer wrap-around, backpressure, doorbell coalescing.
-- Event signal/wait, including cross-queue wait, user events, host signaling.
+- `vx_dev_open` + `vx_dev_close` (legacy → wrapper → `vx_device_open`/`release`)
+- `vx_dev_caps` vs `vx_device_query` (compare legacy and new — must match)
+- `vx_mem_alloc` (legacy) + `vx_buffer_release` (new) — cross-API
+- `vx_buffer_create` (new) + `vx_buffer_address` + `vx_mem_free` (legacy) — cross-API
+- `vx_queue_create` + `vx_queue_release`
+- `vx_user_event_create` + `vx_event_status` + `vx_user_event_signal` + `vx_event_wait_all`
+- Refcount semantics: `vx_buffer_retain` defers actual free until balanced release
+
+Run with `make -C tests/runtime run` under a 120 s cap
+([feedback-test-timeout-120s]). Verification gate: `PASSED` exit + 0
+return code.
+
+### 11.2 Expanded unit tests (post-commit-1b)
+
+Future commits in this phase will add coverage for:
+
+- Ring buffer wrap-around, backpressure, doorbell coalescing
+  (relevant once CP RTL lands — commit 1c).
+- Cross-queue event waits.
 - Profile timestamp readback, including cycle→ns conversion.
-- Map/unmap on PIN_MEMORY buffers; `VX_ERR_NOT_SUPPORTED` on others.
-- Concurrent enqueue from multiple host threads on the same queue.
-- Concurrent enqueue from multiple queues on the same device.
-- Legacy shim (phase 8): every `vx_*` function in `vortex.h`
-  re-implemented over `vortex2.h` produces identical results to the
-  pre-shim implementation.
-
-Framework: existing `tests/Makefile` with a new `runtime/` subdir
-built against `-lvortex_stub`. CI runs per [feedback-test-timeout-120s]
-under a 120 s cap.
+- Map/unmap on PIN_MEMORY buffers (currently the wrapper falls back
+  to staging copies — see §6.2).
+- Concurrent enqueue from multiple host threads.
 
 ### 11.2 Integration tests (xrt backend on FPGA hardware)
 
@@ -833,78 +908,51 @@ conformance harnesses.
 
 ## 12. Phased implementation tasks
 
-Aligns with parent proposal §13 migration plan.
+Aligns with parent proposal §13 migration plan, with the original
+"phase 8 legacy shim" folded into commit 1b (full-redesign approach
+per §3.2).
 
-### Phase 1 — `vortex2.h` skeleton (1 PR, ~1 week)
+### Commit 1b — full runtime redesign (this commit) ✅
 
-- [ ] Write `include/vortex2.h` exactly as §8.11 of parent.
-- [ ] Write `common/vortex2_internal.h` with empty class declarations.
-- [ ] Write `common/vx_device.cpp` with `vx_device_open` returning
-      `VX_ERR_NOT_SUPPORTED` plus the refcount methods.
-- [ ] Same skeleton for `vx_buffer.cpp`, `vx_queue.cpp`, `vx_event.cpp`.
-- [ ] Write `vx_result_string`.
-- [ ] Stub backends: `vortex2_xrt.cpp`, `vortex2_simx.cpp`,
-      `vortex2_rtlsim.cpp`, `vortex2_stub.cpp`, all returning
-      `VX_ERR_NOT_SUPPORTED` for everything.
-- [ ] Build-system integration: configure flag, Makefile updates,
-      `libvortex.so` exports the new symbols.
-- [ ] Compile-only test: `gcc -include vortex2.h -shared empty.c` succeeds.
+- [x] `include/vortex2.h` with the complete API surface (parent §8.11).
+- [x] `common/vortex2_internal.h` — `vx::Device/Queue/Buffer/Event` +
+      `vx::Platform`.
+- [x] `common/vx_result.cpp` + `vx_device.cpp` + `vx_buffer.cpp` +
+      `vx_queue.cpp` + `vx_event.cpp`.
+- [x] `common/vortex_legacy_wrapper.cpp` — every legacy `vx_*` entry
+      point implemented over `vortex2.h`.
+- [x] `simx/platform_simx.cpp` + `rtlsim/platform_rtlsim.cpp` —
+      `vx::Platform` subclasses over the existing in-process simulators.
+- [x] Deleted: `stub/` (the old dispatcher), `opae/` (deprecated),
+      `xrt/` (deferred to commit 1c), per-backend `vortex.cpp` files,
+      `common/callbacks.{h,inc}` (dispatcher abstraction gone).
+- [x] Rewritten build system: single `libvortex.so` per build, no
+      `libvortex-<name>.so` indirection, `BACKEND=simx|rtlsim` selector.
+- [x] `tests/runtime/test_basic.cpp` smoke test: PASSED on simx.
 
-### Phase 2 — single-CPE runtime over CP (3-4 PRs, ~3 weeks)
+### Commit 1c — XRT backend + CP RTL integration (depends on RTL phase 2)
 
-Depends on RTL phase 2.
+- [ ] `xrt/platform_xrt.cpp` — `vx::Platform` subclass over the
+      CP-aware XRT AFU shell.
+- [ ] AXI register-block decode for the new CP doorbells (parent §6.10).
+- [ ] Replace the simx/rtlsim "fake-async" launch path with real
+      ring-buffer submission to the CPE (when the CP RTL is online).
+- [ ] Hardware smoke: vecadd via `vortex2.h` async path on FPGA.
 
-- [ ] Implement `Platform` interface for xrt (`vortex2_xrt_axi.cpp`).
-- [ ] Implement `vx::Device::open` for xrt (queries device caps,
-      reads `CP_CYCLE_FREQ_HZ`).
-- [ ] Implement `vx::Buffer::create` using existing `MemoryAllocator`.
-- [ ] Implement `vx::Queue::create` for single-CPE config (`NUM_QUEUES=1`):
-      ring/head/cmpl allocation, MMIO writes to `Q_*` registers,
-      `enqueue_mu_`, `tail_`.
-- [ ] Implement `CommandEncoder` + `Queue::emit_command`.
-- [ ] Implement `Queue::enqueue_write`, `enqueue_read`,
-      `enqueue_launch` (no events yet — `out_event` ignored).
-- [ ] Implement `Queue::flush` (write doorbell) and `Queue::finish`
-      (poll completion slot for the last submitted seqnum).
-- [ ] Integration test: vecadd on hardware.
+### Commit 1d — N CPEs + events + barriers + profiling (depends on RTL phases 3-4)
 
-### Phase 3 — multi-CPE + events (2-3 PRs, ~3 weeks)
-
-Depends on RTL phase 3.
-
-- [ ] `Device::alloc_queue_id` + per-queue id selection in
-      `Queue::create`.
-- [ ] `EventSlotPool` + `Event::bind` + `alloc_event`.
-- [ ] Wire `out_event` parameter through every `enqueue_*`.
-- [ ] `Event::status`, `Event::wait`, `vx::wait_all`,
-      `vx_user_event_create` / `vx_user_event_signal`.
-- [ ] Stress test: 4 queues each enqueueing 1k commands, all events
-      wait_all'd at the end, no leaks under valgrind.
-
-### Phase 4 — barriers, profiling, raw DCR, map/unmap (2-3 PRs, ~2 weeks)
-
-Depends on RTL phase 4.
-
+- [ ] Per-queue ring-buffer allocation, doorbell, completion seqnum.
 - [ ] Wait-list expansion in `Queue::emit_wait_list`.
-- [ ] `Queue::enqueue_barrier`, `enqueue_dcr_write`, `enqueue_dcr_read`.
-- [ ] `ProfileSlotPool`, `F_PROFILE` flag emission, profile slot
-      writeback parsing, `Event::get_profile`.
-- [ ] `Buffer::map` / `Buffer::unmap` with cache flush/invalidate.
-- [ ] OpenCL 1.2 conformance smoke test passes through a POCL build
-      backed by `vortex2.h`.
+- [ ] `enqueue_barrier`, `enqueue_dcr_write`, `enqueue_dcr_read`.
+- [ ] `ProfileSlotPool`, `F_PROFILE` flag emission, `Event::get_profile`.
+- [ ] `Buffer::map` / `Buffer::unmap` with cache flush/invalidate
+      (replaces current heap-mirror fallback in §6).
+- [ ] OpenCL 1.2 conformance smoke via POCL backed by `vortex2.h`.
 
-### Phase 5 — perf pass (1-2 PRs, timing-driven)
+### Commit 1e — perf pass (timing-driven)
 
 Doorbell coalescing, head-write batching, ring-buffer pinning
-optimizations. Driven by phase-4 perf measurements.
-
-### Phase 8 — legacy shim (1 PR, ~1 week)
-
-- [ ] Implement `common/vortex2_legacy_shim.cpp` covering every
-      `vortex.h` entry point per parent §9.1.
-- [ ] Delete per-backend `vortex.cpp` files (xrt/simx/rtlsim/stub).
-- [ ] Verify SimX/rtlsim/legacy tests pass unchanged.
-- [ ] Update build system to link legacy shim by default.
+optimizations. Driven by phase-4 perf measurements on hardware.
 
 ## 13. Open implementation questions
 
