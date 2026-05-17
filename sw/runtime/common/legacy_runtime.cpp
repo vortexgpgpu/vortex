@@ -236,8 +236,11 @@ extern "C" int vx_start_g(vx_device_h hdevice, vx_buffer_h hkernel,
     Queue* q = dev->legacy_default_queue();
     if (!q) return -1;
 
-    // Program the full KMU descriptor via the queue. Each enqueue_dcr_write
-    // is synchronous in v1 (pre-CP); the launch follows after they retire.
+    // Program the full KMU descriptor via the queue, then issue the launch.
+    // Since the queue is a strict FIFO (single worker thread), the 15 DCR
+    // writes are fire-and-forget — the launch sits behind them and the
+    // worker executes them in order. Waiting per-DCR-write would cost 15
+    // worker round-trips per kernel launch for no correctness gain.
     uint64_t pc   = kernel->dev_address();
     uint64_t argp = args->dev_address();
     struct { uint32_t addr; uint32_t value; } kmu_writes[] = {
@@ -258,13 +261,9 @@ extern "C" int vx_start_g(vx_device_h hdevice, vx_buffer_h hkernel,
         { VX_DCR_KMU_WARP_STEP_Z,   warp_step_z   },
     };
     for (auto& w : kmu_writes) {
-        vx_event_h dummy = nullptr;
-        auto r = vx_enqueue_dcr_write(to_handle(q), w.addr, w.value, 0, nullptr, &dummy);
+        auto r = vx_enqueue_dcr_write(to_handle(q), w.addr, w.value,
+                                      0, nullptr, /*out_event=*/nullptr);
         if (r != VX_SUCCESS) return -1;
-        if (dummy) {
-            vx_event_wait_all(1, &dummy, VX_TIMEOUT_INFINITE);
-            vx_event_release(dummy);
-        }
     }
 
     // Async launch — return immediately; caller polls via vx_ready_wait.

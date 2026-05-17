@@ -23,9 +23,13 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
+#include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <unordered_set>
+#include <vector>
 
 namespace vx {
 
@@ -320,20 +324,52 @@ private:
     Queue(Device* dev, const vx_queue_info_t& info);
     ~Queue();
 
-    // v1 "fake async" pre-CP-RTL helpers. Each enqueue waits on any
-    // external events first, then performs the operation synchronously via
-    // Platform, then signals the returned event. Pre-CP semantics match
-    // legacy vortex.h behavior exactly; post-CP, this is replaced by ring
-    // buffer submission to the CPE.
-    vx_result_t wait_on_externals(uint32_t nw, const vx_event_h* w);
-    Event*      bind_event(uint64_t queued_ns, uint64_t submit_ns,
-                           uint64_t start_ns, uint64_t end_ns);
+    // ------------------------------------------------------------------
+    // Per-queue worker thread. Each enqueue *builds* a Command and pushes
+    // it to commands_; the worker pops them one at a time, waits on the
+    // command's dep events, then runs the work lambda. This decouples
+    // enqueue latency from execution latency and removes the deadlock
+    // when an enqueue is gated on an unsignaled user event (the wait now
+    // happens on the worker, not on the caller).
+    //
+    // In-queue ordering is preserved (FIFO, single worker), matching the
+    // OpenCL in-order queue semantics that POCL relies on.
+    // ------------------------------------------------------------------
+    struct Command {
+        std::vector<Event*>                                       waits;
+        Event*                                                    completion = nullptr;
+        uint64_t                                                  queued_ns  = 0;
+        // work returns the platform result and fills start/end timestamps
+        // when profiling is requested (caller writes 0s when it doesn't
+        // know — barrier, dcr_read with sync read, etc.).
+        std::function<vx_result_t(uint64_t* start_ns, uint64_t* end_ns)> work;
+    };
 
-    Device*               device_;
-    uint32_t              priority_;
-    uint32_t              flags_;
+    void worker_loop();
 
-    std::mutex            enqueue_mu_;
+    // ------------------------------------------------------------------
+    // Helper: capture a wait-list into a Command, retaining each event.
+    // Builds + atomically pushes the command, notifies the worker. Always
+    // produces a completion event (retained for the caller; an extra ref
+    // for the worker is held internally).
+    // ------------------------------------------------------------------
+    vx_result_t enqueue(Command&& cmd, uint32_t nw, const vx_event_h* w,
+                        vx_event_h* out);
+
+    Device*                  device_;
+    uint32_t                 priority_;
+    uint32_t                 flags_;
+
+    // Serializes per-command platform calls when multiple queues share
+    // one backend (v1 has only one Platform per device).
+    std::mutex               enqueue_mu_;
+
+    // Command FIFO + worker thread state.
+    std::mutex               cmd_mu_;
+    std::condition_variable  cmd_cv_;
+    std::deque<Command>      commands_;
+    bool                     shutdown_ = false;
+    std::thread              worker_;
 };
 
 // ============================================================================

@@ -501,6 +501,73 @@ private:
 } // namespace vx
 ```
 
+#### 4.6.1 Pre-CP fallback (v1 shipped implementation)
+
+Until `VX_cp_core` lands and the host can drop commands into a real
+ring buffer, the v1 implementation uses a per-queue worker thread
+backed by a `std::deque<Command>` FIFO. The public surface
+(`vx_enqueue_*`, events, `vx_queue_finish`) is identical; only the
+internals differ.
+
+```cpp
+namespace vx {
+
+class Queue : public RefCounted<Queue> {
+    // ...public API as above...
+private:
+    struct Command {
+        std::vector<Event*>                                       waits;
+        Event*                                                    completion = nullptr;
+        uint64_t                                                  queued_ns  = 0;
+        std::function<vx_result_t(uint64_t* start_ns, uint64_t* end_ns)> work;
+    };
+
+    void worker_loop();
+    vx_result_t enqueue(Command&& cmd, uint32_t nw, const vx_event_h* w,
+                        vx_event_h* out);
+
+    std::mutex               enqueue_mu_;     // serializes platform calls
+    std::mutex               cmd_mu_;
+    std::condition_variable  cmd_cv_;
+    std::deque<Command>      commands_;
+    bool                     shutdown_ = false;
+    std::thread              worker_;
+};
+
+} // namespace vx
+```
+
+**Why a worker, not the caller's thread.** Each `vx_enqueue_*` only
+*builds* a `Command` (a lambda over the underlying Platform call)
+and queues it. The worker pops commands in FIFO order, blocks on
+each command's wait-list, and then runs the work lambda. This
+gives three properties the synchronous fallback lacked:
+
+1. **No caller-thread deadlocks** when an enqueue is gated on an
+   unsignaled user event — the wait now happens on the worker.
+2. **In-queue ordering preserved** (single worker = strict FIFO),
+   matching the OpenCL in-order queue semantics POCL relies on.
+3. **Cross-queue concurrency** — different workers run in parallel,
+   though all platform calls still serialize behind `enqueue_mu_`
+   because the v1 backend is single-threaded (simx / rtlsim hold one
+   `Platform`). Once CP-driven backends arrive, `enqueue_mu_` can
+   relax to per-resource arbitration.
+
+`Queue::finish(timeout)` enqueues a sentinel barrier and waits on
+its completion event — the FIFO order guarantees every prior
+command has finished by then.
+
+The Command lambda captures all platform-call arguments by value.
+`enqueue()` retains each wait-event so the caller can release them
+immediately; the worker releases them after the wait completes.
+
+**Migration path to CP-driven submission.** When `VX_cp_core` is
+live and the host can write into an HBM-resident ring buffer
+(§5 below), the worker is removed and `enqueue_*` becomes the
+direct ring-write + doorbell pattern described next. The Command
+struct becomes the in-ring encoding; the worker's wait-on-deps
+turns into the `wait_list` expansion of §5.6.
+
 ### 4.7 `vx::Event`
 
 ```cpp
