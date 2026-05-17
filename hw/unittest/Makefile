@@ -13,6 +13,7 @@ all:
 	$(MAKE) -C tcu_unit
 	$(MAKE) -C cp_arbiter
 	$(MAKE) -C cp_engine
+	$(MAKE) -C cp_launch
 
 run:
 	$(MAKE) -C generic_queue run
@@ -29,6 +30,7 @@ run:
 	$(MAKE) -C tcu_unit run
 	$(MAKE) -C cp_arbiter run
 	$(MAKE) -C cp_engine run
+	$(MAKE) -C cp_launch run
 
 clean:
 	$(MAKE) -C generic_queue clean
@@ -45,3 +47,4 @@ clean:
 	$(MAKE) -C tcu_unit clean
 	$(MAKE) -C cp_arbiter clean
 	$(MAKE) -C cp_engine clean
+	$(MAKE) -C cp_launch clean
