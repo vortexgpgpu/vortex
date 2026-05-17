@@ -245,6 +245,37 @@ package VX_tcu_pkg;
         return int_fmt[0];
     endfunction
 
+    function automatic logic tcu_fmt_is_mx(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        case (fmt)
+            TCU_MXFP8_ID, TCU_NVFP4_ID, TCU_MXI8_ID:
+                return 1'b1;
+            default:
+                return 1'b0;
+        endcase
+    endfunction
+
+    function automatic logic [4:0] mx_scale_blocks_k(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        case (fmt)
+            TCU_MXFP8_ID, TCU_MXI8_ID:
+                return 5'((TCU_TILE_K + 7) / 8);
+            TCU_NVFP4_ID:
+                return 5'((TCU_TILE_K + 1) / 2);
+            default:
+                return 5'd0;
+        endcase
+    endfunction
+
+    function automatic logic [2:0] mx_words_per_scale_m1(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        case (fmt)
+            TCU_MXFP8_ID, TCU_MXI8_ID:
+                return 3'd7; // 32 8-bit elements => 8 packed 32-bit words
+            TCU_NVFP4_ID:
+                return 3'd1; // 16 4-bit elements => 2 packed 32-bit words
+            default:
+                return 3'd0;
+        endcase
+    endfunction
+
     function automatic logic tcu_fmt_is_bfloat(input logic [3:0] float_fmt);
         return !float_fmt[0];
     endfunction
@@ -342,18 +373,12 @@ package VX_tcu_pkg;
                     op_args.tcu.step_m, op_args.tcu.step_n));
             end
         `endif
-        `ifdef TCU_SPARSE_ENABLE
-            INST_TCU_META_STORE: begin
-                `TRACE(level, ("META_STORE."));
-                trace_fmt(level, op_args.tcu.fmt_s);
-            end
-        `endif
             default: `TRACE(level, ("?"))
         endcase
     endtask
 `endif
 
-    `DECL_EXECUTE_T (tcu, `NUM_TCU_LANES);
+    `DECL_TCU_EXECUTE_T (tcu, `NUM_TCU_LANES);
 
 endpackage
 

@@ -21,11 +21,11 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     input wire          clk,
     input wire          reset,
 
-    // Write port (meta_store instruction)
-    input wire          wr_en,
-    input wire [`LOG2UP(`NUM_WARPS)-1:0] wr_wid,
-    input wire [4:0]    wr_idx, // flat store index within the warp's metadata block
-    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] wr_data,
+    // Capture hidden f14/f15 metadata sidebands on the first WMMA compute uop.
+    input wire          capture_en,
+    input wire [`LOG2UP(`NUM_WARPS)-1:0] capture_wid,
+    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] meta0_data,
+    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] meta1_data,
 
     // Read port (from FEDP path)
     input wire [`LOG2UP(`NUM_WARPS)-1:0] rd_wid,
@@ -34,8 +34,8 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_block
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR (reset)
 
-    // Local parameters
     localparam PER_WARP_DEPTH  = TCU_META_PER_WARP_DEPTH;
     localparam META_BLOCK_WIDTH = TCU_MAX_META_BLOCK_WIDTH;
     localparam COLS_PER_LOAD   = TCU_META_COLS_PER_LOAD;
@@ -46,17 +46,9 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     localparam ADDRW_PW     = `CLOG2(PER_WARP_DEPTH);
     localparam NUM_COLS     = META_BLOCK_WIDTH / 32;
     localparam BANK_DEPTH   = `NUM_WARPS;
-    localparam BANK_ADDRW   = `LOG2UP(BANK_DEPTH);
-    `UNUSED_PARAM (BANK_ADDRW)
-
     localparam TOTAL_COLS   = PER_WARP_DEPTH * NUM_COLS;
     localparam PACKED_WIDTH = TOTAL_COLS * 32;
 
-    localparam LG_CPL = $clog2((COLS_PER_LOAD > 1) ? COLS_PER_LOAD : 2);
-    localparam LG_PD  = $clog2(PER_WARP_DEPTH);
-    localparam LG_SPC = (STORES_PER_COL > 1) ? $clog2(STORES_PER_COL) : 1;
-
-    // Bank select: same generate-if as original per_warp_raddr
     localparam M_STEP_BITS = `CLOG2(TCU_M_STEPS);
     localparam K_STEP_BITS = `CLOG2(HALF_K_STEPS);
     `UNUSED_VAR (step_m)
@@ -73,59 +65,22 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         assign bank_sel = '0;
     end
 
-    // Write decode: flat store index → actual column, sub-store, bank-enable, write data
-    wire [4:0] meta_actual_col_idx;
-    wire [LG_SPC-1:0] sub_store_idx;
-    if (STORES_PER_COL > 1) begin : g_meta_spc
-        assign meta_actual_col_idx = 5'(wr_idx >> LG_SPC);
-        assign sub_store_idx = wr_idx[LG_SPC-1:0];
-    end else begin : g_meta_spc
-        assign meta_actual_col_idx = wr_idx;
-        assign sub_store_idx = '0;
-    end
-    `UNUSED_VAR (sub_store_idx)
-
-    wire [PER_WARP_DEPTH-1:0] meta_wr_bank_en;
-    for (genvar b = 0; b < PER_WARP_DEPTH; ++b) begin : g_bank_en
-        if (STORES_PER_COL > 1) begin : g_partial
-            assign meta_wr_bank_en[b] = (LG_SPC'(b / BANKS_PER_STORE) == sub_store_idx);
-        end else begin : g_partial
-            assign meta_wr_bank_en[b] = 1'b1;
-        end
-    end
-
-    wire [PER_WARP_DEPTH-1:0][31:0] meta_wr_data;
-    if (STORES_PER_COL > 1) begin : g_meta_wr_mode
-        for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
-            assign meta_wr_data[r] = 32'(wr_data[r % BANKS_PER_STORE]);
-        end
-    end else begin : g_meta_wr_mode
-        wire [$clog2(TCU_BLOCK_CAP)-1:0] meta_thread_offset;
-        if (COLS_PER_LOAD > 1) begin : g_meta_off
-            assign meta_thread_offset = {meta_actual_col_idx[LG_CPL-1:0], {LG_PD{1'b0}}};
-        end else begin : g_meta_off
-            assign meta_thread_offset = '0;
-        end
-        for (genvar r = 0; r < PER_WARP_DEPTH; ++r) begin : g_meta_wr
-            assign meta_wr_data[r] = 32'(wr_data[meta_thread_offset + r]);
-        end
-    end
-
-    // Column write-enable (one-hot from meta_actual_col_idx)
-    wire [NUM_COLS-1:0] col_wren;
-    for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col_wren
-    assign col_wren[c] = (c[TCU_FMT_WIDTH-1:0] == meta_actual_col_idx);
-    end
-
-    // Pack write data and enables for unified RAM
     wire [TOTAL_COLS-1:0]   packed_wren;
     wire [PACKED_WIDTH-1:0] packed_wdata;
     wire [PACKED_WIDTH-1:0] packed_rdata;
 
     for (genvar b = 0; b < PER_WARP_DEPTH; ++b) begin : g_meta_banks
         for (genvar c = 0; c < NUM_COLS; ++c) begin : g_col
-            assign packed_wren[b * NUM_COLS + c] = wr_en && col_wren[c] && meta_wr_bank_en[b];
-            assign packed_wdata[(b * NUM_COLS + c) * 32 +: 32] = meta_wr_data[b];
+            localparam STORE_IN_COL   = b / BANKS_PER_STORE;
+            localparam THREAD_IN_STORE= b % BANKS_PER_STORE;
+            localparam FLAT_STORE     = c * STORES_PER_COL + STORE_IN_COL;
+            localparam LOAD_IDX       = FLAT_STORE / COLS_PER_LOAD;
+            localparam STORE_IN_LOAD  = FLAT_STORE % COLS_PER_LOAD;
+            localparam SRC_THREAD     = STORE_IN_LOAD * BANKS_PER_STORE + THREAD_IN_STORE;
+
+            assign packed_wren[b * NUM_COLS + c] = capture_en;
+            assign packed_wdata[(b * NUM_COLS + c) * 32 +: 32] =
+                (LOAD_IDX == 0) ? 32'(meta0_data[SRC_THREAD]) : 32'(meta1_data[SRC_THREAD]);
         end
     end
 
@@ -141,18 +96,20 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
-        .write (|packed_wren),
+        .write (capture_en),
         .wren  (packed_wren),
-        .waddr (wr_wid),
+        .waddr (capture_wid),
         .wdata (packed_wdata),
         .raddr (rd_wid),
         .rdata (packed_rdata)
     );
 
-    // Read output MUX: select bank based on {step_m, step_k}, then split into per-row slices
+    wire same_warp_capture = capture_en && (capture_wid == rd_wid);
+    wire [PACKED_WIDTH-1:0] live_packed_data = same_warp_capture ? packed_wdata : packed_rdata;
+
     wire [PER_WARP_DEPTH-1:0][META_BLOCK_WIDTH-1:0] bank_rdata;
     for (genvar b = 0; b < PER_WARP_DEPTH; ++b) begin : g_unpack
-        assign bank_rdata[b] = packed_rdata[b * META_BLOCK_WIDTH +: META_BLOCK_WIDTH];
+        assign bank_rdata[b] = live_packed_data[b * META_BLOCK_WIDTH +: META_BLOCK_WIDTH];
     end
 
     assign vld_block = bank_rdata[bank_sel];
