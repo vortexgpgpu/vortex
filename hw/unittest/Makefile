@@ -18,6 +18,8 @@ all:
 	$(MAKE) -C cp_unpack
 	$(MAKE) -C cp_axil_regfile
 	$(MAKE) -C cp_axi_path
+	$(MAKE) -C cp_dma
+	$(MAKE) -C cp_core
 
 run:
 	$(MAKE) -C generic_queue run
@@ -39,6 +41,8 @@ run:
 	$(MAKE) -C cp_unpack run
 	$(MAKE) -C cp_axil_regfile run
 	$(MAKE) -C cp_axi_path run
+	$(MAKE) -C cp_dma run
+	$(MAKE) -C cp_core run
 
 clean:
 	$(MAKE) -C generic_queue clean
@@ -60,3 +64,5 @@ clean:
 	$(MAKE) -C cp_unpack clean
 	$(MAKE) -C cp_axil_regfile clean
 	$(MAKE) -C cp_axi_path clean
+	$(MAKE) -C cp_dma clean
+	$(MAKE) -C cp_core clean
