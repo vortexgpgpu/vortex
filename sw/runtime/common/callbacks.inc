@@ -109,8 +109,10 @@ extern "C" int vx_dev_init(callbacks_t* callbacks) {
 
   callbacks->mem_access = [](void* dev_ctx, uint64_t dev_addr, uint64_t size,
                              uint32_t flags) -> int {
-    if (nullptr == dev_ctx || 0 == size)
+    if (nullptr == dev_ctx)
       return -1;
+    if (0 == size)
+      return 0;   // no-op; legacy upload path passes size=0 for empty BSS
     return reinterpret_cast<vx_device*>(dev_ctx)
               ->mem_access(dev_addr, size, static_cast<int>(flags));
   };
