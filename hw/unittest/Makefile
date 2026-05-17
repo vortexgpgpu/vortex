@@ -16,6 +16,8 @@ all:
 	$(MAKE) -C cp_launch
 	$(MAKE) -C cp_dcr_proxy
 	$(MAKE) -C cp_unpack
+	$(MAKE) -C cp_axil_regfile
+	$(MAKE) -C cp_axi_path
 
 run:
 	$(MAKE) -C generic_queue run
@@ -35,6 +37,8 @@ run:
 	$(MAKE) -C cp_launch run
 	$(MAKE) -C cp_dcr_proxy run
 	$(MAKE) -C cp_unpack run
+	$(MAKE) -C cp_axil_regfile run
+	$(MAKE) -C cp_axi_path run
 
 clean:
 	$(MAKE) -C generic_queue clean
@@ -54,3 +58,5 @@ clean:
 	$(MAKE) -C cp_launch clean
 	$(MAKE) -C cp_dcr_proxy clean
 	$(MAKE) -C cp_unpack clean
+	$(MAKE) -C cp_axil_regfile clean
+	$(MAKE) -C cp_axi_path clean
