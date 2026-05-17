@@ -236,6 +236,15 @@ public:
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_tid = 0;
     this->tick();
     device_->vcp2af_sRxPort_c0_mmioRdValid = 0;
+    // The legacy MMIO handler responds combinationally (mmioRdValid fires
+    // the cycle after the request). The CP regfile is registered and
+    // takes ~2-3 cycles; tick until the response arrives. Cap at 1000
+    // cycles so a runaway request doesn't hang the sim silently.
+    int spin = 0;
+    while (!device_->af2cp_sTxPort_c2_mmioRdValid && spin < 1000) {
+      this->tick();
+      ++spin;
+    }
     assert(device_->af2cp_sTxPort_c2_mmioRdValid);
     *value = device_->af2cp_sTxPort_c2_data;
   }

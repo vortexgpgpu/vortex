@@ -57,6 +57,32 @@ using namespace vortex;
 
 #define STATUS_STATE_BITS 8
 
+// ----- Command Processor regfile (host byte addresses) -----
+// The AFU's MMIO demux routes byte addresses 0x1000..0x1FFF to the CP
+// regfile (mapped to CP's native 0x000-based 12-bit address space).
+// Same bit-12 split as the XRT integration; see VX_cp_axil_regfile §17.4.
+#define CP_BASE              0x1000
+#define CP_REG_CTRL          (CP_BASE + 0x000)   // bit0 = enable_global
+#define CP_REG_STATUS        (CP_BASE + 0x004)
+#define CP_REG_DEV_CAPS      (CP_BASE + 0x008)
+#define CP_Q_RING_BASE_LO    (CP_BASE + 0x100)
+#define CP_Q_RING_BASE_HI    (CP_BASE + 0x104)
+#define CP_Q_HEAD_ADDR_LO    (CP_BASE + 0x108)
+#define CP_Q_HEAD_ADDR_HI    (CP_BASE + 0x10C)
+#define CP_Q_CMPL_ADDR_LO    (CP_BASE + 0x110)
+#define CP_Q_CMPL_ADDR_HI    (CP_BASE + 0x114)
+#define CP_Q_RING_SIZE_LOG2  (CP_BASE + 0x118)
+#define CP_Q_CONTROL         (CP_BASE + 0x11C)
+#define CP_Q_TAIL_LO         (CP_BASE + 0x120)
+#define CP_Q_TAIL_HI         (CP_BASE + 0x124)
+#define CP_Q_SEQNUM          (CP_BASE + 0x128)
+#define CP_Q_ERROR           (CP_BASE + 0x12C)
+
+#define CP_RING_SIZE_LOG2    16          // 64 KiB
+#define CP_RING_SIZE         (1u << CP_RING_SIZE_LOG2)
+#define CP_OPCODE_LAUNCH     0x06
+#define CP_LAUNCH_BYTES      12          // 4-byte header + 8-byte arg0
+
 #define CHECK_HANDLE(handle, _expr, _cleanup)                                  \
   auto handle = _expr;                                                         \
   if (handle == nullptr) {                                                     \
@@ -210,6 +236,23 @@ public:
       });
     }
   #endif
+
+    {
+      // Honour common boolean conventions: empty, "0", "false", "no", "off"
+      // all leave CP disabled; everything else enables it.
+      const char* env = getenv("VORTEX_USE_CP");
+      auto is_truthy = [](const char* s) {
+        if (s == nullptr || s[0] == '\0') return false;
+        if (s[0] == '0' && s[1] == '\0') return false;
+        std::string v(s);
+        std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+        return v != "false" && v != "no" && v != "off";
+      };
+      if (is_truthy(env)) {
+        CHECK_ERR(this->cp_init(), { return err; });
+      }
+    }
+
     return 0;
   }
 
@@ -431,6 +474,7 @@ public:
 
   int start() {
     // DCRs already written by stub; just trigger execution
+    if (cp_enabled_) return this->cp_post_launch();
     CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_RUN), {
       return -1;
     });
@@ -438,6 +482,7 @@ public:
   }
 
   int ready_wait(uint64_t timeout) {
+    if (cp_enabled_) return this->cp_wait(timeout);
     std::unordered_map<uint32_t, std::stringstream> print_bufs;
 
     struct timespec sleep_time;
@@ -531,6 +576,95 @@ public:
     return 0;
   }
 
+  // ----- Command Processor path -----
+  // Same shape as the XRT runtime's cp_init / cp_post_launch / cp_wait
+  // — allocate ring + head + completion buffers in device memory, program
+  // CP queue 0 via the CP regfile (MMIO byte 0x1000+), then on each
+  // vx_start() push a CMD_LAUNCH descriptor into the ring + commit Q_TAIL
+  // and poll Q_SEQNUM until the engine retires it.
+  int cp_init() {
+    CHECK_ERR(this->mem_alloc(CP_RING_SIZE, VX_MEM_READ, &cp_ring_dev_addr_), { return err; });
+    CHECK_ERR(this->mem_alloc(CACHE_BLOCK_SIZE, VX_MEM_WRITE, &cp_head_dev_addr_), { return err; });
+    CHECK_ERR(this->mem_alloc(CACHE_BLOCK_SIZE, VX_MEM_WRITE, &cp_cmpl_dev_addr_), { return err; });
+
+    std::vector<uint8_t> zeros_cl(CACHE_BLOCK_SIZE, 0);
+    std::vector<uint8_t> zeros_ring(CP_RING_SIZE, 0);
+    CHECK_ERR(this->upload(cp_ring_dev_addr_, zeros_ring.data(), CP_RING_SIZE), { return err; });
+    CHECK_ERR(this->upload(cp_head_dev_addr_, zeros_cl.data(), CACHE_BLOCK_SIZE), { return err; });
+    CHECK_ERR(this->upload(cp_cmpl_dev_addr_, zeros_cl.data(), CACHE_BLOCK_SIZE), { return err; });
+
+    auto wr = [this](uint32_t off, uint32_t val) -> int {
+      CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, off, val), { return -1; });
+      return 0;
+    };
+
+    CHECK_ERR(wr(CP_Q_RING_BASE_LO,   (uint32_t)(cp_ring_dev_addr_ & 0xFFFFFFFFu)), { return err; });
+    CHECK_ERR(wr(CP_Q_RING_BASE_HI,   (uint32_t)(cp_ring_dev_addr_ >> 32)),         { return err; });
+    CHECK_ERR(wr(CP_Q_HEAD_ADDR_LO,   (uint32_t)(cp_head_dev_addr_ & 0xFFFFFFFFu)), { return err; });
+    CHECK_ERR(wr(CP_Q_HEAD_ADDR_HI,   (uint32_t)(cp_head_dev_addr_ >> 32)),         { return err; });
+    CHECK_ERR(wr(CP_Q_CMPL_ADDR_LO,   (uint32_t)(cp_cmpl_dev_addr_ & 0xFFFFFFFFu)), { return err; });
+    CHECK_ERR(wr(CP_Q_CMPL_ADDR_HI,   (uint32_t)(cp_cmpl_dev_addr_ >> 32)),         { return err; });
+    CHECK_ERR(wr(CP_Q_RING_SIZE_LOG2, CP_RING_SIZE_LOG2),                            { return err; });
+    CHECK_ERR(wr(CP_Q_CONTROL,        0x1),                                          { return err; });
+    CHECK_ERR(wr(CP_REG_CTRL,         0x1),                                          { return err; });
+
+    cp_enabled_         = true;
+    cp_tail_            = 0;
+    cp_expected_seqnum_ = 0;
+
+    printf("info: CP enabled — ring=0x%lx head=0x%lx cmpl=0x%lx\n",
+           cp_ring_dev_addr_, cp_head_dev_addr_, cp_cmpl_dev_addr_);
+    return 0;
+  }
+
+  int cp_post_launch() {
+    uint8_t cl[CACHE_BLOCK_SIZE] = {0};
+    cl[0] = CP_OPCODE_LAUNCH;
+
+    uint64_t ring_offset = cp_tail_ & (CP_RING_SIZE - 1);
+    if (ring_offset + CACHE_BLOCK_SIZE > CP_RING_SIZE) {
+      fprintf(stderr, "[VXDRV] CP ring wraparound mid-CL not yet supported\n");
+      return -1;
+    }
+    CHECK_ERR(this->upload(cp_ring_dev_addr_ + ring_offset, cl, CACHE_BLOCK_SIZE), { return err; });
+
+    cp_tail_           += CP_LAUNCH_BYTES;
+    cp_expected_seqnum_ += 1;
+    CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, CP_Q_TAIL_LO,
+                                        (uint32_t)(cp_tail_ & 0xFFFFFFFFu)), { return -1; });
+    CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, CP_Q_TAIL_HI,
+                                        (uint32_t)(cp_tail_ >> 32)),         { return -1; });
+    return 0;
+  }
+
+  int cp_wait(uint64_t timeout) {
+    // Poll Q_SEQNUM via MMIO read until the engine retires the command —
+    // see the XRT runtime's cp_wait for the rationale (xrtBOSync / opae
+    // BO sync don't tick the simulated clock; only register traffic does).
+    for (;;) {
+      uint64_t seqnum64 = 0;
+      CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, CP_Q_SEQNUM, &seqnum64), { return -1; });
+      uint32_t seqnum32 = (uint32_t)seqnum64;
+      if ((uint64_t)seqnum32 >= cp_expected_seqnum_) break;
+      if (0 == timeout) return -1;
+      timeout -= 1;
+    }
+    // Engine retired (Phase 2b shortcut: on KMU grant, not actual Vortex
+    // completion). Wait for the AFU FSM to drop back to STATE_IDLE — the
+    // saw_busy guard ensures this only fires after Vortex really finished.
+    // No hard spin cap: each MMIO read ticks the sim a handful of cycles,
+    // and sgemm-class kernels need many more than a fixed cap allows.
+    for (;;) {
+      uint64_t status;
+      CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, MMIO_STATUS, &status), { return -1; });
+      uint32_t state = status & ((1 << STATUS_STATE_BITS) - 1);
+      if (state == 0) break;
+      if (0 == timeout) return -1;
+      timeout -= 1;
+    }
+    return 0;
+  }
+
 
 private:
 
@@ -570,6 +704,14 @@ private:
   uint8_t* staging_ptr_;
   uint64_t staging_size_;
   uint64_t clock_rate_;
+
+  // Command Processor state (populated by cp_init() when VORTEX_USE_CP=1).
+  bool     cp_enabled_         = false;
+  uint64_t cp_ring_dev_addr_   = 0;
+  uint64_t cp_head_dev_addr_   = 0;
+  uint64_t cp_cmpl_dev_addr_   = 0;
+  uint64_t cp_tail_            = 0;
+  uint64_t cp_expected_seqnum_ = 0;
 };
 
 #include <callbacks.inc>

@@ -29,6 +29,7 @@
 #include "experimental/xrt_xclbin.h"
 #endif
 
+#include <algorithm>
 #include <limits>
 #include <stdarg.h>
 #include <string>
@@ -306,8 +307,20 @@ public:
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
   #endif
 
-    if (getenv("VORTEX_USE_CP") != nullptr) {
-      CHECK_ERR(this->cp_init(), { return err; });
+    {
+      // Honour common boolean conventions: empty, "0", "false", "no", "off"
+      // all leave CP disabled; everything else enables it.
+      const char* env = getenv("VORTEX_USE_CP");
+      auto is_truthy = [](const char* s) {
+        if (s == nullptr || s[0] == '\0') return false;
+        if (s[0] == '0' && s[1] == '\0') return false;
+        std::string v(s);
+        std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+        return v != "false" && v != "no" && v != "off";
+      };
+      if (is_truthy(env)) {
+        CHECK_ERR(this->cp_init(), { return err; });
+      }
     }
 
     return 0;
@@ -836,16 +849,15 @@ public:
     // KMU grant, not on actual Vortex completion). Now wait for Vortex
     // to genuinely finish by polling the legacy AP_DONE bit — the AFU
     // FSM tracks CP-initiated launches too (sees cp_gpu_if.start), so
-    // AP_DONE eventually rises when vx_busy clears.
-    int drain_spin = 0;
+    // AP_DONE eventually rises when vx_busy clears. Use the caller's
+    // timeout (each register read ticks the sim a handful of cycles,
+    // and we don't want a hard spin cap to truncate longer kernels).
     for (;;) {
       uint32_t status = 0;
       CHECK_ERR(this->read_register(MMIO_CTL_ADDR, &status), { return err; });
       if (status & CTL_AP_DONE) break;
-      if (++drain_spin > 1000000) {
-        fprintf(stderr, "[CP] timed out waiting for Vortex drain (AP_DONE)\n");
-        return -1;
-      }
+      if (0 == timeout) return -1;
+      timeout -= sleep_time_ms;
     }
     return 0;
   }

@@ -63,7 +63,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     localparam VX_AVS_REQ_TAGW2   = `MAX(VX_MEM_TAG_WIDTH, VX_AVS_REQ_TAGW);
     localparam CCI_AVS_REQ_TAGW2  = `MAX(CCI_ADDR_WIDTH, CCI_AVS_REQ_TAGW);
     localparam CCI_VX_TAG_WIDTH   = `MAX(VX_AVS_REQ_TAGW2, CCI_AVS_REQ_TAGW2);
-    localparam AVS_TAG_WIDTH      = CCI_VX_TAG_WIDTH + 1; // adding the arbiter bit
+    localparam AVS_TAG_WIDTH      = CCI_VX_TAG_WIDTH + 2; // 2 arbiter bits (3 inputs incl. CP)
 
     localparam CCI_RD_WINDOW_SIZE = 8;
     localparam CCI_RW_PENDING_SIZE= 256;
@@ -167,7 +167,82 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     `UNUSED_VAR (mmio_req_hdr)
 
     t_if_ccip_c2_Tx mmio_rsp;
-    assign af2cp_sTxPort.c2 = mmio_rsp;
+
+    // MMIO response mux: legacy handler drives `mmio_rsp` on next cycle for
+    // non-CP reads; CP regfile drives `cp_mmio_rsp` (declared below) on
+    // its own slave's rvalid pulse. They never fire simultaneously
+    // because the legacy handler is gated on `!is_cp_mmio_req`.
+    t_if_ccip_c2_Tx cp_mmio_rsp;
+    assign af2cp_sTxPort.c2 = cp_mmio_rsp.mmioRdValid ? cp_mmio_rsp : mmio_rsp;
+
+    // ========================================================================
+    // Command Processor MMIO demux. mmio_req_hdr.address is in 4-byte units
+    // (per CCIP spec — length=2'b01 = 8 B accesses, address advances by 1
+    // per 4 B). Bit 10 (= 0x400) corresponds to host byte address 0x1000.
+    //
+    //   host byte 0x000..0xFFF  (address[10]=0) → legacy AFU MMIO handler
+    //   host byte 0x1000+       (address[10]=1) → CP regfile (VX_cp_axil_s_if)
+    //
+    // Mirrors the XRT integration's bit-12 split so CP_CTRL at CP-offset
+    // 0x000 stays reachable without colliding with legacy MMIO at byte 0x000.
+    // ========================================================================
+    wire is_cp_mmio_req = mmio_req_hdr.address[10];
+    wire cp_mmio_wr     = cp2af_sRxPort.c0.mmioWrValid && is_cp_mmio_req;
+    wire cp_mmio_rd     = cp2af_sRxPort.c0.mmioRdValid && is_cp_mmio_req;
+
+    VX_cp_axil_s_if #(.ADDR_W(16)) cp_axil ();
+
+    // CCIP packs AW + W into one mmioWrValid pulse, so present them together
+    // to the AXI-Lite slave. Truncate host's 64-bit data to low 32 bits —
+    // all CP regs are 32-bit (cp_runtime_impl §17).
+    assign cp_axil.awvalid = cp_mmio_wr;
+    assign cp_axil.awaddr  = {4'd0, mmio_req_hdr.address[9:0], 2'd0};
+    assign cp_axil.wvalid  = cp_mmio_wr;
+    assign cp_axil.wdata   = cp2af_sRxPort.c0.data[31:0];
+    assign cp_axil.wstrb   = 4'hF;
+    assign cp_axil.bready  = 1'b1;                 // CCIP has no B channel; drop
+    `UNUSED_VAR (cp_axil.bvalid)
+    `UNUSED_VAR (cp_axil.bresp)
+
+    assign cp_axil.arvalid = cp_mmio_rd;
+    assign cp_axil.araddr  = {4'd0, mmio_req_hdr.address[9:0], 2'd0};
+
+    // Latch the read tid when a CP read fires; present it on the CCIP
+    // response channel when the CP regfile's rvalid arrives (registered,
+    // ~2 cycles later). Single-outstanding is fine — the runtime reads
+    // CP regs serially.
+    reg              cp_rd_pending;
+    t_ccip_tid       cp_rd_tid;
+    wire [31:0]      cp_rd_data;
+    assign cp_axil.rready = 1'b1;
+    assign cp_rd_data     = cp_axil.rdata;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            cp_rd_pending <= 1'b0;
+            cp_rd_tid     <= '0;
+        end else begin
+            if (cp_mmio_rd) begin
+                cp_rd_pending <= 1'b1;
+                cp_rd_tid     <= mmio_req_hdr.tid;
+            end else if (cp_axil.rvalid) begin
+                cp_rd_pending <= 1'b0;
+            end
+        end
+    end
+    `UNUSED_VAR (cp_axil.rresp)
+    `UNUSED_VAR (cp_rd_pending)
+
+    // Drive the CP-side MMIO response. CCIP expects {mmioRdValid, tid, data}
+    // — we zero-extend the regfile's 32-bit rdata into the 64-bit MMIO bus.
+    always @(*) begin
+        cp_mmio_rsp = '0;
+        if (cp_axil.rvalid) begin
+            cp_mmio_rsp.mmioRdValid = 1'b1;
+            cp_mmio_rsp.hdr.tid     = cp_rd_tid;
+            cp_mmio_rsp.data        = 64'(cp_rd_data);
+        end
+    end
 
 `ifdef SCOPE
 
@@ -274,13 +349,15 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     // MMIO controller ////////////////////////////////////////////////////////
 
-    // Handle MMIO read requests
+    // Handle MMIO read requests. Suppress the legacy response when the
+    // request targets the CP range — those responses come back via the
+    // cp_mmio_rsp path below (CP regfile takes >1 cycle to return rdata).
     always @(posedge clk) begin
         if (reset) begin
             mmio_rsp.mmioRdValid <= 0;
             cout_q_id <= 0;
         end else begin
-            mmio_rsp.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid;
+            mmio_rsp.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid && !is_cp_mmio_req;
         end
 
         mmio_rsp.hdr.tid <= mmio_req_hdr.tid;
@@ -348,9 +425,11 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
-    // Handle MMIO write requests
+    // Handle MMIO write requests. CP-range writes (address[10]=1) are
+    // captured directly by the CP regfile via cp_axil — we don't want
+    // them to also touch cmd_args / cmd_type here.
     always @(posedge clk) begin
-        if (cp2af_sRxPort.c0.mmioWrValid) begin
+        if (cp2af_sRxPort.c0.mmioWrValid && !is_cp_mmio_req) begin
             case (mmio_req_hdr.address)
             MMIO_CMD_ARG0: begin
                 cmd_args[0] <= 64'(cp2af_sRxPort.c0.data);
@@ -398,8 +477,16 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     reg [`RESET_DELAY-1:0] vx_reset_shift_r;
     wire vx_reset;
-    reg  vx_start;
+    reg  vx_start_legacy;
+    reg  saw_busy;
+    wire vx_start;
     wire vx_busy;
+
+    // CP-side launch signal forward-declared; the actual VX_cp_gpu_if
+    // instance is created further down with VX_cp_core. We need its
+    // `.start` here so the FSM can enter STATE_RUN on a CP launch.
+    VX_cp_gpu_if cp_gpu_if ();
+    assign vx_start = vx_start_legacy | cp_gpu_if.start;
 
     wire is_mmio_wr_cmd = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_req_hdr.address);
     wire [CMD_TYPE_WIDTH-1:0] cmd_type = is_mmio_wr_cmd ? CMD_TYPE_WIDTH'(cp2af_sRxPort.c0.data) : CMD_TYPE_WIDTH'(CMD_IDLE);
@@ -419,10 +506,22 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
         if (reset) begin
             state    <= STATE_IDLE;
-            vx_start <= 0;
+            vx_start_legacy <= 0;
+            saw_busy <= 0;
         end else begin
             case (state)
             STATE_IDLE: begin
+                saw_busy <= 0;
+                // CP-initiated launch: enter STATE_RUN without pulsing
+                // vx_start_legacy. CP already drives Vortex via the OR
+                // mux on vx_start; this keeps AFU FSM in sync so the
+                // legacy STATUS poll still reports completion.
+                if (cp_gpu_if.start && !vx_reset) begin
+                `ifdef DBG_TRACE_AFU
+                    `TRACE(2, ("%t: AFU: Goto STATE RUN (CP)\n", $time))
+                `endif
+                    state <= STATE_RUN;
+                end else
                 case (cmd_type)
                 CMD_MEM_READ: begin
                 `ifdef DBG_TRACE_AFU
@@ -454,7 +553,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                     `TRACE(2, ("%t: AFU: Goto STATE RUN\n", $time))
                 `endif
                     state    <= STATE_RUN;
-                    vx_start <= 1;
+                    vx_start_legacy <= 1;
                 end
                 end
                 default: begin
@@ -491,9 +590,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 end
             end
             STATE_RUN: begin
-                vx_start <= 0;
-                // vx_start is still asserted this cycle; wait for execution to complete
-                if (!vx_start && !vx_busy) begin
+                vx_start_legacy <= 0;
+                // Track whether Vortex has actually started executing. The
+                // CP path enters RUN without pulsing vx_start_legacy, so
+                // the unguarded `(!vx_start && !vx_busy)` check would
+                // race ahead before vx_busy has time to rise.
+                if (vx_busy) saw_busy <= 1;
+                if (!vx_start_legacy && saw_busy && !vx_busy) begin
                 `ifdef DBG_TRACE_AFU
                     `TRACE(2, ("%t: AFU: Execution completed\n", $time))
                     `TRACE(2, ("%t: AFU: Goto STATE IDLE\n", $time))
@@ -584,7 +687,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .DATA_SIZE  (LMEM_DATA_SIZE),
         .ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
         .TAG_WIDTH  (CCI_VX_TAG_WIDTH)
-    ) cci_vx_mem_arb_in_if[2]();
+    ) cci_vx_mem_arb_in_if[3](); // [0]=Vortex bank0, [1]=CCIP DMA, [2]=CP axi_m
 
     VX_mem_data_adapter #(
         .SRC_DATA_WIDTH (CCI_DATA_WIDTH),
@@ -627,9 +730,66 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     );
     assign cci_vx_mem_arb_in_if[1].req_data.attr = '0;
 
-    // arbitrate between CCI and VX memory interfaces
+    // arbitrate between CCI, VX memory, and CP memory interfaces
 
     `ASSIGN_VX_MEM_BUS_IF(cci_vx_mem_arb_in_if[0], vx_mem_bus_if[0]);
+
+    // CP axi_m → VX_mem_bus_if bridge (slot [2]).
+    VX_cp_axi_m_if #(.ADDR_W(64), .DATA_W(LMEM_DATA_WIDTH)) cp_axi_m ();
+
+    wire                              cp_membus_req_valid;
+    wire                              cp_membus_req_rw;
+    wire [64 - $clog2(LMEM_DATA_WIDTH/8) - 1:0] cp_membus_req_addr_full;
+    wire [LMEM_DATA_WIDTH-1:0]        cp_membus_req_data;
+    wire [LMEM_DATA_WIDTH/8-1:0]      cp_membus_req_byteen;
+    wire [`VX_CP_AXI_TID_WIDTH-1:0]   cp_membus_req_tag;
+    wire                              cp_membus_req_ready;
+    wire                              cp_membus_rsp_valid;
+    wire [LMEM_DATA_WIDTH-1:0]        cp_membus_rsp_data;
+    wire [`VX_CP_AXI_TID_WIDTH-1:0]   cp_membus_rsp_tag;
+    wire                              cp_membus_rsp_ready;
+
+    VX_cp_axi_to_membus #(
+        .ADDR_W   (64),
+        .DATA_W   (LMEM_DATA_WIDTH),
+        .ID_W     (`VX_CP_AXI_TID_WIDTH)
+    ) u_cp_axi_to_membus (
+        .clk            (clk),
+        .reset          (reset),
+        .axi_s          (cp_axi_m),
+        .mem_req_valid  (cp_membus_req_valid),
+        .mem_req_rw     (cp_membus_req_rw),
+        .mem_req_addr   (cp_membus_req_addr_full),
+        .mem_req_data   (cp_membus_req_data),
+        .mem_req_byteen (cp_membus_req_byteen),
+        .mem_req_tag    (cp_membus_req_tag),
+        .mem_req_ready  (cp_membus_req_ready),
+        .mem_rsp_valid  (cp_membus_rsp_valid),
+        .mem_rsp_data   (cp_membus_rsp_data),
+        .mem_rsp_tag    (cp_membus_rsp_tag),
+        .mem_rsp_ready  (cp_membus_rsp_ready)
+    );
+
+    // Wire bridge into arb slot [2]. Truncate the full byte→CL address to
+    // CCI_VX_ADDR_WIDTH (CP buffers always live in low memory, so the
+    // high bits are zero); zero-extend the CP TID into the wider arb tag.
+    assign cci_vx_mem_arb_in_if[2].req_valid       = cp_membus_req_valid;
+    assign cci_vx_mem_arb_in_if[2].req_data.rw     = cp_membus_req_rw;
+    assign cci_vx_mem_arb_in_if[2].req_data.addr   = cp_membus_req_addr_full[CCI_VX_ADDR_WIDTH-1:0];
+    assign cci_vx_mem_arb_in_if[2].req_data.data   = cp_membus_req_data;
+    assign cci_vx_mem_arb_in_if[2].req_data.byteen = cp_membus_req_byteen;
+    assign cci_vx_mem_arb_in_if[2].req_data.tag    = CCI_VX_TAG_WIDTH'(cp_membus_req_tag);
+    assign cci_vx_mem_arb_in_if[2].req_data.attr   = '0;
+    assign cp_membus_req_ready                     = cci_vx_mem_arb_in_if[2].req_ready;
+
+    assign cp_membus_rsp_valid = cci_vx_mem_arb_in_if[2].rsp_valid;
+    assign cp_membus_rsp_data  = cci_vx_mem_arb_in_if[2].rsp_data.data;
+    assign cp_membus_rsp_tag   = cci_vx_mem_arb_in_if[2].rsp_data.tag[`VX_CP_AXI_TID_WIDTH-1:0];
+    assign cci_vx_mem_arb_in_if[2].rsp_ready = cp_membus_rsp_ready;
+
+    // The high bits of the byte→CL address aren't used (CP buffers fit in
+    // bank 0 below 2 GB) — pin them sink-side so lint stays clean.
+    `UNUSED_VAR (cp_membus_req_addr_full[64 - $clog2(LMEM_DATA_WIDTH/8) - 1 : CCI_VX_ADDR_WIDTH])
 
     VX_mem_bus_if #(
         .DATA_SIZE  (LMEM_DATA_SIZE),
@@ -638,12 +798,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     ) cci_vx_mem_arb_out_if[1]();
 
     VX_mem_arb #(
-        .NUM_INPUTS  (2),
+        .NUM_INPUTS  (3),
         .NUM_OUTPUTS (1),
         .DATA_SIZE   (LMEM_DATA_SIZE),
         .ADDR_WIDTH  (CCI_VX_ADDR_WIDTH),
         .TAG_WIDTH   (CCI_VX_TAG_WIDTH),
-        .ARBITER     ("P"), // prioritize VX requests
+        .ARBITER     ("P"), // prioritize VX requests; CP/CCI share lower priority
         .REQ_OUT_BUF (0),
         .RSP_OUT_BUF (0)
     ) mem_arb (
@@ -1025,21 +1185,36 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     // Vortex /////////////////////////////////////////////////////////////////
 
-    // Pulse vx_dcr_req_valid for exactly one cycle when entering a DCR state.
-    reg vx_dcr_req_sent_r;
+    // Pulse lg_dcr_req_valid for exactly one cycle when entering a DCR state.
+    reg lg_dcr_req_sent_r;
     always @(posedge clk) begin
         if (reset) begin
-            vx_dcr_req_sent_r <= 1'b0;
+            lg_dcr_req_sent_r <= 1'b0;
         end else begin
-            vx_dcr_req_sent_r <= (STATE_DCR_WRITE == state || STATE_DCR_READ == state);
+            lg_dcr_req_sent_r <= (STATE_DCR_WRITE == state || STATE_DCR_READ == state);
         end
     end
-    wire vx_dcr_req_valid = (STATE_DCR_WRITE == state || STATE_DCR_READ == state) && ~vx_dcr_req_sent_r;
-    wire vx_dcr_req_rw = (STATE_DCR_WRITE == state);
-    wire [VX_DCR_ADDR_WIDTH-1:0] vx_dcr_req_addr = cmd_dcr_addr;
-    wire [VX_DCR_DATA_WIDTH-1:0] vx_dcr_req_data = cmd_dcr_data;
+    wire lg_dcr_req_valid = (STATE_DCR_WRITE == state || STATE_DCR_READ == state) && ~lg_dcr_req_sent_r;
+    wire lg_dcr_req_rw = (STATE_DCR_WRITE == state);
+    wire [VX_DCR_ADDR_WIDTH-1:0] lg_dcr_req_addr = cmd_dcr_addr;
+    wire [VX_DCR_DATA_WIDTH-1:0] lg_dcr_req_data = cmd_dcr_data;
+
+    // CP wins on simultaneous valid (mirrors XRT). Both sources never fire
+    // concurrently in a sane host sequence — legacy DCR writes are from the
+    // CMD_DCR_* FSM, CP DCR writes are from CMD_DCR_WRITE commands fetched
+    // off the ring; the host serializes these.
+    wire vx_dcr_req_valid = cp_gpu_if.dcr_req_valid | lg_dcr_req_valid;
+    wire vx_dcr_req_rw    = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_rw   : lg_dcr_req_rw;
+    wire [VX_DCR_ADDR_WIDTH-1:0] vx_dcr_req_addr = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_addr : lg_dcr_req_addr;
+    wire [VX_DCR_DATA_WIDTH-1:0] vx_dcr_req_data = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_data : lg_dcr_req_data;
     wire                         vx_dcr_rsp_valid;
     wire [VX_DCR_DATA_WIDTH-1:0] vx_dcr_rsp_data;
+
+    // Feed Vortex DCR response back to CP gpu_if too (fan-out).
+    assign cp_gpu_if.dcr_req_ready = 1'b1;
+    assign cp_gpu_if.dcr_rsp_valid = vx_dcr_rsp_valid;
+    assign cp_gpu_if.dcr_rsp_data  = vx_dcr_rsp_data;
+    assign cp_gpu_if.busy          = vx_busy;
 
     reg [VX_DCR_DATA_WIDTH-1:0] dcr_rsp_data_r;
     always @(posedge clk) begin
@@ -1082,6 +1257,22 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         // Ctrl/status
         .start          (vx_start),
         .busy           (vx_busy)
+    );
+
+    // Command Processor //////////////////////////////////////////////////////
+    // Instantiated after Vortex so cp_gpu_if and cp_axi_m wires are in scope
+    // from their forward-declared interfaces at the top.
+
+    wire cp_interrupt;
+    `UNUSED_VAR (cp_interrupt)
+
+    VX_cp_core u_cp_core (
+        .clk        (clk),
+        .reset      (reset),
+        .axil_s     (cp_axil),
+        .axi_m      (cp_axi_m),
+        .gpu_if     (cp_gpu_if),
+        .interrupt  (cp_interrupt)
     );
 
     // COUT HANDLING //////////////////////////////////////////////////////////
