@@ -10,6 +10,8 @@
 #include <VX_config.h>
 #include <VX_types.h>
 
+#include <array>
+
 namespace vx {
 
 // ============================================================================
@@ -238,47 +240,90 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     if (!info || !info->kernel || !info->args) return VX_ERR_INVALID_VALUE;
     if (info->struct_size < sizeof(vx_launch_info_t))
         return VX_ERR_INVALID_INFO;
-    // ndim==0 is the legacy "use prior DCRs, just trigger launch" escape
-    // hatch for vx_start (see common/legacy_runtime.cpp). The CP-aware
-    // v2 path uses ndim in [1, 3] and programs grid/block DCRs here.
     if (info->ndim > 3) return VX_ERR_INVALID_VALUE;
 
     Buffer* kernel = to_buffer(info->kernel);
     Buffer* args   = to_buffer(info->args);
 
+    // Capture the launch descriptor by value into the work lambda so the
+    // caller can free/reuse `info` immediately after enqueue returns.
+    // ndim==0 is the legacy escape hatch — only PC + arg ptr get
+    // programmed; the host is responsible for the rest via prior
+    // vx_dcr_write calls (matches legacy vx_start semantics).
+    const uint32_t ndim      = info->ndim;
+    const uint32_t lmem_size = info->lmem_size;
+    std::array<uint32_t, 3> grid_in  = {1, 1, 1};
+    std::array<uint32_t, 3> block_in = {1, 1, 1};
+    for (uint32_t i = 0; i < ndim; ++i) {
+        grid_in [i] = info->grid_dim [i];
+        block_in[i] = info->block_dim[i];
+    }
+
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, kernel, args](uint64_t* s, uint64_t* e) {
+    cmd.work = [this, kernel, args, ndim, lmem_size,
+                grid_in, block_in](uint64_t* s, uint64_t* e) {
         Platform* p = device_->platform();
+
+        // ---- Compute the full KMU descriptor (block_size, warp_step).
+        uint64_t num_threads = 0, num_warps = 0;
+        if (ndim > 0) {
+            auto r = p->query_caps(VX_CAPS_NUM_THREADS, &num_threads);
+            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
+            r = p->query_caps(VX_CAPS_NUM_WARPS, &num_warps);
+            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
+        }
+        uint32_t eff_block[3] = {1, 1, 1};
+        for (uint32_t i = 0; i < ndim; ++i) eff_block[i] = block_in[i];
+        uint32_t block_size = 1;
+        for (uint32_t i = 0; i < ndim; ++i) block_size *= eff_block[i];
+        const uint32_t tpw = (uint32_t)num_threads;
+        const uint32_t ws_x = (ndim >= 1 && eff_block[0]) ?
+                                tpw % eff_block[0] : 0;
+        const uint32_t ws_y = (ndim >= 2 && eff_block[1]) ?
+                                (tpw / eff_block[0]) % eff_block[1] : 0;
+        const uint32_t ws_z = (ndim >= 3 && eff_block[2]) ?
+                                (tpw / (eff_block[0] * eff_block[1]))
+                                  % eff_block[2] : 0;
+
         {
             std::lock_guard<std::mutex> g(enqueue_mu_);
 
-            uint64_t pc   = kernel->dev_address();
-            uint64_t argp = args->dev_address();
-            auto r = p->dcr_write(VX_DCR_KMU_STARTUP_ADDR0,
-                                  (uint32_t)(pc & 0xffffffff));
-            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
-            r = p->dcr_write(VX_DCR_KMU_STARTUP_ADDR1,
-                             (uint32_t)(pc >> 32));
-            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
-            r = p->dcr_write(VX_DCR_KMU_STARTUP_ARG0,
-                             (uint32_t)(argp & 0xffffffff));
-            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
-            r = p->dcr_write(VX_DCR_KMU_STARTUP_ARG1,
-                             (uint32_t)(argp >> 32));
-            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
+            const uint64_t pc   = kernel->dev_address();
+            const uint64_t argp = args->dev_address();
 
-            // TODO(commit 1c+): when ndim > 0, program KMU grid/block/lmem
-            // DCRs here. v1 pre-CP path requires caller to set these via
-            // prior vx_dcr_write calls (matching legacy vx_start semantics).
+            // Address + arg pointer first (legacy ndim==0 callers need
+            // only these; CP-aware ndim>0 callers get the rest below).
+            #define W(addr, val) do {                                     \
+                auto r = p->dcr_write((addr), (uint32_t)(val));           \
+                if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }   \
+            } while (0)
+            W(VX_DCR_KMU_STARTUP_ADDR0, pc   & 0xffffffffu);
+            W(VX_DCR_KMU_STARTUP_ADDR1, pc   >> 32);
+            W(VX_DCR_KMU_STARTUP_ARG0,  argp & 0xffffffffu);
+            W(VX_DCR_KMU_STARTUP_ARG1,  argp >> 32);
+
+            if (ndim > 0) {
+                W(VX_DCR_KMU_BLOCK_DIM_X, eff_block[0]);
+                W(VX_DCR_KMU_BLOCK_DIM_Y, eff_block[1]);
+                W(VX_DCR_KMU_BLOCK_DIM_Z, eff_block[2]);
+                W(VX_DCR_KMU_GRID_DIM_X,  grid_in[0]);
+                W(VX_DCR_KMU_GRID_DIM_Y,  ndim >= 2 ? grid_in[1] : 1);
+                W(VX_DCR_KMU_GRID_DIM_Z,  ndim >= 3 ? grid_in[2] : 1);
+                W(VX_DCR_KMU_LMEM_SIZE,   lmem_size);
+                W(VX_DCR_KMU_BLOCK_SIZE,  block_size);
+                W(VX_DCR_KMU_WARP_STEP_X, ws_x);
+                W(VX_DCR_KMU_WARP_STEP_Y, ws_y);
+                W(VX_DCR_KMU_WARP_STEP_Z, ws_z);
+            }
+            #undef W
 
             *s = now_ns();
-            r = p->launch_start();
+            auto r = p->launch_start();
             if (r != VX_SUCCESS) { *e = now_ns(); return r; }
         }
-        // launch_wait is OUTSIDE enqueue_mu_ so concurrent enqueues on
-        // other queues can still program DCRs / submit other ops. The
-        // device's own launch_wait already serializes.
+        // launch_wait outside enqueue_mu_ so concurrent enqueues on
+        // other queues can still program DCRs / submit other ops.
         auto r = device_->platform()->launch_wait(VX_TIMEOUT_INFINITE);
         *e = now_ns();
         return r;

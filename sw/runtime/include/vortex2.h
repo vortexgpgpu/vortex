@@ -137,8 +137,17 @@ vx_result_t vx_device_query       (vx_device_h dev, uint32_t caps_id,
 vx_result_t vx_device_memory_info (vx_device_h dev,
                                    uint64_t* free, uint64_t* used);
 
+// Compute the maximum-occupancy block / grid for `global_dim` work
+// items on this device. block[i] = device's natural per-warp / per-
+// core dimension (num_threads, num_warps, 1); grid[i] = ceil(global / block).
+// `block_out` and `grid_out` must both be at least `ndim` elements.
+vx_result_t vx_device_max_occupancy_grid (vx_device_h dev, uint32_t ndim,
+                                          const uint32_t* global_dim,
+                                          uint32_t* grid_out,
+                                          uint32_t* block_out);
+
 // ============================================================================
-// Buffer  (8 functions)
+// Buffer  (9 functions)
 // ============================================================================
 
 vx_result_t vx_buffer_create  (vx_device_h dev, uint64_t size, uint32_t flags,
@@ -146,6 +155,15 @@ vx_result_t vx_buffer_create  (vx_device_h dev, uint64_t size, uint32_t flags,
 vx_result_t vx_buffer_reserve (vx_device_h dev, uint64_t address,
                                uint64_t size, uint32_t flags,
                                vx_buffer_h* out);
+
+// Load a .vxbin kernel image from disk into a freshly-reserved buffer
+// at the kernel's link-script address. Uploads the binary + zeros the
+// BSS region via the queue (waits internally before returning so the
+// caller can use the buffer immediately as a launch's `kernel` arg).
+// Returns the kernel image buffer; the caller owns it and must release.
+vx_result_t vx_buffer_load_kernel_file (vx_device_h dev, vx_queue_h queue,
+                                        const char* path, vx_buffer_h* out);
+
 vx_result_t vx_buffer_retain  (vx_buffer_h buf);
 vx_result_t vx_buffer_release (vx_buffer_h buf);
 vx_result_t vx_buffer_address (vx_buffer_h buf, uint64_t* out_addr);
