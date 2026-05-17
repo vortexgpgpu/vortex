@@ -15,6 +15,7 @@ all:
 	$(MAKE) -C cp_engine
 	$(MAKE) -C cp_launch
 	$(MAKE) -C cp_dcr_proxy
+	$(MAKE) -C cp_unpack
 
 run:
 	$(MAKE) -C generic_queue run
@@ -33,6 +34,7 @@ run:
 	$(MAKE) -C cp_engine run
 	$(MAKE) -C cp_launch run
 	$(MAKE) -C cp_dcr_proxy run
+	$(MAKE) -C cp_unpack run
 
 clean:
 	$(MAKE) -C generic_queue clean
@@ -51,3 +53,4 @@ clean:
 	$(MAKE) -C cp_engine clean
 	$(MAKE) -C cp_launch clean
 	$(MAKE) -C cp_dcr_proxy clean
+	$(MAKE) -C cp_unpack clean
