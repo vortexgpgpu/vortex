@@ -73,8 +73,16 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
         .TAG_WIDTH (TAG_WIDTH)
     ) dcache_arb_in_if[2]();
 
-    `ASSIGN_VX_MEM_BUS_IF (dcache_arb_in_if[0], flush_bus_if);
-    `ASSIGN_VX_MEM_BUS_IF (dcache_arb_in_if[1], core_bus_if);
+    // Core traffic on the priority input so it wins arbitration as long as
+    // the LSU has any in-flight stores to push downstream. The flush waits
+    // naturally until upstream is quiescent — the host issues cache_flush
+    // only after `busy` drops to 0, so once the LSU adapter buffers drain
+    // (which happens monotonically because no new stores are being issued),
+    // the core input goes idle and the flush wins. STICKY=1 hardens against
+    // any 1-cycle gap in core valid during the drain phase. This replaces
+    // the per-CTA `fence iorw, iorw` workaround in vx_start.S.
+    `ASSIGN_VX_MEM_BUS_IF (dcache_arb_in_if[0], core_bus_if);
+    `ASSIGN_VX_MEM_BUS_IF (dcache_arb_in_if[1], flush_bus_if);
 
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
@@ -87,7 +95,8 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
         .DATA_SIZE   (WORD_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
         .TAG_SEL_IDX (0),
-        .ARBITER     ("P")
+        .ARBITER     ("P"),
+        .STICKY      (1)
     ) dcache_flush_arb (
         .clk        (clk),
         .reset      (reset),

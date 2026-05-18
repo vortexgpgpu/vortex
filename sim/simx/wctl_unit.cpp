@@ -118,8 +118,12 @@ bool WctlUnit::process(instr_trace_t* trace) {
     // rs2[31] flags expect_tx semantics on the same opcode as barrier_arrive.
     // Lower bits carry the count of pending transactions to register.
     bool is_tx_expect = wctlArgs.is_bar_arrive && ((arg2 >> 31) & 0x1);
-    if (wctlArgs.is_bar_arrive && !is_tx_expect) {
-      uint32_t phase = sched.barrier_unit().get_phase(bar_id);
+    if (wctlArgs.is_bar_arrive) {
+      // BAR.ARRIVE rd writeback mirrors rtlsim VX_wctl_unit.sv:253:
+      //   result_if.data.data[i] = bar_phase_r
+      // where bar_phase_r is bar_unit's `read_phase` (the *current* stored
+      // barrier phase, sampled before this op modifies it).
+      uint32_t phase = core_->scheduler().barrier_unit().get_phase(bar_id) & 0x1u;
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!warp.tmask.test(t)) continue;
         trace->dst_data[t].i = phase;
