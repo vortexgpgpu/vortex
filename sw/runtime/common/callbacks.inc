@@ -15,8 +15,8 @@
 // callbacks.inc — generic vx_dev_init template, included once at the bottom
 // of each backend's vortex.cpp (after the vx_device class is declared).
 //
-// Each backend's class must provide methods with these signatures (the
-// existing simx / rtlsim / xrt / opae backends already do):
+// Each backend's class must provide methods with these signatures (pure-v2
+// after Phase E of cp_pure_v2_callbacks_proposal):
 //
 //   int init();
 //   int get_caps(uint32_t caps_id, uint64_t* value);
@@ -28,17 +28,16 @@
 //   int upload(uint64_t dst, const void* src, uint64_t size);
 //   int download(void* dst, uint64_t src, uint64_t size);
 //   int copy(uint64_t dst, uint64_t src, uint64_t size);
-//   int start();
-//   int ready_wait(uint64_t timeout_ms);
-//   int dcr_write(uint32_t addr, uint32_t value);
-//   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
+//   int cp_mmio_write(uint32_t off, uint32_t value);
+//   int cp_mmio_read(uint32_t off, uint32_t* value);
 //
-// The new callbacks_t is Platform-shaped: it operates on opaque void* device
-// contexts and raw uint64_t device addresses. The dispatcher (stub/vortex.cpp)
-// wraps these primitives into refcounted vx::Device / vx::Buffer / vx::Queue
-// / vx::Event objects on its side. Legacy vortex.h symbols in the dispatcher
-// are pure wrappers over vortex2.h symbols — they NEVER touch callbacks_t
-// directly.
+// All kernel launches and DCR ops flow through the dispatcher's CP
+// submission helpers (sw/runtime/common/vx_device.cpp); backends no longer
+// expose start/ready_wait/dcr_write/dcr_read. The xrt/opae backends route
+// cp_mmio_* to their AFU's CP regfile (host MMIO byte offset 0x1000+);
+// simx/rtlsim route to a sim/common/CommandProcessor C++ instance.
+// Legacy vortex.h symbols in the dispatcher are pure wrappers over
+// vortex2.h symbols — they NEVER touch callbacks_t directly.
 // ============================================================================
 
 extern "C" int vx_dev_init(callbacks_t* callbacks) {
@@ -139,36 +138,7 @@ extern "C" int vx_dev_init(callbacks_t* callbacks) {
     return reinterpret_cast<vx_device*>(dev_ctx)->copy(dst, src, size);
   };
 
-  // ----- Launch -----
-  callbacks->launch_start = [](void* dev_ctx) -> int {
-    if (nullptr == dev_ctx)
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->start();
-  };
-
-  callbacks->launch_wait = [](void* dev_ctx, uint64_t timeout_ms) -> int {
-    if (nullptr == dev_ctx)
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->ready_wait(timeout_ms);
-  };
-
-  // ----- DCR -----
-  callbacks->dcr_write = [](void* dev_ctx, uint32_t addr,
-                            uint32_t value) -> int {
-    if (nullptr == dev_ctx)
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->dcr_write(addr, value);
-  };
-
-  callbacks->dcr_read = [](void* dev_ctx, uint32_t addr, uint32_t tag,
-                           uint32_t* out_value) -> int {
-    if (nullptr == dev_ctx || nullptr == out_value)
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)
-              ->dcr_read(addr, tag, out_value);
-  };
-
-  // ----- CP control plane -----
+  // ----- CP control plane (sole control path) -----
   callbacks->cp_mmio_write = [](void* dev_ctx, uint32_t off,
                                 uint32_t value) -> int {
     if (nullptr == dev_ctx)

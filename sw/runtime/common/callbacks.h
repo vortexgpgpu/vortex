@@ -31,7 +31,6 @@
 #ifndef CALLBACKS_H
 #define CALLBACKS_H
 
-#include <vortex.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -69,22 +68,18 @@ typedef struct {
   int (*mem_copy)    (void* dev_ctx, uint64_t dst_dev_addr,
                       uint64_t src_dev_addr, uint64_t size);
 
-  // ----- Kernel launch (async-style: start kicks off, wait blocks) -----
-  int (*launch_start)(void* dev_ctx);
-  int (*launch_wait) (void* dev_ctx, uint64_t timeout_ms);
-
-  // ----- DCR (legacy, to be removed in Phase E of the pure-v2 cleanup) -----
-  int (*dcr_write)   (void* dev_ctx, uint32_t addr, uint32_t value);
-  int (*dcr_read)    (void* dev_ctx, uint32_t addr, uint32_t tag,
-                      uint32_t* out_value);
-
-  // ----- Command Processor control plane -----
-  // Single pair that replaces launch_*/dcr_* in pure-v2 mode. The
-  // `off` argument is the CP-internal regfile offset (matches the
+  // ----- Command Processor control plane (sole control path) -----
+  // The `off` argument is the CP-internal regfile offset (matches the
   // VX_cp_axil_regfile address map: globals at 0x000..0xFF, queue 0
   // at 0x100..0x13F). xrt/opae backends translate to their host-side
   // MMIO offset by adding 0x1000 (per the AFU's bit-12 demux split).
   // simx/rtlsim forward directly to a sim/common/CommandProcessor.
+  //
+  // All kernel launches and DCR ops flow through the dispatcher's
+  // CP submission path (sw/runtime/common/vx_device.cpp) which builds
+  // CMD_* descriptors, mem_uploads them into the ring, commits Q_TAIL
+  // via cp_mmio_write, and polls Q_SEQNUM / Q_LAST_DCR_RSP via
+  // cp_mmio_read. Backends have no per-command implementation work.
   int (*cp_mmio_write)(void* dev_ctx, uint32_t off, uint32_t value);
   int (*cp_mmio_read) (void* dev_ctx, uint32_t off, uint32_t* out_value);
 

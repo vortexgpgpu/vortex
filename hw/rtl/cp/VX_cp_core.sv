@@ -79,6 +79,8 @@ module VX_cp_core
   logic cp_busy;
   logic cp_error;
 
+  wire [`VX_DCR_DATA_BITS-1:0] dcr_last_rsp_data;
+
   VX_cp_axil_regfile #(
     .NUM_QUEUES (NUM_QUEUES),
     .ADDR_W     (AXIL_AW)
@@ -91,6 +93,7 @@ module VX_cp_core
     .q_head         (q_head_to_reg),
     .q_seqnum       (q_seqnum_to_reg),
     .q_error        (q_error_to_reg),
+    .last_dcr_rsp   (dcr_last_rsp_data),
     .q_state        (q_state),
     .q_reset_pulse  (q_reset_pulse)
   );
@@ -249,7 +252,6 @@ module VX_cp_core
 
   // ----- Shared DCR proxy -----
   logic dcr_done;
-  wire [`VX_DCR_DATA_BITS-1:0] dcr_last_rsp_data;
   VX_cp_dcr_proxy u_dcr (
     .clk           (clk),
     .reset         (reset),
@@ -265,7 +267,6 @@ module VX_cp_core
     .dcr_rsp_data  (gpu_if.dcr_rsp_data)
   );
   `UNUSED_VAR (gpu_if.dcr_req_ready)
-  `UNUSED_VAR (dcr_last_rsp_data)
 
   // ----- DMA (AXI source via xbar) -----
   localparam logic [ID_W-1:0] DMA_TID_PREFIX =

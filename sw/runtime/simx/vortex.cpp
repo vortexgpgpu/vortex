@@ -288,6 +288,12 @@ private:
     h.vortex_dcr_write = [this](uint32_t addr, uint32_t value) {
       processor_.dcr_write(addr, value);
     };
+    h.vortex_dcr_read = [this](uint32_t addr, uint32_t tag) -> uint32_t {
+      if (future_.valid()) future_.wait();
+      uint32_t v = 0;
+      processor_.dcr_read(addr, tag, &v);
+      return v;
+    };
     h.vortex_start = [this]() {
       future_ = std::async(std::launch::async, [&] { processor_.run(); });
     };

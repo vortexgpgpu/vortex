@@ -108,6 +108,7 @@ module VX_cp_axil_regfile_top
     .q_head         (q_head_arr),
     .q_seqnum       (q_seqnum_arr),
     .q_error        (q_error_arr),
+    .last_dcr_rsp   (32'd0),
     .q_state        (q_state_arr),
     .q_reset_pulse  (q_reset_arr)
   );

@@ -288,6 +288,15 @@ private:
     h.vortex_dcr_write = [this](uint32_t addr, uint32_t value) {
       processor_.dcr_write(addr, value);
     };
+    h.vortex_dcr_read = [this](uint32_t addr, uint32_t tag) -> uint32_t {
+      // Match the legacy dcr_read pattern: ensure prior run is done so
+      // we don't race processor_'s Verilator state against a background
+      // run() thread.
+      if (future_.valid()) future_.wait();
+      uint32_t v = 0;
+      processor_.dcr_read(addr, tag, &v);
+      return v;
+    };
     h.vortex_start = [this]() {
       future_ = std::async(std::launch::async, [&] { processor_.run(); });
     };

@@ -64,6 +64,12 @@ public:
         // Issue a single DCR write to Vortex (for CMD_DCR_WRITE).
         std::function<void(uint32_t addr, uint32_t value)> vortex_dcr_write;
 
+        // Issue a single DCR read to Vortex (for CMD_DCR_READ). `tag`
+        // matches the legacy dcr_read tag (used as data on the DCR bus
+        // — e.g. per-core CACHE_FLUSH addressing). Backend is responsible
+        // for blocking until the response is available.
+        std::function<uint32_t(uint32_t addr, uint32_t tag)> vortex_dcr_read;
+
         // Pulse Vortex's start signal (for CMD_LAUNCH). The launch FSM
         // calls this once when transitioning into the "started" state.
         std::function<void()> vortex_start;
@@ -147,6 +153,7 @@ private:
     uint64_t cycle_counter_ = 0;
     Queue    q0_;                    // NUM_QUEUES==1 in v1
     Hooks    hooks_;
+    uint32_t last_dcr_rsp_ = 0;     // Q_LAST_DCR_RSP slot (0x130)
 
     // ----- Engine/launch state machines -----
     EngState    eng_state_ = EngState::Idle;

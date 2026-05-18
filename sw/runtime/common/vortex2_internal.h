@@ -108,17 +108,7 @@ public:
     virtual vx_result_t mem_copy    (uint64_t dst_dev_addr,
                                      uint64_t src_dev_addr, uint64_t size) = 0;
 
-    // ----- Kernel launch (sync semantics in v1; CP-aware backends will
-    //                     replace with async-via-ring once RTL lands) -----
-    virtual vx_result_t launch_start() = 0;
-    virtual vx_result_t launch_wait (uint64_t timeout_ms) = 0;
-
-    // ----- DCR (legacy; removed in Phase E of pure-v2 cleanup) -----
-    virtual vx_result_t dcr_write(uint32_t addr, uint32_t value) = 0;
-    virtual vx_result_t dcr_read (uint32_t addr, uint32_t tag,
-                                  uint32_t* out_value) = 0;
-
-    // ----- Command Processor MMIO surface (pure v2) -----
+    // ----- Command Processor MMIO surface (pure v2; sole control path) -----
     // `off` is the CP-internal regfile offset (0x000..0x13F per
     // VX_cp_axil_regfile §17.4). Backends translate to their own
     // physical address space (xrt/opae add 0x1000; simx/rtlsim
@@ -187,21 +177,6 @@ public:
         return r(cb_.mem_copy(dev_ctx_, dst_dev_addr, src_dev_addr, size));
     }
 
-    vx_result_t launch_start() override {
-        return r(cb_.launch_start(dev_ctx_));
-    }
-    vx_result_t launch_wait(uint64_t timeout_ms) override {
-        return r(cb_.launch_wait(dev_ctx_, timeout_ms));
-    }
-
-    vx_result_t dcr_write(uint32_t addr, uint32_t value) override {
-        return r(cb_.dcr_write(dev_ctx_, addr, value));
-    }
-    vx_result_t dcr_read(uint32_t addr, uint32_t tag,
-                         uint32_t* out_value) override {
-        return r(cb_.dcr_read(dev_ctx_, addr, tag, out_value));
-    }
-
     vx_result_t cp_mmio_write(uint32_t off, uint32_t value) override {
         return r(cb_.cp_mmio_write(dev_ctx_, off, value));
     }
@@ -239,10 +214,11 @@ public:
     void unregister_buffer(Buffer* b);
 
     // ----- Command Processor submission path -----
-    // When VORTEX_USE_CP=1 is set in env at device open time, the device
-    // owns a CP ring + completion slot in device memory and Queue uses
-    // these helpers instead of platform->dcr_write / launch_start /
-    // launch_wait. The CP regfile is poked via platform->cp_mmio_*.
+    // The CP is the sole control path now (Phase E of
+    // cp_pure_v2_callbacks_proposal). The device owns a CP ring +
+    // completion slot in device memory; Queue calls cp_submit_* for
+    // every launch and DCR op. cp_enabled() is always true post-init
+    // and kept as a method only for readability of the call sites.
     bool cp_enabled() const { return cp_enabled_; }
 
     // Post one CMD_DCR_WRITE to the ring, commit Q_TAIL, and wait for
@@ -253,15 +229,22 @@ public:
     // Q_SEQNUM. Synchronous.
     vx_result_t cp_submit_launch();
 
+    // Post one CMD_DCR_READ to the ring, wait for retire, and read the
+    // response from the CP regfile's Q_LAST_DCR_RSP slot. `tag` is
+    // forwarded as the DCR read's data bus payload (matches legacy
+    // dcr_read tag — used for per-core CACHE_FLUSH addressing).
+    vx_result_t cp_submit_dcr_read(uint32_t addr, uint32_t tag,
+                                   uint32_t* out_value);
+
 private:
     friend class RefCounted<Device>;
     explicit Device(std::unique_ptr<Platform> plat);
     ~Device();
 
-    // Read VORTEX_USE_CP env (honoring "0"/"false"/"no"/"off" as off) and
-    // if truthy, allocate ring/head/cmpl buffers and program the CP
-    // regfile. Called from Device::open() after the platform is ready.
-    void cp_try_init();
+    // Allocate ring/head/cmpl buffers and program the CP regfile.
+    // Called from Device::open() after the platform is ready. CP is
+    // unconditionally enabled now (Phase E).
+    vx_result_t cp_init();
 
     // Push one pre-built CL into the ring + commit Q_TAIL + wait. Used by
     // cp_submit_dcr_write / cp_submit_launch — they just build the CL.

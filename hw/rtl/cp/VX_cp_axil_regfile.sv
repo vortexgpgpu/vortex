@@ -66,6 +66,10 @@ module VX_cp_axil_regfile
   input  wire [63:0]                q_seqnum  [NUM_QUEUES],
   input  wire [31:0]                q_error   [NUM_QUEUES],
 
+  // Last CMD_DCR_READ response (from VX_cp_dcr_proxy). Exposed at offset
+  // 0x130 so the host can read the response after polling Q_SEQNUM.
+  input  wire [31:0]                last_dcr_rsp,
+
   // Programmed state out to every CPE.
   output cpe_state_t                q_state   [NUM_QUEUES],
 
@@ -163,6 +167,7 @@ module VX_cp_axil_regfile
         6'h24: return r_tail[qid][63:32];         // returns currently committed HI
         6'h28: return q_seqnum[qid][31:0];        // RO mirror
         6'h2C: return q_error[qid];               // RO
+        6'h30: return last_dcr_rsp;               // RO — last CMD_DCR_READ response
         default: return 32'h0;
       endcase
     end
@@ -182,7 +187,7 @@ module VX_cp_axil_regfile
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00, 6'h04, 6'h08, 6'h0C, 6'h10, 6'h14,
-        6'h18, 6'h1C, 6'h20, 6'h24, 6'h28, 6'h2C: return 1'b1;
+        6'h18, 6'h1C, 6'h20, 6'h24, 6'h28, 6'h2C, 6'h30: return 1'b1;
         default: return 1'b0;
       endcase
     end

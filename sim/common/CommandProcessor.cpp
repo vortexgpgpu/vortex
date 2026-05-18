@@ -85,6 +85,7 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
             case 0x24: return uint32_t(q0_.tail >> 32);
             case 0x28: return uint32_t(q0_.seqnum & 0xFFFFFFFF);
             case 0x2C: return q0_.error;
+            case 0x30: return last_dcr_rsp_;  // last CMD_DCR_READ response
         }
     }
     return 0xDEADBEEF;
@@ -245,6 +246,15 @@ void CommandProcessor::tick_engine() {
                     uint32_t addr = uint32_t(cur_cmd_.arg0 & 0xFFF); // VX_DCR_ADDR_BITS=12
                     uint32_t val  = uint32_t(cur_cmd_.arg1 & 0xFFFFFFFF);
                     hooks_.vortex_dcr_write(addr, val);
+                }
+                eng_state_ = EngState::Retire;
+            } else if (cur_cmd_.opcode == OP_DCR_READ) {
+                // Issue the DCR read; latch the response into the regfile
+                // slot so the host can grab it after polling Q_SEQNUM.
+                if (hooks_.vortex_dcr_read) {
+                    uint32_t addr = uint32_t(cur_cmd_.arg0 & 0xFFF);
+                    uint32_t tag  = uint32_t(cur_cmd_.arg1 & 0xFFFFFFFF);
+                    last_dcr_rsp_ = hooks_.vortex_dcr_read(addr, tag);
                 }
                 eng_state_ = EngState::Retire;
             } else {

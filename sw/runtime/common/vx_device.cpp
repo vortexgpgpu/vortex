@@ -7,15 +7,12 @@
 
 #include "vortex2_internal.h"
 
-#include <algorithm>
 #include <cassert>
-#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
 #include <iostream>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace {
@@ -94,7 +91,11 @@ vx_result_t Device::open(uint32_t index, Device** out) {
 
     std::unique_ptr<Platform> plat(new CallbacksAdapter(g_backend_cb, dev_ctx));
     Device* d = new Device(std::move(plat));
-    d->cp_try_init();
+    auto cr = d->cp_init();
+    if (cr != VX_SUCCESS) {
+        d->release();
+        return cr;
+    }
     *out = d;
     return VX_SUCCESS;
 }
@@ -120,33 +121,28 @@ constexpr uint32_t CP_Q_CONTROL         = 0x11C;
 constexpr uint32_t CP_Q_TAIL_LO         = 0x120;
 constexpr uint32_t CP_Q_TAIL_HI         = 0x124;
 constexpr uint32_t CP_Q_SEQNUM          = 0x128;
+constexpr uint32_t CP_Q_LAST_DCR_RSP    = 0x130;
 
 constexpr uint32_t CP_RING_SIZE_LOG2 = 16;       // 64 KiB
 constexpr uint32_t CP_RING_SIZE      = 1u << CP_RING_SIZE_LOG2;
 constexpr uint8_t  CP_OPCODE_DCR_WR  = 0x04;
+constexpr uint8_t  CP_OPCODE_DCR_RD  = 0x05;
 constexpr uint8_t  CP_OPCODE_LAUNCH  = 0x06;
 constexpr std::size_t CP_CL_BYTES    = 64;
 
-bool truthy_env(const char* name) {
-    const char* v = std::getenv(name);
-    if (v == nullptr || v[0] == '\0') return false;
-    if (v[0] == '0' && v[1] == '\0') return false;
-    std::string s(v);
-    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-    return s != "false" && s != "no" && s != "off";
-}
 } // namespace
 
-void Device::cp_try_init() {
-    if (!truthy_env("VORTEX_USE_CP")) return;
-
+vx_result_t Device::cp_init() {
     // Allocate ring + head + completion slots in device memory.
     // VX_MEM_READ flag for ring (CP reads from it), VX_MEM_WRITE for
     // head + cmpl (CP writes seqnum/head pointers there).
     auto* p = platform();
-    if (p->mem_alloc(CP_RING_SIZE,           /*VX_MEM_READ*/ 0x1, &cp_ring_dev_addr_) != VX_SUCCESS) return;
-    if (p->mem_alloc(CP_CL_BYTES,            /*VX_MEM_WRITE*/ 0x2, &cp_head_dev_addr_) != VX_SUCCESS) return;
-    if (p->mem_alloc(CP_CL_BYTES,            /*VX_MEM_WRITE*/ 0x2, &cp_cmpl_dev_addr_) != VX_SUCCESS) return;
+    auto r = p->mem_alloc(CP_RING_SIZE, /*VX_MEM_READ*/ 0x1, &cp_ring_dev_addr_);
+    if (r != VX_SUCCESS) return r;
+    r = p->mem_alloc(CP_CL_BYTES, /*VX_MEM_WRITE*/ 0x2, &cp_head_dev_addr_);
+    if (r != VX_SUCCESS) return r;
+    r = p->mem_alloc(CP_CL_BYTES, /*VX_MEM_WRITE*/ 0x2, &cp_cmpl_dev_addr_);
+    if (r != VX_SUCCESS) return r;
 
     // Zero them so CP doesn't read stale data on first fetch.
     std::vector<uint8_t> zeros_cl(CP_CL_BYTES, 0);
@@ -167,9 +163,7 @@ void Device::cp_try_init() {
     p->cp_mmio_write(CP_REG_CTRL,         0x1);
 
     cp_enabled_ = true;
-    std::fprintf(stdout,
-                 "info: CP enabled — ring=0x%lx head=0x%lx cmpl=0x%lx\n",
-                 cp_ring_dev_addr_, cp_head_dev_addr_, cp_cmpl_dev_addr_);
+    return VX_SUCCESS;
 }
 
 vx_result_t Device::cp_submit_cl_(const void* cl) {
@@ -225,6 +219,26 @@ vx_result_t Device::cp_submit_launch() {
     uint8_t cl[CP_CL_BYTES] = {0};
     cl[0] = CP_OPCODE_LAUNCH;
     return cp_submit_cl_(cl);
+}
+
+vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
+                                       uint32_t* out_value) {
+    if (!out_value) return VX_ERR_INVALID_VALUE;
+    // CMD_DCR_READ on-wire layout (cmd_size=20):
+    //   bytes 0..3  header  { opcode=0x05, flags=0, reserved=0 }
+    //   bytes 4..11 arg0    DCR addr (low 12 bits used)
+    //   bytes 12..19 arg1   tag (data on the DCR bus; e.g. core index
+    //                       for VX_DCR_BASE_CACHE_FLUSH)
+    uint8_t cl[CP_CL_BYTES] = {0};
+    uint32_t* p32 = reinterpret_cast<uint32_t*>(cl);
+    p32[0] = CP_OPCODE_DCR_RD;
+    p32[1] = addr;
+    p32[3] = tag;
+    auto r = cp_submit_cl_(cl);
+    if (r != VX_SUCCESS) return r;
+    // Pick up the response from the CP regfile (latched by
+    // VX_cp_dcr_proxy.last_rsp_data and exposed at offset 0x130).
+    return platform()->cp_mmio_read(CP_Q_LAST_DCR_RSP, out_value);
 }
 
 void Device::register_queue(Queue* q) {

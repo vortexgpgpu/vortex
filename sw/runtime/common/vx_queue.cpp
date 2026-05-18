@@ -292,15 +292,11 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
             const uint64_t pc   = kernel->dev_address();
             const uint64_t argp = args->dev_address();
 
-            // Address + arg pointer first (legacy ndim==0 callers need
-            // only these; CP-aware ndim>0 callers get the rest below).
-            // CP_W routes the write through CMD_DCR_WRITE in the ring;
-            // LG_W goes through the legacy synchronous dcr_write callback.
-            const bool cp = device_->cp_enabled();
+            // Program the KMU DCRs via CMD_DCR_WRITE descriptors through
+            // the CP ring. ndim==0 is the legacy escape hatch — only PC +
+            // arg ptr get programmed.
             #define WR(addr, val) do {                                       \
-                auto vv = (uint32_t)(val);                                   \
-                auto r = cp ? device_->cp_submit_dcr_write((addr), vv)       \
-                            : p->dcr_write((addr), vv);                      \
+                auto r = device_->cp_submit_dcr_write((addr), (uint32_t)(val)); \
                 if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }       \
             } while (0)
             WR(VX_DCR_KMU_STARTUP_ADDR0, pc   & 0xffffffffu);
@@ -324,21 +320,13 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
             #undef WR
 
             *s = now_ns();
-            if (cp) {
-                // cp_submit_launch is synchronous (it polls Q_SEQNUM
-                // internally) and replaces both launch_start + launch_wait.
-                auto r = device_->cp_submit_launch();
-                *e = now_ns();
-                return r;
-            }
-            auto r = p->launch_start();
-            if (r != VX_SUCCESS) { *e = now_ns(); return r; }
+            // cp_submit_launch posts CMD_LAUNCH + polls Q_SEQNUM until
+            // the engine retires (kernel actually finished — Phase 3
+            // engine retire-on-done, commit 196c4e56).
+            auto r = device_->cp_submit_launch();
+            *e = now_ns();
+            return r;
         }
-        // launch_wait outside enqueue_mu_ so concurrent enqueues on
-        // other queues can still program DCRs / submit other ops.
-        auto r = device_->platform()->launch_wait(VX_TIMEOUT_INFINITE);
-        *e = now_ns();
-        return r;
     };
     return this->enqueue(std::move(cmd), nw, w, out);
 }
@@ -365,9 +353,7 @@ vx_result_t Queue::enqueue_dcr_write(uint32_t addr, uint32_t value,
     cmd.work = [this, addr, value](uint64_t* s, uint64_t* e) {
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto r = device_->cp_enabled()
-                     ? device_->cp_submit_dcr_write(addr, value)
-                     : device_->platform()->dcr_write(addr, value);
+        auto r = device_->cp_submit_dcr_write(addr, value);
         *e = now_ns();
         return r;
     };
@@ -384,7 +370,7 @@ vx_result_t Queue::enqueue_dcr_read(uint32_t addr, uint32_t* host_dst,
     cmd.work = [this, addr, host_dst](uint64_t* s, uint64_t* e) {
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto r = device_->platform()->dcr_read(addr, /*tag=*/0, host_dst);
+        auto r = device_->cp_submit_dcr_read(addr, /*tag=*/0, host_dst);
         *e = now_ns();
         return r;
     };
