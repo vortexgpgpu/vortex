@@ -81,7 +81,10 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef TCU_SPARSE_ENABLE
     output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
 `endif
-    output wire                     tbuf_ready
+    output wire                          tbuf_ready,
+    // Per-row readiness forwarded from fetch engine
+    output wire                          b_ready,
+    output wire [TCU_WG_M_STEPS-1:0]    a_row_ready
 );
 
     // -----------------------------------------------------------------------
@@ -113,6 +116,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire                     tbuf_hit;
     wire [A_TOTAL-1:0][31:0] hit_a_buf;
     wire [B_TOTAL-1:0][31:0] hit_b_buf;
+    // b_ready and a_row_ready wired directly from fetch engine to output ports
 `ifdef TCU_SPARSE_ENABLE
     wire                     hit_is_sparse;
     wire [META_TOTAL_MAX-1:0][31:0] hit_meta_buf;
@@ -157,6 +161,8 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .tcu_lmem_if    (tcu_lmem_if),
         .tbuf_hit       (tbuf_hit),
         .tbuf_ready     (tbuf_ready),
+        .b_ready        (b_ready),
+        .a_row_ready    (a_row_ready),
         .hit_a_buf      (hit_a_buf),
         .hit_b_buf      (hit_b_buf)
     `ifdef TCU_SPARSE_ENABLE

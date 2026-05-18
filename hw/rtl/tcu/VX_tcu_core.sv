@@ -27,7 +27,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef TCU_SPARSE_ENABLE
     input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
 `endif
-    input wire          tbuf_ready,
+    input wire          tbuf_ready,   // full tile ready (used for sparse + perf)
+    input wire          b_ready,      // B tile fully fetched
+    input wire [TCU_WG_M_STEPS-1:0] a_row_ready, // per-m-step A readiness
 `endif
 
 `ifdef PERF_ENABLE
@@ -113,7 +115,20 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = (is_wgmma && wg_a_smem) ? tbuf_sp_meta : wmma_sp_meta;
   `endif
 
-    assign exe_ready_extra = ~is_wgmma || tbuf_ready;
+    // Dense SS: fire each uop once B is ready AND this uop's A row has arrived.
+    // Sparse SS: wait for full tile (includes metadata) via tbuf_ready.
+    // RS (A from regs): only need B ready.
+    localparam M_IDX_W = $clog2(TCU_WG_M_STEPS);
+  `ifdef TCU_SPARSE_ENABLE
+    assign exe_ready_extra = ~is_wgmma
+        || (wg_a_smem
+            ? (is_sparse ? tbuf_ready : (b_ready && a_row_ready[M_IDX_W'(step_m)]))
+            : b_ready);
+  `else
+    `UNUSED_VAR (tbuf_ready)
+    assign exe_ready_extra = ~is_wgmma
+        || (wg_a_smem ? (b_ready && a_row_ready[M_IDX_W'(step_m)]) : b_ready);
+  `endif
 `else
     assign rs1_data = execute_if.data.rs1_data;
     assign rs2_data = execute_if.data.rs2_data;

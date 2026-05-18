@@ -48,8 +48,6 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     localparam TOTAL_COLS   = PER_WARP_DEPTH * NUM_COLS;
     localparam PACKED_WIDTH = TOTAL_COLS * 32;
 
-    localparam LG_CPL = $clog2((COLS_PER_LOAD > 1) ? COLS_PER_LOAD : 2);
-    localparam LG_PD  = $clog2(PER_WARP_DEPTH);
     localparam LG_SPC = (STORES_PER_COL > 1) ? $clog2(STORES_PER_COL) : 1;
 
     // Bank select: same generate-if as original per_warp_raddr

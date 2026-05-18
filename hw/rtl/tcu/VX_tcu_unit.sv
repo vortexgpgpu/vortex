@@ -79,6 +79,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0]    tbuf_sp_meta  [BLOCK_SIZE];
 `endif
     wire                                   tbuf_ready    [BLOCK_SIZE];
+    wire                                   b_ready       [BLOCK_SIZE];
+    wire [TCU_WG_M_STEPS-1:0]             a_row_ready   [BLOCK_SIZE];
 
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] tbuf_stalls_b        [BLOCK_SIZE];
@@ -148,7 +150,9 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `ifdef TCU_SPARSE_ENABLE
             .tbuf_sp_meta     (tbuf_sp_meta[block_idx]),
         `endif
-            .tbuf_ready       (tbuf_ready[block_idx])
+            .tbuf_ready       (tbuf_ready[block_idx]),
+            .b_ready          (b_ready[block_idx]),
+            .a_row_ready      (a_row_ready[block_idx])
         );
     end
 
@@ -353,6 +357,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .tbuf_sp_meta  (tbuf_sp_meta[block_idx]),
         `endif
             .tbuf_ready    (tbuf_ready[block_idx]),
+            .b_ready       (b_ready[block_idx]),
+            .a_row_ready   (a_row_ready[block_idx]),
         `endif
         `ifdef PERF_ENABLE
         `ifdef TCU_WGMMA_ENABLE

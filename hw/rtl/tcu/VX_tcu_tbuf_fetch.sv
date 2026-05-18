@@ -70,6 +70,10 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire                     tbuf_hit,
     output wire                     tbuf_ready,
 
+    // Per-row readiness (dense SS only; used by core to fire uops early)
+    output wire                          b_ready,
+    output wire [TCU_WG_M_STEPS-1:0]    a_row_ready,
+
     // Slot data (combinational read)
     output wire [A_TOTAL-1:0][31:0] hit_a_buf,
     output wire [B_TOTAL-1:0][31:0] hit_b_buf
@@ -92,6 +96,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     localparam A_BANK_ROWS    = (A_TOTAL + NUM_BANKS - 1) / NUM_BANKS;
     localparam B_BANK_ROWS    = (B_TOTAL + NUM_BANKS - 1) / NUM_BANKS;
+    // Half-tile threshold: words 0..A_TOTAL/2-1 cover m_step 0 (A stored row-major).
+    localparam A_BANK_ROWS_M0 = (A_TOTAL / 2 + NUM_BANKS - 1) / NUM_BANKS;
 
 `ifdef TCU_SPARSE_ENABLE
     localparam A_TOTAL_SP      = A_TOTAL / 2;
@@ -330,14 +336,19 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire last_rsp_b = in_fetch_b && tcu_lmem_if.rsp_valid
                    && (rsp_ctr_r == FETCH_CTR_W'(B_BANK_ROWS - 1));
 
+    // Fires when m_step 0's A words (first half of A tile) have all arrived.
+    wire last_rsp_a_m0 = in_fetch_a && tcu_lmem_if.rsp_valid
+                      && (rsp_ctr_r == FETCH_CTR_W'(A_BANK_ROWS_M0 - 1));
+
 `ifdef TCU_SPARSE_ENABLE
     wire last_rsp_meta = in_fetch_meta && tcu_lmem_if.rsp_valid
                       && (rsp_ctr_r == slot_meta_bank_rows[fetch_slot] - FETCH_CTR_W'(1));
-    // SS sparse tiles finish after META; otherwise after B.
+    // SS sparse tiles finish after META; SS dense after A; RS after B.
     wire is_ss_sparse = slot_is_sparse[fetch_slot] && slot_a_from_smem[fetch_slot];
-    wire fetch_done_now = is_ss_sparse ? last_rsp_meta : last_rsp_b;
+    wire fetch_done_now = is_ss_sparse ? last_rsp_meta
+                        : (slot_a_from_smem[fetch_slot] ? last_rsp_a : last_rsp_b);
 `else
-    wire fetch_done_now = last_rsp_b;
+    wire fetch_done_now = slot_a_from_smem[fetch_slot] ? last_rsp_a : last_rsp_b;
 `endif
 
     // -----------------------------------------------------------------------
@@ -365,22 +376,9 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         req_ctr_r      <= '0;
                         rsp_ctr_r      <= '0;
                         req_inflight_r <= 1'b0;
-                        // RS mode: A comes from registers, skip FETCH_A
-                        send_state_r   <= slot_a_from_smem[s] ? SEND_FETCH_A : SEND_FETCH_B;
+                        // Always fetch B first; A follows for SS mode
+                        send_state_r   <= SEND_FETCH_B;
                     end
-                end
-            end
-            // -----------------------------------------------------------------
-            SEND_FETCH_A: begin
-                if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
-                    req_ctr_r <= req_ctr_r + FETCH_CTR_W'(1);
-                if (last_rsp_a) begin
-                    req_ctr_r      <= '0;
-                    rsp_ctr_r      <= '0;
-                    req_inflight_r <= 1'b0;
-                    send_state_r   <= SEND_FETCH_B;
-                end else if (tcu_lmem_if.rsp_valid) begin
-                    rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
                 end
             end
             // -----------------------------------------------------------------
@@ -388,6 +386,20 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                     req_ctr_r <= req_ctr_r + FETCH_CTR_W'(1);
                 if (last_rsp_b) begin
+                    req_ctr_r      <= '0;
+                    rsp_ctr_r      <= '0;
+                    req_inflight_r <= 1'b0;
+                    // SS mode: fetch A next; RS mode: A from registers, done
+                    send_state_r <= slot_a_from_smem[fetch_slot] ? SEND_FETCH_A : SEND_IDLE;
+                end else if (tcu_lmem_if.rsp_valid) begin
+                    rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
+                end
+            end
+            // -----------------------------------------------------------------
+            SEND_FETCH_A: begin
+                if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
+                    req_ctr_r <= req_ctr_r + FETCH_CTR_W'(1);
+                if (last_rsp_a) begin
                     req_ctr_r      <= '0;
                     rsp_ctr_r      <= '0;
                     req_inflight_r <= 1'b0;
@@ -459,6 +471,33 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 warp_alloc_pending[cur_slot] <= 1'b0;
         end
     end
+
+    // -----------------------------------------------------------------------
+    // Per-row readiness tracking
+    // -----------------------------------------------------------------------
+    // b_ready_r: set when B tile is fully fetched.
+    // a_rows_done_r[m]: set when A words for m_step m are in the LUTRAM.
+    // Both cleared on alloc_en (new tile started).
+
+    reg                       b_ready_r;
+    reg [TCU_WG_M_STEPS-1:0] a_rows_done_r;
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            b_ready_r     <= 1'b0;
+            a_rows_done_r <= '0;
+        end else if (alloc_en) begin
+            b_ready_r     <= 1'b0;
+            a_rows_done_r <= '0;
+        end else begin
+            if (last_rsp_b)    b_ready_r              <= 1'b1;
+            if (last_rsp_a_m0) a_rows_done_r[0]       <= 1'b1;
+            if (last_rsp_a)    a_rows_done_r           <= {TCU_WG_M_STEPS{1'b1}};
+        end
+    end
+
+    assign b_ready     = b_ready_r     && !alloc_en;
+    assign a_row_ready = a_rows_done_r & {TCU_WG_M_STEPS{!alloc_en}};
 
     // -----------------------------------------------------------------------
     // A data capture — single-entry LUTRAM (SIZE=1, async read)
