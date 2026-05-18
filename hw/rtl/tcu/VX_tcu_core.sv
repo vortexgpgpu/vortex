@@ -215,7 +215,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         input logic [TCU_BLOCK_CAP-1:0][31:0] meta,
         input logic [4:0] fmt,
         input logic [MX_IDX_W-1:0] mn_idx,
-        input logic [MX_K_IDX_W-1:0] k_word_idx
+        input logic [MX_K_IDX_W-1:0] k_base_idx
     );
         logic [3:0] scale_k;
         logic [MX_SCALE_IDX_W-1:0] scale_idx;
@@ -223,8 +223,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         logic [1:0] byte_idx;
         begin
             case (fmt)
-                TCU_MXFP8_ID, TCU_MXI8_ID: scale_k = 4'(k_word_idx >> 3);
-                TCU_NVFP4_ID:              scale_k = 4'(k_word_idx >> 1);
+                TCU_MXFP8_ID, TCU_MXI8_ID: scale_k = 4'(k_base_idx >> 3);
+                TCU_NVFP4_ID:              scale_k = 4'(k_base_idx >> 1);
                 default:                   scale_k = '0;
             endcase
             scale_idx = MX_SCALE_IDX_W'(mn_idx) * MX_SCALE_IDX_W'(mx_scale_blocks_k(fmt))
@@ -235,23 +235,19 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     endfunction
 
-    wire [TCU_TC_M-1:0][TCU_TC_K-1:0][7:0] mx_sf_a;
-    wire [TCU_TC_N-1:0][TCU_TC_K-1:0][7:0] mx_sf_b;
+    wire [TCU_TC_M-1:0][7:0] mx_sf_a;
+    wire [TCU_TC_N-1:0][7:0] mx_sf_b;
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_mx_sf_a_i
         wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
-        for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_k
-            wire [MX_K_IDX_W-1:0] mx_k_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K) + MX_K_IDX_W'(k_idx);
-            assign mx_sf_a[i][k_idx] = mx_scale_at(mx_meta_a_active, fmt_s, mx_a_idx, mx_k_idx);
-        end
+        wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K);
+        assign mx_sf_a[i] = mx_scale_at(mx_meta_a_active, fmt_s, mx_a_idx, mx_k_base_idx);
     end
 
     for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_mx_sf_b_j
         wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
-        for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_k
-            wire [MX_K_IDX_W-1:0] mx_k_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K) + MX_K_IDX_W'(k_idx);
-            assign mx_sf_b[j][k_idx] = mx_scale_at(mx_meta_b_active, fmt_s, mx_b_idx, mx_k_idx);
-        end
+        wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K);
+        assign mx_sf_b[j] = mx_scale_at(mx_meta_b_active, fmt_s, mx_b_idx, mx_k_base_idx);
     end
 `endif
 
@@ -329,7 +325,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
         `endif
         `ifdef TCU_MX_ENABLE
-            wire [TCU_TC_K-1:0][7:0] sf_a, sf_b;
+            wire [7:0] sf_a, sf_b;
             assign sf_a = mx_sf_a[i];
             assign sf_b = mx_sf_b[j];
         `endif
@@ -377,7 +373,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [4:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
         `ifdef TCU_MX_ENABLE
-            wire [TCU_TC_K-1:0][7:0] sf_a_r, sf_b_r;
+            wire [7:0] sf_a_r, sf_b_r;
         `endif
             wire [31:0] c_val_r;
 
@@ -465,6 +461,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
                 .b_col (b_col_r),
+            `ifdef TCU_MX_ENABLE
+                .sf_a  (sf_a_r),
+                .sf_b  (sf_b_r),
+            `endif
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );

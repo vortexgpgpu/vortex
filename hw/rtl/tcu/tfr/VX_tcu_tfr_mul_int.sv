@@ -27,8 +27,10 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
 
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
+`ifdef TCU_MX_ENABLE
     input wire [7:0]                sf_a,
     input wire [7:0]                sf_b,
+`endif
 
     output logic [TCK-1:0][24:0]    result
 );
@@ -37,14 +39,12 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
 
     wire is_signed_int = tcu_fmt_is_signed_int(fmt_i);
 
-`ifdef TCU_MXI8_ENABLE
+`ifdef TCU_MX_ENABLE
     // --- MXINT8 Scale Factor (shared across all lanes) --------------------
     wire signed [7:0] sf_wo_bias_a = sf_a - 8'd133;
     wire signed [7:0] sf_wo_bias_b = sf_b - 8'd133;
     wire signed [7:0] sf_wo_bias   = sf_wo_bias_a + sf_wo_bias_b;
     wire        [7:0] abs_sf       = -sf_wo_bias;
-`else
-    `UNUSED_VAR ({sf_a, sf_b})
 `endif
 
     // ----------------------------------------------------------------------
@@ -76,7 +76,7 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
             `UNUSED_PIN(cout)
         );
 
-    `ifdef TCU_MXI8_ENABLE
+    `ifdef TCU_MX_ENABLE
         // --- MXINT8 Per-Product Scaling -----------------------------------
         // Apply scale shift per-product with truncation toward zero (matching C++ (int32_t)(float) cast)
         wire signed [24:0] y_mxi8_scaled [2];
@@ -142,7 +142,7 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
                 TCU_U8_ID: result[i] = {8'b0, y_i8_add_res};
                 TCU_I4_ID: result[i] = 25'($signed(y_i4_add_res));
                 TCU_U4_ID: result[i] = {15'b0, y_i4_add_res};
-            `ifdef TCU_MXI8_ENABLE
+            `ifdef TCU_MX_ENABLE
                 TCU_MXI8_ID: result[i] = y_mxi8_add_res;
             `endif
                 default:   result[i] = 'x;

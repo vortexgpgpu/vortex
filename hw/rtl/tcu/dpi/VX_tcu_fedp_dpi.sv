@@ -29,8 +29,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
 `ifdef TCU_MX_ENABLE
-    input  wire [N-1:0][7:0]  sf_a,
-    input  wire [N-1:0][7:0]  sf_b,
+    input  wire [7:0]  sf_a,
+    input  wire [7:0]  sf_b,
 `endif
     input  wire [31:0] c_val,
     output wire [31:0] d_val
@@ -110,8 +110,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
-                raw_sf_a = sf_a[i] - 8'd127;
-                raw_sf_b = sf_b[i] - 8'd127;
+                raw_sf_a = sf_a - 8'd127;
+                raw_sf_b = sf_b - 8'd127;
                 raw_sf   = raw_sf_a + raw_sf_b;
                 if (prod[30:0] != 0) begin
                     prod[30:23] = prod[30:23] + raw_sf;
@@ -125,12 +125,12 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
-                dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_a[i]}, 3'b0, a_sf, fflags);
-                dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_b[i]}, 3'b0, b_sf, fflags);
+                dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_a}, 3'b0, a_sf, fflags);
+                dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, sf_b}, 3'b0, b_sf, fflags);
                 dpi_fmul(enable, int'(0), a_sf, b_sf, 3'b0, temp_sf, fflags);
                 dpi_fmul(enable, int'(0), prod, temp_sf, 3'b0, prod, fflags);
             end
-        `endif
+        `endif  // TCU_MX_ENABLE
             TCU_I8_ID: begin
                 prod = 0;
                 for (int j = 0; j < 4; j++) begin
@@ -165,7 +165,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     reg signed [7:0]  combined_sf;
                     reg        [7:0]  shift_amt;
                     raw_prod = $signed({{24{a_row[i][8 * j + 7]}}, a_row[i][8 * j +: 8]}) * $signed({{24{b_col[i][8 * j + 7]}}, b_col[i][8 * j +: 8]});
-                    combined_sf = $signed(sf_a[i] - 8'd133) + $signed(sf_b[i] - 8'd133);
+                    combined_sf = $signed(sf_a - 8'd133) + $signed(sf_b - 8'd133);
                     if (combined_sf[7]) begin
                         // Negative: right shift with truncation toward zero
                         shift_amt = -combined_sf;
@@ -178,7 +178,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     prod += 64'($signed(scaled_prod));
                 end
             end
-        `endif
+        `endif  // TCU_MX_ENABLE
             default: begin
                 prod = 'x;
             end

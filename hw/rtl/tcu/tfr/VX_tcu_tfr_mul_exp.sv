@@ -32,9 +32,10 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
     input wire [N-1:0][31:0] a_row,
     input wire [N-1:0][31:0] b_col,
     input wire [31:0]        c_val,
+`ifdef TCU_MX_ENABLE
     input wire [7:0]         sf_a,
     input wire [7:0]         sf_b,
-
+`endif
     output wire [EXP_W-1:0]   max_exp,
     output wire [TCK:0][EXP_W-1:0] exponents,
 
@@ -92,6 +93,10 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .fmt_f      (fmt_s[3:0]),
         .a_row      (a_row),
         .b_col      (b_col),
+    `ifdef TCU_MX_ENABLE
+        .sf_a       (sf_a),
+        .sf_b       (sf_b),
+    `endif
         .result_sig (mul_f8_sig),
         .result_exp (mul_f8_exp),
         .exceptions (mul_f8_exc)
@@ -110,8 +115,10 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .fmt_i      (fmt_s[3:0]),
         .a_row      (a_row),
         .b_col      (b_col),
+    `ifdef TCU_MX_ENABLE
         .sf_a       (sf_a),
         .sf_b       (sf_b),
+    `endif
         .result     (mul_int_sig)
     );
 

@@ -28,6 +28,10 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     input  wire [4:0] fmt_d,
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
+`ifdef TCU_MX_ENABLE
+    input  wire [7:0]  sf_a,
+    input  wire [7:0]  sf_b,
+`endif
     input  wire [31:0]        c_val,
     output wire [31:0]        d_val
 );
@@ -81,13 +85,6 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     wire [TOTAL_LATENCY:0] vld_pipe = {vld_pipe_r, (~reset && enable && vld_any)};
     wire [TOTAL_LATENCY:0][31:0] req_pipe = {req_pipe_r, req_id};
 
-    //TODO: temp hardcoded scale factors (input from module)
-    wire [7:0] SCALE_FACTOR_E8M0_A = 8'd129;
-    wire [7:0] SCALE_FACTOR_E8M0_B = 8'd131;
-    wire [7:0] SCALE_FACTOR_E4M3_A = 8'h41;
-    wire [7:0] SCALE_FACTOR_E4M3_B = 8'h33;
-    `UNUSED_VAR ({SCALE_FACTOR_E8M0_A, SCALE_FACTOR_E8M0_B, SCALE_FACTOR_E4M3_A, SCALE_FACTOR_E4M3_B})
-
     // Stage 1: Multiply & Max Exponent
     // ======================================================================
 
@@ -117,8 +114,10 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .a_row(a_row),
         .b_col(b_col),
         .c_val(c_val),
-        .sf_a(SCALE_FACTOR_E8M0_A),
-        .sf_b(SCALE_FACTOR_E8M0_B),
+    `ifdef TCU_MX_ENABLE
+        .sf_a(sf_a),
+        .sf_b(sf_b),
+    `endif
         .max_exp(max_exp),
         .exponents(exponents),
         .raw_sigs(raw_sigs),

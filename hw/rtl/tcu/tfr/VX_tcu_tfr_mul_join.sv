@@ -83,7 +83,7 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
             // --- Integers ---
         `ifdef TCU_INT_ENABLE
             TCU_I8_ID, TCU_U8_ID, TCU_I4_ID, TCU_U4_ID
-        `ifdef TCU_MXI8_ENABLE
+        `ifdef TCU_MX_ENABLE
             , TCU_MXI8_ID
         `endif
             : begin

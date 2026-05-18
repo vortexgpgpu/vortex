@@ -32,6 +32,10 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     // Raw Inputs (No pre-classification)
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
+`ifdef TCU_MX_ENABLE
+    input wire [7:0]                sf_a,
+    input wire [7:0]                sf_b,
+`endif
 
     // Outputs
     output logic [TCK-1:0][24:0]      result_sig,
@@ -205,6 +209,19 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire [7:0] bias_sel = is_bfloat ? BIAS_CONST_BF8 : BIAS_CONST_FP8;
 
         wire [EXP_W-1:0] final_exp;
+        
+    `ifdef TCU_MX_ENABLE
+        wire [EXP_W-1:0] neg_254 = -EXP_W'(254);
+        VX_csa_tree #(
+            .N(5),
+            .W(EXP_W),
+            .S(EXP_W)
+        ) exp_final_add (
+            .operands ({EXP_W'(max_pre_sum), EXP_W'(bias_sel), EXP_W'(sf_a), EXP_W'(sf_b), neg_254}),
+            .sum      (final_exp),
+            `UNUSED_PIN(carry)
+        );
+    `else
         VX_ks_adder #(
             .N(EXP_W),
             .BYPASS(`FORCE_BUILTIN_ADDER(EXP_W))
@@ -215,6 +232,7 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             .sum(final_exp),
             `UNUSED_PIN(cout)
         );
+    `endif
 
         // ------------------------------------------------------------------
         // 2c. Mantissa Multiplication
