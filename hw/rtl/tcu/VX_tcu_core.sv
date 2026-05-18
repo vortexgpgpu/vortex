@@ -207,28 +207,52 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a_active = mx_capture_en ? mx_meta_a_sideband : mx_meta_a_store[wid];
     wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_b_active = mx_capture_en ? mx_meta_b_sideband : mx_meta_b_store[wid];
 
+    localparam MX_IDX_W     = $clog2(TCU_TILE_M > TCU_TILE_N ? TCU_TILE_M : TCU_TILE_N);
+    localparam MX_K_IDX_W   = $clog2(TCU_TILE_K);
+    localparam MX_SCALE_IDX_W = $clog2(TCU_BLOCK_CAP * 4);
+
     function automatic [7:0] mx_scale_at(
         input logic [TCU_BLOCK_CAP-1:0][31:0] meta,
         input logic [4:0] fmt,
-        input logic [7:0] mn_idx,
-        input logic [7:0] k_word_idx
+        input logic [MX_IDX_W-1:0] mn_idx,
+        input logic [MX_K_IDX_W-1:0] k_word_idx
     );
-        int unsigned scale_k;
-        int unsigned scale_idx;
-        int unsigned word_idx;
-        int unsigned byte_idx;
+        logic [3:0] scale_k;
+        logic [MX_SCALE_IDX_W-1:0] scale_idx;
+        logic [`LOG2UP(TCU_BLOCK_CAP)-1:0] word_idx;
+        logic [1:0] byte_idx;
         begin
             case (fmt)
-                TCU_MXFP8_ID, TCU_MXI8_ID: scale_k = int'(k_word_idx) >> 3;
-                TCU_NVFP4_ID:              scale_k = int'(k_word_idx) >> 1;
-                default:                   scale_k = 0;
+                TCU_MXFP8_ID, TCU_MXI8_ID: scale_k = 4'(k_word_idx >> 3);
+                TCU_NVFP4_ID:              scale_k = 4'(k_word_idx >> 1);
+                default:                   scale_k = '0;
             endcase
-            scale_idx = int'(mn_idx) * int'(mx_scale_blocks_k(fmt)) + scale_k;
-            word_idx  = scale_idx >> 2;
-            byte_idx  = scale_idx & 3;
+            scale_idx = MX_SCALE_IDX_W'(mn_idx) * MX_SCALE_IDX_W'(mx_scale_blocks_k(fmt))
+                      + MX_SCALE_IDX_W'(scale_k);
+            word_idx  = `LOG2UP(TCU_BLOCK_CAP)'(scale_idx >> 2);
+            byte_idx  = scale_idx[1:0];
             mx_scale_at = meta[word_idx][byte_idx * 8 +: 8];
         end
     endfunction
+
+    wire [TCU_TC_M-1:0][TCU_TC_K-1:0][7:0] mx_sf_a;
+    wire [TCU_TC_N-1:0][TCU_TC_K-1:0][7:0] mx_sf_b;
+
+    for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_mx_sf_a_i
+        wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
+        for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_k
+            wire [MX_K_IDX_W-1:0] mx_k_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K) + MX_K_IDX_W'(k_idx);
+            assign mx_sf_a[i][k_idx] = mx_scale_at(mx_meta_a_active, fmt_s, mx_a_idx, mx_k_idx);
+        end
+    end
+
+    for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_mx_sf_b_j
+        wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
+        for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_k
+            wire [MX_K_IDX_W-1:0] mx_k_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K) + MX_K_IDX_W'(k_idx);
+            assign mx_sf_b[j][k_idx] = mx_scale_at(mx_meta_b_active, fmt_s, mx_b_idx, mx_k_idx);
+        end
+    end
 `endif
 
     // -----------------------------------------------------------------------
@@ -306,16 +330,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
         `ifdef TCU_MX_ENABLE
             wire [TCU_TC_K-1:0][7:0] sf_a, sf_b;
-            wire [7:0] mx_a_idx = 8'(step_m) * 8'(TCU_TC_M) + 8'(i);
-            wire [7:0] mx_b_idx = 8'(step_n) * 8'(TCU_TC_N) + 8'(j);
+            assign sf_a = mx_sf_a[i];
+            assign sf_b = mx_sf_b[j];
         `endif
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
                 assign a_row[k_idx] = 32'(rs1_data[a_off + i * TCU_TC_K + k_idx]);
-            `ifdef TCU_MX_ENABLE
-                wire [7:0] mx_k_idx = 8'(step_k) * 8'(TCU_TC_K) + 8'(k_idx);
-                assign sf_a[k_idx] = mx_scale_at(mx_meta_a_active, fmt_s, mx_a_idx, mx_k_idx);
-                assign sf_b[k_idx] = mx_scale_at(mx_meta_b_active, fmt_s, mx_b_idx, mx_k_idx);
-            `endif
             `ifdef TCU_SPARSE_ENABLE
                 assign b_col_dense[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
                 // WGMMA_SP: tbuf_rs2_data is wide (TCU_WG_RS2_WIDTH lanes);

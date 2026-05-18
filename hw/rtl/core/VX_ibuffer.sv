@@ -62,7 +62,6 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.used_rs,
             `ifdef TCU_METADATA_ENABLE
                 decode_if.data.hidden_used_rs,
-                decode_if.data.hidden_rs,
             `endif
                 decode_if.data.rd,
                 decode_if.data.bytesel,

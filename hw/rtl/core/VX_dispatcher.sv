@@ -34,6 +34,10 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (ISSUE_ID)
 
     localparam OUT_DATAW = $bits(dispatch_t);
+`ifdef TCU_METADATA_ENABLE
+    localparam TCU_META_DATAW = TCU_META_COUNT * `SIMD_WIDTH * `XLEN;
+    wire [TCU_META_DATAW-1:0] tcu_meta_zero = '0;
+`endif
 
     wire [NUM_EX_UNITS-1:0] operands_ready_in;
     assign operands_if.ready = operands_ready_in[operands_if.data.ex_type];
@@ -66,7 +70,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
                     operands_if.data.rs2_data,
                     operands_if.data.rs3_data,
                 `ifdef TCU_METADATA_ENABLE
-                    operands_if.data.tcu_meta_data,
+                    (i == EX_TCU) ? operands_if.data.tcu_meta_data : tcu_meta_zero,
                 `endif
                     operands_if.data.sop,
                     operands_if.data.eop
@@ -129,7 +133,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
             operands_if.data.rs2_data,
             operands_if.data.rs3_data,
         `ifdef TCU_METADATA_ENABLE
-            operands_if.data.tcu_meta_data,
+            tcu_meta_zero,
         `endif
             operands_if.data.sop,
             operands_if.data.eop

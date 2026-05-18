@@ -65,7 +65,6 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         assign bank_sel = '0;
     end
 
-    wire [TOTAL_COLS-1:0]   packed_wren;
     wire [PACKED_WIDTH-1:0] packed_wdata;
     wire [PACKED_WIDTH-1:0] packed_rdata;
 
@@ -78,7 +77,6 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
             localparam STORE_IN_LOAD  = FLAT_STORE % COLS_PER_LOAD;
             localparam SRC_THREAD     = STORE_IN_LOAD * BANKS_PER_STORE + THREAD_IN_STORE;
 
-            assign packed_wren[b * NUM_COLS + c] = capture_en;
             assign packed_wdata[(b * NUM_COLS + c) * 32 +: 32] =
                 (LOAD_IDX == 0) ? 32'(meta0_data[SRC_THREAD]) : 32'(meta1_data[SRC_THREAD]);
         end
@@ -87,7 +85,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     VX_dp_ram #(
         .DATAW    (PACKED_WIDTH),
         .SIZE     (BANK_DEPTH),
-        .WRENW    (TOTAL_COLS),
+        .WRENW    (1),
         .LUTRAM   (1),
         .OUT_REG  (0),
         .RDW_MODE ("W"),
@@ -97,7 +95,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         .reset (reset),
         .read  (1'b1),
         .write (capture_en),
-        .wren  (packed_wren),
+        .wren  (1'b1),
         .waddr (capture_wid),
         .wdata (packed_wdata),
         .raddr (rd_wid),

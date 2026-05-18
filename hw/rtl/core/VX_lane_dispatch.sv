@@ -51,6 +51,9 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     localparam BATCH_COUNT  = `ISSUE_WIDTH / BLOCK_SIZE;
     localparam BATCH_COUNT_W= `LOG2UP(BATCH_COUNT);
     localparam ISSUE_W      = `LOG2UP(`ISSUE_WIDTH);
+`ifdef TCU_METADATA_ENABLE
+    localparam SIMD_LANE_W  = `LOG2UP(`SIMD_WIDTH);
+`endif
     localparam FANOUT_ENABLE= (`SIMD_WIDTH > (MAX_FANOUT + MAX_FANOUT /2));
 
     localparam DATA_IN_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH);
@@ -63,9 +66,6 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
 
     typedef struct packed {
         logic [2:0][NUM_LANES-1:0][`XLEN-1:0] rsdata;
-    `ifdef TCU_METADATA_ENABLE
-        logic [TCU_META_COUNT-1:0][NUM_LANES-1:0][`XLEN-1:0] tcu_meta_data;
-    `endif
         logic [NUM_LANES-1:0] tmask;
     } packet_t;
 
@@ -168,11 +168,6 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
                     assign packets[i].rsdata[0][j] = dispatch_rsdata[0][k];
                     assign packets[i].rsdata[1][j] = dispatch_rsdata[1][k];
                     assign packets[i].rsdata[2][j] = dispatch_rsdata[2][k];
-                `ifdef TCU_METADATA_ENABLE
-                    for (genvar h = 0; h < TCU_META_COUNT; ++h) begin : g_h
-                        assign packets[i].tcu_meta_data[h][j] = dispatch_tcu_meta_data[h][k];
-                    end
-                `endif
                 end
             end
 
@@ -202,9 +197,6 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
 
             assign block_tmask[block_idx] = block_packet.tmask;
             assign block_rsdata[block_idx] = block_packet.rsdata;
-        `ifdef TCU_METADATA_ENABLE
-            assign block_tcu_meta_data[block_idx] = block_packet.tcu_meta_data;
-        `endif
             assign block_pid[block_idx]   = start_p;
             assign block_sop[block_idx]   = is_first_p;
             assign block_eop[block_idx]   = is_last_p;
@@ -215,7 +207,9 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             assign block_tmask[block_idx] = dispatch_tmask;
             assign block_rsdata[block_idx] = dispatch_rsdata;
         `ifdef TCU_METADATA_ENABLE
-            assign block_tcu_meta_data[block_idx] = dispatch_tcu_meta_data;
+            if (HAS_TCU_META) begin : g_full_meta
+                assign block_tcu_meta_data[block_idx] = dispatch_tcu_meta_data;
+            end
         `endif
             assign block_pid[block_idx]   = 0;
             assign block_sop[block_idx]   = 1;
@@ -223,6 +217,21 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             assign block_ready[block_idx] = ready_p;
             assign block_done[block_idx]  = ready_p || ~valid_p;
         end
+
+    `ifdef TCU_METADATA_ENABLE
+        if (HAS_TCU_META && (`SIMD_WIDTH != NUM_LANES)) begin : g_partial_meta
+            for (genvar h = 0; h < TCU_META_COUNT; ++h) begin : g_h
+                for (genvar j = 0; j < NUM_LANES; ++j) begin : g_j
+                    wire [SIMD_LANE_W-1:0] meta_lane_idx = SIMD_LANE_W'(block_pid[block_idx]) * SIMD_LANE_W'(NUM_LANES) + SIMD_LANE_W'(j);
+                    assign block_tcu_meta_data[block_idx][h][j] = dispatch_tcu_meta_data[h][meta_lane_idx];
+                end
+            end
+        end
+        if (!HAS_TCU_META) begin : g_no_tcu_meta
+            assign block_tcu_meta_data[block_idx] = '0;
+            `UNUSED_VAR (dispatch_tcu_meta_data)
+        end
+    `endif
 
         wire [ISSUE_ISW_W-1:0] isw;
         if (BATCH_COUNT != 1) begin : g_isw_batch

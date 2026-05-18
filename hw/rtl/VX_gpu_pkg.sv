@@ -688,7 +688,6 @@ package VX_gpu_pkg;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
     `ifdef TCU_METADATA_ENABLE
         logic [TCU_META_COUNT-1:0]  hidden_used_rs;
-        logic [TCU_META_COUNT-1:0][NUM_REGS_BITS-1:0] hidden_rs;
     `endif
         logic [NUM_REGS_BITS-1:0]   rd;
         logic [BYTESEL_BITS-1:0]    bytesel;
@@ -710,7 +709,6 @@ package VX_gpu_pkg;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
     `ifdef TCU_METADATA_ENABLE
         logic [TCU_META_COUNT-1:0]  hidden_used_rs;
-        logic [TCU_META_COUNT-1:0][NUM_REGS_BITS-1:0] hidden_rs;
     `endif
         logic [NUM_REGS_BITS-1:0]   rd;
         logic [BYTESEL_BITS-1:0]    bytesel;

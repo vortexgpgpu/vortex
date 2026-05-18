@@ -239,22 +239,17 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r = ibuf_in;
     `ifdef TCU_METADATA_ENABLE
         ibuf_r.hidden_used_rs = '0;
-        ibuf_r.hidden_rs = '0;
     `ifdef TCU_MX_ENABLE
         if (is_first_uop && tcu_fmt_is_mx(ibuf_in.op_args.tcu.fmt_s)) begin
             ibuf_r.hidden_used_rs[TCU_META_MX_A] = 1'b1;
             ibuf_r.hidden_used_rs[TCU_META_MX_B] = 1'b1;
-            ibuf_r.hidden_rs[TCU_META_MX_A] = make_reg_num(REG_TYPE_F, 5'd8);
-            ibuf_r.hidden_rs[TCU_META_MX_B] = make_reg_num(REG_TYPE_F, 5'd9);
         end
     `endif
     `ifdef TCU_SPARSE_ENABLE
         if (is_first_uop && is_sparse) begin
             ibuf_r.hidden_used_rs[TCU_META_SP_0] = 1'b1;
-            ibuf_r.hidden_rs[TCU_META_SP_0] = make_reg_num(REG_TYPE_F, 5'd14);
             if (sparse_meta_two_regs) begin
                 ibuf_r.hidden_used_rs[TCU_META_SP_1] = 1'b1;
-                ibuf_r.hidden_rs[TCU_META_SP_1] = make_reg_num(REG_TYPE_F, 5'd15);
             end
         end
     `endif
