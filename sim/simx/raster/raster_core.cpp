@@ -300,12 +300,17 @@ private:
     uint64_t tbuf_addr = uint64_t(dcrs_.read(VX_DCR_RASTER_TBUF_ADDR)) << 6;
     line_fetches_.clear();
 
-    // Total PID bytes = sum across tiles of pids_count * 2.
+    // PIDs are stored as uint32_t (matches sw/common/gfxutil.cpp::Binning
+    // which memcpys from std::vector<uint32_t> with stride sizeof(uint32_t)).
+    // VX_RASTER_PID_BITS=16 is the consumer-side width; storage is 4 bytes.
+    constexpr uint32_t kPidStride = sizeof(uint32_t);
+
+    // Total PID bytes = sum across tiles of pids_count * kPidStride.
     uint32_t total_bytes = 0;
     pid_table_offset_.assign(tile_headers_.size(), 0);
     for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
       pid_table_offset_[i] = total_bytes;
-      total_bytes += uint32_t(tile_headers_[i].pids_count) * 2;
+      total_bytes += uint32_t(tile_headers_[i].pids_count) * kPidStride;
     }
     pid_table_buf_.assign(total_bytes, 0);
 
@@ -320,9 +325,16 @@ private:
     for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
       const auto& hdr = tile_headers_[i];
       if (hdr.pids_count == 0) continue;
-      uint64_t pid_table_addr = tbuf_addr + uint64_t(hdr.pids_offset);
+      // hdr.pids_offset is in uint32_t-word units, measured from the END
+      // of THIS tile's header — matches the runtime encoding in
+      // sw/common/gfxutil.cpp::Binning and the RTL pids_addr computation
+      // in hw/rtl/raster/VX_raster_mem.sv.
+      uint64_t this_header_addr = tbuf_addr + uint64_t(i) * sizeof(graphics::rast_tile_header_t);
+      uint64_t pid_table_addr   = this_header_addr
+                                + sizeof(graphics::rast_tile_header_t)
+                                + uint64_t(hdr.pids_offset) * kPidStride;
       enqueue_byte_range(pid_table_addr,
-                         uint32_t(hdr.pids_count) * 2,
+                         uint32_t(hdr.pids_count) * kPidStride,
                          &pid_table_buf_[pid_table_offset_[i]]);
     }
     issue_idx_   = 0;
@@ -336,15 +348,19 @@ private:
     uint32_t pbuf_stride = dcrs_.read(VX_DCR_RASTER_PBUF_STRIDE);
     if (pbuf_stride == 0) pbuf_stride = sizeof(graphics::rast_prim_t);
 
-    // Collect unique pids referenced by any tile.
+    // Collect unique pids referenced by any tile. PIDs are stored as
+    // uint32_t in the tile_buffer (see start_load_pids); read the full
+    // 32-bit word and truncate to the 16-bit PID width.
+    constexpr uint32_t kPidStride = sizeof(uint32_t);
     primary_pids_.clear();
     {
       std::unordered_map<uint16_t, bool> seen;
       for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
         const auto& hdr = tile_headers_[i];
         for (uint32_t j = 0; j < hdr.pids_count; ++j) {
-          uint16_t pid;
-          std::memcpy(&pid, &pid_table_buf_[pid_table_offset_[i] + j * 2], 2);
+          uint32_t pid_word;
+          std::memcpy(&pid_word, &pid_table_buf_[pid_table_offset_[i] + j * kPidStride], kPidStride);
+          uint16_t pid = uint16_t(pid_word);
           if (!seen[pid]) {
             seen[pid] = true;
             primary_pids_.push_back(pid);
