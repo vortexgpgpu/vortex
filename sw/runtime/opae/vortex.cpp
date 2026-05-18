@@ -576,6 +576,26 @@ public:
     return 0;
   }
 
+  // ----- CP MMIO surface -----
+  // The AFU's MMIO demux routes host byte offsets 0x1000..0x1FFF to the
+  // CP regfile (mapped to CP-internal 0x000-based offsets). Callers
+  // pass the CP-internal offset directly; we add the AFU base here.
+  int cp_mmio_write(uint32_t off, uint32_t value) {
+    CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, CP_BASE + off, value), {
+      return -1;
+    });
+    return 0;
+  }
+
+  int cp_mmio_read(uint32_t off, uint32_t* value) {
+    uint64_t v = 0;
+    CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, CP_BASE + off, &v), {
+      return -1;
+    });
+    *value = uint32_t(v);
+    return 0;
+  }
+
   // ----- Command Processor path -----
   // Same shape as the XRT runtime's cp_init / cp_post_launch / cp_wait
   // — allocate ring + head + completion buffers in device memory, program

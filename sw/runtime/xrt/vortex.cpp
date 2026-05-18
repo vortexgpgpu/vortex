@@ -737,6 +737,18 @@ public:
     return 0;
   }
 
+  // ----- CP MMIO surface -----
+  // VX_afu_wrap demuxes host AXI-Lite addresses 0x1000..0x1FFF to the
+  // CP regfile (mapped to CP-internal 0x000-based offsets). Callers
+  // pass the CP-internal offset directly; we add the AFU base here.
+  int cp_mmio_write(uint32_t off, uint32_t value) {
+    return this->write_register(CP_BASE + off, value);
+  }
+
+  int cp_mmio_read(uint32_t off, uint32_t *value) {
+    return this->read_register(CP_BASE + off, value);
+  }
+
   // ----- Command Processor path -----
   //
   // When the host sets VORTEX_USE_CP=1 we allocate three device buffers

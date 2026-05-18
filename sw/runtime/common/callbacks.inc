@@ -168,5 +168,21 @@ extern "C" int vx_dev_init(callbacks_t* callbacks) {
               ->dcr_read(addr, tag, out_value);
   };
 
+  // ----- CP control plane -----
+  callbacks->cp_mmio_write = [](void* dev_ctx, uint32_t off,
+                                uint32_t value) -> int {
+    if (nullptr == dev_ctx)
+      return -1;
+    return reinterpret_cast<vx_device*>(dev_ctx)->cp_mmio_write(off, value);
+  };
+
+  callbacks->cp_mmio_read = [](void* dev_ctx, uint32_t off,
+                               uint32_t* out_value) -> int {
+    if (nullptr == dev_ctx || nullptr == out_value)
+      return -1;
+    return reinterpret_cast<vx_device*>(dev_ctx)
+              ->cp_mmio_read(off, out_value);
+  };
+
   return 0;
 }

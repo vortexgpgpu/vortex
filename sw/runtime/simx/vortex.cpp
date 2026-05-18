@@ -17,6 +17,7 @@
 #include <mem.h>
 #include <processor.h>
 #include <util.h>
+#include <CommandProcessor.h>
 
 #include <assert.h>
 #include <chrono>
@@ -33,7 +34,11 @@ using namespace vortex;
 class vx_device {
 public:
   vx_device()
-      : ram_(0, MEM_PAGE_SIZE), processor_(), global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE) {
+      : ram_(0, MEM_PAGE_SIZE),
+        processor_(),
+        global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
+                    MEM_PAGE_SIZE, CACHE_BLOCK_SIZE),
+        cp_(make_cp_hooks()) {
     // attach memory module
     processor_.attach_ram(&ram_);
   }
@@ -244,11 +249,60 @@ public:
     return processor_.dcr_read(addr, tag, value);
   }
 
+  // ----- CP MMIO surface -----
+  // simx has no hardware CP — we provide the same regfile surface via
+  // a functional CommandProcessor C++ model. Any commands that get
+  // posted to the ring will be processed when the dispatcher starts
+  // using the CP path (Phase D); for now this just satisfies the
+  // callback contract.
+  int cp_mmio_write(uint32_t off, uint32_t value) {
+    cp_.mmio_write(off, value);
+    // Drain a few ticks so freshly-committed Q_TAIL gets serviced. Each
+    // call to mmio_write is the host's signal that it might have changed
+    // CP state; a small tick budget here keeps the CP responsive without
+    // a dedicated sim thread.
+    for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
+    return 0;
+  }
+  int cp_mmio_read(uint32_t off, uint32_t* value) {
+    // A few ticks before the read so seqnum has a chance to catch up if
+    // the host is polling for completion.
+    for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
+    *value = cp_.mmio_read(off);
+    return 0;
+  }
+
 private:
+  vortex::CommandProcessor::Hooks make_cp_hooks() {
+    vortex::CommandProcessor::Hooks h;
+    h.dram_read = [this](uint64_t addr, void* dst, std::size_t bytes) {
+      ram_.enable_acl(false);
+      ram_.read(static_cast<uint8_t*>(dst), addr, bytes);
+      ram_.enable_acl(true);
+    };
+    h.dram_write = [this](uint64_t addr, const void* src, std::size_t bytes) {
+      ram_.enable_acl(false);
+      ram_.write(static_cast<const uint8_t*>(src), addr, bytes);
+      ram_.enable_acl(true);
+    };
+    h.vortex_dcr_write = [this](uint32_t addr, uint32_t value) {
+      processor_.dcr_write(addr, value);
+    };
+    h.vortex_start = [this]() {
+      future_ = std::async(std::launch::async, [&] { processor_.run(); });
+    };
+    h.vortex_busy = [this]() -> bool {
+      if (!future_.valid()) return false;
+      return future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
+    };
+    return h;
+  }
+
   RAM ram_;
   Processor processor_;
   MemoryAllocator global_mem_;
   std::future<void> future_;
+  vortex::CommandProcessor cp_;
 };
 
 #include <callbacks.inc>

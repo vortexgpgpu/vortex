@@ -73,10 +73,20 @@ typedef struct {
   int (*launch_start)(void* dev_ctx);
   int (*launch_wait) (void* dev_ctx, uint64_t timeout_ms);
 
-  // ----- DCR -----
+  // ----- DCR (legacy, to be removed in Phase E of the pure-v2 cleanup) -----
   int (*dcr_write)   (void* dev_ctx, uint32_t addr, uint32_t value);
   int (*dcr_read)    (void* dev_ctx, uint32_t addr, uint32_t tag,
                       uint32_t* out_value);
+
+  // ----- Command Processor control plane -----
+  // Single pair that replaces launch_*/dcr_* in pure-v2 mode. The
+  // `off` argument is the CP-internal regfile offset (matches the
+  // VX_cp_axil_regfile address map: globals at 0x000..0xFF, queue 0
+  // at 0x100..0x13F). xrt/opae backends translate to their host-side
+  // MMIO offset by adding 0x1000 (per the AFU's bit-12 demux split).
+  // simx/rtlsim forward directly to a sim/common/CommandProcessor.
+  int (*cp_mmio_write)(void* dev_ctx, uint32_t off, uint32_t value);
+  int (*cp_mmio_read) (void* dev_ctx, uint32_t off, uint32_t* out_value);
 
 } callbacks_t;
 
