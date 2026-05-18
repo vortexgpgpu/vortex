@@ -37,15 +37,7 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
 
-    wire is_signed_int = tcu_fmt_is_signed_int(fmt_i);
-
-`ifdef TCU_MX_ENABLE
-    // --- MXINT8 Scale Factor (shared across all lanes) --------------------
-    wire signed [7:0] sf_wo_bias_a = sf_a - 8'd133;
-    wire signed [7:0] sf_wo_bias_b = sf_b - 8'd133;
-    wire signed [7:0] sf_wo_bias   = sf_wo_bias_a + sf_wo_bias_b;
-    wire        [7:0] abs_sf       = -sf_wo_bias;
-`endif
+    wire is_signed_int = fmt_i[3] || tcu_fmt_is_signed_int(fmt_i);
 
     // ----------------------------------------------------------------------
     // 2. Multiplication & Accumulation
@@ -78,13 +70,15 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
 
     `ifdef TCU_MX_ENABLE
         // --- MXINT8 Per-Product Scaling -----------------------------------
-        // Apply scale shift per-product with truncation toward zero (matching C++ (int32_t)(float) cast)
+        wire signed [8:0] combined_sf = $signed(sf_a + sf_b - 9'd266);
         wire signed [24:0] y_mxi8_scaled [2];
         for (genvar j = 0; j < 2; ++j) begin : g_mxi8
-            wire signed [24:0] prod_ext    = 25'($signed(y_prod_i8[j]));
-            wire        [24:0] trunc_bias  = prod_ext[24] ? ((25'd1 << abs_sf) - 25'd1) : 25'd0;
-            wire signed [24:0] prod_biased = prod_ext + $signed(trunc_bias);
-            assign y_mxi8_scaled[j] = sf_wo_bias[7] ? (prod_biased >>> abs_sf) : (prod_ext <<< sf_wo_bias);
+            wire signed [24:0] raw_prod = {{8{y_prod_i8[j][16]}}, y_prod_i8[j]};
+            wire        [8:0]  shift_amt = -combined_sf;
+            wire        [24:0] abs_prod = raw_prod[24] ? -raw_prod : raw_prod;
+            wire signed [24:0] scaled_prod_r = abs_prod >> shift_amt;
+            wire signed [24:0] scaled_prod = raw_prod[24] ? -scaled_prod_r : scaled_prod_r;
+            assign y_mxi8_scaled[j] = combined_sf[8] ? scaled_prod : (raw_prod <<< combined_sf);
         end
         
         wire [24:0] y_mxi8_add_res;

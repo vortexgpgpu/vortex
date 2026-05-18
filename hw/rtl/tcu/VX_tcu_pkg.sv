@@ -30,15 +30,18 @@ package VX_tcu_pkg;
     localparam TCU_FP8_ID   = 3;
     localparam TCU_BF8_ID   = 4;
     localparam TCU_TF32_ID  = 5;
-    localparam TCU_MXFP8_ID = 6;
-    localparam TCU_NVFP4_ID = 7;
+    // MX  formats have 2nd-MSB set
+    localparam TCU_MXFP8_ID = 8;
+    localparam TCU_NVFP4_ID = 10;
+    
     // Supported integer-point types (prefer setting unsigned versions to even)
     localparam TCU_I32_ID   = 16;
     localparam TCU_I8_ID    = 17;
     localparam TCU_U8_ID    = 18;
     localparam TCU_I4_ID    = 19;
     localparam TCU_U4_ID    = 20;
-    localparam TCU_MXI8_ID  = 21;
+    // MX formats have 2nd-MSB set
+    localparam TCU_MXI8_ID  = 24;
 
     localparam TCU_FMT_WIDTH= 5;
 

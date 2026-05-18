@@ -208,31 +208,34 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
 
         wire [7:0] bias_sel = is_bfloat ? BIAS_CONST_BF8 : BIAS_CONST_FP8;
 
+        wire [EXP_W-1:0] max_pre_sum_cpa, bias_sel_cpa;
         wire [EXP_W-1:0] final_exp;
-        
+
     `ifdef TCU_MX_ENABLE
-        wire [EXP_W-1:0] neg_254 = -EXP_W'(254);
+        wire [3*EXP_W-1:0] sf_comp = fmt_f[3] ? {EXP_W'(sf_a), EXP_W'(sf_b), -EXP_W'(254)} : (3*EXP_W)'(0);
         VX_csa_tree #(
             .N(5),
             .W(EXP_W),
             .S(EXP_W)
-        ) exp_final_add (
-            .operands ({EXP_W'(max_pre_sum), EXP_W'(bias_sel), EXP_W'(sf_a), EXP_W'(sf_b), neg_254}),
-            .sum      (final_exp),
-            `UNUSED_PIN(carry)
+        ) exp_sf_csa (
+            .operands ({EXP_W'(max_pre_sum), EXP_W'(bias_sel), sf_comp}),
+            .sum      (max_pre_sum_cpa),
+            .carry    (bias_sel_cpa)
         );
     `else
+        assign max_pre_sum_cpa = EXP_W'(max_pre_sum);
+        assign bias_sel_cpa = EXP_W'(bias_sel);
+    `endif
         VX_ks_adder #(
             .N(EXP_W),
             .BYPASS(`FORCE_BUILTIN_ADDER(EXP_W))
         ) exp_final_add (
-            .dataa(EXP_W'(max_pre_sum)),
-            .datab(EXP_W'(bias_sel)),
+            .dataa(EXP_W'(max_pre_sum_cpa)),
+            .datab(EXP_W'(bias_sel_cpa)),
             .cin(1'b0),
             .sum(final_exp),
             `UNUSED_PIN(cout)
         );
-    `endif
 
         // ------------------------------------------------------------------
         // 2c. Mantissa Multiplication

@@ -66,7 +66,7 @@ struct tf32 {
 
 struct mxfp8 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 6;
+  static constexpr uint32_t id = 8;
   static constexpr uint32_t bits = 8;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 32;    //elements per block
@@ -75,7 +75,7 @@ struct mxfp8 {
 
 struct nvfp4 {
   using dtype = uint8_t;
-  static constexpr uint32_t id = 7;
+  static constexpr uint32_t id = 10;
   static constexpr uint32_t bits = 4;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 16;
@@ -119,7 +119,7 @@ struct uint4 {
 
 struct mxint8 {
   using dtype = int8_t;
-  static constexpr uint32_t id = 21;
+  static constexpr uint32_t id = 24;
   static constexpr uint32_t bits = 8;
   static constexpr uint32_t scale_bits = 8;
   static constexpr uint32_t ele_block = 32;

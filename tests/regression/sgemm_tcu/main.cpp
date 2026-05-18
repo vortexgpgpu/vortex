@@ -639,8 +639,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
-  uint32_t num_blocks = grid_dim[0] * grid_dim[1];
 #ifdef RDCYC_ENABLE
+  uint32_t num_blocks = grid_dim[0] * grid_dim[1];
   RT_CHECK(vx_mem_alloc(device, num_blocks * 4 * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
   RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
 #endif
