@@ -11,6 +11,15 @@ all:
 	$(MAKE) -C kmu
 	$(MAKE) -C dxa_core
 	$(MAKE) -C tcu_unit
+	$(MAKE) -C cp_arbiter
+	$(MAKE) -C cp_engine
+	$(MAKE) -C cp_launch
+	$(MAKE) -C cp_dcr_proxy
+	$(MAKE) -C cp_unpack
+	$(MAKE) -C cp_axil_regfile
+	$(MAKE) -C cp_axi_path
+	$(MAKE) -C cp_dma
+	$(MAKE) -C cp_core
 
 run:
 	$(MAKE) -C generic_queue run
@@ -25,6 +34,15 @@ run:
 	$(MAKE) -C kmu run
 	$(MAKE) -C dxa_core run
 	$(MAKE) -C tcu_unit run
+	$(MAKE) -C cp_arbiter run
+	$(MAKE) -C cp_engine run
+	$(MAKE) -C cp_launch run
+	$(MAKE) -C cp_dcr_proxy run
+	$(MAKE) -C cp_unpack run
+	$(MAKE) -C cp_axil_regfile run
+	$(MAKE) -C cp_axi_path run
+	$(MAKE) -C cp_dma run
+	$(MAKE) -C cp_core run
 
 clean:
 	$(MAKE) -C generic_queue clean
@@ -39,3 +57,12 @@ clean:
 	$(MAKE) -C kmu clean
 	$(MAKE) -C dxa_core clean
 	$(MAKE) -C tcu_unit clean
+	$(MAKE) -C cp_arbiter clean
+	$(MAKE) -C cp_engine clean
+	$(MAKE) -C cp_launch clean
+	$(MAKE) -C cp_dcr_proxy clean
+	$(MAKE) -C cp_unpack clean
+	$(MAKE) -C cp_axil_regfile clean
+	$(MAKE) -C cp_axi_path clean
+	$(MAKE) -C cp_dma clean
+	$(MAKE) -C cp_core clean

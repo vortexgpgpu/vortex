@@ -33,7 +33,7 @@ LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulato
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DXLEN_$(XLEN)')
 
 # Source files definition
-SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp
+SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp $(SIM_COMMON_DIR)/CommandProcessor.cpp
 SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(SRC_DIR)/core.cpp $(SRC_DIR)/scheduler.cpp $(SRC_DIR)/cta_dispatcher.cpp $(SRC_DIR)/barrier_unit.cpp
 SRCS += $(SRC_DIR)/kmu/kmu.cpp
 SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/decompressor.cpp $(SRC_DIR)/scoreboard.cpp $(SRC_DIR)/sequencer.cpp $(SRC_DIR)/opc_unit.cpp $(SRC_DIR)/dispatcher.cpp
@@ -106,13 +106,10 @@ ifeq ($(USE_SST),1)
 endif
 
 # gem5 integration: build libvortex-gem5.so (the C ABI library loaded
-# by the gem5 VortexGPGPU SimObject) plus gem5_smoke (an in-process
-# smoke driver that exercises the library without needing gem5
-# installed). The gem5 wrapper source is kept out of the default SRCS
-# list and pulled into VORTEX_GEM5_SRCS so the default simx binary
-# does not carry it.
-VORTEX_GEM5_SRCS := $(SRC_DIR)/gem5/vortex_gpgpu.cpp
-GEM5_SMOKE_SRC   := $(SRC_DIR)/gem5/gem5_smoke_main.cpp
+# by the gem5 VortexGPGPU SimObject). The gem5 wrapper source is kept
+# out of the default SRCS list and pulled into VORTEX_GEM5_SRCS so the
+# default simx binary does not carry it.
+VORTEX_GEM5_SRCS := $(SRC_DIR)/gem5/vortex_gpgpu.cpp $(SRC_DIR)/gem5/dev_mem.cpp
 
 # Debugging
 ifdef DEBUG
@@ -148,8 +145,7 @@ endif
 
 ifeq ($(USE_GEM5), 1)
 VORTEX_GEM5_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(VORTEX_GEM5_SRCS))
-GEM5_SMOKE_OBJ   := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(GEM5_SMOKE_SRC))
-DEPS             += $(VORTEX_GEM5_OBJS:.o=.d) $(GEM5_SMOKE_OBJ:.o=.d)
+DEPS             += $(VORTEX_GEM5_OBJS:.o=.d)
 endif
 
 
@@ -159,14 +155,13 @@ CXX := $(if $(shell which ccache),ccache $(CXX),$(CXX))
 PROJECT := simx
 VORTEX_LIB := libvortex.so
 VORTEX_GEM5_LIB := libvortex-gem5.so
-GEM5_SMOKE := gem5_smoke
 
-.PHONY: all force clean clean-lib clean-exe clean-obj libvortex clean-libvortex libvortex-gem5 clean-libvortex-gem5 gem5-smoke clean-gem5-smoke
+.PHONY: all force clean clean-lib clean-exe clean-obj libvortex clean-libvortex libvortex-gem5 clean-libvortex-gem5
 
 ifeq ($(USE_SST), 1)
 all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_LIB)
 else ifeq ($(USE_GEM5), 1)
-all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_GEM5_LIB) $(DESTDIR)/$(GEM5_SMOKE)
+all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_GEM5_LIB)
 else
 all: $(DESTDIR)/$(PROJECT)
 endif
@@ -221,14 +216,6 @@ libvortex-gem5: $(DESTDIR)/$(VORTEX_GEM5_LIB)
 $(DESTDIR)/$(VORTEX_GEM5_LIB): $(OBJS) $(VORTEX_GEM5_OBJS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -Wl,-soname,$(VORTEX_GEM5_LIB) -o $@
 
-# In-process smoke driver (no gem5 needed). Links against the gem5
-# library via the C ABI so a successful run here proves the library
-# is sound before we expose it to the gem5 device.
-gem5-smoke: $(DESTDIR)/$(GEM5_SMOKE)
-
-$(DESTDIR)/$(GEM5_SMOKE): $(GEM5_SMOKE_OBJ) $(DESTDIR)/$(VORTEX_GEM5_LIB)
-	$(CXX) $(CXXFLAGS) $(GEM5_SMOKE_OBJ) -L$(DESTDIR) -lvortex-gem5 -Wl,-rpath,$(DESTDIR) -o $@
-
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force
 	@mkdir -p $(@D)
@@ -251,13 +238,10 @@ clean-libvortex:
 clean-libvortex-gem5:
 	rm -f $(DESTDIR)/$(VORTEX_GEM5_LIB)
 
-clean-gem5-smoke:
-	rm -f $(DESTDIR)/$(GEM5_SMOKE)
-
 clean-exe:
 	rm -f $(DESTDIR)/$(PROJECT)
 
 clean-obj:
 	rm -rf $(OBJ_DIR)
 
-clean: clean-lib clean-libvortex clean-libvortex-gem5 clean-gem5-smoke clean-exe clean-obj
+clean: clean-lib clean-libvortex clean-libvortex-gem5 clean-exe clean-obj

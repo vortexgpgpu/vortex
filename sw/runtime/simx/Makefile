@@ -12,9 +12,12 @@ CXXFLAGS += -DXLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -shared -pthread
+# Find libsimx.so siblings at runtime in the same dir libvortex-simx.so lives in.
+LDFLAGS += -Wl,-rpath,'$$ORIGIN'
 LDFLAGS += -L$(DESTDIR) -lsimx
 
-SRCS := $(SRC_DIR)/vortex.cpp $(RT_COMMON_DIR)/utils.cpp
+SRCS := $(SRC_DIR)/vortex.cpp $(RT_COMMON_DIR)/utils.cpp \
+        $(SIM_COMMON_DIR)/CommandProcessor.cpp
 
 # Debugging
 ifdef DEBUG

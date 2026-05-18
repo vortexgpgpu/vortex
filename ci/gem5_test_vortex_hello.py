@@ -11,16 +11,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Phase 3 gem5 integration test for vortex.VortexGPGPU.
+# Standalone gem5 integration test for vortex.VortexGPGPU.
 #
-# Standalone-device variant: the VortexGPGPU SimObject loads the kernel
-# directly via its `kernel=` parameter and runs it via its internal
-# tick loop. No host CPU, no MMIO traffic, no DMA — this is the gem5
-# analog of sim/simx/gem5/gem5_smoke from Phase 2, used here purely
-# to prove the gem5 SimObject can dlopen libvortex-gem5.so, drive
-# Processor::cycle() from the gem5 event loop, and exit cleanly.
+# The SimObject loads the kernel directly via its `kernel=` parameter
+# and runs it via its internal vortexTickEvent_ chain — no host CPU,
+# no CP, no PIO/DMA. Smoke-tests the gem5↔libvortex-gem5.so wiring:
+# dlopen succeeds, SimObject constructs, Processor::cycle() drives
+# from the gem5 event loop, sim exits cleanly.
 #
-# Phase 5 adds the full host-CPU + MMIO/DMA flow on top of this.
+# The end-to-end variant ([gem5_test_vortex_app.py](gem5_test_vortex_app.py))
+# wires up the host CPU + CP regfile + BAR-mapped VRAM on top.
 #
 # Configurable via env vars:
 #   VORTEX_GEM5_LIB    — path to libvortex-gem5.so (no default)
@@ -54,8 +54,8 @@ if not KERNEL:
 
 # Minimal system: just enough to hang the VortexGPGPU off a membus
 # so gem5 considers it a properly-wired SimObject. No CPU in this
-# Phase-3 test — the kernel runs entirely inside the SimObject's
-# internal tick loop.
+# test — the kernel runs entirely inside the SimObject's internal
+# vortexTickEvent_ chain.
 system = System()
 system.clk_domain = SrcClockDomain(clock="1GHz",
                                    voltage_domain=VoltageDomain())
@@ -65,8 +65,8 @@ system.mem_ranges = [AddrRange("512MiB")]
 # Membus + a small backing memory so PIO ranges have somewhere to bind.
 system.membus = SystemXBar()
 
-# Memory controller (unused at runtime in Phase 3 but required for the
-# system to instantiate cleanly).
+# Memory controller (unused at runtime in standalone mode but required
+# for the system to instantiate cleanly).
 system.mem_ctrl = MemCtrl()
 system.mem_ctrl.dram = DDR3_1600_8x8()
 system.mem_ctrl.dram.range = system.mem_ranges[0]
@@ -77,6 +77,11 @@ system.mem_ctrl.port = system.membus.mem_side_ports
 system.vortex = VortexGPGPU(
     library = LIBRARY,
     kernel  = KERNEL,
+    # Explicitly disable the BAR-mapped VRAM range — the standalone
+    # path loads the kernel via the device library's load_kernel()
+    # entry, never via host memcpy through PIN. Leaving it enabled
+    # here would conflict with this test's DRAM range.
+    pin_size = 0,
 )
 system.vortex.pio = system.membus.mem_side_ports
 system.vortex.dma = system.membus.cpu_side_ports
@@ -85,10 +90,10 @@ system.vortex.dma = system.membus.cpu_side_ports
 root = Root(full_system=False, system=system)
 m5.instantiate()
 
-print(f"Phase 3: VortexGPGPU library={LIBRARY}")
-print(f"Phase 3: kernel={KERNEL}")
-print("Phase 3: running until VortexGPGPU exits the sim loop...")
+print(f"Standalone: VortexGPGPU library={LIBRARY}")
+print(f"Standalone: kernel={KERNEL}")
+print("Standalone: running until VortexGPGPU exits the sim loop...")
 
 exit_event = m5.simulate()
-print(f"Phase 3: exit_event.cause = {exit_event.getCause()!r}")
-print(f"Phase 3: tick = {m5.curTick()}")
+print(f"Standalone: exit_event.cause = {exit_event.getCause()!r}")
+print(f"Standalone: tick = {m5.curTick()}")

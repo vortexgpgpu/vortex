@@ -14,7 +14,9 @@
 #include "vortex_gpgpu.h"
 
 #include "constants.h"
+#include "dev_mem.h"
 #include "processor.h"
+#include <CommandProcessor.h>
 #include <mem.h>
 #include <util.h>
 #include <VX_config.h>
@@ -29,206 +31,181 @@
 using namespace vortex;
 
 // Mirrors sw/runtime/common/common.h's GLOBAL_MEM_SIZE so the bounds
-// check in vram_{read,write} matches what the host runtime enforces
-// on its side. Inlined rather than including common.h because that
-// header drags in the full runtime ABI (vortex.h + callbacks.h +
-// mem_alloc.h) which a device library has no business touching.
+// check in vram_{read,write} matches what the host runtime enforces.
+// Inlined rather than including common.h because that header drags in
+// the full runtime ABI which a device library has no business touching.
 #if (XLEN == 64)
 static constexpr uint64_t GEM5_GLOBAL_MEM_SIZE = 0x200000000ull;  // 8 GB
 #else
 static constexpr uint64_t GEM5_GLOBAL_MEM_SIZE = 0x100000000ull;  // 4 GB
 #endif
 
-// OPAE MMIO command-set constants (same as
-// hw/syn/altera/opae/vortex_afu.json + sw/runtime/gem5/vortex.cpp).
-// Hardcoded — no #include of vortex_opae.h — to keep the device
-// library independent of the OPAE header generator.
-namespace cmd {
-constexpr uint64_t MEM_READ  = 1;
-constexpr uint64_t MEM_WRITE = 2;
-constexpr uint64_t RUN       = 3;
-constexpr uint64_t DCR_WRITE = 4;
-constexpr uint64_t DCR_READ  = 5;
-} // namespace cmd
-namespace mmio {
-constexpr uint64_t CMD_TYPE  = 10 * 4;  // byte offsets, matching the
-constexpr uint64_t CMD_ARG0  = 12 * 4;  // sw/runtime side
-constexpr uint64_t CMD_ARG1  = 14 * 4;
-constexpr uint64_t CMD_ARG2  = 16 * 4;
-constexpr uint64_t STATUS    = 18 * 4;
-constexpr uint64_t DCR_RSP   = 28 * 4;
-} // namespace mmio
-
-// Internal C++ class. Mirrors the shape of vortex::VortexSimulator in
-// sim/simx/sst/ — same Processor + RAM ownership, same KMU DCR priming,
-// same load_kernel paths — but with no SST types in the interface.
 namespace {
 
+// Gem5Device — owns the Vortex Processor + RAM + CommandProcessor
+// triplet. The CP's hooks call back into proc_/dev_mem_, and the
+// SimObject drives cp_tick / vortex_tick on independent gem5 events.
 class Gem5Device {
 public:
-  Gem5Device()
-    : ram_(0, MEM_PAGE_SIZE)
-    , proc_(std::make_unique<Processor>()) {
-    proc_->attach_ram(&ram_);
-  }
-
-  ~Gem5Device() = default;
-
-  // Load a kernel image and prime the KMU for a 1×1×1 CTA at
-  // STARTUP_ADDR. After this, cycle() will dispatch the kernel.
-  // Returns true on success.
-  bool load_kernel(const std::string& path) {
-    // KMU DCRs — same sequence as sim/simx/main.cpp:101–116 and
-    // sim/simx/sst/vortex_simulator.cpp:22–39.
-    const uint64_t startup_addr(STARTUP_ADDR);
-    proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
-  #if (XLEN == 64)
-    proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR1, startup_addr >> 32);
-  #endif
-    proc_->dcr_write(VX_DCR_KMU_STARTUP_ARG0, 0);
-    proc_->dcr_write(VX_DCR_KMU_STARTUP_ARG1, 0);
-    proc_->dcr_write(VX_DCR_KMU_GRID_DIM_X,   1);
-    proc_->dcr_write(VX_DCR_KMU_GRID_DIM_Y,   1);
-    proc_->dcr_write(VX_DCR_KMU_GRID_DIM_Z,   1);
-    proc_->dcr_write(VX_DCR_KMU_BLOCK_DIM_X,  1);
-    proc_->dcr_write(VX_DCR_KMU_BLOCK_DIM_Y,  1);
-    proc_->dcr_write(VX_DCR_KMU_BLOCK_DIM_Z,  1);
-    proc_->dcr_write(VX_DCR_KMU_LMEM_SIZE,    0);
-    proc_->dcr_write(VX_DCR_KMU_BLOCK_SIZE,   1);
-    proc_->dcr_write(VX_DCR_KMU_WARP_STEP_X,  NUM_THREADS);
-    proc_->dcr_write(VX_DCR_KMU_WARP_STEP_Y,  0);
-    proc_->dcr_write(VX_DCR_KMU_WARP_STEP_Z,  0);
-
-    std::string ext(fileExtension(path.c_str()));
-    if (ext == "vxbin") {
-      ram_.loadVxImage(path.c_str());
-    } else if (ext == "bin") {
-      ram_.loadBinImage(path.c_str(), startup_addr);
-    } else if (ext == "hex") {
-      ram_.loadHexImage(path.c_str());
-    } else {
-      std::cerr << "vortex_gem5: unsupported kernel extension '" << ext
-                << "' (need .vxbin, .bin, or .hex)" << std::endl;
-      return false;
+    Gem5Device()
+        : ram_(0, MEM_PAGE_SIZE),
+          proc_(std::make_unique<Processor>()),
+          dev_mem_(std::make_unique<vortex_gem5::InProcessDevMem>(ram_)),
+          cp_(make_cp_hooks()) {
+        proc_->attach_ram(&ram_);
     }
-    return true;
-  }
 
-  bool tick()  { return proc_->cycle(); }
+    ~Gem5Device() = default;
 
-  // Memory access uses the same ACL-bypass pattern as
-  // sw/runtime/simx/vortex.cpp upload()/download(); the gem5 DMA path
-  // is a peer of the host runtime, not a userspace caller subject to
-  // page protections.
-  void vram_write(uint64_t addr, const uint8_t* src, uint32_t size) {
-    if (addr + size > GEM5_GLOBAL_MEM_SIZE) {
-    #ifndef NDEBUG
-      std::cerr << "vortex_gem5: vram_write overflow addr=0x"
-                << std::hex << addr << " size=" << std::dec << size << std::endl;
+    // ---------------- Standalone (Phase 3) kernel preload ---------------
+    // Primes the KMU DCRs for a 1×1×1 CTA at STARTUP_ADDR and loads the
+    // ELF/bin/hex into VRAM. After this, calling vortex_tick repeatedly
+    // dispatches the kernel to completion (ProcessorImpl::cycle's lazy
+    // init resets SimPlatform and calls kmu_->start() on first tick).
+    // The hosted (CP-driven) path never calls this — kernel ELFs land
+    // in VRAM via mem_upload, and KMU programming goes through CMD_DCR_*.
+    bool load_kernel(const std::string& path) {
+        const uint64_t startup_addr(STARTUP_ADDR);
+        proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
+    #if (XLEN == 64)
+        proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR1, startup_addr >> 32);
     #endif
-      return;
+        proc_->dcr_write(VX_DCR_KMU_STARTUP_ARG0, 0);
+        proc_->dcr_write(VX_DCR_KMU_STARTUP_ARG1, 0);
+        proc_->dcr_write(VX_DCR_KMU_GRID_DIM_X,   1);
+        proc_->dcr_write(VX_DCR_KMU_GRID_DIM_Y,   1);
+        proc_->dcr_write(VX_DCR_KMU_GRID_DIM_Z,   1);
+        proc_->dcr_write(VX_DCR_KMU_BLOCK_DIM_X,  1);
+        proc_->dcr_write(VX_DCR_KMU_BLOCK_DIM_Y,  1);
+        proc_->dcr_write(VX_DCR_KMU_BLOCK_DIM_Z,  1);
+        proc_->dcr_write(VX_DCR_KMU_LMEM_SIZE,    0);
+        proc_->dcr_write(VX_DCR_KMU_BLOCK_SIZE,   1);
+        proc_->dcr_write(VX_DCR_KMU_WARP_STEP_X,  NUM_THREADS);
+        proc_->dcr_write(VX_DCR_KMU_WARP_STEP_Y,  0);
+        proc_->dcr_write(VX_DCR_KMU_WARP_STEP_Z,  0);
+
+        std::string ext(fileExtension(path.c_str()));
+        if (ext == "vxbin") {
+            ram_.loadVxImage(path.c_str());
+        } else if (ext == "bin") {
+            ram_.loadBinImage(path.c_str(), startup_addr);
+        } else if (ext == "hex") {
+            ram_.loadHexImage(path.c_str());
+        } else {
+            std::cerr << "vortex_gem5: unsupported kernel extension '" << ext
+                      << "' (need .vxbin, .bin, or .hex)" << std::endl;
+            return false;
+        }
+        // Mark the device as "running" so the SimObject's standalone
+        // path advances vortexTickEvent_ until ProcessorImpl::cycle()
+        // reports done. Hosted launches set this via vortex_start.
+        vortex_running_ = true;
+        return true;
     }
-    ram_.enable_acl(false);
-    ram_.write(src, addr, size);
-    ram_.enable_acl(true);
-  }
 
-  void vram_read(uint64_t addr, uint8_t* dst, uint32_t size) {
-    if (addr + size > GEM5_GLOBAL_MEM_SIZE) {
-    #ifndef NDEBUG
-      std::cerr << "vortex_gem5: vram_read overflow addr=0x"
-                << std::hex << addr << " size=" << std::dec << size << std::endl;
-    #endif
-      return;
+    // ---------------- VRAM direct access --------------------------------
+    void vram_write(uint64_t addr, const uint8_t* src, uint32_t size) {
+        if (addr + size > GEM5_GLOBAL_MEM_SIZE) {
+        #ifndef NDEBUG
+            std::cerr << "vortex_gem5: vram_write overflow addr=0x"
+                      << std::hex << addr << " size=" << std::dec << size
+                      << std::endl;
+        #endif
+            return;
+        }
+        dev_mem_->write(addr, src, size);
     }
-    ram_.enable_acl(false);
-    ram_.read(dst, addr, size);
-    ram_.enable_acl(true);
-  }
-
-  int dcr_write(uint32_t addr, uint32_t value) {
-    return proc_->dcr_write(addr, value);
-  }
-
-  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
-    return proc_->dcr_read(addr, tag, value);
-  }
-
-  // OPAE MMIO command-set state machine. The host runtime
-  // (sw/runtime/gem5/vortex.cpp) drives it in exactly the same
-  // shape as sw/runtime/opae/vortex.cpp:
-  //   1. Write CMD_ARG0/1/2 with command-specific args
-  //   2. Write CMD_TYPE — triggers the command
-  //   3. Poll MMIO_STATUS until busy bit clears
-  //   4. (For DCR_READ) read MMIO_DCR_RSP for the response
-  //
-  // Synchronous commands (DCR_*) complete inside this function and
-  // clear the busy bit immediately. Async commands (RUN, MEM_*)
-  // surface to the gem5 SimObject via pop_pending_cmd; the SimObject
-  // performs the gem5-side work (clock ticks, DMA) and clears busy
-  // when done.
-  uint64_t mmio_read64(uint64_t offset) {
-    if (offset == mmio::STATUS)  return busy_ ? 1u : 0u;
-    if (offset == mmio::DCR_RSP) return dcr_rsp_;
-    return 0;
-  }
-
-  void mmio_write64(uint64_t offset, uint64_t value) {
-    if (offset == mmio::CMD_ARG0) { cmd_args_[0] = value; return; }
-    if (offset == mmio::CMD_ARG1) { cmd_args_[1] = value; return; }
-    if (offset == mmio::CMD_ARG2) { cmd_args_[2] = value; return; }
-    if (offset != mmio::CMD_TYPE) return;  // unknown reg — ignore
-
-    busy_ = true;
-    switch (value) {
-    case cmd::DCR_WRITE: {
-      proc_->dcr_write(uint32_t(cmd_args_[0]), uint32_t(cmd_args_[1]));
-      busy_ = false;
-      break;
+    void vram_read(uint64_t addr, uint8_t* dst, uint32_t size) {
+        if (addr + size > GEM5_GLOBAL_MEM_SIZE) {
+        #ifndef NDEBUG
+            std::cerr << "vortex_gem5: vram_read overflow addr=0x"
+                      << std::hex << addr << " size=" << std::dec << size
+                      << std::endl;
+        #endif
+            return;
+        }
+        dev_mem_->read(addr, dst, size);
     }
-    case cmd::DCR_READ: {
-      uint32_t v = 0;
-      proc_->dcr_read(uint32_t(cmd_args_[0]),
-                      uint32_t(cmd_args_[1]),
-                      &v);
-      dcr_rsp_ = v;
-      busy_ = false;
-      break;
-    }
-    case cmd::RUN:
-    case cmd::MEM_READ:
-    case cmd::MEM_WRITE:
-      // Async — gem5 SimObject reads pending_cmd_ on the same MMIO
-      // dispatch tick and routes the work (clock cycles for RUN,
-      // dmaAction for MEM_*). It clears busy when done.
-      pending_cmd_ = value;
-      break;
-    default:
-      // Unknown command: drop the busy bit so the host doesn't hang.
-      busy_ = false;
-      break;
-    }
-  }
 
-  uint64_t pop_pending_cmd() {
-    uint64_t c = pending_cmd_;
-    pending_cmd_ = 0;
-    return c;
-  }
-  uint64_t get_cmd_arg(int which) const {
-    return (which >= 0 && which < 3) ? cmd_args_[which] : 0;
-  }
-  void set_busy(bool busy) { busy_ = busy; }
+    // ---------------- CP regfile MMIO -----------------------------------
+    // The SimObject's PIO handlers translate `cp_mmio_write(off,v)` to
+    // a single call here. The CommandProcessor's regfile is 32-bit and
+    // its address map is documented in sim/common/CommandProcessor.h.
+    void cp_mmio_write(uint32_t off, uint32_t value) { cp_.mmio_write(off, value); }
+    uint32_t cp_mmio_read (uint32_t off) const       { return cp_.mmio_read(off); }
+
+    // ---------------- CP tick / introspection ---------------------------
+    // tick() advances the CP one functional cycle and returns true iff
+    // the CP still has work to do. The SimObject reschedules
+    // cpTickEvent_ while true and sleeps otherwise — proposal §2.3.
+    bool cp_tick() {
+        cp_.tick();
+        return cp_.busy();
+    }
+    bool cp_has_work() const { return cp_.enabled() && cp_.busy(); }
+
+    // ---------------- Vortex tick / introspection -----------------------
+    // vortex_tick advances ProcessorImpl::cycle() one step. cycle() does
+    // lazy init (resets SimPlatform + calls kmu_->start()) on first call.
+    // For back-to-back launches the CP's vortex_start hook calls
+    // processor_.start_kmu() explicitly to re-arm the KMU for the next
+    // kernel (kmu_->start is idempotent — first launch redundantly
+    // re-starts inside the lazy init, no harm).
+    bool vortex_tick() {
+        bool still_running = proc_->cycle();
+        if (!still_running) {
+            vortex_running_ = false;
+        }
+        return vortex_running_;
+    }
+    bool vortex_busy() const { return vortex_running_; }
+
+    // ---------------- vortex_start handler registration -----------------
+    // The SimObject registers a callback the CP fires when retiring a
+    // CMD_LAUNCH. The callback schedules vortexTickEvent_ at the next
+    // clock edge, decoupling CP and Vortex tick chains (proposal §2.4).
+    void set_start_handler(vortex_gem5_start_handler_t fn, void* ctx) {
+        start_fn_  = fn;
+        start_ctx_ = ctx;
+    }
 
 private:
-  RAM ram_;
-  std::unique_ptr<Processor> proc_;
+    vortex::CommandProcessor::Hooks make_cp_hooks() {
+        vortex::CommandProcessor::Hooks h;
+        h.dram_read = [this](uint64_t addr, void* dst, std::size_t bytes) {
+            dev_mem_->read(addr, dst, bytes);
+        };
+        h.dram_write = [this](uint64_t addr, const void* src, std::size_t bytes) {
+            dev_mem_->write(addr, src, bytes);
+        };
+        h.vortex_dcr_write = [this](uint32_t addr, uint32_t value) {
+            proc_->dcr_write(addr, value);
+        };
+        h.vortex_dcr_read = [this](uint32_t addr, uint32_t tag) -> uint32_t {
+            uint32_t v = 0;
+            proc_->dcr_read(addr, tag, &v);
+            return v;
+        };
+        h.vortex_start = [this]() {
+            // Mark Vortex as in-flight so vortex_busy returns true on
+            // the very next CP poll (before the first cycle() runs).
+            // Then re-arm the KMU for the (possibly back-to-back)
+            // kernel and ask the SimObject to begin ticking Vortex.
+            vortex_running_ = true;
+            proc_->start_kmu();
+            if (start_fn_) start_fn_(start_ctx_);
+        };
+        h.vortex_busy = [this]() -> bool { return vortex_running_; };
+        return h;
+    }
 
-  // OPAE protocol state.
-  uint64_t cmd_args_[3] = {0, 0, 0};
-  uint64_t pending_cmd_ = 0;
-  uint64_t dcr_rsp_     = 0;
-  bool     busy_        = false;
+    RAM ram_;
+    std::unique_ptr<Processor> proc_;
+    std::unique_ptr<vortex_gem5::DevMemAccessor> dev_mem_;
+    vortex::CommandProcessor cp_;
+    bool vortex_running_ = false;
+    vortex_gem5_start_handler_t start_fn_  = nullptr;
+    void* start_ctx_ = nullptr;
 };
 
 } // namespace
@@ -238,83 +215,85 @@ private:
 extern "C" {
 
 const char* vortex_gem5_build_info(void) {
-  static char info[256];
-  std::snprintf(info, sizeof(info),
-                "vortex-gem5 (XLEN=%d, threads=%d, warps=%d, cores=%d, clusters=%d)",
-                XLEN, NUM_THREADS, NUM_WARPS, NUM_CORES, NUM_CLUSTERS);
-  return info;
+    static char info[256];
+    std::snprintf(info, sizeof(info),
+                  "vortex-gem5 (XLEN=%d, threads=%d, warps=%d, cores=%d, clusters=%d)",
+                  XLEN, NUM_THREADS, NUM_WARPS, NUM_CORES, NUM_CLUSTERS);
+    return info;
 }
 
 vortex_gem5_handle_t vortex_gem5_create(void) {
-  try {
-    return reinterpret_cast<vortex_gem5_handle_t>(new Gem5Device());
-  } catch (const std::exception& e) {
-    std::cerr << "vortex_gem5_create: " << e.what() << std::endl;
-    return nullptr;
-  } catch (...) {
-    std::cerr << "vortex_gem5_create: unknown exception" << std::endl;
-    return nullptr;
-  }
+    try {
+        return reinterpret_cast<vortex_gem5_handle_t>(new Gem5Device());
+    } catch (const std::exception& e) {
+        std::cerr << "vortex_gem5_create: " << e.what() << std::endl;
+        return nullptr;
+    } catch (...) {
+        std::cerr << "vortex_gem5_create: unknown exception" << std::endl;
+        return nullptr;
+    }
 }
 
 void vortex_gem5_destroy(vortex_gem5_handle_t h) {
-  if (h == nullptr) return;
-  delete reinterpret_cast<Gem5Device*>(h);
+    if (h == nullptr) return;
+    delete reinterpret_cast<Gem5Device*>(h);
+}
+
+void vortex_gem5_set_start_handler(vortex_gem5_handle_t h,
+                                   vortex_gem5_start_handler_t fn,
+                                   void* ctx) {
+    if (h == nullptr) return;
+    reinterpret_cast<Gem5Device*>(h)->set_start_handler(fn, ctx);
 }
 
 int vortex_gem5_load_kernel(vortex_gem5_handle_t h, const char* path) {
-  if (h == nullptr || path == nullptr) return -1;
-  return reinterpret_cast<Gem5Device*>(h)->load_kernel(path) ? 0 : -1;
+    if (h == nullptr || path == nullptr) return -1;
+    return reinterpret_cast<Gem5Device*>(h)->load_kernel(path) ? 0 : -1;
 }
 
-bool vortex_gem5_tick(vortex_gem5_handle_t h) {
-  if (h == nullptr) return false;
-  return reinterpret_cast<Gem5Device*>(h)->tick();
+void vortex_gem5_cp_mmio_write(vortex_gem5_handle_t h,
+                               uint32_t off, uint32_t value) {
+    if (h == nullptr) return;
+    reinterpret_cast<Gem5Device*>(h)->cp_mmio_write(off, value);
 }
 
-uint64_t vortex_gem5_mmio_read64(vortex_gem5_handle_t h, uint64_t offset) {
-  if (h == nullptr) return 0;
-  return reinterpret_cast<Gem5Device*>(h)->mmio_read64(offset);
+uint32_t vortex_gem5_cp_mmio_read(vortex_gem5_handle_t h, uint32_t off) {
+    if (h == nullptr) return 0;
+    return reinterpret_cast<Gem5Device*>(h)->cp_mmio_read(off);
 }
 
-void vortex_gem5_mmio_write64(vortex_gem5_handle_t h, uint64_t offset, uint64_t value) {
-  if (h == nullptr) return;
-  reinterpret_cast<Gem5Device*>(h)->mmio_write64(offset, value);
+bool vortex_gem5_cp_tick(vortex_gem5_handle_t h) {
+    if (h == nullptr) return false;
+    return reinterpret_cast<Gem5Device*>(h)->cp_tick();
 }
 
-void vortex_gem5_vram_write(vortex_gem5_handle_t h, uint64_t dev_addr, const uint8_t* src, uint32_t size) {
-  if (h == nullptr || src == nullptr) return;
-  reinterpret_cast<Gem5Device*>(h)->vram_write(dev_addr, src, size);
+bool vortex_gem5_cp_has_work(vortex_gem5_handle_t h) {
+    if (h == nullptr) return false;
+    return reinterpret_cast<Gem5Device*>(h)->cp_has_work();
 }
 
-void vortex_gem5_vram_read(vortex_gem5_handle_t h, uint64_t dev_addr, uint8_t* dst, uint32_t size) {
-  if (h == nullptr || dst == nullptr) return;
-  reinterpret_cast<Gem5Device*>(h)->vram_read(dev_addr, dst, size);
+bool vortex_gem5_vortex_tick(vortex_gem5_handle_t h) {
+    if (h == nullptr) return false;
+    return reinterpret_cast<Gem5Device*>(h)->vortex_tick();
 }
 
-int vortex_gem5_dcr_write(vortex_gem5_handle_t h, uint32_t addr, uint32_t value) {
-  if (h == nullptr) return -1;
-  return reinterpret_cast<Gem5Device*>(h)->dcr_write(addr, value);
+bool vortex_gem5_vortex_busy(vortex_gem5_handle_t h) {
+    if (h == nullptr) return false;
+    return reinterpret_cast<Gem5Device*>(h)->vortex_busy();
 }
 
-int vortex_gem5_dcr_read(vortex_gem5_handle_t h, uint32_t addr, uint32_t tag, uint32_t* value) {
-  if (h == nullptr || value == nullptr) return -1;
-  return reinterpret_cast<Gem5Device*>(h)->dcr_read(addr, tag, value);
+void vortex_gem5_vram_write(vortex_gem5_handle_t h,
+                            uint64_t dev_addr, const uint8_t* src,
+                            uint32_t size) {
+    if (h == nullptr || src == nullptr) return;
+    reinterpret_cast<Gem5Device*>(h)->vram_write(dev_addr, src, size);
 }
 
-uint64_t vortex_gem5_pop_pending_cmd(vortex_gem5_handle_t h) {
-  if (h == nullptr) return 0;
-  return reinterpret_cast<Gem5Device*>(h)->pop_pending_cmd();
-}
-
-uint64_t vortex_gem5_get_cmd_arg(vortex_gem5_handle_t h, int which) {
-  if (h == nullptr) return 0;
-  return reinterpret_cast<Gem5Device*>(h)->get_cmd_arg(which);
-}
-
-void vortex_gem5_set_busy(vortex_gem5_handle_t h, bool busy) {
-  if (h == nullptr) return;
-  reinterpret_cast<Gem5Device*>(h)->set_busy(busy);
+void vortex_gem5_vram_read(vortex_gem5_handle_t h,
+                           uint64_t dev_addr, uint8_t* dst,
+                           uint32_t size) {
+    if (h == nullptr || dst == nullptr) return;
+    reinterpret_cast<Gem5Device*>(h)->vram_read(dev_addr, dst, size);
 }
 
 } // extern "C"

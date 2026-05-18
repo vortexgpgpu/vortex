@@ -1,7 +1,7 @@
 # gem5 Integration for SimX v3 — Proposal
 
 **Date:** 2026-05-16
-**Status:** ✅ ALL PHASES (0–7) COMPLETE on BOTH x86_64 AND aarch64 (hello + vecadd + sgemm × 2 ISAs all PASS end-to-end in 16 s wall via `VORTEX_GEM5_ARM=1 ./ci/regression.sh --gem5`)
+**Status:** ✅ Original Phases 0–7 complete (OPAE-protocol design). **§3 (host/device protocol) and §4 (SimObject design) SUPERSEDED** by [gem5_v2_cp_migration_proposal.md](gem5_v2_cp_migration_proposal.md) after upstream's pure-v2 `callbacks_t` + CommandProcessor landed (commits `086d26b`, `8bc2564`, `16aa1ca`). The current operator manual is [docs/gem5_integration.md](../gem5_integration.md). §0–§2 (motivation, source-tree layout) and §5+ (testing, install, cross-arch) remain accurate.
 **Author:** Blaise Tine
 **Related:**
 [simx_v3_proposal.md](simx_v3_proposal.md) (Phase 5: TLM data path),

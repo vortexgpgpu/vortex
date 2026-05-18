@@ -11,22 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Direct-MMIO driver for the gem5 VortexGPGPU device.
+// Direct-MMIO + pinned-region driver for the gem5 VortexGPGPU device.
 //
-// Replaces the libopae abstraction layer used by sw/runtime/opae/.
-// Inside a gem5 SE-mode process, we access the device by:
-//   1. Reading/writing MMIO registers via a fixed virtual address that
-//      the gem5 Python config maps to the device's PIO range
-//      (PIO_BASE_ADDR below; default 0x20000000 matches the legacy
-//      capstone paper).
-//   2. DMA staging through a fixed pinned region that the Python
-//      config maps with identity virtual→physical addressing
-//      (PIN_BASE_ADDR; default 0x10000000). The runtime uses host
-//      virtual addresses; the gem5 DmaPort sees the same value as
-//      physical because of the identity mapping.
+// Inside a gem5 SE-mode process the device is reached by:
 //
-// Phase 5 covers the gem5-side wiring of these mappings; Phase 4 just
-// produces the runtime library.
+//   1. MMIO accesses to the CP regfile via a fixed virtual address that
+//      the gem5 Python config maps to the SimObject's PIO range
+//      (PIO_BASE_ADDR below; default 0x20000000 — gem5_v2_cp_migration
+//      §3). The CP regfile is 32-bit; only 32-bit accesses are used.
+//
+//   2. Direct memory access to device VRAM via a fixed pinned region
+//      that the gem5 Python config identity-maps virtual→physical
+//      (PIN_BASE_ADDR; default 0x10000000). The runtime treats it as
+//      ordinary memory: regular stores from the host process land in
+//      the same physical bytes the SimObject sees as device VRAM.
+//      Eliminates the need for a separate "DMA staging buffer" path —
+//      gem5_v2_cp_migration §2.2.
 
 #pragma once
 
@@ -36,38 +36,35 @@
 namespace vortex {
 
 // Fixed virtual addresses the runtime expects to find mapped by the
-// gem5 Python config. PIN_BASE_ADDR is the runtime's heap for DMA
-// staging buffers; PIO_BASE_ADDR is the device's MMIO command-and-
-// status window. Sizes (PIN_REGION_SIZE / PIO_REGION_SIZE) are caps
-// the runtime enforces — overruns are bugs, not malloc failures.
-constexpr uintptr_t PIN_BASE_ADDR    = 0x10000000ull;
-constexpr size_t    PIN_REGION_SIZE  = 0x10000000ull;  // 256 MB
+// gem5 Python config. PIN_BASE..PIN_BASE+PIN_REGION_SIZE is the
+// host-visible window onto device VRAM — `memcpy(PIN_BASE+dev_addr,
+// host_src, sz)` lands in the same in-process simx::RAM bytes the CP
+// and Vortex see. Sized to cover the full XLEN device address space
+// so any address mem_alloc / mem_reserve can hand out is reachable
+// via the host BAR; placed above 4 GiB so it doesn't collide with the
+// simulated process's natural low-VA layout (heap/stack/code).
+constexpr uintptr_t PIN_BASE_ADDR    = 0x100000000ull;
+constexpr size_t    PIN_REGION_SIZE  = 0x100000000ull;  // 4 GB (= XLEN=32 device VRAM)
 constexpr uintptr_t PIO_BASE_ADDR    = 0x20000000ull;
-constexpr size_t    PIO_REGION_SIZE  = 0x1000ull;      // 4 KB (1 page)
+constexpr size_t    PIO_REGION_SIZE  = 0x00000200ull;   // 0x200 — CP regfile
 
-// Init / shutdown. drv_init mmaps both regions; drv_close munmaps.
-// Both are idempotent in practice but should be paired 1:1.
+// Init / shutdown. Both are idempotent in practice but should be
+// paired 1:1.
 int  drv_init();
 void drv_close();
 
-// MMIO register access. Offsets are byte offsets into the device's
-// PIO range; values are written/read 64-bit at a time (the OPAE
-// protocol's natural width). mmio_fence() emits the right barrier
-// for HOST_ARCH (mfence on x86, dmb sy on AArch64/ARMv7) — call
-// before triggering a command (B14 in proposal §2.2).
-uint64_t mmio_read64 (uint64_t offset);
-void     mmio_write64(uint64_t offset, uint64_t value);
-void     mmio_fence();
-
-// Staging-buffer allocation in the pinned region. Returns 0 on
-// success and fills *host_ptr + *ioaddr; returns -1 on OOM in the
-// pinned region. Caller owns the slot until drv_release_buffer.
+// CP regfile MMIO. `offset` is the CP-internal byte offset
+// (sim/common/CommandProcessor.h §address map). All accesses are 32-bit
+// — the CP regfile is 32-bit wide, and gem5's PIO model honors the
+// packet width verbatim.
 //
-// Under Phase 5's identity v→p mapping, *host_ptr == *ioaddr; on a
-// future setup with non-identity mapping, *ioaddr is the value the
-// device must DMA against and *host_ptr is what the runtime writes
-// through.
-int  drv_pin_buffer    (uint64_t size, void** host_ptr, uint64_t* ioaddr);
-void drv_release_buffer(void* host_ptr);
+// mmio_fence() emits the right barrier for HOST_ARCH (mfence on x86,
+// dmb sy on AArch64/ARMv7). The host runtime issues a fence between
+// any non-MMIO publication (e.g. seeding a ring buffer through
+// PIN_BASE_ADDR) and the doorbell write (Q_TAIL_HI) so the device
+// sees the new ring entries before the tail advance.
+uint32_t mmio_read32 (uint32_t offset);
+void     mmio_write32(uint32_t offset, uint32_t value);
+void     mmio_fence();
 
 } // namespace vortex

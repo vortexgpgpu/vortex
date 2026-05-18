@@ -13,16 +13,28 @@
 
 // libvortex-gem5 — C ABI for the gem5 VortexGPGPU SimObject.
 //
-// The gem5 device (sim/simx/gem5/<simobject>.cc, installed into a pinned
-// gem5 tree by sim/simx/gem5/install.sh) loads this shared library and
-// drives it through this C ABI. Keeping the ABI in C — not C++ — means
-// the gem5 side does not depend on SimX's C++ types and can be rebuilt
-// against a new gem5 release without touching anything Vortex-side.
+// Per gem5_v2_cp_migration_proposal §5.1 the device library hosts a
+// vortex::Processor + vortex::CommandProcessor pair, exposes a 32-bit
+// CP MMIO regfile (PIO_BASE_ADDR + 0x0 .. + 0x1FF), and provides two
+// independently-tickable engines so the SimObject can drive CP and
+// Vortex as separate gem5 event chains:
 //
-// Concurrency: the gem5 device serializes calls on its event-loop thread;
-// no internal locking. Re-entrancy: completion callbacks (currently
-// unused — the DMA path is fully synchronous on the gem5 side per Phase
-// 2) may be added later as Phase 3 wires up async DMA.
+//     cpTickEvent_      -> vortex_gem5_cp_tick()
+//     vortexTickEvent_  -> vortex_gem5_vortex_tick()
+//
+// Both engines self-report whether they still have work via
+// vortex_gem5_cp_has_work() / vortex_gem5_vortex_busy(); the SimObject
+// uses those to decide whether to reschedule. The CP's vortex_start
+// hook calls back into the SimObject via the start-handler registered
+// at construction so a CMD_LAUNCH retirement schedules vortexTickEvent_
+// from inside cpTickEvent_'s execution.
+//
+// The ABI is C — not C++ — so the gem5 side does not depend on SimX's
+// internal types and can be rebuilt against a new gem5 release without
+// touching anything Vortex-side.
+//
+// Concurrency: all calls are serialized on the gem5 event-loop thread.
+// No internal locking. No re-entrancy.
 
 #pragma once
 
@@ -34,7 +46,8 @@
 extern "C" {
 #endif
 
-// Opaque handle. The library owns a vortex::Processor + RAM behind it.
+// Opaque handle. Owns a vortex::Processor, RAM, MemoryAllocator, and
+// vortex::CommandProcessor.
 typedef struct vortex_gem5_device_s* vortex_gem5_handle_t;
 
 // Returns a printable description of the build config (cores, warps,
@@ -49,62 +62,67 @@ vortex_gem5_handle_t vortex_gem5_create(void);
 // Destroy the device. Safe to call with NULL.
 void vortex_gem5_destroy(vortex_gem5_handle_t h);
 
+// Register a callback the device library invokes from inside its CP
+// vortex_start hook. The SimObject uses this to schedule its Vortex
+// tick event when the CP launches a kernel. Pass NULL to clear.
+// `ctx` is forwarded back unchanged.
+typedef void (*vortex_gem5_start_handler_t)(void* ctx);
+void vortex_gem5_set_start_handler(vortex_gem5_handle_t h,
+                                   vortex_gem5_start_handler_t fn,
+                                   void* ctx);
+
 // Load a kernel image into VRAM. Accepts .vxbin / .bin / .hex (same
-// shape as sim/simx/main.cpp:120). Primes the KMU DCRs for a 1x1x1
-// CTA at STARTUP_ADDR (same as sim/simx/main.cpp:101-116) so a
-// subsequent cycle() loop launches the kernel.
-//
-// In the Phase-2 in-process smoke driver this is how kernels reach
-// the device. The Phase-4 runtime will instead upload kernels via
-// the staging-buffer DMA path (vortex_gem5_vram_write + the OPAE MMIO
-// commands), and Phase 3's gem5 SimObject can optionally call this
-// at boot via a Python `kernel=...` parameter for one-shot smoke
-// tests.
+// shape as sim/simx/main.cpp). Primes the KMU DCRs for a 1×1×1 CTA
+// at STARTUP_ADDR for the Phase 3 standalone test path (in hosted
+// mode the dispatcher uploads kernels via mem_upload + programs KMU
+// DCRs via CMD_DCR_WRITE through the CP).
 //
 // Returns 0 on success, -1 on file-not-found or unsupported format.
 int vortex_gem5_load_kernel(vortex_gem5_handle_t h, const char* path);
 
-// Advance the simulator by one cycle. Returns true while work
-// remains (clusters running or channels carrying packets); false once
-// the program has finished. Mirrors vortex::Processor::cycle().
-bool vortex_gem5_tick(vortex_gem5_handle_t h);
+// CP regfile MMIO. `off` is the CP-internal byte offset (0..0x13F for
+// queue 0; see sim/common/CommandProcessor.h §address map). All
+// accesses are 32-bit. The SimObject translates a PIO packet at
+// `PIO_BASE_ADDR + off` into one of these calls; the host runtime's
+// cp_mmio_{write,read} translates `cp_mmio_write(off, v)` to one of
+// these via a 32-bit PIO write at `PIO_BASE_ADDR + off` (no AFU bit-12
+// split — the gem5 device's PIO range IS the CP regfile).
+void     vortex_gem5_cp_mmio_write(vortex_gem5_handle_t h,
+                                   uint32_t off, uint32_t value);
+uint32_t vortex_gem5_cp_mmio_read (vortex_gem5_handle_t h, uint32_t off);
 
-// MMIO (PIO) accessed by the simulated host CPU via the gem5 SimObject's
-// read()/write() callbacks. Offsets are byte addresses inside the
-// device's PIO range. See sw/runtime/opae/vortex.cpp for the OPAE MMIO
-// layout this protocol mirrors.
-uint64_t vortex_gem5_mmio_read64(vortex_gem5_handle_t h, uint64_t offset);
-void vortex_gem5_mmio_write64(vortex_gem5_handle_t h, uint64_t offset, uint64_t value);
+// Advance the embedded CommandProcessor by one functional cycle.
+// Returns true if the CP has more work (ring non-empty, command in
+// flight) and should be ticked again.
+bool vortex_gem5_cp_tick(vortex_gem5_handle_t h);
 
-// VRAM access. The gem5 device DMAs to/from the host's staging buffer
-// using its own DmaPort; once the bytes are in a local scratch, it
-// calls these to copy into/out of the device VRAM. Bytes here cross
-// only the C ABI boundary — they do not re-enter gem5's DMA system.
-//
-// Bounds-checked against the RAM image; on overflow the call is a
-// no-op and (in debug builds) logs to stderr.
-void vortex_gem5_vram_write(vortex_gem5_handle_t h, uint64_t dev_addr, const uint8_t* src, uint32_t size);
-void vortex_gem5_vram_read(vortex_gem5_handle_t h, uint64_t dev_addr, uint8_t* dst, uint32_t size);
+// True iff the CP would benefit from being ticked: enabled and busy.
+// The SimObject uses this from PIO write handlers (after a CP regfile
+// update may have armed work) to decide whether to schedule
+// cpTickEvent_.
+bool vortex_gem5_cp_has_work(vortex_gem5_handle_t h);
 
-// DCR write/read passthrough. The DCR-read path also handles the
-// cache-flush DCR (VX_DCR_BASE_CACHE_FLUSH), which drains dirty cache
-// lines all the way to VRAM — required before a host read-back per
-// B9 in docs/proposals/gem5_simx_v3_proposal.md §2.2.
-int vortex_gem5_dcr_write(vortex_gem5_handle_t h, uint32_t addr, uint32_t value);
-int vortex_gem5_dcr_read(vortex_gem5_handle_t h, uint32_t addr, uint32_t tag, uint32_t* value);
+// Advance the Vortex Processor by one cycle. Returns true while the
+// processor is still running (clusters active or channels carrying
+// packets); the SimObject's vortexTickEvent_ reschedules itself while
+// this returns true and stops otherwise.
+bool vortex_gem5_vortex_tick(vortex_gem5_handle_t h);
 
-// Protocol state introspection for the gem5 SimObject. The library
-// owns the OPAE state machine (cmd_args + busy bit + cmd_type +
-// dcr_rsp); the gem5 SimObject calls these to drive DMA for the
-// async CMD_MEM_{READ,WRITE} commands.
-//
-// pop_pending_cmd returns the CMD_* constant of an async command
-// the SimObject must service (CMD_RUN, CMD_MEM_WRITE, CMD_MEM_READ),
-// or 0 if no command is pending. Synchronous commands (CMD_DCR_*)
-// are handled inside mmio_write64 and never surface here.
-uint64_t vortex_gem5_pop_pending_cmd(vortex_gem5_handle_t h);
-uint64_t vortex_gem5_get_cmd_arg(vortex_gem5_handle_t h, int which);
-void     vortex_gem5_set_busy(vortex_gem5_handle_t h, bool busy);
+// True iff Vortex is currently executing a kernel (any cluster
+// running, any in-flight memory transactions). Used by the CP's
+// vortex_busy hook to know when to retire a CMD_LAUNCH.
+bool vortex_gem5_vortex_busy(vortex_gem5_handle_t h);
+
+// Direct device-VRAM access used by the SimObject's DMA-path scratch
+// buffers in v1 (a peer of the host runtime, ACL-bypassed). v2 will
+// route both Vortex memory and CP DMA through gem5's memory hierarchy
+// via the same DevMemAccessor interface.
+void vortex_gem5_vram_write(vortex_gem5_handle_t h,
+                            uint64_t dev_addr, const uint8_t* src,
+                            uint32_t size);
+void vortex_gem5_vram_read (vortex_gem5_handle_t h,
+                            uint64_t dev_addr, uint8_t* dst,
+                            uint32_t size);
 
 #ifdef __cplusplus
 } // extern "C"

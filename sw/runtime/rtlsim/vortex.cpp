@@ -16,6 +16,7 @@
 #include <mem.h>
 #include <util.h>
 #include <processor.h>
+#include <CommandProcessor.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -36,6 +37,7 @@ public:
                   GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
                   RAM_PAGE_SIZE,
                   CACHE_BLOCK_SIZE)
+    , cp_(make_cp_hooks())
   {
     processor_.attach_ram(&ram_);
   }
@@ -255,13 +257,61 @@ public:
     return processor_.dcr_read(addr, tag, value);
   }
 
+  // ----- CP MMIO surface -----
+  // rtlsim has no hardware CP; the regfile surface is provided by a
+  // functional CommandProcessor C++ model. A bounded tick burst around
+  // each MMIO transaction keeps the CP responsive without a dedicated
+  // simulation thread.
+  int cp_mmio_write(uint32_t off, uint32_t value) {
+    cp_.mmio_write(off, value);
+    for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
+    return 0;
+  }
+  int cp_mmio_read(uint32_t off, uint32_t* value) {
+    for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
+    *value = cp_.mmio_read(off);
+    return 0;
+  }
 
 private:
+  vortex::CommandProcessor::Hooks make_cp_hooks() {
+    vortex::CommandProcessor::Hooks h;
+    h.dram_read = [this](uint64_t addr, void* dst, std::size_t bytes) {
+      ram_.enable_acl(false);
+      ram_.read(static_cast<uint8_t*>(dst), addr, bytes);
+      ram_.enable_acl(true);
+    };
+    h.dram_write = [this](uint64_t addr, const void* src, std::size_t bytes) {
+      ram_.enable_acl(false);
+      ram_.write(static_cast<const uint8_t*>(src), addr, bytes);
+      ram_.enable_acl(true);
+    };
+    h.vortex_dcr_write = [this](uint32_t addr, uint32_t value) {
+      processor_.dcr_write(addr, value);
+    };
+    h.vortex_dcr_read = [this](uint32_t addr, uint32_t tag) -> uint32_t {
+      // Wait for any background processor_.run() to finish so dcr_read
+      // does not race the Verilator state.
+      if (future_.valid()) future_.wait();
+      uint32_t v = 0;
+      processor_.dcr_read(addr, tag, &v);
+      return v;
+    };
+    h.vortex_start = [this]() {
+      future_ = std::async(std::launch::async, [&] { processor_.run(); });
+    };
+    h.vortex_busy = [this]() -> bool {
+      if (!future_.valid()) return false;
+      return future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
+    };
+    return h;
+  }
 
   RAM                 ram_;
   Processor           processor_;
   MemoryAllocator     global_mem_;
   std::future<void>   future_;
+  vortex::CommandProcessor cp_;
 };
 
 #include <callbacks.inc>

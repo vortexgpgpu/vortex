@@ -103,21 +103,20 @@ sst()
     echo "sst tests done!"
 }
 
-# gem5 integration tests — Phase 6 of docs/proposals/gem5_simx_v3_proposal.md.
-# Validates the VortexGPGPU device + libvortex-gem5.so end-to-end inside
-# gem5 SE-mode. Two layers:
+# gem5 integration tests — see docs/proposals/gem5_v2_cp_migration_proposal.md
+# for the v2 CP-first design and docs/gem5_integration.md for the operator
+# manual. Two layers:
 #
-#   1. Phase 3 standalone (--gem5-standalone): kernel preloaded via the
-#      SimObject's `kernel=` Python param; runs entirely inside the gem5
-#      event loop, no host CPU needed. Fast smoke test (~1 s wall, ~5K
-#      simulated cycles per run).
+#   1. Phase 3 standalone: kernel preloaded via the SimObject's
+#      `kernel=` Python param; runs entirely inside the gem5 event
+#      loop, no host CPU needed. Fast smoke test for the device
+#      library wiring.
 #
-#   2. Phase 5 e2e (--gem5): an x86 SE-mode workload (the standard
-#      tests/regression/vecadd binary, same one the SimX backend uses)
-#      drives the device via the OPAE MMIO/DMA protocol through
-#      libvortex-gem5-x86_64.so. Exercises the full path: kernel upload
-#      DMA, status polling, cache-flush DCRs, result DMA, host-side
-#      verification.
+#   2. Phase 5 e2e: an x86 (or aarch64) SE-mode workload drives the
+#      device via the CP regfile (cp_mmio_*) + BAR-mapped VRAM
+#      (mem_upload through identity-mapped PIN region). The
+#      dispatcher's CP submission path handles all command building;
+#      the host runtime is a thin platform shim.
 #
 # ARM matrix is opt-in via VORTEX_GEM5_ARM=1 (needs gcc-aarch64-linux-gnu
 # installed; not part of the default hosted-runner image).
@@ -155,15 +154,14 @@ gem5()
         timeout 120 $GEM5_HOME/build/X86/gem5.opt \
         ci/gem5_test_vortex_hello.py
 
-    # Phase 5 e2e — full OPAE protocol path through the host runtime.
+    # Phase 5 e2e — CP-driven path through the host runtime.
     # Generic test runner (ci/gem5_test_vortex_app.py) parameterized
     # by VORTEX_TEST_BIN + VORTEX_TEST_ARGS. Sizes are chosen so each
     # run fits in the 120s per-test budget (feedback_test_timeout_120s):
-    #   - vecadd -n16   small vector add (~4K device cycles)
-    #   - sgemm  -n4    4x4 matrix multiply (~800 device cycles; larger
-    #                   sizes overrun the budget because the simulated
-    #                   host CPU's ready_wait poll loop burns gem5
-    #                   wall time proportional to kernel runtime).
+    #   - vecadd -n16   small vector add
+    #   - sgemm  -n4    4x4 matrix multiply
+    # Larger sizes overrun the budget because the simulated host CPU's
+    # CP poll loop burns gem5 wall time proportional to kernel runtime.
     # Run on local dev box for larger sizes by overriding VORTEX_TEST_ARGS.
     for spec in "vecadd:-n16" "sgemm:-n4"; do
         app="${spec%%:*}"
@@ -227,7 +225,14 @@ mpi()
 
     make -C sw/runtime/simx
 
-    make -C tests/regression run-simx-mpi NP=4
+    make -C tests/regression/mpi_dotproduct          run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_put_dotproduct      run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_diverge             run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_vecadd              run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_sgemm               run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_blocked_sgemm       run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_conv3               run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_neighbor_a2a_conv3  run-simx MPI=1 NP=4
 
     echo "mpi tests done!"
 }
@@ -413,21 +418,25 @@ rvc()
     make -C sim/rtlsim clean && CONFIGS="-DEXT_C_ENABLE" make -C sim/rtlsim
 
     # ISA conformance for rv*uc-p-* (compressed instruction tests).
-    CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-simx-32c
-    CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-rtlsim-32c
+    make -C tests/riscv/isa run-simx-32c
+    make -C tests/riscv/isa run-rtlsim-32c
 
     if [ "$XLEN" == "64" ]
     then
-        CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-simx-64c
-        CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-rtlsim-64c
+        make -C tests/riscv/isa run-simx-64c
+        make -C tests/riscv/isa run-rtlsim-64c
     fi
 
-    # Rebuild stub/simx runtime with EXT_C (so kernels link with the
-    # right -march) then run regression + opencl on simx.
-    make -C sw/runtime/stub
     make -C sw/runtime/simx clean && CONFIGS="-DEXT_C_ENABLE" make -C sw/runtime/simx
-    CONFIGS="-DEXT_C_ENABLE" make -C tests/regression run-simx
-    CONFIGS="-DEXT_C_ENABLE" make -C tests/opencl run-simx
+    make -C sw/runtime/rtlsim clean && CONFIGS="-DEXT_C_ENABLE" make -C sw/runtime/rtlsim
+    make -C tests/regression/sgemm run-simx
+    make -C tests/regression/sgemm run-rtlsim
+    make -C tests/regression/diverge run-simx
+    make -C tests/regression/diverge run-rtlsim
+    make -C tests/regression/dogfood run-simx
+    make -C tests/regression/dogfood run-rtlsim
+    make -C tests/regression/raycast run-simx
+    make -C tests/regression/raycast run-rtlsim
 
     echo "rvc tests done!"
 }
@@ -438,12 +447,26 @@ vm(){
     make -C sw/kernel
     make -C sw/runtime/stub
     make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/simx
-    make -C tests/opencl run-simx
-    make -C tests/regression run-simx
+    make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/rtlsim
+    make -C tests/regression/sgemm run-simx
+    make -C tests/regression/sgemm run-rtlsim
+    make -C tests/regression/diverge run-simx
+    make -C tests/regression/diverge run-rtlsim
+    make -C tests/regression/dogfood run-simx
+    make -C tests/regression/dogfood run-rtlsim
+    make -C tests/regression/raycast run-simx
+    make -C tests/regression/raycast run-rtlsim
 
     make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/simx
-    make -C tests/opencl run-simx
-    make -C tests/regression run-simx
+    make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim
+    make -C tests/regression/sgemm run-simx
+    make -C tests/regression/sgemm run-rtlsim
+    make -C tests/regression/diverge run-simx
+    make -C tests/regression/diverge run-rtlsim
+    make -C tests/regression/dogfood run-simx
+    make -C tests/regression/dogfood run-rtlsim
+    make -C tests/regression/raycast run-simx
+    make -C tests/regression/raycast run-rtlsim
 
     echo "vm tests done!"
 }
