@@ -54,6 +54,7 @@ ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR)
+RTL_INCLUDE += -I$(RTL_DIR)/cp
 
 # Add TCU extension sources
 ifneq (,$(filter -DEXT_TCU_ENABLE, $(XCONFIGS)))
@@ -88,6 +89,13 @@ ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
 endif
 
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
+
+# Command Processor: declare the package + interface files explicitly so
+# Verilator's filename-based interface lookup can find VX_cp_engine_bid_if
+# and VX_cp_gpu_if (they share a file with the other CP interfaces and
+# won't be auto-discovered via -I alone).
+RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv $(RTL_DIR)/cp/VX_cp_if.sv \
+            $(RTL_DIR)/cp/VX_cp_axi_m_if.sv $(RTL_DIR)/cp/VX_cp_axil_s_if.sv
 
 TOP = vortex_afu_shim
 
