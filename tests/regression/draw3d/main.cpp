@@ -197,9 +197,11 @@ int render(const CGLTrace& trace) {
     // allocate tile memory
     if (tile_buffer != nullptr) vx_mem_free(tile_buffer);
     if (prim_buffer != nullptr) vx_mem_free(prim_buffer);
-    RT_CHECK(vx_mem_alloc(device, tilebuf.size(), VX_MEM_READ, &tile_buffer));
+    // tile_buffer / prim_buffer are bound to the raster unit (via
+    // VX_DCR_RASTER_T/PBUF_ADDR) which bypasses the per-core MMU.
+    RT_CHECK(vx_mem_alloc(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
     RT_CHECK(vx_mem_address(tile_buffer, &tilebuf_addr));
-    RT_CHECK(vx_mem_alloc(device, primbuf.size(), VX_MEM_READ, &prim_buffer));
+    RT_CHECK(vx_mem_alloc(device, primbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &prim_buffer));
     RT_CHECK(vx_mem_address(prim_buffer, &primbuf_addr));
     std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
     std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;
@@ -311,7 +313,8 @@ int render(const CGLTrace& trace) {
 
       // allocate texture memory
       if (tex_buffer != nullptr) vx_mem_free(tex_buffer);
-      RT_CHECK(vx_mem_alloc(device, texbuf.size(), VX_MEM_READ, &tex_buffer));
+      // tex_buffer is bound to the TEX unit (VX_DCR_TEX_ADDR), bypass.
+      RT_CHECK(vx_mem_alloc(device, texbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tex_buffer));
       RT_CHECK(vx_mem_address(tex_buffer, &texbuf_addr));
       std::cout << "tex_buffer=0x" << std::hex << texbuf_addr << std::dec << std::endl;
 
@@ -473,10 +476,11 @@ int main(int argc, char *argv[]) {
   cbuf_pitch  = dst_width * cbuf_stride;
   cbuf_size   = dst_width * cbuf_pitch;
 
-  // allocate device memory
-  RT_CHECK(vx_mem_alloc(device, zbuf_size, VX_MEM_READ_WRITE, &depth_buffer));
+  // depth_buffer / color_buffer are bound to the OM unit (via
+  // VX_DCR_OM_Z/CBUF_ADDR), MMU-bypass.
+  RT_CHECK(vx_mem_alloc(device, zbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &depth_buffer));
   RT_CHECK(vx_mem_address(depth_buffer, &zbuf_addr));
-  RT_CHECK(vx_mem_alloc(device, cbuf_size, VX_MEM_READ_WRITE, &color_buffer));
+  RT_CHECK(vx_mem_alloc(device, cbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &color_buffer));
   RT_CHECK(vx_mem_address(color_buffer, &cbuf_addr));
 
   std::cout << "depth_buffer=0x" << std::hex << zbuf_addr << std::dec << std::endl;

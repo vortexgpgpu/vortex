@@ -115,9 +115,12 @@ int main(int argc, char *argv[]) {
   cbuf_pitch = dst_width * 4;
   cbuf_size  = dst_height * cbuf_pitch;
 
-  RT_CHECK(vx_mem_alloc(device, zbuf_size, VX_MEM_READ_WRITE, &depth_buffer));
+  // depth_buffer / color_buffer are bound to the OM unit (via
+  // VX_DCR_OM_ZBUF_ADDR / VX_DCR_OM_CBUF_ADDR) which bypasses the
+  // per-core MMU — both need physical addresses.
+  RT_CHECK(vx_mem_alloc(device, zbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &depth_buffer));
   RT_CHECK(vx_mem_address(depth_buffer, &zbuf_addr));
-  RT_CHECK(vx_mem_alloc(device, cbuf_size, VX_MEM_READ_WRITE, &color_buffer));
+  RT_CHECK(vx_mem_alloc(device, cbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &color_buffer));
   RT_CHECK(vx_mem_address(color_buffer, &cbuf_addr));
 
   // depth checkerboard prefill (matches skybox test).

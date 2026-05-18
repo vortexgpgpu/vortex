@@ -155,10 +155,17 @@ jobs:
         # links against the libvortex-gem5.so the runner builds, and
         # we only build it once). XLEN=64 entry would just duplicate
         # the run against an identical setup.
+        #
+        # vm is rv32-only for v1: the MMU RTL (VX_mmu*.sv) hardcodes
+        # 32-bit SATP and 22-bit PPN — SV32 page tables only. SV39
+        # support requires widening satp + ppn datapaths and is
+        # tracked separately.
         exclude:
           - name: hip
             xlen: 32
           - name: gem5
+            xlen: 64
+          - name: vm
             xlen: 64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120

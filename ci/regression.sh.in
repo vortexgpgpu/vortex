@@ -469,26 +469,30 @@ vm(){
     CONFIGS="-DVM_ENABLE" make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/simx
     CONFIGS="-DVM_ENABLE" make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/rtlsim
     CONFIGS="-DVM_ENABLE" make -C tests/regression/sgemm run-simx
-    CONFIGS="-DVM_ENABLE" make -C tests/regression/sgemm run-rtlsim
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/sgemm run-xrt
     CONFIGS="-DVM_ENABLE" make -C tests/regression/diverge run-simx
-    CONFIGS="-DVM_ENABLE" make -C tests/regression/diverge run-rtlsim
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/diverge run-xrt
     CONFIGS="-DVM_ENABLE" make -C tests/regression/dogfood run-simx
     CONFIGS="-DVM_ENABLE" make -C tests/regression/dogfood run-rtlsim
     CONFIGS="-DVM_ENABLE" make -C tests/regression/raycast run-simx
     CONFIGS="-DVM_ENABLE" make -C tests/regression/raycast run-rtlsim
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/draw3d run-simx
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/draw3d run-xrt
 
     # Pass 2: BARE mode (identity translation only, no PTW). Same propagation.
     CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/stub clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/stub
     CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/simx
     CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim
     CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/sgemm run-simx
-    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/sgemm run-rtlsim
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/sgemm run-xrt
     CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/diverge run-simx
-    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/diverge run-rtlsim
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/diverge run-xrt
     CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/dogfood run-simx
     CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/dogfood run-rtlsim
     CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/raycast run-simx
     CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/raycast run-rtlsim
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/draw3d run-simx
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/draw3d run-xrt
 
     echo "vm tests done!"
 }

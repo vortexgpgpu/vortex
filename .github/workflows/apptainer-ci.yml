@@ -202,9 +202,16 @@ jobs:
         name: [regression, amo, mpi, dtm, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_mx]
         # hip is rv64-only — chipStar emits Physical64 SPIR-V which POCL
         # refuses on a 32-bit Vortex device (see v3.0 release notes).
+        #
+        # vm is rv32-only for v1: the MMU RTL (VX_mmu*.sv) hardcodes
+        # 32-bit SATP and 22-bit PPN — SV32 page tables only. SV39
+        # support requires widening satp + ppn datapaths and is
+        # tracked separately.
         exclude:
           - name: hip
             xlen: 32
+          - name: vm
+            xlen: 64
 
     env:
       APPTAINER_VERSION: "1.4.3"

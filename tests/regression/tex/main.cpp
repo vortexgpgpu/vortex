@@ -157,7 +157,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
 
   // ---- allocate device buffers -----------------------------------------
-  RT_CHECK(vx_mem_alloc(device, src_bufsize, VX_MEM_READ, &src_buffer));
+  // src_buffer is bound to the TEX unit (VX_DCR_TEX_ADDR) which
+  // bypasses the per-core MMU — needs a physical address.
+  RT_CHECK(vx_mem_alloc(device, src_bufsize, VX_MEM_READ | VX_MEM_PHYS, &src_buffer));
   RT_CHECK(vx_mem_address(src_buffer, &src_addr));
   RT_CHECK(vx_mem_alloc(device, dst_bufsize, VX_MEM_WRITE, &dst_buffer));
   RT_CHECK(vx_mem_address(dst_buffer, &dst_addr));

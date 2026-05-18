@@ -34,6 +34,27 @@
 
 using namespace vortex;
 
+#ifdef VM_ENABLE
+// DeviceMemIO adapter over the rtlsim RAM backing store. ACL bypass
+// is encapsulated here so VMManager stays driver-agnostic.
+class RamMemIO : public DeviceMemIO {
+public:
+  explicit RamMemIO(RAM* ram) : ram_(ram) {}
+  void read(void* dst, uint64_t addr, size_t size) override {
+    ram_->enable_acl(false);
+    ram_->read((uint8_t*)dst, addr, size);
+    ram_->enable_acl(true);
+  }
+  void write(const void* src, uint64_t addr, size_t size) override {
+    ram_->enable_acl(false);
+    ram_->write((const uint8_t*)src, addr, size);
+    ram_->enable_acl(true);
+  }
+private:
+  RAM* ram_;
+};
+#endif
+
 class vx_device {
 public:
   vx_device()
@@ -55,7 +76,8 @@ public:
 
   int init() {
 #ifdef VM_ENABLE
-    vm_mgr_ = std::make_unique<VMManager>(&ram_);
+    dev_io_ = std::make_unique<RamMemIO>(&ram_);
+    vm_mgr_ = std::make_unique<VMManager>(dev_io_.get());
     CHECK_ERR(vm_mgr_->init(), { return err; });
 #endif
     return 0;
@@ -134,7 +156,17 @@ public:
     });
     *dev_addr = addr;
 #ifdef VM_ENABLE
-    vm_mgr_->phy_to_virt_map(asize, dev_addr, flags);
+    if (flags & VX_MEM_PHYS) {
+      // PHYS request: keep *dev_addr as the PA and identity-map it so
+      // kernel loads (via the MMU) and fixed-function units (raster/
+      // tex/om — bypass the MMU) see the same address.
+      CHECK_ERR(vm_mgr_->install_identity_map(addr, asize), {
+        global_mem_.release(addr);
+        return err;
+      });
+    } else {
+      vm_mgr_->phy_to_virt_map(asize, dev_addr, flags);
+    }
 #endif
     return 0;
   }
@@ -353,6 +385,7 @@ private:
   std::future<void>   future_;
   vortex::CommandProcessor cp_;
 #ifdef VM_ENABLE
+  std::unique_ptr<RamMemIO> dev_io_;
   std::unique_ptr<VMManager> vm_mgr_;
 #endif
 };

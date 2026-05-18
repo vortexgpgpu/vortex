@@ -530,7 +530,10 @@ private:
       uint64_t pageStart = current->addr;
       uint64_t pageEnd = pageStart + current->size;
       uint64_t end = start + size;
-      if ((start <= pageEnd) && (end >= pageStart)) {
+      // Half-open range overlap: [start, end) vs [pageStart, pageEnd).
+      // Adjacent ranges (start == pageEnd or end == pageStart) do NOT
+      // overlap.
+      if ((start < pageEnd) && (end > pageStart)) {
         *overlapStart = pageStart;
         *overlapEnd = pageEnd;
         return true;

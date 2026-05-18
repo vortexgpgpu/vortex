@@ -5,9 +5,6 @@
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
 
-// Include VX_config.h first — it auto-defines VM_ENABLE when the TOML has
-// VM_ENABLE = true (via `#ifndef VM_DISABLE / #define VM_ENABLE`), so the
-// guard below must follow this include or the file compiles to nothing.
 #include <VX_config.h>
 
 #ifdef VM_ENABLE
@@ -18,15 +15,14 @@
 #include <util.h>
 #include <cassert>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 
 using namespace vortex;
 
 namespace {
 // Translate the runtime's VX_MEM_{READ,WRITE} access-flag bitmask into PTE
-// permission bits. The runtime's flag has READ=1, WRITE=2 (no EXEC); the
-// historical formula (flag<<1)|0x3 effectively asserted V|R always plus W
-// if WRITE. Spelled out symbolically here so the bit shuffle stays auditable.
+// permission bits (V|R always; W if WRITE).
 uint32_t pte_flags_from_access(uint32_t access_flags) {
   uint32_t pte = PTE_V | PTE_R;
   if (access_flags & VX_MEM_WRITE)
@@ -35,8 +31,8 @@ uint32_t pte_flags_from_access(uint32_t access_flags) {
 }
 } // namespace
 
-VMManager::VMManager(RAM* ram)
-    : ram_(ram),
+VMManager::VMManager(DeviceMemIO* dev_io)
+    : dev_io_(dev_io),
       satp_(nullptr),
       page_table_mem_(nullptr),
       virtual_mem_(nullptr) {
@@ -82,7 +78,6 @@ int VMManager::init() {
   }
 #endif
   virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR, virtual_mem_size, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
-
   if (virtual_mem_ == nullptr)
     return 1;
 
@@ -98,29 +93,26 @@ int VMManager::init() {
   satp_ = std::make_unique<SATP_t>(pt_addr, /*asid=*/0);
 
   if (VM_ADDR_MODE != BARE) {
-    // Identity-map the system regions that are PA-addressed by the kernel
-    // and runtime: the IO MMIO range and the high region containing the
-    // page table itself + per-warp stacks. The kernel image range is not
-    // mapped here — it is installed by mem_reserve() when the loader
-    // reserves it (see runtime simx/rtlsim drivers). The high region's
-    // upper bound is GLOBAL_MEM_SIZE — the simulator's RAM extent is the
-    // natural ceiling, and STACK_BASE_ADDR sits within it by construction.
+    // Identity-map system regions that are PA-addressed by the kernel
+    // and runtime: IO MMIO range and the high region containing the
+    // page table + per-warp stacks. The kernel image is mapped later
+    // via mem_reserve() once the loader knows its extents.
     CHECK_ERR(install_identity_map(0, USER_BASE_ADDR), { return err; });
     CHECK_ERR(install_identity_map(PAGE_TABLE_BASE_ADDR,
                                    GLOBAL_MEM_SIZE - PAGE_TABLE_BASE_ADDR), {
       return err;
     });
   }
-  return 0;
+  // install_identity_map() already flushed; an extra flush here is a
+  // cheap no-op if nothing else dirtied the shadow.
+  return flush();
 }
 
 bool VMManager::need_trans(uint64_t dev_pAddr) {
   (void)dev_pAddr;
   // System PA regions (IO, kernel image, page table, stack) are
-  // identity-mapped at boot via install_identity_map(), so every
-  // address that needs to round-trip through the page table walks the
-  // PTEs. The only address that bypasses translation is one issued
-  // before SATP is set or in BARE mode.
+  // identity-mapped at boot, so every address goes through PTW
+  // except those issued before SATP is set or in BARE mode.
   if (this->is_satp_unset() || get_mode() == BARE)
     return false;
   return true;
@@ -172,6 +164,7 @@ uint64_t VMManager::map_p2v(uint64_t ppn, uint32_t flags) {
 
   CHECK_ERR(update_page_table(ppn, vpn, pte_flags_from_access(flags)), );
   addr_mapping[ppn] = vpn;
+  flush();
   return vpn;
 }
 
@@ -245,24 +238,15 @@ int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flag
   assert(page_table_walk(init_vAddr) == init_pAddr && "VA->PA round-trip mismatch");
 
   *dev_pAddr = init_vAddr;
-  return 0;
+  return flush();
 }
 
 uint8_t VMManager::alloc_page_table(uint64_t* pt_addr) {
   CHECK_ERR(page_table_mem_->allocate(PT_SIZE, pt_addr), { return err; });
-  CHECK_ERR(init_page_table(*pt_addr, PT_SIZE), { return err; });
-  return 0;
-}
-
-int VMManager::init_page_table(uint64_t addr, uint64_t size) {
-  uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-  uint8_t* src = new uint8_t[asize]();
-  if (src == nullptr)
-    return 1;
-  ram_->enable_acl(false);
-  ram_->write(src, addr, asize);
-  ram_->enable_acl(true);
-  delete[] src;
+  // Lazily materialize the shadow page (zero-initialized) and mark
+  // dirty so flush() pushes the zeros to device memory at least once.
+  auto& page = touch_pt_page(*pt_addr);
+  std::memset(page.data(), 0, page.size());
   return 0;
 }
 
@@ -287,14 +271,13 @@ int16_t VMManager::update_page_table(uint64_t ppn, uint64_t vpn, uint32_t pte_fl
       cur_base_ppn = pte_chk.ppn;
     } else {
       if (i == (int)leaf_level) {
-        // Leaf: caller supplies the raw PTE permission bits (PTE_V|PTE_R
-        // already required by the SV32/SV39 spec for any leaf).
+        // Leaf: caller supplies the raw PTE permission bits.
         PTE_t new_pte(ppn << MEM_PAGE_LOG2_SIZE, pte_flag);
         write_pte(pte_addr, new_pte.pte_bytes);
         break;
       } else {
-        // Interior: allocate next-level table; PTE_V only (RWX cleared marks
-        // it as a pointer to the next-level table per the spec).
+        // Interior: allocate next-level table; PTE_V only (RWX cleared
+        // marks it as a pointer to the next-level table per the spec).
         alloc_page_table(&pt_addr);
         PTE_t new_pte(pt_addr, PTE_V);
         write_pte(pte_addr, new_pte.pte_bytes);
@@ -306,7 +289,6 @@ int16_t VMManager::update_page_table(uint64_t ppn, uint64_t vpn, uint32_t pte_fl
   return 0;
 }
 
-
 int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
   // Per-level page coverage: L0 = MEM_PAGE_SIZE, each higher level
   // multiplies by PT entries-per-table. SV32: L1=4MB. SV39: L1=2MB, L2=1GB.
@@ -317,22 +299,16 @@ int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
     level_size[l] = level_size[l - 1] * PT_FANOUT;
   }
 
-  // Identity-mapped system regions get full read/write/execute (the
-  // kernel image needs X, stack needs R+W, IO MMIO needs R+W). The
-  // host-side ACL on RAM, set independently via mem_access(), is the
-  // actual permission boundary.
+  // Identity-mapped system regions get full R/W/X; the host-side ACL
+  // (set via mem_access) is the actual permission boundary.
   constexpr uint32_t IDENTITY_PTE_FLAGS = PTE_V | PTE_R | PTE_W | PTE_X;
 
-  // Reserve the VA range so future phy_to_virt_map cannot mint a VA here.
-  // Best-effort: overlap with prior identity regions is harmless.
   (void)virtual_mem_->reserve(addr, size);
 
   uint64_t cur = addr;
   uint64_t end = addr + size;
   while (cur < end) {
     uint64_t remaining = end - cur;
-    // Pick the largest level whose granule both fits the remaining range
-    // and aligns with cur. Falls back to L0 (4 KB) in the worst case.
     uint8_t leaf_level = 0;
     for (int l = PT_LEVEL - 1; l > 0; --l) {
       if ((cur % level_size[l]) == 0 && remaining >= level_size[l]) {
@@ -346,7 +322,7 @@ int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
     });
     cur += level_size[leaf_level];
   }
-  return 0;
+  return flush();
 }
 
 uint64_t VMManager::page_table_walk(uint64_t vAddr_bits) {
@@ -383,30 +359,67 @@ uint64_t VMManager::page_table_walk(uint64_t vAddr_bits) {
   return (cur_base_ppn << MEM_PAGE_LOG2_SIZE) + vaddr.pgoff;
 }
 
+// -- shadow PT helpers --------------------------------------------------
+
+std::vector<uint8_t>& VMManager::touch_pt_page(uint64_t addr) {
+  uint64_t page_pa = addr & ~(uint64_t)(PT_SIZE - 1);
+  auto& page = shadow_pt_[page_pa];
+  if (page.empty())
+    page.resize(PT_SIZE, 0);
+  dirty_pt_pages_.insert(page_pa);
+  return page;
+}
+
+const std::vector<uint8_t>* VMManager::peek_pt_page(uint64_t addr) const {
+  uint64_t page_pa = addr & ~(uint64_t)(PT_SIZE - 1);
+  auto it = shadow_pt_.find(page_pa);
+  if (it == shadow_pt_.end())
+    return nullptr;
+  return &it->second;
+}
+
 void VMManager::write_pte(uint64_t addr, uint64_t value) {
-  uint8_t* src = new uint8_t[PTE_SIZE];
+  auto& page = touch_pt_page(addr);
+  uint64_t off = addr - (addr & ~(uint64_t)(PT_SIZE - 1));
+  // Little-endian byte serialization, matching the device-side PTW
+  // which fetches PTE_SIZE bytes from this address.
   for (uint64_t i = 0; i < PTE_SIZE; ++i) {
-    src[i] = (value >> (i << 3)) & 0xff;
+    page[off + i] = (value >> (i << 3)) & 0xff;
   }
-  ram_->enable_acl(false);
-  ram_->write(src, addr, PTE_SIZE);
-  ram_->enable_acl(true);
-  delete[] src;
 }
 
 uint64_t VMManager::read_pte(uint64_t addr) {
-  uint8_t* dest = new uint8_t[PTE_SIZE];
+  const auto* page = peek_pt_page(addr);
 #ifdef XLEN_32
   uint64_t mask = 0x00000000FFFFFFFFULL;
 #else
   uint64_t mask = 0xFFFFFFFFFFFFFFFFULL;
 #endif
-  ram_->read(dest, addr, PTE_SIZE);
-  uint64_t ret = (*(uint64_t*)dest) & mask;
-  delete[] dest;
-  return ret;
+  if (page == nullptr) {
+    // Unallocated PT page reads as zero (matches device DRAM init
+    // pattern from cache_init / fresh allocator state).
+    return 0;
+  }
+  uint64_t off = addr - (addr & ~(uint64_t)(PT_SIZE - 1));
+  uint64_t v = 0;
+  for (uint64_t i = 0; i < PTE_SIZE; ++i) {
+    v |= (uint64_t)(*page)[off + i] << (i << 3);
+  }
+  return v & mask;
 }
 
-// get_base_ppn() and get_mode() are inline accessors in the header.
+int VMManager::flush() {
+  // One bulk device write per dirty PT page. On simx/rtlsim this is a
+  // memcpy; on XRT/OPAE this becomes a single DMA per PT page, vs the
+  // per-PTE DMAs the legacy code would have issued.
+  if (dirty_pt_pages_.empty())
+    return 0;
+  for (uint64_t page_pa : dirty_pt_pages_) {
+    const auto& page = shadow_pt_[page_pa];
+    dev_io_->write(page.data(), page_pa, page.size());
+  }
+  dirty_pt_pages_.clear();
+  return 0;
+}
 
 #endif // VM_ENABLE

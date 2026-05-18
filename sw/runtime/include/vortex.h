@@ -76,6 +76,15 @@ typedef void* vx_buffer_h;
 #define VX_MEM_WRITE                0x2
 #define VX_MEM_READ_WRITE           0x3
 #define VX_MEM_PIN_MEMORY           0x4
+// Allocation returns a PHYSICAL device address (no VA translation).
+// Required for any consumer on the device side that bypasses the
+// per-core MMU — e.g. graphics fixed-function units (raster, tex,
+// om), the command processor, and any future DMA engine reading
+// directly from device memory. Under VM mode the runtime identity-
+// maps the underlying PA so the same address is valid on both the
+// MMU-routed (LSU/kernel loads) and bypass paths. Has no effect
+// when VM_ENABLE is off.
+#define VX_MEM_PHYS                 0x8
 
 // open the device and connect to it
 int vx_dev_open(vx_device_h* hdevice);

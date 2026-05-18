@@ -118,8 +118,8 @@ void Mmu::drive_ptw() {
   case PTW_L1_REQ: {
     uint64_t vpn1 = (ptw_vaddr_ >> (MEM_PAGE_LOG2_SIZE + VPN_BITS)) & VPN_MASK;
     ptw_pte_addr_ = pte_addr(satp_->get_base_ppn(), vpn1);
-    MemReq req(ptw_pte_addr_, /*write*/false, AddrType::Global,
-               PTW_TAG_MARKER, /*cid*/0, /*uuid*/0);
+    MemReq req(MemOp::LD, ptw_pte_addr_, /*data*/nullptr, /*byteen*/0,
+               PTW_TAG_MARKER, /*hart_id*/0, /*uuid*/0);
     if (ReqOut.at(0).try_send(req)) {
       DT(4, this->name() << " ptw L1-req: addr=0x" << std::hex << ptw_pte_addr_ << std::dec);
       ptw_state_ = PTW_L1_WAIT;
@@ -129,8 +129,8 @@ void Mmu::drive_ptw() {
   case PTW_L0_REQ: {
     uint64_t vpn0 = (ptw_vaddr_ >> MEM_PAGE_LOG2_SIZE) & VPN_MASK;
     ptw_pte_addr_ = pte_addr(ptw_l1_ppn_, vpn0);
-    MemReq req(ptw_pte_addr_, /*write*/false, AddrType::Global,
-               PTW_TAG_MARKER, /*cid*/0, /*uuid*/0);
+    MemReq req(MemOp::LD, ptw_pte_addr_, /*data*/nullptr, /*byteen*/0,
+               PTW_TAG_MARKER, /*hart_id*/0, /*uuid*/0);
     if (ReqOut.at(0).try_send(req)) {
       DT(4, this->name() << " ptw L0-req: addr=0x" << std::hex << ptw_pte_addr_ << std::dec);
       ptw_state_ = PTW_L0_WAIT;
@@ -216,8 +216,8 @@ void Mmu::on_tick() {
       // TLB miss — kick PTW if it's idle. Otherwise this request waits
       // (stays at the head of ReqIn[p]) until the in-flight walk completes.
       if (ptw_state_ == PTW_IDLE) {
-        // ACCESS_TYPE inferred from req.write (no FETCH on dcache port).
-        ACCESS_TYPE type = req.write ? ACCESS_TYPE::STORE : ACCESS_TYPE::LOAD;
+        // ACCESS_TYPE inferred from req op (no FETCH on dcache port).
+        ACCESS_TYPE type = req.is_write() ? ACCESS_TYPE::STORE : ACCESS_TYPE::LOAD;
         start_ptw(req.addr, type, req, p);
         ReqIn.at(p).pop();
       }

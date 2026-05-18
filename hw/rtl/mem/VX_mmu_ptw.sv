@@ -9,7 +9,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     parameter DATA_SIZE      = DCACHE_WORD_SIZE,
     parameter TAG_WIDTH      = DCACHE_TAG_WIDTH + `UP(`CLOG2(DCACHE_NUM_REQS)),
     parameter ADDR_WIDTH     = DCACHE_ADDR_WIDTH,
-    parameter FLAGS_WIDTH    = MEM_FLAGS_WIDTH
+    parameter ATTR_WIDTH     = MEM_ATTR_WIDTH
 ) (
     input wire clk,
     input wire reset,
@@ -155,7 +155,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     assign ptw_mem_if.req_data.addr = pte_word_addr;
     assign ptw_mem_if.req_data.data = '0;
     assign ptw_mem_if.req_data.byteen = {DATA_SIZE{1'b1}};
-    assign ptw_mem_if.req_data.flags = '0;
+    assign ptw_mem_if.req_data.attr = '0;
     assign ptw_mem_if.req_data.tag = '0;
     assign ptw_mem_if.rsp_ready = (state == PTW_L1_RESP) || (state == PTW_L0_RESP);
 

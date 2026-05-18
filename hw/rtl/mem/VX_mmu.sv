@@ -11,7 +11,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     parameter TAG_WIDTH      = DCACHE_TAG_WIDTH_BASE,
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH     = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
-    parameter FLAGS_WIDTH    = MEM_FLAGS_WIDTH,
+    parameter ATTR_WIDTH    = MEM_ATTR_WIDTH,
     parameter EBUF_SIZE      = 2
 ) (
     input wire clk,
@@ -53,7 +53,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     localparam DATA_WIDTH      = DATA_SIZE * 8;
     localparam TLB_SOURCE_BITS = `UP(`CLOG2(NUM_REQS));
     localparam TAG_WIDTH_TLB   = TAG_WIDTH + TLB_SOURCE_BITS;
-    localparam REQ_DATAW       = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + FLAGS_WIDTH + TAG_WIDTH;
+    localparam REQ_DATAW       = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + ATTR_WIDTH + TAG_WIDTH;
     localparam RSP_DATAW       = DATA_WIDTH + TAG_WIDTH;
 
     // =========================================================================
@@ -63,25 +63,25 @@ module VX_mmu import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE   (DATA_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
-        .FLAGS_WIDTH (FLAGS_WIDTH)
+        .ATTR_WIDTH (ATTR_WIDTH)
     ) buffered_if[NUM_REQS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE   (DATA_SIZE),
         .TAG_WIDTH   (TAG_WIDTH_TLB),
-        .FLAGS_WIDTH (FLAGS_WIDTH)
+        .ATTR_WIDTH (ATTR_WIDTH)
     ) tlb_out_if[NUM_REQS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE   (DATA_SIZE),
         .TAG_WIDTH   (TAG_WIDTH_TLB),
-        .FLAGS_WIDTH (FLAGS_WIDTH)
+        .ATTR_WIDTH (ATTR_WIDTH)
     ) bypass_dcache_if[NUM_REQS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE   (DATA_SIZE),
         .TAG_WIDTH   (TAG_WIDTH_TLB),
-        .FLAGS_WIDTH (FLAGS_WIDTH)
+        .ATTR_WIDTH (ATTR_WIDTH)
     ) ptw_mem_if();
 
 `ifdef PERF_ENABLE
@@ -95,7 +95,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE   (DATA_SIZE),
         .TAG_WIDTH   (TAG_WIDTH_TLB),
-        .FLAGS_WIDTH (FLAGS_WIDTH)
+        .ATTR_WIDTH (ATTR_WIDTH)
     ) merge_in_if[2 * NUM_REQS + 1]();
 
     // =========================================================================
@@ -122,7 +122,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
             lsu_mem_if[i].req_data.addr,
             lsu_mem_if[i].req_data.data,
             lsu_mem_if[i].req_data.byteen,
-            lsu_mem_if[i].req_data.flags[FLAGS_WIDTH-1:0],
+            lsu_mem_if[i].req_data.attr[ATTR_WIDTH-1:0],
             lsu_mem_if[i].req_data.tag[TAG_WIDTH-1:0]
         };
 
@@ -145,7 +145,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
         assign buffered_if[i].req_data.addr   = req_data_out_packed[REQ_DATAW-2 -: ADDR_WIDTH];
         assign buffered_if[i].req_data.data   = req_data_out_packed[REQ_DATAW-2-ADDR_WIDTH -: DATA_WIDTH];
         assign buffered_if[i].req_data.byteen = req_data_out_packed[REQ_DATAW-2-ADDR_WIDTH-DATA_WIDTH -: DATA_SIZE];
-        assign buffered_if[i].req_data.flags  = req_data_out_packed[REQ_DATAW-2-ADDR_WIDTH-DATA_WIDTH-DATA_SIZE -: FLAGS_WIDTH];
+        assign buffered_if[i].req_data.attr  = req_data_out_packed[REQ_DATAW-2-ADDR_WIDTH-DATA_WIDTH-DATA_SIZE -: ATTR_WIDTH];
         assign buffered_if[i].req_data.tag    = req_data_out_packed[TAG_WIDTH-1:0];
 
         wire [RSP_DATAW-1:0] rsp_data_in_packed;
@@ -200,7 +200,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .TAG_WIDTH_IN  (TAG_WIDTH),
         .TAG_WIDTH_OUT (TAG_WIDTH_TLB),
         .ADDR_WIDTH    (ADDR_WIDTH),
-        .FLAGS_WIDTH   (FLAGS_WIDTH)
+        .ATTR_WIDTH   (ATTR_WIDTH)
     ) tlb_unit (
         .clk           (clk),
         .reset         (reset),
@@ -227,7 +227,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .DATA_SIZE     (DATA_SIZE),
         .TAG_WIDTH     (TAG_WIDTH_TLB),
         .ADDR_WIDTH    (ADDR_WIDTH),
-        .FLAGS_WIDTH   (FLAGS_WIDTH)
+        .ATTR_WIDTH   (ATTR_WIDTH)
     ) ptw_unit (
         .clk           (clk),
         .reset         (reset),
@@ -266,7 +266,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
         assign bypass_dcache_if[i].req_data.addr   = lsu_mem_if[i].req_data.addr;
         assign bypass_dcache_if[i].req_data.data   = lsu_mem_if[i].req_data.data;
         assign bypass_dcache_if[i].req_data.byteen = lsu_mem_if[i].req_data.byteen;
-        assign bypass_dcache_if[i].req_data.flags  = lsu_mem_if[i].req_data.flags;
+        assign bypass_dcache_if[i].req_data.attr  = lsu_mem_if[i].req_data.attr;
         assign bypass_dcache_if[i].req_data.tag = {lsu_mem_if[i].req_data.tag[TAG_WIDTH-1:0],
                                                    {TLB_SOURCE_BITS{1'b0}}};
     end
@@ -315,7 +315,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .ARBITER        ("R"),
         .MEM_ADDR_WIDTH (MEM_ADDR_WIDTH),
         .ADDR_WIDTH     (ADDR_WIDTH),
-        .FLAGS_WIDTH    (FLAGS_WIDTH),
+        .ATTR_WIDTH    (ATTR_WIDTH),
         .REQ_OUT_BUF    (2),
         .RSP_OUT_BUF    (2)
     ) merge_arb (

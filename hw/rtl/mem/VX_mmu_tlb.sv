@@ -11,7 +11,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     parameter TAG_WIDTH_IN   = DCACHE_TAG_WIDTH,
     parameter TAG_WIDTH_OUT  = TAG_WIDTH_IN + `UP(`CLOG2(NUM_REQS)),
     parameter ADDR_WIDTH     = DCACHE_ADDR_WIDTH,
-    parameter FLAGS_WIDTH    = MEM_FLAGS_WIDTH
+    parameter ATTR_WIDTH     = MEM_ATTR_WIDTH
 ) (
     input wire clk,
     input wire reset,
@@ -39,8 +39,8 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     // =========================================================================
 
     localparam DATA_WIDTH    = DATA_SIZE * 8;
-    localparam REQ_DATAW_IN  = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + FLAGS_WIDTH + TAG_WIDTH_IN;
-    localparam REQ_DATAW_OUT = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + FLAGS_WIDTH + TAG_WIDTH_OUT;
+    localparam REQ_DATAW_IN  = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + ATTR_WIDTH + TAG_WIDTH_IN;
+    localparam REQ_DATAW_OUT = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + ATTR_WIDTH + TAG_WIDTH_OUT;
     localparam RSP_DATAW_IN  = DATA_WIDTH + TAG_WIDTH_IN;
     localparam RSP_DATAW_OUT = DATA_WIDTH + TAG_WIDTH_OUT;
     localparam SOURCE_BITS   = `UP(`CLOG2(NUM_REQS));
@@ -60,7 +60,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
             tlb_in_if[i].req_data.addr,
             tlb_in_if[i].req_data.data,
             tlb_in_if[i].req_data.byteen,
-            tlb_in_if[i].req_data.flags[FLAGS_WIDTH-1:0],
+            tlb_in_if[i].req_data.attr[ATTR_WIDTH-1:0],
             tlb_in_if[i].req_data.tag[TAG_WIDTH_IN-1:0]
         };
         assign tlb_in_if[i].req_ready = req_ready_in[i];
@@ -126,8 +126,8 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     reg miss_sent;
     reg [TLB_INDEX_BITS-1:0] victim_index;
 
-    localparam ADDR_LSB_IN = TAG_WIDTH_IN + FLAGS_WIDTH + DATA_SIZE + DATA_WIDTH;
-    localparam ADDR_LSB = TAG_WIDTH_OUT + FLAGS_WIDTH + DATA_SIZE + DATA_WIDTH;
+    localparam ADDR_LSB_IN = TAG_WIDTH_IN + ATTR_WIDTH + DATA_SIZE + DATA_WIDTH;
+    localparam ADDR_LSB = TAG_WIDTH_OUT + ATTR_WIDTH + DATA_SIZE + DATA_WIDTH;
 
     wire use_miss_buffer = (state == TLB_REPLAY);
     wire [REQ_DATAW_IN-1:0] lookup_data = use_miss_buffer ? miss_buffer : ser_req_data;
@@ -348,7 +348,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
         assign tlb_out_if[i].req_data.addr   = deser_req_data_out[i][REQ_DATAW_OUT-2 -: ADDR_WIDTH];
         assign tlb_out_if[i].req_data.data   = deser_req_data_out[i][REQ_DATAW_OUT-2-ADDR_WIDTH -: DATA_WIDTH];
         assign tlb_out_if[i].req_data.byteen = deser_req_data_out[i][REQ_DATAW_OUT-2-ADDR_WIDTH-DATA_WIDTH -: DATA_SIZE];
-        assign tlb_out_if[i].req_data.flags  = deser_req_data_out[i][REQ_DATAW_OUT-2-ADDR_WIDTH-DATA_WIDTH-DATA_SIZE -: FLAGS_WIDTH];
+        assign tlb_out_if[i].req_data.attr  = deser_req_data_out[i][REQ_DATAW_OUT-2-ADDR_WIDTH-DATA_WIDTH-DATA_SIZE -: ATTR_WIDTH];
         assign tlb_out_if[i].req_data.tag    = deser_req_data_out[i][TAG_WIDTH_OUT-1:0];
         assign deser_req_ready_out[i]  = tlb_out_if[i].req_ready;
     end

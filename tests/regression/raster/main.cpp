@@ -133,9 +133,12 @@ int render(const CGLTrace& trace) {
     // allocate tile memory
     if (tile_buffer != nullptr) vx_mem_free(tile_buffer);
     if (prim_buffer != nullptr) vx_mem_free(prim_buffer);
-    RT_CHECK(vx_mem_alloc(device, tilebuf.size(), VX_MEM_READ, &tile_buffer));
+    // tile_buffer / prim_buffer are bound to the raster unit (via
+    // VX_DCR_RASTER_T/PBUF_ADDR) which bypasses the per-core MMU —
+    // both need physical addresses.
+    RT_CHECK(vx_mem_alloc(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
     RT_CHECK(vx_mem_address(tile_buffer, &tilebuf_addr));
-    RT_CHECK(vx_mem_alloc(device, primbuf.size(), VX_MEM_READ, &prim_buffer));
+    RT_CHECK(vx_mem_alloc(device, primbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &prim_buffer));
     RT_CHECK(vx_mem_address(prim_buffer, &primbuf_addr));
     std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
     std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;
