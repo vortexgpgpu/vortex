@@ -1,0 +1,114 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# gem5 install for SimX v3 — Phase 0 of docs/proposals/gem5_simx_v3_proposal.md.
+#
+# Fetches a pinned gem5 release, installs build deps, builds the ARM
+# variant, and exports GEM5_HOME. The Vortex SimObject is NOT installed
+# here — that lands in Phase 3 once the API surface is confirmed (see
+# sim/simx/gem5/gem5_api_notes.md after this script runs).
+#
+# Idempotent: re-running with the same GEM5_REV is a no-op once
+# $GEM5_HOME/build/ARM/gem5.opt exists.
+
+# exit when any command fails
+set -e
+
+GEM5_REV=${GEM5_REV:=@GEM5_REV@}
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+GEM5_HOME=$TOOLDIR/gem5
+GEM5_REPO=https://github.com/gem5/gem5.git
+
+# Build deps. gem5 documents these at https://www.gem5.org/documentation/general_docs/building
+# AArch64 cross-toolchain (gcc/g++-aarch64-linux-gnu) is needed for
+# Phase 0's hello-arm SE-mode smoke test and for the Phase 4 runtime
+# cross-build. Installing it here keeps Phase 0 self-contained.
+DEBIAN_FRONTEND=noninteractive sudo apt install -y \
+    scons \
+    python3 python3-dev python3-pip python3-venv \
+    libprotobuf-dev protobuf-compiler libprotoc-dev \
+    libgoogle-perftools-dev \
+    m4 \
+    libboost-all-dev \
+    libhdf5-serial-dev \
+    libpng-dev \
+    pkg-config \
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    build-essential git wget
+
+mkdir -p "$TOOLDIR"
+
+# Fetch (or update) gem5 working tree at the pinned revision.
+if [ -d "$GEM5_HOME/.git" ]; then
+    echo "gem5 working tree exists at $GEM5_HOME"
+    pushd "$GEM5_HOME" > /dev/null
+    current_rev=$(git describe --tags --always 2>/dev/null || echo "unknown")
+    if [ "$current_rev" != "$GEM5_REV" ]; then
+        echo "checked-out rev $current_rev != pinned $GEM5_REV; refetching"
+        git fetch --depth=1 origin "tag" "$GEM5_REV"
+        git checkout "$GEM5_REV"
+    fi
+    popd > /dev/null
+else
+    echo "cloning gem5 $GEM5_REV into $GEM5_HOME"
+    git clone --depth=1 --branch "$GEM5_REV" "$GEM5_REPO" "$GEM5_HOME"
+fi
+
+# Build the ARM variant. -j$(nproc) on the self-hosted runner; cap at 4
+# on hosted runners to avoid OOM (gem5 link uses ~4 GB peak).
+JOBS=$(nproc)
+if [ -n "$GITHUB_ACTIONS" ] && [ -z "$VORTEX_SELF_HOSTED" ]; then
+    JOBS=4
+fi
+
+# Build both X86 (default host ISA — easier, no cross-compile needed)
+# and ARM (research path matching the legacy capstone paper). Either
+# can be selected at test-config time via GEM5_BIN=$GEM5_HOME/build/{X86,ARM}/gem5.opt.
+# Default targets can be overridden via GEM5_TARGETS="X86" or "ARM" or
+# "X86 ARM" (space-separated). Both is the default.
+GEM5_TARGETS=${GEM5_TARGETS:-"X86 ARM"}
+
+cd "$GEM5_HOME"
+for target in $GEM5_TARGETS; do
+    if [ ! -x "$GEM5_HOME/build/$target/gem5.opt" ]; then
+        echo "building gem5.opt ($target) with -j$JOBS"
+        scons "build/$target/gem5.opt" -j"$JOBS"
+    else
+        echo "gem5.opt ($target) already built at $GEM5_HOME/build/$target/gem5.opt"
+    fi
+done
+
+# Persist GEM5_HOME for subsequent shells (idempotent).
+if ! grep -q "^export GEM5_HOME=" ~/.bashrc 2>/dev/null; then
+    echo "export GEM5_HOME=$GEM5_HOME" >> ~/.bashrc
+fi
+export GEM5_HOME
+
+# GitHub Actions: propagate to subsequent steps.
+if [ -n "$GITHUB_ENV" ]; then
+    echo "GEM5_HOME=$GEM5_HOME" >> "$GITHUB_ENV"
+fi
+if [ -n "$GITHUB_PATH" ]; then
+    for target in $GEM5_TARGETS; do
+        echo "$GEM5_HOME/build/$target" >> "$GITHUB_PATH"
+    done
+fi
+
+echo ""
+echo "gem5 $GEM5_REV installed at $GEM5_HOME"
+for target in $GEM5_TARGETS; do
+    echo "  binary: $GEM5_HOME/build/$target/gem5.opt"
+done
+echo "  GEM5_HOME exported (re-source ~/.bashrc to pick up in new shells)"

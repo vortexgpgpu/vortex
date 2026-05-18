@@ -103,6 +103,124 @@ sst()
     echo "sst tests done!"
 }
 
+# gem5 integration tests — Phase 6 of docs/proposals/gem5_simx_v3_proposal.md.
+# Validates the VortexGPGPU device + libvortex-gem5.so end-to-end inside
+# gem5 SE-mode. Two layers:
+#
+#   1. Phase 3 standalone (--gem5-standalone): kernel preloaded via the
+#      SimObject's `kernel=` Python param; runs entirely inside the gem5
+#      event loop, no host CPU needed. Fast smoke test (~1 s wall, ~5K
+#      simulated cycles per run).
+#
+#   2. Phase 5 e2e (--gem5): an x86 SE-mode workload (the standard
+#      tests/regression/vecadd binary, same one the SimX backend uses)
+#      drives the device via the OPAE MMIO/DMA protocol through
+#      libvortex-gem5-x86_64.so. Exercises the full path: kernel upload
+#      DMA, status polling, cache-flush DCRs, result DMA, host-side
+#      verification.
+#
+# ARM matrix is opt-in via VORTEX_GEM5_ARM=1 (needs gcc-aarch64-linux-gnu
+# installed; not part of the default hosted-runner image).
+gem5()
+{
+    echo "begin gem5 tests..."
+
+    if [ -z "$GEM5_HOME" ]; then
+        GEM5_HOME=$HOME/tools/gem5
+    fi
+    if [ ! -x "$GEM5_HOME/build/X86/gem5.opt" ]; then
+        echo "error: $GEM5_HOME/build/X86/gem5.opt not found — run ci/gem5_install.sh first"
+        exit 1
+    fi
+
+    # Build prerequisites. The host runtime is gated on HOST_ARCH;
+    # default x86 needs no cross-toolchain.
+    make -C sim/simx USE_GEM5=1
+    make -C sw/runtime/stub
+    make -C sw/runtime/gem5 HOST_ARCH=x86_64
+    make -C sw/kernel
+    make -C tests/kernel/hello
+    make -C tests/regression/vecadd
+    make -C tests/regression/sgemm
+
+    BUILD_DIR=$(pwd)
+    LIB_GEM5_DEV=$BUILD_DIR/sim/simx/libvortex-gem5.so
+    HOST_RT_DIR=$BUILD_DIR/sw/runtime
+
+    # Phase 3 standalone smoke — no host CPU, kernel preload.
+    # env-vars MUST precede the binary (gem5.opt would otherwise
+    # treat them as positional args).
+    VORTEX_GEM5_LIB=$LIB_GEM5_DEV \
+    VORTEX_GEM5_KERNEL=$BUILD_DIR/tests/kernel/hello/hello.vxbin \
+        timeout 120 $GEM5_HOME/build/X86/gem5.opt \
+        ci/gem5_test_vortex_hello.py
+
+    # Phase 5 e2e — full OPAE protocol path through the host runtime.
+    # Generic test runner (ci/gem5_test_vortex_app.py) parameterized
+    # by VORTEX_TEST_BIN + VORTEX_TEST_ARGS. Sizes are chosen so each
+    # run fits in the 120s per-test budget (feedback_test_timeout_120s):
+    #   - vecadd -n16   small vector add (~4K device cycles)
+    #   - sgemm  -n4    4x4 matrix multiply (~800 device cycles; larger
+    #                   sizes overrun the budget because the simulated
+    #                   host CPU's ready_wait poll loop burns gem5
+    #                   wall time proportional to kernel runtime).
+    # Run on local dev box for larger sizes by overriding VORTEX_TEST_ARGS.
+    for spec in "vecadd:-n16" "sgemm:-n4"; do
+        app="${spec%%:*}"
+        args="${spec#*:}"
+        echo "=== gem5 e2e: $app $args ==="
+        VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+        VORTEX_GEM5_HOST_RT_DIR=$HOST_RT_DIR \
+        VORTEX_TEST_DIR=$BUILD_DIR/tests/regression/$app \
+        VORTEX_TEST_BIN=$app \
+        VORTEX_TEST_ARGS=$args \
+            timeout 120 $GEM5_HOME/build/X86/gem5.opt \
+            ci/gem5_test_vortex_app.py
+    done
+
+    # ARM matrix (opt-in). The device library (libvortex-gem5.so) is
+    # always x86 — gem5.opt is an x86 binary regardless of which
+    # simulated ISA it models. Only the simulated host's ISA changes.
+    if [ -n "$VORTEX_GEM5_ARM" ]; then
+        if [ ! -x "$GEM5_HOME/build/ARM/gem5.opt" ]; then
+            echo "error: $GEM5_HOME/build/ARM/gem5.opt not found"
+            exit 1
+        fi
+
+        # Cross-compile the host runtime, stub, and test binaries for
+        # aarch64. All outputs land in $arch/ subdirs alongside the
+        # native x86 builds so they coexist cleanly.
+        make -C sw/runtime/stub HOST_ARCH=aarch64
+        make -C sw/runtime/gem5 HOST_ARCH=aarch64
+        make -C tests/regression/vecadd HOST_ARCH=aarch64
+        make -C tests/regression/sgemm  HOST_ARCH=aarch64
+
+        ARM_HOST_RT_DIR=$BUILD_DIR/sw/runtime/aarch64
+
+        echo "=== gem5 ARM standalone: hello ==="
+        VORTEX_GEM5_LIB=$LIB_GEM5_DEV \
+        VORTEX_GEM5_KERNEL=$BUILD_DIR/tests/kernel/hello/hello.vxbin \
+            timeout 120 $GEM5_HOME/build/ARM/gem5.opt \
+            ci/gem5_test_vortex_hello.py
+
+        for spec in "vecadd:-n16" "sgemm:-n4"; do
+            app="${spec%%:*}"
+            args="${spec#*:}"
+            echo "=== gem5 ARM e2e: $app $args ==="
+            VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+            VORTEX_GEM5_HOST_RT_DIR=$ARM_HOST_RT_DIR \
+            VORTEX_TEST_DIR=$BUILD_DIR/tests/regression/$app \
+            VORTEX_TEST_BIN=$app-aarch64 \
+            VORTEX_TEST_ARGS=$args \
+            VORTEX_DRIVER=gem5-aarch64 \
+                timeout 120 $GEM5_HOME/build/ARM/gem5.opt \
+                ci/gem5_test_vortex_app.py
+        done
+    fi
+
+    echo "gem5 tests done!"
+}
+
 mpi()
 {
     echo "begin mpi tests..."
@@ -1022,7 +1140,7 @@ hip()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1113,6 +1231,9 @@ while [ "$1" != "" ]; do
                 ;;
         --sst )
                 tests+=("sst")
+                ;;
+        --gem5 )
+                tests+=("gem5")
                 ;;
         --dtm )
                 tests+=("dtm")

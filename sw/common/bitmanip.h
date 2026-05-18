@@ -14,6 +14,8 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
+#include <algorithm>
 #include <assert.h>
 
 namespace vortex {

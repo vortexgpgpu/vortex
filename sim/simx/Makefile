@@ -2,7 +2,16 @@ include ../common.mk
 
 DESTDIR ?= $(CURDIR)
 USE_SST ?= 0
+USE_GEM5 ?= 0
 #SST_PKG ?= SST-14.1 # default SST package name
+
+# USE_SST and USE_GEM5 are mutually exclusive — different external
+# simulator wrappers with different LDFLAGS; building both into one
+# binary makes no sense and the proposal docs/proposals/gem5_simx_v3_proposal.md
+# §8 calls this out explicitly.
+ifeq ($(USE_SST)$(USE_GEM5),11)
+$(error USE_SST=1 and USE_GEM5=1 are mutually exclusive)
+endif
 
 OBJ_DIR = $(DESTDIR)/obj
 CONFIG_FILE = $(DESTDIR)/simx_config.stamp
@@ -96,6 +105,15 @@ ifeq ($(USE_SST),1)
 	SRCS     += $(SRC_DIR)/sst/vortex_simulator.cpp $(SRC_DIR)/sst/vortex_gpgpu.cpp
 endif
 
+# gem5 integration: build libvortex-gem5.so (the C ABI library loaded
+# by the gem5 VortexGPGPU SimObject) plus gem5_smoke (an in-process
+# smoke driver that exercises the library without needing gem5
+# installed). The gem5 wrapper source is kept out of the default SRCS
+# list and pulled into VORTEX_GEM5_SRCS so the default simx binary
+# does not carry it.
+VORTEX_GEM5_SRCS := $(SRC_DIR)/gem5/vortex_gpgpu.cpp
+GEM5_SMOKE_SRC   := $(SRC_DIR)/gem5/gem5_smoke_main.cpp
+
 # Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
@@ -128,17 +146,27 @@ VORTEX_SST_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(VORTEX_SST_SRCS)
 DEPS += $(VORTEX_SST_OBJS:.o=.d)
 endif
 
+ifeq ($(USE_GEM5), 1)
+VORTEX_GEM5_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(VORTEX_GEM5_SRCS))
+GEM5_SMOKE_OBJ   := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(GEM5_SMOKE_SRC))
+DEPS             += $(VORTEX_GEM5_OBJS:.o=.d) $(GEM5_SMOKE_OBJ:.o=.d)
+endif
+
 
 # optional: pipe through ccache if you have it
 CXX := $(if $(shell which ccache),ccache $(CXX),$(CXX))
 
 PROJECT := simx
 VORTEX_LIB := libvortex.so
+VORTEX_GEM5_LIB := libvortex-gem5.so
+GEM5_SMOKE := gem5_smoke
 
-.PHONY: all force clean clean-lib clean-exe clean-obj libvortex clean-libvortex
+.PHONY: all force clean clean-lib clean-exe clean-obj libvortex clean-libvortex libvortex-gem5 clean-libvortex-gem5 gem5-smoke clean-gem5-smoke
 
 ifeq ($(USE_SST), 1)
 all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_LIB)
+else ifeq ($(USE_GEM5), 1)
+all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_GEM5_LIB) $(DESTDIR)/$(GEM5_SMOKE)
 else
 all: $(DESTDIR)/$(PROJECT)
 endif
@@ -186,6 +214,21 @@ $(DESTDIR)/$(VORTEX_LIB): $(OBJS) $(VORTEX_SST_OBJS)
 	-shared -o $@ \
 	$(LDFLAGS) $(SST_LFLAGS)
 
+# Vortex gem5 device shared library — the gem5 SimObject dlopens this
+# and calls the C ABI declared in sim/simx/gem5/vortex_gpgpu.h.
+libvortex-gem5: $(DESTDIR)/$(VORTEX_GEM5_LIB)
+
+$(DESTDIR)/$(VORTEX_GEM5_LIB): $(OBJS) $(VORTEX_GEM5_OBJS)
+	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -Wl,-soname,$(VORTEX_GEM5_LIB) -o $@
+
+# In-process smoke driver (no gem5 needed). Links against the gem5
+# library via the C ABI so a successful run here proves the library
+# is sound before we expose it to the gem5 device.
+gem5-smoke: $(DESTDIR)/$(GEM5_SMOKE)
+
+$(DESTDIR)/$(GEM5_SMOKE): $(GEM5_SMOKE_OBJ) $(DESTDIR)/$(VORTEX_GEM5_LIB)
+	$(CXX) $(CXXFLAGS) $(GEM5_SMOKE_OBJ) -L$(DESTDIR) -lvortex-gem5 -Wl,-rpath,$(DESTDIR) -o $@
+
 # updates the timestamp when flags changed.
 $(CONFIG_FILE): force
 	@mkdir -p $(@D)
@@ -205,10 +248,16 @@ clean-lib:
 clean-libvortex:
 	rm -f $(DESTDIR)/libvortex.so
 
+clean-libvortex-gem5:
+	rm -f $(DESTDIR)/$(VORTEX_GEM5_LIB)
+
+clean-gem5-smoke:
+	rm -f $(DESTDIR)/$(GEM5_SMOKE)
+
 clean-exe:
 	rm -f $(DESTDIR)/$(PROJECT)
 
 clean-obj:
 	rm -rf $(OBJ_DIR)
 
-clean: clean-lib clean-exe clean-obj
+clean: clean-lib clean-libvortex clean-libvortex-gem5 clean-gem5-smoke clean-exe clean-obj
