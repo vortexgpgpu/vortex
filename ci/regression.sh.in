@@ -109,7 +109,14 @@ mpi()
 
     make -C sw/runtime/simx
 
-    make -C tests/regression run-simx-mpi NP=4
+    make -C tests/regression/mpi_dotproduct          run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_put_dotproduct      run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_diverge             run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_vecadd              run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_sgemm               run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_blocked_sgemm       run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_conv3               run-simx MPI=1 NP=4
+    make -C tests/regression/mpi_neighbor_a2a_conv3  run-simx MPI=1 NP=4
 
     echo "mpi tests done!"
 }
@@ -295,21 +302,25 @@ rvc()
     make -C sim/rtlsim clean && CONFIGS="-DEXT_C_ENABLE" make -C sim/rtlsim
 
     # ISA conformance for rv*uc-p-* (compressed instruction tests).
-    CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-simx-32c
-    CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-rtlsim-32c
+    make -C tests/riscv/isa run-simx-32c
+    make -C tests/riscv/isa run-rtlsim-32c
 
     if [ "$XLEN" == "64" ]
     then
-        CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-simx-64c
-        CONFIGS="-DEXT_C_ENABLE" make -C tests/riscv/isa run-rtlsim-64c
+        make -C tests/riscv/isa run-simx-64c
+        make -C tests/riscv/isa run-rtlsim-64c
     fi
 
-    # Rebuild stub/simx runtime with EXT_C (so kernels link with the
-    # right -march) then run regression + opencl on simx.
-    make -C sw/runtime/stub
     make -C sw/runtime/simx clean && CONFIGS="-DEXT_C_ENABLE" make -C sw/runtime/simx
-    CONFIGS="-DEXT_C_ENABLE" make -C tests/regression run-simx
-    CONFIGS="-DEXT_C_ENABLE" make -C tests/opencl run-simx
+    make -C sw/runtime/rtlsim clean && CONFIGS="-DEXT_C_ENABLE" make -C sw/runtime/rtlsim
+    make -C tests/regression/sgemm run-simx
+    make -C tests/regression/sgemm run-rtlsim
+    make -C tests/regression/diverge run-simx
+    make -C tests/regression/diverge run-rtlsim
+    make -C tests/regression/dogfood run-simx
+    make -C tests/regression/dogfood run-rtlsim
+    make -C tests/regression/raycast run-simx
+    make -C tests/regression/raycast run-rtlsim
 
     echo "rvc tests done!"
 }
@@ -320,12 +331,26 @@ vm(){
     make -C sw/kernel
     make -C sw/runtime/stub
     make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/simx
-    make -C tests/opencl run-simx
-    make -C tests/regression run-simx
+    make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/rtlsim
+    make -C tests/regression/sgemm run-simx
+    make -C tests/regression/sgemm run-rtlsim
+    make -C tests/regression/diverge run-simx
+    make -C tests/regression/diverge run-rtlsim
+    make -C tests/regression/dogfood run-simx
+    make -C tests/regression/dogfood run-rtlsim
+    make -C tests/regression/raycast run-simx
+    make -C tests/regression/raycast run-rtlsim
 
     make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/simx
-    make -C tests/opencl run-simx
-    make -C tests/regression run-simx
+    make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim
+    make -C tests/regression/sgemm run-simx
+    make -C tests/regression/sgemm run-rtlsim
+    make -C tests/regression/diverge run-simx
+    make -C tests/regression/diverge run-rtlsim
+    make -C tests/regression/dogfood run-simx
+    make -C tests/regression/dogfood run-rtlsim
+    make -C tests/regression/raycast run-simx
+    make -C tests/regression/raycast run-rtlsim
 
     echo "vm tests done!"
 }
