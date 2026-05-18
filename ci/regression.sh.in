@@ -95,10 +95,22 @@ sst()
 
     cp sim/simx/libvortex.so $SST_ELEMENTS_HOME/lib/sst-elements-library/   # alternatively - $ sst --add-lib-path `pwd` myConfig.py
 
-    sst ci/sst_test_vortex_hello.py
-    sst ci/sst_test_vortex_fibonacci.py
-    sst ci/sst_test_vortex_vecadd.py
-    sst ci/sst_test_vortex_conform.py
+    BUILD_DIR=$(pwd)
+
+    # Hostless SST runner (ci/sst_run_hostless_app.py) parameterized
+    # by VORTEX_TEST_DIR + VORTEX_TEST_KERNEL — same shape as
+    # ci/gem5_run_hostless_app.py. SST is hostless-only today (no
+    # CPU component wired to Vortex); the ci/sst_run_app.py name
+    # slot is reserved for a future host-CPU SST integration.
+    for spec in "hello:hello.vxbin" "fibonacci:fibonacci.vxbin" \
+                "vecadd:vecadd.vxbin" "conform:conform.vxbin"; do
+        kern="${spec%%:*}"
+        vxbin="${spec#*:}"
+        echo "=== sst: $kern ==="
+        VORTEX_TEST_DIR=$BUILD_DIR/tests/kernel/$kern \
+        VORTEX_TEST_KERNEL=$vxbin \
+            sst ci/sst_run_hostless_app.py
+    done
 
     echo "sst tests done!"
 }
@@ -146,22 +158,24 @@ gem5()
     LIB_GEM5_DEV=$BUILD_DIR/sim/simx/libvortex-gem5.so
     HOST_RT_DIR=$BUILD_DIR/sw/runtime
 
-    # Phase 3 standalone smoke — no host CPU, kernel preload.
-    # env-vars MUST precede the binary (gem5.opt would otherwise
-    # treat them as positional args).
-    VORTEX_GEM5_LIB=$LIB_GEM5_DEV \
-    VORTEX_GEM5_KERNEL=$BUILD_DIR/tests/kernel/hello/hello.vxbin \
+    # Hostless smoke — no host CPU, kernel preloaded via SimObject param.
+    # env-vars MUST precede the binary (gem5.opt would otherwise treat
+    # them as positional args).
+    echo "=== gem5 hostless: hello ==="
+    VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+    VORTEX_TEST_DIR=$BUILD_DIR/tests/kernel/hello \
+    VORTEX_TEST_KERNEL=hello.vxbin \
         timeout 120 $GEM5_HOME/build/X86/gem5.opt \
-        ci/gem5_test_vortex_hello.py
+        ci/gem5_run_hostless_app.py
 
-    # Phase 5 e2e — CP-driven path through the host runtime.
-    # Generic test runner (ci/gem5_test_vortex_app.py) parameterized
-    # by VORTEX_TEST_BIN + VORTEX_TEST_ARGS. Sizes are chosen so each
-    # run fits in the 120s per-test budget (feedback_test_timeout_120s):
+    # E2E — CP-driven path through the host runtime. Generic runner
+    # (ci/gem5_run_app.py) parameterized by VORTEX_TEST_BIN +
+    # VORTEX_TEST_ARGS. Sizes fit the 120s per-test budget
+    # (feedback_test_timeout_120s):
     #   - vecadd -n16   small vector add
     #   - sgemm  -n4    4x4 matrix multiply
-    # Larger sizes overrun the budget because the simulated host CPU's
-    # CP poll loop burns gem5 wall time proportional to kernel runtime.
+    # Larger sizes overrun because the simulated host CPU's CP poll
+    # loop burns gem5 wall time proportional to kernel runtime.
     # Run on local dev box for larger sizes by overriding VORTEX_TEST_ARGS.
     for spec in "vecadd:-n16" "sgemm:-n4"; do
         app="${spec%%:*}"
@@ -173,7 +187,7 @@ gem5()
         VORTEX_TEST_BIN=$app \
         VORTEX_TEST_ARGS=$args \
             timeout 120 $GEM5_HOME/build/X86/gem5.opt \
-            ci/gem5_test_vortex_app.py
+            ci/gem5_run_app.py
     done
 
     # ARM matrix (opt-in). The device library (libvortex-gem5.so) is
@@ -195,11 +209,12 @@ gem5()
 
         ARM_HOST_RT_DIR=$BUILD_DIR/sw/runtime/aarch64
 
-        echo "=== gem5 ARM standalone: hello ==="
-        VORTEX_GEM5_LIB=$LIB_GEM5_DEV \
-        VORTEX_GEM5_KERNEL=$BUILD_DIR/tests/kernel/hello/hello.vxbin \
+        echo "=== gem5 ARM hostless: hello ==="
+        VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+        VORTEX_TEST_DIR=$BUILD_DIR/tests/kernel/hello \
+        VORTEX_TEST_KERNEL=hello.vxbin \
             timeout 120 $GEM5_HOME/build/ARM/gem5.opt \
-            ci/gem5_test_vortex_hello.py
+            ci/gem5_run_hostless_app.py
 
         for spec in "vecadd:-n16" "sgemm:-n4"; do
             app="${spec%%:*}"
@@ -212,7 +227,7 @@ gem5()
             VORTEX_TEST_ARGS=$args \
             VORTEX_DRIVER=gem5-aarch64 \
                 timeout 120 $GEM5_HOME/build/ARM/gem5.opt \
-                ci/gem5_test_vortex_app.py
+                ci/gem5_run_app.py
         done
     fi
 

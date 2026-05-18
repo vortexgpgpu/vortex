@@ -163,17 +163,23 @@ install location — no extra setup needed.
 
 ### By hand
 
-**Standalone** (no host CPU; kernel preloaded via SimObject parameter):
+**Hostless** (no host CPU; kernel preloaded via SimObject parameter):
 
 ```bash
-VORTEX_GEM5_LIB=$(pwd)/sim/simx/libvortex-gem5.so \
-VORTEX_GEM5_KERNEL=$(pwd)/tests/kernel/hello/hello.vxbin \
-    $GEM5_HOME/build/X86/gem5.opt ci/gem5_test_vortex_hello.py
+VORTEX_GEM5_DEV_LIB=$(pwd)/sim/simx/libvortex-gem5.so \
+VORTEX_TEST_DIR=$(pwd)/tests/kernel/hello \
+VORTEX_TEST_KERNEL=hello.vxbin \
+    $GEM5_HOME/build/X86/gem5.opt ci/gem5_run_hostless_app.py
 ```
+
+`VORTEX_TEST_KERNEL` defaults to `kernel.vxbin`, so any standard
+regression test's kernel can be driven hostless without the host
+binary — e.g. `VORTEX_TEST_DIR=$(pwd)/tests/regression/vecadd
+ci/gem5_run_hostless_app.py`.
 
 **End-to-end** — any standard Vortex regression test (host binary +
 kernel.vxbin) runs through the generic
-[`ci/gem5_test_vortex_app.py`](../ci/gem5_test_vortex_app.py) runner.
+[`ci/gem5_run_app.py`](../ci/gem5_run_app.py) runner.
 
 ```bash
 # vecadd
@@ -182,7 +188,7 @@ VORTEX_GEM5_HOST_RT_DIR=$(pwd)/sw/runtime \
 VORTEX_TEST_DIR=$(pwd)/tests/regression/vecadd \
 VORTEX_TEST_BIN=vecadd \
 VORTEX_TEST_ARGS="-n16" \
-    $GEM5_HOME/build/X86/gem5.opt ci/gem5_test_vortex_app.py
+    $GEM5_HOME/build/X86/gem5.opt ci/gem5_run_app.py
 
 # sgemm
 VORTEX_GEM5_DEV_LIB=$(pwd)/sim/simx/libvortex-gem5.so \
@@ -190,7 +196,7 @@ VORTEX_GEM5_HOST_RT_DIR=$(pwd)/sw/runtime \
 VORTEX_TEST_DIR=$(pwd)/tests/regression/sgemm \
 VORTEX_TEST_BIN=sgemm \
 VORTEX_TEST_ARGS="-n4" \
-    $GEM5_HOME/build/X86/gem5.opt ci/gem5_test_vortex_app.py
+    $GEM5_HOME/build/X86/gem5.opt ci/gem5_run_app.py
 ```
 
 Expected output ends with:
@@ -228,7 +234,7 @@ is identity-mapped (cacheable=False) so the dispatcher's PIO MMIO
 reaches the SimObject's regfile decoder.
 
 These constants are duplicated in two places — `sw/runtime/gem5/driver.h`
-and `ci/gem5_test_vortex_app.py`. If you change one, change the other.
+and `ci/gem5_run_app.py`. If you change one, change the other.
 
 ## Writing your own gem5 Python script
 
@@ -317,8 +323,8 @@ m5.simulate()
 ```
 
 Reference implementations:
-- [ci/gem5_test_vortex_hello.py](../ci/gem5_test_vortex_hello.py) — standalone Phase-3 variant (preload via `kernel=` param; no host CPU)
-- [ci/gem5_test_vortex_app.py](../ci/gem5_test_vortex_app.py) — Phase-5 e2e variant (any regression test via `VORTEX_TEST_BIN`)
+- [ci/gem5_run_hostless_app.py](../ci/gem5_run_hostless_app.py) — hostless variant (preload via `kernel=` param; no host CPU)
+- [ci/gem5_run_app.py](../ci/gem5_run_app.py) — e2e variant (any regression test via `VORTEX_TEST_BIN`)
 
 ## Load-bearing invariants — do not violate
 

@@ -16,13 +16,6 @@ CXXFLAGS += -DXLEN_$(XLEN)
 CXXFLAGS += -fPIC
 CXXFLAGS += $(CONFIGS)
 
-# OPAE-shaped MMIO constants come from the generated vortex_opae.h
-# at build/sw/ (already on the include path via -I$(ROOT_DIR)/sw).
-# vortex.cpp does `#include <vortex_opae.h>` for the AFU_IMAGE_*
-# defines. Unlike sw/runtime/opae/Makefile we do NOT call
-# afu_json_mgr — configure already generated the header from
-# vortex_opae.toml at build time.
-
 # Per-arch compiler selection. The cross-compilers are sysroot-aware
 # (Ubuntu's gcc-aarch64-linux-gnu ships the matching libstdc++); no
 # extra --sysroot flags needed.

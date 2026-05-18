@@ -622,7 +622,7 @@ CommandProcessor wiring; runnable without gem5 itself).
   HOST_ARCH switch).
 
 **Validation:**
-- Phase 3 standalone test (`ci/gem5_test_vortex_hello.py`): PASSES.
+- Hostless test (`ci/gem5_run_hostless_app.py`): PASSES.
   (No host runtime involvement.)
 - `./ci/regression.sh --gem5`: PASSES — hello + vecadd + sgemm e2e on x86.
 - `VORTEX_GEM5_ARM=1 ./ci/regression.sh --gem5`: PASSES — same 3 tests
