@@ -1,7 +1,7 @@
 # SST Integration for SimX v3 — Proposal
 
 **Date:** 2026-05-03
-**Status:** Draft
+**Status:** Implemented — note that `ci/sst_test_vortex_*.py` have been consolidated into a single generic runner [ci/sst_run_hostless_app.py](../../ci/sst_run_hostless_app.py) (parameterized by `VORTEX_TEST_DIR` + `VORTEX_TEST_KERNEL`, parallel to [ci/gem5_run_hostless_app.py](../../ci/gem5_run_hostless_app.py)). The naming reserves the `ci/sst_run_app.py` slot for a future host-CPU-driven SST integration (none today — see §3). The memHierarchy wiring described in §6 is no longer kept as a standalone test runner; the recipe stays here as documentation. References to specific `sst_test_vortex_<test>.py` filenames below are historical.
 **Author:** Blaise Tine
 **Related:**
 [simx_v3_proposal.md](simx_v3_proposal.md) (Phase 5: TLM data path),

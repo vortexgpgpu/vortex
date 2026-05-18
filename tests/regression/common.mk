@@ -83,7 +83,39 @@ CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors -Werror
 CXXFLAGS += -I$(VORTEX_HOME)/sw/runtime/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CXXFLAGS += $(CONFIGS)
 
-LDFLAGS += -L$(VORTEX_RT_LIB) -lvortex
+# HOST_ARCH selects the simulated-host compiler for the test binary
+# (the .vxbin always builds with the RISC-V toolchain regardless).
+# When non-native, the binary is suffixed (e.g. vecadd-aarch64) and
+# we link against the cross-compiled stub in $(VORTEX_RT_LIB)/$(HOST_ARCH)/.
+# Aligns with sw/runtime/{stub,gem5}/Makefile's HOST_ARCH knob; the
+# gem5 ARM e2e test path uses this to produce aarch64 binaries that
+# the simulated ARM CPU inside gem5 can execute.
+#
+# Cross-compiled ELFs embed `/lib/ld-linux-$arch.so.1` as the dynamic
+# linker (PT_INTERP). gem5 doesn't have that path on the host, but
+# it has a setInterpDir() API that prepends a sysroot to the
+# interpreter lookup — the gem5 Python config calls that when
+# DRIVER=gem5-aarch64. Keep the default INTERP here so that mechanism
+# can do the redirection cleanly. (Earlier versions used
+# `-Wl,--dynamic-linker=` to rewrite PT_INTERP, but that interacts
+# badly with setInterpDir's prepend logic.)
+HOST_ARCH ?= x86_64
+ifeq ($(HOST_ARCH),x86_64)
+    PROJECT_SUFFIX :=
+    RT_LIB_DIR := $(VORTEX_RT_LIB)
+else ifeq ($(HOST_ARCH),aarch64)
+    CXX := aarch64-linux-gnu-g++
+    PROJECT_SUFFIX := -aarch64
+    RT_LIB_DIR := $(VORTEX_RT_LIB)/aarch64
+else ifeq ($(HOST_ARCH),armhf)
+    CXX := arm-linux-gnueabihf-g++
+    PROJECT_SUFFIX := -armhf
+    RT_LIB_DIR := $(VORTEX_RT_LIB)/armhf
+else
+    $(error HOST_ARCH must be one of: x86_64, aarch64, armhf (got $(HOST_ARCH)))
+endif
+
+LDFLAGS += -L$(RT_LIB_DIR) -lvortex
 
 # Debugging
 ifdef DEBUG
@@ -106,7 +138,11 @@ endif
 
 CONFIG_STAMP = config.stamp
 
-all: $(PROJECT) kernel.vxbin kernel.dump
+# HOST_ARCH-suffixed binary name (vecadd, vecadd-aarch64, …) so
+# x86 and cross-compiled variants coexist in the same dir.
+APP := $(PROJECT)$(PROJECT_SUFFIX)
+
+all: $(APP) kernel.vxbin kernel.dump
 
 # Force rebuild when CONFIGS (defines) change between runs.
 $(CONFIG_STAMP): FORCE
@@ -146,8 +182,15 @@ kernel.elf: vx_start.o $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_
 	$(VX_CXX) $(VX_CFLAGS) vx_start.o $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@
 endif
 
-$(PROJECT): $(SRCS) $(VORTEX_RT_LIB)/libvortex.so $(CONFIG_STAMP)
+$(APP): $(SRCS) $(RT_LIB_DIR)/libvortex.so $(CONFIG_STAMP)
 	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(LDFLAGS) -o $@
+
+# Cross-compiled stub for non-native HOST_ARCH. Native (x86_64)
+# is built by $(VORTEX_RT_LIB)/libvortex.so rule below.
+ifneq ($(HOST_ARCH),x86_64)
+$(RT_LIB_DIR)/libvortex.so:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub HOST_ARCH=$(HOST_ARCH) DESTDIR=$(VORTEX_RT_LIB)
+endif
 
 run-simx: $(PROJECT) kernel.vxbin
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)

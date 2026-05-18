@@ -95,12 +95,143 @@ sst()
 
     cp sim/simx/libvortex.so $SST_ELEMENTS_HOME/lib/sst-elements-library/   # alternatively - $ sst --add-lib-path `pwd` myConfig.py
 
-    sst ci/sst_test_vortex_hello.py
-    sst ci/sst_test_vortex_fibonacci.py
-    sst ci/sst_test_vortex_vecadd.py
-    sst ci/sst_test_vortex_conform.py
+    BUILD_DIR=$(pwd)
+
+    # Hostless SST runner (ci/sst_run_hostless_app.py) parameterized
+    # by VORTEX_TEST_DIR + VORTEX_TEST_KERNEL — same shape as
+    # ci/gem5_run_hostless_app.py. SST is hostless-only today (no
+    # CPU component wired to Vortex); the ci/sst_run_app.py name
+    # slot is reserved for a future host-CPU SST integration.
+    for spec in "hello:hello.vxbin" "fibonacci:fibonacci.vxbin" \
+                "vecadd:vecadd.vxbin" "conform:conform.vxbin"; do
+        kern="${spec%%:*}"
+        vxbin="${spec#*:}"
+        echo "=== sst: $kern ==="
+        VORTEX_TEST_DIR=$BUILD_DIR/tests/kernel/$kern \
+        VORTEX_TEST_KERNEL=$vxbin \
+            sst ci/sst_run_hostless_app.py
+    done
 
     echo "sst tests done!"
+}
+
+# gem5 integration tests — see docs/proposals/gem5_v2_cp_migration_proposal.md
+# for the v2 CP-first design and docs/gem5_integration.md for the operator
+# manual. Two layers:
+#
+#   1. Phase 3 standalone: kernel preloaded via the SimObject's
+#      `kernel=` Python param; runs entirely inside the gem5 event
+#      loop, no host CPU needed. Fast smoke test for the device
+#      library wiring.
+#
+#   2. Phase 5 e2e: an x86 (or aarch64) SE-mode workload drives the
+#      device via the CP regfile (cp_mmio_*) + BAR-mapped VRAM
+#      (mem_upload through identity-mapped PIN region). The
+#      dispatcher's CP submission path handles all command building;
+#      the host runtime is a thin platform shim.
+#
+# ARM matrix is opt-in via VORTEX_GEM5_ARM=1 (needs gcc-aarch64-linux-gnu
+# installed; not part of the default hosted-runner image).
+gem5()
+{
+    echo "begin gem5 tests..."
+
+    if [ -z "$GEM5_HOME" ]; then
+        GEM5_HOME=$HOME/tools/gem5
+    fi
+    if [ ! -x "$GEM5_HOME/build/X86/gem5.opt" ]; then
+        echo "error: $GEM5_HOME/build/X86/gem5.opt not found — run ci/gem5_install.sh first"
+        exit 1
+    fi
+
+    # Build prerequisites. The host runtime is gated on HOST_ARCH;
+    # default x86 needs no cross-toolchain.
+    make -C sim/simx USE_GEM5=1
+    make -C sw/runtime/stub
+    make -C sw/runtime/gem5 HOST_ARCH=x86_64
+    make -C sw/kernel
+    make -C tests/kernel/hello
+    make -C tests/regression/vecadd
+    make -C tests/regression/sgemm
+
+    BUILD_DIR=$(pwd)
+    LIB_GEM5_DEV=$BUILD_DIR/sim/simx/libvortex-gem5.so
+    HOST_RT_DIR=$BUILD_DIR/sw/runtime
+
+    # Hostless smoke — no host CPU, kernel preloaded via SimObject param.
+    # env-vars MUST precede the binary (gem5.opt would otherwise treat
+    # them as positional args).
+    echo "=== gem5 hostless: hello ==="
+    VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+    VORTEX_TEST_DIR=$BUILD_DIR/tests/kernel/hello \
+    VORTEX_TEST_KERNEL=hello.vxbin \
+        timeout 120 $GEM5_HOME/build/X86/gem5.opt \
+        ci/gem5_run_hostless_app.py
+
+    # E2E — CP-driven path through the host runtime. Generic runner
+    # (ci/gem5_run_app.py) parameterized by VORTEX_TEST_BIN +
+    # VORTEX_TEST_ARGS. Sizes fit the 120s per-test budget
+    # (feedback_test_timeout_120s):
+    #   - vecadd -n16   small vector add
+    #   - sgemm  -n4    4x4 matrix multiply
+    # Larger sizes overrun because the simulated host CPU's CP poll
+    # loop burns gem5 wall time proportional to kernel runtime.
+    # Run on local dev box for larger sizes by overriding VORTEX_TEST_ARGS.
+    for spec in "vecadd:-n16" "sgemm:-n4"; do
+        app="${spec%%:*}"
+        args="${spec#*:}"
+        echo "=== gem5 e2e: $app $args ==="
+        VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+        VORTEX_GEM5_HOST_RT_DIR=$HOST_RT_DIR \
+        VORTEX_TEST_DIR=$BUILD_DIR/tests/regression/$app \
+        VORTEX_TEST_BIN=$app \
+        VORTEX_TEST_ARGS=$args \
+            timeout 120 $GEM5_HOME/build/X86/gem5.opt \
+            ci/gem5_run_app.py
+    done
+
+    # ARM matrix (opt-in). The device library (libvortex-gem5.so) is
+    # always x86 — gem5.opt is an x86 binary regardless of which
+    # simulated ISA it models. Only the simulated host's ISA changes.
+    if [ -n "$VORTEX_GEM5_ARM" ]; then
+        if [ ! -x "$GEM5_HOME/build/ARM/gem5.opt" ]; then
+            echo "error: $GEM5_HOME/build/ARM/gem5.opt not found"
+            exit 1
+        fi
+
+        # Cross-compile the host runtime, stub, and test binaries for
+        # aarch64. All outputs land in $arch/ subdirs alongside the
+        # native x86 builds so they coexist cleanly.
+        make -C sw/runtime/stub HOST_ARCH=aarch64
+        make -C sw/runtime/gem5 HOST_ARCH=aarch64
+        make -C tests/regression/vecadd HOST_ARCH=aarch64
+        make -C tests/regression/sgemm  HOST_ARCH=aarch64
+
+        ARM_HOST_RT_DIR=$BUILD_DIR/sw/runtime/aarch64
+
+        echo "=== gem5 ARM hostless: hello ==="
+        VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+        VORTEX_TEST_DIR=$BUILD_DIR/tests/kernel/hello \
+        VORTEX_TEST_KERNEL=hello.vxbin \
+            timeout 120 $GEM5_HOME/build/ARM/gem5.opt \
+            ci/gem5_run_hostless_app.py
+
+        for spec in "vecadd:-n16" "sgemm:-n4"; do
+            app="${spec%%:*}"
+            args="${spec#*:}"
+            echo "=== gem5 ARM e2e: $app $args ==="
+            VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+            VORTEX_GEM5_HOST_RT_DIR=$ARM_HOST_RT_DIR \
+            VORTEX_TEST_DIR=$BUILD_DIR/tests/regression/$app \
+            VORTEX_TEST_BIN=$app-aarch64 \
+            VORTEX_TEST_ARGS=$args \
+            VORTEX_DRIVER=gem5-aarch64 \
+                timeout 120 $GEM5_HOME/build/ARM/gem5.opt \
+                ci/gem5_run_app.py
+        done
+    fi
+
+    echo "gem5 tests done!"
 }
 
 mpi()
@@ -1047,7 +1178,7 @@ hip()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1138,6 +1269,9 @@ while [ "$1" != "" ]; do
                 ;;
         --sst )
                 tests+=("sst")
+                ;;
+        --gem5 )
+                tests+=("gem5")
                 ;;
         --dtm )
                 tests+=("dtm")

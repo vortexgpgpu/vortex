@@ -40,6 +40,11 @@ public:
 
   int run();
 
+  // Single-cycle step; see Processor::cycle() doc. Lazily initializes
+  // (resets + starts KMU) on the first call after construction or
+  // after reset() has been invoked.
+  bool cycle();
+
   int dcr_write(uint32_t addr, uint32_t value);
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
@@ -47,6 +52,8 @@ public:
   PerfStats perf_stats() const;
 
   Kmu& kmu()       { return *kmu_; }
+
+  Memory* memsim() { return memsim_.get(); }
 
   bool any_running() const;
 
@@ -67,6 +74,10 @@ private:
   uint64_t perf_mem_writes_;
   uint64_t perf_mem_latency_;
   uint64_t perf_mem_pending_reads_;
+  // Tracks whether cycle() has done its first-call init (reset +
+  // kmu_->start()). reset() clears it so a back-to-back kernel launch
+  // via cycle() re-dispatches the KMU.
+  bool is_cycle_initialized_;
 };
 
 }

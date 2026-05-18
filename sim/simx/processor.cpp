@@ -231,6 +231,22 @@ void ProcessorImpl::reset() {
   perf_mem_writes_ = 0;
   perf_mem_latency_ = 0;
   perf_mem_pending_reads_ = 0;
+  is_cycle_initialized_ = false;
+}
+
+bool ProcessorImpl::cycle() {
+  // Lazy first-call init mirrors run()'s top-of-loop sequence so the
+  // external driver doesn't need to choreograph reset + kmu start
+  // separately. reset() clears is_cycle_initialized_ so a back-to-back
+  // kernel launch re-dispatches.
+  if (!is_cycle_initialized_) {
+    this->reset();
+    kmu_->start();
+    is_cycle_initialized_ = true;
+  }
+  SimPlatform::instance().tick();
+  perf_mem_latency_ += perf_mem_pending_reads_;
+  return this->any_running();
 }
 
 int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
@@ -331,6 +347,14 @@ int Processor::run() {
     }
   }
   return -1;
+}
+
+bool Processor::cycle() {
+  return impl_->cycle();
+}
+
+Memory* Processor::memsim() {
+  return impl_->memsim();
 }
 
 int Processor::dcr_write(uint32_t addr, uint32_t value) {

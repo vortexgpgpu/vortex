@@ -20,6 +20,7 @@
 namespace vortex {
 
 class RAM;
+class Memory;
 class ProcessorImpl;
 
 class Processor {
@@ -33,11 +34,28 @@ public:
 
   int run();
 
+  // Advance the simulator by one cycle. On the first call after a
+  // reset() (or on the very first call), the KMU is started so warps
+  // dispatch into the cluster. Returns true while work remains
+  // (clusters running or channels carrying packets); false once the
+  // program has finished and the channels have drained.
+  //
+  // Used by external simulators that drive Vortex's clock from their
+  // own event loop (SST in sim/simx/sst/, gem5 in sim/simx/gem5/).
+  bool cycle();
+
   void start_kmu();
 
   bool any_running() const;
 
   class Core* get_first_core() const;
+
+  // Returns the processor's memory module. Used by external simulators
+  // (SST, gem5) to install a pre-send hook on Memory::tick that mirrors
+  // accepted requests to their own memory hierarchy for timing
+  // observability. The local data path stays in Vortex's RAM — this is
+  // a peek, not a substitute.
+  Memory* memsim();
 
   int dcr_write(uint32_t addr, uint32_t value);
 

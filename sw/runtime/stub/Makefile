@@ -1,5 +1,13 @@
 include ../common.mk
 
+# HOST_ARCH switch — when building for a non-native simulated host
+# (e.g. running x86 gem5 with an aarch64 simulated CPU), select the
+# matching cross-compiler. Aligns with sw/runtime/gem5/Makefile's
+# HOST_ARCH knob; cross-arch builds land in $(DESTDIR)/$(HOST_ARCH)/
+# so the same dlopen target name (libvortex.so) can coexist with the
+# native build in $(DESTDIR)/.
+HOST_ARCH ?= x86_64
+
 DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/sw/runtime/stub
@@ -13,8 +21,21 @@ LDFLAGS += -shared -pthread -ldl -Wl,-soname,libvortex.so
 # itself lives in (so the dlopen at vx_device_open time finds them).
 LDFLAGS += -Wl,-rpath,'$$ORIGIN'
 
+ifeq ($(HOST_ARCH),x86_64)
+    CXX := g++
+    OUT_DIR := $(DESTDIR)
+else ifeq ($(HOST_ARCH),aarch64)
+    CXX := aarch64-linux-gnu-g++
+    OUT_DIR := $(DESTDIR)/aarch64
+else ifeq ($(HOST_ARCH),armhf)
+    CXX := arm-linux-gnueabihf-g++
+    OUT_DIR := $(DESTDIR)/armhf
+else
+    $(error HOST_ARCH must be one of: x86_64, aarch64, armhf (got $(HOST_ARCH)))
+endif
+
 # Dispatcher library = vortex2.h runtime (C++ classes) +
-#                      vortex_legacy.cpp wrappers (vortex.h -> vortex2.h) +
+#                      legacy_runtime.cpp wrappers (vortex.h -> vortex2.h) +
 #                      legacy utility helpers +
 #                      thin stub/vortex.cpp glue (currently just for the
 #                      build target — the real entry points live in
@@ -41,12 +62,13 @@ endif
 
 PROJECT := libvortex.so
 
-all: $(DESTDIR)/$(PROJECT)
+all: $(OUT_DIR)/$(PROJECT)
 
-$(DESTDIR)/$(PROJECT): $(SRCS)
+$(OUT_DIR)/$(PROJECT): $(SRCS)
+	@mkdir -p $(OUT_DIR)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 clean:
-	rm -f $(DESTDIR)/$(PROJECT)
+	rm -f $(DESTDIR)/$(PROJECT) $(DESTDIR)/aarch64/$(PROJECT) $(DESTDIR)/armhf/$(PROJECT)
 
 .PHONY: all clean
