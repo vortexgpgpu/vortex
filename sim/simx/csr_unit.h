@@ -64,6 +64,11 @@ private:
 #ifdef EXT_RASTER_ENABLE
   std::array<std::array<RasterCsrs, NUM_THREADS>, NUM_WARPS> raster_csrs_{};
 #endif
+#ifdef VM_ENABLE
+  // Mirror of the kernel-visible SATP CSR. Forwarded to Core::set_satp
+  // on write so the per-core MMU updates its translation root.
+  uint64_t satp_ = 0;
+#endif
 };
 
 } // namespace vortex

@@ -169,7 +169,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // ------------------------------------------------------------------------
 
     VX_elastic_buffer #(
-        .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH),
+        .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH_BASE),
         .SIZE    (2),
         .OUT_REG (1) // external bus should be registered
     ) req_buf (

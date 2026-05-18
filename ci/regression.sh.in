@@ -460,28 +460,35 @@ vm(){
     echo "begin vm tests..."
 
     make -C sw/kernel
-    make -C sw/runtime/stub
-    make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/simx
-    make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/rtlsim
-    make -C tests/regression/sgemm run-simx
-    make -C tests/regression/sgemm run-rtlsim
-    make -C tests/regression/diverge run-simx
-    make -C tests/regression/diverge run-rtlsim
-    make -C tests/regression/dogfood run-simx
-    make -C tests/regression/dogfood run-rtlsim
-    make -C tests/regression/raycast run-simx
-    make -C tests/regression/raycast run-rtlsim
 
-    make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/simx
-    make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim
-    make -C tests/regression/sgemm run-simx
-    make -C tests/regression/sgemm run-rtlsim
-    make -C tests/regression/diverge run-simx
-    make -C tests/regression/diverge run-rtlsim
-    make -C tests/regression/dogfood run-simx
-    make -C tests/regression/dogfood run-rtlsim
-    make -C tests/regression/raycast run-simx
-    make -C tests/regression/raycast run-rtlsim
+    # Pass 1: default VM mode (SV32 on rv32, SV39 on rv64). VM_ENABLE must
+    # reach the stub (VMManager bodies are #ifdef VM_ENABLE), both sim
+    # drivers, AND each test invocation (test app rebuilds its own
+    # vx_start.S which gates `csrw satp` on VM_ENABLE).
+    CONFIGS="-DVM_ENABLE" make -C sw/runtime/stub clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/stub
+    CONFIGS="-DVM_ENABLE" make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/simx
+    CONFIGS="-DVM_ENABLE" make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE" make -C sw/runtime/rtlsim
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/sgemm run-simx
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/sgemm run-rtlsim
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/diverge run-simx
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/diverge run-rtlsim
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/dogfood run-simx
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/dogfood run-rtlsim
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/raycast run-simx
+    CONFIGS="-DVM_ENABLE" make -C tests/regression/raycast run-rtlsim
+
+    # Pass 2: BARE mode (identity translation only, no PTW). Same propagation.
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/stub clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/stub
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/simx
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/sgemm run-simx
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/sgemm run-rtlsim
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/diverge run-simx
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/diverge run-rtlsim
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/dogfood run-simx
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/dogfood run-rtlsim
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/raycast run-simx
+    CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C tests/regression/raycast run-rtlsim
 
     echo "vm tests done!"
 }

@@ -14,8 +14,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <VX_config.h>
-#include <mem.h>
 
 namespace vortex {
 

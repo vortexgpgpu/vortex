@@ -224,6 +224,9 @@ public:
   uint8_t get_mode();
   uint64_t get_base_ppn();
   void set_satp(uint64_t satp);
+  // Public translator entry point used by simx Core::translate to feed
+  // translated PAs into LsuReq / icache MemReq.
+  uint64_t vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type);
 #else
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags);
 #endif
@@ -319,7 +322,6 @@ private:
   std::pair<bool, uint64_t> tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits);
 
   bool need_trans(uint64_t dev_pAddr);
-  uint64_t vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type);
 
   uint64_t get_pte_address(uint64_t base_ppn, uint64_t vpn);
   std::pair<uint64_t, uint8_t> page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t* size_bits);

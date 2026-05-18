@@ -15,6 +15,7 @@ SRC_DIR := $(VORTEX_HOME)/sw/runtime/stub
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
 CXXFLAGS += -fPIC
+CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -shared -pthread -ldl -Wl,-soname,libvortex.so
 # Look for libvortex-<NAME>.so siblings in the same directory libvortex.so
@@ -40,6 +41,11 @@ endif
 #                      thin stub/vortex.cpp glue (currently just for the
 #                      build target — the real entry points live in
 #                      common/).
+#
+# vm.cpp added so VMManager symbols are exported by libvortex.so and
+# consumed by both simx and rtlsim runtime shims via -lvortex (no
+# per-driver duplication). Symbols stay unresolved here until a sim
+# driver is dlopen'd at runtime — same pattern as dcr_read/mem_alloc.
 SRCS := \
 	$(SRC_DIR)/vortex.cpp \
 	$(RT_COMMON_DIR)/vx_result.cpp \
@@ -51,7 +57,8 @@ SRCS := \
 	$(RT_COMMON_DIR)/legacy_runtime.cpp \
 	$(RT_COMMON_DIR)/legacy_utils.cpp \
 	$(RT_COMMON_DIR)/legacy_perf.cpp \
-	$(RT_COMMON_DIR)/utils.cpp
+	$(RT_COMMON_DIR)/utils.cpp \
+	$(RT_COMMON_DIR)/vm.cpp
 
 # Debugging
 ifdef DEBUG
