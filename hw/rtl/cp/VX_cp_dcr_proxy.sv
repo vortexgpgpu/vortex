@@ -57,10 +57,17 @@ module VX_cp_dcr_proxy
 
   state_e state;
   logic   pending_is_read;
-  logic [`VX_DCR_DATA_BITS-1:0] rsp_data_r;
+  // Latch the entire DCR request payload on grant. cmd is only valid
+  // during the grant cycle (granted_dcr_cmd in VX_cp_core is a
+  // combinational mux of bid_dcr.cmd[i] gated on dcr_grant[i]; the
+  // grant drops the cycle after — combinational use in S_REQ would
+  // sample zeros and silently write DCR 0 with data 0).
+  logic [`VX_DCR_ADDR_BITS-1:0]  pending_addr;
+  logic [`VX_DCR_DATA_BITS-1:0]  pending_data;
+  logic [`VX_DCR_DATA_BITS-1:0]  rsp_data_r;
 
-  // Extract address / data / rw from cmd. CMD_DCR_WRITE: arg1 = value;
-  // CMD_DCR_READ: arg1 = host_writeback_addr (not driven on the DCR bus).
+  // Combinational decode of the in-flight cmd (only valid during grant
+  // cycle; latched into pending_* on the same edge that S_IDLE → S_REQ).
   wire                          is_read    = (cmd.hdr.opcode == 8'(CMD_DCR_READ));
   wire [`VX_DCR_ADDR_BITS-1:0]  cmd_addr   = cmd.arg0[`VX_DCR_ADDR_BITS-1:0];
   wire [`VX_DCR_DATA_BITS-1:0]  cmd_data   = cmd.arg1[`VX_DCR_DATA_BITS-1:0];
@@ -69,6 +76,8 @@ module VX_cp_dcr_proxy
     if (reset) begin
       state           <= S_IDLE;
       pending_is_read <= 1'b0;
+      pending_addr    <= '0;
+      pending_data    <= '0;
       rsp_data_r      <= '0;
     end else begin
       case (state)
@@ -76,6 +85,8 @@ module VX_cp_dcr_proxy
           if (grant) begin
             state           <= S_REQ;
             pending_is_read <= is_read;
+            pending_addr    <= cmd_addr;
+            pending_data    <= cmd_data;
           end
         end
         S_REQ: begin
@@ -103,9 +114,9 @@ module VX_cp_dcr_proxy
 
   always_comb begin
     dcr_req_valid = (state == S_REQ);
-    dcr_req_rw    = !is_read;
-    dcr_req_addr  = cmd_addr;
-    dcr_req_data  = cmd_data;
+    dcr_req_rw    = !pending_is_read;
+    dcr_req_addr  = pending_addr;
+    dcr_req_data  = pending_data;
     done          = (state == S_DONE);
     last_rsp_data = rsp_data_r;
   end
