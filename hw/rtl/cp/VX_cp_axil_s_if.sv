@@ -9,7 +9,7 @@
 // ============================================================================
 // VX_cp_axil_s_if.sv — AXI4-Lite slave interface bundle used inside
 // rtl/cp/. The host's control plane drives this; VX_cp_axil_regfile is
-// the (sole, in v1) slave inside the CP.
+// the only slave inside the CP.
 //
 // AXI4-Lite has no burst, ID, or last signals — just AW/W/B and AR/R
 // with 32-bit data and a byte enable. Single-beat per transaction.

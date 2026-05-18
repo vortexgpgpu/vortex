@@ -309,11 +309,10 @@ extern "C" int vx_dcr_write(vx_device_h hdevice, uint32_t addr,
 extern "C" int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t tag,
                            uint32_t* value) {
     if (!hdevice) return -1;
-    // The legacy 'tag' field was used by the simx perf-counter scheme to
-    // pack mpm_class+csr_id+core_id. vortex2's enqueue_dcr_read API doesn't
-    // surface tag — for the tag-aware legacy path, bypass the queue and
-    // submit directly through the CP (which DOES forward tag via cmd.arg1
-    // → dcr_req_data, matching the legacy MMIO_DCR_ADDR+4 semantics).
+    // The legacy `tag` field is used by the simx perf-counter scheme to
+    // pack mpm_class+csr_id+core_id and matches the data driven onto the
+    // DCR bus. vortex2's enqueue_dcr_read API does not surface tag, so
+    // submit directly through the CP, which forwards it via cmd.arg1.
     Device* dev = to_device(hdevice);
     return to_int(dev->cp_submit_dcr_read(addr, tag, value));
 }

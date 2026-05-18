@@ -11,8 +11,10 @@ namespace vx {
 
 Event::Event(Device* dev, bool is_user)
     : device_(dev), is_user_(is_user) {
-    // User events start in QUEUED state (signaled by vx_user_event_signal).
-    // Non-user events are bound by Queue and pre-completed in v1 (pre-CP).
+    // Both user events and runtime-managed events are created in the
+    // QUEUED state; user events transition only on vx_user_event_signal,
+    // runtime-managed events transition when the dispatcher's worker
+    // calls complete().
     status_ = VX_EVENT_STATUS_QUEUED;
 }
 

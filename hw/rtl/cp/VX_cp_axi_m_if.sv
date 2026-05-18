@@ -15,9 +15,9 @@
 // the single upstream master that VX_cp_core exposes on its `axi_m` port.
 //
 // The bundle deliberately omits the optional AW/AR sideband signals
-// (LOCK / CACHE / PROT / QOS / REGION) that v1 doesn't drive — they are
-// tied off at the cp_core boundary to whatever value the upstream XRT
-// shell expects (typically all zero, write-allocate cache attributes).
+// (LOCK / CACHE / PROT / QOS / REGION); they are tied off at the
+// cp_core boundary to whatever value the upstream shell expects
+// (typically all zero, write-allocate cache attributes).
 // ============================================================================
 
 interface VX_cp_axi_m_if

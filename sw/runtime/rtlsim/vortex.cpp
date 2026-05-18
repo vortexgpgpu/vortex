@@ -258,9 +258,10 @@ public:
   }
 
   // ----- CP MMIO surface -----
-  // rtlsim has no hardware CP — we provide the same regfile surface
-  // through the functional CommandProcessor C++ model. Phase D will
-  // start routing the dispatcher's launches through this path.
+  // rtlsim has no hardware CP; the regfile surface is provided by a
+  // functional CommandProcessor C++ model. A bounded tick burst around
+  // each MMIO transaction keeps the CP responsive without a dedicated
+  // simulation thread.
   int cp_mmio_write(uint32_t off, uint32_t value) {
     cp_.mmio_write(off, value);
     for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
@@ -289,9 +290,8 @@ private:
       processor_.dcr_write(addr, value);
     };
     h.vortex_dcr_read = [this](uint32_t addr, uint32_t tag) -> uint32_t {
-      // Match the legacy dcr_read pattern: ensure prior run is done so
-      // we don't race processor_'s Verilator state against a background
-      // run() thread.
+      // Wait for any background processor_.run() to finish so dcr_read
+      // does not race the Verilator state.
       if (future_.valid()) future_.wait();
       uint32_t v = 0;
       processor_.dcr_read(addr, tag, &v);

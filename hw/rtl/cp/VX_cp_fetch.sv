@@ -4,34 +4,30 @@
 `include "VX_define.vh"
 
 // ============================================================================
-// VX_cp_fetch — per-CPE ring-buffer fetcher (parent §6.7 / RTL impl §6).
+// VX_cp_fetch — per-CPE ring-buffer fetcher.
 //
 // One instance per VX_cp_engine. Reads 64 B cache lines from the host-
-// pinned ring buffer over an AXI4 master sub-port (the per-CPE input
-// to VX_cp_axi_xbar), decodes them with an embedded VX_cp_unpack, and
-// streams the decoded cmd_t records one at a time to its CPE's
-// cmd_in port.
+// pinned ring buffer over an AXI4 master sub-port (the per-CPE input to
+// VX_cp_axi_xbar), decodes them with an embedded VX_cp_unpack, and streams
+// the decoded cmd_t records one at a time to its CPE's cmd_in port.
 //
 // FSM:
-//   S_IDLE         : head < tail → S_ISSUE_AR
-//                    head == tail → wait (host hasn't published more)
-//   S_ISSUE_AR     : drive AR with addr = ring_base + (head & mask),
-//                    arlen=0 (single 64 B beat), arsize=6, arburst=INCR
-//                    → S_WAIT_R on arready
-//   S_WAIT_R       : wait for rvalid; latch rdata into cl_data_r
-//                    → S_EMIT on rvalid && rlast
-//   S_EMIT         : present cmds[slot]; on cmd_out_ready advance slot.
-//                    When slot == cmd_count - 1: head += 64, → S_IDLE
-//                    Pure-padding lines (cmd_count == 0) skip directly
-//                    to head advance + IDLE.
+//   S_IDLE       : head < tail → S_ISSUE_AR
+//                  head == tail → wait (host hasn't published more)
+//   S_ISSUE_AR   : drive AR with addr = ring_base + (head & mask),
+//                  arlen=0 (single 64 B beat), arsize=6, arburst=INCR
+//                  → S_WAIT_R on arready
+//   S_WAIT_R     : wait for rvalid; latch rdata into cl_data_r
+//                  → S_EMIT on rvalid && rlast
+//   S_EMIT       : present cmds[slot]; on cmd_out_ready advance slot.
+//                  When slot == cmd_count - 1: head += 64, → S_IDLE
+//                  Pure-padding lines (cmd_count == 0) skip directly to
+//                  head advance + IDLE.
 //
-// Notes:
-//   - v1 issues a single-beat 512 b AR (one cache line). Multi-CL
-//     prefetch can come later; the engine processes one command per
-//     cycle so single-CL is rarely a throughput bottleneck.
-//   - The ring is `1 << ring_size_log2` bytes; head/tail are byte
-//     offsets that wrap via ring_size_mask. Tail is monotonic from the
-//     host's perspective; we don't watch for wraparound here.
+// Issues a single-beat 512 b AR (one cache line) per ring transaction.
+// The ring is `1 << ring_size_log2` bytes; head/tail are byte offsets
+// that wrap via ring_size_mask. Tail is monotonic from the host's
+// perspective; this fetcher does not watch for wraparound.
 // ============================================================================
 
 module VX_cp_fetch
@@ -77,7 +73,6 @@ module VX_cp_fetch
     .cmds      (cmds)
   );
 
-  // ---- FSM ----
   typedef enum logic [1:0] { S_IDLE, S_ISSUE_AR, S_WAIT_R, S_EMIT } state_e;
   state_e state;
 

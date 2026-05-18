@@ -5,18 +5,18 @@
 
 // ============================================================================
 // VX_cp_dcr_proxy — DCR request/response gateway between the CP and Vortex.
-// Owned by the DCR resource arbiter (parent §6.4 / RTL impl §11).
+// Owned by the DCR resource arbiter.
 //
 // For CMD_DCR_WRITE (cmd.arg0 = dcr_addr, cmd.arg1 = dcr_value):
-//   IDLE → REQ_WRITE (drive dcr_req with rw=1 until ready) → DONE → IDLE.
+//   IDLE → REQ (drive dcr_req with rw=1) → DONE → IDLE.
 //
-// For CMD_DCR_READ (cmd.arg0 = dcr_addr, cmd.arg1 = host_writeback_addr):
-//   IDLE → REQ_READ (drive dcr_req with rw=0 until ready) → WAIT_RSP
-//        (latch dcr_rsp_data when valid) → WRITEBACK_HOST → DONE → IDLE.
+// For CMD_DCR_READ (cmd.arg0 = dcr_addr):
+//   IDLE → REQ (drive dcr_req with rw=0) → WAIT_RSP (latch dcr_rsp_data
+//        when valid) → DONE → IDLE.
 //
-// The WRITEBACK_HOST step requires the AXI master and is deferred to
-// the next commit; for now CMD_DCR_READ completes after WAIT_RSP and
-// publishes the read value on `last_rsp_data` for the engine to capture.
+// The most-recent read response is published on `last_rsp_data` and is
+// also exposed on the AXI-Lite regfile so the host can poll it after
+// observing the seqnum advance.
 // ============================================================================
 
 module VX_cp_dcr_proxy
@@ -57,17 +57,14 @@ module VX_cp_dcr_proxy
 
   state_e state;
   logic   pending_is_read;
-  // Latch the entire DCR request payload on grant. cmd is only valid
-  // during the grant cycle (granted_dcr_cmd in VX_cp_core is a
-  // combinational mux of bid_dcr.cmd[i] gated on dcr_grant[i]; the
-  // grant drops the cycle after — combinational use in S_REQ would
-  // sample zeros and silently write DCR 0 with data 0).
+  // The full DCR payload is latched on grant: granted_dcr_cmd is a
+  // combinational mux gated on the arbiter's grant pulse, which drops
+  // the cycle after, so any downstream state that consumes cmd fields
+  // must capture them on the same edge as the IDLE → REQ transition.
   logic [`VX_DCR_ADDR_BITS-1:0]  pending_addr;
   logic [`VX_DCR_DATA_BITS-1:0]  pending_data;
   logic [`VX_DCR_DATA_BITS-1:0]  rsp_data_r;
 
-  // Combinational decode of the in-flight cmd (only valid during grant
-  // cycle; latched into pending_* on the same edge that S_IDLE → S_REQ).
   wire                          is_read    = (cmd.hdr.opcode == 8'(CMD_DCR_READ));
   wire [`VX_DCR_ADDR_BITS-1:0]  cmd_addr   = cmd.arg0[`VX_DCR_ADDR_BITS-1:0];
   wire [`VX_DCR_DATA_BITS-1:0]  cmd_data   = cmd.arg1[`VX_DCR_DATA_BITS-1:0];
@@ -90,9 +87,8 @@ module VX_cp_dcr_proxy
           end
         end
         S_REQ: begin
-          // In this DCR bus model the request is consumed in one cycle
-          // (req_valid handshakes with the Vortex DCR arbiter combinationally;
-          // there is no req_ready backpressure in v1).
+          // The Vortex DCR bus consumes the request in a single cycle
+          // (req_valid handshakes combinationally; no req_ready backpressure).
           if (pending_is_read)
             state <= S_WAIT_RSP;
           else

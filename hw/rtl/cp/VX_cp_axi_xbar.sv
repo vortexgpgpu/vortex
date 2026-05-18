@@ -5,31 +5,28 @@
 
 // ============================================================================
 // VX_cp_axi_xbar — fans N_SOURCES internal AXI4 sub-masters into the
-// single upstream AXI master exposed by VX_cp_core (parent §6.4 /
-// RTL impl §15).
+// single upstream AXI master exposed by VX_cp_core.
 //
-// Sources: per-CPE fetches + DMA + event_unit + completion + profiling.
-// In v1 the topology is N_SOURCES = NUM_QUEUES + 4. Each source gets
-// a unique TID prefix (the high bits of arid / awid); responses are
-// routed back to the source by inspecting the high bits of rid / bid.
+// Sources: per-CPE fetches + DMA + completion (and, optionally, event_unit
+// + profiling). Each source gets a unique TID prefix in the high bits of
+// arid / awid; responses are routed back by inspecting the same bits on
+// rid / bid.
 //
 // Arbitration:
-//   - AR channel: per-cycle round-robin among sources that have
-//     arvalid asserted. Single grant per cycle.
+//   - AR channel: per-cycle round-robin among sources asserting arvalid.
+//     Single grant per cycle.
 //   - AW channel: same.
-//   - W channel: must FOLLOW the AW grant in lockstep — AXI4 mandates
-//     that W beats for a write transaction arrive in AW issue order.
-//     We track the most-recent AW grant in `aw_grant_r` and route W
-//     from that source until wlast.
+//   - W channel: must follow the AW grant in lockstep — AXI4 requires W
+//     beats arrive in AW issue order. We track the most-recent AW grant
+//     and route W from that source until wlast.
 //   - R channel: routed by rid[ID_W-1:SUB_ID_W] back to the source.
 //   - B channel: routed by bid[ID_W-1:SUB_ID_W] back to the source.
 //
-// TID layout (parent §15):
-//   [ID_W-1 : SUB_ID_W]    = source index (this is what the xbar
-//                            sets/inspects)
-//   [SUB_ID_W-1 : 0]       = sub-tag (each source uses these as it
-//                            sees fit — fetch ignores, DMA uses for
-//                            multi-burst tracking, etc.)
+// TID layout:
+//   [ID_W-1 : SUB_ID_W]    = source index (managed by the xbar)
+//   [SUB_ID_W-1 : 0]       = sub-tag (each source uses these as it sees
+//                            fit — fetch ignores; DMA uses for multi-burst
+//                            tracking; etc.)
 // ============================================================================
 
 module VX_cp_axi_xbar

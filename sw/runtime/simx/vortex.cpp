@@ -250,23 +250,16 @@ public:
   }
 
   // ----- CP MMIO surface -----
-  // simx has no hardware CP — we provide the same regfile surface via
-  // a functional CommandProcessor C++ model. Any commands that get
-  // posted to the ring will be processed when the dispatcher starts
-  // using the CP path (Phase D); for now this just satisfies the
-  // callback contract.
+  // simx has no hardware CP; the regfile surface is provided by a
+  // functional CommandProcessor C++ model. A bounded tick burst around
+  // each MMIO transaction keeps the CP responsive without a dedicated
+  // simulation thread.
   int cp_mmio_write(uint32_t off, uint32_t value) {
     cp_.mmio_write(off, value);
-    // Drain a few ticks so freshly-committed Q_TAIL gets serviced. Each
-    // call to mmio_write is the host's signal that it might have changed
-    // CP state; a small tick budget here keeps the CP responsive without
-    // a dedicated sim thread.
     for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
     return 0;
   }
   int cp_mmio_read(uint32_t off, uint32_t* value) {
-    // A few ticks before the read so seqnum has a chance to catch up if
-    // the host is polling for completion.
     for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
     *value = cp_.mmio_read(off);
     return 0;
@@ -289,6 +282,8 @@ private:
       processor_.dcr_write(addr, value);
     };
     h.vortex_dcr_read = [this](uint32_t addr, uint32_t tag) -> uint32_t {
+      // Wait for any background processor_.run() to finish so dcr_read
+      // does not race the Verilator state.
       if (future_.valid()) future_.wait();
       uint32_t v = 0;
       processor_.dcr_read(addr, tag, &v);

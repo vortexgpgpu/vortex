@@ -62,17 +62,15 @@ namespace vx {
 
 Device::Device(std::unique_ptr<Platform> plat)
     : platform_(std::move(plat)), cycle_freq_hz_(0) {
-    // Future CP-aware backends will report a real cycle frequency; v1 uses 0
-    // and the legacy ns conversion path treats 0 as "use wall clock".
+    // cycle_freq_hz_=0 tells the ns conversion path to use the wall clock.
 }
 
 Device::~Device() {
-    // Drop any outstanding default-queue / last-event the legacy wrapper
-    // accumulated.
+    // Release whatever default-queue / last-event the legacy wrapper holds.
     if (legacy_last_)   { legacy_last_->release();   legacy_last_   = nullptr; }
     if (legacy_q_)      { legacy_q_->release();      legacy_q_      = nullptr; }
-    // Queues / buffers are torn down by their own refcount path; this just
-    // detaches the device backlinks.
+    // Queues / buffers are torn down by their own refcount path; this
+    // just detaches the device backlinks.
     std::lock_guard<std::mutex> g(mu_);
     queues_.clear();
     buffers_.clear();
@@ -80,7 +78,7 @@ Device::~Device() {
 
 vx_result_t Device::open(uint32_t index, Device** out) {
     if (!out) return VX_ERR_INVALID_VALUE;
-    if (index != 0) return VX_ERR_INVALID_VALUE;   // v1: one device per backend
+    if (index != 0) return VX_ERR_INVALID_VALUE;   // one device per backend
 
     auto r = load_backend_once();
     if (r != VX_SUCCESS) return r;
@@ -101,14 +99,14 @@ vx_result_t Device::open(uint32_t index, Device** out) {
 }
 
 // ============================================================================
-// Command Processor submission path (Phase C of cp_pure_v2_callbacks_proposal).
-// One source of truth for the CP wire protocol — every backend goes through
-// this code via platform()->cp_mmio_*  +  platform()->mem_upload.
+// Command Processor submission path. One source of truth for the CP wire
+// protocol — every backend goes through this code via
+// platform()->cp_mmio_*  +  platform()->mem_upload.
 // ============================================================================
 
 namespace {
 // CP regfile offsets (CP-internal; backends translate to physical addrs).
-// Mirrors VX_cp_axil_regfile §17.4.
+// Matches VX_cp_axil_regfile.
 constexpr uint32_t CP_REG_CTRL          = 0x000;
 constexpr uint32_t CP_Q_RING_BASE_LO    = 0x100;
 constexpr uint32_t CP_Q_RING_BASE_HI    = 0x104;
@@ -199,11 +197,11 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
 }
 
 vx_result_t Device::cp_submit_dcr_write(uint32_t addr, uint32_t value) {
-    // CMD_DCR_WRITE on-wire layout (per VX_cp_pkg.sv cmd_t + cmd_size=20):
-    //   bytes 0..3  header  { opcode=0x04, flags=0, reserved=0 }
-    //   bytes 4..11 arg0    DCR addr
-    //   bytes 12..19 arg1   DCR value
-    // Pad rest of CL to 0 (NOP sentinel for unpack).
+    // CMD_DCR_WRITE on-wire layout (cmd_size=20):
+    //   bytes 0..3   header  { opcode=0x04, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    DCR addr
+    //   bytes 12..19 arg1    DCR value
+    // Rest of CL is padded with zeros (NOP sentinel for the unpacker).
     uint8_t cl[CP_CL_BYTES] = {0};
     uint32_t* p32 = reinterpret_cast<uint32_t*>(cl);
     p32[0] = CP_OPCODE_DCR_WR;
@@ -214,8 +212,8 @@ vx_result_t Device::cp_submit_dcr_write(uint32_t addr, uint32_t value) {
 
 vx_result_t Device::cp_submit_launch() {
     // CMD_LAUNCH on-wire layout (cmd_size=12):
-    //   bytes 0..3  header  { opcode=0x06, flags=0, reserved=0 }
-    //   bytes 4..11 arg0    unused by VX_cp_launch in v1
+    //   bytes 0..3   header  { opcode=0x06, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    unused by VX_cp_launch
     uint8_t cl[CP_CL_BYTES] = {0};
     cl[0] = CP_OPCODE_LAUNCH;
     return cp_submit_cl_(cl);
@@ -225,10 +223,10 @@ vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
                                        uint32_t* out_value) {
     if (!out_value) return VX_ERR_INVALID_VALUE;
     // CMD_DCR_READ on-wire layout (cmd_size=20):
-    //   bytes 0..3  header  { opcode=0x05, flags=0, reserved=0 }
-    //   bytes 4..11 arg0    DCR addr (low 12 bits used)
-    //   bytes 12..19 arg1   tag (data on the DCR bus; e.g. core index
-    //                       for VX_DCR_BASE_CACHE_FLUSH)
+    //   bytes 0..3   header  { opcode=0x05, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    DCR addr (low 12 bits used)
+    //   bytes 12..19 arg1    tag (data on the DCR bus; e.g. core index
+    //                        for VX_DCR_BASE_CACHE_FLUSH)
     uint8_t cl[CP_CL_BYTES] = {0};
     uint32_t* p32 = reinterpret_cast<uint32_t*>(cl);
     p32[0] = CP_OPCODE_DCR_RD;
@@ -236,8 +234,8 @@ vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
     p32[3] = tag;
     auto r = cp_submit_cl_(cl);
     if (r != VX_SUCCESS) return r;
-    // Pick up the response from the CP regfile (latched by
-    // VX_cp_dcr_proxy.last_rsp_data and exposed at offset 0x130).
+    // Pick up the response from the CP regfile: VX_cp_dcr_proxy latches
+    // it on Q_LAST_DCR_RSP at the same offset as the engine's retire.
     return platform()->cp_mmio_read(CP_Q_LAST_DCR_RSP, out_value);
 }
 
@@ -267,8 +265,8 @@ Queue* Device::legacy_default_queue() {
         std::lock_guard<std::mutex> g(mu_);
         if (legacy_q_) return legacy_q_;
     }
-    // Slow path: create OUTSIDE the lock (Queue::create acquires this
-    // same mutex via register_queue — holding it here would deadlock).
+    // Slow path: create OUTSIDE the lock. Queue::create takes this same
+    // mutex via register_queue, so holding it here would block.
     vx_queue_info_t info = {};
     info.struct_size = sizeof(info);
     info.priority    = VX_QUEUE_PRIORITY_NORMAL;
@@ -311,7 +309,7 @@ using namespace vx;
 
 extern "C" vx_result_t vx_device_count(uint32_t* out_count) {
     if (!out_count) return VX_ERR_INVALID_VALUE;
-    *out_count = 1;   // v1: each backend exposes a single device
+    *out_count = 1;   // each backend exposes a single device
     return VX_SUCCESS;
 }
 

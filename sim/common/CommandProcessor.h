@@ -12,17 +12,17 @@
 // limitations under the License.
 
 // ============================================================================
-// CommandProcessor.h — functional C++ model of the hardware Command Processor
-// (cp_pure_v2_callbacks_proposal §3). Shared by simx and rtlsim so neither
-// needs a hardware CP yet still satisfies the pure-v2 cp_mmio_* callbacks.
+// CommandProcessor.h — functional C++ model of the hardware Command Processor.
+// Shared by simx and rtlsim so neither backend needs a hardware CP while
+// still presenting the same cp_mmio_* MMIO surface to the runtime.
 //
-// The hardware CP is a synchronous FSM clocked off the same clock as Vortex
-// — this class is the C++ analog: a `tick()`-per-cycle state machine that
+// The hardware CP is a synchronous FSM clocked off the same clock as Vortex;
+// this class is the C++ analog: a `tick()`-per-cycle state machine that
 // reads commands from a host-pinned ring in DRAM, dispatches them to the
-// right "resource" (DCR proxy, launch, DMA), and publishes a retired
+// right "resource" (DCR proxy, launch, DMA), and publishes the retired
 // sequence number back to a host-pinned completion slot.
 //
-// Address map (matches VX_cp_axil_regfile §17.4 exactly):
+// Address map (matches VX_cp_axil_regfile):
 //   Globals (CP-internal offsets 0x000..0x0FF)
 //     0x000 CP_CTRL       bit0=enable_global, bit1=reset_all
 //     0x004 CP_STATUS     bit0=busy, bit1=error
@@ -39,6 +39,7 @@
 //     0x124    Q_TAIL_HI          (atomic commit)
 //     0x128    Q_SEQNUM           (RO mirror)
 //     0x12C    Q_ERROR
+//     0x130    Q_LAST_DCR_RSP     (RO — latest CMD_DCR_READ response)
 // ============================================================================
 
 #ifndef VORTEX_COMMAND_PROCESSOR_H
@@ -64,10 +65,10 @@ public:
         // Issue a single DCR write to Vortex (for CMD_DCR_WRITE).
         std::function<void(uint32_t addr, uint32_t value)> vortex_dcr_write;
 
-        // Issue a single DCR read to Vortex (for CMD_DCR_READ). `tag`
-        // matches the legacy dcr_read tag (used as data on the DCR bus
-        // — e.g. per-core CACHE_FLUSH addressing). Backend is responsible
-        // for blocking until the response is available.
+        // Issue a single DCR read to Vortex (for CMD_DCR_READ). `tag` is
+        // placed on the DCR data bus and addresses things like per-core
+        // CACHE_FLUSH. The backend must block until the response is
+        // available before returning.
         std::function<uint32_t(uint32_t addr, uint32_t tag)> vortex_dcr_read;
 
         // Pulse Vortex's start signal (for CMD_LAUNCH). The launch FSM
@@ -151,7 +152,7 @@ private:
     // ----- Globals -----
     uint32_t cp_ctrl_ = 0;           // bit0=enable_global
     uint64_t cycle_counter_ = 0;
-    Queue    q0_;                    // NUM_QUEUES==1 in v1
+    Queue    q0_;                    // single-queue model
     Hooks    hooks_;
     uint32_t last_dcr_rsp_ = 0;     // Q_LAST_DCR_RSP slot (0x130)
 
@@ -161,9 +162,6 @@ private:
     Cmd         cur_cmd_{};
     bool        cur_is_launch_ = false;
     bool        cur_is_no_resource_ = false;
-    // For the launch FSM: bytes [start, drain] are the natural cadence.
-    // We always tick at least one cycle of launch FSM between Vortex
-    // start-pulse and the busy poll, matching the hardware behavior.
 
     // ----- Fetch state -----
     // The simulator fetches one cache line at a time when head < tail,

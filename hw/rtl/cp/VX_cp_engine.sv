@@ -6,10 +6,10 @@
 // ============================================================================
 // VX_cp_engine — per-queue Command Processor Engine (CPE).
 //
-// Phase 2b: real decode + resource-bid + retire logic. The fetch and
-// unpack paths are left wired through to `cmd_in` / `cmd_in_valid` from
-// outside (Phase 3 splices VX_cp_fetch + VX_cp_unpack onto these inputs
-// once the AXI xbar is real).
+// Consumes a decoded command stream on `cmd_in`, classifies each command
+// onto one of three shared resources (KMU / DMA / DCR), bids for the
+// resource through the engine_bid interface, and retires the command
+// once the resource signals done.
 //
 // FSM:
 //   IDLE         : no command in hand; assert cmd_in_ready
@@ -18,14 +18,12 @@
 //   WAIT_DONE    : hold bid until resource signals done
 //   RETIRE       : pulse retire_evt + advance seqnum; back to IDLE
 //
-// For Phase 2b the engine handles:
-//   - CMD_NOP (retire immediately)
-//   - CMD_LAUNCH (bid KMU)
-//   - CMD_DCR_WRITE / CMD_DCR_READ (bid DCR)
-//   - CMD_MEM_* (bid DMA)
-// Other opcodes (CMD_FENCE, CMD_EVENT_*) are passed through but
-// effectively NOP for now (FSM retires them without doing anything).
-// Real semantics for those land in Phase 4.
+// Opcodes handled:
+//   - CMD_NOP                       (retire immediately)
+//   - CMD_LAUNCH                    (bid KMU)
+//   - CMD_DCR_WRITE / CMD_DCR_READ  (bid DCR)
+//   - CMD_MEM_*                     (bid DMA)
+// CMD_FENCE / CMD_EVENT_* are accepted and retired as NOPs.
 // ============================================================================
 
 module VX_cp_engine
@@ -41,9 +39,7 @@ module VX_cp_engine
   input  cpe_state_t              state_in,
   output cpe_state_t              state_out,
 
-  // Decoded command stream input. Phase 3 wires VX_cp_fetch + VX_cp_unpack
-  // here; for Phase 2b nothing drives it from outside (the engine just
-  // sits in IDLE waiting on cmd_in_valid).
+  // Decoded command stream input (driven by VX_cp_fetch + VX_cp_unpack).
   input  wire                     cmd_in_valid,
   input  cmd_t                    cmd_in,
   output logic                    cmd_in_ready,
@@ -65,7 +61,7 @@ module VX_cp_engine
   output logic                    retire_evt,
   output logic [63:0]             retire_seqnum,
 
-  // Profiling sample pulses (Phase 4 hookup).
+  // Profiling sample pulses (consumed by the event unit).
   output logic                    submit_evt,
   output logic                    start_evt,
   output logic                    end_evt,
@@ -105,14 +101,11 @@ module VX_cp_engine
     endcase
   endfunction
 
-  // Phase 3: done signals come from outside as kmu_done_i / dma_done_i /
-  // dcr_done_i. The engine waits in S_WAIT_DONE until the corresponding
-  // resource fires done. For NUM_QUEUES == 1 the granted CPE is the only
-  // one in S_WAIT_DONE, so the done pulse unambiguously belongs to it.
-  // (Multi-CPE contention is not yet exercised — the bid arbiter only
-  // grants one CPE per resource per cycle, and the resource module
-  // processes one command at a time, so the granted CPE is always the
-  // one waiting.)
+  // The done pulses (kmu_done_i / dma_done_i / dcr_done_i) are broadcast
+  // from the shared resource modules to every CPE. The bid arbiter grants
+  // one CPE per resource at a time and the resource processes one command
+  // at a time, so only the granted CPE is in S_WAIT_DONE when the matching
+  // pulse arrives; non-granted CPEs ignore it.
 
   // -------------------------------------------------------------------------
   // FSM
@@ -195,7 +188,6 @@ module VX_cp_engine
     retire_evt    = (fsm == S_RETIRE);
     retire_seqnum = seqnum_r;
 
-    // Profiling hooks (Phase 4 fills these in for real).
     submit_evt   = (fsm == S_DECODE) && cur_cmd.hdr.flags[F_PROFILE];
     start_evt    = (fsm == S_BID) && cur_cmd.hdr.flags[F_PROFILE] &&
                    ((cur_res == RES_KMU && bid_kmu.grant) ||

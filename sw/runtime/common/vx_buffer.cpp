@@ -60,13 +60,12 @@ vx_result_t Buffer::map(uint64_t off, uint64_t size, uint32_t flags,
     if (off + size > size_)  return VX_ERR_INVALID_VALUE;
 
     std::lock_guard<std::mutex> g(map_mu_);
-    if (mapped_) return VX_ERR_NOT_SUPPORTED;   // v1: single mapping at a time
+    if (mapped_) return VX_ERR_NOT_SUPPORTED;   // single mapping at a time
 
-    // v1 policy: allocate a host mirror, prefill from device if READ-mapped,
-    // and on unmap upload back to device if WRITE-mapped. This is correct
-    // (no use-after-free) but loses the zero-copy benefit pinned memory
-    // would provide on real hardware. The XRT backend later overrides this
-    // through Platform when host-visible buffers are available.
+    // Allocate a host mirror, prefill from device if READ-mapped, and on
+    // unmap upload back to device if WRITE-mapped. Correct (no
+    // use-after-free) but loses the zero-copy benefit pinned memory
+    // would provide on real hardware.
     host_mirror_ = std::malloc(size);
     if (!host_mirror_) return VX_ERR_OUT_OF_HOST_MEMORY;
 

@@ -54,8 +54,9 @@ void CommandProcessor::mmio_write(uint32_t off, uint32_t value) {
             case 0x28: case 0x2C: return;
         }
     }
-    // Unknown offset — silently ignored (mirrors hardware DECERR behavior
-    // from the host's perspective is via the MMIO bus, not this object).
+    // Unknown offset — silently ignored. The hardware would respond with
+    // DECERR on the MMIO bus; this functional model presents no failure
+    // surface for it.
 }
 
 uint32_t CommandProcessor::mmio_read(uint32_t off) const {
@@ -63,9 +64,8 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         case 0x000: return cp_ctrl_;
         case 0x004: return uint32_t(busy() ? 1 : 0);    // CP_STATUS bit0
         case 0x008: {
-            // CP_DEV_CAPS: matches VX_cp_axil_regfile §17.4.
-            // {AXI_TID_W:8 | RING_LOG2:8 | NUM_QUEUES:8}
-            // We use the same defaults as the hardware (TID=6, RING=16, N=1).
+            // CP_DEV_CAPS: {AXI_TID_W:8 | RING_LOG2:8 | NUM_QUEUES:8}.
+            // Defaults match the hardware (TID=6, RING_LOG2=16, NUM_QUEUES=1).
             return (uint32_t(6) << 16) | (uint32_t(16) << 8) | uint32_t(1);
         }
         case 0x010: return uint32_t(cycle_counter_ & 0xFFFFFFFF);
@@ -123,7 +123,7 @@ int CommandProcessor::decode_cmd(int off, Cmd& out) {
     out.arg0     = rd64(off + 4);
     out.arg1     = rd64(off + 12);
     out.arg2     = rd64(off + 20);
-    // Size table mirrors cmd_size_bytes() in VX_cp_pkg.sv.
+    // Size table matches cmd_size_bytes() in VX_cp_pkg.sv.
     switch (out.opcode) {
         case OP_NOP:        return 4;
         case OP_LAUNCH:     return 12;
@@ -207,8 +207,7 @@ void CommandProcessor::tick_engine() {
         switch (cur_cmd_.opcode) {
             case OP_NOP: case OP_FENCE:
             case OP_EVENT_SIG: case OP_EVENT_WAIT:
-                // No resource — retire as NOP (matches engine Phase 2b
-                // skip_flag path for unimplemented opcodes).
+                // No resource bid for these opcodes; retire as NOP.
                 cur_is_no_resource_ = true;
                 break;
             default:
@@ -258,9 +257,8 @@ void CommandProcessor::tick_engine() {
                 }
                 eng_state_ = EngState::Retire;
             } else {
-                // DCR_READ / MEM_* not yet implemented in this functional
-                // model — retire as NOP (matches the engine's Phase 2b
-                // behavior for unimplemented opcodes).
+                // MEM_* are not implemented in this functional model;
+                // retire as NOP.
                 eng_state_ = EngState::Retire;
             }
             return;

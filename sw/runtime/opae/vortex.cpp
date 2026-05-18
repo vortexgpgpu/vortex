@@ -60,7 +60,6 @@ using namespace vortex;
 // ----- Command Processor regfile (host byte addresses) -----
 // The AFU's MMIO demux routes byte addresses 0x1000..0x1FFF to the CP
 // regfile (mapped to CP's native 0x000-based 12-bit address space).
-// Same bit-12 split as the XRT integration; see VX_cp_axil_regfile §17.4.
 #define CP_BASE              0x1000
 #define CP_REG_CTRL          (CP_BASE + 0x000)   // bit0 = enable_global
 #define CP_REG_STATUS        (CP_BASE + 0x004)
@@ -597,10 +596,9 @@ public:
   }
 
   // ----- Command Processor path -----
-  // Same shape as the XRT runtime's cp_init / cp_post_launch / cp_wait
-  // — allocate ring + head + completion buffers in device memory, program
+  // Allocate ring + head + completion buffers in device memory, program
   // CP queue 0 via the CP regfile (MMIO byte 0x1000+), then on each
-  // vx_start() push a CMD_LAUNCH descriptor into the ring + commit Q_TAIL
+  // start() push a CMD_LAUNCH descriptor into the ring, commit Q_TAIL,
   // and poll Q_SEQNUM until the engine retires it.
   int cp_init() {
     CHECK_ERR(this->mem_alloc(CP_RING_SIZE, VX_MEM_READ, &cp_ring_dev_addr_), { return err; });
@@ -658,9 +656,9 @@ public:
   }
 
   int cp_wait(uint64_t timeout) {
-    // Poll Q_SEQNUM via MMIO read until the engine retires the command —
-    // see the XRT runtime's cp_wait for the rationale (xrtBOSync / opae
-    // BO sync don't tick the simulated clock; only register traffic does).
+    // Poll Q_SEQNUM via MMIO read until the engine retires the command.
+    // Only register traffic ticks the simulated clock, so polling on
+    // BO-sync calls alone would never advance.
     for (;;) {
       uint64_t seqnum64 = 0;
       CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, CP_Q_SEQNUM, &seqnum64), { return -1; });
@@ -669,11 +667,10 @@ public:
       if (0 == timeout) return -1;
       timeout -= 1;
     }
-    // Engine retired (Phase 2b shortcut: on KMU grant, not actual Vortex
-    // completion). Wait for the AFU FSM to drop back to STATE_IDLE — the
-    // saw_busy guard ensures this only fires after Vortex really finished.
-    // No hard spin cap: each MMIO read ticks the sim a handful of cycles,
-    // and sgemm-class kernels need many more than a fixed cap allows.
+    // Engine retire indicates the CP issued the launch; wait for the
+    // AFU FSM to drop back to STATE_IDLE before returning so the caller
+    // observes Vortex draining as well. The caller's timeout drives the
+    // spin since each MMIO read ticks the sim a handful of cycles.
     for (;;) {
       uint64_t status;
       CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, MMIO_STATUS, &status), { return -1; });
@@ -725,7 +722,7 @@ private:
   uint64_t staging_size_;
   uint64_t clock_rate_;
 
-  // Command Processor state (populated by cp_init() when VORTEX_USE_CP=1).
+  // Command Processor state (populated by cp_init() when enabled).
   bool     cp_enabled_         = false;
   uint64_t cp_ring_dev_addr_   = 0;
   uint64_t cp_head_dev_addr_   = 0;

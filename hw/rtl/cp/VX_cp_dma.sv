@@ -5,26 +5,23 @@
 
 // ============================================================================
 // VX_cp_dma — generic DMA engine for CMD_MEM_READ / CMD_MEM_WRITE /
-// CMD_MEM_COPY. Owned by the DMA resource arbiter (parent §6.4 / RTL
-// impl §10).
+// CMD_MEM_COPY. Owned by the DMA resource arbiter.
 //
-// Command encoding (parent §6.5):
+// Command encoding:
 //   arg0 = dst address (device or host AXI address)
 //   arg1 = src address (device or host AXI address)
-//   arg2 = size in bytes (must be 64 in v1)
+//   arg2 = size in bytes (must equal CL_BYTES = 64)
 //
-// All three opcodes resolve to the same hardware behavior — issue an
-// AXI read at src, capture the data into an internal CL buffer, then
-// issue an AXI write at dst. CMD_MEM_READ / CMD_MEM_WRITE differ from
-// CMD_MEM_COPY only in *which* address is host- vs device-resident;
-// the CP itself doesn't care.
+// All three opcodes resolve to the same hardware behavior: issue an AXI
+// read at src, capture the data into an internal CL buffer, then issue
+// an AXI write at dst. CMD_MEM_READ / CMD_MEM_WRITE differ from
+// CMD_MEM_COPY only in which side of arg0/arg1 is host- vs device-
+// resident; the CP itself does not distinguish.
 //
-// v1 limitations (documented):
-//   - Single-cache-line transfers only (size must equal CL_BYTES = 64).
-//     Multi-CL chunking comes in a follow-up; the runtime side already
-//     splits enqueue_copy larger than this into multiple commands.
-//   - Read-modify-write hazard: arg0 and arg1 must not overlap. (The
-//     runtime layer enforces this.)
+// Restrictions:
+//   - Single-cache-line transfers only (size must equal CL_BYTES); the
+//     runtime splits larger transfers into multiple commands.
+//   - arg0 and arg1 must not overlap (the runtime enforces this).
 //
 // FSM:
 //   S_IDLE     : grant ↑ → latch cmd, → S_REQ_AR
@@ -46,8 +43,8 @@ module VX_cp_dma
   input  wire                       reset,
 
   input  wire                       grant,
-  // cmd is wider than what DMA actually reads; suppress the upstream
-  // (engine forwards the whole cmd_t to every resource consumer).
+  // cmd is wider than what DMA actually reads (the engine forwards the
+  // whole cmd_t to every resource consumer); suppress the warning.
   /* verilator lint_off UNUSED */
   input  cmd_t                      cmd,
   /* verilator lint_on UNUSED */

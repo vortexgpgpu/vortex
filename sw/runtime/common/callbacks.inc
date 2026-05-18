@@ -15,8 +15,7 @@
 // callbacks.inc — generic vx_dev_init template, included once at the bottom
 // of each backend's vortex.cpp (after the vx_device class is declared).
 //
-// Each backend's class must provide methods with these signatures (pure-v2
-// after Phase E of cp_pure_v2_callbacks_proposal):
+// Each backend's class must provide methods with these signatures:
 //
 //   int init();
 //   int get_caps(uint32_t caps_id, uint64_t* value);
@@ -32,12 +31,12 @@
 //   int cp_mmio_read(uint32_t off, uint32_t* value);
 //
 // All kernel launches and DCR ops flow through the dispatcher's CP
-// submission helpers (sw/runtime/common/vx_device.cpp); backends no longer
-// expose start/ready_wait/dcr_write/dcr_read. The xrt/opae backends route
+// submission helpers in sw/runtime/common/vx_device.cpp; backends only
+// expose the platform primitives above. The xrt/opae backends route
 // cp_mmio_* to their AFU's CP regfile (host MMIO byte offset 0x1000+);
 // simx/rtlsim route to a sim/common/CommandProcessor C++ instance.
 // Legacy vortex.h symbols in the dispatcher are pure wrappers over
-// vortex2.h symbols — they NEVER touch callbacks_t directly.
+// vortex2.h symbols and never touch callbacks_t directly.
 // ============================================================================
 
 extern "C" int vx_dev_init(callbacks_t* callbacks) {
@@ -111,7 +110,7 @@ extern "C" int vx_dev_init(callbacks_t* callbacks) {
     if (nullptr == dev_ctx)
       return -1;
     if (0 == size)
-      return 0;   // no-op; legacy upload path passes size=0 for empty BSS
+      return 0;   // no-op; the upload path passes size=0 for empty BSS
     return reinterpret_cast<vx_device*>(dev_ctx)
               ->mem_access(dev_addr, size, static_cast<int>(flags));
   };

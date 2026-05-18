@@ -21,11 +21,10 @@
 // All subsequent vortex.h / vortex2.h calls in libvortex.so flow through
 // the function pointers in callbacks_t.
 //
-// The fields below are intentionally Platform-shaped (parent CP proposal
-// §6.3 / runtime impl proposal §4.3): they operate on opaque void* device
-// contexts and raw uint64_t device addresses. The dispatcher wraps these
-// primitives into refcounted vx::Device / vx::Buffer / vx::Queue /
-// vx::Event objects on top.
+// The fields below are intentionally Platform-shaped: they operate on
+// opaque void* device contexts and raw uint64_t device addresses. The
+// dispatcher wraps these primitives into refcounted vx::Device /
+// vx::Buffer / vx::Queue / vx::Event objects on top.
 // ============================================================================
 
 #ifndef CALLBACKS_H

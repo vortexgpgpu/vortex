@@ -57,7 +57,7 @@ package VX_cp_pkg;
   localparam int CL_BITS  = CL_BYTES * 8;
 
   // ------------------------------------------------------------------------
-  // Command opcodes (parent §6.5).
+  // Command opcodes.
   // ------------------------------------------------------------------------
 
   typedef enum logic [7:0] {
@@ -74,7 +74,7 @@ package VX_cp_pkg;
   } cp_opcode_e;
 
   // ------------------------------------------------------------------------
-  // Header flag bits (parent §6.5).
+  // Header flag bits.
   // ------------------------------------------------------------------------
 
   localparam int F_PROFILE   = 0;
@@ -120,7 +120,7 @@ package VX_cp_pkg;
   localparam int FENCE_GPU_BIT = 1;
 
   // ------------------------------------------------------------------------
-  // Per-CPE persistent state (parent §6.3 / RTL impl §3.1).
+  // Per-CPE persistent state.
   //
   // One instance lives inside each VX_cp_engine. Host-visible registers in
   // the AXI-Lite slave write to these.

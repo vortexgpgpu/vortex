@@ -4,24 +4,20 @@
 `include "VX_define.vh"
 
 // ============================================================================
-// VX_cp_launch — KMU start/busy wrapper. Owned by the KMU resource arbiter
-// (parent §6.4 / RTL impl §9).
+// VX_cp_launch — KMU start/busy wrapper. Owned by the KMU resource arbiter.
 //
-// Behavior per parent §6.4 "KMU arbitration holds for the entire duration
-// of a launch":
+// KMU arbitration holds for the entire duration of a launch:
 //   IDLE         : no grant yet
 //   PULSE_START  : grant just observed; assert `start` for one cycle
 //   WAIT_BUSY    : Vortex pulls `busy` high (kernel started)
 //   WAIT_DRAIN   : Vortex drops `busy` low (kernel done) → fire `done`,
 //                  go back to IDLE
 //
-// The CPE that won the KMU arbiter holds its bid (and thus the grant)
-// across all of these states; `done` releasing the bid lets the next CPE
-// take its turn.
+// The CPE that won the KMU arbiter holds its bid across all of these
+// states; `done` releasing the bid lets the next CPE take its turn.
 //
-// Note: `grant` here is the *combined* OR of per-CPE grants from the KMU
-// arbiter. The CP_core's instantiation glues N CPE bids to this single
-// `grant` input.
+// `grant` is the OR of per-CPE grants from the KMU arbiter (the CP core
+// glues all N bids onto this single input).
 // ============================================================================
 
 module VX_cp_launch (

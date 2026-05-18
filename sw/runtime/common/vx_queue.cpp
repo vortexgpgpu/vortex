@@ -61,7 +61,7 @@ vx_result_t Queue::create(Device* dev, const vx_queue_info_t* info,
 //
 // Each command may have a wait-list of events that must complete before its
 // work runs. The waits happen on the worker thread, so an enqueue gated on
-// an unsignaled user event no longer deadlocks the caller. In-order queue
+// an unsignaled user event does not block the caller. In-order queue
 // semantics are preserved because there is exactly one worker per Queue.
 // ============================================================================
 
@@ -152,9 +152,8 @@ vx_result_t Queue::enqueue(Command&& cmd, uint32_t nw, const vx_event_h* w,
 // ============================================================================
 
 vx_result_t Queue::flush() {
-    // Wake the worker so any queued commands begin execution. In v1 the
-    // worker is already woken on each enqueue, so this is a no-op except
-    // as a documented sync point for higher layers.
+    // The worker is already woken on each enqueue, so this is effectively
+    // a no-op sync point for higher layers.
     cmd_cv_.notify_one();
     return VX_SUCCESS;
 }
@@ -247,8 +246,8 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
 
     // Capture the launch descriptor by value into the work lambda so the
     // caller can free/reuse `info` immediately after enqueue returns.
-    // ndim==0 is the legacy escape hatch — only PC + arg ptr get
-    // programmed; the host is responsible for the rest via prior
+    // ndim==0 is the legacy escape hatch — only PC + arg ptr are
+    // programmed and the host is expected to have set the rest via prior
     // vx_dcr_write calls (matches legacy vx_start semantics).
     const uint32_t ndim      = info->ndim;
     const uint32_t lmem_size = info->lmem_size;
@@ -293,8 +292,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
             const uint64_t argp = args->dev_address();
 
             // Program the KMU DCRs via CMD_DCR_WRITE descriptors through
-            // the CP ring. ndim==0 is the legacy escape hatch — only PC +
-            // arg ptr get programmed.
+            // the CP ring. ndim==0 leaves only PC + arg ptr programmed.
             #define WR(addr, val) do {                                       \
                 auto r = device_->cp_submit_dcr_write((addr), (uint32_t)(val)); \
                 if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }       \
@@ -320,9 +318,10 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
             #undef WR
 
             *s = now_ns();
-            // cp_submit_launch posts CMD_LAUNCH + polls Q_SEQNUM until
-            // the engine retires (kernel actually finished — Phase 3
-            // engine retire-on-done, commit 196c4e56).
+            // cp_submit_launch posts CMD_LAUNCH and polls Q_SEQNUM until
+            // the engine retires (the engine retires only after Vortex
+            // signals done, so Q_SEQNUM advance means the kernel
+            // finished).
             auto r = device_->cp_submit_launch();
             *e = now_ns();
             return r;

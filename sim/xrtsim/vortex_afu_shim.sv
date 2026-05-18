@@ -14,7 +14,7 @@
 `include "vortex_afu.vh"
 
 module vortex_afu_shim #(
-    parameter C_S_AXI_CTRL_ADDR_WIDTH = 16,  // widened from 8 for CP regfile range
+    parameter C_S_AXI_CTRL_ADDR_WIDTH = 16,  // covers legacy + CP regfile range
 
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH 	  = `PLATFORM_MEMORY_ID_WIDTH,

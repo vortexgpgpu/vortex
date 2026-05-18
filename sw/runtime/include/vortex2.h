@@ -19,13 +19,8 @@
 // events with wait lists, and per-command profiling timestamps.
 //
 // Legacy synchronous vortex.h is implemented as a thin wrapper over the
-// entry points here (see common/vortex_legacy_wrapper.cpp). All upper-layer
-// translators (POCL, chipStar, future Vulkan/CUDA/HIP/Metal/OpenGL) should
-// target vortex2.h directly.
-//
-// See docs/proposals/command_processor_proposal.md §8 for the architectural
-// design and docs/proposals/cp_runtime_impl_proposal.md for the
-// implementation plan.
+// entry points here. All upper-layer translators (POCL, chipStar, future
+// Vulkan/CUDA/HIP/Metal/OpenGL) should target vortex2.h directly.
 // ============================================================================
 
 #ifndef __VX_VORTEX2_H__

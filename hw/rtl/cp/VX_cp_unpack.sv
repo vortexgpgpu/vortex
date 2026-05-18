@@ -5,18 +5,18 @@
 
 // ============================================================================
 // VX_cp_unpack — combinational walk of a 64 B cache line, extracting up to
-// VX_CP_MAX_CMDS_PER_CL packed cmd_t records (parent §6.5 / RTL impl §7).
+// VX_CP_MAX_CMDS_PER_CL packed cmd_t records.
 //
-// Per-command framing rule (parent §3.2 / runtime impl §5.2):
-//   - Commands are byte-aligned but NEVER cross a cache-line boundary.
+// Framing rules:
+//   - Commands are byte-aligned but never cross a cache-line boundary.
 //   - The runtime zero-pads to the end of the line if the next command
-//     would overflow. The walker detects the zero header (CMD_NOP=0) and
-//     stops at that point.
+//     would overflow. A zero header (opcode=CMD_NOP=0, flags=0) terminates
+//     the walk.
 //
 // Per-command on-wire layout:
 //   [hdr (4B)] [arg0 (8B)] [arg1 (8B)] [arg2 (8B)] [profile_slot (8B)]
-//   where arg2 / profile_slot are present only for the opcodes that need
-//   them (see cmd_size_bytes() in VX_cp_pkg.sv). Bytes are little-endian.
+//   arg2 / profile_slot are present only for the opcodes that need them
+//   (see cmd_size_bytes() in VX_cp_pkg.sv). Bytes are little-endian.
 // ============================================================================
 
 module VX_cp_unpack

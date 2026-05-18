@@ -55,8 +55,8 @@ endinterface : VX_cp_engine_bid_if
 // CP -> Vortex GPU bundle.
 //
 // Carries the DCR request/response pair (request side asserted by the CP's
-// VX_cp_dcr_proxy; response captured from Vortex.sv's now-exposed dcr_rsp
-// outputs — see parent §6.7 / RTL impl §16) plus the KMU launch handshake.
+// VX_cp_dcr_proxy; response captured from Vortex.sv's dcr_rsp outputs)
+// plus the KMU launch handshake.
 // ----------------------------------------------------------------------------
 interface VX_cp_gpu_if;
 

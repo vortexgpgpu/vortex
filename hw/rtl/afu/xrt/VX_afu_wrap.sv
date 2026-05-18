@@ -18,27 +18,25 @@
 // ============================================================================
 // XRT AFU shim with Command Processor integration.
 //
-// AXI-Lite address space (parent §6.10 / cp_rtl_impl §17):
+// AXI-Lite address space:
 //   0x0000..0x0FFF — legacy AP_CTRL + DCR + DEV_CAPS (VX_afu_ctrl, 8b view)
 //   0x1000..0x1FFF — Command Processor regfile, mapped to CP's native
 //                    0x000..0xFFF address space (CP sees addr - 0x1000).
-//                    The bit-12 split is what lets CP_CTRL at CP-offset
-//                    0x000 stay reachable without colliding with the
-//                    legacy AP_CTRL register at host-offset 0x000.
+//                    The bit-12 split keeps CP_CTRL at CP-offset 0x000
+//                    reachable without colliding with the legacy AP_CTRL
+//                    register at host-offset 0x000.
 //
 // Data plane:
 //   * Vortex memory banks 0..N-1 ride the platform AXI4 master ports.
-//   * VX_cp_core has its own axi_m. Bank 0 is shared via VX_axi_arb2 — the
-//     arbiter holds a sticky owner per channel until response completes, so
-//     CP and Vortex can interleave without deadlock. (For sgemm/vecadd the
-//     CP is only active while Vortex is idle anyway, but the arb keeps
-//     correctness if that changes.)
+//   * VX_cp_core has its own axi_m. Bank 0 is shared via VX_axi_arb2 —
+//     the arbiter holds a sticky owner per channel until the response
+//     completes, so CP and Vortex can interleave without deadlock.
 //
 // Control fan-in to Vortex DCR:
-//   Either legacy AFU_ctrl (DCR writes via the 0x20/0x24 register pair) OR
-//   the CP DCR proxy can issue DCR writes. They never fire concurrently in
-//   a sane host sequence, so the mux is just a "first one wins" combinational
-//   selector keyed on dcr_req_valid. Same for vx_start (OR-combined).
+//   Either legacy AFU_ctrl (DCR writes via the 0x20/0x24 register pair)
+//   or the CP DCR proxy can issue DCR writes. The mux is a "CP wins on
+//   simultaneous valid" combinational selector keyed on dcr_req_valid;
+//   same approach for vx_start (OR-combined).
 // ============================================================================
 
 module VX_afu_wrap import VX_gpu_pkg::*; #(
@@ -277,10 +275,10 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 					state    <= STATE_RUN;
 					vx_start_legacy <= 1;
 				end else if (cp_gpu_if.start && !vx_reset) begin
-					// CP-initiated launch: enter RUN without firing
-					// the legacy vx_start_legacy pulse (CP's gpu_if.start
-					// already feeds the OR-mux into vx_start). This lets
-					// AP_DONE / ready_wait still work in CP mode.
+					// CP-initiated launch: enter RUN without firing the
+					// legacy vx_start_legacy pulse (CP's gpu_if.start
+					// already feeds the OR-mux into vx_start). AP_DONE /
+					// ready_wait still work in CP mode this way.
 				`ifdef DBG_TRACE_AFU
 					`TRACE(2, ("%t: AFU: Goto STATE_RUN (CP)\n", $time))
 				`endif
@@ -289,10 +287,11 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 			end
 			STATE_RUN: begin
 				vx_start_legacy <= 0;
-				// Track whether Vortex has actually started executing.
-				// Without this guard the FSM would race through RUN→DONE
-				// before vx_busy has time to rise (a problem in the CP
-				// path where we don't pulse vx_start_legacy).
+				// Track whether Vortex has actually started executing
+				// before checking for completion, so the FSM does not
+				// race through RUN→DONE before vx_busy has had time to
+				// rise (matters on the CP path where vx_start_legacy is
+				// not pulsed).
 				if (vx_busy) saw_busy <= 1;
 				if (!vx_start_legacy && saw_busy && !vx_busy) begin
 				`ifdef DBG_TRACE_AFU

@@ -75,12 +75,10 @@ private:
 // vx::Device::open() calls vx_create_platform() and owns the returned
 // pointer.
 //
-// In v1 (before the CP RTL lands), the Platform interface is essentially a
-// thin wrapper around the legacy synchronous operations. The new
-// vortex2.h Queue/Event machinery in common/ runs on top of Platform and
-// fakes async semantics where the backend doesn't yet provide them. When
-// the CP RTL lands, Platform will gain new methods for ring-buffer
-// submission, completion polling, and profiling slot writeback.
+// The Platform interface exposes the small set of synchronous primitives
+// the dispatcher needs from each backend: capability queries, device
+// memory management, raw DMA, and the CP MMIO surface. Higher-level
+// async machinery (Queue/Event) lives in the dispatcher on top of it.
 // ============================================================================
 
 class Platform {
@@ -108,11 +106,11 @@ public:
     virtual vx_result_t mem_copy    (uint64_t dst_dev_addr,
                                      uint64_t src_dev_addr, uint64_t size) = 0;
 
-    // ----- Command Processor MMIO surface (pure v2; sole control path) -----
-    // `off` is the CP-internal regfile offset (0x000..0x13F per
-    // VX_cp_axil_regfile §17.4). Backends translate to their own
-    // physical address space (xrt/opae add 0x1000; simx/rtlsim
-    // proxy to a software CommandProcessor).
+    // ----- Command Processor MMIO surface (sole control path) -----
+    // `off` is the CP-internal regfile offset (0x000..0x13F per the
+    // VX_cp_axil_regfile address map). Backends translate to their own
+    // physical address space (xrt/opae add 0x1000; simx/rtlsim proxy
+    // to a software CommandProcessor).
     virtual vx_result_t cp_mmio_write(uint32_t off, uint32_t value) = 0;
     virtual vx_result_t cp_mmio_read (uint32_t off, uint32_t* out)  = 0;
 };
@@ -214,11 +212,11 @@ public:
     void unregister_buffer(Buffer* b);
 
     // ----- Command Processor submission path -----
-    // The CP is the sole control path now (Phase E of
-    // cp_pure_v2_callbacks_proposal). The device owns a CP ring +
-    // completion slot in device memory; Queue calls cp_submit_* for
-    // every launch and DCR op. cp_enabled() is always true post-init
-    // and kept as a method only for readability of the call sites.
+    // The CP is the sole control path: the device owns a CP ring +
+    // completion slot in device memory, and the Queue layer calls
+    // cp_submit_* for every launch and DCR op. cp_enabled() is always
+    // true post-init and is exposed as a method only for readability
+    // at the call sites.
     bool cp_enabled() const { return cp_enabled_; }
 
     // Post one CMD_DCR_WRITE to the ring, commit Q_TAIL, and wait for
@@ -231,8 +229,8 @@ public:
 
     // Post one CMD_DCR_READ to the ring, wait for retire, and read the
     // response from the CP regfile's Q_LAST_DCR_RSP slot. `tag` is
-    // forwarded as the DCR read's data bus payload (matches legacy
-    // dcr_read tag — used for per-core CACHE_FLUSH addressing).
+    // forwarded as the DCR read's data bus payload (e.g. per-core
+    // CACHE_FLUSH addressing).
     vx_result_t cp_submit_dcr_read(uint32_t addr, uint32_t tag,
                                    uint32_t* out_value);
 
@@ -242,8 +240,7 @@ private:
     ~Device();
 
     // Allocate ring/head/cmpl buffers and program the CP regfile.
-    // Called from Device::open() after the platform is ready. CP is
-    // unconditionally enabled now (Phase E).
+    // Called from Device::open() after the platform is ready.
     vx_result_t cp_init();
 
     // Push one pre-built CL into the ring + commit Q_TAIL + wait. Used by
@@ -300,8 +297,8 @@ private:
     uint64_t      size_;
     uint32_t      flags_;
 
-    // Mapping state (only used when VX_MEM_PIN_MEMORY is honored; v1's simx
-    // backend does not expose a true host-visible buffer, so map() shadows
+    // Mapping state (only used when VX_MEM_PIN_MEMORY is honored; simx
+    // does not expose a true host-visible buffer, so map() shadows
     // through a heap-allocated mirror — see Buffer::map for the policy).
     std::mutex    map_mu_;
     void*         host_mirror_  = nullptr;   // heap mirror, freed at unmap
@@ -356,15 +353,15 @@ private:
     ~Queue();
 
     // ------------------------------------------------------------------
-    // Per-queue worker thread. Each enqueue *builds* a Command and pushes
+    // Per-queue worker thread. Each enqueue builds a Command and pushes
     // it to commands_; the worker pops them one at a time, waits on the
     // command's dep events, then runs the work lambda. This decouples
-    // enqueue latency from execution latency and removes the deadlock
-    // when an enqueue is gated on an unsignaled user event (the wait now
-    // happens on the worker, not on the caller).
+    // enqueue latency from execution latency so an enqueue gated on an
+    // unsignaled user event does not block the caller — the wait runs on
+    // the worker thread instead.
     //
     // In-queue ordering is preserved (FIFO, single worker), matching the
-    // OpenCL in-order queue semantics that POCL relies on.
+    // OpenCL in-order queue semantics POCL relies on.
     // ------------------------------------------------------------------
     struct Command {
         std::vector<Event*>                                       waits;
@@ -392,7 +389,7 @@ private:
     uint32_t                 flags_;
 
     // Serializes per-command platform calls when multiple queues share
-    // one backend (v1 has only one Platform per device).
+    // one backend (one Platform per device today).
     std::mutex               enqueue_mu_;
 
     // Command FIFO + worker thread state.
@@ -406,9 +403,9 @@ private:
 // ============================================================================
 // Event.
 //
-// In v1 (pre-CP) every enqueue completes synchronously, so events are
-// born already in COMPLETE state. User events are created in QUEUED state
-// and transition only on vx_user_event_signal.
+// Runtime-managed events are born QUEUED and complete()'d by the
+// dispatcher when the underlying work finishes. User events are also
+// QUEUED at birth and transition only on vx_user_event_signal.
 // ============================================================================
 
 class Event : public RefCounted<Event> {
@@ -467,7 +464,7 @@ inline vx_queue_h  to_handle(Queue*  q) { return reinterpret_cast<vx_queue_h>(q)
 inline vx_event_h  to_handle(Event*  e) { return reinterpret_cast<vx_event_h>(e);  }
 
 // ============================================================================
-// Wall clock helper for v1 fake-async profile timestamps.
+// Wall clock helper for runtime-synthesized profile timestamps.
 // ============================================================================
 
 inline uint64_t now_ns() {

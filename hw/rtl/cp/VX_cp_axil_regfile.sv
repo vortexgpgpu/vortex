@@ -6,9 +6,8 @@
 // ============================================================================
 // VX_cp_axil_regfile — the CP's AXI4-Lite host-control register block.
 //
-// Specified in `docs/proposals/cp_runtime_impl_proposal.md §6.10` and
-// `cp_rtl_impl_proposal.md §17.4`. This is the *only* slave on the CP's
-// AXI-Lite port; VX_cp_core hands its `axil_s` interface here.
+// This is the only slave on the CP's AXI-Lite port; VX_cp_core hands
+// its `axil_s` interface directly to this module.
 //
 // Register map (16-bit byte address):
 //
@@ -35,11 +34,10 @@
 //     +0x28 Q_SEQNUM        RO  latest retired seqnum (mirrors cmpl slot)
 //     +0x2C Q_ERROR         RO  per-queue error word
 //
-// Atomic-tail rule (parent §6.10): the host writes Q_TAIL_LO into a
-// staging register *without* advancing q_state.tail, then writes
-// Q_TAIL_HI which both stages the high half AND commits the full
-// 64-bit value into q_state.tail in the same cycle. A host that writes
-// only Q_TAIL_LO does not advance the queue.
+// Atomic-tail rule: the host writes Q_TAIL_LO into a staging register
+// *without* advancing q_state.tail, then writes Q_TAIL_HI which stages
+// the high half AND commits the full 64-bit value into q_state.tail in
+// the same cycle. Writing only Q_TAIL_LO does not advance the queue.
 // ============================================================================
 
 module VX_cp_axil_regfile
@@ -93,8 +91,7 @@ module VX_cp_axil_regfile
   logic [31:0] r_tail_lo_staging [NUM_QUEUES];
 
   // The slave ignores wstrb — every host write is treated as full-32-bit.
-  // Partial writes are a documented restriction (parent §6.10); none of
-  // the runtime code emits sub-word writes to CP registers.
+  // Sub-word writes to CP registers are not supported.
   `UNUSED_VAR (axil_s.wstrb)
 
   // ---- Global registers ----

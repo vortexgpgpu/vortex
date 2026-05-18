@@ -86,7 +86,7 @@ module VX_cp_arbiter
 
   end
 
-  // Round-robin only in v1 — priority is reserved for a future eligibility
+  // Plain round-robin; priority is reserved for a future eligibility
   // pre-filter pass. Suppress unused-bit warnings per-element so the macro
   // sees a packed logic instead of the unpacked array.
   generate

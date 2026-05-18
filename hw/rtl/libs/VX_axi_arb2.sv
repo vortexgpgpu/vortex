@@ -6,20 +6,18 @@
 // ============================================================================
 // VX_axi_arb2 — Strict 2-master to 1-slave AXI4 arbiter.
 //
-// Mirrors the reduced AXI4 view used at the AFU memory-bank boundary:
+// Carries the reduced AXI4 view used at the AFU memory-bank boundary:
 //   AW: valid/ready/addr/id/len
 //   W : valid/ready/data/strb/last
 //   B : valid/ready/id/resp
 //   AR: valid/ready/addr/id/len
 //   R : valid/ready/data/last/id/resp
 //
-// Master 0 = Vortex (high priority); Master 1 = CP.
-// Per-channel arbitration is single-outstanding per source — once a request
-// is accepted on AW or AR, that channel is held to the same source until the
-// corresponding response (B or R-last) completes. The other source stalls.
-// W follows the granted AW source until WLAST. R is routed back to the
-// source that owns the current AR. This is sufficient for the v1 CP, which
-// issues short, isolated bursts when Vortex is idle.
+// Master 0 has priority over master 1. Each channel is single-outstanding
+// per source — once AW or AR is accepted, the channel sticks to that source
+// until the matching response (B or R-last) completes; the other source
+// stalls. W follows the granted AW source until WLAST. R routes back to
+// the owner of the current AR.
 // ============================================================================
 
 `TRACING_OFF

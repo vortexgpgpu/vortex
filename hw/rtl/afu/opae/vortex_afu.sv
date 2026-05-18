@@ -168,10 +168,10 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     t_if_ccip_c2_Tx mmio_rsp;
 
-    // MMIO response mux: legacy handler drives `mmio_rsp` on next cycle for
-    // non-CP reads; CP regfile drives `cp_mmio_rsp` (declared below) on
-    // its own slave's rvalid pulse. They never fire simultaneously
-    // because the legacy handler is gated on `!is_cp_mmio_req`.
+    // MMIO response mux: the legacy handler drives `mmio_rsp` on the next
+    // cycle for non-CP reads; the CP regfile drives `cp_mmio_rsp` on its
+    // own slave's rvalid pulse. They never fire simultaneously because
+    // the legacy handler is gated on `!is_cp_mmio_req`.
     t_if_ccip_c2_Tx cp_mmio_rsp;
     assign af2cp_sTxPort.c2 = cp_mmio_rsp.mmioRdValid ? cp_mmio_rsp : mmio_rsp;
 
@@ -183,8 +183,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     //   host byte 0x000..0xFFF  (address[10]=0) → legacy AFU MMIO handler
     //   host byte 0x1000+       (address[10]=1) → CP regfile (VX_cp_axil_s_if)
     //
-    // Mirrors the XRT integration's bit-12 split so CP_CTRL at CP-offset
-    // 0x000 stays reachable without colliding with legacy MMIO at byte 0x000.
+    // CP_CTRL lives at CP-offset 0x000; the bit-12 split keeps it reachable
+    // without colliding with legacy MMIO at host byte 0x000.
     // ========================================================================
     wire is_cp_mmio_req = mmio_req_hdr.address[10];
     wire cp_mmio_wr     = cp2af_sRxPort.c0.mmioWrValid && is_cp_mmio_req;
@@ -194,7 +194,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     // CCIP packs AW + W into one mmioWrValid pulse, so present them together
     // to the AXI-Lite slave. Truncate host's 64-bit data to low 32 bits —
-    // all CP regs are 32-bit (cp_runtime_impl §17).
+    // every CP register is 32-bit.
     assign cp_axil.awvalid = cp_mmio_wr;
     assign cp_axil.awaddr  = {4'd0, mmio_req_hdr.address[9:0], 2'd0};
     assign cp_axil.wvalid  = cp_mmio_wr;
@@ -351,7 +351,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     // Handle MMIO read requests. Suppress the legacy response when the
     // request targets the CP range — those responses come back via the
-    // cp_mmio_rsp path below (CP regfile takes >1 cycle to return rdata).
+    // cp_mmio_rsp path (the CP regfile takes >1 cycle to return rdata).
     always @(posedge clk) begin
         if (reset) begin
             mmio_rsp.mmioRdValid <= 0;
@@ -426,8 +426,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     end
 
     // Handle MMIO write requests. CP-range writes (address[10]=1) are
-    // captured directly by the CP regfile via cp_axil — we don't want
-    // them to also touch cmd_args / cmd_type here.
+    // captured directly by the CP regfile via cp_axil; gate the legacy
+    // cmd_args / cmd_type handler off them.
     always @(posedge clk) begin
         if (cp2af_sRxPort.c0.mmioWrValid && !is_cp_mmio_req) begin
             case (mmio_req_hdr.address)
@@ -482,9 +482,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire vx_start;
     wire vx_busy;
 
-    // CP-side launch signal forward-declared; the actual VX_cp_gpu_if
-    // instance is created further down with VX_cp_core. We need its
-    // `.start` here so the FSM can enter STATE_RUN on a CP launch.
+    // CP-side launch signal: the VX_cp_gpu_if instance is created
+    // further down with VX_cp_core; forward-declaring it here lets the
+    // FSM enter STATE_RUN on a CP launch.
     VX_cp_gpu_if cp_gpu_if ();
     assign vx_start = vx_start_legacy | cp_gpu_if.start;
 
@@ -513,9 +513,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             STATE_IDLE: begin
                 saw_busy <= 0;
                 // CP-initiated launch: enter STATE_RUN without pulsing
-                // vx_start_legacy. CP already drives Vortex via the OR
-                // mux on vx_start; this keeps AFU FSM in sync so the
-                // legacy STATUS poll still reports completion.
+                // vx_start_legacy. The CP already drives Vortex via the
+                // OR mux on vx_start; this keeps the AFU FSM in sync so
+                // the legacy STATUS poll still reports completion.
                 if (cp_gpu_if.start && !vx_reset) begin
                 `ifdef DBG_TRACE_AFU
                     `TRACE(2, ("%t: AFU: Goto STATE RUN (CP)\n", $time))
@@ -591,10 +591,10 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             end
             STATE_RUN: begin
                 vx_start_legacy <= 0;
-                // Track whether Vortex has actually started executing. The
-                // CP path enters RUN without pulsing vx_start_legacy, so
-                // the unguarded `(!vx_start && !vx_busy)` check would
-                // race ahead before vx_busy has time to rise.
+                // Track whether Vortex has actually started executing.
+                // The CP path enters RUN without pulsing vx_start_legacy,
+                // so without this guard the FSM would race ahead before
+                // vx_busy had time to rise.
                 if (vx_busy) saw_busy <= 1;
                 if (!vx_start_legacy && saw_busy && !vx_busy) begin
                 `ifdef DBG_TRACE_AFU
@@ -1199,10 +1199,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [VX_DCR_ADDR_WIDTH-1:0] lg_dcr_req_addr = cmd_dcr_addr;
     wire [VX_DCR_DATA_WIDTH-1:0] lg_dcr_req_data = cmd_dcr_data;
 
-    // CP wins on simultaneous valid (mirrors XRT). Both sources never fire
-    // concurrently in a sane host sequence — legacy DCR writes are from the
-    // CMD_DCR_* FSM, CP DCR writes are from CMD_DCR_WRITE commands fetched
-    // off the ring; the host serializes these.
+    // CP wins on simultaneous valid. Both sources are serialized by the
+    // host: legacy DCR writes come from the CMD_DCR_* MMIO FSM while CP
+    // DCR writes come from CMD_DCR_WRITE commands fetched off the ring.
     wire vx_dcr_req_valid = cp_gpu_if.dcr_req_valid | lg_dcr_req_valid;
     wire vx_dcr_req_rw    = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_rw   : lg_dcr_req_rw;
     wire [VX_DCR_ADDR_WIDTH-1:0] vx_dcr_req_addr = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_addr : lg_dcr_req_addr;
@@ -1260,8 +1259,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     );
 
     // Command Processor //////////////////////////////////////////////////////
-    // Instantiated after Vortex so cp_gpu_if and cp_axi_m wires are in scope
-    // from their forward-declared interfaces at the top.
+    // Instantiated after Vortex; cp_gpu_if and cp_axi_m are forward-declared
+    // higher up so the DCR/start/memory wires are already in scope.
 
     wire cp_interrupt;
     `UNUSED_VAR (cp_interrupt)

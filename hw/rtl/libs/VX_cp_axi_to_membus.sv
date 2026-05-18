@@ -9,14 +9,13 @@
 // to join the request/response-style fabric that already feeds local
 // memory (Vortex's memory port format is request/response, not AXI4).
 //
-// v1 supports single-beat bursts only (awlen=arlen=0): this matches the
-// CP's actual issue pattern (fetch = single 64 B read; completion =
-// single 8 B write; DMA = single beat per command in the current engine).
-// Multi-beat is documented as future work.
+// Supports single-beat bursts only (awlen=arlen=0), which matches the
+// CP's issue pattern: fetch is a single 64 B read, completion is a single
+// 8 B write, and DMA is a single beat per command.
 //
 // Tag encoding: AXI ID (ID_W bits) is placed in the low bits of the
 // VX_mem_bus_if tag's `value` field; the response routes it back
-// untouched. UUID is tied to 0 (CP traffic has no Vortex UUID concept).
+// untouched.
 // ============================================================================
 
 `TRACING_OFF
@@ -163,8 +162,7 @@ module VX_cp_axi_to_membus
     `UNUSED_VAR (axi_s.arsize)
     `UNUSED_VAR (axi_s.arburst)
 
-    // ---- mem_req mux: writes win when both pending (CP fetch + completion
-    // don't actually contend in practice, but pick a deterministic policy) ----
+    // ---- mem_req mux: writes win when both pending. ----
     wire issue_wr = (wr_state == WR_ISSUE);
     wire issue_rd = (rd_state == RD_ISSUE);
 

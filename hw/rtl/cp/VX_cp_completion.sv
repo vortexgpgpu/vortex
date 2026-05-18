@@ -4,18 +4,13 @@
 `include "VX_define.vh"
 
 // ============================================================================
-// VX_cp_completion — writes per-queue retired seqnums to host memory
-// via the CP's AXI master. Triggered by per-CPE `retire_evt` pulses.
-// Parent §6.8 / RTL impl §13.
+// VX_cp_completion — writes per-queue retired seqnums to host memory via
+// the CP's AXI master. Triggered by per-CPE `retire_evt` pulses; the host
+// reads `cmpl_addr[qid]` to learn the most recently retired seqnum.
 //
-// Per parent §6.8: the host reads `cmpl_slot[qid]` to learn the most
-// recent retired sequence number. This module is what writes that slot.
-//
-// Architecture for NUM_QUEUES > 1: a small FIFO captures `retire_evt`
-// pulses so concurrent retires don't drop on the floor. The AXI master
-// drains the FIFO one entry at a time (AW → W → B). Round-robin would
-// be needed for true fairness but in practice retires from different
-// CPEs are rare per-cycle events, so a simple priority encoder is fine.
+// A small FIFO captures retire pulses so concurrent retires don't drop on
+// the floor. The AXI master drains it one entry at a time (AW → W → B).
+// A priority encoder picks one retire per cycle (lower QID wins ties).
 //
 // FSM:
 //   S_IDLE     : FIFO empty → wait. Non-empty → pop, → S_REQ_AW
@@ -24,9 +19,8 @@
 //                on wready → S_WAIT_B
 //   S_WAIT_B   : wait for bvalid → S_IDLE
 //
-// For v1 (NUM_QUEUES=1) the FIFO is depth-2 — enough to absorb one
-// in-flight write + one pending retire. Multi-CPE configurations
-// should bump the depth proportional to NUM_QUEUES.
+// FIFO_DEPTH defaults to 2 * NUM_QUEUES, enough to absorb one in-flight
+// write per queue plus one pending retire.
 // ============================================================================
 
 module VX_cp_completion
@@ -64,13 +58,9 @@ module VX_cp_completion
   wire fifo_full  = ((wptr[FIFO_PTR_W-1:0] == rptr[FIFO_PTR_W-1:0])
                   && (wptr[FIFO_PTR_W] != rptr[FIFO_PTR_W]));
 
-  // Priority-encode the retires this cycle to enqueue one per cycle.
-  // Two CPEs retiring in the same cycle is unusual (KMU is single-
-  // context); if it ever happens, the lower-QID retire wins this
-  // cycle and the higher-QID retire's payload must be re-driven by
-  // the engine next cycle (the engine's S_RETIRE only spans one cycle,
-  // so this race ISN'T possible today — but the priority encoder is
-  // future-proof for multi-resource retires).
+  // Priority-encode retires so one is enqueued per cycle. If two CPEs
+  // retire on the same cycle the lower-QID wins; the higher-QID retire
+  // must be re-driven by its engine the next cycle.
   logic         enq;
   cmpl_ent_t    enq_ent;
   always_comb begin
@@ -103,10 +93,9 @@ module VX_cp_completion
         fifo[wptr[FIFO_PTR_W-1:0]] <= enq_ent;
         wptr <= wptr + 1'b1;
       end
-      // We silently drop on FIFO full — this only happens if FIFO_DEPTH
-      // was sized too small for the workload. Document this as a
-      // parameter tuning concern; the host can detect it via
-      // CP_STATUS.error in a future revision.
+      // Silently drops on FIFO full — only possible if FIFO_DEPTH is
+      // sized too small for the workload. The host can detect dropped
+      // retires by observing a stalled seqnum.
 
       // ----- Dequeue / state machine -----
       case (state)
@@ -151,8 +140,7 @@ module VX_cp_completion
     axi_m.awburst = 2'b01;
 
     // W: 64-bit seqnum at the low 8 bytes of the data bus; wstrb selects
-    // those bytes. (The xbar's downstream master treats wstrb as a byte
-    // enable; the host shell maps that to a partial write.)
+    // those bytes as a byte enable for the partial write.
     axi_m.wvalid = (state == S_REQ_W);
     axi_m.wdata  = '0;
     axi_m.wdata[63:0] = cur_ent.seqnum;

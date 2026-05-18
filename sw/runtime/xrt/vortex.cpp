@@ -61,8 +61,8 @@ using namespace vortex;
 // ----- Command Processor regfile -----
 // The AXI-Lite demux in VX_afu_wrap routes host addresses 0x1000..0x1FFF
 // to the CP regfile (mapped to CP's native 0x000-based 12-bit address
-// space). Per VX_cp_axil_regfile §17.4, queue 0 base is at CP-offset 0x100.
-#define CP_BASE              0x1000     // demux split bit
+// space). Queue 0 base is at CP-offset 0x100.
+#define CP_BASE              0x1000     // host-side base of CP regfile
 #define CP_REG_CTRL          (CP_BASE + 0x000)   // bit0 = enable_global
 #define CP_REG_STATUS        (CP_BASE + 0x004)
 #define CP_REG_DEV_CAPS      (CP_BASE + 0x008)
@@ -751,16 +751,14 @@ public:
 
   // ----- Command Processor path -----
   //
-  // When the host sets VORTEX_USE_CP=1 we allocate three device buffers
-  // (ring, consumer-head publish slot, completion slot) and program CP
-  // queue 0 to use them. Subsequent vx_start() calls post a CMD_LAUNCH
-  // into the ring and bump Q_TAIL; ready_wait() polls the cmpl slot.
+  // Allocates three device buffers (ring, consumer-head publish slot,
+  // completion slot) and programs CP queue 0 to use them. Subsequent
+  // start() calls post a CMD_LAUNCH into the ring and bump Q_TAIL;
+  // ready_wait() polls the completion slot.
   //
-  // DCR programming for the kernel still goes through the legacy AFU_ctrl
-  // path (MMIO 0x20/0x24) before vx_start(), because the upper-layer
-  // vortex2.h KMU helper already emits those writes — the CP only owns
-  // the "go" signal here, not the descriptor build. This keeps the v1
-  // runtime change small while still exercising the full ring path.
+  // DCR programming for the kernel is expected to be issued by the
+  // upper-layer KMU helper before start(); the CP only owns the "go"
+  // signal in this code path.
   int cp_init() {
     CHECK_ERR(this->mem_alloc(CP_RING_SIZE, VX_MEM_READ, &cp_ring_dev_addr_), {
       return err;
@@ -808,16 +806,15 @@ public:
   }
 
   int cp_post_launch() {
-    // Build CMD_LAUNCH in a CL-sized scratch buffer (so the device-side
+    // Build CMD_LAUNCH in a CL-sized scratch buffer (the device-side
     // fetcher always loads a full 64 B cache line). The payload is 12 B:
-    //   bytes 0..3 = header { opcode=0x06, flags=0, reserved=0 }
-    //   bytes 4..11 = arg0 (unused by VX_cp_launch in v1)
+    //   bytes 0..3  = header { opcode=0x06, flags=0, reserved=0 }
+    //   bytes 4..11 = arg0 (unused by VX_cp_launch)
     uint8_t cl[CACHE_BLOCK_SIZE] = {0};
     cl[0] = CP_OPCODE_LAUNCH;
 
-    // Place the descriptor in the ring buffer. We never wrap in the tests
-    // we care about (one launch per vx_start), but the modulo keeps things
-    // correct if the host pushes many.
+    // Place the descriptor in the ring buffer. Wrap handling is left to
+    // the modulo since one launch per ring is the common pattern.
     uint64_t ring_offset = cp_tail_ & (CP_RING_SIZE - 1);
     if (ring_offset + CACHE_BLOCK_SIZE > CP_RING_SIZE) {
       fprintf(stderr, "[VXDRV] CP ring wraparound mid-CL not yet supported\n");
@@ -846,10 +843,9 @@ public:
     uint64_t sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
 
     // Poll Q_SEQNUM via the CP regfile (AXI-Lite read). This is the
-    // cheapest sim-advancing op and matches the seqnum the engine bumps
-    // each time it retires a command. xrtsim only ticks the clock during
-    // AXI transactions, so xrtBOSync (no-op) can't make forward
-    // progress on its own — we have to drive register traffic.
+    // cheapest sim-advancing operation: xrtsim only ticks its clock
+    // during AXI transactions, so xrtBOSync alone cannot make forward
+    // progress.
     for (;;) {
       uint32_t seqnum32 = 0;
       CHECK_ERR(this->read_register(CP_Q_SEQNUM, &seqnum32), { return err; });
@@ -857,13 +853,11 @@ public:
       if (0 == timeout) return -1;
       timeout -= sleep_time_ms;
     }
-    // Engine retired the CMD_LAUNCH (Phase 2b shortcut: retire fires on
-    // KMU grant, not on actual Vortex completion). Now wait for Vortex
-    // to genuinely finish by polling the legacy AP_DONE bit — the AFU
-    // FSM tracks CP-initiated launches too (sees cp_gpu_if.start), so
-    // AP_DONE eventually rises when vx_busy clears. Use the caller's
-    // timeout (each register read ticks the sim a handful of cycles,
-    // and we don't want a hard spin cap to truncate longer kernels).
+    // Engine retire indicates the CP has finished issuing the launch;
+    // wait for Vortex itself to drain by polling AP_DONE. The AFU FSM
+    // tracks CP-initiated launches (via cp_gpu_if.start), so AP_DONE
+    // rises when vx_busy clears. The caller's timeout drives the spin
+    // — each register read ticks the sim a handful of cycles.
     for (;;) {
       uint32_t status = 0;
       CHECK_ERR(this->read_register(MMIO_CTL_ADDR, &status), { return err; });
@@ -887,8 +881,8 @@ private:
   uint32_t lg2_num_banks_;
   uint32_t lg2_bank_size_;
 
-  // Command Processor state. Populated by cp_init() when VORTEX_USE_CP=1
-  // is set in the environment; left zero/disabled otherwise.
+  // Command Processor state. Populated by cp_init() when the CP path
+  // is enabled; left zero/disabled otherwise.
   bool     cp_enabled_         = false;
   uint64_t cp_ring_dev_addr_   = 0;   // device address of CP ring buffer
   uint64_t cp_head_dev_addr_   = 0;   // CP-published consumer head pointer
