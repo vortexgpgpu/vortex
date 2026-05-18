@@ -53,25 +53,13 @@ _start:
 
   # call main program routine
   csrr  a0, VX_CSR_MSCRATCH
-  # temporarily disable RVC to force 4-byte jal codegen needed by the scheduler's PC-12 next-CTA warp re-entry rewind
+  # temporarily disable RVC to force 4-byte jal codegen needed by the scheduler's CTA rewind logic.
   .option push
   .option norvc
   jal   ra, kernel_main
   .option pop
 
-  # Drain pending stores before halting the warp. Required so kernel
-  # writes (e.g. tests/hip/vecadd's `fsw fa5, 0(C_ptr)`) are visible to
-  # the cache_flush issued by the host before D2H readback. Without
-  # this, rtlsim's L1 D-cache loses outstanding stores when tmc=0
-  # halts the warp and the host reads pre-write sentinel (0xbaadf00d).
-  # simx is a functional simulator that doesn't model the store
-  # pipeline, so it didn't surface the bug. OpenCL POCL kernels happen
-  # to issue enough other memory traffic during the workgroup loop
-  # epilogue that stores settle; HIP-via-chipStar kernels emit a
-  # single fsw and halt, exposing the gap.
-  fence iorw, iorw
-
-  # shutdown warp
+  # shutdown warp.
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
 
 #else
@@ -172,7 +160,7 @@ init_tls_all:
 #endif
 
 .section .data
-	
+
 	.weak __dso_handle
 __dso_handle:
 	.long	0

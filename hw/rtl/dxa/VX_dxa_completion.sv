@@ -53,9 +53,14 @@ module VX_dxa_completion import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire fifo_push = done_fire;
     wire fifo_pop  = txbar_bus_if.valid && txbar_bus_if.ready;
 
+    // DEPTH must be a power of 2 and >= 2 (the queue's ALM_FULL defaults to
+    // DEPTH-1, which fails its `ALM_FULL > 0` static assert at DEPTH=1).
+    // Bump to 2 when NUM_WARPS=1 — the depth doesn't affect correctness, just
+    // backpressure granularity.
+    localparam FIFO_DEPTH = (`NUM_WARPS < 2) ? 2 : `NUM_WARPS;
     VX_fifo_queue #(
         .DATAW  (BAR_ADDR_W),
-        .DEPTH  (`NUM_WARPS),
+        .DEPTH  (FIFO_DEPTH),
         .LUTRAM (1)
     ) compl_fifo (
         .clk        (clk),
