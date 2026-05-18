@@ -294,31 +294,43 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
 
             // Address + arg pointer first (legacy ndim==0 callers need
             // only these; CP-aware ndim>0 callers get the rest below).
-            #define W(addr, val) do {                                     \
-                auto r = p->dcr_write((addr), (uint32_t)(val));           \
-                if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }   \
+            // CP_W routes the write through CMD_DCR_WRITE in the ring;
+            // LG_W goes through the legacy synchronous dcr_write callback.
+            const bool cp = device_->cp_enabled();
+            #define WR(addr, val) do {                                       \
+                auto vv = (uint32_t)(val);                                   \
+                auto r = cp ? device_->cp_submit_dcr_write((addr), vv)       \
+                            : p->dcr_write((addr), vv);                      \
+                if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }       \
             } while (0)
-            W(VX_DCR_KMU_STARTUP_ADDR0, pc   & 0xffffffffu);
-            W(VX_DCR_KMU_STARTUP_ADDR1, pc   >> 32);
-            W(VX_DCR_KMU_STARTUP_ARG0,  argp & 0xffffffffu);
-            W(VX_DCR_KMU_STARTUP_ARG1,  argp >> 32);
+            WR(VX_DCR_KMU_STARTUP_ADDR0, pc   & 0xffffffffu);
+            WR(VX_DCR_KMU_STARTUP_ADDR1, pc   >> 32);
+            WR(VX_DCR_KMU_STARTUP_ARG0,  argp & 0xffffffffu);
+            WR(VX_DCR_KMU_STARTUP_ARG1,  argp >> 32);
 
             if (ndim > 0) {
-                W(VX_DCR_KMU_BLOCK_DIM_X, eff_block[0]);
-                W(VX_DCR_KMU_BLOCK_DIM_Y, eff_block[1]);
-                W(VX_DCR_KMU_BLOCK_DIM_Z, eff_block[2]);
-                W(VX_DCR_KMU_GRID_DIM_X,  grid_in[0]);
-                W(VX_DCR_KMU_GRID_DIM_Y,  ndim >= 2 ? grid_in[1] : 1);
-                W(VX_DCR_KMU_GRID_DIM_Z,  ndim >= 3 ? grid_in[2] : 1);
-                W(VX_DCR_KMU_LMEM_SIZE,   lmem_size);
-                W(VX_DCR_KMU_BLOCK_SIZE,  block_size);
-                W(VX_DCR_KMU_WARP_STEP_X, ws_x);
-                W(VX_DCR_KMU_WARP_STEP_Y, ws_y);
-                W(VX_DCR_KMU_WARP_STEP_Z, ws_z);
+                WR(VX_DCR_KMU_BLOCK_DIM_X, eff_block[0]);
+                WR(VX_DCR_KMU_BLOCK_DIM_Y, eff_block[1]);
+                WR(VX_DCR_KMU_BLOCK_DIM_Z, eff_block[2]);
+                WR(VX_DCR_KMU_GRID_DIM_X,  grid_in[0]);
+                WR(VX_DCR_KMU_GRID_DIM_Y,  ndim >= 2 ? grid_in[1] : 1);
+                WR(VX_DCR_KMU_GRID_DIM_Z,  ndim >= 3 ? grid_in[2] : 1);
+                WR(VX_DCR_KMU_LMEM_SIZE,   lmem_size);
+                WR(VX_DCR_KMU_BLOCK_SIZE,  block_size);
+                WR(VX_DCR_KMU_WARP_STEP_X, ws_x);
+                WR(VX_DCR_KMU_WARP_STEP_Y, ws_y);
+                WR(VX_DCR_KMU_WARP_STEP_Z, ws_z);
             }
-            #undef W
+            #undef WR
 
             *s = now_ns();
+            if (cp) {
+                // cp_submit_launch is synchronous (it polls Q_SEQNUM
+                // internally) and replaces both launch_start + launch_wait.
+                auto r = device_->cp_submit_launch();
+                *e = now_ns();
+                return r;
+            }
             auto r = p->launch_start();
             if (r != VX_SUCCESS) { *e = now_ns(); return r; }
         }
@@ -353,7 +365,9 @@ vx_result_t Queue::enqueue_dcr_write(uint32_t addr, uint32_t value,
     cmd.work = [this, addr, value](uint64_t* s, uint64_t* e) {
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto r = device_->platform()->dcr_write(addr, value);
+        auto r = device_->cp_enabled()
+                     ? device_->cp_submit_dcr_write(addr, value)
+                     : device_->platform()->dcr_write(addr, value);
         *e = now_ns();
         return r;
     };

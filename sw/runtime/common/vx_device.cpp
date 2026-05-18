@@ -7,12 +7,16 @@
 
 #include "vortex2_internal.h"
 
+#include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
 #include <iostream>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace {
 
@@ -89,8 +93,138 @@ vx_result_t Device::open(uint32_t index, Device** out) {
         return VX_ERR_DEVICE_LOST;
 
     std::unique_ptr<Platform> plat(new CallbacksAdapter(g_backend_cb, dev_ctx));
-    *out = new Device(std::move(plat));
+    Device* d = new Device(std::move(plat));
+    d->cp_try_init();
+    *out = d;
     return VX_SUCCESS;
+}
+
+// ============================================================================
+// Command Processor submission path (Phase C of cp_pure_v2_callbacks_proposal).
+// One source of truth for the CP wire protocol — every backend goes through
+// this code via platform()->cp_mmio_*  +  platform()->mem_upload.
+// ============================================================================
+
+namespace {
+// CP regfile offsets (CP-internal; backends translate to physical addrs).
+// Mirrors VX_cp_axil_regfile §17.4.
+constexpr uint32_t CP_REG_CTRL          = 0x000;
+constexpr uint32_t CP_Q_RING_BASE_LO    = 0x100;
+constexpr uint32_t CP_Q_RING_BASE_HI    = 0x104;
+constexpr uint32_t CP_Q_HEAD_ADDR_LO    = 0x108;
+constexpr uint32_t CP_Q_HEAD_ADDR_HI    = 0x10C;
+constexpr uint32_t CP_Q_CMPL_ADDR_LO    = 0x110;
+constexpr uint32_t CP_Q_CMPL_ADDR_HI    = 0x114;
+constexpr uint32_t CP_Q_RING_SIZE_LOG2  = 0x118;
+constexpr uint32_t CP_Q_CONTROL         = 0x11C;
+constexpr uint32_t CP_Q_TAIL_LO         = 0x120;
+constexpr uint32_t CP_Q_TAIL_HI         = 0x124;
+constexpr uint32_t CP_Q_SEQNUM          = 0x128;
+
+constexpr uint32_t CP_RING_SIZE_LOG2 = 16;       // 64 KiB
+constexpr uint32_t CP_RING_SIZE      = 1u << CP_RING_SIZE_LOG2;
+constexpr uint8_t  CP_OPCODE_DCR_WR  = 0x04;
+constexpr uint8_t  CP_OPCODE_LAUNCH  = 0x06;
+constexpr std::size_t CP_CL_BYTES    = 64;
+
+bool truthy_env(const char* name) {
+    const char* v = std::getenv(name);
+    if (v == nullptr || v[0] == '\0') return false;
+    if (v[0] == '0' && v[1] == '\0') return false;
+    std::string s(v);
+    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+    return s != "false" && s != "no" && s != "off";
+}
+} // namespace
+
+void Device::cp_try_init() {
+    if (!truthy_env("VORTEX_USE_CP")) return;
+
+    // Allocate ring + head + completion slots in device memory.
+    // VX_MEM_READ flag for ring (CP reads from it), VX_MEM_WRITE for
+    // head + cmpl (CP writes seqnum/head pointers there).
+    auto* p = platform();
+    if (p->mem_alloc(CP_RING_SIZE,           /*VX_MEM_READ*/ 0x1, &cp_ring_dev_addr_) != VX_SUCCESS) return;
+    if (p->mem_alloc(CP_CL_BYTES,            /*VX_MEM_WRITE*/ 0x2, &cp_head_dev_addr_) != VX_SUCCESS) return;
+    if (p->mem_alloc(CP_CL_BYTES,            /*VX_MEM_WRITE*/ 0x2, &cp_cmpl_dev_addr_) != VX_SUCCESS) return;
+
+    // Zero them so CP doesn't read stale data on first fetch.
+    std::vector<uint8_t> zeros_cl(CP_CL_BYTES, 0);
+    std::vector<uint8_t> zeros_ring(CP_RING_SIZE, 0);
+    p->mem_upload(cp_ring_dev_addr_, zeros_ring.data(), CP_RING_SIZE);
+    p->mem_upload(cp_head_dev_addr_, zeros_cl.data(), CP_CL_BYTES);
+    p->mem_upload(cp_cmpl_dev_addr_, zeros_cl.data(), CP_CL_BYTES);
+
+    // Program CP queue 0.
+    p->cp_mmio_write(CP_Q_RING_BASE_LO,   uint32_t(cp_ring_dev_addr_ & 0xFFFFFFFFu));
+    p->cp_mmio_write(CP_Q_RING_BASE_HI,   uint32_t(cp_ring_dev_addr_ >> 32));
+    p->cp_mmio_write(CP_Q_HEAD_ADDR_LO,   uint32_t(cp_head_dev_addr_ & 0xFFFFFFFFu));
+    p->cp_mmio_write(CP_Q_HEAD_ADDR_HI,   uint32_t(cp_head_dev_addr_ >> 32));
+    p->cp_mmio_write(CP_Q_CMPL_ADDR_LO,   uint32_t(cp_cmpl_dev_addr_ & 0xFFFFFFFFu));
+    p->cp_mmio_write(CP_Q_CMPL_ADDR_HI,   uint32_t(cp_cmpl_dev_addr_ >> 32));
+    p->cp_mmio_write(CP_Q_RING_SIZE_LOG2, CP_RING_SIZE_LOG2);
+    p->cp_mmio_write(CP_Q_CONTROL,        0x1);
+    p->cp_mmio_write(CP_REG_CTRL,         0x1);
+
+    cp_enabled_ = true;
+    std::fprintf(stdout,
+                 "info: CP enabled — ring=0x%lx head=0x%lx cmpl=0x%lx\n",
+                 cp_ring_dev_addr_, cp_head_dev_addr_, cp_cmpl_dev_addr_);
+}
+
+vx_result_t Device::cp_submit_cl_(const void* cl) {
+    std::lock_guard<std::mutex> g(cp_mu_);
+    auto* p = platform();
+
+    // 1) Upload one CL into the ring at the current tail.
+    const uint64_t ring_off = cp_tail_ & (CP_RING_SIZE - 1);
+    if (ring_off + CP_CL_BYTES > CP_RING_SIZE)
+        return VX_ERR_INVALID_VALUE;  // mid-CL ring wrap not yet supported
+    auto r = p->mem_upload(cp_ring_dev_addr_ + ring_off, cl, CP_CL_BYTES);
+    if (r != VX_SUCCESS) return r;
+
+    // 2) Commit the new tail. Atomic-pair: LO stages, HI commits both.
+    cp_tail_           += CP_CL_BYTES;
+    cp_expected_seqnum_ += 1;
+    r = p->cp_mmio_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
+    if (r != VX_SUCCESS) return r;
+    r = p->cp_mmio_write(CP_Q_TAIL_HI, uint32_t(cp_tail_ >> 32));
+    if (r != VX_SUCCESS) return r;
+
+    // 3) Poll Q_SEQNUM until it catches up to this command's slot.
+    //    Each MMIO read drives the simulator one or more cycles; on
+    //    real hardware this is a cheap PCIe read.
+    const uint64_t target = cp_expected_seqnum_;
+    for (;;) {
+        uint32_t seqnum32 = 0;
+        r = p->cp_mmio_read(CP_Q_SEQNUM, &seqnum32);
+        if (r != VX_SUCCESS) return r;
+        if (uint64_t(seqnum32) >= target) return VX_SUCCESS;
+        // No host sleep: each MMIO read already ticks sim cycles.
+    }
+}
+
+vx_result_t Device::cp_submit_dcr_write(uint32_t addr, uint32_t value) {
+    // CMD_DCR_WRITE on-wire layout (per VX_cp_pkg.sv cmd_t + cmd_size=20):
+    //   bytes 0..3  header  { opcode=0x04, flags=0, reserved=0 }
+    //   bytes 4..11 arg0    DCR addr
+    //   bytes 12..19 arg1   DCR value
+    // Pad rest of CL to 0 (NOP sentinel for unpack).
+    uint8_t cl[CP_CL_BYTES] = {0};
+    uint32_t* p32 = reinterpret_cast<uint32_t*>(cl);
+    p32[0] = CP_OPCODE_DCR_WR;
+    p32[1] = addr;
+    p32[3] = value;
+    return cp_submit_cl_(cl);
+}
+
+vx_result_t Device::cp_submit_launch() {
+    // CMD_LAUNCH on-wire layout (cmd_size=12):
+    //   bytes 0..3  header  { opcode=0x06, flags=0, reserved=0 }
+    //   bytes 4..11 arg0    unused by VX_cp_launch in v1
+    uint8_t cl[CP_CL_BYTES] = {0};
+    cl[0] = CP_OPCODE_LAUNCH;
+    return cp_submit_cl_(cl);
 }
 
 void Device::register_queue(Queue* q) {
