@@ -47,6 +47,14 @@ module VX_cp_engine_top
   output wire [$bits(cmd_t)-1:0]       bid_dcr_cmd,
   input  wire                          bid_dcr_grant,
 
+  // Resource done pulses (harness drives these to simulate the resource
+  // modules finishing). For backwards-compatible tests that still treat
+  // grant as done, the harness can simply tie these to the corresponding
+  // bid_*_grant inputs delayed by one cycle.
+  input  wire                          kmu_done_i,
+  input  wire                          dma_done_i,
+  input  wire                          dcr_done_i,
+
   // Retirement.
   output wire                          retire_evt,
   output wire [63:0]                   retire_seqnum,
@@ -109,6 +117,9 @@ module VX_cp_engine_top
     .bid_kmu       (bid_kmu_if),
     .bid_dma       (bid_dma_if),
     .bid_dcr       (bid_dcr_if),
+    .kmu_done_i    (kmu_done_i),
+    .dma_done_i    (dma_done_i),
+    .dcr_done_i    (dcr_done_i),
     .retire_evt    (retire_evt),
     .retire_seqnum (retire_seqnum),
     .submit_evt    (submit_evt),

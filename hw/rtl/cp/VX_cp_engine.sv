@@ -53,6 +53,14 @@ module VX_cp_engine
   VX_cp_engine_bid_if.bidder      bid_dma,
   VX_cp_engine_bid_if.bidder      bid_dcr,
 
+  // Per-resource done signals. These come from the resource module
+  // (launch/dma/dcr_proxy) and pulse high for one cycle when the
+  // resource finishes the current command. The engine consumes them
+  // in S_WAIT_DONE to know when to retire.
+  input  wire                     kmu_done_i,
+  input  wire                     dma_done_i,
+  input  wire                     dcr_done_i,
+
   // Retirement signaling to VX_cp_completion.
   output logic                    retire_evt,
   output logic [63:0]             retire_seqnum,
@@ -97,16 +105,14 @@ module VX_cp_engine
     endcase
   endfunction
 
-  // Grant + done signals from the three resource arbiters / consumers.
-  // Engine sees which arbiter has granted and waits for the matching done.
-  wire kmu_done = bid_kmu.grant;  // VX_cp_launch's done is OR'd into all CPEs; CPE filters on its own grant
-  wire dma_done = bid_dma.grant;  // similarly tied for Phase 2b
-  wire dcr_done = bid_dcr.grant;
-  // NOTE: tying done to grant here is a Phase 2b shortcut — the
-  // resource modules' real `done` outputs are aggregated in VX_cp_core
-  // and routed back per-CPE in Phase 3. For now we treat "got grant"
-  // as "done immediately next cycle" which lets the FSM cycle through
-  // states cleanly without external resource feedback.
+  // Phase 3: done signals come from outside as kmu_done_i / dma_done_i /
+  // dcr_done_i. The engine waits in S_WAIT_DONE until the corresponding
+  // resource fires done. For NUM_QUEUES == 1 the granted CPE is the only
+  // one in S_WAIT_DONE, so the done pulse unambiguously belongs to it.
+  // (Multi-CPE contention is not yet exercised — the bid arbiter only
+  // grants one CPE per resource per cycle, and the resource module
+  // processes one command at a time, so the granted CPE is always the
+  // one waiting.)
 
   // -------------------------------------------------------------------------
   // FSM
@@ -149,9 +155,13 @@ module VX_cp_engine
           endcase
         end
         S_WAIT_DONE: begin
-          // Phase 2b: treat grant as done. Phase 3+ replaces with per-
-          // resource done aggregator.
-          fsm <= S_RETIRE;
+          // Wait for the resource's actual done pulse before retiring.
+          case (cur_res)
+            RES_KMU: if (kmu_done_i) fsm <= S_RETIRE;
+            RES_DMA: if (dma_done_i) fsm <= S_RETIRE;
+            RES_DCR: if (dcr_done_i) fsm <= S_RETIRE;
+            default: fsm <= S_RETIRE;
+          endcase
         end
         S_RETIRE: begin
           seqnum_r <= seqnum_r + 64'd1;
@@ -202,9 +212,6 @@ module VX_cp_engine
   end
 
   `UNUSED_VAR (QID)
-  `UNUSED_VAR (kmu_done)
-  `UNUSED_VAR (dma_done)
-  `UNUSED_VAR (dcr_done)
   `UNUSED_VAR (no_resource)
 
 endmodule : VX_cp_engine

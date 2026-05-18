@@ -193,8 +193,17 @@ static uint64_t run_one_cmd(vl_simulator<T>& sim, uint64_t& tick,
         sim->bid_dma_grant = 0;
         sim->bid_dcr_grant = 0;
 
-        // ----- Cycle 4: WAIT_DONE -> RETIRE (no observable bid) -----
+        // ----- Cycle 4: WAIT_DONE -> pulse done -> RETIRE -----
+        // Phase 3: engine waits for the resource's done pulse before
+        // retiring (was treating grant as done in Phase 2b). Simulate
+        // a one-cycle done pulse here.
+        if (expect_kmu) sim->kmu_done_i = 1;
+        if (expect_dma) sim->dma_done_i = 1;
+        if (expect_dcr) sim->dcr_done_i = 1;
         cycle(sim, tick);
+        sim->kmu_done_i = 0;
+        sim->dma_done_i = 0;
+        sim->dcr_done_i = 0;
     }
 
     // ----- RETIRE cycle: retire_evt high, seqnum still old value -----
@@ -227,6 +236,9 @@ int main(int argc, char** argv) {
     sim->bid_kmu_grant = 0;
     sim->bid_dma_grant = 0;
     sim->bid_dcr_grant = 0;
+    sim->kmu_done_i = 0;
+    sim->dma_done_i = 0;
+    sim->dcr_done_i = 0;
     tick = sim.reset(tick);
 
     uint64_t seq = 0;
@@ -285,7 +297,9 @@ int main(int argc, char** argv) {
     sim->bid_kmu_grant = 1;
     cycle(sim, tick);                   // BID -> WAIT_DONE
     sim->bid_kmu_grant = 0;
+    sim->kmu_done_i = 1;                // pulse done
     cycle(sim, tick);                   // WAIT_DONE -> RETIRE
+    sim->kmu_done_i = 0;
     cycle(sim, tick);                   // RETIRE -> IDLE
     ++seq;
 

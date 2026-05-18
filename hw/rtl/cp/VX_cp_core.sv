@@ -149,6 +149,15 @@ module VX_cp_core
         .bid_kmu       (bid_kmu[q]),
         .bid_dma       (bid_dma[q]),
         .bid_dcr       (bid_dcr[q]),
+        // Real done pulses from the shared resource modules. Broadcast
+        // to every CPE: the bid arbiter only grants one CPE at a time
+        // per resource, and the resource processes one command at a
+        // time, so only the granted CPE will be in S_WAIT_DONE when the
+        // pulse arrives — non-granted CPEs ignore it (they're in
+        // S_IDLE / S_DECODE / S_BID).
+        .kmu_done_i    (launch_done),
+        .dma_done_i    (dma_done),
+        .dcr_done_i    (dcr_done),
         .retire_evt    (retire_evt[q]),
         .retire_seqnum (retire_seqnum[q]),
         .submit_evt    (submit_evt[q]),
@@ -237,7 +246,6 @@ module VX_cp_core
     .gpu_busy (gpu_if.busy),
     .done     (launch_done)
   );
-  `UNUSED_VAR (launch_done)
 
   // ----- Shared DCR proxy -----
   logic dcr_done;
@@ -257,7 +265,6 @@ module VX_cp_core
     .dcr_rsp_data  (gpu_if.dcr_rsp_data)
   );
   `UNUSED_VAR (gpu_if.dcr_req_ready)
-  `UNUSED_VAR (dcr_done)
   `UNUSED_VAR (dcr_last_rsp_data)
 
   // ----- DMA (AXI source via xbar) -----
@@ -278,7 +285,6 @@ module VX_cp_core
     .done  (dma_done),
     .axi_m (dma_axi)
   );
-  `UNUSED_VAR (dma_done)
 
   // ----- Completion writeback -----
   wire [63:0] cmpl_addr_arr [NUM_QUEUES];
