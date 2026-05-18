@@ -41,7 +41,12 @@ else
 TESTS_64A :=
 endif
 ifneq ($(HAS_EXT_C),0)
-TESTS_64C := $(wildcard $(TEST_DIR)/rv64uc-p-*.bin)
+# rv64uc-p-rvc contains a 64-bit-misaligned C.FLD that the upstream test
+# expects to trap on. Vortex has no trap handler and rtlsim hard-asserts
+# on misaligned access (VX_lsu_slice.sv:221). simx tolerates it and exits
+# vacuously via the trap-vector's tmc x0 at PC 0x10 — same pattern as the
+# already-filtered rv64ui-p-ma_data.bin.
+TESTS_64C := $(filter-out $(TEST_DIR)/rv64uc-p-rvc.bin, $(wildcard $(TEST_DIR)/rv64uc-p-*.bin))
 else
 TESTS_64C :=
 endif
