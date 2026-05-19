@@ -33,6 +33,7 @@ all:
 	$(MAKE) -C softmax
 	$(MAKE) -C sgemm_tcu
 	$(MAKE) -C sgemm_tcu_wg
+	$(MAKE) -C sgemm_tcu_wg_d
 	$(MAKE) -C sgemm_tcu_sp
 	$(MAKE) -C sgemm_tcu_mx
 	$(MAKE) -C sgemm_tcu_wg_sp
@@ -80,6 +81,7 @@ run-simx:
 	$(MAKE) -C softmax run-simx
 	$(MAKE) -C sgemm_tcu run-simx
 	$(MAKE) -C sgemm_tcu_wg run-simx
+	$(MAKE) -C sgemm_tcu_wg_d run-simx
 	$(MAKE) -C sgemm_tcu_sp run-simx
 	$(MAKE) -C sgemm_tcu_mx run-simx
 	$(MAKE) -C sgemm_tcu_wg_sp run-simx
@@ -127,6 +129,7 @@ run-rtlsim:
 	$(MAKE) -C softmax run-rtlsim
 	$(MAKE) -C sgemm_tcu run-rtlsim
 	$(MAKE) -C sgemm_tcu_wg run-rtlsim
+	$(MAKE) -C sgemm_tcu_wg_d run-rtlsim
 	$(MAKE) -C sgemm_tcu_sp run-rtlsim
 #	$(MAKE) -C sgemm_tcu_mx run-rtlsim - not supported yet
 	$(MAKE) -C sgemm_tcu_wg_sp run-rtlsim
@@ -162,6 +165,7 @@ clean:
 	$(MAKE) -C sgemm_v1 clean
 	$(MAKE) -C sgemm_tcu clean
 	$(MAKE) -C sgemm_tcu_wg clean
+	$(MAKE) -C sgemm_tcu_wg_d clean
 	$(MAKE) -C sgemm_tcu_sp clean
 	$(MAKE) -C sgemm_tcu_mx clean
 	$(MAKE) -C sgemm_tcu_wg_sp clean

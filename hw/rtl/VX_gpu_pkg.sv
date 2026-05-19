@@ -627,7 +627,7 @@ package VX_gpu_pkg;
 
 `ifdef EXT_TCU_ENABLE
     typedef struct packed {
-        logic __padding;
+        logic cd_from_lmem;   // 1=C/D accumulator in local memory (lmem)
         logic a_from_smem;    // 0=register, 1=shared memory (B is always smem)
         logic [1:0] cd_nregs; // 0=8, 1=16, 2=32 C/D registers
         logic is_sparse;

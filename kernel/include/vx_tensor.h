@@ -795,13 +795,15 @@ private:
   //   bit 0     : is_sparse
   //   bits [2:1]: cd_nregs — 0=8, 1=16, 2=32
   //   bit 3     : a_from_smem
+  //   bit 4     : cd_from_lmem — C/D accumulator lives in lmem (desc_cd in a2)
   static constexpr int cd_nregs_code = (NRC_ == 8) ? 0 : (NRC_ == 16) ? 1 : 2;
 
-  template <bool a_is_smem>
+  template <bool a_is_smem, bool cd_from_lmem = false>
   static constexpr int wgmma_flags() {
     return (is_sparse ? 1 : 0)
          | (cd_nregs_code << 1)
-         | ((a_is_smem ? 1 : 0) << 3);
+         | ((a_is_smem ? 1 : 0) << 3)
+         | ((cd_from_lmem ? 1 : 0) << 4);
   }
 
 public:
@@ -827,6 +829,10 @@ public:
   static constexpr uint32_t tileK   = k_steps * tcK * i_ratio;
 
   static constexpr uint32_t NRC = NRC_;
+
+  // Warp-group size and combined group tile M
+  static constexpr uint32_t WG_SIZE = 4;
+  static constexpr uint32_t group_M = WG_SIZE * xtileM;
 
   // Sparse metadata constants (WGMMA geometry, NOT wmma geometry)
   static constexpr uint32_t sp_rtl_i_ratio       = 32 / It::bits;
@@ -1103,6 +1109,33 @@ public:
         frag_d.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
       }
     }
+  }
+
+  // CD-from-lmem variant: C is read from lmem and D is written back to lmem.
+  // No register accumulator — desc_cd (a2) points to the per-warp C/D smem region.
+  // SS: OpA = smem_matrix_desc. RS: OpA = fragment_a (NRC <= 16 only).
+  template <typename OpA, typename OpB>
+  static __attribute__((always_inline)) void wgmma_sync(
+      const OpA &op_a,
+      const OpB &op_b,
+      const smem_matrix_desc &desc_cd) {
+    static_assert(is_smem_desc<OpB>::value, "B must be smem_matrix_desc");
+    constexpr bool a_is_smem = is_smem_desc<OpA>::value;
+    if constexpr (!a_is_smem) {
+      static_assert(static_cast<int>(OpA::Use) == static_cast<int>(matrix_a), "A operand must be matrix_a fragment");
+      static_assert(NRC_ <= 16, "A-from-reg requires NRC <= 16");
+    }
+    constexpr int flags = wgmma_flags<a_is_smem, true>();
+    register uint32_t ra __asm__("a0") = op_a.value;
+    register uint32_t rb __asm__("a1") = op_b.value;
+    register uint32_t rc __asm__("a2") = desc_cd.value;
+
+    __asm__ volatile (".insn r %[insn], 1, 2, x%[fmd], x%[fms], x%[flags]"
+      :
+      : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id), [flags]"i"(flags),
+        "r"(ra), "r"(rb), "r"(rc)
+      : "memory"
+    );
   }
 };
 

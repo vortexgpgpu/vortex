@@ -928,13 +928,13 @@ public:
       bool b_cached = tbuf_state_.b_valid && !b_dirty
                    && (b_desc == tbuf_state_.b_desc);
 
-      // Fetch cycles: A (if smem) + B (if not cached) + meta (if sparse)
+      // Fetch cycles: B (if not cached) + A (if smem) + meta (if sparse)
       uint32_t fetch_cycles = 0;
-      if (is_a_smem) {
-        fetch_cycles += is_sparse ? a_bank_rows_sp : a_bank_rows;
-      }
       if (!b_cached) {
         fetch_cycles += b_bank_rows;
+      }
+      if (is_a_smem) {
+        fetch_cycles += is_sparse ? a_bank_rows_sp : a_bank_rows;
       }
       if (is_sparse && is_a_smem) {
         uint32_t ratio = elem_ratio(fmt_s);
@@ -944,13 +944,13 @@ public:
         fetch_cycles += (meta_total + num_banks - 1) / num_banks;
       }
 
-      // Count LMEM reads: A words + B words (if not cached) + metadata words
+      // Count LMEM reads: B words (if not cached) + A words + metadata words
       uint32_t lmem_reads = 0;
-      if (is_a_smem) {
-        lmem_reads += is_sparse ? (a_total / 2) : a_total;
-      }
       if (!b_cached) {
         lmem_reads += b_total;
+      }
+      if (is_a_smem) {
+        lmem_reads += is_sparse ? (a_total / 2) : a_total;
       }
       if (is_sparse && is_a_smem) {
         uint32_t ratio = elem_ratio(fmt_s);

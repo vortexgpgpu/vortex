@@ -96,7 +96,9 @@ package VX_tcu_pkg;
     localparam TCU_WG_N_STEPS = TCU_WG_TILE_N / TCU_TC_N;
     localparam TCU_WG_K_STEPS = TCU_WG_TILE_K / TCU_TC_K;
 
-    localparam TCU_WG_UOPS = TCU_WG_M_STEPS * TCU_WG_N_STEPS * TCU_WG_K_STEPS;
+    localparam TCU_WG_UOPS   = TCU_WG_M_STEPS * TCU_WG_N_STEPS * TCU_WG_K_STEPS;
+    // Full C/D tile size in 32-bit words (used for lmem-accumulator LUTRAM)
+    localparam TCU_WG_C_TOTAL = TCU_WG_TILE_M * TCU_WG_TILE_N;
 
     // WG A/B micro-tiling (block geometry is shared with non-WG)
     localparam TCU_WG_A_BLOCK_SIZE = TCU_TC_M * TCU_TC_K;

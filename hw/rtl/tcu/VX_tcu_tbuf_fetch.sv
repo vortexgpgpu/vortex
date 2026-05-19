@@ -29,7 +29,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter         BANK_ADDR_WIDTH = 12,
     // Tile buffer sizes (in 32-bit words); passed from VX_tcu_tbuf.
     parameter         A_TOTAL        = 1,
-    parameter         B_TOTAL        = 1
+    parameter         B_TOTAL        = 1,
+    parameter         C_TOTAL        = 1
 `ifdef TCU_SPARSE_ENABLE
    ,parameter         META_TOTAL_MAX = 1
 `endif
@@ -62,6 +63,16 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [`XLEN-1:0]         req_desc_a,
     input  wire [`XLEN-1:0]         req_desc_b,
     input  wire                     req_a_is_smem,
+    input  wire [`XLEN-1:0]         req_desc_cd,       // C/D lmem descriptor (valid when cd_from_lmem)
+    input  wire                     req_cd_from_lmem,  // 1=C/D accumulator in lmem
+
+    // C LUTRAM write-back from VX_tcu_core (FEDP output, lmem-accumulator mode)
+    input  wire                     c_wb_valid,
+    input  wire [C_TOTAL-1:0]       c_wb_wren,
+    input  wire [C_TOTAL-1:0][31:0] c_wb_data,
+
+    // Trigger STORE_D after final k-step FEDP outputs land in C LUTRAM
+    input  wire                     c_all_done,
 
     // LMEM bank-parallel read port (1-cycle latency, pipelined)
     VX_mem_bus_if.master            tcu_lmem_if,
@@ -74,9 +85,15 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire                          b_ready,
     output wire [TCU_WG_M_STEPS-1:0]    a_row_ready,
 
+    // C tile ready (lmem-accumulator mode: C fetched from lmem)
+    output wire                     c_ready,
+    // Pulses one cycle after all C_BANK_ROWS writes in STORE_D complete
+    output wire                     store_d_done,
+
     // Slot data (combinational read)
     output wire [A_TOTAL-1:0][31:0] hit_a_buf,
-    output wire [B_TOTAL-1:0][31:0] hit_b_buf
+    output wire [B_TOTAL-1:0][31:0] hit_b_buf,
+    output wire [C_TOTAL-1:0][31:0] hit_c_buf
 `ifdef TCU_SPARSE_ENABLE
    ,output wire                     hit_is_sparse,
     output wire [META_TOTAL_MAX-1:0][31:0] hit_meta_buf,
@@ -96,6 +113,7 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     localparam A_BANK_ROWS    = (A_TOTAL + NUM_BANKS - 1) / NUM_BANKS;
     localparam B_BANK_ROWS    = (B_TOTAL + NUM_BANKS - 1) / NUM_BANKS;
+    localparam C_BANK_ROWS    = (C_TOTAL + NUM_BANKS - 1) / NUM_BANKS;
     // Half-tile threshold: words 0..A_TOTAL/2-1 cover m_step 0 (A stored row-major).
     localparam A_BANK_ROWS_M0 = (A_TOTAL / 2 + NUM_BANKS - 1) / NUM_BANKS;
 
@@ -118,12 +136,13 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam META_TOTAL_16B    = WG_META_BANKS * META_STRIDE_16B;
     localparam META_ROWS_MAX     = (META_TOTAL_MAX + NUM_BANKS - 1) / NUM_BANKS;
 
-    localparam MAX_BANK_ROWS = A_BANK_ROWS > B_BANK_ROWS
+    localparam MAX_BANK_ROWS_AB = A_BANK_ROWS > B_BANK_ROWS
                              ? (A_BANK_ROWS > META_ROWS_MAX ? A_BANK_ROWS : META_ROWS_MAX)
                              : (B_BANK_ROWS > META_ROWS_MAX ? B_BANK_ROWS : META_ROWS_MAX);
 `else
-    localparam MAX_BANK_ROWS = A_BANK_ROWS > B_BANK_ROWS ? A_BANK_ROWS : B_BANK_ROWS;
+    localparam MAX_BANK_ROWS_AB = A_BANK_ROWS > B_BANK_ROWS ? A_BANK_ROWS : B_BANK_ROWS;
 `endif
+    localparam MAX_BANK_ROWS = MAX_BANK_ROWS_AB > C_BANK_ROWS ? MAX_BANK_ROWS_AB : C_BANK_ROWS;
 
     localparam FETCH_CTR_W = `CLOG2(MAX_BANK_ROWS + 1);
 
@@ -158,8 +177,10 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [SLOT_DEPTH-1:0]                            slot_fetch_done;
     logic [SLOT_DEPTH-1:0]                            warp_alloc_pending;
     logic [SLOT_DEPTH-1:0]                            slot_a_from_smem;
+    logic [SLOT_DEPTH-1:0]                            slot_cd_from_lmem;
     logic [SLOT_DEPTH-1:0][BANK_ADDR_WIDTH-1:0]       slot_a_row_base;
     logic [SLOT_DEPTH-1:0][BANK_ADDR_WIDTH-1:0]       slot_b_row_base;
+    logic [SLOT_DEPTH-1:0][BANK_ADDR_WIDTH-1:0]       slot_cd_row_base;
     logic [SLOT_ADDRW-1:0]                            fetch_slot;
 
 `ifdef TCU_SPARSE_ENABLE
@@ -194,16 +215,20 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Descriptor parsing -> row bases (combinational, used only at alloc)
     // -----------------------------------------------------------------------
 
-    wire [LMEM_ADDR_W-1:0] desc_a_word_base = LMEM_ADDR_W'(req_desc_a[15:0] >> WORD_SIZE_LOG2);
-    wire [LMEM_ADDR_W-1:0] desc_b_word_base = LMEM_ADDR_W'(req_desc_b[15:0] >> WORD_SIZE_LOG2);
+    wire [LMEM_ADDR_W-1:0] desc_a_word_base  = LMEM_ADDR_W'(req_desc_a[15:0]  >> WORD_SIZE_LOG2);
+    wire [LMEM_ADDR_W-1:0] desc_b_word_base  = LMEM_ADDR_W'(req_desc_b[15:0]  >> WORD_SIZE_LOG2);
+    wire [LMEM_ADDR_W-1:0] desc_cd_word_base = LMEM_ADDR_W'(req_desc_cd[15:0] >> WORD_SIZE_LOG2);
 
-    wire [BANK_ADDR_WIDTH-1:0] desc_a_row_base = desc_a_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-    wire [BANK_ADDR_WIDTH-1:0] desc_b_row_base = desc_b_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
+    wire [BANK_ADDR_WIDTH-1:0] desc_a_row_base  = desc_a_word_base [BANK_SEL_BITS +: BANK_ADDR_WIDTH];
+    wire [BANK_ADDR_WIDTH-1:0] desc_b_row_base  = desc_b_word_base [BANK_SEL_BITS +: BANK_ADDR_WIDTH];
+    wire [BANK_ADDR_WIDTH-1:0] desc_cd_row_base = desc_cd_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
 
     if (BANK_SEL_BITS > 0) begin : g_word_base_lsbs_unused
         `UNUSED_VAR (desc_a_word_base[BANK_SEL_BITS-1:0])
         `UNUSED_VAR (desc_b_word_base[BANK_SEL_BITS-1:0])
+        `UNUSED_VAR (desc_cd_word_base[BANK_SEL_BITS-1:0])
     end
+    `UNUSED_VAR (req_desc_cd[`XLEN-1:16])
 
 `ifdef TCU_SPARSE_ENABLE
     wire [LMEM_ADDR_W-1:0] desc_meta_word_base = desc_a_word_base
@@ -237,21 +262,29 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Sender FSM states
     // -----------------------------------------------------------------------
 
-    typedef enum logic [1:0] {
-        SEND_IDLE       = 2'd0,
-        SEND_FETCH_A    = 2'd1,
-        SEND_FETCH_B    = 2'd2,
-        SEND_FETCH_META = 2'd3
+    typedef enum logic [2:0] {
+        SEND_IDLE       = 3'd0,
+        SEND_FETCH_C    = 3'd1,
+        SEND_FETCH_B    = 3'd2,
+        SEND_FETCH_A    = 3'd3,
+        SEND_FETCH_META = 3'd4,
+        SEND_STORE_D    = 3'd5
     } send_state_e;
 
     (* fsm_encoding = "one_hot" *) send_state_e send_state_r;
 
+    wire in_fetch_c    = (send_state_r == SEND_FETCH_C);
     wire in_fetch_a    = (send_state_r == SEND_FETCH_A);
     wire in_fetch_b    = (send_state_r == SEND_FETCH_B);
+    wire in_store_d    = (send_state_r == SEND_STORE_D);
 `ifdef TCU_SPARSE_ENABLE
     wire in_fetch_meta = (send_state_r == SEND_FETCH_META);
 `endif
-    wire in_fetch      = (send_state_r != SEND_IDLE);
+    wire in_fetch      = in_fetch_c || in_fetch_b || in_fetch_a
+`ifdef TCU_SPARSE_ENABLE
+                      || in_fetch_meta
+`endif
+                      ;
 
     // Allocate (or re-allocate) a slot on the first uop of each new tile.
     // req_desc_a/req_desc_b may be stale on non-first uops (used_rs gates RF
@@ -269,29 +302,36 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic                   req_inflight_r;
 
     // Per-phase termination threshold and row base.
-`ifndef TCU_SPARSE_ENABLE
-    wire [FETCH_CTR_W-1:0]     phase_total_rows =
-        in_fetch_a ? FETCH_CTR_W'(A_BANK_ROWS) : FETCH_CTR_W'(B_BANK_ROWS);
-
-    wire [BANK_ADDR_WIDTH-1:0] phase_row_base =
-        in_fetch_a ? slot_a_row_base[fetch_slot] : slot_b_row_base[fetch_slot];
-`else
     logic [FETCH_CTR_W-1:0]     phase_total_rows;
     logic [BANK_ADDR_WIDTH-1:0] phase_row_base;
     always_comb begin
         case (send_state_r)
+            SEND_FETCH_C: begin
+                phase_total_rows = FETCH_CTR_W'(C_BANK_ROWS);
+                phase_row_base   = slot_cd_row_base[fetch_slot];
+            end
             SEND_FETCH_A: begin
+`ifdef TCU_SPARSE_ENABLE
                 phase_total_rows = FETCH_CTR_W'(slot_is_sparse[fetch_slot]
                                    ? A_BANK_ROWS_SP : A_BANK_ROWS);
+`else
+                phase_total_rows = FETCH_CTR_W'(A_BANK_ROWS);
+`endif
                 phase_row_base   = slot_a_row_base[fetch_slot];
             end
             SEND_FETCH_B: begin
                 phase_total_rows = FETCH_CTR_W'(B_BANK_ROWS);
                 phase_row_base   = slot_b_row_base[fetch_slot];
             end
+`ifdef TCU_SPARSE_ENABLE
             SEND_FETCH_META: begin
                 phase_total_rows = slot_meta_bank_rows[fetch_slot];
                 phase_row_base   = slot_meta_row_base[fetch_slot];
+            end
+`endif
+            SEND_STORE_D: begin
+                phase_total_rows = FETCH_CTR_W'(C_BANK_ROWS);
+                phase_row_base   = slot_cd_row_base[fetch_slot];
             end
             default: begin
                 phase_total_rows = '0;
@@ -299,7 +339,6 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
         endcase
     end
-`endif
 
     wire all_requested = (req_ctr_r >= phase_total_rows);
 
@@ -307,14 +346,31 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // LMEM request handshake
     // -----------------------------------------------------------------------
 
-    wire can_issue = in_fetch && !all_requested
-                  && (!req_inflight_r || tcu_lmem_if.rsp_valid);
+    // Reads use req_inflight_r to ensure one in-flight at a time (rsp_valid clears it).
+    // Writes (STORE_D) have no response, so bypass req_inflight_r entirely.
+    wire can_issue = (in_fetch   && !all_requested && (!req_inflight_r || tcu_lmem_if.rsp_valid))
+                  || (in_store_d && !all_requested);
+
+    // Write data from C LUTRAM for STORE_D phase
+    logic [NUM_BANKS*`XLEN-1:0] store_d_wdata;
+    logic [NUM_BANKS*(`XLEN/8)-1:0] store_d_byteen;
+    always_comb begin
+        store_d_wdata  = '0;
+        store_d_byteen = '0;
+        for (int b = 0; b < NUM_BANKS; ++b) begin
+            automatic int idx = int'(req_ctr_r) * NUM_BANKS + b;
+            if (idx < C_TOTAL) begin
+                store_d_wdata [b * `XLEN +: `XLEN]         = `XLEN'(hit_c_buf[idx]);
+                store_d_byteen[b * (`XLEN/8) +: (`XLEN/8)] = '1;
+            end
+        end
+    end
 
     assign tcu_lmem_if.req_valid       = can_issue;
-    assign tcu_lmem_if.req_data.rw     = 1'b0;
+    assign tcu_lmem_if.req_data.rw     = in_store_d;
     assign tcu_lmem_if.req_data.addr   = LMEM_DMA_ADDR_WIDTH'(phase_row_base + BANK_ADDR_WIDTH'(req_ctr_r));
-    assign tcu_lmem_if.req_data.data   = '0;
-    assign tcu_lmem_if.req_data.byteen = '0;
+    assign tcu_lmem_if.req_data.data   = in_store_d ? store_d_wdata : '0;
+    assign tcu_lmem_if.req_data.byteen = in_store_d ? store_d_byteen : '0;
     assign tcu_lmem_if.req_data.flags  = '0;
     assign tcu_lmem_if.req_data.tag    = '0;
     assign tcu_lmem_if.rsp_ready       = 1'b1;
@@ -324,6 +380,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Phase-done detection
     // -----------------------------------------------------------------------
 
+    wire last_rsp_c = in_fetch_c && tcu_lmem_if.rsp_valid
+                   && (rsp_ctr_r == FETCH_CTR_W'(C_BANK_ROWS - 1));
 `ifdef TCU_SPARSE_ENABLE
     wire last_rsp_a = in_fetch_a && tcu_lmem_if.rsp_valid
                    && (rsp_ctr_r == (slot_is_sparse[fetch_slot]
@@ -335,6 +393,9 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
     wire last_rsp_b = in_fetch_b && tcu_lmem_if.rsp_valid
                    && (rsp_ctr_r == FETCH_CTR_W'(B_BANK_ROWS - 1));
+    // STORE_D completes on last write request accepted (writes have no rsp).
+    wire last_store_d = in_store_d && tcu_lmem_if.req_valid && tcu_lmem_if.req_ready
+                     && (req_ctr_r == FETCH_CTR_W'(C_BANK_ROWS - 1));
 
     // Fires when m_step 0's A words (first half of A tile) have all arrived.
     wire last_rsp_a_m0 = in_fetch_a && tcu_lmem_if.rsp_valid
@@ -370,15 +431,37 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             case (send_state_r)
             // -----------------------------------------------------------------
             SEND_IDLE: begin
-                for (int s = SLOT_DEPTH-1; s >= 0; s--) begin
-                    if (slot_valid[s] && !slot_fetch_done[s]) begin
-                        fetch_slot     <= SLOT_ADDRW'(s);
-                        req_ctr_r      <= '0;
-                        rsp_ctr_r      <= '0;
-                        req_inflight_r <= 1'b0;
-                        // Always fetch B first; A follows for SS mode
-                        send_state_r   <= SEND_FETCH_B;
+                // STORE_D triggered by c_all_done (higher priority than new fetch)
+                if (c_all_done && slot_cd_from_lmem[cur_slot]) begin
+                    fetch_slot     <= cur_slot;
+                    req_ctr_r      <= '0;
+                    rsp_ctr_r      <= '0;
+                    req_inflight_r <= 1'b0;
+                    send_state_r   <= SEND_STORE_D;
+                end else begin
+                    for (int s = SLOT_DEPTH-1; s >= 0; s--) begin
+                        if (slot_valid[s] && !slot_fetch_done[s]) begin
+                            fetch_slot     <= SLOT_ADDRW'(s);
+                            req_ctr_r      <= '0;
+                            rsp_ctr_r      <= '0;
+                            req_inflight_r <= 1'b0;
+                            // Fetch C first (if lmem-accumulator mode), then B, then A (SS only)
+                            send_state_r   <= slot_cd_from_lmem[s] ? SEND_FETCH_C : SEND_FETCH_B;
+                        end
                     end
+                end
+            end
+            // -----------------------------------------------------------------
+            SEND_FETCH_C: begin
+                if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
+                    req_ctr_r <= req_ctr_r + FETCH_CTR_W'(1);
+                if (last_rsp_c) begin
+                    req_ctr_r      <= '0;
+                    rsp_ctr_r      <= '0;
+                    req_inflight_r <= 1'b0;
+                    send_state_r   <= SEND_FETCH_B;
+                end else if (tcu_lmem_if.rsp_valid) begin
+                    rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
                 end
             end
             // -----------------------------------------------------------------
@@ -430,6 +513,17 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
         `endif
             // -----------------------------------------------------------------
+            SEND_STORE_D: begin
+                if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
+                    req_ctr_r <= req_ctr_r + FETCH_CTR_W'(1);
+                if (last_store_d) begin
+                    req_ctr_r      <= '0;
+                    rsp_ctr_r      <= '0;
+                    req_inflight_r <= 1'b0;
+                    send_state_r   <= SEND_IDLE;
+                end
+            end
+            // -----------------------------------------------------------------
             default: send_state_r <= SEND_IDLE;
             endcase
         end
@@ -453,10 +547,12 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 slot_valid[cur_slot]          <= 1'b1;
                 slot_fetch_done[cur_slot]     <= 1'b0;
                 slot_a_from_smem[cur_slot]    <= req_a_is_smem;
+                slot_cd_from_lmem[cur_slot]   <= req_cd_from_lmem;
                 slot_desc_a[cur_slot]         <= req_desc_a;
                 slot_desc_b[cur_slot]         <= req_desc_b;
                 slot_a_row_base[cur_slot]     <= desc_a_row_base;
                 slot_b_row_base[cur_slot]     <= desc_b_row_base;
+                slot_cd_row_base[cur_slot]    <= desc_cd_row_base;
             `ifdef TCU_SPARSE_ENABLE
                 slot_is_sparse[cur_slot]      <= is_sparse;
                 slot_meta_row_base[cur_slot]  <= desc_meta_row_base;
@@ -498,6 +594,20 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     assign b_ready     = b_ready_r     && !alloc_en;
     assign a_row_ready = a_rows_done_r & {TCU_WG_M_STEPS{!alloc_en}};
+
+    // -----------------------------------------------------------------------
+    // C tile readiness tracking (lmem-accumulator mode)
+    // -----------------------------------------------------------------------
+    reg c_ready_r;
+    always_ff @(posedge clk) begin
+        if (reset)
+            c_ready_r <= 1'b0;
+        else if (alloc_en)
+            c_ready_r <= 1'b0;
+        else if (last_rsp_c)
+            c_ready_r <= 1'b1;
+    end
+    assign c_ready = c_ready_r && !alloc_en;
 
     // -----------------------------------------------------------------------
     // A data capture — single-entry LUTRAM (SIZE=1, async read)
@@ -578,6 +688,62 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .raddr (1'b0),
         .rdata (hit_b_buf)
     );
+
+    // -----------------------------------------------------------------------
+    // C data capture — single-entry LUTRAM (lmem-accumulator mode)
+    // Written by: (a) LMEM reads during FETCH_C; (b) VX_tcu_core FEDP output via c_wb_*
+    // Read by: VX_tcu_tbuf_gather (combinational) and STORE_D FSM via store_d_wdata
+    // -----------------------------------------------------------------------
+
+    logic [C_TOTAL*32-1:0] c_wdata;
+    logic [C_TOTAL-1:0]    c_wren;
+    logic                  c_write_en;
+
+    always_comb begin
+        c_wdata    = '0;
+        c_wren     = '0;
+        c_write_en = 1'b0;
+        if (tcu_lmem_if.rsp_valid && in_fetch_c) begin
+            // Capture from lmem response (NUM_BANKS words per cycle)
+            c_write_en = 1'b1;
+            for (int b = 0; b < NUM_BANKS; ++b) begin
+                if (int'(rsp_ctr_r) * NUM_BANKS + b < C_TOTAL) begin
+                    c_wren[int'(rsp_ctr_r) * NUM_BANKS + b]               = 1'b1;
+                    c_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
+                        tcu_lmem_if.rsp_data.data[b * `XLEN +: `XLEN];
+                end
+            end
+        end else if (c_wb_valid) begin
+            // Capture from VX_tcu_core FEDP write-back
+            c_write_en = 1'b1;
+            for (int i = 0; i < C_TOTAL; ++i) begin
+                c_wren[i]           = c_wb_wren[i];
+                c_wdata[i * 32 +: 32] = c_wb_data[i];
+            end
+        end
+    end
+
+    VX_dp_ram #(
+        .DATAW   (C_TOTAL * 32),
+        .SIZE    (1),
+        .WRENW   (C_TOTAL),
+        .LUTRAM  (1),
+        .OUT_REG (0),
+        .RDW_MODE("W")
+    ) shared_c_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (c_write_en),
+        .wren  (c_wren),
+        .waddr (1'b0),
+        .wdata (c_wdata),
+        .raddr (1'b0),
+        .rdata (hit_c_buf)
+    );
+
+    // store_d_done: combinational pulse on last STORE_D acknowledgment
+    assign store_d_done = last_store_d;
 
     // -----------------------------------------------------------------------
     // Metadata capture — single-entry LUTRAM (sparse only)
@@ -692,8 +858,8 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     always @(posedge clk) begin
         if (!reset) begin
             if (alloc_en)
-                `TRACE(3, ("%t: %s tbuf-fetch: alloc desc_a=0x%0h desc_b=0x%0h sparse=%0b\n",
-                    $time, INSTANCE_ID, req_desc_a, req_desc_b, is_sparse))
+                `TRACE(3, ("%t: %s tbuf-fetch: alloc desc_a=0x%0h desc_b=0x%0h sparse=%0b cd_from_lmem=%0b desc_cd=0x%0h\n",
+                    $time, INSTANCE_ID, req_desc_a, req_desc_b, is_sparse, req_cd_from_lmem, req_desc_cd))
             if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
                 `TRACE(3, ("%t: %s tbuf-fetch: rd_req addr=0x%0h phase=%0d req_ctr=%0d\n",
                     $time, INSTANCE_ID, tcu_lmem_if.req_data.addr, send_state_r, req_ctr_r))
@@ -702,6 +868,12 @@ module VX_tcu_tbuf_fetch import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     $time, INSTANCE_ID, tcu_lmem_if.rsp_data.data[0 +: `XLEN], send_state_r, rsp_ctr_r))
             if (fetch_done_now)
                 `TRACE(3, ("%t: %s tbuf-fetch: READY\n", $time, INSTANCE_ID))
+            if (last_rsp_c)
+                `TRACE(3, ("%t: %s tbuf-fetch: C-FETCH-DONE (cd_from_lmem hit)\n", $time, INSTANCE_ID))
+            if (c_all_done && slot_cd_from_lmem[cur_slot])
+                `TRACE(3, ("%t: %s tbuf-fetch: STORE-D triggered (cd_from_lmem hit)\n", $time, INSTANCE_ID))
+            if (last_store_d)
+                `TRACE(3, ("%t: %s tbuf-fetch: STORE-D done\n", $time, INSTANCE_ID))
         end
     end
 `endif

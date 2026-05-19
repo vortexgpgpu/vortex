@@ -1,3 +1,4 @@
+#include "VX_types.h"
 #include "common.h"
 #include <chrono>
 #include <cmath>
@@ -191,9 +192,9 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B,
 
 const char *kernel_file = "kernel.vxbin";
 
-uint32_t xm = 64;
-uint32_t xn = 64;
-uint32_t xk = 64;
+uint32_t xm = 128;
+uint32_t xn = 128;
+uint32_t xk = 128;
 uint32_t warps = 4;
 
 vx_device_h device = nullptr;
@@ -386,6 +387,50 @@ int main(int argc, char *argv[]) {
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
+
+  // DXA + WGMMA performance statistics
+  {
+    auto pct = [](uint64_t num, uint64_t den) -> double {
+      return den ? 100.0 * num / den : 0.0;
+    };
+    auto avg = [](uint64_t num, uint64_t den) -> double {
+      return den ? (double)num / den : 0.0;
+    };
+
+    uint64_t dxa_transfers   = 0, dxa_gmem_reads  = 0, dxa_gmem_dedup  = 0;
+    uint64_t dxa_lmem_writes = 0, dxa_gmem_lt     = 0;
+    uint64_t dxa_active_cyc  = 0, dxa_gmem_st_cyc = 0;
+    uint64_t dxa_smem_st_cyc = 0, dxa_fifo_st_cyc = 0;
+    uint64_t dxa_xfer_lt     = 0;
+
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_TRANSFERS,  0, &dxa_transfers);
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_GMEM_READS, 0, &dxa_gmem_reads);
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_GMEM_DEDUP, 0, &dxa_gmem_dedup);
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_LMEM_WRITES,0, &dxa_lmem_writes);
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_GMEM_LT,    0, &dxa_gmem_lt);
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_ACTIVE_CYC, 0, &dxa_active_cyc);
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_GMEM_ST_CYC,0, &dxa_gmem_st_cyc);
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_SMEM_ST_CYC,0, &dxa_smem_st_cyc);
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_FIFO_ST_CYC,0, &dxa_fifo_st_cyc);
+    vx_mpm_query(device, VX_DCR_MPM_CLASS_DXA, VX_CSR_MPM_DXA_XFER_LT,    0, &dxa_xfer_lt);
+
+    printf("=== DXA statistics ===\n");
+    printf("  transfers      : %lu\n", dxa_transfers);
+    printf("  gmem_reads     : %lu  (dedup_saved=%lu, dedup_rate=%.1f%%)\n",
+           dxa_gmem_reads, dxa_gmem_dedup, pct(dxa_gmem_dedup, dxa_gmem_reads + dxa_gmem_dedup));
+    printf("  lmem_writes    : %lu\n", dxa_lmem_writes);
+    printf("  gmem_latency   : %lu cyc total  (avg %.1f cyc/CL)\n",
+           dxa_gmem_lt, avg(dxa_gmem_lt, dxa_gmem_reads));
+    printf("  xfer_latency   : %lu cyc total  (avg %.1f cyc/transfer, end-to-end)\n",
+           dxa_xfer_lt, avg(dxa_xfer_lt, dxa_transfers));
+    printf("  active_cyc     : %lu  (avg %.1f cyc/transfer)\n",
+           dxa_active_cyc, avg(dxa_active_cyc, dxa_transfers));
+    printf("  gmem_stall_cyc : %lu  (%.1f%% of active)\n",
+           dxa_gmem_st_cyc, pct(dxa_gmem_st_cyc, dxa_active_cyc));
+    printf("  smem_stall_cyc : %lu  (%.1f%% of active)\n",
+           dxa_smem_st_cyc, pct(dxa_smem_st_cyc, dxa_active_cyc));
+    printf("  fifo_stall_cyc : %lu  (cycles all workers busy)\n", dxa_fifo_st_cyc);
+  }
 
   // Download result
   std::vector<otype_t> h_C(sizeC);

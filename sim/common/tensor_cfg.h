@@ -321,6 +321,11 @@ public:
   static constexpr uint32_t m_steps = 2;
   static constexpr uint32_t k_steps = 2;
   static constexpr uint32_t NRC = NRC_;
+
+  // Warp-group size: 4 warps cooperate on a single group tile
+  static constexpr uint32_t WG_SIZE = 4;
+  // Group tile M dimension: WG_SIZE warps each contributing xtileM rows
+  static constexpr uint32_t group_M = WG_SIZE * xtileM;
 };
 
 } // namespace tensor

@@ -42,7 +42,8 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     // Tile buffer sizes (in 32-bit words); must match VX_tcu_tbuf_fetch params.
     parameter A_TOTAL        = 1,
-    parameter B_TOTAL        = 1
+    parameter B_TOTAL        = 1,
+    parameter C_TOTAL        = 1
 `ifdef TCU_SPARSE_ENABLE
    ,parameter META_TOTAL_MAX = 1
 `endif
@@ -57,6 +58,7 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Hit-slot buffers (from VX_tcu_tbuf_fetch)
     input  wire [A_TOTAL-1:0][31:0] a_buf,
     input  wire [B_TOTAL-1:0][31:0] b_buf,
+    input  wire [C_TOTAL-1:0][31:0] c_buf,
 
 `ifdef TCU_SPARSE_ENABLE
     input  wire                     is_sparse,
@@ -66,7 +68,8 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Outputs to VX_tcu_core
     output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
-    output wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data
+    output wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data,
+    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_c_data
 `ifdef TCU_SPARSE_ENABLE
    ,output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta
 `endif
@@ -84,7 +87,7 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam TILE_K   = TCU_WG_TILE_K;
     localparam TILE_N   = TCU_WG_TILE_N;
     `UNUSED_PARAM (TILE_M)
-    `UNUSED_PARAM (TILE_N)
+    `UNUSED_PARAM (C_TOTAL)
 
     // B-buffer stride shift amounts (replaces runtime actual_N multiply).
     // actual_N = {8,16,32} for cd_nregs = {0,1,2}, always a power of 2.
@@ -251,6 +254,26 @@ module VX_tcu_tbuf_gather import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 
     assign tbuf_rs2_data = rs2_mux;
+
+    // -----------------------------------------------------------------------
+    // C operand gather (tbuf_c_data) — lmem-accumulator mode
+    // -----------------------------------------------------------------------
+    // C tile layout: [row * TILE_N + col] (row-major, fp32 words)
+    // Extracts TC_M × TC_N sub-tile at (step_m, step_n) into lane vector.
+
+    logic [TCU_BLOCK_CAP-1:0][`XLEN-1:0] c_mux;
+    always_comb begin
+        c_mux = '0;
+        for (int i = 0; i < TCU_TC_M; ++i) begin
+            for (int j = 0; j < TCU_TC_N; ++j) begin
+                automatic int row  = int'(req_step_m) * TCU_TC_M + i;
+                automatic int col  = int'(req_step_n) * TCU_TC_N + j;
+                automatic int lane = i * TCU_TC_N + j;
+                c_mux[lane] = `XLEN'(c_buf[row * TILE_N + col]);
+            end
+        end
+    end
+    assign tbuf_c_data = c_mux;
 
     // -----------------------------------------------------------------------
     // Metadata extraction (WGMMA_SP only)

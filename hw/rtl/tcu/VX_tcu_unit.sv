@@ -81,6 +81,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire                                   tbuf_ready    [BLOCK_SIZE];
     wire                                   b_ready       [BLOCK_SIZE];
     wire [TCU_WG_M_STEPS-1:0]             a_row_ready   [BLOCK_SIZE];
+    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0]   tbuf_c_data   [BLOCK_SIZE];
+    wire                                   c_ready       [BLOCK_SIZE];
+    wire                                   c_wb_valid    [BLOCK_SIZE];
+    wire [TCU_WG_C_TOTAL-1:0]             c_wb_wren     [BLOCK_SIZE];
+    wire [TCU_WG_C_TOTAL-1:0][31:0]       c_wb_data     [BLOCK_SIZE];
+    wire                                   c_all_done    [BLOCK_SIZE];
 
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] tbuf_stalls_b        [BLOCK_SIZE];
@@ -144,13 +150,22 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_desc_a       (per_block_execute_if[block_idx].data.rs1_data[0]),
             .req_desc_b       (per_block_execute_if[block_idx].data.rs2_data[0]),
             .req_a_is_smem    (per_block_execute_if[block_idx].data.op_args.tcu.a_from_smem),
+            .req_desc_cd      (32'(per_block_execute_if[block_idx].data.rs3_data[0])),
+            .req_cd_from_lmem (per_block_execute_if[block_idx].data.op_args.tcu.cd_from_lmem),
+            .c_wb_valid       (c_wb_valid[block_idx]),
+            .c_wb_wren        (c_wb_wren[block_idx]),
+            .c_wb_data        (c_wb_data[block_idx]),
+            .c_all_done       (c_all_done[block_idx]),
             .tcu_lmem_if      (per_block_lmem_if[block_idx]),
             .tbuf_rs1_data    (tbuf_rs1_data[block_idx]),
             .tbuf_rs2_data    (tbuf_rs2_data[block_idx]),
+            .tbuf_c_data      (tbuf_c_data[block_idx]),
         `ifdef TCU_SPARSE_ENABLE
             .tbuf_sp_meta     (tbuf_sp_meta[block_idx]),
         `endif
             .tbuf_ready       (tbuf_ready[block_idx]),
+            .c_ready          (c_ready[block_idx]),
+            `UNUSED_PIN       (store_d_done),
             .b_ready          (b_ready[block_idx]),
             .a_row_ready      (a_row_ready[block_idx])
         );
@@ -353,12 +368,18 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `ifdef TCU_WGMMA_ENABLE
             .tbuf_rs1_data (tbuf_rs1_data[block_idx]),
             .tbuf_rs2_data (tbuf_rs2_data[block_idx]),
+            .tbuf_c_data   (tbuf_c_data[block_idx]),
         `ifdef TCU_SPARSE_ENABLE
             .tbuf_sp_meta  (tbuf_sp_meta[block_idx]),
         `endif
             .tbuf_ready    (tbuf_ready[block_idx]),
             .b_ready       (b_ready[block_idx]),
             .a_row_ready   (a_row_ready[block_idx]),
+            .c_ready       (c_ready[block_idx]),
+            .c_wb_valid    (c_wb_valid[block_idx]),
+            .c_wb_wren     (c_wb_wren[block_idx]),
+            .c_wb_data     (c_wb_data[block_idx]),
+            .c_all_done    (c_all_done[block_idx]),
         `endif
         `ifdef PERF_ENABLE
         `ifdef TCU_WGMMA_ENABLE

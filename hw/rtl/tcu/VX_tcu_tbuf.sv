@@ -20,12 +20,12 @@
 //
 // Thin wrapper that computes shared parameters and connects:
 //   VX_tcu_tbuf_fetch  — slot management, LMEM fetch FSM, data capture
-//   VX_tcu_tbuf_gather — format-aware A/B/meta operand gather
+//   VX_tcu_tbuf_gather — format-aware A/B/C/meta operand gather
 //
-// Prefetches A, B, and optional sparse metadata tiles from local memory
-// using a dedicated bank-parallel read port that bypasses the LSU crossbar.
-// All LMEM banks are read simultaneously each cycle, yielding NUM_BANKS
-// words/cycle throughput.
+// Prefetches A, B, C (lmem-accumulator mode), and optional sparse metadata
+// tiles from local memory using a dedicated bank-parallel read/write port
+// that bypasses the LSU crossbar.  All LMEM banks are accessed simultaneously
+// each cycle, yielding NUM_BANKS words/cycle throughput.
 //
 // A single shared slot is allocated on the first uop of a new tile
 // (step_m==step_n==step_k==0) and evicted implicitly when re-allocated
@@ -71,17 +71,30 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [`XLEN-1:0]         req_desc_a,
     input  wire [`XLEN-1:0]         req_desc_b,
     input  wire                     req_a_is_smem,
+    input  wire [`XLEN-1:0]         req_desc_cd,      // C/D lmem descriptor
+    input  wire                     req_cd_from_lmem, // 1=C/D accumulator in lmem
 
-    // LMEM read port
+    // C LUTRAM write-back from VX_tcu_core (FEDP output, lmem-accumulator mode)
+    input  wire                     c_wb_valid,
+    input  wire [TCU_WG_C_TOTAL-1:0]       c_wb_wren,
+    input  wire [TCU_WG_C_TOTAL-1:0][31:0] c_wb_data,
+
+    // Trigger STORE_D after final k-step FEDP outputs land in C LUTRAM
+    input  wire                     c_all_done,
+
+    // LMEM read/write port
     VX_mem_bus_if.master            tcu_lmem_if,
 
     // Tile buffer outputs
     output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
     output wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data,
+    output wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_c_data,   // C tile for lmem-accum mode
 `ifdef TCU_SPARSE_ENABLE
     output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
 `endif
     output wire                          tbuf_ready,
+    output wire                          c_ready,       // C tile fetched from lmem
+    output wire                          store_d_done,  // STORE_D write-back complete
     // Per-row readiness forwarded from fetch engine
     output wire                          b_ready,
     output wire [TCU_WG_M_STEPS-1:0]    a_row_ready
@@ -98,6 +111,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Buffer sizes in 32-bit words (format-agnostic; sub-word packing done in gather).
     localparam A_TOTAL = TILE_M * TILE_K;
     localparam B_TOTAL = TILE_K * TILE_N;
+    localparam C_TOTAL = TCU_WG_C_TOTAL;  // full tile: TILE_M * TILE_N
 
 `ifdef TCU_SPARSE_ENABLE
     // Metadata buffer: worst-case format is int8 (I_RATIO=4).
@@ -116,6 +130,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire                     tbuf_hit;
     wire [A_TOTAL-1:0][31:0] hit_a_buf;
     wire [B_TOTAL-1:0][31:0] hit_b_buf;
+    wire [C_TOTAL-1:0][31:0] hit_c_buf;
     // b_ready and a_row_ready wired directly from fetch engine to output ports
 `ifdef TCU_SPARSE_ENABLE
     wire                     hit_is_sparse;
@@ -128,7 +143,8 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .NUM_BANKS      (NUM_BANKS),
         .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH),
         .A_TOTAL        (A_TOTAL),
-        .B_TOTAL        (B_TOTAL)
+        .B_TOTAL        (B_TOTAL),
+        .C_TOTAL        (C_TOTAL)
     `ifdef TCU_SPARSE_ENABLE
        ,.META_TOTAL_MAX (META_TOTAL_MAX)
     `endif
@@ -157,14 +173,23 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_fmt_s      (req_fmt_s),
         .req_desc_a     (req_desc_a),
         .req_desc_b     (req_desc_b),
-        .req_a_is_smem(req_a_is_smem),
+        .req_a_is_smem  (req_a_is_smem),
+        .req_desc_cd    (req_desc_cd),
+        .req_cd_from_lmem(req_cd_from_lmem),
+        .c_wb_valid     (c_wb_valid),
+        .c_wb_wren      (c_wb_wren),
+        .c_wb_data      (c_wb_data),
+        .c_all_done     (c_all_done),
         .tcu_lmem_if    (tcu_lmem_if),
         .tbuf_hit       (tbuf_hit),
         .tbuf_ready     (tbuf_ready),
+        .c_ready        (c_ready),
+        .store_d_done   (store_d_done),
         .b_ready        (b_ready),
         .a_row_ready    (a_row_ready),
         .hit_a_buf      (hit_a_buf),
-        .hit_b_buf      (hit_b_buf)
+        .hit_b_buf      (hit_b_buf),
+        .hit_c_buf      (hit_c_buf)
     `ifdef TCU_SPARSE_ENABLE
        ,.hit_is_sparse  (hit_is_sparse),
         .hit_meta_buf   (hit_meta_buf),
@@ -179,7 +204,8 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_tcu_tbuf_gather #(
         .INSTANCE_ID    (`SFORMATF(("%s-gather", INSTANCE_ID))),
         .A_TOTAL        (A_TOTAL),
-        .B_TOTAL        (B_TOTAL)
+        .B_TOTAL        (B_TOTAL),
+        .C_TOTAL        (C_TOTAL)
     `ifdef TCU_SPARSE_ENABLE
        ,.META_TOTAL_MAX (META_TOTAL_MAX)
     `endif
@@ -191,13 +217,15 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_cd_nregs   (req_cd_nregs),
         .a_buf          (hit_a_buf),
         .b_buf          (hit_b_buf),
+        .c_buf          (hit_c_buf),
     `ifdef TCU_SPARSE_ENABLE
         .is_sparse      (hit_is_sparse),
         .meta_buf       (hit_meta_buf),
         .meta_stride    (hit_meta_stride),
     `endif
         .tbuf_rs1_data  (tbuf_rs1_data),
-        .tbuf_rs2_data  (tbuf_rs2_data)
+        .tbuf_rs2_data  (tbuf_rs2_data),
+        .tbuf_c_data    (tbuf_c_data)
     `ifdef TCU_SPARSE_ENABLE
        ,.tbuf_sp_meta   (tbuf_sp_meta)
     `endif

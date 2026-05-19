@@ -66,7 +66,10 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 
 `ifdef TCU_WGMMA_ENABLE
     wire is_wgmma = (ibuf_in.op_type == INST_TCU_WGMMA);
-    wire wg_a_from_smem = ibuf_in.op_args.tcu.a_from_smem;
+    wire wg_a_from_smem   = ibuf_in.op_args.tcu.a_from_smem;
+    wire wg_cd_from_lmem  = ibuf_in.op_args.tcu.cd_from_lmem;
+    // lmem accumulator always uses full tile (NRC=32); ignore cd_nregs when cd_from_lmem
+    wire [1:0] eff_cd_nregs = wg_cd_from_lmem ? 2'd2 : ibuf_in.op_args.tcu.cd_nregs;
 
     // Variable NRC based on cd_nregs: 0→8, 1→16, 2→32
     // Loop order: m (inner) → n → k (outer)  [K-outer, Nvidia-style]
@@ -89,7 +92,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     // Mux uop count based on cd_nregs: 0→8, 1→16, 2→32
     reg [UOP_CTR_W-1:0] wg_uop_cnt;
     always_comb begin
-        case (ibuf_in.op_args.tcu.cd_nregs)
+        case (eff_cd_nregs)
             2'd0: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR8);
             2'd1: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR16);
             default: wg_uop_cnt = UOP_CTR_W'(WG_UOPS_NR32);
@@ -129,7 +132,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         begin
             // Dense K-outer: m (inner) → n (middle) → k (outer)
             // n width varies by cd_nregs; k bit shifts accordingly.
-            case (ibuf_in.op_args.tcu.cd_nregs)
+            case (eff_cd_nregs)
                 2'd0: begin // nrc=8, n_steps=4, LG_N=2
                     wg_n_index = `UP(LG_N_WG_MAX)'(wg_idx_ctr[LG_M_WG +: 2]);
                     wg_k_index = `UP(LG_K_WG)'(wg_idx_ctr[LG_M_WG + 2 +: `UP(LG_K_WG)]);
@@ -353,10 +356,19 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                 ibuf_r.op_args.tcu.step_m = 4'(wg_m_index);
                 ibuf_r.op_args.tcu.step_n = 4'(wg_n_index);
                 ibuf_r.op_args.tcu.step_k = 4'(wg_k_index);
-                ibuf_r.wb  = 1'b1;
-                ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
-                ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
-                ibuf_r.used_rs[2] = 1'b1;
+                if (wg_cd_from_lmem) begin
+                    // Accumulator lives in lmem: no regfile writeback.
+                    // desc_cd arrives in a2 (x12), fetched only on first uop.
+                    ibuf_r.wb  = 1'b0;
+                    ibuf_r.rd  = '0;
+                    ibuf_r.rs3 = make_reg_num(REG_TYPE_I, 5'd12);
+                    ibuf_r.used_rs[2] = (wg_idx_ctr == '0);
+                end else begin
+                    ibuf_r.wb  = 1'b1;
+                    ibuf_r.rd  = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
+                    ibuf_r.rs3 = make_reg_num(REG_TYPE_F, TCU_WG_RC + wg_rs3_off);
+                    ibuf_r.used_rs[2] = 1'b1;
+                end
                 // Smem descriptors are invariant across the whole WGMMA expansion,
                 // so only fetch them on the first MMA uop.
                 if (wg_a_from_smem) begin
@@ -430,5 +442,27 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     end
 
     assign ibuf_out = ibuf_r;
+
+`ifdef DBG_TRACE_WGMMAD
+  `ifdef TCU_WGMMA_ENABLE
+    always @(posedge clk) begin
+        if (!reset && is_wgmma && start) begin
+            if (wg_cd_from_lmem) begin
+                `TRACE(3, ("%t: tcu-uops: WGMMA cd_from_lmem uop idx=%0d step_m=%0d step_n=%0d step_k=%0d\n",
+                    $time, uop_idx,
+                    ibuf_r.op_args.tcu.step_m,
+                    ibuf_r.op_args.tcu.step_n,
+                    ibuf_r.op_args.tcu.step_k))
+            end else begin
+                `TRACE(3, ("%t: tcu-uops: WGMMA uop idx=%0d step_m=%0d step_n=%0d step_k=%0d\n",
+                    $time, uop_idx,
+                    ibuf_r.op_args.tcu.step_m,
+                    ibuf_r.op_args.tcu.step_n,
+                    ibuf_r.op_args.tcu.step_k))
+            end
+        end
+    end
+  `endif
+`endif
 
 endmodule
