@@ -127,8 +127,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         wire [CTA_TID_WIDTH:0] cx = tx / sched_csr_if.cta_csrs.block_dim[0];
         wire [CTA_TID_WIDTH:0] ty = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[1]) + cx;
         wire [CTA_TID_WIDTH:0] cy = ty / sched_csr_if.cta_csrs.block_dim[1];
-        assign cta_tid_x[i] = `XLEN'(tx - cx * sched_csr_if.cta_csrs.block_dim[0]);
-        assign cta_tid_y[i] = `XLEN'(ty - cy * sched_csr_if.cta_csrs.block_dim[1]);
+        assign cta_tid_x[i] = `XLEN'(tx) - `XLEN'(cx) * `XLEN'(sched_csr_if.cta_csrs.block_dim[0]);
+        assign cta_tid_y[i] = `XLEN'(ty) - `XLEN'(cy) * `XLEN'(sched_csr_if.cta_csrs.block_dim[1]);
         assign cta_tid_z[i] = `XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + `XLEN'(cy);
     end
 
