@@ -167,30 +167,15 @@ extern "C" int vx_copy_dev_to_dev(vx_buffer_h hdest_buffer, uint64_t dest_offset
 extern "C" int vx_start(vx_device_h hdevice, vx_buffer_h hkernel,
                         vx_buffer_h harguments) {
     if (!hdevice || !hkernel || !harguments) return -1;
-    Device* dev = to_device(hdevice);
-
-    // Drain any prior in-flight legacy launch first (legacy callers can call
-    // vx_start back-to-back without vx_ready_wait between them on some
-    // codepaths; the second start should observe the first as complete).
-    if (Event* prev = dev->legacy_take_last_event()) {
-        prev->wait(VX_TIMEOUT_INFINITE);
-        prev->release();
-    }
-
-    Queue* q = dev->legacy_default_queue();
-    if (!q) return -1;
-
-    vx_launch_info_t li = {};
-    li.struct_size = sizeof(li);
-    li.kernel      = hkernel;
-    li.args        = harguments;
-    li.ndim        = 0;     // legacy: use prior-set DCRs for grid/block/lmem
-
-    vx_event_h ev = nullptr;
-    auto r = vx_enqueue_launch(to_handle(q), &li, 0, nullptr, &ev);
-    if (r != VX_SUCCESS) return -1;
-    dev->legacy_remember_last_event(to_event(ev));
-    return 0;
+    // Schedule one CTA per core with the device's auto-occupancy block
+    // size. Matches the pre-CP legacy `vx_start` semantics: caller passes
+    // only kernel + args, runtime picks grid = num_cores, block = full
+    // warp width (block_dim=nullptr → prepare_kernel_launch_params auto-
+    // selects), so the kernel's `main()` runs and can call vx_spawn_threads.
+    uint64_t num_cores = 0;
+    if (vx_device_query(hdevice, VX_CAPS_NUM_CORES, &num_cores) != VX_SUCCESS) return -1;
+    uint32_t grid_dim = (uint32_t)num_cores;
+    return vx_start_g(hdevice, hkernel, harguments, 1, &grid_dim, nullptr, 0);
 }
 
 // vx_start_g: program full KMU descriptor (PC, args, grid, block, lmem,

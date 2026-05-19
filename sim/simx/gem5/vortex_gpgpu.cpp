@@ -16,7 +16,7 @@
 #include "constants.h"
 #include "dev_mem.h"
 #include "processor.h"
-#include <CommandProcessor.h>
+#include <cmd_processor.h>
 #include <mem.h>
 #include <util.h>
 #include <VX_config.h>
@@ -130,7 +130,7 @@ public:
     // ---------------- CP regfile MMIO -----------------------------------
     // The SimObject's PIO handlers translate `cp_mmio_write(off,v)` to
     // a single call here. The CommandProcessor's regfile is 32-bit and
-    // its address map is documented in sim/common/CommandProcessor.h.
+    // its address map is documented in sim/common/cmd_processor.h.
     void cp_mmio_write(uint32_t off, uint32_t value) { cp_.mmio_write(off, value); }
     uint32_t cp_mmio_read (uint32_t off) const       { return cp_.mmio_read(off); }
 

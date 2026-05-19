@@ -16,7 +16,7 @@
 #include <mem.h>
 #include <util.h>
 #include <processor.h>
-#include <CommandProcessor.h>
+#include <cmd_processor.h>
 
 #ifdef VM_ENABLE
 #include <vm.h>

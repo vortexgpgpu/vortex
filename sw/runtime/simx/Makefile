@@ -17,7 +17,7 @@ LDFLAGS += -Wl,-rpath,'$$ORIGIN'
 LDFLAGS += -L$(DESTDIR) -lsimx
 
 SRCS := $(SRC_DIR)/vortex.cpp $(RT_COMMON_DIR)/utils.cpp \
-        $(SIM_COMMON_DIR)/CommandProcessor.cpp
+        $(SIM_COMMON_DIR)/cmd_processor.cpp
 
 # Debugging
 ifdef DEBUG

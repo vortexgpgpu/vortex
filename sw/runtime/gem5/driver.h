@@ -54,7 +54,7 @@ int  drv_init();
 void drv_close();
 
 // CP regfile MMIO. `offset` is the CP-internal byte offset
-// (sim/common/CommandProcessor.h §address map). All accesses are 32-bit
+// (sim/common/cmd_processor.h §address map). All accesses are 32-bit
 // — the CP regfile is 32-bit wide, and gem5's PIO model honors the
 // packet width verbatim.
 //

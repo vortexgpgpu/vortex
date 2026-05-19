@@ -81,7 +81,7 @@ void vortex_gem5_set_start_handler(vortex_gem5_handle_t h,
 int vortex_gem5_load_kernel(vortex_gem5_handle_t h, const char* path);
 
 // CP regfile MMIO. `off` is the CP-internal byte offset (0..0x13F for
-// queue 0; see sim/common/CommandProcessor.h §address map). All
+// queue 0; see sim/common/cmd_processor.h §address map). All
 // accesses are 32-bit. The SimObject translates a PIO packet at
 // `PIO_BASE_ADDR + off` into one of these calls; the host runtime's
 // cp_mmio_{write,read} translates `cp_mmio_write(off, v)` to one of

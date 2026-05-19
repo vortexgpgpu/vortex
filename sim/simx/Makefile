@@ -33,7 +33,7 @@ LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulato
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DXLEN_$(XLEN)')
 
 # Source files definition
-SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp $(SIM_COMMON_DIR)/CommandProcessor.cpp
+SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp $(SIM_COMMON_DIR)/cmd_processor.cpp
 SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(SRC_DIR)/core.cpp $(SRC_DIR)/scheduler.cpp $(SRC_DIR)/cta_dispatcher.cpp $(SRC_DIR)/barrier_unit.cpp
 SRCS += $(SRC_DIR)/kmu/kmu.cpp
 SRCS += $(SRC_DIR)/decode.cpp $(SRC_DIR)/decompressor.cpp $(SRC_DIR)/scoreboard.cpp $(SRC_DIR)/sequencer.cpp $(SRC_DIR)/opc_unit.cpp $(SRC_DIR)/dispatcher.cpp

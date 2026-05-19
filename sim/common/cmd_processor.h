@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // ============================================================================
-// CommandProcessor.h — functional C++ model of the hardware Command Processor.
+// cmd_processor.h — functional C++ model of the hardware Command Processor.
 // Shared by simx and rtlsim so neither backend needs a hardware CP while
 // still presenting the same cp_mmio_* MMIO surface to the runtime.
 //

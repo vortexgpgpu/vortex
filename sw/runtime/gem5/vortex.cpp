@@ -172,7 +172,7 @@ public:
     }
 
     // ---- Control plane (sole) ----
-    // `off` is the CP-internal regfile offset (sim/common/CommandProcessor.h
+    // `off` is the CP-internal regfile offset (sim/common/cmd_processor.h
     // §address map). The gem5 device exposes the CP regfile starting at
     // PIO_BASE_ADDR + 0 — no AFU bit-12 split — so the wrapper is a
     // straight PIO access.
