@@ -74,11 +74,10 @@ int main(int argc, char** argv) {
     CHECK(vx_queue_create(dev, &qi, &q));
 
     vx_buffer_h src0_buf=nullptr, src1_buf=nullptr, dst_buf=nullptr,
-                args_buf=nullptr, kbuf=nullptr;
-    CHECK(vx_buffer_create(dev, buf_size,             VX_MEM_READ,  &src0_buf));
-    CHECK(vx_buffer_create(dev, buf_size,             VX_MEM_READ,  &src1_buf));
-    CHECK(vx_buffer_create(dev, buf_size,             VX_MEM_WRITE, &dst_buf));
-    CHECK(vx_buffer_create(dev, sizeof(kernel_arg_t), VX_MEM_READ,  &args_buf));
+                kbuf=nullptr;
+    CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &src0_buf));
+    CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &src1_buf));
+    CHECK(vx_buffer_create(dev, buf_size, VX_MEM_WRITE, &dst_buf));
     CHECK(vx_buffer_load_kernel_file(dev, q, kernel_file, &kbuf));
 
     kernel_arg_t kernel_arg{};
@@ -93,10 +92,11 @@ int main(int argc, char** argv) {
         h_src1[i] = static_cast<TYPE>(std::rand()) / RAND_MAX;
     }
 
-    // ----- Async chain: 3 writes → launch → read → 1 wait -----
+    // ----- Async chain: 2 writes → launch → read → 1 wait -----
+    // The kernel-args block is passed straight to the launch as a host
+    // blob (Phase 2 UVA args) — no args device buffer to create or upload.
     CHECK(vx_enqueue_write(q, src0_buf, 0, h_src0.data(), buf_size, 0,nullptr,nullptr));
     CHECK(vx_enqueue_write(q, src1_buf, 0, h_src1.data(), buf_size, 0,nullptr,nullptr));
-    CHECK(vx_enqueue_write(q, args_buf, 0, &kernel_arg, sizeof(kernel_arg), 0,nullptr,nullptr));
 
     uint32_t grid[1], block[1];
     CHECK(vx_device_max_occupancy_grid(dev, 1, &num_points, grid, block));
@@ -104,7 +104,8 @@ int main(int argc, char** argv) {
     vx_launch_info_t li{};
     li.struct_size = sizeof(li);
     li.kernel      = kbuf;
-    li.args        = args_buf;
+    li.args_host   = &kernel_arg;
+    li.args_size   = sizeof(kernel_arg);
     li.ndim        = 1;
     li.grid_dim[0] = grid[0];
     li.block_dim[0]= block[0];
@@ -127,7 +128,6 @@ int main(int argc, char** argv) {
 
     vx_event_release(read_ev);
     vx_event_release(launch_ev);
-    vx_buffer_release(args_buf);
     vx_buffer_release(dst_buf);
     vx_buffer_release(src1_buf);
     vx_buffer_release(src0_buf);

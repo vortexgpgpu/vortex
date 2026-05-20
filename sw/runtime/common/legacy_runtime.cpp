@@ -252,11 +252,16 @@ extern "C" int vx_start_g(vx_device_h hdevice, vx_buffer_h hkernel,
     }
 
     // Async launch — return immediately; caller polls via vx_ready_wait.
+    // The legacy wrapper has already programmed every KMU DCR (PC, ARG,
+    // grid/block/lmem/...) above via the kmu_writes loop, so the launch
+    // info uses ndim=0 and args_host=NULL: enqueue_launch programs nothing
+    // and just triggers CMD_LAUNCH.
     vx_launch_info_t li = {};
     li.struct_size = sizeof(li);
     li.kernel      = hkernel;
-    li.args        = harguments;
-    li.ndim        = 0;   // DCRs already programmed above; engine just triggers
+    li.args_host   = nullptr;   // ARG DCRs already programmed above
+    li.args_size   = 0;
+    li.ndim        = 0;         // grid/block DCRs already programmed above
     vx_event_h ev = nullptr;
     auto r = vx_enqueue_launch(to_handle(q), &li, 0, nullptr, &ev);
     if (r != VX_SUCCESS) return -1;

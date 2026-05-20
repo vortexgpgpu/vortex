@@ -69,11 +69,52 @@ Device::~Device() {
     // Release whatever default-queue / last-event the legacy wrapper holds.
     if (legacy_last_)   { legacy_last_->release();   legacy_last_   = nullptr; }
     if (legacy_q_)      { legacy_q_->release();      legacy_q_      = nullptr; }
+    // Drain the kernel-args scratch pool.
+    {
+        std::lock_guard<std::mutex> g(args_pool_mu_);
+        for (uint64_t addr : args_pool_free_)
+            platform_->mem_free(addr);
+        args_pool_free_.clear();
+    }
     // Queues / buffers are torn down by their own refcount path; this
     // just detaches the device backlinks.
     std::lock_guard<std::mutex> g(mu_);
     queues_.clear();
     buffers_.clear();
+}
+
+// ============================================================================
+// Phase 2 — kernel-args scratch pool
+// ============================================================================
+
+vx_result_t Device::args_slot_acquire(uint64_t size, uint64_t* out_addr,
+                                      bool* out_pooled) {
+    if (!out_addr || !out_pooled) return VX_ERR_INVALID_VALUE;
+    if (size > ARGS_SLOT_SIZE) {
+        // Oversized args block — one-off allocation, not pooled.
+        *out_pooled = false;
+        return platform_->mem_alloc(size, /*VX_MEM_READ*/ 0x1, out_addr);
+    }
+    *out_pooled = true;
+    {
+        std::lock_guard<std::mutex> g(args_pool_mu_);
+        if (!args_pool_free_.empty()) {
+            *out_addr = args_pool_free_.back();
+            args_pool_free_.pop_back();
+            return VX_SUCCESS;
+        }
+    }
+    // Pool empty — allocate a fresh pooled slot (recycled on release).
+    return platform_->mem_alloc(ARGS_SLOT_SIZE, /*VX_MEM_READ*/ 0x1, out_addr);
+}
+
+void Device::args_slot_release(uint64_t addr, bool pooled) {
+    if (!pooled) {
+        platform_->mem_free(addr);
+        return;
+    }
+    std::lock_guard<std::mutex> g(args_pool_mu_);
+    args_pool_free_.push_back(addr);
 }
 
 vx_result_t Device::open(uint32_t index, Device** out) {

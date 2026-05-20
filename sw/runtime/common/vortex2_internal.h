@@ -247,6 +247,19 @@ public:
     vx_result_t cp_submit_event_wait(uint64_t event_dev_addr,
                                      uint64_t value);
 
+    // ---- Phase 2: kernel-args scratch pool ----
+    //
+    // Acquire a device-memory slot to stage a kernel-args blob of `size`
+    // bytes. Slots <= ARGS_SLOT_SIZE come from a recycled free-list (the
+    // common case — kernel arg blocks are small); oversized requests get
+    // a one-off allocation. `*out_pooled` reports which, so the matching
+    // args_slot_release frees correctly. Because vx_enqueue_launch holds
+    // a slot only for the duration of one synchronous CP launch, the
+    // free-list naturally settles at the count of concurrent launches.
+    vx_result_t args_slot_acquire(uint64_t size, uint64_t* out_addr,
+                                  bool* out_pooled);
+    void        args_slot_release(uint64_t addr, bool pooled);
+
 private:
     friend class RefCounted<Device>;
     explicit Device(std::unique_ptr<Platform> plat);
@@ -278,6 +291,13 @@ private:
     uint64_t                       cp_tail_            = 0;
     uint64_t                       cp_expected_seqnum_ = 0;
     std::mutex                     cp_mu_;             // serialize ring writes
+
+    // Kernel-args scratch pool (Phase 2). Free-list of recycled fixed-size
+    // device slots; ARGS_SLOT_SIZE comfortably covers typical kernel arg
+    // blocks. Drained in ~Device.
+    static constexpr uint64_t      ARGS_SLOT_SIZE = 4096;
+    std::mutex                     args_pool_mu_;
+    std::vector<uint64_t>          args_pool_free_;
 };
 
 // ============================================================================

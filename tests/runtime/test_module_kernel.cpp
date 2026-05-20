@@ -250,41 +250,32 @@ int test_launch_via_kernel_handle(vx_device_h dev, const std::string& vxbin) {
     vx_kernel_h k = nullptr;
     CHECK_VX(vx_module_get_kernel(mod, "main", &k));
 
-    // Args buffer must be zero-initialized: the basic regression kernel
-    // reads kernel_arg_t fields and loops `count` times. Garbage in the
-    // buffer would spin the kernel for indefinite cycles. The kernel
-    // doesn't actually need meaningful args here — we only care that the
-    // launch path completes via the new vx_kernel_h dispatch.
-    vx_buffer_h args = nullptr;
-    CHECK_VX(vx_buffer_create(dev, 64, VX_MEM_READ_WRITE, &args));
-
     vx_queue_info_t qi = {};
     qi.struct_size = sizeof(qi);
     vx_queue_h q = nullptr;
     CHECK_VX(vx_queue_create(dev, &qi, &q));
 
-    // Zero the args buffer so the kernel sees count==0 and exits early.
-    std::vector<uint8_t> zeros(64, 0);
-    vx_event_h ev_zero = nullptr;
-    CHECK_VX(vx_enqueue_write(q, args, 0, zeros.data(), zeros.size(),
-                              0, nullptr, &ev_zero));
+    // Phase 2: kernel args are a host blob handed straight to the launch —
+    // the runtime stages them into a scratch slot. A zero-filled blob makes
+    // the basic regression kernel see count==0 and exit early; we only care
+    // that the launch completes via the new vx_kernel_h dispatch.
+    uint8_t args_blob[64] = {0};
 
     vx_launch_info_t li = {};
     li.struct_size = sizeof(li);
     li.kernel      = (vx_buffer_h)k;     // tag dispatch resolves as Kernel
-    li.args        = args;
+    li.args_host   = args_blob;
+    li.args_size   = sizeof(args_blob);
     li.ndim        = 1;
     li.grid_dim[0] = 1;
     li.block_dim[0] = 1;
 
     vx_event_h ev = nullptr;
-    CHECK_VX(vx_enqueue_launch(q, &li, 1, &ev_zero, &ev));
+    CHECK_VX(vx_enqueue_launch(q, &li, 0, nullptr, &ev));
     CHECK_VX(vx_event_wait_value(ev, 1, 30ull * 1000 * 1000 * 1000));
-    CHECK_VX(vx_event_release(ev_zero));
     CHECK_VX(vx_event_release(ev));
 
     CHECK_VX(vx_queue_release(q));
-    CHECK_VX(vx_buffer_release(args));
     CHECK_VX(vx_kernel_release(k));
     CHECK_VX(vx_module_release(mod));
     return 0;

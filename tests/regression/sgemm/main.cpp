@@ -89,12 +89,10 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    vx_buffer_h A_buf=nullptr, B_buf=nullptr, C_buf=nullptr,
-                args_buf=nullptr, kbuf=nullptr;
-    CHECK(vx_buffer_create(dev, buf_size,             VX_MEM_READ,  &A_buf));
-    CHECK(vx_buffer_create(dev, buf_size,             VX_MEM_READ,  &B_buf));
-    CHECK(vx_buffer_create(dev, buf_size,             VX_MEM_WRITE, &C_buf));
-    CHECK(vx_buffer_create(dev, sizeof(kernel_arg_t), VX_MEM_READ,  &args_buf));
+    vx_buffer_h A_buf=nullptr, B_buf=nullptr, C_buf=nullptr, kbuf=nullptr;
+    CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &A_buf));
+    CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &B_buf));
+    CHECK(vx_buffer_create(dev, buf_size, VX_MEM_WRITE, &C_buf));
     CHECK(vx_buffer_load_kernel_file(dev, q, kernel_file, &kbuf));
 
     kernel_arg_t kernel_arg{};
@@ -111,14 +109,14 @@ int main(int argc, char** argv) {
 
     auto t0 = std::chrono::high_resolution_clock::now();
 
-    CHECK(vx_enqueue_write(q, A_buf,    0, h_A.data(), buf_size, 0,nullptr,nullptr));
-    CHECK(vx_enqueue_write(q, B_buf,    0, h_B.data(), buf_size, 0,nullptr,nullptr));
-    CHECK(vx_enqueue_write(q, args_buf, 0, &kernel_arg, sizeof(kernel_arg), 0,nullptr,nullptr));
+    CHECK(vx_enqueue_write(q, A_buf, 0, h_A.data(), buf_size, 0,nullptr,nullptr));
+    CHECK(vx_enqueue_write(q, B_buf, 0, h_B.data(), buf_size, 0,nullptr,nullptr));
 
     vx_launch_info_t li{};
     li.struct_size = sizeof(li);
     li.kernel      = kbuf;
-    li.args        = args_buf;
+    li.args_host   = &kernel_arg;
+    li.args_size   = sizeof(kernel_arg);
     li.ndim        = 2;
     li.grid_dim[0] = grid[0];  li.grid_dim[1] = grid[1];
     li.block_dim[0]= block[0]; li.block_dim[1]= block[1];
@@ -145,7 +143,6 @@ int main(int argc, char** argv) {
 
     vx_event_release(read_ev);
     vx_event_release(launch_ev);
-    vx_buffer_release(args_buf);
     vx_buffer_release(C_buf);
     vx_buffer_release(B_buf);
     vx_buffer_release(A_buf);

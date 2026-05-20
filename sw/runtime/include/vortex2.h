@@ -111,9 +111,19 @@ typedef struct {
 typedef struct {
     size_t       struct_size;
     const void*  next;
-    vx_buffer_h  kernel;          // loaded ELF; entry PC = buffer base
-    vx_buffer_h  args;            // kernel argument block
-    uint32_t     ndim;            // 1, 2, or 3
+    vx_buffer_h  kernel;          // vx_kernel_h or kernel-image vx_buffer_h
+    // Kernel argument block as a host-side blob. The runtime stages it into
+    // a device-side scratch slot at launch time and programs the KMU ARG
+    // pointer — callers no longer allocate/upload/free an args device
+    // buffer. Buffers passed as kernel args appear as their uint64_t
+    // device addresses inline in the blob (see vx_buffer_address).
+    //
+    // args_host may be NULL (args_size 0) — the legacy escape hatch: the
+    // caller is expected to have programmed the ARG DCRs itself via prior
+    // vx_dcr_write calls (matches the ndim==0 convention).
+    const void*  args_host;
+    size_t       args_size;
+    uint32_t     ndim;            // 1, 2, or 3 (0 = legacy escape hatch)
     uint32_t     grid_dim [3];
     uint32_t     block_dim[3];
     uint32_t     lmem_size;

@@ -236,10 +236,11 @@ vx_result_t Queue::enqueue_copy(Buffer* dst, uint64_t do_, Buffer* src,
 vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
                                   uint32_t nw, const vx_event_h* w,
                                   vx_event_h* out) {
-    if (!info || !info->kernel || !info->args) return VX_ERR_INVALID_VALUE;
+    if (!info || !info->kernel) return VX_ERR_INVALID_VALUE;
     if (info->struct_size < sizeof(vx_launch_info_t))
         return VX_ERR_INVALID_INFO;
     if (info->ndim > 3) return VX_ERR_INVALID_VALUE;
+    if (info->args_size != 0 && !info->args_host) return VX_ERR_INVALID_VALUE;
 
     // Resolve the kernel handle. The launch kernel slot accepts either a
     // Buffer (legacy: image base = entry PC) or a Kernel (new in Phase 1b:
@@ -249,11 +250,20 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     const uint64_t kernel_pc = (lkh->launch_kind() == LaunchKernelHandle::Kind::Kernel)
                                  ? static_cast<Kernel*>(lkh)->pc()
                                  : static_cast<Buffer*>(lkh)->dev_address();
-    Buffer* args = to_buffer(info->args);
+
+    // Phase 2: the args block arrives as a host blob. Copy it into the
+    // command now so the caller can free/reuse `info` (and the memory it
+    // points at) the instant enqueue returns. An empty blob is the legacy
+    // escape hatch — the caller pre-programmed the ARG DCRs itself.
+    std::vector<uint8_t> args_blob;
+    if (info->args_host && info->args_size > 0) {
+        const uint8_t* p = static_cast<const uint8_t*>(info->args_host);
+        args_blob.assign(p, p + info->args_size);
+    }
 
     // Capture the launch descriptor by value into the work lambda so the
     // caller can free/reuse `info` immediately after enqueue returns.
-    // ndim==0 is the legacy escape hatch — only PC + arg ptr are
+    // ndim==0 is the legacy escape hatch — only PC (+ staged arg ptr) are
     // programmed and the host is expected to have set the rest via prior
     // vx_dcr_write calls (matches legacy vx_start semantics).
     const uint32_t ndim      = info->ndim;
@@ -267,8 +277,8 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
 
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, kernel_pc, args, ndim, lmem_size,
-                grid_in, block_in](uint64_t* s, uint64_t* e) {
+    cmd.work = [this, kernel_pc, ndim, lmem_size, grid_in, block_in,
+                args_blob = std::move(args_blob)](uint64_t* s, uint64_t* e) {
         Platform* p = device_->platform();
 
         // ---- Compute the full KMU descriptor (block_size, warp_step).
@@ -292,22 +302,46 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
                                 (tpw / (eff_block[0] * eff_block[1]))
                                   % eff_block[2] : 0;
 
+        // ---- Stage the kernel-args blob into a device scratch slot.
+        // Empty blob → caller pre-programmed the ARG DCRs (legacy path).
+        uint64_t args_addr   = 0;
+        bool     args_pooled = false;
+        bool     args_staged = !args_blob.empty();
+        if (args_staged) {
+            auto r = device_->args_slot_acquire(args_blob.size(),
+                                                &args_addr, &args_pooled);
+            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
+            r = p->mem_upload(args_addr, args_blob.data(), args_blob.size());
+            if (r != VX_SUCCESS) {
+                device_->args_slot_release(args_addr, args_pooled);
+                *s = *e = now_ns();
+                return r;
+            }
+        }
+
+        vx_result_t r;
         {
             std::lock_guard<std::mutex> g(enqueue_mu_);
 
-            const uint64_t pc   = kernel_pc;
-            const uint64_t argp = args->dev_address();
+            const uint64_t pc = kernel_pc;
 
             // Program the KMU DCRs via CMD_DCR_WRITE descriptors through
-            // the CP ring. ndim==0 leaves only PC + arg ptr programmed.
-            #define WR(addr, val) do {                                       \
-                auto r = device_->cp_submit_dcr_write((addr), (uint32_t)(val)); \
-                if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }       \
+            // the CP ring.
+            #define WR(addr, val) do {                                        \
+                auto _r = device_->cp_submit_dcr_write((addr), (uint32_t)(val)); \
+                if (_r != VX_SUCCESS) {                                       \
+                    if (args_staged)                                          \
+                        device_->args_slot_release(args_addr, args_pooled);   \
+                    *s = *e = now_ns();                                       \
+                    return _r;                                                \
+                }                                                             \
             } while (0)
-            WR(VX_DCR_KMU_STARTUP_ADDR0, pc   & 0xffffffffu);
-            WR(VX_DCR_KMU_STARTUP_ADDR1, pc   >> 32);
-            WR(VX_DCR_KMU_STARTUP_ARG0,  argp & 0xffffffffu);
-            WR(VX_DCR_KMU_STARTUP_ARG1,  argp >> 32);
+            WR(VX_DCR_KMU_STARTUP_ADDR0, pc & 0xffffffffu);
+            WR(VX_DCR_KMU_STARTUP_ADDR1, pc >> 32);
+            if (args_staged) {
+                WR(VX_DCR_KMU_STARTUP_ARG0, args_addr & 0xffffffffu);
+                WR(VX_DCR_KMU_STARTUP_ARG1, args_addr >> 32);
+            }
 
             if (ndim > 0) {
                 WR(VX_DCR_KMU_BLOCK_DIM_X, eff_block[0]);
@@ -329,10 +363,15 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
             // the engine retires (the engine retires only after Vortex
             // signals done, so Q_SEQNUM advance means the kernel
             // finished).
-            auto r = device_->cp_submit_launch();
+            r = device_->cp_submit_launch();
             *e = now_ns();
-            return r;
         }
+
+        // Launch retired — the kernel has consumed its args. Return the
+        // scratch slot to the pool for the next launch.
+        if (args_staged)
+            device_->args_slot_release(args_addr, args_pooled);
+        return r;
     };
     return this->enqueue(std::move(cmd), nw, w, out);
 }
