@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <vector>
-#include <vortex.h>
+#include <vortex2.h>
 #include "common.h"
 
 #define RT_CHECK(_expr)                                         \
@@ -22,8 +22,9 @@ uint32_t count = 4;
 
 vx_device_h device = nullptr;
 vx_buffer_h src_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -54,10 +55,11 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(src_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (src_buffer) vx_buffer_release(src_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -71,12 +73,15 @@ int main(int argc, char *argv[]) {
 
   // open device connection
   std::cout << "open device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   uint64_t num_cores, num_warps, num_threads;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   uint32_t total_threads = num_cores * num_warps * num_threads;
   uint32_t num_points = count * total_threads;
@@ -89,8 +94,8 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src_buffer));
-  RT_CHECK(vx_mem_address(src_buffer, &kernel_arg.src_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_READ, &src_buffer));
+  RT_CHECK(vx_buffer_address(src_buffer, &kernel_arg.src_addr));
 
   std::cout << "dev_src=0x" << std::hex << kernel_arg.src_addr << std::endl;
 
@@ -105,27 +110,34 @@ int main(int argc, char *argv[]) {
 
   // upload source buffer0
   std::cout << "upload source buffer" << std::endl;
-  RT_CHECK(vx_copy_to_dev(src_buffer, h_src.data(), 0, buf_size));
+  RT_CHECK(vx_enqueue_write(queue, src_buffer, 0, h_src.data(), buf_size, 0, nullptr, nullptr));
 
-  // Upload kernel binary
-  std::cout << "Upload kernel binary" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+  // load kernel module
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
-
-  // start device
-  std::cout << "start device" << std::endl;
+  // launch kernel — args passed as a host blob (UVA), no args device buffer
+  std::cout << "launch kernel" << std::endl;
+  vx_event_h launch_ev = nullptr;
   {
     uint32_t grid_dim[1], block_dim[1];
-    RT_CHECK(vx_max_occupancy_grid(device, 1, &num_points, grid_dim, block_dim));
-    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
+    RT_CHECK(vx_device_max_occupancy_grid(device, 1, &num_points, grid_dim, block_dim));
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 1;
+    li.grid_dim[0]  = grid_dim[0];
+    li.block_dim[0] = block_dim[0];
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   }
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+  RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(launch_ev);
 
   // cleanup
   std::cout << "cleanup" << std::endl;

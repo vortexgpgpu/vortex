@@ -71,18 +71,19 @@ Tracer::~Tracer() {
 
   if (!use_cpu_) {
     // free buffers
-    vx_mem_free(output_buffer_);
-    vx_mem_free(args_buffer_);
-    vx_mem_free(krnl_buffer_);
-    vx_mem_free(triBuffer_);
-    vx_mem_free(triExBuffer_);
-    vx_mem_free(texBuffer_);
-    vx_mem_free(tlasBuffer_);
-    vx_mem_free(blasBuffer_);
-    vx_mem_free(bvhBuffer_);
-    vx_mem_free(idxBuffer_);
+    if (output_buffer_) vx_buffer_release(output_buffer_);
+    if (triBuffer_)     vx_buffer_release(triBuffer_);
+    if (triExBuffer_)   vx_buffer_release(triExBuffer_);
+    if (texBuffer_)     vx_buffer_release(texBuffer_);
+    if (tlasBuffer_)    vx_buffer_release(tlasBuffer_);
+    if (blasBuffer_)    vx_buffer_release(blasBuffer_);
+    if (bvhBuffer_)     vx_buffer_release(bvhBuffer_);
+    if (idxBuffer_)     vx_buffer_release(idxBuffer_);
+    if (kernel_)  vx_kernel_release(kernel_);
+    if (module_)  vx_module_release(module_);
+    if (queue_)   vx_queue_release(queue_);
     // close device
-    vx_dev_close(device_);
+    vx_device_release(device_);
   }
 }
 
@@ -108,42 +109,46 @@ int Tracer::init(const char *kernel_file, const char* model_file, uint32_t mesh_
     kernel_arg_.blas_addr = (uint64_t)scene_->blas_nodes().data();
     kernel_arg_.tex_addr = (uint64_t)scene_->tex_buf().data();
   } else {
-    RT_CHECK(vx_dev_open(&device_));
+    RT_CHECK(vx_device_open(0, &device_));
 
-    // upload kernel
-    RT_CHECK(vx_upload_kernel_file(device_, kernel_file, &krnl_buffer_));
+    vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+    RT_CHECK(vx_queue_create(device_, &qi, &queue_));
+
+    // load kernel module
+    RT_CHECK(vx_module_load_file(device_, kernel_file, &module_));
+    RT_CHECK(vx_module_get_kernel(module_, "main", &kernel_));
 
     // allocate tri buffer
-    RT_CHECK(vx_mem_alloc(device_, scene_->tri_buf().size() * sizeof(tri_t), VX_MEM_READ, &triBuffer_));
-    RT_CHECK(vx_mem_address(triBuffer_, &kernel_arg_.tri_addr));
+    RT_CHECK(vx_buffer_create(device_, scene_->tri_buf().size() * sizeof(tri_t), VX_MEM_READ, &triBuffer_));
+    RT_CHECK(vx_buffer_address(triBuffer_, &kernel_arg_.tri_addr));
 
     // allocate triEx buffer
-    RT_CHECK(vx_mem_alloc(device_, scene_->triEx_buf().size() * sizeof(tri_ex_t), VX_MEM_READ, &triExBuffer_));
-    RT_CHECK(vx_mem_address(triExBuffer_, &kernel_arg_.triEx_addr));
+    RT_CHECK(vx_buffer_create(device_, scene_->triEx_buf().size() * sizeof(tri_ex_t), VX_MEM_READ, &triExBuffer_));
+    RT_CHECK(vx_buffer_address(triExBuffer_, &kernel_arg_.triEx_addr));
 
     // allocate triIdx buffer
-    RT_CHECK(vx_mem_alloc(device_, scene_->triIdx_buf().size() * sizeof(uint32_t), VX_MEM_READ, &idxBuffer_));
-    RT_CHECK(vx_mem_address(idxBuffer_, &kernel_arg_.triIdx_addr));
+    RT_CHECK(vx_buffer_create(device_, scene_->triIdx_buf().size() * sizeof(uint32_t), VX_MEM_READ, &idxBuffer_));
+    RT_CHECK(vx_buffer_address(idxBuffer_, &kernel_arg_.triIdx_addr));
 
     // allocate tlas buffer
-    RT_CHECK(vx_mem_alloc(device_, scene_->tlas_nodes().size() * sizeof(tlas_node_t), VX_MEM_READ, &tlasBuffer_));
-    RT_CHECK(vx_mem_address(tlasBuffer_, &kernel_arg_.tlas_addr));
+    RT_CHECK(vx_buffer_create(device_, scene_->tlas_nodes().size() * sizeof(tlas_node_t), VX_MEM_READ, &tlasBuffer_));
+    RT_CHECK(vx_buffer_address(tlasBuffer_, &kernel_arg_.tlas_addr));
 
     // allocate inst buffer
-    RT_CHECK(vx_mem_alloc(device_, scene_->blas_nodes().size() * sizeof(blas_node_t), VX_MEM_READ, &blasBuffer_));
-    RT_CHECK(vx_mem_address(blasBuffer_, &kernel_arg_.blas_addr));
+    RT_CHECK(vx_buffer_create(device_, scene_->blas_nodes().size() * sizeof(blas_node_t), VX_MEM_READ, &blasBuffer_));
+    RT_CHECK(vx_buffer_address(blasBuffer_, &kernel_arg_.blas_addr));
 
     // allocate bvh buffer
-    RT_CHECK(vx_mem_alloc(device_, scene_->bvh_nodes().size() * sizeof(bvh_node_t), VX_MEM_READ, &bvhBuffer_));
-    RT_CHECK(vx_mem_address(bvhBuffer_, &kernel_arg_.bvh_addr));
+    RT_CHECK(vx_buffer_create(device_, scene_->bvh_nodes().size() * sizeof(bvh_node_t), VX_MEM_READ, &bvhBuffer_));
+    RT_CHECK(vx_buffer_address(bvhBuffer_, &kernel_arg_.bvh_addr));
 
     // allocate tex buffer
-    RT_CHECK(vx_mem_alloc(device_, scene_->tex_buf().size(), VX_MEM_READ, &texBuffer_));
-    RT_CHECK(vx_mem_address(texBuffer_, &kernel_arg_.tex_addr));
+    RT_CHECK(vx_buffer_create(device_, scene_->tex_buf().size(), VX_MEM_READ, &texBuffer_));
+    RT_CHECK(vx_buffer_address(texBuffer_, &kernel_arg_.tex_addr));
 
     // allocate output buffer
-    RT_CHECK(vx_mem_alloc(device_, dst_width_ * dst_height_ * sizeof(uint32_t), VX_MEM_WRITE, &output_buffer_));
-    RT_CHECK(vx_mem_address(output_buffer_, &kernel_arg_.dst_addr));
+    RT_CHECK(vx_buffer_create(device_, dst_width_ * dst_height_ * sizeof(uint32_t), VX_MEM_WRITE, &output_buffer_));
+    RT_CHECK(vx_buffer_address(output_buffer_, &kernel_arg_.dst_addr));
   }
 
   return 0;
@@ -195,25 +200,25 @@ int Tracer::setup(float camera_vfov, float zoom, float3_t light_pos, float3_t li
     return 0;
 
   // upload tri data
-  RT_CHECK(vx_copy_to_dev(triBuffer_, scene_->tri_buf().data(), 0, scene_->tri_buf().size() * sizeof(tri_t)));
+  RT_CHECK(vx_enqueue_write(queue_, triBuffer_, 0, scene_->tri_buf().data(), scene_->tri_buf().size() * sizeof(tri_t), 0, nullptr, nullptr));
 
   // upload triEx data
-  RT_CHECK(vx_copy_to_dev(triExBuffer_, scene_->triEx_buf().data(), 0, scene_->triEx_buf().size() * sizeof(tri_ex_t)));
+  RT_CHECK(vx_enqueue_write(queue_, triExBuffer_, 0, scene_->triEx_buf().data(), scene_->triEx_buf().size() * sizeof(tri_ex_t), 0, nullptr, nullptr));
 
   // upload triIdx data
-  RT_CHECK(vx_copy_to_dev(idxBuffer_, scene_->triIdx_buf().data(), 0, scene_->triIdx_buf().size() * sizeof(uint32_t)));
+  RT_CHECK(vx_enqueue_write(queue_, idxBuffer_, 0, scene_->triIdx_buf().data(), scene_->triIdx_buf().size() * sizeof(uint32_t), 0, nullptr, nullptr));
 
   // upload tlas data
-  RT_CHECK(vx_copy_to_dev(tlasBuffer_, scene_->tlas_nodes().data(), 0, scene_->tlas_nodes().size() * sizeof(tlas_node_t)));
+  RT_CHECK(vx_enqueue_write(queue_, tlasBuffer_, 0, scene_->tlas_nodes().data(), scene_->tlas_nodes().size() * sizeof(tlas_node_t), 0, nullptr, nullptr));
 
   // upload inst data
-  RT_CHECK(vx_copy_to_dev(blasBuffer_, scene_->blas_nodes().data(), 0, scene_->blas_nodes().size() * sizeof(blas_node_t)));
+  RT_CHECK(vx_enqueue_write(queue_, blasBuffer_, 0, scene_->blas_nodes().data(), scene_->blas_nodes().size() * sizeof(blas_node_t), 0, nullptr, nullptr));
 
   // upload bvh data
-  RT_CHECK(vx_copy_to_dev(bvhBuffer_, scene_->bvh_nodes().data(), 0, scene_->bvh_nodes().size() * sizeof(bvh_node_t)));
+  RT_CHECK(vx_enqueue_write(queue_, bvhBuffer_, 0, scene_->bvh_nodes().data(), scene_->bvh_nodes().size() * sizeof(bvh_node_t), 0, nullptr, nullptr));
 
   // upload tex data
-  RT_CHECK(vx_copy_to_dev(texBuffer_, scene_->tex_buf().data(), 0, scene_->tex_buf().size()));
+  RT_CHECK(vx_enqueue_write(queue_, texBuffer_, 0, scene_->tex_buf().data(), scene_->tex_buf().size(), 0, nullptr, nullptr));
 
   return 0;
 }
@@ -227,24 +232,32 @@ int Tracer::run(const char *output_file) {
     kernel_arg_.dst_addr = (uint64_t)h_output.data();
     this->render();
   } else {
-    // upload kernel arguments
-    RT_CHECK(vx_upload_bytes(device_, &kernel_arg_, sizeof(kernel_arg_t), &args_buffer_));
-
-    // start kernel execution
+    // launch kernel — args passed as a host blob (UVA), no args device buffer
+    vx_event_h launch_ev = nullptr, read_ev = nullptr;
     {
       uint64_t num_threads;
-      RT_CHECK(vx_dev_caps(device_, VX_CAPS_NUM_THREADS, &num_threads));
+      RT_CHECK(vx_device_query(device_, VX_CAPS_NUM_THREADS, &num_threads));
       uint32_t NT = (uint32_t)num_threads;
-      uint32_t grid_dim[2]  = {(dst_width_ + NT - 1) / NT, dst_height_};
-      uint32_t block_dim[2] = {NT, 1};
-      RT_CHECK(vx_start_g(device_, krnl_buffer_, args_buffer_, 2, grid_dim, block_dim, 0));
+      vx_launch_info_t li = {};
+      li.struct_size  = sizeof(li);
+      li.kernel       = kernel_;
+      li.args_host    = &kernel_arg_;
+      li.args_size    = sizeof(kernel_arg_);
+      li.ndim         = 2;
+      li.grid_dim[0]  = (dst_width_ + NT - 1) / NT;
+      li.grid_dim[1]  = dst_height_;
+      li.block_dim[0] = NT;
+      li.block_dim[1] = 1;
+      RT_CHECK(vx_enqueue_launch(queue_, &li, 0, nullptr, &launch_ev));
     }
 
-    // wait for the kernel to finish
-    RT_CHECK(vx_ready_wait(device_, VX_MAX_TIMEOUT));
+    // download the output buffer — chained after the launch
+    RT_CHECK(vx_enqueue_read(queue_, h_output.data(), output_buffer_, 0, h_output.size(), 1, &launch_ev, &read_ev));
 
-    // download the output buffer
-    RT_CHECK(vx_copy_from_dev(h_output.data(), output_buffer_, 0, h_output.size()));
+    // wait for the kernel + readback to finish
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    vx_event_release(launch_ev);
   }
 
   // write the output to a PPM file

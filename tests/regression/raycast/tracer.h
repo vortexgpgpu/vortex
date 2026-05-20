@@ -2,7 +2,7 @@
 
 #include "common.h"
 #include "scene.h"
-#include <vortex.h>
+#include <vortex2.h>
 
 class Tracer {
 public:
@@ -28,8 +28,9 @@ private:
 
   kernel_arg_t kernel_arg_ = {};        // kernel arguments
   vx_device_h device_ = nullptr;        // Vortex device handle
-  vx_buffer_h args_buffer_ = nullptr;   // store kernel arguments
-  vx_buffer_h krnl_buffer_ = nullptr;   // store kernel binary
+  vx_queue_h  queue_ = nullptr;         // command queue
+  vx_module_h module_ = nullptr;        // loaded kernel module
+  vx_kernel_h kernel_ = nullptr;        // kernel entry point
   vx_buffer_h output_buffer_ = nullptr; // store output image
   vx_buffer_h triBuffer_ = nullptr;     // store Tri data
   vx_buffer_h triExBuffer_ = nullptr;   // store TriEx data

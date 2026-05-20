@@ -32,8 +32,9 @@ uint32_t tiles[DXA_MAX_DIMS] = {4, 4, 1, 1, 1};
 
 vx_device_h device = nullptr;
 vx_buffer_h src_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -89,10 +90,11 @@ static void parse_args(int argc, char** argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(src_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (src_buffer) vx_buffer_release(src_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -135,11 +137,14 @@ int main(int argc, char* argv[]) {
   const uint32_t buf_size = total_elems * sizeof(TYPE);
   const uint32_t local_mem = group_size * sizeof(TYPE);
 
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
 #ifdef EXT_DXA_ENABLE
   uint64_t isa_flags = 0;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
 #ifdef ISA_EXT_DXA
   const uint64_t dxa_isa_bit = (1ull << (32 + ISA_EXT_DXA));
   if ((isa_flags & dxa_isa_bit) == 0) {
@@ -150,14 +155,7 @@ int main(int argc, char* argv[]) {
 #endif
 #endif
 
-  uint32_t max_localmem = 0;
-  RT_CHECK(vx_check_occupancy(device, group_size, &max_localmem));
-  if (local_mem > max_localmem) {
-    std::cout << "Error: tile too large for local memory (" << local_mem
-              << " > " << max_localmem << ")\n";
-    cleanup();
-    return -1;
-  }
+  RT_CHECK(vx_check_occupancy(device, group_size, local_mem));
 
   // Set up kernel args.
   kernel_arg.ndim = ndim;
@@ -168,13 +166,13 @@ int main(int argc, char* argv[]) {
   }
 
   // Allocate and fill source array.
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src_buffer));
-  RT_CHECK(vx_mem_address(src_buffer, &kernel_arg.src_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_READ, &src_buffer));
+  RT_CHECK(vx_buffer_address(src_buffer, &kernel_arg.src_addr));
 
   std::vector<TYPE> h_src(total_elems);
   for (uint32_t i = 0; i < total_elems; ++i)
     h_src[i] = static_cast<TYPE>(i + 1);
-  RT_CHECK(vx_copy_to_dev(src_buffer, h_src.data(), 0, buf_size));
+  RT_CHECK(vx_enqueue_write(queue, src_buffer, 0, h_src.data(), buf_size, 0, nullptr, nullptr));
 
 #ifdef EXT_DXA_ENABLE
   // Program DXA descriptor for N-D source tile.
@@ -219,16 +217,29 @@ int main(int argc, char* argv[]) {
   }
 #endif
 
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // Launch with flattened 1D grid; kernel decomposes flat group ID.
   uint32_t grid_dim[1] = {total_groups};
   uint32_t block_dim[1] = {group_size};
 
   std::cout << "start\n";
-  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, local_mem));
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+  vx_event_h launch_ev = nullptr;
+  {
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 1;
+    li.grid_dim[0]  = grid_dim[0];
+    li.block_dim[0] = block_dim[0];
+    li.lmem_size    = local_mem;
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+  }
+  RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(launch_ev);
 
   std::cout << "PASSED\n";
 

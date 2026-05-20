@@ -5,7 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <vector>
-#include <vortex.h>
+#include <vortex2.h>
 
 #define FLOAT_ULP 6
 
@@ -24,8 +24,9 @@ uint32_t size = 32;
 
 vx_device_h device = nullptr;
 vx_buffer_h dst_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 
 // Synthetic computation replica for verification
@@ -64,10 +65,11 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(dst_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (dst_buffer) vx_buffer_release(dst_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -77,7 +79,11 @@ int main(int argc, char *argv[]) {
 
   // open device connection
   std::cout << "open device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
+
   uint32_t buf_size = size * size * sizeof(float);
 
   std::cout << "number of points: " << size << std::endl;
@@ -87,36 +93,46 @@ int main(int argc, char *argv[]) {
 
   // allocate buffers
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &dst_buffer));
-  RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_WRITE, &dst_buffer));
+  RT_CHECK(vx_buffer_address(dst_buffer, &kernel_arg.dst_addr));
   std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::endl;
 
-  // Upload kernel binary
-  std::cout << "upload kernel binary" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
-
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  // load kernel module
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // start device
   std::cout << "start device" << std::endl;
+  vx_event_h launch_ev = nullptr, read_ev = nullptr;
   {
     uint64_t num_threads;
-    RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
+    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
     uint32_t NT = (uint32_t)num_threads;
     uint32_t grid_dim[2]  = {(size + NT - 1) / NT, size};
     uint32_t block_dim[2] = {NT, 1};
-    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, 0));
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 2;
+    li.grid_dim[0]  = grid_dim[0];
+    li.grid_dim[1]  = grid_dim[1];
+    li.block_dim[0] = block_dim[0];
+    li.block_dim[1] = block_dim[1];
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   }
-
-  // wait for completion
-  std::cout << "wait for completion" << std::endl;
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
   // download destination buffer
   std::vector<float> h_C(size * size);
-  RT_CHECK(vx_copy_from_dev(h_C.data(), dst_buffer, 0, buf_size));
+  RT_CHECK(vx_enqueue_read(queue, h_C.data(), dst_buffer, 0, buf_size, 1, &launch_ev, &read_ev));
+
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(read_ev);
+  vx_event_release(launch_ev);
 
   // Verify results
   std::cout << "verify result" << std::endl;

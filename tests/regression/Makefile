@@ -50,6 +50,7 @@ all:
 	$(MAKE) -C wgather
 	$(MAKE) -C wsync
 	$(MAKE) -C occupancy
+	$(MAKE) -C multikernel
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -100,6 +101,7 @@ run-simx:
 	$(MAKE) -C wgather run-simx
 	$(MAKE) -C wsync run-simx
 	$(MAKE) -C occupancy run-simx
+	$(MAKE) -C multikernel run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -152,6 +154,7 @@ run-rtlsim:
 	$(MAKE) -C wgather run-rtlsim
 	$(MAKE) -C wsync run-rtlsim
 	$(MAKE) -C occupancy run-rtlsim
+	$(MAKE) -C multikernel run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -205,3 +208,4 @@ clean:
 	$(MAKE) -C wgather clean
 	$(MAKE) -C wsync clean
 	$(MAKE) -C occupancy clean
+	$(MAKE) -C multikernel clean

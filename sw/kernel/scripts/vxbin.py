@@ -65,6 +65,45 @@ def get_symbol(elf_file, name):
     print("Error: {} symbol not found in {}".format(name, elf_file))
     sys.exit(-1)
 
+def get_kernel_entries(elf_file):
+    # Collect the per-kernel KMU entry stubs of a multi-entry .vxbin. The
+    # POCL compiler glue emits one symbol "__vx_kentry_<kernel>" per kernel;
+    # the runtime's vx_module_get_kernel(<kernel>) resolves to its address.
+    cmd = ['readelf', '-s', '-W', elf_file]
+    output = subprocess.check_output(cmd, universal_newlines=True)
+    regex = re.compile(
+        r'\s*\d+:\s+([0-9a-fA-F]+)\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+'
+        r'__vx_kentry_(\S+)$')
+    entries = []
+    seen = set()
+    for line in output.splitlines():
+        match = regex.match(line)
+        if match:
+            name = match.group(2)
+            if name in seen:
+                continue
+            seen.add(name)
+            entries.append((name, int(match.group(1), 16)))
+    return entries
+
+def build_symtab_footer(entries):
+    # VXSYMTAB footer layout consumed by vx_module.cpp Module::load_bytes:
+    #   [string blob: names back-to-back]
+    #   [entries: N x { name_off:u32, name_len:u16, _pad:u16, pc:u64 }]
+    #   [n_symbols : u32]
+    #   [magic     : 8 bytes 'VXSYMTAB']
+    string_blob = b''
+    offsets = []
+    for name, _pc in entries:
+        offsets.append(len(string_blob))
+        string_blob += name.encode('utf-8')
+    footer = bytearray(string_blob)
+    for (name, pc), off in zip(entries, offsets):
+        footer += struct.pack('<IHHQ', off, len(name.encode('utf-8')), 0, pc)
+    footer += struct.pack('<I', len(entries))
+    footer += b'VXSYMTAB'
+    return bytes(footer)
+
 def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     min_vma, max_vma = get_vma_size(input_elf)
     edata = get_symbol(input_elf, '_edata')
@@ -91,11 +130,20 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     min_vma_bytes = struct.pack('<Q', min_vma)
     max_vma_bytes = struct.pack('<Q', max(max_vma, end))
 
+    # Optional symbol-table footer: present when the ELF carries per-kernel
+    # entry stubs (multi-entry POCL .vxbin). Absent for single-entry kernels
+    # (the regression tests), which the runtime resolves as "main" @ min_vma.
+    footer = b''
+    entries = get_kernel_entries(input_elf)
+    if entries:
+        footer = build_symtab_footer(entries)
+
     # Write the total size and binary data to the final output file
     with open(output_bin, 'wb') as bin_file:
         bin_file.write(min_vma_bytes)
         bin_file.write(max_vma_bytes)
         bin_file.write(binary_data)
+        bin_file.write(footer)
 
     # Remove the temporary binary file
     os.remove(temp_bin_path)

@@ -157,50 +157,33 @@ extern "C" int vx_copy_dev_to_dev(vx_buffer_h hdest_buffer, uint64_t dest_offset
 //     stores the returned event on the device as the "last event."
 //   - vx_ready_wait blocks on the stored event and releases it.
 //
-// Legacy DCR programming for grid/block/lmem happens via the caller's prior
-// vx_dcr_write calls — those execute synchronously and program the KMU
-// before vx_start fires. The launch_info passed here uses ndim=0, which
-// signals enqueue_launch to skip its own grid/block DCR programming (the
-// legacy caller already did it).
+// vx_start programs the full KMU descriptor (PC, args, grid, block, lmem,
+// block_size, warp_step) via the default queue's DCR-write path and then
+// triggers an async launch. It schedules one CTA per core with the device's
+// auto-occupancy block size (grid = num_cores, block = full warp width), so
+// the kernel's main() runs and can call vx_spawn_threads.
 // ============================================================================
 
 extern "C" int vx_start(vx_device_h hdevice, vx_buffer_h hkernel,
                         vx_buffer_h harguments) {
     if (!hdevice || !hkernel || !harguments) return -1;
-    // Schedule one CTA per core with the device's auto-occupancy block
-    // size. Matches the pre-CP legacy `vx_start` semantics: caller passes
-    // only kernel + args, runtime picks grid = num_cores, block = full
-    // warp width (block_dim=nullptr → prepare_kernel_launch_params auto-
-    // selects), so the kernel's `main()` runs and can call vx_spawn_threads.
-    uint64_t num_cores = 0;
-    if (vx_device_query(hdevice, VX_CAPS_NUM_CORES, &num_cores) != VX_SUCCESS) return -1;
-    uint32_t grid_dim = (uint32_t)num_cores;
-    return vx_start_g(hdevice, hkernel, harguments, 1, &grid_dim, nullptr, 0);
-}
-
-// vx_start_g: program full KMU descriptor (PC, args, grid, block, lmem,
-// block_size, warp_step) and trigger an async launch. Returns immediately;
-// vx_ready_wait blocks on the stored event.
-extern "C" int vx_start_g(vx_device_h hdevice, vx_buffer_h hkernel,
-                          vx_buffer_h harguments,
-                          uint32_t ndim, const uint32_t* grid_dim,
-                          const uint32_t* block_dim, uint32_t lmem_size) {
-    if (!hdevice || !hkernel || !harguments) return -1;
-    if (ndim < 1 || ndim > 3 || !grid_dim) return -1;
 
     Device* dev = to_device(hdevice);
     Buffer* kernel = to_buffer(hkernel);
     Buffer* args   = to_buffer(harguments);
 
-    // Drain any prior in-flight legacy launch (legacy vx_start_g can be
+    // Drain any prior in-flight legacy launch (legacy vx_start can be
     // called back-to-back without an interleaved vx_ready_wait).
     if (Event* prev = dev->legacy_take_last_event()) {
         prev->wait(VX_TIMEOUT_INFINITE);
         prev->release();
     }
 
-    // Pull device sizing for warp_step calculation.
-    uint64_t num_threads = 0, num_warps = 0;
+    // Pull device sizing: grid = num_cores, block auto-selected from the
+    // device's warp geometry (block_dim=nullptr → prepare_kernel_launch_params
+    // picks the full warp width).
+    uint64_t num_cores = 0, num_threads = 0, num_warps = 0;
+    if (vx_device_query(hdevice, VX_CAPS_NUM_CORES,   &num_cores)   != VX_SUCCESS) return -1;
     if (vx_device_query(hdevice, VX_CAPS_NUM_THREADS, &num_threads) != VX_SUCCESS) return -1;
     if (vx_device_query(hdevice, VX_CAPS_NUM_WARPS,   &num_warps)   != VX_SUCCESS) return -1;
 
@@ -208,15 +191,12 @@ extern "C" int vx_start_g(vx_device_h hdevice, vx_buffer_h hkernel,
     uint32_t block_size = 0;
     uint32_t warp_step_x = 0, warp_step_y = 0, warp_step_z = 0;
     prepare_kernel_launch_params((uint32_t)num_threads, (uint32_t)num_warps,
-                                 ndim, block_dim, eff_block_dim,
+                                 /*ndim=*/1, /*block_dim=*/nullptr, eff_block_dim,
                                  &block_size, &warp_step_x, &warp_step_y, &warp_step_z);
 
-    uint32_t full_grid[3]  = {1, 1, 1};
-    uint32_t full_block[3] = {1, 1, 1};
-    for (uint32_t i = 0; i < ndim; ++i) {
-        full_grid[i]  = grid_dim[i];
-        full_block[i] = eff_block_dim[i];
-    }
+    uint32_t full_grid[3]  = {(uint32_t)num_cores, 1, 1};
+    uint32_t full_block[3] = {eff_block_dim[0], 1, 1};
+    uint32_t lmem_size     = 0;
 
     Queue* q = dev->legacy_default_queue();
     if (!q) return -1;

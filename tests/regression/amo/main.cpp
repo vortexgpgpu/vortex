@@ -3,7 +3,7 @@
 #include <unordered_set>
 #include <unistd.h>
 #include <string.h>
-#include <vortex.h>
+#include <vortex2.h>
 #include "testcases.h"
 #include "common.h"
 
@@ -19,8 +19,9 @@ bool stop_on_error = true;
 vx_device_h device = nullptr;
 vx_buffer_h shared_buffer = nullptr;
 vx_buffer_h per_hart_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -51,11 +52,12 @@ static void parse_args(int argc, char **argv) {
 void cleanup() {
   if (testSuite) delete testSuite;
   if (device) {
-    if (shared_buffer)   vx_mem_free(shared_buffer);
-    if (per_hart_buffer) vx_mem_free(per_hart_buffer);
-    if (krnl_buffer)     vx_mem_free(krnl_buffer);
-    if (args_buffer)     vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (shared_buffer)   vx_buffer_release(shared_buffer);
+    if (per_hart_buffer) vx_buffer_release(per_hart_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -66,12 +68,15 @@ int main(int argc, char *argv[]) {
   std::cout << "iters per hart: " << iters << std::endl;
   std::cout << "kernel: " << kernel_file << std::endl;
 
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   uint64_t num_cores, num_warps, num_threads;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   uint32_t num_harts = (uint32_t)(num_cores * num_warps * num_threads);
   std::cout << "num_harts: " << num_harts << std::endl;
@@ -84,11 +89,10 @@ int main(int argc, char *argv[]) {
   const size_t shared_bytes  = 64;
   const size_t per_hart_bytes = num_harts * sizeof(uint32_t);
 
-  RT_CHECK(vx_mem_alloc(device, shared_bytes,   VX_MEM_READ_WRITE, &shared_buffer));
-  RT_CHECK(vx_mem_address(shared_buffer, &kernel_arg.shared_addr));
-  RT_CHECK(vx_mem_alloc(device, per_hart_bytes, VX_MEM_READ_WRITE, &per_hart_buffer));
-  RT_CHECK(vx_mem_address(per_hart_buffer, &kernel_arg.per_hart_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeof(kernel_arg_t), VX_MEM_READ, &args_buffer));
+  RT_CHECK(vx_buffer_create(device, shared_bytes,   VX_MEM_READ_WRITE, &shared_buffer));
+  RT_CHECK(vx_buffer_address(shared_buffer, &kernel_arg.shared_addr));
+  RT_CHECK(vx_buffer_create(device, per_hart_bytes, VX_MEM_READ_WRITE, &per_hart_buffer));
+  RT_CHECK(vx_buffer_address(per_hart_buffer, &kernel_arg.per_hart_addr));
 
   std::cout << "shared_addr=0x"   << std::hex << kernel_arg.shared_addr
             << ", per_hart_addr=0x" << kernel_arg.per_hart_addr
@@ -100,7 +104,8 @@ int main(int argc, char *argv[]) {
   testSuite = new TestSuite(device);
   if (testid_e == 0) testid_e = (int)testSuite->size() - 1;
 
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   int errors = 0;
   for (int t = testid_s; t <= testid_e; ++t) {
@@ -129,22 +134,33 @@ int main(int argc, char *argv[]) {
     std::memset(per_hart_host.data(), 0, per_hart_bytes);
     test->setup(num_harts, shared_host.data(), per_hart_host.data());
 
-    RT_CHECK(vx_copy_to_dev(shared_buffer,   shared_host.data(),   0, shared_bytes));
-    RT_CHECK(vx_copy_to_dev(per_hart_buffer, per_hart_host.data(), 0, per_hart_bytes));
+    RT_CHECK(vx_enqueue_write(queue, shared_buffer,   0, shared_host.data(),   shared_bytes, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_write(queue, per_hart_buffer, 0, per_hart_host.data(), per_hart_bytes, 0, nullptr, nullptr));
 
     kernel_arg.testid = (uint32_t)t;
-    RT_CHECK(vx_copy_to_dev(args_buffer, &kernel_arg, 0, sizeof(kernel_arg_t)));
 
+    vx_event_h launch_ev = nullptr, read_ev0 = nullptr, read_ev1 = nullptr;
     {
       uint32_t n = num_harts;
       uint32_t grid_dim[1], block_dim[1];
-      RT_CHECK(vx_max_occupancy_grid(device, 1, &n, grid_dim, block_dim));
-      RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
+      RT_CHECK(vx_device_max_occupancy_grid(device, 1, &n, grid_dim, block_dim));
+      vx_launch_info_t li = {};
+      li.struct_size  = sizeof(li);
+      li.kernel       = kernel;
+      li.args_host    = &kernel_arg;
+      li.args_size    = sizeof(kernel_arg);
+      li.ndim         = 1;
+      li.grid_dim[0]  = grid_dim[0];
+      li.block_dim[0] = block_dim[0];
+      RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
-    RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
 
-    RT_CHECK(vx_copy_from_dev(shared_host.data(),   shared_buffer,   0, shared_bytes));
-    RT_CHECK(vx_copy_from_dev(per_hart_host.data(), per_hart_buffer, 0, per_hart_bytes));
+    RT_CHECK(vx_enqueue_read(queue, shared_host.data(),   shared_buffer,   0, shared_bytes, 1, &launch_ev, &read_ev0));
+    RT_CHECK(vx_enqueue_read(queue, per_hart_host.data(), per_hart_buffer, 0, per_hart_bytes, 1, &launch_ev, &read_ev1));
+    RT_CHECK(vx_event_wait_value(read_ev1, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev1);
+    vx_event_release(read_ev0);
+    vx_event_release(launch_ev);
 
     int err = test->verify(num_harts, iters, shared_host.data(), per_hart_host.data());
     if (err != 0) {

@@ -2,7 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <vector>
-#include <vortex.h>
+#include <vortex2.h>
 #include "common.h"
 
 #define FLOAT_ULP 6
@@ -86,8 +86,9 @@ vx_buffer_h nextmask_buffer = nullptr;
 vx_buffer_h visit_buffer = nullptr;
 vx_buffer_h frontier_buffer = nullptr;
 vx_buffer_h cost_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -118,15 +119,16 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(nodes_buffer);
-    vx_mem_free(edges_buffer);
-    vx_mem_free(nextmask_buffer);
-    vx_mem_free(visit_buffer);
-    vx_mem_free(frontier_buffer);
-    vx_mem_free(cost_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (nodes_buffer)    vx_buffer_release(nodes_buffer);
+    if (edges_buffer)    vx_buffer_release(edges_buffer);
+    if (nextmask_buffer) vx_buffer_release(nextmask_buffer);
+    if (visit_buffer)    vx_buffer_release(visit_buffer);
+    if (frontier_buffer) vx_buffer_release(frontier_buffer);
+    if (cost_buffer)     vx_buffer_release(cost_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -186,7 +188,10 @@ int main(int argc, char *argv[]) {
 
   // open device connection
   std::cout << "open device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   // Generate graph
   int max_edges_per_node = 5;
@@ -212,18 +217,18 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, nodes_buf_size,    VX_MEM_READ_WRITE, &nodes_buffer));
-  RT_CHECK(vx_mem_address(nodes_buffer,    &kernel_arg.nodes_addr));
-  RT_CHECK(vx_mem_alloc(device, edges_buf_size,    VX_MEM_READ_WRITE, &edges_buffer));
-  RT_CHECK(vx_mem_address(edges_buffer,    &kernel_arg.edges_addr));
-  RT_CHECK(vx_mem_alloc(device, nextmask_buf_size, VX_MEM_READ_WRITE, &nextmask_buffer));
-  RT_CHECK(vx_mem_address(nextmask_buffer, &kernel_arg.nextmask_addr));
-  RT_CHECK(vx_mem_alloc(device, visit_buf_size,    VX_MEM_READ_WRITE, &visit_buffer));
-  RT_CHECK(vx_mem_address(visit_buffer,    &kernel_arg.visit_addr));
-  RT_CHECK(vx_mem_alloc(device, frontier_buf_size, VX_MEM_READ_WRITE, &frontier_buffer));
-  RT_CHECK(vx_mem_address(frontier_buffer, &kernel_arg.frontier_addr));
-  RT_CHECK(vx_mem_alloc(device, cost_buf_size,     VX_MEM_READ_WRITE, &cost_buffer));
-  RT_CHECK(vx_mem_address(cost_buffer,     &kernel_arg.cost_addr));
+  RT_CHECK(vx_buffer_create(device, nodes_buf_size,    VX_MEM_READ_WRITE, &nodes_buffer));
+  RT_CHECK(vx_buffer_address(nodes_buffer,    &kernel_arg.nodes_addr));
+  RT_CHECK(vx_buffer_create(device, edges_buf_size,    VX_MEM_READ_WRITE, &edges_buffer));
+  RT_CHECK(vx_buffer_address(edges_buffer,    &kernel_arg.edges_addr));
+  RT_CHECK(vx_buffer_create(device, nextmask_buf_size, VX_MEM_READ_WRITE, &nextmask_buffer));
+  RT_CHECK(vx_buffer_address(nextmask_buffer, &kernel_arg.nextmask_addr));
+  RT_CHECK(vx_buffer_create(device, visit_buf_size,    VX_MEM_READ_WRITE, &visit_buffer));
+  RT_CHECK(vx_buffer_address(visit_buffer,    &kernel_arg.visit_addr));
+  RT_CHECK(vx_buffer_create(device, frontier_buf_size, VX_MEM_READ_WRITE, &frontier_buffer));
+  RT_CHECK(vx_buffer_address(frontier_buffer, &kernel_arg.frontier_addr));
+  RT_CHECK(vx_buffer_create(device, cost_buf_size,     VX_MEM_READ_WRITE, &cost_buffer));
+  RT_CHECK(vx_buffer_address(cost_buffer,     &kernel_arg.cost_addr));
 
   // host buffers
   std::vector<Node>     h_nodes(num_nodes);
@@ -242,13 +247,14 @@ int main(int argc, char *argv[]) {
   h_frontier.push_back(0);
 
   // upload static data once
-  RT_CHECK(vx_copy_to_dev(nodes_buffer, h_nodes.data(), 0, nodes_buf_size));
-  RT_CHECK(vx_copy_to_dev(edges_buffer, h_edges.data(), 0, edges_buf_size));
-  RT_CHECK(vx_copy_to_dev(cost_buffer,  h_cost.data(),  0, cost_buf_size));
+  RT_CHECK(vx_enqueue_write(queue, nodes_buffer, 0, h_nodes.data(), nodes_buf_size, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, edges_buffer, 0, h_edges.data(), edges_buf_size, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, cost_buffer,  0, h_cost.data(),  cost_buf_size, 0, nullptr, nullptr));
 
-  // upload program
-  std::cout << "upload program" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+  // load kernel module
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // BFS level-by-level dispatch
   std::cout << "start device" << std::endl;
@@ -256,21 +262,34 @@ int main(int argc, char *argv[]) {
     uint32_t frontier_size = (uint32_t)h_frontier.size();
 
     kernel_arg.frontier_size = frontier_size;
-    RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
-    RT_CHECK(vx_copy_to_dev(frontier_buffer, h_frontier.data(), 0, frontier_size * sizeof(uint32_t)));
-    RT_CHECK(vx_copy_to_dev(visit_buffer,    h_visit.data(),    0, visit_buf_size));
+    RT_CHECK(vx_enqueue_write(queue, frontier_buffer, 0, h_frontier.data(), frontier_size * sizeof(uint32_t), 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_write(queue, visit_buffer,    0, h_visit.data(),    visit_buf_size, 0, nullptr, nullptr));
     std::fill(h_nextmask.begin(), h_nextmask.end(), 0);
-    RT_CHECK(vx_copy_to_dev(nextmask_buffer, h_nextmask.data(), 0, nextmask_buf_size));
+    RT_CHECK(vx_enqueue_write(queue, nextmask_buffer, 0, h_nextmask.data(), nextmask_buf_size, 0, nullptr, nullptr));
 
-    uint32_t grid_dim[1], block_dim[1];
-    RT_CHECK(vx_max_occupancy_grid(device, 1, &frontier_size, grid_dim, block_dim));
-    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
-    RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+    vx_event_h launch_ev = nullptr, read_ev0 = nullptr, read_ev1 = nullptr;
+    {
+      uint32_t grid_dim[1], block_dim[1];
+      RT_CHECK(vx_device_max_occupancy_grid(device, 1, &frontier_size, grid_dim, block_dim));
+      vx_launch_info_t li = {};
+      li.struct_size  = sizeof(li);
+      li.kernel       = kernel;
+      li.args_host    = &kernel_arg;
+      li.args_size    = sizeof(kernel_arg);
+      li.ndim         = 1;
+      li.grid_dim[0]  = grid_dim[0];
+      li.block_dim[0] = block_dim[0];
+      RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+    }
 
     // compact next frontier on host
-    RT_CHECK(vx_copy_from_dev(h_nextmask.data(), nextmask_buffer, 0, nextmask_buf_size));
-    RT_CHECK(vx_copy_from_dev(h_cost.data(),     cost_buffer,     0, cost_buf_size));
+    RT_CHECK(vx_enqueue_read(queue, h_nextmask.data(), nextmask_buffer, 0, nextmask_buf_size, 1, &launch_ev, &read_ev0));
+    RT_CHECK(vx_enqueue_read(queue, h_cost.data(),     cost_buffer,     0, cost_buf_size, 1, &launch_ev, &read_ev1));
+    RT_CHECK(vx_event_wait_value(read_ev1, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev1);
+    vx_event_release(read_ev0);
+    vx_event_release(launch_ev);
     h_frontier.clear();
     for (uint32_t v = 0; v < num_nodes; ++v) {
       if (h_nextmask[v] && !h_visit[v]) {

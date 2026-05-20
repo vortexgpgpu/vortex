@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <util.h>
 #include <vector>
-#include <vortex.h>
+#include <vortex2.h>
 
 #define FLOAT_ULP 10
 #define MAX_ERRORS 100
@@ -521,8 +521,9 @@ vx_buffer_h C_buffer = nullptr;
 #ifdef PROFILE_ENABLE
 vx_buffer_h cycles_buffer = nullptr;
 #endif
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -556,15 +557,16 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(A_buffer);
-    vx_mem_free(B_buffer);
-    vx_mem_free(C_buffer);
+    if (A_buffer) vx_buffer_release(A_buffer);
+    if (B_buffer) vx_buffer_release(B_buffer);
+    if (C_buffer) vx_buffer_release(C_buffer);
 #ifdef PROFILE_ENABLE
-    vx_mem_free(cycles_buffer);
+    if (cycles_buffer) vx_buffer_release(cycles_buffer);
 #endif
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -576,10 +578,14 @@ int main(int argc, char *argv[]) {
 
   // open device connection
   std::cout << "open device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  // create the command queue used for the async enqueue chain
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   uint64_t isa_flags;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
   bool has_ext = (isa_flags & VX_ISA_EXT_TCU) != 0;
   if (!has_ext) {
     std::cout << "TCU extension not supported!" << std::endl;
@@ -588,7 +594,7 @@ int main(int argc, char *argv[]) {
   }
 
   uint64_t NT;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &NT));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &NT));
   if (NT != NUM_THREADS) {
     std::cout << "Error: device warp size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
     return -1;
@@ -634,17 +640,17 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
-  RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeB * sizeof(itype_t), VX_MEM_READ, &B_buffer));
-  RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
-  RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
+  RT_CHECK(vx_buffer_create(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
+  RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
+  RT_CHECK(vx_buffer_create(device, sizeB * sizeof(itype_t), VX_MEM_READ, &B_buffer));
+  RT_CHECK(vx_buffer_address(B_buffer, &kernel_arg.B_addr));
+  RT_CHECK(vx_buffer_create(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
+  RT_CHECK(vx_buffer_address(C_buffer, &kernel_arg.C_addr));
 
 #ifdef PROFILE_ENABLE
   uint32_t num_blocks = grid_dim[0] * grid_dim[1];
-  RT_CHECK(vx_mem_alloc(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
-  RT_CHECK(vx_mem_address(cycles_buffer, &kernel_arg.cycles_addr));
+  RT_CHECK(vx_buffer_create(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
+  RT_CHECK(vx_buffer_address(cycles_buffer, &kernel_arg.cycles_addr));
 #endif
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
@@ -661,10 +667,16 @@ int main(int argc, char *argv[]) {
     h_B[i] = generate_B_value<vt::ITYPE>();
   }
 
-  // upload matrix A buffer
+  // upload matrix A buffer.
+  // h_B_col must outlive the async write below — vx_enqueue_write may copy
+  // from it on the worker thread, so it is declared here at function scope.
+  // Sized in bytes; covers both the sub-byte (1 B/elem) and wide-element
+  // layouts.
+  std::vector<uint8_t> h_B_col(sizeB * sizeof(itype_t));
   {
     std::cout << "upload matrix A buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, sizeA * sizeof(itype_t)));
+    RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A.data(),
+                              sizeA * sizeof(itype_t), 0, nullptr, nullptr));
   }
 
   // upload matrix B buffer
@@ -674,53 +686,78 @@ int main(int argc, char *argv[]) {
                   std::is_same<vt::ITYPE, vt::uint4>::value) {
       // sub-byte matrix B must be in col-major format
       // we convert the 4-bit row-major to col-major here
-      std::vector<uint8_t> h_B_col(sizeB);
       convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());
-      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB));
+      RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, h_B_col.data(),
+                                sizeB, 0, nullptr, nullptr));
     } else {
-      std::vector<itype_t> h_B_col(sizeB);
-      convert_row_to_col_major(h_B_col.data(), h_B.data(), K, N);
-      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB * sizeof(itype_t)));
+      convert_row_to_col_major((itype_t*)h_B_col.data(), h_B.data(), K, N);
+      RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, h_B_col.data(),
+                                sizeB * sizeof(itype_t), 0, nullptr, nullptr));
     }
   }
 
-  // upload program
-  std::cout << "upload program" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+  // load kernel module
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  // Host result buffers — must outlive the async reads enqueued below.
+  std::vector<otype_t> h_C(sizeC);
+#ifdef PROFILE_ENABLE
+  std::vector<uint32_t> h_cycles(num_blocks);
+#endif
 
   auto time_start = std::chrono::high_resolution_clock::now();
 
-  // start device
-  std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, 0));
+  // launch kernel — args passed as a host blob (UVA), no args device buffer
+  std::cout << "launch kernel" << std::endl;
+  vx_launch_info_t li = {};
+  li.struct_size  = sizeof(li);
+  li.kernel       = kernel;
+  li.args_host    = &kernel_arg;
+  li.args_size    = sizeof(kernel_arg);
+  li.ndim         = 2;
+  li.grid_dim[0]  = grid_dim[0];
+  li.grid_dim[1]  = grid_dim[1];
+  li.block_dim[0] = block_dim[0];
+  li.block_dim[1] = block_dim[1];
+  vx_event_h launch_ev = nullptr;
+  RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
 
-  // wait for completion
+  // read results back — chained after the launch on the same queue
+  std::cout << "download destination buffer" << std::endl;
+  vx_event_h read_ev = nullptr;
+  RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0,
+                           sizeC * sizeof(otype_t), 1, &launch_ev, &read_ev));
+#ifdef PROFILE_ENABLE
+  vx_event_h cyc_ev = nullptr;
+  RT_CHECK(vx_enqueue_read(queue, h_cycles.data(), cycles_buffer, 0,
+                           num_blocks * sizeof(uint32_t), 1, &read_ev, &cyc_ev));
+#endif
+
+  // wait for the whole chain to retire
   std::cout << "wait for completion" << std::endl;
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+#ifdef PROFILE_ENABLE
+  RT_CHECK(vx_event_wait_value(cyc_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(cyc_ev);
+#else
+  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+#endif
+  vx_event_release(read_ev);
+  vx_event_release(launch_ev);
 
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
 #ifdef PROFILE_ENABLE
-  // read back TCU cycle counts
+  // report TCU cycle counts
   {
-    std::vector<uint32_t> h_cycles(num_blocks);
-    RT_CHECK(vx_copy_from_dev(h_cycles.data(), cycles_buffer, 0, num_blocks * sizeof(uint32_t)));
     uint32_t max_cycles = 0;
     for (auto c : h_cycles) max_cycles = std::max(max_cycles, c);
     printf("TCU_CYCLES: max=%u (across %u blocks)\n", max_cycles, num_blocks);
   }
 #endif
-
-  // download destination buffer
-  std::vector<otype_t> h_C(sizeC);
-  std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t)));
 
   // verify result
   std::cout << "verify result" << std::endl;

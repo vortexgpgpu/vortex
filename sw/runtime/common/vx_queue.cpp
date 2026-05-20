@@ -10,7 +10,9 @@
 #include <VX_config.h>
 #include <VX_types.h>
 
+#include <algorithm>
 #include <array>
+#include <cstring>
 
 namespace vx {
 
@@ -388,6 +390,265 @@ vx_result_t Queue::enqueue_barrier(uint32_t nw, const vx_event_h* w,
     return this->enqueue(std::move(cmd), nw, w, out);
 }
 
+// ============================================================================
+// Rect-DMA helpers — software fallback for the *_rect enqueues. Each rect is
+// decomposed into linear transfers; a future CP DMA descriptor with native
+// 3D stride can replace the per-row loop without an API change.
+// ============================================================================
+
+namespace {
+
+struct ResolvedRect {
+    size_t region[3];
+    size_t buffer_origin[3];
+    size_t host_origin[3];
+    size_t buffer_row, buffer_slice;
+    size_t host_row, host_slice;
+};
+
+// Apply OpenCL pitch defaults (0 row pitch -> region[0]; 0 slice pitch ->
+// region[1] * row_pitch) and reject a degenerate region or a pitch too
+// small to hold its row / slice.
+vx_result_t resolve_rect(const vx_rect_info_t& in, ResolvedRect* out) {
+    for (int i = 0; i < 3; ++i) {
+        out->region[i]        = in.region[i];
+        out->buffer_origin[i] = in.buffer_origin[i];
+        out->host_origin[i]   = in.host_origin[i];
+    }
+    if (in.region[0] == 0 || in.region[1] == 0 || in.region[2] == 0)
+        return VX_ERR_INVALID_VALUE;
+    out->buffer_row   = in.buffer_row_pitch   ? in.buffer_row_pitch
+                                              : in.region[0];
+    out->buffer_slice = in.buffer_slice_pitch ? in.buffer_slice_pitch
+                                              : out->buffer_row * in.region[1];
+    out->host_row     = in.host_row_pitch     ? in.host_row_pitch
+                                              : in.region[0];
+    out->host_slice   = in.host_slice_pitch   ? in.host_slice_pitch
+                                              : out->host_row * in.region[1];
+    if (out->buffer_row < in.region[0] || out->host_row < in.region[0])
+        return VX_ERR_INVALID_VALUE;
+    if (out->buffer_slice < out->buffer_row * in.region[1] ||
+        out->host_slice   < out->host_row   * in.region[1])
+        return VX_ERR_INVALID_VALUE;
+    return VX_SUCCESS;
+}
+
+// Byte offset of row `row` of slice `sl` within one side of the rect.
+uint64_t rect_off(const size_t origin[3], size_t row_pitch, size_t slice_pitch,
+                  size_t sl, size_t row) {
+    return (uint64_t)(origin[2] + sl)  * slice_pitch
+         + (uint64_t)(origin[1] + row) * row_pitch
+         + origin[0];
+}
+
+// Highest byte (exclusive) one side of the rect touches — for bounds checks.
+uint64_t rect_span(const size_t region[3], const size_t origin[3],
+                   size_t row_pitch, size_t slice_pitch) {
+    return rect_off(origin, row_pitch, slice_pitch,
+                    region[2] - 1, region[1] - 1) + region[0];
+}
+
+// Walk the rect, invoking row_fn(buffer_off, host_off, len) for each
+// contiguous run — once for the whole rect when it is fully contiguous,
+// otherwise once per row. Stops at the first failing transfer.
+template <class Fn>
+vx_result_t rect_for_each(const ResolvedRect& r, Fn&& row_fn) {
+    const bool contig =
+        r.buffer_row   == r.region[0] &&
+        r.host_row     == r.region[0] &&
+        r.buffer_slice == r.region[1] * r.region[0] &&
+        r.host_slice   == r.region[1] * r.region[0];
+    if (contig) {
+        return row_fn(
+            rect_off(r.buffer_origin, r.buffer_row, r.buffer_slice, 0, 0),
+            rect_off(r.host_origin,   r.host_row,   r.host_slice,   0, 0),
+            (uint64_t)r.region[0] * r.region[1] * r.region[2]);
+    }
+    for (size_t sl = 0; sl < r.region[2]; ++sl) {
+        for (size_t row = 0; row < r.region[1]; ++row) {
+            auto rc = row_fn(
+                rect_off(r.buffer_origin, r.buffer_row, r.buffer_slice, sl, row),
+                rect_off(r.host_origin,   r.host_row,   r.host_slice,   sl, row),
+                (uint64_t)r.region[0]);
+            if (rc != VX_SUCCESS) return rc;
+        }
+    }
+    return VX_SUCCESS;
+}
+
+} // namespace
+
+vx_result_t Queue::enqueue_read_rect(void* host_dst, Buffer* src,
+                                     const vx_rect_info_t* info,
+                                     uint32_t nw, const vx_event_h* w,
+                                     vx_event_h* out) {
+    if (!src || !host_dst || !info)                  return VX_ERR_INVALID_VALUE;
+    if (info->struct_size < sizeof(vx_rect_info_t))  return VX_ERR_INVALID_INFO;
+    ResolvedRect rr;
+    auto r = resolve_rect(*info, &rr);
+    if (r != VX_SUCCESS) return r;
+    if (rect_span(rr.region, rr.buffer_origin, rr.buffer_row, rr.buffer_slice)
+        > src->size())
+        return VX_ERR_INVALID_VALUE;
+
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, host_dst, src, rr](uint64_t* s, uint64_t* e) {
+        *s = now_ns();
+        std::lock_guard<std::mutex> g(enqueue_mu_);
+        Platform* p = device_->platform();
+        auto rc = rect_for_each(rr, [&](uint64_t bo, uint64_t ho, uint64_t len) {
+            return p->mem_download((uint8_t*)host_dst + ho,
+                                   src->dev_address() + bo, len);
+        });
+        *e = now_ns();
+        return rc;
+    };
+    return this->enqueue(std::move(cmd), nw, w, out);
+}
+
+vx_result_t Queue::enqueue_write_rect(Buffer* dst, const void* host_src,
+                                      const vx_rect_info_t* info,
+                                      uint32_t nw, const vx_event_h* w,
+                                      vx_event_h* out) {
+    if (!dst || !host_src || !info)                  return VX_ERR_INVALID_VALUE;
+    if (info->struct_size < sizeof(vx_rect_info_t))  return VX_ERR_INVALID_INFO;
+    ResolvedRect rr;
+    auto r = resolve_rect(*info, &rr);
+    if (r != VX_SUCCESS) return r;
+    if (rect_span(rr.region, rr.buffer_origin, rr.buffer_row, rr.buffer_slice)
+        > dst->size())
+        return VX_ERR_INVALID_VALUE;
+
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, dst, host_src, rr](uint64_t* s, uint64_t* e) {
+        *s = now_ns();
+        std::lock_guard<std::mutex> g(enqueue_mu_);
+        Platform* p = device_->platform();
+        auto rc = rect_for_each(rr, [&](uint64_t bo, uint64_t ho, uint64_t len) {
+            return p->mem_upload(dst->dev_address() + bo,
+                                 (const uint8_t*)host_src + ho, len);
+        });
+        *e = now_ns();
+        return rc;
+    };
+    return this->enqueue(std::move(cmd), nw, w, out);
+}
+
+vx_result_t Queue::enqueue_copy_rect(Buffer* dst, Buffer* src,
+                                     const vx_rect_info_t* info,
+                                     uint32_t nw, const vx_event_h* w,
+                                     vx_event_h* out) {
+    if (!dst || !src || !info)                       return VX_ERR_INVALID_VALUE;
+    if (info->struct_size < sizeof(vx_rect_info_t))  return VX_ERR_INVALID_INFO;
+    ResolvedRect rr;
+    auto r = resolve_rect(*info, &rr);
+    if (r != VX_SUCCESS) return r;
+    // buffer_* describes the destination, host_* the source.
+    if (rect_span(rr.region, rr.buffer_origin, rr.buffer_row, rr.buffer_slice)
+        > dst->size())
+        return VX_ERR_INVALID_VALUE;
+    if (rect_span(rr.region, rr.host_origin, rr.host_row, rr.host_slice)
+        > src->size())
+        return VX_ERR_INVALID_VALUE;
+
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, dst, src, rr](uint64_t* s, uint64_t* e) {
+        *s = now_ns();
+        std::lock_guard<std::mutex> g(enqueue_mu_);
+        Platform* p = device_->platform();
+        auto rc = rect_for_each(rr, [&](uint64_t do_, uint64_t so, uint64_t len) {
+            return p->mem_copy(dst->dev_address() + do_,
+                               src->dev_address() + so, len);
+        });
+        *e = now_ns();
+        return rc;
+    };
+    return this->enqueue(std::move(cmd), nw, w, out);
+}
+
+vx_result_t Queue::enqueue_fill_buffer(Buffer* dst, uint64_t offset,
+                                       uint64_t size, const void* pattern,
+                                       size_t pattern_size, uint32_t nw,
+                                       const vx_event_h* w, vx_event_h* out) {
+    if (!dst || !pattern)             return VX_ERR_INVALID_VALUE;
+    if (pattern_size == 0)            return VX_ERR_INVALID_VALUE;
+    if (size % pattern_size != 0)     return VX_ERR_INVALID_VALUE;
+    if (offset + size > dst->size())  return VX_ERR_INVALID_VALUE;
+
+    std::vector<uint8_t> pat(static_cast<const uint8_t*>(pattern),
+                             static_cast<const uint8_t*>(pattern) + pattern_size);
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, dst, offset, size, pat = std::move(pat)]
+               (uint64_t* s, uint64_t* e) {
+        *s = now_ns();
+        std::lock_guard<std::mutex> g(enqueue_mu_);
+        // Stage one bounded chunk of the repeated pattern and upload it in
+        // a loop — avoids a host allocation the full size of a large fill.
+        const uint64_t kChunkCap = 64 * 1024;
+        uint64_t chunk = kChunkCap - (kChunkCap % pat.size());  // whole patterns
+        if (chunk > size) chunk = size;
+        std::vector<uint8_t> staging(chunk);
+        for (uint64_t i = 0; i < chunk; i += pat.size())
+            std::memcpy(staging.data() + i, pat.data(), pat.size());
+        Platform* p = device_->platform();
+        vx_result_t r = VX_SUCCESS;
+        for (uint64_t done = 0; done < size && r == VX_SUCCESS; done += chunk) {
+            uint64_t n = std::min<uint64_t>(chunk, size - done);
+            r = p->mem_upload(dst->dev_address() + offset + done,
+                              staging.data(), n);
+        }
+        *e = now_ns();
+        return r;
+    };
+    return this->enqueue(std::move(cmd), nw, w, out);
+}
+
+vx_result_t Queue::enqueue_map(Buffer* buf, uint64_t offset, uint64_t size,
+                               uint32_t flags, uint32_t nw,
+                               const vx_event_h* w, vx_event_h* out,
+                               void** out_host_ptr) {
+    if (!buf || !out_host_ptr) return VX_ERR_INVALID_VALUE;
+    // Reserve the host mirror now so the caller gets a valid pointer
+    // synchronously; the READ population runs on the worker in queue order.
+    auto r = buf->map_reserve(offset, size, flags, out_host_ptr);
+    if (r != VX_SUCCESS) return r;
+
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, buf](uint64_t* s, uint64_t* e) {
+        *s = now_ns();
+        std::lock_guard<std::mutex> g(enqueue_mu_);
+        auto rc = buf->map_commit();
+        *e = now_ns();
+        return rc;
+    };
+    r = this->enqueue(std::move(cmd), nw, w, out);
+    if (r != VX_SUCCESS) {
+        buf->map_cancel();
+        *out_host_ptr = nullptr;
+    }
+    return r;
+}
+
+vx_result_t Queue::enqueue_unmap(Buffer* buf, void* host_ptr, uint32_t nw,
+                                 const vx_event_h* w, vx_event_h* out) {
+    if (!buf) return VX_ERR_INVALID_HANDLE;
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, buf, host_ptr](uint64_t* s, uint64_t* e) {
+        *s = now_ns();
+        std::lock_guard<std::mutex> g(enqueue_mu_);
+        auto r = buf->unmap(host_ptr);
+        *e = now_ns();
+        return r;
+    };
+    return this->enqueue(std::move(cmd), nw, w, out);
+}
+
 vx_result_t Queue::enqueue_dcr_write(uint32_t addr, uint32_t value,
                                      uint32_t nw, const vx_event_h* w,
                                      vx_event_h* out) {
@@ -576,6 +837,64 @@ extern "C" vx_result_t vx_enqueue_barrier(vx_queue_h q, uint32_t nw,
                                           vx_event_h* out) {
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_barrier(nw, w, out);
+}
+
+extern "C" vx_result_t vx_enqueue_read_rect(vx_queue_h q, void* host_dst,
+                                            vx_buffer_h src,
+                                            const vx_rect_info_t* info,
+                                            uint32_t nw, const vx_event_h* w,
+                                            vx_event_h* out) {
+    if (!q || !src) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_read_rect(host_dst, to_buffer(src), info,
+                                          nw, w, out);
+}
+
+extern "C" vx_result_t vx_enqueue_write_rect(vx_queue_h q, vx_buffer_h dst,
+                                             const void* host_src,
+                                             const vx_rect_info_t* info,
+                                             uint32_t nw, const vx_event_h* w,
+                                             vx_event_h* out) {
+    if (!q || !dst) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_write_rect(to_buffer(dst), host_src, info,
+                                           nw, w, out);
+}
+
+extern "C" vx_result_t vx_enqueue_copy_rect(vx_queue_h q, vx_buffer_h dst,
+                                            vx_buffer_h src,
+                                            const vx_rect_info_t* info,
+                                            uint32_t nw, const vx_event_h* w,
+                                            vx_event_h* out) {
+    if (!q || !dst || !src) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_copy_rect(to_buffer(dst), to_buffer(src), info,
+                                          nw, w, out);
+}
+
+extern "C" vx_result_t vx_enqueue_fill_buffer(vx_queue_h q, vx_buffer_h dst,
+                                              uint64_t offset, uint64_t size,
+                                              const void* pattern,
+                                              size_t pattern_size,
+                                              uint32_t nw, const vx_event_h* w,
+                                              vx_event_h* out) {
+    if (!q || !dst) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_fill_buffer(to_buffer(dst), offset, size,
+                                            pattern, pattern_size, nw, w, out);
+}
+
+extern "C" vx_result_t vx_enqueue_map(vx_queue_h q, vx_buffer_h buf,
+                                      uint64_t offset, uint64_t size,
+                                      uint32_t flags, uint32_t nw,
+                                      const vx_event_h* w, vx_event_h* out,
+                                      void** out_host_ptr) {
+    if (!q || !buf) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_map(to_buffer(buf), offset, size, flags,
+                                    nw, w, out, out_host_ptr);
+}
+
+extern "C" vx_result_t vx_enqueue_unmap(vx_queue_h q, vx_buffer_h buf,
+                                        void* host_ptr, uint32_t nw,
+                                        const vx_event_h* w, vx_event_h* out) {
+    if (!q || !buf) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_unmap(to_buffer(buf), host_ptr, nw, w, out);
 }
 
 extern "C" vx_result_t vx_enqueue_dcr_write(vx_queue_h q,

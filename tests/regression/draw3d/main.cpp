@@ -6,7 +6,7 @@
 #include <cmath>
 #include <array>
 #include <assert.h>
-#include <vortex.h>
+#include <vortex2.h>
 #include <graphics.h>
 #include <gfxutil.h>
 #include <bitmanip.h>
@@ -67,8 +67,9 @@ uint64_t tilebuf_addr;
 uint64_t primbuf_addr;
 
 vx_device_h device      = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue       = nullptr;
+vx_module_h module_     = nullptr;
+vx_kernel_h kernel      = nullptr;
 vx_buffer_h depth_buffer= nullptr;
 vx_buffer_h color_buffer= nullptr;
 vx_buffer_h tex_buffer  = nullptr;
@@ -137,45 +138,43 @@ static void parse_args(int argc, char **argv) {
 }
 
 void cleanup() {
-  vx_mem_free(depth_buffer);
-  vx_mem_free(color_buffer);
-  vx_mem_free(tex_buffer);
-  vx_mem_free(tile_buffer);
-  vx_mem_free(prim_buffer);
-  vx_mem_free(krnl_buffer);
-  vx_mem_free(args_buffer);
-  vx_dev_close(device);
+  if (depth_buffer) vx_buffer_release(depth_buffer);
+  if (color_buffer) vx_buffer_release(color_buffer);
+  if (tex_buffer)   vx_buffer_release(tex_buffer);
+  if (tile_buffer)  vx_buffer_release(tile_buffer);
+  if (prim_buffer)  vx_buffer_release(prim_buffer);
+  if (kernel)  vx_kernel_release(kernel);
+  if (module_) vx_module_release(module_);
+  if (queue)   vx_queue_release(queue);
+  if (device)  vx_device_release(device);
 }
 
 #ifdef SW_ENABLE
   #define RASTER_DCR_WRITE(addr, value)  \
-    vx_dcr_write(device, addr, value); \
+    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr); \
     kernel_arg.raster_dcrs.write(addr, value)
 
   #define OM_DCR_WRITE(addr, value)  \
-    vx_dcr_write(device, addr, value); \
+    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr); \
     kernel_arg.om_dcrs.write(addr, value)
 
   #define TEX_DCR_WRITE(addr, value)  \
-    vx_dcr_write(device, addr, value); \
+    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr); \
     kernel_arg.tex_dcrs.write(addr, value)
 #else
   #define RASTER_DCR_WRITE(addr, value)  \
-    vx_dcr_write(device, addr, value)
+    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr)
 
   #define OM_DCR_WRITE(addr, value)  \
-    vx_dcr_write(device, addr, value)
+    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr)
 
   #define TEX_DCR_WRITE(addr, value)  \
-    vx_dcr_write(device, addr, value)
+    vx_enqueue_dcr_write(queue, addr, value, 0, nullptr, nullptr)
 #endif
 
 int render(const CGLTrace& trace) {
   std::cout << "render" << std::endl;
   auto time_begin = std::chrono::high_resolution_clock::now();
-
-  uint64_t instrs = 0;
-  uint64_t cycles = 0;
 
   // render each draw call
   for (uint32_t d = 0, nd = trace.drawcalls.size(); d < nd; ++d) {
@@ -187,6 +186,9 @@ int render(const CGLTrace& trace) {
 
     std::vector<uint8_t> tilebuf;
     std::vector<uint8_t> primbuf;
+    // texbuf is hoisted to drawcall-loop scope so the host data passed to
+    // vx_enqueue_write stays alive until the launch completion is waited.
+    std::vector<uint8_t> texbuf;
 
     // Perform tile binning
     auto num_tiles = graphics::Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
@@ -195,24 +197,24 @@ int render(const CGLTrace& trace) {
       continue;
 
     // allocate tile memory
-    if (tile_buffer != nullptr) vx_mem_free(tile_buffer);
-    if (prim_buffer != nullptr) vx_mem_free(prim_buffer);
+    if (tile_buffer != nullptr) { vx_buffer_release(tile_buffer); tile_buffer = nullptr; }
+    if (prim_buffer != nullptr) { vx_buffer_release(prim_buffer); prim_buffer = nullptr; }
     // tile_buffer / prim_buffer are bound to the raster unit (via
     // VX_DCR_RASTER_T/PBUF_ADDR) which bypasses the per-core MMU.
-    RT_CHECK(vx_mem_alloc(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
-    RT_CHECK(vx_mem_address(tile_buffer, &tilebuf_addr));
-    RT_CHECK(vx_mem_alloc(device, primbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &prim_buffer));
-    RT_CHECK(vx_mem_address(prim_buffer, &primbuf_addr));
+    RT_CHECK(vx_buffer_create(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
+    RT_CHECK(vx_buffer_address(tile_buffer, &tilebuf_addr));
+    RT_CHECK(vx_buffer_create(device, primbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &prim_buffer));
+    RT_CHECK(vx_buffer_address(prim_buffer, &primbuf_addr));
     std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
     std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;
 
     // upload tiles buffer
     std::cout << "upload tile buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(tile_buffer, tilebuf.data(), 0, tilebuf.size()));
+    RT_CHECK(vx_enqueue_write(queue, tile_buffer, 0, tilebuf.data(), tilebuf.size(), 0, nullptr, nullptr));
 
     // upload primitives buffer
     std::cout << "upload primitive buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(prim_buffer, primbuf.data(), 0, primbuf.size()));
+    RT_CHECK(vx_enqueue_write(queue, prim_buffer, 0, primbuf.data(), primbuf.size(), 0, nullptr, nullptr));
 
     uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
 
@@ -289,7 +291,6 @@ int render(const CGLTrace& trace) {
 
     if (states.texture_enabled) {
       // configure texture states
-      std::vector<uint8_t> texbuf;
       std::vector<uint32_t> mip_offsets;
 
       auto& texture = trace.textures.at(drawcall.texture_id);
@@ -312,15 +313,15 @@ int render(const CGLTrace& trace) {
       int tex_wrapV = (states.texture_addressU == CGLTrace::ADDRESS_WRAP);
 
       // allocate texture memory
-      if (tex_buffer != nullptr) vx_mem_free(tex_buffer);
+      if (tex_buffer != nullptr) { vx_buffer_release(tex_buffer); tex_buffer = nullptr; }
       // tex_buffer is bound to the TEX unit (VX_DCR_TEX_ADDR), bypass.
-      RT_CHECK(vx_mem_alloc(device, texbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tex_buffer));
-      RT_CHECK(vx_mem_address(tex_buffer, &texbuf_addr));
+      RT_CHECK(vx_buffer_create(device, texbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tex_buffer));
+      RT_CHECK(vx_buffer_address(tex_buffer, &texbuf_addr));
       std::cout << "tex_buffer=0x" << std::hex << texbuf_addr << std::dec << std::endl;
 
       // upload texture data
       std::cout << "upload texture buffer" << std::endl;
-      RT_CHECK(vx_copy_to_dev(tex_buffer, texbuf.data(), 0, texbuf.size()));
+      RT_CHECK(vx_enqueue_write(queue, tex_buffer, 0, texbuf.data(), texbuf.size(), 0, nullptr, nullptr));
 
       // configure texture units
       TEX_DCR_WRITE(VX_DCR_TEX_STAGE,  0);
@@ -335,8 +336,8 @@ int render(const CGLTrace& trace) {
       };
     }
 
-    // upload kernel argument
-    std::cout << "upload kernel argument" << std::endl;
+    // prepare kernel argument
+    std::cout << "prepare kernel argument" << std::endl;
     {
       kernel_arg.depth_enabled = states.depth_test;
       kernel_arg.color_enabled = states.color_enabled;
@@ -347,52 +348,57 @@ int render(const CGLTrace& trace) {
         kernel_arg.tex_modulate = false;
       if (kernel_arg.tex_enabled && kernel_arg.color_enabled && !kernel_arg.tex_modulate)
         kernel_arg.color_enabled = false;
-
-      RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
     }
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
     // start device
     std::cout << "start device" << std::endl;
+    vx_event_h launch_ev = nullptr;
     {
       // 1D launch — every thread polls vx_rast() until the cluster-shared
       // raster_core drains its tile queue.
-      uint32_t grid[1]  = { 1 };
-      uint32_t block[1] = { (uint32_t)num_threads };
-      RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid, block, 0));
+      vx_launch_info_t li = {};
+      li.struct_size  = sizeof(li);
+      li.kernel       = kernel;
+      li.args_host    = &kernel_arg;
+      li.args_size    = sizeof(kernel_arg);
+      li.ndim         = 1;
+      li.grid_dim[0]  = 1;
+      li.block_dim[0] = (uint32_t)num_threads;
+      RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     }
 
     // wait for completion
     std::cout << "wait for completion" << std::endl;
-    RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+    RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(launch_ev);
 
     auto time_end = std::chrono::high_resolution_clock::now();
     double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
     printf("Elapsed time: %lg ms\n", elapsed);
 
     if (d < trace.drawcalls.size()-1) {
-      vx_dump_perf(device, stdout);
+      vx_device_dump_perf(device, stdout);
     }
-
-    uint64_t instrs_;
-    uint64_t cycles_;
-    // v2 vx_mpm_query signature: (device, mpm_class, addr, core_id, *value)
-    RT_CHECK(vx_mpm_query(device, VX_DCR_MPM_CLASS_BASE, VX_CSR_MCYCLE,   -1, &cycles_));
-    RT_CHECK(vx_mpm_query(device, VX_DCR_MPM_CLASS_BASE, VX_CSR_MINSTRET, -1, &instrs_));
-    cycles += cycles_;
-    instrs += instrs_;
+    // NOTE: per-counter MPM queries (legacy vx_mpm_query) are not exposed by
+    // vortex2.h; the formatted report from vx_device_dump_perf above is the
+    // performance-reporting path. IPC computation is therefore omitted.
   }
 
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_begin).count();
-  float IPC = (float)(double(instrs) / double(cycles));
-  printf("Total elapsed time: %lg ms, instrs=%ld, cycles=%ld, IPC=%f\n", elapsed, instrs, cycles, IPC);
+  printf("Total elapsed time: %lg ms\n", elapsed);
 
   if (strcmp(output_file, "null") != 0) {
     std::cout << "save output image" << std::endl;
     std::vector<uint8_t> dst_pixels(cbuf_size);
-    RT_CHECK(vx_copy_from_dev(dst_pixels.data(), color_buffer, 0, cbuf_size));
+    {
+      vx_event_h read_ev = nullptr;
+      RT_CHECK(vx_enqueue_read(queue, dst_pixels.data(), color_buffer, 0, cbuf_size, 0, nullptr, &read_ev));
+      RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+      vx_event_release(read_ev);
+    }
     //DumpImage(dst_pixels, dst_width, dst_height, 4);
     auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
     RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
@@ -407,10 +413,13 @@ int main(int argc, char *argv[]) {
 
   // open device connection
   std::cout << "open device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   uint64_t isa_flags;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
   bool has_ext = (isa_flags & VX_ISA_EXT_RASTER) != 0;
   if (!has_ext) {
     std::cout << "RASTER ISA extensions are needed!" << std::endl;
@@ -429,9 +438,9 @@ int main(int argc, char *argv[]) {
   }
 
   uint64_t num_cores, num_warps;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
   std::cout << "device: " << num_cores << " cores, " << num_warps
             << " warps, " << num_threads << " threads" << std::endl;
 
@@ -464,9 +473,10 @@ int main(int argc, char *argv[]) {
             << ", stencil=" << stencil_test
             << ", blend=" << blend_enabled << std::endl;
 
-  // upload program
-  std::cout << "upload program" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+  // load kernel module
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   zbuf_stride = 4;
   zbuf_pitch  = dst_width * zbuf_stride;
@@ -478,10 +488,10 @@ int main(int argc, char *argv[]) {
 
   // depth_buffer / color_buffer are bound to the OM unit (via
   // VX_DCR_OM_Z/CBUF_ADDR), MMU-bypass.
-  RT_CHECK(vx_mem_alloc(device, zbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &depth_buffer));
-  RT_CHECK(vx_mem_address(depth_buffer, &zbuf_addr));
-  RT_CHECK(vx_mem_alloc(device, cbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &color_buffer));
-  RT_CHECK(vx_mem_address(color_buffer, &cbuf_addr));
+  RT_CHECK(vx_buffer_create(device, zbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &depth_buffer));
+  RT_CHECK(vx_buffer_address(depth_buffer, &zbuf_addr));
+  RT_CHECK(vx_buffer_create(device, cbuf_size, VX_MEM_READ_WRITE | VX_MEM_PHYS, &color_buffer));
+  RT_CHECK(vx_buffer_address(color_buffer, &cbuf_addr));
 
   std::cout << "depth_buffer=0x" << std::hex << zbuf_addr << std::dec << std::endl;
   std::cout << "color_buffer=0x" << std::hex << cbuf_addr << std::dec << std::endl;
@@ -490,14 +500,20 @@ int main(int argc, char *argv[]) {
   std::cout << "clear depth buffer" << std::endl;
   {
     std::vector<uint32_t> staging_buf(zbuf_size / zbuf_stride, clear_depth);
-    RT_CHECK(vx_copy_to_dev(depth_buffer, staging_buf.data(), 0, zbuf_size));
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_write(queue, depth_buffer, 0, staging_buf.data(), zbuf_size, 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
   }
 
   // clear destination buffer
   std::cout << "clear destination buffer" << std::endl;
   {
     std::vector<uint32_t> staging_buf(cbuf_size / cbuf_stride, clear_color);
-    RT_CHECK(vx_copy_to_dev(color_buffer, staging_buf.data(), 0, cbuf_size));
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_write(queue, color_buffer, 0, staging_buf.data(), cbuf_size, 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
   }
 
   // sw_* fallback fields removed in the v2 KMU port; kernel_arg is now

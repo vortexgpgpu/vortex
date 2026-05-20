@@ -3,7 +3,7 @@
 #include <string.h>
 #include <vector>
 #include <chrono>
-#include <vortex.h>
+#include <vortex2.h>
 #include <cmath>
 #include "common.h"
 
@@ -25,8 +25,9 @@ vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;  // Matrix (M x N)
 vx_buffer_h x_buffer = nullptr;  // Vector (N x 1)
 vx_buffer_h y_buffer = nullptr;  // Output (M x 1)
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -59,12 +60,13 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(A_buffer);
-    vx_mem_free(x_buffer);
-    vx_mem_free(y_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (A_buffer) vx_buffer_release(A_buffer);
+    if (x_buffer) vx_buffer_release(x_buffer);
+    if (y_buffer) vx_buffer_release(y_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -87,7 +89,10 @@ int main(int argc, char *argv[]) {
 
   // Open device connection
   std::cout << "Opening device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   uint32_t A_size = M * N * sizeof(float);
   uint32_t x_size = N * sizeof(float);
@@ -99,12 +104,12 @@ int main(int argc, char *argv[]) {
 
   // Allocate device memory
   std::cout << "Allocating device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, A_size, VX_MEM_READ, &A_buffer));
-  RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, x_size, VX_MEM_READ, &x_buffer));
-  RT_CHECK(vx_mem_address(x_buffer, &kernel_arg.x_addr));
-  RT_CHECK(vx_mem_alloc(device, y_size, VX_MEM_WRITE, &y_buffer));
-  RT_CHECK(vx_mem_address(y_buffer, &kernel_arg.y_addr));
+  RT_CHECK(vx_buffer_create(device, A_size, VX_MEM_READ, &A_buffer));
+  RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
+  RT_CHECK(vx_buffer_create(device, x_size, VX_MEM_READ, &x_buffer));
+  RT_CHECK(vx_buffer_address(x_buffer, &kernel_arg.x_addr));
+  RT_CHECK(vx_buffer_create(device, y_size, VX_MEM_WRITE, &y_buffer));
+  RT_CHECK(vx_buffer_address(y_buffer, &kernel_arg.y_addr));
 
   // Generate synthetic data
   std::vector<float> h_A(M * N);
@@ -119,34 +124,42 @@ int main(int argc, char *argv[]) {
 
   // Upload input buffers
   std::cout << "Uploading matrix A" << std::endl;
-  RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, A_size));
+  RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A.data(), A_size, 0, nullptr, nullptr));
   std::cout << "Uploading vector x" << std::endl;
-  RT_CHECK(vx_copy_to_dev(x_buffer, h_x.data(), 0, x_size));
+  RT_CHECK(vx_enqueue_write(queue, x_buffer, 0, h_x.data(), x_size, 0, nullptr, nullptr));
 
-  // Upload program
-  std::cout << "Uploading kernel" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
-
-  // Upload kernel arguments
-  std::cout << "Uploading kernel arguments" << std::endl;
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  // Load kernel module
+  std::cout << "Loading kernel" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // Execute kernel
   auto time_start = std::chrono::high_resolution_clock::now();
   std::cout << "Launching kernel" << std::endl;
+  vx_event_h launch_ev = nullptr, read_ev = nullptr;
   {
     uint32_t grid_dim[1], block_dim[1];
-    RT_CHECK(vx_max_occupancy_grid(device, 1, &M, grid_dim, block_dim));
-    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
+    RT_CHECK(vx_device_max_occupancy_grid(device, 1, &M, grid_dim, block_dim));
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 1;
+    li.grid_dim[0]  = grid_dim[0];
+    li.block_dim[0] = block_dim[0];
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
   }
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
-  auto time_end = std::chrono::high_resolution_clock::now();
-  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
-  printf("Elapsed time: %lg ms\n", elapsed);
 
   // Download results
   std::cout << "Downloading results" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_y.data(), y_buffer, 0, y_size));
+  RT_CHECK(vx_enqueue_read(queue, h_y.data(), y_buffer, 0, y_size, 1, &launch_ev, &read_ev));
+  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(read_ev);
+  vx_event_release(launch_ev);
+  auto time_end = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+  printf("Elapsed time: %lg ms\n", elapsed);
 
   // Verify results
   std::cout << "Verifying results" << std::endl;

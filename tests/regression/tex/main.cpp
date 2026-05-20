@@ -19,7 +19,7 @@
 #include <chrono>
 #include <cmath>
 #include <assert.h>
-#include <vortex.h>
+#include <vortex2.h>
 #include <VX_types.h>
 #include "common.h"
 #include <bitmanip.h>
@@ -58,8 +58,9 @@ int         format         = VX_TEX_FORMAT_A8R8G8B8;
 ePixelFormat eformat       = FORMAT_A8R8G8B8;
 
 vx_device_h device      = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue       = nullptr;
+vx_module_h module_     = nullptr;
+vx_kernel_h kernel      = nullptr;
 vx_buffer_h dst_buffer  = nullptr;
 vx_buffer_h src_buffer  = nullptr;
 
@@ -92,11 +93,12 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    if (src_buffer)  vx_mem_free(src_buffer);
-    if (dst_buffer)  vx_mem_free(dst_buffer);
-    if (krnl_buffer) vx_mem_free(krnl_buffer);
-    if (args_buffer) vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (src_buffer) vx_buffer_release(src_buffer);
+    if (dst_buffer) vx_buffer_release(dst_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -137,10 +139,13 @@ int main(int argc, char *argv[]) {
   uint32_t dst_bufsize = dst_pitch * dst_height;
 
   // ---- open device + sanity check --------------------------------------
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   uint64_t isa_flags;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
   if ((isa_flags & VX_ISA_EXT_TEX) == 0) {
     std::cout << "tex extension not enabled (build with -DEXT_TEX_ENABLE)" << std::endl;
     cleanup();
@@ -148,22 +153,23 @@ int main(int argc, char *argv[]) {
   }
 
   uint64_t num_threads;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   std::cout << "src: " << src_width << "x" << src_height << " (" << src_bufsize << " bytes incl. mipmaps)" << std::endl;
   std::cout << "dst: " << dst_width << "x" << dst_height << " (" << dst_bufsize << " bytes)" << std::endl;
 
-  // ---- upload kernel binary --------------------------------------------
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+  // ---- load kernel module ----------------------------------------------
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // ---- allocate device buffers -----------------------------------------
   // src_buffer is bound to the TEX unit (VX_DCR_TEX_ADDR) which
   // bypasses the per-core MMU — needs a physical address.
-  RT_CHECK(vx_mem_alloc(device, src_bufsize, VX_MEM_READ | VX_MEM_PHYS, &src_buffer));
-  RT_CHECK(vx_mem_address(src_buffer, &src_addr));
-  RT_CHECK(vx_mem_alloc(device, dst_bufsize, VX_MEM_WRITE, &dst_buffer));
-  RT_CHECK(vx_mem_address(dst_buffer, &dst_addr));
-  RT_CHECK(vx_copy_to_dev(src_buffer, src_pixels.data(), 0, src_bufsize));
+  RT_CHECK(vx_buffer_create(device, src_bufsize, VX_MEM_READ | VX_MEM_PHYS, &src_buffer));
+  RT_CHECK(vx_buffer_address(src_buffer, &src_addr));
+  RT_CHECK(vx_buffer_create(device, dst_bufsize, VX_MEM_WRITE, &dst_buffer));
+  RT_CHECK(vx_buffer_address(dst_buffer, &dst_addr));
+  RT_CHECK(vx_enqueue_write(queue, src_buffer, 0, src_pixels.data(), src_bufsize, 0, nullptr, nullptr));
 
   // ---- pre-compute LOD + per-pixel delta -------------------------------
   // Match skybox kernel's lod selection: minification = max(width_ratio, height_ratio)
@@ -182,14 +188,14 @@ int main(int argc, char *argv[]) {
   uint32_t deltaY = ((uint32_t)1 << VX_TEX_FXD_FRAC) / dst_height;
 
   // ---- configure TEX DCRs ----------------------------------------------
-  RT_CHECK(vx_dcr_write(device, VX_DCR_TEX_STAGE,  0));
-  RT_CHECK(vx_dcr_write(device, VX_DCR_TEX_LOGDIM, (src_logheight << 16) | src_logwidth));
-  RT_CHECK(vx_dcr_write(device, VX_DCR_TEX_FORMAT, format));
-  RT_CHECK(vx_dcr_write(device, VX_DCR_TEX_WRAP,   (wrap << 16) | wrap));
-  RT_CHECK(vx_dcr_write(device, VX_DCR_TEX_FILTER, (filter == VX_TEX_FILTER_BILINEAR) ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT));
-  RT_CHECK(vx_dcr_write(device, VX_DCR_TEX_ADDR,   src_addr / 64));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_STAGE,  0, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_LOGDIM, (src_logheight << 16) | src_logwidth, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FORMAT, format, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_WRAP,   (wrap << 16) | wrap, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FILTER, (filter == VX_TEX_FILTER_BILINEAR) ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_ADDR,   src_addr / 64, 0, nullptr, nullptr));
   for (uint32_t i = 0; i < mip_offsets.size() && i < (uint32_t)VX_TEX_LOD_MAX; ++i) {
-    RT_CHECK(vx_dcr_write(device, VX_DCR_TEX_MIPOFF(i), mip_offsets[i]));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_MIPOFF(i), mip_offsets[i], 0, nullptr, nullptr));
   }
 
   // ---- pack kernel arg + launch ----------------------------------------
@@ -206,8 +212,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.lod           = (uint32_t)lod;
   kernel_arg.frac          = frac_q8;
 
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg), &args_buffer));
-
   // 2D launch: gx ranges [0, dst_width), gy ranges [0, dst_height).
   uint32_t block_x = std::min<uint32_t>((uint32_t)num_threads, dst_width);
   uint32_t block_y = 1;
@@ -220,8 +224,22 @@ int main(int argc, char *argv[]) {
             << ", lod=" << lod << std::endl;
 
   auto t0 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid, block, 0));
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+  vx_event_h launch_ev = nullptr;
+  {
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 2;
+    li.grid_dim[0]  = grid[0];
+    li.grid_dim[1]  = grid[1];
+    li.block_dim[0] = block[0];
+    li.block_dim[1] = block[1];
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+  }
+  RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(launch_ev);
   auto t1 = std::chrono::high_resolution_clock::now();
   printf("Elapsed time: %.2f ms\n",
          std::chrono::duration<double, std::milli>(t1 - t0).count());
@@ -229,7 +247,12 @@ int main(int argc, char *argv[]) {
   // ---- save output PNG --------------------------------------------------
   if (output_file && strcmp(output_file, "null") != 0) {
     std::vector<uint8_t> dst_pixels(dst_bufsize);
-    RT_CHECK(vx_copy_from_dev(dst_pixels.data(), dst_buffer, 0, dst_bufsize));
+    {
+      vx_event_h read_ev = nullptr;
+      RT_CHECK(vx_enqueue_read(queue, dst_pixels.data(), dst_buffer, 0, dst_bufsize, 0, nullptr, &read_ev));
+      RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+      vx_event_release(read_ev);
+    }
     RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels.data(),
                        dst_width, dst_height, dst_pitch));
   }

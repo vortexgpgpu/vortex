@@ -6,8 +6,10 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 #include "vortex2_internal.h"
+#include <vortex.h>  // vx_dump_perf — legacy MPM dumper wrapped by vx_device_dump_perf
 
 #include <cassert>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
@@ -440,4 +442,14 @@ extern "C" vx_result_t vx_device_memory_info(vx_device_h dev,
                                              uint64_t* used) {
     if (!dev) return VX_ERR_INVALID_HANDLE;
     return to_device(dev)->platform()->memory_info(free, used);
+}
+
+// Formatted MPM performance-counter dump (per core / cluster / cache). The
+// counter walk + report formatting already lives in legacy_perf.cpp's
+// vx_dump_perf; this is the vortex2.h-shaped wrapper so callers need not
+// reach into the legacy surface.
+extern "C" vx_result_t vx_device_dump_perf(vx_device_h dev, FILE* stream) {
+    if (!dev) return VX_ERR_INVALID_HANDLE;
+    return (vx_dump_perf(dev, stream) == 0) ? VX_SUCCESS
+                                            : VX_ERR_INVALID_VALUE;
 }

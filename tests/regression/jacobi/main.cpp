@@ -78,8 +78,9 @@ vx_buffer_h src0_buffer = nullptr;
 vx_buffer_h src1_buffer = nullptr;
 vx_buffer_h src2_buffer = nullptr;
 vx_buffer_h dst_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -110,13 +111,14 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(src0_buffer);
-    vx_mem_free(src1_buffer);
-    vx_mem_free(src2_buffer);
-    vx_mem_free(dst_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (src0_buffer) vx_buffer_release(src0_buffer);
+    if (src1_buffer) vx_buffer_release(src1_buffer);
+    if (src2_buffer) vx_buffer_release(src2_buffer);
+    if (dst_buffer)  vx_buffer_release(dst_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -128,7 +130,10 @@ int main(int argc, char *argv[]) {
 
   // open device connection
   std::cout << "open device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
 
   // Temporary
@@ -146,14 +151,14 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, A_buf_size, VX_MEM_READ_WRITE, &src0_buffer));
-  RT_CHECK(vx_mem_address(src0_buffer, &kernel_arg.src0_addr));
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_READ_WRITE, &src1_buffer));
-  RT_CHECK(vx_mem_address(src1_buffer, &kernel_arg.src1_addr));
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_READ_WRITE, &src2_buffer));
-  RT_CHECK(vx_mem_address(src2_buffer, &kernel_arg.src2_addr));
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_READ_WRITE, &dst_buffer));
-  RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
+  RT_CHECK(vx_buffer_create(device, A_buf_size, VX_MEM_READ_WRITE, &src0_buffer));
+  RT_CHECK(vx_buffer_address(src0_buffer, &kernel_arg.src0_addr));
+  RT_CHECK(vx_buffer_create(device, dst_buf_size, VX_MEM_READ_WRITE, &src1_buffer));
+  RT_CHECK(vx_buffer_address(src1_buffer, &kernel_arg.src1_addr));
+  RT_CHECK(vx_buffer_create(device, dst_buf_size, VX_MEM_READ_WRITE, &src2_buffer));
+  RT_CHECK(vx_buffer_address(src2_buffer, &kernel_arg.src2_addr));
+  RT_CHECK(vx_buffer_create(device, dst_buf_size, VX_MEM_READ_WRITE, &dst_buffer));
+  RT_CHECK(vx_buffer_address(dst_buffer, &kernel_arg.dst_addr));
 
   std::cout << "dev_src0=0x" << std::hex << kernel_arg.src0_addr << std::endl;
   std::cout << "dev_src1=0x" << std::hex << kernel_arg.src1_addr << std::endl;
@@ -202,24 +207,21 @@ int main(int argc, char *argv[]) {
 
   // upload source buffer0
   std::cout << "upload source buffer0" << std::endl;
-  RT_CHECK(vx_copy_to_dev(src0_buffer, h_src0.data(), 0, A_buf_size));
+  RT_CHECK(vx_enqueue_write(queue, src0_buffer, 0, h_src0.data(), A_buf_size, 0, nullptr, nullptr));
 
-  // upload source buffer0
+  // upload source buffer1
   std::cout << "upload source buffer1" << std::endl;
-  RT_CHECK(vx_copy_to_dev(src1_buffer, h_src1.data(), 0, dst_buf_size));
+  RT_CHECK(vx_enqueue_write(queue, src1_buffer, 0, h_src1.data(), dst_buf_size, 0, nullptr, nullptr));
 
-  // upload source buffer0
+  // upload source buffer2
   std::cout << "upload source buffer2" << std::endl;
-  RT_CHECK(vx_copy_to_dev(src2_buffer, h_src2.data(), 0, dst_buf_size));
+  RT_CHECK(vx_enqueue_write(queue, src2_buffer, 0, h_src2.data(), dst_buf_size, 0, nullptr, nullptr));
 
 
-  // upload program
-  std::cout << "upload program" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
-
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  // load kernel module
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
 
 
@@ -232,21 +234,34 @@ int main(int argc, char *argv[]) {
   uint64_t iteration = 1;
 
   uint32_t grid_dim[1], block_dim[1];
-  RT_CHECK(vx_max_occupancy_grid(device, 1, &size, grid_dim, block_dim));
+  RT_CHECK(vx_device_max_occupancy_grid(device, 1, &size, grid_dim, block_dim));
 
   for(uint32_t k = 0; k < iteration; k++){
 
     // start device
     std::cout << "start device" << std::endl;
-    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
-
-    // wait for completion
-    std::cout << "wait for completion" << std::endl;
-    RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+    vx_event_h launch_ev = nullptr, read_ev = nullptr;
+    {
+      vx_launch_info_t li = {};
+      li.struct_size  = sizeof(li);
+      li.kernel       = kernel;
+      li.args_host    = &kernel_arg;
+      li.args_size    = sizeof(kernel_arg);
+      li.ndim         = 1;
+      li.grid_dim[0]  = grid_dim[0];
+      li.block_dim[0] = block_dim[0];
+      RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+    }
 
     // download destination buffer
     std::cout << "download destination buffer" << std::endl;
-    RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, dst_buf_size));
+    RT_CHECK(vx_enqueue_read(queue, h_dst.data(), dst_buffer, 0, dst_buf_size, 1, &launch_ev, &read_ev));
+
+    // wait for completion
+    std::cout << "wait for completion" << std::endl;
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    vx_event_release(launch_ev);
 
     // Get Results
     RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE, 0, &cycles_per_core));
@@ -261,9 +276,9 @@ int main(int argc, char *argv[]) {
         h_src1[i] = h_dst[i];
     }
 
-    // upload source buffer0
+    // upload source buffer1
     std::cout << "upload source buffer1" << std::endl;
-    RT_CHECK(vx_copy_to_dev(src1_buffer, h_src1.data(), 0, dst_buf_size));
+    RT_CHECK(vx_enqueue_write(queue, src1_buffer, 0, h_src1.data(), dst_buf_size, 0, nullptr, nullptr));
 
     printf("%d\n",k);
   }
@@ -271,7 +286,12 @@ int main(int argc, char *argv[]) {
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, dst_buf_size));
+  {
+    vx_event_h final_read_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, h_dst.data(), dst_buffer, 0, dst_buf_size, 0, nullptr, &final_read_ev));
+    RT_CHECK(vx_event_wait_value(final_read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(final_read_ev);
+  }
 
   // verify result
   std::cout << "verify result" << std::endl;

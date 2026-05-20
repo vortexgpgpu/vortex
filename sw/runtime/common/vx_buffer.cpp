@@ -54,36 +54,56 @@ vx_result_t Buffer::access(uint64_t off, uint64_t size, uint32_t flags) {
     return device_->platform()->mem_access(dev_addr_ + off, size, flags);
 }
 
-vx_result_t Buffer::map(uint64_t off, uint64_t size, uint32_t flags,
-                        void** out) {
+vx_result_t Buffer::map_reserve(uint64_t off, uint64_t size, uint32_t flags,
+                                void** out) {
     if (!out)                return VX_ERR_INVALID_VALUE;
     if (off + size > size_)  return VX_ERR_INVALID_VALUE;
 
     std::lock_guard<std::mutex> g(map_mu_);
     if (mapped_) return VX_ERR_NOT_SUPPORTED;   // single mapping at a time
 
-    // Allocate a host mirror, prefill from device if READ-mapped, and on
-    // unmap upload back to device if WRITE-mapped. Correct (no
+    // Allocate a host mirror. map_commit prefills it from the device for
+    // READ maps; unmap uploads it back for WRITE maps. Correct (no
     // use-after-free) but loses the zero-copy benefit pinned memory
     // would provide on real hardware.
     host_mirror_ = std::malloc(size);
     if (!host_mirror_) return VX_ERR_OUT_OF_HOST_MEMORY;
 
-    if (flags & VX_MEM_READ) {
-        auto r = device_->platform()->mem_download(host_mirror_,
-                                                   dev_addr_ + off, size);
-        if (r != VX_SUCCESS) {
-            std::free(host_mirror_);
-            host_mirror_ = nullptr;
-            return r;
-        }
-    }
     mapped_off_   = off;
     mapped_size_  = size;
     mapped_flags_ = flags;
     mapped_       = true;
     *out = host_mirror_;
     return VX_SUCCESS;
+}
+
+vx_result_t Buffer::map_commit() {
+    std::lock_guard<std::mutex> g(map_mu_);
+    if (!mapped_) return VX_ERR_INVALID_VALUE;
+    if ((mapped_flags_ & VX_MEM_READ) && mapped_size_ != 0) {
+        return device_->platform()->mem_download(host_mirror_,
+                                                 dev_addr_ + mapped_off_,
+                                                 mapped_size_);
+    }
+    return VX_SUCCESS;
+}
+
+void Buffer::map_cancel() {
+    std::lock_guard<std::mutex> g(map_mu_);
+    if (mapped_) {
+        std::free(host_mirror_);
+        host_mirror_ = nullptr;
+        mapped_      = false;
+    }
+}
+
+vx_result_t Buffer::map(uint64_t off, uint64_t size, uint32_t flags,
+                        void** out) {
+    auto r = this->map_reserve(off, size, flags, out);
+    if (r != VX_SUCCESS) return r;
+    r = this->map_commit();
+    if (r != VX_SUCCESS) this->map_cancel();
+    return r;
 }
 
 vx_result_t Buffer::unmap(void* host_ptr) {

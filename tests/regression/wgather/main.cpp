@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <vector>
-#include <vortex.h>
+#include <vortex2.h>
 #include "common.h"
 
 #define RT_CHECK(_expr)                                         \
@@ -22,8 +22,9 @@ uint32_t threads_per_warp = 0; // 0 = use device default (num_threads)
 vx_device_h device      = nullptr;
 vx_buffer_h dst_buffer  = nullptr;
 vx_buffer_h tp_buffer   = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue       = nullptr;
+vx_module_h module_     = nullptr;
+vx_kernel_h kernel      = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -46,21 +47,25 @@ static void parse_args(int argc, char** argv) {
 
 void cleanup() {
     if (device) {
-        vx_mem_free(dst_buffer);
-        vx_mem_free(tp_buffer);
-        vx_mem_free(krnl_buffer);
-        vx_mem_free(args_buffer);
-        vx_dev_close(device);
+        if (dst_buffer) vx_buffer_release(dst_buffer);
+        if (tp_buffer)  vx_buffer_release(tp_buffer);
+        if (kernel)  vx_kernel_release(kernel);
+        if (module_) vx_module_release(module_);
+        if (queue)   vx_queue_release(queue);
+        vx_device_release(device);
     }
 }
 
 int main(int argc, char* argv[]) {
     parse_args(argc, argv);
 
-    RT_CHECK(vx_dev_open(&device));
+    RT_CHECK(vx_device_open(0, &device));
+
+    vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+    RT_CHECK(vx_queue_create(device, &qi, &queue));
 
     uint64_t num_threads;
-    RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
+    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
     // use device NT as default when not specified on command line
     if (threads_per_warp == 0) {
@@ -71,7 +76,7 @@ int main(int argc, char* argv[]) {
     if (num_threads < 4) {
         std::cout << "SKIPPED (num_threads=" << num_threads
                   << " < 4, wgather requires groups of 4)" << std::endl;
-        vx_dev_close(device);
+        cleanup();
         device = nullptr;
         return 0;
     }
@@ -99,20 +104,30 @@ int main(int argc, char* argv[]) {
     uint32_t buf_size = num_threads_total * sizeof(uint32_t);
     uint32_t tp_size  = num_threads_total * 4 * sizeof(uint32_t);
 
-    RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &dst_buffer));
-    RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
+    RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_WRITE, &dst_buffer));
+    RT_CHECK(vx_buffer_address(dst_buffer, &kernel_arg.dst_addr));
 
-    RT_CHECK(vx_mem_alloc(device, tp_size, VX_MEM_WRITE, &tp_buffer));
-    RT_CHECK(vx_mem_address(tp_buffer, &kernel_arg.tp_addr));
+    RT_CHECK(vx_buffer_create(device, tp_size, VX_MEM_WRITE, &tp_buffer));
+    RT_CHECK(vx_buffer_address(tp_buffer, &kernel_arg.tp_addr));
 
-    RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
-    RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+    RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+    RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
     // 1D grid: num_warps blocks, threads_per_warp threads each
-    uint32_t grid_dim[1]  = {num_warps};
-    uint32_t block_dim[1] = {threads_per_warp};
-    RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 1, grid_dim, block_dim, 0));
-    RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+    vx_event_h launch_ev = nullptr;
+    {
+        uint32_t grid_dim[1]  = {num_warps};
+        uint32_t block_dim[1] = {threads_per_warp};
+        vx_launch_info_t li = {};
+        li.struct_size  = sizeof(li);
+        li.kernel       = kernel;
+        li.args_host    = &kernel_arg;
+        li.args_size    = sizeof(kernel_arg);
+        li.ndim         = 1;
+        li.grid_dim[0]  = grid_dim[0];
+        li.block_dim[0] = block_dim[0];
+        RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+    }
 
     // ---- Verify basic wgather (dst_buffer) ----
     // Kernel uses src_offset=0, so within each group of 4 the source is
@@ -126,7 +141,27 @@ int main(int argc, char* argv[]) {
     //   offset=3: result = v3[src]  = group_base*10 + 3
 
     std::vector<uint32_t> h_dst(num_threads_total);
-    RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, buf_size));
+    vx_event_h read_ev0 = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, h_dst.data(), dst_buffer, 0, buf_size, 1, &launch_ev, &read_ev0));
+
+    // ---- Verify transpose (tp_buffer) ----
+    // Kernel sets up per-group 4x4 matrix M where:
+    //   M[i][j] = group_base_val + j*4 + i + 1
+    //   group_base_val = w*100 + group*16
+    //   i = lane within group (0-3), j = column (0-3)
+    //
+    // After vx_transpose4, lane i holds column i of M:
+    //   T[i][j] = M[j][i] = group_base_val + i*4 + j + 1
+
+    std::vector<uint32_t> h_tp(num_threads_total * 4);
+    vx_event_h read_ev1 = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, h_tp.data(), tp_buffer, 0, tp_size, 1, &read_ev0, &read_ev1));
+
+    // wait for the last read to complete
+    RT_CHECK(vx_event_wait_value(read_ev1, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev1);
+    vx_event_release(read_ev0);
+    vx_event_release(launch_ev);
 
     int errors = 0;
     for (uint32_t w = 0; w < num_warps; ++w) {
@@ -150,18 +185,6 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-
-    // ---- Verify transpose (tp_buffer) ----
-    // Kernel sets up per-group 4x4 matrix M where:
-    //   M[i][j] = group_base_val + j*4 + i + 1
-    //   group_base_val = w*100 + group*16
-    //   i = lane within group (0-3), j = column (0-3)
-    //
-    // After vx_transpose4, lane i holds column i of M:
-    //   T[i][j] = M[j][i] = group_base_val + i*4 + j + 1
-
-    std::vector<uint32_t> h_tp(num_threads_total * 4);
-    RT_CHECK(vx_copy_from_dev(h_tp.data(), tp_buffer, 0, tp_size));
 
     for (uint32_t w = 0; w < num_warps; ++w) {
         for (uint32_t tid = 0; tid < threads_per_warp; ++tid) {

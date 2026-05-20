@@ -141,7 +141,7 @@ extern int vx_upload_file(vx_device_h hdevice, const char* filename, vx_buffer_h
   return 0;
 }
 
-int vx_check_occupancy(vx_device_h hdevice, uint32_t block_size, uint32_t* max_localmem) {
+int vx_check_occupancy(vx_device_h hdevice, uint32_t block_size, uint32_t max_localmem) {
    // check block size
   uint64_t warps_per_core, threads_per_warp;
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_WARPS, &warps_per_core), {
@@ -160,15 +160,18 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t block_size, uint32_t* max_l
   int warps_per_block = (block_size + threads_per_warp-1) / threads_per_warp;
   int blocks_per_core = warps_per_core / warps_per_block;
 
-  // Compute per-block local-memory budget. Treated as an out-only field:
-  // some external callers (POCL pocl-vortex.c) pass uninitialized memory
-  // here, so reading it as a user-supplied requirement is unsafe.
-  if (max_localmem) {
+  // Validate the kernel's per-block local-memory requirement against the
+  // budget (total local memory split across the resident blocks).
+  if (max_localmem != 0) {
     uint64_t local_mem_size;
     CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size), {
       return err;
     });
-    *max_localmem = local_mem_size / blocks_per_core;
+    uint32_t budget = local_mem_size / blocks_per_core;
+    if (max_localmem > budget) {
+      printf("Error: kernel local-memory request exceeds budget (%u > %u)\n", max_localmem, budget);
+      return -1;
+    }
   }
 
   return 0;

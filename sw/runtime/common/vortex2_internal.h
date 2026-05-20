@@ -320,6 +320,16 @@ public:
     vx_result_t map   (uint64_t off, uint64_t size, uint32_t flags, void** out);
     vx_result_t unmap (void* host_ptr);
 
+    // Async-map support: map_reserve allocates the host mirror and records
+    // the mapping (no data transfer), so vx_enqueue_map can hand the caller
+    // a pointer synchronously. map_commit performs the device->host READ
+    // population on the queue worker. map_cancel tears down a reservation
+    // whose enqueue failed (frees the mirror without flushing).
+    vx_result_t map_reserve(uint64_t off, uint64_t size, uint32_t flags,
+                            void** out);
+    vx_result_t map_commit();
+    void        map_cancel();
+
 private:
     friend class RefCounted<Buffer>;
     Buffer(Device* dev, uint64_t dev_addr, uint64_t size, uint32_t flags);
@@ -446,6 +456,29 @@ public:
                                 vx_event_h* out);
     vx_result_t enqueue_barrier(uint32_t nw, const vx_event_h* w,
                                 vx_event_h* out);
+    vx_result_t enqueue_read_rect  (void* host_dst, Buffer* src,
+                                    const vx_rect_info_t* info,
+                                    uint32_t nw, const vx_event_h* w,
+                                    vx_event_h* out);
+    vx_result_t enqueue_write_rect (Buffer* dst, const void* host_src,
+                                    const vx_rect_info_t* info,
+                                    uint32_t nw, const vx_event_h* w,
+                                    vx_event_h* out);
+    vx_result_t enqueue_copy_rect  (Buffer* dst, Buffer* src,
+                                    const vx_rect_info_t* info,
+                                    uint32_t nw, const vx_event_h* w,
+                                    vx_event_h* out);
+    vx_result_t enqueue_fill_buffer(Buffer* dst, uint64_t offset, uint64_t size,
+                                    const void* pattern, size_t pattern_size,
+                                    uint32_t nw, const vx_event_h* w,
+                                    vx_event_h* out);
+    vx_result_t enqueue_map        (Buffer* buf, uint64_t offset, uint64_t size,
+                                    uint32_t flags, uint32_t nw,
+                                    const vx_event_h* w, vx_event_h* out,
+                                    void** out_host_ptr);
+    vx_result_t enqueue_unmap      (Buffer* buf, void* host_ptr,
+                                    uint32_t nw, const vx_event_h* w,
+                                    vx_event_h* out);
     vx_result_t enqueue_dcr_write(uint32_t addr, uint32_t value,
                                   uint32_t nw, const vx_event_h* w,
                                   vx_event_h* out);

@@ -77,8 +77,9 @@ vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel = nullptr;
 kernel_arg_t kernel_arg = {};
 constexpr uint32_t kDescA = 0;
 constexpr uint32_t kDescB = 1;
@@ -112,12 +113,13 @@ static void parse_args(int argc, char** argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(A_buffer);
-    vx_mem_free(B_buffer);
-    vx_mem_free(C_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (A_buffer) vx_buffer_release(A_buffer);
+    if (B_buffer) vx_buffer_release(B_buffer);
+    if (C_buffer) vx_buffer_release(C_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -136,9 +138,13 @@ int main(int argc, char* argv[]) {
   std::srand(50);
 
   std::cout << "open device connection\n";
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
+
   uint64_t isa_flags = 0;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
 #ifdef ISA_EXT_DXA
   const uint64_t dxa_isa_bit = (1ull << (32 + ISA_EXT_DXA));
   if ((isa_flags & dxa_isa_bit) == 0) {
@@ -156,8 +162,20 @@ int main(int argc, char* argv[]) {
   std::cout << "matrix size: " << size << "x" << size << "\n";
   std::cout << "mode: " << mode << " (1=single/full-K, 2=double/chunked-K)\n";
 
+  // Derive the per-block local-memory budget (total LMEM split across the
+  // blocks resident per core) so chunk_k can be auto-sized to fit. The
+  // occupancy math mirrors vx_check_occupancy; that runtime call is now a
+  // pure validator and is invoked below once local_mem is known.
   uint32_t max_localmem = 0;
-  RT_CHECK(vx_check_occupancy(device, group_size, &max_localmem));
+  {
+    uint64_t warps_per_core = 0, threads_per_warp = 0, lmem_size = 0;
+    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &warps_per_core));
+    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &threads_per_warp));
+    RT_CHECK(vx_device_query(device, VX_CAPS_LOCAL_MEM_SIZE, &lmem_size));
+    uint32_t warps_per_block = (group_size + threads_per_warp - 1) / threads_per_warp;
+    uint32_t blocks_per_core = warps_per_core / warps_per_block;
+    max_localmem = uint32_t(lmem_size / blocks_per_core);
+  }
   const uint32_t stage_count = (mode == 2) ? 2u : 1u;
   const uint32_t bytes_per_k = stage_count * (2u * tile_size * sizeof(TYPE));
   if (bytes_per_k == 0) {
@@ -196,7 +214,7 @@ int main(int argc, char* argv[]) {
             << ", chunk_k(selected)=" << chunk_k << "\n";
   std::cout << "local memory: " << local_mem << " bytes\n";
   std::cout << "occupancy: max_localmem=" << max_localmem << " bytes\n";
-  RT_CHECK(max_localmem < local_mem);
+  RT_CHECK(vx_check_occupancy(device, group_size, local_mem));
 
   uint32_t grid_dim[2]  = {size / tile_size, size / tile_size};
   uint32_t block_dim[2] = {tile_size, tile_size};
@@ -206,12 +224,12 @@ int main(int argc, char* argv[]) {
   kernel_arg.mode = mode;
 
   std::cout << "allocate device memory\n";
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &A_buffer));
-  RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &B_buffer));
-  RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &C_buffer));
-  RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_READ, &A_buffer));
+  RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_READ, &B_buffer));
+  RT_CHECK(vx_buffer_address(B_buffer, &kernel_arg.B_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_WRITE, &C_buffer));
+  RT_CHECK(vx_buffer_address(C_buffer, &kernel_arg.C_addr));
 
   std::vector<TYPE> h_A(size_sq);
   std::vector<TYPE> h_B(size_sq);
@@ -221,8 +239,8 @@ int main(int argc, char* argv[]) {
     h_B[i] = Comparator<TYPE>::generate();
   }
 
-  RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, buf_size));
-  RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, buf_size));
+  RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A.data(), buf_size, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, h_B.data(), buf_size, 0, nullptr, nullptr));
 
   // Descriptor A: dim0=k, dim1=row => A[row, k]
   RT_CHECK(vx_dxa_program_desc_2d(device, kDescA, kernel_arg.A_addr,
@@ -238,15 +256,32 @@ int main(int argc, char* argv[]) {
     /*tile0=*/tile_size, /*tile1=*/chunk_k,
     /*elem_bytes=*/sizeof(TYPE)));
 
-  std::cout << "upload kernel\n";
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  std::cout << "load kernel module\n";
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  std::cout << "start device\n";
-  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, local_mem));
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+  std::cout << "launch kernel\n";
+  vx_event_h launch_ev = nullptr;
+  {
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 2;
+    li.grid_dim[0]  = grid_dim[0];
+    li.grid_dim[1]  = grid_dim[1];
+    li.block_dim[0] = block_dim[0];
+    li.block_dim[1] = block_dim[1];
+    li.lmem_size    = local_mem;
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+  }
 
-  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, buf_size));
+  vx_event_h read_ev = nullptr;
+  RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0, buf_size, 1, &launch_ev, &read_ev));
+  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(read_ev);
+  vx_event_release(launch_ev);
 
   int errors = 0;
   if (verify) {

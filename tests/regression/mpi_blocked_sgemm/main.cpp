@@ -4,7 +4,7 @@
 #include <string.h>
 #include <vector>
 #include <chrono>
-#include <vortex.h>
+#include <vortex2.h>
 #include <cmath>
 #include "common.h"
 #include <mpi.h>
@@ -92,8 +92,9 @@ vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -124,12 +125,13 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(A_buffer);
-    vx_mem_free(B_buffer);
-    vx_mem_free(C_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (A_buffer) vx_buffer_release(A_buffer);
+    if (B_buffer) vx_buffer_release(B_buffer);
+    if (C_buffer) vx_buffer_release(C_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -262,41 +264,60 @@ int main(int argc, char *argv[]) {
   for (int k = 0; k < dims[0]; k++) {
 
     // Vortex compute block multiply
-    vx_device_h device;
-    vx_buffer_h A_buffer, B_buffer, C_buffer;
-    vx_buffer_h krnl_buffer, args_buffer;
-    kernel_arg_t kernel_arg = {};
+    RT_CHECK(vx_device_open(0, &device));
 
-    RT_CHECK(vx_dev_open(&device));
-    RT_CHECK(vx_mem_alloc(device, block_bytes, VX_MEM_READ, &A_buffer));
-    RT_CHECK(vx_mem_alloc(device, block_bytes, VX_MEM_READ, &B_buffer));
-    RT_CHECK(vx_mem_alloc(device, block_bytes, VX_MEM_WRITE, &C_buffer));
+    vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+    RT_CHECK(vx_queue_create(device, &qi, &queue));
 
-    RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-    RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-    RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
+    uint64_t num_cores, num_threads;
+    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores));
+    RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
+
+    RT_CHECK(vx_buffer_create(device, block_bytes, VX_MEM_READ, &A_buffer));
+    RT_CHECK(vx_buffer_create(device, block_bytes, VX_MEM_READ, &B_buffer));
+    RT_CHECK(vx_buffer_create(device, block_bytes, VX_MEM_WRITE, &C_buffer));
+
+    RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
+    RT_CHECK(vx_buffer_address(B_buffer, &kernel_arg.B_addr));
+    RT_CHECK(vx_buffer_address(C_buffer, &kernel_arg.C_addr));
 
     kernel_arg.grid_dim[0] = block_size;
     kernel_arg.grid_dim[1] = block_size;
     kernel_arg.size = block_size;
 
-    RT_CHECK(vx_copy_to_dev(A_buffer, A_block.data(), 0, block_bytes));
-    RT_CHECK(vx_copy_to_dev(B_buffer, B_block.data(), 0, block_bytes));
+    RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, A_block.data(), block_bytes, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, B_block.data(), block_bytes, 0, nullptr, nullptr));
 
-    RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
-    RT_CHECK(vx_upload_bytes(device, &kernel_arg,
-                             sizeof(kernel_arg_t), &args_buffer));
-
-    RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
-    RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+    RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+    RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
     std::vector<TYPE> temp(block_elems);
-    RT_CHECK(vx_copy_from_dev(temp.data(), C_buffer, 0, block_bytes));
+
+    vx_event_h launch_ev = nullptr, read_ev = nullptr;
+    {
+      vx_launch_info_t li = {};
+      li.struct_size  = sizeof(li);
+      li.kernel       = kernel;
+      li.args_host    = &kernel_arg;
+      li.args_size    = sizeof(kernel_arg);
+      li.ndim         = 1;
+      li.grid_dim[0]  = (uint32_t)num_cores;
+      li.block_dim[0] = (uint32_t)num_threads;
+      RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+    }
+
+    RT_CHECK(vx_enqueue_read(queue, temp.data(), C_buffer, 0, block_bytes, 1, &launch_ev, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    vx_event_release(launch_ev);
 
     for (uint32_t i = 0; i < block_elems; i++)
       C_block[i] += temp[i];
 
-    vx_dev_close(device);
+    cleanup();
+    device = nullptr;
+    A_buffer = B_buffer = C_buffer = nullptr;
+    queue = nullptr; module_ = nullptr; kernel = nullptr;
 
     // shift left A
     MPI_Cart_shift(grid_comm, 1, -1, &src, &dst);

@@ -18,32 +18,101 @@
 // with refcounted lifecycle, asynchronous command submission, OpenCL-shaped
 // events with wait lists, and per-command profiling timestamps.
 //
-// Legacy synchronous vortex.h is implemented as a thin wrapper over the
-// entry points here. All upper-layer translators (POCL, chipStar, future
-// Vulkan/CUDA/HIP/Metal/OpenGL) should target vortex2.h directly.
+// All upper-layer translators (POCL, chipStar, future Vulkan/CUDA/HIP/
+// Metal/OpenGL) should target this API directly. The legacy synchronous
+// API is a thin wrapper layered on top of these entry points.
 // ============================================================================
 
 #ifndef __VX_VORTEX2_H__
 #define __VX_VORTEX2_H__
 
-#include <vortex.h>      // inherit vx_device_h, vx_buffer_h, VX_CAPS_*, VX_MEM_*
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <VX_config.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // ============================================================================
-// Opaque handles introduced by vortex2.h
+// Opaque handles
 // ============================================================================
+
+// Device + buffer handles are void* for ABI stability across runtime builds.
+typedef void* vx_device_h;
+typedef void* vx_buffer_h;
 
 typedef struct vx_queue*  vx_queue_h;
 typedef struct vx_event*  vx_event_h;
 typedef struct vx_module* vx_module_h;
 typedef struct vx_kernel* vx_kernel_h;
 
-// (vx_device_h, vx_buffer_h inherited from vortex.h as void* for ABI compat.)
+// ============================================================================
+// Device capability IDs  (vx_device_query)
+// ============================================================================
+
+#define VX_CAPS_VERSION             0x0   // implementation version
+#define VX_CAPS_NUM_THREADS         0x1   // number of threads per warp
+#define VX_CAPS_NUM_WARPS           0x2   // number of warps per core
+#define VX_CAPS_NUM_CORES           0x3   // number of total cores
+#define VX_CAPS_CACHE_LINE_SIZE     0x4   // cache line size in bytes
+#define VX_CAPS_GLOBAL_MEM_SIZE     0x5   // global memory size in bytes
+#define VX_CAPS_LOCAL_MEM_SIZE      0x6   // local memory size per core in bytes
+#define VX_CAPS_ISA_FLAGS           0x7   // device ISA flags
+#define VX_CAPS_NUM_MEM_BANKS       0x8   // number of memory banks
+#define VX_CAPS_MEM_BANK_SIZE       0x9   // memory bank size in bytes
+#define VX_CAPS_NUM_CLUSTERS        0xA   // number of clusters
+#define VX_CAPS_SOCKET_SIZE         0xB   // number of cores per socket
+#define VX_CAPS_ISSUE_WIDTH         0xC   // issue width per core
+#define VX_CAPS_CLOCK_RATE          0xD   // pipeline clock rate in MHz
+#define VX_CAPS_PEAK_MEM_BW         0xE   // peak memory bandwidth (MB/s)
+
+// ============================================================================
+// Device ISA flags  (decode a VX_CAPS_ISA_FLAGS query result)
+// ============================================================================
+
+#define VX_ISA_STD_A                (1ull << ISA_STD_A)
+#define VX_ISA_STD_C                (1ull << ISA_STD_C)
+#define VX_ISA_STD_D                (1ull << ISA_STD_D)
+#define VX_ISA_STD_E                (1ull << ISA_STD_E)
+#define VX_ISA_STD_F                (1ull << ISA_STD_F)
+#define VX_ISA_STD_H                (1ull << ISA_STD_H)
+#define VX_ISA_STD_I                (1ull << ISA_STD_I)
+#define VX_ISA_STD_N                (1ull << ISA_STD_N)
+#define VX_ISA_STD_Q                (1ull << ISA_STD_Q)
+#define VX_ISA_STD_S                (1ull << ISA_STD_S)
+#define VX_ISA_STD_V                (1ull << ISA_STD_V)
+#define VX_ISA_ARCH(flags)          (1ull << (((flags >> 30) & 0x3) + 4))
+#define VX_ISA_EXT_ICACHE           (1ull << (32+ISA_EXT_ICACHE))
+#define VX_ISA_EXT_DCACHE           (1ull << (32+ISA_EXT_DCACHE))
+#define VX_ISA_EXT_L2CACHE          (1ull << (32+ISA_EXT_L2CACHE))
+#define VX_ISA_EXT_L3CACHE          (1ull << (32+ISA_EXT_L3CACHE))
+#define VX_ISA_EXT_LMEM             (1ull << (32+ISA_EXT_LMEM))
+#define VX_ISA_EXT_ZICOND           (1ull << (32+ISA_EXT_ZICOND))
+#define VX_ISA_EXT_TEX              (1ull << (32+ISA_EXT_TEX))
+#define VX_ISA_EXT_RASTER           (1ull << (32+ISA_EXT_RASTER))
+#define VX_ISA_EXT_OM               (1ull << (32+ISA_EXT_OM))
+#define VX_ISA_EXT_TCU              (1ull << (32+ISA_EXT_TCU))
+#define VX_ISA_EXT_DXA              (1ull << (32+ISA_EXT_DXA))
+
+// ============================================================================
+// Device memory access flags  (vx_buffer_create / vx_buffer_access)
+// ============================================================================
+
+#define VX_MEM_READ                 0x1
+#define VX_MEM_WRITE                0x2
+#define VX_MEM_READ_WRITE           0x3
+#define VX_MEM_PIN_MEMORY           0x4
+// Allocation returns a PHYSICAL device address (no VA translation).
+// Required for any consumer on the device side that bypasses the
+// per-core MMU — e.g. graphics fixed-function units (raster, tex,
+// om), the command processor, and any future DMA engine reading
+// directly from device memory. Under VM mode the runtime identity-
+// maps the underlying PA so the same address is valid on both the
+// MMU-routed (LSU/kernel loads) and bypass paths. Has no effect
+// when VM_ENABLE is off.
+#define VX_MEM_PHYS                 0x8
 
 // ============================================================================
 // Result type
@@ -119,6 +188,32 @@ typedef struct {
     uint32_t     lmem_size;
 } vx_launch_info_t;
 
+// 3D-strided DMA descriptor for the rect enqueue ops. Mirrors OpenCL 1.2's
+// clEnqueue{Read,Write,Copy}BufferRect parameter block.
+//
+//   region[0]       bytes per row (the contiguous run)
+//   region[1]       rows per slice
+//   region[2]       slices
+//   *_origin        start position: [0] in bytes, [1] in rows, [2] in slices
+//   *_row_pitch     byte stride between rows   (0 -> region[0])
+//   *_slice_pitch   byte stride between slices (0 -> region[1] * row_pitch)
+//
+// For read_rect / write_rect the `buffer_*` fields describe the device
+// buffer and the `host_*` fields the host memory. For copy_rect the
+// `buffer_*` fields describe the destination buffer and the `host_*`
+// fields the source buffer.
+typedef struct {
+    size_t       struct_size;
+    const void*  next;
+    size_t       buffer_origin[3];
+    size_t       host_origin  [3];
+    size_t       region       [3];
+    size_t       buffer_row_pitch;
+    size_t       buffer_slice_pitch;
+    size_t       host_row_pitch;
+    size_t       host_slice_pitch;
+} vx_rect_info_t;
+
 typedef struct {
     uint64_t queued_ns;
     uint64_t submit_ns;
@@ -127,7 +222,7 @@ typedef struct {
 } vx_profile_info_t;
 
 // ============================================================================
-// Device  (6 functions)
+// Device
 // ============================================================================
 
 vx_result_t vx_device_count       (uint32_t* out_count);
@@ -139,6 +234,11 @@ vx_result_t vx_device_query       (vx_device_h dev, uint32_t caps_id,
 vx_result_t vx_device_memory_info (vx_device_h dev,
                                    uint64_t* free, uint64_t* used);
 
+// Dump the formatted MPM performance-counter report (per core / cluster /
+// cache) to `stream` (NULL -> stdout). Controlled by the VORTEX_PROFILING
+// environment variable, same as the legacy vx_dump_perf.
+vx_result_t vx_device_dump_perf   (vx_device_h dev, FILE* stream);
+
 // Compute the maximum-occupancy block / grid for `global_dim` work
 // items on this device. block[i] = device's natural per-warp / per-
 // core dimension (num_threads, num_warps, 1); grid[i] = ceil(global / block).
@@ -149,7 +249,7 @@ vx_result_t vx_device_max_occupancy_grid (vx_device_h dev, uint32_t ndim,
                                           uint32_t* block_out);
 
 // ============================================================================
-// Buffer  (9 functions)
+// Buffer
 // ============================================================================
 
 vx_result_t vx_buffer_create  (vx_device_h dev, uint64_t size, uint32_t flags,
@@ -197,7 +297,7 @@ vx_result_t vx_kernel_get_max_block_size (vx_kernel_h k,
                                           uint32_t* z);
 
 // ============================================================================
-// Queue  (5 functions)
+// Queue
 // ============================================================================
 
 vx_result_t vx_queue_create   (vx_device_h dev, const vx_queue_info_t* info,
@@ -208,7 +308,7 @@ vx_result_t vx_queue_flush    (vx_queue_h q);
 vx_result_t vx_queue_finish   (vx_queue_h q, uint64_t timeout_ns);
 
 // ============================================================================
-// Async enqueue  (7 functions)
+// Async enqueue
 //
 // Every enqueue takes a wait-list and returns an event for the work just
 // submitted. out_event may be NULL if the caller does not need to observe
@@ -241,6 +341,64 @@ vx_result_t vx_enqueue_write     (vx_queue_h q,
                                   vx_buffer_h dst, uint64_t dst_off,
                                   const void* host_src,
                                   uint64_t    size,
+                                  uint32_t          n_wait_events,
+                                  const vx_event_h* wait_events,
+                                  vx_event_h*       out_event);
+
+// Strided 3D DMA. The initial implementation is a host-side software
+// fallback that decomposes the rect into per-row linear transfers (a
+// single transfer when the rect is fully contiguous); a future CP DMA
+// descriptor can absorb the stride without an API change.
+vx_result_t vx_enqueue_read_rect (vx_queue_h q,
+                                  void* host_dst,
+                                  vx_buffer_h src,
+                                  const vx_rect_info_t* info,
+                                  uint32_t          n_wait_events,
+                                  const vx_event_h* wait_events,
+                                  vx_event_h*       out_event);
+
+vx_result_t vx_enqueue_write_rect(vx_queue_h q,
+                                  vx_buffer_h dst,
+                                  const void* host_src,
+                                  const vx_rect_info_t* info,
+                                  uint32_t          n_wait_events,
+                                  const vx_event_h* wait_events,
+                                  vx_event_h*       out_event);
+
+vx_result_t vx_enqueue_copy_rect (vx_queue_h q,
+                                  vx_buffer_h dst,
+                                  vx_buffer_h src,
+                                  const vx_rect_info_t* info,
+                                  uint32_t          n_wait_events,
+                                  const vx_event_h* wait_events,
+                                  vx_event_h*       out_event);
+
+// Fill `size` bytes of `dst` at `offset` with `pattern` (pattern_size
+// bytes) repeated. `size` must be a whole multiple of `pattern_size`.
+vx_result_t vx_enqueue_fill_buffer(vx_queue_h q,
+                                   vx_buffer_h dst,
+                                   uint64_t offset, uint64_t size,
+                                   const void* pattern, size_t pattern_size,
+                                   uint32_t          n_wait_events,
+                                   const vx_event_h* wait_events,
+                                   vx_event_h*       out_event);
+
+// Async buffer map / unmap. vx_enqueue_map allocates a host-accessible
+// staging region and returns its pointer synchronously in *out_host_ptr;
+// once the wait list resolves the worker populates it from the device
+// (for VX_MEM_READ maps). The pointer is valid for access only after
+// out_event signals. vx_enqueue_unmap flushes a VX_MEM_WRITE mapping back
+// to the device and frees the staging region.
+vx_result_t vx_enqueue_map       (vx_queue_h q, vx_buffer_h buf,
+                                  uint64_t offset, uint64_t size,
+                                  uint32_t flags,
+                                  uint32_t          n_wait_events,
+                                  const vx_event_h* wait_events,
+                                  vx_event_h*       out_event,
+                                  void**            out_host_ptr);
+
+vx_result_t vx_enqueue_unmap     (vx_queue_h q, vx_buffer_h buf,
+                                  void* host_ptr,
                                   uint32_t          n_wait_events,
                                   const vx_event_h* wait_events,
                                   vx_event_h*       out_event);

@@ -55,6 +55,10 @@ SECTIONS
   .iplt           : { *(.iplt) }
   .text           :
   {
+    /* Per-kernel KMU entry stubs of a multi-entry POCL .vxbin. Reached
+       only via the VXSYMTAB footer, which the linker cannot see — KEEP
+       so --gc-sections does not drop them. */
+    KEEP (*(.vx_entry .vx_entry.*))
     *(.text.unlikely .text.*_unlikely .text.unlikely.*)
     *(.text.exit .text.exit.*)
     *(.text.startup .text.startup.*)
@@ -108,6 +112,12 @@ SECTIONS
     PROVIDE_HIDDEN (__tbss_end = .);
   }
   PROVIDE(__tbss_size = ALIGN(SIZEOF(.tbss), 8));
+  /* Per-hart stride for the TLS image, which spans .tdata + .tbss.
+     vx_start.S places each hart's TLS block this far apart; using
+     __tbss_size alone made adjacent harts' images overlap by
+     __tbss_offset bytes. __tbss_offset and __tbss_size are both
+     section-aligned, so their sum keeps the image alignment. */
+  PROVIDE(__tls_block_size = __tbss_offset + __tbss_size);
   .preinit_array    :
   {
     PROVIDE_HIDDEN (__preinit_array_start = .);

@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <mpi.h>
-#include <vortex.h>
+#include <vortex2.h>
 #include "common.h"
 
 #define FLOAT_ULP 6
@@ -60,17 +60,20 @@ int size = 32;
 
 vx_device_h device = nullptr;
 vx_buffer_h I_buf=nullptr, W_buf=nullptr, O_buf=nullptr;
-vx_buffer_h krnl_buf=nullptr, args_buf=nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 
 void cleanup() {
   if (device) {
-    vx_mem_free(I_buf);
-    vx_mem_free(W_buf);
-    vx_mem_free(O_buf);
-    vx_mem_free(krnl_buf);
-    vx_mem_free(args_buf);
-    vx_dev_close(device);
+    if (I_buf) vx_buffer_release(I_buf);
+    if (W_buf) vx_buffer_release(W_buf);
+    if (O_buf) vx_buffer_release(O_buf);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -210,31 +213,51 @@ int main(int argc, char** argv) {
   // Vortex Execution (unchanged)
   // ==========================================
 
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
+
+  uint64_t num_cores, num_threads;
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   kernel_arg.width=size;
   kernel_arg.grid_dim[0]=size;
   kernel_arg.grid_dim[1]=local_rows;
   kernel_arg.use_lmem=false;
 
-  RT_CHECK(vx_mem_alloc(device,local_I.size()*sizeof(float),VX_MEM_READ,&I_buf));
-  RT_CHECK(vx_mem_alloc(device,9*sizeof(float),VX_MEM_READ,&W_buf));
-  RT_CHECK(vx_mem_alloc(device,local_O.size()*sizeof(float),VX_MEM_WRITE,&O_buf));
+  RT_CHECK(vx_buffer_create(device,local_I.size()*sizeof(float),VX_MEM_READ,&I_buf));
+  RT_CHECK(vx_buffer_create(device,9*sizeof(float),VX_MEM_READ,&W_buf));
+  RT_CHECK(vx_buffer_create(device,local_O.size()*sizeof(float),VX_MEM_WRITE,&O_buf));
 
-  RT_CHECK(vx_mem_address(I_buf,&kernel_arg.I_addr));
-  RT_CHECK(vx_mem_address(W_buf,&kernel_arg.W_addr));
-  RT_CHECK(vx_mem_address(O_buf,&kernel_arg.O_addr));
+  RT_CHECK(vx_buffer_address(I_buf,&kernel_arg.I_addr));
+  RT_CHECK(vx_buffer_address(W_buf,&kernel_arg.W_addr));
+  RT_CHECK(vx_buffer_address(O_buf,&kernel_arg.O_addr));
 
-  RT_CHECK(vx_copy_to_dev(I_buf,local_I.data(),0,local_I.size()*sizeof(float)));
-  RT_CHECK(vx_copy_to_dev(W_buf,local_W.data(),0,9*sizeof(float)));
+  RT_CHECK(vx_enqueue_write(queue,I_buf,0,local_I.data(),local_I.size()*sizeof(float),0,nullptr,nullptr));
+  RT_CHECK(vx_enqueue_write(queue,W_buf,0,local_W.data(),9*sizeof(float),0,nullptr,nullptr));
 
-  RT_CHECK(vx_upload_kernel_file(device,kernel_file,&krnl_buf));
-  RT_CHECK(vx_upload_bytes(device,&kernel_arg,sizeof(kernel_arg),&args_buf));
+  RT_CHECK(vx_module_load_file(device,kernel_file,&module_));
+  RT_CHECK(vx_module_get_kernel(module_,"main",&kernel));
 
-  RT_CHECK(vx_start(device,krnl_buf,args_buf));
-  RT_CHECK(vx_ready_wait(device,VX_MAX_TIMEOUT));
+  vx_event_h launch_ev = nullptr, read_ev = nullptr;
+  {
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 1;
+    li.grid_dim[0]  = (uint32_t)num_cores;
+    li.block_dim[0] = (uint32_t)num_threads;
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+  }
 
-  RT_CHECK(vx_copy_from_dev(local_O.data(),O_buf,0,local_O.size()*sizeof(float)));
+  RT_CHECK(vx_enqueue_read(queue,local_O.data(),O_buf,0,local_O.size()*sizeof(float),1,&launch_ev,&read_ev));
+  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(read_ev);
+  vx_event_release(launch_ev);
 
   // ==========================================
   // Gather results

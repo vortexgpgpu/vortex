@@ -1,7 +1,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <string.h>
-#include <vortex.h>
+#include <vortex2.h>
 #include <chrono>
 #include <vector>
 #include "common.h"
@@ -27,9 +27,11 @@ uint32_t count = 0;
 vx_device_h device = nullptr;
 vx_buffer_h src_buffer = nullptr;
 vx_buffer_h dst_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
+uint64_t num_cores = 0, num_threads = 0;
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
@@ -62,11 +64,12 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(src_buffer);
-    vx_mem_free(dst_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (src_buffer) vx_buffer_release(src_buffer);
+    if (dst_buffer) vx_buffer_release(dst_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_release(device);
   }
 }
 
@@ -91,13 +94,16 @@ int run_memcopy_test(const kernel_arg_t& kernel_arg) {
   // upload source buffer
   std::cout << "write source buffer to device memory" << std::endl;
   auto t0 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_to_dev(dst_buffer, h_src.data(), 0, buf_size));
+  RT_CHECK(vx_enqueue_write(queue, dst_buffer, 0, h_src.data(), buf_size, 0, nullptr, nullptr));
   auto t1 = std::chrono::high_resolution_clock::now();
 
   // download destination buffer
   std::cout << "read destination buffer from device memory" << std::endl;
   auto t2 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, buf_size));
+  vx_event_h mc_read_ev = nullptr;
+  RT_CHECK(vx_enqueue_read(queue, h_dst.data(), dst_buffer, 0, buf_size, 0, nullptr, &mc_read_ev));
+  RT_CHECK(vx_event_wait_value(mc_read_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(mc_read_ev);
   auto t3 = std::chrono::high_resolution_clock::now();
 
   // verify result
@@ -137,32 +143,43 @@ int run_kernel_test(const kernel_arg_t& kernel_arg) {
     h_src[i] = shuffle(i, NONCE);
   }
 
-  // Upload kernel binary
-  std::cout << "Upload kernel binary" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
-
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  // load kernel module
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   auto time_start = std::chrono::high_resolution_clock::now();
 
   // upload source buffer
   auto t0 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_to_dev(src_buffer, h_src.data(), 0, buf_size));
+  RT_CHECK(vx_enqueue_write(queue, src_buffer, 0, h_src.data(), buf_size, 0, nullptr, nullptr));
   auto t1 = std::chrono::high_resolution_clock::now();
 
-  // start device
+  // start execution — legacy vx_start maps to grid=num_cores, block=num_threads
   std::cout << "start execution" << std::endl;
   auto t2 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+  vx_event_h launch_ev = nullptr, read_ev = nullptr;
+  {
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 1;
+    li.grid_dim[0]  = (uint32_t)num_cores;
+    li.block_dim[0] = (uint32_t)num_threads;
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+  }
+  RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
   auto t3 = std::chrono::high_resolution_clock::now();
 
   // download destination buffer
   std::cout << "read destination buffer from device memory" << std::endl;
   auto t4 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_from_dev(h_dst.data(), dst_buffer, 0, buf_size));
+  RT_CHECK(vx_enqueue_read(queue, h_dst.data(), dst_buffer, 0, buf_size, 1, &launch_ev, &read_ev));
+  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(read_ev);
+  vx_event_release(launch_ev);
   auto t5 = std::chrono::high_resolution_clock::now();
 
   // verify result
@@ -202,10 +219,13 @@ int main(int argc, char *argv[]) {
 
   // open device connection
   std::cout << "open device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
 
-  uint64_t num_cores;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
+
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   uint32_t num_points = count * num_cores;
   uint32_t buf_size = num_points * sizeof(int32_t);
@@ -215,10 +235,10 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src_buffer));
-  RT_CHECK(vx_mem_address(src_buffer, &kernel_arg.src_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &dst_buffer));
-  RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_READ, &src_buffer));
+  RT_CHECK(vx_buffer_address(src_buffer, &kernel_arg.src_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_WRITE, &dst_buffer));
+  RT_CHECK(vx_buffer_address(dst_buffer, &kernel_arg.dst_addr));
 
   kernel_arg.count = count;
 
