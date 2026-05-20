@@ -268,42 +268,8 @@ package VX_tcu_pkg;
         endcase
     endfunction
 
-    function automatic logic [2:0] mx_words_per_scale_m1(input logic [TCU_FMT_WIDTH-1:0] fmt);
-        case (fmt)
-            TCU_MXFP8_ID, TCU_MXI8_ID:
-                return 3'd7; // 32 8-bit elements => 8 packed 32-bit words
-            TCU_NVFP4_ID:
-                return 3'd1; // 16 4-bit elements => 2 packed 32-bit words
-            default:
-                return 3'd0;
-        endcase
-    endfunction
-
     function automatic logic tcu_fmt_is_bfloat(input logic [3:0] float_fmt);
         return !float_fmt[0];
-    endfunction
-
-    // meta_num_cols / meta_total_store_uops are called combinationally from
-    // VX_tcu_uops.sv on the ibuffer → uop_data critical path. Writing them
-    // as case statements returning compile-time constants keeps Vivado from
-    // synthesising the (TCU_BLOCK_CAP + hw - 1) / hw expression as a
-    // variable-divisor ceil-divide (which expanded to 9 CARRY8 stages and
-    // blew the 300 MHz budget). Each arm is a pure constant, so the whole
-    // lookup collapses to a single 4→5-bit LUT.
-    function automatic logic [4:0] meta_num_cols(input logic [TCU_FMT_WIDTH-1:0] fmt);
-        case (fmt)
-            TCU_FP16_ID, TCU_BF16_ID:
-                return 5'((TCU_BLOCK_CAP + 7)  / 8);   // hw = 16/2 = 8
-            TCU_FP8_ID, TCU_BF8_ID, TCU_I8_ID, TCU_U8_ID,
-            TCU_MXFP8_ID, TCU_MXI8_ID:
-                return 5'((TCU_BLOCK_CAP + 3)  / 4);   // hw = 8/2  = 4
-            TCU_NVFP4_ID, TCU_I4_ID, TCU_U4_ID:
-                return 5'((TCU_BLOCK_CAP + 1)  / 2);   // hw = 4/2  = 2
-            TCU_FP32_ID, TCU_I32_ID, TCU_TF32_ID:
-                return 5'((TCU_BLOCK_CAP + 15) / 16);  // hw = 32/2 = 16
-            default:
-                return 5'd0;
-        endcase
     endfunction
 
     function automatic logic [4:0] meta_total_store_uops(input logic [TCU_FMT_WIDTH-1:0] fmt);
