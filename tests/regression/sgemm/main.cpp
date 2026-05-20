@@ -89,11 +89,15 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    vx_buffer_h A_buf=nullptr, B_buf=nullptr, C_buf=nullptr, kbuf=nullptr;
+    vx_buffer_h A_buf=nullptr, B_buf=nullptr, C_buf=nullptr;
     CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &A_buf));
     CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &B_buf));
     CHECK(vx_buffer_create(dev, buf_size, VX_MEM_WRITE, &C_buf));
-    CHECK(vx_buffer_load_kernel_file(dev, q, kernel_file, &kbuf));
+
+    vx_module_h mod = nullptr;
+    vx_kernel_h kern = nullptr;
+    CHECK(vx_module_load_file(dev, kernel_file, &mod));
+    CHECK(vx_module_get_kernel(mod, "main", &kern));
 
     kernel_arg_t kernel_arg{};
     kernel_arg.size = size;
@@ -114,7 +118,7 @@ int main(int argc, char** argv) {
 
     vx_launch_info_t li{};
     li.struct_size = sizeof(li);
-    li.kernel      = kbuf;
+    li.kernel      = kern;
     li.args_host   = &kernel_arg;
     li.args_size   = sizeof(kernel_arg);
     li.ndim        = 2;
@@ -125,7 +129,7 @@ int main(int argc, char** argv) {
     CHECK(vx_enqueue_launch(q, &li, 0, nullptr, &launch_ev));
     CHECK(vx_enqueue_read(q, h_C.data(), C_buf, 0, buf_size,
                           1, &launch_ev, &read_ev));
-    CHECK(vx_event_wait_all(1, &read_ev, VX_TIMEOUT_INFINITE));
+    CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
     auto t1 = std::chrono::high_resolution_clock::now();
     std::printf("Elapsed: %ld ms\n",
         (long)std::chrono::duration_cast<std::chrono::milliseconds>(t1-t0).count());
@@ -146,7 +150,8 @@ int main(int argc, char** argv) {
     vx_buffer_release(C_buf);
     vx_buffer_release(B_buf);
     vx_buffer_release(A_buf);
-    vx_buffer_release(kbuf);
+    vx_kernel_release(kern);
+    vx_module_release(mod);
     vx_queue_release(q);
     vx_device_release(dev);
 

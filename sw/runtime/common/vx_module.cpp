@@ -197,8 +197,7 @@ vx_result_t Module::get_kernel(const char* name, Kernel** out) {
 // ----------------------------------------------------------------------------
 
 Kernel::Kernel(Module* mod, uint64_t pc)
-    : LaunchKernelHandle(LaunchKernelHandle::Kind::Kernel),
-      module_(mod), pc_(pc) {
+    : module_(mod), pc_(pc) {
     module_->retain();
 }
 

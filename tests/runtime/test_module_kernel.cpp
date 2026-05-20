@@ -17,7 +17,7 @@
 //   - Error path: vx_module_get_kernel("nonexistent")
 //   - Multi-symbol via in-memory .vxbin with synthetic VXSYMTAB footer
 //   - End-to-end launch via vx_enqueue_launch with launch_info.kernel
-//     pointing at a vx_kernel_h (tag dispatch in the launch path)
+//     pointing at a vx_kernel_h
 //
 // Kernel path: defaults to $VORTEX_HOME/build/tests/regression/basic/kernel.vxbin
 // (built in the standard regression run), overridable via -k <path> or env
@@ -231,14 +231,9 @@ int test_multi_symbol_footer(vx_device_h dev, const std::string& vxbin) {
 
 // ---------------------------------------------------------------------------
 // Section 5 — end-to-end launch via vx_kernel_h.
-//   The launch path's tag-dispatch resolves vx_launch_info_t.kernel as a
-//   Kernel (not a Buffer) and reads the PC from the Kernel object. Verifies
-//   the LaunchKernelHandle plumbing works for real kernel execution.
-//
-//   Uses the legacy vx_dcr_write path to program KMU block_size = 1 so the
-//   kernel's main() runs (matches what legacy vx_start does via vx_start_g).
-//   We don't care what the kernel computes — just that the launch completes
-//   without error.
+//   vx_enqueue_launch reads the entry PC straight from the vx_kernel_h in
+//   vx_launch_info_t.kernel. We don't care what the kernel computes — just
+//   that the launch completes without error.
 // ---------------------------------------------------------------------------
 int test_launch_via_kernel_handle(vx_device_h dev, const std::string& vxbin) {
     if (vxbin.empty()) {
@@ -263,7 +258,7 @@ int test_launch_via_kernel_handle(vx_device_h dev, const std::string& vxbin) {
 
     vx_launch_info_t li = {};
     li.struct_size = sizeof(li);
-    li.kernel      = (vx_buffer_h)k;     // tag dispatch resolves as Kernel
+    li.kernel      = k;
     li.args_host   = args_blob;
     li.args_size   = sizeof(args_blob);
     li.ndim        = 1;

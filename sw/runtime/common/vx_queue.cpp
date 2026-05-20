@@ -236,20 +236,17 @@ vx_result_t Queue::enqueue_copy(Buffer* dst, uint64_t do_, Buffer* src,
 vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
                                   uint32_t nw, const vx_event_h* w,
                                   vx_event_h* out) {
-    if (!info || !info->kernel) return VX_ERR_INVALID_VALUE;
+    if (!info) return VX_ERR_INVALID_VALUE;
     if (info->struct_size < sizeof(vx_launch_info_t))
         return VX_ERR_INVALID_INFO;
     if (info->ndim > 3) return VX_ERR_INVALID_VALUE;
     if (info->args_size != 0 && !info->args_host) return VX_ERR_INVALID_VALUE;
 
-    // Resolve the kernel handle. The launch kernel slot accepts either a
-    // Buffer (legacy: image base = entry PC) or a Kernel (new in Phase 1b:
-    // named entry point inside a Module). Disambiguated by the tag at
-    // offset 0 of the LaunchKernelHandle base.
-    LaunchKernelHandle* lkh = to_lkh(info->kernel);
-    const uint64_t kernel_pc = (lkh->launch_kind() == LaunchKernelHandle::Kind::Kernel)
-                                 ? static_cast<Kernel*>(lkh)->pc()
-                                 : static_cast<Buffer*>(lkh)->dev_address();
+    // Resolve the kernel entry PC. info->kernel is a vx_kernel_h
+    // (vx_module_get_kernel). NULL is the legacy escape hatch — the caller
+    // pre-programmed the PC DCRs itself, so program_pc stays false.
+    const bool     program_pc = (info->kernel != nullptr);
+    const uint64_t kernel_pc  = program_pc ? to_kernel(info->kernel)->pc() : 0;
 
     // Phase 2: the args block arrives as a host blob. Copy it into the
     // command now so the caller can free/reuse `info` (and the memory it
@@ -263,9 +260,9 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
 
     // Capture the launch descriptor by value into the work lambda so the
     // caller can free/reuse `info` immediately after enqueue returns.
-    // ndim==0 is the legacy escape hatch — only PC (+ staged arg ptr) are
-    // programmed and the host is expected to have set the rest via prior
-    // vx_dcr_write calls (matches legacy vx_start semantics).
+    // ndim==0 is the legacy escape hatch — grid/block DCRs are left to the
+    // host's prior vx_dcr_write calls (matches legacy vx_start semantics);
+    // kernel==NULL and args_host==NULL are the analogous PC / ARG hatches.
     const uint32_t ndim      = info->ndim;
     const uint32_t lmem_size = info->lmem_size;
     std::array<uint32_t, 3> grid_in  = {1, 1, 1};
@@ -277,7 +274,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
 
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, kernel_pc, ndim, lmem_size, grid_in, block_in,
+    cmd.work = [this, kernel_pc, program_pc, ndim, lmem_size, grid_in, block_in,
                 args_blob = std::move(args_blob)](uint64_t* s, uint64_t* e) {
         Platform* p = device_->platform();
 
@@ -323,10 +320,9 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         {
             std::lock_guard<std::mutex> g(enqueue_mu_);
 
-            const uint64_t pc = kernel_pc;
-
             // Program the KMU DCRs via CMD_DCR_WRITE descriptors through
-            // the CP ring.
+            // the CP ring. program_pc / args_staged false → caller
+            // pre-programmed those DCRs (legacy escape hatch).
             #define WR(addr, val) do {                                        \
                 auto _r = device_->cp_submit_dcr_write((addr), (uint32_t)(val)); \
                 if (_r != VX_SUCCESS) {                                       \
@@ -336,8 +332,10 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
                     return _r;                                                \
                 }                                                             \
             } while (0)
-            WR(VX_DCR_KMU_STARTUP_ADDR0, pc & 0xffffffffu);
-            WR(VX_DCR_KMU_STARTUP_ADDR1, pc >> 32);
+            if (program_pc) {
+                WR(VX_DCR_KMU_STARTUP_ADDR0, kernel_pc & 0xffffffffu);
+                WR(VX_DCR_KMU_STARTUP_ADDR1, kernel_pc >> 32);
+            }
             if (args_staged) {
                 WR(VX_DCR_KMU_STARTUP_ARG0, args_addr & 0xffffffffu);
                 WR(VX_DCR_KMU_STARTUP_ARG1, args_addr >> 32);

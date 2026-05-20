@@ -44,11 +44,6 @@ typedef struct vx_module* vx_module_h;
 typedef struct vx_kernel* vx_kernel_h;
 
 // (vx_device_h, vx_buffer_h inherited from vortex.h as void* for ABI compat.)
-//
-// vx_kernel_h and vx_buffer_h are interchangeable in vx_launch_info_t.kernel:
-// the runtime tags the underlying object so vx_enqueue_launch can accept
-// either a kernel-image buffer (legacy) or a named kernel from a module
-// (vx_module_get_kernel, new in Phase 1b).
 
 // ============================================================================
 // Result type
@@ -80,14 +75,6 @@ typedef enum {
     VX_QUEUE_PRIORITY_HIGH   = 2
 } vx_queue_priority_e;
 
-typedef enum {
-    VX_EVENT_STATUS_QUEUED    = 0,
-    VX_EVENT_STATUS_SUBMITTED = 1,
-    VX_EVENT_STATUS_RUNNING   = 2,
-    VX_EVENT_STATUS_COMPLETE  = 3,
-    VX_EVENT_STATUS_ERROR     = 4
-} vx_event_status_e;
-
 // ============================================================================
 // Macros
 // ============================================================================
@@ -111,7 +98,10 @@ typedef struct {
 typedef struct {
     size_t       struct_size;
     const void*  next;
-    vx_buffer_h  kernel;          // vx_kernel_h or kernel-image vx_buffer_h
+    // Kernel entry point (vx_module_get_kernel). NULL is the legacy escape
+    // hatch — the caller is expected to have programmed the KMU PC DCRs
+    // itself via prior vx_dcr_write calls.
+    vx_kernel_h  kernel;
     // Kernel argument block as a host-side blob. The runtime stages it into
     // a device-side scratch slot at launch time and programs the KMU ARG
     // pointer — callers no longer allocate/upload/free an args device
@@ -168,14 +158,6 @@ vx_result_t vx_buffer_reserve (vx_device_h dev, uint64_t address,
                                uint64_t size, uint32_t flags,
                                vx_buffer_h* out);
 
-// Load a .vxbin kernel image from disk into a freshly-reserved buffer
-// at the kernel's link-script address. Uploads the binary + zeros the
-// BSS region via the queue (waits internally before returning so the
-// caller can use the buffer immediately as a launch's `kernel` arg).
-// Returns the kernel image buffer; the caller owns it and must release.
-vx_result_t vx_buffer_load_kernel_file (vx_device_h dev, vx_queue_h queue,
-                                        const char* path, vx_buffer_h* out);
-
 vx_result_t vx_buffer_retain  (vx_buffer_h buf);
 vx_result_t vx_buffer_release (vx_buffer_h buf);
 vx_result_t vx_buffer_address (vx_buffer_h buf, uint64_t* out_addr);
@@ -188,14 +170,11 @@ vx_result_t vx_buffer_unmap   (vx_buffer_h buf, void* host_ptr);
 // ============================================================================
 // Module + kernel
 //
-// Phase 1b — load a .vxbin as a module, then resolve named entry points to
-// vx_kernel_h handles. Matches CUDA cuModule/cuFunction, HIP hipModule/
-// hipFunction, Metal MTLLibrary/MTLFunction, Vulkan VkShaderModule + entry
-// name. Replaces vx_buffer_load_kernel_file's "kernel image is a buffer"
-// pun with explicit object identity.
+// Load a .vxbin as a module, then resolve named entry points to vx_kernel_h
+// handles. Matches CUDA cuModule/cuFunction, HIP hipModule/hipFunction,
+// Metal MTLLibrary/MTLFunction, Vulkan VkShaderModule + entry name.
 //
-// vx_kernel_h can be passed wherever vx_launch_info_t.kernel expects a
-// vx_buffer_h (the dispatcher tags handles internally).
+// A vx_kernel_h is the only handle accepted by vx_launch_info_t.kernel.
 // ============================================================================
 
 vx_result_t vx_module_load_file  (vx_device_h dev, const char* path,
@@ -314,24 +293,6 @@ vx_result_t vx_event_retain        (vx_event_h ev);
 vx_result_t vx_event_release       (vx_event_h ev);
 
 vx_result_t vx_event_get_profiling (vx_event_h ev, vx_profile_info_t* out);
-
-// ============================================================================
-// Deprecated event API (binary-event semantics).
-//
-// Retained as thin shims over the timeline API for source-compat with
-// pre-v1 callers. New code should target the timeline functions above.
-//   vx_user_event_create  -> vx_event_create
-//   vx_user_event_signal  -> vx_event_signal(ev, 1)  + records optional error
-//   vx_event_status       -> derived from counter: QUEUED if 0, COMPLETE if >=1
-//   vx_event_wait_all     -> per-event vx_event_wait_value(ev, 1, timeout)
-//   vx_event_status_e     -> still defined above for the shim's return type
-// ============================================================================
-
-vx_result_t vx_user_event_create   (vx_device_h dev, vx_event_h* out);
-vx_result_t vx_user_event_signal   (vx_event_h ev, vx_result_t status);
-vx_result_t vx_event_status        (vx_event_h ev, vx_event_status_e* out);
-vx_result_t vx_event_wait_all      (uint32_t n, const vx_event_h* evs,
-                                    uint64_t timeout_ns);
 
 // ============================================================================
 // Queue-ordered timeline signal / wait

@@ -73,12 +73,15 @@ int main(int argc, char** argv) {
     vx_queue_h q = nullptr;
     CHECK(vx_queue_create(dev, &qi, &q));
 
-    vx_buffer_h src0_buf=nullptr, src1_buf=nullptr, dst_buf=nullptr,
-                kbuf=nullptr;
+    vx_buffer_h src0_buf=nullptr, src1_buf=nullptr, dst_buf=nullptr;
     CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &src0_buf));
     CHECK(vx_buffer_create(dev, buf_size, VX_MEM_READ,  &src1_buf));
     CHECK(vx_buffer_create(dev, buf_size, VX_MEM_WRITE, &dst_buf));
-    CHECK(vx_buffer_load_kernel_file(dev, q, kernel_file, &kbuf));
+
+    vx_module_h mod = nullptr;
+    vx_kernel_h kern = nullptr;
+    CHECK(vx_module_load_file(dev, kernel_file, &mod));
+    CHECK(vx_module_get_kernel(mod, "main", &kern));
 
     kernel_arg_t kernel_arg{};
     kernel_arg.num_points = num_points;
@@ -103,7 +106,7 @@ int main(int argc, char** argv) {
 
     vx_launch_info_t li{};
     li.struct_size = sizeof(li);
-    li.kernel      = kbuf;
+    li.kernel      = kern;
     li.args_host   = &kernel_arg;
     li.args_size   = sizeof(kernel_arg);
     li.ndim        = 1;
@@ -114,7 +117,7 @@ int main(int argc, char** argv) {
     CHECK(vx_enqueue_launch(q, &li, 0, nullptr, &launch_ev));
     CHECK(vx_enqueue_read(q, h_dst.data(), dst_buf, 0, buf_size,
                           1, &launch_ev, &read_ev));
-    CHECK(vx_event_wait_all(1, &read_ev, VX_TIMEOUT_INFINITE));
+    CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
 
     int errors = 0;
     for (uint32_t i = 0; i < num_points; ++i) {
@@ -131,7 +134,8 @@ int main(int argc, char** argv) {
     vx_buffer_release(dst_buf);
     vx_buffer_release(src1_buf);
     vx_buffer_release(src0_buf);
-    vx_buffer_release(kbuf);
+    vx_kernel_release(kern);
+    vx_module_release(mod);
     vx_queue_release(q);
     vx_device_release(dev);
 

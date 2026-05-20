@@ -11,7 +11,7 @@
 // Exercises the asynchronous vortex2.h surface beyond what test_basic covers:
 //   - Multiple concurrent queues on one device
 //   - Async copy chain with event dependencies (q1 produces, q2 consumes)
-//   - User events as a host-side synchronization primitive
+//   - Timeline events as a host-side synchronization primitive
 //   - vx_enqueue_barrier as an in-queue join point
 //   - Profiling timestamps: queued <= submit <= start <= end
 //   - Buffer map / unmap round-trip (READ before / WRITE after)
@@ -94,7 +94,7 @@ int test_event_chain(vx_device_h dev) {
     CHECK_VX(vx_enqueue_read(q2, out.data(), bufB, 0, bytes,
                              1, &eB, &eRead));
 
-    CHECK_VX(vx_event_wait_all(1, &eRead, VX_TIMEOUT_INFINITE));
+    CHECK_VX(vx_event_wait_value(eRead, 1, VX_TIMEOUT_INFINITE));
 
     for (uint32_t i = 0; i < N; ++i) {
         if (out[i] != patternA[i]) {
@@ -115,34 +115,34 @@ int test_event_chain(vx_device_h dev) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 2 — user event lifecycle and host-side cross-thread signaling.
+// Section 2 — timeline event lifecycle and host-side cross-thread signaling.
 // ---------------------------------------------------------------------------
 int test_user_event(vx_device_h dev) {
     vx_event_h gate = nullptr;
-    CHECK_VX(vx_user_event_create(dev, &gate));
+    CHECK_VX(vx_event_create(dev, &gate));
 
-    vx_event_status_e st;
-    CHECK_VX(vx_event_status(gate, &st));
-    EXPECT(st == VX_EVENT_STATUS_QUEUED, "fresh user event not QUEUED");
+    uint64_t v;
+    CHECK_VX(vx_event_get_value(gate, &v));
+    EXPECT(v == 0, "fresh event counter not 0");
 
-    // A 10 ms wait on an unsignaled user event must time out (not succeed).
-    auto r = vx_event_wait_all(1, &gate, 10ull * 1000 * 1000);
-    EXPECT(r == VX_ERR_TIMEOUT, "wait on unsignaled user event should TIMEOUT");
+    // A 10 ms wait on an unsignaled event must time out (not succeed).
+    auto r = vx_event_wait_value(gate, 1, 10ull * 1000 * 1000);
+    EXPECT(r == VX_ERR_TIMEOUT, "wait on unsignaled event should TIMEOUT");
 
     // Background signaller. Main thread waits with INFINITE; the signaller
     // releases it after a delay.
     std::thread signaller([gate]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        vx_user_event_signal(gate, VX_SUCCESS);
+        vx_event_signal(gate, 1);
     });
-    CHECK_VX(vx_event_wait_all(1, &gate, VX_TIMEOUT_INFINITE));
+    CHECK_VX(vx_event_wait_value(gate, 1, VX_TIMEOUT_INFINITE));
     signaller.join();
 
-    CHECK_VX(vx_event_status(gate, &st));
-    EXPECT(st == VX_EVENT_STATUS_COMPLETE, "signaled user event not COMPLETE");
+    CHECK_VX(vx_event_get_value(gate, &v));
+    EXPECT(v >= 1, "signaled event counter not advanced");
 
-    // A second wait should return immediately (event already complete).
-    CHECK_VX(vx_event_wait_all(1, &gate, 0));
+    // A second wait should return immediately (counter already reached).
+    CHECK_VX(vx_event_wait_value(gate, 1, 0));
 
     CHECK_VX(vx_event_release(gate));
     return 0;
@@ -174,13 +174,13 @@ int test_user_event_gated_enqueue(vx_device_h dev) {
     // Prime src with the pattern.
     vx_event_h ePrime = nullptr;
     CHECK_VX(vx_enqueue_write(q, src, 0, pat.data(), bytes, 0, nullptr, &ePrime));
-    CHECK_VX(vx_event_wait_all(1, &ePrime, VX_TIMEOUT_INFINITE));
+    CHECK_VX(vx_event_wait_value(ePrime, 1, VX_TIMEOUT_INFINITE));
     CHECK_VX(vx_event_release(ePrime));
 
     // Issue a copy gated on an unsignaled user event. The enqueue MUST
     // return promptly (no deadlock); the worker will block on the gate.
     vx_event_h gate = nullptr;
-    CHECK_VX(vx_user_event_create(dev, &gate));
+    CHECK_VX(vx_event_create(dev, &gate));
 
     auto t_enqueue_start = std::chrono::steady_clock::now();
     vx_event_h eCopy = nullptr;
@@ -191,24 +191,24 @@ int test_user_event_gated_enqueue(vx_device_h dev) {
     EXPECT(enqueue_ms < 50, "enqueue_copy on unsignaled gate did not return promptly");
 
     // Confirm the copy hasn't completed before the gate signal.
-    vx_event_status_e st;
-    CHECK_VX(vx_event_status(eCopy, &st));
-    EXPECT(st != VX_EVENT_STATUS_COMPLETE, "copy completed before gate signal");
+    uint64_t cv;
+    CHECK_VX(vx_event_get_value(eCopy, &cv));
+    EXPECT(cv == 0, "copy completed before gate signal");
 
     // Signal the gate from a background thread.
     std::thread signaller([gate]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        vx_user_event_signal(gate, VX_SUCCESS);
+        vx_event_signal(gate, 1);
     });
 
-    CHECK_VX(vx_event_wait_all(1, &eCopy, VX_TIMEOUT_INFINITE));
+    CHECK_VX(vx_event_wait_value(eCopy, 1, VX_TIMEOUT_INFINITE));
     signaller.join();
 
     // Verify the copy actually executed (dst now matches pat).
     std::vector<uint8_t> out(bytes, 0);
     vx_event_h eRead = nullptr;
     CHECK_VX(vx_enqueue_read(q, out.data(), dst, 0, bytes, 0, nullptr, &eRead));
-    CHECK_VX(vx_event_wait_all(1, &eRead, VX_TIMEOUT_INFINITE));
+    CHECK_VX(vx_event_wait_value(eRead, 1, VX_TIMEOUT_INFINITE));
     for (size_t i = 0; i < bytes; ++i) {
         if (out[i] != pat[i]) {
             fprintf(stderr, "FAILED: gated copy mismatch at %zu: got 0x%x exp 0x%x\n",
@@ -254,15 +254,15 @@ int test_barrier(vx_device_h dev) {
 
     vx_event_h eBarrier = nullptr;
     CHECK_VX(vx_enqueue_barrier(q, 0, nullptr, &eBarrier));
-    CHECK_VX(vx_event_wait_all(1, &eBarrier, VX_TIMEOUT_INFINITE));
+    CHECK_VX(vx_event_wait_value(eBarrier, 1, VX_TIMEOUT_INFINITE));
 
     // Every prior write event should now be complete.
     for (uint32_t i = 0; i < N_WRITES; ++i) {
-        vx_event_status_e st;
-        CHECK_VX(vx_event_status(write_events[i], &st));
-        if (st != VX_EVENT_STATUS_COMPLETE) {
-            fprintf(stderr, "FAILED: write[%u] not COMPLETE after barrier (st=%d)\n",
-                    i, (int)st);
+        uint64_t v;
+        CHECK_VX(vx_event_get_value(write_events[i], &v));
+        if (v < 1) {
+            fprintf(stderr, "FAILED: write[%u] not complete after barrier (v=%llu)\n",
+                    i, (unsigned long long)v);
             return 1;
         }
     }
@@ -271,7 +271,7 @@ int test_barrier(vx_device_h dev) {
     vx_event_h eRead = nullptr;
     CHECK_VX(vx_enqueue_read(q, out.data(), buf, 0, N_WRITES * chunk,
                              0, nullptr, &eRead));
-    CHECK_VX(vx_event_wait_all(1, &eRead, VX_TIMEOUT_INFINITE));
+    CHECK_VX(vx_event_wait_value(eRead, 1, VX_TIMEOUT_INFINITE));
     for (uint32_t i = 0; i < N_WRITES; ++i) {
         for (uint64_t b = 0; b < chunk; ++b) {
             if (out[i * chunk + b] != patterns[i][b]) {
@@ -307,7 +307,7 @@ int test_profiling(vx_device_h dev) {
     vx_event_h eW = nullptr, eC = nullptr;
     CHECK_VX(vx_enqueue_write(q, src, 0, pat.data(), 1024, 0, nullptr, &eW));
     CHECK_VX(vx_enqueue_copy (q, dst, 0, src, 0, 1024, 1, &eW, &eC));
-    CHECK_VX(vx_event_wait_all(1, &eC, VX_TIMEOUT_INFINITE));
+    CHECK_VX(vx_event_wait_value(eC, 1, VX_TIMEOUT_INFINITE));
 
     vx_profile_info_t pW = {}, pC = {};
     CHECK_VX(vx_event_get_profiling(eW, &pW));
@@ -384,11 +384,11 @@ int test_queue_finish(vx_device_h dev) {
     CHECK_VX(vx_queue_finish(q, VX_TIMEOUT_INFINITE));
 
     for (uint32_t i = 0; i < N; ++i) {
-        vx_event_status_e st;
-        CHECK_VX(vx_event_status(evs[i], &st));
-        if (st != VX_EVENT_STATUS_COMPLETE) {
-            fprintf(stderr, "FAILED: ev[%u] not COMPLETE after finish (st=%d)\n",
-                    i, (int)st);
+        uint64_t v;
+        CHECK_VX(vx_event_get_value(evs[i], &v));
+        if (v < 1) {
+            fprintf(stderr, "FAILED: ev[%u] not complete after finish (v=%llu)\n",
+                    i, (unsigned long long)v);
             return 1;
         }
         CHECK_VX(vx_event_release(evs[i]));
@@ -453,7 +453,7 @@ int test_concurrent_queues(vx_device_h dev) {
         vx_event_h eRead = nullptr;
         CHECK_VX(vx_enqueue_read(queues[qid], out.data(), bufs[qid], 0,
                                  N * bytes, 0, nullptr, &eRead));
-        CHECK_VX(vx_event_wait_all(1, &eRead, VX_TIMEOUT_INFINITE));
+        CHECK_VX(vx_event_wait_value(eRead, 1, VX_TIMEOUT_INFINITE));
         CHECK_VX(vx_event_release(eRead));
         for (uint32_t i = 0; i < N; ++i) {
             for (uint64_t b = 0; b < bytes; ++b) {

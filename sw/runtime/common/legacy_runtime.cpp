@@ -43,7 +43,7 @@ vx_result_t enqueue_and_wait(Device* dev, Fn&& fn) {
     auto r = fn(to_handle(q), &ev);
     if (r != VX_SUCCESS) return r;
     if (ev) {
-        r = vx_event_wait_all(1, &ev, VX_TIMEOUT_INFINITE);
+        r = vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE);
         vx_event_release(ev);
     }
     return r;
@@ -254,11 +254,11 @@ extern "C" int vx_start_g(vx_device_h hdevice, vx_buffer_h hkernel,
     // Async launch — return immediately; caller polls via vx_ready_wait.
     // The legacy wrapper has already programmed every KMU DCR (PC, ARG,
     // grid/block/lmem/...) above via the kmu_writes loop, so the launch
-    // info uses ndim=0 and args_host=NULL: enqueue_launch programs nothing
-    // and just triggers CMD_LAUNCH.
+    // info uses every escape hatch — kernel=NULL, args_host=NULL, ndim=0 —
+    // and enqueue_launch programs nothing, just triggers CMD_LAUNCH.
     vx_launch_info_t li = {};
     li.struct_size = sizeof(li);
-    li.kernel      = hkernel;
+    li.kernel      = nullptr;   // PC DCRs already programmed above
     li.args_host   = nullptr;   // ARG DCRs already programmed above
     li.args_size   = 0;
     li.ndim        = 0;         // grid/block DCRs already programmed above

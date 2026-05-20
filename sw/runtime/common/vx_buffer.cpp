@@ -12,8 +12,7 @@
 namespace vx {
 
 Buffer::Buffer(Device* dev, uint64_t dev_addr, uint64_t size, uint32_t flags)
-    : LaunchKernelHandle(LaunchKernelHandle::Kind::Buffer),
-      device_(dev), dev_addr_(dev_addr), size_(size), flags_(flags) {
+    : device_(dev), dev_addr_(dev_addr), size_(size), flags_(flags) {
     device_->retain();
     device_->register_buffer(this);
 }

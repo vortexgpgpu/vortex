@@ -93,21 +93,23 @@ int main() {
     if (!q) { fprintf(stderr, "FAILED: vx_queue_create returned NULL\n"); return 1; }
     CHECK_VX(vx_queue_release(q));
 
-    // ----- 6) User event lifecycle (vortex2.h only). -----
+    // ----- 6) Timeline event lifecycle (vortex2.h only). -----
     vx_event_h ev = nullptr;
-    CHECK_VX(vx_user_event_create(dev, &ev));
-    if (!ev) { fprintf(stderr, "FAILED: vx_user_event_create returned NULL\n"); return 1; }
-    vx_event_status_e st;
-    CHECK_VX(vx_event_status(ev, &st));
-    if (st != VX_EVENT_STATUS_QUEUED) {
-        fprintf(stderr, "FAILED: fresh user event not in QUEUED state (got %d)\n", (int)st);
+    CHECK_VX(vx_event_create(dev, &ev));
+    if (!ev) { fprintf(stderr, "FAILED: vx_event_create returned NULL\n"); return 1; }
+    uint64_t v = 0xbadbad;
+    CHECK_VX(vx_event_get_value(ev, &v));
+    if (v != 0) {
+        fprintf(stderr, "FAILED: fresh event counter not 0 (got %llu)\n",
+                (unsigned long long)v);
         return 1;
     }
-    CHECK_VX(vx_user_event_signal(ev, VX_SUCCESS));
-    CHECK_VX(vx_event_wait_all(1, &ev, VX_TIMEOUT_INFINITE));
-    CHECK_VX(vx_event_status(ev, &st));
-    if (st != VX_EVENT_STATUS_COMPLETE) {
-        fprintf(stderr, "FAILED: signaled user event not COMPLETE (got %d)\n", (int)st);
+    CHECK_VX(vx_event_signal(ev, 1));
+    CHECK_VX(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    CHECK_VX(vx_event_get_value(ev, &v));
+    if (v != 1) {
+        fprintf(stderr, "FAILED: signaled event counter not 1 (got %llu)\n",
+                (unsigned long long)v);
         return 1;
     }
     CHECK_VX(vx_event_release(ev));

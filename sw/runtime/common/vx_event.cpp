@@ -108,21 +108,6 @@ uint64_t Event::get_value() const {
     return counter_;
 }
 
-vx_result_t Event::signal_user(vx_result_t status) {
-    // Legacy semantic: signal at value 1 + record status.
-    complete(status);
-    return VX_SUCCESS;
-}
-
-vx_result_t Event::status(vx_event_status_e* out) {
-    if (!out) return VX_ERR_INVALID_VALUE;
-    std::lock_guard<std::mutex> g(mu_);
-    if (error_ != VX_SUCCESS) *out = VX_EVENT_STATUS_ERROR;
-    else if (counter_ >= 1)   *out = VX_EVENT_STATUS_COMPLETE;
-    else                      *out = VX_EVENT_STATUS_QUEUED;
-    return VX_SUCCESS;
-}
-
 void Event::set_profile(uint64_t queued_ns, uint64_t submit_ns,
                         uint64_t start_ns, uint64_t end_ns) {
     std::lock_guard<std::mutex> g(mu_);
@@ -210,34 +195,4 @@ extern "C" vx_result_t vx_event_get_profiling(vx_event_h ev,
     if (!ev)  return VX_ERR_INVALID_HANDLE;
     if (!out) return VX_ERR_INVALID_VALUE;
     return to_event(ev)->get_profile(out);
-}
-
-// ============================================================================
-// C entry points — deprecated binary-event shims
-// ============================================================================
-
-extern "C" vx_result_t vx_user_event_create(vx_device_h dev, vx_event_h* out) {
-    return vx_event_create(dev, out);
-}
-
-extern "C" vx_result_t vx_user_event_signal(vx_event_h ev, vx_result_t status) {
-    if (!ev) return VX_ERR_INVALID_HANDLE;
-    return to_event(ev)->signal_user(status);
-}
-
-extern "C" vx_result_t vx_event_status(vx_event_h ev, vx_event_status_e* out) {
-    if (!ev)  return VX_ERR_INVALID_HANDLE;
-    if (!out) return VX_ERR_INVALID_VALUE;
-    return to_event(ev)->status(out);
-}
-
-extern "C" vx_result_t vx_event_wait_all(uint32_t n, const vx_event_h* evs,
-                                         uint64_t timeout_ns) {
-    if (n != 0 && !evs) return VX_ERR_INVALID_VALUE;
-    for (uint32_t i = 0; i < n; ++i) {
-        if (!evs[i]) return VX_ERR_INVALID_HANDLE;
-        auto r = to_event(evs[i])->wait_value(1, timeout_ns);
-        if (r != VX_SUCCESS) return r;
-    }
-    return VX_SUCCESS;
 }

@@ -301,40 +301,10 @@ private:
 };
 
 // ============================================================================
-// LaunchKernelHandle — tag base for objects passable into vx_launch_info_t.kernel.
-//
-// Phase 1b introduces vx_kernel_h (named entry point inside a module) as a
-// new option for the launch's kernel slot, alongside the legacy vx_buffer_h
-// (kernel image as a raw buffer). The launch path needs to disambiguate
-// without forcing a `vx_launch_info_t` shape change.
-//
-// Trick: both Buffer and Kernel inherit LaunchKernelHandle as their FIRST
-// base, so the tag sits at byte offset 0 of the object. vx_enqueue_launch
-// reinterprets the void* handle as `LaunchKernelHandle*` and dispatches on
-// `launch_kind()`. Layout is well-defined under C++'s standard multi-
-// inheritance rules — neither this class nor RefCounted has virtuals or
-// vtables, so the cast costs nothing and there is no slicing risk.
-// ============================================================================
-
-class LaunchKernelHandle {
-public:
-    enum class Kind : uint32_t {
-        Buffer = 0x42554652,    // 'BUFR'
-        Kernel = 0x4B524E4C,    // 'KRNL'
-    };
-    explicit LaunchKernelHandle(Kind k) : lkh_kind_(k) {}
-    Kind launch_kind() const { return lkh_kind_; }
-protected:
-    ~LaunchKernelHandle() = default;
-private:
-    Kind lkh_kind_;
-};
-
-// ============================================================================
 // Buffer.
 // ============================================================================
 
-class Buffer : public LaunchKernelHandle, public RefCounted<Buffer> {
+class Buffer : public RefCounted<Buffer> {
 public:
     static vx_result_t create (Device* dev, uint64_t size, uint32_t flags,
                                Buffer** out);
@@ -423,7 +393,7 @@ private:
     std::map<std::string, Kernel*>       kernel_cache_;   // weak refs (no retain)
 };
 
-class Kernel : public LaunchKernelHandle, public RefCounted<Kernel> {
+class Kernel : public RefCounted<Kernel> {
 public:
     static vx_result_t create(Module* mod, uint64_t pc, Kernel** out);
 
@@ -584,10 +554,9 @@ public:
     // Snapshot the current counter value.
     uint64_t get_value() const;
 
-    // Legacy shim helpers (called by the C entry points in vx_event.cpp).
-    vx_result_t signal_user(vx_result_t status);    // -> complete(status)
-    vx_result_t status(vx_event_status_e* out);     // counter -> enum
-    vx_result_t wait(uint64_t timeout_ns) {         // wait_value(1, t)
+    // Internal convenience: wait for the binary-completion case (a
+    // runtime-managed event the worker complete()s to value 1).
+    vx_result_t wait(uint64_t timeout_ns) {
         return wait_value(1, timeout_ns);
     }
 
@@ -632,38 +601,18 @@ private:
 // ============================================================================
 
 inline Device* to_device(vx_device_h h) { return static_cast<Device*>(h); }
-inline Buffer* to_buffer(vx_buffer_h h) {
-    // h points to the start of a Buffer object; LaunchKernelHandle is the
-    // first base (at offset 0) so static_cast<Buffer*> needs an explicit
-    // adjustment when coming from a void*. Reinterpret first to the LKH base,
-    // then static_cast back down to Buffer to get the right adjusted pointer.
-    return static_cast<Buffer*>(reinterpret_cast<LaunchKernelHandle*>(h));
-}
+inline Buffer* to_buffer(vx_buffer_h h) { return static_cast<Buffer*>(h); }
 inline Queue*  to_queue (vx_queue_h  h) { return reinterpret_cast<Queue*>(h);  }
 inline Event*  to_event (vx_event_h  h) { return reinterpret_cast<Event*>(h);  }
 inline Module* to_module(vx_module_h h) { return reinterpret_cast<Module*>(h); }
-inline Kernel* to_kernel(vx_kernel_h h) {
-    return static_cast<Kernel*>(reinterpret_cast<LaunchKernelHandle*>(h));
-}
+inline Kernel* to_kernel(vx_kernel_h h) { return reinterpret_cast<Kernel*>(h); }
 
 inline vx_device_h to_handle(Device* d) { return static_cast<vx_device_h>(d); }
-inline vx_buffer_h to_handle(Buffer* b) {
-    // Returned handle points at the LaunchKernelHandle base (offset 0) so
-    // the dispatcher can read its kind tag without knowing the dynamic type.
-    return static_cast<vx_buffer_h>(static_cast<LaunchKernelHandle*>(b));
-}
+inline vx_buffer_h to_handle(Buffer* b) { return static_cast<vx_buffer_h>(b); }
 inline vx_queue_h  to_handle(Queue*  q) { return reinterpret_cast<vx_queue_h>(q);  }
 inline vx_event_h  to_handle(Event*  e) { return reinterpret_cast<vx_event_h>(e);  }
 inline vx_module_h to_handle(Module* m) { return reinterpret_cast<vx_module_h>(m); }
-inline vx_kernel_h to_handle(Kernel* k) {
-    return reinterpret_cast<vx_kernel_h>(static_cast<LaunchKernelHandle*>(k));
-}
-
-// LaunchKernelHandle-aware accessor for vx_launch_info_t.kernel — accepts
-// either a Buffer or a Kernel handle.
-inline LaunchKernelHandle* to_lkh(void* h) {
-    return reinterpret_cast<LaunchKernelHandle*>(h);
-}
+inline vx_kernel_h to_handle(Kernel* k) { return reinterpret_cast<vx_kernel_h>(k); }
 
 // ============================================================================
 // Wall clock helper for runtime-synthesized profile timestamps.

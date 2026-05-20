@@ -15,8 +15,6 @@
 //   - Counter monotonicity (signal with smaller value is a no-op)
 //   - Multi-waiter satisfaction (one signal wakes all)
 //   - Cross-queue rendezvous via shared timeline event
-//   - Deprecated binary shims (vx_user_event_*, vx_event_status,
-//     vx_event_wait_all) still work and observe the timeline counter
 //
 // PASS: all sections print [ OK ], exit code 0.
 // ============================================================================
@@ -231,44 +229,6 @@ int test_queue_signal_wait(vx_device_h dev) {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Section 5 — deprecated binary shims observe the timeline counter.
-//   - vx_user_event_create / signal / wait_all still work
-//   - vx_event_status returns QUEUED / COMPLETE based on the counter
-// ---------------------------------------------------------------------------
-int test_legacy_shims(vx_device_h dev) {
-    vx_event_h ev = nullptr;
-    CHECK_VX(vx_user_event_create(dev, &ev));
-
-    vx_event_status_e st;
-    CHECK_VX(vx_event_status(ev, &st));
-    EXPECT(st == VX_EVENT_STATUS_QUEUED, "freshly-created event must read as QUEUED");
-
-    // Advancing the counter via the *new* API should be visible to the
-    // legacy status query.
-    CHECK_VX(vx_event_signal(ev, 1));
-    CHECK_VX(vx_event_status(ev, &st));
-    EXPECT(st == VX_EVENT_STATUS_COMPLETE, "counter>=1 must read as COMPLETE via shim");
-
-    // vx_event_wait_all on a counter>=1 event returns immediately.
-    CHECK_VX(vx_event_wait_all(1, &ev, VX_TIMEOUT_INFINITE));
-
-    // Fresh event signaled via the legacy signal_user with an error status
-    // should report ERROR via the shim.
-    vx_event_h ev2 = nullptr;
-    CHECK_VX(vx_user_event_create(dev, &ev2));
-    CHECK_VX(vx_user_event_signal(ev2, VX_ERR_INTERNAL));
-    CHECK_VX(vx_event_status(ev2, &st));
-    EXPECT(st == VX_EVENT_STATUS_ERROR, "user_event_signal(ERR) must produce ERROR status");
-
-    auto r = vx_event_wait_all(1, &ev2, VX_TIMEOUT_INFINITE);
-    EXPECT(r == VX_ERR_INTERNAL, "wait on errored event must surface the error");
-
-    CHECK_VX(vx_event_release(ev));
-    CHECK_VX(vx_event_release(ev2));
-    return 0;
-}
-
 #define RUN(section)                                                     \
     do {                                                                  \
         printf("[RUN ] %s\n", #section);                                  \
@@ -287,7 +247,6 @@ int main() {
     RUN(test_multi_waiter);
     RUN(test_wait_values);
     RUN(test_queue_signal_wait);
-    RUN(test_legacy_shims);
 
     CHECK_VX(vx_device_release(dev));
     printf("PASSED\n");
