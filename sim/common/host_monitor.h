@@ -20,15 +20,16 @@ namespace vortex {
 
 class RAM;
 
-// HTIF-style `tohost` watcher. riscv-tests signal pass/fail by storing a
-// value to the `tohost` memory word; the host observes that store and
-// terminates the run. Vortex's caches are write-through, so a store
-// reaches device RAM within a bounded latency and direct RAM polling is
-// sufficient.
+// HTIF `tohost` exit watcher for upstream riscv-tests/isa.
+//
+// The ISA tests signal pass/fail by storing `(code << 1) | 1` to the
+// `tohost` memory word. Vortex's L1 dcache is write-through, so the
+// store reaches device RAM within a bounded latency and the monitor
+// observes it by polling.
 //
 // The monitor stays disabled when the loaded image has no `tohost`
-// symbol — normal Vortex kernels are unaffected and terminate through
-// the usual `tmc 0` + IO_EXIT_CODE path.
+// symbol — normal Vortex kernels and the (MMIO-based) benchmarks are
+// unaffected and terminate through the usual IO_EXIT_CODE path.
 class HostMonitor {
 public:
   HostMonitor() = default;

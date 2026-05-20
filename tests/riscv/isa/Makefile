@@ -1,20 +1,12 @@
 include ../common.mk
 
-# Upstream RISC-V ISA tests (riscv-tests). These are built on demand from
-# the pinned upstream commit and run unmodified — Vortex's synchronous
-# trap path (ECALL/EBREAK -> mtvec) lets the test's own trap_vector run,
-# and the HTIF `tohost` watcher in the simulators harvests pass/fail.
+# Upstream RISC-V ISA tests (riscv-tests/isa). The upstream tree is cloned
+# and built by the $(RISCV_TESTS_STAMP) rule in ../common.mk; the run-*
+# targets below depend on it, so the first invocation auto-installs.
 #
-# The upstream tree is cloned into the build directory (out-of-tree) and
-# cached behind a stamp file: `make clean` preserves it, `make distclean`
-# forces a re-fetch.
-
-RISCV_TESTS_REPO   ?= https://github.com/riscv-software-src/riscv-tests.git
-RISCV_TESTS_COMMIT ?= 1eb47d946c55f55cab8653c224c2993acc0276bd
-
-UPSTREAM_DIR := $(ROOT_DIR)/tests/riscv/upstream
-ISA_DIR      := $(UPSTREAM_DIR)/isa
-STAMP        := $(UPSTREAM_DIR)/.installed
+# These tests run unmodified — Vortex's synchronous trap path (ECALL ->
+# mtvec) lets the test's own trap_vector run, and the HTIF `tohost`
+# watcher in the simulators harvests pass/fail.
 
 # Skip atomic ISA tests when the build is configured without EXT_A_ENABLE.
 # Without atomics support, AMO instructions trap and the test fails. Resolve
@@ -63,61 +55,49 @@ endef
 
 all:
 
-# Clone + build the upstream riscv-tests ISA suites for this build's XLEN.
-$(STAMP):
-	rm -rf $(UPSTREAM_DIR)
-	git clone $(RISCV_TESTS_REPO) $(UPSTREAM_DIR)
-	cd $(UPSTREAM_DIR) && git checkout --quiet $(RISCV_TESTS_COMMIT) && git submodule update --init --recursive
-	PATH=$(RISCV_TOOLCHAIN_PATH)/bin:$$PATH $(MAKE) -C $(ISA_DIR) \
-	  XLEN=$(XLEN) RISCV_PREFIX=$(RISCV_PREFIX)- \
-	  rv$(XLEN)ui rv$(XLEN)um rv$(XLEN)uf rv$(XLEN)ud rv$(XLEN)ua rv$(XLEN)uc
-	touch $@
-
-install: $(STAMP)
-
-run-simx-32imf: $(STAMP)
+run-simx-32imf: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_32I) $(P_32M) $(P_32F))
 
-run-simx-64imf: $(STAMP)
+run-simx-64imf: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_64I) $(P_64M) $(P_64F))
 
-run-simx-32imafd: $(STAMP)
+run-simx-32imafd: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_32I) $(P_32M) $(P_32F) $(P_32D) $(P_32A) $(P_32C))
 
-run-simx-64imafd: $(STAMP)
+run-simx-64imafd: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_64I) $(P_64M) $(P_64F) $(P_64D) $(P_64A) $(P_64C))
 
-run-simx-32i: $(STAMP)
+run-simx-32i: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_32I))
 
-run-simx-32im: $(STAMP)
+run-simx-32im: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_32I) $(P_32M))
 
-run-simx-32f: $(STAMP)
+run-simx-32f: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_32F))
 
-run-simx-32d: $(STAMP)
+run-simx-32d: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_32D))
 
-run-simx-32a: $(STAMP)
+run-simx-32a: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_32A))
 
-run-simx-32c: $(STAMP)
+run-simx-32c: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_32C))
 
-run-simx-64im: $(STAMP)
+run-simx-64im: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_64I) $(P_64M))
 
-run-simx-64f: $(STAMP)
+run-simx-64f: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_64F))
 
-run-simx-64d: $(STAMP)
+run-simx-64d: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_64D))
 
-run-simx-64a: $(STAMP)
+run-simx-64a: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_64A))
 
-run-simx-64c: $(STAMP)
+run-simx-64c: $(RISCV_TESTS_STAMP)
 	$(call run_isa,simx,$(P_64C))
 
 run-simx-32: run-simx-32imafd
@@ -126,40 +106,40 @@ run-simx-64: run-simx-32imafd run-simx-64imafd
 
 run-simx: run-simx-$(XLEN)
 
-run-rtlsim-32imf: $(STAMP)
+run-rtlsim-32imf: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_32I) $(P_32M) $(P_32F))
 
-run-rtlsim-64imf: $(STAMP)
+run-rtlsim-64imf: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_64I) $(P_64M) $(P_64F))
 
-run-rtlsim-32i: $(STAMP)
+run-rtlsim-32i: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_32I))
 
-run-rtlsim-32im: $(STAMP)
+run-rtlsim-32im: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_32I) $(P_32M))
 
-run-rtlsim-32f: $(STAMP)
+run-rtlsim-32f: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_32F))
 
-run-rtlsim-32a: $(STAMP)
+run-rtlsim-32a: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_32A))
 
-run-rtlsim-32c: $(STAMP)
+run-rtlsim-32c: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_32C))
 
-run-rtlsim-64im: $(STAMP)
+run-rtlsim-64im: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_64I) $(P_64M))
 
-run-rtlsim-64f: $(STAMP)
+run-rtlsim-64f: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_64F))
 
-run-rtlsim-64d: $(STAMP)
+run-rtlsim-64d: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_64D))
 
-run-rtlsim-64a: $(STAMP)
+run-rtlsim-64a: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_64A))
 
-run-rtlsim-64c: $(STAMP)
+run-rtlsim-64c: $(RISCV_TESTS_STAMP)
 	$(call run_isa,rtlsim,$(P_64C))
 
 run-rtlsim-32: run-rtlsim-32imf
@@ -168,11 +148,7 @@ run-rtlsim-64: run-rtlsim-32imf run-rtlsim-64imf
 
 run-rtlsim: run-rtlsim-$(XLEN)
 
-# `clean` preserves the upstream cache; `distclean` forces a re-fetch.
 clean:
 
-distclean:
-	rm -rf $(UPSTREAM_DIR)
-
-.PHONY: all install clean distclean \
+.PHONY: all clean \
         run-simx run-simx-32 run-simx-64 run-rtlsim run-rtlsim-32 run-rtlsim-64

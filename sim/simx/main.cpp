@@ -213,7 +213,7 @@ int main(int argc, char **argv) {
       // Unreachable in practice; debug mode is a long-running session.
     } else if (monitor.enabled()) {
       // HTIF mode: tick until the test writes its `tohost` word, then
-      // take the exit code from there. Used by upstream riscv-tests.
+      // take the exit code from there. Used by upstream riscv-tests/isa.
       while (processor.cycle()) {
         if (monitor.tick(ram))
           break;
