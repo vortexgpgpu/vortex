@@ -160,6 +160,7 @@ package VX_tcu_pkg;
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
+    localparam MAX_SF_BLOCKS_PER_FEDP = (TCU_TC_K + 1) / 2;
 
     `ifdef TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;

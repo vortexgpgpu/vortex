@@ -235,19 +235,26 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     endfunction
 
-    wire [TCU_TC_M-1:0][7:0] mx_sf_a;
-    wire [TCU_TC_N-1:0][7:0] mx_sf_b;
+    wire [TCU_TC_M-1:0][MAX_SF_BLOCKS_PER_FEDP-1:0][7:0] mx_sf_a;
+    wire [TCU_TC_N-1:0][MAX_SF_BLOCKS_PER_FEDP-1:0][7:0] mx_sf_b;
+    wire is_4_bit_k = (fmt_s == TCU_NVFP4_ID);
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_mx_sf_a_i
         wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
         wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K);
-        assign mx_sf_a[i] = mx_scale_at(mx_meta_a_active, fmt_s, mx_a_idx, mx_k_base_idx);
+        for (genvar s = 0; s < MAX_SF_BLOCKS_PER_FEDP; ++s) begin : g_s
+            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + (is_4_bit_k ? MX_K_IDX_W'(s * 2) : '0);
+            assign mx_sf_a[i][s] = mx_scale_at(mx_meta_a_active, fmt_s, mx_a_idx, mx_k_idx);
+        end
     end
 
     for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_mx_sf_b_j
         wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
         wire [MX_K_IDX_W-1:0] mx_k_base_idx = MX_K_IDX_W'(step_k) * MX_K_IDX_W'(TCU_TC_K);
-        assign mx_sf_b[j] = mx_scale_at(mx_meta_b_active, fmt_s, mx_b_idx, mx_k_base_idx);
+        for (genvar s = 0; s < MAX_SF_BLOCKS_PER_FEDP; ++s) begin : g_s
+            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + (is_4_bit_k ? MX_K_IDX_W'(s * 2) : '0);
+            assign mx_sf_b[j][s] = mx_scale_at(mx_meta_b_active, fmt_s, mx_b_idx, mx_k_idx);
+        end
     end
 `endif
 
@@ -325,7 +332,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
         `endif
         `ifdef TCU_MX_ENABLE
-            wire [7:0] sf_a, sf_b;
+            wire [MAX_SF_BLOCKS_PER_FEDP-1:0][7:0] sf_a, sf_b;
             assign sf_a = mx_sf_a[i];
             assign sf_b = mx_sf_b[j];
         `endif
@@ -373,7 +380,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [4:0] fmt_s_r, fmt_d_r;
             wire [TCU_TC_K-1:0][31:0] a_row_r, b_col_r;
         `ifdef TCU_MX_ENABLE
-            wire [7:0] sf_a_r, sf_b_r;
+            wire [MAX_SF_BLOCKS_PER_FEDP-1:0][7:0] sf_a_r, sf_b_r;
         `endif
             wire [31:0] c_val_r;
 
@@ -399,7 +406,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             VX_tcu_fedp_dpi #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
-                .N (TCU_TC_K)
+                .N (TCU_TC_K),
+                .SF (MAX_SF_BLOCKS_PER_FEDP)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
@@ -451,7 +459,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             VX_tcu_fedp_tfr #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
-                .N (TCU_TC_K)
+                .N (TCU_TC_K),
+                .SF (MAX_SF_BLOCKS_PER_FEDP)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),

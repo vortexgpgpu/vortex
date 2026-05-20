@@ -145,7 +145,7 @@ Generate roofline plot (Peak vs Actual FLOPS, Compute vs Memory BW):
 ## General Notes
 
 - Keep changes minimal, targeted, and reversible.
-- Fix root causes; avoid workaround-only patches.
-- Add only concise, straightforward comments at the start of code sections (unless complex logic/targeted optimizations warrant more).
-- If this guide conflicts with commands emitted by generated scripts under `build/ci/`, trust the generated scripts and update this file in the same change.
-- AGENTS.md is intended to be living documentation; contributors and agents are encouraged to keep updating it as best practices and workflows evolve.
+- Fix root causes; avoid workaround-only patches or reward hacking
+- Add only concise, straightforward comments at the start of code sections (unless complex logic/targeted optimizations warrant more)
+- If this guide conflicts with commands emitted by generated scripts under `build/ci/`, trust the generated scripts and update this file in the same change
+- AGENTS.md is intended to be living documentation; contributors and agents are encouraged to keep updating it as best practices and workflows evolve
