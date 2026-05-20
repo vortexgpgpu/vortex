@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import argparse
+from contextlib import contextmanager
 import os
 import re
+import time
 
 TICK_RE = re.compile(r'^\s*\w+\s+(\d+):|^\s*(\d+):')
 ISSUE_RE = re.compile(
@@ -87,6 +89,72 @@ def find_log_file(name):
     return None
 
 
+def count_lines(path):
+    total = 0
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            total += chunk.count(b"\n")
+    return total
+
+
+@contextmanager
+def phase(name):
+    start = time.monotonic()
+    print(f"{name}: start", flush=True)
+    try:
+        yield
+    finally:
+        elapsed = time.monotonic() - start
+        print(f"{name}: done ({elapsed:.1f}s)", flush=True)
+
+
+def progress_lines(lines, name):
+    total_lines = len(lines)
+    if total_lines == 0:
+        print(f"{name}: start (0 lines)", flush=True)
+        print(f"{name}: done (0.0s)", flush=True)
+        return
+
+    start = time.monotonic()
+    print(f"{name}: start ({total_lines} lines)", flush=True)
+    for line in lines:
+        yield line
+    elapsed = time.monotonic() - start
+    print(f"{name}: done ({elapsed:.1f}s)", flush=True)
+
+
+def progress_items(items, name):
+    total_items = len(items)
+    if total_items == 0:
+        print(f"{name}: start (0 items)", flush=True)
+        print(f"{name}: done (0.0s)", flush=True)
+        return
+
+    start = time.monotonic()
+    print(f"{name}: start ({total_items} items)", flush=True)
+    for item in items:
+        yield item
+    elapsed = time.monotonic() - start
+    print(f"{name}: done ({elapsed:.1f}s)", flush=True)
+
+
+def read_lines_with_progress(path):
+    with phase("Count total lines"):
+        total_lines = count_lines(path)
+    if total_lines == 0:
+        print("Read log: start (0 lines)", flush=True)
+        print("Read log: done (0.0s)", flush=True)
+        return []
+
+    lines = []
+    with phase("Read log"):
+        with open(path, "r") as f:
+            for line in f:
+                lines.append(line)
+
+    return lines
+
+
 def extract_tick(line):
     m = TICK_RE.match(line)
     if not m:
@@ -108,7 +176,7 @@ def parse_issue_events(lines):
     dxa_issue_ticks = []
     dxa_issue_re = re.compile(r'\bdxa_op=(\d+)\b')
 
-    for line in lines:
+    for line in progress_lines(lines, "Parse issue events"):
         if "Issuing TCU u-op" in line:
             tick = extract_tick(line)
             if tick is not None:
@@ -138,7 +206,7 @@ def parse_issue_events(lines):
 
 def parse_other_issue_ticks(lines):
     ticks = []
-    for line in lines:
+    for line in progress_lines(lines, "Parse other issue ticks"):
         if "Issuing u-op" not in line:
             continue
         if "Issuing load u-op" in line:
@@ -153,9 +221,10 @@ def parse_other_issue_ticks(lines):
     return ticks
 
 
-def parse_pattern_ticks(lines, patterns):
+def parse_pattern_ticks(lines, patterns, progress_name=None):
     ticks = []
-    for line in lines:
+    iterable = progress_lines(lines, progress_name) if progress_name else lines
+    for line in iterable:
         if any(pat in line for pat in patterns):
             tick = extract_tick(line)
             if tick is not None:
@@ -163,9 +232,10 @@ def parse_pattern_ticks(lines, patterns):
     return ticks
 
 
-def parse_regex_ticks(lines, regex):
+def parse_regex_ticks(lines, regex, progress_name=None):
     ticks = []
-    for line in lines:
+    iterable = progress_lines(lines, progress_name) if progress_name else lines
+    for line in iterable:
         if regex.search(line):
             tick = extract_tick(line)
             if tick is not None:
@@ -174,12 +244,16 @@ def parse_regex_ticks(lines, regex):
 
 
 def parse_tcu_commit_ticks(lines):
-    return parse_regex_ticks(lines, re.compile(r'commit:.*\bex=TCU\b'))
+    return parse_regex_ticks(
+        lines,
+        re.compile(r'commit:.*\bex=TCU\b'),
+        progress_name="Parse TCU commit ticks",
+    )
 
 
 def parse_tcu_dispatch_flush_flags(lines):
     flags = []
-    for line in lines:
+    for line in progress_lines(lines, "Parse TCU dispatch flush flags"):
         if "issue0-dispatch:" not in line:
             continue
         if "ex=TCU" not in line:
@@ -206,18 +280,20 @@ def parse_tcu_dispatch_flush_flags(lines):
 def parse_dxa_done_ticks(lines):
     consume_done_ticks = set(parse_regex_ticks(
         lines,
-        re.compile(r'\[wctl-txbar\]\s+consume txbar addr=\d+ done=1\b')
+        re.compile(r'\[wctl-txbar\]\s+consume txbar addr=\d+ done=1\b'),
+        progress_name="Parse DXA consume done ticks",
     ))
     dxa_mem_done_ticks = set(parse_regex_ticks(
         lines,
-        re.compile(r'\[sfu-txbar\].*dxa_mem\(v=1\b.*\bd=1\)')
+        re.compile(r'\[sfu-txbar\].*dxa_mem\(v=1\b.*\bd=1\)'),
+        progress_name="Parse DXA memory done ticks",
     ))
     return sorted(consume_done_ticks & dxa_mem_done_ticks)
 
 
 def parse_marker_events(lines, regex):
     events = []
-    for line in lines:
+    for line in progress_lines(lines, "Parse marker events"):
         if "issue0-dispatcher dispatch:" not in line:
             continue
         if "ex=LSU, op=SW" not in line:
@@ -273,7 +349,7 @@ def parse_run_metadata(lines):
             meta["flags"].append(flag_name)
 
     sparsities = []
-    for line in lines:
+    for line in progress_lines(lines, "Parse run metadata"):
         if meta["testbench"] is None:
             m_testbench = TESTBENCH_RUN_RE.search(line)
             if m_testbench:
@@ -371,7 +447,7 @@ def parse_perf_info(lines):
     perf_lines = []
     perf_class = None
 
-    for line in lines:
+    for line in progress_lines(lines, "Parse PERF info"):
         m_perf = PERF_LINE_RE.match(line)
         if not m_perf:
             continue
@@ -448,12 +524,16 @@ def parse_perf_info(lines):
 
 
 def parse_run_result(lines):
-    passed = any(PASS_RE.search(line) for line in lines)
-    failed = any(FAIL_RE.search(line) for line in lines)
-
+    passed = False
+    failed = False
     error_count = None
     total_errors = None
-    for line in lines:
+
+    for line in progress_lines(lines, "Parse run result"):
+        if PASS_RE.search(line):
+            passed = True
+        if FAIL_RE.search(line):
+            failed = True
         m_fail_count = FAIL_COUNT_RE.search(line)
         if m_fail_count:
             error_count = int(m_fail_count.group(1))
@@ -484,10 +564,12 @@ def parse_roi_metrics(lines):
         "tcu_utilization": None,
     }
 
-    metrics["roi_enabled"] = any(ROI_ENABLED_RE.search(line) for line in lines)
-    metrics["mul_active_cycles"] = sum(1 for line in lines if MUL_ACTIVE_CYCLES_RE.search(line))
+    for line in progress_lines(lines, "Parse ROI metrics"):
+        if ROI_ENABLED_RE.search(line):
+            metrics["roi_enabled"] = True
+        if MUL_ACTIVE_CYCLES_RE.search(line):
+            metrics["mul_active_cycles"] += 1
 
-    for line in lines:
         m_total_instr = PERF_INSTRS_RE.search(line)
         if m_total_instr:
             metrics["total_kernel_instructions"] = int(m_total_instr.group(1))
@@ -547,7 +629,10 @@ def count_muls_active(lines, run_meta):
         enq_re = FEDP_ENQ_RE
         divisor = run_meta["num_threads"] or 32
 
-    enq_count = sum(1 for line in lines if enq_re.search(line))
+    enq_count = 0
+    for line in progress_lines(lines, "Count active MULs"):
+        if enq_re.search(line):
+            enq_count += 1
     return enq_count / divisor
 
 
@@ -803,7 +888,7 @@ def parse_mem_events(lines, include_re=None, exclude_re=None):
         "rd_rsp_lmem": [],
         "wr_rsp_lmem": [],
     }
-    for line in lines:
+    for line in progress_lines(lines, "Parse memory events"):
         if include_re and not include_re.search(line):
             continue
         if exclude_re and exclude_re.search(line):
@@ -824,7 +909,7 @@ def parse_mem_events(lines, include_re=None, exclude_re=None):
 
 def parse_lmem_read_rsp_matrix_events(lines, include_re=None, exclude_re=None):
     events = []
-    for line in lines:
+    for line in progress_lines(lines, "Parse LMEM matrix read responses"):
         if include_re and not include_re.search(line):
             continue
         if exclude_re and exclude_re.search(line):
@@ -925,12 +1010,11 @@ def main():
         print("Error: log file not found under ../build, current directory, or any subdirectory.")
         return
 
-    with open(log_path, "r") as f:
-        lines = f.readlines()
+    lines = read_lines_with_progress(log_path)
     run_result = parse_run_result(lines)
     roi_metrics = parse_roi_metrics(lines)
     total_cycles = 0
-    for line in lines:
+    for line in progress_lines(lines, "Find max tick"):
         tick = extract_tick(line)
         if tick is not None and tick > total_cycles:
             total_cycles = tick
@@ -948,12 +1032,20 @@ def main():
 
     # Issue events (TCU + all scoreboard issues)
     if tcu_op_enabled:
-        tcu_issue_ticks = parse_pattern_ticks(lines, ["Issuing TCU MMA_OP"])
+        tcu_issue_ticks = parse_pattern_ticks(
+            lines,
+            ["Issuing TCU MMA_OP"],
+            progress_name="Parse TCU MMA issue ticks",
+        )
     else:
-        tcu_issue_ticks = parse_pattern_ticks(lines, [
-            "Issuing TCU u-op",
-            "Issuing TCU MMA_OP",
-        ])
+        tcu_issue_ticks = parse_pattern_ticks(
+            lines,
+            [
+                "Issuing TCU u-op",
+                "Issuing TCU MMA_OP",
+            ],
+            progress_name="Parse TCU issue ticks",
+        )
     tcu_commit_ticks_all = parse_tcu_commit_ticks(lines)
     tcu_dispatch_flush_flags = parse_tcu_dispatch_flush_flags(lines)
     # Stage markers: only consider explicit MARKER writes (0x12345678).
@@ -961,14 +1053,26 @@ def main():
     parsed_tcu_issue_ticks, dxa_issue_ticks, issue_events = parse_issue_events(lines)
     if not tcu_op_enabled:
         tcu_issue_ticks.extend(parsed_tcu_issue_ticks)
-    load_issue_ticks = parse_pattern_ticks(lines, ["Issuing load u-op"])
-    store_issue_ticks = parse_pattern_ticks(lines, ["Issuing store u-op"])
+    load_issue_ticks = parse_pattern_ticks(
+        lines,
+        ["Issuing load u-op"],
+        progress_name="Parse load issue ticks",
+    )
+    store_issue_ticks = parse_pattern_ticks(
+        lines,
+        ["Issuing store u-op"],
+        progress_name="Parse store issue ticks",
+    )
     other_issue_ticks = parse_other_issue_ticks(lines)
-    c_accum_ticks = parse_regex_ticks(lines, ACCU_C_ACCUM_RE)
+    c_accum_ticks = parse_regex_ticks(
+        lines,
+        ACCU_C_ACCUM_RE,
+        progress_name="Parse accumulate_c ticks",
+    )
     xbar_stall_ticks = parse_pattern_ticks(lines, [
         "[feop_accu]: ERROR: xbar queues are full - must stall",
         "[feop_accu]: xbar queues are full - must stall",
-    ])
+    ], progress_name="Parse XBAR stall ticks")
     dxa_done_ticks = parse_dxa_done_ticks(lines)
 
     tcu_ex_type = args.tcu_ex_type
@@ -977,58 +1081,67 @@ def main():
         if tcu_ex_type is not None:
             print(f"Auto-detected TCU ex_type={tcu_ex_type} (most frequent non-zero ex_type)")
 
-    for tick, _, ex_type, op_type in issue_events:
-        if tcu_op_type is not None and op_type != tcu_op_type:
-            continue
-        if tcu_ex_type is not None and ex_type != tcu_ex_type:
-            continue
-        tcu_issue_ticks.append(tick)
-    if tcu_issue_ticks:
-        tcu_issue_ticks = dedup_sorted(tcu_issue_ticks)
-    if dxa_issue_ticks:
-        dxa_issue_ticks = dedup_sorted(dxa_issue_ticks)
-    if dxa_done_ticks:
-        dxa_done_ticks = dedup_sorted(dxa_done_ticks)
-    tcu_commit_ticks_raw = list(tcu_commit_ticks_all)
-    if tcu_commit_ticks_all:
-        tcu_commit_ticks_all = dedup_sorted(tcu_commit_ticks_all)
-    if tcu_dispatch_flush_flags:
-        if len(tcu_dispatch_flush_flags) != len(tcu_commit_ticks_raw):
-            print(
-                "Warning: TCU dispatch/commit count mismatch "
-                f"(dispatches={len(tcu_dispatch_flush_flags)}, commits={len(tcu_commit_ticks_raw)}); "
-                "flush commit filtering will use chronological pairing."
-            )
-        tcu_commit_ticks = [
-            tick for tick, flush_flag in zip(tcu_commit_ticks_raw, tcu_dispatch_flush_flags)
-            if flush_flag
-        ]
-        tcu_commit_ticks = dedup_sorted(tcu_commit_ticks)
-        if not tcu_commit_ticks and tcu_commit_ticks_all:
-            print("No flush-tagged TCU commits found; falling back to all TCU commit ticks.")
+    with phase("Filter and deduplicate tick lists"):
+        for tick, _, ex_type, op_type in issue_events:
+            if tcu_op_type is not None and op_type != tcu_op_type:
+                continue
+            if tcu_ex_type is not None and ex_type != tcu_ex_type:
+                continue
+            tcu_issue_ticks.append(tick)
+        if tcu_issue_ticks:
+            tcu_issue_ticks = dedup_sorted(tcu_issue_ticks)
+        if dxa_issue_ticks:
+            dxa_issue_ticks = dedup_sorted(dxa_issue_ticks)
+        if dxa_done_ticks:
+            dxa_done_ticks = dedup_sorted(dxa_done_ticks)
+        tcu_commit_ticks_raw = list(tcu_commit_ticks_all)
+        if tcu_commit_ticks_all:
+            tcu_commit_ticks_all = dedup_sorted(tcu_commit_ticks_all)
+        if tcu_dispatch_flush_flags:
+            if len(tcu_dispatch_flush_flags) != len(tcu_commit_ticks_raw):
+                print(
+                    "Warning: TCU dispatch/commit count mismatch "
+                    f"(dispatches={len(tcu_dispatch_flush_flags)}, commits={len(tcu_commit_ticks_raw)}); "
+                    "flush commit filtering will use chronological pairing."
+                )
+            tcu_commit_ticks = [
+                tick for tick, flush_flag in zip(tcu_commit_ticks_raw, tcu_dispatch_flush_flags)
+                if flush_flag
+            ]
+            tcu_commit_ticks = dedup_sorted(tcu_commit_ticks)
+            if not tcu_commit_ticks and tcu_commit_ticks_all:
+                print("No flush-tagged TCU commits found; falling back to all TCU commit ticks.")
+                tcu_commit_ticks = list(tcu_commit_ticks_all)
+        else:
             tcu_commit_ticks = list(tcu_commit_ticks_all)
-    else:
-        tcu_commit_ticks = list(tcu_commit_ticks_all)
-    marker_ticks = [t for t, value in marker_events if value == MARKER_HEX.lower()]
-    if marker_ticks:
-        marker_ticks = dedup_sorted(marker_ticks)
-    green_marker_ticks = [t for t, value in marker_events if value == GREEN_MARKER_HEX.lower()]
-    if green_marker_ticks:
-        green_marker_ticks = dedup_sorted(green_marker_ticks)
-    blue_marker_ticks = [t for t, value in marker_events if value == BLUE_MARKER_HEX.lower()]
-    if blue_marker_ticks:
-        blue_marker_ticks = dedup_sorted(blue_marker_ticks)
-    pre_tcu_marker_ticks = [t for t, value in marker_events if value == PRE_TCU_MARKER_HEX.lower()]
-    if pre_tcu_marker_ticks:
-        pre_tcu_marker_ticks = dedup_sorted(pre_tcu_marker_ticks)
+        marker_ticks = [t for t, value in marker_events if value == MARKER_HEX.lower()]
+        if marker_ticks:
+            marker_ticks = dedup_sorted(marker_ticks)
+        green_marker_ticks = [t for t, value in marker_events if value == GREEN_MARKER_HEX.lower()]
+        if green_marker_ticks:
+            green_marker_ticks = dedup_sorted(green_marker_ticks)
+        blue_marker_ticks = [t for t, value in marker_events if value == BLUE_MARKER_HEX.lower()]
+        if blue_marker_ticks:
+            blue_marker_ticks = dedup_sorted(blue_marker_ticks)
+        pre_tcu_marker_ticks = [t for t, value in marker_events if value == PRE_TCU_MARKER_HEX.lower()]
+        if pre_tcu_marker_ticks:
+            pre_tcu_marker_ticks = dedup_sorted(pre_tcu_marker_ticks)
 
     first_tcu_tick = min(tcu_issue_ticks) if tcu_issue_ticks else None
     last_tcu_commit = max(tcu_commit_ticks_all) if tcu_commit_ticks_all else None
 
     # FEOP assignment (or fallback to FEOP accu activity)
-    feop_ticks = parse_pattern_ticks(lines, args.feop_pattern)
+    feop_ticks = parse_pattern_ticks(
+        lines,
+        args.feop_pattern,
+        progress_name="Parse FEOP ticks",
+    )
     if not feop_ticks:
-        feop_ticks = parse_pattern_ticks(lines, ["[feop_accu]"])
+        feop_ticks = parse_pattern_ticks(
+            lines,
+            ["[feop_accu]"],
+            progress_name="Parse FEOP fallback ticks",
+        )
         if feop_ticks:
             print("FEOP patterns not found; using [feop_accu] activity as FEOP work markers.")
 
@@ -1048,15 +1161,16 @@ def main():
             (t, m) for (t, m) in lmem_read_rsp_matrix_events_right if t >= first_tcu_tick
         ]
 
-    if not args.no_dedup_mem:
-        mem = {k: dedup_sorted(v) for k, v in mem.items()}
-    feop_ticks = [t for t in feop_ticks if t >= 4]
-    if not args.no_dedup_feop:
-        feop_ticks = dedup_sorted(feop_ticks)
-    if xbar_stall_ticks:
-        xbar_stall_ticks = dedup_sorted(xbar_stall_ticks)
-    if other_issue_ticks:
-        other_issue_ticks = dedup_sorted(other_issue_ticks)
+    with phase("Deduplicate memory and FEOP ticks"):
+        if not args.no_dedup_mem:
+            mem = {k: dedup_sorted(v) for k, v in mem.items()}
+        feop_ticks = [t for t in feop_ticks if t >= 4]
+        if not args.no_dedup_feop:
+            feop_ticks = dedup_sorted(feop_ticks)
+        if xbar_stall_ticks:
+            xbar_stall_ticks = dedup_sorted(xbar_stall_ticks)
+        if other_issue_ticks:
+            other_issue_ticks = dedup_sorted(other_issue_ticks)
 
     # FEOP window metrics: xbar stall cycles are counted in the FEOP window, but the
     # stall percentage is normalized by MUL-active cycles plus stall cycles.
@@ -1075,19 +1189,20 @@ def main():
         xbar_stall_cycles = len(xbar_stalls_in_feop)
 
     # TCU issue->commit stall metrics (per paired TCU op).
-    tcu_pairs = pair_tcu_issue_commit_ticks(tcu_issue_ticks, tcu_commit_ticks_all)
-    tcu_total_cycles = 0
-    tcu_active_cycles = 0
-    tcu_stall_cycles = 0
-    tcu_stall_pct = None
-    active_ticks_tcu = dedup_sorted(
-        mem_right["rd_req_lmem"]
-        + mem_right["wr_req_global"]
-        + mem_right["wr_req_lmem"]
-        + c_accum_ticks
-        + feop_ticks
-    )
-    for issue_t, commit_t in tcu_pairs:
+    with phase("Prepare TCU stall metrics"):
+        tcu_pairs = pair_tcu_issue_commit_ticks(tcu_issue_ticks, tcu_commit_ticks_all)
+        tcu_total_cycles = 0
+        tcu_active_cycles = 0
+        tcu_stall_cycles = 0
+        tcu_stall_pct = None
+        active_ticks_tcu = dedup_sorted(
+            mem_right["rd_req_lmem"]
+            + mem_right["wr_req_global"]
+            + mem_right["wr_req_lmem"]
+            + c_accum_ticks
+            + feop_ticks
+        )
+    for issue_t, commit_t in progress_items(tcu_pairs, "Compute TCU stall metrics"):
         if commit_t < issue_t:
             continue
         total_cycles_this = ((commit_t - issue_t) // 2) + 1

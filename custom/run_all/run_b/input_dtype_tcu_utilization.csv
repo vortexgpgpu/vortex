@@ -1,0 +1,10 @@
+file,run,testbench,status,shape,dtype,tcu_utilization
+run_b_1.stat,1,sgemm_tcu,FAIL,128x128x512,fp32,3.28
+run_b_2.stat,2,sgemm_tcu_sp,FAIL,128x128x512,fp32,3.68
+run_b_9.stat,9,sgemm_tcu_op,PASS,128x128x512,fp32,58.53
+run_b_5.stat,5,sgemm_tcu,FAIL,128x128x512,fp16,2.03
+run_b_6.stat,6,sgemm_tcu_sp,FAIL,128x128x512,fp16,2.78
+run_b_8.stat,8,sgemm_tcu_op,PASS,128x128x512,fp16,92.7
+run_b_3.stat,3,sgemm_tcu,PASS,128x128x512,fp8,1.16
+run_b_4.stat,4,sgemm_tcu_sp,FAIL,128x128x512,fp8,2.13
+run_b_7.stat,7,sgemm_tcu_op,PASS,128x128x512,fp8,95.32

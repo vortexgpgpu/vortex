@@ -1,0 +1,5 @@
+file,run,testbench,status,shape,dtype,a_sparsity,b_sparsity,total_instructions,kernel_body_cycles,tcu_utilization,memory_reqs,memory_reads,memory_writes
+run_b_7.stat,7,sgemm_tcu_op,PASS,128x128x512,fp8,0.111389,0.109863,1632,275021,95.32,10646,8931,1715
+run_b_10.stat,10,sgemm_tcu_op,PASS,128x128x512,fp8,20.2209,20.2423,2255,241932,88.16,10812,8875,1937
+run_b_11.stat,11,sgemm_tcu_op,PASS,128x128x512,fp8,49.9496,49.9176,2255,138282,70.27,8508,6571,1937
+run_b_12.stat,12,sgemm_tcu_op,PASS,128x128x512,fp8,89.9353,89.8376,2255,54371,28.14,5180,3243,1937

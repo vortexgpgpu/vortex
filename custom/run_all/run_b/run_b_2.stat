@@ -1,0 +1,31 @@
+Testbench: sgemm_tcu_sp
+MxNxK=128x128x512 | It=fp32
+Threads: 32, Warps: 2
+perf=2
+
+FAIL
+Error count: unknown
+Total kernel cycles: 1800352
+Total kernel instructions: 163611
+Kernel body cycles: 1778862
+Kernel body instructions: 4974
+MUL active cycles: 0
+XBAR stalls: 0.00% (0 cycles)
+
+PERF2: core0: lmem: reqs=0, bank_stalls=0 (utility=0%)
+PERF2: core0: coalescer: misses=65176
+PERF2: core0: icache: reads=100123, miss=51 (hit=100%), mshr_st=0 (utility=100%)
+PERF2: core0: dcache: reqs=188744, miss_r=124997 (hit=21%), miss_w=26457 (hit=11%), bank_st=92160 (utility=67%)
+PERF2: memory: reqs=139355 (r=108864, w=30491), lat=78.9 cyc, bank_st=0 (utility=100%)
+PERF2: instrs=163611, cycles=1800352, IPC=0.091
+
+MEMORY (perf=2):
+core0: lmem: reqs=0, bank_stalls=0 (utility=0%)
+core0: coalescer: misses=65176
+core0: icache: reads=100123, miss=51 (hit=100%), mshr_st=0 (utility=100%)
+core0: dcache: reqs=188744, miss_r=124997 (hit=21%), miss_w=26457 (hit=11%), bank_st=92160 (utility=67%)
+memory: reqs=139355 (r=108864, w=30491), lat=78.9 cyc, bank_st=0 (utility=100%)
+
+TCU cycles (from first TCU issue to last TCU commit): 943178
+MULs active: 65537
+TCU utilization: 3.68%

@@ -22,23 +22,35 @@ CSV_HEADER="file,testbench,run,m,n,k,sparsity,a_sparsity,b_sparsity,num_threads,
 CONFIGS=(
 
   #  COMPARISON WITH SMALLER BASELINES - FROM SERVER
-  -# "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu    -l run1.log"
-  -# "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_sp -l run2.log"
+  # -# "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu    -l run_b_1.log"
+  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_sp -l run_b_2.log"
 
-  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu    -l run3.log"
-  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_sp -l run4.log"
+  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu    -l run_b_3.log"
+  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_sp -l run_b_4.log"
 
-  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu    -l run5.log"
-  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_sp -l run6.log"
+  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu    -l run_b_5.log"
+  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_sp -l run_b_6.log"
 
-  #-# "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_7.log"
+  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_7.log"
   # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp16 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_8.log"
   # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_9.log"
 
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_10.log"
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_11.log"
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_12.log"
+
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp16  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_13.log"
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp16  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_14.log"
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp16  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_15.log"
+
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_16.log"
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_17.log"
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_18.log"
+
   # INSTRUCTION & MEMORY COMPARISON WITH BASELINES & SPARSITY - USE SOME STATS FROM ABOVE
-  -# "-m 128  -n 128  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_10.log"
-  -# "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_11.log"
-  -# "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_12.log"
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_10.log"
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_11.log"
+  # "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_12.log"
 
   # K DIMENSION ANALYSIS
   # "-m 64  -n 64  -k 128  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_k_1.log"
@@ -92,85 +104,156 @@ CONFIGS=(
   "-m 64  -n 64  -k 512  -s 1 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_5.log"
   "-m 64  -n 64  -k 512  -s 1 -a 0.5  -b 0.5  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_6.log"
   "-m 64  -n 64  -k 512  -s 1 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_7.log"
+
+
+  #  SPARSITIES SENSITIVITY DIAGRAM
+  # "-m 64  -n 64  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_1.log"
+
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_2.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_3.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_4.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_5.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_6.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_7.log"
+
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_8.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_9.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_10.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_11.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_12.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_13.log"
+
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_14.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_15.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_16.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_17.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_18.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_19.log"
+
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_20.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_21.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_22.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_23.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_24.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_25.log"
+
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_26.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_27.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_28.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_29.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_30.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_31.log"
+
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_32.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_33.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_34.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_35.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_36.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_37.log"
+
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_38.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_39.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_40.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_41.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_42.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_43.log"
+
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_44.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_45.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_46.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_47.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_48.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_49.log"
+
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_50.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_51.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_52.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_53.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_54.log"
+  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_55.log"
  
+  # EDGE CASE FOR A DENSE (POINTS ON Y-AXIS)
+  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_56.log"
+  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_57.log"
+  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_58.log"
+  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_59.log"
+  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_60.log"
+  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_61.log"
+
+
+  # EVALUATION OF S1 MODE
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_2.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.2  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_3.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.2  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_4.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.2  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_5.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.2  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_6.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.2  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_7.log"
+
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.3  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_8.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.3  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_9.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.3  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_10.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.3  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_11.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.3  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_12.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.3  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_13.log"
+
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.4  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_14.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.4  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_15.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.4  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_16.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.4  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_17.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.4  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_18.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.4  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_19.log"
+
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.5  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_20.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.5  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_21.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.5  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_22.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.5  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_23.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.5  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_24.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.5  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_25.log"
+
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.6  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_26.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.6  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_27.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.6  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_28.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.6  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_29.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.6  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_30.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.6  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_31.log"
+
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.7  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_32.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.7  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_33.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.7  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_34.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.7  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_35.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.7  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_36.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.7  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_37.log"
+
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.8  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_38.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.8  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_39.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.8  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_40.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.8  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_41.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.8  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_42.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.8  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_43.log"
+
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.9  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_44.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.9  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_45.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.9  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_46.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.9  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_47.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_48.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.9  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_49.log"
+
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.99 -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_50.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.99 -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_51.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.99 -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_52.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.99 -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_53.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.99 -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_54.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.99 -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_a_55.log"
+
   # ---------------------------------------------------------------------------------------------------------------------------
   # Not run below this line
 
 
 
   # COMPARISON OF fp8 / fp16 / fp32 ACCROSS SPARSITIES
+  # Take insight from baseline runs
 
 
-
-  # EVALUATION OF S1 MODE
-
-
-
-  #  SPARSITIES SENSITIVITY DIAGRAM
-  # "-m 64  -n 64  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_1.log -d 0"
-
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_2.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_3.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_4.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_5.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_6.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.2  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_7.log -d 0"
-
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_8.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_9.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_10.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_11.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_12.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.3  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_13.log -d 0"
-
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_14.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_15.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_16.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_17.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_18.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.4  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_19.log -d 0"
-
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_20.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_21.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_22.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_23.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_24.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_25.log -d 0"
-
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_26.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_27.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_28.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_29.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_30.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.6  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_31.log -d 0"
-
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_32.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_33.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_34.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_35.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_36.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.7  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_37.log -d 0"
-
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_38.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_39.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_40.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_41.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_42.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.8  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_43.log -d 0"
-
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_44.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_45.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_46.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_47.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_48.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_49.log -d 0"
-
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_50.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_51.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_52.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_53.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_54.log -d 0"
-  # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_55.log -d 0"
 )
 
 usage() {

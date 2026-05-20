@@ -1,0 +1,10 @@
+file,run,testbench,status,shape,dtype,a_sparsity,b_sparsity,total_instructions,kernel_body_cycles,tcu_utilization,memory_reqs,memory_reads,memory_writes
+run_b_1.stat,1,sgemm_tcu,FAIL,128x128x512,fp32,,,179483,1996624,3.28,114635,86237,28398
+run_b_2.stat,2,sgemm_tcu_sp,FAIL,128x128x512,fp32,,,163611,1778862,3.68,139355,108864,30491
+run_b_9.stat,9,sgemm_tcu_op,PASS,128x128x512,fp32,0.0,0.0,5584,447868,58.53,35523,33810,1713
+run_b_5.stat,5,sgemm_tcu,FAIL,128x128x512,fp16,,,107931,1617754,2.03,92734,62321,30413
+run_b_6.stat,6,sgemm_tcu_sp,FAIL,128x128x512,fp16,,,87771,1179799,2.78,80177,49689,30488
+run_b_8.stat,8,sgemm_tcu_op,PASS,128x128x512,fp16,0.0,0.0,2992,282788,92.7,18942,17226,1716
+run_b_3.stat,3,sgemm_tcu,PASS,128x128x512,fp8,,,66011,1411181,1.16,73955,51690,22265
+run_b_4.stat,4,sgemm_tcu_sp,FAIL,128x128x512,fp8,,,47323,767988,2.13,56395,30013,26382
+run_b_7.stat,7,sgemm_tcu_op,PASS,128x128x512,fp8,0.111389,0.109863,1632,275021,95.32,10646,8931,1715

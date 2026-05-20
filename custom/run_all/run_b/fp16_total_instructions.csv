@@ -1,0 +1,4 @@
+file,run,testbench,status,shape,dtype,total_instructions
+run_b_5.stat,5,sgemm_tcu,FAIL,128x128x512,fp16,107931
+run_b_6.stat,6,sgemm_tcu_sp,FAIL,128x128x512,fp16,87771
+run_b_8.stat,8,sgemm_tcu_op,PASS,128x128x512,fp16,2992
