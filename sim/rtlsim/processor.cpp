@@ -33,6 +33,7 @@
 #include <fstream>
 #include <iomanip>
 #include <mem.h>
+#include <host_monitor.h>
 
 #include <VX_config.h>
 #include <ostream>
@@ -162,7 +163,7 @@ public:
     ram_ = ram;
   }
 
-  void run() {
+  void run(HostMonitor* monitor) {
   #ifndef NDEBUG
     std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
   #endif
@@ -176,9 +177,11 @@ public:
       this->tick();
     }
 
-    // wait for device to go idle
+    // wait for device to go idle, or for the HTIF tohost write
     while (device_->busy) {
       this->tick();
+      if (monitor && monitor->enabled() && monitor->tick(*ram_))
+        break;
     }
 
     this->cout_flush();
@@ -478,8 +481,8 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-void Processor::run() {
-  impl_->run();
+void Processor::run(HostMonitor* monitor) {
+  impl_->run(monitor);
 }
 
 int Processor::dcr_write(uint32_t addr, uint32_t value) {

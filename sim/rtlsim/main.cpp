@@ -17,6 +17,8 @@
 #include <unistd.h>
 #include <util.h>
 #include <mem.h>
+#include <elf_loader.h>
+#include <host_monitor.h>
 #include <VX_config.h>
 #include <VX_types.h>
 #include "processor.h"
@@ -88,16 +90,28 @@ int main(int argc, char **argv) {
     processor.dcr_write(VX_DCR_KMU_WARP_STEP_Z,  0);
 
 	// load program
+	HostMonitor monitor;
 	{
 		std::string program_ext(fileExtension(program));
-		if (program_ext == "vxbin") {
+		if (isElfFile(program)) {
+			// ELF executables (e.g. upstream riscv-tests) carry their own
+			// entry point and the HTIF `tohost` pass/fail symbol.
+			ElfImage img;
+			if (!loadElfImage(program, ram, &img))
+				return -1;
+			monitor.attach(img);
+			processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR0, img.entry & 0xffffffff);
+		#if (XLEN == 64)
+			processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR1, img.entry >> 32);
+		#endif
+		} else if (program_ext == "vxbin") {
 			ram.loadVxImage(program);
 		} else if (program_ext == "bin") {
 			ram.loadBinImage(program, startup_addr);
 		} else if (program_ext == "hex") {
 			ram.loadHexImage(program);
 		} else {
-			std::cerr << "Error: only *.vxbin, *.bin or *.hex images supported." << std::endl;
+			std::cerr << "Error: only ELF, *.vxbin, *.bin or *.hex images supported." << std::endl;
 			return -1;
 		}
 	}
@@ -105,18 +119,23 @@ int main(int argc, char **argv) {
 	std::cout << "[VXDRV] START: program=" << program << std::endl;
 #endif
 	// run simulation
-	processor.run();
+	processor.run(&monitor);
 
-	// flush GPU caches before reading back results
-	{
-		uint32_t dummy;
-		for (uint32_t cid = 0; cid < NUM_CORES * NUM_CLUSTERS; ++cid) {
-			processor.dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
+	if (monitor.enabled()) {
+		// HTIF mode: exit code comes from the `tohost` word.
+		exitcode = monitor.exit_code();
+	} else {
+		// flush GPU caches before reading back results
+		{
+			uint32_t dummy;
+			for (uint32_t cid = 0; cid < NUM_CORES * NUM_CLUSTERS; ++cid) {
+				processor.dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
+			}
 		}
-	}
 
-	// read exitcode from @MPM.1
-  ram.read(&exitcode, IO_EXIT_CODE, 4);
+		// read exitcode from @MPM.1
+		ram.read(&exitcode, IO_EXIT_CODE, 4);
+	}
 
 	// Use _exit() to bypass destructors — Verilator's VerilatedScope destructor
 	// calls scopeErase which crashes on strcmp with certain 64-bit module hierarchies.

@@ -18,6 +18,7 @@
 namespace vortex {
 
 class RAM;
+class HostMonitor;
 
 class Processor {
 public:
@@ -27,7 +28,9 @@ public:
 
   void attach_ram(RAM* ram);
 
-  void run();
+  // When `monitor` is non-null and enabled, the run loop polls it each
+  // cycle and stops as soon as the HTIF `tohost` word is written.
+  void run(HostMonitor* monitor = nullptr);
 
   int dcr_write(uint32_t addr, uint32_t value);
 

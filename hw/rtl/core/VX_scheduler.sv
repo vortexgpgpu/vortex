@@ -53,6 +53,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg [`NUM_WARPS-1:0][`MEM_ADDR_WIDTH-1:0] mscratch_r;
     reg [`NUM_WARPS-1:0][NCTA_WIDTH-1:0] cta_id_per_warp_r;
 
+    // Per-warp machine-mode trap CSRs. csrw writes arrive on
+    // sched_csr_if.trap_csr_wr_*; ECALL/EBREAK hardware-write mepc/mcause/
+    // mtval; MRET restores the warp PC from mepc.
+    reg [`NUM_WARPS-1:0][`XLEN-1:0] mstatus_r, mtvec_r, mepc_r, mcause_r, mtval_r;
+
     wire [NW_WIDTH-1:0]     schedule_wid;
     wire [`NUM_THREADS-1:0] schedule_tmask;
     wire [PC_BITS-1:0]      schedule_pc;
@@ -138,6 +143,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     );
 
     assign sched_csr_if.mscratch  = mscratch_r[sched_csr_if.csr_rd_wid];
+    assign sched_csr_if.csr_mstatus = mstatus_r[sched_csr_if.csr_rd_wid];
+    assign sched_csr_if.csr_mtvec   = mtvec_r  [sched_csr_if.csr_rd_wid];
+    assign sched_csr_if.csr_mepc    = mepc_r   [sched_csr_if.csr_rd_wid];
+    assign sched_csr_if.csr_mcause  = mcause_r [sched_csr_if.csr_rd_wid];
+    assign sched_csr_if.csr_mtval   = mtval_r  [sched_csr_if.csr_rd_wid];
 
     // -----------------------------------------------------------------------
     // Per-CTA + per-warp sp_ram drivers
@@ -201,11 +211,17 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [`NUM_ALU_BLOCKS-1:0][NW_WIDTH-1:0] branch_wid;
     wire [`NUM_ALU_BLOCKS-1:0]               branch_taken;
     wire [`NUM_ALU_BLOCKS-1:0][PC_BITS-1:0]  branch_dest;
+    wire [`NUM_ALU_BLOCKS-1:0]               branch_is_trap;
+    wire [`NUM_ALU_BLOCKS-1:0]               branch_is_mret;
+    wire [`NUM_ALU_BLOCKS-1:0][3:0]          branch_trap_cause;
     for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin : g_branch_init
-        assign branch_valid[i] = branch_ctl_if[i].valid;
-        assign branch_wid[i]   = branch_ctl_if[i].wid;
-        assign branch_taken[i] = branch_ctl_if[i].taken;
-        assign branch_dest[i]  = branch_ctl_if[i].dest;
+        assign branch_valid[i]      = branch_ctl_if[i].valid;
+        assign branch_wid[i]        = branch_ctl_if[i].wid;
+        assign branch_taken[i]      = branch_ctl_if[i].taken;
+        assign branch_dest[i]       = branch_ctl_if[i].dest;
+        assign branch_is_trap[i]    = branch_ctl_if[i].is_trap;
+        assign branch_is_mret[i]    = branch_ctl_if[i].is_mret;
+        assign branch_trap_cause[i] = branch_ctl_if[i].trap_cause;
     end
 
     // barriers
@@ -291,7 +307,14 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // Branch handling
         for (integer i = 0; i < `NUM_ALU_BLOCKS; ++i) begin
             if (branch_valid[i]) begin
-                if (branch_taken[i]) begin
+                if (branch_is_trap[i]) begin
+                    // ECALL/EBREAK: redirect to the trap vector. Low 2 bits
+                    // of mtvec are the MODE field — v1 is direct mode only.
+                    warp_pcs_n[branch_wid[i]] = from_fullPC(mtvec_r[branch_wid[i]] & ~`XLEN'(3));
+                end else if (branch_is_mret[i]) begin
+                    // MRET/SRET/URET: restore the saved PC from mepc.
+                    warp_pcs_n[branch_wid[i]] = from_fullPC(mepc_r[branch_wid[i]]);
+                end else if (branch_taken[i]) begin
                     warp_pcs_n[branch_wid[i]] = branch_dest[i];
                 end
                 stalled_warps_n[branch_wid[i]] = 0; // unlock warp
@@ -331,6 +354,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             thread_masks    <= '0;
             is_single_warp  <= 0;
             mscratch_r      <= '0;
+            mstatus_r       <= '0;
+            mtvec_r         <= '0;
+            mepc_r          <= '0;
+            mcause_r        <= '0;
+            mtval_r         <= '0;
         end else begin
             active_warps   <= active_warps_n;
             stalled_warps  <= stalled_warps_n;
@@ -366,6 +394,29 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             // MSCRATCH write-back from CSR unit (CSR instruction)
             if (sched_csr_if.csr_wr_valid) begin
                 mscratch_r[sched_csr_if.csr_wr_wid] <= sched_csr_if.csr_wr_data;
+            end
+
+            // Trap CSR write-back from CSR unit (csrw mstatus/mtvec/mepc/...)
+            if (sched_csr_if.trap_csr_wr_valid) begin
+                case (sched_csr_if.trap_csr_wr_addr)
+                    `VX_CSR_MSTATUS: mstatus_r[sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
+                    `VX_CSR_MTVEC:   mtvec_r  [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
+                    `VX_CSR_MEPC:    mepc_r   [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
+                    `VX_CSR_MCAUSE:  mcause_r [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
+                    `VX_CSR_MTVAL:   mtval_r  [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
+                    default:;
+                endcase
+            end
+
+            // Hardware trap entry (ECALL/EBREAK): snapshot the faulting PC
+            // into mepc and the cause into mcause. Ordered after the
+            // software write so a hardware trap wins a same-cycle conflict.
+            for (integer i = 0; i < `NUM_ALU_BLOCKS; ++i) begin
+                if (branch_valid[i] && branch_is_trap[i]) begin
+                    mepc_r  [branch_wid[i]] <= to_fullPC(branch_dest[i]);
+                    mcause_r[branch_wid[i]] <= `XLEN'(branch_trap_cause[i]);
+                    mtval_r [branch_wid[i]] <= '0;
+                end
             end
 
             if (busy) begin

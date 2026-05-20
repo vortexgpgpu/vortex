@@ -307,6 +307,13 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_br_less = inst_br_is_less(br_op_r);
     wire is_br_static = inst_br_is_static(br_op_r);
 
+    // Synchronous trap ops: ECALL/EBREAK enter a trap (redirect to mtvec),
+    // MRET/SRET/URET return (restore PC from mepc). The scheduler acts on
+    // these via branch_ctl_if.{is_trap,is_mret,trap_cause}.
+    wire is_trap_entry = is_br_op_r && (br_op_r == INST_BR_ECALL || br_op_r == INST_BR_EBREAK);
+    wire is_mret_op    = is_br_op_r && (br_op_r == INST_BR_MRET || br_op_r == INST_BR_SRET || br_op_r == INST_BR_URET);
+    wire [3:0] br_trap_cause = (br_op_r == INST_BR_EBREAK) ? 4'd3 : 4'd11; // EBREAK / ECALL_M
+
     wire [`XLEN-1:0] br_result = alu_result_r[last_tid_r];
     wire is_less  = br_result[0];
     wire is_equal = br_result[1];
@@ -314,19 +321,22 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire result_fire = result_if.valid && result_if.ready;
     wire br_enable = result_fire && is_br_op_r && result_if.data.header.eop;
     wire br_taken = ((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static;
-    wire [PC_BITS-1:0] br_dest = is_br_static ? from_fullPC(br_result) : cbr_dest_r;
+    // For a trap entry, `dest` carries the faulting PC (saved into mepc).
+    wire [PC_BITS-1:0] br_dest = is_trap_entry ? result_if.data.header.PC
+                               : is_br_static  ? from_fullPC(br_result)
+                               : cbr_dest_r;
     wire [NW_WIDTH-1:0] br_wid;
     `ASSIGN_BLOCKED_WID (br_wid, result_if.data.header.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
 
     VX_pipe_register #(
-        .DATAW  (1 + NW_WIDTH + 1 + PC_BITS),
+        .DATAW  (1 + NW_WIDTH + 1 + PC_BITS + 1 + 1 + 4),
         .RESETW (1)
     ) branch_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({br_enable,           br_wid,            br_taken,            br_dest}),
-        .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest})
+        .data_in  ({br_enable,           br_wid,            br_taken,            br_dest,            is_trap_entry,         is_mret_op,            br_trap_cause}),
+        .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest, branch_ctl_if.is_trap, branch_ctl_if.is_mret, branch_ctl_if.trap_cause})
     );
 
     `IGNORE_UNOPTFLAT_BEGIN

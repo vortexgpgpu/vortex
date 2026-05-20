@@ -38,6 +38,19 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     logic [NW_WIDTH-1:0]            csr_wr_wid;
     logic [`MEM_ADDR_WIDTH-1:0]     csr_wr_data;
 
+    // Per-warp machine-mode trap CSRs live in the scheduler (alongside
+    // mscratch) because the scheduler owns warp PC redirection. Reads are
+    // returned already selected by csr_rd_wid; csrw writes are forwarded
+    // here carrying the CSR address. csr_wr_wid is shared with mscratch.
+    logic [`XLEN-1:0]               csr_mstatus;
+    logic [`XLEN-1:0]               csr_mtvec;
+    logic [`XLEN-1:0]               csr_mepc;
+    logic [`XLEN-1:0]               csr_mcause;
+    logic [`XLEN-1:0]               csr_mtval;
+    logic                           trap_csr_wr_valid;
+    logic [`VX_CSR_ADDR_BITS-1:0]   trap_csr_wr_addr;
+    logic [`XLEN-1:0]               trap_csr_wr_data;
+
     modport master (
         output cycles,
         output instret,
@@ -45,6 +58,11 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output thread_masks,
         output mscratch,
         output cta_csrs,
+        output csr_mstatus,
+        output csr_mtvec,
+        output csr_mepc,
+        output csr_mcause,
+        output csr_mtval,
     `ifdef VM_ENABLE
         input csr_satp,
     `endif
@@ -52,7 +70,10 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  csr_rd_cta_id,
         input  csr_wr_valid,
         input  csr_wr_wid,
-        input  csr_wr_data
+        input  csr_wr_data,
+        input  trap_csr_wr_valid,
+        input  trap_csr_wr_addr,
+        input  trap_csr_wr_data
     );
 
     modport slave (
@@ -62,6 +83,11 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  thread_masks,
         input  mscratch,
         input  cta_csrs,
+        input  csr_mstatus,
+        input  csr_mtvec,
+        input  csr_mepc,
+        input  csr_mcause,
+        input  csr_mtval,
     `ifdef VM_ENABLE
         output csr_satp,
     `endif
@@ -69,7 +95,10 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output csr_rd_cta_id,
         output csr_wr_valid,
         output csr_wr_wid,
-        output csr_wr_data
+        output csr_wr_data,
+        output trap_csr_wr_valid,
+        output trap_csr_wr_addr,
+        output trap_csr_wr_data
     );
 
 endinterface

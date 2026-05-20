@@ -43,6 +43,11 @@ void warp_t::reset() {
   this->PC   = 0;
   this->uuid = 0;
   this->fcsr = 0;
+  this->mstatus = 0;
+  this->mtvec   = 0;
+  this->mepc    = 0;
+  this->mcause  = 0;
+  this->mtval   = 0;
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -244,10 +249,35 @@ bool Scheduler::wspawn(uint32_t num_warps, Word nextPC) {
 
 // Barrier handling lives in BarrierUnit. See barrier_unit.{h,cpp}.
 
-// ecall/ebreak trap by deactivating all warps (used by riscv-vector tests)
-void Scheduler::trigger_ecall() {
-  active_warps_.reset();
+// RISC-V machine-mode synchronous exception cause codes (mcause).
+namespace {
+  constexpr Word TRAP_CAUSE_BREAKPOINT   = 3;
+  constexpr Word TRAP_CAUSE_ECALL_MMODE  = 11;
 }
-void Scheduler::trigger_ebreak() {
-  active_warps_.reset();
+
+void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
+  auto& warp = warps_.at(wid);
+  warp.mepc   = trap_pc;
+  warp.mcause = cause;
+  warp.mtval  = 0;
+  // Redirect to the handler. Low 2 bits of mtvec are the MODE field;
+  // v1 supports direct mode only, so mask them off.
+  warp.PC = warp.mtvec & ~Word(3);
+  DT(3, core_->name() << " trap: wid=" << wid << ", cause=" << cause
+     << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);
+}
+
+void Scheduler::mret(uint32_t wid) {
+  auto& warp = warps_.at(wid);
+  warp.PC = warp.mepc;
+  DT(3, core_->name() << " mret: wid=" << wid
+     << ", mepc=0x" << std::hex << warp.mepc << std::dec);
+}
+
+void Scheduler::trigger_ecall(uint32_t wid, Word trap_pc) {
+  this->raise_trap(wid, TRAP_CAUSE_ECALL_MMODE, trap_pc);
+}
+
+void Scheduler::trigger_ebreak(uint32_t wid, Word trap_pc) {
+  this->raise_trap(wid, TRAP_CAUSE_BREAKPOINT, trap_pc);
 }

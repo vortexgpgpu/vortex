@@ -52,16 +52,19 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   switch (addr) {
   case VX_CSR_PMPCFG0:
   case VX_CSR_PMPADDR0:
-  case VX_CSR_MSTATUS:
   case VX_CSR_MISA:
   case VX_CSR_MEDELEG:
   case VX_CSR_MIDELEG:
   case VX_CSR_MIE:
-  case VX_CSR_MTVEC:
-  case VX_CSR_MEPC:
   case VX_CSR_MNSTATUS:
-  case VX_CSR_MCAUSE:
     return 0;
+
+  // Per-warp machine-mode trap CSRs (see warp_t).
+  case VX_CSR_MSTATUS: return warp.mstatus;
+  case VX_CSR_MTVEC:   return warp.mtvec;
+  case VX_CSR_MEPC:    return warp.mepc;
+  case VX_CSR_MCAUSE:  return warp.mcause;
+  case VX_CSR_MTVAL:   return warp.mtval;
   case VX_CSR_SATP:
 #ifdef VM_ENABLE
     return (Word)satp_;
@@ -282,16 +285,28 @@ void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
     core_->set_satp(value);
 #endif
     break;
+  // Per-warp machine-mode trap CSRs (see warp_t).
   case VX_CSR_MSTATUS:
+    warp.mstatus = value;
+    break;
+  case VX_CSR_MTVEC:
+    warp.mtvec = value;
+    break;
+  case VX_CSR_MEPC:
+    warp.mepc = value;
+    break;
+  case VX_CSR_MCAUSE:
+    warp.mcause = value;
+    break;
+  case VX_CSR_MTVAL:
+    warp.mtval = value;
+    break;
   case VX_CSR_MEDELEG:
   case VX_CSR_MIDELEG:
   case VX_CSR_MIE:
-  case VX_CSR_MTVEC:
-  case VX_CSR_MEPC:
   case VX_CSR_PMPCFG0:
   case VX_CSR_PMPADDR0:
   case VX_CSR_MNSTATUS:
-  case VX_CSR_MCAUSE:
     break;
   default: {
       std::cerr << "Error: invalid CSR write addr=0x" << std::hex << addr << ", value=0x" << value << std::dec << std::endl;

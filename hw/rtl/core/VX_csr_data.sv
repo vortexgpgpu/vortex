@@ -80,6 +80,17 @@ import VX_fpu_pkg::*;
     assign sched_csr_if.csr_wr_wid   = write_wid;
     assign sched_csr_if.csr_wr_data  = `MEM_ADDR_WIDTH'(write_data);
 
+    // Machine-mode trap CSRs are stored in the scheduler; forward csrw
+    // writes to them (csr_wr_wid above carries the warp id).
+    wire is_trap_csr = (write_addr == `VX_CSR_MSTATUS)
+                    || (write_addr == `VX_CSR_MTVEC)
+                    || (write_addr == `VX_CSR_MEPC)
+                    || (write_addr == `VX_CSR_MCAUSE)
+                    || (write_addr == `VX_CSR_MTVAL);
+    assign sched_csr_if.trap_csr_wr_valid = write_enable && is_trap_csr;
+    assign sched_csr_if.trap_csr_wr_addr  = write_addr;
+    assign sched_csr_if.trap_csr_wr_data  = write_data;
+
 `ifdef EXT_F_ENABLE
     reg [`NUM_WARPS-1:0][INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
     wire [`NUM_FPU_BLOCKS-1:0]              fpu_write_enable;
@@ -155,10 +166,13 @@ import VX_fpu_pkg::*;
                 `VX_CSR_MIE,
                 `VX_CSR_MTVEC,
                 `VX_CSR_MEPC,
+                `VX_CSR_MCAUSE,
+                `VX_CSR_MTVAL,
                 `VX_CSR_PMPCFG0,
                 `VX_CSR_PMPADDR0,
                 `VX_CSR_MSCRATCH: begin
-                    // do nothing (mscratch handled combinatorially above)
+                    // do nothing — mscratch and the trap CSRs are stored
+                    // in the scheduler and written via sched_csr_if above.
                 end
                 default: begin
                     `ASSERT(0, ("invalid CSR write address: %0h (#%0d)", write_addr, write_uuid));
@@ -227,15 +241,19 @@ import VX_fpu_pkg::*;
         `else
             `VX_CSR_SATP,
         `endif
-            `VX_CSR_MSTATUS,
             `VX_CSR_MNSTATUS,
             `VX_CSR_MEDELEG,
             `VX_CSR_MIDELEG,
             `VX_CSR_MIE,
-            `VX_CSR_MTVEC,
-            `VX_CSR_MEPC,
             `VX_CSR_PMPCFG0,
             `VX_CSR_PMPADDR0 : read_data_ro_w = `XLEN'(0);
+
+            // Machine-mode trap CSRs (stored in the scheduler).
+            `VX_CSR_MSTATUS : read_data_rw_w = sched_csr_if.csr_mstatus;
+            `VX_CSR_MTVEC   : read_data_rw_w = sched_csr_if.csr_mtvec;
+            `VX_CSR_MEPC    : read_data_rw_w = sched_csr_if.csr_mepc;
+            `VX_CSR_MCAUSE  : read_data_rw_w = sched_csr_if.csr_mcause;
+            `VX_CSR_MTVAL   : read_data_rw_w = sched_csr_if.csr_mtval;
 
             default: begin
                 read_addr_valid_w = 0;

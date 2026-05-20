@@ -1,15 +1,20 @@
 include ../common.mk
 
-TEST_DIR := $(VORTEX_HOME)/tests/riscv/isa
+# Upstream RISC-V ISA tests (riscv-tests). These are built on demand from
+# the pinned upstream commit and run unmodified — Vortex's synchronous
+# trap path (ECALL/EBREAK -> mtvec) lets the test's own trap_vector run,
+# and the HTIF `tohost` watcher in the simulators harvests pass/fail.
+#
+# The upstream tree is cloned into the build directory (out-of-tree) and
+# cached behind a stamp file: `make clean` preserves it, `make distclean`
+# forces a re-fetch.
 
-# TODO: Missing features
-# - unaligned LD/ST (RTL)
-# - 64-bit float extension (RTL)
-# - 64-bit double extension (RTL)
-# - compressed extension
-# - fence extension
-# - atomics extension
-# - vector extension
+RISCV_TESTS_REPO   ?= https://github.com/riscv-software-src/riscv-tests.git
+RISCV_TESTS_COMMIT ?= 1eb47d946c55f55cab8653c224c2993acc0276bd
+
+UPSTREAM_DIR := $(ROOT_DIR)/tests/riscv/upstream
+ISA_DIR      := $(UPSTREAM_DIR)/isa
+STAMP        := $(UPSTREAM_DIR)/.installed
 
 # Skip atomic ISA tests when the build is configured without EXT_A_ENABLE.
 # Without atomics support, AMO instructions trap and the test fails. Resolve
@@ -18,87 +23,102 @@ TEST_DIR := $(VORTEX_HOME)/tests/riscv/isa
 HAS_EXT_A := $(shell echo 'EXT_A_ENABLED' | gcc -E -P $(CONFIGS) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
 HAS_EXT_C := $(shell echo 'EXT_C_ENABLED' | gcc -E -P $(CONFIGS) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -include VX_config.h - 2>/dev/null | tr -d ' \t\n')
 
-TESTS_32I := $(filter-out $(TEST_DIR)/rv32ui-p-ma_data.bin $(TEST_DIR)/rv32ui-p-fence_i.bin, $(wildcard $(TEST_DIR)/rv32ui-p-*.bin))
-TESTS_32M := $(wildcard $(TEST_DIR)/rv32um-p-*.bin)
+# Test-suite prefixes (extension-gated). A/C are only run when the build
+# was configured with the corresponding extension.
+P_32I := rv32ui-p
+P_32M := rv32um-p
+P_32F := rv32uf-p
+P_32D := rv32ud-p
+P_32A :=
+P_32C :=
+P_64I := rv64ui-p
+P_64M := rv64um-p
+P_64F := rv64uf-p
+P_64D := rv64ud-p
+P_64A :=
+P_64C :=
 ifneq ($(HAS_EXT_A),0)
-TESTS_32A := $(wildcard $(TEST_DIR)/rv32ua-p-*.bin)
-else
-TESTS_32A :=
+P_32A := rv32ua-p
+P_64A := rv64ua-p
 endif
 ifneq ($(HAS_EXT_C),0)
-TESTS_32C := $(wildcard $(TEST_DIR)/rv32uc-p-*.bin)
-else
-TESTS_32C :=
+P_32C := rv32uc-p
+P_64C := rv64uc-p
 endif
-TESTS_32F := $(wildcard $(TEST_DIR)/rv32uf-p-*.bin)
-TESTS_32D := $(wildcard $(TEST_DIR)/rv32ud-p-*.bin)
 
-TESTS_64I := $(filter-out $(TEST_DIR)/rv64ui-p-ma_data.bin $(TEST_DIR)/rv64ui-p-fence_i.bin, $(wildcard $(TEST_DIR)/rv64ui-p-*.bin))
-TESTS_64M := $(wildcard $(TEST_DIR)/rv64um-p-*.bin)
-ifneq ($(HAS_EXT_A),0)
-TESTS_64A := $(wildcard $(TEST_DIR)/rv64ua-p-*.bin)
-else
-TESTS_64A :=
-endif
-ifneq ($(HAS_EXT_C),0)
-# rv64uc-p-rvc contains a 64-bit-misaligned C.FLD that the upstream test
-# expects to trap on. Vortex has no trap handler and rtlsim hard-asserts
-# on misaligned access (VX_lsu_slice.sv:221). simx tolerates it and exits
-# vacuously via the trap-vector's tmc x0 at PC 0x10 — same pattern as the
-# already-filtered rv64ui-p-ma_data.bin.
-TESTS_64C := $(filter-out $(TEST_DIR)/rv64uc-p-rvc.bin, $(wildcard $(TEST_DIR)/rv64uc-p-*.bin))
-else
-TESTS_64C :=
-endif
-TESTS_64F := $(wildcard $(TEST_DIR)/rv64uf-p-*.bin)
-TESTS_64D := $(wildcard $(TEST_DIR)/rv64ud-p-*.bin)
+# Run one or more test-suite prefixes against a simulator.
+#   $(1) = simulator (simx | rtlsim)
+#   $(2) = space-separated test prefixes (e.g. "rv32ui-p rv32um-p")
+# Known-unsupported tests are skipped: fence_i (no instruction-cache
+# coherence), ma_data (no misaligned-access trap), rv64uc-p-rvc
+# (misaligned C.FLD the upstream test expects to trap on).
+define run_isa
+@set -e; for pfx in $(2); do for t in $(ISA_DIR)/$$pfx-*; do \
+  case "$$t" in *.dump) continue;; esac; [ -f "$$t" ] || continue; \
+  b=`basename $$t`; \
+  case "$$b" in *-fence_i|*-ma_data|rv64uc-p-rvc) echo "[skip] $$b"; continue;; esac; \
+  echo "[run]  $$b"; $(SIM_DIR)/$(1)/$(1) "$$t" || { echo "[FAIL] $$b"; exit 1; }; \
+done; done; echo "[$(1)] passed: $(2)"
+endef
 
 all:
 
-run-simx-32imf:
-	@for test in  $(TESTS_32I) $(TESTS_32M) $(TESTS_32F); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+# Clone + build the upstream riscv-tests ISA suites for this build's XLEN.
+$(STAMP):
+	rm -rf $(UPSTREAM_DIR)
+	git clone $(RISCV_TESTS_REPO) $(UPSTREAM_DIR)
+	cd $(UPSTREAM_DIR) && git checkout --quiet $(RISCV_TESTS_COMMIT) && git submodule update --init --recursive
+	PATH=$(RISCV_TOOLCHAIN_PATH)/bin:$$PATH $(MAKE) -C $(ISA_DIR) \
+	  XLEN=$(XLEN) RISCV_PREFIX=$(RISCV_PREFIX)- \
+	  rv$(XLEN)ui rv$(XLEN)um rv$(XLEN)uf rv$(XLEN)ud rv$(XLEN)ua rv$(XLEN)uc
+	touch $@
 
-run-simx-64imf:
-	@for test in  $(TESTS_64I) $(TESTS_64M) $(TESTS_64F); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+install: $(STAMP)
 
-run-simx-32imafd:
-	@for test in  $(TESTS_32I) $(TESTS_32M) $(TESTS_32F) $(TESTS_32D) $(TESTS_32A) $(TESTS_32C); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-32imf: $(STAMP)
+	$(call run_isa,simx,$(P_32I) $(P_32M) $(P_32F))
 
-run-simx-64imafd:
-	@for test in  $(TESTS_64I) $(TESTS_64M) $(TESTS_64F) $(TESTS_64D) $(TESTS_64A) $(TESTS_64C); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-64imf: $(STAMP)
+	$(call run_isa,simx,$(P_64I) $(P_64M) $(P_64F))
 
-run-simx-32c:
-	@for test in  $(TESTS_32C); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-32imafd: $(STAMP)
+	$(call run_isa,simx,$(P_32I) $(P_32M) $(P_32F) $(P_32D) $(P_32A) $(P_32C))
 
-run-simx-64c:
-	@for test in  $(TESTS_64C); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-64imafd: $(STAMP)
+	$(call run_isa,simx,$(P_64I) $(P_64M) $(P_64F) $(P_64D) $(P_64A) $(P_64C))
 
-run-simx-32i:
-	@for test in  $(TESTS_32I); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-32i: $(STAMP)
+	$(call run_isa,simx,$(P_32I))
 
-run-simx-32im:
-	@for test in  $(TESTS_32I) $(TESTS_32M); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-32im: $(STAMP)
+	$(call run_isa,simx,$(P_32I) $(P_32M))
 
-run-simx-32f:
-	@for test in  $(TESTS_32F); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-32f: $(STAMP)
+	$(call run_isa,simx,$(P_32F))
 
-run-simx-32d:
-	@for test in  $(TESTS_32D); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-32d: $(STAMP)
+	$(call run_isa,simx,$(P_32D))
 
-run-simx-32a:
-	@for test in  $(TESTS_32A); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-32a: $(STAMP)
+	$(call run_isa,simx,$(P_32A))
 
-run-simx-64im:
-	@for test in  $(TESTS_64I) $(TESTS_64M); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-32c: $(STAMP)
+	$(call run_isa,simx,$(P_32C))
 
-run-simx-64f:
-	@for test in  $(TESTS_64F); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-64im: $(STAMP)
+	$(call run_isa,simx,$(P_64I) $(P_64M))
 
-run-simx-64d:
-	@for test in  $(TESTS_64D); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-64f: $(STAMP)
+	$(call run_isa,simx,$(P_64F))
 
-run-simx-64a:
-	@for test in  $(TESTS_64A); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+run-simx-64d: $(STAMP)
+	$(call run_isa,simx,$(P_64D))
+
+run-simx-64a: $(STAMP)
+	$(call run_isa,simx,$(P_64A))
+
+run-simx-64c: $(STAMP)
+	$(call run_isa,simx,$(P_64C))
 
 run-simx-32: run-simx-32imafd
 
@@ -106,41 +126,41 @@ run-simx-64: run-simx-32imafd run-simx-64imafd
 
 run-simx: run-simx-$(XLEN)
 
-run-rtlsim-32imf:
-	@for test in  $(TESTS_32I) $(TESTS_32M) $(TESTS_32F); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-32imf: $(STAMP)
+	$(call run_isa,rtlsim,$(P_32I) $(P_32M) $(P_32F))
 
-run-rtlsim-64imf:
-	@for test in  $(TESTS_64I) $(TESTS_64M) $(TESTS_64F); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-64imf: $(STAMP)
+	$(call run_isa,rtlsim,$(P_64I) $(P_64M) $(P_64F))
 
-run-rtlsim-32i:
-	@for test in  $(TESTS_32I); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-32i: $(STAMP)
+	$(call run_isa,rtlsim,$(P_32I))
 
-run-rtlsim-32im:
-	@for test in  $(TESTS_32I) $(TESTS_32M); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-32im: $(STAMP)
+	$(call run_isa,rtlsim,$(P_32I) $(P_32M))
 
-run-rtlsim-32f:
-	@for test in  $(TESTS_32F); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-32f: $(STAMP)
+	$(call run_isa,rtlsim,$(P_32F))
 
-run-rtlsim-32a:
-	@for test in  $(TESTS_32A); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-32a: $(STAMP)
+	$(call run_isa,rtlsim,$(P_32A))
 
-run-rtlsim-64im:
-	@for test in  $(TESTS_64I) $(TESTS_64M); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-32c: $(STAMP)
+	$(call run_isa,rtlsim,$(P_32C))
 
-run-rtlsim-64f:
-	@for test in  $(TESTS_64F); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-64im: $(STAMP)
+	$(call run_isa,rtlsim,$(P_64I) $(P_64M))
 
-run-rtlsim-64d:
-	@for test in  $(TESTS_64D); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-64f: $(STAMP)
+	$(call run_isa,rtlsim,$(P_64F))
 
-run-rtlsim-64a:
-	@for test in  $(TESTS_64A); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-64d: $(STAMP)
+	$(call run_isa,rtlsim,$(P_64D))
 
-run-rtlsim-32c:
-	@for test in  $(TESTS_32C); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-64a: $(STAMP)
+	$(call run_isa,rtlsim,$(P_64A))
 
-run-rtlsim-64c:
-	@for test in  $(TESTS_64C); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
+run-rtlsim-64c: $(STAMP)
+	$(call run_isa,rtlsim,$(P_64C))
 
 run-rtlsim-32: run-rtlsim-32imf
 
@@ -148,4 +168,11 @@ run-rtlsim-64: run-rtlsim-32imf run-rtlsim-64imf
 
 run-rtlsim: run-rtlsim-$(XLEN)
 
+# `clean` preserves the upstream cache; `distclean` forces a re-fetch.
 clean:
+
+distclean:
+	rm -rf $(UPSTREAM_DIR)
+
+.PHONY: all install clean distclean \
+        run-simx run-simx-32 run-simx-64 run-rtlsim run-rtlsim-32 run-rtlsim-64

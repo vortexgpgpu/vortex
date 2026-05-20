@@ -77,6 +77,15 @@ struct warp_t {
   // Per-warp MSCRATCH (holds kernel arg pointer, set at CTA dispatch)
   Word                              mscratch;
 
+  // Per-warp machine-mode trap CSRs. Synchronous ECALL/EBREAK traps
+  // redirect the warp PC to mtvec and snapshot the faulting PC/cause
+  // here; MRET restores the PC from mepc. See Scheduler::raise_trap.
+  Word                              mstatus = 0;
+  Word                              mtvec   = 0;
+  Word                              mepc    = 0;
+  Word                              mcause  = 0;
+  Word                              mtval   = 0;
+
   // CTA CSR values set at dispatch time
   cta_csrs_t                        cta_csrs;
 
@@ -113,8 +122,14 @@ public:
   // core_->csr_unit().
 
   // ----- Trap helpers -----
-  void trigger_ecall();
-  void trigger_ebreak();
+  // Synchronous trap entry: snapshot the faulting PC into mepc, set
+  // mcause, and redirect the warp PC to mtvec. trap_pc is the PC of the
+  // faulting instruction (trace->PC), not the decode-advanced warp.PC.
+  void raise_trap(uint32_t wid, Word cause, Word trap_pc);
+  // Trap return: restore the warp PC from mepc (MRET/SRET/URET).
+  void mret(uint32_t wid);
+  void trigger_ecall(uint32_t wid, Word trap_pc);
+  void trigger_ebreak(uint32_t wid, Word trap_pc);
 
   // ----- Accessors -----
   warp_t& warp(uint32_t wid) { return warps_.at(wid); }
