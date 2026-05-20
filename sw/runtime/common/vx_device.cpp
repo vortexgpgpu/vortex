@@ -126,7 +126,16 @@ constexpr uint32_t CP_RING_SIZE      = 1u << CP_RING_SIZE_LOG2;
 constexpr uint8_t  CP_OPCODE_DCR_WR  = 0x04;
 constexpr uint8_t  CP_OPCODE_DCR_RD  = 0x05;
 constexpr uint8_t  CP_OPCODE_LAUNCH  = 0x06;
+constexpr uint8_t  CP_OPCODE_EVT_SIG = 0x08;
+constexpr uint8_t  CP_OPCODE_EVT_WAIT= 0x09;
 constexpr std::size_t CP_CL_BYTES    = 64;
+
+// CMD_EVENT_WAIT comparison operations (encoded in arg2[1:0]).
+// Mirrors hw/rtl/cp/VX_cp_pkg.sv:wait_op_e.
+constexpr uint8_t  CP_WAIT_OP_EQ = 0;
+constexpr uint8_t  CP_WAIT_OP_GE = 1;
+constexpr uint8_t  CP_WAIT_OP_GT = 2;
+constexpr uint8_t  CP_WAIT_OP_NE = 3;
 
 } // namespace
 
@@ -165,31 +174,46 @@ vx_result_t Device::cp_init() {
 }
 
 vx_result_t Device::cp_submit_cl_(const void* cl) {
-    std::lock_guard<std::mutex> g(cp_mu_);
     auto* p = platform();
+    uint64_t target;
+    {
+        // Phase 1c: holding cp_mu_ across the SEQNUM poll deadlocks when a
+        // CP-side CMD_EVENT_WAIT (which spins until its slot is signaled)
+        // is at the head of the ring — concurrent submitters can't post the
+        // SIGNAL that would unblock the WAIT. Release the mutex after the
+        // ring/state mutation + TAIL commit, then poll without it.
+        std::lock_guard<std::mutex> g(cp_mu_);
 
-    // 1) Upload one CL into the ring at the current tail.
-    const uint64_t ring_off = cp_tail_ & (CP_RING_SIZE - 1);
-    if (ring_off + CP_CL_BYTES > CP_RING_SIZE)
-        return VX_ERR_INVALID_VALUE;  // mid-CL ring wrap not yet supported
-    auto r = p->mem_upload(cp_ring_dev_addr_ + ring_off, cl, CP_CL_BYTES);
-    if (r != VX_SUCCESS) return r;
+        // 1) Upload one CL into the ring at the current tail.
+        const uint64_t ring_off = cp_tail_ & (CP_RING_SIZE - 1);
+        if (ring_off + CP_CL_BYTES > CP_RING_SIZE)
+            return VX_ERR_INVALID_VALUE;  // mid-CL ring wrap not yet supported
+        auto r = p->mem_upload(cp_ring_dev_addr_ + ring_off, cl, CP_CL_BYTES);
+        if (r != VX_SUCCESS) return r;
 
-    // 2) Commit the new tail. Atomic-pair: LO stages, HI commits both.
-    cp_tail_           += CP_CL_BYTES;
-    cp_expected_seqnum_ += 1;
-    r = p->cp_mmio_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
-    if (r != VX_SUCCESS) return r;
-    r = p->cp_mmio_write(CP_Q_TAIL_HI, uint32_t(cp_tail_ >> 32));
-    if (r != VX_SUCCESS) return r;
+        // 2) Bump tail + reserve our seqnum slot atomically, capture target.
+        cp_tail_           += CP_CL_BYTES;
+        cp_expected_seqnum_ += 1;
+        target = cp_expected_seqnum_;
 
-    // 3) Poll Q_SEQNUM until it catches up to this command's slot.
-    //    Each MMIO read drives the simulator one or more cycles; on
-    //    real hardware this is a cheap PCIe read.
-    const uint64_t target = cp_expected_seqnum_;
+        // 3) Commit the new tail. Atomic-pair: LO stages, HI commits both.
+        r = p->cp_mmio_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
+        if (r != VX_SUCCESS) return r;
+        r = p->cp_mmio_write(CP_Q_TAIL_HI, uint32_t(cp_tail_ >> 32));
+        if (r != VX_SUCCESS) return r;
+    }   // release cp_mu_ — another submitter can now post its own command
+
+    // 4) Poll Q_SEQNUM. Reacquire cp_mu_ around each individual MMIO read
+    // so simx's tick() (which mutates simulator state) and concurrent
+    // posts from other queues don't race; this still leaves a window
+    // between iterations for other submitters to come in.
     for (;;) {
         uint32_t seqnum32 = 0;
-        r = p->cp_mmio_read(CP_Q_SEQNUM, &seqnum32);
+        vx_result_t r;
+        {
+            std::lock_guard<std::mutex> g(cp_mu_);
+            r = p->cp_mmio_read(CP_Q_SEQNUM, &seqnum32);
+        }
         if (r != VX_SUCCESS) return r;
         if (uint64_t(seqnum32) >= target) return VX_SUCCESS;
         // No host sleep: each MMIO read already ticks sim cycles.
@@ -237,6 +261,35 @@ vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,
     // Pick up the response from the CP regfile: VX_cp_dcr_proxy latches
     // it on Q_LAST_DCR_RSP at the same offset as the engine's retire.
     return platform()->cp_mmio_read(CP_Q_LAST_DCR_RSP, out_value);
+}
+
+vx_result_t Device::cp_submit_event_signal(uint64_t event_dev_addr,
+                                           uint64_t value) {
+    // CMD_EVENT_SIGNAL on-wire layout (cmd_size=20):
+    //   bytes 0..3   header  { opcode=0x08, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    device byte address of 8-byte counter slot
+    //   bytes 12..19 arg1    64-bit value to write
+    uint8_t cl[CP_CL_BYTES] = {0};
+    cl[0] = CP_OPCODE_EVT_SIG;
+    std::memcpy(cl + 4,  &event_dev_addr, sizeof(event_dev_addr));
+    std::memcpy(cl + 12, &value,          sizeof(value));
+    return cp_submit_cl_(cl);
+}
+
+vx_result_t Device::cp_submit_event_wait(uint64_t event_dev_addr,
+                                         uint64_t value) {
+    // CMD_EVENT_WAIT on-wire layout (cmd_size=28):
+    //   bytes 0..3   header  { opcode=0x09, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    device byte address of 8-byte counter slot
+    //   bytes 12..19 arg1    target value
+    //   bytes 20..27 arg2    wait_op (low 2 bits) — we always submit GE
+    uint8_t cl[CP_CL_BYTES] = {0};
+    cl[0] = CP_OPCODE_EVT_WAIT;
+    std::memcpy(cl + 4,  &event_dev_addr, sizeof(event_dev_addr));
+    std::memcpy(cl + 12, &value,          sizeof(value));
+    uint64_t op = CP_WAIT_OP_GE;
+    std::memcpy(cl + 20, &op, sizeof(op));
+    return cp_submit_cl_(cl);
 }
 
 void Device::register_queue(Queue* q) {

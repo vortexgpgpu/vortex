@@ -25,8 +25,10 @@
 #include <cstring>
 #include <deque>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <unordered_set>
 #include <vector>
@@ -234,6 +236,17 @@ public:
     vx_result_t cp_submit_dcr_read(uint32_t addr, uint32_t tag,
                                    uint32_t* out_value);
 
+    // Post one CMD_EVENT_SIGNAL: VX_cp_event_unit writes `value` to the
+    // 8-byte counter slot at `event_dev_addr`. Returns when retired.
+    vx_result_t cp_submit_event_signal(uint64_t event_dev_addr,
+                                       uint64_t value);
+
+    // Post one CMD_EVENT_WAIT: VX_cp_event_unit spin-polls the 8-byte
+    // counter slot at `event_dev_addr` until it reaches `value` (>=).
+    // Returns when the CP retires the wait.
+    vx_result_t cp_submit_event_wait(uint64_t event_dev_addr,
+                                     uint64_t value);
+
 private:
     friend class RefCounted<Device>;
     explicit Device(std::unique_ptr<Platform> plat);
@@ -268,10 +281,40 @@ private:
 };
 
 // ============================================================================
+// LaunchKernelHandle — tag base for objects passable into vx_launch_info_t.kernel.
+//
+// Phase 1b introduces vx_kernel_h (named entry point inside a module) as a
+// new option for the launch's kernel slot, alongside the legacy vx_buffer_h
+// (kernel image as a raw buffer). The launch path needs to disambiguate
+// without forcing a `vx_launch_info_t` shape change.
+//
+// Trick: both Buffer and Kernel inherit LaunchKernelHandle as their FIRST
+// base, so the tag sits at byte offset 0 of the object. vx_enqueue_launch
+// reinterprets the void* handle as `LaunchKernelHandle*` and dispatches on
+// `launch_kind()`. Layout is well-defined under C++'s standard multi-
+// inheritance rules — neither this class nor RefCounted has virtuals or
+// vtables, so the cast costs nothing and there is no slicing risk.
+// ============================================================================
+
+class LaunchKernelHandle {
+public:
+    enum class Kind : uint32_t {
+        Buffer = 0x42554652,    // 'BUFR'
+        Kernel = 0x4B524E4C,    // 'KRNL'
+    };
+    explicit LaunchKernelHandle(Kind k) : lkh_kind_(k) {}
+    Kind launch_kind() const { return lkh_kind_; }
+protected:
+    ~LaunchKernelHandle() = default;
+private:
+    Kind lkh_kind_;
+};
+
+// ============================================================================
 // Buffer.
 // ============================================================================
 
-class Buffer : public RefCounted<Buffer> {
+class Buffer : public LaunchKernelHandle, public RefCounted<Buffer> {
 public:
     static vx_result_t create (Device* dev, uint64_t size, uint32_t flags,
                                Buffer** out);
@@ -306,6 +349,79 @@ private:
     uint64_t      mapped_size_  = 0;
     uint32_t      mapped_flags_ = 0;
     bool          mapped_       = false;
+};
+
+// ============================================================================
+// Module + Kernel.
+//
+// A Module is a loaded .vxbin: device-side image buffer + parsed symbol
+// table. A Kernel is a named entry point within a module (with its PC and
+// a refcount on the owning module). Kernel objects are cached on the
+// module the first time they're requested by name and reused thereafter.
+// ============================================================================
+
+class Module;
+class Kernel;
+
+class Module : public RefCounted<Module> {
+public:
+    // Load a .vxbin file from disk: parse header, reserve+upload the image,
+    // parse symbol-table footer if present (single-`main` fallback otherwise).
+    static vx_result_t load_file (Device* dev, const char* path, Module** out);
+    static vx_result_t load_bytes(Device* dev, const void* bytes, size_t size,
+                                  Module** out);
+
+    Device*  device()      { return device_; }
+    Buffer*  image()       { return image_; }
+    uint64_t base_address() const { return base_addr_; }
+
+    // Look up a named kernel entry point. Returns a new ref (caller releases).
+    // Subsequent lookups of the same name return the same cached Kernel.
+    vx_result_t get_kernel(const char* name, Kernel** out);
+
+private:
+    friend class RefCounted<Module>;
+    friend class Kernel;        // accesses kcache_mu_ + kernel_cache_ on destruct
+    Module(Device* dev, Buffer* image, uint64_t base_addr);
+    ~Module();
+
+    // Parse `bytes` (the full .vxbin content). Fills the symbol table.
+    // If the footer magic is absent, populates a single "main" entry at
+    // base_addr_.
+    vx_result_t parse_symbols(const void* bytes, size_t size);
+
+    struct Symbol {
+        std::string name;
+        uint64_t    pc;
+    };
+
+    Device*                              device_;
+    Buffer*                              image_;       // refcounted
+    uint64_t                             base_addr_;
+    std::vector<Symbol>                  symbols_;
+    std::mutex                           kcache_mu_;
+    std::map<std::string, Kernel*>       kernel_cache_;   // weak refs (no retain)
+};
+
+class Kernel : public LaunchKernelHandle, public RefCounted<Kernel> {
+public:
+    static vx_result_t create(Module* mod, uint64_t pc, Kernel** out);
+
+    Module*  module()      { return module_; }
+    uint64_t pc()    const { return pc_; }
+
+    // Per-kernel max-block hints. v1 returns the device default (full warp
+    // width); per-kernel introspection from compiler metadata is a Phase 1b
+    // follow-up once vxbin symbol footer carries it.
+    vx_result_t get_max_block_size(uint32_t* x, uint32_t* y, uint32_t* z);
+
+private:
+    friend class RefCounted<Kernel>;
+    Kernel(Module* mod, uint64_t pc);
+    ~Kernel();
+
+    Module*  module_;
+    uint64_t pc_;
 };
 
 // ============================================================================
@@ -346,6 +462,17 @@ public:
     vx_result_t enqueue_dcr_read (uint32_t addr, uint32_t* host_dst,
                                   uint32_t nw, const vx_event_h* w,
                                   vx_event_h* out);
+
+    // Queue-ordered timeline ops. enqueue_signal advances `ev` to `value`
+    // when the queue's prior work completes. enqueue_wait_value blocks the
+    // queue worker until `ev` reaches `value` before proceeding to later
+    // enqueued commands.
+    vx_result_t enqueue_signal     (Event* ev, uint64_t value,
+                                    uint32_t nw, const vx_event_h* w,
+                                    vx_event_h* out);
+    vx_result_t enqueue_wait_value (Event* ev, uint64_t value,
+                                    uint32_t nw, const vx_event_h* w,
+                                    vx_event_h* out);
 
 private:
     friend class RefCounted<Queue>;
@@ -401,52 +528,83 @@ private:
 };
 
 // ============================================================================
-// Event.
+// Event — counter-based timeline primitive.
 //
-// Runtime-managed events are born QUEUED and complete()'d by the
-// dispatcher when the underlying work finishes. User events are also
-// QUEUED at birth and transition only on vx_user_event_signal.
+// Each event carries a monotonic uint64_t counter that starts at 0. signal()
+// advances it; waiters block until counter >= target. The legacy binary
+// semantics (QUEUED -> COMPLETE/ERROR) map onto:
+//   counter == 0 && error == SUCCESS  -> QUEUED
+//   counter >= 1 && error == SUCCESS  -> COMPLETE
+//   error  != SUCCESS                 -> ERROR
+// Runtime-managed completion events from vx_enqueue_* are signaled to value
+// 1 by the queue worker via complete(), which also records error status.
+// Pure timeline waiters use signal()/wait_value() and never touch error_.
 // ============================================================================
 
 class Event : public RefCounted<Event> {
 public:
-    // Internal factory: creates an event in QUEUED state. Runtime code calls
-    // complete() on it once the underlying work finishes.
+    // Factory.
     static vx_result_t create(Device* dev, Event** out);
 
-    // Public-API factory: creates a user event that only the host can signal
-    // via signal_user().
-    static vx_result_t create_user(Device* dev, Event** out);
+    // Timeline API: advance the counter and unblock waiters whose target
+    // value is now satisfied. value < current is a no-op (counter is
+    // monotonic). No error semantics — pure counter advance.
+    void signal(uint64_t value);
 
-    // Public API: signal a user event from the host. Rejects non-user events.
-    vx_result_t signal_user(vx_result_t status);
-
-    // Internal: mark this event complete with the given status. Works for
-    // any event (user or runtime-managed).
+    // Internal completion path for runtime-managed events: equivalent to
+    // signal(1) but also records the work's result status. If status !=
+    // VX_SUCCESS, subsequent wait_value() returns that status instead of
+    // VX_SUCCESS. Idempotent.
     void complete(vx_result_t status);
 
-    vx_result_t status(vx_event_status_e* out);
-    vx_result_t wait  (uint64_t timeout_ns);
+    // Timeline wait — block until counter >= value or timeout.
+    // Returns VX_ERR_TIMEOUT on timeout, recorded error_ if set, else SUCCESS.
+    vx_result_t wait_value(uint64_t value, uint64_t timeout_ns);
+
+    // Snapshot the current counter value.
+    uint64_t get_value() const;
+
+    // Legacy shim helpers (called by the C entry points in vx_event.cpp).
+    vx_result_t signal_user(vx_result_t status);    // -> complete(status)
+    vx_result_t status(vx_event_status_e* out);     // counter -> enum
+    vx_result_t wait(uint64_t timeout_ns) {         // wait_value(1, t)
+        return wait_value(1, timeout_ns);
+    }
 
     void set_profile(uint64_t queued_ns, uint64_t submit_ns,
                      uint64_t start_ns, uint64_t end_ns);
     vx_result_t get_profile(vx_profile_info_t* out);
 
-    bool is_user() const { return is_user_; }
+    // ---- Phase 1c: CP-backed timeline counter slot ----
+    //
+    // Each event optionally owns an 8-byte device-resident counter slot
+    // that the CP's VX_cp_event_unit can read/write directly via
+    // CMD_EVENT_SIGNAL / CMD_EVENT_WAIT. cp_slot() returns the device
+    // address (0 if not allocated yet). cp_alloc_slot() lazily allocates
+    // it from the device on first use; idempotent. Slot lifetime is tied
+    // to the event's lifetime (freed in ~Event).
+    uint64_t cp_slot();   // returns 0 on failure / no platform
+    Device*  device() { return device_; }
 
 private:
     friend class RefCounted<Event>;
-    Event(Device* dev, bool is_user);
-    ~Event() = default;
+    explicit Event(Device* dev);
+    ~Event();
 
     Device*                       device_;
-    bool                          is_user_;
-    std::mutex                    mu_;
+    mutable std::mutex            mu_;
     std::condition_variable       cv_;
-    vx_event_status_e             status_  = VX_EVENT_STATUS_QUEUED;
+    // Counter is mutated under mu_; reads under mu_ for memory ordering with
+    // waiters. Plain uint64_t rather than atomic because every read/write
+    // path already takes mu_ for the condvar interaction.
+    uint64_t                      counter_ = 0;
     vx_result_t                   error_   = VX_SUCCESS;
     bool                          has_profile_ = false;
     vx_profile_info_t             profile_ {};
+
+    // CP-backed slot — lazily allocated by cp_slot() on first call.
+    // 0 means "not yet allocated".
+    uint64_t                      cp_slot_addr_ = 0;
 };
 
 // ============================================================================
@@ -454,14 +612,38 @@ private:
 // ============================================================================
 
 inline Device* to_device(vx_device_h h) { return static_cast<Device*>(h); }
-inline Buffer* to_buffer(vx_buffer_h h) { return static_cast<Buffer*>(h); }
+inline Buffer* to_buffer(vx_buffer_h h) {
+    // h points to the start of a Buffer object; LaunchKernelHandle is the
+    // first base (at offset 0) so static_cast<Buffer*> needs an explicit
+    // adjustment when coming from a void*. Reinterpret first to the LKH base,
+    // then static_cast back down to Buffer to get the right adjusted pointer.
+    return static_cast<Buffer*>(reinterpret_cast<LaunchKernelHandle*>(h));
+}
 inline Queue*  to_queue (vx_queue_h  h) { return reinterpret_cast<Queue*>(h);  }
 inline Event*  to_event (vx_event_h  h) { return reinterpret_cast<Event*>(h);  }
+inline Module* to_module(vx_module_h h) { return reinterpret_cast<Module*>(h); }
+inline Kernel* to_kernel(vx_kernel_h h) {
+    return static_cast<Kernel*>(reinterpret_cast<LaunchKernelHandle*>(h));
+}
 
 inline vx_device_h to_handle(Device* d) { return static_cast<vx_device_h>(d); }
-inline vx_buffer_h to_handle(Buffer* b) { return static_cast<vx_buffer_h>(b); }
+inline vx_buffer_h to_handle(Buffer* b) {
+    // Returned handle points at the LaunchKernelHandle base (offset 0) so
+    // the dispatcher can read its kind tag without knowing the dynamic type.
+    return static_cast<vx_buffer_h>(static_cast<LaunchKernelHandle*>(b));
+}
 inline vx_queue_h  to_handle(Queue*  q) { return reinterpret_cast<vx_queue_h>(q);  }
 inline vx_event_h  to_handle(Event*  e) { return reinterpret_cast<vx_event_h>(e);  }
+inline vx_module_h to_handle(Module* m) { return reinterpret_cast<vx_module_h>(m); }
+inline vx_kernel_h to_handle(Kernel* k) {
+    return reinterpret_cast<vx_kernel_h>(static_cast<LaunchKernelHandle*>(k));
+}
+
+// LaunchKernelHandle-aware accessor for vx_launch_info_t.kernel — accepts
+// either a Buffer or a Kernel handle.
+inline LaunchKernelHandle* to_lkh(void* h) {
+    return reinterpret_cast<LaunchKernelHandle*>(h);
+}
 
 // ============================================================================
 // Wall clock helper for runtime-synthesized profile timestamps.

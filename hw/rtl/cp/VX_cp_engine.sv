@@ -19,11 +19,11 @@
 //   RETIRE       : pulse retire_evt + advance seqnum; back to IDLE
 //
 // Opcodes handled:
-//   - CMD_NOP                       (retire immediately)
-//   - CMD_LAUNCH                    (bid KMU)
-//   - CMD_DCR_WRITE / CMD_DCR_READ  (bid DCR)
-//   - CMD_MEM_*                     (bid DMA)
-// CMD_FENCE / CMD_EVENT_* are accepted and retired as NOPs.
+//   - CMD_NOP / CMD_FENCE                          (retire immediately)
+//   - CMD_LAUNCH                                   (bid KMU)
+//   - CMD_DCR_WRITE / CMD_DCR_READ                 (bid DCR)
+//   - CMD_MEM_*                                    (bid DMA)
+//   - CMD_EVENT_SIGNAL / CMD_EVENT_WAIT            (bid EVENT)
 // ============================================================================
 
 module VX_cp_engine
@@ -44,18 +44,20 @@ module VX_cp_engine
   input  cmd_t                    cmd_in,
   output logic                    cmd_in_ready,
 
-  // Bid lines to the three resource arbiters.
+  // Bid lines to the four resource arbiters.
   VX_cp_engine_bid_if.bidder      bid_kmu,
   VX_cp_engine_bid_if.bidder      bid_dma,
   VX_cp_engine_bid_if.bidder      bid_dcr,
+  VX_cp_engine_bid_if.bidder      bid_event,
 
   // Per-resource done signals. These come from the resource module
-  // (launch/dma/dcr_proxy) and pulse high for one cycle when the
-  // resource finishes the current command. The engine consumes them
+  // (launch/dma/dcr_proxy/event_unit) and pulse high for one cycle when
+  // the resource finishes the current command. The engine consumes them
   // in S_WAIT_DONE to know when to retire.
   input  wire                     kmu_done_i,
   input  wire                     dma_done_i,
   input  wire                     dcr_done_i,
+  input  wire                     event_done_i,
 
   // Retirement signaling to VX_cp_completion.
   output logic                    retire_evt,
@@ -94,6 +96,8 @@ module VX_cp_engine
       CMD_MEM_WRITE,
       CMD_MEM_READ,
       CMD_MEM_COPY:                  return RES_DMA;
+      CMD_EVENT_SIGNAL,
+      CMD_EVENT_WAIT:                return RES_EVT;
       default: begin
         skip = 1'b1;
         return RES_KMU;   // unused when skip=1
@@ -141,19 +145,21 @@ module VX_cp_engine
         S_BID: begin
           // Wait for our grant.
           case (cur_res)
-            RES_KMU: if (bid_kmu.grant) fsm <= S_WAIT_DONE;
-            RES_DMA: if (bid_dma.grant) fsm <= S_WAIT_DONE;
-            RES_DCR: if (bid_dcr.grant) fsm <= S_WAIT_DONE;
-            default: fsm <= S_RETIRE;
+            RES_KMU:   if (bid_kmu.grant)   fsm <= S_WAIT_DONE;
+            RES_DMA:   if (bid_dma.grant)   fsm <= S_WAIT_DONE;
+            RES_DCR:   if (bid_dcr.grant)   fsm <= S_WAIT_DONE;
+            RES_EVT: if (bid_event.grant) fsm <= S_WAIT_DONE;
+            default:                        fsm <= S_RETIRE;
           endcase
         end
         S_WAIT_DONE: begin
           // Wait for the resource's actual done pulse before retiring.
           case (cur_res)
-            RES_KMU: if (kmu_done_i) fsm <= S_RETIRE;
-            RES_DMA: if (dma_done_i) fsm <= S_RETIRE;
-            RES_DCR: if (dcr_done_i) fsm <= S_RETIRE;
-            default: fsm <= S_RETIRE;
+            RES_KMU:   if (kmu_done_i)   fsm <= S_RETIRE;
+            RES_DMA:   if (dma_done_i)   fsm <= S_RETIRE;
+            RES_DCR:   if (dcr_done_i)   fsm <= S_RETIRE;
+            RES_EVT: if (event_done_i) fsm <= S_RETIRE;
+            default:                     fsm <= S_RETIRE;
           endcase
         end
         S_RETIRE: begin
@@ -185,14 +191,19 @@ module VX_cp_engine
     bid_dcr.priority_ = state_in.prio;
     bid_dcr.cmd       = cur_cmd;
 
+    bid_event.valid     = (fsm == S_BID) && (cur_res == RES_EVT);
+    bid_event.priority_ = state_in.prio;
+    bid_event.cmd       = cur_cmd;
+
     retire_evt    = (fsm == S_RETIRE);
     retire_seqnum = seqnum_r;
 
     submit_evt   = (fsm == S_DECODE) && cur_cmd.hdr.flags[F_PROFILE];
     start_evt    = (fsm == S_BID) && cur_cmd.hdr.flags[F_PROFILE] &&
-                   ((cur_res == RES_KMU && bid_kmu.grant) ||
-                    (cur_res == RES_DMA && bid_dma.grant) ||
-                    (cur_res == RES_DCR && bid_dcr.grant));
+                   ((cur_res == RES_KMU   && bid_kmu.grant)   ||
+                    (cur_res == RES_DMA   && bid_dma.grant)   ||
+                    (cur_res == RES_DCR   && bid_dcr.grant)   ||
+                    (cur_res == RES_EVT && bid_event.grant));
     end_evt      = (fsm == S_RETIRE) && cur_cmd.hdr.flags[F_PROFILE];
     profile_slot = cur_cmd.profile_slot;
   end

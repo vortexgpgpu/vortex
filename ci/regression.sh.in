@@ -33,6 +33,24 @@ unittest()
     make -C hw/unittest > /dev/null
 }
 
+runtime()
+{
+    echo "begin runtime tests..."
+
+    # vortex2.h runtime API integration tests (tests/runtime/). Unlike
+    # tests/unittest these dlopen a backend and spin up the simulator, so
+    # they need the dispatcher + simx backend built. test_module_kernel
+    # also needs a kernel image — reuse the `basic` regression .vxbin.
+    make -C sw/kernel
+    make -C sw/runtime/stub
+    make -C sw/runtime/simx
+    make -C tests/regression/basic kernel.vxbin
+
+    make -C tests/runtime run-simx
+
+    echo "runtime tests done!"
+}
+
 riscv()
 {
     echo "begin riscv tests..."
@@ -1189,7 +1207,7 @@ hip()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1202,6 +1220,9 @@ while [ "$1" != "" ]; do
                 ;;
         --unittest )
                 tests+=("unittest")
+                ;;
+        --runtime )
+                tests+=("runtime")
                 ;;
         --riscv )
                 tests+=("riscv")
@@ -1290,6 +1311,7 @@ while [ "$1" != "" ]; do
         --all )
                 tests=()
                 tests+=("unittest")
+                tests+=("runtime")
                 tests+=("riscv")
                 tests+=("kernel")
                 tests+=("regression")

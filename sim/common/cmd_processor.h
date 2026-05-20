@@ -180,6 +180,9 @@ private:
     int  decode_cmd(int off, Cmd& out);
     // Inverse of decoded helpers: write seqnum to cmpl_addr.
     void publish_completion();
+    // CMD_EVENT_WAIT compare helper — reads cur_cmd_.arg0 from DRAM and
+    // compares to cur_cmd_.arg1 under the wait_op encoded in arg2[1:0].
+    bool event_wait_satisfied_();
     // Advance the launch FSM one step using cur_cmd_.
     void tick_launch();
     // Advance the engine FSM one step.

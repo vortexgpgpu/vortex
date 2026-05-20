@@ -64,7 +64,7 @@ module VX_cp_core
   output wire                       interrupt
 );
 
-  localparam int N_SOURCES = NUM_QUEUES + 2;   // fetch[N] + DMA + cmpl
+  localparam int N_SOURCES = NUM_QUEUES + 3;   // fetch[N] + DMA + cmpl + event
 
   // ----- Regfile-owned per-queue programmable state -----
   cpe_state_t q_state          [NUM_QUEUES];
@@ -101,10 +101,11 @@ module VX_cp_core
   // ----- Per-CPE wires -----
   cpe_state_t state_out  [NUM_QUEUES];
 
-  // Bid lines to the three arbiters.
-  VX_cp_engine_bid_if bid_kmu [NUM_QUEUES] ();
-  VX_cp_engine_bid_if bid_dma [NUM_QUEUES] ();
-  VX_cp_engine_bid_if bid_dcr [NUM_QUEUES] ();
+  // Bid lines to the four arbiters.
+  VX_cp_engine_bid_if bid_kmu   [NUM_QUEUES] ();
+  VX_cp_engine_bid_if bid_dma   [NUM_QUEUES] ();
+  VX_cp_engine_bid_if bid_dcr   [NUM_QUEUES] ();
+  VX_cp_engine_bid_if bid_event [NUM_QUEUES] ();
 
   // Retire + profile pulses from each CPE.
   logic        retire_evt    [NUM_QUEUES];
@@ -152,12 +153,14 @@ module VX_cp_core
         .bid_kmu       (bid_kmu[q]),
         .bid_dma       (bid_dma[q]),
         .bid_dcr       (bid_dcr[q]),
+        .bid_event     (bid_event[q]),
         // Done pulses are broadcast from the shared resource modules to
         // every CPE; only the granted CPE is in S_WAIT_DONE when the
         // matching pulse arrives.
         .kmu_done_i    (launch_done),
         .dma_done_i    (dma_done),
         .dcr_done_i    (dcr_done),
+        .event_done_i  (event_done),
         .retire_evt    (retire_evt[q]),
         .retire_seqnum (retire_seqnum[q]),
         .submit_evt    (submit_evt[q]),
@@ -172,21 +175,26 @@ module VX_cp_core
     end
   endgenerate
 
-  // ----- Three resource arbiters (round-robin) -----
-  wire        kmu_valid [NUM_QUEUES];
-  wire [1:0]  kmu_prio  [NUM_QUEUES];
-  cmd_t       kmu_cmd   [NUM_QUEUES];
-  logic       kmu_grant [NUM_QUEUES];
+  // ----- Four resource arbiters (round-robin) -----
+  wire        kmu_valid   [NUM_QUEUES];
+  wire [1:0]  kmu_prio    [NUM_QUEUES];
+  cmd_t       kmu_cmd     [NUM_QUEUES];
+  logic       kmu_grant   [NUM_QUEUES];
 
-  wire        dma_valid [NUM_QUEUES];
-  wire [1:0]  dma_prio  [NUM_QUEUES];
-  cmd_t       dma_cmd   [NUM_QUEUES];
-  logic       dma_grant [NUM_QUEUES];
+  wire        dma_valid   [NUM_QUEUES];
+  wire [1:0]  dma_prio    [NUM_QUEUES];
+  cmd_t       dma_cmd     [NUM_QUEUES];
+  logic       dma_grant   [NUM_QUEUES];
 
-  wire        dcr_valid [NUM_QUEUES];
-  wire [1:0]  dcr_prio  [NUM_QUEUES];
-  cmd_t       dcr_cmd   [NUM_QUEUES];
-  logic       dcr_grant [NUM_QUEUES];
+  wire        dcr_valid   [NUM_QUEUES];
+  wire [1:0]  dcr_prio    [NUM_QUEUES];
+  cmd_t       dcr_cmd     [NUM_QUEUES];
+  logic       dcr_grant   [NUM_QUEUES];
+
+  wire        event_valid [NUM_QUEUES];
+  wire [1:0]  event_prio  [NUM_QUEUES];
+  cmd_t       event_cmd   [NUM_QUEUES];
+  logic       event_grant [NUM_QUEUES];
 
   generate
     for (genvar q = 0; q < NUM_QUEUES; ++q) begin : g_unpack_bids
@@ -204,6 +212,11 @@ module VX_cp_core
       assign dcr_prio[q]      = bid_dcr[q].priority_;
       assign dcr_cmd[q]       = bid_dcr[q].cmd;
       assign bid_dcr[q].grant = dcr_grant[q];
+
+      assign event_valid[q]     = bid_event[q].valid;
+      assign event_prio[q]      = bid_event[q].priority_;
+      assign event_cmd[q]       = bid_event[q].cmd;
+      assign bid_event[q].grant = event_grant[q];
     end
   endgenerate
 
@@ -219,18 +232,24 @@ module VX_cp_core
     .clk(clk), .reset(reset),
     .bid_valid(dcr_valid), .bid_priority(dcr_prio), .bid_grant(dcr_grant)
   );
+  VX_cp_arbiter #(.N(NUM_QUEUES)) u_arb_event (
+    .clk(clk), .reset(reset),
+    .bid_valid(event_valid), .bid_priority(event_prio), .bid_grant(event_grant)
+  );
 
   // ----- Pick the granted bid's cmd for each shared resource -----
-  logic any_kmu_grant, any_dma_grant, any_dcr_grant;
-  cmd_t granted_kmu_cmd, granted_dma_cmd, granted_dcr_cmd;
+  logic any_kmu_grant, any_dma_grant, any_dcr_grant, any_event_grant;
+  cmd_t granted_kmu_cmd, granted_dma_cmd, granted_dcr_cmd, granted_event_cmd;
   always_comb begin
     any_kmu_grant = 1'b0; granted_kmu_cmd = '0;
     any_dma_grant = 1'b0; granted_dma_cmd = '0;
     any_dcr_grant = 1'b0; granted_dcr_cmd = '0;
+    any_event_grant = 1'b0; granted_event_cmd = '0;
     for (int i = 0; i < NUM_QUEUES; ++i) begin
-      if (kmu_grant[i]) begin any_kmu_grant = 1'b1; granted_kmu_cmd = kmu_cmd[i]; end
-      if (dma_grant[i]) begin any_dma_grant = 1'b1; granted_dma_cmd = dma_cmd[i]; end
-      if (dcr_grant[i]) begin any_dcr_grant = 1'b1; granted_dcr_cmd = dcr_cmd[i]; end
+      if (kmu_grant[i])   begin any_kmu_grant   = 1'b1; granted_kmu_cmd   = kmu_cmd[i];   end
+      if (dma_grant[i])   begin any_dma_grant   = 1'b1; granted_dma_cmd   = dma_cmd[i];   end
+      if (dcr_grant[i])   begin any_dcr_grant   = 1'b1; granted_dcr_cmd   = dcr_cmd[i];   end
+      if (event_grant[i]) begin any_event_grant = 1'b1; granted_event_cmd = event_cmd[i]; end
     end
   end
 
@@ -265,14 +284,17 @@ module VX_cp_core
   );
   `UNUSED_VAR (gpu_if.dcr_req_ready)
 
-  // ----- DMA (AXI source via xbar) -----
+  // ----- DMA + event_unit (AXI sources via xbar) -----
   localparam logic [ID_W-1:0] DMA_TID_PREFIX =
     ID_W'(NUM_QUEUES) << ($clog2(N_SOURCES) > 0 ? (ID_W - $clog2(N_SOURCES)) : 0);
   localparam logic [ID_W-1:0] CMPL_TID_PREFIX =
     ID_W'(NUM_QUEUES + 1) << ($clog2(N_SOURCES) > 0 ? (ID_W - $clog2(N_SOURCES)) : 0);
+  localparam logic [ID_W-1:0] EVENT_TID_PREFIX =
+    ID_W'(NUM_QUEUES + 2) << ($clog2(N_SOURCES) > 0 ? (ID_W - $clog2(N_SOURCES)) : 0);
 
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) dma_axi  ();
-  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) cmpl_axi ();
+  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) dma_axi   ();
+  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) cmpl_axi  ();
+  VX_cp_axi_m_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) event_axi ();
 
   logic dma_done;
   VX_cp_dma #(.TID_PREFIX(DMA_TID_PREFIX)) u_dma (
@@ -282,6 +304,17 @@ module VX_cp_core
     .cmd   (granted_dma_cmd),
     .done  (dma_done),
     .axi_m (dma_axi)
+  );
+
+  // ----- Event unit (CMD_EVENT_SIGNAL / CMD_EVENT_WAIT) -----
+  logic event_done;
+  VX_cp_event_unit #(.TID_PREFIX(EVENT_TID_PREFIX)) u_event (
+    .clk   (clk),
+    .reset (reset),
+    .grant (any_event_grant),
+    .cmd   (granted_event_cmd),
+    .done  (event_done),
+    .axi_m (event_axi)
   );
 
   // ----- Completion writeback -----
@@ -405,6 +438,37 @@ module VX_cp_core
   assign cmpl_axi.rresp  = xbar_src[NUM_QUEUES+1].rresp;
   assign xbar_src[NUM_QUEUES+1].rready = cmpl_axi.rready;
 
+  // Wire event_unit into source slot NUM_QUEUES+2.
+  assign xbar_src[NUM_QUEUES+2].awvalid = event_axi.awvalid;
+  assign xbar_src[NUM_QUEUES+2].awaddr  = event_axi.awaddr;
+  assign xbar_src[NUM_QUEUES+2].awid    = event_axi.awid;
+  assign xbar_src[NUM_QUEUES+2].awlen   = event_axi.awlen;
+  assign xbar_src[NUM_QUEUES+2].awsize  = event_axi.awsize;
+  assign xbar_src[NUM_QUEUES+2].awburst = event_axi.awburst;
+  assign event_axi.awready = xbar_src[NUM_QUEUES+2].awready;
+  assign xbar_src[NUM_QUEUES+2].wvalid  = event_axi.wvalid;
+  assign xbar_src[NUM_QUEUES+2].wdata   = event_axi.wdata;
+  assign xbar_src[NUM_QUEUES+2].wstrb   = event_axi.wstrb;
+  assign xbar_src[NUM_QUEUES+2].wlast   = event_axi.wlast;
+  assign event_axi.wready = xbar_src[NUM_QUEUES+2].wready;
+  assign event_axi.bvalid = xbar_src[NUM_QUEUES+2].bvalid;
+  assign event_axi.bid    = xbar_src[NUM_QUEUES+2].bid;
+  assign event_axi.bresp  = xbar_src[NUM_QUEUES+2].bresp;
+  assign xbar_src[NUM_QUEUES+2].bready = event_axi.bready;
+  assign xbar_src[NUM_QUEUES+2].arvalid = event_axi.arvalid;
+  assign xbar_src[NUM_QUEUES+2].araddr  = event_axi.araddr;
+  assign xbar_src[NUM_QUEUES+2].arid    = event_axi.arid;
+  assign xbar_src[NUM_QUEUES+2].arlen   = event_axi.arlen;
+  assign xbar_src[NUM_QUEUES+2].arsize  = event_axi.arsize;
+  assign xbar_src[NUM_QUEUES+2].arburst = event_axi.arburst;
+  assign event_axi.arready = xbar_src[NUM_QUEUES+2].arready;
+  assign event_axi.rvalid = xbar_src[NUM_QUEUES+2].rvalid;
+  assign event_axi.rdata  = xbar_src[NUM_QUEUES+2].rdata;
+  assign event_axi.rid    = xbar_src[NUM_QUEUES+2].rid;
+  assign event_axi.rlast  = xbar_src[NUM_QUEUES+2].rlast;
+  assign event_axi.rresp  = xbar_src[NUM_QUEUES+2].rresp;
+  assign xbar_src[NUM_QUEUES+2].rready = event_axi.rready;
+
   VX_cp_axi_xbar #(
     .N_SOURCES (N_SOURCES),
     .ADDR_W    (ADDR_W),
@@ -427,7 +491,8 @@ module VX_cp_core
     for (int i = 0; i < NUM_QUEUES; ++i) begin
       if (cpe_cmd_valid[i]) cp_busy = 1'b1;
     end
-    if (any_kmu_grant || any_dma_grant || any_dcr_grant) cp_busy = 1'b1;
+    if (any_kmu_grant || any_dma_grant || any_dcr_grant ||
+        any_event_grant) cp_busy = 1'b1;
   end
 
   // Reset pulse from regfile (Q_CONTROL.reset / CP_CTRL.reset_all) is

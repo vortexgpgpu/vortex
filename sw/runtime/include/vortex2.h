@@ -38,10 +38,17 @@ extern "C" {
 // Opaque handles introduced by vortex2.h
 // ============================================================================
 
-typedef struct vx_queue* vx_queue_h;
-typedef struct vx_event* vx_event_h;
+typedef struct vx_queue*  vx_queue_h;
+typedef struct vx_event*  vx_event_h;
+typedef struct vx_module* vx_module_h;
+typedef struct vx_kernel* vx_kernel_h;
 
 // (vx_device_h, vx_buffer_h inherited from vortex.h as void* for ABI compat.)
+//
+// vx_kernel_h and vx_buffer_h are interchangeable in vx_launch_info_t.kernel:
+// the runtime tags the underlying object so vx_enqueue_launch can accept
+// either a kernel-image buffer (legacy) or a named kernel from a module
+// (vx_module_get_kernel, new in Phase 1b).
 
 // ============================================================================
 // Result type
@@ -169,6 +176,38 @@ vx_result_t vx_buffer_map     (vx_buffer_h buf, uint64_t offset, uint64_t size,
 vx_result_t vx_buffer_unmap   (vx_buffer_h buf, void* host_ptr);
 
 // ============================================================================
+// Module + kernel
+//
+// Phase 1b — load a .vxbin as a module, then resolve named entry points to
+// vx_kernel_h handles. Matches CUDA cuModule/cuFunction, HIP hipModule/
+// hipFunction, Metal MTLLibrary/MTLFunction, Vulkan VkShaderModule + entry
+// name. Replaces vx_buffer_load_kernel_file's "kernel image is a buffer"
+// pun with explicit object identity.
+//
+// vx_kernel_h can be passed wherever vx_launch_info_t.kernel expects a
+// vx_buffer_h (the dispatcher tags handles internally).
+// ============================================================================
+
+vx_result_t vx_module_load_file  (vx_device_h dev, const char* path,
+                                  vx_module_h* out);
+vx_result_t vx_module_load_bytes (vx_device_h dev, const void* bytes,
+                                  size_t size, vx_module_h* out);
+vx_result_t vx_module_retain     (vx_module_h mod);
+vx_result_t vx_module_release    (vx_module_h mod);
+
+vx_result_t vx_module_get_kernel (vx_module_h mod, const char* name,
+                                  vx_kernel_h* out);
+vx_result_t vx_kernel_retain     (vx_kernel_h k);
+vx_result_t vx_kernel_release    (vx_kernel_h k);
+
+// Per-kernel max-block hint. Returns the device's natural block dims as a
+// starting point; future revisions will pull from per-kernel compiler
+// metadata once the .vxbin symbol footer carries it.
+vx_result_t vx_kernel_get_max_block_size (vx_kernel_h k,
+                                          uint32_t* x, uint32_t* y,
+                                          uint32_t* z);
+
+// ============================================================================
 // Queue  (5 functions)
 // ============================================================================
 
@@ -235,19 +274,78 @@ vx_result_t vx_enqueue_dcr_read  (vx_queue_h q,
                                   vx_event_h*       out_event);
 
 // ============================================================================
-// Events  (7 functions)
+// Events
+//
+// Counter-based timeline events (Vulkan VkTimelineSemaphore / Metal
+// MTLSharedEvent.value / CUDA cuStreamWaitValue64 shape). Each event carries
+// a monotonically-increasing uint64_t value; signal advances it, wait blocks
+// until value >= target. The binary case (signal once, wait once) is just
+// "signal value=1, wait value=1" — which is what every vx_enqueue_* op
+// returns: a fresh event the worker advances to 1 on completion.
 // ============================================================================
 
-vx_result_t vx_user_event_create   (vx_device_h dev, vx_event_h* out);
-vx_result_t vx_user_event_signal   (vx_event_h ev, vx_result_t status);
+// Create a timeline event. The counter starts at 0.
+vx_result_t vx_event_create        (vx_device_h dev, vx_event_h* out);
+
+// Host-side signal — advance the event's counter to max(current, value).
+// Idempotent; never decrements.
+vx_result_t vx_event_signal        (vx_event_h ev, uint64_t value);
+
+// Host-side queries.
+vx_result_t vx_event_get_value     (vx_event_h ev, uint64_t* out_value);
+vx_result_t vx_event_wait_value    (vx_event_h ev, uint64_t value,
+                                    uint64_t timeout_ns);
+vx_result_t vx_event_wait_values   (uint32_t n,
+                                    const vx_event_h* evs,
+                                    const uint64_t*   values,
+                                    uint64_t timeout_ns);
 
 vx_result_t vx_event_retain        (vx_event_h ev);
 vx_result_t vx_event_release       (vx_event_h ev);
 
+vx_result_t vx_event_get_profiling (vx_event_h ev, vx_profile_info_t* out);
+
+// ============================================================================
+// Deprecated event API (binary-event semantics).
+//
+// Retained as thin shims over the timeline API for source-compat with
+// pre-v1 callers. New code should target the timeline functions above.
+//   vx_user_event_create  -> vx_event_create
+//   vx_user_event_signal  -> vx_event_signal(ev, 1)  + records optional error
+//   vx_event_status       -> derived from counter: QUEUED if 0, COMPLETE if >=1
+//   vx_event_wait_all     -> per-event vx_event_wait_value(ev, 1, timeout)
+//   vx_event_status_e     -> still defined above for the shim's return type
+// ============================================================================
+
+vx_result_t vx_user_event_create   (vx_device_h dev, vx_event_h* out);
+vx_result_t vx_user_event_signal   (vx_event_h ev, vx_result_t status);
 vx_result_t vx_event_status        (vx_event_h ev, vx_event_status_e* out);
 vx_result_t vx_event_wait_all      (uint32_t n, const vx_event_h* evs,
                                     uint64_t timeout_ns);
-vx_result_t vx_event_get_profiling (vx_event_h ev, vx_profile_info_t* out);
+
+// ============================================================================
+// Queue-ordered timeline signal / wait
+//
+// vx_enqueue_signal:    after the queue's prior work completes (including
+//                       wait_events), advance `ev`'s counter to `value`.
+// vx_enqueue_wait_value: subsequent queue ops block until `ev`'s counter
+//                       reaches `value`.
+//
+// Both return their own completion event (out_event), which signals when
+// the signal/wait op itself retires.
+// ============================================================================
+
+vx_result_t vx_enqueue_signal      (vx_queue_h q, vx_event_h ev,
+                                    uint64_t value,
+                                    uint32_t n_wait_events,
+                                    const vx_event_h* wait_events,
+                                    vx_event_h* out_event);
+
+vx_result_t vx_enqueue_wait_value  (vx_queue_h q, vx_event_h ev,
+                                    uint64_t value,
+                                    uint32_t n_wait_events,
+                                    const vx_event_h* wait_events,
+                                    vx_event_h* out_event);
 
 #ifdef __cplusplus
 } // extern "C"

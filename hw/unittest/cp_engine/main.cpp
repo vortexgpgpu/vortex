@@ -6,7 +6,7 @@
 //
 // Drives synthetic cmd_t values into the engine and verifies the FSM:
 //
-//   - IDLE -> DECODE -> RETIRE     for CMD_NOP / CMD_FENCE / CMD_EVENT_*
+//   - IDLE -> DECODE -> RETIRE     for CMD_NOP / CMD_FENCE
 //   - IDLE -> DECODE -> BID -> WAIT_DONE -> RETIRE for the resource opcodes
 //
 // Per opcode → resource classification (cmd:[7:0] header.opcode):
@@ -19,8 +19,8 @@
 //   0x05 DCR_READ       -> bid_dcr
 //   0x06 LAUNCH         -> bid_kmu
 //   0x07 FENCE          -> no bid (Phase 2b NOP)
-//   0x08 EVENT_SIGNAL   -> no bid (Phase 2b NOP)
-//   0x09 EVENT_WAIT     -> no bid (Phase 2b NOP)
+//   0x08 EVENT_SIGNAL   -> bid EVENT (Phase 1c)
+//   0x09 EVENT_WAIT     -> bid EVENT (Phase 1c)
 //
 // Also asserts:
 //   - retire_seqnum monotonically increments by 1 per retired command
@@ -132,14 +132,16 @@ static void cycle(vl_simulator<T>& sim, uint64_t& tick) {
 template <typename T>
 static uint64_t run_one_cmd(vl_simulator<T>& sim, uint64_t& tick,
                             uint8_t opcode, uint8_t flags,
-                            bool expect_kmu, bool expect_dma, bool expect_dcr,
+                            bool expect_kmu, bool expect_dma,
+                            bool expect_dcr, bool expect_event,
                             uint64_t prior_seqnum) {
     // ----- Pre-condition: engine in IDLE -----
     sim->cmd_in_valid = 0;
     set_cmd(sim.operator->(), 0);
-    sim->bid_kmu_grant = 0;
-    sim->bid_dma_grant = 0;
-    sim->bid_dcr_grant = 0;
+    sim->bid_kmu_grant   = 0;
+    sim->bid_dma_grant   = 0;
+    sim->bid_dcr_grant   = 0;
+    sim->bid_event_grant = 0;
     sim->eval();
     EXPECT(sim->cmd_in_ready == 1, "engine not in IDLE before cmd");
 
@@ -159,51 +161,63 @@ static uint64_t run_one_cmd(vl_simulator<T>& sim, uint64_t& tick,
     EXPECT((sim->submit_evt != 0) == prof, "submit_evt mismatch for profiled NOP/skip");
     cycle(sim, tick);
 
-    bool any_bid = expect_kmu || expect_dma || expect_dcr;
+    bool any_bid = expect_kmu || expect_dma || expect_dcr || expect_event;
 
     if (any_bid) {
         // ----- Cycle 3: BID -----
         // The expected bid line is asserted; others are not.
         sim->eval();
         if (expect_kmu) {
-            EXPECT(sim->bid_kmu_valid == 1, "expected bid_kmu_valid high");
-            EXPECT(sim->bid_dma_valid == 0, "expected bid_dma_valid low");
-            EXPECT(sim->bid_dcr_valid == 0, "expected bid_dcr_valid low");
+            EXPECT(sim->bid_kmu_valid   == 1, "expected bid_kmu_valid high");
+            EXPECT(sim->bid_dma_valid   == 0, "expected bid_dma_valid low");
+            EXPECT(sim->bid_dcr_valid   == 0, "expected bid_dcr_valid low");
+            EXPECT(sim->bid_event_valid == 0, "expected bid_event_valid low");
         } else if (expect_dma) {
-            EXPECT(sim->bid_kmu_valid == 0, "expected bid_kmu_valid low");
-            EXPECT(sim->bid_dma_valid == 1, "expected bid_dma_valid high");
-            EXPECT(sim->bid_dcr_valid == 0, "expected bid_dcr_valid low");
+            EXPECT(sim->bid_kmu_valid   == 0, "expected bid_kmu_valid low");
+            EXPECT(sim->bid_dma_valid   == 1, "expected bid_dma_valid high");
+            EXPECT(sim->bid_dcr_valid   == 0, "expected bid_dcr_valid low");
+            EXPECT(sim->bid_event_valid == 0, "expected bid_event_valid low");
         } else if (expect_dcr) {
-            EXPECT(sim->bid_kmu_valid == 0, "expected bid_kmu_valid low");
-            EXPECT(sim->bid_dma_valid == 0, "expected bid_dma_valid low");
-            EXPECT(sim->bid_dcr_valid == 1, "expected bid_dcr_valid high");
+            EXPECT(sim->bid_kmu_valid   == 0, "expected bid_kmu_valid low");
+            EXPECT(sim->bid_dma_valid   == 0, "expected bid_dma_valid low");
+            EXPECT(sim->bid_dcr_valid   == 1, "expected bid_dcr_valid high");
+            EXPECT(sim->bid_event_valid == 0, "expected bid_event_valid low");
+        } else if (expect_event) {
+            EXPECT(sim->bid_kmu_valid   == 0, "expected bid_kmu_valid low");
+            EXPECT(sim->bid_dma_valid   == 0, "expected bid_dma_valid low");
+            EXPECT(sim->bid_dcr_valid   == 0, "expected bid_dcr_valid low");
+            EXPECT(sim->bid_event_valid == 1, "expected bid_event_valid high");
         }
 
         // Grant immediately; FSM transitions to WAIT_DONE at edge.
-        if (expect_kmu) sim->bid_kmu_grant = 1;
-        if (expect_dma) sim->bid_dma_grant = 1;
-        if (expect_dcr) sim->bid_dcr_grant = 1;
+        if (expect_kmu)   sim->bid_kmu_grant   = 1;
+        if (expect_dma)   sim->bid_dma_grant   = 1;
+        if (expect_dcr)   sim->bid_dcr_grant   = 1;
+        if (expect_event) sim->bid_event_grant = 1;
         sim->eval();
 
         // start_evt pulses iff F_PROFILE && (cur_res granted).
         EXPECT((sim->start_evt != 0) == prof, "start_evt mismatch");
         cycle(sim, tick);
 
-        sim->bid_kmu_grant = 0;
-        sim->bid_dma_grant = 0;
-        sim->bid_dcr_grant = 0;
+        sim->bid_kmu_grant   = 0;
+        sim->bid_dma_grant   = 0;
+        sim->bid_dcr_grant   = 0;
+        sim->bid_event_grant = 0;
 
         // ----- Cycle 4: WAIT_DONE -> pulse done -> RETIRE -----
         // Phase 3: engine waits for the resource's done pulse before
         // retiring (was treating grant as done in Phase 2b). Simulate
         // a one-cycle done pulse here.
-        if (expect_kmu) sim->kmu_done_i = 1;
-        if (expect_dma) sim->dma_done_i = 1;
-        if (expect_dcr) sim->dcr_done_i = 1;
+        if (expect_kmu)   sim->kmu_done_i   = 1;
+        if (expect_dma)   sim->dma_done_i   = 1;
+        if (expect_dcr)   sim->dcr_done_i   = 1;
+        if (expect_event) sim->event_done_i = 1;
         cycle(sim, tick);
-        sim->kmu_done_i = 0;
-        sim->dma_done_i = 0;
-        sim->dcr_done_i = 0;
+        sim->kmu_done_i   = 0;
+        sim->dma_done_i   = 0;
+        sim->dcr_done_i   = 0;
+        sim->event_done_i = 0;
     }
 
     // ----- RETIRE cycle: retire_evt high, seqnum still old value -----
@@ -233,54 +247,56 @@ int main(int argc, char** argv) {
     sim->state_prio   = 0;
     sim->cmd_in_valid = 0;
     set_cmd(sim.operator->(), 0);
-    sim->bid_kmu_grant = 0;
-    sim->bid_dma_grant = 0;
-    sim->bid_dcr_grant = 0;
-    sim->kmu_done_i = 0;
-    sim->dma_done_i = 0;
-    sim->dcr_done_i = 0;
+    sim->bid_kmu_grant   = 0;
+    sim->bid_dma_grant   = 0;
+    sim->bid_dcr_grant   = 0;
+    sim->bid_event_grant = 0;
+    sim->kmu_done_i   = 0;
+    sim->dma_done_i   = 0;
+    sim->dcr_done_i   = 0;
+    sim->event_done_i = 0;
     tick = sim.reset(tick);
 
     uint64_t seq = 0;
 
     // ----- NOP retires without any bid -----
     seq = run_one_cmd(sim, tick, OP_NOP, 0,
-                      /*kmu=*/false, /*dma=*/false, /*dcr=*/false, seq);
+                      /*kmu=*/false, /*dma=*/false, /*dcr=*/false, /*event=*/false, seq);
 
     // ----- LAUNCH bids KMU -----
     seq = run_one_cmd(sim, tick, OP_LAUNCH, 0,
-                      /*kmu=*/true, /*dma=*/false, /*dcr=*/false, seq);
+                      /*kmu=*/true, /*dma=*/false, /*dcr=*/false, /*event=*/false, seq);
 
     // ----- DCR_WRITE bids DCR -----
     seq = run_one_cmd(sim, tick, OP_DCR_WRITE, 0,
-                      /*kmu=*/false, /*dma=*/false, /*dcr=*/true, seq);
+                      /*kmu=*/false, /*dma=*/false, /*dcr=*/true, /*event=*/false, seq);
 
     // ----- DCR_READ bids DCR -----
     seq = run_one_cmd(sim, tick, OP_DCR_READ, 0,
-                      /*kmu=*/false, /*dma=*/false, /*dcr=*/true, seq);
+                      /*kmu=*/false, /*dma=*/false, /*dcr=*/true, /*event=*/false, seq);
 
     // ----- MEM_WRITE / MEM_READ / MEM_COPY all bid DMA -----
     seq = run_one_cmd(sim, tick, OP_MEM_WRITE, 0,
-                      /*kmu=*/false, /*dma=*/true, /*dcr=*/false, seq);
+                      /*kmu=*/false, /*dma=*/true, /*dcr=*/false, /*event=*/false, seq);
     seq = run_one_cmd(sim, tick, OP_MEM_READ, 0,
-                      /*kmu=*/false, /*dma=*/true, /*dcr=*/false, seq);
+                      /*kmu=*/false, /*dma=*/true, /*dcr=*/false, /*event=*/false, seq);
     seq = run_one_cmd(sim, tick, OP_MEM_COPY, 0,
-                      /*kmu=*/false, /*dma=*/true, /*dcr=*/false, seq);
+                      /*kmu=*/false, /*dma=*/true, /*dcr=*/false, /*event=*/false, seq);
 
-    // ----- FENCE / EVENT_SIGNAL / EVENT_WAIT skip resources (Phase 2b) -----
-    seq = run_one_cmd(sim, tick, OP_FENCE, 0, false, false, false, seq);
-    seq = run_one_cmd(sim, tick, OP_EVT_SIG, 0, false, false, false, seq);
-    seq = run_one_cmd(sim, tick, OP_EVT_WAIT, 0, false, false, false, seq);
+    // ----- FENCE still skips (no resource); EVENT_SIGNAL / EVENT_WAIT bid EVENT (Phase 1c) -----
+    seq = run_one_cmd(sim, tick, OP_FENCE,    0, false, false, false, false, seq);
+    seq = run_one_cmd(sim, tick, OP_EVT_SIG,  0, false, false, false, true,  seq);
+    seq = run_one_cmd(sim, tick, OP_EVT_WAIT, 0, false, false, false, true,  seq);
 
     // ----- Profiled NOP fires submit/end pulses (no bid → no start_evt) ---
     // run_one_cmd handles the profiling assertions for both bid and skip
     // paths; reuse it.
     seq = run_one_cmd(sim, tick, OP_NOP, (1u << F_PROFILE_BIT),
-                      false, false, false, seq);
+                      false, false, false, false, seq);
 
     // ----- Profiled LAUNCH fires submit/start/end pulses -----
     seq = run_one_cmd(sim, tick, OP_LAUNCH, (1u << F_PROFILE_BIT),
-                      true, false, false, seq);
+                      true, false, false, false, seq);
 
     // ----- Priority propagation: set state_prio=3, drive a LAUNCH, check
     //       bid_kmu_prio reads back as 3 during BID. -----

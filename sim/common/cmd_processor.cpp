@@ -167,6 +167,22 @@ void CommandProcessor::publish_completion() {
     hooks_.dram_write(q0_.cmpl_addr, &seq, sizeof(seq));
 }
 
+// Mirrors hw/rtl/cp/VX_cp_pkg.sv: wait_op_e encoded in arg2[1:0].
+bool CommandProcessor::event_wait_satisfied_() {
+    if (!hooks_.dram_read) return true;   // no DRAM hook -> retire as NOP
+    uint64_t cur = 0;
+    hooks_.dram_read(cur_cmd_.arg0, &cur, sizeof(cur));
+    const uint64_t target = cur_cmd_.arg1;
+    const uint32_t op = uint32_t(cur_cmd_.arg2) & 0x3;
+    switch (op) {
+        case 0: return cur == target;   // WAIT_OP_EQ
+        case 1: return cur >= target;   // WAIT_OP_GE
+        case 2: return cur >  target;   // WAIT_OP_GT
+        case 3: return cur != target;   // WAIT_OP_NE
+        default: return true;
+    }
+}
+
 void CommandProcessor::tick_launch() {
     switch (launch_state_) {
         case LaunchState::Idle:        return;
@@ -206,11 +222,12 @@ void CommandProcessor::tick_engine() {
         cur_is_launch_ = (cur_cmd_.opcode == OP_LAUNCH);
         switch (cur_cmd_.opcode) {
             case OP_NOP: case OP_FENCE:
-            case OP_EVENT_SIG: case OP_EVENT_WAIT:
                 // No resource bid for these opcodes; retire as NOP.
                 cur_is_no_resource_ = true;
                 break;
             default:
+                // LAUNCH, DCR_*, MEM_*, EVENT_SIG, EVENT_WAIT all bid a
+                // resource.
                 cur_is_no_resource_ = false;
                 break;
         }
@@ -256,6 +273,32 @@ void CommandProcessor::tick_engine() {
                     last_dcr_rsp_ = hooks_.vortex_dcr_read(addr, tag);
                 }
                 eng_state_ = EngState::Retire;
+            } else if (cur_cmd_.opcode == OP_EVENT_SIG) {
+                // CMD_EVENT_SIGNAL: write arg1 (8-byte value) to arg0
+                // (device counter slot). Matches VX_cp_event_unit's
+                // SIGNAL path (AW + W + B).
+                if (hooks_.dram_write) {
+                    uint64_t v = cur_cmd_.arg1;
+                    hooks_.dram_write(cur_cmd_.arg0, &v, sizeof(v));
+                }
+                eng_state_ = EngState::Retire;
+            } else if (cur_cmd_.opcode == OP_EVENT_WAIT) {
+                // CMD_EVENT_WAIT: spin reading arg0 until the value
+                // matches arg1 under the wait_op encoded in arg2[1:0].
+                // Functional model: do the compare in this single tick;
+                // if it doesn't match, transition to WaitDone and keep
+                // re-checking on subsequent ticks (so multiple events
+                // can interleave).
+                if (event_wait_satisfied_()) {
+                    eng_state_ = EngState::Retire;
+                } else {
+                    // Reuse WaitDone state via a dedicated launch-shaped
+                    // flag isn't needed — just spin in Bid by NOT
+                    // transitioning. The cp_mmio_read host loop will
+                    // tick the simulator further, on each tick we'll
+                    // re-check.
+                    // Stay in Bid (no state change).
+                }
             } else {
                 // MEM_* are not implemented in this functional model;
                 // retire as NOP.

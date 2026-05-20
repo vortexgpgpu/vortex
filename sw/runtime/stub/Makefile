@@ -53,6 +53,7 @@ SRCS := \
 	$(RT_COMMON_DIR)/vx_buffer.cpp \
 	$(RT_COMMON_DIR)/vx_queue.cpp \
 	$(RT_COMMON_DIR)/vx_event.cpp \
+	$(RT_COMMON_DIR)/vx_module.cpp \
 	$(RT_COMMON_DIR)/vx_runtime_helpers.cpp \
 	$(RT_COMMON_DIR)/legacy_runtime.cpp \
 	$(RT_COMMON_DIR)/legacy_utils.cpp \

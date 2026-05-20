@@ -241,8 +241,15 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         return VX_ERR_INVALID_INFO;
     if (info->ndim > 3) return VX_ERR_INVALID_VALUE;
 
-    Buffer* kernel = to_buffer(info->kernel);
-    Buffer* args   = to_buffer(info->args);
+    // Resolve the kernel handle. The launch kernel slot accepts either a
+    // Buffer (legacy: image base = entry PC) or a Kernel (new in Phase 1b:
+    // named entry point inside a Module). Disambiguated by the tag at
+    // offset 0 of the LaunchKernelHandle base.
+    LaunchKernelHandle* lkh = to_lkh(info->kernel);
+    const uint64_t kernel_pc = (lkh->launch_kind() == LaunchKernelHandle::Kind::Kernel)
+                                 ? static_cast<Kernel*>(lkh)->pc()
+                                 : static_cast<Buffer*>(lkh)->dev_address();
+    Buffer* args = to_buffer(info->args);
 
     // Capture the launch descriptor by value into the work lambda so the
     // caller can free/reuse `info` immediately after enqueue returns.
@@ -260,7 +267,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
 
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, kernel, args, ndim, lmem_size,
+    cmd.work = [this, kernel_pc, args, ndim, lmem_size,
                 grid_in, block_in](uint64_t* s, uint64_t* e) {
         Platform* p = device_->platform();
 
@@ -288,7 +295,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         {
             std::lock_guard<std::mutex> g(enqueue_mu_);
 
-            const uint64_t pc   = kernel->dev_address();
+            const uint64_t pc   = kernel_pc;
             const uint64_t argp = args->dev_address();
 
             // Program the KMU DCRs via CMD_DCR_WRITE descriptors through
@@ -370,6 +377,79 @@ vx_result_t Queue::enqueue_dcr_read(uint32_t addr, uint32_t* host_dst,
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
         auto r = device_->cp_submit_dcr_read(addr, /*tag=*/0, host_dst);
+        *e = now_ns();
+        return r;
+    };
+    return this->enqueue(std::move(cmd), nw, w, out);
+}
+
+vx_result_t Queue::enqueue_signal(Event* ev, uint64_t value,
+                                  uint32_t nw, const vx_event_h* w,
+                                  vx_event_h* out) {
+    if (!ev) return VX_ERR_INVALID_HANDLE;
+    // Eagerly allocate the CP-side counter slot now (cheap if already done)
+    // so all downstream worker-side and CP-side signals see a consistent
+    // device-resident value. The slot doubles as the mirror that
+    // Event::signal upcalls write into via mem_upload.
+    ev->cp_slot();
+    // Retain the target event for the duration the work item lives in the
+    // queue; release in the work lambda after signaling.
+    ev->retain();
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, ev, value](uint64_t* s, uint64_t* e) {
+        *s = now_ns();
+        // 1) Host-side signal FIRST. Event::signal() mirrors the value
+        //    to the device-side counter slot via mem_upload, which
+        //    bypasses cp_mu_. A CP-side CMD_EVENT_WAIT spinning on the
+        //    same slot will see the update and retire — without this,
+        //    a WAIT that grabbed cp_mu_ first would deadlock against a
+        //    SIGNAL waiting on cp_mu_.
+        ev->signal(value);
+        // 2) CP-side SIGNAL — enforces queue-internal ordering against
+        //    subsequent ops on this queue that depend on the slot being
+        //    set. The CP write of the same value is redundant but
+        //    idempotent; the cost is one ring slot + one round-trip.
+        vx_result_t r = VX_SUCCESS;
+        uint64_t slot = ev->cp_slot();
+        if (slot != 0) {
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            r = device_->cp_submit_event_signal(slot, value);
+        }
+        ev->release();
+        *e = now_ns();
+        return r;
+    };
+    return this->enqueue(std::move(cmd), nw, w, out);
+}
+
+vx_result_t Queue::enqueue_wait_value(Event* ev, uint64_t value,
+                                      uint32_t nw, const vx_event_h* w,
+                                      vx_event_h* out) {
+    if (!ev) return VX_ERR_INVALID_HANDLE;
+    ev->cp_slot();
+    ev->retain();
+    Command cmd;
+    cmd.queued_ns = now_ns();
+    cmd.work = [this, ev, value](uint64_t* s, uint64_t* e) {
+        *s = now_ns();
+        vx_result_t r = VX_SUCCESS;
+        // Route through the CP if the event has a device-side slot —
+        // VX_cp_event_unit spin-polls device-side. The CP retire
+        // serializes the wait against subsequent queue ops without a
+        // host round-trip per check. cp_submit_cl_ releases cp_mu_
+        // during the SEQNUM poll so a concurrent SIGNAL on another
+        // queue can post into the same ring.
+        uint64_t slot = ev->cp_slot();
+        if (slot != 0) {
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            r = device_->cp_submit_event_wait(slot, value);
+        } else {
+            // Fallback: host-side wait. Used only if slot allocation
+            // failed (out of device memory) — preserves correctness.
+            r = ev->wait_value(value, VX_TIMEOUT_INFINITE);
+        }
+        ev->release();
         *e = now_ns();
         return r;
     };
@@ -475,4 +555,20 @@ extern "C" vx_result_t vx_enqueue_dcr_read(vx_queue_h q,
                                            vx_event_h* out) {
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_dcr_read(addr, host_dst, nw, w, out);
+}
+
+extern "C" vx_result_t vx_enqueue_signal(vx_queue_h q, vx_event_h ev,
+                                         uint64_t value,
+                                         uint32_t nw, const vx_event_h* w,
+                                         vx_event_h* out) {
+    if (!q || !ev) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_signal(to_event(ev), value, nw, w, out);
+}
+
+extern "C" vx_result_t vx_enqueue_wait_value(vx_queue_h q, vx_event_h ev,
+                                             uint64_t value,
+                                             uint32_t nw, const vx_event_h* w,
+                                             vx_event_h* out) {
+    if (!q || !ev) return VX_ERR_INVALID_HANDLE;
+    return to_queue(q)->enqueue_wait_value(to_event(ev), value, nw, w, out);
 }
