@@ -22,7 +22,7 @@ CSV_HEADER="file,testbench,run,m,n,k,sparsity,a_sparsity,b_sparsity,num_threads,
 CONFIGS=(
 
   #  COMPARISON WITH SMALLER BASELINES - FROM SERVER
-  # -# "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu    -l run_b_1.log"
+  # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu    -l run_b_1.log"
   # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp32 -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_sp -l run_b_2.log"
 
   # "-m 128  -n 128  -k 512  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu    -l run_b_3.log"
@@ -101,9 +101,9 @@ CONFIGS=(
   # "-m 64  -n 64  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_3.log"
   # "-m 64  -n 64  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_4.log"
 
-  "-m 64  -n 64  -k 512  -s 1 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_5.log"
-  "-m 64  -n 64  -k 512  -s 1 -a 0.5  -b 0.5  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_6.log"
-  "-m 64  -n 64  -k 512  -s 1 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_7.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_5.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.5  -b 0.5  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_6.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 6 -t sgemm_tcu_op -l run_d_7.log"
 
 
   #  SPARSITIES SENSITIVITY DIAGRAM
@@ -173,12 +173,12 @@ CONFIGS=(
   # "-m 64  -n 64  -k 512  -s 2 -a 0.99 -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_55.log"
  
   # EDGE CASE FOR A DENSE (POINTS ON Y-AXIS)
-  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_56.log"
-  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_57.log"
-  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_58.log"
-  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_59.log"
-  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_60.log"
-  "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_61.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_56.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.4  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_57.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.6  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_58.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.8  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_59.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_60.log"
+  # "-m 64  -n 64  -k 512  -s 1 -a 0.0  -b 0.99 -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_s_61.log"
 
 
   # EVALUATION OF S1 MODE
