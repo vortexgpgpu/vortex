@@ -1653,12 +1653,17 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         trace->data = trace_data;
         uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
         uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
+        // cd_desc from x12 (a2) on first uop via rs3_data; single descriptor for C reads and D writes.
+        uint32_t cd_desc = rs3_data.empty() ? 0 : rs3_data.at(0).u32;
         core_->tensor_unit()->wgmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d,
                                     tpuArgs.step_m, tpuArgs.step_n, tpuArgs.step_k,
-                                    a_desc, b_desc, rs1_data, rs3_data, rd_data,
+                                    a_desc, b_desc, cd_desc,
+                                    rs1_data, rs3_data, rd_data,
                                     trace_data.get(), tpuArgs.is_sparse,
-                                    tpuArgs.cd_nregs, tpuArgs.is_a_smem);
-        rd_write = trace_data->is_last_k;
+                                    tpuArgs.cd_nregs, tpuArgs.is_a_smem,
+                                    tpuArgs.is_cd_smem);
+        // When C/D are smem descriptors, results are already stored to smem; no reg writeback.
+        rd_write = trace_data->is_last_k && !tpuArgs.is_cd_smem;
       } break;
   #endif // TCU_WGMMA_ENABLE
       case TcuType::META_STORE: {

@@ -26,7 +26,11 @@ using namespace vortex;
 
 namespace vt = vortex::tensor;
 using cfg    = vt::wmma_config_t<NUM_THREADS>;
+#ifdef TCU_WG_N_MUL
+using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::fp32, vt::fp32, 8u * TCU_WG_N_MUL>;
+#else
 using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::fp32, vt::fp32>;
+#endif
 
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
@@ -795,26 +799,31 @@ public:
              uint32_t step_k,
              uint32_t a_desc,
              uint32_t b_desc,
+             uint32_t cd_desc,
              const std::vector<reg_data_t>& rs1_data,
              const std::vector<reg_data_t>& rs3_data,
              std::vector<reg_data_t>& rd_data,
              ExeTraceData* trace_data,
              bool is_sparse,
              uint32_t cd_nregs,
-             uint32_t is_a_smem) {
-    __unused(cd_nregs);
+             uint32_t is_a_smem,
+             uint32_t is_cd_smem) {
+    uint32_t nrc = 8u << cd_nregs;
+    uint32_t xtileN_actual = (nrc * NUM_THREADS) / wg_cfg::xtileM;
     if (is_sparse && !vt::sparse_format_supported(fmt_s)) {
       std::cout << "Error: WGMMA_SP unsupported input format: "
                 << vt::fmt_string(fmt_s) << " (id=" << fmt_s << ")" << std::endl;
       std::abort();
     }
 
-    uint32_t ratio   = elem_ratio(fmt_s);
-    uint32_t k_words = cfg::tcK;
-    uint32_t e_bytes = elem_bits(fmt_s) / 8;
+    uint32_t ratio    = elem_ratio(fmt_s);
+    uint32_t k_words  = cfg::tcK;
+    uint32_t e_bytes  = elem_bits(fmt_s) / 8;
+    uint32_t e_bytes_d = elem_bits(fmt_d) / 8;
 
-    // Decode smem descriptors (B is always from smem, A optionally)
-    lmem_desc_t sd_a, sd_b;
+    // Decode smem descriptors: B always from smem, A optionally, C/D when is_cd_smem.
+    // cd_desc is a single descriptor for the accumulator buffer used for both C reads and D writes.
+    lmem_desc_t sd_a, sd_b, sd_cd;
     if (step_k == 0 && step_m == 0 && step_n == 0) {
       if (is_a_smem) {
         sd_a = {uint64_t(LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
@@ -822,9 +831,16 @@ public:
       }
       sd_b = {uint64_t(LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
       lmem_desc_[wid][1] = sd_b;
+      if (is_cd_smem) {
+        sd_cd = {uint64_t(LMEM_BASE_ADDR) + (cd_desc & 0xFFFF), (cd_desc >> 16) / e_bytes_d, false};
+        lmem_desc_[wid][2] = sd_cd;
+      }
     } else {
       sd_a = lmem_desc_[wid][0];
       sd_b = lmem_desc_[wid][1];
+      if (is_cd_smem) {
+        sd_cd = lmem_desc_[wid][2];
+      }
     }
 
     // Prepare A tile [tcM][tcK]
@@ -904,8 +920,30 @@ public:
       }
     }
 
-    fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d,
-              a_tile, b_tile, rs3_data, rd_data);
+    if (is_cd_smem) {
+      // Load C elements from smem accumulator, compute FMA, store results back to same buffer.
+      std::vector<reg_data_t> c_vals(cfg::tcM * cfg::tcN);
+      for (uint32_t i = 0; i < cfg::tcM; ++i) {
+        for (uint32_t j = 0; j < cfg::tcN; ++j) {
+          uint32_t row = step_m * cfg::tcM + i;
+          uint32_t col = step_n * cfg::tcN + j;
+          uint32_t val = 0;
+          core_->mem_read(&val, sd_cd.base + uint64_t(row * sd_cd.ldm + col) * e_bytes_d, e_bytes_d);
+          c_vals[i * cfg::tcN + j].u32 = val;
+        }
+      }
+      fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d, a_tile, b_tile, c_vals, rd_data);
+      for (uint32_t i = 0; i < cfg::tcM; ++i) {
+        for (uint32_t j = 0; j < cfg::tcN; ++j) {
+          uint32_t row = step_m * cfg::tcM + i;
+          uint32_t col = step_n * cfg::tcN + j;
+          uint32_t val = rd_data[i * cfg::tcN + j].u32;
+          core_->mem_write(&val, sd_cd.base + uint64_t(row * sd_cd.ldm + col) * e_bytes_d, e_bytes_d);
+        }
+      }
+    } else {
+      fedp_tile(wid, step_m, step_n, step_k, fmt_s, fmt_d, a_tile, b_tile, rs3_data, rd_data);
+    }
 
     trace_data->is_last_k = true;
 
@@ -915,11 +953,11 @@ public:
     // and count perf stats.
     if (step_m == 0 && step_n == 0 && step_k == 0) {
       constexpr uint32_t a_total    = wg_cfg::xtileM * wg_cfg::xtileK;
-      constexpr uint32_t b_total    = wg_cfg::xtileK * wg_cfg::xtileN;
+      const     uint32_t b_total    = wg_cfg::xtileK * xtileN_actual;
       constexpr uint32_t num_banks  = LMEM_NUM_BANKS;
       constexpr uint32_t a_bank_rows    = (a_total + num_banks - 1) / num_banks;
       constexpr uint32_t a_bank_rows_sp = ((a_total / 2) + num_banks - 1) / num_banks;
-      constexpr uint32_t b_bank_rows    = (b_total + num_banks - 1) / num_banks;
+      const     uint32_t b_bank_rows    = (b_total + num_banks - 1) / num_banks;
 
       // B dirty: same warp re-alloc with same desc (LMEM may be overwritten by DXA)
       bool b_dirty = tbuf_state_.b_valid
@@ -944,7 +982,16 @@ public:
         fetch_cycles += (meta_total + num_banks - 1) / num_banks;
       }
 
-      // Count LMEM reads: B words (if not cached) + A words + metadata words
+      // When is_cd_smem, each A block streamed in triggers a C load and D store.
+      // Model as additional bank rows: C reads + D writes interleaved with A streaming.
+      if (is_cd_smem) {
+        const uint32_t cd_total     = wg_cfg::xtileM * xtileN_actual;
+        const uint32_t cd_bank_rows = (cd_total + num_banks - 1) / num_banks;
+        fetch_cycles += cd_bank_rows; // C reads per A block
+        fetch_cycles += cd_bank_rows; // D writes per A block
+      }
+
+      // Count LMEM reads: B words (if not cached) + A words + metadata words + C words
       uint32_t lmem_reads = 0;
       if (!b_cached) {
         lmem_reads += b_total;
@@ -958,6 +1005,10 @@ public:
         uint32_t meta_stride_r = (cfg::tcM * meta_row_bits_r + 31) / 32;
         lmem_reads += wg_cfg::m_steps * (wg_cfg::k_steps / 2) * meta_stride_r;
       }
+      if (is_cd_smem) {
+        const uint32_t cd_total = wg_cfg::xtileM * xtileN_actual;
+        lmem_reads += cd_total; // C reads
+      }
       perf_stats_.lmem_reads += lmem_reads;
 
       trace_data->fetch_delay = fetch_cycles;
@@ -968,6 +1019,7 @@ public:
          << " b_dirty=" << b_dirty
          << " b_cached=" << b_cached
          << " is_a_smem=" << is_a_smem
+         << " is_cd_smem=" << is_cd_smem
          << " fetch=" << fetch_cycles);
 
       // Update tile buffer state
@@ -1113,7 +1165,7 @@ private:
   Arch          arch_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
   std::vector<std::array<uint32_t, kMxMetaWords>> mx_meta_;
-  std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
+  std::unordered_map<uint32_t, lmem_desc_t[4]> lmem_desc_; // [0]=A, [1]=B, [2]=C, [3]=D
   PerfStats     perf_stats_;
   TileBufferState tbuf_state_;
 };
@@ -1127,8 +1179,9 @@ op_string_t TensorUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
              + "." + std::to_string(args.step_k), ""};
   case TcuType::WGMMA: {
-    uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
-    std::string src_mode = std::string(args.is_a_smem ? "S" : "R") + "S";
+    uint32_t nrc = 8u << args.cd_nregs;
+    std::string src_mode = std::string(args.is_a_smem ? "S" : "R") + "S"
+                         + std::string(args.is_cd_smem ? "S" : "R"); // CD mode
     return {"WGMMA." + std::string(args.is_sparse ? "SP." : "") + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
              + "." + std::to_string(nrc) + "." + src_mode
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n)
@@ -1168,7 +1221,7 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
 
 #ifdef TCU_WGMMA_ENABLE
   if (tcu_type == TcuType::WGMMA) {
-    uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
+    uint32_t nrc = 8u << args.cd_nregs;
     uint32_t k_count = args.is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
     uint32_t mma_uops = k_count * nrc;
     uint32_t meta_stores = 0;
@@ -1225,7 +1278,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t group = uop_index;
       uint32_t reg_rs1 = (group > 0) ? meta_reg1 : meta_reg0;
       uop_instr->set_op_type(TcuType::META_STORE);
-      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, group, 0, 0, 0, TCU_META_KIND_SPARSE});
+      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, group, 0, 0, 0, TCU_META_KIND_SPARSE, 0});
       uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
     } else if (uop_index < total_meta_stores) {
       // Phase 1b: MX scale metadata-store uops
@@ -1239,7 +1292,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         reg_rs1 = mx8_regs[mx_store];
       }
       uop_instr->set_op_type(TcuType::META_STORE);
-      uop_instr->set_args(IntrTcuArgs{0, 0, 0, fmt_s, mx_store, 0, 0, 0, TCU_META_KIND_MX});
+      uop_instr->set_args(IntrTcuArgs{0, 0, 0, fmt_s, mx_store, 0, 0, 0, TCU_META_KIND_MX, 0});
       uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
     } else {
       // Phase 2: MMA uops
@@ -1267,7 +1320,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uint32_t actual_n = lg_k ? (n_sp >> lg_k) : n_sp;
         uint32_t reg_rs3 = rc_base + (mma_idx >> 1);
         uop_instr->set_op_type(TcuType::WMMA);
-        uop_instr->set_args(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, actual_n, 0, 0});
+        uop_instr->set_args(IntrTcuArgs{true, 0, 0, fmt_s, fmt_d, m_sp, actual_n, 0, 0, 0});
         uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         uop_instr->set_src_reg(0, ra_base + m_sp, RegType::Float);
         uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
@@ -1323,7 +1376,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
           reg_rs3 = rc_base + c_off;
         }
         uop_instr->set_op_type(TcuType::WMMA);
-        uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k, 0});
+        uop_instr->set_args(IntrTcuArgs{is_sparse, 0, 0, fmt_s, fmt_d, m, n, k, 0, 0});
         uop_instr->set_dest_reg(reg_rs3, RegType::Float);
         uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
         uop_instr->set_src_reg(1, reg_rs2, RegType::Float);
@@ -1359,7 +1412,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t group = uop_index;
       uint32_t reg_rs1 = (group > 0) ? wg_meta_reg1 : wg_meta_reg0;
       uop_instr->set_op_type(TcuType::META_STORE);
-      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, group, 0, 0, 0, TCU_META_KIND_SPARSE_WG});
+      uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, group, 0, 0, 0, TCU_META_KIND_SPARSE_WG, 0});
       uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
     } else {
       // MMA phase
@@ -1376,8 +1429,10 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
       uop_instr->set_op_type(TcuType::WGMMA);
       uop_instr->set_args(IntrTcuArgs{is_sparse, is_a_smem ? 1u : 0u, cd_nregs,
-                                     fmt_s, fmt_d, m, n, k, 0});
-      uop_instr->set_dest_reg(r, RegType::Float);
+                                     fmt_s, fmt_d, m, n, k, 0, args.is_cd_smem ? 1u : 0u});
+      if (!args.is_cd_smem) {
+        uop_instr->set_dest_reg(r, RegType::Float);
+      }
       if (mma_idx == 0) {
         if (is_a_smem) {
           uop_instr->set_src_reg(0, a0, RegType::Integer);
@@ -1386,11 +1441,18 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
           uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
         }
         uop_instr->set_src_reg(1, a1, RegType::Integer);
+        // First uop carries cd_desc from x12 (a2) when C/D are smem accumulators.
+        if (args.is_cd_smem) {
+          uop_instr->set_src_reg(2, 12, RegType::Integer);
+        }
       } else if (!is_a_smem) {
         uint32_t rs1_off = m * k_count + k;
         uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
       }
-      uop_instr->set_src_reg(2, r, RegType::Float);
+      // When is_cd_smem and mma_idx>0, C is loaded from smem; no register src needed.
+      if (!args.is_cd_smem) {
+        uop_instr->set_src_reg(2, r, RegType::Float);
+      }
     }
     // fu_lock on first uop, fu_unlock on last uop
     uop_instr->set_fu_lock(uop_index == 0);
@@ -1453,16 +1515,18 @@ void TensorUnit::wgmma(uint32_t wid,
                        uint32_t step_k,
                        uint32_t a_desc,
                        uint32_t b_desc,
+                       uint32_t cd_desc,
                        const std::vector<reg_data_t>& rs1_data,
                        const std::vector<reg_data_t>& rs3_data,
                        std::vector<reg_data_t>& rd_data,
                        ExeTraceData* trace_data,
                        bool is_sparse,
                        uint32_t cd_nregs,
-                       uint32_t is_a_smem) {
+                       uint32_t is_a_smem,
+                       uint32_t is_cd_smem) {
   impl_->wgmma(wid, fmt_s, fmt_d, step_m, step_n, step_k, a_desc, b_desc,
-               rs1_data, rs3_data, rd_data, trace_data,
-               is_sparse, cd_nregs, is_a_smem);
+               cd_desc, rs1_data, rs3_data, rd_data, trace_data,
+               is_sparse, cd_nregs, is_a_smem, is_cd_smem);
 }
 
 void TensorUnit::meta_store(uint32_t wid,

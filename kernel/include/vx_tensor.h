@@ -793,10 +793,10 @@ private:
 
   // WGMMA flags encoding (rs2 field):
   //   bit 0     : is_sparse
-  //   bits [2:1]: cd_nregs — 0=8, 1=16, 2=32
+  //   bits [2:1]: cd_nregs — 0=8, 1=16, 2=32, 3=64
   //   bit 3     : a_from_smem
   //   bit 4     : cd_from_lmem — C/D accumulator lives in lmem (desc_cd in a2)
-  static constexpr int cd_nregs_code = (NRC_ == 8) ? 0 : (NRC_ == 16) ? 1 : 2;
+  static constexpr int cd_nregs_code = (NRC_ == 8) ? 0 : (NRC_ == 16) ? 1 : (NRC_ == 32) ? 2 : 3;
 
   template <bool a_is_smem, bool cd_from_lmem = false>
   static constexpr int wgmma_flags() {
