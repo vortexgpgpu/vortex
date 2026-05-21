@@ -1,10 +1,19 @@
-file,run,testbench,status,shape,dtype,tcu_utilization
-run_b_1.stat,1,sgemm_tcu,FAIL,128x128x512,fp32,3.28
-run_b_2.stat,2,sgemm_tcu_sp,FAIL,128x128x512,fp32,3.68
-run_b_9.stat,9,sgemm_tcu_op,PASS,128x128x512,fp32,58.53
-run_b_5.stat,5,sgemm_tcu,FAIL,128x128x512,fp16,2.03
-run_b_6.stat,6,sgemm_tcu_sp,FAIL,128x128x512,fp16,2.78
-run_b_8.stat,8,sgemm_tcu_op,PASS,128x128x512,fp16,92.7
-run_b_3.stat,3,sgemm_tcu,PASS,128x128x512,fp8,1.16
-run_b_4.stat,4,sgemm_tcu_sp,FAIL,128x128x512,fp8,2.13
-run_b_7.stat,7,sgemm_tcu_op,PASS,128x128x512,fp8,95.32
+file,run,testbench,variant,variant_label,status,shape,dtype,sparsity_mode,a_sparsity,b_sparsity,sparsity_label,total_instructions,kernel_body_cycles,tcu_utilization,memory_reqs,memory_reads,memory_writes
+run_b_3.stat,3,sgemm_tcu,sgemm_tcu,sgemm_tcu,PASS,128x128x512,fp8,0,0.0,0.0,0%,66011,1411181,1.16,73955,51690,22265
+run_b_4.stat,4,sgemm_tcu_sp,sgemm_tcu_sp,sgemm_tcu_sp,FAIL,128x128x512,fp8,0,0.0,0.0,0%,47323,767988,2.13,56395,30013,26382
+run_b_7.stat,7,sgemm_tcu_op,sgemm_tcu_op_dense,sgemm_tcu_op dense,PASS,128x128x512,fp8,0,0.111389,0.109863,0%,1632,275021,95.32,10646,8931,1715
+run_b_10.stat,10,sgemm_tcu_op,sgemm_tcu_op_s20,sgemm_tcu_op 20%,PASS,128x128x512,fp8,2,20.2209,20.2423,20%,2255,241932,88.16,10812,8875,1937
+run_b_11.stat,11,sgemm_tcu_op,sgemm_tcu_op_s50,sgemm_tcu_op 50%,PASS,128x128x512,fp8,2,49.9496,49.9176,50%,2255,138282,70.27,8508,6571,1937
+run_b_12.stat,12,sgemm_tcu_op,sgemm_tcu_op_s90,sgemm_tcu_op 90%,PASS,128x128x512,fp8,2,89.9353,89.8376,90%,2255,54371,28.14,5180,3243,1937
+run_b_5.stat,5,sgemm_tcu,sgemm_tcu,sgemm_tcu,FAIL,128x128x512,fp16,0,0.0,0.0,0%,107931,1617754,2.03,92734,62321,30413
+run_b_6.stat,6,sgemm_tcu_sp,sgemm_tcu_sp,sgemm_tcu_sp,FAIL,128x128x512,fp16,0,0.0,0.0,0%,87771,1179799,2.78,80177,49689,30488
+run_b_8.stat,8,sgemm_tcu_op,sgemm_tcu_op_dense,sgemm_tcu_op dense,PASS,128x128x512,fp16,0,0.0,0.0,0%,2992,282788,92.7,18942,17226,1716
+run_b_13.stat,13,sgemm_tcu_op,sgemm_tcu_op_s20,sgemm_tcu_op 20%,PASS,128x128x512,fp16,2,20.1324,20.1569,20%,4206,251466,84.92,17864,15928,1936
+run_b_14.stat,14,sgemm_tcu_op,sgemm_tcu_op_s50,sgemm_tcu_op 50%,PASS,128x128x512,fp16,2,49.8962,49.8566,50%,4206,164243,59.3,13000,11064,1936
+run_b_15.stat,15,sgemm_tcu_op,sgemm_tcu_op_s90,sgemm_tcu_op 90%,PASS,128x128x512,fp16,2,89.9246,89.8209,90%,4206,82238,18.62,6344,4408,1936
+run_b_1.stat,1,sgemm_tcu,sgemm_tcu,sgemm_tcu,FAIL,128x128x512,fp32,0,0.0,0.0,0%,179483,1996624,3.28,114635,86237,28398
+run_b_2.stat,2,sgemm_tcu_sp,sgemm_tcu_sp,sgemm_tcu_sp,FAIL,128x128x512,fp32,0,0.0,0.0,0%,163611,1778862,3.68,139355,108864,30491
+run_b_9.stat,9,sgemm_tcu_op,sgemm_tcu_op_dense,sgemm_tcu_op dense,PASS,128x128x512,fp32,0,0.0,0.0,0%,5584,447868,58.53,35523,33810,1713
+run_b_16.stat,16,sgemm_tcu_op,sgemm_tcu_op_s20,sgemm_tcu_op 20%,PASS,128x128x512,fp32,2,20.1324,20.1569,20%,8249,751388,28.42,65337,59763,5574
+run_b_17.stat,17,sgemm_tcu_op,sgemm_tcu_op_s50,sgemm_tcu_op 50%,PASS,128x128x512,fp32,2,49.8962,49.8566,50%,8249,641156,15.19,56113,50547,5566
+run_b_18.stat,18,sgemm_tcu_op,sgemm_tcu_op_s90,sgemm_tcu_op 90%,PASS,128x128x512,fp32,2,89.9246,89.8209,90%,8249,462538,3.31,41784,36211,5573

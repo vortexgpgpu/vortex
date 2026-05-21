@@ -48,9 +48,6 @@ CONFIGS=(
   # "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp32  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_18.log"
 
   # INSTRUCTION & MEMORY COMPARISON WITH BASELINES & SPARSITY - USE SOME STATS FROM ABOVE
-  # "-m 128  -n 128  -k 512  -s 2 -a 0.2  -b 0.2  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_10.log"
-  # "-m 128  -n 128  -k 512  -s 2 -a 0.5  -b 0.5  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_11.log"
-  # "-m 128  -n 128  -k 512  -s 2 -a 0.9  -b 0.9  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_b_12.log"
 
   # K DIMENSION ANALYSIS
   # "-m 64  -n 64  -k 128  -s 0 -a 0.0  -b 0.0  -T 32 -i fp8  -o fp32 -w 2 -M 2 -N 16 -Q 4 -p 2 -t sgemm_tcu_op -l run_k_1.log"
