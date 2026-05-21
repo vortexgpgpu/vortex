@@ -96,7 +96,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             logic [4:0] raw_ea, raw_eb;
             logic [2:0] raw_ma, raw_mb;
             logic       raw_sa, raw_sb;
-            logic [4:0] exp_max;
 
             always_comb begin
                 if (is_bfloat) begin // TCU_BF8_ID (E5M2)
@@ -106,7 +105,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
                     raw_mb  = {raw_b[1:0], 1'b0};
                     raw_sa  = raw_a[7];
                     raw_sb  = raw_b[7];
-                    exp_max = 5'h1F;
                 end else begin       // TCU_FP8_ID (E4M3)
                     raw_ea  = 5'(raw_a[S_FP8-1 -: E_FP8]);
                     raw_eb  = 5'(raw_b[S_FP8-1 -: E_FP8]);
@@ -114,7 +112,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
                     raw_mb  = raw_b[2:0];
                     raw_sa  = raw_a[7];
                     raw_sb  = raw_b[7];
-                    exp_max = 5'h0F;
                 end
             end
 
@@ -127,7 +124,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             ) class_a (
                 .exp (raw_ea),
                 .man (raw_ma),
-                .max_exp (exp_max),
                 .cls (cls_a)
             );
 
@@ -138,7 +134,6 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
             ) class_b (
                 .exp (raw_eb),
                 .man (raw_mb),
-                .max_exp (exp_max),
                 .cls (cls_b)
             );
 

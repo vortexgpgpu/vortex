@@ -88,7 +88,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         logic [7:0] raw_ea, raw_eb;
         logic [9:0] raw_ma, raw_mb;
         logic       raw_sa, raw_sb;
-        logic [7:0] exp_max;
         logic [7:0] bias_sel;
 
         always_comb begin
@@ -100,7 +99,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_mb    = b_col[i/2][9+OFF_16 -: 10];
                     raw_sa    = a_row[i/2][15+OFF_16];
                     raw_sb    = b_col[i/2][15+OFF_16];
-                    exp_max   = 8'h1F;
                     bias_sel  = BIAS_CONST_FP16;
                 end
             `ifdef TCU_BF16_ENABLE
@@ -111,7 +109,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_mb    = {b_col[i/2][6+OFF_16 -: 7], 3'b0};
                     raw_sa    = a_row[i/2][15+OFF_16];
                     raw_sb    = b_col[i/2][15+OFF_16];
-                    exp_max   = 8'hFF;
                     bias_sel  = BIAS_CONST_BF16;
                 end
             `endif
@@ -124,7 +121,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                         raw_mb    = b_col[i/2][9:0];
                         raw_sa    = a_row[i/2][18];
                         raw_sb    = b_col[i/2][18];
-                        exp_max   = 8'hFF;
                         bias_sel  = BIAS_CONST_TF32;
                     end else begin
                         raw_ea    = '0;
@@ -133,7 +129,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                         raw_mb    = '0;
                         raw_sa    = '0;
                         raw_sb    = '0;
-                        exp_max   = 8'hFF;
                         bias_sel  = '0;
                     end
                 end
@@ -145,7 +140,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_mb    = 'x;
                     raw_sa    = 'x;
                     raw_sb    = 'x;
-                    exp_max   = 'x;
                     bias_sel  = 'x;
                 end
             endcase
@@ -162,7 +156,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         ) class_a (
             .exp (raw_ea),
             .man (raw_ma),
-            .max_exp (exp_max),
             .cls (cls_a)
         );
 
@@ -173,7 +166,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         ) class_b (
             .exp (raw_eb),
             .man (raw_mb),
-            .max_exp (exp_max),
             .cls (cls_b)
         );
 

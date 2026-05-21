@@ -114,7 +114,6 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     ) class_c (
         .exp (c_val[30:23]),
         .man (c_val[22:0]),
-        .max_exp (8'hFF),
         .cls (cls_c)
     );
     `UNUSED_VAR (cls_c.is_sub)
