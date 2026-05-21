@@ -8,7 +8,6 @@
 // (e.g., VX_CFG_NUM_WARPS=16 + 4-warp CTAs → 4 co-resident CTAs).
 
 #include "common.h"
-#include <VX_config.h>
 #include <vx_spawn2.h>
 #include <vx_tensor.h>
 #include <vx_intrinsics.h>

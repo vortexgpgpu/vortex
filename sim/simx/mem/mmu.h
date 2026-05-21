@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <VX_types.h>
 #include <VX_config.h>
 
 #ifdef VX_CFG_VM_ENABLE
@@ -79,7 +80,7 @@ private:
 
   // PTE address for a given level given the current SATP and walk VA.
   uint64_t pte_addr(uint64_t base_ppn, uint64_t vpn_idx) const {
-    return (base_ppn * VX_CFG_PT_SIZE) + (vpn_idx * VX_CFG_PTE_SIZE);
+    return (base_ppn * VX_VM_PT_SIZE) + (vpn_idx * VX_VM_PTE_SIZE);
   }
 
   void start_ptw(uint64_t va, ACCESS_TYPE type, MemReq orig, uint32_t port);

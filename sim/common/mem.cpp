@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <VX_types.h>
 #include "mem.h"
 #include <vector>
 #include <iostream>
@@ -750,13 +751,13 @@ uint64_t MemoryUnit::vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type)
 
 uint64_t MemoryUnit::get_pte_address(uint64_t base_ppn, uint64_t vpn)
 {
-  return (base_ppn * VX_CFG_PT_SIZE) + (vpn * VX_CFG_PTE_SIZE);
+  return (base_ppn * VX_VM_PT_SIZE) + (vpn * VX_VM_PTE_SIZE);
 }
 
 std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t *size_bits)
 {
   DBGPRINT("  [MMU:PTW] Start: vaddr = 0x%lx, type = %u.\n", vAddr_bits, type);
-  uint8_t level = VX_CFG_PT_LEVEL;
+  uint8_t level = VX_VM_PT_LEVEL;
   int i = level-1;
   vAddr_t vaddr(vAddr_bits);
   uint32_t flags =0;
@@ -769,7 +770,7 @@ std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, AC
   {
     // Read PTE.
     pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
-    decoder_.read(&pte_bytes, pte_addr, VX_CFG_PTE_SIZE);
+    decoder_.read(&pte_bytes, pte_addr, VX_VM_PTE_SIZE);
     PTE_t pte(pte_bytes);
     DBGPRINT("  [MMU:PTW] Level[%u] pte_addr=0x%lx, pte_bytes =0x%lx, pte.ppn= 0x%lx, pte.flags = %u)\n", i, pte_addr, pte_bytes, pte.ppn, pte.flags);
 

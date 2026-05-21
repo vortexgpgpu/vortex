@@ -40,3 +40,8 @@ THIRD_PARTY_DIR ?= $(VORTEX_HOME)/third_party
 SW_COMMON_DIR ?= $(VORTEX_HOME)/sw/common
 
 SIM_COMMON_DIR ?= $(VORTEX_HOME)/sim/common
+
+# Resolved hardware config projected to -DVX_CFG_* compiler flags. Build code
+# adds $(XCONFIGS) to its compile flags rather than #include <VX_config.h>.
+# See docs/proposals/config_hw_sw_layering_proposal.md.
+XCONFIGS := $(shell python3 $(VORTEX_HOME)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)' 2>/dev/null)

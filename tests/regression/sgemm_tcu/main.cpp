@@ -1,5 +1,4 @@
 #include "common.h"
-#include <VX_config.h>
 #include <chrono>
 #include <cmath>
 #include <iostream>

@@ -16,15 +16,19 @@
 
 `include "VX_define.vh"
 `include "VX_config_pkg.sv"
+`include "VX_types_pkg.sv"
 
 `IGNORE_UNUSED_BEGIN
 
 package VX_gpu_pkg;
 
-    // resolved hardware configuration lives in VX_config_pkg;
-    // re-export it so importers of VX_gpu_pkg see it transparently.
+    // resolved hardware configuration lives in VX_config_pkg, and the
+    // device memory map / VM contract in VX_types_pkg; re-export both so
+    // importers of VX_gpu_pkg see every name transparently.
     import VX_config_pkg::*;
     export VX_config_pkg::*;
+    import VX_types_pkg::*;
+    export VX_types_pkg::*;
 
     // These 6 configs stay here (not in VX_config_pkg): their VX_config.vh
     // macros expand to the [[param]] symbols VX_CFG_{DCACHE,L2,L3}_NUM_REQS,

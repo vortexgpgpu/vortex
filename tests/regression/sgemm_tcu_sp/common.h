@@ -2,7 +2,6 @@
 #define _COMMON_H_
 
 #include <stdint.h>
-#include <VX_config.h>
 
 #ifndef ITYPE
 #define ITYPE fp16

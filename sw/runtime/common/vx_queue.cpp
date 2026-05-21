@@ -7,7 +7,6 @@
 
 #include "vortex2_internal.h"
 
-#include <VX_config.h>
 #include <VX_types.h>
 
 #include <algorithm>

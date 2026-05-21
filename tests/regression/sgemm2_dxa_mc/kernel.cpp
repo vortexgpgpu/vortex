@@ -17,7 +17,6 @@
 // SMEM fabric.
 
 #include <vx_spawn2.h>
-#include <VX_config.h>
 #include <vx_dxa.h>
 #include <vx_barrier.h>
 #include <vx_intrinsics.h>

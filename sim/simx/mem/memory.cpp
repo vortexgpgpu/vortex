@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <VX_types.h>
 #include "memory.h"
 #include <vector>
 #include <queue>
@@ -42,10 +43,10 @@ private:
 	// per-thread print buffer. Returns true if the byte was consumed (no RAM
 	// write needed).
 	bool io_cout_tap(uint64_t addr, uint8_t byte) {
-		if (addr < uint64_t(VX_CFG_IO_COUT_ADDR)
-		 || addr >= (uint64_t(VX_CFG_IO_COUT_ADDR) + VX_CFG_IO_COUT_SIZE))
+		if (addr < uint64_t(VX_MEM_IO_COUT_ADDR)
+		 || addr >= (uint64_t(VX_MEM_IO_COUT_ADDR) + VX_MEM_IO_COUT_SIZE))
 			return false;
-		uint32_t tid = (addr - VX_CFG_IO_COUT_ADDR) & (VX_CFG_IO_COUT_SIZE - 1);
+		uint32_t tid = (addr - VX_MEM_IO_COUT_ADDR) & (VX_MEM_IO_COUT_SIZE - 1);
 		auto& ss_buf = print_bufs_[tid];
 		char c = (char)byte;
 		ss_buf << c;

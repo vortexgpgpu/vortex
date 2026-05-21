@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <VX_types.h>
 #include <common.h>
 
 #include <mem.h>
@@ -142,7 +143,7 @@ public:
 
   int mem_alloc(uint64_t size, int flags, uint64_t* dev_addr) {
 #ifdef VX_CFG_VM_ENABLE
-    uint64_t asize = aligned_size(size, VX_CFG_MEM_PAGE_SIZE);
+    uint64_t asize = aligned_size(size, VX_VM_PAGE_SIZE);
 #else
     uint64_t asize = size;
 #endif
@@ -173,7 +174,7 @@ public:
 
   int mem_reserve(uint64_t dev_addr, uint64_t size, int flags) {
 #ifdef VX_CFG_VM_ENABLE
-    uint64_t asize = aligned_size(size, VX_CFG_MEM_PAGE_SIZE);
+    uint64_t asize = aligned_size(size, VX_VM_PAGE_SIZE);
 #else
     uint64_t asize = size;
 #endif

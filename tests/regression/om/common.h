@@ -1,7 +1,6 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
-#include <VX_config.h>
 #include <VX_types.h>
 #include <stdint.h>
 

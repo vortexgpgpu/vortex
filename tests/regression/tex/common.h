@@ -2,7 +2,6 @@
 #define _COMMON_H_
 
 #include <stdint.h>
-#include <VX_config.h>
 #include <VX_types.h>
 
 // vortex2 KMU launch kernel-arg layout. Host pre-computes per-pixel

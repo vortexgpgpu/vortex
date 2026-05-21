@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <VX_config.h>
 #include <VX_types.h>
 
 #define RISCV_CUSTOM0   0x0B

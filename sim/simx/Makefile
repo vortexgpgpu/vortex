@@ -195,7 +195,7 @@ $(VORTEX_SST_OBJS): $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(CONFIG_FILE)
 # build main object file
 $(MAIN_OBJ): $(SRC_DIR)/main.cpp $(CONFIG_FILE)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -DVX_CFG_STARTUP_ADDR=0x80000000 -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Main executable
 $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)

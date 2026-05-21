@@ -1,7 +1,7 @@
+#include <VX_types.h>
 #include "tests.h"
 #include <stdio.h>
 #include <algorithm>
-#include <VX_config.h>
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <vx_spawn.h>
@@ -46,7 +46,7 @@ int test_global_memory() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-volatile int* lmem_addr = (int*)VX_CFG_LMEM_BASE_ADDR;
+volatile int* lmem_addr = (int*)VX_MEM_LMEM_BASE_ADDR;
 
 int lmem_buffer[8];
 

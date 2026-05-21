@@ -1,5 +1,4 @@
 #include <vx_spawn2.h>
-#include <VX_config.h>
 #include <vx_intrinsics.h>
 #include "common.h"
 

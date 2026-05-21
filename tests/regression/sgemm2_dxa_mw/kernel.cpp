@@ -15,7 +15,6 @@
 //             when every receiver's events_r is set.
 
 #include <vx_spawn2.h>
-#include <VX_config.h>
 #include <vx_dxa.h>
 #include <vx_barrier.h>
 

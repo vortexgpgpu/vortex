@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <VX_types.h>
 #include "processor.h"
 
 #include "Vrtlsim_shim.h"
@@ -354,8 +355,8 @@ private:
           auto byteen = device_->mem_req_byteen[b];
           auto data = VDataCast<uint8_t*, VX_CFG_PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_req_data[b]);
           // check if console output address
-          if (byte_addr >= uint64_t(VX_CFG_IO_COUT_ADDR)
-           && byte_addr < (uint64_t(VX_CFG_IO_COUT_ADDR) + VX_CFG_IO_COUT_SIZE)) {
+          if (byte_addr >= uint64_t(VX_MEM_IO_COUT_ADDR)
+           && byte_addr < (uint64_t(VX_MEM_IO_COUT_ADDR) + VX_MEM_IO_COUT_SIZE)) {
             // process console output
             for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; i++) {
               if ((byteen >> i) & 0x1) {

@@ -85,7 +85,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_NUM_THREADS:return VX_CFG_NUM_THREADS;
   case VX_CSR_NUM_WARPS:  return VX_CFG_NUM_WARPS;
   case VX_CSR_NUM_CORES:  return uint32_t(VX_CFG_NUM_CORES) * VX_CFG_NUM_CLUSTERS;
-  case VX_CSR_LOCAL_MEM_BASE: return VX_CFG_LMEM_BASE_ADDR;
+  case VX_CSR_LOCAL_MEM_BASE: return VX_MEM_LMEM_BASE_ADDR;
   case VX_CSR_NUM_BARRIERS: return VX_CFG_NUM_BARRIERS;
   case VX_CSR_MSCRATCH:   return warp.mscratch;
 

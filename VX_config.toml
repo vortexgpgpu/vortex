@@ -90,21 +90,11 @@ VX_CFG_PLATFORM_MEMORY_INTERLEAVE = 1
 VX_CFG_PLATFORM_MEMORY_PEAK_BW = 460000 # 460 GB/s
 VX_CFG_PLATFORM_CLOCK_RATE = 400
 
-[address_space]
-VX_CFG_STARTUP_ADDR = "expr: 0x0000000080000000 if $VX_CFG_XLEN_64 else 0x80000000"
-VX_CFG_USER_BASE_ADDR = "expr: 0x0000000000010000 if $VX_CFG_XLEN_64 else 0x00010000"
-
-VX_CFG_STACK_LOG2_SIZE = 13
-VX_CFG_STACK_BASE_ADDR = "expr: 0x00000001FFFF0000 if $VX_CFG_XLEN_64 else 0xFFFF0000"
-
-VX_CFG_IO_BASE_ADDR = "expr: 0x0000000000000040 if $VX_CFG_XLEN_64 else 0x00000040"
-VX_CFG_PAGE_TABLE_BASE_ADDR = "expr: 0x00000000F0000000 if $VX_CFG_XLEN_64 else 0xF0000000"
-
-VX_CFG_IO_COUT_ADDR = "expr: $VX_CFG_IO_BASE_ADDR"
-VX_CFG_IO_COUT_SIZE = 64
-
-VX_CFG_IO_EXIT_CODE = "expr: ($VX_CFG_IO_COUT_ADDR + $VX_CFG_IO_COUT_SIZE + 8)"
-VX_CFG_IO_END_ADDR = "expr: $VX_CFG_USER_BASE_ADDR"
+# The device memory map (USER_BASE/STACK/IO/PAGE_TABLE/LMEM base addresses)
+# is a HW<->SW contract — relocated to VX_types.toml [memmap]. STARTUP_ADDR
+# was dropped entirely: it is 100% software (loader reads the ELF e_entry;
+# the linker script owns its load address).
+# See docs/proposals/config_hw_sw_layering_proposal.md.
 
 [alu]
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -162,16 +152,11 @@ VX_CFG_NUM_VPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
 VX_CFG_NUM_VPU_BLOCKS = 1
 
 [vm]
-VX_CFG_MEM_PAGE_LOG2_SIZE = 12
-VX_CFG_MEM_PAGE_SIZE = "expr: 1 << $VX_CFG_MEM_PAGE_LOG2_SIZE"
-VX_CFG_VM_ADDR_MODE = "expr: 'SV39' if $VX_CFG_XLEN_64 else 'SV32'"
+# VM page-table format (MEM_PAGE_*/PT_*/PTE_SIZE/VM_ADDR_MODE) is a HW<->SW
+# contract — RISC-V architectural constants — relocated to VX_types.toml [vm].
+# NUM_PTE_ENTRY was dead code and is dropped. TLB depth stays here (pure
+# microarchitecture). See docs/proposals/config_hw_sw_layering_proposal.md.
 VX_CFG_TLB_SIZE = 32
-
-VX_CFG_PT_LEVEL = "expr: 3 if $VX_CFG_XLEN_64 else 2"
-VX_CFG_PTE_SIZE = "expr: 8 if $VX_CFG_XLEN_64 else 4"
-VX_CFG_NUM_PTE_ENTRY = "expr: 512 if $VX_CFG_XLEN_64 else 1024"
-VX_CFG_PT_SIZE = "expr: $VX_CFG_MEM_PAGE_SIZE"
-VX_CFG_PT_SIZE_LIMIT = "expr: (1 << 25) if $VX_CFG_XLEN_64 else (1 << 23)"
 
 __cache_repl_random = 0
 __cache_repl_fifo   = 1
@@ -234,7 +219,6 @@ VX_CFG_L3_MEM_PORTS = "expr: min($VX_CFG_L3_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_N
 
 [lmem]
 VX_CFG_LMEM_LOG_SIZE = 14
-VX_CFG_LMEM_BASE_ADDR = "expr: $VX_CFG_STACK_BASE_ADDR"
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 
 [tcu]
@@ -334,7 +318,6 @@ VX_CFG_XLEN = [32, 64]
 VX_CFG_FLEN = [32, 64]
 VX_CFG_FPU_TYPE = ["DPI", "DSP", "FPNEW", "STD"]
 VX_CFG_TCU_TYPE = ["DPI", "DSP", "BHF", "TFR"]
-VX_CFG_VM_ADDR_MODE = ["BARE", "SV32", "SV39", "SV48", "SV57"]
 
 [[param]]
 VX_CFG_DCACHE_NUM_REQS = "int"

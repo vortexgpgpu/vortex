@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <VX_config.h>
 #include <VX_types.h>
 #include "common.h"
 
@@ -19,8 +18,8 @@
 .global vx_putchar
 vx_putchar:
     csrr t0, VX_CSR_MHARTID
-    andi t0, t0, %lo(VX_CFG_IO_COUT_SIZE-1)
-    li t1, VX_CFG_IO_COUT_ADDR
+    andi t0, t0, %lo(VX_MEM_IO_COUT_SIZE-1)
+    li t1, VX_MEM_IO_COUT_ADDR
     add t0, t0, t1
     sb a0, 0(t0)
     ret

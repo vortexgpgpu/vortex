@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 
   {
     // create memory module
-    RAM ram(0, VX_CFG_MEM_PAGE_SIZE);
+    RAM ram(0, VX_VM_PAGE_SIZE);
 
     // create processor
     Processor processor;
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
     processor.attach_ram(&ram);
 
 	  // setup base DCRs
-    const uint64_t startup_addr(VX_CFG_STARTUP_ADDR);
+    const uint64_t startup_addr = 0x80000000;  // flat-image (vxbin/bin/hex) load address; the ELF path uses img.entry
     processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
   #if (VX_CFG_XLEN == 64)
     processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR1, startup_addr >> 32);
@@ -232,7 +232,7 @@ int main(int argc, char **argv) {
       }
 
       // read exitcode from @MPM.1
-      ram.read(&exitcode, VX_CFG_IO_EXIT_CODE, 4);
+      ram.read(&exitcode, VX_MEM_IO_EXIT_CODE, 4);
     }
   }
 

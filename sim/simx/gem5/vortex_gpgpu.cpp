@@ -48,7 +48,7 @@ namespace {
 class Gem5Device {
 public:
     Gem5Device()
-        : ram_(0, VX_CFG_MEM_PAGE_SIZE),
+        : ram_(0, VX_VM_PAGE_SIZE),
           proc_(std::make_unique<Processor>()),
           dev_mem_(std::make_unique<vortex_gem5::InProcessDevMem>(ram_)),
           cp_(make_cp_hooks()) {
@@ -58,14 +58,14 @@ public:
     ~Gem5Device() = default;
 
     // ---------------- Standalone (Phase 3) kernel preload ---------------
-    // Primes the KMU DCRs for a 1×1×1 CTA at VX_CFG_STARTUP_ADDR and loads the
+    // Primes the KMU DCRs for a 1×1×1 CTA at the standalone load address and loads the
     // ELF/bin/hex into VRAM. After this, calling vortex_tick repeatedly
     // dispatches the kernel to completion (ProcessorImpl::cycle's lazy
     // init resets SimPlatform and calls kmu_->start() on first tick).
     // The hosted (CP-driven) path never calls this — kernel ELFs land
     // in VRAM via mem_upload, and KMU programming goes through CMD_DCR_*.
     bool load_kernel(const std::string& path) {
-        const uint64_t startup_addr(VX_CFG_STARTUP_ADDR);
+        const uint64_t startup_addr = 0x80000000;  // flat-image (vxbin/bin/hex) load address; the ELF path uses img.entry
         proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
     #if (VX_CFG_XLEN == 64)
         proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR1, startup_addr >> 32);

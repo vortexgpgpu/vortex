@@ -2,7 +2,6 @@
 #define _DXA_COPY_MC_COMMON_H_
 
 #include <stdint.h>
-#include <VX_config.h>
 
 #ifndef TYPE
 #define TYPE float

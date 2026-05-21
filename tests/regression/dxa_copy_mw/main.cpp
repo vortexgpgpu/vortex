@@ -4,7 +4,6 @@
 // receiving the same tile via DXA multicast.
 
 #include <cstdlib>
-#include <VX_config.h>
 #include <iostream>
 #include <unistd.h>
 #include <vector>

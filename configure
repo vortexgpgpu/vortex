@@ -207,6 +207,9 @@ gen_header() {
         "$SOURCE_DIR/ci/gen_config.py" --config "$toml" --output "$out" --format "$fmt" $extra
     fi
 }
+# gen_config.py reads XLEN from the environment to resolve the XLEN-dependent
+# exprs relocated into VX_types.toml ([memmap]/[vm]).
+export XLEN
 for toml in "$SOURCE_DIR"/*.toml; do
     [ -f "$toml" ] || continue
     name=$(basename -- "$toml" .toml)
@@ -216,8 +219,9 @@ for toml in "$SOURCE_DIR"/*.toml; do
     esac
     gen_header "$toml" "$CURRENT_DIR/hw/$name.vh" verilog "$extra"
     gen_header "$toml" "$CURRENT_DIR/sw/$name.h"  cpp     "$extra"
-    # VX_config also emits a SystemVerilog package (typed localparam view)
+    # VX_config and VX_types each emit a SystemVerilog package (typed localparam view)
     case "$name" in
         VX_config) gen_header "$toml" "$CURRENT_DIR/hw/VX_config_pkg.sv" sv_pkg "" ;;
+        VX_types)  gen_header "$toml" "$CURRENT_DIR/hw/VX_types_pkg.sv"  sv_pkg "" ;;
     esac
 done

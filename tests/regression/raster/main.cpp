@@ -9,7 +9,6 @@
 #include <vortex2.h>
 #include <graphics.h>
 #include <gfxutil.h>
-#include <VX_config.h>
 #include <algorithm>
 #include "common.h"
 #include <cocogfx/include/imageutil.hpp>

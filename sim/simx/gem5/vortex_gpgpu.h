@@ -38,6 +38,7 @@
 
 #pragma once
 
+#include <VX_types.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -73,7 +74,7 @@ void vortex_gem5_set_start_handler(vortex_gem5_handle_t h,
 
 // Load a kernel image into VRAM. Accepts .vxbin / .bin / .hex (same
 // shape as sim/simx/main.cpp). Primes the KMU DCRs for a 1×1×1 CTA
-// at VX_CFG_STARTUP_ADDR for the Phase 3 standalone test path (in hosted
+// at the standalone load address for the Phase 3 standalone test path (in hosted
 // mode the dispatcher uploads kernels via mem_upload + programs KMU
 // DCRs via CMD_DCR_WRITE through the CP).
 //

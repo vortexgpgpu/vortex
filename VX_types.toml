@@ -13,6 +13,33 @@ VX_ISA_VENDOR_ID = 0
 VX_ISA_ARCH_ID   = 0
 VX_ISA_IMPL_ID   = 0
 
+# Device memory map — a HW<->SW contract: the hardware decodes these address
+# regions, the linker places code/stack within them, and the runtime addresses
+# into them. Relocated from VX_config.toml.
+# See docs/proposals/config_hw_sw_layering_proposal.md.
+[memmap]
+VX_MEM_USER_BASE_ADDR       = "expr: 0x0000000000010000 if ($XLEN == 64) else 0x00010000"
+VX_MEM_STACK_LOG2_SIZE      = 13
+VX_MEM_STACK_BASE_ADDR      = "expr: 0x00000001FFFF0000 if ($XLEN == 64) else 0xFFFF0000"
+VX_MEM_LMEM_BASE_ADDR       = "expr: $VX_MEM_STACK_BASE_ADDR"
+VX_MEM_IO_BASE_ADDR         = "expr: 0x0000000000000040 if ($XLEN == 64) else 0x00000040"
+VX_MEM_PAGE_TABLE_BASE_ADDR = "expr: 0x00000000F0000000 if ($XLEN == 64) else 0xF0000000"
+VX_MEM_IO_COUT_ADDR         = "expr: $VX_MEM_IO_BASE_ADDR"
+VX_MEM_IO_COUT_SIZE         = 64
+VX_MEM_IO_EXIT_CODE         = "expr: ($VX_MEM_IO_COUT_ADDR + $VX_MEM_IO_COUT_SIZE + 8)"
+VX_MEM_IO_END_ADDR          = "expr: $VX_MEM_USER_BASE_ADDR"
+
+# VM page-table format — RISC-V architectural constants fixed by the SATP mode
+# (SV32 vs SV39, selected by XLEN). Relocated from VX_config.toml.
+[vm]
+VX_VM_PAGE_LOG2_SIZE = 12
+VX_VM_PAGE_SIZE      = "expr: 1 << $VX_VM_PAGE_LOG2_SIZE"
+VX_VM_ADDR_MODE      = "expr: 'SV39' if ($XLEN == 64) else 'SV32'"
+VX_VM_PT_LEVEL       = "expr: 3 if ($XLEN == 64) else 2"
+VX_VM_PTE_SIZE       = "expr: 8 if ($XLEN == 64) else 4"
+VX_VM_PT_SIZE        = "expr: $VX_VM_PAGE_SIZE"
+VX_VM_PT_SIZE_LIMIT  = "expr: (1 << 25) if ($XLEN == 64) else (1 << 23)"
+
 [dcr_base]
 VX_DCR_BASE_STATE_BEGIN = 0x000
 VX_DCR_BASE_CACHE_FLUSH = 0x000
@@ -527,3 +554,12 @@ VX_CSR_MPM_TCU_TBUF_CACHE_HITS= 0xB04  # B tile reuse hits from tile buffer cach
 VX_CSR_MPM_TCU_TBUF_CACHE_HITS_H = 0xB84
 VX_CSR_MPM_TCU_LMEM_READS     = 0xB05  # tile buffer local memory reads
 VX_CSR_MPM_TCU_LMEM_READS_H   = 0xB85
+
+# XLEN is an environment-supplied build axis (configure exports it); the
+# [memmap]/[vm] exprs above reference it. Declared as a [[builtin]] so the
+# dependency is explicit and typed; defaults to 0 (→ 32-bit) when unset.
+[[builtin]]
+XLEN = "int"
+
+[[enum]]
+VX_VM_ADDR_MODE = ["BARE", "SV32", "SV39", "SV48", "SV57"]

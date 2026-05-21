@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <VX_types.h>
 #include "cta_dispatcher.h"
 #include "core.h"
 #include "socket.h"
@@ -27,7 +28,7 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , kmu_(&core->socket()->cluster()->processor()->kmu())
   , num_threads_(VX_CFG_NUM_THREADS)
   , num_warps_(VX_CFG_NUM_WARPS)
-  , lmem_base_(VX_CFG_LMEM_BASE_ADDR)
+  , lmem_base_(VX_MEM_LMEM_BASE_ADDR)
   , lmem_capacity_(1u << VX_CFG_LMEM_LOG_SIZE)
   , lmem_tail_(0)
   , free_size_(1u << VX_CFG_LMEM_LOG_SIZE)

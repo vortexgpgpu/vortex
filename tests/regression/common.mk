@@ -66,6 +66,9 @@ VX_CFLAGS += -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -nostdl
 VX_CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 VX_CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) -DNDEBUG -D__VORTEX__
 VX_CFLAGS += $(CONFIGS)
+# Project the resolved hardware config to -DVX_CFG_* flags so kernel/test code
+# need not #include <VX_config.h>. See docs/proposals/config_hw_sw_layering_proposal.md.
+VX_CFLAGS += $(XCONFIGS)
 
 VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc
 
@@ -82,6 +85,8 @@ KERNEL_STARTUP := $(VORTEX_HOME)/sw/kernel/scripts/kernel_startup.sh
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors -Werror
 CXXFLAGS += -I$(VORTEX_HOME)/sw/runtime/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CXXFLAGS += $(CONFIGS)
+# Project the resolved hardware config to -DVX_CFG_* flags (host side).
+CXXFLAGS += $(XCONFIGS)
 
 # HOST_ARCH selects the simulated-host compiler for the test binary
 # (the .vxbin always builds with the RISC-V toolchain regardless).

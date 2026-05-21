@@ -15,7 +15,6 @@
 #define __VX_SPAWN_H__
 
 #include <vx_intrinsics.h>
-#include <VX_config.h>
 
 #ifdef __cplusplus
 extern "C" {

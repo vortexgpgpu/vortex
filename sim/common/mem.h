@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <VX_types.h>
 #include <cstdint>
 #include <vector>
 #include <map>
@@ -106,7 +107,7 @@ public:
   };
 
 #ifdef VX_CFG_VM_ENABLE
-  MemoryUnit(uint64_t pageSize = VX_CFG_MEM_PAGE_SIZE);
+  MemoryUnit(uint64_t pageSize = VX_VM_PAGE_SIZE);
   ~MemoryUnit(){
     if ( this->satp_ != NULL)
       delete this->satp_;

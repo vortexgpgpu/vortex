@@ -12,7 +12,6 @@
 // limitations under the License.
 
 #include "scope.h"
-#include <VX_config.h>
 #include <nlohmann_json.hpp>
 #include <cstdlib>
 #include <iostream>

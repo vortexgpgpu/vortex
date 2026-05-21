@@ -1,5 +1,4 @@
 #include <iostream>
-#include <VX_config.h>
 #include <unistd.h>
 #include <string.h>
 #include <vector>

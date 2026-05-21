@@ -27,7 +27,6 @@
 // ============================================================================
 
 #include <vortex.h>
-#include <VX_config.h>
 #include <vortex2.h>
 
 #include <cstdint>

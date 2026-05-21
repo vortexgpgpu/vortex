@@ -1,7 +1,6 @@
 #pragma once
 
 #include <iostream>
-#include <VX_config.h>
 #include <vector>
 #include <cstdint>
 #include <cstring>

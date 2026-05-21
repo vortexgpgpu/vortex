@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <VX_types.h>
 #include <common.h>
 
 #include <constants.h>
@@ -32,7 +33,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <VX_config.h>
 
 using namespace vortex;
 
@@ -60,10 +60,10 @@ private:
 class vx_device {
 public:
   vx_device()
-      : ram_(0, VX_CFG_MEM_PAGE_SIZE),
+      : ram_(0, VX_VM_PAGE_SIZE),
         processor_(),
         global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
-                    VX_CFG_MEM_PAGE_SIZE, CACHE_BLOCK_SIZE),
+                    VX_VM_PAGE_SIZE, CACHE_BLOCK_SIZE),
         cp_(make_cp_hooks()) {
     // attach memory module
     processor_.attach_ram(&ram_);
@@ -146,7 +146,7 @@ public:
 
   int mem_alloc(uint64_t size, int flags, uint64_t *dev_addr) {
 #ifdef VX_CFG_VM_ENABLE
-    uint64_t asize = aligned_size(size, VX_CFG_MEM_PAGE_SIZE);
+    uint64_t asize = aligned_size(size, VX_VM_PAGE_SIZE);
 #else
     uint64_t asize = size;
 #endif
@@ -181,7 +181,7 @@ public:
 
   int mem_reserve(uint64_t dev_addr, uint64_t size, int flags) {
 #ifdef VX_CFG_VM_ENABLE
-    uint64_t asize = aligned_size(size, VX_CFG_MEM_PAGE_SIZE);
+    uint64_t asize = aligned_size(size, VX_VM_PAGE_SIZE);
 #else
     uint64_t asize = size;
 #endif

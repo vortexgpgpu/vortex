@@ -4,7 +4,6 @@
 // DXA multicast routed through a global barrier.
 
 #include <cstdlib>
-#include <VX_config.h>
 #include <iostream>
 #include <unistd.h>
 #include <vector>

@@ -1,5 +1,4 @@
 #include <vx_spawn2.h>
-#include <VX_config.h>
 #include "common.h"
 
 #ifndef VX_CFG_NUM_THREADS

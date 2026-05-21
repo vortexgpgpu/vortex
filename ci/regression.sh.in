@@ -27,6 +27,11 @@ XSIZE=$((XLEN / 8))
 
 echo "Vortex Regression Test: XLEN=$XLEN"
 
+# Enforce the HW/SW config layering boundary: VX_config.h is HW/sim-private
+# and must not leak into software or tests.
+# See docs/proposals/config_hw_sw_layering_proposal.md.
+"@VORTEX_HOME@/ci/check_config_boundary.sh"
+
 unittest()
 {
     make -C tests/unittest run

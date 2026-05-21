@@ -15,6 +15,8 @@ VXBIN := $(ROOT_DIR)/tests/regression/basic/kernel.vxbin
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -O2 -DNDEBUG
 CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
+# Project the resolved hardware config as -DVX_CFG_* flags.
+CXXFLAGS += $(XCONFIGS)
 
 LDFLAGS += -Wl,-rpath,$(RT_DIR) -L$(RT_DIR) -lvortex -pthread
 

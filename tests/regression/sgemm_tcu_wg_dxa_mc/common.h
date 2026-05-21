@@ -2,7 +2,6 @@
 #define _SGEMM_TCU_WG_DXA_MC_COMMON_H_
 
 #include <stdint.h>
-#include <VX_config.h>
 
 #ifndef WGMMA_NRC
   #define WGMMA_NRC 8

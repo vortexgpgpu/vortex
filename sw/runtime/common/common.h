@@ -15,7 +15,6 @@
 
 #include <assert.h>
 #include <vortex.h>
-#include <VX_config.h>
 #include <VX_types.h>
 #include <callbacks.h>
 #include <mem_alloc.h>
@@ -26,9 +25,9 @@
 
 #define CACHE_BLOCK_SIZE  64
 
-#define RAM_PAGE_SIZE     4096 // Please use VX_CFG_MEM_PAGE_SIZE in VX_config.h
+#define RAM_PAGE_SIZE     4096 // Please use VX_VM_PAGE_SIZE in VX_config.h
 
-#define ALLOC_BASE_ADDR   VX_CFG_USER_BASE_ADDR
+#define ALLOC_BASE_ADDR   VX_MEM_USER_BASE_ADDR
 
 #if (VX_CFG_XLEN == 64)
 #define GLOBAL_MEM_SIZE    0x200000000  // 8 GB

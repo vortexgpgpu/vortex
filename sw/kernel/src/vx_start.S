@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <VX_config.h>
 #include <VX_types.h>
 #include <newlib.h>
 #include "common.h"
@@ -73,20 +72,20 @@ _start:
 __vx_cta_entry:
 #ifdef VX_CFG_VM_ENABLE
   # Program SATP with the page-table base PPN and addressing mode. The
-  # runtime has already populated the page table at VX_CFG_PAGE_TABLE_BASE_ADDR
+  # runtime has already populated the page table at VX_MEM_PAGE_TABLE_BASE_ADDR
   # before launching this kernel; we just point the per-core MMU at it.
   # STACK and PT regions are MMU-bypass per VMManager::need_trans, so it
   # is safe to do this before the stack is set up.
-#if VX_CFG_VM_ADDR_MODE == SV39
-  li    t0, VX_CFG_PAGE_TABLE_BASE_ADDR
-  srli  t0, t0, VX_CFG_MEM_PAGE_LOG2_SIZE
+#if VX_VM_ADDR_MODE == SV39
+  li    t0, VX_MEM_PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, VX_VM_PAGE_LOG2_SIZE
   li    t1, 1
   slli  t1, t1, 63
   or    t0, t0, t1
   csrw  satp, t0
-#elif VX_CFG_VM_ADDR_MODE == SV32
-  li    t0, VX_CFG_PAGE_TABLE_BASE_ADDR
-  srli  t0, t0, VX_CFG_MEM_PAGE_LOG2_SIZE
+#elif VX_VM_ADDR_MODE == SV32
+  li    t0, VX_MEM_PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, VX_VM_PAGE_LOG2_SIZE
   li    t1, 1
   slli  t1, t1, 31
   or    t0, t0, t1
@@ -98,9 +97,9 @@ __vx_cta_entry:
   la    gp, __global_pointer
 #endif
   # set stack pointer register
-  LOAD_IMMEDIATE64(sp, VX_CFG_STACK_BASE_ADDR)
+  LOAD_IMMEDIATE64(sp, VX_MEM_STACK_BASE_ADDR)
   csrr  t0, VX_CSR_MHARTID
-  sll   t1, t0, VX_CFG_STACK_LOG2_SIZE
+  sll   t1, t0, VX_MEM_STACK_LOG2_SIZE
   sub   sp, sp, t1
 #ifdef NEED_TLS
   # set thread pointer register: each hart gets its own TLS image in the
@@ -175,7 +174,7 @@ __vx_cta_entry:
 .type _Exit, @function
 .global _Exit
 _Exit:
-  li t0, VX_CFG_IO_EXIT_CODE
+  li t0, VX_MEM_IO_EXIT_CODE
   sw a0, 0(t0)
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
 
@@ -188,16 +187,16 @@ init_regs:
   # idempotently — keeps the non-KMU init path symmetric with _start so
   # spawned warps don't rely on warp-0's earlier write being visible
   # before any user-VA access they make.
-#if VX_CFG_VM_ADDR_MODE == SV39
-  li    t0, VX_CFG_PAGE_TABLE_BASE_ADDR
-  srli  t0, t0, VX_CFG_MEM_PAGE_LOG2_SIZE
+#if VX_VM_ADDR_MODE == SV39
+  li    t0, VX_MEM_PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, VX_VM_PAGE_LOG2_SIZE
   li    t1, 1
   slli  t1, t1, 63
   or    t0, t0, t1
   csrw  satp, t0
-#elif VX_CFG_VM_ADDR_MODE == SV32
-  li    t0, VX_CFG_PAGE_TABLE_BASE_ADDR
-  srli  t0, t0, VX_CFG_MEM_PAGE_LOG2_SIZE
+#elif VX_VM_ADDR_MODE == SV32
+  li    t0, VX_MEM_PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, VX_VM_PAGE_LOG2_SIZE
   li    t1, 1
   slli  t1, t1, 31
   or    t0, t0, t1
@@ -214,9 +213,9 @@ init_regs:
 #endif
 
   # set stack pointer register
-  LOAD_IMMEDIATE64(sp, VX_CFG_STACK_BASE_ADDR)
+  LOAD_IMMEDIATE64(sp, VX_MEM_STACK_BASE_ADDR)
   csrr  t0, VX_CSR_MHARTID
-  sll   t1, t0, VX_CFG_STACK_LOG2_SIZE
+  sll   t1, t0, VX_MEM_STACK_LOG2_SIZE
   sub   sp, sp, t1
 
 #ifdef NEED_TLS

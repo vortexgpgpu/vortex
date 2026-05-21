@@ -789,11 +789,11 @@ enum class AddrType {
 };
 
 inline AddrType get_addr_type(uint64_t addr) {
-  if (addr >= VX_CFG_IO_BASE_ADDR && addr < VX_CFG_IO_END_ADDR) {
+  if (addr >= VX_MEM_IO_BASE_ADDR && addr < VX_MEM_IO_END_ADDR) {
      return AddrType::IO;
   }
   if (VX_CFG_LMEM_ENABLED) {
-    if (addr >= VX_CFG_LMEM_BASE_ADDR && (addr-VX_CFG_LMEM_BASE_ADDR) < (1 << VX_CFG_LMEM_LOG_SIZE)) {
+    if (addr >= VX_MEM_LMEM_BASE_ADDR && (addr-VX_MEM_LMEM_BASE_ADDR) < (1 << VX_CFG_LMEM_LOG_SIZE)) {
         return AddrType::Shared;
     }
   }

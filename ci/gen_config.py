@@ -25,7 +25,7 @@ Key features:
   - Reads defaults from TOML (ordered, sectioned).
   - Applies overrides from --cflags and trailing -D... args.
   - Supports [[enum]] blocks in TOML to declare enum-typed parameters.
-  - Supports [[builtin]] blocks in TOML to declare builtin variables used only in expr evaluation.
+  - Supports [[builtin]] blocks in TOML to declare environment-sourced variables used only in expr evaluation.
   - Supports [[param]] blocks in TOML to declare parameter variables used only in expr evaluation / unresolved RHS.
   - builtin/param variables are NOT emitted to outputs.
   - Supports "expr:" values in TOML, with $NAME references.
@@ -365,6 +365,18 @@ def _var_default(spec: VarSpec) -> Any:
   if spec.typ == "int":
     return 0
   return ""
+
+
+def _coerce_env(raw: str, spec: VarSpec) -> Any:
+  """Cast an environment-variable string to a [[builtin]]'s declared type."""
+  if spec.typ == "bool":
+    return _truthy(raw)
+  if spec.typ == "int":
+    try:
+      return int(raw.strip(), 0)
+    except ValueError:
+      return _var_default(spec)
+  return raw
 
 
 def _compute_param_taint(toml_defs: Dict[str, Any], params_set: Set[str]) -> Set[str]:
@@ -1219,7 +1231,12 @@ class Resolver:
       raise ValueError(f"Cycle detected while resolving '{key}'")
 
     if key in self.builtins:
-      v = _var_default(self.builtins[key])
+      # [[builtin]] variables are sourced from the environment, so a TOML can
+      # declare an explicit, typed dependency on a build axis (e.g. XLEN).
+      # They fall back to the type default when the variable is unset.
+      spec = self.builtins[key]
+      env = os.environ.get(key)
+      v = _coerce_env(env, spec) if env is not None else _var_default(spec)
       self.cache[key] = v
       return v
 
@@ -1396,9 +1413,23 @@ def emit_cflags(cfg: Dict[str, Any], layout: Layout, enums: Dict[str, EnumSpec],
 # initialized from its `VX_CFG_* macro. A typed, scoped view of the macro
 # header; VX_gpu_pkg imports and re-exports it so all RTL sees the names.
 
+# config keys are packagized into a typed localparam view; the prefix set
+# below selects which keys, and the matched prefix is stripped to form the
+# localparam name. VX_CFG_ = build config (VX_config.toml); VX_MEM_/VX_VM_ =
+# relocated memory-map / VM contract (VX_types.toml).
+_PKG_PREFIXES: Tuple[str, ...] = ("VX_CFG_", "VX_MEM_", "VX_VM_")
+
+
+def _pkg_prefix(k: str) -> Optional[str]:
+  for p in _PKG_PREFIXES:
+    if k.startswith(p):
+      return p
+  return None
+
+
 def _pkg_include(k: str, types: Dict[str, Any], params_set: Set[str],
                  taint: Set[str]) -> bool:
-  if not _has_public_scope(k) or not k.startswith("VX_CFG_"):
+  if not _has_public_scope(k) or _pkg_prefix(k) is None:
     return False
   if k in params_set or k in taint:
     return False
@@ -1440,7 +1471,7 @@ def emit_sv_package(layout: Layout, enums: Dict[str, EnumSpec], types: Dict[str,
   emitted: Set[str] = set()
 
   def emit_lp(dst: List[str], k: str) -> None:
-    short = k[len("VX_CFG_"):]
+    short = k[len(_pkg_prefix(k)):]
     dst.append(f"    localparam {short:<34} = `{k};")
     emitted.add(k)
 

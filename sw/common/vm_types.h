@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include <VX_config.h>
+#include <VX_types.h>
 
 #ifdef VX_CFG_VM_ENABLE
 
@@ -62,15 +62,15 @@ public:
     asid = bits(satp, 44, 59);
     ppn  = bits(satp, 0, 43);
 #endif
-    address = ppn << VX_CFG_MEM_PAGE_LOG2_SIZE;
+    address = ppn << VX_VM_PAGE_LOG2_SIZE;
   }
 
   SATP_t(uint64_t address, uint16_t asid) : address(address), asid(asid) {
 #ifdef VX_CFG_XLEN_32
     assert((address >> 32) == 0 && "Upper 32 bits are not zero!");
 #endif
-    mode = VX_CFG_VM_ADDR_MODE;
-    ppn = address >> VX_CFG_MEM_PAGE_LOG2_SIZE;
+    mode = VX_VM_ADDR_MODE;
+    ppn = address >> VX_VM_PAGE_LOG2_SIZE;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshift-count-overflow"
 #ifdef VX_CFG_XLEN_32
@@ -105,7 +105,7 @@ private:
   }
 
 public:
-#if VX_CFG_VM_ADDR_MODE == SV39
+#if VX_VM_ADDR_MODE == SV39
   bool N;
   uint8_t PBMT;
 #endif
@@ -129,34 +129,34 @@ public:
   }
 
   PTE_t(uint64_t address, uint32_t flags) : address(address) {
-#if VX_CFG_VM_ADDR_MODE == SV39
+#if VX_VM_ADDR_MODE == SV39
     N = 0;
     PBMT = 0;
     level = 3;
-    ppn = address >> VX_CFG_MEM_PAGE_LOG2_SIZE;
+    ppn = address >> VX_VM_PAGE_LOG2_SIZE;
     set_flags(flags);
     pte_bytes = (ppn << 10) | flags;
 #else // SV32
     assert((address >> 32) == 0 && "Upper 32 bits are not zero!");
     level = 2;
-    ppn = address >> VX_CFG_MEM_PAGE_LOG2_SIZE;
+    ppn = address >> VX_VM_PAGE_LOG2_SIZE;
     set_flags(flags);
     pte_bytes = (ppn << 10) | flags;
 #endif
   }
 
   PTE_t(uint64_t pte_bytes) : pte_bytes(pte_bytes) {
-#if VX_CFG_VM_ADDR_MODE == SV39
+#if VX_VM_ADDR_MODE == SV39
     N = bit(pte_bytes, 63);
     PBMT = bits(pte_bytes, 61, 62);
     level = 3;
     ppn = bits(pte_bytes, 10, 53);
-    address = ppn << VX_CFG_MEM_PAGE_LOG2_SIZE;
+    address = ppn << VX_VM_PAGE_LOG2_SIZE;
 #else // SV32
     assert((pte_bytes >> 32) == 0 && "Upper 32 bits are not zero!");
     level = 2;
     ppn = bits(pte_bytes, 10, 31);
-    address = ppn << VX_CFG_MEM_PAGE_LOG2_SIZE;
+    address = ppn << VX_VM_PAGE_LOG2_SIZE;
 #endif
     rsw = bits(pte_bytes, 8, 9);
     set_flags((uint32_t)(bits(pte_bytes, 0, 7)));
@@ -176,7 +176,7 @@ public:
   uint8_t level;
 
   vAddr_t(uint64_t address) : address(address) {
-#if VX_CFG_VM_ADDR_MODE == SV39
+#if VX_VM_ADDR_MODE == SV39
     level = 3;
     vpn = new uint64_t[level];
     vpn[2] = bits(30, 38);

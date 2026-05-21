@@ -59,7 +59,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 `ifdef PLATFORM_MERGED_MEMORY_INTERFACE
 	`MP_REPEAT (1, GEN_AXI_MEM, MP_COMMA),
 `else
-	`MP_REPEAT (PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, MP_COMMA),
+	`MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, MP_COMMA),
 `endif
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
@@ -131,7 +131,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 `ifdef PLATFORM_MERGED_MEMORY_INTERFACE
 	`MP_REPEAT (1, AXI_MEM_TO_ARRAY, MP_SEMI);
 `else
-	`MP_REPEAT (PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_TO_ARRAY, MP_SEMI);
+	`MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_TO_ARRAY, MP_SEMI);
 `endif
 
 	reg [RESET_DELAY-1:0] vx_reset_shift_r;

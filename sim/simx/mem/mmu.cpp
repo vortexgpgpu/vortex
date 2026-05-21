@@ -5,6 +5,7 @@
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
 
+#include <VX_types.h>
 #include <VX_config.h>
 
 #ifdef VX_CFG_VM_ENABLE
@@ -63,7 +64,7 @@ void Mmu::start_ptw(uint64_t va, ACCESS_TYPE type, MemReq orig, uint32_t port) {
 void Mmu::on_ptw_response(const MemRsp& rsp) {
   // Extract the PTE word from the cache-line payload using the recorded
   // PTE address (low bits give the offset within the line).
-  uint32_t off_words = (uint32_t)((ptw_pte_addr_ & (VX_CFG_MEM_BLOCK_SIZE - 1)) / VX_CFG_PTE_SIZE);
+  uint32_t off_words = (uint32_t)((ptw_pte_addr_ & (VX_CFG_MEM_BLOCK_SIZE - 1)) / VX_VM_PTE_SIZE);
   uint64_t pte_bytes = 0;
   if (rsp.data) {
     auto* words = reinterpret_cast<const uint32_t*>(rsp.data->data());
@@ -111,12 +112,12 @@ void Mmu::on_ptw_response(const MemRsp& rsp) {
 
 void Mmu::drive_ptw() {
   // Bits of VA per page-table level. Derived from PT geometry:
-  // VX_CFG_PT_SIZE / VX_CFG_PTE_SIZE = entries per table = 2^VPN_BITS_PER_LEVEL.
-  const uint32_t VPN_BITS = log2ceil(VX_CFG_PT_SIZE / VX_CFG_PTE_SIZE);
+  // VX_VM_PT_SIZE / VX_VM_PTE_SIZE = entries per table = 2^VPN_BITS_PER_LEVEL.
+  const uint32_t VPN_BITS = log2ceil(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
   const uint64_t VPN_MASK = (1ULL << VPN_BITS) - 1;
   switch (ptw_state_) {
   case PTW_L1_REQ: {
-    uint64_t vpn1 = (ptw_vaddr_ >> (VX_CFG_MEM_PAGE_LOG2_SIZE + VPN_BITS)) & VPN_MASK;
+    uint64_t vpn1 = (ptw_vaddr_ >> (VX_VM_PAGE_LOG2_SIZE + VPN_BITS)) & VPN_MASK;
     ptw_pte_addr_ = pte_addr(satp_->get_base_ppn(), vpn1);
     MemReq req(MemOp::LD, ptw_pte_addr_, /*data*/nullptr, /*byteen*/0,
                PTW_TAG_MARKER, /*hart_id*/0, /*uuid*/0);
@@ -127,7 +128,7 @@ void Mmu::drive_ptw() {
     break;
   }
   case PTW_L0_REQ: {
-    uint64_t vpn0 = (ptw_vaddr_ >> VX_CFG_MEM_PAGE_LOG2_SIZE) & VPN_MASK;
+    uint64_t vpn0 = (ptw_vaddr_ >> VX_VM_PAGE_LOG2_SIZE) & VPN_MASK;
     ptw_pte_addr_ = pte_addr(ptw_l1_ppn_, vpn0);
     MemReq req(MemOp::LD, ptw_pte_addr_, /*data*/nullptr, /*byteen*/0,
                PTW_TAG_MARKER, /*hart_id*/0, /*uuid*/0);
@@ -140,18 +141,18 @@ void Mmu::drive_ptw() {
   case PTW_FILL: {
     // Compose the PA. For leaf at L0 the offset is just pgoff; for a
     // leaf at L1 (SV32 megapage), the offset additionally includes
-    // VPN[0] from the original VA. VX_CFG_PT_SIZE/VX_CFG_PTE_SIZE bits per level.
-    uint32_t off_bits = VX_CFG_MEM_PAGE_LOG2_SIZE +
-                        ptw_leaf_level_ * log2ceil(VX_CFG_PT_SIZE / VX_CFG_PTE_SIZE);
+    // VPN[0] from the original VA. VX_VM_PT_SIZE/VX_VM_PTE_SIZE bits per level.
+    uint32_t off_bits = VX_VM_PAGE_LOG2_SIZE +
+                        ptw_leaf_level_ * log2ceil(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
     uint64_t off_mask = (1ULL << off_bits) - 1;
-    uint64_t pa_base = (ptw_final_ppn_ << VX_CFG_MEM_PAGE_LOG2_SIZE) & ~off_mask;
+    uint64_t pa_base = (ptw_final_ppn_ << VX_VM_PAGE_LOG2_SIZE) & ~off_mask;
     uint64_t pa = pa_base | (ptw_vaddr_ & off_mask);
     // Cache the per-4KB sub-page mapping in the TLB. A megapage walk
     // therefore only services the specific 4 KB that triggered the
     // miss; subsequent VAs in the same megapage will re-walk (correct,
     // just less optimal — fine for the rare system regions we identity-map).
-    uint64_t vpn = ptw_vaddr_ >> VX_CFG_MEM_PAGE_LOG2_SIZE;
-    uint64_t ppn_4kb = pa >> VX_CFG_MEM_PAGE_LOG2_SIZE;
+    uint64_t vpn = ptw_vaddr_ >> VX_VM_PAGE_LOG2_SIZE;
+    uint64_t ppn_4kb = pa >> VX_VM_PAGE_LOG2_SIZE;
     tlb_.fill(vpn, ppn_4kb, ptw_flags_);
     MemReq translated = ptw_orig_req_;
     translated.addr = pa;
@@ -203,12 +204,12 @@ void Mmu::on_tick() {
       continue;
     }
 
-    uint64_t vpn = req.addr >> VX_CFG_MEM_PAGE_LOG2_SIZE;
+    uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
     auto [hit, ppn] = tlb_.lookup(vpn);
     if (hit) {
       MemReq translated = req;
-      translated.addr = (ppn << VX_CFG_MEM_PAGE_LOG2_SIZE) |
-                        (req.addr & ((1ULL << VX_CFG_MEM_PAGE_LOG2_SIZE) - 1));
+      translated.addr = (ppn << VX_VM_PAGE_LOG2_SIZE) |
+                        (req.addr & ((1ULL << VX_VM_PAGE_LOG2_SIZE) - 1));
       if (ReqOut.at(p).try_send(translated)) {
         ReqIn.at(p).pop();
       }

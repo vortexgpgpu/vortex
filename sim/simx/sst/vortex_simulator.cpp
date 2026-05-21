@@ -10,7 +10,7 @@
 namespace vortex {
 
 VortexSimulator::VortexSimulator()
-: ram_(0, VX_CFG_MEM_PAGE_SIZE)
+: ram_(0, VX_VM_PAGE_SIZE)
 , proc_(std::make_unique<Processor>())
 , halted_(true) {}
 
@@ -19,7 +19,7 @@ bool VortexSimulator::init(const std::string& kernelPath) {
 
     // Prime KMU DCRs the same way main.cpp does — the KMU needs the
     // startup address and a 1×1×1 grid/block to launch a single CTA.
-    const uint64_t startup_addr(VX_CFG_STARTUP_ADDR);
+    const uint64_t startup_addr = 0x80000000;  // flat-image (vxbin/bin/hex) load address; the ELF path uses img.entry
     proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
 #if (VX_CFG_XLEN == 64)
     proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR1, startup_addr >> 32);

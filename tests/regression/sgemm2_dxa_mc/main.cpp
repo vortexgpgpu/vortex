@@ -7,7 +7,6 @@
 //  descriptor programming is the artifact under review.)
 
 #include <algorithm>
-#include <VX_config.h>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>

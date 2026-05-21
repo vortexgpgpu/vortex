@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <VX_types.h>
 #include "tcu_unit.h"
 #include "tensor_cfg.h"
 #include <rvfloats.h>
@@ -789,10 +790,10 @@ public:
 
     lmem_desc_t sd_a{}, sd_b{};
     if (is_a_smem) {
-      sd_a = {uint64_t(VX_CFG_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
+      sd_a = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
       lmem_desc_[wid][0] = sd_a;
     }
-    sd_b = {uint64_t(VX_CFG_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
+    sd_b = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
     lmem_desc_[wid][1] = sd_b;
 
     // The gather walks the un-packed K element range:
@@ -1076,10 +1077,10 @@ public:
     lmem_desc_t sd_a, sd_b;
     if (step_k == 0 && step_m == 0 && step_n == 0) {
       if (is_a_smem) {
-        sd_a = {uint64_t(VX_CFG_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
+        sd_a = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
         lmem_desc_[wid][0] = sd_a;
       }
-      sd_b = {uint64_t(VX_CFG_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
+      sd_b = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
       lmem_desc_[wid][1] = sd_b;
     } else {
       sd_a = lmem_desc_[wid][0];

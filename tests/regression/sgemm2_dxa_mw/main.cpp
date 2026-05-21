@@ -4,7 +4,6 @@
 // blockIdx.y form a multicast group sharing one B column-block.
 
 #include <algorithm>
-#include <VX_config.h>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>

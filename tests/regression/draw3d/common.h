@@ -2,7 +2,6 @@
 #define _COMMON_H_
 
 #include <stdint.h>
-#include <VX_config.h>
 #include <VX_types.h>
 
 // vortex2 KMU kernel-arg layout for the full TEX+RASTER+OM pipeline.

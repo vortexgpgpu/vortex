@@ -1,9 +1,9 @@
+#include <VX_types.h>
 #include <iostream>
 #include <unistd.h>
 #include <string.h>
 #include <vortex2.h>
 #include <vector>
-#include <VX_config.h>
 #include "common.h"
 
 #define NUM_ADDRS 16
@@ -23,7 +23,7 @@
 const char* kernel_file = "kernel.vxbin";
 uint32_t count = 0;
 
-static uint64_t io_base_addr = VX_CFG_IO_BASE_ADDR;
+static uint64_t io_base_addr = VX_MEM_IO_BASE_ADDR;
 uint64_t usr_test_addr;
 
 vx_device_h device = nullptr;

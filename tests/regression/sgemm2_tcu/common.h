@@ -2,7 +2,6 @@
 #define _COMMON_H_
 
 #include <stdint.h>
-#include <VX_config.h>
 
 #ifndef VX_CFG_NUM_THREADS
 #define VX_CFG_NUM_THREADS 4

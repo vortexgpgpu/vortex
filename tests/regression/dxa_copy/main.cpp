@@ -1,5 +1,4 @@
 #include <cstdlib>
-#include <VX_config.h>
 #include <cstring>
 #include <iostream>
 #include <unistd.h>
