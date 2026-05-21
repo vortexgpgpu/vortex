@@ -18,6 +18,7 @@
 #include <util.h>
 #include <processor.h>
 #include <cmd_processor.h>
+#include <vx_caps.h>
 
 #ifdef VX_CFG_VM_ENABLE
 #include <vm.h>
@@ -85,59 +86,35 @@ public:
   }
 
   int get_caps(uint32_t caps_id, uint64_t *value) {
-    uint64_t _value;
+    // Lazily read the static caps words from the CP regfile model.
+    if (!caps_loaded_) {
+      if (vortex::load_caps(
+            [this](uint32_t off, uint32_t *v) { return cp_mmio_read(off, v); },
+            &dev_caps_, &isa_caps_))
+        return -1;
+      caps_loaded_ = true;
+    }
+    if (vortex::decode_caps(dev_caps_, isa_caps_, caps_id, value))
+      return 0;
+    // Caps not encoded in the CP caps words — platform/runtime-specific.
     switch (caps_id) {
-    case VX_CAPS_VERSION:
-      _value = VX_ISA_IMPL_ID;
-      break;
-    case VX_CAPS_NUM_THREADS:
-      _value = VX_CFG_NUM_THREADS;
-      break;
-    case VX_CAPS_NUM_WARPS:
-      _value = VX_CFG_NUM_WARPS;
-      break;
-    case VX_CAPS_NUM_CORES:
-      _value = VX_CFG_NUM_CORES * VX_CFG_NUM_CLUSTERS;
-      break;
-    case VX_CAPS_NUM_CLUSTERS:
-      _value = VX_CFG_NUM_CLUSTERS;
-      break;
-    case VX_CAPS_SOCKET_SIZE:
-      _value = VX_CFG_SOCKET_SIZE;
-      break;
-    case VX_CAPS_ISSUE_WIDTH:
-      _value = VX_CFG_ISSUE_WIDTH;
-      break;
     case VX_CAPS_CACHE_LINE_SIZE:
-      _value = CACHE_BLOCK_SIZE;
+      *value = CACHE_BLOCK_SIZE;
       break;
     case VX_CAPS_GLOBAL_MEM_SIZE:
-      _value = GLOBAL_MEM_SIZE;
-      break;
-    case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = (1 << VX_CFG_LMEM_LOG_SIZE);
-      break;
-    case VX_CAPS_ISA_FLAGS:
-      _value = ((uint64_t(VX_CFG_MISA_EXT))<<32) | ((log2floor(VX_CFG_XLEN)-4) << 30) | VX_CFG_MISA_STD;
-      break;
-    case VX_CAPS_NUM_MEM_BANKS:
-      _value = VX_CFG_PLATFORM_MEMORY_NUM_BANKS;
-      break;
-    case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (VX_CFG_MEM_ADDR_WIDTH / VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
+      *value = GLOBAL_MEM_SIZE;
       break;
     case VX_CAPS_CLOCK_RATE:
-      _value = 0;
+      *value = 0;
       break;
     case VX_CAPS_PEAK_MEM_BW:
-      _value = VX_CFG_PLATFORM_MEMORY_PEAK_BW;
+      *value = VX_CFG_PLATFORM_MEMORY_PEAK_BW;
       break;
     default:
       std::cout << "invalid caps id: " << caps_id << std::endl;
       std::abort();
       return -1;
     }
-    *value = _value;
     return 0;
   }
 
@@ -385,6 +362,9 @@ private:
   MemoryAllocator     global_mem_;
   std::future<void>   future_;
   vortex::CommandProcessor cp_;
+  uint64_t            dev_caps_ = 0;
+  uint64_t            isa_caps_ = 0;
+  bool                caps_loaded_ = false;
 #ifdef VX_CFG_VM_ENABLE
   std::unique_ptr<RamMemIO> dev_io_;
   std::unique_ptr<VMManager> vm_mgr_;

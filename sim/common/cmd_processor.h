@@ -29,6 +29,10 @@
 //     0x008 CP_DEV_CAPS   {AXI_TID_W:8 | RING_LOG2:8 | NUM_QUEUES:8}
 //     0x010 CP_CYCLE_LO
 //     0x014 CP_CYCLE_HI
+//     0x018 GPU_DEV_CAPS_LO  device-config caps, low 32 bits   (RO)
+//     0x01C GPU_DEV_CAPS_HI  device-config caps, high 32 bits  (RO)
+//     0x020 GPU_ISA_CAPS_LO  ISA caps, low 32 bits             (RO)
+//     0x024 GPU_ISA_CAPS_HI  ISA caps, high 32 bits            (RO)
 //   Per queue 0 (CP-internal offsets 0x100..0x13F)
 //     0x100/04 Q_RING_BASE_LO/HI
 //     0x108/0C Q_HEAD_ADDR_LO/HI   (where the CP publishes head)

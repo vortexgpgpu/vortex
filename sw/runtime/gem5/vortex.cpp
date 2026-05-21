@@ -34,6 +34,7 @@
 
 #include <common.h>
 #include <util.h>          // log2floor / log2ceil / is_aligned / aligned_size
+#include <vx_caps.h>
 #include "driver.h"
 
 #include <cassert>
@@ -64,28 +65,22 @@ public:
         return 0;
     }
 
-    // Compile-time capability table — host runtime and SimX-side device
-    // library share the build tree so VX_config.h macros agree on both
-    // sides by construction.
+    // Capability query — device/ISA caps are decoded from the two
+    // static CP regfile words (read via PIO); the remaining ids are
+    // platform/runtime-specific and resolved locally.
     int get_caps(uint32_t caps_id, uint64_t* value) {
+        if (!caps_loaded_) {
+            if (vortex::load_caps(
+                    [this](uint32_t off, uint32_t* v) { return cp_mmio_read(off, v); },
+                    &dev_caps_, &isa_caps_))
+                return -1;
+            caps_loaded_ = true;
+        }
+        if (vortex::decode_caps(dev_caps_, isa_caps_, caps_id, value))
+            return 0;
         switch (caps_id) {
-        case VX_CAPS_VERSION:         *value = VX_ISA_IMPL_ID; break;
-        case VX_CAPS_NUM_THREADS:     *value = VX_CFG_NUM_THREADS; break;
-        case VX_CAPS_NUM_WARPS:       *value = VX_CFG_NUM_WARPS; break;
-        case VX_CAPS_NUM_CORES:       *value = VX_CFG_NUM_CORES * VX_CFG_NUM_CLUSTERS; break;
-        case VX_CAPS_NUM_CLUSTERS:    *value = VX_CFG_NUM_CLUSTERS; break;
-        case VX_CAPS_SOCKET_SIZE:     *value = VX_CFG_SOCKET_SIZE; break;
-        case VX_CAPS_ISSUE_WIDTH:     *value = VX_CFG_ISSUE_WIDTH; break;
         case VX_CAPS_CACHE_LINE_SIZE: *value = CACHE_BLOCK_SIZE; break;
         case VX_CAPS_GLOBAL_MEM_SIZE: *value = GLOBAL_MEM_SIZE; break;
-        case VX_CAPS_LOCAL_MEM_SIZE:  *value = (1 << VX_CFG_LMEM_LOG_SIZE); break;
-        case VX_CAPS_ISA_FLAGS:
-            *value = ((uint64_t(VX_CFG_MISA_EXT)) << 32)
-                   | ((log2floor(VX_CFG_XLEN) - 4) << 30)
-                   |   VX_CFG_MISA_STD;
-            break;
-        case VX_CAPS_NUM_MEM_BANKS:   *value = VX_CFG_PLATFORM_MEMORY_NUM_BANKS; break;
-        case VX_CAPS_MEM_BANK_SIZE:   *value = 1ull << (VX_CFG_MEM_ADDR_WIDTH / VX_CFG_PLATFORM_MEMORY_NUM_BANKS); break;
         case VX_CAPS_CLOCK_RATE:      *value = 0; break;
         case VX_CAPS_PEAK_MEM_BW:     *value = VX_CFG_PLATFORM_MEMORY_PEAK_BW; break;
         default:
@@ -187,6 +182,9 @@ public:
 
 private:
     MemoryAllocator global_mem_;
+    uint64_t dev_caps_ = 0;
+    uint64_t isa_caps_ = 0;
+    bool     caps_loaded_ = false;
 };
 
 #include <callbacks.inc>

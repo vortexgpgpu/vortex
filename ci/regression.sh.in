@@ -60,8 +60,11 @@ riscv()
 {
     echo "begin riscv tests..."
 
-    make -C sim/simx
-    make -C sim/rtlsim
+    # The ISA suite (run-{simx,rtlsim}-$XLEN) exercises the full imafdc
+    # ISA, so the sims must be built with the A and C extensions even
+    # though VX_config.toml defaults them off.
+    CONFIGS="-DVX_CFG_EXT_A_ENABLE -DVX_CFG_EXT_C_ENABLE" make -C sim/simx
+    CONFIGS="-DVX_CFG_EXT_A_ENABLE -DVX_CFG_EXT_C_ENABLE" make -C sim/rtlsim
 
     make -C tests/riscv run-simx
     make -C tests/riscv run-rtlsim
@@ -397,33 +400,37 @@ graphics()
 {
     echo "begin graphics tests..."
 
-    make -C sw/kernel
-    make -C sw/runtime/rtlsim
-
-    # ---- full PNG-driven tests (with reference image diff) --------------
     # tex: 64x64 palette texture, point-filter, scale=1.0
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex \
+        --args="-i palette64.png -r palette64_ref_g0.png"
     CONFIGS="-DVX_CFG_EXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex \
         --args="-i palette64.png -r palette64_ref_g0.png"
 
     # om: 32x32 white-box gradient render
+        CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=simx --app=om \
+        --args="-w 32 -h 32 -c 16777215 -r whitebox_32.png"
     CONFIGS="-DVX_CFG_EXT_OM_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=om \
         --args="-w 32 -h 32 -c 16777215 -r whitebox_32.png"
 
     # raster: 32x32 single triangle from cgltrace
+    CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=simx --app=raster \
+        --args="-w 32 -h 32 -t triangle.cgltrace -r triangle_ref_32.png"
     CONFIGS="-DVX_CFG_EXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster \
         --args="-w 32 -h 32 -t triangle.cgltrace -r triangle_ref_32.png"
 
-    # draw3d: full-pipeline (TEX+RASTER+OM) build-and-run smoke. Functional
-    # output is gated on raster bcoord/pos_mask CSR plumbing (deferred);
-    # this verifies the v2 KMU launch path and kernel binary build.
+    # draw3d: full-pipeline (TEX+RASTER+OM) build-and-run smoke.
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE" \
+        ./ci/blackbox.sh --driver=simx --app=draw3d \
+        --args="-w 32 -h 32 -t triangle.cgltrace -o /tmp/draw3d_out.png"
     CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE" \
         ./ci/blackbox.sh --driver=rtlsim --app=draw3d \
         --args="-w 32 -h 32 -t triangle.cgltrace -o /tmp/draw3d_out.png"
-
-    # NOTE: draw3d (full-pipeline test) is gated on raster bcoord/pos_mask
-    # CSR plumbing which is deferred. SimX support is gated on simx_v3
-    # Phase 5 — graphics ops abort on --driver=simx until the SimX
-    # functional model lands.
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE" \
+        ./ci/blackbox.sh --driver=xrt --app=draw3d \
+        --args="-w 32 -h 32 -t triangle.cgltrace -o /tmp/draw3d_out.png"
+    CONFIGS="-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE" \
+        ./ci/blackbox.sh --driver=opae --app=draw3d \
+        --args="-w 32 -h 32 -t triangle.cgltrace -o /tmp/draw3d_out.png"
 
     echo "graphics tests done!"
 }

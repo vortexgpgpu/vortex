@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include <common.h>
+#include <vx_caps.h>
 
 #ifdef SCOPE
 #include "scope.h"
@@ -226,21 +227,8 @@ public:
       return err;
     });
 
-    CHECK_ERR(this->read_register(MMIO_DEV_ADDR, (uint32_t *)&dev_caps_), {
-      return err;
-    });
-
-    CHECK_ERR(this->read_register(MMIO_DEV_ADDR + 4, (uint32_t *)&dev_caps_ + 1), {
-      return err;
-    });
-
-    CHECK_ERR(this->read_register(MMIO_ISA_ADDR, (uint32_t *)&isa_caps_), {
-      return err;
-    });
-
-    CHECK_ERR(this->read_register(MMIO_ISA_ADDR + 4, (uint32_t *)&isa_caps_ + 1), {
-      return err;
-    });
+    // dev_caps_ / isa_caps_ are loaded lazily on the first get_caps()
+    // from the CP regfile (GPU_DEV_CAPS / GPU_ISA_CAPS) — see vx_caps.h.
 
     uint64_t num_banks;
     this->get_caps(VX_CAPS_NUM_MEM_BANKS, &num_banks);
@@ -327,49 +315,23 @@ public:
   }
 
   int get_caps(uint32_t caps_id, uint64_t *value) {
+    // Lazily read the static caps words from the CP regfile.
+    if (!caps_loaded_) {
+      CHECK_ERR(vortex::load_caps(
+            [this](uint32_t off, uint32_t *v) { return cp_mmio_read(off, v); },
+            &dev_caps_, &isa_caps_), { return err; });
+      caps_loaded_ = true;
+    }
+    if (vortex::decode_caps(dev_caps_, isa_caps_, caps_id, value))
+      return 0;
+    // Caps not encoded in the CP caps words — platform/runtime-specific.
     uint64_t _value;
     switch (caps_id) {
-    case VX_CAPS_VERSION:
-      _value = (dev_caps_ >> 0) & 0xff;
-      break;
-    case VX_CAPS_NUM_THREADS:
-      _value = 1 << ((dev_caps_ >> 8) & 0x7);
-      break;
-    case VX_CAPS_NUM_WARPS:
-      _value = 1 << ((dev_caps_ >> 11) & 0x7);
-      break;
-    case VX_CAPS_NUM_CORES: {
-      uint32_t socket_size  = 1 << ((dev_caps_ >> 14) & 0x7);
-      uint32_t cluster_size = 1 << ((dev_caps_ >> 17) & 0x7);
-      uint32_t num_clusters = 1 << ((dev_caps_ >> 20) & 0x7);
-      _value = num_clusters * cluster_size * socket_size;
-    } break;
-    case VX_CAPS_SOCKET_SIZE:
-      _value = 1 << ((dev_caps_ >> 14) & 0x7);
-      break;
-    case VX_CAPS_NUM_CLUSTERS:
-      _value = 1 << ((dev_caps_ >> 20) & 0x7);
-      break;
-    case VX_CAPS_ISSUE_WIDTH:
-      _value = 1 << ((dev_caps_ >> 23) & 0x7);
-      break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
       break;
     case VX_CAPS_GLOBAL_MEM_SIZE:
       _value = global_mem_size_;
-      break;
-    case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = 1ull << ((dev_caps_ >> 26) & 0xff);
-      break;
-    case VX_CAPS_ISA_FLAGS:
-      _value = isa_caps_;
-      break;
-    case VX_CAPS_NUM_MEM_BANKS:
-      _value = 1 << ((dev_caps_ >> 34) & 0x7);
-      break;
-    case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (20 + ((dev_caps_ >> 37) & 0x1f));
       break;
     case VX_CAPS_CLOCK_RATE:
       _value = clock_freqs_;
@@ -873,8 +835,9 @@ private:
   MemoryAllocator global_mem_;
   xrt_device_t xrtDevice_;
   xrt_kernel_t xrtKernel_;
-  uint64_t dev_caps_;
-  uint64_t isa_caps_;
+  uint64_t dev_caps_ = 0;
+  uint64_t isa_caps_ = 0;
+  bool     caps_loaded_ = false;
   uint64_t global_mem_size_;
   uint64_t clock_freqs_;
   uint64_t memory_bw_;

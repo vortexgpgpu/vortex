@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include <common.h>
+#include <vx_caps.h>
 
 #include "driver.h"
 
@@ -189,17 +190,8 @@ public:
     });
 
     {
-      // Load ISA CAPS
-      CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, MMIO_ISA_CAPS, &isa_caps_), {
-        api_.fpgaClose(fpga_);
-        return -1;
-      });
-
-      // Load device CAPS
-      CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, MMIO_DEV_CAPS, &dev_caps_), {
-        api_.fpgaClose(fpga_);
-        return -1;
-      });
+      // dev_caps_ / isa_caps_ are loaded lazily on the first get_caps()
+      // from the CP regfile (GPU_DEV_CAPS / GPU_ISA_CAPS) — see vx_caps.h.
 
       // Determine global memory size
       uint64_t num_banks, bank_size;
@@ -256,49 +248,24 @@ public:
   }
 
   int get_caps(uint32_t caps_id, uint64_t * value) {
+    // Lazily read the static caps words from the CP regfile.
+    if (!caps_loaded_) {
+      if (vortex::load_caps(
+            [this](uint32_t off, uint32_t * v) { return cp_mmio_read(off, v); },
+            &dev_caps_, &isa_caps_))
+        return -1;
+      caps_loaded_ = true;
+    }
+    if (vortex::decode_caps(dev_caps_, isa_caps_, caps_id, value))
+      return 0;
+    // Caps not encoded in the CP caps words — platform/runtime-specific.
     uint64_t _value;
     switch (caps_id) {
-    case VX_CAPS_VERSION:
-      _value = (dev_caps_ >> 0) & 0xff;
-      break;
-    case VX_CAPS_NUM_THREADS:
-      _value = 1 << ((dev_caps_ >> 8) & 0x7);
-      break;
-    case VX_CAPS_NUM_WARPS:
-      _value = 1 << ((dev_caps_ >> 11) & 0x7);
-      break;
-    case VX_CAPS_NUM_CORES: {
-      uint32_t socket_size  = 1 << ((dev_caps_ >> 14) & 0x7);
-      uint32_t cluster_size = 1 << ((dev_caps_ >> 17) & 0x7);
-      uint32_t num_clusters = 1 << ((dev_caps_ >> 20) & 0x7);
-      _value = num_clusters * cluster_size * socket_size;
-    } break;
-    case VX_CAPS_SOCKET_SIZE:
-      _value = 1 << ((dev_caps_ >> 14) & 0x7);
-      break;
-    case VX_CAPS_NUM_CLUSTERS:
-      _value = 1 << ((dev_caps_ >> 20) & 0x7);
-      break;
-    case VX_CAPS_ISSUE_WIDTH:
-      _value = 1 << ((dev_caps_ >> 23) & 0x7);
-      break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
       break;
     case VX_CAPS_GLOBAL_MEM_SIZE:
       _value = global_mem_size_;
-      break;
-    case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = 1ull << ((dev_caps_ >> 26) & 0xff);
-      break;
-    case VX_CAPS_ISA_FLAGS:
-      _value = isa_caps_;
-      break;
-    case VX_CAPS_NUM_MEM_BANKS:
-      _value = 1 << ((dev_caps_ >> 34) & 0x7);
-      break;
-    case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (20 + ((dev_caps_ >> 37) & 0x1f));
       break;
     case VX_CAPS_CLOCK_RATE:
       _value = clock_rate_;
@@ -713,8 +680,9 @@ private:
   opae_drv_api_t api_;
   fpga_handle fpga_;
   MemoryAllocator global_mem_;
-  uint64_t dev_caps_;
-  uint64_t isa_caps_;
+  uint64_t dev_caps_ = 0;
+  uint64_t isa_caps_ = 0;
+  bool     caps_loaded_ = false;
   uint64_t global_mem_size_;
   uint64_t staging_wsid_;
   uint64_t staging_ioaddr_;

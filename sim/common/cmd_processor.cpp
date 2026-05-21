@@ -3,10 +3,50 @@
 
 #include "cmd_processor.h"
 
+#include <VX_config.h>     // VX_CFG_* device configuration
+#include <VX_types.h>      // VX_ISA_IMPL_ID
+
 #include <cstring>
 #include <cassert>
 
 namespace vortex {
+
+// ============================================================================
+// Static GPU capability words
+//
+// Packed identically to the canonical RTL in
+// hw/rtl/cp/VX_cp_axil_regfile.sv (gpu_dev_caps / gpu_isa_caps). The
+// CommandProcessor is the functional twin of that regfile, so simx /
+// rtlsim / gem5 expose the same RO GPU_DEV_CAPS / GPU_ISA_CAPS registers.
+// sw/runtime/common/vx_caps.h is the single matching decoder.
+// ============================================================================
+namespace {
+constexpr unsigned cp_clog2(uint64_t n) {
+    unsigned r = 0;
+    while ((uint64_t(1) << r) < n) ++r;
+    return r;
+}
+uint64_t gpu_dev_caps() {
+    const unsigned cluster_size = VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE;
+    const unsigned bank_addr_w  = VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH
+                                - cp_clog2(VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
+    return  (uint64_t(VX_ISA_IMPL_ID) & 0xFF)
+         | ((uint64_t(cp_clog2(VX_CFG_NUM_THREADS))  & 0x7)  << 8)
+         | ((uint64_t(cp_clog2(VX_CFG_NUM_WARPS))    & 0x7)  << 11)
+         | ((uint64_t(cp_clog2(VX_CFG_SOCKET_SIZE))  & 0x7)  << 14)
+         | ((uint64_t(cp_clog2(cluster_size))        & 0x7)  << 17)
+         | ((uint64_t(cp_clog2(VX_CFG_NUM_CLUSTERS)) & 0x7)  << 20)
+         | ((uint64_t(cp_clog2(VX_CFG_ISSUE_WIDTH))  & 0x7)  << 23)
+         | ((uint64_t(VX_CFG_LMEM_ENABLED ? VX_CFG_LMEM_LOG_SIZE : 0) & 0xFF) << 26)
+         | ((uint64_t(cp_clog2(VX_CFG_PLATFORM_MEMORY_NUM_BANKS)) & 0x7) << 34)
+         | ((uint64_t(bank_addr_w - 20) & 0x1F) << 37);
+}
+uint64_t gpu_isa_caps() {
+    return  (uint64_t(VX_CFG_MISA_EXT) << 32)
+         | ((uint64_t(cp_clog2(VX_CFG_XLEN) - 4) & 0x3) << 30)
+         |  uint64_t(VX_CFG_MISA_STD);
+}
+} // namespace
 
 CommandProcessor::CommandProcessor(const Hooks& hooks)
     : hooks_(hooks) {}
@@ -30,8 +70,9 @@ void CommandProcessor::mmio_write(uint32_t off, uint32_t value) {
     // Globals
     switch (off) {
         case 0x000: cp_ctrl_ = value; return;
-        // STATUS / DEV_CAPS / CYCLE are RO; ignore writes.
-        case 0x004: case 0x008: case 0x010: case 0x014: return;
+        // STATUS / DEV_CAPS / CYCLE / GPU caps are RO; ignore writes.
+        case 0x004: case 0x008: case 0x010: case 0x014:
+        case 0x018: case 0x01C: case 0x020: case 0x024: return;
     }
     // Queue 0 (offsets 0x100..0x12F)
     if (off >= 0x100 && off < 0x140) {
@@ -70,6 +111,10 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         }
         case 0x010: return uint32_t(cycle_counter_ & 0xFFFFFFFF);
         case 0x014: return uint32_t(cycle_counter_ >> 32);
+        case 0x018: return uint32_t(gpu_dev_caps() & 0xFFFFFFFF);
+        case 0x01C: return uint32_t(gpu_dev_caps() >> 32);
+        case 0x020: return uint32_t(gpu_isa_caps() & 0xFFFFFFFF);
+        case 0x024: return uint32_t(gpu_isa_caps() >> 32);
     }
     if (off >= 0x100 && off < 0x140) {
         switch (off - 0x100) {

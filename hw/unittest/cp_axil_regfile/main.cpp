@@ -9,6 +9,8 @@
 //   - CP_STATUS reflects the harness-driven cp_busy / cp_error inputs.
 //   - CP_DEV_CAPS returns the configured (NUM_QUEUES, RING_SIZE_LOG2_MAX,
 //     AXI_TID_WIDTH) fields.
+//   - GPU_DEV_CAPS / GPU_ISA_CAPS read back non-DECERR, decode to sane
+//     fields, and ignore writes (read-only).
 //   - CP_CYCLE counter actually advances per clock.
 //   - Atomic Q_TAIL commit: writing Q_TAIL_LO alone does NOT advance
 //     q_state.tail; writing Q_TAIL_HI atomically commits both halves.
@@ -152,6 +154,10 @@ static constexpr uint16_t CP_STATUS        = 0x004;
 static constexpr uint16_t CP_DEV_CAPS      = 0x008;
 static constexpr uint16_t CP_CYCLE_LO      = 0x010;
 static constexpr uint16_t CP_CYCLE_HI      = 0x014;
+static constexpr uint16_t GPU_DEV_CAPS_LO  = 0x018;
+static constexpr uint16_t GPU_DEV_CAPS_HI  = 0x01C;
+static constexpr uint16_t GPU_ISA_CAPS_LO  = 0x020;
+static constexpr uint16_t GPU_ISA_CAPS_HI  = 0x024;
 
 static constexpr uint16_t Q0_BASE          = 0x100;
 static constexpr uint16_t Q_RING_BASE_LO   = 0x00;
@@ -318,6 +324,32 @@ int main(int argc, char** argv) {
         EXPECT((uint32_t)r == 0xDEADBEEF, "T10: sentinel rdata on DECERR");
     }
 
-    std::printf("PASSED — 10 scenarios\n");
+    // ----- Test 11: GPU_DEV_CAPS / GPU_ISA_CAPS readable + read-only -----
+    {
+        uint64_t dl = axil_read(sim, tick, GPU_DEV_CAPS_LO);
+        uint64_t dh = axil_read(sim, tick, GPU_DEV_CAPS_HI);
+        uint64_t il = axil_read(sim, tick, GPU_ISA_CAPS_LO);
+        uint64_t ih = axil_read(sim, tick, GPU_ISA_CAPS_HI);
+        EXPECT((dl >> 32) == 0 && (dh >> 32) == 0, "T11: GPU_DEV_CAPS DECERR");
+        EXPECT((il >> 32) == 0 && (ih >> 32) == 0, "T11: GPU_ISA_CAPS DECERR");
+        uint32_t dlo = (uint32_t)dl, dhi = (uint32_t)dh;
+        uint32_t ilo = (uint32_t)il, ihi = (uint32_t)ih;
+        EXPECT(dlo != 0xDEADBEEF && ilo != 0xDEADBEEF,
+               "T11: caps must not be the DECERR sentinel");
+        uint64_t dev_caps = ((uint64_t)dhi << 32) | dlo;
+        uint64_t isa_caps = ((uint64_t)ihi << 32) | ilo;
+        // dev_caps reserved bits [63:42] must be zero.
+        EXPECT((dev_caps >> 42) == 0, "T11: dev_caps reserved bits set");
+        // isa_caps XLEN field [31:30] = clog2(XLEN)-4, so 1 (RV32) or 2 (RV64).
+        uint32_t xlen_field = (uint32_t)((isa_caps >> 30) & 0x3);
+        EXPECT(xlen_field == 1 || xlen_field == 2, "T11: isa_caps XLEN field");
+        // Read-only: a write is accepted (OKAY) but must not change the value.
+        EXPECT(axil_write(sim, tick, GPU_DEV_CAPS_LO, 0xFFFFFFFF) == 0,
+               "T11: caps write should be OKAY");
+        EXPECT((uint32_t)axil_read(sim, tick, GPU_DEV_CAPS_LO) == dlo,
+               "T11: GPU_DEV_CAPS_LO is read-only");
+    }
+
+    std::printf("PASSED — 11 scenarios\n");
     return 0;
 }
