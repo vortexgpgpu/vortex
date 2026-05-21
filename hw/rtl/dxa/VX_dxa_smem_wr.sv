@@ -27,7 +27,7 @@
 
 module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter MAX_OUTSTANDING = 8,
-    parameter CL_SIZE         = L1_LINE_SIZE,
+    parameter CL_SIZE         = `VX_CFG_L1_LINE_SIZE,
     parameter SMEM_WORD_SIZE  = DXA_LMEM_WORD_SIZE,
     parameter SMEM_ADDR_WIDTH = DXA_LMEM_ADDR_W,
     parameter GMEM_DATAW      = CL_SIZE * 8
@@ -50,7 +50,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                        sw_ready,
     input  wire [TAG_W-1:0]            sw_tag,
     input  wire [GMEM_DATAW-1:0]       sw_data,
-    input  wire [MEM_ADDR_WIDTH-1:0]  sw_smem_byte_addr,
+    input  wire [`VX_CFG_MEM_ADDR_WIDTH-1:0]  sw_smem_byte_addr,
     input  wire [CL_OFF_BITS-1:0]      sw_byte_offset,
     input  wire [CL_OFF_BITS:0]        sw_valid_length,
     input  wire                        sw_oob,
@@ -71,7 +71,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Multicast (always available; active when is_multicast is set).
     input  wire                        is_multicast,
-    input  wire [NUM_WARPS-1:0]       cta_mask,
+    input  wire [`VX_CFG_NUM_WARPS-1:0]       cta_mask,
     input  wire [31:0]                 smem_stride
 
 `ifdef PERF_ENABLE
@@ -103,7 +103,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ════════════════════════════════════════════════════════════════════
     reg                       pend_valid_r;
     reg [TAG_W-1:0]           pend_tag_r;
-    reg [MEM_ADDR_WIDTH-1:0] pend_smem_byte_addr_r;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] pend_smem_byte_addr_r;
     reg [CL_OFF_BITS-1:0]     pend_byte_offset_r;
     reg [CL_OFF_BITS:0]       pend_valid_length_r;
     reg                       pend_last_r;
@@ -115,7 +115,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ════════════════════════════════════════════════════════════════════
     reg                       defer_valid_r;
     reg [TAG_W-1:0]           defer_tag_r;
-    reg [MEM_ADDR_WIDTH-1:0] defer_smem_byte_addr_r;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0] defer_smem_byte_addr_r;
     reg [CL_OFF_BITS-1:0]     defer_byte_offset_r;
     reg [CL_OFF_BITS:0]       defer_valid_length_r;
     reg [GMEM_DATAW-1:0]      defer_data_r;
@@ -211,7 +211,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire                       fb_load_now      = use_sw_for_fb || use_pend_for_fb || use_defer_for_fb;
 
     wire [GMEM_DATAW-1:0]      fb_load_data;
-    wire [MEM_ADDR_WIDTH-1:0] fb_load_smem_byte_addr;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] fb_load_smem_byte_addr;
     wire [CL_OFF_BITS-1:0]     fb_load_byte_offset;
     wire [CL_OFF_BITS:0]       fb_load_valid_length;
     wire [TAG_W-1:0]           fb_load_tag;
@@ -331,10 +331,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // LOG2UP (not CLOG2): NUM_WARPS=1 would make CLOG2 0 and the index vector
     // [-1:0]. VX_priority_encoder.index_out is `LOG2UP(N)` wide — match it.
-    localparam MC_NW_BITS = `LOG2UP(NUM_WARPS);
+    localparam MC_NW_BITS = `LOG2UP(`VX_CFG_NUM_WARPS);
     wire [SMEM_ADDR_WIDTH-1:0] smem_stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_W);
 
-    reg [NUM_WARPS-1:0] replay_remaining_r;
+    reg [`VX_CFG_NUM_WARPS-1:0] replay_remaining_r;
     wire [MC_NW_BITS-1:0] replay_next_idx;
     wire replay_has_remaining;
 
@@ -342,10 +342,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // present cta_mask to the PE this cycle so the first beat of the new
     // word fires without a 1-cycle reload gap.
     wire reload_now = is_multicast && drain_valid && (replay_remaining_r == '0);
-    wire [NUM_WARPS-1:0] replay_remaining_use = reload_now ? cta_mask : replay_remaining_r;
+    wire [`VX_CFG_NUM_WARPS-1:0] replay_remaining_use = reload_now ? cta_mask : replay_remaining_r;
 
     VX_priority_encoder #(
-        .N (NUM_WARPS)
+        .N (`VX_CFG_NUM_WARPS)
     ) replay_pe (
         .data_in   (replay_remaining_use),
         .index_out (replay_next_idx),
@@ -356,7 +356,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [SMEM_ADDR_WIDTH-1:0] replay_addr = fb_word_addr_r
         + SMEM_ADDR_WIDTH'(replay_next_idx) * smem_stride_words;
     wire replay_is_last = replay_has_remaining
-        && (replay_remaining_use == (NUM_WARPS'(1) << replay_next_idx));
+        && (replay_remaining_use == (`VX_CFG_NUM_WARPS'(1) << replay_next_idx));
 
     wire mc_write_valid = transfer_active && drain_valid
                        && (!is_multicast || replay_has_remaining);
@@ -372,7 +372,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             // Single update: reload from cta_mask on demand, then clear the
             // bit corresponding to the beat that fires this cycle (if any).
             if (mc_write_fire && replay_has_remaining) begin
-                replay_remaining_r <= replay_remaining_use & ~(NUM_WARPS'(1) << replay_next_idx);
+                replay_remaining_r <= replay_remaining_use & ~(`VX_CFG_NUM_WARPS'(1) << replay_next_idx);
             end else if (reload_now) begin
                 replay_remaining_r <= cta_mask;
             end

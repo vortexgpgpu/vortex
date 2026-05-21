@@ -35,17 +35,17 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     VX_lsu_mem_if.master    global_out_if,
     VX_lsu_mem_if.master    local_out_if
 );
-    localparam REQ_DATAW = NUM_LSU_LANES + 1 + NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + MEM_ATTR_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
-    localparam RSP_DATAW = NUM_LSU_LANES + NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
+    localparam REQ_DATAW = `VX_CFG_NUM_LSU_LANES + 1 + `VX_CFG_NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + MEM_ATTR_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
+    localparam RSP_DATAW = `VX_CFG_NUM_LSU_LANES + `VX_CFG_NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
 
     // Per-lane is_addr_local from the user bits at the fixed offset.
-    wire [NUM_LSU_LANES-1:0] is_addr_local_mask;
-    for (genvar i = 0; i < NUM_LSU_LANES; ++i) begin : g_is_addr_local_mask
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] is_addr_local_mask;
+    for (genvar i = 0; i < `VX_CFG_NUM_LSU_LANES; ++i) begin : g_is_addr_local_mask
         assign is_addr_local_mask[i] = lsu_in_if.req_data.user[i][MEM_ATTR_LOCAL_OFFS];
     end
 
-    wire [NUM_LSU_LANES-1:0] global_mask = lsu_in_if.req_data.mask & ~is_addr_local_mask;
-    wire [NUM_LSU_LANES-1:0] local_mask  = lsu_in_if.req_data.mask &  is_addr_local_mask;
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] global_mask = lsu_in_if.req_data.mask & ~is_addr_local_mask;
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] local_mask  = lsu_in_if.req_data.mask &  is_addr_local_mask;
 
     wire is_addr_global = |global_mask;
     wire is_addr_local  = |local_mask;
@@ -82,8 +82,8 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
 
     // Strip per-lane AMO bits on the local path so the LMEM banks never
     // observe amo.amo_valid. Other attr fields pass through unchanged.
-    wire [NUM_LSU_LANES-1:0][MEM_ATTR_WIDTH-1:0] local_user;
-    for (genvar i = 0; i < NUM_LSU_LANES; ++i) begin : g_local_user
+    wire [`VX_CFG_NUM_LSU_LANES-1:0][MEM_ATTR_WIDTH-1:0] local_user;
+    for (genvar i = 0; i < `VX_CFG_NUM_LSU_LANES; ++i) begin : g_local_user
         mem_bus_attr_t lane_clean;
         always_comb begin
             lane_clean      = mem_bus_attr_t'(lsu_in_if.req_data.user[i]);
@@ -118,7 +118,7 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     // Synth-time assertion mirror of SimX's local_mem_switch guard
     // (sim/simx/mem/local_mem_switch.cpp:65). AMO on Shared/LMEM is
     // out of scope (proposal §6).
-    for (genvar lane = 0; lane < NUM_LSU_LANES; ++lane) begin : g_amo_lmem_assert
+    for (genvar lane = 0; lane < `VX_CFG_NUM_LSU_LANES; ++lane) begin : g_amo_lmem_assert
         wire amo_local_lane = lsu_in_if.req_valid
                            && lsu_in_if.req_data.mask[lane]
                            && lsu_in_if.req_data.user[lane][MEM_ATTR_AMO_OFFS]    // amo_valid

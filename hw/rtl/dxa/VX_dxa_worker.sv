@@ -35,15 +35,15 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_SPARAM (WORKER_ID)
 
-    localparam GMEM_BYTES      = L1_LINE_SIZE;
+    localparam GMEM_BYTES      = `VX_CFG_L1_LINE_SIZE;
     localparam GMEM_DATAW      = GMEM_BYTES * 8;
     localparam GMEM_OFF_BITS   = `CLOG2(GMEM_BYTES);
-    localparam GMEM_ADDR_WIDTH = MEM_ADDR_WIDTH - GMEM_OFF_BITS;
+    localparam GMEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - GMEM_OFF_BITS;
 
     localparam SMEM_BYTES      = DXA_LMEM_WORD_SIZE;
     localparam SMEM_ADDR_WIDTH = DXA_LMEM_ADDR_W;
 
-    localparam MAX_OUTSTANDING = DXA_MAX_INFLIGHT;
+    localparam MAX_OUTSTANDING = `VX_CFG_DXA_MAX_INFLIGHT;
     localparam TAG_W = `CLOG2(MAX_OUTSTANDING);
     localparam SEQ_W = `CLOG2(MAX_OUTSTANDING + 1);
 
@@ -61,14 +61,14 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [BAR_ADDR_W-1:0]       active_bar_addr;
     wire                        active_notify_smem_done;
     wire                        active_is_multicast;
-    wire [NUM_WARPS-1:0]       active_cta_mask;
+    wire [`VX_CFG_NUM_WARPS-1:0]       active_cta_mask;
     wire [31:0]                 active_smem_stride;
 
     // addr_gen → gmem_req
     wire                        ag_valid;
     wire                        ag_ready;
     wire [GMEM_ADDR_WIDTH-1:0]  ag_cl_addr;
-    wire [MEM_ADDR_WIDTH-1:0]  ag_smem_byte_addr;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0]  ag_smem_byte_addr;
     wire [GMEM_OFF_BITS-1:0]    ag_byte_offset;
     wire [GMEM_OFF_BITS:0]      ag_valid_length;
     wire                        ag_oob;
@@ -80,7 +80,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire                        sw_ready;
     wire [TAG_W-1:0]            sw_tag;
     wire [GMEM_DATAW-1:0]       sw_data;
-    wire [MEM_ADDR_WIDTH-1:0]  sw_smem_byte_addr;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0]  sw_smem_byte_addr;
     wire [GMEM_OFF_BITS-1:0]    sw_byte_offset;
     wire [GMEM_OFF_BITS:0]      sw_valid_length;
     wire                        sw_oob;
@@ -163,7 +163,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .GMEM_ADDR_WIDTH (GMEM_ADDR_WIDTH),
         .GMEM_TAG_WIDTH  (GMEM_TAG_WIDTH),
         .CL_OFF_BITS     (GMEM_OFF_BITS),
-        .SMEM_ADDR_W     (MEM_ADDR_WIDTH)
+        .SMEM_ADDR_W     (`VX_CFG_MEM_ADDR_WIDTH)
     ) gmem_req (
         .clk                (clk),
         .reset              (reset),

@@ -19,7 +19,7 @@
 
 `ifdef VX_CFG_XLEN_64
     `define CSR_READ_64(addr, dst, src) \
-        addr : dst = XLEN'(src)
+        addr : dst = `VX_CFG_XLEN'(src)
 `else
     `define CSR_READ_64(addr, dst, src) \
         addr : dst = src[31:0]; \
@@ -46,7 +46,7 @@ import VX_fpu_pkg::*;
 `endif
 
 `ifdef VX_CFG_EXT_F_ENABLE
-    VX_fpu_csr_if.slave                 fpu_csr_if [NUM_FPU_BLOCKS],
+    VX_fpu_csr_if.slave                 fpu_csr_if [`VX_CFG_NUM_FPU_BLOCKS],
 `endif
 
     VX_sched_csr_if.slave               sched_csr_if,
@@ -56,20 +56,20 @@ import VX_fpu_pkg::*;
     input wire [NW_WIDTH-1:0]           read_wid,
     input wire [NCTA_WIDTH-1:0]         read_cta_id,
     input wire [`VX_CSR_ADDR_BITS-1:0]  read_addr,
-    output wire [XLEN-1:0]             read_data_ro,
-    output wire [XLEN-1:0]             read_data_rw,
+    output wire [`VX_CFG_XLEN-1:0]             read_data_ro,
+    output wire [`VX_CFG_XLEN-1:0]             read_data_rw,
 
     input wire                          write_enable,
     input wire [UUID_WIDTH-1:0]         write_uuid,
     input wire [NW_WIDTH-1:0]           write_wid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  write_addr,
-    input wire [XLEN-1:0]              write_data
+    input wire [`VX_CFG_XLEN-1:0]              write_data
 );
 
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR ({mpm_class, read_data_rw, read_enable, read_uuid});
-    wire [MEM_ADDR_WIDTH-1:0] __cta_param = sched_csr_if.cta_csrs.param;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] __cta_param = sched_csr_if.cta_csrs.param;
     `UNUSED_VAR (__cta_param)
     `UNUSED_VAR ({write_data, write_uuid})
 
@@ -78,7 +78,7 @@ import VX_fpu_pkg::*;
     // Scheduler CSRs write interface
     assign sched_csr_if.csr_wr_valid = write_enable && (write_addr == `VX_CSR_MSCRATCH);
     assign sched_csr_if.csr_wr_wid   = write_wid;
-    assign sched_csr_if.csr_wr_data  = MEM_ADDR_WIDTH'(write_data);
+    assign sched_csr_if.csr_wr_data  = `VX_CFG_MEM_ADDR_WIDTH'(write_data);
 
     // Machine-mode trap CSRs are stored in the scheduler; forward csrw
     // writes to them (csr_wr_wid above carries the warp id).
@@ -92,12 +92,12 @@ import VX_fpu_pkg::*;
     assign sched_csr_if.trap_csr_wr_data  = write_data;
 
 `ifdef VX_CFG_EXT_F_ENABLE
-    reg [NUM_WARPS-1:0][INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
-    wire [NUM_FPU_BLOCKS-1:0]              fpu_write_enable;
-    wire [NUM_FPU_BLOCKS-1:0][NW_WIDTH-1:0] fpu_write_wid;
-    fflags_t [NUM_FPU_BLOCKS-1:0]          fpu_write_fflags;
+    reg [`VX_CFG_NUM_WARPS-1:0][INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
+    wire [`VX_CFG_NUM_FPU_BLOCKS-1:0]              fpu_write_enable;
+    wire [`VX_CFG_NUM_FPU_BLOCKS-1:0][NW_WIDTH-1:0] fpu_write_wid;
+    fflags_t [`VX_CFG_NUM_FPU_BLOCKS-1:0]          fpu_write_fflags;
 
-    for (genvar i = 0; i < NUM_FPU_BLOCKS; ++i) begin : g_fpu_write
+    for (genvar i = 0; i < `VX_CFG_NUM_FPU_BLOCKS; ++i) begin : g_fpu_write
         assign fpu_write_enable[i] = fpu_csr_if[i].write_enable;
         assign fpu_write_wid[i]    = fpu_csr_if[i].write_wid;
         assign fpu_write_fflags[i] = fpu_csr_if[i].write_fflags;
@@ -105,7 +105,7 @@ import VX_fpu_pkg::*;
 
     always @(*) begin
         fcsr_n = fcsr;
-        for (integer i = 0; i < NUM_FPU_BLOCKS; ++i) begin
+        for (integer i = 0; i < `VX_CFG_NUM_FPU_BLOCKS; ++i) begin
             if (fpu_write_enable[i]) begin
                 fcsr_n[fpu_write_wid[i]][`FP_FLAGS_BITS-1:0] = fcsr[fpu_write_wid[i]][`FP_FLAGS_BITS-1:0]
                                                              | fpu_write_fflags[i];
@@ -121,7 +121,7 @@ import VX_fpu_pkg::*;
         end
     end
 
-    for (genvar i = 0; i < NUM_FPU_BLOCKS; ++i) begin : g_fpu_csr_read_frm
+    for (genvar i = 0; i < `VX_CFG_NUM_FPU_BLOCKS; ++i) begin : g_fpu_csr_read_frm
         assign fpu_csr_if[i].read_frm = fcsr[fpu_csr_if[i].read_wid][INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS];
     end
 
@@ -139,7 +139,7 @@ import VX_fpu_pkg::*;
     // it from vx_start.S after the runtime has installed the page table.
     // Surfaced on sched_csr_if.satp so VX_core can pick it up directly
     // off the shared interface instead of routing through SFU/execute.
-    reg [XLEN-1:0] satp;
+    reg [`VX_CFG_XLEN-1:0] satp;
     always @(posedge clk) begin
         if (reset) begin
             satp <= '0;
@@ -187,8 +187,8 @@ import VX_fpu_pkg::*;
     assign sched_csr_if.csr_rd_wid = read_wid;
     assign sched_csr_if.csr_rd_cta_id = read_cta_id;
 
-    reg [XLEN-1:0] read_data_ro_w;
-    reg [XLEN-1:0] read_data_rw_w;
+    reg [`VX_CFG_XLEN-1:0] read_data_ro_w;
+    reg [`VX_CFG_XLEN-1:0] read_data_rw_w;
     reg read_addr_valid_w;
 
     always @(*) begin
@@ -196,40 +196,40 @@ import VX_fpu_pkg::*;
         read_data_rw_w    = '0;
         read_addr_valid_w = 1;
         case (read_addr)
-            `VX_CSR_MVENDORID  : read_data_ro_w = XLEN'(`VX_ISA_VENDOR_ID);
-            `VX_CSR_MARCHID    : read_data_ro_w = XLEN'(`VX_ISA_ARCH_ID);
-            `VX_CSR_MIMPID     : read_data_ro_w = XLEN'(`VX_ISA_IMPL_ID);
-            `VX_CSR_MISA       : read_data_ro_w = XLEN'({2'(`CLOG2(XLEN/16)), 30'(MISA_STD)});
+            `VX_CSR_MVENDORID  : read_data_ro_w = `VX_CFG_XLEN'(`VX_ISA_VENDOR_ID);
+            `VX_CSR_MARCHID    : read_data_ro_w = `VX_CFG_XLEN'(`VX_ISA_ARCH_ID);
+            `VX_CSR_MIMPID     : read_data_ro_w = `VX_CFG_XLEN'(`VX_ISA_IMPL_ID);
+            `VX_CSR_MISA       : read_data_ro_w = `VX_CFG_XLEN'({2'(`CLOG2(`VX_CFG_XLEN/16)), 30'(`VX_CFG_MISA_STD)});
         `ifdef VX_CFG_EXT_F_ENABLE
-            `VX_CSR_FFLAGS     : read_data_rw_w = XLEN'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
-            `VX_CSR_FRM        : read_data_rw_w = XLEN'(fcsr[read_wid][INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
-            `VX_CSR_FCSR       : read_data_rw_w = XLEN'(fcsr[read_wid]);
+            `VX_CSR_FFLAGS     : read_data_rw_w = `VX_CFG_XLEN'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
+            `VX_CSR_FRM        : read_data_rw_w = `VX_CFG_XLEN'(fcsr[read_wid][INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
+            `VX_CSR_FCSR       : read_data_rw_w = `VX_CFG_XLEN'(fcsr[read_wid]);
         `endif
-            `VX_CSR_MSCRATCH   : read_data_rw_w = XLEN'(sched_csr_if.mscratch);
+            `VX_CSR_MSCRATCH   : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.mscratch);
 
-            `VX_CSR_CTA_ID          : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.cta_id);
-            `VX_CSR_CTA_RANK        : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.cta_rank);
-            `VX_CSR_CTA_SIZE        : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.cta_size);
-            `VX_CSR_CTA_BLOCK_ID_X  : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.block_idx[0]);
-            `VX_CSR_CTA_BLOCK_ID_Y  : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.block_idx[1]);
-            `VX_CSR_CTA_BLOCK_ID_Z  : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.block_idx[2]);
-            `VX_CSR_CTA_BLOCK_DIM_X : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.block_dim[0]);
-            `VX_CSR_CTA_BLOCK_DIM_Y : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.block_dim[1]);
-            `VX_CSR_CTA_BLOCK_DIM_Z : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.block_dim[2]);
-            `VX_CSR_CTA_GRID_DIM_X  : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.grid_dim[0]);
-            `VX_CSR_CTA_GRID_DIM_Y  : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.grid_dim[1]);
-            `VX_CSR_CTA_GRID_DIM_Z  : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.grid_dim[2]);
-            `VX_CSR_CTA_LMEM_ADDR   : read_data_rw_w = XLEN'(sched_csr_if.cta_csrs.lmem_addr);
+            `VX_CSR_CTA_ID          : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cta_id);
+            `VX_CSR_CTA_RANK        : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cta_rank);
+            `VX_CSR_CTA_SIZE        : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cta_size);
+            `VX_CSR_CTA_BLOCK_ID_X  : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_idx[0]);
+            `VX_CSR_CTA_BLOCK_ID_Y  : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_idx[1]);
+            `VX_CSR_CTA_BLOCK_ID_Z  : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_idx[2]);
+            `VX_CSR_CTA_BLOCK_DIM_X : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_dim[0]);
+            `VX_CSR_CTA_BLOCK_DIM_Y : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_dim[1]);
+            `VX_CSR_CTA_BLOCK_DIM_Z : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_dim[2]);
+            `VX_CSR_CTA_GRID_DIM_X  : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.grid_dim[0]);
+            `VX_CSR_CTA_GRID_DIM_Y  : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.grid_dim[1]);
+            `VX_CSR_CTA_GRID_DIM_Z  : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.grid_dim[2]);
+            `VX_CSR_CTA_LMEM_ADDR   : read_data_rw_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.lmem_addr);
 
-            `VX_CSR_WARP_ID    : read_data_ro_w = XLEN'(read_wid);
-            `VX_CSR_CORE_ID    : read_data_ro_w = XLEN'(CORE_ID);
-            `VX_CSR_ACTIVE_THREADS: read_data_ro_w = XLEN'(sched_csr_if.thread_masks[read_wid]);
-            `VX_CSR_ACTIVE_WARPS: read_data_ro_w = XLEN'(sched_csr_if.active_warps);
-            `VX_CSR_NUM_THREADS: read_data_ro_w = XLEN'(NUM_THREADS);
-            `VX_CSR_NUM_WARPS  : read_data_ro_w = XLEN'(NUM_WARPS);
-            `VX_CSR_NUM_CORES  : read_data_ro_w = XLEN'(NUM_CORES * NUM_CLUSTERS);
-            `VX_CSR_LOCAL_MEM_BASE: read_data_ro_w = XLEN'(LMEM_BASE_ADDR);
-            `VX_CSR_NUM_BARRIERS: read_data_ro_w = XLEN'(NUM_BARRIERS);
+            `VX_CSR_WARP_ID    : read_data_ro_w = `VX_CFG_XLEN'(read_wid);
+            `VX_CSR_CORE_ID    : read_data_ro_w = `VX_CFG_XLEN'(CORE_ID);
+            `VX_CSR_ACTIVE_THREADS: read_data_ro_w = `VX_CFG_XLEN'(sched_csr_if.thread_masks[read_wid]);
+            `VX_CSR_ACTIVE_WARPS: read_data_ro_w = `VX_CFG_XLEN'(sched_csr_if.active_warps);
+            `VX_CSR_NUM_THREADS: read_data_ro_w = `VX_CFG_XLEN'(`VX_CFG_NUM_THREADS);
+            `VX_CSR_NUM_WARPS  : read_data_ro_w = `VX_CFG_XLEN'(`VX_CFG_NUM_WARPS);
+            `VX_CSR_NUM_CORES  : read_data_ro_w = `VX_CFG_XLEN'(`VX_CFG_NUM_CORES * `VX_CFG_NUM_CLUSTERS);
+            `VX_CSR_LOCAL_MEM_BASE: read_data_ro_w = `VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR);
+            `VX_CSR_NUM_BARRIERS: read_data_ro_w = `VX_CFG_XLEN'(`VX_CFG_NUM_BARRIERS);
 
             `CSR_READ_64(`VX_CSR_MCYCLE, read_data_ro_w, sched_csr_if.cycles);
             `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_w, sched_csr_if.instret);
@@ -246,7 +246,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_MIDELEG,
             `VX_CSR_MIE,
             `VX_CSR_PMPCFG0,
-            `VX_CSR_PMPADDR0 : read_data_ro_w = XLEN'(0);
+            `VX_CSR_PMPADDR0 : read_data_ro_w = `VX_CFG_XLEN'(0);
 
             // Machine-mode trap CSRs (stored in the scheduler).
             `VX_CSR_MSTATUS : read_data_rw_w = sched_csr_if.csr_mstatus;

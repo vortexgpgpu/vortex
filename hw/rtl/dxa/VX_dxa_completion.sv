@@ -57,7 +57,7 @@ module VX_dxa_completion import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // DEPTH-1, which fails its `ALM_FULL > 0` static assert at DEPTH=1).
     // Bump to 2 when NUM_WARPS=1 — the depth doesn't affect correctness, just
     // backpressure granularity.
-    localparam FIFO_DEPTH = (NUM_WARPS < 2) ? 2 : NUM_WARPS;
+    localparam FIFO_DEPTH = (`VX_CFG_NUM_WARPS < 2) ? 2 : `VX_CFG_NUM_WARPS;
     VX_fifo_queue #(
         .DATAW  (BAR_ADDR_W),
         .DEPTH  (FIFO_DEPTH),

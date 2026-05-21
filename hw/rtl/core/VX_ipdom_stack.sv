@@ -27,18 +27,18 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
     input  wire             pop,
     output wire [WIDTH-1:0] q_val,
     output wire             q_idx,
-    output wire [NUM_WARPS-1:0][ADDRW-1:0] wr_ptr,
+    output wire [`VX_CFG_NUM_WARPS-1:0][ADDRW-1:0] wr_ptr,
     output wire             empty,
     output wire             full
 );
     localparam BRAM_DATAW = 1 + WIDTH;
-    localparam BRAM_SIZE  = DEPTH * NUM_WARPS;
+    localparam BRAM_SIZE  = DEPTH * `VX_CFG_NUM_WARPS;
     localparam BRAW_ADDRW = `LOG2UP(BRAM_SIZE);
 
-    wire [NUM_WARPS-1:0][ADDRW-1:0] wr_ptr_w;
-    wire [NUM_WARPS-1:0] empty_w, full_w;
+    wire [`VX_CFG_NUM_WARPS-1:0][ADDRW-1:0] wr_ptr_w;
+    wire [`VX_CFG_NUM_WARPS-1:0] empty_w, full_w;
 
-    for (genvar i = 0; i < NUM_WARPS; i++) begin : g_addressing
+    for (genvar i = 0; i < `VX_CFG_NUM_WARPS; i++) begin : g_addressing
 
         reg [ADDRW-1:0] wr_ptr_r;
         reg empty_r, full_r;
@@ -75,14 +75,14 @@ module VX_ipdom_stack import VX_gpu_pkg::*; #(
 
     wire [BRAW_ADDRW-1:0] raddr, waddr;
 
-    if (DEPTH > 1 && NUM_WARPS > 1) begin : g_DW
+    if (DEPTH > 1 && `VX_CFG_NUM_WARPS > 1) begin : g_DW
         assign waddr = push ? {wr_ptr_w[wid], wid} : {rd_ptr, wid};
         assign raddr = {rd_ptr, wid};
     end else if (DEPTH > 1) begin : g_D
         `UNUSED_VAR (wid)
         assign waddr = push ? wr_ptr_w : rd_ptr;
         assign raddr = rd_ptr;
-    end else if (NUM_WARPS > 1) begin : g_W
+    end else if (`VX_CFG_NUM_WARPS > 1) begin : g_W
         `UNUSED_VAR (rd_ptr)
         `UNUSED_VAR (wr_ptr_w)
         assign waddr = wid;

@@ -20,7 +20,7 @@
 
 module VX_dxa_rsp_buf import VX_gpu_pkg::*; #(
     parameter MAX_OUTSTANDING = 8,
-    parameter GMEM_DATAW      = L1_LINE_SIZE * 8
+    parameter GMEM_DATAW      = `VX_CFG_L1_LINE_SIZE * 8
 ) (
     input  wire                        clk,
     input  wire                        reset,

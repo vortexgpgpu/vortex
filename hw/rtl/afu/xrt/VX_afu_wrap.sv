@@ -43,12 +43,12 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	parameter C_S_AXI_CTRL_ADDR_WIDTH = 16,
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH    = `PLATFORM_MEMORY_ID_WIDTH,
-	parameter C_M_AXI_MEM_DATA_WIDTH  = PLATFORM_MEMORY_DATA_SIZE * 8,
+	parameter C_M_AXI_MEM_DATA_WIDTH  = `VX_CFG_PLATFORM_MEMORY_DATA_SIZE * 8,
 	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,
 `ifdef PLATFORM_MERGED_MEMORY_INTERFACE
 	parameter C_M_AXI_MEM_NUM_BANKS   = 1
 `else
-	parameter C_M_AXI_MEM_NUM_BANKS   = PLATFORM_MEMORY_NUM_BANKS
+	parameter C_M_AXI_MEM_NUM_BANKS   = `VX_CFG_PLATFORM_MEMORY_NUM_BANKS
 `endif
 ) (
     // System signals
@@ -86,7 +86,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
     output wire                                 interrupt
 );
-	localparam M_AXI_MEM_ADDR_WIDTH = PLATFORM_MEMORY_ADDR_WIDTH;
+	localparam M_AXI_MEM_ADDR_WIDTH = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH;
 
 	typedef enum logic [1:0] {
 		STATE_IDLE = 0,
@@ -134,7 +134,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	`MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_TO_ARRAY, MP_SEMI);
 `endif
 
-	reg [RESET_DELAY-1:0] vx_reset_shift_r;
+	reg [`VX_CFG_RESET_DELAY-1:0] vx_reset_shift_r;
 	reg [PENDING_WR_SIZEW-1:0] vx_pending_writes;
 	wire vx_reset;
 	reg vx_start_legacy;
@@ -248,16 +248,16 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 `endif
 
     initial begin
-        vx_reset_shift_r = {RESET_DELAY{1'b1}};
+        vx_reset_shift_r = {`VX_CFG_RESET_DELAY{1'b1}};
 // asserted at initialization
     end
-    assign vx_reset = vx_reset_shift_r[RESET_DELAY-1];
+    assign vx_reset = vx_reset_shift_r[`VX_CFG_RESET_DELAY-1];
 
 	always @(posedge clk) begin
 		if (reset || ap_reset) begin
-			vx_reset_shift_r <= {RESET_DELAY{1'b1}};
+			vx_reset_shift_r <= {`VX_CFG_RESET_DELAY{1'b1}};
 		end else begin
-			vx_reset_shift_r <= {vx_reset_shift_r[RESET_DELAY-2:0], 1'b0};
+			vx_reset_shift_r <= {vx_reset_shift_r[`VX_CFG_RESET_DELAY-2:0], 1'b0};
 		end
 
 		if (reset || ap_reset) begin
@@ -751,7 +751,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 `ifdef SIMULATION
 `ifndef VERILATOR
 	// disable assertions until full reset
-	reg [`CLOG2(RESET_DELAY+1)-1:0] assert_delay_ctr;
+	reg [`CLOG2(`VX_CFG_RESET_DELAY+1)-1:0] assert_delay_ctr;
 	reg assert_enabled;
 	initial begin
 		$assertoff(0, vortex_axi);
@@ -762,7 +762,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 			assert_enabled   <= 0;
 		end else begin
 			if (~assert_enabled) begin
-				if (assert_delay_ctr == (RESET_DELAY-1)) begin
+				if (assert_delay_ctr == (`VX_CFG_RESET_DELAY-1)) begin
 					assert_enabled <= 1;
 					$asserton(0, vortex_axi); // enable assertions
 				end else begin

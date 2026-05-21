@@ -72,7 +72,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     input  wire                         rsp_valid,
     input  wire [31:0]                  rsp_word,
     input  wire [PC_BITS-1:0]           rsp_PC,
-    input  wire [NUM_THREADS-1:0]      rsp_tmask,
+    input  wire [`VX_CFG_NUM_THREADS-1:0]      rsp_tmask,
     input  wire [NW_WIDTH-1:0]          rsp_wid,
     input  wire [UUID_WIDTH-1:0]        rsp_uuid,
     output logic                        rsp_ready,
@@ -80,7 +80,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // Follow-up icache request (cross-word 32-bit).
     output logic                        follow_req_valid,
     output logic [PC_BITS-1:0]          follow_req_PC,
-    output logic [NUM_THREADS-1:0]     follow_req_tmask,
+    output logic [`VX_CFG_NUM_THREADS-1:0]     follow_req_tmask,
     output logic [NW_WIDTH-1:0]         follow_req_wid,
     output logic [UUID_WIDTH-1:0]       follow_req_uuid,
 
@@ -102,7 +102,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     typedef struct packed {
         logic [15:0]              hw;
         logic [UUID_WIDTH-1:0]    uuid;
-        logic [NUM_THREADS-1:0]  tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0]  tmask;
     } buf_data_t;
 
     // Stage-1 emit kind (which slow-path case captured this entry).
@@ -122,7 +122,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         logic [PC_BITS-1:0]        PC;
         logic [NW_WIDTH-1:0]       wid;
         logic [UUID_WIDTH-1:0]     uuid;
-        logic [NUM_THREADS-1:0]   tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0]   tmask;
     } s1_ctx_t;
 
     // ------------------------------------------------------------------
@@ -303,10 +303,10 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // State storage
     // ------------------------------------------------------------------
 
-    buf_state_e         state    [NUM_WARPS];
-    buf_state_e         state_n  [NUM_WARPS];
-    logic [PC_BITS-1:0] buf_pc   [NUM_WARPS];
-    logic [PC_BITS-1:0] buf_pc_n [NUM_WARPS];
+    buf_state_e         state    [`VX_CFG_NUM_WARPS];
+    buf_state_e         state_n  [`VX_CFG_NUM_WARPS];
+    logic [PC_BITS-1:0] buf_pc   [`VX_CFG_NUM_WARPS];
+    logic [PC_BITS-1:0] buf_pc_n [`VX_CFG_NUM_WARPS];
 
     logic                       buf_we;
     logic [NW_WIDTH-1:0]        buf_waddr;
@@ -317,7 +317,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
 
     VX_dp_ram #(
         .DATAW   ($bits(buf_data_t)),
-        .SIZE    (NUM_WARPS),
+        .SIZE    (`VX_CFG_NUM_WARPS),
         .OUT_REG (1),
         .LUTRAM  (1),
         .RDW_MODE("R")
@@ -445,7 +445,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         buf_we    = 1'b0;
         buf_waddr = rsp_wid;
         buf_wdata = '0;
-        for (int w = 0; w < NUM_WARPS; ++w) begin
+        for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
             state_n[w]  = state[w];
             buf_pc_n[w] = buf_pc[w];
         end
@@ -453,7 +453,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         if (st0_advance) begin
             // Stale flush: scheduler asks for a warp at sched_PC but the
             // warp has stale buffered state at a different PC.
-            for (int w = 0; w < NUM_WARPS; ++w) begin
+            for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
                 if (sched_valid
                  && (sched_wid == w[NW_WIDTH-1:0])
                  && (state[w] != BUF_EMPTY)
@@ -615,14 +615,14 @@ module VX_decompressor import VX_gpu_pkg::*; #(
 
     always_ff @(posedge clk) begin
         if (reset) begin
-            for (int w = 0; w < NUM_WARPS; ++w) begin
+            for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
                 state[w]  <= BUF_EMPTY;
                 buf_pc[w] <= '0;
             end
             s1_kind <= S1_NONE;
             s1_ctx  <= '0;
         end else begin
-            for (int w = 0; w < NUM_WARPS; ++w) begin
+            for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
                 state[w]  <= state_n[w];
                 buf_pc[w] <= buf_pc_n[w];
             end

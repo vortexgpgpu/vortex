@@ -18,7 +18,7 @@ interface VX_schedule_if import VX_gpu_pkg::*; ();
     logic  valid;
     schedule_t data;
     logic  ready;
-    logic [NUM_WARPS-1:0] ibuf_pop;
+    logic [`VX_CFG_NUM_WARPS-1:0] ibuf_pop;
 
     modport master (
         output valid,

@@ -72,7 +72,7 @@ module VX_dxa_desc_table import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     );
 
     // Unpack fields
-    assign read_desc.base_addr = MEM_ADDR_WIDTH'({
+    assign read_desc.base_addr = `VX_CFG_MEM_ADDR_WIDTH'({
         entry_rdata[`VX_DCR_DXA_DESC_BASE_HI_OFF*32 +: 32],
         entry_rdata[`VX_DCR_DXA_DESC_BASE_LO_OFF*32 +: 32]
     });

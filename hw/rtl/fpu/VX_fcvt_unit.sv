@@ -35,8 +35,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     input wire is_dst_64,  // F2I: 1=I64 target, 0=I32 target
     input wire is_src_64,  // I2F: 1=I64 source, 0=I32 source
 
-    input wire [XLEN-1:0]  dataa,
-    output wire [XLEN-1:0] result,
+    input wire [`VX_CFG_XLEN-1:0]  dataa,
+    output wire [`VX_CFG_XLEN-1:0] result,
 
     output wire [`FP_FLAGS_BITS-1:0] fflags
 );
@@ -49,8 +49,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     localparam MAX_EXP = F32_EXP;
 
     // Internal widths driven by XLEN (for I64 support) and F32 mantissa
-    localparam S_MAN_WIDTH      = `MAX(1 + MAX_MAN, XLEN);
-    localparam S_EXP_WIDTH      = `MAX(`CLOG2(XLEN), MAX_EXP + 2) + 2;
+    localparam S_MAN_WIDTH      = `MAX(1 + MAX_MAN, `VX_CFG_XLEN);
+    localparam S_EXP_WIDTH      = `MAX(`CLOG2(`VX_CFG_XLEN), MAX_EXP + 2) + 2;
     localparam LZC_RESULT_WIDTH = `CLOG2(S_MAN_WIDTH);
 
     reg [LATENCY-1:0] mask_pipe;
@@ -85,9 +85,9 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         .clss_o (fclass)
     );
 
-    wire i_sign = safe_dataa[is_src_64 ? (XLEN-1) : 31] && is_signed;
-    wire [XLEN-1:0] i_mag_raw = i_sign ? (-dataa) : dataa;
-    wire [XLEN-1:0] i_mag = is_src_64 ? i_mag_raw : XLEN'(i_mag_raw[31:0]);
+    wire i_sign = safe_dataa[is_src_64 ? (`VX_CFG_XLEN-1) : 31] && is_signed;
+    wire [`VX_CFG_XLEN-1:0] i_mag_raw = i_sign ? (-dataa) : dataa;
+    wire [`VX_CFG_XLEN-1:0] i_mag = is_src_64 ? i_mag_raw : `VX_CFG_XLEN'(i_mag_raw[31:0]);
 
     logic [S_MAN_WIDTH-1:0]        unpacked_mant_s0;
     logic signed [S_EXP_WIDTH-1:0] unpacked_exp_s0;
@@ -96,7 +96,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     always_comb begin
         if (is_itof) begin
             unpacked_mant_s0 = S_MAN_WIDTH'(i_mag);
-            unpacked_exp_s0  = S_EXP_WIDTH'(XLEN - 1);
+            unpacked_exp_s0  = S_EXP_WIDTH'(`VX_CFG_XLEN - 1);
         end else begin
             unpacked_mant_s0 = S_MAN_WIDTH'({fclass.is_normal, input_fp_man});
             unpacked_exp_s0  = S_EXP_WIDTH'(input_fp_exp) - S_EXP_WIDTH'(F32_BIAS)
@@ -302,7 +302,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire [15:0] safe_dst_exp     = mant_is_zero_s5 ? 16'h0 : final_exp_16;
 
     // Integer result (F2I)
-    wire [63:0] abs_xlen_64  = 64'(rounded_abs_s5[XLEN-1:0]);
+    wire [63:0] abs_xlen_64  = 64'(rounded_abs_s5[`VX_CFG_XLEN-1:0]);
     wire [63:0] safe_int_res = rounded_sign_s5 ? (-abs_xlen_64) : abs_xlen_64;
     wire [31:0] int_32_res   = safe_int_res[31:0];
     wire [63:0] int_64_res   = safe_int_res;
@@ -327,7 +327,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     // F2I overflow detection (I64 target, XLEN=64 only)
     wire f2i_s64_pos_ovf, f2i_s64_neg_ovf, f2i_u64_neg_ovf;
-    if (XLEN == 64) begin : g_f2i_64ovf
+    if (`VX_CFG_XLEN == 64) begin : g_f2i_64ovf
         assign f2i_s64_pos_ovf = is_signed_s5 && is_dst_64_s5 && !input_sign_s5 && (|rounded_abs_s5[S_MAN_WIDTH-1:63]);
         assign f2i_s64_neg_ovf = is_signed_s5 && is_dst_64_s5 &&  input_sign_s5 && (rounded_abs_s5 > S_MAN_WIDTH'(64'h8000000000000000));
         assign f2i_u64_neg_ovf = !is_signed_s5 && is_dst_64_s5 && rounded_sign_s5 && (|rounded_abs_s5);
@@ -391,8 +391,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     `UNUSED_VAR ({is_itof_s5, fclass_s5, safe_rounded_abs, safe_dst_exp, res_val_64, res_val_32})
 
-    wire [XLEN-1:0] final_result_s5;
-    if (XLEN == 64) begin : g_out_x64
+    wire [`VX_CFG_XLEN-1:0] final_result_s5;
+    if (`VX_CFG_XLEN == 64) begin : g_out_x64
         assign final_result_s5 = res_val_64;
     end else begin : g_out_x32
         assign final_result_s5 = res_val_32;
@@ -400,7 +400,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     // Stage 5 -> Output Register
     VX_pipe_register #(
-        .DATAW (XLEN + `FP_FLAGS_BITS),
+        .DATAW (`VX_CFG_XLEN + `FP_FLAGS_BITS),
         .DEPTH (OUT_REG)
     ) pipe_reg_out (
         .clk      (clk),

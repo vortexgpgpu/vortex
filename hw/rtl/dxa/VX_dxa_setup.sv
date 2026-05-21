@@ -55,7 +55,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
 
     // Multicast (always available; active when cta_mask has >1 bit set).
     output wire                        active_is_multicast,
-    output wire [NUM_WARPS-1:0]       active_cta_mask,
+    output wire [`VX_CFG_NUM_WARPS-1:0]       active_cta_mask,
     output wire [31:0]                 active_smem_stride
 );
     localparam MUL_LATENCY = 2;
@@ -121,7 +121,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     // ════════════════════════════════════════════════════════════════════
 
     wire [BAR_ADDR_W-1:0] launch_bar_addr;
-    if (NUM_WARPS > 1) begin : g_bar_w
+    if (`VX_CFG_NUM_WARPS > 1) begin : g_bar_w
         assign launch_bar_addr = {req_data.meta[4 +: NW_BITS], req_data.meta[(4 + BAR_ID_SHIFT) +: NB_BITS]};
     end else begin : g_bar_wo
         assign launch_bar_addr = req_data.meta[(4 + BAR_ID_SHIFT) +: NB_BITS];
@@ -137,10 +137,10 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [BAR_ADDR_W-1:0]                   r_bar_addr;
     reg                                    r_notify_smem_done;
     reg                                    r_is_multicast;
-    reg [NUM_WARPS-1:0]                   r_cta_mask;
+    reg [`VX_CFG_NUM_WARPS-1:0]                   r_cta_mask;
     reg [31:0]                             r_smem_stride;
-    reg [MEM_ADDR_WIDTH-1:0]              r_initial_gmem_base;
-    reg [XLEN-1:0]                        r_initial_smem_base;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]              r_initial_gmem_base;
+    reg [`VX_CFG_XLEN-1:0]                        r_initial_smem_base;
     reg [31:0]                             r_row_len_bytes;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_delta;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     r_dim_tiles;
@@ -158,10 +158,10 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [BAR_ADDR_W-1:0]                   s_bar_addr;
     reg                                    s_notify_smem_done;
     reg                                    s_is_multicast;
-    reg [NUM_WARPS-1:0]                   s_cta_mask;
+    reg [`VX_CFG_NUM_WARPS-1:0]                   s_cta_mask;
     reg [31:0]                             s_smem_stride;
-    reg [MEM_ADDR_WIDTH-1:0]              s_initial_gmem_base;
-    reg [XLEN-1:0]                        s_initial_smem_base;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]              s_initial_gmem_base;
+    reg [`VX_CFG_XLEN-1:0]                        s_initial_smem_base;
     reg [31:0]                             s_row_len_bytes;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_delta;
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0]     s_dim_tiles;
@@ -419,14 +419,14 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 if (ctr_r == 4'd2) begin
                     s_row_len_bytes     <= mul0_result;
                     s_initial_gmem_base <= s_initial_gmem_base
-                                         + MEM_ADDR_WIDTH'(mul1_result)
-                                         + MEM_ADDR_WIDTH'(mul2_result);
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result)
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul2_result);
                 end
 
                 // ── Phase 1 capture at ctr=4 (rank≥3) ──
                 if (ctr_r == 4'd4 && lat_rank >= 3) begin
                     s_initial_gmem_base <= s_initial_gmem_base
-                                         + MEM_ADDR_WIDTH'(mul1_result);
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
                     // delta[1] = stride1 - (tile1-1)*stride0
                     s_delta[1] <= lat_stride1 - mul0_result;
                 end
@@ -434,7 +434,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 // ── Phase 2 capture at ctr=6 (rank≥4) ──
                 if (ctr_r == 4'd6 && lat_rank >= 4) begin
                     s_initial_gmem_base <= s_initial_gmem_base
-                                         + MEM_ADDR_WIDTH'(mul1_result);
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
                     // delta[2] = stride2 - (tile2-1)*stride1
                     s_delta[2] <= lat_stride2 - mul0_result;
                 end
@@ -442,7 +442,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 // ── Phase 3 capture at ctr=8 (rank=5) ──
                 if (ctr_r == 4'd8 && lat_rank >= 5) begin
                     s_initial_gmem_base <= s_initial_gmem_base
-                                         + MEM_ADDR_WIDTH'(mul1_result);
+                                         + `VX_CFG_MEM_ADDR_WIDTH'(mul1_result);
                     // delta[3] = stride3 - (tile3-1)*stride2
                     s_delta[3] <= lat_stride3 - mul0_result;
                 end

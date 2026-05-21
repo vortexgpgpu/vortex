@@ -19,7 +19,6 @@
 package VX_fpu_pkg;
 
     import VX_gpu_pkg::*;
-    import VX_config_pkg::*;
 
     typedef struct packed {
         logic is_normal;
@@ -39,7 +38,7 @@ package VX_fpu_pkg;
         logic NX; // 0-Inexact
     } fflags_t;
 
-    `DECL_EXECUTE_T (fpu, NUM_FPU_LANES);
+    `DECL_EXECUTE_T (fpu, `VX_CFG_NUM_FPU_LANES);
 
 endpackage
 

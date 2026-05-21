@@ -22,8 +22,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          reset,
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    input wire [TCU_BLOCK_CAP-1:0][XLEN-1:0] tbuf_rs1_data,
-    input wire [TCU_WG_RS2_WIDTH-1:0][XLEN-1:0] tbuf_rs2_data,
+    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
+    input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] tbuf_rs2_data,
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
 `endif
@@ -82,11 +82,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // common interface.  Downstream code uses only these wires and never
     // references tbuf_* or is_wgmma directly.
 
-    wire [TCU_BLOCK_CAP-1:0][XLEN-1:0] rs1_data;
+    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] rs1_data;
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    wire [TCU_WG_RS2_WIDTH-1:0][XLEN-1:0] rs2_data;
+    wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] rs2_data;
 `else
-    wire [TCU_BLOCK_CAP-1:0][XLEN-1:0] rs2_data;
+    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] rs2_data;
 `endif
     wire exe_ready_extra; // additional ready gating (tbuf_ready)
 
@@ -98,7 +98,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // RF-side rs2_data is NUM_THREADS lanes wide; the WGMMA bbuf can be
     // wider (TCU_WG_RS2_WIDTH lanes). Pad/truncate to the wgmma width on
     // the false branch so both arms match TCU_WG_RS2_WIDTH * XLEN bits.
-    localparam WG_RS2_BITS = TCU_WG_RS2_WIDTH * XLEN;
+    localparam WG_RS2_BITS = TCU_WG_RS2_WIDTH * `VX_CFG_XLEN;
     wire [WG_RS2_BITS-1:0] rs2_data_rf = WG_RS2_BITS'(execute_if.data.rs2_data);
     assign rs1_data = (is_wgmma && wg_a_smem) ? tbuf_rs1_data : execute_if.data.rs1_data;
     assign rs2_data = is_wgmma ? tbuf_rs2_data : rs2_data_rf;
@@ -353,7 +353,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
 
             // NaN-box the fp32 result for XLEN=64: upper 32 bits must be all-1s per RVF spec.
-            if (XLEN > 32) begin : g_result_nanbox
+            if (`VX_CFG_XLEN > 32) begin : g_result_nanbox
                 assign result_if.data.data[i * TCU_TC_N + j] = {32'hffffffff, d_val[i][j]};
             end else begin : g_result_passthrough
                 assign result_if.data.data[i * TCU_TC_N + j] = d_val[i][j];

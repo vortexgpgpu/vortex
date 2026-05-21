@@ -21,7 +21,6 @@
 package VX_tcu_pkg;
 
     import VX_gpu_pkg::*;
-    import VX_config_pkg::*;
 
     // Supported floating-point types
     // WARNING: Changing this list requires updating format utility functions below
@@ -43,7 +42,7 @@ package VX_tcu_pkg;
     localparam TCU_FMT_WIDTH= 4;
 
     // Set configuration parameters
-    localparam TCU_NT = NUM_THREADS;
+    localparam TCU_NT = `VX_CFG_NUM_THREADS;
 
     localparam TCU_WG_NRA = 4;  // A registers per warp (fixed)
     localparam TCU_WG_NR = 32;  // max NRC (C/D registers, variable via cd_nregs)
@@ -108,7 +107,7 @@ package VX_tcu_pkg;
 
     // Symmetric sparse flag (NT=4, NT=16: block_em == block_en)
     // WGMMA always uses full interleaved layout, so SYM_SPARSE is forced off.
-    localparam SYM_SPARSE = TCU_WGMMA_ENABLED ? 0 : (TCU_BLOCK_EM == TCU_BLOCK_EN);
+    localparam SYM_SPARSE = `VX_CFG_TCU_WGMMA_ENABLED ? 0 : (TCU_BLOCK_EM == TCU_BLOCK_EN);
 
     // B micro-tiling (sparse 2:4)
     // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)
@@ -120,7 +119,7 @@ package VX_tcu_pkg;
     localparam TCU_WG_B_BLOCK_SIZE_SP = TCU_TC_K * TCU_TC_N * 2;
     // Width of the tbuf_rs2_data port: wider only when SPARSE is enabled (WGMMA_SP path).
     // Without SPARSE, only TCU_BLOCK_CAP lanes are ever consumed, so keep the port narrow.
-    localparam TCU_WG_RS2_WIDTH = TCU_SPARSE_ENABLED ? TCU_WG_B_BLOCK_SIZE_SP : TCU_BLOCK_CAP;
+    localparam TCU_WG_RS2_WIDTH = `VX_CFG_TCU_SPARSE_ENABLED ? TCU_WG_B_BLOCK_SIZE_SP : TCU_BLOCK_CAP;
 
     localparam TCU_MIN_FMT_WIDTH = 4; //int4
     localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
@@ -336,7 +335,7 @@ package VX_tcu_pkg;
     endtask
 `endif
 
-    `DECL_EXECUTE_T (tcu, NUM_TCU_LANES);
+    `DECL_EXECUTE_T (tcu, `VX_CFG_NUM_TCU_LANES);
 
 endpackage
 

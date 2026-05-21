@@ -219,9 +219,4 @@ for toml in "$SOURCE_DIR"/*.toml; do
     esac
     gen_header "$toml" "$CURRENT_DIR/hw/$name.vh" verilog "$extra"
     gen_header "$toml" "$CURRENT_DIR/sw/$name.h"  cpp     "$extra"
-    # VX_config and VX_types each emit a SystemVerilog package (typed localparam view)
-    case "$name" in
-        VX_config) gen_header "$toml" "$CURRENT_DIR/hw/VX_config_pkg.sv" sv_pkg "" ;;
-        VX_types)  gen_header "$toml" "$CURRENT_DIR/hw/VX_types_pkg.sv"  sv_pkg "" ;;
-    esac
 done

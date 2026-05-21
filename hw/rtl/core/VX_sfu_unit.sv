@@ -30,10 +30,10 @@ import VX_raster_pkg::*;
 `endif
 
     // Inputs
-    VX_dispatch_if.slave    dispatch_if [ISSUE_WIDTH],
+    VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
 
 `ifdef VX_CFG_EXT_F_ENABLE
-    VX_fpu_csr_if.slave     fpu_csr_if [NUM_FPU_BLOCKS],
+    VX_fpu_csr_if.slave     fpu_csr_if [`VX_CFG_NUM_FPU_BLOCKS],
 `endif
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -58,13 +58,13 @@ import VX_raster_pkg::*;
     VX_dcr_csr_if           dcr_csr_if,
 
     // Outputs
-    VX_commit_if.master     commit_if [ISSUE_WIDTH],
+    VX_commit_if.master     commit_if [`VX_CFG_ISSUE_WIDTH],
     VX_warp_ctl_if.master   warp_ctl_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
-    localparam NUM_LANES    = NUM_SFU_LANES;
-    localparam PE_COUNT     = 2 + EXT_DXA_ENABLED + EXT_TEX_ENABLED + EXT_OM_ENABLED + EXT_RASTER_ENABLED;
+    localparam NUM_LANES    = `VX_CFG_NUM_SFU_LANES;
+    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
@@ -72,13 +72,13 @@ import VX_raster_pkg::*;
     localparam PE_IDX_DXA   = 2;
 `endif
 `ifdef VX_CFG_EXT_TEX_ENABLE
-    localparam PE_IDX_TEX   = 2 + EXT_DXA_ENABLED;
+    localparam PE_IDX_TEX   = 2 + `VX_CFG_EXT_DXA_ENABLED;
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
-    localparam PE_IDX_OM    = 2 + EXT_DXA_ENABLED + EXT_TEX_ENABLED;
+    localparam PE_IDX_OM    = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED;
 `endif
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    localparam PE_IDX_RASTER = 2 + EXT_DXA_ENABLED + EXT_TEX_ENABLED + EXT_OM_ENABLED;
+    localparam PE_IDX_RASTER = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED;
 `endif
 
     VX_execute_if #(
@@ -255,7 +255,7 @@ import VX_raster_pkg::*;
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // Side-band CSR write port from VX_raster_unit → VX_raster_csr.
-    localparam RASTER_PID_W = `UP(`LOG2UP(NUM_THREADS / NUM_LANES));
+    localparam RASTER_PID_W = `UP(`LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES));
     wire                              raster_csr_write_enable;
     wire [UUID_WIDTH-1:0]             raster_csr_write_uuid;
     wire [NW_WIDTH-1:0]              raster_csr_write_wid;

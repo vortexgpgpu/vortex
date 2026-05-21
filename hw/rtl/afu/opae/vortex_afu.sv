@@ -107,27 +107,27 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
-    localparam CLUSTER_SIZE = NUM_CORES / SOCKET_SIZE;
-    `STATIC_ASSERT((CLUSTER_SIZE * SOCKET_SIZE) == NUM_CORES, ("NUM_CORES must be a multiple of SOCKET_SIZE"));
+    localparam CLUSTER_SIZE = `VX_CFG_NUM_CORES / `VX_CFG_SOCKET_SIZE;
+    `STATIC_ASSERT((CLUSTER_SIZE * `VX_CFG_SOCKET_SIZE) == `VX_CFG_NUM_CORES, ("NUM_CORES must be a multiple of SOCKET_SIZE"));
 
     wire [63:0] dev_caps = {
         22'b0,
         5'(LMEM_BYTE_ADDR_WIDTH-20),
         3'($clog2(NUM_LOCAL_MEM_BANKS)),
-        8'(LMEM_ENABLED ? LMEM_LOG_SIZE : 0),
-        3'($clog2(ISSUE_WIDTH)),
-        3'($clog2(NUM_CLUSTERS)),
+        8'(`VX_CFG_LMEM_ENABLED ? `VX_CFG_LMEM_LOG_SIZE : 0),
+        3'($clog2(`VX_CFG_ISSUE_WIDTH)),
+        3'($clog2(`VX_CFG_NUM_CLUSTERS)),
         3'($clog2(CLUSTER_SIZE)),
-        3'($clog2(SOCKET_SIZE)),
-        3'($clog2(NUM_WARPS)),
-        3'($clog2(NUM_THREADS)),
+        3'($clog2(`VX_CFG_SOCKET_SIZE)),
+        3'($clog2(`VX_CFG_NUM_WARPS)),
+        3'($clog2(`VX_CFG_NUM_THREADS)),
         8'(`VX_ISA_IMPL_ID)
     };
 
     wire [63:0] isa_caps = {
-        32'(MISA_EXT),
-        2'(`CLOG2(XLEN)-4),
-        30'(MISA_STD)
+        32'(`VX_CFG_MISA_EXT),
+        2'(`CLOG2(`VX_CFG_XLEN)-4),
+        30'(`VX_CFG_MISA_STD)
     };
 
     reg [STATE_WIDTH-1:0] state;
@@ -330,7 +330,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 `ifdef SIMULATION
 `ifndef VERILATOR
     // disable assertions until full reset
-    reg [`CLOG2(RESET_DELAY+1)-1:0] assert_delay_ctr;
+    reg [`CLOG2(`VX_CFG_RESET_DELAY+1)-1:0] assert_delay_ctr;
     initial begin
         $assertoff;
     end
@@ -339,7 +339,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             assert_delay_ctr <= '0;
         end else begin
             assert_delay_ctr <= assert_delay_ctr + $bits(assert_delay_ctr)'(1);
-            if (assert_delay_ctr == (RESET_DELAY-1)) begin
+            if (assert_delay_ctr == (`VX_CFG_RESET_DELAY-1)) begin
                 $asserton; // enable assertions
             end
         end
@@ -475,7 +475,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire cmd_mem_rd_done;
     reg  cmd_mem_wr_done;
 
-    reg [RESET_DELAY-1:0] vx_reset_shift_r;
+    reg [`VX_CFG_RESET_DELAY-1:0] vx_reset_shift_r;
     wire vx_reset;
     reg  vx_start_legacy;
     reg  saw_busy;
@@ -492,16 +492,16 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [CMD_TYPE_WIDTH-1:0] cmd_type = is_mmio_wr_cmd ? CMD_TYPE_WIDTH'(cp2af_sRxPort.c0.data) : CMD_TYPE_WIDTH'(CMD_IDLE);
 
     initial begin
-        vx_reset_shift_r = {RESET_DELAY{1'b1}};
+        vx_reset_shift_r = {`VX_CFG_RESET_DELAY{1'b1}};
 // asserted at initialization
     end
-    assign vx_reset = vx_reset_shift_r[RESET_DELAY-1];
+    assign vx_reset = vx_reset_shift_r[`VX_CFG_RESET_DELAY-1];
 
     always @(posedge clk) begin
         if (reset) begin
-            vx_reset_shift_r <= {RESET_DELAY{1'b1}};
+            vx_reset_shift_r <= {`VX_CFG_RESET_DELAY{1'b1}};
         end else begin
-            vx_reset_shift_r <= {vx_reset_shift_r[RESET_DELAY-2:0], 1'b0};
+            vx_reset_shift_r <= {vx_reset_shift_r[`VX_CFG_RESET_DELAY-2:0], 1'b0};
         end
 
         if (reset) begin
@@ -870,7 +870,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .NUM_BANKS_OUT (NUM_LOCAL_MEM_BANKS),
         .TAG_WIDTH     (AVS_TAG_WIDTH),
         .RD_QUEUE_SIZE (AVS_RD_QUEUE_SIZE),
-        .INTERLEAVE    (PLATFORM_MEMORY_INTERLEAVE),
+        .INTERLEAVE    (`VX_CFG_PLATFORM_MEMORY_INTERLEAVE),
         .REQ_OUT_BUF   (2), // always needed due to CCI/VX arbiter
         .RSP_OUT_BUF   ((VX_MEM_PORTS > 1 || NUM_LOCAL_MEM_BANKS > 1) ? 2 : 0)
     ) avs_adapter (
@@ -1292,7 +1292,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
         wire [7:0] cout_char = vx_mem_req_data_m[cout_tid];
 
-        wire [VX_MEM_ADDR_WIDTH-1:0] io_cout_addr_b = VX_MEM_ADDR_WIDTH'(IO_COUT_ADDR >> `CLOG2(MEM_BLOCK_SIZE));
+        wire [VX_MEM_ADDR_WIDTH-1:0] io_cout_addr_b = VX_MEM_ADDR_WIDTH'(`VX_MEM_IO_COUT_ADDR >> `CLOG2(`VX_CFG_MEM_BLOCK_SIZE));
 
         wire vx_mem_is_cout = (vx_mem_req_addr[i] == io_cout_addr_b);
 

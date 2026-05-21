@@ -22,8 +22,8 @@
 // For raster CSRs (read-only state latched on vx_rast pop) these are
 // unused; tex/om may use them to receive runtime writes.
 interface VX_sfu_csr_if import VX_gpu_pkg::*; #(
-    parameter NUM_LANES = NUM_THREADS,
-    parameter PID_WIDTH = `LOG2UP(NUM_THREADS / NUM_LANES)
+    parameter NUM_LANES = `VX_CFG_NUM_THREADS,
+    parameter PID_WIDTH = `LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES)
 ) ();
 
     // Read interface
@@ -33,12 +33,12 @@ interface VX_sfu_csr_if import VX_gpu_pkg::*; #(
     wire [NW_WIDTH-1:0]            read_wid;
     wire [`UP(PID_WIDTH)-1:0]       read_pid;
     wire [NUM_LANES-1:0]            read_tmask;
-    wire [NUM_LANES-1:0][XLEN-1:0] read_data;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] read_data;
 
     // Write interface (kernel-issued CSRRW/RS/RC; unused for read-only CSRs)
     wire                            write_enable;
     wire [`VX_CSR_ADDR_BITS-1:0]    write_addr;
-    wire [XLEN-1:0]                write_data;
+    wire [`VX_CFG_XLEN-1:0]                write_data;
     wire [UUID_WIDTH-1:0]           write_uuid;
     wire [NW_WIDTH-1:0]            write_wid;
     wire [`UP(PID_WIDTH)-1:0]       write_pid;

@@ -29,24 +29,24 @@ module VX_split_join import VX_gpu_pkg::*; #(
     output wire                     join_is_dvg,
     output wire                     join_is_else,
     output wire [NW_WIDTH-1:0]      join_wid,
-    output wire [NUM_THREADS-1:0]  join_tmask,
+    output wire [`VX_CFG_NUM_THREADS-1:0]  join_tmask,
     output wire [PC_BITS-1:0]       join_pc,
     output wire [DV_STACK_SIZEW-1:0] stack_ptr
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
     if (NT_BITS != 0) begin : g_enable
-        wire [NUM_WARPS-1:0][DV_STACK_SIZEW-1:0] ipdom_wr_ptr;
-        wire [NUM_THREADS-1:0] orig_tmask;
+        wire [`VX_CFG_NUM_WARPS-1:0][DV_STACK_SIZEW-1:0] ipdom_wr_ptr;
+        wire [`VX_CFG_NUM_THREADS-1:0] orig_tmask;
         wire [PC_BITS-1:0] next_pc;
         wire ipdom_idx;
 
-        wire [(NUM_THREADS + PC_BITS)-1:0] ipdom_val = {split.then_tmask | split.else_tmask, split.next_pc};
+        wire [(`VX_CFG_NUM_THREADS + PC_BITS)-1:0] ipdom_val = {split.then_tmask | split.else_tmask, split.next_pc};
 
         wire sjoin_is_dvg = (sjoin.stack_ptr != ipdom_wr_ptr[wid]);
 
         VX_ipdom_stack #(
-            .WIDTH (NUM_THREADS + PC_BITS),
+            .WIDTH (`VX_CFG_NUM_THREADS + PC_BITS),
             .DEPTH (DV_STACK_SIZE)
         ) ipdom_stack (
             .clk   (clk),
@@ -63,10 +63,10 @@ module VX_split_join import VX_gpu_pkg::*; #(
             `UNUSED_PIN (full)
         );
 
-        wire [NUM_THREADS-1:0] join_tmask_n = ipdom_idx ? orig_tmask : (~sjoin.tmask & orig_tmask);
+        wire [`VX_CFG_NUM_THREADS-1:0] join_tmask_n = ipdom_idx ? orig_tmask : (~sjoin.tmask & orig_tmask);
 
         VX_pipe_register #(
-            .DATAW  (1 + NW_WIDTH + 1 +  1 + NUM_THREADS + PC_BITS),
+            .DATAW  (1 + NW_WIDTH + 1 +  1 + `VX_CFG_NUM_THREADS + PC_BITS),
             .RESETW (1),
             .DEPTH  (OUT_REG)
         ) pipe_reg (

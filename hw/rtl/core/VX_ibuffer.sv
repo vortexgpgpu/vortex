@@ -43,7 +43,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
         VX_ibuffer_if ibuffer_tmp_if();
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
-            .SIZE    (IBUF_SIZE),
+            .SIZE    (`VX_CFG_IBUF_SIZE),
             .OUT_REG (1)
         ) instr_buf (
             .clk      (clk),

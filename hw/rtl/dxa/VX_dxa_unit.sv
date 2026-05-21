@@ -32,14 +32,14 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     //   Lane 1: rs1=meta,      rs2=coord3
     //   Lane 2: rs1=coord0,    rs2=coord4
     //   Lane 3: rs1=coord1,    rs2=cta_mask (multicast)
-    wire [XLEN-1:0] lane0_rs1 = execute_if.data.rs1_data[0];
-    wire [XLEN-1:0] lane1_rs1 = execute_if.data.rs1_data[1];
-    wire [XLEN-1:0] lane2_rs1 = execute_if.data.rs1_data[2];
-    wire [XLEN-1:0] lane3_rs1 = execute_if.data.rs1_data[3];
-    wire [XLEN-1:0] lane0_rs2 = execute_if.data.rs2_data[0];
-    wire [XLEN-1:0] lane1_rs2 = execute_if.data.rs2_data[1];
-    wire [XLEN-1:0] lane2_rs2 = execute_if.data.rs2_data[2];
-    wire [XLEN-1:0] lane3_rs2 = execute_if.data.rs2_data[3];
+    wire [`VX_CFG_XLEN-1:0] lane0_rs1 = execute_if.data.rs1_data[0];
+    wire [`VX_CFG_XLEN-1:0] lane1_rs1 = execute_if.data.rs1_data[1];
+    wire [`VX_CFG_XLEN-1:0] lane2_rs1 = execute_if.data.rs1_data[2];
+    wire [`VX_CFG_XLEN-1:0] lane3_rs1 = execute_if.data.rs1_data[3];
+    wire [`VX_CFG_XLEN-1:0] lane0_rs2 = execute_if.data.rs2_data[0];
+    wire [`VX_CFG_XLEN-1:0] lane1_rs2 = execute_if.data.rs2_data[1];
+    wire [`VX_CFG_XLEN-1:0] lane2_rs2 = execute_if.data.rs2_data[2];
+    wire [`VX_CFG_XLEN-1:0] lane3_rs2 = execute_if.data.rs2_data[3];
     `UNUSED_VAR (lane3_rs2)
 
     // Build dxa_req payload
@@ -54,7 +54,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dxa_req_data_in.coords[2] = lane0_rs2;
     assign dxa_req_data_in.coords[3] = lane1_rs2;
     assign dxa_req_data_in.coords[4] = lane2_rs2;
-    assign dxa_req_data_in.cta_mask  = lane3_rs2[NUM_WARPS-1:0];
+    assign dxa_req_data_in.cta_mask  = lane3_rs2[`VX_CFG_NUM_WARPS-1:0];
 
     // Output elastic buffer breaks the combinatorial path between
     // dxa_req_arb and this unit. Barrier transaction registration is now

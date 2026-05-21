@@ -25,7 +25,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
     input wire          wr_en,
     input wire [NW_WIDTH-1:0] wid,
     input wire [3:0]    wr_idx, // group index: each group writes COLS_PER_LOAD columns
-    input wire [TCU_BLOCK_CAP-1:0][XLEN-1:0] wr_data,
+    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] wr_data,
 
     // Read port (from FEDP path)
     input wire [3:0]    step_m,
@@ -117,7 +117,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*;
         end
     end
 
-    localparam META_DEPTH = NUM_WARPS;
+    localparam META_DEPTH = `VX_CFG_NUM_WARPS;
     localparam META_ADDRW = `CLOG2(META_DEPTH);
 
     wire [`UP(META_ADDRW)-1:0] meta_addr = `UP(META_ADDRW)'(wid);

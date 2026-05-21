@@ -208,9 +208,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 
     // Parametric symmetric tmask for sparse mode
     // sym_mask_lo[t] = 1 for threads where (t % tcN) < (tcN/2)
-    logic [NUM_THREADS-1:0] sym_mask_lo;
+    logic [`VX_CFG_NUM_THREADS-1:0] sym_mask_lo;
     if (SYM_SPARSE) begin : g_sym_mask
-        for (genvar t = 0; t < NUM_THREADS; ++t) begin : g_bit
+        for (genvar t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin : g_bit
             assign sym_mask_lo[t] = ((t % TCU_TC_N) < (TCU_TC_N / 2)) ? 1'b1 : 1'b0;
         end
     end else begin : g_sym_mask

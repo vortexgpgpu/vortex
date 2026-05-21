@@ -23,14 +23,14 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     input wire              reset,
 
     // Inputs
-    VX_dispatch_if.slave    dispatch_if [ISSUE_WIDTH],
+    VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
 
     // Outputs
-    VX_commit_if.master     commit_if [ISSUE_WIDTH],
-    VX_lsu_mem_if.master    lsu_mem_if [NUM_LSU_BLOCKS]
+    VX_commit_if.master     commit_if [`VX_CFG_ISSUE_WIDTH],
+    VX_lsu_mem_if.master    lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS]
 );
-    localparam BLOCK_SIZE = NUM_LSU_BLOCKS;
-    localparam NUM_LANES  = NUM_LSU_LANES;
+    localparam BLOCK_SIZE = `VX_CFG_NUM_LSU_BLOCKS;
+    localparam NUM_LANES  = `VX_CFG_NUM_LSU_LANES;
 
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
 

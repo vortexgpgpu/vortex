@@ -26,10 +26,10 @@
 
 module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter MAX_OUTSTANDING = 8,
-    parameter GMEM_ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(L1_LINE_SIZE),
+    parameter GMEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(`VX_CFG_L1_LINE_SIZE),
     parameter GMEM_TAG_WIDTH  = L1_MEM_ARB_TAG_WIDTH,
-    parameter CL_OFF_BITS     = `CLOG2(L1_LINE_SIZE),
-    parameter SMEM_ADDR_W     = MEM_ADDR_WIDTH
+    parameter CL_OFF_BITS     = `CLOG2(`VX_CFG_L1_LINE_SIZE),
+    parameter SMEM_ADDR_W     = `VX_CFG_MEM_ADDR_WIDTH
 ) (
     input  wire                        clk,
     input  wire                        reset,

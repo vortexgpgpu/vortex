@@ -33,7 +33,7 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     input wire [31:0]       dataa,
     input wire [31:0]       datab,
-    output wire [XLEN-1:0]  result,
+    output wire [`VX_CFG_XLEN-1:0]  result,
 
     output wire [`FP_FLAGS_BITS-1:0] fflags
 );
@@ -238,13 +238,13 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     //   CMP/CLASS (integer output)  → zero-extend
     //   MVXW      (float → int reg) → sign-extend
     //   SGNJ/MVWX/MIN/MAX (FP out)  → NaN-box upper bits
-    wire [XLEN-1:0] result_xlen_s0;
-    if (XLEN > 32) begin : g_result_ext
+    wire [`VX_CFG_XLEN-1:0] result_xlen_s0;
+    if (`VX_CFG_XLEN > 32) begin : g_result_ext
         wire is_int_result = op_mod_s0[3]             // CMP
                           || (op_mod_s0[2:0] == 3'd3); // CLASS
         wire is_mvxw      = (op_mod_s0[2:0] == 3'd4) && !op_mod_s0[3];
-        assign result_xlen_s0 = is_int_result ? XLEN'(result_s0)
-                              : is_mvxw       ? {{(XLEN-32){result_s0[31]}}, result_s0}
+        assign result_xlen_s0 = is_int_result ? `VX_CFG_XLEN'(result_s0)
+                              : is_mvxw       ? {{(`VX_CFG_XLEN-32){result_s0[31]}}, result_s0}
                               :                 {32'hffffffff, result_s0};
     end else begin : g_no_result_ext
         assign result_xlen_s0 = result_s0;
@@ -253,7 +253,7 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire fflags_NV;
 
     VX_pipe_register #(
-        .DATAW (XLEN + 1),
+        .DATAW (`VX_CFG_XLEN + 1),
         .DEPTH (OUT_REG)
     ) pipe_reg1 (
         .clk      (clk),

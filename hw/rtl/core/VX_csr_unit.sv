@@ -27,7 +27,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_F_ENABLE
-    VX_fpu_csr_if.slave         fpu_csr_if [NUM_FPU_BLOCKS],
+    VX_fpu_csr_if.slave         fpu_csr_if [`VX_CFG_NUM_FPU_BLOCKS],
 `endif
 
     VX_sched_csr_if.slave       sched_csr_if,
@@ -40,14 +40,14 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_result_if.master         result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam PID_BITS = `CLOG2(NUM_THREADS / NUM_LANES);
+    localparam PID_BITS = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
-    reg [NUM_LANES-1:0][XLEN-1:0]  csr_read_data;
-    reg  [XLEN-1:0]                csr_write_data;
-    wire [XLEN-1:0]                csr_read_data_ro, csr_read_data_rw;
-    wire [XLEN-1:0]                csr_req_data;
+    reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  csr_read_data;
+    reg  [`VX_CFG_XLEN-1:0]                csr_write_data;
+    wire [`VX_CFG_XLEN-1:0]                csr_read_data_ro, csr_read_data_rw;
+    wire [`VX_CFG_XLEN-1:0]                csr_req_data;
     reg                             csr_rd_enable;
     wire                            csr_wr_enable;
     wire                            csr_req_ready;
@@ -81,7 +81,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     assign dcr_csr_if.ready = ~csr_req_valid;
     assign dcr_csr_if.value = VX_DCR_DATA_WIDTH'(csr_read_data_ro);
 
-    wire [NUM_LANES-1:0][XLEN-1:0] rs1_data;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rs1_data;
     `UNUSED_VAR (rs1_data)
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rs1_data
         assign rs1_data[i] = execute_if.data.rs1_data[i];
@@ -126,32 +126,32 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     // CSR read
 
-    wire [NUM_LANES-1:0][XLEN-1:0] wtid, gtid;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] wtid, gtid;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_wtid
         if (PID_BITS != 0) begin : g_pid
-            assign wtid[i] = XLEN'(execute_if.data.header.pid * NUM_LANES + i);
+            assign wtid[i] = `VX_CFG_XLEN'(execute_if.data.header.pid * NUM_LANES + i);
         end else begin : g_no_pid
-            assign wtid[i] = XLEN'(i);
+            assign wtid[i] = `VX_CFG_XLEN'(i);
         end
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_gtid
-        assign gtid[i] = (XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (XLEN'(execute_if.data.header.wid) << NT_BITS) + wtid[i];
+        assign gtid[i] = (`VX_CFG_XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`VX_CFG_XLEN'(execute_if.data.header.wid) << NT_BITS) + wtid[i];
     end
 
     // Per-lane CTA thread IDs
     // Use proper quotient/remainder to handle cases where NUM_LANES > block_dim
     // (e.g., NUM_THREADS=32 with block_dim={4,4} needs multi-carry propagation).
-    wire [NUM_LANES-1:0][XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] cta_tid_x, cta_tid_y, cta_tid_z;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cta_tid
         wire [CTA_TID_WIDTH:0] tx = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[0]) + (CTA_TID_WIDTH+1)'(wtid[i]);
         wire [CTA_TID_WIDTH:0] cx = tx / sched_csr_if.cta_csrs.block_dim[0];
         wire [CTA_TID_WIDTH:0] ty = (CTA_TID_WIDTH+1)'(sched_csr_if.cta_csrs.thread_idx[1]) + cx;
         wire [CTA_TID_WIDTH:0] cy = ty / sched_csr_if.cta_csrs.block_dim[1];
-        assign cta_tid_x[i] = XLEN'(tx - cx * sched_csr_if.cta_csrs.block_dim[0]);
-        assign cta_tid_y[i] = XLEN'(ty - cy * sched_csr_if.cta_csrs.block_dim[1]);
-        assign cta_tid_z[i] = XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + XLEN'(cy);
+        assign cta_tid_x[i] = `VX_CFG_XLEN'(tx - cx * sched_csr_if.cta_csrs.block_dim[0]);
+        assign cta_tid_y[i] = `VX_CFG_XLEN'(ty - cy * sched_csr_if.cta_csrs.block_dim[1]);
+        assign cta_tid_z[i] = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.thread_idx[2]) + `VX_CFG_XLEN'(cy);
     end
 
     always @(*) begin
@@ -208,7 +208,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     // CSR write
 
-    assign csr_req_data = execute_if.data.op_args.csr.use_imm ? XLEN'(csr_imm) : rs1_data[0];
+    assign csr_req_data = execute_if.data.op_args.csr.use_imm ? `VX_CFG_XLEN'(csr_imm) : rs1_data[0];
     assign csr_wr_enable = csr_write_enable || (| csr_req_data);
 
     always @(*) begin

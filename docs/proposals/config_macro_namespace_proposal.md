@@ -1,5 +1,5 @@
 **Date:** 2026-05-20
-**Status:** Draft — not yet approved
+**Status:** §§1–8 implemented; §9 follow-up implemented then reverted (see §9)
 **Author:** Blaise Tine
 **Related:** [command_processor_proposal.md](command_processor_proposal.md)
 
@@ -42,17 +42,16 @@ This proposal fixes all three with one coherent design:
 
 - **Mechanically.** In-TOML key renames + a self-contained `vortex2.h`
   + a mechanical `sed` codemod. The namespace rename needs **no
-  generator change** (§3.6); the §9 follow-up then adds one new,
-  additive emission format (`sv_pkg`) on top.
+  generator change** (§3.6).
 
 The approach mirrors [VX_types.toml](../../VX_types.toml), which already
 spells its keys with prefixes directly (`VX_CSR_*`, `VX_DCR_*`): the
 generator has no naming logic; the TOML author makes the namespace
 decision by how the key is spelled.
 
-A separate, deferred follow-up (§9) then gives the RTL a typed
-`localparam` *view* of the value configs — orthogonal to the rename and
-committed on its own.
+A separate follow-up (§9) gave the RTL a typed `localparam` *view* of
+the value configs; it was implemented and then **reverted** — RTL keeps
+consuming config as `` `VX_CFG_* `` macros. See §9 for the post-mortem.
 
 ---
 
@@ -73,16 +72,13 @@ committed on its own.
 
 - **No generator change for the rename.** The namespace migration
   (Phases 0–3) does not modify [ci/gen_config.py](../../ci/gen_config.py)
-  — it already emits whatever key names it reads (§3.6). The §9
-  follow-up *does* extend the generator, but only additively: one new
-  output format (`sv_pkg`) emitting the typed `localparam` package; the
-  existing `verilog`/`cpp`/`cflags` paths are untouched.
-- **No mechanism change** *in this migration.* `#ifdef` / `` `ifdef ``
-  stays; no `constexpr`, no `if constexpr`. Conditional-compilation
-  flexibility (structural gating, conditional `#include`s, conditional
-  port lists, asm/Verilog preprocessing reach) is worth keeping. A
-  typed SystemVerilog `localparam` *view* of the value configs is a
-  deferred, separately-committed follow-up — see §9.
+  — it already emits whatever key names it reads (§3.6). (The §9
+  follow-up added an `sv_pkg` format; it was later reverted — §9.)
+- **No mechanism change.** `#ifdef` / `` `ifdef `` stays; no
+  `constexpr`, no `if constexpr`. Conditional-compilation flexibility
+  (structural gating, conditional `#include`s, conditional port lists,
+  asm/Verilog preprocessing reach) is worth keeping. (§9 trialled a
+  typed `localparam` *view* of the value configs and reverted it.)
 - **No type-safety upgrade.** Macros remain untyped.
 - **No new public API.** This proposal *removes* leakage; it does not
   add a single new public symbol.
@@ -492,51 +488,71 @@ Estimated wall-clock: ~1 day Phase 0+1, ~1 day Phase 2, ~2 h Phase 3.
 
 ---
 
-## 9. Follow-up: RTL config localparams (separate commit)
+## 9. Follow-up: RTL config localparams — implemented, then reverted
 
-After the rename, Vortex RTL references hardware config purely as
-preprocessor macros — `` `VX_CFG_XLEN ``, `` `VX_CFG_NUM_THREADS ``,
-`` `VX_CFG_FLEN ``, … — scattered through module bodies. Backtick
-macros are untyped, unscoped, and invisible to elaboration-time
-checking. SystemVerilog has a better tool for *value* parameters:
-typed `localparam`s in a `package`.
+**Status:** implemented after the rename (leaf packages `VX_config_pkg`
+/ `VX_types_pkg`, a new `sv_pkg` `gen_config.py` format, `import`/
+`export`-ed through `VX_gpu_pkg`), then **fully reverted**. RTL consumes
+hardware config as `` `VX_CFG_* `` / `` `VX_MEM_* `` / `` `VX_VM_* ``
+preprocessor macros directly — the form §§1–8 leave it in. This section
+is kept as the record and the post-mortem.
 
-**Proposal.** For each RTL package `VX_*_pkg.sv`, resolve the
-value-carrying `` `VX_CFG_* `` macros once into typed `localparam`s:
+### 9.1 What was proposed and built
 
-```systemverilog
-package VX_gpu_pkg;
-  localparam int XLEN        = `VX_CFG_XLEN;
-  localparam int FLEN        = `VX_CFG_FLEN;
-  localparam int NUM_THREADS = `VX_CFG_NUM_THREADS;
-  // ...
-endpackage
-```
+The rename leaves RTL referencing config purely as backtick macros,
+which are untyped and unscoped. The follow-up resolved each
+value-carrying `` `VX_CFG_* `` macro once into a typed `localparam` in a
+leaf package `VX_config_pkg` (and `VX_types_pkg` for the relocated
+memory-map / VM symbols). `VX_gpu_pkg` did `import VX_config_pkg::*;
+export VX_config_pkg::*;`, so every module saw the clean short names
+(`XLEN`, `NUM_THREADS`) transparently via `import VX_gpu_pkg::*`.
 
-Modules then `import VX_gpu_pkg::*;` and use the typed, scoped
-`localparam` instead of the bare macro.
+### 9.2 Why it was reverted
 
-**Boundary — what converts and what does not:**
+The design hinged on `VX_gpu_pkg` being a **wildcard re-export hub**
+(`export VX_config_pkg::*`). That is valid IEEE 1800-2017 SystemVerilog,
+but it does not survive the toolchain:
 
-- **Value configs only** (widths, counts, latencies) — the symbols
-  that read naturally as `localparam int`. These convert.
-- **Boolean enable-flags consumed by `` `ifdef ``** — `VX_CFG_*_ENABLE`
-  used for structural gating (conditional `generate`, port lists,
-  `` `include ``) — **stay macros**: `` `ifdef `` cannot test a
-  `localparam`, and that conditional-compilation reach is exactly what
-  §2.2 keeps.
-- Scope is Vortex's **own design RTL** (non-`rtl/libs` modules); the
-  vendored library primitives under `rtl/libs` are out of scope.
-- No value is duplicated: the `localparam` is *initialized from* the
-  macro. `VX_config.vh` stays the single source of truth; the package
-  is a typed *view* of it.
+- **sv2v drops re-exported symbols.** The ASIC synthesis flow
+  (`gen_sources.sh` → sv2v → yosys) runs config RTL through sv2v, which
+  does not propagate symbols across a wildcard `export pkg::*`. Config
+  symbols reaching a consumer *only* through the re-export — e.g.
+  cache-tuning parameters (`L3_CACHE_SIZE`, `L3_NUM_WAYS`, …) used
+  solely as module-instantiation parameter overrides in `Vortex.sv` —
+  were emitted by sv2v as **bare undefined identifiers**, and yosys
+  failed (`Failed to detect width for parameter ..._CACHE_SIZE`). A
+  symbol resolved only if `VX_gpu_pkg` also used it in its own body; the
+  failure partitioned exactly along that line. It surfaced only once
+  `regression.sh --synthesis` ran to completion — earlier it was masked
+  by two unrelated faults (a generated-package double-compile in
+  `gen_sources.sh`; a misplaced `cp` module in `rtl/libs/`).
+- **Package compile-ordering is tool-divergent.** A package must be
+  compiled before its consumers: Verilator enforces strict filelist
+  order (won't-fix, verilator#2890), Vivado auto-sorts, VCS's `vlogan`
+  is order-sensitive. A generated package collected by `gen_sources.sh`
+  added ordering and double-collection hazards the macro form lacks.
 
-**Why a separate commit, after the rename.** It is design-touching
-(every package, plus every module's parameter references) and
-orthogonal to the namespace work; it is independently testable via RTL
-elaboration + `rtlsim`. The rename must land first so the packages
-resolve `` `VX_CFG_* `` rather than bare names.
+### 9.3 Outcome
 
-**Benefits.** Type and width checking at elaboration; proper scoping;
-`localparam`s appear in waveforms and tooling; module bodies stop being
-macro soup.
+The `VX_CFG_` **prefix** (§§1–8) already solved the original collision
+problem. The localparam package added a *second* representation of the
+same data whose cost — a wildcard `export` sv2v cannot follow, package
+ordering, double-collection — exceeded its clean-name ergonomic benefit,
+and it broke the ASIC synthesis flow. Reverted in full:
+
+- `VX_config_pkg` / `VX_types_pkg` and the `sv_pkg` generator format
+  deleted; RTL config-localparam names codemodded back to
+  `` `VX_CFG_* `` / `` `VX_MEM_* `` / `` `VX_VM_* `` macros (~1.6k sites,
+  97 files).
+- `VX_gpu_pkg` is **retained** — it still holds genuine typedefs/structs
+  and RTL-*derived* `localparam`s (`NC_BITS`, `L3_IS_LLC`, …); those are
+  native package members, never broke, and are unaffected.
+- Verified: `rtlsim` builds clean and `regression.sh --synthesis` passes
+  end-to-end.
+
+**Lesson.** Config values are compile-time integer constants already
+shared with the C/C++ side as `#define`s. The preprocessor-macro form is
+the one representation every tool in the flow — Verilator, Vivado, VCS,
+sv2v, yosys — handles identically. A typed `localparam` view is
+attractive on paper but not worth a parallel representation the
+synthesis toolchain cannot carry.

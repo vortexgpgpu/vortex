@@ -305,7 +305,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     wire [TAG_WIDTH-1:0] flush_tag;
     if (UUID_WIDTH != 0) begin : g_flush_tag_uuid
-        assign flush_tag = {flush_uuid, (TAG_WIDTH-UUID_WIDTH)'(1'b0)};
+        if (TAG_WIDTH > UUID_WIDTH) begin : g_pad
+            assign flush_tag = {flush_uuid, (TAG_WIDTH-UUID_WIDTH)'(1'b0)};
+        end else begin : g_cut
+            assign flush_tag = flush_uuid[UUID_WIDTH-1 -: TAG_WIDTH];
+        end
     end else begin : g_flush_tag_0
         `UNUSED_VAR (flush_uuid)
         assign flush_tag = '0;
@@ -783,7 +787,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         wire amo_res_invalidate_w = amo_do_store_st1;
 
         VX_amo_unit #(
-            .NUM_RES_ENTRIES (AMO_RS_SIZE),
+            .NUM_RES_ENTRIES (`VX_CFG_AMO_RS_SIZE),
             .LINE_ADDR_BITS  (`CS_LINE_ADDR_WIDTH)
         ) amo_unit (
             .clk           (clk),
@@ -1051,12 +1055,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire input_stall = (replay_valid || mem_rsp_valid || core_req_valid || flush_valid)
                    && ~(replay_fire || mem_rsp_fire || core_req_fire || flush_fire);
 
-    wire [XLEN-1:0] mem_rsp_full_addr = `CS_BANK_TO_FULL_ADDR(mem_rsp_addr, BANK_ID);
-    wire [XLEN-1:0] replay_full_addr = `CS_BANK_TO_FULL_ADDR(replay_addr, BANK_ID);
-    wire [XLEN-1:0] core_req_full_addr = `CS_BANK_TO_FULL_ADDR(core_req_addr, BANK_ID);
-    wire [XLEN-1:0] full_addr_st0 = `CS_BANK_TO_FULL_ADDR(addr_st0, BANK_ID);
-    wire [XLEN-1:0] full_addr_st1 = `CS_BANK_TO_FULL_ADDR(addr_st1, BANK_ID);
-    wire [XLEN-1:0] mreq_queue_full_addr = `CS_BANK_TO_FULL_ADDR(mreq_queue_addr, BANK_ID);
+    wire [`VX_CFG_XLEN-1:0] mem_rsp_full_addr = `CS_BANK_TO_FULL_ADDR(mem_rsp_addr, BANK_ID);
+    wire [`VX_CFG_XLEN-1:0] replay_full_addr = `CS_BANK_TO_FULL_ADDR(replay_addr, BANK_ID);
+    wire [`VX_CFG_XLEN-1:0] core_req_full_addr = `CS_BANK_TO_FULL_ADDR(core_req_addr, BANK_ID);
+    wire [`VX_CFG_XLEN-1:0] full_addr_st0 = `CS_BANK_TO_FULL_ADDR(addr_st0, BANK_ID);
+    wire [`VX_CFG_XLEN-1:0] full_addr_st1 = `CS_BANK_TO_FULL_ADDR(addr_st1, BANK_ID);
+    wire [`VX_CFG_XLEN-1:0] mreq_queue_full_addr = `CS_BANK_TO_FULL_ADDR(mreq_queue_addr, BANK_ID);
 
     always @(posedge clk) begin
         if (input_stall || pipe_stall) begin

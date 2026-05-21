@@ -17,7 +17,7 @@ module VX_mem_switch import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter DATA_SIZE      = 1,
-    parameter ADDR_WIDTH     = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
+    parameter ADDR_WIDTH     = (`VX_CFG_MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
     parameter TAG_WIDTH      = 1,
     parameter ATTR_WIDTH     = MEM_ATTR_WIDTH,
     parameter REQ_OUT_BUF    = 0,

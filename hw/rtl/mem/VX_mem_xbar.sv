@@ -26,7 +26,7 @@ module VX_mem_xbar import VX_gpu_pkg::*; #(
     parameter REQ_OUT_BUF    = 0,
     parameter RSP_OUT_BUF    = 0,
     parameter `STRING ARBITER = "R",
-    parameter ADDR_WIDTH     = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
+    parameter ADDR_WIDTH     = (`VX_CFG_MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
     parameter ATTR_WIDTH     = MEM_ATTR_WIDTH
 ) (
     input wire              clk,

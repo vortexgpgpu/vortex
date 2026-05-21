@@ -121,29 +121,29 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
         RSTATE_RESP     = 2'd2,
         RSTATE_WIDTH    = 2;
 
-    localparam MEMORY_BANK_ADDR_WIDTH = PLATFORM_MEMORY_ADDR_WIDTH - `CLOG2(PLATFORM_MEMORY_NUM_BANKS);
+    localparam MEMORY_BANK_ADDR_WIDTH = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH - `CLOG2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
 
-    localparam CLUSTER_SIZE = NUM_CORES / SOCKET_SIZE;
-    `STATIC_ASSERT((CLUSTER_SIZE * SOCKET_SIZE) == NUM_CORES, ("NUM_CORES must be a multiple of SOCKET_SIZE"));
+    localparam CLUSTER_SIZE = `VX_CFG_NUM_CORES / `VX_CFG_SOCKET_SIZE;
+    `STATIC_ASSERT((CLUSTER_SIZE * `VX_CFG_SOCKET_SIZE) == `VX_CFG_NUM_CORES, ("NUM_CORES must be a multiple of SOCKET_SIZE"));
 
     wire [63:0] dev_caps = {
         22'b0,
         5'(MEMORY_BANK_ADDR_WIDTH-20),
-        3'($clog2(PLATFORM_MEMORY_NUM_BANKS)),
-        8'(LMEM_ENABLED ? LMEM_LOG_SIZE : 0),
-        3'($clog2(ISSUE_WIDTH)),
-        3'($clog2(NUM_CLUSTERS)),
+        3'($clog2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS)),
+        8'(`VX_CFG_LMEM_ENABLED ? `VX_CFG_LMEM_LOG_SIZE : 0),
+        3'($clog2(`VX_CFG_ISSUE_WIDTH)),
+        3'($clog2(`VX_CFG_NUM_CLUSTERS)),
         3'($clog2(CLUSTER_SIZE)),
-        3'($clog2(SOCKET_SIZE)),
-        3'($clog2(NUM_WARPS)),
-        3'($clog2(NUM_THREADS)),
+        3'($clog2(`VX_CFG_SOCKET_SIZE)),
+        3'($clog2(`VX_CFG_NUM_WARPS)),
+        3'($clog2(`VX_CFG_NUM_THREADS)),
         8'(`VX_ISA_IMPL_ID)
     };
 
     wire [63:0] isa_caps = {
-        32'(MISA_EXT),
-        2'(`CLOG2(XLEN)-4),
-        30'(MISA_STD)
+        32'(`VX_CFG_MISA_EXT),
+        2'(`CLOG2(`VX_CFG_XLEN)-4),
+        30'(`VX_CFG_MISA_STD)
     };
 
     reg [WSTATE_WIDTH-1:0] wstate;

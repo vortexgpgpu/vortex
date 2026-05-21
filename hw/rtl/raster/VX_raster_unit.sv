@@ -22,7 +22,7 @@
 module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
-    parameter NUM_LANES = NUM_THREADS
+    parameter NUM_LANES = `VX_CFG_NUM_THREADS
 ) (
     input wire clk,
     input wire reset,
@@ -39,7 +39,7 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     output wire [UUID_WIDTH-1:0]               csr_write_uuid,
     output wire [NW_WIDTH-1:0]                csr_write_wid,
     output wire [NUM_LANES-1:0]                csr_write_tmask,
-    output wire [`UP(`LOG2UP(NUM_THREADS / NUM_LANES))-1:0] csr_write_pid,
+    output wire [`UP(`LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES))-1:0] csr_write_pid,
     output raster_stamp_t [NUM_LANES-1:0]      csr_write_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -70,7 +70,7 @@ module VX_raster_unit import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     sfu_result_t rsp_data_in;
     assign rsp_data_in.header = execute_if.data.header;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rsp_data
-        assign rsp_data_in.data[i] = XLEN'(response_data[i]);
+        assign rsp_data_in.data[i] = `VX_CFG_XLEN'(response_data[i]);
     end
 
     VX_elastic_buffer #(

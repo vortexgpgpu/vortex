@@ -34,12 +34,12 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
 
     // Configuration registers
-    reg [XLEN-1:0] dcr_PC;
+    reg [`VX_CFG_XLEN-1:0] dcr_PC;
     reg [2:0][31:0] dcr_grid_dim;
     reg [2:0][CTA_TID_WIDTH:0] dcr_block_dim;
-    reg [XLEN-1:0] dcr_param;
+    reg [`VX_CFG_XLEN-1:0] dcr_param;
     reg [CTA_TID_WIDTH:0] dcr_block_size;
-    reg [LMEM_LOG_SIZE:0] dcr_lmem_size;
+    reg [`VX_CFG_LMEM_LOG_SIZE:0] dcr_lmem_size;
     reg [2:0][CTA_TID_WIDTH-1:0] dcr_warp_step;
     `UNUSED_VAR(dcr_param)
 
@@ -74,7 +74,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
                 `VX_DCR_KMU_BLOCK_DIM_Y: dcr_block_dim[1] <= dcr_req_data[CTA_TID_WIDTH:0];
                 `VX_DCR_KMU_BLOCK_DIM_Z: dcr_block_dim[2] <= dcr_req_data[CTA_TID_WIDTH:0];
                 // Local memory size
-                `VX_DCR_KMU_LMEM_SIZE:   dcr_lmem_size  <= dcr_req_data[LMEM_LOG_SIZE:0];
+                `VX_DCR_KMU_LMEM_SIZE:   dcr_lmem_size  <= dcr_req_data[`VX_CFG_LMEM_LOG_SIZE:0];
                 // Block size (total threads per CTA)
                 `VX_DCR_KMU_BLOCK_SIZE:  dcr_block_size <= dcr_req_data[CTA_TID_WIDTH:0];
                 // Warp steps
@@ -128,7 +128,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     assign kmu_bus_if.data.block_idx = block_idx;
     assign kmu_bus_if.data.block_dim = dcr_block_dim;
     assign kmu_bus_if.data.grid_dim  = dcr_grid_dim;
-    assign kmu_bus_if.data.param     = MEM_ADDR_WIDTH'(dcr_param);
+    assign kmu_bus_if.data.param     = `VX_CFG_MEM_ADDR_WIDTH'(dcr_param);
     assign kmu_bus_if.data.block_size= dcr_block_size;
     assign kmu_bus_if.data.lmem_size = dcr_lmem_size;
     assign kmu_bus_if.data.warp_step = dcr_warp_step;

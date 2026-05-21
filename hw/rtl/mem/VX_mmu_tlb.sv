@@ -108,7 +108,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
         logic [7:0]           flags;
     } tlb_entry_t;
 
-    tlb_entry_t tlb_entries [TLB_SIZE-1:0];
+    tlb_entry_t tlb_entries [`VX_CFG_TLB_SIZE-1:0];
 
     typedef enum logic [1:0] {
         TLB_IDLE,
@@ -161,8 +161,8 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
         endcase
     endfunction
 
-    wire [TLB_SIZE-1:0] cam_hit;
-    for (genvar i = 0; i < TLB_SIZE; i++) begin : g_cam
+    wire [`VX_CFG_TLB_SIZE-1:0] cam_hit;
+    for (genvar i = 0; i < `VX_CFG_TLB_SIZE; i++) begin : g_cam
         wire [VPN_WIDTH-1:0] mask_i = vpn_mask(tlb_entries[i].page_level);
         assign cam_hit[i] = tlb_entries[i].valid &&
                             ((tlb_entries[i].vpn & mask_i) == (lookup_vpn & mask_i));
@@ -173,7 +173,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     reg [TLB_INDEX_BITS-1:0] hit_index;
     always_comb begin
         hit_index = '0;
-        for (int j = TLB_SIZE-1; j >= 0; j--) begin
+        for (int j = `VX_CFG_TLB_SIZE-1; j >= 0; j--) begin
             if (cam_hit[j]) hit_index = j[TLB_INDEX_BITS-1:0];
         end
     end
@@ -186,22 +186,22 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     always_comb begin
         victim_candidate = '0;
         found_invalid = 1'b0;
-        for (int j = TLB_SIZE-1; j >= 0; j--) begin
+        for (int j = `VX_CFG_TLB_SIZE-1; j >= 0; j--) begin
             if (!tlb_entries[j].valid) begin
                 victim_candidate = j[TLB_INDEX_BITS-1:0];
                 found_invalid = 1'b1;
             end
         end
         if (!found_invalid) begin
-            for (int j = TLB_SIZE-1; j >= 0; j--) begin
+            for (int j = `VX_CFG_TLB_SIZE-1; j >= 0; j--) begin
                 if (tlb_entries[j].valid && !tlb_entries[j].mru)
                     victim_candidate = j[TLB_INDEX_BITS-1:0];
             end
         end
     end
 
-    wire [TLB_SIZE-1:0] entry_mru;
-    for (genvar i = 0; i < TLB_SIZE; i++) begin : g_mru_check
+    wire [`VX_CFG_TLB_SIZE-1:0] entry_mru;
+    for (genvar i = 0; i < `VX_CFG_TLB_SIZE; i++) begin : g_mru_check
         assign entry_mru[i] = tlb_entries[i].valid ? tlb_entries[i].mru : 1'b0;
     end
     assign all_mru = &entry_mru;
@@ -234,7 +234,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
             miss_fill_paddr <= '0;
             miss_sent <= 1'b0;
             victim_index <= '0;
-            for (int i = 0; i < TLB_SIZE; i++) begin
+            for (int i = 0; i < `VX_CFG_TLB_SIZE; i++) begin
                 tlb_entries[i].valid      <= 1'b0;
                 tlb_entries[i].mru        <= 1'b0;
                 tlb_entries[i].page_level <= 2'd0;
@@ -253,7 +253,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
                         if (tlb_hit) begin
                             tlb_entries[hit_index].mru <= 1'b1;
                             if (all_mru) begin
-                                for (int i = 0; i < TLB_SIZE; i++) begin
+                                for (int i = 0; i < `VX_CFG_TLB_SIZE; i++) begin
                                     if (i[TLB_INDEX_BITS-1:0] != hit_index)
                                         tlb_entries[i].mru <= 1'b0;
                                 end
@@ -280,7 +280,7 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
                         tlb_entries[victim_index].flags      <= fill_flags;
 
                         if (all_mru) begin
-                            for (int i = 0; i < TLB_SIZE; i++) begin
+                            for (int i = 0; i < `VX_CFG_TLB_SIZE; i++) begin
                                 if (i[TLB_INDEX_BITS-1:0] != victim_index)
                                     tlb_entries[i].mru <= 1'b0;
                             end

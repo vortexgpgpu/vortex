@@ -23,42 +23,42 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     input  wire             reset,
 
     // inputs
-    VX_dispatch_if.slave    dispatch_if [ISSUE_WIDTH],
+    VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
 
     // outputs
     VX_execute_if.master    execute_if [BLOCK_SIZE]
 );
-    `STATIC_ASSERT (`IS_DIVISBLE(ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
-    `STATIC_ASSERT (`IS_DIVISBLE(SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
+    `STATIC_ASSERT (`IS_DIVISBLE(`VX_CFG_ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT (`IS_DIVISBLE(`VX_CFG_SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
 
     `DECL_EXECUTE_T (pe, NUM_LANES);
     localparam IN_DATAW     = $bits(dispatch_t);
     localparam OUT_DATAW    = $bits(pe_execute_t);
 
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
-    localparam NUM_PACKETS  = SIMD_WIDTH / NUM_LANES;
+    localparam NUM_PACKETS  = `VX_CFG_SIMD_WIDTH / NUM_LANES;
     localparam LPID_BITS    = `CLOG2(NUM_PACKETS);
     localparam LPID_WIDTH   = `UP(LPID_BITS);
-    localparam GPID_BITS    = `CLOG2(NUM_THREADS / NUM_LANES);
+    localparam GPID_BITS    = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam GPID_WIDTH   = `UP(GPID_BITS);
-    localparam BATCH_COUNT  = ISSUE_WIDTH / BLOCK_SIZE;
+    localparam BATCH_COUNT  = `VX_CFG_ISSUE_WIDTH / BLOCK_SIZE;
     localparam BATCH_COUNT_W= `LOG2UP(BATCH_COUNT);
-    localparam ISSUE_W      = `LOG2UP(ISSUE_WIDTH);
-    localparam FANOUT_ENABLE= (SIMD_WIDTH > (MAX_FANOUT + MAX_FANOUT /2));
+    localparam ISSUE_W      = `LOG2UP(`VX_CFG_ISSUE_WIDTH);
+    localparam FANOUT_ENABLE= (`VX_CFG_SIMD_WIDTH > (MAX_FANOUT + MAX_FANOUT /2));
 
-    localparam DATA_IN_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + NCTA_WIDTH + SIMD_IDX_W + SIMD_WIDTH);
+    localparam DATA_IN_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + NCTA_WIDTH + SIMD_IDX_W + `VX_CFG_SIMD_WIDTH);
     localparam DATA_IN_OPDS_OFF = 1 + 1;
 
     typedef struct packed {
-        logic [2:0][NUM_LANES-1:0][XLEN-1:0] rsdata;
+        logic [2:0][NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rsdata;
         logic [NUM_LANES-1:0] tmask;
     } packet_t;
 
-    wire [ISSUE_WIDTH-1:0] dispatch_valid;
-    wire [ISSUE_WIDTH-1:0][IN_DATAW-1:0] dispatch_data;
-    wire [ISSUE_WIDTH-1:0] dispatch_ready;
+    wire [`VX_CFG_ISSUE_WIDTH-1:0] dispatch_valid;
+    wire [`VX_CFG_ISSUE_WIDTH-1:0][IN_DATAW-1:0] dispatch_data;
+    wire [`VX_CFG_ISSUE_WIDTH-1:0] dispatch_ready;
 
-    for (genvar i = 0; i < ISSUE_WIDTH; ++i) begin : g_dispatch_data
+    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_dispatch_data
         assign dispatch_valid[i] = dispatch_if[i].valid;
         assign dispatch_data[i] = dispatch_if[i].data;
         assign dispatch_if[i].ready = dispatch_ready[i];
@@ -66,7 +66,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
 
     wire [BLOCK_SIZE-1:0] block_ready;
     wire [BLOCK_SIZE-1:0][NUM_LANES-1:0] block_tmask;
-    wire [BLOCK_SIZE-1:0][2:0][NUM_LANES-1:0][XLEN-1:0] block_rsdata;
+    wire [BLOCK_SIZE-1:0][2:0][NUM_LANES-1:0][`VX_CFG_XLEN-1:0] block_rsdata;
     wire [BLOCK_SIZE-1:0][LPID_WIDTH-1:0] block_pid;
     wire [BLOCK_SIZE-1:0] block_sop;
     wire [BLOCK_SIZE-1:0] block_eop;
@@ -118,23 +118,23 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
 
         wire [ISSUE_W-1:0] issue_idx = issue_indices[block_idx];
-        wire [ISSUE_WIS_W-1:0] dispatch_wis    = dispatch_data[issue_idx][DATA_IN_TMASK_OFF + SIMD_WIDTH + SIMD_IDX_W + NCTA_WIDTH +: ISSUE_WIS_W];
-        wire [NCTA_WIDTH-1:0]  dispatch_cta_id = dispatch_data[issue_idx][DATA_IN_TMASK_OFF + SIMD_WIDTH + SIMD_IDX_W +: NCTA_WIDTH];
-        wire [SIMD_IDX_W-1:0]  dispatch_sid    = dispatch_data[issue_idx][DATA_IN_TMASK_OFF + SIMD_WIDTH +: SIMD_IDX_W];
+        wire [ISSUE_WIS_W-1:0] dispatch_wis    = dispatch_data[issue_idx][DATA_IN_TMASK_OFF + `VX_CFG_SIMD_WIDTH + SIMD_IDX_W + NCTA_WIDTH +: ISSUE_WIS_W];
+        wire [NCTA_WIDTH-1:0]  dispatch_cta_id = dispatch_data[issue_idx][DATA_IN_TMASK_OFF + `VX_CFG_SIMD_WIDTH + SIMD_IDX_W +: NCTA_WIDTH];
+        wire [SIMD_IDX_W-1:0]  dispatch_sid    = dispatch_data[issue_idx][DATA_IN_TMASK_OFF + `VX_CFG_SIMD_WIDTH +: SIMD_IDX_W];
         wire dispatch_sop = dispatch_data[issue_idx][1];
         wire dispatch_eop = dispatch_data[issue_idx][0];
 
-        wire [SIMD_WIDTH-1:0] dispatch_tmask;
-        wire [2:0][SIMD_WIDTH-1:0][XLEN-1:0] dispatch_rsdata;
+        wire [`VX_CFG_SIMD_WIDTH-1:0] dispatch_tmask;
+        wire [2:0][`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] dispatch_rsdata;
 
-        assign dispatch_tmask = dispatch_data[issue_idx][DATA_IN_TMASK_OFF +: SIMD_WIDTH];
-        assign dispatch_rsdata[0] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 2 * SIMD_WIDTH * XLEN +: SIMD_WIDTH * XLEN];
-        assign dispatch_rsdata[1] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 1 * SIMD_WIDTH * XLEN +: SIMD_WIDTH * XLEN];
-        assign dispatch_rsdata[2] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 0 * SIMD_WIDTH * XLEN +: SIMD_WIDTH * XLEN];
+        assign dispatch_tmask = dispatch_data[issue_idx][DATA_IN_TMASK_OFF +: `VX_CFG_SIMD_WIDTH];
+        assign dispatch_rsdata[0] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 2 * `VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN +: `VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN];
+        assign dispatch_rsdata[1] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 1 * `VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN +: `VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN];
+        assign dispatch_rsdata[2] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 0 * `VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN +: `VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN];
 
         wire valid_p, ready_p;
 
-        if (SIMD_WIDTH != NUM_LANES) begin : g_partial_simd
+        if (`VX_CFG_SIMD_WIDTH != NUM_LANES) begin : g_partial_simd
 
             packet_t [NUM_PACKETS-1:0] packets;
 
@@ -224,7 +224,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
                 warp_pid,
                 warp_sop,
                 warp_eop,
-                dispatch_data[issue_idx][DATA_IN_TMASK_OFF-1 : (DATA_IN_OPDS_OFF + NUM_SRC_OPDS * SIMD_WIDTH * XLEN)],
+                dispatch_data[issue_idx][DATA_IN_TMASK_OFF-1 : (DATA_IN_OPDS_OFF + NUM_SRC_OPDS * `VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN)],
                 block_rsdata[block_idx][0],
                 block_rsdata[block_idx][1],
                 block_rsdata[block_idx][2]
@@ -236,7 +236,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     end
 
     // release the dispatch interface when all packets are sent
-    reg [ISSUE_WIDTH-1:0] ready_in;
+    reg [`VX_CFG_ISSUE_WIDTH-1:0] ready_in;
     always @(*) begin
         ready_in = 0;
         for (integer block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin

@@ -208,7 +208,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .ADDR_WIDTH   (OCACHE_ADDR_WIDTH),
         .USER_WIDTH   (0),
         .TAG_WIDTH    (TAG_WIDTH),
-        .CORE_QUEUE_SIZE(OM_MEM_QUEUE_SIZE),
+        .CORE_QUEUE_SIZE(`VX_CFG_OM_MEM_QUEUE_SIZE),
         .UUID_WIDTH   (UUID_WIDTH),
         .RSP_PARTIAL  (0),
         .MEM_OUT_BUF  (0),

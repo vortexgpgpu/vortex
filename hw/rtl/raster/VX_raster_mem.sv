@@ -296,7 +296,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .ADDR_WIDTH   (RCACHE_ADDR_WIDTH),
         .USER_WIDTH   (0),
         .TAG_WIDTH    (TAG_WIDTH),
-        .CORE_QUEUE_SIZE(RASTER_MEM_QUEUE_SIZE),
+        .CORE_QUEUE_SIZE(`VX_CFG_RASTER_MEM_QUEUE_SIZE),
         .RSP_PARTIAL  (0),
         .MEM_OUT_BUF  (2),
         .CORE_OUT_BUF (3)

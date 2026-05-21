@@ -25,15 +25,15 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
     VX_result_if.slave  result_if [BLOCK_SIZE],
 
     // outputs
-    VX_commit_if.master commit_if [ISSUE_WIDTH]
+    VX_commit_if.master commit_if [`VX_CFG_ISSUE_WIDTH]
 );
-    `STATIC_ASSERT (`IS_DIVISBLE(ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
-    `STATIC_ASSERT (`IS_DIVISBLE(SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
+    `STATIC_ASSERT (`IS_DIVISBLE(`VX_CFG_ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT (`IS_DIVISBLE(`VX_CFG_SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
 
     `DECL_EXECUTE_T (pe, NUM_LANES);
 
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
-    localparam NUM_PACKETS  = SIMD_WIDTH / NUM_LANES;
+    localparam NUM_PACKETS  = `VX_CFG_SIMD_WIDTH / NUM_LANES;
     localparam LPID_BITS    = `CLOG2(NUM_PACKETS);
     localparam LPID_WIDTH   = `UP(LPID_BITS);
     localparam DATAW        = $bits(pe_result_t);
@@ -48,7 +48,7 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
         assign result_in_valid[i] = result_if[i].valid;
         assign result_in_data[i]  = result_if[i].data;
         assign result_if[i].ready = result_in_ready[i];
-        if (BLOCK_SIZE != ISSUE_WIDTH) begin : g_result_in_isw_partial
+        if (BLOCK_SIZE != `VX_CFG_ISSUE_WIDTH) begin : g_result_in_isw_partial
             if (BLOCK_SIZE != 1) begin : g_block
                 assign result_in_isw[i] = {result_in_data[i][DATA_WIS_OFF+BLOCK_SIZE_W +: (ISSUE_ISW_W-BLOCK_SIZE_W)], BLOCK_SIZE_W'(i)};
             end else begin : g_no_block
@@ -59,13 +59,13 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
         end
     end
 
-    reg [ISSUE_WIDTH-1:0] result_out_valid;
-    reg [ISSUE_WIDTH-1:0][DATAW-1:0] result_out_data;
-    wire [ISSUE_WIDTH-1:0] result_out_ready;
+    reg [`VX_CFG_ISSUE_WIDTH-1:0] result_out_valid;
+    reg [`VX_CFG_ISSUE_WIDTH-1:0][DATAW-1:0] result_out_data;
+    wire [`VX_CFG_ISSUE_WIDTH-1:0] result_out_ready;
 
     always @(*) begin
         result_out_valid = '0;
-        for (integer i = 0; i < ISSUE_WIDTH; ++i) begin
+        for (integer i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin
             result_out_data[i] = 'x;
         end
         for (integer i = 0; i < BLOCK_SIZE; ++i) begin
@@ -78,7 +78,7 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
         assign result_in_ready[i] = result_out_ready[result_in_isw[i]];
     end
 
-    for (genvar i = 0; i < ISSUE_WIDTH; ++i) begin: g_out_bufs
+    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin: g_out_bufs
         VX_result_if #(
             .data_t (pe_result_t)
         ) result_tmp_if();
@@ -99,8 +99,8 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
         );
 
         logic [SIMD_IDX_W-1:0] commit_sid_w;
-        logic [SIMD_WIDTH-1:0] commit_tmask_w;
-        logic [SIMD_WIDTH-1:0][XLEN-1:0] commit_data_w;
+        logic [`VX_CFG_SIMD_WIDTH-1:0] commit_tmask_w;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] commit_data_w;
 
         if (LPID_BITS != 0) begin : g_lpid
             logic [LPID_WIDTH-1:0] lpid;

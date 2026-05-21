@@ -19,10 +19,9 @@
 package VX_dxa_pkg;
 
     import VX_gpu_pkg::*;
-    import VX_config_pkg::*;
 
     // DXA local-memory path: dimensioned to cover all banks in one request.
-    localparam DXA_LMEM_WORD_SIZE = LMEM_NUM_BANKS * (XLEN / 8);
+    localparam DXA_LMEM_WORD_SIZE = `VX_CFG_LMEM_NUM_BANKS * (`VX_CFG_XLEN / 8);
     localparam DXA_LMEM_ADDR_W = LMEM_DMA_ADDR_WIDTH;
 
     localparam DXA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_DXA_DESC_COUNT);
@@ -33,10 +32,10 @@ package VX_dxa_pkg;
         logic [NC_WIDTH-1:0]      core_id;
         logic [UUID_WIDTH-1:0]    uuid;
         logic [NW_WIDTH-1:0]      wid;
-        logic [XLEN-1:0]         smem_addr;   // from lane 0 rs1
-        logic [XLEN-1:0]         meta;        // from lane 1 rs1 (desc[3:0], bar[30:4], 1[31])
-        logic [4:0][XLEN-1:0]    coords;      // [0]=lane2.rs1,[1]=lane3.rs1,[2]=lane0.rs2,[3]=lane1.rs2,[4]=lane2.rs2
-        logic [NUM_WARPS-1:0]    cta_mask;     // from rs2 lane 3
+        logic [`VX_CFG_XLEN-1:0]         smem_addr;   // from lane 0 rs1
+        logic [`VX_CFG_XLEN-1:0]         meta;        // from lane 1 rs1 (desc[3:0], bar[30:4], 1[31])
+        logic [4:0][`VX_CFG_XLEN-1:0]    coords;      // [0]=lane2.rs1,[1]=lane3.rs1,[2]=lane0.rs2,[3]=lane1.rs2,[4]=lane2.rs2
+        logic [`VX_CFG_NUM_WARPS-1:0]    cta_mask;     // from rs2 lane 3
     } dxa_req_data_t;
 
     // Decoded launch data — dispatched from FIFO to workers.
@@ -46,14 +45,14 @@ package VX_dxa_pkg;
         logic [NW_WIDTH-1:0]        wid;
         logic [BAR_ADDR_W-1:0]      bar_addr;
         logic [DXA_DESC_SLOT_W-1:0] desc_slot;
-        logic [XLEN-1:0]           smem_addr;
-        logic [4:0][XLEN-1:0]      coords;
-        logic [NUM_WARPS-1:0]      cta_mask;
+        logic [`VX_CFG_XLEN-1:0]           smem_addr;
+        logic [4:0][`VX_CFG_XLEN-1:0]      coords;
+        logic [`VX_CFG_NUM_WARPS-1:0]      cta_mask;
     } dxa_launch_t;
 
     // Descriptor table read output — all fields for one slot.
     typedef struct packed {
-        logic [MEM_ADDR_WIDTH-1:0] base_addr;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] base_addr;
         logic [31:0] meta;
         logic [31:0] tile01;
         logic [31:0] tile23;
@@ -88,9 +87,9 @@ package VX_dxa_pkg;
         logic [NC_WIDTH-1:0]      core_id;
         logic [NW_WIDTH-1:0]      wid;
         logic [BAR_ADDR_W-1:0]    bar_addr;
-        logic [MEM_ADDR_WIDTH-1:0] gmem_base;
-        logic [XLEN-1:0]         smem_base;
-        logic [4:0][XLEN-1:0]    coords;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] gmem_base;
+        logic [`VX_CFG_XLEN-1:0]         smem_base;
+        logic [4:0][`VX_CFG_XLEN-1:0]    coords;
         dxa_issue_dec_t           dec;
     } dxa_worker_cmd_t;
 
@@ -113,8 +112,8 @@ package VX_dxa_pkg;
     // Setup parameters: precomputed constants for addr_gen, rd_ctrl, cl2smem, wr_ctrl.
     // All multiplies happen during setup; fast path uses additions only.
     typedef struct packed {
-        logic [MEM_ADDR_WIDTH-1:0]  initial_gmem_base;
-        logic [XLEN-1:0]           initial_smem_base;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]  initial_gmem_base;
+        logic [`VX_CFG_XLEN-1:0]           initial_smem_base;
         logic [31:0]                row_len_bytes;
         // Rolling-cursor deltas applied at each outer-dim step:
         //   delta[0]: dim-0 step                = stride[0]

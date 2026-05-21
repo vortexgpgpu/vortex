@@ -20,18 +20,18 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire reset,
 
     // Inputs
-    VX_dispatch_if.slave    dispatch_if [ISSUE_WIDTH],
+    VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
 
     // Outputs
-    VX_commit_if.master     commit_if [ISSUE_WIDTH],
-    VX_fpu_csr_if.master    fpu_csr_if[NUM_FPU_BLOCKS]
+    VX_commit_if.master     commit_if [`VX_CFG_ISSUE_WIDTH],
+    VX_fpu_csr_if.master    fpu_csr_if[`VX_CFG_NUM_FPU_BLOCKS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam BLOCK_SIZE = NUM_FPU_BLOCKS;
-    localparam NUM_LANES  = NUM_FPU_LANES;
-    localparam PID_BITS   = `CLOG2(NUM_THREADS / NUM_LANES);
-    localparam TAG_WIDTH  = `LOG2UP(FPUQ_SIZE);
-    localparam PARTIAL_BW = (BLOCK_SIZE != ISSUE_WIDTH) || (NUM_LANES != SIMD_WIDTH);
+    localparam BLOCK_SIZE = `VX_CFG_NUM_FPU_BLOCKS;
+    localparam NUM_LANES  = `VX_CFG_NUM_FPU_LANES;
+    localparam PID_BITS   = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
+    localparam TAG_WIDTH  = `LOG2UP(`VX_CFG_FPUQ_SIZE);
+    localparam PARTIAL_BW = (BLOCK_SIZE != `VX_CFG_ISSUE_WIDTH) || (NUM_LANES != `VX_CFG_SIMD_WIDTH);
 
     VX_execute_if #(
         .data_t (fpu_execute_t)
@@ -56,7 +56,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         // Store request info
         wire fpu_req_valid, fpu_req_ready;
         wire fpu_rsp_valid, fpu_rsp_ready;
-        wire [NUM_LANES-1:0][XLEN-1:0] fpu_rsp_result;
+        wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] fpu_rsp_result;
         fflags_t fpu_rsp_fflags;
         wire fpu_rsp_has_fflags;
 
@@ -85,7 +85,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_index_buffer #(
             .DATAW  ($bits(fpu_header_t)),
-            .SIZE   (FPUQ_SIZE)
+            .SIZE   (`VX_CFG_FPUQ_SIZE)
         ) tag_store (
             .clk          (clk),
             .reset        (reset),
@@ -101,7 +101,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         // resolve dynamic FRM from CSR
         wire [INST_FRM_BITS-1:0] fpu_req_frm;
-        `ASSIGN_BLOCKED_WID (fpu_csr_if[block_idx].read_wid, per_block_execute_if[block_idx].data.header.wid, block_idx, NUM_FPU_BLOCKS)
+        `ASSIGN_BLOCKED_WID (fpu_csr_if[block_idx].read_wid, per_block_execute_if[block_idx].data.header.wid, block_idx, `VX_CFG_NUM_FPU_BLOCKS)
         assign fpu_req_frm = (per_block_execute_if[block_idx].data.op_type != INST_FPU_MISC
                            && fpu_frm == INST_FRM_DYN) ? fpu_csr_if[block_idx].read_frm : fpu_frm;
 
@@ -247,7 +247,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         VX_fpu_csr_if fpu_csr_tmp_if();
         assign fpu_csr_tmp_if.write_enable = fpu_rsp_fire && fpu_hdr.eop && fpu_rsp_has_fflags;
-        `ASSIGN_BLOCKED_WID (fpu_csr_tmp_if.write_wid, fpu_hdr.wid, block_idx, NUM_FPU_BLOCKS)
+        `ASSIGN_BLOCKED_WID (fpu_csr_tmp_if.write_wid, fpu_hdr.wid, block_idx, `VX_CFG_NUM_FPU_BLOCKS)
         assign fpu_csr_tmp_if.write_fflags = fpu_rsp_fflags_q;
 
          VX_pipe_register #(
@@ -264,7 +264,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         // send response
 
         VX_elastic_buffer #(
-            .DATAW ($bits(fpu_header_t) + (NUM_LANES * XLEN)),
+            .DATAW ($bits(fpu_header_t) + (NUM_LANES * `VX_CFG_XLEN)),
             .SIZE  (0)
         ) rsp_buf (
             .clk       (clk),

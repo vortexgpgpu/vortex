@@ -68,24 +68,24 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_decode_if        decode_if();
     VX_sched_csr_if     sched_csr_if();
     VX_decode_sched_if  decode_sched_if();
-    VX_issue_sched_if   issue_sched_if[ISSUE_WIDTH]();
+    VX_issue_sched_if   issue_sched_if[`VX_CFG_ISSUE_WIDTH]();
     VX_commit_sched_if  commit_sched_if();
-    VX_branch_ctl_if    branch_ctl_if[NUM_ALU_BLOCKS]();
+    VX_branch_ctl_if    branch_ctl_if[`VX_CFG_NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
 
-    VX_dispatch_if      dispatch_if[NUM_EX_UNITS * ISSUE_WIDTH]();
-    VX_commit_if        commit_if[NUM_EX_UNITS * ISSUE_WIDTH]();
-    VX_writeback_if     writeback_if[ISSUE_WIDTH]();
+    VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
+    VX_commit_if        commit_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
+    VX_writeback_if     writeback_if[`VX_CFG_ISSUE_WIDTH]();
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_txbar_bus_if     dxa_txbar_bus_if();
 `endif
 
     VX_lsu_mem_if #(
-        .NUM_LANES (NUM_LSU_LANES),
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_mem_if[NUM_LSU_BLOCKS]();
+    ) lsu_mem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
@@ -98,9 +98,9 @@ module VX_core import VX_gpu_pkg::*; #(
     ) mmu_icache_if[1]();
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    localparam TCU_LMEM_BANK_ADDR_W = LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(LMEM_NUM_BANKS);
+    localparam TCU_LMEM_BANK_ADDR_W = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`VX_CFG_LMEM_NUM_BANKS);
     VX_mem_bus_if #(
-        .DATA_SIZE  (LMEM_NUM_BANKS * LSU_WORD_SIZE),
+        .DATA_SIZE  (`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE),
         .TAG_WIDTH  (TCU_LMEM_TAG_W),
         .ATTR_WIDTH (LMEM_DMA_ATTR_W),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
@@ -378,11 +378,11 @@ module VX_core import VX_gpu_pkg::*; #(
     wire [LSU_NUM_REQS-1:0] perf_dcache_wr_req_fire, perf_dcache_wr_req_fire_r;
     wire [LSU_NUM_REQS-1:0] perf_dcache_rsp_fire;
 
-    for (genvar i = 0; i < NUM_LSU_BLOCKS; ++i) begin : g_perf_dcache
-        for (genvar j = 0; j < NUM_LSU_LANES; ++j) begin : g_j
-            assign perf_dcache_rd_req_fire[i * NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && ~lsu_mem_if[i].req_data.rw;
-            assign perf_dcache_wr_req_fire[i * NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && lsu_mem_if[i].req_data.rw;
-            assign perf_dcache_rsp_fire[i * NUM_LSU_LANES + j] = lsu_mem_if[i].rsp_valid && lsu_mem_if[i].rsp_data.mask[j] && lsu_mem_if[i].rsp_ready;
+    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_perf_dcache
+        for (genvar j = 0; j < `VX_CFG_NUM_LSU_LANES; ++j) begin : g_j
+            assign perf_dcache_rd_req_fire[i * `VX_CFG_NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && ~lsu_mem_if[i].req_data.rw;
+            assign perf_dcache_wr_req_fire[i * `VX_CFG_NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && lsu_mem_if[i].req_data.rw;
+            assign perf_dcache_rsp_fire[i * `VX_CFG_NUM_LSU_LANES + j] = lsu_mem_if[i].rsp_valid && lsu_mem_if[i].rsp_data.mask[j] && lsu_mem_if[i].rsp_ready;
         end
     end
 

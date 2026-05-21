@@ -1,7 +1,7 @@
 // Copyright © 2019-2023
 // Licensed under the Apache License, Version 2.0.
 
-`include "VX_platform.vh"
+`include "VX_define.vh"
 
 // ============================================================================
 // VX_cp_axi_to_membus — bridges VX_cp_axi_m_if (AXI4 master) to a

@@ -23,8 +23,8 @@
 `include "VX_define.vh"
 
 module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
-    parameter GMEM_LINE_SIZE  = L1_LINE_SIZE,
-    parameter GMEM_ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(GMEM_LINE_SIZE)
+    parameter GMEM_LINE_SIZE  = `VX_CFG_L1_LINE_SIZE,
+    parameter GMEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(GMEM_LINE_SIZE)
 ) (
     input  wire                        clk,
     input  wire                        reset,
@@ -37,7 +37,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire                        out_valid,
     input  wire                        out_ready,
     output wire [GMEM_ADDR_WIDTH-1:0]  out_cl_addr,
-    output wire [MEM_ADDR_WIDTH-1:0]  out_smem_byte_addr,
+    output wire [`VX_CFG_MEM_ADDR_WIDTH-1:0]  out_smem_byte_addr,
     output wire [CL_OFF_BITS-1:0]      out_byte_offset,
     output wire [CL_OFF_BITS:0]        out_valid_length,
     output wire                        out_oob,
@@ -52,7 +52,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // ---- Registered state ----
     reg                        active_r;
-    reg [MEM_ADDR_WIDTH-1:0]  gmem_cursor_r;        // Current row's GMEM base
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]  gmem_cursor_r;        // Current row's GMEM base
     reg [31:0]                 row_len_r;            // row_len_bytes (constant)
     reg [31:0]                 line_idx_r;           // CL index within current row
 
@@ -63,7 +63,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit_r;   // OOB limit per dim
 
     // SMEM byte address tracking.
-    reg [MEM_ADDR_WIDTH-1:0]  smem_byte_addr_r;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]  smem_byte_addr_r;
 
     // Pass-through latched params.
     reg [31:0]                 cfill_r;
@@ -76,11 +76,11 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [31:0] num_lines  = (bytes_span + GMEM_LINE_SIZE - 1) >> CL_OFF_BITS;
 
     // ---- Current CL address ----
-    wire [MEM_ADDR_WIDTH-1:0] first_cl_base = {gmem_cursor_r[MEM_ADDR_WIDTH-1:CL_OFF_BITS],
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] first_cl_base = {gmem_cursor_r[`VX_CFG_MEM_ADDR_WIDTH-1:CL_OFF_BITS],
                                                  {CL_OFF_BITS{1'b0}}};
-    wire [MEM_ADDR_WIDTH-1:0] cur_cl_byte_addr = first_cl_base
-        + (MEM_ADDR_WIDTH'(line_idx_r) << CL_OFF_BITS);
-    wire [GMEM_ADDR_WIDTH-1:0] cur_cl_addr = cur_cl_byte_addr[MEM_ADDR_WIDTH-1:CL_OFF_BITS];
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cur_cl_byte_addr = first_cl_base
+        + (`VX_CFG_MEM_ADDR_WIDTH'(line_idx_r) << CL_OFF_BITS);
+    wire [GMEM_ADDR_WIDTH-1:0] cur_cl_addr = cur_cl_byte_addr[`VX_CFG_MEM_ADDR_WIDTH-1:CL_OFF_BITS];
 
     // ---- Narrow token: byte_offset + valid_length ----
     wire [CL_OFF_BITS-1:0] cur_byte_offset = (line_idx_r == 0) ? first_off : '0;
@@ -129,11 +129,11 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire dim2_steps = (dim_count_r[2] + 1 < dim_tile_r[2]);
     // dim3 must step otherwise (we already checked is_last_outer).
 
-    wire [MEM_ADDR_WIDTH-1:0] step_delta =
-        dim0_steps ? MEM_ADDR_WIDTH'(delta_r[0]) :
-        dim1_steps ? MEM_ADDR_WIDTH'(delta_r[1]) :
-        dim2_steps ? MEM_ADDR_WIDTH'(delta_r[2]) :
-                     MEM_ADDR_WIDTH'(delta_r[3]);
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] step_delta =
+        dim0_steps ? `VX_CFG_MEM_ADDR_WIDTH'(delta_r[0]) :
+        dim1_steps ? `VX_CFG_MEM_ADDR_WIDTH'(delta_r[1]) :
+        dim2_steps ? `VX_CFG_MEM_ADDR_WIDTH'(delta_r[2]) :
+                     `VX_CFG_MEM_ADDR_WIDTH'(delta_r[3]);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -150,7 +150,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             row_len_r        <= setup_params.row_len_bytes;
             line_idx_r       <= '0;
             cfill_r          <= setup_params.cfill;
-            smem_byte_addr_r <= MEM_ADDR_WIDTH'(setup_params.initial_smem_base);
+            smem_byte_addr_r <= `VX_CFG_MEM_ADDR_WIDTH'(setup_params.initial_smem_base);
             for (int d = 0; d < DXA_MAX_OUTER_DIMS; d++) begin
                 dim_count_r[d] <= '0;
                 dim_tile_r[d]  <= setup_params.dim_tiles[d];
@@ -159,7 +159,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             end
         end else if (advance) begin
             // Advance SMEM byte address by valid_length.
-            smem_byte_addr_r <= smem_byte_addr_r + MEM_ADDR_WIDTH'(cur_valid_length);
+            smem_byte_addr_r <= smem_byte_addr_r + `VX_CFG_MEM_ADDR_WIDTH'(cur_valid_length);
 
             if (is_last_line && is_last_outer) begin
                 // All done.

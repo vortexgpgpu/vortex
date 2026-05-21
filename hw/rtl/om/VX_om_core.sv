@@ -308,7 +308,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // otherwise we get into potential read/write deadlock.
     // ensure the memory scheduler's queue doesn't fill up
     VX_pending_size #(
-        .SIZE (OM_MEM_QUEUE_SIZE)
+        .SIZE (`VX_CFG_OM_MEM_QUEUE_SIZE)
     ) pending_reads (
         .clk   (clk),
         .reset (reset),

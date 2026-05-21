@@ -43,7 +43,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     localparam REQ_SEL_WIDTH    = SRC_OPD_WIDTH;
     localparam BANK_SEL_BITS    = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH   = `UP(BANK_SEL_BITS);
-    localparam BANK_DATA_WIDTH  = XLEN * SIMD_WIDTH;
+    localparam BANK_DATA_WIDTH  = `VX_CFG_XLEN * `VX_CFG_SIMD_WIDTH;
     localparam BANK_DATA_SIZE   = BANK_DATA_WIDTH / 8;
 
     localparam BANK_SIZE        = (NUM_REGS * SIMD_COUNT * PER_OPC_WARPS) / NUM_BANKS;
@@ -51,7 +51,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     localparam REG_REM_BITS     = NUM_REGS_BITS - BANK_SEL_BITS;
 
-    localparam META_DATAW       = UUID_WIDTH + ISSUE_WIS_W + NCTA_WIDTH + SIMD_IDX_W + SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NUM_XREGS + NUM_REGS_BITS + BYTESEL_BITS + 1 + 1;
+    localparam META_DATAW       = UUID_WIDTH + ISSUE_WIS_W + NCTA_WIDTH + SIMD_IDX_W + `VX_CFG_SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NUM_XREGS + NUM_REGS_BITS + BYTESEL_BITS + 1 + 1;
     localparam OUT_DATAW        = $bits(operands_t);
 
     `UNUSED_VAR (writeback_if.data.sop)
@@ -64,10 +64,10 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0] gpr_rd_valid, gpr_rd_ready;
     wire [NUM_BANKS-1:0] gpr_rd_valid_st1, gpr_rd_valid_st2;
     wire [NUM_BANKS-1:0][REG_REM_BITS-1:0] gpr_rd_reg, gpr_rd_reg_st1;
-    wire [NUM_BANKS-1:0][SIMD_WIDTH-1:0][XLEN-1:0] gpr_rd_data_st2;
+    wire [NUM_BANKS-1:0][`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] gpr_rd_data_st2;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_opd, gpr_rd_opd_st1, gpr_rd_opd_st2;
 
-    wire [SIMD_WIDTH-1:0] simd_out;
+    wire [`VX_CFG_SIMD_WIDTH-1:0] simd_out;
     wire [SIMD_IDX_W-1:0] simd_pid;
     wire simd_sop, simd_eop;
 
@@ -76,7 +76,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire pipe_valid_st2, pipe_ready_st2;
     wire [META_DATAW-1:0] pipe_mdata, pipe_mdata_st1, pipe_mdata_st2;
 
-    reg [NUM_SRC_OPDS-1:0][(SIMD_WIDTH * XLEN)-1:0] opd_buffer_st2, opd_buffer_n_st2;
+    reg [NUM_SRC_OPDS-1:0][(`VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN)-1:0] opd_buffer_st2, opd_buffer_n_st2;
 
     reg [NUM_SRC_OPDS-1:0] opd_fetched_st1;
 
@@ -141,7 +141,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     // simd iterator (skip requests with inactive threads)
     VX_nz_iterator #(
-        .DATAW (SIMD_WIDTH),
+        .DATAW (`VX_CFG_SIMD_WIDTH),
         .N     (SIMD_COUNT)
     ) simd_iter (
         .clk     (clk),
@@ -255,7 +255,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     end
 
     wire [BANK_DATA_SIZE-1:0] gpr_wr_byteen;
-    for (genvar i = 0; i < SIMD_WIDTH; ++i) begin : g_gpr_wr_byteen
+    for (genvar i = 0; i < `VX_CFG_SIMD_WIDTH; ++i) begin : g_gpr_wr_byteen
         assign gpr_wr_byteen[i*XLENB+:XLENB] = writeback_if.data.byteen[i];
     end
 

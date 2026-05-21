@@ -51,7 +51,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [3:0]               req_step_m,
     input  wire [3:0]               req_step_n,
     input  wire [3:0]               req_step_k,
-    input  wire [XLEN-1:0]         req_desc_a,
+    input  wire [`VX_CFG_XLEN-1:0]         req_desc_a,
     input  wire                     req_a_is_smem,
 
     // LMEM bank-parallel read port
@@ -59,7 +59,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Outputs
     output wire                                   abuf_ready,
-    output wire [TCU_BLOCK_CAP-1:0][XLEN-1:0]    abuf_rs1_data
+    output wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0]    abuf_rs1_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (req_wid)
@@ -69,7 +69,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     localparam BANK_SEL_BITS      = $clog2(NUM_BANKS);
-    localparam WORD_SIZE_LOG2     = $clog2(XLEN / 8);
+    localparam WORD_SIZE_LOG2     = $clog2(`VX_CFG_XLEN / 8);
     localparam A_BLOCK_WORDS      = TCU_TC_M * TCU_TC_K;
     localparam A_BLOCK_BANK_ROWS  = (A_BLOCK_WORDS + NUM_BANKS - 1) / NUM_BANKS;
     localparam BLOCK_WORDS_PADDED = A_BLOCK_BANK_ROWS * NUM_BANKS;
@@ -88,7 +88,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     logic                       slot_valid_r;
-    logic [XLEN-1:0]           slot_desc_a_r;
+    logic [`VX_CFG_XLEN-1:0]           slot_desc_a_r;
     logic [BANK_ADDR_WIDTH-1:0] slot_desc_a_row_base_r;
     logic [`UP(K_STEPS_W)-1:0]  slot_step_k_r;
     logic                       slot_fetching_r;
@@ -289,7 +289,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Storage holds blocks at [m_blk * BLOCK_WORDS_PADDED .. +BLOCK_WORDS_PADDED).
     // -----------------------------------------------------------------------
 
-    logic [TCU_BLOCK_CAP-1:0][XLEN-1:0] rs1_mux;
+    logic [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] rs1_mux;
     always_comb begin
         rs1_mux = '0;
         for (int lane = 0; lane < TCU_BLOCK_CAP; ++lane) begin
@@ -297,7 +297,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 int src_idx;
                 src_idx = int'(req_step_m) * BLOCK_WORDS_PADDED + lane;
                 if (src_idx < int'(A_STRIPE_WORDS))
-                    rs1_mux[lane] = XLEN'(storage_rdata[src_idx]);
+                    rs1_mux[lane] = `VX_CFG_XLEN'(storage_rdata[src_idx]);
             end
         end
     end

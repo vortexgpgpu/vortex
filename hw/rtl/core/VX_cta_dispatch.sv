@@ -24,7 +24,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     VX_kmu_bus_if.slave             kmu_bus_if,
 
     // from scheduler
-    input wire [NUM_WARPS-1:0]     active_warps,
+    input wire [`VX_CFG_NUM_WARPS-1:0]     active_warps,
     input wire                      warp_done,
     input wire [NW_WIDTH-1:0]       warp_done_wid,
 
@@ -32,15 +32,15 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     output wire                     cta_fire,
     output wire [NW_WIDTH-1:0]      cta_wid,
     output wire [PC_BITS-1:0]       cta_PC,
-    output wire [NUM_THREADS-1:0]  cta_tmask,
+    output wire [`VX_CFG_NUM_THREADS-1:0]  cta_tmask,
     output cta_csrs_t               cta_csrs,
     output wire                     cta_init,
     output wire                     busy
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam NUM_CTA_SLOTS= NUM_WARPS;
+    localparam NUM_CTA_SLOTS= `VX_CFG_NUM_WARPS;
     localparam CS_BITS      = NW_WIDTH; // UP(NW_BITS): at least 1 to avoid zero-width when NUM_WARPS=1
-    localparam LMEM_SIZE    = (1 << LMEM_LOG_SIZE);
+    localparam LMEM_SIZE    = (1 << `VX_CFG_LMEM_LOG_SIZE);
 
     // -------------------------------------------------------------------------
     // CTA table — in-order FIFO ring.
@@ -57,9 +57,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire                    lmem_size_read;
     wire                    lmem_size_write;
     wire [CS_BITS-1:0]      lmem_size_waddr;
-    wire [LMEM_LOG_SIZE:0] lmem_size_wdata;
+    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_size_wdata;
     wire [CS_BITS-1:0]      lmem_size_raddr;
-    wire [LMEM_LOG_SIZE:0] lmem_size_rdata;
+    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_size_rdata;
 
     VX_dp_ram #(
         .DATAW (NW_WIDTH+1),
@@ -79,7 +79,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     );
 
     VX_dp_ram #(
-        .DATAW (LMEM_LOG_SIZE+1),
+        .DATAW (`VX_CFG_LMEM_LOG_SIZE+1),
         .SIZE  (NUM_CTA_SLOTS),
         .RDW_MODE ("R"),
         .OUT_REG (1)
@@ -101,14 +101,14 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [NW_WIDTH:0]        slot_count_r;          // number of occupied slots (0..NUM_WARPS)
 
     // LMEM ring-buffer
-    reg [LMEM_LOG_SIZE-1:0] lmem_tail_r;
-    reg [LMEM_LOG_SIZE:0]   free_size_r;          // available bytes (0..LMEM_SIZE)
-    reg [LMEM_LOG_SIZE-1:0] cur_lmem_base_r;      // latched at accept, stable through DISPATCH
+    reg [`VX_CFG_LMEM_LOG_SIZE-1:0] lmem_tail_r;
+    reg [`VX_CFG_LMEM_LOG_SIZE:0]   free_size_r;          // available bytes (0..LMEM_SIZE)
+    reg [`VX_CFG_LMEM_LOG_SIZE-1:0] cur_lmem_base_r;      // latched at accept, stable through DISPATCH
 
     // Reverse lookup: warp-ID → CTA slot index. A flop array indexed by wid,
     // updated on each warp dispatch. Combinational read on warp_done lets the
     // retirement path skip the registered raddr that a DP-RAM would require.
-    reg [NUM_WARPS-1:0][CS_BITS-1:0] cta_slot_per_warp_r;
+    reg [`VX_CFG_NUM_WARPS-1:0][CS_BITS-1:0] cta_slot_per_warp_r;
     wire [CS_BITS-1:0] done_slot = cta_slot_per_warp_r[warp_done_wid];
 
     // Registered retirement signals. The pipeline holds two stages: warp_done_r
@@ -121,7 +121,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     // Kernel initialization tracking
     reg [7:0]           cur_ctx_id_r;
-    reg [NUM_WARPS-1:0] warp_init_mask_r;
+    reg [`VX_CFG_NUM_WARPS-1:0] warp_init_mask_r;
     reg                 warp_skip_init_r;
 
     // -------------------------------------------------------------------------
@@ -134,12 +134,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     reg [2:0][31:0]                 block_idx_r;
     reg [2:0][CTA_TID_WIDTH:0]      block_dim_r;
     reg [2:0][31:0]                 grid_dim_r;
-    reg [MEM_ADDR_WIDTH-1:0]       param_r;
+    reg [`VX_CFG_MEM_ADDR_WIDTH-1:0]       param_r;
     reg [CTA_TID_WIDTH:0]           block_size_r;
     reg [2:0][CTA_TID_WIDTH-1:0]    warp_step_r;
     reg                             warp_fire_r;
     reg [NW_WIDTH-1:0]              warp_id_r;
-    reg [NUM_THREADS-1:0]          warp_tmask_r;
+    reg [`VX_CFG_NUM_THREADS-1:0]          warp_tmask_r;
     reg [NW_WIDTH-1:0]              cta_rank_r;
     reg [2:0][CTA_TID_WIDTH-1:0]    thread_idx_r;
     reg [CS_BITS-1:0]               cur_slot_r;
@@ -147,11 +147,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // -------------------------------------------------------------------------
     // Free-warp selection
     // -------------------------------------------------------------------------
-    reg  [NUM_WARPS-1:0] dispatched_warps;
+    reg  [`VX_CFG_NUM_WARPS-1:0] dispatched_warps;
     wire [NW_WIDTH-1:0] warp_id_n;
     wire                warp_ready;
     VX_priority_encoder #(
-        .N       (NUM_WARPS),
+        .N       (`VX_CFG_NUM_WARPS),
         .REVERSE (0)
     ) priority_enc (
         .data_in   (~(active_warps | dispatched_warps)),
@@ -168,7 +168,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [NW_WIDTH:0]      cta_num_warps;
     wire [NW_WIDTH:0]      kmu_num_warps;
     wire [CTA_TID_WIDTH:0] block_size_next;
-    wire [NUM_THREADS-1:0] partial_tmask;
+    wire [`VX_CFG_NUM_THREADS-1:0] partial_tmask;
 
     if (NT_BITS > 0) begin : g_nt_nonzero
         // Ceiling division block_size / NUM_THREADS: upper bits + OR of lower bits.
@@ -178,13 +178,13 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         // Shared block_size decrement: low NT_BITS bits unchanged; upper bits decrement by 1.
         assign block_size_next = {block_size_r[CTA_TID_WIDTH:NT_BITS] - 1'b1, block_size_r[NT_BITS-1:0]};
         // Partial-warp mask: (1 << count) - 1 where count = block_size_r[NT_BITS-1:0]
-        assign partial_tmask = (NUM_THREADS'(1) << block_size_r[NT_BITS-1:0]) - NUM_THREADS'(1);
+        assign partial_tmask = (`VX_CFG_NUM_THREADS'(1) << block_size_r[NT_BITS-1:0]) - `VX_CFG_NUM_THREADS'(1);
     end else begin : g_nt_zero
         // NT_BITS=0: NUM_THREADS=1, each warp has exactly 1 thread, no partial warps.
         assign cta_num_warps = (NW_WIDTH+1)'(block_size_r);
         assign kmu_num_warps = (NW_WIDTH+1)'(kmu_bus_if.data.block_size);
         assign block_size_next = (CTA_TID_WIDTH+1)'(block_size_r - 1'b1);
-        assign partial_tmask = NUM_THREADS'(0);
+        assign partial_tmask = `VX_CFG_NUM_THREADS'(0);
     end
 
     // Full-warp test: upper bits non-zero (no comparator)
@@ -238,18 +238,18 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // If lmem_tail + lmem_size > LMEM_SIZE, we must pad the tail to 0
     // (waste the remaining fragment) to avoid addresses escaping the
     // LSU's LMEM range check.
-    wire [LMEM_LOG_SIZE:0] lmem_next_tail =
-        {1'b0, lmem_tail_r} + (LMEM_LOG_SIZE+1)'(kmu_bus_if.data.lmem_size);
-    wire lmem_alloc_wraps = lmem_next_tail[LMEM_LOG_SIZE];
+    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_next_tail =
+        {1'b0, lmem_tail_r} + (`VX_CFG_LMEM_LOG_SIZE+1)'(kmu_bus_if.data.lmem_size);
+    wire lmem_alloc_wraps = lmem_next_tail[`VX_CFG_LMEM_LOG_SIZE];
 
     // When wrapping, the wasted padding counts against free space.
-    wire [LMEM_LOG_SIZE:0] lmem_padding =
-        lmem_alloc_wraps ? ((LMEM_LOG_SIZE+1)'(1 << LMEM_LOG_SIZE) - {1'b0, lmem_tail_r})
-                         : (LMEM_LOG_SIZE+1)'(0);
-    wire [LMEM_LOG_SIZE:0] lmem_total_cost =
-        (LMEM_LOG_SIZE+1)'(kmu_bus_if.data.lmem_size) + lmem_padding;
+    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_padding =
+        lmem_alloc_wraps ? ((`VX_CFG_LMEM_LOG_SIZE+1)'(1 << `VX_CFG_LMEM_LOG_SIZE) - {1'b0, lmem_tail_r})
+                         : (`VX_CFG_LMEM_LOG_SIZE+1)'(0);
+    wire [`VX_CFG_LMEM_LOG_SIZE:0] lmem_total_cost =
+        (`VX_CFG_LMEM_LOG_SIZE+1)'(kmu_bus_if.data.lmem_size) + lmem_padding;
 
-    wire table_notfull = (slot_count_r < (NW_WIDTH+1)'(NUM_WARPS));
+    wire table_notfull = (slot_count_r < (NW_WIDTH+1)'(`VX_CFG_NUM_WARPS));
     wire lmem_ok = (free_size_r >= lmem_total_cost);
     assign kmu_bus_if.ready = (state == IDLE) && table_notfull && lmem_ok && !rem_warps_write_r;
 
@@ -289,7 +289,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             tail_r          <= '0;
             lmem_tail_r     <= '0;
             cur_lmem_base_r <= '0;
-            free_size_r     <= (LMEM_LOG_SIZE+1)'(LMEM_SIZE);
+            free_size_r     <= (`VX_CFG_LMEM_LOG_SIZE+1)'(LMEM_SIZE);
             slot_valid_r    <= '0;
             dispatched_warps<= '0;
             slot_count_r    <= '0;
@@ -349,7 +349,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             head_reclaimable_dly <= head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r));
 
             if (head_reclaimable_s1 || (cta_done && (done_slot_r_dly == head_r))) begin
-                head_r <= head_r + CS_BITS'((NUM_WARPS > 1) ? 1 : 0);
+                head_r <= head_r + CS_BITS'((`VX_CFG_NUM_WARPS > 1) ? 1 : 0);
             end
 
             if (head_reclaimable_dly) begin
@@ -381,12 +381,12 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         // boundary, pad the tail to 0 first.
                         cur_lmem_base_r <= lmem_alloc_wraps ? '0 : lmem_tail_r;
                         lmem_tail_r     <= lmem_alloc_wraps
-                            ? LMEM_LOG_SIZE'(kmu_bus_if.data.lmem_size)
-                            : lmem_next_tail[LMEM_LOG_SIZE-1:0];
+                            ? `VX_CFG_LMEM_LOG_SIZE'(kmu_bus_if.data.lmem_size)
+                            : lmem_next_tail[`VX_CFG_LMEM_LOG_SIZE-1:0];
 
                         // Allocate slot at tail; cur_cta_slot = tail_r (before increment)
                         slot_valid_r[tail_r] <= 1'b1;
-                        tail_r <= tail_r + CS_BITS'((NUM_WARPS > 1) ? 1 : 0);
+                        tail_r <= tail_r + CS_BITS'((`VX_CFG_NUM_WARPS > 1) ? 1 : 0);
                         cur_slot_r <= tail_r;
                         dispatched_warps <= '0;
                         state <= DISPATCH;
@@ -399,7 +399,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         warp_id_r    <= warp_id_n;
                         dispatched_warps[warp_id_n] <= 1'b1;
                         // Full warp: all ones.  Partial: (1<<count)-1, no subtrahend barrel shift.
-                        warp_tmask_r <= is_full_warp ? {NUM_THREADS{1'b1}} : partial_tmask;
+                        warp_tmask_r <= is_full_warp ? {`VX_CFG_NUM_THREADS{1'b1}} : partial_tmask;
                         warp_skip_init_r <= warp_init_mask_r[warp_id_n];
                     end else begin
                         warp_fire_r <= 0;
@@ -451,8 +451,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign cta_csrs.block_dim  = block_dim_r;
     assign cta_csrs.grid_dim   = grid_dim_r;
     assign cta_csrs.param      = param_r;
-    assign cta_csrs.lmem_addr  = MEM_ADDR_WIDTH'(LMEM_BASE_ADDR)
-                               | MEM_ADDR_WIDTH'(cur_lmem_base_r);
+    assign cta_csrs.lmem_addr  = `VX_CFG_MEM_ADDR_WIDTH'(`VX_MEM_LMEM_BASE_ADDR)
+                               | `VX_CFG_MEM_ADDR_WIDTH'(cur_lmem_base_r);
 
     assign busy = (state == DISPATCH);
 
@@ -488,7 +488,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             `TRACE(1, ("%t: %s dispatch: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, param=0x%0h, lmem_addr=0x%0h, init=%b\n",
                 $time, INSTANCE_ID, warp_id_r, cur_slot_r, to_fullPC(warp_PC),
                 warp_tmask_r, param_r,
-                (MEM_ADDR_WIDTH'(LMEM_BASE_ADDR) | MEM_ADDR_WIDTH'(cur_lmem_base_r)),
+                (`VX_CFG_MEM_ADDR_WIDTH'(`VX_MEM_LMEM_BASE_ADDR) | `VX_CFG_MEM_ADDR_WIDTH'(cur_lmem_base_r)),
                 ~warp_skip_init_r))
         end
         // Warp retirement / CTA done

@@ -31,16 +31,16 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     // Inputs
-    VX_dispatch_if.slave    dispatch_if [ISSUE_WIDTH],
+    VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
 
     // Outputs
-    VX_commit_if.master     commit_if [ISSUE_WIDTH]
+    VX_commit_if.master     commit_if [`VX_CFG_ISSUE_WIDTH]
 );
-    localparam BLOCK_SIZE = NUM_TCU_BLOCKS;
-    localparam NUM_LANES  = NUM_TCU_LANES;
+    localparam BLOCK_SIZE = `VX_CFG_NUM_TCU_BLOCKS;
+    localparam NUM_LANES  = `VX_CFG_NUM_TCU_LANES;
 
-    `STATIC_ASSERT (BLOCK_SIZE == ISSUE_WIDTH, ("must be full issue execution"));
-    `STATIC_ASSERT (NUM_LANES == NUM_THREADS, ("must be full warp execution"));
+    `STATIC_ASSERT (BLOCK_SIZE == `VX_CFG_ISSUE_WIDTH, ("must be full issue execution"));
+    `STATIC_ASSERT (NUM_LANES == `VX_CFG_NUM_THREADS, ("must be full warp execution"));
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
 
     VX_execute_if #(
@@ -70,7 +70,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // VX_tcu_mbuf).
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    localparam BANK_ADDR_WIDTH = LMEM_LOG_SIZE - $clog2(XLEN / 8) - $clog2(LMEM_NUM_BANKS);
+    localparam BANK_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - $clog2(`VX_CFG_XLEN / 8) - $clog2(`VX_CFG_LMEM_NUM_BANKS);
 
     // Per-block uop observation, packed for VX_tcu_tbuf (one bit/lane per block).
     wire [BLOCK_SIZE-1:0]                    req_valid_arr;
@@ -79,8 +79,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BLOCK_SIZE-1:0][3:0]               req_step_k_arr;
     wire [BLOCK_SIZE-1:0][3:0]               req_step_n_arr;
     wire [BLOCK_SIZE-1:0][1:0]               req_cd_nregs_arr;
-    wire [BLOCK_SIZE-1:0][XLEN-1:0]         req_desc_a_arr;
-    wire [BLOCK_SIZE-1:0][XLEN-1:0]         req_desc_b_arr;
+    wire [BLOCK_SIZE-1:0][`VX_CFG_XLEN-1:0]         req_desc_a_arr;
+    wire [BLOCK_SIZE-1:0][`VX_CFG_XLEN-1:0]         req_desc_b_arr;
     wire [BLOCK_SIZE-1:0]                    req_a_is_smem_arr;
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [BLOCK_SIZE-1:0]                    req_is_sparse_arr;
@@ -109,8 +109,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
 
     // Per-block tile buffer outputs (rs2 broadcast, rs1 per-block, ready ANDed)
-    wire [BLOCK_SIZE-1:0][TCU_BLOCK_CAP-1:0][XLEN-1:0]    tbuf_rs1_data;
-    wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][XLEN-1:0] tbuf_rs2_data;
+    wire [BLOCK_SIZE-1:0][TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0]    tbuf_rs1_data;
+    wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] tbuf_rs2_data;
     wire [BLOCK_SIZE-1:0]                                  tbuf_ready;
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0]    tbuf_sp_meta;
@@ -124,7 +124,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_tcu_tbuf #(
         .INSTANCE_ID    (`SFORMATF(("%s-tbuf", INSTANCE_ID))),
-        .NUM_BANKS      (LMEM_NUM_BANKS),
+        .NUM_BANKS      (`VX_CFG_LMEM_NUM_BANKS),
         .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH),
         .BLOCK_SIZE     (BLOCK_SIZE)
     ) tbuf (

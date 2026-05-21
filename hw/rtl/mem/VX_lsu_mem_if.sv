@@ -18,7 +18,7 @@ interface VX_lsu_mem_if import VX_gpu_pkg::*; #(
     parameter DATA_SIZE  = 1,
     parameter TAG_WIDTH  = 1,
     parameter USER_WIDTH = MEM_ATTR_WIDTH,
-    parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
+    parameter ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
 ) ();
 
     typedef struct packed {

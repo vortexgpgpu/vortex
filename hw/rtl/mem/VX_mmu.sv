@@ -9,7 +9,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     parameter NUM_REQS       = DCACHE_NUM_REQS,
     parameter DATA_SIZE      = DCACHE_WORD_SIZE,
     parameter TAG_WIDTH      = DCACHE_TAG_WIDTH_BASE,
-    parameter ADDR_WIDTH     = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
+    parameter ADDR_WIDTH     = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
     parameter ATTR_WIDTH    = MEM_ATTR_WIDTH,
     parameter EBUF_SIZE      = 2
 ) (

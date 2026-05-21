@@ -46,9 +46,9 @@ module VX_graphics import VX_gpu_pkg::*; #(
     // unit's internal case-statement filters by DCR address range. The
     // VX_dcr_arb owns the rsp_valid/rsp_data signaling on dcr_bus_if so
     // VX_graphics doesn't drive them itself.
-    localparam NUM_DCR_REQS = EXT_TEX_ENABLED * NUM_TEX_CORES
-                            + EXT_RASTER_ENABLED * NUM_RASTER_CORES
-                            + EXT_OM_ENABLED * NUM_OM_CORES;
+    localparam NUM_DCR_REQS = `VX_CFG_EXT_TEX_ENABLED * `VX_CFG_NUM_TEX_CORES
+                            + `VX_CFG_EXT_RASTER_ENABLED * `VX_CFG_NUM_RASTER_CORES
+                            + `VX_CFG_EXT_OM_ENABLED * `VX_CFG_NUM_OM_CORES;
 
     VX_dcr_bus_if per_unit_dcr_bus_if [NUM_DCR_REQS] ();
 
@@ -66,11 +66,11 @@ module VX_graphics import VX_gpu_pkg::*; #(
     localparam DCR_TEX_BASE    = 0;
 `endif
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    localparam DCR_RASTER_BASE = EXT_TEX_ENABLED * NUM_TEX_CORES;
+    localparam DCR_RASTER_BASE = `VX_CFG_EXT_TEX_ENABLED * `VX_CFG_NUM_TEX_CORES;
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
-    localparam DCR_OM_BASE     = EXT_TEX_ENABLED * NUM_TEX_CORES
-                               + EXT_RASTER_ENABLED * NUM_RASTER_CORES;
+    localparam DCR_OM_BASE     = `VX_CFG_EXT_TEX_ENABLED * `VX_CFG_NUM_TEX_CORES
+                               + `VX_CFG_EXT_RASTER_ENABLED * `VX_CFG_NUM_RASTER_CORES;
 `endif
 
     /////////////////////////////////////////////////////////////////////////////
@@ -82,20 +82,20 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (TCACHE_WORD_SIZE),
         .TAG_WIDTH (TCACHE_TAG_WIDTH)
-    ) tcache_bus_if [NUM_TEX_CORES * TCACHE_NUM_REQS] ();
+    ) tcache_bus_if [`VX_CFG_NUM_TEX_CORES * TCACHE_NUM_REQS] ();
 
     VX_tex_bus_if #(
-        .NUM_LANES (NUM_SFU_LANES),
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
         .TAG_WIDTH (TEX_REQ_ARB2_TAG_WIDTH)
-    ) tex_bus_if [NUM_TEX_CORES] ();
+    ) tex_bus_if [`VX_CFG_NUM_TEX_CORES] ();
 
     VX_tex_arb #(
         .NUM_INPUTS  (NUM_SOCKETS),
-        .NUM_LANES   (NUM_SFU_LANES),
-        .NUM_OUTPUTS (NUM_TEX_CORES),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
+        .NUM_OUTPUTS (`VX_CFG_NUM_TEX_CORES),
         .TAG_WIDTH   (TEX_REQ_ARB1_TAG_WIDTH),
         .ARBITER     ("R"),
-        .OUT_BUF_REQ ((NUM_SOCKETS != NUM_TEX_CORES) ? 2 : 0)
+        .OUT_BUF_REQ ((NUM_SOCKETS != `VX_CFG_NUM_TEX_CORES) ? 2 : 0)
     ) tex_cluster_arb (
         .clk        (clk),
         .reset      (reset),
@@ -103,10 +103,10 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .bus_out_if (tex_bus_if)
     );
 
-    for (genvar i = 0; i < NUM_TEX_CORES; ++i) begin : g_tex_unit
+    for (genvar i = 0; i < `VX_CFG_NUM_TEX_CORES; ++i) begin : g_tex_unit
         VX_tex_core #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-tex%0d", CLUSTER_ID, i))),
-            .NUM_LANES   (NUM_SFU_LANES),
+            .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
             .TAG_WIDTH   (TEX_REQ_ARB2_TAG_WIDTH)
         ) tex_core (
             .clk          (clk),
@@ -124,20 +124,20 @@ module VX_graphics import VX_gpu_pkg::*; #(
 
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("cluster%0d-tcache", CLUSTER_ID))),
-        .NUM_UNITS      (NUM_TCACHES),
-        .NUM_INPUTS     (NUM_TEX_CORES),
+        .NUM_UNITS      (`VX_CFG_NUM_TCACHES),
+        .NUM_INPUTS     (`VX_CFG_NUM_TEX_CORES),
         .TAG_SEL_IDX    (0),
-        .CACHE_SIZE     (TCACHE_SIZE),
+        .CACHE_SIZE     (`VX_CFG_TCACHE_SIZE),
         .LINE_SIZE      (TCACHE_LINE_SIZE),
-        .NUM_BANKS      (TCACHE_NUM_BANKS),
-        .NUM_WAYS       (TCACHE_NUM_WAYS),
+        .NUM_BANKS      (`VX_CFG_TCACHE_NUM_BANKS),
+        .NUM_WAYS       (`VX_CFG_TCACHE_NUM_WAYS),
         .WORD_SIZE      (TCACHE_WORD_SIZE),
         .NUM_REQS       (TCACHE_NUM_REQS),
         .MEM_PORTS      (TCACHE_MEM_PORTS),
-        .CRSQ_SIZE      (TCACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (TCACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (TCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (TCACHE_MREQ_SIZE),
+        .CRSQ_SIZE      (`VX_CFG_TCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`VX_CFG_TCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`VX_CFG_TCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`VX_CFG_TCACHE_MREQ_SIZE),
         .TAG_WIDTH      (TCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
         .WRITEBACK      (0),
@@ -166,23 +166,23 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (RCACHE_WORD_SIZE),
         .TAG_WIDTH (RCACHE_TAG_WIDTH)
-    ) rcache_bus_if [NUM_RASTER_CORES * RCACHE_NUM_REQS] ();
+    ) rcache_bus_if [`VX_CFG_NUM_RASTER_CORES * RCACHE_NUM_REQS] ();
 
     VX_raster_bus_if #(
-        .NUM_LANES (NUM_SFU_LANES)
-    ) raster_bus_if [NUM_RASTER_CORES] ();
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) raster_bus_if [`VX_CFG_NUM_RASTER_CORES] ();
 
-    for (genvar i = 0; i < NUM_RASTER_CORES; ++i) begin : g_raster_unit
+    for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_raster_unit
         VX_raster_core #(
             .INSTANCE_ID     (`SFORMATF(("cluster%0d-raster%0d", CLUSTER_ID, i))),
-            .INSTANCE_IDX    (CLUSTER_ID * NUM_RASTER_CORES + i),
-            .NUM_INSTANCES   (NUM_CLUSTERS * NUM_RASTER_CORES),
-            .NUM_SLICES      (RASTER_NUM_SLICES),
-            .TILE_LOGSIZE    (RASTER_TILE_LOGSIZE),
-            .BLOCK_LOGSIZE   (RASTER_BLOCK_LOGSIZE),
-            .MEM_FIFO_DEPTH  (RASTER_MEM_FIFO_DEPTH),
-            .QUAD_FIFO_DEPTH (RASTER_QUAD_FIFO_DEPTH),
-            .OUTPUT_QUADS    (NUM_SFU_LANES)
+            .INSTANCE_IDX    (CLUSTER_ID * `VX_CFG_NUM_RASTER_CORES + i),
+            .NUM_INSTANCES   (`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES),
+            .NUM_SLICES      (`VX_CFG_RASTER_NUM_SLICES),
+            .TILE_LOGSIZE    (`VX_CFG_RASTER_TILE_LOGSIZE),
+            .BLOCK_LOGSIZE   (`VX_CFG_RASTER_BLOCK_LOGSIZE),
+            .MEM_FIFO_DEPTH  (`VX_CFG_RASTER_MEM_FIFO_DEPTH),
+            .QUAD_FIFO_DEPTH (`VX_CFG_RASTER_QUAD_FIFO_DEPTH),
+            .OUTPUT_QUADS    (`VX_CFG_NUM_SFU_LANES)
         ) raster_core (
             .clk           (clk),
             .reset         (reset),
@@ -193,11 +193,11 @@ module VX_graphics import VX_gpu_pkg::*; #(
     end
 
     VX_raster_arb #(
-        .NUM_INPUTS  (NUM_RASTER_CORES),
-        .NUM_LANES   (NUM_SFU_LANES),
+        .NUM_INPUTS  (`VX_CFG_NUM_RASTER_CORES),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (NUM_SOCKETS),
         .ARBITER     ("R"),
-        .OUT_BUF     ((NUM_SOCKETS != NUM_RASTER_CORES) ? 2 : 0)
+        .OUT_BUF     ((NUM_SOCKETS != `VX_CFG_NUM_RASTER_CORES) ? 2 : 0)
     ) raster_cluster_arb (
         .clk        (clk),
         .reset      (reset),
@@ -212,20 +212,20 @@ module VX_graphics import VX_gpu_pkg::*; #(
 
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("cluster%0d-rcache", CLUSTER_ID))),
-        .NUM_UNITS      (NUM_RCACHES),
-        .NUM_INPUTS     (NUM_RASTER_CORES),
+        .NUM_UNITS      (`VX_CFG_NUM_RCACHES),
+        .NUM_INPUTS     (`VX_CFG_NUM_RASTER_CORES),
         .TAG_SEL_IDX    (0),
-        .CACHE_SIZE     (RCACHE_SIZE),
+        .CACHE_SIZE     (`VX_CFG_RCACHE_SIZE),
         .LINE_SIZE      (RCACHE_LINE_SIZE),
-        .NUM_BANKS      (RCACHE_NUM_BANKS),
-        .NUM_WAYS       (RCACHE_NUM_WAYS),
+        .NUM_BANKS      (`VX_CFG_RCACHE_NUM_BANKS),
+        .NUM_WAYS       (`VX_CFG_RCACHE_NUM_WAYS),
         .WORD_SIZE      (RCACHE_WORD_SIZE),
         .NUM_REQS       (RCACHE_NUM_REQS),
         .MEM_PORTS      (RCACHE_MEM_PORTS),
-        .CRSQ_SIZE      (RCACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (RCACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (RCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (RCACHE_MREQ_SIZE),
+        .CRSQ_SIZE      (`VX_CFG_RCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`VX_CFG_RCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`VX_CFG_RCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`VX_CFG_RCACHE_MREQ_SIZE),
         .TAG_WIDTH      (RCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
         .WRITEBACK      (0),
@@ -254,18 +254,18 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (OCACHE_WORD_SIZE),
         .TAG_WIDTH (OCACHE_TAG_WIDTH)
-    ) ocache_bus_if [NUM_OM_CORES * OCACHE_NUM_REQS] ();
+    ) ocache_bus_if [`VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS] ();
 
     VX_om_bus_if #(
-        .NUM_LANES (NUM_SFU_LANES)
-    ) om_bus_if [NUM_OM_CORES] ();
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
+    ) om_bus_if [`VX_CFG_NUM_OM_CORES] ();
 
     VX_om_arb #(
         .NUM_INPUTS  (NUM_SOCKETS),
-        .NUM_LANES   (NUM_SFU_LANES),
-        .NUM_OUTPUTS (NUM_OM_CORES),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
+        .NUM_OUTPUTS (`VX_CFG_NUM_OM_CORES),
         .ARBITER     ("R"),
-        .OUT_BUF     ((NUM_SOCKETS != NUM_OM_CORES) ? 2 : 0)
+        .OUT_BUF     ((NUM_SOCKETS != `VX_CFG_NUM_OM_CORES) ? 2 : 0)
     ) om_cluster_arb (
         .clk        (clk),
         .reset      (reset),
@@ -273,10 +273,10 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .bus_out_if (om_bus_if)
     );
 
-    for (genvar i = 0; i < NUM_OM_CORES; ++i) begin : g_om_unit
+    for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_unit
         VX_om_core #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-om%0d", CLUSTER_ID, i))),
-            .NUM_LANES   (NUM_SFU_LANES)
+            .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
         ) om_core (
             .clk          (clk),
             .reset        (reset),
@@ -293,20 +293,20 @@ module VX_graphics import VX_gpu_pkg::*; #(
 
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("cluster%0d-ocache", CLUSTER_ID))),
-        .NUM_UNITS      (NUM_OCACHES),
-        .NUM_INPUTS     (NUM_OM_CORES),
+        .NUM_UNITS      (`VX_CFG_NUM_OCACHES),
+        .NUM_INPUTS     (`VX_CFG_NUM_OM_CORES),
         .TAG_SEL_IDX    (0),
-        .CACHE_SIZE     (OCACHE_SIZE),
+        .CACHE_SIZE     (`VX_CFG_OCACHE_SIZE),
         .LINE_SIZE      (OCACHE_LINE_SIZE),
-        .NUM_BANKS      (OCACHE_NUM_BANKS),
-        .NUM_WAYS       (OCACHE_NUM_WAYS),
+        .NUM_BANKS      (`VX_CFG_OCACHE_NUM_BANKS),
+        .NUM_WAYS       (`VX_CFG_OCACHE_NUM_WAYS),
         .WORD_SIZE      (OCACHE_WORD_SIZE),
         .NUM_REQS       (OCACHE_NUM_REQS),
         .MEM_PORTS      (OCACHE_MEM_PORTS),
-        .CRSQ_SIZE      (OCACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (OCACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (OCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (OCACHE_MREQ_SIZE),
+        .CRSQ_SIZE      (`VX_CFG_OCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`VX_CFG_OCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`VX_CFG_OCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`VX_CFG_OCACHE_MREQ_SIZE),
         .TAG_WIDTH      (OCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (0),

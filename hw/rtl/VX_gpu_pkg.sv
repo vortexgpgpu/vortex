@@ -15,22 +15,13 @@
 `define VX_GPU_PKG_VH
 
 `include "VX_define.vh"
-`include "VX_config_pkg.sv"
-`include "VX_types_pkg.sv"
 
 `IGNORE_UNUSED_BEGIN
 
 package VX_gpu_pkg;
 
-    // resolved hardware configuration lives in VX_config_pkg, and the
-    // device memory map / VM contract in VX_types_pkg; re-export both so
-    // importers of VX_gpu_pkg see every name transparently.
-    import VX_config_pkg::*;
-    export VX_config_pkg::*;
-    import VX_types_pkg::*;
-    export VX_types_pkg::*;
-
-    // These 6 configs stay here (not in VX_config_pkg): their VX_config.vh
+    // Config is consumed directly as `VX_CFG_*/`VX_MEM_*/`VX_VM_* macros from
+    // VX_define.vh. These 6 are kept as VX_gpu_pkg localparams: their VX_CFG_*
     // macros expand to the [[param]] symbols VX_CFG_{DCACHE,L2,L3}_NUM_REQS,
     // which are RTL-derived localparams declared later in this package.
     localparam DCACHE_NUM_BANKS                 = `VX_CFG_DCACHE_NUM_BANKS;
@@ -41,21 +32,21 @@ package VX_gpu_pkg;
     localparam L3_NUM_BANKS                     = `VX_CFG_L3_NUM_BANKS;
 
 
-	localparam NC_BITS = `CLOG2(NUM_CORES);
-	localparam NW_BITS = `CLOG2(NUM_WARPS);
-	localparam NT_BITS = `CLOG2(NUM_THREADS);
-	localparam NB_BITS = `CLOG2(NUM_BARRIERS);
+	localparam NC_BITS = `CLOG2(`VX_CFG_NUM_CORES);
+	localparam NW_BITS = `CLOG2(`VX_CFG_NUM_WARPS);
+	localparam NT_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
+	localparam NB_BITS = `CLOG2(`VX_CFG_NUM_BARRIERS);
 
 	localparam NC_WIDTH = `UP(NC_BITS);
 	localparam NW_WIDTH = `UP(NW_BITS);
 	localparam NT_WIDTH = `UP(NT_BITS);
 	localparam NB_WIDTH = `UP(NB_BITS);
 
-    localparam NUM_CTA_MAX = NUM_WARPS;
+    localparam NUM_CTA_MAX = `VX_CFG_NUM_WARPS;
 	localparam NCTA_BITS  = `CLOG2(NUM_CTA_MAX);
 	localparam NCTA_WIDTH = `UP(NCTA_BITS);
 
-    localparam XLENB    = XLEN / 8;
+    localparam XLENB    = `VX_CFG_XLEN / 8;
     localparam XLENB_W  = `CLOG2(XLENB);
     localparam BYTESEL_BITS = (XLENB_W + XLENB_W);
     localparam [BYTESEL_BITS-1:0] BYTESEL_DEFAULT = {XLENB_W'(XLENB-1), XLENB_W'(0)};
@@ -71,7 +62,7 @@ package VX_gpu_pkg;
     localparam REG_TYPE_I = 0;
     localparam REG_TYPE_F = 1;
 
-	localparam REG_TYPES = 1 + EXT_F_ENABLED;
+	localparam REG_TYPES = 1 + `VX_CFG_EXT_F_ENABLED;
 
 	localparam NUM_REGS = (REG_TYPES * RV_REGS);
 
@@ -83,16 +74,16 @@ package VX_gpu_pkg;
     localparam XREG_FRM    = 1;
     localparam NUM_XREGS   = 2;
 
-	localparam DV_STACK_SIZE = `UP(NUM_THREADS-1);
+	localparam DV_STACK_SIZE = `UP(`VX_CFG_NUM_THREADS-1);
 	localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
 
 	localparam PERF_CTR_BITS = 44;
 
-    localparam SIMD_COUNT = NUM_THREADS / SIMD_WIDTH;
+    localparam SIMD_COUNT = `VX_CFG_NUM_THREADS / `VX_CFG_SIMD_WIDTH;
     localparam SIMD_IDX_BITS = `CLOG2(SIMD_COUNT);
     localparam SIMD_IDX_W = `UP(SIMD_IDX_BITS);
 
-    localparam NUM_OPCS_BITS = `CLOG2(NUM_OPCS);
+    localparam NUM_OPCS_BITS = `CLOG2(`VX_CFG_NUM_OPCS);
     localparam NUM_OPCS_W = `UP(NUM_OPCS_BITS);
 
     localparam BAR_ADDR_BITS = NW_BITS + NB_BITS;
@@ -103,7 +94,7 @@ package VX_gpu_pkg;
 
     localparam UOP_PACKLD = 0;
     localparam UOP_TCU = UOP_PACKLD + 1;
-    localparam UOP_MAX = UOP_TCU + EXT_TCU_ENABLED;
+    localparam UOP_MAX = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
     localparam UOP_CTR_W = 8;
 
     localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
@@ -117,28 +108,28 @@ package VX_gpu_pkg;
 `endif
 
 `ifndef NDEBUG
-	localparam PC_BITS = XLEN;
-    function automatic logic [XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
-        to_fullPC = XLEN'(pc);
+	localparam PC_BITS = `VX_CFG_XLEN;
+    function automatic logic [`VX_CFG_XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
+        to_fullPC = `VX_CFG_XLEN'(pc);
     endfunction
-    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[XLEN-1:0] pc);
+    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`VX_CFG_XLEN-1:0] pc);
         from_fullPC = pc;
     endfunction
 `elsif VX_CFG_EXT_C_ENABLE
     // With the compressed extension, branch targets and warp PCs may be 2-byte aligned.
-    localparam PC_BITS = (XLEN-1);
-    function automatic logic [XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
-        to_fullPC = XLEN'({pc, 1'b0});
+    localparam PC_BITS = (`VX_CFG_XLEN-1);
+    function automatic logic [`VX_CFG_XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
+        to_fullPC = `VX_CFG_XLEN'({pc, 1'b0});
     endfunction
-    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[XLEN-1:0] pc);
+    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`VX_CFG_XLEN-1:0] pc);
         from_fullPC = PC_BITS'(pc >> 1);
     endfunction
 `else
-    localparam PC_BITS = (XLEN-2);
-    function automatic logic [XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
-        to_fullPC = XLEN'({pc, 2'b0});
+    localparam PC_BITS = (`VX_CFG_XLEN-2);
+    function automatic logic [`VX_CFG_XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
+        to_fullPC = `VX_CFG_XLEN'({pc, 2'b0});
     endfunction
-    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[XLEN-1:0] pc);
+    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`VX_CFG_XLEN-1:0] pc);
         from_fullPC = PC_BITS'(pc >> 2);
     endfunction
 `endif
@@ -146,7 +137,7 @@ package VX_gpu_pkg;
     localparam NUM_SRC_OPDS = 3;
     localparam SRC_OPD_BITS = `CLOG2(NUM_SRC_OPDS);
     localparam SRC_OPD_WIDTH = `UP(SRC_OPD_BITS);
-    localparam NUM_SOCKETS = `UP(NUM_CORES / SOCKET_SIZE);
+    localparam NUM_SOCKETS = `UP(`VX_CFG_NUM_CORES / `VX_CFG_SOCKET_SIZE);
 
 
     // ===== AMO (RVA) sideband =====================================
@@ -234,7 +225,7 @@ package VX_gpu_pkg;
 `ifdef VX_DBG_STALL_TIMEOUT
     localparam STALL_TIMEOUT = `VX_DBG_STALL_TIMEOUT;
 `else
-    localparam STALL_TIMEOUT = (100000 * (1 ** (L2_ENABLED + L3_ENABLED)));
+    localparam STALL_TIMEOUT = (100000 * (1 ** (`VX_CFG_L2_ENABLED + `VX_CFG_L3_ENABLED)));
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
@@ -242,8 +233,8 @@ package VX_gpu_pkg;
 	localparam EX_ALU = 0;
 	localparam EX_LSU = 1;
 	localparam EX_SFU = 2;
-	localparam EX_FPU = (EX_SFU + EXT_F_ENABLED);
-    localparam EX_TCU = (EX_FPU + EXT_TCU_ENABLED);
+	localparam EX_FPU = (EX_SFU + `VX_CFG_EXT_F_ENABLED);
+    localparam EX_TCU = (EX_FPU + `VX_CFG_EXT_TCU_ENABLED);
 
 	localparam NUM_EX_UNITS = EX_TCU + 1;
 	localparam EX_BITS = `CLOG2(NUM_EX_UNITS);
@@ -549,14 +540,14 @@ package VX_gpu_pkg;
 
     /////////////////////////////// Issue parameters //////////////////////////
 
-    localparam ISSUE_ISW_BITS = `CLOG2(ISSUE_WIDTH);
-    localparam ISSUE_ISW_SIZEW = `CLOG2(ISSUE_WIDTH + 1);
+    localparam ISSUE_ISW_BITS = `CLOG2(`VX_CFG_ISSUE_WIDTH);
+    localparam ISSUE_ISW_SIZEW = `CLOG2(`VX_CFG_ISSUE_WIDTH + 1);
     localparam ISSUE_ISW_W = `UP(ISSUE_ISW_BITS);
-    localparam PER_ISSUE_WARPS = NUM_WARPS / ISSUE_WIDTH;
+    localparam PER_ISSUE_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_ISSUE_WIDTH;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 
-    localparam PER_OPC_WARPS = PER_ISSUE_WARPS / NUM_OPCS;
+    localparam PER_OPC_WARPS = PER_ISSUE_WARPS / `VX_CFG_NUM_OPCS;
     localparam PER_OPC_NW_BITS = `CLOG2(PER_OPC_WARPS);
     localparam PER_OPC_NW_W = `UP(PER_OPC_NW_BITS);
 
@@ -607,23 +598,23 @@ package VX_gpu_pkg;
     ///////////////////////////////////////////////////////////////////////////
 
     typedef struct packed {
-        logic [NUM_THREADS-1:0] tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0] tmask;
     } tmc_t;
 
     typedef struct packed {
-        logic [NUM_WARPS-1:0]  wmask;
+        logic [`VX_CFG_NUM_WARPS-1:0]  wmask;
         logic [PC_BITS-1:0]     pc;
     } wspawn_t;
 
     typedef struct packed {
         logic                   is_dvg;
-        logic [NUM_THREADS-1:0] then_tmask;
-        logic [NUM_THREADS-1:0] else_tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0] then_tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0] else_tmask;
         logic [PC_BITS-1:0]     next_pc;
     } split_t;
 
     typedef struct packed {
-        logic [NUM_THREADS-1:0] tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0] tmask;
         logic [DV_STACK_SIZEW-1:0] stack_ptr;
     } join_t;
 
@@ -669,8 +660,8 @@ package VX_gpu_pkg;
         logic [2:0][31:0] block_idx;
         logic [2:0][CTA_TID_WIDTH:0] block_dim;
         logic [2:0][31:0] grid_dim;
-        logic [MEM_ADDR_WIDTH-1:0] param;
-        logic [LMEM_LOG_SIZE:0] lmem_size;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
+        logic [`VX_CFG_LMEM_LOG_SIZE:0] lmem_size;
         logic [CTA_TID_WIDTH:0] block_size;
         logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
     } kmu_req_t;
@@ -683,8 +674,8 @@ package VX_gpu_pkg;
         logic [2:0][31:0] block_idx;
         logic [2:0][CTA_TID_WIDTH:0] block_dim;
         logic [2:0][31:0] grid_dim;
-        logic [MEM_ADDR_WIDTH-1:0] param;
-        logic [MEM_ADDR_WIDTH-1:0] lmem_addr;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] lmem_addr;
     } cta_csrs_t;
 
     typedef struct packed {
@@ -692,8 +683,8 @@ package VX_gpu_pkg;
         logic [2:0][31:0]               block_idx;
         logic [2:0][CTA_TID_WIDTH:0]    block_dim;
         logic [2:0][31:0]               grid_dim;
-        logic [MEM_ADDR_WIDTH-1:0]     param;
-        logic [MEM_ADDR_WIDTH-1:0]     lmem_addr;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]     param;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]     lmem_addr;
     } cta_ctx_t;
 
     typedef struct packed {
@@ -844,7 +835,7 @@ package VX_gpu_pkg;
         logic [UUID_WIDTH-1:0]  uuid;
         logic [NW_WIDTH-1:0]    wid;
         logic [NCTA_WIDTH-1:0]  cta_id;
-        logic [NUM_THREADS-1:0] tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0] tmask;
         logic [PC_BITS-1:0]     PC;
         logic [31:0]            instr;
     `ifdef VX_CFG_EXT_C_ENABLE
@@ -856,7 +847,7 @@ package VX_gpu_pkg;
         logic [UUID_WIDTH-1:0]      uuid;
         logic [NW_WIDTH-1:0]        wid;
         logic [NCTA_WIDTH-1:0]      cta_id;
-        logic [NUM_THREADS-1:0]    tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
         logic [EX_BITS-1:0]         ex_type;
         logic [INST_OP_BITS-1:0]    op_type;
@@ -876,7 +867,7 @@ package VX_gpu_pkg;
         logic [UUID_WIDTH-1:0]      uuid;
         logic [NW_WIDTH-1:0]        wid;
         logic [NCTA_WIDTH-1:0]      cta_id;
-        logic [NUM_THREADS-1:0]    tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
         logic [EX_BITS-1:0]         ex_type;
         logic [INST_OP_BITS-1:0]    op_type;
@@ -898,7 +889,7 @@ package VX_gpu_pkg;
         logic [UUID_WIDTH-1:0]      uuid;
         logic [ISSUE_WIS_W-1:0]     wis;
         logic [NCTA_WIDTH-1:0]      cta_id;
-        logic [NUM_THREADS-1:0]    tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0]    tmask;
         logic [PC_BITS-1:0]         PC;
         logic [EX_BITS-1:0]         ex_type;
         logic [INST_OP_BITS-1:0]    op_type;
@@ -918,7 +909,7 @@ package VX_gpu_pkg;
         logic [ISSUE_WIS_W-1:0]             wis;
         logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
-        logic [SIMD_WIDTH-1:0]             tmask;
+        logic [`VX_CFG_SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
         logic [EX_BITS-1:0]                 ex_type;
         logic [INST_OP_BITS-1:0]            op_type;
@@ -927,9 +918,9 @@ package VX_gpu_pkg;
         logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
         logic [BYTESEL_BITS-1:0]            bytesel;
-        logic [SIMD_WIDTH-1:0][XLEN-1:0]  rs1_data;
-        logic [SIMD_WIDTH-1:0][XLEN-1:0]  rs2_data;
-        logic [SIMD_WIDTH-1:0][XLEN-1:0]  rs3_data;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0]  rs1_data;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0]  rs2_data;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0]  rs3_data;
         logic                               sop;
         logic                               eop;
     } operands_t;
@@ -940,7 +931,7 @@ package VX_gpu_pkg;
         logic [ISSUE_WIS_W-1:0]             wis;
         logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
-        logic [SIMD_WIDTH-1:0]             tmask;
+        logic [`VX_CFG_SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
         logic                               wb;
         logic [NUM_XREGS-1:0]               wr_xregs;
@@ -948,9 +939,9 @@ package VX_gpu_pkg;
         logic [BYTESEL_BITS-1:0]            bytesel;
         logic [INST_OP_BITS-1:0]            op_type;
         op_args_t                           op_args;
-        logic [SIMD_WIDTH-1:0][XLEN-1:0]  rs1_data;
-        logic [SIMD_WIDTH-1:0][XLEN-1:0]  rs2_data;
-        logic [SIMD_WIDTH-1:0][XLEN-1:0]  rs3_data;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0]  rs1_data;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0]  rs2_data;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0]  rs3_data;
         logic                               sop;
         logic                               eop;
     } dispatch_t;
@@ -960,13 +951,13 @@ package VX_gpu_pkg;
         logic [NW_WIDTH-1:0]                wid;
         logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
-        logic [SIMD_WIDTH-1:0]             tmask;
+        logic [`VX_CFG_SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
         logic                               wb;
         logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
         logic [BYTESEL_BITS-1:0]            bytesel;
-        logic [SIMD_WIDTH-1:0][XLEN-1:0]  data;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0]  data;
         logic                               sop;
         logic                               eop;
     } commit_t;
@@ -976,13 +967,13 @@ package VX_gpu_pkg;
         logic [ISSUE_WIS_W-1:0]             wis;
         logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
-        logic [SIMD_WIDTH-1:0]             tmask;
+        logic [`VX_CFG_SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
         logic                               wb;
         logic [NUM_XREGS-1:0]               wr_xregs;
         logic [NUM_REGS_BITS-1:0]           rd;
-        logic [SIMD_WIDTH-1:0][XLENB-1:0]  byteen;
-        logic [SIMD_WIDTH-1:0][XLEN-1:0]  data;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][XLENB-1:0]  byteen;
+        logic [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0]  data;
         logic                               sop;
         logic                               eop;
     } writeback_t;
@@ -991,13 +982,13 @@ package VX_gpu_pkg;
         logic [UUID_WIDTH-1:0]              uuid;
         logic [NW_WIDTH-1:0]                wid;
         logic [NCTA_WIDTH-1:0]              cta_id;
-        logic [NUM_THREADS-1:0]            tmask;
+        logic [`VX_CFG_NUM_THREADS-1:0]            tmask;
         logic [PC_BITS-1:0]                 PC;
     } schedule_t;
 
-    `DECL_EXECUTE_T (alu, NUM_ALU_LANES);
-    `DECL_EXECUTE_T (lsu, NUM_LSU_LANES);
-    `DECL_EXECUTE_T (sfu, NUM_SFU_LANES);
+    `DECL_EXECUTE_T (alu, `VX_CFG_NUM_ALU_LANES);
+    `DECL_EXECUTE_T (lsu, `VX_CFG_NUM_LSU_LANES);
+    `DECL_EXECUTE_T (sfu, `VX_CFG_NUM_SFU_LANES);
 
     //////////////////////////// Perf counter types ///////////////////////////
 
@@ -1115,44 +1106,44 @@ package VX_gpu_pkg;
     ///////////////////////// LSU memory Parameters ///////////////////////////
 
     localparam LSU_WORD_SIZE        = XLENB;
-    localparam LSU_ADDR_WIDTH	    = (MEM_ADDR_WIDTH - `CLOG2(LSU_WORD_SIZE));
+    localparam LSU_ADDR_WIDTH	    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(LSU_WORD_SIZE));
     localparam LSU_MEM_BATCHES      = 1;
-    localparam LSU_TAG_ID_BITS      = (`CLOG2(LSUQ_IN_SIZE) + `CLOG2(LSU_MEM_BATCHES));
+    localparam LSU_TAG_ID_BITS      = (`CLOG2(`VX_CFG_LSUQ_IN_SIZE) + `CLOG2(LSU_MEM_BATCHES));
     localparam LSU_TAG_WIDTH        = (UUID_WIDTH + LSU_TAG_ID_BITS);
-    localparam LSU_NUM_REQS	        = NUM_LSU_BLOCKS * NUM_LSU_LANES;
-    localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(NUM_LSU_BLOCKS);
+    localparam LSU_NUM_REQS	        = `VX_CFG_NUM_LSU_BLOCKS * `VX_CFG_NUM_LSU_LANES;
+    localparam LMEM_TAG_WIDTH_BASE  = LSU_TAG_WIDTH + `CLOG2(`VX_CFG_NUM_LSU_BLOCKS);
     localparam LMEM_TAG_WIDTH       = LMEM_TAG_WIDTH_BASE;
 
     // DXA lmem tag and attr widths for DMA arb.
     localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);
     localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
     localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS;
-    localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(NUM_DXA_UNITS, 1);
+    localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_UNITS, 1);
 
     // TCU lmem tag and attr widths for DMA arb.
     localparam TCU_LMEM_ATTR_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
-    localparam TCU_LMEM_NUM_MASTERS = (TCU_SPARSE_ENABLED ? (2 * NUM_TCU_BLOCKS + 1) : (NUM_TCU_BLOCKS + 1));
+    localparam TCU_LMEM_NUM_MASTERS = (`VX_CFG_TCU_SPARSE_ENABLED ? (2 * `VX_CFG_NUM_TCU_BLOCKS + 1) : (`VX_CFG_NUM_TCU_BLOCKS + 1));
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
     // LMEM DMA port parameters.
-    localparam LMEM_DMA_EN         = (EXT_DXA_ENABLED + TCU_WGMMA_ENABLED) != 0;
-    localparam LMEM_DMA_DATA_SIZE  = LMEM_NUM_BANKS * LSU_WORD_SIZE;
-    localparam LMEM_DMA_ADDR_WIDTH = LMEM_LOG_SIZE - `CLOG2(LMEM_NUM_BANKS * LSU_WORD_SIZE);
+    localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED) != 0;
+    localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
+    localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
     localparam LMEM_DMA_ATTR_W     = `MAX(DXA_LMEM_ATTR_W, TCU_LMEM_ATTR_W);
     localparam LMEM_DMA_DXA_IDX    = 0;
-    localparam LMEM_DMA_TCU_IDX    = LMEM_DMA_DXA_IDX + EXT_DXA_ENABLED;
-    localparam LMEM_DMA_INPUTS     = EXT_DXA_ENABLED + TCU_WGMMA_ENABLED;
+    localparam LMEM_DMA_TCU_IDX    = LMEM_DMA_DXA_IDX + `VX_CFG_EXT_DXA_ENABLED;
+    localparam LMEM_DMA_INPUTS     = `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED;
     localparam LMEM_DMA_TAG_WIDTH  = `MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W) + `ARB_SEL_BITS(LMEM_DMA_INPUTS, 1);
 
     ////////////////////////// Icache Parameters //////////////////////////////
 
     // Word size in bytes
     localparam ICACHE_WORD_SIZE	    = 4;
-    localparam ICACHE_ADDR_WIDTH	= (MEM_ADDR_WIDTH - `CLOG2(ICACHE_WORD_SIZE));
+    localparam ICACHE_ADDR_WIDTH	= (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(ICACHE_WORD_SIZE));
 
     // Block size in bytes
-    localparam ICACHE_LINE_SIZE	    = L1_LINE_SIZE;
+    localparam ICACHE_LINE_SIZE	    = `VX_CFG_L1_LINE_SIZE;
 
     // Core request tag Id bits
     localparam ICACHE_TAG_ID_BITS	= NW_WIDTH;
@@ -1178,28 +1169,28 @@ package VX_gpu_pkg;
 
     // Memory request tag bits
 `ifdef VX_CFG_ICACHE_ENABLE
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(ICACHE_MSHR_SIZE, 1, 1, NUM_ICACHES, UUID_WIDTH);
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`VX_CFG_ICACHE_MSHR_SIZE, 1, 1, `VX_CFG_NUM_ICACHES, UUID_WIDTH);
 `else
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(1, 1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, SOCKET_SIZE, NUM_ICACHES);
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(1, 1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_ICACHES);
 `endif
 
     ////////////////////////// Dcache Parameters //////////////////////////////
 
     // Word size in bytes
-    localparam DCACHE_WORD_SIZE	    = LSU_LINE_SIZE;
-    localparam DCACHE_ADDR_WIDTH	= (MEM_ADDR_WIDTH - `CLOG2(DCACHE_WORD_SIZE));
+    localparam DCACHE_WORD_SIZE	    = `VX_CFG_LSU_LINE_SIZE;
+    localparam DCACHE_ADDR_WIDTH	= (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DCACHE_WORD_SIZE));
 
     // Block size in bytes
-    localparam DCACHE_LINE_SIZE 	= L1_LINE_SIZE;
+    localparam DCACHE_LINE_SIZE 	= `VX_CFG_L1_LINE_SIZE;
 
     // Input request size (using coalesced memory blocks)
-    localparam DCACHE_CHANNELS	    = `UP((NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE);
-    localparam DCACHE_NUM_REQS	    = NUM_LSU_BLOCKS * DCACHE_CHANNELS;
+    localparam DCACHE_CHANNELS	    = `UP((`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE);
+    localparam DCACHE_NUM_REQS	    = `VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS;
 
     // Core request tag Id bits
-    localparam DCACHE_MERGED_REQS   = (NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
+    localparam DCACHE_MERGED_REQS   = (`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
     localparam DCACHE_MEM_BATCHES   = `CDIV(DCACHE_MERGED_REQS, DCACHE_CHANNELS);
-    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(LSUQ_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
+    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`VX_CFG_LSUQ_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
 
     // Core request tag bits
     localparam DCACHE_CORE_TAG_WIDTH = (UUID_WIDTH + DCACHE_TAG_ID_BITS);
@@ -1226,78 +1217,78 @@ package VX_gpu_pkg;
     // Memory request tag bits (computed with DCACHE_TAG_WIDTH since
     // VX_cache_cluster sees the post-arb tag width)
 `ifdef VX_CFG_DCACHE_ENABLE
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(DCACHE_MSHR_SIZE, DCACHE_NUM_BANKS, DCACHE_NUM_REQS, L1_MEM_PORTS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, SOCKET_SIZE, NUM_DCACHES, UUID_WIDTH);
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`VX_CFG_DCACHE_MSHR_SIZE, DCACHE_NUM_BANKS, DCACHE_NUM_REQS, L1_MEM_PORTS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_DCACHES, UUID_WIDTH);
 `else
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, L1_MEM_PORTS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, SOCKET_SIZE, NUM_DCACHES);
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, L1_MEM_PORTS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_DCACHES);
 `endif
 
     // If dcache writeback is enabled, MSHR size must be large enough to track all outstanding requests
 
     // §3.1.2: L1 dcache is the LLC iff neither L2 nor L3 is enabled.
-    localparam DCACHE_IS_LLC        = !L2_ENABLED && !L3_ENABLED;
+    localparam DCACHE_IS_LLC        = !`VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
 
     ////////////////////////// Tex / Tcache Parameters ////////////////////////
 `ifdef VX_CFG_EXT_TEX_ENABLE
     // tex unit: per-request queue + per-request tag
-    localparam TEX_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(TEX_REQ_QUEUE_SIZE));
-    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_REQ_TAG_WIDTH + `CLOG2(SOCKET_SIZE));
-    localparam TEX_REQ_ARB2_TAG_WIDTH = (TEX_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, NUM_TEX_CORES));
+    localparam TEX_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(`VX_CFG_TEX_REQ_QUEUE_SIZE));
+    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_REQ_TAG_WIDTH + `CLOG2(`VX_CFG_SOCKET_SIZE));
+    localparam TEX_REQ_ARB2_TAG_WIDTH = (TEX_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, `VX_CFG_NUM_TEX_CORES));
 
     localparam TCACHE_WORD_SIZE     = 4;
-    localparam TCACHE_ADDR_WIDTH    = (MEM_ADDR_WIDTH - `CLOG2(TCACHE_WORD_SIZE));
-    localparam TCACHE_LINE_SIZE     = L1_LINE_SIZE;
-    localparam TCACHE_NUM_REQS      = TCACHE_NUM_BANKS;
+    localparam TCACHE_ADDR_WIDTH    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(TCACHE_WORD_SIZE));
+    localparam TCACHE_LINE_SIZE     = `VX_CFG_L1_LINE_SIZE;
+    localparam TCACHE_NUM_REQS      = `VX_CFG_TCACHE_NUM_BANKS;
 
     // Per-tex-unit memory port count (skybox: 4 * NUM_SFU_LANES bilinear taps)
-    localparam TEX_MEM_REQS         = (4 * NUM_SFU_LANES);
+    localparam TEX_MEM_REQS         = (4 * `VX_CFG_NUM_SFU_LANES);
 
     localparam TCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
-    localparam TCACHE_TAG_ID_BITS    = (`CLOG2(TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
+    localparam TCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
     localparam TCACHE_TAG_WIDTH      = (UUID_WIDTH + TCACHE_TAG_ID_BITS);
     localparam TCACHE_MEM_DATA_WIDTH = (TCACHE_LINE_SIZE * 8);
     localparam TCACHE_MEM_PORTS      = 1;
     // Cache-enabled (NC_ENABLE=0, PASSTHRU=0) tag width = cache_cluster's
     // CACHE_MEM_TAG_WIDTH + per-cache arb-sel bits.
     localparam TCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(
-        TCACHE_MSHR_SIZE, TCACHE_NUM_BANKS, TCACHE_MEM_PORTS, NUM_TCACHES, UUID_WIDTH);
+        `VX_CFG_TCACHE_MSHR_SIZE, `VX_CFG_TCACHE_NUM_BANKS, TCACHE_MEM_PORTS, `VX_CFG_NUM_TCACHES, UUID_WIDTH);
 `endif
 
     ////////////////////////// Raster / Rcache Parameters /////////////////////
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam RCACHE_WORD_SIZE      = 4;
-    localparam RCACHE_ADDR_WIDTH     = (MEM_ADDR_WIDTH - `CLOG2(RCACHE_WORD_SIZE));
-    localparam RCACHE_LINE_SIZE      = L1_LINE_SIZE;
-    localparam RCACHE_NUM_REQS       = RCACHE_NUM_BANKS;
+    localparam RCACHE_ADDR_WIDTH     = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(RCACHE_WORD_SIZE));
+    localparam RCACHE_LINE_SIZE      = `VX_CFG_L1_LINE_SIZE;
+    localparam RCACHE_NUM_REQS       = `VX_CFG_RCACHE_NUM_BANKS;
 
     // Per-raster-unit memory port count (skybox: 9 = 3 vertices * 3 attributes)
     localparam RASTER_MEM_REQS       = 9;
 
     localparam RCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(RASTER_MEM_REQS, RCACHE_NUM_REQS);
-    localparam RCACHE_TAG_ID_BITS    = (`CLOG2(RASTER_MEM_QUEUE_SIZE) + RCACHE_BATCH_SEL_BITS);
+    localparam RCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + RCACHE_BATCH_SEL_BITS);
     localparam RCACHE_TAG_WIDTH      = RCACHE_TAG_ID_BITS;
     localparam RCACHE_MEM_DATA_WIDTH = (RCACHE_LINE_SIZE * 8);
     localparam RCACHE_MEM_PORTS      = 1;
     localparam RCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(
-        RCACHE_MSHR_SIZE, RCACHE_NUM_BANKS, RCACHE_MEM_PORTS, NUM_RCACHES, UUID_WIDTH);
+        `VX_CFG_RCACHE_MSHR_SIZE, `VX_CFG_RCACHE_NUM_BANKS, RCACHE_MEM_PORTS, `VX_CFG_NUM_RCACHES, UUID_WIDTH);
 `endif
 
     ////////////////////////// OM / Ocache Parameters /////////////////////////
 `ifdef VX_CFG_EXT_OM_ENABLE
     localparam OCACHE_WORD_SIZE      = 4;
-    localparam OCACHE_ADDR_WIDTH     = (MEM_ADDR_WIDTH - `CLOG2(OCACHE_WORD_SIZE));
-    localparam OCACHE_LINE_SIZE      = L1_LINE_SIZE;
-    localparam OCACHE_NUM_REQS       = OCACHE_NUM_BANKS;
+    localparam OCACHE_ADDR_WIDTH     = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(OCACHE_WORD_SIZE));
+    localparam OCACHE_LINE_SIZE      = `VX_CFG_L1_LINE_SIZE;
+    localparam OCACHE_NUM_REQS       = `VX_CFG_OCACHE_NUM_BANKS;
 
     // Per-OM-unit memory port count (skybox: 2 * NUM_SFU_LANES — color + depth lanes)
-    localparam OM_MEM_REQS           = (2 * NUM_SFU_LANES);
+    localparam OM_MEM_REQS           = (2 * `VX_CFG_NUM_SFU_LANES);
 
     localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(OM_MEM_REQS, OCACHE_NUM_REQS);
-    localparam OCACHE_TAG_ID_BITS    = (`CLOG2(OM_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
+    localparam OCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_OM_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
     localparam OCACHE_TAG_WIDTH      = (UUID_WIDTH + OCACHE_TAG_ID_BITS);
     localparam OCACHE_MEM_DATA_WIDTH = (OCACHE_LINE_SIZE * 8);
     localparam OCACHE_MEM_PORTS      = 1;
     localparam OCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(
-        OCACHE_MSHR_SIZE, OCACHE_NUM_BANKS, OCACHE_MEM_PORTS, NUM_OCACHES, UUID_WIDTH);
+        `VX_CFG_OCACHE_MSHR_SIZE, `VX_CFG_OCACHE_NUM_BANKS, OCACHE_MEM_PORTS, `VX_CFG_NUM_OCACHES, UUID_WIDTH);
 `endif
 
     /////////////////////////////// L1 Parameters /////////////////////////////
@@ -1312,22 +1303,22 @@ package VX_gpu_pkg;
     localparam DCACHE_MEM_ARB_IDX   = ICACHE_MEM_ARB_IDX + 1;
 
     // Word size in bytes
-    localparam L2_WORD_SIZE	        = L1_LINE_SIZE;
+    localparam L2_WORD_SIZE	        = `VX_CFG_L1_LINE_SIZE;
 
     // Input request size — socket-only (DXA merges via per-port priority arb)
     localparam L2_SOCKET_REQS       = NUM_SOCKETS * L1_MEM_PORTS;
 
     // Graphics caches add dedicated L2 input slots (one per enabled cache)
-    localparam L2_GFX_REQS          = EXT_TEX_ENABLED + EXT_RASTER_ENABLED + EXT_OM_ENABLED;
+    localparam L2_GFX_REQS          = `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_OM_ENABLED;
     localparam L2_GFX_TEX_IDX       = L2_SOCKET_REQS;
-    localparam L2_GFX_RASTER_IDX    = L2_GFX_TEX_IDX + EXT_TEX_ENABLED;
-    localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + EXT_RASTER_ENABLED;
+    localparam L2_GFX_RASTER_IDX    = L2_GFX_TEX_IDX + `VX_CFG_EXT_TEX_ENABLED;
+    localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
   `ifdef VX_CFG_NUM_DXA_UNITS
-    localparam L2_DXA_NUM_REQS      = NUM_DXA_UNITS;
+    localparam L2_DXA_NUM_REQS      = `VX_CFG_NUM_DXA_UNITS;
   `else
     localparam L2_DXA_NUM_REQS      = 1;
   `endif
@@ -1338,57 +1329,57 @@ package VX_gpu_pkg;
     // a combinational ready-valid loop when output-select distribution fans
     // out 1 worker across many L2 ports in multi-core configs.
     localparam DXA_L2_GMEM_PORTS    = `MIN(L2_DXA_NUM_REQS, L2_SOCKET_REQS);
-    localparam DXA_L2_ARB_TAG_BITS  = EXT_DXA_ENABLED * `CLOG2(2);
+    localparam DXA_L2_ARB_TAG_BITS  = `VX_CFG_EXT_DXA_ENABLED * `CLOG2(2);
 
     // Core request tag bits (includes DXA arb overhead when enabled)
     localparam L2_TAG_WIDTH         = L1_MEM_ARB_TAG_WIDTH + DXA_L2_ARB_TAG_BITS;
 
     // Memory request data bits
-    localparam L2_MEM_DATA_WIDTH	= (L2_LINE_SIZE * 8);
+    localparam L2_MEM_DATA_WIDTH	= (`VX_CFG_L2_LINE_SIZE * 8);
 
     // Memory request tag bits
 `ifdef VX_CFG_L2_ENABLE
-    localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(L2_MSHR_SIZE, L2_NUM_BANKS, L2_NUM_REQS, L2_MEM_PORTS, L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH, UUID_WIDTH);
+    localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L2_MSHR_SIZE, L2_NUM_BANKS, L2_NUM_REQS, L2_MEM_PORTS, `VX_CFG_L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH, UUID_WIDTH);
 `else
-    localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, L2_MEM_PORTS, L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
+    localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, L2_MEM_PORTS, `VX_CFG_L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
 `endif
 
     // If L2 writeback is enabled, MSHR size must be large enough to track all outstanding requests
 
     // §3.1.2: L2 is the LLC iff L2 is enabled and L3 is not.
-    localparam L2_IS_LLC            = L2_ENABLED && !L3_ENABLED;
+    localparam L2_IS_LLC            = `VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
 
     /////////////////////////////// L3 Parameters /////////////////////////////
 
     // Word size in bytes
-    localparam L3_WORD_SIZE	        = L2_LINE_SIZE;
+    localparam L3_WORD_SIZE	        = `VX_CFG_L2_LINE_SIZE;
 
     // Input request size
-    localparam L3_NUM_REQS	        = NUM_CLUSTERS * L2_MEM_PORTS;
+    localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
 
     // Core request tag bits
     localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;
 
     // Memory request data bits
-    localparam L3_MEM_DATA_WIDTH	= (L3_LINE_SIZE * 8);
+    localparam L3_MEM_DATA_WIDTH	= (`VX_CFG_L3_LINE_SIZE * 8);
 
     // Memory request tag bits
 `ifdef VX_CFG_L3_ENABLE
-    localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(L3_MSHR_SIZE, L3_NUM_BANKS, L3_NUM_REQS, L3_MEM_PORTS, L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH, UUID_WIDTH);
+    localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L3_MSHR_SIZE, L3_NUM_BANKS, L3_NUM_REQS, L3_MEM_PORTS, `VX_CFG_L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH, UUID_WIDTH);
 `else
-    localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, L3_MEM_PORTS, L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
+    localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, L3_MEM_PORTS, `VX_CFG_L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `endif
     // If L3 writeback is enabled, MSHR size must be large enough to track all outstanding requests
 
     // §3.1.2: L3 is the LLC whenever it is enabled.
-    localparam L3_IS_LLC            = L3_ENABLED;
+    localparam L3_IS_LLC            = `VX_CFG_L3_ENABLED;
 
     ///////////////////////////////////////////////////////////////////////////
 
     localparam VX_MEM_PORTS =           L3_MEM_PORTS;
-    localparam VX_MEM_BYTEEN_WIDTH =    L3_LINE_SIZE;
-    localparam VX_MEM_ADDR_WIDTH =      (MEM_ADDR_WIDTH - `CLOG2(L3_LINE_SIZE));
-    localparam VX_MEM_DATA_WIDTH =      (L3_LINE_SIZE * 8);
+    localparam VX_MEM_BYTEEN_WIDTH =    `VX_CFG_L3_LINE_SIZE;
+    localparam VX_MEM_ADDR_WIDTH =      (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(`VX_CFG_L3_LINE_SIZE));
+    localparam VX_MEM_DATA_WIDTH =      (`VX_CFG_L3_LINE_SIZE * 8);
     localparam VX_MEM_TAG_WIDTH =       L3_MEM_TAG_WIDTH;
 
     ///////////////////////// Miscaellaneous functions ////////////////////////

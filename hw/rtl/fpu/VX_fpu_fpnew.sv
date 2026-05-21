@@ -40,10 +40,10 @@ module VX_fpu_fpnew
     input wire [INST_FMT_BITS-1:0] fmt,
     input wire [INST_FRM_BITS-1:0] frm,
 
-    input wire [NUM_LANES-1:0][XLEN-1:0]  dataa,
-    input wire [NUM_LANES-1:0][XLEN-1:0]  datab,
-    input wire [NUM_LANES-1:0][XLEN-1:0]  datac,
-    output wire [NUM_LANES-1:0][XLEN-1:0] result,
+    input wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  dataa,
+    input wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  datab,
+    input wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  datac,
+    output wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] result,
 
     output wire has_fflags,
     output wire [`FP_FLAGS_BITS-1:0] fflags,
@@ -53,11 +53,11 @@ module VX_fpu_fpnew
     input wire  ready_out,
     output wire valid_out
 );
-    localparam LATENCY_FDIVSQRT = `MAX(LATENCY_FDIV, LATENCY_FSQRT);
-    localparam RSP_DATAW = (NUM_LANES * XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
+    localparam LATENCY_FDIVSQRT = `MAX(`VX_CFG_LATENCY_FDIV, `VX_CFG_LATENCY_FSQRT);
+    localparam RSP_DATAW = (NUM_LANES * `VX_CFG_XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
-        Width:         unsigned'(XLEN),
+        Width:         unsigned'(`VX_CFG_XLEN),
         EnableVectors: 1'b0,
     `ifdef VX_CFG_XLEN_64
         EnableNanBox:  1'b1,
@@ -75,10 +75,10 @@ module VX_fpu_fpnew
     };
 
     localparam fpnew_pkg::fpu_implementation_t FPU_IMPLEMENTATION = '{
-      PipeRegs:'{'{LATENCY_FMA, 0, 0, 0, 0}, // ADDMUL
+      PipeRegs:'{'{`VX_CFG_LATENCY_FMA, 0, 0, 0, 0}, // ADDMUL
                  '{default: unsigned'(LATENCY_FDIVSQRT)}, // DIVSQRT
-                 '{default: LATENCY_FNCP}, // NONCOMP
-                 '{default: LATENCY_FCVT}}, // CONV
+                 '{default: `VX_CFG_LATENCY_FNCP}, // NONCOMP
+                 '{default: `VX_CFG_LATENCY_FCVT}}, // CONV
       UnitTypes:'{'{default: fpnew_pkg::PARALLEL}, // ADDMUL
                   '{default: fpnew_pkg::MERGED}, // DIVSQRT
                   '{default: fpnew_pkg::PARALLEL}, // NONCOMP
@@ -91,9 +91,9 @@ module VX_fpu_fpnew
 
     reg [TAG_WIDTH-1:0] fpu_tag_in, fpu_tag_out;
 
-    logic [2:0][NUM_LANES-1:0][XLEN-1:0] fpu_operands;
+    logic [2:0][NUM_LANES-1:0][`VX_CFG_XLEN-1:0] fpu_operands;
 
-    wire [NUM_LANES-1:0][XLEN-1:0] fpu_result;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] fpu_result;
     fpnew_pkg::status_t fpu_status;
 
     fpnew_pkg::operation_e fpu_op;

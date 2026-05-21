@@ -31,13 +31,13 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 
     // Dcache interface
-    VX_lsu_mem_if.master    lsu_mem_if [NUM_LSU_BLOCKS],
+    VX_lsu_mem_if.master    lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
 
     // dispatch interface
-    VX_dispatch_if.slave    dispatch_if [NUM_EX_UNITS * ISSUE_WIDTH],
+    VX_dispatch_if.slave    dispatch_if [NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
 
     // commit interface
-    VX_commit_if.master     commit_if [NUM_EX_UNITS * ISSUE_WIDTH],
+    VX_commit_if.master     commit_if [NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
@@ -58,7 +58,7 @@ module VX_execute import VX_gpu_pkg::*; #(
 
     // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if,
-    VX_branch_ctl_if.master branch_ctl_if [NUM_ALU_BLOCKS],
+    VX_branch_ctl_if.master branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
     VX_warp_ctl_if.master   warp_ctl_if,
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -71,7 +71,7 @@ module VX_execute import VX_gpu_pkg::*; #(
 );
 
 `ifdef VX_CFG_EXT_F_ENABLE
-    VX_fpu_csr_if fpu_csr_if[NUM_FPU_BLOCKS]();
+    VX_fpu_csr_if fpu_csr_if[`VX_CFG_NUM_FPU_BLOCKS]();
 `endif
 
     VX_alu_unit #(
@@ -79,8 +79,8 @@ module VX_execute import VX_gpu_pkg::*; #(
     ) alu_unit (
         .clk            (clk),
         .reset          (reset),
-        .dispatch_if    (dispatch_if[EX_ALU * ISSUE_WIDTH +: ISSUE_WIDTH]),
-        .commit_if      (commit_if[EX_ALU * ISSUE_WIDTH +: ISSUE_WIDTH]),
+        .dispatch_if    (dispatch_if[EX_ALU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .commit_if      (commit_if[EX_ALU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .branch_ctl_if  (branch_ctl_if)
     );
 
@@ -93,8 +93,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
         .reset          (reset),
-        .dispatch_if    (dispatch_if[EX_LSU * ISSUE_WIDTH +: ISSUE_WIDTH]),
-        .commit_if      (commit_if[EX_LSU * ISSUE_WIDTH +: ISSUE_WIDTH]),
+        .dispatch_if    (dispatch_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .commit_if      (commit_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .lsu_mem_if     (lsu_mem_if)
     );
 
@@ -104,8 +104,8 @@ module VX_execute import VX_gpu_pkg::*; #(
     ) fpu_unit (
         .clk            (clk),
         .reset          (reset),
-        .dispatch_if    (dispatch_if[EX_FPU * ISSUE_WIDTH +: ISSUE_WIDTH]),
-        .commit_if      (commit_if[EX_FPU * ISSUE_WIDTH +: ISSUE_WIDTH]),
+        .dispatch_if    (dispatch_if[EX_FPU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .commit_if      (commit_if[EX_FPU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .fpu_csr_if     (fpu_csr_if)
     );
 `endif
@@ -122,8 +122,8 @@ module VX_execute import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         .tcu_lmem_if    (tcu_lmem_if),
     `endif
-        .dispatch_if    (dispatch_if[EX_TCU * ISSUE_WIDTH +: ISSUE_WIDTH]),
-        .commit_if      (commit_if[EX_TCU * ISSUE_WIDTH +: ISSUE_WIDTH])
+        .dispatch_if    (dispatch_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .commit_if      (commit_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH])
     );
 `endif
 
@@ -137,8 +137,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .sysmem_perf    (sysmem_perf),
         .pipeline_perf  (pipeline_perf),
     `endif
-        .dispatch_if    (dispatch_if[EX_SFU * ISSUE_WIDTH +: ISSUE_WIDTH]),
-        .commit_if      (commit_if[EX_SFU * ISSUE_WIDTH +: ISSUE_WIDTH]),
+        .dispatch_if    (dispatch_if[EX_SFU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .commit_if      (commit_if[EX_SFU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
     `ifdef VX_CFG_EXT_F_ENABLE
         .fpu_csr_if     (fpu_csr_if),
     `endif

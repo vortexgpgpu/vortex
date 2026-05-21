@@ -49,7 +49,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     wire [UUID_WIDTH-1:0]   rsp_uuid;
     wire [PC_BITS-1:0]      rsp_PC;
-    wire [NUM_THREADS-1:0] rsp_tmask;
+    wire [`VX_CFG_NUM_THREADS-1:0] rsp_tmask;
     wire [NW_WIDTH-1:0]     req_tag;
     wire [NW_WIDTH-1:0]     rsp_tag;
     wire [NCTA_WIDTH-1:0]   rsp_cta_id;
@@ -61,8 +61,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign {rsp_uuid, rsp_tag} = icache_bus_if.rsp_data.tag;
 
     VX_dp_ram #(
-        .DATAW (PC_BITS + NUM_THREADS + NCTA_WIDTH),
-        .SIZE  (NUM_WARPS),
+        .DATAW (PC_BITS + `VX_CFG_NUM_THREADS + NCTA_WIDTH),
+        .SIZE  (`VX_CFG_NUM_WARPS),
         .RDW_MODE ("R"),
         .LUTRAM (1)
     ) tag_store (
@@ -86,12 +86,12 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // ------------------------------------------------------------------------
 
     wire [PC_BITS-1:0]      icache_req_PC;
-    wire [NUM_THREADS-1:0] icache_req_tmask;
+    wire [`VX_CFG_NUM_THREADS-1:0] icache_req_tmask;
     wire [NW_WIDTH-1:0]     rsp_wid;
 
     wire                    follow_req_valid;
     wire [PC_BITS-1:0]      follow_req_PC;
-    wire [NUM_THREADS-1:0] follow_req_tmask;
+    wire [`VX_CFG_NUM_THREADS-1:0] follow_req_tmask;
     wire [NW_WIDTH-1:0]     follow_req_wid;
     wire [UUID_WIDTH-1:0]   follow_req_uuid;
 
@@ -113,9 +113,12 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign icache_req_uuid  = follow_req_valid ? follow_req_uuid  : schedule_if.data.uuid;
     // NOTE: bind the full PC to a net before part-selecting — Vivado synthesis
     // rejects a bit-select applied directly to a function-call result.
-    wire [XLEN-1:0] icache_req_full_pc = to_fullPC(icache_req_PC);
+    wire [`VX_CFG_XLEN-1:0] icache_req_full_pc = to_fullPC(icache_req_PC);
     assign icache_req_addr  = icache_req_full_pc[ICACHE_ADDR_WIDTH+1 : 2];
     assign icache_req_tag   = {icache_req_uuid, icache_req_wid};
+    // The icache is word-addressed: PC[1:0] (sub-word) is intentionally
+    // dropped from icache_req_addr.
+    `UNUSED_VAR (icache_req_full_pc)
 
     // Scheduler is "ready" when icache accepts the request OR when the
     // decompressor already has the data buffered.
@@ -153,7 +156,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // ------------------------------------------------------------------------
 
     assign icache_req_valid = schedule_if.valid;
-    assign icache_req_addr  = schedule_if.data.PC[2-(XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH];
+    assign icache_req_addr  = schedule_if.data.PC[2-(`VX_CFG_XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH];
     assign icache_req_wid   = schedule_if.data.wid;
     assign icache_req_uuid  = schedule_if.data.uuid;
     assign icache_req_tag   = {icache_req_uuid, icache_req_wid};
@@ -219,7 +222,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 1, 6, 3, (
-            UUID_WIDTH + NW_WIDTH + NUM_THREADS + PC_BITS +
+            UUID_WIDTH + NW_WIDTH + `VX_CFG_NUM_THREADS + PC_BITS +
             UUID_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
             UUID_WIDTH + (ICACHE_WORD_SIZE * 8)
         ), {

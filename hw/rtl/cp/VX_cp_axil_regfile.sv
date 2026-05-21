@@ -18,6 +18,10 @@
 //                            [23:16]AXI_TID_WIDTH
 //     0x010 CP_CYCLE_LO RO   free-running cycle counter low 32 bits
 //     0x014 CP_CYCLE_HI RO   high 32 bits
+//     0x018 GPU_DEV_CAPS_LO RO  device-config caps, low 32 bits
+//     0x01C GPU_DEV_CAPS_HI RO  device-config caps, high 32 bits
+//     0x020 GPU_ISA_CAPS_LO RO  ISA caps, low 32 bits
+//     0x024 GPU_ISA_CAPS_HI RO  ISA caps, high 32 bits
 //
 //   Per-queue, base = 0x100 + qid * 0x40
 //     +0x00 Q_RING_BASE_LO  RW
@@ -103,6 +107,37 @@ module VX_cp_axil_regfile
     else       r_cycle_count <= r_cycle_count + 64'd1;
   end
 
+  // ---- Static GPU capability words ----
+  // device/ISA caps exposed RO so the host runtime reads them from a
+  // single, platform-neutral source (the CP regfile) instead of each
+  // AFU shell re-packing them. The bit layout is the canonical one from
+  // hw/rtl/afu/xrt/VX_afu_ctrl.sv; sim/common/cmd_processor.cpp packs
+  // the identical words for the functional-model backends, and
+  // sw/runtime/common/vx_caps.h is the single matching decoder.
+  localparam int GPU_CLUSTER_SIZE = `VX_CFG_NUM_CORES / `VX_CFG_SOCKET_SIZE;
+  localparam int GPU_BANK_ADDR_W  = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH
+                                  - `CLOG2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
+
+  wire [63:0] gpu_dev_caps = {
+    22'b0,
+    5'(GPU_BANK_ADDR_W - 20),
+    3'($clog2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS)),
+    8'(`VX_CFG_LMEM_ENABLED ? `VX_CFG_LMEM_LOG_SIZE : 0),
+    3'($clog2(`VX_CFG_ISSUE_WIDTH)),
+    3'($clog2(`VX_CFG_NUM_CLUSTERS)),
+    3'($clog2(GPU_CLUSTER_SIZE)),
+    3'($clog2(`VX_CFG_SOCKET_SIZE)),
+    3'($clog2(`VX_CFG_NUM_WARPS)),
+    3'($clog2(`VX_CFG_NUM_THREADS)),
+    8'(`VX_ISA_IMPL_ID)
+  };
+
+  wire [63:0] gpu_isa_caps = {
+    32'(`VX_CFG_MISA_EXT),
+    2'(`CLOG2(`VX_CFG_XLEN)-4),
+    30'(`VX_CFG_MISA_STD)
+  };
+
   // ---- Address-decode helpers ----
   // Returns 1 if `addr` is the global register at `g_off`. Globals occupy
   // 0x000..0x0FF.
@@ -150,6 +185,10 @@ module VX_cp_axil_regfile
                                         8'(NUM_QUEUES)};
     if (is_global(addr, 8'h10)) return r_cycle_count[31:0];
     if (is_global(addr, 8'h14)) return r_cycle_count[63:32];
+    if (is_global(addr, 8'h18)) return gpu_dev_caps[31:0];
+    if (is_global(addr, 8'h1C)) return gpu_dev_caps[63:32];
+    if (is_global(addr, 8'h20)) return gpu_isa_caps[31:0];
+    if (is_global(addr, 8'h24)) return gpu_isa_caps[63:32];
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00: return r_ring_base[qid][31:0];
@@ -181,6 +220,10 @@ module VX_cp_axil_regfile
     if (is_global(addr, 8'h08)) return 1'b1;
     if (is_global(addr, 8'h10)) return 1'b1;
     if (is_global(addr, 8'h14)) return 1'b1;
+    if (is_global(addr, 8'h18)) return 1'b1;
+    if (is_global(addr, 8'h1C)) return 1'b1;
+    if (is_global(addr, 8'h20)) return 1'b1;
+    if (is_global(addr, 8'h24)) return 1'b1;
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00, 6'h04, 6'h08, 6'h0C, 6'h10, 6'h14,
