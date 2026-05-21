@@ -39,6 +39,12 @@ public:
     return static_cast<float>(rand()) / RAND_MAX;
   }
   static bool compare(float a, float b, int index, int errors) {
+    if (!std::isfinite(a) || !std::isfinite(b)) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
+      }
+      return false;
+    }
     union fi_t {
       float f;
       int32_t i;

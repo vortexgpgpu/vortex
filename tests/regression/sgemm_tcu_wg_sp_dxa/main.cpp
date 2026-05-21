@@ -386,7 +386,7 @@ int main(int argc, char *argv[]) {
     fa.f = h_C[i];
     fb.f = h_ref[i];
     auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
+    if (!std::isfinite(h_C[i]) || !std::isfinite(h_ref[i]) || d > FLOAT_ULP) {
       if (errors < MAX_ERRORS) {
         printf("*** error: [%u] expected=%f, actual=%f\n", i, h_ref[i], h_C[i]);
       }

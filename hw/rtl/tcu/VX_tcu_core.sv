@@ -392,6 +392,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 0, // resetw
                 1  // depth
             );
+            `UNUSED_VAR ({sf_a_r, sf_b_r});
         `else
             `BUFFER_EX (
                 {c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r},

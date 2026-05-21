@@ -397,7 +397,7 @@ int main(int argc, char *argv[]) {
     float diff = std::abs(actual - expected);
     float tol = std::is_same<vt::ITYPE, vt::mxint8>::value ? 0.0f :
                 std::max(1.0e-3f, std::abs(expected) * rel_tol);
-    if (diff > tol) {
+    if (!std::isfinite(actual) || !std::isfinite(expected) || !std::isfinite(diff) || diff > tol) {
       if (errors < MAX_ERRORS) {
         printf("*** error: [%d] expected=%f, actual=%f, diff=%f, tol=%f\n",
                i, expected, actual, diff, tol);

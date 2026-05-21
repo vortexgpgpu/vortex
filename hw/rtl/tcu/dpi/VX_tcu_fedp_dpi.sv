@@ -43,7 +43,7 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
-    `UNUSED_VAR ({fmt_d, c_val});
+    `UNUSED_VAR (fmt_d);
 
     wire [31:0] mult_result [N];
 

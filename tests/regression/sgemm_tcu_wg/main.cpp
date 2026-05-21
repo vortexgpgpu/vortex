@@ -295,13 +295,19 @@ public:
     return static_cast<float>(rand()) / RAND_MAX;
   }
   static bool compare(float a, float b, int index, int errors) {
+    if (!std::isfinite(a) || !std::isfinite(b)) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
+      }
+      return false;
+    }
     if constexpr (std::is_same<vt::ITYPE, vt::fp8>::value || std::is_same<vt::ITYPE, vt::bf8>::value) {
       if (a == 0.0f && b == 0.0f) {
         return true;
       }
       //relative error tolerance
       auto diff = std::abs((a - b)/b);
-      if (diff < 0.01f) {
+      if (std::isfinite(diff) && diff < 0.01f) {
         return true;
       }
       if (errors < MAX_ERRORS) {
