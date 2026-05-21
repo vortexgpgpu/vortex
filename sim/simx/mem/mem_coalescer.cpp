@@ -174,7 +174,7 @@ void MemCoalescer::on_tick() {
             std::memset(merged->data(), 0, merged->size());
           }
           uint64_t lane_be = in_req.byteen.at(j);
-          for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
+          for (uint32_t b = 0; b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
             if (lane_be & (1ull << b)) {
               (*merged)[b] = (*in_req.data.at(j))[b];
             }

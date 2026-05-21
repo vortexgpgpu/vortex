@@ -57,7 +57,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire [4:0] rs3 = instr[31:27];
 
     `UNUSED_VAR (funct2)
-`ifndef EXT_A_ENABLE
+`ifndef VX_CFG_EXT_A_ENABLE
     `UNUSED_VAR (funct5)
 `endif
     `UNUSED_VAR (frm_is_dyn)
@@ -87,7 +87,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     end
 
     wire [19:0] ui_imm  = instr[31:12];
-`ifdef XLEN_64
+`ifdef VX_CFG_XLEN_64
     wire [11:0] i_imm   = is_itype_sh ? {6'b0, instr[25:20]} : u_12;
     wire [11:0] iw_imm  = is_itype_sh ? {7'b0, instr[24:20]} : u_12;
 `else
@@ -136,7 +136,7 @@ module VX_decode import VX_gpu_pkg::*; #(
         endcase
     end
 
-`ifdef EXT_M_ENABLE
+`ifdef VX_CFG_EXT_M_ENABLE
     reg [INST_M_BITS-1:0] m_type;
     always @(*) begin
         case (funct3)
@@ -152,7 +152,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     end
 `endif
 
-`ifdef EXT_A_ENABLE
+`ifdef VX_CFG_EXT_A_ENABLE
     // Map RVA funct5 (instr[31:27]) to amo_op_e + amo_unsigned bit.
     // Mirrors sim/simx/decode.cpp:599-622. MINU/MAXU collapse into
     // MIN/MAX + amo_unsigned=1.
@@ -177,7 +177,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     end
 `endif
 
-`ifdef EXT_C_ENABLE
+`ifdef VX_CFG_EXT_C_ENABLE
     wire decode_is_rvc = fetch_if.data.is_rvc;
 `else
     wire decode_is_rvc = 1'b0;
@@ -195,7 +195,7 @@ module VX_decode import VX_gpu_pkg::*; #(
         bytesel   = BYTESEL_DEFAULT;
         is_wstall = 0;
 
-    `ifdef EXT_A_ENABLE
+    `ifdef VX_CFG_EXT_A_ENABLE
         // Default the LSU amo sideband to "not an AMO" so plain
         // loads/stores/fences/packed-loads don't propagate 'x through
         op_args.lsu.amo_valid = 1'b0;
@@ -222,14 +222,14 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
                 case (funct7)
-                `ifdef EXT_M_ENABLE
+                `ifdef VX_CFG_EXT_M_ENABLE
                     INST_R_F7_MUL: begin
                         // MUL, MULH, MULHSU, MULHU
                         op_type = INST_OP_BITS'(m_type);
                         op_args.alu.xtype = ALU_TYPE_MULDIV;
                     end
                 `endif
-                `ifdef EXT_ZICOND_ENABLE
+                `ifdef VX_CFG_EXT_ZICOND_ENABLE
                     INST_R_F7_ZICOND: begin
                         // CZERO-EQZ, CZERO-NEZ
                         op_type = funct3[1] ? INST_OP_BITS'(INST_ALU_CZNE) : INST_OP_BITS'(INST_ALU_CZEQ);
@@ -242,7 +242,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     end
                 endcase
             end
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             INST_I_W: begin
                 // ADDIW, SLLIW, SRLIW, SRAIW
                 ex_type = EX_ALU;
@@ -264,7 +264,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
                 case (funct7)
-                `ifdef EXT_M_ENABLE
+                `ifdef VX_CFG_EXT_M_ENABLE
                     INST_R_F7_MUL: begin
                         // MULW, DIVW, DIVUW, REMW, REMUW
                         op_type = INST_OP_BITS'(m_type);
@@ -342,7 +342,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.pack     = 0;
                 op_args.lsu.offset   = 0;
             end
-        `ifdef EXT_A_ENABLE
+        `ifdef VX_CFG_EXT_A_ENABLE
             INST_AMO: begin
                 // RVA: funct3 = 010 (.W) or 011 (.D); we route AMO down
                 // the LSU's load path (every AMO returns to rd). The
@@ -392,7 +392,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     `USED_IREG (rd);
                 end
             end
-        `ifdef EXT_F_ENABLE
+        `ifdef VX_CFG_EXT_F_ENABLE
             INST_FL,
         `endif
             INST_L: begin
@@ -403,13 +403,13 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.pack     = 0;
                 op_args.lsu.offset   = u_12;
                 `USED_IREG (rs1);
-            `ifdef EXT_F_ENABLE
+            `ifdef VX_CFG_EXT_F_ENABLE
                 `USED_REG (opcode[2], rd, 1'b1);
             `else
                 `USED_IREG (rd);
             `endif
             end
-        `ifdef EXT_F_ENABLE
+        `ifdef VX_CFG_EXT_F_ENABLE
             INST_FS,
         `endif
             INST_S: begin
@@ -420,13 +420,13 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.pack    = 0;
                 op_args.lsu.offset   = s_imm;
                 `USED_IREG (rs1);
-            `ifdef EXT_F_ENABLE
+            `ifdef VX_CFG_EXT_F_ENABLE
                 `USED_REG (opcode[2], rs2, 1'b1);
             `else
                 `USED_IREG (rs2);
             `endif
             end
-        `ifdef EXT_F_ENABLE
+        `ifdef VX_CFG_EXT_F_ENABLE
             INST_FMADD,  // 7'b1000011
             INST_FMSUB,  // 7'b1000111
             INST_FNMSUB, // 7'b1001011
@@ -483,7 +483,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
                     end
-                `ifdef FLEN_64
+                `ifdef VX_CFG_FLEN_64
                     5'b01000: begin
                         // FCVT.S.D, FCVT.D.S
                         op_type = INST_OP_BITS'(INST_FPU_F2F);
@@ -618,16 +618,16 @@ module VX_decode import VX_gpu_pkg::*; #(
                         end
                         op_type = INST_OP_BITS'(funct3);
                     end
-                `ifdef EXT_TCU_ENABLE
+                `ifdef VX_CFG_EXT_TCU_ENABLE
                     7'h02: begin
                         ex_type = EX_TCU;
-                    `ifdef TCU_WGMMA_ENABLE
+                    `ifdef VX_CFG_TCU_WGMMA_ENABLE
                         op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA)
                                             : INST_OP_BITS'(INST_TCU_WMMA);
                     `else
                         op_type = INST_OP_BITS'(INST_TCU_WMMA);
                     `endif
-                    `ifdef TCU_SPARSE_ENABLE
+                    `ifdef VX_CFG_TCU_SPARSE_ENABLE
                         op_args.tcu.is_sparse = rs2[0];
                     `else
                         op_args.tcu.is_sparse = 1'b0;
@@ -645,7 +645,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         `USED_FREG (rs3);
                     end
                 `endif
-                `ifdef EXT_DXA_ENABLE
+                `ifdef VX_CFG_EXT_DXA_ENABLE
                     7'h03: begin // DXA issue
                         // Multicast is determined by cta_mask (>1 bit set).
                         // Expanded into micro-ops by VX_dxa_uops.
@@ -698,7 +698,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     `USED_IREG (rs3);
                     op_type = INST_OP_BITS'(INST_WGATHER);
                 end
-            `ifdef EXT_TEX_ENABLE
+            `ifdef VX_CFG_EXT_TEX_ENABLE
                 3'h1: begin // vx_tex: R4-type, funct2=stage, rd=texel, rs1=u, rs2=v, rs3=lod
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_TEX);
@@ -709,7 +709,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     `USED_IREG (rs3);
                 end
             `endif
-            `ifdef EXT_OM_ENABLE
+            `ifdef VX_CFG_EXT_OM_ENABLE
                 3'h2: begin // vx_om: R4-type, rd=x0, rs1=pos_face, rs2=color, rs3=depth
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_OM);
@@ -718,7 +718,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     `USED_IREG (rs3);
                 end
             `endif
-            `ifdef EXT_RASTER_ENABLE
+            `ifdef VX_CFG_EXT_RASTER_ENABLE
                 3'h3: begin // vx_rast: R-type, rd=quad, rs1=x0, rs2=x0
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_RASTER);
@@ -757,7 +757,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     reg                  decode_sched_valid_r;
     reg                  decode_sched_unlock_r;
     reg [NW_WIDTH-1:0]   decode_sched_wid_r;
-`ifdef EXT_C_ENABLE
+`ifdef VX_CFG_EXT_C_ENABLE
     reg                  decode_sched_is_rvc_r;
 `endif
 
@@ -768,7 +768,7 @@ module VX_decode import VX_gpu_pkg::*; #(
             decode_sched_valid_r  <= fetch_fire;
             decode_sched_unlock_r <= ~is_wstall;
             decode_sched_wid_r    <= fetch_if.data.wid;
-        `ifdef EXT_C_ENABLE
+        `ifdef VX_CFG_EXT_C_ENABLE
             decode_sched_is_rvc_r <= fetch_if.data.is_rvc;
         `endif
         end
@@ -777,7 +777,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     assign decode_sched_if.valid  = decode_sched_valid_r;
     assign decode_sched_if.wid    = decode_sched_wid_r;
     assign decode_sched_if.unlock = decode_sched_unlock_r;
-`ifdef EXT_C_ENABLE
+`ifdef VX_CFG_EXT_C_ENABLE
     assign decode_sched_if.is_rvc = decode_sched_is_rvc_r;
 `endif
 

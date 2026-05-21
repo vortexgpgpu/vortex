@@ -17,7 +17,7 @@
 
 #include <VX_config.h>
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 
 #include <cstdint>
 #include <stdexcept>
@@ -53,7 +53,7 @@ private:
 
 public:
   SATP_t(uint64_t satp_val) : satp(satp_val) {
-#ifdef XLEN_32
+#ifdef VX_CFG_XLEN_32
     mode = bit(satp, 31);
     asid = bits(satp, 22, 30);
     ppn  = bits(satp, 0, 21);
@@ -62,18 +62,18 @@ public:
     asid = bits(satp, 44, 59);
     ppn  = bits(satp, 0, 43);
 #endif
-    address = ppn << MEM_PAGE_LOG2_SIZE;
+    address = ppn << VX_CFG_MEM_PAGE_LOG2_SIZE;
   }
 
   SATP_t(uint64_t address, uint16_t asid) : address(address), asid(asid) {
-#ifdef XLEN_32
+#ifdef VX_CFG_XLEN_32
     assert((address >> 32) == 0 && "Upper 32 bits are not zero!");
 #endif
-    mode = VM_ADDR_MODE;
-    ppn = address >> MEM_PAGE_LOG2_SIZE;
+    mode = VX_CFG_VM_ADDR_MODE;
+    ppn = address >> VX_CFG_MEM_PAGE_LOG2_SIZE;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshift-count-overflow"
-#ifdef XLEN_32
+#ifdef VX_CFG_XLEN_32
     satp = (((uint64_t)mode << 31) | ((uint64_t)asid << 22) | ppn);
 #else
     satp = (((uint64_t)mode << 60) | ((uint64_t)asid << 44) | ppn);
@@ -105,7 +105,7 @@ private:
   }
 
 public:
-#if VM_ADDR_MODE == SV39
+#if VX_CFG_VM_ADDR_MODE == SV39
   bool N;
   uint8_t PBMT;
 #endif
@@ -129,34 +129,34 @@ public:
   }
 
   PTE_t(uint64_t address, uint32_t flags) : address(address) {
-#if VM_ADDR_MODE == SV39
+#if VX_CFG_VM_ADDR_MODE == SV39
     N = 0;
     PBMT = 0;
     level = 3;
-    ppn = address >> MEM_PAGE_LOG2_SIZE;
+    ppn = address >> VX_CFG_MEM_PAGE_LOG2_SIZE;
     set_flags(flags);
     pte_bytes = (ppn << 10) | flags;
 #else // SV32
     assert((address >> 32) == 0 && "Upper 32 bits are not zero!");
     level = 2;
-    ppn = address >> MEM_PAGE_LOG2_SIZE;
+    ppn = address >> VX_CFG_MEM_PAGE_LOG2_SIZE;
     set_flags(flags);
     pte_bytes = (ppn << 10) | flags;
 #endif
   }
 
   PTE_t(uint64_t pte_bytes) : pte_bytes(pte_bytes) {
-#if VM_ADDR_MODE == SV39
+#if VX_CFG_VM_ADDR_MODE == SV39
     N = bit(pte_bytes, 63);
     PBMT = bits(pte_bytes, 61, 62);
     level = 3;
     ppn = bits(pte_bytes, 10, 53);
-    address = ppn << MEM_PAGE_LOG2_SIZE;
+    address = ppn << VX_CFG_MEM_PAGE_LOG2_SIZE;
 #else // SV32
     assert((pte_bytes >> 32) == 0 && "Upper 32 bits are not zero!");
     level = 2;
     ppn = bits(pte_bytes, 10, 31);
-    address = ppn << MEM_PAGE_LOG2_SIZE;
+    address = ppn << VX_CFG_MEM_PAGE_LOG2_SIZE;
 #endif
     rsw = bits(pte_bytes, 8, 9);
     set_flags((uint32_t)(bits(pte_bytes, 0, 7)));
@@ -176,7 +176,7 @@ public:
   uint8_t level;
 
   vAddr_t(uint64_t address) : address(address) {
-#if VM_ADDR_MODE == SV39
+#if VX_CFG_VM_ADDR_MODE == SV39
     level = 3;
     vpn = new uint64_t[level];
     vpn[2] = bits(30, 38);
@@ -198,4 +198,4 @@ public:
 
 } // namespace vortex
 
-#endif // VM_ENABLE
+#endif // VX_CFG_VM_ENABLE

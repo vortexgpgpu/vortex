@@ -33,7 +33,7 @@ instr_trace_t* OmUnit::process(instr_trace_t* trace) {
   req.tag  = uint32_t(trace->uuid);
 
   uint32_t bits = 0;
-  for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) continue;
     bits |= (1u << t);
     uint32_t pos_face = trace->src_data[0].at(t).u;

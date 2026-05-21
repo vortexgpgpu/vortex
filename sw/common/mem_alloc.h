@@ -39,7 +39,7 @@ public:
     page_t* currPage = pages_;
     while (currPage) {
       auto nextPage = currPage->next;
-      #ifdef VM_ENABLE
+      #ifdef VX_CFG_VM_ENABLE
       block_t* currblock = currPage->findfirstUsedBlock();
       block_t* nextblock;
       while (currblock) {
@@ -345,7 +345,7 @@ private:
       }
       return nullptr;
     }
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     block_t* findfirstUsedBlock() {
       return usedList_;
     }

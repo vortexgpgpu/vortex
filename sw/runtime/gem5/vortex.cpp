@@ -69,25 +69,25 @@ public:
     // sides by construction.
     int get_caps(uint32_t caps_id, uint64_t* value) {
         switch (caps_id) {
-        case VX_CAPS_VERSION:         *value = IMPLEMENTATION_ID; break;
-        case VX_CAPS_NUM_THREADS:     *value = NUM_THREADS; break;
-        case VX_CAPS_NUM_WARPS:       *value = NUM_WARPS; break;
-        case VX_CAPS_NUM_CORES:       *value = NUM_CORES * NUM_CLUSTERS; break;
-        case VX_CAPS_NUM_CLUSTERS:    *value = NUM_CLUSTERS; break;
-        case VX_CAPS_SOCKET_SIZE:     *value = SOCKET_SIZE; break;
-        case VX_CAPS_ISSUE_WIDTH:     *value = ISSUE_WIDTH; break;
+        case VX_CAPS_VERSION:         *value = VX_ISA_IMPL_ID; break;
+        case VX_CAPS_NUM_THREADS:     *value = VX_CFG_NUM_THREADS; break;
+        case VX_CAPS_NUM_WARPS:       *value = VX_CFG_NUM_WARPS; break;
+        case VX_CAPS_NUM_CORES:       *value = VX_CFG_NUM_CORES * VX_CFG_NUM_CLUSTERS; break;
+        case VX_CAPS_NUM_CLUSTERS:    *value = VX_CFG_NUM_CLUSTERS; break;
+        case VX_CAPS_SOCKET_SIZE:     *value = VX_CFG_SOCKET_SIZE; break;
+        case VX_CAPS_ISSUE_WIDTH:     *value = VX_CFG_ISSUE_WIDTH; break;
         case VX_CAPS_CACHE_LINE_SIZE: *value = CACHE_BLOCK_SIZE; break;
         case VX_CAPS_GLOBAL_MEM_SIZE: *value = GLOBAL_MEM_SIZE; break;
-        case VX_CAPS_LOCAL_MEM_SIZE:  *value = (1 << LMEM_LOG_SIZE); break;
+        case VX_CAPS_LOCAL_MEM_SIZE:  *value = (1 << VX_CFG_LMEM_LOG_SIZE); break;
         case VX_CAPS_ISA_FLAGS:
-            *value = ((uint64_t(MISA_EXT)) << 32)
-                   | ((log2floor(XLEN) - 4) << 30)
-                   |   MISA_STD;
+            *value = ((uint64_t(VX_CFG_MISA_EXT)) << 32)
+                   | ((log2floor(VX_CFG_XLEN) - 4) << 30)
+                   |   VX_CFG_MISA_STD;
             break;
-        case VX_CAPS_NUM_MEM_BANKS:   *value = PLATFORM_MEMORY_NUM_BANKS; break;
-        case VX_CAPS_MEM_BANK_SIZE:   *value = 1ull << (MEM_ADDR_WIDTH / PLATFORM_MEMORY_NUM_BANKS); break;
+        case VX_CAPS_NUM_MEM_BANKS:   *value = VX_CFG_PLATFORM_MEMORY_NUM_BANKS; break;
+        case VX_CAPS_MEM_BANK_SIZE:   *value = 1ull << (VX_CFG_MEM_ADDR_WIDTH / VX_CFG_PLATFORM_MEMORY_NUM_BANKS); break;
         case VX_CAPS_CLOCK_RATE:      *value = 0; break;
-        case VX_CAPS_PEAK_MEM_BW:     *value = PLATFORM_MEMORY_PEAK_BW; break;
+        case VX_CAPS_PEAK_MEM_BW:     *value = VX_CFG_PLATFORM_MEMORY_PEAK_BW; break;
         default:
             std::fprintf(stderr, "[VXDRV] invalid caps id: %u\n", caps_id);
             return -1;

@@ -21,7 +21,7 @@ AmoUnit::AmoUnit(uint32_t reservation_size)
 {
   // RVA conformance floor: ≥ 2 entries to allow forward progress
   // for at least two harts under contention.
-  assert(reservation_size >= 2 && "AMO_RS_SIZE must be >= 2");
+  assert(reservation_size >= 2 && "VX_CFG_AMO_RS_SIZE must be >= 2");
 }
 
 AmoComputeResult AmoUnit::compute(MemOp op, uint8_t width,

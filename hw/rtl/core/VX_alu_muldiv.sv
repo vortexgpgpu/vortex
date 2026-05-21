@@ -35,13 +35,13 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     wire is_mulx_op = inst_m_is_mulx(muldiv_op);
     wire is_signed_op = inst_m_signed(muldiv_op);
-`ifdef XLEN_64
+`ifdef VX_CFG_XLEN_64
     wire is_alu_w = execute_if.data.op_args.alu.is_w;
 `else
     wire is_alu_w = 0;
 `endif
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] mul_result_out;
+    wire [NUM_LANES-1:0][XLEN-1:0] mul_result_out;
     alu_header_t mul_hdr_out;
 
     wire mul_valid_in = execute_if.valid && is_mulx_op;
@@ -53,31 +53,31 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     wire is_signed_mul_a = inst_m_signed_a(muldiv_op);
     wire is_signed_mul_b = is_signed_op;
 
-`ifdef IMUL_DPI
+`ifdef VX_CFG_IMUL_DPI
 
     import "DPI-C" function void dpi_imul(input logic enable, input logic is_signed_a, input logic is_signed_b, input int a, input int b, output int resultl, output int resulth);
     import "DPI-C" function void dpi_lmul(input logic enable, input logic is_signed_a, input logic is_signed_b, input longint a, input longint b, output longint resultl, output longint resulth);
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] mul_result_tmp;
+    wire [NUM_LANES-1:0][XLEN-1:0] mul_result_tmp;
 
     wire mul_fire_in = mul_valid_in && mul_ready_in;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_result_tmp
-        reg [`XLEN-1:0] mul_resultl, mul_resulth;
-        wire [`XLEN-1:0] mul_in1 = is_alu_w ? (execute_if.data.rs1_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs1_data[i];
-        wire [`XLEN-1:0] mul_in2 = is_alu_w ? (execute_if.data.rs2_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs2_data[i];
+        reg [XLEN-1:0] mul_resultl, mul_resulth;
+        wire [XLEN-1:0] mul_in1 = is_alu_w ? (execute_if.data.rs1_data[i] & XLEN'(32'hFFFFFFFF)) : execute_if.data.rs1_data[i];
+        wire [XLEN-1:0] mul_in2 = is_alu_w ? (execute_if.data.rs2_data[i] & XLEN'(32'hFFFFFFFF)) : execute_if.data.rs2_data[i];
         always @(*) begin
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             dpi_lmul (mul_fire_in, is_signed_mul_a, is_signed_mul_b, mul_in1, mul_in2, mul_resultl, mul_resulth);
         `else
             dpi_imul (mul_fire_in, is_signed_mul_a, is_signed_mul_b, mul_in1, mul_in2, mul_resultl, mul_resulth);
         `endif
         end
-        assign mul_result_tmp[i] = is_mulh_in ? mul_resulth : (is_alu_w ? `XLEN'($signed(mul_resultl[31:0])) : mul_resultl);
+        assign mul_result_tmp[i] = is_mulh_in ? mul_resulth : (is_alu_w ? XLEN'($signed(mul_resultl[31:0])) : mul_resultl);
     end
 
     VX_shift_register #(
-        .DATAW  (1 + TAG_WIDTH + (NUM_LANES * `XLEN)),
+        .DATAW  (1 + TAG_WIDTH + (NUM_LANES * XLEN)),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
@@ -92,18 +92,18 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
 `else
 
-    wire [NUM_LANES-1:0][2*(`XLEN+1)-1:0] mul_result_tmp;
+    wire [NUM_LANES-1:0][2*(XLEN+1)-1:0] mul_result_tmp;
     wire is_mulh_out;
     wire is_mul_w_out;
 
-`ifdef XLEN_64
+`ifdef VX_CFG_XLEN_64
 
-    wire [NUM_LANES-1:0][`XLEN:0] mul_in1;
-    wire [NUM_LANES-1:0][`XLEN:0] mul_in2;
+    wire [NUM_LANES-1:0][XLEN:0] mul_in1;
+    wire [NUM_LANES-1:0][XLEN:0] mul_in2;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_in
-        assign mul_in1[i] = is_alu_w ? {{(`XLEN-31){execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]} : {is_signed_mul_a && execute_if.data.rs1_data[i][`XLEN-1], execute_if.data.rs1_data[i]};
-        assign mul_in2[i] = is_alu_w ? {{(`XLEN-31){execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]} : {is_signed_mul_b && execute_if.data.rs2_data[i][`XLEN-1], execute_if.data.rs2_data[i]};
+        assign mul_in1[i] = is_alu_w ? {{(XLEN-31){execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]} : {is_signed_mul_a && execute_if.data.rs1_data[i][XLEN-1], execute_if.data.rs1_data[i]};
+        assign mul_in2[i] = is_alu_w ? {{(XLEN-31){execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]} : {is_signed_mul_b && execute_if.data.rs2_data[i][XLEN-1], execute_if.data.rs2_data[i]};
     end
 
     wire mul_strode;
@@ -121,7 +121,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     );
 
     VX_serial_mul #(
-        .A_WIDTH (`XLEN+1),
+        .A_WIDTH (XLEN+1),
         .LANES   (NUM_LANES),
         .SIGNED  (1)
     ) serial_mul (
@@ -148,13 +148,13 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 `else
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_multiplier
-        wire [`XLEN:0] mul_in1 = {is_signed_mul_a && execute_if.data.rs1_data[i][`XLEN-1], execute_if.data.rs1_data[i]};
-        wire [`XLEN:0] mul_in2 = {is_signed_mul_b && execute_if.data.rs2_data[i][`XLEN-1], execute_if.data.rs2_data[i]};
+        wire [XLEN:0] mul_in1 = {is_signed_mul_a && execute_if.data.rs1_data[i][XLEN-1], execute_if.data.rs1_data[i]};
+        wire [XLEN:0] mul_in2 = {is_signed_mul_b && execute_if.data.rs2_data[i][XLEN-1], execute_if.data.rs2_data[i]};
 
         VX_multiplier #(
-            .A_WIDTH (`XLEN+1),
-            .B_WIDTH (`XLEN+1),
-            .R_WIDTH (2*(`XLEN+1)),
+            .A_WIDTH (XLEN+1),
+            .B_WIDTH (XLEN+1),
+            .R_WIDTH (2*(XLEN+1)),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -183,12 +183,12 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 `endif
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_result_out
-    `ifdef XLEN_64
-        assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(`XLEN)-1:`XLEN] :
-                                                 (is_mul_w_out ? `XLEN'($signed(mul_result_tmp[i][31:0])) :
-                                                                 mul_result_tmp[i][`XLEN-1:0]);
+    `ifdef VX_CFG_XLEN_64
+        assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(XLEN)-1:XLEN] :
+                                                 (is_mul_w_out ? XLEN'($signed(mul_result_tmp[i][31:0])) :
+                                                                 mul_result_tmp[i][XLEN-1:0]);
     `else
-        assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(`XLEN)-1:`XLEN] : mul_result_tmp[i][`XLEN-1:0];
+        assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(XLEN)-1:XLEN] : mul_result_tmp[i][XLEN-1:0];
         `UNUSED_VAR (is_mul_w_out)
     `endif
     end
@@ -197,7 +197,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_result_out;
+    wire [NUM_LANES-1:0][XLEN-1:0] div_result_out;
     alu_header_t div_hdr_out;
 
     wire is_rem_op = inst_m_is_rem(muldiv_op);
@@ -207,42 +207,42 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     wire div_valid_out;
     wire div_ready_out;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_in1;
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_in2;
+    wire [NUM_LANES-1:0][XLEN-1:0] div_in1;
+    wire [NUM_LANES-1:0][XLEN-1:0] div_in2;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_in
-    `ifdef XLEN_64
-        assign div_in1[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]}: execute_if.data.rs1_data[i];
-        assign div_in2[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]}: execute_if.data.rs2_data[i];
+    `ifdef VX_CFG_XLEN_64
+        assign div_in1[i] = is_alu_w ? {{(XLEN-32){is_signed_op && execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]}: execute_if.data.rs1_data[i];
+        assign div_in2[i] = is_alu_w ? {{(XLEN-32){is_signed_op && execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]}: execute_if.data.rs2_data[i];
     `else
         assign div_in1[i] = execute_if.data.rs1_data[i];
         assign div_in2[i] = execute_if.data.rs2_data[i];
     `endif
     end
 
-`ifdef IDIV_DPI
+`ifdef VX_CFG_IDIV_DPI
 
     import "DPI-C" function void dpi_idiv(input logic enable, input logic is_signed, input int a, input int b, output int quotient, output int remainder);
     import "DPI-C" function void dpi_ldiv(input logic enable, input logic is_signed, input longint a, input longint b, output longint quotient, output longint remainder);
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_result_in;
+    wire [NUM_LANES-1:0][XLEN-1:0] div_result_in;
     wire div_fire_in = div_valid_in && div_ready_in;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_result_in
-        reg [`XLEN-1:0] div_quotient, div_remainder;
+        reg [XLEN-1:0] div_quotient, div_remainder;
         always @(*) begin
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             dpi_ldiv (div_fire_in, is_signed_op, div_in1[i], div_in2[i], div_quotient, div_remainder);
         `else
             dpi_idiv (div_fire_in, is_signed_op, div_in1[i], div_in2[i], div_quotient, div_remainder);
         `endif
         end
-        assign div_result_in[i] = is_rem_op ? (is_alu_w ? `XLEN'($signed(div_remainder[31:0])) : div_remainder) :
-                                              (is_alu_w ? `XLEN'($signed(div_quotient[31:0])) : div_quotient);
+        assign div_result_in[i] = is_rem_op ? (is_alu_w ? XLEN'($signed(div_remainder[31:0])) : div_remainder) :
+                                              (is_alu_w ? XLEN'($signed(div_quotient[31:0])) : div_quotient);
     end
 
     VX_shift_register #(
-        .DATAW  (1 + TAG_WIDTH + (NUM_LANES * `XLEN)),
+        .DATAW  (1 + TAG_WIDTH + (NUM_LANES * XLEN)),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) div_shift_reg (
@@ -257,7 +257,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
 `else
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_quotient, div_remainder;
+    wire [NUM_LANES-1:0][XLEN-1:0] div_quotient, div_remainder;
     wire is_rem_op_out;
     wire is_div_w_out;
     wire div_strode;
@@ -275,10 +275,10 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     );
 
     VX_serial_div #(
-        .WIDTHN (`XLEN),
-        .WIDTHD (`XLEN),
-        .WIDTHQ (`XLEN),
-        .WIDTHR (`XLEN),
+        .WIDTHN (XLEN),
+        .WIDTHD (XLEN),
+        .WIDTHQ (XLEN),
+        .WIDTHR (XLEN),
         .LANES  (NUM_LANES)
     ) serial_div (
         .clk       (clk),
@@ -305,9 +305,9 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     assign {div_hdr_out, is_rem_op_out, is_div_w_out} = div_tag_r;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_result_out
-    `ifdef XLEN_64
-        assign div_result_out[i] = is_rem_op_out ? (is_div_w_out ? `XLEN'($signed(div_remainder[i][31:0])) : div_remainder[i]) :
-                                                   (is_div_w_out ? `XLEN'($signed(div_quotient[i][31:0])) : div_quotient[i]);
+    `ifdef VX_CFG_XLEN_64
+        assign div_result_out[i] = is_rem_op_out ? (is_div_w_out ? XLEN'($signed(div_remainder[i][31:0])) : div_remainder[i]) :
+                                                   (is_div_w_out ? XLEN'($signed(div_quotient[i][31:0])) : div_quotient[i]);
     `else
         assign div_result_out[i] = is_rem_op_out ? div_remainder[i] : div_quotient[i];
         `UNUSED_VAR (is_div_w_out)
@@ -321,7 +321,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
-        .DATAW (TAG_WIDTH + (NUM_LANES * `XLEN)),
+        .DATAW (TAG_WIDTH + (NUM_LANES * XLEN)),
         .ARBITER ("P"),
         .OUT_BUF (2)
     ) rsp_buf (

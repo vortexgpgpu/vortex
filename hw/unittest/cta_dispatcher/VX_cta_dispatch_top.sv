@@ -32,14 +32,14 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     input  wire [31:0]                  in_grid_dim_x,
     input  wire [31:0]                  in_grid_dim_y,
     input  wire [31:0]                  in_grid_dim_z,
-    input  wire [`MEM_ADDR_WIDTH-1:0]   in_param,
-    input  wire [`LMEM_LOG_SIZE:0]      in_lmem_size,
+    input  wire [`VX_CFG_MEM_ADDR_WIDTH-1:0]   in_param,
+    input  wire [`VX_CFG_LMEM_LOG_SIZE:0]      in_lmem_size,
     input  wire [CTA_TID_WIDTH:0]       in_block_size,
     input  wire [CTA_TID_WIDTH-1:0]     in_warp_step_x,
     input  wire [CTA_TID_WIDTH-1:0]     in_warp_step_y,
     input  wire [CTA_TID_WIDTH-1:0]     in_warp_step_z,
 
-    input  wire [`NUM_WARPS-1:0]        active_warps,
+    input  wire [`VX_CFG_NUM_WARPS-1:0]        active_warps,
     input  wire                         warp_done,
     input  wire [NW_WIDTH-1:0]          warp_done_wid,
 
@@ -72,7 +72,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     assign kmu_bus.data.warp_step[2] = in_warp_step_z;
 
     wire [PC_BITS-1:0]      cta_PC;
-    wire [`NUM_THREADS-1:0] cta_tmask;
+    wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask;
     cta_csrs_t              cta_csrs;
     wire                    cta_init;
     wire                    busy;

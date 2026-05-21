@@ -29,12 +29,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     VX_result_if.master     result_if,
     VX_lsu_mem_if.master    lsu_mem_if
 );
-    localparam NUM_LANES    = `NUM_LSU_LANES;
-    localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
-    localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_IN_SIZE);
+    localparam NUM_LANES    = NUM_LSU_LANES;
+    localparam PID_BITS     = `CLOG2(NUM_THREADS / NUM_LANES);
+    localparam LSUQ_SIZEW   = `LOG2UP(LSUQ_IN_SIZE);
     localparam REQ_ASHIFT   = `CLOG2(LSU_WORD_SIZE);
-    localparam MEM_ASHIFT   = `CLOG2(`MEM_BLOCK_SIZE);
-    localparam MEM_ADDRW    = `MEM_ADDR_WIDTH - MEM_ASHIFT;
+    localparam MEM_ASHIFT   = `CLOG2(MEM_BLOCK_SIZE);
+    localparam MEM_ADDRW    = MEM_ADDR_WIDTH - MEM_ASHIFT;
     `UNUSED_PARAM (CORE_ID)
 
     // tag_width = header + op_type + align + pkt_addr + fence
@@ -54,9 +54,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     wire req_is_fence, rsp_is_fence;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;
+    wire [NUM_LANES-1:0][XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
-        assign full_addr[i] = execute_if.data.rs1_data[i] + `SEXT(`XLEN, execute_if.data.op_args.lsu.offset);
+        assign full_addr[i] = execute_if.data.rs1_data[i] + `SEXT(XLEN, execute_if.data.op_args.lsu.offset);
     end
 
     // address type + AMO classification — per-lane mem_bus_attr_t
@@ -68,19 +68,19 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_attr
         wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is I/O address
-        wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT);
-        wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`XLEN'(`IO_END_ADDR) >> MEM_ASHIFT);
+        wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(XLEN'(IO_BASE_ADDR) >> MEM_ASHIFT);
+        wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(XLEN'(IO_END_ADDR) >> MEM_ASHIFT);
         assign mem_req_attr_struct[i].is_flush  = req_is_fence;
         assign mem_req_attr_struct[i].is_addr_io = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
-    `ifdef LMEM_ENABLE
+    `ifdef VX_CFG_LMEM_ENABLE
         // is local memory address
-        wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
-        wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + `XLEN'(1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
+        wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(XLEN'(LMEM_BASE_ADDR) >> MEM_ASHIFT);
+        wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((XLEN'(LMEM_BASE_ADDR) + XLEN'(1 << LMEM_LOG_SIZE)) >> MEM_ASHIFT);
         assign mem_req_attr_struct[i].is_addr_local = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
     `else
         assign mem_req_attr_struct[i].is_addr_local = 1'b0;
     `endif
-    `ifdef EXT_A_ENABLE
+    `ifdef VX_CFG_EXT_A_ENABLE
         amo_req_t lane_amo;
         assign lane_amo.amo_valid    = execute_if.data.op_args.lsu.amo_valid;
         assign lane_amo.amo_op       = execute_if.data.op_args.lsu.amo_op;
@@ -167,7 +167,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                            && ~fence_lock;
 
     assign mem_req_mask = execute_if.data.header.tmask;
-`ifdef EXT_A_ENABLE
+`ifdef VX_CFG_EXT_A_ENABLE
     // AMO MemReq.rw is unconditionally 0 (proposal §3.4): a missing
     // line under SC must miss-and-return-failure, not write-and-succeed.
     assign mem_req_rw = execute_if.data.op_args.lsu.is_store
@@ -182,7 +182,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_addr
         assign req_align[i] = full_addr[i][REQ_ASHIFT-1:0];
-        assign mem_req_addr[i] = full_addr[i][`MEM_ADDR_WIDTH-1:REQ_ASHIFT];
+        assign mem_req_addr[i] = full_addr[i][MEM_ADDR_WIDTH-1:REQ_ASHIFT];
     end
 
     // byte enable formatting
@@ -198,7 +198,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                     mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:1], 1'b0}] = 1'b1;
                     mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:1], 1'b1}] = 1'b1;
                 end
-            `ifdef XLEN_64
+            `ifdef VX_CFG_XLEN_64
                 2: begin // 32 bit
                     mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:2], 2'b00}] = 1'b1;
                     mem_req_byteen_w[{req_align[i][REQ_ASHIFT-1:2], 2'b01}] = 1'b1;
@@ -226,14 +226,14 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         always @(*) begin
             mem_req_data[i] = execute_if.data.rs2_data[i];
             case (req_align[i])
-                1: mem_req_data[i][`XLEN-1:8]  = execute_if.data.rs2_data[i][`XLEN-9:0];
-                2: mem_req_data[i][`XLEN-1:16] = execute_if.data.rs2_data[i][`XLEN-17:0];
-                3: mem_req_data[i][`XLEN-1:24] = execute_if.data.rs2_data[i][`XLEN-25:0];
-            `ifdef XLEN_64
-                4: mem_req_data[i][`XLEN-1:32] = execute_if.data.rs2_data[i][`XLEN-33:0];
-                5: mem_req_data[i][`XLEN-1:40] = execute_if.data.rs2_data[i][`XLEN-41:0];
-                6: mem_req_data[i][`XLEN-1:48] = execute_if.data.rs2_data[i][`XLEN-49:0];
-                7: mem_req_data[i][`XLEN-1:56] = execute_if.data.rs2_data[i][`XLEN-57:0];
+                1: mem_req_data[i][XLEN-1:8]  = execute_if.data.rs2_data[i][XLEN-9:0];
+                2: mem_req_data[i][XLEN-1:16] = execute_if.data.rs2_data[i][XLEN-17:0];
+                3: mem_req_data[i][XLEN-1:24] = execute_if.data.rs2_data[i][XLEN-25:0];
+            `ifdef VX_CFG_XLEN_64
+                4: mem_req_data[i][XLEN-1:32] = execute_if.data.rs2_data[i][XLEN-33:0];
+                5: mem_req_data[i][XLEN-1:40] = execute_if.data.rs2_data[i][XLEN-41:0];
+                6: mem_req_data[i][XLEN-1:48] = execute_if.data.rs2_data[i][XLEN-49:0];
+                7: mem_req_data[i][XLEN-1:56] = execute_if.data.rs2_data[i][XLEN-57:0];
             `endif
                 default:;
             endcase
@@ -244,8 +244,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // we should track and flag SOP and EOP responses.
 
     if (PID_BITS != 0) begin : g_pid
-        reg [`LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
-        reg [`LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
+        reg [LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
+        reg [LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
 
         wire mem_req_rd_fire     = mem_req_fire && ~mem_req_rw;
         wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.header.sop;
@@ -255,7 +255,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire full;
 
         VX_allocator #(
-            .SIZE (`LSUQ_IN_SIZE)
+            .SIZE (LSUQ_IN_SIZE)
         ) pkt_allocator (
             .clk        (clk),
             .reset      (reset),
@@ -344,8 +344,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .ADDR_WIDTH  (LSU_ADDR_WIDTH),
         .USER_WIDTH  (MEM_ATTR_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH),
-        .CORE_QUEUE_SIZE (`LSUQ_IN_SIZE),
-        .MEM_QUEUE_SIZE (`LSUQ_OUT_SIZE),
+        .CORE_QUEUE_SIZE (LSUQ_IN_SIZE),
+        .MEM_QUEUE_SIZE (LSUQ_OUT_SIZE),
         .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (1),
         .MEM_OUT_BUF (0),
@@ -430,10 +430,10 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // load response formatting
 
-    reg [NUM_LANES-1:0][`XLEN-1:0] rsp_data;
+    reg [NUM_LANES-1:0][XLEN-1:0] rsp_data;
 
-`ifdef XLEN_64
-`ifdef EXT_F_ENABLE
+`ifdef VX_CFG_XLEN_64
+`ifdef VX_CFG_EXT_F_ENABLE
     // apply nan-boxing to flw outputs
     wire rsp_is_float = (get_reg_type(rsp_hdr.rd) == REG_TYPE_F);
 `else
@@ -442,7 +442,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `endif
 
     for (genvar i = 0; i < NUM_LANES; i++) begin : g_rsp_data
-    `ifdef XLEN_64
+    `ifdef VX_CFG_XLEN_64
         wire [63:0] rsp_data64 = mem_rsp_data[i];
         wire [31:0] rsp_data32 = (rsp_align[i][2] ? mem_rsp_data[i][63:32] : mem_rsp_data[i][31:0]);
     `else
@@ -453,16 +453,16 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
         always @(*) begin
             case (inst_lsu_fmt(rsp_op_type))
-            LSU_FMT_B:  rsp_data[i] = `XLEN'(signed'(rsp_data8));
-            LSU_FMT_H:  rsp_data[i] = `XLEN'(signed'(rsp_data16));
-            LSU_FMT_BU: rsp_data[i] = `XLEN'(unsigned'(rsp_data8));
-            LSU_FMT_HU: rsp_data[i] = `XLEN'(unsigned'(rsp_data16));
-        `ifdef XLEN_64
-            LSU_FMT_W:  rsp_data[i] = rsp_is_float ? (`XLEN'(rsp_data32) | 64'hffffffff00000000) : `XLEN'(signed'(rsp_data32));
-            LSU_FMT_WU: rsp_data[i] = `XLEN'(unsigned'(rsp_data32));
-            LSU_FMT_D:  rsp_data[i] = `XLEN'(signed'(rsp_data64));
+            LSU_FMT_B:  rsp_data[i] = XLEN'(signed'(rsp_data8));
+            LSU_FMT_H:  rsp_data[i] = XLEN'(signed'(rsp_data16));
+            LSU_FMT_BU: rsp_data[i] = XLEN'(unsigned'(rsp_data8));
+            LSU_FMT_HU: rsp_data[i] = XLEN'(unsigned'(rsp_data16));
+        `ifdef VX_CFG_XLEN_64
+            LSU_FMT_W:  rsp_data[i] = rsp_is_float ? (XLEN'(rsp_data32) | 64'hffffffff00000000) : XLEN'(signed'(rsp_data32));
+            LSU_FMT_WU: rsp_data[i] = XLEN'(unsigned'(rsp_data32));
+            LSU_FMT_D:  rsp_data[i] = XLEN'(signed'(rsp_data64));
         `else
-            LSU_FMT_W:  rsp_data[i] = `XLEN'(signed'(rsp_data32));
+            LSU_FMT_W:  rsp_data[i] = XLEN'(signed'(rsp_data32));
         `endif
             default: rsp_data[i] = 'x;
             endcase
@@ -563,7 +563,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 3, 4, 2, (
-            1 + NUM_LANES * (`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + UUID_WIDTH
+            1 + NUM_LANES * (XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + UUID_WIDTH
         ), {
             mem_req_valid,
             mem_req_ready,

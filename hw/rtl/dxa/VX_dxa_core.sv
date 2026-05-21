@@ -16,7 +16,6 @@
 module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_REQS = 1,
-    parameter NUM_DXA_UNITS = 1,
     parameter GMEM_OUT_PORTS = 1
 ) (
     input wire clk,
@@ -67,7 +66,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW  (REQ_DATAW),
-        .SIZE   (`DXA_QUEUE_SIZE),
+        .SIZE   (DXA_QUEUE_SIZE),
         .LUTRAM (1)
     ) req_queue (
         .clk       (clk),
@@ -110,7 +109,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam WORKER_GMEM_TAG_WIDTH = L1_MEM_ARB_TAG_WIDTH - GMEM_ARB_SEL_BITS;
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`L1_LINE_SIZE),
+        .DATA_SIZE (L1_LINE_SIZE),
         .TAG_WIDTH (WORKER_GMEM_TAG_WIDTH)
     ) worker_gmem_bus_if[NUM_DXA_UNITS]();
 
@@ -148,7 +147,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_mem_arb #(
         .NUM_INPUTS  (NUM_DXA_UNITS),
         .NUM_OUTPUTS (GMEM_OUT_PORTS),
-        .DATA_SIZE   (`L1_LINE_SIZE),
+        .DATA_SIZE   (L1_LINE_SIZE),
         .TAG_WIDTH   (WORKER_GMEM_TAG_WIDTH),
         .ARBITER     ("R")
     ) gmem_arb (

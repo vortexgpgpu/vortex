@@ -21,6 +21,7 @@
 package VX_tcu_pkg;
 
     import VX_gpu_pkg::*;
+    import VX_config_pkg::*;
 
     // Supported floating-point types
     // WARNING: Changing this list requires updating format utility functions below
@@ -42,7 +43,7 @@ package VX_tcu_pkg;
     localparam TCU_FMT_WIDTH= 4;
 
     // Set configuration parameters
-    localparam TCU_NT = `NUM_THREADS;
+    localparam TCU_NT = NUM_THREADS;
 
     localparam TCU_WG_NRA = 4;  // A registers per warp (fixed)
     localparam TCU_WG_NR = 32;  // max NRC (C/D registers, variable via cd_nregs)
@@ -107,7 +108,7 @@ package VX_tcu_pkg;
 
     // Symmetric sparse flag (NT=4, NT=16: block_em == block_en)
     // WGMMA always uses full interleaved layout, so SYM_SPARSE is forced off.
-    localparam SYM_SPARSE = `TCU_WGMMA_ENABLED ? 0 : (TCU_BLOCK_EM == TCU_BLOCK_EN);
+    localparam SYM_SPARSE = TCU_WGMMA_ENABLED ? 0 : (TCU_BLOCK_EM == TCU_BLOCK_EN);
 
     // B micro-tiling (sparse 2:4)
     // NT=8/32: standard interleaved layout (tcK × tcN × 2 = NT lanes per block)
@@ -119,7 +120,7 @@ package VX_tcu_pkg;
     localparam TCU_WG_B_BLOCK_SIZE_SP = TCU_TC_K * TCU_TC_N * 2;
     // Width of the tbuf_rs2_data port: wider only when SPARSE is enabled (WGMMA_SP path).
     // Without SPARSE, only TCU_BLOCK_CAP lanes are ever consumed, so keep the port narrow.
-    localparam TCU_WG_RS2_WIDTH = `TCU_SPARSE_ENABLED ? TCU_WG_B_BLOCK_SIZE_SP : TCU_BLOCK_CAP;
+    localparam TCU_WG_RS2_WIDTH = TCU_SPARSE_ENABLED ? TCU_WG_B_BLOCK_SIZE_SP : TCU_BLOCK_CAP;
 
     localparam TCU_MIN_FMT_WIDTH = 4; //int4
     localparam TCU_MAX_ELT_RATIO = 32 / TCU_MIN_FMT_WIDTH;
@@ -138,7 +139,7 @@ package VX_tcu_pkg;
         ? TCU_NT : TCU_META_PER_WARP_DEPTH;
     localparam TCU_STORES_PER_COL = (TCU_META_PER_WARP_DEPTH + TCU_NT - 1) / TCU_NT;
 
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Meta-store micro-op expansion parameters (WGMMA RS sparse)
     localparam TCU_WG_META_PER_WARP_DEPTH = TCU_WG_M_STEPS * (TCU_WG_K_STEPS / 2);
     localparam TCU_WG_META_COLS_PER_LOAD  = (TCU_BLOCK_CAP >= TCU_WG_META_PER_WARP_DEPTH)
@@ -162,9 +163,9 @@ package VX_tcu_pkg;
 
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
 
-    `ifdef TCU_TF32_ENABLE
+    `ifdef VX_CFG_TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;
-    `elsif TCU_BF16_ENABLE
+    `elsif VX_CFG_TCU_BF16_ENABLE
         localparam TCU_EXP_BITS = 10;
     `else
         localparam TCU_EXP_BITS = 9;
@@ -263,7 +264,7 @@ package VX_tcu_pkg;
                   * TCU_STORES_PER_COL);
     endfunction
 
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
     function automatic logic [4:0] wg_meta_total_store_uops(input logic [3:0] fmt);
         return 5'(((32'(meta_num_cols(fmt)) + TCU_WG_META_COLS_PER_LOAD - 1) / TCU_WG_META_COLS_PER_LOAD)
                   * TCU_WG_STORES_PER_COL);
@@ -298,7 +299,7 @@ package VX_tcu_pkg;
     );
         case (INST_TCU_BITS'(op_type))
             INST_TCU_WMMA: begin
-            `ifdef TCU_SPARSE_ENABLE
+            `ifdef VX_CFG_TCU_SPARSE_ENABLE
                 `TRACE(level, (op_args.tcu.is_sparse ? "WMMA.SP." : "WMMA."));
             `else
                 `TRACE(level, ("WMMA."));
@@ -308,9 +309,9 @@ package VX_tcu_pkg;
                 trace_fmt(level, op_args.tcu.fmt_d);
                 `TRACE(level, (".%0d.%0d.%0d", op_args.tcu.step_m, op_args.tcu.step_n, op_args.tcu.step_k));
             end
-        `ifdef TCU_WGMMA_ENABLE
+        `ifdef VX_CFG_TCU_WGMMA_ENABLE
             INST_TCU_WGMMA: begin
-            `ifdef TCU_SPARSE_ENABLE
+            `ifdef VX_CFG_TCU_SPARSE_ENABLE
                 `TRACE(level, (op_args.tcu.is_sparse ? "WGMMA.SP." : "WGMMA."));
             `else
                 `TRACE(level, ("WGMMA."));
@@ -324,7 +325,7 @@ package VX_tcu_pkg;
                     op_args.tcu.step_m, op_args.tcu.step_n));
             end
         `endif
-        `ifdef TCU_SPARSE_ENABLE
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
             INST_TCU_META_STORE: begin
                 `TRACE(level, ("META_STORE."));
                 trace_fmt(level, op_args.tcu.fmt_s);
@@ -335,7 +336,7 @@ package VX_tcu_pkg;
     endtask
 `endif
 
-    `DECL_EXECUTE_T (tcu, `NUM_TCU_LANES);
+    `DECL_EXECUTE_T (tcu, NUM_TCU_LANES);
 
 endpackage
 

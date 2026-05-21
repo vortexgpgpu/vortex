@@ -46,13 +46,13 @@ endif
 
 ifdef NUM_CORES
 # cluster configuration
-CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
-CONFIGS_2c  := -DNUM_CLUSTERS=1 -DNUM_CORES=2
-CONFIGS_4c  := -DNUM_CLUSTERS=1 -DNUM_CORES=4
-CONFIGS_8c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=8
-CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16
-CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16
-CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16
+CONFIGS_1c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=1
+CONFIGS_2c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=2
+CONFIGS_4c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4
+CONFIGS_8c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=8
+CONFIGS_16c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16
+CONFIGS_32c := -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16
+CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 endif
 
@@ -62,13 +62,13 @@ ifneq ($(TARGET), fpga)
 	CONFIGS += -DSIMULATION
 endif
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DXLEN_$(XLEN)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)')
 
 # include sources
 RTL_PKGS = $(AFU_DIR)/local_mem_cfg_pkg.sv $(AFU_DIR)/ccip/ccip_if_pkg.sv
 RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
@@ -76,46 +76,46 @@ RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RT
 RTL_INCLUDE += $(FPU_INCLUDE)
 
 # Add TCU extension sources
-ifneq (,$(filter -DEXT_TCU_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_DPI, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 	endif
-	ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_DSP, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 	endif
-	ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_BHF, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 	endif
-	ifneq (,$(filter -DTCU_TYPE_TFR, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 	endif
 endif
 
 # Add DXA extension sources
-ifneq (,$(filter -DEXT_DXA_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_DXA_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/dxa/VX_dxa_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/dxa
 endif
 
 # Add V extension sources
-ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
 
 # compilation flags
-CFLAGS += -DXLEN_$(XLEN)
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
 # Debugging
 ifdef DEBUG
 	ifneq ($(TARGET), fpga)
-		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
+		CFLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	else
 		CFLAGS += -DNDEBUG
 	endif
@@ -135,7 +135,7 @@ ifdef PERF
 endif
 
 # ast dump flags
-XML_CFLAGS = $(filter-out -DSYNTHESIS -DQUARTUS, $(CFLAGS)) $(RTL_PKGS) -I$(AFU_DIR)/ccip -I$(DPI_DIR) -DPLATFORM_PROVIDES_LOCAL_MEMORY -DPLATFORM_MEMORY_NUM_BANKS=1 -DNOPAE -DSV_DPI
+XML_CFLAGS = $(filter-out -DSYNTHESIS -DQUARTUS, $(CFLAGS)) $(RTL_PKGS) -I$(AFU_DIR)/ccip -I$(DPI_DIR) -DPLATFORM_PROVIDES_LOCAL_MEMORY -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 -DNOPAE -DSV_DPI
 
 all: swconfig ip-gen setup build
 

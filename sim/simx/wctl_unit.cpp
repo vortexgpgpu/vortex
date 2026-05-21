@@ -27,7 +27,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
   auto& warp        = sched.warp(trace->wid);
   auto instrArgs    = trace->instr_ptr->get_args();
   auto wctlArgs     = std::get<IntrWctlArgs>(instrArgs);
-  uint32_t num_threads = NUM_THREADS;
+  uint32_t num_threads = VX_CFG_NUM_THREADS;
   auto& rs1_data    = trace->src_data[0];
   auto& rs2_data    = trace->src_data[1];
 
@@ -113,7 +113,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
   case WctlType::BAR: {
     uint32_t arg1 = rs1_data[thread_last].u;
     uint32_t arg2 = rs2_data[thread_last].u;
-    uint32_t bar_id = bar_decode_id(arg1, NUM_BARRIERS);
+    uint32_t bar_id = bar_decode_id(arg1, VX_CFG_NUM_BARRIERS);
     bool is_sync_bar = (bool)wctlArgs.is_sync_bar;
     // rs2[31] flags expect_tx semantics on the same opcode as barrier_arrive.
     // Lower bits carry the count of pending transactions to register.

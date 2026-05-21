@@ -31,10 +31,10 @@ struct TexReq {
   uint64_t                                uuid       = 0;
   uint32_t                                tag        = 0;     // {core_local, queue_slot} routing tag
   uint32_t                                stage      = 0;
-  uint32_t                                tmask_bits = 0;     // active-thread bitmask (NUM_THREADS lsbs)
-  std::array<int32_t,  NUM_THREADS>       u          = {};    // s32 fixed-point coord (VX_TEX_FXD_FRAC bits)
-  std::array<int32_t,  NUM_THREADS>       v          = {};
-  std::array<uint32_t, NUM_THREADS>       lod        = {};
+  uint32_t                                tmask_bits = 0;     // active-thread bitmask (VX_CFG_NUM_THREADS lsbs)
+  std::array<int32_t,  VX_CFG_NUM_THREADS>       u          = {};    // s32 fixed-point coord (VX_TEX_FXD_FRAC bits)
+  std::array<int32_t,  VX_CFG_NUM_THREADS>       v          = {};
+  std::array<uint32_t, VX_CFG_NUM_THREADS>       lod        = {};
 
   // SimX-only: routing back to the per-core SfuUnit writeback.
   instr_trace_t* trace    = nullptr;
@@ -49,7 +49,7 @@ struct TexReq {
 struct TexRsp {
   uint64_t                            uuid     = 0;
   uint32_t                            tag      = 0;
-  std::array<uint32_t, NUM_THREADS>   texels   = {};
+  std::array<uint32_t, VX_CFG_NUM_THREADS>   texels   = {};
   instr_trace_t*                      trace    = nullptr;
   uint32_t                            block_id = 0;
 

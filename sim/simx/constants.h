@@ -41,7 +41,7 @@
 
 namespace vortex {
 
-inline constexpr uint32_t XLENB           = (XLEN / 8);
+inline constexpr uint32_t XLENB           = (VX_CFG_XLEN / 8);
 
 inline constexpr uint32_t MAX_NUM_CORES   = 1024;
 inline constexpr uint32_t MAX_NUM_WARPS   = 64;
@@ -49,21 +49,21 @@ inline constexpr uint32_t MAX_NUM_REGS    = 32;
 inline constexpr uint32_t LOG_NUM_REGS    = 5;
 inline constexpr uint32_t NUM_SRC_REGS    = 3;
 
-inline constexpr uint32_t LSU_WORD_SIZE   = (XLEN / 8);
-inline constexpr uint32_t LSU_CHANNELS    = NUM_LSU_LANES;
-inline constexpr uint32_t LSU_NUM_REQS	  = (NUM_LSU_BLOCKS * LSU_CHANNELS);
+inline constexpr uint32_t LSU_WORD_SIZE   = (VX_CFG_XLEN / 8);
+inline constexpr uint32_t LSU_CHANNELS    = VX_CFG_NUM_LSU_LANES;
+inline constexpr uint32_t LSU_NUM_REQS	  = (VX_CFG_NUM_LSU_BLOCKS * LSU_CHANNELS);
 
 // The dcache uses coalesced memory blocks
-inline constexpr uint32_t DCACHE_WORD_SIZE= LSU_LINE_SIZE;
-inline constexpr uint32_t DCACHE_CHANNELS = __UP((NUM_LSU_LANES * XLENB) / DCACHE_WORD_SIZE);
-inline constexpr uint32_t DCACHE_NUM_REQS	= (NUM_LSU_BLOCKS * DCACHE_CHANNELS);
+inline constexpr uint32_t DCACHE_WORD_SIZE= VX_CFG_LSU_LINE_SIZE;
+inline constexpr uint32_t DCACHE_CHANNELS = __UP((VX_CFG_NUM_LSU_LANES * XLENB) / DCACHE_WORD_SIZE);
+inline constexpr uint32_t VX_CFG_DCACHE_NUM_REQS	= (VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
 
-inline constexpr uint32_t NUM_SOCKETS     = __UP(NUM_CORES / SOCKET_SIZE);
+inline constexpr uint32_t NUM_SOCKETS     = __UP(VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE);
 
-inline constexpr uint32_t L2_NUM_REQS     = NUM_SOCKETS * L1_MEM_PORTS;
-inline constexpr uint32_t L3_NUM_REQS     = NUM_CLUSTERS * L2_MEM_PORTS;
+inline constexpr uint32_t VX_CFG_L2_NUM_REQS     = NUM_SOCKETS * VX_CFG_L1_MEM_PORTS;
+inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS;
 
-inline constexpr uint32_t PER_ISSUE_WARPS = NUM_WARPS / ISSUE_WIDTH;
+inline constexpr uint32_t PER_ISSUE_WARPS = VX_CFG_NUM_WARPS / VX_CFG_ISSUE_WIDTH;
 inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);
 
 } // namespace vortex

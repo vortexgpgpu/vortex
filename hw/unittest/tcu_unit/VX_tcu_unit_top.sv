@@ -24,14 +24,14 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     input  wire clk,
     input  wire reset,
 
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
     // LMEM request (output — driven by DUT)
     output wire                                             tcu_lmem_req_valid,
     input  wire                                             tcu_lmem_req_ready,
-    output wire [`LMEM_LOG_SIZE-`CLOG2(LSU_WORD_SIZE)-`CLOG2(`LMEM_NUM_BANKS)-1:0] tcu_lmem_req_addr,
+    output wire [`VX_CFG_LMEM_LOG_SIZE-`CLOG2(LSU_WORD_SIZE)-`CLOG2(`VX_CFG_LMEM_NUM_BANKS)-1:0] tcu_lmem_req_addr,
     // LMEM response (input — driven by testbench)
     input  wire                                             tcu_lmem_rsp_valid,
-    input  wire [`LMEM_NUM_BANKS*`XLEN-1:0]               tcu_lmem_rsp_data,
+    input  wire [`VX_CFG_LMEM_NUM_BANKS*`VX_CFG_XLEN-1:0]               tcu_lmem_rsp_data,
 `endif
 
     // Dispatch interface — slot 0 (ISSUE_WIDTH must be 1)
@@ -40,7 +40,7 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     input  wire [UUID_WIDTH-1:0]               dispatch_uuid,
     input  wire [ISSUE_WIS_W-1:0]             dispatch_wis,
     input  wire [SIMD_IDX_W-1:0]             dispatch_sid,
-    input  wire [`SIMD_WIDTH-1:0]             dispatch_tmask,
+    input  wire [`VX_CFG_SIMD_WIDTH-1:0]             dispatch_tmask,
     input  wire [PC_BITS-1:0]                 dispatch_PC,
     input  wire                                dispatch_wb,
     input  wire [NUM_XREGS-1:0]              dispatch_wr_xregs,
@@ -52,9 +52,9 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     input  wire [3:0]                          dispatch_step_m,
     input  wire [3:0]                          dispatch_step_n,
     input  wire [3:0]                          dispatch_step_k,
-    input  wire [`SIMD_WIDTH*`XLEN-1:0]       dispatch_rs1_data,
-    input  wire [`SIMD_WIDTH*`XLEN-1:0]       dispatch_rs2_data,
-    input  wire [`SIMD_WIDTH*`XLEN-1:0]       dispatch_rs3_data,
+    input  wire [`VX_CFG_SIMD_WIDTH*`VX_CFG_XLEN-1:0]       dispatch_rs1_data,
+    input  wire [`VX_CFG_SIMD_WIDTH*`VX_CFG_XLEN-1:0]       dispatch_rs2_data,
+    input  wire [`VX_CFG_SIMD_WIDTH*`VX_CFG_XLEN-1:0]       dispatch_rs3_data,
     input  wire                                dispatch_sop,
     input  wire                                dispatch_eop,
 
@@ -64,23 +64,23 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     output wire [UUID_WIDTH-1:0]              commit_uuid,
     output wire [NW_WIDTH-1:0]                commit_wid,
     output wire [SIMD_IDX_W-1:0]            commit_sid,
-    output wire [`SIMD_WIDTH-1:0]            commit_tmask,
+    output wire [`VX_CFG_SIMD_WIDTH-1:0]            commit_tmask,
     output wire [PC_BITS-1:0]               commit_PC,
     output wire                               commit_wb,
     output wire [NUM_XREGS-1:0]             commit_wr_xregs,
     output wire [NUM_REGS_BITS-1:0]          commit_rd,
     output wire [BYTESEL_BITS-1:0]          commit_bytesel,
-    output wire [`SIMD_WIDTH*`XLEN-1:0]     commit_data,
+    output wire [`VX_CFG_SIMD_WIDTH*`VX_CFG_XLEN-1:0]     commit_data,
     output wire                               commit_sop,
     output wire                               commit_eop
 );
-    `STATIC_ASSERT (`ISSUE_WIDTH == 1, ("tcu_unit_top: only ISSUE_WIDTH=1 is supported"))
+    `STATIC_ASSERT (`VX_CFG_ISSUE_WIDTH == 1, ("tcu_unit_top: only ISSUE_WIDTH=1 is supported"))
 
-`ifdef TCU_WGMMA_ENABLE
-    localparam TCU_LMEM_BANK_ADDR_W = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`LMEM_NUM_BANKS);
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    localparam TCU_LMEM_BANK_ADDR_W = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`VX_CFG_LMEM_NUM_BANKS);
 
     VX_mem_bus_if #(
-        .DATA_SIZE  (`LMEM_NUM_BANKS * (`XLEN / 8)),
+        .DATA_SIZE  (`VX_CFG_LMEM_NUM_BANKS * (`VX_CFG_XLEN / 8)),
         .TAG_WIDTH  (UUID_WIDTH),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
     ) tcu_lmem_if();
@@ -93,8 +93,8 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     assign tcu_lmem_if.rsp_data.tag   = '0;
 `endif
 
-    VX_dispatch_if dispatch_if[`ISSUE_WIDTH]();
-    VX_commit_if   commit_if  [`ISSUE_WIDTH]();
+    VX_dispatch_if dispatch_if[`VX_CFG_ISSUE_WIDTH]();
+    VX_commit_if   commit_if  [`VX_CFG_ISSUE_WIDTH]();
 
     // ---- Dispatch --------------------------------------------------------
     assign dispatch_if[0].valid = dispatch_valid;
@@ -148,7 +148,7 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
         `SCOPE_IO_BIND (0)
         .clk         (clk),
         .reset       (reset),
-    `ifdef TCU_WGMMA_ENABLE
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
         .tcu_lmem_if (tcu_lmem_if),
     `endif
         .dispatch_if (dispatch_if),

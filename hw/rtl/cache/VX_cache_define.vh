@@ -27,8 +27,8 @@
 `define CS_LINES_PER_BANK       (`CS_BANK_SIZE / (LINE_SIZE * NUM_WAYS))
 `define CS_WORDS_PER_LINE       (LINE_SIZE / WORD_SIZE)
 
-`define CS_WORD_ADDR_WIDTH      (`MEM_ADDR_WIDTH-`CLOG2(WORD_SIZE))
-`define CS_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH-`CLOG2(LINE_SIZE))
+`define CS_WORD_ADDR_WIDTH      (`VX_CFG_MEM_ADDR_WIDTH-`CLOG2(WORD_SIZE))
+`define CS_MEM_ADDR_WIDTH       (`VX_CFG_MEM_ADDR_WIDTH-`CLOG2(LINE_SIZE))
 `define CS_LINE_ADDR_WIDTH      (`CS_MEM_ADDR_WIDTH-`CLOG2(NUM_BANKS))
 
 // Word select
@@ -55,8 +55,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CS_BANK_TO_FULL_ADDR(x, b) {x, (`XLEN-$bits(x))'(b << (`XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
-`define CS_MEM_TO_FULL_ADDR(x)     {x, (`XLEN-$bits(x))'(0)}
+`define CS_BANK_TO_FULL_ADDR(x, b) {x, (`VX_CFG_XLEN-$bits(x))'(b << (`VX_CFG_XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
+`define CS_MEM_TO_FULL_ADDR(x)     {x, (`VX_CFG_XLEN-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
 

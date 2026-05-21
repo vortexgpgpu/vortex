@@ -124,7 +124,7 @@
     dpi_trace(level, $sformatf args);
 `else
 `define TRACE(level, args) \
-    if (level <= `DEBUG_LEVEL) begin \
+    if (level <= `VX_DBG_DEBUG_LEVEL) begin \
         $write args; \
     end
 `endif
@@ -141,7 +141,7 @@
 
 `define DEBUG_BLOCK(x)
 `define TRACE(level, args) \
-    if (level <= `DEBUG_LEVEL) begin \
+    if (level <= `VX_DBG_DEBUG_LEVEL) begin \
     end
 `define SFORMATF(x) ""
 

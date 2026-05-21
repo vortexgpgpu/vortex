@@ -1,4 +1,5 @@
 #include "common.h"
+#include <VX_config.h>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -484,7 +485,7 @@ inline typename T::dtype generate_B_value() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using cfg = vt::wmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
@@ -595,8 +596,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t NT;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &NT));
-  if (NT != NUM_THREADS) {
-    std::cout << "Error: device warp size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
+  if (NT != VX_CFG_NUM_THREADS) {
+    std::cout << "Error: device warp size (" << NT << ") must match VX_CFG_NUM_THREADS=" << VX_CFG_NUM_THREADS << "!" << std::endl;
     return -1;
   }
 

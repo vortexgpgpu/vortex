@@ -31,32 +31,32 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     VX_gbar_bus_if.master gbar_bus_if,
 
     // scheduler interface
-    input wire [`NUM_WARPS-1:0] active_warps,
+    input wire [NUM_WARPS-1:0] active_warps,
     output wire               unlock_valid, // unlock stalled warps
-    output wire [`NUM_WARPS-1:0] unlock_mask // warps to unlock
+    output wire [NUM_WARPS-1:0] unlock_mask // warps to unlock
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
 
     //                    warp mask + warp count + event count
     localparam EVENT_WIDTH = 16;
-    localparam BAR_STATEW = `NUM_WARPS + NW_WIDTH + EVENT_WIDTH;
+    localparam BAR_STATEW = NUM_WARPS + NW_WIDTH + EVENT_WIDTH;
     localparam USE_GBAR = (NUM_CORES > 1);
 
-    logic [`NUM_WARPS-1:0] mask_r, mask_n;
+    logic [NUM_WARPS-1:0] mask_r, mask_n;
     logic [NW_WIDTH-1:0]   count_r, count_n;
     logic [EVENT_WIDTH-1:0] events_r, events_n;
     logic                  phase_r, phase_n;
 
     logic                  unlock_valid_n;
-    logic [`NUM_WARPS-1:0] unlock_mask_n;
+    logic [NUM_WARPS-1:0] unlock_mask_n;
 
     logic gbar_req_valid_r, gbar_req_valid_n;
     logic [NB_WIDTH-1:0] gbar_req_id_r, gbar_req_id_n;
     logic [NC_WIDTH-1:0] gbar_req_size_m1_r, gbar_req_size_m1_n;
     wire gbar_rsp_ready = ~req_valid;
 
-    wire [`NUM_WARPS-1:0] wait_mask = ((`NUM_WARPS)'(1) << req_wid) | mask_r;
+    wire [NUM_WARPS-1:0] wait_mask = ((NUM_WARPS)'(1) << req_wid) | mask_r;
     wire [NW_WIDTH-1:0] next_count  = count_r + NW_WIDTH'(1);
     wire next_phase  = ~phase_r;
 
@@ -113,7 +113,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                 // barrier waiting
                 if (req_data.phase != phase_r) begin
                     unlock_valid_n = 1; // release warp
-                    unlock_mask_n = (`NUM_WARPS)'(1) << req_wid;
+                    unlock_mask_n = (NUM_WARPS)'(1) << req_wid;
                 end else begin
                     // add warp to wait list
                     mask_n = wait_mask;
@@ -154,7 +154,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                     // barrier waiting
                     if (req_data.phase != phase_r) begin
                         unlock_valid_n = 1; // release warp
-                        unlock_mask_n = (`NUM_WARPS)'(1) << req_wid;
+                        unlock_mask_n = (NUM_WARPS)'(1) << req_wid;
                     end else begin
                         // add warp to wait list
                         mask_n = wait_mask;
@@ -243,7 +243,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     wire phase_async = is_rdw_hazard ? phase_n : store_phase_rdata_v;
 
     reg unlock_valid_r;
-    reg [`NUM_WARPS-1:0] unlock_mask_r;
+    reg [NUM_WARPS-1:0] unlock_mask_r;
 
     always @(posedge clk) begin
         if (reset) begin

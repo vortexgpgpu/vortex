@@ -73,8 +73,8 @@ public:
 
 			// Apply byte-enabled writes from TLM payload to local RAM.
 			if (bank_req.is_write() && bank_req.data) {
-				uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(MEM_BLOCK_SIZE - 1);
-				for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
+				uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+				for (uint32_t b = 0; b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
 					if (bank_req.byteen & (1ull << b)) {
 						uint8_t value = (*bank_req.data)[b];
 						ram_.write(&value, line_addr + b, 1);
@@ -89,8 +89,8 @@ public:
 				MemRsp bank_rsp{bank_req.tag, bank_req.hart_id, bank_req.uuid};
 				if (!bank_req.is_write()) {
 					auto rsp_data = make_mem_block();
-					uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(MEM_BLOCK_SIZE - 1);
-					ram_.read(rsp_data->data(), line_addr, MEM_BLOCK_SIZE);
+					uint64_t line_addr = to_local_addr(bank_req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+					ram_.read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
 					bank_rsp.data = rsp_data;
 				}
 				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))

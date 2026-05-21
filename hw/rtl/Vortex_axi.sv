@@ -15,7 +15,7 @@
 
 module Vortex_axi import VX_gpu_pkg::*; #(
     parameter AXI_DATA_WIDTH = VX_MEM_DATA_WIDTH,
-    parameter AXI_ADDR_WIDTH = `MEM_ADDR_WIDTH,
+    parameter AXI_ADDR_WIDTH = MEM_ADDR_WIDTH,
     parameter AXI_TID_WIDTH  = VX_MEM_TAG_WIDTH,
     parameter AXI_NUM_BANKS  = 1
 )(
@@ -204,7 +204,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .TAG_WIDTH_OUT  (AXI_TID_WIDTH),
         .NUM_PORTS_IN   (VX_MEM_PORTS),
         .NUM_BANKS_OUT  (AXI_NUM_BANKS),
-        .INTERLEAVE     (`PLATFORM_MEMORY_INTERLEAVE),
+        .INTERLEAVE     (PLATFORM_MEMORY_INTERLEAVE),
         .REQ_OUT_BUF    ((VX_MEM_PORTS > 1) ? 2 : 0),
         .RSP_OUT_BUF    ((VX_MEM_PORTS > 1 || AXI_NUM_BANKS > 1) ? 2 : 0)
     ) axi_adapter (

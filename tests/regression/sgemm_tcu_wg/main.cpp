@@ -1,4 +1,5 @@
 #include "common.h"
+#include <VX_config.h>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -475,7 +476,7 @@ inline typename T::dtype generate_B_value() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
+using wg_cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
 
 static constexpr uint32_t per_warp_M = wg_cfg::xtileM;
 static constexpr uint32_t per_warp_N = wg_cfg::xtileN;
@@ -586,8 +587,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t NT;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &NT));
-  if (NT != NUM_THREADS) {
-    std::cout << "Error: device thread size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
+  if (NT != VX_CFG_NUM_THREADS) {
+    std::cout << "Error: device thread size (" << NT << ") must match VX_CFG_NUM_THREADS=" << VX_CFG_NUM_THREADS << "!" << std::endl;
     return -1;
   }
 
@@ -601,7 +602,7 @@ int main(int argc, char *argv[]) {
   uint64_t issue_width;
   RT_CHECK(vx_device_query(device, VX_CAPS_ISSUE_WIDTH, &issue_width));
   if (warps != issue_width) {
-    std::cout << "Error: number of warps in TB (" << warps << ") must match device's ISSUE_WIDTH=" << issue_width << "!" << std::endl;
+    std::cout << "Error: number of warps in TB (" << warps << ") must match device's VX_CFG_ISSUE_WIDTH=" << issue_width << "!" << std::endl;
     return -1;
   }
 

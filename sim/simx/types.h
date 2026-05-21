@@ -37,22 +37,22 @@ namespace vortex {
 // One memory block (a cache line / DRAM transfer unit). Carried by
 // MemReq/MemRsp in TLM data-path mode. Use `shared_ptr<mem_block_t>` so
 // MSHR-coalesced replays share a single fill buffer without copying.
-using mem_block_t = std::array<uint8_t, MEM_BLOCK_SIZE>;
+using mem_block_t = std::array<uint8_t, VX_CFG_MEM_BLOCK_SIZE>;
 
 typedef uint8_t Byte;
 
-#if (XLEN == 32)
+#if (VX_CFG_XLEN == 32)
 typedef uint32_t Word;
 typedef int32_t  WordI;
 typedef uint64_t DWord;
 typedef int64_t  DWordI;
-#elif (XLEN == 64)
+#elif (VX_CFG_XLEN == 64)
 typedef uint64_t Word;
 typedef int64_t  WordI;
 typedef __uint128_t DWord;
 typedef __int128_t DWordI;
 #else
-#error unsupported XLEN
+#error unsupported VX_CFG_XLEN
 #endif
 
 typedef std::bitset<MAX_NUM_CORES>   CoreMask;
@@ -165,7 +165,7 @@ enum class FUType {
   LSU,
   FPU,
   SFU,
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
   TCU,
 #endif
   Count
@@ -177,7 +177,7 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::LSU: os << "LSU"; break;
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
   case FUType::TCU: os << "TCU"; break;
 #endif
   default:
@@ -376,14 +376,14 @@ inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
 ///////////////////////////////////////////////////////////////////////////////
 
 // Memory-op tag. Mirrors RTL's mem_op_e (hw/rtl/VX_gpu_pkg.sv): always-present
-// ops (LD/ST/FLUSH) at the low values, EXT_A_ENABLE atomic family contiguous
+// ops (LD/ST/FLUSH) at the low values, VX_CFG_EXT_A_ENABLE atomic family contiguous
 // at 3..13.
 enum class MemOp : uint8_t {
-  // Always-present (independent of EXT_A_ENABLE)
+  // Always-present (independent of VX_CFG_EXT_A_ENABLE)
   LD        = 0,
   ST        = 1,
   FLUSH     = 2,
-  // Atomic family (only meaningful when EXT_A_ENABLE)
+  // Atomic family (only meaningful when VX_CFG_EXT_A_ENABLE)
   AMO_LR    = 3,
   AMO_SC    = 4,
   AMO_SWAP  = 5,
@@ -420,10 +420,10 @@ struct MemFlags {
       uint32_t io           : 1;  // bit 1: uncacheable I/O
       uint32_t local        : 1;  // bit 2: LMEM port
       uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
-    #ifdef EXT_DXA_ENABLE
+    #ifdef VX_CFG_EXT_DXA_ENABLE
       // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
       uint32_t dxa_notify_done   : 1;   // bit 4
-      uint32_t dxa_notify_bar_id : 8;   // bits 5..12 (covers NUM_BARRIERS + multicast slack)
+      uint32_t dxa_notify_bar_id : 8;   // bits 5..12 (covers VX_CFG_NUM_BARRIERS + multicast slack)
     #endif
     };
   };
@@ -592,7 +592,7 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 
 enum class DxaType {
   ISSUE
@@ -612,7 +612,7 @@ inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 
 enum class TexType { SAMPLE };
 
@@ -630,7 +630,7 @@ inline std::ostream &operator<<(std::ostream &os, const TexType& type) {
 
 #endif
 
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 
 enum class OmType { WRITE };
 
@@ -646,7 +646,7 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 
 #endif
 
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 
 enum class RasterType { POP };
 
@@ -736,19 +736,19 @@ using OpType = std::variant<
 , ShflType
 , WgatherType
 , WctlType
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 , DxaType
 #endif
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
 , TcuType
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 , TexType
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 , OmType
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 , RasterType
 #endif
 >;
@@ -763,19 +763,19 @@ using IntrArgs = std::variant<
 , IntrCsrArgs
 , IntrWgatherArgs
 , IntrWctlArgs
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 , IntrDxaArgs
 #endif
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
 , IntrTcuArgs
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 , IntrTexArgs
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 , IntrOmArgs
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 , IntrRasterArgs
 #endif
 >;
@@ -789,11 +789,11 @@ enum class AddrType {
 };
 
 inline AddrType get_addr_type(uint64_t addr) {
-  if (addr >= IO_BASE_ADDR && addr < IO_END_ADDR) {
+  if (addr >= VX_CFG_IO_BASE_ADDR && addr < VX_CFG_IO_END_ADDR) {
      return AddrType::IO;
   }
-  if (LMEM_ENABLED) {
-    if (addr >= LMEM_BASE_ADDR && (addr-LMEM_BASE_ADDR) < (1 << LMEM_LOG_SIZE)) {
+  if (VX_CFG_LMEM_ENABLED) {
+    if (addr >= VX_CFG_LMEM_BASE_ADDR && (addr-VX_CFG_LMEM_BASE_ADDR) < (1 << VX_CFG_LMEM_LOG_SIZE)) {
         return AddrType::Shared;
     }
   }
@@ -1152,8 +1152,8 @@ inline bool amo_is_unsigned(AmoType t) {
 // (thread, then warp, then core) so the small per-bank reservation
 // table sees fewer hash collisions.
 inline uint32_t make_hart_id(uint32_t cid, uint32_t wid, uint32_t tid) {
-  constexpr uint32_t LOG_WARPS   = log2ceil(NUM_WARPS);
-  constexpr uint32_t LOG_THREADS = log2ceil(NUM_THREADS);
+  constexpr uint32_t LOG_WARPS   = log2ceil(VX_CFG_NUM_WARPS);
+  constexpr uint32_t LOG_THREADS = log2ceil(VX_CFG_NUM_THREADS);
   return (cid << (LOG_WARPS + LOG_THREADS))
        | (wid << LOG_THREADS)
        | tid;

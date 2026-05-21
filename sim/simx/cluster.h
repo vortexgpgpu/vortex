@@ -15,16 +15,16 @@
 
 #include <simobject.h>
 #include "cache.h"
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 #include "tex_core.h"
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 #include "om_core.h"
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 #include "raster_core.h"
 #endif
 
@@ -38,7 +38,7 @@ class Cluster : public SimObject<Cluster> {
 public:
   struct PerfStats {
     Cache::PerfStats l2cache;
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
     DxaCore::PerfStats dxa;
 #endif
   };
@@ -78,7 +78,7 @@ public:
   void l2_flush_begin();
   bool l2_flush_done() const;
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
   DxaCore::Ptr& dxa_core();
 #endif
 

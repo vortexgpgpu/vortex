@@ -1,4 +1,5 @@
 #include <iostream>
+#include <VX_config.h>
 #include <unistd.h>
 #include <string.h>
 #include <vector>
@@ -134,8 +135,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t NT;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &NT));
-  if (NT != NUM_THREADS) {
-    std::cout << "Error: device warp size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
+  if (NT != VX_CFG_NUM_THREADS) {
+    std::cout << "Error: device warp size (" << NT << ") must match VX_CFG_NUM_THREADS=" << VX_CFG_NUM_THREADS << "!" << std::endl;
     cleanup();
     return -1;
   }
@@ -199,7 +200,7 @@ int main(int argc, char *argv[]) {
   std::cout << "launch kernel" << std::endl;
   vx_event_h launch_ev = nullptr, read_ev = nullptr;
   {
-    uint32_t num_warps = (threadsPerBlock + NUM_THREADS - 1) / NUM_THREADS;
+    uint32_t num_warps = (threadsPerBlock + VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_THREADS;
     vx_launch_info_t li = {};
     li.struct_size  = sizeof(li);
     li.kernel       = kernel;

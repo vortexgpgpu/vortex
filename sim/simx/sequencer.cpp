@@ -25,7 +25,7 @@ Sequencer::Sequencer(const SimContext& ctx, const char* name, Core* core, PoolAl
   : SimObject<Sequencer>(ctx, name)
   , core_(core)
   , lsu_uop_gen_(instr_pool)
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
   , tcu_uop_gen_(instr_pool)
 #endif
 {}
@@ -52,7 +52,7 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
         return lsu_uop_gen_.get(m, i);
       };
       break;
-  #ifdef EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_TCU_ENABLE
     case FUType::TCU:
       state_.uop_count = TcuUopGen::uop_count(*trace->instr_ptr);
       state_.gen_fn = [this](const Instr& m, uint32_t i) {

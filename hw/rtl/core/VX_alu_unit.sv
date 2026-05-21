@@ -20,21 +20,21 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     input wire              reset,
 
     // Inputs
-    VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    VX_dispatch_if.slave    dispatch_if [ISSUE_WIDTH],
 
     // Outputs
-    VX_commit_if.master     commit_if [`ISSUE_WIDTH],
-    VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS]
+    VX_commit_if.master     commit_if [ISSUE_WIDTH],
+    VX_branch_ctl_if.master branch_ctl_if [NUM_ALU_BLOCKS]
 );
 
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam BLOCK_SIZE   = `NUM_ALU_BLOCKS;
-    localparam NUM_LANES    = `NUM_ALU_LANES;
-    localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `SIMD_WIDTH);
-    localparam PE_COUNT     = 1 + `EXT_M_ENABLED;
+    localparam BLOCK_SIZE   = NUM_ALU_BLOCKS;
+    localparam NUM_LANES    = NUM_ALU_LANES;
+    localparam PARTIAL_BW   = (BLOCK_SIZE != ISSUE_WIDTH) || (NUM_LANES != SIMD_WIDTH);
+    localparam PE_COUNT     = 1 + EXT_M_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_INT   = 0;
-    localparam PE_IDX_MDV   = PE_IDX_INT + `EXT_M_ENABLED;
+    localparam PE_IDX_MDV   = PE_IDX_INT + EXT_M_ENABLED;
 
     VX_execute_if #(
         .data_t (alu_execute_t)
@@ -68,7 +68,7 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
         reg [`UP(PE_SEL_BITS)-1:0] pe_select;
         always @(*) begin
             pe_select = PE_IDX_INT;
-            if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == ALU_TYPE_MULDIV))
+            if (EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == ALU_TYPE_MULDIV))
                 pe_select = PE_IDX_MDV;
         end
 
@@ -100,7 +100,7 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
             .result_if  (pe_result_if[PE_IDX_INT])
         );
 
-    `ifdef EXT_M_ENABLE
+    `ifdef VX_CFG_EXT_M_ENABLE
         VX_alu_muldiv #(
             .INSTANCE_ID (`SFORMATF(("%s-muldiv%0d", INSTANCE_ID, block_idx))),
             .NUM_LANES (NUM_LANES)

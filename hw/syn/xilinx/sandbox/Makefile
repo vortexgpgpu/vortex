@@ -21,11 +21,11 @@ JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
 CONFIGS += -DSYNTHESIS -DVIVADO -DEXT_F_DISABLE
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DXLEN_$(XLEN)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)')
 
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
@@ -38,8 +38,8 @@ CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
 # update memory layout for 2MB RAM
-CFLAGS += -DSTARTUP_ADDR=32\'h80000
-CFLAGS += -DSTACK_BASE_ADDR=32\'hFF000
+CFLAGS += -DVX_CFG_STARTUP_ADDR=32\'h80000
+CFLAGS += -DVX_CFG_STACK_BASE_ADDR=32\'hFF000
 
 all: build
 

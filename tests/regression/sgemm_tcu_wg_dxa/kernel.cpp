@@ -1,4 +1,5 @@
 #include "common.h"
+#include <VX_config.h>
 #include <vx_spawn2.h>
 #include <vx_tensor.h>
 #include <vx_intrinsics.h>
@@ -6,7 +7,7 @@
 #include <vx_barrier.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wgmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
 
 // DXA descriptor slots (programmed by host in main.cpp).
 constexpr uint32_t kDescA = 0;
@@ -20,8 +21,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   uint32_t tid = threadIdx.x;
   uint32_t num_threads = blockDim.x;
-  uint32_t warp_rank = tid / NUM_THREADS;
-  uint32_t num_warps = num_threads / NUM_THREADS;
+  uint32_t warp_rank = tid / VX_CFG_NUM_THREADS;
+  uint32_t num_warps = num_threads / VX_CFG_NUM_THREADS;
 
   // CTA tile dimensions
   uint32_t cta_M = num_warps * ctx::xtileM;

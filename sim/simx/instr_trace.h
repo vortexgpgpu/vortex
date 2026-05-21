@@ -90,8 +90,8 @@ public:
     , src_regs(NUM_SRC_REGS, {RegType::None, 0})
     , fu_type(FUType::ALU)
     , op_type({})
-     , src_data(NUM_SRC_REGS, std::vector<reg_data_t>(NUM_THREADS))
-    , dst_data(NUM_THREADS)
+     , src_data(NUM_SRC_REGS, std::vector<reg_data_t>(VX_CFG_NUM_THREADS))
+    , dst_data(VX_CFG_NUM_THREADS)
     , dst_bytesel(0xFF)
     , pid(-1)
     , sop(true)
@@ -143,7 +143,7 @@ public:
     os << ", wid=" << trace.wid;
     os << ", cta_id=" << trace.cta_id;
     os << ", tmask=";
-    for (uint32_t i = 0, n = NUM_THREADS; i < n; ++i) {
+    for (uint32_t i = 0, n = VX_CFG_NUM_THREADS; i < n; ++i) {
       os << trace.tmask.test(i);
     }
     os << ", PC=0x" << std::hex << trace.PC << std::dec;

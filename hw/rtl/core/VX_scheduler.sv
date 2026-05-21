@@ -26,9 +26,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // inputs
     VX_warp_ctl_if.slave    warp_ctl_if,
-    VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
+    VX_branch_ctl_if.slave  branch_ctl_if [NUM_ALU_BLOCKS],
     VX_decode_sched_if.slave decode_sched_if,
-    VX_issue_sched_if.slave issue_sched_if [`ISSUE_WIDTH],
+    VX_issue_sched_if.slave issue_sched_if [ISSUE_WIDTH],
     VX_commit_sched_if.slave commit_sched_if,
 
     // KMU bus
@@ -45,21 +45,21 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
 
-    reg [`NUM_WARPS-1:0] active_warps, active_warps_n; // updated when a warp is activated or disabled
-    reg [`NUM_WARPS-1:0] stalled_warps, stalled_warps_n;  // set when branch/gpgpu instructions are issued
+    reg [NUM_WARPS-1:0] active_warps, active_warps_n; // updated when a warp is activated or disabled
+    reg [NUM_WARPS-1:0] stalled_warps, stalled_warps_n;  // set when branch/gpgpu instructions are issued
 
-    reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks, thread_masks_n;
-    reg [`NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
-    reg [`NUM_WARPS-1:0][`MEM_ADDR_WIDTH-1:0] mscratch_r;
-    reg [`NUM_WARPS-1:0][NCTA_WIDTH-1:0] cta_id_per_warp_r;
+    reg [NUM_WARPS-1:0][NUM_THREADS-1:0] thread_masks, thread_masks_n;
+    reg [NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
+    reg [NUM_WARPS-1:0][MEM_ADDR_WIDTH-1:0] mscratch_r;
+    reg [NUM_WARPS-1:0][NCTA_WIDTH-1:0] cta_id_per_warp_r;
 
     // Per-warp machine-mode trap CSRs. csrw writes arrive on
     // sched_csr_if.trap_csr_wr_*; ECALL/EBREAK hardware-write mepc/mcause/
     // mtval; MRET restores the warp PC from mepc.
-    reg [`NUM_WARPS-1:0][`XLEN-1:0] mstatus_r, mtvec_r, mepc_r, mcause_r, mtval_r;
+    reg [NUM_WARPS-1:0][XLEN-1:0] mstatus_r, mtvec_r, mepc_r, mcause_r, mtval_r;
 
     wire [NW_WIDTH-1:0]     schedule_wid;
-    wire [`NUM_THREADS-1:0] schedule_tmask;
+    wire [NUM_THREADS-1:0] schedule_tmask;
     wire [PC_BITS-1:0]      schedule_pc;
     wire                    schedule_valid;
     wire                    schedule_ready;
@@ -68,7 +68,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire cta_fire;
     wire [NW_WIDTH-1:0] cta_wid;
     wire [PC_BITS-1:0] cta_PC;
-    wire [`NUM_THREADS-1:0] cta_tmask;
+    wire [NUM_THREADS-1:0] cta_tmask;
     cta_csrs_t cta_csrs;
     wire cta_dispatcher_busy;
     wire cta_init;
@@ -106,7 +106,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     VX_dp_ram #(
         .DATAW     ($bits(cta_warp_t)),
-        .SIZE      (`NUM_WARPS),
+        .SIZE      (NUM_WARPS),
         .RDW_MODE  ("R"),
         .RADDR_REG (1)
     ) cta_warp_ram (
@@ -194,27 +194,27 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire                    join_is_dvg;
     wire                    join_is_else;
     wire [NW_WIDTH-1:0]     join_wid;
-    wire [`NUM_THREADS-1:0] join_tmask;
+    wire [NUM_THREADS-1:0] join_tmask;
     wire [PC_BITS-1:0]      join_pc;
 
     reg [PERF_CTR_BITS-1:0] cycles;
 
     wire schedule_fire = schedule_valid && schedule_ready;
     wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
-`ifdef EXT_C_ENABLE
+`ifdef VX_CFG_EXT_C_ENABLE
     // PC advance is driven by decompress_finished under EXT_C;
     `UNUSED_VAR (schedule_if_fire)
 `endif
 
     // branch
-    wire [`NUM_ALU_BLOCKS-1:0]               branch_valid;
-    wire [`NUM_ALU_BLOCKS-1:0][NW_WIDTH-1:0] branch_wid;
-    wire [`NUM_ALU_BLOCKS-1:0]               branch_taken;
-    wire [`NUM_ALU_BLOCKS-1:0][PC_BITS-1:0]  branch_dest;
-    wire [`NUM_ALU_BLOCKS-1:0]               branch_is_trap;
-    wire [`NUM_ALU_BLOCKS-1:0]               branch_is_mret;
-    wire [`NUM_ALU_BLOCKS-1:0][3:0]          branch_trap_cause;
-    for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin : g_branch_init
+    wire [NUM_ALU_BLOCKS-1:0]               branch_valid;
+    wire [NUM_ALU_BLOCKS-1:0][NW_WIDTH-1:0] branch_wid;
+    wire [NUM_ALU_BLOCKS-1:0]               branch_taken;
+    wire [NUM_ALU_BLOCKS-1:0][PC_BITS-1:0]  branch_dest;
+    wire [NUM_ALU_BLOCKS-1:0]               branch_is_trap;
+    wire [NUM_ALU_BLOCKS-1:0]               branch_is_mret;
+    wire [NUM_ALU_BLOCKS-1:0][3:0]          branch_trap_cause;
+    for (genvar i = 0; i < NUM_ALU_BLOCKS; ++i) begin : g_branch_init
         assign branch_valid[i]      = branch_ctl_if[i].valid;
         assign branch_wid[i]        = branch_ctl_if[i].wid;
         assign branch_taken[i]      = branch_ctl_if[i].taken;
@@ -225,7 +225,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 
     // barriers
-    wire [`NUM_WARPS-1:0] bar_unlock_mask;
+    wire [NUM_WARPS-1:0] bar_unlock_mask;
     wire bar_unlock_valid;
 
     // wspawn
@@ -234,7 +234,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg [NW_WIDTH-1:0] wspawn_wid;
     reg is_single_warp;
 
-    wire [`CLOG2(`NUM_WARPS+1)-1:0] active_warps_cnt;
+    wire [`CLOG2(NUM_WARPS+1)-1:0] active_warps_cnt;
     `POP_COUNT(active_warps_cnt, active_warps);
 
      always @(*) begin
@@ -247,7 +247,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         if (cta_fire) begin
             active_warps_n[cta_wid] = 1;
             // if executing next CTA on same warp, we can skip prolog and jump to kernel_main at PC-12 (see vx_start.S)
-            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(`XLEN'(12)));
+            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(XLEN'(12)));
             thread_masks_n[cta_wid] = cta_tmask;
         end
 
@@ -259,7 +259,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // wspawn handling
         if (wspawn_valid && is_single_warp) begin
             active_warps_n |= wspawn.wmask;
-            for (integer i = 0; i < `NUM_WARPS; ++i) begin
+            for (integer i = 0; i < NUM_WARPS; ++i) begin
                 if (wspawn.wmask[i] && (NW_WIDTH'(i) != wspawn_wid)) begin
                     thread_masks_n[i][0] = 1;
                     warp_pcs_n[i] = wspawn.pc;
@@ -305,12 +305,12 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
 
         // Branch handling
-        for (integer i = 0; i < `NUM_ALU_BLOCKS; ++i) begin
+        for (integer i = 0; i < NUM_ALU_BLOCKS; ++i) begin
             if (branch_valid[i]) begin
                 if (branch_is_trap[i]) begin
                     // ECALL/EBREAK: redirect to the trap vector. Low 2 bits
                     // of mtvec are the MODE field — v1 is direct mode only.
-                    warp_pcs_n[branch_wid[i]] = from_fullPC(mtvec_r[branch_wid[i]] & ~`XLEN'(3));
+                    warp_pcs_n[branch_wid[i]] = from_fullPC(mtvec_r[branch_wid[i]] & ~XLEN'(3));
                 end else if (branch_is_mret[i]) begin
                     // MRET/SRET/URET: restore the saved PC from mepc.
                     warp_pcs_n[branch_wid[i]] = from_fullPC(mepc_r[branch_wid[i]]);
@@ -327,16 +327,16 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
 
         // advance PC.
-    `ifdef EXT_C_ENABLE
+    `ifdef VX_CFG_EXT_C_ENABLE
         // With RVC, the decompressor may emit a 2-byte instruction.
         if (decode_sched_if.valid) begin
             warp_pcs_n[decode_sched_if.wid] =
                 warp_pcs_n[decode_sched_if.wid]
-                + from_fullPC(decode_sched_if.is_rvc ? `XLEN'(2) : `XLEN'(4));
+                + from_fullPC(decode_sched_if.is_rvc ? XLEN'(2) : XLEN'(4));
         end
     `else
         if (schedule_if_fire) begin
-            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`XLEN'(4));
+            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(XLEN'(4));
         end
     `endif
     end
@@ -376,7 +376,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             if (wspawn_valid && is_single_warp) begin
                 wspawn_valid <= 0;
                 // copy mscratch from spawning warp to all newly spawned warps
-                for (integer i = 0; i < `NUM_WARPS; ++i) begin
+                for (integer i = 0; i < NUM_WARPS; ++i) begin
                     if (wspawn.wmask[i] && (NW_WIDTH'(i) != wspawn_wid)) begin
                         mscratch_r[i] <= mscratch_r[wspawn_wid];
                     end
@@ -411,10 +411,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             // Hardware trap entry (ECALL/EBREAK): snapshot the faulting PC
             // into mepc and the cause into mcause. Ordered after the
             // software write so a hardware trap wins a same-cycle conflict.
-            for (integer i = 0; i < `NUM_ALU_BLOCKS; ++i) begin
+            for (integer i = 0; i < NUM_ALU_BLOCKS; ++i) begin
                 if (branch_valid[i] && branch_is_trap[i]) begin
                     mepc_r  [branch_wid[i]] <= to_fullPC(branch_dest[i]);
-                    mcause_r[branch_wid[i]] <= `XLEN'(branch_trap_cause[i]);
+                    mcause_r[branch_wid[i]] <= XLEN'(branch_trap_cause[i]);
                     mtval_r [branch_wid[i]] <= '0;
                 end
             end
@@ -469,22 +469,22 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // schedule the next ready warp
 
-    wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~stalled_warps;
+    wire [NUM_WARPS-1:0] ready_warps = active_warps & ~stalled_warps;
 
     // Per-warp ibuffer occupancy counter (registered full[i] keeps arbitration
     // off the critical path; full_n feeds an externally registered aggregate
     // so all_full is valid the same cycle as full[i]).
-    localparam IBUF_CW = $clog2(`IBUF_SIZE + 1);
+    localparam IBUF_CW = $clog2(IBUF_SIZE + 1);
 
-    wire [`NUM_WARPS-1:0] schedule_onehot;
-    logic [`NUM_WARPS-1:0] ibuf_full, ibuf_full_n;
+    wire [NUM_WARPS-1:0] schedule_onehot;
+    logic [NUM_WARPS-1:0] ibuf_full, ibuf_full_n;
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_ibuf_cnt
+    for (genvar i = 0; i < NUM_WARPS; ++i) begin : g_ibuf_cnt
         logic [IBUF_CW-1:0] size_r, size_n;
         wire incr = schedule_fire && schedule_onehot[i];
         wire decr = schedule_if.ibuf_pop[i];
         assign size_n = size_r + IBUF_CW'(incr) - IBUF_CW'(decr);
-        assign ibuf_full_n[i] = (size_n == IBUF_CW'(`IBUF_SIZE));
+        assign ibuf_full_n[i] = (size_n == IBUF_CW'(IBUF_SIZE));
         always @(posedge clk) begin
             if (reset) begin
                 size_r       <= '0;
@@ -496,22 +496,22 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
     end
 
-    wire [`NUM_WARPS-1:0] preferred_warps = ready_warps & ~ibuf_full;
+    wire [NUM_WARPS-1:0] preferred_warps = ready_warps & ~ibuf_full;
 `ifndef L1_ENABLE
     // without L1, we should ensure the icache never stalls,
     // because it could deadlock dcache response since they share the same bus.
-    wire [`NUM_WARPS-1:0] schedule_warps = preferred_warps;
+    wire [NUM_WARPS-1:0] schedule_warps = preferred_warps;
 `else
     reg all_ibuf_full;
     always @(posedge clk) begin
         if (reset) all_ibuf_full <= 1'b0;
         else all_ibuf_full <= (& ibuf_full_n);
     end
-    wire [`NUM_WARPS-1:0] schedule_warps = all_ibuf_full ? ready_warps : preferred_warps;
+    wire [NUM_WARPS-1:0] schedule_warps = all_ibuf_full ? ready_warps : preferred_warps;
 `endif
 
     VX_priority_encoder #(
-        .N (`NUM_WARPS)
+        .N (NUM_WARPS)
     ) wid_select (
         .data_in   (schedule_warps),
         .index_out (schedule_wid),
@@ -519,14 +519,14 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .onehot_out(schedule_onehot)
     );
 
-    wire [`NUM_WARPS-1:0][(`NUM_THREADS + PC_BITS)-1:0] schedule_data;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_schedule_data
+    wire [NUM_WARPS-1:0][(NUM_THREADS + PC_BITS)-1:0] schedule_data;
+    for (genvar i = 0; i < NUM_WARPS; ++i) begin : g_schedule_data
         assign schedule_data[i] = {thread_masks[i], warp_pcs[i]};
     end
 
     assign {schedule_tmask, schedule_pc} = {
-        schedule_data[schedule_wid][(`NUM_THREADS + PC_BITS)-1:(`NUM_THREADS + PC_BITS)-4],
-        schedule_data[schedule_wid][(`NUM_THREADS + PC_BITS)-5:0]
+        schedule_data[schedule_wid][(NUM_THREADS + PC_BITS)-1:(NUM_THREADS + PC_BITS)-4],
+        schedule_data[schedule_wid][(NUM_THREADS + PC_BITS)-5:0]
     };
 
     wire [UUID_WIDTH-1:0] instr_uuid;
@@ -548,7 +548,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [NCTA_WIDTH-1:0] schedule_cta_id = cta_id_per_warp_r[schedule_wid];
 
     VX_elastic_buffer #(
-        .DATAW (`NUM_THREADS + PC_BITS + NW_WIDTH + NCTA_WIDTH + UUID_WIDTH),
+        .DATAW (NUM_THREADS + PC_BITS + NW_WIDTH + NCTA_WIDTH + UUID_WIDTH),
         .SIZE  (2),  // need to buffer out ready_in
         .OUT_REG (1) // should be registered for BRAM acces in fetch unit
     ) out_buf (
@@ -566,8 +566,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     reg [PERF_CTR_BITS-1:0] instret;
 
-    wire [`NUM_WARPS-1:0] committed_warps_v = commit_sched_if.committed_warps;
-    wire [`CLOG2(`NUM_WARPS+1)-1:0] committed_warps_cnt_v;
+    wire [NUM_WARPS-1:0] committed_warps_v = commit_sched_if.committed_warps;
+    wire [`CLOG2(NUM_WARPS+1)-1:0] committed_warps_cnt_v;
     `POP_COUNT(committed_warps_cnt_v, committed_warps_v);
 
     always @(posedge clk) begin
@@ -580,10 +580,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // Track pending instructions per warp
 
-    wire [`NUM_WARPS-1:0] pending_warp_empty;
-    wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
+    wire [NUM_WARPS-1:0] pending_warp_empty;
+    wire [NUM_WARPS-1:0] pending_warp_alm_empty;
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_warps
+    for (genvar i = 0; i < NUM_WARPS; ++i) begin : g_pending_warps
         localparam logic [ISSUE_ISW_W-1:0] isw = wid_to_isw(i);
         localparam logic [ISSUE_WIS_W-1:0] wis = wid_to_wis(i);
 
@@ -643,7 +643,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     always @(posedge clk) begin
         if (!reset && (timeout_ctr == (SCHED_STALL_TIMEOUT - 1))) begin
             $display("*** %s scheduler-timeout dump: active=%b stalled=%b", INSTANCE_ID, active_warps, stalled_warps);
-            for (integer wi = 0; wi < `NUM_WARPS; ++wi) begin
+            for (integer wi = 0; wi < NUM_WARPS; ++wi) begin
                 $display("    wid=%0d stalled=%0d pc=0x%0h tmask=%b",
                          wi, stalled_warps[wi], to_fullPC(warp_pcs[wi]), thread_masks[wi]);
             end
@@ -661,13 +661,13 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg [PERF_CTR_BITS-1:0] perf_branches;
     reg [PERF_CTR_BITS-1:0] perf_divergence;
 
-    wire [`CLOG2(`NUM_WARPS+1)-1:0] stalled_warps_cnt;
-    wire [`CLOG2(`NUM_ALU_BLOCKS+1)-1:0] branches_cnt;
-    wire [`CLOG2(`NUM_THREADS+1)-1:0] issued_threads_cnt;
+    wire [`CLOG2(NUM_WARPS+1)-1:0] stalled_warps_cnt;
+    wire [`CLOG2(NUM_ALU_BLOCKS+1)-1:0] branches_cnt;
+    wire [`CLOG2(NUM_THREADS+1)-1:0] issued_threads_cnt;
 
     wire schedule_idle = ~schedule_valid;
     wire has_divergence = warp_ctl_if.split_valid && warp_ctl_if.split.is_dvg;
-    wire [`NUM_THREADS-1:0] issued_threads = {`NUM_THREADS{schedule_if_fire}} & schedule_if.data.tmask;
+    wire [NUM_THREADS-1:0] issued_threads = {NUM_THREADS{schedule_if_fire}} & schedule_if.data.tmask;
 
     `POP_COUNT(stalled_warps_cnt, stalled_warps);
     `POP_COUNT(issued_threads_cnt, issued_threads);
@@ -703,7 +703,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef DBG_TRACE_PIPELINE
-    for (genvar w = 0; w < `NUM_WARPS; ++w) begin : g_trace_warp_status
+    for (genvar w = 0; w < NUM_WARPS; ++w) begin : g_trace_warp_status
         always @(posedge clk) begin
             if (active_warps_n[w] != active_warps[w]
              || (active_warps[w] && (stalled_warps_n[w] != stalled_warps[w]

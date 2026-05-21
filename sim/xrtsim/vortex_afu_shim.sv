@@ -18,16 +18,16 @@ module vortex_afu_shim #(
 
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH 	  = `PLATFORM_MEMORY_ID_WIDTH,
-	parameter C_M_AXI_MEM_DATA_WIDTH  = (`PLATFORM_MEMORY_DATA_SIZE * 8),
+	parameter C_M_AXI_MEM_DATA_WIDTH  = (`VX_CFG_PLATFORM_MEMORY_DATA_SIZE * 8),
 	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,
-    parameter C_M_AXI_MEM_NUM_BANKS   = `PLATFORM_MEMORY_NUM_BANKS
+    parameter C_M_AXI_MEM_NUM_BANKS   = `VX_CFG_PLATFORM_MEMORY_NUM_BANKS
 ) (
 	// System signals
 	input wire 									ap_clk,
 	input wire 									ap_rst_n,
 
     // AXI4 master interface
-    `MP_REPEAT (`PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, MP_COMMA),
+    `MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, MP_COMMA),
 
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
@@ -62,7 +62,7 @@ module vortex_afu_shim #(
 		.clk             	(ap_clk),
 		.reset           	(~ap_rst_n),
 
-		`MP_REPEAT (`PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_ARGS, MP_COMMA),
+		`MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_ARGS, MP_COMMA),
 
 		.s_axi_ctrl_awvalid (s_axi_ctrl_awvalid),
 		.s_axi_ctrl_awready (s_axi_ctrl_awready),

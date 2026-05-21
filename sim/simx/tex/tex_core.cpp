@@ -27,18 +27,18 @@ using namespace vortex;
 namespace {
 
 // Cluster-local TEX-core fan-in (cluster TexBus arb collapses sockets → 1).
-// Mirrors `NUM_TEX_CORES` in VX_gpu_pkg / VX_config.
+// Mirrors `VX_CFG_NUM_TEX_CORES` in VX_gpu_pkg / VX_config.
 constexpr uint32_t kNumTexCores = 1;
 
 // tcache request ports exposed to the L2 path. Mirrors `TCACHE_NUM_REQS`.
 constexpr uint32_t kTcacheNumReqs = 1;
 
-// tcache cache-line size (matches `TCACHE_LINE_SIZE = L1_LINE_SIZE`).
-constexpr uint32_t kTcacheLineSize = MEM_BLOCK_SIZE;
-constexpr uint64_t kTcacheLineMask = ~uint64_t(MEM_BLOCK_SIZE - 1);
+// tcache cache-line size (matches `TCACHE_LINE_SIZE = VX_CFG_L1_LINE_SIZE`).
+constexpr uint32_t kTcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
+constexpr uint64_t kTcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Per-request slot count. Mirrors `TEX_REQ_QUEUE_SIZE` from VX_config (a
-// rounding helper based on NUM_THREADS / NUM_SFU_LANES; 4 is the upper
+// Per-request slot count. Mirrors `VX_CFG_TEX_REQ_QUEUE_SIZE` from VX_config (a
+// rounding helper based on VX_CFG_NUM_THREADS / VX_CFG_NUM_SFU_LANES; 4 is the upper
 // bound at this config and well-above what the tex kernel issues).
 constexpr uint32_t kInflight = 8;
 
@@ -76,7 +76,7 @@ public:
     bool                                       in_use = false;
     State                                      state  = State::ADDR;
     TexReq                                     req;
-    std::array<LaneState, NUM_THREADS>         lanes  = {};
+    std::array<LaneState, VX_CFG_NUM_THREADS>         lanes  = {};
     uint32_t                                   pending_lines = 0; // outstanding MemReqs
     uint64_t                                   issue_cycle  = 0;
   };
@@ -128,7 +128,7 @@ public:
     }
 
     // 3) Drain incoming TexReqs into a free slot (round-robin across the
-    //    NUM_TEX_CORES inputs — currently 1).
+    //    VX_CFG_NUM_TEX_CORES inputs — currently 1).
     drain_req_in();
 
     // perf: stall when any slot is waiting on cache rsp this cycle
@@ -173,7 +173,7 @@ private:
 
   // ── Stage: tex_addr — compute per-lane TexelRequest ─────────────────
   void advance_addr(Slot& s) {
-    for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!(s.req.tmask_bits & (1u << t))) {
         l.active = false;
@@ -197,7 +197,7 @@ private:
     uint32_t budget = kTcacheNumReqs;
     bool all_filled = true;
 
-    for (uint32_t t = 0; t < NUM_THREADS && budget > 0; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS && budget > 0; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
       for (uint32_t c = 0; c < l.needed; ++c) {
@@ -277,7 +277,7 @@ private:
 
   // ── Stage: tex_sampler — apply_filter per active lane ───────────────
   bool slot_all_filled(const Slot& s) const {
-    for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       const LaneState& l = s.lanes[t];
       if (!l.active) continue;
       for (uint32_t c = 0; c < l.needed; ++c) {
@@ -289,7 +289,7 @@ private:
 
   void advance_sample(Slot& s) {
     if (!slot_all_filled(s)) return;
-    for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
       l.filtered = graphics::TextureSampler::apply_filter(l.trq, l.texels.data());
@@ -307,7 +307,7 @@ private:
     rsp.tag      = s.req.tag;
     rsp.trace    = s.req.trace;
     rsp.block_id = s.req.block_id;
-    for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       rsp.texels[t] = (s.req.tmask_bits & (1u << t)) ? s.lanes[t].filtered : 0u;
     }
     rsp_ch.send(rsp);

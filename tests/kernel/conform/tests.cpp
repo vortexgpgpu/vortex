@@ -46,7 +46,7 @@ int test_global_memory() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-volatile int* lmem_addr = (int*)LMEM_BASE_ADDR;
+volatile int* lmem_addr = (int*)VX_CFG_LMEM_BASE_ADDR;
 
 int lmem_buffer[8];
 

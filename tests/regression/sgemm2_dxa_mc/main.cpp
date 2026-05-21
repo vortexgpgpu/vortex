@@ -1,12 +1,13 @@
 // Host driver for sgemm2_dxa_mc (inter-core multicast).
-// Adapted from sgemm2_dxa: one CTA per core, NUM_CORES CTAs share each B
+// Adapted from sgemm2_dxa: one CTA per core, VX_CFG_NUM_CORES CTAs share each B
 // column-block via global-barrier-routed multicast. Requires:
-//   - NUM_CORES ≥ 2 to demonstrate inter-core behavior.
+//   - VX_CFG_NUM_CORES ≥ 2 to demonstrate inter-core behavior.
 //   - cross-core LMEM write fabric (socket-level) — see proposal Phase 2.
 // (This test won't pass until that fabric lands; structure of the kernel +
 //  descriptor programming is the artifact under review.)
 
 #include <algorithm>
+#include <VX_config.h>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -104,7 +105,7 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   if (num_cores < 2) {
-    std::cout << "Error: sgemm2_dxa_mc requires NUM_CORES >= 2 "
+    std::cout << "Error: sgemm2_dxa_mc requires VX_CFG_NUM_CORES >= 2 "
                  "(have " << num_cores << "); use sgemm2_dxa_mw on single-core\n";
     cleanup();
     return -1;
@@ -115,7 +116,7 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  // Multicast group spans NUM_CORES cores. Grid arranged so consecutive CTAs
+  // Multicast group spans VX_CFG_NUM_CORES cores. Grid arranged so consecutive CTAs
   // in row order land on consecutive cores (KMU's default round-robin).
   const uint32_t mc_group_size = (uint32_t)num_cores;
   if ((size / tile_size) % mc_group_size != 0) {

@@ -13,7 +13,7 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_TYPE_FPNEW
+`ifdef VX_CFG_FPU_TYPE_FPNEW
 
 module VX_fpu_fpnew
     import VX_gpu_pkg::*;
@@ -40,10 +40,10 @@ module VX_fpu_fpnew
     input wire [INST_FMT_BITS-1:0] fmt,
     input wire [INST_FRM_BITS-1:0] frm,
 
-    input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
-    input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
-    input wire [NUM_LANES-1:0][`XLEN-1:0]  datac,
-    output wire [NUM_LANES-1:0][`XLEN-1:0] result,
+    input wire [NUM_LANES-1:0][XLEN-1:0]  dataa,
+    input wire [NUM_LANES-1:0][XLEN-1:0]  datab,
+    input wire [NUM_LANES-1:0][XLEN-1:0]  datac,
+    output wire [NUM_LANES-1:0][XLEN-1:0] result,
 
     output wire has_fflags,
     output wire [`FP_FLAGS_BITS-1:0] fflags,
@@ -53,15 +53,15 @@ module VX_fpu_fpnew
     input wire  ready_out,
     output wire valid_out
 );
-    localparam LATENCY_FDIVSQRT = `MAX(`LATENCY_FDIV, `LATENCY_FSQRT);
-    localparam RSP_DATAW = (NUM_LANES * `XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
+    localparam LATENCY_FDIVSQRT = `MAX(LATENCY_FDIV, LATENCY_FSQRT);
+    localparam RSP_DATAW = (NUM_LANES * XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
-        Width:         unsigned'(`XLEN),
+        Width:         unsigned'(XLEN),
         EnableVectors: 1'b0,
-    `ifdef XLEN_64
+    `ifdef VX_CFG_XLEN_64
         EnableNanBox:  1'b1,
-    `ifdef FLEN_64
+    `ifdef VX_CFG_FLEN_64
         FpFmtMask:     5'b11000,
     `else
         FpFmtMask:     5'b11000, // TODO: adding FP64 to fix CVT bug in FpNew
@@ -75,10 +75,10 @@ module VX_fpu_fpnew
     };
 
     localparam fpnew_pkg::fpu_implementation_t FPU_IMPLEMENTATION = '{
-      PipeRegs:'{'{`LATENCY_FMA, 0, 0, 0, 0}, // ADDMUL
+      PipeRegs:'{'{LATENCY_FMA, 0, 0, 0, 0}, // ADDMUL
                  '{default: unsigned'(LATENCY_FDIVSQRT)}, // DIVSQRT
-                 '{default: `LATENCY_FNCP}, // NONCOMP
-                 '{default: `LATENCY_FCVT}}, // CONV
+                 '{default: LATENCY_FNCP}, // NONCOMP
+                 '{default: LATENCY_FCVT}}, // CONV
       UnitTypes:'{'{default: fpnew_pkg::PARALLEL}, // ADDMUL
                   '{default: fpnew_pkg::MERGED}, // DIVSQRT
                   '{default: fpnew_pkg::PARALLEL}, // NONCOMP
@@ -91,9 +91,9 @@ module VX_fpu_fpnew
 
     reg [TAG_WIDTH-1:0] fpu_tag_in, fpu_tag_out;
 
-    logic [2:0][NUM_LANES-1:0][`XLEN-1:0] fpu_operands;
+    logic [2:0][NUM_LANES-1:0][XLEN-1:0] fpu_operands;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] fpu_result;
+    wire [NUM_LANES-1:0][XLEN-1:0] fpu_result;
     fpnew_pkg::status_t fpu_status;
 
     fpnew_pkg::operation_e fpu_op;
@@ -116,13 +116,13 @@ module VX_fpu_fpnew
         fpu_dst_fmt     = fpnew_pkg::FP32;
         fpu_int_fmt     = fpnew_pkg::INT32;
 
-    `ifdef FLEN_64
+    `ifdef VX_CFG_FLEN_64
         if (fmt[0]) begin
             fpu_dst_fmt = fpnew_pkg::FP64;
         end
     `endif
 
-    `ifdef XLEN_64
+    `ifdef VX_CFG_XLEN_64
         if (fmt[1]) begin
             fpu_int_fmt = fpnew_pkg::INT64;
         end
@@ -142,7 +142,7 @@ module VX_fpu_fpnew
             INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = ~fmt[1]; end
             INST_FPU_DIV:   begin fpu_op = fpnew_pkg::DIV; end
             INST_FPU_SQRT:  begin fpu_op = fpnew_pkg::SQRT; end
-        `ifdef FLEN_64
+        `ifdef VX_CFG_FLEN_64
             INST_FPU_F2F: begin fpu_op = fpnew_pkg::F2F; fpu_src_fmt = fmt[0] ? fpnew_pkg::FP32 : fpnew_pkg::FP64; end
         `endif
             INST_FPU_F2I,

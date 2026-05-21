@@ -1,10 +1,11 @@
 #include "common.h"
+#include <VX_config.h>
 #include <vx_spawn2.h>
 #include <vx_tensor.h>
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -16,8 +17,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t cta_M = arg->cta_M;
 
   uint32_t tid = threadIdx.x;
-  uint32_t num_threads = blockDim.x; // num_warps * NUM_THREADS
-  uint32_t warp_rank = tid / NUM_THREADS;
+  uint32_t num_threads = blockDim.x; // num_warps * VX_CFG_NUM_THREADS
+  uint32_t warp_rank = tid / VX_CFG_NUM_THREADS;
 
   uint32_t tile_row = blockIdx.y * cta_M;
   uint32_t tile_col = blockIdx.x * ctx::tileN;

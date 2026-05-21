@@ -1,8 +1,8 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-CONFIGS := $(if $(findstring -DEXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DEXT_TCU_ENABLE)
-CONFIGS := $(if $(findstring -DTCU_MX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DTCU_MX_ENABLE)
+CONFIGS := $(if $(findstring -DVX_CFG_EXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TCU_ENABLE)
+CONFIGS := $(if $(findstring -DVX_CFG_TCU_MX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_TCU_MX_ENABLE)
 
 PROJECT := sgemm_tcu_mx
 

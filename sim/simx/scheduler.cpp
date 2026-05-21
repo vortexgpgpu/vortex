@@ -56,8 +56,8 @@ void warp_t::reset() {
 Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     : SimObject<Scheduler>(ctx, name)
     , core_(core)
-    , warps_(NUM_WARPS, NUM_THREADS)
-    , ipdom_size_(NUM_THREADS - 1)
+    , warps_(VX_CFG_NUM_WARPS, VX_CFG_NUM_THREADS)
+    , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
   std::srand(50);
 
@@ -155,7 +155,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   }
 
   // pick next ready warp
-  for (size_t wid = 0, nw = NUM_WARPS; wid < nw; ++wid) {
+  for (size_t wid = 0, nw = VX_CFG_NUM_WARPS; wid < nw; ++wid) {
     if (active_warps_.test(wid) && !stalled_warps_.test(wid) && warp_mask.test(wid)) {
       scheduled_warp = wid;
       break;
@@ -174,7 +174,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
 #ifndef NDEBUG
   {
     uint32_t instr_id = warp.uuid++;
-    uint32_t g_wid = core_->id() * NUM_WARPS + scheduled_warp;
+    uint32_t g_wid = core_->id() * VX_CFG_NUM_WARPS + scheduled_warp;
     uuid = (uint64_t(g_wid) << 32) | instr_id;
   }
 #endif
@@ -237,7 +237,7 @@ bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
 }
 
 bool Scheduler::wspawn(uint32_t num_warps, Word nextPC) {
-  num_warps = std::min<uint32_t>(num_warps, NUM_WARPS);
+  num_warps = std::min<uint32_t>(num_warps, VX_CFG_NUM_WARPS);
   if (num_warps < 2 && active_warps_.count() == 1)
     return true; // nothing to do
   // schedule wspawn

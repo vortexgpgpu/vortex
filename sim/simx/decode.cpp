@@ -26,7 +26,7 @@
 #include "decompressor.h"
 #include "instr.h"
 
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
 #include "tensor_cfg.h"
 #include "tcu_unit.h"
 #endif
@@ -390,28 +390,28 @@ static op_string_t op_string(const Instr &instr) {
         std::abort();
       }
     }
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
     ,[&](DxaType /*dxa_type*/)-> op_string_t {
       return {"DXA.ISSUE", ""};
     }
 #endif
-  #ifdef EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_TCU_ENABLE
     ,[&](TcuType tcu_type)-> op_string_t {
       auto tpuArgs = std::get<IntrTcuArgs>(instrArgs);
       return TcuUnit::op_string(tcu_type, tpuArgs);
     }
-  #endif // EXT_TCU_ENABLE
-  #ifdef EXT_TEX_ENABLE
+  #endif // VX_CFG_EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_TEX_ENABLE
     ,[&](TexType /*tex_type*/)-> op_string_t {
       return {"TEX.SAMPLE", ""};
     }
   #endif
-  #ifdef EXT_OM_ENABLE
+  #ifdef VX_CFG_EXT_OM_ENABLE
     ,[&](OmType /*om_type*/)-> op_string_t {
       return {"OM.WRITE", ""};
     }
   #endif
-  #ifdef EXT_RASTER_ENABLE
+  #ifdef VX_CFG_EXT_RASTER_ENABLE
     ,[&](RasterType /*raster_type*/)-> op_string_t {
       return {"RASTER.POP", ""};
     }
@@ -492,7 +492,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_args(IntrAluArgs{1, 0, imm20});
     instr->set_dest_reg(rd, RegType::Integer);
   } break;
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   case Opcode::R_W:
   case Opcode::I_W:
 #endif
@@ -532,7 +532,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       if (funct3 == 0x1 || funct3 == 0x5) {
         // Shift instructions
         imm = rs2; // uint5
-      #ifdef XLEN_64
+      #ifdef VX_CFG_XLEN_64
         imm |= ((funct7 & 0x1) << 5);
       #endif
       } else {
@@ -873,7 +873,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
     } break;
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
     case 3: { // DXA issue
       instr->set_fu_type(FUType::SFU);
       IntrDxaArgs dxaArgs{};
@@ -883,7 +883,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_src_reg(1, rs2, RegType::Integer);
     } break;
 #endif
-  #ifdef EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_TCU_ENABLE
     case 2: {
       instr->set_fu_type(FUType::TCU);
       switch (funct3) {
@@ -895,7 +895,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
-    #ifdef TCU_WGMMA_ENABLE
+    #ifdef VX_CFG_TCU_WGMMA_ENABLE
       case 1: { // WGMMA_SYNC — single macro Instr, sequencer expands to micro-ops
         uint32_t fmt_d = rd, fmt_s = rs1;
         bool is_sparse = (rs2 & 1) != 0;
@@ -906,7 +906,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
-    #endif // TCU_WGMMA_ENABLE
+    #endif // VX_CFG_TCU_WGMMA_ENABLE
       default:
         std::abort();
       }
@@ -947,7 +947,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       wgArgs.src_lane = funct2;
       instr->set_args(wgArgs);
     } break;
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
     case 1: { // vx_tex: R4-type, funct2=stage, rd=texel, rs1=u, rs2=v, rs3=lod
       instr->set_fu_type(FUType::SFU);
       instr->set_op_type(TexType::SAMPLE);
@@ -960,7 +960,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(texArgs);
     } break;
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
     case 2: { // vx_om: R4-type, rs1=pos_face, rs2=color, rs3=depth
       instr->set_fu_type(FUType::SFU);
       instr->set_op_type(OmType::WRITE);
@@ -971,7 +971,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(omArgs);
     } break;
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
     case 3: { // vx_rast: R-type, rd=quad descriptor
       instr->set_fu_type(FUType::SFU);
       instr->set_op_type(RasterType::POP);

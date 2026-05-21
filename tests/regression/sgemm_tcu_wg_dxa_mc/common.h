@@ -16,7 +16,7 @@
 #define OTYPE fp32
 #endif
 
-// Inter-core multicast variant. `mc_group_size` (= NUM_CORES) CTAs on distinct
+// Inter-core multicast variant. `mc_group_size` (= VX_CFG_NUM_CORES) CTAs on distinct
 // cores share the same B tile via global-barrier-routed multicast.
 typedef struct {
   uint32_t M, N, K;

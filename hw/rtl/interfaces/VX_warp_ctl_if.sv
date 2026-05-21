@@ -31,7 +31,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     barrier_t bar;
 
     // Per-warp pipeline drain status (from scheduler)
-    wire [`NUM_WARPS-1:0] warp_pending_alm_empty;
+    wire [NUM_WARPS-1:0] warp_pending_alm_empty;
 
     // Return IPDOM stack address
     wire [NW_WIDTH-1:0] dvstack_wid;

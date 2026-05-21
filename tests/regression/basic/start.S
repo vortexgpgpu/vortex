@@ -14,7 +14,7 @@
 #include <VX_config.h>
 #include <VX_types.h>
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 // Mode encodings used by SATP. Defined locally to avoid pulling
 // sim/common/mem.h into the kernel build.
 #define BARE 0
@@ -26,19 +26,19 @@
 .global _start
 .type _start, @function
 _start:
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   # Each core programs SATP from the runtime-installed page table at
-  # PAGE_TABLE_BASE_ADDR. Must run before any user-VA load/store.
-#if VM_ADDR_MODE == SV39
-  li    t0, PAGE_TABLE_BASE_ADDR
-  srli  t0, t0, MEM_PAGE_LOG2_SIZE
+  # VX_CFG_PAGE_TABLE_BASE_ADDR. Must run before any user-VA load/store.
+#if VX_CFG_VM_ADDR_MODE == SV39
+  li    t0, VX_CFG_PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, VX_CFG_MEM_PAGE_LOG2_SIZE
   li    t1, 1
   slli  t1, t1, 63
   or    t0, t0, t1
   csrw  satp, t0
-#elif VM_ADDR_MODE == SV32
-  li    t0, PAGE_TABLE_BASE_ADDR
-  srli  t0, t0, MEM_PAGE_LOG2_SIZE
+#elif VX_CFG_VM_ADDR_MODE == SV32
+  li    t0, VX_CFG_PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, VX_CFG_MEM_PAGE_LOG2_SIZE
   li    t1, 1
   slli  t1, t1, 31
   or    t0, t0, t1

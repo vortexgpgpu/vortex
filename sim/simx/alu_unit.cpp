@@ -25,7 +25,7 @@
 using namespace vortex;
 
 AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<NUM_ALU_BLOCKS>(ctx, name, core)
+	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core)
 {}
 
 uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
@@ -78,7 +78,7 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 		case MdvType::DIVU:
 		case MdvType::REM:
 		case MdvType::REMU:
-			return XLEN+2;
+			return VX_CFG_XLEN+2;
 		default:
 			std::abort();
 		}
@@ -97,7 +97,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 	auto& tmask = trace->tmask;
 	auto& instr = *trace->instr_ptr;
 	auto instrArgs = instr.get_args();
-	uint32_t num_threads = NUM_THREADS;
+	uint32_t num_threads = VX_CFG_NUM_THREADS;
 	auto& rs1_data = trace->src_data[0];
 	auto& rs2_data = trace->src_data[1];
 	auto& rs3_data = trace->src_data[2];
@@ -115,7 +115,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 	}
 
 	bool is_w_enabled = false;
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
 	is_w_enabled = true;
 #endif
 
@@ -176,7 +176,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 			}
 		} break;
 		case AluType::SLL: {
-			Word shamt_mask = (Word(1) << log2up(XLEN)) - 1;
+			Word shamt_mask = (Word(1) << log2up(VX_CFG_XLEN)) - 1;
 			for (uint32_t t = thread_start; t < num_threads; ++t) {
 				if (!tmask.test(t)) continue;
 				if (is_w_enabled && aluArgs.is_w) {
@@ -190,7 +190,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 			}
 		} break;
 		case AluType::SRA: {
-			Word shamt_mask = (Word(1) << log2up(XLEN)) - 1;
+			Word shamt_mask = (Word(1) << log2up(VX_CFG_XLEN)) - 1;
 			for (uint32_t t = thread_start; t < num_threads; ++t) {
 				if (!tmask.test(t)) continue;
 				if (is_w_enabled && aluArgs.is_w) {
@@ -204,7 +204,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 			}
 		} break;
 		case AluType::SRL: {
-			Word shamt_mask = (Word(1) << log2up(XLEN)) - 1;
+			Word shamt_mask = (Word(1) << log2up(VX_CFG_XLEN)) - 1;
 			for (uint32_t t = thread_start; t < num_threads; ++t) {
 				if (!tmask.test(t)) continue;
 				if (is_w_enabled && aluArgs.is_w) {
@@ -392,7 +392,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 				if (!tmask.test(t)) continue;
 				auto first = static_cast<DWordI>(rs1_data[t].i);
 				auto second = static_cast<DWordI>(rs2_data[t].i);
-				rd_data[t].i = (first * second) >> XLEN;
+				rd_data[t].i = (first * second) >> VX_CFG_XLEN;
 			}
 		} break;
 		case MdvType::MULHSU: {
@@ -400,7 +400,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 				if (!tmask.test(t)) continue;
 				auto first = static_cast<DWordI>(rs1_data[t].i);
 				auto second = static_cast<DWord>(rs2_data[t].u);
-				rd_data[t].i = (first * second) >> XLEN;
+				rd_data[t].i = (first * second) >> VX_CFG_XLEN;
 			}
 		} break;
 		case MdvType::MULHU: {
@@ -408,7 +408,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 				if (!tmask.test(t)) continue;
 				auto first = static_cast<DWord>(rs1_data[t].u);
 				auto second = static_cast<DWord>(rs2_data[t].u);
-				rd_data[t].i = (first * second) >> XLEN;
+				rd_data[t].i = (first * second) >> VX_CFG_XLEN;
 			}
 		} break;
 		case MdvType::DIV: {
@@ -426,7 +426,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 				} else {
 					auto dividen = rs1_data[t].i;
 					auto divisor = rs2_data[t].i;
-					auto largest_negative = WordI(1) << (XLEN-1);
+					auto largest_negative = WordI(1) << (VX_CFG_XLEN-1);
 					WordI quotient;
 					if (divisor == 0)                                   quotient = -1;
 					else if (dividen == largest_negative && divisor == -1) quotient = dividen;
@@ -470,7 +470,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 				} else {
 					auto dividen = rs1_data[t].i;
 					auto divisor = rs2_data[t].i;
-					auto largest_negative = WordI(1) << (XLEN-1);
+					auto largest_negative = WordI(1) << (VX_CFG_XLEN-1);
 					WordI remainder;
 					if (rs2_data[t].i == 0)                             remainder = dividen;
 					else if (dividen == largest_negative && divisor == -1) remainder = 0;
@@ -509,7 +509,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 }
 
 void AluUnit::on_tick() {
-  for (uint32_t b = 0; b < NUM_ALU_BLOCKS; ++b) {
+  for (uint32_t b = 0; b < VX_CFG_NUM_ALU_BLOCKS; ++b) {
 		auto& input = Inputs.at(b);
 		if (input.empty())
 			continue;

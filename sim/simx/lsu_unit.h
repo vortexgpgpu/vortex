@@ -66,7 +66,7 @@ private:
   bool locked_ = false;
 };
 
-class LsuUnit : public FuncUnit<NUM_LSU_BLOCKS> {
+class LsuUnit : public FuncUnit<VX_CFG_NUM_LSU_BLOCKS> {
 public:
 	LsuUnit(const SimContext& ctx, const char* name, Core*);
 	~LsuUnit();
@@ -104,12 +104,12 @@ private:
 
 	// Per-block LSU state. Each member is a named hardware sub-block.
 	struct lsu_state_t {
-		RingQueue<instr_trace_t*> req_queue{LSUQ_IN_SIZE};
+		RingQueue<instr_trace_t*> req_queue{VX_CFG_LSUQ_IN_SIZE};
 		// In-flight LSU requests, keyed by the tag the LSU allocates on
 		// issue. Stores the originating trace + per-lane (tid, addr, size)
 		// info needed to write the response back to the right registers.
 		// (Not a miss-status table — the cache has its own MSHR for that.)
-		HashTable<pending_req_t>  pending_reqs{LSUQ_IN_SIZE};
+		HashTable<pending_req_t>  pending_reqs{VX_CFG_LSUQ_IN_SIZE};
 		FenceController           fence;
 		std::vector<mem_addr_size_t> addr_list;
 		uint32_t                  remain_addrs = 0;
@@ -123,7 +123,7 @@ private:
 		}
 	};
 
-	std::array<lsu_state_t, NUM_LSU_BLOCKS> states_;
+	std::array<lsu_state_t, VX_CFG_NUM_LSU_BLOCKS> states_;
 	uint64_t pending_loads_;
 };
 

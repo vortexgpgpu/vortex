@@ -84,7 +84,7 @@ module testbench;
                 dcr_req_valid <= 1;
                 dcr_req_rw    <= 1;
                 dcr_req_addr  <= `VX_DCR_BASE_STARTUP_ADDR0;
-                dcr_req_data  <= `STARTUP_ADDR;
+                dcr_req_data  <= `VX_CFG_STARTUP_ADDR;
             end
             2: begin
                 dcr_req_valid <= 0;
@@ -111,7 +111,7 @@ module testbench;
                     end
                 end
             end else begin
-                if (vx_reset_wait && vx_reset_ctr == (`RESET_DELAY-1)) begin
+                if (vx_reset_wait && vx_reset_ctr == (`VX_CFG_RESET_DELAY-1)) begin
                     $display("start!");
                     vx_reset_wait <= 0;
                     vx_running    <= 1;

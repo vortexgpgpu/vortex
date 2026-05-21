@@ -70,24 +70,24 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
     // ----------------------------------------------------------------------
     always_comb begin
         case (fmt_s)
-        `ifdef TCU_BF16_ENABLE
+        `ifdef VX_CFG_TCU_BF16_ENABLE
             TCU_BF16_ID,
         `endif
             TCU_FP16_ID: lane_mask = mask_16;
-        `ifdef TCU_TF32_ENABLE
+        `ifdef VX_CFG_TCU_TF32_ENABLE
             TCU_TF32_ID: lane_mask = mask_32;
         `endif
-        `ifdef TCU_FP8_ENABLE
+        `ifdef VX_CFG_TCU_FP8_ENABLE
             TCU_FP8_ID,
             TCU_BF8_ID:  lane_mask = mask_8;
             TCU_MXFP8_ID:lane_mask = mask_8;
         `endif
-        `ifdef TCU_INT_ENABLE
+        `ifdef VX_CFG_TCU_INT_ENABLE
             TCU_I8_ID,
             TCU_U8_ID:   lane_mask = mask_8;
             TCU_I4_ID,
             TCU_U4_ID:   lane_mask = mask_4;
-        `ifdef TCU_MXI8_ENABLE
+        `ifdef VX_CFG_TCU_MXI8_ENABLE
             TCU_MXI8_ID: lane_mask = mask_8;
         `endif
         `endif

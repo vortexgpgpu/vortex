@@ -7,6 +7,12 @@ VX_CSR_MPM_BASE_H = 0xB80
 VX_CSR_MPM_USER = 0xB03
 VX_CSR_MPM_USER_H = 0xB83
 
+# Device-identity constants: read-only mvendorid/marchid/mimpid CSR contents.
+[isa]
+VX_ISA_VENDOR_ID = 0
+VX_ISA_ARCH_ID   = 0
+VX_ISA_IMPL_ID   = 0
+
 [dcr_base]
 VX_DCR_BASE_STATE_BEGIN = 0x000
 VX_DCR_BASE_CACHE_FLUSH = 0x000

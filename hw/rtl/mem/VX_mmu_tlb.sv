@@ -93,7 +93,6 @@ module VX_mmu_tlb import VX_gpu_pkg::*; #(
     // TLB Logic
     // =========================================================================
 
-    localparam TLB_SIZE       = 32;
     localparam TLB_INDEX_BITS = 5;
     localparam PAGE_OFFSET_BITS = 12 - `CLOG2(DATA_SIZE);
     localparam VPN_WIDTH = 20;

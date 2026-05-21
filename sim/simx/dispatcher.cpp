@@ -18,14 +18,14 @@ using namespace vortex;
 
 Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes)
   : SimObject<Dispatcher>(ctx, name)
-  , Inputs(ISSUE_WIDTH, this)
+  , Inputs(VX_CFG_ISSUE_WIDTH, this)
   , Outputs(block_size, this)  // physical block count, matches downstream FU
   , core_(core)
   , buf_size_(buf_size)
   , block_size_(block_size)
   , num_lanes_(num_lanes)
-  , num_blocks_(ISSUE_WIDTH / block_size)
-  , num_packets_(NUM_THREADS / num_lanes)
+  , num_blocks_(VX_CFG_ISSUE_WIDTH / block_size)
+  , num_packets_(VX_CFG_NUM_THREADS / num_lanes)
   , batch_idx_(0)
   , block_pids_(block_size, 0)
 {}
@@ -77,7 +77,7 @@ void Dispatcher::on_tick() {
       // lanes are still stale.
       if (block_pid == 0) {
         uint32_t n_pkts = 0;
-        for (uint32_t j = 0; j < NUM_THREADS; j += num_lanes_) {
+        for (uint32_t j = 0; j < VX_CFG_NUM_THREADS; j += num_lanes_) {
           for (uint32_t k = 0; k < num_lanes_; ++k) {
             if (trace->tmask.test(j + k)) { ++n_pkts; break; }
           }
@@ -86,7 +86,7 @@ void Dispatcher::on_tick() {
       }
       // calculate current packet start and end
       int start(-1), end(-1);
-      for (uint32_t j = block_pid * num_lanes_, n = NUM_THREADS; j < n; ++j) {
+      for (uint32_t j = block_pid * num_lanes_, n = VX_CFG_NUM_THREADS; j < n; ++j) {
         if (!trace->tmask.test(j))
           continue;
         if (start == -1)
@@ -106,7 +106,7 @@ void Dispatcher::on_tick() {
         input.pop();
         ++block_sent;
       }
-      ThreadMask tmask(NUM_THREADS);
+      ThreadMask tmask(VX_CFG_NUM_THREADS);
       for (int j = start * num_lanes_, n = j + num_lanes_; j < n; ++j) {
         tmask[j] = trace->tmask[j];
       }

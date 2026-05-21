@@ -1,10 +1,11 @@
 #include "common.h"
+#include <VX_config.h>
 #include <vx_spawn2.h>
 #include <vx_tensor.h>
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);

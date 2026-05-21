@@ -15,7 +15,7 @@ SRCS := $(SRC_DIR)/main.cpp
 
 DBG_TRACE_FLAGS :=
 
-VL_FLAGS += -DEXT_TEX_ENABLE
+VL_FLAGS += -DVX_CFG_EXT_TEX_ENABLE
 
 RTL_PKGS := $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/tex/VX_tex_pkg.sv
 

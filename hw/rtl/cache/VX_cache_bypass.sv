@@ -27,7 +27,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
 
     parameter CORE_TAG_WIDTH    = 1,
 
-    parameter MEM_ADDR_WIDTH    = 1,
+    parameter MEM_ADDRW    = 1,
     parameter MEM_TAG_IN_WIDTH  = 1,
 
     parameter CORE_OUT_BUF      = 0,
@@ -59,7 +59,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     localparam MEM_TAG_NC2_WIDTH = MEM_TAG_NC1_WIDTH + WSEL_BITS;
     localparam MEM_TAG_OUT_WIDTH = CACHE_ENABLE ? `MAX(MEM_TAG_IN_WIDTH, MEM_TAG_NC2_WIDTH) : MEM_TAG_NC2_WIDTH;
 
-    `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(0 == (IO_BASE_ADDR % MEM_BLOCK_SIZE), ("invalid parameter"))
 
     // hanlde non-cacheable core request switch ///////////////////////////////
 
@@ -167,7 +167,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
             core_req_nc_arb_tag
         } = core_bus_nc_arb_if[i].req_data;
 
-        logic [MEM_ADDR_WIDTH-1:0] core_req_nc_arb_addr_w;
+        logic [MEM_ADDRW-1:0] core_req_nc_arb_addr_w;
         logic [WORDS_PER_LINE-1:0][WORD_SIZE-1:0] core_req_nc_arb_byteen_w;
         logic [WORDS_PER_LINE-1:0][CORE_DATA_WIDTH-1:0] core_req_nc_arb_data_w;
         logic [CORE_DATA_WIDTH-1:0] core_rsp_nc_arb_data_w;
@@ -201,7 +201,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
                 .sel_out  (rsp_wsel),
                 .data_out (core_rsp_nc_arb_tag_w)
             );
-            assign core_req_nc_arb_addr_w   = core_req_nc_arb_addr[WSEL_BITS +: MEM_ADDR_WIDTH];
+            assign core_req_nc_arb_addr_w   = core_req_nc_arb_addr[WSEL_BITS +: MEM_ADDRW];
             assign core_rsp_nc_arb_data_w   = mem_bus_out_nc_if[i].rsp_data.data[rsp_wsel * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
         end else begin : g_single_word_line
             assign core_req_nc_arb_addr_w   = core_req_nc_arb_addr;

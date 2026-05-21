@@ -142,7 +142,7 @@ struct CoreCounters {
   uint64_t mem_reads = 0;
   uint64_t mem_writes = 0;
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   // VM (icache + dcache MMU summed in hardware)
   uint64_t tlb_reads = 0;
   uint64_t tlb_hits = 0;
@@ -282,7 +282,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LOAD_LT, core_id, &c.load_lt), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STORES, core_id, &c.stores), { return err; });
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
       // VM/MMU lives in its own perf class (CLASS_VM), independent of CORE/MEM.
       // Hardware sums icache + dcache MMU counters into one bank.
       CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_READS,   core_id, &c.tlb_reads),   { return err; });
@@ -343,7 +343,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
         perf_print_core(stream, core_id, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64,
                         ifetch_avg_lt, load_avg_lt, c.loads, c.stores);
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
         const int tlb_hit_pct = calc_percent(c.tlb_hits, c.tlb_reads);
         const double ptw_avg_lt = safe_div((double)c.ptw_latency, (double)c.ptw_walks);
         perf_print_core(stream, core_id, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
@@ -387,7 +387,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       tot.load_lt += c.load_lt;
       tot.stores += c.stores;
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
       tot.tlb_reads += c.tlb_reads;
       tot.tlb_hits += c.tlb_hits;
       tot.tlb_misses += c.tlb_misses;
@@ -450,7 +450,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     perf_print(stream, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64 ", read_bytes=%" PRIu64 ", write_bytes=%" PRIu64,
                tot_ifetch_avg_lt, tot_load_avg_lt, tot.loads, tot.stores, read_bytes, write_bytes);
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     const int tot_tlb_hit_pct = calc_percent(tot.tlb_hits, tot.tlb_reads);
     const double tot_ptw_avg_lt = safe_div((double)tot.ptw_latency, (double)tot.ptw_walks);
     perf_print(stream, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",

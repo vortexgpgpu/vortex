@@ -102,7 +102,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     exp_max   = 8'h1F;
                     bias_sel  = BIAS_CONST_FP16;
                 end
-            `ifdef TCU_BF16_ENABLE
+            `ifdef VX_CFG_TCU_BF16_ENABLE
                 TCU_BF16_ID: begin
                     raw_ea    = a_row[i/2][S_BF16-1+OFF_16 -: E_BF16];
                     raw_eb    = b_col[i/2][S_BF16-1+OFF_16 -: E_BF16];
@@ -114,7 +114,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     bias_sel  = BIAS_CONST_BF16;
                 end
             `endif
-            `ifdef TCU_TF32_ENABLE
+            `ifdef VX_CFG_TCU_TF32_ENABLE
                 TCU_TF32_ID: begin
                     if ((i % 2) == 0) begin
                         raw_ea    = a_row[i/2][S_TF32-1 -: E_TF32];
@@ -246,10 +246,10 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         always_comb begin
             case (fmt_f)
                 TCU_FP16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
-            `ifdef TCU_BF16_ENABLE
+            `ifdef VX_CFG_TCU_BF16_ENABLE
                 TCU_BF16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
             `endif
-            `ifdef TCU_TF32_ENABLE
+            `ifdef VX_CFG_TCU_TF32_ENABLE
                 TCU_TF32_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
             `endif
                 default:     result_sig[i] = 'x;

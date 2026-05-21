@@ -304,7 +304,7 @@ public:
       _value = clock_rate_;
       break;
     case VX_CAPS_PEAK_MEM_BW:
-      _value = PLATFORM_MEMORY_PEAK_BW;
+      _value = VX_CFG_PLATFORM_MEMORY_PEAK_BW;
       break;
     default:
       fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);

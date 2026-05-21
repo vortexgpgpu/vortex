@@ -21,7 +21,7 @@ namespace vortex {
 
 class Core;
 
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 // Per-warp + per-thread snapshot of the most recent vx_rast() pop's
 // raster_csrs_t. Latched by SfuUnit when a RasterRsp is delivered;
 // surfaced to the kernel via VX_CSR_RASTER_POS_MASK + VX_CSR_RASTER_PID +
@@ -52,7 +52,7 @@ public:
   uint32_t get_fpu_rm(uint32_t funct3, uint32_t wid, uint32_t tid);
   void update_fcrs(uint32_t fflags, uint32_t wid, uint32_t tid);
 
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
   // Latch raster CSRs for one (warp, thread) lane on RasterRsp arrival.
   void set_raster_csrs(uint32_t wid, uint32_t tid, const RasterCsrs& csrs) {
     raster_csrs_.at(wid).at(tid) = csrs;
@@ -61,10 +61,10 @@ public:
 
 private:
   Core* core_;
-#ifdef EXT_RASTER_ENABLE
-  std::array<std::array<RasterCsrs, NUM_THREADS>, NUM_WARPS> raster_csrs_{};
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  std::array<std::array<RasterCsrs, VX_CFG_NUM_THREADS>, VX_CFG_NUM_WARPS> raster_csrs_{};
 #endif
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   // Mirror of the kernel-visible SATP CSR. Forwarded to Core::set_satp
   // on write so the per-core MMU updates its translation root.
   uint64_t satp_ = 0;

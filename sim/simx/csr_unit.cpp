@@ -25,18 +25,18 @@
 #include "processor_impl.h"
 #include "local_mem.h"
 #include "mem_coalescer.h"
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
 #include "tcu_unit.h"
 #endif
 #include "constants.h"
 #include "VX_types.h"
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
 #include "tcu_unit.h"
 #endif
 
 using namespace vortex;
 
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   #define CSR_READ_64(addr, value) \
     case addr: return value
 #else
@@ -66,7 +66,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_MCAUSE:  return warp.mcause;
   case VX_CSR_MTVAL:   return warp.mtval;
   case VX_CSR_SATP:
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     return (Word)satp_;
 #else
     return 0;
@@ -76,17 +76,17 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_FRM:    return (warp.fcsr >> 5);
   case VX_CSR_FCSR:   return warp.fcsr;
 
-  case VX_CSR_MHARTID:    return (core_->id() * NUM_WARPS + wid) * NUM_THREADS + tid;
+  case VX_CSR_MHARTID:    return (core_->id() * VX_CFG_NUM_WARPS + wid) * VX_CFG_NUM_THREADS + tid;
   case VX_CSR_THREAD_ID:  return tid;
   case VX_CSR_WARP_ID:    return wid;
   case VX_CSR_CORE_ID:    return core_->id();
   case VX_CSR_ACTIVE_THREADS:return warp.tmask.to_ulong();
   case VX_CSR_ACTIVE_WARPS:return sched.active_warps().to_ulong();
-  case VX_CSR_NUM_THREADS:return NUM_THREADS;
-  case VX_CSR_NUM_WARPS:  return NUM_WARPS;
-  case VX_CSR_NUM_CORES:  return uint32_t(NUM_CORES) * NUM_CLUSTERS;
-  case VX_CSR_LOCAL_MEM_BASE: return LMEM_BASE_ADDR;
-  case VX_CSR_NUM_BARRIERS: return NUM_BARRIERS;
+  case VX_CSR_NUM_THREADS:return VX_CFG_NUM_THREADS;
+  case VX_CSR_NUM_WARPS:  return VX_CFG_NUM_WARPS;
+  case VX_CSR_NUM_CORES:  return uint32_t(VX_CFG_NUM_CORES) * VX_CFG_NUM_CLUSTERS;
+  case VX_CSR_LOCAL_MEM_BASE: return VX_CFG_LMEM_BASE_ADDR;
+  case VX_CSR_NUM_BARRIERS: return VX_CFG_NUM_BARRIERS;
   case VX_CSR_MSCRATCH:   return warp.mscratch;
 
   case VX_CSR_CTA_ID:       return warp.cta_csrs.cta_id;
@@ -116,7 +116,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
   case VX_CSR_CTA_GRID_DIM_Z:  return warp.cta_csrs.grid_dim[2];
   case VX_CSR_CTA_LMEM_ADDR:   return warp.cta_csrs.lmem_addr;
 
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
   case VX_CSR_RASTER_POS_MASK:  return raster_csrs_.at(wid).at(tid).pos_mask;
   case VX_CSR_RASTER_PID:       return raster_csrs_.at(wid).at(tid).pid;
   case VX_CSR_RASTER_BCOORD_X0: return raster_csrs_.at(wid).at(tid).bcoords[0][0];
@@ -159,7 +159,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_STALL_FPU, core_perf.fpu_stalls);
         CSR_READ_64(VX_CSR_MPM_STALL_LSU, core_perf.lsu_stalls);
         CSR_READ_64(VX_CSR_MPM_STALL_SFU, core_perf.sfu_stalls);
-      #ifdef EXT_TCU_ENABLE
+      #ifdef VX_CFG_EXT_TCU_ENABLE
         CSR_READ_64(VX_CSR_MPM_STALL_TCU, core_perf.tcu_stalls);
       #endif
         CSR_READ_64(VX_CSR_MPM_BRANCHES, core_perf.branches);
@@ -168,7 +168,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_INSTR_FPU, core_perf.fpu_instrs);
         CSR_READ_64(VX_CSR_MPM_INSTR_LSU, core_perf.lsu_instrs);
         CSR_READ_64(VX_CSR_MPM_INSTR_SFU, core_perf.sfu_instrs);
-      #ifdef EXT_TCU_ENABLE
+      #ifdef VX_CFG_EXT_TCU_ENABLE
         CSR_READ_64(VX_CSR_MPM_INSTR_TCU, core_perf.tcu_instrs);
       #endif
         CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
@@ -186,7 +186,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         auto lmem_perf = core_->local_mem()->perf_stats();
 
         uint64_t coalescer_misses = 0;
-        for (uint i = 0; i < NUM_LSU_BLOCKS; ++i) {
+        for (uint i = 0; i < VX_CFG_NUM_LSU_BLOCKS; ++i) {
           coalescer_misses += core_->mem_coalescer(i)->perf_stats().misses;
         }
 
@@ -228,7 +228,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_LMEM_BANK_ST, lmem_perf.bank_stalls);
         }
       } break;
-    #ifdef EXT_TCU_ENABLE
+    #ifdef VX_CFG_EXT_TCU_ENABLE
       case VX_DCR_MPM_CLASS_TCU: {
         auto tcu_perf = core_->tcu_unit()->perf_stats();
         switch (addr) {
@@ -238,7 +238,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         }
       } break;
     #endif
-    #ifdef EXT_DXA_ENABLE
+    #ifdef VX_CFG_EXT_DXA_ENABLE
       case VX_DCR_MPM_CLASS_DXA: {
         auto cluster_perf = core_->socket()->cluster()->perf_stats();
         switch (addr) {
@@ -280,7 +280,7 @@ void CsrUnit::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
     warp.mscratch = value;
     break;
   case VX_CSR_SATP:
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     satp_ = value;
     core_->set_satp(value);
 #endif
@@ -336,7 +336,7 @@ void CsrUnit::process(instr_trace_t* trace) {
   auto csr_type  = std::get<CsrType>(trace->op_type);
   uint32_t wid   = trace->wid;
   uint32_t csr_addr = csrArgs.csr;
-  uint32_t num_threads = NUM_THREADS;
+  uint32_t num_threads = VX_CFG_NUM_THREADS;
   auto& rs1_data = trace->src_data[0];
 
   uint32_t thread_start = 0;

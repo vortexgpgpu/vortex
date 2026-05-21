@@ -1,8 +1,9 @@
 #include <vx_spawn2.h>
+#include <VX_config.h>
 #include "common.h"
 
-#ifndef NUM_THREADS
-#define NUM_THREADS 4
+#ifndef VX_CFG_NUM_THREADS
+#define VX_CFG_NUM_THREADS 4
 #endif
 
 static inline size_t bits_from_f32(float x) { size_t u; __builtin_memcpy(&u, &x, 4); return u; }
@@ -29,8 +30,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto tbuf = reinterpret_cast<float*>(__local_mem());
 
   uint32_t gid  = threadIdx.x + blockIdx.x * blockDim.x;
-  uint32_t lane = threadIdx.x & (NUM_THREADS - 1);
-  uint32_t lwid = threadIdx.x / NUM_THREADS;
+  uint32_t lane = threadIdx.x & (VX_CFG_NUM_THREADS - 1);
+  uint32_t lwid = threadIdx.x / VX_CFG_NUM_THREADS;
 
   float acc = 0.0f;
   uint32_t stride = blockDim.x * gridDim.x;
@@ -38,7 +39,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     acc += src0[i] * src1[i];
   }
 
-  acc = warp_reduce_sum(acc, NUM_THREADS);
+  acc = warp_reduce_sum(acc, VX_CFG_NUM_THREADS);
 
   if (lane == 0) {
     tbuf[lwid] = acc;
@@ -46,9 +47,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   __syncthreads();
 
   if (lwid == 0) {
-    uint32_t num_warps = (blockDim.x + NUM_THREADS - 1) / NUM_THREADS;
+    uint32_t num_warps = (blockDim.x + VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_THREADS;
     float v = (lane < num_warps) ? tbuf[lane] : 0.0f;
-    v = warp_reduce_sum(v, NUM_THREADS);
+    v = warp_reduce_sum(v, VX_CFG_NUM_THREADS);
     if (lane == 0) {
       dst[blockIdx.x] = v;
     }

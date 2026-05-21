@@ -1,9 +1,10 @@
 // Host driver for dxa_copy_mc (inter-core multicast).
 //
-// num_recv = NUM_CORES CTAs, one per core, each receiving the same tile via
+// num_recv = VX_CFG_NUM_CORES CTAs, one per core, each receiving the same tile via
 // DXA multicast routed through a global barrier.
 
 #include <cstdlib>
+#include <VX_config.h>
 #include <iostream>
 #include <unistd.h>
 #include <vector>
@@ -77,11 +78,11 @@ int main(int argc, char* argv[]) {
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
-  // Inter-core multicast spans NUM_CORES. One CTA per core, multi-warp OK.
+  // Inter-core multicast spans VX_CFG_NUM_CORES. One CTA per core, multi-warp OK.
   uint64_t num_cores = 0;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores));
   if (num_cores < 2) {
-    std::cout << "Error: dxa_copy_mc requires NUM_CORES >= 2 (have "
+    std::cout << "Error: dxa_copy_mc requires VX_CFG_NUM_CORES >= 2 (have "
               << num_cores << "); use dxa_copy_mw on single-core configs\n";
     cleanup();
     return -1;

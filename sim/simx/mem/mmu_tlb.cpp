@@ -7,7 +7,7 @@
 
 #include <VX_config.h>
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 
 #include "mmu_tlb.h"
 #include <cstddef>
@@ -69,4 +69,4 @@ void Tlb::flush() {
 
 } // namespace vortex
 
-#endif // VM_ENABLE
+#endif // VX_CFG_VM_ENABLE

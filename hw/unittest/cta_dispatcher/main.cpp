@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
   sim->in_param       = 0x87654321;
   sim->in_lmem_size   = 0;
   sim->in_block_size  = 4;
-  sim->in_warp_step_x = NUM_THREADS;
+  sim->in_warp_step_x = VX_CFG_NUM_THREADS;
   sim->in_warp_step_y = 0;
   sim->in_warp_step_z = 0;
   sim->active_warps   = 0;
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
   sim->warp_done_wid  = 0;
 
   // Per-warp countdown timers: expire after 4 cycles → warp slot freed
-  std::vector<int> warp_timer(NUM_WARPS, 0);
+  std::vector<int> warp_timer(VX_CFG_NUM_WARPS, 0);
 
   for (int i = 0; i < 30; ++i) {
     tick = sim.step(tick, 2);
@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
     // Advance timers; signal warp_done when a timer expires
     sim->warp_done = 0;
     uint32_t next_active_warps = 0;
-    for (int w = 0; w < NUM_WARPS; ++w) {
+    for (int w = 0; w < VX_CFG_NUM_WARPS; ++w) {
       if (warp_timer[w] > 0) {
         warp_timer[w]--;
         if (warp_timer[w] > 0) {

@@ -112,8 +112,8 @@ struct abstractcs_t {
     unsigned cmderr;
 
     // datacount: number of data registers (1 for RV32, 2 for RV64)
-    // OpenOCD uses this to determine XLEN
-    abstractcs_t() : datacount((XLEN == 64) ? 2 : 1), progbufsize(0), busy(false), cmderr(0) {}
+    // OpenOCD uses this to determine VX_CFG_XLEN
+    abstractcs_t() : datacount((VX_CFG_XLEN == 64) ? 2 : 1), progbufsize(0), busy(false), cmderr(0) {}
 };
 
 class DebugModule {
@@ -250,8 +250,8 @@ private:
     std::map<uint32_t, uint32_t> software_breakpoints_;
 
     // datacount: number of data registers (1 for RV32, 2 for RV64)
-    // OpenOCD uses this to determine XLEN
-    static constexpr unsigned datacount = (XLEN == 64) ? 2 : 1;
+    // OpenOCD uses this to determine VX_CFG_XLEN
+    static constexpr unsigned datacount = (VX_CFG_XLEN == 64) ? 2 : 1;
     uint32_t dmdata[datacount];
     uint32_t data1;  // DATA1 register (address 0x5)
     uint32_t data2;  // DATA2 register (address 0x6)

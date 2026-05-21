@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <VX_config.h>
 #include <vector>
 #include <cstdint>
 #include <cstring>
@@ -315,7 +316,7 @@ private:
 };
 
 inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
-  // Test_ATOMIC_CRITICAL needs to know NUM_THREADS to compute the
+  // Test_ATOMIC_CRITICAL needs to know VX_CFG_NUM_THREADS to compute the
   // expected count; query it from the device caps.
   uint64_t num_threads = 0;
   vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads);

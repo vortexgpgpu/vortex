@@ -1,10 +1,11 @@
 #include "common.h"
+#include <VX_config.h>
 #include <vx_spawn2.h>
 #include <vx_tensor.h>
 #include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, true>; // is_sparse=true
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true>; // is_sparse=true
 
 __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -29,12 +30,12 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
   // Per-K-tile metadata reload
   constexpr uint32_t rtl_i_ratio = 32 / vt::ITYPE::bits;
-  constexpr uint32_t meta_cols = (NUM_THREADS * 2 * rtl_i_ratio + 31) / 32;
-  using kcfg = vt::wmma_config_t<NUM_THREADS>;
+  constexpr uint32_t meta_cols = (VX_CFG_NUM_THREADS * 2 * rtl_i_ratio + 31) / 32;
+  using kcfg = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
   constexpr uint32_t PD = kcfg::m_steps * (kcfg::k_steps / 2);
-  //constexpr uint32_t meta_cols_per_load = (NUM_THREADS >= PD) ? (NUM_THREADS / PD) : 1;
-  constexpr uint32_t num_meta_loads = (PD * meta_cols + NUM_THREADS - 1) / NUM_THREADS;
-  constexpr uint32_t per_k_tile_words = num_meta_loads * NUM_THREADS;
+  //constexpr uint32_t meta_cols_per_load = (VX_CFG_NUM_THREADS >= PD) ? (VX_CFG_NUM_THREADS / PD) : 1;
+  constexpr uint32_t num_meta_loads = (PD * meta_cols + VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_THREADS;
+  constexpr uint32_t per_k_tile_words = num_meta_loads * VX_CFG_NUM_THREADS;
   uint32_t num_k_tiles = K / ctx::tileK;
   uint32_t tile_row_idx = blockIdx.y;
 

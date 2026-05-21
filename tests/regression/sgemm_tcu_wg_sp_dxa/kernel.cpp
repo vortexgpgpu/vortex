@@ -1,4 +1,5 @@
 #include "common.h"
+#include <VX_config.h>
 #include <vx_spawn2.h>
 #include <vx_tensor.h>
 #include <vx_intrinsics.h>
@@ -7,7 +8,7 @@
 
 namespace vt = vortex::tensor;
 // WGMMA accumulator; is_sparse=true (A is 2:4 compressed in smem)
-using ctx = vt::wgmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, true, WGMMA_NRC>;
 
 // Per-warp smem layout: [A_compressed][metadata] (bank-aligned section)
 // Then shared B after all warp sections
@@ -15,7 +16,7 @@ static constexpr uint32_t smem_a_elems     = ctx::xtileM * (ctx::tileK / 2);
 static constexpr uint32_t smem_a_bytes     = smem_a_elems * sizeof(ctx::input_t);
 //static constexpr uint32_t smem_b_elems     = ctx::tileK * ctx::xtileN;
 //static constexpr uint32_t smem_b_bytes     = smem_b_elems * sizeof(ctx::input_t);
-static constexpr uint32_t smem_bank_bytes  = NUM_THREADS * sizeof(float);
+static constexpr uint32_t smem_bank_bytes  = VX_CFG_NUM_THREADS * sizeof(float);
 static constexpr uint32_t per_warp_section = ((smem_a_bytes + ctx::wg_meta_total_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
 
 // DXA descriptor slots (programmed by host in main.cpp).
@@ -31,8 +32,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   uint32_t tid = threadIdx.x;
   uint32_t num_threads = blockDim.x;
-  uint32_t warp_rank = tid / NUM_THREADS;
-  uint32_t num_warps = num_threads / NUM_THREADS;
+  uint32_t warp_rank = tid / VX_CFG_NUM_THREADS;
+  uint32_t num_warps = num_threads / VX_CFG_NUM_THREADS;
 
   // CTA tile dimensions
   uint32_t cta_M = num_warps * ctx::xtileM;

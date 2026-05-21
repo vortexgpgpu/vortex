@@ -2,7 +2,7 @@ PROJECT = VX_tex_core_top
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
 
-CONFIGS += -DEXT_TEX_ENABLE
+CONFIGS += -DVX_CFG_EXT_TEX_ENABLE
 
 include ../../common.mk
 

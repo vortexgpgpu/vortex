@@ -72,7 +72,7 @@
 
 using namespace vortex;
 
-static uint32_t g_mem_bank_addr_width = (PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(PLATFORM_MEMORY_NUM_BANKS));
+static uint32_t g_mem_bank_addr_width = (VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(VX_CFG_PLATFORM_MEMORY_NUM_BANKS));
 
 static uint64_t timestamp = 0;
 
@@ -98,7 +98,7 @@ public:
   Impl()
   : device_(nullptr)
   , ram_(nullptr)
-  , dram_sim_(PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO)
+  , dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO)
   , stop_(false)
   , host_buffer_ids_(0)
 #ifdef VCD_OUTPUT
@@ -291,7 +291,7 @@ private:
 
     device_->reset = 1;
 
-    for (int i = 0; i < RESET_DELAY; ++i) {
+    for (int i = 0; i < VX_CFG_RESET_DELAY; ++i) {
       device_->clk = 0;
       this->eval();
       device_->clk = 1;
@@ -445,14 +445,14 @@ private:
   }
 
   void avs_bus_reset() {
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       device_->avs_readdatavalid[b] = 0;
       device_->avs_waitrequest[b] = 0;
     }
   }
 
   void avs_bus_eval() {
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       // process memory responses
       device_->avs_readdatavalid[b] = 0;
       if (!pending_mem_reqs_[b].empty()
@@ -460,7 +460,7 @@ private:
         auto mem_rd_it = pending_mem_reqs_[b].begin();
         auto mem_req = *mem_rd_it;
         device_->avs_readdatavalid[b] = 1;
-        memcpy(device_->avs_readdata[b], mem_req->data.data(), PLATFORM_MEMORY_DATA_SIZE);
+        memcpy(device_->avs_readdata[b], mem_req->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
         uint32_t addr = mem_req->addr;
         pending_mem_reqs_[b].erase(mem_rd_it);
         delete mem_req;
@@ -468,24 +468,24 @@ private:
 
       // process memory requests
       assert(!device_->avs_read[b] || !device_->avs_write[b]);
-    #if PLATFORM_MEMORY_INTERLEAVE == 1
-      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) * PLATFORM_MEMORY_NUM_BANKS + b) * PLATFORM_MEMORY_DATA_SIZE;
+    #if VX_CFG_PLATFORM_MEMORY_INTERLEAVE == 1
+      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) * VX_CFG_PLATFORM_MEMORY_NUM_BANKS + b) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
     #else
-      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) + (b << g_mem_bank_addr_width)) * PLATFORM_MEMORY_DATA_SIZE;
+      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) + (b << g_mem_bank_addr_width)) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
     #endif
 
       if (device_->avs_write[b]) {
         // process write request
         uint64_t byteen = device_->avs_byteenable[b];
         uint8_t* data = (uint8_t*)(device_->avs_writedata[b].data());
-        for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
+        for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; i++) {
           if ((byteen >> i) & 0x1) {
             (*ram_)[byte_addr + i] = data[i];
           }
         }
 
         /*printf("%0ld: [sim] MEM Wr Req[%d]: addr=0x%lx, byteen=0x%lx, data=0x", timestamp, b, byte_addr, byteen);
-        for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
+        for (int i = VX_CFG_PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
           printf("%02x", data[i]);
         }
         printf("\n");*/
@@ -504,13 +504,13 @@ private:
         auto mem_req = new mem_req_t();
         mem_req->addr = device_->avs_address[b];
         mem_req->bank_id = b;
-        ram_->read(mem_req->data.data(), byte_addr, PLATFORM_MEMORY_DATA_SIZE);
+        ram_->read(mem_req->data.data(), byte_addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
         mem_req->write = false;
         mem_req->ready = false;
         pending_mem_reqs_[b].emplace_back(mem_req);
 
         /*printf("%0ld: [sim] MEM Rd Req[%d]: addr=0x%lx, pending={", timestamp, b, byte_addr);
-        for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
+        for (int i = VX_CFG_PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
           printf("%02x", mem_req->data[i]);
         }
         printf("\n");*/
@@ -524,7 +524,7 @@ private:
   }
 
   typedef struct {
-    std::array<uint8_t, PLATFORM_MEMORY_DATA_SIZE> data;
+    std::array<uint8_t, VX_CFG_PLATFORM_MEMORY_DATA_SIZE> data;
     uint32_t addr;
     uint32_t bank_id;
     bool write;
@@ -559,7 +559,7 @@ private:
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
   uint64_t host_buffer_ids_;
 
-  std::list<mem_req_t*> pending_mem_reqs_[PLATFORM_MEMORY_NUM_BANKS];
+  std::list<mem_req_t*> pending_mem_reqs_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
 
   std::list<cci_rd_req_t> cci_reads_;
   std::list<cci_wr_req_t> cci_writes_;

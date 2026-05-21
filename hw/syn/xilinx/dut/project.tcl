@@ -71,6 +71,11 @@ proc run_setup {} {
   # Create project
   create_project $project_name $project_name -force -part $device_part
 
+  # Use manual compile order so the explicit top module set below is honored.
+  # In automatic-hierarchy mode Vivado can fail to validate a parameterized
+  # top (e.g. VX_afu_wrap) and silently substitute a different root module.
+  set_property source_mgmt_mode None [current_project]
+
   # 1. Synthesis: Enable Retiming
   set_property strategy "Flow_PerfOptimized_High" [get_runs synth_1]
   set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]

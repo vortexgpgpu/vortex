@@ -19,9 +19,9 @@ CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -DNUM_REGS=$(NUM_REGS) -DLATENCY=$(LATENCY)
 PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY)
 
-CONFIGS += -DSIMULATION -DSV_DPI -DEXT_TCU_ENABLE
+CONFIGS += -DSIMULATION -DSV_DPI -DVX_CFG_EXT_TCU_ENABLE
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DXLEN_$(XLEN)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)')
 
 SRCS += $(DPI_DIR)/dpi_util.cpp
 SRCS += $(DPI_DIR)/dpi_float.cpp
@@ -35,17 +35,17 @@ RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
 RTL_INCLUDE += -I$(RTL_DIR)/tcu -I$(SRC_DIR)
 
-ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_TCU_TYPE_DPI, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 TOP := VX_tcu_fedp_dpi
 endif
 
-ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_TCU_TYPE_DSP, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 TOP := VX_tcu_fedp_dsp
 endif
 
-ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_TCU_TYPE_BHF, $(XCONFIGS)))
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
@@ -60,7 +60,7 @@ RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 TOP := VX_tcu_fedp_bhf
 endif
 
-ifneq (,$(filter -DTCU_TYPE_TFR, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 TOP := VX_tcu_fedp_tfr
 PARAMS += -GLANE_MASK=1

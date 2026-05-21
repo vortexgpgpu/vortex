@@ -26,11 +26,11 @@
 
 #define CACHE_BLOCK_SIZE  64
 
-#define RAM_PAGE_SIZE     4096 // Please use MEM_PAGE_SIZE in VX_config.h
+#define RAM_PAGE_SIZE     4096 // Please use VX_CFG_MEM_PAGE_SIZE in VX_config.h
 
-#define ALLOC_BASE_ADDR   USER_BASE_ADDR
+#define ALLOC_BASE_ADDR   VX_CFG_USER_BASE_ADDR
 
-#if (XLEN == 64)
+#if (VX_CFG_XLEN == 64)
 #define GLOBAL_MEM_SIZE    0x200000000  // 8 GB
 #else
 #define GLOBAL_MEM_SIZE    0x100000000  // 4 GB

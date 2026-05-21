@@ -28,7 +28,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     input wire [UOP_CTR_W-1:0] uop_idx,
     output wire [UOP_CTR_W-1:0] uop_count
 );
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     // Worst-case uop count for sparse: fused meta-store + MMA steps.
     localparam MAX_META_STORES = ((TCU_BLOCK_CAP + 1) / 2) * TCU_STORES_PER_COL;
     localparam MAX_UOPS = SYM_SPARSE ? (TCU_UOPS + MAX_META_STORES) : (TCU_UOPS / 2 + MAX_META_STORES);
@@ -36,8 +36,8 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     localparam MAX_UOPS = TCU_UOPS;
 `endif
 
-`ifdef TCU_WGMMA_ENABLE
-  `ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+  `ifdef VX_CFG_TCU_SPARSE_ENABLE
     localparam MAX_WG_META_STORES = ((TCU_BLOCK_CAP + 1) / 2) * TCU_WG_STORES_PER_COL;
     localparam MAX_WG_UOPS_SP = TCU_WG_UOPS / 2 + MAX_WG_META_STORES;
     localparam CTR_W_MAX_WMMA = MAX_UOPS > TCU_WG_UOPS ? MAX_UOPS : TCU_WG_UOPS;
@@ -54,7 +54,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     localparam LG_M = $clog2(TCU_M_STEPS);
     localparam LG_K = $clog2(TCU_K_STEPS);
 
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     localparam LG_A_SB = $clog2(TCU_A_SUB_BLOCKS);
 `endif
     localparam LG_B_SB = $clog2(TCU_B_SUB_BLOCKS);
@@ -64,7 +64,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     // Truncate the wide uop_idx to the bits this expander actually uses.
     wire [`UP(CTR_W)-1:0] ctr = `UP(CTR_W)'(uop_idx);
 
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
     wire is_wgmma = (ibuf_in.op_type == INST_TCU_WGMMA);
     wire wg_a_from_smem = ibuf_in.op_args.tcu.a_from_smem;
 
@@ -101,7 +101,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     //   Sparse: ctr = n * m_steps + m  (k always 0)
     // Since n_steps varies by cd_nregs, k-index bit position shifts.
     // m is always bit 0 (m_steps=2). n and k extracted via mux.
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [`UP(CTR_W)-1:0] wg_idx_ctr = wg_eff_ctr;
 `else
     wire [`UP(CTR_W)-1:0] wg_idx_ctr = ctr;
@@ -109,7 +109,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire [`UP(LG_M_WG)-1:0] wg_m_index = wg_idx_ctr[0 +: `UP(LG_M_WG)];
     reg [`UP(LG_K_WG)-1:0] wg_k_index;
     reg [`UP(LG_N_WG_MAX)-1:0] wg_n_index;
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire wg_is_sparse = ibuf_in.op_args.tcu.is_sparse;
     wire wg_rs_sparse = wg_is_sparse && !wg_a_from_smem;
     localparam WG_META_REG0 = TCU_WG_RA + TCU_WG_M_STEPS * (TCU_WG_K_STEPS / 2);
@@ -119,7 +119,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire [`UP(CTR_W)-1:0] wg_eff_ctr = wg_rs_sparse ? (ctr - `UP(CTR_W)'(wg_meta_total)) : ctr;
 `endif
     always_comb begin
-    `ifdef TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
         if (wg_is_sparse) begin
             // Sparse: k always 0, n right after m
             wg_k_index = '0;
@@ -156,7 +156,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     // Sparse A: rs1_off = m  (NRA compressed to 2 regs f24,f25; f26,f27 hold metadata)
     localparam LG_WG_A_SB = $clog2(`UP(TCU_WG_A_SUB_BLOCKS));
     wire [`UP(CTR_W)-1:0] wg_rs1_reg_off_dense = ((`UP(CTR_W)'(wg_m_index) >> LG_WG_A_SB) << `UP(LG_K_WG)) | `UP(CTR_W)'(wg_k_index);
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = (ibuf_in.op_args.tcu.is_sparse && !wg_a_from_smem)
         ? `UP(CTR_W)'(wg_m_index)
         : wg_rs1_reg_off_dense;
@@ -168,7 +168,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     end
 `endif
 
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire is_sparse = ibuf_in.op_args.tcu.is_sparse;
     wire is_meta_store = (ibuf_in.op_type == INST_TCU_META_STORE);
 
@@ -184,9 +184,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `endif
 
     assign uop_count =
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
         is_wgmma ? (
-    `ifdef TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
             ibuf_in.op_args.tcu.is_sparse
                 ? (wg_a_from_smem
                     ? (wg_uop_cnt >> 1)
@@ -195,7 +195,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     `endif
             wg_uop_cnt) :
 `endif
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
         is_meta_store ? UOP_CTR_W'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s)) :
         is_sparse ? (SYM_SPARSE
             ? UOP_CTR_W'(TCU_UOPS + int'(meta_total_store_uops(ibuf_in.op_args.tcu.fmt_s)))
@@ -203,14 +203,14 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 `endif
         UOP_CTR_W'(TCU_UOPS);
 
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [`UP(CTR_W)-1:0] eff_ctr = (is_sparse && !is_meta_phase) ? mma_ctr : ctr;
 
     // Parametric symmetric tmask for sparse mode
     // sym_mask_lo[t] = 1 for threads where (t % tcN) < (tcN/2)
-    logic [`NUM_THREADS-1:0] sym_mask_lo;
+    logic [NUM_THREADS-1:0] sym_mask_lo;
     if (SYM_SPARSE) begin : g_sym_mask
-        for (genvar t = 0; t < `NUM_THREADS; ++t) begin : g_bit
+        for (genvar t = 0; t < NUM_THREADS; ++t) begin : g_bit
             assign sym_mask_lo[t] = ((t % TCU_TC_N) < (TCU_TC_N / 2)) ? 1'b1 : 1'b0;
         end
     end else begin : g_sym_mask
@@ -268,7 +268,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         assign rc_off = `UP(CTR_W)'({n_index[0], ~m_index[0], n_index[`UP(LG_N)-1]});
     end
 
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     if (SYM_SPARSE) begin : g_sym_off
         wire [`UP(CTR_W)-1:0] n_sp = `UP(CTR_W)'(eff_ctr[0 +: (LG_N + LG_K)]);
         wire [`UP(CTR_W)-1:0] m_sp = `UP(CTR_W)'(eff_ctr[(LG_N + LG_K) +: LG_M]);
@@ -310,11 +310,11 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     // -----------------------------------------------------------------------
     // Output uop assembly.
     // -----------------------------------------------------------------------
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire meta_use_rs2 = (ctr >= `UP(CTR_W)'(1));
 `endif
 
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     logic [3:0] n_sp_s;
     logic [3:0] m_sp_s;
 `endif
@@ -322,13 +322,13 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     ibuffer_t ibuf_r;
     always_comb begin
         ibuf_r = ibuf_in;
-    `ifdef TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
         n_sp_s = '0;
         m_sp_s = '0;
     `endif
-    `ifdef TCU_WGMMA_ENABLE
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
         if (is_wgmma) begin
-        `ifdef TCU_SPARSE_ENABLE
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
             if (wg_is_meta_phase) begin
                 // RS sparse meta-store phase: preload metadata from f26/f27
                 // into VX_tcu_meta SRAM (same path as WMMA META_STORE).
@@ -373,7 +373,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         end else
     `endif
         begin
-    `ifdef TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
         if (SYM_SPARSE) begin
             ibuf_r.tmask = is_sparse
                 ? (is_meta_phase ? ibuf_in.tmask
@@ -417,7 +417,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
         ibuf_r.used_rs[2] = 1'b1;
     `endif
         end
-    `ifdef TCU_WGMMA_ENABLE
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
         if (is_wgmma) begin
             ibuf_r.fu_lock   = (uop_idx == '0);
             ibuf_r.fu_unlock = (uop_idx == (uop_count - UOP_CTR_W'(1)));

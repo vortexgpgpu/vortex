@@ -22,25 +22,25 @@
 `include "dpi_util.vh"
 `endif
 
-`ifdef ICACHE_ENABLE
+`ifdef VX_CFG_ICACHE_ENABLE
     `define L1_ENABLE
 `endif
 
-`ifdef DCACHE_ENABLE
+`ifdef VX_CFG_DCACHE_ENABLE
     `define L1_ENABLE
 `endif
 
-`ifdef EXT_TEX_ENABLE
+`ifdef VX_CFG_EXT_TEX_ENABLE
     // Per-LOD mip-offset DCR slot: 6 base entries + lod (lod < VX_TEX_LOD_MAX)
     `define VX_DCR_TEX_MIPOFF(lod) (`VX_DCR_TEX_MIPOFF_BASE + (lod))
 `endif
 
 // Convenience flag: any graphics extension is enabled.
-`ifdef EXT_TEX_ENABLE
+`ifdef VX_CFG_EXT_TEX_ENABLE
     `define EXT_GFX_ANY_ENABLE
-`elsif EXT_RASTER_ENABLE
+`elsif VX_CFG_EXT_RASTER_ENABLE
     `define EXT_GFX_ANY_ENABLE
-`elsif EXT_OM_ENABLE
+`elsif VX_CFG_EXT_OM_ENABLE
     `define EXT_GFX_ANY_ENABLE
 `endif
 
@@ -313,7 +313,7 @@
 `define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, tag_width, num_inputs, num_caches, uuid_width) \
         `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches), uuid_width), num_caches)
 
-`define TO_FULL_ADDR(x) {x, (`MEM_ADDR_WIDTH-$bits(x))'(0)}
+`define TO_FULL_ADDR(x) {x, (`VX_CFG_MEM_ADDR_WIDTH-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -479,7 +479,7 @@
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
     /* verilator lint_off GENUNNAMED */ \
     if (block_size != 1) begin \
-        if (block_size != `NUM_WARPS) begin \
+        if (block_size != `VX_CFG_NUM_WARPS) begin \
             assign dst = {src[NW_WIDTH-1:`CLOG2(block_size)], `CLOG2(block_size)'(block_idx)}; \
         end else begin \
             assign dst = NW_WIDTH'(block_idx); \
@@ -495,7 +495,7 @@
         logic [NW_WIDTH-1:0]             wid; \
         logic [NCTA_WIDTH-1:0]           cta_id; \
         logic [__lanes__-1:0]            tmask; \
-        logic [`LOG2UP(`NUM_THREADS / __lanes__)-1:0] pid; \
+        logic [`LOG2UP(`VX_CFG_NUM_THREADS / __lanes__)-1:0] pid; \
         logic                            sop; \
         logic                            eop; \
         logic [PC_BITS-1:0]              PC; \
@@ -508,13 +508,13 @@
         __name__``_header_t              header; \
         logic [INST_OP_BITS-1:0]         op_type; \
         op_args_t                        op_args; \
-        logic [__lanes__-1:0][`XLEN-1:0] rs1_data; \
-        logic [__lanes__-1:0][`XLEN-1:0] rs2_data; \
-        logic [__lanes__-1:0][`XLEN-1:0] rs3_data; \
+        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] rs1_data; \
+        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] rs2_data; \
+        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] rs3_data; \
     } __name__``_execute_t; \
     typedef struct packed { \
         __name__``_header_t              header; \
-        logic [__lanes__-1:0][`XLEN-1:0] data; \
+        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] data; \
     } __name__``_result_t
 
 `endif // VX_DEFINE_VH

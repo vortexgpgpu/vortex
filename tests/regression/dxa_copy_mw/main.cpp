@@ -1,9 +1,10 @@
 // Host driver for dxa_copy_mw — intra-core multicast.
 //
-// num_recv = NUM_WARPS single-warp CTAs co-resident on one core, each
+// num_recv = VX_CFG_NUM_WARPS single-warp CTAs co-resident on one core, each
 // receiving the same tile via DXA multicast.
 
 #include <cstdlib>
+#include <VX_config.h>
 #include <iostream>
 #include <unistd.h>
 #include <vector>
@@ -78,14 +79,14 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   // Single-warp CTAs: block = (tile_cols, 1) so each CTA uses exactly one
-  // warp. num_recv = NUM_WARPS so all receivers fit co-resident on one core.
+  // warp. num_recv = VX_CFG_NUM_WARPS so all receivers fit co-resident on one core.
   uint64_t num_warps = 0, num_threads = 0;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS, &num_warps));
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   if (tile_cols != (uint32_t)num_threads) {
     std::cout << "Error: tile_cols (" << tile_cols
-              << ") must equal NUM_THREADS (" << num_threads
+              << ") must equal VX_CFG_NUM_THREADS (" << num_threads
               << ") for single-warp CTAs\n";
     cleanup();
     return -1;

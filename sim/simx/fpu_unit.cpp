@@ -40,7 +40,7 @@ inline int64_t check_boxing(int64_t a) {
 }
 
 FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<NUM_FPU_BLOCKS>(ctx, name, core)
+	: FuncUnit<VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core)
 {}
 
 uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
@@ -61,15 +61,15 @@ uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	case FpuType::FMSUB:
 	case FpuType::FNMADD:
 	case FpuType::FNMSUB:
-		return LATENCY_FMA+delay;
+		return VX_CFG_LATENCY_FMA+delay;
 	case FpuType::FDIV:
-		return LATENCY_FDIV+delay;
+		return VX_CFG_LATENCY_FDIV+delay;
 	case FpuType::FSQRT:
-		return LATENCY_FSQRT+delay;
+		return VX_CFG_LATENCY_FSQRT+delay;
 	case FpuType::F2I:
 	case FpuType::I2F:
 	case FpuType::F2F:
-		return LATENCY_FCVT+delay;
+		return VX_CFG_LATENCY_FCVT+delay;
 	default:
 		std::abort();
 	}
@@ -86,7 +86,7 @@ void FpuUnit::execute(instr_trace_t* trace) {
 	auto fpuArgs = std::get<IntrFpuArgs>(instrArgs);
 	auto fpu_type = std::get<FpuType>(trace->op_type);
 	uint32_t wid = trace->wid;
-	uint32_t num_threads = NUM_THREADS;
+	uint32_t num_threads = VX_CFG_NUM_THREADS;
 	auto& rs1_data = trace->src_data[0];
 	auto& rs2_data = trace->src_data[1];
 	auto& rs3_data = trace->src_data[2];
@@ -374,7 +374,7 @@ void FpuUnit::execute(instr_trace_t* trace) {
 }
 
 void FpuUnit::on_tick() {
-	for (uint32_t b = 0; b < NUM_FPU_BLOCKS; ++b) {
+	for (uint32_t b = 0; b < VX_CFG_NUM_FPU_BLOCKS; ++b) {
 		auto& input = Inputs.at(b);
 		if (input.empty())
 			continue;

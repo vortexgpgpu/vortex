@@ -23,7 +23,7 @@
 `define TEX_FXD_HALF        (`TEX_FXD_ONE >> 1)
 `define TEX_FXD_MASK        (`TEX_FXD_ONE - 1)
 
-`ifdef XLEN_64
+`ifdef VX_CFG_XLEN_64
 `define TEX_ADDR_BITS       32
 `else
 `define TEX_ADDR_BITS       25

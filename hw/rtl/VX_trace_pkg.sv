@@ -31,10 +31,10 @@ package VX_trace_pkg;
             EX_ALU: `TRACE(level, ("ALU"))
             EX_LSU: `TRACE(level, ("LSU"))
             EX_SFU: `TRACE(level, ("SFU"))
-        `ifdef EXT_F_ENABLE
+        `ifdef VX_CFG_EXT_F_ENABLE
             EX_FPU: `TRACE(level, ("FPU"))
         `endif
-        `ifdef EXT_TCU_ENABLE
+        `ifdef VX_CFG_EXT_TCU_ENABLE
             EX_TCU: `TRACE(level, ("TCU"))
         `endif
             default: `TRACE(level, ("?"))
@@ -257,16 +257,16 @@ package VX_trace_pkg;
                         `TRACE(level, ("CSRRC"))
                     end
                 end
-            `ifdef EXT_DXA_ENABLE
+            `ifdef VX_CFG_EXT_DXA_ENABLE
                 INST_SFU_DXA: VX_dxa_pkg::trace_ex_op(level, op_type, op_args);
             `endif
-            `ifdef EXT_TCU_ENABLE
+            `ifdef VX_CFG_EXT_TCU_ENABLE
                 INST_SFU_WSYNC: `TRACE(level, ("WSYNC"))
             `endif
                 default: `TRACE(level, ("?"))
             endcase
         end
-    `ifdef EXT_F_ENABLE
+    `ifdef VX_CFG_EXT_F_ENABLE
         EX_FPU: begin
             case (INST_FPU_BITS'(op_type))
                 INST_FPU_ADD: begin
@@ -420,7 +420,7 @@ package VX_trace_pkg;
             endcase
         end
     `endif
-    `ifdef EXT_TCU_ENABLE
+    `ifdef VX_CFG_EXT_TCU_ENABLE
         EX_TCU: begin
             VX_tcu_pkg::trace_ex_op(level, op_type, op_args);
         end
@@ -446,7 +446,7 @@ package VX_trace_pkg;
                 `TRACE(level, (", addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm5))
             end
         end
-    `ifdef EXT_F_ENABLE
+    `ifdef VX_CFG_EXT_F_ENABLE
         EX_FPU: begin
             `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm))
         end
@@ -466,11 +466,11 @@ package VX_trace_pkg;
     task trace_kmu_dcr(input int level, input [VX_DCR_ADDR_WIDTH-1:0] addr);
         case (addr)
             `VX_DCR_KMU_STARTUP_ADDR0: `TRACE(level, ("STARTUP_ADDR0"))
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             `VX_DCR_KMU_STARTUP_ADDR1: `TRACE(level, ("STARTUP_ADDR1"))
         `endif
             `VX_DCR_KMU_STARTUP_ARG0:  `TRACE(level, ("STARTUP_ARG0"))
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             `VX_DCR_KMU_STARTUP_ARG1:  `TRACE(level, ("STARTUP_ARG1"))
         `endif
             `VX_DCR_KMU_GRID_DIM_X:    `TRACE(level, ("GRID_DIM_X"))

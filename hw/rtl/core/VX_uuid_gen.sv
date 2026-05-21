@@ -23,8 +23,8 @@ module VX_uuid_gen import VX_gpu_pkg::*; #(
     output wire [UUID_WIDTH-1:0] uuid
 );
     localparam GNW_WIDTH = UUID_WIDTH - 32;
-    reg [31:0] uuid_cntrs [0:`NUM_WARPS-1];
-    reg [`NUM_WARPS-1:0] has_uuid_cntrs;
+    reg [31:0] uuid_cntrs [0:NUM_WARPS-1];
+    reg [NUM_WARPS-1:0] has_uuid_cntrs;
 
     always @(posedge clk) begin
         if (reset) begin

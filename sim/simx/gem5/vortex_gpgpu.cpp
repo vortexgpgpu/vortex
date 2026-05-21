@@ -34,7 +34,7 @@ using namespace vortex;
 // check in vram_{read,write} matches what the host runtime enforces.
 // Inlined rather than including common.h because that header drags in
 // the full runtime ABI which a device library has no business touching.
-#if (XLEN == 64)
+#if (VX_CFG_XLEN == 64)
 static constexpr uint64_t GEM5_GLOBAL_MEM_SIZE = 0x200000000ull;  // 8 GB
 #else
 static constexpr uint64_t GEM5_GLOBAL_MEM_SIZE = 0x100000000ull;  // 4 GB
@@ -48,7 +48,7 @@ namespace {
 class Gem5Device {
 public:
     Gem5Device()
-        : ram_(0, MEM_PAGE_SIZE),
+        : ram_(0, VX_CFG_MEM_PAGE_SIZE),
           proc_(std::make_unique<Processor>()),
           dev_mem_(std::make_unique<vortex_gem5::InProcessDevMem>(ram_)),
           cp_(make_cp_hooks()) {
@@ -58,16 +58,16 @@ public:
     ~Gem5Device() = default;
 
     // ---------------- Standalone (Phase 3) kernel preload ---------------
-    // Primes the KMU DCRs for a 1×1×1 CTA at STARTUP_ADDR and loads the
+    // Primes the KMU DCRs for a 1×1×1 CTA at VX_CFG_STARTUP_ADDR and loads the
     // ELF/bin/hex into VRAM. After this, calling vortex_tick repeatedly
     // dispatches the kernel to completion (ProcessorImpl::cycle's lazy
     // init resets SimPlatform and calls kmu_->start() on first tick).
     // The hosted (CP-driven) path never calls this — kernel ELFs land
     // in VRAM via mem_upload, and KMU programming goes through CMD_DCR_*.
     bool load_kernel(const std::string& path) {
-        const uint64_t startup_addr(STARTUP_ADDR);
+        const uint64_t startup_addr(VX_CFG_STARTUP_ADDR);
         proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
-    #if (XLEN == 64)
+    #if (VX_CFG_XLEN == 64)
         proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR1, startup_addr >> 32);
     #endif
         proc_->dcr_write(VX_DCR_KMU_STARTUP_ARG0, 0);
@@ -80,7 +80,7 @@ public:
         proc_->dcr_write(VX_DCR_KMU_BLOCK_DIM_Z,  1);
         proc_->dcr_write(VX_DCR_KMU_LMEM_SIZE,    0);
         proc_->dcr_write(VX_DCR_KMU_BLOCK_SIZE,   1);
-        proc_->dcr_write(VX_DCR_KMU_WARP_STEP_X,  NUM_THREADS);
+        proc_->dcr_write(VX_DCR_KMU_WARP_STEP_X,  VX_CFG_NUM_THREADS);
         proc_->dcr_write(VX_DCR_KMU_WARP_STEP_Y,  0);
         proc_->dcr_write(VX_DCR_KMU_WARP_STEP_Z,  0);
 
@@ -218,7 +218,7 @@ const char* vortex_gem5_build_info(void) {
     static char info[256];
     std::snprintf(info, sizeof(info),
                   "vortex-gem5 (XLEN=%d, threads=%d, warps=%d, cores=%d, clusters=%d)",
-                  XLEN, NUM_THREADS, NUM_WARPS, NUM_CORES, NUM_CLUSTERS);
+                  VX_CFG_XLEN, VX_CFG_NUM_THREADS, VX_CFG_NUM_WARPS, VX_CFG_NUM_CORES, VX_CFG_NUM_CLUSTERS);
     return info;
 }
 

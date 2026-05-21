@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-CONFIGS := $(if $(findstring -DEXT_RASTER_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DEXT_RASTER_ENABLE)
+CONFIGS := $(if $(findstring -DVX_CFG_EXT_RASTER_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_RASTER_ENABLE)
 
 PROJECT := raster
 

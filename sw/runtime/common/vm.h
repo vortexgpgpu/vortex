@@ -7,10 +7,10 @@
 
 #pragma once
 
-// VX_config.h before the guard — auto-defines VM_ENABLE from TOML.
+// VX_config.h before the guard — auto-defines VX_CFG_VM_ENABLE from TOML.
 #include <VX_config.h>
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 
 #include <cstdint>
 #include <cstddef>
@@ -50,7 +50,7 @@ public:
 };
 
 // Host-resident virtual-memory manager. Owns the page-table allocator
-// (a PA region at PAGE_TABLE_BASE_ADDR) and a parallel virtual-address
+// (a PA region at VX_CFG_PAGE_TABLE_BASE_ADDR) and a parallel virtual-address
 // allocator. On every vx_mem_alloc, allocates a PA from the global
 // pool, then mints a VA + installs PTEs so the kernel can use the VA.
 //
@@ -111,7 +111,7 @@ private:
   MemoryAllocator* virtual_mem_;
   std::unordered_map<uint64_t, uint64_t> addr_mapping;
 
-  // Host shadow: key = PT-page-aligned PA, value = PT_SIZE bytes.
+  // Host shadow: key = PT-page-aligned PA, value = VX_CFG_PT_SIZE bytes.
   std::unordered_map<uint64_t, std::vector<uint8_t>> shadow_pt_;
   // Dirty set: PT-page-aligned PAs needing flush to device.
   std::unordered_set<uint64_t> dirty_pt_pages_;
@@ -123,4 +123,4 @@ private:
 
 } // namespace vortex
 
-#endif // VM_ENABLE
+#endif // VX_CFG_VM_ENABLE

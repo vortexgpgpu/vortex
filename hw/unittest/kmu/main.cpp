@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
   tick = write_dcr(sim, VX_DCR_KMU_BLOCK_DIM_Y,   dummy_block[1], tick);
   tick = write_dcr(sim, VX_DCR_KMU_BLOCK_DIM_Z,   dummy_block[2], tick);
   tick = write_dcr(sim, VX_DCR_KMU_BLOCK_SIZE,     dummy_block[0] * dummy_block[1] * dummy_block[2], tick);
-  tick = write_dcr(sim, VX_DCR_KMU_WARP_STEP_X,   NUM_THREADS, tick);
+  tick = write_dcr(sim, VX_DCR_KMU_WARP_STEP_X,   VX_CFG_NUM_THREADS, tick);
 
   // Pulse start for one cycle to arm KMU dispatch
   sim->start = 1;

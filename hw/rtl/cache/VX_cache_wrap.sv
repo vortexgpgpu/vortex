@@ -136,7 +136,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .CORE_ADDR_WIDTH   (`CS_WORD_ADDR_WIDTH),
             .CORE_TAG_WIDTH    (TAG_WIDTH),
 
-            .MEM_ADDR_WIDTH    (`CS_MEM_ADDR_WIDTH),
+            .MEM_ADDRW    (`CS_MEM_ADDR_WIDTH),
             .MEM_TAG_IN_WIDTH  (CACHE_MEM_TAG_WIDTH),
 
             .CORE_OUT_BUF      (CORE_OUT_BUF),

@@ -19,7 +19,6 @@
 module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 #(
     parameter LATENCY   = 5,
-    parameter XLEN      = `XLEN,
     parameter OUT_REG   = 0
 ) (
     input wire clk,

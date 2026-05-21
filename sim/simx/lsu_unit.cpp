@@ -72,7 +72,7 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 }
 
 LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<NUM_LSU_BLOCKS>(ctx, name, core)
+	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core)
 	, pending_loads_(0)
 {}
 
@@ -96,7 +96,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	auto& tmask = trace->tmask;
 	auto& rs1_data = trace->src_data[0];
 	auto& rs2_data = trace->src_data[1];
-	uint32_t num_threads = NUM_THREADS;
+	uint32_t num_threads = VX_CFG_NUM_THREADS;
 	uint32_t data_bytes;
 	bool is_write;
 	int64_t  offset;
@@ -119,8 +119,8 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	for (uint32_t t = 0; t < num_threads; ++t) {
 		if (!tmask.test(t)) continue;
 		mem_addr_size_t e;
-		// AGU result is XLEN-bit wide.
-		// Cast through Word so 32-bit XLEN doesn't carry sign-extended
+		// AGU result is VX_CFG_XLEN-bit wide.
+		// Cast through Word so 32-bit VX_CFG_XLEN doesn't carry sign-extended
 		// upper bits into the 64-bit address field.
 		e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
 		e.size = data_bytes;
@@ -174,7 +174,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 				continue;
 			const auto& lane_info = entry.lanes.at(lane);
 			assert(lsu_rsp.data.at(lane) && "LOAD response must carry line payload");
-			uint32_t off = lane_info.addr & (MEM_BLOCK_SIZE - 1);
+			uint32_t off = lane_info.addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
 			uint64_t read_data = 0;
 			std::memcpy(&read_data, lsu_rsp.data.at(lane)->data() + off, data_bytes);
 			// Format the loaded value at low bits per RISC-V load semantics.
@@ -255,11 +255,11 @@ void LsuUnit::process_request_step(uint32_t b) {
 	auto* amo_tag = std::get_if<AmoType>(&trace->op_type);
 	if (!lsu_tag && !amo_tag) {
 		// Trace landed on the LSU with neither LsuType nor AmoType. This
-		// would only happen on a build mismatch (EXT_A_ENABLE off but
+		// would only happen on a build mismatch (VX_CFG_EXT_A_ENABLE off but
 		// decode emitted AmoType, or unrelated op_type alias).
 		std::abort();
 	}
-#if !EXT_A_ENABLED
+#if !VX_CFG_EXT_A_ENABLED
 	if (amo_tag) {
 		// AMO ops are unsupported in this build.
 		std::abort();
@@ -300,7 +300,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 	// check output backpressure. AMO always returns to rd, so it is not
 	// direct-commit even though it carries a side-effect write.
 	bool direct_commit = (is_write || 0 == state.addr_list.size()) && !is_amo;
-	if (direct_commit && state.remain_addrs <= NUM_LSU_LANES) {
+	if (direct_commit && state.remain_addrs <= VX_CFG_NUM_LSU_LANES) {
 		if (Outputs.at(b).full())
 			return; // stall
 	}
@@ -311,7 +311,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 			return; // stall
 
 		// setup memory request
-		LsuReq lsu_req(NUM_LSU_LANES);
+		LsuReq lsu_req(VX_CFG_NUM_LSU_LANES);
 		// LsuReq.write is derived from op via is_write(); no separate field.
 		lsu_req.wid = trace->wid;
 		// Typed op (warp-uniform). For AMO, amo_to_memop() picks the family
@@ -323,11 +323,11 @@ void LsuUnit::process_request_step(uint32_t b) {
 			lsu_req.flags.amo_unsigned = amo_is_unsigned(*amo_tag);
 		}
 		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
-		std::vector<mem_addr_size_t> lane_entries(NUM_LSU_LANES);
-		for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
+		std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
+		for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
 			auto& entry = state.addr_list.at(t0 + i);
 			// Address goes downstream as VA. The per-core dcache MMU
-			// (under VM_ENABLE) substitutes PA before the request reaches
+			// (under VX_CFG_VM_ENABLE) substitutes PA before the request reaches
 			// the cache; with VM off, the address is already the PA.
 			lsu_req.mask.set(i);
 			lsu_req.addrs.at(i) = entry.addr;
@@ -338,7 +338,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 				// rhs at byte_off using the same path.
 				auto block = make_mem_block();
 				std::memset(block->data(), 0, block->size());
-				uint32_t off = entry.addr & (MEM_BLOCK_SIZE - 1);
+				uint32_t off = entry.addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
 				for (uint32_t bo = 0; bo < entry.size; ++bo) {
 					(*block)[off + bo] = uint8_t((entry.data >> (8 * bo)) & 0xff);
 				}
@@ -401,7 +401,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 void LsuUnit::on_tick() {
 	core_->perf_stats().load_latency += pending_loads_;
 
-	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
 		this->process_response_step(b);
 		this->ingest_inputs(b);
 		this->process_request_step(b);

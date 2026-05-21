@@ -1,8 +1,8 @@
 // sgemm2_dxa_mw — Intra-core DXA multicast variant of sgemm2_dxa.
 //
 // Layout:
-//   - `mc_group_size` (= NUM_WARPS per core) CTAs co-resident on one core.
-//   - Each CTA is single-warp (block_dim = tile_size × 1, exactly NUM_THREADS).
+//   - `mc_group_size` (= VX_CFG_NUM_WARPS per core) CTAs co-resident on one core.
+//   - Each CTA is single-warp (block_dim = tile_size × 1, exactly VX_CFG_NUM_THREADS).
 //   - Each CTA computes one row strip of C: (1 × tile_size) elements.
 //   - CTAs in the same column-block share the same B tile (chunk_k × tile_size)
 //     via intra-core multicast. A is per-CTA (one row per CTA).
@@ -15,6 +15,7 @@
 //             when every receiver's events_r is set.
 
 #include <vx_spawn2.h>
+#include <VX_config.h>
 #include <vx_dxa.h>
 #include <vx_barrier.h>
 

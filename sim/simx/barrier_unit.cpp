@@ -24,7 +24,7 @@ BarrierUnit::BarrierUnit(const SimContext& ctx, const char* name, Core* core, Sc
   : SimObject<BarrierUnit>(ctx, name)
   , core_(core)
   , scheduler_(scheduler)
-  , barriers_(NUM_WARPS * NUM_BARRIERS)
+  , barriers_(VX_CFG_NUM_WARPS * VX_CFG_NUM_BARRIERS)
 {}
 
 BarrierUnit::~BarrierUnit() {}
@@ -75,7 +75,7 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
     auto barrier_count_p1 = barrier.count + 1;
     if (barrier_count_p1 == count && barrier.events == 0) {
       // resume waiting warps
-      for (uint32_t i = 0; i < NUM_WARPS; ++i) {
+      for (uint32_t i = 0; i < VX_CFG_NUM_WARPS; ++i) {
         if (barrier.wait_mask.test(i)) {
           DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
           scheduler_->resume(i);
@@ -117,7 +117,7 @@ void BarrierUnit::global_resume(uint32_t bar_id) {
   // Only resume warps that actually suspended on this barrier (sync_bar or
   // bar_wait). Async bar_arrive leaves wait_mask empty so this is a no-op,
   // which is the correct semantics for fire-and-forget global barriers.
-  for (uint32_t i = 0; i < NUM_WARPS; ++i) {
+  for (uint32_t i = 0; i < VX_CFG_NUM_WARPS; ++i) {
     if (barrier.wait_mask.test(i)) {
       DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
       scheduler_->resume(i);
@@ -153,7 +153,7 @@ void BarrierUnit::event_release(uint32_t bar_id) {
     } else {
       if (barrier.count == 0) {
         // resume waiting warps
-        for (uint32_t i = 0; i < NUM_WARPS; ++i) {
+        for (uint32_t i = 0; i < VX_CFG_NUM_WARPS; ++i) {
           if (barrier.wait_mask.test(i)) {
             DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_id);
             scheduler_->resume(i);

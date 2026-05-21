@@ -7,7 +7,7 @@
 
 #include <VX_config.h>
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 #include "vm.h"
 
 #include <vortex.h>
@@ -65,23 +65,23 @@ int VMManager::virtual_mem_reserve(uint64_t dev_addr, uint64_t size, int /*flags
 int VMManager::init() {
   uint64_t pt_addr = 0;
   std::cout << "VMManager Initialization..." << std::endl;
-  page_table_mem_ = new MemoryAllocator(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+  page_table_mem_ = new MemoryAllocator(VX_CFG_PAGE_TABLE_BASE_ADDR, VX_CFG_PT_SIZE_LIMIT, VX_CFG_MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
   if (page_table_mem_ == nullptr)
     return 1;
 
   uint64_t virtual_mem_size = (GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR);
-#ifdef XLEN_32
+#ifdef VX_CFG_XLEN_32
   // Keep VAs within the 32-bit address space.
   uint64_t max_va_end = 0x100000000ULL;
   if (ALLOC_BASE_ADDR + virtual_mem_size > max_va_end) {
     virtual_mem_size = max_va_end - ALLOC_BASE_ADDR;
   }
 #endif
-  virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR, virtual_mem_size, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+  virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR, virtual_mem_size, VX_CFG_MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
   if (virtual_mem_ == nullptr)
     return 1;
 
-  if (VM_ADDR_MODE == BARE) {
+  if (VX_CFG_VM_ADDR_MODE == BARE) {
     DBGPRINT("[RT:init_VM] VA_MODE = BARE MODE(addr= 0x0)\n");
   } else {
     CHECK_ERR(alloc_page_table(&pt_addr), { return err; });
@@ -92,14 +92,14 @@ int VMManager::init() {
   // csrw at boot — VMManager does not push it into the simulator.
   satp_ = std::make_unique<SATP_t>(pt_addr, /*asid=*/0);
 
-  if (VM_ADDR_MODE != BARE) {
+  if (VX_CFG_VM_ADDR_MODE != BARE) {
     // Identity-map system regions that are PA-addressed by the kernel
     // and runtime: IO MMIO range and the high region containing the
     // page table + per-warp stacks. The kernel image is mapped later
     // via mem_reserve() once the loader knows its extents.
-    CHECK_ERR(install_identity_map(0, USER_BASE_ADDR), { return err; });
-    CHECK_ERR(install_identity_map(PAGE_TABLE_BASE_ADDR,
-                                   GLOBAL_MEM_SIZE - PAGE_TABLE_BASE_ADDR), {
+    CHECK_ERR(install_identity_map(0, VX_CFG_USER_BASE_ADDR), { return err; });
+    CHECK_ERR(install_identity_map(VX_CFG_PAGE_TABLE_BASE_ADDR,
+                                   GLOBAL_MEM_SIZE - VX_CFG_PAGE_TABLE_BASE_ADDR), {
       return err;
     });
   }
@@ -128,38 +128,38 @@ uint64_t VMManager::map_p2v(uint64_t ppn, uint32_t flags) {
     bool allocated = false;
     for (int attempt = 0; attempt < MAX_ATTEMPTS; ++attempt) {
       uint64_t va_range_start = ALLOC_BASE_ADDR;
-      uint64_t va_range_end = PAGE_TABLE_BASE_ADDR;
-#ifdef XLEN_32
+      uint64_t va_range_end = VX_CFG_PAGE_TABLE_BASE_ADDR;
+#ifdef VX_CFG_XLEN_32
       uint64_t max_va = 0xFFFFFFFFULL;
       if (va_range_end > max_va)
         va_range_end = max_va;
 #endif
       uint64_t va_range_size = va_range_end - va_range_start;
-      uint64_t max_pages = va_range_size >> MEM_PAGE_LOG2_SIZE;
+      uint64_t max_pages = va_range_size >> VX_CFG_MEM_PAGE_LOG2_SIZE;
       std::uniform_int_distribution<uint64_t> dist(0, max_pages - 1);
       uint64_t random_page_offset = dist(rng_);
-      uint64_t candidate_va = va_range_start + (random_page_offset << MEM_PAGE_LOG2_SIZE);
+      uint64_t candidate_va = va_range_start + (random_page_offset << VX_CFG_MEM_PAGE_LOG2_SIZE);
 
       bool in_use = false;
       for (const auto& mapping : addr_mapping) {
-        if (mapping.second == (candidate_va >> MEM_PAGE_LOG2_SIZE)) {
+        if (mapping.second == (candidate_va >> VX_CFG_MEM_PAGE_LOG2_SIZE)) {
           in_use = true;
           break;
         }
       }
-      if (!in_use && virtual_mem_->reserve(candidate_va, MEM_PAGE_SIZE) == 0) {
-        vpn = candidate_va >> MEM_PAGE_LOG2_SIZE;
+      if (!in_use && virtual_mem_->reserve(candidate_va, VX_CFG_MEM_PAGE_SIZE) == 0) {
+        vpn = candidate_va >> VX_CFG_MEM_PAGE_LOG2_SIZE;
         allocated = true;
         break;
       }
     }
     if (!allocated) {
-      virtual_mem_->allocate(MEM_PAGE_SIZE, &vpn);
-      vpn >>= MEM_PAGE_LOG2_SIZE;
+      virtual_mem_->allocate(VX_CFG_MEM_PAGE_SIZE, &vpn);
+      vpn >>= VX_CFG_MEM_PAGE_LOG2_SIZE;
     }
   } else {
-    virtual_mem_->allocate(MEM_PAGE_SIZE, &vpn);
-    vpn >>= MEM_PAGE_LOG2_SIZE;
+    virtual_mem_->allocate(VX_CFG_MEM_PAGE_SIZE, &vpn);
+    vpn >>= VX_CFG_MEM_PAGE_LOG2_SIZE;
   }
 
   CHECK_ERR(update_page_table(ppn, vpn, pte_flags_from_access(flags)), );
@@ -173,8 +173,8 @@ int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flag
     return 0;
 
   uint64_t init_pAddr = *dev_pAddr;
-  uint64_t num_pages = size >> MEM_PAGE_LOG2_SIZE;
-  uint64_t base_ppn = init_pAddr >> MEM_PAGE_LOG2_SIZE;
+  uint64_t num_pages = size >> VX_CFG_MEM_PAGE_LOG2_SIZE;
+  uint64_t base_ppn = init_pAddr >> VX_CFG_MEM_PAGE_LOG2_SIZE;
 
   uint64_t base_vpn;
   if (addr_mapping.find(base_ppn) != addr_mapping.end()) {
@@ -186,21 +186,21 @@ int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flag
       bool allocated = false;
       for (int attempt = 0; attempt < MAX_ATTEMPTS && !allocated; ++attempt) {
         uint64_t va_range_start = ALLOC_BASE_ADDR;
-        uint64_t va_range_end = PAGE_TABLE_BASE_ADDR;
-#ifdef XLEN_32
+        uint64_t va_range_end = VX_CFG_PAGE_TABLE_BASE_ADDR;
+#ifdef VX_CFG_XLEN_32
         uint64_t max_va = 0xFFFFFFFFULL;
         if (va_range_end > max_va)
           va_range_end = max_va;
 #endif
         uint64_t va_range_size = va_range_end - va_range_start;
-        uint64_t max_pages = (va_range_size >> MEM_PAGE_LOG2_SIZE) - num_pages;
+        uint64_t max_pages = (va_range_size >> VX_CFG_MEM_PAGE_LOG2_SIZE) - num_pages;
         std::uniform_int_distribution<uint64_t> dist(0, max_pages - 1);
         uint64_t random_page_offset = dist(rng_);
-        uint64_t candidate_va = va_range_start + (random_page_offset << MEM_PAGE_LOG2_SIZE);
+        uint64_t candidate_va = va_range_start + (random_page_offset << VX_CFG_MEM_PAGE_LOG2_SIZE);
 
         bool range_available = true;
         for (uint64_t i = 0; i < num_pages && range_available; ++i) {
-          uint64_t test_vpn = (candidate_va >> MEM_PAGE_LOG2_SIZE) + i;
+          uint64_t test_vpn = (candidate_va >> VX_CFG_MEM_PAGE_LOG2_SIZE) + i;
           for (const auto& mapping : addr_mapping) {
             if (mapping.second == test_vpn) {
               range_available = false;
@@ -221,10 +221,10 @@ int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flag
       base_va = 0;
       CHECK_ERR(virtual_mem_->allocate(size, &base_va), );
     }
-    base_vpn = base_va >> MEM_PAGE_LOG2_SIZE;
+    base_vpn = base_va >> VX_CFG_MEM_PAGE_LOG2_SIZE;
   }
 
-  uint64_t init_vAddr = (base_vpn << MEM_PAGE_LOG2_SIZE) | (init_pAddr & ((1 << MEM_PAGE_LOG2_SIZE) - 1));
+  uint64_t init_vAddr = (base_vpn << VX_CFG_MEM_PAGE_LOG2_SIZE) | (init_pAddr & ((1 << VX_CFG_MEM_PAGE_LOG2_SIZE) - 1));
 
   for (uint64_t i = 0; i < num_pages; i++) {
     uint64_t ppn = base_ppn + i;
@@ -242,7 +242,7 @@ int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flag
 }
 
 uint8_t VMManager::alloc_page_table(uint64_t* pt_addr) {
-  CHECK_ERR(page_table_mem_->allocate(PT_SIZE, pt_addr), { return err; });
+  CHECK_ERR(page_table_mem_->allocate(VX_CFG_PT_SIZE, pt_addr), { return err; });
   // Lazily materialize the shadow page (zero-initialized) and mark
   // dirty so flush() pushes the zeros to device memory at least once.
   auto& page = touch_pt_page(*pt_addr);
@@ -251,20 +251,20 @@ uint8_t VMManager::alloc_page_table(uint64_t* pt_addr) {
 }
 
 int16_t VMManager::update_page_table(uint64_t ppn, uint64_t vpn, uint32_t pte_flag, uint8_t leaf_level) {
-#if VM_ADDR_MODE == SV39
+#if VX_CFG_VM_ADDR_MODE == SV39
   assert((((ppn >> 44) == 0) && ((vpn >> 27) == 0)) && "Upper bits are not zero!");
 #else
   assert((((ppn >> 20) == 0) && ((vpn >> 20) == 0)) && "Upper 12 bits are not zero!");
 #endif
-  assert(leaf_level < PT_LEVEL && "leaf_level out of range");
-  int i = PT_LEVEL - 1;
-  vAddr_t vaddr(vpn << MEM_PAGE_LOG2_SIZE);
+  assert(leaf_level < VX_CFG_PT_LEVEL && "leaf_level out of range");
+  int i = VX_CFG_PT_LEVEL - 1;
+  vAddr_t vaddr(vpn << VX_CFG_MEM_PAGE_LOG2_SIZE);
   uint64_t pte_addr = 0, pte_bytes = 0;
   uint64_t pt_addr = 0;
   uint64_t cur_base_ppn = get_base_ppn();
 
   while (i >= 0) {
-    pte_addr = (cur_base_ppn * PT_SIZE) + (vaddr.vpn[i] * PTE_SIZE);
+    pte_addr = (cur_base_ppn * VX_CFG_PT_SIZE) + (vaddr.vpn[i] * VX_CFG_PTE_SIZE);
     pte_bytes = read_pte(pte_addr);
     PTE_t pte_chk(pte_bytes);
     if (pte_chk.v == 1 && ((pte_bytes & 0xFFFFFFFF) != 0xbaadf00d)) {
@@ -272,7 +272,7 @@ int16_t VMManager::update_page_table(uint64_t ppn, uint64_t vpn, uint32_t pte_fl
     } else {
       if (i == (int)leaf_level) {
         // Leaf: caller supplies the raw PTE permission bits.
-        PTE_t new_pte(ppn << MEM_PAGE_LOG2_SIZE, pte_flag);
+        PTE_t new_pte(ppn << VX_CFG_MEM_PAGE_LOG2_SIZE, pte_flag);
         write_pte(pte_addr, new_pte.pte_bytes);
         break;
       } else {
@@ -290,12 +290,12 @@ int16_t VMManager::update_page_table(uint64_t ppn, uint64_t vpn, uint32_t pte_fl
 }
 
 int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
-  // Per-level page coverage: L0 = MEM_PAGE_SIZE, each higher level
+  // Per-level page coverage: L0 = VX_CFG_MEM_PAGE_SIZE, each higher level
   // multiplies by PT entries-per-table. SV32: L1=4MB. SV39: L1=2MB, L2=1GB.
-  constexpr uint64_t PT_FANOUT = PT_SIZE / PTE_SIZE;
-  uint64_t level_size[PT_LEVEL];
-  level_size[0] = MEM_PAGE_SIZE;
-  for (uint8_t l = 1; l < PT_LEVEL; ++l) {
+  constexpr uint64_t PT_FANOUT = VX_CFG_PT_SIZE / VX_CFG_PTE_SIZE;
+  uint64_t level_size[VX_CFG_PT_LEVEL];
+  level_size[0] = VX_CFG_MEM_PAGE_SIZE;
+  for (uint8_t l = 1; l < VX_CFG_PT_LEVEL; ++l) {
     level_size[l] = level_size[l - 1] * PT_FANOUT;
   }
 
@@ -310,13 +310,13 @@ int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
   while (cur < end) {
     uint64_t remaining = end - cur;
     uint8_t leaf_level = 0;
-    for (int l = PT_LEVEL - 1; l > 0; --l) {
+    for (int l = VX_CFG_PT_LEVEL - 1; l > 0; --l) {
       if ((cur % level_size[l]) == 0 && remaining >= level_size[l]) {
         leaf_level = (uint8_t)l;
         break;
       }
     }
-    uint64_t vpn = cur >> MEM_PAGE_LOG2_SIZE;
+    uint64_t vpn = cur >> VX_CFG_MEM_PAGE_LOG2_SIZE;
     CHECK_ERR(update_page_table(vpn, vpn, IDENTITY_PTE_FLAGS, leaf_level), {
       return err;
     });
@@ -329,14 +329,14 @@ uint64_t VMManager::page_table_walk(uint64_t vAddr_bits) {
   if (!need_trans(vAddr_bits))
     return vAddr_bits;
 
-  uint8_t level = PT_LEVEL;
+  uint8_t level = VX_CFG_PT_LEVEL;
   int i = level - 1;
   vAddr_t vaddr(vAddr_bits);
   uint64_t pte_addr = 0, pte_bytes = 0;
   uint64_t cur_base_ppn = get_base_ppn();
 
   while (true) {
-    pte_addr = (cur_base_ppn * PT_SIZE) + (vaddr.vpn[i] * PTE_SIZE);
+    pte_addr = (cur_base_ppn * VX_CFG_PT_SIZE) + (vaddr.vpn[i] * VX_CFG_PTE_SIZE);
     pte_bytes = read_pte(pte_addr);
     PTE_t pte(pte_bytes);
     assert(((pte.pte_bytes & 0xFFFFFFFF) != 0xbaadf00d) && "uninitialized PTE");
@@ -356,22 +356,22 @@ uint64_t VMManager::page_table_walk(uint64_t vAddr_bits) {
     cur_base_ppn = pte.ppn;
     break;
   }
-  return (cur_base_ppn << MEM_PAGE_LOG2_SIZE) + vaddr.pgoff;
+  return (cur_base_ppn << VX_CFG_MEM_PAGE_LOG2_SIZE) + vaddr.pgoff;
 }
 
 // -- shadow PT helpers --------------------------------------------------
 
 std::vector<uint8_t>& VMManager::touch_pt_page(uint64_t addr) {
-  uint64_t page_pa = addr & ~(uint64_t)(PT_SIZE - 1);
+  uint64_t page_pa = addr & ~(uint64_t)(VX_CFG_PT_SIZE - 1);
   auto& page = shadow_pt_[page_pa];
   if (page.empty())
-    page.resize(PT_SIZE, 0);
+    page.resize(VX_CFG_PT_SIZE, 0);
   dirty_pt_pages_.insert(page_pa);
   return page;
 }
 
 const std::vector<uint8_t>* VMManager::peek_pt_page(uint64_t addr) const {
-  uint64_t page_pa = addr & ~(uint64_t)(PT_SIZE - 1);
+  uint64_t page_pa = addr & ~(uint64_t)(VX_CFG_PT_SIZE - 1);
   auto it = shadow_pt_.find(page_pa);
   if (it == shadow_pt_.end())
     return nullptr;
@@ -380,17 +380,17 @@ const std::vector<uint8_t>* VMManager::peek_pt_page(uint64_t addr) const {
 
 void VMManager::write_pte(uint64_t addr, uint64_t value) {
   auto& page = touch_pt_page(addr);
-  uint64_t off = addr - (addr & ~(uint64_t)(PT_SIZE - 1));
+  uint64_t off = addr - (addr & ~(uint64_t)(VX_CFG_PT_SIZE - 1));
   // Little-endian byte serialization, matching the device-side PTW
-  // which fetches PTE_SIZE bytes from this address.
-  for (uint64_t i = 0; i < PTE_SIZE; ++i) {
+  // which fetches VX_CFG_PTE_SIZE bytes from this address.
+  for (uint64_t i = 0; i < VX_CFG_PTE_SIZE; ++i) {
     page[off + i] = (value >> (i << 3)) & 0xff;
   }
 }
 
 uint64_t VMManager::read_pte(uint64_t addr) {
   const auto* page = peek_pt_page(addr);
-#ifdef XLEN_32
+#ifdef VX_CFG_XLEN_32
   uint64_t mask = 0x00000000FFFFFFFFULL;
 #else
   uint64_t mask = 0xFFFFFFFFFFFFFFFFULL;
@@ -400,9 +400,9 @@ uint64_t VMManager::read_pte(uint64_t addr) {
     // pattern from cache_init / fresh allocator state).
     return 0;
   }
-  uint64_t off = addr - (addr & ~(uint64_t)(PT_SIZE - 1));
+  uint64_t off = addr - (addr & ~(uint64_t)(VX_CFG_PT_SIZE - 1));
   uint64_t v = 0;
-  for (uint64_t i = 0; i < PTE_SIZE; ++i) {
+  for (uint64_t i = 0; i < VX_CFG_PTE_SIZE; ++i) {
     v |= (uint64_t)(*page)[off + i] << (i << 3);
   }
   return v & mask;
@@ -422,4 +422,4 @@ int VMManager::flush() {
   return 0;
 }
 
-#endif // VM_ENABLE
+#endif // VX_CFG_VM_ENABLE

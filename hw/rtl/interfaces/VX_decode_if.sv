@@ -17,7 +17,7 @@ interface VX_decode_if import VX_gpu_pkg::*; ();
     logic  valid;
     decode_t data;
     logic  ready;
-    wire [`NUM_WARPS-1:0] ibuf_pop;
+    wire [NUM_WARPS-1:0] ibuf_pop;
 
     modport master (
         output valid,

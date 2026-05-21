@@ -17,7 +17,7 @@
 #endif
 
 #ifndef CTA_SIZE
-#define CTA_SIZE NUM_THREADS
+#define CTA_SIZE VX_CFG_NUM_THREADS
 #endif
 
 typedef struct {

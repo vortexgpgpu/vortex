@@ -1,4 +1,5 @@
 #include "common.h"
+#include <VX_config.h>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -28,7 +29,7 @@ using namespace vortex;
 namespace vt = tensor;
 
 // WGMMA geometry
-using wg_cfg_t = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
+using wg_cfg_t = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
 
 // Sparse parameters derived from wg_cfg_t
 static constexpr uint32_t kRtlIRatio     = 32 / vt::ITYPE::bits;
@@ -198,8 +199,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t NT;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &NT));
-  if (NT != NUM_THREADS) {
-    std::cout << "Error: device warp size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
+  if (NT != VX_CFG_NUM_THREADS) {
+    std::cout << "Error: device warp size (" << NT << ") must match VX_CFG_NUM_THREADS=" << VX_CFG_NUM_THREADS << "!" << std::endl;
     return -1;
   }
 
@@ -213,7 +214,7 @@ int main(int argc, char *argv[]) {
   uint64_t issue_width;
   RT_CHECK(vx_device_query(device, VX_CAPS_ISSUE_WIDTH, &issue_width));
   if (warps != issue_width) {
-    std::cout << "Error: number of warps in TB (" << warps << ") must match device's ISSUE_WIDTH=" << issue_width << "!" << std::endl;
+    std::cout << "Error: number of warps in TB (" << warps << ") must match device's VX_CFG_ISSUE_WIDTH=" << issue_width << "!" << std::endl;
     return -1;
   }
 
@@ -307,7 +308,7 @@ int main(int argc, char *argv[]) {
   // smem: per-warp [A_compressed][metadata] sections, then shared B
   uint32_t smem_a_bytes      = tileM * (tileK_elem / 2) * sizeof(itype_t);
   uint32_t smem_meta_bytes   = kWgMetaBanks * kMetaStrWords * 4;
-  uint32_t smem_bank_bytes   = NUM_THREADS * sizeof(float);
+  uint32_t smem_bank_bytes   = VX_CFG_NUM_THREADS * sizeof(float);
   uint32_t per_warp_section  = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
   uint32_t smem_b_bytes      = tileK_elem * tileN * sizeof(itype_t);
   uint32_t smem_b_off        = ((warps * per_warp_section + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;

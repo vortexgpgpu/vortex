@@ -24,44 +24,44 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     output coalescer_perf_t coalescer_perf,
 `endif
 
-`ifdef EXT_DXA_ENABLE
+`ifdef VX_CFG_EXT_DXA_ENABLE
     VX_mem_bus_if.slave     dxa_lmem_bus_if,
     VX_txbar_bus_if.master  dxa_txbar_bus_if,
 `endif
 
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
     // TCU LMEM read port
     VX_mem_bus_if.slave     tcu_lmem_if,
 `endif
 
-    VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
+    VX_lsu_mem_if.slave     lsu_mem_if [NUM_LSU_BLOCKS],
     VX_dcr_flush_if.slave   dcr_flush_if,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
     VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
+        .NUM_LANES (NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_dcache_if[`NUM_LSU_BLOCKS]();
+    ) lsu_dcache_if[NUM_LSU_BLOCKS]();
 
-`ifdef TCU_WGMMA_ENABLE
-    `STATIC_ASSERT(`LMEM_ENABLED, ("TCU_WGMMA_ENABLE requires LMEM_ENABLE"))
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    `STATIC_ASSERT(LMEM_ENABLED, ("TCU_WGMMA_ENABLE requires LMEM_ENABLE"))
 `endif
 
-`ifdef LMEM_ENABLE
+`ifdef VX_CFG_LMEM_ENABLE
 
-    `STATIC_ASSERT(`IS_DIVISBLE((1 << `LMEM_LOG_SIZE), `MEM_BLOCK_SIZE), ("invalid parameter"))
-    `STATIC_ASSERT(0 == (`LMEM_BASE_ADDR % (1 << `LMEM_LOG_SIZE)), ("invalid parameter"))
+    `STATIC_ASSERT(`IS_DIVISBLE((1 << LMEM_LOG_SIZE), MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(0 == (LMEM_BASE_ADDR % (1 << LMEM_LOG_SIZE)), ("invalid parameter"))
 
-    localparam LMEM_ADDR_WIDTH = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
+    localparam LMEM_ADDR_WIDTH = LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
 
     VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
+        .NUM_LANES (NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_lmem_if[`NUM_LSU_BLOCKS]();
+    ) lsu_lmem_if[NUM_LSU_BLOCKS]();
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lmem_switches
+    for (genvar i = 0; i < NUM_LSU_BLOCKS; ++i) begin : g_lmem_switches
         VX_lmem_switch #(
             .GLOBAL_OUT_BUF(1),
             .LOCAL_OUT_BUF(1),
@@ -85,15 +85,15 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lmem_adapt_if[LSU_NUM_REQS]();
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lmem_adapters
+    for (genvar i = 0; i < NUM_LSU_BLOCKS; ++i) begin : g_lmem_adapters
 
         VX_mem_bus_if #(
             .DATA_SIZE (LSU_WORD_SIZE),
             .TAG_WIDTH (LSU_TAG_WIDTH)
-        ) lmem_block_if[`NUM_LSU_LANES]();
+        ) lmem_block_if[NUM_LSU_LANES]();
 
         VX_lsu_adapter #(
-            .NUM_LANES    (`NUM_LSU_LANES),
+            .NUM_LANES    (NUM_LSU_LANES),
             .DATA_SIZE    (LSU_WORD_SIZE),
             .TAG_WIDTH    (LSU_TAG_WIDTH),
             .TAG_SEL_BITS (LSU_TAG_WIDTH - UUID_WIDTH),
@@ -107,8 +107,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .mem_bus_if (lmem_block_if)
         );
 
-        for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin : g_lmem_adapt_if
-            `ASSIGN_VX_MEM_BUS_IF (lmem_adapt_if[i * `NUM_LSU_LANES + j], lmem_block_if[j]);
+        for (genvar j = 0; j < NUM_LSU_LANES; ++j) begin : g_lmem_adapt_if
+            `ASSIGN_VX_MEM_BUS_IF (lmem_adapt_if[i * NUM_LSU_LANES + j], lmem_block_if[j]);
         end
     end
 
@@ -140,10 +140,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         ) dma_arb_out_if[1]();
 
         // Wire DXA and/or TCU into the arbiter input array.
-    `ifdef EXT_DXA_ENABLE
+    `ifdef VX_CFG_EXT_DXA_ENABLE
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_DXA_IDX], dxa_lmem_bus_if, LMEM_DMA_IN_TAG_W, DXA_LMEM_OUT_TAG_W, UUID_WIDTH);
     `endif
-    `ifdef TCU_WGMMA_ENABLE
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
     `endif
 
@@ -164,9 +164,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
         `ASSIGN_VX_MEM_BUS_IF (lmem_dma_if, dma_arb_out_if[0]);
 
-    `ifdef EXT_DXA_ENABLE
-        wire [`LMEM_NUM_BANKS-1:0] dxa_bank_wr_fire;
-        for (genvar i = 0; i < `LMEM_NUM_BANKS; ++i) begin : g_dxa_bank_wr_fire
+    `ifdef VX_CFG_EXT_DXA_ENABLE
+        wire [LMEM_NUM_BANKS-1:0] dxa_bank_wr_fire;
+        for (genvar i = 0; i < LMEM_NUM_BANKS; ++i) begin : g_dxa_bank_wr_fire
             assign dxa_bank_wr_fire[i] = lmem_dma_if.req_valid
                                       && lmem_dma_if.req_data.rw
                                       && (|lmem_dma_if.req_data.byteen[i*LSU_WORD_SIZE +: LSU_WORD_SIZE]);
@@ -174,7 +174,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
         VX_dxa_completion #(
             .INSTANCE_ID (`SFORMATF(("%s-lmem-dma-compl_det", INSTANCE_ID))),
-            .NUM_BANKS   (`LMEM_NUM_BANKS),
+            .NUM_BANKS   (LMEM_NUM_BANKS),
             .ATTR_WIDTH  (DXA_LMEM_ATTR_W)
         ) dxa_completion_detect (
             .clk           (clk),
@@ -208,9 +208,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     VX_local_mem #(
         .INSTANCE_ID (`SFORMATF(("%s-lmem", INSTANCE_ID))),
-        .SIZE        (1 << `LMEM_LOG_SIZE),
+        .SIZE        (1 << LMEM_LOG_SIZE),
         .NUM_REQS    (LSU_NUM_REQS),
-        .NUM_BANKS   (`LMEM_NUM_BANKS),
+        .NUM_BANKS   (LMEM_NUM_BANKS),
         .WORD_SIZE   (LSU_WORD_SIZE),
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
         .TAG_WIDTH   (LSU_TAG_WIDTH),
@@ -229,7 +229,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
 `else
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lsu_dcache_if
+    for (genvar i = 0; i < NUM_LSU_BLOCKS; ++i) begin : g_lsu_dcache_if
         `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if[i], lsu_mem_if[i]);
     end
 
@@ -243,14 +243,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (DCACHE_CHANNELS),
         .DATA_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
-    ) dcache_coalesced_if[`NUM_LSU_BLOCKS]();
+    ) dcache_coalesced_if[NUM_LSU_BLOCKS]();
 
 `ifdef PERF_ENABLE
-    wire [`NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] per_block_coalescer_misses;
+    wire [NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] per_block_coalescer_misses;
     wire [PERF_CTR_BITS-1:0] coalescer_misses;
     VX_reduce_tree #(
         .IN_W (PERF_CTR_BITS),
-        .N    (`NUM_LSU_BLOCKS),
+        .N    (NUM_LSU_BLOCKS),
         .OP   ("+")
     ) coalescer_reduce (
         .data_in  (per_block_coalescer_misses),
@@ -259,20 +259,20 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `BUFFER(coalescer_perf.misses, coalescer_misses);
 `endif
 
-    if ((`NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) begin : g_coalescing
+    if ((NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) begin : g_coalescing
 
-        for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_coalescers
+        for (genvar i = 0; i < NUM_LSU_BLOCKS; ++i) begin : g_coalescers
 
             VX_mem_coalescer #(
                 .INSTANCE_ID    (`SFORMATF(("%s-coalescer%0d", INSTANCE_ID, i))),
-                .NUM_REQS       (`NUM_LSU_LANES),
+                .NUM_REQS       (NUM_LSU_LANES),
                 .DATA_IN_SIZE   (LSU_WORD_SIZE),
                 .DATA_OUT_SIZE  (DCACHE_WORD_SIZE),
                 .ADDR_WIDTH     (LSU_ADDR_WIDTH),
                 .USER_WIDTH     (MEM_ATTR_WIDTH),
                 .TAG_WIDTH      (LSU_TAG_WIDTH),
                 .UUID_WIDTH     (UUID_WIDTH),
-                .QUEUE_SIZE     (`LSUQ_OUT_SIZE),
+                .QUEUE_SIZE     (LSUQ_OUT_SIZE),
                 .PERF_CTR_BITS  (PERF_CTR_BITS)
             ) mem_coalescer (
                 .clk            (clk),
@@ -325,7 +325,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     end else begin : g_no_coalescing
 
-        for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_dcache_coalesced_if
+        for (genvar i = 0; i < NUM_LSU_BLOCKS; ++i) begin : g_dcache_coalesced_if
             `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
         `ifdef PERF_ENABLE
             assign per_block_coalescer_misses[i] = '0;
@@ -334,7 +334,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     end
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_dcache_adapters
+    for (genvar i = 0; i < NUM_LSU_BLOCKS; ++i) begin : g_dcache_adapters
 
         VX_mem_bus_if #(
             .DATA_SIZE (DCACHE_WORD_SIZE),

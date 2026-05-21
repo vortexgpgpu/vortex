@@ -145,14 +145,11 @@ int main(int argc, char* argv[]) {
 
   uint64_t isa_flags = 0;
   RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-#ifdef ISA_EXT_DXA
-  const uint64_t dxa_isa_bit = (1ull << (32 + ISA_EXT_DXA));
-  if ((isa_flags & dxa_isa_bit) == 0) {
+  if ((isa_flags & VX_ISA_EXT_DXA) == 0) {
     std::cerr << "Error: DXA ISA extension is disabled in runtime CONFIGS.\n";
     cleanup();
     return -1;
   }
-#endif
 
   const uint32_t size_sq = size * size;
   const uint32_t buf_size = size_sq * sizeof(TYPE);

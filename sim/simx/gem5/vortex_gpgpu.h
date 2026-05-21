@@ -51,7 +51,7 @@ extern "C" {
 typedef struct vortex_gem5_device_s* vortex_gem5_handle_t;
 
 // Returns a printable description of the build config (cores, warps,
-// threads, XLEN). Returned pointer is static; do not free.
+// threads, VX_CFG_XLEN). Returned pointer is static; do not free.
 const char* vortex_gem5_build_info(void);
 
 // Construct a Vortex device instance. Returns NULL on failure.
@@ -73,7 +73,7 @@ void vortex_gem5_set_start_handler(vortex_gem5_handle_t h,
 
 // Load a kernel image into VRAM. Accepts .vxbin / .bin / .hex (same
 // shape as sim/simx/main.cpp). Primes the KMU DCRs for a 1×1×1 CTA
-// at STARTUP_ADDR for the Phase 3 standalone test path (in hosted
+// at VX_CFG_STARTUP_ADDR for the Phase 3 standalone test path (in hosted
 // mode the dispatcher uploads kernels via mem_upload + programs KMU
 // DCRs via CMD_DCR_WRITE through the CP).
 //

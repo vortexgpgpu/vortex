@@ -1,9 +1,10 @@
 #include <vx_spawn2.h>
+#include <VX_config.h>
 #include <vx_intrinsics.h>
 
 #include "common.h"
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 #include <vx_dxa.h>
 #include <vx_barrier.h>
 
@@ -33,7 +34,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // Allocate shared memory for one tile.
   auto shmem = reinterpret_cast<TYPE*>(__local_mem());
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
   // ── DXA path: issue N-D tile copy, barrier wait ──
   vortex::barrier bar(0);
   const bool is_dxa_warp = (get_sub_group_id() == 0);

@@ -21,8 +21,8 @@
 #include "svdpi.h"
 #include "verilated_vpi.h"
 
-#ifndef DEBUG_LEVEL
-#define DEBUG_LEVEL 3
+#ifndef VX_DBG_DEBUG_LEVEL
+#define VX_DBG_DEBUG_LEVEL 3
 #endif
 
 extern "C" {
@@ -237,7 +237,7 @@ void dpi_ldiv(bool enable, bool is_signed, int64_t a, int64_t b, int64_t* quotie
 bool sim_trace_enabled();
 
 void dpi_trace(int level, const char* format, ...) {
-  if (level > DEBUG_LEVEL)
+  if (level > VX_DBG_DEBUG_LEVEL)
     return;
   if (!sim_trace_enabled())
     return;

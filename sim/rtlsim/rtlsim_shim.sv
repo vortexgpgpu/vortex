@@ -14,9 +14,9 @@
 `include "VX_define.vh"
 
 module rtlsim_shim import VX_gpu_pkg::*; #(
-    parameter MEM_DATA_WIDTH = (`PLATFORM_MEMORY_DATA_SIZE * 8),
-    parameter MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH - $clog2(`PLATFORM_MEMORY_NUM_BANKS),
-    parameter MEM_NUM_BANKS  = `PLATFORM_MEMORY_NUM_BANKS,
+    parameter MEM_DATA_WIDTH = (`VX_CFG_PLATFORM_MEMORY_DATA_SIZE * 8),
+    parameter VX_CFG_MEM_ADDR_WIDTH = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH - $clog2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS),
+    parameter MEM_NUM_BANKS  = `VX_CFG_PLATFORM_MEMORY_NUM_BANKS,
     parameter MEM_TAG_WIDTH  = 64
 ) (
     `SCOPE_IO_DECL
@@ -29,7 +29,7 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
     output wire                             mem_req_valid [MEM_NUM_BANKS],
     output wire                             mem_req_rw [MEM_NUM_BANKS],
     output wire [(MEM_DATA_WIDTH/8)-1:0]    mem_req_byteen [MEM_NUM_BANKS],
-    output wire [MEM_ADDR_WIDTH-1:0]        mem_req_addr [MEM_NUM_BANKS],
+    output wire [VX_CFG_MEM_ADDR_WIDTH-1:0]        mem_req_addr [MEM_NUM_BANKS],
     output wire [MEM_DATA_WIDTH-1:0]        mem_req_data [MEM_NUM_BANKS],
     output wire [MEM_TAG_WIDTH-1:0]         mem_req_tag [MEM_NUM_BANKS],
     input  wire                             mem_req_ready [MEM_NUM_BANKS],
@@ -165,12 +165,12 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
     VX_mem_bank_adapter #(
         .DATA_WIDTH     (MEM_DATA_WIDTH),
         .ADDR_WIDTH_IN  (VX_MEM_ADDR_A_WIDTH),
-        .ADDR_WIDTH_OUT (MEM_ADDR_WIDTH),
+        .ADDR_WIDTH_OUT (VX_CFG_MEM_ADDR_WIDTH),
         .TAG_WIDTH_IN   (VX_MEM_TAG_A_WIDTH),
         .TAG_WIDTH_OUT  (MEM_TAG_WIDTH),
         .NUM_PORTS_IN   (VX_MEM_PORTS),
         .NUM_BANKS_OUT  (MEM_NUM_BANKS),
-        .INTERLEAVE     (`PLATFORM_MEMORY_INTERLEAVE),
+        .INTERLEAVE     (`VX_CFG_PLATFORM_MEMORY_INTERLEAVE),
         .REQ_OUT_BUF    ((VX_MEM_PORTS > 1) ? 2 : 0),
         .RSP_OUT_BUF    ((VX_MEM_PORTS > 1 || MEM_NUM_BANKS > 1) ? 2 : 0)
     ) mem_bank_adapter (

@@ -29,7 +29,7 @@ class RAM;
 //
 // The monitor stays disabled when the loaded image has no `tohost`
 // symbol — normal Vortex kernels and the (MMIO-based) benchmarks are
-// unaffected and terminate through the usual IO_EXIT_CODE path.
+// unaffected and terminate through the usual VX_CFG_IO_EXIT_CODE path.
 class HostMonitor {
 public:
   HostMonitor() = default;

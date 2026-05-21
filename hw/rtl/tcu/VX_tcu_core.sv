@@ -21,10 +21,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire          clk,
     input wire          reset,
 
-`ifdef TCU_WGMMA_ENABLE
-    input wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] tbuf_rs1_data,
-    input wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data,
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    input wire [TCU_BLOCK_CAP-1:0][XLEN-1:0] tbuf_rs1_data,
+    input wire [TCU_WG_RS2_WIDTH-1:0][XLEN-1:0] tbuf_rs2_data,
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     input wire [TCU_MAX_META_BLOCK_WIDTH-1:0] tbuf_sp_meta,
 `endif
     input wire          tbuf_ready,
@@ -38,23 +38,23 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID);
 
-`ifdef TCU_TYPE_DSP
+`ifdef VX_CFG_TCU_TYPE_DSP
     localparam FCVT_LATENCY = 1;
     localparam FMUL_LATENCY = 8;
     localparam FADD_LATENCY = 11;
     localparam FACC_LATENCY = $clog2(2 * TCU_TC_K + 1) * FADD_LATENCY;
     localparam FEDP_LATENCY = FCVT_LATENCY + FMUL_LATENCY + FACC_LATENCY;
-`elsif TCU_TYPE_BHF
+`elsif VX_CFG_TCU_TYPE_BHF
     localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 2;
     localparam FRND_LATENCY = 1;
     localparam FACC_LATENCY  = $clog2(2 * TCU_TC_K + 1) * (FADD_LATENCY + FRND_LATENCY);
     localparam FEDP_LATENCY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FACC_LATENCY;
-`elsif TCU_TYPE_DPI
+`elsif VX_CFG_TCU_TYPE_DPI
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam FEDP_LATENCY = FMUL_LATENCY + FACC_LATENCY;
-`else // TCU_TYPE_TFR
+`else // VX_CFG_TCU_TYPE_TFR
     localparam FMUL_LATENCY = (`LATENCY_TCU - 3);
     localparam FALN_LATENCY = 1;
     localparam FACC_LATENCY = 1;
@@ -69,7 +69,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam LG_B_BS    = $clog2(TCU_B_BLOCK_SIZE);
     localparam OFF_W      = $clog2(TCU_BLOCK_CAP);
 
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     localparam LG_B_BS_SP = $clog2(TCU_B_BLOCK_SIZE_SP);
     wire is_sparse = execute_if.data.op_args.tcu.is_sparse;
     wire is_meta_store = (execute_if.data.op_type == INST_TCU_META_STORE);
@@ -82,15 +82,15 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // common interface.  Downstream code uses only these wires and never
     // references tbuf_* or is_wgmma directly.
 
-    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] rs1_data;
-`ifdef TCU_WGMMA_ENABLE
-    wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] rs2_data;
+    wire [TCU_BLOCK_CAP-1:0][XLEN-1:0] rs1_data;
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    wire [TCU_WG_RS2_WIDTH-1:0][XLEN-1:0] rs2_data;
 `else
-    wire [TCU_BLOCK_CAP-1:0][`XLEN-1:0] rs2_data;
+    wire [TCU_BLOCK_CAP-1:0][XLEN-1:0] rs2_data;
 `endif
     wire exe_ready_extra; // additional ready gating (tbuf_ready)
 
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
     wire is_wgmma = (execute_if.data.op_type == INST_TCU_WGMMA);
     wire wg_a_smem = execute_if.data.op_args.tcu.a_from_smem;
 
@@ -98,12 +98,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // RF-side rs2_data is NUM_THREADS lanes wide; the WGMMA bbuf can be
     // wider (TCU_WG_RS2_WIDTH lanes). Pad/truncate to the wgmma width on
     // the false branch so both arms match TCU_WG_RS2_WIDTH * XLEN bits.
-    localparam WG_RS2_BITS = TCU_WG_RS2_WIDTH * `XLEN;
+    localparam WG_RS2_BITS = TCU_WG_RS2_WIDTH * XLEN;
     wire [WG_RS2_BITS-1:0] rs2_data_rf = WG_RS2_BITS'(execute_if.data.rs2_data);
     assign rs1_data = (is_wgmma && wg_a_smem) ? tbuf_rs1_data : execute_if.data.rs1_data;
     assign rs2_data = is_wgmma ? tbuf_rs2_data : rs2_data_rf;
 
-  `ifdef TCU_SPARSE_ENABLE
+  `ifdef VX_CFG_TCU_SPARSE_ENABLE
     // Sparse metadata mux: tile-buffer (SS mode) vs VX_tcu_meta SRAM (WMMA / RS mode)
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = (is_wgmma && wg_a_smem) ? tbuf_sp_meta : wmma_sp_meta;
   `endif
@@ -112,7 +112,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `else
     assign rs1_data = execute_if.data.rs1_data;
     assign rs2_data = execute_if.data.rs2_data;
-  `ifdef TCU_SPARSE_ENABLE
+  `ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
   `endif
     assign exe_ready_extra = 1'b1;
@@ -131,7 +131,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Sparse metadata: VX_tcu_meta (for WMMA_SP) + optional tile-buffer mux
     // -----------------------------------------------------------------------
 
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire meta_wr_en = execute_fire && is_meta_store;
 `endif
 
@@ -139,7 +139,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     tcu_header_t mdata_queue_in;
     always_comb begin
         mdata_queue_in = execute_if.data.header;
-    `ifdef TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
         if (is_meta_store) begin
             mdata_queue_in.rd = '0;
         end
@@ -201,7 +201,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     wire [OFF_W-1:0] a_off = (OFF_W'(step_m) & OFF_W'(TCU_A_SUB_BLOCKS-1)) << LG_A_BS;
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [OFF_W-1:0] b_off = is_sparse
         ? (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS_SP-1)) << LG_B_BS_SP
         : (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
@@ -213,7 +213,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Unified sparse metadata
     // -----------------------------------------------------------------------
 
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
     VX_tcu_meta #(
         .INSTANCE_ID (INSTANCE_ID)
@@ -238,14 +238,14 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_i
         for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_j
-        `ifdef TCU_SPARSE_ENABLE
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
             wire [TCU_TC_K-1:0][31:0] a_row, b_col, b_col_dense, b_col_sparse, b_col_1, b_col_2;
         `else
             wire [TCU_TC_K-1:0][31:0] a_row, b_col;
         `endif
             for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_slice_assign
                 assign a_row[k_idx] = 32'(rs1_data[a_off + i * TCU_TC_K + k_idx]);
-            `ifdef TCU_SPARSE_ENABLE
+            `ifdef VX_CFG_TCU_SPARSE_ENABLE
                 assign b_col_dense[k_idx] = 32'(rs2_data[b_off + j * TCU_TC_K + k_idx]);
                 localparam J_SP = SYM_SPARSE ? (j % (TCU_TC_N / 2)) : j;
                 assign b_col_1[k_idx] = 32'(rs2_data[b_off + J_SP * TCU_TC_K * 2 + k_idx * 2]);
@@ -257,7 +257,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
             wire [31:0] c_val = 32'(execute_if.data.rs3_data[i * TCU_TC_N + j]);
 
-        `ifdef TCU_SPARSE_ENABLE
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
             VX_tcu_sp_mux #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .ROW_IDX     (i)
@@ -285,7 +285,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .data_out ({c_val_r, fmt_s_r, fmt_d_r, b_col_r, a_row_r})
             );
 
-        `ifdef TCU_TYPE_DPI
+        `ifdef VX_CFG_TCU_TYPE_DPI
             VX_tcu_fedp_dpi #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
@@ -301,7 +301,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
-        `elsif TCU_TYPE_BHF
+        `elsif VX_CFG_TCU_TYPE_BHF
             VX_tcu_fedp_bhf #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
@@ -317,7 +317,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
-        `elsif TCU_TYPE_TFR
+        `elsif VX_CFG_TCU_TYPE_TFR
             VX_tcu_fedp_tfr #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
@@ -334,7 +334,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
-        `elsif TCU_TYPE_DSP
+        `elsif VX_CFG_TCU_TYPE_DSP
             VX_tcu_fedp_dsp #(
                 .INSTANCE_ID (INSTANCE_ID),
                 .LATENCY (FEDP_LATENCY),
@@ -353,7 +353,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `endif
 
             // NaN-box the fp32 result for XLEN=64: upper 32 bits must be all-1s per RVF spec.
-            if (`XLEN > 32) begin : g_result_nanbox
+            if (XLEN > 32) begin : g_result_nanbox
                 assign result_if.data.data[i * TCU_TC_N + j] = {32'hffffffff, d_val[i][j]};
             end else begin : g_result_passthrough
                 assign result_if.data.data[i * TCU_TC_N + j] = d_val[i][j];

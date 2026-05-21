@@ -1,4 +1,5 @@
 #include <vx_spawn2.h>
+#include <VX_config.h>
 #include <vx_intrinsics.h>
 #include "common.h"
 
@@ -10,7 +11,7 @@
 typedef void (*PFN_Kernel)(kernel_arg_t* __UNIFORM__ arg);
 
 // Globally-unique hart id matching the simulator's make_hart_id():
-// (cid * NUM_WARPS + wid) * NUM_THREADS + tid.
+// (cid * VX_CFG_NUM_WARPS + wid) * VX_CFG_NUM_THREADS + tid.
 static inline uint32_t hart_id() {
   return (vx_core_id() * vx_num_warps() + vx_warp_id()) * vx_num_threads()
        + vx_thread_id();

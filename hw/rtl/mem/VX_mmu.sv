@@ -9,7 +9,6 @@ module VX_mmu import VX_gpu_pkg::*; #(
     parameter NUM_REQS       = DCACHE_NUM_REQS,
     parameter DATA_SIZE      = DCACHE_WORD_SIZE,
     parameter TAG_WIDTH      = DCACHE_TAG_WIDTH_BASE,
-    parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH     = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
     parameter ATTR_WIDTH    = MEM_ATTR_WIDTH,
     parameter EBUF_SIZE      = 2
@@ -313,7 +312,6 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .TAG_WIDTH      (TAG_WIDTH_TLB),
         .TAG_SEL_IDX    (TAG_WIDTH_TLB),
         .ARBITER        ("R"),
-        .MEM_ADDR_WIDTH (MEM_ADDR_WIDTH),
         .ADDR_WIDTH     (ADDR_WIDTH),
         .ATTR_WIDTH    (ATTR_WIDTH),
         .REQ_OUT_BUF    (2),

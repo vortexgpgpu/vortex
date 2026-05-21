@@ -26,8 +26,8 @@
 using namespace vortex;
 
 namespace vt = vortex::tensor;
-using cfg    = vt::wmma_config_t<NUM_THREADS>;
-using wg_cfg = vt::wgmma_config_t<NUM_THREADS, vt::fp32, vt::fp32>;
+using cfg    = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
+using wg_cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::fp32, vt::fp32>;
 
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
@@ -37,7 +37,7 @@ static inline uint8_t unpack_u8(uint32_t word, uint32_t idx) {
   return (word >> (idx * 8)) & 0xffu;
 }
 
-#ifdef TCU_MX_ENABLE
+#ifdef VX_CFG_TCU_MX_ENABLE
 static inline uint8_t unpack_mx_scale_8(uint32_t w0,
                                         uint32_t w1,
                                         uint32_t idx,
@@ -314,7 +314,7 @@ struct FEDP<vt::uint4, vt::int32>{
   }
 };
 
-#ifdef TCU_MX_ENABLE
+#ifdef VX_CFG_TCU_MX_ENABLE
 // Scaled FMA variants for MX microscaling formats (extra scale-factor args).
 template <typename It, typename Ot>
 struct FMA_MX;
@@ -503,7 +503,7 @@ static inline uint32_t gather_sparse(uint32_t bword0, uint32_t bword1,
 }
 
 static inline uint32_t meta_num_cols(uint32_t fmt_s) {
-  return vt::sparse_meta_num_cols(fmt_s, NUM_THREADS);
+  return vt::sparse_meta_num_cols(fmt_s, VX_CFG_NUM_THREADS);
 }
 
 static inline uint32_t meta_row_width(uint32_t elem_bits) {
@@ -533,8 +533,8 @@ public:
   Impl(TcuUnit* simobject, Core* core)
     : simobject_(simobject)
     , core_(core)
-    , sparse_meta_(NUM_WARPS, std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
-    , mx_meta_(NUM_WARPS)
+    , sparse_meta_(VX_CFG_NUM_WARPS, std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
+    , mx_meta_(VX_CFG_NUM_WARPS)
     , perf_stats_()
   {
     exec_done_.fill(false);
@@ -561,12 +561,12 @@ public:
   }
 
   void tick() {
-  #ifdef TCU_WGMMA_ENABLE
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Q-warp lock-step probe.
     // Pass 1 — identify active WGMMA blocks and prime each one's plan() on
     // first uop. WMMA / META_STORE blocks are unaffected (no Q-coupling).
     uint32_t wgmma_active = 0;
-    for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
       if (input.empty()) continue;
       auto trace = input.peek();
@@ -600,7 +600,7 @@ public:
       // it plans cleanly.
       int32_t new_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
       bool block_other_cta_inflight = false;
-      for (uint32_t k = 0; k < NUM_TCU_BLOCKS; ++k) {
+      for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
         if (k == b) continue;
         if (in_wgmma_.at(k) && cta_owner_a_.at(k) != new_cta) {
           block_other_cta_inflight = true;
@@ -644,7 +644,7 @@ public:
     if (wgmma_active != 0) {
       uint32_t ready_mask = 0;
       auto& tbuf = simobject_->tbuf();
-      for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
+      for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
         if (!((wgmma_active >> b) & 1u)) continue;
         auto trace = simobject_->Inputs.at(b).peek();
         auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
@@ -660,14 +660,14 @@ public:
     }
   #endif
 
-    for (uint32_t b = 0; b < NUM_TCU_BLOCKS; ++b) {
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& input = simobject_->Inputs.at(b);
       if (input.empty())
         continue;
       auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
 
-    #ifdef TCU_WGMMA_ENABLE
+    #ifdef VX_CFG_TCU_WGMMA_ENABLE
       // CTA-overlap fence deferred this block's WGMMA — skip processing
       // until pass 1 plans it (when the previous CTA's blocks all drain).
       if (tcu_type == TcuType::WGMMA &&
@@ -682,7 +682,7 @@ public:
         auto& instr = *trace->instr_ptr;
         auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
         uint32_t wid = trace->wid;
-        uint32_t num_threads = NUM_THREADS;
+        uint32_t num_threads = VX_CFG_NUM_THREADS;
         auto& rs1_data = trace->src_data[0];
         auto& rs2_data = trace->src_data[1];
         auto& rs3_data = trace->src_data[2];
@@ -696,7 +696,7 @@ public:
                      rs1_data, rs2_data, rs3_data, rd_data,
                      tpuArgs.is_sparse);
           break;
-      #ifdef TCU_WGMMA_ENABLE
+      #ifdef VX_CFG_TCU_WGMMA_ENABLE
         case TcuType::WGMMA: {
           uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
           uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
@@ -708,7 +708,7 @@ public:
           // state, the gate has been bypassed somewhere upstream.
           {
             int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
-            for (uint32_t k = 0; k < NUM_TCU_BLOCKS; ++k) {
+            for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
               if (k == b) continue;
               if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {
                 std::cerr << "*** TCU CTA lockstep violation: block " << b
@@ -750,7 +750,7 @@ public:
       }
       if (simobject_->Outputs.at(b).try_send(trace, 2 + delay)) {
         exec_done_.at(b) = false;
-      #ifdef TCU_WGMMA_ENABLE
+      #ifdef VX_CFG_TCU_WGMMA_ENABLE
         // WGMMA wind-down: clear this warp's plan bit on its last uop so the
         // next WGMMA at this (block, warp) re-decodes its descriptors. Block
         // stays in_wgmma_ until ALL planned warps drain.
@@ -785,14 +785,14 @@ public:
     // canonical formula: xtileN = NRC * NT / xtileM (matches host-side
     // wgmma_context::xtileN).
     uint32_t nrc      = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
-    uint32_t xtile_n  = (nrc * NUM_THREADS) / wg_cfg::xtileM;
+    uint32_t xtile_n  = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
 
     lmem_desc_t sd_a{}, sd_b{};
     if (is_a_smem) {
-      sd_a = {uint64_t(LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
+      sd_a = {uint64_t(VX_CFG_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
       lmem_desc_[wid][0] = sd_a;
     }
-    sd_b = {uint64_t(LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
+    sd_b = {uint64_t(VX_CFG_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
     lmem_desc_[wid][1] = sd_b;
 
     // The gather walks the un-packed K element range:
@@ -832,7 +832,7 @@ public:
             elem_off = uint64_t(r) * sd_a.ldm + c;
           }
           uint64_t addr = sd_a.base + elem_off * e_bytes;
-          a_lines.push_back(addr & ~uint64_t(MEM_BLOCK_SIZE - 1));
+          a_lines.push_back(addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1));
         }
       }
       tbuf->plan_a(b, a_lines);
@@ -857,7 +857,7 @@ public:
         m_lines.reserve(total_meta_words);
         for (uint32_t w = 0; w < total_meta_words; ++w) {
           uint64_t addr = meta_base + uint64_t(w) * 4;
-          m_lines.push_back(addr & ~uint64_t(MEM_BLOCK_SIZE - 1));
+          m_lines.push_back(addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1));
         }
         tbuf->plan_m(b, m_lines);
       }
@@ -883,7 +883,7 @@ public:
           elem_off = uint64_t(r) * sd_b.ldm + c;
         }
         uint64_t addr = sd_b.base + elem_off * e_bytes;
-        b_lines.push_back(addr & ~uint64_t(MEM_BLOCK_SIZE - 1));
+        b_lines.push_back(addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1));
       }
     }
     tbuf->plan_b(b_lines);
@@ -914,7 +914,7 @@ public:
       // Data goes into kMetaBanks rows (same as WMMA); the reader selects
       // banks using WMMA-style {step_m, step_k_half} so m=1 lands at bank
       // (cfg::k_steps/2), not bank 1.
-      constexpr uint32_t wg_cols_per_load = NUM_THREADS / kMetaBanks;
+      constexpr uint32_t wg_cols_per_load = VX_CFG_NUM_THREADS / kMetaBanks;
       uint32_t group = col_idx;
       uint32_t col_begin = group * wg_cols_per_load;
       uint32_t col_end = std::min(col_begin + wg_cols_per_load, num_cols);
@@ -929,7 +929,7 @@ public:
       return;
     }
 
-    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, NUM_THREADS, cfg::meta_cols_per_load);
+    uint32_t total_stores = vt::sparse_meta_total_store_uops(fmt_s, cfg::stores_per_col, VX_CFG_NUM_THREADS, cfg::meta_cols_per_load);
     if (col_idx >= total_stores) {
       // Flat per-thread store (fallback)
       for (uint32_t t = 0; t < rs1_data.size(); ++t) {
@@ -988,8 +988,8 @@ public:
                   << "). Supported formats: i8, u8, fp8, bf8, fp16, bf16, i4, u4." << std::endl;
         std::abort();
       }
-      if ((NUM_THREADS % cfg::b_block_size_sp) != 0) {
-        std::cout << "Error: NUM_THREADS must be divisible by sparse B block size" << std::endl;
+      if ((VX_CFG_NUM_THREADS % cfg::b_block_size_sp) != 0) {
+        std::cout << "Error: VX_CFG_NUM_THREADS must be divisible by sparse B block size" << std::endl;
         std::abort();
       }
     }
@@ -1076,10 +1076,10 @@ public:
     lmem_desc_t sd_a, sd_b;
     if (step_k == 0 && step_m == 0 && step_n == 0) {
       if (is_a_smem) {
-        sd_a = {uint64_t(LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
+        sd_a = {uint64_t(VX_CFG_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) / e_bytes, false};
         lmem_desc_[wid][0] = sd_a;
       }
-      sd_b = {uint64_t(LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
+      sd_b = {uint64_t(VX_CFG_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) / e_bytes, false};
       lmem_desc_[wid][1] = sd_b;
     } else {
       sd_a = lmem_desc_[wid][0];
@@ -1091,7 +1091,7 @@ public:
     // xtileN = NRC * NT / xtileM (canonical formula, matches host kernel).
     {
       uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
-      cur_xtile_n_ = (nrc * NUM_THREADS) / wg_cfg::xtileM;
+      cur_xtile_n_ = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
     }
 
     // Prepare A tile [tcM][tcK]
@@ -1147,7 +1147,7 @@ public:
                       << std::hex << byte_addr << std::dec << std::endl;
             std::abort();
           }
-          uint32_t off = byte_addr & (MEM_BLOCK_SIZE - 1);
+          uint32_t off = byte_addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
           word_val = (uint32_t((*line)[off    ]))        |
                      (uint32_t((*line)[off + 1]) << 8)   |
                      (uint32_t((*line)[off + 2]) << 16)  |
@@ -1290,7 +1290,7 @@ private:
                   << std::dec << std::endl;
         std::abort();
       }
-      uint32_t off = byte_addr & (MEM_BLOCK_SIZE - 1);
+      uint32_t off = byte_addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
       if (e_bits == 32) {
         result = (uint32_t((*line)[off    ]))        |
                  (uint32_t((*line)[off + 1]) << 8)   |
@@ -1327,7 +1327,7 @@ private:
 
   static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
   static constexpr uint32_t kMetaBanks = cfg::m_steps * kSparseKSteps;
-  static constexpr uint32_t kMaxMetaCols = NUM_THREADS / 2;
+  static constexpr uint32_t kMaxMetaCols = VX_CFG_NUM_THREADS / 2;
   static constexpr uint32_t kMxMetaWords = 8;
 
   // FEDP tile computation for both WMMA and WGMMA.
@@ -1342,7 +1342,7 @@ private:
                  const std::vector<reg_data_t>& rs3_data,
                  std::vector<reg_data_t>& rd_data) {
     __unused(wid, step_m, step_n, step_k);
-  #ifdef TCU_MX_ENABLE
+  #ifdef VX_CFG_TCU_MX_ENABLE
     bool use_mx = ((fmt_s == vt::mxfp8::id) && (fmt_d == vt::fp32::id))
                || ((fmt_s == vt::mxint8::id) && (fmt_d == vt::int32::id))
                || ((fmt_s == vt::nvfp4::id) && (fmt_d == vt::fp32::id));
@@ -1363,7 +1363,7 @@ private:
 
         uint32_t d_val;
         if (use_mx) {
-#ifdef TCU_MX_ENABLE
+#ifdef VX_CFG_TCU_MX_ENABLE
           const auto& mx = mx_meta_.at(wid);
           uint32_t row_idx = step_m * cfg::tcM + i;
           uint32_t col_idx = step_n * cfg::tcN + j;
@@ -1405,16 +1405,16 @@ private:
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
   mutable PerfStats perf_stats_;
   // Per-block "execute already happened for this trace" guard. Reset on input.pop().
-  std::array<bool, NUM_TCU_BLOCKS> exec_done_;
+  std::array<bool, VX_CFG_NUM_TCU_BLOCKS> exec_done_;
   // Per-block bitmask of warp IDs whose WGMMA lines are already planned.
   // Tracked per-warp because IW=1 multiplexes multiple warps' WGMMAs onto a
   // single block — each warp's plan() runs once on its first uop (additively
   // into the shared bbuf), then bit clears on fu_unlock.
-  std::array<uint64_t, NUM_TCU_BLOCKS> wgmma_planned_warps_;
+  std::array<uint64_t, VX_CFG_NUM_TCU_BLOCKS> wgmma_planned_warps_;
   // Per-block "currently between first and last WGMMA uop" flag.
   // Used to gate the shared B buffer invalidation so it's only dropped when
   // no other block is mid-WGMMA.
-  std::array<bool, NUM_TCU_BLOCKS> in_wgmma_;
+  std::array<bool, VX_CFG_NUM_TCU_BLOCKS> in_wgmma_;
   // Set by tick() to the current block index before delegating to wgmma() —
   // the gather helpers route reads through TcuTbuf for this block.
   uint32_t cur_block_ = 0;
@@ -1425,7 +1425,7 @@ private:
   uint32_t cur_xtile_n_ = 8;
   // Diagnostic: which CTA's data currently occupies each block's A/M and the
   // shared B buffer. -1 = unowned. Logged on transition.
-  std::array<int32_t, NUM_TCU_BLOCKS> cta_owner_a_{};
+  std::array<int32_t, VX_CFG_NUM_TCU_BLOCKS> cta_owner_a_{};
   int32_t cta_owner_b_ = -1;
 };
 
@@ -1461,12 +1461,12 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
   auto args = std::get<IntrTcuArgs>(instr.get_args());
 
   if (tcu_type == TcuType::WMMA) {
-    using wmma = vt::wmma_config_t<NUM_THREADS>;
+    using wmma = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
     bool is_sparse = args.is_sparse;
     bool is_mx = vt::mx_scale_format(args.fmt_s);
     uint32_t sparse_meta_stores = 0;
     if (is_sparse) {
-      sparse_meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wmma::stores_per_col, NUM_THREADS, wmma::meta_cols_per_load);
+      sparse_meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wmma::stores_per_col, VX_CFG_NUM_THREADS, wmma::meta_cols_per_load);
     }
     uint32_t mx_meta_stores = is_mx ? mx_meta_words(args.fmt_s) : 0;
     uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
@@ -1476,7 +1476,7 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
     return sparse_meta_stores + mx_meta_stores + mma_steps;
   }
 
-#ifdef TCU_WGMMA_ENABLE
+#ifdef VX_CFG_TCU_WGMMA_ENABLE
   if (tcu_type == TcuType::WGMMA) {
     uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
     uint32_t k_count = args.is_sparse ? (wg_cfg::k_steps / 2) : wg_cfg::k_steps;
@@ -1485,9 +1485,9 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
     if (args.is_sparse && !args.is_a_smem) {
       // RS sparse: META_STORE uops using WGMMA-specific per_warp_depth=2
       constexpr uint32_t wg_depth = wg_cfg::m_steps * (wg_cfg::k_steps / 2);
-      constexpr uint32_t wg_stores_per_col = (wg_depth + NUM_THREADS - 1) / NUM_THREADS;
-      constexpr uint32_t wg_cols_per_load = (NUM_THREADS >= wg_depth) ? (NUM_THREADS / wg_depth) : 1;
-      meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wg_stores_per_col, NUM_THREADS, wg_cols_per_load);
+      constexpr uint32_t wg_stores_per_col = (wg_depth + VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_THREADS;
+      constexpr uint32_t wg_cols_per_load = (VX_CFG_NUM_THREADS >= wg_depth) ? (VX_CFG_NUM_THREADS / wg_depth) : 1;
+      meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wg_stores_per_col, VX_CFG_NUM_THREADS, wg_cols_per_load);
     }
     return meta_stores + mma_uops;
   }
@@ -1514,7 +1514,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   uop_instr->set_parent_uuid(parent_uuid);
 
   if (tcu_type == TcuType::WMMA) {
-    using wmma = vt::wmma_config_t<NUM_THREADS>;
+    using wmma = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
     constexpr uint32_t rc_base = 0, ra_base = 10;
     constexpr uint32_t rb_base = (wmma::NRB == 4) ? 28 : 24;
     bool is_sparse = args.is_sparse;
@@ -1524,7 +1524,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     bool is_mx = vt::mx_scale_format(fmt_s);
     uint32_t sparse_meta_stores = 0;
     if (is_sparse) {
-      sparse_meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wmma::stores_per_col, NUM_THREADS, wmma::meta_cols_per_load);
+      sparse_meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wmma::stores_per_col, VX_CFG_NUM_THREADS, wmma::meta_cols_per_load);
     }
     uint32_t mx_meta_stores = is_mx ? mx_meta_words(fmt_s) : 0;
     uint32_t total_meta_stores = sparse_meta_stores + mx_meta_stores;
@@ -1564,11 +1564,11 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         constexpr uint32_t step_mask = step_bits ? ((1u << step_bits) - 1) : 0;
         constexpr uint32_t sym_mask_lo = []() {
           uint32_t mask = 0;
-          for (uint32_t lane = 0; lane < NUM_THREADS; ++lane)
+          for (uint32_t lane = 0; lane < VX_CFG_NUM_THREADS; ++lane)
             if ((lane % wmma::tcN) < (wmma::tcN / 2)) mask |= (1u << lane);
           return mask;
         }();
-        constexpr uint32_t all_lanes = (NUM_THREADS == 32) ? 0xffffffffu : ((1u << NUM_THREADS) - 1);
+        constexpr uint32_t all_lanes = (VX_CFG_NUM_THREADS == 32) ? 0xffffffffu : ((1u << VX_CFG_NUM_THREADS) - 1);
 
         uint32_t n_sp = step_bits ? (mma_idx & step_mask) : 0;
         uint32_t m_sp = mma_idx >> step_bits;
@@ -1583,7 +1583,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
         uop_instr->set_src_reg(1, rb_base + n_sp, RegType::Float);
         uop_instr->set_src_reg(2, reg_rs3, RegType::Float);
         // Symmetric sparse: no k-loop, always wb=1 and always reads C from RF
-        uop_instr->set_tmask(ThreadMask(NUM_THREADS, (mma_idx & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
+        uop_instr->set_tmask(ThreadMask(VX_CFG_NUM_THREADS, (mma_idx & 1) ? (all_lanes & ~sym_mask_lo) : sym_mask_lo));
       } else {
         // Standard k-major triple loop (dense or non-sym sparse)
         uint32_t b_sub = is_sparse ? wmma::b_sub_blocks_sp : wmma::b_sub_blocks;
@@ -1641,7 +1641,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       }
     }
   }
-#ifdef TCU_WGMMA_ENABLE
+#ifdef VX_CFG_TCU_WGMMA_ENABLE
   else if (tcu_type == TcuType::WGMMA) {
     constexpr uint32_t m_steps = wg_cfg::m_steps;
     constexpr uint32_t k_steps = wg_cfg::k_steps;
@@ -1657,9 +1657,9 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t meta_stores = 0;
     if (is_sparse && !is_a_smem) {
       constexpr uint32_t wg_depth = wg_cfg::m_steps * (wg_cfg::k_steps / 2);
-      constexpr uint32_t wg_stores_per_col = (wg_depth + NUM_THREADS - 1) / NUM_THREADS;
-      constexpr uint32_t wg_cols_per_load = (NUM_THREADS >= wg_depth) ? (NUM_THREADS / wg_depth) : 1;
-      meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wg_stores_per_col, NUM_THREADS, wg_cols_per_load);
+      constexpr uint32_t wg_stores_per_col = (wg_depth + VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_THREADS;
+      constexpr uint32_t wg_cols_per_load = (VX_CFG_NUM_THREADS >= wg_depth) ? (VX_CFG_NUM_THREADS / wg_depth) : 1;
+      meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wg_stores_per_col, VX_CFG_NUM_THREADS, wg_cols_per_load);
     }
 
     if (uop_index < meta_stores) {

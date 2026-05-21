@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-CONFIGS := $(if $(findstring -DEXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DEXT_TCU_ENABLE)
+CONFIGS := $(if $(findstring -DVX_CFG_EXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TCU_ENABLE)
 
 PROJECT := sgemm_tcu_wg
 
@@ -11,9 +11,9 @@ SRCS := $(SRC_DIR)/main.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/softf
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
-CONFIGS := $(if $(findstring -DNUM_WARPS=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DNUM_WARPS=4)
-CONFIGS := $(if $(findstring -DISSUE_WIDTH=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DISSUE_WIDTH=4)
-CONFIGS += -DTCU_WGMMA_ENABLE -DWGMMA_RS
+CONFIGS := $(if $(findstring -DVX_CFG_NUM_WARPS=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_NUM_WARPS=4)
+CONFIGS := $(if $(findstring -DVX_CFG_ISSUE_WIDTH=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_ISSUE_WIDTH=4)
+CONFIGS += -DVX_CFG_TCU_WGMMA_ENABLE -DWGMMA_RS
 
 # RTLsim is roughly two orders of magnitude slower than SimX; keep the
 # default matrix size small enough for a 60s sweep budget. Override

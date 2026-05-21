@@ -65,7 +65,7 @@ extern fpga_result fpgaDestroyToken(fpga_token *token) {
 extern fpga_result fpgaPropertiesGetLocalMemorySize(const fpga_properties *filters, uint64_t* lms) {
   __unused (filters);
   if (lms) {
-  #if (XLEN == 64)
+  #if (VX_CFG_XLEN == 64)
     *lms = 0x200000000; // 8 GB
   #else
     *lms = 0x100000000; // 4 GB

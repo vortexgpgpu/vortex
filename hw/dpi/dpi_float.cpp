@@ -52,7 +52,7 @@ extern "C" {
 }
 
 inline uint64_t nan_box(uint32_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return value | 0xffffffff00000000;
 #else
   return value;
@@ -60,7 +60,7 @@ inline uint64_t nan_box(uint32_t value) {
 }
 
 inline uint64_t nan_box16(uint32_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return value | 0xffffffffffff0000;
 #else
   return value;
@@ -68,7 +68,7 @@ inline uint64_t nan_box16(uint32_t value) {
 }
 
 inline uint64_t nan_box19(uint32_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return value | 0xfffffffffff80000;
 #else
   return value;
@@ -76,7 +76,7 @@ inline uint64_t nan_box19(uint32_t value) {
 }
 
 inline uint64_t nan_box8(uint32_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return value | 0xffffffffffffff00;
 #else
   return value;
@@ -84,7 +84,7 @@ inline uint64_t nan_box8(uint32_t value) {
 }
 
 inline uint64_t nan_box4(uint32_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return value | 0xfffffffffffffff0;
 #else
   return value;
@@ -92,7 +92,7 @@ inline uint64_t nan_box4(uint32_t value) {
 }
 
 inline bool is_nan_boxed(uint64_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return (uint32_t(value >> 32) == 0xffffffff);
 #else
   return true;
@@ -100,7 +100,7 @@ inline bool is_nan_boxed(uint64_t value) {
 }
 
 inline bool is_nan_boxed16(uint64_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return (uint64_t(value >> 16) == 0xffffffffffff);
 #else
   return true;
@@ -108,7 +108,7 @@ inline bool is_nan_boxed16(uint64_t value) {
 }
 
 inline bool is_nan_boxed19(uint64_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return (uint64_t(value >> 19) == 0xffffffffffff);
 #else
   return true;
@@ -116,7 +116,7 @@ inline bool is_nan_boxed19(uint64_t value) {
 }
 
 inline bool is_nan_boxed8(uint64_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return (uint64_t(value >> 8) == 0xffffffffffffff);
 #else
   return true;
@@ -124,7 +124,7 @@ inline bool is_nan_boxed8(uint64_t value) {
 }
 
 inline bool is_nan_boxed4(uint64_t value) {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
   return (uint64_t(value >> 4) == 0xfffffffffffffff);
 #else
   return true;

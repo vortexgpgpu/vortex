@@ -23,7 +23,7 @@ class Socket::Impl {
 public:
   Impl(Socket* simobject)
     : simobject_(simobject)
-    , cores_(SOCKET_SIZE)
+    , cores_(VX_CFG_SOCKET_SIZE)
   {
     auto cores_per_socket = cores_.size();
 
@@ -31,49 +31,49 @@ public:
     char sname[100];
 
     snprintf(sname, 100, "%s-icache", name.c_str());
-    icaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_ICACHES, Cache::Config{
-      !ICACHE_ENABLED,
-      log2ceil(ICACHE_SIZE),  // C
-      log2ceil(L1_LINE_SIZE), // L
+    icaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_ICACHES, Cache::Config{
+      !VX_CFG_ICACHE_ENABLED,
+      log2ceil(VX_CFG_ICACHE_SIZE),  // C
+      log2ceil(VX_CFG_L1_LINE_SIZE), // L
       log2ceil(sizeof(uint32_t)), // W
-      log2ceil(ICACHE_NUM_WAYS),// A
+      log2ceil(VX_CFG_ICACHE_NUM_WAYS),// A
       log2ceil(1),            // B
-      XLEN,                   // address bits
+      VX_CFG_XLEN,                   // address bits
       1,                      // number of inputs
-      ICACHE_MEM_PORTS,       // memory ports
+      VX_CFG_ICACHE_MEM_PORTS,       // memory ports
       false,                  // write-back
       false,                  // write response
-      ICACHE_MSHR_SIZE,       // mshr size
+      VX_CFG_ICACHE_MSHR_SIZE,       // mshr size
       1,                      // pipeline latency
-      ICACHE_REPL_POLICY,     // replacement policy
+      VX_CFG_ICACHE_REPL_POLICY,     // replacement policy
       false,                  // is_llc (icache never carries AMO state)
     });
 
     snprintf(sname, 100, "%s-dcache", name.c_str());
     // §3.1.3: L1 dcache is the LLC iff neither L2 nor L3 is enabled.
-    dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, Cache::Config{
-      !DCACHE_ENABLED,
-      log2ceil(DCACHE_SIZE),  // C
-      log2ceil(L1_LINE_SIZE), // L
+    dcaches_ = CacheCluster::Create(sname, cores_per_socket, VX_CFG_NUM_DCACHES, Cache::Config{
+      !VX_CFG_DCACHE_ENABLED,
+      log2ceil(VX_CFG_DCACHE_SIZE),  // C
+      log2ceil(VX_CFG_L1_LINE_SIZE), // L
       log2ceil(DCACHE_WORD_SIZE), // W
-      log2ceil(DCACHE_NUM_WAYS),// A
-      log2ceil(DCACHE_NUM_BANKS), // B
-      XLEN,                   // address bits
-      DCACHE_NUM_REQS,        // number of inputs
-      L1_MEM_PORTS,           // memory ports
-      DCACHE_WRITEBACK,       // write-back
+      log2ceil(VX_CFG_DCACHE_NUM_WAYS),// A
+      log2ceil(VX_CFG_DCACHE_NUM_BANKS), // B
+      VX_CFG_XLEN,                   // address bits
+      VX_CFG_DCACHE_NUM_REQS,        // number of inputs
+      VX_CFG_L1_MEM_PORTS,           // memory ports
+      VX_CFG_DCACHE_WRITEBACK,       // write-back
       false,                  // write response
-      DCACHE_MSHR_SIZE,       // mshr size
+      VX_CFG_DCACHE_MSHR_SIZE,       // mshr size
       1,                      // pipeline latency
-      DCACHE_REPL_POLICY,     // replacement policy
-      (DCACHE_ENABLED != 0) && (L2_ENABLED == 0) && (L3_ENABLED == 0), // is_llc
+      VX_CFG_DCACHE_REPL_POLICY,     // replacement policy
+      (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
     });
 
     // find overlap
-    uint32_t overlap = __MIN(ICACHE_MEM_PORTS, L1_MEM_PORTS);
+    uint32_t overlap = __MIN(VX_CFG_ICACHE_MEM_PORTS, VX_CFG_L1_MEM_PORTS);
 
     // connect l1 caches to outgoing memory interfaces
-    for (uint32_t i = 0; i < L1_MEM_PORTS; ++i) {
+    for (uint32_t i = 0; i < VX_CFG_L1_MEM_PORTS; ++i) {
       snprintf(sname, 100, "%s-l1_arb%d", name.c_str(), i);
       auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2 * overlap, overlap);
 
@@ -87,7 +87,7 @@ public:
         l1_arb->ReqOut.at(i).bind(&simobject->mem_req_out.at(i));
         simobject->mem_rsp_in.at(i).bind(&l1_arb->RspIn.at(i));
       } else {
-        if (L1_MEM_PORTS > ICACHE_MEM_PORTS) {
+        if (VX_CFG_L1_MEM_PORTS > VX_CFG_ICACHE_MEM_PORTS) {
           // if more dcache ports
           dcaches_->mem_req_out.at(i).bind(&simobject->mem_req_out.at(i));
           simobject->mem_rsp_in.at(i).bind(&dcaches_->mem_rsp_in.at(i));
@@ -111,7 +111,7 @@ public:
         cores_.at(i)->icache_req_out.at(0).bind(&icaches_->core_req_in.at(i).at(0));
         icaches_->core_rsp_out.at(i).at(0).bind(&cores_.at(i)->icache_rsp_in.at(0));
 
-      for (uint32_t j = 0; j < DCACHE_NUM_REQS; ++j) {
+      for (uint32_t j = 0; j < VX_CFG_DCACHE_NUM_REQS; ++j) {
         cores_.at(i)->dcache_req_out.at(j).bind(&dcaches_->core_req_in.at(i).at(j));
         dcaches_->core_rsp_out.at(i).at(j).bind(&cores_.at(i)->dcache_rsp_in.at(j));
       }
@@ -192,8 +192,8 @@ Socket::Socket(const SimContext& ctx,
                 uint32_t socket_id,
                 Cluster* cluster)
   : SimObject(ctx, name)
-  , mem_req_out(L1_MEM_PORTS, this)
-  , mem_rsp_in(L1_MEM_PORTS, this)
+  , mem_req_out(VX_CFG_L1_MEM_PORTS, this)
+  , mem_rsp_in(VX_CFG_L1_MEM_PORTS, this)
   , socket_id_(socket_id)
   , cluster_(cluster)
   , impl_(new Impl(this))

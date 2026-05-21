@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-`ifdef EXT_C_ENABLE
+`ifdef VX_CFG_EXT_C_ENABLE
 
 // VX_decompressor sits between the icache response and decode when
 // EXT_C_ENABLE is set. Per warp it tracks one of:
@@ -72,7 +72,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     input  wire                         rsp_valid,
     input  wire [31:0]                  rsp_word,
     input  wire [PC_BITS-1:0]           rsp_PC,
-    input  wire [`NUM_THREADS-1:0]      rsp_tmask,
+    input  wire [NUM_THREADS-1:0]      rsp_tmask,
     input  wire [NW_WIDTH-1:0]          rsp_wid,
     input  wire [UUID_WIDTH-1:0]        rsp_uuid,
     output logic                        rsp_ready,
@@ -80,7 +80,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // Follow-up icache request (cross-word 32-bit).
     output logic                        follow_req_valid,
     output logic [PC_BITS-1:0]          follow_req_PC,
-    output logic [`NUM_THREADS-1:0]     follow_req_tmask,
+    output logic [NUM_THREADS-1:0]     follow_req_tmask,
     output logic [NW_WIDTH-1:0]         follow_req_wid,
     output logic [UUID_WIDTH-1:0]       follow_req_uuid,
 
@@ -102,7 +102,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     typedef struct packed {
         logic [15:0]              hw;
         logic [UUID_WIDTH-1:0]    uuid;
-        logic [`NUM_THREADS-1:0]  tmask;
+        logic [NUM_THREADS-1:0]  tmask;
     } buf_data_t;
 
     // Stage-1 emit kind (which slow-path case captured this entry).
@@ -122,7 +122,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         logic [PC_BITS-1:0]        PC;
         logic [NW_WIDTH-1:0]       wid;
         logic [UUID_WIDTH-1:0]     uuid;
-        logic [`NUM_THREADS-1:0]   tmask;
+        logic [NUM_THREADS-1:0]   tmask;
     } s1_ctx_t;
 
     // ------------------------------------------------------------------
@@ -146,7 +146,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         localparam logic [6:0] OPC_R    = 7'b0110011;
         localparam logic [6:0] OPC_FL   = 7'b0000111;
         localparam logic [6:0] OPC_FS   = 7'b0100111;
-    `ifdef XLEN_64
+    `ifdef VX_CFG_XLEN_64
         localparam logic [6:0] OPC_I_W  = 7'b0011011;
         localparam logic [6:0] OPC_R_W  = 7'b0111011;
     `endif
@@ -154,7 +154,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         logic [4:0]  rd, rs1, rs2;
         logic [4:0]  rdp, rs1p, rs2p;
         logic [11:0] lsw_imm, lwsp_imm, swsp_imm;
-    `ifdef XLEN_64
+    `ifdef VX_CFG_XLEN_64
         logic [11:0] lsd_imm, ldsp_imm, sdsp_imm;
     `endif
         logic [11:0] i_imm, b_imm, x_imm, w_imm;
@@ -171,7 +171,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         lsw_imm  = {5'b0, instr_i[5], instr_i[12:10], instr_i[6], 2'b0};
         lwsp_imm = {4'b0, instr_i[3:2], instr_i[12], instr_i[6:4], 2'b0};
         swsp_imm = {4'b0, instr_i[8:7], instr_i[12:9], 2'b0};
-    `ifdef XLEN_64
+    `ifdef VX_CFG_XLEN_64
         lsd_imm  = {4'b0, instr_i[6:5], instr_i[12:10], 3'b0};
         ldsp_imm = {3'b0, instr_i[4:2], instr_i[12], instr_i[6:5], 3'b0};
         sdsp_imm = {3'b0, instr_i[9:7], instr_i[12:10], 3'b0};
@@ -188,20 +188,20 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         2'b00: begin // Quadrant 0
             case (func3)
             3'b000: instr_o = {w_imm, 5'd2, 3'b000, rdp, OPC_I};
-        `ifdef FLEN_64
+        `ifdef VX_CFG_FLEN_64
             3'b001: instr_o = {lsd_imm, rs1p, 3'b011, rdp, OPC_FL};
         `endif
             3'b010: instr_o = {lsw_imm, rs1p, 3'b010, rdp, OPC_L};
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             3'b011: instr_o = {lsd_imm, rs1p, 3'b011, rdp, OPC_L};
         `else
             3'b011: instr_o = {lsw_imm, rs1p, 3'b010, rdp, OPC_FL};
         `endif
-        `ifdef FLEN_64
+        `ifdef VX_CFG_FLEN_64
             3'b101: instr_o = {lsd_imm[11:5], rs2p, rs1p, 3'b011, lsd_imm[4:0], OPC_FS};
         `endif
             3'b110: instr_o = {lsw_imm[11:5], rs2p, rs1p, 3'b010, lsw_imm[4:0], OPC_S};
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             3'b111: instr_o = {lsd_imm[11:5], rs2p, rs1p, 3'b011, lsd_imm[4:0], OPC_S};
         `else
             3'b111: instr_o = {lsw_imm[11:5], rs2p, rs1p, 3'b010, lsw_imm[4:0], OPC_FS};
@@ -217,7 +217,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 else
                     instr_o = {i_imm, rd, 3'b000, rd, OPC_I};
             end
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             3'b001: instr_o = {i_imm, rd, 3'b000, rd, OPC_I_W};
         `endif
             3'b010: instr_o = {i_imm, 5'd0, 3'b000, rd, OPC_I};
@@ -238,7 +238,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                     3'b001: instr_o = {7'b0000000, rs2p, rs1p, 3'b100, rs1p, OPC_R};
                     3'b010: instr_o = {7'b0000000, rs2p, rs1p, 3'b110, rs1p, OPC_R};
                     3'b011: instr_o = {7'b0000000, rs2p, rs1p, 3'b111, rs1p, OPC_R};
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
                     3'b100: instr_o = {7'b0100000, rs2p, rs1p, 3'b000, rs1p, OPC_R_W};
                     3'b101: instr_o = {7'b0000000, rs2p, rs1p, 3'b000, rs1p, OPC_R_W};
         `endif
@@ -257,11 +257,11 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         2'b10: begin // Quadrant 2
             case (func3)
             3'b000: instr_o = {{6'b000000, i_imm[5:0]}, rd, 3'b001, rd, OPC_I};
-        `ifdef FLEN_64
+        `ifdef VX_CFG_FLEN_64
             3'b001: instr_o = {ldsp_imm, 5'd2, 3'b011, rd, OPC_FL};
         `endif
             3'b010: instr_o = {lwsp_imm, 5'd2, 3'b010, rd, OPC_L};
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             3'b011: instr_o = {ldsp_imm, 5'd2, 3'b011, rd, OPC_L};
         `else
             3'b011: instr_o = {lwsp_imm, 5'd2, 3'b010, rd, OPC_FL};
@@ -282,11 +282,11 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                         instr_o = {7'b0000000, rs2, rd, 3'b000, rd, OPC_R};
                 end
             end
-        `ifdef FLEN_64
+        `ifdef VX_CFG_FLEN_64
             3'b101: instr_o = {sdsp_imm[11:5], rs2, 5'd2, 3'b011, sdsp_imm[4:0], OPC_FS};
         `endif
             3'b110: instr_o = {swsp_imm[11:5], rs2, 5'd2, 3'b010, swsp_imm[4:0], OPC_S};
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             3'b111: instr_o = {sdsp_imm[11:5], rs2, 5'd2, 3'b011, sdsp_imm[4:0], OPC_S};
         `else
             3'b111: instr_o = {swsp_imm[11:5], rs2, 5'd2, 3'b010, swsp_imm[4:0], OPC_FS};
@@ -303,10 +303,10 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // State storage
     // ------------------------------------------------------------------
 
-    buf_state_e         state    [`NUM_WARPS];
-    buf_state_e         state_n  [`NUM_WARPS];
-    logic [PC_BITS-1:0] buf_pc   [`NUM_WARPS];
-    logic [PC_BITS-1:0] buf_pc_n [`NUM_WARPS];
+    buf_state_e         state    [NUM_WARPS];
+    buf_state_e         state_n  [NUM_WARPS];
+    logic [PC_BITS-1:0] buf_pc   [NUM_WARPS];
+    logic [PC_BITS-1:0] buf_pc_n [NUM_WARPS];
 
     logic                       buf_we;
     logic [NW_WIDTH-1:0]        buf_waddr;
@@ -317,7 +317,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
 
     VX_dp_ram #(
         .DATAW   ($bits(buf_data_t)),
-        .SIZE    (`NUM_WARPS),
+        .SIZE    (NUM_WARPS),
         .OUT_REG (1),
         .LUTRAM  (1),
         .RDW_MODE("R")
@@ -445,7 +445,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         buf_we    = 1'b0;
         buf_waddr = rsp_wid;
         buf_wdata = '0;
-        for (int w = 0; w < `NUM_WARPS; ++w) begin
+        for (int w = 0; w < NUM_WARPS; ++w) begin
             state_n[w]  = state[w];
             buf_pc_n[w] = buf_pc[w];
         end
@@ -453,7 +453,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         if (st0_advance) begin
             // Stale flush: scheduler asks for a warp at sched_PC but the
             // warp has stale buffered state at a different PC.
-            for (int w = 0; w < `NUM_WARPS; ++w) begin
+            for (int w = 0; w < NUM_WARPS; ++w) begin
                 if (sched_valid
                  && (sched_wid == w[NW_WIDTH-1:0])
                  && (state[w] != BUF_EMPTY)
@@ -615,14 +615,14 @@ module VX_decompressor import VX_gpu_pkg::*; #(
 
     always_ff @(posedge clk) begin
         if (reset) begin
-            for (int w = 0; w < `NUM_WARPS; ++w) begin
+            for (int w = 0; w < NUM_WARPS; ++w) begin
                 state[w]  <= BUF_EMPTY;
                 buf_pc[w] <= '0;
             end
             s1_kind <= S1_NONE;
             s1_ctx  <= '0;
         end else begin
-            for (int w = 0; w < `NUM_WARPS; ++w) begin
+            for (int w = 0; w < NUM_WARPS; ++w) begin
                 state[w]  <= state_n[w];
                 buf_pc[w] <= buf_pc_n[w];
             end

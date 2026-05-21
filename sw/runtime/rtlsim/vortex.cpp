@@ -18,7 +18,7 @@
 #include <processor.h>
 #include <cmd_processor.h>
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 #include <vm.h>
 #include <memory>
 #endif
@@ -34,7 +34,7 @@
 
 using namespace vortex;
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 // DeviceMemIO adapter over the rtlsim RAM backing store. ACL bypass
 // is encapsulated here so VMManager stays driver-agnostic.
 class RamMemIO : public DeviceMemIO {
@@ -75,7 +75,7 @@ public:
   }
 
   int init() {
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     dev_io_ = std::make_unique<RamMemIO>(&ram_);
     vm_mgr_ = std::make_unique<VMManager>(dev_io_.get());
     CHECK_ERR(vm_mgr_->init(), { return err; });
@@ -87,25 +87,25 @@ public:
     uint64_t _value;
     switch (caps_id) {
     case VX_CAPS_VERSION:
-      _value = IMPLEMENTATION_ID;
+      _value = VX_ISA_IMPL_ID;
       break;
     case VX_CAPS_NUM_THREADS:
-      _value = NUM_THREADS;
+      _value = VX_CFG_NUM_THREADS;
       break;
     case VX_CAPS_NUM_WARPS:
-      _value = NUM_WARPS;
+      _value = VX_CFG_NUM_WARPS;
       break;
     case VX_CAPS_NUM_CORES:
-      _value = NUM_CORES * NUM_CLUSTERS;
+      _value = VX_CFG_NUM_CORES * VX_CFG_NUM_CLUSTERS;
       break;
     case VX_CAPS_NUM_CLUSTERS:
-      _value = NUM_CLUSTERS;
+      _value = VX_CFG_NUM_CLUSTERS;
       break;
     case VX_CAPS_SOCKET_SIZE:
-      _value = SOCKET_SIZE;
+      _value = VX_CFG_SOCKET_SIZE;
       break;
     case VX_CAPS_ISSUE_WIDTH:
-      _value = ISSUE_WIDTH;
+      _value = VX_CFG_ISSUE_WIDTH;
       break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
@@ -114,22 +114,22 @@ public:
       _value = GLOBAL_MEM_SIZE;
       break;
     case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = (1 << LMEM_LOG_SIZE);
+      _value = (1 << VX_CFG_LMEM_LOG_SIZE);
       break;
     case VX_CAPS_ISA_FLAGS:
-      _value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
+      _value = ((uint64_t(VX_CFG_MISA_EXT))<<32) | ((log2floor(VX_CFG_XLEN)-4) << 30) | VX_CFG_MISA_STD;
       break;
     case VX_CAPS_NUM_MEM_BANKS:
-      _value = PLATFORM_MEMORY_NUM_BANKS;
+      _value = VX_CFG_PLATFORM_MEMORY_NUM_BANKS;
       break;
     case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (MEM_ADDR_WIDTH / PLATFORM_MEMORY_NUM_BANKS);
+      _value = 1ull << (VX_CFG_MEM_ADDR_WIDTH / VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
       break;
     case VX_CAPS_CLOCK_RATE:
       _value = 0;
       break;
     case VX_CAPS_PEAK_MEM_BW:
-      _value = PLATFORM_MEMORY_PEAK_BW;
+      _value = VX_CFG_PLATFORM_MEMORY_PEAK_BW;
       break;
     default:
       std::cout << "invalid caps id: " << caps_id << std::endl;
@@ -141,8 +141,8 @@ public:
   }
 
   int mem_alloc(uint64_t size, int flags, uint64_t* dev_addr) {
-#ifdef VM_ENABLE
-    uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
+#ifdef VX_CFG_VM_ENABLE
+    uint64_t asize = aligned_size(size, VX_CFG_MEM_PAGE_SIZE);
 #else
     uint64_t asize = size;
 #endif
@@ -155,7 +155,7 @@ public:
       return err;
     });
     *dev_addr = addr;
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     if (flags & VX_MEM_PHYS) {
       // PHYS request: keep *dev_addr as the PA and identity-map it so
       // kernel loads (via the MMU) and fixed-function units (raster/
@@ -172,8 +172,8 @@ public:
   }
 
   int mem_reserve(uint64_t dev_addr, uint64_t size, int flags) {
-#ifdef VM_ENABLE
-    uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
+#ifdef VX_CFG_VM_ENABLE
+    uint64_t asize = aligned_size(size, VX_CFG_MEM_PAGE_SIZE);
 #else
     uint64_t asize = size;
 #endif
@@ -184,7 +184,7 @@ public:
       global_mem_.release(dev_addr);
       return err;
     });
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     // mem_reserve places content at the caller-chosen PA (vs mem_alloc,
     // which mints a fresh VA). The kernel will later access this region
     // via that same PA through the MMU, so install identity PTEs.
@@ -197,7 +197,7 @@ public:
   }
 
   int mem_free(uint64_t dev_addr) {
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     uint64_t paddr = vm_mgr_->page_table_walk(dev_addr);
     return global_mem_.release(paddr);
 #else
@@ -241,7 +241,7 @@ public:
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
     if (dest_addr + asize > GLOBAL_MEM_SIZE)
       return -1;
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     dest_addr = vm_mgr_->page_table_walk(dest_addr);
 #endif
     ram_.enable_acl(false);
@@ -268,11 +268,11 @@ public:
     // flush GPU caches before reading back results
     {
       uint32_t dummy;
-      for (uint32_t cid = 0; cid < NUM_CORES * NUM_CLUSTERS; ++cid) {
+      for (uint32_t cid = 0; cid < VX_CFG_NUM_CORES * VX_CFG_NUM_CLUSTERS; ++cid) {
         this->dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
       }
     }
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
     src_addr = vm_mgr_->page_table_walk(src_addr);
 #endif
     ram_.enable_acl(false);
@@ -384,7 +384,7 @@ private:
   MemoryAllocator     global_mem_;
   std::future<void>   future_;
   vortex::CommandProcessor cp_;
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   std::unique_ptr<RamMemIO> dev_io_;
   std::unique_ptr<VMManager> vm_mgr_;
 #endif

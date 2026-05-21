@@ -34,27 +34,27 @@ static void simx_print_backtrace() {
 }
 
 ProcessorImpl::ProcessorImpl()
-  : clusters_(NUM_CLUSTERS)
+  : clusters_(VX_CFG_NUM_CLUSTERS)
 {
   SimPlatform::instance().initialize();
 
-	assert(PLATFORM_MEMORY_DATA_SIZE == MEM_BLOCK_SIZE);
+	assert(VX_CFG_PLATFORM_MEMORY_DATA_SIZE == VX_CFG_MEM_BLOCK_SIZE);
 
   // create kernel management unit (SimObject)
   kmu_ = Kmu::Create("kmu");
 
   // create memory simulator
   memsim_ = Memory::Create("dram", Memory::Config{
-    PLATFORM_MEMORY_NUM_BANKS,
-    L3_MEM_PORTS,
-    MEM_BLOCK_SIZE,
+    VX_CFG_PLATFORM_MEMORY_NUM_BANKS,
+    VX_CFG_L3_MEM_PORTS,
+    VX_CFG_MEM_BLOCK_SIZE,
     MEM_CLOCK_RATIO
   });
 
   char sname[100];
 
   // create clusters
-  for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
+  for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
     snprintf(sname, 100, "cluster%d", i);
     clusters_.at(i) = Cluster::Create(sname, i, this);
   }
@@ -63,35 +63,35 @@ ProcessorImpl::ProcessorImpl()
   // §3.1.3: when L3 is enabled it is the LLC; otherwise the L3 instance
   // is a transparent bypass arbiter and the L2 (or L1) is the LLC.
   l3cache_ = Cache::Create("l3cache", Cache::Config{
-    !L3_ENABLED,
-    log2ceil(L3_CACHE_SIZE),  // C
-    log2ceil(MEM_BLOCK_SIZE), // L
-    log2ceil(L2_LINE_SIZE),   // W
-    log2ceil(L3_NUM_WAYS),    // A
-    log2ceil(L3_NUM_BANKS),   // B
-    XLEN,                     // address bits
-    L3_NUM_REQS,              // request size
-    L3_MEM_PORTS,             // memory ports
-    L3_WRITEBACK,             // write-back
+    !VX_CFG_L3_ENABLED,
+    log2ceil(VX_CFG_L3_CACHE_SIZE),  // C
+    log2ceil(VX_CFG_MEM_BLOCK_SIZE), // L
+    log2ceil(VX_CFG_L2_LINE_SIZE),   // W
+    log2ceil(VX_CFG_L3_NUM_WAYS),    // A
+    log2ceil(VX_CFG_L3_NUM_BANKS),   // B
+    VX_CFG_XLEN,                     // address bits
+    VX_CFG_L3_NUM_REQS,              // request size
+    VX_CFG_L3_MEM_PORTS,             // memory ports
+    VX_CFG_L3_WRITEBACK,             // write-back
     false,                    // write response
-    L3_MSHR_SIZE,             // mshr size
+    VX_CFG_L3_MSHR_SIZE,             // mshr size
     2,                        // pipeline latency
-    L3_REPL_POLICY,           // replacement policy
-    L3_ENABLED != 0,          // is_llc when L3 is the LLC
+    VX_CFG_L3_REPL_POLICY,           // replacement policy
+    VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
     }
   );
 
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
   // §3.1.5 build-time invariant: every cache strictly above the LLC
   // must be write-through. A write-back intermediate could absorb a
   // store from hart B without the LLC seeing it; a later SC from hart
   // A on the same line would spuriously succeed (RVA spec violation:
   // RVA permits spurious failure, not spurious success).
-#if L3_ENABLED
-  static_assert(!DCACHE_WRITEBACK, "AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L3 is the LLC");
-  static_assert(!L2_WRITEBACK,     "AMO requires write-through L2 (L2_WRITEBACK=0) when L3 is the LLC");
-#elif L2_ENABLED
-  static_assert(!DCACHE_WRITEBACK, "AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L2 is the LLC");
+#if VX_CFG_L3_ENABLED
+  static_assert(!VX_CFG_DCACHE_WRITEBACK, "AMO requires write-through L1 (VX_CFG_DCACHE_WRITEBACK=0) when L3 is the LLC");
+  static_assert(!VX_CFG_L2_WRITEBACK,     "AMO requires write-through L2 (VX_CFG_L2_WRITEBACK=0) when L3 is the LLC");
+#elif VX_CFG_L2_ENABLED
+  static_assert(!VX_CFG_DCACHE_WRITEBACK, "AMO requires write-through L1 (VX_CFG_DCACHE_WRITEBACK=0) when L2 is the LLC");
   // L1 is unconstrained when L1 itself is the LLC.
 #endif
 
@@ -105,21 +105,21 @@ ProcessorImpl::ProcessorImpl()
 #endif
 
   // connect L3 core interfaces
-  for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
-    for (uint32_t j = 0; j < L2_MEM_PORTS; ++j) {
-      clusters_.at(i)->mem_req_out.at(j).bind(&l3cache_->core_req_in.at(i * L2_MEM_PORTS + j));
-      l3cache_->core_rsp_out.at(i * L2_MEM_PORTS + j).bind(&clusters_.at(i)->mem_rsp_in.at(j));
+  for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
+    for (uint32_t j = 0; j < VX_CFG_L2_MEM_PORTS; ++j) {
+      clusters_.at(i)->mem_req_out.at(j).bind(&l3cache_->core_req_in.at(i * VX_CFG_L2_MEM_PORTS + j));
+      l3cache_->core_rsp_out.at(i * VX_CFG_L2_MEM_PORTS + j).bind(&clusters_.at(i)->mem_rsp_in.at(j));
     }
   }
 
   // connect L3 memory interfaces
-  for (uint32_t i = 0; i < L3_MEM_PORTS; ++i) {
+  for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
     l3cache_->mem_req_out.at(i).bind(&memsim_->mem_req_in.at(i));
     memsim_->mem_rsp_out.at(i).bind(&l3cache_->mem_rsp_in.at(i));
   }
 
   // set up memory profiling
-  for (uint32_t i = 0; i < L3_MEM_PORTS; ++i) {
+  for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
     memsim_->mem_req_in.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
       __unused (cycle);
       perf_mem_reads_  += !req.is_write();
@@ -135,13 +135,13 @@ ProcessorImpl::ProcessorImpl()
 #ifndef NDEBUG
   // dump device configuration
   std::cout << "CONFIGS:"
-            << " num_threads=" << NUM_THREADS
-            << ", num_warps=" << NUM_WARPS
-            << ", num_cores=" << NUM_CORES
-            << ", num_clusters=" << NUM_CLUSTERS
-            << ", socket_size=" << SOCKET_SIZE
-            << ", local_mem_base=0x" << std::hex << LMEM_BASE_ADDR << std::dec
-            << ", num_barriers=" << NUM_BARRIERS
+            << " num_threads=" << VX_CFG_NUM_THREADS
+            << ", num_warps=" << VX_CFG_NUM_WARPS
+            << ", num_cores=" << VX_CFG_NUM_CORES
+            << ", num_clusters=" << VX_CFG_NUM_CLUSTERS
+            << ", socket_size=" << VX_CFG_SOCKET_SIZE
+            << ", local_mem_base=0x" << std::hex << VX_CFG_LMEM_BASE_ADDR << std::dec
+            << ", num_barriers=" << VX_CFG_NUM_BARRIERS
             << std::endl;
 #endif
   // reset the device

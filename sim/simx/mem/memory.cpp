@@ -42,10 +42,10 @@ private:
 	// per-thread print buffer. Returns true if the byte was consumed (no RAM
 	// write needed).
 	bool io_cout_tap(uint64_t addr, uint8_t byte) {
-		if (addr < uint64_t(IO_COUT_ADDR)
-		 || addr >= (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE))
+		if (addr < uint64_t(VX_CFG_IO_COUT_ADDR)
+		 || addr >= (uint64_t(VX_CFG_IO_COUT_ADDR) + VX_CFG_IO_COUT_SIZE))
 			return false;
-		uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE - 1);
+		uint32_t tid = (addr - VX_CFG_IO_COUT_ADDR) & (VX_CFG_IO_COUT_SIZE - 1);
 		auto& ss_buf = print_bufs_[tid];
 		char c = (char)byte;
 		ss_buf << c;
@@ -116,7 +116,7 @@ public:
 
 			std::shared_ptr<mem_block_t> rsp_data;
 			if (ram_) {
-				uint64_t line_addr = mem_req.addr & ~uint64_t(MEM_BLOCK_SIZE - 1);
+				uint64_t line_addr = mem_req.addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 				// Cache fills/writebacks are simulator-internal traffic and
 				// don't carry the kernel's intent (e.g. a write-back cache
 				// reads a write-only buffer to fill the line on write-miss,
@@ -129,7 +129,7 @@ public:
 					// IO_COUT-range bytes are tapped to the print buffer and
 					// not stored in RAM.
 					if (mem_req.data) {
-						for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
+						for (uint32_t b = 0; b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
 							if (mem_req.byteen & (1ull << b)) {
 								uint8_t value = (*mem_req.data)[b];
 								uint64_t byte_addr = line_addr + b;
@@ -142,7 +142,7 @@ public:
 				} else {
 					// Capture the line at request time; response carries it back.
 					rsp_data = make_mem_block();
-					ram_->read(rsp_data->data(), line_addr, MEM_BLOCK_SIZE);
+					ram_->read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
 				}
 				ram_->enable_acl(true);
 			}

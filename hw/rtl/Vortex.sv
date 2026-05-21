@@ -50,21 +50,21 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     output wire                             busy
 );
     // Check clustering configuration
-    `STATIC_ASSERT(`IS_POW2(`NUM_CLUSTERS), ("NUM_CLUSTERS must be a power of 2"));
-    `STATIC_ASSERT(`IS_POW2(`NUM_CORES), ("NUM_CORES must be a power of 2"));
-    `STATIC_ASSERT(`IS_POW2(`SOCKET_SIZE), ("SOCKET_SIZE must be a power of 2"));
+    `STATIC_ASSERT(`IS_POW2(NUM_CLUSTERS), ("NUM_CLUSTERS must be a power of 2"));
+    `STATIC_ASSERT(`IS_POW2(NUM_CORES), ("NUM_CORES must be a power of 2"));
+    `STATIC_ASSERT(`IS_POW2(SOCKET_SIZE), ("SOCKET_SIZE must be a power of 2"));
 
     // §3.1.5 invariant: every cache strictly above the LLC must be
     // write-through. A WB intermediate could absorb a hart-B store
     // without the LLC seeing it; a later SC from hart-A on the same
     // line would spuriously succeed. RVA permits spurious failure,
     // not spurious success.
-`ifdef EXT_A_ENABLE
-  `ifdef L3_ENABLE
-    `STATIC_ASSERT(`DCACHE_WRITEBACK == 0, ("AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L3 is the LLC"));
-    `STATIC_ASSERT(`L2_WRITEBACK == 0,     ("AMO requires write-through L2 (L2_WRITEBACK=0) when L3 is the LLC"));
-  `elsif L2_ENABLE
-    `STATIC_ASSERT(`DCACHE_WRITEBACK == 0, ("AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L2 is the LLC"));
+`ifdef VX_CFG_EXT_A_ENABLE
+  `ifdef VX_CFG_L3_ENABLE
+    `STATIC_ASSERT(DCACHE_WRITEBACK == 0, ("AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L3 is the LLC"));
+    `STATIC_ASSERT(L2_WRITEBACK == 0,     ("AMO requires write-through L2 (L2_WRITEBACK=0) when L3 is the LLC"));
+  `elsif VX_CFG_L2_ENABLE
+    `STATIC_ASSERT(DCACHE_WRITEBACK == 0, ("AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L2 is the LLC"));
   `endif
 `endif
 
@@ -95,7 +95,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
 
 `ifdef SCOPE
     localparam scope_cluster = 0;
-    `SCOPE_IO_SWITCH (`NUM_CLUSTERS);
+    `SCOPE_IO_SWITCH (NUM_CLUSTERS);
 `endif
 
 `ifdef PERF_ENABLE
@@ -110,39 +110,39 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
 `endif
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`L2_LINE_SIZE),
+        .DATA_SIZE (L2_LINE_SIZE),
         .TAG_WIDTH (L3_TAG_WIDTH)
-    ) per_cluster_mem_bus_if[`NUM_CLUSTERS * `L2_MEM_PORTS]();
+    ) per_cluster_mem_bus_if[NUM_CLUSTERS * L2_MEM_PORTS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`L3_LINE_SIZE),
+        .DATA_SIZE (L3_LINE_SIZE),
         .TAG_WIDTH (L3_MEM_TAG_WIDTH)
-    ) mem_bus_if[`L3_MEM_PORTS]();
+    ) mem_bus_if[L3_MEM_PORTS]();
 
     VX_cache_wrap #(
         .INSTANCE_ID    ("l3cache"),
-        .CACHE_SIZE     (`L3_CACHE_SIZE),
-        .LINE_SIZE      (`L3_LINE_SIZE),
-        .NUM_BANKS      (`L3_NUM_BANKS),
-        .NUM_WAYS       (`L3_NUM_WAYS),
+        .CACHE_SIZE     (L3_CACHE_SIZE),
+        .LINE_SIZE      (L3_LINE_SIZE),
+        .NUM_BANKS      (L3_NUM_BANKS),
+        .NUM_WAYS       (L3_NUM_WAYS),
         .WORD_SIZE      (L3_WORD_SIZE),
         .NUM_REQS       (L3_NUM_REQS),
-        .MEM_PORTS      (`L3_MEM_PORTS),
-        .CRSQ_SIZE      (`L3_CRSQ_SIZE),
-        .MSHR_SIZE      (`L3_MSHR_SIZE),
-        .MRSQ_SIZE      (`L3_MRSQ_SIZE),
+        .MEM_PORTS      (L3_MEM_PORTS),
+        .CRSQ_SIZE      (L3_CRSQ_SIZE),
+        .MSHR_SIZE      (L3_MSHR_SIZE),
+        .MRSQ_SIZE      (L3_MRSQ_SIZE),
         .MREQ_SIZE      (L3_MREQ_SIZE),
         .TAG_WIDTH      (L3_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .WRITEBACK      (`L3_WRITEBACK),
-        .DIRTY_BYTES    (`L3_DIRTYBYTES),
-        .REPL_POLICY    (`L3_REPL_POLICY),
+        .WRITEBACK      (L3_WRITEBACK),
+        .DIRTY_BYTES    (L3_DIRTYBYTES),
+        .REPL_POLICY    (L3_REPL_POLICY),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
-        .PASSTHRU       (!`L3_ENABLED),
+        .PASSTHRU       (!L3_ENABLED),
         .IS_LLC         (L3_IS_LLC),
-        .AMO_ENABLE     (`EXT_A_ENABLED && L3_IS_LLC)
+        .AMO_ENABLE     (EXT_A_ENABLED && L3_IS_LLC)
     ) l3cache (
         .clk            (clk),
         .reset          (reset),
@@ -155,7 +155,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .mem_bus_if     (mem_bus_if)
     );
 
-    for (genvar i = 0; i < `L3_MEM_PORTS; ++i) begin : g_mem_bus_if
+    for (genvar i = 0; i < L3_MEM_PORTS; ++i) begin : g_mem_bus_if
         assign mem_req_valid[i]  = mem_bus_if[i].req_valid;
         assign mem_req_rw[i]     = mem_bus_if[i].req_data.rw;
         assign mem_req_byteen[i] = mem_bus_if[i].req_data.byteen;
@@ -171,23 +171,23 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         assign mem_rsp_ready[i] = mem_bus_if[i].rsp_ready;
     end
 
-    wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
+    wire [NUM_CLUSTERS-1:0] per_cluster_busy;
 
-    VX_kmu_bus_if per_cluster_kmu_bus_if[`NUM_CLUSTERS]();
+    VX_kmu_bus_if per_cluster_kmu_bus_if[NUM_CLUSTERS]();
     VX_kmu_arb #(
         .NUM_INPUTS (1),
-        .NUM_OUTPUTS (`NUM_CLUSTERS)
+        .NUM_OUTPUTS (NUM_CLUSTERS)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_in),
-        .bus_out_if (per_cluster_kmu_bus_if[`NUM_CLUSTERS-1:0])
+        .bus_out_if (per_cluster_kmu_bus_if[NUM_CLUSTERS-1:0])
     );
 
-    VX_dcr_bus_if per_cluster_dcr_bus_if[`NUM_CLUSTERS]();
+    VX_dcr_bus_if per_cluster_dcr_bus_if[NUM_CLUSTERS]();
     VX_dcr_arb #(
-        .NUM_REQS    (`NUM_CLUSTERS),
-        .REQ_OUT_BUF ((`NUM_CLUSTERS > 1) ? 1 : 0)
+        .NUM_REQS    (NUM_CLUSTERS),
+        .REQ_OUT_BUF ((NUM_CLUSTERS > 1) ? 1 : 0)
     ) dcr_cluster_arb (
         .clk        (clk),
         .reset      (reset),
@@ -196,7 +196,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     );
 
     // Generate all clusters
-    for (genvar cluster_id = 0; cluster_id < `NUM_CLUSTERS; ++cluster_id) begin : g_clusters
+    for (genvar cluster_id = 0; cluster_id < NUM_CLUSTERS; ++cluster_id) begin : g_clusters
 
         VX_cluster #(
             .CLUSTER_ID (cluster_id),
@@ -213,7 +213,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
 
             .dcr_bus_if         (per_cluster_dcr_bus_if[cluster_id]),
 
-            .mem_bus_if         (per_cluster_mem_bus_if[cluster_id * `L2_MEM_PORTS +: `L2_MEM_PORTS]),
+            .mem_bus_if         (per_cluster_mem_bus_if[cluster_id * L2_MEM_PORTS +: L2_MEM_PORTS]),
 
             .kmu_bus_if         (per_cluster_kmu_bus_if[cluster_id +: 1]),
 
@@ -221,7 +221,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         );
     end
     wire busy_r;
-    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy), 1'b1, 1, (`NUM_CLUSTERS > 1));
+    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy), 1'b1, 1, (NUM_CLUSTERS > 1));
     assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid;
 
 `ifdef PERF_ENABLE
@@ -272,7 +272,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     // dump device configuration
     initial begin
         `TRACE(0, ("CONFIGS: num_threads=%0d, num_warps=%0d, num_cores=%0d, num_clusters=%0d, socket_size=%0d, local_mem_base=0x%0h, num_barriers=%0d\n",
-                    `NUM_THREADS, `NUM_WARPS, `NUM_CORES, `NUM_CLUSTERS, `SOCKET_SIZE, `LMEM_BASE_ADDR, `NUM_BARRIERS))
+                    NUM_THREADS, NUM_WARPS, NUM_CORES, NUM_CLUSTERS, SOCKET_SIZE, LMEM_BASE_ADDR, NUM_BARRIERS))
     end
 
 `ifdef DBG_TRACE_MEM

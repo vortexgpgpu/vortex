@@ -18,7 +18,6 @@
 
 module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY  = 1,
-    parameter XLEN     = `XLEN,
     parameter EXP_BITS = 8,
     parameter MAN_BITS = 23,
     parameter OUT_REG  = 0

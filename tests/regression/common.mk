@@ -13,23 +13,23 @@ KERNEL_LIB ?= vortex
 
 # Resolve the toml + CONFIGS overrides into the canonical -D... list, the
 # same way sim/simx/Makefile does. Then sniff for extension enables.
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DXLEN_$(XLEN)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)')
 
-ifneq (,$(filter -DEXT_C_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_C_ENABLE, $(XCONFIGS)))
 	C_EXT := c
 else
 	C_EXT :=
 endif
 
 ifeq ($(XLEN),64)
-	ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
 		VX_CFLAGS += -march=rv64imafd$(C_EXT)v_zve64d -mabi=lp64d # vector extension
 	else
 		VX_CFLAGS += -march=rv64imafd$(C_EXT) -mabi=lp64d
 	endif
 	STARTUP_ADDR ?= 0x180000000
 else
-	ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
 		VX_CFLAGS += -march=rv32imaf$(C_EXT)v_zve32f -mabi=ilp32f # vector extension
 	else
 		VX_CFLAGS += -march=rv32imaf$(C_EXT) -mabi=ilp32f
@@ -64,7 +64,7 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 VX_CFLAGS += -Wall -Wextra -Wfatal-errors -Werror -Wno-unused-command-line-argument
 VX_CFLAGS += -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
-VX_CFLAGS += -DXLEN_$(XLEN) -DNDEBUG -D__VORTEX__
+VX_CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) -DNDEBUG -D__VORTEX__
 VX_CFLAGS += $(CONFIGS)
 
 VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc

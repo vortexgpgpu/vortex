@@ -29,22 +29,22 @@ using namespace vortex;
 namespace {
 
 // Number of GMEM ports DxaCore exposes to L2 (one arb output per port).
-constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(NUM_DXA_UNITS, L2_NUM_REQS);
+constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(VX_CFG_NUM_DXA_UNITS, VX_CFG_L2_NUM_REQS);
 
 // LMEM "word" granularity for splitting DXA writes. The LocalMem bank
-// model applies byteen relative to a MEM_BLOCK_SIZE-aligned address (see
+// model applies byteen relative to a VX_CFG_MEM_BLOCK_SIZE-aligned address (see
 // LocalMem::Impl::tick), so each LineWork's destination must lie within
-// one MEM_BLOCK_SIZE-aligned region. RTL DXA_LMEM_WORD_SIZE
-// (LMEM_NUM_BANKS * XLENB) is the per-cycle-bandwidth unit; mem_block
+// one VX_CFG_MEM_BLOCK_SIZE-aligned region. RTL DXA_LMEM_WORD_SIZE
+// (VX_CFG_LMEM_NUM_BANKS * XLENB) is the per-cycle-bandwidth unit; mem_block
 // granularity here is the byteen-mask scope.
-constexpr uint32_t kLmemWordSize = MEM_BLOCK_SIZE;
+constexpr uint32_t kLmemWordSize = VX_CFG_MEM_BLOCK_SIZE;
 
 // GMEM line size + mask.
-constexpr uint32_t kGmemLineSize = L1_LINE_SIZE;
-constexpr uint64_t kGmemLineMask = ~uint64_t(L1_LINE_SIZE - 1);
+constexpr uint32_t kGmemLineSize = VX_CFG_L1_LINE_SIZE;
+constexpr uint64_t kGmemLineMask = ~uint64_t(VX_CFG_L1_LINE_SIZE - 1);
 
 // Cores per cluster.
-constexpr uint32_t kCoresPerCluster = NUM_SOCKETS * SOCKET_SIZE;
+constexpr uint32_t kCoresPerCluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
 
 } // namespace
 
@@ -107,7 +107,7 @@ public:
     uint32_t                ag_idx = 0;          // next entry to issue (gmem_req)
 
     // gmem_req → rsp_buf → smem_wr inflight bookkeeping.
-    std::array<InflightSlot, DXA_MAX_INFLIGHT> inflight;
+    std::array<InflightSlot, VX_CFG_DXA_MAX_INFLIGHT> inflight;
     std::deque<uint32_t>    issued_order;        // tag order, FIFO drain
 
     // smem_wr multicast replay state.
@@ -119,10 +119,10 @@ public:
   explicit Impl(DxaCore* simobject, MemArbiter* gmem_arb)
     : simobject_(simobject)
     , gmem_arb_(gmem_arb)
-    , workers_(NUM_DXA_UNITS)
+    , workers_(VX_CFG_NUM_DXA_UNITS)
     , cycle_(0)
   {
-    for (uint32_t i = 0; i < NUM_DXA_UNITS; ++i)
+    for (uint32_t i = 0; i < VX_CFG_NUM_DXA_UNITS; ++i)
       workers_[i].worker_id = i;
   }
 
@@ -194,7 +194,7 @@ public:
       auto& ch = gmem_arb_->RspOut.at(worker_id);
       while (!ch.empty()) {
         auto& rsp = ch.peek();
-        uint32_t slot_id = uint32_t(rsp.tag) & (DXA_MAX_INFLIGHT - 1);
+        uint32_t slot_id = uint32_t(rsp.tag) & (VX_CFG_DXA_MAX_INFLIGHT - 1);
         auto& w = workers_[worker_id];
         if (slot_id < w.inflight.size() && w.inflight[slot_id].allocated) {
           w.inflight[slot_id].rsp_arrived = true;
@@ -245,7 +245,7 @@ private:
       uint32_t cid = (rr_req_ + i) % chs.size();
       auto& ch = chs.at(cid);
       if (ch.empty()) continue;
-      if (queue_.size() >= DXA_QUEUE_SIZE) break;
+      if (queue_.size() >= VX_CFG_DXA_QUEUE_SIZE) break;
       queue_.push_back(ch.peek());
       ch.pop();
       rr_req_ = (cid + 1) % chs.size();
@@ -364,9 +364,9 @@ private:
         uint32_t cl_room  = kGmemLineSize - cl_off;
         uint32_t sw_room  = kLmemWordSize - s_off;
         uint32_t row_room = (row_elems - e0) * elem_bytes;
-        // Cap to MEM_BLOCK_SIZE (the byteen mask is 64 bits wide and the
+        // Cap to VX_CFG_MEM_BLOCK_SIZE (the byteen mask is 64 bits wide and the
         // mem_block_t payload is 64 bytes).
-        uint32_t span = std::min({cl_room, sw_room, row_room, uint32_t(MEM_BLOCK_SIZE)});
+        uint32_t span = std::min({cl_room, sw_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)});
         // Round to a whole-element multiple — ensures e0 advances by an
         // integer count and avoids off-by-one element splits.
         span -= span % elem_bytes;
@@ -537,11 +537,11 @@ private:
     // bar_id is RAW (encoded); decode at release call site.
     if (w.is_multicast) {
       for (uint32_t cta : w.cta_indices) {
-        uint32_t decoded = bar_decode_id(w.req.bar_id + cta, NUM_BARRIERS);
+        uint32_t decoded = bar_decode_id(w.req.bar_id + cta, VX_CFG_NUM_BARRIERS);
         w.req.core->barrier_event_release(decoded);
       }
     } else {
-      uint32_t decoded = bar_decode_id(w.req.bar_id, NUM_BARRIERS);
+      uint32_t decoded = bar_decode_id(w.req.bar_id, VX_CFG_NUM_BARRIERS);
       w.req.core->barrier_event_release(decoded);
     }
   }
@@ -588,13 +588,13 @@ DxaCore::DxaCore(const SimContext& ctx, const char* name, Cluster* cluster)
 {
   __unused(cluster);
 
-  // Build the GMEM arbiter (NUM_DXA_UNITS workers → kDxaMemPorts L2-facing).
+  // Build the GMEM arbiter (VX_CFG_NUM_DXA_UNITS workers → kDxaMemPorts L2-facing).
   // Tag layout used by workers: high bit packs worker_id, low bits the
   // per-worker inflight slot. We pass TAG_SEL_IDX so the arb can route
   // responses back to the right input.
   char sname[100];
   snprintf(sname, 100, "%s-gmem-arb", name);
-  gmem_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, NUM_DXA_UNITS, kDxaMemPorts);
+  gmem_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_DXA_UNITS, kDxaMemPorts);
   for (uint32_t i = 0; i < kDxaMemPorts; ++i) {
     gmem_arb_->ReqOut.at(i).bind(&gmem_req_out.at(i));
     gmem_rsp_in.at(i).bind(&gmem_arb_->RspIn.at(i));

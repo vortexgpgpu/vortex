@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_socket import VX_gpu_pkg::*;
-`ifdef EXT_DXA_ENABLE
+`ifdef VX_CFG_EXT_DXA_ENABLE
     import VX_dxa_pkg::*;
 `endif
 #(
@@ -35,24 +35,24 @@ module VX_socket import VX_gpu_pkg::*;
     VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Memory
-    VX_mem_bus_if.master    mem_bus_if [`L1_MEM_PORTS],
+    VX_mem_bus_if.master    mem_bus_if [L1_MEM_PORTS],
 
-`ifdef EXT_DXA_ENABLE
+`ifdef VX_CFG_EXT_DXA_ENABLE
     // DXA control path
     VX_dxa_req_bus_if.master dxa_req_bus_if,
     // DXA LMEM write path
     VX_mem_bus_if.slave     dxa_lmem_bus_if [1],
 `endif
 
-`ifdef EXT_TEX_ENABLE
+`ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_bus_if.master    per_socket_tex_bus_if,
 `endif
 
-`ifdef EXT_OM_ENABLE
+`ifdef VX_CFG_EXT_OM_ENABLE
     VX_om_bus_if.master     per_socket_om_bus_if,
 `endif
 
-`ifdef EXT_RASTER_ENABLE
+`ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_raster_bus_if.slave  per_socket_raster_bus_if,
 `endif
 
@@ -68,27 +68,27 @@ module VX_socket import VX_gpu_pkg::*;
 
 `ifdef SCOPE
     localparam scope_core = 0;
-    `SCOPE_IO_SWITCH (`SOCKET_SIZE);
+    `SCOPE_IO_SWITCH (SOCKET_SIZE);
 `endif
 
-    VX_kmu_bus_if per_core_kmu_bus_if[`SOCKET_SIZE]();
+    VX_kmu_bus_if per_core_kmu_bus_if[SOCKET_SIZE]();
 
     VX_kmu_arb #(
         .NUM_INPUTS (1),
-        .NUM_OUTPUTS (`SOCKET_SIZE)
+        .NUM_OUTPUTS (SOCKET_SIZE)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_if),
-        .bus_out_if (per_core_kmu_bus_if[`SOCKET_SIZE-1:0])
+        .bus_out_if (per_core_kmu_bus_if[SOCKET_SIZE-1:0])
     );
 
-    VX_gbar_bus_if per_core_gbar_bus_if[`SOCKET_SIZE]();
+    VX_gbar_bus_if per_core_gbar_bus_if[SOCKET_SIZE]();
 
     VX_gbar_arb #(
-        .NUM_REQS (`SOCKET_SIZE),
-        .REQ_OUT_BUF ((`SOCKET_SIZE > 1) ? 2 : 0),
-        .RSP_OUT_BUF ((`SOCKET_SIZE > 1) ? 2 : 0)
+        .NUM_REQS (SOCKET_SIZE),
+        .REQ_OUT_BUF ((SOCKET_SIZE > 1) ? 2 : 0),
+        .RSP_OUT_BUF ((SOCKET_SIZE > 1) ? 2 : 0)
     ) gbar_arb (
         .clk        (clk),
         .reset      (reset),
@@ -113,7 +113,7 @@ module VX_socket import VX_gpu_pkg::*;
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) per_core_icache_bus_if[`SOCKET_SIZE]();
+    ) per_core_icache_bus_if[SOCKET_SIZE]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_LINE_SIZE),
@@ -122,23 +122,23 @@ module VX_socket import VX_gpu_pkg::*;
 
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("%s-icache", INSTANCE_ID))),
-        .NUM_UNITS      (`NUM_ICACHES),
-        .NUM_INPUTS     (`SOCKET_SIZE),
+        .NUM_UNITS      (NUM_ICACHES),
+        .NUM_INPUTS     (SOCKET_SIZE),
         .TAG_SEL_IDX    (0),
-        .CACHE_SIZE     (`ICACHE_SIZE),
+        .CACHE_SIZE     (ICACHE_SIZE),
         .LINE_SIZE      (ICACHE_LINE_SIZE),
         .NUM_BANKS      (1),
-        .NUM_WAYS       (`ICACHE_NUM_WAYS),
+        .NUM_WAYS       (ICACHE_NUM_WAYS),
         .WORD_SIZE      (ICACHE_WORD_SIZE),
         .NUM_REQS       (1),
         .MEM_PORTS      (1),
-        .CRSQ_SIZE      (`ICACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (`ICACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (`ICACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
+        .CRSQ_SIZE      (ICACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (ICACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (ICACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (ICACHE_MREQ_SIZE),
         .TAG_WIDTH      (ICACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
-        .REPL_POLICY    (`ICACHE_REPL_POLICY),
+        .REPL_POLICY    (ICACHE_REPL_POLICY),
         .NC_ENABLE      (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2)
@@ -157,39 +157,39 @@ module VX_socket import VX_gpu_pkg::*;
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) per_core_dcache_bus_if[`SOCKET_SIZE * DCACHE_NUM_REQS]();
+    ) per_core_dcache_bus_if[SOCKET_SIZE * DCACHE_NUM_REQS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_LINE_SIZE),
         .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_bus_if[`L1_MEM_PORTS]();
+    ) dcache_mem_bus_if[L1_MEM_PORTS]();
 
     VX_cache_cluster #(
         .INSTANCE_ID    (`SFORMATF(("%s-dcache", INSTANCE_ID))),
-        .NUM_UNITS      (`NUM_DCACHES),
-        .NUM_INPUTS     (`SOCKET_SIZE),
+        .NUM_UNITS      (NUM_DCACHES),
+        .NUM_INPUTS     (SOCKET_SIZE),
         .TAG_SEL_IDX    (0),
-        .CACHE_SIZE     (`DCACHE_SIZE),
+        .CACHE_SIZE     (DCACHE_SIZE),
         .LINE_SIZE      (DCACHE_LINE_SIZE),
-        .NUM_BANKS      (`DCACHE_NUM_BANKS),
-        .NUM_WAYS       (`DCACHE_NUM_WAYS),
+        .NUM_BANKS      (DCACHE_NUM_BANKS),
+        .NUM_WAYS       (DCACHE_NUM_WAYS),
         .WORD_SIZE      (DCACHE_WORD_SIZE),
         .NUM_REQS       (DCACHE_NUM_REQS),
-        .MEM_PORTS      (`L1_MEM_PORTS),
-        .CRSQ_SIZE      (`DCACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (`DCACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
+        .MEM_PORTS      (L1_MEM_PORTS),
+        .CRSQ_SIZE      (DCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (DCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (DCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (DCACHE_MREQ_SIZE),
         .TAG_WIDTH      (DCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .WRITEBACK      (`DCACHE_WRITEBACK),
-        .DIRTY_BYTES    (`DCACHE_DIRTYBYTES),
-        .REPL_POLICY    (`DCACHE_REPL_POLICY),
+        .WRITEBACK      (DCACHE_WRITEBACK),
+        .DIRTY_BYTES    (DCACHE_DIRTYBYTES),
+        .REPL_POLICY    (DCACHE_REPL_POLICY),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2),
         .IS_LLC         (DCACHE_IS_LLC),
-        .AMO_ENABLE     (`EXT_A_ENABLED && DCACHE_IS_LLC)
+        .AMO_ENABLE     (EXT_A_ENABLED && DCACHE_IS_LLC)
     ) dcache (
     `ifdef PERF_ENABLE
         .cache_perf     (dcache_perf),
@@ -202,15 +202,15 @@ module VX_socket import VX_gpu_pkg::*;
 
     ///////////////////////////////////////////////////////////////////////////
 
-    for (genvar i = 0; i < `L1_MEM_PORTS; ++i) begin : g_mem_bus_if
+    for (genvar i = 0; i < L1_MEM_PORTS; ++i) begin : g_mem_bus_if
         if (i == 0) begin : g_i0
             VX_mem_bus_if #(
-                .DATA_SIZE (`L1_LINE_SIZE),
+                .DATA_SIZE (L1_LINE_SIZE),
                 .TAG_WIDTH (L1_MEM_TAG_WIDTH)
             ) l1_mem_bus_if[2]();
 
             VX_mem_bus_if #(
-                .DATA_SIZE (`L1_LINE_SIZE),
+                .DATA_SIZE (L1_LINE_SIZE),
                 .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
             ) l1_mem_arb_bus_if[1]();
 
@@ -220,7 +220,7 @@ module VX_socket import VX_gpu_pkg::*;
             VX_mem_arb #(
                 .NUM_INPUTS (2),
                 .NUM_OUTPUTS(1),
-                .DATA_SIZE  (`L1_LINE_SIZE),
+                .DATA_SIZE  (L1_LINE_SIZE),
                 .TAG_WIDTH  (L1_MEM_TAG_WIDTH),
                 .TAG_SEL_IDX(0),
                 .ARBITER    ("P"), // prioritize the icache
@@ -236,7 +236,7 @@ module VX_socket import VX_gpu_pkg::*;
             `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[0], l1_mem_arb_bus_if[0]);
         end else begin : g_i
             VX_mem_bus_if #(
-                .DATA_SIZE (`L1_LINE_SIZE),
+                .DATA_SIZE (L1_LINE_SIZE),
                 .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
             ) l1_mem_arb_bus_if();
 
@@ -248,24 +248,24 @@ module VX_socket import VX_gpu_pkg::*;
 
     ///////////////////////////////////////////////////////////////////////////
 
-`ifdef EXT_TEX_ENABLE
+`ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_bus_if #(
-        .NUM_LANES (`NUM_SFU_LANES),
+        .NUM_LANES (NUM_SFU_LANES),
         .TAG_WIDTH (TEX_REQ_TAG_WIDTH)
-    ) per_core_tex_bus_if[`SOCKET_SIZE]();
+    ) per_core_tex_bus_if[SOCKET_SIZE]();
 
     VX_tex_bus_if #(
-        .NUM_LANES (`NUM_SFU_LANES),
+        .NUM_LANES (NUM_SFU_LANES),
         .TAG_WIDTH (TEX_REQ_TAG_WIDTH)
     ) tex_socket_arb_out_if[1]();
 
     VX_tex_arb #(
-        .NUM_INPUTS  (`SOCKET_SIZE),
-        .NUM_LANES   (`NUM_SFU_LANES),
+        .NUM_INPUTS  (SOCKET_SIZE),
+        .NUM_LANES   (NUM_SFU_LANES),
         .NUM_OUTPUTS (1),
         .TAG_WIDTH   (TEX_REQ_TAG_WIDTH),
         .ARBITER     ("R"),
-        .OUT_BUF_REQ ((`SOCKET_SIZE > 1) ? 2 : 0)
+        .OUT_BUF_REQ ((SOCKET_SIZE > 1) ? 2 : 0)
     ) tex_socket_arb (
         .clk        (clk),
         .reset      (reset),
@@ -276,21 +276,21 @@ module VX_socket import VX_gpu_pkg::*;
     `ASSIGN_VX_TEX_BUS_IF (per_socket_tex_bus_if, tex_socket_arb_out_if[0]);
 `endif
 
-`ifdef EXT_OM_ENABLE
+`ifdef VX_CFG_EXT_OM_ENABLE
     VX_om_bus_if #(
-        .NUM_LANES (`NUM_SFU_LANES)
-    ) per_core_om_bus_if[`SOCKET_SIZE]();
+        .NUM_LANES (NUM_SFU_LANES)
+    ) per_core_om_bus_if[SOCKET_SIZE]();
 
     VX_om_bus_if #(
-        .NUM_LANES (`NUM_SFU_LANES)
+        .NUM_LANES (NUM_SFU_LANES)
     ) om_socket_arb_out_if[1]();
 
     VX_om_arb #(
-        .NUM_INPUTS  (`SOCKET_SIZE),
-        .NUM_LANES   (`NUM_SFU_LANES),
+        .NUM_INPUTS  (SOCKET_SIZE),
+        .NUM_LANES   (NUM_SFU_LANES),
         .NUM_OUTPUTS (1),
         .ARBITER     ("R"),
-        .OUT_BUF     ((`SOCKET_SIZE > 1) ? 2 : 0)
+        .OUT_BUF     ((SOCKET_SIZE > 1) ? 2 : 0)
     ) om_socket_arb (
         .clk        (clk),
         .reset      (reset),
@@ -301,24 +301,24 @@ module VX_socket import VX_gpu_pkg::*;
     `ASSIGN_VX_OM_BUS_IF (per_socket_om_bus_if, om_socket_arb_out_if[0]);
 `endif
 
-`ifdef EXT_RASTER_ENABLE
+`ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_raster_bus_if #(
-        .NUM_LANES (`NUM_SFU_LANES)
-    ) per_core_raster_bus_if[`SOCKET_SIZE]();
+        .NUM_LANES (NUM_SFU_LANES)
+    ) per_core_raster_bus_if[SOCKET_SIZE]();
 
     // Raster arb fans the cluster-side bus out to per-core consumers
     VX_raster_bus_if #(
-        .NUM_LANES (`NUM_SFU_LANES)
+        .NUM_LANES (NUM_SFU_LANES)
     ) raster_socket_arb_in_if[1]();
 
     `ASSIGN_VX_RASTER_BUS_IF (raster_socket_arb_in_if[0], per_socket_raster_bus_if);
 
     VX_raster_arb #(
         .NUM_INPUTS  (1),
-        .NUM_LANES   (`NUM_SFU_LANES),
-        .NUM_OUTPUTS (`SOCKET_SIZE),
+        .NUM_LANES   (NUM_SFU_LANES),
+        .NUM_OUTPUTS (SOCKET_SIZE),
         .ARBITER     ("R"),
-        .OUT_BUF     ((`SOCKET_SIZE > 1) ? 2 : 0)
+        .OUT_BUF     ((SOCKET_SIZE > 1) ? 2 : 0)
     ) raster_socket_arb (
         .clk        (clk),
         .reset      (reset),
@@ -327,14 +327,14 @@ module VX_socket import VX_gpu_pkg::*;
     );
 `endif
 
-`ifdef EXT_DXA_ENABLE
+`ifdef VX_CFG_EXT_DXA_ENABLE
 
-    VX_dxa_req_bus_if per_core_dxa_req_bus_if[`SOCKET_SIZE]();
+    VX_dxa_req_bus_if per_core_dxa_req_bus_if[SOCKET_SIZE]();
     VX_dxa_req_bus_if dxa_req_arb_out_if[1]();
 
     VX_dxa_req_arb #(
-        .NUM_INPUTS (`SOCKET_SIZE),
-        .OUT_BUF    ((`SOCKET_SIZE > 1) ? 2 : 0)
+        .NUM_INPUTS (SOCKET_SIZE),
+        .OUT_BUF    ((SOCKET_SIZE > 1) ? 2 : 0)
     ) dxa_req_arb (
         .clk        (clk),
         .reset      (reset),
@@ -349,16 +349,16 @@ module VX_socket import VX_gpu_pkg::*;
     // Route DXA lmem requests to per-core buses using core_local_id from tag.
     // Tag value layout: {core_id[NC_BITS-1:0], engine_value[0]}
     // core_local_id = core_id[CORE_LOCAL_BITS-1:0]
-    localparam DXA_LMEM_CORE_LOCAL_BITS = `CLOG2(`SOCKET_SIZE);
+    localparam DXA_LMEM_CORE_LOCAL_BITS = `CLOG2(SOCKET_SIZE);
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
-    ) per_core_dxa_lmem_bus_if[`SOCKET_SIZE]();
+    ) per_core_dxa_lmem_bus_if[SOCKET_SIZE]();
 
     wire [`UP(DXA_LMEM_CORE_LOCAL_BITS)-1:0] dxa_lmem_core_sel;
-    if (`SOCKET_SIZE > 1) begin : g_dxa_lmem_sel
+    if (SOCKET_SIZE > 1) begin : g_dxa_lmem_sel
         assign dxa_lmem_core_sel = dxa_lmem_bus_if[0].req_data.tag.value[1 +: DXA_LMEM_CORE_LOCAL_BITS];
     end else begin : g_dxa_lmem_sel
         assign dxa_lmem_core_sel = '0;
@@ -366,7 +366,7 @@ module VX_socket import VX_gpu_pkg::*;
 
     VX_mem_switch #(
         .NUM_INPUTS  (1),
-        .NUM_OUTPUTS (`SOCKET_SIZE),
+        .NUM_OUTPUTS (SOCKET_SIZE),
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
         .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
@@ -383,10 +383,10 @@ module VX_socket import VX_gpu_pkg::*;
 
     ///////////////////////////////////////////////////////////////////////////
 
-    VX_dcr_bus_if per_core_dcr_bus_if[`SOCKET_SIZE]();
+    VX_dcr_bus_if per_core_dcr_bus_if[SOCKET_SIZE]();
     VX_dcr_arb #(
-        .NUM_REQS    (`SOCKET_SIZE),
-        .REQ_OUT_BUF ((`SOCKET_SIZE > 1) ? 1 : 0)
+        .NUM_REQS    (SOCKET_SIZE),
+        .REQ_OUT_BUF ((SOCKET_SIZE > 1) ? 1 : 0)
     ) dcr_core_arb (
         .clk        (clk),
         .reset      (reset),
@@ -394,10 +394,10 @@ module VX_socket import VX_gpu_pkg::*;
         .bus_out_if (per_core_dcr_bus_if)
     );
 
-    wire [`SOCKET_SIZE-1:0] per_core_busy;
+    wire [SOCKET_SIZE-1:0] per_core_busy;
 
     // Generate all cores
-    for (genvar core_id = 0; core_id < `SOCKET_SIZE; ++core_id) begin : g_cores
+    for (genvar core_id = 0; core_id < SOCKET_SIZE; ++core_id) begin : g_cores
         /*
         wire core_clk;
         wire core_clk_en = reset
@@ -411,7 +411,7 @@ module VX_socket import VX_gpu_pkg::*;
         );*/
 
         VX_core #(
-            .CORE_ID  ((SOCKET_ID * `SOCKET_SIZE) + core_id),
+            .CORE_ID  ((SOCKET_ID * SOCKET_SIZE) + core_id),
             .INSTANCE_ID (`SFORMATF(("%s-core%0d", INSTANCE_ID, core_id)))
         ) core (
             `SCOPE_IO_BIND  (scope_core + core_id)
@@ -429,20 +429,20 @@ module VX_socket import VX_gpu_pkg::*;
 
             .icache_bus_if  (per_core_icache_bus_if[core_id]),
 
-        `ifdef EXT_DXA_ENABLE
+        `ifdef VX_CFG_EXT_DXA_ENABLE
             .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),
             .dxa_lmem_bus_if(per_core_dxa_lmem_bus_if[core_id]),
         `endif
 
-        `ifdef EXT_TEX_ENABLE
+        `ifdef VX_CFG_EXT_TEX_ENABLE
             .tex_bus_if     (per_core_tex_bus_if[core_id]),
         `endif
 
-        `ifdef EXT_OM_ENABLE
+        `ifdef VX_CFG_EXT_OM_ENABLE
             .om_bus_if      (per_core_om_bus_if[core_id]),
         `endif
 
-        `ifdef EXT_RASTER_ENABLE
+        `ifdef VX_CFG_EXT_RASTER_ENABLE
             .raster_bus_if  (per_core_raster_bus_if[core_id]),
         `endif
 
@@ -455,7 +455,7 @@ module VX_socket import VX_gpu_pkg::*;
     end
 
     wire busy_r;
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy), 1'b1, 1, (`SOCKET_SIZE > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy), 1'b1, 1, (SOCKET_SIZE > 1));
     assign busy = busy_r | dcr_bus_if.req_valid;
 
 endmodule

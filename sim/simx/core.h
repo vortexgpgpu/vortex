@@ -50,7 +50,7 @@ public:
     uint64_t fpu_stalls = 0;
     uint64_t lsu_stalls = 0;
     uint64_t sfu_stalls = 0;
-  #ifdef EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_TCU_ENABLE
     uint64_t tcu_stalls = 0;
   #endif
     uint64_t branches   = 0;
@@ -59,7 +59,7 @@ public:
     uint64_t fpu_instrs = 0;
     uint64_t lsu_instrs = 0;
     uint64_t sfu_instrs = 0;
-  #ifdef EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_TCU_ENABLE
     uint64_t tcu_instrs = 0;
   #endif
     uint64_t ifetches = 0;
@@ -134,7 +134,7 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   // SATP write — invoked by CsrUnit on kernel `csrw satp`. Fans out to
   // both per-core MMUs (dcache + icache). Translation itself happens
   // asynchronously inside the Mmu SimObject; LSU/fetch emit VAs.
@@ -142,7 +142,7 @@ public:
 #endif
 
 
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
   std::shared_ptr<TcuUnit>& tcu_unit();
 #endif
 

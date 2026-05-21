@@ -119,7 +119,7 @@ DecompResult rvc_decompress(uint32_t word) {
             break;
         }
         case 0b011: {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
             // RV64C: C.LD -> LD rd', uimm(rs1')
             uint32_t rd_  = rcp(bits(h, 4, 2));
             uint32_t rs1_ = rcp(bits(h, 9, 7));
@@ -142,7 +142,7 @@ DecompResult rvc_decompress(uint32_t word) {
             break;
         }
         case 0b111: {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
             // RV64C: C.SD -> SD rs2', uimm(rs1')
             uint32_t rs2_ = rcp(bits(h, 4, 2));
             uint32_t rs1_ = rcp(bits(h, 9, 7));
@@ -176,7 +176,7 @@ DecompResult rvc_decompress(uint32_t word) {
             break;
         }
         case 0b001: {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
             // RV64C: C.ADDIW -> ADDIW rd, rd, imm (rd != 0)
             uint32_t rd = bits(h, 11, 7);
             int32_t imm = static_cast<int32_t>(sext_imm(((bit(h,12)<<5) | bits(h,6,2)), 6));
@@ -241,7 +241,7 @@ DecompResult rvc_decompress(uint32_t word) {
                         case 0b11: out.instr32 = ENCR(0b0000000, rs2_, rd_, 0b111, rd_, 0b0110011); break; // C.AND
                     }
                 } else {
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
                     switch (op2) {
                         case 0b00: out.instr32 = ENCR(0b0100000, rs2_, rd_, 0b000, rd_, 0b0111011); break; // C.SUBW
                         case 0b01: out.instr32 = ENCR(0b0000000, rs2_, rd_, 0b000, rd_, 0b0111011); break; // C.ADDW
@@ -313,7 +313,7 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCI(uimm, 2, 0b010, rd, 0b0000011);
             break;
         }
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
         case 0b011: { // RV64C: C.LDSP -> LD rd, uimm(x2), rd != 0
             uint32_t rd = bits(h, 11, 7);
             if (rd == 0) { out.illegal = true; break; }
@@ -365,7 +365,7 @@ DecompResult rvc_decompress(uint32_t word) {
             out.instr32 = ENCS(imm, rs2, 2, 0b010, 0b0100011);
             break;
         }
-#ifdef XLEN_64
+#ifdef VX_CFG_XLEN_64
         case 0b111: { // RV64C: C.SDSP -> SD rs2, uimm(x2)
             uint32_t rs2 = bits(h, 6, 2);
             uint32_t uimm = (bits(h, 12, 10) << 3) | (bits(h, 9, 7) << 6);
@@ -445,7 +445,7 @@ bool Decompressor::on_icache_rsp(instr_trace_t* trace, const mem_block_t& line) 
     // Extract the 4-byte word at the address we fetched. fetch_addr()
     // factors in whether this rsp is a refetch completion (high half of a
     // cross-word 32b) or a fresh fetch.
-    uint32_t line_offset = fetch_addr(trace) & (MEM_BLOCK_SIZE - 1);
+    uint32_t line_offset = fetch_addr(trace) & (VX_CFG_MEM_BLOCK_SIZE - 1);
     uint32_t word = 0;
     std::memcpy(&word, line.data() + line_offset, sizeof(uint32_t));
 

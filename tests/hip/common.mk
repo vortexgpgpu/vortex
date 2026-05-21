@@ -26,7 +26,7 @@ VX_CFLAGS  += --target=riscv$(XLEN)-unknown-elf
 VX_CFLAGS  += -O3 -mcmodel=medany --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 VX_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 VX_CFLAGS  += -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(VORTEX_HOME)/sw/kernel/include
-VX_CFLAGS  += -DXLEN_$(XLEN) -DNDEBUG -D__VORTEX__
+VX_CFLAGS  += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) -DNDEBUG -D__VORTEX__
 VX_CFLAGS  += -Xclang -target-feature -Xclang +xvortex
 VX_CFLAGS  += -Xclang -target-feature -Xclang +zicond
 VX_CFLAGS  += -mllvm -disable-loop-idiom-all

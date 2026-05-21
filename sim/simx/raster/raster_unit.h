@@ -29,7 +29,7 @@ class Core;
 struct RasterReq {
   uint64_t                                   uuid       = 0;
   uint32_t                                   tag        = 0;     // arbiter-routing tag
-  uint32_t                                   tmask_bits = 0;     // active lanes (NUM_THREADS lsbs)
+  uint32_t                                   tmask_bits = 0;     // active lanes (VX_CFG_NUM_THREADS lsbs)
   instr_trace_t*                             trace      = nullptr;
   uint32_t                                   block_id   = 0;
 
@@ -54,7 +54,7 @@ struct RasterStamp {
 struct RasterRsp {
   uint64_t                                   uuid     = 0;
   uint32_t                                   tag      = 0;
-  std::array<RasterStamp, NUM_THREADS>       stamps   = {};
+  std::array<RasterStamp, VX_CFG_NUM_THREADS>       stamps   = {};
   instr_trace_t*                             trace    = nullptr;
   uint32_t                                   block_id = 0;
 

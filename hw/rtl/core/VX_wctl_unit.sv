@@ -30,7 +30,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam LANE_BITS  = `CLOG2(NUM_LANES);
-    localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam PID_BITS   = `CLOG2(NUM_THREADS / NUM_LANES);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t);
 
     `UNUSED_VAR (execute_if.data.rs3_data)
@@ -67,8 +67,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         assign last_tid = 0;
     end
 
-    wire [`XLEN-1:0] rs1_data = execute_if.data.rs1_data[last_tid];
-    wire [`XLEN-1:0] rs2_data = execute_if.data.rs2_data[last_tid];
+    wire [XLEN-1:0] rs1_data = execute_if.data.rs1_data[last_tid];
+    wire [XLEN-1:0] rs2_data = execute_if.data.rs2_data[last_tid];
     `UNUSED_VAR (rs1_data)
 
     wire not_pred = execute_if.data.op_args.wctl.is_cond_neg;
@@ -78,13 +78,13 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         assign taken[i] = (execute_if.data.rs1_data[i][0] ^ not_pred);
     end
 
-    logic [`NUM_THREADS-1:0] then_tmask;
-    logic [`NUM_THREADS-1:0] else_tmask;
+    logic [NUM_THREADS-1:0] then_tmask;
+    logic [NUM_THREADS-1:0] else_tmask;
 
     if (PID_BITS != 0) begin : g_pid
-        reg [`NUM_WARPS-1:0][2*`NUM_THREADS-1:0] tmask_table;
+        reg [NUM_WARPS-1:0][2*NUM_THREADS-1:0] tmask_table;
 
-        wire [2*`NUM_THREADS-1:0] tmask_r = tmask_table[execute_if.data.header.wid];
+        wire [2*NUM_THREADS-1:0] tmask_r = tmask_table[execute_if.data.header.wid];
 
         always @(*) begin
             {else_tmask, then_tmask} = execute_if.data.header.sop ? '0 : tmask_r;
@@ -107,24 +107,24 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // tmc / pred
 
-    wire [`NUM_THREADS-1:0] pred_mask = has_then ? then_tmask : rs2_data[`NUM_THREADS-1:0];
+    wire [NUM_THREADS-1:0] pred_mask = has_then ? then_tmask : rs2_data[NUM_THREADS-1:0];
     assign tmc_valid = wctl_valid && (is_tmc || is_pred);
-    assign tmc.tmask = is_pred ? pred_mask : rs1_data[`NUM_THREADS-1:0];
+    assign tmc.tmask = is_pred ? pred_mask : rs1_data[NUM_THREADS-1:0];
 
     // split
 
-    wire [`CLOG2(`NUM_THREADS+1)-1:0] then_tmask_cnt, else_tmask_cnt;
+    wire [`CLOG2(NUM_THREADS+1)-1:0] then_tmask_cnt, else_tmask_cnt;
     `POP_COUNT(then_tmask_cnt, then_tmask);
     `POP_COUNT(else_tmask_cnt, else_tmask);
     wire then_first = (then_tmask_cnt <= else_tmask_cnt);
-    wire [`NUM_THREADS-1:0] taken_tmask = then_first ? then_tmask : else_tmask;
-    wire [`NUM_THREADS-1:0] ntaken_tmask = then_first ? else_tmask : then_tmask;
+    wire [NUM_THREADS-1:0] taken_tmask = then_first ? then_tmask : else_tmask;
+    wire [NUM_THREADS-1:0] ntaken_tmask = then_first ? else_tmask : then_tmask;
 
     assign split_valid      = wctl_valid && is_split;
     assign split.is_dvg     = has_then && has_else;
     assign split.then_tmask = taken_tmask;
     assign split.else_tmask = ntaken_tmask;
-    assign split.next_pc    = execute_if.data.header.PC + from_fullPC(`XLEN'(4));
+    assign split.next_pc    = execute_if.data.header.PC + from_fullPC(XLEN'(4));
 
     // join
 
@@ -163,8 +163,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // wspawn
 
-    wire [`NUM_WARPS-1:0] wspawn_wmask;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_wspawn_wmask
+    wire [NUM_WARPS-1:0] wspawn_wmask;
+    for (genvar i = 0; i < NUM_WARPS; ++i) begin : g_wspawn_wmask
         assign wspawn_wmask[i] = (i < rs1_data[NW_BITS:0]) && (i != execute_if.data.header.wid);
     end
     assign wspawn_valid = wctl_valid && is_wspawn;
@@ -250,7 +250,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // Result data
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result_if
-        assign result_if.data.data[i] = bar_rsp_valid_r ? `XLEN'(bar_phase_r) : `XLEN'(dvstack_ptr_r);
+        assign result_if.data.data[i] = bar_rsp_valid_r ? XLEN'(bar_phase_r) : XLEN'(dvstack_ptr_r);
     end
 
 endmodule

@@ -25,7 +25,7 @@
 module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
-    parameter NUM_LANES = `NUM_THREADS
+    parameter NUM_LANES = NUM_THREADS
 ) (
     input wire clk,
     input wire reset,
@@ -39,7 +39,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
-    localparam REQ_QUEUE_BITS = `LOG2UP(`TEX_REQ_QUEUE_SIZE);
+    localparam REQ_QUEUE_BITS = `LOG2UP(TEX_REQ_QUEUE_SIZE);
 
     // Stash header bits in a tag-indexed buffer so they round-trip with
     // the texture response.
@@ -52,7 +52,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     typedef struct packed {
         logic [NW_WIDTH-1:0]                                           wid;
         logic [NUM_LANES-1:0]                                          tmask;
-        logic [`LOG2UP(`NUM_THREADS / NUM_LANES)-1:0]                  pid;
+        logic [`LOG2UP(NUM_THREADS / NUM_LANES)-1:0]                  pid;
         logic                                                          sop;
         logic                                                          eop;
         logic [PC_BITS-1:0]                                            PC;
@@ -90,7 +90,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 
     VX_index_buffer #(
         .DATAW ($bits(header_echo_t)),
-        .SIZE  (`TEX_REQ_QUEUE_SIZE)
+        .SIZE  (TEX_REQ_QUEUE_SIZE)
     ) tag_store (
         .clk          (clk),
         .reset        (reset),
@@ -148,7 +148,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     assign rsp_data_in.header.rd       = out_echo.rd;
     assign rsp_data_in.header.bytesel  = out_echo.bytesel;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rsp_data
-        assign rsp_data_in.data[i] = `XLEN'(rsp_texels[i]);
+        assign rsp_data_in.data[i] = XLEN'(rsp_texels[i]);
     end
 
     VX_elastic_buffer #(

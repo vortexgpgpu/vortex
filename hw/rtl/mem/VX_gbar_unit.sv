@@ -23,10 +23,10 @@ module VX_gbar_unit import VX_gpu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    reg [`NUM_BARRIERS-1:0][`NUM_CORES-1:0] barrier_masks;
-    wire [`CLOG2(`NUM_CORES+1)-1:0] active_barrier_count;
+    reg [NUM_BARRIERS-1:0][NUM_CORES-1:0] barrier_masks;
+    wire [`CLOG2(NUM_CORES+1)-1:0] active_barrier_count;
     wire [NB_WIDTH-1:0] req_id = gbar_bus_if.req_data.id;
-    wire [`NUM_CORES-1:0] curr_barrier_mask = barrier_masks[req_id];
+    wire [NUM_CORES-1:0] curr_barrier_mask = barrier_masks[req_id];
 
     `POP_COUNT(active_barrier_count, curr_barrier_mask);
     `UNUSED_VAR (active_barrier_count)

@@ -24,13 +24,13 @@ CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/src
-CXXFLAGS += -DXLEN_$(XLEN)
+CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DXLEN_$(XLEN)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)')
 
 # Source files definition
 SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SIM_COMMON_DIR)/dram_sim.cpp $(SIM_COMMON_DIR)/cmd_processor.cpp $(SIM_COMMON_DIR)/elf_loader.cpp $(SIM_COMMON_DIR)/host_monitor.cpp
@@ -43,13 +43,13 @@ SRCS += $(SRC_DIR)/mem/local_mem_switch.cpp $(SRC_DIR)/mem/lsu_mem_adapter.cpp
 SRCS += $(SRC_DIR)/dtm/debug_module.cpp $(SRC_DIR)/dtm/jtag_dtm.cpp $(SRC_DIR)/dtm/remote_bitbang.cpp
 
 # Add A extension sources
-ifneq ($(filter -DEXT_A_ENABLE, $(XCONFIGS)),)
+ifneq ($(filter -DVX_CFG_EXT_A_ENABLE, $(XCONFIGS)),)
 	CXXFLAGS += -I$(SRC_DIR)/amo
 	SRCS += $(SRC_DIR)/amo/amo_unit.cpp
 endif
 
 # Add V extension sources
-ifneq ($(filter -DEXT_V_ENABLE, $(XCONFIGS)),)
+ifneq ($(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)),)
 	CXXFLAGS += -I$(SRC_DIR)/vpu
 	SRCS += $(SRC_DIR)/vpu/voperands.cpp
 	SRCS += $(SRC_DIR)/vpu/vopc_unit.cpp
@@ -58,44 +58,44 @@ else
 	SRCS += $(SRC_DIR)/operands.cpp
 endif
 # Add TCU extension sources
-ifneq ($(filter -DEXT_TCU_ENABLE, $(XCONFIGS)),)
+ifneq ($(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)),)
 	CXXFLAGS += -I$(SRC_DIR)/tcu
 	SRCS += $(SRC_DIR)/tcu/tcu_unit.cpp
 	SRCS += $(SRC_DIR)/tcu/tcu_tbuf.cpp
 endif
 
 # Add VM sources
-ifneq ($(filter -DVM_ENABLE, $(XCONFIGS)),)
+ifneq ($(filter -DVX_CFG_VM_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/mem/mmu.cpp
 	SRCS += $(SRC_DIR)/mem/mmu_tlb.cpp
 endif
 
 # Add DXA extension sources
-ifneq ($(filter -DEXT_DXA_ENABLE, $(XCONFIGS)),)
+ifneq ($(filter -DVX_CFG_EXT_DXA_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/dxa/dxa_core.cpp
 	SRCS += $(SRC_DIR)/dxa/dxa_unit.cpp
 endif
 
 # Graphics SW helpers (TextureSampler / DepthTencil / Blender / Rasterizer).
 # Added once if any of TEX/OM/RASTER is enabled.
-ifneq ($(or $(filter -DEXT_TEX_ENABLE, $(XCONFIGS)),$(filter -DEXT_OM_ENABLE, $(XCONFIGS)),$(filter -DEXT_RASTER_ENABLE, $(XCONFIGS))),)
+ifneq ($(or $(filter -DVX_CFG_EXT_TEX_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)),$(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS))),)
 	SRCS += $(SW_COMMON_DIR)/graphics.cpp
 endif
 
 # Add TEX extension sources (functional cluster-shared TexCore + per-core TexUnit)
-ifneq ($(filter -DEXT_TEX_ENABLE, $(XCONFIGS)),)
+ifneq ($(filter -DVX_CFG_EXT_TEX_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/tex/tex_core.cpp
 	SRCS += $(SRC_DIR)/tex/tex_unit.cpp
 endif
 
 # Add OM extension sources
-ifneq ($(filter -DEXT_OM_ENABLE, $(XCONFIGS)),)
+ifneq ($(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/om/om_core.cpp
 	SRCS += $(SRC_DIR)/om/om_unit.cpp
 endif
 
 # Add RASTER extension sources
-ifneq ($(filter -DEXT_RASTER_ENABLE, $(XCONFIGS)),)
+ifneq ($(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/raster/raster_core.cpp
 	SRCS += $(SRC_DIR)/raster/raster_unit.cpp
 endif
@@ -119,7 +119,7 @@ VORTEX_GEM5_SRCS := $(SRC_DIR)/gem5/vortex_gpgpu.cpp $(SRC_DIR)/gem5/dev_mem.cpp
 
 # Debugging
 ifdef DEBUG
-	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
+	CXXFLAGS += -g -O0 -DVX_DBG_DEBUG_LEVEL=$(DEBUG)
 else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
@@ -195,7 +195,7 @@ $(VORTEX_SST_OBJS): $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(CONFIG_FILE)
 # build main object file
 $(MAIN_OBJ): $(SRC_DIR)/main.cpp $(CONFIG_FILE)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -DSTARTUP_ADDR=0x80000000 -c $< -o $@
+	$(CXX) $(CXXFLAGS) -DVX_CFG_STARTUP_ADDR=0x80000000 -c $< -o $@
 
 # Main executable
 $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)

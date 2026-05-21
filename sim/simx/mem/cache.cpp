@@ -15,7 +15,7 @@
 #include "mem_block_pool.h"
 #include "debug.h"
 #include "types.h"
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
 #include "amo_unit.h"
 #endif
 #include <cstring>
@@ -136,7 +136,7 @@ static inline void line_merge(line_t& line, const std::shared_ptr<mem_block_t>& 
     std::memset(line.data->data(), 0, line.data->size());
   }
   if (src) {
-    for (uint32_t b = 0; b < MEM_BLOCK_SIZE; ++b) {
+    for (uint32_t b = 0; b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
       if (byteen & (1ull << b)) {
         (*line.data)[b] = (*src)[b];
       }
@@ -486,8 +486,8 @@ public:
             const params_t &params,
             uint32_t bank_id)
       : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, params.lines_per_set), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency)), rand_ctr_(0)
-#if EXT_A_ENABLED
-      , amo_unit_(__MAX(2u, (uint32_t)AMO_RS_SIZE))
+#if VX_CFG_EXT_A_ENABLED
+      , amo_unit_(__MAX(2u, (uint32_t)VX_CFG_AMO_RS_SIZE))
 #endif
   {
     this->on_reset();
@@ -533,7 +533,7 @@ protected:
     flushing_ = false;
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
     amo_unit_.reset();
     for (auto &e : amo_passthru_) {
       e = amo_passthru_entry_t{};
@@ -587,7 +587,7 @@ private:
     // 2) fill only when no replay is pending
     if (!this->mem_rsp_in.empty()) {
       auto &mem_rsp = this->mem_rsp_in.peek();
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
       // Non-LLC AMO passthrough response: forward straight to core
       // without filling. The original tag was rewritten to
       // (mshr_capacity + pid) when the bank emitted the request from
@@ -638,7 +638,7 @@ private:
       // a load (proposal §3.7), at non-LLC they don't fill so no MSHR
       // slot is needed but a passthru side-table slot is.
       const bool is_amo = memop_is_amo(core_req.op);
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
       const bool is_amo_passthru = is_amo && !config_.is_llc;
       if (is_amo_passthru) {
         // Need a free passthru-table slot before accepting.
@@ -696,7 +696,7 @@ private:
     }
   }
 
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
   // AMO commit at the LLC bank. Returns false if the cycle stalls
   // (caller leaves bank_req at the head of pipe_req_); returns true
   // when the commit completes and the caller should pop pipe_req_.
@@ -705,7 +705,7 @@ private:
   bool commitAmo(const bank_req_t &bank_req, set_t &set, int hit_id, uint32_t set_id) {
     auto &hit_line = set.lines.at(hit_id);
     const uint64_t line_addr = (bank_req.addr >> config_.L) << config_.L;
-    const uint32_t byte_off  = (uint32_t)(bank_req.addr & (MEM_BLOCK_SIZE - 1));
+    const uint32_t byte_off  = (uint32_t)(bank_req.addr & (VX_CFG_MEM_BLOCK_SIZE - 1));
     const MemOp    op        = bank_req.op;
     // Width derived from byteen popcount (RVA mandates natural alignment, so
     // byteen is contiguous: popcount==8 ⇒ .D, popcount==4 ⇒ .W). Mirrors the
@@ -805,7 +805,7 @@ private:
       pipe_req_->pop();
       return;
 
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
     case bank_req_t::AmoProbe: {
       // Non-LLC AMO passthrough (proposal §3.8). Probe the local line
       // first so any cached copy doesn't shadow the LLC's view: dirty
@@ -849,7 +849,7 @@ private:
         wb.hart_id    = bank_req.hart_id;
         wb.uuid   = bank_req.uuid;
         wb.data   = line.data;
-        wb.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);
+        wb.byteen = ~uint64_t(0) >> (64 - VX_CFG_MEM_BLOCK_SIZE);
         this->mem_req_out.send(wb);
         DT(3, this->name() << " amo-probe-wb: " << wb);
         ++perf_stats_.evictions;
@@ -912,7 +912,7 @@ private:
         wb.hart_id    = bank_req.hart_id;
         wb.uuid   = bank_req.uuid;
         wb.data   = victim_line.data;
-        wb.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);
+        wb.byteen = ~uint64_t(0) >> (64 - VX_CFG_MEM_BLOCK_SIZE);
         this->mem_req_out.send(wb);
         DT(3, this->name() << " writeback: " << wb);
         ++perf_stats_.evictions;
@@ -936,7 +936,7 @@ private:
       int hit_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_id, &repl_id);
       assert(hit_id != -1 && "replay miss");
 
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
       if (memop_is_atomic(bank_req.op)) {
         assert(config_.is_llc && "AMO replay reached non-LLC bank");
         if (!this->commitAmo(bank_req, set, hit_id, set_id))
@@ -962,7 +962,7 @@ private:
         line_merge(hit_line, bank_req.data, bank_req.byteen);
         if (config_.write_back)
           hit_line.dirty = true;
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
         // Write-back write-miss replay: this is a store from above
         // (always WT above the LLC, per §3.1.5) reaching the LLC tag
         // array → break other harts' reservations on the line.
@@ -998,7 +998,7 @@ private:
       int hit_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_id, &repl_id);
 
       if (hit_id != -1) {
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
         if (memop_is_atomic(bank_req.op)) {
           assert(config_.is_llc && "AMO Core+hit reached non-LLC bank");
           if (!this->commitAmo(bank_req, set, hit_id, set_id))
@@ -1033,7 +1033,7 @@ private:
             w.byteen = bank_req.byteen;
             this->mem_req_out.send(w);
             DT(3, this->name() << " writethrough: " << w);
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
             // Writethrough commit reaches the LLC tag array → break
             // other harts' reservations (proposal §3.9).
             if (config_.is_llc) {
@@ -1042,7 +1042,7 @@ private:
             }
 #endif
           }
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
           // Write-back write-hit: also visible to LLC tag array since
           // we mutated this LLC line. Break other harts' reservations.
           if (config_.is_llc && config_.write_back) {
@@ -1090,7 +1090,7 @@ private:
           this->mem_req_out.send(w);
           DT(3, this->name() << " writethrough: " << w);
 
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
           // Writethrough write-miss is still a "store from above" reaching
           // the LLC bank → break other harts' reservations (proposal §3.9).
           if (config_.is_llc) {
@@ -1169,7 +1169,7 @@ private:
           mem_req.addr = params_.mem_addr(bank_id_, flush_set_idx_, line.tag);
           mem_req.op   = MemOp::ST;
           mem_req.data = line.data;
-          mem_req.byteen = ~uint64_t(0) >> (64 - MEM_BLOCK_SIZE);
+          mem_req.byteen = ~uint64_t(0) >> (64 - VX_CFG_MEM_BLOCK_SIZE);
           this->mem_req_out.send(mem_req);
           DT(3, this->name() << " flush-wb: " << mem_req);
           ++perf_stats_.evictions;
@@ -1205,7 +1205,7 @@ private:
   uint32_t flush_set_idx_;
   uint32_t flush_way_idx_;
 
-#if EXT_A_ENABLED
+#if VX_CFG_EXT_A_ENABLED
   AmoUnit  amo_unit_;
 
   // Non-LLC AMO passthrough table. When config_.is_llc==false, AMOs

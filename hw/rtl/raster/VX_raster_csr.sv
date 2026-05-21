@@ -20,7 +20,7 @@
 module VX_raster_csr import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     parameter CORE_ID   = 0,
     parameter NUM_LANES = 1,
-    parameter PID_WIDTH = `LOG2UP(`NUM_THREADS / NUM_LANES)
+    parameter PID_WIDTH = `LOG2UP(NUM_THREADS / NUM_LANES)
 ) (
     input wire clk,
     input wire reset,
@@ -38,17 +38,17 @@ module VX_raster_csr import VX_gpu_pkg::*, VX_raster_pkg::*; #(
 );
     `UNUSED_PARAM (CORE_ID)
 
-    raster_csrs_t [`NUM_THREADS-1:0] wdata;
-    raster_csrs_t [`NUM_THREADS-1:0] rdata;
-    reg [`NUM_THREADS-1:0]           write;
+    raster_csrs_t [NUM_THREADS-1:0] wdata;
+    raster_csrs_t [NUM_THREADS-1:0] rdata;
+    reg [NUM_THREADS-1:0]           write;
     reg [NW_WIDTH-1:0]              waddr;
     wire [NW_WIDTH-1:0]             raddr;
 
     // Per-(wid, slot) storage: NUM_THREADS slots per warp (one per lane × pid).
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin : g_stamp_store
+    for (genvar i = 0; i < NUM_THREADS; ++i) begin : g_stamp_store
         VX_dp_ram #(
             .DATAW  ($bits(raster_csrs_t)),
-            .SIZE   (`NUM_WARPS),
+            .SIZE   (NUM_WARPS),
             .LUTRAM (1)
         ) stamp_store (
             .clk   (clk),
@@ -87,23 +87,23 @@ module VX_raster_csr import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         raster_csrs_t lane_csrs;
         assign lane_csrs = rdata[rd_pid * NUM_LANES + i];
 
-        reg [`XLEN-1:0] selected;
+        reg [XLEN-1:0] selected;
         always @(*) begin
             case (raster_csr_if.read_addr)
-                `VX_CSR_RASTER_POS_MASK:  selected = `XLEN'(lane_csrs.pos_mask);
-                `VX_CSR_RASTER_PID:       selected = `XLEN'(lane_csrs.pid);
-                `VX_CSR_RASTER_BCOORD_X0: selected = `XLEN'(lane_csrs.bcoords[0][0]);
-                `VX_CSR_RASTER_BCOORD_X1: selected = `XLEN'(lane_csrs.bcoords[0][1]);
-                `VX_CSR_RASTER_BCOORD_X2: selected = `XLEN'(lane_csrs.bcoords[0][2]);
-                `VX_CSR_RASTER_BCOORD_X3: selected = `XLEN'(lane_csrs.bcoords[0][3]);
-                `VX_CSR_RASTER_BCOORD_Y0: selected = `XLEN'(lane_csrs.bcoords[1][0]);
-                `VX_CSR_RASTER_BCOORD_Y1: selected = `XLEN'(lane_csrs.bcoords[1][1]);
-                `VX_CSR_RASTER_BCOORD_Y2: selected = `XLEN'(lane_csrs.bcoords[1][2]);
-                `VX_CSR_RASTER_BCOORD_Y3: selected = `XLEN'(lane_csrs.bcoords[1][3]);
-                `VX_CSR_RASTER_BCOORD_Z0: selected = `XLEN'(lane_csrs.bcoords[2][0]);
-                `VX_CSR_RASTER_BCOORD_Z1: selected = `XLEN'(lane_csrs.bcoords[2][1]);
-                `VX_CSR_RASTER_BCOORD_Z2: selected = `XLEN'(lane_csrs.bcoords[2][2]);
-                `VX_CSR_RASTER_BCOORD_Z3: selected = `XLEN'(lane_csrs.bcoords[2][3]);
+                `VX_CSR_RASTER_POS_MASK:  selected = XLEN'(lane_csrs.pos_mask);
+                `VX_CSR_RASTER_PID:       selected = XLEN'(lane_csrs.pid);
+                `VX_CSR_RASTER_BCOORD_X0: selected = XLEN'(lane_csrs.bcoords[0][0]);
+                `VX_CSR_RASTER_BCOORD_X1: selected = XLEN'(lane_csrs.bcoords[0][1]);
+                `VX_CSR_RASTER_BCOORD_X2: selected = XLEN'(lane_csrs.bcoords[0][2]);
+                `VX_CSR_RASTER_BCOORD_X3: selected = XLEN'(lane_csrs.bcoords[0][3]);
+                `VX_CSR_RASTER_BCOORD_Y0: selected = XLEN'(lane_csrs.bcoords[1][0]);
+                `VX_CSR_RASTER_BCOORD_Y1: selected = XLEN'(lane_csrs.bcoords[1][1]);
+                `VX_CSR_RASTER_BCOORD_Y2: selected = XLEN'(lane_csrs.bcoords[1][2]);
+                `VX_CSR_RASTER_BCOORD_Y3: selected = XLEN'(lane_csrs.bcoords[1][3]);
+                `VX_CSR_RASTER_BCOORD_Z0: selected = XLEN'(lane_csrs.bcoords[2][0]);
+                `VX_CSR_RASTER_BCOORD_Z1: selected = XLEN'(lane_csrs.bcoords[2][1]);
+                `VX_CSR_RASTER_BCOORD_Z2: selected = XLEN'(lane_csrs.bcoords[2][2]);
+                `VX_CSR_RASTER_BCOORD_Z3: selected = XLEN'(lane_csrs.bcoords[2][3]);
                 default:                  selected = '0;
             endcase
         end

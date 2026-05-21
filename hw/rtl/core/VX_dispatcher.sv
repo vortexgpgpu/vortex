@@ -80,7 +80,7 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
         end
     end
 
-    logic [`SIMD_WIDTH-1:0][`XLEN-1:0] eff_rs1_data;
+    logic [SIMD_WIDTH-1:0][XLEN-1:0] eff_rs1_data;
     op_args_t eff_op_args;
 
     // Pack-load: compute eff_rs1[lane] = rs1[lane] + rs2[lane] * uop_idx
@@ -89,10 +89,10 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
     wire is_pack_lsu = (operands_if.data.op_args.lsu.pack != 2'b00);
     wire [1:0] pld_uop_idx = operands_if.data.op_args.lsu.offset[1:0];
 
-    for (genvar j = 0; j < `SIMD_WIDTH; ++j) begin : g_eff_rs1
-        wire [`XLEN-1:0] stride_off =
-            ({`XLEN{pld_uop_idx[0]}} & (operands_if.data.rs2_data[j] << 0))
-          + ({`XLEN{pld_uop_idx[1]}} & (operands_if.data.rs2_data[j] << 1));
+    for (genvar j = 0; j < SIMD_WIDTH; ++j) begin : g_eff_rs1
+        wire [XLEN-1:0] stride_off =
+            ({XLEN{pld_uop_idx[0]}} & (operands_if.data.rs2_data[j] << 0))
+          + ({XLEN{pld_uop_idx[1]}} & (operands_if.data.rs2_data[j] << 1));
         assign eff_rs1_data[j] = is_pack_lsu
             ? (operands_if.data.rs1_data[j] + stride_off)
             :  operands_if.data.rs1_data[j];
@@ -170,11 +170,11 @@ module VX_dispatcher import VX_gpu_pkg::*; #(
                 `TRACE(1, (", op="))
                 VX_trace_pkg::trace_ex_op(1, ex, dispatch_if[ex].data.op_type, dispatch_if[ex].data.op_args);
                 `TRACE(1, (", tmask=%b, wb=%b, wr_xregs=%b, rd=%0d, rs1_data=", dispatch_if[ex].data.tmask, dispatch_if[ex].data.wb, dispatch_if[ex].data.wr_xregs, dispatch_if[ex].data.rd))
-                `TRACE_ARRAY1D(1, "0x%0h", dispatch_if[ex].data.rs1_data, `SIMD_WIDTH)
+                `TRACE_ARRAY1D(1, "0x%0h", dispatch_if[ex].data.rs1_data, SIMD_WIDTH)
                 `TRACE(1, (", rs2_data="))
-                `TRACE_ARRAY1D(1, "0x%0h", dispatch_if[ex].data.rs2_data, `SIMD_WIDTH)
+                `TRACE_ARRAY1D(1, "0x%0h", dispatch_if[ex].data.rs2_data, SIMD_WIDTH)
                 `TRACE(1, (", rs3_data="))
-                `TRACE_ARRAY1D(1, "0x%0h", dispatch_if[ex].data.rs3_data, `SIMD_WIDTH)
+                `TRACE_ARRAY1D(1, "0x%0h", dispatch_if[ex].data.rs3_data, SIMD_WIDTH)
             VX_trace_pkg::trace_op_args(1, ex, dispatch_if[ex].data.op_type, dispatch_if[ex].data.op_args);
                 `TRACE(1, (", sop=%b, eop=%b (#%0d)\n", dispatch_if[ex].data.sop, dispatch_if[ex].data.eop, dispatch_if[ex].data.uuid))
             end

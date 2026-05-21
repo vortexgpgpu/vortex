@@ -23,7 +23,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     input wire                              decode_valid,
     input wire [UUID_WIDTH-1:0]             decode_uuid,
     input wire [NW_WIDTH-1:0]               decode_wid,
-    input wire [`NUM_THREADS-1:0]           decode_tmask,
+    input wire [`VX_CFG_NUM_THREADS-1:0]           decode_tmask,
     input wire [PC_BITS-1:0]                decode_PC,
     input wire [EX_BITS-1:0]                decode_ex_type,
     input wire [INST_OP_BITS-1:0]           decode_op_type,
@@ -37,43 +37,43 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     input wire [NUM_REGS_BITS-1:0]          decode_rs3,
     output wire                             decode_ready,
 
-    input wire                              writeback_valid[`ISSUE_WIDTH],
-    input wire [UUID_WIDTH-1:0]             writeback_uuid[`ISSUE_WIDTH],
-    input wire [ISSUE_WIS_W-1:0]            writeback_wis[`ISSUE_WIDTH],
-    input wire [SIMD_IDX_W-1:0]             writeback_sid[`ISSUE_WIDTH],
-    input wire [`SIMD_WIDTH-1:0]            writeback_tmask[`ISSUE_WIDTH],
-    input wire [PC_BITS-1:0]                writeback_PC[`ISSUE_WIDTH],
-    input wire [NUM_REGS_BITS-1:0]          writeback_rd[`ISSUE_WIDTH],
-    input wire                              writeback_wb[`ISSUE_WIDTH],
-    input wire [NUM_XREGS-1:0]              writeback_wr_xregs[`ISSUE_WIDTH],
-    input wire [`SIMD_WIDTH-1:0][XLENB-1:0] writeback_byteen[`ISSUE_WIDTH],
-    input wire [`SIMD_WIDTH-1:0][`XLEN-1:0] writeback_data[`ISSUE_WIDTH],
-    input wire                              writeback_sop[`ISSUE_WIDTH],
-    input wire                              writeback_eop[`ISSUE_WIDTH],
+    input wire                              writeback_valid[`VX_CFG_ISSUE_WIDTH],
+    input wire [UUID_WIDTH-1:0]             writeback_uuid[`VX_CFG_ISSUE_WIDTH],
+    input wire [ISSUE_WIS_W-1:0]            writeback_wis[`VX_CFG_ISSUE_WIDTH],
+    input wire [SIMD_IDX_W-1:0]             writeback_sid[`VX_CFG_ISSUE_WIDTH],
+    input wire [`VX_CFG_SIMD_WIDTH-1:0]            writeback_tmask[`VX_CFG_ISSUE_WIDTH],
+    input wire [PC_BITS-1:0]                writeback_PC[`VX_CFG_ISSUE_WIDTH],
+    input wire [NUM_REGS_BITS-1:0]          writeback_rd[`VX_CFG_ISSUE_WIDTH],
+    input wire                              writeback_wb[`VX_CFG_ISSUE_WIDTH],
+    input wire [NUM_XREGS-1:0]              writeback_wr_xregs[`VX_CFG_ISSUE_WIDTH],
+    input wire [`VX_CFG_SIMD_WIDTH-1:0][XLENB-1:0] writeback_byteen[`VX_CFG_ISSUE_WIDTH],
+    input wire [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] writeback_data[`VX_CFG_ISSUE_WIDTH],
+    input wire                              writeback_sop[`VX_CFG_ISSUE_WIDTH],
+    input wire                              writeback_eop[`VX_CFG_ISSUE_WIDTH],
 
-    output wire                             dispatch_valid[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [UUID_WIDTH-1:0]            dispatch_uuid[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [ISSUE_WIS_W-1:0]           dispatch_wis[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [SIMD_IDX_W-1:0]            dispatch_sid[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [`SIMD_WIDTH-1:0]           dispatch_tmask[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [PC_BITS-1:0]               dispatch_PC[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [INST_OP_BITS-1:0]          dispatch_op_type[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output op_args_t                        dispatch_op_args[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire                             dispatch_wb[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [NUM_REGS_BITS-1:0]         dispatch_rd[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [`SIMD_WIDTH-1:0][`XLEN-1:0] dispatch_rs1_data[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [`SIMD_WIDTH-1:0][`XLEN-1:0] dispatch_rs2_data[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire [`SIMD_WIDTH-1:0][`XLEN-1:0] dispatch_rs3_data[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire                             dispatch_sop[NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire                             dispatch_eop[NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire                              dispatch_ready[NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire                             dispatch_valid[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [UUID_WIDTH-1:0]            dispatch_uuid[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [ISSUE_WIS_W-1:0]           dispatch_wis[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [SIMD_IDX_W-1:0]            dispatch_sid[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [`VX_CFG_SIMD_WIDTH-1:0]           dispatch_tmask[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [PC_BITS-1:0]               dispatch_PC[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [INST_OP_BITS-1:0]          dispatch_op_type[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output op_args_t                        dispatch_op_args[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire                             dispatch_wb[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [NUM_REGS_BITS-1:0]         dispatch_rd[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] dispatch_rs1_data[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] dispatch_rs2_data[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] dispatch_rs3_data[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire                             dispatch_sop[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    output wire                             dispatch_eop[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
+    input wire                              dispatch_ready[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
 
     output wire [ISSUE_ISW_SIZEW-1:0]       issued_warps_cnt
 );
     VX_decode_if    decode_if();
-    VX_dispatch_if  dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
-    VX_writeback_if writeback_if[`ISSUE_WIDTH]();
-    VX_issue_sched_if issue_sched_if[`ISSUE_WIDTH]();
+    VX_dispatch_if  dispatch_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
+    VX_writeback_if writeback_if[`VX_CFG_ISSUE_WIDTH]();
+    VX_issue_sched_if issue_sched_if[`VX_CFG_ISSUE_WIDTH]();
 
     assign decode_if.valid = decode_valid;
     assign decode_if.data.uuid = decode_uuid;
@@ -92,7 +92,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     assign decode_if.data.rs3 = decode_rs3;
     assign decode_ready = decode_if.ready;
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_writeback_if
+    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_writeback_if
         assign writeback_if[i].valid = writeback_valid[i];
         assign writeback_if[i].data.uuid = writeback_uuid[i];
         assign writeback_if[i].data.wis = writeback_wis[i];
@@ -108,7 +108,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.eop = writeback_eop[i];
     end
 
-    for (genvar i = 0; i < NUM_EX_UNITS * `ISSUE_WIDTH; ++i) begin : g_dispatch_if
+    for (genvar i = 0; i < NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH; ++i) begin : g_dispatch_if
         assign dispatch_valid[i] = dispatch_if[i].valid;
         assign dispatch_uuid[i] = dispatch_if[i].data.uuid;
         assign dispatch_wis[i] = dispatch_if[i].data.wis;
@@ -127,8 +127,8 @@ module VX_issue_top import VX_gpu_pkg::*; #(
         assign dispatch_if[i].ready = dispatch_ready[i];
     end
 
-    logic [`ISSUE_WIDTH-1:0] issued_valids;
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_issued_valids
+    logic [`VX_CFG_ISSUE_WIDTH-1:0] issued_valids;
+    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_issued_valids
         assign issued_valids[i] = issue_sched_if[i].valid;
         `UNUSED_VAR (issue_sched_if[i].wis)
     end

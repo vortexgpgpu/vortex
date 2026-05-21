@@ -489,7 +489,7 @@ inline typename T::dtype generate_B_value() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using cfg = vt::wmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
@@ -524,11 +524,11 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
   constexpr uint32_t mcols = cfg::meta_cols;
   constexpr uint32_t half_k_steps = cfg::k_steps / 2;
   constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-  constexpr uint32_t cols_per_load = (NUM_THREADS >= PD) ? (NUM_THREADS / PD) : 1;
-  constexpr uint32_t banks_per_store = (NUM_THREADS < PD) ? NUM_THREADS : PD;
-  constexpr uint32_t stores_per_col = (PD + NUM_THREADS - 1) / NUM_THREADS;
-  constexpr uint32_t num_meta_loads = (PD * mcols + NUM_THREADS - 1) / NUM_THREADS;
-  constexpr uint32_t per_k_tile_words = num_meta_loads * NUM_THREADS;
+  constexpr uint32_t cols_per_load = (VX_CFG_NUM_THREADS >= PD) ? (VX_CFG_NUM_THREADS / PD) : 1;
+  constexpr uint32_t banks_per_store = (VX_CFG_NUM_THREADS < PD) ? VX_CFG_NUM_THREADS : PD;
+  constexpr uint32_t stores_per_col = (PD + VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_THREADS;
+  constexpr uint32_t num_meta_loads = (PD * mcols + VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_THREADS;
+  constexpr uint32_t per_k_tile_words = num_meta_loads * VX_CFG_NUM_THREADS;
 
   uint32_t subbytes = (vt::ITYPE::bits < 8) ? (8 / vt::ITYPE::bits) : 0;
   uint32_t tileK_elem = subbytes ? (cfg::tileK * subbytes) : cfg::tileK;
@@ -580,7 +580,7 @@ static void pack_metadata(std::vector<uint32_t> &h_meta,
                   uint32_t flat_store = word_idx * stores_per_col + store_in_col;
                   uint32_t load_idx = flat_store / cols_per_load;
                   uint32_t store_in_load = flat_store % cols_per_load;
-                  uint32_t meta_idx = load_idx * NUM_THREADS + store_in_load * banks_per_store + thread_in_store;
+                  uint32_t meta_idx = load_idx * VX_CFG_NUM_THREADS + store_in_load * banks_per_store + thread_in_store;
                   h_meta[section_base + meta_idx] |= (1u << bit_idx);
                 }
               }
@@ -690,8 +690,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t NT;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &NT));
-  if (NT != NUM_THREADS) {
-    std::cout << "Error: device warp size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
+  if (NT != VX_CFG_NUM_THREADS) {
+    std::cout << "Error: device warp size (" << NT << ") must match VX_CFG_NUM_THREADS=" << VX_CFG_NUM_THREADS << "!" << std::endl;
     return -1;
   }
 
@@ -749,8 +749,8 @@ int main(int argc, char *argv[]) {
   uint32_t num_tile_rows = M / cfg::tileM;
   uint32_t num_k_tiles = K / cfg::tileK;
   constexpr uint32_t PD = cfg::m_steps * (cfg::k_steps / 2);
-  constexpr uint32_t num_meta_loads = (PD * meta_cols + NUM_THREADS - 1) / NUM_THREADS;
-  uint32_t meta_buf_entries = num_tile_rows * num_k_tiles * (num_meta_loads * NUM_THREADS);
+  constexpr uint32_t num_meta_loads = (PD * meta_cols + VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_THREADS;
+  uint32_t meta_buf_entries = num_tile_rows * num_k_tiles * (num_meta_loads * VX_CFG_NUM_THREADS);
   RT_CHECK(vx_buffer_create(device, meta_buf_entries * sizeof(uint32_t), VX_MEM_READ, &meta_buffer));
   RT_CHECK(vx_buffer_address(meta_buffer, &kernel_arg.meta_sp_addr));
 
@@ -937,8 +937,8 @@ int main(int argc, char *argv[]) {
     pack_metadata(h_meta_dbg, masks, M, K);
     constexpr uint32_t mcols_d = cfg::meta_cols;
     constexpr uint32_t PD_d = cfg::m_steps * (cfg::k_steps / 2);
-    constexpr uint32_t num_meta_loads_d = (PD_d * mcols_d + NUM_THREADS - 1) / NUM_THREADS;
-    uint32_t per_k_words_d = num_meta_loads_d * NUM_THREADS;
+    constexpr uint32_t num_meta_loads_d = (PD_d * mcols_d + VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_THREADS;
+    uint32_t per_k_words_d = num_meta_loads_d * VX_CFG_NUM_THREADS;
     std::cout << "Metadata words (tile_row=0, k_tile=0):";
     for (uint32_t w = 0; w < per_k_words_d; ++w) {
       printf(" [%u]=0x%08x", w, h_meta_dbg[w]);
@@ -1077,7 +1077,7 @@ int main(int argc, char *argv[]) {
           cfg::m_steps, cfg::n_steps, cfg::k_steps);
       printf("Matrix: M=%u N=%u K=%u, Grid=%ux%u\n",
           M, N, K, M/cfg::tileM, N/cfg::tileN);
-#ifdef TCU_SPARSE_ENABLE
+#ifdef VX_CFG_TCU_SPARSE_ENABLE
       printf("Sparse: meta_cols=%u per_warp_depth=%u\n",
           cfg::meta_cols, cfg::per_warp_depth);
 #endif

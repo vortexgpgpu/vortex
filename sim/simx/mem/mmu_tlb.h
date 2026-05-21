@@ -9,7 +9,7 @@
 
 #include <VX_config.h>
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 
 #include <cstdint>
 #include <vector>
@@ -21,7 +21,7 @@ namespace vortex {
 // MMU perf counters surfaced by VX_DCR_MPM_CLASS_VM.
 class Tlb {
 public:
-  explicit Tlb(uint32_t size = TLB_SIZE);
+  explicit Tlb(uint32_t size = VX_CFG_TLB_SIZE);
 
   // Returns {hit, ppn} for the given vpn. Increments `reads_` on every
   // call and `hits_` on a successful lookup.
@@ -60,4 +60,4 @@ private:
 
 } // namespace vortex
 
-#endif // VM_ENABLE
+#endif // VX_CFG_VM_ENABLE

@@ -63,7 +63,7 @@ uint64_t num_threads = 0;  // populated in main, read by render()
 
 kernel_arg_t kernel_arg = {};
 
-uint32_t tileLogSize = RASTER_TILE_LOGSIZE;
+uint32_t tileLogSize = VX_CFG_RASTER_TILE_LOGSIZE;
 
 static void show_usage() {
    std::cout << "Vortex rasterizer Test." << std::endl;

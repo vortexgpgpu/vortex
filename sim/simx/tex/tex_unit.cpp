@@ -28,7 +28,7 @@ instr_trace_t* TexUnit::process(instr_trace_t* trace, uint32_t block_id) {
   auto args   = std::get<IntrTexArgs>(instr.get_args());
 
   // Pre-clear destination data; TexCore will fill on completion.
-  trace->dst_data.assign(NUM_THREADS, reg_data_t{});
+  trace->dst_data.assign(VX_CFG_NUM_THREADS, reg_data_t{});
 
   TexReq req;
   req.uuid     = trace->uuid;
@@ -38,7 +38,7 @@ instr_trace_t* TexUnit::process(instr_trace_t* trace, uint32_t block_id) {
   req.block_id = block_id;
 
   uint32_t bits = 0;
-  for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+  for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) continue;
     bits |= (1u << t);
     req.u[t]   = static_cast<int32_t>(trace->src_data[0].at(t).u);

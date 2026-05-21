@@ -17,7 +17,7 @@
 
 module VX_tex_core_top import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_LANES = `NUM_THREADS,
+    parameter NUM_LANES = `VX_CFG_NUM_THREADS,
     parameter TAG_WIDTH = TEX_REQ_TAG_WIDTH
 ) (
     input wire                              clk,

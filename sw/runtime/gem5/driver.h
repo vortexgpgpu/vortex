@@ -39,12 +39,12 @@ namespace vortex {
 // gem5 Python config. PIN_BASE..PIN_BASE+PIN_REGION_SIZE is the
 // host-visible window onto device VRAM — `memcpy(PIN_BASE+dev_addr,
 // host_src, sz)` lands in the same in-process simx::RAM bytes the CP
-// and Vortex see. Sized to cover the full XLEN device address space
+// and Vortex see. Sized to cover the full VX_CFG_XLEN device address space
 // so any address mem_alloc / mem_reserve can hand out is reachable
 // via the host BAR; placed above 4 GiB so it doesn't collide with the
 // simulated process's natural low-VA layout (heap/stack/code).
 constexpr uintptr_t PIN_BASE_ADDR    = 0x100000000ull;
-constexpr size_t    PIN_REGION_SIZE  = 0x100000000ull;  // 4 GB (= XLEN=32 device VRAM)
+constexpr size_t    PIN_REGION_SIZE  = 0x100000000ull;  // 4 GB (= VX_CFG_XLEN=32 device VRAM)
 constexpr uintptr_t PIO_BASE_ADDR    = 0x20000000ull;
 constexpr size_t    PIO_REGION_SIZE  = 0x00000200ull;   // 0x200 — CP regfile
 

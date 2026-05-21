@@ -17,8 +17,8 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
 
     wire [PERF_CTR_BITS-1:0]        cycles;
     wire [PERF_CTR_BITS-1:0]        instret;
-    wire [`NUM_WARPS-1:0]           active_warps;
-    wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
+    wire [NUM_WARPS-1:0]           active_warps;
+    wire [NUM_WARPS-1:0][NUM_THREADS-1:0] thread_masks;
 
     // Read port: slave sends wid + cta_id, master returns selected mscratch
     // and cta_csrs. csr_rd_cta_id is sourced from execute_if.data.header.cta_id
@@ -26,30 +26,30 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     // internal cta_id_per_warp_r lookup.
     logic [NW_WIDTH-1:0]            csr_rd_wid;
     logic [NCTA_WIDTH-1:0]          csr_rd_cta_id;
-    logic [`MEM_ADDR_WIDTH-1:0]     mscratch;
+    logic [MEM_ADDR_WIDTH-1:0]     mscratch;
     cta_csrs_t                      cta_csrs;
 
-`ifdef VM_ENABLE
-    logic [`XLEN-1:0]               csr_satp;
+`ifdef VX_CFG_VM_ENABLE
+    logic [XLEN-1:0]               csr_satp;
 `endif
 
     // Write port: slave notifies scheduler of MSCRATCH CSR writes
     logic                           csr_wr_valid;
     logic [NW_WIDTH-1:0]            csr_wr_wid;
-    logic [`MEM_ADDR_WIDTH-1:0]     csr_wr_data;
+    logic [MEM_ADDR_WIDTH-1:0]     csr_wr_data;
 
     // Per-warp machine-mode trap CSRs live in the scheduler (alongside
     // mscratch) because the scheduler owns warp PC redirection. Reads are
     // returned already selected by csr_rd_wid; csrw writes are forwarded
     // here carrying the CSR address. csr_wr_wid is shared with mscratch.
-    logic [`XLEN-1:0]               csr_mstatus;
-    logic [`XLEN-1:0]               csr_mtvec;
-    logic [`XLEN-1:0]               csr_mepc;
-    logic [`XLEN-1:0]               csr_mcause;
-    logic [`XLEN-1:0]               csr_mtval;
+    logic [XLEN-1:0]               csr_mstatus;
+    logic [XLEN-1:0]               csr_mtvec;
+    logic [XLEN-1:0]               csr_mepc;
+    logic [XLEN-1:0]               csr_mcause;
+    logic [XLEN-1:0]               csr_mtval;
     logic                           trap_csr_wr_valid;
     logic [`VX_CSR_ADDR_BITS-1:0]   trap_csr_wr_addr;
-    logic [`XLEN-1:0]               trap_csr_wr_data;
+    logic [XLEN-1:0]               trap_csr_wr_data;
 
     modport master (
         output cycles,
@@ -63,7 +63,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output csr_mepc,
         output csr_mcause,
         output csr_mtval,
-    `ifdef VM_ENABLE
+    `ifdef VX_CFG_VM_ENABLE
         input csr_satp,
     `endif
         input  csr_rd_wid,
@@ -88,7 +88,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  csr_mepc,
         input  csr_mcause,
         input  csr_mtval,
-    `ifdef VM_ENABLE
+    `ifdef VX_CFG_VM_ENABLE
         output csr_satp,
     `endif
         output csr_rd_wid,

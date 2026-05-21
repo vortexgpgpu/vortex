@@ -59,10 +59,10 @@ module VX_tcu_drl_mul_join import VX_tcu_pkg::*; #(
     always_comb begin
         case (fmt_s)
             // --- F16 / BF16 / TF32 ---
-        `ifdef TCU_BF16_ENABLE
+        `ifdef VX_CFG_TCU_BF16_ENABLE
             TCU_BF16_ID,
         `endif
-        `ifdef TCU_TF32_ENABLE
+        `ifdef VX_CFG_TCU_TF32_ENABLE
             TCU_TF32_ID,
         `endif
             TCU_FP16_ID: begin
@@ -72,7 +72,7 @@ module VX_tcu_drl_mul_join import VX_tcu_pkg::*; #(
             end
 
             // --- FP8 / BF8 ---
-        `ifdef TCU_FP8_ENABLE
+        `ifdef VX_CFG_TCU_FP8_ENABLE
             TCU_FP8_ID, TCU_BF8_ID: begin
                 sig_sel = sig_f8;
                 exp_sel = exp_f8;
@@ -81,9 +81,9 @@ module VX_tcu_drl_mul_join import VX_tcu_pkg::*; #(
         `endif
 
             // --- Integers ---
-        `ifdef TCU_INT_ENABLE
+        `ifdef VX_CFG_TCU_INT_ENABLE
             TCU_I8_ID, TCU_U8_ID, TCU_I4_ID, TCU_U4_ID
-        `ifdef TCU_MXI8_ENABLE
+        `ifdef VX_CFG_TCU_MXI8_ENABLE
             , TCU_MXI8_ID
         `endif
             : begin

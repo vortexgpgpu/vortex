@@ -28,16 +28,16 @@ namespace {
 
 // Mirrors RTL `OCACHE_*` (default config). See
 // hw/rtl/VX_gpu_pkg.sv:1089-1101 and VX_config.toml [ocache].
-constexpr uint32_t kOcacheNumReqs  = OCACHE_NUM_BANKS;
+constexpr uint32_t kOcacheNumReqs  = VX_CFG_OCACHE_NUM_BANKS;
 constexpr uint32_t kOcacheMemPorts = 1;
-constexpr uint32_t kOcacheLineSize = MEM_BLOCK_SIZE;
-constexpr uint64_t kOcacheLineMask = ~uint64_t(MEM_BLOCK_SIZE - 1);
+constexpr uint32_t kOcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
+constexpr uint64_t kOcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Inflight OmReq slot count. Mirrors `OM_MEM_QUEUE_SIZE`.
-constexpr uint32_t kInflight = OM_MEM_QUEUE_SIZE;
+// Inflight OmReq slot count. Mirrors `VX_CFG_OM_MEM_QUEUE_SIZE`.
+constexpr uint32_t kInflight = VX_CFG_OM_MEM_QUEUE_SIZE;
 
 // Cores per cluster.
-constexpr uint32_t kCoresPerCluster = NUM_SOCKETS * SOCKET_SIZE;
+constexpr uint32_t kCoresPerCluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
 
 } // namespace
 
@@ -96,7 +96,7 @@ public:
     bool                                    in_use = false;
     State                                   state  = State::ADDR;
     OmReq                                   req;
-    std::array<LaneState, NUM_THREADS>      lanes  = {};
+    std::array<LaneState, VX_CFG_NUM_THREADS>      lanes  = {};
     uint64_t                                issue_cycle = 0;
   };
 
@@ -229,7 +229,7 @@ private:
     bool depth_enabled    = depth_stencil_.depth_enabled();
     bool blend_enabled    = blender_.enabled();
 
-    for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!(s.req.tmask_bits & (1u << t))) {
         s.lanes[t].active = false;
         continue;
@@ -260,7 +260,7 @@ private:
     // Cap MemReq issuance per tick at OCACHE_NUM_REQS (RTL bandwidth).
     uint32_t budget = kOcacheNumReqs;
 
-    for (uint32_t t = 0; t < NUM_THREADS && budget > 0; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS && budget > 0; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
 
@@ -286,7 +286,7 @@ private:
       }
     }
     // Detect "is anything still un-issued?"
-    for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
       if (l.need_z_read && !l.z_read_issued) { all_issued = false; }
@@ -363,7 +363,7 @@ private:
 
   // ── Stage: READ_GATHER — wait for all needed responses ──────────────
   void advance_read_gather(Slot& s) {
-    for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       const LaneState& l = s.lanes[t];
       if (!l.active) continue;
       if (l.need_z_read && !l.z_arrived) return;
@@ -377,7 +377,7 @@ private:
     bool depth_enabled = depth_stencil_.depth_enabled();
     bool blend_enabled = blender_.enabled();
 
-    for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
 
@@ -423,7 +423,7 @@ private:
 
     uint32_t budget = kOcacheNumReqs;
 
-    for (uint32_t t = 0; t < NUM_THREADS && budget > 0; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS && budget > 0; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
 
@@ -450,7 +450,7 @@ private:
     }
 
     // Re-scan for un-issued writes.
-    for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       const LaneState& l = s.lanes[t];
       if (!l.active) continue;
       if (l.need_z_write && !l.z_write_issued) all_done = false;

@@ -17,7 +17,7 @@ using namespace vortex;
 
 Scoreboard::Scoreboard(const SimContext& ctx, const char* name)
   : SimObject<Scoreboard>(ctx, name)
-  , in_use_regs_(NUM_WARPS) {
+  , in_use_regs_(VX_CFG_NUM_WARPS) {
   for (auto& in_use_reg : in_use_regs_) {
     in_use_reg.resize((int)RegType::Count);
   }

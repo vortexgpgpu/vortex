@@ -45,7 +45,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class TcuUnit : public FuncUnit<NUM_TCU_BLOCKS> {
+class TcuUnit : public FuncUnit<VX_CFG_NUM_TCU_BLOCKS> {
 public:
   using Ptr = std::shared_ptr<TcuUnit>;
 

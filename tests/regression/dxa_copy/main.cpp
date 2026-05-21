@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <VX_config.h>
 #include <cstring>
 #include <iostream>
 #include <unistd.h>
@@ -7,7 +8,7 @@
 #include <VX_types.h>
 #include <vortex.h>
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 #include <dxa.h>
 #endif
 
@@ -122,7 +123,7 @@ int main(int argc, char* argv[]) {
 
   std::srand(42);
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
   std::cout << "mode: DXA\n";
 #else
   std::cout << "mode: LSU\n";
@@ -142,17 +143,14 @@ int main(int argc, char* argv[]) {
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
   uint64_t isa_flags = 0;
   RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-#ifdef ISA_EXT_DXA
-  const uint64_t dxa_isa_bit = (1ull << (32 + ISA_EXT_DXA));
-  if ((isa_flags & dxa_isa_bit) == 0) {
+  if ((isa_flags & VX_ISA_EXT_DXA) == 0) {
     std::cerr << "Error: DXA ISA extension is disabled.\n";
     cleanup();
     return -1;
   }
-#endif
 #endif
 
   RT_CHECK(vx_check_occupancy(device, group_size, local_mem));
@@ -174,7 +172,7 @@ int main(int argc, char* argv[]) {
     h_src[i] = static_cast<TYPE>(i + 1);
   RT_CHECK(vx_enqueue_write(queue, src_buffer, 0, h_src.data(), buf_size, 0, nullptr, nullptr));
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
   // Program DXA descriptor for N-D source tile.
   constexpr uint32_t kDescSrc = 0;
 

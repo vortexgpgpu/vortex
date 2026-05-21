@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
 
 //
 // TB-shared B buffer (block-major SMEM, 1 bank-row storage).
@@ -57,14 +57,14 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [3:0]               req_step_k,
     input  wire [3:0]               req_step_n,
     input  wire [1:0]               req_cd_nregs,
-    input  wire [`XLEN-1:0]         req_desc_b,
+    input  wire [XLEN-1:0]         req_desc_b,
 
     // LMEM bank-parallel read port
     VX_mem_bus_if.master            tcu_lmem_if,
 
     // Outputs (broadcast to all Q tcu_cores)
     output wire                                       bbuf_ready,
-    output wire [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0]     bbuf_rs2_data
+    output wire [TCU_WG_RS2_WIDTH-1:0][XLEN-1:0]     bbuf_rs2_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -73,7 +73,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     localparam BANK_SEL_BITS      = $clog2(NUM_BANKS);
-    localparam WORD_SIZE_LOG2     = $clog2(`XLEN / 8);
+    localparam WORD_SIZE_LOG2     = $clog2(XLEN / 8);
     localparam B_BLOCK_WORDS      = TCU_TC_K * TCU_TC_N;
     localparam B_BUF_WORDS        = NUM_BANKS;             // 1 bank-row
     localparam LG_B_SUB_BLOCKS    = $clog2(TCU_WG_B_SUB_BLOCKS);
@@ -112,7 +112,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam DESC_ADDR_W = BANK_ADDR_WIDTH + BANK_SEL_BITS;
     wire [DESC_ADDR_W-1:0]      desc_b_word_base = DESC_ADDR_W'(req_desc_b[15:0] >> WORD_SIZE_LOG2);
     wire [BANK_ADDR_WIDTH-1:0]  desc_b_row_base  = desc_b_word_base[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-    `UNUSED_VAR (req_desc_b[`XLEN-1:16])
+    `UNUSED_VAR (req_desc_b[XLEN-1:16])
     if (BANK_SEL_BITS > 0) begin : g_addr_lsb_unused
         `UNUSED_VAR (desc_b_word_base[BANK_SEL_BITS-1:0])
     end
@@ -227,7 +227,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     storage_wren[b]               = 1'b1;
                     // Storage is 32-bit-word organized. The LMEM response data
                     // is contiguous bytes; word b lives at bit offset b*32
-                    // regardless of `XLEN. (The bus is NUM_BANKS*`XLEN wide, so
+                    // regardless of XLEN. (The bus is NUM_BANKS*XLEN wide, so
                     // for XLEN=64 it over-fetches a 2nd bank-row which we drop.)
                     storage_wdata[b * 32 +: 32]   =
                         tcu_lmem_if.rsp_data.data[b * 32 +: 32];
@@ -262,12 +262,12 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // tcu_core's b_off picks within the bank-row.
     // -----------------------------------------------------------------------
 
-    logic [TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] rs2_mux;
+    logic [TCU_WG_RS2_WIDTH-1:0][XLEN-1:0] rs2_mux;
     always_comb begin
         rs2_mux = '0;
         for (int lane = 0; lane < TCU_WG_RS2_WIDTH; ++lane) begin
             if (lane < int'(B_BUF_WORDS))
-                rs2_mux[lane] = `XLEN'(storage_rdata[lane]);
+                rs2_mux[lane] = XLEN'(storage_rdata[lane]);
         end
     end
     assign bbuf_rs2_data = rs2_mux;
@@ -326,4 +326,4 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 endmodule
 
-`endif // TCU_WGMMA_ENABLE
+`endif // VX_CFG_TCU_WGMMA_ENABLE

@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_uop_sequencer import
-`ifdef EXT_TCU_ENABLE
+`ifdef VX_CFG_EXT_TCU_ENABLE
     VX_tcu_pkg::*,
 `endif
     VX_gpu_pkg::*; #(
@@ -121,13 +121,13 @@ module VX_uop_sequencer import
         .uop_count (uop_out_count[UOP_PACKLD])
     );
 
-`ifdef EXT_TCU_ENABLE
+`ifdef VX_CFG_EXT_TCU_ENABLE
     // ------------------------------------------------------------------
     // TCU uop expander
     // ------------------------------------------------------------------
     assign uop_in_valid[UOP_TCU] = (uop_in_data.ex_type == EX_TCU)
         && (uop_in_data.op_type == INST_TCU_WMMA
-    `ifdef TCU_WGMMA_ENABLE
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
         || uop_in_data.op_type == INST_TCU_WGMMA
     `endif
         );

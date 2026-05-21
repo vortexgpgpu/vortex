@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include <VX_config.h>
 #include <vx_intrinsics.h>
 
 using fixed16_t = cocogfx::TFixed<16>;
@@ -18,8 +19,8 @@ public:
   Rasterizer() : graphics::Rasterizer(
     shader_function_sw_rast_cb, 
     nullptr,
-    RASTER_TILE_LOGSIZE,
-    RASTER_BLOCK_LOGSIZE
+    VX_CFG_RASTER_TILE_LOGSIZE,
+    VX_CFG_RASTER_BLOCK_LOGSIZE
   ) {}
 
   void configure(const graphics::RasterDCRS& dcrs, uint32_t log_num_tasks) {    

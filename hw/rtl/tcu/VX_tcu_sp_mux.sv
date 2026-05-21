@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
 
 //
 // 2:4 structured sparsity gather mux.
@@ -183,4 +183,4 @@ module VX_tcu_sp_mux import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 endmodule
 
-`endif // TCU_SPARSE_ENABLE
+`endif // VX_CFG_TCU_SPARSE_ENABLE

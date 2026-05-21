@@ -24,7 +24,7 @@ class Core;
 class Cluster;
 
 // Cluster-shared DXA engine. Aggregates DxaReq packets from per-core
-// DxaUnits, dispatches to NUM_DXA_UNITS workers, and drives GMEM reads
+// DxaUnits, dispatches to VX_CFG_NUM_DXA_UNITS workers, and drives GMEM reads
 // (through L2) and LMEM writes (per-core direct channels carrying real
 // MemReq packets with TLM payload + completion flag).
 class DxaCore : public SimObject<DxaCore> {
@@ -53,7 +53,7 @@ public:
   std::vector<SimChannel<DxaReq>>  dxa_req_in;
 
   // GMEM ports to L2 (size = kDxaMemPorts). Internally fed by gmem_arb_
-  // from NUM_DXA_UNITS worker outputs.
+  // from VX_CFG_NUM_DXA_UNITS worker outputs.
   std::vector<SimChannel<MemReq>>  gmem_req_out;
   std::vector<SimChannel<MemRsp>>  gmem_rsp_in;
   MemArbiter::Ptr                  gmem_arb_;

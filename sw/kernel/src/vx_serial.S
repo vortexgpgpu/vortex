@@ -19,7 +19,7 @@
 .type vx_serial, @function
 .global vx_serial
 vx_serial:
-#if (XLEN == 64)
+#if (VX_CFG_XLEN == 64)
     addi sp, sp, -56
     sd   ra, 48(sp)
     sd   s5, 40(sp)
@@ -54,7 +54,7 @@ label_join:
     .insn r RISCV_CUSTOM0, 3, 0, x0, s5, x0  # join s5
     addi s0, s0, 1              # index++
     blt	 s0, s2, label_loop     # loop back
-#if (XLEN == 64)
+#if (VX_CFG_XLEN == 64)
     ld   ra, 48(sp)
     ld   s5, 40(sp)
     ld   s4, 32(sp)

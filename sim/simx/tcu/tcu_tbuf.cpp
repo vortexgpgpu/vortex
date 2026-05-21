@@ -23,16 +23,16 @@ using namespace vortex;
 
 namespace {
 
-constexpr uint64_t kLineMask = ~uint64_t(MEM_BLOCK_SIZE - 1);
+constexpr uint64_t kLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
 // 2Q+1 sources fan into one external port. Source IDs:
-//   0 .. NUM_TCU_BLOCKS-1                      → abuf[b]
-//   NUM_TCU_BLOCKS .. 2*NUM_TCU_BLOCKS-1       → mbuf[b]
-//   2*NUM_TCU_BLOCKS                           → bbuf
-constexpr uint32_t kNumSources = 2 * NUM_TCU_BLOCKS + 1;
+//   0 .. VX_CFG_NUM_TCU_BLOCKS-1                      → abuf[b]
+//   VX_CFG_NUM_TCU_BLOCKS .. 2*VX_CFG_NUM_TCU_BLOCKS-1       → mbuf[b]
+//   2*VX_CFG_NUM_TCU_BLOCKS                           → bbuf
+constexpr uint32_t kNumSources = 2 * VX_CFG_NUM_TCU_BLOCKS + 1;
 constexpr uint32_t kAOffset    = 0;
-constexpr uint32_t kMOffset    = NUM_TCU_BLOCKS;
-constexpr uint32_t kBOffset    = 2 * NUM_TCU_BLOCKS;
+constexpr uint32_t kMOffset    = VX_CFG_NUM_TCU_BLOCKS;
+constexpr uint32_t kBOffset    = 2 * VX_CFG_NUM_TCU_BLOCKS;
 
 // Per-source line cache. Resident, in-flight and pending state are tracked
 // independently per source; the wrapper arbitrates the shared LMEM port.

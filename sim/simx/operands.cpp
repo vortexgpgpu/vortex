@@ -21,14 +21,14 @@ using namespace vortex;
 
 // wid → which OpcUnit within the issue lane owns this warp.
 inline static constexpr uint32_t wid_to_opc_idx(uint32_t wid) {
-  return (wid / ISSUE_WIDTH) % NUM_OPCS;
+  return (wid / VX_CFG_ISSUE_WIDTH) % VX_CFG_NUM_OPCS;
 }
 
 // wid → slot inside that OpcUnit. Inverse of OpcUnit's
-// (wis / NUM_OPCS) packing — see opc_unit.h for the lane/wis/opc/slot
+// (wis / VX_CFG_NUM_OPCS) packing — see opc_unit.h for the lane/wis/opc/slot
 // breakdown.
 inline static constexpr uint32_t wid_to_slot(uint32_t wid) {
-  return (wid / ISSUE_WIDTH) / NUM_OPCS;
+  return (wid / VX_CFG_ISSUE_WIDTH) / VX_CFG_NUM_OPCS;
 }
 
 namespace {
@@ -91,26 +91,26 @@ Operands::Operands(const SimContext &ctx, const char* name, Core* core)
     , Input(this)
     , Output(this)
     , core_(core)
-    , opc_units_(NUM_OPCS) {
-  static_assert(NUM_OPCS <= PER_ISSUE_WARPS, "invalid NUM_OPCS value");
+    , opc_units_(VX_CFG_NUM_OPCS) {
+  static_assert(VX_CFG_NUM_OPCS <= PER_ISSUE_WARPS, "invalid VX_CFG_NUM_OPCS value");
   char sname[100];
 
   // Per-OPC warp slot count: each OPC owns the warps where
-  //   (wid % ISSUE_WIDTH == lane) && ((wid/IW) % NUM_OPCS == opc_idx)
-  // Slot count = ceil(NUM_WARPS / (ISSUE_WIDTH * NUM_OPCS)).
-  uint32_t num_warps   = NUM_WARPS;
-  uint32_t num_threads = NUM_THREADS;
-  uint32_t per_opc_warps = (num_warps + (ISSUE_WIDTH * NUM_OPCS) - 1) / (ISSUE_WIDTH * NUM_OPCS);
+  //   (wid % VX_CFG_ISSUE_WIDTH == lane) && ((wid/IW) % VX_CFG_NUM_OPCS == opc_idx)
+  // Slot count = ceil(VX_CFG_NUM_WARPS / (VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS)).
+  uint32_t num_warps   = VX_CFG_NUM_WARPS;
+  uint32_t num_threads = VX_CFG_NUM_THREADS;
+  uint32_t per_opc_warps = (num_warps + (VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS) - 1) / (VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS);
 
-  for (uint32_t i = 0; i < NUM_OPCS; i++) {
+  for (uint32_t i = 0; i < VX_CFG_NUM_OPCS; i++) {
     snprintf(sname, 100, "%s-opc%d", name, i);
     opc_units_.at(i) = SimPlatform::instance().create_object<OpcUnit>(sname, per_opc_warps, num_threads);
   }
 
-  if (NUM_OPCS >= 2) {
+  if (VX_CFG_NUM_OPCS >= 2) {
     snprintf(sname, 100, "%s-rsp_arb", name);
-    rsp_arb_ = TraceArbiter::Create(sname, ArbiterType::RoundRobin, NUM_OPCS, 1);
-    for (uint32_t i = 0; i < NUM_OPCS; ++i) {
+    rsp_arb_ = TraceArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_OPCS, 1);
+    for (uint32_t i = 0; i < VX_CFG_NUM_OPCS; ++i) {
       opc_units_.at(i)->Output.bind(&rsp_arb_->Inputs.at(i));
     }
     rsp_arb_->Outputs.at(0).bind(&this->Output);
@@ -130,7 +130,7 @@ void Operands::on_reset() {
 }
 
 void Operands::on_tick() {
-  if (NUM_OPCS < 2)
+  if (VX_CFG_NUM_OPCS < 2)
     return; // pass-thru
 
   // process requests

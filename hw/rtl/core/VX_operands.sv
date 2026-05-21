@@ -34,16 +34,16 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     // LSU cannot handle partial requests from multiple warps at the same time
     // this ensure that OPCs are dispatched atomically
-    localparam OUT_ARB_STICKY = (`NUM_OPCS != 1) && (SIMD_COUNT != 1);
+    localparam OUT_ARB_STICKY = (NUM_OPCS != 1) && (SIMD_COUNT != 1);
 
 `ifdef PERF_ENABLE
-    wire [`NUM_OPCS-1:0][PERF_CTR_BITS-1:0] per_opc_perf_stalls;
+    wire [NUM_OPCS-1:0][PERF_CTR_BITS-1:0] per_opc_perf_stalls;
 `endif
 
-    VX_operands_if per_opc_operands_if[`NUM_OPCS]();
+    VX_operands_if per_opc_operands_if[NUM_OPCS]();
 
     wire [NUM_OPCS_W-1:0] sb_opc, wb_opc;
-    if (`NUM_OPCS != 1) begin : g_wis_opc
+    if (NUM_OPCS != 1) begin : g_wis_opc
         assign sb_opc = scoreboard_if.data.wis[NUM_OPCS_W-1:0];
         assign wb_opc = writeback_if.data.wis[NUM_OPCS_W-1:0];
     end else begin : g_wis_opc
@@ -51,10 +51,10 @@ module VX_operands import VX_gpu_pkg::*; #(
         assign wb_opc = 0;
     end
 
-    wire [`NUM_OPCS-1:0] scoreboard_ready_in;
+    wire [NUM_OPCS-1:0] scoreboard_ready_in;
     assign scoreboard_if.ready = scoreboard_ready_in[sb_opc];
 
-    for (genvar i = 0; i < `NUM_OPCS; i++) begin : g_collectors
+    for (genvar i = 0; i < NUM_OPCS; i++) begin : g_collectors
         // select scoreboard interface
         VX_scoreboard_if opc_scoreboard_if();
         assign opc_scoreboard_if.valid = scoreboard_if.valid && (sb_opc == i);
@@ -68,7 +68,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
         VX_opc_unit #(
             .INSTANCE_ID  (`SFORMATF(("%s-collector%0d", INSTANCE_ID, i))),
-            .NUM_BANKS    (`NUM_GPR_BANKS),
+            .NUM_BANKS    (NUM_GPR_BANKS),
             .OUT_BUF      (3)
         ) opc_unit (
             .clk          (clk),
@@ -82,15 +82,15 @@ module VX_operands import VX_gpu_pkg::*; #(
         );
     end
 
-    `ITF_TO_AOS (per_opc_operands, per_opc_operands_if, `NUM_OPCS, OUT_DATAW)
+    `ITF_TO_AOS (per_opc_operands, per_opc_operands_if, NUM_OPCS, OUT_DATAW)
 
     VX_stream_arb #(
-        .NUM_INPUTS  (`NUM_OPCS),
+        .NUM_INPUTS  (NUM_OPCS),
         .NUM_OUTPUTS (1),
         .DATAW       (OUT_DATAW),
         .ARBITER     ("P"),
         .STICKY      (OUT_ARB_STICKY),
-        .OUT_BUF     ((`NUM_OPCS > 1) ? 3 : 0)
+        .OUT_BUF     ((NUM_OPCS > 1) ? 3 : 0)
     ) output_arb (
         .clk       (clk),
         .reset     (reset),
@@ -107,7 +107,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire [PERF_CTR_BITS-1:0] perf_stalls_w;
     VX_reduce_tree #(
         .IN_W (PERF_CTR_BITS),
-        .N    (`NUM_OPCS),
+        .N    (NUM_OPCS),
         .OP   ("+")
     ) perf_stalls_reduce (
         .data_in  (per_opc_perf_stalls),

@@ -74,56 +74,56 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
 
 ifdef NUM_CORES
 # cluster configuration
-CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
-CONFIGS_2c  := -DNUM_CLUSTERS=1 -DNUM_CORES=2
-CONFIGS_4c  := -DNUM_CLUSTERS=1 -DNUM_CORES=4  -DL2_ENABLE
-CONFIGS_8c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=8  -DL2_ENABLE
-CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE
-CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE
-CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE
+CONFIGS_1c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=1
+CONFIGS_2c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=2
+CONFIGS_4c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4  -DVX_CFG_L2_ENABLE
+CONFIGS_8c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=8  -DVX_CFG_L2_ENABLE
+CONFIGS_16c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
+CONFIGS_32c := -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
+CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 endif
 
 CONFIGS += -DSYNTHESIS -DASIC -DSYNOPSYS
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DXLEN_$(XLEN)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)')
 
 # include paths
 RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
-ifneq (,$(filter -DEXT_F_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_F_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/fpu
 endif
 
 RTL_INCLUDE += -I$(LIB_DIR)/no_mem
 
 # Add TCU extension sources
-ifneq (,$(filter -DEXT_TCU_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_DPI, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
 	endif
-	ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_DSP, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
 	endif
-	ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_BHF, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 	endif
-	ifneq (,$(filter -DTCU_TYPE_TFR, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 	endif
 endif
 
 # Add DXA extension sources
-ifneq (,$(filter -DEXT_DXA_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_DXA_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/dxa/VX_dxa_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/dxa
 endif
 
 # Add V extension sources
-ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
@@ -146,7 +146,7 @@ ifdef PERF
 	CFLAGS += -DPERF_ENABLE
 endif
 
-CFLAGS += -DXLEN_$(XLEN)
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 

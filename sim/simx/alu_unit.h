@@ -17,7 +17,7 @@
 
 namespace vortex {
 
-class AluUnit : public FuncUnit<NUM_ALU_BLOCKS> {
+class AluUnit : public FuncUnit<VX_CFG_NUM_ALU_BLOCKS> {
 public:
   AluUnit(const SimContext& ctx, const char* name, Core*);
 

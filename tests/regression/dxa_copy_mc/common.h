@@ -2,6 +2,7 @@
 #define _DXA_COPY_MC_COMMON_H_
 
 #include <stdint.h>
+#include <VX_config.h>
 
 #ifndef TYPE
 #define TYPE float
@@ -12,7 +13,7 @@ typedef struct {
   uint32_t tile_rows;
   uint32_t tile_cols;
   uint32_t src_row_stride;  // elements between source rows (descriptor stride)
-  uint32_t num_recv;        // multicast group size (= NUM_CORES)
+  uint32_t num_recv;        // multicast group size (= VX_CFG_NUM_CORES)
   uint64_t src_addr;
   uint64_t dst_addr;        // tightly packed: num_recv × tile_rows × tile_cols
 } kernel_arg_t;

@@ -44,7 +44,7 @@ public:
   };
 
   // Inputs from per-socket TexBus arbiter (cluster-level VX_tex_arb).
-  // Size = NUM_TEX_CORES (after the cluster arb collapses NUM_SOCKETS → NUM_TEX_CORES).
+  // Size = VX_CFG_NUM_TEX_CORES (after the cluster arb collapses NUM_SOCKETS → VX_CFG_NUM_TEX_CORES).
   std::vector<SimChannel<TexReq>>  tex_req_in;
   std::vector<SimChannel<TexRsp>>  tex_rsp_out;
 

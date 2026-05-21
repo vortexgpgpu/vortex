@@ -25,7 +25,7 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
     parameter NUM_BANKS         = 4,
 
     // Size of a word in bytes
-    parameter WORD_SIZE         = `XLEN/8,
+    parameter WORD_SIZE         = `VX_CFG_XLEN/8,
 
     // Request tag size
     parameter TAG_WIDTH         = 16 + UUID_WIDTH,

@@ -920,7 +920,7 @@ private:
       // Specs list "Off-chip Total Bandwidth" = 102.4 GB/s
       return 102400;
     } else if (s_name.find("vortex_xrtsim") != std::string::npos) {
-      return PLATFORM_MEMORY_PEAK_BW;
+      return VX_CFG_PLATFORM_MEMORY_PEAK_BW;
     }
     std::cerr << "Warning: Unknown device type (" << s_name << "). Returning 0." << std::endl;
     return 0;

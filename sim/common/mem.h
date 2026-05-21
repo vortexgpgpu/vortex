@@ -105,8 +105,8 @@ public:
     // ACCESS_TYPE access_type;
   };
 
-#ifdef VM_ENABLE
-  MemoryUnit(uint64_t pageSize = MEM_PAGE_SIZE);
+#ifdef VX_CFG_VM_ENABLE
+  MemoryUnit(uint64_t pageSize = VX_CFG_MEM_PAGE_SIZE);
   ~MemoryUnit(){
     if ( this->satp_ != NULL)
       delete this->satp_;
@@ -118,7 +118,7 @@ public:
   void attach(MemDevice &m, uint64_t start, uint64_t end);
 
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   void read(void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type = ACCESS_TYPE::LOAD);
   void write(const void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type = ACCESS_TYPE::STORE);
 #else
@@ -129,7 +129,7 @@ public:
   void amo_reserve(uint64_t addr);
   bool amo_check(uint64_t addr);
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits);
   uint8_t is_satp_unset();
   uint64_t get_satp();
@@ -186,7 +186,7 @@ private:
 
   struct TLBEntry {
     TLBEntry() : valid(false) {}
-  #ifdef VM_ENABLE
+  #ifdef VX_CFG_VM_ENABLE
     TLBEntry(uint64_t vpn, uint32_t pfn, uint32_t flags, uint64_t size_bits)
       : vpn(vpn)
       , pfn(pfn)
@@ -230,7 +230,7 @@ private:
   #endif
   };
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   std::pair<bool, uint64_t> tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits);
 
   bool need_trans(uint64_t dev_pAddr);
@@ -250,12 +250,12 @@ private:
   std::vector<TLBEntry> tlb_;
   uint64_t  pageSize_;
   ADecoder  decoder_;
-#ifndef VM_ENABLE
+#ifndef VX_CFG_VM_ENABLE
   bool      enableVM_;
 #endif
 
   amo_reservation_t amo_reservation_;
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   std::unordered_set<uint64_t> unique_translations;
   uint64_t TLB_HIT, TLB_MISS, TLB_EVICT, PTW, PERF_UNIQUE_PTW;
   SATP_t *satp_;

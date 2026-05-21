@@ -15,7 +15,7 @@
 
 module Vortex_wrap #(
 	parameter C_M_AXI_GMEM_DATA_WIDTH = 512,
-	parameter C_M_AXI_GMEM_ADDR_WIDTH = `XLEN,
+	parameter C_M_AXI_GMEM_ADDR_WIDTH = `VX_CFG_XLEN,
 	parameter C_M_AXI_GMEM_ID_WIDTH   = 32,
 	parameter C_M_AXI_MEM_NUM_BANKS   = 1
 ) (

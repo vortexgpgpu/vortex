@@ -12,7 +12,7 @@ CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/src
-CXXFLAGS += -DXLEN_$(XLEN)
+CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
@@ -29,13 +29,13 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_TCU
 
 CONFIGS += -DSIMULATION -DSV_DPI
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DXLEN_$(XLEN)')
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)')
 
-DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
+DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(filter -DFPU_TYPE_FPNEW, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
 	FPU_INCLUDE += -y $(THIRD_PARTY_DIR)/cvfpu/src/stubs
@@ -43,48 +43,48 @@ endif
 RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 
 # Add TCU extension sources
-ifneq (,$(filter -DEXT_TCU_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	ifneq (,$(filter -DTCU_TYPE_DPI, $(XCONFIGS)))
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_DPI, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
-	else ifneq (,$(filter -DTCU_TYPE_DSP, $(XCONFIGS)))
+	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_DSP, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
-	else ifneq (,$(filter -DTCU_TYPE_BHF, $(XCONFIGS)))
+	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_BHF, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
-	else ifneq (,$(filter -DTCU_TYPE_TFR, $(XCONFIGS)))
+	else ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
 	endif
 endif
 
 # Add DXA extension sources
-ifneq (,$(filter -DEXT_DXA_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_DXA_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/dxa/VX_dxa_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/dxa
 endif
 
 # Add TEX extension sources
-ifneq (,$(filter -DEXT_TEX_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_TEX_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tex/VX_tex_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tex
 endif
 
 # Add RASTER extension sources
-ifneq (,$(filter -DEXT_RASTER_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/raster/VX_raster_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/raster
 endif
 
 # Add OM extension sources
-ifneq (,$(filter -DEXT_OM_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_OM_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/om/VX_om_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/om
 endif
 
 # Add V extension sources
-ifneq (,$(filter -DEXT_V_ENABLE, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_V_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
@@ -102,7 +102,7 @@ VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
-VL_FLAGS += -DXLEN_$(XLEN)
+VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
@@ -147,7 +147,7 @@ PROJECT := rtlsim
 all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(SRC_DIR)/main.cpp $(CONFIG_FILE) $(RTL_SRCS)
-	$(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) $(SRC_DIR)/main.cpp -CFLAGS '$(CXXFLAGS) -DSTARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' --MMD --Mdir $@.obj_dir -o $@
+	$(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) $(SRC_DIR)/main.cpp -CFLAGS '$(CXXFLAGS) -DVX_CFG_STARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' --MMD --Mdir $@.obj_dir -o $@
 
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS) $(CONFIG_FILE) $(RTL_SRCS)
 	$(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' --MMD --Mdir $@.obj_dir -o $@

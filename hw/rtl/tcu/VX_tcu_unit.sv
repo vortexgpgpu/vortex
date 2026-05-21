@@ -25,22 +25,22 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output tcu_perf_t       tcu_perf,
 `endif
 
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Bank-parallel LMEM read port
     VX_mem_bus_if.master     tcu_lmem_if,
 `endif
 
     // Inputs
-    VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    VX_dispatch_if.slave    dispatch_if [ISSUE_WIDTH],
 
     // Outputs
-    VX_commit_if.master     commit_if [`ISSUE_WIDTH]
+    VX_commit_if.master     commit_if [ISSUE_WIDTH]
 );
-    localparam BLOCK_SIZE = `NUM_TCU_BLOCKS;
-    localparam NUM_LANES  = `NUM_TCU_LANES;
+    localparam BLOCK_SIZE = NUM_TCU_BLOCKS;
+    localparam NUM_LANES  = NUM_TCU_LANES;
 
-    `STATIC_ASSERT (BLOCK_SIZE == `ISSUE_WIDTH, ("must be full issue execution"));
-    `STATIC_ASSERT (NUM_LANES == `NUM_THREADS, ("must be full warp execution"));
+    `STATIC_ASSERT (BLOCK_SIZE == ISSUE_WIDTH, ("must be full issue execution"));
+    `STATIC_ASSERT (NUM_LANES == NUM_THREADS, ("must be full warp execution"));
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
 
     VX_execute_if #(
@@ -69,8 +69,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // LMEM-port arbitration (Q+1 → 1). Sparse meta path TBD (Phase 4 →
     // VX_tcu_mbuf).
 
-`ifdef TCU_WGMMA_ENABLE
-    localparam BANK_ADDR_WIDTH = `LMEM_LOG_SIZE - $clog2(`XLEN / 8) - $clog2(`LMEM_NUM_BANKS);
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    localparam BANK_ADDR_WIDTH = LMEM_LOG_SIZE - $clog2(XLEN / 8) - $clog2(LMEM_NUM_BANKS);
 
     // Per-block uop observation, packed for VX_tcu_tbuf (one bit/lane per block).
     wire [BLOCK_SIZE-1:0]                    req_valid_arr;
@@ -79,10 +79,10 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BLOCK_SIZE-1:0][3:0]               req_step_k_arr;
     wire [BLOCK_SIZE-1:0][3:0]               req_step_n_arr;
     wire [BLOCK_SIZE-1:0][1:0]               req_cd_nregs_arr;
-    wire [BLOCK_SIZE-1:0][`XLEN-1:0]         req_desc_a_arr;
-    wire [BLOCK_SIZE-1:0][`XLEN-1:0]         req_desc_b_arr;
+    wire [BLOCK_SIZE-1:0][XLEN-1:0]         req_desc_a_arr;
+    wire [BLOCK_SIZE-1:0][XLEN-1:0]         req_desc_b_arr;
     wire [BLOCK_SIZE-1:0]                    req_a_is_smem_arr;
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [BLOCK_SIZE-1:0]                    req_is_sparse_arr;
     wire [BLOCK_SIZE-1:0][3:0]               req_fmt_s_arr;
 `endif
@@ -102,17 +102,17 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign req_desc_a_arr   [bi] = per_block_execute_if[bi].data.rs1_data[0];
         assign req_desc_b_arr   [bi] = per_block_execute_if[bi].data.rs2_data[0];
         assign req_a_is_smem_arr[bi] = per_block_execute_if[bi].data.op_args.tcu.a_from_smem;
-    `ifdef TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
         assign req_is_sparse_arr[bi] = per_block_execute_if[bi].data.op_args.tcu.is_sparse;
         assign req_fmt_s_arr    [bi] = per_block_execute_if[bi].data.op_args.tcu.fmt_s;
     `endif
     end
 
     // Per-block tile buffer outputs (rs2 broadcast, rs1 per-block, ready ANDed)
-    wire [BLOCK_SIZE-1:0][TCU_BLOCK_CAP-1:0][`XLEN-1:0]    tbuf_rs1_data;
-    wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`XLEN-1:0] tbuf_rs2_data;
+    wire [BLOCK_SIZE-1:0][TCU_BLOCK_CAP-1:0][XLEN-1:0]    tbuf_rs1_data;
+    wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][XLEN-1:0] tbuf_rs2_data;
     wire [BLOCK_SIZE-1:0]                                  tbuf_ready;
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [BLOCK_SIZE-1:0][TCU_MAX_META_BLOCK_WIDTH-1:0]    tbuf_sp_meta;
 `endif
 
@@ -124,7 +124,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_tcu_tbuf #(
         .INSTANCE_ID    (`SFORMATF(("%s-tbuf", INSTANCE_ID))),
-        .NUM_BANKS      (`LMEM_NUM_BANKS),
+        .NUM_BANKS      (LMEM_NUM_BANKS),
         .BANK_ADDR_WIDTH(BANK_ADDR_WIDTH),
         .BLOCK_SIZE     (BLOCK_SIZE)
     ) tbuf (
@@ -144,14 +144,14 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_desc_a     (req_desc_a_arr),
         .req_desc_b     (req_desc_b_arr),
         .req_a_is_smem  (req_a_is_smem_arr),
-    `ifdef TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
         .req_is_sparse  (req_is_sparse_arr),
         .req_fmt_s      (req_fmt_s_arr),
     `endif
         .tcu_lmem_if    (tcu_lmem_if),
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),
-    `ifdef TCU_SPARSE_ENABLE
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
         .tbuf_sp_meta   (tbuf_sp_meta),
     `endif
         .tbuf_ready     (tbuf_ready)
@@ -191,7 +191,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_perf.wgmma_stalls = wgmma_stalls_ctr_r;
 `endif
 
-`else // !TCU_WGMMA_ENABLE
+`else // !VX_CFG_TCU_WGMMA_ENABLE
 
 `ifdef PERF_ENABLE
     assign tcu_perf.tbuf_stalls     = '0;
@@ -201,7 +201,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_perf.wgmma_stalls    = '0;
 `endif
 
-`endif // TCU_WGMMA_ENABLE
+`endif // VX_CFG_TCU_WGMMA_ENABLE
 
     // -----------------------------------------------------------------------
     // CTA lockstep gate
@@ -220,7 +220,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // throughput on a path that is already config-rare.
     // -----------------------------------------------------------------------
 
-`ifdef TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
     localparam INFLIGHT_CW = 4;
     reg [BLOCK_SIZE-1:0][INFLIGHT_CW-1:0] inflight_count_r;
     reg [BLOCK_SIZE-1:0][NCTA_WIDTH-1:0]  cta_owner_r;
@@ -348,7 +348,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `RUNTIME_ASSERT (~|lockstep_violation,
         ("%s lockstep violation: a WGMMA uop fired with a cta_id that conflicts with another block's resident CTA",
          INSTANCE_ID))
-`endif // TCU_WGMMA_ENABLE
+`endif // VX_CFG_TCU_WGMMA_ENABLE
 
     // -----------------------------------------------------------------------
     // TCU core instances
@@ -361,10 +361,10 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             `SCOPE_IO_BIND (block_idx)
             .clk        (clk),
             .reset      (reset),
-        `ifdef TCU_WGMMA_ENABLE
+        `ifdef VX_CFG_TCU_WGMMA_ENABLE
             .tbuf_rs1_data (tbuf_rs1_data[block_idx]),
             .tbuf_rs2_data (tbuf_rs2_data[block_idx]),
-        `ifdef TCU_SPARSE_ENABLE
+        `ifdef VX_CFG_TCU_SPARSE_ENABLE
             .tbuf_sp_meta  (tbuf_sp_meta[block_idx]),
         `endif
             .tbuf_ready    (tbuf_ready_eff[block_idx]),

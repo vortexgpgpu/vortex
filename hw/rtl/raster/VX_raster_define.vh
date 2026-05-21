@@ -18,7 +18,7 @@
 
 `include "VX_define.vh"
 
-`ifdef XLEN_64
+`ifdef VX_CFG_XLEN_64
 `define RASTER_ADDR_BITS        32
 `else
 `define RASTER_ADDR_BITS        25

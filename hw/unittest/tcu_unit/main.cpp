@@ -49,28 +49,28 @@ bool sim_trace_enabled() { return true; }
 static uint64_t timestamp = 0;
 double sc_time_stamp() { return timestamp; }
 
-// ---- TCU block dimensions (derived from NUM_THREADS) ----------------------
-// TCU_BLOCK_CAP = NUM_THREADS, TCU_LG_BLOCK_CAP = log2(NUM_THREADS)
+// ---- TCU block dimensions (derived from VX_CFG_NUM_THREADS) ----------------------
+// TCU_BLOCK_CAP = VX_CFG_NUM_THREADS, TCU_LG_BLOCK_CAP = log2(VX_CFG_NUM_THREADS)
 // TCU_BLOCK_EM  = LG / 2 (rounded up), TCU_BLOCK_EN = LG - EM
 // TCU_TC_M = 2^EM, TCU_TC_N = 2^EN, TCU_TC_K = NT / max(TC_M, TC_N)
 
-static_assert((NUM_THREADS & (NUM_THREADS - 1)) == 0, "NUM_THREADS must be power of 2");
+static_assert((VX_CFG_NUM_THREADS & (VX_CFG_NUM_THREADS - 1)) == 0, "VX_CFG_NUM_THREADS must be power of 2");
 
 constexpr int log2_floor(int n) {
     return (n <= 1) ? 0 : 1 + log2_floor(n / 2);
 }
 
-constexpr int TCU_LG = log2_floor(NUM_THREADS);
+constexpr int TCU_LG = log2_floor(VX_CFG_NUM_THREADS);
 constexpr int TCU_EN = TCU_LG / 2;
 constexpr int TCU_EM = TCU_LG - TCU_EN;
 constexpr int TCU_TC_M = 1 << TCU_EM;
 constexpr int TCU_TC_N = 1 << TCU_EN;
-constexpr int TCU_TC_K = NUM_THREADS / ((TCU_TC_M > TCU_TC_N) ? TCU_TC_M : TCU_TC_N);
+constexpr int TCU_TC_K = VX_CFG_NUM_THREADS / ((TCU_TC_M > TCU_TC_N) ? TCU_TC_M : TCU_TC_N);
 
-static_assert(TCU_TC_M * TCU_TC_N == NUM_THREADS, "TC dimension check");
+static_assert(TCU_TC_M * TCU_TC_N == VX_CFG_NUM_THREADS, "TC dimension check");
 
-// Words per lane in the Verilator signal (XLEN/32: 1 for 32-bit, 2 for 64-bit)
-constexpr int LANE_WORDS = XLEN / 32;
+// Words per lane in the Verilator signal (VX_CFG_XLEN/32: 1 for 32-bit, 2 for 64-bit)
+constexpr int LANE_WORDS = VX_CFG_XLEN / 32;
 
 // TCU format IDs (must match VX_tcu_pkg.sv)
 constexpr uint32_t TCU_FP32_ID = 0;
@@ -145,12 +145,12 @@ static float elem_to_float(uint32_t raw, const FmtInfo &fi) {
 // rs3_data layout: lane t -> C[i][j] where t = i*TC_N + j
 //
 static std::vector<float> wmma_ref(
-    const std::vector<uint32_t> &rs1,  // NUM_THREADS elements (A, row-major)
-    const std::vector<uint32_t> &rs2,  // NUM_THREADS elements (B columns, col-major)
-    const std::vector<uint32_t> &rs3,  // NUM_THREADS elements (C, row-major)
+    const std::vector<uint32_t> &rs1,  // VX_CFG_NUM_THREADS elements (A, row-major)
+    const std::vector<uint32_t> &rs2,  // VX_CFG_NUM_THREADS elements (B columns, col-major)
+    const std::vector<uint32_t> &rs3,  // VX_CFG_NUM_THREADS elements (C, row-major)
     const FmtInfo &fi_s)               // source format (for A and B)
 {
-    std::vector<float> result(NUM_THREADS);
+    std::vector<float> result(VX_CFG_NUM_THREADS);
 
     for (int i = 0; i < TCU_TC_M; i++) {
         for (int j = 0; j < TCU_TC_N; j++) {
@@ -297,7 +297,7 @@ public:
                   << " TCU_TC_M=" << TCU_TC_M
                   << " TCU_TC_N=" << TCU_TC_N
                   << " TCU_TC_K=" << TCU_TC_K
-                  << " NUM_THREADS=" << NUM_THREADS
+                  << " VX_CFG_NUM_THREADS=" << VX_CFG_NUM_THREADS
                   << "\n";
 
         uint32_t tests_done = 0;
@@ -309,13 +309,13 @@ public:
             size_t feat_idx = test_id % cfg_.features.size();
             const std::string &feat = cfg_.features[feat_idx];
 
-            // Generate source elements for A and B (NUM_THREADS values each)
-            std::vector<uint32_t> rs1(NUM_THREADS), rs2(NUM_THREADS), rs3(NUM_THREADS);
-            for (int t = 0; t < NUM_THREADS; t++) {
-                rs1[t] = gen_fp_value(feat, fi.exp_bits, fi.sig_bits, test_id * NUM_THREADS + t, rng_);
-                rs2[t] = gen_fp_value("normals", fi.exp_bits, fi.sig_bits, test_id * NUM_THREADS + t, rng_);
+            // Generate source elements for A and B (VX_CFG_NUM_THREADS values each)
+            std::vector<uint32_t> rs1(VX_CFG_NUM_THREADS), rs2(VX_CFG_NUM_THREADS), rs3(VX_CFG_NUM_THREADS);
+            for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
+                rs1[t] = gen_fp_value(feat, fi.exp_bits, fi.sig_bits, test_id * VX_CFG_NUM_THREADS + t, rng_);
+                rs2[t] = gen_fp_value("normals", fi.exp_bits, fi.sig_bits, test_id * VX_CFG_NUM_THREADS + t, rng_);
                 // C accumulator is always fp32
-                float c = bit_cast<float>(gen_fp_value("normals", 8, 23, test_id * NUM_THREADS + t + 1, rng_));
+                float c = bit_cast<float>(gen_fp_value("normals", 8, 23, test_id * VX_CFG_NUM_THREADS + t + 1, rng_));
                 rs3[t] = bit_cast<uint32_t>(c);
             }
 
@@ -327,7 +327,7 @@ public:
 
             // Verify
             bool test_pass = true;
-            for (int t = 0; t < NUM_THREADS; t++) {
+            for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
                 float act = bit_cast<float>(result[t]);
                 int delta = approx_equal(act, expected[t]);
                 if (std::abs(delta) > cfg_.ulp) {
@@ -436,7 +436,7 @@ private:
         dut_->dispatch_uuid     = 0;
         dut_->dispatch_wis      = 0;
         dut_->dispatch_sid      = 0;
-        dut_->dispatch_tmask    = (1u << NUM_THREADS) - 1;  // all threads active
+        dut_->dispatch_tmask    = (1u << VX_CFG_NUM_THREADS) - 1;  // all threads active
         dut_->dispatch_PC       = 0;
         dut_->dispatch_wb       = 1;
         dut_->dispatch_wr_xregs = 0;
@@ -451,7 +451,7 @@ private:
         dut_->dispatch_sop      = 1;
         dut_->dispatch_eop      = 1;
 
-        for (int t = 0; t < NUM_THREADS; t++) {
+        for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
             write_lane(&dut_->dispatch_rs1_data, t, rs1[t]);
             write_lane(&dut_->dispatch_rs2_data, t, rs2[t]);
             write_lane(&dut_->dispatch_rs3_data, t, rs3[t]);
@@ -482,8 +482,8 @@ private:
         }
 
         // Collect result from commit data (one cycle with commit_ready=1)
-        std::vector<uint32_t> result(NUM_THREADS);
-        for (int t = 0; t < NUM_THREADS; t++) {
+        std::vector<uint32_t> result(VX_CFG_NUM_THREADS);
+        for (int t = 0; t < VX_CFG_NUM_THREADS; t++) {
             result[t] = read_lane(&dut_->commit_data, t);
         }
         tick();  // consume the commit beat

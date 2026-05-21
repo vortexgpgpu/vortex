@@ -27,7 +27,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // Address width
     parameter ADDR_WIDTH        = `CLOG2(SIZE),
     // Size of a word in bytes
-    parameter WORD_SIZE         = `XLEN/8,
+    parameter WORD_SIZE         = XLEN/8,
 
     // Request tag size
     parameter TAG_WIDTH         = 16,

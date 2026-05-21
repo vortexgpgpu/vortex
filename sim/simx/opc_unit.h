@@ -22,10 +22,10 @@ class Core;
 // Operand collector partition. Each (issue_lane, opc_idx) pair owns the
 // integer + float register files for the warps it serves.
 // Routing math:
-//   lane = wid % ISSUE_WIDTH       — selects which Operands instance
-//   wis  = wid / ISSUE_WIDTH       — warp-in-slice index
-//   opc  = wis % NUM_OPCS          — which OpcUnit within the lane
-//   slot = wis / NUM_OPCS          — local slot inside this OpcUnit
+//   lane = wid % VX_CFG_ISSUE_WIDTH       — selects which Operands instance
+//   wis  = wid / VX_CFG_ISSUE_WIDTH       — warp-in-slice index
+//   opc  = wis % VX_CFG_NUM_OPCS          — which OpcUnit within the lane
+//   slot = wis / VX_CFG_NUM_OPCS          — local slot inside this OpcUnit
 class OpcUnit : public SimObject<OpcUnit> {
 public:
   SimChannel<instr_trace_t *> Input;

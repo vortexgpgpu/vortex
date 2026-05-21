@@ -1,7 +1,7 @@
 // sgemm2_dxa_mc — Inter-core DXA multicast variant of sgemm2_dxa.
 //
 // Layout:
-//   - `mc_group_size` (= NUM_CORES) CTAs, one per core.
+//   - `mc_group_size` (= VX_CFG_NUM_CORES) CTAs, one per core.
 //   - Each CTA is full-sized (tile_size × tile_size threads, multi-warp).
 //   - CTAs at the same blockIdx.y (column-block) form an inter-core multicast
 //     group sharing the same B column block. A is per-CTA (one row block per CTA).
@@ -17,6 +17,7 @@
 // SMEM fabric.
 
 #include <vx_spawn2.h>
+#include <VX_config.h>
 #include <vx_dxa.h>
 #include <vx_barrier.h>
 #include <vx_intrinsics.h>

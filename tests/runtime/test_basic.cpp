@@ -27,6 +27,7 @@
 // ============================================================================
 
 #include <vortex.h>
+#include <VX_config.h>
 #include <vortex2.h>
 
 #include <cstdint>
@@ -66,7 +67,7 @@ int main() {
                 legacy_num_cores, new_num_cores);
         return 1;
     }
-    printf("device caps NUM_CORES = %lu\n", legacy_num_cores);
+    printf("device caps VX_CFG_NUM_CORES = %lu\n", legacy_num_cores);
 
     // ----- 3) Allocate a buffer via legacy API; free via new API. -----
     vx_buffer_h buf = nullptr;

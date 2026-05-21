@@ -1,10 +1,11 @@
 // sgemm_tcu_wg_dxa_mc — Inter-core DXA multicast variant of sgemm_tcu_wg_dxa.
 //
 // WGMMA pattern: each CTA uses (num_warps_per_cta) warps. `mc_group_size`
-// (= NUM_CORES) CTAs on distinct cores share the same B tile via inter-core
+// (= VX_CFG_NUM_CORES) CTAs on distinct cores share the same B tile via inter-core
 // DXA multicast routed through a global barrier.
 
 #include "common.h"
+#include <VX_config.h>
 #include <vx_spawn2.h>
 #include <vx_tensor.h>
 #include <vx_intrinsics.h>
@@ -12,7 +13,7 @@
 #include <vx_barrier.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wgmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
+using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
 
 constexpr uint32_t kDescA = 0;
 constexpr uint32_t kDescB = 1;
@@ -26,8 +27,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   const uint32_t tid          = threadIdx.x;
   const uint32_t num_threads  = blockDim.x;
-  const uint32_t warp_rank    = tid / NUM_THREADS;
-  const uint32_t num_warps    = num_threads / NUM_THREADS;
+  const uint32_t warp_rank    = tid / VX_CFG_NUM_THREADS;
+  const uint32_t num_warps    = num_threads / VX_CFG_NUM_THREADS;
 
   const uint32_t cta_M    = num_warps * ctx::xtileM;
   const uint32_t tile_row = blockIdx.y * cta_M;

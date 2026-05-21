@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-`ifdef EXT_F_ENABLE
+`ifdef VX_CFG_EXT_F_ENABLE
 `include "VX_fpu_define.vh"
 `endif
 
@@ -37,20 +37,20 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_mem_bus_if.master    icache_bus_if,
 
-`ifdef EXT_DXA_ENABLE
+`ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
     VX_mem_bus_if.slave     dxa_lmem_bus_if,
 `endif
 
-`ifdef EXT_TEX_ENABLE
+`ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_bus_if.master    tex_bus_if,
 `endif
 
-`ifdef EXT_OM_ENABLE
+`ifdef VX_CFG_EXT_OM_ENABLE
     VX_om_bus_if.master     om_bus_if,
 `endif
 
-`ifdef EXT_RASTER_ENABLE
+`ifdef VX_CFG_EXT_RASTER_ENABLE
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
@@ -68,24 +68,24 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_decode_if        decode_if();
     VX_sched_csr_if     sched_csr_if();
     VX_decode_sched_if  decode_sched_if();
-    VX_issue_sched_if   issue_sched_if[`ISSUE_WIDTH]();
+    VX_issue_sched_if   issue_sched_if[ISSUE_WIDTH]();
     VX_commit_sched_if  commit_sched_if();
-    VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
+    VX_branch_ctl_if    branch_ctl_if[NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
 
-    VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
-    VX_commit_if        commit_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
-    VX_writeback_if     writeback_if[`ISSUE_WIDTH]();
+    VX_dispatch_if      dispatch_if[NUM_EX_UNITS * ISSUE_WIDTH]();
+    VX_commit_if        commit_if[NUM_EX_UNITS * ISSUE_WIDTH]();
+    VX_writeback_if     writeback_if[ISSUE_WIDTH]();
 
-`ifdef EXT_DXA_ENABLE
+`ifdef VX_CFG_EXT_DXA_ENABLE
     VX_txbar_bus_if     dxa_txbar_bus_if();
 `endif
 
     VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
+        .NUM_LANES (NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_mem_if[`NUM_LSU_BLOCKS]();
+    ) lsu_mem_if[NUM_LSU_BLOCKS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
@@ -97,10 +97,10 @@ module VX_core import VX_gpu_pkg::*; #(
         .TAG_WIDTH (ICACHE_TAG_WIDTH_BASE)
     ) mmu_icache_if[1]();
 
-`ifdef TCU_WGMMA_ENABLE
-    localparam TCU_LMEM_BANK_ADDR_W = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`LMEM_NUM_BANKS);
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    localparam TCU_LMEM_BANK_ADDR_W = LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(LMEM_NUM_BANKS);
     VX_mem_bus_if #(
-        .DATA_SIZE  (`LMEM_NUM_BANKS * LSU_WORD_SIZE),
+        .DATA_SIZE  (LMEM_NUM_BANKS * LSU_WORD_SIZE),
         .TAG_WIDTH  (TCU_LMEM_TAG_W),
         .ATTR_WIDTH (LMEM_DMA_ATTR_W),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
@@ -111,7 +111,7 @@ module VX_core import VX_gpu_pkg::*; #(
     lmem_perf_t lmem_perf;
     coalescer_perf_t coalescer_perf;
     pipeline_perf_t pipeline_perf;
-`ifdef EXT_TCU_ENABLE
+`ifdef VX_CFG_EXT_TCU_ENABLE
     tcu_perf_t tcu_perf;
     assign pipeline_perf.tcu = tcu_perf;
 `endif
@@ -224,7 +224,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .sysmem_perf    (sysmem_perf_tmp),
         .pipeline_perf  (pipeline_perf),
-    `ifdef EXT_TCU_ENABLE
+    `ifdef VX_CFG_EXT_TCU_ENABLE
         .tcu_perf       (tcu_perf),
     `endif
     `endif
@@ -238,20 +238,20 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .dcr_csr_if     (dcr_csr_if),
 
-    `ifdef TCU_WGMMA_ENABLE
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
         .tcu_lmem_if    (tcu_lmem_if),
     `endif
-    `ifdef EXT_DXA_ENABLE
+    `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
-    `ifdef EXT_TEX_ENABLE
+    `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),
     `endif
-    `ifdef EXT_OM_ENABLE
+    `ifdef VX_CFG_EXT_OM_ENABLE
         .om_bus_if      (om_bus_if),
     `endif
-    `ifdef EXT_RASTER_ENABLE
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
         .raster_bus_if  (raster_bus_if),
     `endif
 
@@ -281,10 +281,10 @@ module VX_core import VX_gpu_pkg::*; #(
         .lmem_perf     (lmem_perf),
         .coalescer_perf(coalescer_perf),
     `endif
-    `ifdef TCU_WGMMA_ENABLE
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
         .tcu_lmem_if   (tcu_lmem_if),
     `endif
-    `ifdef EXT_DXA_ENABLE
+    `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
@@ -293,7 +293,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .dcache_bus_if (mmu_dcache_if)
     );
 
-`ifdef VM_ENABLE
+`ifdef VX_CFG_VM_ENABLE
 `ifdef PERF_ENABLE
     mmu_perf_t dcache_mmu_perf;
     mmu_perf_t icache_mmu_perf;
@@ -378,11 +378,11 @@ module VX_core import VX_gpu_pkg::*; #(
     wire [LSU_NUM_REQS-1:0] perf_dcache_wr_req_fire, perf_dcache_wr_req_fire_r;
     wire [LSU_NUM_REQS-1:0] perf_dcache_rsp_fire;
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_perf_dcache
-        for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin : g_j
-            assign perf_dcache_rd_req_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && ~lsu_mem_if[i].req_data.rw;
-            assign perf_dcache_wr_req_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && lsu_mem_if[i].req_data.rw;
-            assign perf_dcache_rsp_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if[i].rsp_valid && lsu_mem_if[i].rsp_data.mask[j] && lsu_mem_if[i].rsp_ready;
+    for (genvar i = 0; i < NUM_LSU_BLOCKS; ++i) begin : g_perf_dcache
+        for (genvar j = 0; j < NUM_LSU_LANES; ++j) begin : g_j
+            assign perf_dcache_rd_req_fire[i * NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && ~lsu_mem_if[i].req_data.rw;
+            assign perf_dcache_wr_req_fire[i * NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && lsu_mem_if[i].req_data.rw;
+            assign perf_dcache_rsp_fire[i * NUM_LSU_LANES + j] = lsu_mem_if[i].rsp_valid && lsu_mem_if[i].rsp_data.mask[j] && lsu_mem_if[i].rsp_ready;
         end
     end
 

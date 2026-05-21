@@ -18,21 +18,21 @@
 #include "constants.h"
 #include "types.h"
 #include "debug.h"
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
 #include "sfu_unit.h"
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 #include "tex_core.h"
 #include "tex_unit.h"
 #include "sfu_unit.h"
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 #include "om_core.h"
 #include "om_unit.h"
 #include "sfu_unit.h"
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 #include "raster_core.h"
 #include "raster_unit.h"
 #include "sfu_unit.h"
@@ -45,8 +45,8 @@ public:
   Impl(Cluster* simobject)
     : simobject_(simobject)
     , sockets_(NUM_SOCKETS)
-    , gbarriers_(NUM_BARRIERS)
-    , cores_per_socket_(SOCKET_SIZE)
+    , gbarriers_(VX_CFG_NUM_BARRIERS)
+    , cores_per_socket_(VX_CFG_SOCKET_SIZE)
   {
     const std::string& name = simobject_->name();
     char sname[100];
@@ -67,26 +67,26 @@ public:
     snprintf(sname, 100, "%s-l2cache", name.c_str());
     // §3.1.3: L2 is the LLC iff L2 is enabled and L3 is not.
     l2cache_ = Cache::Create(sname, Cache::Config{
-      !L2_ENABLED,
-      log2ceil(L2_CACHE_SIZE),// C
-      log2ceil(MEM_BLOCK_SIZE),// L
-      log2ceil(L1_LINE_SIZE), // W
-      log2ceil(L2_NUM_WAYS),  // A
-      log2ceil(L2_NUM_BANKS), // B
-      XLEN,                   // address bits
-      L2_NUM_REQS,            // request size
-      L2_MEM_PORTS,           // memory ports
-      L2_WRITEBACK,           // write-back
+      !VX_CFG_L2_ENABLED,
+      log2ceil(VX_CFG_L2_CACHE_SIZE),// C
+      log2ceil(VX_CFG_MEM_BLOCK_SIZE),// L
+      log2ceil(VX_CFG_L1_LINE_SIZE), // W
+      log2ceil(VX_CFG_L2_NUM_WAYS),  // A
+      log2ceil(VX_CFG_L2_NUM_BANKS), // B
+      VX_CFG_XLEN,                   // address bits
+      VX_CFG_L2_NUM_REQS,            // request size
+      VX_CFG_L2_MEM_PORTS,           // memory ports
+      VX_CFG_L2_WRITEBACK,           // write-back
       false,                  // write response
-      L2_MSHR_SIZE,           // mshr size
+      VX_CFG_L2_MSHR_SIZE,           // mshr size
       2,                      // pipeline latency
-      L2_REPL_POLICY,         // replacement policy
-      (L2_ENABLED != 0) && (L3_ENABLED == 0), // is_llc
+      VX_CFG_L2_REPL_POLICY,         // replacement policy
+      (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
     });
 
 
     // connect l2cache memory interface
-    for (uint32_t i = 0; i < L2_MEM_PORTS; ++i) {
+    for (uint32_t i = 0; i < VX_CFG_L2_MEM_PORTS; ++i) {
       l2cache_->mem_req_out.at(i).bind(&simobject_->mem_req_out.at(i));
       simobject_->mem_rsp_in.at(i).bind(&l2cache_->mem_rsp_in.at(i));
     }
@@ -99,16 +99,16 @@ public:
     // Row 4 = rcache (if enabled).
     // The priority arbiter lets sockets win over extension traffic on
     // contention, matching the RTL `VX_mem_arb` priority ordering.
-#if defined(EXT_DXA_ENABLE) || defined(EXT_TEX_ENABLE) || defined(EXT_OM_ENABLE) || defined(EXT_RASTER_ENABLE)
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
     constexpr uint32_t kL2Rows = 1
-        + EXT_DXA_ENABLED + EXT_TEX_ENABLED + EXT_OM_ENABLED + EXT_RASTER_ENABLED;
+        + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED;
     snprintf(sname, 100, "%s-l2arb", name.c_str());
     auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority,
-                                    kL2Rows * L2_NUM_REQS, L2_NUM_REQS);
+                                    kL2Rows * VX_CFG_L2_NUM_REQS, VX_CFG_L2_NUM_REQS);
     // sockets → row 0
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
-      for (uint32_t j = 0; j < L1_MEM_PORTS; ++j) {
-        uint32_t port = i * L1_MEM_PORTS + j;
+      for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
+        uint32_t port = i * VX_CFG_L1_MEM_PORTS + j;
         sockets_.at(i)->mem_req_out.at(j).bind(&l2arb->ReqIn.at(kL2Rows * port + 0));
         l2arb->RspOut.at(kL2Rows * port + 0).bind(&sockets_.at(i)->mem_rsp_in.at(j));
       }
@@ -116,14 +116,14 @@ public:
 #else
     // No L2-sharing extensions: direct sockets → L2.
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
-      for (uint32_t j = 0; j < L1_MEM_PORTS; ++j) {
-        sockets_.at(i)->mem_req_out.at(j).bind(&l2cache_->core_req_in.at(i * L1_MEM_PORTS + j));
-        l2cache_->core_rsp_out.at(i * L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
+      for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
+        sockets_.at(i)->mem_req_out.at(j).bind(&l2cache_->core_req_in.at(i * VX_CFG_L1_MEM_PORTS + j));
+        l2cache_->core_rsp_out.at(i * VX_CFG_L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
 #endif // any L2-sharing extension
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
     // Create DxaCore at cluster scope
     snprintf(sname, 100, "%s-dxa-core", name.c_str());
     dxa_core_ = DxaCore::Create(sname, simobject_);
@@ -151,7 +151,7 @@ public:
     // cycle the LMEM input receives it) and pulses
     // core->barrier_event_release for those carrying notify_done.
     uint32_t port_dxa = LSU_NUM_REQS;
-  #ifdef EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_TCU_ENABLE
     port_dxa += 1;
   #endif
     for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
@@ -164,7 +164,7 @@ public:
           if (req.is_write() && req.flags.dxa_notify_done) {
             // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,
             // bits[30:8] = bar_no. Decode to flat barrier index before release.
-            uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, NUM_BARRIERS);
+            uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, VX_CFG_NUM_BARRIERS);
             core->barrier_event_release(decoded);
           }
         });
@@ -172,7 +172,7 @@ public:
     }
 #endif
 
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
     // ── Cluster-shared TEX engine + tcache ──────────────────────────────
     snprintf(sname, 100, "%s-tex-core", name.c_str());
     tex_core_ = TexCore::Create(sname, simobject_);
@@ -180,25 +180,25 @@ public:
     // tcache: TLM `Cache` instance (read-only), config from VX_config.toml's
     // [tcache] section. Mirrors RTL `tcache` (VX_cache_cluster instance).
     snprintf(sname, 100, "%s-tcache", name.c_str());
-    constexpr uint32_t kTcacheLineSize = MEM_BLOCK_SIZE; // = TCACHE_LINE_SIZE = L1_LINE_SIZE
+    constexpr uint32_t kTcacheLineSize = VX_CFG_MEM_BLOCK_SIZE; // = TCACHE_LINE_SIZE = VX_CFG_L1_LINE_SIZE
     constexpr uint32_t kTcacheWordSize = 4;              // = TCACHE_WORD_SIZE
-    constexpr uint32_t kTcacheNumReqs  = TCACHE_NUM_BANKS;
+    constexpr uint32_t kTcacheNumReqs  = VX_CFG_TCACHE_NUM_BANKS;
     constexpr uint32_t kTcacheMemPorts = 1;              // = TCACHE_MEM_PORTS
     auto tcache = Cache::Create(sname, Cache::Config{
       false,                       // bypass
-      log2ceil(TCACHE_SIZE),       // C
+      log2ceil(VX_CFG_TCACHE_SIZE),       // C
       log2ceil(kTcacheLineSize),   // L
       log2ceil(kTcacheWordSize),   // W
-      log2ceil(TCACHE_NUM_WAYS),   // A
-      log2ceil(TCACHE_NUM_BANKS),  // B
-      XLEN,                        // address bits
+      log2ceil(VX_CFG_TCACHE_NUM_WAYS),   // A
+      log2ceil(VX_CFG_TCACHE_NUM_BANKS),  // B
+      VX_CFG_XLEN,                        // address bits
       kTcacheNumReqs,              // request size
       kTcacheMemPorts,             // memory ports
       false,                       // write-back (read-only cache)
       false,                       // write response
-      TCACHE_MSHR_SIZE,            // mshr size
+      VX_CFG_TCACHE_MSHR_SIZE,            // mshr size
       2,                           // pipeline latency
-      uint8_t(L2_REPL_POLICY),     // replacement policy (use L2 policy as default)
+      uint8_t(VX_CFG_L2_REPL_POLICY),     // replacement policy (use L2 policy as default)
       false,                       // is_llc (TCACHE is auxiliary, not LLC)
     });
     tcache_ = tcache;
@@ -210,7 +210,7 @@ public:
     }
     // tcache memory side → l2arb. Row index = kL2Rows-1 if no OM, else
     // kL2Rows-2 (OM occupies the last row when both are present).
-    constexpr uint32_t kTexRow = 1 + EXT_DXA_ENABLED;
+    constexpr uint32_t kTexRow = 1 + VX_CFG_EXT_DXA_ENABLED;
     for (uint32_t i = 0; i < kTcacheMemPorts; ++i) {
       tcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kTexRow));
       l2arb->RspOut.at(kL2Rows * i + kTexRow).bind(&tcache->mem_rsp_in.at(i));
@@ -235,15 +235,15 @@ public:
     tex_core_->tex_rsp_out.at(0).bind(&tex_bus->RspIn.at(0));
 #endif
 
-#if defined(EXT_DXA_ENABLE) || defined(EXT_TEX_ENABLE) || defined(EXT_OM_ENABLE) || defined(EXT_RASTER_ENABLE)
+#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
     // L2 arb outputs → l2cache (after all rows are bound).
-    for (uint32_t i = 0; i < L2_NUM_REQS; ++i) {
+    for (uint32_t i = 0; i < VX_CFG_L2_NUM_REQS; ++i) {
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
       l2cache_->core_rsp_out.at(i).bind(&l2arb->RspIn.at(i));
     }
 #endif
 
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
     // ── Cluster-shared OM engine + ocache ───────────────────────────────
     snprintf(sname, 100, "%s-om-core", name.c_str());
     om_core_ = OmCore::Create(sname, simobject_);
@@ -252,25 +252,25 @@ public:
     // VX_config.toml's [ocache] section. Mirrors RTL `ocache` (WRITE_ENABLE=1,
     // WRITEBACK=0 — see hw/rtl/VX_graphics.sv:311-312).
     snprintf(sname, 100, "%s-ocache", name.c_str());
-    constexpr uint32_t kOcacheLineSize = MEM_BLOCK_SIZE;
+    constexpr uint32_t kOcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
     constexpr uint32_t kOcacheWordSize = 4;
-    constexpr uint32_t kOcacheNumReqs  = OCACHE_NUM_BANKS;
+    constexpr uint32_t kOcacheNumReqs  = VX_CFG_OCACHE_NUM_BANKS;
     constexpr uint32_t kOcacheMemPorts = 1;
     auto ocache = Cache::Create(sname, Cache::Config{
       false,                        // bypass
-      log2ceil(OCACHE_SIZE),        // C
+      log2ceil(VX_CFG_OCACHE_SIZE),        // C
       log2ceil(kOcacheLineSize),    // L
       log2ceil(kOcacheWordSize),    // W
-      log2ceil(OCACHE_NUM_WAYS),    // A
-      log2ceil(OCACHE_NUM_BANKS),   // B
-      XLEN,                         // address bits
+      log2ceil(VX_CFG_OCACHE_NUM_WAYS),    // A
+      log2ceil(VX_CFG_OCACHE_NUM_BANKS),   // B
+      VX_CFG_XLEN,                         // address bits
       kOcacheNumReqs,               // request size
       kOcacheMemPorts,              // memory ports
       false,                        // write-back (write-through)
       false,                        // write response
-      OCACHE_MSHR_SIZE,             // mshr size
+      VX_CFG_OCACHE_MSHR_SIZE,             // mshr size
       2,                            // pipeline latency
-      uint8_t(L2_REPL_POLICY),      // replacement policy
+      uint8_t(VX_CFG_L2_REPL_POLICY),      // replacement policy
       false,                        // is_llc (OCACHE is auxiliary, not LLC)
     });
     ocache_ = ocache;
@@ -282,7 +282,7 @@ public:
     }
 
     // ocache memory side → l2arb. Row index is sockets + DXA + TEX (if those are present).
-    constexpr uint32_t kOmRow = 1 + EXT_DXA_ENABLED + EXT_TEX_ENABLED;
+    constexpr uint32_t kOmRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_TEX_ENABLED;
     for (uint32_t i = 0; i < kOcacheMemPorts; ++i) {
       ocache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kOmRow));
       l2arb->RspOut.at(kL2Rows * i + kOmRow).bind(&ocache->mem_rsp_in.at(i));
@@ -299,7 +299,7 @@ public:
     }
 #endif
 
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
     // ── Cluster-shared RASTER engine + rcache ───────────────────────────
     snprintf(sname, 100, "%s-raster-core", name.c_str());
     raster_core_ = RasterCore::Create(sname, simobject_);
@@ -307,25 +307,25 @@ public:
     // rcache: TLM `Cache` instance (read-only, like tcache). Mirrors RTL
     // `rcache` (VX_cache_cluster, WRITE_ENABLE=0).
     snprintf(sname, 100, "%s-rcache", name.c_str());
-    constexpr uint32_t kRcacheLineSize = MEM_BLOCK_SIZE;
+    constexpr uint32_t kRcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
     constexpr uint32_t kRcacheWordSize = 4;
-    constexpr uint32_t kRcacheNumReqs  = RCACHE_NUM_BANKS;
+    constexpr uint32_t kRcacheNumReqs  = VX_CFG_RCACHE_NUM_BANKS;
     constexpr uint32_t kRcacheMemPorts = 1;
     auto rcache = Cache::Create(sname, Cache::Config{
       false,                        // bypass
-      log2ceil(RCACHE_SIZE),        // C
+      log2ceil(VX_CFG_RCACHE_SIZE),        // C
       log2ceil(kRcacheLineSize),    // L
       log2ceil(kRcacheWordSize),    // W
-      log2ceil(RCACHE_NUM_WAYS),    // A
-      log2ceil(RCACHE_NUM_BANKS),   // B
-      XLEN,                         // address bits
+      log2ceil(VX_CFG_RCACHE_NUM_WAYS),    // A
+      log2ceil(VX_CFG_RCACHE_NUM_BANKS),   // B
+      VX_CFG_XLEN,                         // address bits
       kRcacheNumReqs,               // request size
       kRcacheMemPorts,              // memory ports
       false,                        // write-back (read-only)
       false,                        // write response
-      RCACHE_MSHR_SIZE,             // mshr size
+      VX_CFG_RCACHE_MSHR_SIZE,             // mshr size
       2,                            // pipeline latency
-      uint8_t(L2_REPL_POLICY),      // replacement policy
+      uint8_t(VX_CFG_L2_REPL_POLICY),      // replacement policy
       false,                        // is_llc (RCACHE is auxiliary, not LLC)
     });
     rcache_ = rcache;
@@ -419,29 +419,29 @@ public:
   Cluster::PerfStats perf_stats() const {
     Cluster::PerfStats perf_stats;
     perf_stats.l2cache = l2cache_->perf_stats();
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
     perf_stats.dxa = dxa_core_->perf_stats();
 #endif
     return perf_stats;
   }
 
   int dcr_write(uint32_t addr, uint32_t value) {
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
     if (addr >= VX_DCR_DXA_STATE_BEGIN && addr < VX_DCR_DXA_STATE_END) {
       return dxa_core_->dcr_write(addr, value);
     }
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
     if (addr >= VX_DCR_TEX_STATE_BEGIN && addr < VX_DCR_TEX_STATE_END) {
       return tex_core_->dcr_write(addr, value);
     }
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
     if (addr >= VX_DCR_OM_STATE_BEGIN && addr < VX_DCR_OM_STATE_END) {
       return om_core_->dcr_write(addr, value);
     }
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
     if (addr >= VX_DCR_RASTER_STATE_BEGIN && addr < VX_DCR_RASTER_STATE_END) {
       return raster_core_->dcr_write(addr, value);
     }
@@ -492,7 +492,7 @@ public:
     return sockets_.at(s)->core(c).get();
   }
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
   DxaCore::Ptr& dxa_core() { return dxa_core_; }
 #endif
 
@@ -502,19 +502,19 @@ private:
   std::vector<core_barrier_t> gbarriers_;
   Cache::Ptr                  l2cache_;
   uint32_t                    cores_per_socket_;
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
   DxaCore::Ptr                dxa_core_;
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
   TexCore::Ptr                tex_core_;
   Cache::Ptr                  tcache_;
   TexBusArbiter::Ptr          tex_bus_arb_;
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
   OmCore::Ptr                 om_core_;
   Cache::Ptr                  ocache_;
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
   RasterCore::Ptr             raster_core_;
   Cache::Ptr                  rcache_;
   RasterBusArbiter::Ptr       raster_bus_arb_;
@@ -528,8 +528,8 @@ Cluster::Cluster(const SimContext& ctx,
                  uint32_t cluster_id,
                  ProcessorImpl* processor)
   : SimObject(ctx, name)
-  , mem_req_out(L2_MEM_PORTS, this)
-  , mem_rsp_in(L2_MEM_PORTS, this)
+  , mem_req_out(VX_CFG_L2_MEM_PORTS, this)
+  , mem_rsp_in(VX_CFG_L2_MEM_PORTS, this)
   , cluster_id_(cluster_id)
   , processor_(processor)
   , impl_(new Impl(this))
@@ -591,7 +591,7 @@ bool Cluster::l2_flush_done() const {
   return impl_->l2_flush_done();
 }
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 DxaCore::Ptr& Cluster::dxa_core() {
   return impl_->dxa_core();
 }

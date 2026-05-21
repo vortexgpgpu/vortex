@@ -17,7 +17,7 @@
 
 module VX_om_core_top import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_LANES = `NUM_THREADS
+    parameter NUM_LANES = `VX_CFG_NUM_THREADS
 ) (
     input wire                              clk,
     input wire                              reset,

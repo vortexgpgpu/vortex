@@ -20,10 +20,10 @@ module VX_commit import VX_gpu_pkg::*; #(
     input wire              reset,
 
     // inputs
-    VX_commit_if.slave      commit_if [NUM_EX_UNITS * `ISSUE_WIDTH],
+    VX_commit_if.slave      commit_if [NUM_EX_UNITS * ISSUE_WIDTH],
 
     // outputs
-    VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
+    VX_writeback_if.master  writeback_if  [ISSUE_WIDTH],
     VX_commit_sched_if.master commit_sched_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -31,19 +31,19 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     // commit arbitration
 
-    VX_commit_if commit_arb_if[`ISSUE_WIDTH]();
-    wire [`ISSUE_WIDTH-1:0] committed_warps;
+    VX_commit_if commit_arb_if[ISSUE_WIDTH]();
+    wire [ISSUE_WIDTH-1:0] committed_warps;
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_commit_arbs
+    for (genvar i = 0; i < ISSUE_WIDTH; ++i) begin : g_commit_arbs
 
         wire [NUM_EX_UNITS-1:0]            valid_in;
         wire [NUM_EX_UNITS-1:0][OUT_DATAW-1:0] data_in;
         wire [NUM_EX_UNITS-1:0]            ready_in;
 
         for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_data_in
-            assign valid_in[j] = commit_if[j * `ISSUE_WIDTH + i].valid;
-            assign data_in[j]  = commit_if[j * `ISSUE_WIDTH + i].data;
-            assign commit_if[j * `ISSUE_WIDTH + i].ready = ready_in[j];
+            assign valid_in[j] = commit_if[j * ISSUE_WIDTH + i].valid;
+            assign data_in[j]  = commit_if[j * ISSUE_WIDTH + i].data;
+            assign commit_if[j * ISSUE_WIDTH + i].ready = ready_in[j];
         end
 
         VX_stream_arb #(
@@ -68,16 +68,16 @@ module VX_commit import VX_gpu_pkg::*; #(
     end
 
     // notify scheduler: build per-warp committed mask from per-slot signals
-    wire [`ISSUE_WIDTH-1:0][NW_WIDTH-1:0] committed_slot_wid;
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_committed_wid
+    wire [ISSUE_WIDTH-1:0][NW_WIDTH-1:0] committed_slot_wid;
+    for (genvar i = 0; i < ISSUE_WIDTH; ++i) begin : g_committed_wid
         assign committed_slot_wid[i] = commit_arb_if[i].data.wid;
     end
 
-    logic [`NUM_WARPS-1:0] committed_warp_mask;
-    wire  [`NUM_WARPS-1:0] committed_warp_mask_r;
+    logic [NUM_WARPS-1:0] committed_warp_mask;
+    wire  [NUM_WARPS-1:0] committed_warp_mask_r;
     always_comb begin
         committed_warp_mask = '0;
-        for (integer i = 0; i < `ISSUE_WIDTH; ++i) begin
+        for (integer i = 0; i < ISSUE_WIDTH; ++i) begin
             if (committed_warps[i]) begin
                 committed_warp_mask[committed_slot_wid[i]] = 1'b1;
             end
@@ -88,11 +88,11 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     // Writeback
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_writeback
+    for (genvar i = 0; i < ISSUE_WIDTH; ++i) begin : g_writeback
         wire [XLENB_W-1:0] bytesel_size = commit_arb_if[i].data.bytesel[BYTESEL_BITS-1 -: XLENB_W];
         wire [XLENB_W-1:0] bytesel_off  = commit_arb_if[i].data.bytesel[0 +: XLENB_W];
-        wire [`SIMD_WIDTH-1:0][`XLEN-1:0] writeback_data;
-        wire [`SIMD_WIDTH-1:0][XLENB-1:0] writeback_byteen;
+        wire [SIMD_WIDTH-1:0][XLEN-1:0] writeback_data;
+        wire [SIMD_WIDTH-1:0][XLENB-1:0] writeback_byteen;
 
         wire [XLENB-1:0] size_mask = (bytesel_size == XLENB_W'(7)) ? XLENB'(255) :
                                      (bytesel_size == XLENB_W'(6)) ? XLENB'(127) :
@@ -103,7 +103,7 @@ module VX_commit import VX_gpu_pkg::*; #(
                                      (bytesel_size == XLENB_W'(1)) ? XLENB'(3)   : XLENB'(1);
         wire [XLENB-1:0] base_byteen = size_mask << bytesel_off;
 
-        for (genvar lane = 0; lane < `SIMD_WIDTH; ++lane) begin : g_bytesel
+        for (genvar lane = 0; lane < SIMD_WIDTH; ++lane) begin : g_bytesel
             assign writeback_data[lane] = commit_arb_if[i].data.data[lane] << (8 * bytesel_off);
             assign writeback_byteen[lane] = commit_arb_if[i].data.tmask[lane] ? base_byteen : '0;
         end
@@ -126,15 +126,15 @@ module VX_commit import VX_gpu_pkg::*; #(
     end
 
 `ifdef DBG_TRACE_PIPELINE
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_trace
+    for (genvar i = 0; i < ISSUE_WIDTH; ++i) begin : g_trace
         for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_j
             always @(posedge clk) begin
-                if (commit_if[j * `ISSUE_WIDTH + i].valid && commit_if[j * `ISSUE_WIDTH + i].ready) begin
-                    `TRACE(1, ("%t: %s commit: wid=%0d, cta_id=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, commit_if[j * `ISSUE_WIDTH + i].data.cta_id, commit_if[j * `ISSUE_WIDTH + i].data.sid, to_fullPC(commit_if[j * `ISSUE_WIDTH + i].data.PC)))
+                if (commit_if[j * ISSUE_WIDTH + i].valid && commit_if[j * ISSUE_WIDTH + i].ready) begin
+                    `TRACE(1, ("%t: %s commit: wid=%0d, cta_id=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, commit_if[j * ISSUE_WIDTH + i].data.wid, commit_if[j * ISSUE_WIDTH + i].data.cta_id, commit_if[j * ISSUE_WIDTH + i].data.sid, to_fullPC(commit_if[j * ISSUE_WIDTH + i].data.PC)))
                     VX_trace_pkg::trace_ex_type(1, j);
-                    `TRACE(1, (", tmask=%b, wb=%b, wr_xregs=%b, rd=%0d, sop=%b, eop=%b, data=", commit_if[j * `ISSUE_WIDTH + i].data.tmask, commit_if[j * `ISSUE_WIDTH + i].data.wb, commit_if[j * `ISSUE_WIDTH + i].data.wr_xregs, commit_if[j * `ISSUE_WIDTH + i].data.rd, commit_if[j * `ISSUE_WIDTH + i].data.sop, commit_if[j * `ISSUE_WIDTH + i].data.eop))
-                    `TRACE_ARRAY1D(1, "0x%0h", commit_if[j * `ISSUE_WIDTH + i].data.data, `SIMD_WIDTH)
-                    `TRACE(1, (" (#%0d)\n", commit_if[j * `ISSUE_WIDTH + i].data.uuid))
+                    `TRACE(1, (", tmask=%b, wb=%b, wr_xregs=%b, rd=%0d, sop=%b, eop=%b, data=", commit_if[j * ISSUE_WIDTH + i].data.tmask, commit_if[j * ISSUE_WIDTH + i].data.wb, commit_if[j * ISSUE_WIDTH + i].data.wr_xregs, commit_if[j * ISSUE_WIDTH + i].data.rd, commit_if[j * ISSUE_WIDTH + i].data.sop, commit_if[j * ISSUE_WIDTH + i].data.eop))
+                    `TRACE_ARRAY1D(1, "0x%0h", commit_if[j * ISSUE_WIDTH + i].data.data, SIMD_WIDTH)
+                    `TRACE(1, (" (#%0d)\n", commit_if[j * ISSUE_WIDTH + i].data.uuid))
                 end
             end
         end

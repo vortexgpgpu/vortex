@@ -18,16 +18,16 @@
 #include "func_unit.h"
 #include "wctl_unit.h"
 #include "csr_unit.h"
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa/dxa_unit.h"
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 #include "tex/tex_unit.h"
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 #include "om/om_unit.h"
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 #include "raster/raster_unit.h"
 #endif
 
@@ -46,34 +46,34 @@ class RasterCore;
 // `tex_req_out` and the SFU does NOT push the trace onto its writeback
 // output — TexCore owns the trace until it returns it via `tex_rsp_in`,
 // at which point on_tick() forwards it to the original writeback lane.
-class SfuUnit : public FuncUnit<NUM_SFU_BLOCKS> {
+class SfuUnit : public FuncUnit<VX_CFG_NUM_SFU_BLOCKS> {
 public:
 	SfuUnit(const SimContext& ctx, const char* name, Core*);
 
 	CsrUnit& csr_unit() { return *csr_unit_; }
 
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 	// Outbound DXA request channel — bound by Cluster to
 	// DxaCore::dxa_req_in[cid]. Owned here (SfuUnit is the SimObject;
 	// DxaUnit is a plain helper sub-class).
 	SimChannel<DxaReq> dxa_req_out;
 #endif
 
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 	// Outbound TEX request / inbound TEX response channels. Cluster binds
 	// these to the cluster-level TexBus arbiter (which fans into TexCore).
 	SimChannel<TexReq> tex_req_out;
 	SimChannel<TexRsp> tex_rsp_in;
 #endif
 
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 	// Outbound OM request channel. Cluster binds to OmCore::om_req_in[cid].
 	// vx_om has no return value — there is no rsp channel; OmCore drives
 	// the R-M-W asynchronously through the ocache.
 	SimChannel<OmReq> om_req_out;
 #endif
 
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 	// Outbound RASTER request / inbound response channels. Cluster binds
 	// these to the cluster-level RasterBus arbiter (which fans into RasterCore).
 	SimChannel<RasterReq> raster_req_out;
@@ -88,16 +88,16 @@ private:
 
 	std::unique_ptr<WctlUnit> wctl_unit_;
 	std::unique_ptr<CsrUnit>  csr_unit_;
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 	std::unique_ptr<DxaUnit>  dxa_unit_;
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 	std::unique_ptr<TexUnit>  tex_unit_;
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 	std::unique_ptr<OmUnit>   om_unit_;
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 	std::unique_ptr<RasterUnit> raster_unit_;
 #endif
 };

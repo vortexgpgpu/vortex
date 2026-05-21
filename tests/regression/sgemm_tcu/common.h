@@ -2,9 +2,10 @@
 #define _COMMON_H_
 
 #include <stdint.h>
+#include <VX_config.h>
 
-#ifndef NUM_THREADS
-#define NUM_THREADS 4
+#ifndef VX_CFG_NUM_THREADS
+#define VX_CFG_NUM_THREADS 4
 #endif
 
 #ifndef ITYPE

@@ -2,7 +2,7 @@ PROJECT = VX_raster_core_top
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
 
-CONFIGS += -DEXT_RASTER_ENABLE
+CONFIGS += -DVX_CFG_EXT_RASTER_ENABLE
 
 include ../../common.mk
 

@@ -1,4 +1,5 @@
 #include "common.h"
+#include <VX_config.h>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -169,7 +170,7 @@ struct muladd_t<vt::tf32, vt::tf32> {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using cfg = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
+using cfg = vt::wgmma_config_t<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
 
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
@@ -259,20 +260,17 @@ int main(int argc, char *argv[]) {
   }
 
   // Check DXA extension
-#ifdef ISA_EXT_DXA
-  const uint64_t dxa_isa_bit = (1ull << (32 + ISA_EXT_DXA));
-  if ((isa_flags & dxa_isa_bit) == 0) {
+  if ((isa_flags & VX_ISA_EXT_DXA) == 0) {
     std::cerr << "Error: DXA ISA extension is disabled." << std::endl;
     cleanup();
     return -1;
   }
-#endif
 
   uint64_t NT;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &NT));
-  if (NT != NUM_THREADS) {
+  if (NT != VX_CFG_NUM_THREADS) {
     std::cout << "Error: device thread count (" << NT
-              << ") must match NUM_THREADS=" << NUM_THREADS << std::endl;
+              << ") must match VX_CFG_NUM_THREADS=" << VX_CFG_NUM_THREADS << std::endl;
     return -1;
   }
 
@@ -288,7 +286,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_device_query(device, VX_CAPS_ISSUE_WIDTH, &issue_width));
   if (warps != issue_width) {
     std::cout << "Error: number of warps in TB (" << warps
-              << ") must match device's ISSUE_WIDTH=" << issue_width << "!" << std::endl;
+              << ") must match device's VX_CFG_ISSUE_WIDTH=" << issue_width << "!" << std::endl;
     return -1;
   }
 
@@ -335,12 +333,12 @@ int main(int argc, char *argv[]) {
   kernel_arg.N = N;
   kernel_arg.K = K;
 
-  // Inter-core multicast group spans NUM_CORES (one CTA per core).
+  // Inter-core multicast group spans VX_CFG_NUM_CORES (one CTA per core).
   uint64_t num_cores_cap = 0;
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CORES, &num_cores_cap));
   const uint32_t mc_group_size = (uint32_t)num_cores_cap;
   if (mc_group_size < 2) {
-    std::cout << "Error: sgemm_tcu_wg_dxa_mc requires NUM_CORES >= 2 "
+    std::cout << "Error: sgemm_tcu_wg_dxa_mc requires VX_CFG_NUM_CORES >= 2 "
                  "(have " << num_cores_cap << "); use _mw on single-core\n";
     cleanup();
     return -1;

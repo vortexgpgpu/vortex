@@ -13,8 +13,8 @@
 
 `include "VX_define.vh"
 
-`ifdef TCU_WGMMA_ENABLE
-`ifdef TCU_SPARSE_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+`ifdef VX_CFG_TCU_SPARSE_ENABLE
 
 //
 // Per-block sparse-metadata buffer (SS sparse, block-major SMEM).
@@ -53,7 +53,7 @@ module VX_tcu_mbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [3:0]               req_step_n,
     input  wire [3:0]               req_step_k,
     input  wire [3:0]               req_fmt_s,
-    input  wire [`XLEN-1:0]         req_desc_a,
+    input  wire [XLEN-1:0]         req_desc_a,
 
     // LMEM bank-parallel read port
     VX_mem_bus_if.master            tcu_lmem_if,
@@ -69,7 +69,7 @@ module VX_tcu_mbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     localparam BANK_SEL_BITS      = $clog2(NUM_BANKS);
-    localparam WORD_SIZE_LOG2     = $clog2(`XLEN / 8);
+    localparam WORD_SIZE_LOG2     = $clog2(XLEN / 8);
 
     localparam SP_I_RATIO_32B     = 1;
     localparam SP_I_RATIO_16B     = 2;
@@ -123,7 +123,7 @@ module VX_tcu_mbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     logic                       slot_valid_r;
-    logic [`XLEN-1:0]           slot_desc_a_r;
+    logic [XLEN-1:0]           slot_desc_a_r;
     logic [BANK_ADDR_WIDTH-1:0] slot_meta_base_r;
     logic [`UP(K_STEPS_W)-1:0]  slot_step_k_r;
     logic [3:0]                 slot_meta_stride_r;
@@ -278,7 +278,7 @@ module VX_tcu_mbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < META_TOTAL_MAX) begin
                     storage_wren[int'(rsp_ctr_r) * NUM_BANKS + b] = 1'b1;
                     storage_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data.data[b * `XLEN +: `XLEN];
+                        tcu_lmem_if.rsp_data.data[b * XLEN +: XLEN];
                 end
             end
         end
@@ -378,5 +378,5 @@ module VX_tcu_mbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 endmodule
 
-`endif // TCU_SPARSE_ENABLE
-`endif // TCU_WGMMA_ENABLE
+`endif // VX_CFG_TCU_SPARSE_ENABLE
+`endif // VX_CFG_TCU_WGMMA_ENABLE

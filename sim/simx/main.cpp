@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 
   {
     // create memory module
-    RAM ram(0, MEM_PAGE_SIZE);
+    RAM ram(0, VX_CFG_MEM_PAGE_SIZE);
 
     // create processor
     Processor processor;
@@ -98,9 +98,9 @@ int main(int argc, char **argv) {
     processor.attach_ram(&ram);
 
 	  // setup base DCRs
-    const uint64_t startup_addr(STARTUP_ADDR);
+    const uint64_t startup_addr(VX_CFG_STARTUP_ADDR);
     processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
-  #if (XLEN == 64)
+  #if (VX_CFG_XLEN == 64)
     processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR1, startup_addr >> 32);
   #endif
     processor.dcr_write(VX_DCR_KMU_STARTUP_ARG0, 0);
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
     processor.dcr_write(VX_DCR_KMU_BLOCK_DIM_Z,  1);
     processor.dcr_write(VX_DCR_KMU_LMEM_SIZE,    0);
     processor.dcr_write(VX_DCR_KMU_BLOCK_SIZE,   1);
-    processor.dcr_write(VX_DCR_KMU_WARP_STEP_X,  NUM_THREADS);
+    processor.dcr_write(VX_DCR_KMU_WARP_STEP_X,  VX_CFG_NUM_THREADS);
     processor.dcr_write(VX_DCR_KMU_WARP_STEP_Y,  0);
     processor.dcr_write(VX_DCR_KMU_WARP_STEP_Z,  0);
 
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
           return -1;
         monitor.attach(img);
         processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR0, img.entry & 0xffffffff);
-      #if (XLEN == 64)
+      #if (VX_CFG_XLEN == 64)
         processor.dcr_write(VX_DCR_KMU_STARTUP_ADDR1, img.entry >> 32);
       #endif
       } else if (program_ext == "vxbin") {
@@ -226,13 +226,13 @@ int main(int argc, char **argv) {
       // flush GPU caches before reading back results
       {
         uint32_t dummy;
-        for (uint32_t cid = 0; cid < NUM_CORES * NUM_CLUSTERS; ++cid) {
+        for (uint32_t cid = 0; cid < VX_CFG_NUM_CORES * VX_CFG_NUM_CLUSTERS; ++cid) {
           processor.dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
         }
       }
 
       // read exitcode from @MPM.1
-      ram.read(&exitcode, IO_EXIT_CODE, 4);
+      ram.read(&exitcode, VX_CFG_IO_EXIT_CODE, 4);
     }
   }
 

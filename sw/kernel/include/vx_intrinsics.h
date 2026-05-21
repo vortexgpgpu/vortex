@@ -256,7 +256,7 @@ inline void vx_wsync() {
 //   funct3=2, R4-type, funct2=0     : vx_om    (output-merger write)
 //   funct3=3, R-type,  funct7=0     : vx_rast  (raster pop)
 // These trap as illegal-instruction unless the corresponding
-// EXT_TEX_ENABLE / EXT_OM_ENABLE / EXT_RASTER_ENABLE is set.
+// VX_CFG_EXT_TEX_ENABLE / VX_CFG_EXT_OM_ENABLE / VX_CFG_EXT_RASTER_ENABLE is set.
 
 // Texture sample: (stage, u, v, lod) -> texel
 inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {

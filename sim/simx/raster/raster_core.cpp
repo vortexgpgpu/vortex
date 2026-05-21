@@ -28,10 +28,10 @@ using namespace vortex;
 namespace {
 
 // rcache config — mirrors VX_gpu_pkg.sv:1075-1085 + VX_config.toml [rcache].
-constexpr uint32_t kRcacheNumReqs  = RCACHE_NUM_BANKS;
+constexpr uint32_t kRcacheNumReqs  = VX_CFG_RCACHE_NUM_BANKS;
 constexpr uint32_t kRcacheMemPorts = 1;
-constexpr uint32_t kRcacheLineSize = MEM_BLOCK_SIZE;
-constexpr uint64_t kRcacheLineMask = ~uint64_t(MEM_BLOCK_SIZE - 1);
+constexpr uint32_t kRcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
+constexpr uint64_t kRcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
 // One RasterCore per cluster after the RTL-style raster_arb collapses
 // NUM_SLICES → 1. SimX models a single producer lane.
@@ -66,7 +66,7 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
 // is deposited via per-tag (target_ptr, byte_offset, length) bookkeeping.
 //
 // Once READY, per-core RasterReqs are drained from raster_req_in[0] and
-// served from quad_queue_, encoding NUM_THREADS stamps per response. When
+// served from quad_queue_, encoding VX_CFG_NUM_THREADS stamps per response. When
 // queue drains, subsequent responses carry stamps=0 (the "done" sentinel
 // the kernel polls for).
 
@@ -423,11 +423,11 @@ private:
       return;
     }
     graphics::Rasterizer rasterizer(&shader_trampoline, this,
-                                    RASTER_TILE_LOGSIZE,
-                                    RASTER_BLOCK_LOGSIZE);
+                                    VX_CFG_RASTER_TILE_LOGSIZE,
+                                    VX_CFG_RASTER_BLOCK_LOGSIZE);
     rasterizer.configure(dcrs_);
 
-    uint32_t tile_size = 1u << RASTER_TILE_LOGSIZE;
+    uint32_t tile_size = 1u << VX_CFG_RASTER_TILE_LOGSIZE;
     for (uint32_t t = 0; t < tile_headers_.size(); ++t) {
       const auto& hdr = tile_headers_[t];
       uint32_t tile_x = uint32_t(hdr.tile_x) * tile_size;
@@ -455,7 +455,7 @@ private:
 
       // One stamp per active lane. When queue empty, leave default-
       // constructed (pos_mask=0 → drain sentinel).
-      for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         if (!(req.tmask_bits & (1u << t))) continue;
         if (quad_queue_.empty()) continue;
         rsp.stamps[t] = quad_queue_.front();

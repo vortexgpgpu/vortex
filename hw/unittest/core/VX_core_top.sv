@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-`ifdef EXT_F_ENABLE
+`ifdef VX_CFG_EXT_F_ENABLE
 `include "VX_fpu_define.vh"
 `endif
 
@@ -82,7 +82,7 @@ module VX_core_top import VX_gpu_pkg::*; #(
     assign gbar_bus_if.rsp_data.id  = gbar_rsp_id;
     assign gbar_rsp_ready = gbar_bus_if.rsp_ready;
 
-`ifdef EXT_DXA_ENABLE
+`ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if dxa_req_bus_if();
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
@@ -189,7 +189,7 @@ module VX_core_top import VX_gpu_pkg::*; #(
 
         .gbar_bus_if    (gbar_bus_if),
 
-    `ifdef EXT_DXA_ENABLE
+    `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
     `endif

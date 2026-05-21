@@ -11,13 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#if defined(TCU_TYPE_TFR)
+#if defined(VX_CFG_TCU_TYPE_TFR)
 #include "VVX_tcu_fedp_tfr.h"
 #define MODULE VVX_tcu_fedp_tfr
-#elif defined(TCU_TYPE_BHF)
+#elif defined(VX_CFG_TCU_TYPE_BHF)
 #include "VVX_tcu_fedp_bhf.h"
 #define MODULE VVX_tcu_fedp_bhf
-#elif defined(TCU_TYPE_DSP)
+#elif defined(VX_CFG_TCU_TYPE_DSP)
 #include "VVX_tcu_fedp_dsp.h"
 #define MODULE VVX_tcu_fedp_dsp
 #else
@@ -626,7 +626,7 @@ public:
     dut_->clk = 0;
     dut_->reset = 0;
     dut_->enable = 0;
-  #ifdef TCU_TYPE_TFR
+  #ifdef VX_CFG_TCU_TYPE_TFR
     dut_->vld_mask = 0;
   #endif
     dut_->fmt_s = config_.fmt_s;
@@ -654,7 +654,7 @@ public:
   bool test_integers() {
     std::cout << "Testing integer format" << std::endl;
 
-    // Calculate how many elements we can fit in NUM_REGS XLEN words
+    // Calculate how many elements we can fit in NUM_REGS VX_CFG_XLEN words
     bool is_signed = int_fmt_sign(config_.fmt_s);
     int element_bits = int_fmt_width(config_.fmt_s);
     int elements_per_word = 32 / element_bits;
@@ -692,7 +692,7 @@ public:
       // Generate c value
       int32_t c_value = generate_int_value(true, 32, c_enable ? test_id : -1);
 
-      // Pack into XLEN words
+      // Pack into VX_CFG_XLEN words
       uint32_t a_packed[NUM_REGS], b_packed[NUM_REGS];
       pack_elements(a_values, element_bits, NUM_REGS, a_packed);
       pack_elements(b_values, element_bits, NUM_REGS, b_packed);
@@ -705,14 +705,14 @@ public:
       dut_->c_val = c_value;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
-    #ifdef TCU_TYPE_TFR
+    #ifdef VX_CFG_TCU_TYPE_TFR
       dut_->vld_mask = current_vld_mask;
     #endif
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
-      #ifdef TCU_TYPE_TFR
+      #ifdef VX_CFG_TCU_TYPE_TFR
         dut_->vld_mask = 0;
       #endif
       }
@@ -743,7 +743,7 @@ public:
   bool test_floating_points(const std::vector<std::string> &features_to_test) {
     if (features_to_test.empty()) return true;
 
-    // Calculate how many elements we can fit in NUM_REGS XLEN words
+    // Calculate how many elements we can fit in NUM_REGS VX_CFG_XLEN words
     int element_bits = float_fmt_width(config_.exp_bits, config_.sig_bits);
     int elements_per_word = 32 / element_bits;
     int total_elements = NUM_REGS * elements_per_word;
@@ -810,7 +810,7 @@ public:
         std::cout << "Testing floating-point feature: " << feature << std::endl;
       }
 
-      // Pack into XLEN words
+      // Pack into VX_CFG_XLEN words
       std::vector<uint32_t> a_packed(NUM_REGS), b_packed(NUM_REGS);
       pack_elements(a_value_hex, element_bits, NUM_REGS, a_packed.data());
       pack_elements(b_value_hex, element_bits, NUM_REGS, b_packed.data());
@@ -823,14 +823,14 @@ public:
       dut_->c_val = c_value_hex;
       dut_->fmt_s = config_.fmt_s;
       dut_->enable = 1;
-    #ifdef TCU_TYPE_TFR
+    #ifdef VX_CFG_TCU_TYPE_TFR
       dut_->vld_mask = current_vld_mask;
     #endif
 
       // Run for latency cycles
       for (int i = 0; i < LATENCY; i++) {
         tick();
-      #ifdef TCU_TYPE_TFR
+      #ifdef VX_CFG_TCU_TYPE_TFR
         dut_->vld_mask = 0;
       #endif
       }

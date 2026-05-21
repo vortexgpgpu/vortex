@@ -21,7 +21,7 @@ using namespace vortex;
 
 // wid → local slot index inside this OpcUnit.
 inline static constexpr uint32_t wid_to_opc_slot(uint32_t wid) {
-  return (wid / ISSUE_WIDTH) / NUM_OPCS;
+  return (wid / VX_CFG_ISSUE_WIDTH) / VX_CFG_NUM_OPCS;
 }
 
 void OpcUnit::warp_regs_t::reset() {
@@ -67,8 +67,8 @@ static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
       if ((trace->src_regs[i].type == RegType::Integer && trace->src_regs[i].id() == 0)
        || (trace->src_regs[j].type == RegType::Integer && trace->src_regs[j].id() == 0))
         continue; // skip x0
-      uint32_t bank_i = trace->src_regs[i].idx % NUM_GPR_BANKS;
-      uint32_t bank_j = trace->src_regs[j].idx % NUM_GPR_BANKS;
+      uint32_t bank_i = trace->src_regs[i].idx % VX_CFG_NUM_GPR_BANKS;
+      uint32_t bank_j = trace->src_regs[j].idx % VX_CFG_NUM_GPR_BANKS;
       if (bank_i == bank_j)
         ++stalls;
     }

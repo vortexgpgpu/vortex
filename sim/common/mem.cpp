@@ -22,7 +22,7 @@
 
 using namespace vortex;
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 // #ifndef NDEBUG
 // #define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
 // #else
@@ -134,11 +134,11 @@ void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size)
 
 MemoryUnit::MemoryUnit(uint64_t pageSize)
   : pageSize_(pageSize)
-#ifndef VM_ENABLE
+#ifndef VX_CFG_VM_ENABLE
   , enableVM_(pageSize != 0)
 #endif
   , amo_reservation_({0x0, false})
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
   , TLB_HIT(0)
   , TLB_MISS(0)
   , TLB_EVICT(0)
@@ -146,8 +146,8 @@ MemoryUnit::MemoryUnit(uint64_t pageSize)
   , satp_(NULL)
 #endif
 {
-  tlb_.resize(TLB_SIZE);
-#ifndef VM_ENABLE
+  tlb_.resize(VX_CFG_TLB_SIZE);
+#ifndef VX_CFG_VM_ENABLE
   if (pageSize != 0) {
     // Bootstrap identity entry — preserves prior MemoryUnit behavior when
     // VM is compiled out but a non-zero pageSize is passed.
@@ -161,9 +161,9 @@ void MemoryUnit::attach(MemDevice &m, uint64_t start, uint64_t end) {
 }
 
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits) {
-  // Linear scan over the fixed-size TLB array (typical TLB_SIZE = 16-64 fits
+  // Linear scan over the fixed-size TLB array (typical VX_CFG_TLB_SIZE = 16-64 fits
   // in 1-2 cache lines — cheaper than hash lookup, and matches RTL behavior).
   for (auto& entry : tlb_) {
     if (entry.valid && entry.vpn == (vAddr >> entry.size_bits)) {
@@ -230,7 +230,7 @@ uint64_t MemoryUnit::toPhyAddr(uint64_t addr, uint32_t flagMask) {
 }
 #endif
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 void MemoryUnit::read(void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type) {
   DBGPRINT("  [MMU:read] 0x%lx, 0x%x, %u\n",addr,size,type);
   uint64_t pAddr;
@@ -243,7 +243,7 @@ void MemoryUnit::read(void* data, uint64_t addr, uint32_t size, bool sup) {
   return decoder_.read(data, pAddr, size);
 }
 #endif
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 void MemoryUnit::write(const void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type) {
   DBGPRINT("  [MMU:Write] 0x%lx, 0x%x, %u\n",addr,size,type);
   uint64_t pAddr;
@@ -259,7 +259,7 @@ void MemoryUnit::write(const void* data, uint64_t addr, uint32_t size, bool sup)
 }
 #endif
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 void MemoryUnit::amo_reserve(uint64_t addr) {
   DBGPRINT("  [MMU:amo_reserve] 0x%lx\n",addr);
   uint64_t pAddr = this->vAddr_to_pAddr(addr,ACCESS_TYPE::LOAD);
@@ -274,7 +274,7 @@ void MemoryUnit::amo_reserve(uint64_t addr) {
 }
 #endif
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 bool MemoryUnit::amo_check(uint64_t addr) {
   DBGPRINT("  [MMU:amo_check] 0x%lx\n",addr);
   uint64_t pAddr = this->vAddr_to_pAddr(addr, ACCESS_TYPE::LOAD);
@@ -288,7 +288,7 @@ bool MemoryUnit::amo_check(uint64_t addr) {
 #endif
 
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits) {
   uint64_t vpn = virt / pageSize_;
@@ -670,7 +670,7 @@ void RAM::loadHexImage(const char* filename) {
   }
 }
 
-#ifdef VM_ENABLE
+#ifdef VX_CFG_VM_ENABLE
 
 uint64_t MemoryUnit::get_base_ppn()
 {
@@ -750,13 +750,13 @@ uint64_t MemoryUnit::vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type)
 
 uint64_t MemoryUnit::get_pte_address(uint64_t base_ppn, uint64_t vpn)
 {
-  return (base_ppn * PT_SIZE) + (vpn * PTE_SIZE);
+  return (base_ppn * VX_CFG_PT_SIZE) + (vpn * VX_CFG_PTE_SIZE);
 }
 
 std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t *size_bits)
 {
   DBGPRINT("  [MMU:PTW] Start: vaddr = 0x%lx, type = %u.\n", vAddr_bits, type);
-  uint8_t level = PT_LEVEL;
+  uint8_t level = VX_CFG_PT_LEVEL;
   int i = level-1;
   vAddr_t vaddr(vAddr_bits);
   uint32_t flags =0;
@@ -769,7 +769,7 @@ std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, AC
   {
     // Read PTE.
     pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
-    decoder_.read(&pte_bytes, pte_addr, PTE_SIZE);
+    decoder_.read(&pte_bytes, pte_addr, VX_CFG_PTE_SIZE);
     PTE_t pte(pte_bytes);
     DBGPRINT("  [MMU:PTW] Level[%u] pte_addr=0x%lx, pte_bytes =0x%lx, pte.ppn= 0x%lx, pte.flags = %u)\n", i, pte_addr, pte_bytes, pte.ppn, pte.flags);
 

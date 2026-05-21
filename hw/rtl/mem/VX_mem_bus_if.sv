@@ -17,7 +17,6 @@ interface VX_mem_bus_if import VX_gpu_pkg::*; #(
     parameter DATA_SIZE  = 1,
     parameter ATTR_WIDTH = MEM_ATTR_WIDTH,
     parameter TAG_WIDTH  = UUID_WIDTH + 1,
-    parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
 ) ();
 

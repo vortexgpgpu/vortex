@@ -63,12 +63,12 @@ parse_args() {
         case $i in
             --driver=*) DRIVER=${i#*=} ;;
             --app=*)    APP=${i#*=} ;;
-            --clusters=*) CONFIGS=$(add_option "$CONFIGS" "-DNUM_CLUSTERS=${i#*=}") ;;
-            --cores=*)  CONFIGS=$(add_option "$CONFIGS" "-DNUM_CORES=${i#*=}") ;;
-            --warps=*)  CONFIGS=$(add_option "$CONFIGS" "-DNUM_WARPS=${i#*=}") ;;
-            --threads=*) CONFIGS=$(add_option "$CONFIGS" "-DNUM_THREADS=${i#*=}") ;;
-            --l2cache)  CONFIGS=$(add_option "$CONFIGS" "-DL2_ENABLE") ;;
-            --l3cache)  CONFIGS=$(add_option "$CONFIGS" "-DL3_ENABLE") ;;
+            --clusters=*) CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_NUM_CLUSTERS=${i#*=}") ;;
+            --cores=*)  CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_NUM_CORES=${i#*=}") ;;
+            --warps=*)  CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_NUM_WARPS=${i#*=}") ;;
+            --threads=*) CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_NUM_THREADS=${i#*=}") ;;
+            --l2cache)  CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_L2_ENABLE") ;;
+            --l3cache)  CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_L3_ENABLE") ;;
             --perf=*)   CONFIGS=$(add_option "$CONFIGS" "-DPERF_ENABLE"); PERF_CLASS=${i#*=} ;;
             --debug=*)  DEBUG=1; DEBUG_LEVEL=${i#*=} ;;
             --scope)    SCOPE=1 ;;

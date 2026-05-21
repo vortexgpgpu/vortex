@@ -4,6 +4,7 @@
 // blockIdx.y form a multicast group sharing one B column-block.
 
 #include <algorithm>
+#include <VX_config.h>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -44,7 +45,7 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t n) {
 
 const char* kernel_file = "kernel.vxbin";
 uint32_t size      = 16;
-uint32_t tile_size = 4;     // = NUM_THREADS (1 warp per CTA)
+uint32_t tile_size = 4;     // = VX_CFG_NUM_THREADS (1 warp per CTA)
 uint32_t verify    = 1;
 
 vx_device_h device = nullptr;
@@ -101,9 +102,9 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   // Block = (tile_size, 1) — single-warp CTAs.
-  // Want tile_size == NUM_THREADS so one warp covers tile_size lanes.
+  // Want tile_size == VX_CFG_NUM_THREADS so one warp covers tile_size lanes.
   if (tile_size != (uint32_t)num_threads) {
-    std::cout << "Warning: tile_size != NUM_THREADS (" << tile_size
+    std::cout << "Warning: tile_size != VX_CFG_NUM_THREADS (" << tile_size
               << " vs " << num_threads << "); single-warp CTA assumption may break\n";
   }
   if (size % tile_size != 0) {
@@ -113,7 +114,7 @@ int main(int argc, char* argv[]) {
   }
 
   // `mc_group_size` CTAs co-resident on one core. With single-warp CTAs,
-  // this == NUM_WARPS. The grid is laid out so blockIdx.x walks rows and
+  // this == VX_CFG_NUM_WARPS. The grid is laid out so blockIdx.x walks rows and
   // every mc_group_size consecutive rows form a multicast group sharing B.
   const uint32_t mc_group_size = (uint32_t)num_warps;
   if (size % mc_group_size != 0) {

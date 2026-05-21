@@ -29,7 +29,12 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <VX_config.h>
+
+// This public header is deliberately self-contained: it includes
+// standard C headers ONLY — never VX_config.h or any other Vortex
+// build-time header. Hardware configuration is discovered at runtime
+// via vx_device_query(); nothing here depends on the build config.
+// See docs/proposals/config_macro_namespace_proposal.md.
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,29 +77,35 @@ typedef struct vx_kernel* vx_kernel_h;
 // Device ISA flags  (decode a VX_CAPS_ISA_FLAGS query result)
 // ============================================================================
 
-#define VX_ISA_STD_A                (1ull << ISA_STD_A)
-#define VX_ISA_STD_C                (1ull << ISA_STD_C)
-#define VX_ISA_STD_D                (1ull << ISA_STD_D)
-#define VX_ISA_STD_E                (1ull << ISA_STD_E)
-#define VX_ISA_STD_F                (1ull << ISA_STD_F)
-#define VX_ISA_STD_H                (1ull << ISA_STD_H)
-#define VX_ISA_STD_I                (1ull << ISA_STD_I)
-#define VX_ISA_STD_N                (1ull << ISA_STD_N)
-#define VX_ISA_STD_Q                (1ull << ISA_STD_Q)
-#define VX_ISA_STD_S                (1ull << ISA_STD_S)
-#define VX_ISA_STD_V                (1ull << ISA_STD_V)
+// Standard-extension flags — bit positions are the RISC-V `misa`
+// register layout, fixed by the ISA spec. Inlined as literals so this
+// public header stays self-contained (must match VX_CFG_MISA_STD in
+// VX_config.toml).
+#define VX_ISA_STD_A                (1ull << 0)
+#define VX_ISA_STD_C                (1ull << 2)
+#define VX_ISA_STD_D                (1ull << 3)
+#define VX_ISA_STD_E                (1ull << 4)
+#define VX_ISA_STD_F                (1ull << 5)
+#define VX_ISA_STD_H                (1ull << 7)
+#define VX_ISA_STD_I                (1ull << 8)
+#define VX_ISA_STD_N                (1ull << 13)
+#define VX_ISA_STD_Q                (1ull << 16)
+#define VX_ISA_STD_S                (1ull << 18)
+#define VX_ISA_STD_V                (1ull << 21)
 #define VX_ISA_ARCH(flags)          (1ull << (((flags >> 30) & 0x3) + 4))
-#define VX_ISA_EXT_ICACHE           (1ull << (32+ISA_EXT_ICACHE))
-#define VX_ISA_EXT_DCACHE           (1ull << (32+ISA_EXT_DCACHE))
-#define VX_ISA_EXT_L2CACHE          (1ull << (32+ISA_EXT_L2CACHE))
-#define VX_ISA_EXT_L3CACHE          (1ull << (32+ISA_EXT_L3CACHE))
-#define VX_ISA_EXT_LMEM             (1ull << (32+ISA_EXT_LMEM))
-#define VX_ISA_EXT_ZICOND           (1ull << (32+ISA_EXT_ZICOND))
-#define VX_ISA_EXT_TEX              (1ull << (32+ISA_EXT_TEX))
-#define VX_ISA_EXT_RASTER           (1ull << (32+ISA_EXT_RASTER))
-#define VX_ISA_EXT_OM               (1ull << (32+ISA_EXT_OM))
-#define VX_ISA_EXT_TCU              (1ull << (32+ISA_EXT_TCU))
-#define VX_ISA_EXT_DXA              (1ull << (32+ISA_EXT_DXA))
+// Custom-extension flags — Vortex `misa` custom field, bits 32+ (must
+// match VX_CFG_MISA_EXT in VX_config.toml).
+#define VX_ISA_EXT_ICACHE           (1ull << (32 + 0))
+#define VX_ISA_EXT_DCACHE           (1ull << (32 + 1))
+#define VX_ISA_EXT_L2CACHE          (1ull << (32 + 2))
+#define VX_ISA_EXT_L3CACHE          (1ull << (32 + 3))
+#define VX_ISA_EXT_LMEM             (1ull << (32 + 4))
+#define VX_ISA_EXT_ZICOND           (1ull << (32 + 5))
+#define VX_ISA_EXT_TEX              (1ull << (32 + 6))
+#define VX_ISA_EXT_RASTER           (1ull << (32 + 7))
+#define VX_ISA_EXT_OM               (1ull << (32 + 8))
+#define VX_ISA_EXT_TCU              (1ull << (32 + 9))
+#define VX_ISA_EXT_DXA              (1ull << (32 + 10))
 
 // ============================================================================
 // Device memory access flags  (vx_buffer_create / vx_buffer_access)
@@ -111,7 +122,7 @@ typedef struct vx_kernel* vx_kernel_h;
 // directly from device memory. Under VM mode the runtime identity-
 // maps the underlying PA so the same address is valid on both the
 // MMU-routed (LSU/kernel loads) and bypass paths. Has no effect
-// when VM_ENABLE is off.
+// when VX_CFG_VM_ENABLE is off.
 #define VX_MEM_PHYS                 0x8
 
 // ============================================================================

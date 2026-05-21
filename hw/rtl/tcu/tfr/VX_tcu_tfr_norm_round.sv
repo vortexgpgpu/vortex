@@ -180,7 +180,7 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         end
     end
 
-`ifdef TCU_INT_ENABLE
+`ifdef VX_CFG_TCU_INT_ENABLE
 
     // ======================================================================
     // PHASE 5: INTEGER HANDLING

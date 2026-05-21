@@ -10,7 +10,7 @@
 namespace vortex {
 
 VortexSimulator::VortexSimulator()
-: ram_(0, MEM_PAGE_SIZE)
+: ram_(0, VX_CFG_MEM_PAGE_SIZE)
 , proc_(std::make_unique<Processor>())
 , halted_(true) {}
 
@@ -19,9 +19,9 @@ bool VortexSimulator::init(const std::string& kernelPath) {
 
     // Prime KMU DCRs the same way main.cpp does — the KMU needs the
     // startup address and a 1×1×1 grid/block to launch a single CTA.
-    const uint64_t startup_addr(STARTUP_ADDR);
+    const uint64_t startup_addr(VX_CFG_STARTUP_ADDR);
     proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR0, startup_addr & 0xffffffff);
-#if (XLEN == 64)
+#if (VX_CFG_XLEN == 64)
     proc_->dcr_write(VX_DCR_KMU_STARTUP_ADDR1, startup_addr >> 32);
 #endif
     proc_->dcr_write(VX_DCR_KMU_STARTUP_ARG0, 0);
@@ -34,7 +34,7 @@ bool VortexSimulator::init(const std::string& kernelPath) {
     proc_->dcr_write(VX_DCR_KMU_BLOCK_DIM_Z,  1);
     proc_->dcr_write(VX_DCR_KMU_LMEM_SIZE,    0);
     proc_->dcr_write(VX_DCR_KMU_BLOCK_SIZE,   1);
-    proc_->dcr_write(VX_DCR_KMU_WARP_STEP_X,  NUM_THREADS);
+    proc_->dcr_write(VX_DCR_KMU_WARP_STEP_X,  VX_CFG_NUM_THREADS);
     proc_->dcr_write(VX_DCR_KMU_WARP_STEP_Y,  0);
     proc_->dcr_write(VX_DCR_KMU_WARP_STEP_Z,  0);
 
@@ -85,8 +85,8 @@ void VortexSimulator::set_sst_mem_iface(SST::Interfaces::StandardMem* iface) {
     mem->set_pre_send_hook([iface](const MemReq& req) {
         using SST::Interfaces::StandardMem;
         StandardMem::Request* sst_req;
-        const uint64_t size = MEM_BLOCK_SIZE;
-        const uint64_t addr = req.addr & ~uint64_t(MEM_BLOCK_SIZE - 1);
+        const uint64_t size = VX_CFG_MEM_BLOCK_SIZE;
+        const uint64_t addr = req.addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
         if (req.is_write()) {
             std::vector<uint8_t> data(size, 0);
             if (req.data) {

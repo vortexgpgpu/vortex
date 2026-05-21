@@ -14,43 +14,43 @@
 #include "sfu_unit.h"
 #include "core.h"
 #include "debug.h"
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 #include "om/om_core.h"
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 #include "raster/raster_core.h"
 #endif
 
 using namespace vortex;
 
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<NUM_SFU_BLOCKS>(ctx, name, core)
-#ifdef EXT_DXA_ENABLE
+	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core)
+#ifdef VX_CFG_EXT_DXA_ENABLE
 	, dxa_req_out(this)
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 	, tex_req_out(this)
 	, tex_rsp_in(this)
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 	, om_req_out(this)
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 	, raster_req_out(this)
 	, raster_rsp_in(this)
 #endif
 	, wctl_unit_(new WctlUnit(core))
 	, csr_unit_(new CsrUnit(core))
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 	, dxa_unit_(new DxaUnit(core, dxa_req_out))
 #endif
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 	, tex_unit_(new TexUnit(core, tex_req_out))
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 	, om_unit_(new OmUnit(core, om_req_out))
 #endif
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 	, raster_unit_(new RasterUnit(core, raster_req_out))
 #endif
 {
@@ -61,7 +61,7 @@ uint32_t SfuUnit::latency_of(const instr_trace_t* /*trace*/) const {
 }
 
 void SfuUnit::on_tick() {
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 	// Drain TEX completions FIRST. TexCore returns each finished trace via
 	// tex_rsp_in; copy filtered texels into dst_data and forward the trace
 	// onto the originally-recorded writeback output lane.
@@ -71,7 +71,7 @@ void SfuUnit::on_tick() {
 		if (output.full())
 			break;
 		instr_trace_t* trace = rsp.trace;
-		for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+		for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 			if (trace->tmask.test(t)) {
 				trace->dst_data[t].i = rsp.texels[t];
 			}
@@ -82,7 +82,7 @@ void SfuUnit::on_tick() {
 	}
 #endif
 
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 	// Drain RASTER completions. RasterCore returns one stamp per active lane
 	// per request; deliver pos_mask to the trace's dst_data (vx_rast result),
 	// and latch pid + bcoords into per-warp+thread CSR storage so the kernel
@@ -93,7 +93,7 @@ void SfuUnit::on_tick() {
 		if (output.full())
 			break;
 		instr_trace_t* trace = rsp.trace;
-		for (uint32_t t = 0; t < NUM_THREADS; ++t) {
+		for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 			if (!trace->tmask.test(t)) continue;
 			const auto& s = rsp.stamps[t];
 			trace->dst_data[t].i = s.pos_mask;
@@ -111,14 +111,14 @@ void SfuUnit::on_tick() {
 
 	// PE switch: peek input, route to the matching sub-unit (WCTL / CSR /
 	// DXA / TEX / OM / RASTER) by op_type, gather to the single result port.
-	for (uint32_t b = 0; b < NUM_SFU_BLOCKS; ++b) {
+	for (uint32_t b = 0; b < VX_CFG_NUM_SFU_BLOCKS; ++b) {
 		auto& input = Inputs.at(b);
 		if (input.empty())
 			continue;
 		auto& output = Outputs.at(b);
 		auto trace = input.peek();
 
-#ifdef EXT_TEX_ENABLE
+#ifdef VX_CFG_EXT_TEX_ENABLE
 		// TEX path is async: don't gate on output.full() yet — that check
 		// happens on completion. Submit only.
 		if (std::get_if<TexType>(&trace->op_type)) {
@@ -129,7 +129,7 @@ void SfuUnit::on_tick() {
 		}
 #endif
 
-#ifdef EXT_RASTER_ENABLE
+#ifdef VX_CFG_EXT_RASTER_ENABLE
 		// RASTER path is async (same shape as TEX). RasterCore owns the
 		// trace from accept until its rsp arrives via raster_rsp_in.
 		if (std::get_if<RasterType>(&trace->op_type)) {
@@ -156,7 +156,7 @@ void SfuUnit::on_tick() {
 			release_warp = wctl_unit_->process(trace);
 		} else if (std::get_if<CsrType>(&trace->op_type)) {
 			csr_unit_->process(trace);
-#ifdef EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_ENABLE
 		} else if (std::get_if<DxaType>(&trace->op_type)) {
 			// process() returns nullptr on backpressure (idempotent retry next
 			// cycle) or the trace on success → fall through to send/pop.
@@ -164,7 +164,7 @@ void SfuUnit::on_tick() {
 				continue;
 			}
 #endif
-#ifdef EXT_OM_ENABLE
+#ifdef VX_CFG_EXT_OM_ENABLE
 		} else if (std::get_if<OmType>(&trace->op_type)) {
 			// process() returns nullptr on backpressure (idempotent retry next
 			// cycle) or the trace on success → fall through to send/pop.
