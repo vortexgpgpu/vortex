@@ -115,12 +115,16 @@ uint32_t rv_ftotf32_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_mxfp8tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 uint8_t rv_ftomxfp8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 
-// mxint8 conversion (to quantized INT8 representation)
-uint8_t rv_ftomxint8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
+// mxbf8 <--> fp32 conversions
+uint32_t rv_mxbf8tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
+uint8_t rv_ftomxbf8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 
 // nvfp4 <--> fp32 conversions
 uint32_t rv_nvfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 uint8_t rv_ftonvfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
+
+// mxint8 <--> fp32 conversions
+uint8_t rv_ftomxint8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 
 // e2m1 <--> fp32 conversions
 uint32_t rv_e2m1tof_s(uint8_t a, uint32_t frm, uint32_t* fflags);

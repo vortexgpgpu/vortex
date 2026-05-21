@@ -223,7 +223,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         logic [1:0] byte_idx;
         begin
             case (fmt)
-                TCU_MXFP8_ID, TCU_MXI8_ID: scale_k = 4'(k_base_idx >> 3);
+                TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXI8_ID: scale_k = 4'(k_base_idx >> 3);
                 TCU_NVFP4_ID:              scale_k = 4'(k_base_idx >> 1);
                 default:                   scale_k = '0;
             endcase

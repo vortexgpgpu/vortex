@@ -16,7 +16,8 @@
 module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter N   = 2,
-    parameter TCK = 2 * N
+    parameter TCK = 2 * N,
+    parameter SF  = 1
 ) (
     input wire                      clk,
     input wire                      valid_in,
@@ -28,8 +29,8 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
 `ifdef TCU_MX_ENABLE
-    input wire [7:0]                sf_a,
-    input wire [7:0]                sf_b,
+    input wire [SF-1:0][7:0]                sf_a,
+    input wire [SF-1:0][7:0]                sf_b,
 `endif
 
     output logic [TCK-1:0][24:0]    result
@@ -70,7 +71,7 @@ module VX_tcu_tfr_mul_int import VX_tcu_pkg::*; #(
 
     `ifdef TCU_MX_ENABLE
         // --- MXINT8 Per-Product Scaling -----------------------------------
-        wire signed [8:0] combined_sf = $signed(sf_a + sf_b - 9'd266);
+        wire signed [8:0] combined_sf = $signed(sf_a[0] + sf_b[0] - 9'd266);
         wire signed [24:0] y_mxi8_scaled [2];
         for (genvar j = 0; j < 2; ++j) begin : g_mxi8
             wire signed [24:0] raw_prod = {{8{y_prod_i8[j][16]}}, y_prod_i8[j]};

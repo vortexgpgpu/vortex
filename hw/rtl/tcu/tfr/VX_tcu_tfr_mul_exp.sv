@@ -19,7 +19,8 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
     parameter W = 25,           // Product width
     parameter WA = 28,          // Accumulator width
     parameter EXP_W = 10,       // Max exponent width
-    parameter TCK = 2 * N       // Max physical lanes
+    parameter TCK = 2 * N,      // Max physical lanes
+    parameter SF = 1            // Scale factor slots
 ) (
     input wire              clk,
     input wire              valid_in,
@@ -33,8 +34,8 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
     input wire [N-1:0][31:0] b_col,
     input wire [31:0]        c_val,
 `ifdef TCU_MX_ENABLE
-    input wire [7:0]         sf_a,
-    input wire [7:0]         sf_b,
+    input wire [SF-1:0][7:0] sf_a,
+    input wire [SF-1:0][7:0] sf_b,
 `endif
     output wire [EXP_W-1:0]   max_exp,
     output wire [TCK:0][EXP_W-1:0] exponents,
@@ -84,7 +85,8 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .TCK(TCK),
         .W(W),
         .WA(WA),
-        .EXP_W(EXP_W)
+        .EXP_W(EXP_W),
+        .SF(SF)
     ) mul_f8 (
         .clk        (clk),
         .valid_in   (valid_in),
@@ -106,7 +108,8 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
     wire [TCK-1:0][24:0] mul_int_sig;
     VX_tcu_tfr_mul_int #(
         .N(N),
-        .TCK(TCK)
+        .TCK(TCK),
+        .SF(SF)
     ) mul_int (
         .clk        (clk),
         .valid_in   (valid_in),

@@ -27,11 +27,6 @@
 using namespace vortex;
 namespace vt = tensor;
 
-static_assert(vt::mx_scale_format(vt::ITYPE::id), "sgemm_tcu_mx only supports MX input formats");
-static_assert((std::is_same<vt::ITYPE, vt::mxint8>::value && std::is_same<vt::OTYPE, vt::int32>::value)
-           || (!std::is_same<vt::ITYPE, vt::mxint8>::value && std::is_same<vt::OTYPE, vt::fp32>::value),
-              "sgemm_tcu_mx expects mxint8/int32 or floating MX/fp32");
-
 using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
@@ -127,6 +122,8 @@ static float dequantize_mx_value(const itype_t *data,
   uint8_t sf = scales[scale_index];
   if constexpr (std::is_same<vt::ITYPE, vt::mxfp8>::value) {
     return bit_cast<float>(rv_mxfp8tof_s(data[offset], sf, 0, nullptr));
+  } else if constexpr (std::is_same<vt::ITYPE, vt::mxbf8>::value) {
+    return bit_cast<float>(rv_mxbf8tof_s(data[offset], sf, 0, nullptr));
   } else if constexpr (std::is_same<vt::ITYPE, vt::mxint8>::value) {
     float scale = std::ldexp(1.0f, static_cast<int32_t>(sf) - 127);
     return (static_cast<float>(data[offset]) / 64.0f) * scale;
@@ -328,6 +325,9 @@ int main(int argc, char *argv[]) {
   if constexpr (std::is_same<vt::ITYPE, vt::mxfp8>::value) {
     ok = vt::quantize_mxfp8_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
       && vt::quantize_mxfp8_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
+  } else if constexpr (std::is_same<vt::ITYPE, vt::mxbf8>::value) {
+    ok = vt::quantize_mxbf8_a_rowmajor(reinterpret_cast<uint8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
+      && vt::quantize_mxbf8_b_colmajor(reinterpret_cast<uint8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);
   } else if constexpr (std::is_same<vt::ITYPE, vt::mxint8>::value) {
     ok = vt::quantize_mxint8_a_rowmajor(reinterpret_cast<int8_t*>(h_A.data()), scale_a, h_A_dense.data(), M, K_logical)
       && vt::quantize_mxint8_b_colmajor(reinterpret_cast<int8_t*>(h_B.data()), scale_b, h_B_dense.data(), K_logical, N);

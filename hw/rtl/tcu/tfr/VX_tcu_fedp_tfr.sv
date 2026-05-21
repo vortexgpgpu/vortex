@@ -18,6 +18,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     parameter LANE_MASK = 0,
     parameter LATENCY = 0,
     parameter N = 2,
+    parameter SF = 1,
     parameter W = 25
 ) (
     input  wire clk,
@@ -29,13 +30,14 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
 `ifdef TCU_MX_ENABLE
-    input  wire [7:0]  sf_a,
-    input  wire [7:0]  sf_b,
+    input  wire [SF-1:0][7:0]  sf_a,
+    input  wire [SF-1:0][7:0]  sf_b,
 `endif
     input  wire [31:0]        c_val,
     output wire [31:0]        d_val
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_SPARAM (SF)
     `UNUSED_VAR (fmt_d)
 
     localparam TCK     = 2 * N;
@@ -103,8 +105,9 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     VX_tcu_tfr_mul_exp #(
         .N (N),
         .W (W),
-        .WA(ACC_SIG_W),
-        .EXP_W (EXP_W)
+        .WA (ACC_SIG_W),
+        .EXP_W (EXP_W),
+        .SF (SF)
     ) mul_exp (
         .clk(clk),
         .valid_in(vld_pipe[S0_IDX]),

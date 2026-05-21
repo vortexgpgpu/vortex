@@ -36,6 +36,7 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     input wire [TCK-1:0][24:0]      sig_f8,
     input wire [TCK-1:0][EXP_W-1:0] exp_f8,
     input fedp_excep_t [TCK-1:0]    exc_f8,
+    
     input wire [TCK-1:0][24:0]      sig_int,
 
     output logic [TCK:0][24:0]      sig_out,
@@ -71,9 +72,13 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
                 exc_sel = exc_f16;
             end
 
-            // --- FP8 / BF8 ---
+            // --- FP8 / BF8 / MXFP8 / MXBF8 ---
         `ifdef TCU_FP8_ENABLE
-            TCU_FP8_ID, TCU_BF8_ID: begin
+            TCU_FP8_ID, TCU_BF8_ID
+        `ifdef TCU_MX_ENABLE
+            , TCU_MXFP8_ID, TCU_MXBF8_ID
+        `endif
+            : begin
                 sig_sel = sig_f8;
                 exp_sel = exp_f8;
                 exc_sel = exc_f8;

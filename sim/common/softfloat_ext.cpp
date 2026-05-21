@@ -966,6 +966,36 @@ mxfloat8_t f32_to_mxfp8(float32_t a, sfexp8_t scale_factor) {
   return res;
 }
 
+float32_t mxbf8_to_f32(mxbfloat8_t a) {
+  //convert e5m2 value to f32
+  uint32_t fflags = 0;
+  auto base_value = cvt_custom_to_f32(a.v, 5, 2, softfloat_roundingMode, &fflags);
+  //convert e8m0 scale factor to f32 (bias = 127)
+  int32_t scale_exp = (int32_t)a.sf - 127;
+  float scale_factor = std::ldexp(1.0f, scale_exp);
+  float out = base_value * scale_factor;
+  softfloat_exceptionFlags |= fflags;
+  float32_t res;
+  res.v = vortex::bit_cast<uint32_t>(out);
+  return res;
+}
+
+mxbfloat8_t f32_to_mxbf8(float32_t a, sfexp8_t scale_factor) {
+  //extract e8m0 scale factor
+  int32_t scale_exp = (int32_t)scale_factor.sf - 127;
+  float scale = std::ldexp(1.0f, scale_exp);
+  //divide input by scale factor
+  float scaled_value = vortex::bit_cast<float>(a.v) / scale;
+  //convert scaled value to e5m2
+  uint32_t fflags = 0;
+  auto out = cvt_f32_to_custom(scaled_value, 5, 2, softfloat_roundingMode, &fflags);
+  softfloat_exceptionFlags |= fflags;
+  mxbfloat8_t res;
+  res.v = out & 0xff;
+  res.sf = scale_factor.sf;
+  return res;
+}
+
 float32_t nvfp4_to_f32(nvfloat4_t a) {
   //convert e2m1 value to f32
   uint32_t fflags = 0;

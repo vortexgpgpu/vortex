@@ -651,22 +651,27 @@ uint8_t rv_ftomxfp8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   return mxfp8.v;
 }
 
-uint8_t rv_ftomxint8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+uint32_t rv_mxbf8tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   rv_init(frm);
-  union {
-    uint32_t u;
-    float f;
-  } in{a};
-
-  int32_t scale_exp = static_cast<int32_t>(sf) - 127;
-  float inv_scale = std::ldexp(1.0f, -scale_exp);
-  float q_real = in.f * inv_scale * 64.0f;
-  int32_t q = round_ties_to_even_i32(q_real);
-  q = std::max(-127, std::min(127, q));
-
+  mxbfloat8_t mxbf8;
+  mxbf8.v = a;
+  mxbf8.sf = sf;
+  float32_t f32 = mxbf8_to_f32(mxbf8);
   if (fflags) { *fflags = softfloat_exceptionFlags; }
-  return static_cast<uint8_t>(static_cast<int8_t>(q));
+  return f32.v;
 }
+
+uint8_t rv_ftomxbf8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  sfexp8_t scale_factor;
+  scale_factor.sf = sf;
+  mxbfloat8_t mxbf8 = f32_to_mxbf8(f32, scale_factor);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return mxbf8.v;
+}
+
 
 uint32_t rv_nvfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   rv_init(frm);
@@ -687,6 +692,17 @@ uint8_t rv_ftonvfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   nvfloat4_t nvfp4 = f32_to_nvfp4(f32, scale_factor);
   if (fflags) { *fflags = softfloat_exceptionFlags; }
   return nvfp4.v;
+}
+
+uint8_t rv_ftomxint8_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float scale = std::ldexp(1.0f, static_cast<int32_t>(sf) - 127);
+  union { uint32_t u; float f; } value_bits = {a};
+  float value = value_bits.f / scale * 64.0f;
+  int32_t rounded = round_ties_to_even_i32(value);
+  rounded = std::max(-128, std::min(127, rounded));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return static_cast<uint8_t>(static_cast<int8_t>(rounded));
 }
 
 uint32_t rv_e2m1tof_s(uint8_t a, uint32_t frm, uint32_t* fflags) {

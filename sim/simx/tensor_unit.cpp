@@ -680,6 +680,7 @@ private:
     case vt::int8::id:
     case vt::uint8::id:
     case vt::mxfp8::id:
+    case vt::mxbf8::id:
     case vt::mxint8::id:
       return 8;
     case vt::int4::id:
@@ -707,6 +708,7 @@ private:
   uint32_t mx_ele_block(uint32_t fmt_s) const {
     switch (fmt_s) {
     case vt::mxfp8::id:
+    case vt::mxbf8::id:
     case vt::mxint8::id:
       return 32;
     case vt::nvfp4::id:
@@ -831,6 +833,23 @@ private:
           uint8_t b = (b_col[z].u32 >> (8 * e)) & 0xff;
           auto xa = rv_mxfp8tof_s(a, scale_a(elem_k), 0, nullptr);
           auto xb = rv_mxfp8tof_s(b, scale_b(elem_k), 0, nullptr);
+          auto xab = rv_fmul_s(xa, xb, 0, nullptr);
+          auto xd = rv_fadd_s(xab, bit_cast<uint32_t>(acc), 0, nullptr);
+          acc = bit_cast<float>(xd);
+        }
+      }
+      return bit_cast<uint32_t>(acc);
+    }
+
+    if (fmt_s == vt::mxbf8::id && fmt_d == vt::fp32::id) {
+      float acc = bit_cast<float>(c_val);
+      for (uint32_t z = 0; z < cfg::tcK; ++z) {
+        for (uint32_t e = 0; e < ratio; ++e) {
+          uint32_t elem_k = (step_k * cfg::tcK + z) * ratio + e;
+          uint8_t a = (a_row[z].u32 >> (8 * e)) & 0xff;
+          uint8_t b = (b_col[z].u32 >> (8 * e)) & 0xff;
+          auto xa = rv_mxbf8tof_s(a, scale_a(elem_k), 0, nullptr);
+          auto xb = rv_mxbf8tof_s(b, scale_b(elem_k), 0, nullptr);
           auto xab = rv_fmul_s(xa, xb, 0, nullptr);
           auto xd = rv_fadd_s(xab, bit_cast<uint32_t>(acc), 0, nullptr);
           acc = bit_cast<float>(xd);

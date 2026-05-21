@@ -122,6 +122,21 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     prod[30:23] = prod[30:23] + raw_sf;
                 end
             end
+            TCU_MXBF8_ID: begin
+                prod = 64'hffffffff00000000;
+                for (int j = 0; j < 4; j++) begin
+                    dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffffff, a_row[i][j * 8 +: 8]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffffff, b_col[i][j * 8 +: 8]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                    dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
+                end
+                raw_sf_a = sf_a[0] - 8'd127;
+                raw_sf_b = sf_b[0] - 8'd127;
+                raw_sf   = raw_sf_a + raw_sf_b;
+                if (prod[30:0] != 0) begin
+                    prod[30:23] = prod[30:23] + raw_sf;
+                end
+            end
             TCU_NVFP4_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 8; j++) begin

@@ -144,7 +144,8 @@ inline float element_magnitude(const typename TensorT::dtype* data, uint32_t off
   } else if constexpr (std::is_same_v<TensorT, uint8>
                     || std::is_same_v<TensorT, fp8>
                     || std::is_same_v<TensorT, bf8>
-                    || std::is_same_v<TensorT, mxfp8>) {
+                    || std::is_same_v<TensorT, mxfp8>
+                    || std::is_same_v<TensorT, mxbf8>) {
     return static_cast<float>(val);
   } else if constexpr (std::is_same_v<TensorT, int4>) {
     int32_t sval = val & 0xF;
@@ -275,6 +276,18 @@ inline uint8_t select_mxfp8_scale(float max_abs) {
   return static_cast<uint8_t>(sf);
 }
 
+inline uint8_t select_mxbf8_scale(float max_abs) {
+  if (!(max_abs > 0.0f) || !std::isfinite(max_abs)) {
+    return 127;
+  }
+  constexpr float kE5M2Max = 57344.0f;
+  float target = max_abs / kE5M2Max;
+  int32_t scale_exp = static_cast<int32_t>(std::ceil(std::log2(target)));
+  int32_t sf = scale_exp + 127;
+  sf = std::max(0, std::min(255, sf));
+  return static_cast<uint8_t>(sf);
+}
+
 template <typename OutT, typename ConvertFn>
 inline bool quantize_mx_rowwise_blocks(OutT* quantized,
                                        std::vector<uint8_t>& scale_meta,
@@ -384,6 +397,32 @@ inline bool quantize_mxfp8_b_colmajor(uint8_t* quantized,
   return quantize_mx_colwise_blocks<uint8_t>(
       quantized, scale_meta, dense_rowmajor, K, N, mxfp8::ele_block,
       convert, select_mxfp8_scale);
+}
+
+inline bool quantize_mxbf8_a_rowmajor(uint8_t* quantized,
+                                      std::vector<uint8_t>& scale_meta,
+                                      const float* dense,
+                                      uint32_t rows,
+                                      uint32_t cols) {
+  auto convert = [](float v, uint8_t sf) {
+    return rv_ftomxbf8_s(bit_cast<uint32_t>(v), sf, 0, nullptr);
+  };
+  return quantize_mx_rowwise_blocks<uint8_t>(
+      quantized, scale_meta, dense, rows, cols, mxbf8::ele_block,
+      false, convert, select_mxbf8_scale);
+}
+
+inline bool quantize_mxbf8_b_colmajor(uint8_t* quantized,
+                                      std::vector<uint8_t>& scale_meta,
+                                      const float* dense_rowmajor,
+                                      uint32_t K,
+                                      uint32_t N) {
+  auto convert = [](float v, uint8_t sf) {
+    return rv_ftomxbf8_s(bit_cast<uint32_t>(v), sf, 0, nullptr);
+  };
+  return quantize_mx_colwise_blocks<uint8_t>(
+      quantized, scale_meta, dense_rowmajor, K, N, mxbf8::ele_block,
+      convert, select_mxbf8_scale);
 }
 
 inline uint8_t select_mxint8_scale(float max_abs) {
