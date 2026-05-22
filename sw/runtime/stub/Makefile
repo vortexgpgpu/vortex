@@ -48,13 +48,13 @@ endif
 # driver is dlopen'd at runtime — same pattern as dcr_read/mem_alloc.
 SRCS := \
 	$(SRC_DIR)/vortex.cpp \
-	$(RT_COMMON_DIR)/vx_result.cpp \
-	$(RT_COMMON_DIR)/vx_device.cpp \
-	$(RT_COMMON_DIR)/vx_buffer.cpp \
-	$(RT_COMMON_DIR)/vx_queue.cpp \
-	$(RT_COMMON_DIR)/vx_event.cpp \
-	$(RT_COMMON_DIR)/vx_module.cpp \
-	$(RT_COMMON_DIR)/vx_runtime_helpers.cpp \
+	$(RT_COMMON_DIR)/result.cpp \
+	$(RT_COMMON_DIR)/device.cpp \
+	$(RT_COMMON_DIR)/buffer.cpp \
+	$(RT_COMMON_DIR)/queue.cpp \
+	$(RT_COMMON_DIR)/event.cpp \
+	$(RT_COMMON_DIR)/module.cpp \
+	$(RT_COMMON_DIR)/runtime_helpers.cpp \
 	$(RT_COMMON_DIR)/legacy_runtime.cpp \
 	$(RT_COMMON_DIR)/legacy_utils.cpp \
 	$(RT_COMMON_DIR)/legacy_perf.cpp \

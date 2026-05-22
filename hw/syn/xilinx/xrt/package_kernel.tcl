@@ -161,8 +161,20 @@ foreach up [ipx::get_user_parameters] {
 
 ipx::associate_bus_interfaces -busif s_axi_ctrl -clock ap_clk $core
 
-for {set i 0} {$i < $num_banks} {incr i} {
-    ipx::associate_bus_interfaces -busif m_axi_mem_$i -clock ap_clk $core
+# Associate ap_clk with every AXI master interface the RTL actually
+# produced — discovered from the packaged core so the list tracks the
+# real port set (memory banks + the Command Processor's m_axi_host)
+# regardless of which config defines reached RTL elaboration.
+set axi_masters {}
+foreach bif [ipx::get_bus_interfaces -of $core] {
+    set bname [get_property NAME $bif]
+    if { [string match "m_axi*" $bname] } {
+        lappend axi_masters $bname
+    }
+}
+set axi_masters [lsort $axi_masters]
+foreach m $axi_masters {
+    ipx::associate_bus_interfaces -busif $m -clock ap_clk $core
 }
 
 set mem_map [::ipx::add_memory_map -quiet "s_axi_ctrl" $core]
@@ -253,14 +265,18 @@ set reg [::ipx::add_register -quiet "SCP" $addr_block]
 set_property address_offset 0x028 $reg
 set_property size           [expr {8*8}]   $reg
 
-for {set i 0} {$i < $num_banks} {incr i} {
-# Add register for each memory bank
-set reg [::ipx::add_register -quiet "MEM_$i" $addr_block]
-set_property address_offset [expr {0x30 + $i * 8}] $reg
+# One control register per AXI master interface — the XRT RTL-kernel
+# flow requires every m_axi interface to carry an ASSOCIATED_BUSIF
+# register. Iterates the discovered master list (memory banks + the
+# CP's m_axi_host) so it stays correct for any port count.
+set reg_off 0x30
+foreach m $axi_masters {
+set reg [::ipx::add_register -quiet $m $addr_block]
+set_property address_offset $reg_off $reg
 set_property size           [expr {8*8}]   $reg
-# Associate the bus interface
 set regparam [::ipx::add_register_parameter ASSOCIATED_BUSIF $reg]
-set_property value m_axi_mem_$i $regparam
+set_property value $m $regparam
+set reg_off [expr {$reg_off + 8}]
 }
 
 set_property slave_memory_map_ref "s_axi_ctrl" [::ipx::get_bus_interfaces -of $core "s_axi_ctrl"]

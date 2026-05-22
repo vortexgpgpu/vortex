@@ -28,6 +28,12 @@ struct scope_callback_t {
 };
 
 int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t start_time, uint64_t stop_time);
+
+// Drain the tap rings into host buffers. Called continuously while a
+// kernel runs (the CP launch-wait poll loop) so the lossless on-chip
+// rings rarely back-pressure the capture.
+int vx_scope_drain(void);
+
 int vx_scope_stop(vx_device_h hdevice);
 
 #ifdef __cplusplus

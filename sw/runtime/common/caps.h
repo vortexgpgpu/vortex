@@ -15,7 +15,7 @@
 #define VORTEX_RUNTIME_VX_CAPS_H
 
 // ============================================================================
-// vx_caps.h — the single device/ISA capability decoder, shared by every
+// caps.h — the single device/ISA capability decoder, shared by every
 // runtime backend (xrt / opae / simx / rtlsim / gem5).
 //
 // The two 64-bit capability words (GPU_DEV_CAPS / GPU_ISA_CAPS) are read

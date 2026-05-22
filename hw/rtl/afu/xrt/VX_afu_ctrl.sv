@@ -13,7 +13,24 @@
 
 `include "vortex_afu.vh"
 
-module VX_afu_ctrl import VX_gpu_pkg::*; #(
+// ============================================================================
+// VX_afu_ctrl — slim AXI-Lite slave for the xrt AFU shell.
+//
+// After the Command-Processor migration the AFU's command path is the CP
+// regfile (host AXI-Lite 0x1000+). This module retains only the legacy
+// 0x000-page essentials:
+//   * 0x00 — a minimal `ap_ctrl` stub. The XRT framework expects an
+//            `ap_ctrl` register at offset 0; the kernel is CP-driven, so
+//            this stub simply reports the kernel permanently idle and
+//            accepts writes inertly.
+//   * 0x28/0x2C — the SCOPE bit-serial debug register pair (`ifdef SCOPE`).
+//            SCOPE stays an independent sideband (proposal §10.6).
+//
+// The legacy launch FSM, legacy DCR registers, dev_caps/isa_caps copies,
+// and the GIE/IER/ISR interrupt block were removed in Phase 4.
+// ============================================================================
+
+module VX_afu_ctrl #(
     parameter S_AXI_ADDR_WIDTH = 8,
     parameter S_AXI_DATA_WIDTH = 32
 ) (
@@ -41,72 +58,23 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
     output wire                         s_axi_rvalid,
     output wire [S_AXI_DATA_WIDTH-1:0]  s_axi_rdata,
     output wire [1:0]                   s_axi_rresp,
-    input  wire                         s_axi_rready,
-
-    output wire                         ap_reset,
-    output wire                         ap_start,
-    input  wire                         ap_done,
-    input  wire                         ap_ready,
-    input  wire                         ap_idle,
-    output wire                         interrupt,
-
-    output wire                         ap_ctrl_read,
+    input  wire                         s_axi_rready
 
 `ifdef SCOPE
-    input wire                          scope_bus_in,
-    output wire                         scope_bus_out,
+  , input  wire                         scope_bus_in,
+    output wire                         scope_bus_out
 `endif
-
-    output wire                         dcr_req_valid,
-    output wire                         dcr_req_rw,
-    output wire [VX_DCR_ADDR_WIDTH-1:0] dcr_req_addr,
-    output wire [VX_DCR_DATA_WIDTH-1:0] dcr_req_data,
-    input  wire                         dcr_rsp_valid,
-    input  wire [VX_DCR_DATA_WIDTH-1:0] dcr_rsp_data
 );
 
-    // Address Info
-    // 0x00 : Control signals
-    //        bit 0  - ap_start (Read/Write/COH)
-    //        bit 1  - ap_done (Read/COR)
-    //        bit 2  - ap_idle (Read)
-    //        bit 3  - ap_ready (Read)
-    //        bit 4  - ap_reset (Write)
-    //        bit 7  - auto_restart (Read/Write)
-    //        others - reserved
-    // 0x04 : Global Interrupt Enable Register
-    //        bit 0  - Global Interrupt Enable (Read/Write)
-    //        others - reserved
-    // 0x08 : IP Interrupt Enable Register (Read/Write)
-    //        bit 0  - Channel 0 (ap_done)
-    //        bit 1  - Channel 1 (ap_ready)
-    //        others - reserved
-    // 0x0c : IP Interrupt Status Register (Read/TOW)
-    //        bit 0  - Channel 0 (ap_done)
-    //        bit 1  - Channel 1 (ap_ready)
-    //        others - reserved
-
-    // Parameters
+    // Address map
+    // 0x00       : ap_ctrl stub  (read: bit 2 = ap_idle = 1; writes inert)
+    // 0x28/0x2C  : SCOPE bit-serial register pair (`ifdef SCOPE`)
     localparam
         ADDR_AP_CTRL    = 8'h00,
-        ADDR_GIE        = 8'h04,
-        ADDR_IER        = 8'h08,
-        ADDR_ISR        = 8'h0C,
-
-        ADDR_DEV_0      = 8'h10,
-        ADDR_DEV_1      = 8'h14,
-
-        ADDR_ISA_0      = 8'h18,
-        ADDR_ISA_1      = 8'h1C,
-
-        ADDR_DCR_0      = 8'h20,
-        ADDR_DCR_1      = 8'h24,
-
     `ifdef SCOPE
         ADDR_SCP_0      = 8'h28,
         ADDR_SCP_1      = 8'h2C,
     `endif
-
         ADDR_BITS       = 8;
 
     localparam
@@ -121,31 +89,6 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
         RSTATE_RESP     = 2'd2,
         RSTATE_WIDTH    = 2;
 
-    localparam MEMORY_BANK_ADDR_WIDTH = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH - `CLOG2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
-
-    localparam CLUSTER_SIZE = `VX_CFG_NUM_CORES / `VX_CFG_SOCKET_SIZE;
-    `STATIC_ASSERT((CLUSTER_SIZE * `VX_CFG_SOCKET_SIZE) == `VX_CFG_NUM_CORES, ("NUM_CORES must be a multiple of SOCKET_SIZE"));
-
-    wire [63:0] dev_caps = {
-        22'b0,
-        5'(MEMORY_BANK_ADDR_WIDTH-20),
-        3'($clog2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS)),
-        8'(`VX_CFG_LMEM_ENABLED ? `VX_CFG_LMEM_LOG_SIZE : 0),
-        3'($clog2(`VX_CFG_ISSUE_WIDTH)),
-        3'($clog2(`VX_CFG_NUM_CLUSTERS)),
-        3'($clog2(CLUSTER_SIZE)),
-        3'($clog2(`VX_CFG_SOCKET_SIZE)),
-        3'($clog2(`VX_CFG_NUM_WARPS)),
-        3'($clog2(`VX_CFG_NUM_THREADS)),
-        8'(`VX_ISA_IMPL_ID)
-    };
-
-    wire [63:0] isa_caps = {
-        32'(`VX_CFG_MISA_EXT),
-        2'(`CLOG2(`VX_CFG_XLEN)-4),
-        30'(`VX_CFG_MISA_STD)
-    };
-
     reg [WSTATE_WIDTH-1:0] wstate;
     reg [ADDR_BITS-1:0] waddr;
     wire        s_axi_aw_fire;
@@ -158,25 +101,14 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
     wire        s_axi_ar_fire;
     wire        s_axi_r_fire;
 
-    reg         ap_reset_r;
-    reg         ap_start_r;
-    reg         auto_restart_r;
-    reg         gie_r;
-    reg [1:0]   ier_r;
-    reg [1:0]   isr_r;
-    reg         dcr_req_valid_r;
-    reg         dcra_rw_r;                   // 1=write, 0=read
-    reg [VX_DCR_ADDR_WIDTH-1:0] dcra_addr_r;
-    reg [31:0]  dcrv_r;
-    reg         dcr_rsp_valid_r;
-    reg [31:0]  dcr_rsp_data_r;
-
     logic wready_stall;
     logic rvalid_stall;
-    // stall an AXI read of ADDR_DCR_1 only for a DCR read (not a write)
-    wire  dcr_rvalid_stall = (raddr == ADDR_DCR_1) && ~dcra_rw_r && ~dcr_rsp_valid_r;
 
     `UNUSED_VAR (s_axi_wstrb)
+    `UNUSED_VAR (s_axi_wdata)
+`ifndef SCOPE
+    `UNUSED_VAR (waddr)
+`endif
 
 `ifdef SCOPE
 
@@ -247,12 +179,12 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
     assign scope_bus_out = scope_bus_out_r;
 
     assign wready_stall = is_scope_waddr && cmd_scope_writing;
-    assign rvalid_stall = (is_scope_raddr && ~scope_rdata_valid) || dcr_rvalid_stall;
+    assign rvalid_stall = is_scope_raddr && ~scope_rdata_valid;
 
 `else
 
     assign wready_stall = 0;
-    assign rvalid_stall = dcr_rvalid_stall;
+    assign rvalid_stall = 0;
 
 `endif
 
@@ -282,77 +214,14 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
         end
     end
 
-    // waddr
+    // waddr — write-address latch (used by the SCOPE register decode)
     always @(posedge clk) begin
         if (s_axi_aw_fire) begin
             waddr <= s_axi_awaddr[ADDR_BITS-1:0];
         end
     end
 
-    // wdata
-    always @(posedge clk) begin
-        if (reset) begin
-            ap_start_r <= 0;
-            ap_reset_r <= 0;
-            auto_restart_r <= 0;
-
-            gie_r <= 0;
-            ier_r <= '0;
-            isr_r <= '0;
-
-            dcra_rw_r   <= 1; // default to write mode
-            dcra_addr_r <= '0;
-            dcrv_r <= '0;
-            dcr_req_valid_r <= 0;
-        end else begin
-            dcr_req_valid_r <= 0;
-            ap_reset_r <= 0;
-
-            if (ap_ready)
-                ap_start_r <= auto_restart_r;
-
-            if (s_axi_w_fire) begin
-                case (waddr)
-                ADDR_AP_CTRL: begin
-                    if (s_axi_wstrb[0]) begin
-                        if (s_axi_wdata[0])
-                            ap_start_r <= 1;
-                        if (s_axi_wdata[4])
-                            ap_reset_r <= 1;
-                        if (s_axi_wdata[7])
-                            auto_restart_r <= 1;
-                    end
-                end
-                ADDR_GIE: begin
-                    if (s_axi_wstrb[0])
-                        gie_r <= s_axi_wdata[0];
-                end
-                ADDR_IER: begin
-                    if (s_axi_wstrb[0])
-                        ier_r <= s_axi_wdata[1:0];
-                end
-                ADDR_ISR: begin
-                    if (s_axi_wstrb[0])
-                        isr_r <= isr_r ^ s_axi_wdata[1:0];
-                end
-                ADDR_DCR_0: begin
-                    dcra_rw_r   <= s_axi_wdata[31]; // bit 31: 1=write, 0=read
-                    dcra_addr_r <= s_axi_wdata[VX_DCR_ADDR_WIDTH-1:0];
-                end
-                ADDR_DCR_1: begin
-                    dcrv_r <= s_axi_wdata;
-                    dcr_req_valid_r <= 1;
-                end
-                default:;
-                endcase
-
-                if (ier_r[0] & ap_done)
-                    isr_r[0] <= 1'b1;
-                if (ier_r[1] & ap_ready)
-                    isr_r[1] <= 1'b1;
-            end
-        end
-    end
+    // ap_ctrl writes are accepted but inert — the kernel is CP-driven.
 
     // AXI Read Request
     assign s_axi_arready = (rstate == RSTATE_ADDR);
@@ -386,37 +255,13 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
         end
     end
 
-    // rdata
+    // rdata — the ap_ctrl stub reports the kernel permanently idle (bit 2);
+    // the CP, not ap_ctrl, drives execution. SCOPE returns its serial word.
     always @(posedge clk) begin
         rdata <= '0;
         case (raddr)
             ADDR_AP_CTRL: begin
-                rdata[0] <= ap_start_r;
-                rdata[1] <= ap_done;
-                rdata[2] <= ap_idle;
-                rdata[3] <= ap_ready;
-                rdata[7] <= auto_restart_r;
-            end
-            ADDR_GIE: begin
-                rdata <= 32'(gie_r);
-            end
-            ADDR_IER: begin
-                rdata <= 32'(ier_r);
-            end
-            ADDR_ISR: begin
-                rdata <= 32'(isr_r);
-            end
-            ADDR_DEV_0: begin
-                rdata <= dev_caps[31:0];
-            end
-            ADDR_DEV_1: begin
-                rdata <= dev_caps[63:32];
-            end
-            ADDR_ISA_0: begin
-                rdata <= isa_caps[31:0];
-            end
-            ADDR_ISA_1: begin
-                rdata <= isa_caps[63:32];
+                rdata[2] <= 1'b1;   // ap_idle = 1
             end
         `ifdef SCOPE
             ADDR_SCP_0: begin
@@ -426,38 +271,8 @@ module VX_afu_ctrl import VX_gpu_pkg::*; #(
                 rdata <= scope_bus_rdata[63:32];
             end
         `endif
-            ADDR_DCR_1: begin
-                rdata <= dcr_rsp_data_r;
-            end
             default:;
         endcase
     end
-
-    // DCR read response capture
-    always @(posedge clk) begin
-        if (reset) begin
-            dcr_rsp_valid_r <= 0;
-            dcr_rsp_data_r  <= '0;
-        end else begin
-            if (dcr_rsp_valid) begin
-                dcr_rsp_valid_r <= 1;
-                dcr_rsp_data_r  <= 32'(dcr_rsp_data);
-            end
-            if (s_axi_r_fire && (raddr == ADDR_DCR_1)) begin
-                dcr_rsp_valid_r <= 0;
-            end
-        end
-    end
-
-    assign ap_reset  = ap_reset_r;
-    assign ap_start  = ap_start_r;
-    assign interrupt = gie_r & (| isr_r);
-
-    assign ap_ctrl_read = s_axi_r_fire && (raddr == ADDR_AP_CTRL);
-
-    assign dcr_req_valid = dcr_req_valid_r;
-    assign dcr_req_rw    = dcra_rw_r;
-    assign dcr_req_addr  = dcra_addr_r;
-    assign dcr_req_data  = VX_DCR_DATA_WIDTH'(dcrv_r);
 
 endmodule

@@ -67,6 +67,12 @@
 
 #define CPU_GPU_LATENCY 200
 
+// Host-memory aperture — XRT host-only BOs live here; the kernel's
+// m_axi_host master (the Command Processor's host-memory port) addresses
+// into it. RAM is sparsely paged, so a large aperture costs nothing.
+#define HOST_RAM_BASE  (1ull << 44)
+#define HOST_RAM_SIZE  (1ull << 30)   // 1 GiB
+
 #if VX_CFG_PLATFORM_MEMORY_DATA_SIZE > 8
   typedef VlWide<(VX_CFG_PLATFORM_MEMORY_DATA_SIZE/4)> Vl_m_data_t;
 #else
@@ -131,6 +137,8 @@ public:
   Impl()
   : device_(nullptr)
   , ram_(nullptr)
+  , host_ram_(nullptr)
+  , host_alloc_(nullptr)
   , dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO)
   , stop_(false)
 #ifdef VCD_OUTPUT
@@ -151,6 +159,12 @@ public:
     }
     if (ram_) {
       delete ram_;
+    }
+    if (host_alloc_) {
+      delete host_alloc_;
+    }
+    if (host_ram_) {
+      delete host_ram_;
     }
   #ifdef VCD_OUTPUT
     if (tfp_) {
@@ -208,6 +222,38 @@ public:
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       mem_alloc_[b] = new MemoryAllocator(0, mem_bank_size_, 4096, 64);
     }
+
+    // allocate host RAM + allocator (backs XRT host-only BOs; reached by
+    // the kernel's m_axi_host master)
+    host_ram_   = new RAM(0, RAM_PAGE_SIZE);
+    host_alloc_ = new MemoryAllocator(HOST_RAM_BASE, HOST_RAM_SIZE, 4096, 64);
+
+    // bind the m_axi_host AXI slave port
+    m_axi_host_.awvalid = &device_->m_axi_host_awvalid;
+    m_axi_host_.awready = &device_->m_axi_host_awready;
+    m_axi_host_.awaddr  = &device_->m_axi_host_awaddr;
+    m_axi_host_.awid    = &device_->m_axi_host_awid;
+    m_axi_host_.awlen   = &device_->m_axi_host_awlen;
+    m_axi_host_.wvalid  = &device_->m_axi_host_wvalid;
+    m_axi_host_.wready  = &device_->m_axi_host_wready;
+    m_axi_host_.wdata   = &device_->m_axi_host_wdata;
+    m_axi_host_.wstrb   = &device_->m_axi_host_wstrb;
+    m_axi_host_.wlast   = &device_->m_axi_host_wlast;
+    m_axi_host_.arvalid = &device_->m_axi_host_arvalid;
+    m_axi_host_.arready = &device_->m_axi_host_arready;
+    m_axi_host_.araddr  = &device_->m_axi_host_araddr;
+    m_axi_host_.arid    = &device_->m_axi_host_arid;
+    m_axi_host_.arlen   = &device_->m_axi_host_arlen;
+    m_axi_host_.rvalid  = &device_->m_axi_host_rvalid;
+    m_axi_host_.rready  = &device_->m_axi_host_rready;
+    m_axi_host_.rdata   = &device_->m_axi_host_rdata;
+    m_axi_host_.rlast   = &device_->m_axi_host_rlast;
+    m_axi_host_.rid     = &device_->m_axi_host_rid;
+    m_axi_host_.rresp   = &device_->m_axi_host_rresp;
+    m_axi_host_.bvalid  = &device_->m_axi_host_bvalid;
+    m_axi_host_.bready  = &device_->m_axi_host_bready;
+    m_axi_host_.bresp   = &device_->m_axi_host_bresp;
+    m_axi_host_.bid     = &device_->m_axi_host_bid;
 
     // reset the device
     this->reset();
@@ -278,6 +324,30 @@ public:
     return 0;
   }
 
+  // ----- Host memory (XRT host-only BOs; reached by m_axi_host) -----
+
+  int host_mem_alloc(uint64_t size, uint64_t* addr) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    return host_alloc_->allocate(size, addr);
+  }
+
+  int host_mem_free(uint64_t addr) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    return host_alloc_->release(addr);
+  }
+
+  int host_mem_write(uint64_t addr, uint64_t size, const void* data) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    host_ram_->write(data, addr, size);
+    return 0;
+  }
+
+  int host_mem_read(uint64_t addr, uint64_t size, void* data) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    host_ram_->read(data, addr, size);
+    return 0;
+  }
+
   int register_write(uint32_t offset, uint32_t value) {
     std::lock_guard<std::mutex> guard(mutex_);
 
@@ -335,7 +405,6 @@ public:
     device_->s_axi_ctrl_rready = 1;
     this->tick();
     device_->s_axi_ctrl_rready = 0;
-    //printf("%0ld: [sim] register_read: done (value=0x%x)\n", timestamp, *value);
     return 0;
   }
 
@@ -344,6 +413,7 @@ private:
   void reset() {
     this->axi_ctrl_bus_reset();
     this->axi_mem_bus_reset();
+    this->axi_host_bus_reset();
 
     for (auto& reqs : pending_mem_reqs_) {
       reqs.clear();
@@ -378,11 +448,13 @@ private:
     this->eval();
 
     this->axi_mem_bus_eval(0);
+    this->axi_host_bus_eval(0);
 
     device_->ap_clk = 1;
     this->eval();
 
     this->axi_mem_bus_eval(1);
+    this->axi_host_bus_eval(1);
 
     dram_sim_.tick();
 
@@ -461,8 +533,102 @@ private:
       *m_axi_mem_[b].bvalid = 0;
 
       // states
-      m_axi_states_[b].write_req_addr_ack = false;
-      m_axi_states_[b].write_req_data_ack = false;
+      m_axi_states_[b].aw_active = false;
+    }
+  }
+
+  void axi_host_bus_reset() {
+    // Ready signals stay constant-high (like the m_axi_mem model): a slave
+    // that toggles *ready races the master, which only samples it the cycle
+    // after it enters its issue state. Our masters keep one outstanding
+    // read/write at a time, so always-ready is correct.
+    *m_axi_host_.arready = 1;
+    *m_axi_host_.awready = 1;
+    *m_axi_host_.wready  = 1;
+    *m_axi_host_.rvalid  = 0;
+    *m_axi_host_.bvalid  = 0;
+    host_rd_active_    = false;
+    host_wr_active_    = false;
+    host_wr_b_pending_ = false;
+    host_rd_rsp_ready_ = false;
+    host_wr_rsp_ready_ = false;
+  }
+
+  // Burst-capable AXI slave model for the m_axi_host port — the kernel's
+  // host-memory master (the Command Processor's host-AXI port). Host memory
+  // is reached over the platform slave-bridge, not device DRAM, so this is
+  // modeled with minimal latency (no dram_sim timing).
+  void axi_host_bus_eval(bool clk) {
+    if (!clk) {
+      host_rd_rsp_ready_ = *m_axi_host_.rready;
+      host_wr_rsp_ready_ = *m_axi_host_.bready;
+      return;
+    }
+
+    // R channel — retire a presented beat.
+    if (*m_axi_host_.rvalid && host_rd_rsp_ready_) {
+      *m_axi_host_.rvalid = 0;
+      if (host_rd_beat_ >= host_rd_len_)
+        host_rd_active_ = false;
+      else
+        ++host_rd_beat_;
+    }
+    // B channel — retire the write response.
+    if (*m_axi_host_.bvalid && host_wr_rsp_ready_) {
+      *m_axi_host_.bvalid = 0;
+      host_wr_b_pending_ = false;
+    }
+    // Accept a read burst (one outstanding at a time).
+    if (*m_axi_host_.arvalid && *m_axi_host_.arready && !host_rd_active_) {
+      host_rd_active_ = true;
+      host_rd_addr_   = uint64_t(*m_axi_host_.araddr);
+      host_rd_len_    = *m_axi_host_.arlen;
+      host_rd_id_     = *m_axi_host_.arid;
+      host_rd_beat_   = 0;
+    }
+    // Present the next read beat.
+    if (host_rd_active_ && !*m_axi_host_.rvalid) {
+      uint64_t a = host_rd_addr_
+                 + uint64_t(host_rd_beat_) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
+      // Host memory is plain process memory (the runtime's host_mem_alloc
+      // hands the CP a raw pointer as the cp_addr) — dereference it directly.
+      std::memcpy(m_axi_host_.rdata->data(), reinterpret_cast<const void*>(a),
+                  VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+      *m_axi_host_.rvalid = 1;
+      *m_axi_host_.rid    = host_rd_id_;
+      *m_axi_host_.rresp  = 0;
+      *m_axi_host_.rlast  = (host_rd_beat_ >= host_rd_len_);
+    }
+    // Accept a write burst (one outstanding at a time).
+    if (*m_axi_host_.awvalid && *m_axi_host_.awready
+     && !host_wr_active_ && !host_wr_b_pending_) {
+      host_wr_active_ = true;
+      host_wr_addr_   = uint64_t(*m_axi_host_.awaddr);
+      host_wr_id_     = *m_axi_host_.awid;
+      host_wr_beat_   = 0;
+    }
+    // Accept a write data beat.
+    if (host_wr_active_ && *m_axi_host_.wvalid && *m_axi_host_.wready) {
+      uint64_t a = host_wr_addr_
+                 + uint64_t(host_wr_beat_) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
+      auto byteen = *m_axi_host_.wstrb;
+      auto data = (const uint8_t*)m_axi_host_.wdata->data();
+      for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; ++i) {
+        if ((byteen >> i) & 0x1)
+          reinterpret_cast<uint8_t*>(a)[i] = data[i];
+      }
+      if (*m_axi_host_.wlast) {
+        host_wr_active_    = false;
+        host_wr_b_pending_ = true;
+      } else {
+        ++host_wr_beat_;
+      }
+    }
+    // Present the write response.
+    if (host_wr_b_pending_ && !*m_axi_host_.bvalid) {
+      *m_axi_host_.bvalid = 1;
+      *m_axi_host_.bid    = host_wr_id_;
+      *m_axi_host_.bresp  = 0;
     }
   }
 
@@ -489,7 +655,7 @@ private:
           *m_axi_mem_[b].rvalid = 1;
           *m_axi_mem_[b].rid    = mem_rsp->tag;
           *m_axi_mem_[b].rresp  = 0;
-          *m_axi_mem_[b].rlast  = 1;
+          *m_axi_mem_[b].rlast  = mem_rsp->last;
           memcpy(m_axi_mem_[b].rdata->data(), mem_rsp->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
           pending_mem_reqs_[b].erase(mem_rsp_it);
           delete mem_rsp;
@@ -514,84 +680,72 @@ private:
         }
       }
 
-      // handle read requests
+      // handle read requests — an AXI burst expands into arlen+1 per-beat
+      // responses (one cache line each, INCR addressing).
       if (*m_axi_mem_[b].arvalid && *m_axi_mem_[b].arready) {
-        auto mem_req = new mem_req_t();
-        mem_req->tag   = *m_axi_mem_[b].arid;
-        mem_req->addr  = uint64_t(*m_axi_mem_[b].araddr);
-        ram_->read(mem_req->data.data(), mem_req->addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
-        mem_req->write = false;
-        mem_req->ready = false;
-        pending_mem_reqs_[b].emplace_back(mem_req);
-
-        /*printf("%0ld: [sim] axi-mem-read[%d]: addr=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, mem_req->tag);
-        for (int i = VX_CFG_PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", mem_req->data[i]);
+        uint32_t len  = *m_axi_mem_[b].arlen;     // beats - 1
+        uint64_t base = uint64_t(*m_axi_mem_[b].araddr);
+        for (uint32_t beat = 0; beat <= len; ++beat) {
+          auto mem_req = new mem_req_t();
+          mem_req->tag   = *m_axi_mem_[b].arid;
+          mem_req->addr  = base + uint64_t(beat) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
+          ram_->read(mem_req->data.data(), mem_req->addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+          mem_req->write = false;
+          mem_req->ready = false;
+          mem_req->last  = (beat == len);
+          pending_mem_reqs_[b].emplace_back(mem_req);
+          dram_queues_[b].push(mem_req);
         }
-        printf("\n");*/
-
-        // send dram request
-        dram_queues_[b].push(mem_req);
       }
 
-      // handle write address requests
-      if (*m_axi_mem_[b].awvalid && *m_axi_mem_[b].awready && !m_axi_states_[b].write_req_addr_ack) {
-        m_axi_states_[b].write_req_addr = *m_axi_mem_[b].awaddr;
-        m_axi_states_[b].write_req_tag = *m_axi_mem_[b].awid;
-        m_axi_states_[b].write_req_addr_ack = true;
+      // handle write address — latch the burst.
+      if (*m_axi_mem_[b].awvalid && *m_axi_mem_[b].awready
+       && !m_axi_states_[b].aw_active) {
+        m_axi_states_[b].aw_active = true;
+        m_axi_states_[b].aw_addr   = uint64_t(*m_axi_mem_[b].awaddr);
+        m_axi_states_[b].aw_tag    = *m_axi_mem_[b].awid;
+        m_axi_states_[b].aw_beat   = 0;
       }
 
-      // handle write data requests
-      if (*m_axi_mem_[b].wvalid && *m_axi_mem_[b].wready && !m_axi_states_[b].write_req_data_ack) {
-        m_axi_states_[b].write_req_byteen = *m_axi_mem_[b].wstrb;
+      // handle write data beats — write one cache line per W beat; the
+      // last beat (WLAST) queues a single B response for the burst.
+      if (m_axi_states_[b].aw_active
+       && *m_axi_mem_[b].wvalid && *m_axi_mem_[b].wready) {
+        uint64_t byte_addr = m_axi_states_[b].aw_addr
+                           + uint64_t(m_axi_states_[b].aw_beat)
+                             * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
+        auto byteen = *m_axi_mem_[b].wstrb;
         auto data = (const uint8_t*)m_axi_mem_[b].wdata->data();
         for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; ++i) {
-          m_axi_states_[b].write_req_data[i] = data[i];
-        }
-        m_axi_states_[b].write_req_data_ack = true;
-      }
-
-      // handle write requests
-      if (m_axi_states_[b].write_req_addr_ack && m_axi_states_[b].write_req_data_ack) {
-        auto byteen = m_axi_states_[b].write_req_byteen;
-        auto byte_addr = m_axi_states_[b].write_req_addr;
-        for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; ++i) {
           if ((byteen >> i) & 0x1) {
-            (*ram_)[byte_addr + i] = m_axi_states_[b].write_req_data[i];
+            (*ram_)[byte_addr + i] = data[i];
           }
         }
-        auto mem_req = new mem_req_t();
-        mem_req->tag   = m_axi_states_[b].write_req_tag;
-        mem_req->addr  = byte_addr;
-        mem_req->write = true;
-        mem_req->ready = false;
-        pending_mem_reqs_[b].emplace_back(mem_req);
-
-        /*printf("%0ld: [sim] axi-mem-write[%d]: addr=0x%lx, byteen=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, byteen, mem_req->tag);
-        for (int i = VX_CFG_PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", m_axi_states_[b].write_req_data[i]);
+        if (*m_axi_mem_[b].wlast) {
+          auto mem_req = new mem_req_t();
+          mem_req->tag   = m_axi_states_[b].aw_tag;
+          mem_req->addr  = m_axi_states_[b].aw_addr;
+          mem_req->write = true;
+          mem_req->ready = false;
+          mem_req->last  = true;
+          pending_mem_reqs_[b].emplace_back(mem_req);
+          dram_queues_[b].push(mem_req);
+          m_axi_states_[b].aw_active = false;
+        } else {
+          ++m_axi_states_[b].aw_beat;
         }
-        printf("\n");*/
-
-        // send dram request
-        dram_queues_[b].push(mem_req);
-
-        // clear acks
-        m_axi_states_[b].write_req_addr_ack = false;
-        m_axi_states_[b].write_req_data_ack = false;
       }
     }
   }
 
   typedef struct {
-    std::array<uint8_t, VX_CFG_PLATFORM_MEMORY_DATA_SIZE> write_req_data;
-    uint64_t write_req_byteen;
-    uint64_t write_req_addr;
-    uint32_t write_req_tag;
-    bool read_rsp_ready;
-    bool write_rsp_ready;
-    bool write_req_addr_ack;
-    bool write_req_data_ack;
+    bool     read_rsp_ready;
+    bool     write_rsp_ready;
+    // Write-burst state — latched on AW, advanced one cache line per W beat.
+    bool     aw_active;
+    uint64_t aw_addr;
+    uint32_t aw_beat;
+    uint32_t aw_tag;
   } m_axi_state_t;
 
   typedef struct {
@@ -600,6 +754,7 @@ private:
     uint64_t addr;
     bool write;
     bool ready;
+    bool last;     // last beat of its burst — drives rlast
   } mem_req_t;
 
   typedef struct {
@@ -632,6 +787,8 @@ private:
 
   Vvortex_afu_shim* device_;
   RAM* ram_;
+  RAM* host_ram_;
+  MemoryAllocator* host_alloc_;
   DramSim dram_sim_;
   uint64_t mem_bank_size_;
 
@@ -649,6 +806,21 @@ private:
   m_axi_state_t m_axi_states_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
 
   std::queue<mem_req_t*> dram_queues_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
+
+  // m_axi_host AXI slave port + burst state.
+  m_axi_mem_t m_axi_host_;
+  bool     host_rd_active_;
+  uint64_t host_rd_addr_;
+  uint32_t host_rd_len_;
+  uint32_t host_rd_beat_;
+  uint32_t host_rd_id_;
+  bool     host_rd_rsp_ready_;
+  bool     host_wr_active_;
+  uint64_t host_wr_addr_;
+  uint32_t host_wr_beat_;
+  uint32_t host_wr_id_;
+  bool     host_wr_b_pending_;
+  bool     host_wr_rsp_ready_;
 
 #ifdef VCD_OUTPUT
   VerilatedVcdC* tfp_;
@@ -690,6 +862,22 @@ int xrt_sim::mem_read(uint32_t bank_id, uint64_t addr, uint64_t size, void* data
 
 int xrt_sim::mem_copy(uint32_t bank_id_dest , uint32_t bank_id_src, uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
   return impl_->mem_copy(bank_id_dest, bank_id_src, dest_addr, src_addr, size);
+}
+
+int xrt_sim::host_mem_alloc(uint64_t size, uint64_t* addr) {
+  return impl_->host_mem_alloc(size, addr);
+}
+
+int xrt_sim::host_mem_free(uint64_t addr) {
+  return impl_->host_mem_free(addr);
+}
+
+int xrt_sim::host_mem_write(uint64_t addr, uint64_t size, const void* value) {
+  return impl_->host_mem_write(addr, size, value);
+}
+
+int xrt_sim::host_mem_read(uint64_t addr, uint64_t size, void* value) {
+  return impl_->host_mem_read(addr, size, value);
 }
 
 int xrt_sim::register_write(uint32_t offset, uint32_t value) {

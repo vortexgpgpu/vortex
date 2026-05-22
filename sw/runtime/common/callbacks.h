@@ -15,16 +15,22 @@
 // callbacks.h — runtime dispatcher contract between libvortex.so and each
 // backend's libvortex-<NAME>.so.
 //
-// At vx_dev_open time, the dispatcher (sw/runtime/stub/vortex.cpp) dlopens
+// At vx_device_open time, the dispatcher (sw/runtime/stub/vortex.cpp) dlopens
 // the backend library named by $VORTEX_DRIVER, resolves vx_dev_init, and
 // calls it to populate a callbacks_t with the backend's implementations.
-// All subsequent vortex.h / vortex2.h calls in libvortex.so flow through
-// the function pointers in callbacks_t.
 //
-// The fields below are intentionally Platform-shaped: they operate on
-// opaque void* device contexts and raw uint64_t device addresses. The
-// dispatcher wraps these primitives into refcounted vx::Device /
-// vx::Buffer / vx::Queue / vx::Event objects on top.
+// The backend is a pure TRANSPORT HAL. Once the Command Processor is the
+// sole command + DMA engine, the backend does no memory management, no DMA
+// and no capability decoding — those are the CP's job (CMD_* descriptors)
+// or generic common-core code (the device-memory allocator, caps decode).
+// The backend provides exactly three things:
+//
+//   * device lifecycle           — dev_open / dev_close
+//   * a register channel to CP   — cp_reg_read / cp_reg_write
+//   * CP-visible host memory     — host_mem_alloc / host_mem_free
+//
+// See docs/proposals/cp_pure_v2_callbacks_proposal.md (Addendum) for the
+// rationale. All return values are 0 on success, non-zero on failure.
 // ============================================================================
 
 #ifndef CALLBACKS_H
@@ -40,47 +46,30 @@ typedef struct {
 
   // ----- Device lifecycle -----
   // dev_open creates a backend-private device context (returned as void*).
-  // The dispatcher wraps it in a vx::Device on its side.
+  // The dispatcher wraps it in a vx::Device. All one-time platform setup
+  // (device handle, CP-reachable device-memory aperture) happens here.
   int (*dev_open)  (void** out_dev_ctx);
   int (*dev_close) (void*  dev_ctx);
 
-  // ----- Capability + heap queries -----
-  int (*query_caps)  (void* dev_ctx, uint32_t caps_id, uint64_t* out_value);
-  int (*memory_info) (void* dev_ctx, uint64_t* out_free, uint64_t* out_used);
+  // ----- CP register channel -----
+  // A 32-bit read/write window into the Command Processor regfile — the
+  // entire control plane (doorbell via Q_TAIL, status via Q_SEQNUM, and
+  // the device/ISA caps window). `off` is the CP-internal regfile offset
+  // (matches hw/rtl/cp/VX_cp_axil_regfile.sv); the backend forwards it to
+  // its physical MMIO mechanism, applying any platform base itself.
+  int (*cp_reg_write)(void* dev_ctx, uint32_t off, uint32_t value);
+  int (*cp_reg_read) (void* dev_ctx, uint32_t off, uint32_t* out_value);
 
-  // ----- Device memory (raw uint64_t addresses; dispatcher wraps in
-  //                     vx::Buffer) -----
-  int (*mem_alloc)   (void* dev_ctx, uint64_t size, uint32_t flags,
-                      uint64_t* out_dev_addr);
-  int (*mem_reserve) (void* dev_ctx, uint64_t dev_addr, uint64_t size,
-                      uint32_t flags);
-  int (*mem_free)    (void* dev_ctx, uint64_t dev_addr);
-  int (*mem_access)  (void* dev_ctx, uint64_t dev_addr, uint64_t size,
-                      uint32_t flags);
-
-  // ----- DMA primitives (sync; the dispatcher's vx::Queue layer adds the
-  //                      async event wrapping on top) -----
-  int (*mem_upload)  (void* dev_ctx, uint64_t dst_dev_addr, const void* src,
-                      uint64_t size);
-  int (*mem_download)(void* dev_ctx, void* dst, uint64_t src_dev_addr,
-                      uint64_t size);
-  int (*mem_copy)    (void* dev_ctx, uint64_t dst_dev_addr,
-                      uint64_t src_dev_addr, uint64_t size);
-
-  // ----- Command Processor control plane (sole control path) -----
-  // The `off` argument is the CP-internal regfile offset (matches the
-  // VX_cp_axil_regfile address map: globals at 0x000..0xFF, queue 0
-  // at 0x100..0x13F). xrt/opae backends translate to their host-side
-  // MMIO offset by adding 0x1000 (per the AFU's bit-12 demux split).
-  // simx/rtlsim forward directly to a sim/common/CommandProcessor.
-  //
-  // All kernel launches and DCR ops flow through the dispatcher's
-  // CP submission path (sw/runtime/common/vx_device.cpp) which builds
-  // CMD_* descriptors, mem_uploads them into the ring, commits Q_TAIL
-  // via cp_mmio_write, and polls Q_SEQNUM / Q_LAST_DCR_RSP via
-  // cp_mmio_read. Backends have no per-command implementation work.
-  int (*cp_mmio_write)(void* dev_ctx, uint32_t off, uint32_t value);
-  int (*cp_mmio_read) (void* dev_ctx, uint32_t off, uint32_t* out_value);
+  // ----- CP-visible host memory -----
+  // Allocates host-resident memory the CP's m_axi_host master can DMA.
+  // Returns BOTH a CPU-addressable pointer (out_host_ptr — the runtime
+  // memcpy's the command ring / DMA staging through it) and the device-
+  // side address the CP uses to reach the same bytes (out_cp_addr).
+  // host_mem_free is keyed by that cp_addr. The region must be coherent
+  // with the CP's m_axi_host view (no explicit sync callback).
+  int (*host_mem_alloc)(void* dev_ctx, uint64_t size,
+                        void** out_host_ptr, uint64_t* out_cp_addr);
+  int (*host_mem_free) (void* dev_ctx, uint64_t cp_addr);
 
 } callbacks_t;
 

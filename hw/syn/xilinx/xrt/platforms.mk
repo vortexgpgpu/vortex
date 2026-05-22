@@ -14,6 +14,10 @@ ifneq ($(findstring xilinx_vck5000,$(XSA)),)
 endif
 else
 # alveo
+# The Command Processor's host-memory master (m_axi_host) reaches host DRAM
+# through the platform slave-bridge / Host Memory Access aperture. All Alveo
+# XDMA shells expose this as the HOST[0] connectivity tag.
+VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_host:HOST[0]
 ifneq ($(findstring xilinx_u55c,$(XSA)),)
   # 16 GB of HBM2 with 32 channels (512 MB per channel)
   CONFIGS += -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=32 -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=34

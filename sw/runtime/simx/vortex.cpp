@@ -11,6 +11,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// ============================================================================
+// simx backend — a pure transport HAL (see callbacks.h). It exposes only:
+//   * device lifecycle      — init() / ~vx_device()
+//   * CP register channel   — cp_reg_read / cp_reg_write
+//   * CP-visible host memory — host_mem_alloc / host_mem_free
+//
+// Device-memory allocation and caps decoding live in the common core; the
+// Command Processor is the sole memory engine. simx has unified memory, so
+// host memory is a plain process allocation: the software CommandProcessor's
+// dram hooks dereference it directly (the sim runs in-process).
+// ============================================================================
+
 #include <VX_types.h>
 #include <common.h>
 
@@ -19,39 +31,32 @@
 #include <processor.h>
 #include <util.h>
 #include <cmd_processor.h>
-#include <vx_caps.h>
 
 #ifdef VX_CFG_VM_ENABLE
 #include <vm.h>
 #include <memory>
 #endif
 
-#include <assert.h>
 #include <chrono>
+#include <cstring>
 #include <future>
-#include <iostream>
+#include <map>
+#include <mutex>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
-
 
 using namespace vortex;
 
 #ifdef VX_CFG_VM_ENABLE
-// DeviceMemIO adapter over the simx RAM backing store. The ACL bypass
-// is encapsulated here so VMManager itself stays driver-agnostic.
+// DeviceMemIO adapter over the simx RAM backing store.
 class RamMemIO : public DeviceMemIO {
 public:
   explicit RamMemIO(RAM* ram) : ram_(ram) {}
   void read(void* dst, uint64_t addr, size_t size) override {
-    ram_->enable_acl(false);
     ram_->read((uint8_t*)dst, addr, size);
-    ram_->enable_acl(true);
   }
   void write(const void* src, uint64_t addr, size_t size) override {
-    ram_->enable_acl(false);
     ram_->write((const uint8_t*)src, addr, size);
-    ram_->enable_acl(true);
   }
 private:
   RAM* ram_;
@@ -63,10 +68,8 @@ public:
   vx_device()
       : ram_(0, VX_VM_PAGE_SIZE),
         processor_(),
-        global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
-                    VX_VM_PAGE_SIZE, CACHE_BLOCK_SIZE),
         cp_(make_cp_hooks()) {
-    // attach memory module
+    ram_.enable_acl(false);   // the common-core allocator owns the address map
     processor_.attach_ram(&ram_);
   }
 
@@ -74,13 +77,15 @@ public:
     if (future_.valid()) {
       future_.wait();
     }
+    for (auto& kv : host_regions_)
+      free(reinterpret_cast<void*>(kv.first));
+    host_regions_.clear();
   }
 
   int init() {
 #ifdef VX_CFG_VM_ENABLE
     // Boot-time VM init: allocate the page table inside RAM, push SATP
-    // into the simulator. Must run after attach_ram (constructor) and
-    // before the first vx_mem_alloc (so phy_to_virt_map can mint VAs).
+    // into the simulator.
     dev_io_ = std::make_unique<RamMemIO>(&ram_);
     vm_mgr_ = std::make_unique<VMManager>(dev_io_.get());
     CHECK_ERR(vm_mgr_->init(), { return err; });
@@ -88,251 +93,80 @@ public:
     return 0;
   }
 
-  int get_caps(uint32_t caps_id, uint64_t *value) {
-    // Lazily read the static caps words from the CP regfile model.
-    if (!caps_loaded_) {
-      if (vortex::load_caps(
-            [this](uint32_t off, uint32_t *v) { return cp_mmio_read(off, v); },
-            &dev_caps_, &isa_caps_))
-        return -1;
-      caps_loaded_ = true;
-    }
-    if (vortex::decode_caps(dev_caps_, isa_caps_, caps_id, value))
-      return 0;
-    // Caps not encoded in the CP caps words — platform/runtime-specific.
-    switch (caps_id) {
-    case VX_CAPS_CACHE_LINE_SIZE:
-      *value = CACHE_BLOCK_SIZE;
-      break;
-    case VX_CAPS_GLOBAL_MEM_SIZE:
-      *value = GLOBAL_MEM_SIZE;
-      break;
-    case VX_CAPS_CLOCK_RATE:
-      *value = 0;
-      break;
-    case VX_CAPS_PEAK_MEM_BW:
-      *value = VX_CFG_PLATFORM_MEMORY_PEAK_BW;
-      break;
-    default:
-      std::cout << "invalid caps id: " << caps_id << std::endl;
-      std::abort();
-      return -1;
-    }
-    return 0;
-  }
-
-  int mem_alloc(uint64_t size, int flags, uint64_t *dev_addr) {
-#ifdef VX_CFG_VM_ENABLE
-    uint64_t asize = aligned_size(size, VX_VM_PAGE_SIZE);
-#else
-    uint64_t asize = size;
-#endif
-    uint64_t addr = 0;
-
-    DBGPRINT("[RT:mem_alloc] size: 0x%lx, asize, 0x%lx,flag : 0x%d\n", size, asize, flags);
-    CHECK_ERR(global_mem_.allocate(asize, &addr), {
-      return err;
-    });
-    CHECK_ERR(this->mem_access(addr, asize, flags), {
-      global_mem_.release(addr);
-      return err;
-    });
-    *dev_addr = addr;
-#ifdef VX_CFG_VM_ENABLE
-    if (flags & VX_MEM_PHYS) {
-      // PHYS request: keep *dev_addr as the PA and identity-map it so
-      // kernel loads (via the MMU) and fixed-function units (raster/
-      // tex/om — bypass the MMU) see the same address.
-      CHECK_ERR(vm_mgr_->install_identity_map(addr, asize), {
-        global_mem_.release(addr);
-        return err;
-      });
-    } else {
-      // Replace the PA in *dev_addr with a freshly-minted VA. After
-      // this call, the user-facing API uses VAs end-to-end.
-      vm_mgr_->phy_to_virt_map(asize, dev_addr, flags);
-    }
-#endif
-    return 0;
-  }
-
-  int mem_reserve(uint64_t dev_addr, uint64_t size, int flags) {
-#ifdef VX_CFG_VM_ENABLE
-    uint64_t asize = aligned_size(size, VX_VM_PAGE_SIZE);
-#else
-    uint64_t asize = size;
-#endif
-    CHECK_ERR(global_mem_.reserve(dev_addr, asize), {
-      return err;
-    });
-    DBGPRINT("[RT:mem_reserve] addr: 0x%lx, asize:0x%lx, size: 0x%lx\n", dev_addr, asize, size);
-    CHECK_ERR(this->mem_access(dev_addr, asize, flags), {
-      global_mem_.release(dev_addr);
-      return err;
-    });
-#ifdef VX_CFG_VM_ENABLE
-    // mem_reserve places content at the caller-chosen PA (vs mem_alloc,
-    // which mints a fresh VA). The kernel will later access this region
-    // via that same PA through the MMU, so install identity PTEs.
-    CHECK_ERR(vm_mgr_->install_identity_map(dev_addr, asize), {
-      global_mem_.release(dev_addr);
-      return err;
-    });
-#endif
-    return 0;
-  }
-
-  int mem_free(uint64_t dev_addr) {
-#ifdef VX_CFG_VM_ENABLE
-    // dev_addr is a VA; resolve to PA before releasing from the
-    // physical-address-keyed global allocator.
-    uint64_t paddr = vm_mgr_->page_table_walk(dev_addr);
-    return global_mem_.release(paddr);
-#else
-    return global_mem_.release(dev_addr);
-#endif
-  }
-
-  int mem_access(uint64_t dev_addr, uint64_t size, int flags) {
-    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-    if (dev_addr + asize > GLOBAL_MEM_SIZE)
-      return -1;
-
-    ram_.set_acl(dev_addr, size, flags);
-    return 0;
-  }
-
-  int mem_info(uint64_t *mem_free, uint64_t *mem_used) const {
-    if (mem_free)
-      *mem_free = global_mem_.free();
-    if (mem_used)
-      *mem_used = global_mem_.allocated();
-    return 0;
-  }
-
-  int copy(uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
-    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-    if (src_addr + asize > GLOBAL_MEM_SIZE || dest_addr + asize > GLOBAL_MEM_SIZE)
-      return -1;
-    ram_.enable_acl(false);
-    ram_.copy(dest_addr, src_addr, size);
-    ram_.enable_acl(true);
-    return 0;
-  }
-
-  int upload(uint64_t dest_addr, const void *src, uint64_t size) {
-    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-    if (dest_addr + asize > GLOBAL_MEM_SIZE)
-      return -1;
-#ifdef VX_CFG_VM_ENABLE
-    // dest_addr is a VA; translate before touching backing RAM.
-    dest_addr = vm_mgr_->page_table_walk(dest_addr);
-#endif
-    ram_.enable_acl(false);
-    ram_.write((const uint8_t *)src, dest_addr, size);
-    ram_.enable_acl(true);
-
-    /*
-    DBGPRINT("upload %ld bytes to 0x%lx\n", size, dest_addr);
-    for (uint64_t i = 0; i < size && i < 1024; i += 4) {
-        DBGPRINT("  0x%lx <- 0x%x\n", dest_addr + i, *(uint32_t*)((uint8_t*)src + i));
-    }*/
-
-    return 0;
-  }
-
-  int download(void *dest, uint64_t src_addr, uint64_t size) {
-    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-    if (src_addr + asize > GLOBAL_MEM_SIZE)
-      return -1;
-
-    // flush GPU caches before reading back results
-    {
-      uint32_t dummy;
-      for (uint32_t cid = 0; cid < VX_CFG_NUM_CORES * VX_CFG_NUM_CLUSTERS; ++cid) {
-        this->dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy);
-      }
-    }
-#ifdef VX_CFG_VM_ENABLE
-    // src_addr is a VA; translate before reading from backing RAM.
-    src_addr = vm_mgr_->page_table_walk(src_addr);
-#endif
-    ram_.enable_acl(false);
-    ram_.read((uint8_t *)dest, src_addr, size);
-    ram_.enable_acl(true);
-
-    /*DBGPRINT("download %ld bytes from 0x%lx\n", size, src_addr);
-    for (uint64_t i = 0; i < size && i < 1024; i += 4) {
-        DBGPRINT("  0x%lx -> 0x%x\n", src_addr + i, *(uint32_t*)((uint8_t*)dest + i));
-    }*/
-
-    return 0;
-  }
-
-  int start() {
-    // DCRs already written by stub; just trigger execution
-    future_ = std::async(std::launch::async, [&] { processor_.run(); });
-    return 0;
-  }
-
-  int ready_wait(uint64_t timeout) {
-    if (!future_.valid())
-      return 0;
-    uint64_t timeout_sec = timeout / 1000;
-    std::chrono::seconds wait_time(1);
-    for (;;) {
-      // wait for 1 sec and check status
-      auto status = future_.wait_for(wait_time);
-      if (status == std::future_status::ready)
-        break;
-      if (0 == timeout_sec--)
-        return -1;
-    }
-    return 0;
-  }
-
-  int dcr_write(uint32_t addr, uint32_t value) {
-    if (future_.valid()) {
-      future_.wait(); // ensure prior run completed
-    }
-    return processor_.dcr_write(addr, value);
-  }
-
-  int dcr_read(uint32_t addr, uint32_t tag, uint32_t *value) {
-    if (future_.valid()) {
-      future_.wait(); // ensure prior run completed
-    }
-    return processor_.dcr_read(addr, tag, value);
-  }
-
-  // ----- CP MMIO surface -----
+  // ----- CP register channel -----
   // simx has no hardware CP; the regfile surface is provided by a
   // functional CommandProcessor C++ model. A bounded tick burst around
   // each MMIO transaction keeps the CP responsive without a dedicated
   // simulation thread.
-  int cp_mmio_write(uint32_t off, uint32_t value) {
+  int cp_reg_write(uint32_t off, uint32_t value) {
     cp_.mmio_write(off, value);
     for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
     return 0;
   }
-  int cp_mmio_read(uint32_t off, uint32_t* value) {
+  int cp_reg_read(uint32_t off, uint32_t* value) {
     for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
     *value = cp_.mmio_read(off);
     return 0;
   }
 
+  // ----- CP-visible host memory (command ring + DMA staging) -----
+  // Unified memory: a plain process allocation. cp_addr is the pointer
+  // value itself; the CP model's dram hooks route by registered region.
+  int host_mem_alloc(uint64_t size, void** host_ptr, uint64_t* cp_addr) {
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+    void* ptr = aligned_alloc(CACHE_BLOCK_SIZE, asize);
+    if (ptr == nullptr)
+      return -1;
+    std::lock_guard<std::mutex> g(host_mu_);
+    host_regions_[reinterpret_cast<uint64_t>(ptr)] = asize;
+    *host_ptr = ptr;
+    *cp_addr  = reinterpret_cast<uint64_t>(ptr);
+    return 0;
+  }
+
+  int host_mem_free(uint64_t cp_addr) {
+    {
+      std::lock_guard<std::mutex> g(host_mu_);
+      auto it = host_regions_.find(cp_addr);
+      if (it == host_regions_.end())
+        return -1;
+      host_regions_.erase(it);
+    }
+    free(reinterpret_cast<void*>(cp_addr));
+    return 0;
+  }
+
 private:
+  // If `addr` falls in a registered host region, return it as a host
+  // pointer (cp_addr == the pointer); otherwise nullptr → device memory.
+  void* host_region_ptr(uint64_t addr) {
+    std::lock_guard<std::mutex> g(host_mu_);
+    if (host_regions_.empty())
+      return nullptr;
+    auto it = host_regions_.upper_bound(addr);
+    if (it == host_regions_.begin())
+      return nullptr;
+    --it;
+    if (addr >= it->first && addr < it->first + it->second)
+      return reinterpret_cast<void*>(addr);
+    return nullptr;
+  }
+
   vortex::CommandProcessor::Hooks make_cp_hooks() {
     vortex::CommandProcessor::Hooks h;
     h.dram_read = [this](uint64_t addr, void* dst, std::size_t bytes) {
-      ram_.enable_acl(false);
+      if (void* hp = host_region_ptr(addr)) {
+        std::memcpy(dst, hp, bytes);
+        return;
+      }
       ram_.read(static_cast<uint8_t*>(dst), addr, bytes);
-      ram_.enable_acl(true);
     };
     h.dram_write = [this](uint64_t addr, const void* src, std::size_t bytes) {
-      ram_.enable_acl(false);
+      if (void* hp = host_region_ptr(addr)) {
+        std::memcpy(hp, src, bytes);
+        return;
+      }
       ram_.write(static_cast<const uint8_t*>(src), addr, bytes);
-      ram_.enable_acl(true);
     };
     h.vortex_dcr_write = [this](uint32_t addr, uint32_t value) {
       processor_.dcr_write(addr, value);
@@ -357,12 +191,10 @@ private:
 
   RAM ram_;
   Processor processor_;
-  MemoryAllocator global_mem_;
   std::future<void> future_;
   vortex::CommandProcessor cp_;
-  uint64_t dev_caps_ = 0;
-  uint64_t isa_caps_ = 0;
-  bool     caps_loaded_ = false;
+  std::mutex host_mu_;
+  std::map<uint64_t, uint64_t> host_regions_;   // base -> size
 #ifdef VX_CFG_VM_ENABLE
   std::unique_ptr<RamMemIO> dev_io_;
   std::unique_ptr<VMManager> vm_mgr_;

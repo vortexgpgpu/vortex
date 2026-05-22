@@ -6,7 +6,7 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 // ============================================================================
-// vx_runtime_helpers.cpp — vortex2.h utility entry points.
+// runtime_helpers.cpp — vortex2.h utility entry points.
 //
 // These wrap common multi-call patterns (occupancy computation) so user
 // code calling vortex2.h doesn't reimplement them. All implementations

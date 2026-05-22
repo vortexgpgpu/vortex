@@ -11,8 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// ============================================================================
+// XRT backend — a pure transport HAL (see callbacks.h). It exposes only:
+//   * device lifecycle      — init() / ~vx_device()
+//   * CP register channel   — cp_reg_read / cp_reg_write
+//   * CP-visible host memory — host_mem_alloc / host_mem_free
+//
+// Device-memory allocation, DMA and capability decoding all live in the
+// common core; the Command Processor is the sole memory engine. Host memory
+// is the command ring + DMA staging, reachable by the CP's m_axi_host master
+// (a host-only XRT BO on hardware; plain process memory under xrtsim, where
+// the sim runs in-process and the m_axi_host model dereferences it directly).
+// ============================================================================
+
 #include <common.h>
-#include <vx_caps.h>
 
 #ifdef SCOPE
 #include "scope.h"
@@ -30,11 +42,11 @@
 #include "experimental/xrt_xclbin.h"
 #endif
 
-#include <algorithm>
+#include <cstdlib>
 #include <limits>
+#include <map>
 #include <stdarg.h>
 #include <string>
-#include <unordered_map>
 #include <util.h>
 #include <vector>
 
@@ -44,12 +56,7 @@ using namespace vortex;
 #define CPP_API
 #endif
 
-// #define BANK_INTERLEAVE
-
 #define MMIO_CTL_ADDR 0x00
-#define MMIO_DEV_ADDR 0x10
-#define MMIO_ISA_ADDR 0x18
-#define MMIO_DCR_ADDR 0x20
 #define MMIO_SCP_ADDR 0x28
 
 #define CTL_AP_START (1 << 0)
@@ -62,47 +69,19 @@ using namespace vortex;
 // ----- Command Processor regfile -----
 // The AXI-Lite demux in VX_afu_wrap routes host addresses 0x1000..0x1FFF
 // to the CP regfile (mapped to CP's native 0x000-based 12-bit address
-// space). Queue 0 base is at CP-offset 0x100.
+// space). Callers pass the CP-internal offset; cp_reg_* add this base.
 #define CP_BASE              0x1000     // host-side base of CP regfile
-#define CP_REG_CTRL          (CP_BASE + 0x000)   // bit0 = enable_global
-#define CP_REG_STATUS        (CP_BASE + 0x004)
-#define CP_REG_DEV_CAPS      (CP_BASE + 0x008)
-#define CP_Q_RING_BASE_LO    (CP_BASE + 0x100)
-#define CP_Q_RING_BASE_HI    (CP_BASE + 0x104)
-#define CP_Q_HEAD_ADDR_LO    (CP_BASE + 0x108)
-#define CP_Q_HEAD_ADDR_HI    (CP_BASE + 0x10C)
-#define CP_Q_CMPL_ADDR_LO    (CP_BASE + 0x110)
-#define CP_Q_CMPL_ADDR_HI    (CP_BASE + 0x114)
-#define CP_Q_RING_SIZE_LOG2  (CP_BASE + 0x118)
-#define CP_Q_CONTROL         (CP_BASE + 0x11C)   // bit0 = enable, bits3:2 = prio
-#define CP_Q_TAIL_LO         (CP_BASE + 0x120)
-#define CP_Q_TAIL_HI         (CP_BASE + 0x124)   // atomic commit on write
-#define CP_Q_SEQNUM          (CP_BASE + 0x128)
-#define CP_Q_ERROR           (CP_BASE + 0x12C)
-
-#define CP_RING_SIZE_LOG2    16          // 64 KiB
-#define CP_RING_SIZE         (1u << CP_RING_SIZE_LOG2)
-#define CP_OPCODE_LAUNCH     0x06
-#define CP_LAUNCH_BYTES      12          // 4-byte header + 8-byte arg0
 
 #ifdef CPP_API
-
 typedef xrt::device xrt_device_t;
-typedef xrt::ip xrt_kernel_t;
-typedef xrt::bo xrt_buffer_t;
-
+typedef xrt::ip     xrt_kernel_t;
 #else
-
 typedef xrtDeviceHandle xrt_device_t;
 typedef xrtKernelHandle xrt_kernel_t;
-typedef xrtBufferHandle xrt_buffer_t;
-
 #endif
 
 #define DEFAULT_DEVICE_INDEX 0
-
 #define DEFAULT_XCLBIN_PATH "vortex_afu.xclbin"
-
 #define KERNEL_NAME "vortex_afu"
 
 #define CHECK_HANDLE(handle, _expr, _cleanup)                                  \
@@ -127,34 +106,21 @@ static void dump_xrt_error(xrtDeviceHandle xrtDevice, xrtErrorCode err) {
 class vx_device {
 public:
   vx_device()
-    : global_mem_(ALLOC_BASE_ADDR,
-                  GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
-                  RAM_PAGE_SIZE,
-                  CACHE_BLOCK_SIZE)
-  #ifndef CPP_API
-    , xrtDevice_(nullptr)
-    , xrtKernel_(nullptr)
-  #endif
+#ifndef CPP_API
+    : xrtDevice_(nullptr), xrtKernel_(nullptr)
+#endif
   {}
 
   ~vx_device() {
   #ifdef SCOPE
     vx_scope_stop(this);
   #endif
-  #ifndef CPP_API
-    for (auto &entry : xrtBuffers_) {
-    #ifdef BANK_INTERLEAVE
-      xrtBOFree(entry);
-    #else
-      xrtBOFree(entry.second.xrtBuffer);
-    #endif
-    }
-    if (xrtKernel_) {
-      xrtKernelClose(xrtKernel_);
-    }
-    if (xrtDevice_) {
-      xrtDeviceClose(xrtDevice_);
-    }
+  #ifdef CPP_API
+    // xrt::device / xrt::ip / xrt::bo are RAII.
+    host_bos_.clear();
+  #else
+    if (xrtKernel_) xrtKernelClose(xrtKernel_);
+    if (xrtDevice_) xrtDeviceClose(xrtDevice_);
   #endif
   }
 
@@ -175,9 +141,6 @@ public:
     auto xrtDevice = xrt::device(device_index);
     auto uuid = xrtDevice.load_xclbin(xlbin_path_s);
     auto xrtKernel = xrt::ip(xrtDevice, uuid, KERNEL_NAME);
-    auto xclbin = xrt::xclbin(xlbin_path_s);
-    auto device_name = xrtDevice.get_info<xrt::info::device::name>();
-    clock_freqs_ = xrtDevice.get_info<xrt::info::device::max_clock_frequency_mhz>();
 
   #else
 
@@ -207,18 +170,7 @@ public:
     xrtKernelHandle xrtKernel = xrtDevice;
   #endif
 
-    // get device name
-    int device_name_size;
-    xrtXclbinGetXSAName(xrtDevice, nullptr, 0, &device_name_size);
-    std::vector<char> sz_device_name(device_name_size);
-    xrtXclbinGetXSAName(xrtDevice, sz_device_name.data(), device_name_size, nullptr);
-    std::string device_name(sz_device_name.data(), device_name_size);
-
-    clock_freqs_ = 0;
-
   #endif
-
-    memory_bw_ = get_memory_bandwidth(device_name);
 
     xrtDevice_ = xrtDevice;
     xrtKernel_ = xrtKernel;
@@ -226,36 +178,6 @@ public:
     CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
       return err;
     });
-
-    // dev_caps_ / isa_caps_ are loaded lazily on the first get_caps()
-    // from the CP regfile (GPU_DEV_CAPS / GPU_ISA_CAPS) — see vx_caps.h.
-
-    uint64_t num_banks;
-    this->get_caps(VX_CAPS_NUM_MEM_BANKS, &num_banks);
-    lg2_num_banks_ = log2ceil(num_banks);
-
-    uint64_t bank_size;
-    this->get_caps(VX_CAPS_MEM_BANK_SIZE, &bank_size);
-    lg2_bank_size_ = log2ceil(bank_size);
-
-    global_mem_size_ = num_banks * bank_size;
-
-    printf("info: device name=%s, memory_capacity=0x%lx bytes, memory_banks=%ld.\n", device_name.c_str(), global_mem_size_, num_banks);
-
-  #ifdef BANK_INTERLEAVE
-    xrtBuffers_.reserve(num_banks);
-    for (uint32_t i = 0; i < num_banks; ++i) {
-    #ifdef CPP_API
-      xrtBuffers_.emplace_back(xrtDevice_, bank_size, xrt::bo::flags::normal, i);
-    #else
-      CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice_, bank_size, XRT_BO_FLAGS_NONE, i), {
-         return -1;
-      });
-      xrtBuffers_.push_back(xrtBuffer);
-    #endif
-      printf("*** allocated bank%u/%u, size=%lu\n", i, num_banks, bank_size);
-    }
-  #endif
 
   #ifdef SCOPE
     {
@@ -295,154 +217,57 @@ public:
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
   #endif
 
-    {
-      // Honour common boolean conventions: empty, "0", "false", "no", "off"
-      // all leave CP disabled; everything else enables it.
-      const char* env = getenv("VORTEX_USE_CP");
-      auto is_truthy = [](const char* s) {
-        if (s == nullptr || s[0] == '\0') return false;
-        if (s[0] == '0' && s[1] == '\0') return false;
-        std::string v(s);
-        std::transform(v.begin(), v.end(), v.begin(), ::tolower);
-        return v != "false" && v != "no" && v != "off";
-      };
-      if (is_truthy(env)) {
-        CHECK_ERR(this->cp_init(), { return err; });
-      }
-    }
-
     return 0;
   }
 
-  int get_caps(uint32_t caps_id, uint64_t *value) {
-    // Lazily read the static caps words from the CP regfile.
-    if (!caps_loaded_) {
-      CHECK_ERR(vortex::load_caps(
-            [this](uint32_t off, uint32_t *v) { return cp_mmio_read(off, v); },
-            &dev_caps_, &isa_caps_), { return err; });
-      caps_loaded_ = true;
-    }
-    if (vortex::decode_caps(dev_caps_, isa_caps_, caps_id, value))
-      return 0;
-    // Caps not encoded in the CP caps words — platform/runtime-specific.
-    uint64_t _value;
-    switch (caps_id) {
-    case VX_CAPS_CACHE_LINE_SIZE:
-      _value = CACHE_BLOCK_SIZE;
-      break;
-    case VX_CAPS_GLOBAL_MEM_SIZE:
-      _value = global_mem_size_;
-      break;
-    case VX_CAPS_CLOCK_RATE:
-      _value = clock_freqs_;
-      break;
-    case VX_CAPS_PEAK_MEM_BW:
-      _value = memory_bw_;
-      break;
-    default:
-      fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);
-      std::abort();
-      return -1;
-    }
-    *value = _value;
-    return 0;
+  // ----- CP register channel -----
+  // VX_afu_wrap demuxes host AXI-Lite addresses 0x1000..0x1FFF to the CP
+  // regfile (CP-internal 0x000-based offsets). Callers pass the CP-internal
+  // offset; we add the AFU base here.
+  int cp_reg_write(uint32_t off, uint32_t value) {
+    return this->write_register(CP_BASE + off, value);
   }
 
-  int mem_alloc(uint64_t size, int flags, uint64_t *dev_addr) {
+  int cp_reg_read(uint32_t off, uint32_t *value) {
+    return this->read_register(CP_BASE + off, value);
+  }
+
+  // ----- CP-visible host memory (command ring + DMA staging) -----
+  // Reached by the CP's m_axi_host master. On hardware: a host-only XRT BO.
+  // Under xrtsim: plain process memory — the sim runs in-process and the
+  // m_axi_host model dereferences the address directly (see xrt_sim.cpp).
+  int host_mem_alloc(uint64_t size, void **host_ptr, uint64_t *cp_addr) {
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-    uint64_t addr;
-    CHECK_ERR(global_mem_.allocate(asize, &addr), {
-      return err;
-    });
-  #ifndef BANK_INTERLEAVE
-    uint32_t bank_id;
-    CHECK_ERR(this->get_bank_info(addr, &bank_id, nullptr), {
-      global_mem_.release(addr);
-      return err;
-    });
-    CHECK_ERR(get_buffer(bank_id, nullptr), {
-      global_mem_.release(addr);
-      return err;
-    });
-  #endif
-    CHECK_ERR(this->mem_access(addr, size, flags), {
-      global_mem_.release(addr);
-      return err;
-    });
-    *dev_addr = addr;
-    return 0;
-  }
-
-  int mem_reserve(uint64_t dev_addr, uint64_t size, int flags) {
-    CHECK_ERR(global_mem_.reserve(dev_addr, size), {
-      return err;
-    });
-  #ifndef BANK_INTERLEAVE
-    uint32_t bank_id;
-    CHECK_ERR(this->get_bank_info(dev_addr, &bank_id, nullptr), {
-      global_mem_.release(dev_addr);
-      return err;
-    });
-    CHECK_ERR(get_buffer(bank_id, nullptr), {
-      global_mem_.release(dev_addr);
-      return err;
-    });
-  #endif
-    CHECK_ERR(this->mem_access(dev_addr, size, flags), {
-      global_mem_.release(dev_addr);
-      return err;
-    });
-    return 0;
-  }
-
-  int mem_free(uint64_t dev_addr) {
-    CHECK_ERR(global_mem_.release(dev_addr), {
-      return err;
-    });
-  #ifdef BANK_INTERLEAVE
-    if (0 == global_mem_.allocated()) {
-    #ifndef CPP_API
-      for (auto &entry : xrtBuffers_) {
-        xrtBOFree(entry);
-      }
-    #endif
-      xrtBuffers_.clear();
-    }
+  #ifdef CPP_API
+    xrt::bo bo(xrtDevice_, asize, xrt::bo::flags::host_only, 0);
+    void *ptr     = bo.map<uint8_t *>();
+    uint64_t addr = bo.address();
+    host_bos_.emplace(addr, host_bo_t{std::move(bo), ptr});
+    *host_ptr = ptr;
+    *cp_addr  = addr;
   #else
-    uint32_t bank_id;
-    CHECK_ERR(this->get_bank_info(dev_addr, &bank_id, nullptr), {
-      return err;
-    });
-    auto it = xrtBuffers_.find(bank_id);
-    if (it != xrtBuffers_.end()) {
-      auto count = --it->second.count;
-      if (0 == count) {
-        printf("freeing bank%d...\n", bank_id);
-      #ifndef CPP_API
-        xrtBOFree(it->second.xrtBuffer);
-      #endif
-        xrtBuffers_.erase(it);
-      }
-    } else {
-      fprintf(stderr, "[VXDRV] Error: invalid device memory address: 0x%lx\n",
-              dev_addr);
+    void *ptr = aligned_alloc(CACHE_BLOCK_SIZE, asize);
+    if (ptr == nullptr)
       return -1;
-    }
+    *host_ptr = ptr;
+    *cp_addr  = reinterpret_cast<uint64_t>(ptr);
   #endif
     return 0;
   }
 
-  int mem_access(uint64_t /*dev_addr*/, uint64_t /*size*/, int /*flags*/) {
+  int host_mem_free(uint64_t cp_addr) {
+  #ifdef CPP_API
+    auto it = host_bos_.find(cp_addr);
+    if (it == host_bos_.end())
+      return -1;
+    host_bos_.erase(it);   // xrt::bo RAII releases the BO
+  #else
+    free(reinterpret_cast<void *>(cp_addr));
+  #endif
     return 0;
   }
 
-  int mem_info(uint64_t *mem_free, uint64_t *mem_used) const {
-    if (mem_free)
-      *mem_free = global_mem_.free();
-    if (mem_used)
-      *mem_used = global_mem_.allocated();
-    return 0;
-  }
+private:
 
   int write_register(uint32_t addr, uint32_t value) {
   #ifdef CPP_API
@@ -468,508 +293,16 @@ public:
     return 0;
   }
 
-  int copy(uint64_t dest_addr, uint64_t src_addr, uint64_t size) {
-    if (dest_addr == src_addr) {
-      return 0;
-    }
-
-    // bound checking
-    if (dest_addr + size > global_mem_size_ ||
-        src_addr + size > global_mem_size_)
-      return -1;
-
-    uint64_t offset = 0;
-    while (offset < size) {
-      uint64_t curr_src = src_addr + offset;
-      uint64_t curr_dest = dest_addr + offset;
-
-      uint64_t src_rem = CACHE_BLOCK_SIZE - (curr_src % CACHE_BLOCK_SIZE);
-      uint64_t dest_rem = CACHE_BLOCK_SIZE - (curr_dest % CACHE_BLOCK_SIZE);
-
-      uint64_t chunk_size = (src_rem < dest_rem) ? src_rem : dest_rem;
-      if (chunk_size > size - offset) {
-        chunk_size = size - offset;
-      }
-
-      uint32_t src_bo_idx, dst_bo_idx;
-      uint64_t src_bo_off, dst_bo_off;
-      xrt_buffer_t src_buf, dst_buf;
-
-      CHECK_ERR(this->get_bank_info(curr_src, &src_bo_idx, &src_bo_off), {
-        return err;
-      });
-#ifdef BANK_INTERLEAVE
-      src_bo_off += (curr_src % CACHE_BLOCK_SIZE);
-#endif
-
-      CHECK_ERR(this->get_buffer(src_bo_idx, &src_buf), {
-        return err;
-      });
-
-      CHECK_ERR(this->get_bank_info(curr_dest, &dst_bo_idx, &dst_bo_off), {
-        return err;
-      });
-#ifdef BANK_INTERLEAVE
-      dst_bo_off += (curr_dest % CACHE_BLOCK_SIZE);
-#endif
-
-      CHECK_ERR(this->get_buffer(dst_bo_idx, &dst_buf), {
-        return err;
-      });
-
-#ifdef CPP_API
-      dst_buf.copy(src_buf, chunk_size, src_bo_off, dst_bo_off);
-#else
-      CHECK_ERR(xrtBOCopy(dst_buf, src_buf, chunk_size, src_bo_off, dst_bo_off), {
-        dump_xrt_error(xrtDevice_, err);
-        return err;
-      });
-#endif
-
-      offset += chunk_size;
-    }
-
-    return 0;
-  }
-
-  int upload(uint64_t dev_addr, const void *src, uint64_t size) {
-    auto host_ptr = (const uint8_t *)src;
-
-    // check alignment
-    if (!is_aligned(dev_addr, CACHE_BLOCK_SIZE))
-      return -1;
-
-    auto asize = aligned_size(size, CACHE_BLOCK_SIZE);
-
-    // bound checking
-    if (dev_addr + asize > global_mem_size_)
-      return -1;
-
-    for (uint64_t end = dev_addr + asize; dev_addr < end;
-         dev_addr += CACHE_BLOCK_SIZE, host_ptr += CACHE_BLOCK_SIZE) {
-    #ifdef BANK_INTERLEAVE
-      asize = CACHE_BLOCK_SIZE;
-    #else
-      end = 0;
-    #endif
-      uint32_t bo_index;
-      uint64_t bo_offset;
-      xrt_buffer_t xrtBuffer;
-      CHECK_ERR(this->get_bank_info(dev_addr, &bo_index, &bo_offset), {
-        return err;
-      });
-      CHECK_ERR(this->get_buffer(bo_index, &xrtBuffer), {
-        return err;
-      });
-    #ifdef CPP_API
-      xrtBuffer.write(host_ptr, size, bo_offset);
-      xrtBuffer.sync(XCL_BO_SYNC_BO_TO_DEVICE, size, bo_offset);
-    #else
-      CHECK_ERR(xrtBOWrite(xrtBuffer, host_ptr, size, bo_offset), {
-        dump_xrt_error(xrtDevice_, err);
-        return err;
-      });
-      CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_TO_DEVICE, size, bo_offset), {
-        dump_xrt_error(xrtDevice_, err);
-        return err;
-      });
-#endif
-    }
-    return 0;
-  }
-
-  int download(void *dest, uint64_t dev_addr, uint64_t size) {
-    auto host_ptr = (uint8_t *)dest;
-
-    // check alignment
-    if (!is_aligned(dev_addr, CACHE_BLOCK_SIZE))
-      return -1;
-
-    auto asize = aligned_size(size, CACHE_BLOCK_SIZE);
-
-    // bound checking
-    if (dev_addr + asize > global_mem_size_)
-      return -1;
-
-    // flush GPU caches before reading back results
-    {
-      uint64_t num_cores;
-      CHECK_ERR(this->get_caps(VX_CAPS_NUM_CORES, &num_cores), { return err; });
-      uint32_t dummy;
-      for (uint32_t cid = 0; cid < (uint32_t)num_cores; ++cid) {
-        CHECK_ERR(this->dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid, &dummy), { return err; });
-      }
-    }
-
-    for (uint64_t end = dev_addr + asize; dev_addr < end;
-         dev_addr += CACHE_BLOCK_SIZE, host_ptr += CACHE_BLOCK_SIZE) {
-    #ifdef BANK_INTERLEAVE
-      asize = CACHE_BLOCK_SIZE;
-    #else
-      end = 0;
-    #endif
-      uint32_t bo_index;
-      uint64_t bo_offset;
-      xrt_buffer_t xrtBuffer;
-      CHECK_ERR(this->get_bank_info(dev_addr, &bo_index, &bo_offset), {
-        return err;
-      });
-      CHECK_ERR(this->get_buffer(bo_index, &xrtBuffer), {
-        return err;
-      });
-    #ifdef CPP_API
-      xrtBuffer.sync(XCL_BO_SYNC_BO_FROM_DEVICE, size, bo_offset);
-      xrtBuffer.read(host_ptr, size, bo_offset);
-    #else
-      CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_FROM_DEVICE, size, bo_offset), {
-        dump_xrt_error(xrtDevice_, err);
-        return err;
-      });
-      CHECK_ERR(xrtBORead(xrtBuffer, host_ptr, size, bo_offset), {
-        dump_xrt_error(xrtDevice_, err);
-        return err;
-      });
-    #endif
-    }
-    return 0;
-  }
-
-  int start() {
-    // DCRs already written by stub; just trigger execution
-    if (cp_enabled_) return this->cp_post_launch();
-    return this->write_register(MMIO_CTL_ADDR, CTL_AP_START);
-  }
-
-  int ready_wait(uint64_t timeout) {
-    if (cp_enabled_) return this->cp_wait(timeout);
-    struct timespec sleep_time;
-  #ifndef NDEBUG
-    sleep_time.tv_sec = 1;
-    sleep_time.tv_nsec = 0;
-  #else
-    sleep_time.tv_sec = 0;
-    sleep_time.tv_nsec = 1000000;
-  #endif
-
-    // to milliseconds
-    uint64_t sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
-
-    for (;;) {
-      uint32_t status = 0;
-      CHECK_ERR(this->read_register(MMIO_CTL_ADDR, &status), {
-        return err;
-      });
-      bool is_done = (status & CTL_AP_DONE) == CTL_AP_DONE;
-      if (is_done)
-        break;
-      if (0 == timeout) {
-        return -1;
-      }
-      nanosleep(&sleep_time, nullptr);
-      timeout -= sleep_time_ms;
-    };
-
-    return 0;
-  }
-
-  int dcr_write(uint32_t addr, uint32_t value) {
-    // set bit 31 to signal write mode to the AFU (DCR addr is 12 bits, upper bits are free)
-    CHECK_ERR(this->write_register(MMIO_DCR_ADDR, addr | (1u << 31)), {
-      return err;
-    });
-    CHECK_ERR(this->write_register(MMIO_DCR_ADDR + 4, value), {
-      return err;
-    });
-    return 0;
-  }
-
-  int dcr_read(uint32_t addr, uint32_t tag, uint32_t *value) {
-    // write DCR address (bit 31 = 0 signals read mode to the AFU)
-    CHECK_ERR(this->write_register(MMIO_DCR_ADDR, addr), {
-      return err;
-    });
-    // write tag to trigger DCR read request
-    CHECK_ERR(this->write_register(MMIO_DCR_ADDR + 4, tag), {
-      return err;
-    });
-    // read back response value (AXI read stalls until dcr_rsp_valid)
-    CHECK_ERR(this->read_register(MMIO_DCR_ADDR + 4, value), {
-      return err;
-    });
-    return 0;
-  }
-
-  // ----- CP MMIO surface -----
-  // VX_afu_wrap demuxes host AXI-Lite addresses 0x1000..0x1FFF to the
-  // CP regfile (mapped to CP-internal 0x000-based offsets). Callers
-  // pass the CP-internal offset directly; we add the AFU base here.
-  int cp_mmio_write(uint32_t off, uint32_t value) {
-    return this->write_register(CP_BASE + off, value);
-  }
-
-  int cp_mmio_read(uint32_t off, uint32_t *value) {
-    return this->read_register(CP_BASE + off, value);
-  }
-
-  // ----- Command Processor path -----
-  //
-  // Allocates three device buffers (ring, consumer-head publish slot,
-  // completion slot) and programs CP queue 0 to use them. Subsequent
-  // start() calls post a CMD_LAUNCH into the ring and bump Q_TAIL;
-  // ready_wait() polls the completion slot.
-  //
-  // DCR programming for the kernel is expected to be issued by the
-  // upper-layer KMU helper before start(); the CP only owns the "go"
-  // signal in this code path.
-  int cp_init() {
-    CHECK_ERR(this->mem_alloc(CP_RING_SIZE, VX_MEM_READ, &cp_ring_dev_addr_), {
-      return err;
-    });
-    CHECK_ERR(this->mem_alloc(CACHE_BLOCK_SIZE, VX_MEM_WRITE, &cp_head_dev_addr_), {
-      return err;
-    });
-    CHECK_ERR(this->mem_alloc(CACHE_BLOCK_SIZE, VX_MEM_WRITE, &cp_cmpl_dev_addr_), {
-      return err;
-    });
-
-    // Zero ring + slots so the CP doesn't read stale data on the first fetch.
-    std::vector<uint8_t> zeros_cl(CACHE_BLOCK_SIZE, 0);
-    std::vector<uint8_t> zeros_ring(CP_RING_SIZE, 0);
-    CHECK_ERR(this->upload(cp_ring_dev_addr_, zeros_ring.data(), CP_RING_SIZE),
-              { return err; });
-    CHECK_ERR(this->upload(cp_head_dev_addr_, zeros_cl.data(), CACHE_BLOCK_SIZE),
-              { return err; });
-    CHECK_ERR(this->upload(cp_cmpl_dev_addr_, zeros_cl.data(), CACHE_BLOCK_SIZE),
-              { return err; });
-
-    auto wr = [this](uint32_t off, uint32_t val) -> int {
-      return this->write_register(off, val);
-    };
-
-    // Queue 0 programmable state.
-    CHECK_ERR(wr(CP_Q_RING_BASE_LO,   (uint32_t)(cp_ring_dev_addr_ & 0xFFFFFFFFu)), { return err; });
-    CHECK_ERR(wr(CP_Q_RING_BASE_HI,   (uint32_t)(cp_ring_dev_addr_ >> 32)),         { return err; });
-    CHECK_ERR(wr(CP_Q_HEAD_ADDR_LO,   (uint32_t)(cp_head_dev_addr_ & 0xFFFFFFFFu)), { return err; });
-    CHECK_ERR(wr(CP_Q_HEAD_ADDR_HI,   (uint32_t)(cp_head_dev_addr_ >> 32)),         { return err; });
-    CHECK_ERR(wr(CP_Q_CMPL_ADDR_LO,   (uint32_t)(cp_cmpl_dev_addr_ & 0xFFFFFFFFu)), { return err; });
-    CHECK_ERR(wr(CP_Q_CMPL_ADDR_HI,   (uint32_t)(cp_cmpl_dev_addr_ >> 32)),         { return err; });
-    CHECK_ERR(wr(CP_Q_RING_SIZE_LOG2, CP_RING_SIZE_LOG2),                            { return err; });
-    CHECK_ERR(wr(CP_Q_CONTROL,        0x1),                                          { return err; });
-    // Global enable: queue is enabled only when (CP_CTRL.bit0 & Q_CONTROL.bit0).
-    CHECK_ERR(wr(CP_REG_CTRL,         0x1),                                          { return err; });
-
-    cp_enabled_         = true;
-    cp_tail_            = 0;
-    cp_expected_seqnum_ = 0;
-
-    printf("info: CP enabled — ring=0x%lx head=0x%lx cmpl=0x%lx\n",
-           cp_ring_dev_addr_, cp_head_dev_addr_, cp_cmpl_dev_addr_);
-    return 0;
-  }
-
-  int cp_post_launch() {
-    // Build CMD_LAUNCH in a CL-sized scratch buffer (the device-side
-    // fetcher always loads a full 64 B cache line). The payload is 12 B:
-    //   bytes 0..3  = header { opcode=0x06, flags=0, reserved=0 }
-    //   bytes 4..11 = arg0 (unused by VX_cp_launch)
-    uint8_t cl[CACHE_BLOCK_SIZE] = {0};
-    cl[0] = CP_OPCODE_LAUNCH;
-
-    // Place the descriptor in the ring buffer. Wrap handling is left to
-    // the modulo since one launch per ring is the common pattern.
-    uint64_t ring_offset = cp_tail_ & (CP_RING_SIZE - 1);
-    if (ring_offset + CACHE_BLOCK_SIZE > CP_RING_SIZE) {
-      fprintf(stderr, "[VXDRV] CP ring wraparound mid-CL not yet supported\n");
-      return -1;
-    }
-    CHECK_ERR(this->upload(cp_ring_dev_addr_ + ring_offset, cl, CACHE_BLOCK_SIZE),
-              { return err; });
-
-    // Commit the new tail (Q_TAIL_HI write is the atomic latch).
-    cp_tail_           += CP_LAUNCH_BYTES;
-    cp_expected_seqnum_ += 1;
-    CHECK_ERR(this->write_register(CP_Q_TAIL_LO, (uint32_t)(cp_tail_ & 0xFFFFFFFFu)),
-              { return err; });
-    CHECK_ERR(this->write_register(CP_Q_TAIL_HI, (uint32_t)(cp_tail_ >> 32)),
-              { return err; });
-    return 0;
-  }
-
-  int cp_wait(uint64_t timeout) {
-    struct timespec sleep_time;
-  #ifndef NDEBUG
-    sleep_time.tv_sec = 1; sleep_time.tv_nsec = 0;
-  #else
-    sleep_time.tv_sec = 0; sleep_time.tv_nsec = 1000000;
-  #endif
-    uint64_t sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
-
-    // Poll Q_SEQNUM via the CP regfile (AXI-Lite read). This is the
-    // cheapest sim-advancing operation: xrtsim only ticks its clock
-    // during AXI transactions, so xrtBOSync alone cannot make forward
-    // progress.
-    for (;;) {
-      uint32_t seqnum32 = 0;
-      CHECK_ERR(this->read_register(CP_Q_SEQNUM, &seqnum32), { return err; });
-      if ((uint64_t)seqnum32 >= cp_expected_seqnum_) break;
-      if (0 == timeout) return -1;
-      timeout -= sleep_time_ms;
-    }
-    // Engine retire indicates the CP has finished issuing the launch;
-    // wait for Vortex itself to drain by polling AP_DONE. The AFU FSM
-    // tracks CP-initiated launches (via cp_gpu_if.start), so AP_DONE
-    // rises when vx_busy clears. The caller's timeout drives the spin
-    // — each register read ticks the sim a handful of cycles.
-    for (;;) {
-      uint32_t status = 0;
-      CHECK_ERR(this->read_register(MMIO_CTL_ADDR, &status), { return err; });
-      if (status & CTL_AP_DONE) break;
-      if (0 == timeout) return -1;
-      timeout -= sleep_time_ms;
-    }
-    return 0;
-  }
-
-private:
-
-  MemoryAllocator global_mem_;
   xrt_device_t xrtDevice_;
   xrt_kernel_t xrtKernel_;
-  uint64_t dev_caps_ = 0;
-  uint64_t isa_caps_ = 0;
-  bool     caps_loaded_ = false;
-  uint64_t global_mem_size_;
-  uint64_t clock_freqs_;
-  uint64_t memory_bw_;
-  uint32_t lg2_num_banks_;
-  uint32_t lg2_bank_size_;
 
-  // Command Processor state. Populated by cp_init() when the CP path
-  // is enabled; left zero/disabled otherwise.
-  bool     cp_enabled_         = false;
-  uint64_t cp_ring_dev_addr_   = 0;   // device address of CP ring buffer
-  uint64_t cp_head_dev_addr_   = 0;   // CP-published consumer head pointer
-  uint64_t cp_cmpl_dev_addr_   = 0;   // CP-published retired seqnum
-  uint64_t cp_tail_            = 0;   // next ring write offset (bytes)
-  uint64_t cp_expected_seqnum_ = 0;   // host's seqnum to wait for
-
-  uint64_t get_memory_bandwidth(const std::string &device_name) {
-    std::string s_name(device_name);
-    std::transform(s_name.begin(), s_name.end(), s_name.begin(), ::tolower);
-    if (s_name.find("u55c") != std::string::npos) {
-      // Alveo U55C: 16GB HBM2
-      // Single stack HBM2 often cited around 460 GB/s aggregate
-      return 460000;
-    } else if (s_name.find("u280") != std::string::npos) {
-      // Alveo U280: 16GB HBM2 (2 Stacks) + DDR4
-      // HBM2 Peak: ~460 GB/s
-      // (Ignoring the 2x DDR4 channels which add ~38 GB/s, as HBM is the primary high-BW target)
-      return 460000;
-    } else if (s_name.find("u50") != std::string::npos) {
-      // Alveo U50: 8GB HBM2 (1 Stack)
-      // 1 Stack HBM2 = 460 / 2 = 230 GB/s theoretical
-      // Note: Often power limited to ~201 GB/s in practice, but theoretical peak is higher.
-      return 316000; // Peak limit often cited for U50 silicon before thermal throttling
-    } else if (s_name.find("u250") != std::string::npos) {
-      // Alveo U250: 4x DDR4-2400 DIMMs
-      // 4 channels * 19.2 GB/s per channel
-      return 76800;
-    } else if (s_name.find("u200") != std::string::npos) {
-      // Alveo U200: 4x DDR4-2400 DIMMs
-      // 4 channels * 19.2 GB/s per channel
-      return 76800;
-    } else if (s_name.find("vck5000") != std::string::npos) {
-      // VCK5000 (Versal AI Core): LPDDR4/DDR4 High Speed
-      // Specs list "Off-chip Total Bandwidth" = 102.4 GB/s
-      return 102400;
-    } else if (s_name.find("vortex_xrtsim") != std::string::npos) {
-      return VX_CFG_PLATFORM_MEMORY_PEAK_BW;
-    }
-    std::cerr << "Warning: Unknown device type (" << s_name << "). Returning 0." << std::endl;
-    return 0;
-  }
-
-#ifdef BANK_INTERLEAVE
-
-  std::vector<xrt_buffer_t> xrtBuffers_;
-
-  int get_bank_info(uint64_t addr, uint32_t *pIdx, uint64_t *pOff) {
-    uint32_t num_banks = 1 << lg2_num_banks_;
-    uint64_t block_addr = addr / CACHE_BLOCK_SIZE;
-    uint32_t index = block_addr & (num_banks - 1);
-    uint64_t offset = (block_addr >> lg2_num_banks_) * CACHE_BLOCK_SIZE;
-    if (pIdx) {
-      *pIdx = index;
-    }
-    if (pOff) {
-      *pOff = offset;
-    }
-    //printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index, offset);
-    return 0;
-  }
-
-  int get_buffer(uint32_t bank_id, xrt_buffer_t *pBuf) {
-    if (pBuf) {
-      *pBuf = xrtBuffers_.at(bank_id);
-    }
-    return 0;
-  }
-
-#else
-
-  struct buf_cnt_t {
-    xrt_buffer_t xrtBuffer;
-    uint32_t count;
+#ifdef CPP_API
+  // Host-only BOs (CP-visible host memory), keyed by kernel-visible address.
+  struct host_bo_t {
+    xrt::bo bo;
+    void   *ptr;
   };
-
-  std::unordered_map<uint32_t, buf_cnt_t> xrtBuffers_;
-
-  int get_bank_info(uint64_t addr, uint32_t *pIdx, uint64_t *pOff) {
-    uint32_t num_banks = 1 << lg2_num_banks_;
-    uint64_t bank_size = 1ull << lg2_bank_size_;
-    uint32_t index = addr >> lg2_bank_size_;
-    uint64_t offset = addr & (bank_size - 1);
-    if (index > num_banks) {
-      fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", addr);
-      return -1;
-    }
-    if (pIdx) {
-      *pIdx = index;
-    }
-    if (pOff) {
-      *pOff = offset;
-    }
-    //printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index, offset);
-    return 0;
-  }
-
-  int get_buffer(uint32_t bank_id, xrt_buffer_t *pBuf) {
-    auto it = xrtBuffers_.find(bank_id);
-    if (it != xrtBuffers_.end()) {
-      if (pBuf) {
-        *pBuf = it->second.xrtBuffer;
-      } else {
-        printf("reusing bank%d...\n", bank_id);
-        ++it->second.count;
-      }
-    } else {
-      printf("allocating bank%d...\n", bank_id);
-      uint64_t bank_size = 1ull << lg2_bank_size_;
-    #ifdef CPP_API
-      xrt::bo xrtBuffer(xrtDevice_, bank_size, xrt::bo::flags::normal, bank_id);
-    #else
-      CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice_, bank_size, XRT_BO_FLAGS_NONE, bank_id), {
-        return -1;
-      });
-    #endif
-      xrtBuffers_.insert({bank_id, {xrtBuffer, 1}});
-      if (pBuf) {
-        *pBuf = xrtBuffer;
-      }
-    }
-    return 0;
-  }
-
+  std::map<uint64_t, host_bo_t> host_bos_;
 #endif
 };
 

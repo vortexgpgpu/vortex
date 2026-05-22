@@ -354,22 +354,9 @@ private:
         if (device_->mem_req_rw[b]) {
           auto byteen = device_->mem_req_byteen[b];
           auto data = VDataCast<uint8_t*, VX_CFG_PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_req_data[b]);
-          // check if console output address
-          if (byte_addr >= uint64_t(VX_MEM_IO_COUT_ADDR)
-           && byte_addr < (uint64_t(VX_MEM_IO_COUT_ADDR) + VX_MEM_IO_COUT_SIZE)) {
-            // process console output
-            for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; i++) {
-              if ((byteen >> i) & 0x1) {
-                auto& ss_buf = print_bufs_[i];
-                char c = data[i];
-                ss_buf << c;
-                if (c == '\n') {
-                  std::cout << std::dec << "#" << i << ": " << ss_buf.str() << std::flush;
-                  ss_buf.str("");
-                }
-              }
-            }
-          } else {
+          // Console output (VX_MEM_IO_COUT range) is now ordinary device
+          // memory — Option C: the host runtime drains it. No tap here.
+          {
             // process memory writes
             /*printf("%0ld: [sim] MEM Wr Req[%d]: addr=0x%0lx, tag=0x%0lx, byteen=0x", timestamp, b, byte_addr, device_->mem_req_tag[b]);
             for (int i = (VX_CFG_PLATFORM_MEMORY_DATA_SIZE/4)-1; i >= 0; --i) {

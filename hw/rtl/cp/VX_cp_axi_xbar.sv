@@ -275,9 +275,12 @@ module VX_cp_axi_xbar
     end
   end
 
-  // Drive W from the routed source.
+  // Drive W from the routed source. This block must not read axi_m.wready:
+  // the W slave (e.g. VX_cp_axi_to_membus) drives wready combinationally
+  // from wvalid, so a block that both produces wvalid and consumes wready
+  // is seen as a false comb loop (wvalid -> wready -> wvalid) by a
+  // per-block dependency analysis. The s_wready fan-back is split out below.
   always_comb begin
-    for (int i = 0; i < N_SOURCES; ++i) s_wready[i] = 1'b0;
     axi_m.wvalid = 1'b0;
     axi_m.wdata  = '0;
     axi_m.wstrb  = '0;
@@ -287,8 +290,13 @@ module VX_cp_axi_xbar
       axi_m.wdata  = s_wdata [w_route];
       axi_m.wstrb  = s_wstrb [w_route];
       axi_m.wlast  = s_wlast [w_route];
-      s_wready[w_route] = axi_m.wready;
     end
+  end
+
+  // W-ready fan-back to the routed source (separate block — see above).
+  always_comb begin
+    for (int i = 0; i < N_SOURCES; ++i) s_wready[i] = 1'b0;
+    if (w_active) s_wready[w_route] = axi_m.wready;
   end
 
   // ============================================================================

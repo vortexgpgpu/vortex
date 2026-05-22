@@ -21,7 +21,7 @@
 // Opcodes handled:
 //   - CMD_NOP / CMD_FENCE                          (retire immediately)
 //   - CMD_LAUNCH                                   (bid KMU)
-//   - CMD_DCR_WRITE / CMD_DCR_READ                 (bid DCR)
+//   - CMD_DCR_WRITE / CMD_DCR_READ / CMD_CACHE_FLUSH (bid DCR)
 //   - CMD_MEM_*                                    (bid DMA)
 //   - CMD_EVENT_SIGNAL / CMD_EVENT_WAIT            (bid EVENT)
 // ============================================================================
@@ -34,10 +34,13 @@ module VX_cp_engine
   input  wire clk,
   input  wire reset,
 
-  // Per-queue state mirror (driven by AXI-Lite Q_* register writes from
-  // the host via VX_cp_core's regfile). Read by this engine.
-  input  cpe_state_t              state_in,
-  output cpe_state_t              state_out,
+  // Queue priority (a field of the regfile's q_state) used to tag the
+  // arbiter bids. The engine needs nothing else from the queue state.
+  input  wire [1:0]               prio_in,
+  // Retired sequence-number telemetry back to the regfile's Q_SEQNUM.
+  // A bare scalar (not a cpe_state_t passthrough): see the seqnum_out
+  // driver below for why.
+  output wire [63:0]              seqnum_out,
 
   // Decoded command stream input (driven by VX_cp_fetch + VX_cp_unpack).
   input  wire                     cmd_in_valid,
@@ -92,7 +95,8 @@ module VX_cp_engine
     skip = 1'b0;
     case (op)
       CMD_LAUNCH:                    return RES_KMU;
-      CMD_DCR_WRITE, CMD_DCR_READ:   return RES_DCR;
+      CMD_DCR_WRITE, CMD_DCR_READ,
+      CMD_CACHE_FLUSH:               return RES_DCR;
       CMD_MEM_WRITE,
       CMD_MEM_READ,
       CMD_MEM_COPY:                  return RES_DMA;
@@ -180,39 +184,48 @@ module VX_cp_engine
 
     // Bid one resource at a time.
     bid_kmu.valid     = (fsm == S_BID) && (cur_res == RES_KMU);
-    bid_kmu.priority_ = state_in.prio;
+    bid_kmu.priority_ = prio_in;
     bid_kmu.cmd       = cur_cmd;
 
     bid_dma.valid     = (fsm == S_BID) && (cur_res == RES_DMA);
-    bid_dma.priority_ = state_in.prio;
+    bid_dma.priority_ = prio_in;
     bid_dma.cmd       = cur_cmd;
 
     bid_dcr.valid     = (fsm == S_BID) && (cur_res == RES_DCR);
-    bid_dcr.priority_ = state_in.prio;
+    bid_dcr.priority_ = prio_in;
     bid_dcr.cmd       = cur_cmd;
 
     bid_event.valid     = (fsm == S_BID) && (cur_res == RES_EVT);
-    bid_event.priority_ = state_in.prio;
+    bid_event.priority_ = prio_in;
     bid_event.cmd       = cur_cmd;
 
     retire_evt    = (fsm == S_RETIRE);
     retire_seqnum = seqnum_r;
 
     submit_evt   = (fsm == S_DECODE) && cur_cmd.hdr.flags[F_PROFILE];
-    start_evt    = (fsm == S_BID) && cur_cmd.hdr.flags[F_PROFILE] &&
-                   ((cur_res == RES_KMU   && bid_kmu.grant)   ||
-                    (cur_res == RES_DMA   && bid_dma.grant)   ||
-                    (cur_res == RES_DCR   && bid_dcr.grant)   ||
-                    (cur_res == RES_EVT && bid_event.grant));
     end_evt      = (fsm == S_RETIRE) && cur_cmd.hdr.flags[F_PROFILE];
     profile_slot = cur_cmd.profile_slot;
   end
 
-  // State mirror passes through with seqnum tracked locally.
-  always_comb begin
-    state_out         = state_in;
-    state_out.seqnum  = seqnum_r;
-  end
+  // start_evt reads the arbiter grant lines. Leaving it in the always_comb
+  // above would make that block both read `grant` and drive `bid_*.valid`;
+  // a per-block dependency analysis then sees a false loop
+  // (valid -> arbiter -> grant -> block -> valid) and reports UNOPTFLAT
+  // whenever it cannot split the block (e.g. at -O0). A standalone
+  // continuous assign breaks the apparent cycle at every optimization level.
+  assign start_evt = (fsm == S_BID) && cur_cmd.hdr.flags[F_PROFILE] &&
+                     ((cur_res == RES_KMU && bid_kmu.grant)   ||
+                      (cur_res == RES_DMA && bid_dma.grant)   ||
+                      (cur_res == RES_DCR && bid_dcr.grant)   ||
+                      (cur_res == RES_EVT && bid_event.grant));
+
+  // The engine's only queue-state contribution is the retired seqnum.
+  // Emitting it as a bare register read (rather than a cpe_state_t built
+  // from state_in) keeps a per-block analysis from seeing the output as
+  // dependent on the input: a struct passthrough closes a false comb loop
+  // q_seqnum -> q_state -> state_in -> state_out -> q_seqnum through the
+  // regfile. seqnum_r is a register, so this path is genuinely acyclic.
+  assign seqnum_out = seqnum_r;
 
   `UNUSED_VAR (QID)
   `UNUSED_VAR (no_resource)

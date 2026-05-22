@@ -18,25 +18,15 @@
 // Each backend's class must provide methods with these signatures:
 //
 //   int init();
-//   int get_caps(uint32_t caps_id, uint64_t* value);
-//   int mem_info(uint64_t* free, uint64_t* used);
-//   int mem_alloc(uint64_t size, int flags, uint64_t* dev_addr);
-//   int mem_reserve(uint64_t dev_addr, uint64_t size, int flags);
-//   int mem_free(uint64_t dev_addr);
-//   int mem_access(uint64_t dev_addr, uint64_t size, int flags);
-//   int upload(uint64_t dst, const void* src, uint64_t size);
-//   int download(void* dst, uint64_t src, uint64_t size);
-//   int copy(uint64_t dst, uint64_t src, uint64_t size);
-//   int cp_mmio_write(uint32_t off, uint32_t value);
-//   int cp_mmio_read(uint32_t off, uint32_t* value);
+//   int cp_reg_write(uint32_t off, uint32_t value);
+//   int cp_reg_read (uint32_t off, uint32_t* value);
+//   int host_mem_alloc(uint64_t size, void** host_ptr, uint64_t* cp_addr);
+//   int host_mem_free (uint64_t cp_addr);
 //
-// All kernel launches and DCR ops flow through the dispatcher's CP
-// submission helpers in sw/runtime/common/vx_device.cpp; backends only
-// expose the platform primitives above. The xrt/opae backends route
-// cp_mmio_* to their AFU's CP regfile (host MMIO byte offset 0x1000+);
-// simx/rtlsim route to a sim/common/CommandProcessor C++ instance.
-// Legacy vortex.h symbols in the dispatcher are pure wrappers over
-// vortex2.h symbols and never touch callbacks_t directly.
+// The backend is a pure transport HAL — device memory allocation, DMA and
+// capability decoding all live in the common core (sw/runtime/common). The
+// CP is the sole command + DMA engine; backends only expose the register
+// channel and CP-visible host memory above.
 // ============================================================================
 
 extern "C" int vx_dev_init(callbacks_t* callbacks) {
@@ -67,90 +57,36 @@ extern "C" int vx_dev_init(callbacks_t* callbacks) {
     return 0;
   };
 
-  // ----- Queries -----
-  callbacks->query_caps = [](void* dev_ctx, uint32_t caps_id,
-                             uint64_t* out_value) -> int {
+  // ----- CP register channel -----
+  callbacks->cp_reg_write = [](void* dev_ctx, uint32_t off,
+                               uint32_t value) -> int {
+    if (nullptr == dev_ctx)
+      return -1;
+    return reinterpret_cast<vx_device*>(dev_ctx)->cp_reg_write(off, value);
+  };
+
+  callbacks->cp_reg_read = [](void* dev_ctx, uint32_t off,
+                              uint32_t* out_value) -> int {
     if (nullptr == dev_ctx || nullptr == out_value)
       return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->get_caps(caps_id, out_value);
+    return reinterpret_cast<vx_device*>(dev_ctx)->cp_reg_read(off, out_value);
   };
 
-  callbacks->memory_info = [](void* dev_ctx, uint64_t* out_free,
-                              uint64_t* out_used) -> int {
-    if (nullptr == dev_ctx)
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->mem_info(out_free, out_used);
-  };
-
-  // ----- Memory -----
-  callbacks->mem_alloc = [](void* dev_ctx, uint64_t size, uint32_t flags,
-                            uint64_t* out_dev_addr) -> int {
-    if (nullptr == dev_ctx || nullptr == out_dev_addr || 0 == size)
+  // ----- CP-visible host memory -----
+  callbacks->host_mem_alloc = [](void* dev_ctx, uint64_t size,
+                                 void** out_host_ptr,
+                                 uint64_t* out_cp_addr) -> int {
+    if (nullptr == dev_ctx || nullptr == out_host_ptr ||
+        nullptr == out_cp_addr || 0 == size)
       return -1;
     return reinterpret_cast<vx_device*>(dev_ctx)
-              ->mem_alloc(size, static_cast<int>(flags), out_dev_addr);
+              ->host_mem_alloc(size, out_host_ptr, out_cp_addr);
   };
 
-  callbacks->mem_reserve = [](void* dev_ctx, uint64_t dev_addr, uint64_t size,
-                              uint32_t flags) -> int {
-    if (nullptr == dev_ctx || 0 == size)
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)
-              ->mem_reserve(dev_addr, size, static_cast<int>(flags));
-  };
-
-  callbacks->mem_free = [](void* dev_ctx, uint64_t dev_addr) -> int {
+  callbacks->host_mem_free = [](void* dev_ctx, uint64_t cp_addr) -> int {
     if (nullptr == dev_ctx)
       return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->mem_free(dev_addr);
-  };
-
-  callbacks->mem_access = [](void* dev_ctx, uint64_t dev_addr, uint64_t size,
-                             uint32_t flags) -> int {
-    if (nullptr == dev_ctx)
-      return -1;
-    if (0 == size)
-      return 0;   // no-op; the upload path passes size=0 for empty BSS
-    return reinterpret_cast<vx_device*>(dev_ctx)
-              ->mem_access(dev_addr, size, static_cast<int>(flags));
-  };
-
-  // ----- DMA -----
-  callbacks->mem_upload = [](void* dev_ctx, uint64_t dst, const void* src,
-                             uint64_t size) -> int {
-    if (nullptr == dev_ctx || (nullptr == src && size != 0))
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->upload(dst, src, size);
-  };
-
-  callbacks->mem_download = [](void* dev_ctx, void* dst, uint64_t src,
-                               uint64_t size) -> int {
-    if (nullptr == dev_ctx || (nullptr == dst && size != 0))
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->download(dst, src, size);
-  };
-
-  callbacks->mem_copy = [](void* dev_ctx, uint64_t dst, uint64_t src,
-                           uint64_t size) -> int {
-    if (nullptr == dev_ctx)
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->copy(dst, src, size);
-  };
-
-  // ----- CP control plane (sole control path) -----
-  callbacks->cp_mmio_write = [](void* dev_ctx, uint32_t off,
-                                uint32_t value) -> int {
-    if (nullptr == dev_ctx)
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)->cp_mmio_write(off, value);
-  };
-
-  callbacks->cp_mmio_read = [](void* dev_ctx, uint32_t off,
-                               uint32_t* out_value) -> int {
-    if (nullptr == dev_ctx || nullptr == out_value)
-      return -1;
-    return reinterpret_cast<vx_device*>(dev_ctx)
-              ->cp_mmio_read(off, out_value);
+    return reinterpret_cast<vx_device*>(dev_ctx)->host_mem_free(cp_addr);
   };
 
   return 0;

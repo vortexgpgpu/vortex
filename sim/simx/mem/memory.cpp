@@ -37,35 +37,6 @@ private:
 	DramSim   dram_sim_;
 	RAM*      ram_;
 	mutable PerfStats perf_stats_;
-	std::unordered_map<int, std::stringstream> print_bufs_;
-
-	// Tap byte writes that fall in the IO_COUT range and route them to the
-	// per-thread print buffer. Returns true if the byte was consumed (no RAM
-	// write needed).
-	bool io_cout_tap(uint64_t addr, uint8_t byte) {
-		if (addr < uint64_t(VX_MEM_IO_COUT_ADDR)
-		 || addr >= (uint64_t(VX_MEM_IO_COUT_ADDR) + VX_MEM_IO_COUT_SIZE))
-			return false;
-		uint32_t tid = (addr - VX_MEM_IO_COUT_ADDR) & (VX_MEM_IO_COUT_SIZE - 1);
-		auto& ss_buf = print_bufs_[tid];
-		char c = (char)byte;
-		ss_buf << c;
-		if (c == '\n') {
-			std::cout << "#" << tid << ": " << ss_buf.str() << std::flush;
-			ss_buf.str("");
-		}
-		return true;
-	}
-
-	void cout_flush() {
-		for (auto& buf : print_bufs_) {
-			auto str = buf.second.str();
-			if (!str.empty()) {
-				std::cout << "#" << buf.first << ": " << str << std::endl;
-			}
-		}
-		print_bufs_.clear();
-	}
 	struct DramCallbackArgs {
 		Memory::Impl* memsim;
 		MemReq request;
@@ -93,9 +64,7 @@ public:
 		}
 	}
 
-	~Impl() {
-		this->cout_flush();
-	}
+	~Impl() {}
 
 	const PerfStats& perf_stats() const {
 		perf_stats_.bank_stalls = mem_xbar_->collisions();
@@ -133,10 +102,7 @@ public:
 						for (uint32_t b = 0; b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
 							if (mem_req.byteen & (1ull << b)) {
 								uint8_t value = (*mem_req.data)[b];
-								uint64_t byte_addr = line_addr + b;
-								if (this->io_cout_tap(byte_addr, value))
-									continue;
-								ram_->write(&value, byte_addr, 1);
+								ram_->write(&value, line_addr + b, 1);
 							}
 						}
 					}

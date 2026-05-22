@@ -14,7 +14,7 @@ Event::Event(Device* dev) : device_(dev) {}
 Event::~Event() {
     if (cp_slot_addr_ != 0 && device_) {
         // Best-effort free of the device-resident counter slot.
-        device_->platform()->mem_free(cp_slot_addr_);
+        device_->mem_free(cp_slot_addr_);
     }
 }
 
@@ -31,14 +31,12 @@ uint64_t Event::cp_slot() {
     // 8 bytes — VX_cp_event_unit operates with awsize=3 (single 8 B beat).
     // VX_MEM_READ_WRITE so both the CP and the host can mmio-read/write it.
     uint64_t addr = 0;
-    auto r = device_->platform()->mem_alloc(/*size=*/8,
-                                            /*flags=*/0x3 /*RW*/,
-                                            &addr);
+    auto r = device_->mem_alloc(/*size=*/8, /*flags=*/0x3 /*RW*/, &addr);
     if (r != VX_SUCCESS) return 0;
     // Zero-initialize so the CP's first poll sees the canonical "not yet
-    // signaled" value.
+    // signaled" value. The slot is device memory — written via the CP DMA.
     uint64_t zero = 0;
-    device_->platform()->mem_upload(addr, &zero, sizeof(zero));
+    device_->dev_write(addr, &zero, sizeof(zero));
     cp_slot_addr_ = addr;
     return cp_slot_addr_;
 }
@@ -55,7 +53,7 @@ void Event::signal(uint64_t value) {
     // VX_cp_event_unit might be polling this address inside an in-flight
     // CMD_EVENT_WAIT, so the host-side signal needs to be visible to it.
     if (mirror_addr != 0 && device_) {
-        device_->platform()->mem_upload(mirror_addr, &value, sizeof(value));
+        device_->dev_write(mirror_addr, &value, sizeof(value));
     }
     cv_.notify_all();
 }
@@ -82,7 +80,7 @@ void Event::complete(vx_result_t status) {
     }
     if (mirror_needed && mirror_addr != 0 && device_) {
         uint64_t one = 1;
-        device_->platform()->mem_upload(mirror_addr, &one, sizeof(one));
+        device_->dev_write(mirror_addr, &one, sizeof(one));
     }
     cv_.notify_all();
 }

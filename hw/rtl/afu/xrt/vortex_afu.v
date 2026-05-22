@@ -36,6 +36,9 @@ module vortex_afu #(
 	`MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, MP_COMMA),
 `endif
 
+    // AXI4 host-memory master interface (CP command ring + host side of DMA)
+	`GEN_AXI_HOST,
+
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
     output wire                                 s_axi_ctrl_awready,
@@ -77,6 +80,7 @@ module vortex_afu #(
 	`else
 		`MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_ARGS, MP_COMMA),
 	`endif
+		`AXI_HOST_ARGS,
 		.s_axi_ctrl_awvalid (s_axi_ctrl_awvalid),
 		.s_axi_ctrl_awready (s_axi_ctrl_awready),
 		.s_axi_ctrl_awaddr  (s_axi_ctrl_awaddr),

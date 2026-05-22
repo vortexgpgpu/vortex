@@ -373,3 +373,89 @@ control-plane code path to debug instead of four divergent ones.
 
 Total estimated effort: **~5 substantial commits** (one per phase),
 2–4 hours each.
+
+---
+
+# Addendum (May 2026) — Minimal 6-function transport `callbacks_t`
+
+**Status:** supersedes the §1 "pure v2" target. Implemented alongside the
+Track-1 CP host-memory ring work.
+
+## A.1 Principle
+
+Once the Command Processor is the **sole** command + DMA engine, the
+backend driver does no memory management, no DMA, and no capability
+decoding. Those are either the CP's job (it has a DMA engine and a
+regfile) or generic host-side code (an address allocator). `callbacks_t`
+collapses to a pure **transport HAL**: a device handle, a register
+channel to the CP, and CP-visible host memory — nothing else.
+
+## A.2 The interface
+
+```c
+typedef struct {
+  int (*dev_open) (void** out_dev_ctx);
+  int (*dev_close)(void*  dev_ctx);
+
+  // CP register channel — doorbell + status + caps window.
+  int (*cp_reg_read) (void* dev_ctx, uint32_t off, uint32_t* out_value);
+  int (*cp_reg_write)(void* dev_ctx, uint32_t off, uint32_t  value);
+
+  // CP-visible host memory — command ring + DMA staging.
+  // Returns BOTH a host pointer (the runtime memcpy's through it) and the
+  // device-side address the CP's m_axi_host master uses to reach it.
+  int (*host_mem_alloc)(void* dev_ctx, uint64_t size,
+                        void** out_host_ptr, uint64_t* out_cp_addr);
+  int (*host_mem_free) (void* dev_ctx, uint64_t cp_addr);
+} callbacks_t;
+```
+
+13 callbacks → **6**. Three pairs: lifecycle, register channel, host memory.
+
+## A.3 What moves, and where
+
+| Removed callback | Fate |
+|---|---|
+| `mem_upload`, `mem_download` | gone — runtime `memcpy`s through `host_mem_alloc`'s `host_ptr`; the CP moves bytes via `CMD_MEM_*` |
+| `mem_copy` | gone — was already dead (`dev_copy`→`cp_submit_mem_copy`) |
+| `mem_alloc`, `mem_reserve`, `mem_free` | → **common core**: `vx::Device` owns one `MemoryAllocator` for device memory (the free-list was copy-pasted into all 5 backends) |
+| `mem_access` | gone — a no-op on every backend |
+| `memory_info` | → **common core** — answered from the allocator |
+| `query_caps` | → **common core** — `cp_reg_read` of the CP caps window + `vortex::load_caps`/`decode_caps` (already shared helpers) + `VX_CFG_*` constants for `CACHE_LINE_SIZE`/`CLOCK_RATE`/`PEAK_MEM_BW` |
+| `has_native_dma` | gone — every backend routes device transfers through the CP, identically |
+| `cp_mmio_read/write` | kept, renamed `cp_reg_read/write` |
+
+The coherence contract: host memory from `host_mem_alloc` must be
+coherent with the CP's `m_axi_host` view (true for XRT host-only BOs,
+OPAE CCI-P, and the unified-memory sims). No explicit sync callback.
+
+## A.4 CP hardware queues
+
+The CP RTL (`hw/rtl/cp/VX_cp_axil_regfile.sv`) instantiates
+`VX_CP_NUM_QUEUES` independent hardware queues, each with its own 64-byte
+register window at `0x100 + qid*0x40` (`RING_BASE`/`HEAD`/`CMPL`/`TAIL`/
+`SEQNUM`/`CONTROL`/`ERROR`). The count is **runtime-queryable** from
+`CP_DEV_CAPS` (offset `0x008`, bits `[7:0]`).
+
+Multi-queue needs **zero extra callbacks** — a queue is just a different
+register offset. The common core reads `NUM_QUEUES` and maps software
+`vx::Queue`s onto CP HW queues through the same `cp_reg_*` channel. This
+is also the proper fix for the serial-ring COUT-drain limitation: COUT
+draining runs on a separate HW queue, concurrently with a launch.
+
+## A.5 Sim backends (simx / rtlsim / gem5)
+
+The sims have no host/device split — one unified memory. `host_mem_alloc`
+returns a real `malloc`'d host buffer; `cp_addr` is the pointer value
+itself. The software `CommandProcessor`'s `dram_read`/`dram_write` hooks
+route by registered host region: an address inside a host region hits the
+`malloc`'d buffer, otherwise the sim RAM. The CP thus moves bytes between
+"host" and "device" identically to hardware.
+
+## A.6 NVIDIA/AMD alignment
+
+The 6 calls are the per-platform ring/register/pinned-memory hooks —
+the same seam `amdgpu` draws between its per-ASIC backend and its common
+core. The allocator, ring protocol, and queue/event layer live in the
+common core, matching the `amdgpu`/TTM shared core. `host_mem_alloc` is
+precisely a real driver's pinned-memory allocator for the ring.

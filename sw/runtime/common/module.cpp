@@ -6,7 +6,7 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 // ============================================================================
-// vx_module.cpp — Phase 1b of vortex2_v1_shape_lock_proposal.md.
+// module.cpp — Phase 1b of vortex2_v1_shape_lock_proposal.md.
 //
 // Module = a loaded .vxbin (device-side image + parsed symbol table).
 // Kernel = a named entry point inside a module, with its PC cached.
@@ -128,16 +128,15 @@ vx_result_t Module::load_bytes(Device* dev, const void* bytes_, size_t size,
         if (r != VX_SUCCESS) { image->release(); return r; }
     }
 
-    // Synchronously upload the binary payload + zero the BSS region. Doing
-    // this via the Platform directly (not the queue) keeps Module a pure
-    // synchronous primitive — caller doesn't need a queue handy to load a
-    // module.
-    auto* plat = dev->platform();
-    r = plat->mem_upload(min_vma, bin, bin_sz);
+    // Synchronously upload the binary payload + zero the BSS region.
+    // Routed via dev_write (the CP's DMA on a CP-only-DMA backend); still
+    // synchronous, so Module stays a pure synchronous primitive — the
+    // caller doesn't need a queue handy to load a module.
+    r = dev->dev_write(min_vma, bin, bin_sz);
     if (r != VX_SUCCESS) { image->release(); return r; }
     if (rt_sz > bin_sz) {
         std::vector<uint8_t> zeros(rt_sz - bin_sz, 0);
-        r = plat->mem_upload(min_vma + bin_sz, zeros.data(), rt_sz - bin_sz);
+        r = dev->dev_write(min_vma + bin_sz, zeros.data(), rt_sz - bin_sz);
         if (r != VX_SUCCESS) { image->release(); return r; }
     }
 
@@ -231,10 +230,10 @@ vx_result_t Kernel::get_max_block_size(uint32_t* x, uint32_t* y, uint32_t* z) {
     // legacy vx_check_occupancy auto-block. Per-kernel metadata override
     // is a Phase 1b follow-up once the vxbin footer carries it.
     uint64_t nt = 0, nw = 0;
-    auto* plat = module_->device()->platform();
-    auto r = plat->query_caps(VX_CAPS_NUM_THREADS, &nt);
+    auto* dev = module_->device();
+    auto r = dev->query_caps(VX_CAPS_NUM_THREADS, &nt);
     if (r != VX_SUCCESS) return r;
-    r = plat->query_caps(VX_CAPS_NUM_WARPS, &nw);
+    r = dev->query_caps(VX_CAPS_NUM_WARPS, &nw);
     if (r != VX_SUCCESS) return r;
     *x = (uint32_t)nt;
     *y = (uint32_t)nw;

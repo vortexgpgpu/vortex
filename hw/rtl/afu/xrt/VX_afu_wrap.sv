@@ -16,14 +16,17 @@
 `include "vortex_afu.vh"
 
 // ============================================================================
-// XRT AFU shim with Command Processor integration.
+// XRT AFU shim. The Command Processor is the sole command path.
 //
 // AXI-Lite address space:
-//   0x0000..0x0FFF — legacy AP_CTRL + DCR + DEV_CAPS (VX_afu_ctrl, 8b view)
+//   0x0000..0x0FFF — VX_afu_ctrl: a minimal ap_ctrl stub (0x00) plus the
+//                    SCOPE bit-serial register pair (0x28/0x2C). The legacy
+//                    launch FSM / DCR / dev_caps registers were removed in
+//                    Phase 4.
 //   0x1000..0x1FFF — Command Processor regfile, mapped to CP's native
 //                    0x000..0xFFF address space (CP sees addr - 0x1000).
 //                    The bit-12 split keeps CP_CTRL at CP-offset 0x000
-//                    reachable without colliding with the legacy AP_CTRL
+//                    reachable without colliding with the ap_ctrl stub
 //                    register at host-offset 0x000.
 //
 // Data plane:
@@ -32,11 +35,7 @@
 //     the arbiter holds a sticky owner per channel until the response
 //     completes, so CP and Vortex can interleave without deadlock.
 //
-// Control fan-in to Vortex DCR:
-//   Either legacy AFU_ctrl (DCR writes via the 0x20/0x24 register pair)
-//   or the CP DCR proxy can issue DCR writes. The mux is a "CP wins on
-//   simultaneous valid" combinational selector keyed on dcr_req_valid;
-//   same approach for vx_start (OR-combined).
+// Launch / DCR: driven solely by the CP through cp_gpu_if (start + DCR).
 // ============================================================================
 
 module VX_afu_wrap import VX_gpu_pkg::*; #(
@@ -61,6 +60,8 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 `else
 	`MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, MP_COMMA),
 `endif
+    // AXI4 host-memory master interface (CP command ring + host side of DMA)
+	`GEN_AXI_HOST,
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
     output wire                                 s_axi_ctrl_awready,
@@ -87,15 +88,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     output wire                                 interrupt
 );
 	localparam M_AXI_MEM_ADDR_WIDTH = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH;
-
-	typedef enum logic [1:0] {
-		STATE_IDLE = 0,
-    	STATE_RUN  = 1,
-		STATE_DONE = 2
-	} state_e;
-
-	localparam PENDING_WR_SIZEW    = 12; // max outstanding requests size
-	localparam NUM_MEM_BANKS_SIZEW = `CLOG2(C_M_AXI_MEM_NUM_BANKS+1);
 
 	wire                                 m_axi_mem_awvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_awready_a [C_M_AXI_MEM_NUM_BANKS];
@@ -135,10 +127,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 `endif
 
 	reg [`VX_CFG_RESET_DELAY-1:0] vx_reset_shift_r;
-	reg [PENDING_WR_SIZEW-1:0] vx_pending_writes;
 	wire vx_reset;
-	reg vx_start_legacy;
-	reg saw_busy;
 	wire vx_start;
 	wire vx_busy;
 
@@ -230,17 +219,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	assign cp_axil.rready    = s_axi_ctrl_rready &&  route_cp_r_r;
 	assign lg_rready         = s_axi_ctrl_rready && !route_cp_r_r;
 
-	state_e state;
-
-	wire ap_reset;
-	wire ap_start;
-	wire ap_ctrl_read;
-	wire ap_idle  = (state == STATE_IDLE);
-	wire ap_done  = (state == STATE_DONE) && (vx_pending_writes == '0);
-	wire ap_ready = ap_done;
-
-	wire ap_done_ack = ap_done && ap_ctrl_read;
-
 `ifdef SCOPE
 	wire scope_bus_in;
 	wire scope_bus_out;
@@ -253,109 +231,15 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     end
     assign vx_reset = vx_reset_shift_r[`VX_CFG_RESET_DELAY-1];
 
+	// Vortex reset-delay shift register. The CP owns launches; there is no
+	// host-driven ap_reset any more, so this keys on `reset` alone.
 	always @(posedge clk) begin
-		if (reset || ap_reset) begin
+		if (reset) begin
 			vx_reset_shift_r <= {`VX_CFG_RESET_DELAY{1'b1}};
 		end else begin
 			vx_reset_shift_r <= {vx_reset_shift_r[`VX_CFG_RESET_DELAY-2:0], 1'b0};
 		end
-
-		if (reset || ap_reset) begin
-			state    <= STATE_IDLE;
-			vx_start_legacy <= 0;
-			saw_busy <= 0;
-		end else begin
-			case (state)
-			STATE_IDLE: begin
-				saw_busy <= 0;
-				if (ap_start && !vx_reset) begin
-				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%t: AFU: Goto STATE_RUN\n", $time))
-				`endif
-					state    <= STATE_RUN;
-					vx_start_legacy <= 1;
-				end else if (cp_gpu_if.start && !vx_reset) begin
-					// CP-initiated launch: enter RUN without firing the
-					// legacy vx_start_legacy pulse (CP's gpu_if.start
-					// already feeds the OR-mux into vx_start). AP_DONE /
-					// ready_wait still work in CP mode this way.
-				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%t: AFU: Goto STATE_RUN (CP)\n", $time))
-				`endif
-					state <= STATE_RUN;
-				end
-			end
-			STATE_RUN: begin
-				vx_start_legacy <= 0;
-				// Track whether Vortex has actually started executing
-				// before checking for completion, so the FSM does not
-				// race through RUN→DONE before vx_busy has had time to
-				// rise (matters on the CP path where vx_start_legacy is
-				// not pulsed).
-				if (vx_busy) saw_busy <= 1;
-				if (!vx_start_legacy && saw_busy && !vx_busy) begin
-				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%t: AFU: Execution completed\n", $time))
-				`endif
-					state <= STATE_DONE;
-				end
-			end
-			STATE_DONE: begin
-				// wait for host's done acknowledgement
-				if (ap_done_ack) begin
-				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%t: AFU: Processor idle\n", $time))
-				`endif
-					state <= STATE_IDLE;
-				end
-			end
-			default:;
-			endcase
-
-		end
 	end
-
-	wire [C_M_AXI_MEM_NUM_BANKS-1:0] m_axi_wr_req_fire, m_axi_wr_rsp_fire;
-	wire [NUM_MEM_BANKS_SIZEW-1:0] cur_wr_reqs, cur_wr_rsps;
-
-	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_m_axi_wr_req_fire
-		VX_axi_write_ack axi_write_ack (
-            .clk    (clk),
-            .reset  (reset),
-            .awvalid(m_axi_mem_awvalid_a[i]),
-            .awready(m_axi_mem_awready_a[i]),
-            .wvalid (m_axi_mem_wvalid_a[i]),
-            .wready (m_axi_mem_wready_a[i]),
-			.tx_ack (m_axi_wr_req_fire[i]),
-			`UNUSED_PIN (aw_ack),
-			`UNUSED_PIN (w_ack),
-			`UNUSED_PIN (tx_rdy)
-        );
-	end
-
-	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_m_axi_wr_rsp_fire
-		assign m_axi_wr_rsp_fire[i] = m_axi_mem_bvalid_a[i] && m_axi_mem_bready_a[i];
-	end
-
-	`POP_COUNT(cur_wr_reqs, m_axi_wr_req_fire);
-	`POP_COUNT(cur_wr_rsps, m_axi_wr_rsp_fire);
-
-	wire signed [NUM_MEM_BANKS_SIZEW:0] reqs_sub = (NUM_MEM_BANKS_SIZEW+1)'(cur_wr_reqs) -
-	                                                     (NUM_MEM_BANKS_SIZEW+1)'(cur_wr_rsps);
-
-	always @(posedge clk) begin
-		if (reset) begin
-			vx_pending_writes <= '0;
-		end else begin
-			vx_pending_writes <= vx_pending_writes + PENDING_WR_SIZEW'(reqs_sub);
-		end
-	end
-
-	// ---- Legacy AFU_ctrl with its DCR outputs flowing into the mux ----
-	wire                          lg_dcr_req_valid;
-	wire                          lg_dcr_req_rw;
-	wire [VX_DCR_ADDR_WIDTH-1:0]  lg_dcr_req_addr;
-	wire [VX_DCR_DATA_WIDTH-1:0]  lg_dcr_req_data;
 
 	VX_afu_ctrl #(
 		.S_AXI_ADDR_WIDTH (8),
@@ -384,62 +268,89 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
 		.s_axi_bvalid   (lg_bvalid),
 		.s_axi_bready   (lg_bready),
-		.s_axi_bresp    (lg_bresp),
-
-		.ap_reset  		(ap_reset),
-		.ap_start  		(ap_start),
-		.ap_done     	(ap_done),
-		.ap_ready       (ap_ready),
-		.ap_idle     	(ap_idle),
-		.interrupt 		(interrupt),
-
-		.ap_ctrl_read   (ap_ctrl_read),
+		.s_axi_bresp    (lg_bresp)
 
 	`ifdef SCOPE
-		.scope_bus_in   (scope_bus_out),
-		.scope_bus_out  (scope_bus_in),
+	  , .scope_bus_in   (scope_bus_out),
+		.scope_bus_out  (scope_bus_in)
 	`endif
-
-		.dcr_req_valid	(lg_dcr_req_valid),
-		.dcr_req_rw		(lg_dcr_req_rw),
-		.dcr_req_addr	(lg_dcr_req_addr),
-		.dcr_req_data	(lg_dcr_req_data),
-		.dcr_rsp_valid	(dcr_rsp_valid),
-		.dcr_rsp_data	(dcr_rsp_data)
 	);
 
 	// ========================================================================
 	// Command Processor
 	// ========================================================================
 	VX_cp_gpu_if cp_gpu_if ();
+	// CP device-memory master (shares Vortex bank 0 via VX_axi_arb2).
 	VX_cp_axi_m_if #(.ADDR_W(64), .DATA_W(C_M_AXI_MEM_DATA_WIDTH))
-	    cp_axi_m ();
+	    cp_axi_dev ();
+	// CP host-memory master (command ring + host side of DMA → m_axi_host).
+	VX_cp_axi_m_if #(.ADDR_W(64), .DATA_W(C_M_AXI_MEM_DATA_WIDTH))
+	    cp_axi_host ();
 
 	wire cp_interrupt;
-	`UNUSED_VAR (cp_interrupt)
 
 	VX_cp_core u_cp_core (
 		.clk        (clk),
 		.reset      (reset),
 		.axil_s     (cp_axil),
-		.axi_m      (cp_axi_m),
+		.axi_host   (cp_axi_host),
+		.axi_dev    (cp_axi_dev),
 		.gpu_if     (cp_gpu_if),
 		.interrupt  (cp_interrupt)
 	);
 
-	// ---- gpu_if ↔ Vortex DCR fan-in (CP wins on simultaneous valid) ----
-	assign dcr_req_valid = cp_gpu_if.dcr_req_valid | lg_dcr_req_valid;
-	assign dcr_req_rw    = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_rw   : lg_dcr_req_rw;
-	assign dcr_req_addr  = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_addr : lg_dcr_req_addr;
-	assign dcr_req_data  = cp_gpu_if.dcr_req_valid ? cp_gpu_if.dcr_req_data : lg_dcr_req_data;
+	// ---- CP host-memory master → m_axi_host AFU port ----
+	// XRT pins m_axi_host to HOST[0]; host addresses pass straight through
+	// (no PLATFORM_MEMORY_OFFSET — that offset is device-memory specific).
+	assign m_axi_host_awvalid = cp_axi_host.awvalid;
+	assign m_axi_host_awaddr  = cp_axi_host.awaddr;
+	assign m_axi_host_awid    = {{(C_M_AXI_MEM_ID_WIDTH-`VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_host.awid};
+	assign m_axi_host_awlen   = cp_axi_host.awlen;
+	assign cp_axi_host.awready = m_axi_host_awready;
+	assign m_axi_host_wvalid  = cp_axi_host.wvalid;
+	assign m_axi_host_wdata   = cp_axi_host.wdata;
+	assign m_axi_host_wstrb   = cp_axi_host.wstrb;
+	assign m_axi_host_wlast   = cp_axi_host.wlast;
+	assign cp_axi_host.wready = m_axi_host_wready;
+	assign cp_axi_host.bvalid = m_axi_host_bvalid;
+	assign cp_axi_host.bid    = m_axi_host_bid[`VX_CP_AXI_TID_WIDTH-1:0];
+	assign cp_axi_host.bresp  = m_axi_host_bresp;
+	assign m_axi_host_bready  = cp_axi_host.bready;
+	assign m_axi_host_arvalid = cp_axi_host.arvalid;
+	assign m_axi_host_araddr  = cp_axi_host.araddr;
+	assign m_axi_host_arid    = {{(C_M_AXI_MEM_ID_WIDTH-`VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_host.arid};
+	assign m_axi_host_arlen   = cp_axi_host.arlen;
+	assign cp_axi_host.arready = m_axi_host_arready;
+	assign cp_axi_host.rvalid = m_axi_host_rvalid;
+	assign cp_axi_host.rdata  = m_axi_host_rdata;
+	assign cp_axi_host.rid    = m_axi_host_rid[`VX_CP_AXI_TID_WIDTH-1:0];
+	assign cp_axi_host.rlast  = m_axi_host_rlast;
+	assign cp_axi_host.rresp  = m_axi_host_rresp;
+	assign m_axi_host_rready  = cp_axi_host.rready;
+	`UNUSED_VAR (m_axi_host_bid)
+	`UNUSED_VAR (m_axi_host_rid)
+	`UNUSED_VAR (cp_axi_host.awsize)
+	`UNUSED_VAR (cp_axi_host.awburst)
+	`UNUSED_VAR (cp_axi_host.arsize)
+	`UNUSED_VAR (cp_axi_host.arburst)
+
+	// P5: the AFU interrupt pin reflects the Command Processor — a one-cycle
+	// pulse each time the CP retires a command.
+	assign interrupt = cp_interrupt;
+
+	// ---- gpu_if → Vortex DCR (the CP is the sole DCR source) ----
+	assign dcr_req_valid = cp_gpu_if.dcr_req_valid;
+	assign dcr_req_rw    = cp_gpu_if.dcr_req_rw;
+	assign dcr_req_addr  = cp_gpu_if.dcr_req_addr;
+	assign dcr_req_data  = cp_gpu_if.dcr_req_data;
 
 	assign cp_gpu_if.dcr_req_ready = 1'b1;          // Vortex DCR always accepts
 	assign cp_gpu_if.dcr_rsp_valid = dcr_rsp_valid;
 	assign cp_gpu_if.dcr_rsp_data  = dcr_rsp_data;
 	assign cp_gpu_if.busy          = vx_busy;
 
-	// Either source can start Vortex; OR-combine.
-	assign vx_start = vx_start_legacy | cp_gpu_if.start;
+	// The CP is the sole launch source.
+	assign vx_start = cp_gpu_if.start;
 
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
@@ -585,16 +496,16 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	// Pad CP's narrower ID into the platform ID width so the arbiter sees
 	// identical signal widths from both sources.
 	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_awid_padded =
-	    {{(C_M_AXI_MEM_ID_WIDTH - `VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_m.awid};
+	    {{(C_M_AXI_MEM_ID_WIDTH - `VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_dev.awid};
 	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_arid_padded =
-	    {{(C_M_AXI_MEM_ID_WIDTH - `VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_m.arid};
+	    {{(C_M_AXI_MEM_ID_WIDTH - `VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_dev.arid};
 
 	// Drop the platform offset from the CP address so the arbiter's slave
 	// port sees an offset-relative bank-0 address (matches vx_awaddr_a[0]).
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] cp_awaddr_offset =
-	    M_AXI_MEM_ADDR_WIDTH'(cp_axi_m.awaddr - `PLATFORM_MEMORY_OFFSET);
+	    M_AXI_MEM_ADDR_WIDTH'(cp_axi_dev.awaddr - `PLATFORM_MEMORY_OFFSET);
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] cp_araddr_offset =
-	    M_AXI_MEM_ADDR_WIDTH'(cp_axi_m.araddr - `PLATFORM_MEMORY_OFFSET);
+	    M_AXI_MEM_ADDR_WIDTH'(cp_axi_dev.araddr - `PLATFORM_MEMORY_OFFSET);
 
 	VX_axi_arb2 #(
 		.ADDR_W (M_AXI_MEM_ADDR_WIDTH),
@@ -619,20 +530,20 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		.s0_rdata   (vx_rdata_a[0]),    .s0_rlast   (vx_rlast_a[0]),
 		.s0_rid     (vx_rid_a[0]),      .s0_rresp   (vx_rresp_a[0]),
 
-		.s1_awvalid (cp_axi_m.awvalid), .s1_awready (cp_axi_m.awready),
+		.s1_awvalid (cp_axi_dev.awvalid), .s1_awready (cp_axi_dev.awready),
 		.s1_awaddr  (cp_awaddr_offset), .s1_awid    (cp_awid_padded),
-		.s1_awlen   (cp_axi_m.awlen),
-		.s1_wvalid  (cp_axi_m.wvalid),  .s1_wready  (cp_axi_m.wready),
-		.s1_wdata   (cp_axi_m.wdata),   .s1_wstrb   (cp_axi_m.wstrb),
-		.s1_wlast   (cp_axi_m.wlast),
-		.s1_bvalid  (cp_axi_m.bvalid),  .s1_bready  (cp_axi_m.bready),
-		.s1_bid     (cp_axi_m_bid_full),.s1_bresp   (cp_axi_m.bresp),
-		.s1_arvalid (cp_axi_m.arvalid), .s1_arready (cp_axi_m.arready),
+		.s1_awlen   (cp_axi_dev.awlen),
+		.s1_wvalid  (cp_axi_dev.wvalid),  .s1_wready  (cp_axi_dev.wready),
+		.s1_wdata   (cp_axi_dev.wdata),   .s1_wstrb   (cp_axi_dev.wstrb),
+		.s1_wlast   (cp_axi_dev.wlast),
+		.s1_bvalid  (cp_axi_dev.bvalid),  .s1_bready  (cp_axi_dev.bready),
+		.s1_bid     (cp_axi_dev_bid_full),.s1_bresp   (cp_axi_dev.bresp),
+		.s1_arvalid (cp_axi_dev.arvalid), .s1_arready (cp_axi_dev.arready),
 		.s1_araddr  (cp_araddr_offset), .s1_arid    (cp_arid_padded),
-		.s1_arlen   (cp_axi_m.arlen),
-		.s1_rvalid  (cp_axi_m.rvalid),  .s1_rready  (cp_axi_m.rready),
-		.s1_rdata   (cp_axi_m.rdata),   .s1_rlast   (cp_axi_m.rlast),
-		.s1_rid     (cp_axi_m_rid_full),.s1_rresp   (cp_axi_m.rresp),
+		.s1_arlen   (cp_axi_dev.arlen),
+		.s1_rvalid  (cp_axi_dev.rvalid),  .s1_rready  (cp_axi_dev.rready),
+		.s1_rdata   (cp_axi_dev.rdata),   .s1_rlast   (cp_axi_dev.rlast),
+		.s1_rid     (cp_axi_dev_rid_full),.s1_rresp   (cp_axi_dev.rresp),
 
 		.m_awvalid  (m_axi_mem_awvalid_a[0]), .m_awready (m_axi_mem_awready_a[0]),
 		.m_awaddr   (m_axi_mem_awaddr_u[0]),  .m_awid    (m_axi_mem_awid_a[0]),
@@ -651,19 +562,19 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	);
 
 	// Truncate the arbiter's wider ID back to CP's narrower native ID width.
-	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_m_bid_full;
-	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_m_rid_full;
-	assign cp_axi_m.bid = cp_axi_m_bid_full[`VX_CP_AXI_TID_WIDTH-1:0];
-	assign cp_axi_m.rid = cp_axi_m_rid_full[`VX_CP_AXI_TID_WIDTH-1:0];
-	`UNUSED_VAR (cp_axi_m_bid_full)
-	`UNUSED_VAR (cp_axi_m_rid_full)
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_dev_bid_full;
+	wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_dev_rid_full;
+	assign cp_axi_dev.bid = cp_axi_dev_bid_full[`VX_CP_AXI_TID_WIDTH-1:0];
+	assign cp_axi_dev.rid = cp_axi_dev_rid_full[`VX_CP_AXI_TID_WIDTH-1:0];
+	`UNUSED_VAR (cp_axi_dev_bid_full)
+	`UNUSED_VAR (cp_axi_dev_rid_full)
 
 	// The optional AXI4 sideband signals (size/burst) are unused by the
 	// reduced VX_axi_arb2 view — pin them sink-side so lint stays clean.
-	`UNUSED_VAR (cp_axi_m.awsize)
-	`UNUSED_VAR (cp_axi_m.awburst)
-	`UNUSED_VAR (cp_axi_m.arsize)
-	`UNUSED_VAR (cp_axi_m.arburst)
+	`UNUSED_VAR (cp_axi_dev.awsize)
+	`UNUSED_VAR (cp_axi_dev.awburst)
+	`UNUSED_VAR (cp_axi_dev.arsize)
+	`UNUSED_VAR (cp_axi_dev.arburst)
 
 	// We only use addr[12:0] of the AXI-Lite address space; bits 15:13 are
 	// always 0 from the kernel.xml-advertised slave size but Verilator
@@ -682,14 +593,10 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 	wire reset_negedge;
 	`NEG_EDGE (reset_negedge, reset);
 	`SCOPE_TAP (0, 0, {
-			ap_reset,
-			ap_start,
-			ap_done,
-			ap_idle,
+			vx_start,
 			interrupt,
 			vx_reset,
 			vx_busy,
-			state,
 			m_axi_mem_awvalid_a[0],
 			m_axi_mem_awready_a[0],
 			m_axi_mem_wvalid_a[0],
@@ -709,7 +616,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 		}, {
 			dcr_req_addr,
 			dcr_req_data,
-			vx_pending_writes,
 			m_axi_mem_awaddr_u[0],
 			m_axi_mem_awid_a[0],
 			m_axi_mem_bid_a[0],
@@ -729,15 +635,10 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     ila_afu ila_afu_inst (
       	.clk (clk),
 		.probe0 ({
-			ap_reset,
-        	ap_start,
-        	ap_done,
-			ap_idle,
-			state,
+			vx_start,
 			interrupt
 		}),
 		.probe1 ({
-        	vx_pending_writes,
 			vx_busy,
 			vx_reset,
 			dcr_req_valid,

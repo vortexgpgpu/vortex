@@ -126,6 +126,7 @@ private:
         OP_FENCE      = 0x07,
         OP_EVENT_SIG  = 0x08,
         OP_EVENT_WAIT = 0x09,
+        OP_CACHE_FLUSH = 0x0A,
     };
 
     // Decoded cmd record (matches cmd_t struct layout on-wire).

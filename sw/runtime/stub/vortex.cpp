@@ -26,7 +26,7 @@
 //                                via a CallbacksAdapter holding the
 //                                backend's callbacks_t (filled at
 //                                dlopen + vx_dev_init time by
-//                                common/vx_device.cpp).
+//                                common/device.cpp).
 //
 //   common/legacy_runtime.cpp — every legacy vortex.h C entry point
 //                               implemented as a pure wrapper over

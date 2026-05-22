@@ -76,6 +76,62 @@
     .m_axi_mem_``i``_bresp(m_axi_mem_``i``_bresp), \
     .m_axi_mem_``i``_bid(m_axi_mem_``i``_bid)
 
+// Host-memory AXI4 master port (CP command ring + host side of DMA).
+// XRT pins this kernel port to HOST[0] (see hw/syn/xilinx/xrt/platforms.mk).
+`define GEN_AXI_HOST \
+	output wire                                 m_axi_host_awvalid, \
+	input  wire                                 m_axi_host_awready, \
+	output wire [C_M_AXI_MEM_ADDR_WIDTH-1:0] 	m_axi_host_awaddr, \
+	output wire [C_M_AXI_MEM_ID_WIDTH-1:0]   	m_axi_host_awid, \
+	output wire [7:0]                           m_axi_host_awlen, \
+	output wire                                 m_axi_host_wvalid, \
+	input  wire                                 m_axi_host_wready, \
+	output wire [C_M_AXI_MEM_DATA_WIDTH-1:0]   	m_axi_host_wdata, \
+	output wire [C_M_AXI_MEM_DATA_WIDTH/8-1:0] 	m_axi_host_wstrb, \
+	output wire                                 m_axi_host_wlast, \
+	output wire                                 m_axi_host_arvalid, \
+	input  wire                                 m_axi_host_arready, \
+	output wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]   	m_axi_host_araddr, \
+	output wire [C_M_AXI_MEM_ID_WIDTH-1:0]     	m_axi_host_arid, \
+	output wire [7:0]                           m_axi_host_arlen, \
+	input  wire                                 m_axi_host_rvalid, \
+	output wire                                 m_axi_host_rready, \
+	input  wire [C_M_AXI_MEM_DATA_WIDTH-1:0] 	m_axi_host_rdata, \
+	input  wire                                 m_axi_host_rlast, \
+	input  wire [C_M_AXI_MEM_ID_WIDTH-1:0]   	m_axi_host_rid, \
+	input  wire [1:0]                           m_axi_host_rresp, \
+	input  wire                                 m_axi_host_bvalid, \
+	output wire                                 m_axi_host_bready, \
+	input  wire [1:0]                           m_axi_host_bresp, \
+	input  wire [C_M_AXI_MEM_ID_WIDTH-1:0]   	m_axi_host_bid
+
+`define AXI_HOST_ARGS \
+    .m_axi_host_awvalid(m_axi_host_awvalid), \
+    .m_axi_host_awready(m_axi_host_awready), \
+    .m_axi_host_awaddr(m_axi_host_awaddr), \
+    .m_axi_host_awid(m_axi_host_awid), \
+    .m_axi_host_awlen(m_axi_host_awlen), \
+    .m_axi_host_wvalid(m_axi_host_wvalid), \
+    .m_axi_host_wready(m_axi_host_wready), \
+    .m_axi_host_wdata(m_axi_host_wdata), \
+    .m_axi_host_wstrb(m_axi_host_wstrb), \
+    .m_axi_host_wlast(m_axi_host_wlast), \
+    .m_axi_host_arvalid(m_axi_host_arvalid), \
+    .m_axi_host_arready(m_axi_host_arready), \
+    .m_axi_host_araddr(m_axi_host_araddr), \
+    .m_axi_host_arid(m_axi_host_arid), \
+    .m_axi_host_arlen(m_axi_host_arlen), \
+    .m_axi_host_rvalid(m_axi_host_rvalid), \
+    .m_axi_host_rready(m_axi_host_rready), \
+    .m_axi_host_rdata(m_axi_host_rdata), \
+    .m_axi_host_rlast(m_axi_host_rlast), \
+    .m_axi_host_rid(m_axi_host_rid), \
+    .m_axi_host_rresp(m_axi_host_rresp), \
+    .m_axi_host_bvalid(m_axi_host_bvalid), \
+    .m_axi_host_bready(m_axi_host_bready), \
+    .m_axi_host_bresp(m_axi_host_bresp), \
+    .m_axi_host_bid(m_axi_host_bid)
+
 `define AXI_MEM_TO_ARRAY(i) \
 	assign m_axi_mem_``i``_awvalid = m_axi_mem_awvalid_a[i]; \
 	assign m_axi_mem_awready_a[i] = m_axi_mem_``i``_awready; \

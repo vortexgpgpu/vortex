@@ -9,7 +9,7 @@
 // vortex2_internal.h — internal C++ class declarations for vortex2.h.
 //
 // Not a public header. Backends include this to subclass vx::Platform.
-// The C wrappers in vx_device.cpp / vx_queue.cpp / etc. translate the
+// The C wrappers in device.cpp / queue.cpp / etc. translate the
 // public vx_*_h handles into pointers to these classes.
 // ============================================================================
 
@@ -18,6 +18,8 @@
 
 #include <vortex2.h>
 #include <callbacks.h>
+#include <VX_types.h>   // VX_MEM_IO_COUT_* (console stream-ring layout)
+#include <mem_alloc.h>  // MemoryAllocator — device-memory allocator (common core)
 
 #include <atomic>
 #include <chrono>
@@ -87,34 +89,21 @@ class Platform {
 public:
     virtual ~Platform() = default;
 
-    // ----- Capability queries -----
-    virtual vx_result_t query_caps(uint32_t caps_id, uint64_t* out) = 0;
-    virtual vx_result_t memory_info(uint64_t* free, uint64_t* used) = 0;
+    // ----- CP register channel (sole control path) -----
+    // `off` is the CP-internal regfile offset (matching VX_cp_axil_regfile).
+    // Backends translate to their own physical MMIO space. cp_reg_write to
+    // Q_TAIL is the doorbell; cp_reg_read of Q_SEQNUM is the completion poll.
+    virtual vx_result_t cp_reg_write(uint32_t off, uint32_t value) = 0;
+    virtual vx_result_t cp_reg_read (uint32_t off, uint32_t* out)  = 0;
 
-    // ----- Device memory allocation -----
-    virtual vx_result_t mem_alloc  (uint64_t size, uint32_t flags,
-                                    uint64_t* out_dev_addr) = 0;
-    virtual vx_result_t mem_reserve(uint64_t dev_addr, uint64_t size,
-                                    uint32_t flags) = 0;
-    virtual vx_result_t mem_free   (uint64_t dev_addr) = 0;
-    virtual vx_result_t mem_access (uint64_t dev_addr, uint64_t size,
-                                    uint32_t flags) = 0;
-
-    // ----- DMA -----
-    virtual vx_result_t mem_upload  (uint64_t dst_dev_addr, const void* src,
-                                     uint64_t size) = 0;
-    virtual vx_result_t mem_download(void* dst, uint64_t src_dev_addr,
-                                     uint64_t size) = 0;
-    virtual vx_result_t mem_copy    (uint64_t dst_dev_addr,
-                                     uint64_t src_dev_addr, uint64_t size) = 0;
-
-    // ----- Command Processor MMIO surface (sole control path) -----
-    // `off` is the CP-internal regfile offset (0x000..0x13F per the
-    // VX_cp_axil_regfile address map). Backends translate to their own
-    // physical address space (xrt/opae add 0x1000; simx/rtlsim proxy
-    // to a software CommandProcessor).
-    virtual vx_result_t cp_mmio_write(uint32_t off, uint32_t value) = 0;
-    virtual vx_result_t cp_mmio_read (uint32_t off, uint32_t* out)  = 0;
+    // ----- CP-visible host memory -----
+    // Allocates host-resident memory the CP's m_axi_host master can DMA.
+    // Returns a CPU pointer (the runtime memcpy's through it) and the
+    // device-side address the CP uses for the same bytes. host_mem_free
+    // is keyed by that cp_addr.
+    virtual vx_result_t host_mem_alloc(uint64_t size, void** out_host_ptr,
+                                       uint64_t* out_cp_addr) = 0;
+    virtual vx_result_t host_mem_free (uint64_t cp_addr) = 0;
 };
 
 // ============================================================================
@@ -141,47 +130,20 @@ public:
         return (rc == 0) ? VX_SUCCESS : VX_ERR_INVALID_VALUE;
     }
 
-    vx_result_t query_caps(uint32_t caps_id, uint64_t* out) override {
-        return r(cb_.query_caps(dev_ctx_, caps_id, out));
+    vx_result_t cp_reg_write(uint32_t off, uint32_t value) override {
+        return r(cb_.cp_reg_write(dev_ctx_, off, value));
     }
-    vx_result_t memory_info(uint64_t* free, uint64_t* used) override {
-        return r(cb_.memory_info(dev_ctx_, free, used));
-    }
-
-    vx_result_t mem_alloc(uint64_t size, uint32_t flags,
-                          uint64_t* out_dev_addr) override {
-        return r(cb_.mem_alloc(dev_ctx_, size, flags, out_dev_addr));
-    }
-    vx_result_t mem_reserve(uint64_t dev_addr, uint64_t size,
-                            uint32_t flags) override {
-        return r(cb_.mem_reserve(dev_ctx_, dev_addr, size, flags));
-    }
-    vx_result_t mem_free(uint64_t dev_addr) override {
-        return r(cb_.mem_free(dev_ctx_, dev_addr));
-    }
-    vx_result_t mem_access(uint64_t dev_addr, uint64_t size,
-                           uint32_t flags) override {
-        return r(cb_.mem_access(dev_ctx_, dev_addr, size, flags));
+    vx_result_t cp_reg_read(uint32_t off, uint32_t* out) override {
+        return r(cb_.cp_reg_read(dev_ctx_, off, out));
     }
 
-    vx_result_t mem_upload(uint64_t dst_dev_addr, const void* src,
-                           uint64_t size) override {
-        return r(cb_.mem_upload(dev_ctx_, dst_dev_addr, src, size));
+    vx_result_t host_mem_alloc(uint64_t size, void** out_host_ptr,
+                               uint64_t* out_cp_addr) override {
+        return r(cb_.host_mem_alloc(dev_ctx_, size, out_host_ptr,
+                                    out_cp_addr));
     }
-    vx_result_t mem_download(void* dst, uint64_t src_dev_addr,
-                             uint64_t size) override {
-        return r(cb_.mem_download(dev_ctx_, dst, src_dev_addr, size));
-    }
-    vx_result_t mem_copy(uint64_t dst_dev_addr, uint64_t src_dev_addr,
-                         uint64_t size) override {
-        return r(cb_.mem_copy(dev_ctx_, dst_dev_addr, src_dev_addr, size));
-    }
-
-    vx_result_t cp_mmio_write(uint32_t off, uint32_t value) override {
-        return r(cb_.cp_mmio_write(dev_ctx_, off, value));
-    }
-    vx_result_t cp_mmio_read(uint32_t off, uint32_t* out) override {
-        return r(cb_.cp_mmio_read(dev_ctx_, off, out));
+    vx_result_t host_mem_free(uint64_t cp_addr) override {
+        return r(cb_.host_mem_free(dev_ctx_, cp_addr));
     }
 
 private:
@@ -226,8 +188,15 @@ public:
     vx_result_t cp_submit_dcr_write(uint32_t addr, uint32_t value);
 
     // Post one CMD_LAUNCH to the ring, commit Q_TAIL, and wait for
-    // Q_SEQNUM. Synchronous.
+    // Q_SEQNUM. Synchronous. Followed by an implicit CMD_CACHE_FLUSH so
+    // the host observes coherent results (see cp_submit_cache_flush).
     vx_result_t cp_submit_launch();
+
+    // Post one CMD_CACHE_FLUSH to the ring (AMD ACQUIRE_MEM model): the CP
+    // sweeps a per-core cache flush across all cores and retires the
+    // command only when the last core's flush completes. A no-op on
+    // write-through cache configs. Posted after every CMD_LAUNCH.
+    vx_result_t cp_submit_cache_flush();
 
     // Post one CMD_DCR_READ to the ring, wait for retire, and read the
     // response from the CP regfile's Q_LAST_DCR_RSP slot. `tag` is
@@ -247,6 +216,36 @@ public:
     vx_result_t cp_submit_event_wait(uint64_t event_dev_addr,
                                      uint64_t value);
 
+    // ----- CP-driven host<->device DMA (CMD_MEM_*) -----
+    // The CP's VX_cp_dma engine performs the transfer; the host only
+    // appends the descriptor to the ring. cp_submit_mem_copy moves
+    // device->device directly. cp_submit_mem_write stages `host_src`
+    // into a VX_MEM_HOST buffer and posts CMD_MEM_WRITE (host->device);
+    // cp_submit_mem_read posts CMD_MEM_READ (device->host) into a
+    // VX_MEM_HOST buffer and copies it back to `host_dst`. Synchronous.
+    vx_result_t cp_submit_mem_copy (uint64_t dst, uint64_t src, uint64_t size);
+    vx_result_t cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
+                                    uint64_t size);
+    vx_result_t cp_submit_mem_read (void* host_dst, uint64_t dev_src,
+                                    uint64_t size);
+
+    // ----- Device-memory transfer router -----
+    // Every dispatcher path that moves data to/from device memory (module
+    // image, kernel args, COUT rings, rect/fill/map, buffer copies) goes
+    // through these. They always route through the Command Processor's DMA
+    // engine (CMD_MEM_*) — identically on every backend. The runtime never
+    // touches device memory directly: it only appends commands to the host
+    // ring and the CP executes them.
+    vx_result_t dev_write(uint64_t dev_addr, const void* src, uint64_t size);
+    vx_result_t dev_read (void* dst, uint64_t dev_addr, uint64_t size);
+    vx_result_t dev_copy (uint64_t dst, uint64_t src, uint64_t size);
+
+    // Drain the lossless COUT stream rings (proposal §10): copy out each
+    // hart's [rd,wr) bytes, print "#slot: <line>", publish the advanced
+    // rd[]. Called every CP launch-wait poll iteration — concurrent with
+    // the producing kernel, so the kernel's back-pressure never deadlocks.
+    vx_result_t drain_cout();
+
     // ---- Phase 2: kernel-args scratch pool ----
     //
     // Acquire a device-memory slot to stage a kernel-args blob of `size`
@@ -259,6 +258,19 @@ public:
     vx_result_t args_slot_acquire(uint64_t size, uint64_t* out_addr,
                                   bool* out_pooled);
     void        args_slot_release(uint64_t addr, bool pooled);
+
+    // ----- Device-memory allocation (common-core allocator) -----
+    // The CP is the sole DMA engine, so a device buffer is pure host-side
+    // address bookkeeping in a MemoryAllocator the Device owns. The
+    // VX_MEM_HOST flag routes to platform host memory instead.
+    vx_result_t mem_alloc  (uint64_t size, uint32_t flags, uint64_t* out_addr);
+    vx_result_t mem_reserve(uint64_t addr, uint64_t size, uint32_t flags);
+    vx_result_t mem_free   (uint64_t addr);
+    vx_result_t memory_info(uint64_t* out_free, uint64_t* out_used);
+
+    // Decode a VX_CAPS_* id: the CP caps window (read via cp_reg_read +
+    // vortex::load_caps/decode_caps) plus VX_CFG_* platform constants.
+    vx_result_t query_caps (uint32_t caps_id, uint64_t* out_value);
 
 private:
     friend class RefCounted<Device>;
@@ -273,8 +285,34 @@ private:
     // cp_submit_dcr_write / cp_submit_launch — they just build the CL.
     vx_result_t cp_submit_cl_(const void* cl);
 
+    // Build + submit a CMD_MEM_* descriptor (opcode, dst, src, size).
+    vx_result_t cp_submit_mem_(uint8_t opcode, uint64_t arg0, uint64_t arg1,
+                               uint64_t arg2);
+
+    // ----- CP-visible host memory (command ring + DMA staging) -----
+    // host_alloc wraps platform()->host_mem_alloc and records the region
+    // so cp_addr -> host_ptr lookups and host_free work.
+    struct HostMem {
+        void*    host_ptr = nullptr;   // CPU pointer (runtime memcpy's here)
+        uint64_t cp_addr  = 0;         // device-side address the CP DMAs
+        uint64_t size     = 0;
+    };
+    vx_result_t host_alloc(uint64_t size, HostMem* out);
+    void        host_free (uint64_t cp_addr);
+
     std::unique_ptr<Platform>      platform_;
     uint64_t                       cycle_freq_hz_;
+
+    // Device-memory allocator (the CP DMAs to these addresses). Pure
+    // host-side bookkeeping — constructed in the Device ctor.
+    vortex::MemoryAllocator        global_mem_;
+    // Live CP-visible host regions, keyed by cp_addr.
+    std::map<uint64_t, HostMem>    host_mems_;
+
+    // Lazily-loaded device/ISA caps words (read once from the CP regfile).
+    uint64_t                       dev_caps_    = 0;
+    uint64_t                       isa_caps_    = 0;
+    bool                           caps_loaded_ = false;
 
     std::mutex                     mu_;
     std::unordered_set<Queue*>     queues_;
@@ -283,14 +321,24 @@ private:
     Queue*                         legacy_q_     = nullptr;
     Event*                         legacy_last_  = nullptr;
 
-    // CP state — populated only when cp_enabled_ == true.
+    // CP state — populated only when cp_enabled_ == true. The ring / head /
+    // completion buffers are CP-visible host memory (HostMem): the runtime
+    // writes commands straight through their host_ptr.
     bool                           cp_enabled_         = false;
-    uint64_t                       cp_ring_dev_addr_   = 0;
-    uint64_t                       cp_head_dev_addr_   = 0;
-    uint64_t                       cp_cmpl_dev_addr_   = 0;
+    HostMem                        cp_ring_;
+    HostMem                        cp_head_;
+    HostMem                        cp_cmpl_;
     uint64_t                       cp_tail_            = 0;
     uint64_t                       cp_expected_seqnum_ = 0;
+    uint64_t                       cp_num_cores_       = 0; // VX_CAPS_NUM_CORES, cached for CMD_CACHE_FLUSH
     std::mutex                     cp_mu_;             // serialize ring writes
+
+    // Lossless COUT stream-ring consumer state (proposal §10). cout_rd_[h]
+    // is the host read pointer for hart h's ring; cout_line_[h] holds a
+    // partial (not-yet-newline-terminated) line. Both persist across the
+    // per-poll drain_cout() calls.
+    uint32_t                       cout_rd_[VX_MEM_IO_COUT_SLOTS] = {};
+    std::string                    cout_line_[VX_MEM_IO_COUT_SLOTS];
 
     // Kernel-args scratch pool (Phase 2). Free-list of recycled fixed-size
     // device slots; ARGS_SLOT_SIZE comfortably covers typical kernel arg

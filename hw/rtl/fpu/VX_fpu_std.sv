@@ -175,7 +175,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             if (`VX_CFG_XLEN > 32) begin : g_nan_box
                 assign per_core_result[FPU_FMA][i] = {32'hffffffff, data_out[i][0+:32]};
             end else begin : g_no_nan_box
-                assign per_core_result[FPU_FMA][i] = data_out[i][0+:XLEN];
+                assign per_core_result[FPU_FMA][i] = data_out[i][0+:`VX_CFG_XLEN];
             end
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
@@ -266,7 +266,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             if (`VX_CFG_XLEN > 32) begin : g_nan_box
                 assign per_core_result[FPU_DIVSQRT][i] = {32'hffffffff, data_out[i][0+:32]};
             end else begin : g_no_nan_box
-                assign per_core_result[FPU_DIVSQRT][i] = data_out[i][0+:XLEN];
+                assign per_core_result[FPU_DIVSQRT][i] = data_out[i][0+:`VX_CFG_XLEN];
             end
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
@@ -346,7 +346,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] fflags_lanes;
 
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
-            assign per_core_result[FPU_CVT][i] = data_out[i][0+:XLEN];
+            assign per_core_result[FPU_CVT][i] = data_out[i][0+:`VX_CFG_XLEN];
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
@@ -378,8 +378,8 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .is_signed  (is_signed),
                 .is_dst_64  (is_dst_64),
                 .is_src_64  (is_src_64),
-                .dataa      (pe_data_in[i][0+:XLEN]),
-                .result     (pe_data_out[i][0+:XLEN]),
+                .dataa      (pe_data_in[i][0+:`VX_CFG_XLEN]),
+                .result     (pe_data_out[i][0+:`VX_CFG_XLEN]),
                 .fflags     (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
             );
         end
@@ -446,7 +446,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] fflags_lanes;
 
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
-            assign per_core_result[FPU_NCP][i] = data_out[i][0+:XLEN];
+            assign per_core_result[FPU_NCP][i] = data_out[i][0+:`VX_CFG_XLEN];
             assign fflags_lanes[i] = data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS];
         end
 
@@ -463,7 +463,7 @@ module VX_fpu_std import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 .op_type (pe_shared[INST_FRM_BITS+:INST_FPU_BITS]),
                 .dataa   (pe_data_in[i][0+:32]),
                 .datab   (pe_data_in[i][`VX_CFG_XLEN+:32]),
-                .result  (pe_data_out[i][0+:XLEN]),
+                .result  (pe_data_out[i][0+:`VX_CFG_XLEN]),
                 .fflags  (pe_data_out[i][`VX_CFG_XLEN+:`FP_FLAGS_BITS])
             );
         end

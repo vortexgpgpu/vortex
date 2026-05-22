@@ -14,28 +14,30 @@
 #include "scope.h"
 #include <nlohmann_json.hpp>
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <fstream>
 #include <thread>
 #include <chrono>
 #include <vector>
-#include <list>
-#include <assert.h>
-#include <chrono>
-#include <thread>
-#include <condition_variable>
 #include <mutex>
+#include <unordered_map>
 #include <unordered_set>
 #include <sstream>
+
+// The SCOPE trace is a lossless, back-pressured device->host stream.
+// `VX_scope_tap` captures into an on-chip BRAM that is now a *ring*: the
+// host drains it continuously (every CP launch-wait poll iteration, via
+// `vx_scope_drain`) over the bit-serial MMIO sideband; when the ring is
+// full the tap pauses capture (it never overflows / overwrites). The
+// serial sideband is kept deliberately — it is independent of the membus
+// and the CP, so SCOPE survives a wedged command path.
 
 #define SAMPLE_FLUSH_SIZE 100
 
 #define TIMEOUT_TIME (60*60)
 
 #define MAX_DELAY_CYCLES 10000
-
-#define MMIO_SCOPE_READ  (AFU_IMAGE_MMIO_SCOPE_READ * 4)
-#define MMIO_SCOPE_WRITE (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
 
 #define CMD_GET_WIDTH   0
 #define CMD_GET_COUNT   1
@@ -63,18 +65,24 @@ struct tap_signal_t {
 struct tap_t {
   uint32_t id;
   uint32_t width;
-  uint32_t samples;
-  uint32_t cur_sample;
+  uint32_t samples;     // total samples drained from the ring
+  uint32_t cur_sample;  // VCD emit cursor, in samples
   uint64_t cycle_time;
   std::string path;
   std::vector<tap_signal_t> signals;
+  std::vector<uint64_t> words; // raw drained word stream: [delta,data...]*
+  size_t rpos;                 // VCD emit cursor, in words
 };
 
 static scope_callback_t g_callback;
 
+static vx_device_h g_hdevice = nullptr;
+
 static bool g_running = false;
 
 static std::mutex g_stop_mutex;
+
+static std::vector<tap_t> g_taps;
 
 using json = nlohmann::json;
 
@@ -181,20 +189,100 @@ static uint64_t advance_clock(std::ofstream& ofs, uint64_t cur_time, uint64_t ne
   return cur_time;
 }
 
-static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
+// load the scope manifest (tap topology) from the JSON file
+static int load_taps(std::vector<tap_t>& taps) {
+  const char* json_path = getenv("SCOPE_JSON_PATH");
+  if (nullptr == json_path) {
+    std::cerr << "[SCOPE] Error: SCOPE_JSON_PATH is not set" << std::endl;
+    return -1;
+  }
+  std::ifstream ifs(json_path);
+  if (!ifs) {
+    std::cerr << "[SCOPE] Error: cannot open scope manifest file: " << json_path << std::endl;
+    return -1;
+  }
+  auto json_obj = json::parse(ifs);
+  if (json_obj.is_null()) {
+    std::cerr << "[SCOPE] Error: invalid scope manifest file: " << json_path << std::endl;
+    return -1;
+  }
+
+  uint32_t signal_id = 1;
+  for (auto& tap : json_obj["taps"]) {
+    tap_t _tap;
+    _tap.id         = tap["id"].get<uint32_t>();
+    _tap.width      = tap["width"].get<uint32_t>();
+    _tap.path       = tap["path"].get<std::string>();
+    _tap.samples    = 0;
+    _tap.cur_sample = 0;
+    _tap.cycle_time = 0;
+    _tap.rpos       = 0;
+    for (auto& signal : tap["signals"]) {
+      auto name  = signal[0].get<std::string>();
+      auto width = signal[1].get<uint32_t>();
+      _tap.signals.push_back({signal_id, name, width});
+      ++signal_id;
+    }
+    taps.emplace_back(std::move(_tap));
+  }
+  return 0;
+}
+
+// issue one serial register command and read back its 64-bit response
+static int read_reg(vx_device_h hdevice, uint64_t wr_value, uint64_t* rd_value) {
+  CHECK_ERR(g_callback.registerWrite(hdevice, wr_value));
+  CHECK_ERR(g_callback.registerRead(hdevice, rd_value));
+  return 0;
+}
+
+// Drain every sample currently buffered in one tap's ring. The hardware
+// reports the live occupancy via CMD_GET_COUNT; each sample is a leading
+// delta word followed by ceil(width/64) data words.
+//
+// Occupancy can never exceed the on-chip ring depth, which is small
+// (<= 64Ki). A larger value means the bit-serial bus desynced; fail
+// loudly rather than spin reading a bogus sample count.
+#define SCOPE_MAX_OCCUPANCY (64u * 1024u)
+static int drain_tap(tap_t& tap, vx_device_h hdevice) {
+  uint64_t count = 0;
+  CHECK_ERR(read_reg(hdevice, (uint64_t(tap.id) << 3) | CMD_GET_COUNT, &count));
+  if (count == 0)
+    return 0;
+  if (count > SCOPE_MAX_OCCUPANCY) {
+    std::cerr << "[SCOPE] Error: tap #" << tap.id << " bogus occupancy="
+              << count << " (serial bus desync)" << std::endl;
+    return -1;
+  }
+  uint32_t data_blocks = (tap.width + 63) / 64;
+  uint64_t words_per_sample = 1 + data_blocks;
+  uint64_t cmd_data = (uint64_t(tap.id) << 3) | CMD_GET_DATA;
+  uint64_t total_words = count * words_per_sample;
+  tap.words.reserve(tap.words.size() + total_words);
+  for (uint64_t i = 0; i < total_words; ++i) {
+    uint64_t word = 0;
+    CHECK_ERR(read_reg(hdevice, cmd_data, &word));
+    tap.words.push_back(word);
+  }
+  tap.samples += (uint32_t)count;
+  return 0;
+}
+
+static int dump_tap(std::ofstream& ofs, tap_t* tap) {
   uint32_t signal_offset = 0;
   uint32_t sample_offset = 0;
   uint64_t word;
 
-  std::vector<char> signal_data(tap->width);
+  std::vector<char> signal_data(tap->width + 1);
   auto signal_it = tap->signals.rbegin();
   uint32_t signal_width = signal_it->width;
 
   do {
-    // read data
-    uint64_t cmd_data = (tap->id << 3) | CMD_GET_DATA;
-    CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));
-    CHECK_ERR(g_callback.registerRead(hdevice, &word));
+    // read data word from the drained buffer
+    if (tap->rpos >= tap->words.size()) {
+      std::cerr << "[SCOPE] Error: tap #" << tap->id << " trace underrun" << std::endl;
+      return -1;
+    }
+    word = tap->words[tap->rpos++];
     do {
       uint32_t word_offset = sample_offset % 64;
       signal_data[signal_width - signal_offset - 1] = ((word >> word_offset) & 0x1) ? '1' : '0';
@@ -207,9 +295,12 @@ static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
           // end-of-sample
           ++tap->cur_sample;
           if (tap->cur_sample != tap->samples) {
-            // read next delta
-            CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));
-            CHECK_ERR(g_callback.registerRead(hdevice, &word));
+            // next delta word
+            if (tap->rpos >= tap->words.size()) {
+              std::cerr << "[SCOPE] Error: tap #" << tap->id << " trace underrun" << std::endl;
+              return -1;
+            }
+            word = tap->words[tap->rpos++];
             tap->cycle_time += 1 + word;
             if (0 == (tap->cur_sample % SAMPLE_FLUSH_SIZE)) {
               ofs << std::flush;
@@ -232,55 +323,27 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
   if (nullptr == hdevice || nullptr == callback)
     return -1;
 
-  const char* json_path = getenv("SCOPE_JSON_PATH");
-  std::ifstream ifs(json_path);
-  if (!ifs) {
-    std::cerr << "[SCOPE] Error: cannot open scope manifest file: " << json_path << std::endl;
-    return -1;
-  }
-  auto json_obj = json::parse(ifs);
-  if (json_obj.is_null()) {
-    std::cerr << "[SCOPE] Error: invalid scope manifest file: " << json_path << std::endl;
-    return -1;
-  }
-
   g_callback = *callback;
+  g_hdevice  = hdevice;
 
-  // validate scope manifest
-  for (auto& tap : json_obj["taps"]) {
-    auto id = tap["id"].get<uint32_t>();
-    auto width = tap["width"].get<uint32_t>();
+  g_taps.clear();
+  CHECK_ERR(load_taps(g_taps));
 
-    uint64_t cmd_width = (id << 3) | CMD_GET_WIDTH;
-    CHECK_ERR(g_callback.registerWrite(hdevice, cmd_width));
-    uint64_t dev_width;
-    CHECK_ERR(g_callback.registerRead(hdevice, &dev_width));
-    if (width != dev_width) {
-      std::cerr << "[SCOPE] Error: invalid tap #" << id << " width, actual=" << dev_width << ", expected=" << width << std::endl;
+  // validate the scope manifest against the hardware
+  for (auto& tap : g_taps) {
+    uint64_t dev_width = 0;
+    CHECK_ERR(read_reg(hdevice, (uint64_t(tap.id) << 3) | CMD_GET_WIDTH, &dev_width));
+    if (tap.width != dev_width) {
+      std::cerr << "[SCOPE] Error: invalid tap #" << tap.id << " width, actual=" << dev_width << ", expected=" << tap.width << std::endl;
       return 1;
-    }
-  }
-
-  // setup capture size
-  const char* capture_size_env = std::getenv("SCOPE_DEPTH");
-  if (capture_size_env != nullptr) {
-    std::stringstream ss(capture_size_env);
-    uint32_t capture_size;
-    if (ss >> capture_size) {
-      for (auto& tap : json_obj["taps"]) {
-        auto id = tap["id"].get<uint32_t>();
-        uint64_t cmd_depth = (capture_size << 11) | (id << 3) | CMD_SET_DEPTH;
-        CHECK_ERR(g_callback.registerWrite(hdevice, cmd_depth));
-      }
     }
   }
 
   // set stop time
   if (stop_time != uint64_t(-1)) {
     std::cout << "[SCOPE] stop time: " << std::dec << stop_time << "s" << std::endl;
-    for (auto& tap : json_obj["taps"]) {
-      auto id = tap["id"].get<uint32_t>();
-      uint64_t cmd_stop = (stop_time << 11) | (id << 3) | CMD_SET_STOP;
+    for (auto& tap : g_taps) {
+      uint64_t cmd_stop = (stop_time << 11) | (uint64_t(tap.id) << 3) | CMD_SET_STOP;
       CHECK_ERR(g_callback.registerWrite(hdevice, cmd_stop));
     }
   }
@@ -288,9 +351,8 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
   // start recording
   if (start_time != uint64_t(-1)) {
     std::cout << "[SCOPE] start time: " << std::dec << start_time << "s" << std::endl;
-    for (auto& tap : json_obj["taps"]) {
-      auto id = tap["id"].get<uint32_t>();
-      uint64_t cmd_start = (start_time << 11) | (id << 3) | CMD_SET_START;
+    for (auto& tap : g_taps) {
+      uint64_t cmd_start = (start_time << 11) | (uint64_t(tap.id) << 3) | CMD_SET_START;
       CHECK_ERR(g_callback.registerWrite(hdevice, cmd_start));
     }
   }
@@ -317,6 +379,20 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
   return 0;
 }
 
+// Drain the tap rings into host buffers. Called continuously by the host
+// (the CP launch-wait poll loop) so the producer rarely back-pressures.
+int vx_scope_drain(void) {
+  std::lock_guard<std::mutex> lock(g_stop_mutex);
+
+  if (!g_running)
+    return 0;
+
+  for (auto& tap : g_taps) {
+    CHECK_ERR(drain_tap(tap, g_hdevice));
+  }
+  return 0;
+}
+
 int vx_scope_stop(vx_device_h hdevice) {
   std::lock_guard<std::mutex> lock(g_stop_mutex);
 
@@ -328,67 +404,32 @@ int vx_scope_stop(vx_device_h hdevice) {
 
   g_running = false;
 
-  std::vector<tap_t> taps;
-
-  {
-    const char* json_path = getenv("SCOPE_JSON_PATH");
-    std::ifstream ifs(json_path);
-    auto json_obj = json::parse(ifs);
-    if (json_obj.is_null())
-      return 0;
-
-    uint32_t signal_id = 1;
-
-    for (auto& tap : json_obj["taps"]) {
-      tap_t _tap;
-      _tap.id    = tap["id"].get<uint32_t>();
-      _tap.width = tap["width"].get<uint32_t>();
-      _tap.path  = tap["path"].get<std::string>();
-      _tap.cycle_time = 0;
-      _tap.samples = 0;
-      _tap.cur_sample = 0;
-
-      for (auto& signal : tap["signals"]) {
-        auto name  = signal[0].get<std::string>();
-        auto width = signal[1].get<uint32_t>();
-        _tap.signals.push_back({signal_id, name, width});
-        ++signal_id;
-      }
-
-      taps.emplace_back(std::move(_tap));
-    }
-  }
-
   std::cout << "[SCOPE] stop recording..." << std::endl;
 
-  for (auto& tap : taps) {
-    uint64_t cmd_stop = (0 << 11) | (tap.id << 3) | CMD_SET_STOP;
+  // stop the taps
+  for (auto& tap : g_taps) {
+    uint64_t cmd_stop = (uint64_t(0) << 11) | (uint64_t(tap.id) << 3) | CMD_SET_STOP;
     CHECK_ERR(g_callback.registerWrite(hdevice, cmd_stop));
+  }
+
+  // final drain of whatever is still buffered in the rings
+  for (auto& tap : g_taps) {
+    CHECK_ERR(drain_tap(tap, hdevice));
   }
 
   std::cout << "[SCOPE] load trace info..." << std::endl;
 
-  for (auto& tap : taps) {
-    uint64_t count, start, delta;
-
-    // get count
-    uint64_t cmd_count = (tap.id << 3) | CMD_GET_COUNT;
-    CHECK_ERR(g_callback.registerWrite(hdevice, cmd_count));
-    CHECK_ERR(g_callback.registerRead(hdevice, &count));
-    if (count == 0)
+  for (auto& tap : g_taps) {
+    if (tap.samples == 0)
       continue;
 
-    // get start
-    uint64_t cmd_start = (tap.id << 3) | CMD_GET_START;
-    CHECK_ERR(g_callback.registerWrite(hdevice, cmd_start));
-    CHECK_ERR(g_callback.registerRead(hdevice, &start));
+    // get start timestamp
+    uint64_t start = 0;
+    CHECK_ERR(read_reg(hdevice, (uint64_t(tap.id) << 3) | CMD_GET_START, &start));
 
-    // get delta
-    uint64_t cmd_data = (tap.id << 3) | CMD_GET_DATA;
-    CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));
-    CHECK_ERR(g_callback.registerRead(hdevice, &delta));
-
-    tap.samples = count;
+    // the first word of the drained stream is the leading delta
+    uint64_t delta = tap.words[0];
+    tap.rpos = 1;
     tap.cycle_time = 1 + start + delta;
 
     std::cout << std::dec << "[SCOPE] tap #" << tap.id
@@ -403,20 +444,20 @@ int vx_scope_stop(vx_device_h hdevice) {
   const char* vcd_file = std::getenv("VCD_FILE");
   std::ofstream ofs(vcd_file ? vcd_file : "trace.vcd");
 
-  dump_header(ofs, taps);
+  dump_header(ofs, g_taps);
 
   std::cout << "[SCOPE] dump taps..." << std::endl;
 
   uint64_t cur_time = 0;
-  auto tap = find_earliest_tap(taps);
+  auto tap = find_earliest_tap(g_taps);
   if (tap != nullptr) {
     do {
       // advance clock
       cur_time = advance_clock(ofs, cur_time, tap->cycle_time);
       // dump tap
-      CHECK_ERR(dump_tap(ofs, tap, hdevice));
+      CHECK_ERR(dump_tap(ofs, tap));
       // find the nearest tap
-      tap = find_earliest_tap(taps);
+      tap = find_earliest_tap(g_taps);
     } while (tap != nullptr);
     // advance clock
     advance_clock(ofs, cur_time, cur_time + 1);

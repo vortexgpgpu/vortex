@@ -187,8 +187,9 @@ vx_result_t Queue::enqueue_write(Buffer* dst, uint64_t off, const void* host,
     cmd.work = [this, dst, off, host, sz](uint64_t* s, uint64_t* e) {
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto r = device_->platform()->mem_upload(dst->dev_address() + off,
-                                                 host, sz);
+        // Host->device through the CP's DMA engine (CMD_MEM_WRITE).
+        auto r = device_->cp_submit_mem_write(dst->dev_address() + off,
+                                              host, sz);
         *e = now_ns();
         return r;
     };
@@ -206,8 +207,9 @@ vx_result_t Queue::enqueue_read(void* host, Buffer* src, uint64_t so,
     cmd.work = [this, host, src, so, sz](uint64_t* s, uint64_t* e) {
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto r = device_->platform()->mem_download(host,
-                                                   src->dev_address() + so, sz);
+        // Device->host through the CP's DMA engine (CMD_MEM_READ).
+        auto r = device_->cp_submit_mem_read(host,
+                                             src->dev_address() + so, sz);
         *e = now_ns();
         return r;
     };
@@ -226,8 +228,9 @@ vx_result_t Queue::enqueue_copy(Buffer* dst, uint64_t do_, Buffer* src,
     cmd.work = [this, dst, do_, src, so, sz](uint64_t* s, uint64_t* e) {
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto r = device_->platform()->mem_copy(dst->dev_address() + do_,
-                                               src->dev_address() + so, sz);
+        // Device->device through the CP's DMA engine (CMD_MEM_COPY).
+        auto r = device_->cp_submit_mem_copy(dst->dev_address() + do_,
+                                             src->dev_address() + so, sz);
         *e = now_ns();
         return r;
     };
@@ -277,14 +280,12 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     cmd.queued_ns = now_ns();
     cmd.work = [this, kernel_pc, program_pc, ndim, lmem_size, grid_in, block_in,
                 args_blob = std::move(args_blob)](uint64_t* s, uint64_t* e) {
-        Platform* p = device_->platform();
-
         // ---- Compute the full KMU descriptor (block_size, warp_step).
         uint64_t num_threads = 0, num_warps = 0;
         if (ndim > 0) {
-            auto r = p->query_caps(VX_CAPS_NUM_THREADS, &num_threads);
+            auto r = device_->query_caps(VX_CAPS_NUM_THREADS, &num_threads);
             if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
-            r = p->query_caps(VX_CAPS_NUM_WARPS, &num_warps);
+            r = device_->query_caps(VX_CAPS_NUM_WARPS, &num_warps);
             if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
         }
         uint32_t eff_block[3] = {1, 1, 1};
@@ -309,7 +310,8 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
             auto r = device_->args_slot_acquire(args_blob.size(),
                                                 &args_addr, &args_pooled);
             if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
-            r = p->mem_upload(args_addr, args_blob.data(), args_blob.size());
+            r = device_->dev_write(args_addr, args_blob.data(),
+                                   args_blob.size());
             if (r != VX_SUCCESS) {
                 device_->args_slot_release(args_addr, args_pooled);
                 *s = *e = now_ns();
@@ -495,10 +497,9 @@ vx_result_t Queue::enqueue_read_rect(void* host_dst, Buffer* src,
     cmd.work = [this, host_dst, src, rr](uint64_t* s, uint64_t* e) {
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
-        Platform* p = device_->platform();
         auto rc = rect_for_each(rr, [&](uint64_t bo, uint64_t ho, uint64_t len) {
-            return p->mem_download((uint8_t*)host_dst + ho,
-                                   src->dev_address() + bo, len);
+            return device_->dev_read((uint8_t*)host_dst + ho,
+                                     src->dev_address() + bo, len);
         });
         *e = now_ns();
         return rc;
@@ -524,10 +525,9 @@ vx_result_t Queue::enqueue_write_rect(Buffer* dst, const void* host_src,
     cmd.work = [this, dst, host_src, rr](uint64_t* s, uint64_t* e) {
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
-        Platform* p = device_->platform();
         auto rc = rect_for_each(rr, [&](uint64_t bo, uint64_t ho, uint64_t len) {
-            return p->mem_upload(dst->dev_address() + bo,
-                                 (const uint8_t*)host_src + ho, len);
+            return device_->dev_write(dst->dev_address() + bo,
+                                      (const uint8_t*)host_src + ho, len);
         });
         *e = now_ns();
         return rc;
@@ -557,10 +557,9 @@ vx_result_t Queue::enqueue_copy_rect(Buffer* dst, Buffer* src,
     cmd.work = [this, dst, src, rr](uint64_t* s, uint64_t* e) {
         *s = now_ns();
         std::lock_guard<std::mutex> g(enqueue_mu_);
-        Platform* p = device_->platform();
         auto rc = rect_for_each(rr, [&](uint64_t do_, uint64_t so, uint64_t len) {
-            return p->mem_copy(dst->dev_address() + do_,
-                               src->dev_address() + so, len);
+            return device_->dev_copy(dst->dev_address() + do_,
+                                     src->dev_address() + so, len);
         });
         *e = now_ns();
         return rc;
@@ -593,12 +592,11 @@ vx_result_t Queue::enqueue_fill_buffer(Buffer* dst, uint64_t offset,
         std::vector<uint8_t> staging(chunk);
         for (uint64_t i = 0; i < chunk; i += pat.size())
             std::memcpy(staging.data() + i, pat.data(), pat.size());
-        Platform* p = device_->platform();
         vx_result_t r = VX_SUCCESS;
         for (uint64_t done = 0; done < size && r == VX_SUCCESS; done += chunk) {
             uint64_t n = std::min<uint64_t>(chunk, size - done);
-            r = p->mem_upload(dst->dev_address() + offset + done,
-                              staging.data(), n);
+            r = device_->dev_write(dst->dev_address() + offset + done,
+                                   staging.data(), n);
         }
         *e = now_ns();
         return r;

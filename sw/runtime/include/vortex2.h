@@ -124,6 +124,12 @@ typedef struct vx_kernel* vx_kernel_h;
 // MMU-routed (LSU/kernel loads) and bypass paths. Has no effect
 // when VX_CFG_VM_ENABLE is off.
 #define VX_MEM_PHYS                 0x8
+// Allocate the buffer in host memory (the platform slave-bridge / Host
+// Memory Access aperture) so the Command Processor's host-memory master
+// (m_axi_host) can reach it — used for the CP command ring and for
+// host<->device DMA staging. Backends without a real host/device memory
+// split (simx, rtlsim, gem5) ignore this flag.
+#define VX_MEM_HOST                 0x10
 
 // ============================================================================
 // Result type

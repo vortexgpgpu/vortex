@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <cassert>
+#include <vector>
 
 namespace vortex {
 
@@ -173,6 +174,7 @@ int CommandProcessor::decode_cmd(int off, Cmd& out) {
         case OP_NOP:        return 4;
         case OP_LAUNCH:     return 12;
         case OP_FENCE:      return 8;
+        case OP_CACHE_FLUSH: return 12;
         case OP_DCR_WRITE:  return 20;
         case OP_DCR_READ:   return 20;
         case OP_EVENT_SIG:  return 20;
@@ -266,8 +268,10 @@ void CommandProcessor::tick_engine() {
         decode_cmd(off, cur_cmd_);
         cur_is_launch_ = (cur_cmd_.opcode == OP_LAUNCH);
         switch (cur_cmd_.opcode) {
-            case OP_NOP: case OP_FENCE:
-                // No resource bid for these opcodes; retire as NOP.
+            case OP_NOP: case OP_FENCE: case OP_CACHE_FLUSH:
+                // No resource bid for these opcodes; retire as NOP. The
+                // functional model has no caches, so CMD_CACHE_FLUSH is a
+                // pure no-op here — memory is already coherent.
                 cur_is_no_resource_ = true;
                 break;
             default:
@@ -344,9 +348,31 @@ void CommandProcessor::tick_engine() {
                     // re-check.
                     // Stay in Bid (no state change).
                 }
+            } else if (cur_cmd_.opcode == OP_MEM_WRITE ||
+                       cur_cmd_.opcode == OP_MEM_READ  ||
+                       cur_cmd_.opcode == OP_MEM_COPY) {
+                // CMD_MEM_*: copy arg2 bytes from src (arg1) to dst (arg0).
+                // The functional model has a single unified memory, so all
+                // three opcodes behave identically — the host-vs-device
+                // distinction is a hardware-only routing concern handled by
+                // VX_cp_dma.sv (axi_host vs axi_dev). Done in this tick.
+                if (hooks_.dram_read && hooks_.dram_write
+                 && cur_cmd_.arg2 != 0) {
+                    const uint64_t total = cur_cmd_.arg2;
+                    constexpr uint64_t CHUNK = 64 * 1024;
+                    std::vector<uint8_t> buf(
+                        std::size_t(total < CHUNK ? total : CHUNK));
+                    for (uint64_t done = 0; done < total; ) {
+                        uint64_t n = total - done;
+                        if (n > CHUNK) n = CHUNK;
+                        hooks_.dram_read (cur_cmd_.arg1 + done, buf.data(), n);
+                        hooks_.dram_write(cur_cmd_.arg0 + done, buf.data(), n);
+                        done += n;
+                    }
+                }
+                eng_state_ = EngState::Retire;
             } else {
-                // MEM_* are not implemented in this functional model;
-                // retire as NOP.
+                // Unknown opcode — retire as NOP.
                 eng_state_ = EngState::Retire;
             }
             return;

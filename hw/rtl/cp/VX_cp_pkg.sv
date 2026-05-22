@@ -70,7 +70,8 @@ package VX_cp_pkg;
     CMD_LAUNCH       = 8'h06,
     CMD_FENCE        = 8'h07,
     CMD_EVENT_SIGNAL = 8'h08,
-    CMD_EVENT_WAIT   = 8'h09
+    CMD_EVENT_WAIT   = 8'h09,
+    CMD_CACHE_FLUSH  = 8'h0A
   } cp_opcode_e;
 
   // ------------------------------------------------------------------------
@@ -166,6 +167,7 @@ package VX_cp_pkg;
       CMD_NOP:          base = 4;
       CMD_LAUNCH:       base = 12;
       CMD_FENCE:        base = 8;
+      CMD_CACHE_FLUSH:  base = 12;
       CMD_DCR_WRITE:    base = 20;
       CMD_DCR_READ:     base = 20;
       CMD_EVENT_SIGNAL: base = 20;

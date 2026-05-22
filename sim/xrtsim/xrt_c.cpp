@@ -35,6 +35,7 @@ typedef struct {
   xrt_sim* sim;
   uint32_t bank;
   uint64_t addr;
+  bool     is_host;   // XRT_BO_FLAGS_HOST_ONLY — backed by host memory
 } buffer_t;
 
 extern xrtDeviceHandle xrtDeviceOpen(unsigned int index) {
@@ -77,14 +78,17 @@ extern int xrtKernelClose(xrtKernelHandle /*kernelHandle*/) {
 extern xrtBufferHandle xrtBOAlloc(xrtDeviceHandle dhdl, size_t size, xrtBufferFlags flags, xrtMemoryGroup grp) {
   auto sim = reinterpret_cast<xrt_sim*>(dhdl);
   uint64_t addr;
-  int err = sim->mem_alloc(size, grp, &addr);
+  bool is_host = (flags & XRT_BO_FLAGS_HOST_ONLY) != 0;
+  int err = is_host ? sim->host_mem_alloc(size, &addr)
+                    : sim->mem_alloc(size, grp, &addr);
   if (err != 0)
     return nullptr;
-  auto buffer   = new buffer_t();
-  buffer->size  = size;
-  buffer->bank  = grp;
-  buffer->sim   = sim;
-  buffer->addr  = addr;
+  auto buffer    = new buffer_t();
+  buffer->size   = size;
+  buffer->bank   = grp;
+  buffer->sim    = sim;
+  buffer->addr   = addr;
+  buffer->is_host = is_host;
   return buffer;
 }
 
@@ -92,6 +96,8 @@ extern int xrtBOFree(xrtBufferHandle bhdl) {
   if (bhdl == nullptr)
     return -1;
   auto buffer = reinterpret_cast<buffer_t*>(bhdl);
+  if (buffer->is_host)
+    return buffer->sim->host_mem_free(buffer->addr);
   return buffer->sim->mem_free(buffer->bank, buffer->addr);
 }
 
@@ -99,6 +105,8 @@ extern int xrtBOWrite(xrtBufferHandle bhdl, const void* src, size_t size, size_t
   if (bhdl == nullptr)
     return -1;
   auto buffer = reinterpret_cast<buffer_t*>(bhdl);
+  if (buffer->is_host)
+    return buffer->sim->host_mem_write(buffer->addr + offset, size, src);
   return buffer->sim->mem_write(buffer->bank, buffer->addr + offset, size, src);
 }
 
@@ -106,7 +114,15 @@ extern int xrtBORead(xrtBufferHandle bhdl, void* dst, size_t size, size_t offset
   if (bhdl == nullptr)
     return -1;
   auto buffer = reinterpret_cast<buffer_t*>(bhdl);
+  if (buffer->is_host)
+    return buffer->sim->host_mem_read(buffer->addr + offset, size, dst);
   return buffer->sim->mem_read(buffer->bank, buffer->addr + offset, size, dst);
+}
+
+extern uint64_t xrtBOAddress(xrtBufferHandle bhdl) {
+  if (bhdl == nullptr)
+    return 0;
+  return reinterpret_cast<buffer_t*>(bhdl)->addr;
 }
 
 extern int xrtBOCopy(xrtBufferHandle dst, xrtBufferHandle src, size_t size, size_t src_offset, size_t dst_offset) {

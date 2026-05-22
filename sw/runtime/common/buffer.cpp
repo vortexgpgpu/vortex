@@ -24,7 +24,7 @@ Buffer::~Buffer() {
     }
     if (device_) {
         // Best-effort free on the device. Ignore errors at destruction.
-        device_->platform()->mem_free(dev_addr_);
+        device_->mem_free(dev_addr_);
         device_->unregister_buffer(this);
         device_->release();
     }
@@ -34,7 +34,7 @@ vx_result_t Buffer::create(Device* dev, uint64_t size, uint32_t flags,
                            Buffer** out) {
     if (!dev || !out || size == 0) return VX_ERR_INVALID_VALUE;
     uint64_t dev_addr = 0;
-    auto r = dev->platform()->mem_alloc(size, flags, &dev_addr);
+    auto r = dev->mem_alloc(size, flags, &dev_addr);
     if (r != VX_SUCCESS) return r;
     *out = new Buffer(dev, dev_addr, size, flags);
     return VX_SUCCESS;
@@ -43,15 +43,17 @@ vx_result_t Buffer::create(Device* dev, uint64_t size, uint32_t flags,
 vx_result_t Buffer::reserve(Device* dev, uint64_t address, uint64_t size,
                             uint32_t flags, Buffer** out) {
     if (!dev || !out || size == 0) return VX_ERR_INVALID_VALUE;
-    auto r = dev->platform()->mem_reserve(address, size, flags);
+    auto r = dev->mem_reserve(address, size, flags);
     if (r != VX_SUCCESS) return r;
     *out = new Buffer(dev, address, size, flags);
     return VX_SUCCESS;
 }
 
-vx_result_t Buffer::access(uint64_t off, uint64_t size, uint32_t flags) {
+vx_result_t Buffer::access(uint64_t off, uint64_t size, uint32_t /*flags*/) {
     if (off + size > size_) return VX_ERR_INVALID_VALUE;
-    return device_->platform()->mem_access(dev_addr_ + off, size, flags);
+    // Access permissions are not tracked by the transport HAL — the CP is
+    // the sole memory engine and the common-core allocator owns the map.
+    return VX_SUCCESS;
 }
 
 vx_result_t Buffer::map_reserve(uint64_t off, uint64_t size, uint32_t flags,
@@ -81,9 +83,8 @@ vx_result_t Buffer::map_commit() {
     std::lock_guard<std::mutex> g(map_mu_);
     if (!mapped_) return VX_ERR_INVALID_VALUE;
     if ((mapped_flags_ & VX_MEM_READ) && mapped_size_ != 0) {
-        return device_->platform()->mem_download(host_mirror_,
-                                                 dev_addr_ + mapped_off_,
-                                                 mapped_size_);
+        return device_->dev_read(host_mirror_, dev_addr_ + mapped_off_,
+                                 mapped_size_);
     }
     return VX_SUCCESS;
 }
@@ -112,8 +113,8 @@ vx_result_t Buffer::unmap(void* host_ptr) {
         return VX_ERR_INVALID_VALUE;
     vx_result_t r = VX_SUCCESS;
     if (mapped_flags_ & VX_MEM_WRITE) {
-        r = device_->platform()->mem_upload(dev_addr_ + mapped_off_,
-                                            host_mirror_, mapped_size_);
+        r = device_->dev_write(dev_addr_ + mapped_off_, host_mirror_,
+                               mapped_size_);
     }
     std::free(host_mirror_);
     host_mirror_ = nullptr;
