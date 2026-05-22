@@ -1,5 +1,5 @@
 **Date:** 2026-05-17
-**Status:** Draft — Phase 0 baseline landed (vanilla lavapipe builds & runs); pre-Phase 1
+**Status:** Draft — Phase 0 ✅, Phase 1 ✅, Phase 2 in progress (#1 of 6 done; Shape C)
 **Author:** Blaise Tine
 **Related:**
 [gfx_migration_proposal.md](gfx_migration_proposal.md),
@@ -78,6 +78,24 @@
     SPIR-V→`.vxbin` toolchain (`pocl_vortex` /
     SPIRV-LLVM-Translator) with Mesa's `nir_to_spirv` — glue, not
     a code generator. §3, Phase 2, §8 risk 1, §9 updated.
+- **2026-05-22 (Shape C)** — Phase 2 increment #1 landed; Phase 2
+  pipeline switched again, Shape B → Shape C, after a spike.
+  - **Phase 2 #1 committed** (`vortex_3.x` @ `0e09493314c`,
+    `daf278736e9`..): vortexpipe links the Vortex runtime
+    (`libvortex.so`), opens a device, and intercepts the compute
+    hooks (driver-interception layer).
+  - **Shape B disproved by a spike.** Mesa's only `nir_to_spirv`
+    is zink-private *and* emits Vulkan-flavored SPIR-V; the spike
+    found `llvm-spirv -r` hard-rejects it
+    (`InvalidBuiltinSetName: Expects OpenCL.std`) — the
+    SPIRV-LLVM-Translator is OpenCL-only. No SPIR-V round-trip
+    carries a Vulkan shader to Vortex.
+  - **§3 rewritten — Shape C.** A scalar NIR→LLVM-IR translator in
+    `vortexpipe` (`vp_nir_to_llvm`). Not Shape A's SoA fork:
+    Vortex is SIMT, so each thread runs *scalar* code — the
+    translator emits scalar IR, with `lp_bld_nir`'s visitor
+    structure only as a reference. §3, Phase 2 (6 increments),
+    §4.1, §8 risk 1, §9 updated.
 
 # Vulkan Support — Proposal
 
@@ -119,12 +137,13 @@ Vortex tree (`feature_vulkan`) carries only: this proposal, a
 `tests/vulkan/` regression suite, the CI hook, and the SimX
 graphics-model changes for the §5 improvements.
 
-The compilation pipeline adopted is **Shape B** (§3): it reuses the
-existing Vortex SPIR-V toolchain rather than forking a code
-generator. lavapipe SPIR-V → NIR → lavapipe lowerings → `nir_to_spirv`
-→ the `llvm_vortex` / SPIRV-LLVM-Translator SPIR-V→`.vxbin` path
-that `pocl_vortex` already uses → loaded into the Vortex device at
-pipeline-creation time and cached via `VkPipelineCache`.
+The compilation pipeline adopted is **Shape C** (§3): a scalar
+NIR→LLVM-IR translator in `vortexpipe`. lavapipe SPIR-V → NIR →
+lavapipe lowerings → `vp_nir_to_llvm` (scalar LLVM IR via the LLVM
+C API) → `llvm_vortex`'s RISC-V backend → `.vxbin` → loaded into
+the Vortex device at pipeline-creation time and cached via
+`VkPipelineCache`. (Shape A — forking llvmpipe's SoA codegen — and
+Shape B — a SPIR-V round-trip — were both ruled out; see §3.)
 
 The **north-star end goal is ray tracing**. The conformance model
 (§4.5) is *inherit-and-accelerate*: `vortexpipe` inherits
@@ -211,8 +230,8 @@ direction Mesa is heading. But for Vortex specifically:
   what llvmpipe already gives us.
 - The hybrid s/w-h/w model in §2.1 maps cleanly onto Gallium's
   draw-module / setup / shader split: shaders go through the
-  Shape-B SPIR-V toolchain (§3) to produce Vortex device binaries;
-  `lp_setup_*` → `VX_raster_*`; `lp_bld_sample` → `vx_tex`;
+  Shape-C scalar NIR→LLVM translator (§3) to produce Vortex device
+  binaries; `lp_setup_*` → `VX_raster_*`; `lp_bld_sample` → `vx_tex`;
   `lp_bld_depth/blend` → `vx_om`.
 - Lavapipe's Vulkan conformance work (validation layer compliance,
   feature flag plumbing, descriptor set semantics) is inherited
@@ -223,7 +242,7 @@ A native Vulkan driver is a possible v2; see §8 risk #6.
 
 ---
 
-## 3. Compilation pipeline (Shape B — reuse the Vortex SPIR-V toolchain)
+## 3. Compilation pipeline (Shape C — scalar NIR→LLVM)
 
 ```
 foo.comp.spv                              (Vulkan client — VkShaderModule)
@@ -234,12 +253,13 @@ foo.comp.spv                              (Vulkan client — VkShaderModule)
    │    (descriptor-set → flat binding, robustness,
    │     subgroups, shared / explicit I/O …)
    │
-   ▼  vortexpipe_create_compute_state(nir)  (vortexpipe)
-   ├─ nir_to_spirv   (Mesa — the lowering `zink` ships)   →  foo2.spv
-   ├─ llvm-spirv     (SPIRV-LLVM-Translator)              →  foo.bc   (LLVM IR)
-   ├─ clang / llvm_vortex  --target=riscv$(XLEN)-unknown-elf
-   │                       -mattr=+xvortex,+zicond        →  foo.elf
-   ├─ vxbin.py       (sw/kernel/scripts/)                 →  foo.vxbin
+   ▼  vortexpipe create_compute_state(nir)  (vortexpipe)
+   ├─ vp_nir_to_llvm   (vortexpipe — scalar NIR→LLVM, LLVM C API) →  foo.bc
+   │    + the SIMT kernel wrapper (gl_GlobalInvocationID etc.
+   │      from the KMU CSRs; the vx_spawn2 launch idiom)
+   ├─ llvm_vortex RISC-V backend  (--target=riscv$(XLEN)-unknown-elf
+   │                               -mattr=+xvortex,+zicond)       →  foo.elf
+   ├─ vxbin.py        (sw/kernel/scripts/)                        →  foo.vxbin
    └─ .vxbin blob stored in the pipe_compute_state object
                                             (cached via VkPipelineCache)
 
@@ -249,48 +269,58 @@ vkCmdDispatch → vortexpipe launch_grid(pipe_grid_info):
    └─ vx_queue_finish
 ```
 
-**Why Shape B, not "fork `lp_bld_nir`" (the original Shape A).**
-Shape A would fork llvmpipe's NIR→LLVM builder
-(`lp_bld_nir_soa.c`, ~238 KB of *host-x86, SoA-vectorized* codegen)
-and rewrite every leaf for Vortex's per-thread scalar RISC-V SIMT
-ABI — a multi-month compiler effort that re-derives what
-`llvm_vortex` already does. Shape B instead **reuses the Vortex
-SPIR-V toolchain that already exists**: `pocl_vortex` and the
-SPIRV-LLVM-Translator already compile SPIR-V to a Vortex `.vxbin`,
-and Mesa already ships `nir_to_spirv` (the `zink` GL-on-Vulkan
-driver uses it in production). `vortexpipe` therefore writes only
-the *glue* — NIR→SPIR-V plus driving the existing tools — not a
-code generator.
+**Why Shape C — and why not B or A.** Two earlier shapes were
+ruled out:
+
+- **Shape B (SPIR-V round-trip) — disproved by a spike (2026-05-22).**
+  Shape B routed NIR → `nir_to_spirv` → SPIRV-LLVM-Translator →
+  LLVM. The spike found Mesa's only `nir_to_spirv` is zink-private
+  *and* emits Vulkan-flavored SPIR-V (`Shader` / `Logical` /
+  `GLSL.std.450`), which SPIRV-LLVM-Translator **hard-rejects**:
+  `llvm-spirv -r` → `InvalidBuiltinSetName: Expects OpenCL.std`.
+  The translator is OpenCL-only; no SPIR-V round-trip carries a
+  Vulkan shader to Vortex.
+- **Shape A (fork `lp_bld_nir_soa.c`) — overscoped.** That file is
+  ~238 KB because of llvmpipe's **SoA host-CPU vectorization** — it
+  vectorizes across invocations with explicit LLVM vector types +
+  AVX. Vortex does not need that: Vortex's **SIMT hardware is the
+  parallelism**; each Vortex thread runs ordinary *scalar* code.
+
+**Shape C** is the consequence: a **scalar NIR→LLVM-IR translator**
+in `vortexpipe` (`vp_nir_to_llvm`). It walks the lavapipe-lowered
+NIR and emits straight scalar LLVM IR via the LLVM C API — NIR ALU
+op → LLVM instruction, load/store → load/store, control flow →
+basic blocks. `lp_bld_nir`'s visitor *structure* is a reference;
+the SoA leaf emission is **not** carried over. The LLVM IR then
+goes to `llvm_vortex`'s RISC-V backend and `vxbin.py`, exactly as
+HIP/OpenCL device code does.
 
 Notes:
 
-1. **The SPIR-V → NIR → SPIR-V round-trip is fine.** lavapipe must
-   ingest SPIR-V as NIR — that is how Vulkan shader modules work,
-   and the Vulkan-semantic lowering passes need NIR. `zink` proves
-   NIR→SPIR-V is a solid production path. The round-trip costs a
-   little pipeline-create time, not correctness or runtime perf.
+1. **It is a real compiler component, but a tractable one.** Shape
+   C is not "glue" — it is a NIR→LLVM translator, the genuine core
+   of the driver. But emitting *scalar* IR (no SoA vectorizer) is a
+   normal-sized component, not the multi-month SoA fork: the
+   reusable part is the visitor walk; the replaced part is simple
+   per-op scalar emission.
 
-2. **Compute is the SPIR-V toolchain's home turf.** Phase 2 is
-   compute-only (`vkCmdDispatch`). Compute SPIR-V — flat memory,
-   the workgroup model, no graphics builtins — is exactly what
-   `pocl_vortex` / SPIRV-LLVM-Translator already handle for OpenCL.
-   (Shape A's original objection to the SPIR-V route was about
-   *graphics* shaders; it does not apply to compute.)
+2. **The SIMT kernel wrapper.** A Vulkan compute `main()` is one
+   workgroup-invocation. The translator wraps it as a Vortex KMU
+   kernel: the entry reads grid/block from the KMU CSRs and binds
+   `gl_GlobalInvocationID` / `gl_LocalInvocationID` / `gl_WorkGroupID`
+   per thread — the `vx_spawn2` idiom (see
+   [sw/kernel/include/vx_spawn2.h](../../sw/kernel/include/vx_spawn2.h)).
+   `pocl_vortex` does the equivalent for OpenCL kernels; mirror it.
 
-3. **Graphics shaders (Phase 3+) revisit this.** Fragment/vertex
-   shaders that drive the TEX/RASTER/OM HW units may need richer
-   lowering than a plain NIR→SPIR-V round-trip provides; whether
-   the graphics path stays on Shape B or needs purpose-built
-   lowering is deferred to Phase 3. Phase 2 (compute) commits to
-   Shape B.
+3. **LLVM C API availability.** vortexpipe already builds inside
+   Mesa, which links LLVM (llvmpipe). `vp_nir_to_llvm` emits IR via
+   `llvm-c/*` against that LLVM (the same `llvm_vortex` install,
+   §8 risk 5) — no extra LLVM dependency.
 
-4. **In-process vs. exec.** `llvm-spirv` and `llvm_vortex` are
-   available both as command-line tools and as libraries. A first
-   cut may `fork`/`exec` the `llvm-spirv` / `clang` / `vxbin.py`
-   tools for simplicity, moving in-process (load `libLLVMSPIRVLib`
-   + `libLLVM`) later if pipeline-create latency matters. Either
-   way the result is an AOT-compiled `.vxbin` cached in
-   `VkPipelineCache`.
+4. **Graphics shaders (Phase 3+).** The same scalar translator
+   serves vertex/fragment shaders; the graphics-specific part is
+   lowering the TEX/RASTER/OM ops, deferred to Phase 3. Phase 2
+   (compute) commits to Shape C.
 
 ---
 
@@ -306,7 +336,7 @@ graphics-model changes for the §5 improvements (no RTL — §1 scope).
 |---|---|---|
 | Mesa fork | remote `github.com/vortexgpgpu/mesa`; local clone `~/dev/mesa_vortex/` pinned at `mesa-25.1`; `upstream` remote → freedesktop Mesa for rebases | Fork of upstream Mesa; Vortex changes confined to additions under `src/gallium/drivers/vortexpipe/`. |
 | `vortexpipe` Gallium driver | `~/dev/mesa_vortex/src/gallium/drivers/vortexpipe/` | New (~5–8 kLOC, mostly forked from `llvmpipe/`). |
-| `vortexpipe` shader path (Shape B) | `~/dev/mesa_vortex/src/gallium/drivers/vortexpipe/vp_compile.c` (+ helpers) | New (~few hundred LOC): `nir_to_spirv` + driving the existing `llvm-spirv` / `llvm_vortex` / `vxbin.py` toolchain. No code generator forked. |
+| `vortexpipe` shader path (Shape C) | `~/dev/mesa_vortex/src/gallium/drivers/vortexpipe/vp_nir_to_llvm.c` (+ helpers) | New: a scalar NIR→LLVM-IR translator (LLVM C API) — the genuine compiler core — plus the SIMT kernel wrapper, then `llvm_vortex` + `vxbin.py`. |
 | Gallium loader entry | `~/dev/mesa_vortex/src/gallium/targets/dri/target.c` + `meson_options.txt` | Register `vortexpipe` so `lavapipe` can pick it via `LAVAPIPE_PIPE_DRIVER=vortexpipe`. |
 | `lavapipe` patches | `~/dev/mesa_vortex/src/gallium/frontends/lavapipe/` | Minimal — most diffs are feature-flag plumbing for what `vortexpipe` does or doesn't support. Try to keep zero patches if possible. |
 | Vortex runtime host glue | `~/dev/mesa_vortex/src/gallium/drivers/vortexpipe/vx_context.c` | Owns the `vortex_runtime` device handle, kernel cache, descriptor heaps; bridges Gallium calls to `vortex2.h` async API. |
@@ -679,38 +709,45 @@ Nothing in the Vortex tree changed except this proposal,
 return `VK_SUCCESS` against a Vortex device; framebuffer is whatever
 init color it was cleared to.
 
-### Phase 2 — Compute pipelines via the Vortex SPIR-V toolchain
+### Phase 2 — Compute pipelines (Shape C: scalar NIR→LLVM)
 
-Shape B (§3). `vortexpipe` reuses the existing Vortex SPIR-V →
-`.vxbin` toolchain; no NIR→LLVM code generator is written.
+Shape C (§3). The genuine compiler core of the project. Built as
+six committable increments — each independently buildable; the
+whole of Phase 2 is committed once the exit test passes.
 
-- [ ] **Device context** — `vp_context` opens a `vortex_runtime`
-      device (`vx_device_open`), owns a `vx_queue_h`, and bridges
-      memory: `pipe_resource` ⇄ `vx_buffer_*`. (The Phase 1
-      passthrough is replaced for the buffer/dispatch paths;
-      llvmpipe still backs anything not yet ported — §4.5.)
-- [ ] **`create_compute_state(nir)`** — `nir_to_spirv` the lowered
-      NIR, then drive `llvm-spirv` → `clang`/`llvm_vortex`
-      (`--target=riscv$(XLEN)-unknown-elf -mattr=+xvortex,+zicond`)
-      → `vxbin.py`, producing a `.vxbin` stored in the compute-
-      state object. `fork`/`exec` the tools for the first cut.
-- [ ] **`launch_grid(pipe_grid_info)`** — upload the `.vxbin` +
-      argument block via `vx_buffer_*`, `vx_enqueue_launch` with
-      grid/block from `pipe_grid_info`, `vx_queue_finish`.
-- [ ] Fill `pipe_screen.compute_caps` from Vortex device caps
-      (`vx_device_query`); implement the compute `pipe_context`
-      hooks (`create/bind/delete_compute_state`, `launch_grid`,
-      `set_global_binding`).
-- [ ] `vkCmdDispatch` end-to-end — compute only, no graphics state.
+- [x] **#1 Driver interception.** `vortexpipe` patches the
+      llvmpipe `context_create` + the compute hooks
+      (`create/bind/delete_compute_state`, `launch_grid`); side
+      registry holds per-screen/context state. Overrides forward
+      to llvmpipe until the increments below fill them in.
+- [ ] **#2 `vp_nir_to_llvm` skeleton.** A `nir_shader` → LLVM
+      module walk via the LLVM C API: functions, basic blocks, the
+      NIR-SSA → `LLVMValueRef` map, control flow. Trivial shaders
+      first.
+- [ ] **#3 NIR instruction emission.** Per-op scalar emission:
+      `nir_alu` (the bulk), `nir_intrinsic` (load/store, the
+      `gl_*InvocationID` system values), `nir_load_const`,
+      derefs. Scalar — no SoA vectorizer.
+- [ ] **#4 SIMT kernel wrapper + `.vxbin`.** Wrap the shader as a
+      Vortex KMU kernel (grid/block from CSRs, the `vx_spawn2`
+      idiom; the descriptor-set → arg-block ABI). Drive
+      `llvm_vortex`'s RISC-V backend + `vxbin.py` →  `.vxbin`,
+      stored in the compute-state object.
+- [ ] **#5 `launch_grid`.** Upload the `.vxbin` + argument block
+      via `vx_buffer_*`; `vx_enqueue_launch` with grid/block from
+      `pipe_grid_info`; `vx_queue_finish`. `pipe_resource` ⇄
+      `vx_buffer_*` memory bridging. The screen's Vortex device
+      (opened in the Phase 2-foundation increment) backs this.
+- [ ] **#6 Compute caps + test.** Fill `pipe_screen.compute_caps`
+      from `vx_device_query`; wire the vecadd `vkCmdDispatch`
+      test.
 
-**Exit criteria:** a SPIR-V compute shader that does vecadd compiles
-through `vortexpipe`, runs on SimX, and matches the CPU reference.
-This is the Vulkan analog of [tests/hip/vecadd](../../tests/hip/vecadd/).
-
-**Note:** the Phase 1 "device context" item the proposal originally
-deferred is folded in here — Shape B's `launch_grid` needs a real
-Vortex device, so the device-context plumbing is Phase 2's first
-step.
+**Exit criteria:** a SPIR-V compute shader that does vecadd
+compiles through `vortexpipe`, runs on SimX, and matches the CPU
+reference — the Vulkan analog of
+[tests/hip/vecadd](../../tests/hip/vecadd/). Anything `vp_nir_to_llvm`
+cannot yet translate falls back to llvmpipe (§4.5), so the driver
+stays whole at every increment.
 
 ### Phase 3 — Software graphics MVP (all-CPU fallback)
 
@@ -795,7 +832,7 @@ gfx-v1.
 - [ ] Lower `VK_KHR_ray_query` `rayQueryEXT` ops (a NIR pass) to
       calls into that traversal library; raygen/closest-hit/miss
       shaders compile as ordinary Vortex compute kernels via the
-      Shape-B path (§3).
+      Shape-C path (§3).
 - [ ] Keep lavapipe's CPU RT path selectable for diff (§4.5).
 
 **Exit criteria:** a `VK_KHR_ray_query` test (a compute or
@@ -852,17 +889,20 @@ conformance regressions without exploding CI runtime.
 
 ## 8. Risks & open questions
 
-1. **Shape-B SPIR-V round-trip fidelity.** Shape B (§3) routes
-   shaders SPIR-V → NIR → `nir_to_spirv` → the Vortex SPIR-V
-   toolchain. `nir_to_spirv` is production-tested by `zink`, but
-   the *Vortex* SPIR-V ingestion (`pocl_vortex` / SPIRV-LLVM-
-   Translator) is exercised mainly by OpenCL compute — graphics-
-   flavored SPIR-V from Phase 3+ may surface gaps. **Risk: low for
-   compute (Phase 2), medium for graphics.** **Mitigation:**
-   Phase 2 is compute-only, squarely in the toolchain's tested
-   range; the graphics-path decision is explicitly deferred to
-   Phase 3 (§3 note 3). The earlier "fork `lp_bld_nir`" risk is
-   retired — Shape B writes no code generator.
+1. **`vp_nir_to_llvm` coverage.** Shape C (§3) is a scalar
+   NIR→LLVM translator — the genuine compiler core, and the single
+   largest piece of work in the project. The risk is breadth: NIR
+   has a wide ALU/intrinsic surface and the translator must cover
+   what real shaders emit. **Risk: medium (effort, not
+   feasibility).** **Mitigation:** (a) it is *scalar* emission —
+   no SoA vectorizer, the part that bloats llvmpipe's codegen;
+   (b) it is built as bounded increments (Phase 2 #2–#6), trivial
+   shaders first; (c) anything not yet translated falls back to
+   llvmpipe (§4.5), so the driver stays whole throughout. The
+   earlier Shape-A "fork 238 KB" and Shape-B "SPIR-V round-trip"
+   risks are retired — Shape A was overscoped, Shape B was
+   disproved by the 2026-05-22 spike (`llvm-spirv` rejects
+   Vulkan SPIR-V).
 
 2. **Lavapipe assumes host-side framebuffer.** Lavapipe's WSI path
    (`lvp_wsi_*`) assumes the framebuffer is host memory. Under
@@ -946,10 +986,11 @@ Please confirm or redirect:
       + the SimX graphics-model changes for §5 land in
       `feature_vulkan`. **OK?**
 - [ ] Mesa pin: `mesa-25.1` tag as the initial baseline. **OK?**
-- [x] **Compilation pipeline: Shape B** (decided 2026-05-22) —
-      reuse the Vortex SPIR-V toolchain: SPIR-V → NIR → lavapipe
-      lowerings → `nir_to_spirv` → `llvm_vortex` /
-      SPIRV-LLVM-Translator → `.vxbin`. No `lp_bld_nir` fork.
+- [x] **Compilation pipeline: Shape C** (decided 2026-05-22, after
+      a spike) — a scalar NIR→LLVM-IR translator in `vortexpipe`
+      (`vp_nir_to_llvm`) → `llvm_vortex` → `.vxbin`. Shape B (SPIR-V
+      round-trip) was disproved — `llvm-spirv` rejects Vulkan
+      SPIR-V; Shape A (fork llvmpipe's SoA codegen) was overscoped.
 - [ ] Phase ordering: compute pipelines (Phase 2) before any
       graphics; CPU-fragment fallback (Phase 3) before RASTER
       integration (Phase 4); graphics-model integration (4→5→6)
