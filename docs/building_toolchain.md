@@ -20,6 +20,7 @@ The components covered here are:
 6. [POCL for Vortex](#6-pocl-for-vortex) — OpenCL implementation with the Vortex device target
 7. [chipStar](#7-chipstar-hip-host-runtime) — HIP host runtime layered on POCL
 8. [OpenSTA](#8-opensta) — static timing analysis (optional)
+9. [Mesa for Vortex](#9-mesa-for-vortex-vulkan) — Vulkan software stack (lavapipe) the Vortex Vulkan driver builds on (optional)
 
 ---
 
@@ -501,6 +502,98 @@ make install
 
 ---
 
+## 9. Mesa for Vortex (Vulkan)
+
+**Purpose**: Mesa's `lavapipe` Vulkan driver (with the `llvmpipe`
+Gallium driver underneath) — the software Vulkan stack the Vortex
+Vulkan driver is built on. The `vortexpipe` Gallium driver
+(Vulkan-on-Vortex) is developed inside this Mesa fork; see
+[proposals/vulkan_support_proposal.md](proposals/vulkan_support_proposal.md).
+
+> **Automated path:** `ci/mesa_install.sh` performs every step
+> below (build deps, meson configure, build, install). This
+> section documents the manual build for maintainers.
+
+> **v3.0 pin:** branch `vortex_3.x` of
+> `github.com/vortexgpgpu/mesa` — a fork of upstream Mesa at tag
+> `mesa-25.1.0`. Until the fork carries the `vortexpipe` driver,
+> this builds plain lavapipe (the "baseline" of the Vulkan
+> proposal's Phase 0).
+
+### Dependencies
+
+Mesa needs a current `meson` (≥ 1.4 — the Ubuntu 22.04 distro
+`meson` 0.61 is too old) and extra system packages beyond the
+[Prerequisites](#prerequisites) list:
+
+```bash
+python3 -m pip install --user --upgrade 'meson>=1.4.0'
+export PATH=$HOME/.local/bin:$PATH
+
+sudo apt-get install \
+    python3-mako flex bison pkg-config \
+    libdrm-dev libexpat1-dev zlib1g-dev libzstd-dev libelf-dev \
+    libwayland-dev wayland-protocols \
+    libx11-dev libxext-dev libxshmfence-dev libxrandr-dev libxfixes-dev \
+    libxcb1-dev libxcb-glx0-dev libxcb-shm0-dev libxcb-dri2-0-dev \
+    libxcb-dri3-dev libxcb-present-dev libxcb-sync-dev libxcb-xfixes0-dev
+```
+
+No separate host LLVM is built — Mesa's `llvmpipe` reuses the
+Vortex LLVM from [§3](#3-llvm-for-vortex) (`$LLVM_PREFIX`,
+LLVM 20.1.8, built with both `X86` and `RISCV`).
+
+### Build
+
+```bash
+git clone --branch vortex_3.x https://github.com/vortexgpgpu/mesa.git mesa_vortex
+cd mesa_vortex
+
+# Put the Vortex LLVM's llvm-config first so meson selects it.
+export PATH=$HOME/.local/bin:$LLVM_PREFIX/bin:$PATH
+
+meson setup build \
+    --prefix=$TOOLDIR/mesa-vortex \
+    --libdir=lib \
+    --buildtype=release \
+    -D cpp_rtti=false \
+    -D gallium-drivers=llvmpipe \
+    -D vulkan-drivers=swrast \
+    -D platforms=x11,wayland \
+    -D llvm=enabled \
+    -D video-codecs= \
+    -D gallium-extra-hud=false
+
+meson compile -C build
+meson install -C build
+```
+
+### Notes
+
+- **`-D cpp_rtti=false`** — Mesa's C++ RTTI setting must match
+  LLVM's; `llvm-vortex` is built without RTTI ([§3](#3-llvm-for-vortex),
+  no `LLVM_ENABLE_RTTI`). `ci/mesa_install.sh` auto-detects this
+  from `llvm-config --cxxflags`.
+- **Driver names:** `gallium-drivers=llvmpipe` is the Gallium
+  driver; `vulkan-drivers=swrast` is lavapipe. Once the fork
+  carries `vortexpipe`, append it to `gallium-drivers`.
+- **zstd:** if `libzstd-dev` is unavailable, build zstd from
+  source and add it to `PKG_CONFIG_PATH`. zstd bakes `prefix=`
+  into its installed `libzstd.pc` at build time — fix that line
+  to the real install path or pkg-config resolves the wrong
+  headers.
+- **Runtime env:** the Vulkan loader finds the driver via
+  `VK_ICD_FILENAMES`; `LD_LIBRARY_PATH` must include both
+  `mesa-vortex/lib` and `llvm-vortex/lib` (the ICD links
+  `libLLVM` shared):
+
+  ```bash
+  export VK_ICD_FILENAMES=$TOOLDIR/mesa-vortex/share/vulkan/icd.d/lvp_icd.x86_64.json
+  export LD_LIBRARY_PATH=$TOOLDIR/mesa-vortex/lib:$LLVM_PREFIX/lib:$LD_LIBRARY_PATH
+  ```
+
+---
+
 ## Verifying an installed toolchain
 
 Once components are installed under `$TOOLDIR`, confirm the
@@ -520,7 +613,8 @@ $TOOLDIR/
 │   ├── bin/ etc/ lib/libOpenCL.so* share/pocl/
 │   └── include/CL/*.h          (REQUIRED — see §6; absence breaks tests/opencl)
 ├── chipstar/                   (bin/hipcc, lib/libCHIP.so, include/hip/)
-└── sta/                        (OpenSTA, optional)
+├── sta/                        (OpenSTA, optional)
+└── mesa-vortex/                (lavapipe Vulkan ICD; share/vulkan/icd.d/, optional)
 ```
 
 The Vortex build script `ci/toolchain_env.sh` exports this layout
@@ -534,4 +628,9 @@ $TOOLDIR/riscv32-gnu-toolchain/bin/riscv32-unknown-elf-gcc --version
 $TOOLDIR/verilator/bin/verilator --version
 $TOOLDIR/chipstar/bin/hipcc --version       # if chipStar installed
 test -f $TOOLDIR/pocl/include/CL/opencl.h && echo "POCL host headers OK"
+
+# if Mesa installed — expect a device line "llvmpipe (LLVM 20.1.8, ...)"
+VK_ICD_FILENAMES=$TOOLDIR/mesa-vortex/share/vulkan/icd.d/lvp_icd.x86_64.json \
+LD_LIBRARY_PATH=$TOOLDIR/mesa-vortex/lib:$TOOLDIR/llvm-vortex/lib \
+    vulkaninfo --summary
 ```
