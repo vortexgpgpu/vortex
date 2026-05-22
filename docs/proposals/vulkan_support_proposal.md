@@ -1,5 +1,5 @@
 **Date:** 2026-05-17
-**Status:** Draft — Phases 0–6 ✅ (compute + full graphics pipeline: VS, RASTER, FS, OM, TEX); Phase 7 (RT) next
+**Status:** Draft — Phases 0–6 ✅ (compute + full graphics pipeline: VS, RASTER, FS, OM, TEX); Phase 7 steps 1–4 ✅ (RT oracle + translator: control flow, f64, shared memory); 7.5/7.6 blocked on llvm-vortex backend bugs
 **Author:** Blaise Tine
 **Related:**
 [gfx_migration_proposal.md](gfx_migration_proposal.md),
@@ -173,6 +173,28 @@
     rendered the first one twice. Mip mapping, non-A8R8G8B8 formats
     and anisotropic filtering are deferred to a v2 proposal. §6
     Phase 6 marked done — the graphics pipeline is complete.
+- **2026-05-22 (Phase 7, steps 1–4)** — ray-tracing foundation: the
+  shader translator is now a near-complete compute backend.
+  - `tests/vulkan/raytrace` (7.1) traces primary rays at a one-triangle
+    acceleration structure via `VK_KHR_ray_query`; it runs on
+    lavapipe's software RT path — the correctness oracle.
+  - `vp_nir_to_llvm` gained structured control flow (7.2 — if / loop /
+    phi, via a CFG walk over NIR's per-block successors) and compute
+    completeness (7.3/7.4 — the full ALU set incl. f64 soft-float,
+    `load_ubo` / `load_global`, shared memory, `barrier`, 64-bit-aware
+    loads). `tests/vulkan/cflow` and `tests/vulkan/shmem` exercise
+    control flow and shared memory on the Vortex device.
+  - **Route:** the ray-query *traversal* runs on Vortex; BVH *build*
+    stays on lavapipe's CPU path (Mesa's builder shaders are heavy
+    SIMT-collective code — subgroups, multi-warp barriers — out of
+    scope for v1). The translator now emits valid LLVM IR for the
+    traversal shader.
+  - **Blocked at 7.5/7.6:** two `llvm-vortex` / SimX bugs surfaced and
+    are unfixed — a multi-warp `vx_barrier` hangs when reached after
+    divergent control flow, and the `+xvortex` backend segfaults
+    compiling the traversal shader's deeply-nested divergent control
+    flow. RT end-to-end on Vortex resumes once those compiler/HW bugs
+    are fixed; §6 Phase 7 steps 1–4 done.
 
 # Vulkan Support — Proposal
 
@@ -954,31 +976,42 @@ path (SimX)." A SimX RASTER bug (per-tile PID table walked with a
 Mip mapping, non-A8R8G8B8 formats and anisotropic filtering in TEX
 are deferred to a v2 proposal.
 
-### Phase 7 — Ray tracing on the SIMT cores
+### Phase 7 — Ray tracing on the SIMT cores (steps 1–4 done)
 
-The end-goal RT path, brought up end-to-end. Per §4.7 Invariant 1,
-ray tracing is **not** a HW unit — BVH build, traversal,
-intersection, and shading all run as ordinary Vortex SIMT compute
-kernels. **No new RTL.** This is the complete RT solution for
-gfx-v1.
+The end-goal RT path. Per §4.7 Invariant 1, ray tracing is **not** a
+HW unit — BVH build, traversal, intersection and shading all run as
+ordinary Vortex SIMT compute kernels. **No new RTL.**
 
-- [ ] Implement BVH **build** as a Vortex SIMT compute kernel,
-      invoked when the client calls
-      `vkCmdBuildAccelerationStructures`.
-- [ ] Implement BVH **traversal** + ray/AABB + ray/triangle
-      **intersection** as a device-side library called from the
-      shader — plain compute code (FP on the SIMT FPU), not a
-      custom intrinsic.
-- [ ] Lower `VK_KHR_ray_query` `rayQueryEXT` ops (a NIR pass) to
-      calls into that traversal library; raygen/closest-hit/miss
-      shaders compile as ordinary Vortex compute kernels via the
-      Shape-C path (§3).
-- [ ] Keep lavapipe's CPU RT path selectable for diff (§4.5).
+Investigation revised the plan: Mesa already provides the BVH builder
+as compute (the `vk_bvh` builder, dispatched by lavapipe) and lowers
+`rayQueryEXT` into the user shader. At the Gallium layer both arrive
+as ordinary compute shaders, so "RT on Vortex" is a *translator*
+effort, not RT-specific infrastructure. v1 runs the ray-query
+**traversal** on Vortex and keeps BVH **build** on lavapipe's CPU path
+(the builder shaders are heavy SIMT-collective code — subgroups,
+multi-warp barriers).
 
-**Exit criteria:** a `VK_KHR_ray_query` test (a compute or
-fragment shader that traces primary rays against a triangle BVH)
-runs end-to-end on Vortex SimX and is pixel-identical to
-lavapipe's software RT reference.
+- [x] **7.1 — RT correctness oracle.** `tests/vulkan/raytrace`:
+      `VK_KHR_ray_query` primary rays at a one-triangle acceleration
+      structure, run on lavapipe's software RT path.
+- [x] **7.2 — structured control flow** in `vp_nir_to_llvm` (if /
+      loop / phi — a CFG walk over NIR's per-block successors).
+      `tests/vulkan/cflow`.
+- [x] **7.3/7.4 — compute completeness.** Full ALU set incl. f64
+      (soft-float — rv32 has no D), `load_ubo` / `load_global`,
+      shared memory + `barrier`, 64-bit-aware loads, allocas hoisted
+      to the entry block. `tests/vulkan/shmem`. The translator now
+      emits valid LLVM IR for the ray-query traversal shader.
+- [ ] **7.5/7.6 — blocked.** Wiring the acceleration structure to the
+      kernel + end-to-end need the traversal `.vxbin` to build, but
+      the `llvm-vortex` `+xvortex` backend segfaults on the traversal
+      shader's deeply-nested divergent control flow, and a multi-warp
+      `vx_barrier` hangs after divergence. Both are compiler / SimX
+      bugs below vortexpipe — a separate workstream.
+
+**Exit criteria:** a `VK_KHR_ray_query` test runs end-to-end on
+Vortex SimX, pixel-identical to lavapipe's software RT reference.
+*Blocked on the `llvm-vortex` backend fixes above.*
 
 `VK_KHR_ray_tracing_pipeline` (raygen/hit/miss *pipeline* stages +
 shader binding table, vs. inline `ray_query`) is a later
