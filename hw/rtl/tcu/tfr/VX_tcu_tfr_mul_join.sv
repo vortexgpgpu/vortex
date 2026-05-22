@@ -36,7 +36,11 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     input wire [TCK-1:0][24:0]      sig_f8,
     input wire [TCK-1:0][EXP_W-1:0] exp_f8,
     input fedp_excep_t [TCK-1:0]    exc_f8,
-    
+
+    input wire [TCK-1:0][24:0]      sig_f4,
+    input wire [TCK-1:0][EXP_W-1:0] exp_f4,
+    input fedp_excep_t [TCK-1:0]    exc_f4,
+
     input wire [TCK-1:0][24:0]      sig_int,
 
     output logic [TCK:0][24:0]      sig_out,
@@ -46,6 +50,7 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
     `UNUSED_VAR ({sig_f8, exp_f8, exc_f8})
+    `UNUSED_VAR ({sig_f4, exp_f4, exc_f4})
     `UNUSED_VAR ({sig_int})
 
 
@@ -82,6 +87,15 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
                 sig_sel = sig_f8;
                 exp_sel = exp_f8;
                 exc_sel = exc_f8;
+            end
+        `endif
+
+            // --- NVFP4 ---
+        `ifdef TCU_MX_ENABLE
+            TCU_NVFP4_ID: begin
+                sig_sel = sig_f4;
+                exp_sel = exp_f4;
+                exc_sel = exc_f4;
             end
         `endif
 

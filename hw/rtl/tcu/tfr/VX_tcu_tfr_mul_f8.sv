@@ -20,8 +20,7 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     parameter TCK   = 2 * N,
     parameter W     = 25,
     parameter WA    = 28,
-    parameter EXP_W = 10,
-    parameter SF    = 1
+    parameter EXP_W = 10
 ) (
     input wire                      clk,
     input wire                      valid_in,
@@ -34,8 +33,8 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
 `ifdef TCU_MX_ENABLE
-    input wire [SF-1:0][7:0]        sf_a,
-    input wire [SF-1:0][7:0]        sf_b,
+    input wire [7:0]                sf_a,
+    input wire [7:0]                sf_b,
 `endif
 
     // Outputs
@@ -208,7 +207,7 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire [EXP_W-1:0] final_exp;
 
     `ifdef TCU_MX_ENABLE
-        wire [3*EXP_W-1:0] sf_comp = fmt_f[3] ? {EXP_W'(sf_a[0]), EXP_W'(sf_b[0]), -EXP_W'(254)} : (3*EXP_W)'(0);
+        wire [3*EXP_W-1:0] sf_comp = fmt_f[3] ? {EXP_W'(sf_a), EXP_W'(sf_b), -EXP_W'(254)} : (3*EXP_W)'(0);
         VX_csa_tree #(
             .N(5),
             .W(EXP_W),

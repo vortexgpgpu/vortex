@@ -85,8 +85,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .TCK(TCK),
         .W(W),
         .WA(WA),
-        .EXP_W(EXP_W),
-        .SF(SF)
+        .EXP_W(EXP_W)
     ) mul_f8 (
         .clk        (clk),
         .valid_in   (valid_in),
@@ -96,20 +95,67 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .a_row      (a_row),
         .b_col      (b_col),
     `ifdef TCU_MX_ENABLE
-        .sf_a       (sf_a),
-        .sf_b       (sf_b),
+        .sf_a       (sf_a[0]),
+        .sf_b       (sf_b[0]),
     `endif
         .result_sig (mul_f8_sig),
         .result_exp (mul_f8_exp),
         .exceptions (mul_f8_exc)
     );
 
+    // --- FP4 ---------------------------------------------------------------
+    wire [TCK-1:0][24:0]      mul_f4_sig;
+    wire [TCK-1:0][EXP_W-1:0] mul_f4_exp;
+    fedp_excep_t [TCK-1:0]    mul_f4_exc;
+
+`ifdef TCU_MX_ENABLE
+    wire [SF-1:0][TCK-1:0][24:0]      mul_f4_sig_s;
+    wire [SF-1:0][TCK-1:0][EXP_W-1:0] mul_f4_exp_s;
+    fedp_excep_t [SF-1:0][TCK-1:0]    mul_f4_exc_s;
+
+    for (genvar s = 0; s < SF; ++s) begin : g_mul_f4_sf
+        VX_tcu_tfr_mul_f4 #(
+            .N(N),
+            .TCK(TCK),
+            .W(W),
+            .WA(WA),
+            .EXP_W(EXP_W)
+        ) mul_f4 (
+            .clk        (clk),
+            .valid_in   (valid_in),
+            .req_id     (req_id),
+            .vld_mask   (vld_mask),
+            .fmt_f      (fmt_s[3:0]),
+            .a_row      (a_row),
+            .b_col      (b_col),
+            .sf_a       (sf_a[s]),
+            .sf_b       (sf_b[s]),
+            .result_sig (mul_f4_sig_s[s]),
+            .result_exp (mul_f4_exp_s[s]),
+            .exceptions (mul_f4_exc_s[s])
+        );
+    end
+
+    for (genvar i = 0; i < TCK; ++i) begin : g_mul_f4_lane
+        localparam K_WORD = i / 2;
+        localparam MX_SLOT_4B = ((K_WORD / 2) < SF) ? (K_WORD / 2) : (SF - 1);
+        assign mul_f4_sig[i] = mul_f4_sig_s[MX_SLOT_4B][i];
+        assign mul_f4_exp[i] = mul_f4_exp_s[MX_SLOT_4B][i];
+        assign mul_f4_exc[i] = mul_f4_exc_s[MX_SLOT_4B][i];
+
+        for (genvar s = 0; s < SF; ++s) begin : g_unused_f4_sf
+            if (s != MX_SLOT_4B) begin : g_unused
+                `UNUSED_VAR ({mul_f4_sig_s[s][i], mul_f4_exp_s[s][i], mul_f4_exc_s[s][i]})
+            end
+        end
+    end
+`endif
+
     // --- I8/U8/I4/U4 ------------------------------------------------------
     wire [TCK-1:0][24:0] mul_int_sig;
     VX_tcu_tfr_mul_int #(
         .N(N),
-        .TCK(TCK),
-        .SF(SF)
+        .TCK(TCK)
     ) mul_int (
         .clk        (clk),
         .valid_in   (valid_in),
@@ -119,8 +165,8 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .a_row      (a_row),
         .b_col      (b_col),
     `ifdef TCU_MX_ENABLE
-        .sf_a       (sf_a),
-        .sf_b       (sf_b),
+        .sf_a       (sf_a[0]),
+        .sf_b       (sf_b[0]),
     `endif
         .result     (mul_int_sig)
     );
@@ -151,6 +197,10 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .sig_f8     (mul_f8_sig),
         .exp_f8     (mul_f8_exp),
         .exc_f8     (mul_f8_exc),
+
+        .sig_f4     (mul_f4_sig),
+        .exp_f4     (mul_f4_exp),
+        .exc_f4     (mul_f4_exc),
 
         .sig_int    (mul_int_sig),
 
