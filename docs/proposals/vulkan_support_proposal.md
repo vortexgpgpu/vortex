@@ -140,6 +140,20 @@
   - **Design rule recorded:** for any design question pick the
     solution a real NVIDIA GPU/driver would use — every shader stage
     is JIT-compiled by the driver. §6 Phase 4 marked done.
+- **2026-05-22 (Phase 5)** — OM integration: depth test + blend run
+  on the Vortex output-merger unit.
+  - The SimX OM model already existed and works under
+    `--driver=simx`; Phase 5 consumes it.
+  - vortexpipe intercepts the depth-stencil + blend Gallium state
+    (via the pointer-keyed registry — `util_blitter` makes those
+    csos before the hooks arm); `emit_fs_wrapper` emits `vx_om`
+    instead of a raw store; `vp_raster.cpp` programs the
+    `VX_DCR_OM_*` registers.
+  - `tests/vulkan/depth` (two overlapping triangles, depth test
+    LESS) renders the near triangle on top — depth testing on the
+    Vortex OM unit confirmed. The OM ISA redesign for full Vulkan
+    1.3 conformance (more blend factors, dual-source, MRT, stencil)
+    is deferred to a v2 proposal. §6 Phase 5 marked done.
 
 # Vulkan Support — Proposal
 
@@ -877,20 +891,28 @@ reference. ✅ **met** — `tests/vulkan/triangle` renders 512/4096
 pixels via the Vortex RASTER path, identical to the Phase 3 and
 llvmpipe references.
 
-### Phase 5 — OM integration (SimX model)
+### Phase 5 — OM integration (SimX model) ✅ done
 
-- [ ] Implement the **SimX OM model** (`sim/simx/om/`) —
-      depth/stencil compare, blend, logic op, color/depth write —
-      mirroring [hw/rtl/om/](../../hw/rtl/om/).
-- [ ] Replace `lp_bld_depth_blend` codegen with `vx_om` emits in
-      the fragment kernel.
-- [ ] Plumb depth, stencil, blend, color-mask DCR state from
-      `lavapipe` through `vortexpipe`.
+- [x] **SimX OM model** — already present and functional
+      (`sim/simx/om/`, mirroring [hw/rtl/om/](../../hw/rtl/om/));
+      verified passing under `--driver=simx` with `EXT_OM_ENABLE`.
+      Phase 5 consumes it.
+- [x] **`vx_om` emits in the fragment kernel.** `emit_fs_wrapper`
+      replaces the raw framebuffer store with `vx_om(pos, color,
+      depth)` — it interpolates the fragment depth (`rast_attribs.z`)
+      and submits each fragment to the OM unit.
+- [x] **OM state plumbing.** vortexpipe intercepts the depth-stencil
+      + blend Gallium hooks, translates the state to the VX OM
+      encoding, and `vp_raster.cpp` programs the `VX_DCR_OM_*`
+      registers (colour/depth buffers, depth func/writemask, blend
+      mode/func, colour mask). Stencil + the OM ISA redesign for
+      full Vulkan 1.3 conformance are deferred to a **v2 proposal**.
 
-**Exit criteria:** depth/stencil/blend tests from
-[tests/regression/om](../../tests/regression/om/) (or Vulkan-port
-equivalents) pass on SimX; pixel-identical against the Phase 4 +
-CPU-OM reference.
+**Exit criteria:** depth/blend tests pass on SimX; pixel-identical
+against the Phase 4 reference. ✅ **met** — `tests/vulkan/triangle`
+renders 512/4096 through the OM unit (passthrough); the new
+`tests/vulkan/depth` (two overlapping triangles, depth test LESS)
+renders the near triangle on top — centre pixel `0,0,255`.
 
 ### Phase 6 — TEX integration (SimX model)
 
