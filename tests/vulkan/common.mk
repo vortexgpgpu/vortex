@@ -26,8 +26,9 @@ VORTEX_RT_SRC ?= $(ROOT_DIR)/sw/runtime
 VORTEX_RT_LIB ?= $(VORTEX_RT_SRC)
 
 # vortexpipe drives the Vortex graphics hardware units, so the SimX
-# device build must enable them: RASTER (Phase 4) + OM (Phase 5).
-CONFIGS += -DEXT_RASTER_ENABLE -DEXT_OM_ENABLE
+# device build must enable them all: RASTER (Phase 4) + OM (Phase 5)
+# + TEX (Phase 6).
+CONFIGS += -DEXT_RASTER_ENABLE -DEXT_OM_ENABLE -DEXT_TEX_ENABLE
 
 GLSLC ?= glslc
 CC    ?= cc

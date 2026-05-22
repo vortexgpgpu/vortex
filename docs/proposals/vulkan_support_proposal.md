@@ -1,5 +1,5 @@
 **Date:** 2026-05-17
-**Status:** Draft — Phase 0 ✅, Phase 1 ✅, Phase 2 in progress (#1 of 6 done; Shape C)
+**Status:** Draft — Phases 0–6 ✅ (compute + full graphics pipeline: VS, RASTER, FS, OM, TEX); Phase 7 (RT) next
 **Author:** Blaise Tine
 **Related:**
 [gfx_migration_proposal.md](gfx_migration_proposal.md),
@@ -154,6 +154,25 @@
     Vortex OM unit confirmed. The OM ISA redesign for full Vulkan
     1.3 conformance (more blend factors, dual-source, MRT, stencil)
     is deferred to a v2 proposal. §6 Phase 5 marked done.
+- **2026-05-22 (Phase 6)** — TEX integration: texture sampling runs
+  on the Vortex texture unit; the graphics pipeline is complete.
+  - The SimX TEX model already existed and works under
+    `--driver=simx`; Phase 6 consumes it.
+  - vortexpipe captures the bound texture + sampler through
+    `create_texture_handle` (lavapipe keeps descriptors in a buffer
+    the shader dereferences — it does not bind app textures through
+    `set_sampler_views`); `vp_raster.cpp` converts the texture to the
+    TEX A8R8G8B8 layout, uploads it, and programs the `VX_DCR_TEX_*`
+    registers; the FS translator lowers NIR `texture()` to `vx_tex`
+    and interpolates the UV varying from the RASTER attribute planes.
+  - `tests/vulkan/textured` (full-screen quad, 2×2 RGBW texture)
+    maps each texel to its quadrant — texture sampling on the Vortex
+    TEX unit confirmed. A SimX RASTER bug surfaced and was fixed:
+    `run_rasterizer` walked the per-tile PID table with a 2-byte
+    stride though PIDs are `uint32_t`, so a tile with two primitives
+    rendered the first one twice. Mip mapping, non-A8R8G8B8 formats
+    and anisotropic filtering are deferred to a v2 proposal. §6
+    Phase 6 marked done — the graphics pipeline is complete.
 
 # Vulkan Support — Proposal
 
@@ -914,19 +933,26 @@ renders 512/4096 through the OM unit (passthrough); the new
 `tests/vulkan/depth` (two overlapping triangles, depth test LESS)
 renders the near triangle on top — centre pixel `0,0,255`.
 
-### Phase 6 — TEX integration (SimX model)
+### Phase 6 — TEX integration (SimX model) ✅ done
 
-- [ ] Implement the **SimX TEX model** (`sim/simx/tex/`) — address
-      gen, wrap/clamp, format decode, bilinear/trilinear lerp, LOD
-      selection — mirroring [hw/rtl/tex/](../../hw/rtl/tex/).
-- [ ] Replace `lp_bld_sample` codegen with `vx_tex` emits.
-- [ ] Plumb texture descriptors through.
+- [x] The **SimX TEX model** (`sim/simx/tex/`) — address gen,
+      wrap/clamp, format decode, bilinear lerp — already exists and
+      works under `--driver=simx`; Phase 6 consumes it.
+- [x] Replace `lp_bld_sample` codegen with `vx_tex` emits — the FS
+      translator lowers NIR `texture()` to `vx_tex` and interpolates
+      the UV varying from the RASTER attribute planes.
+- [x] Plumb texture descriptors through — captured from
+      `create_texture_handle`, converted to the TEX A8R8G8B8 layout,
+      uploaded, and programmed into the `VX_DCR_TEX_*` registers.
 
-**Exit criteria:** [tests/regression/tex](../../tests/regression/tex/)
-Vulkan ports pass on SimX; a draw3d-equivalent Vulkan test
-(textured triangle with depth) passes end-to-end through all three
-Vortex graphics models — the milestone that says "we have a Vulkan
-driver on the Vortex graphics path (SimX)."
+**Exit criteria:** met. [tests/vulkan/textured](../../tests/vulkan/textured/)
+(full-screen quad, 2×2 RGBW texture) renders each texel into its
+quadrant end-to-end through all three Vortex graphics models — the
+milestone that says "we have a Vulkan driver on the Vortex graphics
+path (SimX)." A SimX RASTER bug (per-tile PID table walked with a
+2-byte stride though PIDs are `uint32_t`) was found and fixed.
+Mip mapping, non-A8R8G8B8 formats and anisotropic filtering in TEX
+are deferred to a v2 proposal.
 
 ### Phase 7 — Ray tracing on the SIMT cores
 

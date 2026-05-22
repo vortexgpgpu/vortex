@@ -11,15 +11,18 @@ all:
 	$(MAKE) -C compute
 	$(MAKE) -C triangle
 	$(MAKE) -C depth
+	$(MAKE) -C textured
 
 run-simx:
 	$(MAKE) -C compute run-simx
 	$(MAKE) -C triangle run-simx
 	$(MAKE) -C depth run-simx
+	$(MAKE) -C textured run-simx
 
 clean:
 	$(MAKE) -C compute clean
 	$(MAKE) -C triangle clean
 	$(MAKE) -C depth clean
+	$(MAKE) -C textured clean
 
 .PHONY: all run-simx clean
