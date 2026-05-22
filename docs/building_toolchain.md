@@ -510,15 +510,23 @@ Vulkan driver is built on. The `vortexpipe` Gallium driver
 (Vulkan-on-Vortex) is developed inside this Mesa fork; see
 [proposals/vulkan_support_proposal.md](proposals/vulkan_support_proposal.md).
 
-> **Automated path:** `ci/mesa_install.sh` performs every step
-> below (build deps, meson configure, build, install). This
-> section documents the manual build for maintainers.
+> **Prebuilt path (recommended):** Mesa-with-`vortexpipe` is a
+> prebuilt toolchain component. `ci/toolchain_install.sh --mesa`
+> (folded into `--all`) fetches `$TOOLDIR/mesa-vortex` from the
+> `vortex-toolchain-prebuilt` release — no Mesa build needed.
+> `ci/toolchain_env.sh` then exports `MESA_HOME` / `VK_ICD_FILENAMES`.
+
+> **Build-from-source path:** `ci/mesa_install.sh` performs every
+> step below (build deps, meson configure, build, install) and is
+> the *producer* of the `mesa-vortex` prebuilt — run once per OS by
+> the toolchain maintainer, then packaged by
+> `ci/toolchain_prebuilt.sh --mesa`. This section documents the
+> manual build for maintainers.
 
 > **v3.0 pin:** branch `vortex_3.x` of
 > `github.com/vortexgpgpu/mesa` — a fork of upstream Mesa at tag
-> `mesa-25.1.0`. Until the fork carries the `vortexpipe` driver,
-> this builds plain lavapipe (the "baseline" of the Vulkan
-> proposal's Phase 0).
+> `mesa-25.1.0`, carrying the `vortexpipe` Gallium driver. Built
+> with `gallium-drivers=llvmpipe,vortexpipe`.
 
 ### Dependencies
 
@@ -557,16 +565,21 @@ meson setup build \
     --libdir=lib \
     --buildtype=release \
     -D cpp_rtti=false \
-    -D gallium-drivers=llvmpipe \
+    -D gallium-drivers=llvmpipe,vortexpipe \
     -D vulkan-drivers=swrast \
     -D platforms=x11,wayland \
     -D llvm=enabled \
     -D video-codecs= \
-    -D gallium-extra-hud=false
+    -D gallium-extra-hud=false \
+    -D vortex-runtime=$VORTEX_HOME \
+    -D vortex-tooldir=$TOOLDIR
 
 meson compile -C build
 meson install -C build
 ```
+
+`vortexpipe` resolves `libvortex.so` at meson-configure time, so
+build the Vortex runtime stub first: `make -C $VORTEX_HOME/build/sw/runtime/stub`.
 
 ### Notes
 
@@ -574,9 +587,10 @@ meson install -C build
   LLVM's; `llvm-vortex` is built without RTTI ([§3](#3-llvm-for-vortex),
   no `LLVM_ENABLE_RTTI`). `ci/mesa_install.sh` auto-detects this
   from `llvm-config --cxxflags`.
-- **Driver names:** `gallium-drivers=llvmpipe` is the Gallium
-  driver; `vulkan-drivers=swrast` is lavapipe. Once the fork
-  carries `vortexpipe`, append it to `gallium-drivers`.
+- **Driver names:** `gallium-drivers=llvmpipe,vortexpipe` — both
+  Gallium drivers; `vulkan-drivers=swrast` is lavapipe. `vortexpipe`
+  is selected at run time with `GALLIUM_DRIVER=vortexpipe`; the ICD
+  stays `lvp_icd.x86_64.json` (no separate Vortex ICD).
 - **zstd:** if `libzstd-dev` is unavailable, build zstd from
   source and add it to `PKG_CONFIG_PATH`. zstd bakes `prefix=`
   into its installed `libzstd.pc` at build time — fix that line

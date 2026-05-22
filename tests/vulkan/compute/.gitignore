@@ -1,8 +1,0 @@
-# build artifacts
-vk_compute
-*.spv
-
-# SimX run artifacts
-ramulator.stats.log
-trace/
-*.dump

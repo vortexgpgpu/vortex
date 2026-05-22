@@ -25,13 +25,16 @@
 # Prerequisite: $TOOLDIR/llvm-vortex must already be installed
 # (ci/toolchain_install.sh). The apt steps need sudo.
 #
-# Phase 0 of the proposal builds *vanilla* lavapipe from upstream
-# Mesa as the "I haven't broken Mesa" baseline. The defaults below
-# therefore point at upstream Mesa. Once the Vortex Mesa fork
-#   https://github.com/vortexgpgpu/mesa
-# (with the `vortexpipe` Gallium driver) is populated, repoint by
-# exporting MESA_REPO=https://github.com/vortexgpgpu/mesa.git plus a
-# MESA_REV on that fork, and append `vortexpipe` to GALLIUM_DRIVERS.
+# The defaults build the Vortex Mesa fork
+#   https://github.com/vortexgpgpu/mesa  (branch vortex_3.x)
+# whose `vortexpipe` Gallium driver runs Vulkan workloads on the
+# Vortex GPU. For a vanilla-lavapipe baseline (no vortexpipe),
+# override MESA_REPO/MESA_REV and set GALLIUM_DRIVERS=llvmpipe.
+#
+# This script is the *producer* of the mesa-vortex prebuilt: build
+# here, then `ci/toolchain_prebuilt.sh --mesa` packages
+# $TOOLDIR/mesa-vortex and `ci/toolchain_install.sh --mesa` fetches
+# it. Most users install the prebuilt and never run this script.
 #
 # Idempotent: re-running with the same MESA_REV is a no-op once
 # $MESA_PREFIX/lib/libvulkan_lvp.so exists.
@@ -40,16 +43,16 @@
 set -e
 
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+VORTEX_HOME=${VORTEX_HOME:=@VORTEX_HOME@}
 
-# Pinned versions. Override via env to track the Vortex Mesa fork
-# (https://github.com/vortexgpgpu/mesa.git) once it is populated.
-MESA_REPO=${MESA_REPO:=https://gitlab.freedesktop.org/mesa/mesa.git}
-MESA_REV=${MESA_REV:=mesa-25.1.0}
+# Pinned source: the Vortex Mesa fork carrying the vortexpipe driver.
+MESA_REPO=${MESA_REPO:=https://github.com/vortexgpgpu/mesa.git}
+MESA_REV=${MESA_REV:=vortex_3.x}
 
-# Gallium / Vulkan driver set. `llvmpipe` (Gallium) + `swrast`
-# (Vulkan) is lavapipe — the Phase 0 baseline. Append `vortexpipe`
-# to GALLIUM_DRIVERS once the fork's driver lands (proposal Phase 1).
-GALLIUM_DRIVERS=${GALLIUM_DRIVERS:=llvmpipe}
+# Gallium / Vulkan driver set. `llvmpipe`+`vortexpipe` (Gallium) under
+# `swrast` (Vulkan) is lavapipe plus the Vortex accelerator:
+# vortexpipe accelerates a growing subset and falls back to llvmpipe.
+GALLIUM_DRIVERS=${GALLIUM_DRIVERS:=llvmpipe,vortexpipe}
 VULKAN_DRIVERS=${VULKAN_DRIVERS:=swrast}
 # Windowing backends — needed for `vkcube` on a display (Phase 0/3).
 # Set MESA_PLATFORMS= (empty) for a headless CI build.
@@ -144,6 +147,22 @@ if [ -n "$GITHUB_ACTIONS" ] && [ -z "$VORTEX_SELF_HOSTED" ]; then
     JOBS=4
 fi
 
+# vortexpipe links libvortex.so (the vortex2.h API layer) and Mesa's
+# meson resolves it at configure time. Build the Vortex runtime stub
+# if it is absent; meson.build expects it under $VORTEX_HOME/build.
+if [[ ",$GALLIUM_DRIVERS," == *,vortexpipe,* ]]; then
+    VORTEX_RT="$VORTEX_HOME/build/sw/runtime"
+    if [ ! -f "$VORTEX_RT/libvortex.so" ]; then
+        if [ ! -d "$VORTEX_RT/stub" ]; then
+            echo "error: $VORTEX_HOME/build not configured — run ../configure"
+            echo "       in $VORTEX_HOME/build before installing vortexpipe Mesa."
+            exit 1
+        fi
+        echo "building Vortex runtime stub (libvortex.so) for vortexpipe"
+        make -C "$VORTEX_RT/stub" DESTDIR="$VORTEX_RT"
+    fi
+fi
+
 # Skip the build if the lavapipe ICD is already installed.
 if [ -f "$MESA_PREFIX/lib/libvulkan_lvp.so" ]; then
     echo "mesa already installed at $MESA_PREFIX"
@@ -160,7 +179,9 @@ else
         -D platforms="$MESA_PLATFORMS" \
         -D llvm=enabled \
         -D gallium-extra-hud=false \
-        -D video-codecs=
+        -D video-codecs= \
+        -D vortex-runtime="$VORTEX_HOME" \
+        -D vortex-tooldir="$TOOLDIR"
 
     meson compile -C "$MESA_BUILD" -j"$JOBS"
     meson install -C "$MESA_BUILD"
@@ -169,10 +190,11 @@ fi
 # ----------------------------------------------------------------------
 # 5. Environment
 # ----------------------------------------------------------------------
-# VK_ICD_FILENAMES points the Vulkan loader at the Mesa ICD. Starts on
-# lavapipe (lvp); repoint at vortex_icd.x86_64.json once the vortexpipe
-# driver is installed (proposal Phase 1). LD_LIBRARY_PATH must carry
-# llvm-vortex/lib too — the driver links libLLVM shared.
+# VK_ICD_FILENAMES points the Vulkan loader at Mesa's lavapipe ICD.
+# vortexpipe is a Gallium driver *under* lavapipe, selected at run
+# time with GALLIUM_DRIVER=vortexpipe — there is no separate ICD.
+# LD_LIBRARY_PATH must carry llvm-vortex/lib too: libgallium links
+# libLLVM shared.
 MESA_ICD=$MESA_PREFIX/share/vulkan/icd.d/lvp_icd.x86_64.json
 MESA_LD_PATH=$MESA_PREFIX/lib:$LLVM_HOME/lib
 

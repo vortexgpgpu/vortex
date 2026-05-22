@@ -1,22 +1,21 @@
 # Copyright © 2026  Vortex GPGPU
 # SPDX-License-Identifier: MIT
 #
-# Vulkan compute smoke test for the vortexpipe driver: add1.comp
-# (data[i] += 1) runs through lavapipe + vortexpipe on the Vortex
-# SimX device, and the result is checked on the host.
+# Hello-triangle Vulkan test for the vortexpipe driver: the vertex
+# stage runs on the Vortex device, the fragment stage on llvmpipe.
 #
 #   make            -- build the host binary + SPIR-V
-#   make run-simx   -- run on Vortex via vortexpipe
+#   make run-simx   -- render the triangle via vortexpipe
 
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-PROJECT := compute
+PROJECT := triangle
 
 SRC_DIR := $(VORTEX_HOME)/tests/vulkan/$(PROJECT)
 
 SRCS := $(SRC_DIR)/main.c
 
-SHADERS := $(SRC_DIR)/add1.comp
+SHADERS := $(SRC_DIR)/triangle.vert $(SRC_DIR)/triangle.frag
 
 include ../common.mk

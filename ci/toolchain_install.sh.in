@@ -123,6 +123,17 @@ chipstar()
     rm -rf chipstar.tar.bz2
 }
 
+# Mesa with the vortexpipe Gallium driver — the Vulkan backend.
+# Built by ci/mesa_install.sh, packaged by ci/toolchain_prebuilt.sh.
+# Links libLLVM shared from llvm-vortex, so install --llvm too.
+mesa()
+{
+    wget $REPOSITORY/mesa-vortex/$OSVERSION/mesa-vortex.tar.bz2
+    tar -xvf mesa-vortex.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/mesa-vortex && mv mesa-vortex $TOOLDIR
+    rm -rf mesa-vortex.tar.bz2
+}
+
 verilator()
 {
     case $OSVERSION in
@@ -177,7 +188,7 @@ sta()
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -185,6 +196,8 @@ while [ "$1" != "" ]; do
         --pocl ) pocl
                 ;;
         --chipstar ) chipstar
+                ;;
+        --mesa ) mesa
                 ;;
         --verilator ) verilator
                 ;;
@@ -221,6 +234,7 @@ while [ "$1" != "" ]; do
                 sv2v
                 yosys
                 sta
+                mesa
                 ;;
         -h | --help ) show_usage
                 exit

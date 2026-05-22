@@ -97,6 +97,16 @@ chipstar()
     mv chipstar.tar.bz2 ./chipstar/$OSVERSION
 }
 
+# Mesa with the vortexpipe Gallium driver — built by ci/mesa_install.sh
+# into $TOOLDIR/mesa-vortex. ~9 MB compressed, so no split needed.
+mesa()
+{
+    echo "prebuilt mesa-vortex..."
+    tar -C $TOOLDIR -cvjf mesa-vortex.tar.bz2 mesa-vortex
+    mkdir -p ./mesa-vortex/$OSVERSION
+    mv mesa-vortex.tar.bz2 ./mesa-vortex/$OSVERSION
+}
+
 verilator()
 {
     echo "prebuilt verilator..."
@@ -135,7 +145,7 @@ sta()
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -143,6 +153,8 @@ while [ "$1" != "" ]; do
         --pocl ) pocl
                 ;;
         --chipstar ) chipstar
+                ;;
+        --mesa ) mesa
                 ;;
         --verilator ) verilator
                 ;;
@@ -179,6 +191,7 @@ while [ "$1" != "" ]; do
                 sv2v
                 yosys
                 sta
+                mesa
                 ;;
         -h | --help ) show_usage
                 exit

@@ -25,3 +25,13 @@ export PATH=$YOSYS_PATH/bin:$PATH
 
 export STA_PATH=$TOOLDIR/sta
 export PATH=$STA_PATH/bin:$PATH
+
+# Mesa with the vortexpipe Gallium driver (the Vulkan backend).
+# libgallium links libLLVM shared from llvm-vortex, so that lib dir
+# must be on LD_LIBRARY_PATH too. VK_ICD_FILENAMES points the Vulkan
+# loader at the lavapipe ICD; select vortexpipe at run time with
+# GALLIUM_DRIVER=vortexpipe (see tests/vulkan/common.mk).
+export MESA_HOME=$TOOLDIR/mesa-vortex
+export PATH=$MESA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$MESA_HOME/lib:$TOOLDIR/llvm-vortex/lib:$LD_LIBRARY_PATH
+export VK_ICD_FILENAMES=$MESA_HOME/share/vulkan/icd.d/lvp_icd.x86_64.json

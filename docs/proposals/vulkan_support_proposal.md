@@ -96,6 +96,23 @@
     translator emits scalar IR, with `lp_bld_nir`'s visitor
     structure only as a reference. §3, Phase 2 (6 increments),
     §4.1, §8 risk 1, §9 updated.
+- **2026-05-22 (Phase 2 + CI)** — Phase 2 compute path complete;
+  Vulkan suite wired into CI; Mesa folded into the prebuilt
+  toolchain.
+  - **Phase 2 #2–#5 committed** (`vortex_3.x` @ `2229ecb7aa7`):
+    the scalar NIR→LLVM translator (`vp_nir_to_llvm`), the
+    IR→`.vxbin` compiler (`vp_compile`), and the `launch_grid`
+    dispatch (`vp_launch`). A Vulkan compute shader (`add1`) runs
+    end-to-end on SimX with the correct result.
+  - **`tests/vulkan`** gains a `common.mk` (modelled on
+    `tests/opencl`) plus the `compute/` smoke test.
+  - **CI:** `regression.sh --vulkan` runs `tests/vulkan run-simx`;
+    `ci.yml` adds a `vulkan` matrix job (rv32-only).
+  - **Mesa → prebuilt toolchain.** `mesa_install.sh` now builds the
+    fork with `vortexpipe` and is the *producer*; `mesa` is a
+    prebuilt component (`toolchain_{install,prebuilt,env}.sh`,
+    folded into `--all`) distributed via `vortex-toolchain-prebuilt`
+    at `@TOOLCHAIN_REV@`. §4.4 + §4.1 rewritten.
 
 # Vulkan Support — Proposal
 
@@ -341,11 +358,11 @@ graphics-model changes for the §5 improvements (no RTL — §1 scope).
 | `lavapipe` patches | `~/dev/mesa_vortex/src/gallium/frontends/lavapipe/` | Minimal — most diffs are feature-flag plumbing for what `vortexpipe` does or doesn't support. Try to keep zero patches if possible. |
 | Vortex runtime host glue | `~/dev/mesa_vortex/src/gallium/drivers/vortexpipe/vx_context.c` | Owns the `vortex_runtime` device handle, kernel cache, descriptor heaps; bridges Gallium calls to `vortex2.h` async API. |
 | Mesa build infra | `~/dev/mesa_vortex/meson.build` adjustments | Add `vortexpipe` as a gallium-drivers option; require `llvm_vortex` install via `dependency('LLVMVortex', method: 'cmake')`. |
-| Mesa install script | [ci/mesa_install.sh.in](../../ci/mesa_install.sh.in) | **Landed (Phase 0).** Installs build deps, builds Mesa from `MESA_REPO`@`MESA_REV` with `meson`, installs into `$(TOOLDIR)/mesa-vortex/{lib,share,include}`. Uses `$(TOOLDIR)/llvm-vortex` as the host LLVM. Default rev is upstream `mesa-25.1.0` (the Phase 0 baseline); repoint `MESA_REPO` at `github.com/vortexgpgpu/mesa` once the fork is populated. ICD is `lvp_icd.x86_64.json` until `vortexpipe` lands. |
-| Vulkan tests | [tests/vulkan/](../../tests/vulkan/) (new) | New: smoke tests + a Vulkan port of [draw3d](../../tests/regression/draw3d/) as the integration end-to-end. |
-| Test aggregator | [tests/vulkan/Makefile](../../tests/vulkan/) + `common.mk` (new) | New, defaults `VULKAN_INSTALL_PATH := $(TOOLDIR)/mesa-vortex`, modelled on [tests/hip/common.mk](../../tests/hip/common.mk). |
-| Test suite registration | [tests/Makefile](../../tests/Makefile) | Add opt-in `vulkan` target gated on `$(TOOLDIR)/mesa-vortex` existing. |
-| CI hook | [ci/regression.sh.in](../../ci/regression.sh.in) | Add `--vulkan` suite gated on the toolchain installation. |
+| Mesa build script (producer) | [ci/mesa_install.sh.in](../../ci/mesa_install.sh.in) | **Landed.** Builds Mesa from the fork (`github.com/vortexgpgpu/mesa`@`vortex_3.x`, `gallium-drivers=llvmpipe,vortexpipe`) into `$(TOOLDIR)/mesa-vortex`; passes `-D vortex-runtime=`/`-D vortex-tooldir=`. Run once per OS/rev by the toolchain maintainer — see §4.4. |
+| Mesa prebuilt (consumer) | [ci/toolchain_install.sh.in](../../ci/toolchain_install.sh.in) / [toolchain_prebuilt.sh.in](../../ci/toolchain_prebuilt.sh.in) / [toolchain_env.sh.in](../../ci/toolchain_env.sh.in) | **Landed.** `mesa` is a prebuilt component like `pocl`/`chipstar`: `--mesa` (in `--all`) fetches `mesa-vortex.tar.bz2` from `vortex-toolchain-prebuilt`@`@TOOLCHAIN_REV@`; `toolchain_env.sh` exports `MESA_HOME`/`VK_ICD_FILENAMES`. |
+| Vulkan tests | [tests/vulkan/](../../tests/vulkan/) (new) | **Landed (compute).** `compute/` smoke test; later a Vulkan port of [draw3d](../../tests/regression/draw3d/) as the integration end-to-end. |
+| Test aggregator | [tests/vulkan/Makefile](../../tests/vulkan/) + [common.mk](../../tests/vulkan/common.mk) | **Landed.** `common.mk` resolves `MESA_VORTEX := $(TOOLDIR)/mesa-vortex` and runs under `GALLIUM_DRIVER=vortexpipe`; per-test Makefiles model [tests/opencl/common.mk](../../tests/opencl/common.mk). |
+| CI hook | [ci/regression.sh.in](../../ci/regression.sh.in) + [.github/workflows/ci.yml](../../.github/workflows/ci.yml) | **Landed.** `regression.sh --vulkan` runs `tests/vulkan run-simx`; `ci.yml` adds a `vulkan` matrix job (rv32-only). |
 | SimX graphics models (R/T/O) | `sim/simx/{raster,tex,om}/` (new) | Implemented by Phases 4–6 ([gfx_migration_proposal.md](gfx_migration_proposal.md) Phase 3 scope, absorbed here) and extended by the §5 improvements. Mirror the RTL module structure 1:1. |
 | RTL (`hw/rtl/{raster,tex,om}/`) | [hw/rtl/](../../hw/rtl/) | **Not modified.** Behavioral reference the SimX models mirror; RTL realization of the gfx-v1 improvements is a separate future proposal (§1 scope). |
 
@@ -396,41 +413,67 @@ initially, not performance).
 
 ### 4.4 Building & installing the Mesa toolchain
 
-The driver toolchain is built and installed by
+Mesa-with-`vortexpipe` is a **prebuilt toolchain component** — the
+same distribution model as `pocl` (OpenCL) and `chipstar` (HIP).
+Two roles:
+
+**Producer** (toolchain maintainer, once per OS/rev).
 [ci/mesa_install.sh.in](../../ci/mesa_install.sh.in) — a `.in`
-template that `configure` substitutes (`@TOOLDIR@`) and copies to
-`<build>/ci/mesa_install.sh`, in the same style as `sst_install.sh`
-and `gem5_install.sh`. It does four things:
+template `configure` substitutes (`@TOOLDIR@`, `@VORTEX_HOME@`) and
+copies to `<build>/ci/mesa_install.sh`, like `sst_install.sh` /
+`gem5_install.sh` — builds Mesa from the Vortex fork and installs it
+into `$(TOOLDIR)/mesa-vortex`. It:
 
 1. **Build deps** — apt packages (`python3-mako`, `flex`/`bison`,
    `libdrm`/`libx*`/`wayland` WSI libs, `libzstd-dev`) plus a
    current `meson` from `pip` (the Ubuntu 22.04 distro `meson` 0.61
-   is older than Mesa 25.x's `>= 1.4` requirement).
+   predates Mesa 25.x's `>= 1.4` requirement).
 2. **Host LLVM** — *no separate LLVM is installed.* Mesa's llvmpipe
-   is pointed at `$(TOOLDIR)/llvm-vortex` (LLVM 20.1.8, built with
-   X86 + RISCV, shared libs). `mesa_install.sh` errors out early if
-   `llvm-vortex` is absent — `ci/toolchain_install.sh` must run
-   first.
+   is pointed at `$(TOOLDIR)/llvm-vortex` (LLVM 20.1.8, X86 + RISCV,
+   shared libs). The script errors out early if `llvm-vortex` is
+   absent — `ci/toolchain_install.sh --llvm` must run first.
 3. **Vulkan runtime stack** — loader, validation layers,
    `vulkaninfo`/`vkcube`, `glslang`/`spirv-tools`.
-4. **Mesa** — clone at `MESA_REV`, `meson setup` + `compile` +
+4. **Mesa** — clone the fork
+   (`github.com/vortexgpgpu/mesa`, branch `vortex_3.x`),
+   `meson setup` (`gallium-drivers=llvmpipe,vortexpipe`,
+   `-D vortex-runtime=`/`-D vortex-tooldir=`) + `compile` +
    `install` into `$(TOOLDIR)/mesa-vortex`.
 
-Two non-obvious points, both handled by the script:
+Then [ci/toolchain_prebuilt.sh.in](../../ci/toolchain_prebuilt.sh.in)
+`--mesa` packages `$(TOOLDIR)/mesa-vortex` into a `.tar.bz2`
+(~9 MB — no split) under `mesa-vortex/$(OSVERSION)/`, uploaded to the
+[`vortex-toolchain-prebuilt`](https://github.com/vortexgpgpu/vortex-toolchain-prebuilt)
+release at tag `@TOOLCHAIN_REV@` (`v3.0`).
+
+**Consumer** (everyone else — devs, CI).
+[ci/toolchain_install.sh.in](../../ci/toolchain_install.sh.in)
+`--mesa` (folded into `--all`) fetches and unpacks that tarball into
+`$(TOOLDIR)/mesa-vortex` — no Mesa build on the consumer side.
+[ci/toolchain_env.sh.in](../../ci/toolchain_env.sh.in) then exports
+`MESA_HOME`, adds `mesa-vortex/lib` + `llvm-vortex/lib` to
+`LD_LIBRARY_PATH` (the ICD links `libLLVM` shared), and sets
+`VK_ICD_FILENAMES` to the lavapipe ICD.
+
+Two non-obvious points, both handled by `mesa_install.sh`:
 
 - **RTTI.** Mesa's C++ RTTI setting must match LLVM's. `llvm-vortex`
   is built without RTTI, so Mesa is configured `-D cpp_rtti=false`
   (auto-detected by grepping `llvm-config --cxxflags` for
   `-fno-rtti`).
 - **`gallium-drivers` naming.** The Gallium value for llvmpipe is
-  `llvmpipe`; the Vulkan value for lavapipe is `swrast`. Phase 1
-  appends `vortexpipe` to `GALLIUM_DRIVERS`.
+  `llvmpipe`; the Vulkan value for lavapipe is `swrast`. `vortexpipe`
+  is appended to `GALLIUM_DRIVERS`; it is a Gallium driver *under*
+  lavapipe, selected at run time with `GALLIUM_DRIVER=vortexpipe` —
+  there is no separate ICD, so `VK_ICD_FILENAMES` stays
+  `lvp_icd.x86_64.json`.
 
-The Vulkan loader finds the driver via
-`VK_ICD_FILENAMES=$(TOOLDIR)/mesa-vortex/share/vulkan/icd.d/lvp_icd.x86_64.json`;
-`LD_LIBRARY_PATH` must include both `mesa-vortex/lib` and
-`llvm-vortex/lib` (the ICD links `libLLVM` shared). The script
-exports these and persists them to `~/.bashrc` / `$GITHUB_ENV`.
+Because the prebuilt is relocatable but `vortexpipe` bakes in the
+producer's `VORTEX_HOME`/`TOOLDIR`, the `.vxbin` compiler
+([vp_compile.c](../../../mesa_vortex)) reads `VORTEX_HOME`,
+`VORTEX_TOOLDIR` and `VORTEX_BUILD` from the environment when set —
+[tests/vulkan/common.mk](../../tests/vulkan/common.mk) passes the
+consumer's actual paths.
 
 ### 4.5 Conformance model — inherit-and-accelerate
 
@@ -678,18 +721,17 @@ we target first.
 - [x] Push the fork — branch `vortex_3.x` is on
       `github.com/vortexgpgpu/mesa` (full Mesa history, at
       `mesa-25.1.0`).
-- [ ] Repoint `mesa_install.sh`'s `MESA_REPO` at the fork — once
-      it carries the `vortexpipe` driver (Phase 1).
+- [x] Repoint `mesa_install.sh` at the fork — `MESA_REPO`/`MESA_REV`
+      default to `github.com/vortexgpgpu/mesa`@`vortex_3.x` with
+      `GALLIUM_DRIVERS=llvmpipe,vortexpipe`. Mesa is now a prebuilt
+      toolchain component (`toolchain_install.sh --mesa`); see §4.4.
 - [ ] Confirm `vkcube` runs on a display (needs a `DISPLAY`; the
       headless CI path stops at `vulkaninfo --summary`).
 
 **Exit criteria:** vanilla lavapipe builds against `llvm-vortex`
 and `vulkaninfo` enumerates the device. ✅ **met.** The Mesa fork
-is pushed to `github.com/vortexgpgpu/mesa`; only the `MESA_REPO`
-repoint (Phase 1) and the optional `vkcube`-on-display remain.
-Nothing in the Vortex tree changed except this proposal,
-`ci/mesa_install.sh.in`, and the §9 Mesa section of
-`docs/building_toolchain.md`.
+is pushed to `github.com/vortexgpgpu/mesa`; only the optional
+`vkcube`-on-display check remains.
 
 ### Phase 1 — `vortexpipe` skeleton + device context
 
@@ -720,27 +762,29 @@ whole of Phase 2 is committed once the exit test passes.
       (`create/bind/delete_compute_state`, `launch_grid`); side
       registry holds per-screen/context state. Overrides forward
       to llvmpipe until the increments below fill them in.
-- [ ] **#2 `vp_nir_to_llvm` skeleton.** A `nir_shader` → LLVM
+- [x] **#2 `vp_nir_to_llvm` skeleton.** A `nir_shader` → LLVM
       module walk via the LLVM C API: functions, basic blocks, the
       NIR-SSA → `LLVMValueRef` map, control flow. Trivial shaders
       first.
-- [ ] **#3 NIR instruction emission.** Per-op scalar emission:
+- [x] **#3 NIR instruction emission.** Per-op scalar emission:
       `nir_alu` (the bulk), `nir_intrinsic` (load/store, the
       `gl_*InvocationID` system values), `nir_load_const`,
       derefs. Scalar — no SoA vectorizer.
-- [ ] **#4 SIMT kernel wrapper + `.vxbin`.** Wrap the shader as a
-      Vortex KMU kernel (grid/block from CSRs, the `vx_spawn2`
-      idiom; the descriptor-set → arg-block ABI). Drive
-      `llvm_vortex`'s RISC-V backend + `vxbin.py` →  `.vxbin`,
-      stored in the compute-state object.
-- [ ] **#5 `launch_grid`.** Upload the `.vxbin` + argument block
+- [x] **#4 SIMT kernel wrapper + `.vxbin`.** Wrap the shader as a
+      Vortex KMU kernel (`kernel_main`, grid/block from CTA CSRs;
+      the descriptor-set → arg-block ABI). Drive `llvm_vortex`'s
+      RISC-V backend + `vxbin.py` → `.vxbin`, stored in the
+      compute-state object.
+- [x] **#5 `launch_grid`.** Upload the `.vxbin` + argument block
       via `vx_buffer_*`; `vx_enqueue_launch` with grid/block from
       `pipe_grid_info`; `vx_queue_finish`. `pipe_resource` ⇄
       `vx_buffer_*` memory bridging. The screen's Vortex device
       (opened in the Phase 2-foundation increment) backs this.
-- [ ] **#6 Compute caps + test.** Fill `pipe_screen.compute_caps`
-      from `vx_device_query`; wire the vecadd `vkCmdDispatch`
-      test.
+- [ ] **#6 Compute caps + multi-SSBO test.** Fill
+      `pipe_screen.compute_caps` from `vx_device_query`; generalize
+      the descriptor-stride handling and wire the multi-SSBO vecadd
+      `vkCmdDispatch` test. (The single-SSBO `add1` smoke test
+      already passes end-to-end on SimX — see `tests/vulkan/compute`.)
 
 **Exit criteria:** a SPIR-V compute shader that does vecadd
 compiles through `vortexpipe`, runs on SimX, and matches the CPU
