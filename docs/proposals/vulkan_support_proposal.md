@@ -124,6 +124,22 @@
   - `tests/vulkan/triangle` renders a hello-triangle pixel-identical
     to the lavapipe reference via the Vortex VS path. §6 Phase 3
     marked done.
+- **2026-05-22 (Phase 4)** — RASTER integration: the full graphics
+  pipeline (vertex + rasterization + fragment) now runs on Vortex.
+  - The SimX RASTER model already existed and works under
+    `--driver=simx`; Phase 4 consumes it.
+  - `vp_nir_to_llvm` gained fragment-shader support — the FS body
+    plus a hand-emitted rasterizer wrapper (`vx_rast()` poll loop,
+    barycentric interpolation, framebuffer write). New `vp_raster.cpp`
+    does triangle setup + binning (`graphics::Binning`, vendored into
+    the driver), RASTER DCR programming and FS-kernel dispatch;
+    `set_framebuffer_state` is intercepted for the colour round-trip.
+  - `tests/vulkan/triangle` renders through the Vortex RASTER unit,
+    pixel-identical (512/4096) to the Phase 3 reference. The Phase 3
+    llvmpipe-raster path stays as the `VORTEXPIPE_SW_RASTER` fallback.
+  - **Design rule recorded:** for any design question pick the
+    solution a real NVIDIA GPU/driver would use — every shader stage
+    is JIT-compiled by the driver. §6 Phase 4 marked done.
 
 # Vulkan Support — Proposal
 
@@ -832,23 +848,34 @@ wholly to llvmpipe (§4.5); widening the Vortex VS path to cover them
 establishes the "skeleton driver works" checkpoint before HW-unit
 integration.
 
-### Phase 4 — RASTER integration (SimX model)
+### Phase 4 — RASTER integration (SimX model) ✅ done
 
-- [ ] Implement the **SimX RASTER model** (`sim/simx/raster/`) —
-      tile→block→quad engine, edge/extents, bcoord CSRs —
-      mirroring [hw/rtl/raster/](../../hw/rtl/raster/) (the
-      gfx_migration Phase-3 raster scope, absorbed here; §8 risk 3).
-- [ ] Replace `lp_setup_*` in `vortexpipe` with a Vortex path:
-      the front-end submits primitives to the RASTER model via
-      DCRs, the fragment kernel polls `vx_rast()`.
-- [ ] Reuse the [draw3d/kernel.cpp](../../tests/regression/draw3d/kernel.cpp)
-      idiom for the fragment kernel template; the NIR-to-LLVM
-      path emits something structurally identical.
-- [ ] Keep the Phase 3 CPU-fallback path selectable via env var.
+- [x] **SimX RASTER model** — already present and functional
+      (`sim/simx/raster/`, mirroring [hw/rtl/raster/](../../hw/rtl/raster/));
+      verified passing under `--driver=simx` with `EXT_RASTER_ENABLE`.
+      Phase 4 consumes it rather than re-implementing it.
+- [x] **Fragment-shader translation.** `vp_nir_to_llvm` extended for
+      the fragment stage: the FS body (`fs_main`) translates like the
+      VS body; a hand-emitted wrapper (`emit_fs_wrapper`) is the
+      driver's fixed-function glue — the `vx_rast()` poll loop, the
+      4-pixel unroll, barycentric interpolation from the bcoord CSRs,
+      and the framebuffer write. Every shader stage is JIT-compiled
+      by the driver ([[feedback_design_aligns_with_nvidia_gpu]]).
+- [x] **Raster orchestration** (`vp_raster.cpp`): `graphics::Binning()`
+      does triangle setup + tile binning; the RASTER DCRs are
+      programmed via `vx_enqueue_dcr_write`; the fragment kernel is
+      dispatched. The Vortex `graphics` library is compiled into the
+      driver.
+- [x] **Framebuffer integration** — `set_framebuffer_state`
+      interception + a colour-attachment round-trip (`vp_fb_color_*`).
+- [x] Phase 3's llvmpipe-raster path kept, selectable via
+      `VORTEXPIPE_SW_RASTER`.
 
-**Exit criteria:** hello-triangle renders end-to-end on SimX
-through the Vortex RASTER model; pixel-identical against the
-Phase 3 reference.
+**Exit criteria:** hello-triangle renders end-to-end on SimX through
+the Vortex RASTER unit; pixel-identical against the Phase 3
+reference. ✅ **met** — `tests/vulkan/triangle` renders 512/4096
+pixels via the Vortex RASTER path, identical to the Phase 3 and
+llvmpipe references.
 
 ### Phase 5 — OM integration (SimX model)
 
