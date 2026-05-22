@@ -113,6 +113,17 @@
     prebuilt component (`toolchain_{install,prebuilt,env}.sh`,
     folded into `--all`) distributed via `vortex-toolchain-prebuilt`
     at `@TOOLCHAIN_REV@`. §4.4 + §4.1 rewritten.
+- **2026-05-22 (Phase 3)** — Software graphics MVP complete: the
+  vertex stage runs on Vortex.
+  - `vortexpipe` intercepts the graphics pipeline (vertex-shader
+    hooks + `draw_vbo`); `vp_nir_to_llvm` gained vertex-shader
+    support (deref-based NIR, `load_vertex_id`, `vecN`); `draw_vbo`
+    runs the VS `.vxbin` on Vortex (`vp_launch_vs`) and feeds the
+    transformed vertices to llvmpipe via a synthesized passthrough
+    VS for clip/raster/fragment/OM.
+  - `tests/vulkan/triangle` renders a hello-triangle pixel-identical
+    to the lavapipe reference via the Vortex VS path. §6 Phase 3
+    marked done.
 
 # Vulkan Support — Proposal
 
@@ -793,23 +804,33 @@ reference — the Vulkan analog of
 cannot yet translate falls back to llvmpipe (§4.5), so the driver
 stays whole at every increment.
 
-### Phase 3 — Software graphics MVP (all-CPU fallback)
+### Phase 3 — Software graphics MVP (vertex stage on Vortex) ✅ done
 
-- [ ] Wire `vortexpipe` through `lp_setup_*` / `lp_bld_sample` /
-      `lp_bld_depth_blend` — i.e. let llvmpipe's CPU code do all
-      the fragment work, on the *host*, while the vertex stage
-      runs on Vortex.
-- [ ] Get a triangle on screen via the lavapipe → vortexpipe →
-      (llvmpipe-CPU-fragment) path. Vertex shading happens on
-      Vortex; rasterization, sampling, OM happen on the host CPU.
+- [x] **Graphics-pipeline interception.** `vortexpipe` intercepts
+      the vertex-shader hooks (`create/bind/delete_vs_state`) and
+      `draw_vbo`, alongside the Phase 2 compute hooks.
+- [x] **Vertex-shader translation.** `vp_nir_to_llvm` extended for
+      the deref-based VS NIR lavapipe emits — `deref_var`/
+      `deref_array`, `load`/`store_deref`, `load_vertex_id`, `vecN`,
+      function-temp arrays as LLVM allocas. One Vortex thread per
+      vertex; the kernel writes a padded-vec4 record per vertex.
+- [x] **Draw integration.** `draw_vbo` runs the VS `.vxbin` on
+      Vortex (`vp_launch_vs`), then feeds the transformed vertices
+      to llvmpipe through a synthesized passthrough VS + matching
+      vertex-element layout, so clip / setup / rasterization /
+      fragment / OM all stay on llvmpipe's host CPU path.
 
-**Exit criteria:** a hello-triangle Vulkan demo (vkcube minus the
-spinning cube, just a triangle) renders correctly via the Vortex
-vertex path and CPU fragment path. Pixels match lavapipe-only
-reference.
+**Exit criteria:** a hello-triangle Vulkan demo renders correctly
+via the Vortex vertex path and the CPU fragment path; pixels match
+the lavapipe-only reference. ✅ **met** — `tests/vulkan/triangle`
+renders 512/4096 pixels identically on both the Vortex VS path and
+the llvmpipe reference.
 
-This phase establishes the "skeleton driver works"
-checkpoint *before* we get tangled up in HW-unit integration.
+Indexed, instanced, indirect and multi-draw calls still fall back
+wholly to llvmpipe (§4.5); widening the Vortex VS path to cover them
+(plus vertex-buffer attribute fetch) is follow-up work. This phase
+establishes the "skeleton driver works" checkpoint before HW-unit
+integration.
 
 ### Phase 4 — RASTER integration (SimX model)
 
