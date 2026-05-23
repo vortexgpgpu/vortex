@@ -20,6 +20,7 @@
 #include <callbacks.h>
 #include <VX_types.h>   // VX_MEM_IO_COUT_* (console stream-ring layout)
 #include <mem_alloc.h>  // MemoryAllocator — device-memory allocator (common core)
+#include <vm.h>         // VMManager — virtual memory (empty when VM disabled)
 
 #include <atomic>
 #include <chrono>
@@ -225,9 +226,9 @@ public:
     // VX_MEM_HOST buffer and copies it back to `host_dst`. Synchronous.
     vx_result_t cp_submit_mem_copy (uint64_t dst, uint64_t src, uint64_t size);
     vx_result_t cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
-                                    uint64_t size);
+                                    uint64_t size, bool physical = false);
     vx_result_t cp_submit_mem_read (void* host_dst, uint64_t dev_src,
-                                    uint64_t size);
+                                    uint64_t size, bool physical = false);
 
     // ----- Device-memory transfer router -----
     // Every dispatcher path that moves data to/from device memory (module
@@ -286,8 +287,10 @@ private:
     vx_result_t cp_submit_cl_(const void* cl);
 
     // Build + submit a CMD_MEM_* descriptor (opcode, dst, src, size).
+    // `physical` sets the CMD_MEM header flag so the CP DMA skips VM
+    // translation — used for page-table writes / the PT region.
     vx_result_t cp_submit_mem_(uint8_t opcode, uint64_t arg0, uint64_t arg1,
-                               uint64_t arg2);
+                               uint64_t arg2, bool physical = false);
 
     // ----- CP-visible host memory (command ring + DMA staging) -----
     // host_alloc wraps platform()->host_mem_alloc and records the region
@@ -332,6 +335,17 @@ private:
     uint64_t                       cp_expected_seqnum_ = 0;
     uint64_t                       cp_num_cores_       = 0; // VX_CAPS_NUM_CORES, cached for CMD_CACHE_FLUSH
     std::mutex                     cp_mu_;             // serialize ring writes
+
+    // Virtual memory — the Device owns the VMManager (the page-table
+    // builder) iff the device reports an MMU (vm_enabled_, discovered from
+    // CP DEV_CAPS at open). mem_alloc mints VAs; the CP DMA does the VA->PA
+    // walk. CpMemIO is the VMManager's device-memory port — PA-direct CP
+    // DMA. Always compiled; vm_mgr_/vm_io_ stay null on an MMU-less device.
+    bool                                vm_enabled_ = false;
+    class CpMemIO;
+    std::unique_ptr<CpMemIO>            vm_io_;
+    std::unique_ptr<vortex::VMManager>  vm_mgr_;
+    std::mutex                          vm_mu_;   // serialize VMManager ops
 
     // Lossless COUT stream-ring consumer state (proposal §10). cout_rd_[h]
     // is the host read pointer for hart h's ring; cout_line_[h] holds a

@@ -7,10 +7,11 @@
 
 #pragma once
 
-// VX_config.h before the guard — auto-defines VX_CFG_VM_ENABLE from TOML.
+// VMManager is unconditionally compiled into the generic libvortex.so —
+// VM is discovered at runtime (CP DEV_CAPS.VM_ENABLED), not via #ifdef.
+// It is inert (never constructed) on a device without an MMU. No
+// HW-private VX_config.h dependency: VM config comes from VX_types.h.
 #include <VX_types.h>
-
-#ifdef VX_CFG_VM_ENABLE
 
 #include <cstdint>
 #include <cstddef>
@@ -89,6 +90,10 @@ public:
   // can ignore it; exposed publicly for explicit pre-launch sync.
   int flush();
 
+  // Packed SATP value (page-table root + mode) — programmed into the CP so
+  // its DMA's MMU walker can find the page table. 0 before init().
+  uint64_t satp() const { return satp_ ? satp_->get_satp() : 0; }
+
 private:
   uint8_t alloc_page_table(uint64_t* pt_addr);
   int16_t update_page_table(uint64_t ppn, uint64_t vpn, uint32_t flag, uint8_t leaf_level = 0);
@@ -122,5 +127,3 @@ private:
 };
 
 } // namespace vortex
-
-#endif // VX_CFG_VM_ENABLE

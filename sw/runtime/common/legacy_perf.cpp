@@ -142,15 +142,14 @@ struct CoreCounters {
   uint64_t mem_reads = 0;
   uint64_t mem_writes = 0;
 
-#ifdef VX_CFG_VM_ENABLE
-  // VM (icache + dcache MMU summed in hardware)
+  // VM (icache + dcache MMU summed in hardware) — fields always present;
+  // populated only when the device reports VM (VX_CAPS_VM_SUPPORT).
   uint64_t tlb_reads = 0;
   uint64_t tlb_hits = 0;
   uint64_t tlb_misses = 0;
   uint64_t tlb_evicts = 0;
   uint64_t ptw_walks = 0;
   uint64_t ptw_latency = 0;
-#endif
 };
 
 struct CacheCounters {
@@ -201,6 +200,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
   uint64_t isa_flags = 0;
   uint64_t clock_mhz = 0;
   uint64_t peak_mem_bw_MBps = 0;
+  uint64_t vm_support = 0;
 
   const auto mpm_class = get_profiling_mode();
 
@@ -213,6 +213,10 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_ISA_FLAGS, &isa_flags), { return err; });
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_CLOCK_RATE, &clock_mhz), { return err; });
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_PEAK_MEM_BW, &peak_mem_bw_MBps), { return err; });
+  CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_VM_SUPPORT, &vm_support), { return err; });
+
+  // VM is a runtime device property — gate the MMU/TLB perf counters on it.
+  const bool vm_enabled = (vm_support != 0);
 
   const bool icache_en = (isa_flags & VX_ISA_EXT_ICACHE) != 0;
   const bool dcache_en = (isa_flags & VX_ISA_EXT_DCACHE) != 0;
@@ -282,16 +286,16 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_LOAD_LT, core_id, &c.load_lt), { return err; });
       CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_STORES, core_id, &c.stores), { return err; });
 
-#ifdef VX_CFG_VM_ENABLE
-      // VM/MMU lives in its own perf class (CLASS_VM), independent of CORE/MEM.
-      // Hardware sums icache + dcache MMU counters into one bank.
-      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_READS,   core_id, &c.tlb_reads),   { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_HITS,    core_id, &c.tlb_hits),    { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_MISSES,  core_id, &c.tlb_misses),  { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_EVICTS,  core_id, &c.tlb_evicts),  { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_PTW_WALKS,   core_id, &c.ptw_walks),   { return err; });
-      CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_PTW_LATENCY, core_id, &c.ptw_latency), { return err; });
-#endif
+      if (vm_enabled) {
+        // VM/MMU lives in its own perf class (CLASS_VM), independent of CORE/MEM.
+        // Hardware sums icache + dcache MMU counters into one bank.
+        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_READS,   core_id, &c.tlb_reads),   { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_HITS,    core_id, &c.tlb_hits),    { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_MISSES,  core_id, &c.tlb_misses),  { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_TLB_EVICTS,  core_id, &c.tlb_evicts),  { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_PTW_WALKS,   core_id, &c.ptw_walks),   { return err; });
+        CHECK_ERR(vx_mpm_query(hdevice, VX_DCR_MPM_CLASS_VM, VX_CSR_MPM_PTW_LATENCY, core_id, &c.ptw_latency), { return err; });
+      }
 
       if (num_cores > 1) {
         // Per-Core report
@@ -343,12 +347,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
         perf_print_core(stream, core_id, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64,
                         ifetch_avg_lt, load_avg_lt, c.loads, c.stores);
 
-#ifdef VX_CFG_VM_ENABLE
-        const int tlb_hit_pct = calc_percent(c.tlb_hits, c.tlb_reads);
-        const double ptw_avg_lt = safe_div((double)c.ptw_latency, (double)c.ptw_walks);
-        perf_print_core(stream, core_id, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
-                        c.tlb_reads, tlb_hit_pct, c.tlb_evicts, c.ptw_walks, ptw_avg_lt);
-#endif
+        if (vm_enabled) {
+          const int tlb_hit_pct = calc_percent(c.tlb_hits, c.tlb_reads);
+          const double ptw_avg_lt = safe_div((double)c.ptw_latency, (double)c.ptw_walks);
+          perf_print_core(stream, core_id, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
+                          c.tlb_reads, tlb_hit_pct, c.tlb_evicts, c.ptw_walks, ptw_avg_lt);
+        }
 
         perf_print_core(stream, core_id, "instrs=%" PRIu64 ", cycles=%" PRIu64 ", IPC=%.3f", c.instrs, c.cycles, ipc);
       }
@@ -387,14 +391,14 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
       tot.load_lt += c.load_lt;
       tot.stores += c.stores;
 
-#ifdef VX_CFG_VM_ENABLE
-      tot.tlb_reads += c.tlb_reads;
-      tot.tlb_hits += c.tlb_hits;
-      tot.tlb_misses += c.tlb_misses;
-      tot.tlb_evicts += c.tlb_evicts;
-      tot.ptw_walks += c.ptw_walks;
-      tot.ptw_latency += c.ptw_latency;
-#endif
+      if (vm_enabled) {
+        tot.tlb_reads += c.tlb_reads;
+        tot.tlb_hits += c.tlb_hits;
+        tot.tlb_misses += c.tlb_misses;
+        tot.tlb_evicts += c.tlb_evicts;
+        tot.ptw_walks += c.ptw_walks;
+        tot.ptw_latency += c.ptw_latency;
+      }
     }
 
     // Query global MPM counters
@@ -450,12 +454,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     perf_print(stream, "memory: ifetch_lat=%.2f, load_lat=%.2f, loads=%" PRIu64 ", stores=%" PRIu64 ", read_bytes=%" PRIu64 ", write_bytes=%" PRIu64,
                tot_ifetch_avg_lt, tot_load_avg_lt, tot.loads, tot.stores, read_bytes, write_bytes);
 
-#ifdef VX_CFG_VM_ENABLE
-    const int tot_tlb_hit_pct = calc_percent(tot.tlb_hits, tot.tlb_reads);
-    const double tot_ptw_avg_lt = safe_div((double)tot.ptw_latency, (double)tot.ptw_walks);
-    perf_print(stream, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
-               tot.tlb_reads, tot_tlb_hit_pct, tot.tlb_evicts, tot.ptw_walks, tot_ptw_avg_lt);
-#endif
+    if (vm_enabled) {
+      const int tot_tlb_hit_pct = calc_percent(tot.tlb_hits, tot.tlb_reads);
+      const double tot_ptw_avg_lt = safe_div((double)tot.ptw_latency, (double)tot.ptw_walks);
+      perf_print(stream, "vm: tlb_reads=%" PRIu64 ", hit=%d%%, evicts=%" PRIu64 ", ptw_walks=%" PRIu64 ", ptw_avg_lat=%.2f",
+                 tot.tlb_reads, tot_tlb_hit_pct, tot.tlb_evicts, tot.ptw_walks, tot_ptw_avg_lt);
+    }
   } break;
 
   case VX_DCR_MPM_CLASS_MEM: {

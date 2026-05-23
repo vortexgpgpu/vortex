@@ -75,6 +75,11 @@ endif
 RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE)
 
+# Command Processor sources. RTL_PKGS holds packages only; the CP
+# interface files are auto-discovered via the -I path below.
+RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
+RTL_INCLUDE += -I$(RTL_DIR)/cp
+
 # Add TCU extension sources
 ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv

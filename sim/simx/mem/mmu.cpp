@@ -13,6 +13,8 @@
 #include "mmu.h"
 #include "../debug.h"
 
+#include <cstring>
+
 namespace vortex {
 
 Mmu::Mmu(const SimContext& ctx,
@@ -52,7 +54,11 @@ bool Mmu::needs_translation(uint64_t addr) const {
 }
 
 void Mmu::start_ptw(uint64_t va, ACCESS_TYPE type, MemReq orig, uint32_t port) {
-  ptw_state_     = PTW_L1_REQ;
+  // Walk from the root table down: level VX_VM_PT_LEVEL-1 .. 0
+  // (Sv32: L1->L0; Sv39: L2->L1->L0). The root table is at the SATP PPN.
+  ptw_state_     = PTW_REQ;
+  ptw_level_     = VX_VM_PT_LEVEL - 1;
+  ptw_cur_ppn_   = satp_->get_base_ppn();
   ptw_vaddr_     = va;
   ptw_type_      = type;
   ptw_orig_req_  = orig;
@@ -62,20 +68,20 @@ void Mmu::start_ptw(uint64_t va, ACCESS_TYPE type, MemReq orig, uint32_t port) {
 }
 
 void Mmu::on_ptw_response(const MemRsp& rsp) {
-  // Extract the PTE word from the cache-line payload using the recorded
-  // PTE address (low bits give the offset within the line).
-  uint32_t off_words = (uint32_t)((ptw_pte_addr_ & (VX_CFG_MEM_BLOCK_SIZE - 1)) / VX_VM_PTE_SIZE);
+  // Extract the PTE from the cache-line payload at the recorded PTE
+  // address (low bits give the byte offset within the line). A PTE is
+  // VX_VM_PTE_SIZE bytes — 4 for Sv32, 8 for Sv39.
   uint64_t pte_bytes = 0;
   if (rsp.data) {
-    auto* words = reinterpret_cast<const uint32_t*>(rsp.data->data());
-    pte_bytes = words[off_words];
+    uint32_t byte_off = (uint32_t)(ptw_pte_addr_ & (VX_CFG_MEM_BLOCK_SIZE - 1));
+    std::memcpy(&pte_bytes,
+                reinterpret_cast<const uint8_t*>(rsp.data->data()) + byte_off,
+                VX_VM_PTE_SIZE);
   }
   PTE_t pte(pte_bytes);
 
-  // Validity check (mirrors VX_mmu_ptw + sim/common/mem.cpp::page_table_walk).
+  // Validity check (mirrors VX_mmu_ptw + VMManager::page_table_walk).
   bool invalid = (pte.v == 0) | ((pte.r == 0) & (pte.w == 1));
-  bool is_leaf = (pte.r != 0) | (pte.w != 0) | (pte.x != 0);
-
   if (invalid) {
     // Page fault — for now, abort the simulator with a clear message.
     // TODO: route a page-fault exception back to the LSU.
@@ -84,30 +90,28 @@ void Mmu::on_ptw_response(const MemRsp& rsp) {
     std::abort();
   }
 
-  switch (ptw_state_) {
-  case PTW_L1_WAIT:
-    if (is_leaf) {
-      // Megapage at L1 — the PTE's PPN encodes the megapage base; the
-      // low VPN[0] + page-offset bits come from the original VA.
-      ptw_final_ppn_   = pte.ppn;
-      ptw_flags_       = pte.flags;
-      ptw_leaf_level_  = 1;
-      ptw_state_       = PTW_FILL;
-    } else {
-      ptw_l1_ppn_ = pte.ppn;
-      ptw_state_  = PTW_L0_REQ;
-    }
-    break;
-  case PTW_L0_WAIT:
+  // A PTE with any of R/W/X set is a leaf; R=W=X=0 is a pointer to the
+  // next-level table. A leaf found at level L is a (super)page — L0 =
+  // 4 KB, L1 = megapage, L2 = gigapage; PTW_FILL composes the PA from
+  // ptw_leaf_level_, so the level just needs to be recorded here.
+  bool is_leaf = (pte.r != 0) | (pte.w != 0) | (pte.x != 0);
+  if (is_leaf) {
     ptw_final_ppn_  = pte.ppn;
     ptw_flags_      = pte.flags;
-    ptw_leaf_level_ = 0;
+    ptw_leaf_level_ = ptw_level_;
     ptw_state_      = PTW_FILL;
-    break;
-  default:
-    // Unexpected — ignore.
-    break;
+    return;
   }
+  // Interior node — descend to the next level. A non-leaf at level 0
+  // means the walk ran out of levels with no leaf: a page fault.
+  if (ptw_level_ == 0) {
+    std::cerr << "MMU: page fault — no leaf PTE for vaddr 0x"
+              << std::hex << ptw_vaddr_ << std::dec << std::endl;
+    std::abort();
+  }
+  ptw_cur_ppn_ = pte.ppn;
+  --ptw_level_;
+  ptw_state_   = PTW_REQ;
 }
 
 void Mmu::drive_ptw() {
@@ -116,32 +120,27 @@ void Mmu::drive_ptw() {
   const uint32_t VPN_BITS = log2ceil(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
   const uint64_t VPN_MASK = (1ULL << VPN_BITS) - 1;
   switch (ptw_state_) {
-  case PTW_L1_REQ: {
-    uint64_t vpn1 = (ptw_vaddr_ >> (VX_VM_PAGE_LOG2_SIZE + VPN_BITS)) & VPN_MASK;
-    ptw_pte_addr_ = pte_addr(satp_->get_base_ppn(), vpn1);
+  case PTW_REQ: {
+    // Index the page table at the current level by this level's VPN
+    // slice. The root level uses the SATP base PPN (set in start_ptw);
+    // deeper levels use the interior PTE's PPN recorded by the response.
+    uint32_t shift = VX_VM_PAGE_LOG2_SIZE + ptw_level_ * VPN_BITS;
+    uint64_t vpn   = (ptw_vaddr_ >> shift) & VPN_MASK;
+    ptw_pte_addr_  = pte_addr(ptw_cur_ppn_, vpn);
     MemReq req(MemOp::LD, ptw_pte_addr_, /*data*/nullptr, /*byteen*/0,
                PTW_TAG_MARKER, /*hart_id*/0, /*uuid*/0);
     if (ReqOut.at(0).try_send(req)) {
-      DT(4, this->name() << " ptw L1-req: addr=0x" << std::hex << ptw_pte_addr_ << std::dec);
-      ptw_state_ = PTW_L1_WAIT;
-    }
-    break;
-  }
-  case PTW_L0_REQ: {
-    uint64_t vpn0 = (ptw_vaddr_ >> VX_VM_PAGE_LOG2_SIZE) & VPN_MASK;
-    ptw_pte_addr_ = pte_addr(ptw_l1_ppn_, vpn0);
-    MemReq req(MemOp::LD, ptw_pte_addr_, /*data*/nullptr, /*byteen*/0,
-               PTW_TAG_MARKER, /*hart_id*/0, /*uuid*/0);
-    if (ReqOut.at(0).try_send(req)) {
-      DT(4, this->name() << " ptw L0-req: addr=0x" << std::hex << ptw_pte_addr_ << std::dec);
-      ptw_state_ = PTW_L0_WAIT;
+      DT(4, this->name() << " ptw L" << (uint32_t)ptw_level_
+                         << "-req: addr=0x" << std::hex << ptw_pte_addr_ << std::dec);
+      ptw_state_ = PTW_WAIT;
     }
     break;
   }
   case PTW_FILL: {
-    // Compose the PA. For leaf at L0 the offset is just pgoff; for a
-    // leaf at L1 (SV32 megapage), the offset additionally includes
-    // VPN[0] from the original VA. VX_VM_PT_SIZE/VX_VM_PTE_SIZE bits per level.
+    // Compose the PA. For a leaf at level L the low 12 + L*VPN_BITS VA
+    // bits are the offset within the (super)page — L0 = 4 KB (pgoff
+    // only), L1 = megapage, L2 = gigapage — and come from the VA, not
+    // the leaf PPN.
     uint32_t off_bits = VX_VM_PAGE_LOG2_SIZE +
                         ptw_leaf_level_ * log2ceil(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
     uint64_t off_mask = (1ULL << off_bits) - 1;
@@ -175,7 +174,7 @@ void Mmu::on_tick() {
     const MemRsp& rsp = RspIn.at(p).peek();
     if (rsp.tag & PTW_TAG_MARKER) {
       // PTW response. Only PTW state cares about it.
-      if (ptw_state_ == PTW_L1_WAIT || ptw_state_ == PTW_L0_WAIT) {
+      if (ptw_state_ == PTW_WAIT) {
         on_ptw_response(rsp);
       }
       RspIn.at(p).pop();
@@ -187,7 +186,7 @@ void Mmu::on_tick() {
   }
 
   // 2) Run PTW FSM — emit pending PTE fetches / fill.
-  if (ptw_state_ != PTW_IDLE && ptw_state_ != PTW_L1_WAIT && ptw_state_ != PTW_L0_WAIT) {
+  if (ptw_state_ != PTW_IDLE && ptw_state_ != PTW_WAIT) {
     drive_ptw();
   }
 

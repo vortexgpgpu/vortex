@@ -4,10 +4,13 @@
 // ============================================================================
 // Verilator unit test for VX_cp_dma.
 //
-// Drives a CMD_MEM_COPY command (the encoding is identical across COPY /
-// READ / WRITE — only the addresses' provenance differs from the
-// runtime's view) and verifies that the DMA module:
-//   1. Issues an AXI AR at src, captures one cache line of rdata.
+// VX_cp_dma is dual-port (axi_host + axi_dev). A CMD_MEM_COPY routes both
+// the read and the write to the device port, so this TB attaches a full
+// AXI slave memory model to the device port (d_*) and holds the host port
+// (h_*) idle.
+//
+// Verifies that the DMA module:
+//   1. Issues an AXI AR at src on axi_dev, captures one cache line of rdata.
 //   2. Issues an AXI AW at dst + W with the captured data, awaits B.
 //   3. Pulses `done` exactly once.
 //
@@ -107,39 +110,39 @@ struct AxiSlave {
 
     template <typename T>
     void comb_drive(T* top) {
-        top->m_arready = !r_inflight;
-        top->m_rvalid = r_inflight;
-        top->m_rid    = r_id;
-        top->m_rlast  = 1;
-        top->m_rresp  = 0;
-        if (r_inflight) mem_read_cl(r_addr, top->m_rdata);
+        top->d_arready = !r_inflight;
+        top->d_rvalid = r_inflight;
+        top->d_rid    = r_id;
+        top->d_rlast  = 1;
+        top->d_rresp  = 0;
+        if (r_inflight) mem_read_cl(r_addr, top->d_rdata);
 
-        top->m_awready = !aw_taken;
-        top->m_wready  = aw_taken && !b_pending;
-        top->m_bvalid  = b_pending;
-        top->m_bid     = b_id;
-        top->m_bresp   = 0;
+        top->d_awready = !aw_taken;
+        top->d_wready  = aw_taken && !b_pending;
+        top->d_bvalid  = b_pending;
+        top->d_bid     = b_id;
+        top->d_bresp   = 0;
     }
 
     template <typename T>
     void posedge_update(T* top) {
-        if (top->m_arvalid && top->m_arready) {
+        if (top->d_arvalid && top->d_arready) {
             r_inflight = true;
-            r_addr     = top->m_araddr;
-            r_id       = top->m_arid;
-        } else if (r_inflight && top->m_rvalid && top->m_rready) {
+            r_addr     = top->d_araddr;
+            r_id       = top->d_arid;
+        } else if (r_inflight && top->d_rvalid && top->d_rready) {
             r_inflight = false;
         }
 
-        if (top->m_awvalid && top->m_awready) {
+        if (top->d_awvalid && top->d_awready) {
             aw_taken = true;
-            aw_addr  = top->m_awaddr;
-            aw_id    = top->m_awid;
+            aw_addr  = top->d_awaddr;
+            aw_id    = top->d_awid;
         }
-        if (aw_taken && top->m_wvalid && top->m_wready) {
+        if (aw_taken && top->d_wvalid && top->d_wready) {
             // Write 64 bytes from wdata[0..15] into memory at aw_addr.
             for (int w = 0; w < 16; ++w) {
-                uint32_t v = top->m_wdata[w];
+                uint32_t v = top->d_wdata[w];
                 for (int b = 0; b < 4; ++b) {
                     int64_t a = (int64_t)aw_addr - (int64_t)MEM_BASE + w*4 + b;
                     if (a >= 0 && a < MEM_SIZE) mem[a] = (uint8_t)(v >> (8 * b));
@@ -149,7 +152,7 @@ struct AxiSlave {
             b_pending = true;
             b_id      = aw_id;
         }
-        if (b_pending && top->m_bvalid && top->m_bready) b_pending = false;
+        if (b_pending && top->d_bvalid && top->d_bready) b_pending = false;
     }
 };
 
@@ -190,7 +193,7 @@ static void run_copy(vl_simulator<T>& sim, AxiSlave& slave, uint64_t& tick,
     bool latched = false;
     for (int g = 0; g < 8 && !latched; ++g) {
         cycle(sim, slave, tick);
-        if (sim->m_arvalid) latched = true;
+        if (sim->d_arvalid) latched = true;
     }
     sim->grant = 0;
     EXPECT(latched, "DMA never asserted arvalid (grant capture failed)");
@@ -211,6 +214,8 @@ int main(int argc, char** argv) {
 
     sim->grant = 0;
     for (int i = 0; i < 9; ++i) sim->cmd_packed[i] = 0;
+    // The host AXI port (h_*) stays idle for CMD_MEM_COPY; verilator
+    // zero-inits its input ports and the harness never drives them.
     tick = sim.reset(tick);
 
     // ----- Test 1: copy at known offsets -----

@@ -72,6 +72,7 @@ typedef struct vx_kernel* vx_kernel_h;
 #define VX_CAPS_ISSUE_WIDTH         0xC   // issue width per core
 #define VX_CAPS_CLOCK_RATE          0xD   // pipeline clock rate in MHz
 #define VX_CAPS_PEAK_MEM_BW         0xE   // peak memory bandwidth (MB/s)
+#define VX_CAPS_VM_SUPPORT          0xF   // 1 if the device has an MMU (VM), else 0
 
 // ============================================================================
 // Device ISA flags  (decode a VX_CAPS_ISA_FLAGS query result)

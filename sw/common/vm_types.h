@@ -15,9 +15,10 @@
 
 #pragma once
 
+// Pure host-side RISC-V Sv32/Sv39 page-table value classes. The Sv32/Sv39
+// split is taken from VX_VM_ADDR_MODE in the SW-facing VX_types.h;
+// HW-private VX_config.h is never included.
 #include <VX_types.h>
-
-#ifdef VX_CFG_VM_ENABLE
 
 #include <cstdint>
 #include <stdexcept>
@@ -53,7 +54,7 @@ private:
 
 public:
   SATP_t(uint64_t satp_val) : satp(satp_val) {
-#ifdef VX_CFG_XLEN_32
+#if VX_VM_ADDR_MODE == SV32
     mode = bit(satp, 31);
     asid = bits(satp, 22, 30);
     ppn  = bits(satp, 0, 21);
@@ -66,14 +67,14 @@ public:
   }
 
   SATP_t(uint64_t address, uint16_t asid) : address(address), asid(asid) {
-#ifdef VX_CFG_XLEN_32
+#if VX_VM_ADDR_MODE == SV32
     assert((address >> 32) == 0 && "Upper 32 bits are not zero!");
 #endif
     mode = VX_VM_ADDR_MODE;
     ppn = address >> VX_VM_PAGE_LOG2_SIZE;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshift-count-overflow"
-#ifdef VX_CFG_XLEN_32
+#if VX_VM_ADDR_MODE == SV32
     satp = (((uint64_t)mode << 31) | ((uint64_t)asid << 22) | ppn);
 #else
     satp = (((uint64_t)mode << 60) | ((uint64_t)asid << 44) | ppn);
@@ -197,5 +198,3 @@ public:
 };
 
 } // namespace vortex
-
-#endif // VX_CFG_VM_ENABLE

@@ -22,6 +22,29 @@
 `include "dpi_util.vh"
 `endif
 
+// ----------------------------------------------------------------------
+// Command Processor compile-time parameters.
+//
+// Tunables for the rtl/cp tree, mirrored from VX_config.toml's [cp] block.
+// They live here (a globally-included header) rather than inside
+// VX_cp_pkg.sv so the per-file preprocessing used by the FPGA synthesis
+// flow (gen_sources.sh -P) resolves them in every CP module and AFU
+// wrapper — not only in files that include the package. The `ifndef
+// guards let the configure script override any of them via -D flags.
+// ----------------------------------------------------------------------
+`ifndef VX_CP_NUM_QUEUES
+`define VX_CP_NUM_QUEUES 1
+`endif
+`ifndef VX_CP_RING_SIZE_LOG2
+`define VX_CP_RING_SIZE_LOG2 16   // 64 KiB per queue ring
+`endif
+`ifndef VX_CP_MAX_CMDS_PER_CL
+`define VX_CP_MAX_CMDS_PER_CL 5
+`endif
+`ifndef VX_CP_AXI_TID_WIDTH
+`define VX_CP_AXI_TID_WIDTH 6
+`endif
+
 `ifdef VX_CFG_ICACHE_ENABLE
     `define L1_ENABLE
 `endif

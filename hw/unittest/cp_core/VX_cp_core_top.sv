@@ -6,10 +6,12 @@
 // ============================================================================
 // VX_cp_core_top — verilator-friendly wrapper around VX_cp_core.
 //
-// Exposes all three interfaces (AXI-Lite slave, AXI4 master, gpu_if) as
-// flat scalar ports so the C++ harness can drive the host control
-// plane, act as the upstream AXI memory, and simulate the Vortex
-// start/busy + DCR handshake.
+// Exposes every interface as flat scalar ports so the C++ harness can
+// drive the host control plane, act as the upstream AXI memories, and
+// simulate the Vortex start/busy + DCR handshake. VX_cp_core has two
+// AXI4 data-plane masters:
+//   - m_* : host-memory master  (command ring + completion + DMA host side)
+//   - d_* : device-memory master (DMA device side + event-counter traffic)
 // ============================================================================
 
 module VX_cp_core_top
@@ -43,7 +45,7 @@ module VX_cp_core_top
   output wire [31:0]                s_rdata,
   output wire [1:0]                 s_rresp,
 
-  // ---- AXI4 master (data plane upstream) ----
+  // ---- AXI4 host-memory master (m_*) ----
   output wire                       m_awvalid,
   input  wire                       m_awready,
   output wire [ADDR_W-1:0]          m_awaddr,
@@ -74,6 +76,37 @@ module VX_cp_core_top
   input  wire                       m_rlast,
   input  wire [1:0]                 m_rresp,
 
+  // ---- AXI4 device-memory master (d_*) ----
+  output wire                       d_awvalid,
+  input  wire                       d_awready,
+  output wire [ADDR_W-1:0]          d_awaddr,
+  output wire [ID_W-1:0]            d_awid,
+  output wire [7:0]                 d_awlen,
+  output wire [2:0]                 d_awsize,
+  output wire [1:0]                 d_awburst,
+  output wire                       d_wvalid,
+  input  wire                       d_wready,
+  output wire [DATA_W-1:0]          d_wdata,
+  output wire [DATA_W/8-1:0]        d_wstrb,
+  output wire                       d_wlast,
+  input  wire                       d_bvalid,
+  output wire                       d_bready,
+  input  wire [ID_W-1:0]            d_bid,
+  input  wire [1:0]                 d_bresp,
+  output wire                       d_arvalid,
+  input  wire                       d_arready,
+  output wire [ADDR_W-1:0]          d_araddr,
+  output wire [ID_W-1:0]            d_arid,
+  output wire [7:0]                 d_arlen,
+  output wire [2:0]                 d_arsize,
+  output wire [1:0]                 d_arburst,
+  input  wire                       d_rvalid,
+  output wire                       d_rready,
+  input  wire [DATA_W-1:0]          d_rdata,
+  input  wire [ID_W-1:0]            d_rid,
+  input  wire                       d_rlast,
+  input  wire [1:0]                 d_rresp,
+
   // ---- GPU interface (Vortex DCR + start/busy) ----
   output wire                       gpu_dcr_req_valid,
   output wire                       gpu_dcr_req_rw,
@@ -96,7 +129,8 @@ module VX_cp_core_top
 );
 
   VX_cp_axil_s_if #(.ADDR_W(AXIL_AW)) axil_s_if ();
-  VX_cp_axi_m_if  #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_m_if ();
+  VX_cp_axi_m_if  #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_host_if ();
+  VX_cp_axi_m_if  #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) axi_dev_if  ();
   VX_cp_gpu_if    gpu_if_inst ();
 
   // AXI-Lite slave passthrough.
@@ -118,36 +152,67 @@ module VX_cp_core_top
   assign s_rdata           = axil_s_if.rdata;
   assign s_rresp           = axil_s_if.rresp;
 
-  // AXI master passthrough.
-  assign m_awvalid       = axi_m_if.awvalid;
-  assign axi_m_if.awready = m_awready;
-  assign m_awaddr        = axi_m_if.awaddr;
-  assign m_awid          = axi_m_if.awid;
-  assign m_awlen         = axi_m_if.awlen;
-  assign m_awsize        = axi_m_if.awsize;
-  assign m_awburst       = axi_m_if.awburst;
-  assign m_wvalid        = axi_m_if.wvalid;
-  assign axi_m_if.wready = m_wready;
-  assign m_wdata         = axi_m_if.wdata;
-  assign m_wstrb         = axi_m_if.wstrb;
-  assign m_wlast         = axi_m_if.wlast;
-  assign axi_m_if.bvalid = m_bvalid;
-  assign m_bready        = axi_m_if.bready;
-  assign axi_m_if.bid    = m_bid;
-  assign axi_m_if.bresp  = m_bresp;
-  assign m_arvalid       = axi_m_if.arvalid;
-  assign axi_m_if.arready = m_arready;
-  assign m_araddr        = axi_m_if.araddr;
-  assign m_arid          = axi_m_if.arid;
-  assign m_arlen         = axi_m_if.arlen;
-  assign m_arsize        = axi_m_if.arsize;
-  assign m_arburst       = axi_m_if.arburst;
-  assign axi_m_if.rvalid = m_rvalid;
-  assign m_rready        = axi_m_if.rready;
-  assign axi_m_if.rdata  = m_rdata;
-  assign axi_m_if.rid    = m_rid;
-  assign axi_m_if.rlast  = m_rlast;
-  assign axi_m_if.rresp  = m_rresp;
+  // AXI host-memory master passthrough.
+  assign m_awvalid          = axi_host_if.awvalid;
+  assign axi_host_if.awready = m_awready;
+  assign m_awaddr           = axi_host_if.awaddr;
+  assign m_awid             = axi_host_if.awid;
+  assign m_awlen            = axi_host_if.awlen;
+  assign m_awsize           = axi_host_if.awsize;
+  assign m_awburst          = axi_host_if.awburst;
+  assign m_wvalid           = axi_host_if.wvalid;
+  assign axi_host_if.wready  = m_wready;
+  assign m_wdata            = axi_host_if.wdata;
+  assign m_wstrb            = axi_host_if.wstrb;
+  assign m_wlast            = axi_host_if.wlast;
+  assign axi_host_if.bvalid  = m_bvalid;
+  assign m_bready           = axi_host_if.bready;
+  assign axi_host_if.bid     = m_bid;
+  assign axi_host_if.bresp   = m_bresp;
+  assign m_arvalid          = axi_host_if.arvalid;
+  assign axi_host_if.arready = m_arready;
+  assign m_araddr           = axi_host_if.araddr;
+  assign m_arid             = axi_host_if.arid;
+  assign m_arlen            = axi_host_if.arlen;
+  assign m_arsize           = axi_host_if.arsize;
+  assign m_arburst          = axi_host_if.arburst;
+  assign axi_host_if.rvalid  = m_rvalid;
+  assign m_rready           = axi_host_if.rready;
+  assign axi_host_if.rdata   = m_rdata;
+  assign axi_host_if.rid     = m_rid;
+  assign axi_host_if.rlast   = m_rlast;
+  assign axi_host_if.rresp   = m_rresp;
+
+  // AXI device-memory master passthrough.
+  assign d_awvalid          = axi_dev_if.awvalid;
+  assign axi_dev_if.awready  = d_awready;
+  assign d_awaddr           = axi_dev_if.awaddr;
+  assign d_awid             = axi_dev_if.awid;
+  assign d_awlen            = axi_dev_if.awlen;
+  assign d_awsize           = axi_dev_if.awsize;
+  assign d_awburst          = axi_dev_if.awburst;
+  assign d_wvalid           = axi_dev_if.wvalid;
+  assign axi_dev_if.wready   = d_wready;
+  assign d_wdata            = axi_dev_if.wdata;
+  assign d_wstrb            = axi_dev_if.wstrb;
+  assign d_wlast            = axi_dev_if.wlast;
+  assign axi_dev_if.bvalid   = d_bvalid;
+  assign d_bready           = axi_dev_if.bready;
+  assign axi_dev_if.bid      = d_bid;
+  assign axi_dev_if.bresp    = d_bresp;
+  assign d_arvalid          = axi_dev_if.arvalid;
+  assign axi_dev_if.arready  = d_arready;
+  assign d_araddr           = axi_dev_if.araddr;
+  assign d_arid             = axi_dev_if.arid;
+  assign d_arlen            = axi_dev_if.arlen;
+  assign d_arsize           = axi_dev_if.arsize;
+  assign d_arburst          = axi_dev_if.arburst;
+  assign axi_dev_if.rvalid   = d_rvalid;
+  assign d_rready           = axi_dev_if.rready;
+  assign axi_dev_if.rdata    = d_rdata;
+  assign axi_dev_if.rid      = d_rid;
+  assign axi_dev_if.rlast    = d_rlast;
+  assign axi_dev_if.rresp    = d_rresp;
 
   // gpu_if passthrough.
   assign gpu_dcr_req_valid = gpu_if_inst.dcr_req_valid;
@@ -170,7 +235,8 @@ module VX_cp_core_top
     .clk       (clk),
     .reset     (reset),
     .axil_s    (axil_s_if),
-    .axi_m     (axi_m_if),
+    .axi_host  (axi_host_if),
+    .axi_dev   (axi_dev_if),
     .gpu_if    (gpu_if_inst),
     .interrupt (interrupt)
   );

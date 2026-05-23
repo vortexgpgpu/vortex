@@ -52,6 +52,7 @@
 #include <cstdint>
 #include <functional>
 #include <array>
+#include <vm_types.h>   // SATP_t / PTE_t / vAddr_t (VM page-table walk)
 
 namespace vortex {
 
@@ -129,6 +130,13 @@ private:
         OP_CACHE_FLUSH = 0x0A,
     };
 
+    // CMD_MEM_* header flag (cmd_t.flags bit2 = F_MEM_PHYSICAL): the device
+    // operand is a physical address — the MMU-aware CP DMA skips translation.
+    // Used for page-table bootstrap writes and the PT region itself. A
+    // dedicated bit, distinct from flags bit0 (F_PROFILE) — the addressing
+    // mode is its own descriptor field (modern-GPU convention).
+    static constexpr uint8_t MEM_FLAG_PHYSICAL = 0x04;
+
     // Decoded cmd record (matches cmd_t struct layout on-wire).
     struct Cmd {
         uint8_t  opcode;
@@ -156,6 +164,7 @@ private:
 
     // ----- Globals -----
     uint32_t cp_ctrl_ = 0;           // bit0=enable_global
+    uint64_t satp_ = 0;              // CP_SATP — page-table root for the CP DMA's MMU
     uint64_t cycle_counter_ = 0;
     Queue    q0_;                    // single-queue model
     Hooks    hooks_;
@@ -194,6 +203,9 @@ private:
     void tick_engine();
     // Fetch one CL from ring into cl_buf_ if needed.
     void fetch_if_needed();
+    // VM: translate a device virtual address to physical via a page-table
+    // walk. A no-op when VM is disabled, SATP is unset/BARE, or physical.
+    uint64_t cp_translate(uint64_t vaddr, bool physical) const;
 };
 
 } // namespace vortex

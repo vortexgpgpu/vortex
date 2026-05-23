@@ -167,6 +167,7 @@ namespace {
 // CP regfile offsets (CP-internal; backends translate to physical addrs).
 // Matches VX_cp_axil_regfile.
 constexpr uint32_t CP_REG_CTRL          = 0x000;
+constexpr uint32_t CP_DEV_CAPS          = 0x008;  // {VM_ENABLED@24|TID|RING|NQ}
 constexpr uint32_t CP_Q_RING_BASE_LO    = 0x100;
 constexpr uint32_t CP_Q_RING_BASE_HI    = 0x104;
 constexpr uint32_t CP_Q_HEAD_ADDR_LO    = 0x108;
@@ -179,6 +180,13 @@ constexpr uint32_t CP_Q_TAIL_LO         = 0x120;
 constexpr uint32_t CP_Q_TAIL_HI         = 0x124;
 constexpr uint32_t CP_Q_SEQNUM          = 0x128;
 constexpr uint32_t CP_Q_LAST_DCR_RSP    = 0x130;
+constexpr uint32_t CP_SATP_LO           = 0x028;  // CP DMA MMU page-table root
+constexpr uint32_t CP_SATP_HI           = 0x02C;
+
+// CMD_MEM_* header flag (cmd_t.flags bit2 = F_MEM_PHYSICAL): device operand
+// is physical — the MMU-aware CP DMA skips translation. Mirrors
+// cmd_processor.h MEM_FLAG_PHYSICAL and VX_cp_pkg.sv F_MEM_PHYSICAL.
+constexpr uint8_t  CP_MEM_FLAG_PHYSICAL = 0x04;
 
 constexpr uint32_t CP_RING_SIZE_LOG2 = 16;       // 64 KiB
 constexpr uint32_t CP_RING_SIZE      = 1u << CP_RING_SIZE_LOG2;
@@ -201,6 +209,22 @@ constexpr uint8_t  CP_WAIT_OP_GT = 2;
 constexpr uint8_t  CP_WAIT_OP_NE = 3;
 
 } // namespace
+
+// VMManager's device-memory port: PA-direct page-table I/O through the CP
+// DMA. The `physical` flag bypasses the CP DMA's VA translation, so the
+// page-table region itself is written/read at its true physical address.
+class Device::CpMemIO : public vortex::DeviceMemIO {
+public:
+    explicit CpMemIO(Device* dev) : dev_(dev) {}
+    void read(void* dst, uint64_t addr, size_t size) override {
+        dev_->cp_submit_mem_read(dst, addr, size, /*physical=*/true);
+    }
+    void write(const void* src, uint64_t addr, size_t size) override {
+        dev_->cp_submit_mem_write(addr, src, size, /*physical=*/true);
+    }
+private:
+    Device* dev_;
+};
 
 vx_result_t Device::cp_init() {
     // Ring + head + completion live in CP-visible host memory: the runtime
@@ -231,6 +255,44 @@ vx_result_t Device::cp_init() {
     p->cp_reg_write(CP_REG_CTRL,         0x1);
 
     cp_enabled_ = true;
+
+    // Discover virtual memory from the device, never from a compile-time
+    // #ifdef: the CP publishes a VM_ENABLED bit in DEV_CAPS (bit 24). The
+    // generic libvortex.so dispatcher reads it once here — exactly as a
+    // real GPU driver queries "does this device have an MMU?".
+    {
+        uint32_t dev_caps = 0;
+        if (p->cp_reg_read(CP_DEV_CAPS, &dev_caps) != VX_SUCCESS)
+            return VX_ERR_DEVICE_LOST;
+        vm_enabled_ = (dev_caps & (1u << 24)) != 0;
+    }
+
+    if (vm_enabled_) {
+        // Virtual memory: build the page tables (the host driver's job) and
+        // program the CP DMA's MMU with the page-table root. After this,
+        // mem_alloc mints VAs and the CP DMA translates VA->PA per CMD_MEM_*.
+        //
+        // First carve the page-table region out of the device-memory
+        // allocator. VMManager keeps its PT pages in a separate allocator
+        // over [VX_MEM_PAGE_TABLE_BASE_ADDR, +VX_VM_PT_SIZE_LIMIT); that
+        // range lies inside global_mem_, so without this reserve a later
+        // mem_alloc could hand back a buffer PA that overlaps the page
+        // tables. Done before any mem_alloc is reachable (still in open()).
+        {
+            std::lock_guard<std::mutex> g(mu_);
+            if (global_mem_.reserve(VX_MEM_PAGE_TABLE_BASE_ADDR,
+                                    VX_VM_PT_SIZE_LIMIT) != 0)
+                return VX_ERR_DEVICE_LOST;
+        }
+        vm_io_  = std::unique_ptr<CpMemIO>(new CpMemIO(this));
+        vm_mgr_ = std::unique_ptr<vortex::VMManager>(
+                      new vortex::VMManager(vm_io_.get()));
+        if (vm_mgr_->init() != 0)
+            return VX_ERR_DEVICE_LOST;
+        const uint64_t satp = vm_mgr_->satp();
+        p->cp_reg_write(CP_SATP_LO, uint32_t(satp & 0xFFFFFFFFu));
+        p->cp_reg_write(CP_SATP_HI, uint32_t(satp >> 32));
+    }
 
     // Zero the COUT stream-ring wr[]/rd[] pointers (proposal §10) so the
     // first drain sees empty rings. Routed via dev_write — on a CP-only-DMA
@@ -403,14 +465,16 @@ vx_result_t Device::cp_submit_event_wait(uint64_t event_dev_addr,
 // ============================================================================
 
 vx_result_t Device::cp_submit_mem_(uint8_t opcode, uint64_t arg0,
-                                   uint64_t arg1, uint64_t arg2) {
+                                   uint64_t arg1, uint64_t arg2,
+                                   bool physical) {
     // CMD_MEM_* on-wire layout (cmd_size=28):
-    //   bytes 0..3   header  { opcode, flags=0, reserved=0 }
+    //   bytes 0..3   header  { opcode, flags, reserved=0 }
     //   bytes 4..11  arg0    dst address
     //   bytes 12..19 arg1    src address
     //   bytes 20..27 arg2    size in bytes
     uint8_t cl[CP_CL_BYTES] = {0};
     cl[0] = opcode;
+    cl[1] = physical ? CP_MEM_FLAG_PHYSICAL : 0;   // skip CP-DMA VM translation
     std::memcpy(cl + 4,  &arg0, sizeof(arg0));
     std::memcpy(cl + 12, &arg1, sizeof(arg1));
     std::memcpy(cl + 20, &arg2, sizeof(arg2));
@@ -424,22 +488,24 @@ vx_result_t Device::cp_submit_mem_copy(uint64_t dst, uint64_t src,
 }
 
 vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
-                                        uint64_t size) {
+                                        uint64_t size, bool physical) {
     if (size == 0)  return VX_SUCCESS;
     if (!host_src)  return VX_ERR_INVALID_VALUE;
     // Stage the payload into CP-visible host memory (a plain memcpy through
-    // the host pointer), then have the CP DMA it to device memory.
+    // the host pointer), then have the CP DMA it to device memory. `physical`
+    // (set for page-table writes) tells the CP DMA to skip VM translation.
     HostMem staging;
     auto r = host_alloc(size, &staging);
     if (r != VX_SUCCESS) return r;
     std::memcpy(staging.host_ptr, host_src, size);
-    r = cp_submit_mem_(CP_OPCODE_MEM_WRITE, dev_dst, staging.cp_addr, size);
+    r = cp_submit_mem_(CP_OPCODE_MEM_WRITE, dev_dst, staging.cp_addr, size,
+                       physical);
     host_free(staging.cp_addr);
     return r;
 }
 
 vx_result_t Device::cp_submit_mem_read(void* host_dst, uint64_t dev_src,
-                                       uint64_t size) {
+                                       uint64_t size, bool physical) {
     if (size == 0)  return VX_SUCCESS;
     if (!host_dst)  return VX_ERR_INVALID_VALUE;
     // Have the CP DMA device->host into a CP-visible host staging buffer,
@@ -447,7 +513,8 @@ vx_result_t Device::cp_submit_mem_read(void* host_dst, uint64_t dev_src,
     HostMem staging;
     auto r = host_alloc(size, &staging);
     if (r != VX_SUCCESS) return r;
-    r = cp_submit_mem_(CP_OPCODE_MEM_READ, staging.cp_addr, dev_src, size);
+    r = cp_submit_mem_(CP_OPCODE_MEM_READ, staging.cp_addr, dev_src, size,
+                       physical);
     if (r == VX_SUCCESS)
         std::memcpy(host_dst, staging.host_ptr, size);
     host_free(staging.cp_addr);
@@ -493,9 +560,23 @@ vx_result_t Device::mem_alloc(uint64_t size, uint32_t flags,
     }
     const uint64_t asize =
         (size + CACHE_BLOCK_SIZE - 1) & ~uint64_t(CACHE_BLOCK_SIZE - 1);
-    std::lock_guard<std::mutex> g(mu_);
-    return (global_mem_.allocate(asize, out_addr) == 0)
-               ? VX_SUCCESS : VX_ERR_OUT_OF_DEVICE_MEMORY;
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        if (global_mem_.allocate(asize, out_addr) != 0)
+            return VX_ERR_OUT_OF_DEVICE_MEMORY;
+    }
+    // VM: *out_addr is a PA. VX_MEM_PHYS keeps it (identity-mapped so the
+    // kernel reaches it at VA==PA); otherwise mint a fresh VA + install
+    // PTEs so the kernel's MMU and the CP DMA both translate it. vm_mgr_ is
+    // non-null iff the device reported an MMU at vx_device_open.
+    if (vm_mgr_) {
+        std::lock_guard<std::mutex> g(vm_mu_);
+        int rc = (flags & VX_MEM_PHYS)
+                   ? vm_mgr_->install_identity_map(*out_addr, asize)
+                   : vm_mgr_->phy_to_virt_map(asize, out_addr, flags);
+        if (rc != 0) return VX_ERR_INVALID_VALUE;
+    }
+    return VX_SUCCESS;
 }
 
 vx_result_t Device::mem_reserve(uint64_t addr, uint64_t size, uint32_t flags) {
@@ -503,9 +584,19 @@ vx_result_t Device::mem_reserve(uint64_t addr, uint64_t size, uint32_t flags) {
     if (size == 0) return VX_ERR_INVALID_VALUE;
     const uint64_t asize =
         (size + CACHE_BLOCK_SIZE - 1) & ~uint64_t(CACHE_BLOCK_SIZE - 1);
-    std::lock_guard<std::mutex> g(mu_);
-    return (global_mem_.reserve(addr, asize) == 0)
-               ? VX_SUCCESS : VX_ERR_INVALID_VALUE;
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        if (global_mem_.reserve(addr, asize) != 0)
+            return VX_ERR_INVALID_VALUE;
+    }
+    // VM: a reserved region sits at a caller-chosen PA — identity-map it
+    // (VA == PA) so the kernel reaches it at the same address.
+    if (vm_mgr_) {
+        std::lock_guard<std::mutex> g(vm_mu_);
+        if (vm_mgr_->install_identity_map(addr, asize) != 0)
+            return VX_ERR_INVALID_VALUE;
+    }
+    return VX_SUCCESS;
 }
 
 vx_result_t Device::mem_free(uint64_t addr) {
@@ -517,6 +608,12 @@ vx_result_t Device::mem_free(uint64_t addr) {
     if (is_host) {
         host_free(addr);
         return VX_SUCCESS;
+    }
+    // VM: `addr` is a VA — resolve to the PA the allocator handed out.
+    if (vm_mgr_) {
+        std::lock_guard<std::mutex> g(vm_mu_);
+        try { addr = vm_mgr_->page_table_walk(addr); }
+        catch (...) { /* already unmapped — fall through to release */ }
     }
     std::lock_guard<std::mutex> g(mu_);
     return (global_mem_.release(addr) == 0)
@@ -553,6 +650,7 @@ vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
     case VX_CAPS_GLOBAL_MEM_SIZE: *out_value = GLOBAL_MEM_SIZE;              break;
     case VX_CAPS_CLOCK_RATE:      *out_value = VX_CFG_PLATFORM_CLOCK_RATE;   break;
     case VX_CAPS_PEAK_MEM_BW:     *out_value = VX_CFG_PLATFORM_MEMORY_PEAK_BW; break;
+    case VX_CAPS_VM_SUPPORT:      *out_value = vm_enabled_ ? 1 : 0;          break;
     default:                      return VX_ERR_INVALID_VALUE;
     }
     return VX_SUCCESS;

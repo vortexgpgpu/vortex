@@ -136,6 +136,20 @@ if [ -n "$copy_folder" ]; then
     copy_one_file "$file"
   done
 
+  # Files from extern dirs (-J). When preprocessing, run them through the
+  # same path as everything else so their `include directives get inlined.
+  # This makes the packaged output self-contained — downstream synthesis
+  # no longer needs the original third-party source tree on disk (e.g.
+  # cvfpu's common_cells/*.svh headers, which IP packaging does not carry
+  # along since they are reachable only via +incdir+).
+  if [ "$preprocessor" != 0 ]; then
+    for dir in "${externs[@]}"; do
+      find "$dir" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) | while read -r file; do
+        copy_one_file "$file"
+      done
+    done
+  fi
+
   # Strip .master/.slave modport qualifiers from preprocessed copies
   # (Vivado doesn't support modport qualifiers in interface port declarations)
   if [ "$preprocessor" != 0 ]; then
@@ -156,18 +170,25 @@ if [ "$output_file" != "" ]; then
             done
         fi
 
-        # extern search paths
-        for dir in ${externs[@]}; do
-            echo "+incdir+$(realpath "$dir")"
-        done
+        # Extern (-J) files. When preprocessing into a copy folder they
+        # have already been inlined+copied there by the copy phase above,
+        # and get emitted below alongside the rest of the copy-folder
+        # sources — so the packaged output stays self-contained. Otherwise
+        # list them in place via +incdir+ search paths.
+        if ! { [ -n "$copy_folder" ] && [ "$preprocessor" != 0 ]; }; then
+            # extern search paths
+            for dir in ${externs[@]}; do
+                echo "+incdir+$(realpath "$dir")"
+            done
 
-        # extern *_pkg.sv and .v/.sv files
-        for dir in ${externs[@]}; do
-            find "$(realpath $dir)" -maxdepth 1 -type f -name "*_pkg.sv" -print
-        done
-        for dir in ${externs[@]}; do
-            find "$(realpath $dir)" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" -print
-        done
+            # extern *_pkg.sv and .v/.sv files
+            for dir in ${externs[@]}; do
+                find "$(realpath $dir)" -maxdepth 1 -type f -name "*_pkg.sv" -print
+            done
+            for dir in ${externs[@]}; do
+                find "$(realpath $dir)" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" -print
+            done
+        fi
 
         if [ "$copy_folder" != "" ]; then
             # All files have been copied; just point to the copy folder

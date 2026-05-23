@@ -180,6 +180,14 @@ foreach m $axi_masters {
 set mem_map [::ipx::add_memory_map -quiet "s_axi_ctrl" $core]
 set addr_block [::ipx::add_address_block -quiet "reg0" $mem_map]
 
+# VX_afu_wrap routes s_axi_ctrl by address bit 12: [0x0000,0x1000) is the
+# legacy register block, [0x1000,0x2000) is the Command Processor's
+# AXI-Lite register window. Declare a 64 KB address block so the packaged
+# interface resolves C_S_AXI_CTRL_ADDR_WIDTH to 16 (>= 13). Without this,
+# Vivado infers the width from the enumerated registers alone (~0x40) and
+# the bit-12 / [11:0] CP part-selects in VX_afu_wrap.sv go out of range.
+set_property range 65536 $addr_block
+
 set reg [::ipx::add_register "CTRL" $addr_block]
 set_property description    "Control signals"    $reg
 set_property address_offset 0x000 $reg

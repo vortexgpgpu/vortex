@@ -491,38 +491,43 @@ vm(){
 
     make -C sw/kernel
 
+    # v3 release: VM support is SimX-only. RTL VM bring-up (xrtsim/xrt/rtlsim)
+    # is deferred to a future release; the CP RTL does not yet implement a
+    # shared MMU. RTL invocations are kept commented out below so they can be
+    # restored verbatim once Phase 2 lands.
+
     # Pass 1: default VM mode (SV32 on rv32, SV39 on rv64). VM_ENABLE must
     # reach the stub (VMManager bodies are #ifdef VM_ENABLE), both sim
     # drivers, AND each test invocation (test app rebuilds its own
     # vx_start.S which gates `csrw satp` on VM_ENABLE).
     CONFIGS="-DVX_CFG_VM_ENABLE" make -C sw/runtime/stub clean && CONFIGS="-DVX_CFG_VM_ENABLE" make -C sw/runtime/stub
     CONFIGS="-DVX_CFG_VM_ENABLE" make -C sw/runtime/simx clean && CONFIGS="-DVX_CFG_VM_ENABLE" make -C sw/runtime/simx
-    CONFIGS="-DVX_CFG_VM_ENABLE" make -C sw/runtime/rtlsim clean && CONFIGS="-DVX_CFG_VM_ENABLE" make -C sw/runtime/rtlsim
+    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C sw/runtime/rtlsim clean && CONFIGS="-DVX_CFG_VM_ENABLE" make -C sw/runtime/rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/sgemm run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/sgemm run-xrt
+    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/sgemm run-xrt
     CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/diverge run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/diverge run-xrt
+    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/diverge run-xrt
     CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/dogfood run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/dogfood run-rtlsim
+    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/dogfood run-rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/raycast run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/raycast run-rtlsim
+    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/raycast run-rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/draw3d run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/draw3d run-xrt
+    #CONFIGS="-DVX_CFG_VM_ENABLE" make -C tests/regression/draw3d run-xrt
 
     # Pass 2: BARE mode (identity translation only, no PTW). Same propagation.
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/stub clean && CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/stub
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/simx clean && CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/simx
-    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim clean && CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim
+    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim clean && CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C sw/runtime/rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/sgemm run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/sgemm run-xrt
+    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/sgemm run-xrt
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/diverge run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/diverge run-xrt
+    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/diverge run-xrt
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/dogfood run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/dogfood run-rtlsim
+    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/dogfood run-rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/raycast run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/raycast run-rtlsim
+    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/raycast run-rtlsim
     CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/draw3d run-simx
-    CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/draw3d run-xrt
+    #CONFIGS="-DVX_CFG_VM_ENABLE -DVX_CFG_VM_ADDR_MODE=BARE" make -C tests/regression/draw3d run-xrt
 
     echo "vm tests done!"
 }

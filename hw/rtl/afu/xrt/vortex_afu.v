@@ -14,7 +14,9 @@
 `include "vortex_afu.vh"
 
 module vortex_afu #(
-	parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
+	// 16 bits: the AFU routes s_axi_ctrl by address bit 12 (legacy block
+	// vs. Command Processor AXI-Lite window) — must match VX_afu_wrap.
+	parameter C_S_AXI_CTRL_ADDR_WIDTH = 16,
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH 	  = `PLATFORM_MEMORY_ID_WIDTH,
 	parameter C_M_AXI_MEM_DATA_WIDTH  = (`VX_CFG_PLATFORM_MEMORY_DATA_SIZE * 8),

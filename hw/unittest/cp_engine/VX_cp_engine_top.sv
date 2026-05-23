@@ -12,9 +12,9 @@
 // flat packed ports the harness reads/writes, and connects them through
 // modports to the engine.
 //
-// The state_in mirror is reduced to a single `state_prio` input — the
-// other cpe_state_t fields aren't read by the engine FSM (they live there
-// for the future fetch/unpack path that the engine forwards untouched).
+// The CPE state mirror is reduced to a single `state_prio` input — the
+// only queue-state field the engine FSM consumes (it tags the arbiter
+// bids). The engine's `seqnum_out` telemetry output is left unobserved.
 // ============================================================================
 
 module VX_cp_engine_top
@@ -76,15 +76,10 @@ module VX_cp_engine_top
   cmd_t cmd_in_typed;
   assign cmd_in_typed = cmd_t'(cmd_in_packed);
 
-  // ---- Synthesize a minimal cpe_state_t with the harness-provided prio --
-  cpe_state_t state_in_typed;
+  // ---- Engine retired-seqnum telemetry (unobserved by the harness) ------
   /* verilator lint_off UNUSED */
-  cpe_state_t state_out_typed;
+  wire [63:0] seqnum_out_w;
   /* verilator lint_on UNUSED */
-  always_comb begin
-    state_in_typed = '0;
-    state_in_typed.prio = state_prio;
-  end
 
   // ---- Bid interfaces ---------------------------------------------------
   VX_cp_engine_bid_if bid_kmu_if   ();
@@ -121,8 +116,8 @@ module VX_cp_engine_top
   VX_cp_engine #(.QID(0)) u_engine (
     .clk           (clk),
     .reset         (reset),
-    .state_in      (state_in_typed),
-    .state_out     (state_out_typed),
+    .prio_in       (state_prio),
+    .seqnum_out    (seqnum_out_w),
     .cmd_in_valid  (cmd_in_valid),
     .cmd_in        (cmd_in_typed),
     .cmd_in_ready  (cmd_in_ready_w),

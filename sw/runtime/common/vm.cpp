@@ -5,9 +5,10 @@
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
 
+// VMManager is always compiled into libvortex.so — VM is a runtime device
+// property, not a compile-time #ifdef. The Sv32/Sv39 split comes from
+// VX_VM_ADDR_MODE (VX_types.h); HW-private VX_config.h is not included.
 #include <VX_types.h>
-
-#ifdef VX_CFG_VM_ENABLE
 #include "vm.h"
 
 #include <vortex.h>
@@ -29,6 +30,15 @@ uint32_t pte_flags_from_access(uint32_t access_flags) {
     pte |= PTE_W;
   return pte;
 }
+
+// Ceil-log2 — used for the per-level VPN field width.
+constexpr unsigned vm_clog2(uint64_t n) {
+  unsigned r = 0;
+  while ((uint64_t(1) << r) < n) ++r;
+  return r;
+}
+// VPN bits per page-table level = log2(PTEs per table). SV39 -> 9, SV32 -> 10.
+constexpr unsigned VM_VPN_BITS = vm_clog2(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
 } // namespace
 
 VMManager::VMManager(DeviceMemIO* dev_io)
@@ -70,7 +80,7 @@ int VMManager::init() {
     return 1;
 
   uint64_t virtual_mem_size = (GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR);
-#ifdef VX_CFG_XLEN_32
+#if VX_VM_ADDR_MODE == SV32
   // Keep VAs within the 32-bit address space.
   uint64_t max_va_end = 0x100000000ULL;
   if (ALLOC_BASE_ADDR + virtual_mem_size > max_va_end) {
@@ -129,7 +139,7 @@ uint64_t VMManager::map_p2v(uint64_t ppn, uint32_t flags) {
     for (int attempt = 0; attempt < MAX_ATTEMPTS; ++attempt) {
       uint64_t va_range_start = ALLOC_BASE_ADDR;
       uint64_t va_range_end = VX_MEM_PAGE_TABLE_BASE_ADDR;
-#ifdef VX_CFG_XLEN_32
+#if VX_VM_ADDR_MODE == SV32
       uint64_t max_va = 0xFFFFFFFFULL;
       if (va_range_end > max_va)
         va_range_end = max_va;
@@ -173,7 +183,10 @@ int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flag
     return 0;
 
   uint64_t init_pAddr = *dev_pAddr;
-  uint64_t num_pages = size >> VX_VM_PAGE_LOG2_SIZE;
+  // Round up: a sub-page allocation still needs one PTE. A plain
+  // `size >> PAGE_LOG2` truncates to 0 for any buffer < 4 KB, leaving
+  // it unmapped.
+  uint64_t num_pages = (size + VX_VM_PAGE_SIZE - 1) >> VX_VM_PAGE_LOG2_SIZE;
   uint64_t base_ppn = init_pAddr >> VX_VM_PAGE_LOG2_SIZE;
 
   uint64_t base_vpn;
@@ -187,7 +200,7 @@ int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flag
       for (int attempt = 0; attempt < MAX_ATTEMPTS && !allocated; ++attempt) {
         uint64_t va_range_start = ALLOC_BASE_ADDR;
         uint64_t va_range_end = VX_MEM_PAGE_TABLE_BASE_ADDR;
-#ifdef VX_CFG_XLEN_32
+#if VX_VM_ADDR_MODE == SV32
         uint64_t max_va = 0xFFFFFFFFULL;
         if (va_range_end > max_va)
           va_range_end = max_va;
@@ -267,8 +280,21 @@ int16_t VMManager::update_page_table(uint64_t ppn, uint64_t vpn, uint32_t pte_fl
     pte_addr = (cur_base_ppn * VX_VM_PT_SIZE) + (vaddr.vpn[i] * VX_VM_PTE_SIZE);
     pte_bytes = read_pte(pte_addr);
     PTE_t pte_chk(pte_bytes);
-    if (pte_chk.v == 1 && ((pte_bytes & 0xFFFFFFFF) != 0xbaadf00d)) {
-      cur_base_ppn = pte_chk.ppn;
+    bool valid = (pte_chk.v == 1) && ((pte_bytes & 0xFFFFFFFF) != 0xbaadf00d);
+    if (valid && (pte_chk.r || pte_chk.w || pte_chk.x)) {
+      // An existing leaf (super)page already maps this VA — a PTE with any of
+      // R/W/X set is a leaf, not a pointer to the next level (RISC-V priv
+      // spec). Descending into it would walk mapped data as a page table.
+      // Re-mapping is idempotent when the existing leaf already yields the
+      // requested translation — install_identity_map legitimately re-covers a
+      // sub-range of a coarser identity superpage installed by
+      // VMManager::init() — while a different target is a genuine conflict.
+      uint64_t span = uint64_t(1) << (i * VM_VPN_BITS);   // 4 KB pages per level-i page
+      uint64_t mapped_ppn = (pte_chk.ppn & ~(span - 1)) | (vpn & (span - 1));
+      return (mapped_ppn == ppn) ? 0 : -1;
+    }
+    if (valid) {
+      cur_base_ppn = pte_chk.ppn;   // interior node — descend
     } else {
       if (i == (int)leaf_level) {
         // Leaf: caller supplies the raw PTE permission bits.
@@ -353,10 +379,18 @@ uint64_t VMManager::page_table_walk(uint64_t vAddr_bits) {
     }
     if (pte.r == 0)
       throw Page_Fault_Exception("[RT:PTW] permission");
-    cur_base_ppn = pte.ppn;
+    cur_base_ppn = pte.ppn;   // leaf found at level i
     break;
   }
-  return (cur_base_ppn << VX_VM_PAGE_LOG2_SIZE) + vaddr.pgoff;
+  // Reconstruct the physical address. For a leaf found at level i > 0 (a
+  // mega/gigapage) the low VX_VM_PAGE_LOG2_SIZE + i*VM_VPN_BITS address bits
+  // are the offset *within* the superpage and must come from the VA, not
+  // from the (superpage-aligned) leaf PPN. For a 4 KB leaf (i == 0) this
+  // reduces to the ordinary ppn<<12 | page-offset.
+  const uint64_t off_mask =
+      (uint64_t(1) << (VX_VM_PAGE_LOG2_SIZE + i * VM_VPN_BITS)) - 1;
+  return ((cur_base_ppn << VX_VM_PAGE_LOG2_SIZE) & ~off_mask)
+       | (vAddr_bits & off_mask);
 }
 
 // -- shadow PT helpers --------------------------------------------------
@@ -390,7 +424,7 @@ void VMManager::write_pte(uint64_t addr, uint64_t value) {
 
 uint64_t VMManager::read_pte(uint64_t addr) {
   const auto* page = peek_pt_page(addr);
-#ifdef VX_CFG_XLEN_32
+#if VX_VM_ADDR_MODE == SV32
   uint64_t mask = 0x00000000FFFFFFFFULL;
 #else
   uint64_t mask = 0xFFFFFFFFFFFFFFFFULL;
@@ -421,5 +455,3 @@ int VMManager::flush() {
   dirty_pt_pages_.clear();
   return 0;
 }
-
-#endif // VX_CFG_VM_ENABLE

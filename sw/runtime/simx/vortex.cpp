@@ -32,11 +32,6 @@
 #include <util.h>
 #include <cmd_processor.h>
 
-#ifdef VX_CFG_VM_ENABLE
-#include <vm.h>
-#include <memory>
-#endif
-
 #include <chrono>
 #include <cstring>
 #include <future>
@@ -46,22 +41,6 @@
 #include <stdlib.h>
 
 using namespace vortex;
-
-#ifdef VX_CFG_VM_ENABLE
-// DeviceMemIO adapter over the simx RAM backing store.
-class RamMemIO : public DeviceMemIO {
-public:
-  explicit RamMemIO(RAM* ram) : ram_(ram) {}
-  void read(void* dst, uint64_t addr, size_t size) override {
-    ram_->read((uint8_t*)dst, addr, size);
-  }
-  void write(const void* src, uint64_t addr, size_t size) override {
-    ram_->write((const uint8_t*)src, addr, size);
-  }
-private:
-  RAM* ram_;
-};
-#endif
 
 class vx_device {
 public:
@@ -83,13 +62,8 @@ public:
   }
 
   int init() {
-#ifdef VX_CFG_VM_ENABLE
-    // Boot-time VM init: allocate the page table inside RAM, push SATP
-    // into the simulator.
-    dev_io_ = std::make_unique<RamMemIO>(&ram_);
-    vm_mgr_ = std::make_unique<VMManager>(dev_io_.get());
-    CHECK_ERR(vm_mgr_->init(), { return err; });
-#endif
+    // Virtual memory lives wholly in the common core (vx::Device owns the
+    // VMManager; the CP model translates) — nothing backend-side here.
     return 0;
   }
 
@@ -195,10 +169,6 @@ private:
   vortex::CommandProcessor cp_;
   std::mutex host_mu_;
   std::map<uint64_t, uint64_t> host_regions_;   // base -> size
-#ifdef VX_CFG_VM_ENABLE
-  std::unique_ptr<RamMemIO> dev_io_;
-  std::unique_ptr<VMManager> vm_mgr_;
-#endif
 };
 
 #include <callbacks.inc>

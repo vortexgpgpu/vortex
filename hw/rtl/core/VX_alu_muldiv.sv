@@ -184,11 +184,11 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_result_out
     `ifdef VX_CFG_XLEN_64
-        assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(`VX_CFG_XLEN)-1:XLEN] :
+        assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(`VX_CFG_XLEN)-1:`VX_CFG_XLEN] :
                                                  (is_mul_w_out ? `VX_CFG_XLEN'($signed(mul_result_tmp[i][31:0])) :
                                                                  mul_result_tmp[i][`VX_CFG_XLEN-1:0]);
     `else
-        assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(`VX_CFG_XLEN)-1:XLEN] : mul_result_tmp[i][`VX_CFG_XLEN-1:0];
+        assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(`VX_CFG_XLEN)-1:`VX_CFG_XLEN] : mul_result_tmp[i][`VX_CFG_XLEN-1:0];
         `UNUSED_VAR (is_mul_w_out)
     `endif
     end

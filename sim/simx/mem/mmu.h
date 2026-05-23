@@ -92,12 +92,12 @@ private:
   Tlb                      tlb_;
 
   // PTW FSM. One walk in flight at a time (matches RTL VX_mmu_ptw.sv).
+  // The walk is VX_VM_PT_LEVEL-deep — Sv32 (2 levels) and Sv39 (3) — and
+  // is driven by a level counter rather than per-level states.
   enum PtwState {
     PTW_IDLE,
-    PTW_L1_REQ,    // need to emit L1 PTE fetch
-    PTW_L1_WAIT,   // waiting for L1 PTE response
-    PTW_L0_REQ,    // need to emit L0 PTE fetch
-    PTW_L0_WAIT,   // waiting for L0 PTE response
+    PTW_REQ,       // need to emit the current level's PTE fetch
+    PTW_WAIT,      // waiting for the current level's PTE response
     PTW_FILL       // ready to fill TLB and replay
   };
 
@@ -105,10 +105,11 @@ private:
   uint64_t   ptw_vaddr_     = 0;
   ACCESS_TYPE ptw_type_     = ACCESS_TYPE::LOAD;
   uint64_t   ptw_pte_addr_  = 0;     // address of the most recent PTE fetch
-  uint64_t   ptw_l1_ppn_    = 0;     // L1 PTE's PPN field (used for L0 base)
+  uint64_t   ptw_cur_ppn_   = 0;     // base PPN of the page table at ptw_level_
+  uint8_t    ptw_level_     = 0;     // current walk level: VX_VM_PT_LEVEL-1 .. 0
   uint64_t   ptw_final_ppn_ = 0;
   uint8_t    ptw_flags_     = 0;
-  uint8_t    ptw_leaf_level_= 0;     // 0 = 4KB page, 1 = SV32 megapage
+  uint8_t    ptw_leaf_level_= 0;     // leaf level: 0 = 4KB, 1 = mega, 2 = giga
   MemReq     ptw_orig_req_;
   uint32_t   ptw_orig_port_ = 0;
 

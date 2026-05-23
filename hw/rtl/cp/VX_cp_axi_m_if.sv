@@ -20,14 +20,12 @@
 // (typically all zero, write-allocate cache attributes).
 // ============================================================================
 
-interface VX_cp_axi_m_if
+interface VX_cp_axi_m_if import VX_cp_pkg::*;
 #(
   parameter int ADDR_W = 64,
   parameter int DATA_W = 512,
   parameter int ID_W   = VX_CP_AXI_TID_WIDTH_C
 );
-
-  import VX_cp_pkg::*;
 
   // ---- Write request address channel (AW) ----
   logic              awvalid;

@@ -459,3 +459,148 @@ the same seam `amdgpu` draws between its per-ASIC backend and its common
 core. The allocator, ring protocol, and queue/event layer live in the
 common core, matching the `amdgpu`/TTM shared core. `host_mem_alloc` is
 precisely a real driver's pinned-memory allocator for the ring.
+
+---
+
+# Addendum (May 2026) — Virtual Memory: an MMU-aware CP DMA
+
+**Status:** design. Supersedes the host-side `page_table_walk` model — which
+the `callbacks_t` collapse removed when it moved `mem_alloc` + DMA into the
+common core and the CP.
+
+## VM.1 What was wrong with the old model
+
+Vortex VM today: the host runtime builds page tables in device memory, and
+`upload`/`download` did a **software `page_table_walk` on the host** to turn a
+VA into a PA before DMA-ing. That only worked because the host had direct
+access to the simulator's RAM. It is wrong twice over:
+
+- It does not match real GPUs — on NVIDIA (GMMU + Copy Engines) and AMD
+  (GPUVM + SDMA) the copy/DMA engines are **MMU-aware**; the driver never
+  translates addresses on their behalf.
+- It does not fit the CP-sole-DMA architecture: the CP owns every transfer,
+  and it cannot call back into a host software walker.
+
+## VM.2 Principle — the copy engine is MMU-aware
+
+On modern GPUs: the **driver builds page tables and never walks them at run
+time**; **every hardware engine — compute units *and* copy/DMA engines —
+translates in hardware** through those same page tables; software works
+purely in **virtual addresses**. One address space, hardware translation.
+
+Vortex's CP already has a DMA engine (`VX_cp_dma`) — it *is* Vortex's copy
+engine. The correct design makes it MMU-aware, exactly like SDMA / a CE.
+
+## VM.3 Design
+
+```
+  host driver (vx::Device + VMManager)      the CP / its DMA engine
+  ──────────────────────────────────       ───────────────────────────
+  mem_alloc:  PA <- global_mem_             CMD_MEM_* device operand
+              VA <- phy_to_virt_map(PA)       = a VIRTUAL address
+  builds PTEs in a host shadow              VX_cp_dma walks the page table
+  flushes dirty PT pages via                 (HW walker + small TLB) -> PA,
+  CMD_MEM_WRITE(physical)                     then bursts AXI
+  runtime API is VA-only — no walks         shares the kernel's PTs + SATP
+```
+
+1. **Host driver (common core).** `vx::Device` owns the `VMManager` page-table
+   builder. `mem_alloc` allocates a PA from `global_mem_`, installs PTEs,
+   returns a **VA**; `mem_free` unmaps. The runtime API is VA-only — the
+   driver's job and *only* the driver's job, like `amdgpu`'s GPUVM manager.
+2. **Page-table writes.** `VMManager` keeps a host shadow of the page tables
+   (already its design) and flushes dirty PT pages with
+   **`CMD_MEM_WRITE(physical)`** — one bulk transfer per dirty PT page.
+3. **CP DMA = MMU-aware copy engine.** The device-side operand of every
+   `CMD_MEM_*` is a **VA**; `VX_cp_dma` translates it via a hardware
+   page-table walker + small TLB, using the kernel's page tables. The host
+   never translates.
+4. **`physical` command flag.** `CMD_MEM_*` carries a `physical` bit in its
+   header; set → the CP DMA skips translation. Used for PT bootstrap (writing
+   the first PT pages before the table exists) and the PT region itself.
+5. **SATP to the CP.** The host programs the page-table root + mode into a CP
+   regfile register (`CP_SATP_LO/HI`) at VM init so the CP DMA walker knows
+   where the table is. Compute cores still receive SATP via the kernel's boot
+   `csrw` — unchanged.
+6. **Compute cores — unchanged.** Their per-core MMU walks the same tables.
+7. **Simulators.** The shared C++ `CommandProcessor` model gains the same
+   MMU-aware behavior — a page-table walk in its device-memory path — so
+   simx / rtlsim / gem5 match FPGA semantics. (This models *the CP* walking,
+   mirroring hardware — not a host-side shortcut.)
+
+## VM.4 Why it is correct and efficient
+
+- **Correct:** one page table, hardware-walked by every engine; the host is
+  translation-free — the AMD SDMA / NVIDIA CE model verbatim.
+- **No `callbacks_t` impact:** VM lives entirely in the common core (PT
+  builder) and the CP (translation); the 6-function transport HAL is
+  untouched — a backend never sees VM.
+- **Efficient:** host-shadow + batched flush (one DMA per dirty PT page, not
+  per PTE); the CP-DMA TLB amortizes walks across the 4 KB burst chunks
+  `VX_cp_dma` already uses; `install_identity_map` already emits **megapage**
+  PTEs where alignment permits (fewer walk levels, less TLB pressure);
+  VA-only host API → zero host-side translation cost, no host/HW page-table
+  coherency race.
+
+## VM.5 Address-space map
+
+| Region | In device VA space? | CP DMA access |
+|---|---|---|
+| Command ring / DMA staging | no — host memory (`m_axi_host`) | untranslated |
+| Page-table region | physical | `CMD_MEM_*(physical)` |
+| IO / COUT `[0, USER_BASE)` | identity-mapped | translate → self |
+| Kernel image (`mem_reserve`) | identity-mapped | translate → self |
+| User buffers (`mem_alloc`) | virtual | translate |
+
+## VM.6 Phasing
+
+- **Phase 1 — simulators, no RTL.** Make the `CommandProcessor` C++ model
+  MMU-aware (walker in its device-memory path) + add the `physical` flag and
+  `CP_SATP` to the model; `vx::Device` owns the `VMManager`. → VM correct on
+  simx / rtlsim / gem5; validates the whole runtime + protocol end to end.
+- **Phase 2 — RTL.** `VX_cp_dma` gains a hardware page-table walker + TLB;
+  `VX_cp_axil_regfile` gains `CP_SATP`; the `CMD_MEM_*` decoder honors the
+  `physical` flag. → VM correct on xrt / opae.
+
+Validate each phase with sgemm + tex on the respective backends.
+
+## VM.7 — Phase 1 implementation checklist (file-by-file)
+
+**`sim/common/cmd_processor.{h,cpp}` — make the CP model MMU-aware**
+- `#include <vm_types.h>` (guarded by `VX_CFG_VM_ENABLE`).
+- New CP-internal regs `CP_SATP_LO = 0x028`, `CP_SATP_HI = 0x02C`; `mmio_write`
+  stores them into a `uint64_t satp_` member.
+- New private `uint64_t cp_translate(uint64_t va) const`: with VM disabled or
+  `satp_` mode `BARE`, return `va`; else do an Sv32/Sv39 walk using
+  `SATP_t`/`vAddr_t`/`PTE_t` and `hooks_.dram_read` to read PTEs — megapage-aware
+  (a leaf PTE at level > 0 contributes the low VA bits).
+- In the `CMD_MEM_*` handler: read `physical = cur_cmd_.flags & CP_MEM_FLAG_PHYSICAL`.
+  Translate the **device** operand(s) once at the base, before the chunk loop —
+  `MEM_WRITE`→`arg0`, `MEM_READ`→`arg1`, `MEM_COPY`→both; skip when `physical`.
+  (A buffer is one contiguous PA allocation, so a single base translate covers
+  the whole transfer.)
+
+**`sw/runtime/common/{vortex2_internal.h,device.cpp}` — host driver owns VM**
+- `Device` owns `std::unique_ptr<vortex::VMManager> vm_mgr_` and a nested
+  `CpMemIO : vortex::DeviceMemIO` whose `read`/`write` call `cp_submit_mem_*`
+  with the `physical` flag set (page-table I/O is PA-direct).
+- `cp_submit_mem_` gains a `bool physical` param → sets `CP_MEM_FLAG_PHYSICAL`
+  in the CL header `flags` byte. `dev_write/read/copy` pass `physical=false`
+  (the CP translates); `CpMemIO` passes `physical=true`.
+- `cp_init`: after `cp_enabled_`, if VM → construct `VMManager`, `init()`, then
+  program `CP_SATP_LO/HI` via `cp_reg_write` from the SATP value.
+- `mem_alloc` (VM, non-`VX_MEM_HOST`): `global_mem_.allocate()`→PA;
+  `VX_MEM_PHYS`→`install_identity_map` (keep PA); else `phy_to_virt_map`→VA.
+- `mem_free` (VM): `page_table_walk` VA→PA, then `global_mem_.release(PA)`.
+- `mem_reserve` (VM): `global_mem_.reserve` + `install_identity_map`.
+- `dev_write/read/copy`: **no** host-side translation — pass VAs straight to
+  `cp_submit_mem_*`; the CP DMA translates.
+
+**`sw/runtime/{simx,rtlsim}/vortex.cpp` — drop the dead VM stubs**
+- Delete the `#ifdef VX_CFG_VM_ENABLE` blocks (`RamMemIO`, `vm_mgr_`, `dev_io_`,
+  the `init()` VM call) — VM is wholly common-core now.
+
+**Build + validate:** a `VX_CFG_VM_ENABLE=true` build (`VX_config.toml`), then
+sgemm + tex on simx and rtlsim. The `CP_MEM_FLAG_PHYSICAL` bit + the SATP regs
+are also what Phase 2's `VX_cp_dma` RTL walker will consume — identical wire
+protocol.

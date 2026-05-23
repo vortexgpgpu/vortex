@@ -71,6 +71,9 @@ void CommandProcessor::mmio_write(uint32_t off, uint32_t value) {
     // Globals
     switch (off) {
         case 0x000: cp_ctrl_ = value; return;
+        // CP_SATP — page-table root for the CP DMA's MMU.
+        case 0x028: satp_ = (satp_ & 0xFFFFFFFF00000000ULL) |  uint64_t(value);         return;
+        case 0x02C: satp_ = (satp_ & 0x00000000FFFFFFFFULL) | (uint64_t(value) << 32);  return;
         // STATUS / DEV_CAPS / CYCLE / GPU caps are RO; ignore writes.
         case 0x004: case 0x008: case 0x010: case 0x014:
         case 0x018: case 0x01C: case 0x020: case 0x024: return;
@@ -106,9 +109,17 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         case 0x000: return cp_ctrl_;
         case 0x004: return uint32_t(busy() ? 1 : 0);    // CP_STATUS bit0
         case 0x008: {
-            // CP_DEV_CAPS: {AXI_TID_W:8 | RING_LOG2:8 | NUM_QUEUES:8}.
-            // Defaults match the hardware (TID=6, RING_LOG2=16, NUM_QUEUES=1).
-            return (uint32_t(6) << 16) | (uint32_t(16) << 8) | uint32_t(1);
+            // CP_DEV_CAPS: {VM_ENABLED:1 @bit24 | AXI_TID_W:8 | RING_LOG2:8
+            // | NUM_QUEUES:8}. Defaults match the hardware (TID=6,
+            // RING_LOG2=16, NUM_QUEUES=1). VM_ENABLED is published from this
+            // sim's build config so the config-agnostic libvortex.so can
+            // discover VM at vx_device_open instead of #ifdef-ing on it.
+            uint32_t vm_enabled = 0;
+#ifdef VX_CFG_VM_ENABLE
+            vm_enabled = 1u << 24;
+#endif
+            return vm_enabled | (uint32_t(6) << 16)
+                 | (uint32_t(16) << 8) | uint32_t(1);
         }
         case 0x010: return uint32_t(cycle_counter_ & 0xFFFFFFFF);
         case 0x014: return uint32_t(cycle_counter_ >> 32);
@@ -116,6 +127,8 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         case 0x01C: return uint32_t(gpu_dev_caps() >> 32);
         case 0x020: return uint32_t(gpu_isa_caps() & 0xFFFFFFFF);
         case 0x024: return uint32_t(gpu_isa_caps() >> 32);
+        case 0x028: return uint32_t(satp_ & 0xFFFFFFFF);
+        case 0x02C: return uint32_t(satp_ >> 32);
     }
     if (off >= 0x100 && off < 0x140) {
         switch (off - 0x100) {
@@ -135,6 +148,56 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         }
     }
     return 0xDEADBEEF;
+}
+
+// ============================================================================
+// VM — page-table walk (the CP DMA is an MMU-aware copy engine)
+// ============================================================================
+
+uint64_t CommandProcessor::cp_translate(uint64_t vaddr, bool physical) const {
+#ifdef VX_CFG_VM_ENABLE
+    if (physical || satp_ == 0)
+        return vaddr;
+    SATP_t satp(satp_);
+    if (satp.get_mode() == BARE)
+        return vaddr;
+    // Sv32/Sv39 walk — mirrors VMManager::page_table_walk so the CP DMA and
+    // the host driver resolve addresses identically.
+    int i = VX_VM_PT_LEVEL - 1;
+    vAddr_t va(vaddr);
+    uint64_t cur_base_ppn = satp.get_base_ppn();
+    for (;;) {
+        uint64_t pte_addr  = cur_base_ppn * VX_VM_PT_SIZE
+                           + va.vpn[i] * VX_VM_PTE_SIZE;
+        uint64_t pte_bytes = 0;
+        if (hooks_.dram_read)
+            hooks_.dram_read(pte_addr, &pte_bytes, VX_VM_PTE_SIZE);
+        PTE_t pte(pte_bytes);
+        if (pte.v == 0)
+            return vaddr;            // unmapped — pass through (defensive)
+        if (pte.r == 0 && pte.w == 0 && pte.x == 0) {
+            if (--i < 0)
+                return vaddr;        // no leaf — pass through
+            cur_base_ppn = pte.ppn;
+            continue;
+        }
+        cur_base_ppn = pte.ppn;      // leaf found at level i
+        break;
+    }
+    // Reconstruct the physical address. For a leaf found at level i > 0 (a
+    // mega/gigapage) the low VX_VM_PAGE_LOG2_SIZE + i*VPN_BITS address bits
+    // are the offset *within* the superpage and must come from the VA, not
+    // from the (superpage-aligned) leaf PPN. For a 4 KB leaf (i == 0) this
+    // reduces to the ordinary ppn<<12 | page-offset.
+    constexpr unsigned VPN_BITS = cp_clog2(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
+    const uint64_t off_mask =
+        (uint64_t(1) << (VX_VM_PAGE_LOG2_SIZE + i * VPN_BITS)) - 1;
+    return ((cur_base_ppn << VX_VM_PAGE_LOG2_SIZE) & ~off_mask)
+         | (vaddr & off_mask);
+#else
+    (void)physical;
+    return vaddr;
+#endif
 }
 
 // ============================================================================
@@ -352,12 +415,27 @@ void CommandProcessor::tick_engine() {
                        cur_cmd_.opcode == OP_MEM_READ  ||
                        cur_cmd_.opcode == OP_MEM_COPY) {
                 // CMD_MEM_*: copy arg2 bytes from src (arg1) to dst (arg0).
-                // The functional model has a single unified memory, so all
-                // three opcodes behave identically — the host-vs-device
-                // distinction is a hardware-only routing concern handled by
-                // VX_cp_dma.sv (axi_host vs axi_dev). Done in this tick.
+                // The CP DMA is an MMU-aware copy engine: the device-side
+                // operand is a virtual address, translated here by a
+                // page-table walk. MEM_WRITE -> arg0 is the device dst;
+                // MEM_READ -> arg1 is the device src; MEM_COPY -> both.
+                // Host-side operands and physical-flagged commands pass
+                // through untranslated. A buffer is one contiguous PA
+                // allocation, so translating the base covers the transfer.
                 if (hooks_.dram_read && hooks_.dram_write
                  && cur_cmd_.arg2 != 0) {
+                    const bool physical =
+                        (cur_cmd_.flags & MEM_FLAG_PHYSICAL) != 0;
+                    uint64_t dst = cur_cmd_.arg0;
+                    uint64_t src = cur_cmd_.arg1;
+                    if (cur_cmd_.opcode == OP_MEM_WRITE) {
+                        dst = cp_translate(dst, physical);
+                    } else if (cur_cmd_.opcode == OP_MEM_READ) {
+                        src = cp_translate(src, physical);
+                    } else { // OP_MEM_COPY — both operands are device
+                        dst = cp_translate(dst, physical);
+                        src = cp_translate(src, physical);
+                    }
                     const uint64_t total = cur_cmd_.arg2;
                     constexpr uint64_t CHUNK = 64 * 1024;
                     std::vector<uint8_t> buf(
@@ -365,8 +443,8 @@ void CommandProcessor::tick_engine() {
                     for (uint64_t done = 0; done < total; ) {
                         uint64_t n = total - done;
                         if (n > CHUNK) n = CHUNK;
-                        hooks_.dram_read (cur_cmd_.arg1 + done, buf.data(), n);
-                        hooks_.dram_write(cur_cmd_.arg0 + done, buf.data(), n);
+                        hooks_.dram_read (src + done, buf.data(), n);
+                        hooks_.dram_write(dst + done, buf.data(), n);
                         done += n;
                     }
                 }

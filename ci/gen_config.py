@@ -230,6 +230,13 @@ def _scan_hex_literals(toml_path: str) -> Dict[str, HexMeta]:
 def _format_int_literal(dkind: str, key: str, value: int, hex_meta: Dict[str, HexMeta]) -> str:
   hm = hex_meta.get(key)
   if hm is None:
+    # A bare decimal literal is implicitly 32-bit in Verilog; a value
+    # outside the signed-32-bit range is silently truncated by strict
+    # tools (e.g. Vivado synthesis). Emit a sized hex literal instead so
+    # the full value survives — address/size constants can exceed 2**31.
+    if dkind == "sv" and value >= 2**31:
+      digits = f"{value:X}"
+      return f"{4 * len(digits)}'h{digits}"
     return str(value)
   if dkind == "sv":  # verilog-style literal
     return f"{hm.width}'h{hm.digits}"
