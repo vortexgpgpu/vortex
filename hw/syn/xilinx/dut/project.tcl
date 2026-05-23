@@ -71,19 +71,33 @@ proc run_setup {} {
   # Create project
   create_project $project_name $project_name -force -part $device_part
 
-  # 1. Synthesis: Enable Retiming
-  set_property strategy "Flow_PerfOptimized_High" [get_runs synth_1]
-  set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]
+  # Synthesis optimization level (OPT_LEVEL env, set by the Makefile):
+  #   0    -- Flow_RuntimeOptimized: fastest compile, minimal optimization
+  #   1, 2 -- Vivado defaults (no overrides)
+  #   3    -- default: aggressive performance flow (Flow_PerfOptimized_High +
+  #           Performance_ExtraTimingOpt + AggressiveExplore phys_opt)
+  set opt_level 3
+  if {[info exists ::env(OPT_LEVEL)]} { set opt_level $::env(OPT_LEVEL) }
 
-  # 2. Implementation: Use ExtraTimingOpt
-  set_property strategy "Performance_ExtraTimingOpt" [get_runs impl_1]
+  if {$opt_level == 0} {
+    set_property strategy "Flow_RuntimeOptimized"      [get_runs synth_1]
+    set_property strategy "Performance_RuntimeOptimized" [get_runs impl_1]
+  } elseif {$opt_level >= 3} {
+    # 1. Synthesis: Enable Retiming
+    set_property strategy "Flow_PerfOptimized_High" [get_runs synth_1]
+    set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]
 
-  # 3. Implementation: Force Physical Optimization steps
-  set_property STEPS.PHYS_OPT_DESIGN.IS_ENABLED true [get_runs impl_1]
-  set_property STEPS.PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]
+    # 2. Implementation: Use ExtraTimingOpt
+    set_property strategy "Performance_ExtraTimingOpt" [get_runs impl_1]
 
-  set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.IS_ENABLED true [get_runs impl_1]
-  set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]
+    # 3. Implementation: Force Physical Optimization steps
+    set_property STEPS.PHYS_OPT_DESIGN.IS_ENABLED true [get_runs impl_1]
+    set_property STEPS.PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]
+
+    set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.IS_ENABLED true [get_runs impl_1]
+    set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]
+  }
+  # OPT_LEVEL 1 or 2: Vivado defaults (no strategy overrides).
 
   # Add constrains file
   read_xdc $xdc_file

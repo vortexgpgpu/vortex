@@ -8,6 +8,11 @@ BUILD_DIR := $(PREFIX)
 SAIF_FILE ?=
 SAIF_INST ?=
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile (no opt), 3 -- default. Forwarded to each sub-build.
+OPT_LEVEL ?= 3
+export OPT_LEVEL
+
 .PHONY: unittest scope mem_unit lmem cache fpu tcu dxa tex raster om core issue vortex top
 
 unittest:

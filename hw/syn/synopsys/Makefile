@@ -8,6 +8,14 @@ SAIF_FILE 	?=
 SAIF_INST 	?=
 LIB_TYPE 	?= DEFAULT
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- compile -map_effort low    (fastest, lowest QoR)
+#   1 -- compile -map_effort medium
+#   2 -- compile_ultra              (no retiming)
+#   3 -- compile_ultra -retime      (default, highest QoR)
+# project.tcl reads this through the OPT_LEVEL env var.
+OPT_LEVEL ?= 3
+
 SRC_DIR := $(VORTEX_HOME)/hw/syn/synopsys
 LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 
@@ -169,6 +177,7 @@ synthesis: $(BUILD_DIR)/sources.txt
 	MEM_LIBS="$(SRAM_DB)" \
 	SAIF_FILE="$(SAIF_FILE)" \
 	SAIF_INST="$(SAIF_INST)" \
+	OPT_LEVEL=$(OPT_LEVEL) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	WALL_IGNORE=$(WALL_IGNORE) \
@@ -184,6 +193,7 @@ synthesis-nosram: $(BUILD_DIR)/sources.txt
 	SDC_FILE=$(SRC_DIR)/project.sdc \
 	SAIF_FILE="$(SAIF_FILE)" \
 	SAIF_INST="$(SAIF_INST)" \
+	OPT_LEVEL=$(OPT_LEVEL) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	WALL_IGNORE=$(WALL_IGNORE) \
@@ -200,6 +210,7 @@ synthesis-estsram: $(BUILD_DIR)/sources.txt
 	BB_MODULES="VX_dp_ram_asic,VX_sp_ram_asic" \
 	SAIF_FILE="$(SAIF_FILE)" \
 	SAIF_INST="$(SAIF_INST)" \
+	OPT_LEVEL=$(OPT_LEVEL) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	WALL_IGNORE=$(WALL_IGNORE) \

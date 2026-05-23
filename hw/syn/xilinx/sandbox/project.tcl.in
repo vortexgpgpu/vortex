@@ -433,6 +433,17 @@ proc run_setup {} {
   #set_property STEPS.WRITE_BITSTREAM.TCL.PRE ${script_dir}/pre_bitstream_hook.tcl  [get_runs impl_1]
   #set_property STEPS.WRITE_BITSTREAM.TCL.POST  ${script_dir}/post_bitstream_hook.tcl [get_runs impl_1]
 
+  # Synthesis optimization level (OPT_LEVEL env, set by the Makefile):
+  #   0    -- Flow_RuntimeOptimized: fastest compile
+  #   1, 2 -- Vivado defaults (current sandbox behaviour)
+  #   3    -- default (Vivado defaults)
+  set opt_level 3
+  if {[info exists ::env(OPT_LEVEL)]} { set opt_level $::env(OPT_LEVEL) }
+  if {$opt_level == 0} {
+    set_property strategy "Flow_RuntimeOptimized"        [get_runs synth_1]
+    set_property strategy "Performance_RuntimeOptimized" [get_runs impl_1]
+  }
+
   update_compile_order -fileset sources_1
 }
 

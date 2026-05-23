@@ -7,6 +7,13 @@ DELAY_IO  	?= 0.05
 SAIF_FILE 	?=
 SAIF_INST 	?=
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile, 3 -- default. NOT supported on this backend.
+OPT_LEVEL ?= 3
+ifneq ($(OPT_LEVEL),3)
+$(error OPT_LEVEL=$(OPT_LEVEL) requested but not supported on the yosys backend)
+endif
+
 SRC_DIR := $(VORTEX_HOME)/hw/syn/yosys
 LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 

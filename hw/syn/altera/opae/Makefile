@@ -6,6 +6,13 @@ DEVICE_FAMILY ?= arria10
 PREFIX ?= build$(XLEN)
 TARGET ?= fpga
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile, 3 -- default. NOT supported on this backend.
+OPT_LEVEL ?= 3
+ifneq ($(OPT_LEVEL),3)
+$(error OPT_LEVEL=$(OPT_LEVEL) requested but not supported on the altera/opae backend)
+endif
+
 SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/opae
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
