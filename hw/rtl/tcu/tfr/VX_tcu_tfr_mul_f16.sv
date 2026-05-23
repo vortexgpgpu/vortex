@@ -42,9 +42,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     `UNUSED_VAR ({clk, req_id, valid_in})
     `UNUSED_VAR (vld_mask)
 
-    // ======================================================================
-    // 1. Constants & Parameters
-    // ======================================================================
+    // Constants
 
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
@@ -71,20 +69,23 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     `UNUSED_PARAM (BIAS_CONST_BF16)
     `UNUSED_PARAM (S_TF32)
     `UNUSED_PARAM (S_BF16)
+`ifndef TCU_FP16_ENABLE
+    `UNUSED_PARAM (BIAS_CONST_FP16)
+    `UNUSED_PARAM (S_FP16)
+`endif
 
 
-    // ======================================================================
-    // 2. Main Loop (Per TCK Lane)
-    // ======================================================================
+    // Main loop
 
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
 
         wire lane_valid = vld_mask[i*4];
         localparam OFF_16 = (i % 2) * 16;
+`ifndef TCU_FP16_ENABLE
+        `UNUSED_PARAM (OFF_16)
+`endif
 
-        // ------------------------------------------------------------------
-        // 2a. Input Muxing & Field Extraction
-        // ------------------------------------------------------------------
+        // Input muxing and field extraction
         logic [7:0] raw_ea, raw_eb;
         logic [9:0] raw_ma, raw_mb;
         logic       raw_sa, raw_sb;
@@ -92,6 +93,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
 
         always_comb begin
             case (fmt_f)
+            `ifdef TCU_FP16_ENABLE
                 TCU_FP16_ID: begin
                     raw_ea    = 8'(a_row[i/2][S_FP16-1+OFF_16 -: E_FP16]);
                     raw_eb    = 8'(b_col[i/2][S_FP16-1+OFF_16 -: E_FP16]);
@@ -101,7 +103,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                     raw_sb    = b_col[i/2][15+OFF_16];
                     bias_sel  = BIAS_CONST_FP16;
                 end
-            `ifdef TCU_BF16_ENABLE
                 TCU_BF16_ID: begin
                     raw_ea    = a_row[i/2][S_BF16-1+OFF_16 -: E_BF16];
                     raw_eb    = b_col[i/2][S_BF16-1+OFF_16 -: E_BF16];
@@ -134,20 +135,18 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
                 end
             `endif
                 default: begin
-                    raw_ea    = 'x;
-                    raw_eb    = 'x;
-                    raw_ma    = 'x;
-                    raw_mb    = 'x;
-                    raw_sa    = 'x;
-                    raw_sb    = 'x;
-                    bias_sel  = 'x;
+                    raw_ea    = '0;
+                    raw_eb    = '0;
+                    raw_ma    = '0;
+                    raw_mb    = '0;
+                    raw_sa    = '0;
+                    raw_sb    = '0;
+                    bias_sel  = '0;
                 end
             endcase
         end
 
-        // ------------------------------------------------------------------
-        // 2b. Inline Generic Classification
-        // ------------------------------------------------------------------
+        // Classification
 
         fedp_class_t cls_a;
         VX_tcu_tfr_classifier #(
@@ -169,14 +168,17 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
             .cls (cls_b)
         );
 
-        // ------------------------------------------------------------------
-        // 2c. Operand Preparation
-        // ------------------------------------------------------------------
-        wire [7:0] ea_sel = cls_a.is_sub ? 8'b1 : raw_ea;
-        wire [7:0] eb_sel = cls_b.is_sub ? 8'b1 : raw_eb;
+        // Operand preparation
+        wire is_ea_zero = (raw_ea == 0);
+        wire is_eb_zero = (raw_eb == 0);
 
-        wire [10:0] ma_sel = {!cls_a.is_sub, raw_ma};
-        wire [10:0] mb_sel = {!cls_b.is_sub, raw_mb};
+        wire [7:0] ea_sel = is_ea_zero ? 8'b1 : raw_ea;
+        wire [7:0] eb_sel = is_eb_zero ? 8'b1 : raw_eb;
+
+        wire [10:0] ma_sel = {~is_ea_zero, raw_ma};
+        wire [10:0] mb_sel = {~is_eb_zero, raw_mb};
+        `UNUSED_VAR (cls_a.is_sub)
+        `UNUSED_VAR (cls_b.is_sub)
 
         wire sign_sel = raw_sa ^ raw_sb;
         wire zero_sel = cls_a.is_zero | cls_b.is_zero;
@@ -188,11 +190,7 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         wire nan_sel = nan_in | inf_z;
         wire inf_sel = inf_op & ~inf_z;
 
-        // ------------------------------------------------------------------
-        // 2d. Arithmetic Path
-        // ------------------------------------------------------------------
-
-        // Exponent Addition
+        // Arithmetic path
         wire [EXP_W-1:0] exp_sum, exp_carry;
         VX_csa_tree #(
             .N (3),
@@ -218,7 +216,6 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
 
         assign result_exp[i] = (~zero_sel && lane_valid) ? exp_final_sum : '0;
 
-        // Mantissa Multiplication
         wire [21:0] man_prod;
         VX_wallace_mul #(
             .N (11),
@@ -229,21 +226,19 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
             .p(man_prod)
         );
 
-        // Output Formatting
         always_comb begin
             case (fmt_f)
+            `ifdef TCU_FP16_ENABLE
                 TCU_FP16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
-            `ifdef TCU_BF16_ENABLE
                 TCU_BF16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
             `endif
             `ifdef TCU_TF32_ENABLE
                 TCU_TF32_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
             `endif
-                default:     result_sig[i] = 'x;
+                default:     result_sig[i] = '0;
             endcase
         end
 
-        // Exception Outputs
         assign exceptions[i].is_nan = nan_sel && lane_valid;
         assign exceptions[i].is_inf = inf_sel && lane_valid;
         assign exceptions[i].sign   = sign_sel;

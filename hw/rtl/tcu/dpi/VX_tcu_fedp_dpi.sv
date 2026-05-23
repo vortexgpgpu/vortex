@@ -37,7 +37,9 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     output wire [31:0] d_val
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_SPARAM (SF)
+`ifndef TCU_FP4_ENABLE
+    `UNUSED_PARAM (SF)
+`endif
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
@@ -53,17 +55,22 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
         reg [63:0] temp, prod;
         reg [4:0] fflags;
     `ifdef TCU_MX_ENABLE
+    `ifdef TCU_FP8_ENABLE
         reg [7:0] raw_sf_a, raw_sf_b, raw_sf;
+    `endif
+    `ifdef TCU_FP4_ENABLE
         reg [63:0] a_sf, b_sf, temp_sf;
         localparam MX_SLOT_4B = ((i / 2) < SF) ? (i / 2) : (SF - 1);
         wire [7:0] sf_a_4b = sf_a[MX_SLOT_4B];
         wire [7:0] sf_b_4b = sf_b[MX_SLOT_4B];
+    `endif
     `endif
 
         `UNUSED_VAR({fflags, prod[63:32]});
 
         always_latch begin
             case (fmt_s)
+        `ifdef TCU_FP16_ENABLE
             TCU_FP16_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 2; j++) begin
@@ -82,6 +89,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
+        `endif
+        `ifdef TCU_FP8_ENABLE
             TCU_FP8_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 4; j++) begin
@@ -100,13 +109,17 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     dpi_fadd(enable, int'(0), temp, prod, 3'b0, prod, fflags);
                 end
             end
+        `endif
+        `ifdef TCU_TF32_ENABLE
             TCU_TF32_ID: begin
                 prod = 64'hffffffff00000000;
                 dpi_f2f(enable, int'(0), int'(6), {32'hffffffff, a_row[i]}, 3'b0, a_f, fflags);
                 dpi_f2f(enable, int'(0), int'(6), {32'hffffffff, b_col[i]}, 3'b0, b_f, fflags);
                 dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, prod, fflags);
             end
+        `endif
         `ifdef TCU_MX_ENABLE
+        `ifdef TCU_FP8_ENABLE
             TCU_MXFP8_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 4; j++) begin
@@ -137,6 +150,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     prod[30:23] = prod[30:23] + raw_sf;
                 end
             end
+        `endif
+        `ifdef TCU_FP4_ENABLE
             TCU_NVFP4_ID: begin
                 prod = 64'hffffffff00000000;
                 for (int j = 0; j < 8; j++) begin
@@ -150,7 +165,9 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                 dpi_fmul(enable, int'(0), a_sf, b_sf, 3'b0, temp_sf, fflags);
                 dpi_fmul(enable, int'(0), prod, temp_sf, 3'b0, prod, fflags);
             end
+        `endif
         `endif  // TCU_MX_ENABLE
+        `ifdef TCU_INT8_ENABLE
             TCU_I8_ID: begin
                 prod = 0;
                 for (int j = 0; j < 4; j++) begin
@@ -161,18 +178,6 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                 prod = 0;
                 for (int j = 0; j < 4; j++) begin
                     prod += a_row[i][8 * j +: 8] * b_col[i][8 * j +: 8];
-                end
-            end
-            TCU_I4_ID: begin
-                prod = 0;
-                for (int j = 0; j < 8; j++) begin
-                    prod += $signed({{28{a_row[i][4 * j + 3]}}, a_row[i][4 * j +: 4]}) * $signed({{28{b_col[i][4 * j + 3]}}, b_col[i][4 * j +: 4]});
-                end
-            end
-            TCU_U4_ID: begin
-                prod = 0;
-                for (int j = 0; j < 8; j++) begin
-                    prod += a_row[i][4 * j +: 4] * b_col[i][4 * j +: 4];
                 end
             end
         `ifdef TCU_MX_ENABLE
@@ -198,7 +203,22 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                     prod += 64'($signed(scaled_prod));
                 end
             end
-        `endif  // TCU_MX_ENABLE
+        `endif
+        `endif
+        `ifdef TCU_INT4_ENABLE
+            TCU_I4_ID: begin
+                prod = 0;
+                for (int j = 0; j < 8; j++) begin
+                    prod += $signed({{28{a_row[i][4 * j + 3]}}, a_row[i][4 * j +: 4]}) * $signed({{28{b_col[i][4 * j + 3]}}, b_col[i][4 * j +: 4]});
+                end
+            end
+            TCU_U4_ID: begin
+                prod = 0;
+                for (int j = 0; j < 8; j++) begin
+                    prod += a_row[i][4 * j +: 4] * b_col[i][4 * j +: 4];
+                end
+            end
+        `endif
             default: begin
                 prod = 'x;
             end

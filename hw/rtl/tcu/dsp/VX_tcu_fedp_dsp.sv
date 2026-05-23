@@ -168,11 +168,11 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
 
         always @(*) begin
             case (fmt_s)
+        `ifdef TCU_FP16_ENABLE
             TCU_FP16_ID: begin
                 a_row_sel = a_row_fp16;
                 a_col_sel = b_col_fp16;
             end
-        `ifdef TCU_BF16_ENABLE
             TCU_BF16_ID: begin
                 a_row_sel = a_row_bf16;
                 a_col_sel = b_col_bf16;

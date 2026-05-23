@@ -71,6 +71,7 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*, fpnew_pkg::*; #(
     wire [31:0] mult_result [TCK];
 
     for (genvar i = 0; i < TCK; ++i) begin : g_multiply
+    `ifdef TCU_FP16_ENABLE
         wire [31:0] mult_result_fp16;
 
         VX_tcu_fpnew_mulfp32 #(
@@ -86,7 +87,6 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*, fpnew_pkg::*; #(
             .y      (mult_result_fp16)
         );
 
-    `ifdef TCU_BF16_ENABLE
         wire [31:0] mult_result_bf16;
 
         VX_tcu_fpnew_mulfp32 #(
@@ -106,8 +106,8 @@ module VX_tcu_fedp_fpnew import VX_tcu_pkg::*, fpnew_pkg::*; #(
         logic [31:0] mult_result_mux;
         always_comb begin
             case ({1'b0, fmt_s_delayed})
+            `ifdef TCU_FP16_ENABLE
                 TCU_FP16_ID: mult_result_mux = mult_result_fp16;
-            `ifdef TCU_BF16_ENABLE
                 TCU_BF16_ID: mult_result_mux = mult_result_bf16;
             `endif
                 default:     mult_result_mux = 'x;

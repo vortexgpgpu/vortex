@@ -47,6 +47,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     `UNUSED_VAR ({clk, req_id, valid_in, fmt_f})
 
 `ifdef TCU_MX_ENABLE
+`ifdef TCU_FP4_ENABLE
 
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
@@ -241,6 +242,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         assign exceptions[i].is_inf = 1'b0;
         assign exceptions[i].sign   = sum_sign & ~is_zero_out;
     end
+`endif
 `endif
 
 endmodule

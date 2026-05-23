@@ -45,13 +45,45 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
     output wire [TCK-1:0]     lane_mask
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+`ifndef TCU_MX_ENABLE
+    `UNUSED_PARAM (SF)
+`endif
     `UNUSED_VAR ({clk, req_id, valid_in})
 
-    // ======================================================================
-    // 1. Independent Compute Paths
-    // ======================================================================
+`ifdef TCU_FP16_ENABLE
+`define TFR_MUL_F16_ENABLE
+`elsif TCU_TF32_ENABLE
+`define TFR_MUL_F16_ENABLE
+`endif
 
-    // --- F16 / BF16 / TF32 ------------------------------------------------
+    // Input fanout replication
+`ifdef TFR_MUL_F16_ENABLE
+    (* keep = "true" *) wire [N-1:0][31:0] a_row_f16 = a_row;
+    (* keep = "true" *) wire [N-1:0][31:0] b_col_f16 = b_col;
+`endif
+`ifdef TCU_FP8_ENABLE
+    (* keep = "true" *) wire [N-1:0][31:0] a_row_f8 = a_row;
+    (* keep = "true" *) wire [N-1:0][31:0] b_col_f8 = b_col;
+`endif
+`ifdef TCU_MX_ENABLE
+`ifdef TCU_FP4_ENABLE
+    (* keep = "true" *) wire [N-1:0][31:0] a_row_f4 = a_row;
+    (* keep = "true" *) wire [N-1:0][31:0] b_col_f4 = b_col;
+`endif
+`endif
+`ifdef TCU_INT8_ENABLE
+    (* keep = "true" *) wire [N-1:0][31:0] a_row_int8 = a_row;
+    (* keep = "true" *) wire [N-1:0][31:0] b_col_int8 = b_col;
+`endif
+`ifdef TCU_INT4_ENABLE
+    (* keep = "true" *) wire [N-1:0][31:0] a_row_int4 = a_row;
+    (* keep = "true" *) wire [N-1:0][31:0] b_col_int4 = b_col;
+`endif
+
+    // Compute paths
+
+`ifdef TFR_MUL_F16_ENABLE
+    // F16 / BF16 / TF32
     wire [TCK-1:0][24:0]      mul_f16_sig;
     wire [TCK-1:0][EXP_W-1:0] mul_f16_exp;
     fedp_excep_t [TCK-1:0]    mul_f16_exc;
@@ -68,14 +100,16 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .req_id     (req_id),
         .vld_mask   (vld_mask),
         .fmt_f      (fmt_s[3:0]),
-        .a_row      (a_row),
-        .b_col      (b_col),
+        .a_row      (a_row_f16),
+        .b_col      (b_col_f16),
         .result_sig (mul_f16_sig),
         .result_exp (mul_f16_exp),
         .exceptions (mul_f16_exc)
     );
+`endif
 
-    // --- FP8 / BF8 --------------------------------------------------------
+`ifdef TCU_FP8_ENABLE
+    // FP8 / BF8
     wire [TCK-1:0][24:0]      mul_f8_sig;
     wire [TCK-1:0][EXP_W-1:0] mul_f8_exp;
     fedp_excep_t [TCK-1:0]    mul_f8_exc;
@@ -92,8 +126,8 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .req_id     (req_id),
         .vld_mask   (vld_mask),
         .fmt_f      (fmt_s[3:0]),
-        .a_row      (a_row),
-        .b_col      (b_col),
+        .a_row      (a_row_f8),
+        .b_col      (b_col_f8),
     `ifdef TCU_MX_ENABLE
         .sf_a       (sf_a[0]),
         .sf_b       (sf_b[0]),
@@ -102,13 +136,15 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .result_exp (mul_f8_exp),
         .exceptions (mul_f8_exc)
     );
+`endif
 
-    // --- FP4 ---------------------------------------------------------------
+`ifdef TCU_MX_ENABLE
+`ifdef TCU_FP4_ENABLE
+    // FP4
     wire [TCK-1:0][24:0]      mul_f4_sig;
     wire [TCK-1:0][EXP_W-1:0] mul_f4_exp;
     fedp_excep_t [TCK-1:0]    mul_f4_exc;
 
-`ifdef TCU_MX_ENABLE
     wire [SF-1:0][TCK-1:0][24:0]      mul_f4_sig_s;
     wire [SF-1:0][TCK-1:0][EXP_W-1:0] mul_f4_exp_s;
     fedp_excep_t [SF-1:0][TCK-1:0]    mul_f4_exc_s;
@@ -126,8 +162,8 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
             .req_id     (req_id),
             .vld_mask   (vld_mask),
             .fmt_f      (fmt_s[3:0]),
-            .a_row      (a_row),
-            .b_col      (b_col),
+            .a_row      (a_row_f4),
+            .b_col      (b_col_f4),
             .sf_a       (sf_a[s]),
             .sf_b       (sf_b[s]),
             .result_sig (mul_f4_sig_s[s]),
@@ -150,30 +186,49 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         end
     end
 `endif
+`endif
 
-    // --- I8/U8/I4/U4 ------------------------------------------------------
-    wire [TCK-1:0][24:0] mul_int_sig;
-    VX_tcu_tfr_mul_int #(
+`ifdef TCU_INT8_ENABLE
+    // I8 / U8 / MXI8
+    wire [TCK-1:0][24:0] mul_int8_sig;
+    VX_tcu_tfr_mul_i8 #(
         .N(N),
         .TCK(TCK)
-    ) mul_int (
+    ) mul_int8 (
         .clk        (clk),
         .valid_in   (valid_in),
         .req_id     (req_id),
         .vld_mask   (vld_mask),
         .fmt_i      (fmt_s[3:0]),
-        .a_row      (a_row),
-        .b_col      (b_col),
+        .a_row      (a_row_int8),
+        .b_col      (b_col_int8),
     `ifdef TCU_MX_ENABLE
         .sf_a       (sf_a[0]),
         .sf_b       (sf_b[0]),
     `endif
-        .result     (mul_int_sig)
+        .result     (mul_int8_sig)
     );
+`endif
 
-    // ======================================================================
-    // 2. Aggregation & Exception Reduction
-    // ======================================================================
+`ifdef TCU_INT4_ENABLE
+    // I4 / U4
+    wire [TCK-1:0][24:0] mul_int4_sig;
+    VX_tcu_tfr_mul_i4 #(
+        .N(N),
+        .TCK(TCK)
+    ) mul_int4 (
+        .clk        (clk),
+        .valid_in   (valid_in),
+        .req_id     (req_id),
+        .vld_mask   (vld_mask),
+        .fmt_i      (fmt_s[3:0]),
+        .a_row      (a_row_int4),
+        .b_col      (b_col_int4),
+        .result     (mul_int4_sig)
+    );
+`endif
+
+    // Aggregation and exception reduction
 
     VX_tcu_tfr_mul_join #(
         .N(N),
@@ -190,28 +245,39 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
 
         .c_val      (c_val),
 
+    `ifdef TFR_MUL_F16_ENABLE
         .sig_f16    (mul_f16_sig),
         .exp_f16    (mul_f16_exp),
         .exc_f16    (mul_f16_exc),
+    `endif
 
+    `ifdef TCU_FP8_ENABLE
         .sig_f8     (mul_f8_sig),
         .exp_f8     (mul_f8_exp),
         .exc_f8     (mul_f8_exc),
+    `endif
 
+    `ifdef TCU_MX_ENABLE
+    `ifdef TCU_FP4_ENABLE
         .sig_f4     (mul_f4_sig),
         .exp_f4     (mul_f4_exp),
         .exc_f4     (mul_f4_exc),
+    `endif
+    `endif
 
-        .sig_int    (mul_int_sig),
+    `ifdef TCU_INT8_ENABLE
+        .sig_int8   (mul_int8_sig),
+    `endif
+    `ifdef TCU_INT4_ENABLE
+        .sig_int4   (mul_int4_sig),
+    `endif
 
         .sig_out    (raw_sigs),
         .exp_out    (exponents),
         .exc_out    (exceptions)
     );
 
-    // ======================================================================
-    // 3. Global Maximum Exponent
-    // ======================================================================
+    // Global maximum exponent
 
     VX_tcu_tfr_max_exp #(
         .N     (TCK+1),
@@ -221,9 +287,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
         .max_exp   (max_exp)
     );
 
-    // ======================================================================
-    // 4. Lane Mask
-    // ======================================================================
+    // Lane mask
 
     VX_tcu_tfr_lane_mask #(
         .N   (N),
@@ -235,3 +299,7 @@ module VX_tcu_tfr_mul_exp import VX_tcu_pkg::*;  #(
     );
 
 endmodule
+
+`ifdef TFR_MUL_F16_ENABLE
+`undef TFR_MUL_F16_ENABLE
+`endif

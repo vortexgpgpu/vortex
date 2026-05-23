@@ -165,7 +165,7 @@ package VX_tcu_pkg;
 
     `ifdef TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;
-    `elsif TCU_BF16_ENABLE
+    `elsif TCU_FP16_ENABLE
         localparam TCU_EXP_BITS = 10;
     `else
         localparam TCU_EXP_BITS = 9;

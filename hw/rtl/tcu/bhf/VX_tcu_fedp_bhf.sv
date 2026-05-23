@@ -77,16 +77,9 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
 
     for (genvar i = 0; i < TCK; i++) begin : g_multiply
 
-        wire [32:0] mult_result_fp16;
-        wire [32:0] mult_result_bf16;
-
+    `ifdef TCU_FP8_ENABLE
         wire [32:0] mult_result_fp8;
         wire [32:0] mult_result_bf8;
-
-        wire [32:0] mult_result_tf32;
-
-        `UNUSED_VAR ({mult_result_bf16, mult_result_fp8, mult_result_bf8, mult_result_tf32});
-
         VX_tcu_bhf_fp8mul #(
             .IN_EXPW (4),
             .IN_SIGW (3+1),
@@ -130,7 +123,11 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
             .y      (mult_result_bf8),
             `UNUSED_PIN(fflags)
         );
+    `endif
 
+    `ifdef TCU_FP16_ENABLE
+        wire [32:0] mult_result_fp16;
+        wire [32:0] mult_result_bf16;
         VX_tcu_bhf_fmul #(
             .IN_EXPW (5),
             .IN_SIGW (10+1),
@@ -170,7 +167,10 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
             .y      (mult_result_bf16),
             `UNUSED_PIN(fflags)
         );
+    `endif
 
+    `ifdef TCU_TF32_ENABLE
+        wire [32:0] mult_result_tf32;
         // Only even TCK lanes are valid for TF32
         if ((i % 2) == 0) begin : g_tf32_mul
             VX_tcu_bhf_fmul #(
@@ -196,15 +196,13 @@ module VX_tcu_fedp_bhf import VX_tcu_pkg::*; #(
             // Zero out odd lanes
             assign mult_result_tf32 = 33'h0;
         end
-    `ifndef TCU_TF32_ENABLE
-        `UNUSED_VAR (mult_result_tf32)
     `endif
 
         logic [32:0] mult_result_mux;
         always_comb begin
             case({1'b0, fmt_s_delayed})
+            `ifdef TCU_FP16_ENABLE
                 TCU_FP16_ID: mult_result_mux = mult_result_fp16;
-            `ifdef TCU_BF16_ENABLE
                 TCU_BF16_ID: mult_result_mux = mult_result_bf16;
             `endif
             `ifdef TCU_FP8_ENABLE
