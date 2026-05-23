@@ -433,8 +433,13 @@ private:
       uint32_t tile_x = uint32_t(hdr.tile_x) * tile_size;
       uint32_t tile_y = uint32_t(hdr.tile_y) * tile_size;
       for (uint32_t j = 0; j < hdr.pids_count; ++j) {
-        uint16_t pid;
-        std::memcpy(&pid, &pid_table_buf_[pid_table_offset_[t] + j * 2], 2);
+        // PIDs are stored as uint32_t words (see start_load_pids /
+        // start_load_prims, which use kPidStride = sizeof(uint32_t)).
+        uint32_t pid_word;
+        std::memcpy(&pid_word,
+                    &pid_table_buf_[pid_table_offset_[t] + j * sizeof(uint32_t)],
+                    sizeof(uint32_t));
+        uint16_t pid = uint16_t(pid_word);
         auto pit = prim_data_.find(pid);
         if (pit == prim_data_.end()) continue;
         const auto& prim = pit->second;

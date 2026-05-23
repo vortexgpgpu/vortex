@@ -5,6 +5,13 @@ DEVICE ?= xcu55c-fsvh2892-2L-e
 
 MAX_JOBS ?= 8
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0    -- fastest compile, minimal optimization (Flow_RuntimeOptimized)
+#   1, 2 -- Vivado defaults (current sandbox behaviour)
+#   3    -- default
+# project.tcl reads this through the OPT_LEVEL env var.
+OPT_LEVEL ?= 3
+
 VIVADO := $(XILINX_VIVADO)/bin/vivado
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/sandbox
@@ -66,11 +73,11 @@ project_1/sources.txt:
 
 build: done.dcp
 done.dcp: project_1/sources.txt kernel.bin.coe project.tcl pre_opt_hook.tcl
-	MAX_JOBS=$(JOBS) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source project.tcl -tclargs $(DEVICE) project_1/sources.txt
+	MAX_JOBS=$(JOBS) OPT_LEVEL=$(OPT_LEVEL) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source project.tcl -tclargs $(DEVICE) project_1/sources.txt
 	echo done > done.dcp
 
 run: simulate.tcl done.dcp
-	MAX_JOBS=$(JOBS) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source simulate.tcl -tclargs project_1/project_1.xpr 50000ns
+	MAX_JOBS=$(JOBS) OPT_LEVEL=$(OPT_LEVEL) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source simulate.tcl -tclargs project_1/project_1.xpr 50000ns
 
 open: done.dcp
 	TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) project_1/project_1.xpr &

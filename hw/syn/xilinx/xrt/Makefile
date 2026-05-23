@@ -21,6 +21,12 @@ SAIF_FILE ?=
 SAIF_INST ?=
 MAX_JOBS ?= 8
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile, no optimization (Vitis --optimize 0)
+#   3 -- default
+# Flows through to v++ via --optimize. DEBUG builds force level 0.
+OPT_LEVEL ?= 3
+
 SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
@@ -169,7 +175,7 @@ ifdef DEBUG
 		CFLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	endif
 else
-	VPP_FLAGS += --optimize 3
+	VPP_FLAGS += --optimize $(OPT_LEVEL)
 	CFLAGS += -DNDEBUG
 endif
 

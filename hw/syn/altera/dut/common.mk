@@ -1,6 +1,13 @@
 ROOT_DIR := $(realpath ../../../../../..)
 include $(ROOT_DIR)/config.mk
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile, 3 -- default. NOT supported on this backend.
+OPT_LEVEL ?= 3
+ifneq ($(OPT_LEVEL),3)
+$(error OPT_LEVEL=$(OPT_LEVEL) requested but not supported on the altera/dut backend)
+endif
+
 SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/dut
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl

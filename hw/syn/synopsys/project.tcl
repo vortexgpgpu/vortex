@@ -871,8 +871,21 @@ catch { set compile_seqmap_propagate_constants true }
 catch { set power_enable_analysis true }
 
 # ---------------- compile ----------------
-if {[catch {compile_ultra -retime} compile_err]} {
-  DIE "Synthesis (compile_ultra) Failed: $compile_err"
+# Synthesis optimization level (OPT_LEVEL env, set by the Makefile):
+#   0 -- compile -map_effort low    : fastest, lowest QoR
+#   1 -- compile -map_effort medium : light optimization
+#   2 -- compile_ultra              : moderate (no retiming)
+#   3 -- compile_ultra -retime      : default (highest QoR, slowest)
+set opt_level 3
+if {[info exists ::env(OPT_LEVEL)]} { set opt_level $::env(OPT_LEVEL) }
+set compile_cmd [list compile_ultra -retime]
+switch -- $opt_level {
+  0 { set compile_cmd [list compile -map_effort low] }
+  1 { set compile_cmd [list compile -map_effort medium] }
+  2 { set compile_cmd [list compile_ultra] }
+}
+if {[catch {eval $compile_cmd} compile_err]} {
+  DIE "Synthesis ([join $compile_cmd { }]) Failed: $compile_err"
 }
 # If OPT-101 occurs, DC leaves generic "GTECH" cells. We must catch this.
 set unmapped_cells [get_cells -hierarchical -filter "ref_name =~ *GTECH*"]

@@ -453,6 +453,34 @@ opencl()
     echo "opencl tests done!"
 }
 
+# Vulkan tests — exercise the vortexpipe Gallium driver through
+# Mesa's lavapipe ICD. See docs/proposals/vulkan_support_proposal.md.
+#
+# vortexpipe lives in the Vortex Mesa fork and is installed by
+# ci/mesa_install.sh into $TOOLDIR/mesa-vortex. A shader is lowered
+# SPIR-V -> NIR -> LLVM IR -> rv32 .vxbin inside the driver at run
+# time, so the suite is SimX-only and rv32-only.
+vulkan()
+{
+    echo "begin vulkan tests..."
+
+    MESA_VORTEX=${MESA_VORTEX:-@TOOLDIR@/mesa-vortex}
+    if [ ! -f "$MESA_VORTEX/share/vulkan/icd.d/lvp_icd.x86_64.json" ]; then
+        echo "error: Mesa with vortexpipe not found at $MESA_VORTEX — run ci/mesa_install.sh first"
+        exit 1
+    fi
+
+    # vortexpipe compiles shader kernels against sw/kernel's
+    # libvortex2.a and dispatches them through the SimX backend.
+    make -C sw/kernel
+    make -C sw/runtime/stub
+    make -C sw/runtime/simx
+
+    make -C tests/vulkan run-simx
+
+    echo "vulkan tests done!"
+}
+
 rvc()
 {
     echo "begin rvc tests..."
@@ -1226,7 +1254,7 @@ hip()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1269,6 +1297,9 @@ while [ "$1" != "" ]; do
                 ;;
         --opencl )
                 tests+=("opencl")
+                ;;
+        --vulkan )
+                tests+=("vulkan")
                 ;;
         --cache )
                 tests+=("cache")

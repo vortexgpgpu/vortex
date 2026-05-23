@@ -1,3 +1,10 @@
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile, 3 -- default. NOT supported on this backend.
+OPT_LEVEL ?= 3
+ifneq ($(OPT_LEVEL),3)
+$(error OPT_LEVEL=$(OPT_LEVEL) requested but not supported on this backend)
+endif
+
 all: RUNFILE
 
 # -LDFLAGS '-lsystemc'
