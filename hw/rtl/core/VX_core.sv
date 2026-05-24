@@ -256,7 +256,8 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
 
         .warp_ctl_if    (warp_ctl_if),
-        .branch_ctl_if  (branch_ctl_if)
+        .branch_ctl_if  (branch_ctl_if),
+        .lsu_queue_empty(lsu_queue_empty)
     );
 
     VX_commit #(
@@ -353,7 +354,14 @@ module VX_core import VX_gpu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, mmu_icache_if[0]);
 `endif
 
-    assign busy = sched_busy || dcr_busy;
+    // Core.busy must stay high while any LSU slice still has an
+    // in-flight request. The scheduler's pending_warp counter
+    // (sched_busy) decrements when the LSU input accepts a store —
+    // not when the store actually leaves on lsu_mem_if — so without
+    // ORing in ~lsu_queue_empty the device can momentarily appear
+    // idle with stores still parked in the slice's mem_scheduler.
+    wire lsu_queue_empty;
+    assign busy = sched_busy || dcr_busy || ~lsu_queue_empty;
 
 `ifdef PERF_ENABLE
 

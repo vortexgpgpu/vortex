@@ -246,8 +246,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // dispatch warps
         if (cta_fire) begin
             active_warps_n[cta_wid] = 1;
-            // if executing next CTA on same warp, we can skip prolog and jump to kernel_main at PC-12 (see vx_start.S)
-            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(`VX_CFG_XLEN'(12)));
+            // if executing next CTA on same warp, we can skip prolog and jump to kernel_main at PC-16 (see vx_start.S)
+            // 16 = csrr(4) + jalr(4) + wsync(4) + tmc(4). The wsync was added to drain LSU writes before tmc.
+            warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(`VX_CFG_XLEN'(16)));
             thread_masks_n[cta_wid] = cta_tmask;
         end
 

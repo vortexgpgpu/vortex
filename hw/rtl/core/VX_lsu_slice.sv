@@ -27,7 +27,14 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_result_if.master     result_if,
-    VX_lsu_mem_if.master    lsu_mem_if
+    VX_lsu_mem_if.master    lsu_mem_if,
+
+    // High when this slice has no LSU activity in flight. Plumbed up
+    // through VX_lsu_unit/VX_execute into Core.busy so the device's
+    // idle signal waits for in-flight stores to actually leave the LSU
+    // — the warp-level commit counter decrements at the LSU input, not
+    // at the lsu_mem_if exit.
+    output wire             lsu_queue_empty
 );
     localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
@@ -104,6 +111,17 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     end
 
     // schedule memory request
+
+    // High only when this slice has no LSU activity in flight: nothing
+    // waiting at the slice input, nothing parked in the mem_scheduler's
+    // input queue, and no batch mid-dispatch on lsu_mem_if. Plumbed up
+    // through VX_lsu_unit/VX_execute into Core.busy so the device idle
+    // signal waits for in-flight stores to actually leave the LSU (the
+    // warp-level commit counter decrements at LSU input, not at exit).
+    wire mem_sched_req_queue_empty;
+    assign lsu_queue_empty = mem_sched_req_queue_empty
+                          & ~lsu_mem_if.req_valid
+                          & ~execute_if.valid;
 
     wire                            mem_req_valid;
     wire [NUM_LANES-1:0]            mem_req_mask;
@@ -365,8 +383,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .core_req_tag   (mem_req_tag),
         .core_req_ready (mem_req_ready),
 
-        // request queue info
-        `UNUSED_PIN (req_queue_empty),
+        // request queue info — wired into `lsu_queue_empty` below.
+        .req_queue_empty (mem_sched_req_queue_empty),
         `UNUSED_PIN (req_queue_rw_notify),
 
         // Output response

@@ -89,8 +89,9 @@ void Scheduler::on_reset() {
 void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   auto& warp = warps_[wid];
 
-  // if executing next CTA on same warp, we can skip prolog and jump to kernel_main at PC-12 (see vx_start.S)
-  warp.PC       = rec.do_init ? rec.PC : (warp.PC - 12);
+  // if executing next CTA on same warp, we can skip prolog and jump to kernel_main at PC-16 (see vx_start.S)
+  // 16 = csrr(4) + jalr(4) + wsync(4) + tmc(4). The wsync was added to drain LSU writes before tmc.
+  warp.PC       = rec.do_init ? rec.PC : (warp.PC - 16);
   warp.tmask    = rec.tmask;
   warp.mscratch = rec.mscratch;
 

@@ -35,6 +35,7 @@
 #include <iomanip>
 #include <mem.h>
 #include <host_monitor.h>
+#include <cout_drainer.h>
 
 #include <VX_config.h>
 #include <ostream>
@@ -164,7 +165,7 @@ public:
     ram_ = ram;
   }
 
-  void run(HostMonitor* monitor) {
+  void run(HostMonitor* monitor, CoutDrainer* cout_drainer) {
   #ifndef NDEBUG
     std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
   #endif
@@ -178,12 +179,20 @@ public:
       this->tick();
     }
 
-    // wait for device to go idle, or for the HTIF tohost write
+    // wait for device to go idle, or for the HTIF tohost write.
+    //
+    // Standalone rtlsim has no host runtime, so a kernel that uses
+    // vx_printf would back-pressure on a full COUT ring forever unless
+    // it's drained here (cf. Device::drain_cout). Drainer is only wired
+    // by sim/rtlsim/main.cpp — the runtime path leaves it null so the
+    // runtime's own drainer is the sole COUT consumer.
     while (device_->busy) {
       this->tick();
+      if (cout_drainer) cout_drainer->tick(*ram_);
       if (monitor && monitor->enabled() && monitor->tick(*ram_))
         break;
     }
+    if (cout_drainer) cout_drainer->tick(*ram_); // final flush
 
     this->cout_flush();
   }
@@ -469,8 +478,8 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-void Processor::run(HostMonitor* monitor) {
-  impl_->run(monitor);
+void Processor::run(HostMonitor* monitor, CoutDrainer* cout_drainer) {
+  impl_->run(monitor, cout_drainer);
 }
 
 int Processor::dcr_write(uint32_t addr, uint32_t value) {

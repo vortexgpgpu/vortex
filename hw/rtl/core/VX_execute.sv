@@ -56,6 +56,11 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
+    // High only when every LSU slice's mem_scheduler is empty. Plumbed
+    // up into Core.busy so the device doesn't go idle while a store is
+    // still parked in the LSU input queue (see VX_lsu_slice port doc).
+    output wire             lsu_queue_empty,
+
     // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if,
     VX_branch_ctl_if.master branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
@@ -91,11 +96,12 @@ module VX_execute import VX_gpu_pkg::*; #(
         .CORE_ID     (CORE_ID)
     ) lsu_unit (
         `SCOPE_IO_BIND  (0)
-        .clk            (clk),
-        .reset          (reset),
-        .dispatch_if    (dispatch_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
-        .commit_if      (commit_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
-        .lsu_mem_if     (lsu_mem_if)
+        .clk             (clk),
+        .reset           (reset),
+        .dispatch_if     (dispatch_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .commit_if       (commit_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .lsu_mem_if      (lsu_mem_if),
+        .lsu_queue_empty (lsu_queue_empty)
     );
 
 `ifdef VX_CFG_EXT_F_ENABLE

@@ -27,12 +27,20 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_commit_if.master     commit_if [`VX_CFG_ISSUE_WIDTH],
-    VX_lsu_mem_if.master    lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS]
+    VX_lsu_mem_if.master    lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
+    // AND of all slices' lsu_queue_empty — high only when *every*
+    // block's mem_scheduler holds no pending request. Plumbed up into
+    // Core.busy so the device's idle signal waits for in-flight LSU
+    // stores to actually leave the LSU (the warp-level commit counter
+    // decrements at LSU input, not at lsu_mem_if exit).
+    output wire             lsu_queue_empty
 );
     localparam BLOCK_SIZE = `VX_CFG_NUM_LSU_BLOCKS;
     localparam NUM_LANES  = `VX_CFG_NUM_LSU_LANES;
 
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
+
+    wire [BLOCK_SIZE-1:0] per_block_queue_empty;
 
     VX_execute_if #(
         .data_t (lsu_execute_t)
@@ -59,13 +67,16 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .CORE_ID     (CORE_ID)
         ) lsu_slice(
             `SCOPE_IO_BIND  (block_idx)
-            .clk        (clk),
-            .reset      (reset),
-            .execute_if (per_block_execute_if[block_idx]),
-            .result_if  (per_block_result_if[block_idx]),
-            .lsu_mem_if (lsu_mem_if[block_idx])
+            .clk             (clk),
+            .reset           (reset),
+            .execute_if      (per_block_execute_if[block_idx]),
+            .result_if       (per_block_result_if[block_idx]),
+            .lsu_mem_if      (lsu_mem_if[block_idx]),
+            .lsu_queue_empty (per_block_queue_empty[block_idx])
         );
     end
+
+    assign lsu_queue_empty = (&per_block_queue_empty);
 
     VX_lane_gather #(
         .BLOCK_SIZE (BLOCK_SIZE),

@@ -12,33 +12,78 @@
 // limitations under the License.
 
 // ============================================================================
-// stub/vortex.cpp — build-target anchor for the dispatcher library
-// (libvortex.so).
+// stub/vortex.cpp — libvortex.so dispatcher.
 //
-// The real entry points live in common/:
+// libvortex.so is the user-facing front of the runtime. Its job is to:
+//   1. Aggregate the backend-agnostic entry points (common/vx_*.cpp,
+//      legacy_runtime.cpp, etc.) into a single dynamic library that
+//      every test/program links against.
+//   2. At first vx_device_open(), dlopen the backend library named by
+//      $VORTEX_DRIVER (default "simx"), resolve its vx_dev_init, and
+//      hand the populated callbacks_t back to common/device.cpp via the
+//      dispatcher_get_callbacks() accessor.
 //
-//   common/vx_*.cpp           — vortex2.h C entry points
-//                               (vx_device_open, vx_buffer_create,
-//                                vx_queue_create, vx_enqueue_*,
-//                                vx_event_*, ...). Internally use
-//                                vx::Device / Buffer / Queue / Event,
-//                                which dispatch to the loaded backend
-//                                via a CallbacksAdapter holding the
-//                                backend's callbacks_t (filled at
-//                                dlopen + vx_dev_init time by
-//                                common/device.cpp).
-//
-//   common/legacy_runtime.cpp — every legacy vortex.h C entry point
-//                               implemented as a pure wrapper over
-//                               vortex2.h symbols in the same library.
-//                               Never touches callbacks_t directly.
-//
-//   common/legacy_utils.cpp,  — vx_upload_kernel_*, vx_check_occupancy,
-//   common/legacy_perf.cpp      vx_mpm_query, vx_dump_perf. These call
-//                               vortex.h primitives which route through
-//                               the legacy wrapper above.
-//
-// This translation unit is intentionally empty of code; the Makefile
-// includes it as a source so the build target name (libvortex.so) is
-// anchored here.
+// common/ stays backend-agnostic: it includes "dispatcher.h" and asks
+// for a callbacks table; it never touches dlopen, getenv("VORTEX_DRIVER"),
+// or the library-name string. That contract lives entirely here.
 // ============================================================================
+
+#include "dispatcher.h"
+
+#include <cstdlib>
+#include <dlfcn.h>
+#include <iostream>
+#include <string>
+
+namespace {
+
+// Per-process handle on the dlopened backend library (libvortex-<NAME>.so).
+// One backend per process; reused across vx_device_open calls.
+void*       g_backend_lib = nullptr;
+callbacks_t g_backend_cb  {};
+
+} // anonymous namespace
+
+namespace vx {
+
+vx_result_t dispatcher_get_callbacks(const callbacks_t** out) {
+    if (!out) return VX_ERR_INVALID_VALUE;
+
+    if (g_backend_lib != nullptr) {
+        *out = &g_backend_cb;
+        return VX_SUCCESS;
+    }
+
+    const char* drv = std::getenv("VORTEX_DRIVER");
+    if (drv == nullptr) drv = "simx";   // default backend
+    std::string lib = std::string("libvortex-") + drv + ".so";
+
+    void* h = dlopen(lib.c_str(), RTLD_LAZY);
+    if (h == nullptr) {
+        std::cerr << "vortex: cannot open backend library '" << lib
+                  << "': " << dlerror() << std::endl;
+        return VX_ERR_DEVICE_LOST;
+    }
+
+    using vx_dev_init_t = int (*)(callbacks_t*);
+    auto init = reinterpret_cast<vx_dev_init_t>(dlsym(h, "vx_dev_init"));
+    if (init == nullptr) {
+        std::cerr << "vortex: backend library '" << lib
+                  << "' is missing vx_dev_init: " << dlerror() << std::endl;
+        dlclose(h);
+        return VX_ERR_DEVICE_LOST;
+    }
+
+    if (init(&g_backend_cb) != 0) {
+        std::cerr << "vortex: vx_dev_init failed in '" << lib << "'"
+                  << std::endl;
+        dlclose(h);
+        return VX_ERR_DEVICE_LOST;
+    }
+
+    g_backend_lib = h;
+    *out = &g_backend_cb;
+    return VX_SUCCESS;
+}
+
+} // namespace vx

@@ -331,10 +331,8 @@ void CommandProcessor::tick_engine() {
         decode_cmd(off, cur_cmd_);
         cur_is_launch_ = (cur_cmd_.opcode == OP_LAUNCH);
         switch (cur_cmd_.opcode) {
-            case OP_NOP: case OP_FENCE: case OP_CACHE_FLUSH:
-                // No resource bid for these opcodes; retire as NOP. The
-                // functional model has no caches, so CMD_CACHE_FLUSH is a
-                // pure no-op here — memory is already coherent.
+            case OP_NOP: case OP_FENCE:
+                // No resource bid for these opcodes; retire as NOP.
                 cur_is_no_resource_ = true;
                 break;
             default:
@@ -383,6 +381,21 @@ void CommandProcessor::tick_engine() {
                     uint32_t addr = uint32_t(cur_cmd_.arg0 & 0xFFF);
                     uint32_t tag  = uint32_t(cur_cmd_.arg1 & 0xFFFFFFFF);
                     last_dcr_rsp_ = hooks_.vortex_dcr_read(addr, tag);
+                }
+                eng_state_ = EngState::Retire;
+            } else if (cur_cmd_.opcode == OP_CACHE_FLUSH) {
+                // Mirrors hw/rtl/cp/VX_cp_dcr_proxy.sv: sweep a per-core
+                // DCR-read of VX_DCR_BASE_CACHE_FLUSH across [0, num_cores).
+                // arg0 carries num_cores from cp_submit_cache_flush. simx's
+                // dcr_read routes this to flush_caches() (drains dcache/L2/
+                // L3 to memsim); rtlsim's routes it through VX_dcr_data
+                // which asserts dcr_flush_if.req until the cache reports
+                // dcr_flush_if.done.
+                if (hooks_.vortex_dcr_read) {
+                    uint32_t n = uint32_t(cur_cmd_.arg0 & 0xFFFFFFFF);
+                    for (uint32_t cid = 0; cid < n; ++cid) {
+                        (void)hooks_.vortex_dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid);
+                    }
                 }
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_EVENT_SIG) {

@@ -6,6 +6,7 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 #include "vortex2_internal.h"
+#include "dispatcher.h"  // dispatcher_get_callbacks — load the backend selected by $VORTEX_DRIVER
 #include <vortex.h>  // vx_dump_perf — legacy MPM dumper wrapped by vx_device_dump_perf
 #include <VX_types.h>  // VX_MEM_IO_COUT_* (console buffer layout)
 #include "common.h"    // ALLOC_BASE_ADDR / GLOBAL_MEM_SIZE / *_SIZE constants
@@ -18,53 +19,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <dlfcn.h>
 #include <iostream>
 #include <string>
 #include <vector>
-
-namespace {
-
-// Per-process handle on the dlopened backend library (libvortex-<NAME>.so).
-// One backend per process; reused across vx_device_open calls.
-void*       g_backend_lib = nullptr;
-callbacks_t g_backend_cb  {};
-
-vx_result_t load_backend_once() {
-    if (g_backend_lib != nullptr) return VX_SUCCESS;   // already loaded
-
-    const char* drv = std::getenv("VORTEX_DRIVER");
-    if (drv == nullptr) drv = "simx";   // default backend
-    std::string lib = std::string("libvortex-") + drv + ".so";
-
-    void* h = dlopen(lib.c_str(), RTLD_LAZY);
-    if (h == nullptr) {
-        std::cerr << "vortex: cannot open backend library '" << lib
-                  << "': " << dlerror() << std::endl;
-        return VX_ERR_DEVICE_LOST;
-    }
-
-    using vx_dev_init_t = int (*)(callbacks_t*);
-    auto init = reinterpret_cast<vx_dev_init_t>(dlsym(h, "vx_dev_init"));
-    if (init == nullptr) {
-        std::cerr << "vortex: backend library '" << lib
-                  << "' is missing vx_dev_init: " << dlerror() << std::endl;
-        dlclose(h);
-        return VX_ERR_DEVICE_LOST;
-    }
-
-    if (init(&g_backend_cb) != 0) {
-        std::cerr << "vortex: vx_dev_init failed in '" << lib << "'"
-                  << std::endl;
-        dlclose(h);
-        return VX_ERR_DEVICE_LOST;
-    }
-
-    g_backend_lib = h;
-    return VX_SUCCESS;
-}
-
-} // anonymous namespace
 
 namespace vx {
 
@@ -137,14 +94,15 @@ vx_result_t Device::open(uint32_t index, Device** out) {
     if (!out) return VX_ERR_INVALID_VALUE;
     if (index != 0) return VX_ERR_INVALID_VALUE;   // one device per backend
 
-    auto r = load_backend_once();
+    const callbacks_t* cb = nullptr;
+    auto r = dispatcher_get_callbacks(&cb);
     if (r != VX_SUCCESS) return r;
 
     void* dev_ctx = nullptr;
-    if (g_backend_cb.dev_open(&dev_ctx) != 0)
+    if (cb->dev_open(&dev_ctx) != 0)
         return VX_ERR_DEVICE_LOST;
 
-    std::unique_ptr<Platform> plat(new CallbacksAdapter(g_backend_cb, dev_ctx));
+    std::unique_ptr<Platform> plat(new CallbacksAdapter(*cb, dev_ctx));
     Device* d = new Device(std::move(plat));
     auto cr = d->cp_init();
     if (cr != VX_SUCCESS) {

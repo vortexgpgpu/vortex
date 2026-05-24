@@ -19,6 +19,7 @@ namespace vortex {
 
 class RAM;
 class HostMonitor;
+class CoutDrainer;
 
 class Processor {
 public:
@@ -29,8 +30,11 @@ public:
   void attach_ram(RAM* ram);
 
   // When `monitor` is non-null and enabled, the run loop polls it each
-  // cycle and stops as soon as the HTIF `tohost` word is written.
-  void run(HostMonitor* monitor = nullptr);
+  // cycle and stops as soon as the HTIF `tohost` word is written. When
+  // `cout_drainer` is non-null, the run loop drains the lossless COUT
+  // stream-ring every cycle — only standalone rtlsim wires this; the
+  // runtime path leaves it null and drains COUT itself.
+  void run(HostMonitor* monitor = nullptr, CoutDrainer* cout_drainer = nullptr);
 
   int dcr_write(uint32_t addr, uint32_t value);
 

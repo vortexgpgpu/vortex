@@ -129,6 +129,8 @@ __vx_cta_entry:
   .option norvc
   jalr  ra, s11
   .option pop
+  # drain all pending instruction this warp issued before retiring warp
+  .insn r RISCV_CUSTOM0, 7, 0, x0, x0, x0  # wsync
   # shutdown warp.
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
   .size __vx_cta_entry, .-__vx_cta_entry
@@ -176,6 +178,9 @@ __vx_cta_entry:
 _Exit:
   li t0, VX_MEM_IO_EXIT_CODE
   sw a0, 0(t0)
+  # drain all pending instruction this warp issued before retiring warp
+  .insn r RISCV_CUSTOM0, 7, 0, x0, x0, x0  # wsync
+  # shutdown warp
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
 
 .section .text

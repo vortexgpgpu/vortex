@@ -46,9 +46,13 @@ $(RISCV_TESTS_STAMP):
 	PATH=$(RISCV_TOOLCHAIN_PATH)/bin:$$PATH $(MAKE) -C $(ISA_DIR) \
 	  XLEN=$(XLEN) RISCV_PREFIX=$(RISCV_PREFIX)- \
 	  rv$(XLEN)ui rv$(XLEN)um rv$(XLEN)uf rv$(XLEN)ud rv$(XLEN)ua rv$(XLEN)uc
+	# The patched crt.S/syscalls.c reference VX_MEM_IO_* symbols from
+	# the generated sw/VX_types.h; inject that include path into the
+	# upstream Makefile via RISCV_GCC (the only compile entry point).
 	PATH=$(RISCV_TOOLCHAIN_PATH)/bin:$$PATH $(MAKE) -C $(BENCHMARKS_DIR) \
 	  XLEN=$(XLEN) RISCV_PREFIX=$(RISCV_PREFIX)- src_dir=$(BENCHMARKS_DIR) \
 	  ABI=$(BENCH_ABI) RISCV_MARCH=$(BENCH_MARCH) \
+	  RISCV_GCC="$(RISCV_PREFIX)-gcc -I$(ROOT_DIR)/sw" \
 	  $(addsuffix .riscv,$(BENCH_LIST))
 	touch $@
 
