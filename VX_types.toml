@@ -25,15 +25,20 @@ VX_MEM_LMEM_BASE_ADDR       = "expr: $VX_MEM_STACK_BASE_ADDR"
 VX_MEM_IO_BASE_ADDR         = "expr: 0x0000000000000040 if ($XLEN == 64) else 0x00000040"
 VX_MEM_PAGE_TABLE_BASE_ADDR = "expr: 0x00000000F0000000 if ($XLEN == 64) else 0xF0000000"
 VX_MEM_IO_COUT_ADDR         = "expr: $VX_MEM_IO_BASE_ADDR"
-# Console buffer — lossless back-pressured stream rings (proposal §10):
-# one ring per hart. Layout: wr[SLOTS] u32, rd[SLOTS] u32, data[SLOTS][RING].
-# The kernel back-pressures on a full ring; the host drains in the CP
-# launch-wait poll. One slot per hart (hartid folded mod SLOTS).
+# Console buffer — lossy per-hart stream rings (proposal §10, post-O-1).
+# Layout: wr[SLOTS] u32, rd[SLOTS] u32, data[SLOTS][RING], lost[SLOTS] u32.
+# Producer (vx_putchar) drops the byte on a full ring and atomically
+# increments lost[slot]; host drain reports "#N: lost K bytes" alongside
+# the drained stream. One slot per hart (hartid folded mod SLOTS). Matches
+# CUDA's cudaLimitPrintfFifoSize / HIP printf shape: bounded, non-blocking,
+# with an overflow indicator. Replaces the legacy spin-on-full path that
+# could deadlock a printf-heavy launch (cp_v3_critical_review §4.5, O-1).
 VX_MEM_IO_COUT_SLOTS        = 64
 VX_MEM_IO_COUT_RING         = 512
 VX_MEM_IO_COUT_RING_LOG2    = 9
-# total = SLOTS*4 (wr) + SLOTS*4 (rd) + SLOTS*RING (data) = 64*8 + 64*512
-VX_MEM_IO_COUT_SIZE         = 33280
+# total = SLOTS*4 (wr) + SLOTS*4 (rd) + SLOTS*RING (data) + SLOTS*4 (lost)
+#       = 64*12 + 64*512 = 33536
+VX_MEM_IO_COUT_SIZE         = 33536
 VX_MEM_IO_EXIT_CODE         = "expr: ($VX_MEM_IO_COUT_ADDR + $VX_MEM_IO_COUT_SIZE + 8)"
 VX_MEM_IO_END_ADDR          = "expr: $VX_MEM_USER_BASE_ADDR"
 

@@ -24,16 +24,27 @@ void CoutDrainer::tick(RAM& ram) {
   const uint64_t WR_BASE   = VX_MEM_IO_COUT_ADDR;
   const uint64_t RD_BASE   = VX_MEM_IO_COUT_ADDR + uint64_t(SLOTS) * 4;
   const uint64_t DATA_BASE = VX_MEM_IO_COUT_ADDR + uint64_t(SLOTS) * 8;
+  const uint64_t LOST_BASE = DATA_BASE + uint64_t(SLOTS) * RING;
 
   uint32_t wr[SLOTS];
-  ram.read(wr, WR_BASE, sizeof(wr));
+  uint32_t lost[SLOTS];
+  ram.read(wr,   WR_BASE,   sizeof(wr));
+  ram.read(lost, LOST_BASE, sizeof(lost));
 
   bool advanced = false;
   for (uint32_t s = 0; s < SLOTS; ++s) {
     const uint32_t rd = rd_[s];
+    // Surface lost-byte deltas — kernel atomically bumps lost[slot] on a
+    // full-ring drop; host reports the delta and remembers the latest.
+    if (lost[s] != lost_seen_[s]) {
+      uint32_t delta = lost[s] - lost_seen_[s];
+      std::cout << "[#" << s << ": lost " << delta << " bytes]"
+                << std::endl;
+      lost_seen_[s] = lost[s];
+    }
     if (wr[s] == rd) continue;
     uint32_t n = wr[s] - rd;
-    if (n > RING) n = RING; // defensive — a lossless ring never overruns
+    if (n > RING) n = RING; // defensive — should not exceed RING in the lossy ring
     char data[RING];
     ram.read(data, DATA_BASE + uint64_t(s) * RING, RING);
     for (uint32_t i = 0; i < n; ++i) {

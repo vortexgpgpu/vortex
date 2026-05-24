@@ -62,9 +62,13 @@ module VX_cp_engine
   input  wire                     dcr_done_i,
   input  wire                     event_done_i,
 
-  // Retirement signaling to VX_cp_completion.
+  // Retirement signaling to VX_cp_completion. `retire_evt` is held high in
+  // S_RETIRE until `retire_ready_i` is observed — valid/ready handshake so
+  // completion never drops a seqnum on cycle collisions (see
+  // VX_cp_completion's per-source latch).
   output logic                    retire_evt,
   output logic [63:0]             retire_seqnum,
+  input  wire                     retire_ready_i,
 
   // Profiling sample pulses (consumed by the event unit).
   output logic                    submit_evt,
@@ -167,8 +171,13 @@ module VX_cp_engine
           endcase
         end
         S_RETIRE: begin
-          seqnum_r <= seqnum_r + 64'd1;
-          fsm      <= S_IDLE;
+          // Hold S_RETIRE (and retire_evt) until completion accepts the
+          // retire. seqnum_r only advances on the cycle we move out, so
+          // retire_seqnum keeps presenting the same value to the latch.
+          if (retire_ready_i) begin
+            seqnum_r <= seqnum_r + 64'd1;
+            fsm      <= S_IDLE;
+          end
         end
         default: fsm <= S_IDLE;
       endcase
@@ -203,7 +212,11 @@ module VX_cp_engine
     retire_seqnum = seqnum_r;
 
     submit_evt   = (fsm == S_DECODE) && cur_cmd.hdr.flags[F_PROFILE];
-    end_evt      = (fsm == S_RETIRE) && cur_cmd.hdr.flags[F_PROFILE];
+    // end_evt aligns with the retire handshake fire (one pulse per command)
+    // rather than the multi-cycle S_RETIRE state, so the profiling unit
+    // counts each retired command exactly once.
+    end_evt      = (fsm == S_RETIRE) && retire_ready_i
+                                     && cur_cmd.hdr.flags[F_PROFILE];
     profile_slot = cur_cmd.profile_slot;
   end
 

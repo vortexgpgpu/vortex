@@ -132,23 +132,27 @@ using namespace vx;
 
 extern "C" vx_result_t vx_buffer_create(vx_device_h dev, uint64_t size,
                                         uint32_t flags, vx_buffer_h* out) {
+    VX_C_ENTRY_TRY
     if (!dev || !out) return VX_ERR_INVALID_VALUE;
     Buffer* b = nullptr;
     auto r = Buffer::create(to_device(dev), size, flags, &b);
     if (r != VX_SUCCESS) return r;
     *out = to_handle(b);
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_buffer_reserve(vx_device_h dev, uint64_t address,
                                          uint64_t size, uint32_t flags,
                                          vx_buffer_h* out) {
+    VX_C_ENTRY_TRY
     if (!dev || !out) return VX_ERR_INVALID_VALUE;
     Buffer* b = nullptr;
     auto r = Buffer::reserve(to_device(dev), address, size, flags, &b);
     if (r != VX_SUCCESS) return r;
     *out = to_handle(b);
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_buffer_retain(vx_buffer_h buf) {
@@ -179,9 +183,11 @@ extern "C" vx_result_t vx_buffer_access(vx_buffer_h buf, uint64_t offset,
 extern "C" vx_result_t vx_buffer_map(vx_buffer_h buf, uint64_t offset,
                                      uint64_t size, uint32_t flags,
                                      void** out_host_ptr) {
+    VX_C_ENTRY_TRY
     if (!buf)          return VX_ERR_INVALID_HANDLE;
     if (!out_host_ptr) return VX_ERR_INVALID_VALUE;
     return to_buffer(buf)->map(offset, size, flags, out_host_ptr);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_buffer_unmap(vx_buffer_h buf, void* host_ptr) {

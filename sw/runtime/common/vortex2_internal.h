@@ -27,14 +27,44 @@
 #include <condition_variable>
 #include <cstring>
 #include <deque>
+#include <exception>
 #include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <new>            // std::bad_alloc
 #include <string>
+#include <system_error>   // std::system_error (std::thread ctor)
 #include <thread>
 #include <unordered_set>
 #include <vector>
+
+// ============================================================================
+// VX_C_ENTRY_{TRY,CATCH} — wrap every extern "C" entry point that may
+// construct C++ objects so an exception cannot propagate across the C ABI
+// boundary (UB). `new` can throw std::bad_alloc; std::thread's ctor (used
+// by Queue) can throw std::system_error on resource exhaustion. Backends
+// that throw their own exceptions (e.g. XRT) are handled by their own
+// wrapper at the callbacks_t boundary, so we only need to catch what the
+// common-core code can raise.
+//
+// Pattern:
+//   extern "C" vx_result_t vx_foo(...) {
+//       VX_C_ENTRY_TRY
+//       ...body...
+//       VX_C_ENTRY_CATCH
+//   }
+// ============================================================================
+
+#define VX_C_ENTRY_TRY try {
+#define VX_C_ENTRY_CATCH                                                    \
+    } catch (const std::bad_alloc&) {                                       \
+        return VX_ERR_OUT_OF_HOST_MEMORY;                                   \
+    } catch (const std::system_error&) {                                    \
+        return VX_ERR_INTERNAL;                                             \
+    } catch (...) {                                                         \
+        return VX_ERR_INTERNAL;                                             \
+    }
 
 namespace vx {
 
@@ -347,12 +377,15 @@ private:
     std::unique_ptr<vortex::VMManager>  vm_mgr_;
     std::mutex                          vm_mu_;   // serialize VMManager ops
 
-    // Lossless COUT stream-ring consumer state (proposal §10). cout_rd_[h]
+    // Lossy COUT stream-ring consumer state (proposal §10, O-1). cout_rd_[h]
     // is the host read pointer for hart h's ring; cout_line_[h] holds a
-    // partial (not-yet-newline-terminated) line. Both persist across the
-    // per-poll drain_cout() calls.
-    uint32_t                       cout_rd_[VX_MEM_IO_COUT_SLOTS] = {};
-    std::string                    cout_line_[VX_MEM_IO_COUT_SLOTS];
+    // partial (not-yet-newline-terminated) line; cout_lost_seen_[h] is the
+    // last-observed value of the device-side `lost[h]` counter, so the
+    // drainer can emit deltas — `[#h: lost N bytes]` — only when new
+    // overruns appear since the previous drain.
+    uint32_t                       cout_rd_       [VX_MEM_IO_COUT_SLOTS] = {};
+    uint32_t                       cout_lost_seen_[VX_MEM_IO_COUT_SLOTS] = {};
+    std::string                    cout_line_     [VX_MEM_IO_COUT_SLOTS];
 
     // Kernel-args scratch pool (Phase 2). Free-list of recycled fixed-size
     // device slots; ARGS_SLOT_SIZE comfortably covers typical kernel arg

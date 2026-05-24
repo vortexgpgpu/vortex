@@ -157,9 +157,11 @@ module VX_cp_core
   VX_cp_engine_bid_if bid_dcr   [NUM_QUEUES] ();
   VX_cp_engine_bid_if bid_event [NUM_QUEUES] ();
 
-  // Retire + profile pulses from each CPE.
+  // Retire + profile pulses from each CPE. retire_evt is held by the
+  // engine until retire_ready (from VX_cp_completion) handshakes.
   logic        retire_evt    [NUM_QUEUES];
   logic [63:0] retire_seqnum [NUM_QUEUES];
+  logic        retire_ready  [NUM_QUEUES];
   logic        submit_evt    [NUM_QUEUES];
   logic        start_evt     [NUM_QUEUES];
   logic        end_evt       [NUM_QUEUES];
@@ -209,6 +211,7 @@ module VX_cp_core
         .event_done_i  (event_done),
         .retire_evt    (retire_evt[q]),
         .retire_seqnum (retire_seqnum[q]),
+        .retire_ready_i(retire_ready[q]),
         .submit_evt    (submit_evt[q]),
         .start_evt     (start_evt[q]),
         .end_evt       (end_evt[q]),
@@ -374,6 +377,7 @@ module VX_cp_core
     .retire_evt    (retire_evt),
     .retire_seqnum (retire_seqnum),
     .cmpl_addr     (cmpl_addr_arr),
+    .retire_ready  (retire_ready),
     .axi_m         (cmpl_axi)
   );
 

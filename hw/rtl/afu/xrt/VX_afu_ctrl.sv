@@ -112,6 +112,22 @@ module VX_afu_ctrl #(
 
 `ifdef SCOPE
 
+    // O-2: bounded SCOPE serial-bus watchdog. After SCOPE_RSTALL_TIMEOUT
+    // cycles of `rvalid_stall` held high (host AXI-Lite read waiting for a
+    // tap response that never arrived — desynced switch, dead tap, etc.),
+    // force scope_rdata_valid=1 with a 64-bit sentinel pattern so the host
+    // read returns instead of hanging the entire runtime. The runtime
+    // (sw/runtime/common/scope.cpp) recognizes the sentinel and skips the
+    // affected tap-this-pass rather than treating it as data. Mirrors the
+    // bounded-stall pattern used by Xilinx AXI Firewall and ARM CoreSight
+    // ITM debug buses.
+    //
+    // The threshold is sized to ~4 serial-bus round-trips (4 * 64 = 256
+    // clocks), comfortably longer than the worst-case good-tap response.
+    localparam int SCOPE_RSTALL_TIMEOUT = 256;
+    localparam int SCOPE_RSTALL_CTR_W   = $clog2(SCOPE_RSTALL_TIMEOUT + 1);
+    localparam logic [63:0] SCOPE_BUS_SENTINEL = 64'hDEAD_DEAD_DEAD_DEAD;
+
     reg [63:0] scope_bus_wdata, scope_bus_rdata;
     reg [5:0] scope_bus_ctr;
 
@@ -120,6 +136,11 @@ module VX_afu_ctrl #(
     reg scope_rdata_valid;
 
     reg is_scope_waddr, is_scope_raddr;
+
+    // Watchdog state: counts cycles of stalled rvalid; resets on a new AR
+    // (next read starts fresh) or when scope_rdata_valid asserts.
+    reg [SCOPE_RSTALL_CTR_W-1:0] scope_rstall_ctr;
+    wire scope_rvalid_stall_q;  // pre-watchdog stall condition (forward decl)
 
     always @(posedge clk) begin
         if (reset) begin
@@ -131,6 +152,7 @@ module VX_afu_ctrl #(
             is_scope_raddr <= 0;
             scope_bus_rdata <= '0;
             scope_rdata_valid <= 0;
+            scope_rstall_ctr <= '0;
         end else begin
             scope_bus_out_r <= 0;
             if (s_axi_aw_fire) begin
@@ -140,6 +162,7 @@ module VX_afu_ctrl #(
             if (s_axi_ar_fire) begin
                 is_scope_raddr <= (s_axi_araddr[ADDR_BITS-1:0] == ADDR_SCP_0)
                                || (s_axi_araddr[ADDR_BITS-1:0] == ADDR_SCP_1);
+                scope_rstall_ctr <= '0;   // new read window: watchdog starts fresh
             end
             if (s_axi_w_fire && waddr == ADDR_SCP_0) begin
                 scope_bus_wdata[31:0] <= s_axi_wdata;
@@ -173,13 +196,34 @@ module VX_afu_ctrl #(
                     scope_bus_ctr <= 0;
                 end
             end
+            // ---- Watchdog tick ----
+            // Count up only while the host is genuinely waiting for a
+            // SCOPE read (rvalid_stall asserted = host stalled). On
+            // overflow, force scope_rdata_valid=1 with the sentinel and
+            // tear down any in-flight serial-read state so the next
+            // legitimate transaction starts clean.
+            if (scope_rvalid_stall_q
+                && scope_rstall_ctr != SCOPE_RSTALL_CTR_W'(SCOPE_RSTALL_TIMEOUT)) begin
+                scope_rstall_ctr <= scope_rstall_ctr + 1;
+            end
+            if (scope_rvalid_stall_q
+                && scope_rstall_ctr == SCOPE_RSTALL_CTR_W'(SCOPE_RSTALL_TIMEOUT)) begin
+                scope_bus_rdata   <= SCOPE_BUS_SENTINEL;
+                scope_rdata_valid <= 1;
+                cmd_scope_reading <= 0;
+                scope_bus_ctr     <= 0;
+            end
         end
     end
 
     assign scope_bus_out = scope_bus_out_r;
 
     assign wready_stall = is_scope_waddr && cmd_scope_writing;
-    assign rvalid_stall = is_scope_raddr && ~scope_rdata_valid;
+    // Pre-watchdog stall: the raw "host waiting" signal that drives the
+    // counter. The publicly-visible `rvalid_stall` is the same expression
+    // — the watchdog drops it from inside by raising scope_rdata_valid.
+    assign scope_rvalid_stall_q = is_scope_raddr && ~scope_rdata_valid;
+    assign rvalid_stall = scope_rvalid_stall_q;
 
 `else
 

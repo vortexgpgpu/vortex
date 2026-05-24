@@ -131,6 +131,7 @@ module VX_cp_engine_top
     .event_done_i  (event_done_i),
     .retire_evt    (retire_evt),
     .retire_seqnum (retire_seqnum),
+    .retire_ready_i(1'b1),                // unit-test: completion is always ready
     .submit_evt    (submit_evt),
     .start_evt     (start_evt),
     .end_evt       (end_evt),

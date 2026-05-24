@@ -13,6 +13,7 @@
 
 #include "scope.h"
 #include <nlohmann_json.hpp>
+#include <atomic>
 #include <cstdlib>
 #include <cstdint>
 #include <iostream>
@@ -78,11 +79,23 @@ static scope_callback_t g_callback;
 
 static vx_device_h g_hdevice = nullptr;
 
-static bool g_running = false;
+// O-2: atomic so vx_scope_stop can flip the flag without taking
+// g_stop_mutex — a wedged drain thread (e.g. AXI-Lite read hung on a
+// desynced serial bus) holds the mutex, so the previous bool-under-mutex
+// design made vx_scope_stop join the hang. With the atomic, stop signals
+// the drain to bail and only then acquires the mutex.
+static std::atomic<bool> g_running{false};
 
 static std::mutex g_stop_mutex;
 
 static std::vector<tap_t> g_taps;
+
+// O-2: SCOPE serial-bus sentinel. The AFU's VX_afu_ctrl returns this 64-bit
+// pattern on the SCP_0/SCP_1 read pair when its bounded-stall timeout
+// fires (rvalid_stall held longer than the watchdog) — mirroring AXI
+// Firewall / CoreSight ITM bus-fault sentinels. The host treats it as
+// "tap timed out; skip this drain pass" rather than as data.
+static constexpr uint64_t SCOPE_BUS_SENTINEL = 0xDEADDEADDEADDEADull;
 
 using json = nlohmann::json;
 
@@ -229,9 +242,18 @@ static int load_taps(std::vector<tap_t>& taps) {
 }
 
 // issue one serial register command and read back its 64-bit response
+//
+// Returns:
+//   0  on success
+//   1  on serial-bus timeout (AFU returned SCOPE_BUS_SENTINEL on the
+//      read) — soft error; caller should skip this tap-this-pass rather
+//      than treat as fatal.
+//   -1 on hard backend error.
 static int read_reg(vx_device_h hdevice, uint64_t wr_value, uint64_t* rd_value) {
   CHECK_ERR(g_callback.registerWrite(hdevice, wr_value));
   CHECK_ERR(g_callback.registerRead(hdevice, rd_value));
+  if (*rd_value == SCOPE_BUS_SENTINEL)
+    return 1;   // bus-stall watchdog tripped; tap likely desynced
   return 0;
 }
 
@@ -245,7 +267,16 @@ static int read_reg(vx_device_h hdevice, uint64_t wr_value, uint64_t* rd_value) 
 #define SCOPE_MAX_OCCUPANCY (64u * 1024u)
 static int drain_tap(tap_t& tap, vx_device_h hdevice) {
   uint64_t count = 0;
-  CHECK_ERR(read_reg(hdevice, (uint64_t(tap.id) << 3) | CMD_GET_COUNT, &count));
+  int rr = read_reg(hdevice, (uint64_t(tap.id) << 3) | CMD_GET_COUNT, &count);
+  if (rr > 0) {
+    // Serial-bus watchdog fired — soft error. Drop this drain pass; let
+    // the next drain retry. Matches CoreSight ITM behaviour on a hung
+    // trace bus: report and continue, do not propagate as fatal.
+    std::cerr << "[SCOPE] tap #" << tap.id << " serial-bus timeout (skip)"
+              << std::endl;
+    return 0;
+  }
+  if (rr < 0) return rr;
   if (count == 0)
     return 0;
   if (count > SCOPE_MAX_OCCUPANCY) {
@@ -257,10 +288,25 @@ static int drain_tap(tap_t& tap, vx_device_h hdevice) {
   uint64_t words_per_sample = 1 + data_blocks;
   uint64_t cmd_data = (uint64_t(tap.id) << 3) | CMD_GET_DATA;
   uint64_t total_words = count * words_per_sample;
-  tap.words.reserve(tap.words.size() + total_words);
+  size_t   rollback   = tap.words.size();   // snapshot for partial-drain rollback
+  tap.words.reserve(rollback + total_words);
   for (uint64_t i = 0; i < total_words; ++i) {
     uint64_t word = 0;
-    CHECK_ERR(read_reg(hdevice, cmd_data, &word));
+    int rr_d = read_reg(hdevice, cmd_data, &word);
+    if (rr_d > 0) {
+      // Mid-burst bus timeout. Rollback the partial words because (a)
+      // the AFU watchdog fired, so we cannot tell which of the queued
+      // samples actually drained from the on-chip ring; and (b) keeping
+      // a partial sample would desync the VCD writer's per-sample word
+      // accounting forever. Accept the lost samples — far better than
+      // silently corrupted trace data.
+      std::cerr << "[SCOPE] tap #" << tap.id << " serial-bus timeout mid-drain "
+                   "(dropped " << (count - (i / words_per_sample))
+                << " samples)" << std::endl;
+      tap.words.resize(rollback);
+      return 0;
+    }
+    if (rr_d < 0) return rr_d;
     tap.words.push_back(word);
   }
   tap.samples += (uint32_t)count;
@@ -357,7 +403,7 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
     }
   }
 
-  g_running = true;
+  g_running.store(true, std::memory_order_release);
 
   // create auto-stop thread
   uint32_t timeout_time = TIMEOUT_TIME;
@@ -380,29 +426,39 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
 }
 
 // Drain the tap rings into host buffers. Called continuously by the host
-// (the CP launch-wait poll loop) so the producer rarely back-pressures.
+// (the CP launch-wait poll loop). Checks g_running cooperatively so a
+// stop request takes effect within a single tap of latency, even if the
+// drain loop is mid-burst.
 int vx_scope_drain(void) {
-  std::lock_guard<std::mutex> lock(g_stop_mutex);
-
-  if (!g_running)
+  // Fast-path bail BEFORE taking the mutex: vx_scope_stop sets g_running
+  // to false unlocked, so a wedged drain holder can't block stop.
+  if (!g_running.load(std::memory_order_acquire))
     return 0;
 
+  std::lock_guard<std::mutex> lock(g_stop_mutex);
+  if (!g_running.load(std::memory_order_acquire))
+    return 0;   // raced with stop while waiting on mutex
+
   for (auto& tap : g_taps) {
+    if (!g_running.load(std::memory_order_acquire))
+      return 0;   // stop signal mid-pass — bail
     CHECK_ERR(drain_tap(tap, g_hdevice));
   }
   return 0;
 }
 
 int vx_scope_stop(vx_device_h hdevice) {
-  std::lock_guard<std::mutex> lock(g_stop_mutex);
-
   if (nullptr == hdevice)
     return -1;
 
-  if (!g_running)
-    return 0;
+  // Flag stop BEFORE taking the mutex so vx_scope_drain bails out of any
+  // in-flight pass — including ones wedged inside read_reg on a stuck
+  // AXI-Lite read. Without this, a hung drain would hold g_stop_mutex
+  // and vx_scope_stop would block forever joining the hang.
+  if (!g_running.exchange(false, std::memory_order_acq_rel))
+    return 0;   // already stopped
 
-  g_running = false;
+  std::lock_guard<std::mutex> lock(g_stop_mutex);
 
   std::cout << "[SCOPE] stop recording..." << std::endl;
 

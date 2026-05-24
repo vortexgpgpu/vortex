@@ -252,12 +252,28 @@ vx_result_t Device::cp_init() {
         p->cp_reg_write(CP_SATP_HI, uint32_t(satp >> 32));
     }
 
-    // Zero the COUT stream-ring wr[]/rd[] pointers (proposal §10) so the
-    // first drain sees empty rings. Routed via dev_write — on a CP-only-DMA
-    // backend (opae) this is a CP transfer, so it must follow CP enable.
-    std::vector<uint8_t> zeros_cout(VX_MEM_IO_COUT_SLOTS * 8, 0);
-    r = dev_write(VX_MEM_IO_COUT_ADDR, zeros_cout.data(), zeros_cout.size());
-    if (r != VX_SUCCESS) return r;
+    // Zero the COUT stream-ring metadata (wr[]/rd[]/lost[]) so the first
+    // drain sees empty rings and a zero overflow baseline. data[] is
+    // overwritten by vx_putchar before being read by drain_cout, so we
+    // skip it: zero only wr[] (offset 0), rd[] (offset SLOTS*4), and
+    // lost[] (offset SLOTS*8 + SLOTS*RING). Routed via dev_write — on a
+    // CP-only-DMA backend this is a CP transfer, so it must follow CP enable.
+    {
+        constexpr uint32_t SLOTS = VX_MEM_IO_COUT_SLOTS;
+        constexpr uint32_t RING  = VX_MEM_IO_COUT_RING;
+        std::vector<uint8_t> zeros_meta(SLOTS * 4, 0);
+        // wr[] + rd[] are contiguous at the start of the region.
+        r = dev_write(VX_MEM_IO_COUT_ADDR,
+                      std::vector<uint8_t>(SLOTS * 8, 0).data(),
+                      SLOTS * 8);
+        if (r != VX_SUCCESS) return r;
+        // lost[] sits past data[].
+        const uint64_t LOST_BASE = VX_MEM_IO_COUT_ADDR
+                                 + uint64_t(SLOTS) * 8
+                                 + uint64_t(SLOTS) * RING;
+        r = dev_write(LOST_BASE, zeros_meta.data(), zeros_meta.size());
+        if (r != VX_SUCCESS) return r;
+    }
 
     return VX_SUCCESS;
 }
@@ -285,6 +301,13 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         cp_tail_           += CP_CL_BYTES;
         cp_expected_seqnum_ += 1;
         target = cp_expected_seqnum_;
+
+        // Release fence between the ring memcpy and the doorbell MMIO so
+        // the CP cannot read a stale ring entry. The MMIO write is a
+        // serializing UC store on x86 (sfence-equivalent), but on ARM /
+        // RISC-V and on shells that map host_only BOs WB this fence is
+        // required for correctness. Cheap on x86; matters everywhere else.
+        std::atomic_thread_fence(std::memory_order_release);
 
         // 3) Commit the new tail. Atomic-pair: LO stages, HI commits both.
         auto r = p->cp_reg_write(CP_Q_TAIL_LO, uint32_t(cp_tail_ & 0xFFFFFFFFu));
@@ -632,30 +655,48 @@ vx_result_t Device::dev_copy(uint64_t dst, uint64_t src, uint64_t size) {
 }
 
 vx_result_t Device::drain_cout() {
-    // Lossless COUT (proposal §10): drain each hart's back-pressured ring
-    // — read wr[], copy out [rd,wr), print "#slot: <line>", and publish
-    // the advanced rd[] so the kernel sees the freed space. Called every
-    // CP launch-wait poll iteration, concurrently with the producing
-    // kernel, so the kernel's back-pressure spin never deadlocks.
+    // Lossy COUT (proposal §10, O-1): drain each hart's ring — read wr[]
+    // and lost[], copy out [rd,wr) bytes, emit "#slot: <line>", surface any
+    // new lost-byte deltas, and publish the advanced rd[]. The kernel-side
+    // vx_putchar is non-blocking (drops + bumps lost[slot] on full ring),
+    // so this drain has no host/kernel deadlock concern — see the legacy
+    // back-pressure spin in vx_print.S which O-1 replaced.
     constexpr uint32_t SLOTS = VX_MEM_IO_COUT_SLOTS;
     constexpr uint32_t RING  = VX_MEM_IO_COUT_RING;
     const uint64_t WR_BASE   = VX_MEM_IO_COUT_ADDR;
     const uint64_t RD_BASE   = VX_MEM_IO_COUT_ADDR + uint64_t(SLOTS) * 4;
     const uint64_t DATA_BASE = VX_MEM_IO_COUT_ADDR + uint64_t(SLOTS) * 8;
+    const uint64_t LOST_BASE = DATA_BASE + uint64_t(SLOTS) * RING;
 
     // dev_read/dev_write route through cp_submit_* (which take cp_mu_
     // themselves), so this must not hold cp_mu_ — and need not: drain_cout
     // is only ever called post-launch, when the CP ring is otherwise idle.
-    uint32_t wr[SLOTS] = {};
-    auto r = dev_read(wr, WR_BASE, sizeof(wr));
+    uint32_t wr  [SLOTS] = {};
+    uint32_t lost[SLOTS] = {};
+    auto r = dev_read(wr,   WR_BASE,   sizeof(wr));
+    if (r != VX_SUCCESS) return r;
+    r = dev_read(lost, LOST_BASE, sizeof(lost));
     if (r != VX_SUCCESS) return r;
 
     bool advanced = false;
     for (uint32_t s = 0; s < SLOTS; ++s) {
         const uint32_t rd = cout_rd_[s];
+        // Surface a per-slot overflow delta: kernel atomically bumps
+        // lost[slot] on a full-ring drop, host reports the delta and
+        // remembers the latest value so each byte is counted exactly once.
+        if (lost[s] != cout_lost_seen_[s]) {
+            uint32_t delta = lost[s] - cout_lost_seen_[s];   // wrap-safe (32-bit)
+            std::cout << "[#" << s << ": lost " << delta << " bytes]"
+                      << std::endl;
+            cout_lost_seen_[s] = lost[s];
+        }
         if (wr[s] == rd) continue;
         uint32_t n = wr[s] - rd;
-        if (n > RING) n = RING;          // defensive — a lossless ring never overruns
+        // Defensive cap: the ring is lossy, so wr-rd should never exceed
+        // RING. If it ever does (corrupt slot, host missed many polls),
+        // drain only the most recent RING bytes and let the producer keep
+        // bumping `lost`.
+        if (n > RING) n = RING;
         char data[RING];
         r = dev_read(data, DATA_BASE + uint64_t(s) * RING, RING);
         if (r != VX_SUCCESS) return r;
@@ -750,12 +791,14 @@ extern "C" vx_result_t vx_device_count(uint32_t* out_count) {
 }
 
 extern "C" vx_result_t vx_device_open(uint32_t index, vx_device_h* out) {
+    VX_C_ENTRY_TRY
     if (!out) return VX_ERR_INVALID_VALUE;
     Device* d = nullptr;
     auto r = Device::open(index, &d);
     if (r != VX_SUCCESS) return r;
     *out = to_handle(d);
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_device_retain(vx_device_h dev) {
@@ -765,9 +808,14 @@ extern "C" vx_result_t vx_device_retain(vx_device_h dev) {
 }
 
 extern "C" vx_result_t vx_device_release(vx_device_h dev) {
+    VX_C_ENTRY_TRY
     if (!dev) return VX_ERR_INVALID_HANDLE;
+    // ~Device tears down queues/buffers/modules; any of their dtors going
+    // off-rails (e.g. an XRT bo cleanup throwing on a dead device) must not
+    // propagate across the C boundary.
     to_device(dev)->release();
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_device_query(vx_device_h dev, uint32_t caps_id,

@@ -8,19 +8,27 @@
 // the CP's AXI master. Triggered by per-CPE `retire_evt` pulses; the host
 // reads `cmpl_addr[qid]` to learn the most recently retired seqnum.
 //
-// A small FIFO captures retire pulses so concurrent retires don't drop on
-// the floor. The AXI master drains it one entry at a time (AW → W → B).
-// A priority encoder picks one retire per cycle (lower QID wins ties).
+// Per-source 1-deep latch + shared drain FIFO, with `retire_ready[i]`
+// back-pressure so no retire is ever dropped:
 //
-// FSM:
-//   S_IDLE     : FIFO empty → wait. Non-empty → pop, → S_REQ_AW
-//   S_REQ_AW   : drive awvalid + awaddr; on awready → S_REQ_W
-//   S_REQ_W    : drive wvalid + wdata = seqnum (LE in low 64 b of bus);
-//                on wready → S_WAIT_B
-//   S_WAIT_B   : wait for bvalid → S_IDLE
+//   * When `retire_evt[i]` fires, the source's payload is latched in a
+//     per-source pending register. The engine holds `retire_evt[i]` high
+//     until `retire_ready[i]` asserts, then deasserts and advances.
+//   * A round-robin selector picks one pending source per cycle and pushes
+//     its payload into the shared drain FIFO (if not full). On enqueue,
+//     the chosen source's pending bit clears AND its `retire_ready` is
+//     asserted that cycle, releasing the engine.
+//   * If two CPEs retire on the same cycle, BOTH latch immediately; the
+//     selector drains them on consecutive cycles. The higher-QID retire
+//     is no longer lost.
+//   * The drain FIFO absorbs bursty AXI back-pressure; if it ever fills,
+//     `retire_ready[i]` stays low and the engine stalls in S_RETIRE
+//     until space frees — propagating back-pressure all the way to fetch
+//     instead of silently dropping a seqnum on the floor.
 //
-// FIFO_DEPTH defaults to 2 * NUM_QUEUES, enough to absorb one in-flight
-// write per queue plus one pending retire.
+// AXI drain FSM is unchanged: S_IDLE → S_REQ_AW → S_REQ_W → S_WAIT_B.
+// FIFO_DEPTH defaults to 2 * NUM_QUEUES, sized to keep at least one
+// completion in flight per queue under typical AXI latency.
 // ============================================================================
 
 module VX_cp_completion
@@ -34,20 +42,28 @@ module VX_cp_completion
   input  wire                       clk,
   input  wire                       reset,
 
-  // Retire pulses + payload from each CPE.
+  // Retire pulses + payload from each CPE. retire_evt[i] is held by the
+  // engine until retire_ready[i] is observed (valid/ready handshake).
   input  wire                       retire_evt    [NUM_QUEUES],
   input  wire [63:0]                retire_seqnum [NUM_QUEUES],
   input  wire [63:0]                cmpl_addr     [NUM_QUEUES],
+  output logic                      retire_ready  [NUM_QUEUES],
 
   // AXI4 master sub-port.
   VX_cp_axi_m_if.master             axi_m
 );
 
-  // Capture (addr, seqnum) into a small FIFO each time a retire fires.
+  // Per-source latch: addr+seqnum captured on retire_evt fire. `pending[i]`
+  // is set the cycle a retire is captured; cleared the cycle the selector
+  // picks it. The engine cannot fire a second retire while pending is set
+  // because retire_ready stays low — back-pressure to the engine.
   typedef struct packed {
     logic [63:0] addr;
     logic [63:0] seqnum;
   } cmpl_ent_t;
+
+  cmpl_ent_t pending_ent [NUM_QUEUES];
+  logic      pending     [NUM_QUEUES];
 
   localparam int FIFO_PTR_W = (FIFO_DEPTH > 1) ? $clog2(FIFO_DEPTH) : 1;
 
@@ -58,20 +74,41 @@ module VX_cp_completion
   wire fifo_full  = ((wptr[FIFO_PTR_W-1:0] == rptr[FIFO_PTR_W-1:0])
                   && (wptr[FIFO_PTR_W] != rptr[FIFO_PTR_W]));
 
-  // Priority-encode retires so one is enqueued per cycle. If two CPEs
-  // retire on the same cycle the lower-QID wins; the higher-QID retire
-  // must be re-driven by its engine the next cycle.
-  logic         enq;
-  cmpl_ent_t    enq_ent;
+  // Round-robin selector — picks one pending source per cycle. Rotating
+  // start prevents starvation of higher-QID sources when several retire
+  // back-to-back. SEL_W is at least 1 so the signal is always declared
+  // even for the NUM_QUEUES==1 build (where the selector is degenerate).
+  localparam int SEL_W = (NUM_QUEUES > 1) ? $clog2(NUM_QUEUES) : 1;
+
+  logic [SEL_W-1:0]       rr_ptr;
+  logic                   sel_valid;
+  logic [SEL_W-1:0]       sel_idx;
   always_comb begin
-    enq     = 1'b0;
-    enq_ent = '0;
-    for (int i = 0; i < NUM_QUEUES; ++i) begin
-      if (!enq && retire_evt[i]) begin
-        enq         = 1'b1;
-        enq_ent.addr   = cmpl_addr[i];
-        enq_ent.seqnum = retire_seqnum[i];
+    sel_valid = 1'b0;
+    sel_idx   = '0;
+    for (int k = 0; k < NUM_QUEUES; ++k) begin
+      // SEL_W-bit modular index — wraps automatically when NUM_QUEUES is a
+      // power of two; non-pow2 NUM_QUEUES uses an explicit modulo.
+      logic [SEL_W-1:0] idx;
+      if (NUM_QUEUES > 1) begin
+        idx = SEL_W'((int'(rr_ptr) + k) % NUM_QUEUES);
+      end else begin
+        idx = '0;
       end
+      if (!sel_valid && pending[idx]) begin
+        sel_valid = 1'b1;
+        sel_idx   = idx;
+      end
+    end
+  end
+
+  // Engine handshake: the selected source's retire_ready goes high THIS
+  // cycle iff its payload is being pushed to the FIFO. Capture-side then
+  // clears `pending` on the next clock.
+  wire enq = sel_valid && !fifo_full;
+  always_comb begin
+    for (int i = 0; i < NUM_QUEUES; ++i) begin
+      retire_ready[i] = enq && (sel_idx == SEL_W'(i));
     end
   end
 
@@ -87,15 +124,33 @@ module VX_cp_completion
       rptr <= '0;
       state <= S_IDLE;
       cur_ent <= '0;
-    end else begin
-      // ----- Enqueue side -----
-      if (enq && !fifo_full) begin
-        fifo[wptr[FIFO_PTR_W-1:0]] <= enq_ent;
-        wptr <= wptr + 1'b1;
+      rr_ptr <= '0;
+      for (int i = 0; i < NUM_QUEUES; ++i) begin
+        pending[i]     <= 1'b0;
+        pending_ent[i] <= '0;
       end
-      // Silently drops on FIFO full — only possible if FIFO_DEPTH is
-      // sized too small for the workload. The host can detect dropped
-      // retires by observing a stalled seqnum.
+    end else begin
+      // ----- Capture side: per-source latch -----
+      // retire_evt[i] is held by the engine until retire_ready[i] fires.
+      // While !pending[i], latch the payload; while pending[i], the engine
+      // sees retire_ready=0 and re-presents the same retire next cycle.
+      for (int i = 0; i < NUM_QUEUES; ++i) begin
+        if (retire_evt[i] && !pending[i]) begin
+          pending[i]     <= 1'b1;
+          pending_ent[i] <= '{addr:   cmpl_addr[i],
+                              seqnum: retire_seqnum[i]};
+        end
+      end
+      // ----- Selector / drain into shared FIFO -----
+      if (enq) begin
+        fifo[wptr[FIFO_PTR_W-1:0]] <= pending_ent[sel_idx];
+        wptr <= wptr + 1'b1;
+        pending[sel_idx] <= 1'b0;     // clears the captured source
+        // Rotate the round-robin pointer past the served source so the
+        // next cycle starts the scan AFTER it.
+        if (NUM_QUEUES > 1)
+          rr_ptr <= SEL_W'((int'(sel_idx) + 1) % NUM_QUEUES);
+      end
 
       // ----- Dequeue / state machine -----
       case (state)

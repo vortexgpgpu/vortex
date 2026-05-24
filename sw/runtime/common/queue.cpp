@@ -182,18 +182,27 @@ vx_result_t Queue::enqueue_write(Buffer* dst, uint64_t off, const void* host,
     if (!dst || (!host && sz != 0)) return VX_ERR_INVALID_VALUE;
     if (off + sz > dst->size())     return VX_ERR_INVALID_VALUE;
 
+    // Retain dst for the worker's lifetime — caller may release the buffer
+    // immediately after enqueue returns (matches OpenCL retain semantics).
+    dst->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, dst, off, host, sz](uint64_t* s, uint64_t* e) {
-        *s = now_ns();
-        std::lock_guard<std::mutex> g(enqueue_mu_);
-        // Host->device through the CP's DMA engine (CMD_MEM_WRITE).
-        auto r = device_->cp_submit_mem_write(dst->dev_address() + off,
-                                              host, sz);
-        *e = now_ns();
+        vx_result_t r;
+        {
+            *s = now_ns();
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            // Host->device through the CP's DMA engine (CMD_MEM_WRITE).
+            r = device_->cp_submit_mem_write(dst->dev_address() + off,
+                                             host, sz);
+            *e = now_ns();
+        }
+        dst->release();
         return r;
     };
-    return this->enqueue(std::move(cmd), nw, w, out);
+    auto r = this->enqueue(std::move(cmd), nw, w, out);
+    if (r != VX_SUCCESS) dst->release();
+    return r;
 }
 
 vx_result_t Queue::enqueue_read(void* host, Buffer* src, uint64_t so,
@@ -202,18 +211,25 @@ vx_result_t Queue::enqueue_read(void* host, Buffer* src, uint64_t so,
     if (!src || (!host && sz != 0)) return VX_ERR_INVALID_VALUE;
     if (so + sz > src->size())      return VX_ERR_INVALID_VALUE;
 
+    src->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, host, src, so, sz](uint64_t* s, uint64_t* e) {
-        *s = now_ns();
-        std::lock_guard<std::mutex> g(enqueue_mu_);
-        // Device->host through the CP's DMA engine (CMD_MEM_READ).
-        auto r = device_->cp_submit_mem_read(host,
-                                             src->dev_address() + so, sz);
-        *e = now_ns();
+        vx_result_t r;
+        {
+            *s = now_ns();
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            // Device->host through the CP's DMA engine (CMD_MEM_READ).
+            r = device_->cp_submit_mem_read(host,
+                                            src->dev_address() + so, sz);
+            *e = now_ns();
+        }
+        src->release();
         return r;
     };
-    return this->enqueue(std::move(cmd), nw, w, out);
+    auto r = this->enqueue(std::move(cmd), nw, w, out);
+    if (r != VX_SUCCESS) src->release();
+    return r;
 }
 
 vx_result_t Queue::enqueue_copy(Buffer* dst, uint64_t do_, Buffer* src,
@@ -223,18 +239,27 @@ vx_result_t Queue::enqueue_copy(Buffer* dst, uint64_t do_, Buffer* src,
     if (do_ + sz > dst->size())     return VX_ERR_INVALID_VALUE;
     if (so + sz > src->size())      return VX_ERR_INVALID_VALUE;
 
+    dst->retain();
+    src->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, dst, do_, src, so, sz](uint64_t* s, uint64_t* e) {
-        *s = now_ns();
-        std::lock_guard<std::mutex> g(enqueue_mu_);
-        // Device->device through the CP's DMA engine (CMD_MEM_COPY).
-        auto r = device_->cp_submit_mem_copy(dst->dev_address() + do_,
-                                             src->dev_address() + so, sz);
-        *e = now_ns();
+        vx_result_t r;
+        {
+            *s = now_ns();
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            // Device->device through the CP's DMA engine (CMD_MEM_COPY).
+            r = device_->cp_submit_mem_copy(dst->dev_address() + do_,
+                                            src->dev_address() + so, sz);
+            *e = now_ns();
+        }
+        src->release();
+        dst->release();
         return r;
     };
-    return this->enqueue(std::move(cmd), nw, w, out);
+    auto r = this->enqueue(std::move(cmd), nw, w, out);
+    if (r != VX_SUCCESS) { src->release(); dst->release(); }
+    return r;
 }
 
 vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
@@ -249,8 +274,13 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     // Resolve the kernel entry PC. info->kernel is a vx_kernel_h
     // (vx_module_get_kernel). NULL is the legacy escape hatch — the caller
     // pre-programmed the PC DCRs itself, so program_pc stays false.
-    const bool     program_pc = (info->kernel != nullptr);
-    const uint64_t kernel_pc  = program_pc ? to_kernel(info->kernel)->pc() : 0;
+    // Retain the kernel for the worker's lifetime so the underlying module
+    // image (Kernel → Module → image Buffer) stays alive until the launch
+    // retires, even if the caller releases the kernel immediately.
+    Kernel*        kernel     = (info->kernel != nullptr) ? to_kernel(info->kernel) : nullptr;
+    const bool     program_pc = (kernel != nullptr);
+    const uint64_t kernel_pc  = program_pc ? kernel->pc() : 0;
+    if (kernel) kernel->retain();
 
     // Phase 2: the args block arrives as a host blob. Copy it into the
     // command now so the caller can free/reuse `info` (and the memory it
@@ -278,15 +308,21 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
 
     Command cmd;
     cmd.queued_ns = now_ns();
-    cmd.work = [this, kernel_pc, program_pc, ndim, lmem_size, grid_in, block_in,
+    cmd.work = [this, kernel, kernel_pc, program_pc, ndim, lmem_size, grid_in, block_in,
                 args_blob = std::move(args_blob)](uint64_t* s, uint64_t* e) {
         // ---- Compute the full KMU descriptor (block_size, warp_step).
         uint64_t num_threads = 0, num_warps = 0;
         if (ndim > 0) {
             auto r = device_->query_caps(VX_CAPS_NUM_THREADS, &num_threads);
-            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
+            if (r != VX_SUCCESS) {
+                if (kernel) kernel->release();
+                *s = *e = now_ns(); return r;
+            }
             r = device_->query_caps(VX_CAPS_NUM_WARPS, &num_warps);
-            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
+            if (r != VX_SUCCESS) {
+                if (kernel) kernel->release();
+                *s = *e = now_ns(); return r;
+            }
         }
         uint32_t eff_block[3] = {1, 1, 1};
         for (uint32_t i = 0; i < ndim; ++i) eff_block[i] = block_in[i];
@@ -309,11 +345,15 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         if (args_staged) {
             auto r = device_->args_slot_acquire(args_blob.size(),
                                                 &args_addr, &args_pooled);
-            if (r != VX_SUCCESS) { *s = *e = now_ns(); return r; }
+            if (r != VX_SUCCESS) {
+                if (kernel) kernel->release();
+                *s = *e = now_ns(); return r;
+            }
             r = device_->dev_write(args_addr, args_blob.data(),
                                    args_blob.size());
             if (r != VX_SUCCESS) {
                 device_->args_slot_release(args_addr, args_pooled);
+                if (kernel) kernel->release();
                 *s = *e = now_ns();
                 return r;
             }
@@ -331,6 +371,7 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
                 if (_r != VX_SUCCESS) {                                       \
                     if (args_staged)                                          \
                         device_->args_slot_release(args_addr, args_pooled);   \
+                    if (kernel) kernel->release();                            \
                     *s = *e = now_ns();                                       \
                     return _r;                                                \
                 }                                                             \
@@ -372,9 +413,12 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         // scratch slot to the pool for the next launch.
         if (args_staged)
             device_->args_slot_release(args_addr, args_pooled);
+        if (kernel) kernel->release();
         return r;
     };
-    return this->enqueue(std::move(cmd), nw, w, out);
+    auto r = this->enqueue(std::move(cmd), nw, w, out);
+    if (r != VX_SUCCESS && kernel) kernel->release();
+    return r;
 }
 
 vx_result_t Queue::enqueue_barrier(uint32_t nw, const vx_event_h* w,
@@ -492,19 +536,26 @@ vx_result_t Queue::enqueue_read_rect(void* host_dst, Buffer* src,
         > src->size())
         return VX_ERR_INVALID_VALUE;
 
+    src->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, host_dst, src, rr](uint64_t* s, uint64_t* e) {
-        *s = now_ns();
-        std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto rc = rect_for_each(rr, [&](uint64_t bo, uint64_t ho, uint64_t len) {
-            return device_->dev_read((uint8_t*)host_dst + ho,
-                                     src->dev_address() + bo, len);
-        });
-        *e = now_ns();
+        vx_result_t rc;
+        {
+            *s = now_ns();
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            rc = rect_for_each(rr, [&](uint64_t bo, uint64_t ho, uint64_t len) {
+                return device_->dev_read((uint8_t*)host_dst + ho,
+                                         src->dev_address() + bo, len);
+            });
+            *e = now_ns();
+        }
+        src->release();
         return rc;
     };
-    return this->enqueue(std::move(cmd), nw, w, out);
+    auto rr_enq = this->enqueue(std::move(cmd), nw, w, out);
+    if (rr_enq != VX_SUCCESS) src->release();
+    return rr_enq;
 }
 
 vx_result_t Queue::enqueue_write_rect(Buffer* dst, const void* host_src,
@@ -520,19 +571,26 @@ vx_result_t Queue::enqueue_write_rect(Buffer* dst, const void* host_src,
         > dst->size())
         return VX_ERR_INVALID_VALUE;
 
+    dst->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, dst, host_src, rr](uint64_t* s, uint64_t* e) {
-        *s = now_ns();
-        std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto rc = rect_for_each(rr, [&](uint64_t bo, uint64_t ho, uint64_t len) {
-            return device_->dev_write(dst->dev_address() + bo,
-                                      (const uint8_t*)host_src + ho, len);
-        });
-        *e = now_ns();
+        vx_result_t rc;
+        {
+            *s = now_ns();
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            rc = rect_for_each(rr, [&](uint64_t bo, uint64_t ho, uint64_t len) {
+                return device_->dev_write(dst->dev_address() + bo,
+                                          (const uint8_t*)host_src + ho, len);
+            });
+            *e = now_ns();
+        }
+        dst->release();
         return rc;
     };
-    return this->enqueue(std::move(cmd), nw, w, out);
+    auto rr_enq = this->enqueue(std::move(cmd), nw, w, out);
+    if (rr_enq != VX_SUCCESS) dst->release();
+    return rr_enq;
 }
 
 vx_result_t Queue::enqueue_copy_rect(Buffer* dst, Buffer* src,
@@ -552,19 +610,28 @@ vx_result_t Queue::enqueue_copy_rect(Buffer* dst, Buffer* src,
         > src->size())
         return VX_ERR_INVALID_VALUE;
 
+    dst->retain();
+    src->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, dst, src, rr](uint64_t* s, uint64_t* e) {
-        *s = now_ns();
-        std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto rc = rect_for_each(rr, [&](uint64_t do_, uint64_t so, uint64_t len) {
-            return device_->dev_copy(dst->dev_address() + do_,
-                                     src->dev_address() + so, len);
-        });
-        *e = now_ns();
+        vx_result_t rc;
+        {
+            *s = now_ns();
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            rc = rect_for_each(rr, [&](uint64_t do_, uint64_t so, uint64_t len) {
+                return device_->dev_copy(dst->dev_address() + do_,
+                                         src->dev_address() + so, len);
+            });
+            *e = now_ns();
+        }
+        src->release();
+        dst->release();
         return rc;
     };
-    return this->enqueue(std::move(cmd), nw, w, out);
+    auto rr_enq = this->enqueue(std::move(cmd), nw, w, out);
+    if (rr_enq != VX_SUCCESS) { src->release(); dst->release(); }
+    return rr_enq;
 }
 
 vx_result_t Queue::enqueue_fill_buffer(Buffer* dst, uint64_t offset,
@@ -578,30 +645,37 @@ vx_result_t Queue::enqueue_fill_buffer(Buffer* dst, uint64_t offset,
 
     std::vector<uint8_t> pat(static_cast<const uint8_t*>(pattern),
                              static_cast<const uint8_t*>(pattern) + pattern_size);
+    dst->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, dst, offset, size, pat = std::move(pat)]
                (uint64_t* s, uint64_t* e) {
-        *s = now_ns();
-        std::lock_guard<std::mutex> g(enqueue_mu_);
-        // Stage one bounded chunk of the repeated pattern and upload it in
-        // a loop — avoids a host allocation the full size of a large fill.
-        const uint64_t kChunkCap = 64 * 1024;
-        uint64_t chunk = kChunkCap - (kChunkCap % pat.size());  // whole patterns
-        if (chunk > size) chunk = size;
-        std::vector<uint8_t> staging(chunk);
-        for (uint64_t i = 0; i < chunk; i += pat.size())
-            std::memcpy(staging.data() + i, pat.data(), pat.size());
         vx_result_t r = VX_SUCCESS;
-        for (uint64_t done = 0; done < size && r == VX_SUCCESS; done += chunk) {
-            uint64_t n = std::min<uint64_t>(chunk, size - done);
-            r = device_->dev_write(dst->dev_address() + offset + done,
-                                   staging.data(), n);
+        {
+            *s = now_ns();
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            // Stage one bounded chunk of the repeated pattern and upload it
+            // in a loop — avoids a host allocation the full size of a large
+            // fill.
+            const uint64_t kChunkCap = 64 * 1024;
+            uint64_t chunk = kChunkCap - (kChunkCap % pat.size());  // whole patterns
+            if (chunk > size) chunk = size;
+            std::vector<uint8_t> staging(chunk);
+            for (uint64_t i = 0; i < chunk; i += pat.size())
+                std::memcpy(staging.data() + i, pat.data(), pat.size());
+            for (uint64_t done = 0; done < size && r == VX_SUCCESS; done += chunk) {
+                uint64_t n = std::min<uint64_t>(chunk, size - done);
+                r = device_->dev_write(dst->dev_address() + offset + done,
+                                       staging.data(), n);
+            }
+            *e = now_ns();
         }
-        *e = now_ns();
+        dst->release();
         return r;
     };
-    return this->enqueue(std::move(cmd), nw, w, out);
+    auto rc = this->enqueue(std::move(cmd), nw, w, out);
+    if (rc != VX_SUCCESS) dst->release();
+    return rc;
 }
 
 vx_result_t Queue::enqueue_map(Buffer* buf, uint64_t offset, uint64_t size,
@@ -614,17 +688,23 @@ vx_result_t Queue::enqueue_map(Buffer* buf, uint64_t offset, uint64_t size,
     auto r = buf->map_reserve(offset, size, flags, out_host_ptr);
     if (r != VX_SUCCESS) return r;
 
+    buf->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, buf](uint64_t* s, uint64_t* e) {
-        *s = now_ns();
-        std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto rc = buf->map_commit();
-        *e = now_ns();
+        vx_result_t rc;
+        {
+            *s = now_ns();
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            rc = buf->map_commit();
+            *e = now_ns();
+        }
+        buf->release();
         return rc;
     };
     r = this->enqueue(std::move(cmd), nw, w, out);
     if (r != VX_SUCCESS) {
+        buf->release();
         buf->map_cancel();
         *out_host_ptr = nullptr;
     }
@@ -634,16 +714,23 @@ vx_result_t Queue::enqueue_map(Buffer* buf, uint64_t offset, uint64_t size,
 vx_result_t Queue::enqueue_unmap(Buffer* buf, void* host_ptr, uint32_t nw,
                                  const vx_event_h* w, vx_event_h* out) {
     if (!buf) return VX_ERR_INVALID_HANDLE;
+    buf->retain();
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, buf, host_ptr](uint64_t* s, uint64_t* e) {
-        *s = now_ns();
-        std::lock_guard<std::mutex> g(enqueue_mu_);
-        auto r = buf->unmap(host_ptr);
-        *e = now_ns();
+        vx_result_t r;
+        {
+            *s = now_ns();
+            std::lock_guard<std::mutex> g(enqueue_mu_);
+            r = buf->unmap(host_ptr);
+            *e = now_ns();
+        }
+        buf->release();
         return r;
     };
-    return this->enqueue(std::move(cmd), nw, w, out);
+    auto rc = this->enqueue(std::move(cmd), nw, w, out);
+    if (rc != VX_SUCCESS) buf->release();
+    return rc;
 }
 
 vx_result_t Queue::enqueue_dcr_write(uint32_t addr, uint32_t value,
@@ -762,12 +849,14 @@ using namespace vx;
 extern "C" vx_result_t vx_queue_create(vx_device_h dev,
                                        const vx_queue_info_t* info,
                                        vx_queue_h* out) {
+    VX_C_ENTRY_TRY
     if (!dev || !out) return VX_ERR_INVALID_VALUE;
     Queue* q = nullptr;
     auto r = Queue::create(to_device(dev), info, &q);
     if (r != VX_SUCCESS) return r;
     *out = to_handle(q);
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_queue_retain(vx_queue_h q) {
@@ -788,16 +877,20 @@ extern "C" vx_result_t vx_queue_flush(vx_queue_h q) {
 }
 
 extern "C" vx_result_t vx_queue_finish(vx_queue_h q, uint64_t timeout_ns) {
+    VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->finish(timeout_ns);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_launch(vx_queue_h q,
                                          const vx_launch_info_t* info,
                                          uint32_t nw, const vx_event_h* w,
                                          vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_launch(info, nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_copy(vx_queue_h q,
@@ -805,18 +898,22 @@ extern "C" vx_result_t vx_enqueue_copy(vx_queue_h q,
                                        vx_buffer_h src, uint64_t so,
                                        uint64_t sz, uint32_t nw,
                                        const vx_event_h* w, vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_copy(to_buffer(dst), do_, to_buffer(src), so,
                                      sz, nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_read(vx_queue_h q, void* host_dst,
                                        vx_buffer_h src, uint64_t so,
                                        uint64_t sz, uint32_t nw,
                                        const vx_event_h* w, vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_read(host_dst, to_buffer(src), so, sz, nw,
                                      w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_write(vx_queue_h q,
@@ -824,16 +921,20 @@ extern "C" vx_result_t vx_enqueue_write(vx_queue_h q,
                                         const void* host_src, uint64_t sz,
                                         uint32_t nw, const vx_event_h* w,
                                         vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_write(to_buffer(dst), off, host_src, sz, nw,
                                       w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_barrier(vx_queue_h q, uint32_t nw,
                                           const vx_event_h* w,
                                           vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_barrier(nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_read_rect(vx_queue_h q, void* host_dst,
@@ -841,9 +942,11 @@ extern "C" vx_result_t vx_enqueue_read_rect(vx_queue_h q, void* host_dst,
                                             const vx_rect_info_t* info,
                                             uint32_t nw, const vx_event_h* w,
                                             vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q || !src) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_read_rect(host_dst, to_buffer(src), info,
                                           nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_write_rect(vx_queue_h q, vx_buffer_h dst,
@@ -851,9 +954,11 @@ extern "C" vx_result_t vx_enqueue_write_rect(vx_queue_h q, vx_buffer_h dst,
                                              const vx_rect_info_t* info,
                                              uint32_t nw, const vx_event_h* w,
                                              vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q || !dst) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_write_rect(to_buffer(dst), host_src, info,
                                            nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_copy_rect(vx_queue_h q, vx_buffer_h dst,
@@ -861,9 +966,11 @@ extern "C" vx_result_t vx_enqueue_copy_rect(vx_queue_h q, vx_buffer_h dst,
                                             const vx_rect_info_t* info,
                                             uint32_t nw, const vx_event_h* w,
                                             vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q || !dst || !src) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_copy_rect(to_buffer(dst), to_buffer(src), info,
                                           nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_fill_buffer(vx_queue_h q, vx_buffer_h dst,
@@ -872,9 +979,11 @@ extern "C" vx_result_t vx_enqueue_fill_buffer(vx_queue_h q, vx_buffer_h dst,
                                               size_t pattern_size,
                                               uint32_t nw, const vx_event_h* w,
                                               vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q || !dst) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_fill_buffer(to_buffer(dst), offset, size,
                                             pattern, pattern_size, nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_map(vx_queue_h q, vx_buffer_h buf,
@@ -882,46 +991,58 @@ extern "C" vx_result_t vx_enqueue_map(vx_queue_h q, vx_buffer_h buf,
                                       uint32_t flags, uint32_t nw,
                                       const vx_event_h* w, vx_event_h* out,
                                       void** out_host_ptr) {
+    VX_C_ENTRY_TRY
     if (!q || !buf) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_map(to_buffer(buf), offset, size, flags,
                                     nw, w, out, out_host_ptr);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_unmap(vx_queue_h q, vx_buffer_h buf,
                                         void* host_ptr, uint32_t nw,
                                         const vx_event_h* w, vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q || !buf) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_unmap(to_buffer(buf), host_ptr, nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_dcr_write(vx_queue_h q,
                                             uint32_t addr, uint32_t value,
                                             uint32_t nw, const vx_event_h* w,
                                             vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_dcr_write(addr, value, nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_dcr_read(vx_queue_h q,
                                            uint32_t addr, uint32_t* host_dst,
                                            uint32_t nw, const vx_event_h* w,
                                            vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_dcr_read(addr, host_dst, nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_signal(vx_queue_h q, vx_event_h ev,
                                          uint64_t value,
                                          uint32_t nw, const vx_event_h* w,
                                          vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q || !ev) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_signal(to_event(ev), value, nw, w, out);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_enqueue_wait_value(vx_queue_h q, vx_event_h ev,
                                              uint64_t value,
                                              uint32_t nw, const vx_event_h* w,
                                              vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!q || !ev) return VX_ERR_INVALID_HANDLE;
     return to_queue(q)->enqueue_wait_value(to_event(ev), value, nw, w, out);
+    VX_C_ENTRY_CATCH
 }

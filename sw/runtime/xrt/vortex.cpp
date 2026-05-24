@@ -43,9 +43,12 @@
 #endif
 
 #include <cstdlib>
+#include <exception>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <stdarg.h>
+#include <stdio.h>
 #include <string>
 #include <util.h>
 #include <vector>
@@ -91,6 +94,21 @@ typedef xrtKernelHandle xrt_kernel_t;
     _cleanup                                                                   \
   }
 
+// All XRT C++ APIs can throw xrt_core::system_error; propagating across the
+// extern "C" callbacks_t boundary is UB, so every XRT-touching member wraps
+// in a try/catch and returns -1 on exception. Errors are logged once so a
+// missing xclbin or AXI-Lite timeout produces a diagnostic, not a silent
+// SEGV from libstdc++'s unhandled-exception terminate path.
+#define XRT_TRY(_label) try {
+#define XRT_CATCH(_ret) }                                                      \
+  catch (const std::exception& _e) {                                           \
+    fprintf(stderr, "[VXDRV] XRT exception: %s\n", _e.what());                 \
+    return _ret;                                                               \
+  } catch (...) {                                                              \
+    fprintf(stderr, "[VXDRV] XRT exception (unknown)\n");                      \
+    return _ret;                                                               \
+  }
+
 #ifndef CPP_API
 static void dump_xrt_error(xrtDeviceHandle xrtDevice, xrtErrorCode err) {
   size_t len = 0;
@@ -116,8 +134,11 @@ public:
     vx_scope_stop(this);
   #endif
   #ifdef CPP_API
-    // xrt::device / xrt::ip / xrt::bo are RAII.
-    host_bos_.clear();
+    // xrt::device / xrt::ip / xrt::bo are RAII. The xrt::bo dtor can throw
+    // on some shells (e.g. if the underlying device handle was already
+    // released); a throw out of a destructor terminates the process, so
+    // swallow it defensively.
+    try { host_bos_.clear(); } catch (...) {}
   #else
     if (xrtKernel_) xrtKernelClose(xrtKernel_);
     if (xrtDevice_) xrtDeviceClose(xrtDevice_);
@@ -138,9 +159,16 @@ public:
 
   #ifdef CPP_API
 
-    auto xrtDevice = xrt::device(device_index);
-    auto uuid = xrtDevice.load_xclbin(xlbin_path_s);
-    auto xrtKernel = xrt::ip(xrtDevice, uuid, KERNEL_NAME);
+    xrt::device xrtDevice;
+    xrt::uuid   uuid;
+    XRT_TRY()
+      xrtDevice = xrt::device(device_index);
+      uuid      = xrtDevice.load_xclbin(xlbin_path_s);
+    XRT_CATCH(-1)
+    xrt::ip xrtKernel;
+    XRT_TRY()
+      xrtKernel = xrt::ip(xrtDevice, uuid, KERNEL_NAME);
+    XRT_CATCH(-1)
 
   #else
 
@@ -239,12 +267,20 @@ public:
   int host_mem_alloc(uint64_t size, void **host_ptr, uint64_t *cp_addr) {
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
   #ifdef CPP_API
-    xrt::bo bo(xrtDevice_, asize, xrt::bo::flags::host_only, 0);
-    void *ptr     = bo.map<uint8_t *>();
-    uint64_t addr = bo.address();
-    host_bos_.emplace(addr, host_bo_t{std::move(bo), ptr});
-    *host_ptr = ptr;
-    *cp_addr  = addr;
+    // xrt::bo / map / address all may throw under XRT; host_bos_ is touched
+    // from worker threads so the std::map insert needs a mutex (the map is
+    // not thread-safe even on disjoint keys).
+    XRT_TRY()
+      xrt::bo bo(xrtDevice_, asize, xrt::bo::flags::host_only, 0);
+      void *ptr     = bo.map<uint8_t *>();
+      uint64_t addr = bo.address();
+      {
+        std::lock_guard<std::mutex> g(host_bos_mu_);
+        host_bos_.emplace(addr, host_bo_t{std::move(bo), ptr});
+      }
+      *host_ptr = ptr;
+      *cp_addr  = addr;
+    XRT_CATCH(-1)
   #else
     void *ptr = aligned_alloc(CACHE_BLOCK_SIZE, asize);
     if (ptr == nullptr)
@@ -257,10 +293,13 @@ public:
 
   int host_mem_free(uint64_t cp_addr) {
   #ifdef CPP_API
-    auto it = host_bos_.find(cp_addr);
-    if (it == host_bos_.end())
-      return -1;
-    host_bos_.erase(it);   // xrt::bo RAII releases the BO
+    XRT_TRY()
+      std::lock_guard<std::mutex> g(host_bos_mu_);
+      auto it = host_bos_.find(cp_addr);
+      if (it == host_bos_.end())
+        return -1;
+      host_bos_.erase(it);   // xrt::bo RAII releases the BO
+    XRT_CATCH(-1)
   #else
     free(reinterpret_cast<void *>(cp_addr));
   #endif
@@ -271,7 +310,9 @@ private:
 
   int write_register(uint32_t addr, uint32_t value) {
   #ifdef CPP_API
-    xrtKernel_.write_register(addr, value);
+    XRT_TRY()
+      xrtKernel_.write_register(addr, value);
+    XRT_CATCH(-1)
   #else
     CHECK_ERR(xrtKernelWriteRegister(xrtKernel_, addr, value), {
       dump_xrt_error(xrtDevice_, err);
@@ -283,7 +324,9 @@ private:
 
   int read_register(uint32_t addr, uint32_t *value) {
   #ifdef CPP_API
-    *value = xrtKernel_.read_register(addr);
+    XRT_TRY()
+      *value = xrtKernel_.read_register(addr);
+    XRT_CATCH(-1)
   #else
     CHECK_ERR(xrtKernelReadRegister(xrtKernel_, addr, value), {
       dump_xrt_error(xrtDevice_, err);
@@ -303,6 +346,10 @@ private:
     void   *ptr;
   };
   std::map<uint64_t, host_bo_t> host_bos_;
+  // std::map isn't thread-safe even on disjoint keys; queue workers race on
+  // host_mem_alloc/host_mem_free from arbitrary threads. The mutex covers
+  // the only sites that touch host_bos_ (alloc/free + ~vx_device clear()).
+  std::mutex                    host_bos_mu_;
 #endif
 };
 

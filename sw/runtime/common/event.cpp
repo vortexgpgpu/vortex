@@ -133,12 +133,14 @@ vx_result_t Event::get_profile(vx_profile_info_t* out) {
 using namespace vx;
 
 extern "C" vx_result_t vx_event_create(vx_device_h dev, vx_event_h* out) {
+    VX_C_ENTRY_TRY
     if (!dev || !out) return VX_ERR_INVALID_VALUE;
     Event* ev = nullptr;
     auto r = Event::create(to_device(dev), &ev);
     if (r != VX_SUCCESS) return r;
     *out = to_handle(ev);
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_event_signal(vx_event_h ev, uint64_t value) {
@@ -156,14 +158,17 @@ extern "C" vx_result_t vx_event_get_value(vx_event_h ev, uint64_t* out_value) {
 
 extern "C" vx_result_t vx_event_wait_value(vx_event_h ev, uint64_t value,
                                            uint64_t timeout_ns) {
+    VX_C_ENTRY_TRY
     if (!ev) return VX_ERR_INVALID_HANDLE;
     return to_event(ev)->wait_value(value, timeout_ns);
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_event_wait_values(uint32_t n,
                                             const vx_event_h* evs,
                                             const uint64_t*   values,
                                             uint64_t timeout_ns) {
+    VX_C_ENTRY_TRY
     if (n != 0 && (!evs || !values)) return VX_ERR_INVALID_VALUE;
     // For each event, wait until its counter reaches the requested value.
     // Single-event fast path is the common case; multi-event loops are fine
@@ -174,6 +179,7 @@ extern "C" vx_result_t vx_event_wait_values(uint32_t n,
         if (r != VX_SUCCESS) return r;
     }
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_event_retain(vx_event_h ev) {

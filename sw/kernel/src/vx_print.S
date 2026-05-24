@@ -16,16 +16,22 @@
 
 // void vx_putchar(int c)
 //
-// Console output — lossless back-pressured stream ring (proposal §10).
+// Console output — LOSSY per-hart stream ring (proposal §10, post-O-1).
 // Each hart owns one ring in the device-memory console buffer at
 // VX_MEM_IO_COUT_ADDR. Layout:
-//   uint32 wr  [VX_MEM_IO_COUT_SLOTS]      // producer (this kernel)
-//   uint32 rd  [VX_MEM_IO_COUT_SLOTS]      // consumer (the host)
-//   char   data[VX_MEM_IO_COUT_SLOTS][VX_MEM_IO_COUT_RING]
+//   uint32 wr   [VX_MEM_IO_COUT_SLOTS]     // producer (this kernel)
+//   uint32 rd   [VX_MEM_IO_COUT_SLOTS]     // consumer (the host)
+//   char   data [VX_MEM_IO_COUT_SLOTS][VX_MEM_IO_COUT_RING]
+//   uint32 lost [VX_MEM_IO_COUT_SLOTS]     // overflow counter (this hart's
+//                                          // bytes dropped because ring full)
 //
-// The host drains the ring in its CP launch-wait poll and advances `rd`.
-// If this hart's ring is full (wr - rd == RING) vx_putchar SPINS until
-// the host frees space — it never overflows and never drops a character.
+// On a full ring (wr - rd == RING) the byte is DROPPED and lost[slot] is
+// atomically incremented; vx_putchar NEVER blocks. The host drains the ring
+// in its CP launch-wait poll (and post-launch), and surfaces lost[] as
+// "[#N: lost K bytes]" alongside the drained text. Matches CUDA / HIP
+// printf semantics — bounded buffer, lossy, with an overflow indicator;
+// fixes the producer/consumer deadlock that bit the legacy spin-on-full
+// path when a printf-heavy launch's COUT could only be drained post-retire.
 .type vx_putchar, @function
 .global vx_putchar
 vx_putchar:                                     // a0 = character
@@ -38,9 +44,9 @@ vx_putchar:                                     // a0 = character
     add   t4, t4, t3                            // t4 = &rd[slot]
     lw    t5, 0(t3)                             // t5 = wr (this hart owns it)
     li    t6, VX_MEM_IO_COUT_RING
-1:  lw    a1, 0(t4)                             // a1 = rd (reload each spin)
+    lw    a1, 0(t4)                             // a1 = rd (single snapshot)
     sub   a2, t5, a1                            // a2 = occupancy
-    bgeu  a2, t6, 1b                            // ring full -> back-pressure spin
+    bgeu  a2, t6, .Lvx_putchar_drop             // ring full -> drop + bump lost
     li    a1, (VX_MEM_IO_COUT_SLOTS*8)
     add   a1, a1, t1                            // a1 = data region base
     slli  a2, t0, VX_MEM_IO_COUT_RING_LOG2
@@ -57,4 +63,14 @@ vx_putchar:                                     // a0 = character
                                                 // not-yet-written ring bytes
     addi  t5, t5, 1
     sw    t5, 0(t3)                             // publish wr+1
+    ret
+.Lvx_putchar_drop:
+    // Ring full: drop the byte, atomically bump lost[slot] so the host
+    // can surface "[#N: lost K bytes]" on the next drain. Atomic because
+    // multiple harts can share a slot when total_harts > SLOTS.
+    li    a1, (VX_MEM_IO_COUT_SLOTS*8 + VX_MEM_IO_COUT_SLOTS*VX_MEM_IO_COUT_RING)
+    add   a1, a1, t1                            // a1 = &lost[0]
+    add   a1, a1, t2                            // + slot*4 = &lost[slot]
+    li    a2, 1
+    amoadd.w zero, a2, (a1)                     // lost[slot] += 1
     ret

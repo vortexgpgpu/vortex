@@ -251,22 +251,26 @@ using namespace vx;
 
 extern "C" vx_result_t vx_module_load_file(vx_device_h dev, const char* path,
                                            vx_module_h* out) {
+    VX_C_ENTRY_TRY
     if (!dev || !path || !out) return VX_ERR_INVALID_VALUE;
     Module* m = nullptr;
     auto r = Module::load_file(to_device(dev), path, &m);
     if (r != VX_SUCCESS) return r;
     *out = to_handle(m);
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_module_load_bytes(vx_device_h dev, const void* bytes,
                                             size_t size, vx_module_h* out) {
+    VX_C_ENTRY_TRY
     if (!dev || !bytes || !out) return VX_ERR_INVALID_VALUE;
     Module* m = nullptr;
     auto r = Module::load_bytes(to_device(dev), bytes, size, &m);
     if (r != VX_SUCCESS) return r;
     *out = to_handle(m);
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_module_retain(vx_module_h mod) {
@@ -283,12 +287,14 @@ extern "C" vx_result_t vx_module_release(vx_module_h mod) {
 
 extern "C" vx_result_t vx_module_get_kernel(vx_module_h mod, const char* name,
                                             vx_kernel_h* out) {
+    VX_C_ENTRY_TRY
     if (!mod || !name || !out) return VX_ERR_INVALID_VALUE;
     Kernel* k = nullptr;
     auto r = to_module(mod)->get_kernel(name, &k);
     if (r != VX_SUCCESS) return r;
     *out = to_handle(k);
     return VX_SUCCESS;
+    VX_C_ENTRY_CATCH
 }
 
 extern "C" vx_result_t vx_kernel_retain(vx_kernel_h k) {
