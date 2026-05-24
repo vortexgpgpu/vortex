@@ -18,13 +18,11 @@ module VX_tcu_tfr_max_exp import VX_tcu_pkg::*; #(
     parameter WIDTH = 8
 ) (
     input  wire [N-1:0][WIDTH-1:0] exponents,
-    output logic [WIDTH-1:0]       max_exp
+    output logic [WIDTH-1:0]       max_exp,
+    output wire [N-1:0][7:0]       shift_amts
 );
 
-    // ----------------------------------------------------------------------
-    // 1. Signed Subtractor Matrix
-    // ----------------------------------------------------------------------
-
+    // Signed subtractor matrix.
     wire [N-2:0] sign_mat[N-2:0] /* verilator split_var */;
     wire signed [WIDTH:0] diff_mat[N-2:0][N-2:0];
 
@@ -39,10 +37,7 @@ module VX_tcu_tfr_max_exp import VX_tcu_pkg::*; #(
         end
     end
 
-    // ----------------------------------------------------------------------
-    // 2. One-Hot Select Logic (Kept exactly as you requested)
-    // ----------------------------------------------------------------------
-
+    // One-hot max exponent select.
     wire [N-1:0] sel_exp;
 
     for (genvar i = 0; i < N; i++) begin : g_index
@@ -70,16 +65,47 @@ module VX_tcu_tfr_max_exp import VX_tcu_pkg::*; #(
         assign sel_exp[i] = and_left & (~or_right);
     end
 
-    // ----------------------------------------------------------------------
-    // 3. Parallel Output Mux
-    // ----------------------------------------------------------------------
+    (* keep = "true" *) wire [N-1:0] sel_exp_max   = sel_exp;
+    (* keep = "true" *) wire [N-1:0] sel_exp_shift = sel_exp;
 
+    // Parallel max exponent mux.
     wire [WIDTH-1:0] or_red[N:0] /* verilator split_var */;
 
     assign or_red[0] = {WIDTH{1'b0}};
     for (genvar i = 0; i < N; i++) begin : g_or_red
-        assign or_red[i+1] = or_red[i] | (sel_exp[i] ? exponents[i] : {WIDTH{1'b0}});
+        assign or_red[i+1] = or_red[i] | (sel_exp_max[i] ? exponents[i] : {WIDTH{1'b0}});
     end
     assign max_exp = or_red[N];
+
+    // Reuse the comparison subtractors to produce max_exp - exponents[i].
+    for (genvar i = 0; i < N; i++) begin : g_shift
+        wire [WIDTH-1:0] sh_or [N:0] /* verilator split_var */;
+        assign sh_or[0] = {WIDTH{1'b0}};
+        for (genvar k = 0; k < N; k++) begin : g_sh_mux
+            if (k == i) begin : g_self
+                assign sh_or[k+1] = sh_or[k];
+            end else if (k < i) begin : g_direct
+                assign sh_or[k+1] = sh_or[k]
+                    | (sel_exp_shift[k] ? diff_mat[k][i-1][WIDTH-1:0] : {WIDTH{1'b0}});
+            end else begin : g_invert
+                assign sh_or[k+1] = sh_or[k]
+                    | (sel_exp_shift[k] ? ~diff_mat[i][k-1][WIDTH-1:0] : {WIDTH{1'b0}});
+            end
+        end
+
+        wire needs_inc;
+        if (i == N-1) begin : g_no_inc
+            assign needs_inc = 1'b0;
+        end else begin : g_calc_inc
+            assign needs_inc = |sel_exp_shift[N-1:i+1];
+        end
+
+        wire [WIDTH-1:0] shift_full = sh_or[N] + WIDTH'(needs_inc);
+        if (WIDTH > 8) begin : g_sat
+            assign shift_amts[i] = (|shift_full[WIDTH-1:8]) ? 8'hFF : shift_full[7:0];
+        end else begin : g_no_sat
+            assign shift_amts[i] = 8'(shift_full);
+        end
+    end
 
 endmodule
