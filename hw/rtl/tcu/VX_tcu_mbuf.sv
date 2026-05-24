@@ -277,8 +277,10 @@ module VX_tcu_mbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             for (int b = 0; b < NUM_BANKS; ++b) begin
                 if (int'(rsp_ctr_r) * NUM_BANKS + b < META_TOTAL_MAX) begin
                     storage_wren[int'(rsp_ctr_r) * NUM_BANKS + b] = 1'b1;
+                    // Metadata slots are 32-bit by design; on rv64 the LMEM
+                    // word is 64-bit, so explicitly take the low 32 bits.
                     storage_wdata[(int'(rsp_ctr_r) * NUM_BANKS + b) * 32 +: 32] =
-                        tcu_lmem_if.rsp_data.data[b * `VX_CFG_XLEN +: `VX_CFG_XLEN];
+                        tcu_lmem_if.rsp_data.data[b * `VX_CFG_XLEN +: 32];
                 end
             end
         end

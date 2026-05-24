@@ -149,31 +149,9 @@ jobs:
         # rv32 Vortex (CL_INVALID_OPERATION). hip is rv64-only until
         # either chipStar grows --offload=spirv32 or the native
         # HIPVortex toolchain lands (see hip_support_proposal.md).
-        #
-        # gem5 only runs against the rv32 build; the device library
-        # is XLEN-locked by the gem5 install (build/X86/gem5.opt
-        # links against the libvortex-gem5.so the runner builds, and
-        # we only build it once). XLEN=64 entry would just duplicate
-        # the run against an identical setup.
-        #
-        # vm is rv32-only for v1: the MMU RTL (VX_mmu*.sv) hardcodes
-        # 32-bit SATP and 22-bit PPN — SV32 page tables only. SV39
-        # support requires widening satp + ppn datapaths and is
-        # tracked separately.
-        #
-        # vulkan is rv32-only: the vortexpipe driver lowers shaders to
-        # riscv32 .vxbin unconditionally (see vp_nir_to_llvm.c). It
-        # needs the mesa-vortex prebuilt — installed by the setup job's
-        # toolchain_install.sh --all (see ci/mesa_install.sh).
-        exclude:
+        #        exclude:
           - name: hip
             xlen: 32
-          - name: gem5
-            xlen: 64
-          - name: vm
-            xlen: 64
-          - name: vulkan
-            xlen: 64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
 

@@ -48,6 +48,7 @@ SPVS := $(addsuffix .spv, $(notdir $(SHADERS)))
 VK_ICD  := $(MESA_VORTEX)/share/vulkan/icd.d/lvp_icd.x86_64.json
 RUN_ENV := VK_ICD_FILENAMES=$(VK_ICD) \
            GALLIUM_DRIVER=vortexpipe \
+           MESA_VORTEX_XLEN=$(XLEN) \
            VORTEX_HOME=$(VORTEX_HOME) \
            VORTEX_TOOLDIR=$(TOOLDIR) \
            VORTEX_BUILD=$(ROOT_DIR) \
