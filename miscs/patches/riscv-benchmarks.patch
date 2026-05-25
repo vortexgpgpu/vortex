@@ -1,8 +1,18 @@
 diff --git a/benchmarks/common/crt.S b/benchmarks/common/crt.S
-index 33e45ec..4007d45 100644
+index 33e45ec..dd1efe4 100644
 --- a/benchmarks/common/crt.S
 +++ b/benchmarks/common/crt.S
-@@ -60,8 +60,12 @@ _start:
+@@ -1,6 +1,9 @@
+ # See LICENSE for license details.
+ 
+ #include "encoding.h"
++// Vortex MMIO addresses (VX_MEM_IO_EXIT_CODE) — relies on -I<build>/sw
++// being passed by the riscv-tests build wrapper.
++#include "VX_types.h"
+ 
+ #if __riscv_xlen == 64
+ # define LREG ld
+@@ -60,8 +63,12 @@ _start:
    bltz t0, 1f
  #endif
  2:
@@ -10,24 +20,28 @@ index 33e45ec..4007d45 100644
 +  # failure through Vortex's IO_EXIT_CODE MMIO instead of HTIF tohost.
    li a0, 1
 -  sw a0, tohost, t0
-+  li t0, (0x40 + 64 + 8)
++  li t0, VX_MEM_IO_EXIT_CODE
 +  sw a0, 0(t0)
 +  fence
    j 2b
  1:
  
 diff --git a/benchmarks/common/syscalls.c b/benchmarks/common/syscalls.c
-index 2a2a8f3..35a38c9 100644
+index 2a2a8f3..e967138 100644
 --- a/benchmarks/common/syscalls.c
 +++ b/benchmarks/common/syscalls.c
-@@ -8,32 +8,15 @@
+@@ -7,33 +7,18 @@
+ #include <limits.h>
  #include <sys/signal.h>
  #include "util.h"
- 
+-
 -#define SYS_write 64
 -#define HTIF_DEV_CONSOLE 1
 -#define HTIF_CONSOLE_CMD_PUTC 1
--
++// Vortex MMIO addresses (VX_MEM_IO_COUT_* / VX_MEM_IO_EXIT_CODE) — relies
++// on -I<build>/sw being passed by the riscv-tests build wrapper.
++#include "VX_types.h"
+ 
  #undef strcmp
  
 -volatile uint64_t tohost __attribute__ ((section (".tohost")));
@@ -51,16 +65,15 @@ index 2a2a8f3..35a38c9 100644
 -  return magic_mem[0];
 -}
 +// Vortex runs these benchmarks bare-metal. Console output and the exit
-+// code go to Vortex's MMIO registers (IO_COUT / IO_EXIT_CODE) instead of
-+// through the HTIF tohost/fromhost protocol, whose blocking host<->guest
-+// handshake needs memory coherence Vortex's caches do not provide.
-+#define VX_IO_COUT_ADDR  0x40
-+#define VX_IO_COUT_SIZE  64
-+#define VX_IO_EXIT_CODE  (VX_IO_COUT_ADDR + VX_IO_COUT_SIZE + 8)
++// code go to Vortex's MMIO registers (VX_MEM_IO_COUT_* / VX_MEM_IO_EXIT_CODE)
++// instead of through the HTIF tohost/fromhost protocol, whose blocking
++// host<->guest handshake needs memory coherence Vortex's caches do not
++// provide. The per-hart console-byte slots are the first
++// VX_MEM_IO_COUT_SLOTS bytes of the COUT region, indexed by mhartid.
  
  #define NUM_COUNTERS 2
  static uintptr_t counters[NUM_COUNTERS];
-@@ -55,20 +38,17 @@ void setStats(int enable)
+@@ -55,20 +40,17 @@ void setStats(int enable)
  #undef READ_CTR
  }
  
@@ -68,7 +81,7 @@ index 2a2a8f3..35a38c9 100644
 +void __attribute__((noreturn)) exit(int code)
  {
 -  tohost = (code << 1) | 1;
-+  *(volatile int*)VX_IO_EXIT_CODE = code;
++  *(volatile int*)VX_MEM_IO_EXIT_CODE = code;
 +  __asm__ volatile ("fence");
 +  __asm__ volatile (".insn r 0x0B, 0, 0, x0, x0, x0"); // tmc x0: stop warp
    while (1);
@@ -86,7 +99,7 @@ index 2a2a8f3..35a38c9 100644
  }
  
  void abort()
-@@ -78,9 +58,8 @@ void abort()
+@@ -78,9 +60,8 @@ void abort()
  
  void printstr(const char* s)
  {
@@ -98,7 +111,7 @@ index 2a2a8f3..35a38c9 100644
  }
  
  void __attribute__((weak)) thread_entry(int cid, int nc)
-@@ -129,10 +108,8 @@ void _init(int cid, int nc)
+@@ -129,10 +110,8 @@ void _init(int cid, int nc)
  #undef putchar
  int putchar(int ch)
  {
@@ -106,8 +119,8 @@ index 2a2a8f3..35a38c9 100644
 -
 -  syscall(SYS_write, HTIF_DEV_CONSOLE, (uintptr_t)&c, HTIF_CONSOLE_CMD_PUTC);
 -
-+  unsigned tid = read_csr(mhartid) & (VX_IO_COUT_SIZE - 1);
-+  *(volatile char*)(VX_IO_COUT_ADDR + tid) = (char)ch;
++  unsigned tid = read_csr(mhartid) & (VX_MEM_IO_COUT_SLOTS - 1);
++  *(volatile char*)(VX_MEM_IO_COUT_ADDR + tid) = (char)ch;
    return 0;
  }
  
