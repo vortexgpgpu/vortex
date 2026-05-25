@@ -22,6 +22,21 @@ module VX_graphics import VX_gpu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
+`ifdef PERF_ENABLE
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    output tex_perf_t       tex_perf,
+    output cache_perf_t     tcache_perf,
+`endif
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    output raster_perf_t    raster_perf,
+    output cache_perf_t     rcache_perf,
+`endif
+`ifdef VX_CFG_EXT_OM_ENABLE
+    output om_perf_t        om_perf,
+    output cache_perf_t     ocache_perf,
+`endif
+`endif
+
 `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_bus_if.slave     per_socket_tex_bus_if [NUM_SOCKETS],
     VX_mem_bus_if.master    tcache_mem_bus_if,
@@ -103,6 +118,10 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .bus_out_if (tex_bus_if)
     );
 
+`ifdef PERF_ENABLE
+    VX_tex_perf_if per_core_tex_perf_if [`VX_CFG_NUM_TEX_CORES] ();
+`endif
+
     for (genvar i = 0; i < `VX_CFG_NUM_TEX_CORES; ++i) begin : g_tex_unit
         VX_tex_core #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-tex%0d", CLUSTER_ID, i))),
@@ -111,11 +130,36 @@ module VX_graphics import VX_gpu_pkg::*; #(
         ) tex_core (
             .clk          (clk),
             .reset        (reset),
+        `ifdef PERF_ENABLE
+            .perf_tex_if  (per_core_tex_perf_if[i]),
+        `endif
             .dcr_bus_if   (per_unit_dcr_bus_if[DCR_TEX_BASE + i]),
             .tex_bus_if   (tex_bus_if[i]),
             .cache_bus_if (tcache_bus_if[i * TCACHE_NUM_REQS +: TCACHE_NUM_REQS])
         );
     end
+
+`ifdef PERF_ENABLE
+    // Sum per-core TEX counters across the cluster. Verilator forbids
+    // dynamic indexing into an interface array, so first copy each interface
+    // member into a packed wire array via a genvar, then sum.
+    wire [`VX_CFG_NUM_TEX_CORES-1:0][PERF_CTR_BITS-1:0] tex_mr_w, tex_ml_w, tex_sc_w;
+    for (genvar i = 0; i < `VX_CFG_NUM_TEX_CORES; ++i) begin : g_tex_perf_pack
+        assign tex_mr_w[i] = per_core_tex_perf_if[i].mem_reads;
+        assign tex_ml_w[i] = per_core_tex_perf_if[i].mem_latency;
+        assign tex_sc_w[i] = per_core_tex_perf_if[i].stall_cycles;
+    end
+    tex_perf_t tex_perf_sum;
+    always @(*) begin
+        tex_perf_sum = '0;
+        for (int i = 0; i < `VX_CFG_NUM_TEX_CORES; ++i) begin
+            tex_perf_sum.mem_reads    = tex_perf_sum.mem_reads    + tex_mr_w[i];
+            tex_perf_sum.mem_latency  = tex_perf_sum.mem_latency  + tex_ml_w[i];
+            tex_perf_sum.stall_cycles = tex_perf_sum.stall_cycles + tex_sc_w[i];
+        end
+    end
+    assign tex_perf = tex_perf_sum;
+`endif
 
     VX_mem_bus_if #(
         .DATA_SIZE (TCACHE_LINE_SIZE),
@@ -148,6 +192,9 @@ module VX_graphics import VX_gpu_pkg::*; #(
     ) tcache (
         .clk            (clk),
         .reset          (reset),
+    `ifdef PERF_ENABLE
+        .cache_perf     (tcache_perf),
+    `endif
         .core_bus_if    (tcache_bus_if),
         .mem_bus_if     (tcache_mem_bus_tmp_if)
     );
@@ -172,6 +219,10 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) raster_bus_if [`VX_CFG_NUM_RASTER_CORES] ();
 
+`ifdef PERF_ENABLE
+    VX_raster_perf_if per_core_raster_perf_if [`VX_CFG_NUM_RASTER_CORES] ();
+`endif
+
     for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_raster_unit
         VX_raster_core #(
             .INSTANCE_ID     (`SFORMATF(("cluster%0d-raster%0d", CLUSTER_ID, i))),
@@ -184,13 +235,35 @@ module VX_graphics import VX_gpu_pkg::*; #(
             .QUAD_FIFO_DEPTH (`VX_CFG_RASTER_QUAD_FIFO_DEPTH),
             .OUTPUT_QUADS    (`VX_CFG_NUM_SFU_LANES)
         ) raster_core (
-            .clk           (clk),
-            .reset         (reset),
-            .dcr_bus_if    (per_unit_dcr_bus_if[DCR_RASTER_BASE + i]),
-            .raster_bus_if (raster_bus_if[i]),
-            .cache_bus_if  (rcache_bus_if[i * RCACHE_NUM_REQS +: RCACHE_NUM_REQS])
+            .clk             (clk),
+            .reset           (reset),
+        `ifdef PERF_ENABLE
+            .perf_raster_if  (per_core_raster_perf_if[i]),
+        `endif
+            .dcr_bus_if      (per_unit_dcr_bus_if[DCR_RASTER_BASE + i]),
+            .raster_bus_if   (raster_bus_if[i]),
+            .cache_bus_if    (rcache_bus_if[i * RCACHE_NUM_REQS +: RCACHE_NUM_REQS])
         );
     end
+
+`ifdef PERF_ENABLE
+    wire [`VX_CFG_NUM_RASTER_CORES-1:0][PERF_CTR_BITS-1:0] ras_mr_w, ras_ml_w, ras_sc_w;
+    for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_ras_perf_pack
+        assign ras_mr_w[i] = per_core_raster_perf_if[i].mem_reads;
+        assign ras_ml_w[i] = per_core_raster_perf_if[i].mem_latency;
+        assign ras_sc_w[i] = per_core_raster_perf_if[i].stall_cycles;
+    end
+    raster_perf_t raster_perf_sum;
+    always @(*) begin
+        raster_perf_sum = '0;
+        for (int i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin
+            raster_perf_sum.mem_reads    = raster_perf_sum.mem_reads    + ras_mr_w[i];
+            raster_perf_sum.mem_latency  = raster_perf_sum.mem_latency  + ras_ml_w[i];
+            raster_perf_sum.stall_cycles = raster_perf_sum.stall_cycles + ras_sc_w[i];
+        end
+    end
+    assign raster_perf = raster_perf_sum;
+`endif
 
     VX_raster_arb #(
         .NUM_INPUTS  (`VX_CFG_NUM_RASTER_CORES),
@@ -236,6 +309,9 @@ module VX_graphics import VX_gpu_pkg::*; #(
     ) rcache (
         .clk            (clk),
         .reset          (reset),
+    `ifdef PERF_ENABLE
+        .cache_perf     (rcache_perf),
+    `endif
         .core_bus_if    (rcache_bus_if),
         .mem_bus_if     (rcache_mem_bus_tmp_if)
     );
@@ -273,6 +349,10 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .bus_out_if (om_bus_if)
     );
 
+`ifdef PERF_ENABLE
+    VX_om_perf_if per_core_om_perf_if [`VX_CFG_NUM_OM_CORES] ();
+`endif
+
     for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_unit
         VX_om_core #(
             .INSTANCE_ID (`SFORMATF(("cluster%0d-om%0d", CLUSTER_ID, i))),
@@ -280,11 +360,35 @@ module VX_graphics import VX_gpu_pkg::*; #(
         ) om_core (
             .clk          (clk),
             .reset        (reset),
+        `ifdef PERF_ENABLE
+            .perf_om_if   (per_core_om_perf_if[i]),
+        `endif
             .dcr_bus_if   (per_unit_dcr_bus_if[DCR_OM_BASE + i]),
             .om_bus_if    (om_bus_if[i]),
             .cache_bus_if (ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS])
         );
     end
+
+`ifdef PERF_ENABLE
+    wire [`VX_CFG_NUM_OM_CORES-1:0][PERF_CTR_BITS-1:0] om_mr_w, om_mw_w, om_ml_w, om_sc_w;
+    for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_perf_pack
+        assign om_mr_w[i] = per_core_om_perf_if[i].mem_reads;
+        assign om_mw_w[i] = per_core_om_perf_if[i].mem_writes;
+        assign om_ml_w[i] = per_core_om_perf_if[i].mem_latency;
+        assign om_sc_w[i] = per_core_om_perf_if[i].stall_cycles;
+    end
+    om_perf_t om_perf_sum;
+    always @(*) begin
+        om_perf_sum = '0;
+        for (int i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin
+            om_perf_sum.mem_reads    = om_perf_sum.mem_reads    + om_mr_w[i];
+            om_perf_sum.mem_writes   = om_perf_sum.mem_writes   + om_mw_w[i];
+            om_perf_sum.mem_latency  = om_perf_sum.mem_latency  + om_ml_w[i];
+            om_perf_sum.stall_cycles = om_perf_sum.stall_cycles + om_sc_w[i];
+        end
+    end
+    assign om_perf = om_perf_sum;
+`endif
 
     VX_mem_bus_if #(
         .DATA_SIZE (OCACHE_LINE_SIZE),
@@ -317,6 +421,9 @@ module VX_graphics import VX_gpu_pkg::*; #(
     ) ocache (
         .clk            (clk),
         .reset          (reset),
+    `ifdef PERF_ENABLE
+        .cache_perf     (ocache_perf),
+    `endif
         .core_bus_if    (ocache_bus_if),
         .mem_bus_if     (ocache_mem_bus_tmp_if)
     );

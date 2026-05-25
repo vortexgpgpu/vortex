@@ -36,7 +36,7 @@ module VX_gto_arbiter #(
     input  wire                     clk,
     input  wire                     reset,
     input  wire [NUM_REQS-1:0]      requests,
-    input  wire [NUM_REQS-1:0]      suppress = '0,
+    input  wire [NUM_REQS-1:0]      suppress,
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,
     output wire                     grant_valid,

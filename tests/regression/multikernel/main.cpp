@@ -200,6 +200,7 @@ int main(int argc, char** argv) {
   vx_buffer_release(add_buf);
   vx_buffer_release(src_buf);
   vx_queue_release(q);
+  vx_device_dump_perf(dev, stdout);
   vx_device_release(dev);
 
   if (errors) {

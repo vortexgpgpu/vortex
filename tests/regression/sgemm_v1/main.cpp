@@ -125,6 +125,7 @@ void cleanup() {
     vx_mem_free(C_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
+    vx_dump_perf(device, stdout);
     vx_dev_close(device);
   }
 }

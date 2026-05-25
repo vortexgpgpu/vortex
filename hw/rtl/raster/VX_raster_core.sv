@@ -403,22 +403,22 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_fire);
     `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_fire);
 
-    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;
+    reg [PERF_CTR_BITS-1:0] perf_pending_reads;
     assign perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;
 
     always @(posedge clk) begin
         if (reset) begin
             perf_pending_reads <= '0;
         end else begin
-            perf_pending_reads <= $signed(perf_pending_reads) + `PERF_CTR_BITS'($signed(perf_pending_reads_cycle));
+            perf_pending_reads <= $signed(perf_pending_reads) + PERF_CTR_BITS'($signed(perf_pending_reads_cycle));
         end
     end
 
     wire perf_stall_cycle = raster_bus_if.req_valid && ~raster_bus_if.req_ready && ~raster_bus_if.req_data.done;
 
-    reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
-    reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
-    reg [`PERF_CTR_BITS-1:0] perf_stall_cycles;
+    reg [PERF_CTR_BITS-1:0] perf_mem_reads;
+    reg [PERF_CTR_BITS-1:0] perf_mem_latency;
+    reg [PERF_CTR_BITS-1:0] perf_stall_cycles;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -426,9 +426,9 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             perf_mem_latency  <= '0;
             perf_stall_cycles <= '0;
         end else begin
-            perf_mem_reads    <= perf_mem_reads + `PERF_CTR_BITS'(perf_mem_req_per_cycle);
-            perf_mem_latency  <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);
-            perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
+            perf_mem_reads    <= perf_mem_reads + PERF_CTR_BITS'(perf_mem_req_per_cycle);
+            perf_mem_latency  <= perf_mem_latency + PERF_CTR_BITS'(perf_pending_reads);
+            perf_stall_cycles <= perf_stall_cycles + PERF_CTR_BITS'(perf_stall_cycle);
         end
     end
 

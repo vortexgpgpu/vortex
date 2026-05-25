@@ -41,6 +41,18 @@ public:
 #ifdef VX_CFG_EXT_DXA_ENABLE
     DxaCore::PerfStats dxa;
 #endif
+#ifdef VX_CFG_EXT_TEX_ENABLE
+    TexCore::PerfStats tex;
+    Cache::PerfStats   tcache;
+#endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+    RasterCore::PerfStats raster;
+    Cache::PerfStats      rcache;
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+    OmCore::PerfStats om;
+    Cache::PerfStats  ocache;
+#endif
   };
 
   std::vector<SimChannel<MemReq>> mem_req_out;

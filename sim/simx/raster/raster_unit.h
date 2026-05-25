@@ -34,6 +34,14 @@ struct RasterReq {
   uint32_t                                   block_id   = 0;
 
   RasterReq() = default;
+
+  // Required by TxRxArbiter's DT(4, ... << req) trace at simx/types.h.
+  friend std::ostream& operator<<(std::ostream& os, const RasterReq& req) {
+    os << "tag=0x" << std::hex << req.tag << std::dec
+       << ", tmask=0x" << std::hex << req.tmask_bits << std::dec
+       << " (#" << req.uuid << ")";
+    return os;
+  }
 };
 
 // RasterStamp — per-lane raster output carrying everything the CSR
@@ -61,6 +69,13 @@ struct RasterRsp {
   RasterRsp() = default;
   RasterRsp(const RasterReq& req)
     : uuid(req.uuid), tag(req.tag), stamps{}, trace(req.trace), block_id(req.block_id) {}
+
+  // Required by TxRxArbiter's DT(4, ... << rsp) trace at simx/types.h.
+  friend std::ostream& operator<<(std::ostream& os, const RasterRsp& rsp) {
+    os << "tag=0x" << std::hex << rsp.tag << std::dec
+       << " (#" << rsp.uuid << ")";
+    return os;
+  }
 };
 
 using RasterBusArbiter = TxRxArbiter<RasterReq, RasterRsp>;

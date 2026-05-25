@@ -226,6 +226,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
 
   const bool fpu_en = (isa_flags & VX_ISA_STD_F) != 0;
   const bool tcu_en = (isa_flags & VX_ISA_EXT_TCU) != 0;
+  const bool tex_en = (isa_flags & VX_ISA_EXT_TEX) != 0;
+  const bool raster_en = (isa_flags & VX_ISA_EXT_RASTER) != 0;
+  const bool om_en = (isa_flags & VX_ISA_EXT_OM) != 0;
 
   std::vector<CoreCounters> cores(num_cores);
   uint64_t total_instrs = 0;
@@ -641,6 +644,120 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
     perf_print(stream,
       "tcu: total_tbuf_stalls=%" PRIu64 ", total_tbuf_cache_hits=%" PRIu64 ", total_lmem_reads=%" PRIu64,
       tot_tbuf_stalls, tot_tbuf_cache_hits, tot_lmem_reads);
+  } break;
+
+  case VX_DCR_MPM_CLASS_TEX: {
+    if (!tex_en) {
+      perf_print(stream, "TEX not supported");
+      break;
+    }
+    uint64_t tot_reads = 0, tot_lat = 0, tot_st = 0;
+    CacheCounters tcache_tot;
+    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+      uint64_t reads = 0, lat = 0, st = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TEX_READS, core_id, &reads), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TEX_LAT,   core_id, &lat),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TEX_ST,    core_id, &st),    { return err; });
+      uint64_t r = 0, mr = 0, bst = 0, mst = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCACHE_READS,   core_id, &r),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCACHE_MISS_R,  core_id, &mr),  { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCACHE_BANK_ST, core_id, &bst), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_TCACHE_MSHR_ST, core_id, &mst), { return err; });
+
+      double avg_lat = safe_div((double)lat, (double)reads);
+      perf_print_core(stream, core_id,
+        "tex: reads=%" PRIu64 ", avg_lat=%.1f cyc, stalls=%" PRIu64 "; tcache: reqs=%" PRIu64 ", miss=%" PRIu64 " (hit=%d%%), bank_st=%" PRIu64 " (utility=%d%%)",
+        reads, avg_lat, st, r, mr, calc_ratio(mr, r), bst, calc_utility(r, bst));
+      tot_reads += reads; tot_lat += lat; tot_st += st;
+      tcache_tot.reads += r; tcache_tot.miss_r += mr; tcache_tot.bank_st += bst; tcache_tot.mshr_st += mst;
+    }
+    double tot_avg_lat = safe_div((double)tot_lat, (double)tot_reads);
+    perf_print(stream,
+      "tex: total_reads=%" PRIu64 ", avg_lat=%.1f cyc, total_stalls=%" PRIu64
+      "; tcache: total_reqs=%" PRIu64 ", miss=%" PRIu64 " (hit=%d%%), bank_st=%" PRIu64 " (utility=%d%%), mshr_st=%" PRIu64 " (utility=%d%%)",
+      tot_reads, tot_avg_lat, tot_st,
+      tcache_tot.reads, tcache_tot.miss_r, calc_ratio(tcache_tot.miss_r, tcache_tot.reads),
+      tcache_tot.bank_st, calc_utility(tcache_tot.reads, tcache_tot.bank_st),
+      tcache_tot.mshr_st, calc_utility(tcache_tot.miss_r, tcache_tot.mshr_st));
+  } break;
+
+  case VX_DCR_MPM_CLASS_RASTER: {
+    if (!raster_en) {
+      perf_print(stream, "RASTER not supported");
+      break;
+    }
+    uint64_t tot_reads = 0, tot_lat = 0, tot_st = 0;
+    CacheCounters rcache_tot;
+    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+      uint64_t reads = 0, lat = 0, st = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RASTER_READS, core_id, &reads), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RASTER_LAT,   core_id, &lat),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RASTER_ST,    core_id, &st),    { return err; });
+      uint64_t r = 0, mr = 0, bst = 0, mst = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RCACHE_READS,   core_id, &r),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RCACHE_MISS_R,  core_id, &mr),  { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RCACHE_BANK_ST, core_id, &bst), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_RCACHE_MSHR_ST, core_id, &mst), { return err; });
+
+      double avg_lat = safe_div((double)lat, (double)reads);
+      perf_print_core(stream, core_id,
+        "raster: reads=%" PRIu64 ", avg_lat=%.1f cyc, stalls=%" PRIu64 "; rcache: reqs=%" PRIu64 ", miss=%" PRIu64 " (hit=%d%%), bank_st=%" PRIu64 " (utility=%d%%)",
+        reads, avg_lat, st, r, mr, calc_ratio(mr, r), bst, calc_utility(r, bst));
+      tot_reads += reads; tot_lat += lat; tot_st += st;
+      rcache_tot.reads += r; rcache_tot.miss_r += mr; rcache_tot.bank_st += bst; rcache_tot.mshr_st += mst;
+    }
+    double tot_avg_lat = safe_div((double)tot_lat, (double)tot_reads);
+    perf_print(stream,
+      "raster: total_reads=%" PRIu64 ", avg_lat=%.1f cyc, total_stalls=%" PRIu64
+      "; rcache: total_reqs=%" PRIu64 ", miss=%" PRIu64 " (hit=%d%%), bank_st=%" PRIu64 " (utility=%d%%), mshr_st=%" PRIu64 " (utility=%d%%)",
+      tot_reads, tot_avg_lat, tot_st,
+      rcache_tot.reads, rcache_tot.miss_r, calc_ratio(rcache_tot.miss_r, rcache_tot.reads),
+      rcache_tot.bank_st, calc_utility(rcache_tot.reads, rcache_tot.bank_st),
+      rcache_tot.mshr_st, calc_utility(rcache_tot.miss_r, rcache_tot.mshr_st));
+  } break;
+
+  case VX_DCR_MPM_CLASS_OM: {
+    if (!om_en) {
+      perf_print(stream, "OM not supported");
+      break;
+    }
+    uint64_t tot_reads = 0, tot_writes = 0, tot_lat = 0, tot_st = 0;
+    CacheCounters ocache_tot;
+    for (uint32_t core_id = 0; core_id < num_cores; ++core_id) {
+      uint64_t reads = 0, writes = 0, lat = 0, st = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OM_READS,  core_id, &reads),  { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OM_WRITES, core_id, &writes), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OM_LAT,    core_id, &lat),    { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OM_ST,     core_id, &st),     { return err; });
+      uint64_t r = 0, w = 0, mr = 0, mw = 0, bst = 0, mst = 0;
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OCACHE_READS,   core_id, &r),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OCACHE_WRITES,  core_id, &w),   { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OCACHE_MISS_R,  core_id, &mr),  { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OCACHE_MISS_W,  core_id, &mw),  { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OCACHE_BANK_ST, core_id, &bst), { return err; });
+      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_OCACHE_MSHR_ST, core_id, &mst), { return err; });
+
+      double avg_lat = safe_div((double)lat, (double)reads);
+      perf_print_core(stream, core_id,
+        "om: reads=%" PRIu64 ", writes=%" PRIu64 ", avg_lat=%.1f cyc, stalls=%" PRIu64
+        "; ocache: reqs=%" PRIu64 ", miss_r=%" PRIu64 " (hit=%d%%), miss_w=%" PRIu64 " (hit=%d%%), bank_st=%" PRIu64 " (utility=%d%%)",
+        reads, writes, avg_lat, st,
+        r + w, mr, calc_ratio(mr, r), mw, calc_ratio(mw, w), bst, calc_utility(r + w, bst));
+      tot_reads += reads; tot_writes += writes; tot_lat += lat; tot_st += st;
+      ocache_tot.reads += r; ocache_tot.writes += w;
+      ocache_tot.miss_r += mr; ocache_tot.miss_w += mw;
+      ocache_tot.bank_st += bst; ocache_tot.mshr_st += mst;
+    }
+    double tot_avg_lat = safe_div((double)tot_lat, (double)tot_reads);
+    perf_print(stream,
+      "om: total_reads=%" PRIu64 ", total_writes=%" PRIu64 ", avg_lat=%.1f cyc, total_stalls=%" PRIu64
+      "; ocache: total_reqs=%" PRIu64 ", miss_r=%" PRIu64 " (hit=%d%%), miss_w=%" PRIu64 " (hit=%d%%), bank_st=%" PRIu64 " (utility=%d%%), mshr_st=%" PRIu64 " (utility=%d%%)",
+      tot_reads, tot_writes, tot_avg_lat, tot_st,
+      ocache_tot.reads + ocache_tot.writes,
+      ocache_tot.miss_r, calc_ratio(ocache_tot.miss_r, ocache_tot.reads),
+      ocache_tot.miss_w, calc_ratio(ocache_tot.miss_w, ocache_tot.writes),
+      ocache_tot.bank_st, calc_utility(ocache_tot.reads + ocache_tot.writes, ocache_tot.bank_st),
+      ocache_tot.mshr_st, calc_utility(ocache_tot.miss_r + ocache_tot.miss_w, ocache_tot.mshr_st));
   } break;
 
   default:

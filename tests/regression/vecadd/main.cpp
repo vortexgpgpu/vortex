@@ -137,6 +137,7 @@ int main(int argc, char** argv) {
     vx_kernel_release(kern);
     vx_module_release(mod);
     vx_queue_release(q);
+    vx_device_dump_perf(dev, stdout);
     vx_device_release(dev);
 
     if (errors) {

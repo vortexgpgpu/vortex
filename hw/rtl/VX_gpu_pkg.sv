@@ -1051,6 +1051,31 @@ package VX_gpu_pkg;
     } dxa_perf_t;
 `endif
 
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] mem_reads;
+        logic [PERF_CTR_BITS-1:0] mem_latency;
+        logic [PERF_CTR_BITS-1:0] stall_cycles;
+    } tex_perf_t;
+`endif
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] mem_reads;
+        logic [PERF_CTR_BITS-1:0] mem_latency;
+        logic [PERF_CTR_BITS-1:0] stall_cycles;
+    } raster_perf_t;
+`endif
+
+`ifdef VX_CFG_EXT_OM_ENABLE
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] mem_reads;
+        logic [PERF_CTR_BITS-1:0] mem_writes;
+        logic [PERF_CTR_BITS-1:0] mem_latency;
+        logic [PERF_CTR_BITS-1:0] stall_cycles;
+    } om_perf_t;
+`endif
+
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] idles;
         logic [PERF_CTR_BITS-1:0] active_warps;
@@ -1083,6 +1108,18 @@ package VX_gpu_pkg;
         mem_perf_t   mem;
     `ifdef VX_CFG_EXT_DXA_ENABLE
         dxa_perf_t   dxa;
+    `endif
+    `ifdef VX_CFG_EXT_TEX_ENABLE
+        tex_perf_t   tex;
+        cache_perf_t tcache;
+    `endif
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        raster_perf_t raster;
+        cache_perf_t  rcache;
+    `endif
+    `ifdef VX_CFG_EXT_OM_ENABLE
+        om_perf_t    om;
+        cache_perf_t ocache;
     `endif
     } sysmem_perf_t;
 
@@ -1265,7 +1302,11 @@ package VX_gpu_pkg;
 
     localparam RCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(RASTER_MEM_REQS, RCACHE_NUM_REQS);
     localparam RCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + RCACHE_BATCH_SEL_BITS);
-    localparam RCACHE_TAG_WIDTH      = RCACHE_TAG_ID_BITS;
+    // Cache bus tag carries UUID prefix (consumed by debug trace) ahead of
+    // the per-request ID — match TCACHE/OCACHE convention so VX_lsu_mem_if's
+    // tag_t {uuid, value} struct has a non-negative `value` width when
+    // NDEBUG is off and UUID_WIDTH = 44.
+    localparam RCACHE_TAG_WIDTH      = (UUID_WIDTH + RCACHE_TAG_ID_BITS);
     localparam RCACHE_MEM_DATA_WIDTH = (RCACHE_LINE_SIZE * 8);
     localparam RCACHE_MEM_PORTS      = 1;
     localparam RCACHE_MEM_TAG_WIDTH  = `CACHE_CLUSTER_MEM_TAG_WIDTH(

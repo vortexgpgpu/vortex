@@ -55,11 +55,35 @@ module VX_cluster import VX_gpu_pkg::*;
 `ifdef VX_CFG_EXT_DXA_ENABLE
     dxa_perf_t dxa_core_perf;
 `endif
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    tex_perf_t   gfx_tex_perf;
+    cache_perf_t gfx_tcache_perf;
+`endif
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    raster_perf_t gfx_raster_perf;
+    cache_perf_t  gfx_rcache_perf;
+`endif
+`ifdef VX_CFG_EXT_OM_ENABLE
+    om_perf_t    gfx_om_perf;
+    cache_perf_t gfx_ocache_perf;
+`endif
     always @(*) begin
         sysmem_perf_tmp = sysmem_perf;
         sysmem_perf_tmp.l2cache = l2_perf;
     `ifdef VX_CFG_EXT_DXA_ENABLE
         sysmem_perf_tmp.dxa = dxa_core_perf;
+    `endif
+    `ifdef VX_CFG_EXT_TEX_ENABLE
+        sysmem_perf_tmp.tex    = gfx_tex_perf;
+        sysmem_perf_tmp.tcache = gfx_tcache_perf;
+    `endif
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        sysmem_perf_tmp.raster = gfx_raster_perf;
+        sysmem_perf_tmp.rcache = gfx_rcache_perf;
+    `endif
+    `ifdef VX_CFG_EXT_OM_ENABLE
+        sysmem_perf_tmp.om     = gfx_om_perf;
+        sysmem_perf_tmp.ocache = gfx_ocache_perf;
     `endif
     end
 `endif
@@ -381,6 +405,20 @@ module VX_cluster import VX_gpu_pkg::*;
     ) graphics (
         .clk        (clk),
         .reset      (reset),
+    `ifdef PERF_ENABLE
+    `ifdef VX_CFG_EXT_TEX_ENABLE
+        .tex_perf                 (gfx_tex_perf),
+        .tcache_perf              (gfx_tcache_perf),
+    `endif
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        .raster_perf              (gfx_raster_perf),
+        .rcache_perf              (gfx_rcache_perf),
+    `endif
+    `ifdef VX_CFG_EXT_OM_ENABLE
+        .om_perf                  (gfx_om_perf),
+        .ocache_perf              (gfx_ocache_perf),
+    `endif
+    `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .per_socket_tex_bus_if    (per_socket_tex_bus_if),
         .tcache_mem_bus_if        (tcache_l2_bus_if),

@@ -288,6 +288,15 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .TAG_WIDTH (RCACHE_TAG_WIDTH)
     ) mem_bus_if();
 
+    // Pad the raster tag with leading UUID zeros so the scheduler can
+    // slice off the upper UUID_WIDTH bits unconditionally (matches the
+    // tex/om pattern). Raster has no instruction UUID — those bits stay '0.
+    localparam SCHED_TAG_WIDTH = UUID_WIDTH + TAG_WIDTH;
+    wire [SCHED_TAG_WIDTH-1:0] sched_req_tag = {UUID_WIDTH'(0), mem_req_tag};
+    wire [SCHED_TAG_WIDTH-1:0] sched_rsp_tag;
+    assign mem_rsp_tag = sched_rsp_tag[TAG_WIDTH-1:0];
+    `UNUSED_VAR (sched_rsp_tag)
+
     VX_mem_scheduler #(
         .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
         .CORE_REQS    (NUM_REQS),
@@ -295,8 +304,9 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .WORD_SIZE    (`RASTER_DATA_BITS / 8),
         .ADDR_WIDTH   (RCACHE_ADDR_WIDTH),
         .USER_WIDTH   (0),
-        .TAG_WIDTH    (TAG_WIDTH),
+        .TAG_WIDTH    (SCHED_TAG_WIDTH),
         .CORE_QUEUE_SIZE(`VX_CFG_RASTER_MEM_QUEUE_SIZE),
+        .UUID_WIDTH   (UUID_WIDTH),
         .RSP_PARTIAL  (0),
         .MEM_OUT_BUF  (2),
         .CORE_OUT_BUF (3)
@@ -312,7 +322,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .core_req_addr  (mem_req_addr_w),
         .core_req_user  ('0),
         .core_req_data  ('0),
-        .core_req_tag   (mem_req_tag),
+        .core_req_tag   (sched_req_tag),
         .core_req_ready (mem_req_ready),
         `UNUSED_PIN (req_queue_empty),
         `UNUSED_PIN (req_queue_rw_notify),
@@ -321,7 +331,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .core_rsp_valid (mem_rsp_valid),
         `UNUSED_PIN (core_rsp_mask),
         .core_rsp_data  (mem_rsp_data),
-        .core_rsp_tag   (mem_rsp_tag),
+        .core_rsp_tag   (sched_rsp_tag),
         `UNUSED_PIN (core_rsp_sop),
         `UNUSED_PIN (core_rsp_eop),
         .core_rsp_ready (mem_rsp_ready),

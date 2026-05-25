@@ -41,6 +41,14 @@ struct TexReq {
   uint32_t       block_id = 0;
 
   TexReq() = default;
+
+  // Required by TxRxArbiter's DT(4, ... << req) trace at simx/types.h.
+  friend std::ostream& operator<<(std::ostream& os, const TexReq& req) {
+    os << "tag=0x" << std::hex << req.tag << std::dec
+       << ", stage=" << req.stage << ", tmask=0x" << std::hex << req.tmask_bits
+       << std::dec << " (#" << req.uuid << ")";
+    return os;
+  }
 };
 
 // TexRsp — final filtered texels for an in-flight TexReq. Mirrors
@@ -57,6 +65,13 @@ struct TexRsp {
   // Allow Req → Rsp copy in TxRxArbiter's bypass binding.
   TexRsp(const TexReq& req)
     : uuid(req.uuid), tag(req.tag), texels{}, trace(req.trace), block_id(req.block_id) {}
+
+  // Required by TxRxArbiter's DT(4, ... << rsp) trace at simx/types.h.
+  friend std::ostream& operator<<(std::ostream& os, const TexRsp& rsp) {
+    os << "tag=0x" << std::hex << rsp.tag << std::dec
+       << " (#" << rsp.uuid << ")";
+    return os;
+  }
 };
 
 using TexBusArbiter = TxRxArbiter<TexReq, TexRsp>;

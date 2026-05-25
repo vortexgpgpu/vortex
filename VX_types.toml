@@ -381,12 +381,15 @@ VX_CSR_CTA_GRID_DIM_Z = 0xCDE
 VX_CSR_CTA_LMEM_ADDR  = 0xCDF
 
 [dcr_mpm_class]
-VX_DCR_MPM_CLASS_BASE = 0
-VX_DCR_MPM_CLASS_CORE = 1
-VX_DCR_MPM_CLASS_MEM  = 2
-VX_DCR_MPM_CLASS_DXA  = 6
-VX_DCR_MPM_CLASS_TCU  = 7
-VX_DCR_MPM_CLASS_VM   = 8
+VX_DCR_MPM_CLASS_BASE   = 0
+VX_DCR_MPM_CLASS_CORE   = 1
+VX_DCR_MPM_CLASS_MEM    = 2
+VX_DCR_MPM_CLASS_TEX    = 3
+VX_DCR_MPM_CLASS_RASTER = 4
+VX_DCR_MPM_CLASS_OM     = 5
+VX_DCR_MPM_CLASS_DXA    = 6
+VX_DCR_MPM_CLASS_TCU    = 7
+VX_DCR_MPM_CLASS_VM     = 8
 
 [csr_mpm_base]
 VX_CSR_MCYCLE = 0xB00
@@ -567,6 +570,66 @@ VX_CSR_MPM_TCU_TBUF_CACHE_HITS= 0xB04  # B tile reuse hits from tile buffer cach
 VX_CSR_MPM_TCU_TBUF_CACHE_HITS_H = 0xB84
 VX_CSR_MPM_TCU_LMEM_READS     = 0xB05  # tile buffer local memory reads
 VX_CSR_MPM_TCU_LMEM_READS_H   = 0xB85
+
+[csr_mpm_tex]
+# PERF: texture unit (per-core; summed across blocks)
+VX_CSR_MPM_TEX_READS          = 0xB03  # texture accesses
+VX_CSR_MPM_TEX_READS_H        = 0xB83
+VX_CSR_MPM_TEX_LAT            = 0xB04  # texture total latency cycles
+VX_CSR_MPM_TEX_LAT_H          = 0xB84
+VX_CSR_MPM_TEX_ST             = 0xB05  # texture stall cycles (queue back-pressure)
+VX_CSR_MPM_TEX_ST_H           = 0xB85
+# PERF: texture cache
+VX_CSR_MPM_TCACHE_READS       = 0xB06  # total reads
+VX_CSR_MPM_TCACHE_READS_H     = 0xB86
+VX_CSR_MPM_TCACHE_MISS_R      = 0xB07  # read misses
+VX_CSR_MPM_TCACHE_MISS_R_H    = 0xB87
+VX_CSR_MPM_TCACHE_BANK_ST     = 0xB08  # bank conflicts
+VX_CSR_MPM_TCACHE_BANK_ST_H   = 0xB88
+VX_CSR_MPM_TCACHE_MSHR_ST     = 0xB09  # MSHR stalls
+VX_CSR_MPM_TCACHE_MSHR_ST_H   = 0xB89
+
+[csr_mpm_raster]
+# PERF: raster unit (per-core; summed across blocks)
+VX_CSR_MPM_RASTER_READS       = 0xB03  # raster accesses
+VX_CSR_MPM_RASTER_READS_H     = 0xB83
+VX_CSR_MPM_RASTER_LAT         = 0xB04  # raster total latency cycles
+VX_CSR_MPM_RASTER_LAT_H       = 0xB84
+VX_CSR_MPM_RASTER_ST          = 0xB05  # raster stall cycles
+VX_CSR_MPM_RASTER_ST_H        = 0xB85
+# PERF: raster cache
+VX_CSR_MPM_RCACHE_READS       = 0xB06  # total reads
+VX_CSR_MPM_RCACHE_READS_H     = 0xB86
+VX_CSR_MPM_RCACHE_MISS_R      = 0xB07  # read misses
+VX_CSR_MPM_RCACHE_MISS_R_H    = 0xB87
+VX_CSR_MPM_RCACHE_BANK_ST     = 0xB08  # bank conflicts
+VX_CSR_MPM_RCACHE_BANK_ST_H   = 0xB88
+VX_CSR_MPM_RCACHE_MSHR_ST     = 0xB09  # MSHR stalls
+VX_CSR_MPM_RCACHE_MSHR_ST_H   = 0xB89
+
+[csr_mpm_om]
+# PERF: output-merger unit (per-core; summed across blocks)
+VX_CSR_MPM_OM_READS           = 0xB03  # OM memory reads
+VX_CSR_MPM_OM_READS_H         = 0xB83
+VX_CSR_MPM_OM_WRITES          = 0xB04  # OM memory writes
+VX_CSR_MPM_OM_WRITES_H        = 0xB84
+VX_CSR_MPM_OM_LAT             = 0xB05  # OM memory total latency cycles
+VX_CSR_MPM_OM_LAT_H           = 0xB85
+VX_CSR_MPM_OM_ST              = 0xB06  # OM stall cycles
+VX_CSR_MPM_OM_ST_H            = 0xB86
+# PERF: OM cache
+VX_CSR_MPM_OCACHE_READS       = 0xB07  # total reads
+VX_CSR_MPM_OCACHE_READS_H     = 0xB87
+VX_CSR_MPM_OCACHE_WRITES      = 0xB08  # total writes
+VX_CSR_MPM_OCACHE_WRITES_H    = 0xB88
+VX_CSR_MPM_OCACHE_MISS_R      = 0xB09  # read misses
+VX_CSR_MPM_OCACHE_MISS_R_H    = 0xB89
+VX_CSR_MPM_OCACHE_MISS_W      = 0xB0A  # write misses
+VX_CSR_MPM_OCACHE_MISS_W_H    = 0xB8A
+VX_CSR_MPM_OCACHE_BANK_ST     = 0xB0B  # bank conflicts
+VX_CSR_MPM_OCACHE_BANK_ST_H   = 0xB8B
+VX_CSR_MPM_OCACHE_MSHR_ST     = 0xB0C  # MSHR stalls
+VX_CSR_MPM_OCACHE_MSHR_ST_H   = 0xB8C
 
 # XLEN is an environment-supplied build axis (configure exports it); the
 # [memmap]/[vm] exprs above reference it. Declared as a [[builtin]] so the

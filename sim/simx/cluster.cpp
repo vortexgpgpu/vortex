@@ -422,6 +422,18 @@ public:
 #ifdef VX_CFG_EXT_DXA_ENABLE
     perf_stats.dxa = dxa_core_->perf_stats();
 #endif
+#ifdef VX_CFG_EXT_TEX_ENABLE
+    perf_stats.tex    = tex_core_->perf_stats();
+    perf_stats.tcache = tcache_->perf_stats();
+#endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+    perf_stats.raster = raster_core_->perf_stats();
+    perf_stats.rcache = rcache_->perf_stats();
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+    perf_stats.om     = om_core_->perf_stats();
+    perf_stats.ocache = ocache_->perf_stats();
+#endif
     return perf_stats;
   }
 

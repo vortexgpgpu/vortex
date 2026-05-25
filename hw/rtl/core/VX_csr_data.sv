@@ -378,6 +378,51 @@ import VX_fpu_pkg::*;
                         endcase
                     end
                 `endif
+                `ifdef VX_CFG_EXT_TEX_ENABLE
+                    `VX_DCR_MPM_CLASS_TEX: begin
+                        case (read_addr)
+                        `CSR_READ_64(`VX_CSR_MPM_TEX_READS,      read_data_ro_w, sysmem_perf.tex.mem_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_TEX_LAT,        read_data_ro_w, sysmem_perf.tex.mem_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_TEX_ST,         read_data_ro_w, sysmem_perf.tex.stall_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_TCACHE_READS,   read_data_ro_w, sysmem_perf.tcache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_TCACHE_MISS_R,  read_data_ro_w, sysmem_perf.tcache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_TCACHE_BANK_ST, read_data_ro_w, sysmem_perf.tcache.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_TCACHE_MSHR_ST, read_data_ro_w, sysmem_perf.tcache.mshr_stalls);
+                        default:;
+                        endcase
+                    end
+                `endif
+                `ifdef VX_CFG_EXT_RASTER_ENABLE
+                    `VX_DCR_MPM_CLASS_RASTER: begin
+                        case (read_addr)
+                        `CSR_READ_64(`VX_CSR_MPM_RASTER_READS,   read_data_ro_w, sysmem_perf.raster.mem_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_RASTER_LAT,     read_data_ro_w, sysmem_perf.raster.mem_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_RASTER_ST,      read_data_ro_w, sysmem_perf.raster.stall_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_RCACHE_READS,   read_data_ro_w, sysmem_perf.rcache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_RCACHE_MISS_R,  read_data_ro_w, sysmem_perf.rcache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_RCACHE_BANK_ST, read_data_ro_w, sysmem_perf.rcache.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_RCACHE_MSHR_ST, read_data_ro_w, sysmem_perf.rcache.mshr_stalls);
+                        default:;
+                        endcase
+                    end
+                `endif
+                `ifdef VX_CFG_EXT_OM_ENABLE
+                    `VX_DCR_MPM_CLASS_OM: begin
+                        case (read_addr)
+                        `CSR_READ_64(`VX_CSR_MPM_OM_READS,       read_data_ro_w, sysmem_perf.om.mem_reads);
+                        `CSR_READ_64(`VX_CSR_MPM_OM_WRITES,      read_data_ro_w, sysmem_perf.om.mem_writes);
+                        `CSR_READ_64(`VX_CSR_MPM_OM_LAT,         read_data_ro_w, sysmem_perf.om.mem_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_OM_ST,          read_data_ro_w, sysmem_perf.om.stall_cycles);
+                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_READS,   read_data_ro_w, sysmem_perf.ocache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_WRITES,  read_data_ro_w, sysmem_perf.ocache.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_MISS_R,  read_data_ro_w, sysmem_perf.ocache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_MISS_W,  read_data_ro_w, sysmem_perf.ocache.write_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_BANK_ST, read_data_ro_w, sysmem_perf.ocache.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_OCACHE_MSHR_ST, read_data_ro_w, sysmem_perf.ocache.mshr_stalls);
+                        default:;
+                        endcase
+                    end
+                `endif
                     default:;
                     endcase
                 `endif

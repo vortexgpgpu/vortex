@@ -83,6 +83,7 @@ Tracer::~Tracer() {
     if (module_)  vx_module_release(module_);
     if (queue_)   vx_queue_release(queue_);
     // close device
+    vx_device_dump_perf(device_, stdout);
     vx_device_release(device_);
   }
 }

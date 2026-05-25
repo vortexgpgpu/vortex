@@ -250,6 +250,51 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         }
       } break;
     #endif
+    #ifdef VX_CFG_EXT_TEX_ENABLE
+      case VX_DCR_MPM_CLASS_TEX: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_TEX_READS,     cluster_perf.tex.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_TEX_LAT,       cluster_perf.tex.mem_latency);
+        CSR_READ_64(VX_CSR_MPM_TEX_ST,        cluster_perf.tex.stall_cycles);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_READS,  cluster_perf.tcache.reads);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_MISS_R, cluster_perf.tcache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_BANK_ST,cluster_perf.tcache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_TCACHE_MSHR_ST,cluster_perf.tcache.mshr_stalls);
+        }
+      } break;
+    #endif
+    #ifdef VX_CFG_EXT_RASTER_ENABLE
+      case VX_DCR_MPM_CLASS_RASTER: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_RASTER_READS,  cluster_perf.raster.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_RASTER_LAT,    cluster_perf.raster.mem_latency);
+        CSR_READ_64(VX_CSR_MPM_RASTER_ST,     cluster_perf.raster.stall_cycles);
+        CSR_READ_64(VX_CSR_MPM_RCACHE_READS,  cluster_perf.rcache.reads);
+        CSR_READ_64(VX_CSR_MPM_RCACHE_MISS_R, cluster_perf.rcache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_RCACHE_BANK_ST,cluster_perf.rcache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_RCACHE_MSHR_ST,cluster_perf.rcache.mshr_stalls);
+        }
+      } break;
+    #endif
+    #ifdef VX_CFG_EXT_OM_ENABLE
+      case VX_DCR_MPM_CLASS_OM: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_OM_READS,      cluster_perf.om.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_OM_WRITES,     cluster_perf.om.mem_writes);
+        CSR_READ_64(VX_CSR_MPM_OM_LAT,        cluster_perf.om.mem_latency);
+        CSR_READ_64(VX_CSR_MPM_OM_ST,         cluster_perf.om.stall_cycles);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_READS,  cluster_perf.ocache.reads);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_WRITES, cluster_perf.ocache.writes);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_MISS_R, cluster_perf.ocache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_MISS_W, cluster_perf.ocache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_BANK_ST,cluster_perf.ocache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_OCACHE_MSHR_ST,cluster_perf.ocache.mshr_stalls);
+        }
+      } break;
+    #endif
       default:
         std::cerr << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
         std::abort();

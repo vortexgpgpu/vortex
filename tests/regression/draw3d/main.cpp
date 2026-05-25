@@ -146,7 +146,10 @@ void cleanup() {
   if (kernel)  vx_kernel_release(kernel);
   if (module_) vx_module_release(module_);
   if (queue)   vx_queue_release(queue);
-  if (device)  vx_device_release(device);
+  if (device) {
+    vx_device_dump_perf(device, stdout);
+    vx_device_release(device);
+  }
 }
 
 #ifdef SW_ENABLE
