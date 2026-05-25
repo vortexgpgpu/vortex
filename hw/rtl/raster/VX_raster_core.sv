@@ -82,18 +82,34 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire mem_unit_valid;
     wire mem_unit_ready;
 
-    // Generate start pulse
+    // Generate start pulse. Two triggers:
+    //   1. Boot-time (~START_DELAY cycles after reset) — original design,
+    //      kept so quick runtimes (regression/raster) keep working.
+    //   2. tile_count transitioning 0 → non-zero — fires once vortexpipe
+    //      finishes programming the DCRs. Without this the mem-unit
+    //      pulses at boot with tile_count=0 (now reset-clean) and never
+    //      gets a second start, so the raster sits idle forever for any
+    //      runtime whose DCR programming takes longer than START_DELAY.
     reg [START_DELAY_W-1:0] start_cnt;
     reg mem_unit_start;
     reg start_pending;
     reg running;
+    reg tile_count_was_nz;
+    wire tile_count_now_nz = (raster_dcrs.tile_count != '0);
+    wire tile_count_rising = tile_count_now_nz && ~tile_count_was_nz;
     always @(posedge clk) begin
         if (reset) begin
             start_cnt <= '0;
             mem_unit_start <= 0;
             start_pending <= 0;
+            tile_count_was_nz <= 1'b0;
         end else begin
+            tile_count_was_nz <= tile_count_now_nz;
             if (~running && ~reset) begin
+                start_cnt  <= START_DELAY_W'(START_DELAY);
+                start_pending <= 1'b1;
+            end else if (tile_count_rising && start_cnt == '0 && !start_pending) begin
+                // Re-kick after the runtime programmed a new frame's DCRs.
                 start_cnt  <= START_DELAY_W'(START_DELAY);
                 start_pending <= 1'b1;
             end else if (start_cnt != '0) begin

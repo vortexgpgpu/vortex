@@ -28,7 +28,6 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
     output om_dcrs_t        om_dcrs
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_VAR (reset)
 
     // Decode write strobe + extract addr/data from the new req-style DCR bus
     wire write_valid                    = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
@@ -58,10 +57,15 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
 
     om_dcrs_t dcrs;
 
-    // DCRs write
-
+    // DCRs write. Reset all fields so depth_func / writemask / blend
+    // params start at known-safe zeros under Verilator's --x-initial
+    // unique. Without this the OM unit can see depth_test=enabled with
+    // a random depth_func at boot and silently discard every fragment
+    // — same family of bug as the raster_dcr reset issue.
     always @(posedge clk) begin
-        if (write_valid) begin
+        if (reset) begin
+            dcrs <= '0;
+        end else if (write_valid) begin
             case (write_addr)
                 `VX_DCR_OM_CBUF_ADDR: begin
                     dcrs.cbuf_addr <= write_data[`OM_ADDR_BITS-1:0];
