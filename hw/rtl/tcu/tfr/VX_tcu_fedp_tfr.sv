@@ -90,8 +90,9 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     // Stage 1: Multiply & Max Exponent
     // ======================================================================
 
-    wire [EXP_W-1:0]          max_exp;
-    wire [TCK:0][7:0]         shift_amts;
+    wire [TCK:0][EXP_W-1:0]   exponents;
+    wire [TCK:0]              exp_sel;
+    wire [TCK-1:0][TCK-1:0][EXP_W:0] exp_diff_mat;
     wire [TCK:0][W-1:0]       raw_sigs;
     fedp_excep_t              exceptions;
     wire [TCK-1:0]            lane_mask;
@@ -121,15 +122,17 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .sf_a(sf_a),
         .sf_b(sf_b),
     `endif
-        .max_exp(max_exp),
-        .shift_amts(shift_amts),
+        .exponents(exponents),
+        .exp_sel(exp_sel),
+        .exp_diff_mat(exp_diff_mat),
         .raw_sigs(raw_sigs),
         .exceptions(exceptions),
         .lane_mask(lane_mask)
     );
 
-    wire [EXP_W-1:0]          s1_max_exp;
-    wire [TCK:0][7:0]         s1_shift_amts;
+    wire [TCK:0][EXP_W-1:0]   s1_exponents;
+    wire [TCK:0]              s1_exp_sel;
+    wire [TCK-1:0][TCK-1:0][EXP_W:0] s1_exp_diff_mat;
     fedp_excep_t              s1_exceptions;
     wire [TCK-1:0]            s1_lane_mask;
     wire [TCK:0][W-1:0]       s1_raw_sig;
@@ -142,7 +145,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
 
     VX_tcu_tfr_pipe_register #(
         .NUM_LANES  (TCK),
-        .SHARED_DATAW(EXP_W + ((TCK+1)*8) + EXC_W + TCK + W + C_HI_W + 1),
+        .SHARED_DATAW(((TCK+1)*EXP_W) + (TCK+1) + (TCK*TCK*(EXP_W+1)) + EXC_W + TCK + W + C_HI_W + 1),
         .LANE_DATAW (W),
         .DEPTH      (MUL_LATENCY),
         .LANE_MASK  (LANE_MASK)
@@ -151,8 +154,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .reset(reset),
         .enable(enable),
         .lane_mask (lane_mask),
-        .shared_data_in ({max_exp,    shift_amts,    exceptions,    lane_mask,    raw_sigs[TCK],   cval_hi,    is_int}),
-        .shared_data_out({s1_max_exp, s1_shift_amts, s1_exceptions, s1_lane_mask, s1_raw_sig[TCK], s1_cval_hi, s1_is_int}),
+        .shared_data_in ({exponents,    exp_sel,    exp_diff_mat,    exceptions,    lane_mask,    raw_sigs[TCK],   cval_hi,    is_int}),
+        .shared_data_out({s1_exponents, s1_exp_sel, s1_exp_diff_mat, s1_exceptions, s1_lane_mask, s1_raw_sig[TCK], s1_cval_hi, s1_is_int}),
         .lane_data_in (pipe_mul_lane_din),
         .lane_data_out(pipe_mul_lane_dout)
     );
@@ -163,6 +166,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
 
     wire [TCK:0][ALN_SIG_W-1:0] s1_aln_sigs;
     wire [TCK:0]                s1_aln_sticky;
+    wire [EXP_W-1:0]            s1_max_exp;
 
     VX_tcu_tfr_align #(
         .N (TCK+1),
@@ -172,9 +176,12 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .clk(clk),
         .valid_in(vld_pipe[S1_IDX]),
         .req_id(req_pipe[S1_IDX]),
-        .shift_amts(s1_shift_amts),
+        .exponents(s1_exponents),
+        .sel_exp(s1_exp_sel),
+        .diff_mat(s1_exp_diff_mat),
         .sigs_in(s1_raw_sig),
         .is_int(s1_is_int),
+        .max_exp(s1_max_exp),
         .sigs_out(s1_aln_sigs),
         .sticky_bits(s1_aln_sticky)
     );
@@ -297,8 +304,8 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
     // Stage 1: Mul/Exp
     always_ff @(posedge clk) begin
         if (vld_pipe[S1_IDX]) begin
-            `TRACE(4, ("%t: %s FEDP-S1(%0d): is_int=%b, cval_hi=0x%0h, max_exp=0x%0h, shift_amts=", $time, INSTANCE_ID, req_pipe[S1_IDX], s1_is_int, s1_cval_hi, s1_max_exp));
-            `TRACE_ARRAY1D(4, "0x%0h", s1_shift_amts, (TCK+1))
+            `TRACE(4, ("%t: %s FEDP-S1(%0d): is_int=%b, cval_hi=0x%0h, exponents=", $time, INSTANCE_ID, req_pipe[S1_IDX], s1_is_int, s1_cval_hi));
+            `TRACE_ARRAY1D(4, "0x%0h", s1_exponents, (TCK+1))
             `TRACE(4, (", raw_sig="))
             `TRACE_ARRAY1D(4, "0x%0h", s1_raw_sig, (TCK+1))
             `TRACE(4, (", exceptions=%0b, lane_mask=%b\n", s1_exceptions, s1_lane_mask))

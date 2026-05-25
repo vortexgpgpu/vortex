@@ -23,10 +23,13 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
     input  wire                 valid_in,
     input  wire [31:0]          req_id,
 
-    input  wire [N-1:0][7:0]    shift_amts,
+    input  wire [N-1:0][TCU_EXP_BITS-1:0] exponents,
+    input  wire [N-1:0]         sel_exp,
+    input  wire [N-2:0][N-2:0][TCU_EXP_BITS:0] diff_mat,
 
     input  wire [N-1:0][WI-1:0] sigs_in,
     input  wire                 is_int,
+    output logic [TCU_EXP_BITS-1:0] max_exp,
     output wire [N-1:0][WO-1:0] sigs_out,
     output wire [N-1:0]         sticky_bits
 );
@@ -35,6 +38,52 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
 
     localparam MAX_PRE_SHIFT = WI - 23;
     localparam SHIFT_MAG_W   = (WI - 1) + MAX_PRE_SHIFT;
+
+    wire [TCU_EXP_BITS-1:0] or_red[N:0] /* verilator split_var */;
+    wire [N-1:0][7:0] shift_amts;
+
+    assign or_red[0] = {TCU_EXP_BITS{1'b0}};
+    for (genvar i = 0; i < N; i++) begin : g_or_red
+        assign or_red[i+1] = or_red[i] | (sel_exp[i] ? exponents[i] : {TCU_EXP_BITS{1'b0}});
+    end
+    assign max_exp = or_red[N];
+
+    for (genvar i = 0; i < N; i++) begin : g_shift_amts
+        wire [TCU_EXP_BITS-1:0] sh_or [N:0] /* verilator split_var */;
+
+        assign sh_or[0] = {TCU_EXP_BITS{1'b0}};
+        for (genvar k = 0; k < N; k++) begin : g_sh_mux
+            if (k == i) begin : g_self
+                assign sh_or[k+1] = sh_or[k];
+            end else if (k < i) begin : g_direct
+                wire [TCU_EXP_BITS-1:0] diff_lane = diff_mat[k][i-1][TCU_EXP_BITS-1:0];
+                assign sh_or[k+1] = sh_or[k] | (sel_exp[k] ? diff_lane : {TCU_EXP_BITS{1'b0}});
+            end else begin : g_invert
+                wire [TCU_EXP_BITS-1:0] diff_lane = diff_mat[i][k-1][TCU_EXP_BITS-1:0];
+                assign sh_or[k+1] = sh_or[k] | (sel_exp[k] ? ~diff_lane : {TCU_EXP_BITS{1'b0}});
+            end
+        end
+
+        wire needs_inc;
+        if (i == N-1) begin : g_no_inc
+            assign needs_inc = 1'b0;
+        end else begin : g_calc_inc
+            wire [N-2-i:0] inc_sel;
+            for (genvar k = i+1; k < N; k++) begin : g_inc_sel
+                assign inc_sel[k-i-1] = sel_exp[k];
+            end
+            assign needs_inc = |inc_sel;
+        end
+
+        if (TCU_EXP_BITS > 8) begin : g_sat
+            wire [7:0] shift_lo = sh_or[N][7:0] + 8'(needs_inc);
+            wire shift_hi = (|sh_or[N][TCU_EXP_BITS-1:8]) || (needs_inc && (&sh_or[N][7:0]));
+            assign shift_amts[i] = shift_hi ? 8'hFF : shift_lo;
+        end else begin : g_no_sat
+            wire [TCU_EXP_BITS-1:0] shift_full = sh_or[N] + TCU_EXP_BITS'(needs_inc);
+            assign shift_amts[i] = 8'(shift_full);
+        end
+    end
 
     for (genvar i = 0; i < N; ++i) begin : g_align_lanes
         wire [7:0] shift_amt = shift_amts[i];
@@ -71,7 +120,7 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
     always_ff @(posedge clk) begin
         if (valid_in) begin
             `TRACE(4, ("%t: %s FEDP-ALIGN(%0d): is_int=%0d", $time, INSTANCE_ID, req_id, is_int));
-            `TRACE(4, (", shift_amts="));
+            `TRACE(4, (", max_exp=0x%0h, shift_amts=", max_exp));
             `TRACE_ARRAY1D(4, "0x%0h", shift_amts, N)
             `TRACE(4, (", sigs_in="));
             `TRACE_ARRAY1D(4, "0x%0h", sigs_in, N)

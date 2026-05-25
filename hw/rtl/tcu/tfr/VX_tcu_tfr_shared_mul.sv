@@ -37,8 +37,9 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     input wire [SF-1:0][7:0] sf_a,
     input wire [SF-1:0][7:0] sf_b,
 `endif
-    output wire [EXP_W-1:0]   max_exp,
-    output wire [TCK:0][7:0]  shift_amts,
+    output wire [TCK:0][EXP_W-1:0] exponents,
+    output wire [TCK:0]            exp_sel,
+    output wire [TCK-1:0][TCK-1:0][EXP_W:0] exp_diff_mat,
 
     output wire [TCK:0][24:0] raw_sigs,
     output wire fedp_excep_t  exceptions,
@@ -206,7 +207,6 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 
     // Aggregation and exception reduction
 
-    wire [TCK:0][EXP_W-1:0] exponents;
     fedp_excep_t [TCK:0] join_exceptions;
 
     VX_tcu_tfr_mul_join #(
@@ -268,10 +268,10 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     VX_tcu_tfr_max_exp #(
         .N     (TCK+1),
         .WIDTH (EXP_W)
-    ) find_max_exp (
+    ) find_diff_mat (
         .exponents (exponents),
-        .max_exp   (max_exp),
-        .shift_amts(shift_amts)
+        .sel_exp   (exp_sel),
+        .diff_mat  (exp_diff_mat)
     );
 
     // Lane mask
