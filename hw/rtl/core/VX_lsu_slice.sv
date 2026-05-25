@@ -382,9 +382,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .core_req_data  (mem_req_data),
         .core_req_tag   (mem_req_tag),
         .core_req_ready (mem_req_ready),
-
-        // request queue info — wired into `lsu_queue_empty` below.
-        .req_queue_empty (mem_sched_req_queue_empty),
+        .req_queue_empty(mem_sched_req_queue_empty),
         `UNUSED_PIN (req_queue_rw_notify),
 
         // Output response
