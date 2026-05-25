@@ -36,7 +36,12 @@ apt-get update -y
 # opencl-headers ships CL/opencl.h needed by tests/opencl host code; the prebuilt
 # POCL tarball doesn't include host-API headers, so this is the system fallback.
 # ocl-icd-opencl-dev provides libOpenCL.so symlinks for host-side linking.
-apt-get install -y build-essential valgrind libstdc++6 binutils python3 uuid-dev ccache cmake libffi8 libpng-dev libboost-serialization-dev opencl-headers ocl-icd-opencl-dev
+# openmpi-bin + libopenmpi-dev provide mpic++ / mpicc and the runtime needed
+# by tests/regression/mpi_* targets (MPI=1). SST builds its own OpenMPI under
+# $TOOLDIR/openmpi_install for its internal linkage, but the test recipes
+# pick up the system mpic++ — make that dependency explicit so it's not a
+# silent transitive of build-essential.
+apt-get install -y build-essential valgrind libstdc++6 binutils python3 uuid-dev ccache cmake libffi8 libpng-dev libboost-serialization-dev opencl-headers ocl-icd-opencl-dev openmpi-bin libopenmpi-dev
 
 # Check and install GCC 11 if necessary
 if check_gcc_version; then
