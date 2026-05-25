@@ -1,9 +1,15 @@
 #version 450
 
 /* Minimal Vulkan compute smoke kernel for the vortexpipe driver:
- * data[i] = data[i] + 1.0. See tests/vulkan/compute/main.c. */
+ * data[i] = data[i] + 1.0. See tests/vulkan/compute/main.c.
+ *
+ * local_size_x is a Vulkan specialization constant (ID 0) chosen by
+ * the host at pipeline creation time from
+ * VkPhysicalDeviceProperties.limits.maxComputeWorkGroupSize[0]. This
+ * lets the same shader run on any Vortex config without baking the
+ * NUM_THREADS × NUM_WARPS cap into the shader source. */
 
-layout(local_size_x = 64) in;
+layout(local_size_x_id = 0) in;
 
 layout(std430, binding = 0) buffer Buf {
    float data[];

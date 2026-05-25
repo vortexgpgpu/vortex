@@ -19,7 +19,14 @@
 #include <string.h>
 
 #define N           256u
-#define LOCAL_SIZE  64u
+/* Maximum local_size_x the test will request. The actual value is
+ * specialized at pipeline creation to
+ * min(LOCAL_SIZE_MAX, VkPhysicalDeviceProperties.limits.maxComputeWorkGroupSize[0])
+ * — vortexpipe reports the Vortex hardware cap (NUM_THREADS × NUM_WARPS)
+ * there, so the same shader runs on every Vortex config without baking
+ * the cap into the .comp source. N must be a multiple of the chosen
+ * value; the loop below rounds down if needed. */
+#define LOCAL_SIZE_MAX  64u
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -166,12 +173,35 @@ main(int argc, char **argv)
    VkPipelineLayout pl;
    CHECK(vkCreatePipelineLayout(dev, &plci, NULL, &pl));
 
+   /* --- pick local_size_x from device limits ---------------------- *
+    * Cap the requested size by what the device advertises, then round
+    * down to the largest power of two that divides N — keeps dispatch
+    * geometry simple (N / local_size workgroups, every thread in
+    * range). `add1.comp` declares `layout(local_size_x_id = 0)` so the
+    * value flows in as Vulkan specialization constant ID 0. */
+   uint32_t dev_max_x = props.limits.maxComputeWorkGroupSize[0];
+   uint32_t local_size = LOCAL_SIZE_MAX < dev_max_x ? LOCAL_SIZE_MAX
+                                                    : dev_max_x;
+   while (local_size > 1 && (N % local_size) != 0)
+      local_size >>= 1;
+   if (local_size == 0)
+      local_size = 1;
+   printf("local_size_x=%u (device max=%u)\n", local_size, dev_max_x);
+
    /* --- compute pipeline (→ vortexpipe create_compute_state) ------ */
+   VkSpecializationMapEntry sme = {
+      .constantID = 0, .offset = 0, .size = sizeof(uint32_t),
+   };
+   VkSpecializationInfo spec_info = {
+      .mapEntryCount = 1, .pMapEntries = &sme,
+      .dataSize = sizeof(uint32_t), .pData = &local_size,
+   };
    VkComputePipelineCreateInfo cpci = {
       .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
       .stage = {
          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
          .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = sm, .pName = "main",
+         .pSpecializationInfo = &spec_info,
       },
       .layout = pl,
    };
@@ -228,7 +258,7 @@ main(int argc, char **argv)
    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl,
                            0, 1, &ds, 0, NULL);
-   vkCmdDispatch(cb, N / LOCAL_SIZE, 1, 1);
+   vkCmdDispatch(cb, N / local_size, 1, 1);
    CHECK(vkEndCommandBuffer(cb));
 
    VkSubmitInfo si = {
