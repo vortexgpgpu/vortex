@@ -51,10 +51,10 @@ LLVM_CFLAGS += -Wno-unused-command-line-argument
 #LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0
 #LLVM_CFLAGS += --rtlib=libgcc
 
-VX_CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
-VX_CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
-VX_DP  = $(LLVM_VORTEX)/bin/llvm-objdump
-VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
+VX_CC  = $(LLVM_PATH)/bin/clang $(LLVM_CFLAGS)
+VX_CXX = $(LLVM_PATH)/bin/clang++ $(LLVM_CFLAGS)
+VX_DP  = $(LLVM_PATH)/bin/llvm-objdump
+VX_CP  = $(LLVM_PATH)/bin/llvm-objcopy
 
 #VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
 #VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-g++
@@ -70,9 +70,9 @@ VX_CFLAGS += $(CONFIGS)
 # need not #include <VX_config.h>. See docs/proposals/config_hw_sw_layering_proposal.md.
 VX_CFLAGS += $(XCONFIGS)
 
-VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc
+VX_LIBS += -L$(LIBC_PATH)/lib -lm -lc
 
-VX_LIBS += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
+VX_LIBS += $(LIBCRT_PATH)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 #VX_LIBS += -lgcc
 
 VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/sw/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(VX_LIBS)

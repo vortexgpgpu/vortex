@@ -464,9 +464,9 @@ vulkan()
 {
     echo "begin vulkan tests..."
 
-    MESA_VORTEX=${MESA_VORTEX:-@TOOLDIR@/mesa-vortex}
-    if [ ! -f "$MESA_VORTEX/share/vulkan/icd.d/lvp_icd.x86_64.json" ]; then
-        echo "error: Mesa with vortexpipe not found at $MESA_VORTEX — run ci/mesa_install.sh first"
+    MESA_PATH=${MESA_PATH:-@TOOLDIR@/mesa-vortex}
+    if [ ! -f "$MESA_PATH/share/vulkan/icd.d/lvp_icd.x86_64.json" ]; then
+        echo "error: Mesa with vortexpipe not found at $MESA_PATH — run ci/mesa_install.sh first"
         exit 1
     fi
 

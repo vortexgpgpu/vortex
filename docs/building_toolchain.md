@@ -514,7 +514,7 @@ Vulkan driver is built on. The `vortexpipe` Gallium driver
 > prebuilt toolchain component. `ci/toolchain_install.sh --mesa`
 > (folded into `--all`) fetches `$TOOLDIR/mesa-vortex` from the
 > `vortex-toolchain-prebuilt` release — no Mesa build needed.
-> `ci/toolchain_env.sh` then exports `MESA_HOME` / `VK_ICD_FILENAMES`.
+> `ci/toolchain_env.sh` then exports `MESA_PATH` / `VK_ICD_FILENAMES`.
 
 > **Build-from-source path:** `ci/mesa_install.sh` performs every
 > step below (build deps, meson configure, build, install) and is
@@ -663,7 +663,7 @@ from `ci/*.sh.in` templates — with `$TOOLDIR`, `$OSVERSION`, and
 Both accept the same per-component flags:
 
 ```
---pocl  --chipstar  --verilator  --riscv32  --riscv64  --llvm
+--pocl  --chipstar  --verilator  --riscv32  --riscv64  --llvm --mesa
 --libcrt32  --libcrt64  --libc32  --libc64  --sv2v  --yosys  --sta
 --all      (every component)
 ```

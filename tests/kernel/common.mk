@@ -14,11 +14,11 @@ LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +xvortex
 
-CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
-CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
-AR  = $(LLVM_VORTEX)/bin/llvm-ar
-DP  = $(LLVM_VORTEX)/bin/llvm-objdump
-CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
+CC  = $(LLVM_PATH)/bin/clang $(LLVM_CFLAGS)
+CXX = $(LLVM_PATH)/bin/clang++ $(LLVM_CFLAGS)
+AR  = $(LLVM_PATH)/bin/llvm-ar
+DP  = $(LLVM_PATH)/bin/llvm-objdump
+CP  = $(LLVM_PATH)/bin/llvm-objcopy
 
 CFLAGS += -Wall -Wextra -Wfatal-errors -Werror -Wno-unused-command-line-argument
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
@@ -27,8 +27,8 @@ CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) -DNDEBUG $(CONFIGS) -D__VO
 # Project the resolved hardware config as -DVX_CFG_* flags.
 CFLAGS += $(XCONFIGS)
 
-LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc
-LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
+LIBC_LIB += -L$(LIBC_PATH)/lib -lm -lc
+LIBC_LIB += $(LIBCRT_PATH)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
 LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/sw/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex.a $(LIBC_LIB)
 

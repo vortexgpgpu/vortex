@@ -18,10 +18,10 @@ LLVM_CFLAGS += -Xclang -target-feature -Xclang +xvortex -mllvm -vortex-branch-di
 #LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0
 #LLVM_CFLAGS += --rtlib=libgcc
 
-#CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
-#AR  = $(LLVM_VORTEX)/bin/llvm-ar
-#DP  = $(LLVM_VORTEX)/bin/llvm-objdump
-#CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
+#CC  = $(LLVM_PATH)/bin/clang $(LLVM_CFLAGS)
+#AR  = $(LLVM_PATH)/bin/llvm-ar
+#DP  = $(LLVM_PATH)/bin/llvm-objdump
+#CP  = $(LLVM_PATH)/bin/llvm-objcopy
 
 CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
 AR  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar

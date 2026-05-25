@@ -449,9 +449,9 @@ graphics-model changes for the §5 improvements (no RTL — §1 scope).
 | Vortex runtime host glue | `~/dev/mesa_vortex/src/gallium/drivers/vortexpipe/vx_context.c` | Owns the `vortex_runtime` device handle, kernel cache, descriptor heaps; bridges Gallium calls to `vortex2.h` async API. |
 | Mesa build infra | `~/dev/mesa_vortex/meson.build` adjustments | Add `vortexpipe` as a gallium-drivers option; require `llvm_vortex` install via `dependency('LLVMVortex', method: 'cmake')`. |
 | Mesa build script (producer) | [ci/mesa_install.sh.in](../../ci/mesa_install.sh.in) | **Landed.** Builds Mesa from the fork (`github.com/vortexgpgpu/mesa`@`vortex_3.x`, `gallium-drivers=llvmpipe,vortexpipe`) into `$(TOOLDIR)/mesa-vortex`; passes `-D vortex-runtime=`/`-D vortex-tooldir=`. Run once per OS/rev by the toolchain maintainer — see §4.4. |
-| Mesa prebuilt (consumer) | [ci/toolchain_install.sh.in](../../ci/toolchain_install.sh.in) / [toolchain_prebuilt.sh.in](../../ci/toolchain_prebuilt.sh.in) / [toolchain_env.sh.in](../../ci/toolchain_env.sh.in) | **Landed.** `mesa` is a prebuilt component like `pocl`/`chipstar`: `--mesa` (in `--all`) fetches `mesa-vortex.tar.bz2` from `vortex-toolchain-prebuilt`@`@TOOLCHAIN_REV@`; `toolchain_env.sh` exports `MESA_HOME`/`VK_ICD_FILENAMES`. |
+| Mesa prebuilt (consumer) | [ci/toolchain_install.sh.in](../../ci/toolchain_install.sh.in) / [toolchain_prebuilt.sh.in](../../ci/toolchain_prebuilt.sh.in) / [toolchain_env.sh.in](../../ci/toolchain_env.sh.in) | **Landed.** `mesa` is a prebuilt component like `pocl`/`chipstar`: `--mesa` (in `--all`) fetches `mesa-vortex.tar.bz2` from `vortex-toolchain-prebuilt`@`@TOOLCHAIN_REV@`; `toolchain_env.sh` exports `MESA_PATH`/`VK_ICD_FILENAMES`. |
 | Vulkan tests | [tests/vulkan/](../../tests/vulkan/) (new) | **Landed (compute).** `compute/` smoke test; later a Vulkan port of [draw3d](../../tests/regression/draw3d/) as the integration end-to-end. |
-| Test aggregator | [tests/vulkan/Makefile](../../tests/vulkan/) + [common.mk](../../tests/vulkan/common.mk) | **Landed.** `common.mk` resolves `MESA_VORTEX := $(TOOLDIR)/mesa-vortex` and runs under `GALLIUM_DRIVER=vortexpipe`; per-test Makefiles model [tests/opencl/common.mk](../../tests/opencl/common.mk). |
+| Test aggregator | [tests/vulkan/Makefile](../../tests/vulkan/) + [common.mk](../../tests/vulkan/common.mk) | **Landed.** `common.mk` resolves `MESA_PATH := $(TOOLDIR)/mesa-vortex` and runs under `GALLIUM_DRIVER=vortexpipe`; per-test Makefiles model [tests/opencl/common.mk](../../tests/opencl/common.mk). |
 | CI hook | [ci/regression.sh.in](../../ci/regression.sh.in) + [.github/workflows/ci.yml](../../.github/workflows/ci.yml) | **Landed.** `regression.sh --vulkan` runs `tests/vulkan run-simx`; `ci.yml` adds a `vulkan` matrix job (rv32-only). |
 | SimX graphics models (R/T/O) | `sim/simx/{raster,tex,om}/` (new) | Implemented by Phases 4–6 ([gfx_migration_proposal.md](gfx_migration_proposal.md) Phase 3 scope, absorbed here) and extended by the §5 improvements. Mirror the RTL module structure 1:1. |
 | RTL (`hw/rtl/{raster,tex,om}/`) | [hw/rtl/](../../hw/rtl/) | **Not modified.** Behavioral reference the SimX models mirror; RTL realization of the gfx-v1 improvements is a separate future proposal (§1 scope). |
@@ -541,7 +541,7 @@ release at tag `@TOOLCHAIN_REV@` (`v3.0`).
 `--mesa` (folded into `--all`) fetches and unpacks that tarball into
 `$(TOOLDIR)/mesa-vortex` — no Mesa build on the consumer side.
 [ci/toolchain_env.sh.in](../../ci/toolchain_env.sh.in) then exports
-`MESA_HOME`, adds `mesa-vortex/lib` + `llvm-vortex/lib` to
+`MESA_PATH`, adds `mesa-vortex/lib` + `llvm-vortex/lib` to
 `LD_LIBRARY_PATH` (the ICD links `libLLVM` shared), and sets
 `VK_ICD_FILENAMES` to the lavapipe ICD.
 

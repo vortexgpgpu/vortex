@@ -25,10 +25,10 @@ OSVERSION ?= @OSVERSION@
 
 INSTALLDIR ?= @INSTALLDIR@
 
-LLVM_VORTEX ?= $(TOOLDIR)/llvm-vortex
+LLVM_PATH ?= $(TOOLDIR)/llvm-vortex
 
-LIBC_VORTEX ?= $(TOOLDIR)/libc$(XLEN)
-LIBCRT_VORTEX ?= $(TOOLDIR)/libcrt$(XLEN)
+LIBC_PATH ?= $(TOOLDIR)/libc$(XLEN)
+LIBCRT_PATH ?= $(TOOLDIR)/libcrt$(XLEN)
 
 RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv$(XLEN)-gnu-toolchain
 

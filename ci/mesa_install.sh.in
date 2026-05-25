@@ -198,12 +198,12 @@ fi
 MESA_ICD=$MESA_PREFIX/share/vulkan/icd.d/lvp_icd.x86_64.json
 MESA_LD_PATH=$MESA_PREFIX/lib:$LLVM_HOME/lib
 
-export MESA_HOME=$MESA_PREFIX
+export MESA_PATH=$MESA_PREFIX
 export LD_LIBRARY_PATH=$MESA_LD_PATH:$LD_LIBRARY_PATH
 export VK_ICD_FILENAMES=$MESA_ICD
 
 add_bashrc() { grep -q "^export $1=" ~/.bashrc 2>/dev/null || echo "export $1=$2" >> ~/.bashrc; }
-add_bashrc MESA_HOME "$MESA_PREFIX"
+add_bashrc MESA_PATH "$MESA_PREFIX"
 add_bashrc VK_ICD_FILENAMES "$MESA_ICD"
 if ! grep -q "mesa-vortex/lib" ~/.bashrc 2>/dev/null; then
     echo 'export LD_LIBRARY_PATH='"$MESA_LD_PATH"':$LD_LIBRARY_PATH' >> ~/.bashrc
@@ -212,7 +212,7 @@ fi
 # GitHub Actions: propagate to subsequent steps.
 if [ -n "$GITHUB_ENV" ]; then
     {
-        echo "MESA_HOME=$MESA_PREFIX"
+        echo "MESA_PATH=$MESA_PREFIX"
         echo "VK_ICD_FILENAMES=$MESA_ICD"
         echo "LD_LIBRARY_PATH=$MESA_LD_PATH:$LD_LIBRARY_PATH"
     } >> "$GITHUB_ENV"
@@ -228,4 +228,4 @@ echo "  ICD:     $MESA_ICD"
 echo "  drivers: gallium=$GALLIUM_DRIVERS vulkan=$VULKAN_DRIVERS"
 echo "  llvm:    $($LLVM_HOME/bin/llvm-config --version) ($LLVM_HOME)"
 echo "  verify:  vulkaninfo --summary"
-echo "  (re-source ~/.bashrc to pick up MESA_HOME in new shells)"
+echo "  (re-source ~/.bashrc to pick up MESA_PATH in new shells)"

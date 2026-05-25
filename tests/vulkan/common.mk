@@ -15,8 +15,8 @@
 # includes this file -- see tests/vulkan/compute/Makefile.
 
 # Mesa-with-vortexpipe install + supporting toolchain libraries.
-MESA_VORTEX ?= $(TOOLDIR)/mesa-vortex
-ZSTD        ?= $(TOOLDIR)/zstd
+MESA_PATH ?= $(TOOLDIR)/mesa-vortex
+ZSTD_PATH        ?= $(TOOLDIR)/zstd
 
 # Vortex runtime, built out-of-tree under the configure build dir.
 # Mesa's libgallium links libvortex.so (the backend-agnostic
@@ -52,7 +52,7 @@ SPVS := $(addsuffix .spv, $(notdir $(SHADERS)))
 # Vortex runtime. VORTEX_HOME / VORTEX_TOOLDIR tell vortexpipe's
 # .vxbin compiler where the Vortex tree and toolchain are -- needed
 # because a prebuilt Mesa's baked-in paths point at the build host.
-VK_ICD  := $(MESA_VORTEX)/share/vulkan/icd.d/lvp_icd.x86_64.json
+VK_ICD  := $(MESA_PATH)/share/vulkan/icd.d/lvp_icd.x86_64.json
 # MESA_VORTEX_STRICT=1: vortexpipe refuses to silently fall back to llvmpipe
 # (the CPU rasterizer it inherits from). With strict mode off, a missing
 # kernel / runtime failure / NIR-translation gap was just a logw + CPU
@@ -71,7 +71,7 @@ RUN_ENV := VK_ICD_FILENAMES=$(VK_ICD) \
            VORTEX_HOME=$(VORTEX_HOME) \
            VORTEX_TOOLDIR=$(TOOLDIR) \
            VORTEX_BUILD=$(ROOT_DIR) \
-           LD_LIBRARY_PATH=$(MESA_VORTEX)/lib:$(LLVM_VORTEX)/lib:$(ZSTD)/lib:$(VORTEX_RT_LIB)
+           LD_LIBRARY_PATH=$(MESA_PATH)/lib:$(LLVM_PATH)/lib:$(ZSTD_PATH)/lib:$(VORTEX_RT_LIB)
 
 RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG))
 

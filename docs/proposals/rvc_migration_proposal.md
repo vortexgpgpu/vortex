@@ -324,8 +324,8 @@ because it expects different `fetch_t` / `schedule_if` shapes.
   live under `/opt/`, not `$HOME/tools/` where the generated
   `toolchain_env.sh` looks. Workaround: pass `TOOLDIR=/opt` (covers
   verilator/sv2v/yosys/sta) and `RISCV_TOOLCHAIN_PATH=/opt/riscv$XLEN-gnu-toolchain
-  LIBC_VORTEX=/opt/libc$XLEN LIBCRT_VORTEX=/opt/libcrt$XLEN
-  LLVM_VORTEX=/opt/llvm-vortex` for the regression flow.
+  LIBC_PATH=/opt/libc$XLEN LIBCRT_PATH=/opt/libcrt$XLEN
+  LLVM_PATH=/opt/llvm-vortex` for the regression flow.
 
 ## 6. Bugs root-caused and fixed
 
