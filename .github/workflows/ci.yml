@@ -201,7 +201,6 @@ jobs:
       - name: Run tests
         run: |
           cd build${{ matrix.xlen }}
-          source ci/toolchain_env.sh
           chmod -R +x . # Ensure all files have executable permissions
           if [ "${{ matrix.name }}" == "regression" ]; then
             ./ci/regression.sh --unittest
