@@ -82,11 +82,13 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     __syncthreads();
   }
 
-  // Copy C accumulator from smem to global memory
+  // Copy C accumulator from smem to global memory.
+  // Each row of xtileN is <= NUM_THREADS wide, so all lanes in a warp write
+  // one contiguous row per iteration — fully coalesced stores.
   auto out = pC + (tile_row + warp_rank * ctx::xtileM) * N + tile_col;
-  for (uint32_t i = lane; i < ctx::xtileM * ctx::xtileN; i += NUM_THREADS) {
-    uint32_t r = i / ctx::xtileN;
-    uint32_t c = i % ctx::xtileN;
-    out[r * N + c] = C_warp[i];
+  for (uint32_t r = 0; r < ctx::xtileM; ++r) {
+    for (uint32_t c = lane; c < ctx::xtileN; c += NUM_THREADS) {
+      out[r * N + c] = C_warp[r * ctx::xtileN + c];
+    }
   }
 }

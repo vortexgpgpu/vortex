@@ -799,6 +799,9 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_TCU_TBUF_STALLS,     tcu_perf.tbuf_stalls);
         CSR_READ_64(VX_CSR_MPM_TCU_TBUF_CACHE_HITS, tcu_perf.tbuf_cache_hits);
+        CSR_READ_64(VX_CSR_MPM_TCU_TBUF_B_MISSES,   tcu_perf.tbuf_b_misses);
+        CSR_READ_64(VX_CSR_MPM_TCU_TBUF_FETCH_CYC,  tcu_perf.tbuf_fetch_cyc);
+        CSR_READ_64(VX_CSR_MPM_TCU_FETCH_B_CYC,     tcu_perf.fetch_b_cyc);
         CSR_READ_64(VX_CSR_MPM_TCU_LMEM_READS,    tcu_perf.lmem_reads);
         }
       } break;

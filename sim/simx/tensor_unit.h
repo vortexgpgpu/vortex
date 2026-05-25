@@ -50,7 +50,7 @@ public:
   struct ExeTraceData : public ITraceData {
     using Ptr = std::shared_ptr<ExeTraceData>;
     bool is_last_k = true;        // false for non-last K-steps (suppress rd writeback)
-    int  fetch_delay = 0;         // tile buffer fetch cycles (v2 timing model)
+    int  fetch_delay = 0;         // total tile buffer fetch cycles (a + b)
     bool tbuf_cache_hit = false;  // B tile was reused from tile buffer cache
   };
 
@@ -58,12 +58,18 @@ public:
 		uint64_t latency = 0;
 		uint64_t tbuf_stalls = 0;      // cycles stalled waiting for tbuf data
 		uint64_t tbuf_cache_hits = 0;  // B tile reuse from tile buffer cache
+		uint64_t tbuf_b_misses = 0;    // B tile fetched from smem (cache miss)
+		uint64_t tbuf_fetch_cyc = 0;   // cumulative fetch_delay (A+B) per fetch event
+		uint64_t fetch_b_cyc = 0;      // cumulative b_bank_rows per B-miss event
 		uint64_t lmem_reads = 0;   // tile buffer local memory reads
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->latency          += rhs.latency;
 			this->tbuf_stalls      += rhs.tbuf_stalls;
 			this->tbuf_cache_hits  += rhs.tbuf_cache_hits;
+			this->tbuf_b_misses    += rhs.tbuf_b_misses;
+			this->tbuf_fetch_cyc   += rhs.tbuf_fetch_cyc;
+			this->fetch_b_cyc      += rhs.fetch_b_cyc;
 			this->lmem_reads       += rhs.lmem_reads;
 			return *this;
 		}

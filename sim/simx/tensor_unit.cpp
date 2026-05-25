@@ -593,17 +593,14 @@ public:
         auto trace_data = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
         int fetch_delay = trace_data ? trace_data->fetch_delay : 0;
         if (fetch_delay > 0) {
-          // First uop with fetch: set buffer ready cycle
           if (tbuf_state_.ready_cycle <= cur_cycle) {
             tbuf_state_.ready_cycle = cur_cycle + fetch_delay;
           }
-          // Clear fetch_delay so we don't re-trigger on subsequent ticks
           trace_data->fetch_delay = 0;
         }
-        // Stall if buffer not ready
         if (cur_cycle < tbuf_state_.ready_cycle) {
           ++perf_stats_.tbuf_stalls;
-          continue; // don't pop, stall this cycle
+          continue;
         }
         delay = 4;
       } break;
@@ -921,7 +918,6 @@ public:
     }
 
     if (is_cd_smem) {
-      // Load C elements from smem accumulator, compute FMA, store results back to same buffer.
       std::vector<reg_data_t> c_vals(cfg::tcM * cfg::tcN);
       for (uint32_t i = 0; i < cfg::tcM; ++i) {
         for (uint32_t j = 0; j < cfg::tcN; ++j) {
@@ -966,13 +962,14 @@ public:
       bool b_cached = tbuf_state_.b_valid && !b_dirty
                    && (b_desc == tbuf_state_.b_desc);
 
-      // Fetch cycles: B (if not cached) + A (if smem) + meta (if sparse)
+      // Fetch order: A first (entire tile), then B streamed column by column.
+      // Loop order k→n→m ensures each (k,n) B column is reused across all m_steps.
       uint32_t fetch_cycles = 0;
-      if (!b_cached) {
-        fetch_cycles += b_bank_rows;
-      }
       if (is_a_smem) {
         fetch_cycles += is_sparse ? a_bank_rows_sp : a_bank_rows;
+      }
+      if (!b_cached) {
+        fetch_cycles += b_bank_rows;
       }
       if (is_sparse && is_a_smem) {
         uint32_t ratio = elem_ratio(fmt_s);
@@ -982,13 +979,14 @@ public:
         fetch_cycles += (meta_total + num_banks - 1) / num_banks;
       }
 
-      // When is_cd_smem, each A block streamed in triggers a C load and D store.
-      // Model as additional bank rows: C reads + D writes interleaved with A streaming.
+      // When is_cd_smem, each of TOTAL_BLOCKS blocks triggers one FETCH_C + one STORE_D.
       if (is_cd_smem) {
-        const uint32_t cd_total     = wg_cfg::xtileM * xtileN_actual;
-        const uint32_t cd_bank_rows = (cd_total + num_banks - 1) / num_banks;
-        fetch_cycles += cd_bank_rows; // C reads per A block
-        fetch_cycles += cd_bank_rows; // D writes per A block
+        constexpr uint32_t block_cap   = cfg::tcM * cfg::tcN;
+        constexpr uint32_t c_bank_rows = (block_cap + num_banks - 1) / num_banks;
+        const uint32_t n_steps_actual  = xtileN_actual / cfg::tcN;
+        const uint32_t total_blocks    = wg_cfg::m_steps * n_steps_actual;
+        fetch_cycles += total_blocks * c_bank_rows;  // FETCH_C per block
+        fetch_cycles += total_blocks * c_bank_rows;  // STORE_D per block
       }
 
       // Count LMEM reads: B words (if not cached) + A words + metadata words + C words
@@ -1011,6 +1009,11 @@ public:
       }
       perf_stats_.lmem_reads += lmem_reads;
 
+      perf_stats_.tbuf_fetch_cyc += fetch_cycles;
+      if (!b_cached) {
+        perf_stats_.fetch_b_cyc += b_bank_rows;
+      }
+
       trace_data->fetch_delay = fetch_cycles;
       trace_data->tbuf_cache_hit = b_cached;
       DT(2, "WGMMA tbuf: wid=" << wid
@@ -1024,6 +1027,7 @@ public:
 
       // Update tile buffer state
       if (!b_cached) {
+        ++perf_stats_.tbuf_b_misses;
         tbuf_state_.b_valid     = true;
         tbuf_state_.b_desc      = b_desc;
         tbuf_state_.b_fetch_wid = wid;
@@ -1419,12 +1423,20 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uint32_t mma_idx = uop_index - meta_stores;
       uint32_t ra_base = is_a_smem ? 10 : 24;
 
-      // Loop order: m (inner) -> k -> n (outer), matching RTL
-      uint32_t mk = m_steps * k_count;
-      uint32_t n = mma_idx / mk;
-      uint32_t rem = mma_idx % mk;
-      uint32_t k = rem / m_steps;
-      uint32_t m = rem % m_steps;
+      uint32_t k, m, n;
+      if (args.is_cd_smem) {
+        // K-inner: k (inner) → m → n (outer), matching RTL lmem-accumulator loop order
+        k = mma_idx % k_count;
+        m = (mma_idx / k_count) % m_steps;
+        n = mma_idx / (k_count * m_steps);
+      } else {
+        // A-first / B-stream: k (outer) → n (middle) → m (inner)
+        // Each (k,n) B column is exhausted across all m_steps before the next is fetched.
+        uint32_t nm = 8u << cd_nregs;  // = n_steps * m_steps
+        k = mma_idx / nm;
+        n = (mma_idx % nm) / m_steps;
+        m = mma_idx % m_steps;
+      }
       uint32_t r = n * m_steps + m;
 
       uop_instr->set_op_type(TcuType::WGMMA);
@@ -1537,3 +1549,4 @@ void TensorUnit::meta_store(uint32_t wid,
                             ExeTraceData* trace_data) {
   impl_->meta_store(wid, fmt_s, col_idx, meta_kind, rs1_data, trace_data);
 }
+
