@@ -64,6 +64,10 @@ jobs:
           cd build
           ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --all
+          # sst_install.sh + gem5_install.sh both emit MPIHOME / SST_*_HOME /
+          # GEM5_HOME to $GITHUB_ENV and the corresponding bin/ dirs to
+          # $GITHUB_PATH, so subsequent steps in *this* job see them. Build
+          # and tests jobs need their own re-export (env doesn't cross jobs).
           ci/sst_install.sh
           ci/gem5_install.sh
 
@@ -71,18 +75,6 @@ jobs:
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
           make -C third_party > /dev/null
-
-      - name: Export SST paths
-        run: |
-          echo "$PWD/tools/sst-install/sst-core/bin" >> $GITHUB_PATH
-          echo "$PWD/tools/sst-install/sst-elements/bin" >> $GITHUB_PATH
-          echo "SST_CORE_HOME=$PWD/tools/sst-install/sst-core" >> $GITHUB_ENV
-          echo "SST_ELEMENTS_HOME=$PWD/tools/sst-install/sst-elements" >> $GITHUB_ENV
-
-      - name: Export gem5 paths
-        run: |
-          echo "GEM5_HOME=$PWD/tools/gem5" >> $GITHUB_ENV
-          echo "$PWD/tools/gem5/build/X86" >> $GITHUB_PATH
 
   build:
     needs: setup
@@ -126,7 +118,6 @@ jobs:
           mkdir -p build${{ matrix.xlen }}
           cd build${{ matrix.xlen }}
           ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
-          source ci/toolchain_env.sh
           make software -s
           make tests -s
 
@@ -186,17 +177,31 @@ jobs:
           name: build-${{ matrix.os }}-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
 
-      - name: Export SST paths
+      - name: Export tool env (SST + gem5 + MPI)
         run: |
-          echo "$PWD/tools/sst-install/sst-core/bin" >> $GITHUB_PATH
-          echo "$PWD/tools/sst-install/sst-elements/bin" >> $GITHUB_PATH
-          echo "SST_CORE_HOME=$PWD/tools/sst-install/sst-core" >> $GITHUB_ENV
-          echo "SST_ELEMENTS_HOME=$PWD/tools/sst-install/sst-elements" >> $GITHUB_ENV
-
-      - name: Export gem5 paths
-        run: |
-          echo "GEM5_HOME=$PWD/tools/gem5" >> $GITHUB_ENV
-          echo "$PWD/tools/gem5/build/X86" >> $GITHUB_PATH
+          # $GITHUB_ENV / $GITHUB_PATH don't cross jobs, so we re-export
+          # what the setup job's install scripts emitted. Keep in sync
+          # with ci/{sst,gem5}_install.sh.in's GITHUB_ENV/GITHUB_PATH
+          # blocks. Tests that actually need these vars: gem5 (GEM5_HOME),
+          # mpi (mpic++ via $MPIHOME/bin), sst (SST_*_HOME).
+          MPIHOME="$PWD/tools/openmpi_install"
+          SST_CORE_HOME="$PWD/tools/sst-install/sst-core"
+          SST_ELEMENTS_HOME="$PWD/tools/sst-install/sst-elements"
+          GEM5_HOME="$PWD/tools/gem5"
+          {
+            echo "MPIHOME=$MPIHOME"
+            echo "MPICC=mpicc"
+            echo "MPICXX=mpicxx"
+            echo "SST_CORE_HOME=$SST_CORE_HOME"
+            echo "SST_ELEMENTS_HOME=$SST_ELEMENTS_HOME"
+            echo "GEM5_HOME=$GEM5_HOME"
+          } >> $GITHUB_ENV
+          {
+            echo "$MPIHOME/bin"
+            echo "$SST_CORE_HOME/bin"
+            echo "$SST_ELEMENTS_HOME/bin"
+            echo "$GEM5_HOME/build/X86"
+          } >> $GITHUB_PATH
 
       - name: Run tests
         run: |
