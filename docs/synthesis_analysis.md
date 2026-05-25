@@ -22,33 +22,33 @@ This guide explains how to run synthesis, timing analysis, area analysis, and po
 
 All synthesis flows accept a `CONFIGS` variable to customize the hardware design at build time. `CONFIGS` is a string of preprocessor macro definitions (`-D` flags) that control core count, cache hierarchy, extensions, and other parameters.
 
-Common configuration flags:
+Common configuration flags (all parameters live in the `VX_CFG_*` namespace; see `VX_config.toml` at the repo root for the full list):
 
 | Flag | Description |
 |------|-------------|
-| `-DNUM_CLUSTERS=N` | Number of clusters |
-| `-DNUM_CORES=N` | Number of cores per cluster |
-| `-DNUM_WARPS=N` | Number of warps per core |
-| `-DNUM_THREADS=N` | Number of threads per warp |
-| `-DL2_ENABLE` | Enable shared L2 cache |
-| `-DL3_ENABLE` | Enable shared L3 cache |
-| `-DEXT_TCU_ENABLE` | Enable Tensor Core Unit |
-| `-DEXT_DXA_ENABLE` | Enable DXA extension |
-| `-DEXT_V_ENABLE` | Enable Vector extension |
-| `-DDCACHE_SIZE=N` | Set data cache size in bytes |
+| `-DVX_CFG_NUM_CLUSTERS=N` | Number of clusters |
+| `-DVX_CFG_NUM_CORES=N` | Number of cores per cluster |
+| `-DVX_CFG_NUM_WARPS=N` | Number of warps per core |
+| `-DVX_CFG_NUM_THREADS=N` | Number of threads per warp |
+| `-DVX_CFG_L2_ENABLE` | Enable shared L2 cache |
+| `-DVX_CFG_L3_ENABLE` | Enable shared L3 cache |
+| `-DVX_CFG_EXT_TCU_ENABLE` | Enable Tensor Core Unit |
+| `-DVX_CFG_EXT_DXA_ENABLE` | Enable DXA extension |
+| `-DVX_CFG_EXT_V_ENABLE` | Enable Vector extension |
+| `-DVX_CFG_DCACHE_SIZE=N` | Set data cache size in bytes |
 
 Example:
 
 ```bash
-CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE -DEXT_TCU_ENABLE"
+CONFIGS="-DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4 -DVX_CFG_L2_ENABLE -DVX_CFG_EXT_TCU_ENABLE"
 ```
 
-All flows also support the `NUM_CORES` shorthand which auto-selects a pre-defined cluster/core/L2 configuration:
+All flows also support the `NUM_CORES` Makefile shorthand which auto-selects a pre-defined cluster/core/L2 configuration:
 
 ```bash
-NUM_CORES=4   # equivalent to -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE
-NUM_CORES=16  # equivalent to -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE
-NUM_CORES=32  # equivalent to -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE
+NUM_CORES=4   # equivalent to -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4 -DVX_CFG_L2_ENABLE
+NUM_CORES=16  # equivalent to -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
+NUM_CORES=32  # equivalent to -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
 ```
 
 ### Using PREFIX for Isolated Builds
@@ -151,10 +151,10 @@ Located in `hw/syn/xilinx/dut/`. Available sub-component targets:
 cd hw/syn/xilinx/dut
 
 # Synthesize the TCU in isolation
-CONFIGS="-DEXT_TCU_ENABLE" make tcu
+CONFIGS="-DVX_CFG_EXT_TCU_ENABLE" make tcu
 
 # Synthesize a 4-core Vortex without the platform wrapper
-CONFIGS="-DNUM_CORES=4 -DL2_ENABLE" make vortex
+CONFIGS="-DVX_CFG_NUM_CORES=4 -DVX_CFG_L2_ENABLE" make vortex
 
 # Run power analysis on an existing tcu
 make tcu-power SAIF_FILE=/path/to/trace.saif SAIF_INST=*.tensor_unit
@@ -173,7 +173,7 @@ cd hw/syn/altera/dut
 make ip-gen
 
 # Synthesize TCU for Arria 10
-DEVICE_FAMILY=arria10 CONFIGS="-DEXT_TCU_ENABLE" make tcu
+DEVICE_FAMILY=arria10 CONFIGS="-DVX_CFG_EXT_TCU_ENABLE" make tcu
 
 # Synthesize a single core for Stratix 10
 DEVICE_FAMILY=stratix10 make core
@@ -199,7 +199,7 @@ cd hw/syn/xilinx/xrt
 # Build a 4-core design for U280
 PREFIX=build_4c NUM_CORES=4 TARGET=hw \
   PLATFORM=xilinx_u280_gen3x16_xdma_1_202310_1 \
-  CONFIGS="-DL2_ENABLE -DDCACHE_SIZE=8192" \
+  CONFIGS="-DVX_CFG_L2_ENABLE -DVX_CFG_DCACHE_SIZE=8192" \
   make > build.log 2>&1 &
 ```
 

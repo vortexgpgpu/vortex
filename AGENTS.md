@@ -1,69 +1,90 @@
 # AGENTS Guide for Vortex GPGPU Development
 
-This file contains context and guidelines for coding agents working in this repository.
+This is the canonical entry point for **both human contributors and AI coding agents** working on Vortex. It captures the *rules* — invariants, conventions, and footguns — that every change should respect. Build/test/debug *recipes* live in the topic docs linked below.
 
-## Vortex Documentation Map
+If a rule here conflicts with something you observe in `build/ci/` generated scripts, trust the generated scripts and update this file in the same change.
 
-- `docs/codebase.md` (repo file tree map)
-- `docs/install_vortex.md` (initial install + build setup)
-- `docs/testing.md` (test and regression flow)
-- `docs/debugging.md` (debug traces and workflows)
-- `docs/simulation.md` (driver modes and blackbox usage)
-- `docs/coding_guidelines_cpp.md` (C++ style guidelines)
-- `docs/coding_guidelines_verilog.md` (Verilog style and verilator warning/linting guidelines)
-- `docs/contributing.md` (contribution guidelines and PR process)
-- `docs/perfetto_analysis.md` (perfetto trace and analysis guide)
+---
 
-## Build Directory Setup
+## 1. Documentation Map
 
-```bash
-# From repo root:
-mkdir -p build && cd build
+### Setup & build
+- [docs/install_vortex.md](docs/install_vortex.md) — initial install + build setup
+- [docs/building_toolchain.md](docs/building_toolchain.md) — building Verilator, RISC-V GNU, LLVM, compiler-rt, musl, POCL from source
+- [docs/environment_setup.md](docs/environment_setup.md) — environment variables and toolchain layout
+- [docs/fpga_setup.md](docs/fpga_setup.md) — FPGA target setup
 
-# Configure word size (pick one XLEN):
-# 32-bit
-../configure --xlen=32 --tooldir=$HOME/tools
-# 64-bit
-../configure --xlen=64 --tooldir=$HOME/tools
+### Codebase orientation
+- [docs/codebase.md](docs/codebase.md) — repo file-tree map
+- [docs/microarchitecture.md](docs/microarchitecture.md) — pipeline & cache architecture
+- [docs/cache_subsystem.md](docs/cache_subsystem.md) — cache subsystem details
+- [docs/hardware_library.md](docs/hardware_library.md) — `hw/rtl/libs/` reference
 
-# Install toolchain (first time / when missing):
-./ci/toolchain_install.sh --all
+### Coding conventions
+- [docs/coding_guidelines_cpp.md](docs/coding_guidelines_cpp.md) — C++ style
+- [docs/coding_guidelines_verilog.md](docs/coding_guidelines_verilog.md) — Verilog/SystemVerilog style
 
-# Build (configure baked the full toolchain layout into the build
-# dir's Makefiles; no shell env sourcing required)
-make -s
-```
+### Simulation & test
+- [docs/simulation.md](docs/simulation.md) — driver modes (simx, rtlsim, opae, xrt) and blackbox usage
+- [docs/testing.md](docs/testing.md) — test and regression flow
+- [docs/debugging.md](docs/debugging.md) — debug traces (`--debug`), VCD, scope, trace_csv
+- [docs/debug_mode.md](docs/debug_mode.md) — debug-mode hardware support
+- [docs/perfetto_analysis.md](docs/perfetto_analysis.md) — Perfetto trace and analysis
+- [docs/synthesis_analysis.md](docs/synthesis_analysis.md) — synthesis/PPA analysis
 
-Wait until build completes before running anything else in parallel terminals.
+### Process
+- [CONTRIBUTING.md](CONTRIBUTING.md) — public fork/PR contribution flow
+- [docs/bug_fixes.md](docs/bug_fixes.md) — bug-fix discipline (root-cause vs patch)
+- [docs/continuous_integration.md](docs/continuous_integration.md) — CI pipeline
+- [docs/proposals/](docs/proposals/) — design and migration proposals (drafts and in-progress)
+- [docs/designs/](docs/designs/) — accepted designs (post-proposal, post-implementation)
 
-`configure` generates a runnable build tree by copying and instantiating `ci/`, `runtime/`, `sim/`, and `tests/` into `build/`. For execution and test automation, prefer the generated scripts and Makefiles under `build/` over the source-tree `.in` files.
+---
 
-### Common Gotchas:
+## 2. Build & Toolchain Rules
 
-- If you git pull from origin, modify Makefiles or add/remove directories that participate in build logic, remember to re-run configure from `build/`
+See [docs/install_vortex.md](docs/install_vortex.md) for the full recipe. The non-negotiable rules:
 
-    ```bash
-    ../configure
-    make -C hw clean && make -C hw
-    ```
+- **Out-of-tree.** From the repo root:
+  ```bash
+  mkdir -p build && cd build
+  ../configure --xlen=64 --tooldir=$HOME/tools   # or --xlen=32
+  ./ci/toolchain_install.sh --all                # first time only
+  make -s
+  ```
+- **Separate build dirs per major variant** (`build32/`, `build64/`, `build_fpga64/`, ...) to avoid config/tool contamination. Never reuse one build dir for incompatible configurations.
+- **`configure` generates a runnable tree** by copying and instantiating `ci/`, `runtime/`, `sim/`, and `tests/` into `build/`. For execution and test automation, *always* prefer the generated scripts/Makefiles under `build/` over the source-tree `.in` files.
+- **Re-`../configure` from `build/`** whenever you `git pull`, edit source Makefiles, or add/remove a build-participating directory. Symptom of forgetting this: stale binaries, missing targets, or "I edited this Makefile and nothing happened."
+- **`ccache` can serve stale objects on `fmt`-version mismatches** (typical symptom: `fmt::v8` undefined-reference link errors in sim builds). Before deep-diving, retry with `CCACHE_DISABLE=1`.
 
-- Prefer separate build dirs for major variants (example: `build32/`, `build64/`) to avoid config/tool contamination.
-- `./ci/blackbox.sh` rebuilds the selected runtime driver with `CONFIGS` / `--cores` / `--warps` / `--threads`, but it does **not** rebuild the target app with matching compile-time macros. If the app binary already exists and was built with different values (for example `NUM_THREADS=4`), blackbox can launch a mismatched binary and fail host-side checks.
+---
 
-    ```bash
-    # Rebuild the test/app with the same compile-time overrides first
-    make -C tests/regression/sgemm_tcu clean
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE" make -C tests/regression/sgemm_tcu
+## 3. Bug-Fix Rules
 
-    # Then run blackbox with matching runtime overrides
-    CONFIGS="-DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --threads=8
-    ```
+See [docs/bug_fixes.md](docs/bug_fixes.md) for the full rationale and examples. The rules:
 
-- `make tests` and `make -C tests/regression` build test binaries using their default macros. If you intend to run a test with non-default thread count, data types, or feature flags use `CONFIGS` + `blackbox.sh`
+- **Fix root causes, not symptoms.** Diagnose before patching.
+- **Don't paper over upstream regressions** or mask bugs with fallback paths and suppressed warnings.
+- **If a patch is genuinely unavoidable** (e.g. blocked by an external dep), label it as a patch explicitly *in the commit message* and pair it with a follow-up to do the proper fix.
 
-## Testing & Debugging
+---
 
-All commands below MUST run directly from the `build/` directory (where generated `ci/` scripts and resolved env are expected).
+## 4. Testing & Verification Rules
+
+See [docs/testing.md](docs/testing.md) and [docs/debugging.md](docs/debugging.md) for recipes. The rules:
+
+- **All test commands run from `build/`.** The generated `ci/` scripts assume it.
+- **120-second timeout cap** on every test invocation. No exceptions.
+- **`CONFIGS` must match on both sides.** `blackbox.sh` only rebuilds the driver. If your test was compiled with `-DVX_CFG_NUM_THREADS=4`, blackbox can't fix that — rebuild the app first:
+  ```bash
+  make -C tests/regression/<app> clean
+  CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE" make -C tests/regression/<app>
+  CONFIGS="-DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=<app> --threads=8
+  ```
+- **`make tests` / `make -C tests/regression` build with *default* macros.** Use `CONFIGS` + explicit per-app rebuild for non-default configurations.
+- **`--rebuild=1` forces a driver rebuild** even if the hardware configuration is unchanged. Use it when iterating on the driver itself; `--rebuild=0` suppresses rebuild regardless.
+- **RTL coverage path is `xrt`, not `rtlsim`.** When discussing or planning RTL verification, `xrt` is the canonical path — `rtlsim` bypasses the AFU surface. `rtlsim` remains useful for fast iteration on processor RTL; `xrt` is what proves the full integration.
+- **`ci/regression.sh` is the canonical source of tested configurations.** Use it to discover supported parameter combinations before inventing ad hoc ones.
 
 ### Smoke tests
 
@@ -77,149 +98,49 @@ All commands below MUST run directly from the `build/` directory (where generate
 ```bash
 make -C tests/regression run-simx
 make -C tests/regression run-rtlsim
-
-make -C tests/opencl run-simx
-make -C tests/opencl run-rtlsim
+make -C tests/opencl     run-simx
+make -C tests/opencl     run-rtlsim
 ```
 
-### Targeted test during development
+### Architecture overrides
 
-```bash
-# build specific test
-make -C tests/regression/<test-name>
+`blackbox.sh` exposes the common knobs directly: `--clusters=`, `--cores=`, `--warps=`, `--threads=`, `--l2cache`, `--l3cache`, `--debug=`, `--perf=`. For anything not exposed as a flag, use `CONFIGS="-D..."` (all parameters take the `VX_CFG_*` prefix — e.g. `-DVX_CFG_NUM_THREADS=8`, `-DVX_CFG_EXT_TCU_ENABLE`). Baseline parameters live in `VX_config.toml` and `VX_types.toml` at the repo root — edit those only when an override is needed for *all* builds, and re-`configure` afterward.
 
-# run specific test with debug log
-./ci/blackbox.sh --driver=rtlsim --app=<test-name> --debug=1 --log=run.log
-```
+---
 
-When using non-default compile-time macros, pass them directly via `CONFIGS` on the same command:
+## 5. Design & Architecture Rules
 
-```bash
-CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32 -DEXT_TCU_ENABLE" \
-./ci/blackbox.sh --driver=simx --app=<test-name> --threads=8 --args="..."
-```
+- **Align with mainstream CUDA, HIP, OpenCL, and Vulkan API and driver stacks.** For any design question — driver surface, command-processor model, memory model, scheduling — pick the solution those stacks would use. This keeps Vortex's externals familiar to mainstream software and avoids one-off abstractions.
 
-### Roofline Perf Plot
+---
 
-Example to run sgemm_tcu test with perf collection and generate roofline plot (Peak vs Actual FLOPS, Compute vs Memory BW)
-```bash
-/usr/bin/python3 ../perf/roofline.py --app=sgemm_tcu --driver=simx --cores=1 --warps=4 --threads=8 --issue-width=2 --n=32 --perf=1 --by-cycle --output=sgemm_tcu_roofline.png
-```
+## 6. Coding Conventions
 
-For multi-suite coverage, `ci/regression.sh` is the canonical source of tested configurations. Use it to discover supported parameter combinations before inventing ad hoc ones.
+See [docs/coding_guidelines_cpp.md](docs/coding_guidelines_cpp.md) and [docs/coding_guidelines_verilog.md](docs/coding_guidelines_verilog.md) for full style. Cross-cutting comment rules:
 
-## Configuring architecture parameters
+- **Default to no comment.** Add one only when the *why* is non-obvious — a hidden constraint, a subtle invariant, a workaround for a specific bug, a surprising behavior.
+- **Comments explain *why*, not *what*.** Well-named identifiers carry the *what*.
+- **Never reference the current task, PR, caller, issue number, or fix.** Those belong in the commit message and rot in code. Don't write `// used by foo()`, `// added for the X flow`, `// handles issue #123`.
+- **`RTL_PKGS` is for `VX_*_pkg.sv` only.** Verilog interfaces are illegal there. If an interface isn't being discovered, fix it via include paths or file naming — not by stuffing it into `RTL_PKGS`.
+- **Library RTL defaults to `TRACING_OFF`.** Modules under `hw/rtl/libs/` are excluded from VCD by default to keep waveform size manageable. Toggle per-file with `TRACING_ON`/`TRACING_OFF`, or globally with `CONFIGS="-DTRACING_ALL"`.
+- **No multi-paragraph docstrings or multi-line block comments** for trivial code. One short line is the ceiling unless the logic genuinely needs more.
+- **No `// removed code` or stale-rename breadcrumbs.** If something is unused, delete it.
 
-Use command-line configuration overrides first; avoid editing baseline config in `VX_config.toml` unless needed.
+---
 
-### Direct command-line overrides
+## 7. Proposals
 
-`blackbox.sh` supports direct architecture overrides:
+Design and migration proposals belong in [`docs/proposals/`](docs/proposals/) — never in build dirs or the repo root. A proposal captures the *why* of a non-trivial change before the code lands.
 
-- `--clusters=<n>`
-- `--cores=<n>`
-- `--warps=<n>`
-- `--threads=<n>`
-- `--l2cache`
-- `--l3cache`
-- `--debug=<level>`
-- `--perf=<class>`
+Accepted designs that outlive their proposal phase live in [`docs/designs/`](docs/designs/).
 
-Example:
+---
 
-```bash
-./ci/blackbox.sh --driver=simx --app=sgemm --clusters=1 --cores=2 --warps=4 --threads=4 --l2cache
-```
+## 8. Living Document Policy
 
-### Advanced pass `CONFIGS` macros
+This file is versioned alongside the code and evolves with it. Both humans and agents are expected to update it:
 
-For parameters not exposed as explicit flags, use `CONFIGS` with `-D...` overrides:
-
-Example: To enable TCU, select FEDP backend, and set I/O data types:
-```bash
-CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_TYPE_TFR -DITYPE=bf16 -DOTYPE=fp32" \
-./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --threads=4
-```
-
-### Editing default config files
-
-Default hardware/type parameters are defined in:
-
-- `hw/VX_config.toml`
-- `hw/VX_types.toml`
-
-Re-run configure and build after changing baseline configuration files.
-
-## Graphics extensions (TEX / RASTER / OM)
-
-Three skybox-era extensions are integrated and gated behind separate
-flags. All three are off by default; enabling them is opt-in via
-`CONFIGS` per build/run.
-
-| Extension | Flag | Op (CUSTOM1 / `INST_EXT2`) | Cluster path |
-|---|---|---|---|
-| Texture sampling | `EXT_TEX_ENABLE` | `vx_tex(stage, u, v, lod)` (R4, funct3=1) | per-socket → `VX_tex_arb` → `VX_tex_core` → `tcache` → L2 |
-| Output merger    | `EXT_OM_ENABLE`  | `vx_om(x, y, face, color, depth)` (R4, funct3=2) | per-socket → `VX_om_arb` → `VX_om_core` → `ocache` → L2 |
-| Rasterizer pop   | `EXT_RASTER_ENABLE` | `vx_rast()` (R, funct3=3, returns packed pos_mask `{pos_y, pos_x, mask}`, 0 ⇒ drained) | `VX_raster_core` → per-socket fan-out via `VX_raster_arb` |
-
-DCR address space (host-side configuration writes):
-- `VX_DCR_TEX_*`     `0x020..0x03F`
-- `VX_DCR_RASTER_*`  `0x040..0x045`
-- `VX_DCR_OM_*`      `0x060..0x071`
-
-CSR address space (per-warp readback for raster bcoords):
-- `VX_CSR_RASTER_*`  `0x7C0..0x7CC`
-- `VX_CSR_OM_*`      `0x7CD..0x7CE`
-
-### Graphics tests (rtlsim)
-
-End-to-end PNG-driven tests live under `tests/regression/`:
-
-```bash
-CONFIGS="-DEXT_TEX_ENABLE"    ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-i palette64.png -r palette64_ref_g0.png"
-CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-w 32 -h 32 -t triangle.cgltrace -r triangle_ref_32.png"
-CONFIGS="-DEXT_OM_ENABLE"     ./ci/blackbox.sh --driver=rtlsim --app=om --args="-w 32 -h 32 -c 16777215 -r whitebox_32.png"
-# Full graphics matrix:
-./ci/regression.sh --graphics
-```
-
-### Standalone unit elaboration
-
-Each unit also has a verilator unittest at `hw/unittest/{tex,om,raster}_unit/`
-that elaborates the cluster-shared unit in isolation (no SFU agent, no
-cluster wrapper) — useful for fast iteration on RTL changes without
-rebuilding the full driver:
-
-```bash
-make -C hw/unittest/tex_core run
-make -C hw/unittest/om_core run
-make -C hw/unittest/raster_core run
-```
-
-### SimX caveat
-
-The C++ functional simulator (`--driver=simx`) does **not** yet model the
-graphics units; running a `vx_tex/om/rast` op under simx triggers an
-abort. Use `--driver=rtlsim` for any kernel that issues graphics ops.
-SimX support is gated on simx_v3 Phase 5 (caches-carry-data) — see
-[docs/proposals/gfx_migration_proposal.md](docs/proposals/gfx_migration_proposal.md)
-§4 Phase 3.
-
-### Migrating a skybox graphics test
-
-The full skybox PNG-driven regression suites (`tests/regression/{tex,om,raster,draw3d}`)
-were written for the **vortex v1 kernel API** (`int main()` + `vx_spawn_threads`).
-Porting one requires translating to feature_gfx's vortex2 API
-(`__kernel void kernel_main(...)` with CUDA-like `blockIdx`/`threadIdx`).
-The smoke tests above show the v2 pattern; the host-side DCR-write
-sequence translates directly from the skybox `TEX_DCR_WRITE` style.
-Helpers `sim/common/{gfxutil,graphics}.{cpp,h}` and `third_party/cocogfx/`
-are vendored from skybox and ready to link against.
-
-## General Notes
-
-- Keep changes minimal, targeted, and reversible.
-- Fix root causes; avoid workaround-only patches.
-- Add only concise, straightforward comments at the start of code sections (unless complex logic/targeted optimizations warrant more).
-- If this guide conflicts with commands emitted by generated scripts under `build/ci/`, trust the generated scripts and update this file in the same change.
-- AGENTS.md is intended to be living documentation; contributors and agents are encouraged to keep updating it as best practices and workflows evolve.
+- **Add a rule** when you discover a footgun the next contributor will hit. Include the *why*.
+- **Update or remove a rule** that's gone stale. A stale rule is worse than no rule.
+- **Don't duplicate** content from the topic docs in `docs/`. AGENTS.md links; the topic doc explains.
+- **Branch-specific addenda are forbidden.** Branch context goes in a `docs/proposals/<feature>_proposal.md`, not in branch-local `AGENTS.md` variants. If the rule is general, promote it here; if it's a project-tracking detail, keep it in the proposal.

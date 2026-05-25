@@ -38,17 +38,17 @@ You can override these values at build time using the `CONFIGS` environment vari
 
 | Cache Level |  Parameter | Default size | CONFIGS flag |
 |-------------|-----------|---------|----------------|
-| L1 Data     | `DCACHE_SIZE` | 16384 | `-DDCACHE_SIZE=16384` |
-| L1 Instruction | `ICACHE_SIZE` | 16384 | `-DICACHE_SIZE=16384` |
-| L2 Cache    | `L2_CACHE_SIZE` | 1048576 | `-DL2_CACHE_SIZE=1048576` |
-| L3 Cache    | `L3_CACHE_SIZE` | 2097152 | `-DL3_CACHE_SIZE=2097152` |
+| L1 Data     | `VX_CFG_DCACHE_SIZE` | 16384 | `-DVX_CFG_DCACHE_SIZE=16384` |
+| L1 Instruction | `VX_CFG_ICACHE_SIZE` | 16384 | `-DVX_CFG_ICACHE_SIZE=16384` |
+| L2 Cache    | `VX_CFG_L2_CACHE_SIZE` | 1048576 | `-DVX_CFG_L2_CACHE_SIZE=1048576` |
+| L3 Cache    | `VX_CFG_L3_CACHE_SIZE` | 2097152 | `-DVX_CFG_L3_CACHE_SIZE=2097152` |
 
-**Note:** All sizes must be specified in **bytes** 
+**Note:** All sizes must be specified in **bytes**.
 
-**Example:** Running BFS with custom cache sizes
+**Example:** Running with custom cache sizes
 
 ```bash
-$ CONFIGS="-DDCACHE_SIZE=16384 -DL2_CACHE_SIZE=1048576 -DL3_CACHE_SIZE=2097152" \
+$ CONFIGS="-DVX_CFG_DCACHE_SIZE=16384 -DVX_CFG_L2_CACHE_SIZE=1048576 -DVX_CFG_L3_CACHE_SIZE=2097152" \
 ./ci/blackbox.sh --driver=simx --clusters=1 --cores=4 --warps=4 --threads=4 --args="path-to-test-file"
 ```
 Output from terminal:

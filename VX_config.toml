@@ -304,9 +304,6 @@ YOSYS = false
 SYNOPSIS = false
 SV_DPI = false
 
-[testing]
-VX_DBG_RVTEST_MT = false
-
 [debug]
 VX_DBG_STALL_TIMEOUT = "expr: (100000 * (1 << ($VX_CFG_L2_ENABLED + $VX_CFG_L3_ENABLED)))"
 VX_DBG_DEBUG_LEVEL = 3
