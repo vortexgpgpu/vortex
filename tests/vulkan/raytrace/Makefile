@@ -23,4 +23,13 @@ SHADERS := $(SRC_DIR)/raytrace.comp
 # rayQueryEXT needs SPIR-V 1.4 -- compile against the Vulkan 1.2 env.
 GLSLC := glslc --target-env=vulkan1.2
 
+# This test is the lavapipe (CPU) correctness oracle for future Vortex-SIMT
+# RT phases — it deliberately runs the ray tracing on llvmpipe. The harness
+# default (STRICT=1) would refuse the llvmpipe fallback and fail; turn off
+# strict mode for this test so the fallback is the EXPECTED path. The
+# device check in common.mk still validates that vortexpipe was loaded
+# (the device name carries the "vortexpipe (Vortex on …)" prefix because
+# vortexpipe's pipe_screen is in front, even when launches fall back).
+STRICT := 0
+
 include ../common.mk

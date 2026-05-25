@@ -201,16 +201,22 @@ vx_result_t Device::cp_init() {
     std::memset(cp_head_.host_ptr, 0, CP_CL_BYTES);
     std::memset(cp_cmpl_.host_ptr, 0, CP_CL_BYTES);
 
-    // Program CP queue 0.
-    p->cp_reg_write(CP_Q_RING_BASE_LO,   uint32_t(cp_ring_.cp_addr & 0xFFFFFFFFu));
-    p->cp_reg_write(CP_Q_RING_BASE_HI,   uint32_t(cp_ring_.cp_addr >> 32));
-    p->cp_reg_write(CP_Q_HEAD_ADDR_LO,   uint32_t(cp_head_.cp_addr & 0xFFFFFFFFu));
-    p->cp_reg_write(CP_Q_HEAD_ADDR_HI,   uint32_t(cp_head_.cp_addr >> 32));
-    p->cp_reg_write(CP_Q_CMPL_ADDR_LO,   uint32_t(cp_cmpl_.cp_addr & 0xFFFFFFFFu));
-    p->cp_reg_write(CP_Q_CMPL_ADDR_HI,   uint32_t(cp_cmpl_.cp_addr >> 32));
-    p->cp_reg_write(CP_Q_RING_SIZE_LOG2, CP_RING_SIZE_LOG2);
-    p->cp_reg_write(CP_Q_CONTROL,        0x1);
-    p->cp_reg_write(CP_REG_CTRL,         0x1);
+    // Program CP queue 0. Any failure here is fatal — the CP regfile is
+    // the sole control path, so a botched setup means cp_enabled_=true
+    // would lie about a working device. Macro keeps the call list legible.
+    #define CP_WR(_off, _val) do {                                          \
+        auto _r = p->cp_reg_write((_off), (_val));                          \
+        if (_r != VX_SUCCESS) return _r;                                    \
+    } while (0)
+    CP_WR(CP_Q_RING_BASE_LO,   uint32_t(cp_ring_.cp_addr & 0xFFFFFFFFu));
+    CP_WR(CP_Q_RING_BASE_HI,   uint32_t(cp_ring_.cp_addr >> 32));
+    CP_WR(CP_Q_HEAD_ADDR_LO,   uint32_t(cp_head_.cp_addr & 0xFFFFFFFFu));
+    CP_WR(CP_Q_HEAD_ADDR_HI,   uint32_t(cp_head_.cp_addr >> 32));
+    CP_WR(CP_Q_CMPL_ADDR_LO,   uint32_t(cp_cmpl_.cp_addr & 0xFFFFFFFFu));
+    CP_WR(CP_Q_CMPL_ADDR_HI,   uint32_t(cp_cmpl_.cp_addr >> 32));
+    CP_WR(CP_Q_RING_SIZE_LOG2, CP_RING_SIZE_LOG2);
+    CP_WR(CP_Q_CONTROL,        0x1);
+    CP_WR(CP_REG_CTRL,         0x1);
 
     cp_enabled_ = true;
 
@@ -248,9 +254,10 @@ vx_result_t Device::cp_init() {
         if (vm_mgr_->init() != 0)
             return VX_ERR_DEVICE_LOST;
         const uint64_t satp = vm_mgr_->satp();
-        p->cp_reg_write(CP_SATP_LO, uint32_t(satp & 0xFFFFFFFFu));
-        p->cp_reg_write(CP_SATP_HI, uint32_t(satp >> 32));
+        CP_WR(CP_SATP_LO, uint32_t(satp & 0xFFFFFFFFu));
+        CP_WR(CP_SATP_HI, uint32_t(satp >> 32));
     }
+    #undef CP_WR
 
     // Zero the COUT stream-ring metadata (wr[]/rd[]/lost[]) so the first
     // drain sees empty rings and a zero overflow baseline. data[] is
@@ -711,8 +718,10 @@ vx_result_t Device::drain_cout() {
         cout_rd_[s] = wr[s];
         advanced = true;
     }
-    if (advanced)
-        dev_write(RD_BASE, cout_rd_, sizeof(cout_rd_));
+    if (advanced) {
+        r = dev_write(RD_BASE, cout_rd_, sizeof(cout_rd_));
+        if (r != VX_SUCCESS) return r;
+    }
     return VX_SUCCESS;
 }
 
