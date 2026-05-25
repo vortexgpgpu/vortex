@@ -23,6 +23,7 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     input  wire                 valid_in,
     input  wire [31:0]          req_id,
     input  wire [N-2:0]         lane_mask,
+    input  wire                 is_int,
     input  wire [N-1:0][WI-1:0] sigs_in,
     input  wire [N-1:0]         sticky_in,
     output wire [WO-1:0]        sig_out,   // Packed Sign-Magnitude
@@ -50,10 +51,25 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     // Sign Extension
     // ----------------------------------------------------------------------
 
-    wire [N-1:0][WO-1:0] sigs_in_packed;
+    wire [N-1:0] fp_neg_terms;
+    wire [N:0][WO-1:0] sig_operands;
+
     for (genvar i = 0; i < N; ++i) begin : g_ext
-        assign sigs_in_packed[i] = $signed({{(WO-WI){masked_sigs[i][WI-1]}}, masked_sigs[i]});
+        wire [WO-1:0] int_sig = $signed({{(WO-WI){masked_sigs[i][WI-1]}}, masked_sigs[i]});
+        wire [WO-1:0] fp_mag  = WO'(masked_sigs[i][WI-2:0]);
+        assign fp_neg_terms[i] = ~is_int & masked_sigs[i][WI-1];
+        assign sig_operands[i] = is_int ? int_sig : (fp_neg_terms[i] ? ~fp_mag : fp_mag);
     end
+
+    wire [`CLOG2(N+1)-1:0] fp_neg_count;
+    VX_popcount #(
+        .N (N)
+    ) fp_neg_popcount (
+        .data_in  (fp_neg_terms),
+        .data_out (fp_neg_count)
+    );
+
+    assign sig_operands[N] = WO'(fp_neg_count);
 
     // ----------------------------------------------------------------------
     // Fast Accumulation (CSA Tree)
@@ -63,11 +79,11 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     wire [WO-1:0] carry_vec;
 
     VX_csa_tree #(
-        .N (N),
+        .N (N+1),
         .W (WO),
         .S (WO)
     ) sig_csa (
-        .operands (sigs_in_packed),
+        .operands (sig_operands),
         .sum      (sum_vec),
         .carry    (carry_vec)
     );
@@ -96,7 +112,7 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     wire [WO-2:0] sig_neg_raw;
     VX_ks_adder #(
         .N (WO-1),
-        .BYPASS (`FORCE_BUILTIN_ADDER(WO))
+        .BYPASS (`FORCE_BUILTIN_ADDER(WO-1))
     ) neg_adder (
         .cin   (1'b1),
         .dataa (~sum_vec[WO-2:0]),

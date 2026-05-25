@@ -105,15 +105,12 @@ module VX_tcu_tfr_align import VX_tcu_pkg::*; #(
         wire [SHIFT_MAG_W-1:0] shift_res_full = mag_shifted >> shift_amt;
         wire [WO-2:0] adj_mag = is_overshift ? '0 : shift_res_full[WO-2:0];
 
-        // 4. Convert to 2's Complement
-        wire [WO-1:0] fp_sig_out = in_sign ? -{1'b0, adj_mag} : {1'b0, adj_mag};
-
-        // 5. Sticky Calculation
+        // 4. Sticky Calculation
         wire [SHIFT_MAG_W-1:0] sticky_check_shift = mag_shifted << (8'(SHIFT_MAG_W) - shift_amt);
         assign sticky_bits[i] = is_overshift ? (|mag_shifted) : (|sticky_check_shift);
 
-        // 6. Output select
-        assign sigs_out[i] = is_int ? WO'($signed(sigs_in[i])) : fp_sig_out;
+        // 5. Output select
+        assign sigs_out[i] = is_int ? WO'($signed(sigs_in[i])) : {in_sign, adj_mag};
     end
 
 `ifdef DBG_TRACE_TCU

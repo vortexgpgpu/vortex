@@ -231,6 +231,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .valid_in(vld_pipe[S2_IDX]),
         .req_id(req_pipe[S2_IDX]),
         .lane_mask(s2_lane_mask),
+        .is_int(s2_is_int),
         .sigs_in(s2_aln_sigs),
         .sticky_in(s2_aln_sticky),
         .sig_out(s2_acc_sum),
