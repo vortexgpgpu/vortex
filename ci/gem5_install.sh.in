@@ -95,13 +95,11 @@ for target in $GEM5_TARGETS; do
     fi
 done
 
-# Persist GEM5_HOME for subsequent shells (idempotent).
-if ! grep -q "^export GEM5_HOME=" ~/.bashrc 2>/dev/null; then
-    echo "export GEM5_HOME=$GEM5_HOME" >> ~/.bashrc
-fi
 export GEM5_HOME
 
-# GitHub Actions: propagate to subsequent steps.
+# GitHub Actions: propagate to subsequent steps. No global ~/.bashrc
+# mutation — multiple Vortex trees on one machine should not collide
+# on GEM5_HOME / PATH (see also sst_install.sh.in, mesa_install.sh.in).
 if [ -n "$GITHUB_ENV" ]; then
     echo "GEM5_HOME=$GEM5_HOME" >> "$GITHUB_ENV"
 fi

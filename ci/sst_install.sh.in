@@ -34,13 +34,10 @@ export MPIHOME=$TOOLDIR/openmpi_install
 ./configure --prefix=$MPIHOME
 make all install
 
+# Build-time env for the SST core/elements compile below.
 export PATH=$MPIHOME/bin:$PATH
 export MPICC=mpicc
 export MPICXX=mpicxx
-
-echo 'export PATH='"$MPIHOME"'/bin:$PATH' >> ~/.bashrc
-echo 'export MPICC=mpicc' >> ~/.bashrc
-echo 'export MPICXX=mpicxx' >> ~/.bashrc
 
 rm -r $TOOLDIR/openmpi-4.1.6
 
@@ -53,8 +50,6 @@ cd sst-core
 mkdir -p $TOOLDIR/sst-install/sst-core
 export SST_CORE_HOME=$TOOLDIR/sst-install/sst-core
 export SST_CORE_ROOT=$TOOLDIR/sst-core
-echo 'export SST_CORE_HOME='"$SST_CORE_HOME" >> ~/.bashrc
-#echo 'export SST_CORE_ROOT='"$SST_CORE_ROOT" >> ~/.bashrc
 
 autoreconf -fi
 ./configure --prefix=$SST_CORE_HOME
@@ -64,7 +59,6 @@ make install
 rm -r $SST_CORE_ROOT
 
 export PATH=$SST_CORE_HOME/bin:$PATH
-echo 'export PATH='"$SST_CORE_HOME"'/bin:$PATH' >> ~/.bashrc
 
 cd $TOOLDIR
 wget $SST_ELEMENTS_1510
@@ -75,8 +69,6 @@ cd sst-elements
 mkdir -p $TOOLDIR/sst-install/sst-elements
 export SST_ELEMENTS_HOME=$TOOLDIR/sst-install/sst-elements
 export SST_ELEMENTS_ROOT=$TOOLDIR/sst-elements
-echo 'export SST_ELEMENTS_HOME='"$SST_ELEMENTS_HOME" >> ~/.bashrc
-#echo 'export SST_ELEMENTS_ROOT='"$SST_ELEMENTS_ROOT" >> ~/.bashrc
 
 ./configure --prefix=$SST_ELEMENTS_HOME --with-sst-core=$SST_CORE_HOME
 make -j2 all
@@ -84,13 +76,30 @@ make install
 
 rm -r $SST_ELEMENTS_ROOT
 
-export PATH=$SST_ELEMENTS_HOME/bin:$PATH
-echo 'export PATH='"$SST_ELEMENTS_HOME"'/bin:$PATH' >> ~/.bashrc
-
-if [ -n "$GITHUB_PATH" ]; then
-  echo "$SST_CORE_HOME/bin" >> "$GITHUB_PATH"
-  echo "$SST_ELEMENTS_HOME/bin" >> "$GITHUB_PATH"
+# GitHub Actions: propagate to subsequent steps. Mirrors the per-tool
+# pattern used by gem5_install.sh.in + mesa_install.sh.in — no global
+# ~/.bashrc mutation, so multiple Vortex trees on one machine can
+# coexist without clobbering each other's PATH/MPIHOME/SST_*_HOME.
+if [ -n "$GITHUB_ENV" ]; then
+    {
+        echo "MPIHOME=$MPIHOME"
+        echo "MPICC=mpicc"
+        echo "MPICXX=mpicxx"
+        echo "SST_CORE_HOME=$SST_CORE_HOME"
+        echo "SST_ELEMENTS_HOME=$SST_ELEMENTS_HOME"
+    } >> "$GITHUB_ENV"
 fi
+if [ -n "$GITHUB_PATH" ]; then
+    echo "$MPIHOME/bin"           >> "$GITHUB_PATH"
+    echo "$SST_CORE_HOME/bin"     >> "$GITHUB_PATH"
+    echo "$SST_ELEMENTS_HOME/bin" >> "$GITHUB_PATH"
+fi
+
+echo ""
+echo "SST installed at $TOOLDIR/sst-install (OpenMPI: $MPIHOME)"
+echo "  outside CI: source the paths into your shell ad-hoc:"
+echo "    export PATH=$MPIHOME/bin:$SST_CORE_HOME/bin:$SST_ELEMENTS_HOME/bin:\$PATH"
+echo "    export SST_CORE_HOME=$SST_CORE_HOME SST_ELEMENTS_HOME=$SST_ELEMENTS_HOME"
 
 
 
