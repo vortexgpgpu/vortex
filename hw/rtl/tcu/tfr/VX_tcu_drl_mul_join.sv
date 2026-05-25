@@ -82,11 +82,7 @@ module VX_tcu_drl_mul_join import VX_tcu_pkg::*; #(
 
             // --- Integers ---
         `ifdef VX_CFG_TCU_INT_ENABLE
-            TCU_I8_ID, TCU_U8_ID, TCU_I4_ID, TCU_U4_ID
-        `ifdef VX_CFG_TCU_MXI8_ENABLE
-            , TCU_MXI8_ID
-        `endif
-            : begin
+            TCU_I8_ID, TCU_U8_ID, TCU_I4_ID, TCU_U4_ID: begin
                 sig_sel = sig_int;
                 exp_sel = 'x;
                 exc_sel = 'x;

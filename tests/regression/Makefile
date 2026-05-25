@@ -35,7 +35,6 @@ all:
 	$(MAKE) -C sgemm_tcu
 	$(MAKE) -C sgemm_tcu_wg
 	$(MAKE) -C sgemm_tcu_sp
-	$(MAKE) -C sgemm_tcu_mx
 	$(MAKE) -C sgemm_tcu_wg_sp
 	$(MAKE) -C sgemm2_dxa
 	$(MAKE) -C sgemm2_tcu
@@ -86,7 +85,6 @@ run-simx:
 	$(MAKE) -C sgemm_tcu run-simx
 	$(MAKE) -C sgemm_tcu_wg run-simx
 	$(MAKE) -C sgemm_tcu_sp run-simx
-	$(MAKE) -C sgemm_tcu_mx run-simx
 	$(MAKE) -C sgemm_tcu_wg_sp run-simx
 	$(MAKE) -C sgemm2_dxa run-simx
 	$(MAKE) -C sgemm2_tcu run-simx
@@ -179,7 +177,6 @@ clean:
 	$(MAKE) -C sgemm_tcu clean
 	$(MAKE) -C sgemm_tcu_wg clean
 	$(MAKE) -C sgemm_tcu_sp clean
-	$(MAKE) -C sgemm_tcu_mx clean
 	$(MAKE) -C sgemm_tcu_wg_sp clean
 	$(MAKE) -C conv3 clean
 	$(MAKE) -C mpi_neighbor_a2a_conv3 clean

@@ -198,8 +198,8 @@ jobs:
       matrix:
         os: [ubuntu-24.04]
         xlen: [32, 64]
-        # dxa + tensor_wg disabled: features not yet complete (see regression{32,64}_failures.md)
-        name: [regression, amo, mpi, dtm, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, tensor_mx]
+        # dxa + tensor_wg + tensor_mx disabled: features not yet complete (see regression{32,64}_failures.md)
+        name: [regression, amo, mpi, dtm, opencl, vulkan, cache, config1, config2, debug, scope, stress, synthesis, vm, rvc, cupbop, hip, tensor, tensor_sp, gem5]
         # hip is rv64-only — chipStar emits Physical64 SPIR-V which POCL
         # refuses on a 32-bit Vortex device (see v3.0 release notes).
         #

@@ -696,7 +696,6 @@ enum class TcuType {
 };
 
 constexpr uint32_t TCU_META_KIND_SPARSE    = 0;
-constexpr uint32_t TCU_META_KIND_MX        = 1;
 constexpr uint32_t TCU_META_KIND_SPARSE_WG = 2;  // WGMMA RS sparse (per_warp_depth=2)
 
 struct IntrTcuArgs {

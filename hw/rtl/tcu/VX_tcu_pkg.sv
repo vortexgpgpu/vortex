@@ -30,15 +30,12 @@ package VX_tcu_pkg;
     localparam TCU_FP8_ID   = 3;
     localparam TCU_BF8_ID   = 4;
     localparam TCU_TF32_ID  = 5;
-    localparam TCU_MXFP8_ID = 6;
-    localparam TCU_NVFP4_ID = 7;
     // Supported integer-point types
     localparam TCU_I32_ID   = 8;
     localparam TCU_I8_ID    = 9;
     localparam TCU_U8_ID    = 10;
     localparam TCU_I4_ID    = 11;
     localparam TCU_U4_ID    = 12;
-    localparam TCU_MXI8_ID  = 13;
     localparam TCU_FMT_WIDTH= 4;
 
     // Set configuration parameters
@@ -223,14 +220,12 @@ package VX_tcu_pkg;
         case (fmt)
             TCU_FP16_ID, TCU_BF16_ID:
                 return 16;
-            TCU_NVFP4_ID, TCU_I4_ID, TCU_U4_ID:
+            TCU_I4_ID, TCU_U4_ID:
                 return 4;
             TCU_FP8_ID,
             TCU_BF8_ID,
             TCU_I8_ID,
-            TCU_U8_ID,
-            TCU_MXFP8_ID,
-            TCU_MXI8_ID:
+            TCU_U8_ID:
                 return 8;
             TCU_FP32_ID,
             TCU_I32_ID,
@@ -280,14 +275,11 @@ package VX_tcu_pkg;
             TCU_FP8_ID:   `TRACE(level, ("fp8"))
             TCU_BF8_ID:   `TRACE(level, ("bf8"))
             TCU_TF32_ID:  `TRACE(level, ("tf32"))
-            TCU_MXFP8_ID: `TRACE(level, ("mxfp8"))
-            TCU_NVFP4_ID: `TRACE(level, ("nvfp4"))
             TCU_I32_ID:   `TRACE(level, ("i32"))
             TCU_I8_ID:    `TRACE(level, ("i8"))
             TCU_U8_ID:    `TRACE(level, ("u8"))
             TCU_I4_ID:    `TRACE(level, ("i4"))
             TCU_U4_ID:    `TRACE(level, ("u4"))
-            TCU_MXI8_ID:  `TRACE(level, ("mxi8"))
             default:      `TRACE(level, ("?"))
         endcase
     endtask

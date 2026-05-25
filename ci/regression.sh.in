@@ -1094,34 +1094,6 @@ tensor_sp()
     echo "tensor_sp tests done!"
 }
 
-tensor_mx() {
-
-    echo "begin tensor tensor_mx tests..."
-
-    make -C sw/kernel
-
-    # simx tests
-    # mxfp8 tests
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
-
-    # mxint8 tests
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=mxint8 -DOTYPE=int32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
-
-    # nvfp4 tests
-    CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-    CONFIGS="-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-    CONFIGS="-DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k32"
-    CONFIGS="-DVX_CFG_NUM_THREADS=32 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DITYPE=nvfp4 -DOTYPE=fp32" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu_mx --args="-k64"
-
-    echo "tensor_mx tests done!"
-}
-
 tensor_wg() {
 
     echo "begin tensor tensor_wg tests..."
@@ -1254,7 +1226,7 @@ hip()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_mx] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--runtime] [--riscv] [--kernel] [--regression] [--amo] [--dxa] [--opencl] [--cache] [--vm] [--rvc] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--graphics] [--vulkan] [--tensor] [--tensor_sp] [--tensor_wg] [--cupbop] [--hip] [--sst] [--gem5] [--dtm] [--mpi] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -1337,9 +1309,6 @@ while [ "$1" != "" ]; do
         --tensor_sp )
                 tests+=("tensor_sp")
                 ;;
-        --tensor_mx )
-                tests+=("tensor_mx")
-                ;;
         --tensor_wg )
                 tests+=("tensor_wg")
                 ;;
@@ -1381,7 +1350,6 @@ while [ "$1" != "" ]; do
                 tests+=("synthesis")
                 tests+=("tensor")
                 tests+=("tensor_sp")
-                tests+=("tensor_mx")
                 tests+=("tensor_wg")
                 tests+=("cupbop")
                 tests+=("hip")

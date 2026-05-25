@@ -38,108 +38,6 @@ static inline uint8_t unpack_u8(uint32_t word, uint32_t idx) {
   return (word >> (idx * 8)) & 0xffu;
 }
 
-#ifdef VX_CFG_TCU_MX_ENABLE
-static inline uint8_t unpack_mx_scale_8(uint32_t w0,
-                                        uint32_t w1,
-                                        uint32_t idx,
-                                        const char* axis_name) {
-  // mxfp8/mxint8 ABI carries two packed words per axis.
-  // For 16x16 tiles this intentionally wraps indices [8..15] to [0..7].
-  if (idx >= 8) {
-    idx &= 0x7;
-  }
-  if (idx < 4) {
-    return unpack_u8(w0, idx);
-  }
-  if (idx < 8) {
-    return unpack_u8(w1, idx - 4);
-  }
-  std::cout << "Error: unsupported mxfp8 scale index for " << axis_name << ": " << idx << std::endl;
-  std::abort();
-}
-
-static inline uint8_t unpack_mx_scale_16(uint32_t w0,
-                                         uint32_t w1,
-                                         uint32_t w2,
-                                         uint32_t w3,
-                                         uint32_t idx,
-                                         const char* axis_name) {
-  if (idx >= 16) {
-    idx &= 0xf;
-  }
-  if (idx < 4) {
-    return unpack_u8(w0, idx);
-  }
-  if (idx < 8) {
-    return unpack_u8(w1, idx - 4);
-  }
-  if (idx < 12) {
-    return unpack_u8(w2, idx - 8);
-  }
-  if (idx < 16) {
-    return unpack_u8(w3, idx - 12);
-  }
-  std::cout << "Error: unsupported nvfp4 scale index for " << axis_name << ": " << idx << std::endl;
-  std::abort();
-}
-
-static inline int32_t round_shift_rne(int32_t value, uint32_t rshift) {
-  if (rshift == 0) {
-    return value;
-  }
-  if (rshift >= 31) {
-    return 0;
-  }
-  int32_t mask = (1 << rshift) - 1;
-  int32_t half = 1 << (rshift - 1);
-  int32_t base = value >> rshift;
-  int32_t rem = value & mask;
-  if (value < 0 && rem != 0) {
-    rem -= (1 << rshift);
-  }
-  if (rem > half) {
-    return base + 1;
-  }
-  if (rem < -half) {
-    return base - 1;
-  }
-  if (rem == half || rem == -half) {
-    return (base & 1) ? (base + (rem > 0 ? 1 : -1)) : base;
-  }
-  return base;
-}
-
-static inline int32_t shl_sat_i32(int32_t value, uint32_t lshift) {
-  if (lshift >= 31) {
-    return (value < 0) ? std::numeric_limits<int32_t>::min()
-                       : std::numeric_limits<int32_t>::max();
-  }
-  int64_t scaled = static_cast<int64_t>(value) << lshift;
-  if (scaled > std::numeric_limits<int32_t>::max()) {
-    return std::numeric_limits<int32_t>::max();
-  }
-  if (scaled < std::numeric_limits<int32_t>::min()) {
-    return std::numeric_limits<int32_t>::min();
-  }
-  return static_cast<int32_t>(scaled);
-}
-
-static inline int32_t madd_wrap_i32(int32_t a, int32_t b, int32_t c) {
-  int64_t sum = static_cast<int64_t>(a) * static_cast<int64_t>(b)
-              + static_cast<int64_t>(c);
-  return static_cast<int32_t>(static_cast<uint32_t>(sum));
-}
-
-static inline int32_t mxint8_scaled_i32(int8_t q, uint8_t sf) {
-  int32_t value = static_cast<int32_t>(q);
-  int32_t shift = static_cast<int32_t>(sf) - 133;
-  if (shift >= 0) {
-    return shl_sat_i32(value, static_cast<uint32_t>(shift));
-  }
-  return round_shift_rne(value, static_cast<uint32_t>(-shift));
-}
-#endif
-
 // FMA<It, Ot>: fused multiply-add returning an Ot-typed accumulator (bit-packed in uint32).
 // Widens narrow inputs/accumulator to fp32, performs mul+add, rounds once to Ot.
 template <typename It, typename Ot>
@@ -315,86 +213,6 @@ struct FEDP<vt::uint4, vt::int32>{
   }
 };
 
-#ifdef VX_CFG_TCU_MX_ENABLE
-// Scaled FMA variants for MX microscaling formats (extra scale-factor args).
-template <typename It, typename Ot>
-struct FMA_MX;
-
-template <> struct FMA_MX<vt::mxfp8, vt::fp32> {
-  static uint32_t eval(uint8_t a, uint8_t b, uint8_t sf_a, uint8_t sf_b, uint32_t c) {
-    auto fa = rv_mxfp8tof_s(a, sf_a, 0, nullptr);
-    auto fb = rv_mxfp8tof_s(b, sf_b, 0, nullptr);
-    return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
-  }
-};
-template <> struct FMA_MX<vt::mxint8, vt::int32> {
-  static uint32_t eval(int8_t a, int8_t b, uint8_t sf_a, uint8_t sf_b, uint32_t c) {
-    int32_t xa = mxint8_scaled_i32(a, sf_a);
-    int32_t xb = mxint8_scaled_i32(b, sf_b);
-    return bit_cast<uint32_t>(bit_cast<int32_t>(c) + xa * xb);
-  }
-};
-template <> struct FMA_MX<vt::nvfp4, vt::fp32> {
-  static uint32_t eval(uint8_t a, uint8_t b, uint8_t sf_a, uint8_t sf_b, uint32_t c) {
-    auto fa = rv_nvfp4tof_s(a & 0x0f, sf_a, 0, nullptr);
-    auto fb = rv_nvfp4tof_s(b & 0x0f, sf_b, 0, nullptr);
-    return rv_fadd_s(rv_fmul_s(fa, fb, 0, nullptr), c, 0, nullptr);
-  }
-};
-
-static uint32_t fedp_mxfp8_fp32_scaled(const reg_data_t* a_row,
-                                       const reg_data_t* b_col,
-                                       uint32_t c_val,
-                                       uint8_t sf_a,
-                                       uint8_t sf_b) {
-  constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(uint8_t);
-  uint32_t acc = c_val;
-  for (uint32_t z = 0; z < cfg::tcK; ++z) {
-    auto a = reinterpret_cast<const uint8_t*>(&a_row[z].u32);
-    auto b = reinterpret_cast<const uint8_t*>(&b_col[z].u32);
-    for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc = FMA_MX<vt::mxfp8, vt::fp32>::eval(a[i], b[i], sf_a, sf_b, acc);
-    }
-  }
-  return acc;
-}
-
-static uint32_t fedp_mxint8_int32_scaled(const reg_data_t* a_row,
-                                         const reg_data_t* b_col,
-                                         uint32_t c_val,
-                                         uint8_t sf_a,
-                                         uint8_t sf_b) {
-  constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(int8_t);
-  uint32_t acc = c_val;
-  for (uint32_t z = 0; z < cfg::tcK; ++z) {
-    auto a = reinterpret_cast<const int8_t*>(&a_row[z].u32);
-    auto b = reinterpret_cast<const int8_t*>(&b_col[z].u32);
-    for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc = FMA_MX<vt::mxint8, vt::int32>::eval(a[i], b[i], sf_a, sf_b, acc);
-    }
-  }
-  return acc;
-}
-
-static uint32_t fedp_nvfp4_fp32_scaled(const reg_data_t* a_row,
-                                       const reg_data_t* b_col,
-                                       uint32_t c_val,
-                                       uint8_t sf_a,
-                                       uint8_t sf_b) {
-  uint32_t acc = c_val;
-  for (uint32_t z = 0; z < cfg::tcK; ++z) {
-    uint32_t aw = a_row[z].u32;
-    uint32_t bw = b_col[z].u32;
-    for (uint32_t i = 0; i < 8; ++i) {
-      uint8_t a = (aw >> (i * 4)) & 0x0f;
-      uint8_t b = (bw >> (i * 4)) & 0x0f;
-      acc = FMA_MX<vt::nvfp4, vt::fp32>::eval(a, b, sf_a, sf_b, acc);
-    }
-  }
-  return acc;
-}
-#endif
-
 using PFN_FEDP = uint32_t (*)(const reg_data_t*, const reg_data_t*, uint32_t);
 
 static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
@@ -512,16 +330,6 @@ static inline uint32_t meta_row_width(uint32_t elem_bits) {
   return cfg::tcK * 2 * (32 / elem_bits);
 }
 
-static inline uint32_t mx_meta_words(uint32_t fmt_s) {
-  if (fmt_s == vt::nvfp4::id) {
-    return 8;
-  }
-  if (fmt_s == vt::mxfp8::id || fmt_s == vt::mxint8::id) {
-    return 4;
-  }
-  return 0;
-}
-
 class TcuUnit::Impl {
 public:
 
@@ -535,7 +343,6 @@ public:
     : simobject_(simobject)
     , core_(core)
     , sparse_meta_(VX_CFG_NUM_WARPS, std::vector<uint32_t>(kMetaBanks * kMaxMetaCols, 0))
-    , mx_meta_(VX_CFG_NUM_WARPS)
     , perf_stats_()
   {
     exec_done_.fill(false);
@@ -549,9 +356,6 @@ public:
     perf_stats_ = PerfStats();
     for (auto& sparse_meta : sparse_meta_) {
       std::fill(sparse_meta.begin(), sparse_meta.end(), 0);
-    }
-    for (auto& mx_meta : mx_meta_) {
-      mx_meta.fill(0);
     }
     exec_done_.fill(false);
     wgmma_planned_warps_.fill(0);
@@ -895,16 +699,6 @@ public:
                   uint32_t col_idx,
                   uint32_t meta_kind,
                   const std::vector<reg_data_t>& rs1_data) {
-    if (meta_kind == TCU_META_KIND_MX) {
-      uint32_t num_mx_words = mx_meta_words(fmt_s);
-      if (col_idx >= num_mx_words || rs1_data.empty()) {
-        std::cout << "Error: META_STORE MX index out of range: " << col_idx << std::endl;
-        std::abort();
-      }
-      mx_meta_.at(wid).at(col_idx) = rs1_data.at(0).u32;
-      return;
-    }
-
     uint32_t num_cols = meta_num_cols(fmt_s);
 
     if (meta_kind == TCU_META_KIND_SPARSE_WG) {
@@ -1216,14 +1010,11 @@ private:
       return 16;
     case vt::fp8::id:
     case vt::bf8::id:
-    case vt::mxfp8::id:
-    case vt::mxint8::id:
     case vt::int8::id:
     case vt::uint8::id:
       return 8;
     case vt::int4::id:
     case vt::uint4::id:
-    case vt::nvfp4::id:
       return 4;
     default:
       std::abort();
@@ -1304,7 +1095,7 @@ private:
       } else if (e_bits == 8) {
         result |= uint32_t((*line)[off]) << (r * 8);
       } else {
-        // 4-bit (int4/uint4/nvfp4) not supported.
+        // 4-bit (int4/uint4) not supported.
         std::cout << "Error: TCU 4-bit operand gather not supported" << std::endl;
         std::abort();
       }
@@ -1329,7 +1120,6 @@ private:
   static constexpr uint32_t kSparseKSteps = cfg::k_steps / 2;
   static constexpr uint32_t kMetaBanks = cfg::m_steps * kSparseKSteps;
   static constexpr uint32_t kMaxMetaCols = VX_CFG_NUM_THREADS / 2;
-  static constexpr uint32_t kMxMetaWords = 8;
 
   // FEDP tile computation for both WMMA and WGMMA.
   // a_tile: [tcM][tcK] flat array of pre-loaded A operand words.
@@ -1343,17 +1133,7 @@ private:
                  const std::vector<reg_data_t>& rs3_data,
                  std::vector<reg_data_t>& rd_data) {
     __unused(wid, step_m, step_n, step_k);
-  #ifdef VX_CFG_TCU_MX_ENABLE
-    bool use_mx = ((fmt_s == vt::mxfp8::id) && (fmt_d == vt::fp32::id))
-               || ((fmt_s == vt::mxint8::id) && (fmt_d == vt::int32::id))
-               || ((fmt_s == vt::nvfp4::id) && (fmt_d == vt::fp32::id));
-  #else
-    bool use_mx = false;
-  #endif
-    PFN_FEDP fedp = nullptr;
-    if (!use_mx) {
-      fedp = select_FEDP(fmt_s, fmt_d);
-    }
+    PFN_FEDP fedp = select_FEDP(fmt_s, fmt_d);
 
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
       for (uint32_t j = 0; j < cfg::tcN; ++j) {
@@ -1362,31 +1142,7 @@ private:
         auto a_row = &a_tile[i * cfg::tcK];
         auto b_col = &b_tile[(i * cfg::tcN + j) * cfg::tcK];
 
-        uint32_t d_val;
-        if (use_mx) {
-#ifdef VX_CFG_TCU_MX_ENABLE
-          const auto& mx = mx_meta_.at(wid);
-          uint32_t row_idx = step_m * cfg::tcM + i;
-          uint32_t col_idx = step_n * cfg::tcN + j;
-          if (fmt_s == vt::nvfp4::id) {
-            uint8_t sf_a = unpack_mx_scale_16(mx.at(0), mx.at(1), mx.at(2), mx.at(3), row_idx, "A");
-            uint8_t sf_b = unpack_mx_scale_16(mx.at(4), mx.at(5), mx.at(6), mx.at(7), col_idx, "B");
-            d_val = fedp_nvfp4_fp32_scaled(a_row, b_col, c_val, sf_a, sf_b);
-          } else {
-            uint8_t sf_a = unpack_mx_scale_8(mx.at(0), mx.at(1), row_idx, "A");
-            uint8_t sf_b = unpack_mx_scale_8(mx.at(2), mx.at(3), col_idx, "B");
-            if (fmt_s == vt::mxint8::id) {
-              d_val = fedp_mxint8_int32_scaled(a_row, b_col, c_val, sf_a, sf_b);
-            } else {
-              d_val = fedp_mxfp8_fp32_scaled(a_row, b_col, c_val, sf_a, sf_b);
-            }
-          }
-#else
-          std::abort();
-#endif
-        } else {
-          d_val = fedp(a_row, b_col, c_val);
-        }
+        uint32_t d_val = fedp(a_row, b_col, c_val);
 
         rd_data.at(t).u64 = nan_box(d_val);
         DTH(3, simobject_->name() << " FEDP"
@@ -1402,7 +1158,6 @@ private:
   TcuUnit*   simobject_;
   Core*         core_;
   std::vector<std::vector<uint32_t>> sparse_meta_;
-  std::vector<std::array<uint32_t, kMxMetaWords>> mx_meta_;
   std::unordered_map<uint32_t, lmem_desc_t[2]> lmem_desc_;
   mutable PerfStats perf_stats_;
   // Per-block "execute already happened for this trace" guard. Reset on input.pop().
@@ -1464,17 +1219,15 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
   if (tcu_type == TcuType::WMMA) {
     using wmma = vt::wmma_config_t<VX_CFG_NUM_THREADS>;
     bool is_sparse = args.is_sparse;
-    bool is_mx = vt::mx_scale_format(args.fmt_s);
     uint32_t sparse_meta_stores = 0;
     if (is_sparse) {
       sparse_meta_stores = vt::sparse_meta_total_store_uops(args.fmt_s, wmma::stores_per_col, VX_CFG_NUM_THREADS, wmma::meta_cols_per_load);
     }
-    uint32_t mx_meta_stores = is_mx ? mx_meta_words(args.fmt_s) : 0;
     uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
     uint32_t mma_steps = (wmma::sym_sparse && is_sparse)
                        ? (wmma::m_steps * wmma::n_steps * wmma::k_steps)
                        : (wmma::m_steps * wmma::n_steps * k_count);
-    return sparse_meta_stores + mx_meta_stores + mma_steps;
+    return sparse_meta_stores + mma_steps;
   }
 
 #ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -1522,13 +1275,10 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t fmt_s = args.fmt_s;
     uint32_t fmt_d = args.fmt_d;
 
-    bool is_mx = vt::mx_scale_format(fmt_s);
     uint32_t sparse_meta_stores = 0;
     if (is_sparse) {
       sparse_meta_stores = vt::sparse_meta_total_store_uops(fmt_s, wmma::stores_per_col, VX_CFG_NUM_THREADS, wmma::meta_cols_per_load);
     }
-    uint32_t mx_meta_stores = is_mx ? mx_meta_words(fmt_s) : 0;
-    uint32_t total_meta_stores = sparse_meta_stores + mx_meta_stores;
 
     if (uop_index < sparse_meta_stores) {
       // Sparse metadata-store uops (one per group of cols_per_load columns).
@@ -1538,23 +1288,9 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
       uop_instr->set_op_type(TcuType::META_STORE);
       uop_instr->set_args(IntrTcuArgs{false, 0, 0, fmt_s, group, 0, 0, 0, TCU_META_KIND_SPARSE});
       uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
-    } else if (uop_index < total_meta_stores) {
-      // MX scale metadata-store uops.
-      uint32_t mx_store = uop_index - sparse_meta_stores;
-      uint32_t reg_rs1 = 0;
-      if (fmt_s == vt::nvfp4::id) {
-        constexpr uint32_t nvfp4_regs[] = {8, 9, 20, 21, 18, 19, 22, 23};
-        reg_rs1 = nvfp4_regs[mx_store];
-      } else {
-        constexpr uint32_t mx8_regs[] = {8, 9, 18, 19};
-        reg_rs1 = mx8_regs[mx_store];
-      }
-      uop_instr->set_op_type(TcuType::META_STORE);
-      uop_instr->set_args(IntrTcuArgs{0, 0, 0, fmt_s, mx_store, 0, 0, 0, TCU_META_KIND_MX});
-      uop_instr->set_src_reg(0, reg_rs1, RegType::Float);
     } else {
       // MMA uops.
-      uint32_t mma_idx = uop_index - total_meta_stores;
+      uint32_t mma_idx = uop_index - sparse_meta_stores;
       uint32_t k_count = is_sparse ? (wmma::k_steps / 2) : wmma::k_steps;
 
       if (wmma::sym_sparse && is_sparse) {

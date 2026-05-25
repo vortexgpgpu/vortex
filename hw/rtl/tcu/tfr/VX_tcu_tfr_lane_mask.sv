@@ -80,16 +80,12 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
         `ifdef VX_CFG_TCU_FP8_ENABLE
             TCU_FP8_ID,
             TCU_BF8_ID:  lane_mask = mask_8;
-            TCU_MXFP8_ID:lane_mask = mask_8;
         `endif
         `ifdef VX_CFG_TCU_INT_ENABLE
             TCU_I8_ID,
             TCU_U8_ID:   lane_mask = mask_8;
             TCU_I4_ID,
             TCU_U4_ID:   lane_mask = mask_4;
-        `ifdef VX_CFG_TCU_MXI8_ENABLE
-            TCU_MXI8_ID: lane_mask = mask_8;
-        `endif
         `endif
             default:     lane_mask = 'x;
         endcase

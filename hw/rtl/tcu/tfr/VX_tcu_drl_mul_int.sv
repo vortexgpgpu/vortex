@@ -34,16 +34,7 @@ module VX_tcu_drl_mul_int import VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
-
-`ifdef VX_CFG_TCU_MXI8_ENABLE
-    // --- MXINT8 Scale Factor (shared across all lanes) --------------------
-    wire signed [7:0] sf_wo_bias_a = sf_a - 8'd133;
-    wire signed [7:0] sf_wo_bias_b = sf_b - 8'd133;
-    wire signed [7:0] sf_wo_bias   = sf_wo_bias_a + sf_wo_bias_b;
-    wire        [7:0] abs_sf       = -sf_wo_bias;
-`else
     `UNUSED_VAR ({sf_a, sf_b})
-`endif
 
     // ----------------------------------------------------------------------
     // 2. Multiplication & Accumulation
@@ -75,30 +66,6 @@ module VX_tcu_drl_mul_int import VX_tcu_pkg::*; #(
             .sum   (y_i8_add_res),
             `UNUSED_PIN(cout)
         );
-
-    `ifdef VX_CFG_TCU_MXI8_ENABLE
-        // --- MXINT8 Per-Product Scaling -----------------------------------
-        // Apply scale shift per-product with truncation toward zero (matching C++ (int32_t)(float) cast)
-        wire signed [24:0] y_mxi8_scaled [2];
-        for (genvar j = 0; j < 2; ++j) begin : g_mxi8
-            wire signed [24:0] prod_ext    = 25'($signed(y_prod_i8[j]));
-            wire        [24:0] trunc_bias  = prod_ext[24] ? ((25'd1 << abs_sf) - 25'd1) : 25'd0;
-            wire signed [24:0] prod_biased = prod_ext + $signed(trunc_bias);
-            assign y_mxi8_scaled[j] = sf_wo_bias[7] ? (prod_biased >>> abs_sf) : (prod_ext <<< sf_wo_bias);
-        end
-        
-        wire [24:0] y_mxi8_add_res;
-        VX_ks_adder #(
-            .N(25),
-            .BYPASS (`FORCE_BUILTIN_ADDER(25))
-        ) mxi8_ksa (
-            .cin   (1'b0),
-            .dataa (y_mxi8_scaled[0]),
-            .datab (y_mxi8_scaled[1]),
-            .sum   (y_mxi8_add_res),
-            `UNUSED_PIN(cout)
-        );
-    `endif
 
         // --- I4/U4 Processing ---------------------------------------------
         wire signed [3:0][9:0] y_prod_i4;
@@ -142,9 +109,6 @@ module VX_tcu_drl_mul_int import VX_tcu_pkg::*; #(
                 TCU_U8_ID: result[i] = {8'b0, y_i8_add_res};
                 TCU_I4_ID: result[i] = 25'($signed(y_i4_add_res));
                 TCU_U4_ID: result[i] = {15'b0, y_i4_add_res};
-            `ifdef VX_CFG_TCU_MXI8_ENABLE
-                TCU_MXI8_ID: result[i] = y_mxi8_add_res;
-            `endif
                 default:   result[i] = 'x;
             endcase
         end
