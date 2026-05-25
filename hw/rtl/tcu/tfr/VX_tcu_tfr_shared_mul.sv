@@ -56,30 +56,6 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
 `define TFR_MUL_F16_ENABLE
 `endif
 
-    // Input fanout replication
-`ifdef TFR_MUL_F16_ENABLE
-    (* keep = "true" *) wire [N-1:0][31:0] a_row_f16 = a_row;
-    (* keep = "true" *) wire [N-1:0][31:0] b_col_f16 = b_col;
-`endif
-`ifdef TCU_FP8_ENABLE
-    (* keep = "true" *) wire [N-1:0][31:0] a_row_f8 = a_row;
-    (* keep = "true" *) wire [N-1:0][31:0] b_col_f8 = b_col;
-`endif
-`ifdef TCU_MX_ENABLE
-`ifdef TCU_FP4_ENABLE
-    (* keep = "true" *) wire [N-1:0][31:0] a_row_f4 = a_row;
-    (* keep = "true" *) wire [N-1:0][31:0] b_col_f4 = b_col;
-`endif
-`endif
-`ifdef TCU_INT8_ENABLE
-    (* keep = "true" *) wire [N-1:0][31:0] a_row_int8 = a_row;
-    (* keep = "true" *) wire [N-1:0][31:0] b_col_int8 = b_col;
-`endif
-`ifdef TCU_INT4_ENABLE
-    (* keep = "true" *) wire [N-1:0][31:0] a_row_int4 = a_row;
-    (* keep = "true" *) wire [N-1:0][31:0] b_col_int4 = b_col;
-`endif
-
     // Compute paths
 
 `ifdef TFR_MUL_F16_ENABLE
@@ -100,8 +76,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
         .req_id     (req_id),
         .vld_mask   (vld_mask),
         .fmt_f      (fmt_s[3:0]),
-        .a_row      (a_row_f16),
-        .b_col      (b_col_f16),
+        .a_row      (a_row),
+        .b_col      (b_col),
         .result_sig (mul_f16_sig),
         .result_exp (mul_f16_exp),
         .exceptions (mul_f16_exc)
@@ -126,8 +102,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
         .req_id     (req_id),
         .vld_mask   (vld_mask),
         .fmt_f      (fmt_s[3:0]),
-        .a_row      (a_row_f8),
-        .b_col      (b_col_f8),
+        .a_row      (a_row),
+        .b_col      (b_col),
     `ifdef TCU_MX_ENABLE
         .sf_a       (sf_a[0]),
         .sf_b       (sf_b[0]),
@@ -162,8 +138,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
             .req_id     (req_id),
             .vld_mask   (vld_mask),
             .fmt_f      (fmt_s[3:0]),
-            .a_row      (a_row_f4),
-            .b_col      (b_col_f4),
+            .a_row      (a_row),
+            .b_col      (b_col),
             .sf_a       (sf_a[s]),
             .sf_b       (sf_b[s]),
             .result_sig (mul_f4_sig_s[s]),
@@ -200,8 +176,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
         .req_id     (req_id),
         .vld_mask   (vld_mask),
         .fmt_i      (fmt_s[3:0]),
-        .a_row      (a_row_int8),
-        .b_col      (b_col_int8),
+        .a_row      (a_row),
+        .b_col      (b_col),
     `ifdef TCU_MX_ENABLE
         .sf_a       (sf_a[0]),
         .sf_b       (sf_b[0]),
@@ -222,8 +198,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
         .req_id     (req_id),
         .vld_mask   (vld_mask),
         .fmt_i      (fmt_s[3:0]),
-        .a_row      (a_row_int4),
-        .b_col      (b_col_int4),
+        .a_row      (a_row),
+        .b_col      (b_col),
         .result     (mul_int4_sig)
     );
 `endif

@@ -148,29 +148,61 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
 
         // Classification
 
-        fedp_class_t cls_a;
+        fedp_class_t cls_a_f16;
+        VX_tcu_tfr_classifier #(
+            .EXP_W (E_FP16),
+            .MAN_W (10)
+        ) class_a_f16 (
+            .exp (raw_ea[E_FP16-1:0]),
+            .man (raw_ma),
+            .cls (cls_a_f16)
+        );
+
+        fedp_class_t cls_b_f16;
+        VX_tcu_tfr_classifier #(
+            .EXP_W (E_FP16),
+            .MAN_W (10)
+        ) class_b_f16 (
+            .exp (raw_eb[E_FP16-1:0]),
+            .man (raw_mb),
+            .cls (cls_b_f16)
+        );
+
+        fedp_class_t cls_a_wide;
         VX_tcu_tfr_classifier #(
             .EXP_W (8),
             .MAN_W (10)
-        ) class_a (
+        ) class_a_wide (
             .exp (raw_ea),
             .man (raw_ma),
-            .cls (cls_a)
+            .cls (cls_a_wide)
         );
 
-        fedp_class_t cls_b;
+        fedp_class_t cls_b_wide;
         VX_tcu_tfr_classifier #(
             .EXP_W (8),
             .MAN_W (10)
-        ) class_b (
+        ) class_b_wide (
             .exp (raw_eb),
             .man (raw_mb),
-            .cls (cls_b)
+            .cls (cls_b_wide)
         );
 
+        fedp_class_t cls_a;
+        fedp_class_t cls_b;
+        always_comb begin
+            if (fmt_f == TCU_FP16_ID) begin
+                cls_a = cls_a_f16;
+                cls_b = cls_b_f16;
+            end else begin
+                cls_a = cls_a_wide;
+                cls_b = cls_b_wide;
+            end
+        end
+
         // Operand preparation
-        wire is_ea_zero = (raw_ea == 0);
-        wire is_eb_zero = (raw_eb == 0);
+        wire is_ea_zero = ~|raw_ea;
+        wire is_eb_zero = ~|raw_eb;
 
         wire [7:0] ea_sel = is_ea_zero ? 8'b1 : raw_ea;
         wire [7:0] eb_sel = is_eb_zero ? 8'b1 : raw_eb;
@@ -190,31 +222,8 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         wire nan_sel = nan_in | inf_z;
         wire inf_sel = inf_op & ~inf_z;
 
-        // Arithmetic path
-        wire [EXP_W-1:0] exp_sum, exp_carry;
-        VX_csa_tree #(
-            .N (3),
-            .W (EXP_W),
-            .S (EXP_W)
-        ) exp_csa (
-            .operands ({EXP_W'(bias_sel), EXP_W'(ea_sel), EXP_W'(eb_sel)}),
-            .sum      (exp_sum),
-            .carry    (exp_carry)
-        );
-
-        wire [EXP_W-1:0] exp_final_sum;
-        VX_ks_adder #(
-            .N (EXP_W),
-            .BYPASS (!`FORCE_BUILTIN_ADDER(EXP_W))
-        ) exp_ksa (
-            .cin   (1'b0),
-            .dataa (exp_sum),
-            .datab (exp_carry),
-            .sum   (exp_final_sum),
-            `UNUSED_PIN(cout)
-        );
-
-        assign result_exp[i] = (~zero_sel && lane_valid) ? exp_final_sum : '0;
+        wire [EXP_W-1:0] exp_final = EXP_W'(bias_sel) + EXP_W'(ea_sel) + EXP_W'(eb_sel);
+        assign result_exp[i] = (~zero_sel && lane_valid) ? exp_final : '0;
 
         wire [21:0] man_prod;
         VX_wallace_mul #(

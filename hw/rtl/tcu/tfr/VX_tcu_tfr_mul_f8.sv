@@ -65,11 +65,10 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     localparam B_BF8 = (1 << (E_BF8 - 1)) - 1;
     localparam [7:0] BIAS_CONST_BF8  = 8'(BIAS_BASE - 2*B_BF8);
 
-    wire is_bfloat = tcu_fmt_is_bfloat(fmt_f);
-
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
 
         wire [1:0] lane_valid = {vld_mask[i * 4 + 2], vld_mask[i * 4 + 0]};
+        wire is_bfloat = tcu_fmt_is_bfloat(fmt_f);
 
         wire [1:0][4:0] ea_sel, eb_sel;
         wire [1:0][3:0] ma_sel, mb_sel;

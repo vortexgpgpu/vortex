@@ -33,6 +33,12 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in, is_int, cval_hi})
 
+`ifdef TCU_INT8_ENABLE
+`define TFR_NORM_INT_ENABLE
+`elsif TCU_INT4_ENABLE
+`define TFR_NORM_INT_ENABLE
+`endif
+
     // Unpack and parallel compute
     wire sum_sign = acc_sig[WA-1];
     wire [WA-1:0] abs_sum = {1'b0, acc_sig[WA-2:0]};
@@ -87,19 +93,18 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     wire round_up = guard_bit && (round_bit || sticky_bit || lsb_bit);
 
     wire [24:0] man_plus_zero = {1'b0, norm_man};
-    wire [24:0] man_plus_one;
+    wire [24:0] rounded_sig_full;
     VX_ks_adder #(
         .N(25),
         .BYPASS (`FORCE_BUILTIN_ADDER(25))
     ) round_adder (
-        .cin   (1'b1),
+        .cin   (round_up),
         .dataa (man_plus_zero),
         .datab (25'd0),
-        .sum   (man_plus_one),
+        .sum   (rounded_sig_full),
         `UNUSED_PIN (cout)
     );
 
-    wire [24:0] rounded_sig_full = round_up ? man_plus_one : man_plus_zero;
     wire carry_out = rounded_sig_full[24];
     wire [22:0] final_man = carry_out ? rounded_sig_full[23:1] : rounded_sig_full[22:0];
 
@@ -132,28 +137,28 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
         end
     end
 
+    wire [31:0] fp_nan_result = {1'b0, 8'hFF, 1'b1, 22'd0};
+    wire [31:0] fp_inf_result = {exceptions.sign, 8'hFF, 23'd0};
+    wire [31:0] fp_zero_result = {sum_sign, 8'd0, 23'd0};
+    wire [31:0] fp_overflow_result = {sum_sign, 8'hFF, 23'd0};
+    wire [31:0] fp_normal_result = {sum_sign, packed_exp, final_man};
+
     logic [31:0] fp_result;
     always_comb begin
         if (exceptions.is_nan) begin
-            fp_result = {1'b0, 8'hFF, 1'b1, 22'd0};
+            fp_result = fp_nan_result;
         end else if (exceptions.is_inf) begin
-            fp_result = {exceptions.sign, 8'hFF, 23'd0};
+            fp_result = fp_inf_result;
         end else begin
             if (zero_sum || exp_underflow) begin
-                 fp_result = {sum_sign, 8'd0, 23'd0};
+                 fp_result = fp_zero_result;
             end else if (exp_overflow) begin
-                 fp_result = {sum_sign, 8'hFF, 23'd0};
+                 fp_result = fp_overflow_result;
             end else begin
-                 fp_result = {sum_sign, packed_exp, final_man};
+                 fp_result = fp_normal_result;
             end
         end
     end
-
-`ifdef TCU_INT8_ENABLE
-`define TFR_NORM_INT_ENABLE
-`elsif TCU_INT4_ENABLE
-`define TFR_NORM_INT_ENABLE
-`endif
 
 `ifdef TFR_NORM_INT_ENABLE
     // Integer handling
