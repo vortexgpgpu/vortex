@@ -94,11 +94,6 @@ sudo ./ci/install_dependencies.sh
 ```sh
    ./ci/toolchain_install.sh --all
 ```
-### set environment variables
-```sh
-    # should always run before using the toolchain!
-    source ./ci/toolchain_env.sh
-```
 ### Building Vortex
 ```sh
 make -s
@@ -119,10 +114,12 @@ make install
 ```sh
 ../configure --xlen=64 --tooldir=$HOME/tools
 ```
-- Sourcing "./ci/toolchain_env.sh" is required everytime you start a new terminal. we recommend adding "source <build-path>/ci/toolchain_env.sh" to your ~/.bashrc file to automate the process at login.
-```sh
-echo "source <build-path>/ci/toolchain_env.sh" >> ~/.bashrc
-```
+- No shell environment setup is required. `../configure` bakes the full
+  toolchain layout (paths, XCONFIGS, every tool binary) into the build
+  dir's `config.mk` and domain `common.mk` files. Make recipes invoke
+  tools by absolute path (`$(VERILATOR_PATH)/bin/verilator` etc.), so
+  multiple Vortex trees on the same machine can coexist without any
+  `~/.bashrc` sourcing.
 - Making changes to Makefiles in your source tree or adding new folders will require executing the "configure" script again without any options to get changes propagated to your build folder.
 ```sh
 ../configure

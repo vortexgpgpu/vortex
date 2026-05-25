@@ -35,9 +35,17 @@
 #   [SRAM_OVERHEAD=100.0]
 #   [SRAM_W_PORTS="wdata,rdata"]
 #   [SRAM_A_PORTS="addr,waddr,raddr"]
+#   [YOSYS=<absolute path to yosys>]    # default: PATH lookup
+#   [STA=<absolute path to sta>]        # default: PATH lookup
 #   ./run_synth.sh
 #
 set -euo pipefail
+
+# Tool binaries: prefer caller-supplied env vars (set by hw/syn/common.mk
+# to absolute $(TOOLDIR)/{yosys,sta}/bin/...) so the build is self-
+# contained. Fall back to PATH lookup for callers that don't set them.
+YOSYS="${YOSYS:-yosys}"
+STA="${STA:-sta}"
 
 die() { echo "FATAL: $*" >&2; exit 1; }
 log() { echo "[run_synth] $*"; }
@@ -193,8 +201,8 @@ log "Writing $YS"
 stamp "gen-ys"
 
 # -------- run yosys --------
-log "yosys -q -s $YS -l $YLOG"
-yosys -q -s "$YS" -l "$YLOG"
+log "$YOSYS -q -s $YS -l $YLOG"
+"$YOSYS" -q -s "$YS" -l "$YLOG"
 stamp "yosys"
 
 # -------- run sram area estimation --------
@@ -220,15 +228,17 @@ fi
 
 # -------- optional OpenSTA (run_sta.tcl colocated) --------
 if [[ "$RUN_STA" == "1" ]]; then
-  if ! command -v sta >/dev/null 2>&1; then
-    echo "ERROR: OpenSTA ('sta') not found in PATH; required when RUN_STA=1" >&2
+  # Resolve $STA: prefer the absolute path the caller gave us; otherwise
+  # accept any sta on PATH; otherwise error out.
+  if [[ ! -x "$STA" ]] && ! command -v "$STA" >/dev/null 2>&1; then
+    echo "ERROR: OpenSTA ('$STA') not found; required when RUN_STA=1" >&2
     exit 1
   fi
   STA_SCRIPT="$SCRIPT_DIR/run_sta.tcl"
   NETLIST="$NET_POST"; [[ -f "$NETLIST" ]] || NETLIST="$NET_PRE"
   STA_SDC="${RESOLVED_SDC:-$SDC_FILE}"
-  log "TOP=$TOP NETLIST=$NETLIST LIB_TGT=$LIB_TGT LIB_ROOT=$LIB_ROOT SDC_FILE=$STA_SDC RPT_DIR=$RPT_DIR  SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" sta $STA_SCRIPT"
-  TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$STA_SDC" RPT_DIR="$RPT_DIR" SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" sta "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1
+  log "TOP=$TOP NETLIST=$NETLIST LIB_TGT=$LIB_TGT LIB_ROOT=$LIB_ROOT SDC_FILE=$STA_SDC RPT_DIR=$RPT_DIR SAIF_FILE=$SAIF_FILE SAIF_INST=$SAIF_INST $STA $STA_SCRIPT"
+  TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$STA_SDC" RPT_DIR="$RPT_DIR" SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" "$STA" "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1
   cat "$RPT_DIR/sta.log"
   stamp "sta"
 fi

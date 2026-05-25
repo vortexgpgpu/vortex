@@ -50,8 +50,7 @@ Apptainer> ./ci/toolchain_install.sh --all
 Apptainer> sed -i 's/\btar --no-same-owner /tar /g' ci/toolchain_install.sh
 
 
-Apptainer> source ./ci/toolchain_env.sh
-Apptainer> verilator --version
+Apptainer> $TOOLDIR/verilator/bin/verilator --version
 ```
 
 
@@ -90,9 +89,7 @@ Apptainer> platforminfo -l
 Apptainer> pwd
 /home/vortex/build
 
-Apptainer> source ci/toolchain_env.sh
-
-Apptainer> verilator --version
+Apptainer> $TOOLDIR/verilator/bin/verilator --version
 Verilator 5.026 2024-06-15 rev v5.026-43-g065f36ab5
 
 Apptainer> cd hw/syn/xilinx/xrt

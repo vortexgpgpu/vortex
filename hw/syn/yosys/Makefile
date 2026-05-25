@@ -1,5 +1,6 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
+include $(ROOT_DIR)/hw/syn/common.mk    # SV2V_PATH/YOSYS_PATH/STA_PATH + exported SV2V/YOSYS/STA
 
 CLOCK_FREQ	?= 800
 DELAY_UNC 	?= 0.02
@@ -61,7 +62,6 @@ endif
 
 CONFIGS += -DSYNTHESIS -DASIC -DYOSYS
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)')
 
 # include paths
 RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache

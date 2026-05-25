@@ -80,18 +80,13 @@ mkdir build && cd build && ../configure --tooldir=$HOME/tools
 
 # Install the whole prebuilt toolchain
 ./ci/toolchain_install.sh --all
-
-# Add environment variables to bashrc
-echo "source <full-path-to-vortex-root>/vortex/build/ci/toolchain_env.sh" >> ~/.bashrc
 ```
 
-### Activate Vortex Toolchain
+### Verify Toolchain Install
 ```
-# From any directory
-source ~/.bashrc
-
-# Check environment setup
-verilator --version
+# Tools are invoked by absolute path from the Vortex Makefiles -- no
+# shell env sourcing required. Confirm the install with:
+$TOOLDIR/verilator/bin/verilator --version
 ```
 
 ### Build the FPGA Bitstream

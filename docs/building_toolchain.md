@@ -514,7 +514,8 @@ Vulkan driver is built on. The `vortexpipe` Gallium driver
 > prebuilt toolchain component. `ci/toolchain_install.sh --mesa`
 > (folded into `--all`) fetches `$TOOLDIR/mesa-vortex` from the
 > `vortex-toolchain-prebuilt` release — no Mesa build needed.
-> `ci/toolchain_env.sh` then exports `MESA_PATH` / `VK_ICD_FILENAMES`.
+> Tests pick the install up via the `MESA_PATH` make var declared in
+> `tests/vulkan/common.mk` (defaults to `$(TOOLDIR)/mesa-vortex`).
 
 > **Build-from-source path:** `ci/mesa_install.sh` performs every
 > step below (build deps, meson configure, build, install) and is
@@ -631,8 +632,10 @@ $TOOLDIR/
 └── mesa-vortex/                (lavapipe Vulkan ICD; share/vulkan/icd.d/, optional)
 ```
 
-The Vortex build script `ci/toolchain_env.sh` exports this layout
-into the shell. Confirm a sane environment with:
+The Vortex build's `config.mk` + per-domain `common.mk` files (e.g.
+`tests/vulkan/common.mk`, `hw/syn/common.mk`) bake the paths into
+every recipe — no shell env sourcing required. Confirm a sane
+toolchain install with:
 
 ```bash
 $LLVM_PREFIX/bin/clang --version            # expect "clang version 20.1.8"

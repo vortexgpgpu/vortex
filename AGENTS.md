@@ -29,10 +29,8 @@ mkdir -p build && cd build
 # Install toolchain (first time / when missing):
 ./ci/toolchain_install.sh --all
 
-# Source toolchain environment (every new shell):
-source ./ci/toolchain_env.sh
-
-# Build
+# Build (configure baked the full toolchain layout into the build
+# dir's Makefiles; no shell env sourcing required)
 make -s
 ```
 

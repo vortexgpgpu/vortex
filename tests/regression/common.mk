@@ -13,7 +13,6 @@ KERNEL_LIB ?= vortex
 
 # Resolve the toml + CONFIGS overrides into the canonical -D... list, the
 # same way sim/simx/Makefile does. Then sniff for extension enables.
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)')
 
 ifneq (,$(filter -DVX_CFG_EXT_C_ENABLE, $(XCONFIGS)))
 	C_EXT := c

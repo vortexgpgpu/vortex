@@ -29,15 +29,13 @@
    $ cd build
    $ ../configure --xlen=32 --tooldir=$HOME/tools
    $ ./ci/toolchain_install.sh --all
-   $ source ./ci/toolchain_env.sh
    $ make -s
    ```
 
-4. (Optional) Add toolchain environment variables to bashrc for future sessions:
-
-   ```
-   echo 'source <build-path>/ci/toolchain_env.sh' >> ~/.bashrc
-   ```
+   `../configure` writes the full toolchain layout (paths, XCONFIGS,
+   tool binaries) into the build dir's Makefiles, so no shell env
+   sourcing is required and multiple Vortex trees can coexist on one
+   machine without a global `~/.bashrc` clobber.
 
 ## RHEL 8
 Note: depending on the system, some of the toolchain may need to be recompiled for non-Ubuntu Linux. The source for the tools can be found [here](https://github.com/vortexgpgpu/).
@@ -80,6 +78,5 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
    $ cd build
    $ ../configure --xlen=32 --tooldir=$HOME/tools
    $ ./ci/toolchain_install.sh --all
-   $ source ./ci/toolchain_env.sh
    $ make -s
    ```

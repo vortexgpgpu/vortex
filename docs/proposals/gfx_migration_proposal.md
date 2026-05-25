@@ -301,7 +301,6 @@ All work happens inside `build_test32/`:
 ```bash
 cd /home/blaisetine/dev/vortex_v3/feature_gfx/build_test32
 ../configure --xlen=32 --tooldir=$HOME/tools
-source ./ci/toolchain_env.sh
 make -s
 ```
 

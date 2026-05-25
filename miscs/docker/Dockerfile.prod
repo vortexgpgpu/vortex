@@ -50,8 +50,13 @@ RUN mkdir build && cd build && ../configure
 # Install prebuilt toolchain
 RUN cd build && ./ci/toolchain_install.sh --all
 
-# Source tools environment variables and add to bashrc
-RUN echo "source /vortex/build/ci/toolchain_env.sh" >> ~/.bashrc
+# No shell env sourcing required: the Vortex Makefiles invoke every
+# tool by absolute path baked at configure time. For interactive use
+# (verilator, vulkaninfo, hipcc CLI), the TOOLDIR layout is on $PATH:
+ENV TOOLDIR=/opt
+ENV PATH=$TOOLDIR/verilator/bin:$TOOLDIR/llvm-vortex/bin:$TOOLDIR/chipstar/bin:$TOOLDIR/pocl/bin:$TOOLDIR/mesa-vortex/bin:$PATH
+ENV LD_LIBRARY_PATH=$TOOLDIR/llvm-vortex/lib:$TOOLDIR/mesa-vortex/lib:$LD_LIBRARY_PATH
+ENV VK_ICD_FILENAMES=$TOOLDIR/mesa-vortex/share/vulkan/icd.d/lvp_icd.x86_64.json
 
 # Set the working directory to /vortex/build
 WORKDIR /vortex/build

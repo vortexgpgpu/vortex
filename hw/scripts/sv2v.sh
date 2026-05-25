@@ -17,6 +17,12 @@
 # sv2v: https://github.com/zachjs/sv2v
 # yosys: http://www.clifford.at/yosys/
 
+# Tool binaries: prefer caller-supplied env vars (set by hw/syn/common.mk
+# to absolute $(TOOLDIR)/{sv2v,yosys}/bin/...) so the build is self-
+# contained. Fall back to PATH lookup for callers that don't set them.
+SV2V="${SV2V:-sv2v}"
+YOSYS="${YOSYS:-yosys}"
+
 # exit when any command fails
 set -e
 
@@ -70,5 +76,5 @@ do
 done
 
 # system-verilog to verilog conversion
-echo "sv2v $top $macro_args $inc_args $file_args -v -w $output_file"
-sv2v $top $macro_args $inc_args $file_args -v -w $output_file
+echo "$SV2V $top $macro_args $inc_args $file_args -v -w $output_file"
+"$SV2V" $top $macro_args $inc_args $file_args -v -w $output_file
